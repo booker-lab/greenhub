@@ -53,7 +53,8 @@ export class AuthService {
       updatedAt: now,
     });
 
-    return this.issueTokens({ sub: userId, role: dto.role as JwtPayload['role'] });
+    // 스펙: 201 { userId }
+    return { userId };
   }
 
   async login(dto: LoginDto) {
@@ -63,30 +64,36 @@ export class AuthService {
       .limit(1)
       .get();
 
-    if (snap.empty) throw new UnauthorizedException('인증 실패');
+    if (snap.empty) throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
 
-    const user = snap.docs[0].data();
-    const valid = await bcrypt.compare(dto.password, user['passwordHash']);
-    if (!valid) throw new UnauthorizedException('인증 실패');
+    const userData = snap.docs[0].data();
+    const valid = await bcrypt.compare(dto.password, userData['passwordHash']);
+    if (!valid) throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
 
-    return this.issueTokens({
-      sub: user['id'],
-      role: user['role'],
-      storeId: user['storeId'] ?? undefined,
+    const { accessToken } = this.issueTokens({
+      sub: userData['id'],
+      role: userData['role'],
+      storeId: userData['storeId'] ?? undefined,
     });
+
+    // 스펙: 200 { accessToken, user: UserProfile }
+    const user = this.sanitizeUser(userData);
+    return { accessToken, user };
   }
 
   async getMe(userId: string) {
     const snap = await this.firestore.doc(`users/${userId}`).get();
     if (!snap.exists) throw new NotFoundException('사용자를 찾을 수 없습니다.');
-    const data = snap.data()!;
-    const { passwordHash: _, ...user } = data;
+    return this.sanitizeUser(snap.data()!);
+  }
+
+  private sanitizeUser(data: Record<string, unknown>) {
+    const { passwordHash: _pw, ...user } = data;
     return user;
   }
 
   async updateMe(userId: string, dto: UpdateMeDto) {
-    const ref = this.firestore.doc(`users/${userId}`);
-    await ref.update({
+    await this.firestore.doc(`users/${userId}`).update({
       ...dto,
       updatedAt: this.firestore.Timestamp.now(),
     });

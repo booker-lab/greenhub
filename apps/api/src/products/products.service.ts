@@ -35,9 +35,9 @@ export class ProductsService {
     if (query.colors) {
       const colorFilter = Array.isArray(query.colors)
         ? query.colors
-        : query.colors.split(',');
+        : String(query.colors).split(',');
       products = products.filter((p) =>
-        colorFilter.some((c) => p['colors']?.includes(c)),
+        colorFilter.some((c) => Array.isArray(p['colors']) && p['colors'].includes(c)),
       );
     }
 
@@ -46,9 +46,55 @@ export class ProductsService {
     if (sort === 'price_asc') products.sort((a, b) => a['price'] - b['price']);
     else if (sort === 'price_desc')
       products.sort((a, b) => b['price'] - a['price']);
-    else products.sort((a, b) => b['createdAt']?.seconds - a['createdAt']?.seconds);
+    else
+      products.sort(
+        (a, b) => (b['createdAt']?.seconds ?? 0) - (a['createdAt']?.seconds ?? 0),
+      );
 
-    return { products };
+    // groupSummary 병합 (공동구매 상품만)
+    const groupProductIds = products
+      .filter((p) => p['saleType'] === 'group')
+      .map((p) => p['id'] as string);
+
+    const groupConfigMap = new Map<string, Record<string, unknown>>();
+    if (groupProductIds.length > 0) {
+      // Firestore 'in' 쿼리는 30개 제한이지만 MVP는 충분
+      const gcSnap = await this.firestore
+        .collection('groupProductConfig')
+        .where('productId', 'in', groupProductIds.slice(0, 30))
+        .get();
+      gcSnap.docs.forEach((d) =>
+        groupConfigMap.set(d.data()['productId'], d.data()),
+      );
+    }
+
+    // 스펙 응답: { items: ProductSummary[], total: number }
+    const items = products.map((p) => {
+      const summary: Record<string, unknown> = {
+        id: p['id'],
+        name: p['name'],
+        price: p['price'],
+        images: Array.isArray(p['images']) ? [p['images'][0]] : [],
+        category: p['category'],
+        colors: p['colors'],
+        saleType: p['saleType'],
+        isActive: p['isActive'],
+      };
+      if (p['saleType'] === 'group') {
+        const gc = groupConfigMap.get(p['id'] as string);
+        if (gc) {
+          summary['groupSummary'] = {
+            currentParticipants: gc['currentParticipants'],
+            minParticipants: gc['minParticipants'],
+            maxParticipants: gc['maxParticipants'],
+            recruitDeadline: gc['recruitDeadline'],
+          };
+        }
+      }
+      return summary;
+    });
+
+    return { items, total: items.length };
   }
 
   async getProduct(storeId: string, productId: string) {
@@ -66,7 +112,11 @@ export class ProductsService {
       groupConfig = gc.exists ? (gc.data() as Record<string, unknown>) : null;
     }
 
-    return { ...product, groupConfig };
+    // groupConfig가 있을 때만 포함 (스펙: optional 필드)
+    if (groupConfig) {
+      return { ...product, groupConfig };
+    }
+    return { ...product };
   }
 
   async createProduct(

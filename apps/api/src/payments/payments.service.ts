@@ -1,7 +1,16 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { FirestoreService } from '../firestore/firestore.service';
 import { PortoneClient } from './portone.client';
 import { PortoneWebhookDto } from './dto/portone-webhook.dto';
+
+// 환불 가능 상태
+const REFUNDABLE_STATUSES = [
+  'ACCEPTED',
+  'RECRUITING',
+  'CONFIRMED',
+  'PREPARING',
+];
 
 @Injectable()
 export class PaymentsService {
@@ -17,29 +26,32 @@ export class PaymentsService {
     if (!orderSnap.exists) return { ok: false, reason: 'order_not_found' };
 
     const order = orderSnap.data()!;
-    if (order['status'] !== 'PENDING') return { ok: true, reason: 'already_processed' };
+    // 멱등성: 이미 처리된 경우 스킵
+    if (order['status'] !== 'PENDING') {
+      return { ok: true, reason: 'already_processed' };
+    }
 
     if (dto.status !== 'paid') {
       await this.cancelOrderWithSlotRecovery(orderId, order, 'payment_failed');
       return { ok: true };
     }
 
-    // 금액 검증
+    // 금액 검증 (위변조 방지)
     const paymentData = await this.portone.getPayment(dto.imp_uid);
     if (paymentData.amount !== order['totalAmount']) {
-      // 위변조 — 즉시 환불
       await this.portone.refund(dto.imp_uid, paymentData.amount, '금액 위변조 감지');
       await this.cancelOrderWithSlotRecovery(orderId, order, 'amount_mismatch');
       return { ok: false, reason: 'amount_mismatch' };
     }
 
-    // 결제 성공 — 주문 상태 전환
     const newStatus =
       order['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED';
 
+    const now = this.firestore.Timestamp.now();
+
     await this.firestore.doc(`orders/${orderId}`).update({
       status: newStatus,
-      updatedAt: this.firestore.Timestamp.now(),
+      updatedAt: now,
     });
 
     // 결제 기록 저장
@@ -56,13 +68,16 @@ export class PaymentsService {
       refundAmount: null,
       refundedAt: null,
       refundReason: null,
-      createdAt: this.firestore.Timestamp.now(),
-      updatedAt: this.firestore.Timestamp.now(),
+      createdAt: now,
+      updatedAt: now,
     });
 
     return { ok: true, status: newStatus };
   }
 
+  /**
+   * 판매자 환불 엔드포인트용 — 상태 검증 포함
+   */
   async refundOrder(
     storeId: string,
     orderId: string,
@@ -75,7 +90,22 @@ export class PaymentsService {
     }
     const order = orderSnap.data()!;
 
-    // 결제 기록 조회
+    // 환불 가능 상태 검증
+    if (!REFUNDABLE_STATUSES.includes(order['status'])) {
+      throw new ForbiddenException(
+        `${order['status']} 상태에서는 환불할 수 없습니다.`,
+      );
+    }
+
+    await this.processRefundByOrderId(orderId, reason ?? '판매자 취소');
+    return { ok: true };
+  }
+
+  /**
+   * 내부 공통 환불 처리 — 상태 검증 없이 결제 기록만 처리
+   * OrdersService.cancelOrder(), NotificationsService.cancelGroupBuyLack()에서 호출
+   */
+  async processRefundByOrderId(orderId: string, reason: string): Promise<void> {
     const paySnap = await this.firestore
       .collection('payments')
       .where('orderId', '==', orderId)
@@ -83,52 +113,42 @@ export class PaymentsService {
       .limit(1)
       .get();
 
-    if (paySnap.empty) {
-      throw new BadRequestException('결제 내역을 찾을 수 없습니다.');
-    }
+    if (paySnap.empty) return; // 결제 기록 없으면 스킵 (PENDING 상태 등)
 
     const payment = paySnap.docs[0].data();
-    const refundReason = reason ?? '판매자 취소';
-
     await this.portone.refund(
       payment['portoneImpUid'],
       payment['amount'],
-      refundReason,
+      reason,
     );
 
     const now = this.firestore.Timestamp.now();
-
     await paySnap.docs[0].ref.update({
       status: 'CANCELLED',
       refundAmount: payment['amount'],
       refundedAt: now,
-      refundReason,
+      refundReason: reason,
       updatedAt: now,
     });
-
-    await this.firestore.doc(`orders/${orderId}`).update({
-      status: 'CANCELLED',
-      cancelReason: refundReason,
-      updatedAt: now,
-    });
-
-    return { ok: true };
   }
 
+  // ── 스케줄러: PENDING 주문 15분 타임아웃 처리 ──
+  @Cron(CronExpression.EVERY_MINUTE)
   async cleanupPendingOrders() {
-    const cutoff = new Date(Date.now() - 15 * 60 * 1000); // 15분
+    const cutoff = new Date(Date.now() - 15 * 60 * 1000);
     const snap = await this.firestore
       .collection('orders')
       .where('status', '==', 'PENDING')
       .where('createdAt', '<', this.firestore.Timestamp.fromDate(cutoff))
       .get();
 
-    const promises = snap.docs.map(async (doc) => {
-      const order = doc.data();
-      await this.cancelOrderWithSlotRecovery(doc.id, order, 'timeout');
-    });
+    if (snap.empty) return;
 
+    const promises = snap.docs.map((doc) =>
+      this.cancelOrderWithSlotRecovery(doc.id, doc.data(), 'timeout'),
+    );
     await Promise.all(promises);
+    console.log(`[PaymentsScheduler] PENDING 타임아웃 처리 ${snap.size}건`);
   }
 
   private async cancelOrderWithSlotRecovery(
@@ -145,7 +165,6 @@ export class PaymentsService {
       }),
     ];
 
-    // usedSlots 복구
     if (order['deliveryMethod'] !== 'parcel') {
       const dateStr = (order['createdAt'] as any)
         .toDate()

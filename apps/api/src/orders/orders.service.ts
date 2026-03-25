@@ -9,12 +9,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateStatusDto, OrderStatus } from './dto/update-status.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { PaymentsService } from '../payments/payments.service';
 
 // 판매자 허용 상태 전환
 const SELLER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   ACCEPTED: ['PREPARING'],
   CONFIRMED: ['PREPARING'],
-  PREPARING: ['CANCELLED'],
+  PREPARING: ['DELIVERING', 'CANCELLED'],
   DELIVERING: ['CANCELLED'],
   HUB_ARRIVED: ['CANCELLED'],
 };
@@ -31,13 +33,30 @@ const CONSUMER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   PICKED_UP: ['REVIEWED'],
 };
 
+// 알림이 필요한 전환과 템플릿 코드 매핑
+const NOTIFICATION_MAP: Partial<
+  Record<OrderStatus, Partial<Record<OrderStatus, string>>>
+> = {
+  ACCEPTED: { PREPARING: 'ORDER_PREPARING' },
+  CONFIRMED: { PREPARING: 'GROUP_PREPARING' },
+  PREPARING: { DELIVERING: 'ORDER_DELIVERING' },
+  DELIVERING: {
+    HUB_ARRIVED: 'ORDER_HUB_ARRIVED',
+    DELIVERED: 'ORDER_DELIVERED',
+  },
+};
+
 function generatePickupCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly firestore: FirestoreService) {}
+  constructor(
+    private readonly firestore: FirestoreService,
+    private readonly notifications: NotificationsService,
+    private readonly payments: PaymentsService,
+  ) {}
 
   async createOrder(storeId: string, userId: string, dto: CreateOrderDto) {
     // 공동구매 동의 검증
@@ -82,16 +101,19 @@ export class OrdersService {
         }
       }
 
-      // 공동구매 참여자 수 증가
+      // 공동구매: 참여자 수 증가 + 최대 인원 검증
       if (dto.saleType === 'group') {
         const gcRef = this.firestore.doc(
           `groupProductConfig/${dto.productId}`,
         );
         const gcSnap = await t.get(gcRef);
         if (gcSnap.exists) {
+          const gc = gcSnap.data()!;
+          if (gc['currentParticipants'] >= gc['maxParticipants']) {
+            throw new ConflictException('공동구매 모집 인원이 마감되었습니다.');
+          }
           t.update(gcRef, {
-            currentParticipants:
-              (gcSnap.data()!['currentParticipants'] ?? 0) + 1,
+            currentParticipants: gc['currentParticipants'] + 1,
           });
         }
       }
@@ -131,7 +153,6 @@ export class OrdersService {
       });
     });
 
-    // Portone 결제 파라미터 반환
     return {
       orderId,
       portonePaymentParams: {
@@ -149,7 +170,6 @@ export class OrdersService {
       throw new NotFoundException('주문을 찾을 수 없습니다.');
     }
     const order = snap.data()!;
-    // 소비자는 본인 주문만, 판매자/드라이버는 해당 스토어 주문 조회 가능
     if (order['userId'] !== requesterId) {
       const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
       const role = userSnap.data()?.['role'];
@@ -207,6 +227,28 @@ export class OrdersService {
     if (dto.reason) update['cancelReason'] = dto.reason;
 
     await this.firestore.doc(`orders/${orderId}`).update(update);
+
+    // 판매자 강제 취소 → 환불 처리
+    if (dto.status === 'CANCELLED') {
+      const refundableStatuses: OrderStatus[] = [
+        'ACCEPTED',
+        'RECRUITING',
+        'CONFIRMED',
+        'PREPARING',
+      ];
+      if (refundableStatuses.includes(currentStatus)) {
+        await this.payments.processRefundByOrderId(orderId, dto.reason ?? '판매자 취소');
+      }
+    }
+
+    // 알림 발송
+    await this.sendTransitionNotification(
+      order,
+      currentStatus,
+      dto.status,
+      orderId,
+    );
+
     return { orderId, status: dto.status };
   }
 
@@ -227,21 +269,38 @@ export class OrdersService {
       throw new ForbiddenException('RECRUITING 상태에서만 취소 가능합니다.');
     }
 
-    await this.firestore.doc(`orders/${orderId}`).update({
-      status: 'CANCELLED',
-      cancelReason: reason ?? '소비자 취소',
-      updatedAt: this.firestore.Timestamp.now(),
-    });
+    const cancelReason = reason ?? '소비자 취소';
 
-    // 공동구매 참여자 수 감소
+    // Portone 환불
+    await this.payments.processRefundByOrderId(orderId, cancelReason);
+
+    // 주문 상태 + 공동구매 참여자 수 원자적 업데이트
     const gcRef = this.firestore.doc(
       `groupProductConfig/${order['productId']}`,
     );
-    const gcSnap = await gcRef.get();
-    if (gcSnap.exists) {
-      const current = gcSnap.data()!['currentParticipants'] ?? 1;
-      await gcRef.update({ currentParticipants: Math.max(0, current - 1) });
-    }
+    const now = this.firestore.Timestamp.now();
+
+    await this.firestore.runTransaction(async (t) => {
+      t.update(this.firestore.doc(`orders/${orderId}`), {
+        status: 'CANCELLED',
+        cancelReason,
+        updatedAt: now,
+      });
+      const gcSnap = await t.get(gcRef);
+      if (gcSnap.exists) {
+        t.update(gcRef, {
+          currentParticipants: this.firestore.FieldValue.increment(-1),
+        });
+      }
+    });
+
+    // 본인 알림 발송
+    await this.notifications.sendToUser(
+      userId,
+      'GROUP_CANCELLED_SELF',
+      { orderId, productId: order['productId'] },
+      orderId,
+    );
 
     return { orderId, status: 'CANCELLED' };
   }
@@ -273,15 +332,52 @@ export class OrdersService {
   }
 
   // ────────────────────────────────────────────────────────────
+  // 알림 발송 헬퍼
+  // ────────────────────────────────────────────────────────────
+
+  private async sendTransitionNotification(
+    order: Record<string, unknown>,
+    from: OrderStatus,
+    to: OrderStatus,
+    orderId: string,
+  ) {
+    const templateCode =
+      NOTIFICATION_MAP[from]?.[to] ??
+      (to === 'CANCELLED' ? 'ORDER_CANCELLED' : null);
+    if (!templateCode) return;
+
+    const variables: Record<string, string> = { orderId };
+    const isGroup = order['saleType'] === 'group';
+
+    if (isGroup && ['GROUP_PREPARING', 'GROUP_DELIVERING', 'GROUP_DELIVERED', 'GROUP_CONFIRMED'].includes(templateCode)) {
+      await this.notifications.sendToGroupParticipants(
+        order['productId'] as string,
+        templateCode as any,
+        variables,
+      );
+    } else {
+      await this.notifications.sendToUser(
+        order['userId'] as string,
+        templateCode as any,
+        variables,
+        orderId,
+      );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────
   // Private helpers
   // ────────────────────────────────────────────────────────────
 
   private getAllowedTransitions(role: string, current: OrderStatus): OrderStatus[] {
     if (role === 'seller') {
-      return [
-        ...(SELLER_TRANSITIONS[current] ?? []),
-        'CANCELLED', // 판매자 강제 취소는 모든 상태에서 가능
-      ];
+      const base = SELLER_TRANSITIONS[current] ?? [];
+      // 판매자 강제 취소는 REVIEWED/CANCELLED/PICKED_UP 제외 모든 상태
+      const noCancel: OrderStatus[] = ['REVIEWED', 'CANCELLED', 'PICKED_UP', 'DELIVERED'];
+      if (!noCancel.includes(current) && !base.includes('CANCELLED')) {
+        return [...base, 'CANCELLED'];
+      }
+      return base;
     }
     if (role === 'driver') return DRIVER_TRANSITIONS[current] ?? [];
     return CONSUMER_TRANSITIONS[current] ?? [];
@@ -324,9 +420,7 @@ export class OrdersService {
   private async getDeliveryConfig(
     storeId: string,
   ): Promise<Record<string, number>> {
-    const snap = await this.firestore
-      .doc(`deliveryFeeConfig/${storeId}`)
-      .get();
+    const snap = await this.firestore.doc(`deliveryFeeConfig/${storeId}`).get();
     return (snap.data() ?? {}) as Record<string, number>;
   }
 }
