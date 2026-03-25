@@ -17,8 +17,9 @@ export type ColorOption =
 
 export type DeliverySize = 'small' | 'medium' | 'large'
 
-// SaleType, DeliveryMethod are defined in order.types.ts — re-exported here
-export type { SaleType, DeliveryMethod } from './order.types.js'
+// SaleType, DeliveryMethod are defined in order.types.ts — imported for local use and re-exported
+import type { SaleType, DeliveryMethod } from './order.types.js'
+export type { SaleType, DeliveryMethod }
 
 export interface GroupProductConfig {
   productId: string
@@ -40,7 +41,7 @@ export interface Product {
   price: number
   category: Category
   colors: ColorOption[]
-  saleType: import('./order.types.js').SaleType
+  saleType: SaleType
   deliverySize: DeliverySize
   isActive: boolean
   createdAt: string // ISO8601
@@ -54,7 +55,7 @@ export interface ProductSummary {
   images: string[]
   category: Category
   colors: ColorOption[]
-  saleType: import('./order.types.js').SaleType
+  saleType: SaleType
   isActive: boolean
   groupSummary?: {
     currentParticipants: number
