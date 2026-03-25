@@ -1,0 +1,19 @@
+{
+  "name": "greenhub",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "dev:consumer": "pnpm --filter consumer dev",
+    "dev:api": "pnpm --filter api start:dev",
+    "build": "pnpm --filter ./packages/shared build && pnpm -r --filter './apps/*' build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}
