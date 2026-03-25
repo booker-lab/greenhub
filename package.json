@@ -15,5 +15,15 @@
   "engines": {
     "node": ">=20",
     "pnpm": ">=9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "bcrypt",
+      "firebase-admin",
+      "protobufjs",
+      "@firebase/util",
+      "unrs-resolver"
+    ]
   }
 }
