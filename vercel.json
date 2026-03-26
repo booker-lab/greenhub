@@ -1,6 +1,0 @@
-{
-  "framework": "nextjs",
-  "buildCommand": "pnpm --filter @greenhub/shared build && pnpm --filter consumer build",
-  "installCommand": "pnpm install --frozen-lockfile",
-  "outputDirectory": "apps/consumer/.next"
-}
