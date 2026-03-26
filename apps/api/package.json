@@ -70,14 +70,6 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@nestjs/core",
-      "bcrypt",
-      "firebase-admin",
-      "protobufjs"
-    ]
-  },
   "jest": {
     "moduleFileExtensions": [
       "js",
