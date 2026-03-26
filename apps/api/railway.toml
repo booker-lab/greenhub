@@ -1,6 +1,6 @@
 [build]
-builder = "nixpacks"
-buildCommand = "pnpm --filter api build"
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "node dist/main"
