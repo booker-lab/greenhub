@@ -1,0 +1,14 @@
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = [
+  "npm install -g pnpm",
+  "cd /app && pnpm install --frozen-lockfile"
+]
+
+[phases.build]
+cmds = ["cd /app && pnpm --filter api build"]
+
+[start]
+cmd = "node /app/apps/api/dist/main"
