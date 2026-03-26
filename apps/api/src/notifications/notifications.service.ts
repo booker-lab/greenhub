@@ -29,6 +29,30 @@ export class NotificationsService {
     private readonly payments: PaymentsService,
   ) {}
 
+  async getUserNotifications(userId: string) {
+    const snap = await this.firestore
+      .collection('notifications')
+      .where('userId', '==', userId)
+      .get();
+
+    const items = snap.docs
+      .map((d) => d.data())
+      .sort((a, b) => (b['createdAt']?.seconds ?? 0) - (a['createdAt']?.seconds ?? 0))
+      .slice(0, 50); // 최근 50건
+
+    return { items, total: items.length };
+  }
+
+  async updatePreferences(userId: string, preferences: Record<string, boolean>) {
+    const ref = this.firestore.doc(`users/${userId}`);
+    await ref.update({
+      notificationPreferences: preferences,
+      updatedAt: this.firestore.Timestamp.now(),
+    });
+    const snap = await ref.get();
+    return snap.data()!['notificationPreferences'] ?? {};
+  }
+
   async sendToUser(
     userId: string,
     templateCode: NotificationTemplateCode,

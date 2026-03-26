@@ -75,6 +75,36 @@ export class PaymentsService {
     return { ok: true, status: newStatus };
   }
 
+  async getPayment(paymentId: string, requesterId: string) {
+    const snap = await this.firestore.doc(`payments/${paymentId}`).get();
+    if (!snap.exists) throw new BadRequestException('결제 내역을 찾을 수 없습니다.');
+    const payment = snap.data()!;
+
+    // 본인 결제 또는 해당 스토어 판매자만 조회 가능 (간소화: userId 비교)
+    if (payment['userId'] !== requesterId) {
+      const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
+      const role = userSnap.data()?.['role'];
+      if (role !== 'seller') throw new ForbiddenException();
+    }
+    return payment;
+  }
+
+  async getPaymentByOrder(storeId: string, orderId: string, requesterId: string) {
+    const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
+    if (!orderSnap.exists || orderSnap.data()!['storeId'] !== storeId) {
+      throw new BadRequestException('주문을 찾을 수 없습니다.');
+    }
+
+    const snap = await this.firestore
+      .collection('payments')
+      .where('orderId', '==', orderId)
+      .limit(1)
+      .get();
+
+    if (snap.empty) throw new BadRequestException('결제 내역을 찾을 수 없습니다.');
+    return snap.docs[0].data();
+  }
+
   /**
    * 판매자 환불 엔드포인트용 — 상태 검증 포함
    */

@@ -179,11 +179,57 @@ export class ProductsService {
     return this.getProduct(storeId, productId);
   }
 
+  async toggleProductActive(
+    storeId: string,
+    productId: string,
+    sellerId: string,
+    isActive: boolean,
+  ) {
+    await this.assertSellerOwnsStore(storeId, sellerId);
+    const snap = await this.firestore.doc(`products/${productId}`).get();
+    if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+      throw new NotFoundException('상품을 찾을 수 없습니다.');
+    }
+    await this.firestore.doc(`products/${productId}`).update({
+      isActive,
+      updatedAt: this.firestore.Timestamp.now(),
+    });
+    return { productId, isActive };
+  }
+
   async deleteProduct(storeId: string, productId: string, sellerId: string) {
     await this.assertSellerOwnsStore(storeId, sellerId);
     await this.firestore
       .doc(`products/${productId}`)
       .update({ isActive: false, updatedAt: this.firestore.Timestamp.now() });
+  }
+
+  async getDailyCaps(storeId: string, sellerId: string, from?: string, to?: string) {
+    await this.assertSellerOwnsStore(storeId, sellerId);
+
+    const today = new Date().toISOString().split('T')[0];
+    const fromDate = from ?? today;
+    const toDate = to ?? today;
+
+    const snap = await this.firestore
+      .collection('dailyCaps')
+      .where('storeId', '==', storeId)
+      .where('date', '>=', fromDate)
+      .where('date', '<=', toDate)
+      .get();
+
+    return { caps: snap.docs.map((d) => d.data()) };
+  }
+
+  async updateDailyCap(storeId: string, date: string, sellerId: string, totalCap: number) {
+    await this.assertSellerOwnsStore(storeId, sellerId);
+    const docId = `${storeId}_${date}`;
+    await this.firestore.doc(`dailyCaps/${docId}`).set(
+      { id: docId, storeId, date, totalCap },
+      { merge: true },
+    );
+    const snap = await this.firestore.doc(`dailyCaps/${docId}`).get();
+    return snap.data();
   }
 
   async getDeliveryConfig(storeId: string) {

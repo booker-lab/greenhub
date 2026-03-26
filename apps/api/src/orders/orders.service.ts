@@ -305,6 +305,26 @@ export class OrdersService {
     return { orderId, status: 'CANCELLED' };
   }
 
+  async reviewOrder(storeId: string, orderId: string, userId: string) {
+    const snap = await this.firestore.doc(`orders/${orderId}`).get();
+    if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+      throw new NotFoundException();
+    }
+    const order = snap.data()!;
+    if (order['userId'] !== userId) throw new ForbiddenException();
+
+    const reviewableStatuses = ['DELIVERED', 'PICKED_UP'];
+    if (!reviewableStatuses.includes(order['status'])) {
+      throw new BadRequestException('DELIVERED 또는 PICKED_UP 상태에서만 리뷰 가능합니다.');
+    }
+
+    await this.firestore.doc(`orders/${orderId}`).update({
+      status: 'REVIEWED',
+      updatedAt: this.firestore.Timestamp.now(),
+    });
+    return { orderId, status: 'REVIEWED' };
+  }
+
   async confirmPickup(
     storeId: string,
     orderId: string,

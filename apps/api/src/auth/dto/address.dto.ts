@@ -5,10 +5,10 @@ export class AddressDto {
   label: string;
 
   @IsString()
-  roadAddress: string;
+  address: string;
 
   @IsString()
-  detailAddress: string;
+  addressDetail: string;
 
   @IsString()
   zipCode: string;

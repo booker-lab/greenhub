@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
   Param,
@@ -24,11 +25,30 @@ export class PaymentsController {
   handleWebhook(@Body() dto: PortoneWebhookDto) {
     return this.paymentsService.handleWebhook(dto);
   }
+
+  @Get(':paymentId')
+  @UseGuards(JwtAuthGuard)
+  getPayment(
+    @Param('paymentId') paymentId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.paymentsService.getPayment(paymentId, user.sub);
+  }
 }
 
 @Controller('stores/:storeId/orders/:orderId')
 export class RefundController {
   constructor(private readonly paymentsService: PaymentsService) {}
+
+  @Get('payment')
+  @UseGuards(JwtAuthGuard)
+  getOrderPayment(
+    @Param('storeId') storeId: string,
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.paymentsService.getPaymentByOrder(storeId, orderId, user.sub);
+  }
 
   @Post('refund')
   @UseGuards(JwtAuthGuard, RolesGuard)

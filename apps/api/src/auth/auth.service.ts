@@ -109,8 +109,8 @@ export class AuthService {
     const newAddr = {
       id: uuidv4(),
       label: dto.label,
-      address: dto.roadAddress,
-      addressDetail: dto.detailAddress,
+      address: dto.address,
+      addressDetail: dto.addressDetail,
       zipCode: dto.zipCode,
       isDefault: dto.isDefault ?? addresses.length === 0,
     };

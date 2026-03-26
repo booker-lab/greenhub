@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  ParseBoolPipe,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -69,6 +70,18 @@ export class ProductsController {
     );
   }
 
+  @Patch(':productId/active')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('seller')
+  toggleActive(
+    @Param('storeId') storeId: string,
+    @Param('productId') productId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body('isActive', ParseBoolPipe) isActive: boolean,
+  ) {
+    return this.productsService.toggleProductActive(storeId, productId, user.sub, isActive);
+  }
+
   @Delete(':productId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('seller')
@@ -79,6 +92,35 @@ export class ProductsController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.productsService.deleteProduct(storeId, productId, user.sub);
+  }
+}
+
+@Controller('stores/:storeId/daily-caps')
+export class DailyCapsController {
+  constructor(private readonly productsService: ProductsService) {}
+
+  @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('seller')
+  getDailyCaps(
+    @Param('storeId') storeId: string,
+    @CurrentUser() user: JwtPayload,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.productsService.getDailyCaps(storeId, user.sub, from, to);
+  }
+
+  @Patch(':date')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('seller')
+  updateDailyCap(
+    @Param('storeId') storeId: string,
+    @Param('date') date: string,
+    @CurrentUser() user: JwtPayload,
+    @Body('totalCap') totalCap: number,
+  ) {
+    return this.productsService.updateDailyCap(storeId, date, user.sub, totalCap);
   }
 }
 

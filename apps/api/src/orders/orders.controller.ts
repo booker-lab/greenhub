@@ -70,6 +70,16 @@ export class OrdersController {
     return this.ordersService.cancelOrder(storeId, orderId, user.sub, reason);
   }
 
+  @Patch(':orderId/review')
+  @HttpCode(HttpStatus.OK)
+  reviewOrder(
+    @Param('storeId') storeId: string,
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.ordersService.reviewOrder(storeId, orderId, user.sub);
+  }
+
   @Patch(':orderId/pickup-confirm')
   @HttpCode(HttpStatus.OK)
   confirmPickup(
