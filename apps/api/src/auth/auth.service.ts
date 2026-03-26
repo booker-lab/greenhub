@@ -162,6 +162,25 @@ export class AuthService {
     });
   }
 
+  async setDefaultAddress(userId: string, addressId: string) {
+    const ref = this.firestore.doc(`users/${userId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new NotFoundException();
+
+    const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
+    const idx = addresses.findIndex((a) => a.id === addressId);
+    if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
+
+    addresses.forEach((a) => (a.isDefault = false));
+    addresses[idx].isDefault = true;
+
+    await ref.update({
+      savedAddresses: addresses,
+      updatedAt: this.firestore.Timestamp.now(),
+    });
+    return addresses[idx];
+  }
+
   async updateFcmToken(userId: string, fcmToken: string) {
     await this.firestore.doc(`users/${userId}`).update({
       fcmToken,

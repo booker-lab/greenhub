@@ -72,6 +72,15 @@ export class AuthController {
     return this.authService.deleteAddress(user.sub, addressId);
   }
 
+  @Patch('me/addresses/:addressId/default')
+  @UseGuards(JwtAuthGuard)
+  setDefaultAddress(
+    @CurrentUser() user: JwtPayload,
+    @Param('addressId') addressId: string,
+  ) {
+    return this.authService.setDefaultAddress(user.sub, addressId);
+  }
+
   @Patch('me/fcm-token')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)

@@ -12,11 +12,11 @@ import { UpdateStatusDto, OrderStatus } from './dto/update-status.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 
-// 판매자 허용 상태 전환
+// 판매자 허용 상태 전환 (PREPARING → DELIVERING 는 드라이버 전용)
 const SELLER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   ACCEPTED: ['PREPARING'],
   CONFIRMED: ['PREPARING'],
-  PREPARING: ['DELIVERING', 'CANCELLED'],
+  PREPARING: ['CANCELLED'],
   DELIVERING: ['CANCELLED'],
   HUB_ARRIVED: ['CANCELLED'],
 };

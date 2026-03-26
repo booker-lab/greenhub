@@ -11,8 +11,6 @@ import {
 import { PaymentsService } from './payments.service';
 import { PortoneWebhookDto } from './dto/portone-webhook.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/types/jwt-payload.type';
 
@@ -36,6 +34,7 @@ export class PaymentsController {
   }
 }
 
+// Spec: 환불은 OrdersService 내부 취소 흐름에서만 실행 (외부 직접 노출 금지)
 @Controller('stores/:storeId/orders/:orderId')
 export class RefundController {
   constructor(private readonly paymentsService: PaymentsService) {}
@@ -48,23 +47,5 @@ export class RefundController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.paymentsService.getPaymentByOrder(storeId, orderId, user.sub);
-  }
-
-  @Post('refund')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('seller')
-  @HttpCode(HttpStatus.OK)
-  refundOrder(
-    @Param('storeId') storeId: string,
-    @Param('orderId') orderId: string,
-    @CurrentUser() user: JwtPayload,
-    @Body('reason') reason?: string,
-  ) {
-    return this.paymentsService.refundOrder(
-      storeId,
-      orderId,
-      user.sub,
-      reason,
-    );
   }
 }
