@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import type { Order } from '@greenhub/shared'
 
@@ -22,12 +22,12 @@ export function useOrderStatus(orderId: string | null): UseOrderStatusResult {
       return
     }
 
-    const ref = doc(db, 'orders', orderId)
-    console.log('[useOrderStatus] onSnapshot 시작, orderId:', orderId)
-    const unsubscribe = onSnapshot(
-      ref,
-      (snap) => {
-        console.log('[useOrderStatus] 콜백 수신, exists:', snap.exists(), 'status:', snap.data()?.['status'])
+    let cancelled = false
+
+    async function fetchOrder() {
+      try {
+        const snap = await getDoc(doc(db, 'orders', orderId!))
+        if (cancelled) return
         if (snap.exists()) {
           setOrder({ id: snap.id, ...snap.data() } as Order)
         } else {
@@ -35,15 +35,21 @@ export function useOrderStatus(orderId: string | null): UseOrderStatusResult {
         }
         setLoading(false)
         setError(null)
-      },
-      (err) => {
-        console.error('[useOrderStatus] 에러:', err.code, err.message)
-        setError(err.message)
+      } catch (e: unknown) {
+        if (cancelled) return
+        const msg = e instanceof Error ? e.message : '오류가 발생했습니다.'
+        setError(msg)
         setLoading(false)
-      },
-    )
+      }
+    }
 
-    return unsubscribe
+    fetchOrder()
+    const interval = setInterval(fetchOrder, 3000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [orderId])
 
   return { order, loading, error }
