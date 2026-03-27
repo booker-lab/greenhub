@@ -64,11 +64,15 @@ export class OrdersService {
       throw new BadRequestException('공동구매 동의가 필요합니다.');
     }
 
-    const product = await this.firestore.doc(`products/${dto.productId}`).get();
+    const [product, userSnap] = await Promise.all([
+      this.firestore.doc(`products/${dto.productId}`).get(),
+      this.firestore.doc(`users/${userId}`).get(),
+    ]);
     if (!product.exists || product.data()!['storeId'] !== storeId) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
     const productData = product.data()!;
+    const buyerName: string = userSnap.data()?.['name'] ?? userId;
 
     // 배송비 계산
     const deliveryConfig = await this.getDeliveryConfig(storeId);
@@ -159,7 +163,7 @@ export class OrdersService {
         merchantUid: orderId,
         amount: productData['price'] * dto.quantity + deliveryFee,
         name: productData['name'],
-        buyerName: userId,
+        buyerName,
       },
     };
   }
