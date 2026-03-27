@@ -2,90 +2,51 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 interface PortonePaymentData {
-  imp_uid: string;
-  merchant_uid: string;
-  amount: number;
+  id: string;
+  transactionId: string;
+  amount: { total: number };
   status: string;
-  pay_method: string;
+  method?: { type: string };
 }
 
 @Injectable()
 export class PortoneClient {
-  private readonly apiKey: string;
-  private readonly apiSecret: string;
+  private readonly secret: string;
+  private readonly baseUrl = 'https://api.portone.io';
 
   constructor(private readonly config: ConfigService) {
-    this.apiKey = config.get<string>('PORTONE_API_KEY', '');
-    this.apiSecret = config.get<string>('PORTONE_API_SECRET', '');
+    this.secret = config.get<string>('PORTONE_V2_SECRET', '');
   }
 
-  private async getAccessToken(): Promise<string> {
-    const res = await fetch('https://api.iamport.kr/users/getToken', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        imp_key: this.apiKey,
-        imp_secret: this.apiSecret,
-      }),
-    });
-    if (!res.ok) {
-      throw new InternalServerErrorException(
-        `Portone 토큰 발급 실패: ${res.status}`,
-      );
-    }
-    const json = (await res.json()) as {
-      code: number;
-      response: { access_token: string };
-    };
-    if (json.code !== 0) {
-      throw new InternalServerErrorException(
-        `Portone 토큰 발급 오류: code=${json.code}`,
-      );
-    }
-    return json.response.access_token;
-  }
-
-  async getPayment(impUid: string): Promise<PortonePaymentData> {
-    const token = await this.getAccessToken();
-    const res = await fetch(`https://api.iamport.kr/payments/${impUid}`, {
-      headers: { Authorization: token },
-    });
+  async getPayment(paymentId: string): Promise<PortonePaymentData> {
+    const res = await fetch(
+      `${this.baseUrl}/payments/${encodeURIComponent(paymentId)}`,
+      { headers: { Authorization: `PortOne ${this.secret}` } },
+    );
     if (!res.ok) {
       throw new InternalServerErrorException(
         `Portone 결제 조회 실패: ${res.status}`,
       );
     }
-    const json = (await res.json()) as {
-      code: number;
-      response: PortonePaymentData;
-    };
-    if (json.code !== 0 || !json.response) {
-      throw new InternalServerErrorException(
-        `Portone 결제 조회 오류: code=${json.code}`,
-      );
-    }
-    return json.response;
+    return res.json() as Promise<PortonePaymentData>;
   }
 
-  async refund(impUid: string, amount: number, reason: string): Promise<void> {
-    const token = await this.getAccessToken();
-    const res = await fetch('https://api.iamport.kr/payments/cancel', {
-      method: 'POST',
-      headers: {
-        Authorization: token,
-        'Content-Type': 'application/json',
+  async refund(paymentId: string, amount: number, reason: string): Promise<void> {
+    const res = await fetch(
+      `${this.baseUrl}/payments/${encodeURIComponent(paymentId)}/cancel`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `PortOne ${this.secret}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason, amount }),
       },
-      body: JSON.stringify({ imp_uid: impUid, amount, reason }),
-    });
+    );
     if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { message?: string };
       throw new InternalServerErrorException(
-        `Portone 환불 실패: ${res.status}`,
-      );
-    }
-    const json = (await res.json()) as { code: number; message: string };
-    if (json.code !== 0) {
-      throw new InternalServerErrorException(
-        `Portone 환불 오류: ${json.message}`,
+        `Portone 환불 실패: ${body.message ?? res.status}`,
       );
     }
   }

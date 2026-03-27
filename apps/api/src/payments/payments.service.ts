@@ -20,7 +20,7 @@ export class PaymentsService {
   ) {}
 
   async handleWebhook(dto: PortoneWebhookDto) {
-    const orderId = dto.merchant_uid;
+    const orderId = dto.data.paymentId;
 
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!orderSnap.exists) return { ok: false, reason: 'order_not_found' };
@@ -31,15 +31,15 @@ export class PaymentsService {
       return { ok: true, reason: 'already_processed' };
     }
 
-    if (dto.status !== 'paid') {
+    if (dto.type !== 'Transaction.Paid') {
       await this.cancelOrderWithSlotRecovery(orderId, order, 'payment_failed');
       return { ok: true };
     }
 
     // 금액 검증 (위변조 방지)
-    const paymentData = await this.portone.getPayment(dto.imp_uid);
-    if (paymentData.amount !== order['totalAmount']) {
-      await this.portone.refund(dto.imp_uid, paymentData.amount, '금액 위변조 감지');
+    const paymentData = await this.portone.getPayment(orderId);
+    if (paymentData.amount.total !== order['totalAmount']) {
+      await this.portone.refund(orderId, paymentData.amount.total, '금액 위변조 감지');
       await this.cancelOrderWithSlotRecovery(orderId, order, 'amount_mismatch');
       return { ok: false, reason: 'amount_mismatch' };
     }
@@ -55,16 +55,16 @@ export class PaymentsService {
     });
 
     // 결제 기록 저장
-    await this.firestore.doc(`payments/${dto.imp_uid}`).set({
-      id: dto.imp_uid,
+    await this.firestore.doc(`payments/${orderId}`).set({
+      id: orderId,
       orderId,
       userId: order['userId'],
       storeId: order['storeId'],
-      amount: paymentData.amount,
-      payMethod: paymentData.pay_method,
+      amount: paymentData.amount.total,
+      payMethod: paymentData.method?.type ?? null,
       status: 'PAID',
-      portoneImpUid: dto.imp_uid,
-      portoneMerchantUid: orderId,
+      portonePaymentId: orderId,
+      portoneTransactionId: paymentData.transactionId,
       refundAmount: null,
       refundedAt: null,
       refundReason: null,
@@ -147,7 +147,7 @@ export class PaymentsService {
 
     const payment = paySnap.docs[0].data();
     await this.portone.refund(
-      payment['portoneImpUid'],
+      payment['portonePaymentId'],
       payment['amount'],
       reason,
     );
