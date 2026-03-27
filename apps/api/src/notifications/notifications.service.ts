@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
@@ -6,6 +6,7 @@ import { AligoClient } from './aligo.client';
 import { PaymentsService } from '../payments/payments.service';
 
 export type NotificationTemplateCode =
+  // 소비자 수신
   | 'ORDER_ACCEPTED'
   | 'ORDER_PREPARING'
   | 'ORDER_DELIVERING'
@@ -19,13 +20,19 @@ export type NotificationTemplateCode =
   | 'GROUP_CANCELLED_SELF'
   | 'GROUP_PREPARING'
   | 'GROUP_DELIVERING'
-  | 'GROUP_DELIVERED';
+  | 'GROUP_DELIVERED'
+  // 판매자 수신
+  | 'SELLER_NEW_ORDER'
+  | 'SELLER_GROUP_CONFIRMED'
+  | 'SELLER_ORDER_CANCELLED'
+  | 'SELLER_GROUP_CANCELLED_LACK';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly aligo: AligoClient,
+    @Inject(forwardRef(() => PaymentsService))
     private readonly payments: PaymentsService,
   ) {}
 
@@ -38,7 +45,7 @@ export class NotificationsService {
     const items = snap.docs
       .map((d) => d.data())
       .sort((a, b) => (b['createdAt']?.seconds ?? 0) - (a['createdAt']?.seconds ?? 0))
-      .slice(0, 50); // 최근 50건
+      .slice(0, 50);
 
     return { items, total: items.length };
   }
@@ -96,7 +103,24 @@ export class NotificationsService {
     await Promise.all(promises);
   }
 
+  // 판매자(storeId 기준 ownerId 조회)에게 알림 발송
+  async sendToStoreOwner(
+    storeId: string,
+    templateCode: NotificationTemplateCode,
+    variables: Record<string, string>,
+    orderId?: string,
+  ) {
+    const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!storeSnap.exists) return;
+
+    const ownerId = storeSnap.data()!['ownerId'] as string | undefined;
+    if (!ownerId) return;
+
+    await this.sendToUser(ownerId, templateCode, variables, orderId);
+  }
+
   // ── 스케줄러: 공동구매 자동 확정·취소 (매 1분) ──
+  // isProcessed: true인 항목은 쿼리에서 제외하여 중복 처리 방지
   @Cron(CronExpression.EVERY_MINUTE)
   async processGroupBuyDeadlines() {
     const now = new Date();
@@ -104,46 +128,37 @@ export class NotificationsService {
     const expiredSnap = await this.firestore
       .collection('groupProductConfig')
       .where('recruitDeadline', '<=', this.firestore.Timestamp.fromDate(now))
+      .where('isProcessed', '==', false)
       .get();
 
-    for (const gcDoc of expiredSnap.docs) {
+    const promises = expiredSnap.docs.map(async (gcDoc) => {
       const gc = gcDoc.data();
       const productId = gc['productId'] as string;
-
-      // 이미 처리된 공동구매는 스킵 (RECRUITING 주문이 없으면 이미 처리됨)
-      const recruitingSnap = await this.firestore
-        .collection('orders')
-        .where('productId', '==', productId)
-        .where('status', '==', 'RECRUITING')
-        .limit(1)
-        .get();
-
-      if (recruitingSnap.empty) continue;
 
       if (gc['currentParticipants'] >= gc['minParticipants']) {
         await this.confirmGroupBuy(productId, gc);
       } else {
         await this.cancelGroupBuyLack(productId, gc);
       }
-    }
+
+      // 처리 완료 플래그 설정 (중복 실행 방지)
+      await gcDoc.ref.update({ isProcessed: true });
+    });
+
+    await Promise.all(promises);
   }
 
   // ── 스케줄러: 마감 2시간 전 알림 (매 10분) ──
   @Cron('*/10 * * * *')
   async notifyDeadlineSoon() {
     const in2h = new Date(Date.now() + 2 * 60 * 60 * 1000);
-    const in2h10 = new Date(
-      Date.now() + 2 * 60 * 60 * 1000 + 10 * 60 * 1000,
-    );
+    const in2h10 = new Date(Date.now() + 2 * 60 * 60 * 1000 + 10 * 60 * 1000);
 
     const snap = await this.firestore
       .collection('groupProductConfig')
       .where('recruitDeadline', '>=', this.firestore.Timestamp.fromDate(in2h))
-      .where(
-        'recruitDeadline',
-        '<=',
-        this.firestore.Timestamp.fromDate(in2h10),
-      )
+      .where('recruitDeadline', '<=', this.firestore.Timestamp.fromDate(in2h10))
+      .where('isProcessed', '==', false)
       .get();
 
     for (const doc of snap.docs) {
@@ -153,18 +168,12 @@ export class NotificationsService {
         .get();
       const productName = productSnap.data()?.['name'] ?? '';
 
-      await this.sendToGroupParticipants(
-        gc['productId'],
-        'GROUP_DEADLINE_SOON',
-        {
-          productName,
-          currentParticipants: String(gc['currentParticipants']),
-          minParticipants: String(gc['minParticipants']),
-          remaining: String(
-            gc['minParticipants'] - gc['currentParticipants'],
-          ),
-        },
-      );
+      await this.sendToGroupParticipants(gc['productId'], 'GROUP_DEADLINE_SOON', {
+        productName,
+        currentParticipants: String(gc['currentParticipants']),
+        minParticipants: String(gc['minParticipants']),
+        remaining: String(gc['minParticipants'] - gc['currentParticipants']),
+      });
     }
   }
 
@@ -191,16 +200,24 @@ export class NotificationsService {
     );
     await batch.commit();
 
-    const productSnap = await this.firestore
-      .doc(`products/${productId}`)
-      .get();
+    const productSnap = await this.firestore.doc(`products/${productId}`).get();
     const productName = productSnap.data()?.['name'] ?? '';
+    const storeId = productSnap.data()?.['storeId'] as string | undefined;
 
+    // 소비자 전체 알림
     await this.sendToGroupParticipants(productId, 'GROUP_CONFIRMED', {
       productName,
       minParticipants: String(gc['minParticipants']),
       groupDeliveryDate: String(gc['groupDeliveryDate']),
     });
+
+    // 판매자 알림
+    if (storeId) {
+      await this.sendToStoreOwner(storeId, 'SELLER_GROUP_CONFIRMED', {
+        productName,
+        participantCount: String(gc['currentParticipants']),
+      });
+    }
   }
 
   private async cancelGroupBuyLack(
@@ -218,32 +235,35 @@ export class NotificationsService {
     const reason = '목표 수량 미달성으로 취소';
     const now = this.firestore.Timestamp.now();
 
-    // Portone 환불 병렬 처리 (결제 기록이 있는 경우만)
     await Promise.all(
       ordersSnap.docs.map((doc) =>
         this.payments.processRefundByOrderId(doc.id, reason),
       ),
     );
 
-    // 주문 상태 일괄 CANCELLED
     const batch = this.firestore.db.batch();
     ordersSnap.docs.forEach((d) =>
-      batch.update(d.ref, {
-        status: 'CANCELLED',
-        cancelReason: reason,
-        updatedAt: now,
-      }),
+      batch.update(d.ref, { status: 'CANCELLED', cancelReason: reason, updatedAt: now }),
     );
     await batch.commit();
 
-    const productSnap = await this.firestore
-      .doc(`products/${productId}`)
-      .get();
+    const productSnap = await this.firestore.doc(`products/${productId}`).get();
     const productName = productSnap.data()?.['name'] ?? '';
+    const storeId = productSnap.data()?.['storeId'] as string | undefined;
 
+    // 소비자 전체 알림
     await this.sendToGroupParticipants(productId, 'GROUP_CANCELLED_LACK', {
       productName,
     });
+
+    // 판매자 알림
+    if (storeId) {
+      await this.sendToStoreOwner(storeId, 'SELLER_GROUP_CANCELLED_LACK', {
+        productName,
+        participantCount: String(gc['currentParticipants']),
+        minParticipants: String(gc['minParticipants']),
+      });
+    }
   }
 
   private async logNotification(data: {

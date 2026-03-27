@@ -157,12 +157,19 @@ export class OrdersService {
       });
     });
 
+    // 판매자 알림: 신규 주문 접수
+    await this.notifications.sendToStoreOwner(
+      storeId,
+      'SELLER_NEW_ORDER',
+      { orderId, productName: productData['name'] as string },
+      orderId,
+    );
+
     return {
       orderId,
       portonePaymentParams: {
-        merchantUid: orderId,
-        amount: productData['price'] * dto.quantity + deliveryFee,
         name: productData['name'],
+        amount: productData['price'] * dto.quantity + deliveryFee,
         buyerName,
       },
     };
@@ -176,8 +183,13 @@ export class OrdersService {
     const order = snap.data()!;
     if (order['userId'] !== requesterId) {
       const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
-      const role = userSnap.data()?.['role'];
+      const userData = userSnap.data();
+      const role = userData?.['role'];
       if (role !== 'seller' && role !== 'driver') {
+        throw new ForbiddenException();
+      }
+      // 판매자는 자신의 storeId 주문만 조회 가능
+      if (role === 'seller' && userData?.['storeId'] !== storeId) {
         throw new ForbiddenException();
       }
     }
@@ -189,6 +201,13 @@ export class OrdersService {
     requesterId: string,
     query: { userId?: string; status?: string; saleType?: string },
   ) {
+    // 판매자는 자신의 storeId 주문만 조회 가능
+    const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
+    const userData = userSnap.data();
+    if (userData?.['role'] === 'seller' && userData?.['storeId'] !== storeId) {
+      throw new ForbiddenException();
+    }
+
     let ref = this.firestore
       .collection('orders')
       .where('storeId', '==', storeId) as any;
@@ -298,11 +317,19 @@ export class OrdersService {
       }
     });
 
-    // 본인 알림 발송
+    // 소비자 본인 알림
     await this.notifications.sendToUser(
       userId,
       'GROUP_CANCELLED_SELF',
-      { orderId, productId: order['productId'] },
+      { orderId, productId: order['productId'] as string },
+      orderId,
+    );
+
+    // 판매자 알림: 소비자 개인 취소 발생
+    await this.notifications.sendToStoreOwner(
+      storeId,
+      'SELLER_ORDER_CANCELLED',
+      { orderId, productId: order['productId'] as string, reason: cancelReason },
       orderId,
     );
 

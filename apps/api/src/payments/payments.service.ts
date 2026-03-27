@@ -1,8 +1,9 @@
-import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FirestoreService } from '../firestore/firestore.service';
 import { PortoneClient } from './portone.client';
 import { PortoneWebhookDto } from './dto/portone-webhook.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // 환불 가능 상태
 const REFUNDABLE_STATUSES = [
@@ -17,6 +18,8 @@ export class PaymentsService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly portone: PortoneClient,
+    @Inject(forwardRef(() => NotificationsService))
+    private readonly notifications: NotificationsService,
   ) {}
 
   async handleWebhook(dto: PortoneWebhookDto) {
@@ -71,6 +74,15 @@ export class PaymentsService {
       createdAt: now,
       updatedAt: now,
     });
+
+    // 소비자 알림: 일반 결제 완료 / 공동구매 참여 완료
+    const buyerTemplateCode = newStatus === 'ACCEPTED' ? 'ORDER_ACCEPTED' : 'GROUP_JOINED';
+    await this.notifications.sendToUser(
+      order['userId'] as string,
+      buyerTemplateCode,
+      { orderId },
+      orderId,
+    );
 
     return { ok: true, status: newStatus };
   }
