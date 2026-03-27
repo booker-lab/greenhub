@@ -3,15 +3,15 @@ export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED'
 export type PayMethod = 'kakaopay' | 'naverpay' | 'card'
 
 export interface Payment {
-  id: string // Portone imp_uid
+  id: string // orderId와 동일 (Portone V2 paymentId)
   orderId: string
   userId: string
   storeId: string
   amount: number
-  payMethod: PayMethod
+  payMethod: PayMethod | null
   status: PaymentStatus
-  portoneImpUid: string
-  portoneMerchantUid: string
+  portonePaymentId: string     // Portone V2: paymentId (구 imp_uid)
+  portoneTransactionId: string // Portone V2: transactionId (구 merchant_uid)
   refundAmount: number | null
   refundedAt: string | null // ISO8601
   refundReason: string | null
@@ -19,15 +19,9 @@ export interface Payment {
   updatedAt: string // ISO8601
 }
 
+// Portone V2 SDK requestPayment() 파라미터
 export interface PortonePaymentParams {
-  pg: string // 'html5_inicis' | 'naverpay' | 'kakaopay'
-  pay_method: string
-  merchant_uid: string
-  name: string
-  amount: number
-  buyer_name: string
-  buyer_tel: string
-  buyer_email: string
-  buyer_addr: string
-  buyer_postcode: string
+  name: string    // 상품명
+  amount: number  // 결제금액 (KRW)
+  buyerName: string
 }
