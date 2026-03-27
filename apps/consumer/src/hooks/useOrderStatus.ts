@@ -23,9 +23,11 @@ export function useOrderStatus(orderId: string | null): UseOrderStatusResult {
     }
 
     const ref = doc(db, 'orders', orderId)
+    console.log('[useOrderStatus] onSnapshot 시작, orderId:', orderId)
     const unsubscribe = onSnapshot(
       ref,
       (snap) => {
+        console.log('[useOrderStatus] 콜백 수신, exists:', snap.exists(), 'status:', snap.data()?.['status'])
         if (snap.exists()) {
           setOrder({ id: snap.id, ...snap.data() } as Order)
         } else {
@@ -35,6 +37,7 @@ export function useOrderStatus(orderId: string | null): UseOrderStatusResult {
         setError(null)
       },
       (err) => {
+        console.error('[useOrderStatus] 에러:', err.code, err.message)
         setError(err.message)
         setLoading(false)
       },
