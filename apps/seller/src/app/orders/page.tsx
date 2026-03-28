@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useOrders, TAB_STATUSES } from '@/hooks/useOrders'
 import type { Order, OrderStatus } from '@greenhub/shared'
@@ -145,6 +146,7 @@ export default function OrdersPage() {
 }
 
 function OrderCard({ order, storeId }: { order: Order; storeId: string | null }) {
+  const router = useRouter()
   const { data: session } = useSession()
   const [actionLoading, setActionLoading] = useState(false)
   const [showPrepareForm, setShowPrepareForm] = useState(false)
@@ -185,10 +187,14 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
   }
 
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED'
+  // 발송(DELIVERING) 이전까지만 취소 가능
   const canCancel = order.status === 'ACCEPTED' || order.status === 'CONFIRMED' || order.status === 'PREPARING'
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-4">
+    <div
+      className="bg-white rounded-2xl shadow-sm p-4 cursor-pointer active:bg-gray-50 transition-colors"
+      onClick={() => router.push(`/orders/${order.id}`)}
+    >
       {/* 상단: 상태 뱃지 + 시간 */}
       <div className="flex items-center justify-between mb-2">
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLOR[order.status]}`}>
@@ -211,7 +217,7 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
 
       {/* 준비 시작 폼 */}
       {showPrepareForm && (
-        <div className="mb-3 p-3 bg-gray-50 rounded-xl space-y-2">
+        <div className="mb-3 p-3 bg-gray-50 rounded-xl space-y-2" onClick={(e) => e.stopPropagation()}>
           <p className="text-xs text-gray-500">드라이버 수거 예정 시간 (선택)</p>
           <input
             type="datetime-local"
@@ -239,7 +245,7 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
 
       {/* 액션 버튼 */}
       {!showPrepareForm && (canPrepare || canCancel) && (
-        <div className="flex gap-2">
+        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
           {canPrepare && (
             <button
               onClick={() => setShowPrepareForm(true)}

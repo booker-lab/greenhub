@@ -42,6 +42,7 @@ export interface Order {
   pickupCode: string | null
   totalAmount: number
   requestedDeliveryDate: string | null // ISO8601
+  preparedAt: string | null            // ISO8601 — 드라이버 수거 예정 시각 (판매자 설정)
   cancelReason: string | null
   groupBuyConsent: GroupBuyConsent | null
   createdAt: string // ISO8601
