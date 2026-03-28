@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import type { Order } from '@greenhub/shared'
-import { parseFirestoreDoc, type FirestoreValue } from '@/lib/firestore'
 
-const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+const STORE_ID = 'dear-orchid'
 
 interface UseOrdersResult {
   orders: Order[]
@@ -23,7 +23,8 @@ export function useOrders(): UseOrdersResult {
 
   useEffect(() => {
     const userId = session?.user?.id
-    if (!userId) {
+    const token = session?.user?.accessToken
+    if (!userId || !token) {
       setLoading(false)
       return
     }
@@ -33,36 +34,15 @@ export function useOrders(): UseOrdersResult {
 
     async function fetchOrders() {
       try {
-        const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:runQuery`
+        const url = `${API_URL}/stores/${STORE_ID}/orders?userId=${userId}`
         const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            structuredQuery: {
-              from: [{ collectionId: 'orders' }],
-              where: {
-                fieldFilter: {
-                  field: { fieldPath: 'userId' },
-                  op: 'EQUAL',
-                  value: { stringValue: userId },
-                },
-              },
-              orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
-            },
-          }),
+          headers: { Authorization: `Bearer ${token}` },
         })
         if (cancelled) return
-        if (!res.ok) throw new Error(`Firestore 응답 오류: ${res.status}`)
+        if (!res.ok) throw new Error(`주문 조회 오류: ${res.status}`)
 
-        const docs = (await res.json()) as Array<{
-          document?: { name: string; fields: Record<string, FirestoreValue> }
-        }>
-
-        const parsed = docs
-          .filter((d) => d.document)
-          .map((d) => parseFirestoreDoc<Order>(d.document!))
-
-        setOrders(parsed)
+        const data = (await res.json()) as Order[]
+        setOrders(data)
         setLoading(false)
         setError(null)
       } catch (e: unknown) {
@@ -76,7 +56,7 @@ export function useOrders(): UseOrdersResult {
     return () => {
       cancelled = true
     }
-  }, [session?.user?.id, tick])
+  }, [session?.user?.id, session?.user?.accessToken, tick])
 
   return { orders, loading, error, refetch: () => setTick((t) => t + 1) }
 }
