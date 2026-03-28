@@ -103,7 +103,7 @@ export default function OrderDetailPage() {
   // ── 공동구매인 경우 groupProductConfig 로드 ──
   useEffect(() => {
     if (!order || order.saleType !== 'group') return
-    const ref = doc(db, 'groupProductConfigs', order.productId)
+    const ref = doc(db, 'groupProductConfig', order.productId)
     getDoc(ref).then((snap) => {
       if (snap.exists()) {
         setGroupConfig(snap.data() as GroupProductConfig)

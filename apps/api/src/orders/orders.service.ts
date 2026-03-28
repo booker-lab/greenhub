@@ -14,9 +14,11 @@ import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
 
 // 판매자 허용 상태 전환 — DELIVERING 이후 취소 불가 (소비자 반품 신청 루트)
+// PREPARING → DELIVERING: 드라이버 앱 미완성 전까지 판매자가 임시 수행 (드라이버 앱 완성 시 제거)
 const SELLER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   ACCEPTED: ['PREPARING'],
   CONFIRMED: ['PREPARING'],
+  PREPARING: ['DELIVERING'],
 };
 
 // 드라이버 허용 상태 전환
@@ -162,14 +164,6 @@ export class OrdersService {
         updatedAt: now,
       });
     });
-
-    // 판매자 알림: 신규 주문 접수
-    await this.notifications.sendToStoreOwner(
-      storeId,
-      'SELLER_NEW_ORDER',
-      { orderId, productName: productData['name'] as string },
-      orderId,
-    );
 
     return {
       orderId,
@@ -340,14 +334,6 @@ export class OrdersService {
       userId,
       'GROUP_CANCELLED_SELF',
       { orderId, productId: order['productId'] as string },
-      orderId,
-    );
-
-    // 판매자 알림: 소비자 개인 취소 발생
-    await this.notifications.sendToStoreOwner(
-      storeId,
-      'SELLER_ORDER_CANCELLED',
-      { orderId, productId: order['productId'] as string, reason: cancelReason },
       orderId,
     );
 
