@@ -217,7 +217,7 @@ export class OrdersService {
     if (query.saleType) ref = ref.where('saleType', '==', query.saleType);
 
     const snap = await ref.get();
-    return { orders: snap.docs.map((d: any) => d.data()) };
+    return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
   }
 
   async updateStatus(
