@@ -34,6 +34,11 @@ export class PaymentsService {
       return { ok: true, reason: 'already_processed' };
     }
 
+    // Transaction.Ready: 결제창 오픈 이벤트 — 주문 상태 변경 없이 무시
+    if (dto.type === 'Transaction.Ready') {
+      return { ok: true, reason: 'transaction_ready_ignored' };
+    }
+
     if (dto.type !== 'Transaction.Paid') {
       await this.cancelOrderWithSlotRecovery(orderId, order, 'payment_failed');
       return { ok: true };
