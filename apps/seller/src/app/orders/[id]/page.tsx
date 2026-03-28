@@ -152,6 +152,25 @@ export default function OrderDetailPage() {
     }
   }
 
+  // ── 액션: 배송 시작 ──
+  async function handleDeliver() {
+    if (!storeId || !order) return
+    setActionLoading(true)
+    setActionError(null)
+    try {
+      const res = await apiFetch(
+        `/stores/${storeId}/orders/${order.id}/status`,
+        token,
+        { method: 'PATCH', body: JSON.stringify({ status: 'DELIVERING' }) },
+      )
+      if (!res.ok) throw new Error(`서버 오류 (${res.status})`)
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : '오류가 발생했습니다')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   // ── 액션: 강제 취소 ──
   async function handleCancel() {
     if (!storeId || !order) return
@@ -202,6 +221,7 @@ export default function OrderDetailPage() {
 
   const isReadonly = READONLY_STATUSES.includes(order.status)
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED'
+  const canDeliver = order.status === 'PREPARING'
   const canCancel = CANCELLABLE_STATUSES.includes(order.status)
 
   const deliveryDate =
@@ -374,6 +394,15 @@ export default function OrderDetailPage() {
                 className="w-full bg-green-primary text-white text-sm font-semibold py-3.5 rounded-2xl disabled:opacity-50"
               >
                 준비 시작
+              </button>
+            )}
+            {canDeliver && (
+              <button
+                onClick={handleDeliver}
+                disabled={actionLoading}
+                className="w-full bg-purple-600 text-white text-sm font-semibold py-3.5 rounded-2xl disabled:opacity-50"
+              >
+                {actionLoading ? '처리 중...' : '배송 시작'}
               </button>
             )}
             {canCancel && (
