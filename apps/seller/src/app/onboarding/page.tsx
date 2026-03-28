@@ -21,7 +21,16 @@ export default function OnboardingPage() {
   })
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+    if (name === 'phone') {
+      const digits = value.replace(/\D/g, '').slice(0, 11)
+      let formatted = digits
+      if (digits.length > 7) formatted = `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
+      else if (digits.length > 3) formatted = `${digits.slice(0, 3)}-${digits.slice(3)}`
+      setForm((prev) => ({ ...prev, phone: formatted }))
+      return
+    }
+    setForm((prev) => ({ ...prev, [name]: value }))
   }
 
   async function handleSubmit(e: React.FormEvent) {
