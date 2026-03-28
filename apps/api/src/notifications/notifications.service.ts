@@ -94,12 +94,15 @@ export class NotificationsService {
     const snap = await this.firestore
       .collection('orders')
       .where('productId', '==', productId)
-      .where('status', 'in', ['RECRUITING', 'CONFIRMED'])
       .get();
 
-    const promises = snap.docs.map((doc) =>
-      this.sendToUser(doc.data()['userId'], templateCode, variables, doc.id),
-    );
+    // PENDING·CANCELLED·REVIEWED(종료 상태) 제외 — CONFIRMED 이후 상태(PREPARING 등)도 포함
+    const terminalStatuses = ['PENDING', 'CANCELLED', 'REVIEWED'];
+    const promises = snap.docs
+      .filter((doc) => !terminalStatuses.includes(doc.data()['status'] as string))
+      .map((doc) =>
+        this.sendToUser(doc.data()['userId'], templateCode, variables, doc.id),
+      );
     await Promise.all(promises);
   }
 

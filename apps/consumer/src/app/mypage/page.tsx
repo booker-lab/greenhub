@@ -1,13 +1,14 @@
-import A2HSButton from "@/components/A2HSButton";
+'use client'
+
+import dynamic from 'next/dynamic'
+
+const MyPageClient = dynamic(() => import('./_client'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ padding: '60px 24px', textAlign: 'center', color: '#999' }}>로딩 중...</div>
+  ),
+})
 
 export default function MyPage() {
-  return (
-    <main className="p-4 space-y-6">
-      <h1 className="text-xl font-bold">마이페이지</h1>
-      <section>
-        <h2 className="text-sm text-gray-500 mb-2">앱 설치</h2>
-        <A2HSButton />
-      </section>
-    </main>
-  );
+  return <MyPageClient />
 }

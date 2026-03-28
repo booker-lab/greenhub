@@ -439,15 +439,25 @@ export class OrdersService {
     to: OrderStatus,
     orderId: string,
   ) {
-    const templateCode =
+    const isGroup = order['saleType'] === 'group';
+
+    // 공동구매 전용 템플릿 오버라이드 (스펙: 전체 참여자 알림 필요)
+    const GROUP_TEMPLATE_OVERRIDES: Partial<Record<OrderStatus, Partial<Record<OrderStatus, string>>>> = {
+      PREPARING: { DELIVERING: 'GROUP_DELIVERING' },
+      DELIVERING: { DELIVERED: 'GROUP_DELIVERED' },
+    };
+
+    const templateCode: string | null =
+      (isGroup ? GROUP_TEMPLATE_OVERRIDES[from]?.[to] : null) ??
       NOTIFICATION_MAP[from]?.[to] ??
       (to === 'CANCELLED' ? 'ORDER_CANCELLED' : null);
+
     if (!templateCode) return;
 
     const variables: Record<string, string> = { orderId };
-    const isGroup = order['saleType'] === 'group';
+    const GROUP_TEMPLATES = ['GROUP_PREPARING', 'GROUP_DELIVERING', 'GROUP_DELIVERED', 'GROUP_CONFIRMED'];
 
-    if (isGroup && ['GROUP_PREPARING', 'GROUP_DELIVERING', 'GROUP_DELIVERED', 'GROUP_CONFIRMED'].includes(templateCode)) {
+    if (isGroup && GROUP_TEMPLATES.includes(templateCode)) {
       await this.notifications.sendToGroupParticipants(
         order['productId'] as string,
         templateCode as any,

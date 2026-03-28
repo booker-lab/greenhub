@@ -2,33 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { Order } from '@greenhub/shared'
-
-type FirestoreValue =
-  | { stringValue: string }
-  | { integerValue: string }
-  | { doubleValue: number }
-  | { booleanValue: boolean }
-  | { nullValue: null }
-  | { timestampValue: string }
-  | { mapValue: { fields?: Record<string, FirestoreValue> } }
-  | { arrayValue: { values?: FirestoreValue[] } }
-
-function parseValue(val: FirestoreValue): unknown {
-  if ('stringValue' in val) return val.stringValue
-  if ('integerValue' in val) return Number(val.integerValue)
-  if ('doubleValue' in val) return val.doubleValue
-  if ('booleanValue' in val) return val.booleanValue
-  if ('nullValue' in val) return null
-  if ('timestampValue' in val) return val.timestampValue
-  if ('mapValue' in val) {
-    const fields = val.mapValue.fields ?? {}
-    return Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, parseValue(v)]))
-  }
-  if ('arrayValue' in val) {
-    return (val.arrayValue.values ?? []).map(parseValue)
-  }
-  return null
-}
+import { parseFirestoreValue, type FirestoreValue } from '@/lib/firestore'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
 
@@ -70,7 +44,7 @@ export function useOrderStatus(orderId: string | null): UseOrderStatusResult {
         const data = await res.json()
         const fields = data.fields as Record<string, FirestoreValue>
         const parsed = Object.fromEntries(
-          Object.entries(fields).map(([k, v]) => [k, parseValue(v)]),
+          Object.entries(fields).map(([k, v]) => [k, parseFirestoreValue(v)]),
         ) as Record<string, unknown>
 
         setOrder({ id: orderId, ...parsed } as Order)
