@@ -50,8 +50,11 @@ const DELIVERY_LABEL: Record<string, string> = {
   parcel: '택배',
 }
 
-function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
+function formatRelativeTime(iso: unknown): string {
+  const date = iso && typeof iso === 'object' && 'toDate' in iso
+    ? (iso as { toDate(): Date }).toDate()
+    : new Date(iso as string)
+  const diff = Date.now() - date.getTime()
   const min = Math.floor(diff / 60000)
   if (min < 1) return '방금 전'
   if (min < 60) return `${min}분 전`
