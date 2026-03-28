@@ -85,6 +85,32 @@ export class HubsService {
     return { id: hubId };
   }
 
+  async getHubOrders(
+    storeId: string,
+    hubId: string,
+    requesterId: string,
+    status?: string,
+  ) {
+    await this.verifyOwnership(storeId, requesterId);
+
+    const hubSnap = await this.firestore.doc(`hubs/${hubId}`).get();
+    if (!hubSnap.exists || hubSnap.data()!['storeId'] !== storeId) {
+      throw new NotFoundException('거점을 찾을 수 없습니다');
+    }
+
+    // hubId 단일 필드 쿼리 (자동 인덱스) — status는 앱 레이어 필터 (복합 인덱스 불필요)
+    const snap = await (this.firestore
+      .collection('orders')
+      .where('hubId', '==', hubId) as any).get();
+
+    let orders = snap.docs.map((d: any) => d.data());
+    if (status) {
+      orders = orders.filter((o: any) => o.status === status);
+    }
+
+    return { orders };
+  }
+
   async deleteHub(storeId: string, hubId: string, requesterId: string) {
     await this.verifyOwnership(storeId, requesterId);
 

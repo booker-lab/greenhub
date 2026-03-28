@@ -100,7 +100,7 @@ export default function HubsPage() {
             {hubs.map((hub) => (
               <div key={hub.id} className="bg-white rounded-2xl px-4 py-4 shadow-sm">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
+                  <Link href={`/hubs/${hub.id}`} className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-semibold text-gray-900 text-sm truncate">{hub.name}</p>
                       <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
@@ -118,7 +118,7 @@ export default function HubsPage() {
                     {hub.operatingHours && (
                       <p className="text-xs text-gray-400 mt-1">운영: {hub.operatingHours}</p>
                     )}
-                  </div>
+                  </Link>
                   <div className="flex flex-col gap-1 flex-shrink-0">
                     <button
                       onClick={() => toggleActive(hub)}

@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -36,6 +37,16 @@ export class HubsController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.hubsService.getHub(storeId, hubId, user.sub);
+  }
+
+  @Get(':hubId/orders')
+  getHubOrders(
+    @Param('storeId') storeId: string,
+    @Param('hubId') hubId: string,
+    @CurrentUser() user: JwtPayload,
+    @Query('status') status?: string,
+  ) {
+    return this.hubsService.getHubOrders(storeId, hubId, user.sub, status);
   }
 
   @Post()

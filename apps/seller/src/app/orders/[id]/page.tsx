@@ -164,7 +164,7 @@ export default function OrderDetailPage() {
         token,
         {
           method: 'PATCH',
-          body: JSON.stringify({ status: 'CANCELLED', cancelReason: cancelReason.trim() }),
+          body: JSON.stringify({ status: 'CANCELLED', reason: cancelReason.trim() }),
         },
       )
       if (!res.ok) throw new Error(`서버 오류 (${res.status})`)

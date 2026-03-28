@@ -13,13 +13,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
 
-// 판매자 허용 상태 전환 (PREPARING → DELIVERING 는 드라이버 전용)
+// 판매자 허용 상태 전환 — DELIVERING 이후 취소 불가 (소비자 반품 신청 루트)
 const SELLER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   ACCEPTED: ['PREPARING'],
   CONFIRMED: ['PREPARING'],
-  PREPARING: ['CANCELLED'],
-  DELIVERING: ['CANCELLED'],
-  HUB_ARRIVED: ['CANCELLED'],
 };
 
 // 드라이버 허용 상태 전환
@@ -64,6 +61,11 @@ export class OrdersService {
     // 공동구매 동의 검증
     if (dto.saleType === 'group' && !dto.groupBuyConsent?.agreed) {
       throw new BadRequestException('공동구매 동의가 필요합니다.');
+    }
+
+    // hub 배송 시 hubId 필수
+    if (dto.deliveryMethod === 'hub' && !dto.hubId) {
+      throw new BadRequestException('거점 배송 시 hubId가 필요합니다.');
     }
 
     const [product, userSnap] = await Promise.all([
@@ -140,6 +142,7 @@ export class OrdersService {
         deliveryFee,
         deliveryAddress: dto.deliveryAddress,
         isMetropolitan,
+        hubId: dto.deliveryMethod === 'hub' ? (dto.hubId ?? null) : null,
         pickupCode:
           dto.deliveryMethod === 'hub' ? generatePickupCode() : null,
         totalAmount: productData['price'] * dto.quantity + deliveryFee,
@@ -405,6 +408,41 @@ export class OrdersService {
     return { orderId, status: 'PICKED_UP' };
   }
 
+  async hubConfirmPickup(
+    storeId: string,
+    orderId: string,
+    requesterId: string,
+    pickupCode: string,
+  ) {
+    // seller 소유권 검증
+    const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!storeSnap.exists || storeSnap.data()?.['ownerId'] !== requesterId) {
+      throw new ForbiddenException('해당 스토어에 대한 권한이 없습니다');
+    }
+
+    const snap = await this.firestore.doc(`orders/${orderId}`).get();
+    if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+      throw new NotFoundException();
+    }
+    const order = snap.data()!;
+
+    if (order['status'] !== 'HUB_ARRIVED') {
+      throw new BadRequestException('HUB_ARRIVED 상태에서만 픽업 확인 가능');
+    }
+    if (order['pickupCode'] !== pickupCode) {
+      throw new BadRequestException('픽업 코드가 올바르지 않습니다.');
+    }
+
+    await this.firestore.doc(`orders/${orderId}`).update({
+      status: 'PICKED_UP',
+      updatedAt: this.firestore.Timestamp.now(),
+    });
+
+    await this.settlements.createSettlement(order, 'PICKED_UP');
+
+    return { orderId, status: 'PICKED_UP' };
+  }
+
   // ────────────────────────────────────────────────────────────
   // 알림 발송 헬퍼
   // ────────────────────────────────────────────────────────────
@@ -446,9 +484,9 @@ export class OrdersService {
   private getAllowedTransitions(role: string, current: OrderStatus): OrderStatus[] {
     if (role === 'seller') {
       const base = SELLER_TRANSITIONS[current] ?? [];
-      // 판매자 강제 취소는 REVIEWED/CANCELLED/PICKED_UP 제외 모든 상태
-      const noCancel: OrderStatus[] = ['REVIEWED', 'CANCELLED', 'PICKED_UP', 'DELIVERED'];
-      if (!noCancel.includes(current) && !base.includes('CANCELLED')) {
+      // 판매자 강제 취소는 ACCEPTED·CONFIRMED·PREPARING 상태에서만 허용
+      const sellerCancellable: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
+      if (sellerCancellable.includes(current)) {
         return [...base, 'CANCELLED'];
       }
       return base;

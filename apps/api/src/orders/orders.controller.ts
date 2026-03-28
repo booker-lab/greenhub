@@ -95,4 +95,20 @@ export class OrdersController {
       pickupCode,
     );
   }
+
+  @Patch(':orderId/hub-confirm')
+  @HttpCode(HttpStatus.OK)
+  hubConfirmPickup(
+    @Param('storeId') storeId: string,
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body('pickupCode') pickupCode: string,
+  ) {
+    return this.ordersService.hubConfirmPickup(
+      storeId,
+      orderId,
+      user.sub,
+      pickupCode,
+    );
+  }
 }

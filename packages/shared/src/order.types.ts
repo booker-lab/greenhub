@@ -39,6 +39,7 @@ export interface Order {
   deliveryFee: number
   deliveryAddress: DeliveryAddress
   isMetropolitan: boolean
+  hubId: string | null               // hub 배송 선택 시 거점 ID
   pickupCode: string | null
   totalAmount: number
   requestedDeliveryDate: string | null // ISO8601
@@ -62,6 +63,7 @@ export interface CreateOrderRequest {
   quantity: number
   saleType: SaleType
   deliveryMethod: DeliveryMethod
+  hubId?: string                 // hub 배송 시 필수
   deliveryAddress: DeliveryAddress
   requestedDeliveryDate?: string // 일반 판매 전용 'YYYY-MM-DD'
   groupBuyConsent?: {

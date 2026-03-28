@@ -42,6 +42,10 @@ export class CreateOrderDto {
   @IsEnum(['direct', 'hub', 'parcel'])
   deliveryMethod: string;
 
+  @IsOptional()
+  @IsString()
+  hubId?: string; // deliveryMethod === 'hub' 시 필수 (서비스 레이어에서 검증)
+
   @ValidateNested()
   @Type(() => DeliveryAddressDto)
   deliveryAddress: DeliveryAddressDto;
