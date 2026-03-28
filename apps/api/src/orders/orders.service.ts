@@ -11,6 +11,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateStatusDto, OrderStatus } from './dto/update-status.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
+import { SettlementsService } from '../settlements/settlements.service';
 
 // 판매자 허용 상태 전환 (PREPARING → DELIVERING 는 드라이버 전용)
 const SELLER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
@@ -56,6 +57,7 @@ export class OrdersService {
     private readonly firestore: FirestoreService,
     private readonly notifications: NotificationsService,
     private readonly payments: PaymentsService,
+    private readonly settlements: SettlementsService,
   ) {}
 
   async createOrder(storeId: string, userId: string, dto: CreateOrderDto) {
@@ -142,6 +144,7 @@ export class OrdersService {
           dto.deliveryMethod === 'hub' ? generatePickupCode() : null,
         totalAmount: productData['price'] * dto.quantity + deliveryFee,
         requestedDeliveryDate: dto.requestedDeliveryDate ?? null,
+        preparedAt: null,
         cancelReason: null,
         groupBuyConsent: dto.groupBuyConsent
           ? {
@@ -248,6 +251,13 @@ export class OrdersService {
       updatedAt: this.firestore.Timestamp.now(),
     };
     if (dto.reason) update['cancelReason'] = dto.reason;
+    if (dto.status === 'PREPARING' && dto.preparedAt) {
+      const date = new Date(dto.preparedAt);
+      if (isNaN(date.getTime())) {
+        throw new BadRequestException('preparedAt must be a valid ISO8601 date');
+      }
+      update['preparedAt'] = this.firestore.Timestamp.fromDate(date);
+    }
 
     await this.firestore.doc(`orders/${orderId}`).update(update);
 
@@ -262,6 +272,11 @@ export class OrdersService {
       if (refundableStatuses.includes(currentStatus)) {
         await this.payments.processRefundByOrderId(orderId, dto.reason ?? '판매자 취소');
       }
+    }
+
+    // DELIVERED 전환 시 정산 자동 생성
+    if (dto.status === 'DELIVERED') {
+      await this.settlements.createSettlement(order, 'DELIVERED');
     }
 
     // 알림 발송
@@ -353,6 +368,10 @@ export class OrdersService {
       status: 'REVIEWED',
       updatedAt: this.firestore.Timestamp.now(),
     });
+
+    // 정산 자동 생성
+    await this.settlements.createSettlement(order, 'REVIEWED');
+
     return { orderId, status: 'REVIEWED' };
   }
 
@@ -379,6 +398,10 @@ export class OrdersService {
       status: 'PICKED_UP',
       updatedAt: this.firestore.Timestamp.now(),
     });
+
+    // 정산 자동 생성
+    await this.settlements.createSettlement(order, 'PICKED_UP');
+
     return { orderId, status: 'PICKED_UP' };
   }
 
