@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
 
 export default function OnboardingPage() {
-  const { data: session } = useSession()
+  const { data: session, update } = useSession()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -35,23 +35,32 @@ export default function OnboardingPage() {
 
     const storeId = session?.user.storeId
     const token = session?.user.accessToken
-    if (!storeId || !token) {
+    if (!token) {
       setError('로그인 정보를 확인해주세요.')
       setLoading(false)
       return
     }
 
-    const res = await apiFetch(`/stores/${storeId}`, token, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        name: form.name,
-        ceoName: form.ceoName,
-        phone: form.phone,
-        address: form.address,
-        businessNumber: form.businessNumber || undefined,
-        logoUrl: form.logoUrl || undefined,
-      }),
+    const body = JSON.stringify({
+      name: form.name,
+      ceoName: form.ceoName,
+      phone: form.phone,
+      address: form.address,
+      businessNumber: form.businessNumber || undefined,
+      logoUrl: form.logoUrl || undefined,
     })
+
+    let res: Response
+    if (!storeId) {
+      // 신규 seller — 스토어 생성
+      res = await apiFetch('/stores', token, { method: 'POST', body })
+      if (res.ok) {
+        const data = await res.json()
+        await update({ storeId: data.storeId })
+      }
+    } else {
+      res = await apiFetch(`/stores/${storeId}`, token, { method: 'PATCH', body })
+    }
 
     setLoading(false)
 

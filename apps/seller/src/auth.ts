@@ -42,11 +42,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    jwt({ token, user, trigger, session }) {
       if (user) {
         token.accessToken = user.accessToken;
         token.role = user.role;
         token.storeId = user.storeId;
+      }
+      if (trigger === 'update' && session?.storeId) {
+        token.storeId = session.storeId;
       }
       return token;
     },

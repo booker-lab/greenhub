@@ -1,5 +1,6 @@
 import {
   Controller,
+  Post,
   Patch,
   Body,
   Param,
@@ -17,6 +18,15 @@ import { JwtPayload } from '../auth/types/jwt-payload.type';
 @UseGuards(JwtAuthGuard)
 export class StoresController {
   constructor(private readonly storesService: StoresService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  createStore(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdateStoreDto,
+  ) {
+    return this.storesService.createStore(user.sub, dto);
+  }
 
   @Patch(':storeId')
   @HttpCode(HttpStatus.OK)
