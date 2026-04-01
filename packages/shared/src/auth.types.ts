@@ -1,4 +1,4 @@
-export type UserRole = 'consumer' | 'seller' | 'driver'
+export type UserRole = 'consumer' | 'seller' | 'driver' | 'admin'
 
 export type AuthProvider = 'kakao' | 'naver' | 'email'
 

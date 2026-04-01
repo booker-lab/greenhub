@@ -12,43 +12,13 @@ import { UpdateStatusDto, OrderStatus } from './dto/update-status.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
-
-// 판매자 허용 상태 전환 — DELIVERING 이후 취소 불가 (소비자 반품 신청 루트)
-// PREPARING → DELIVERING: 드라이버 앱 미완성 전까지 판매자가 임시 수행 (드라이버 앱 완성 시 제거)
-const SELLER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
-  ACCEPTED: ['PREPARING'],
-  CONFIRMED: ['PREPARING'],
-  PREPARING: ['DELIVERING'],
-};
-
-// 드라이버 허용 상태 전환
-const DRIVER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
-  PREPARING: ['DELIVERING'],
-  DELIVERING: ['HUB_ARRIVED', 'DELIVERED'],
-};
-
-// 소비자 허용 상태 전환
-const CONSUMER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
-  DELIVERED: ['REVIEWED'],
-  PICKED_UP: ['REVIEWED'],
-};
-
-// 알림이 필요한 전환과 템플릿 코드 매핑
-const NOTIFICATION_MAP: Partial<
-  Record<OrderStatus, Partial<Record<OrderStatus, string>>>
-> = {
-  ACCEPTED: { PREPARING: 'ORDER_PREPARING' },
-  CONFIRMED: { PREPARING: 'GROUP_PREPARING' },
-  PREPARING: { DELIVERING: 'ORDER_DELIVERING' },
-  DELIVERING: {
-    HUB_ARRIVED: 'ORDER_HUB_ARRIVED',
-    DELIVERED: 'ORDER_DELIVERED',
-  },
-};
-
-function generatePickupCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
+import {
+  generatePickupCode,
+  detectMetropolitan,
+  calcDeliveryFee,
+  getAllowedTransitions,
+  NOTIFICATION_MAP,
+} from './orders.helpers';
 
 @Injectable()
 export class OrdersService {
@@ -82,7 +52,7 @@ export class OrdersService {
 
     // 배송비 계산
     const deliveryConfig = await this.getDeliveryConfig(storeId);
-    const deliveryFee = this.calcDeliveryFee(
+    const deliveryFee = calcDeliveryFee(
       dto.deliveryMethod,
       productData['deliverySize'],
       productData['price'] * dto.quantity,
@@ -128,9 +98,7 @@ export class OrdersService {
         }
       }
 
-      const isMetropolitan = this.detectMetropolitan(
-        dto.deliveryAddress.address,
-      );
+      const isMetropolitan = detectMetropolitan(dto.deliveryAddress.address);
 
       t.set(this.firestore.doc(`orders/${orderId}`), {
         id: orderId,
@@ -185,10 +153,11 @@ export class OrdersService {
       const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
       const userData = userSnap.data();
       const role = userData?.['role'];
-      if (role !== 'seller' && role !== 'driver') {
+      // admin·seller·driver는 타인 주문 조회 허용
+      if (role !== 'seller' && role !== 'driver' && role !== 'admin') {
         throw new ForbiddenException();
       }
-      // 판매자는 자신의 storeId 주문만 조회 가능
+      // 판매자는 자신의 storeId 주문만 조회 가능 (admin·driver는 제한 없음)
       if (role === 'seller' && userData?.['storeId'] !== storeId) {
         throw new ForbiddenException();
       }
@@ -201,10 +170,12 @@ export class OrdersService {
     requesterId: string,
     query: { userId?: string; status?: string; saleType?: string },
   ) {
-    // 판매자는 자신의 storeId 주문만 조회 가능
     const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
     const userData = userSnap.data();
-    if (userData?.['role'] === 'seller' && userData?.['storeId'] !== storeId) {
+    const role = userData?.['role'];
+
+    // 판매자는 자신의 storeId 주문만 조회 가능 (admin·driver는 storeId 제한 없음)
+    if (role === 'seller' && userData?.['storeId'] !== storeId) {
       throw new ForbiddenException();
     }
 
@@ -236,7 +207,7 @@ export class OrdersService {
     const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
     const role = userSnap.data()?.['role'] ?? 'consumer';
 
-    const allowed = this.getAllowedTransitions(role, currentStatus);
+    const allowed = getAllowedTransitions(role, currentStatus);
     if (!allowed.includes(dto.status)) {
       throw new ForbiddenException(
         `${currentStatus} → ${dto.status} 전환은 허용되지 않습니다.`,
@@ -277,12 +248,7 @@ export class OrdersService {
     }
 
     // 알림 발송
-    await this.sendTransitionNotification(
-      order,
-      currentStatus,
-      dto.status,
-      orderId,
-    );
+    await this.sendTransitionNotification(order, currentStatus, dto.status, orderId);
 
     return { orderId, status: dto.status };
   }
@@ -430,7 +396,7 @@ export class OrdersService {
   }
 
   // ────────────────────────────────────────────────────────────
-  // 알림 발송 헬퍼
+  // Private helpers
   // ────────────────────────────────────────────────────────────
 
   private async sendTransitionNotification(
@@ -471,58 +437,6 @@ export class OrdersService {
         orderId,
       );
     }
-  }
-
-  // ────────────────────────────────────────────────────────────
-  // Private helpers
-  // ────────────────────────────────────────────────────────────
-
-  private getAllowedTransitions(role: string, current: OrderStatus): OrderStatus[] {
-    if (role === 'seller') {
-      const base = SELLER_TRANSITIONS[current] ?? [];
-      // 판매자 강제 취소는 ACCEPTED·CONFIRMED·PREPARING 상태에서만 허용
-      const sellerCancellable: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
-      if (sellerCancellable.includes(current)) {
-        return [...base, 'CANCELLED'];
-      }
-      return base;
-    }
-    if (role === 'driver') return DRIVER_TRANSITIONS[current] ?? [];
-    return CONSUMER_TRANSITIONS[current] ?? [];
-  }
-
-  private detectMetropolitan(address: string): boolean {
-    return /^(서울|경기)/.test(address);
-  }
-
-  private calcDeliveryFee(
-    method: string,
-    size: string,
-    orderAmount: number,
-    config: Record<string, number>,
-  ): number {
-    const sizeExtra: Record<string, number> = {
-      small: 0,
-      medium: 1000,
-      large: 3000,
-    };
-    const baseFeeMap: Record<string, number> = {
-      direct: config['directFee'] ?? 3000,
-      hub: config['hubFee'] ?? 1000,
-      parcel: config['parcelFee'] ?? 4000,
-    };
-    const freeThresholdMap: Record<string, number> = {
-      direct: config['freeThresholdDirect'] ?? 50000,
-      hub: config['freeThresholdHub'] ?? 30000,
-      parcel: config['freeThresholdParcel'] ?? 50000,
-    };
-
-    const base = baseFeeMap[method] ?? 0;
-    const extra = sizeExtra[size] ?? 0;
-    const threshold = freeThresholdMap[method] ?? 0;
-
-    if (orderAmount >= threshold) return 0;
-    return base + extra;
   }
 
   private async getDeliveryConfig(
