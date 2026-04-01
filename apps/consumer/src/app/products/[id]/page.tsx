@@ -2,7 +2,7 @@
 
 import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useProduct } from '@/hooks/useProducts'
+import { useProduct, useStore } from '@/hooks/useProducts'
 import { useGroupProduct } from '@/hooks/useGroupProduct'
 import { useDailyCap } from '@/hooks/useDailyCap'
 import { useCart } from '@/hooks/useCart'
@@ -24,6 +24,7 @@ export default function ProductDetailPage({
   const { id } = use(params)
   const router = useRouter()
   const { product, loading, error } = useProduct(id)
+  const { store } = useStore(product?.storeId ?? null)
   const { config: groupConfig } = useGroupProduct(
     product?.saleType === 'group' ? id : null,
   )
@@ -255,6 +256,34 @@ export default function ProductDetailPage({
             바로 결제
           </button>
         </div>
+
+        {/* 판매자 정보 */}
+        {store && (
+          <section className="mt-4 border-t pt-4 space-y-2">
+            <h3 className="text-sm font-semibold text-gray-700">판매자 정보</h3>
+            <div className="flex items-center gap-3">
+              {store.logoUrl ? (
+                <img
+                  src={store.logoUrl}
+                  alt={store.name}
+                  className="w-10 h-10 rounded-full object-cover bg-gray-100"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-green-bg flex items-center justify-center text-green-primary font-bold text-sm">
+                  {store.name[0]}
+                </div>
+              )}
+              <div>
+                <p className="text-sm font-semibold text-gray-800">{store.name}</p>
+                <p className="text-xs text-gray-400">{store.ceoName}</p>
+              </div>
+            </div>
+            <div className="text-xs text-gray-500 space-y-1">
+              <p>📍 {store.address}</p>
+              <p>📞 {store.phone}</p>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   )

@@ -5,6 +5,15 @@ import { collection, query, where, getDocs, doc, getDoc, QueryConstraint } from 
 import { db } from '@/lib/firebase'
 import type { Product, Category } from '@greenhub/shared'
 
+export interface StoreInfo {
+  id: string
+  name: string
+  ceoName: string
+  phone: string
+  address: string
+  logoUrl: string | null
+}
+
 // MVP 고정 스토어
 const STORE_ID = 'dear-orchid'
 
@@ -77,4 +86,32 @@ export function useProduct(productId: string) {
   }, [productId])
 
   return { product, loading, error }
+}
+
+/**
+ * 단일 스토어 정보 조회
+ */
+export function useStore(storeId: string | null) {
+  const [store, setStore] = useState<StoreInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!storeId) {
+      setLoading(false)
+      return
+    }
+    async function fetch() {
+      try {
+        const snap = await getDoc(doc(db, 'stores', storeId))
+        if (snap.exists()) {
+          setStore({ id: snap.id, ...snap.data() } as StoreInfo)
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetch()
+  }, [storeId])
+
+  return { store, loading }
 }
