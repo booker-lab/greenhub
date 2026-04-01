@@ -180,6 +180,30 @@ export default function MyPageClient() {
         )}
       </section>
 
+      {/* 배송지 관리 */}
+      <section style={{ marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px' }}>배송지 관리</h2>
+        <button
+          onClick={() => router.push('/mypage/addresses')}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            width: '100%',
+            background: '#fff',
+            border: '1px solid #e0e0e0',
+            borderRadius: '10px',
+            padding: '14px 16px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            color: '#333',
+          }}
+        >
+          <span>배송지 목록 · 추가 · 수정</span>
+          <span style={{ color: '#999', fontSize: '16px' }}>›</span>
+        </button>
+      </section>
+
       {/* 앱 설치 */}
       <section>
         <h2 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px' }}>앱 설치</h2>
