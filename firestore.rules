@@ -3,10 +3,21 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // orders: 공개 읽기 허용 (orderId를 아는 사람만 접근 가능 — MVP)
-    // TODO: Firebase Auth 도입 후 userId 기반으로 강화
     match /orders/{orderId} {
       allow read: if true;
-      allow write: if false; // 쓰기는 서버(firebase-admin)만
+      allow write: if false;
+    }
+
+    // products: 단일 문서 get만 허용 (목록 조회는 NestJS API 사용)
+    match /products/{productId} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // stores: 단일 문서 get만 허용 (상품 상세 판매자 정보 노출용)
+    match /stores/{storeId} {
+      allow get: if true;
+      allow list, write: if false;
     }
 
     // 나머지 모든 컬렉션: 클라이언트 직접 접근 차단 (서버만)
