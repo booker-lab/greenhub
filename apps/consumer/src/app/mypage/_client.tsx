@@ -180,6 +180,30 @@ export default function MyPageClient() {
         )}
       </section>
 
+      {/* 알림 내역 */}
+      <section style={{ marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px' }}>알림</h2>
+        <button
+          onClick={() => router.push('/mypage/notifications')}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            width: '100%',
+            background: '#fff',
+            border: '1px solid #e0e0e0',
+            borderRadius: '10px',
+            padding: '14px 16px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            color: '#333',
+          }}
+        >
+          <span>알림 내역</span>
+          <span style={{ color: '#999', fontSize: '16px' }}>›</span>
+        </button>
+      </section>
+
       {/* 배송지 관리 */}
       <section style={{ marginBottom: '24px' }}>
         <h2 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px' }}>배송지 관리</h2>
