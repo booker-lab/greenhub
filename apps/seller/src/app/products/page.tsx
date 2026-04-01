@@ -98,6 +98,7 @@ function ProductCard({
 }) {
   const { data: session } = useSession()
   const [toggling, setToggling] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   async function handleToggleActive() {
     setToggling(true)
@@ -115,6 +116,22 @@ function ProductCard({
       )
     } finally {
       setToggling(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm(`"${product.name}" 상품을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return
+    setDeleting(true)
+    try {
+      await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/stores/${storeId}/products/${product.id}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${session?.user.accessToken}` },
+        }
+      )
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -162,6 +179,13 @@ function ProductCard({
           >
             수정
           </Link>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="text-xs text-red-400 px-2.5 py-1 rounded-full bg-red-50 hover:bg-red-100 transition-colors"
+          >
+            {deleting ? '삭제 중...' : '삭제'}
+          </button>
         </div>
       </div>
     </div>

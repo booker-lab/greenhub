@@ -19,6 +19,7 @@ export function useProducts(category?: Category) {
 
   useEffect(() => {
     setLoading(true)
+    setProducts([])
     async function fetch() {
       try {
         const constraints: QueryConstraint[] = [
