@@ -1,3 +1,4 @@
+'use client'
 import dynamic from 'next/dynamic'
 
 const AdminOrdersClient = dynamic(() => import('./_client'), { ssr: false })
