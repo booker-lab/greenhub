@@ -27,8 +27,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const data = await res.json();
 
-        // seller role 검증
-        if (data.user.role !== "seller") return null;
+        // seller / admin role 검증
+        if (!['seller', 'admin'].includes(data.user.role)) return null;
 
         return {
           id: data.user.id,

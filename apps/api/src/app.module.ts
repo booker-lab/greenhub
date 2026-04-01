@@ -11,6 +11,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { StoresModule } from './stores/stores.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { HubsModule } from './hubs/hubs.module';
+import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -30,6 +31,7 @@ import { AppService } from './app.service';
     StoresModule,
     SettlementsModule,
     HubsModule,
+    AdminModule,
   ],
 })
 export class AppModule {}
