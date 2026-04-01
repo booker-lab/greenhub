@@ -100,9 +100,10 @@ export function useStore(storeId: string | null) {
       setLoading(false)
       return
     }
+    const sid = storeId
     async function fetch() {
       try {
-        const snap = await getDoc(doc(db, 'stores', storeId))
+        const snap = await getDoc(doc(db, 'stores', sid))
         if (snap.exists()) {
           setStore({ id: snap.id, ...snap.data() } as StoreInfo)
         }
