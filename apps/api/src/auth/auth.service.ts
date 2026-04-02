@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -13,6 +14,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { AddressDto } from './dto/address.dto';
+import { KakaoLoginDto } from './dto/kakao-login.dto';
 import type { JwtPayload } from './types/jwt-payload.type';
 
 @Injectable()
@@ -179,6 +181,51 @@ export class AuthService {
       updatedAt: this.firestore.Timestamp.now(),
     });
     return addresses[idx];
+  }
+
+  async kakaoLogin(dto: KakaoLoginDto) {
+    const snap = await this.firestore
+      .collection('users')
+      .where('kakaoId', '==', dto.kakaoId)
+      .limit(1)
+      .get();
+
+    let userData: Record<string, unknown>;
+
+    if (!snap.empty) {
+      userData = snap.docs[0].data();
+    } else {
+      const userId = uuidv4();
+      const now = this.firestore.Timestamp.now();
+      userData = {
+        id: userId,
+        kakaoId: dto.kakaoId,
+        email: dto.email ?? null,
+        name: dto.name,
+        phone: null,
+        role: 'driver',
+        storeId: null,
+        providers: ['kakao'],
+        savedAddresses: [],
+        fcmToken: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await this.firestore.doc(`users/${userId}`).set(userData);
+    }
+
+    const role = userData['role'] as string;
+    if (!['seller', 'driver'].includes(role)) {
+      throw new ForbiddenException('접근 권한이 없습니다.');
+    }
+
+    const { accessToken } = this.issueTokens({
+      sub: userData['id'] as string,
+      role: role as JwtPayload['role'],
+      storeId: (userData['storeId'] as string) ?? undefined,
+    });
+
+    return { accessToken, user: this.sanitizeUser(userData) };
   }
 
   async updateFcmToken(userId: string, fcmToken: string) {

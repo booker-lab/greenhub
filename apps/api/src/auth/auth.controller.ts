@@ -15,6 +15,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { AddressDto } from './dto/address.dto';
+import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtPayload } from './types/jwt-payload.type';
@@ -32,6 +33,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post('kakao-login')
+  @HttpCode(HttpStatus.OK)
+  kakaoLogin(@Body() dto: KakaoLoginDto) {
+    return this.authService.kakaoLogin(dto);
   }
 
   @Get('me')
