@@ -50,6 +50,26 @@ function toDateStr(seconds: number) {
   })
 }
 
+function downloadCSV(items: Settlement[], from: string, to: string) {
+  const header = '주문ID,정산일시,총금액,플랫폼수수료,정산액,상태'
+  const rows = items.map((s) => [
+    s.orderId,
+    new Date(s.settledAt._seconds * 1000).toISOString(),
+    s.totalAmount,
+    s.platformFee,
+    s.netAmount,
+    STATUS_LABEL[s.status],
+  ].join(','))
+  const csv = [header, ...rows].join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `settlements_${from || 'all'}_${to || 'all'}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function SettlementsPage() {
   const { data: session } = useSession()
   const [activeTab, setActiveTab] = useState<SettlementTab>('daily')
@@ -218,7 +238,15 @@ export default function SettlementsPage() {
 
             {settlements.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs text-gray-400 px-1">{settlements.length}건 조회됨</p>
+                <div className="flex items-center justify-between px-1">
+                  <p className="text-xs text-gray-400">{settlements.length}건 조회됨</p>
+                  <button
+                    onClick={() => downloadCSV(settlements, from, to)}
+                    className="text-xs text-green-primary font-medium flex items-center gap-1"
+                  >
+                    CSV 다운로드
+                  </button>
+                </div>
                 {settlements.map((s) => (
                   <div key={s.id} className="bg-white rounded-xl px-4 py-3 shadow-sm">
                     <div className="flex items-center justify-between mb-1">
@@ -249,6 +277,14 @@ export default function SettlementsPage() {
               </div>
             ) : (
               <div className="space-y-2">
+                <div className="flex justify-end px-1">
+                  <button
+                    onClick={() => downloadCSV(settlements, '', '')}
+                    className="text-xs text-green-primary font-medium"
+                  >
+                    CSV 다운로드
+                  </button>
+                </div>
                 {settlements.map((s) => (
                   <div key={s.id} className="bg-white rounded-xl px-4 py-3 shadow-sm">
                     <div className="flex items-center justify-between mb-1">

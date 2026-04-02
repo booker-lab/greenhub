@@ -3,12 +3,16 @@
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { storage } from '@/lib/firebase'
 import { apiFetch } from '@/lib/api'
 
 export default function OnboardingPage() {
   const { data: session, update } = useSession()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [logoPreview, setLogoPreview] = useState('')
   const [error, setError] = useState('')
 
   const [form, setForm] = useState({
@@ -19,6 +23,24 @@ export default function OnboardingPage() {
     businessNumber: '',
     logoUrl: '',
   })
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLogoUploading(true)
+    setError('')
+    try {
+      const storageRef = ref(storage, `logos/${session?.user.id ?? 'unknown'}_${Date.now()}`)
+      await uploadBytes(storageRef, file)
+      const url = await getDownloadURL(storageRef)
+      setLogoPreview(url)
+      setForm((prev) => ({ ...prev, logoUrl: url }))
+    } catch {
+      setError('로고 업로드에 실패했습니다. 다시 시도해주세요.')
+    } finally {
+      setLogoUploading(false)
+    }
+  }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = e.target
@@ -90,6 +112,31 @@ export default function OnboardingPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+          {/* 로고 업로드 */}
+          <div className="flex flex-col items-center gap-3 pb-2">
+            <div className="w-20 h-20 rounded-full border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden bg-gray-50">
+              {logoPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoPreview} alt="로고 미리보기" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-2xl text-gray-300">🏪</span>
+              )}
+            </div>
+            <label className="cursor-pointer text-sm text-green-primary font-medium">
+              {logoUploading ? '업로드 중...' : '로고 사진 선택'}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleLogoUpload}
+                disabled={logoUploading}
+              />
+            </label>
+            <p className="text-xs text-gray-400">선택 사항 · JPG, PNG, WebP 권장</p>
+          </div>
+
+          <hr className="border-gray-100" />
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               상호명 <span className="text-red-500">*</span>
