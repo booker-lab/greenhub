@@ -1,4 +1,4 @@
-import { IsEnum, IsISO8601, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsISO8601, IsOptional, IsString, IsUrl } from 'class-validator';
 
 const ORDER_STATUSES = [
   'PENDING',
@@ -27,4 +27,8 @@ export class UpdateStatusDto {
   @IsOptional()
   @IsISO8601()
   preparedAt?: string;
+
+  @IsOptional()
+  @IsUrl()
+  photoUrl?: string;
 }

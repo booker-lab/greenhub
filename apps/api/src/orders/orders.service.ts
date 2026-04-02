@@ -226,6 +226,14 @@ export class OrdersService {
       }
       update['preparedAt'] = this.firestore.Timestamp.fromDate(date);
     }
+    // DELIVERING 전환 시 driverId 자동 기록
+    if (dto.status === 'DELIVERING') {
+      update['driverId'] = requesterId;
+    }
+    // HUB_ARRIVED 전환 시 photoUrl 저장
+    if (dto.status === 'HUB_ARRIVED' && dto.photoUrl) {
+      update['deliveryPhotoUrl'] = dto.photoUrl;
+    }
 
     await this.firestore.doc(`orders/${orderId}`).update(update);
 

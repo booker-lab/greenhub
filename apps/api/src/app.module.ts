@@ -12,6 +12,7 @@ import { StoresModule } from './stores/stores.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { HubsModule } from './hubs/hubs.module';
 import { AdminModule } from './admin/admin.module';
+import { DriverModule } from './driver/driver.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -32,6 +33,7 @@ import { AppService } from './app.service';
     SettlementsModule,
     HubsModule,
     AdminModule,
+    DriverModule,
   ],
 })
 export class AppModule {}
