@@ -229,7 +229,7 @@ export class OrdersService {
 
     await this.firestore.doc(`orders/${orderId}`).update(update);
 
-    // 판매자 강제 취소 → 환불 처리
+    // 판매자 강제 취소 → 환불 + settlement 취소 반영
     if (dto.status === 'CANCELLED') {
       const refundableStatuses: OrderStatus[] = [
         'ACCEPTED',
@@ -240,6 +240,7 @@ export class OrdersService {
       if (refundableStatuses.includes(currentStatus)) {
         await this.payments.processRefundByOrderId(orderId, dto.reason ?? '판매자 취소');
       }
+      await this.settlements.cancelSettlement(orderId);
     }
 
     // DELIVERED 전환 시 정산 자동 생성
@@ -294,6 +295,9 @@ export class OrdersService {
         });
       }
     });
+
+    // settlement 취소 반영 (안전망: 정상 플로우에서는 settlement 미생성 상태)
+    await this.settlements.cancelSettlement(orderId);
 
     // 소비자 본인 알림
     await this.notifications.sendToUser(

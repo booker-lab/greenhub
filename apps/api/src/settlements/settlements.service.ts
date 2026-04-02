@@ -145,6 +145,17 @@ export class SettlementsService {
     };
   }
 
+  // **취소 반영**: 주문 CANCELLED 시 해당 settlement status → 'cancelled'
+  async cancelSettlement(orderId: string): Promise<void> {
+    const ref = this.firestore.doc(`settlements/${orderId}`);
+    const snap = await ref.get();
+    if (!snap.exists) return;
+    await ref.update({
+      status: 'cancelled' as SettlementStatus,
+      updatedAt: this.firestore.Timestamp.now(),
+    });
+  }
+
   private async verifyOwnership(storeId: string, requesterId: string) {
     const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
     if (!storeSnap.exists || storeSnap.data()?.['ownerId'] !== requesterId) {
