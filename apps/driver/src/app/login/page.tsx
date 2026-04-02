@@ -1,10 +1,6 @@
 import { signIn } from "@/auth";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 
 export default async function LoginPage() {
-  const session = await auth();
-  if (session) redirect("/board");
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-green-bg dark:bg-gray-900 px-6">
