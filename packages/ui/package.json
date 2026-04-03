@@ -8,11 +8,12 @@
     "./theme": "./src/theme.ts"
   },
   "peerDependencies": {
-    "@mantine/core": "^7",
-    "@mantine/hooks": "^7",
+    "@mantine/core": "^9",
+    "@mantine/hooks": "^9",
     "react": "^19"
   },
   "devDependencies": {
-    "@mantine/core": "^9.0.0"
+    "@mantine/core": "^9.0.0",
+    "@mantine/hooks": "^9.0.0"
   }
 }
