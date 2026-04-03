@@ -8,10 +8,10 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // products: 단일 문서 get만 허용 (목록 조회는 NestJS API 사용)
+    // products: 읽기 전체 허용 (공개 상품 데이터 — seller 실시간 리스너 + consumer 조회)
     match /products/{productId} {
-      allow get: if true;
-      allow list, write: if false;
+      allow read: if true;
+      allow write: if false;
     }
 
     // stores: 단일 문서 get만 허용 (상품 상세 판매자 정보 노출용)
