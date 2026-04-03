@@ -72,15 +72,14 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, userData['passwordHash']);
     if (!valid) throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
 
-    const { accessToken } = this.issueTokens({
+    const { accessToken, refreshToken } = this.issueTokens({
       sub: userData['id'],
       role: userData['role'],
       storeId: userData['storeId'] ?? undefined,
     });
 
-    // 스펙: 200 { accessToken, user: UserProfile }
     const user = this.sanitizeUser(userData);
-    return { accessToken, user };
+    return { accessToken, refreshToken, user };
   }
 
   async getMe(userId: string) {
@@ -228,13 +227,28 @@ export class AuthService {
       throw new ForbiddenException('접근 권한이 없습니다.');
     }
 
-    const { accessToken } = this.issueTokens({
+    const { accessToken, refreshToken } = this.issueTokens({
       sub: userData['id'] as string,
       role: role as JwtPayload['role'],
       storeId: (userData['storeId'] as string) ?? undefined,
     });
 
-    return { accessToken, user: this.sanitizeUser(userData) };
+    return { accessToken, refreshToken, user: this.sanitizeUser(userData) };
+  }
+
+  async refresh(refreshToken: string) {
+    try {
+      const payload = this.jwt.verify(refreshToken, {
+        secret: this.config.get('JWT_REFRESH_SECRET'),
+      }) as JwtPayload;
+      return this.issueTokens({
+        sub: payload.sub,
+        role: payload.role,
+        storeId: payload.storeId,
+      });
+    } catch {
+      throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
+    }
   }
 
   async updateFcmToken(userId: string, fcmToken: string) {

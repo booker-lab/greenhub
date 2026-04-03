@@ -41,6 +41,12 @@ export class AuthController {
     return this.authService.kakaoLogin(dto);
   }
 
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  refresh(@Body('refreshToken') refreshToken: string) {
+    return this.authService.refresh(refreshToken);
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   getMe(@CurrentUser() user: JwtPayload) {
