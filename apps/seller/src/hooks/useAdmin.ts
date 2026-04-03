@@ -220,7 +220,7 @@ export interface AdminDriver {
   createdAt: unknown
 }
 
-export function useAdminDrivers(status: DriverStatus = 'pending') {
+export function useAdminDrivers() {
   const { data: session } = useSession()
   const [drivers, setDrivers] = useState<AdminDriver[]>([])
   const [loading, setLoading] = useState(true)
@@ -229,8 +229,7 @@ export function useAdminDrivers(status: DriverStatus = 'pending') {
     if (!session?.user.accessToken) return
     setLoading(true)
     try {
-      const qs = status !== 'all' ? `?status=${status}` : ''
-      const res = await apiFetch(`/admin/drivers${qs}`, session.user.accessToken)
+      const res = await apiFetch('/admin/drivers', session.user.accessToken)
       if (res.ok) {
         const data = await res.json()
         setDrivers(data.drivers ?? [])
@@ -238,7 +237,7 @@ export function useAdminDrivers(status: DriverStatus = 'pending') {
     } finally {
       setLoading(false)
     }
-  }, [session?.user.accessToken, status])
+  }, [session?.user.accessToken])
 
   useEffect(() => { load() }, [load])
 

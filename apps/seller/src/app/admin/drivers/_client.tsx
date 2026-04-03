@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useAdminDrivers, AdminDriver, DriverStatus } from '@/hooks/useAdmin'
 
 const STATUS_TABS: { value: DriverStatus; label: string }[] = [
@@ -21,7 +21,15 @@ function DriverBadge({ driver }: { driver: AdminDriver }) {
 export default function DriversClient() {
   const [tab, setTab] = useState<DriverStatus>('pending')
   const [processingId, setProcessingId] = useState<string | null>(null)
-  const { drivers, loading, approve, toggleSuspend } = useAdminDrivers(tab)
+  const { drivers: allDrivers, loading, approve, toggleSuspend } = useAdminDrivers()
+
+  const drivers = useMemo(() => {
+    if (tab === 'all') return allDrivers
+    if (tab === 'pending') return allDrivers.filter(d => !d.driverApproved && !d.suspended)
+    if (tab === 'approved') return allDrivers.filter(d => d.driverApproved && !d.suspended)
+    if (tab === 'suspended') return allDrivers.filter(d => d.suspended)
+    return allDrivers
+  }, [allDrivers, tab])
 
   const handleApprove = async (userId: string) => {
     if (!confirm('이 드라이버를 승인하시겠습니까?')) return
