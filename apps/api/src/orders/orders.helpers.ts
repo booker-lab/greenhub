@@ -4,11 +4,9 @@
 import type { OrderStatus } from './dto/update-status.dto';
 
 // 판매자 허용 상태 전환 — DELIVERING 이후 취소 불가 (소비자 반품 신청 루트)
-// PREPARING → DELIVERING: 드라이버 앱 미완성 전까지 판매자가 임시 수행 (드라이버 앱 완성 시 제거)
 export const SELLER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   ACCEPTED: ['PREPARING'],
   CONFIRMED: ['PREPARING'],
-  PREPARING: ['DELIVERING'],
 };
 
 // 드라이버 허용 상태 전환
