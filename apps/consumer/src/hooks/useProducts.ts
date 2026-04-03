@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { collection, query, where, getDocs, doc, getDoc, QueryConstraint } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import type { Product, Category } from '@greenhub/shared'
 
@@ -16,9 +16,10 @@ export interface StoreInfo {
 
 // MVP 고정 스토어
 const STORE_ID = 'dear-orchid'
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
 
 /**
- * Firestore `products` 컬렉션에서 활성 상품 목록 조회
+ * API를 통해 활성 상품 목록 조회
  * @param category 카테고리 필터 (없으면 전체)
  */
 export function useProducts(category?: Category) {
@@ -29,18 +30,13 @@ export function useProducts(category?: Category) {
   useEffect(() => {
     setLoading(true)
     setProducts([])
-    async function fetch() {
+    async function fetchProducts() {
       try {
-        const constraints: QueryConstraint[] = [
-          where('storeId', '==', STORE_ID),
-          where('isActive', '==', true),
-        ]
-        if (category) {
-          constraints.push(where('category', '==', category))
-        }
-        const q = query(collection(db, 'products'), ...constraints)
-        const snap = await getDocs(q)
-        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Product)
+        const params = new URLSearchParams({ isActive: 'true' })
+        if (category) params.set('category', category)
+        const res = await fetch(`${API_URL}/stores/${STORE_ID}/products?${params}`)
+        if (!res.ok) throw new Error(`서버 오류 ${res.status}`)
+        const items: Product[] = await res.json()
         setProducts(items)
         setError(null)
       } catch (e: unknown) {
@@ -49,7 +45,7 @@ export function useProducts(category?: Category) {
         setLoading(false)
       }
     }
-    fetch()
+    fetchProducts()
   }, [category])
 
   return { products, loading, error }
