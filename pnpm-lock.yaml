@@ -218,7 +218,7 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0(@mantine/hooks@9.0.0(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@mantine/hooks':
-        specifier: ^9
+        specifier: ^9.0.0
         version: 9.0.0(react@19.2.4)
       firebase:
         specifier: ^12.11.0
