@@ -207,6 +207,63 @@ export function useAdminSettlements(filters?: { storeId?: string; from?: string;
   return { settlements, loading, reload: load, markAsPaid }
 }
 
+// ── Drivers ──────────────────────────────────────────────────────
+
+export type DriverStatus = 'all' | 'pending' | 'approved' | 'suspended'
+
+export interface AdminDriver {
+  id: string
+  name: string
+  email: string | null
+  driverApproved: boolean
+  suspended?: boolean
+  createdAt: unknown
+}
+
+export function useAdminDrivers(status: DriverStatus = 'pending') {
+  const { data: session } = useSession()
+  const [drivers, setDrivers] = useState<AdminDriver[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    if (!session?.user.accessToken) return
+    setLoading(true)
+    try {
+      const qs = status !== 'all' ? `?status=${status}` : ''
+      const res = await apiFetch(`/admin/drivers${qs}`, session.user.accessToken)
+      if (res.ok) {
+        const data = await res.json()
+        setDrivers(data.drivers ?? [])
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [session?.user.accessToken, status])
+
+  useEffect(() => { load() }, [load])
+
+  const approve = async (userId: string) => {
+    if (!session?.user.accessToken) return false
+    const res = await apiFetch(`/admin/drivers/${userId}/approve`, session.user.accessToken, {
+      method: 'PATCH',
+    })
+    if (res.ok) await load()
+    return res.ok
+  }
+
+  const toggleSuspend = async (userId: string, suspended: boolean) => {
+    if (!session?.user.accessToken) return false
+    const res = await apiFetch(`/admin/drivers/${userId}/suspend`, session.user.accessToken, {
+      method: 'PATCH',
+      body: JSON.stringify({ suspended }),
+    })
+    if (res.ok) await load()
+    return res.ok
+  }
+
+  return { drivers, loading, reload: load, approve, toggleSuspend }
+}
+
 // ── Invite ───────────────────────────────────────────────────────
 
 export function useAdminInvite() {
