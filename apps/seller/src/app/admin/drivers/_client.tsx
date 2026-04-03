@@ -18,18 +18,26 @@ function useAdminDrivers(status: DriverStatus) {
   const { data: session } = useSession()
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const fetch_ = useCallback(async () => {
     if (!session?.user?.accessToken) return
     setLoading(true)
+    setError(null)
     const q = status !== 'all' ? `?status=${status}` : ''
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/admin/drivers${q}`,
-      { headers: { Authorization: `Bearer ${session.user.accessToken}` } },
-    )
-    if (res.ok) {
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/drivers${q}`,
+        { headers: { Authorization: `Bearer ${session.user.accessToken}` } },
+      )
       const data = await res.json()
-      setDrivers(data.drivers)
+      if (res.ok) {
+        setDrivers(data.drivers)
+      } else {
+        setError(`API 오류 ${res.status}: ${JSON.stringify(data)}`)
+      }
+    } catch (e) {
+      setError(`네트워크 오류: ${String(e)}`)
     }
     setLoading(false)
   }, [session, status])
@@ -65,7 +73,7 @@ function useAdminDrivers(status: DriverStatus) {
     fetch_()
   }
 
-  return { drivers, loading, approve, toggleSuspend }
+  return { drivers, loading, error, approve, toggleSuspend }
 }
 
 const STATUS_TABS: { value: DriverStatus; label: string }[] = [
@@ -85,7 +93,7 @@ function driverBadge(driver: Driver) {
 
 export default function DriversClient() {
   const [tab, setTab] = useState<DriverStatus>('pending')
-  const { drivers, loading, approve, toggleSuspend } = useAdminDrivers(tab)
+  const { drivers, loading, error, approve, toggleSuspend } = useAdminDrivers(tab)
 
   return (
     <div>
@@ -108,6 +116,9 @@ export default function DriversClient() {
         ))}
       </div>
 
+      {error && (
+        <p className="text-sm text-red-500 py-4 text-center bg-red-50 rounded-lg px-4">{error}</p>
+      )}
       {loading ? (
         <p className="text-sm text-gray-500 py-8 text-center">불러오는 중...</p>
       ) : drivers.length === 0 ? (
