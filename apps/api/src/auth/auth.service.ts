@@ -194,6 +194,14 @@ export class AuthService {
 
     if (!snap.empty) {
       userData = snap.docs[0].data();
+      // 기존 드라이버 계정에 driverApproved 필드가 없으면 false로 초기화
+      if (userData['role'] === 'driver' && userData['driverApproved'] === undefined) {
+        await this.firestore.doc(`users/${userData['id']}`).update({
+          driverApproved: false,
+          updatedAt: this.firestore.Timestamp.now(),
+        });
+        userData = { ...userData, driverApproved: false };
+      }
     } else {
       const userId = uuidv4();
       const now = this.firestore.Timestamp.now();
