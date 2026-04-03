@@ -44,7 +44,7 @@ export class ProductsController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('seller')
+  @Roles('seller', 'admin')
   createProduct(
     @Param('storeId') storeId: string,
     @CurrentUser() user: JwtPayload,
@@ -55,7 +55,7 @@ export class ProductsController {
 
   @Patch(':productId')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('seller')
+  @Roles('seller', 'admin')
   updateProduct(
     @Param('storeId') storeId: string,
     @Param('productId') productId: string,
@@ -72,7 +72,7 @@ export class ProductsController {
 
   @Patch(':productId/active')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('seller')
+  @Roles('seller', 'admin')
   toggleActive(
     @Param('storeId') storeId: string,
     @Param('productId') productId: string,
@@ -84,7 +84,7 @@ export class ProductsController {
 
   @Delete(':productId')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('seller')
+  @Roles('seller', 'admin')
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteProduct(
     @Param('storeId') storeId: string,
@@ -101,7 +101,7 @@ export class DailyCapsController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('seller')
+  @Roles('seller', 'admin')
   getDailyCaps(
     @Param('storeId') storeId: string,
     @CurrentUser() user: JwtPayload,
@@ -113,7 +113,7 @@ export class DailyCapsController {
 
   @Patch(':date')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('seller')
+  @Roles('seller', 'admin')
   updateDailyCap(
     @Param('storeId') storeId: string,
     @Param('date') date: string,
@@ -135,7 +135,7 @@ export class DeliveryConfigController {
 
   @Patch()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('seller')
+  @Roles('seller', 'admin')
   updateDeliveryConfig(
     @Param('storeId') storeId: string,
     @CurrentUser() user: JwtPayload,
