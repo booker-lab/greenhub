@@ -1,6 +1,11 @@
 import { signIn } from "@/auth";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pending?: string }>;
+}) {
+  const { pending } = await searchParams;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-green-bg dark:bg-gray-900 px-6">
@@ -15,6 +20,20 @@ export default async function LoginPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-1">드라이버</p>
         </div>
+
+        {/* 승인 대기 안내 */}
+        {pending === "true" && (
+          <div className="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-4 text-center">
+            <p className="text-sm font-semibold text-yellow-800 mb-1">
+              승인 대기 중입니다
+            </p>
+            <p className="text-xs text-yellow-700">
+              관리자 승인 후 이용할 수 있습니다.
+              <br />
+              승인이 완료되면 다시 로그인해 주세요.
+            </p>
+          </div>
+        )}
 
         {/* 카카오 로그인 버튼 */}
         <form

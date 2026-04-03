@@ -32,6 +32,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // seller 또는 driver role만 허용
       if (!["seller", "driver"].includes(data.user.role)) return false;
 
+      // 드라이버 사전 승인 체크 — 미승인이면 대기 안내 페이지로
+      if (data.user.role === "driver" && !data.user.driverApproved) {
+        return "/login?pending=true";
+      }
+
       user.id = data.user.id;
       user.accessToken = data.accessToken;
       user.role = data.user.role;

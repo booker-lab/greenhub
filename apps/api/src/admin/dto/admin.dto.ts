@@ -43,3 +43,9 @@ export class ForceRefundDto {
   @IsString()
   reason?: string;
 }
+
+export class QueryAdminDriversDto {
+  @IsOptional()
+  @IsString()
+  status?: 'pending' | 'approved' | 'suspended';
+}

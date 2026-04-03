@@ -204,6 +204,7 @@ export class AuthService {
         name: dto.name,
         phone: null,
         role: 'driver',
+        driverApproved: false,
         storeId: null,
         providers: ['kakao'],
         savedAddresses: [],

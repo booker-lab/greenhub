@@ -17,6 +17,7 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import {
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
+  QueryAdminDriversDto,
   SuspendUserDto,
   SetCommissionDto,
   ForceRefundDto,
@@ -83,6 +84,26 @@ export class AdminController {
   @Patch('settlements/:settlementId/pay')
   markAsPaid(@Param('settlementId') settlementId: string) {
     return this.admin.markAsPaid(settlementId);
+  }
+
+  // ── Drivers ──────────────────────────────────────────────────────
+
+  @Get('drivers')
+  getDrivers(@Query() dto: QueryAdminDriversDto) {
+    return this.admin.getDrivers(dto);
+  }
+
+  @Patch('drivers/:userId/approve')
+  approveDriver(@Param('userId') userId: string) {
+    return this.admin.approveDriver(userId);
+  }
+
+  @Patch('drivers/:userId/suspend')
+  suspendDriver(
+    @Param('userId') userId: string,
+    @Body() dto: SuspendUserDto,
+  ) {
+    return this.admin.suspendDriver(userId, dto);
   }
 
   // ── Invite ───────────────────────────────────────────────────────

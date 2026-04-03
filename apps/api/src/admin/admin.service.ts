@@ -9,6 +9,7 @@ import { PaymentsService } from '../payments/payments.service';
 import {
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
+  QueryAdminDriversDto,
   SuspendUserDto,
   SetCommissionDto,
   ForceRefundDto,
@@ -172,6 +173,67 @@ export class AdminService {
     });
 
     return { settlementId, status: 'paid' };
+  }
+
+  // ── Drivers ──────────────────────────────────────────────────────
+
+  async getDrivers(dto: QueryAdminDriversDto) {
+    let query = this.firestore
+      .collection('users')
+      .where('role', '==', 'driver') as any;
+
+    if (dto.status === 'pending') {
+      query = query.where('driverApproved', '==', false);
+    } else if (dto.status === 'approved') {
+      query = query.where('driverApproved', '==', true);
+    } else if (dto.status === 'suspended') {
+      query = query.where('suspended', '==', true);
+    }
+
+    query = query.orderBy('createdAt', 'desc').limit(100);
+    const snap = await query.get();
+
+    return {
+      drivers: snap.docs.map((d: any) => {
+        const { passwordHash: _pw, ...user } = d.data();
+        return user;
+      }),
+      total: snap.size,
+    };
+  }
+
+  async approveDriver(userId: string) {
+    const ref = this.firestore.doc(`users/${userId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new NotFoundException('드라이버를 찾을 수 없습니다.');
+
+    const data = snap.data()!;
+    if (data['role'] !== 'driver') {
+      throw new BadRequestException('드라이버 계정이 아닙니다.');
+    }
+
+    await ref.update({
+      driverApproved: true,
+      updatedAt: this.firestore.Timestamp.now(),
+    });
+    return { userId, driverApproved: true };
+  }
+
+  async suspendDriver(userId: string, dto: SuspendUserDto) {
+    const ref = this.firestore.doc(`users/${userId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new NotFoundException('드라이버를 찾을 수 없습니다.');
+
+    const data = snap.data()!;
+    if (data['role'] !== 'driver') {
+      throw new BadRequestException('드라이버 계정이 아닙니다.');
+    }
+
+    await ref.update({
+      suspended: dto.suspended,
+      updatedAt: this.firestore.Timestamp.now(),
+    });
+    return { userId, suspended: dto.suspended };
   }
 
   // ── Invite ───────────────────────────────────────────────────────

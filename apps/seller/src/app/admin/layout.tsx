@@ -25,6 +25,7 @@ export default async function AdminLayout({
           {[
             { href: '/admin/stores', label: '판매자' },
             { href: '/admin/users', label: '소비자' },
+            { href: '/admin/drivers', label: '드라이버' },
             { href: '/admin/orders', label: '주문' },
             { href: '/admin/settlements', label: '정산' },
             { href: '/admin/invite', label: '초대' },
