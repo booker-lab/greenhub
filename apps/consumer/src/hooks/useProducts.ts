@@ -36,7 +36,8 @@ export function useProducts(category?: Category) {
         if (category) params.set('category', category)
         const res = await fetch(`${API_URL}/stores/${STORE_ID}/products?${params}`)
         if (!res.ok) throw new Error(`서버 오류 ${res.status}`)
-        const items: Product[] = await res.json()
+        const data = await res.json()
+        const items: Product[] = Array.isArray(data) ? data : (data.items ?? [])
         setProducts(items)
         setError(null)
       } catch (e: unknown) {
