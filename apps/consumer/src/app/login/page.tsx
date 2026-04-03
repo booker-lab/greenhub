@@ -1,90 +1,91 @@
-"use client";
+'use client'
 
-import { signIn } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { signIn } from 'next-auth/react'
+import { useSearchParams } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { Container, Title, TextInput, PasswordInput, Button, Text, Alert, Stack } from '@mantine/core'
 
 function LoginForm() {
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+  const searchParams = useSearchParams()
+  const callbackUrl = searchParams.get('callbackUrl') ?? '/'
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+    e.preventDefault()
+    setLoading(true)
+    setError('')
 
-    const result = await signIn("credentials", {
+    const result = await signIn('credentials', {
       email,
       password,
       redirect: false,
-    });
+    })
 
     if (result?.error) {
-      setError("이메일 또는 비밀번호가 올바르지 않습니다.");
-      setLoading(false);
-      return;
+      setError('이메일 또는 비밀번호가 올바르지 않습니다.')
+      setLoading(false)
+      return
     }
 
-    window.location.href = callbackUrl;
-  };
+    window.location.href = callbackUrl
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium mb-1">이메일</label>
-        <input
+    <form onSubmit={handleSubmit}>
+      <Stack gap="sm">
+        <TextInput
+          label="이메일"
           type="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2D6A4F]"
           placeholder="example@email.com"
+          radius="md"
         />
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">비밀번호</label>
-        <input
-          type="password"
+        <PasswordInput
+          label="비밀번호"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2D6A4F]"
           placeholder="비밀번호 입력"
+          radius="md"
         />
-      </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && (
+          <Alert color="red" variant="light" p="sm">
+            <Text size="sm">{error}</Text>
+          </Alert>
+        )}
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full py-3 bg-[#2D6A4F] text-white rounded-xl font-medium disabled:opacity-50"
-      >
-        {loading ? "로그인 중..." : "로그인"}
-      </button>
+        <Button
+          type="submit"
+          loading={loading}
+          fullWidth
+          color="brand"
+          radius="md"
+          mt="xs"
+        >
+          로그인
+        </Button>
+      </Stack>
     </form>
-  );
+  )
 }
 
 export default function LoginPage() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm space-y-6">
-        <h1 className="text-2xl font-bold text-center text-[#2D6A4F]">
-          Green Hub
-        </h1>
-        <Suspense fallback={<div className="h-48" />}>
+    <Container size={400} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
+      <Stack gap="lg" w="100%">
+        <Title order={1} ta="center" c="brand.6">Green Hub</Title>
+        <Suspense fallback={<div style={{ height: 192 }} />}>
           <LoginForm />
         </Suspense>
-        <div className="text-center text-sm text-gray-400">
-          소셜 로그인은 준비 중입니다.
-        </div>
-      </div>
-    </main>
-  );
+        <Text ta="center" size="sm" c="gray.4">소셜 로그인은 준비 중입니다.</Text>
+      </Stack>
+    </Container>
+  )
 }

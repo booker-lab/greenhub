@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Container, Box, Title, Text, Button, Group, SimpleGrid, Skeleton, Stack } from '@mantine/core'
 import ProductCard from '@/components/ProductCard'
 import { useProducts } from '@/hooks/useProducts'
 import type { Category } from '@greenhub/shared'
@@ -17,64 +18,66 @@ export default function CategoryPage() {
   const { products, loading, error } = useProducts(selected)
 
   return (
-    <main className="max-w-lg mx-auto pb-24">
+    <Container size="sm" pb={96}>
       {/* 헤더 */}
-      <div className="px-4 pt-6 pb-3">
-        <h1 className="text-xl font-bold text-gray-800">카테고리</h1>
-      </div>
+      <Box px="md" pt="lg" pb="sm">
+        <Title order={2} c="dark">카테고리</Title>
+      </Box>
 
       {/* 카테고리 탭 */}
-      <div className="flex gap-2 px-4 pb-4 overflow-x-auto scrollbar-none">
-        {TABS.map((tab) => {
-          const isActive = selected === tab.value
-          return (
-            <button
-              key={tab.label}
-              onClick={() => setSelected(tab.value)}
-              className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold border transition-colors ${
-                isActive
-                  ? 'bg-green-primary text-white border-green-primary'
-                  : 'bg-white text-gray-500 border-gray-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
+      <Box px="md" pb="md" style={{ overflowX: 'auto' }}>
+        <Group gap="xs" wrap="nowrap">
+          {TABS.map((tab) => {
+            const isActive = selected === tab.value
+            return (
+              <Button
+                key={tab.label}
+                size="sm"
+                radius="xl"
+                variant={isActive ? 'filled' : 'outline'}
+                color={isActive ? 'brand' : 'gray'}
+                onClick={() => setSelected(tab.value)}
+                style={{ flexShrink: 0 }}
+              >
+                {tab.label}
+              </Button>
+            )
+          })}
+        </Group>
+      </Box>
 
       {/* 상품 목록 */}
-      <div className="px-4">
+      <Box px="md">
         {loading && (
-          <div className="grid grid-cols-2 gap-3">
+          <SimpleGrid cols={2} spacing="sm">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="aspect-square rounded-2xl bg-gray-100 animate-pulse" />
+              <Skeleton key={i} height={200} radius="lg" />
             ))}
-          </div>
+          </SimpleGrid>
         )}
 
         {!loading && error && (
-          <div className="text-center py-12 text-gray-400 text-sm">{error}</div>
+          <Text ta="center" py={48} c="gray.4" size="sm">{error}</Text>
         )}
 
         {!loading && !error && products.length === 0 && (
-          <div className="text-center py-16 text-gray-400">
-            <p className="text-4xl mb-3">🌱</p>
-            <p className="text-sm">해당 카테고리 상품이 없습니다.</p>
-          </div>
+          <Stack align="center" py={64}>
+            <Text size="xl">🌱</Text>
+            <Text size="sm" c="gray.4">해당 카테고리 상품이 없습니다.</Text>
+          </Stack>
         )}
 
         {!loading && products.length > 0 && (
           <>
-            <p className="text-xs text-gray-400 mb-3">{products.length}개 상품</p>
-            <div className="grid grid-cols-2 gap-3">
+            <Text size="xs" c="gray.4" mb="sm">{products.length}개 상품</Text>
+            <SimpleGrid cols={2} spacing="sm">
               {products.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
-            </div>
+            </SimpleGrid>
           </>
         )}
-      </div>
-    </main>
+      </Box>
+    </Container>
   )
 }

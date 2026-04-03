@@ -5,10 +5,10 @@ export const dynamic = 'force-dynamic'
 import { Suspense, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { Container, Title, Text, Paper, Stack, TextInput, Group, Button, Alert } from '@mantine/core'
 import { usePayment } from '@/hooks/usePayment'
 import type { CreateOrderRequest, DeliveryAddress, DeliveryMethod, SaleType } from '@greenhub/shared'
 
-// MVP 고정값
 const STORE_ID = 'dear-orchid'
 
 function CheckoutContent() {
@@ -42,7 +42,6 @@ function CheckoutContent() {
     accessToken: session?.user?.accessToken ?? '',
   })
 
-  // 결제창 닫힘 → 완료 화면 이동 (Firestore 리스너가 상태 추적)
   if (state === 'done' && orderId) {
     router.replace(`/order/success?orderId=${orderId}`)
     return null
@@ -58,114 +57,94 @@ function CheckoutContent() {
   }
 
   return (
-    <main style={{ padding: '24px', maxWidth: '480px', margin: '0 auto' }}>
-      <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '24px' }}>결제</h1>
+    <Container size="sm" px="md" py="lg">
+      <Title order={2} mb="lg">결제</Title>
 
       {/* 주문 요약 */}
-      <section style={{ marginBottom: '24px', padding: '16px', background: '#f9f9f9', borderRadius: '8px' }}>
-        <h2 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '12px' }}>주문 정보</h2>
-        <dl style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '14px' }}>
-          <dt style={{ color: '#666' }}>수량</dt>
-          <dd style={{ textAlign: 'right' }}>{quantity}개</dd>
-          <dt style={{ color: '#666' }}>배송 방법</dt>
-          <dd style={{ textAlign: 'right' }}>{deliveryLabels[deliveryMethod]}</dd>
+      <Paper bg="gray.0" radius="md" p="md" mb="lg">
+        <Text fw={600} size="sm" mb="xs">주문 정보</Text>
+        <Stack gap={4}>
+          <Group justify="space-between">
+            <Text size="sm" c="gray.5">수량</Text>
+            <Text size="sm">{quantity}개</Text>
+          </Group>
+          <Group justify="space-between">
+            <Text size="sm" c="gray.5">배송 방법</Text>
+            <Text size="sm">{deliveryLabels[deliveryMethod]}</Text>
+          </Group>
           {totalAmount > 0 && (
-            <>
-              <dt style={{ color: '#666', fontWeight: '600' }}>결제 금액</dt>
-              <dd style={{ textAlign: 'right', fontWeight: '600' }}>
-                {totalAmount.toLocaleString()}원
-              </dd>
-            </>
+            <Group justify="space-between">
+              <Text size="sm" fw={600}>결제 금액</Text>
+              <Text size="sm" fw={600}>{totalAmount.toLocaleString()}원</Text>
+            </Group>
           )}
-        </dl>
-      </section>
+        </Stack>
+      </Paper>
 
       {/* 배송지 입력 */}
-      <section style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '12px' }}>배송지</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <input
-            type="text"
-            placeholder="주소 *"
-            value={address.address}
-            onChange={(e) => setAddress((a) => ({ ...a, address: e.target.value }))}
-            style={inputStyle}
-          />
-          <input
-            type="text"
-            placeholder="상세 주소"
-            value={address.addressDetail}
-            onChange={(e) => setAddress((a) => ({ ...a, addressDetail: e.target.value }))}
-            style={inputStyle}
-          />
-          <input
-            type="text"
-            placeholder="우편번호 *"
-            value={address.zipCode}
-            onChange={(e) => setAddress((a) => ({ ...a, zipCode: e.target.value }))}
-            style={inputStyle}
-          />
-        </div>
-      </section>
+      <Stack gap="sm" mb="lg">
+        <Text fw={600} size="sm">배송지</Text>
+        <TextInput
+          placeholder="주소 *"
+          value={address.address}
+          onChange={(e) => setAddress((a) => ({ ...a, address: e.target.value }))}
+          radius="md"
+        />
+        <TextInput
+          placeholder="상세 주소"
+          value={address.addressDetail}
+          onChange={(e) => setAddress((a) => ({ ...a, addressDetail: e.target.value }))}
+          radius="md"
+        />
+        <TextInput
+          placeholder="우편번호 *"
+          value={address.zipCode}
+          onChange={(e) => setAddress((a) => ({ ...a, zipCode: e.target.value }))}
+          radius="md"
+        />
+      </Stack>
 
       {/* 결제 수단 */}
-      <section style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>결제 수단</h2>
-        <div
-          style={{
-            padding: '14px',
-            border: '2px solid #2D6A4F',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            fontSize: '14px',
-          }}
+      <Stack gap="xs" mb="lg">
+        <Text fw={600} size="sm">결제 수단</Text>
+        <Paper
+          p="sm"
+          radius="md"
+          style={{ border: '2px solid var(--green-primary)', display: 'flex', alignItems: 'center', gap: 10 }}
         >
           <span>💛</span>
-          <span style={{ fontWeight: '600' }}>카카오페이</span>
-        </div>
-      </section>
+          <Text fw={600} size="sm">카카오페이</Text>
+        </Paper>
+      </Stack>
 
       {error && (
-        <p style={{ color: '#e53e3e', marginBottom: '12px', fontSize: '14px' }}>{error}</p>
+        <Alert color="red" variant="light" mb="sm">
+          <Text size="sm">{error}</Text>
+        </Alert>
       )}
 
-      <button
-        onClick={requestPayment}
+      <Button
+        fullWidth
+        size="lg"
+        color="brand"
+        radius="md"
         disabled={!canPay}
-        style={{
-          width: '100%',
-          padding: '16px',
-          background: canPay ? '#2D6A4F' : '#a0aec0',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '8px',
-          fontSize: '16px',
-          fontWeight: 'bold',
-          cursor: canPay ? 'pointer' : 'not-allowed',
-        }}
+        loading={isLoading}
+        onClick={requestPayment}
       >
         {state === 'creating'
           ? '주문 생성 중...'
           : state === 'paying'
             ? '결제 진행 중...'
             : '카카오페이로 결제하기'}
-      </button>
-    </main>
+      </Button>
+    </Container>
   )
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  border: '1px solid #ddd',
-  borderRadius: '6px',
-  fontSize: '14px',
 }
 
 export default function CheckoutPage() {
   return (
-    <Suspense fallback={<div style={{ padding: '24px' }}>로딩 중...</div>}>
+    <Suspense fallback={<Container size="sm" px="md" py="lg"><Text>로딩 중...</Text></Container>}>
       <CheckoutContent />
     </Suspense>
   )

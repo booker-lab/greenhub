@@ -3,55 +3,16 @@
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import {
+  Container, Box, Group, Text, Button, Stack, Paper, Badge,
+  Modal, TextInput, Alert,
+} from '@mantine/core'
 import { useAddresses } from '@/hooks/useAddresses'
 import type { SavedAddress } from '@greenhub/shared'
 import type { AddressFormData } from '@/hooks/useAddresses'
 
-// ── 인라인 스타일 상수 ─────────────────────────────────────────
-const CARD_STYLE: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #e0e0e0',
-  borderRadius: '10px',
-  padding: '14px 16px',
-}
-
-const BTN_SM: React.CSSProperties = {
-  fontSize: '12px',
-  padding: '4px 10px',
-  borderRadius: '6px',
-  border: '1px solid #ddd',
-  background: 'none',
-  cursor: 'pointer',
-  color: '#555',
-}
-
-const BTN_DANGER: React.CSSProperties = { ...BTN_SM, color: '#C62828', borderColor: '#C62828' }
-
-const BTN_PRIMARY: React.CSSProperties = {
-  width: '100%',
-  padding: '14px',
-  borderRadius: '10px',
-  border: 'none',
-  background: '#2D6A4F',
-  color: '#fff',
-  fontSize: '15px',
-  fontWeight: '700',
-  cursor: 'pointer',
-}
-
-const INPUT_STYLE: React.CSSProperties = {
-  width: '100%',
-  padding: '10px 12px',
-  border: '1px solid #ddd',
-  borderRadius: '8px',
-  fontSize: '14px',
-  boxSizing: 'border-box',
-}
-
-// ── 빈 폼 ─────────────────────────────────────────────────────
 const EMPTY_FORM: AddressFormData = { label: '', address: '', addressDetail: '', zipCode: '' }
 
-// ── AddressCard ────────────────────────────────────────────────
 function AddressCard({
   addr,
   onEdit,
@@ -64,57 +25,41 @@ function AddressCard({
   onSetDefault: () => void
 }) {
   return (
-    <div style={CARD_STYLE}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-            <span style={{ fontWeight: '700', fontSize: '14px' }}>{addr.label}</span>
+    <Paper p="md" radius="md" withBorder>
+      <Group justify="space-between" align="flex-start" mb="xs">
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" mb={4}>
+            <Text fw={700} size="sm">{addr.label}</Text>
             {addr.isDefault && (
-              <span
-                style={{
-                  fontSize: '11px',
-                  color: '#2D6A4F',
-                  background: '#2D6A4F18',
-                  padding: '1px 7px',
-                  borderRadius: '10px',
-                  fontWeight: '600',
-                }}
-              >
-                기본
-              </span>
+              <Badge size="xs" color="brand" variant="light">기본</Badge>
             )}
-          </div>
-          <div style={{ fontSize: '13px', color: '#444', lineHeight: '1.5' }}>
-            {addr.address}
-            {addr.addressDetail ? ` ${addr.addressDetail}` : ''}
-          </div>
-          <div style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>{addr.zipCode}</div>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
+          </Group>
+          <Text size="sm" c="gray.6" style={{ lineHeight: 1.5 }}>
+            {addr.address}{addr.addressDetail ? ` ${addr.addressDetail}` : ''}
+          </Text>
+          <Text size="xs" c="gray.4" mt={2}>{addr.zipCode}</Text>
+        </Box>
+      </Group>
+      <Group gap="xs" mt="xs">
         {!addr.isDefault && (
-          <button style={BTN_SM} onClick={onSetDefault}>
+          <Button size="xs" variant="outline" color="gray" radius="sm" onClick={onSetDefault}>
             기본으로 설정
-          </button>
+          </Button>
         )}
-        <button style={BTN_SM} onClick={onEdit}>
-          수정
-        </button>
-        <button style={BTN_DANGER} onClick={onDelete}>
-          삭제
-        </button>
-      </div>
-    </div>
+        <Button size="xs" variant="outline" color="gray" radius="sm" onClick={onEdit}>수정</Button>
+        <Button size="xs" variant="outline" color="red" radius="sm" onClick={onDelete}>삭제</Button>
+      </Group>
+    </Paper>
   )
 }
 
-// ── AddressFormModal ───────────────────────────────────────────
 function AddressFormModal({
+  opened,
   initial,
   onSave,
   onClose,
 }: {
+  opened: boolean
   initial: AddressFormData
   onSave: (data: AddressFormData) => Promise<void>
   onClose: () => void
@@ -145,116 +90,42 @@ function AddressFormModal({
   }
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.4)',
-        display: 'flex',
-        alignItems: 'flex-end',
-        zIndex: 1000,
-      }}
-      onClick={onClose}
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={initial.label ? '배송지 수정' : '배송지 추가'}
+      radius="md"
+      styles={{ title: { fontWeight: 700, fontSize: 17 } }}
     >
-      <div
-        style={{
-          background: '#fff',
-          width: '100%',
-          maxWidth: '480px',
-          margin: '0 auto',
-          borderRadius: '16px 16px 0 0',
-          padding: '24px 20px 36px',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '20px',
-          }}
-        >
-          <h2 style={{ fontSize: '17px', fontWeight: '700' }}>
-            {initial.label ? '배송지 수정' : '배송지 추가'}
-          </h2>
-          <button
-            onClick={onClose}
-            style={{ fontSize: '20px', background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}
-          >
-            ✕
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div>
-            <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '4px' }}>
-              이름 *
-            </label>
-            <input
-              style={INPUT_STYLE}
-              placeholder="예: 집, 회사"
-              value={form.label}
-              onChange={(e) => set('label', e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '4px' }}>
-              우편번호 *
-            </label>
-            <input
-              style={INPUT_STYLE}
-              placeholder="예: 06232"
-              value={form.zipCode}
-              onChange={(e) => set('zipCode', e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '4px' }}>
-              주소 *
-            </label>
-            <input
-              style={INPUT_STYLE}
-              placeholder="예: 서울 강남구 테헤란로 152"
-              value={form.address}
-              onChange={(e) => set('address', e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '4px' }}>
-              상세 주소
-            </label>
-            <input
-              style={INPUT_STYLE}
-              placeholder="예: 5층 502호"
-              value={form.addressDetail}
-              onChange={(e) => set('addressDetail', e.target.value)}
-            />
-          </div>
+      <form onSubmit={handleSubmit}>
+        <Stack gap="sm">
+          <TextInput label="이름 *" placeholder="예: 집, 회사" value={form.label} onChange={(e) => set('label', e.target.value)} radius="md" />
+          <TextInput label="우편번호 *" placeholder="예: 06232" value={form.zipCode} onChange={(e) => set('zipCode', e.target.value)} radius="md" />
+          <TextInput label="주소 *" placeholder="예: 서울 강남구 테헤란로 152" value={form.address} onChange={(e) => set('address', e.target.value)} radius="md" />
+          <TextInput label="상세 주소" placeholder="예: 5층 502호" value={form.addressDetail} onChange={(e) => set('addressDetail', e.target.value)} radius="md" />
 
           {fieldError && (
-            <p style={{ fontSize: '13px', color: '#C62828', margin: 0 }}>{fieldError}</p>
+            <Alert color="red" variant="light" p="xs">
+              <Text size="sm">{fieldError}</Text>
+            </Alert>
           )}
 
-          <button style={{ ...BTN_PRIMARY, marginTop: '4px', opacity: saving ? 0.6 : 1 }} disabled={saving}>
-            {saving ? '저장 중...' : '저장'}
-          </button>
-        </form>
-      </div>
-    </div>
+          <Button type="submit" fullWidth color="brand" radius="md" loading={saving} mt="xs">
+            저장
+          </Button>
+        </Stack>
+      </form>
+    </Modal>
   )
 }
 
-// ── 메인 클라이언트 ────────────────────────────────────────────
 export default function AddressesClient() {
   const { status } = useSession()
   const router = useRouter()
   const { addresses, loading, error, addAddress, updateAddress, deleteAddress, setDefaultAddress } =
     useAddresses()
 
-  const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; addr: SavedAddress } | null>(
-    null,
-  )
+  const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; addr: SavedAddress } | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   if (status === 'unauthenticated') {
@@ -287,46 +158,27 @@ export default function AddressesClient() {
   }
 
   return (
-    <main style={{ padding: '24px 16px 80px', maxWidth: '480px', margin: '0 auto' }}>
+    <Container size="sm" px="md" pt="lg" pb={80}>
       {/* 헤더 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-        <button
-          onClick={() => router.back()}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: '#333', padding: '0 4px 0 0' }}
-        >
-          ←
-        </button>
-        <h1 style={{ fontSize: '18px', fontWeight: '700' }}>배송지 관리</h1>
-      </div>
+      <Group gap="xs" mb="lg">
+        <Button variant="transparent" c="dark" pl={0} onClick={() => router.back()} style={{ fontSize: 20 }}>←</Button>
+        <Text fw={700} size="lg">배송지 관리</Text>
+      </Group>
 
       {/* 오류 */}
       {(error || actionError) && (
-        <div
-          style={{
-            background: '#FFF3F3',
-            border: '1px solid #F5C6C6',
-            borderRadius: '8px',
-            padding: '12px 14px',
-            fontSize: '13px',
-            color: '#C62828',
-            marginBottom: '16px',
-          }}
-        >
-          {error ?? actionError}
-        </div>
+        <Alert color="red" variant="light" mb="md">
+          <Text size="sm">{error ?? actionError}</Text>
+        </Alert>
       )}
 
       {/* 목록 */}
       {loading ? (
-        <div style={{ textAlign: 'center', color: '#999', padding: '40px 0', fontSize: '14px' }}>
-          불러오는 중...
-        </div>
+        <Text ta="center" c="gray.4" py={40} size="sm">불러오는 중...</Text>
       ) : addresses.length === 0 ? (
-        <div style={{ textAlign: 'center', color: '#999', padding: '48px 0', fontSize: '14px' }}>
-          등록된 배송지가 없습니다.
-        </div>
+        <Text ta="center" c="gray.4" py={48} size="sm">등록된 배송지가 없습니다.</Text>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+        <Stack gap="sm" mb="lg">
           {addresses.map((addr) => (
             <AddressCard
               key={addr.id}
@@ -336,26 +188,25 @@ export default function AddressesClient() {
               onSetDefault={() => handleSetDefault(addr.id)}
             />
           ))}
-        </div>
+        </Stack>
       )}
 
       {/* 추가 버튼 */}
-      <button style={BTN_PRIMARY} onClick={() => setModal({ mode: 'add' })}>
+      <Button fullWidth color="brand" radius="md" size="md" onClick={() => setModal({ mode: 'add' })}>
         + 배송지 추가
-      </button>
+      </Button>
 
       {/* 모달 */}
-      {modal && (
-        <AddressFormModal
-          initial={getInitialForm(modal.mode === 'edit' ? modal.addr : undefined)}
-          onSave={
-            modal.mode === 'add'
-              ? addAddress
-              : (data) => updateAddress(modal.addr.id, data)
-          }
-          onClose={() => setModal(null)}
-        />
-      )}
-    </main>
+      <AddressFormModal
+        opened={modal !== null}
+        initial={getInitialForm(modal?.mode === 'edit' ? modal.addr : undefined)}
+        onSave={
+          modal?.mode === 'add'
+            ? addAddress
+            : (data) => updateAddress((modal as { mode: 'edit'; addr: SavedAddress }).addr.id, data)
+        }
+        onClose={() => setModal(null)}
+      />
+    </Container>
   )
 }

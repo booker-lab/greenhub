@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
+import { ColorSchemeScript } from "@mantine/core";
 import Providers from "./providers";
 import BottomNav from "@/components/BottomNav";
 import "./globals.css";
@@ -33,8 +34,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={`${geistSans.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">
+    <html lang="ko" className={geistSans.variable} suppressHydrationWarning>
+      <head>
+        <ColorSchemeScript />
+      </head>
+      <body>
         <Providers>
           {children}
           <BottomNav />

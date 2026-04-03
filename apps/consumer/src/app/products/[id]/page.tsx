@@ -2,6 +2,10 @@
 
 import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  Container, Box, Text, Title, Button, Group, Stack, Badge,
+  Paper, Progress, ActionIcon, Checkbox, Skeleton,
+} from '@mantine/core'
 import { useProduct, useStore } from '@/hooks/useProducts'
 import { useGroupProduct } from '@/hooks/useGroupProduct'
 import { useDailyCap } from '@/hooks/useDailyCap'
@@ -37,26 +41,23 @@ export default function ProductDetailPage({
 
   if (loading) {
     return (
-      <main className="max-w-lg mx-auto px-4 py-6">
-        <div className="aspect-square rounded-2xl bg-gray-100 animate-pulse mb-4" />
-        <div className="h-6 bg-gray-100 rounded animate-pulse mb-2 w-2/3" />
-        <div className="h-8 bg-gray-100 rounded animate-pulse w-1/3" />
-      </main>
+      <Container size="sm" px="md" py="lg">
+        <Skeleton height={300} radius="lg" mb="md" />
+        <Skeleton height={24} width="60%" mb="xs" />
+        <Skeleton height={32} width="30%" />
+      </Container>
     )
   }
 
   if (error || !product) {
     return (
-      <main className="max-w-lg mx-auto px-4 py-16 text-center text-gray-400">
-        <p className="text-4xl mb-3">😔</p>
-        <p className="text-sm">{error ?? '상품을 찾을 수 없습니다.'}</p>
-        <button
-          onClick={() => router.back()}
-          className="mt-4 text-green-primary text-sm underline"
-        >
-          돌아가기
-        </button>
-      </main>
+      <Container size="sm" px="md" py={64}>
+        <Stack align="center" gap="sm">
+          <Text size="xl">😔</Text>
+          <Text size="sm" c="gray.4">{error ?? '상품을 찾을 수 없습니다.'}</Text>
+          <Button variant="transparent" c="brand.6" onClick={() => router.back()}>돌아가기</Button>
+        </Stack>
+      </Container>
     )
   }
 
@@ -82,82 +83,73 @@ export default function ProductDetailPage({
 
   function handleBuyNow() {
     if (!product) return
-    const params = new URLSearchParams({
+    const p = new URLSearchParams({
       productId: product.id,
       quantity: String(quantity),
       saleType: product.saleType,
       deliveryMethod,
       totalAmount: String(totalAmount),
     })
-    router.push(`/checkout?${params.toString()}`)
+    router.push(`/checkout?${p.toString()}`)
   }
 
   return (
-    <main className="max-w-lg mx-auto">
+    <Container size="sm" p={0}>
       {/* 뒤로가기 */}
-      <div className="px-4 pt-4">
-        <button
-          onClick={() => router.back()}
-          className="text-gray-500 text-sm flex items-center gap-1"
-        >
+      <Box px="md" pt="md">
+        <Button variant="transparent" size="sm" c="gray.5" onClick={() => router.back()} pl={0}>
           ← 뒤로
-        </button>
-      </div>
+        </Button>
+      </Box>
 
       {/* 이미지 */}
-      <div className="aspect-square bg-gray-50 overflow-hidden">
+      <Box style={{ aspectRatio: '1', background: 'var(--mantine-color-gray-0)', overflow: 'hidden' }}>
         <img
           src={product.images?.[0] ?? '/icons/icon-192x192.png'}
           alt={product.name}
-          className="object-cover w-full h-full"
+          style={{ objectFit: 'cover', width: '100%', height: '100%' }}
         />
-      </div>
+      </Box>
 
       {/* 정보 */}
-      <div className="px-4 py-5 space-y-4">
+      <Stack gap="md" px="md" py="lg">
         {isGroup && (
-          <span className="inline-block bg-green-primary text-white text-xs font-bold px-2.5 py-1 rounded-full">
-            공동구매
-          </span>
+          <Badge color="brand" variant="filled">공동구매</Badge>
         )}
 
-        <h1 className="text-xl font-bold text-gray-900">{product.name}</h1>
-        <p className="text-2xl font-bold text-green-dark">
-          {unitPrice.toLocaleString()}원
-        </p>
+        <Title order={2}>{product.name}</Title>
+        <Text size="xl" fw={700} c="brand.8">{unitPrice.toLocaleString()}원</Text>
 
         {product.description && (
-          <p className="text-sm text-gray-600 leading-relaxed">
+          <Text size="sm" c="gray.6" style={{ lineHeight: 1.6 }}>
             {product.description}
-          </p>
+          </Text>
         )}
 
         {/* 공동구매 실시간 정보 */}
         {isGroup && groupConfig && (
-          <section className="bg-green-bg rounded-xl p-4 space-y-2">
-            <h3 className="text-sm font-bold text-green-dark">공동구매 현황</h3>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">현재 참여</span>
-              <span className="font-semibold">
+          <Paper bg="brand.0" radius="md" p="md">
+            <Text fw={700} size="sm" c="brand.8" mb="xs">공동구매 현황</Text>
+            <Group justify="space-between" mb={4}>
+              <Text size="sm" c="gray.5">현재 참여</Text>
+              <Text size="sm" fw={600}>
                 {groupConfig.currentParticipants}/{groupConfig.maxParticipants}명
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">최소 인원</span>
-              <span className="font-semibold">{groupConfig.minParticipants}명</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-              <div
-                className="bg-green-primary rounded-full h-2 transition-all"
-                style={{
-                  width: `${Math.min(
-                    (groupConfig.currentParticipants / groupConfig.minParticipants) * 100,
-                    100,
-                  )}%`,
-                }}
-              />
-            </div>
-            <p className="text-xs text-gray-400">
+              </Text>
+            </Group>
+            <Group justify="space-between" mb="xs">
+              <Text size="sm" c="gray.5">최소 인원</Text>
+              <Text size="sm" fw={600}>{groupConfig.minParticipants}명</Text>
+            </Group>
+            <Progress
+              value={Math.min(
+                (groupConfig.currentParticipants / groupConfig.minParticipants) * 100,
+                100,
+              )}
+              color="brand"
+              size="sm"
+              radius="xl"
+            />
+            <Text size="xs" c="gray.4" mt="xs">
               마감:{' '}
               {new Date(groupConfig.recruitDeadline).toLocaleDateString('ko-KR', {
                 month: 'long',
@@ -165,126 +157,145 @@ export default function ProductDetailPage({
                 hour: '2-digit',
                 minute: '2-digit',
               })}
-            </p>
-          </section>
+            </Text>
+          </Paper>
         )}
 
         {/* Daily Cap */}
         {remainingSlots > 0 && (
-          <p className="text-xs text-gray-400">
-            🕐 오늘 잔여 배송 가능: <strong>{remainingSlots}건</strong>
-          </p>
+          <Text size="xs" c="gray.4">
+            🕐 오늘 잔여 배송 가능: <Text span fw={700}>{remainingSlots}건</Text>
+          </Text>
         )}
 
         {/* 배송 방법 */}
-        <section>
-          <h3 className="text-sm font-semibold mb-2">배송 방법</h3>
-          <div className="flex gap-2">
+        <Box>
+          <Text fw={600} size="sm" mb="xs">배송 방법</Text>
+          <Group gap="xs">
             {(['direct', 'hub', 'parcel'] as DeliveryMethod[]).map((method) => (
-              <button
+              <Button
                 key={method}
+                size="xs"
+                radius="md"
+                variant={deliveryMethod === method ? 'filled' : 'outline'}
+                color={deliveryMethod === method ? 'brand' : 'gray'}
+                style={{ flex: 1 }}
                 onClick={() => setDeliveryMethod(method)}
-                className={`flex-1 py-2 px-3 text-xs rounded-lg border transition-colors ${
-                  deliveryMethod === method
-                    ? 'border-green-primary bg-green-bg text-green-dark font-semibold'
-                    : 'border-gray-200 text-gray-500'
-                }`}
               >
                 {deliveryLabels[method]}
-              </button>
+              </Button>
             ))}
-          </div>
-        </section>
+          </Group>
+        </Box>
 
         {/* 수량 */}
-        <section>
-          <h3 className="text-sm font-semibold mb-2">수량</h3>
-          <div className="flex items-center gap-3">
-            <button
+        <Box>
+          <Text fw={600} size="sm" mb="xs">수량</Text>
+          <Group gap="sm">
+            <ActionIcon
+              size="lg"
+              variant="outline"
+              color="gray"
+              radius="md"
               onClick={() => setQuantity(Math.max(1, quantity - 1))}
-              className="w-9 h-9 border border-gray-200 rounded-lg flex items-center justify-center text-lg"
             >
               −
-            </button>
-            <span className="text-lg font-bold w-8 text-center">{quantity}</span>
-            <button
+            </ActionIcon>
+            <Text size="lg" fw={700} w={32} ta="center">{quantity}</Text>
+            <ActionIcon
+              size="lg"
+              variant="outline"
+              color="gray"
+              radius="md"
               onClick={() => setQuantity(quantity + 1)}
-              className="w-9 h-9 border border-gray-200 rounded-lg flex items-center justify-center text-lg"
             >
               +
-            </button>
-          </div>
-        </section>
+            </ActionIcon>
+          </Group>
+        </Box>
 
         {/* 공동구매 동의 */}
         {isGroup && (
-          <label className="flex items-start gap-3 bg-yellow-50 rounded-xl p-4 cursor-pointer">
-            <input
-              type="checkbox"
+          <Paper bg="yellow.0" radius="md" p="md">
+            <Checkbox
               checked={groupConsent}
-              onChange={(e) => setGroupConsent(e.target.checked)}
-              className="mt-0.5 accent-green-primary"
+              onChange={(e) => setGroupConsent(e.currentTarget.checked)}
+              color="brand"
+              label={
+                <Text size="sm" c="gray.7" style={{ lineHeight: 1.5 }}>
+                  공동구매 <Text span fw={700}>확정 이후 취소·환불이 불가</Text>함을 이해하고
+                  동의합니다. (전자상거래법 제17조)
+                </Text>
+              }
             />
-            <span className="text-sm text-gray-700 leading-relaxed">
-              공동구매 <strong>확정 이후 취소·환불이 불가</strong>함을 이해하고
-              동의합니다. (전자상거래법 제17조)
-            </span>
-          </label>
+          </Paper>
         )}
 
         {/* 합계 */}
-        <div className="flex justify-between items-center pt-2 border-t">
-          <span className="text-sm text-gray-500">총 금액</span>
-          <span className="text-xl font-bold text-green-dark">
-            {totalAmount.toLocaleString()}원
-          </span>
-        </div>
+        <Group justify="space-between" pt="sm" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+          <Text size="sm" c="gray.5">총 금액</Text>
+          <Text size="xl" fw={700} c="brand.8">{totalAmount.toLocaleString()}원</Text>
+        </Group>
 
         {/* CTA 버튼 */}
-        <div className="flex gap-2 pt-2">
-          <button
+        <Group gap="xs">
+          <Button
+            flex={1}
+            variant="outline"
+            color="brand"
+            radius="md"
+            size="md"
             onClick={handleAddToCart}
-            className="flex-1 py-3.5 border-2 border-green-primary text-green-primary rounded-xl font-semibold text-sm hover:bg-green-bg transition-colors"
           >
             장바구니
-          </button>
-          <button
-            onClick={handleBuyNow}
+          </Button>
+          <Button
+            flex={1}
+            color="brand"
+            radius="md"
+            size="md"
             disabled={!canBuy}
-            className="flex-1 py-3.5 bg-green-primary text-white rounded-xl font-semibold text-sm disabled:opacity-40 hover:bg-green-dark transition-colors"
+            onClick={handleBuyNow}
           >
             바로 결제
-          </button>
-        </div>
+          </Button>
+        </Group>
 
         {/* 판매자 정보 */}
         {store && (
-          <section className="mt-4 border-t pt-4 space-y-2">
-            <h3 className="text-sm font-semibold text-gray-700">판매자 정보</h3>
-            <div className="flex items-center gap-3">
+          <Box pt="md" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+            <Text fw={600} size="sm" c="gray.7" mb="xs">판매자 정보</Text>
+            <Group gap="sm" mb="xs">
               {store.logoUrl ? (
                 <img
                   src={store.logoUrl}
                   alt={store.name}
-                  className="w-10 h-10 rounded-full object-cover bg-gray-100"
+                  style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', background: 'var(--green-bg)' }}
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-green-bg flex items-center justify-center text-green-primary font-bold text-sm">
+                <Box
+                  style={{
+                    width: 40, height: 40, borderRadius: '50%',
+                    background: 'var(--green-bg)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--green-primary)', fontWeight: 700, fontSize: 14,
+                  }}
+                >
                   {store.name[0]}
-                </div>
+                </Box>
               )}
-              <div>
-                <p className="text-sm font-semibold text-gray-800">{store.name}</p>
-                <p className="text-xs text-gray-400">{store.ceoName}</p>
-              </div>
-            </div>
-            <div className="text-xs text-gray-500 space-y-1">
-              <p>📍 {store.address}</p>
-              <p>📞 {store.phone}</p>
-            </div>
-          </section>
+              <Box>
+                <Text size="sm" fw={600} c="dark">{store.name}</Text>
+                <Text size="xs" c="gray.4">{store.ceoName}</Text>
+              </Box>
+            </Group>
+            <Stack gap={4}>
+              <Text size="xs" c="gray.5">📍 {store.address}</Text>
+              <Text size="xs" c="gray.5">📞 {store.phone}</Text>
+            </Stack>
+          </Box>
         )}
-      </div>
-    </main>
+      </Stack>
+    </Container>
   )
 }

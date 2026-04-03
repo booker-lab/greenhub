@@ -1,8 +1,6 @@
-@import "tailwindcss";
+@import '@mantine/core/styles.css';
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
   --green-primary: #2D6A4F;
   --green-dark: #1B4332;
   --green-light: #95D5B2;
@@ -10,28 +8,6 @@
   --green-bg: #F0FFF4;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-green-primary: var(--green-primary);
-  --color-green-dark: var(--green-dark);
-  --color-green-light: var(--green-light);
-  --color-green-pale: var(--green-pale);
-  --color-green-bg: var(--green-bg);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
   padding-bottom: 72px; /* BottomNav 높이 확보 */
 }

@@ -2,16 +2,15 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { Container, Box, Group, Text, Title, Button, ActionIcon, Paper, Stack, Badge } from '@mantine/core'
 import { useCart } from '@/hooks/useCart'
 
 export default function CartPage() {
   const router = useRouter()
-  const { items, updateQuantity, removeItem, clearCart, totalAmount, itemCount } =
-    useCart()
+  const { items, updateQuantity, removeItem, clearCart, totalAmount, itemCount } = useCart()
 
   function handleCheckout() {
     if (items.length === 0) return
-    // 첫 번째 아이템 기준으로 checkout 이동 (MVP)
     const first = items[0]
     const params = new URLSearchParams({
       productId: first.productId,
@@ -25,120 +24,122 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <main className="max-w-lg mx-auto px-4 py-16 text-center">
-        <p className="text-5xl mb-4">🛒</p>
-        <p className="text-gray-500 mb-6">장바구니가 비어있습니다.</p>
-        <Link
-          href="/"
-          className="inline-block bg-green-primary text-white px-6 py-3 rounded-xl text-sm font-semibold"
-        >
-          쇼핑하러 가기
-        </Link>
-      </main>
+      <Container size="sm" px="md" py={64}>
+        <Stack align="center" gap="md">
+          <Text size="xl">🛒</Text>
+          <Text c="gray.5">장바구니가 비어있습니다.</Text>
+          <Button component={Link} href="/" color="brand" radius="md">
+            쇼핑하러 가기
+          </Button>
+        </Stack>
+      </Container>
     )
   }
 
   return (
-    <main className="max-w-lg mx-auto px-4 pt-6 pb-4">
+    <Container size="sm" px="md" pt="lg" pb="md">
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold">장바구니</h1>
-        <button
-          onClick={clearCart}
-          className="text-xs text-gray-400 underline"
-        >
+      <Group justify="space-between" mb="lg">
+        <Title order={2}>장바구니</Title>
+        <Button variant="transparent" size="xs" c="gray.4" onClick={clearCart} style={{ textDecoration: 'underline' }}>
           전체 삭제
-        </button>
-      </div>
+        </Button>
+      </Group>
 
       {/* 아이템 목록 */}
-      <div className="space-y-3 mb-6">
+      <Stack gap="sm" mb="lg">
         {items.map((item) => (
-          <div
-            key={item.productId}
-            className="flex gap-3 p-3 rounded-xl border border-gray-100 bg-white"
-          >
-            {/* 이미지 */}
-            <Link
-              href={`/products/${item.productId}`}
-              className="shrink-0 w-20 h-20 rounded-lg bg-gray-50 overflow-hidden"
-            >
-              <img
-                src={item.image || '/icons/icon-192x192.png'}
-                alt={item.name}
-                className="w-full h-full object-cover"
-              />
-            </Link>
-
-            {/* 정보 */}
-            <div className="flex-1 min-w-0">
-              <Link
+          <Paper key={item.productId} p="sm" radius="md" withBorder>
+            <Group gap="sm" align="flex-start">
+              {/* 이미지 */}
+              <Box
+                component={Link}
                 href={`/products/${item.productId}`}
-                className="text-sm font-semibold text-gray-800 truncate block"
+                style={{ flexShrink: 0, width: 80, height: 80, borderRadius: 8, background: 'var(--mantine-color-gray-1)', overflow: 'hidden', display: 'block' }}
               >
-                {item.name}
-              </Link>
+                <img
+                  src={item.image || '/icons/icon-192x192.png'}
+                  alt={item.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </Box>
 
-              {item.saleType === 'group' && (
-                <span className="inline-block mt-0.5 text-[10px] bg-green-pale text-green-dark px-1.5 py-0.5 rounded-full font-semibold">
-                  공동구매
-                </span>
-              )}
+              {/* 정보 */}
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <Text
+                  component={Link}
+                  href={`/products/${item.productId}`}
+                  size="sm"
+                  fw={600}
+                  c="dark"
+                  style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
+                >
+                  {item.name}
+                </Text>
 
-              <p className="text-base font-bold text-green-dark mt-1">
-                {(item.price * item.quantity).toLocaleString()}원
-              </p>
+                {item.saleType === 'group' && (
+                  <Badge size="xs" mt={4} style={{ background: 'var(--green-pale)', color: 'var(--green-dark)' }}>
+                    공동구매
+                  </Badge>
+                )}
 
-              {/* 수량 조절 */}
-              <div className="flex items-center gap-2 mt-2">
-                <button
-                  onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                  className="w-7 h-7 border border-gray-200 rounded-md flex items-center justify-center text-sm"
-                >
-                  −
-                </button>
-                <span className="text-sm font-semibold w-6 text-center">
-                  {item.quantity}
-                </span>
-                <button
-                  onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                  className="w-7 h-7 border border-gray-200 rounded-md flex items-center justify-center text-sm"
-                >
-                  +
-                </button>
-                <button
-                  onClick={() => removeItem(item.productId)}
-                  className="ml-auto text-xs text-gray-400"
-                >
-                  삭제
-                </button>
-              </div>
-            </div>
-          </div>
+                <Text size="md" fw={700} c="brand.8" mt={4}>
+                  {(item.price * item.quantity).toLocaleString()}원
+                </Text>
+
+                {/* 수량 조절 */}
+                <Group gap="xs" mt="xs">
+                  <ActionIcon
+                    size="sm"
+                    variant="outline"
+                    color="gray"
+                    radius="sm"
+                    onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                  >
+                    −
+                  </ActionIcon>
+                  <Text size="sm" fw={600} w={24} ta="center">{item.quantity}</Text>
+                  <ActionIcon
+                    size="sm"
+                    variant="outline"
+                    color="gray"
+                    radius="sm"
+                    onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                  >
+                    +
+                  </ActionIcon>
+                  <Button
+                    variant="transparent"
+                    size="xs"
+                    c="gray.4"
+                    ml="auto"
+                    onClick={() => removeItem(item.productId)}
+                  >
+                    삭제
+                  </Button>
+                </Group>
+              </Box>
+            </Group>
+          </Paper>
         ))}
-      </div>
+      </Stack>
 
       {/* 합계 */}
-      <section className="bg-gray-50 rounded-xl p-4 mb-4">
-        <div className="flex justify-between text-sm mb-1">
-          <span className="text-gray-500">상품 수</span>
-          <span>{itemCount}개</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="font-semibold">총 결제 금액</span>
-          <span className="text-xl font-bold text-green-dark">
-            {totalAmount.toLocaleString()}원
-          </span>
-        </div>
-      </section>
+      <Paper bg="gray.0" radius="md" p="md" mb="md">
+        <Group justify="space-between" mb={4}>
+          <Text size="sm" c="gray.5">상품 수</Text>
+          <Text size="sm">{itemCount}개</Text>
+        </Group>
+        <Group justify="space-between">
+          <Text fw={600}>총 결제 금액</Text>
+          <Text size="xl" fw={700} c="brand.8">{totalAmount.toLocaleString()}원</Text>
+        </Group>
+      </Paper>
 
       {/* 결제 버튼 */}
-      <button
-        onClick={handleCheckout}
-        className="w-full py-4 bg-green-primary text-white rounded-xl font-bold text-base hover:bg-green-dark transition-colors"
-      >
+      <Button fullWidth size="lg" color="brand" radius="md" onClick={handleCheckout}>
         결제하기
-      </button>
-    </main>
+      </Button>
+    </Container>
   )
 }

@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { Container, Stack, Title, Text, Button } from '@mantine/core'
 import { useOrderStatus } from '@/hooks/useOrderStatus'
 import type { OrderStatus } from '@greenhub/shared'
 
@@ -27,7 +28,6 @@ function OrderSuccessContent() {
 
   const { order, loading, error } = useOrderStatus(orderId)
 
-  // CANCELLED 시 홈으로 이동
   useEffect(() => {
     if (order?.status === 'CANCELLED') {
       const timer = setTimeout(() => router.replace('/'), 4000)
@@ -45,118 +45,69 @@ function OrderSuccessContent() {
   const isCancelled = !loading && order?.status === 'CANCELLED'
 
   return (
-    <main
-      style={{
-        padding: '60px 24px 40px',
-        maxWidth: '480px',
-        margin: '0 auto',
-        textAlign: 'center',
-      }}
-    >
-      {/* 초기 로딩 또는 PENDING */}
-      {(loading || isPending) && (
-        <>
-          <div style={{ fontSize: '56px', marginBottom: '20px' }}>⏳</div>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold' }}>결제 확인 중...</h1>
-          <p style={{ color: '#666', marginTop: '10px', fontSize: '14px' }}>
-            잠시만 기다려주세요. 결제 완료 후 자동으로 업데이트됩니다.
-          </p>
-        </>
-      )}
+    <Container size="sm" px="md" py={60}>
+      <Stack align="center" gap="xs">
+        {/* 초기 로딩 또는 PENDING */}
+        {(loading || isPending) && (
+          <>
+            <Text size="xl" style={{ fontSize: 56 }}>⏳</Text>
+            <Title order={2}>결제 확인 중...</Title>
+            <Text c="gray.5" size="sm" ta="center">
+              잠시만 기다려주세요. 결제 완료 후 자동으로 업데이트됩니다.
+            </Text>
+          </>
+        )}
 
-      {/* 성공 */}
-      {isSuccess && (
-        <>
-          <div style={{ fontSize: '56px', marginBottom: '20px' }}>✅</div>
-          <h1 style={{ fontSize: '22px', fontWeight: 'bold' }}>주문이 완료되었습니다</h1>
-          <p style={{ color: '#2D6A4F', marginTop: '10px', fontWeight: '600' }}>
-            {STATUS_LABELS[order.status]}
-          </p>
-          {order.status === 'RECRUITING' && (
-            <p style={{ color: '#666', fontSize: '13px', marginTop: '8px' }}>
-              공동구매 목표 달성 시 주문이 확정됩니다.
-            </p>
-          )}
-          <p style={{ color: '#999', fontSize: '12px', marginTop: '16px' }}>
-            주문번호: {orderId}
-          </p>
-          <button
-            onClick={() => router.push('/mypage')}
-            style={{
-              marginTop: '32px',
-              padding: '14px 40px',
-              background: '#2D6A4F',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '15px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-            }}
-          >
-            주문 내역 보기
-          </button>
-          <button
-            onClick={() => router.push('/')}
-            style={{
-              display: 'block',
-              margin: '12px auto 0',
-              background: 'none',
-              border: 'none',
-              color: '#666',
-              fontSize: '14px',
-              cursor: 'pointer',
-              textDecoration: 'underline',
-            }}
-          >
-            홈으로
-          </button>
-        </>
-      )}
+        {/* 성공 */}
+        {isSuccess && (
+          <>
+            <Text style={{ fontSize: 56 }}>✅</Text>
+            <Title order={2}>주문이 완료되었습니다</Title>
+            <Text fw={600} c="brand.6">{STATUS_LABELS[order.status]}</Text>
+            {order.status === 'RECRUITING' && (
+              <Text c="gray.5" size="sm">공동구매 목표 달성 시 주문이 확정됩니다.</Text>
+            )}
+            <Text c="gray.4" size="xs" mt="xs">주문번호: {orderId}</Text>
+            <Button color="brand" radius="md" size="md" mt="lg" onClick={() => router.push('/mypage')}>
+              주문 내역 보기
+            </Button>
+            <Button variant="transparent" c="gray.5" size="sm" onClick={() => router.push('/')}>
+              홈으로
+            </Button>
+          </>
+        )}
 
-      {/* 취소 */}
-      {isCancelled && (
-        <>
-          <div style={{ fontSize: '56px', marginBottom: '20px' }}>❌</div>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold' }}>결제가 취소되었습니다</h1>
-          <p style={{ color: '#666', marginTop: '10px', fontSize: '14px' }}>
-            {order.cancelReason ?? '결제 처리 중 오류가 발생했습니다.'}
-          </p>
-          <p style={{ color: '#999', fontSize: '13px', marginTop: '16px' }}>
-            잠시 후 홈 화면으로 이동합니다.
-          </p>
-        </>
-      )}
+        {/* 취소 */}
+        {isCancelled && (
+          <>
+            <Text style={{ fontSize: 56 }}>❌</Text>
+            <Title order={2}>결제가 취소되었습니다</Title>
+            <Text c="gray.5" size="sm" ta="center">
+              {order.cancelReason ?? '결제 처리 중 오류가 발생했습니다.'}
+            </Text>
+            <Text c="gray.4" size="xs">잠시 후 홈 화면으로 이동합니다.</Text>
+          </>
+        )}
 
-      {/* Firestore 오류 */}
-      {!loading && error && (
-        <>
-          <div style={{ fontSize: '56px', marginBottom: '20px' }}>⚠️</div>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold' }}>주문 정보를 불러올 수 없습니다</h1>
-          <p style={{ color: '#666', marginTop: '10px', fontSize: '14px' }}>{error}</p>
-          <button
-            onClick={() => router.push('/')}
-            style={{
-              marginTop: '24px',
-              padding: '12px 32px',
-              background: '#2D6A4F',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-            }}
-          >
-            홈으로
-          </button>
-        </>
-      )}
-    </main>
+        {/* Firestore 오류 */}
+        {!loading && error && (
+          <>
+            <Text style={{ fontSize: 56 }}>⚠️</Text>
+            <Title order={2}>주문 정보를 불러올 수 없습니다</Title>
+            <Text c="gray.5" size="sm">{error}</Text>
+            <Button color="brand" radius="md" mt="md" onClick={() => router.push('/')}>
+              홈으로
+            </Button>
+          </>
+        )}
+      </Stack>
+    </Container>
   )
 }
 
 export default function OrderSuccessPage() {
   return (
-    <Suspense fallback={<div style={{ padding: '60px 24px', textAlign: 'center' }}>로딩 중...</div>}>
+    <Suspense fallback={<Container size="sm" px="md" py={60}><Text ta="center">로딩 중...</Text></Container>}>
       <OrderSuccessContent />
     </Suspense>
   )

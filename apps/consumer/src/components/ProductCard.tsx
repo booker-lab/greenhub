@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { Card, Text, Badge, Box } from '@mantine/core'
 import type { Product } from '@greenhub/shared'
 
 interface ProductCardProps {
@@ -17,42 +18,55 @@ export default function ProductCard({ product }: ProductCardProps) {
   const imgSrc = product.images?.[0] ?? '/icons/icon-192x192.png'
 
   return (
-    <Link
+    <Card
+      component={Link}
       href={`/products/${product.id}`}
-      className="group block rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
+      radius="lg"
+      p={0}
+      style={{ overflow: 'hidden', display: 'block', textDecoration: 'none' }}
+      withBorder
     >
       {/* 이미지 */}
-      <div className="relative aspect-square bg-gray-50 overflow-hidden">
+      <Box style={{ position: 'relative', aspectRatio: '1', background: 'var(--mantine-color-gray-0)', overflow: 'hidden' }}>
         <img
           src={imgSrc}
           alt={product.name}
-          className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+          style={{ objectFit: 'cover', width: '100%', height: '100%' }}
         />
         {product.saleType === 'group' && (
-          <span className="absolute top-2 left-2 bg-green-primary text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
+          <Badge
+            size="xs"
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              background: 'var(--green-primary)',
+              color: '#fff',
+            }}
+          >
             공동구매
-          </span>
+          </Badge>
         )}
-      </div>
+      </Box>
 
       {/* 정보 */}
-      <div className="p-3">
-        <p className="text-xs text-gray-400 mb-0.5">
+      <Box p="xs">
+        <Text size="xs" c="gray.5" mb={2}>
           {categoryLabels[product.category] ?? product.category}
-        </p>
-        <h3 className="text-sm font-semibold text-gray-800 truncate">
+        </Text>
+        <Text size="sm" fw={600} c="dark" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {product.name}
-        </h3>
-        <p className="text-base font-bold text-green-dark mt-1">
+        </Text>
+        <Text size="md" fw={700} c="brand.8" mt={4}>
           {product.price.toLocaleString()}원
-        </p>
+        </Text>
         {product.colors.length > 0 && (
-          <p className="text-[11px] text-gray-400 mt-1 truncate">
+          <Text size="xs" c="gray.5" mt={4} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {product.colors.slice(0, 3).join(' · ')}
             {product.colors.length > 3 && ` +${product.colors.length - 3}`}
-          </p>
+          </Text>
         )}
-      </div>
-    </Link>
+      </Box>
+    </Card>
   )
 }

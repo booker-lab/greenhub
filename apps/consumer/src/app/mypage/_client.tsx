@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { Container, Box, Title, Text, Paper, Group, Stack, Button, UnstyledButton } from '@mantine/core'
 import { useOrders } from '@/hooks/useOrders'
 import A2HSButton from '@/components/A2HSButton'
 import type { Order, OrderStatus } from '@greenhub/shared'
@@ -46,49 +47,41 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
   const label = STATUS_LABELS[order.status] ?? order.status
 
   return (
-    <button
+    <UnstyledButton
       onClick={onClick}
       style={{
         display: 'block',
         width: '100%',
-        textAlign: 'left',
         background: '#fff',
         border: '1px solid #e0e0e0',
-        borderRadius: '10px',
+        borderRadius: 10,
         padding: '14px 16px',
-        cursor: 'pointer',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span
+      <Group justify="space-between" mb={8}>
+        <Box
           style={{
-            fontSize: '12px',
-            fontWeight: '600',
+            fontSize: 12,
+            fontWeight: 600,
             color,
             background: color + '18',
             padding: '2px 8px',
-            borderRadius: '12px',
+            borderRadius: 12,
           }}
         >
           {label}
-        </span>
-        <span style={{ fontSize: '12px', color: '#999' }}>{formatDate(order.createdAt)}</span>
-      </div>
-      <div style={{ marginTop: '8px', fontSize: '14px', color: '#333' }}>
+        </Box>
+        <Text size="xs" c="gray.4">{formatDate(order.createdAt)}</Text>
+      </Group>
+      <Text size="sm" c="dark" mb={4}>
         {order.saleType === 'group' ? '[공동구매] ' : ''}
-        {order.deliveryMethod === 'hub'
-          ? '거점 픽업'
-          : order.deliveryMethod === 'parcel'
-            ? '택배'
-            : '직배송'}
-      </div>
-      <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '13px', color: '#666' }}>수량 {order.quantity}개</span>
-        <span style={{ fontSize: '14px', fontWeight: '700', color: '#111' }}>
-          {order.totalAmount.toLocaleString('ko-KR')}원
-        </span>
-      </div>
-    </button>
+        {order.deliveryMethod === 'hub' ? '거점 픽업' : order.deliveryMethod === 'parcel' ? '택배' : '직배송'}
+      </Text>
+      <Group justify="space-between">
+        <Text size="sm" c="gray.5">수량 {order.quantity}개</Text>
+        <Text size="sm" fw={700}>{order.totalAmount.toLocaleString('ko-KR')}원</Text>
+      </Group>
+    </UnstyledButton>
   )
 }
 
@@ -104,71 +97,45 @@ export default function MyPageClient() {
   }, [status, router])
 
   if (status === 'loading') {
-    return (
-      <div style={{ padding: '60px 24px', textAlign: 'center', color: '#999' }}>로딩 중...</div>
-    )
+    return <Box py={60} ta="center"><Text c="gray.4">로딩 중...</Text></Box>
   }
 
   if (!session) return null
 
   return (
-    <main style={{ padding: '24px 16px 80px', maxWidth: '480px', margin: '0 auto' }}>
+    <Container size="sm" px="md" pt="lg" pb={80}>
       {/* 프로필 */}
-      <section style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '8px' }}>마이페이지</h1>
-        <div
-          style={{
-            background: '#f5f5f5',
-            borderRadius: '10px',
-            padding: '14px 16px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: '600', fontSize: '15px' }}>{session.user?.name ?? '사용자'}</div>
-            <div style={{ fontSize: '13px', color: '#666', marginTop: '2px' }}>
-              {session.user?.email}
-            </div>
-          </div>
-          <button
-            onClick={() => signOut({ callbackUrl: '/' })}
-            style={{
-              fontSize: '13px',
-              color: '#999',
-              background: 'none',
-              border: '1px solid #ddd',
-              borderRadius: '6px',
-              padding: '4px 10px',
-              cursor: 'pointer',
-            }}
-          >
-            로그아웃
-          </button>
-        </div>
-      </section>
+      <Box mb="lg">
+        <Title order={2} mb="sm">마이페이지</Title>
+        <Paper bg="gray.0" radius="md" p="md">
+          <Group justify="space-between">
+            <Box>
+              <Text fw={600} size="md">{session.user?.name ?? '사용자'}</Text>
+              <Text size="sm" c="gray.5" mt={2}>{session.user?.email}</Text>
+            </Box>
+            <Button
+              variant="outline"
+              color="gray"
+              size="xs"
+              radius="sm"
+              onClick={() => signOut({ callbackUrl: '/' })}
+            >
+              로그아웃
+            </Button>
+          </Group>
+        </Paper>
+      </Box>
 
       {/* 주문 내역 */}
-      <section style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px' }}>주문 내역</h2>
-        {loading && (
-          <div style={{ textAlign: 'center', color: '#999', padding: '24px 0', fontSize: '14px' }}>
-            불러오는 중...
-          </div>
-        )}
-        {!loading && error && (
-          <div style={{ color: '#C62828', fontSize: '14px', padding: '12px 0' }}>
-            주문 내역을 불러올 수 없습니다.
-          </div>
-        )}
+      <Box mb="lg">
+        <Text fw={700} size="md" mb="sm">주문 내역</Text>
+        {loading && <Text ta="center" c="gray.4" py="lg" size="sm">불러오는 중...</Text>}
+        {!loading && error && <Text c="red.7" size="sm" py="xs">주문 내역을 불러올 수 없습니다.</Text>}
         {!loading && !error && orders.length === 0 && (
-          <div style={{ textAlign: 'center', color: '#999', padding: '32px 0', fontSize: '14px' }}>
-            주문 내역이 없습니다.
-          </div>
+          <Text ta="center" c="gray.4" py="xl" size="sm">주문 내역이 없습니다.</Text>
         )}
         {!loading && orders.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <Stack gap="sm">
             {orders.map((order) => (
               <OrderCard
                 key={order.id}
@@ -176,63 +143,47 @@ export default function MyPageClient() {
                 onClick={() => router.push(`/mypage/orders/${order.id}`)}
               />
             ))}
-          </div>
+          </Stack>
         )}
-      </section>
+      </Box>
 
       {/* 알림 내역 */}
-      <section style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px' }}>알림</h2>
-        <button
+      <Box mb="lg">
+        <Text fw={700} size="md" mb="sm">알림</Text>
+        <UnstyledButton
           onClick={() => router.push('/mypage/notifications')}
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            width: '100%',
-            background: '#fff',
-            border: '1px solid #e0e0e0',
-            borderRadius: '10px',
-            padding: '14px 16px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            color: '#333',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            width: '100%', background: '#fff', border: '1px solid #e0e0e0',
+            borderRadius: 10, padding: '14px 16px',
           }}
         >
-          <span>알림 내역</span>
-          <span style={{ color: '#999', fontSize: '16px' }}>›</span>
-        </button>
-      </section>
+          <Text size="sm" c="dark">알림 내역</Text>
+          <Text c="gray.4" size="lg">›</Text>
+        </UnstyledButton>
+      </Box>
 
       {/* 배송지 관리 */}
-      <section style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px' }}>배송지 관리</h2>
-        <button
+      <Box mb="lg">
+        <Text fw={700} size="md" mb="sm">배송지 관리</Text>
+        <UnstyledButton
           onClick={() => router.push('/mypage/addresses')}
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            width: '100%',
-            background: '#fff',
-            border: '1px solid #e0e0e0',
-            borderRadius: '10px',
-            padding: '14px 16px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            color: '#333',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            width: '100%', background: '#fff', border: '1px solid #e0e0e0',
+            borderRadius: 10, padding: '14px 16px',
           }}
         >
-          <span>배송지 목록 · 추가 · 수정</span>
-          <span style={{ color: '#999', fontSize: '16px' }}>›</span>
-        </button>
-      </section>
+          <Text size="sm" c="dark">배송지 목록 · 추가 · 수정</Text>
+          <Text c="gray.4" size="lg">›</Text>
+        </UnstyledButton>
+      </Box>
 
       {/* 앱 설치 */}
-      <section>
-        <h2 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px' }}>앱 설치</h2>
+      <Box>
+        <Text fw={700} size="md" mb="sm">앱 설치</Text>
         <A2HSButton />
-      </section>
-    </main>
+      </Box>
+    </Container>
   )
 }
