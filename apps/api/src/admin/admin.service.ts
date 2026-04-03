@@ -178,28 +178,30 @@ export class AdminService {
   // ── Drivers ──────────────────────────────────────────────────────
 
   async getDrivers(dto: QueryAdminDriversDto) {
-    let query = this.firestore
+    // 복합 인덱스 없이도 동작하도록 role 단일 필터 후 메모리 필터링
+    const snap = await (this.firestore
       .collection('users')
-      .where('role', '==', 'driver') as any;
+      .where('role', '==', 'driver')
+      .limit(100) as any).get();
+
+    let drivers = snap.docs.map((d: any) => {
+      const { passwordHash: _pw, ...user } = d.data();
+      return user;
+    });
 
     if (dto.status === 'pending') {
-      query = query.where('driverApproved', '==', false);
+      drivers = drivers.filter((d: any) => !d.driverApproved && !d.suspended);
     } else if (dto.status === 'approved') {
-      query = query.where('driverApproved', '==', true);
+      drivers = drivers.filter((d: any) => d.driverApproved && !d.suspended);
     } else if (dto.status === 'suspended') {
-      query = query.where('suspended', '==', true);
+      drivers = drivers.filter((d: any) => d.suspended);
     }
 
-    query = query.orderBy('createdAt', 'desc').limit(100);
-    const snap = await query.get();
+    drivers.sort((a: any, b: any) =>
+      (b.createdAt?._seconds ?? 0) - (a.createdAt?._seconds ?? 0),
+    );
 
-    return {
-      drivers: snap.docs.map((d: any) => {
-        const { passwordHash: _pw, ...user } = d.data();
-        return user;
-      }),
-      total: snap.size,
-    };
+    return { drivers, total: drivers.length };
   }
 
   async approveDriver(userId: string) {
