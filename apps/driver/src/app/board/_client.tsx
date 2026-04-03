@@ -1,17 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-} from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import OrderCard from "@/components/OrderCard";
+import { Box, Stack, Title, Text, UnstyledButton, Badge, Anchor } from "@mantine/core";
 
 type Order = {
   id: string;
@@ -27,8 +21,7 @@ type Order = {
   deliveredAt?: { seconds: number } | null;
 };
 
-export default function BoardPage() {
-  const { data: session } = useSession();
+export default function BoardClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get("tab") ?? "preparing";
@@ -37,7 +30,6 @@ export default function BoardPage() {
   const [delivering, setDelivering] = useState<Order[]>([]);
 
   useEffect(() => {
-    // PREPARING 실시간 리스너
     const qPreparing = query(
       collection(db, "orders"),
       where("status", "==", "PREPARING"),
@@ -47,16 +39,13 @@ export default function BoardPage() {
       setPreparing(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order)));
     });
 
-    // DELIVERING 실시간 리스너
     const qDelivering = query(
       collection(db, "orders"),
       where("status", "==", "DELIVERING"),
       orderBy("updatedAt", "asc")
     );
     const unsubDelivering = onSnapshot(qDelivering, (snap) => {
-      setDelivering(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order))
-      );
+      setDelivering(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order)));
     });
 
     return () => {
@@ -66,7 +55,6 @@ export default function BoardPage() {
   }, []);
 
   const orders = tab === "preparing" ? preparing : delivering;
-
   const today = new Date().toLocaleDateString("ko-KR", {
     month: "long",
     day: "numeric",
@@ -74,77 +62,83 @@ export default function BoardPage() {
   });
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <Box style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
       {/* 헤더 */}
-      <header className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-4 pt-4 pb-0">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-              오늘 배송
-            </h1>
-            <p className="text-xs text-gray-400">{today}</p>
-          </div>
-        </div>
+      <Box
+        component="header"
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          backgroundColor: "var(--mantine-color-white)",
+          borderBottom: "1px solid var(--mantine-color-gray-2)",
+          padding: "16px 16px 0",
+        }}
+      >
+        <Box mb="sm">
+          <Title order={4}>오늘 배송</Title>
+          <Text size="xs" c="dimmed">{today}</Text>
+        </Box>
 
         {/* 탭 */}
-        <div className="flex">
-          <button
-            onClick={() => router.replace("/board?tab=preparing")}
-            className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors ${
-              tab === "preparing"
-                ? "border-green-primary text-green-primary"
-                : "border-transparent text-gray-400"
-            }`}
-          >
-            수거 대기{" "}
-            {preparing.length > 0 && (
-              <span className="ml-1 inline-flex items-center justify-center w-5 h-5 bg-red-500 text-white text-[10px] rounded-full">
-                {preparing.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => router.replace("/board?tab=delivering")}
-            className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors ${
-              tab === "delivering"
-                ? "border-green-primary text-green-primary"
-                : "border-transparent text-gray-400"
-            }`}
-          >
-            배송 중{" "}
-            {delivering.length > 0 && (
-              <span className="ml-1 inline-flex items-center justify-center w-5 h-5 bg-blue-500 text-white text-[10px] rounded-full">
-                {delivering.length}
-              </span>
-            )}
-          </button>
-        </div>
-      </header>
+        <Box style={{ display: "flex" }}>
+          {[
+            { key: "preparing", label: "수거 대기", count: preparing.length },
+            { key: "delivering", label: "배송 중", count: delivering.length },
+          ].map(({ key, label, count }) => (
+            <UnstyledButton
+              key={key}
+              onClick={() => router.replace(`/board?tab=${key}`)}
+              style={{
+                flex: 1,
+                padding: "12px 0",
+                textAlign: "center",
+                fontSize: 14,
+                fontWeight: 600,
+                borderBottom: `2px solid ${tab === key ? "var(--green-primary)" : "transparent"}`,
+                color: tab === key ? "var(--green-primary)" : "var(--mantine-color-gray-5)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+              }}
+            >
+              {label}
+              {count > 0 && (
+                <Badge
+                  size="xs"
+                  color={key === "preparing" ? "red" : "blue"}
+                  circle
+                >
+                  {count}
+                </Badge>
+              )}
+            </UnstyledButton>
+          ))}
+        </Box>
+      </Box>
 
       {/* 주문 목록 */}
-      <main className="flex-1 px-4 py-4 space-y-3">
+      <Box component="main" style={{ flex: 1, padding: "16px" }}>
         {orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-gray-400">
-            <p className="text-sm">
-              {tab === "preparing"
-                ? "오늘 수거할 주문이 없습니다"
-                : "현재 배송 중인 주문이 없습니다"}
-            </p>
+          <Stack align="center" justify="center" h={192} gap="xs">
+            <Text size="sm" c="dimmed">
+              {tab === "preparing" ? "오늘 수거할 주문이 없습니다" : "현재 배송 중인 주문이 없습니다"}
+            </Text>
             {tab === "preparing" && (
-              <button
-                onClick={() => router.push("/map")}
-                className="mt-3 text-xs text-green-primary underline"
-              >
+              <Anchor size="xs" c="brand.6" onClick={() => router.push("/map")}>
                 지도에서 경로 보기
-              </button>
+              </Anchor>
             )}
-          </div>
+          </Stack>
         ) : (
-          orders.map((order) => (
-            <OrderCard key={order.id} order={order} tab={tab} />
-          ))
+          <Stack gap="sm">
+            {orders.map((order) => (
+              <OrderCard key={order.id} order={order} tab={tab} />
+            ))}
+          </Stack>
         )}
-      </main>
-    </div>
+      </Box>
+    </Box>
   );
 }

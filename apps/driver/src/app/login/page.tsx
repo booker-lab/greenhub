@@ -1,4 +1,5 @@
 import { signIn } from "@/auth";
+import { Box, Stack, Button, Text, Title, Alert } from "@mantine/core";
 
 export default async function LoginPage({
   searchParams,
@@ -8,52 +9,71 @@ export default async function LoginPage({
   const { pending } = await searchParams;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-green-bg dark:bg-gray-900 px-6">
-      <div className="w-full max-w-sm flex flex-col items-center gap-10">
+    <Box
+      style={{
+        minHeight: "100dvh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "var(--green-bg)",
+        padding: "0 24px",
+      }}
+    >
+      <Stack align="center" gap="xl" w="100%" maw={360}>
         {/* 로고 */}
-        <div className="text-center">
-          <div className="w-20 h-20 bg-green-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-3xl font-bold">G</span>
-          </div>
-          <h1 className="text-2xl font-bold text-green-dark dark:text-green-light">
-            Green Hub
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">드라이버</p>
-        </div>
+        <Stack align="center" gap="xs">
+          <Box
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 16,
+              backgroundColor: "var(--green-primary)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text c="white" fw={700} fz={28}>G</Text>
+          </Box>
+          <Title order={2} c="brand.7">Green Hub</Title>
+          <Text size="sm" c="dimmed">드라이버</Text>
+        </Stack>
 
         {/* 승인 대기 안내 */}
         {pending === "true" && (
-          <div className="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-4 text-center">
-            <p className="text-sm font-semibold text-yellow-800 mb-1">
-              승인 대기 중입니다
-            </p>
-            <p className="text-xs text-yellow-700">
-              관리자 승인 후 이용할 수 있습니다.
-              <br />
+          <Alert color="yellow" radius="md" w="100%">
+            <Text size="sm" fw={600} mb={4}>승인 대기 중입니다</Text>
+            <Text size="xs">
+              관리자 승인 후 이용할 수 있습니다.<br />
               승인이 완료되면 다시 로그인해 주세요.
-            </p>
-          </div>
+            </Text>
+          </Alert>
         )}
 
-        {/* 카카오 로그인 버튼 */}
+        {/* 카카오 로그인 */}
         <form
+          style={{ width: "100%" }}
           action={async () => {
             "use server";
             await signIn("kakao", { redirectTo: "/board" });
           }}
-          className="w-full"
         >
-          <button
+          <Button
             type="submit"
-            className="w-full flex items-center justify-center gap-3 bg-[#FEE500] hover:bg-[#F0D800] text-[#191919] font-semibold py-4 px-6 rounded-xl text-base transition-colors"
+            fullWidth
+            size="lg"
+            radius="xl"
+            style={{ backgroundColor: "#FEE500", color: "#191919" }}
+            leftSection={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#191919">
+                <path d="M12 3C6.477 3 2 6.477 2 10.9c0 2.776 1.548 5.217 3.906 6.72l-.994 3.71a.25.25 0 00.375.274L9.43 19.28A11.6 11.6 0 0012 19.8c5.523 0 10-3.477 10-7.9S17.523 3 12 3z" />
+              </svg>
+            }
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="#191919">
-              <path d="M12 3C6.477 3 2 6.477 2 10.9c0 2.776 1.548 5.217 3.906 6.72l-.994 3.71a.25.25 0 00.375.274L9.43 19.28A11.6 11.6 0 0012 19.8c5.523 0 10-3.477 10-7.9S17.523 3 12 3z" />
-            </svg>
             카카오로 시작하기
-          </button>
+          </Button>
         </form>
-      </div>
-    </div>
+      </Stack>
+    </Box>
   );
 }
