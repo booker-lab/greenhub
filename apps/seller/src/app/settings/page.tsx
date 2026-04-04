@@ -2,63 +2,120 @@
 
 import { signOut, useSession } from 'next-auth/react'
 import Link from 'next/link'
+import {
+  Box,
+  Container,
+  Group,
+  Paper,
+  Stack,
+  Text,
+  Title,
+  UnstyledButton,
+} from '@mantine/core'
 
 export default function SettingsPage() {
   const { data: session } = useSession()
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
       {/* 헤더 */}
-      <header className="bg-white border-b border-gray-100 px-4 py-4">
-        <div className="max-w-lg mx-auto">
-          <h1 className="text-lg font-bold text-gray-900">설정</h1>
-        </div>
-      </header>
+      <Box
+        component="header"
+        style={{
+          backgroundColor: 'var(--mantine-color-white)',
+          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          padding: '16px',
+        }}
+      >
+        <Container size="sm">
+          <Title order={3}>설정</Title>
+        </Container>
+      </Box>
 
-      <div className="max-w-lg mx-auto px-4 py-4 space-y-3">
-        {/* 계정 섹션 */}
-        <section className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-50">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">계정</p>
-          </div>
-          <Link href="/onboarding" className="flex items-center justify-between px-4 py-4 hover:bg-gray-50">
-            <span className="text-sm text-gray-800">사업자 프로필 수정</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
-          </Link>
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="flex items-center justify-between w-full px-4 py-4 hover:bg-gray-50 border-t border-gray-50"
-          >
-            <span className="text-sm text-red-500">로그아웃</span>
-          </button>
-        </section>
+      <Container size="sm" px="md" py="md">
+        <Stack gap="sm">
+          {/* 계정 섹션 */}
+          <Paper radius="lg" shadow="xs" style={{ overflow: 'hidden' }}>
+            <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-gray-0)' }}>
+              <Text size="xs" fw={600} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                계정
+              </Text>
+            </Box>
+            <UnstyledButton
+              component={Link}
+              href="/onboarding"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', width: '100%' }}
+            >
+              <Text size="sm" c="gray.8">사업자 프로필 수정</Text>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </UnstyledButton>
+            <UnstyledButton
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px',
+                width: '100%',
+                borderTop: '1px solid var(--mantine-color-gray-0)',
+              }}
+            >
+              <Text size="sm" c="red">로그아웃</Text>
+            </UnstyledButton>
+          </Paper>
 
-        {/* 배송 섹션 */}
-        <section className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-50">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">배송</p>
-          </div>
-          <Link href="/settings/delivery" className="flex items-center justify-between px-4 py-4 hover:bg-gray-50">
-            <span className="text-sm text-gray-800">배송비 설정 / 기상 제한</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
-          </Link>
-          <Link href="/settings/daily-caps" className="flex items-center justify-between px-4 py-4 hover:bg-gray-50 border-t border-gray-50">
-            <span className="text-sm text-gray-800">배송 슬롯 (Daily Cap)</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
-          </Link>
-        </section>
+          {/* 배송 섹션 */}
+          <Paper radius="lg" shadow="xs" style={{ overflow: 'hidden' }}>
+            <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-gray-0)' }}>
+              <Text size="xs" fw={600} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                배송
+              </Text>
+            </Box>
+            <UnstyledButton
+              component={Link}
+              href="/settings/delivery"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', width: '100%' }}
+            >
+              <Text size="sm" c="gray.8">배송비 설정 / 기상 제한</Text>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </UnstyledButton>
+            <UnstyledButton
+              component={Link}
+              href="/settings/daily-caps"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px',
+                width: '100%',
+                borderTop: '1px solid var(--mantine-color-gray-0)',
+              }}
+            >
+              <Text size="sm" c="gray.8">배송 슬롯 (Daily Cap)</Text>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </UnstyledButton>
+          </Paper>
 
-        {/* 정보 섹션 */}
-        <section className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-50">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">정보</p>
-          </div>
-          <div className="flex items-center justify-between px-4 py-4">
-            <span className="text-sm text-gray-800">앱 버전</span>
-            <span className="text-sm text-gray-400">0.1.0</span>
-          </div>
-        </section>
-      </div>
-    </main>
+          {/* 정보 섹션 */}
+          <Paper radius="lg" shadow="xs" style={{ overflow: 'hidden' }}>
+            <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-gray-0)' }}>
+              <Text size="xs" fw={600} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                정보
+              </Text>
+            </Box>
+            <Group justify="space-between" px="md" py="md">
+              <Text size="sm" c="gray.8">앱 버전</Text>
+              <Text size="sm" c="dimmed">0.1.0</Text>
+            </Group>
+          </Paper>
+        </Stack>
+      </Container>
+    </Box>
   )
 }

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { Box, UnstyledButton, Stack, Text } from '@mantine/core'
 
 const tabs = [
   { href: '/orders', label: '주문', icon: OrderIcon },
@@ -14,39 +15,52 @@ const tabs = [
 export default function BottomNav() {
   const pathname = usePathname()
 
-  // 로그인/온보딩에서는 숨김
   const hiddenPaths = ['/login', '/onboarding']
   if (hiddenPaths.some((p) => pathname.startsWith(p))) return null
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100">
-      <div className="max-w-lg mx-auto flex items-center justify-around h-16">
-        {tabs.map((tab) => {
-          const isActive = pathname.startsWith(tab.href)
-          const Icon = tab.icon
+    <Box
+      component="nav"
+      style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 50,
+        backgroundColor: 'var(--mantine-color-white)',
+        borderTop: '1px solid var(--mantine-color-gray-1)',
+        height: 64,
+        display: 'flex',
+      }}
+    >
+      {tabs.map((tab) => {
+        const isActive = pathname.startsWith(tab.href)
+        const Icon = tab.icon
 
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={`flex flex-col items-center justify-center gap-0.5 min-w-[56px] pt-2 pb-1 ${
-                isActive ? 'text-green-primary' : 'text-gray-400'
-              }`}
-            >
+        return (
+          <UnstyledButton
+            key={tab.href}
+            component={Link}
+            href={tab.href}
+            style={{ flex: 1 }}
+          >
+            <Stack align="center" justify="center" gap={2} h="100%">
               <Icon active={isActive} />
-              <span className="text-[10px] font-medium">{tab.label}</span>
-            </Link>
-          )
-        })}
-      </div>
-    </nav>
+              <Text size="xs" fw={500} c={isActive ? 'var(--green-primary)' : 'gray.4'}>
+                {tab.label}
+              </Text>
+            </Stack>
+          </UnstyledButton>
+        )
+      })}
+    </Box>
   )
 }
 
 // ─── Icons (inline SVG) ──────────────────────────────────────────
 
 function OrderIcon({ active }: { active: boolean }) {
-  const c = active ? '#2D6A4F' : '#9CA3AF'
+  const c = active ? 'var(--green-primary)' : '#9CA3AF'
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 11l3 3L22 4" />
@@ -56,7 +70,7 @@ function OrderIcon({ active }: { active: boolean }) {
 }
 
 function ProductIcon({ active }: { active: boolean }) {
-  const c = active ? '#2D6A4F' : '#9CA3AF'
+  const c = active ? 'var(--green-primary)' : '#9CA3AF'
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="7" width="20" height="14" rx="2" />
@@ -66,7 +80,7 @@ function ProductIcon({ active }: { active: boolean }) {
 }
 
 function SettlementIcon({ active }: { active: boolean }) {
-  const c = active ? '#2D6A4F' : '#9CA3AF'
+  const c = active ? 'var(--green-primary)' : '#9CA3AF'
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="1" x2="12" y2="23" />
@@ -76,7 +90,7 @@ function SettlementIcon({ active }: { active: boolean }) {
 }
 
 function HubIcon({ active }: { active: boolean }) {
-  const c = active ? '#2D6A4F' : '#9CA3AF'
+  const c = active ? 'var(--green-primary)' : '#9CA3AF'
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
@@ -86,7 +100,7 @@ function HubIcon({ active }: { active: boolean }) {
 }
 
 function SettingsIcon({ active }: { active: boolean }) {
-  const c = active ? '#2D6A4F' : '#9CA3AF'
+  const c = active ? 'var(--green-primary)' : '#9CA3AF'
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />

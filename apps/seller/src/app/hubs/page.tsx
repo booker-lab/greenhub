@@ -4,6 +4,18 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { apiFetch } from '@/lib/api'
+import {
+  Badge,
+  Box,
+  Button,
+  Container,
+  Group,
+  Paper,
+  Stack,
+  Text,
+  Title,
+  UnstyledButton,
+} from '@mantine/core'
 
 interface Hub {
   id: string
@@ -66,79 +78,108 @@ export default function HubsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <h1 className="text-lg font-bold text-gray-900">거점 관리</h1>
-          <Link
-            href="/hubs/new"
-            className="flex items-center gap-1 bg-green-primary text-white text-sm font-medium px-3 py-1.5 rounded-lg"
-          >
-            <span>+</span> 거점 등록
-          </Link>
-        </div>
-      </header>
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+      <Box
+        component="header"
+        style={{
+          backgroundColor: 'var(--mantine-color-white)',
+          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          padding: '16px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <Container size="sm">
+          <Group justify="space-between">
+            <Title order={3}>거점 관리</Title>
+            <Button
+              component={Link}
+              href="/hubs/new"
+              size="xs"
+              radius="md"
+              style={{ backgroundColor: 'var(--green-primary)' }}
+            >
+              + 거점 등록
+            </Button>
+          </Group>
+        </Container>
+      </Box>
 
-      <div className="max-w-lg mx-auto px-4 py-4">
-        {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+      <Container size="sm" px="md" py="md">
+        {error && <Text size="sm" c="red" mb="sm">{error}</Text>}
 
         {loading ? (
-          <p className="text-sm text-gray-400 text-center py-20">불러오는 중...</p>
+          <Text size="sm" c="dimmed" ta="center" py={80}>불러오는 중...</Text>
         ) : hubs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-3">
+          <Stack align="center" justify="center" py={80} c="dimmed">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
               <circle cx="12" cy="10" r="3" />
             </svg>
-            <p className="text-sm">등록된 거점이 없습니다</p>
-            <Link href="/hubs/new" className="mt-3 text-sm text-green-primary font-medium">
+            <Text size="sm">등록된 거점이 없습니다</Text>
+            <Text
+              component={Link}
+              href="/hubs/new"
+              size="sm"
+              mt="xs"
+              style={{ color: 'var(--green-primary)', fontWeight: 500 }}
+            >
               거점 등록하기 →
-            </Link>
-          </div>
+            </Text>
+          </Stack>
         ) : (
-          <div className="space-y-3">
+          <Stack gap="sm">
             {hubs.map((hub) => (
-              <div key={hub.id} className="bg-white rounded-2xl px-4 py-4 shadow-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <Link href={`/hubs/${hub.id}`} className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-semibold text-gray-900 text-sm truncate">{hub.name}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                        hub.isActive
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-500'
-                      }`}>
+              <Paper key={hub.id} radius="lg" px="md" py="md" shadow="xs">
+                <Group justify="space-between" align="flex-start" gap="xs">
+                  <UnstyledButton component={Link} href={`/hubs/${hub.id}`} style={{ flex: 1, minWidth: 0 }}>
+                    <Group gap="xs" mb={4}>
+                      <Text fw={600} size="sm" truncate>{hub.name}</Text>
+                      <Badge
+                        color={hub.isActive ? 'green' : 'gray'}
+                        variant="light"
+                        radius="xl"
+                        size="xs"
+                        style={{ flexShrink: 0 }}
+                      >
                         {hub.isActive ? '운영 중' : '비활성'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 truncate">{hub.address}</p>
+                      </Badge>
+                    </Group>
+                    <Text size="xs" c="dimmed" truncate>{hub.address}</Text>
                     {hub.addressDetail && (
-                      <p className="text-xs text-gray-400">{hub.addressDetail}</p>
+                      <Text size="xs" c="gray.4">{hub.addressDetail}</Text>
                     )}
                     {hub.operatingHours && (
-                      <p className="text-xs text-gray-400 mt-1">운영: {hub.operatingHours}</p>
+                      <Text size="xs" c="gray.4" mt={4}>운영: {hub.operatingHours}</Text>
                     )}
-                  </Link>
-                  <div className="flex flex-col gap-1 flex-shrink-0">
-                    <button
+                  </UnstyledButton>
+                  <Stack gap={4} style={{ flexShrink: 0 }}>
+                    <Button
                       onClick={() => toggleActive(hub)}
-                      className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-lg"
+                      size="xs"
+                      variant="light"
+                      color="blue"
+                      radius="md"
                     >
                       {hub.isActive ? '비활성화' : '활성화'}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={() => deleteHub(hub.id)}
-                      className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded-lg"
+                      size="xs"
+                      variant="light"
+                      color="red"
+                      radius="md"
                     >
                       삭제
-                    </button>
-                  </div>
-                </div>
-              </div>
+                    </Button>
+                  </Stack>
+                </Group>
+              </Paper>
             ))}
-          </div>
+          </Stack>
         )}
-      </div>
-    </main>
+      </Container>
+    </Box>
   )
 }

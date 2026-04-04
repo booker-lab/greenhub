@@ -3,6 +3,18 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import {
+  Box,
+  Button,
+  Container,
+  Divider,
+  Paper,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+  PasswordInput,
+} from '@mantine/core'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -33,72 +45,106 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-green-bg px-4">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm p-8">
-        {/* 로고 */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-green-primary mb-3">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-          </div>
-          <h1 className="text-xl font-bold text-gray-900">Green Hub 판매자</h1>
-          <p className="text-sm text-gray-500 mt-1">판매자 계정으로 로그인하세요</p>
-        </div>
+    <Box
+      component="main"
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'var(--green-bg)',
+        padding: '0 16px',
+      }}
+    >
+      <Container size="xs" w="100%">
+        <Paper radius="lg" shadow="sm" p="xl">
+          {/* 로고 */}
+          <Stack align="center" gap="xs" mb="xl">
+            <Box
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                backgroundColor: 'var(--green-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+            </Box>
+            <Title order={2} fz="xl">Green Hub 판매자</Title>
+            <Text size="sm" c="dimmed">판매자 계정으로 로그인하세요</Text>
+          </Stack>
 
-        {/* 카카오 로그인 */}
-        <button
-          type="button"
-          onClick={() => signIn('kakao', { callbackUrl: '/orders' })}
-          className="w-full flex items-center justify-center gap-2 bg-[#FEE500] text-[#191919] font-medium py-3 rounded-xl mb-4 hover:bg-[#FDD800] transition-colors"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="#191919">
-            <path d="M12 3C6.477 3 2 6.477 2 10.5c0 2.59 1.524 4.868 3.842 6.26L4.5 21l4.574-2.437A11.6 11.6 0 0 0 12 18.75c5.523 0 10-3.477 10-7.5S17.523 3 12 3z" />
-          </svg>
-          카카오로 시작하기
-        </button>
+          <Stack gap="md">
+            {/* 카카오 로그인 */}
+            <Button
+              type="button"
+              onClick={() => signIn('kakao', { callbackUrl: '/orders' })}
+              fullWidth
+              size="md"
+              radius="xl"
+              style={{
+                backgroundColor: '#FEE500',
+                color: '#191919',
+              }}
+              leftSection={
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#191919">
+                  <path d="M12 3C6.477 3 2 6.477 2 10.5c0 2.59 1.524 4.868 3.842 6.26L4.5 21l4.574-2.437A11.6 11.6 0 0 0 12 18.75c5.523 0 10-3.477 10-7.5S17.523 3 12 3z" />
+                </svg>
+              }
+            >
+              카카오로 시작하기
+            </Button>
 
-        <div className="flex items-center gap-3 mb-4">
-          <hr className="flex-1 border-gray-200" />
-          <span className="text-xs text-gray-400">또는</span>
-          <hr className="flex-1 border-gray-200" />
-        </div>
+            <Divider label="또는" labelPosition="center" />
 
-        {/* 이메일 로그인 */}
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <input
-            type="email"
-            placeholder="이메일"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-          />
-          <input
-            type="password"
-            placeholder="비밀번호"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-          />
-          {error && (
-            <p className="text-xs text-red-500 text-center">{error}</p>
-          )}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-green-primary text-white font-medium py-3 rounded-xl hover:bg-green-dark transition-colors disabled:opacity-50"
-          >
-            {loading ? '로그인 중...' : '로그인'}
-          </button>
-        </form>
+            {/* 이메일 로그인 */}
+            <form onSubmit={handleSubmit}>
+              <Stack gap="sm">
+                <TextInput
+                  type="email"
+                  placeholder="이메일"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  radius="xl"
+                  size="md"
+                />
+                <PasswordInput
+                  placeholder="비밀번호"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  radius="xl"
+                  size="md"
+                />
+                {error && (
+                  <Text size="xs" c="red" ta="center">{error}</Text>
+                )}
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  fullWidth
+                  size="md"
+                  radius="xl"
+                  style={{ backgroundColor: 'var(--green-primary)' }}
+                >
+                  {loading ? '로그인 중...' : '로그인'}
+                </Button>
+              </Stack>
+            </form>
 
-        <p className="text-xs text-gray-400 text-center mt-6">
-          계정이 없으신가요? 관리자에게 문의하세요.
-        </p>
-      </div>
-    </main>
+            <Text size="xs" c="dimmed" ta="center">
+              계정이 없으신가요? 관리자에게 문의하세요.
+            </Text>
+          </Stack>
+        </Paper>
+      </Container>
+    </Box>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAdminInvite } from '@/hooks/useAdmin'
+import { Badge, Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core'
 
 export default function AdminInviteClient() {
   const { invites, loading, generating, generate } = useAdminInvite()
@@ -21,66 +22,86 @@ export default function AdminInviteClient() {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">초대 토큰 발급</h2>
-      </div>
+    <Box>
+      <Group justify="space-between" mb="md">
+        <Title order={4}>초대 토큰 발급</Title>
+      </Group>
 
       {/* 발급 카드 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
-        <p className="text-sm text-gray-600 mb-4">
+      <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--mantine-color-gray-1)' }} p="lg" mb="xl">
+        <Text size="sm" c="dimmed" mb="md">
           판매자 초대 토큰을 생성합니다. 토큰은 발급 후 <strong>7일간</strong> 유효합니다.
-        </p>
+        </Text>
 
-        <button
+        <Button
           onClick={handleGenerate}
           disabled={generating}
-          className="bg-green-600 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
+          size="md"
+          radius="xl"
+          style={{ backgroundColor: 'var(--green-primary)' }}
         >
           {generating ? '생성중…' : '새 토큰 생성'}
-        </button>
+        </Button>
 
         {lastToken && (
-          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl">
-            <p className="text-xs text-green-700 mb-2 font-medium">생성된 초대 토큰</p>
-            <div className="flex items-center gap-3">
-              <code className="flex-1 text-lg font-mono font-bold text-green-800 tracking-widest">
+          <Box
+            mt="md"
+            p="md"
+            style={{
+              backgroundColor: 'var(--mantine-color-green-0)',
+              border: '1px solid var(--mantine-color-green-2)',
+              borderRadius: 12,
+            }}
+          >
+            <Text size="xs" c="green.7" fw={500} mb="xs">생성된 초대 토큰</Text>
+            <Group gap="sm">
+              <Text
+                component="code"
+                fz="lg"
+                fw={700}
+                c="green.8"
+                ff="monospace"
+                style={{ flex: 1, letterSpacing: '0.15em' }}
+              >
                 {lastToken.token}
-              </code>
-              <button
+              </Text>
+              <Button
                 onClick={handleCopy}
-                className="text-xs bg-white border border-green-300 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+                size="xs"
+                variant="outline"
+                color="green"
+                radius="md"
               >
                 {copied ? '복사됨!' : '복사'}
-              </button>
-            </div>
-            <p className="text-xs text-green-600 mt-2">
+              </Button>
+            </Group>
+            <Text size="xs" c="green.6" mt="xs">
               만료: {new Date(lastToken.expiresAt).toLocaleDateString('ko-KR', {
                 year: 'numeric', month: 'long', day: 'numeric',
               })}
-            </p>
-          </div>
+            </Text>
+          </Box>
         )}
-      </div>
+      </Paper>
 
       {/* 발급 내역 */}
-      <h3 className="text-sm font-semibold text-gray-700 mb-3">발급 내역</h3>
+      <Text size="sm" fw={600} c="gray.7" mb="sm">발급 내역</Text>
       {loading ? (
-        <div className="text-center py-8 text-gray-400">불러오는 중...</div>
+        <Text ta="center" py={32} c="dimmed">불러오는 중...</Text>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--mantine-color-gray-1)', overflow: 'hidden' }}>
           {invites.length === 0 ? (
-            <div className="py-12 text-center text-gray-400">발급된 토큰이 없습니다.</div>
+            <Text ta="center" py={48} c="dimmed">발급된 토큰이 없습니다.</Text>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+            <Box component="table" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
+              <Box component="thead" style={{ backgroundColor: 'var(--mantine-color-gray-0)', borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">토큰</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">상태</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">만료일</th>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>토큰</Box>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상태</Box>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>만료일</Box>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
+              </Box>
+              <Box component="tbody">
                 {invites.map((inv) => {
                   const isUsed = !!inv.usedAt
                   const expDate = inv.expiresAt && typeof (inv.expiresAt as any).toDate === 'function'
@@ -91,36 +112,32 @@ export default function AdminInviteClient() {
                   const isExpired = expDate ? expDate < new Date() : false
 
                   return (
-                    <tr key={inv.token} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <code className="font-mono text-gray-800 tracking-wider">{inv.token}</code>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                            isUsed
-                              ? 'bg-gray-100 text-gray-500'
-                              : isExpired
-                              ? 'bg-red-100 text-red-500'
-                              : 'bg-green-100 text-green-700'
-                          }`}
+                    <Box component="tr" key={inv.token} style={{ borderTop: '1px solid var(--mantine-color-gray-0)' }}>
+                      <Box component="td" style={{ padding: '12px 16px' }}>
+                        <Text component="code" ff="monospace" c="gray.8" style={{ letterSpacing: '0.1em' }}>
+                          {inv.token}
+                        </Text>
+                      </Box>
+                      <Box component="td" style={{ padding: '12px 16px' }}>
+                        <Badge
+                          color={isUsed ? 'gray' : isExpired ? 'red' : 'green'}
+                          variant="light"
+                          radius="xl"
                         >
                           {isUsed ? '사용됨' : isExpired ? '만료' : '유효'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">
-                        {expDate
-                          ? expDate.toLocaleDateString('ko-KR')
-                          : '-'}
-                      </td>
-                    </tr>
+                        </Badge>
+                      </Box>
+                      <Box component="td" style={{ padding: '12px 16px', color: 'var(--mantine-color-gray-5)', fontSize: 12 }}>
+                        {expDate ? expDate.toLocaleDateString('ko-KR') : '-'}
+                      </Box>
+                    </Box>
                   )
                 })}
-              </tbody>
-            </table>
+              </Box>
+            </Box>
           )}
-        </div>
+        </Paper>
       )}
-    </div>
+    </Box>
   )
 }

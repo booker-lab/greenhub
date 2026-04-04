@@ -2,12 +2,20 @@
 
 import { useState } from 'react'
 import { useAdminSettlements } from '@/hooks/useAdmin'
+import { Badge, Box, Button, Group, Paper, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core'
 
 const STATUS_LABEL: Record<string, string> = {
   pending: '대기',
   confirmed: '확정',
   paid: '지급완료',
   cancelled: '취소',
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  pending: 'gray',
+  confirmed: 'blue',
+  paid: 'green',
+  cancelled: 'red',
 }
 
 export default function AdminSettlementsClient() {
@@ -33,116 +41,121 @@ export default function AdminSettlementsClient() {
   const totalFee = settlements.reduce((sum, s) => sum + s.platformFee, 0)
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">
-          정산 목록 <span className="text-sm font-normal text-gray-500">({settlements.length})</span>
-        </h2>
-      </div>
+    <Box>
+      <Group justify="space-between" mb="md">
+        <Title order={4}>
+          정산 목록{' '}
+          <Text component="span" fz="sm" fw={400} c="dimmed">({settlements.length})</Text>
+        </Title>
+      </Group>
 
       {/* 필터 */}
-      <div className="flex gap-3 mb-4 flex-wrap">
-        <input
-          type="text"
+      <Group gap="sm" mb="md" style={{ flexWrap: 'wrap' }}>
+        <TextInput
           placeholder="스토어 ID 필터"
           value={storeFilter}
           onChange={(e) => setStoreFilter(e.target.value)}
-          className="flex-1 min-w-[140px] border border-gray-200 rounded-lg px-3 py-2 text-sm"
+          style={{ flex: 1, minWidth: 140 }}
+          radius="md"
+          size="sm"
         />
         <input
           type="date"
           value={fromFilter}
           onChange={(e) => setFromFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+          style={{
+            border: '1px solid var(--mantine-color-gray-3)',
+            borderRadius: 6,
+            padding: '8px 12px',
+            fontSize: 14,
+          }}
         />
         <input
           type="date"
           value={toFilter}
           onChange={(e) => setToFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+          style={{
+            border: '1px solid var(--mantine-color-gray-3)',
+            borderRadius: 6,
+            padding: '8px 12px',
+            fontSize: 14,
+          }}
         />
-      </div>
+      </Group>
 
       {/* 요약 카드 */}
       {settlements.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <p className="text-xs text-gray-500 mb-1">플랫폼 수수료 합계</p>
-            <p className="text-lg font-bold text-gray-900">₩{totalFee.toLocaleString()}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <p className="text-xs text-gray-500 mb-1">판매자 지급 합계</p>
-            <p className="text-lg font-bold text-green-700">₩{totalNet.toLocaleString()}</p>
-          </div>
-        </div>
+        <SimpleGrid cols={2} mb="md">
+          <Paper radius="lg" style={{ border: '1px solid var(--mantine-color-gray-1)' }} p="md">
+            <Text size="xs" c="dimmed" mb={4}>플랫폼 수수료 합계</Text>
+            <Text fz="lg" fw={700}>₩{totalFee.toLocaleString()}</Text>
+          </Paper>
+          <Paper radius="lg" style={{ border: '1px solid var(--mantine-color-gray-1)' }} p="md">
+            <Text size="xs" c="dimmed" mb={4}>판매자 지급 합계</Text>
+            <Text fz="lg" fw={700} c="green.7">₩{totalNet.toLocaleString()}</Text>
+          </Paper>
+        </SimpleGrid>
       )}
 
       {loading ? (
-        <div className="text-center py-20 text-gray-400">불러오는 중...</div>
+        <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--mantine-color-gray-1)', overflow: 'hidden' }}>
           {settlements.length === 0 ? (
-            <div className="py-16 text-center text-gray-400">정산 내역이 없습니다.</div>
+            <Text ta="center" py={64} c="dimmed">정산 내역이 없습니다.</Text>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+            <Box component="table" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
+              <Box component="thead" style={{ backgroundColor: 'var(--mantine-color-gray-0)', borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">스토어</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">거래금액</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">수수료</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">지급액</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">상태</th>
-                  <th className="px-4 py-3" />
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>스토어</Box>
+                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>거래금액</Box>
+                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>수수료</Box>
+                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>지급액</Box>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상태</Box>
+                  <Box component="th" style={{ padding: '12px 16px' }} />
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
+              </Box>
+              <Box component="tbody">
                 {settlements.map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <p className="font-mono text-xs text-gray-500">{s.storeId.slice(0, 8)}…</p>
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
+                  <Box component="tr" key={s.id} style={{ borderTop: '1px solid var(--mantine-color-gray-0)' }}>
+                    <Box component="td" style={{ padding: '12px 16px' }}>
+                      <Text fz={12} c="dimmed" ff="monospace">{s.storeId.slice(0, 8)}…</Text>
+                    </Box>
+                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--mantine-color-gray-7)' }}>
                       ₩{s.totalAmount.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right text-red-500">
+                    </Box>
+                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--mantine-color-red-5)' }}>
                       ₩{s.platformFee.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium text-green-700">
+                    </Box>
+                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 500, color: 'var(--mantine-color-green-7)' }}>
                       ₩{s.netAmount.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                          s.status === 'paid'
-                            ? 'bg-green-100 text-green-700'
-                            : s.status === 'confirmed'
-                            ? 'bg-blue-100 text-blue-700'
-                            : s.status === 'cancelled'
-                            ? 'bg-red-100 text-red-500'
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
+                    </Box>
+                    <Box component="td" style={{ padding: '12px 16px' }}>
+                      <Badge color={STATUS_COLOR[s.status] ?? 'gray'} variant="light" radius="xl">
                         {STATUS_LABEL[s.status] ?? s.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
+                      </Badge>
+                    </Box>
+                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
                       {s.status === 'confirmed' && (
-                        <button
+                        <Button
                           onClick={() => handlePay(s.id)}
                           disabled={processingId === s.id}
-                          className="text-xs text-blue-600 border border-blue-300 px-3 py-1 rounded hover:bg-blue-50 disabled:opacity-40"
+                          size="xs"
+                          variant="outline"
+                          color="blue"
+                          radius="md"
                         >
                           {processingId === s.id ? '처리중…' : '지급처리'}
-                        </button>
+                        </Button>
                       )}
-                    </td>
-                  </tr>
+                    </Box>
+                  </Box>
                 ))}
-              </tbody>
-            </table>
+              </Box>
+            </Box>
           )}
-        </div>
+        </Paper>
       )}
-    </div>
+    </Box>
   )
 }

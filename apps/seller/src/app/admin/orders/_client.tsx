@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAdminOrders } from '@/hooks/useAdmin'
+import { Badge, Box, Button, Group, Paper, Select, Text, TextInput, Title } from '@mantine/core'
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: '결제대기',
@@ -15,6 +16,12 @@ const STATUS_LABEL: Record<string, string> = {
   DELIVERED: '배달완료',
   REVIEWED: '리뷰완료',
   CANCELLED: '취소됨',
+}
+
+function getStatusColor(status: string): string {
+  if (status === 'CANCELLED') return 'red'
+  if (status === 'DELIVERED' || status === 'REVIEWED') return 'green'
+  return 'yellow'
 }
 
 const REFUNDABLE = ['ACCEPTED', 'RECRUITING', 'CONFIRMED', 'PREPARING']
@@ -37,95 +44,95 @@ export default function AdminOrdersClient() {
     if (!ok) alert('환불 처리에 실패했습니다.')
   }
 
+  const statusOptions = [
+    { value: '', label: '전체 상태' },
+    ...Object.entries(STATUS_LABEL).map(([k, v]) => ({ value: k, label: v })),
+  ]
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">
-          전체 주문 <span className="text-sm font-normal text-gray-500">({orders.length})</span>
-        </h2>
-      </div>
+    <Box>
+      <Group justify="space-between" mb="md">
+        <Title order={4}>
+          전체 주문{' '}
+          <Text component="span" fz="sm" fw={400} c="dimmed">({orders.length})</Text>
+        </Title>
+      </Group>
 
       {/* 필터 */}
-      <div className="flex gap-3 mb-4">
-        <input
-          type="text"
+      <Group gap="sm" mb="md">
+        <TextInput
           placeholder="스토어 ID 필터"
           value={storeFilter}
           onChange={(e) => setStoreFilter(e.target.value)}
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+          style={{ flex: 1 }}
+          radius="md"
+          size="sm"
         />
-        <select
+        <Select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
-        >
-          <option value="">전체 상태</option>
-          {Object.entries(STATUS_LABEL).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-      </div>
+          onChange={(v) => setStatusFilter(v ?? '')}
+          data={statusOptions}
+          radius="md"
+          size="sm"
+          style={{ minWidth: 140 }}
+        />
+      </Group>
 
       {loading ? (
-        <div className="text-center py-20 text-gray-400">불러오는 중...</div>
+        <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--mantine-color-gray-1)', overflow: 'hidden' }}>
           {orders.length === 0 ? (
-            <div className="py-16 text-center text-gray-400">주문이 없습니다.</div>
+            <Text ta="center" py={64} c="dimmed">주문이 없습니다.</Text>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+            <Box component="table" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
+              <Box component="thead" style={{ backgroundColor: 'var(--mantine-color-gray-0)', borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">주문ID</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">스토어</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">상태</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">금액</th>
-                  <th className="px-4 py-3" />
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>주문ID</Box>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>스토어</Box>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상태</Box>
+                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>금액</Box>
+                  <Box component="th" style={{ padding: '12px 16px' }} />
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
+              </Box>
+              <Box component="tbody">
                 {orders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <p className="font-mono text-xs text-gray-500">{order.id.slice(0, 12)}…</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-mono text-xs text-gray-500">{order.storeId.slice(0, 8)}…</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                          order.status === 'CANCELLED'
-                            ? 'bg-red-100 text-red-600'
-                            : order.status === 'DELIVERED' || order.status === 'REVIEWED'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}
-                      >
+                  <Box component="tr" key={order.id} style={{ borderTop: '1px solid var(--mantine-color-gray-0)' }}>
+                    <Box component="td" style={{ padding: '12px 16px' }}>
+                      <Text fz={12} c="dimmed" ff="monospace">{order.id.slice(0, 12)}…</Text>
+                    </Box>
+                    <Box component="td" style={{ padding: '12px 16px' }}>
+                      <Text fz={12} c="dimmed" ff="monospace">{order.storeId.slice(0, 8)}…</Text>
+                    </Box>
+                    <Box component="td" style={{ padding: '12px 16px' }}>
+                      <Badge color={getStatusColor(order.status)} variant="light" radius="xl">
                         {STATUS_LABEL[order.status] ?? order.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
+                      </Badge>
+                    </Box>
+                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--mantine-color-gray-7)' }}>
                       ₩{order.totalAmount.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
+                    </Box>
+                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
                       {REFUNDABLE.includes(order.status) && (
-                        <button
+                        <Button
                           onClick={() => handleRefund(order.id)}
                           disabled={processingId === order.id}
-                          className="text-xs text-red-600 border border-red-300 px-3 py-1 rounded hover:bg-red-50 disabled:opacity-40"
+                          size="xs"
+                          variant="outline"
+                          color="red"
+                          radius="md"
                         >
                           {processingId === order.id ? '처리중…' : '강제환불'}
-                        </button>
+                        </Button>
                       )}
-                    </td>
-                  </tr>
+                    </Box>
+                  </Box>
                 ))}
-              </tbody>
-            </table>
+              </Box>
+            </Box>
           )}
-        </div>
+        </Paper>
       )}
-    </div>
+    </Box>
   )
 }

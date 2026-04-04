@@ -4,6 +4,18 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
+import {
+  ActionIcon,
+  Box,
+  Button,
+  Container,
+  Group,
+  Paper,
+  Stack,
+  Switch,
+  Text,
+  Title,
+} from '@mantine/core'
 
 interface DeliveryConfig {
   directFee: number
@@ -74,114 +86,129 @@ export default function DeliverySettingsPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-sm text-gray-400">불러오는 중...</p>
-      </main>
+      <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Text size="sm" c="dimmed">불러오는 중...</Text>
+      </Box>
     )
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-8">
-      <div className="max-w-sm mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-700">
+    <Box
+      component="main"
+      style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', padding: '32px 16px' }}
+    >
+      <Container size="xs">
+        <Group gap="sm" mb="lg">
+          <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M15 18l-6-6 6-6" />
             </svg>
-          </button>
-          <h1 className="text-xl font-bold text-gray-900">배송비 설정</h1>
-        </div>
+          </ActionIcon>
+          <Title order={2} fz="xl">배송비 설정</Title>
+        </Group>
 
-        <div className="space-y-4">
+        <Stack gap="md">
           {/* 배송 방법별 기본 배송비 */}
-          <section className="bg-white rounded-2xl shadow-sm p-5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">기본 배송비</p>
-            <div className="space-y-3">
+          <Paper radius="lg" shadow="sm" p="lg">
+            <Text size="xs" fw={600} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }} mb="md">
+              기본 배송비
+            </Text>
+            <Stack gap="sm">
               {([
                 { label: '직배송', field: 'directFee' },
                 { label: '거점 픽업', field: 'hubFee' },
                 { label: '택배', field: 'parcelFee' },
               ] as { label: string; field: keyof DeliveryConfig }[]).map(({ label, field }) => (
-                <div key={field} className="flex items-center justify-between gap-4">
-                  <span className="text-sm text-gray-700 w-24">{label}</span>
-                  <div className="flex items-center gap-1 flex-1">
+                <Group key={field} justify="space-between" gap="md">
+                  <Text size="sm" c="gray.7" w={80}>{label}</Text>
+                  <Group gap="xs" style={{ flex: 1 }}>
                     <input
                       type="number"
                       min="0"
                       step="500"
                       value={config[field] as number}
                       onChange={(e) => handleNum(field, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:border-green-primary"
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        border: '1px solid var(--mantine-color-gray-3)',
+                        borderRadius: 12,
+                        fontSize: 14,
+                        textAlign: 'right',
+                      }}
                     />
-                    <span className="text-sm text-gray-500 flex-shrink-0">원</span>
-                  </div>
-                </div>
+                    <Text size="sm" c="dimmed" style={{ flexShrink: 0 }}>원</Text>
+                  </Group>
+                </Group>
               ))}
-            </div>
-          </section>
+            </Stack>
+          </Paper>
 
           {/* 무료 배송 기준 */}
-          <section className="bg-white rounded-2xl shadow-sm p-5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">무료 배송 기준금액</p>
-            <div className="space-y-3">
+          <Paper radius="lg" shadow="sm" p="lg">
+            <Text size="xs" fw={600} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }} mb="md">
+              무료 배송 기준금액
+            </Text>
+            <Stack gap="sm">
               {([
                 { label: '직배송', field: 'freeThresholdDirect' },
                 { label: '거점 픽업', field: 'freeThresholdHub' },
                 { label: '택배', field: 'freeThresholdParcel' },
               ] as { label: string; field: keyof DeliveryConfig }[]).map(({ label, field }) => (
-                <div key={field} className="flex items-center justify-between gap-4">
-                  <span className="text-sm text-gray-700 w-24">{label}</span>
-                  <div className="flex items-center gap-1 flex-1">
+                <Group key={field} justify="space-between" gap="md">
+                  <Text size="sm" c="gray.7" w={80}>{label}</Text>
+                  <Group gap="xs" style={{ flex: 1 }}>
                     <input
                       type="number"
                       min="0"
                       step="1000"
                       value={config[field] as number}
                       onChange={(e) => handleNum(field, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:border-green-primary"
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        border: '1px solid var(--mantine-color-gray-3)',
+                        borderRadius: 12,
+                        fontSize: 14,
+                        textAlign: 'right',
+                      }}
                     />
-                    <span className="text-sm text-gray-500 flex-shrink-0">원</span>
-                  </div>
-                </div>
+                    <Text size="sm" c="dimmed" style={{ flexShrink: 0 }}>원</Text>
+                  </Group>
+                </Group>
               ))}
-            </div>
-          </section>
+            </Stack>
+          </Paper>
 
           {/* 기상 제한 토글 */}
-          <section className="bg-white rounded-2xl shadow-sm p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-800">기상 제한 배송</p>
-                <p className="text-xs text-gray-400 mt-0.5">악천후 시 배송 제한 활성화</p>
-              </div>
-              <button
-                onClick={() => setConfig((prev) => ({ ...prev, weatherRestrictionActive: !prev.weatherRestrictionActive }))}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  config.weatherRestrictionActive ? 'bg-green-primary' : 'bg-gray-200'
-                }`}
-              >
-                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                  config.weatherRestrictionActive ? 'translate-x-6' : 'translate-x-0.5'
-                }`} />
-              </button>
-            </div>
-          </section>
+          <Paper radius="lg" shadow="sm" p="lg">
+            <Group justify="space-between">
+              <Stack gap={2}>
+                <Text size="sm" fw={500} c="gray.8">기상 제한 배송</Text>
+                <Text size="xs" c="dimmed">악천후 시 배송 제한 활성화</Text>
+              </Stack>
+              <Switch
+                checked={config.weatherRestrictionActive}
+                onChange={(e) => setConfig((prev) => ({ ...prev, weatherRestrictionActive: e.currentTarget.checked }))}
+                color="var(--green-primary)"
+              />
+            </Group>
+          </Paper>
 
-          {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+          {error && <Text size="sm" c="red" ta="center">{error}</Text>}
 
-          <button
+          <Button
             onClick={handleSave}
             disabled={saving}
-            className={`w-full font-medium py-3 rounded-xl transition-colors disabled:opacity-50 ${
-              saved
-                ? 'bg-blue-500 text-white'
-                : 'bg-green-primary text-white hover:bg-green-dark'
-            }`}
+            fullWidth
+            size="md"
+            radius="xl"
+            style={{ backgroundColor: saved ? '#3B82F6' : 'var(--green-primary)' }}
           >
             {saving ? '저장 중...' : saved ? '저장 완료!' : '저장'}
-          </button>
-        </div>
-      </div>
-    </main>
+          </Button>
+        </Stack>
+      </Container>
+    </Box>
   )
 }

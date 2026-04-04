@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import ProductForm from '../../_components/ProductForm'
 import type { ProductFormData } from '../../_components/ProductForm'
+import { Box, Group, Loader, Stack, Text, UnstyledButton } from '@mantine/core'
 
 // Firestore Timestamp | ISO string → YYYY-MM-DD
 function toDateStr(value: unknown): string {
@@ -65,20 +66,20 @@ export default function EditProductPage() {
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-3 text-gray-500">
-        <p className="text-sm">상품을 찾을 수 없습니다</p>
-        <button onClick={() => router.back()} className="text-sm text-green-primary underline">
+      <Box style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <Text size="sm" c="dimmed">상품을 찾을 수 없습니다</Text>
+        <UnstyledButton onClick={() => router.back()} style={{ color: 'var(--green-primary)', textDecoration: 'underline', fontSize: 14 }}>
           돌아가기
-        </button>
-      </div>
+        </UnstyledButton>
+      </Box>
     )
   }
 
   if (!initialData) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-green-primary border-t-transparent rounded-full animate-spin" />
-      </div>
+      <Box style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader size="sm" color="var(--green-primary)" />
+      </Box>
     )
   }
 

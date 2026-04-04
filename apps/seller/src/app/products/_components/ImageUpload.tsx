@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { storage } from '@/lib/firebase'
+import { Badge, Box, Group, Loader, Paper, Stack, Text } from '@mantine/core'
 
 interface ImageUploadProps {
   storeId: string
@@ -40,38 +41,109 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
   }
 
   return (
-    <section className="bg-white rounded-2xl shadow-sm p-4">
-      <p className="text-xs font-medium text-gray-500 mb-2">
-        사진 <span className="text-gray-400">({images.length}/5 · 첫 번째가 대표 사진)</span>
-      </p>
-      <div className="flex gap-2 overflow-x-auto pb-1">
+    <Paper radius="lg" shadow="xs" p="md">
+      <Text size="xs" fw={500} c="dimmed" mb="xs">
+        사진 <Text component="span" c="gray.4">({images.length}/5 · 첫 번째가 대표 사진)</Text>
+      </Text>
+      <Group gap="xs" style={{ overflowX: 'auto', paddingBottom: 4, flexWrap: 'nowrap' }}>
         {images.map((url, idx) => (
-          <div key={url} className="relative flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-gray-100">
-            <img src={url} alt="" className="w-full h-full object-cover" />
+          <Box
+            key={url}
+            style={{
+              position: 'relative',
+              flexShrink: 0,
+              width: 80,
+              height: 80,
+              borderRadius: 12,
+              overflow: 'hidden',
+              backgroundColor: 'var(--mantine-color-gray-1)',
+            }}
+          >
+            <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             {idx === 0 && (
-              <span className="absolute bottom-1 left-1 bg-green-primary text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+              <Box
+                style={{
+                  position: 'absolute',
+                  bottom: 4,
+                  left: 4,
+                  backgroundColor: 'var(--green-primary)',
+                  color: 'white',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                }}
+              >
                 대표
-              </span>
+              </Box>
             )}
-            <span className="absolute top-1 left-1 bg-black/50 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+            <Box
+              style={{
+                position: 'absolute',
+                top: 4,
+                left: 4,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                color: 'white',
+                fontSize: 9,
+                fontWeight: 700,
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               {idx + 1}
-            </span>
-            <button
+            </Box>
+            <Box
+              component="button"
               onClick={() => remove(idx)}
-              className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 text-white rounded-full flex items-center justify-center text-[11px]"
+              style={{
+                position: 'absolute',
+                top: 2,
+                right: 2,
+                width: 20,
+                height: 20,
+                backgroundColor: 'rgba(0,0,0,0.6)',
+                color: 'white',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 11,
+                border: 'none',
+                cursor: 'pointer',
+              }}
             >
               ✕
-            </button>
-          </div>
+            </Box>
+          </Box>
         ))}
         {images.length < 5 && (
-          <button
+          <Box
+            component="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="flex-shrink-0 w-20 h-20 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 gap-1 text-xs"
+            style={{
+              flexShrink: 0,
+              width: 80,
+              height: 80,
+              borderRadius: 12,
+              border: '2px dashed var(--mantine-color-gray-3)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              fontSize: 12,
+              color: 'var(--mantine-color-gray-5)',
+              backgroundColor: 'transparent',
+              cursor: uploading ? 'not-allowed' : 'pointer',
+            }}
           >
             {uploading ? (
-              <div className="w-5 h-5 border-2 border-green-primary border-t-transparent rounded-full animate-spin" />
+              <Loader size="xs" color="var(--green-primary)" />
             ) : (
               <>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -80,17 +152,17 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                 <span>사진 추가</span>
               </>
             )}
-          </button>
+          </Box>
         )}
-      </div>
+      </Group>
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
         multiple
-        className="hidden"
+        style={{ display: 'none' }}
         onChange={(e) => { handleFiles(e.target.files); e.target.value = '' }}
       />
-    </section>
+    </Paper>
   )
 }

@@ -1,5 +1,6 @@
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
+import { Box, Badge, Container, Group, Text } from '@mantine/core'
 
 export default async function AdminLayout({
   children,
@@ -13,34 +14,55 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-bold text-gray-900">관리자 콘솔</h1>
-          <span className="text-xs bg-red-100 text-red-600 font-semibold px-2 py-0.5 rounded-full">
-            ADMIN
-          </span>
-        </div>
-        <nav className="max-w-4xl mx-auto px-4 pb-2 flex gap-1 overflow-x-auto">
-          {[
-            { href: '/admin/stores', label: '판매자' },
-            { href: '/admin/users', label: '소비자' },
-            { href: '/admin/drivers', label: '드라이버' },
-            { href: '/admin/orders', label: '주문' },
-            { href: '/admin/settlements', label: '정산' },
-            { href: '/admin/invite', label: '초대' },
-          ].map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="shrink-0 px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-      </header>
-      <main className="max-w-4xl mx-auto px-4 py-6">{children}</main>
-    </div>
+    <Box style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+      <Box
+        component="header"
+        style={{
+          backgroundColor: 'var(--mantine-color-white)',
+          borderBottom: '1px solid var(--mantine-color-gray-2)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <Container size="lg" px="md" py="sm">
+          <Group justify="space-between">
+            <Text fw={700} fz="lg">관리자 콘솔</Text>
+            <Badge color="red" variant="light" fw={600}>ADMIN</Badge>
+          </Group>
+        </Container>
+        <Box style={{ overflowX: 'auto' }}>
+          <Container size="lg" px="md" pb="xs">
+            <Group gap={4} style={{ flexWrap: 'nowrap' }}>
+              {[
+                { href: '/admin/stores', label: '판매자' },
+                { href: '/admin/users', label: '소비자' },
+                { href: '/admin/drivers', label: '드라이버' },
+                { href: '/admin/orders', label: '주문' },
+                { href: '/admin/settlements', label: '정산' },
+                { href: '/admin/invite', label: '초대' },
+              ].map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    flexShrink: 0,
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: 'var(--mantine-color-gray-6)',
+                    textDecoration: 'none',
+                  }}
+                >
+                  {item.label}
+                </a>
+              ))}
+            </Group>
+          </Container>
+        </Box>
+      </Box>
+      <Container size="lg" px="md" py="lg">{children}</Container>
+    </Box>
   )
 }

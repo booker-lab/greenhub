@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useAdminDrivers, AdminDriver, DriverStatus } from '@/hooks/useAdmin'
+import { Badge, Box, Button, Group, Paper, Stack, Text, Title, UnstyledButton } from '@mantine/core'
 
 const STATUS_TABS: { value: DriverStatus; label: string }[] = [
   { value: 'all', label: '전체' },
@@ -12,10 +13,10 @@ const STATUS_TABS: { value: DriverStatus; label: string }[] = [
 
 function DriverBadge({ driver }: { driver: AdminDriver }) {
   if (driver.suspended)
-    return <span className="text-xs bg-red-100 text-red-600 font-medium px-2 py-0.5 rounded-full">정지됨</span>
+    return <Badge color="red" variant="light" radius="xl">정지됨</Badge>
   if (driver.driverApproved)
-    return <span className="text-xs bg-green-100 text-green-700 font-medium px-2 py-0.5 rounded-full">승인 완료</span>
-  return <span className="text-xs bg-yellow-100 text-yellow-700 font-medium px-2 py-0.5 rounded-full">승인 대기</span>
+    return <Badge color="green" variant="light" radius="xl">승인 완료</Badge>
+  return <Badge color="yellow" variant="light" radius="xl">승인 대기</Badge>
 }
 
 export default function DriversClient() {
@@ -47,77 +48,95 @@ export default function DriversClient() {
   }
 
   return (
-    <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-4">드라이버 관리</h2>
+    <Box>
+      <Title order={4} mb="md">드라이버 관리</Title>
 
       {/* 탭 */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {STATUS_TABS.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setTab(t.value)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-              tab === t.value
-                ? 'border-green-600 text-green-700'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Box mb="md" style={{ borderBottom: '1px solid var(--mantine-color-gray-2)' }}>
+        <Group gap={4}>
+          {STATUS_TABS.map((t) => (
+            <UnstyledButton
+              key={t.value}
+              onClick={() => setTab(t.value)}
+              style={{
+                padding: '8px 16px',
+                fontSize: 14,
+                fontWeight: 500,
+                borderBottom: `2px solid ${tab === t.value ? 'var(--green-primary)' : 'transparent'}`,
+                marginBottom: -1,
+                color: tab === t.value ? 'var(--green-primary)' : 'var(--mantine-color-gray-5)',
+              }}
+            >
+              {t.label}
+            </UnstyledButton>
+          ))}
+        </Group>
+      </Box>
 
       {loading ? (
-        <div className="text-center py-20 text-gray-400">불러오는 중...</div>
+        <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
       ) : drivers.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">드라이버가 없습니다.</div>
+        <Text ta="center" py={80} c="dimmed">드라이버가 없습니다.</Text>
       ) : (
-        <div className="space-y-2">
+        <Stack gap="xs">
           {drivers.map((driver) => (
-            <div
+            <Paper
               key={driver.id}
-              className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between gap-4"
+              radius="lg"
+              px="md"
+              py="sm"
+              style={{ border: '1px solid var(--mantine-color-gray-2)' }}
             >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-medium text-gray-900 text-sm truncate">{driver.name}</span>
-                  <DriverBadge driver={driver} />
-                </div>
-                <p className="text-xs text-gray-400 truncate">{driver.email ?? '이메일 없음'}</p>
-              </div>
+              <Group justify="space-between" gap="md">
+                <Box style={{ minWidth: 0 }}>
+                  <Group gap="xs" mb={2}>
+                    <Text fw={500} size="sm" truncate>{driver.name}</Text>
+                    <DriverBadge driver={driver} />
+                  </Group>
+                  <Text size="xs" c="dimmed" truncate>{driver.email ?? '이메일 없음'}</Text>
+                </Box>
 
-              <div className="flex gap-2 shrink-0">
-                {!driver.driverApproved && !driver.suspended && (
-                  <button
-                    onClick={() => handleApprove(driver.id)}
-                    disabled={processingId === driver.id}
-                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-40"
-                  >
-                    {processingId === driver.id ? '처리중…' : '승인'}
-                  </button>
-                )}
-                {!driver.suspended ? (
-                  <button
-                    onClick={() => handleSuspend(driver.id, true)}
-                    disabled={processingId === driver.id}
-                    className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium rounded-lg transition-colors disabled:opacity-40"
-                  >
-                    정지
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleSuspend(driver.id, false)}
-                    disabled={processingId === driver.id}
-                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors disabled:opacity-40"
-                  >
-                    정지 해제
-                  </button>
-                )}
-              </div>
-            </div>
+                <Group gap="xs" style={{ flexShrink: 0 }}>
+                  {!driver.driverApproved && !driver.suspended && (
+                    <Button
+                      onClick={() => handleApprove(driver.id)}
+                      disabled={processingId === driver.id}
+                      size="xs"
+                      color="green"
+                      radius="md"
+                    >
+                      {processingId === driver.id ? '처리중…' : '승인'}
+                    </Button>
+                  )}
+                  {!driver.suspended ? (
+                    <Button
+                      onClick={() => handleSuspend(driver.id, true)}
+                      disabled={processingId === driver.id}
+                      size="xs"
+                      variant="light"
+                      color="red"
+                      radius="md"
+                    >
+                      정지
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => handleSuspend(driver.id, false)}
+                      disabled={processingId === driver.id}
+                      size="xs"
+                      variant="light"
+                      color="gray"
+                      radius="md"
+                    >
+                      정지 해제
+                    </Button>
+                  )}
+                </Group>
+              </Group>
+            </Paper>
           ))}
-        </div>
+        </Stack>
       )}
-    </div>
+    </Box>
   )
 }

@@ -3,6 +3,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { apiFetch } from '@/lib/api'
+import {
+  Badge,
+  Box,
+  Button,
+  Container,
+  Divider,
+  Group,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Text,
+  Title,
+  UnstyledButton,
+} from '@mantine/core'
 
 type SettlementTab = 'daily' | 'period' | 'orders'
 type SettlementStatus = 'pending' | 'confirmed' | 'paid' | 'cancelled'
@@ -34,10 +48,10 @@ const STATUS_LABEL: Record<SettlementStatus, string> = {
 }
 
 const STATUS_COLOR: Record<SettlementStatus, string> = {
-  pending: 'bg-yellow-100 text-yellow-700',
-  confirmed: 'bg-blue-100 text-blue-700',
-  paid: 'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-600',
+  pending: 'yellow',
+  confirmed: 'blue',
+  paid: 'green',
+  cancelled: 'red',
 }
 
 function toKRW(n: number) {
@@ -133,180 +147,221 @@ export default function SettlementsPage() {
     if (activeTab === 'orders') fetchSettlements()
   }, [activeTab, fetchSummary, fetchSettlements])
 
+  const TABS = [
+    { key: 'daily' as SettlementTab, label: '일별 요약' },
+    { key: 'period' as SettlementTab, label: '기간별 조회' },
+    { key: 'orders' as SettlementTab, label: '주문별 상세' },
+  ]
+
   return (
-    <main className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto">
-          <h1 className="text-lg font-bold text-gray-900">정산 관리</h1>
-        </div>
-      </header>
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+      <Box
+        component="header"
+        style={{
+          backgroundColor: 'var(--mantine-color-white)',
+          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          padding: '16px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <Container size="sm">
+          <Title order={3}>정산 관리</Title>
+        </Container>
+      </Box>
 
-      <div className="bg-white border-b border-gray-100 sticky top-[57px] z-10">
-        <div className="max-w-lg mx-auto flex">
-          {([
-            { key: 'daily', label: '일별 요약' },
-            { key: 'period', label: '기간별 조회' },
-            { key: 'orders', label: '주문별 상세' },
-          ] as { key: SettlementTab; label: string }[]).map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.key
-                  ? 'border-green-primary text-green-primary'
-                  : 'border-transparent text-gray-500'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <Box
+        style={{
+          backgroundColor: 'var(--mantine-color-white)',
+          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          position: 'sticky',
+          top: 57,
+          zIndex: 10,
+        }}
+      >
+        <Container size="sm">
+          <Group gap={0}>
+            {TABS.map((tab) => (
+              <UnstyledButton
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  textAlign: 'center',
+                  borderBottom: `2px solid ${activeTab === tab.key ? 'var(--green-primary)' : 'transparent'}`,
+                  color: activeTab === tab.key ? 'var(--green-primary)' : 'var(--mantine-color-gray-6)',
+                }}
+              >
+                {tab.label}
+              </UnstyledButton>
+            ))}
+          </Group>
+        </Container>
+      </Box>
 
-      <div className="max-w-lg mx-auto px-4 py-4">
+      <Container size="sm" px="md" py="md">
         {/* 일별 요약 */}
         {activeTab === 'daily' && (
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <p className="text-sm text-gray-500 mb-4">{todayLabel}</p>
+          <Paper radius="lg" p="lg" shadow="xs">
+            <Text size="sm" c="dimmed" mb="md">{todayLabel}</Text>
             {summaryLoading ? (
-              <p className="text-sm text-gray-400 text-center py-4">불러오는 중...</p>
+              <Text size="sm" c="dimmed" ta="center" py="md">불러오는 중...</Text>
             ) : (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">완료 건수</span>
-                  <span className="font-semibold text-gray-900">{summary?.count ?? 0}건</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">총 매출</span>
-                  <span className="font-semibold text-gray-900">{toKRW(summary?.totalAmount ?? 0)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">플랫폼 수수료</span>
-                  <span className="text-sm text-gray-500">−{toKRW(summary?.totalPlatformFee ?? 0)}</span>
-                </div>
-                <hr className="border-gray-100" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-gray-700">정산 예정</span>
-                  <span className="font-bold text-green-primary">{toKRW(summary?.totalNetAmount ?? 0)}</span>
-                </div>
+              <Stack gap="sm">
+                <Group justify="space-between">
+                  <Text size="sm" c="gray.6">완료 건수</Text>
+                  <Text fw={600}>{summary?.count ?? 0}건</Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text size="sm" c="gray.6">총 매출</Text>
+                  <Text fw={600}>{toKRW(summary?.totalAmount ?? 0)}</Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text size="sm" c="gray.6">플랫폼 수수료</Text>
+                  <Text size="sm" c="dimmed">−{toKRW(summary?.totalPlatformFee ?? 0)}</Text>
+                </Group>
+                <Divider />
+                <Group justify="space-between">
+                  <Text size="sm" fw={500} c="gray.7">정산 예정</Text>
+                  <Text fw={700} style={{ color: 'var(--green-primary)' }}>{toKRW(summary?.totalNetAmount ?? 0)}</Text>
+                </Group>
                 {summary && summary.count > 0 && (
-                  <div className="mt-2 pt-2 border-t border-gray-50 grid grid-cols-2 gap-1">
+                  <SimpleGrid cols={2} mt="xs" style={{ borderTop: '1px solid var(--mantine-color-gray-0)', paddingTop: 8 }}>
                     {(Object.entries(summary.byStatus) as [SettlementStatus, number][])
                       .filter(([, v]) => v > 0)
                       .map(([status, count]) => (
-                        <span key={status} className={`text-xs px-2 py-1 rounded-full ${STATUS_COLOR[status]}`}>
+                        <Badge key={status} color={STATUS_COLOR[status]} variant="light" radius="xl">
                           {STATUS_LABEL[status]} {count}건
-                        </span>
+                        </Badge>
                       ))}
-                  </div>
+                  </SimpleGrid>
                 )}
-              </div>
+              </Stack>
             )}
-          </div>
+          </Paper>
         )}
 
         {/* 기간별 조회 */}
         {activeTab === 'period' && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl p-5 shadow-sm">
-              <p className="text-sm text-gray-500 mb-4">조회 기간을 선택하세요</p>
-              <div className="flex gap-2 mb-4">
+          <Stack gap="md">
+            <Paper radius="lg" p="lg" shadow="xs">
+              <Text size="sm" c="dimmed" mb="md">조회 기간을 선택하세요</Text>
+              <Group gap="xs" mb="md">
                 <input
                   type="date"
                   value={from}
                   onChange={(e) => setFrom(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    border: '1px solid var(--mantine-color-gray-3)',
+                    borderRadius: 12,
+                    fontSize: 14,
+                  }}
                 />
-                <span className="flex items-center text-gray-400">~</span>
+                <Text c="dimmed">~</Text>
                 <input
                   type="date"
                   value={to}
                   onChange={(e) => setTo(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    border: '1px solid var(--mantine-color-gray-3)',
+                    borderRadius: 12,
+                    fontSize: 14,
+                  }}
                 />
-              </div>
-              <button
+              </Group>
+              <Button
                 onClick={() => fetchSettlements(from, to)}
                 disabled={listLoading}
-                className="w-full bg-green-primary text-white py-3 rounded-xl text-sm font-medium disabled:opacity-50"
+                fullWidth
+                size="md"
+                radius="xl"
+                style={{ backgroundColor: 'var(--green-primary)' }}
               >
                 {listLoading ? '조회 중...' : '조회'}
-              </button>
-            </div>
+              </Button>
+            </Paper>
 
-            {listError && <p className="text-sm text-red-500 text-center">{listError}</p>}
+            {listError && <Text size="sm" c="red" ta="center">{listError}</Text>}
 
             {settlements.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between px-1">
-                  <p className="text-xs text-gray-400">{settlements.length}건 조회됨</p>
-                  <button
+              <Stack gap="xs">
+                <Group justify="space-between" px={4}>
+                  <Text size="xs" c="dimmed">{settlements.length}건 조회됨</Text>
+                  <UnstyledButton
                     onClick={() => downloadCSV(settlements, from, to)}
-                    className="text-xs text-green-primary font-medium flex items-center gap-1"
+                    style={{ fontSize: 12, color: 'var(--green-primary)', fontWeight: 500 }}
                   >
                     CSV 다운로드
-                  </button>
-                </div>
+                  </UnstyledButton>
+                </Group>
                 {settlements.map((s) => (
-                  <div key={s.id} className="bg-white rounded-xl px-4 py-3 shadow-sm">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-400">{s.orderId.slice(0, 8)}…</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[s.status]}`}>
+                  <Paper key={s.id} radius="md" px="md" py="sm" shadow="xs">
+                    <Group justify="space-between" mb={4}>
+                      <Text size="xs" c="dimmed">{s.orderId.slice(0, 8)}…</Text>
+                      <Badge color={STATUS_COLOR[s.status]} variant="light" size="xs" radius="xl">
                         {STATUS_LABEL[s.status]}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">{toDateStr(s.settledAt._seconds)}</span>
-                      <span className="font-semibold text-gray-900">{toKRW(s.netAmount)}</span>
-                    </div>
-                  </div>
+                      </Badge>
+                    </Group>
+                    <Group justify="space-between">
+                      <Text size="sm" c="gray.6">{toDateStr(s.settledAt._seconds)}</Text>
+                      <Text fw={600}>{toKRW(s.netAmount)}</Text>
+                    </Group>
+                  </Paper>
                 ))}
-              </div>
+              </Stack>
             )}
-          </div>
+          </Stack>
         )}
 
         {/* 주문별 상세 */}
         {activeTab === 'orders' && (
-          <div>
+          <Box>
             {listLoading ? (
-              <p className="text-sm text-gray-400 text-center py-20">불러오는 중...</p>
+              <Text size="sm" c="dimmed" ta="center" py={80}>불러오는 중...</Text>
             ) : settlements.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                <p className="text-sm">정산 완료된 주문이 없습니다</p>
-              </div>
+              <Stack align="center" justify="center" py={80} c="dimmed">
+                <Text size="sm">정산 완료된 주문이 없습니다</Text>
+              </Stack>
             ) : (
-              <div className="space-y-2">
-                <div className="flex justify-end px-1">
-                  <button
+              <Stack gap="xs">
+                <Group justify="flex-end" px={4}>
+                  <UnstyledButton
                     onClick={() => downloadCSV(settlements, '', '')}
-                    className="text-xs text-green-primary font-medium"
+                    style={{ fontSize: 12, color: 'var(--green-primary)', fontWeight: 500 }}
                   >
                     CSV 다운로드
-                  </button>
-                </div>
+                  </UnstyledButton>
+                </Group>
                 {settlements.map((s) => (
-                  <div key={s.id} className="bg-white rounded-xl px-4 py-3 shadow-sm">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-400">{s.orderId.slice(0, 8)}…</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[s.status]}`}>
+                  <Paper key={s.id} radius="md" px="md" py="sm" shadow="xs">
+                    <Group justify="space-between" mb={4}>
+                      <Text size="xs" c="dimmed">{s.orderId.slice(0, 8)}…</Text>
+                      <Badge color={STATUS_COLOR[s.status]} variant="light" size="xs" radius="xl">
                         {STATUS_LABEL[s.status]}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-sm text-gray-600">{toDateStr(s.settledAt._seconds)}</p>
-                        <p className="text-xs text-gray-400">수수료 {toKRW(s.platformFee)}</p>
-                      </div>
-                      <span className="font-semibold text-gray-900">{toKRW(s.netAmount)}</span>
-                    </div>
-                  </div>
+                      </Badge>
+                    </Group>
+                    <Group justify="space-between">
+                      <Stack gap={0}>
+                        <Text size="sm" c="gray.6">{toDateStr(s.settledAt._seconds)}</Text>
+                        <Text size="xs" c="dimmed">수수료 {toKRW(s.platformFee)}</Text>
+                      </Stack>
+                      <Text fw={600}>{toKRW(s.netAmount)}</Text>
+                    </Group>
+                  </Paper>
                 ))}
-              </div>
+              </Stack>
             )}
-          </div>
+          </Box>
         )}
-      </div>
-    </main>
+      </Container>
+    </Box>
   )
 }

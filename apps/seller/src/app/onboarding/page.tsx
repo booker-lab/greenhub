@@ -6,6 +6,17 @@ import { useRouter } from 'next/navigation'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { storage } from '@/lib/firebase'
 import { apiFetch } from '@/lib/api'
+import {
+  Box,
+  Button,
+  Container,
+  Divider,
+  Paper,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core'
 
 export default function OnboardingPage() {
   const { data: session, update } = useSession()
@@ -83,7 +94,6 @@ export default function OnboardingPage() {
 
     let res: Response
     if (!storeId) {
-      // 신규 seller — 스토어 생성
       res = await apiFetch('/stores', token, { method: 'POST', body })
       if (res.ok) {
         const data = await res.json()
@@ -104,123 +114,128 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-green-bg px-4 py-8">
-      <div className="max-w-sm mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-xl font-bold text-gray-900">사업자 정보 등록</h1>
-          <p className="text-sm text-gray-500 mt-1">서비스 시작 전 한 번만 입력합니다</p>
-        </div>
+    <Box
+      component="main"
+      style={{ minHeight: '100vh', backgroundColor: 'var(--green-bg)', padding: '32px 16px' }}
+    >
+      <Container size="xs">
+        <Stack align="center" gap="xs" mb="xl">
+          <Title order={2} fz="xl">사업자 정보 등록</Title>
+          <Text size="sm" c="dimmed">서비스 시작 전 한 번만 입력합니다</Text>
+        </Stack>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
-          {/* 로고 업로드 */}
-          <div className="flex flex-col items-center gap-3 pb-2">
-            <div className="w-20 h-20 rounded-full border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden bg-gray-50">
-              {logoPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoPreview} alt="로고 미리보기" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-2xl text-gray-300">🏪</span>
-              )}
-            </div>
-            <label className="cursor-pointer text-sm text-green-primary font-medium">
-              {logoUploading ? '업로드 중...' : '로고 사진 선택'}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleLogoUpload}
-                disabled={logoUploading}
+        <Paper radius="lg" shadow="sm" p="lg">
+          <form onSubmit={handleSubmit}>
+            <Stack gap="md">
+              {/* 로고 업로드 */}
+              <Stack align="center" gap="xs" pb="xs">
+                <Box
+                  style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: '50%',
+                    border: '2px dashed var(--mantine-color-gray-3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                    backgroundColor: 'var(--mantine-color-gray-0)',
+                  }}
+                >
+                  {logoPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoPreview} alt="로고 미리보기" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <Text fz={24} c="gray.3">🏪</Text>
+                  )}
+                </Box>
+                <label style={{ cursor: 'pointer' }}>
+                  <Text size="sm" c="var(--green-primary)" fw={500}>
+                    {logoUploading ? '업로드 중...' : '로고 사진 선택'}
+                  </Text>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handleLogoUpload}
+                    disabled={logoUploading}
+                  />
+                </label>
+                <Text size="xs" c="dimmed">선택 사항 · JPG, PNG, WebP 권장</Text>
+              </Stack>
+
+              <Divider />
+
+              <TextInput
+                label={<>상호명 <Text component="span" c="red">*</Text></>}
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                required
+                placeholder="예: 디어 오키드"
+                radius="xl"
               />
-            </label>
-            <p className="text-xs text-gray-400">선택 사항 · JPG, PNG, WebP 권장</p>
-          </div>
 
-          <hr className="border-gray-100" />
+              <TextInput
+                label={<>대표자명 <Text component="span" c="red">*</Text></>}
+                name="ceoName"
+                value={form.ceoName}
+                onChange={handleChange}
+                required
+                placeholder="예: 홍길동"
+                radius="xl"
+              />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              상호명 <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              required
-              placeholder="예: 디어 오키드"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-            />
-          </div>
+              <TextInput
+                label={<>연락처 <Text component="span" c="red">*</Text></>}
+                name="phone"
+                value={form.phone}
+                onChange={handleChange}
+                required
+                placeholder="010-0000-0000"
+                radius="xl"
+              />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              대표자명 <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="ceoName"
-              value={form.ceoName}
-              onChange={handleChange}
-              required
-              placeholder="예: 홍길동"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-            />
-          </div>
+              <TextInput
+                label={<>소재지 <Text component="span" c="red">*</Text></>}
+                name="address"
+                value={form.address}
+                onChange={handleChange}
+                required
+                placeholder="사업장 주소"
+                radius="xl"
+              />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              연락처 <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="phone"
-              value={form.phone}
-              onChange={handleChange}
-              required
-              placeholder="010-0000-0000"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-            />
-          </div>
+              <Divider />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              소재지 <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="address"
-              value={form.address}
-              onChange={handleChange}
-              required
-              placeholder="사업장 주소"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-            />
-          </div>
+              <TextInput
+                label={<>사업자등록번호 <Text component="span" c="dimmed" fw={400}>(선택)</Text></>}
+                name="businessNumber"
+                value={form.businessNumber}
+                onChange={handleChange}
+                placeholder="000-00-00000"
+                radius="xl"
+              />
 
-          <hr className="border-gray-100" />
+              {error && (
+                <Text size="xs" c="red" ta="center">{error}</Text>
+              )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              사업자등록번호 <span className="text-gray-400 font-normal">(선택)</span>
-            </label>
-            <input
-              name="businessNumber"
-              value={form.businessNumber}
-              onChange={handleChange}
-              placeholder="000-00-00000"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-            />
-          </div>
-
-          {error && (
-            <p className="text-xs text-red-500 text-center">{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-green-primary text-white font-medium py-3 rounded-xl hover:bg-green-dark transition-colors disabled:opacity-50 mt-2"
-          >
-            {loading ? '저장 중...' : '저장 후 시작하기'}
-          </button>
-        </form>
-      </div>
-    </main>
+              <Button
+                type="submit"
+                disabled={loading}
+                fullWidth
+                size="md"
+                radius="xl"
+                mt="xs"
+                style={{ backgroundColor: 'var(--green-primary)' }}
+              >
+                {loading ? '저장 중...' : '저장 후 시작하기'}
+              </Button>
+            </Stack>
+          </form>
+        </Paper>
+      </Container>
+    </Box>
   )
 }

@@ -2,11 +2,18 @@
 
 import { useState } from 'react'
 import { useAdminStores } from '@/hooks/useAdmin'
+import { Badge, Box, Button, Group, Paper, Stack, Text, TextInput, Title } from '@mantine/core'
 
 const STATUS_LABEL: Record<string, string> = {
   active: '운영중',
   invited: '초대됨',
   suspended: '정지',
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  active: 'green',
+  invited: 'yellow',
+  suspended: 'gray',
 }
 
 export default function AdminStoresClient() {
@@ -32,54 +39,51 @@ export default function AdminStoresClient() {
 
   if (loading) {
     return (
-      <div className="text-center py-20 text-gray-400">불러오는 중...</div>
+      <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
     )
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">
-          판매자 목록 <span className="text-sm font-normal text-gray-500">({stores.length})</span>
-        </h2>
-      </div>
+    <Box>
+      <Group justify="space-between" mb="md">
+        <Title order={4}>
+          판매자 목록{' '}
+          <Text component="span" fz="sm" fw={400} c="dimmed">({stores.length})</Text>
+        </Title>
+      </Group>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--mantine-color-gray-1)', overflow: 'hidden' }}>
         {stores.length === 0 ? (
-          <div className="py-16 text-center text-gray-400">등록된 판매자가 없습니다.</div>
+          <Text ta="center" py={64} c="dimmed">등록된 판매자가 없습니다.</Text>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
+          <Box component="table" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
+            <Box component="thead" style={{ backgroundColor: 'var(--mantine-color-gray-0)', borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">상호</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">상태</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">수수료율</th>
-                <th className="px-4 py-3" />
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상호</Box>
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상태</Box>
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>수수료율</Box>
+                <Box component="th" style={{ padding: '12px 16px' }} />
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
+            </Box>
+            <Box component="tbody" style={{ borderTop: 'none' }}>
               {stores.map((store) => (
-                <tr key={store.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{store.name || '(미설정)'}</p>
-                    <p className="text-xs text-gray-400 font-mono">{store.id.slice(0, 8)}…</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                        store.status === 'active'
-                          ? 'bg-green-100 text-green-700'
-                          : store.status === 'invited'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
+                <Box component="tr" key={store.id} style={{ borderTop: '1px solid var(--mantine-color-gray-0)' }}>
+                  <Box component="td" style={{ padding: '12px 16px' }}>
+                    <Text fw={500}>{store.name || '(미설정)'}</Text>
+                    <Text fz={12} c="dimmed" ff="monospace">{store.id.slice(0, 8)}…</Text>
+                  </Box>
+                  <Box component="td" style={{ padding: '12px 16px' }}>
+                    <Badge
+                      color={STATUS_COLOR[store.status] ?? 'gray'}
+                      variant="light"
+                      radius="xl"
                     >
                       {STATUS_LABEL[store.status] ?? store.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
+                    </Badge>
+                  </Box>
+                  <Box component="td" style={{ padding: '12px 16px' }}>
                     {editId === store.id ? (
-                      <div className="flex items-center gap-2">
+                      <Group gap="xs">
                         <input
                           type="number"
                           step="0.01"
@@ -87,50 +91,63 @@ export default function AdminStoresClient() {
                           max="1"
                           value={rateInput}
                           onChange={(e) => setRateInput(e.target.value)}
-                          className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
                           placeholder="0.05"
+                          style={{
+                            width: 80,
+                            border: '1px solid var(--mantine-color-gray-3)',
+                            borderRadius: 6,
+                            padding: '4px 8px',
+                            fontSize: 14,
+                          }}
                         />
-                        <button
+                        <Button
                           onClick={() => handleSave(store.id)}
                           disabled={saving}
-                          className="text-xs bg-green-600 text-white px-2 py-1 rounded disabled:opacity-50"
+                          size="xs"
+                          color="green"
+                          radius="md"
                         >
                           저장
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           onClick={() => { setEditId(null); setRateInput('') }}
-                          className="text-xs text-gray-500 px-2 py-1 rounded hover:bg-gray-100"
+                          size="xs"
+                          variant="subtle"
+                          color="gray"
+                          radius="md"
                         >
                           취소
-                        </button>
-                      </div>
+                        </Button>
+                      </Group>
                     ) : (
-                      <span className="text-gray-700">
+                      <Text c="gray.7">
                         {store.commissionRate !== undefined
                           ? `${(store.commissionRate * 100).toFixed(1)}%`
                           : '기본'}
-                      </span>
+                      </Text>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
+                  </Box>
+                  <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
                     {editId !== store.id && (
-                      <button
+                      <Button
                         onClick={() => {
                           setEditId(store.id)
                           setRateInput(String(store.commissionRate ?? ''))
                         }}
-                        className="text-xs text-blue-600 hover:underline"
+                        size="xs"
+                        variant="subtle"
+                        color="blue"
                       >
                         수수료 설정
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </Box>
+                </Box>
               ))}
-            </tbody>
-          </table>
+            </Box>
+          </Box>
         )}
-      </div>
-    </div>
+      </Paper>
+    </Box>
   )
 }

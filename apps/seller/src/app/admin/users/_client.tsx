@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAdminUsers } from '@/hooks/useAdmin'
+import { Badge, Box, Button, Group, Paper, Text, Title } from '@mantine/core'
 
 export default function AdminUsersClient() {
   const { users, loading, toggleSuspend } = useAdminUsers()
@@ -15,68 +16,68 @@ export default function AdminUsersClient() {
   }
 
   if (loading) {
-    return <div className="text-center py-20 text-gray-400">불러오는 중...</div>
+    return <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">
-          소비자 계정 <span className="text-sm font-normal text-gray-500">({users.length})</span>
-        </h2>
-      </div>
+    <Box>
+      <Group justify="space-between" mb="md">
+        <Title order={4}>
+          소비자 계정{' '}
+          <Text component="span" fz="sm" fw={400} c="dimmed">({users.length})</Text>
+        </Title>
+      </Group>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--mantine-color-gray-1)', overflow: 'hidden' }}>
         {users.length === 0 ? (
-          <div className="py-16 text-center text-gray-400">등록된 소비자가 없습니다.</div>
+          <Text ta="center" py={64} c="dimmed">등록된 소비자가 없습니다.</Text>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
+          <Box component="table" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
+            <Box component="thead" style={{ backgroundColor: 'var(--mantine-color-gray-0)', borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">이름</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">이메일</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">상태</th>
-                <th className="px-4 py-3" />
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>이름</Box>
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>이메일</Box>
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상태</Box>
+                <Box component="th" style={{ padding: '12px 16px' }} />
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
+            </Box>
+            <Box component="tbody">
               {users.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{user.name}</p>
-                    <p className="text-xs text-gray-400 font-mono">{user.id.slice(0, 8)}…</p>
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">{user.email}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                        user.suspended
-                          ? 'bg-red-100 text-red-600'
-                          : 'bg-green-100 text-green-700'
-                      }`}
+                <Box component="tr" key={user.id} style={{ borderTop: '1px solid var(--mantine-color-gray-0)' }}>
+                  <Box component="td" style={{ padding: '12px 16px' }}>
+                    <Text fw={500}>{user.name}</Text>
+                    <Text fz={12} c="dimmed" ff="monospace">{user.id.slice(0, 8)}…</Text>
+                  </Box>
+                  <Box component="td" style={{ padding: '12px 16px', color: 'var(--mantine-color-gray-7)' }}>
+                    {user.email}
+                  </Box>
+                  <Box component="td" style={{ padding: '12px 16px' }}>
+                    <Badge
+                      color={user.suspended ? 'red' : 'green'}
+                      variant="light"
+                      radius="xl"
                     >
                       {user.suspended ? '정지됨' : '정상'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
+                    </Badge>
+                  </Box>
+                  <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    <Button
                       onClick={() => handleToggle(user.id, !!user.suspended)}
                       disabled={processingId === user.id}
-                      className={`text-xs px-3 py-1 rounded border disabled:opacity-40 ${
-                        user.suspended
-                          ? 'border-green-300 text-green-700 hover:bg-green-50'
-                          : 'border-red-300 text-red-600 hover:bg-red-50'
-                      }`}
+                      size="xs"
+                      variant="outline"
+                      color={user.suspended ? 'green' : 'red'}
+                      radius="md"
                     >
                       {processingId === user.id ? '처리중…' : user.suspended ? '복구' : '정지'}
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </Box>
+                </Box>
               ))}
-            </tbody>
-          </table>
+            </Box>
+          </Box>
         )}
-      </div>
-    </div>
+      </Paper>
+    </Box>
   )
 }

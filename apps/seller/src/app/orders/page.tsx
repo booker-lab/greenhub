@@ -5,6 +5,19 @@ import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useOrders, TAB_STATUSES } from '@/hooks/useOrders'
 import type { Order, OrderStatus } from '@greenhub/shared'
+import {
+  Badge,
+  Box,
+  Button,
+  Container,
+  Group,
+  Loader,
+  Paper,
+  Stack,
+  Text,
+  Title,
+  UnstyledButton,
+} from '@mantine/core'
 
 type StatusTab = 'pending' | 'preparing' | 'delivering' | 'done' | 'cancelled'
 
@@ -31,17 +44,17 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
 }
 
 const STATUS_COLOR: Record<OrderStatus, string> = {
-  ACCEPTED: 'bg-orange-100 text-orange-600',
-  CONFIRMED: 'bg-orange-100 text-orange-600',
-  RECRUITING: 'bg-orange-100 text-orange-600',
-  PREPARING: 'bg-blue-100 text-blue-600',
-  DELIVERING: 'bg-purple-100 text-purple-600',
-  HUB_ARRIVED: 'bg-purple-100 text-purple-600',
-  CANCELLED: 'bg-red-100 text-red-600',
-  PENDING: 'bg-gray-100 text-gray-600',
-  DELIVERED: 'bg-green-100 text-green-700',
-  PICKED_UP: 'bg-green-100 text-green-700',
-  REVIEWED: 'bg-green-100 text-green-700',
+  ACCEPTED: 'orange',
+  CONFIRMED: 'orange',
+  RECRUITING: 'orange',
+  PREPARING: 'blue',
+  DELIVERING: 'violet',
+  HUB_ARRIVED: 'violet',
+  CANCELLED: 'red',
+  PENDING: 'gray',
+  DELIVERED: 'green',
+  PICKED_UP: 'green',
+  REVIEWED: 'green',
 }
 
 const DELIVERY_LABEL: Record<string, string> = {
@@ -74,77 +87,104 @@ export default function OrdersPage() {
   )
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
       {/* 헤더 */}
-      <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <h1 className="text-lg font-bold text-gray-900">주문 관리</h1>
-          <div className="flex items-center gap-1.5">
-            {loading ? (
-              <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-            ) : error ? (
-              <span className="w-2 h-2 rounded-full bg-red-400" />
-            ) : (
-              <span className="w-2 h-2 rounded-full bg-green-500" />
-            )}
-            <span className="text-xs text-gray-500">
-              {loading ? '연결 중' : error ? '연결 오류' : '실시간 연결'}
-            </span>
-          </div>
-        </div>
-      </header>
+      <Box
+        component="header"
+        style={{
+          backgroundColor: 'var(--mantine-color-white)',
+          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          padding: '16px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <Container size="sm">
+          <Group justify="space-between">
+            <Title order={3}>주문 관리</Title>
+            <Group gap={6}>
+              {loading ? (
+                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#FACC15' }} />
+              ) : error ? (
+                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#F87171' }} />
+              ) : (
+                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22C55E' }} />
+              )}
+              <Text size="xs" c="dimmed">
+                {loading ? '연결 중' : error ? '연결 오류' : '실시간 연결'}
+              </Text>
+            </Group>
+          </Group>
+        </Container>
+      </Box>
 
       {/* 상태 탭 */}
-      <div className="bg-white border-b border-gray-100 sticky top-[57px] z-10">
-        <div className="max-w-lg mx-auto flex overflow-x-auto">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`relative flex-shrink-0 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.key
-                  ? 'border-green-primary text-green-primary'
-                  : 'border-transparent text-gray-500'
-              }`}
-            >
-              {tab.label}
-              {counts[tab.key] > 0 && (
-                <span className={`ml-1.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${
-                  tab.key === 'pending'
-                    ? 'bg-red-500 text-white'
-                    : 'bg-gray-100 text-gray-600'
-                }`}>
-                  {counts[tab.key]}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+      <Box
+        style={{
+          backgroundColor: 'var(--mantine-color-white)',
+          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          position: 'sticky',
+          top: 57,
+          zIndex: 10,
+        }}
+      >
+        <Container size="sm">
+          <Group gap={0} style={{ overflowX: 'auto', flexWrap: 'nowrap' }}>
+            {TABS.map((tab) => (
+              <UnstyledButton
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  flexShrink: 0,
+                  padding: '12px 16px',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  borderBottom: `2px solid ${activeTab === tab.key ? 'var(--green-primary)' : 'transparent'}`,
+                  color: activeTab === tab.key ? 'var(--green-primary)' : 'var(--mantine-color-gray-6)',
+                }}
+              >
+                {tab.label}
+                {counts[tab.key] > 0 && (
+                  <Badge
+                    size="xs"
+                    ml={6}
+                    color={tab.key === 'pending' ? 'red' : 'gray'}
+                  >
+                    {counts[tab.key]}
+                  </Badge>
+                )}
+              </UnstyledButton>
+            ))}
+          </Group>
+        </Container>
+      </Box>
 
       {/* 주문 목록 */}
-      <div className="max-w-lg mx-auto px-4 py-4 space-y-3">
-        {loading && (
-          <div className="flex justify-center py-20">
-            <div className="w-6 h-6 border-2 border-green-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
+      <Container size="sm" px="md" py="md">
+        <Stack gap="sm">
+          {loading && (
+            <Group justify="center" py={80}>
+              <Loader size="sm" color="var(--green-primary)" />
+            </Group>
+          )}
 
-        {!loading && filteredOrders.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-3">
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-            <p className="text-sm">현재 해당 주문이 없습니다</p>
-          </div>
-        )}
+          {!loading && filteredOrders.length === 0 && (
+            <Stack align="center" justify="center" py={80} c="dimmed">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M9 11l3 3L22 4" />
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+              <Text size="sm">현재 해당 주문이 없습니다</Text>
+            </Stack>
+          )}
 
-        {filteredOrders.map((order) => (
-          <OrderCard key={order.id} order={order} storeId={storeId} />
-        ))}
-      </div>
-    </main>
+          {filteredOrders.map((order) => (
+            <OrderCard key={order.id} order={order} storeId={storeId} />
+          ))}
+        </Stack>
+      </Container>
+    </Box>
   )
 }
 
@@ -190,92 +230,128 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
   }
 
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED'
-  // 발송(DELIVERING) 이전까지만 취소 가능
   const canCancel = order.status === 'ACCEPTED' || order.status === 'CONFIRMED' || order.status === 'PREPARING'
 
   return (
-    <div
-      className="bg-white rounded-2xl shadow-sm p-4 cursor-pointer active:bg-gray-50 transition-colors"
+    <Paper
+      radius="lg"
+      shadow="xs"
+      p="md"
+      style={{ cursor: 'pointer' }}
       onClick={() => router.push(`/orders/${order.id}`)}
     >
       {/* 상단: 상태 뱃지 + 시간 */}
-      <div className="flex items-center justify-between mb-2">
-        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLOR[order.status]}`}>
+      <Group justify="space-between" mb="xs">
+        <Badge color={STATUS_COLOR[order.status]} variant="light" radius="xl">
           {STATUS_LABEL[order.status]}
-        </span>
-        <span className="text-xs text-gray-400">{formatRelativeTime(order.createdAt)}</span>
-      </div>
+        </Badge>
+        <Text size="xs" c="dimmed">{formatRelativeTime(order.createdAt)}</Text>
+      </Group>
 
       {/* 주문 정보 */}
-      <p className="font-semibold text-gray-900 text-sm mb-1">
+      <Text fw={600} size="sm" mb={4}>
         주문 #{order.id.slice(-6).toUpperCase()}
-      </p>
-      <p className="text-sm text-gray-600 mb-1">
+      </Text>
+      <Text size="sm" c="dimmed" mb={4}>
         {DELIVERY_LABEL[order.deliveryMethod]}
         {order.requestedDeliveryDate && ` · ${order.requestedDeliveryDate}`}
-      </p>
-      <p className="text-base font-bold text-gray-900 mb-3">
+      </Text>
+      <Text fw={700} mb="sm">
         ₩{order.totalAmount.toLocaleString()}
-      </p>
+      </Text>
 
       {/* 준비 시작 폼 */}
       {showPrepareForm && (
-        <div className="mb-3 p-3 bg-gray-50 rounded-xl space-y-2" onClick={(e) => e.stopPropagation()}>
-          <p className="text-xs text-gray-500">드라이버 수거 예정 시간 (선택)</p>
+        <Paper
+          p="sm"
+          radius="md"
+          mb="sm"
+          style={{ backgroundColor: 'var(--mantine-color-gray-0)' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Text size="xs" c="dimmed" mb="xs">드라이버 수거 예정 시간 (선택)</Text>
           <input
             type="datetime-local"
             value={preparedAtInput}
             onChange={(e) => setPreparedAtInput(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid var(--mantine-color-gray-3)',
+              borderRadius: 8,
+              fontSize: 14,
+              marginBottom: 8,
+            }}
           />
-          <div className="flex gap-2">
-            <button
+          <Group gap="xs">
+            <Button
               onClick={handlePrepare}
               disabled={actionLoading}
-              className="flex-1 bg-green-primary text-white text-sm font-medium py-2 rounded-xl disabled:opacity-50"
+              flex={1}
+              size="sm"
+              radius="xl"
+              style={{ backgroundColor: 'var(--green-primary)' }}
             >
               확인
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => { setShowPrepareForm(false); setPreparedAtInput('') }}
-              className="flex-1 border border-gray-200 text-gray-600 text-sm font-medium py-2 rounded-xl"
+              flex={1}
+              size="sm"
+              radius="xl"
+              variant="outline"
+              color="gray"
             >
               취소
-            </button>
-          </div>
-        </div>
+            </Button>
+          </Group>
+        </Paper>
       )}
 
       {/* 액션 버튼 */}
       {!showPrepareForm && (canPrepare || canCancel) && (
-        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+        <Group gap="xs" onClick={(e) => e.stopPropagation()}>
           {canPrepare && (
-            <button
+            <Button
               onClick={() => setShowPrepareForm(true)}
               disabled={actionLoading}
-              className="flex-1 bg-green-primary text-white text-sm font-medium py-2 rounded-xl disabled:opacity-50"
+              flex={1}
+              size="sm"
+              radius="xl"
+              style={{ backgroundColor: 'var(--green-primary)' }}
             >
               준비 시작
-            </button>
+            </Button>
           )}
           {canCancel && (
-            <button
+            <Button
               onClick={handleCancel}
               disabled={actionLoading}
-              className="flex-1 border border-red-300 text-red-500 text-sm font-medium py-2 rounded-xl disabled:opacity-50"
+              flex={1}
+              size="sm"
+              radius="xl"
+              variant="outline"
+              color="red"
             >
               강제 취소
-            </button>
+            </Button>
           )}
-        </div>
+        </Group>
       )}
 
       {order.status === 'HUB_ARRIVED' && order.pickupCode && (
-        <div className="mt-2 bg-green-bg rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-500 mb-1">픽업 코드</p>
-          <p className="text-2xl font-bold tracking-widest text-green-primary">{order.pickupCode}</p>
-        </div>
+        <Paper
+          mt="xs"
+          p="sm"
+          radius="md"
+          style={{ backgroundColor: 'var(--green-bg)', textAlign: 'center' }}
+        >
+          <Text size="xs" c="dimmed" mb={4}>픽업 코드</Text>
+          <Text fz={24} fw={700} style={{ letterSpacing: '0.2em', color: 'var(--green-primary)' }}>
+            {order.pickupCode}
+          </Text>
+        </Paper>
       )}
-    </div>
+    </Paper>
   )
 }

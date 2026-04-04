@@ -4,6 +4,18 @@ import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
+import {
+  ActionIcon,
+  Box,
+  Button,
+  Container,
+  Group,
+  Paper,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core'
 
 export default function NewHubPage() {
   const { data: session } = useSession()
@@ -52,83 +64,78 @@ export default function NewHubPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-8">
-      <div className="max-w-sm mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-700">
+    <Box
+      component="main"
+      style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', padding: '32px 16px' }}
+    >
+      <Container size="xs">
+        <Group gap="sm" mb="lg">
+          <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M15 18l-6-6 6-6" />
             </svg>
-          </button>
-          <h1 className="text-xl font-bold text-gray-900">거점 등록</h1>
-        </div>
+          </ActionIcon>
+          <Title order={2} fz="xl">거점 등록</Title>
+        </Group>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              거점 이름 <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              required
-              placeholder="예: 강남 거점"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-            />
-          </div>
+        <Paper radius="lg" shadow="sm" p="lg">
+          <form onSubmit={handleSubmit}>
+            <Stack gap="md">
+              <TextInput
+                label={<>거점 이름 <Text component="span" c="red">*</Text></>}
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                required
+                placeholder="예: 강남 거점"
+                radius="xl"
+              />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              주소 <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="address"
-              value={form.address}
-              onChange={handleChange}
-              required
-              placeholder="거점 주소"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-            />
-          </div>
+              <TextInput
+                label={<>주소 <Text component="span" c="red">*</Text></>}
+                name="address"
+                value={form.address}
+                onChange={handleChange}
+                required
+                placeholder="거점 주소"
+                radius="xl"
+              />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              상세 주소 <span className="text-gray-400 font-normal">(선택)</span>
-            </label>
-            <input
-              name="addressDetail"
-              value={form.addressDetail}
-              onChange={handleChange}
-              placeholder="동/호수, 층 등"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-            />
-          </div>
+              <TextInput
+                label={<>상세 주소 <Text component="span" c="dimmed" fw={400}>(선택)</Text></>}
+                name="addressDetail"
+                value={form.addressDetail}
+                onChange={handleChange}
+                placeholder="동/호수, 층 등"
+                radius="xl"
+              />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              운영 시간 <span className="text-gray-400 font-normal">(선택)</span>
-            </label>
-            <input
-              name="operatingHours"
-              value={form.operatingHours}
-              onChange={handleChange}
-              placeholder="예: 09:00~18:00"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-green-primary"
-            />
-          </div>
+              <TextInput
+                label={<>운영 시간 <Text component="span" c="dimmed" fw={400}>(선택)</Text></>}
+                name="operatingHours"
+                value={form.operatingHours}
+                onChange={handleChange}
+                placeholder="예: 09:00~18:00"
+                radius="xl"
+              />
 
-          {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+              {error && <Text size="xs" c="red" ta="center">{error}</Text>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-green-primary text-white font-medium py-3 rounded-xl hover:bg-green-dark transition-colors disabled:opacity-50 mt-2"
-          >
-            {loading ? '등록 중...' : '거점 등록'}
-          </button>
-        </form>
-      </div>
-    </main>
+              <Button
+                type="submit"
+                disabled={loading}
+                fullWidth
+                size="md"
+                radius="xl"
+                mt="xs"
+                style={{ backgroundColor: 'var(--green-primary)' }}
+              >
+                {loading ? '등록 중...' : '거점 등록'}
+              </Button>
+            </Stack>
+          </form>
+        </Paper>
+      </Container>
+    </Box>
   )
 }

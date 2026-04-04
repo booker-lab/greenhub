@@ -4,6 +4,19 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
+import {
+  ActionIcon,
+  Box,
+  Button,
+  Container,
+  Group,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Text,
+  Title,
+  UnstyledButton,
+} from '@mantine/core'
 
 interface DailyCap {
   date: string
@@ -116,117 +129,152 @@ export default function DailyCapsPage() {
   })
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-8">
-      <div className="max-w-sm mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-700">
+    <Box
+      component="main"
+      style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', padding: '32px 16px' }}
+    >
+      <Container size="xs">
+        <Group gap="sm" mb="lg">
+          <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M15 18l-6-6 6-6" />
             </svg>
-          </button>
-          <h1 className="text-xl font-bold text-gray-900">배송 슬롯 설정</h1>
-        </div>
+          </ActionIcon>
+          <Title order={2} fz="xl">배송 슬롯 설정</Title>
+        </Group>
 
-        <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+        <Text size="xs" c="dimmed" mb="md" style={{ lineHeight: 1.6 }}>
           날짜를 탭하면 해당 날짜의 최대 배송 슬롯(총 수량)을 설정할 수 있습니다.
-        </p>
+        </Text>
 
         {/* 월 이동 */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
-          <div className="flex items-center justify-between mb-4">
-            <button onClick={prevMonth} className="p-1 text-gray-500 hover:text-gray-700">
+        <Paper radius="lg" shadow="sm" p="md" mb="md">
+          <Group justify="space-between" mb="md">
+            <ActionIcon variant="subtle" color="gray" onClick={prevMonth}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M15 18l-6-6 6-6" />
               </svg>
-            </button>
-            <span className="font-semibold text-gray-900">{monthLabel}</span>
-            <button onClick={nextMonth} className="p-1 text-gray-500 hover:text-gray-700">
+            </ActionIcon>
+            <Text fw={600}>{monthLabel}</Text>
+            <ActionIcon variant="subtle" color="gray" onClick={nextMonth}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M9 18l6-6-6-6" />
               </svg>
-            </button>
-          </div>
+            </ActionIcon>
+          </Group>
 
           {/* 요일 헤더 */}
-          <div className="grid grid-cols-7 mb-1">
+          <SimpleGrid cols={7} mb={4}>
             {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
-              <div key={d} className="text-center text-xs text-gray-400 py-1">{d}</div>
+              <Text key={d} ta="center" size="xs" c="dimmed" py={4}>{d}</Text>
             ))}
-          </div>
+          </SimpleGrid>
 
           {/* 날짜 그리드 */}
           {loading ? (
-            <div className="py-8 text-center text-sm text-gray-400">불러오는 중...</div>
+            <Box py={32} style={{ textAlign: 'center' }}>
+              <Text size="sm" c="dimmed">불러오는 중...</Text>
+            </Box>
           ) : (
             calendar.map((week, wi) => (
-              <div key={wi} className="grid grid-cols-7">
+              <SimpleGrid key={wi} cols={7}>
                 {week.map((date, di) => {
-                  if (!date) return <div key={di} />
+                  if (!date) return <Box key={di} />
                   const cap = caps[date]
                   const isToday = date === todayStr
                   const isPast = date < todayStr
                   return (
-                    <button
+                    <UnstyledButton
                       key={date}
                       onClick={() => !isPast && startEdit(date)}
                       disabled={isPast}
-                      className={`flex flex-col items-center py-1.5 rounded-xl transition-colors ${
-                        isPast ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50 cursor-pointer'
-                      } ${isToday ? 'bg-green-50' : ''}`}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        padding: '6px 0',
+                        borderRadius: 12,
+                        opacity: isPast ? 0.4 : 1,
+                        cursor: isPast ? 'not-allowed' : 'pointer',
+                        backgroundColor: isToday ? 'var(--green-bg)' : undefined,
+                      }}
                     >
-                      <span className={`text-xs font-medium ${isToday ? 'text-green-primary' : 'text-gray-700'}`}>
+                      <Text
+                        size="xs"
+                        fw={500}
+                        c={isToday ? 'var(--green-primary)' : 'gray.7'}
+                      >
                         {parseInt(date.split('-')[2], 10)}
-                      </span>
-                      <span className={`text-xs mt-0.5 ${cap ? 'text-blue-600 font-semibold' : 'text-gray-300'}`}>
+                      </Text>
+                      <Text
+                        size="xs"
+                        mt={2}
+                        fw={cap ? 600 : undefined}
+                        c={cap ? 'blue' : 'gray.3'}
+                      >
                         {cap ? cap.totalCap : '—'}
-                      </span>
+                      </Text>
                       {cap && (cap.usedSlots ?? 0) > 0 && (
-                        <span className="text-[10px] text-gray-400">{cap.usedSlots}↑</span>
+                        <Text fz={10} c="dimmed">{cap.usedSlots}↑</Text>
                       )}
-                    </button>
+                    </UnstyledButton>
                   )
                 })}
-              </div>
+              </SimpleGrid>
             ))
           )}
-        </div>
+        </Paper>
 
         {/* 편집 패널 */}
         {editing && (
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <p className="text-sm font-medium text-gray-800 mb-3">
+          <Paper radius="lg" shadow="sm" p="lg">
+            <Text size="sm" fw={500} c="gray.8" mb="sm">
               {editing} 슬롯 설정
-            </p>
-            <div className="flex items-center gap-3">
+            </Text>
+            <Group align="center" gap="sm">
               <input
                 type="number"
                 min="0"
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
-                className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:border-green-primary"
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  border: '1px solid var(--mantine-color-gray-3)',
+                  borderRadius: 12,
+                  fontSize: 14,
+                  textAlign: 'right',
+                }}
                 autoFocus
               />
-              <span className="text-sm text-gray-500">개</span>
-            </div>
-            <p className="text-xs text-gray-400 mt-1.5">0 = 해당일 배송 불가</p>
-            <div className="flex gap-2 mt-4">
-              <button
+              <Text size="sm" c="dimmed">개</Text>
+            </Group>
+            <Text size="xs" c="dimmed" mt={6}>0 = 해당일 배송 불가</Text>
+            <Group gap="xs" mt="md">
+              <Button
                 onClick={() => setEditing(null)}
-                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600"
+                flex={1}
+                size="sm"
+                radius="xl"
+                variant="outline"
+                color="gray"
               >
                 취소
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => saveCap(editing)}
                 disabled={saving}
-                className="flex-1 py-2.5 bg-green-primary text-white rounded-xl text-sm font-medium disabled:opacity-50"
+                flex={1}
+                size="sm"
+                radius="xl"
+                style={{ backgroundColor: 'var(--green-primary)' }}
               >
                 {saving ? '저장 중...' : '저장'}
-              </button>
-            </div>
-          </div>
+              </Button>
+            </Group>
+          </Paper>
         )}
-      </div>
-    </main>
+      </Container>
+    </Box>
   )
 }

@@ -1,7 +1,13 @@
 'use client'
 
 import { SessionProvider } from 'next-auth/react'
+import { MantineProvider } from '@mantine/core'
+import { theme } from '@greenhub/ui'
 
 export default function Providers({ children }: { children: React.ReactNode }) {
-  return <SessionProvider>{children}</SessionProvider>
+  return (
+    <MantineProvider theme={theme}>
+      <SessionProvider>{children}</SessionProvider>
+    </MantineProvider>
+  )
 }

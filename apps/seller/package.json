@@ -10,6 +10,9 @@
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
     "@greenhub/shared": "workspace:*",
+    "@greenhub/ui": "workspace:*",
+    "@mantine/core": "^9.0.0",
+    "@mantine/hooks": "^9.0.0",
     "firebase": "^12.11.0",
     "next": "16.2.1",
     "next-auth": "5.0.0-beta.30",
@@ -17,11 +20,11 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "tailwindcss": "^4",
+    "postcss-preset-mantine": "^1.18.0",
+    "postcss-simple-vars": "^7.0.1",
     "typescript": "^5"
   }
 }
