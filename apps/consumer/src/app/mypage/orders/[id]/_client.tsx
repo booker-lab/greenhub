@@ -35,7 +35,7 @@ function getTimelineSteps(order: Order): OrderStatus[] {
 }
 
 function getCurrentStepIndex(steps: OrderStatus[], status: OrderStatus): number {
-  if (status === 'REVIEWED') return steps.length - 1
+  if (status === 'REVIEWED') return steps.length
   return steps.indexOf(status)
 }
 
