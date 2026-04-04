@@ -194,11 +194,13 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
   const [actionLoading, setActionLoading] = useState(false)
   const [showPrepareForm, setShowPrepareForm] = useState(false)
   const [preparedAtInput, setPreparedAtInput] = useState('')
+  const [actionError, setActionError] = useState<string | null>(null)
 
   async function handleStatusChange(status: OrderStatus, extra?: { cancelReason?: string; preparedAt?: string }) {
     setActionLoading(true)
+    setActionError(null)
     try {
-      await fetch(
+      const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/stores/${storeId}/orders/${order.id}/status`,
         {
           method: 'PATCH',
@@ -209,6 +211,12 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
           body: JSON.stringify({ status, ...extra }),
         }
       )
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setActionError(`오류 ${res.status}: ${body?.message ?? '상태 변경 실패'}`)
+      }
+    } catch {
+      setActionError('네트워크 오류가 발생했습니다')
     } finally {
       setActionLoading(false)
     }
@@ -337,6 +345,10 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
             </Button>
           )}
         </Group>
+      )}
+
+      {actionError && (
+        <Text size="xs" c="red" mt="xs">{actionError}</Text>
       )}
 
       {order.status === 'HUB_ARRIVED' && order.pickupCode && (
