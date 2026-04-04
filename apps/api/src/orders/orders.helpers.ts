@@ -73,9 +73,9 @@ export function calcDeliveryFee(
 }
 
 export function getAllowedTransitions(role: string, current: OrderStatus): OrderStatus[] {
-  if (role === 'seller') {
+  if (role === 'seller' || role === 'admin') {
     const base = SELLER_TRANSITIONS[current] ?? [];
-    // 판매자 강제 취소는 ACCEPTED·CONFIRMED·PREPARING 상태에서만 허용
+    // 판매자·관리자 강제 취소는 ACCEPTED·CONFIRMED·PREPARING 상태에서만 허용
     const sellerCancellable: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
     if (sellerCancellable.includes(current)) {
       return [...base, 'CANCELLED'];

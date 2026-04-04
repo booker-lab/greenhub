@@ -56,7 +56,7 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: UpdateStatusDto,
   ) {
-    return this.ordersService.updateStatus(storeId, orderId, user.sub, dto);
+    return this.ordersService.updateStatus(storeId, orderId, user.sub, dto, user.role);
   }
 
   @Patch(':orderId/cancel')

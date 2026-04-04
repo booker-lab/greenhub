@@ -196,6 +196,7 @@ export class OrdersService {
     orderId: string,
     requesterId: string,
     dto: UpdateStatusDto,
+    requesterRole?: string,
   ) {
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
@@ -204,10 +205,14 @@ export class OrdersService {
     const order = snap.data()!;
     const currentStatus = order['status'] as OrderStatus;
 
-    const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
-    const role = userSnap.data()?.['role'] ?? 'consumer';
+    // JWT role을 우선 사용, 없으면 Firestore fallback
+    let role = requesterRole;
+    if (!role) {
+      const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
+      role = userSnap.data()?.['role'] ?? 'consumer';
+    }
 
-    const allowed = getAllowedTransitions(role, currentStatus);
+    const allowed = getAllowedTransitions(role ?? 'consumer', currentStatus);
     if (!allowed.includes(dto.status)) {
       throw new ForbiddenException(
         `${currentStatus} → ${dto.status} 전환은 허용되지 않습니다.`,
