@@ -48,6 +48,14 @@ export interface Order {
   groupBuyConsent: GroupBuyConsent | null
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
+  // Denormalized fields — 드라이버 앱 실시간 표시용
+  productName?: string
+  buyerName?: string
+  address?: string               // deliveryAddress.address + addressDetail 합산
+  buyerPhone?: string | null
+  sellerPhone?: string | null
+  hubName?: string | null        // hub 배송 시 거점명
+  hubAddress?: string | null     // hub 배송 시 거점 주소
 }
 
 export interface DailyCap {

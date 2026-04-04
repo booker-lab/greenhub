@@ -40,9 +40,11 @@ export class OrdersService {
       throw new BadRequestException('거점 배송 시 hubId가 필요합니다.');
     }
 
-    const [product, userSnap] = await Promise.all([
+    const [product, userSnap, storeSnap, hubSnap] = await Promise.all([
       this.firestore.doc(`products/${dto.productId}`).get(),
       this.firestore.doc(`users/${userId}`).get(),
+      this.firestore.doc(`stores/${storeId}`).get(),
+      dto.hubId ? this.firestore.doc(`hubs/${dto.hubId}`).get() : Promise.resolve(null),
     ]);
     if (!product.exists || product.data()!['storeId'] !== storeId) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
@@ -51,6 +53,13 @@ export class OrdersService {
     const rawBuyerName: string = userSnap.data()?.['name'] ?? '';
     const buyerEmail: string = userSnap.data()?.['email'] ?? '';
     const buyerName: string = rawBuyerName && rawBuyerName !== '???' ? rawBuyerName : (buyerEmail.split('@')[0] || userId);
+    const buyerPhone: string | null = userSnap.data()?.['phone'] ?? null;
+    const sellerPhone: string | null = storeSnap.data()?.['phone'] ?? null;
+    const hubData = (hubSnap as any)?.exists ? (hubSnap as any).data() : null;
+    const hubName: string | null = hubData?.['name'] ?? null;
+    const hubAddress: string | null = hubData
+      ? ([hubData['address'], hubData['addressDetail']].filter(Boolean).join(' ') || null)
+      : null;
 
     // 배송비 계산
     const deliveryConfig = await this.getDeliveryConfig(storeId);
@@ -110,6 +119,10 @@ export class OrdersService {
         productName: productData['name'] as string,
         buyerName,
         address: [dto.deliveryAddress.address, dto.deliveryAddress.addressDetail].filter(Boolean).join(' '),
+        buyerPhone,
+        sellerPhone,
+        hubName,
+        hubAddress,
         quantity: dto.quantity,
         saleType: dto.saleType,
         status: 'PENDING',
