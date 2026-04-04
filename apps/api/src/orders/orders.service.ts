@@ -48,7 +48,9 @@ export class OrdersService {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
     const productData = product.data()!;
-    const buyerName: string = userSnap.data()?.['name'] ?? userId;
+    const rawBuyerName: string = userSnap.data()?.['name'] ?? '';
+    const buyerEmail: string = userSnap.data()?.['email'] ?? '';
+    const buyerName: string = rawBuyerName && rawBuyerName !== '???' ? rawBuyerName : (buyerEmail.split('@')[0] || userId);
 
     // 배송비 계산
     const deliveryConfig = await this.getDeliveryConfig(storeId);
@@ -107,7 +109,7 @@ export class OrdersService {
         productId: dto.productId,
         productName: productData['name'] as string,
         buyerName,
-        address: dto.deliveryAddress.address,
+        address: [dto.deliveryAddress.address, dto.deliveryAddress.addressDetail].filter(Boolean).join(' '),
         quantity: dto.quantity,
         saleType: dto.saleType,
         status: 'PENDING',
