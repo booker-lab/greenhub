@@ -19,6 +19,7 @@ type Order = {
   deliveryMethod: string;
   buyerName?: string;
   address?: string;
+  deliveryAddress?: { address?: string };
   hubName?: string;
   hubAddress?: string;
   productName?: string;
@@ -132,7 +133,7 @@ export default function OrderDetailPage({
                   <InfoRow label="거점 주소" value={order.hubAddress ?? "-"} />
                 </>
               ) : (
-                <InfoRow label="배송지" value={order.address ?? "-"} />
+                <InfoRow label="배송지" value={order.address ?? order.deliveryAddress?.address ?? "-"} />
               )}
               {isPreparing && <InfoRow label="소비자" value={order.buyerName ?? "-"} />}
             </Stack>
