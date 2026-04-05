@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAdminInvite } from '@/hooks/useAdmin'
 import { Badge, Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core'
 
@@ -8,6 +8,13 @@ export default function AdminInviteClient() {
   const { invites, loading, generating, generate } = useAdminInvite()
   const [lastToken, setLastToken] = useState<{ token: string; expiresAt: string } | null>(null)
   const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    }
+  }, [])
 
   const handleGenerate = async () => {
     const result = await generate()
@@ -17,8 +24,9 @@ export default function AdminInviteClient() {
   const handleCopy = () => {
     if (!lastToken) return
     navigator.clipboard.writeText(lastToken.token)
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    copyTimerRef.current = setTimeout(() => setCopied(false), 2000)
   }
 
   return (
