@@ -17,6 +17,6 @@ async function bootstrap() {
   });
 
   await app.listen(process.env.PORT ?? 3000);
-  console.log(`API Server running on port ${process.env.PORT ?? 3000}`);
+  console.log(`API Server running on port ${process.env.PORT ?? 3000} [build:2026-04-06]`);
 }
 bootstrap();
