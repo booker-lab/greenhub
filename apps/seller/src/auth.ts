@@ -1,7 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-// 카카오 OAuth — KAKAO_CLIENT_ID 발급 후 주석 해제
-// import Kakao from "next-auth/providers/kakao";
+import Kakao from "next-auth/providers/kakao";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
@@ -29,6 +28,10 @@ async function refreshAccessToken(token: Record<string, unknown>) {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
+    Kakao({
+      clientId: process.env.KAKAO_CLIENT_ID!,
+      clientSecret: process.env.KAKAO_CLIENT_SECRET!,
+    }),
     Credentials({
       credentials: {
         email: { label: "이메일", type: "email" },
@@ -59,6 +62,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider !== "kakao") return true;
+
+      const res = await fetch(`${API}/auth/kakao-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kakaoId: profile?.sub ?? account.providerAccountId,
+          name: profile?.name ?? user.name,
+          email: profile?.email ?? user.email,
+          targetRole: "seller",
+        }),
+      });
+      if (!res.ok) return false;
+
+      const data = await res.json();
+      if (!["seller", "admin"].includes(data.user.role)) return false;
+
+      user.id = data.user.id;
+      user.accessToken = data.accessToken;
+      user.refreshToken = data.refreshToken;
+      user.role = data.user.role;
+      user.storeId = data.user.storeId ?? null;
+      return true;
+    },
     jwt({ token, user, trigger, session }) {
       if (user) {
         return {

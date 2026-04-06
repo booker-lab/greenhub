@@ -202,6 +202,10 @@ export class AuthService {
         userData = { ...userData, driverApproved: false };
       }
     } else {
+      // seller는 admin 초대로만 가입 가능 — 카카오 신규 생성 불가
+      if (dto.targetRole === 'seller') {
+        throw new ForbiddenException('판매자 계정은 관리자 초대로만 가입할 수 있습니다.');
+      }
       const userId = uuidv4();
       const now = this.firestore.Timestamp.now();
       const newRole = dto.targetRole ?? 'driver';
@@ -226,7 +230,9 @@ export class AuthService {
     const role = userData['role'] as string;
     const allowedRoles = dto.targetRole === 'consumer'
       ? ['consumer']
-      : ['seller', 'driver'];
+      : dto.targetRole === 'seller'
+        ? ['seller', 'admin']
+        : ['driver'];
     if (!allowedRoles.includes(role)) {
       throw new ForbiddenException('접근 권한이 없습니다.');
     }
