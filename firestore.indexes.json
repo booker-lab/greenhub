@@ -105,7 +105,16 @@
         { "fieldPath": "storeId", "order": "ASCENDING" },
         { "fieldPath": "isActive", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "groupProductConfig",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isProcessed", "order": "ASCENDING" },
+        { "fieldPath": "recruitDeadline", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
 }
+
