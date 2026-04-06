@@ -65,24 +65,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account, profile }) {
       if (account?.provider !== "kakao") return true;
 
-      const payload = {
-        kakaoId: profile?.sub ?? account.providerAccountId,
-        name: profile?.name ?? user.name ?? "카카오사용자",
-        email: profile?.email ?? user.email,
-        targetRole: "consumer",
-      };
-      console.log("[auth] kakao-login payload:", JSON.stringify(payload));
       const res = await fetch(`${API}/auth/kakao-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          kakaoId: profile?.sub ?? account.providerAccountId,
+          name: profile?.name ?? user.name ?? "카카오사용자",
+          email: profile?.email ?? user.email,
+          targetRole: "consumer",
+        }),
       });
-      console.log("[auth] kakao-login status:", res.status);
-      if (!res.ok) {
-        const body = await res.text();
-        console.error("[auth] kakao-login error body:", body);
-        return false;
-      }
+      if (!res.ok) return false;
 
       const data = await res.json();
       user.id = data.user.id;
