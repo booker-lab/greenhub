@@ -10,4 +10,8 @@ export class KakaoLoginDto {
   @IsOptional()
   @IsEmail()
   email?: string;
+
+  @IsOptional()
+  @IsString()
+  targetRole?: 'consumer' | 'seller' | 'driver';
 }

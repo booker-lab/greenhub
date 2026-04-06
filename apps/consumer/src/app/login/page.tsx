@@ -3,7 +3,7 @@
 import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useState } from 'react'
-import { Container, Title, TextInput, PasswordInput, Button, Text, Alert, Stack } from '@mantine/core'
+import { Container, Title, TextInput, PasswordInput, Button, Text, Alert, Stack, Divider } from '@mantine/core'
 
 function LoginForm() {
   const searchParams = useSearchParams()
@@ -35,44 +35,58 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <Stack gap="sm">
-        <TextInput
-          label="이메일"
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="example@email.com"
-          radius="md"
-        />
-        <PasswordInput
-          label="비밀번호"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="비밀번호 입력"
-          radius="md"
-        />
+    <Stack gap="sm">
+      <Button
+        fullWidth
+        radius="md"
+        size="md"
+        style={{ backgroundColor: '#FEE500', color: '#000000' }}
+        onClick={() => signIn('kakao', { callbackUrl })}
+      >
+        카카오로 시작하기
+      </Button>
 
-        {error && (
-          <Alert color="red" variant="light" p="sm">
-            <Text size="sm">{error}</Text>
-          </Alert>
-        )}
+      <Divider label="또는" labelPosition="center" />
 
-        <Button
-          type="submit"
-          loading={loading}
-          fullWidth
-          color="brand"
-          radius="md"
-          mt="xs"
-        >
-          로그인
-        </Button>
-      </Stack>
-    </form>
+      <form onSubmit={handleSubmit}>
+        <Stack gap="sm">
+          <TextInput
+            label="이메일"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="example@email.com"
+            radius="md"
+          />
+          <PasswordInput
+            label="비밀번호"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="비밀번호 입력"
+            radius="md"
+          />
+
+          {error && (
+            <Alert color="red" variant="light" p="sm">
+              <Text size="sm">{error}</Text>
+            </Alert>
+          )}
+
+          <Button
+            type="submit"
+            loading={loading}
+            fullWidth
+            color="brand"
+            radius="md"
+            mt="xs"
+          >
+            로그인
+          </Button>
+        </Stack>
+      </form>
+    </Stack>
   )
 }
 
@@ -81,10 +95,9 @@ export default function LoginPage() {
     <Container size={400} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
       <Stack gap="lg" w="100%">
         <Title order={1} ta="center" c="brand.6">Green Hub</Title>
-        <Suspense fallback={<div style={{ height: 192 }} />}>
+        <Suspense fallback={<div style={{ height: 240 }} />}>
           <LoginForm />
         </Suspense>
-        <Text ta="center" size="sm" c="gray.4">소셜 로그인은 준비 중입니다.</Text>
       </Stack>
     </Container>
   )

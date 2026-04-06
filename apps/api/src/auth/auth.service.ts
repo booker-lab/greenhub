@@ -204,14 +204,15 @@ export class AuthService {
     } else {
       const userId = uuidv4();
       const now = this.firestore.Timestamp.now();
+      const newRole = dto.targetRole ?? 'driver';
       userData = {
         id: userId,
         kakaoId: dto.kakaoId,
         email: dto.email ?? null,
         name: dto.name,
         phone: null,
-        role: 'driver',
-        driverApproved: false,
+        role: newRole,
+        ...(newRole === 'driver' ? { driverApproved: false } : {}),
         storeId: null,
         providers: ['kakao'],
         savedAddresses: [],
@@ -223,7 +224,10 @@ export class AuthService {
     }
 
     const role = userData['role'] as string;
-    if (!['seller', 'driver'].includes(role)) {
+    const allowedRoles = dto.targetRole === 'consumer'
+      ? ['consumer']
+      : ['seller', 'driver'];
+    if (!allowedRoles.includes(role)) {
       throw new ForbiddenException('접근 권한이 없습니다.');
     }
 

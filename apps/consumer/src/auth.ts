@@ -1,8 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-// W-5: 카카오 OAuth — KAKAO_CLIENT_ID 발급 후 주석 해제
-// import Kakao from "next-auth/providers/kakao";
-// W-5: 네이버 OAuth — NAVER_CLIENT_ID 발급 후 주석 해제 (custom provider 필요)
+import Kakao from "next-auth/providers/kakao";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 // accessToken 만료 55분 후 갱신 (Railway 기본값 1h 기준)
@@ -31,6 +29,10 @@ async function refreshAccessToken(token: Record<string, unknown>) {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
+    Kakao({
+      clientId: process.env.KAKAO_CLIENT_ID!,
+      clientSecret: process.env.KAKAO_CLIENT_SECRET!,
+    }),
     Credentials({
       credentials: {
         email: { label: "이메일", type: "email" },
@@ -59,6 +61,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider !== "kakao") return true;
+
+      const res = await fetch(`${API}/auth/kakao-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kakaoId: profile?.sub ?? account.providerAccountId,
+          name: profile?.name ?? user.name,
+          email: profile?.email ?? user.email,
+          targetRole: "consumer",
+        }),
+      });
+      if (!res.ok) return false;
+
+      const data = await res.json();
+      user.id = data.user.id;
+      user.accessToken = data.accessToken;
+      user.refreshToken = data.refreshToken;
+      user.role = data.user.role;
+      return true;
+    },
     jwt({ token, user }) {
       if (user) {
         return {
