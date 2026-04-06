@@ -48,9 +48,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!res.ok) return false;
 
       const data = await res.json();
-      if (!["seller", "driver"].includes(data.user.role)) return false;
+      if (data.user.role !== "driver") return false;
 
-      if (data.user.role === "driver" && !data.user.driverApproved) {
+      if (!data.user.driverApproved) {
         return "/login?pending=true";
       }
 
