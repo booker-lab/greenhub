@@ -6,10 +6,11 @@ import { Suspense, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Container, Title, Text, Paper, Stack, TextInput, Group, Button, Alert } from '@mantine/core'
-import { usePayment } from '@/hooks/usePayment'
+import { usePayment, type PaymentMethod } from '@/hooks/usePayment'
 import type { CreateOrderRequest, DeliveryAddress, DeliveryMethod, SaleType } from '@greenhub/shared'
 
 const STORE_ID = 'dear-orchid'
+const NAVERPAY_ENABLED = !!process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY
 
 function CheckoutContent() {
   const { data: session } = useSession()
@@ -27,6 +28,7 @@ function CheckoutContent() {
     addressDetail: '',
     zipCode: '',
   })
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay')
 
   const orderRequest: CreateOrderRequest = {
     productId,
@@ -40,6 +42,7 @@ function CheckoutContent() {
     storeId: STORE_ID,
     orderRequest,
     accessToken: session?.user?.accessToken ?? '',
+    paymentMethod,
   })
 
   if (state === 'done' && orderId) {
@@ -55,6 +58,20 @@ function CheckoutContent() {
     hub: '거점 픽업',
     parcel: '택배',
   }
+
+  const paymentOptions: { method: PaymentMethod; label: string; icon: string }[] = [
+    { method: 'kakaopay', label: '카카오페이', icon: '💛' },
+    ...(NAVERPAY_ENABLED ? [{ method: 'naverpay' as PaymentMethod, label: '네이버페이', icon: '🟢' }] : []),
+  ]
+
+  const buttonLabel =
+    state === 'creating'
+      ? '주문 생성 중...'
+      : state === 'paying'
+        ? '결제 진행 중...'
+        : paymentMethod === 'naverpay'
+          ? '네이버페이로 결제하기'
+          : '카카오페이로 결제하기'
 
   return (
     <Container size="sm" px="md" py="lg">
@@ -107,14 +124,27 @@ function CheckoutContent() {
       {/* 결제 수단 */}
       <Stack gap="xs" mb="lg">
         <Text fw={600} size="sm">결제 수단</Text>
-        <Paper
-          p="sm"
-          radius="md"
-          style={{ border: '2px solid var(--green-primary)', display: 'flex', alignItems: 'center', gap: 10 }}
-        >
-          <span>💛</span>
-          <Text fw={600} size="sm">카카오페이</Text>
-        </Paper>
+        {paymentOptions.map(({ method, label, icon }) => {
+          const isSelected = paymentMethod === method
+          return (
+            <Paper
+              key={method}
+              p="sm"
+              radius="md"
+              onClick={() => setPaymentMethod(method)}
+              style={{
+                border: `2px solid ${isSelected ? 'var(--green-primary)' : 'var(--mantine-color-gray-3)'}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                cursor: 'pointer',
+              }}
+            >
+              <span>{icon}</span>
+              <Text fw={isSelected ? 700 : 400} size="sm">{label}</Text>
+            </Paper>
+          )
+        })}
       </Stack>
 
       {error && (
@@ -132,11 +162,7 @@ function CheckoutContent() {
         loading={isLoading}
         onClick={requestPayment}
       >
-        {state === 'creating'
-          ? '주문 생성 중...'
-          : state === 'paying'
-            ? '결제 진행 중...'
-            : '카카오페이로 결제하기'}
+        {buttonLabel}
       </Button>
     </Container>
   )

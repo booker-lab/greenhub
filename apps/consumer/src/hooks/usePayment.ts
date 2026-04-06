@@ -3,12 +3,14 @@
 import { useState } from 'react'
 import type { CreateOrderRequest } from '@greenhub/shared'
 
+export type PaymentMethod = 'kakaopay' | 'naverpay'
 export type PaymentState = 'idle' | 'creating' | 'paying' | 'done' | 'error'
 
 interface UsePaymentOptions {
   storeId: string
   orderRequest: CreateOrderRequest
   accessToken: string
+  paymentMethod: PaymentMethod
 }
 
 interface UsePaymentResult {
@@ -22,6 +24,7 @@ export function usePayment({
   storeId,
   orderRequest,
   accessToken,
+  paymentMethod,
 }: UsePaymentOptions): UsePaymentResult {
   const [state, setState] = useState<PaymentState>('idle')
   const [orderId, setOrderId] = useState<string | null>(null)
@@ -54,15 +57,24 @@ export function usePayment({
       // 2. Portone v2 SDK 결제창 오픈 (dynamic import — 브라우저 전용)
       setState('paying')
       const PortOne = await import('@portone/browser-sdk/v2')
+
+      const channelKey =
+        paymentMethod === 'naverpay'
+          ? process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY!
+          : process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY!
+
+      const easyPayProvider =
+        paymentMethod === 'naverpay' ? 'NAVERPAY' : 'KAKAOPAY'
+
       const response = await PortOne.requestPayment({
         storeId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID!,
         paymentId: createdOrderId,
         orderName: portonePaymentParams.name,
         totalAmount: portonePaymentParams.amount,
         currency: 'KRW' as const,
-        channelKey: process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY!,
+        channelKey,
         payMethod: 'EASY_PAY',
-        easyPay: { easyPayProvider: 'KAKAOPAY' },
+        easyPay: { easyPayProvider },
       })
 
       // code 필드가 있으면 취소 또는 오류 (v2 SDK 에러 구조)
