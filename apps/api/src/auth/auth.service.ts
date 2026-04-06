@@ -229,7 +229,7 @@ export class AuthService {
 
     const role = userData['role'] as string;
     const allowedRoles = dto.targetRole === 'consumer'
-      ? ['consumer']
+      ? ['consumer', 'seller', 'admin']
       : dto.targetRole === 'seller'
         ? ['seller', 'admin']
         : ['driver'];

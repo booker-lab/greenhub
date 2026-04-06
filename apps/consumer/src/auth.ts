@@ -49,7 +49,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
         if (!res.ok) return null;
         const data = await res.json();
-        if (data.user.role !== 'consumer') return null;
+        if (!['consumer', 'seller', 'admin'].includes(data.user.role)) return null;
         return {
           id: data.user.id,
           email: data.user.email,
