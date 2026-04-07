@@ -9,5 +9,8 @@
 }
 
 body {
-  padding-bottom: 72px; /* BottomNav 높이 확보 */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(72px + env(safe-area-inset-bottom)); /* BottomNav + 홈 인디케이터 */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }

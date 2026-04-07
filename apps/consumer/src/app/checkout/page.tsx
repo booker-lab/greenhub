@@ -1,12 +1,23 @@
 'use client'
 
 import { Suspense, useState, useEffect } from 'react'
+import Script from 'next/script'
 import { useSession } from 'next-auth/react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Container, Title, Text, Paper, Stack, TextInput, Group, Button, Alert } from '@mantine/core'
 import { usePayment, type PaymentMethod } from '@/hooks/usePayment'
 import type { CreateOrderRequest, DeliveryAddress, DeliveryMethod, SaleType, Product } from '@greenhub/shared'
 import type { CartItem } from '@/hooks/useCart'
+
+declare global {
+  interface Window {
+    daum: {
+      Postcode: new (options: {
+        oncomplete: (data: { address: string; zonecode: string }) => void
+      }) => { open: () => void }
+    }
+  }
+}
 
 const STORE_ID = 'dear-orchid'
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -214,6 +225,24 @@ function CheckoutForm({
   onPay,
   singleSummary,
 }: CheckoutFormProps) {
+  useEffect(() => {
+    if (!isLoading) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isLoading])
+
+  function openAddressSearch() {
+    new window.daum.Postcode({
+      oncomplete(data) {
+        onAddressChange({ ...address, address: data.address, zipCode: data.zonecode, addressDetail: '' })
+      },
+    }).open()
+  }
+
   const buttonLabel =
     isLoading
       ? '처리 중...'
@@ -262,12 +291,18 @@ function CheckoutForm({
       {/* 배송지 */}
       <Stack gap="sm" mb="lg">
         <Text fw={600} size="sm">배송지</Text>
-        <TextInput
-          placeholder="주소 *"
-          value={address.address}
-          onChange={(e) => onAddressChange({ ...address, address: e.target.value })}
-          radius="md"
-        />
+        <Group gap="xs" align="flex-end">
+          <TextInput
+            style={{ flex: 1 }}
+            placeholder="주소 검색 후 자동 입력 *"
+            value={address.address}
+            readOnly
+            radius="md"
+          />
+          <Button variant="outline" color="gray" radius="md" onClick={openAddressSearch}>
+            주소 검색
+          </Button>
+        </Group>
         <TextInput
           placeholder="상세 주소"
           value={address.addressDetail}
@@ -275,9 +310,9 @@ function CheckoutForm({
           radius="md"
         />
         <TextInput
-          placeholder="우편번호 *"
+          placeholder="우편번호 (자동 입력)"
           value={address.zipCode}
-          onChange={(e) => onAddressChange({ ...address, zipCode: e.target.value })}
+          readOnly
           radius="md"
         />
       </Stack>
@@ -330,8 +365,14 @@ function CheckoutContent() {
 
 export default function CheckoutPage() {
   return (
-    <Suspense fallback={<Container size="sm" px="md" py="lg"><Text>로딩 중...</Text></Container>}>
-      <CheckoutContent />
-    </Suspense>
+    <>
+      <Script
+        src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"
+        strategy="lazyOnload"
+      />
+      <Suspense fallback={<Container size="sm" px="md" py="lg"><Text>로딩 중...</Text></Container>}>
+        <CheckoutContent />
+      </Suspense>
+    </>
   )
 }

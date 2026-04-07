@@ -31,7 +31,8 @@ export default function BottomNav() {
         zIndex: 100,
         backgroundColor: 'var(--mantine-color-white)',
         borderTop: '1px solid var(--mantine-color-gray-2)',
-        height: 64,
+        height: 'calc(64px + env(safe-area-inset-bottom))',
+        paddingBottom: 'env(safe-area-inset-bottom)',
         display: 'flex',
       }}
     >
