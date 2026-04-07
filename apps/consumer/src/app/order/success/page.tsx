@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { Container, Stack, Title, Text, Button } from '@mantine/core'
 import { useOrderStatus } from '@/hooks/useOrderStatus'
 import type { OrderStatus } from '@greenhub/shared'
@@ -24,9 +25,10 @@ const SUCCESS_STATUSES: OrderStatus[] = ['ACCEPTED', 'RECRUITING']
 function OrderSuccessContent() {
   const params = useSearchParams()
   const router = useRouter()
+  const { data: session } = useSession()
   const orderId = params.get('orderId')
 
-  const { order, loading, error } = useOrderStatus(orderId)
+  const { order, loading, error } = useOrderStatus(orderId, session?.user?.accessToken)
 
   useEffect(() => {
     if (order?.status === 'CANCELLED') {

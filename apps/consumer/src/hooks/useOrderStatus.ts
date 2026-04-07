@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import type { Order } from '@greenhub/shared'
-import { parseFirestoreValue, type FirestoreValue } from '@/lib/firestore'
 
-const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+// NOTE: Firebase SDK의 onSnapshot은 PWA Service Worker와 충돌하여 동작 불가.
+// Firestore REST API 대신 Railway API 폴링 방식으로 대체. 설계 결정: docs/CRITICAL_LOGIC.md [2026-03-27] 참조
+const STORE_ID = 'dear-orchid'
 
 interface UseOrderStatusResult {
   order: Order | null
@@ -12,10 +14,7 @@ interface UseOrderStatusResult {
   error: string | null
 }
 
-// NOTE: Firebase SDK의 onSnapshot은 PWA Service Worker와 충돌하여 동작 불가.
-// Firestore REST API 직접 호출(3초 폴링)로 대체. 결제 완료 화면은 실시간 불필요.
-// 설계 결정: docs/CRITICAL_LOGIC.md [2026-03-27] 참조
-export function useOrderStatus(orderId: string | null): UseOrderStatusResult {
+export function useOrderStatus(orderId: string | null, accessToken?: string): UseOrderStatusResult {
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -30,8 +29,10 @@ export function useOrderStatus(orderId: string | null): UseOrderStatusResult {
 
     async function fetchOrder() {
       try {
-        const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/orders/${orderId}`
-        const res = await fetch(url)
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
+
+        const res = await fetch(`${API}/stores/${STORE_ID}/orders/${orderId}`, { headers })
         if (cancelled) return
 
         if (res.status === 404) {
@@ -39,15 +40,10 @@ export function useOrderStatus(orderId: string | null): UseOrderStatusResult {
           setLoading(false)
           return
         }
-        if (!res.ok) throw new Error(`Firestore 응답 오류: ${res.status}`)
+        if (!res.ok) throw new Error('주문 정보를 불러올 수 없습니다.')
 
         const data = await res.json()
-        const fields = data.fields as Record<string, FirestoreValue>
-        const parsed = Object.fromEntries(
-          Object.entries(fields).map(([k, v]) => [k, parseFirestoreValue(v)]),
-        ) as Record<string, unknown>
-
-        setOrder({ id: orderId, ...parsed } as Order)
+        setOrder(data as Order)
         setLoading(false)
         setError(null)
       } catch (e: unknown) {
@@ -63,7 +59,7 @@ export function useOrderStatus(orderId: string | null): UseOrderStatusResult {
       cancelled = true
       clearInterval(interval)
     }
-  }, [orderId])
+  }, [orderId, accessToken])
 
   return { order, loading, error }
 }

@@ -16,9 +16,24 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+  const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+
   async function handleFiles(files: FileList | null) {
     if (!files || images.length >= 5) return
     const toUpload = Array.from(files).slice(0, 5 - images.length)
+
+    for (const file of toUpload) {
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        onError('JPG, PNG, WebP, GIF 파일만 업로드 가능합니다.')
+        return
+      }
+      if (file.size > MAX_SIZE) {
+        onError('파일 크기는 5MB 이하만 가능합니다.')
+        return
+      }
+    }
+
     setUploading(true)
     try {
       const urls = await Promise.all(

@@ -38,6 +38,17 @@ export default function OnboardingPage() {
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setError('JPG, PNG, WebP 파일만 업로드 가능합니다.')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError('로고 파일 크기는 2MB 이하만 가능합니다.')
+      return
+    }
+
     setLogoUploading(true)
     setError('')
     try {

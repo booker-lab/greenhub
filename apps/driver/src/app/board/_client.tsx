@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { db } from "@/lib/firebase";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import OrderCard from "@/components/OrderCard";
@@ -24,6 +25,7 @@ type Order = {
 export default function BoardClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { data: session } = useSession();
   const tab = searchParams.get("tab") ?? "preparing";
 
   const [preparing, setPreparing] = useState<Order[]>([]);
@@ -39,11 +41,11 @@ export default function BoardClient() {
       setPreparing(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order)));
     });
 
-    const qDelivering = query(
-      collection(db, "orders"),
-      where("status", "==", "DELIVERING"),
-      orderBy("updatedAt", "asc")
-    );
+    const driverId = session?.user?.id;
+    const deliveringConditions = driverId
+      ? [where("status", "==", "DELIVERING"), where("driverId", "==", driverId), orderBy("updatedAt", "asc")]
+      : [where("status", "==", "DELIVERING"), orderBy("updatedAt", "asc")];
+    const qDelivering = query(collection(db, "orders"), ...deliveringConditions);
     const unsubDelivering = onSnapshot(qDelivering, (snap) => {
       setDelivering(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order)));
     });
@@ -52,7 +54,7 @@ export default function BoardClient() {
       unsubPreparing();
       unsubDelivering();
     };
-  }, []);
+  }, [session?.user?.id]);
 
   const orders = tab === "preparing" ? preparing : delivering;
   const today = new Date().toLocaleDateString("ko-KR", {

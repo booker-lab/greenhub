@@ -113,7 +113,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // name이 없거나 placeholder인 경우 email 앞부분 사용
       const rawName = token.name as string | undefined;
       session.user.name = rawName && rawName !== '???' ? rawName : (session.user.email?.split('@')[0] ?? '사용자');
-      if (token.error) session.user.accessToken = "";
+      if (token.error) {
+        session.user.accessToken = "";
+        session.user.tokenError = true;
+      }
       return session;
     },
   },
