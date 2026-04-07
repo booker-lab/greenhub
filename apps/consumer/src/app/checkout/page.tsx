@@ -1,15 +1,14 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
-import { Suspense, useState } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Container, Title, Text, Paper, Stack, TextInput, Group, Button, Alert } from '@mantine/core'
 import { usePayment, type PaymentMethod } from '@/hooks/usePayment'
-import type { CreateOrderRequest, DeliveryAddress, DeliveryMethod, SaleType } from '@greenhub/shared'
+import type { CreateOrderRequest, DeliveryAddress, DeliveryMethod, SaleType, Product } from '@greenhub/shared'
 
 const STORE_ID = 'dear-orchid'
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const NAVERPAY_ENABLED = !!process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY
 
 function CheckoutContent() {
@@ -21,7 +20,18 @@ function CheckoutContent() {
   const quantity = Number(params.get('quantity') ?? 1)
   const saleType = (params.get('saleType') ?? 'normal') as SaleType
   const deliveryMethod = (params.get('deliveryMethod') ?? 'direct') as DeliveryMethod
-  const totalAmount = Number(params.get('totalAmount') ?? 0)
+
+  // totalAmount는 URL 파라미터를 신뢰하지 않고 API에서 직접 계산
+  const [product, setProduct] = useState<Product | null>(null)
+  const totalAmount = product ? product.price * quantity : 0
+
+  useEffect(() => {
+    if (!productId) return
+    fetch(`${API_URL}/stores/${STORE_ID}/products/${productId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data) setProduct(data as Product) })
+      .catch(() => {})
+  }, [productId])
 
   const [address, setAddress] = useState<DeliveryAddress>({
     address: '',

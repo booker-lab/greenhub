@@ -3,12 +3,13 @@
 import { useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { storage, db } from "@/lib/firebase";
+import { storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { doc, getDoc } from "firebase/firestore";
 import { apiFetch } from "@/lib/api";
 import { use } from "react";
 import { Button, Text, Loader } from "@mantine/core";
+
+const STORE_ID = "dear-orchid";
 
 export default function PhotoPage({
   params,
@@ -78,11 +79,8 @@ export default function PhotoPage({
       await uploadBytes(storageRef, blob, { contentType: "image/jpeg" });
       const photoUrl = await getDownloadURL(storageRef);
 
-      const orderSnap = await getDoc(doc(db, "orders", orderId));
-      const storeId = orderSnap.data()?.storeId as string;
-
       const res = await apiFetch(
-        `/stores/${storeId}/orders/${orderId}/status`,
+        `/stores/${STORE_ID}/orders/${orderId}/status`,
         session.user.accessToken,
         { method: "PATCH", body: JSON.stringify({ status: "HUB_ARRIVED", photoUrl }) }
       );

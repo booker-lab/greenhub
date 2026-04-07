@@ -17,7 +17,6 @@ export default function CartPage() {
       quantity: String(first.quantity),
       saleType: first.saleType,
       deliveryMethod: first.deliveryMethod,
-      totalAmount: String(totalAmount),
     })
     router.push(`/checkout?${params.toString()}`)
   }

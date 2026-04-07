@@ -7,7 +7,9 @@ import { Container, Title, TextInput, PasswordInput, Button, Text, Alert, Stack,
 
 function LoginForm() {
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/'
+  const raw = searchParams.get('callbackUrl') ?? '/'
+  // Open Redirect 방지: 반드시 상대경로(/)로 시작해야 함
+  const callbackUrl = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
