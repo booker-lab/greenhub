@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 import { apiFetch } from "@/lib/api";
 import { use } from "react";
+import { notifications } from "@mantine/notifications";
 import {
   Box, Stack, Group, Text, Title, Badge, Card,
   Button, Loader, UnstyledButton, Anchor,
@@ -67,7 +68,7 @@ export default function OrderDetailPage({
         router.replace("/board?tab=preparing");
       }
     } catch {
-      alert("오류가 발생했습니다. 다시 시도해주세요.");
+      notifications.show({ color: 'red', message: '오류가 발생했습니다. 다시 시도해주세요.' });
     } finally {
       setLoading(false);
     }

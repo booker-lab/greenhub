@@ -6,12 +6,14 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Container, Title, Text, Paper, Stack, TextInput, Group, Button, Alert } from '@mantine/core'
 import { usePayment, type PaymentMethod } from '@/hooks/usePayment'
 import type { CreateOrderRequest, DeliveryAddress, DeliveryMethod, SaleType, Product } from '@greenhub/shared'
+import type { CartItem } from '@/hooks/useCart'
 
 const STORE_ID = 'dear-orchid'
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const NAVERPAY_ENABLED = !!process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY
 
-function CheckoutContent() {
+// ── 단일 상품 결제 (상품 상세 → 바로 결제) ──────────────────────────────
+function SingleCheckoutContent() {
   const { data: session } = useSession()
   const params = useSearchParams()
   const router = useRouter()
@@ -21,7 +23,6 @@ function CheckoutContent() {
   const saleType = (params.get('saleType') ?? 'normal') as SaleType
   const deliveryMethod = (params.get('deliveryMethod') ?? 'direct') as DeliveryMethod
 
-  // totalAmount는 URL 파라미터를 신뢰하지 않고 API에서 직접 계산
   const [product, setProduct] = useState<Product | null>(null)
   const totalAmount = product ? product.price * quantity : 0
 
@@ -33,11 +34,7 @@ function CheckoutContent() {
       .catch(() => {})
   }, [productId])
 
-  const [address, setAddress] = useState<DeliveryAddress>({
-    address: '',
-    addressDetail: '',
-    zipCode: '',
-  })
+  const [address, setAddress] = useState<DeliveryAddress>({ address: '', addressDetail: '', zipCode: '' })
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay')
 
   const orderRequest: CreateOrderRequest = {
@@ -63,25 +60,166 @@ function CheckoutContent() {
   const isLoading = state === 'creating' || state === 'paying'
   const canPay = !isLoading && !!address.address && !!address.zipCode && !!session
 
-  const deliveryLabels: Record<DeliveryMethod, string> = {
-    direct: '꽃차 직배송',
-    hub: '거점 픽업',
-    parcel: '택배',
+  return (
+    <CheckoutForm
+      items={[]}
+      totalAmount={totalAmount}
+      address={address}
+      onAddressChange={setAddress}
+      paymentMethod={paymentMethod}
+      onPaymentMethodChange={setPaymentMethod}
+      isLoading={isLoading}
+      canPay={canPay}
+      error={error}
+      onPay={requestPayment}
+      singleSummary={{ quantity, deliveryMethod }}
+    />
+  )
+}
+
+// ── 장바구니 다중 결제 ────────────────────────────────────────────────────
+function CartCheckoutContent() {
+  const { data: session } = useSession()
+  const router = useRouter()
+
+  const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [address, setAddress] = useState<DeliveryAddress>({ address: '', addressDetail: '', zipCode: '' })
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay')
+  const [state, setState] = useState<'idle' | 'creating' | 'paying' | 'done' | 'error'>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('checkout_cart')
+      if (raw) setCartItems(JSON.parse(raw) as CartItem[])
+    } catch {}
+  }, [])
+
+  const totalAmount = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  const isLoading = state === 'creating' || state === 'paying'
+  const canPay = !isLoading && !!address.address && !!address.zipCode && !!session && cartItems.length > 0
+
+  async function handlePay() {
+    if (state !== 'idle') return
+    setError(null)
+
+    const accessToken = session?.user?.accessToken ?? ''
+    const channelKey =
+      paymentMethod === 'naverpay'
+        ? process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY!
+        : process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY!
+    const easyPayProvider = paymentMethod === 'naverpay' ? 'NAVERPAY' : 'KAKAOPAY'
+    const PortOne = await import('@portone/browser-sdk/v2')
+
+    let lastOrderId: string | null = null
+
+    for (const item of cartItems) {
+      setState('creating')
+      const res = await fetch(`${API_URL}/stores/${STORE_ID}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          productId: item.productId,
+          quantity: item.quantity,
+          saleType: item.saleType,
+          deliveryMethod: item.deliveryMethod,
+          deliveryAddress: address,
+        } satisfies CreateOrderRequest),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setError(body.message ?? '주문 생성 실패')
+        setState('error')
+        return
+      }
+      const { orderId, portonePaymentParams } = await res.json()
+      lastOrderId = orderId
+
+      setState('paying')
+      const response = await PortOne.requestPayment({
+        storeId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID!,
+        paymentId: orderId,
+        orderName: portonePaymentParams.name,
+        totalAmount: portonePaymentParams.amount,
+        currency: 'KRW' as const,
+        channelKey,
+        payMethod: 'EASY_PAY',
+        easyPay: { easyPayProvider },
+      })
+      if (response && 'code' in response) {
+        setError(response.message ?? '결제가 취소되었습니다.')
+        setState('error')
+        return
+      }
+      setState('idle')
+    }
+
+    sessionStorage.removeItem('checkout_cart')
+    setState('done')
+    if (lastOrderId) router.replace(`/order/success?orderId=${lastOrderId}`)
   }
 
-  const paymentOptions: { method: PaymentMethod; label: string; icon: string }[] = [
-    { method: 'kakaopay', label: '카카오페이', icon: '💛' },
-    ...(NAVERPAY_ENABLED ? [{ method: 'naverpay' as PaymentMethod, label: '네이버페이', icon: '🟢' }] : []),
-  ]
+  return (
+    <CheckoutForm
+      items={cartItems}
+      totalAmount={totalAmount}
+      address={address}
+      onAddressChange={setAddress}
+      paymentMethod={paymentMethod}
+      onPaymentMethodChange={setPaymentMethod}
+      isLoading={isLoading}
+      canPay={canPay}
+      error={error}
+      onPay={handlePay}
+    />
+  )
+}
 
+// ── 공통 UI ──────────────────────────────────────────────────────────────
+interface CheckoutFormProps {
+  items: CartItem[]
+  totalAmount: number
+  address: DeliveryAddress
+  onAddressChange: (a: DeliveryAddress) => void
+  paymentMethod: PaymentMethod
+  onPaymentMethodChange: (m: PaymentMethod) => void
+  isLoading: boolean
+  canPay: boolean
+  error: string | null
+  onPay: () => void
+  singleSummary?: { quantity: number; deliveryMethod: DeliveryMethod }
+}
+
+const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
+  direct: '꽃차 직배송',
+  hub: '거점 픽업',
+  parcel: '택배',
+}
+
+const PAYMENT_OPTIONS: { method: PaymentMethod; label: string; icon: string }[] = [
+  { method: 'kakaopay', label: '카카오페이', icon: '💛' },
+  ...(NAVERPAY_ENABLED ? [{ method: 'naverpay' as PaymentMethod, label: '네이버페이', icon: '🟢' }] : []),
+]
+
+function CheckoutForm({
+  items,
+  totalAmount,
+  address,
+  onAddressChange,
+  paymentMethod,
+  onPaymentMethodChange,
+  isLoading,
+  canPay,
+  error,
+  onPay,
+  singleSummary,
+}: CheckoutFormProps) {
   const buttonLabel =
-    state === 'creating'
-      ? '주문 생성 중...'
-      : state === 'paying'
-        ? '결제 진행 중...'
-        : paymentMethod === 'naverpay'
-          ? '네이버페이로 결제하기'
-          : '카카오페이로 결제하기'
+    isLoading
+      ? '처리 중...'
+      : paymentMethod === 'naverpay'
+        ? '네이버페이로 결제하기'
+        : '카카오페이로 결제하기'
 
   return (
     <Container size="sm" px="md" py="lg">
@@ -91,16 +229,29 @@ function CheckoutContent() {
       <Paper bg="gray.0" radius="md" p="md" mb="lg">
         <Text fw={600} size="sm" mb="xs">주문 정보</Text>
         <Stack gap={4}>
-          <Group justify="space-between">
-            <Text size="sm" c="gray.5">수량</Text>
-            <Text size="sm">{quantity}개</Text>
-          </Group>
-          <Group justify="space-between">
-            <Text size="sm" c="gray.5">배송 방법</Text>
-            <Text size="sm">{deliveryLabels[deliveryMethod]}</Text>
-          </Group>
-          {totalAmount > 0 && (
+          {items.length > 0 ? (
+            <>
+              {items.map((item) => (
+                <Group key={item.productId} justify="space-between">
+                  <Text size="sm" c="gray.5" style={{ flex: 1 }}>{item.name} × {item.quantity}</Text>
+                  <Text size="sm">{(item.price * item.quantity).toLocaleString()}원</Text>
+                </Group>
+              ))}
+            </>
+          ) : singleSummary && (
             <Group justify="space-between">
+              <Text size="sm" c="gray.5">수량</Text>
+              <Text size="sm">{singleSummary.quantity}개</Text>
+            </Group>
+          )}
+          {singleSummary && (
+            <Group justify="space-between">
+              <Text size="sm" c="gray.5">배송 방법</Text>
+              <Text size="sm">{DELIVERY_LABELS[singleSummary.deliveryMethod]}</Text>
+            </Group>
+          )}
+          {totalAmount > 0 && (
+            <Group justify="space-between" mt={4}>
               <Text size="sm" fw={600}>결제 금액</Text>
               <Text size="sm" fw={600}>{totalAmount.toLocaleString()}원</Text>
             </Group>
@@ -108,25 +259,25 @@ function CheckoutContent() {
         </Stack>
       </Paper>
 
-      {/* 배송지 입력 */}
+      {/* 배송지 */}
       <Stack gap="sm" mb="lg">
         <Text fw={600} size="sm">배송지</Text>
         <TextInput
           placeholder="주소 *"
           value={address.address}
-          onChange={(e) => setAddress((a) => ({ ...a, address: e.target.value }))}
+          onChange={(e) => onAddressChange({ ...address, address: e.target.value })}
           radius="md"
         />
         <TextInput
           placeholder="상세 주소"
           value={address.addressDetail}
-          onChange={(e) => setAddress((a) => ({ ...a, addressDetail: e.target.value }))}
+          onChange={(e) => onAddressChange({ ...address, addressDetail: e.target.value })}
           radius="md"
         />
         <TextInput
           placeholder="우편번호 *"
           value={address.zipCode}
-          onChange={(e) => setAddress((a) => ({ ...a, zipCode: e.target.value }))}
+          onChange={(e) => onAddressChange({ ...address, zipCode: e.target.value })}
           radius="md"
         />
       </Stack>
@@ -134,14 +285,14 @@ function CheckoutContent() {
       {/* 결제 수단 */}
       <Stack gap="xs" mb="lg">
         <Text fw={600} size="sm">결제 수단</Text>
-        {paymentOptions.map(({ method, label, icon }) => {
+        {PAYMENT_OPTIONS.map(({ method, label, icon }) => {
           const isSelected = paymentMethod === method
           return (
             <Paper
               key={method}
               p="sm"
               radius="md"
-              onClick={() => setPaymentMethod(method)}
+              onClick={() => onPaymentMethodChange(method)}
               style={{
                 border: `2px solid ${isSelected ? 'var(--green-primary)' : 'var(--mantine-color-gray-3)'}`,
                 display: 'flex',
@@ -163,19 +314,18 @@ function CheckoutContent() {
         </Alert>
       )}
 
-      <Button
-        fullWidth
-        size="lg"
-        color="brand"
-        radius="md"
-        disabled={!canPay}
-        loading={isLoading}
-        onClick={requestPayment}
-      >
+      <Button fullWidth size="lg" color="brand" radius="md" disabled={!canPay} loading={isLoading} onClick={onPay}>
         {buttonLabel}
       </Button>
     </Container>
   )
+}
+
+// ── 진입점 ───────────────────────────────────────────────────────────────
+function CheckoutContent() {
+  const params = useSearchParams()
+  const fromCart = params.get('from') === 'cart'
+  return fromCart ? <CartCheckoutContent /> : <SingleCheckoutContent />
 }
 
 export default function CheckoutPage() {

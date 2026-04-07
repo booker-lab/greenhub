@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { SessionProvider, useSession, signOut } from "next-auth/react";
 import { MantineProvider } from "@mantine/core";
+import { Notifications } from "@mantine/notifications";
 import { theme } from "@greenhub/ui";
 
 function TokenErrorGuard({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,7 @@ function TokenErrorGuard({ children }: { children: React.ReactNode }) {
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider theme={theme}>
+      <Notifications />
       <SessionProvider>
         <TokenErrorGuard>{children}</TokenErrorGuard>
       </SessionProvider>

@@ -11,14 +11,8 @@ export default function CartPage() {
 
   function handleCheckout() {
     if (items.length === 0) return
-    const first = items[0]
-    const params = new URLSearchParams({
-      productId: first.productId,
-      quantity: String(first.quantity),
-      saleType: first.saleType,
-      deliveryMethod: first.deliveryMethod,
-    })
-    router.push(`/checkout?${params.toString()}`)
+    sessionStorage.setItem('checkout_cart', JSON.stringify(items))
+    router.push('/checkout?from=cart')
   }
 
   if (items.length === 0) {

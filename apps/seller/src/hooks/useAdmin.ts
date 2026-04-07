@@ -61,6 +61,7 @@ export function useAdminStores() {
   const { data: session } = useSession()
   const [stores, setStores] = useState<AdminStore[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!session?.user.accessToken) return
@@ -70,7 +71,11 @@ export function useAdminStores() {
       if (res.ok) {
         const data = await res.json()
         setStores(data.stores ?? [])
+      } else {
+        setError('판매자 목록 조회 실패')
       }
+    } catch {
+      setError('판매자 목록 조회 중 오류 발생')
     } finally {
       setLoading(false)
     }
@@ -79,16 +84,20 @@ export function useAdminStores() {
   useEffect(() => { load() }, [load])
 
   const setCommission = async (storeId: string, rate: number) => {
-    if (!session?.user.accessToken) return
-    const res = await apiFetch(`/admin/stores/${storeId}/commission`, session.user.accessToken, {
-      method: 'PATCH',
-      body: JSON.stringify({ rate }),
-    })
-    if (res.ok) await load()
-    return res.ok
+    if (!session?.user.accessToken) return false
+    try {
+      const res = await apiFetch(`/admin/stores/${storeId}/commission`, session.user.accessToken, {
+        method: 'PATCH',
+        body: JSON.stringify({ rate }),
+      })
+      if (res.ok) { await load(); return true }
+      return false
+    } catch {
+      return false
+    }
   }
 
-  return { stores, loading, reload: load, setCommission }
+  return { stores, loading, error, reload: load, setCommission }
 }
 
 // ── Users ────────────────────────────────────────────────────────
@@ -97,6 +106,7 @@ export function useAdminUsers() {
   const { data: session } = useSession()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!session?.user.accessToken) return
@@ -106,7 +116,11 @@ export function useAdminUsers() {
       if (res.ok) {
         const data = await res.json()
         setUsers(data.users ?? [])
+      } else {
+        setError('사용자 목록 조회 실패')
       }
+    } catch {
+      setError('사용자 목록 조회 중 오류 발생')
     } finally {
       setLoading(false)
     }
@@ -116,15 +130,19 @@ export function useAdminUsers() {
 
   const toggleSuspend = async (userId: string, suspended: boolean) => {
     if (!session?.user.accessToken) return false
-    const res = await apiFetch(`/admin/users/${userId}/status`, session.user.accessToken, {
-      method: 'PATCH',
-      body: JSON.stringify({ suspended }),
-    })
-    if (res.ok) await load()
-    return res.ok
+    try {
+      const res = await apiFetch(`/admin/users/${userId}/status`, session.user.accessToken, {
+        method: 'PATCH',
+        body: JSON.stringify({ suspended }),
+      })
+      if (res.ok) { await load(); return true }
+      return false
+    } catch {
+      return false
+    }
   }
 
-  return { users, loading, reload: load, toggleSuspend }
+  return { users, loading, error, reload: load, toggleSuspend }
 }
 
 // ── Orders ───────────────────────────────────────────────────────
@@ -133,6 +151,7 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
   const { data: session } = useSession()
   const [orders, setOrders] = useState<AdminOrder[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!session?.user.accessToken) return
@@ -146,7 +165,11 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
       if (res.ok) {
         const data = await res.json()
         setOrders(data.orders ?? [])
+      } else {
+        setError('주문 목록 조회 실패')
       }
+    } catch {
+      setError('주문 목록 조회 중 오류 발생')
     } finally {
       setLoading(false)
     }
@@ -156,15 +179,19 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
 
   const forceRefund = async (orderId: string, reason?: string) => {
     if (!session?.user.accessToken) return false
-    const res = await apiFetch(`/admin/orders/${orderId}/refund`, session.user.accessToken, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    })
-    if (res.ok) await load()
-    return res.ok
+    try {
+      const res = await apiFetch(`/admin/orders/${orderId}/refund`, session.user.accessToken, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      })
+      if (res.ok) { await load(); return true }
+      return false
+    } catch {
+      return false
+    }
   }
 
-  return { orders, loading, reload: load, forceRefund }
+  return { orders, loading, error, reload: load, forceRefund }
 }
 
 // ── Settlements ──────────────────────────────────────────────────
@@ -173,6 +200,7 @@ export function useAdminSettlements(filters?: { storeId?: string; from?: string;
   const { data: session } = useSession()
   const [settlements, setSettlements] = useState<AdminSettlement[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!session?.user.accessToken) return
@@ -187,7 +215,11 @@ export function useAdminSettlements(filters?: { storeId?: string; from?: string;
       if (res.ok) {
         const data = await res.json()
         setSettlements(data.settlements ?? [])
+      } else {
+        setError('정산 목록 조회 실패')
       }
+    } catch {
+      setError('정산 목록 조회 중 오류 발생')
     } finally {
       setLoading(false)
     }
@@ -197,14 +229,18 @@ export function useAdminSettlements(filters?: { storeId?: string; from?: string;
 
   const markAsPaid = async (settlementId: string) => {
     if (!session?.user.accessToken) return false
-    const res = await apiFetch(`/admin/settlements/${settlementId}/pay`, session.user.accessToken, {
-      method: 'PATCH',
-    })
-    if (res.ok) await load()
-    return res.ok
+    try {
+      const res = await apiFetch(`/admin/settlements/${settlementId}/pay`, session.user.accessToken, {
+        method: 'PATCH',
+      })
+      if (res.ok) { await load(); return true }
+      return false
+    } catch {
+      return false
+    }
   }
 
-  return { settlements, loading, reload: load, markAsPaid }
+  return { settlements, loading, error, reload: load, markAsPaid }
 }
 
 // ── Drivers ──────────────────────────────────────────────────────
@@ -224,6 +260,7 @@ export function useAdminDrivers() {
   const { data: session } = useSession()
   const [drivers, setDrivers] = useState<AdminDriver[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!session?.user.accessToken) return
@@ -233,7 +270,11 @@ export function useAdminDrivers() {
       if (res.ok) {
         const data = await res.json()
         setDrivers(data.drivers ?? [])
+      } else {
+        setError('드라이버 목록 조회 실패')
       }
+    } catch {
+      setError('드라이버 목록 조회 중 오류 발생')
     } finally {
       setLoading(false)
     }
@@ -243,24 +284,32 @@ export function useAdminDrivers() {
 
   const approve = async (userId: string) => {
     if (!session?.user.accessToken) return false
-    const res = await apiFetch(`/admin/drivers/${userId}/approve`, session.user.accessToken, {
-      method: 'PATCH',
-    })
-    if (res.ok) await load()
-    return res.ok
+    try {
+      const res = await apiFetch(`/admin/drivers/${userId}/approve`, session.user.accessToken, {
+        method: 'PATCH',
+      })
+      if (res.ok) { await load(); return true }
+      return false
+    } catch {
+      return false
+    }
   }
 
   const toggleSuspend = async (userId: string, suspended: boolean) => {
     if (!session?.user.accessToken) return false
-    const res = await apiFetch(`/admin/drivers/${userId}/suspend`, session.user.accessToken, {
-      method: 'PATCH',
-      body: JSON.stringify({ suspended }),
-    })
-    if (res.ok) await load()
-    return res.ok
+    try {
+      const res = await apiFetch(`/admin/drivers/${userId}/suspend`, session.user.accessToken, {
+        method: 'PATCH',
+        body: JSON.stringify({ suspended }),
+      })
+      if (res.ok) { await load(); return true }
+      return false
+    } catch {
+      return false
+    }
   }
 
-  return { drivers, loading, reload: load, approve, toggleSuspend }
+  return { drivers, loading, error, reload: load, approve, toggleSuspend }
 }
 
 // ── Invite ───────────────────────────────────────────────────────
@@ -297,6 +346,8 @@ export function useAdminInvite() {
         await loadInvites()
         return data
       }
+      return null
+    } catch {
       return null
     } finally {
       setGenerating(false)

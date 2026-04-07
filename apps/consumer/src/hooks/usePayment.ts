@@ -31,6 +31,7 @@ export function usePayment({
   const [error, setError] = useState<string | null>(null)
 
   async function requestPayment() {
+    if (state !== 'idle') return
     setState('creating')
     setError(null)
 

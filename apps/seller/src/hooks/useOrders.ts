@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase'
 import type { Order, OrderStatus } from '@greenhub/shared'
 
 export const TAB_STATUSES: Record<string, OrderStatus[]> = {
-  pending: ['ACCEPTED', 'CONFIRMED'],
+  pending: ['PENDING', 'RECRUITING', 'ACCEPTED', 'CONFIRMED'],
   preparing: ['PREPARING'],
   delivering: ['DELIVERING', 'HUB_ARRIVED'],
   done: ['DELIVERED', 'PICKED_UP', 'REVIEWED'],

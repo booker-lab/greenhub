@@ -65,7 +65,7 @@ export function useProduct(productId: string) {
       setLoading(false)
       return
     }
-    async function fetch() {
+    async function fetchProduct() {
       try {
         const snap = await getDoc(doc(db, 'products', productId))
         if (snap.exists()) {
@@ -79,7 +79,7 @@ export function useProduct(productId: string) {
         setLoading(false)
       }
     }
-    fetch()
+    fetchProduct()
   }, [productId])
 
   return { product, loading, error }
@@ -98,7 +98,7 @@ export function useStore(storeId: string | null) {
       return
     }
     const sid = storeId
-    async function fetch() {
+    async function fetchStore() {
       try {
         const snap = await getDoc(doc(db, 'stores', sid))
         if (snap.exists()) {
@@ -108,7 +108,7 @@ export function useStore(storeId: string | null) {
         setLoading(false)
       }
     }
-    fetch()
+    fetchStore()
   }, [storeId])
 
   return { store, loading }
