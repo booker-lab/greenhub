@@ -78,7 +78,8 @@ function formatRelativeTime(iso: unknown): string {
 
 export default function OrdersPage() {
   const { data: session } = useSession()
-  const storeId = session?.user.storeId ?? null
+  // admin은 storeId가 없으므로 MVP 기본 상점으로 폴백
+  const storeId = session?.user.storeId ?? (session?.user.role === 'admin' ? 'dear-orchid' : null)
   const { orders, loading, error, counts } = useOrders(storeId)
   const [activeTab, setActiveTab] = useState<StatusTab>('pending')
 
