@@ -2,9 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // orders: 공개 읽기 허용 (orderId를 아는 사람만 접근 가능 — MVP)
+    // orders: Firebase Auth 필수 + 본인 storeId 또는 admin만 접근
     match /orders/{orderId} {
-      allow read: if true;
+      allow read: if request.auth != null &&
+        (resource.data.storeId == request.auth.token.storeId ||
+         request.auth.token.role == 'admin');
       allow write: if false;
     }
 
@@ -18,6 +20,17 @@ service cloud.firestore {
     match /stores/{storeId} {
       allow get: if true;
       allow list, write: if false;
+    }
+
+    // dailyCaps, groupProductConfig: 소비자 앱 공개 읽기 (상품 재고/공동구매 현황)
+    match /dailyCaps/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /groupProductConfig/{docId} {
+      allow read: if true;
+      allow write: if false;
     }
 
     // 나머지 모든 컬렉션: 클라이언트 직접 접근 차단 (서버만)

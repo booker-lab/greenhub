@@ -43,14 +43,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           kakaoId: profile?.sub ?? account.providerAccountId,
           name: profile?.name ?? user.name ?? "카카오사용자",
           email: profile?.email ?? user.email,
+          targetRole: "driver",
         }),
       });
       if (!res.ok) return false;
 
       const data = await res.json();
-      if (data.user.role !== "driver") return false;
+      if (!["driver", "admin"].includes(data.user.role)) return false;
 
-      if (!data.user.driverApproved) {
+      // admin은 승인 절차 없이 바로 통과
+      if (data.user.role === "driver" && !data.user.driverApproved) {
         return "/login?pending=true";
       }
 

@@ -81,15 +81,17 @@ export class OrdersService {
         const capRef = this.firestore.doc(`dailyCaps/${capId}`);
         const capSnap = await t.get(capRef);
 
-        if (capSnap.exists) {
-          const cap = capSnap.data()!;
-          if (cap['usedSlots'] + dto.quantity > cap['totalCap']) {
-            throw new ConflictException('당일 배송 슬롯이 마감되었습니다.');
-          }
-          t.update(capRef, {
-            usedSlots: cap['usedSlots'] + dto.quantity,
-          });
+        // 문서 없으면 당일 운영 설정이 없는 것 — 주문 차단
+        if (!capSnap.exists) {
+          throw new ConflictException('당일 배송 설정을 찾을 수 없습니다.');
         }
+        const cap = capSnap.data()!;
+        if (cap['usedSlots'] + dto.quantity > cap['totalCap']) {
+          throw new ConflictException('당일 배송 슬롯이 마감되었습니다.');
+        }
+        t.update(capRef, {
+          usedSlots: cap['usedSlots'] + dto.quantity,
+        });
       }
 
       // 공동구매: 참여자 수 증가 + 최대 인원 검증
@@ -98,15 +100,19 @@ export class OrdersService {
           `groupProductConfig/${dto.productId}`,
         );
         const gcSnap = await t.get(gcRef);
-        if (gcSnap.exists) {
-          const gc = gcSnap.data()!;
-          if (gc['currentParticipants'] >= gc['maxParticipants']) {
-            throw new ConflictException('공동구매 모집 인원이 마감되었습니다.');
-          }
-          t.update(gcRef, {
-            currentParticipants: gc['currentParticipants'] + 1,
-          });
+        // 설정 문서 없으면 공동구매 자체를 허용하지 않음 (무제한 참여 방지)
+        if (!gcSnap.exists) {
+          throw new ConflictException('공동구매 설정을 찾을 수 없습니다.');
         }
+        const gc = gcSnap.data()!;
+        // Transaction 재시도 시에도 최신 값으로 재검증되므로 Race Condition 방지
+        if (gc['currentParticipants'] >= gc['maxParticipants']) {
+          throw new ConflictException('공동구매 모집 인원이 마감되었습니다.');
+        }
+        // FieldValue.increment 대신 명시적 값 사용 — Transaction 내 읽기 일관성 보장
+        t.update(gcRef, {
+          currentParticipants: gc['currentParticipants'] + 1,
+        });
       }
 
       const isMetropolitan = detectMetropolitan(dto.deliveryAddress.address);
@@ -195,6 +201,16 @@ export class OrdersService {
     // 판매자는 자신의 storeId 주문만 조회 가능 (admin·driver는 storeId 제한 없음)
     if (role === 'seller' && userData?.['storeId'] !== storeId) {
       throw new ForbiddenException();
+    }
+
+    const VALID_STATUSES = ['PENDING','RECRUITING','CONFIRMED','ACCEPTED','PREPARING','DELIVERING','HUB_ARRIVED','PICKED_UP','DELIVERED','CANCELLED','REVIEWED'];
+    const VALID_SALE_TYPES = ['normal', 'group'];
+
+    if (query.status && !VALID_STATUSES.includes(query.status)) {
+      throw new BadRequestException(`유효하지 않은 status: ${query.status}`);
+    }
+    if (query.saleType && !VALID_SALE_TYPES.includes(query.saleType)) {
+      throw new BadRequestException(`유효하지 않은 saleType: ${query.saleType}`);
     }
 
     let ref = this.firestore

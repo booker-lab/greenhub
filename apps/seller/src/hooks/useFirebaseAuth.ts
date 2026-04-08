@@ -1,0 +1,33 @@
+'use client'
+
+import { useEffect } from 'react'
+import { useSession } from 'next-auth/react'
+import { signInWithCustomToken, signOut as firebaseSignOut } from 'firebase/auth'
+import { firebaseAuth } from '@/lib/firebase'
+
+const API = process.env.NEXT_PUBLIC_API_URL!
+
+/**
+ * NextAuth 세션과 Firebase Auth를 동기화.
+ * 로그인 시 백엔드에서 Custom Token을 받아 Firebase에 sign-in,
+ * 로그아웃 시 Firebase도 sign-out.
+ * seller 앱 루트 레이아웃에서 한 번만 마운트.
+ */
+export function useFirebaseAuth() {
+  const { data: session, status } = useSession()
+
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user.accessToken) {
+      fetch(`${API}/auth/firebase-token`, {
+        headers: { Authorization: `Bearer ${session.user.accessToken}` },
+      })
+        .then((res) => res.json())
+        .then((token: string) => signInWithCustomToken(firebaseAuth, token))
+        .catch(() => {/* 실패 시 onSnapshot이 rules에 의해 차단됨 */})
+    }
+
+    if (status === 'unauthenticated') {
+      firebaseSignOut(firebaseAuth).catch(() => {})
+    }
+  }, [status, session?.user.accessToken])
+}

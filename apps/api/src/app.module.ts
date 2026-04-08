@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { FirestoreModule } from './firestore/firestore.module';
 import { AuthModule } from './auth/auth.module';
 import { ProductsModule } from './products/products.module';
@@ -13,17 +14,27 @@ import { SettlementsModule } from './settlements/settlements.module';
 import { HubsModule } from './hubs/hubs.module';
 import { AdminModule } from './admin/admin.module';
 import { DriverModule } from './driver/driver.module';
+import { AuditModule } from './common/audit/audit.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
 @Module({
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot({ throttlers: [{ ttl: 60000, limit: 100 }] }),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        { name: 'default', ttl: 60000, limit: 100 },  // 일반: 1분 100회
+        { name: 'auth', ttl: 60000, limit: 10 },       // 인증: 1분 10회
+      ],
+    }),
     FirestoreModule,
+    AuditModule,
     AuthModule,
     ProductsModule,
     OrdersModule,

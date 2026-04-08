@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app'
 import { initializeFirestore, memoryLocalCache, getFirestore } from 'firebase/firestore'
+import { getAuth } from 'firebase/auth'
 import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
@@ -19,4 +20,5 @@ export const db = getApps().length === 1
   ? initializeFirestore(app, { localCache: memoryLocalCache() })
   : getFirestore(app)
 
+export const firebaseAuth = getAuth(app)
 export const storage = getStorage(app)

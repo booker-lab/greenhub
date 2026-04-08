@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -25,24 +26,28 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @Throttle({ auth: {} })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: {} })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 
   @Post('kakao-login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: {} })
   kakaoLogin(@Body() dto: KakaoLoginDto) {
     return this.authService.kakaoLogin(dto);
   }
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: {} })
   refresh(@Body('refreshToken') refreshToken: string) {
     return this.authService.refresh(refreshToken);
   }
@@ -102,5 +107,19 @@ export class AuthController {
     @Body('fcmToken') fcmToken: string,
   ) {
     return this.authService.updateFcmToken(user.sub, fcmToken);
+  }
+
+  @Get('firebase-token')
+  @UseGuards(JwtAuthGuard)
+  @SkipThrottle()
+  getFirebaseToken(@CurrentUser() user: JwtPayload) {
+    return this.authService.getFirebaseToken(user.sub, user.role, user.storeId ?? undefined);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  logout(@CurrentUser() user: JwtPayload) {
+    return this.authService.logout(user.sub);
   }
 }

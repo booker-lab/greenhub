@@ -49,7 +49,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
         if (!res.ok) return null;
         const data = await res.json();
-        if (!['consumer', 'seller', 'admin'].includes(data.user.role)) return null;
+        if (!['consumer', 'admin'].includes(data.user.role)) return null;
         return {
           id: data.user.id,
           email: data.user.email,
@@ -78,6 +78,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!res.ok) return false;
 
       const data = await res.json();
+      if (!["consumer", "admin"].includes(data.user.role)) return false;
+
       user.id = data.user.id;
       user.accessToken = data.accessToken;
       user.refreshToken = data.refreshToken;

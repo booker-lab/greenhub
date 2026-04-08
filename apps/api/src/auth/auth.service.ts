@@ -4,12 +4,15 @@ import {
   UnauthorizedException,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as admin from 'firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
+import { AuditService } from '../common/audit/audit.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
@@ -19,10 +22,13 @@ import type { JwtPayload } from './types/jwt-payload.type';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly firestore: FirestoreService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly audit: AuditService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -66,11 +72,17 @@ export class AuthService {
       .limit(1)
       .get();
 
-    if (snap.empty) throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
+    if (snap.empty) {
+      await this.audit.log('auth.login.failed', { detail: { email: dto.email, reason: 'user_not_found' } });
+      throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
+    }
 
     const userData = snap.docs[0].data();
     const valid = await bcrypt.compare(dto.password, userData['passwordHash']);
-    if (!valid) throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
+    if (!valid) {
+      await this.audit.log('auth.login.failed', { userId: userData['id'], detail: { email: dto.email, reason: 'wrong_password' } });
+      throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
+    }
 
     const { accessToken, refreshToken } = this.issueTokens({
       sub: userData['id'],
@@ -78,6 +90,7 @@ export class AuthService {
       storeId: userData['storeId'] ?? undefined,
     });
 
+    this.logger.log(`auth.login.success userId=${userData['id']} role=${userData['role']}`);
     const user = this.sanitizeUser(userData);
     return { accessToken, refreshToken, user };
   }
@@ -229,11 +242,15 @@ export class AuthService {
 
     const role = userData['role'] as string;
     const allowedRoles = dto.targetRole === 'consumer'
-      ? ['consumer', 'seller', 'admin']
+      ? ['consumer', 'admin']
       : dto.targetRole === 'seller'
         ? ['seller', 'admin']
-        : ['driver'];
+        : ['driver', 'admin'];  // driver 앱 또는 targetRole 미지정
     if (!allowedRoles.includes(role)) {
+      await this.audit.log('auth.kakao.forbidden', {
+        userId: userData['id'] as string,
+        detail: { actualRole: role, targetRole: dto.targetRole },
+      });
       throw new ForbiddenException('접근 권한이 없습니다.');
     }
 
@@ -243,22 +260,41 @@ export class AuthService {
       storeId: (userData['storeId'] as string) ?? undefined,
     });
 
+    this.logger.log(`auth.kakao.success userId=${userData['id']} role=${role} targetRole=${dto.targetRole}`);
     return { accessToken, refreshToken, user: this.sanitizeUser(userData) };
   }
 
   async refresh(refreshToken: string) {
+    let payload: JwtPayload;
     try {
-      const payload = this.jwt.verify(refreshToken, {
+      payload = this.jwt.verify(refreshToken, {
         secret: this.config.get('JWT_REFRESH_SECRET'),
       }) as JwtPayload;
-      return this.issueTokens({
-        sub: payload.sub,
-        role: payload.role,
-        storeId: payload.storeId,
-      });
     } catch {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
     }
+
+    // Rotation: Firestore에 저장된 토큰과 일치하는지 검증
+    const tokenSnap = await this.firestore
+      .doc(`refreshTokens/${payload.sub}`)
+      .get();
+    if (!tokenSnap.exists || tokenSnap.data()!['token'] !== refreshToken) {
+      // 탈취된 토큰으로 재사용 시도 — 해당 사용자의 모든 세션 무효화
+      await this.firestore.doc(`refreshTokens/${payload.sub}`).delete();
+      await this.audit.log('auth.token.stolen', { userId: payload.sub });
+      throw new UnauthorizedException('만료된 리프레시 토큰입니다.');
+    }
+
+    return this.issueTokens({
+      sub: payload.sub,
+      role: payload.role,
+      storeId: payload.storeId,
+    });
+  }
+
+  async logout(userId: string) {
+    await this.firestore.doc(`refreshTokens/${userId}`).delete();
+    await this.audit.log('auth.logout', { userId });
   }
 
   async updateFcmToken(userId: string, fcmToken: string) {
@@ -266,6 +302,10 @@ export class AuthService {
       fcmToken,
       updatedAt: this.firestore.Timestamp.now(),
     });
+  }
+
+  async getFirebaseToken(userId: string, role: string, storeId?: string): Promise<string> {
+    return admin.auth().createCustomToken(userId, { role, storeId: storeId ?? null });
   }
 
   private issueTokens(payload: JwtPayload) {
@@ -277,6 +317,13 @@ export class AuthService {
       secret: this.config.get('JWT_REFRESH_SECRET'),
       expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '30d'),
     });
+
+    // Rotation: 최신 refresh token만 유효 (이전 토큰 자동 무효화)
+    this.firestore.doc(`refreshTokens/${payload.sub}`).set({
+      token: refreshToken,
+      updatedAt: this.firestore.Timestamp.now(),
+    });
+
     return { accessToken, refreshToken };
   }
 }

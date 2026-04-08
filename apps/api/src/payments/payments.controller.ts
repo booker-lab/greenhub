@@ -4,11 +4,18 @@ import {
   Post,
   Body,
   Param,
+  Req,
+  Headers,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import type { RawBodyRequest } from '@nestjs/common';
+import type { Request } from 'express';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
+import { AuditService } from '../common/audit/audit.service';
+import { PortoneClient } from './portone.client';
 import { PortoneWebhookDto } from './dto/portone-webhook.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -16,11 +23,35 @@ import { JwtPayload } from '../auth/types/jwt-payload.type';
 
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly portone: PortoneClient,
+    private readonly audit: AuditService,
+  ) {}
 
   @Post('webhook/portone')
   @HttpCode(HttpStatus.OK)
-  handleWebhook(@Body() dto: PortoneWebhookDto) {
+  @SkipThrottle()
+  async handleWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Body() dto: PortoneWebhookDto,
+    @Headers('webhook-id') webhookId: string,
+    @Headers('webhook-timestamp') webhookTimestamp: string,
+    @Headers('webhook-signature') webhookSignature: string,
+  ) {
+    try {
+      this.portone.verifyWebhookSignature(
+        webhookId,
+        webhookTimestamp,
+        req.rawBody!,
+        webhookSignature,
+      );
+    } catch (e) {
+      await this.audit.log('payment.webhook.invalid_sig', {
+        detail: { webhookId, webhookTimestamp },
+      });
+      throw e;
+    }
     return this.paymentsService.handleWebhook(dto);
   }
 

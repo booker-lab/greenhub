@@ -1,9 +1,10 @@
-import { Injectable, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FirestoreService } from '../firestore/firestore.service';
 import { PortoneClient } from './portone.client';
 import { PortoneWebhookDto } from './dto/portone-webhook.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditService } from '../common/audit/audit.service';
 
 // 환불 가능 상태
 const REFUNDABLE_STATUSES = [
@@ -15,11 +16,14 @@ const REFUNDABLE_STATUSES = [
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     private readonly firestore: FirestoreService,
     private readonly portone: PortoneClient,
     @Inject(forwardRef(() => NotificationsService))
     private readonly notifications: NotificationsService,
+    private readonly audit: AuditService,
   ) {}
 
   async handleWebhook(dto: PortoneWebhookDto) {
@@ -47,6 +51,10 @@ export class PaymentsService {
     // 금액 검증 (위변조 방지)
     const paymentData = await this.portone.getPayment(orderId);
     if (paymentData.amount.total !== order['totalAmount']) {
+      await this.audit.log('payment.amount_tampered', {
+        userId: order['userId'] as string,
+        detail: { orderId, expected: order['totalAmount'], actual: paymentData.amount.total },
+      });
       await this.portone.refund(orderId, paymentData.amount.total, '금액 위변조 감지');
       await this.cancelOrderWithSlotRecovery(orderId, order, 'amount_mismatch');
       return { ok: false, reason: 'amount_mismatch' };
@@ -89,6 +97,8 @@ export class PaymentsService {
       orderId,
     );
 
+    this.logger.log(`payment.completed orderId=${orderId} userId=${order['userId']} amount=${paymentData.amount.total} status=${newStatus}`);
+
     return { ok: true, status: newStatus };
   }
 
@@ -97,19 +107,32 @@ export class PaymentsService {
     if (!snap.exists) throw new BadRequestException('결제 내역을 찾을 수 없습니다.');
     const payment = snap.data()!;
 
-    // 본인 결제 또는 해당 스토어 판매자만 조회 가능 (간소화: userId 비교)
-    if (payment['userId'] !== requesterId) {
-      const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
-      const role = userSnap.data()?.['role'];
-      if (role !== 'seller') throw new ForbiddenException();
-    }
-    return payment;
+    // 본인 결제이면 허용
+    if (payment['userId'] === requesterId) return payment;
+
+    // 아니면 해당 주문의 storeId 소유 seller 또는 admin만 허용
+    const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
+    const userData = userSnap.data();
+    const role = userData?.['role'];
+
+    if (role === 'admin') return payment;
+    if (role === 'seller' && userData?.['storeId'] === payment['storeId']) return payment;
+
+    throw new ForbiddenException();
   }
 
   async getPaymentByOrder(storeId: string, orderId: string, requesterId: string) {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!orderSnap.exists || orderSnap.data()!['storeId'] !== storeId) {
       throw new BadRequestException('주문을 찾을 수 없습니다.');
+    }
+
+    // 요청자가 해당 storeId 소유자이거나 admin인지 검증
+    const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
+    const userData = userSnap.data();
+    const role = userData?.['role'];
+    if (role !== 'admin' && userData?.['storeId'] !== storeId) {
+      throw new ForbiddenException();
     }
 
     const snap = await this.firestore
@@ -144,6 +167,7 @@ export class PaymentsService {
       );
     }
 
+    this.logger.log(`payment.refunded orderId=${orderId} storeId=${storeId} requesterId=${requesterId} reason=${reason ?? '판매자 취소'}`);
     await this.processRefundByOrderId(orderId, reason ?? '판매자 취소');
     return { ok: true };
   }
