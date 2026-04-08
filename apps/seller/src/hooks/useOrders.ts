@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { onAuthStateChanged } from 'firebase/auth'
+import { db, firebaseAuth } from '@/lib/firebase'
 import type { Order, OrderStatus } from '@greenhub/shared'
 
 export const TAB_STATUSES: Record<string, OrderStatus[]> = {
@@ -28,9 +29,18 @@ export function useOrders(storeId: string | null): UseOrdersResult {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [firebaseReady, setFirebaseReady] = useState(false)
+
+  // Firebase Auth 완료 대기 (signInWithCustomToken race condition 방지)
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      setFirebaseReady(!!user)
+    })
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
-    if (!storeId) {
+    if (!storeId || !firebaseReady) {
       setLoading(false)
       return
     }
