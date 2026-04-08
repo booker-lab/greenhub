@@ -49,6 +49,9 @@ export class PortoneClient {
       .digest('base64');
 
     // 헤더 형식: "v1,<sig1> v1,<sig2>" (복수 서명 지원)
+    if (!signatureHeader) {
+      throw new UnauthorizedException('Missing webhook-signature header');
+    }
     const signatures = signatureHeader
       .split(' ')
       .map((s) => s.replace(/^v[0-9]+,/, ''));

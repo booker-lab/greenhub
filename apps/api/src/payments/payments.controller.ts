@@ -48,7 +48,7 @@ export class PaymentsController {
       );
     } catch (e) {
       await this.audit.log('payment.webhook.invalid_sig', {
-        detail: { webhookId, webhookTimestamp },
+        detail: { webhookId: webhookId ?? null, webhookTimestamp: webhookTimestamp ?? null },
       });
       throw e;
     }
