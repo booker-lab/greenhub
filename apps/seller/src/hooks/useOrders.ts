@@ -66,7 +66,7 @@ export function useOrders(storeId: string | null): UseOrdersResult {
     )
 
     return unsubscribe
-  }, [storeId])
+  }, [storeId, firebaseReady])
 
   const counts = useMemo(() => {
     const result: Record<string, number> = {}
