@@ -9,6 +9,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
@@ -23,6 +24,8 @@ import { JwtPayload } from '../auth/types/jwt-payload.type';
 
 @Controller('payments')
 export class PaymentsController {
+  private readonly logger = new Logger(PaymentsController.name);
+
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly portone: PortoneClient,
@@ -39,16 +42,26 @@ export class PaymentsController {
     @Headers('webhook-timestamp') webhookTimestamp: string,
     @Headers('webhook-signature') webhookSignature: string,
   ) {
+    const rawBody = req.rawBody;
+    this.logger.log(
+      `webhook received: id=${webhookId ?? 'MISSING'} ts=${webhookTimestamp ?? 'MISSING'} sig=${webhookSignature ? 'present' : 'MISSING'} rawBody=${rawBody ? `${rawBody.length}bytes` : 'MISSING'}`,
+    );
+
     try {
       this.portone.verifyWebhookSignature(
         webhookId,
         webhookTimestamp,
-        req.rawBody!,
+        rawBody!,
         webhookSignature,
       );
     } catch (e) {
+      this.logger.error(`webhook sig verify failed: ${(e as Error).message}`);
       await this.audit.log('payment.webhook.invalid_sig', {
-        detail: { webhookId: webhookId ?? null, webhookTimestamp: webhookTimestamp ?? null },
+        detail: {
+          webhookId: webhookId ?? null,
+          webhookTimestamp: webhookTimestamp ?? null,
+          error: (e as Error).message,
+        },
       });
       throw e;
     }
