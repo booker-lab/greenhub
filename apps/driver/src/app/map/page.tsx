@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Box, Stack, Group, Text, Title, Badge, Button } from "@mantine/core";
@@ -49,9 +50,12 @@ function nearestNeighbor(orders: Order[]): Order[] {
 }
 
 export default function MapPage() {
+  const { firebaseReady } = useFirebaseAuth();
   const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
+    if (!firebaseReady) return;
+
     const q = query(
       collection(db, "orders"),
       where("status", "in", ["PREPARING", "DELIVERING"])
@@ -60,7 +64,7 @@ export default function MapPage() {
       setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order)));
     });
     return unsub;
-  }, []);
+  }, [firebaseReady]);
 
   const sorted = nearestNeighbor(orders);
 

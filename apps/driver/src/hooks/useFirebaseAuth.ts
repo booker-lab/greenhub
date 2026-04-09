@@ -1,14 +1,23 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { signInWithCustomToken, signOut as firebaseSignOut } from 'firebase/auth'
+import { signInWithCustomToken, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth'
 import { firebaseAuth } from '@/lib/firebase'
 
 const API = process.env.NEXT_PUBLIC_API_URL!
 
 export function useFirebaseAuth() {
   const { data: session, status } = useSession()
+  const [firebaseReady, setFirebaseReady] = useState(false)
+
+  // Firebase Auth 완료 대기 (Firestore race condition 방지)
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      setFirebaseReady(!!user)
+    })
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user.accessToken) {
@@ -27,4 +36,6 @@ export function useFirebaseAuth() {
       firebaseSignOut(firebaseAuth).catch(() => {})
     }
   }, [status, session?.user.accessToken])
+
+  return { firebaseReady }
 }

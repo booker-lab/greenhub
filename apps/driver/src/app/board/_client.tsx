@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { db } from "@/lib/firebase";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import OrderCard from "@/components/OrderCard";
@@ -26,12 +27,15 @@ export default function BoardClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { data: session } = useSession();
+  const { firebaseReady } = useFirebaseAuth();
   const tab = searchParams.get("tab") ?? "preparing";
 
   const [preparing, setPreparing] = useState<Order[]>([]);
   const [delivering, setDelivering] = useState<Order[]>([]);
 
   useEffect(() => {
+    if (!firebaseReady) return;
+
     const qPreparing = query(
       collection(db, "orders"),
       where("status", "==", "PREPARING"),
@@ -54,7 +58,7 @@ export default function BoardClient() {
       unsubPreparing();
       unsubDelivering();
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, firebaseReady]);
 
   const orders = tab === "preparing" ? preparing : delivering;
   const today = new Date().toLocaleDateString("ko-KR", {

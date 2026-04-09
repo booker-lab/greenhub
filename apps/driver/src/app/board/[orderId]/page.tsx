@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { db } from "@/lib/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 import { apiFetch } from "@/lib/api";
@@ -44,15 +45,18 @@ export default function OrderDetailPage({
   const { orderId } = use(params);
   const { data: session } = useSession();
   const router = useRouter();
+  const { firebaseReady } = useFirebaseAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!firebaseReady) return;
+
     const unsub = onSnapshot(doc(db, "orders", orderId), (snap) => {
       if (snap.exists()) setOrder({ id: snap.id, ...snap.data() } as Order);
     });
     return unsub;
-  }, [orderId]);
+  }, [orderId, firebaseReady]);
 
   async function updateStatus(status: string) {
     if (!order || !session) return;
