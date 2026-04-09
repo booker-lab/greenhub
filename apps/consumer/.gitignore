@@ -37,6 +37,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# PWA - 빌드 시 자동 생성되므로 추적하지 않음
+public/sw.js
+public/workbox-*.js
+public/swe-worker-*.js
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
