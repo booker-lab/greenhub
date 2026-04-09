@@ -84,7 +84,7 @@ export class AuthService {
       throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
     }
 
-    const { accessToken, refreshToken } = this.issueTokens({
+    const { accessToken, refreshToken } = await this.issueTokens({
       sub: userData['id'],
       role: userData['role'],
       storeId: userData['storeId'] ?? undefined,
@@ -254,7 +254,7 @@ export class AuthService {
       throw new ForbiddenException('접근 권한이 없습니다.');
     }
 
-    const { accessToken, refreshToken } = this.issueTokens({
+    const { accessToken, refreshToken } = await this.issueTokens({
       sub: userData['id'] as string,
       role: role as JwtPayload['role'],
       storeId: (userData['storeId'] as string) ?? undefined,
@@ -278,12 +278,13 @@ export class AuthService {
     const tokenSnap = await this.firestore
       .doc(`refreshTokens/${payload.sub}`)
       .get();
-    if (!tokenSnap.exists || tokenSnap.data()!['token'] !== refreshToken) {
-      // 탈취된 토큰으로 재사용 시도 — 해당 사용자의 모든 세션 무효화
+    if (tokenSnap.exists && tokenSnap.data()!['token'] !== refreshToken) {
+      // Firestore에 다른 토큰이 존재 = 탈취 후 재사용 시도 — 모든 세션 무효화
       await this.firestore.doc(`refreshTokens/${payload.sub}`).delete();
       await this.audit.log('auth.token.stolen', { userId: payload.sub });
       throw new UnauthorizedException('만료된 리프레시 토큰입니다.');
     }
+    // tokenSnap.exists === false: rotation 도입 이전 발급 토큰 (정상 허용, 이후 DB에 기록됨)
 
     return this.issueTokens({
       sub: payload.sub,
@@ -308,7 +309,7 @@ export class AuthService {
     return admin.auth().createCustomToken(userId, { role, storeId: storeId ?? null });
   }
 
-  private issueTokens(payload: JwtPayload) {
+  private async issueTokens(payload: JwtPayload) {
     const accessToken = this.jwt.sign(payload, {
       secret: this.config.get('JWT_SECRET'),
       expiresIn: this.config.get('JWT_EXPIRES_IN', '1h'),
@@ -319,7 +320,7 @@ export class AuthService {
     });
 
     // Rotation: 최신 refresh token만 유효 (이전 토큰 자동 무효화)
-    this.firestore.doc(`refreshTokens/${payload.sub}`).set({
+    await this.firestore.doc(`refreshTokens/${payload.sub}`).set({
       token: refreshToken,
       updatedAt: this.firestore.Timestamp.now(),
     });
