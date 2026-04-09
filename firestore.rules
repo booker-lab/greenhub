@@ -2,11 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // orders: Firebase Auth 필수 + 본인 storeId 또는 admin만 접근
+    // orders: Firebase Auth 필수 + 본인 storeId, admin, driver 허용
     match /orders/{orderId} {
       allow read: if request.auth != null &&
         (resource.data.storeId == request.auth.token.storeId ||
-         request.auth.token.role == 'admin');
+         request.auth.token.role == 'admin' ||
+         request.auth.token.role == 'driver');
       allow write: if false;
     }
 
