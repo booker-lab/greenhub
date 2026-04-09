@@ -21,9 +21,12 @@ export function useFirebaseAuth() {
       fetch(`${API}/auth/firebase-token`, {
         headers: { Authorization: `Bearer ${session.user.accessToken}` },
       })
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error(`firebase-token fetch failed: ${res.status}`)
+          return res.json()
+        })
         .then((token: string) => signInWithCustomToken(firebaseAuth, token))
-        .catch(() => {/* 실패 시 onSnapshot이 rules에 의해 차단됨 */})
+        .catch((err) => { console.error('[useFirebaseAuth]', err) })
     }
 
     if (status === 'unauthenticated') {

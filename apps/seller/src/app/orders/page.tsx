@@ -80,7 +80,7 @@ export default function OrdersPage() {
   const { data: session } = useSession()
   // admin은 storeId가 없으므로 MVP 기본 상점으로 폴백
   const storeId = session?.user.storeId ?? (session?.user.role === 'admin' ? 'dear-orchid' : null)
-  const { orders, loading, error, counts } = useOrders(storeId)
+  const { orders, loading, error, counts, firebaseReady } = useOrders(storeId)
   const [activeTab, setActiveTab] = useState<StatusTab>('pending')
 
   const filteredOrders = orders.filter((o) =>
@@ -105,7 +105,7 @@ export default function OrdersPage() {
           <Group justify="space-between">
             <Title order={3}>주문 관리</Title>
             <Group gap={6}>
-              {loading ? (
+              {loading || !firebaseReady ? (
                 <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#FACC15' }} />
               ) : error ? (
                 <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#F87171' }} />
@@ -113,7 +113,7 @@ export default function OrdersPage() {
                 <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22C55E' }} />
               )}
               <Text size="xs" c="dimmed">
-                {loading ? '연결 중' : error ? '연결 오류' : '실시간 연결'}
+                {loading || !firebaseReady ? '연결 중' : error ? '연결 오류' : '실시간 연결'}
               </Text>
             </Group>
           </Group>
@@ -164,13 +164,13 @@ export default function OrdersPage() {
       {/* 주문 목록 */}
       <Container size="sm" px="md" py="md">
         <Stack gap="sm">
-          {loading && (
+          {(loading || !firebaseReady) && (
             <Group justify="center" py={80}>
               <Loader size="sm" color="var(--green-primary)" />
             </Group>
           )}
 
-          {!loading && filteredOrders.length === 0 && (
+          {!loading && firebaseReady && filteredOrders.length === 0 && (
             <Stack align="center" justify="center" py={80} c="dimmed">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M9 11l3 3L22 4" />

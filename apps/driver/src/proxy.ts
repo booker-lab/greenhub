@@ -9,7 +9,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (session.user.role !== "driver") {
+  if (!["driver", "admin"].includes(session.user.role)) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

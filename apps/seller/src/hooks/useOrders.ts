@@ -19,6 +19,7 @@ interface UseOrdersResult {
   loading: boolean
   error: string | null
   counts: Record<string, number>
+  firebaseReady: boolean
 }
 
 /**
@@ -76,5 +77,5 @@ export function useOrders(storeId: string | null): UseOrdersResult {
     return result
   }, [orders])
 
-  return { orders, loading, error, counts }
+  return { orders, loading, error, counts, firebaseReady }
 }
