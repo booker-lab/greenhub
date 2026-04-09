@@ -197,7 +197,7 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
   const [preparedAtInput, setPreparedAtInput] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
 
-  async function handleStatusChange(status: OrderStatus, extra?: { cancelReason?: string; preparedAt?: string }) {
+  async function handleStatusChange(status: OrderStatus, extra?: { reason?: string; preparedAt?: string }) {
     setActionLoading(true)
     setActionError(null)
     try {
@@ -233,9 +233,12 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
   }
 
   async function handleCancel() {
-    const reason = prompt('취소 사유를 입력하세요 (필수)')
-    if (!reason) return
-    await handleStatusChange('CANCELLED', { reason })
+    const reason = prompt('취소 사유를 입력하세요 (최소 5자)')
+    if (!reason || reason.trim().length < 5) {
+      if (reason !== null) alert('취소 사유는 최소 5자 이상 입력해주세요.')
+      return
+    }
+    await handleStatusChange('CANCELLED', { reason: reason.trim() })
   }
 
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED'
