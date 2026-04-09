@@ -235,7 +235,7 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
   async function handleCancel() {
     const reason = prompt('취소 사유를 입력하세요 (필수)')
     if (!reason) return
-    await handleStatusChange('CANCELLED', { cancelReason: reason })
+    await handleStatusChange('CANCELLED', { reason })
   }
 
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED'
