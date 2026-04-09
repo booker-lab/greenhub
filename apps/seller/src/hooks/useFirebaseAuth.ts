@@ -23,7 +23,7 @@ export function useFirebaseAuth() {
       })
         .then((res) => {
           if (!res.ok) throw new Error(`firebase-token fetch failed: ${res.status}`)
-          return res.json()
+          return res.text()
         })
         .then((token: string) => signInWithCustomToken(firebaseAuth, token))
         .catch((err) => { console.error('[useFirebaseAuth]', err) })
