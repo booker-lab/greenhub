@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
+import { useFirebaseAuth } from '@/hooks/useFirebaseAuth'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { apiFetch } from '@/lib/api'
@@ -24,6 +25,7 @@ export default function OrderDetailPage() {
   const router = useRouter()
   const orderId = params.id as string
   const { data: session } = useSession()
+  const { firebaseReady } = useFirebaseAuth()
   const storeId = session?.user.storeId ?? null
   const token = session?.user.accessToken ?? ''
 
@@ -38,14 +40,14 @@ export default function OrderDetailPage() {
   const [cancelReason, setCancelReason] = useState('')
 
   useEffect(() => {
-    if (!orderId) return
+    if (!orderId || !firebaseReady) return
     const ref = doc(db, 'orders', orderId)
     const unsubscribe = onSnapshot(ref, (snap) => {
       if (snap.exists()) setOrder({ id: snap.id, ...snap.data() } as Order)
       setLoading(false)
     })
     return unsubscribe
-  }, [orderId])
+  }, [orderId, firebaseReady])
 
   useEffect(() => {
     if (!order || order.saleType !== 'group') return
