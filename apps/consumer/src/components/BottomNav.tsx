@@ -33,9 +33,16 @@ export default function BottomNav() {
         borderTop: '1px solid var(--mantine-color-gray-2)',
         height: 'calc(64px + env(safe-area-inset-bottom))',
         paddingBottom: 'env(safe-area-inset-bottom)',
-        display: 'flex',
       }}
     >
+      <Box
+        style={{
+          display: 'flex',
+          maxWidth: 768,
+          margin: '0 auto',
+          height: '100%',
+        }}
+      >
       {tabs.map((tab) => {
         const isActive =
           tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href)
@@ -81,6 +88,7 @@ export default function BottomNav() {
           </UnstyledButton>
         )
       })}
+      </Box>
     </Box>
   )
 }
