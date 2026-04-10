@@ -112,7 +112,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const { id: orderId } = use(params)
   const router = useRouter()
   const { data: session } = useSession()
-  const { order, loading, error } = useOrderStatus(orderId)
+  const { order, loading, error } = useOrderStatus(orderId, session?.user?.accessToken)
   const [confirming, setConfirming] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
 
