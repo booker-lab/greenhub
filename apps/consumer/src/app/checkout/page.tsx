@@ -32,9 +32,9 @@ function SingleCheckoutContent() {
   const quantity = Number(params.get('quantity') ?? 1)
   const saleType = (params.get('saleType') ?? 'normal') as SaleType
   const deliveryMethod = (params.get('deliveryMethod') ?? 'direct') as DeliveryMethod
+  const totalAmount = Number(params.get('totalAmount') ?? 0)
 
   const [product, setProduct] = useState<Product | null>(null)
-  const totalAmount = product ? product.price * quantity : 0
 
   useEffect(() => {
     if (!productId) return
