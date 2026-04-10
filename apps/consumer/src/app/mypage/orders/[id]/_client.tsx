@@ -140,7 +140,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   if (error || !order) {
     return (
       <Container size="sm" px="md" py="lg">
-        <Button variant="transparent" c="gray.5" onClick={() => router.back()} pl={0} mb="md">← 뒤로</Button>
+        <Button variant="transparent" c="gray.5" onClick={() => router.push('/mypage')} pl={0} mb="md">← 뒤로</Button>
         <Text ta="center" c="red.7" py={40} size="sm">주문 정보를 불러올 수 없습니다.</Text>
       </Container>
     )
@@ -160,7 +160,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
       {/* 헤더 */}
-      <Button variant="transparent" c="gray.5" onClick={() => router.back()} pl={0} mb="sm">← 뒤로</Button>
+      <Button variant="transparent" c="gray.5" onClick={() => router.push('/mypage')} pl={0} mb="sm">← 뒤로</Button>
       <Title order={3} mb={4}>주문 상세</Title>
       <Text size="xs" c="gray.4" mb="lg">주문번호: {orderId}</Text>
 
