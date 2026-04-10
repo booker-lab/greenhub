@@ -117,7 +117,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [confirmed, setConfirmed] = useState(false)
 
   async function handleConfirm() {
-    if (!session?.user?.accessToken) return
+    if (!session?.user?.accessToken || !order) return
     setConfirming(true)
     try {
       const res = await fetch(`${API_URL}/stores/${order.storeId}/orders/${orderId}/review`, {
