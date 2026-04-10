@@ -2,14 +2,12 @@
 
 import { useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { apiFetch } from "@/lib/api";
 import { use } from "react";
 import { Button, Text, Loader } from "@mantine/core";
-
-const STORE_ID = "dear-orchid";
 
 export default function PhotoPage({
   params,
@@ -17,6 +15,7 @@ export default function PhotoPage({
   params: Promise<{ orderId: string }>;
 }) {
   const { orderId } = use(params);
+  const storeId = useSearchParams().get("storeId") ?? "";
   const { data: session } = useSession();
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -80,7 +79,7 @@ export default function PhotoPage({
       const photoUrl = await getDownloadURL(storageRef);
 
       const res = await apiFetch(
-        `/stores/${STORE_ID}/orders/${orderId}/status`,
+        `/stores/${storeId}/orders/${orderId}/status`,
         session.user.accessToken,
         { method: "PATCH", body: JSON.stringify({ status: "HUB_ARRIVED", photoUrl }) }
       );

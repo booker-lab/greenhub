@@ -47,6 +47,20 @@ export class StoresService {
       updatedAt: now,
     });
 
+    // 배송비 기본 설정 자동 초기화
+    await this.firestore.doc(`deliveryFeeConfig/${storeId}`).set({
+      storeId,
+      directFee: 3000,
+      hubFee: 1000,
+      parcelFee: 4000,
+      freeThresholdDirect: 50000,
+      freeThresholdHub: 30000,
+      freeThresholdParcel: 50000,
+      weatherRestrictionActive: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
     return { storeId };
   }
 

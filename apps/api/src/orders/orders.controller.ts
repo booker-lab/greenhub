@@ -17,6 +17,25 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/types/jwt-payload.type';
 
+@Controller('orders')
+@UseGuards(JwtAuthGuard)
+export class OrdersPublicController {
+  constructor(private readonly ordersService: OrdersService) {}
+
+  @Get()
+  getMyOrders(@CurrentUser() user: JwtPayload) {
+    return this.ordersService.getMyOrders(user.sub);
+  }
+
+  @Get(':orderId')
+  getOrderById(
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.ordersService.getOrderById(orderId, user.sub);
+  }
+}
+
 @Controller('stores/:storeId/orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {

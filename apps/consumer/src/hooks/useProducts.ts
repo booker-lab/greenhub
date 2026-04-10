@@ -14,8 +14,6 @@ export interface StoreInfo {
   logoUrl: string | null
 }
 
-// MVP 고정 스토어
-const STORE_ID = 'dear-orchid'
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
 
 /**
@@ -34,7 +32,7 @@ export function useProducts(category?: Category) {
       try {
         const params = new URLSearchParams({ isActive: 'true' })
         if (category) params.set('category', category)
-        const res = await fetch(`${API_URL}/stores/${STORE_ID}/products?${params}`)
+        const res = await fetch(`${API_URL}/products?${params}`)
         if (!res.ok) throw new Error(`서버 오류 ${res.status}`)
         const data = await res.json()
         const items: Product[] = Array.isArray(data) ? data : (data.items ?? [])

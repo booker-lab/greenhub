@@ -19,7 +19,6 @@ declare global {
   }
 }
 
-const STORE_ID = 'dear-orchid'
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const NAVERPAY_ENABLED = !!process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY
 
@@ -39,7 +38,7 @@ function SingleCheckoutContent() {
 
   useEffect(() => {
     if (!productId) return
-    fetch(`${API_URL}/stores/${STORE_ID}/products/${productId}`)
+    fetch(`${API_URL}/products/${productId}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => { if (data) setProduct(data as Product) })
       .catch(() => {})
@@ -57,7 +56,7 @@ function SingleCheckoutContent() {
   }
 
   const { state, orderId, error, requestPayment } = usePayment({
-    storeId: STORE_ID,
+    storeId: product?.storeId ?? '',
     orderRequest,
     accessToken: session?.user?.accessToken ?? '',
     paymentMethod,
@@ -126,7 +125,7 @@ function CartCheckoutContent() {
 
     for (const item of cartItems) {
       setState('creating')
-      const res = await fetch(`${API_URL}/stores/${STORE_ID}/orders`, {
+      const res = await fetch(`${API_URL}/stores/${item.storeId}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({

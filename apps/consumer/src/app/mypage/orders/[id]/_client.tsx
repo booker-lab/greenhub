@@ -8,7 +8,6 @@ import { useOrderStatus } from '@/hooks/useOrderStatus'
 import type { Order, OrderStatus } from '@greenhub/shared'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
-const STORE_ID = 'dear-orchid'
 
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   PENDING: '결제 확인 중',
@@ -121,7 +120,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     if (!session?.user?.accessToken) return
     setConfirming(true)
     try {
-      const res = await fetch(`${API_URL}/stores/${STORE_ID}/orders/${orderId}/review`, {
+      const res = await fetch(`${API_URL}/stores/${order.storeId}/orders/${orderId}/review`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

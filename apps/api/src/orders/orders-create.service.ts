@@ -69,9 +69,9 @@ export class OrdersCreateService {
         const capRef = this.firestore.doc(`dailyCaps/${capId}`);
         const capSnap = await t.get(capRef);
 
-        // 문서 없으면 당일 운영 설정이 없는 것 — 주문 차단
+        // 문서 없으면 셀러가 해당 날짜 슬롯을 미설정 — 주문 차단
         if (!capSnap.exists) {
-          throw new ConflictException('당일 배송 설정을 찾을 수 없습니다.');
+          throw new ConflictException('판매자가 해당 날짜의 배송 운영을 준비 중입니다. 택배 배송을 이용하거나 다른 날짜를 선택해주세요.');
         }
         const cap = capSnap.data()!;
         if (cap['usedSlots'] + dto.quantity > cap['totalCap']) {
@@ -159,6 +159,15 @@ export class OrdersCreateService {
     storeId: string,
   ): Promise<Record<string, number>> {
     const snap = await this.firestore.doc(`deliveryFeeConfig/${storeId}`).get();
-    return (snap.data() ?? {}) as Record<string, number>;
+    if (snap.exists) return snap.data() as Record<string, number>;
+    // 문서 없는 경우 기본값 (신규 스토어 또는 미설정 시)
+    return {
+      directFee: 3000,
+      hubFee: 1000,
+      parcelFee: 4000,
+      freeThresholdDirect: 50000,
+      freeThresholdHub: 30000,
+      freeThresholdParcel: 50000,
+    };
   }
 }

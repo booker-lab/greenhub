@@ -12,8 +12,6 @@ import { useDailyCap } from '@/hooks/useDailyCap'
 import { useCart } from '@/hooks/useCart'
 import type { SaleType, DeliveryMethod } from '@greenhub/shared'
 
-const STORE_ID = 'dear-orchid'
-
 const deliveryLabels: Record<DeliveryMethod, string> = {
   direct: '꽃차 직배송',
   hub: '거점 픽업',
@@ -32,7 +30,7 @@ export default function ProductDetailPage({
   const { config: groupConfig } = useGroupProduct(
     product?.saleType === 'group' ? id : null,
   )
-  const { remainingSlots } = useDailyCap(STORE_ID)
+  const { remainingSlots } = useDailyCap(product?.storeId ?? null)
   const { addItem } = useCart()
 
   const [quantity, setQuantity] = useState(1)
@@ -75,7 +73,7 @@ export default function ProductDetailPage({
       image: product.images?.[0] ?? '',
       saleType: product.saleType,
       deliveryMethod,
-      storeId: STORE_ID,
+      storeId: product.storeId,
       quantity,
     })
     router.push('/cart')

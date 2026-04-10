@@ -169,7 +169,7 @@ export default function OrderDetailPage({
           </Button>
         )}
         {isDelivering && isHub && (
-          <Button fullWidth size="lg" radius="xl" color="blue" loading={loading} onClick={() => router.push(`/board/${orderId}/photo`)}>
+          <Button fullWidth size="lg" radius="xl" color="blue" loading={loading} onClick={() => router.push(`/board/${orderId}/photo?storeId=${order.storeId}`)}>
             거점 도착
           </Button>
         )}

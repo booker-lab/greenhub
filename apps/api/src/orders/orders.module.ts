@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { OrdersController } from './orders.controller';
+import { OrdersController, OrdersPublicController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { OrdersCreateService } from './orders-create.service';
 import { OrdersQueryService } from './orders-query.service';
@@ -10,7 +10,7 @@ import { SettlementsModule } from '../settlements/settlements.module';
 
 @Module({
   imports: [NotificationsModule, PaymentsModule, SettlementsModule],
-  controllers: [OrdersController],
+  controllers: [OrdersPublicController, OrdersController],
   providers: [OrdersService, OrdersCreateService, OrdersQueryService, OrdersLifecycleService],
   exports: [OrdersService],
 })

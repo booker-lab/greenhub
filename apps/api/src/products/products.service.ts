@@ -264,6 +264,69 @@ export class ProductsService {
     return this.getDeliveryConfig(storeId);
   }
 
+  // ── Public (storeId-free) ─────────────────────────────────────────────────
+
+  async getPublicProducts(query: ProductQueryDto) {
+    const isActive = query.isActive !== false;
+    let ref = this.firestore.collection('products').where('isActive', '==', isActive) as any;
+    if (query.category) ref = ref.where('category', '==', query.category);
+    if (query.saleType) ref = ref.where('saleType', '==', query.saleType);
+
+    const snap = await ref.get();
+    let products = snap.docs.map((d: any) => d.data());
+
+    if (query.colors) {
+      const colorFilter = Array.isArray(query.colors)
+        ? query.colors
+        : String(query.colors).split(',');
+      products = products.filter((p: any) =>
+        colorFilter.some((c: string) => Array.isArray(p['colors']) && p['colors'].includes(c)),
+      );
+    }
+
+    const sort = query.sort ?? 'latest';
+    if (sort === 'price_asc') products.sort((a: any, b: any) => a['price'] - b['price']);
+    else if (sort === 'price_desc') products.sort((a: any, b: any) => b['price'] - a['price']);
+    else products.sort((a: any, b: any) => (b['createdAt']?.seconds ?? 0) - (a['createdAt']?.seconds ?? 0));
+
+    const groupProductIds = products.filter((p: any) => p['saleType'] === 'group').map((p: any) => p['id'] as string);
+    const groupConfigMap = new Map<string, Record<string, unknown>>();
+    if (groupProductIds.length > 0) {
+      const gcSnap = await this.firestore.collection('groupProductConfig')
+        .where('productId', 'in', groupProductIds.slice(0, 30)).get();
+      gcSnap.docs.forEach((d: any) => groupConfigMap.set(d.data()['productId'], d.data()));
+    }
+
+    const items = products.map((p: any) => {
+      const summary: Record<string, unknown> = {
+        id: p['id'], storeId: p['storeId'], name: p['name'], price: p['price'],
+        images: Array.isArray(p['images']) ? [p['images'][0]] : [],
+        category: p['category'], colors: p['colors'], saleType: p['saleType'], isActive: p['isActive'],
+      };
+      if (p['saleType'] === 'group') {
+        const gc = groupConfigMap.get(p['id'] as string);
+        if (gc) summary['groupSummary'] = {
+          currentParticipants: gc['currentParticipants'], minParticipants: gc['minParticipants'],
+          maxParticipants: gc['maxParticipants'], recruitDeadline: gc['recruitDeadline'],
+        };
+      }
+      return summary;
+    });
+
+    return { items, total: items.length };
+  }
+
+  async getPublicProduct(productId: string) {
+    const snap = await this.firestore.doc(`products/${productId}`).get();
+    if (!snap.exists) throw new NotFoundException('상품을 찾을 수 없습니다.');
+    const product = snap.data()!;
+    if (product['saleType'] === 'group') {
+      const gc = await this.firestore.doc(`groupProductConfig/${productId}`).get();
+      if (gc.exists) return { ...product, groupConfig: gc.data() };
+    }
+    return { ...product };
+  }
+
   private async assertSellerOwnsStore(storeId: string, sellerId: string) {
     const snap = await this.firestore.doc(`stores/${storeId}`).get();
     if (!snap.exists || snap.data()!['ownerId'] !== sellerId) {

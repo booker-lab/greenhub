@@ -95,6 +95,21 @@ export class ProductsController {
   }
 }
 
+@Controller('products')
+export class PublicProductsController {
+  constructor(private readonly productsService: ProductsService) {}
+
+  @Get()
+  getPublicProducts(@Query() query: ProductQueryDto) {
+    return this.productsService.getPublicProducts(query);
+  }
+
+  @Get(':productId')
+  getPublicProduct(@Param('productId') productId: string) {
+    return this.productsService.getPublicProduct(productId);
+  }
+}
+
 @Controller('stores/:storeId/daily-caps')
 export class DailyCapsController {
   constructor(private readonly productsService: ProductsService) {}

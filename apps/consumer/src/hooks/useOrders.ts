@@ -5,7 +5,6 @@ import { useSession } from 'next-auth/react'
 import type { Order } from '@greenhub/shared'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
-const STORE_ID = 'dear-orchid'
 
 interface UseOrdersResult {
   orders: Order[]
@@ -34,7 +33,7 @@ export function useOrders(): UseOrdersResult {
 
     async function fetchOrders() {
       try {
-        const url = `${API_URL}/stores/${STORE_ID}/orders?userId=${userId}`
+        const url = `${API_URL}/orders?userId=${userId}`
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         })

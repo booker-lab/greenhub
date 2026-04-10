@@ -54,4 +54,12 @@ export class OrdersService {
   hubConfirmPickup(storeId: string, orderId: string, requesterId: string, pickupCode: string) {
     return this.lifecycle.hubConfirmPickup(storeId, orderId, requesterId, pickupCode);
   }
+
+  getOrderById(orderId: string, requesterId: string) {
+    return this.query.getOrderById(orderId, requesterId);
+  }
+
+  getMyOrders(requesterId: string) {
+    return this.query.getMyOrders(requesterId);
+  }
 }

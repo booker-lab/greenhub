@@ -67,4 +67,29 @@ export class OrdersQueryService {
     const snap = await ref.get();
     return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
   }
+
+  // ── Public (storeId-free) ─────────────────────────────────────────────────
+
+  async getOrderById(orderId: string, requesterId: string) {
+    const snap = await this.firestore.doc(`orders/${orderId}`).get();
+    if (!snap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
+    const order = snap.data()!;
+
+    if (order['userId'] !== requesterId) {
+      const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
+      const role = userSnap.data()?.['role'];
+      if (role !== 'seller' && role !== 'driver' && role !== 'admin') {
+        throw new ForbiddenException();
+      }
+    }
+    return order;
+  }
+
+  async getMyOrders(requesterId: string) {
+    const snap = await this.firestore
+      .collection('orders')
+      .where('userId', '==', requesterId)
+      .get();
+    return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+  }
 }
