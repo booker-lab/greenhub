@@ -2,6 +2,7 @@
 
 import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSession, signIn } from 'next-auth/react'
 import {
   Container, Box, Text, Title, Button, Group, Stack, Badge,
   Paper, Progress, ActionIcon, Checkbox, Skeleton,
@@ -25,6 +26,7 @@ export default function ProductDetailPage({
 }) {
   const { id } = use(params)
   const router = useRouter()
+  const { data: session } = useSession()
   const { product, loading, error } = useProduct(id)
   const { store } = useStore(product?.storeId ?? null)
   const { config: groupConfig } = useGroupProduct(
@@ -88,7 +90,12 @@ export default function ProductDetailPage({
       deliveryMethod,
       totalAmount: String(totalAmount),
     })
-    router.push(`/checkout?${p.toString()}`)
+    const checkoutUrl = `/checkout?${p.toString()}`
+    if (!session) {
+      signIn(undefined, { callbackUrl: checkoutUrl })
+      return
+    }
+    router.push(checkoutUrl)
   }
 
   return (
