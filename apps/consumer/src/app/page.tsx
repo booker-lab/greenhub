@@ -1,7 +1,8 @@
 'use client'
 
-import { Container, Title, Text, Box, Paper, SimpleGrid, Skeleton, Stack } from '@mantine/core'
+import { Container, Text, Box, Paper, SimpleGrid, Skeleton, Stack } from '@mantine/core'
 import ProductCard from '@/components/ProductCard'
+import BrandHeader from '@/components/BrandHeader'
 import { useProducts } from '@/hooks/useProducts'
 
 export default function HomePage() {
@@ -10,10 +11,7 @@ export default function HomePage() {
   return (
     <Container size="sm" px="md" pt="lg" pb="md">
       {/* 헤더 */}
-      <Box mb="lg">
-        <Title order={1} size="h2" c="brand.6">Green Hub</Title>
-        <Text size="sm" c="gray.6" mt={4}>신선한 화훼, 직거래로 만나세요.</Text>
-      </Box>
+      <BrandHeader />
 
       {/* 공동구매 안내 배너 */}
       <Paper

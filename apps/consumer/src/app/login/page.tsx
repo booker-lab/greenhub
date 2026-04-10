@@ -96,7 +96,7 @@ export default function LoginPage() {
   return (
     <Container size={400} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
       <Stack gap="lg" w="100%">
-        <Title order={1} ta="center" c="brand.6">Green Hub</Title>
+        <Title order={1} ta="center" c="brand.6">Green Love</Title>
         <Suspense fallback={<div style={{ height: 240 }} />}>
           <LoginForm />
         </Suspense>

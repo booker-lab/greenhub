@@ -11,13 +11,13 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Green Hub",
+  title: "Green Love",
   description: "신선한 화훼·농산물 직거래 플랫폼",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Green Hub",
+    title: "Green Love",
   },
 };
 
