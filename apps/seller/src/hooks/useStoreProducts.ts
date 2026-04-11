@@ -31,7 +31,13 @@ export function useStoreProducts(storeId: string | null): UseStoreProductsResult
       q,
       (snap) => {
         const items = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }) as Product)
+          .map((d) => {
+            const data = d.data()
+            // Firestore Timestamp → ISO string 변환
+            if (data['createdAt']?.toDate) data['createdAt'] = data['createdAt'].toDate().toISOString()
+            if (data['updatedAt']?.toDate) data['updatedAt'] = data['updatedAt'].toDate().toISOString()
+            return { id: d.id, ...data } as Product
+          })
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         setProducts(items)
         setLoading(false)
