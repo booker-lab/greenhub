@@ -73,9 +73,17 @@ export function calcDeliveryFee(
 }
 
 export function getAllowedTransitions(role: string, current: OrderStatus): OrderStatus[] {
-  if (role === 'seller' || role === 'admin') {
+  if (role === 'admin') {
+    // admin은 seller + driver 전환 모두 허용
+    const sellerBase = SELLER_TRANSITIONS[current] ?? [];
+    const driverBase = DRIVER_TRANSITIONS[current] ?? [];
+    const sellerCancellable: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
+    const cancelList: OrderStatus[] = sellerCancellable.includes(current) ? ['CANCELLED'] : [];
+    return [...new Set([...sellerBase, ...driverBase, ...cancelList])];
+  }
+  if (role === 'seller') {
     const base = SELLER_TRANSITIONS[current] ?? [];
-    // 판매자·관리자 강제 취소는 ACCEPTED·CONFIRMED·PREPARING 상태에서만 허용
+    // 판매자 강제 취소는 ACCEPTED·CONFIRMED·PREPARING 상태에서만 허용
     const sellerCancellable: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
     if (sellerCancellable.includes(current)) {
       return [...base, 'CANCELLED'];
