@@ -41,7 +41,7 @@ export function useProducts(category?: Category, colors?: ColorOption[]) {
         if (!res.ok) throw new Error(`서버 오류 ${res.status}`)
         const data = await res.json()
         const items: Product[] = Array.isArray(data) ? data : (data.items ?? [])
-        items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        items.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
         setProducts(items)
         setError(null)
       } catch (e: unknown) {
