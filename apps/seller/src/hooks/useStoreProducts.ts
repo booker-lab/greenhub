@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import type { Product } from '@greenhub/shared'
 
@@ -25,13 +25,14 @@ export function useStoreProducts(storeId: string | null): UseStoreProductsResult
     const q = query(
       collection(db, 'products'),
       where('storeId', '==', storeId),
-      orderBy('createdAt', 'desc'),
     )
 
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Product)
+        const items = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }) as Product)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         setProducts(items)
         setLoading(false)
         setError(null)
