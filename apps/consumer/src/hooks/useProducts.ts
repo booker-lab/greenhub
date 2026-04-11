@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import type { Product, Category } from '@greenhub/shared'
+import type { Product, Category, ColorOption } from '@greenhub/shared'
 
 export interface StoreInfo {
   id: string
@@ -20,10 +20,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
  * API를 통해 활성 상품 목록 조회
  * @param category 카테고리 필터 (없으면 전체)
  */
-export function useProducts(category?: Category) {
+export function useProducts(category?: Category, colors?: ColorOption[]) {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const colorKey = colors?.join(',') ?? ''
 
   useEffect(() => {
     setLoading(true)
@@ -32,10 +34,14 @@ export function useProducts(category?: Category) {
       try {
         const params = new URLSearchParams({ isActive: 'true' })
         if (category) params.set('category', category)
+        if (colors && colors.length > 0) {
+          colors.forEach((c) => params.append('colors[]', c))
+        }
         const res = await fetch(`${API_URL}/products?${params}`)
         if (!res.ok) throw new Error(`서버 오류 ${res.status}`)
         const data = await res.json()
         const items: Product[] = Array.isArray(data) ? data : (data.items ?? [])
+        items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         setProducts(items)
         setError(null)
       } catch (e: unknown) {
@@ -45,7 +51,8 @@ export function useProducts(category?: Category) {
       }
     }
     fetchProducts()
-  }, [category])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, colorKey])
 
   return { products, loading, error }
 }
