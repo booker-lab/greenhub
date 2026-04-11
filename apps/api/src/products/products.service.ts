@@ -202,9 +202,11 @@ export class ProductsService {
 
   async deleteProduct(storeId: string, productId: string, sellerId: string, role?: string) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
-    await this.firestore
-      .doc(`products/${productId}`)
-      .update({ isActive: false, updatedAt: this.firestore.Timestamp.now() });
+    const snap = await this.firestore.doc(`products/${productId}`).get();
+    if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+      throw new NotFoundException('상품을 찾을 수 없습니다.');
+    }
+    await this.firestore.doc(`products/${productId}`).delete();
   }
 
   async getDailyCaps(storeId: string, sellerId: string, from?: string, to?: string, role?: string) {
