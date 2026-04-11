@@ -50,7 +50,7 @@ export class ProductsController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateProductDto,
   ) {
-    return this.productsService.createProduct(storeId, user.sub, dto);
+    return this.productsService.createProduct(storeId, user.sub, dto, user.role);
   }
 
   @Patch(':productId')
@@ -67,6 +67,7 @@ export class ProductsController {
       productId,
       user.sub,
       dto,
+      user.role,
     );
   }
 
@@ -79,7 +80,7 @@ export class ProductsController {
     @CurrentUser() user: JwtPayload,
     @Body('isActive', ParseBoolPipe) isActive: boolean,
   ) {
-    return this.productsService.toggleProductActive(storeId, productId, user.sub, isActive);
+    return this.productsService.toggleProductActive(storeId, productId, user.sub, isActive, user.role);
   }
 
   @Delete(':productId')
@@ -91,7 +92,7 @@ export class ProductsController {
     @Param('productId') productId: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.productsService.deleteProduct(storeId, productId, user.sub);
+    return this.productsService.deleteProduct(storeId, productId, user.sub, user.role);
   }
 }
 
@@ -123,7 +124,7 @@ export class DailyCapsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.productsService.getDailyCaps(storeId, user.sub, from, to);
+    return this.productsService.getDailyCaps(storeId, user.sub, from, to, user.role);
   }
 
   @Patch(':date')
@@ -135,7 +136,7 @@ export class DailyCapsController {
     @CurrentUser() user: JwtPayload,
     @Body('totalCap') totalCap: number,
   ) {
-    return this.productsService.updateDailyCap(storeId, date, user.sub, totalCap);
+    return this.productsService.updateDailyCap(storeId, date, user.sub, totalCap, user.role);
   }
 }
 
@@ -156,6 +157,6 @@ export class DeliveryConfigController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: UpdateDeliveryConfigDto,
   ) {
-    return this.productsService.updateDeliveryConfig(storeId, user.sub, dto);
+    return this.productsService.updateDeliveryConfig(storeId, user.sub, dto, user.role);
   }
 }

@@ -123,8 +123,9 @@ export class ProductsService {
     storeId: string,
     sellerId: string,
     dto: CreateProductDto,
+    role?: string,
   ) {
-    await this.assertSellerOwnsStore(storeId, sellerId);
+    await this.assertSellerOwnsStore(storeId, sellerId, role);
 
     const productId = uuidv4();
     const now = this.firestore.Timestamp.now();
@@ -157,8 +158,9 @@ export class ProductsService {
     productId: string,
     sellerId: string,
     dto: Partial<CreateProductDto>,
+    role?: string,
   ) {
-    await this.assertSellerOwnsStore(storeId, sellerId);
+    await this.assertSellerOwnsStore(storeId, sellerId, role);
     const snap = await this.firestore.doc(`products/${productId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException();
@@ -184,8 +186,9 @@ export class ProductsService {
     productId: string,
     sellerId: string,
     isActive: boolean,
+    role?: string,
   ) {
-    await this.assertSellerOwnsStore(storeId, sellerId);
+    await this.assertSellerOwnsStore(storeId, sellerId, role);
     const snap = await this.firestore.doc(`products/${productId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
@@ -197,15 +200,15 @@ export class ProductsService {
     return { productId, isActive };
   }
 
-  async deleteProduct(storeId: string, productId: string, sellerId: string) {
-    await this.assertSellerOwnsStore(storeId, sellerId);
+  async deleteProduct(storeId: string, productId: string, sellerId: string, role?: string) {
+    await this.assertSellerOwnsStore(storeId, sellerId, role);
     await this.firestore
       .doc(`products/${productId}`)
       .update({ isActive: false, updatedAt: this.firestore.Timestamp.now() });
   }
 
-  async getDailyCaps(storeId: string, sellerId: string, from?: string, to?: string) {
-    await this.assertSellerOwnsStore(storeId, sellerId);
+  async getDailyCaps(storeId: string, sellerId: string, from?: string, to?: string, role?: string) {
+    await this.assertSellerOwnsStore(storeId, sellerId, role);
 
     const today = new Date().toISOString().split('T')[0];
     const fromDate = from ?? today;
@@ -221,8 +224,8 @@ export class ProductsService {
     return { caps: snap.docs.map((d) => d.data()) };
   }
 
-  async updateDailyCap(storeId: string, date: string, sellerId: string, totalCap: number) {
-    await this.assertSellerOwnsStore(storeId, sellerId);
+  async updateDailyCap(storeId: string, date: string, sellerId: string, totalCap: number, role?: string) {
+    await this.assertSellerOwnsStore(storeId, sellerId, role);
     const docId = `${storeId}_${date}`;
     await this.firestore.doc(`dailyCaps/${docId}`).set(
       { id: docId, storeId, date, totalCap },
@@ -255,8 +258,9 @@ export class ProductsService {
     storeId: string,
     sellerId: string,
     dto: UpdateDeliveryConfigDto,
+    role?: string,
   ) {
-    await this.assertSellerOwnsStore(storeId, sellerId);
+    await this.assertSellerOwnsStore(storeId, sellerId, role);
     await this.firestore.doc(`deliveryFeeConfig/${storeId}`).set(
       { storeId, ...dto, updatedAt: this.firestore.Timestamp.now() },
       { merge: true },
@@ -327,7 +331,8 @@ export class ProductsService {
     return { ...product };
   }
 
-  private async assertSellerOwnsStore(storeId: string, sellerId: string) {
+  private async assertSellerOwnsStore(storeId: string, sellerId: string, role?: string) {
+    if (role === 'admin') return;
     const snap = await this.firestore.doc(`stores/${storeId}`).get();
     if (!snap.exists || snap.data()!['ownerId'] !== sellerId) {
       throw new ForbiddenException('권한이 없습니다.');
