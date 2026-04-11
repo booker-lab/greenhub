@@ -88,7 +88,11 @@ export default function ProductsPage() {
                   color: filter === f ? 'var(--green-primary)' : 'var(--mantine-color-gray-6)',
                 }}
               >
-                {f === 'all' ? `전체 ${products.length}` : f === 'active' ? '판매 중' : '비활성'}
+                {f === 'all'
+                  ? `전체 ${products.length}`
+                  : f === 'active'
+                  ? `판매 중 ${products.filter((p) => p.isActive).length}`
+                  : `비활성 ${products.filter((p) => !p.isActive).length}`}
               </UnstyledButton>
             ))}
           </Group>
