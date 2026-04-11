@@ -32,8 +32,10 @@ export default function BottomNav() {
         height: 'calc(64px + env(safe-area-inset-bottom))',
         paddingBottom: 'env(safe-area-inset-bottom)',
         display: 'flex',
+        justifyContent: 'center',
       }}
     >
+      <Box style={{ maxWidth: 768, width: '100%', display: 'flex' }}>
       {tabs.map((tab) => {
         const isActive = pathname.startsWith(tab.href)
         const Icon = tab.icon
@@ -54,6 +56,7 @@ export default function BottomNav() {
           </UnstyledButton>
         )
       })}
+      </Box>
     </Box>
   )
 }
