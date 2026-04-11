@@ -35,7 +35,7 @@ export function useProducts(category?: Category, colors?: ColorOption[]) {
         const params = new URLSearchParams({ isActive: 'true' })
         if (category) params.set('category', category)
         if (colors && colors.length > 0) {
-          colors.forEach((c) => params.append('colors[]', c))
+          colors.forEach((c) => params.append('colors', c))
         }
         const res = await fetch(`${API_URL}/products?${params}`)
         if (!res.ok) throw new Error(`서버 오류 ${res.status}`)
