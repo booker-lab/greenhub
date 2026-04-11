@@ -17,7 +17,7 @@ export class SettlementsController {
     @CurrentUser() user: JwtPayload,
     @Query() dto: QuerySummaryDto,
   ) {
-    return this.settlementsService.getSummary(storeId, user.sub, dto);
+    return this.settlementsService.getSummary(storeId, user.sub, user.role, dto);
   }
 
   @Get()
@@ -26,6 +26,6 @@ export class SettlementsController {
     @CurrentUser() user: JwtPayload,
     @Query() dto: QuerySettlementsDto,
   ) {
-    return this.settlementsService.getSettlements(storeId, user.sub, dto);
+    return this.settlementsService.getSettlements(storeId, user.sub, user.role, dto);
   }
 }

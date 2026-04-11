@@ -55,9 +55,10 @@ export class SettlementsService {
   async getSettlements(
     storeId: string,
     requesterId: string,
+    role: string,
     dto: QuerySettlementsDto,
   ) {
-    await this.verifyOwnership(storeId, requesterId);
+    await this.verifyOwnership(storeId, requesterId, role);
 
     let ref = this.firestore
       .collection('settlements')
@@ -92,9 +93,10 @@ export class SettlementsService {
   async getSummary(
     storeId: string,
     requesterId: string,
+    role: string,
     dto: QuerySummaryDto,
   ) {
-    await this.verifyOwnership(storeId, requesterId);
+    await this.verifyOwnership(storeId, requesterId, role);
 
     const targetDate = dto.date ?? new Date().toISOString().split('T')[0];
     const start = new Date(targetDate);
@@ -156,7 +158,8 @@ export class SettlementsService {
     });
   }
 
-  private async verifyOwnership(storeId: string, requesterId: string) {
+  private async verifyOwnership(storeId: string, requesterId: string, role: string) {
+    if (role === 'admin') return;
     const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
     if (!storeSnap.exists || storeSnap.data()?.['ownerId'] !== requesterId) {
       throw new ForbiddenException('해당 스토어에 대한 권한이 없습니다');
