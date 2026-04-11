@@ -90,6 +90,7 @@ export default function SettlementsPage() {
 
   const [summary, setSummary] = useState<Summary | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState('')
 
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -108,12 +109,20 @@ export default function SettlementsPage() {
   const fetchSummary = useCallback(async () => {
     if (!storeId || !token) return
     setSummaryLoading(true)
+    setSummaryError('')
     try {
       const res = await apiFetch(
         `/stores/${storeId}/settlements/summary?date=${today}`,
         token,
       )
-      if (res.ok) setSummary(await res.json())
+      if (res.ok) {
+        setSummary(await res.json())
+      } else {
+        const body = await res.text().catch(() => '')
+        setSummaryError(`API 오류 ${res.status}: ${body || '알 수 없는 오류'}`)
+      }
+    } catch (e) {
+      setSummaryError(`네트워크 오류: ${String(e)}`)
     } finally {
       setSummaryLoading(false)
     }
@@ -210,6 +219,8 @@ export default function SettlementsPage() {
             <Text size="sm" c="dimmed" mb="md">{todayLabel}</Text>
             {summaryLoading ? (
               <Text size="sm" c="dimmed" ta="center" py="md">불러오는 중...</Text>
+            ) : summaryError ? (
+              <Text size="sm" c="red" ta="center" py="md">{summaryError}</Text>
             ) : (
               <Stack gap="sm">
                 <Group justify="space-between">
