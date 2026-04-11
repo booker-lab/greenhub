@@ -53,8 +53,10 @@ export default function BottomNav() {
         height: 'calc(72px + env(safe-area-inset-bottom))',
         paddingBottom: 'env(safe-area-inset-bottom)',
         display: "flex",
+        justifyContent: "center",
       }}
     >
+      <Box style={{ maxWidth: 768, width: "100%", display: "flex" }}>
       {TABS.map((tab) => {
         const active = pathname.startsWith(tab.href);
         return (
@@ -73,6 +75,7 @@ export default function BottomNav() {
           </UnstyledButton>
         );
       })}
+      </Box>
     </Box>
   );
 }

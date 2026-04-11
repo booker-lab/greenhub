@@ -11,13 +11,13 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Green Hub 드라이버",
-  description: "Green Hub 드라이버 배송 앱",
+  title: "Green Love 드라이버",
+  description: "Green Love 드라이버 배송 앱",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "GreenHub드라이버",
+    title: "그린러브드라이버",
   },
 };
 
@@ -41,7 +41,9 @@ export default function RootLayout({
       </head>
       <body>
         <Providers>
-          {children}
+          <div style={{ maxWidth: 768, margin: '0 auto' }}>
+            {children}
+          </div>
           <BottomNav />
         </Providers>
       </body>
