@@ -206,13 +206,13 @@ export class AuthService {
 
     if (!snap.empty) {
       userData = snap.docs[0].data();
-      // 기존 드라이버 계정에 driverApproved 필드가 없으면 false로 초기화
+      // 기존 드라이버 계정에 driverApproved 필드가 없으면 true로 초기화 (MVP: 자동 승인)
       if (userData['role'] === 'driver' && userData['driverApproved'] === undefined) {
         await this.firestore.doc(`users/${userData['id']}`).update({
-          driverApproved: false,
+          driverApproved: true,
           updatedAt: this.firestore.Timestamp.now(),
         });
-        userData = { ...userData, driverApproved: false };
+        userData = { ...userData, driverApproved: true };
       }
     } else {
       // seller는 admin 초대로만 가입 가능 — 카카오 신규 생성 불가
@@ -229,7 +229,7 @@ export class AuthService {
         name: dto.name,
         phone: null,
         role: newRole,
-        ...(newRole === 'driver' ? { driverApproved: false } : {}),
+        ...(newRole === 'driver' ? { driverApproved: true } : {}),
         storeId: null,
         providers: ['kakao'],
         savedAddresses: [],
