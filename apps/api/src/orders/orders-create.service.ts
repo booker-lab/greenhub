@@ -27,6 +27,27 @@ export class OrdersCreateService {
       throw new BadRequestException('공동구매 동의가 필요합니다.');
     }
 
+    // 공동구매 1인 1개 제한
+    if (dto.saleType === 'group' && dto.quantity !== 1) {
+      throw new BadRequestException('공동구매는 1인 1개 참여만 가능합니다.');
+    }
+
+    // 공동구매 중복 참여 방지
+    if (dto.saleType === 'group') {
+      const existingSnap = await this.firestore
+        .collection('orders')
+        .where('userId', '==', userId)
+        .where('productId', '==', dto.productId)
+        .where('saleType', '==', 'group')
+        .get();
+      const hasActive = existingSnap.docs.some(
+        (d) => d.data()['status'] !== 'CANCELLED',
+      );
+      if (hasActive) {
+        throw new ConflictException('이미 참여 중인 공동구매입니다.');
+      }
+    }
+
     // hub 배송 시 hubId 필수
     if (dto.deliveryMethod === 'hub' && !dto.hubId) {
       throw new BadRequestException('거점 배송 시 hubId가 필요합니다.');
