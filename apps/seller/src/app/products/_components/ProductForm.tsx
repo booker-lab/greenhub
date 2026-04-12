@@ -72,7 +72,11 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
     if (initialData) return { ...defaultForm(), ...initialData }
     try {
       const saved = localStorage.getItem(draftKey)
-      if (saved) return JSON.parse(saved)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        const def = defaultForm()
+        return { ...def, ...parsed, groupConfig: { ...def.groupConfig, ...parsed.groupConfig } }
+      }
     } catch {}
     return defaultForm()
   })
