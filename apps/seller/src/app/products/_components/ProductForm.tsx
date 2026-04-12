@@ -132,8 +132,10 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
     if (form.colors.length === 0) return '색상을 하나 이상 선택해주세요.'
     if (form.saleType === 'group') {
       const g = form.groupConfig
-      if (!g.minParticipants || !g.maxParticipants || !g.recruitDeadline || !g.groupDeliveryDate)
-        return '공동구매 필수 정보를 모두 입력해주세요.'
+      if (!g.minParticipants) return '최소 인원을 입력해주세요.'
+      if (!g.maxParticipants) return '최대 인원을 입력해주세요.'
+      if (!g.recruitDeadline) return '모집 마감일시를 입력해주세요.'
+      if (!g.groupDeliveryDate) return '배송 예정일을 입력해주세요.'
       if (Number(g.minParticipants) < 2)
         return '최소 인원은 2명 이상이어야 합니다.'
       if (Number(g.minParticipants) > Number(g.maxParticipants))
