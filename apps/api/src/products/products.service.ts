@@ -87,7 +87,7 @@ export class ProductsService {
             currentParticipants: gc['currentParticipants'],
             minParticipants: gc['minParticipants'],
             maxParticipants: gc['maxParticipants'],
-            recruitDeadline: gc['recruitDeadline']?.toDate ? gc['recruitDeadline'].toDate().toISOString() : gc['recruitDeadline'],
+            recruitDeadline: typeof (gc['recruitDeadline'] as { toDate?: () => Date })?.toDate === 'function' ? (gc['recruitDeadline'] as { toDate: () => Date }).toDate().toISOString() : gc['recruitDeadline'],
           };
         }
       }
@@ -114,9 +114,11 @@ export class ProductsService {
 
     // groupConfig가 있을 때만 포함 (스펙: optional 필드)
     if (groupConfig) {
-      const gc = { ...groupConfig };
-      if (gc['recruitDeadline']?.toDate) gc['recruitDeadline'] = gc['recruitDeadline'].toDate().toISOString();
-      if (gc['groupDeliveryDate']?.toDate) gc['groupDeliveryDate'] = gc['groupDeliveryDate'].toDate().toISOString();
+      const gc: Record<string, unknown> = { ...groupConfig };
+      const rd = gc['recruitDeadline'] as { toDate?: () => Date };
+      const gd = gc['groupDeliveryDate'] as { toDate?: () => Date };
+      if (typeof rd?.toDate === 'function') gc['recruitDeadline'] = rd.toDate().toISOString();
+      if (typeof gd?.toDate === 'function') gc['groupDeliveryDate'] = gd.toDate().toISOString();
       return { ...product, groupConfig: gc };
     }
     return { ...product };
