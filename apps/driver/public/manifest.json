@@ -1,7 +1,7 @@
 {
-  "name": "Green Hub 드라이버",
-  "short_name": "GreenHub드라이버",
-  "description": "Green Hub 드라이버 배송 앱",
+  "name": "Green Love 드라이버",
+  "short_name": "GreenLove드라이버",
+  "description": "Green Love 드라이버 배송 앱",
   "start_url": "/board",
   "display": "standalone",
   "background_color": "#ffffff",

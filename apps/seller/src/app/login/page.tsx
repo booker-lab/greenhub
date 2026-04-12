@@ -76,7 +76,7 @@ export default function LoginPage() {
                 <polyline points="9 22 9 12 15 12 15 22" />
               </svg>
             </Box>
-            <Title order={2} fz="xl">Green Hub 판매자</Title>
+            <Title order={2} fz="xl">Green Love 판매자</Title>
             <Text size="sm" c="dimmed">판매자 계정으로 로그인하세요</Text>
           </Stack>
 
