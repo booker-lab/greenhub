@@ -59,7 +59,7 @@ function defaultForm(): ProductFormData {
   return {
     name: '', category: 'cut_flower', colors: [], deliverySize: 'small',
     price: '', description: '', saleType: 'normal',
-    groupConfig: { minParticipants: '', maxParticipants: '', recruitDeadline: '', groupDeliveryDate: '', groupDeliveryMethod: 'direct' },
+    groupConfig: { minParticipants: '2', maxParticipants: '10', recruitDeadline: '', groupDeliveryDate: '', groupDeliveryMethod: 'direct' },
     images: [],
   }
 }
