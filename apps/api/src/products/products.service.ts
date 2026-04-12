@@ -87,7 +87,7 @@ export class ProductsService {
             currentParticipants: gc['currentParticipants'],
             minParticipants: gc['minParticipants'],
             maxParticipants: gc['maxParticipants'],
-            recruitDeadline: gc['recruitDeadline'],
+            recruitDeadline: gc['recruitDeadline']?.toDate ? gc['recruitDeadline'].toDate().toISOString() : gc['recruitDeadline'],
           };
         }
       }
@@ -114,7 +114,10 @@ export class ProductsService {
 
     // groupConfig가 있을 때만 포함 (스펙: optional 필드)
     if (groupConfig) {
-      return { ...product, groupConfig };
+      const gc = { ...groupConfig };
+      if (gc['recruitDeadline']?.toDate) gc['recruitDeadline'] = gc['recruitDeadline'].toDate().toISOString();
+      if (gc['groupDeliveryDate']?.toDate) gc['groupDeliveryDate'] = gc['groupDeliveryDate'].toDate().toISOString();
+      return { ...product, groupConfig: gc };
     }
     return { ...product };
   }
