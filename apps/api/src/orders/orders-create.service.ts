@@ -68,8 +68,8 @@ export class OrdersCreateService {
     const capId = `${storeId}_${dateStr}`;
 
     await this.firestore.runTransaction(async (t) => {
-      // Daily Cap 검증 (hub/direct 배송만 슬롯 소모)
-      if (dto.deliveryMethod !== 'parcel') {
+      // Daily Cap 검증 (hub/direct 배송만 슬롯 소모, 공동구매 제외)
+      if (dto.deliveryMethod !== 'parcel' && dto.saleType !== 'group') {
         const capRef = this.firestore.doc(`dailyCaps/${capId}`);
         const capSnap = await t.get(capRef);
 
