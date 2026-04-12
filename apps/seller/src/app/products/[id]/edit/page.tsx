@@ -8,16 +8,28 @@ import type { ProductFormData } from '../../_components/ProductForm'
 import { Box, Group, Loader, Stack, Text, UnstyledButton } from '@mantine/core'
 
 // Firestore Timestamp | ISO string → YYYY-MM-DD
-function toDateStr(value: unknown): string {
-  if (!value) return ''
-  if (typeof value === 'string') return value.slice(0, 10)
-  // Firestore Timestamp shape
-  if (typeof value === 'object' && value !== null && 'seconds' in value) {
+function toISODate(value: unknown): Date | null {
+  if (!value) return null
+  if (typeof value === 'string') return new Date(value)
+  if (typeof value === 'object' && value !== null && 'seconds' in value)
     return new Date((value as { seconds: number }).seconds * 1000)
-      .toISOString()
-      .slice(0, 10)
-  }
-  return ''
+  return null
+}
+
+// datetime-local 입력용: "YYYY-MM-DDTHH:mm" (로컬 시간)
+function toDateTimeLocalStr(value: unknown): string {
+  const d = toISODate(value)
+  if (!d) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// date 입력용: "YYYY-MM-DD" (로컬 날짜)
+function toDateStr(value: unknown): string {
+  const d = toISODate(value)
+  if (!d) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 export default function EditProductPage() {
@@ -54,7 +66,7 @@ export default function EditProductPage() {
           mapped.groupConfig = {
             minParticipants: String(data.groupConfig.minParticipants ?? ''),
             maxParticipants: String(data.groupConfig.maxParticipants ?? ''),
-            recruitDeadline: toDateStr(data.groupConfig.recruitDeadline),
+            recruitDeadline: toDateTimeLocalStr(data.groupConfig.recruitDeadline),
             groupDeliveryDate: toDateStr(data.groupConfig.groupDeliveryDate),
             groupDeliveryMethod: data.groupConfig.groupDeliveryMethod ?? 'direct',
           }

@@ -162,8 +162,8 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
       body.groupConfig = {
         minParticipants: Number(form.groupConfig.minParticipants),
         maxParticipants: Number(form.groupConfig.maxParticipants),
-        recruitDeadline: form.groupConfig.recruitDeadline,
-        groupDeliveryDate: form.groupConfig.groupDeliveryDate,
+        recruitDeadline: new Date(form.groupConfig.recruitDeadline).toISOString(),
+        groupDeliveryDate: new Date(form.groupConfig.groupDeliveryDate).toISOString(),
         groupDeliveryMethod: form.groupConfig.groupDeliveryMethod,
         deliveryFeeDiscount: 0,
       }
