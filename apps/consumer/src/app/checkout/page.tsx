@@ -53,6 +53,7 @@ function SingleCheckoutContent() {
     saleType,
     deliveryMethod,
     deliveryAddress: address,
+    ...(saleType === 'group' && { groupBuyConsent: { agreed: true, agreedAt: new Date().toISOString() } }),
   }
 
   const { state, orderId, error, requestPayment } = usePayment({
