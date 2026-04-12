@@ -15,6 +15,20 @@ import {
 } from '@mantine/core'
 import { Row, STATUS_LABEL_MAP, STATUS_COLOR_MAP, DELIVERY_LABEL_MAP } from './_components/OrderRow'
 
+function toDate(v: unknown): Date {
+  if (v && typeof v === 'object' && 'toDate' in v) return (v as { toDate(): Date }).toDate()
+  return new Date(v as string)
+}
+
+function formatDeadlineCountdown(deadline: string): string {
+  const diff = new Date(deadline).getTime() - Date.now()
+  if (diff <= 0) return '마감됨'
+  const days = Math.floor(diff / 86400000)
+  const hours = Math.floor((diff % 86400000) / 3600000)
+  if (days > 0) return `마감까지 ${days}일`
+  return `마감까지 ${hours}시간`
+}
+
 const READONLY_STATUSES: OrderStatus[] = [
   'DELIVERING', 'HUB_ARRIVED', 'PICKED_UP', 'DELIVERED', 'REVIEWED', 'CANCELLED',
 ]
@@ -158,8 +172,10 @@ export default function OrderDetailPage() {
               <Badge color={STATUS_COLOR_MAP[order.status]} variant="light" radius="xl" size="md">
                 {STATUS_LABEL_MAP[order.status]}
               </Badge>
-              <Text size="xs" c="dimmed">
-                {new Date(order.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              <Text size="xs" c={order.status === 'RECRUITING' ? 'orange.6' : 'dimmed'} fw={order.status === 'RECRUITING' ? 600 : 400}>
+                {order.status === 'RECRUITING' && groupConfig
+                  ? formatDeadlineCountdown(groupConfig.recruitDeadline)
+                  : toDate(order.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </Text>
             </Group>
             <Text fw={700}>주문 #{order.id.slice(-8).toUpperCase()}</Text>
