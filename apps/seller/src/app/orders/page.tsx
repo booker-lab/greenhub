@@ -350,6 +350,19 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
         </Group>
       )}
 
+      {order.status === 'RECRUITING' && (
+        <Paper
+          mt="xs"
+          p="sm"
+          radius="md"
+          style={{ backgroundColor: '#EBF5FB', border: '1px solid #AED6F1' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Text size="xs" c="blue.7" fw={600}>공동구매 모집 중</Text>
+          <Text size="xs" c="gray.6" mt={2}>모집 마감 후 인원 충족 시 자동 확정됩니다.</Text>
+        </Paper>
+      )}
+
       {actionError && (
         <Text size="xs" c="red" mt="xs">{actionError}</Text>
       )}

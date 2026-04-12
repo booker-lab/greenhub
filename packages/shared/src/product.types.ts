@@ -46,6 +46,12 @@ export interface Product {
   isActive: boolean
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
+  groupSummary?: {
+    currentParticipants: number
+    minParticipants: number
+    maxParticipants: number
+    recruitDeadline: string // ISO8601
+  }
 }
 
 export interface ProductSummary {

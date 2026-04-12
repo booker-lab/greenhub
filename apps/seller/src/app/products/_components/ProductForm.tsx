@@ -118,8 +118,14 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
       const g = form.groupConfig
       if (!g.minParticipants || !g.maxParticipants || !g.recruitDeadline || !g.groupDeliveryDate)
         return '공동구매 필수 정보를 모두 입력해주세요.'
+      if (Number(g.minParticipants) < 2)
+        return '최소 인원은 2명 이상이어야 합니다.'
       if (Number(g.minParticipants) > Number(g.maxParticipants))
         return '최소 인원은 최대 인원보다 클 수 없습니다.'
+      if (new Date(g.recruitDeadline) <= new Date())
+        return '모집 마감일시는 현재 시각 이후여야 합니다.'
+      if (new Date(g.groupDeliveryDate) <= new Date(g.recruitDeadline))
+        return '배송 예정일은 모집 마감일 이후여야 합니다.'
     }
     return null
   }

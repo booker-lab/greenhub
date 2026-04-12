@@ -66,6 +66,13 @@ export default function ProductCard({ product }: ProductCardProps) {
             {product.colors.length > 3 && ` +${product.colors.length - 3}`}
           </Text>
         )}
+        {product.saleType === 'group' && product.groupSummary && (
+          <Text size="xs" c="brand.6" mt={4} fw={500}>
+            {product.groupSummary.currentParticipants >= product.groupSummary.maxParticipants
+              ? '모집 완료'
+              : `${product.groupSummary.currentParticipants}/${product.groupSummary.minParticipants}명 모집 중`}
+          </Text>
+        )}
       </Box>
     </Card>
   )
