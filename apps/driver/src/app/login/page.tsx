@@ -35,7 +35,7 @@ export default async function LoginPage({
           >
             <Text c="white" fw={700} fz={28}>G</Text>
           </Box>
-          <Title order={2} c="brand.7">Green Hub</Title>
+          <Title order={2} c="brand.7">Green Love</Title>
           <Text size="sm" c="dimmed">드라이버</Text>
         </Stack>
 

@@ -53,7 +53,13 @@ export default function OrderDetailPage() {
     if (!order || order.saleType !== 'group') return
     const ref = doc(db, 'groupProductConfig', order.productId)
     getDoc(ref).then((snap) => {
-      if (snap.exists()) setGroupConfig(snap.data() as GroupProductConfig)
+      if (snap.exists()) {
+        const data = snap.data()
+        // Firestore Timestamp → ISO string 변환
+        if (data.recruitDeadline?.toDate) data.recruitDeadline = data.recruitDeadline.toDate().toISOString()
+        if (data.groupDeliveryDate?.toDate) data.groupDeliveryDate = data.groupDeliveryDate.toDate().toISOString()
+        setGroupConfig(data as GroupProductConfig)
+      }
     })
   }, [order?.productId, order?.saleType])
 

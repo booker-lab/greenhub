@@ -1,7 +1,7 @@
 {
-  "name": "Green Hub 판매자",
-  "short_name": "GreenHub판매자",
-  "description": "Green Hub 판매자 관리 앱",
+  "name": "Green Love 판매자",
+  "short_name": "GreenLove판매자",
+  "description": "Green Love 판매자 관리 앱",
   "start_url": "/orders",
   "display": "standalone",
   "background_color": "#ffffff",
