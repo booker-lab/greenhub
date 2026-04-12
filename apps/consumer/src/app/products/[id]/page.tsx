@@ -62,9 +62,10 @@ export default function ProductDetailPage({
   }
 
   const isGroup = product.saleType === 'group'
+  const isFull = isGroup && !!groupConfig && groupConfig.currentParticipants >= groupConfig.maxParticipants
   const unitPrice = product.price
   const totalAmount = unitPrice * quantity
-  const canBuy = isGroup ? groupConsent : true
+  const canBuy = isGroup ? (groupConsent && !isFull) : true
 
   function handleAddToCart() {
     if (!product) return
@@ -133,8 +134,11 @@ export default function ProductDetailPage({
 
         {/* 공동구매 실시간 정보 */}
         {isGroup && groupConfig && (
-          <Paper bg="brand.0" radius="md" p="md">
-            <Text fw={700} size="sm" c="brand.8" mb="xs">공동구매 현황</Text>
+          <Paper bg={isFull ? 'gray.1' : 'brand.0'} radius="md" p="md">
+            <Group justify="space-between" mb="xs">
+              <Text fw={700} size="sm" c={isFull ? 'gray.6' : 'brand.8'}>공동구매 현황</Text>
+              {isFull && <Badge color="gray" variant="filled" size="sm">모집 완료</Badge>}
+            </Group>
             <Group justify="space-between" mb={4}>
               <Text size="sm" c="gray.5">현재 참여</Text>
               <Text size="sm" fw={600}>
@@ -155,12 +159,20 @@ export default function ProductDetailPage({
               radius="xl"
             />
             <Text size="xs" c="gray.4" mt="xs">
-              마감:{' '}
-              {new Date(groupConfig.recruitDeadline).toLocaleDateString('ko-KR', {
+              모집 마감:{' '}
+              {new Date(groupConfig.recruitDeadline).toLocaleString('ko-KR', {
                 month: 'long',
                 day: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit',
+              })}
+            </Text>
+            <Text size="xs" c="brand.7" mt={4} fw={600}>
+              배송 예정일:{' '}
+              {new Date(groupConfig.groupDeliveryDate).toLocaleDateString('ko-KR', {
+                month: 'long',
+                day: 'numeric',
+                weekday: 'short',
               })}
             </Text>
           </Paper>
@@ -262,7 +274,7 @@ export default function ProductDetailPage({
             disabled={!canBuy}
             onClick={handleBuyNow}
           >
-            바로 결제
+            {isFull ? '모집 완료' : '바로 결제'}
           </Button>
         </Group>
 

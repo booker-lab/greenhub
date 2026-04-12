@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import {
   generatePickupCode,
@@ -15,7 +16,10 @@ import {
 
 @Injectable()
 export class OrdersCreateService {
-  constructor(private readonly firestore: FirestoreService) {}
+  constructor(
+    private readonly firestore: FirestoreService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async createOrder(storeId: string, userId: string, dto: CreateOrderDto) {
     // 공동구매 동의 검증
@@ -98,9 +102,19 @@ export class OrdersCreateService {
           throw new ConflictException('공동구매 모집 인원이 마감되었습니다.');
         }
         // FieldValue.increment 대신 명시적 값 사용 — Transaction 내 읽기 일관성 보장
-        t.update(gcRef, {
-          currentParticipants: gc['currentParticipants'] + 1,
-        });
+        const newCount = (gc['currentParticipants'] as number) + 1;
+        t.update(gcRef, { currentParticipants: newCount });
+
+        // 선착순 마감: 트랜잭션 외부에서 조기 확정 트리거 (비동기, 실패 무시)
+        if (newCount >= (gc['maxParticipants'] as number)) {
+          setImmediate(() => {
+            this.notifications
+              .processGroupBuyEarlyConfirm(dto.productId)
+              .catch((err) =>
+                console.error('[GroupBuy] 조기 확정 트리거 실패', err),
+              );
+          });
+        }
       }
 
       const isMetropolitan = detectMetropolitan(dto.deliveryAddress.address);

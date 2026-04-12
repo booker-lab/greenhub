@@ -54,9 +54,9 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
         </Group>
 
         <Box mb="sm">
-          <Text size="xs" c="dimmed" mb={4}>모집 마감일</Text>
+          <Text size="xs" c="dimmed" mb={4}>모집 마감일시</Text>
           <input
-            type="date"
+            type="datetime-local"
             value={config.recruitDeadline}
             onChange={(e) => setGroupConfig('recruitDeadline', e.target.value)}
             style={{ width: '100%', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 12, padding: '10px 12px', fontSize: 14 }}

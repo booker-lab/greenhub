@@ -122,6 +122,18 @@ export class NotificationsService {
     await this.sendToUser(ownerId, templateCode, variables, orderId);
   }
 
+  // ── 선착순 마감: maxParticipants 도달 시 즉시 확정 ──
+  async processGroupBuyEarlyConfirm(productId: string) {
+    const gcSnap = await this.firestore.doc(`groupProductConfig/${productId}`).get();
+    if (!gcSnap.exists) return;
+
+    const gc = gcSnap.data() as Record<string, unknown>;
+    if (gc['isProcessed']) return; // 이미 처리된 경우 스킵
+
+    await this.confirmGroupBuy(productId, gc);
+    await gcSnap.ref.update({ isProcessed: true });
+  }
+
   // ── 스케줄러: 공동구매 자동 확정·취소 (매 1분) ──
   // isProcessed: true인 항목은 쿼리에서 제외하여 중복 처리 방지
   @Cron(CronExpression.EVERY_MINUTE)

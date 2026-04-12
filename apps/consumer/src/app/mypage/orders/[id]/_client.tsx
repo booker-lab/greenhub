@@ -189,6 +189,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Stack>
       </Paper>
 
+      {/* 공동구매 모집 중 안내 */}
+      {order.status === 'RECRUITING' && (
+        <Paper radius="md" p="md" mb="lg" style={{ background: '#EBF5FB', border: '1px solid #AED6F1' }}>
+          <Text fw={700} c="blue.8" mb={4}>공동구매 모집 중</Text>
+          <Text size="sm" c="gray.7" style={{ lineHeight: 1.6 }}>
+            모집 마감일까지 참여 인원이 충족되면 주문이 확정됩니다.
+            확정 이후에는 취소·환불이 불가합니다.
+          </Text>
+          <Text size="xs" c="gray.5" mt="xs">
+            모집 마감 후 인원 미달 시 자동으로 취소되고 전액 환불됩니다.
+          </Text>
+        </Paper>
+      )}
+
       {/* 취소 상태 */}
       {isCancelled && (
         <Paper radius="md" p="md" mb="lg" ta="center" style={{ background: '#fff3f3', border: '1px solid #ffcdd2' }}>
