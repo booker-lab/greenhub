@@ -134,6 +134,7 @@ function CartCheckoutContent() {
           saleType: item.saleType,
           deliveryMethod: item.deliveryMethod,
           deliveryAddress: address,
+          ...(item.saleType === 'group' && { groupBuyConsent: { agreed: true, agreedAt: new Date().toISOString() } }),
         } satisfies CreateOrderRequest),
       })
       if (!res.ok) {
