@@ -27,7 +27,11 @@ export function useGroupProduct(productId: string | null): UseGroupProductResult
       ref,
       (snap) => {
         if (snap.exists()) {
-          setConfig(snap.data() as GroupProductConfig)
+          const data = snap.data()
+          // Firestore Timestamp → ISO string 변환
+          if (data['recruitDeadline']?.toDate) data['recruitDeadline'] = data['recruitDeadline'].toDate().toISOString()
+          if (data['groupDeliveryDate']?.toDate) data['groupDeliveryDate'] = data['groupDeliveryDate'].toDate().toISOString()
+          setConfig(data as GroupProductConfig)
         } else {
           setConfig(null)
         }
