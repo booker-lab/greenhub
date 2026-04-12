@@ -19,6 +19,8 @@ export function useOrderStatus(orderId: string | null, accessToken?: string): Us
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // accessToken이 undefined면 세션 아직 로딩 중 — 대기
+    if (!orderId || accessToken === undefined) return
     if (!orderId) {
       setLoading(false)
       return
