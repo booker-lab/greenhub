@@ -75,7 +75,13 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
       if (saved) {
         const parsed = JSON.parse(saved)
         const def = defaultForm()
-        return { ...def, ...parsed, groupConfig: { ...def.groupConfig, ...parsed.groupConfig } }
+        const merged = { ...def, ...parsed, groupConfig: { ...def.groupConfig, ...(parsed.groupConfig ?? {}) } }
+        // groupConfig 필드 누락 시 draft 폐기
+        const g = merged.groupConfig
+        const valid = typeof g.minParticipants === 'string' && typeof g.maxParticipants === 'string'
+          && typeof g.recruitDeadline === 'string' && typeof g.groupDeliveryDate === 'string'
+        if (!valid) { localStorage.removeItem(draftKey); return def }
+        return merged
       }
     } catch {}
     return defaultForm()
@@ -112,6 +118,12 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
       setDraftSaved(true)
       setTimeout(() => setDraftSaved(false), 2000)
     } catch {}
+  }
+
+  function handleDraftReset() {
+    try { localStorage.removeItem(draftKey) } catch {}
+    setForm(defaultForm())
+    setError(null)
   }
 
   function validate(): string | null {
@@ -187,9 +199,14 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
               </ActionIcon>
               <Title order={3}>{mode === 'create' ? '상품 등록' : '상품 수정'}</Title>
             </Group>
-            <UnstyledButton onClick={handleDraftSave} style={{ fontSize: 14, fontWeight: 500, color: draftSaved ? 'var(--green-primary)' : 'var(--mantine-color-gray-6)' }}>
-              {draftSaved ? '저장됨 ✓' : '임시저장'}
-            </UnstyledButton>
+            <Group gap="xs">
+              <UnstyledButton onClick={handleDraftReset} style={{ fontSize: 13, color: 'var(--mantine-color-gray-4)' }}>
+                초기화
+              </UnstyledButton>
+              <UnstyledButton onClick={handleDraftSave} style={{ fontSize: 14, fontWeight: 500, color: draftSaved ? 'var(--green-primary)' : 'var(--mantine-color-gray-6)' }}>
+                {draftSaved ? '저장됨 ✓' : '임시저장'}
+              </UnstyledButton>
+            </Group>
           </Group>
         </Container>
       </Box>
