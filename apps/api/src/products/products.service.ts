@@ -152,6 +152,7 @@ export class ProductsService {
         currentParticipants: 0,
         recruitDeadline: new Date(groupConfig.recruitDeadline),
         groupDeliveryDate: new Date(groupConfig.groupDeliveryDate),
+        isProcessed: false,
       });
     }
 
