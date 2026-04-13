@@ -125,12 +125,13 @@ export class OrdersLifecycleService {
     const now = this.firestore.Timestamp.now();
 
     await this.firestore.runTransaction(async (t) => {
+      // read 먼저, write 나중 (Firestore 트랜잭션 규칙)
+      const gcSnap = await t.get(gcRef);
       t.update(this.firestore.doc(`orders/${orderId}`), {
         status: 'CANCELLED',
         cancelReason,
         updatedAt: now,
       });
-      const gcSnap = await t.get(gcRef);
       if (gcSnap.exists) {
         t.update(gcRef, {
           currentParticipants: this.firestore.FieldValue.increment(-1),
