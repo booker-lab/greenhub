@@ -115,6 +115,26 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const { order, loading, error } = useOrderStatus(orderId, session?.user?.accessToken)
   const [confirming, setConfirming] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelDone, setCancelDone] = useState(false)
+
+  async function handleCancel() {
+    if (!session?.user?.accessToken || !order) return
+    if (!confirm('공동구매 참여를 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.')) return
+    setCancelling(true)
+    try {
+      const res = await fetch(`${API_URL}/stores/${order.storeId}/orders/${orderId}/cancel`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.user.accessToken}`,
+        },
+      })
+      if (res.ok) setCancelDone(true)
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   async function handleConfirm() {
     if (!session?.user?.accessToken || !order) return
@@ -189,8 +209,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Stack>
       </Paper>
 
-      {/* 공동구매 모집 중 안내 */}
-      {order.status === 'RECRUITING' && (
+      {/* 공동구매 모집 중 안내 + 취소 버튼 */}
+      {order.status === 'RECRUITING' && !cancelDone && (
         <Paper radius="md" p="md" mb="lg" style={{ background: '#EBF5FB', border: '1px solid #AED6F1' }}>
           <Text fw={700} c="blue.8" mb={4}>공동구매 모집 중</Text>
           <Text size="sm" c="gray.7" style={{ lineHeight: 1.6 }}>
@@ -200,11 +220,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <Text size="xs" c="gray.5" mt="xs">
             모집 마감 후 인원 미달 시 자동으로 취소되고 전액 환불됩니다.
           </Text>
+          <Button
+            fullWidth
+            radius="md"
+            size="sm"
+            mt="md"
+            variant="outline"
+            color="red"
+            loading={cancelling}
+            disabled={cancelling}
+            onClick={handleCancel}
+          >
+            공동구매 참여 취소
+          </Button>
         </Paper>
       )}
 
       {/* 취소 상태 */}
-      {isCancelled && (
+      {(isCancelled || cancelDone) && (
         <Paper radius="md" p="md" mb="lg" ta="center" style={{ background: '#fff3f3', border: '1px solid #ffcdd2' }}>
           <Text size="xl" mb="xs">❌</Text>
           <Text fw={700} c="red.7" mb={4}>주문이 취소되었습니다</Text>
@@ -235,7 +268,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {/* 상태 타임라인 */}
-      {!isCancelled && (
+      {!isCancelled && !cancelDone && (
         <Box>
           <Text fw={700} size="sm" mb="md">배송 현황</Text>
           <Box pl={4}>
