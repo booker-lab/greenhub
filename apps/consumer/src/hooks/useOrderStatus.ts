@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { Order } from '@greenhub/shared'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+const TERMINAL_STATUSES = new Set(['CANCELLED', 'DELIVERED', 'REVIEWED'])
 // NOTE: Firebase SDK의 onSnapshot은 PWA Service Worker와 충돌하여 동작 불가.
 // Firestore REST API 대신 Railway API 폴링 방식으로 대체. 설계 결정: docs/CRITICAL_LOGIC.md [2026-03-27] 참조
 
@@ -47,6 +48,8 @@ export function useOrderStatus(orderId: string | null, accessToken?: string): Us
         setOrder(data as Order)
         setLoading(false)
         setError(null)
+        // 종료 상태 도달 시 폴링 중단
+        if (TERMINAL_STATUSES.has(data.status)) clearInterval(interval)
       } catch (e: unknown) {
         if (cancelled) return
         setError(e instanceof Error ? e.message : '오류가 발생했습니다.')
@@ -54,8 +57,9 @@ export function useOrderStatus(orderId: string | null, accessToken?: string): Us
       }
     }
 
+    let interval: ReturnType<typeof setInterval>
     fetchOrder()
-    const interval = setInterval(fetchOrder, 3000)
+    interval = setInterval(fetchOrder, 3000)
     return () => {
       cancelled = true
       clearInterval(interval)
