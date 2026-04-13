@@ -1,0 +1,13 @@
+[
+  {
+    "origin": [
+      "https://greenlove.co.kr",
+      "https://www.greenlove.co.kr",
+      "https://seller.greenlove.co.kr",
+      "https://driver.greenlove.co.kr"
+    ],
+    "method": ["GET", "POST", "PUT", "DELETE", "HEAD"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": ["Content-Type", "Authorization", "Content-Length", "X-Requested-With"]
+  }
+]
