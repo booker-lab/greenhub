@@ -2,18 +2,22 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-12 (색상 필터 + 정렬 + 드라이버 레이아웃 통일)
+최종 수정: 2026-04-14 (TC-7 소비자 취소 UI 완료)
 
 ## ⚡ 다음 세션 즉시 착수 포인트
 
-### 1순위 — 네이버페이 채널키 연결 (승인 이메일 수신 후)
-- Portone 콘솔 → `NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY` Vercel consumer 환경변수 추가
+### 1순위 — Firebase Storage CORS 적용
+- cors.json 커밋 완료: `/c/Develop/greenhub/cors.json`
+- `winget install Google.CloudSDK` → `gcloud auth login`
+- `gcloud storage buckets update gs://green-e4fe3.firebasestorage.app --cors-file=/c/Develop/greenhub/cors.json`
 
-### 2순위 — 네이버페이 재심사
-- footer 사업자 정보 추가 (상호/대표자/사업자번호/통신판매업번호)
+### 2순위 — 네이버페이 채널키 연결 (승인 이메일 수신 후)
 
-### 3순위 — 테스트 상품 정리
-- Seller에서 등록한 테스트 상품("필터테스트", "asdf") 삭제 또는 비활성화
+### 3순위 — Vercel GitHub 자동배포 복구
+- consumer → `greenhubconsumer` 프로젝트로 재연결 필요
+- 임시 수동 배포: 모노레포 루트에서 `VERCEL_PROJECT_ID=prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w VERCEL_ORG_ID=team_J91VWI0TqcHdcF36T7qVgiT1 npx vercel --prod`
+
+### 4순위 — 공동구매 수량 기반 모델 전환 (Phase 2)
 
 ---
 
@@ -21,13 +25,9 @@
 
 | 단계 | 내용 | 상태 |
 |------|------|------|
-| 1~82 | 이전 세션 전체 완료 | ✅ |
-| 83 | **Consumer 색상 필터** (category/page.tsx 색상 칩 13종 + API colors 파라미터) | ✅ 2026-04-12 |
-| 84 | **Consumer/Consumer 상품 최신순 정렬** (createdAt desc) | ✅ 2026-04-12 |
-| 85 | **Seller useStoreProducts Timestamp 변환** (Firestore → ISO string) | ✅ 2026-04-12 |
-| 86 | **Seller BottomNav max-width 768** | ✅ 2026-04-12 |
-| 87 | **Driver 레이아웃 max-width 768 통일** (layout + BottomNav) | ✅ 2026-04-12 |
-| 88 | **Driver 브랜드명 수정** (Green Hub → Green Love) | ✅ 2026-04-12 |
+| 1~93 | 이전 세션 전체 완료 | ✅ |
+| 94 | TC-7 소비자 취소 UI | ✅ 2026-04-14 |
+| 95 | Firebase Storage CORS | ⬜ 다음 세션 |
 
 ---
 
@@ -36,7 +36,7 @@
 | 항목 | 값 |
 |------|-----|
 | Railway API | `https://api-production-13e7.up.railway.app` |
-| Vercel Consumer | `https://greenlove.co.kr` (www 리다이렉트) |
+| Vercel Consumer | `https://greenlove.co.kr` |
 | Vercel Seller | `https://seller.greenlove.co.kr` |
 | Vercel Driver | `https://driver.greenlove.co.kr` |
 | Firebase | `green-e4fe3` · asia-northeast3 |
@@ -52,7 +52,6 @@
 | admin 유저 uid | `6c176cb5-40e1-4d86-8764-6bc87035503a` |
 | 셀러 로그인 | admin 카카오 계정 1개로 seller 앱 운영 |
 | 드라이버 로그인 | 미등록 카카오 계정 → role=driver 자동 생성 (MVP 정책) |
-| 테스트 계정 | 전체 삭제 완료 |
 
 ---
 
@@ -60,19 +59,16 @@
 
 - **브랜드명**: Green Love (UI) / greenlove (도메인·기술) / 그린러브 (한글)
 - **Firebase Custom Token**: NestJS string → `res.text()` 사용 (res.json() 불가)
-- **Firebase authorized domains**: greenlove.co.kr / seller / driver 모두 등록
-- **firebaseReady 패턴**: onSnapshot은 firebaseReady=true 이후에만 시작 (race condition 방지)
 - **Firestore SW 충돌**: seller/driver 앱 `worker/index.ts`에 `firestore.googleapis.com` NetworkOnly 등록
 - **admin role**: `assertSellerOwnsStore`, `settlements.verifyOwnership` 모두 admin bypass 적용
-- **getAllowedTransitions**: admin = seller + driver 전환 모두 허용
-- **상품 삭제**: 하드 삭제 (doc.delete())
-- **orders.service.ts**: create/query/lifecycle 3개 서비스로 분리
-- **네이버페이 코드**: NAVERPAY_CHANNEL_KEY 환경변수 유무로 버튼 자동 노출/숨김
-- **Portone v2**: NEXT_PUBLIC_PORTONE_STORE_ID + KAKAOPAY_CHANNEL_KEY
-- **PENDING 15분 타임아웃**: 크론잡 매 분 실행 → 자동 CANCELLED + 환불
-- **CORS_ORIGIN**: Railway — greenlove.co.kr + www + seller + driver 모두 등록
-- **드라이버 MVP 정책**: 카카오 로그인 시 미등록 kakaoId → role=driver + driverApproved:true 자동 생성
-- **useStoreProducts**: Firestore Timestamp → ISO string 변환 후 클라이언트 정렬 (복합 인덱스 불필요)
-- **colors 필터 파라미터**: `colors[]=` 아님, `colors=` 반복 append (NestJS 배열 파싱)
-- **Driver layout**: `apps/driver/src/app/layout.tsx` div maxWidth 768 래퍼 — 각 페이지 수정 불필요
-- **driver board/page.tsx**: `'use client'` 필수 — Next.js에서 `dynamic({ssr:false})`는 Server Component 불가
+- **PENDING 15분 타임아웃**: 크론잡 매 분 실행 — 자동 CANCELLED + 환불
+- **공동구매 DailyCap 비연계**: `orders-create.service.ts` — saleType=group 시 dailyCap 검증 스킵
+- **공동구매 groupBuyConsent**: checkout에서 saleType=group이면 자동 전송
+- **공동구매 중복 참여 방지**: 비취소 주문 존재 시 409 / 1인 1개 제한
+- **공동구매 isProcessed**: groupProductConfig 생성 시 반드시 false 포함 (크론잡 쿼리 조건)
+- **공동구매 cancelOrder**: Firestore 트랜잭션 read 먼저 후 write (순서 위반 시 500)
+- **공동구매 마감일시 timezone**: seller 폼에서 `.toISOString()` 변환 후 전송 (KST→UTC)
+- **useGroupProduct**: Firestore onSnapshot → Timestamp → ISO string 변환 필수
+- **useOrderStatus**: terminal 상태(CANCELLED/DELIVERED/REVIEWED) 도달 시 폴링 중단
+- **Firebase Storage CORS**: seller 이미지 업로드 차단 중 — gcloud SDK 설치 후 cors.json 적용 필요
+- **Vercel 수동 배포**: consumer는 모노레포 루트에서 VERCEL_PROJECT_ID/ORG_ID 지정 후 배포
