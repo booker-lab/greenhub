@@ -35,7 +35,7 @@ export default function BottomNav() {
         justifyContent: 'center',
       }}
     >
-      <Box style={{ maxWidth: 768, width: '100%', display: 'flex' }}>
+      <Box style={{ maxWidth: 480, width: '100%', display: 'flex' }}>
       {tabs.map((tab) => {
         const isActive = pathname.startsWith(tab.href)
         const Icon = tab.icon
