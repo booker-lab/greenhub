@@ -38,7 +38,7 @@ export default function BottomNav() {
       <Box
         style={{
           display: 'flex',
-          maxWidth: 768,
+          maxWidth: 430,
           margin: '0 auto',
           height: '100%',
         }}

@@ -41,7 +41,7 @@ export default function RootLayout({
       </head>
       <body>
         <Providers>
-          <div style={{ maxWidth: 768, margin: '0 auto' }}>
+          <div style={{ maxWidth: 430, margin: '0 auto' }}>
             {children}
           </div>
           <BottomNav />
