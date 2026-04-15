@@ -1,14 +1,14 @@
 import { createTheme, type MantineColorsTuple } from '@mantine/core';
 
 const brand: MantineColorsTuple = [
-  '#F0FFF4', // 0 - green-bg
-  '#D8F3DC', // 1 - green-pale
-  '#95D5B2', // 2 - green-light
+  '#F2FBF6', // 0
+  '#E0F5E9', // 1
+  '#A8DFC0', // 2
   '#74C69D', // 3
   '#52B788', // 4
   '#40916C', // 5
-  '#2D6A4F', // 6 - green-primary  ← 기본
-  '#1B4332', // 7 - green-dark
+  '#2D6A4F', // 6 - primary
+  '#1B4332', // 7
   '#163B2D', // 8
   '#0D2B1E', // 9
 ];
@@ -16,18 +16,18 @@ const brand: MantineColorsTuple = [
 export const theme = createTheme({
   primaryColor: 'brand',
   colors: { brand },
-  fontFamily: 'var(--font-geist-sans), -apple-system, sans-serif',
-  defaultRadius: 'md',
+  fontFamily: "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+  defaultRadius: 'sm',
   focusRing: 'auto',
   components: {
     Button: {
-      defaultProps: { radius: 'xl' },
+      defaultProps: { radius: 'md' },
     },
     TextInput: {
       defaultProps: { radius: 'md' },
     },
     Card: {
-      defaultProps: { radius: 'xl', withBorder: true },
+      defaultProps: { radius: 'md', shadow: 'sm', withBorder: false },
     },
   },
 });

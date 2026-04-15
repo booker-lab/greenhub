@@ -52,7 +52,7 @@ export default function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'var(--green-bg)',
+        backgroundColor: '#FFFFFF',
         padding: '0 16px',
       }}
     >

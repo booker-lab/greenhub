@@ -1,16 +1,26 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
 @import '@mantine/core/styles.css';
 
 :root {
+  /* 브랜드 그린 */
   --green-primary: #2D6A4F;
   --green-dark: #1B4332;
-  --green-light: #95D5B2;
-  --green-pale: #D8F3DC;
-  --green-bg: #F0FFF4;
+  --green-light: #74C69D;
+  --green-pale: #E0F5E9;
+  --green-bg: #F2FBF6;
+
+  /* 뉴트럴 서피스 */
+  --surface-bg: #F5F5F5;
+  --surface-card: #FFFFFF;
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --border-subtle: #E8E8E8;
 }
 
 body {
+  background-color: var(--surface-bg);
   padding-top: env(safe-area-inset-top);
-  padding-bottom: calc(64px + env(safe-area-inset-bottom)); /* BottomNav + 홈 인디케이터 */
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }

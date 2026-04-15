@@ -17,7 +17,7 @@ export default function BottomNav() {
   const pathname = usePathname()
   const { itemCount } = useCart()
 
-  const hiddenPaths = ['/login', '/checkout', '/order/success']
+  const hiddenPaths = ['/checkout', '/order/success']
   if (hiddenPaths.some((p) => pathname.startsWith(p))) return null
 
   return (

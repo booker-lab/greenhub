@@ -13,9 +13,9 @@
 
 ### 2순위 — 네이버페이 채널키 연결 (승인 이메일 수신 후)
 
-### 3순위 — Vercel GitHub 자동배포 복구
-- consumer → `greenhubconsumer` 프로젝트로 재연결 필요
-- 임시 수동 배포: 모노레포 루트에서 `VERCEL_PROJECT_ID=prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w VERCEL_ORG_ID=team_J91VWI0TqcHdcF36T7qVgiT1 npx vercel --prod`
+### 3순위 — ~~Vercel GitHub 자동배포 복구~~ ✅ 완료 (2026-04-15 확인)
+- consumer/seller/driver 3개 앱 모두 GitHub push → Vercel 자동배포 정상 동작 중
+- 구 `consumer` 빈 프로젝트 Vercel 대시보드에서 삭제 권장
 
 ### 4순위 — 공동구매 수량 기반 모델 전환 (Phase 2)
 
@@ -28,6 +28,7 @@
 | 1~93 | 이전 세션 전체 완료 | ✅ |
 | 94 | TC-7 소비자 취소 UI | ✅ 2026-04-14 |
 | 95 | Firebase Storage CORS | ⬜ 다음 세션 |
+| 96 | Vercel 자동배포 상태 확인 | ✅ 2026-04-15 (정상 동작 확인) |
 
 ---
 
