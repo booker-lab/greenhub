@@ -29,5 +29,10 @@ export const theme = createTheme({
     Card: {
       defaultProps: { radius: 'md', shadow: 'sm', withBorder: false },
     },
+    Badge: {
+      styles: {
+        label: { lineHeight: 1.5 },
+      },
+    },
   },
 });
