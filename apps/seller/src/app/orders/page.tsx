@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import { useOrders, TAB_STATUSES } from '@/hooks/useOrders'
 import type { Order, OrderStatus } from '@greenhub/shared'
 import {
+  Alert,
   Badge,
   Box,
   Button,
@@ -44,10 +45,10 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
 }
 
 const STATUS_COLOR: Record<OrderStatus, string> = {
-  ACCEPTED: 'orange',
-  CONFIRMED: 'orange',
-  RECRUITING: 'orange',
-  PREPARING: 'blue',
+  ACCEPTED: 'blue',
+  CONFIRMED: 'blue',
+  RECRUITING: 'blue',
+  PREPARING: 'orange',
   DELIVERING: 'violet',
   HUB_ARRIVED: 'violet',
   CANCELLED: 'red',
@@ -55,6 +56,20 @@ const STATUS_COLOR: Record<OrderStatus, string> = {
   DELIVERED: 'green',
   PICKED_UP: 'green',
   REVIEWED: 'green',
+}
+
+const ACCENT_BORDER: Record<OrderStatus, string> = {
+  ACCEPTED: 'var(--mantine-color-blue-5)',
+  CONFIRMED: 'var(--mantine-color-blue-5)',
+  RECRUITING: 'var(--mantine-color-blue-5)',
+  PREPARING: 'var(--mantine-color-orange-5)',
+  DELIVERING: 'var(--mantine-color-violet-5)',
+  HUB_ARRIVED: 'var(--mantine-color-violet-5)',
+  CANCELLED: 'var(--mantine-color-red-4)',
+  PENDING: 'var(--mantine-color-gray-4)',
+  DELIVERED: 'var(--mantine-color-green-5)',
+  PICKED_UP: 'var(--mantine-color-green-5)',
+  REVIEWED: 'var(--mantine-color-gray-4)',
 }
 
 const DELIVERY_LABEL: Record<string, string> = {
@@ -93,7 +108,7 @@ export default function OrdersPage() {
         component="header"
         style={{
           backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          borderBottom: '1px solid var(--mantine-color-gray-2)',
           padding: '16px',
           position: 'sticky',
           top: 0,
@@ -102,14 +117,14 @@ export default function OrdersPage() {
       >
         <Container size="sm">
           <Group justify="space-between">
-            <Title order={3}>주문 관리</Title>
+            <Title order={3} fw={700}>주문 관리</Title>
             <Group gap={6}>
               {loading || !firebaseReady ? (
-                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#FACC15' }} />
+                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--mantine-color-yellow-5)' }} />
               ) : error ? (
-                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#F87171' }} />
+                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--mantine-color-red-5)' }} />
               ) : (
-                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22C55E' }} />
+                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--mantine-color-green-5)' }} />
               )}
               <Text size="xs" c="dimmed">
                 {loading || !firebaseReady ? '연결 중' : error ? '연결 오류' : '실시간 연결'}
@@ -123,14 +138,14 @@ export default function OrdersPage() {
       <Box
         style={{
           backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          borderBottom: '1px solid var(--mantine-color-gray-2)',
           position: 'sticky',
           top: 57,
           zIndex: 10,
         }}
       >
         <Container size="sm">
-          <Group gap={0} style={{ overflowX: 'auto', flexWrap: 'nowrap' }}>
+          <Group gap={0} style={{ overflowX: 'auto', flexWrap: 'nowrap', scrollbarWidth: 'none' }}>
             {TABS.map((tab) => (
               <UnstyledButton
                 key={tab.key}
@@ -139,9 +154,10 @@ export default function OrdersPage() {
                   flexShrink: 0,
                   padding: '12px 16px',
                   fontSize: 14,
-                  fontWeight: 500,
-                  borderBottom: `2px solid ${activeTab === tab.key ? 'var(--green-primary)' : 'transparent'}`,
-                  color: activeTab === tab.key ? 'var(--green-primary)' : 'var(--mantine-color-gray-6)',
+                  fontWeight: activeTab === tab.key ? 700 : 400,
+                  borderBottom: `2px solid ${activeTab === tab.key ? 'var(--mantine-color-dark-7)' : 'transparent'}`,
+                  color: activeTab === tab.key ? 'var(--mantine-color-dark-7)' : 'var(--mantine-color-gray-5)',
+                  transition: 'all 0.15s',
                 }}
               >
                 {tab.label}
@@ -165,7 +181,7 @@ export default function OrdersPage() {
         <Stack gap="sm">
           {(loading || !firebaseReady) && (
             <Group justify="center" py={80}>
-              <Loader size="sm" color="var(--green-primary)" />
+              <Loader size="sm" color="brand" />
             </Group>
           )}
 
@@ -242,13 +258,17 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
 
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED'
   const canCancel = order.status === 'ACCEPTED' || order.status === 'CONFIRMED' || order.status === 'PREPARING'
+  const accentColor = ACCENT_BORDER[order.status]
 
   return (
     <Paper
-      radius="lg"
+      radius="md"
       shadow="xs"
       p="md"
-      style={{ cursor: 'pointer' }}
+      style={{
+        cursor: 'pointer',
+        borderLeft: `4px solid ${accentColor}`,
+      }}
       onClick={() => router.push(`/orders/${order.id}`)}
     >
       {/* 상단: 상태 뱃지 + 시간 */}
@@ -260,27 +280,28 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
       </Group>
 
       {/* 주문 정보 */}
-      <Text fw={600} size="sm" mb={4}>
+      <Text fw={700} size="sm" mb={4} c="dark">
         주문 #{order.id.slice(-6).toUpperCase()}
       </Text>
-      <Text size="sm" c="dimmed" mb={4}>
+      <Text size="sm" c="dimmed" mb={6}>
         {DELIVERY_LABEL[order.deliveryMethod]}
         {order.requestedDeliveryDate && ` · ${order.requestedDeliveryDate}`}
       </Text>
-      <Text fw={700} mb="sm">
-        ₩{order.totalAmount.toLocaleString()}
+      <Text size="xl" fw={800} c="dark" mb="sm">
+        {order.totalAmount.toLocaleString()}원
       </Text>
 
       {/* 준비 시작 폼 */}
       {showPrepareForm && (
         <Paper
-          p="sm"
+          p="md"
           radius="md"
           mb="sm"
-          style={{ backgroundColor: 'var(--mantine-color-gray-0)' }}
+          bg="blue.0"
+          style={{ border: '1px solid var(--mantine-color-blue-2)' }}
           onClick={(e) => e.stopPropagation()}
         >
-          <Text size="xs" c="dimmed" mb="xs">드라이버 수거 예정 시간 (선택)</Text>
+          <Text size="xs" c="blue.7" fw={600} mb="xs">드라이버 수거 예정 시간 (선택)</Text>
           <input
             type="datetime-local"
             value={preparedAtInput}
@@ -292,6 +313,7 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
               borderRadius: 8,
               fontSize: 14,
               marginBottom: 8,
+              background: '#fff',
             }}
           />
           <Group gap="xs">
@@ -300,8 +322,8 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
               disabled={actionLoading}
               flex={1}
               size="sm"
-              radius="xl"
-              style={{ backgroundColor: 'var(--green-primary)' }}
+              radius="md"
+              color="brand"
             >
               확인
             </Button>
@@ -309,9 +331,8 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
               onClick={() => { setShowPrepareForm(false); setPreparedAtInput('') }}
               flex={1}
               size="sm"
-              radius="xl"
-              variant="outline"
-              color="gray"
+              radius="md"
+              variant="default"
             >
               취소
             </Button>
@@ -328,8 +349,8 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
               disabled={actionLoading}
               flex={1}
               size="sm"
-              radius="xl"
-              style={{ backgroundColor: 'var(--green-primary)' }}
+              radius="md"
+              color="brand"
             >
               준비 시작
             </Button>
@@ -340,7 +361,7 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
               disabled={actionLoading}
               flex={1}
               size="sm"
-              radius="xl"
+              radius="md"
               variant="outline"
               color="red"
             >
@@ -351,16 +372,17 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
       )}
 
       {order.status === 'RECRUITING' && (
-        <Paper
-          mt="xs"
-          p="sm"
+        <Alert
+          color="blue"
+          variant="light"
           radius="md"
-          style={{ backgroundColor: '#EBF5FB', border: '1px solid #AED6F1' }}
+          mt="xs"
+          py="xs"
           onClick={(e) => e.stopPropagation()}
         >
-          <Text size="xs" c="blue.7" fw={600}>공동구매 모집 중</Text>
+          <Text size="xs" fw={600}>공동구매 모집 중</Text>
           <Text size="xs" c="gray.6" mt={2}>모집 마감 후 인원 충족 시 자동 확정됩니다.</Text>
-        </Paper>
+        </Alert>
       )}
 
       {actionError && (
@@ -372,10 +394,15 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
           mt="xs"
           p="sm"
           radius="md"
-          style={{ backgroundColor: 'var(--green-bg)', textAlign: 'center' }}
+          bg="brand.0"
+          ta="center"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Text size="xs" c="dimmed" mb={4}>픽업 코드</Text>
-          <Text fz={24} fw={700} style={{ letterSpacing: '0.2em', color: 'var(--green-primary)' }}>
+          <Text size="xs" c="brand.6" fw={600} mb={4}>픽업 코드</Text>
+          <Text
+            fw={900}
+            style={{ fontSize: 24, letterSpacing: '0.2em', fontFamily: 'monospace', color: 'var(--mantine-color-brand-7)' }}
+          >
             {order.pickupCode}
           </Text>
         </Paper>

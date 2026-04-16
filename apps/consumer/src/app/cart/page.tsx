@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Container, Box, Group, Text, Title, Button, ActionIcon, Paper, Stack, Badge } from '@mantine/core'
+import { Container, Box, Group, Text, Title, Button, ActionIcon, Paper, Stack, Badge, Divider } from '@mantine/core'
 import { useCart } from '@/hooks/useCart'
 
 export default function CartPage() {
@@ -30,11 +30,11 @@ export default function CartPage() {
   }
 
   return (
-    <Container size="sm" px="md" pt="lg" pb="md">
+    <Container size="sm" px="md" pt="lg" pb={100}>
       {/* 헤더 */}
       <Group justify="space-between" mb="lg">
-        <Title order={2}>장바구니</Title>
-        <Button variant="transparent" size="xs" c="gray.4" onClick={clearCart} style={{ textDecoration: 'underline' }}>
+        <Title order={3} fw={700} c="dark">장바구니</Title>
+        <Button variant="transparent" size="xs" c="gray.4" onClick={clearCart}>
           전체 삭제
         </Button>
       </Group>
@@ -42,13 +42,21 @@ export default function CartPage() {
       {/* 아이템 목록 */}
       <Stack gap="sm" mb="lg">
         {items.map((item) => (
-          <Paper key={item.productId} p="sm" radius="md" withBorder>
-            <Group gap="sm" align="flex-start">
+          <Paper key={item.productId} p="md" radius="md" withBorder>
+            <Group gap="md" align="flex-start">
               {/* 이미지 */}
               <Box
                 component={Link}
                 href={`/products/${item.productId}`}
-                style={{ flexShrink: 0, width: 80, height: 80, borderRadius: 8, background: 'var(--mantine-color-gray-1)', overflow: 'hidden', display: 'block' }}
+                style={{
+                  flexShrink: 0,
+                  width: 72,
+                  height: 72,
+                  borderRadius: 8,
+                  background: 'var(--mantine-color-gray-1)',
+                  overflow: 'hidden',
+                  display: 'block',
+                }}
               >
                 <img
                   src={item.image || '/icons/icon-192x192.png'}
@@ -65,38 +73,40 @@ export default function CartPage() {
                   size="sm"
                   fw={600}
                   c="dark"
-                  style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
+                  style={{
+                    display: 'block',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    textDecoration: 'none',
+                  }}
                 >
                   {item.name}
                 </Text>
 
                 {item.saleType === 'group' && (
-                  <Badge size="xs" mt={4} style={{ background: 'var(--green-pale)', color: 'var(--green-dark)' }}>
-                    공동구매
-                  </Badge>
+                  <Badge size="xs" color="brand" variant="light" mt={4}>공동구매</Badge>
                 )}
 
-                <Text size="md" fw={700} c="brand.8" mt={4}>
+                <Text size="md" fw={700} c="dark" mt={6}>
                   {(item.price * item.quantity).toLocaleString()}원
                 </Text>
 
                 {/* 수량 조절 */}
-                <Group gap="xs" mt="xs">
+                <Group gap="xs" mt="sm">
                   <ActionIcon
-                    size="sm"
-                    variant="outline"
-                    color="gray"
-                    radius="sm"
+                    size="lg"
+                    variant="default"
+                    radius="md"
                     onClick={() => updateQuantity(item.productId, item.quantity - 1)}
                   >
                     −
                   </ActionIcon>
                   <Text size="sm" fw={600} w={24} ta="center">{item.quantity}</Text>
                   <ActionIcon
-                    size="sm"
-                    variant="outline"
-                    color="gray"
-                    radius="sm"
+                    size="lg"
+                    variant="default"
+                    radius="md"
                     onClick={() => updateQuantity(item.productId, item.quantity + 1)}
                   >
                     +
@@ -118,14 +128,23 @@ export default function CartPage() {
       </Stack>
 
       {/* 합계 */}
-      <Paper bg="gray.0" radius="md" p="md" mb="md">
-        <Group justify="space-between" mb={4}>
-          <Text size="sm" c="gray.5">상품 수</Text>
-          <Text size="sm">{itemCount}개</Text>
+      <Paper
+        radius="md"
+        p="lg"
+        mb="md"
+        style={{
+          background: 'var(--mantine-color-dark-8)',
+          color: '#fff',
+        }}
+      >
+        <Group justify="space-between" mb={8}>
+          <Text size="sm" c="dark.1">상품 수</Text>
+          <Text size="sm" c="white">{itemCount}개</Text>
         </Group>
+        <Divider color="dark.6" mb={12} />
         <Group justify="space-between">
-          <Text fw={600}>총 결제 금액</Text>
-          <Text size="xl" fw={700} c="brand.8">{totalAmount.toLocaleString()}원</Text>
+          <Text size="sm" fw={600} c="dark.1">총 결제 금액</Text>
+          <Text size="xl" fw={800} c="white">{totalAmount.toLocaleString()}원</Text>
         </Group>
       </Paper>
 

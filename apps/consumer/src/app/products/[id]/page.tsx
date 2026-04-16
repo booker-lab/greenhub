@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import {
   Container, Box, Text, Title, Button, Group, Stack, Badge,
-  Paper, Progress, ActionIcon, Checkbox, Skeleton,
+  Paper, Progress, ActionIcon, Checkbox, Skeleton, Divider,
 } from '@mantine/core'
 import { useProduct, useStore } from '@/hooks/useProducts'
 import { useGroupProduct } from '@/hooks/useGroupProduct'
@@ -42,7 +42,7 @@ export default function ProductDetailPage({
   if (loading) {
     return (
       <Container size="sm" px="md" py="lg">
-        <Skeleton height={300} radius="lg" mb="md" />
+        <Skeleton height={340} radius="md" mb="md" />
         <Skeleton height={24} width="60%" mb="xs" />
         <Skeleton height={32} width="30%" />
       </Container>
@@ -109,7 +109,7 @@ export default function ProductDetailPage({
       </Box>
 
       {/* 이미지 */}
-      <Box style={{ aspectRatio: '1', background: 'var(--mantine-color-gray-0)', overflow: 'hidden' }}>
+      <Box style={{ aspectRatio: '4/5', background: 'var(--mantine-color-gray-1)', overflow: 'hidden' }}>
         <img
           src={product.images?.[0] ?? '/icons/icon-192x192.png'}
           alt={product.name}
@@ -118,34 +118,49 @@ export default function ProductDetailPage({
       </Box>
 
       {/* 정보 */}
-      <Stack gap="md" px="md" py="lg">
-        {isGroup && (
-          <Badge color="brand" variant="filled">공동구매</Badge>
-        )}
+      <Stack gap={0} px="md" pt="lg" pb={100}>
+        {/* 상품명 + 가격 */}
+        <Stack gap="xs" mb="lg">
+          <Group gap="xs">
+            {isGroup && (
+              <Badge color="brand" variant="filled" size="sm">공동구매</Badge>
+            )}
+            <Badge color="gray" variant="light" size="sm">
+              {product.category === 'cut_flower' ? '절화' : product.category === 'orchid' ? '난' : '관엽'}
+            </Badge>
+          </Group>
+          <Title order={2} fw={700} c="dark">{product.name}</Title>
+          <Text size="xl" fw={800} c="dark">{unitPrice.toLocaleString()}원</Text>
+        </Stack>
 
-        <Title order={2}>{product.name}</Title>
-        <Text size="xl" fw={700} c="brand.8">{unitPrice.toLocaleString()}원</Text>
+        <Divider mb="lg" />
 
         {product.description && (
-          <Text size="sm" c="gray.6" style={{ lineHeight: 1.6 }}>
+          <Text size="sm" c="gray.6" mb="lg" style={{ lineHeight: 1.7 }}>
             {product.description}
           </Text>
         )}
 
         {/* 공동구매 실시간 정보 */}
         {isGroup && groupConfig && (
-          <Paper bg={isFull ? 'gray.1' : 'brand.0'} radius="md" p="md">
-            <Group justify="space-between" mb="xs">
+          <Paper
+            bg={isFull ? 'gray.0' : 'brand.0'}
+            radius="md"
+            p="md"
+            mb="lg"
+            style={{ border: '1px solid var(--mantine-color-brand-2)' }}
+          >
+            <Group justify="space-between" mb="sm">
               <Text fw={700} size="sm" c={isFull ? 'gray.6' : 'brand.8'}>공동구매 현황</Text>
               {isFull && <Badge color="gray" variant="filled" size="sm">모집 완료</Badge>}
             </Group>
             <Group justify="space-between" mb={4}>
               <Text size="sm" c="gray.5">현재 참여</Text>
-              <Text size="sm" fw={600}>
+              <Text size="sm" fw={700} c="brand.8">
                 {groupConfig.currentParticipants}/{groupConfig.maxParticipants}명
               </Text>
             </Group>
-            <Group justify="space-between" mb="xs">
+            <Group justify="space-between" mb="sm">
               <Text size="sm" c="gray.5">최소 인원</Text>
               <Text size="sm" fw={600}>{groupConfig.minParticipants}명</Text>
             </Group>
@@ -155,47 +170,49 @@ export default function ProductDetailPage({
                 100,
               )}
               color="brand"
-              size="sm"
+              size="md"
               radius="xl"
             />
-            <Text size="xs" c="gray.4" mt="xs">
-              모집 마감:{' '}
-              {new Date(groupConfig.recruitDeadline).toLocaleString('ko-KR', {
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </Text>
-            <Text size="xs" c="brand.7" mt={4} fw={600}>
-              배송 예정일:{' '}
-              {new Date(groupConfig.groupDeliveryDate).toLocaleDateString('ko-KR', {
-                month: 'long',
-                day: 'numeric',
-                weekday: 'short',
-              })}
-            </Text>
+            <Group justify="space-between" mt="sm">
+              <Text size="xs" c="gray.4">
+                모집 마감:{' '}
+                {new Date(groupConfig.recruitDeadline).toLocaleString('ko-KR', {
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </Text>
+              <Text size="xs" c="brand.7" fw={600}>
+                배송:{' '}
+                {new Date(groupConfig.groupDeliveryDate).toLocaleDateString('ko-KR', {
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'short',
+                })}
+              </Text>
+            </Group>
           </Paper>
         )}
 
         {/* Daily Cap */}
         {remainingSlots > 0 && (
-          <Text size="xs" c="gray.4">
-            🕐 오늘 잔여 배송 가능: <Text span fw={700}>{remainingSlots}건</Text>
+          <Text size="xs" c="gray.4" mb="md">
+            오늘 잔여 배송 가능: <Text span fw={700} c="gray.6">{remainingSlots}건</Text>
           </Text>
         )}
 
         {/* 배송 방법 */}
-        <Box>
-          <Text fw={600} size="sm" mb="xs">배송 방법</Text>
+        <Paper bg="gray.0" radius="md" p="md" mb="md">
+          <Text fw={600} size="sm" mb="sm" c="dark">배송 방법</Text>
           <Group gap="xs">
             {(['direct', 'hub', 'parcel'] as DeliveryMethod[]).map((method) => (
               <Button
                 key={method}
-                size="xs"
+                size="sm"
                 radius="md"
-                variant={deliveryMethod === method ? 'filled' : 'outline'}
-                color={deliveryMethod === method ? 'brand' : 'gray'}
+                variant={deliveryMethod === method ? 'filled' : 'default'}
+                color={deliveryMethod === method ? 'brand' : undefined}
                 style={{ flex: 1 }}
                 onClick={() => setDeliveryMethod(method)}
               >
@@ -203,16 +220,15 @@ export default function ProductDetailPage({
               </Button>
             ))}
           </Group>
-        </Box>
+        </Paper>
 
         {/* 수량 */}
-        <Box>
-          <Text fw={600} size="sm" mb="xs">수량</Text>
+        <Paper bg="gray.0" radius="md" p="md" mb="lg">
+          <Text fw={600} size="sm" mb="sm" c="dark">수량</Text>
           <Group gap="sm">
             <ActionIcon
               size="lg"
-              variant="outline"
-              color="gray"
+              variant="default"
               radius="md"
               onClick={() => setQuantity(Math.max(1, quantity - 1))}
             >
@@ -221,25 +237,24 @@ export default function ProductDetailPage({
             <Text size="lg" fw={700} w={32} ta="center">{quantity}</Text>
             <ActionIcon
               size="lg"
-              variant="outline"
-              color="gray"
+              variant="default"
               radius="md"
               onClick={() => setQuantity(quantity + 1)}
             >
               +
             </ActionIcon>
           </Group>
-        </Box>
+        </Paper>
 
         {/* 공동구매 동의 */}
         {isGroup && (
-          <Paper bg="yellow.0" radius="md" p="md">
+          <Paper bg="yellow.0" radius="md" p="md" mb="lg" style={{ border: '1px solid var(--mantine-color-yellow-3)' }}>
             <Checkbox
               checked={groupConsent}
               onChange={(e) => setGroupConsent(e.currentTarget.checked)}
               color="brand"
               label={
-                <Text size="sm" c="gray.7" style={{ lineHeight: 1.5 }}>
+                <Text size="sm" c="gray.7" style={{ lineHeight: 1.6 }}>
                   공동구매 <Text span fw={700}>확정 이후 취소·환불이 불가</Text>함을 이해하고
                   동의합니다. (전자상거래법 제17조)
                 </Text>
@@ -249,28 +264,27 @@ export default function ProductDetailPage({
         )}
 
         {/* 합계 */}
-        <Group justify="space-between" pt="sm" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+        <Group justify="space-between" py="md" mb="md" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
           <Text size="sm" c="gray.5">총 금액</Text>
-          <Text size="xl" fw={700} c="brand.8">{totalAmount.toLocaleString()}원</Text>
+          <Text size="xl" fw={800} c="dark">{totalAmount.toLocaleString()}원</Text>
         </Group>
 
         {/* CTA 버튼 */}
         <Group gap="xs">
           <Button
             flex={1}
-            variant="outline"
-            color="brand"
+            variant="default"
             radius="md"
-            size="md"
+            size="lg"
             onClick={handleAddToCart}
           >
             장바구니
           </Button>
           <Button
-            flex={1}
+            flex={2}
             color="brand"
             radius="md"
-            size="md"
+            size="lg"
             disabled={!canBuy}
             onClick={handleBuyNow}
           >
@@ -280,30 +294,30 @@ export default function ProductDetailPage({
 
         {/* 판매자 정보 */}
         {store && (
-          <Box pt="md" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
-            <Text fw={600} size="sm" c="gray.7" mb="xs">판매자 정보</Text>
-            <Group gap="sm" mb="xs">
+          <Box pt="xl" mt="xl" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+            <Text fw={600} size="sm" c="gray.5" mb="sm">판매자 정보</Text>
+            <Group gap="sm" mb="sm">
               {store.logoUrl ? (
                 <img
                   src={store.logoUrl}
                   alt={store.name}
-                  style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', background: 'var(--green-bg)' }}
+                  style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }}
                 />
               ) : (
                 <Box
                   style={{
-                    width: 40, height: 40, borderRadius: '50%',
-                    background: 'var(--green-bg)', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    color: 'var(--green-primary)', fontWeight: 700, fontSize: 14,
+                    width: 44, height: 44, borderRadius: '50%',
+                    background: 'var(--mantine-color-brand-1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--mantine-color-brand-7)', fontWeight: 700, fontSize: 16,
                   }}
                 >
                   {store.name[0]}
                 </Box>
               )}
               <Box>
-                <Text size="sm" fw={600} c="dark">{store.name}</Text>
-                <Text size="xs" c="gray.4">{store.ceoName}</Text>
+                <Text size="sm" fw={700} c="dark">{store.name}</Text>
+                <Text size="xs" c="gray.5">{store.ceoName}</Text>
               </Box>
             </Group>
             <Stack gap={4}>

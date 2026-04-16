@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Container, Box, Title, Text, Button, Group, SimpleGrid, Skeleton, Stack } from '@mantine/core'
+import { Container, Box, Title, Text, Group, SimpleGrid, Skeleton, Stack, Divider, UnstyledButton } from '@mantine/core'
 import ProductCard from '@/components/ProductCard'
 import { useProducts } from '@/hooks/useProducts'
 import type { Category, ColorOption } from '@greenhub/shared'
@@ -43,39 +43,55 @@ export default function CategoryPage() {
   return (
     <Container size="sm" pb={96}>
       {/* 헤더 */}
-      <Box px="md" pt="lg" pb="sm">
-        <Title order={2} c="dark">카테고리</Title>
+      <Box px="md" pt="lg" pb="md">
+        <Title order={3} fw={700} c="dark">카테고리</Title>
       </Box>
 
       {/* 카테고리 탭 */}
-      <Box px="md" pb="sm" style={{ overflowX: 'auto' }}>
-        <Group gap="xs" wrap="nowrap">
+      <Box
+        px="md"
+        pb="sm"
+        style={{ overflowX: 'auto', scrollbarWidth: 'none' }}
+      >
+        <Group gap={0} wrap="nowrap">
           {TABS.map((tab) => {
             const isActive = selected === tab.value
             return (
-              <Button
+              <UnstyledButton
                 key={tab.label}
-                size="sm"
-                radius="xl"
-                variant={isActive ? 'filled' : 'outline'}
-                color={isActive ? 'brand' : 'gray'}
                 onClick={() => setSelected(tab.value)}
-                style={{ flexShrink: 0 }}
+                style={{
+                  flexShrink: 0,
+                  padding: '8px 16px',
+                  fontSize: 14,
+                  fontWeight: isActive ? 700 : 400,
+                  color: isActive ? 'var(--mantine-color-dark-7)' : 'var(--mantine-color-gray-5)',
+                  borderBottom: isActive
+                    ? '2px solid var(--mantine-color-dark-7)'
+                    : '2px solid transparent',
+                  transition: 'all 0.15s',
+                }}
               >
                 {tab.label}
-              </Button>
+              </UnstyledButton>
             )
           })}
         </Group>
+        <Divider mt={0} />
       </Box>
 
       {/* 색상 필터 */}
-      <Box px="md" pb="md" style={{ overflowX: 'auto' }}>
-        <Group gap={6} wrap="nowrap">
+      <Box
+        px="md"
+        py="sm"
+        mb="sm"
+        style={{ overflowX: 'auto', scrollbarWidth: 'none' }}
+      >
+        <Group gap={12} wrap="nowrap">
           {COLOR_CHIPS.map((chip) => {
             const isActive = selectedColors.includes(chip.value)
             return (
-              <Box
+              <UnstyledButton
                 key={chip.value}
                 onClick={() => toggleColor(chip.value)}
                 style={{
@@ -83,37 +99,44 @@ export default function CategoryPage() {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 4,
-                  cursor: 'pointer',
+                  gap: 5,
                 }}
               >
                 <Box
                   style={{
-                    width: 28,
-                    height: 28,
+                    width: 30,
+                    height: 30,
                     borderRadius: '50%',
                     backgroundColor: chip.hex,
                     border: isActive
-                      ? '2.5px solid var(--mantine-color-brand-6, #2f9e44)'
+                      ? '2px solid var(--mantine-color-dark-7)'
                       : '2px solid var(--mantine-color-gray-3)',
-                    boxShadow: isActive ? '0 0 0 1.5px var(--mantine-color-brand-6, #2f9e44)' : 'none',
+                    outline: isActive ? '2px solid var(--mantine-color-dark-7)' : '2px solid transparent',
+                    outlineOffset: 2,
+                    transition: 'outline 0.1s',
                   }}
                 />
-                <Text size="10px" c={isActive ? 'brand' : 'gray.5'} fw={isActive ? 600 : 400}>
+                <Text
+                  size="xs"
+                  c={isActive ? 'dark' : 'gray.5'}
+                  fw={isActive ? 700 : 400}
+                >
                   {chip.label}
                 </Text>
-              </Box>
+              </UnstyledButton>
             )
           })}
         </Group>
       </Box>
+
+      <Divider mb="md" />
 
       {/* 상품 목록 */}
       <Box px="md">
         {loading && (
           <SimpleGrid cols={2} spacing="sm">
             {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} height={200} radius="lg" />
+              <Skeleton key={i} height={260} radius="md" />
             ))}
           </SimpleGrid>
         )}
@@ -131,7 +154,7 @@ export default function CategoryPage() {
 
         {!loading && products.length > 0 && (
           <>
-            <Text size="xs" c="gray.4" mb="sm">{products.length}개 상품</Text>
+            <Text size="xs" c="gray.4" mb="sm" fw={500}>{products.length}개 상품</Text>
             <SimpleGrid cols={2} spacing="sm">
               {products.map((product) => (
                 <ProductCard key={product.id} product={product} />
