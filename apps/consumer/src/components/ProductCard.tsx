@@ -47,10 +47,10 @@ export default function ProductCard({ product }: ProductCardProps) {
             </Badge>
           )}
         </Group>
-        <Text size="sm" fw={700} c="dark" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+        <Text size="md" fw={600} c="dark" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
           {product.name}
         </Text>
-        <Text size="lg" fw={800} c="dark" mt={4}>
+        <Text size="sm" fw={700} c="gray.7" mt={4}>
           {product.price.toLocaleString()}원
         </Text>
         {product.colors.length > 0 && (
