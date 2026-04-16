@@ -17,6 +17,17 @@
   --border-subtle: #E8E8E8;
 }
 
+/* Badge — Pretendard 한글 글자 잘림 방지 */
+.mantine-Badge-root {
+  overflow: visible !important;
+  height: auto !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+.mantine-Badge-label {
+  line-height: 1.5 !important;
+}
+
 body {
   background-color: var(--surface-bg);
   padding-top: env(safe-area-inset-top);
