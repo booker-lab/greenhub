@@ -2,15 +2,15 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-17 (프론트엔드 디자인 개편 레이어1 완료)
+최종 수정: 2026-04-17 (프론트엔드 디자인 개편 레이어2 완료)
 
 ## ⚡ 다음 세션 즉시 착수 포인트
 
-### 1순위 — 프론트엔드 디자인 레이어 2 (컴포넌트 마크업)
-- **BrandHeader** (consumer): 다크 톤 히어로 영역으로 개편
-- **ProductCard** (consumer): 이미지 비율 확대, 텍스트 계층 강화, shadow 카드
-- **BottomNav** (3앱): shadow-top, 아이콘 시각 개선
-- 작업 후 배포 → 확인 → 레이어 3(페이지 레이아웃)으로 진행
+### 1순위 — 프론트엔드 디자인 레이어 3 (페이지 레이아웃)
+- **홈 페이지**: 공동구매 배너, 상품 목록 섹션 레이아웃 정교화
+- **상품 상세 페이지**: 이미지, 정보 계층, CTA 버튼 레이아웃
+- **마이페이지**: 주문 내역, 배송지 관리 레이아웃
+- **셀러 주문 관리**: 주문 카드 및 상태 변경 UI
 
 ### 2순위 — Firebase Storage CORS 적용 (seller 이미지 업로드 차단 중)
 - cors.json 커밋 완료: `/c/Develop/greenhub/cors.json`
@@ -31,7 +31,8 @@
 | 95 | Firebase Storage CORS | ⬜ |
 | 96 | Vercel 자동배포 확인 | ✅ 2026-04-16 |
 | 97 | 디자인 개편 레이어1 | ✅ 2026-04-17 |
-| 98 | 디자인 개편 레이어2 | ⬜ 다음 세션 |
+| 98 | 디자인 개편 레이어2 | ✅ 2026-04-17 |
+| 99 | 디자인 개편 레이어3 | ⬜ 다음 세션 |
 
 ---
 
@@ -44,15 +45,17 @@
 - **컬러**: body 배경 #F5F5F5, 콘텐츠 영역 #FFFFFF (회색-흰색 분리)
 - **Radius**: `xl` 알약형 → `md` 절제형
 - **카드**: border 위주 → shadow 위주
-- **콘텐츠 폭**: consumer 430px / seller 480px / driver 430px (경쟁사 수준)
-- **BottomNav**: consumer /login hiddenPaths 제거 (마이페이지 이동 시 네비 유지)
-- **로그인 배경**: var(--green-bg) → #FFFFFF (seller/driver)
-- **드라이버 로그인**: 셀러와 동일한 Paper 카드 레이아웃으로 통일
+- **콘텐츠 폭**: consumer 430px / seller 480px / driver 430px
 
-### ⬜ 레이어 2 — 컴포넌트 마크업 (다음 세션)
-- BrandHeader, ProductCard, BottomNav 시각 개선
+### ✅ 레이어 2 완료 (컴포넌트 마크업)
+- **BrandHeader** (consumer): 로고 56px, 중앙정렬, full-width, 그레이지 배경 #F5F2EE
+- **ProductCard** (consumer): 이미지 4:5 비율, shadow 카드, 배지 pill 통합, 가격 lg/fw800
+- **BottomNav** (3앱): shadow-top, active 탭 fw600, 아이콘 strokeWidth 2.2
+- **Badge 한글 클리핑 수정**: Mantine v9 `text-box-trim:trim-both` → `none` (globals.css, 3앱)
+  - 셀렉터: `.m_5add502a` (Mantine v9 Badge label 해시 클래스)
+  - ⚠️ Mantine 버전 업그레이드 시 해시 재확인 필요
 
-### ⬜ 레이어 3 — 페이지 레이아웃 (레이어2 후)
+### ⬜ 레이어 3 — 페이지 레이아웃 (다음 세션)
 - 홈, 상품 상세, 마이페이지, 셀러 주문 관리 등
 
 ---
@@ -99,3 +102,5 @@
 - **Firebase Storage CORS**: seller 이미지 업로드 차단 중 — gcloud SDK 설치 후 cors.json 적용 필요
 - **Pretendard 폰트**: globals.css CDN import — PWA 오프라인 시 시스템 폰트 fallback
 - **콘텐츠 폭 래퍼**: layout.tsx div(maxWidth+backgroundColor) — 각 페이지 Container는 그대로 유지
+- **Mantine v9 Badge**: `.m_5add502a`(label 해시)에 `text-box-trim:none` 오버라이드 — 한글 클리핑 방지
+- **Mantine v9 클래스명**: `.mantine-*` 정적 셀렉터 없음, 해시 클래스 사용 (`Badge.module.mjs` 참조)
