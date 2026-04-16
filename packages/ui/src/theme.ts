@@ -31,6 +31,7 @@ export const theme = createTheme({
     },
     Badge: {
       styles: {
+        root: { overflow: 'visible', height: 'auto', paddingTop: 4, paddingBottom: 4 },
         label: { lineHeight: 1.5 },
       },
     },
