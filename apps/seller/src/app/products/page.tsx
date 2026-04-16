@@ -118,7 +118,7 @@ export default function ProductsPage() {
               <Text
                 component={Link}
                 href="/products/new"
-                size="sm"
+                size="md"
                 mt="xs"
                 style={{ color: 'var(--green-primary)', fontWeight: 500 }}
               >
@@ -228,7 +228,7 @@ function ProductCard({
               color={product.isActive ? 'green' : 'gray'}
               variant="light"
               radius="xl"
-              size="sm"
+              size="md"
             >
               {product.isActive ? '판매 중' : '비활성'}
             </Badge>
@@ -238,7 +238,7 @@ function ProductCard({
               color="gray"
               variant="light"
               radius="xl"
-              size="sm"
+              size="md"
               style={{ cursor: 'pointer' }}
             >
               수정
@@ -250,7 +250,7 @@ function ProductCard({
               color="red"
               variant="light"
               radius="xl"
-              size="sm"
+              size="md"
             >
               {deleting ? '삭제 중...' : '삭제'}
             </Badge>
