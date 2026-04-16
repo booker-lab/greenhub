@@ -7,8 +7,8 @@ export default function BrandHeader() {
     <Box
       mb="lg"
       style={{
-        background: '#FAF7F2',
-        margin: '0 -16px',
+        background: '#F5F2EE',
+        margin: '-20px -16px 0',
         padding: '24px 16px 20px',
         textAlign: 'center',
       }}
