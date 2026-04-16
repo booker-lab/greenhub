@@ -17,15 +17,13 @@
   --border-subtle: #E8E8E8;
 }
 
-/* Badge — Pretendard 한글 글자 잘림 방지 */
-.mantine-Badge-root {
+/* Badge — Pretendard 한글 글자 잘림 방지
+   Mantine v9 Badge label(m_5add502a)의 text-box-trim: trim-both가
+   라틴 기준으로 상하를 잘라내어 한글이 클리핑됨 → 비활성화 */
+.m_5add502a {
+  text-box-trim: none !important;
+  text-box-edge: initial !important;
   overflow: visible !important;
-  height: auto !important;
-  padding-top: 4px !important;
-  padding-bottom: 4px !important;
-}
-.mantine-Badge-label {
-  line-height: 1.5 !important;
 }
 
 body {
