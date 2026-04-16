@@ -49,7 +49,7 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
     >
       <Stack gap="xs">
         <Group justify="space-between" align="center">
-          <Badge color={badge.color} variant="light" size="sm">
+          <Badge color={badge.color} variant="light" size="md">
             {badge.label}
           </Badge>
           <Text size="xs" c="dimmed">

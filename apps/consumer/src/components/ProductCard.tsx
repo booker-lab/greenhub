@@ -38,11 +38,11 @@ export default function ProductCard({ product }: ProductCardProps) {
       {/* 정보 */}
       <Box p="xs">
         <Group gap={4} mb={4}>
-          <Badge size="xs" variant="light" color="gray" radius="sm">
+          <Badge size="sm" variant="light" color="gray" radius="sm">
             {categoryLabels[product.category] ?? product.category}
           </Badge>
           {product.saleType === 'group' && (
-            <Badge size="xs" variant="light" color="green" radius="sm">
+            <Badge size="sm" variant="filled" color="green" radius="sm">
               공동구매
             </Badge>
           )}
