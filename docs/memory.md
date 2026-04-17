@@ -2,24 +2,18 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-17 (프론트엔드 디자인 개편 레이어2 완료)
+최종 수정: 2026-04-17 (디자인 개편 레이어3 완료)
 
 ## ⚡ 다음 세션 즉시 착수 포인트
 
-### 1순위 — 프론트엔드 디자인 레이어 3 (페이지 레이아웃)
-- **홈 페이지**: 공동구매 배너, 상품 목록 섹션 레이아웃 정교화
-- **상품 상세 페이지**: 이미지, 정보 계층, CTA 버튼 레이아웃
-- **마이페이지**: 주문 내역, 배송지 관리 레이아웃
-- **셀러 주문 관리**: 주문 카드 및 상태 변경 UI
-
-### 2순위 — Firebase Storage CORS 적용 (seller 이미지 업로드 차단 중)
+### 1순위 — Firebase Storage CORS 적용 (seller 이미지 업로드 차단 중)
 - cors.json 커밋 완료: `/c/Develop/greenhub/cors.json`
 - `winget install Google.CloudSDK` → `gcloud auth login`
 - `gcloud storage buckets update gs://green-e4fe3.firebasestorage.app --cors-file=/c/Develop/greenhub/cors.json`
 
-### 3순위 — 네이버페이 채널키 연결 (승인 이메일 수신 후)
+### 2순위 — 네이버페이 채널키 연결 (승인 이메일 수신 후)
 
-### 4순위 — 공동구매 수량 기반 모델 전환 (Phase 2)
+### 3순위 — 공동구매 수량 기반 모델 전환 (Phase 2)
 
 ---
 
@@ -32,31 +26,34 @@
 | 96 | Vercel 자동배포 확인 | ✅ 2026-04-16 |
 | 97 | 디자인 개편 레이어1 | ✅ 2026-04-17 |
 | 98 | 디자인 개편 레이어2 | ✅ 2026-04-17 |
-| 99 | 디자인 개편 레이어3 | ⬜ 다음 세션 |
+| 99 | 디자인 개편 레이어3 | ✅ 2026-04-17 |
 
 ---
 
-## 디자인 개편 현황 (2026-04-17 기준)
+## 디자인 개편 완료 현황 (2026-04-17 기준)
 
 **목표 감성**: 마켓컬리 계열 — 프리미엄, 클린, 뉴트럴
 
-### ✅ 레이어 1 완료 (전역 테마)
-- **폰트**: Geist Sans → Pretendard Variable (CDN, 한글 최적화)
-- **컬러**: body 배경 #F5F5F5, 콘텐츠 영역 #FFFFFF (회색-흰색 분리)
-- **Radius**: `xl` 알약형 → `md` 절제형
-- **카드**: border 위주 → shadow 위주
-- **콘텐츠 폭**: consumer 430px / seller 480px / driver 430px
+### ✅ 레이어 1 (전역 테마)
+- 폰트: Pretendard Variable (CDN)
+- 배경: body #F5F5F5 / 콘텐츠 #FFFFFF
+- Radius: md 절제형, 카드 shadow 위주
+- 콘텐츠 폭: consumer/driver 430px / seller 480px
 
-### ✅ 레이어 2 완료 (컴포넌트 마크업)
-- **BrandHeader** (consumer): 로고 56px, 중앙정렬, full-width, 그레이지 배경 #F5F2EE
-- **ProductCard** (consumer): 이미지 4:5 비율, shadow 카드, 배지 pill 통합, 가격 lg/fw800
-- **BottomNav** (3앱): shadow-top, active 탭 fw600, 아이콘 strokeWidth 2.2
-- **Badge 한글 클리핑 수정**: Mantine v9 `text-box-trim:trim-both` → `none` (globals.css, 3앱)
-  - 셀렉터: `.m_5add502a` (Mantine v9 Badge label 해시 클래스)
-  - ⚠️ Mantine 버전 업그레이드 시 해시 재확인 필요
+### ✅ 레이어 2 (컴포넌트 마크업)
+- BrandHeader: 로고 56px 중앙정렬, 그레이지 배경 #F5F2EE
+- ProductCard: 이미지 4:5, shadow 카드, 상품명 md/fw600 > 가격 sm/fw700
+- BottomNav (3앱): shadow-top, active fw600, strokeWidth 2.2
+- Badge 한글 클리핑: `.m_5add502a { text-box-trim: none }` (Mantine v9)
 
-### ⬜ 레이어 3 — 페이지 레이아웃 (다음 세션)
-- 홈, 상품 상세, 마이페이지, 셀러 주문 관리 등
+### ✅ 레이어 3 (페이지 레이아웃)
+- **홈**: 배너 accent-bar 카드(brand 좌측 라인), 섹션 Title+Divider
+- **상품 상세**: 이미지 4:5, CTA size=lg(바로결제 flex=2), 섹션 Paper bg=gray.0
+- **카테고리**: 탭 underline 스타일, 색상 칩 outline ring 30px
+- **장바구니**: 합계 dark.8 반전 배경, ActionIcon size=lg
+- **마이페이지**: 주문 카드 상태별 accent-bar, STATUS_COLORS Mantine 토큰화
+- **주문 상세**: Alert 컴포넌트(blue/red), Mantine Stepper 타임라인
+- **셀러 주문 목록**: 주문 카드 accent-bar, 상태 뱃지 색상 정교화(blue/orange/violet/green/red)
 
 ---
 
@@ -104,3 +101,7 @@
 - **콘텐츠 폭 래퍼**: layout.tsx div(maxWidth+backgroundColor) — 각 페이지 Container는 그대로 유지
 - **Mantine v9 Badge**: `.m_5add502a`(label 해시)에 `text-box-trim:none` 오버라이드 — 한글 클리핑 방지
 - **Mantine v9 클래스명**: `.mantine-*` 정적 셀렉터 없음, 해시 클래스 사용 (`Badge.module.mjs` 참조)
+- **SW 캐시 충돌**: 새 배포 후 구 SW가 swe-worker-{hash}.js 못 찾아 SyntaxError → DevTools > SW Unregister + 강력 새로고침
+- **레이어3 상태 색상**: STATUS_COLORS 하드코딩 제거, Mantine CSS 변수 토큰 사용
+- **레이어3 타임라인**: 커스텀 TimelineStep 제거 → Mantine Stepper 컴포넌트 (consumer 주문 상세)
+- **레이어3 accent-bar**: 주문 카드 좌측 `borderLeft: 4px solid {상태별 색상}` 패턴 (consumer + seller)
