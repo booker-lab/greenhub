@@ -21,3 +21,30 @@ SDD(Spec-Driven Design) 아키텍처에 기반하며, 비즈니스 로직과 인
 - **설계 결정 발생 시** → `docs/CRITICAL_LOGIC.md`에 결정 사항과 이유를 즉시 기록.
 - **신규 기능 추가 시** → `docs/specs/` 내의 파일을 먼저 업데이트하여 **선(先) 설계 후(後) 구현** 원칙을 고수, 기술적 표준을 즉시 현행화.
 - **세션 종료 시** → `docs/memory.md` 최신화
+
+## 3. gstack
+
+웹 브라우징이 필요한 모든 작업에는 `/browse` 스킬을 사용합니다. `mcp__claude-in-chrome__*` 도구는 절대 사용하지 않습니다.
+
+사용 가능한 스킬:
+/office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review, /design-consultation, /design-shotgun, /design-html, /review, /ship, /land-and-deploy, /canary, /benchmark, /browse, /connect-chrome, /qa, /qa-only, /design-review, /setup-browser-cookies, /setup-deploy, /retro, /investigate, /document-release, /codex, /cso, /autoplan, /plan-devex-review, /devex-review, /careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn
+
+## Skill routing
+
+When the user's request matches an available skill, ALWAYS invoke it using the Skill
+tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
+The skill has specialized workflows that produce better results than ad-hoc answers.
+
+Key routing rules:
+- Product ideas, "is this worth building", brainstorming → invoke office-hours
+- Bugs, errors, "why is this broken", 500 errors → invoke investigate
+- Ship, deploy, push, create PR → invoke ship
+- QA, test the site, find bugs → invoke qa
+- Code review, check my diff → invoke review
+- Update docs after shipping → invoke document-release
+- Weekly retro → invoke retro
+- Design system, brand → invoke design-consultation
+- Visual audit, design polish → invoke design-review
+- Architecture review → invoke plan-eng-review
+- Save progress, checkpoint, resume → invoke checkpoint
+- Code quality, health check → invoke health
