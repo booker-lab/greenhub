@@ -1,0 +1,122 @@
+[
+  {
+    "id": "phala-amabilis",
+    "name": "아마빌리스 계열",
+    "category": "orchid",
+    "subCategory": "phalaenopsis",
+    "hasFragrance": false,
+    "fragranceLevel": "none",
+    "bloomDuration": "60~90일",
+    "careLevel": "easy",
+    "typicalColors": ["화이트", "핑크"],
+    "notes": "가장 일반적인 호접란. 흰 바탕에 분홍 중심. 입문자에게 적합."
+  },
+  {
+    "id": "phala-biglip",
+    "name": "빅립 계열",
+    "category": "orchid",
+    "subCategory": "phalaenopsis",
+    "hasFragrance": false,
+    "fragranceLevel": "none",
+    "bloomDuration": "60~90일",
+    "careLevel": "easy",
+    "typicalColors": ["화이트", "핑크", "퍼플"],
+    "notes": "입술 꽃잎(lip)이 크고 화려함. 선물용으로 인기."
+  },
+  {
+    "id": "phala-stripes",
+    "name": "줄무늬(스트라이프) 계열",
+    "category": "orchid",
+    "subCategory": "phalaenopsis",
+    "hasFragrance": false,
+    "fragranceLevel": "none",
+    "bloomDuration": "50~80일",
+    "careLevel": "normal",
+    "typicalColors": ["무늬", "핑크", "퍼플"],
+    "notes": "꽃잎에 줄무늬 패턴. 독특한 색상 조합으로 컬렉터에게 인기."
+  },
+  {
+    "id": "phala-yellow",
+    "name": "옐로우 계열",
+    "category": "orchid",
+    "subCategory": "phalaenopsis",
+    "hasFragrance": false,
+    "fragranceLevel": "none",
+    "bloomDuration": "50~70일",
+    "careLevel": "normal",
+    "typicalColors": ["옐로우"],
+    "notes": "노란색 계열. 재배 난이도 약간 높음. 밝고 화사한 분위기."
+  },
+  {
+    "id": "phala-red",
+    "name": "레드/다크 계열",
+    "category": "orchid",
+    "subCategory": "phalaenopsis",
+    "hasFragrance": false,
+    "fragranceLevel": "none",
+    "bloomDuration": "50~70일",
+    "careLevel": "normal",
+    "typicalColors": ["레드", "퍼플"],
+    "notes": "진한 레드~보라 계열. 고급스럽고 강렬한 인상."
+  },
+  {
+    "id": "phala-mini",
+    "name": "미니 호접란",
+    "category": "orchid",
+    "subCategory": "phalaenopsis",
+    "hasFragrance": false,
+    "fragranceLevel": "none",
+    "bloomDuration": "45~60일",
+    "careLevel": "easy",
+    "typicalColors": ["화이트", "핑크", "퍼플"],
+    "notes": "소형 품종. 꽃 지름 3~5cm. 책상·창가 인테리어용으로 인기."
+  },
+  {
+    "id": "phala-multiflora",
+    "name": "멀티플로라 계열",
+    "category": "orchid",
+    "subCategory": "phalaenopsis",
+    "hasFragrance": false,
+    "fragranceLevel": "none",
+    "bloomDuration": "60~100일",
+    "careLevel": "easy",
+    "typicalColors": ["화이트", "핑크"],
+    "notes": "가지가 여러 개로 갈라져 꽃이 풍성함. 관상 기간이 길어 선물용으로 최적."
+  },
+  {
+    "id": "phala-spotted",
+    "name": "점박이(스팟) 계열",
+    "category": "orchid",
+    "subCategory": "phalaenopsis",
+    "hasFragrance": false,
+    "fragranceLevel": "none",
+    "bloomDuration": "50~80일",
+    "careLevel": "normal",
+    "typicalColors": ["무늬", "화이트", "핑크"],
+    "notes": "꽃잎에 점박이 패턴. 희귀감이 있어 애호가 수요 높음."
+  },
+  {
+    "id": "phala-cascade",
+    "name": "캐스케이드(늘어지는) 계열",
+    "category": "orchid",
+    "subCategory": "phalaenopsis",
+    "hasFragrance": false,
+    "fragranceLevel": "none",
+    "bloomDuration": "60~90일",
+    "careLevel": "normal",
+    "typicalColors": ["화이트", "핑크"],
+    "notes": "화경이 아래로 늘어지는 형태. 행잉 바스켓 연출에 적합."
+  },
+  {
+    "id": "phala-fragrant",
+    "name": "향기 호접란 (향기 계열)",
+    "category": "orchid",
+    "subCategory": "phalaenopsis",
+    "hasFragrance": true,
+    "fragranceLevel": "light",
+    "bloomDuration": "40~60일",
+    "careLevel": "hard",
+    "typicalColors": ["화이트", "옐로우"],
+    "notes": "일반 호접란과 달리 은은한 향기 있음. 재배 난이도 높음. 희귀 품종."
+  }
+]

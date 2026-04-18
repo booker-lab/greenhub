@@ -15,6 +15,8 @@ import { HubsModule } from './hubs/hubs.module';
 import { AdminModule } from './admin/admin.module';
 import { DriverModule } from './driver/driver.module';
 import { AuditModule } from './common/audit/audit.module';
+import { VarietiesModule } from './varieties/varieties.module';
+import { AiModule } from './ai/ai.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -45,6 +47,8 @@ import { AppService } from './app.service';
     HubsModule,
     AdminModule,
     DriverModule,
+    VarietiesModule,
+    AiModule,
   ],
 })
 export class AppModule {}

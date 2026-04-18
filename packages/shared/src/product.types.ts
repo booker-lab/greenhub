@@ -17,6 +17,22 @@ export type ColorOption =
 
 export type DeliverySize = 'small' | 'medium' | 'large'
 
+export type FragranceLevel = 'none' | 'light' | 'strong'
+export type BloomCondition = 'bud' | 'half' | 'full'
+
+export interface Selection {
+  colors: ColorOption[]
+  fragrance: FragranceLevel
+  bloomCondition: BloomCondition
+  bundleUnit: string
+}
+
+export interface GeneratedContent {
+  headline: string
+  description: string
+  isEditedByUser: boolean
+}
+
 // SaleType, DeliveryMethod are defined in order.types.ts — imported for local use and re-exported
 import type { SaleType, DeliveryMethod } from './order.types.js'
 export type { SaleType, DeliveryMethod }
@@ -36,11 +52,9 @@ export interface Product {
   id: string
   storeId: string
   name: string
-  description: string
   images: string[]
   price: number
   category: Category
-  colors: ColorOption[]
   saleType: SaleType
   deliverySize: DeliverySize
   isActive: boolean
@@ -52,6 +66,15 @@ export interface Product {
     maxParticipants: number
     recruitDeadline: string // ISO8601
   }
+  // AI 시스템 신규 필드
+  varietyId?: string
+  selection?: Selection
+  sellerNote?: string
+  content?: GeneratedContent
+  sellerOverride?: boolean
+  // 마이그레이션 호환 — 신규 등록 시 미사용
+  description?: string
+  colors?: ColorOption[]
 }
 
 export interface ProductSummary {
