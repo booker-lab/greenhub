@@ -2,20 +2,16 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-19 (AI 상세페이지 자동화 Phase A~F 전체 완료)
+최종 수정: 2026-04-19 (varieties 시드 + Firebase Storage 전체 완료)
 
 ## ⚡ 다음 세션 즉시 착수 포인트
 
-### 1순위 — varieties 시드 데이터 입력 (A2 미완)
-- Firestore 콘솔 > `varieties` 컬렉션에 호접란 10종 수동 입력
-- 참조: `docs/specs/ai_product_content.md` Phase A 섹션
+### 1순위 — AI 상품등록 E2E 검증 (18개 아토믹 태스크)
+- `docs/specs/ai_product_content.md` Phase E 섹션 참조
+- 검증 순서: P1~P3(환경준비) → S1~S4(사진·품종) → T1~T2(터치선택) → M1(메모) → A1~A6(AI) → F1~F4(등록)
+- **핵심 검증 포인트**: S1(Storage CORS 실제 업로드), A1(Gemini 응답), A4(headline 수정 보존), F3(Firestore 신규 필드)
 
-### 2순위 — Firebase Storage CORS 적용 (seller 이미지 업로드 차단 중)
-- cors.json 커밋 완료: `/c/Develop/greenhub/cors.json`
-- `winget install Google.CloudSDK` → `gcloud auth login`
-- `gcloud storage buckets update gs://green-e4fe3.firebasestorage.app --cors-file=/c/Develop/greenhub/cors.json`
-
-### 3순위 — 네이버페이 채널키 연결 (승인 이메일 수신 후)
+### 2순위 — 네이버페이 채널키 연결 (승인 이메일 수신 후)
 
 ---
 
@@ -24,7 +20,7 @@
 | 단계 | 내용 | 상태 |
 |------|------|------|
 | 1~94 | 기능 개발 전체 완료 | ✅ |
-| 95 | Firebase Storage CORS | ⬜ |
+| 95 | Firebase Storage CORS + 보안 규칙 | ✅ 2026-04-19 |
 | 96 | Vercel 자동배포 확인 | ✅ 2026-04-16 |
 | 97 | 디자인 개편 레이어1 | ✅ 2026-04-17 |
 | 98 | 디자인 개편 레이어2 | ✅ 2026-04-17 |
@@ -104,7 +100,8 @@
 - **공동구매 마감일시 timezone**: seller 폼에서 `.toISOString()` 변환 후 전송 (KST→UTC)
 - **useGroupProduct**: Firestore onSnapshot → Timestamp → ISO string 변환 필수
 - **useOrderStatus**: terminal 상태(CANCELLED/DELIVERED/REVIEWED) 도달 시 폴링 중단
-- **Firebase Storage CORS**: seller 이미지 업로드 차단 중 — gcloud SDK 설치 후 cors.json 적용 필요
+- **Firebase Storage**: Blaze 플랜 · asia-northeast3 버킷 · CORS 적용 완료 · 보안규칙(read:public, write:auth) 배포 완료
+- **varieties 시드**: `scripts/seed-varieties.mjs`로 호접란 10종 Firestore 입력 완료
 - **Pretendard 폰트**: globals.css CDN import — PWA 오프라인 시 시스템 폰트 fallback
 - **콘텐츠 폭 래퍼**: layout.tsx div(maxWidth+backgroundColor) — 각 페이지 Container는 그대로 유지
 - **Mantine v9 Badge**: `.m_5add502a`(label 해시)에 `text-box-trim:none` 오버라이드 — 한글 클리핑 방지
