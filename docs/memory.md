@@ -2,15 +2,13 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-19 (AI 상세페이지 자동화 Phase A~C 완료)
+최종 수정: 2026-04-19 (AI 상세페이지 자동화 Phase A~F 전체 완료)
 
 ## ⚡ 다음 세션 즉시 착수 포인트
 
-### 1순위 — AI 상세페이지 자동화 Phase D 착수
-- 구현 계획서: `docs/specs/ai_product_content.md`
-- **D1**: `apps/api/src/products/dto/create-product.dto.ts` — SelectionDto, ContentDto 추가, description/colors 제거
-- **D2**: `apps/api/src/products/products.service.ts` — create()/update() 신규 필드 처리
-- 이후 E(셀러 앱 UI), F(소비자 앱) 순서
+### 1순위 — varieties 시드 데이터 입력 (A2 미완)
+- Firestore 콘솔 > `varieties` 컬렉션에 호접란 10종 수동 입력
+- 참조: `docs/specs/ai_product_content.md` Phase A 섹션
 
 ### 2순위 — Firebase Storage CORS 적용 (seller 이미지 업로드 차단 중)
 - cors.json 커밋 완료: `/c/Develop/greenhub/cors.json`
@@ -34,9 +32,9 @@
 | 100 | AI 상세페이지 — Phase A (타입/스키마) | ✅ 2026-04-19 |
 | 101 | AI 상세페이지 — Phase B (Varieties 모듈) | ✅ 2026-04-19 |
 | 102 | AI 상세페이지 — Phase C (AI/Gemini 모듈) | ✅ 2026-04-19 |
-| 103 | AI 상세페이지 — Phase D (Products DTO/Service) | ⬜ |
-| 104 | AI 상세페이지 — Phase E (셀러 앱 UI) | ⬜ |
-| 105 | AI 상세페이지 — Phase F (소비자 앱) | ⬜ |
+| 103 | AI 상세페이지 — Phase D (Products DTO/Service) | ✅ 2026-04-19 |
+| 104 | AI 상세페이지 — Phase E (셀러 앱 UI) | ✅ 2026-04-19 |
+| 105 | AI 상세페이지 — Phase F (소비자 앱) | ✅ 2026-04-19 |
 
 ---
 
@@ -115,7 +113,7 @@
 - **레이어3 상태 색상**: STATUS_COLORS 하드코딩 제거, Mantine CSS 변수 토큰 사용
 - **레이어3 타임라인**: 커스텀 TimelineStep 제거 → Mantine Stepper 컴포넌트 (consumer 주문 상세)
 - **레이어3 accent-bar**: 주문 카드 좌측 `borderLeft: 4px solid {상태별 색상}` 패턴 (consumer + seller)
-- **AI 상세페이지**: Gemini 2.0 Flash 사용 (`gemini-2.0-flash`), GEMINI_API_KEY는 .env에만 (gitignore 처리)
+- **AI 상세페이지**: Gemini 3 Flash Preview 사용 (`gemini-3-flash-preview`), GEMINI_API_KEY는 .env에만 (gitignore 처리)
 - **AI 가드레일 DB**: Firestore `varieties` 컬렉션, 시드 데이터: `docs/seeds/varieties_phalaenopsis.json` (호접란 10종)
 - **AI 마이그레이션**: 기존 Product colors/description → optional 유지, 신규 필드 optional로 공존
 - **AI sellerOverride**: 가드레일 충돌 강행 등록 시 `sellerOverride: true` 저장 — DB 개선 신호로 활용

@@ -7,16 +7,24 @@ import {
   Container, Box, Text, Title, Button, Group, Stack, Badge,
   Paper, Progress, ActionIcon, Checkbox, Skeleton, Divider,
 } from '@mantine/core'
-import { useProduct, useStore } from '@/hooks/useProducts'
+import { useProduct, useStore, useVariety } from '@/hooks/useProducts'
 import { useGroupProduct } from '@/hooks/useGroupProduct'
 import { useDailyCap } from '@/hooks/useDailyCap'
 import { useCart } from '@/hooks/useCart'
+import GreenLoveBrandSection from '@/components/GreenLoveBrandSection'
 import type { SaleType, DeliveryMethod } from '@greenhub/shared'
 
 const deliveryLabels: Record<DeliveryMethod, string> = {
   direct: '꽃차 직배송',
   hub: '거점 픽업',
   parcel: '택배',
+}
+
+const FRAGRANCE_LABEL: Record<string, string> = {
+  none: '없음', light: '은은함', strong: '진함',
+}
+const BLOOM_LABEL: Record<string, string> = {
+  bud: '봉오리', half: '반개화', full: '활짝 핌',
 }
 
 export default function ProductDetailPage({
@@ -29,6 +37,7 @@ export default function ProductDetailPage({
   const { data: session } = useSession()
   const { product, loading, error } = useProduct(id)
   const { store } = useStore(product?.storeId ?? null)
+  const { variety } = useVariety(product?.varietyId)
   const { config: groupConfig } = useGroupProduct(
     product?.saleType === 'group' ? id : null,
   )
@@ -66,6 +75,10 @@ export default function ProductDetailPage({
   const unitPrice = product.price
   const totalAmount = unitPrice * quantity
   const canBuy = isGroup ? (groupConsent && !isFull) : true
+
+  const headline = product.content?.headline ?? null
+  const description = product.content?.description ?? product.description ?? null
+  const displayColors = product.selection?.colors ?? product.colors ?? []
 
   function handleAddToCart() {
     if (!product) return
@@ -117,14 +130,24 @@ export default function ProductDetailPage({
         />
       </Box>
 
-      {/* 정보 */}
       <Stack gap={0} px="md" pt="lg" pb={100}>
-        {/* 상품명 + 가격 */}
+        {/* headline — AI 생성 마케팅 문구 */}
+        {headline && (
+          <Text
+            size="xl"
+            fw={800}
+            c="var(--green-primary)"
+            mb="xs"
+            style={{ lineHeight: 1.3 }}
+          >
+            {headline}
+          </Text>
+        )}
+
+        {/* 상품명 + 카테고리 + 가격 */}
         <Stack gap="xs" mb="lg">
           <Group gap="xs">
-            {isGroup && (
-              <Badge color="brand" variant="filled" size="sm">공동구매</Badge>
-            )}
+            {isGroup && <Badge color="brand" variant="filled" size="sm">공동구매</Badge>}
             <Badge color="gray" variant="light" size="sm">
               {product.category === 'cut_flower' ? '절화' : product.category === 'orchid' ? '난' : '관엽'}
             </Badge>
@@ -135,10 +158,46 @@ export default function ProductDetailPage({
 
         <Divider mb="lg" />
 
-        {product.description && (
+        {/* 속성 테이블 — varietyId 있는 신규 상품만 표시 */}
+        {product.varietyId && (
+          <Box mb="lg">
+            <Text fw={600} size="sm" c="dark" mb="sm">상품 정보</Text>
+            <Stack gap={6}>
+              {([
+                variety ? ['품종', variety.name] : null,
+                displayColors.length > 0 ? ['색상', displayColors.join(' · ')] : null,
+                variety ? ['향기', FRAGRANCE_LABEL[variety.fragranceLevel] ?? variety.fragranceLevel] : null,
+                product.selection?.bloomCondition ? ['개화 상태', BLOOM_LABEL[product.selection.bloomCondition]] : null,
+                variety ? ['추천 관상 기간', variety.bloomDuration] : null,
+                product.selection?.bundleUnit ? ['판매 단위', product.selection.bundleUnit] : null,
+              ] as ([string, string] | null)[])
+                .filter((r): r is [string, string] => r !== null)
+                .map(([label, value]) => (
+                  <Group key={label} justify="space-between" style={{ borderBottom: '1px solid var(--mantine-color-gray-1)', paddingBottom: 6 }}>
+                    <Text size="sm" c="gray.5">{label}</Text>
+                    <Text size="sm" fw={500} c="dark">{value}</Text>
+                  </Group>
+                ))}
+            </Stack>
+          </Box>
+        )}
+
+        {/* AI 생성 상세 설명 */}
+        {description && (
           <Text size="sm" c="gray.6" mb="lg" style={{ lineHeight: 1.7 }}>
-            {product.description}
+            {description}
           </Text>
+        )}
+
+        {/* 색상 칩 */}
+        {displayColors.length > 0 && (
+          <Group gap="xs" mb="lg" style={{ flexWrap: 'wrap' }}>
+            {displayColors.map((color) => (
+              <Badge key={color} variant="outline" color="gray" radius="xl" size="sm">
+                {color}
+              </Badge>
+            ))}
+          </Group>
         )}
 
         {/* 공동구매 실시간 정보 */}
@@ -177,18 +236,13 @@ export default function ProductDetailPage({
               <Text size="xs" c="gray.4">
                 모집 마감:{' '}
                 {new Date(groupConfig.recruitDeadline).toLocaleString('ko-KR', {
-                  month: 'long',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
+                  month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
                 })}
               </Text>
               <Text size="xs" c="brand.7" fw={600}>
                 배송:{' '}
                 {new Date(groupConfig.groupDeliveryDate).toLocaleDateString('ko-KR', {
-                  month: 'long',
-                  day: 'numeric',
-                  weekday: 'short',
+                  month: 'long', day: 'numeric', weekday: 'short',
                 })}
               </Text>
             </Group>
@@ -226,21 +280,11 @@ export default function ProductDetailPage({
         <Paper bg="gray.0" radius="md" p="md" mb="lg">
           <Text fw={600} size="sm" mb="sm" c="dark">수량</Text>
           <Group gap="sm">
-            <ActionIcon
-              size="lg"
-              variant="default"
-              radius="md"
-              onClick={() => setQuantity(Math.max(1, quantity - 1))}
-            >
+            <ActionIcon size="lg" variant="default" radius="md" onClick={() => setQuantity(Math.max(1, quantity - 1))}>
               −
             </ActionIcon>
             <Text size="lg" fw={700} w={32} ta="center">{quantity}</Text>
-            <ActionIcon
-              size="lg"
-              variant="default"
-              radius="md"
-              onClick={() => setQuantity(quantity + 1)}
-            >
+            <ActionIcon size="lg" variant="default" radius="md" onClick={() => setQuantity(quantity + 1)}>
               +
             </ActionIcon>
           </Group>
@@ -270,48 +314,35 @@ export default function ProductDetailPage({
         </Group>
 
         {/* CTA 버튼 */}
-        <Group gap="xs">
-          <Button
-            flex={1}
-            variant="default"
-            radius="md"
-            size="lg"
-            onClick={handleAddToCart}
-          >
+        <Group gap="xs" mb="xl">
+          <Button flex={1} variant="default" radius="md" size="lg" onClick={handleAddToCart}>
             장바구니
           </Button>
-          <Button
-            flex={2}
-            color="brand"
-            radius="md"
-            size="lg"
-            disabled={!canBuy}
-            onClick={handleBuyNow}
-          >
+          <Button flex={2} color="brand" radius="md" size="lg" disabled={!canBuy} onClick={handleBuyNow}>
             {isFull ? '모집 완료' : '바로 결제'}
           </Button>
         </Group>
 
+        {/* Green Love 브랜드 섹션 */}
+        <Divider mb="xl" />
+        <Box mb="xl">
+          <GreenLoveBrandSection />
+        </Box>
+
         {/* 판매자 정보 */}
         {store && (
-          <Box pt="xl" mt="xl" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+          <Box pt="xl" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
             <Text fw={600} size="sm" c="gray.5" mb="sm">판매자 정보</Text>
             <Group gap="sm" mb="sm">
               {store.logoUrl ? (
-                <img
-                  src={store.logoUrl}
-                  alt={store.name}
-                  style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }}
-                />
+                <img src={store.logoUrl} alt={store.name} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
-                <Box
-                  style={{
-                    width: 44, height: 44, borderRadius: '50%',
-                    background: 'var(--mantine-color-brand-1)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'var(--mantine-color-brand-7)', fontWeight: 700, fontSize: 16,
-                  }}
-                >
+                <Box style={{
+                  width: 44, height: 44, borderRadius: '50%',
+                  background: 'var(--mantine-color-brand-1)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'var(--mantine-color-brand-7)', fontWeight: 700, fontSize: 16,
+                }}>
                   {store.name[0]}
                 </Box>
               )}
