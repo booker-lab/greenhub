@@ -83,7 +83,7 @@ export interface ProductSummary {
   price: number
   images: string[]
   category: Category
-  colors: ColorOption[]
+  colors?: ColorOption[]
   saleType: SaleType
   isActive: boolean
   groupSummary?: {

@@ -22,7 +22,7 @@
 | headline 수정 | 셀러가 수정한 버전 저장, 재생성으로 덮어쓰기 금지 |
 | 카테고리 | MVP는 호접란(phalaenopsis) 20~30종 집중 |
 | 가드레일 DB | Firestore 수동 입력, 필요 시 Claude가 대신 추가 |
-| AI 모델 | Gemini 3 Flash (Google AI Studio API 키) |
+| AI 모델 | Gemini 3 Flash Preview — `gemini-3-flash-preview` (Google AI Studio API 키) |
 | 가드레일 충돌 | AI 수정 제안 + 판매자 강행 등록 허용 (`sellerOverride: true`) |
 
 ---
@@ -135,10 +135,10 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
 
 ## Phase A — 데이터 기반 구축
 
-- [ ] A1. `packages/shared/src/product.types.ts` — `Selection`, `GeneratedContent` 인터페이스 추가, `Product` 업데이트
-- [ ] A1. `packages/shared/src/variety.types.ts` — `Variety` 인터페이스 신규 생성
-- [ ] A2. Firestore `varieties` 컬렉션 생성 + 호접란 10종 시드 입력
-- [ ] A3. 기존 Product 데이터 마이그레이션 스크립트
+- [x] A1. `packages/shared/src/product.types.ts` — `Selection`, `GeneratedContent` 인터페이스 추가, `Product` 업데이트
+- [x] A1. `packages/shared/src/variety.types.ts` — `Variety` 인터페이스 신규 생성
+- [ ] A2. Firestore `varieties` 컬렉션 생성 + 호접란 10종 시드 입력 ← **다음 세션 착수**
+- [x] A3. 기존 Product 데이터 마이그레이션 스크립트
   - `colors[]` → `selection.colors`
   - `description` → `sellerNote`
   - `content.headline` = `name` 초기값
@@ -149,10 +149,10 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
 
 ## Phase B — NestJS: Varieties 모듈
 
-- [ ] B1. `apps/api/src/varieties/varieties.module.ts` 생성 + AppModule 등록
-- [ ] B2. `dto/create-variety.dto.ts` — class-validator 데코레이터 포함
-- [ ] B3. `varieties.service.ts` — `findAll`, `findOne`, `create`, `update`
-- [ ] B4. `varieties.controller.ts`
+- [x] B1. `apps/api/src/varieties/varieties.module.ts` 생성 + AppModule 등록
+- [x] B2. `dto/create-variety.dto.ts` — class-validator 데코레이터 포함
+- [x] B3. `varieties.service.ts` — `findAll`, `findOne`, `create`, `update`
+- [x] B4. `varieties.controller.ts`
   - `GET /varieties` — 카테고리별 조회 (셀러 품종 선택용)
   - `GET /varieties/:id` — 단건
   - `POST /varieties` — 신규 (JwtAuthGuard)
@@ -162,36 +162,36 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
 
 ## Phase C — NestJS: AI 콘텐츠 생성 모듈
 
-- [ ] C1. `GEMINI_API_KEY` 환경 변수 추가, `@google/generative-ai` 패키지 설치
-- [ ] C2. `apps/api/src/ai/ai.service.ts` — Gemini 3 Flash 클라이언트 초기화
-- [ ] C3. `apps/api/src/ai/prompts/product-content.prompt.ts` — 프롬프트 템플릿
+- [x] C1. `GEMINI_API_KEY` 환경 변수 추가, `@google/generative-ai` 패키지 설치
+- [x] C2. `apps/api/src/ai/ai.service.ts` — Gemini 3 Flash Preview (`gemini-3-flash-preview`) 클라이언트 초기화
+- [x] C3. `apps/api/src/ai/prompts/product-content.prompt.ts` — 프롬프트 템플릿
   - 시스템: 가드레일 사실 최우선, sellerNote 매끄럽게 확장, JSON 출력
   - 언어: 한국어, 시니어 친화적
-- [ ] C4. `apps/api/src/ai/guardrail-validator.service.ts` — 충돌 감지 로직
-- [ ] C5. `apps/api/src/ai/ai.controller.ts`
+- [x] C4. `apps/api/src/ai/guardrail-validator.service.ts` — 충돌 감지 로직
+- [x] C5. `apps/api/src/ai/ai.controller.ts`
   - `POST /ai/generate-content` — Request: `{varietyId, selection, sellerNote}` / Response: `{headline, description, conflicts[]}`
 
 ---
 
 ## Phase D — NestJS: Products 모듈 업데이트
 
-- [ ] D1. `create-product.dto.ts` 수정 — `SelectionDto`, `ContentDto` 중첩 DTO 추가, 기존 `description`/`colors` 제거
-- [ ] D2. `products.service.ts` — `create()` 신규 필드 저장, `update()` headline 수정 시 `isEditedByUser: true` 자동 세팅
+- [x] D1. `create-product.dto.ts` 수정 — `SelectionDto`, `ContentDto` 중첩 DTO 추가, 기존 `description`/`colors` 제거
+- [x] D2. `products.service.ts` — `create()` 신규 필드 저장, `update()` headline 수정 시 `isEditedByUser: true` 자동 세팅
 
 ---
 
 ## Phase E — 셀러 앱: UI 구현
 
-- [ ] E1. `VarietySelector.tsx` — 품종 드롭다운 (카테고리 그룹핑)
-- [ ] E2. `TouchSelector.tsx` — 향기/개화상태/판매단위 아이콘 버튼 (큰 버튼, 시니어 UX)
-- [ ] E3. 기존 ColorSelector → `TouchSelector` 섹션에 통합, 상태 변수 `colors[]` → `selection.colors`
-- [ ] E4. `SellerNoteInput.tsx` — 큰 텍스트에어리어, 힌트 문구, 200자 카운터
-- [ ] E5. `AIPreviewPanel.tsx`
+- [x] E1. `VarietySelector.tsx` — 품종 드롭다운 (카테고리 그룹핑)
+- [x] E2. `TouchSelector.tsx` — 향기/개화상태/판매단위 아이콘 버튼 (큰 버튼, 시니어 UX)
+- [x] E3. 기존 ColorSelector → `TouchSelector` 섹션에 통합, 상태 변수 `colors[]` → `selection.colors`
+- [x] E4. `SellerNoteInput.tsx` — 큰 텍스트에어리어, 힌트 문구, 200자 카운터
+- [x] E5. `AIPreviewPanel.tsx`
   - headline / description 편집 가능 필드
   - 가드레일 충돌 경고 Alert (노란색)
   - "수정 반영하기" / "그대로 등록하기" 버튼
   - "다시 생성하기" (편집본 덮어쓰기 확인 모달 포함)
-- [ ] E6. `ProductForm.tsx` — 5단계 스텝 구조 전환
+- [x] E6. `ProductForm.tsx` — 5단계 스텝 구조 전환
   ```
   Step 1: 사진 업로드 + 품종 선택
   Step 2: 터치 선택 (색상·향기·개화·단위)
@@ -206,7 +206,7 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
 
 ## Phase F — 소비자 앱
 
-- [ ] F1. `apps/consumer/src/app/products/[id]/page.tsx` — headline + description 표시 신규 구현
+- [x] F1. `apps/consumer/src/app/products/[id]/page.tsx` — headline + description 표시 신규 구현
   - 상단: `product.content.headline` — 강조 마케팅 문구 (폰트 크기 업)
   - 본문: `product.content.description` — AI 생성 상세 설명
   - 폴백 처리 (마이그레이션 기간 호환):
@@ -214,9 +214,9 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
     const headline = product.content?.headline ?? product.name
     const description = product.content?.description ?? product.description
     ```
-- [ ] F2. `apps/consumer/src/app/products/[id]/page.tsx` — 색상 칩 섹션 추가
+- [x] F2. `apps/consumer/src/app/products/[id]/page.tsx` — 색상 칩 섹션 추가
   - `selection.colors` 우선, 없으면 `colors` 폴백 (마이그레이션 기간 호환)
-- [ ] F3. `apps/consumer/src/app/products/[id]/page.tsx` — 상품 속성 테이블 추가
+- [x] F3. `apps/consumer/src/app/products/[id]/page.tsx` — 상품 속성 테이블 추가
   - `variety` 데이터 + `selection` 데이터를 조합하여 구조화된 테이블로 표시
   - 표시 항목 (가드레일 DB에서 자동 조회):
     | 항목 | 데이터 소스 |
@@ -228,14 +228,14 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
     | 추천 관상 기간 | `variety.bloomDuration` |
     | 판매 단위 | `selection.bundleUnit` |
   - `varietyId` 없는 기존 상품은 테이블 미표시 (graceful 처리)
-- [ ] F4. `apps/consumer/src/components/GreenLoveBrandSection.tsx` — 공통 브랜드 섹션 신규 생성
+- [x] F4. `apps/consumer/src/components/GreenLoveBrandSection.tsx` — 공통 브랜드 섹션 신규 생성
   - 모든 상품 상세 페이지 하단에 고정 노출 (AI 생성 아닌 정적 콘텐츠)
   - 포함 내용:
     - 그린러브 소개 (화훼 농가 직거래 플랫폼)
     - 그린러브 장점 (산지 직송, 중간 유통 없음, 신선도 보장)
     - 판매자(농가) 신뢰 포인트
   - 디자인: 브랜드 컬러 배경, 아이콘 + 짧은 문구 카드 형태
-- [ ] F5. 상품 상세 페이지 최종 레이아웃 순서 확정
+- [x] F5. 상품 상세 페이지 최종 레이아웃 순서 확정
   ```
   1. 상품 이미지
   2. headline (AI 생성 마케팅 문구)

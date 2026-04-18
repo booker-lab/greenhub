@@ -53,12 +53,15 @@ export default function ProductCard({ product }: ProductCardProps) {
         <Text size="sm" fw={700} c="gray.7" mt={4}>
           {product.price.toLocaleString()}원
         </Text>
-        {product.colors.length > 0 && (
-          <Text size="xs" c="gray.5" mt={4} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {product.colors.slice(0, 3).join(' · ')}
-            {product.colors.length > 3 && ` +${product.colors.length - 3}`}
-          </Text>
-        )}
+        {(() => {
+          const colors = product.selection?.colors ?? product.colors ?? []
+          return colors.length > 0 ? (
+            <Text size="xs" c="gray.5" mt={4} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {colors.slice(0, 3).join(' · ')}
+              {colors.length > 3 && ` +${colors.length - 3}`}
+            </Text>
+          ) : null
+        })()}
         {product.saleType === 'group' && product.groupSummary && (
           <Text size="xs" c="brand.6" mt={4} fw={500}>
             {product.groupSummary.currentParticipants >= product.groupSummary.maxParticipants

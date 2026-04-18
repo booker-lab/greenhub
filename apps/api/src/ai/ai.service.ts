@@ -1,6 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, type GenerativeModel } from '@google/generative-ai';
 import { buildProductContentPrompt } from './prompts/product-content.prompt';
 import type { Selection, Variety } from '@greenhub/shared';
 
@@ -17,13 +17,13 @@ export interface GenerateContentResult {
 
 @Injectable()
 export class AiService {
-  private readonly model;
+  private readonly model: GenerativeModel;
 
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.get<string>('GEMINI_API_KEY');
     if (!apiKey) throw new InternalServerErrorException('GEMINI_API_KEY가 설정되지 않았습니다.');
     const genAI = new GoogleGenerativeAI(apiKey);
-    this.model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    this.model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
   }
 
   async generateProductContent(params: GenerateContentParams): Promise<GenerateContentResult> {

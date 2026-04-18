@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import type { Product, Category, ColorOption } from '@greenhub/shared'
+import type { Product, Category, ColorOption, Variety } from '@greenhub/shared'
 
 export interface StoreInfo {
   id: string
@@ -117,4 +117,17 @@ export function useStore(storeId: string | null) {
   }, [storeId])
 
   return { store, loading }
+}
+
+export function useVariety(varietyId: string | null | undefined) {
+  const [variety, setVariety] = useState<Variety | null>(null)
+
+  useEffect(() => {
+    if (!varietyId) { setVariety(null); return }
+    getDoc(doc(db, 'varieties', varietyId))
+      .then((snap) => snap.exists() ? setVariety({ id: snap.id, ...snap.data() } as Variety) : null)
+      .catch(() => {})
+  }, [varietyId])
+
+  return { variety }
 }

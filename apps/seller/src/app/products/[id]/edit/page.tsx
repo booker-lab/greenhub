@@ -55,12 +55,24 @@ export default function EditProductPage() {
         const mapped: Partial<ProductFormData> = {
           name: data.name ?? '',
           category: data.category ?? 'cut_flower',
-          colors: data.colors ?? [],
           deliverySize: data.deliverySize ?? 'small',
           price: String(data.price ?? ''),
-          description: data.description ?? '',
           saleType: data.saleType ?? 'normal',
           images: data.images ?? [],
+          varietyId: data.varietyId ?? '',
+          selection: data.selection ?? {
+            colors: data.colors ?? [],
+            fragrance: 'none',
+            bloomCondition: 'half',
+            bundleUnit: '',
+          },
+          sellerNote: data.sellerNote ?? data.description ?? '',
+          content: data.content ?? {
+            headline: data.name ?? '',
+            description: data.description ?? '',
+            isEditedByUser: true,
+          },
+          sellerOverride: data.sellerOverride ?? false,
         }
         if (data.groupConfig) {
           mapped.groupConfig = {

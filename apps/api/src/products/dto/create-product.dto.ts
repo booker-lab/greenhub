@@ -32,12 +32,35 @@ export class GroupConfigDto {
   deliveryFeeDiscount: number;
 }
 
-export class CreateProductDto {
+export class SelectionDto {
+  @IsArray()
+  @IsString({ each: true })
+  colors: string[];
+
+  @IsEnum(['none', 'light', 'strong'])
+  fragrance: string;
+
+  @IsEnum(['bud', 'half', 'full'])
+  bloomCondition: string;
+
   @IsString()
-  name: string;
+  bundleUnit: string;
+}
+
+export class ContentDto {
+  @IsString()
+  headline: string;
 
   @IsString()
   description: string;
+
+  @IsBoolean()
+  isEditedByUser: boolean;
+}
+
+export class CreateProductDto {
+  @IsString()
+  name: string;
 
   @IsArray()
   @IsString({ each: true })
@@ -50,10 +73,6 @@ export class CreateProductDto {
   @IsEnum(['cut_flower', 'orchid', 'foliage'])
   category: string;
 
-  @IsArray()
-  @IsString({ each: true })
-  colors: string[];
-
   @IsEnum(['normal', 'group'])
   saleType: string;
 
@@ -63,6 +82,29 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  // AI 시스템 필드
+  @IsOptional()
+  @IsString()
+  varietyId?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SelectionDto)
+  selection?: SelectionDto;
+
+  @IsOptional()
+  @IsString()
+  sellerNote?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ContentDto)
+  content?: ContentDto;
+
+  @IsOptional()
+  @IsBoolean()
+  sellerOverride?: boolean;
 
   @IsOptional()
   @ValidateNested()

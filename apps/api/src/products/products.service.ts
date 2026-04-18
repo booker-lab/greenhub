@@ -31,14 +31,15 @@ export class ProductsService {
     const snap = await ref.get();
     let products = snap.docs.map((d) => d.data());
 
-    // 색상 필터 (Firestore array-contains-any는 10개 제한 — 앱 레이어에서 처리)
+    // 색상 필터 — 신규(selection.colors) / 구버전(colors) 모두 지원
     if (query.colors) {
       const colorFilter = Array.isArray(query.colors)
         ? query.colors
         : String(query.colors).split(',');
-      products = products.filter((p) =>
-        colorFilter.some((c) => Array.isArray(p['colors']) && p['colors'].includes(c)),
-      );
+      products = products.filter((p) => {
+        const colors = p['selection']?.['colors'] ?? p['colors'] ?? [];
+        return colorFilter.some((c) => colors.includes(c));
+      });
     }
 
     // 정렬
@@ -76,7 +77,7 @@ export class ProductsService {
         price: p['price'],
         images: Array.isArray(p['images']) ? [p['images'][0]] : [],
         category: p['category'],
-        colors: p['colors'],
+        colors: p['selection']?.['colors'] ?? p['colors'] ?? [],
         saleType: p['saleType'],
         isActive: p['isActive'],
       };
@@ -172,9 +173,14 @@ export class ProductsService {
       throw new NotFoundException();
     }
 
-    const { groupConfig, ...fields } = dto;
+    const { groupConfig, content, ...fields } = dto;
+    // headline 편집 시 isEditedByUser 자동 세팅
+    const contentUpdate = content
+      ? { content: { ...content, isEditedByUser: true } }
+      : {};
     await this.firestore.doc(`products/${productId}`).update({
       ...fields,
+      ...contentUpdate,
       updatedAt: this.firestore.Timestamp.now(),
     });
 
@@ -291,9 +297,10 @@ export class ProductsService {
       const colorFilter = Array.isArray(query.colors)
         ? query.colors
         : String(query.colors).split(',');
-      products = products.filter((p: any) =>
-        colorFilter.some((c: string) => Array.isArray(p['colors']) && p['colors'].includes(c)),
-      );
+      products = products.filter((p: any) => {
+        const colors = p['selection']?.['colors'] ?? p['colors'] ?? [];
+        return colorFilter.some((c: string) => colors.includes(c));
+      });
     }
 
     const sort = query.sort ?? 'latest';
@@ -313,7 +320,9 @@ export class ProductsService {
       const summary: Record<string, unknown> = {
         id: p['id'], storeId: p['storeId'], name: p['name'], price: p['price'],
         images: Array.isArray(p['images']) ? [p['images'][0]] : [],
-        category: p['category'], colors: p['colors'], saleType: p['saleType'], isActive: p['isActive'],
+        category: p['category'],
+        colors: p['selection']?.['colors'] ?? p['colors'] ?? [],
+        saleType: p['saleType'], isActive: p['isActive'],
       };
       if (p['saleType'] === 'group') {
         const gc = groupConfigMap.get(p['id'] as string);

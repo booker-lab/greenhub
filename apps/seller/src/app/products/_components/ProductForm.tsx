@@ -4,9 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ImageUpload from './ImageUpload'
 import GroupConfigSection from './GroupConfigSection'
+import VarietySelector from './VarietySelector'
+import TouchSelector, { SelectionForm } from './TouchSelector'
+import SellerNoteInput from './SellerNoteInput'
+import AIPreviewPanel, { ConflictWarning } from './AIPreviewPanel'
 import {
-  ActionIcon, Badge, Box, Button, Container, Group,
-  Paper, Stack, Text, Textarea, TextInput, Title, UnstyledButton,
+  ActionIcon, Box, Button, Container, Group,
+  Paper, Stack, Text, TextInput, Title, UnstyledButton,
 } from '@mantine/core'
 
 const CATEGORIES = [
@@ -15,16 +19,13 @@ const CATEGORIES = [
   { value: 'foliage', label: '관엽' },
 ] as const
 
-const COLOR_OPTIONS = [
-  '레드', '핑크', '화이트', '옐로우', '오렌지', '퍼플',
-  '블루', '그린', '무늬', '브라운', '베이지', '블랙', '그레이',
-] as const
-
 const DELIVERY_SIZES = [
   { value: 'small', label: '소형' },
   { value: 'medium', label: '중형' },
   { value: 'large', label: '대형' },
 ] as const
+
+const STEP_LABELS = ['사진·품종', '터치 선택', '판매자 메모', 'AI 미리보기', '가격·배송']
 
 interface GroupConfigForm {
   minParticipants: string
@@ -34,16 +35,25 @@ interface GroupConfigForm {
   groupDeliveryMethod: 'direct' | 'parcel'
 }
 
+interface ContentForm {
+  headline: string
+  description: string
+  isEditedByUser: boolean
+}
+
 export interface ProductFormData {
   name: string
   category: string
-  colors: string[]
   deliverySize: string
   price: string
-  description: string
   saleType: 'normal' | 'group'
   groupConfig: GroupConfigForm
   images: string[]
+  varietyId: string
+  selection: SelectionForm
+  sellerNote: string
+  content: ContentForm
+  sellerOverride: boolean
 }
 
 export interface ProductFormProps {
@@ -57,10 +67,15 @@ export interface ProductFormProps {
 
 function defaultForm(): ProductFormData {
   return {
-    name: '', category: 'cut_flower', colors: [], deliverySize: 'small',
-    price: '', description: '', saleType: 'normal',
+    name: '', category: 'cut_flower', deliverySize: 'small',
+    price: '', saleType: 'normal',
     groupConfig: { minParticipants: '2', maxParticipants: '10', recruitDeadline: '', groupDeliveryDate: '', groupDeliveryMethod: 'direct' },
     images: [],
+    varietyId: '',
+    selection: { colors: [], fragrance: 'none', bloomCondition: 'half', bundleUnit: '' },
+    sellerNote: '',
+    content: { headline: '', description: '', isEditedByUser: false },
+    sellerOverride: false,
   }
 }
 
@@ -73,20 +88,22 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
     try {
       const saved = localStorage.getItem(draftKey)
       if (saved) {
-        const parsed = JSON.parse(saved)
+        const p = JSON.parse(saved)
         const def = defaultForm()
-        const merged = { ...def, ...parsed, groupConfig: { ...def.groupConfig, ...(parsed.groupConfig ?? {}) } }
-        // groupConfig 필드 누락 시 draft 폐기
-        const g = merged.groupConfig
-        const valid = typeof g.minParticipants === 'string' && typeof g.maxParticipants === 'string'
-          && typeof g.recruitDeadline === 'string' && typeof g.groupDeliveryDate === 'string'
-        if (!valid) { localStorage.removeItem(draftKey); return def }
-        return merged
+        return {
+          ...def, ...p,
+          groupConfig: { ...def.groupConfig, ...(p.groupConfig ?? {}) },
+          selection: { ...def.selection, ...(p.selection ?? {}) },
+          content: { ...def.content, ...(p.content ?? {}) },
+        }
       }
     } catch {}
     return defaultForm()
   })
 
+  const [step, setStep] = useState(1)
+  const [conflicts, setConflicts] = useState<ConflictWarning[]>([])
+  const [aiLoading, setAiLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draftSaved, setDraftSaved] = useState(false)
@@ -103,15 +120,6 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
     setForm((prev) => ({ ...prev, groupConfig: { ...prev.groupConfig, [key]: value } }))
   }
 
-  function toggleColor(color: string) {
-    setForm((prev) => ({
-      ...prev,
-      colors: prev.colors.includes(color)
-        ? prev.colors.filter((c) => c !== color)
-        : [...prev.colors, color],
-    }))
-  }
-
   function handleDraftSave() {
     try {
       localStorage.setItem(draftKey, JSON.stringify(form))
@@ -123,40 +131,84 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
   function handleDraftReset() {
     try { localStorage.removeItem(draftKey) } catch {}
     setForm(defaultForm())
+    setStep(1)
     setError(null)
   }
 
-  function validate(): string | null {
-    if (!form.name.trim()) return '상품명을 입력해주세요.'
-    if (!form.price || isNaN(Number(form.price)) || Number(form.price) < 0) return '올바른 가격을 입력해주세요.'
-    if (form.colors.length === 0) return '색상을 하나 이상 선택해주세요.'
-    if (form.saleType === 'group') {
-      const g = form.groupConfig
-      if (!g.minParticipants) return '최소 인원을 입력해주세요.'
-      if (!g.maxParticipants) return '최대 인원을 입력해주세요.'
-      if (!g.recruitDeadline) return '모집 마감일시를 입력해주세요.'
-      if (!g.groupDeliveryDate) return '배송 예정일을 입력해주세요.'
-      if (Number(g.minParticipants) < 2)
-        return '최소 인원은 2명 이상이어야 합니다.'
-      if (Number(g.minParticipants) > Number(g.maxParticipants))
-        return '최소 인원은 최대 인원보다 클 수 없습니다.'
-      if (new Date(g.recruitDeadline) <= new Date())
-        return '모집 마감일시는 현재 시각 이후여야 합니다.'
-      if (new Date(g.groupDeliveryDate) <= new Date(g.recruitDeadline))
-        return '배송 예정일은 모집 마감일 이후여야 합니다.'
+  async function generateContent() {
+    setAiLoading(true)
+    setConflicts([])
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ai/generate-content`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          varietyId: form.varietyId || undefined,
+          selection: form.selection,
+          sellerNote: form.sellerNote,
+        }),
+      })
+      if (!res.ok) throw new Error('AI 생성 실패')
+      const data = await res.json()
+      setConflicts(data.conflicts ?? [])
+      setForm((prev) => ({
+        ...prev,
+        content: { headline: data.headline, description: data.description, isEditedByUser: false },
+      }))
+    } catch {
+      setError('AI 생성 중 오류가 발생했습니다.')
+    } finally {
+      setAiLoading(false)
     }
+  }
+
+  function validateStep(s: number): string | null {
+    if (s === 1 && !form.name.trim()) return '상품명을 입력해주세요.'
+    if (s === 2 && form.selection.colors.length === 0) return '색상을 하나 이상 선택해주세요.'
     return null
   }
 
+  async function goNext() {
+    const err = validateStep(step)
+    if (err) { setError(err); return }
+    setError(null)
+    const next = step + 1
+    setStep(next)
+    localStorage.setItem(draftKey, JSON.stringify({ ...form, _step: next }))
+    if (next === 4 && !form.content.headline) {
+      await generateContent()
+    }
+  }
+
+  function goPrev() {
+    setError(null)
+    setStep((s) => Math.max(1, s - 1))
+  }
+
   async function handleSubmit() {
-    const validationError = validate()
-    if (validationError) { setError(validationError); return }
+    if (!form.price || isNaN(Number(form.price)) || Number(form.price) < 0) {
+      setError('올바른 가격을 입력해주세요.'); return
+    }
+    if (form.saleType === 'group') {
+      const g = form.groupConfig
+      if (!g.minParticipants) { setError('최소 인원을 입력해주세요.'); return }
+      if (!g.recruitDeadline) { setError('모집 마감일시를 입력해주세요.'); return }
+      if (!g.groupDeliveryDate) { setError('배송 예정일을 입력해주세요.'); return }
+      if (Number(g.minParticipants) > Number(g.maxParticipants)) { setError('최소 인원은 최대 인원보다 클 수 없습니다.'); return }
+      if (new Date(g.recruitDeadline) <= new Date()) { setError('모집 마감일시는 현재 시각 이후여야 합니다.'); return }
+      if (new Date(g.groupDeliveryDate) <= new Date(g.recruitDeadline)) { setError('배송 예정일은 모집 마감일 이후여야 합니다.'); return }
+    }
     setSubmitting(true)
     setError(null)
     const body: Record<string, unknown> = {
-      name: form.name.trim(), description: form.description.trim(), images: form.images,
-      price: Number(form.price), category: form.category, colors: form.colors,
+      name: form.name.trim(), images: form.images,
+      price: Number(form.price), category: form.category,
       saleType: form.saleType, deliverySize: form.deliverySize,
+      varietyId: form.varietyId || undefined,
+      selection: form.selection,
+      sellerNote: form.sellerNote,
+      content: form.content,
+      sellerOverride: form.sellerOverride,
     }
     if (form.saleType === 'group') {
       body.groupConfig = {
@@ -169,7 +221,9 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
       }
     }
     try {
-      const url = mode === 'create' ? `/stores/${storeId}/products` : `/stores/${storeId}/products/${productId}`
+      const url = mode === 'create'
+        ? `/stores/${storeId}/products`
+        : `/stores/${storeId}/products/${productId}`
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${url}`, {
         method: mode === 'create' ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -185,6 +239,84 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  function renderStep() {
+    switch (step) {
+      case 1:
+        return (
+          <Stack gap="sm">
+            <ImageUpload storeId={storeId} images={form.images} onChange={(images) => set('images', images)} onError={(msg) => setError(msg)} />
+            <TextInput placeholder="상품명" value={form.name} onChange={(e) => set('name', e.target.value)} radius="xl" size="md" />
+            <Paper radius="lg" shadow="xs" p="md">
+              <Text size="xs" fw={500} c="dimmed" mb="xs">카테고리</Text>
+              <Group gap="xs">
+                {CATEGORIES.map(({ value, label }) => (
+                  <Button key={value} onClick={() => set('category', value)} flex={1} size="sm" radius="xl"
+                    variant={form.category === value ? 'filled' : 'outline'} color="gray"
+                    style={form.category === value ? { backgroundColor: 'var(--green-primary)', borderColor: 'var(--green-primary)', color: 'white' } : {}}>
+                    {label}
+                  </Button>
+                ))}
+              </Group>
+            </Paper>
+            <Paper radius="lg" shadow="xs" p="md">
+              <Text size="xs" fw={500} c="dimmed" mb="xs">품종 선택</Text>
+              <VarietySelector category={form.category} value={form.varietyId} onChange={(id) => set('varietyId', id)} token={token} />
+            </Paper>
+          </Stack>
+        )
+      case 2:
+        return <TouchSelector value={form.selection} onChange={(s) => set('selection', s)} />
+      case 3:
+        return <SellerNoteInput value={form.sellerNote} onChange={(v) => set('sellerNote', v)} />
+      case 4:
+        return (
+          <AIPreviewPanel
+            loading={aiLoading}
+            headline={form.content.headline}
+            description={form.content.description}
+            isEditedByUser={form.content.isEditedByUser}
+            conflicts={conflicts}
+            onHeadlineChange={(v) => setForm((p) => ({ ...p, content: { ...p.content, headline: v, isEditedByUser: true } }))}
+            onDescriptionChange={(v) => setForm((p) => ({ ...p, content: { ...p.content, description: v, isEditedByUser: true } }))}
+            onRegenerate={generateContent}
+            onSellerOverride={() => { set('sellerOverride', true); setConflicts([]) }}
+          />
+        )
+      case 5:
+        return (
+          <Stack gap="sm">
+            <TextInput type="number" placeholder="가격" leftSection={<Text size="sm" c="dimmed">₩</Text>}
+              min={0} value={form.price} onChange={(e) => set('price', e.target.value)} radius="xl" size="md" />
+            <Paper radius="lg" shadow="xs" p="md">
+              <Text size="xs" fw={500} c="dimmed" mb="xs">배송 사이즈</Text>
+              <Group gap="xs">
+                {DELIVERY_SIZES.map(({ value, label }) => (
+                  <Button key={value} onClick={() => set('deliverySize', value)} flex={1} size="sm" radius="xl"
+                    variant="outline" color="gray"
+                    style={form.deliverySize === value ? { backgroundColor: 'var(--green-primary)', borderColor: 'var(--green-primary)', color: 'white' } : {}}>
+                    {label}
+                  </Button>
+                ))}
+              </Group>
+            </Paper>
+            <Paper radius="lg" shadow="xs" p="md">
+              <Text size="xs" fw={500} c="dimmed" mb="sm">판매 방식</Text>
+              <Group gap="xl">
+                {(['normal', 'group'] as const).map((type) => (
+                  <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input type="radio" name="saleType" checked={form.saleType === type} onChange={() => set('saleType', type)}
+                      style={{ accentColor: 'var(--green-primary)', width: 16, height: 16 }} />
+                    <Text size="sm" c="gray.7">{type === 'normal' ? '일반 판매' : '공동구매'}</Text>
+                  </label>
+                ))}
+              </Group>
+              <GroupConfigSection visible={form.saleType === 'group'} config={form.groupConfig} setGroupConfig={setGroupConfig} />
+            </Paper>
+          </Stack>
+        )
     }
   }
 
@@ -213,82 +345,56 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
         </Container>
       </Box>
 
+      <Box style={{ backgroundColor: 'var(--mantine-color-white)', borderBottom: '1px solid var(--mantine-color-gray-1)', padding: '8px 16px' }}>
+        <Container size="sm">
+          <Group gap={0}>
+            {STEP_LABELS.map((label, i) => {
+              const s = i + 1
+              const active = s === step
+              const done = s < step
+              return (
+                <Box key={s} style={{ flex: 1, textAlign: 'center', padding: '4px 2px' }}>
+                  <Box style={{
+                    width: 24, height: 24, borderRadius: '50%', margin: '0 auto 2px',
+                    backgroundColor: active ? 'var(--green-primary)' : done ? 'var(--green-bg)' : 'var(--mantine-color-gray-2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, fontWeight: 600,
+                    color: active ? 'white' : done ? 'var(--green-primary)' : 'var(--mantine-color-gray-5)',
+                  }}>
+                    {done ? '✓' : s}
+                  </Box>
+                  <Text size="10px" c={active ? 'var(--green-primary)' : 'gray.4'} fw={active ? 600 : 400}>
+                    {label}
+                  </Text>
+                </Box>
+              )
+            })}
+          </Group>
+        </Container>
+      </Box>
+
       <Container size="sm" px="md" py="md" pb={96}>
         <Stack gap="sm">
-          <ImageUpload storeId={storeId} images={form.images} onChange={(images) => set('images', images)} onError={(msg) => setError(msg)} />
-
-          <TextInput placeholder="상품명" value={form.name} onChange={(e) => set('name', e.target.value)} radius="xl" size="md" />
-
-          <Paper radius="lg" shadow="xs" p="md">
-            <Text size="xs" fw={500} c="dimmed" mb="xs">카테고리</Text>
-            <Group gap="xs">
-              {CATEGORIES.map(({ value, label }) => (
-                <Button key={value} onClick={() => set('category', value)} flex={1} size="sm" radius="xl"
-                  variant={form.category === value ? 'filled' : 'outline'} color="gray"
-                  style={form.category === value ? { backgroundColor: 'var(--green-primary)', borderColor: 'var(--green-primary)', color: 'white' } : {}}>
-                  {label}
-                </Button>
-              ))}
-            </Group>
-          </Paper>
-
-          <Paper radius="lg" shadow="xs" p="md">
-            <Text size="xs" fw={500} c="dimmed" mb="xs">
-              색상 <Text component="span" c="gray.4">(복수 선택 가능)</Text>
-            </Text>
-            <Group gap="xs" style={{ flexWrap: 'wrap' }}>
-              {COLOR_OPTIONS.map((color) => (
-                <Badge key={color} component="button" onClick={() => toggleColor(color)} radius="xl"
-                  variant={form.colors.includes(color) ? 'filled' : 'outline'} color="gray"
-                  style={{
-                    cursor: 'pointer',
-                    backgroundColor: form.colors.includes(color) ? 'var(--green-bg)' : undefined,
-                    color: form.colors.includes(color) ? 'var(--green-primary)' : undefined,
-                    borderColor: form.colors.includes(color) ? 'var(--green-primary)' : undefined,
-                  }}>
-                  {color}
-                </Badge>
-              ))}
-            </Group>
-          </Paper>
-
-          <Paper radius="lg" shadow="xs" p="md">
-            <Text size="xs" fw={500} c="dimmed" mb="xs">배송 사이즈</Text>
-            <Group gap="xs">
-              {DELIVERY_SIZES.map(({ value, label }) => (
-                <Button key={value} onClick={() => set('deliverySize', value)} flex={1} size="sm" radius="xl"
-                  variant="outline" color="gray"
-                  style={form.deliverySize === value ? { backgroundColor: 'var(--green-primary)', borderColor: 'var(--green-primary)', color: 'white' } : {}}>
-                  {label}
-                </Button>
-              ))}
-            </Group>
-          </Paper>
-
-          <TextInput type="number" placeholder="가격" leftSection={<Text size="sm" c="dimmed">₩</Text>}
-            min={0} value={form.price} onChange={(e) => set('price', e.target.value)} radius="xl" size="md" />
-
-          <Textarea placeholder="상품 상세 설명" value={form.description} onChange={(e) => set('description', e.target.value)} rows={4} radius="xl" />
-
-          <Paper radius="lg" shadow="xs" p="md">
-            <Text size="xs" fw={500} c="dimmed" mb="sm">판매 방식</Text>
-            <Group gap="xl">
-              {(['normal', 'group'] as const).map((type) => (
-                <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                  <input type="radio" name="saleType" checked={form.saleType === type} onChange={() => set('saleType', type)}
-                    style={{ accentColor: 'var(--green-primary)', width: 16, height: 16 }} />
-                  <Text size="sm" c="gray.7">{type === 'normal' ? '일반 판매' : '공동구매'}</Text>
-                </label>
-              ))}
-            </Group>
-            <GroupConfigSection visible={form.saleType === 'group'} config={form.groupConfig} setGroupConfig={setGroupConfig} />
-          </Paper>
-
+          {renderStep()}
           {error && <Text size="sm" c="red" ta="center" px="xs">{error}</Text>}
-
-          <Button onClick={handleSubmit} disabled={submitting} fullWidth size="lg" radius="xl" fw={600} mt="xs" style={{ backgroundColor: 'var(--green-primary)' }}>
-            {submitting ? '처리 중...' : mode === 'create' ? '등록하기' : '저장하기'}
-          </Button>
+          <Group gap="xs" mt="xs">
+            {step > 1 && (
+              <Button onClick={goPrev} variant="outline" color="gray" flex={1} size="lg" radius="xl">
+                이전
+              </Button>
+            )}
+            {step < 5 ? (
+              <Button onClick={goNext} flex={1} size="lg" radius="xl" fw={600}
+                style={{ backgroundColor: 'var(--green-primary)' }}>
+                다음
+              </Button>
+            ) : (
+              <Button onClick={handleSubmit} disabled={submitting} flex={1} size="lg" radius="xl" fw={600}
+                style={{ backgroundColor: 'var(--green-primary)' }}>
+                {submitting ? '처리 중...' : mode === 'create' ? '등록하기' : '저장하기'}
+              </Button>
+            )}
+          </Group>
         </Stack>
       </Container>
     </Box>
