@@ -17,8 +17,8 @@ COPY apps/api/ ./apps/api/
 # 의존성 설치
 RUN pnpm install --frozen-lockfile
 
-# 빌드
-RUN pnpm --filter api build
+# 빌드 (shared 패키지 먼저 빌드 후 api 빌드)
+RUN pnpm --filter @greenhub/shared build && pnpm --filter api build
 
 EXPOSE 3000
 
