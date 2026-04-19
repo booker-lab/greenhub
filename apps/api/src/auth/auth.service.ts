@@ -84,6 +84,11 @@ export class AuthService {
       throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
     }
 
+    if (userData['suspended'] === true) {
+      await this.audit.log('auth.login.suspended', { userId: userData['id'], detail: { email: dto.email } });
+      throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
+    }
+
     const { accessToken, refreshToken } = await this.issueTokens({
       sub: userData['id'],
       role: userData['role'],
@@ -246,6 +251,11 @@ export class AuthService {
       : dto.targetRole === 'seller'
         ? ['seller', 'admin']
         : ['driver', 'admin'];  // driver 앱 또는 targetRole 미지정
+    if (userData['suspended'] === true) {
+      await this.audit.log('auth.login.suspended', { userId: userData['id'] as string });
+      throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
+    }
+
     if (!allowedRoles.includes(role)) {
       await this.audit.log('auth.kakao.forbidden', {
         userId: userData['id'] as string,

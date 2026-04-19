@@ -8,6 +8,8 @@ export default withPWA({
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: true,
+  skipWaiting: true,
+  cleanupOutdatedCaches: true,
   disable: process.env.NODE_ENV === "development",
   customWorkerSrc: "worker",
 })(nextConfig);

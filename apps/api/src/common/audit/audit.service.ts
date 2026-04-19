@@ -5,6 +5,7 @@ import { FirestoreService } from '../../firestore/firestore.service';
 export type AuditAction =
   | 'auth.login.success'
   | 'auth.login.failed'
+  | 'auth.login.suspended'
   | 'auth.logout'
   | 'auth.token.stolen'           // refresh token 재사용 감지
   | 'auth.kakao.success'
