@@ -16,6 +16,16 @@ export class CreateVarietyDto {
   @IsString()
   subCategory: string;
 
+  @IsEnum(['small', 'medium', 'large'])
+  flowerSize: string;
+
+  @IsEnum(['small', 'medium', 'large'])
+  plantSize: string;
+
+  @IsArray()
+  @IsEnum(['외대', '쌍대', '가지', '3대'], { each: true })
+  availableStemTypes: string[];
+
   @IsBoolean()
   hasFragrance: boolean;
 
