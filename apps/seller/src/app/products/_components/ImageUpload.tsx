@@ -55,6 +55,12 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
     onChange(images.filter((_, i) => i !== idx))
   }
 
+  function setAsMain(idx: number) {
+    const reordered = [...images]
+    reordered.unshift(reordered.splice(idx, 1)[0])
+    onChange(reordered)
+  }
+
   return (
     <Paper radius="lg" shadow="xs" p="md">
       <Text size="xs" fw={500} c="dimmed" mb="xs">
@@ -75,7 +81,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
             }}
           >
             <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            {idx === 0 && (
+            {idx === 0 ? (
               <Box
                 style={{
                   position: 'absolute',
@@ -90,6 +96,27 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                 }}
               >
                 대표
+              </Box>
+            ) : (
+              <Box
+                component="button"
+                onClick={() => setAsMain(idx)}
+                style={{
+                  position: 'absolute',
+                  bottom: 4,
+                  left: 4,
+                  backgroundColor: 'rgba(0,0,0,0.55)',
+                  color: 'white',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  border: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                대표 설정
               </Box>
             )}
             <Box
