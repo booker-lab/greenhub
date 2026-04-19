@@ -3,13 +3,13 @@ import withPWA from "@ducanh2912/next-pwa";
 
 const nextConfig: NextConfig = {};
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default withPWA({
   dest: "public",
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: true,
-  skipWaiting: true,
   cleanupOutdatedCaches: true,
   disable: process.env.NODE_ENV === "development",
   customWorkerSrc: "worker",
-})(nextConfig);
+} as any)(nextConfig);

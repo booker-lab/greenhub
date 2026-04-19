@@ -72,7 +72,7 @@ function defaultForm(): ProductFormData {
     groupConfig: { minParticipants: '2', maxParticipants: '10', recruitDeadline: '', groupDeliveryDate: '', groupDeliveryMethod: 'direct' },
     images: [],
     varietyId: '',
-    selection: { colors: [], fragrance: 'none', bloomCondition: 'half', bundleUnit: '' },
+    selection: { colors: [], stemType: '외대', fragrance: 'none', bloomCondition: 'half', bundleUnit: '' },
     sellerNote: '',
     content: { headline: '', description: '', isEditedByUser: false },
     sellerOverride: false,
@@ -102,6 +102,7 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
   })
 
   const [step, setStep] = useState(1)
+  const [availableStemTypes, setAvailableStemTypes] = useState<string[] | undefined>(undefined)
   const [conflicts, setConflicts] = useState<ConflictWarning[]>([])
   const [aiLoading, setAiLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -264,12 +265,18 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
             </Paper>
             <Paper radius="lg" shadow="xs" p="md">
               <Text size="xs" fw={500} c="dimmed" mb="xs">품종 선택</Text>
-              <VarietySelector category={form.category} value={form.varietyId} onChange={(id) => set('varietyId', id)} token={token} />
+              <VarietySelector
+                category={form.category}
+                value={form.varietyId}
+                onChange={(id) => set('varietyId', id)}
+                onVarietyChange={(v) => setAvailableStemTypes(v?.availableStemTypes)}
+                token={token}
+              />
             </Paper>
           </Stack>
         )
       case 2:
-        return <TouchSelector value={form.selection} onChange={(s) => set('selection', s)} />
+        return <TouchSelector value={form.selection} onChange={(s) => set('selection', s)} availableStemTypes={availableStemTypes} />
       case 3:
         return <SellerNoteInput value={form.sellerNote} onChange={(v) => set('sellerNote', v)} />
       case 4:

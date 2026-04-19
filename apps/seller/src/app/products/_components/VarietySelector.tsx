@@ -7,12 +7,14 @@ interface Variety {
   id: string
   name: string
   subCategory: string
+  availableStemTypes?: string[]
 }
 
 interface Props {
   category: string
   value: string
   onChange: (id: string) => void
+  onVarietyChange?: (variety: Variety | null) => void
   token: string
 }
 
@@ -22,7 +24,7 @@ const SUB_LABEL: Record<string, string> = {
   cymbidium: '심비디움',
 }
 
-export default function VarietySelector({ category, value, onChange, token }: Props) {
+export default function VarietySelector({ category, value, onChange, onVarietyChange, token }: Props) {
   const [varieties, setVarieties] = useState<Variety[]>([])
 
   useEffect(() => {
@@ -53,7 +55,10 @@ export default function VarietySelector({ category, value, onChange, token }: Pr
       placeholder="품종 선택 (선택사항)"
       data={data}
       value={value || null}
-      onChange={(v) => onChange(v ?? '')}
+      onChange={(v) => {
+        onChange(v ?? '')
+        onVarietyChange?.(varieties.find((vr) => vr.id === v) ?? null)
+      }}
       clearable
       searchable
       size="md"

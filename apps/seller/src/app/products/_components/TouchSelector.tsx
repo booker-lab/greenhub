@@ -3,8 +3,17 @@
 import { Badge, Button, Group, Paper, Stack, Text, TextInput } from '@mantine/core'
 
 const COLOR_OPTIONS = [
-  '레드', '핑크', '화이트', '옐로우', '오렌지', '퍼플',
+  '레드', '핑크', '연핑크', '로즈',
+  '화이트', '크림', '옐로우', '골드',
+  '오렌지', '퍼플', '바이올렛', '연보라',
   '블루', '그린', '무늬', '브라운', '베이지', '블랙', '그레이',
+] as const
+
+const STEM_OPTIONS = [
+  { value: '외대', label: '외대', desc: '1줄기' },
+  { value: '쌍대', label: '쌍대', desc: '2줄기' },
+  { value: '가지', label: '가지', desc: '다분지' },
+  { value: '3대', label: '3대', desc: '3줄기' },
 ] as const
 
 const FRAGRANCE_OPTIONS = [
@@ -21,6 +30,7 @@ const BLOOM_OPTIONS = [
 
 export interface SelectionForm {
   colors: string[]
+  stemType: '외대' | '쌍대' | '가지' | '3대'
   fragrance: 'none' | 'light' | 'strong'
   bloomCondition: 'bud' | 'half' | 'full'
   bundleUnit: string
@@ -29,6 +39,7 @@ export interface SelectionForm {
 interface Props {
   value: SelectionForm
   onChange: (v: SelectionForm) => void
+  availableStemTypes?: string[]
 }
 
 const activeStyle = {
@@ -37,7 +48,7 @@ const activeStyle = {
   color: 'white',
 }
 
-export default function TouchSelector({ value, onChange }: Props) {
+export default function TouchSelector({ value, onChange, availableStemTypes }: Props) {
   function set<K extends keyof SelectionForm>(key: K, val: SelectionForm[K]) {
     onChange({ ...value, [key]: val })
   }
@@ -49,8 +60,35 @@ export default function TouchSelector({ value, onChange }: Props) {
     set('colors', colors)
   }
 
+  const stemOptions = availableStemTypes
+    ? STEM_OPTIONS.filter((o) => availableStemTypes.includes(o.value))
+    : STEM_OPTIONS
+
   return (
     <Stack gap="sm">
+      <Paper radius="lg" shadow="xs" p="md">
+        <Text size="xs" fw={500} c="dimmed" mb="xs">출하 형태</Text>
+        <Group gap="xs">
+          {stemOptions.map(({ value: v, label, desc }) => (
+            <Button
+              key={v}
+              onClick={() => set('stemType', v as SelectionForm['stemType'])}
+              flex={1}
+              size="md"
+              radius="xl"
+              variant="outline"
+              color="gray"
+              style={value.stemType === v ? activeStyle : {}}
+            >
+              <Stack gap={0} align="center">
+                <Text size="sm" fw={600}>{label}</Text>
+                <Text size="10px" c={value.stemType === v ? 'white' : 'dimmed'}>{desc}</Text>
+              </Stack>
+            </Button>
+          ))}
+        </Group>
+      </Paper>
+
       <Paper radius="lg" shadow="xs" p="md">
         <Text size="xs" fw={500} c="dimmed" mb="xs">
           색상 <Text component="span" c="gray.4">(복수 선택 가능)</Text>
