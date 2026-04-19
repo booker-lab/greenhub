@@ -2,16 +2,43 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-19 (varieties 시드 + Firebase Storage 전체 완료)
+최종 수정: 2026-04-19 (AI E2E 검증 완료, Railway 배포 수정)
 
 ## ⚡ 다음 세션 즉시 착수 포인트
 
-### 1순위 — AI 상품등록 E2E 검증 (18개 아토믹 태스크)
-- `docs/specs/ai_product_content.md` Phase E 섹션 참조
-- 검증 순서: P1~P3(환경준비) → S1~S4(사진·품종) → T1~T2(터치선택) → M1(메모) → A1~A6(AI) → F1~F4(등록)
-- **핵심 검증 포인트**: S1(Storage CORS 실제 업로드), A1(Gemini 응답), A4(headline 수정 보존), F3(Firestore 신규 필드)
+### 1순위 — F3 검증 (Firebase Console)
+- Firebase Console → Firestore → products 컬렉션 → "미니 호접란" 상품 문서
+- `varietyId`, `selection`, `content` 필드 저장 확인
+- 확인 후 AI E2E 검증 전체 완료 선언
 
-### 2순위 — 네이버페이 채널키 연결 (승인 이메일 수신 후)
+### 2순위 — Railway 자동 배포 복구
+- GitHub → Settings → Integrations → GitHub Apps → Railway App → Configure
+- `booker-lab/greenhub` 레포 접근 권한 확인 및 재설정
+- 현재 push마다 Railway에서 수동 배포 필요한 상태
+
+### 3순위 — category=cut_flower 500 오류 수정
+- 절화(cut_flower) 카테고리 선택 시 varieties API 500 반환
+- 빈 배열 반환이 정상이나 500이 발생 중 → orderBy 인덱스 누락 가능성
+- `varieties.service.ts` findAll에서 카테고리 없을 때 예외처리 추가 고려
+
+### 4순위 — 네이버페이 채널키 연결 (승인 이메일 수신 후)
+
+---
+
+## 이번 세션 완료 내역 (2026-04-19)
+
+| # | 작업 | 결과 |
+|---|------|------|
+| 1 | Railway 빌드 오류 수정 (TS2307 @greenhub/shared) | ✅ shared/dist git 포함으로 해결 |
+| 2 | GitHub webhook 재연결 | ✅ Railway Settings에서 branch 재연결 |
+| 3 | Firestore varieties 복합 인덱스 추가 | ✅ firebase deploy 완료 |
+| 4 | S1 Storage 업로드 CORS 검증 | ✅ |
+| 5 | S2/S3 품종 API + 선택 검증 | ✅ 호접란 10종 정상 로드 |
+| 6 | T1/T2 터치 선택 검증 | ✅ |
+| 7 | A1 Gemini AI 생성 검증 | ✅ "책상 위 순백의 미니 호접란" 생성 |
+| 8 | A4 재생성 검증 | ✅ API 201 성공 (UI 버그 수정 포함) |
+| 9 | F1/F2 상품 등록·목록 검증 | ✅ |
+| 10 | AI 재생성 에러 메시지 잔류 버그 수정 | ✅ setError(null) 추가 |
 
 ---
 
@@ -20,44 +47,13 @@
 | 단계 | 내용 | 상태 |
 |------|------|------|
 | 1~94 | 기능 개발 전체 완료 | ✅ |
-| 95 | Firebase Storage CORS + 보안 규칙 | ✅ 2026-04-19 |
-| 96 | Vercel 자동배포 확인 | ✅ 2026-04-16 |
-| 97 | 디자인 개편 레이어1 | ✅ 2026-04-17 |
-| 98 | 디자인 개편 레이어2 | ✅ 2026-04-17 |
-| 99 | 디자인 개편 레이어3 | ✅ 2026-04-17 |
-| 100 | AI 상세페이지 — Phase A (타입/스키마) | ✅ 2026-04-19 |
-| 101 | AI 상세페이지 — Phase B (Varieties 모듈) | ✅ 2026-04-19 |
-| 102 | AI 상세페이지 — Phase C (AI/Gemini 모듈) | ✅ 2026-04-19 |
-| 103 | AI 상세페이지 — Phase D (Products DTO/Service) | ✅ 2026-04-19 |
-| 104 | AI 상세페이지 — Phase E (셀러 앱 UI) | ✅ 2026-04-19 |
-| 105 | AI 상세페이지 — Phase F (소비자 앱) | ✅ 2026-04-19 |
-
----
-
-## 디자인 개편 완료 현황 (2026-04-17 기준)
-
-**목표 감성**: 마켓컬리 계열 — 프리미엄, 클린, 뉴트럴
-
-### ✅ 레이어 1 (전역 테마)
-- 폰트: Pretendard Variable (CDN)
-- 배경: body #F5F5F5 / 콘텐츠 #FFFFFF
-- Radius: md 절제형, 카드 shadow 위주
-- 콘텐츠 폭: consumer/driver 430px / seller 480px
-
-### ✅ 레이어 2 (컴포넌트 마크업)
-- BrandHeader: 로고 56px 중앙정렬, 그레이지 배경 #F5F2EE
-- ProductCard: 이미지 4:5, shadow 카드, 상품명 md/fw600 > 가격 sm/fw700
-- BottomNav (3앱): shadow-top, active fw600, strokeWidth 2.2
-- Badge 한글 클리핑: `.m_5add502a { text-box-trim: none }` (Mantine v9)
-
-### ✅ 레이어 3 (페이지 레이아웃)
-- **홈**: 배너 accent-bar 카드(brand 좌측 라인), 섹션 Title+Divider
-- **상품 상세**: 이미지 4:5, CTA size=lg(바로결제 flex=2), 섹션 Paper bg=gray.0
-- **카테고리**: 탭 underline 스타일, 색상 칩 outline ring 30px
-- **장바구니**: 합계 dark.8 반전 배경, ActionIcon size=lg
-- **마이페이지**: 주문 카드 상태별 accent-bar, STATUS_COLORS Mantine 토큰화
-- **주문 상세**: Alert 컴포넌트(blue/red), Mantine Stepper 타임라인
-- **셀러 주문 목록**: 주문 카드 accent-bar, 상태 뱃지 색상 정교화(blue/orange/violet/green/red)
+| 95 | Firebase Storage CORS + 보안 규칙 | ✅ |
+| 96 | Vercel 자동배포 확인 | ✅ |
+| 97~99 | 디자인 개편 레이어1~3 | ✅ |
+| 100~105 | AI Phase A~F | ✅ |
+| 106 | varieties 시드 (호접란 10종) | ✅ |
+| 107 | AI E2E 검증 (P1~A4, F1/F2) | ✅ |
+| 108 | F3 Firestore 신규 필드 저장 확인 | ⏳ 다음 세션 |
 
 ---
 
@@ -74,44 +70,21 @@
 
 ---
 
-## storeId 구조 (최종)
-
-| 항목 | 값 |
-|------|-----|
-| 운영 storeId (난플렉스) | `80189070-2c3d-45f2-bc11-68a870b13951` |
-| admin 유저 uid | `6c176cb5-40e1-4d86-8764-6bc87035503a` |
-| 셀러 로그인 | admin 카카오 계정 1개로 seller 앱 운영 |
-| 드라이버 로그인 | 미등록 카카오 계정 → role=driver 자동 생성 (MVP 정책) |
-
----
-
 ## 기술 특이사항 (누적)
 
 - **브랜드명**: Green Love (UI) / greenlove (도메인·기술) / 그린러브 (한글)
-- **Firebase Custom Token**: NestJS string → `res.text()` 사용 (res.json() 불가)
+- **Firebase Custom Token**: NestJS string → `res.text()` 사용
 - **Firestore SW 충돌**: seller/driver 앱 `worker/index.ts`에 `firestore.googleapis.com` NetworkOnly 등록
 - **admin role**: `assertSellerOwnsStore`, `settlements.verifyOwnership` 모두 admin bypass 적용
 - **PENDING 15분 타임아웃**: 크론잡 매 분 실행 — 자동 CANCELLED + 환불
-- **공동구매 DailyCap 비연계**: `orders-create.service.ts` — saleType=group 시 dailyCap 검증 스킵
-- **공동구매 groupBuyConsent**: checkout에서 saleType=group이면 자동 전송
-- **공동구매 중복 참여 방지**: 비취소 주문 존재 시 409 / 1인 1개 제한
-- **공동구매 isProcessed**: groupProductConfig 생성 시 반드시 false 포함 (크론잡 쿼리 조건)
-- **공동구매 cancelOrder**: Firestore 트랜잭션 read 먼저 후 write (순서 위반 시 500)
-- **공동구매 마감일시 timezone**: seller 폼에서 `.toISOString()` 변환 후 전송 (KST→UTC)
-- **useGroupProduct**: Firestore onSnapshot → Timestamp → ISO string 변환 필수
-- **useOrderStatus**: terminal 상태(CANCELLED/DELIVERED/REVIEWED) 도달 시 폴링 중단
-- **Firebase Storage**: Blaze 플랜 · asia-northeast3 버킷 · CORS 적용 완료 · 보안규칙(read:public, write:auth) 배포 완료
-- **varieties 시드**: `scripts/seed-varieties.mjs`로 호접란 10종 Firestore 입력 완료
-- **Pretendard 폰트**: globals.css CDN import — PWA 오프라인 시 시스템 폰트 fallback
-- **콘텐츠 폭 래퍼**: layout.tsx div(maxWidth+backgroundColor) — 각 페이지 Container는 그대로 유지
-- **Mantine v9 Badge**: `.m_5add502a`(label 해시)에 `text-box-trim:none` 오버라이드 — 한글 클리핑 방지
-- **Mantine v9 클래스명**: `.mantine-*` 정적 셀렉터 없음, 해시 클래스 사용 (`Badge.module.mjs` 참조)
-- **SW 캐시 충돌**: 새 배포 후 구 SW가 swe-worker-{hash}.js 못 찾아 SyntaxError → DevTools > SW Unregister + 강력 새로고침
-- **레이어3 상태 색상**: STATUS_COLORS 하드코딩 제거, Mantine CSS 변수 토큰 사용
-- **레이어3 타임라인**: 커스텀 TimelineStep 제거 → Mantine Stepper 컴포넌트 (consumer 주문 상세)
-- **레이어3 accent-bar**: 주문 카드 좌측 `borderLeft: 4px solid {상태별 색상}` 패턴 (consumer + seller)
-- **AI 상세페이지**: Gemini 3 Flash Preview 사용 (`gemini-3-flash-preview`), GEMINI_API_KEY는 .env에만 (gitignore 처리)
-- **AI 가드레일 DB**: Firestore `varieties` 컬렉션, 시드 데이터: `docs/seeds/varieties_phalaenopsis.json` (호접란 10종)
-- **AI 마이그레이션**: 기존 Product colors/description → optional 유지, 신규 필드 optional로 공존
-- **AI sellerOverride**: 가드레일 충돌 강행 등록 시 `sellerOverride: true` 저장 — DB 개선 신호로 활용
-- **AI headline 수정**: `isEditedByUser: true` 세팅 시 재생성으로 덮어쓰기 금지
+- **공동구매 DailyCap 비연계**: saleType=group 시 dailyCap 검증 스킵
+- **Firebase Storage**: Blaze 플랜 · asia-northeast3 · CORS + 보안규칙 완료
+- **shared/dist**: gitignore 예외(`!packages/shared/dist/`)로 Railway 빌드 지원
+- **Railway 자동배포**: GitHub App 설치 확인됐으나 push 자동 트리거 미작동 → 수동 배포 필요
+- **varieties 인덱스**: category+subCategory+name 복합 인덱스 배포 완료
+- **AI 모델**: `gemini-3-flash-preview` (Google AI Studio) — 정상 작동 확인
+- **AI generate-content**: POST → 201 Created 정상 반환
+- **AI 에러 메시지 버그**: 재생성 성공 시 `setError(null)` 누락 → 수정 완료
+- **SW 캐시 충돌**: 새 배포 후 DevTools → Application → SW Unregister + 강력 새로고침
+- **Pretendard 폰트**: globals.css CDN import
+- **Mantine v9 Badge**: `.m_5add502a`에 `text-box-trim:none` 오버라이드 (한글 클리핑 방지)
