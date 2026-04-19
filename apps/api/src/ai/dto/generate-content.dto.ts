@@ -12,6 +12,9 @@ export class SelectionDto {
   @IsString({ each: true })
   colors: string[];
 
+  @IsEnum(['외대', '쌍대', '가지', '3대'])
+  stemType: string;
+
   @IsEnum(['none', 'light', 'strong'])
   fragrance: string;
 
