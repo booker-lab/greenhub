@@ -9,12 +9,16 @@ export class VarietiesService {
   constructor(private readonly firestore: FirestoreService) {}
 
   async findAll(category?: string) {
-    let ref = this.firestore.collection('varieties') as any;
-    if (category) {
-      ref = ref.where('category', '==', category);
+    try {
+      let ref = this.firestore.collection('varieties') as any;
+      if (category) {
+        ref = ref.where('category', '==', category);
+      }
+      const snap = await ref.orderBy('subCategory').orderBy('name').get();
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    } catch {
+      return [];
     }
-    const snap = await ref.orderBy('subCategory').orderBy('name').get();
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   }
 
   async findOne(id: string) {
