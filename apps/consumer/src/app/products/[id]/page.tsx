@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import {
@@ -47,6 +47,8 @@ export default function ProductDetailPage({
   const [quantity, setQuantity] = useState(1)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('direct')
   const [groupConsent, setGroupConsent] = useState(false)
+  const [activeImageIdx, setActiveImageIdx] = useState(0)
+  const carouselRef = useRef<HTMLDivElement>(null)
 
   if (loading) {
     return (
@@ -121,13 +123,56 @@ export default function ProductDetailPage({
         </Button>
       </Box>
 
-      {/* 이미지 */}
-      <Box style={{ aspectRatio: '4/5', background: 'var(--mantine-color-gray-1)', overflow: 'hidden' }}>
-        <img
-          src={product.images?.[0] ?? '/icons/icon-192x192.png'}
-          alt={product.name}
-          style={{ objectFit: 'cover', width: '100%', height: '100%' }}
-        />
+      {/* 이미지 캐러셀 */}
+      <Box style={{ position: 'relative' }}>
+        <Box
+          ref={carouselRef}
+          onScroll={(e) => {
+            const el = e.currentTarget
+            const idx = Math.round(el.scrollLeft / el.offsetWidth)
+            setActiveImageIdx(idx)
+          }}
+          style={{
+            display: 'flex',
+            overflowX: 'auto',
+            scrollSnapType: 'x mandatory',
+            scrollBehavior: 'smooth',
+            msOverflowStyle: 'none',
+            scrollbarWidth: 'none',
+            aspectRatio: '4/5',
+            background: 'var(--mantine-color-gray-1)',
+          }}
+        >
+          {(product.images?.length ? product.images : ['/icons/icon-192x192.png']).map((src, i) => (
+            <Box
+              key={i}
+              style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start', aspectRatio: '4/5', overflow: 'hidden' }}
+            >
+              <img src={src} alt={`${product.name} ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </Box>
+          ))}
+        </Box>
+        {(product.images?.length ?? 0) > 1 && (
+          <Box style={{ position: 'absolute', bottom: 12, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 6 }}>
+            {product.images!.map((_, i) => (
+              <Box
+                key={i}
+                onClick={() => {
+                  setActiveImageIdx(i)
+                  carouselRef.current?.scrollTo({ left: i * carouselRef.current.offsetWidth, behavior: 'smooth' })
+                }}
+                style={{
+                  width: activeImageIdx === i ? 20 : 6,
+                  height: 6,
+                  borderRadius: 3,
+                  background: activeImageIdx === i ? 'var(--green-primary)' : 'rgba(255,255,255,0.7)',
+                  transition: 'width 0.2s',
+                  cursor: 'pointer',
+                }}
+              />
+            ))}
+          </Box>
+        )}
       </Box>
 
       <Stack gap={0} px="md" pt="lg" pb={100}>
