@@ -234,6 +234,15 @@ export default function ProductDetailPage({
           </Text>
         )}
 
+        {/* 상품 상세 이미지 — 업로드된 사진 세로 나열 */}
+        {(product.images?.length ?? 0) > 0 && (
+          <Box mx={-16} mb="lg">
+            {product.images!.map((src, i) => (
+              <img key={i} src={src} alt={`${product.name} 상세 ${i + 1}`} style={{ width: '100%', display: 'block' }} />
+            ))}
+          </Box>
+        )}
+
         {/* 색상 칩 */}
         {displayColors.length > 0 && (
           <Group gap="xs" mb="lg" style={{ flexWrap: 'wrap' }}>
