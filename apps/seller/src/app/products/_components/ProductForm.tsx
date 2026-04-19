@@ -151,6 +151,7 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
       if (!res.ok) throw new Error('AI 생성 실패')
       const data = await res.json()
       setConflicts(data.conflicts ?? [])
+      setError(null)
       setForm((prev) => ({
         ...prev,
         content: { headline: data.headline, description: data.description, isEditedByUser: false },
