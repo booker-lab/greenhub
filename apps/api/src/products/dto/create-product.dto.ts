@@ -5,6 +5,7 @@ import {
   IsArray,
   IsBoolean,
   IsOptional,
+  IsUrl,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -66,7 +67,7 @@ export class CreateProductDto {
   name: string;
 
   @IsArray()
-  @IsString({ each: true })
+  @IsUrl({ require_tld: true, require_protocol: true }, { each: true })
   images: string[];
 
   @IsNumber()
