@@ -88,7 +88,8 @@ export default function AIPreviewPanel({
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="AI가 생성한 상세 설명"
-          minRows={4}
+          autosize
+          minRows={5}
           radius="md"
           styles={{ input: { fontSize: 15, lineHeight: 1.7 } }}
         />
