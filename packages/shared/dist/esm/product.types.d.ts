@@ -1,10 +1,12 @@
 export type Category = 'cut_flower' | 'orchid' | 'foliage';
-export type ColorOption = '레드' | '핑크' | '화이트' | '옐로우' | '오렌지' | '퍼플' | '블루' | '그린' | '무늬' | '브라운' | '베이지' | '블랙' | '그레이';
+export type ColorOption = '레드' | '핑크' | '연핑크' | '로즈' | '화이트' | '크림' | '옐로우' | '골드' | '오렌지' | '퍼플' | '바이올렛' | '연보라' | '블루' | '그린' | '무늬' | '브라운' | '베이지' | '블랙' | '그레이';
 export type DeliverySize = 'small' | 'medium' | 'large';
 export type FragranceLevel = 'none' | 'light' | 'strong';
 export type BloomCondition = 'bud' | 'half' | 'full';
+export type StemType = '외대' | '쌍대' | '가지' | '3대';
 export interface Selection {
     colors: ColorOption[];
+    stemType: StemType;
     fragrance: FragranceLevel;
     bloomCondition: BloomCondition;
     bundleUnit: string;
