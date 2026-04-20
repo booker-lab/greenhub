@@ -10,7 +10,7 @@ import SellerNoteInput from './SellerNoteInput'
 import AIPreviewPanel, { ConflictWarning } from './AIPreviewPanel'
 import {
   ActionIcon, Box, Button, Container, Group,
-  Paper, Stack, Text, TextInput, Title, UnstyledButton,
+  NumberInput, Paper, Stack, Text, TextInput, Title, UnstyledButton,
 } from '@mantine/core'
 
 const CATEGORIES = [
@@ -302,8 +302,11 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
       case 5:
         return (
           <Stack gap="sm">
-            <TextInput type="number" placeholder="가격" leftSection={<Text size="sm" c="dimmed">₩</Text>}
-              min={0} value={form.price} onChange={(e) => set('price', e.target.value)} radius="xl" size="md" />
+            <NumberInput placeholder="가격" leftSection={<Text size="sm" c="dimmed">₩</Text>}
+              thousandSeparator="," min={0} hideControls
+              value={form.price === '' ? '' : Number(form.price)}
+              onChange={(val) => set('price', val === '' ? '' : String(val))}
+              radius="xl" size="md" />
             <Paper radius="lg" shadow="xs" p="md">
               <Text size="xs" fw={500} c="dimmed" mb="xs">배송 사이즈</Text>
               <Group gap="xs">
