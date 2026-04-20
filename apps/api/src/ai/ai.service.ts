@@ -30,20 +30,30 @@ export class AiService {
   async generateProductContent(params: GenerateContentParams): Promise<GenerateContentResult> {
     const prompt = buildProductContentPrompt(params);
 
-    const result = await this.model.generateContent(prompt);
-    const text = result.response.text().trim();
+    let text: string;
+    try {
+      const result = await this.model.generateContent(prompt);
+      text = result.response.text().trim();
+    } catch (e: any) {
+      throw new InternalServerErrorException(`Gemini 호출 실패: ${e?.message ?? e}`);
+    }
 
-    // JSON 코드블록 제거 후 파싱
+    // JSON 코드블록 제거
     const jsonText = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
 
+    // Gemini가 JSON 문자열 안에 실제 줄바꿈을 출력할 경우 이스케이프 처리
+    const fixedJson = jsonText.replace(/"[^"]*"/gs, (m) =>
+      m.replace(/\n/g, '\\n').replace(/\r/g, ''),
+    );
+
     try {
-      const parsed = JSON.parse(jsonText);
+      const parsed = JSON.parse(fixedJson);
       return {
         headline: parsed.headline ?? '',
         description: parsed.description ?? '',
       };
     } catch {
-      throw new InternalServerErrorException('AI 응답을 파싱할 수 없습니다.');
+      throw new InternalServerErrorException(`AI 응답 파싱 실패. 원문: ${jsonText.slice(0, 200)}`);
     }
   }
 }
