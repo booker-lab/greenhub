@@ -100,6 +100,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
             ) : (
               <Box
                 component="button"
+                type="button"
                 onClick={() => setAsMain(idx)}
                 style={{
                   position: 'absolute',
@@ -140,6 +141,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
             </Box>
             <Box
               component="button"
+              type="button"
               onClick={() => remove(idx)}
               style={{
                 position: 'absolute',
@@ -165,6 +167,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
         {images.length < 5 && (
           <Box
             component="button"
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             style={{
