@@ -83,23 +83,28 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
   const router = useRouter()
   const draftKey = mode === 'create' ? 'product_draft_new' : `product_draft_${productId}`
 
-  const [form, setForm] = useState<ProductFormData>(() => {
-    if (initialData) return { ...defaultForm(), ...initialData }
+  const [form, setForm] = useState<ProductFormData>(() =>
+    initialData ? { ...defaultForm(), ...initialData } : defaultForm()
+  )
+
+  useEffect(() => {
+    if (initialData) return
     try {
       const saved = localStorage.getItem(draftKey)
       if (saved) {
         const p = JSON.parse(saved)
         const def = defaultForm()
-        return {
+        setForm({
           ...def, ...p,
           groupConfig: { ...def.groupConfig, ...(p.groupConfig ?? {}) },
           selection: { ...def.selection, ...(p.selection ?? {}) },
           content: { ...def.content, ...(p.content ?? {}) },
-        }
+        })
+        if (p._step) setStep(p._step)
       }
     } catch {}
-    return defaultForm()
-  })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [step, setStep] = useState(1)
   const [availableStemTypes, setAvailableStemTypes] = useState<string[] | undefined>(undefined)
