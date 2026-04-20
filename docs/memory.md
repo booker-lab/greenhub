@@ -2,11 +2,9 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-21 (AI 프롬프트 고도화, stemType 소비자 페이지 반영, ImageUpload 버그 수정)
+최종 수정: 2026-04-21 (AI 프롬프트 고도화, 버그 수정 다수, 가격 콤마 포맷)
 
 ## ⚡ 다음 세션 착수 순서
-
-> 상세 내용: `docs/specs/next_session_tasks.md`
 
 | 순위 | 작업 | 조건 |
 |------|------|------|
@@ -25,11 +23,15 @@
 | # | 작업 | 결과 |
 |---|------|------|
 | 1 | stemType 소비자 상세 페이지 속성 테이블 추가 | ✅ |
-| 2 | varieties 30종 availableStemTypes 전체 4가지 통일 | ✅ Firestore 재시드 완료 |
-| 3 | AI 프롬프트 T1~T4 고도화 | ✅ stemType 반영, 헤드라인 규칙 강화, description 3문장 구조+\n, 카테고리별 분기 |
-| 4 | generate-content DTO/params에 category 필드 추가 | ✅ |
+| 2 | varieties 30종 availableStemTypes 전체 4가지 통일 + Firestore 재시드 | ✅ |
+| 3 | AI 프롬프트 T1~T4 고도화 | ✅ stemType 반영, 헤드라인 규칙, 3문장 구조+\n, 카테고리 분기 |
+| 4 | generate-content DTO/params/controller에 category 필드 추가 | ✅ |
 | 5 | 소비자 description whiteSpace: pre-line 적용 | ✅ |
-| 6 | ImageUpload 버튼 type="button" 누락 버그 수정 | ✅ 대표 설정·삭제·사진 추가 버튼 모두 수정 |
+| 6 | Gemini JSON 파싱 강화 (줄바꿈 이스케이프 + 에러 메시지 상세화) | ✅ |
+| 7 | ImageUpload 버튼 type="button" 누락 → form submit 버그 수정 | ✅ |
+| 8 | ImageUpload key={url}→key={idx} — 대표 배지 미갱신 수정 | ✅ |
+| 9 | ProductForm localStorage를 useState→useEffect로 이동 (React #418 수정) | ✅ |
+| 10 | 가격 입력 NumberInput + thousandSeparator 콤마 포맷 적용 | ✅ |
 
 ---
 
@@ -37,13 +39,12 @@
 
 | 단계 | 내용 | 상태 |
 |------|------|------|
-| 1~109 | 기능 개발 + AI Phase A~F + E2E 검증 | ✅ |
-| 110 | suspended 로그인 차단 | ✅ |
-| 111 | varieties 30종 실제 데이터 구축 | ✅ |
-| 112 | stemType 스키마 + UI 연동 | ✅ |
+| 1~112 | 기능 개발 + AI Phase A~F + stemType | ✅ |
 | 113 | 네이버페이 채널키 연결 | ⏳ 승인 이메일 대기 |
 | 114 | AI 프롬프트 고도화 (T1~T4) | ✅ 2026-04-21 |
-| 115 | ImageUpload form submit 버그 수정 | ✅ 2026-04-21 |
+| 115 | ImageUpload 버그 3종 수정 | ✅ 2026-04-21 |
+| 116 | React #418 hydration 버그 수정 | ✅ 2026-04-21 |
+| 117 | 가격 콤마 포맷 | ✅ 2026-04-21 |
 
 ---
 
@@ -73,7 +74,9 @@
 - **AI 프롬프트**: `apps/api/src/ai/prompts/product-content.prompt.ts` — 규칙 수정 가능
 - **AI 프롬프트 구조**: 헤드라인(명사형 15자) + description(3문장 \n 구분) + 카테고리별 분기
 - **기존 상품 AI 재생성**: 셀러 앱 편집 → Step 4 → "다시 생성하기" 클릭 필요
-- **varieties 스키마**: flowerSize + plantSize + availableStemTypes(전 품종 4가지 통일)
-- **stemType**: Selection 필드. 소비자 상세 페이지 속성 테이블에 출하 형태로 표시
-- **ImageUpload 버튼**: `type="button"` 필수 — 미지정 시 form submit 트리거됨
+- **Gemini JSON 파싱**: 줄바꿈 이스케이프 처리 + 에러 메시지 상세화 완료
+- **varieties**: availableStemTypes 전 품종 4가지 통일. 소비자 상세 페이지 출하 형태 표시
+- **ImageUpload**: 버튼 `type="button"` 필수 / `key={idx}` (position 기반) 사용
+- **ProductForm localStorage**: `useState` 초기화가 아닌 `useEffect`에서 복원 (hydration 방지)
+- **가격 입력**: Mantine `NumberInput` + `thousandSeparator=","` + `hideControls`
 - **Mantine v9 Badge**: `.m_5add502a`에 `text-box-trim:none` 오버라이드 (한글 클리핑 방지)
