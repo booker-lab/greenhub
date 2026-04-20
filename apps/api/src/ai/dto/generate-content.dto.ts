@@ -30,6 +30,10 @@ export class GenerateContentDto {
   @IsString()
   varietyId?: string;
 
+  @IsOptional()
+  @IsEnum(['orchid', 'cut_flower', 'plant'])
+  category?: string;
+
   @ValidateNested()
   @Type(() => SelectionDto)
   selection: SelectionDto;

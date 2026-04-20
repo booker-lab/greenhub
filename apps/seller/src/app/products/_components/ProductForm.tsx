@@ -145,6 +145,7 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           varietyId: form.varietyId || undefined,
+          category: form.category || undefined,
           selection: form.selection,
           sellerNote: form.sellerNote,
         }),
