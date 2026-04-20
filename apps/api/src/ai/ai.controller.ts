@@ -25,7 +25,7 @@ export class AiController {
     const sellerNote = dto.sellerNote ?? '';
 
     const conflicts = this.validator.validate(sellerNote, selection, variety);
-    const content = await this.aiService.generateProductContent({ variety, selection, sellerNote });
+    const content = await this.aiService.generateProductContent({ variety, selection, sellerNote, category: dto.category });
 
     return { ...content, conflicts };
   }

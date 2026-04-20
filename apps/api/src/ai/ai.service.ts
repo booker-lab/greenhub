@@ -8,6 +8,7 @@ export interface GenerateContentParams {
   variety: Variety | null
   selection: Selection
   sellerNote: string
+  category?: string
 }
 
 export interface GenerateContentResult {

@@ -215,6 +215,7 @@ export default function ProductDetailPage({
                 product.selection?.bloomCondition ? ['개화 상태', BLOOM_LABEL[product.selection.bloomCondition]] : null,
                 variety ? ['추천 관상 기간', variety.bloomDuration] : null,
                 product.selection?.bundleUnit ? ['판매 단위', product.selection.bundleUnit] : null,
+                product.selection?.stemType ? ['출하 형태', product.selection.stemType] : null,
               ] as ([string, string] | null)[])
                 .filter((r): r is [string, string] => r !== null)
                 .map(([label, value]) => (
@@ -229,7 +230,7 @@ export default function ProductDetailPage({
 
         {/* AI 생성 상세 설명 */}
         {description && (
-          <Text size="sm" c="gray.6" mb="lg" style={{ lineHeight: 1.7 }}>
+          <Text size="sm" c="gray.6" mb="lg" style={{ lineHeight: 1.7, whiteSpace: 'pre-line' }}>
             {description}
           </Text>
         )}
