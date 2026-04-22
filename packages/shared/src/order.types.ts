@@ -68,7 +68,7 @@ export interface DailyCap {
 
 export interface CreateOrderRequest {
   productId: string
-  quantity: number
+  quantity: number          // 공동구매: 1 이상 maxPerPerson 이하 — 서비스 레이어에서 검증
   saleType: SaleType
   deliveryMethod: DeliveryMethod
   hubId?: string                 // hub 배송 시 필수

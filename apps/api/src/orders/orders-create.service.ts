@@ -27,11 +27,6 @@ export class OrdersCreateService {
       throw new BadRequestException('공동구매 동의가 필요합니다.');
     }
 
-    // 공동구매 1인 1개 제한
-    if (dto.saleType === 'group' && dto.quantity !== 1) {
-      throw new BadRequestException('공동구매는 1인 1개 참여만 가능합니다.');
-    }
-
     // 공동구매 중복 참여 방지
     if (dto.saleType === 'group') {
       const existingSnap = await this.firestore
@@ -107,7 +102,7 @@ export class OrdersCreateService {
         });
       }
 
-      // 공동구매: 참여자 수 증가 + 최대 인원 검증
+      // 공동구매: 수량 누적 + 목표 수량·maxPerPerson 검증
       if (dto.saleType === 'group') {
         const gcRef = this.firestore.doc(
           `groupProductConfig/${dto.productId}`,
@@ -118,16 +113,24 @@ export class OrdersCreateService {
           throw new ConflictException('공동구매 설정을 찾을 수 없습니다.');
         }
         const gc = gcSnap.data()!;
+
+        // 1인 최대 구매 수량 초과 검증
+        if (dto.quantity > (gc['maxPerPerson'] as number)) {
+          throw new BadRequestException(
+            `1인 최대 구매 수량(${gc['maxPerPerson']}개)을 초과할 수 없습니다.`,
+          );
+        }
+
         // Transaction 재시도 시에도 최신 값으로 재검증되므로 Race Condition 방지
-        if (gc['currentParticipants'] >= gc['maxParticipants']) {
-          throw new ConflictException('공동구매 모집 인원이 마감되었습니다.');
+        if (gc['currentQuantity'] >= gc['targetQuantity']) {
+          throw new ConflictException('공동구매 목표 수량이 마감되었습니다.');
         }
         // FieldValue.increment 대신 명시적 값 사용 — Transaction 내 읽기 일관성 보장
-        const newCount = (gc['currentParticipants'] as number) + 1;
-        t.update(gcRef, { currentParticipants: newCount });
+        const newQuantity = (gc['currentQuantity'] as number) + dto.quantity;
+        t.update(gcRef, { currentQuantity: newQuantity });
 
         // 선착순 마감: 트랜잭션 외부에서 조기 확정 트리거 (비동기, 실패 무시)
-        if (newCount >= (gc['maxParticipants'] as number)) {
+        if (newQuantity >= (gc['targetQuantity'] as number)) {
           setImmediate(() => {
             this.notifications
               .processGroupBuyEarlyConfirm(dto.productId)

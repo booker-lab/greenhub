@@ -13,11 +13,16 @@ import { Type } from 'class-transformer';
 
 export class GroupConfigDto {
   @IsNumber()
-  @Min(2)
-  minParticipants: number;
+  @Min(1)
+  minQuantity: number;
 
   @IsNumber()
-  maxParticipants: number;
+  @Min(1)
+  targetQuantity: number;
+
+  @IsNumber()
+  @Min(1)
+  maxPerPerson: number;
 
   @IsString()
   recruitDeadline: string; // ISO8601

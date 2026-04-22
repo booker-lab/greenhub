@@ -98,11 +98,12 @@ MVP는 단일 판매자(`storeId: 'dear-orchid'`) 고정.
 {
   productId: string            // products 참조
 
-  // 모집 설정
-  minParticipants: number      // 최소 모집 인원
-  maxParticipants: number      // 최대 모집 인원 (= 공동구매 슬롯 한도)
+  // 모집 설정 (수량 기반)
+  minQuantity: number          // 최소 수량 (미달 시 자동 취소)
+  targetQuantity: number       // 목표 수량 (선착순 확정 기준)
+  maxPerPerson: number         // 1인 최대 구매 수량
   recruitDeadline: Timestamp   // 모집 마감일 (판매자 설정)
-  currentParticipants: number  // Firestore 실시간 집계
+  currentQuantity: number      // Firestore 실시간 누적 수량
   isProcessed: boolean         // 마감 기한 자동 취소 처리 완료 여부 (중복 스케줄러 방지)
 
   // 배송 설정 (소비자 변경 불가)
@@ -235,9 +236,9 @@ GET /stores/:storeId/products
   isActive: boolean
   // 공동구매 전용 (saleType: 'group')
   groupSummary?: {
-    currentParticipants: number
-    minParticipants: number
-    maxParticipants: number
+    currentQuantity: number
+    minQuantity: number
+    targetQuantity: number
     recruitDeadline: string  // ISO8601
   }
 }
@@ -283,8 +284,9 @@ POST /stores/:storeId/products
 
   // 공동구매 전용
   groupConfig?: {
-    minParticipants: number
-    maxParticipants: number
+    minQuantity: number          // 최소 수량
+    targetQuantity: number       // 목표 수량
+    maxPerPerson: number         // 1인 최대 구매 수량
     recruitDeadline: string      // ISO8601
     groupDeliveryDate: string    // ISO8601
     groupDeliveryMethod: 'direct' | 'parcel'
@@ -383,11 +385,12 @@ export type { SaleType, DeliveryMethod } from './order.types.js'
 
 export interface GroupProductConfig {
   productId: string
-  minParticipants: number
-  maxParticipants: number
-  recruitDeadline: string   // ISO8601
-  currentParticipants: number
-  groupDeliveryDate: string   // ISO8601
+  minQuantity: number          // 최소 수량 (미달 시 자동 취소)
+  targetQuantity: number       // 목표 수량 (선착순 확정 기준)
+  maxPerPerson: number         // 1인 최대 구매 수량
+  recruitDeadline: string      // ISO8601
+  currentQuantity: number      // Firestore 실시간 누적 수량
+  groupDeliveryDate: string    // ISO8601
   groupDeliveryMethod: 'direct' | 'parcel'
   deliveryFeeDiscount: number
 }
@@ -418,9 +421,9 @@ export interface ProductSummary {
   saleType: SaleType
   isActive: boolean
   groupSummary?: {
-    currentParticipants: number
-    minParticipants: number
-    maxParticipants: number
+    currentQuantity: number
+    minQuantity: number
+    targetQuantity: number
     recruitDeadline: string   // ISO8601
   }
 }
@@ -445,3 +448,4 @@ export interface DeliveryFeeConfig {
 | 날짜 | 내용 |
 |------|------|
 | 2026-03-26 | 초안 작성 — 1·2단계 설계 + 배송 검토사항 기반 통합 |
+| 2026-04-23 | GroupProductConfig 수량 기반 전환 — participants → quantity, maxPerPerson 추가 |

@@ -150,7 +150,7 @@ export class NotificationsService {
       const gc = gcDoc.data();
       const productId = gc['productId'] as string;
 
-      if (gc['currentParticipants'] >= gc['minParticipants']) {
+      if (gc['currentQuantity'] >= gc['minQuantity']) {
         await this.confirmGroupBuy(productId, gc);
       } else {
         await this.cancelGroupBuyLack(productId, gc);
@@ -185,9 +185,9 @@ export class NotificationsService {
 
       await this.sendToGroupParticipants(gc['productId'], 'GROUP_DEADLINE_SOON', {
         productName,
-        currentParticipants: String(gc['currentParticipants']),
-        minParticipants: String(gc['minParticipants']),
-        remaining: String(gc['minParticipants'] - gc['currentParticipants']),
+        currentQuantity: String(gc['currentQuantity']),
+        minQuantity: String(gc['minQuantity']),
+        remaining: String((gc['minQuantity'] as number) - (gc['currentQuantity'] as number)),
       });
     }
   }
@@ -222,7 +222,7 @@ export class NotificationsService {
     // 소비자 전체 알림
     await this.sendToGroupParticipants(productId, 'GROUP_CONFIRMED', {
       productName,
-      minParticipants: String(gc['minParticipants']),
+      minQuantity: String(gc['minQuantity']),
       groupDeliveryDate: String(gc['groupDeliveryDate']),
     });
 
@@ -230,7 +230,7 @@ export class NotificationsService {
     if (storeId) {
       await this.sendToStoreOwner(storeId, 'SELLER_GROUP_CONFIRMED', {
         productName,
-        participantCount: String(gc['currentParticipants']),
+        currentQuantity: String(gc['currentQuantity']),
       });
     }
   }
@@ -275,8 +275,8 @@ export class NotificationsService {
     if (storeId) {
       await this.sendToStoreOwner(storeId, 'SELLER_GROUP_CANCELLED_LACK', {
         productName,
-        participantCount: String(gc['currentParticipants']),
-        minParticipants: String(gc['minParticipants']),
+        currentQuantity: String(gc['currentQuantity']),
+        minQuantity: String(gc['minQuantity']),
       });
     }
   }

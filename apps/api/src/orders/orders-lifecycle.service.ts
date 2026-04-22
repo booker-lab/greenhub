@@ -134,7 +134,7 @@ export class OrdersLifecycleService {
       });
       if (gcSnap.exists) {
         t.update(gcRef, {
-          currentParticipants: this.firestore.FieldValue.increment(-1),
+          currentQuantity: this.firestore.FieldValue.increment(-(order['quantity'] as number)),
         });
       }
     });

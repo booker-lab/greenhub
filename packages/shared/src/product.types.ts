@@ -47,10 +47,11 @@ export type { SaleType, DeliveryMethod }
 
 export interface GroupProductConfig {
   productId: string
-  minParticipants: number
-  maxParticipants: number
-  recruitDeadline: string // ISO8601
-  currentParticipants: number
+  minQuantity: number       // 최소 수량 (미달 시 자동 취소)
+  targetQuantity: number    // 목표 수량 (선착순 확정 기준)
+  maxPerPerson: number      // 1인 최대 구매 수량
+  recruitDeadline: string   // ISO8601
+  currentQuantity: number   // Firestore 실시간 누적 수량
   groupDeliveryDate: string // ISO8601
   groupDeliveryMethod: 'direct' | 'parcel'
   deliveryFeeDiscount: number
@@ -69,9 +70,9 @@ export interface Product {
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
   groupSummary?: {
-    currentParticipants: number
-    minParticipants: number
-    maxParticipants: number
+    currentQuantity: number
+    minQuantity: number
+    targetQuantity: number
     recruitDeadline: string // ISO8601
   }
   // AI 시스템 신규 필드
@@ -95,9 +96,9 @@ export interface ProductSummary {
   saleType: SaleType
   isActive: boolean
   groupSummary?: {
-    currentParticipants: number
-    minParticipants: number
-    maxParticipants: number
+    currentQuantity: number
+    minQuantity: number
+    targetQuantity: number
     recruitDeadline: string // ISO8601
   }
 }
