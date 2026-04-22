@@ -34,7 +34,7 @@ export class CreateOrderDto {
 
   @IsNumber()
   @Min(1)
-  quantity: number;
+  quantity: number; // 공동구매: maxPerPerson 초과 여부는 서비스 레이어에서 검증
 
   @IsEnum(['normal', 'group'])
   saleType: string;

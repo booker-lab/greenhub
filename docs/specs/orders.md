@@ -41,7 +41,7 @@
 
 [공동구매]
   PENDING → RECRUITING → CONFIRMED → PREPARING → DELIVERING → DELIVERED → REVIEWED
-                       ↘ CANCELLED (마감 기한 내 minParticipants 미달 → 자동 환불)
+                       ↘ CANCELLED (마감 기한 내 minQuantity 미달 → 자동 환불)
 
 [공통 취소]
   RECRUITING → CANCELLED (소비자 개인 취소, RECRUITING 구간 한정)
@@ -226,7 +226,7 @@ PATCH /stores/:storeId/orders/:orderId/cancel
 ```
 
 **처리 규칙**
-- `RECRUITING` 상태: 취소 허용 → Portone 환불 API → `CANCELLED` + `currentParticipants` -1
+- `RECRUITING` 상태: 취소 허용 → Portone 환불 API → `CANCELLED` + `currentQuantity -= order.quantity`
 - `CONFIRMED` 이후: **소비자 직접 취소 거부** `403` (계약 성립 시점, 판매자 생산 시작)
 - 환불 소요: 카드 3~5 영업일, 간편결제 1~3일
 
@@ -294,11 +294,11 @@ Body: { pickupCode: string }
 ```
 트리거: NestJS 스케줄러 (1분 주기 폴링 or Firestore onWrite 트리거)
 
-조건: groupProductConfig.currentParticipants >= groupProductConfig.minParticipants
+조건: groupProductConfig.currentQuantity >= groupProductConfig.targetQuantity
 
 처리:
   1. 해당 groupProductId의 모든 RECRUITING 주문 → CONFIRMED 일괄 전환
-  2. 전체 참여자에게 알림톡 발송: "목표 인원이 모였습니다! 주문이 확정되었습니다."
+  2. 전체 참여자에게 알림톡 발송: "목표 수량이 모였습니다! 주문이 확정되었습니다."
 ```
 
 ### 마감 기한 미달 자동 취소
@@ -306,7 +306,7 @@ Body: { pickupCode: string }
 ```
 트리거: NestJS 스케줄러 (groupProductConfig.recruitDeadline 경과 시)
 
-조건: currentParticipants < minParticipants
+조건: currentQuantity < minQuantity
 
 처리:
   1. 모든 RECRUITING 주문 → CANCELLED (cancelReason: '목표 수량 미달성으로 취소')
@@ -339,7 +339,7 @@ Body: { pickupCode: string }
 | 트리거 | 수신자 | 내용 요약 |
 |--------|--------|----------|
 | `PENDING → ACCEPTED` | 본인 | 일반 판매 결제 완료 |
-| `PENDING → RECRUITING` | 본인 | 공동구매 참여 완료, 현재 N/M명 |
+| `PENDING → RECRUITING` | 본인 | 공동구매 참여 완료, 현재 N/M개 |
 | `RECRUITING → CONFIRMED` | **전체 참여자** | 목표 달성, 주문 확정 |
 | `RECRUITING → CANCELLED` (마감 미달) | **전체 참여자** | 미달 취소 + 환불 일정 안내 |
 | `RECRUITING → CANCELLED` (개인 취소) | 취소자 본인만 | 취소 및 환불 완료 |
@@ -466,3 +466,4 @@ export interface CreateOrderRequest {
 | 2026-04-02 | `driverId`, `deliveryPhotoUrl` 필드 추가 (드라이버 IA 2단계 확정 반영) |
 | 2026-04-02 | `PATCH /status` body에 `photoUrl` 파라미터 추가 (거점 하차 인증) |
 | 2026-04-02 | `GET /orders` 쿼리에 `driverId` 파라미터 추가 (Phase 2 예고) |
+| 2026-04-23 | 공동구매 수량 기반 전환 — participants → quantity 용어 통일 전체 반영 |

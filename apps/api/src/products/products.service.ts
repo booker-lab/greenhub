@@ -85,9 +85,9 @@ export class ProductsService {
         const gc = groupConfigMap.get(p['id'] as string);
         if (gc) {
           summary['groupSummary'] = {
-            currentParticipants: gc['currentParticipants'],
-            minParticipants: gc['minParticipants'],
-            maxParticipants: gc['maxParticipants'],
+            currentQuantity: gc['currentQuantity'],
+            minQuantity: gc['minQuantity'],
+            targetQuantity: gc['targetQuantity'],
             recruitDeadline: typeof (gc['recruitDeadline'] as { toDate?: () => Date })?.toDate === 'function' ? (gc['recruitDeadline'] as { toDate: () => Date }).toDate().toISOString() : gc['recruitDeadline'],
           };
         }
@@ -150,7 +150,7 @@ export class ProductsService {
       await this.firestore.doc(`groupProductConfig/${productId}`).set({
         productId,
         ...groupConfig,
-        currentParticipants: 0,
+        currentQuantity: 0,
         recruitDeadline: new Date(groupConfig.recruitDeadline),
         groupDeliveryDate: new Date(groupConfig.groupDeliveryDate),
         isProcessed: false,
@@ -327,8 +327,8 @@ export class ProductsService {
       if (p['saleType'] === 'group') {
         const gc = groupConfigMap.get(p['id'] as string);
         if (gc) summary['groupSummary'] = {
-          currentParticipants: gc['currentParticipants'], minParticipants: gc['minParticipants'],
-          maxParticipants: gc['maxParticipants'], recruitDeadline: gc['recruitDeadline'],
+          currentQuantity: gc['currentQuantity'], minQuantity: gc['minQuantity'],
+          targetQuantity: gc['targetQuantity'], recruitDeadline: gc['recruitDeadline'],
         };
       }
       return summary;

@@ -73,7 +73,7 @@ export default function ProductDetailPage({
   }
 
   const isGroup = product.saleType === 'group'
-  const isFull = isGroup && !!groupConfig && groupConfig.currentParticipants >= groupConfig.maxParticipants
+  const isFull = isGroup && !!groupConfig && groupConfig.currentQuantity >= groupConfig.targetQuantity
   const unitPrice = product.price
   const totalAmount = unitPrice * quantity
   const canBuy = isGroup ? (groupConsent && !isFull) : true
@@ -269,18 +269,18 @@ export default function ProductDetailPage({
               {isFull && <Badge color="gray" variant="filled" size="sm">모집 완료</Badge>}
             </Group>
             <Group justify="space-between" mb={4}>
-              <Text size="sm" c="gray.5">현재 참여</Text>
+              <Text size="sm" c="gray.5">현재 수량</Text>
               <Text size="sm" fw={700} c="brand.8">
-                {groupConfig.currentParticipants}/{groupConfig.maxParticipants}명
+                {groupConfig.currentQuantity}/{groupConfig.targetQuantity}개
               </Text>
             </Group>
             <Group justify="space-between" mb="sm">
-              <Text size="sm" c="gray.5">최소 인원</Text>
-              <Text size="sm" fw={600}>{groupConfig.minParticipants}명</Text>
+              <Text size="sm" c="gray.5">최소 수량</Text>
+              <Text size="sm" fw={600}>{groupConfig.minQuantity}개</Text>
             </Group>
             <Progress
               value={Math.min(
-                (groupConfig.currentParticipants / groupConfig.minParticipants) * 100,
+                (groupConfig.currentQuantity / groupConfig.minQuantity) * 100,
                 100,
               )}
               color="brand"
@@ -339,10 +339,19 @@ export default function ProductDetailPage({
               −
             </ActionIcon>
             <Text size="lg" fw={700} w={32} ta="center">{quantity}</Text>
-            <ActionIcon size="lg" variant="default" radius="md" onClick={() => setQuantity(quantity + 1)}>
+            <ActionIcon
+              size="lg" variant="default" radius="md"
+              onClick={() => {
+                const maxQty = isGroup && groupConfig ? groupConfig.maxPerPerson : 99
+                setQuantity(Math.min(maxQty, quantity + 1))
+              }}
+            >
               +
             </ActionIcon>
           </Group>
+          {isGroup && groupConfig && (
+            <Text size="xs" c="gray.4" mt={6}>1인 최대 {groupConfig.maxPerPerson}개까지 구매 가능</Text>
+          )}
         </Paper>
 
         {/* 공동구매 동의 */}

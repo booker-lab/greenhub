@@ -8,8 +8,9 @@ const GROUP_DELIVERY_METHODS = [
 ] as const
 
 interface GroupConfigForm {
-  minParticipants: string
-  maxParticipants: string
+  minQuantity: string
+  targetQuantity: string
+  maxPerPerson: string
   recruitDeadline: string
   groupDeliveryDate: string
   groupDeliveryMethod: 'direct' | 'parcel'
@@ -34,24 +35,33 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
       <Box style={{ borderTop: '1px solid var(--mantine-color-gray-1)', paddingTop: 16 }}>
         <Group gap="xs" mb="sm">
           <Box style={{ flex: 1 }}>
-            <Text size="xs" c="dimmed" mb={4}>최소 인원</Text>
+            <Text size="xs" c="dimmed" mb={4}>최소 수량</Text>
             <input
-              type="number" placeholder="2" min={2}
-              value={config.minParticipants}
-              onChange={(e) => setGroupConfig('minParticipants', e.target.value)}
+              type="number" placeholder="10" min={1}
+              value={config.minQuantity}
+              onChange={(e) => setGroupConfig('minQuantity', e.target.value)}
               style={{ width: '100%', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 12, padding: '10px 12px', fontSize: 14 }}
             />
           </Box>
           <Box style={{ flex: 1 }}>
-            <Text size="xs" c="dimmed" mb={4}>최대 인원</Text>
+            <Text size="xs" c="dimmed" mb={4}>목표 수량</Text>
             <input
-              type="number" placeholder="10" min={2}
-              value={config.maxParticipants}
-              onChange={(e) => setGroupConfig('maxParticipants', e.target.value)}
+              type="number" placeholder="50" min={1}
+              value={config.targetQuantity}
+              onChange={(e) => setGroupConfig('targetQuantity', e.target.value)}
               style={{ width: '100%', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 12, padding: '10px 12px', fontSize: 14 }}
             />
           </Box>
         </Group>
+        <Box mb="sm">
+          <Text size="xs" c="dimmed" mb={4}>1인 최대 구매 수량</Text>
+          <input
+            type="number" placeholder="5" min={1}
+            value={config.maxPerPerson}
+            onChange={(e) => setGroupConfig('maxPerPerson', e.target.value)}
+            style={{ width: '100%', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 12, padding: '10px 12px', fontSize: 14 }}
+          />
+        </Box>
 
         <Box mb="sm">
           <Text size="xs" c="dimmed" mb={4}>모집 마감일시</Text>

@@ -20,10 +20,11 @@ import type { SaleType, DeliveryMethod } from './order.types.js';
 export type { SaleType, DeliveryMethod };
 export interface GroupProductConfig {
     productId: string;
-    minParticipants: number;
-    maxParticipants: number;
+    minQuantity: number;
+    targetQuantity: number;
+    maxPerPerson: number;
     recruitDeadline: string;
-    currentParticipants: number;
+    currentQuantity: number;
     groupDeliveryDate: string;
     groupDeliveryMethod: 'direct' | 'parcel';
     deliveryFeeDiscount: number;
@@ -41,9 +42,9 @@ export interface Product {
     createdAt: string;
     updatedAt: string;
     groupSummary?: {
-        currentParticipants: number;
-        minParticipants: number;
-        maxParticipants: number;
+        currentQuantity: number;
+        minQuantity: number;
+        targetQuantity: number;
         recruitDeadline: string;
     };
     varietyId?: string;
@@ -64,9 +65,9 @@ export interface ProductSummary {
     saleType: SaleType;
     isActive: boolean;
     groupSummary?: {
-        currentParticipants: number;
-        minParticipants: number;
-        maxParticipants: number;
+        currentQuantity: number;
+        minQuantity: number;
+        targetQuantity: number;
         recruitDeadline: string;
     };
 }

@@ -28,8 +28,9 @@ const DELIVERY_SIZES = [
 const STEP_LABELS = ['사진·품종', '터치 선택', '판매자 메모', 'AI 미리보기', '가격·배송']
 
 interface GroupConfigForm {
-  minParticipants: string
-  maxParticipants: string
+  minQuantity: string
+  targetQuantity: string
+  maxPerPerson: string
   recruitDeadline: string
   groupDeliveryDate: string
   groupDeliveryMethod: 'direct' | 'parcel'
@@ -69,7 +70,7 @@ function defaultForm(): ProductFormData {
   return {
     name: '', category: 'cut_flower', deliverySize: 'small',
     price: '', saleType: 'normal',
-    groupConfig: { minParticipants: '2', maxParticipants: '10', recruitDeadline: '', groupDeliveryDate: '', groupDeliveryMethod: 'direct' },
+    groupConfig: { minQuantity: '10', targetQuantity: '50', maxPerPerson: '5', recruitDeadline: '', groupDeliveryDate: '', groupDeliveryMethod: 'direct' },
     images: [],
     varietyId: '',
     selection: { colors: [], stemType: '외대', fragrance: 'none', bloomCondition: 'half', bundleUnit: '' },
@@ -199,10 +200,12 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
     }
     if (form.saleType === 'group') {
       const g = form.groupConfig
-      if (!g.minParticipants) { setError('최소 인원을 입력해주세요.'); return }
+      if (!g.minQuantity || Number(g.minQuantity) < 1) { setError('최소 수량을 입력해주세요.'); return }
+      if (!g.targetQuantity || Number(g.targetQuantity) < 1) { setError('목표 수량을 입력해주세요.'); return }
+      if (!g.maxPerPerson || Number(g.maxPerPerson) < 1) { setError('1인 최대 구매 수량을 입력해주세요.'); return }
       if (!g.recruitDeadline) { setError('모집 마감일시를 입력해주세요.'); return }
       if (!g.groupDeliveryDate) { setError('배송 예정일을 입력해주세요.'); return }
-      if (Number(g.minParticipants) > Number(g.maxParticipants)) { setError('최소 인원은 최대 인원보다 클 수 없습니다.'); return }
+      if (Number(g.minQuantity) > Number(g.targetQuantity)) { setError('최소 수량은 목표 수량보다 클 수 없습니다.'); return }
       if (new Date(g.recruitDeadline) <= new Date()) { setError('모집 마감일시는 현재 시각 이후여야 합니다.'); return }
       if (new Date(g.groupDeliveryDate) <= new Date(g.recruitDeadline)) { setError('배송 예정일은 모집 마감일 이후여야 합니다.'); return }
     }
@@ -220,8 +223,9 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
     }
     if (form.saleType === 'group') {
       body.groupConfig = {
-        minParticipants: Number(form.groupConfig.minParticipants),
-        maxParticipants: Number(form.groupConfig.maxParticipants),
+        minQuantity: Number(form.groupConfig.minQuantity),
+        targetQuantity: Number(form.groupConfig.targetQuantity),
+        maxPerPerson: Number(form.groupConfig.maxPerPerson),
         recruitDeadline: new Date(form.groupConfig.recruitDeadline).toISOString(),
         groupDeliveryDate: new Date(form.groupConfig.groupDeliveryDate).toISOString(),
         groupDeliveryMethod: form.groupConfig.groupDeliveryMethod,
