@@ -137,8 +137,8 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
 
 - [x] A1. `packages/shared/src/product.types.ts` — `Selection`, `GeneratedContent` 인터페이스 추가, `Product` 업데이트
 - [x] A1. `packages/shared/src/variety.types.ts` — `Variety` 인터페이스 신규 생성
-- [ ] A2. Firestore `varieties` 컬렉션 생성 + 호접란 10종 시드 입력 ← **다음 세션 착수**
-- [x] A3. 기존 Product 데이터 마이그레이션 스크립트
+- [x] A2. Firestore `varieties` 컬렉션 생성 + 30종 시드 입력 (2026-04-21 완료)
+- [x] A3. 기존 Product 데이터 마이그레이션 스크립트 (테스트 상품만 존재 — varietyId 수동 매핑 불필요)
   - `colors[]` → `selection.colors`
   - `description` → `sellerNote`
   - `content.headline` = `name` 초기값
