@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
-import { onAuthStateChanged } from 'firebase/auth'
-import { db, firebaseAuth } from '@/lib/firebase'
+import { db } from '@/lib/firebase'
 import type { Product } from '@greenhub/shared'
 
 interface UseStoreProductsResult {
@@ -16,17 +15,9 @@ export function useStoreProducts(storeId: string | null): UseStoreProductsResult
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [firebaseReady, setFirebaseReady] = useState(false)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
-      setFirebaseReady(!!user)
-    })
-    return unsubscribe
-  }, [])
-
-  useEffect(() => {
-    if (!storeId || !firebaseReady) {
+    if (!storeId) {
       setLoading(false)
       return
     }
@@ -42,7 +33,6 @@ export function useStoreProducts(storeId: string | null): UseStoreProductsResult
         const items = snap.docs
           .map((d) => {
             const data = d.data()
-            // Firestore Timestamp → ISO string 변환
             if (data['createdAt']?.toDate) data['createdAt'] = data['createdAt'].toDate().toISOString()
             if (data['updatedAt']?.toDate) data['updatedAt'] = data['updatedAt'].toDate().toISOString()
             return { id: d.id, ...data } as Product
