@@ -122,7 +122,7 @@ export class NotificationsService {
     await this.sendToUser(ownerId, templateCode, variables, orderId);
   }
 
-  // ── 선착순 마감: maxParticipants 도달 시 즉시 확정 ──
+  // ── 선착순 마감: targetQuantity 도달 시 즉시 확정 ──
   async processGroupBuyEarlyConfirm(productId: string) {
     const gcSnap = await this.firestore.doc(`groupProductConfig/${productId}`).get();
     if (!gcSnap.exists) return;

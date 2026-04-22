@@ -199,7 +199,7 @@ export default function OrderDetailPage() {
             <Paper radius="lg" shadow="xs" p="md">
               <Text fw={600} size="sm" c="gray.7" mb="xs">공동구매 현황</Text>
               <Stack gap={6}>
-                <Row label="참여 인원" value={`${groupConfig.currentParticipants} / ${groupConfig.maxParticipants}명 (최소 ${groupConfig.minParticipants}명)`} />
+                <Row label="현재 수량" value={`${groupConfig.currentQuantity} / ${groupConfig.targetQuantity}개 (최소 ${groupConfig.minQuantity}개)`} />
                 <Row label="모집 마감일" value={new Date(groupConfig.recruitDeadline).toLocaleDateString('ko-KR')} />
                 <Row label="배송 예정일" value={new Date(groupConfig.groupDeliveryDate).toLocaleDateString('ko-KR')} />
               </Stack>

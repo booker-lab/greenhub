@@ -76,8 +76,9 @@ export default function EditProductPage() {
         }
         if (data.groupConfig) {
           mapped.groupConfig = {
-            minParticipants: String(data.groupConfig.minParticipants ?? ''),
-            maxParticipants: String(data.groupConfig.maxParticipants ?? ''),
+            minQuantity: String(data.groupConfig.minQuantity ?? ''),
+            targetQuantity: String(data.groupConfig.targetQuantity ?? ''),
+            maxPerPerson: String(data.groupConfig.maxPerPerson ?? ''),
             recruitDeadline: toDateTimeLocalStr(data.groupConfig.recruitDeadline),
             groupDeliveryDate: toDateStr(data.groupConfig.groupDeliveryDate),
             groupDeliveryMethod: data.groupConfig.groupDeliveryMethod ?? 'direct',
