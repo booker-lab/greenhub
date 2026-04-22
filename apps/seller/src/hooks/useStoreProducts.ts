@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { onAuthStateChanged } from 'firebase/auth'
+import { db, firebaseAuth } from '@/lib/firebase'
 import type { Product } from '@greenhub/shared'
 
 interface UseStoreProductsResult {
@@ -11,10 +12,18 @@ interface UseStoreProductsResult {
   error: string | null
 }
 
-export function useStoreProducts(storeId: string | null, firebaseReady = false): UseStoreProductsResult {
+export function useStoreProducts(storeId: string | null): UseStoreProductsResult {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [firebaseReady, setFirebaseReady] = useState(false)
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      setFirebaseReady(!!user)
+    })
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     if (!storeId || !firebaseReady) {
