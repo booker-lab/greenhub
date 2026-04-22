@@ -2,13 +2,13 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-23 (카카오 채널 개설, 알리고 연동 진행, 공동구매 수량 전환 설계)
+최종 수정: 2026-04-23 (공동구매 수량 기반 전환 구현 완료, Railway 배포, Firestore 마이그레이션 대기)
 
 ## ⚡ 다음 세션 착수 순서
 
 | 순위 | 작업 | 조건 |
 |------|------|------|
-| 1 | **공동구매 수량 기반 전환** | 즉시 가능 — 상세 계획 `docs/specs/next_session_tasks.md` |
+| 1 | **Firestore 마이그레이션 적용** | `node scripts/migrate-groupbuy-quantity.mjs --apply` |
 | 2 | **네이버페이 채널키 연결** | 승인 이메일 수신 후 |
 | 3 | **알리고 ↔ 카카오 채널 연동 + 템플릿 심사** | 그린러브 사업자등록증 발급 후 |
 | 4 | **SELLER_ORDER_BATCH 스케줄러** | 알림톡 연동 후 |
@@ -24,7 +24,7 @@
 | 2 | 알리고 가입 (디어오키드 사업자) | ✅ tazan1988 계정 |
 | 3 | 카카오 비즈니스 채널 개설 | ✅ 채널명: 그린러브, ID: greenlove |
 | 4 | 알리고 ↔ 카카오 채널 연동 시도 → 사업자인증 필요로 보류 | ⏸ 그린러브 사업자등록증 후 재시도 |
-| 5 | 공동구매 수량 기반 전환 설계 완료 | 📋 아토믹 태스크 준비 완료 |
+| 5 | **공동구매 수량 기반 전환 구현 완료** | ✅ Phase 0~6 전체 완료, Railway push |
 
 ---
 
@@ -36,7 +36,8 @@
 | 118 | 네이버페이 채널키 연결 | ⏳ 승인 이메일 대기 |
 | 119 | 카카오 채널 개설 | ✅ 2026-04-23 |
 | 120 | 알리고 ↔ 카카오 연동 | ⏸ 사업자등록증 후 |
-| 121 | 공동구매 수량 기반 전환 | 📋 다음 세션 착수 |
+| 121 | 공동구매 수량 기반 전환 | ✅ 2026-04-23 구현 완료 |
+| 122 | Firestore 마이그레이션 적용 | 📋 다음 세션 즉시 실행 |
 
 ---
 
@@ -80,4 +81,4 @@
 - **ImageUpload**: 버튼 `type="button"` 필수 / `key={idx}` (position 기반)
 - **ProductForm localStorage**: `useState` 초기화가 아닌 `useEffect`에서 복원 (hydration 방지)
 - **가격 입력**: Mantine `NumberInput` + `thousandSeparator=","` + `hideControls`
-- **공동구매**: 현재 인원 기반 — 수량 기반 전환 예정 (다음 세션)
+- **공동구매**: 수량 기반 전환 완료 — minQuantity/targetQuantity/maxPerPerson/currentQuantity. Firestore 마이그레이션 스크립트: `scripts/migrate-groupbuy-quantity.mjs`
