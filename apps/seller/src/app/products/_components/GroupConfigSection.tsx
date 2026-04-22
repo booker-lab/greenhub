@@ -27,7 +27,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
     <Box
       style={{
         overflow: 'hidden',
-        maxHeight: visible ? 400 : 0,
+        maxHeight: visible ? 600 : 0,
         transition: 'max-height 0.3s ease-in-out',
         marginTop: visible ? 16 : 0,
       }}
