@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { useStoreProducts } from '@/hooks/useStoreProducts'
+import { useFirebaseAuth } from '@/hooks/useFirebaseAuth'
 import type { Product } from '@greenhub/shared'
 import {
   ActionIcon,
@@ -30,8 +31,9 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 export default function ProductsPage() {
   const { data: session } = useSession()
+  const { firebaseReady } = useFirebaseAuth()
   const storeId = session?.user.storeId ?? null
-  const { products, loading } = useStoreProducts(storeId)
+  const { products, loading } = useStoreProducts(storeId, firebaseReady)
   const [filter, setFilter] = useState<ProductFilter>('all')
 
   const filtered = products.filter((p) => {

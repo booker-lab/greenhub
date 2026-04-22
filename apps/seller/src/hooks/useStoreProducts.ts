@@ -11,13 +11,13 @@ interface UseStoreProductsResult {
   error: string | null
 }
 
-export function useStoreProducts(storeId: string | null): UseStoreProductsResult {
+export function useStoreProducts(storeId: string | null, firebaseReady = false): UseStoreProductsResult {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!storeId) {
+    if (!storeId || !firebaseReady) {
       setLoading(false)
       return
     }
