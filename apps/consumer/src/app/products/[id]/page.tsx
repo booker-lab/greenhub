@@ -139,56 +139,72 @@ export default function ProductDetailPage({
       <Box style={{ paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>
 
       {/* 이미지 캐러셀 */}
-      <Box style={{ position: 'relative' }}>
+      <Box
+        ref={carouselRef}
+        onScroll={(e) => {
+          const el = e.currentTarget
+          const idx = Math.round(el.scrollLeft / el.offsetWidth)
+          setActiveImageIdx(idx)
+        }}
+        style={{
+          display: 'flex',
+          overflowX: 'auto',
+          scrollSnapType: 'x mandatory',
+          scrollBehavior: 'smooth',
+          msOverflowStyle: 'none',
+          scrollbarWidth: 'none',
+          aspectRatio: '4/5',
+          background: 'var(--mantine-color-gray-1)',
+        }}
+      >
+        {(product.images?.length ? product.images : ['/icons/icon-192x192.png']).map((src, i) => (
+          <Box
+            key={i}
+            style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start', aspectRatio: '4/5', overflow: 'hidden' }}
+          >
+            <img src={src} alt={`${product.name} ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </Box>
+        ))}
+      </Box>
+
+      {/* 썸네일 스트립 */}
+      {(product.images?.length ?? 0) > 1 && (
         <Box
-          ref={carouselRef}
-          onScroll={(e) => {
-            const el = e.currentTarget
-            const idx = Math.round(el.scrollLeft / el.offsetWidth)
-            setActiveImageIdx(idx)
-          }}
           style={{
             display: 'flex',
+            gap: 6,
+            padding: '8px 12px',
             overflowX: 'auto',
-            scrollSnapType: 'x mandatory',
-            scrollBehavior: 'smooth',
-            msOverflowStyle: 'none',
             scrollbarWidth: 'none',
-            aspectRatio: '4/5',
-            background: 'var(--mantine-color-gray-1)',
+            msOverflowStyle: 'none',
+            background: 'var(--mantine-color-gray-0)',
           }}
         >
-          {(product.images?.length ? product.images : ['/icons/icon-192x192.png']).map((src, i) => (
+          {product.images!.map((src, i) => (
             <Box
               key={i}
-              style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start', aspectRatio: '4/5', overflow: 'hidden' }}
+              onClick={() => {
+                setActiveImageIdx(i)
+                carouselRef.current?.scrollTo({ left: i * carouselRef.current.offsetWidth, behavior: 'smooth' })
+              }}
+              style={{
+                flexShrink: 0,
+                width: 56,
+                height: 56,
+                borderRadius: 6,
+                overflow: 'hidden',
+                cursor: 'pointer',
+                border: activeImageIdx === i
+                  ? '2px solid var(--mantine-color-brand-6)'
+                  : '2px solid transparent',
+                transition: 'border-color 0.15s',
+              }}
             >
-              <img src={src} alt={`${product.name} ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={src} alt={`${product.name} 썸네일 ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </Box>
           ))}
         </Box>
-        {(product.images?.length ?? 0) > 1 && (
-          <Box style={{ position: 'absolute', bottom: 12, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 6 }}>
-            {product.images!.map((_, i) => (
-              <Box
-                key={i}
-                onClick={() => {
-                  setActiveImageIdx(i)
-                  carouselRef.current?.scrollTo({ left: i * carouselRef.current.offsetWidth, behavior: 'smooth' })
-                }}
-                style={{
-                  width: activeImageIdx === i ? 20 : 6,
-                  height: 6,
-                  borderRadius: 3,
-                  background: activeImageIdx === i ? 'var(--green-primary)' : 'rgba(255,255,255,0.7)',
-                  transition: 'width 0.2s',
-                  cursor: 'pointer',
-                }}
-              />
-            ))}
-          </Box>
-        )}
-      </Box>
+      )}
 
       <Stack gap={0} px="md" pt="lg" pb={88}>
         {/* headline — AI 생성 마케팅 문구 */}
