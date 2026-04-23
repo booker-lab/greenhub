@@ -91,11 +91,11 @@ export default function ProductDetailPage({
     product.selection?.bloomCondition
       ? { icon: '🌸', label: '개화 상태', value: BLOOM_LABEL[product.selection.bloomCondition] ?? product.selection.bloomCondition }
       : null,
-    variety
-      ? { icon: '💨', label: '향기', value: FRAGRANCE_LABEL[variety.fragranceLevel] ?? variety.fragranceLevel }
+    product.selection?.fragrance
+      ? { icon: '💨', label: '향기', value: FRAGRANCE_LABEL[product.selection.fragrance] ?? product.selection.fragrance }
       : null,
-    variety
-      ? { icon: '⭐', label: '관리 난이도', value: CARE_LABEL[variety.careLevel] ?? variety.careLevel }
+    product.selection?.careLevel
+      ? { icon: '⭐', label: '관리 난이도', value: CARE_LABEL[product.selection.careLevel] ?? product.selection.careLevel }
       : null,
   ].filter((c): c is { icon: string; label: string; value: string } => c !== null)
 

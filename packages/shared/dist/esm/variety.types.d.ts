@@ -1,5 +1,4 @@
-import type { Category, ColorOption, FragranceLevel, StemType } from './product.types.js';
-export type CareLevel = 'easy' | 'normal' | 'hard';
+import type { Category, ColorOption, FragranceLevel, StemType, CareLevel } from './product.types.js';
 export type FlowerSize = 'small' | 'medium' | 'large';
 export type PlantSize = 'small' | 'medium' | 'large';
 export interface Variety {

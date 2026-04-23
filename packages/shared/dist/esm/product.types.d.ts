@@ -4,12 +4,14 @@ export type DeliverySize = 'small' | 'medium' | 'large';
 export type FragranceLevel = 'none' | 'light' | 'strong';
 export type BloomCondition = 'bud' | 'half' | 'full';
 export type StemType = '외대' | '쌍대' | '가지' | '3대';
+export type CareLevel = 'easy' | 'normal' | 'hard';
 export interface Selection {
     colors: ColorOption[];
     stemType: StemType;
     fragrance: FragranceLevel;
     bloomCondition: BloomCondition;
     bundleUnit: string;
+    careLevel?: CareLevel;
 }
 export interface GeneratedContent {
     headline: string;

@@ -73,7 +73,7 @@ function defaultForm(): ProductFormData {
     groupConfig: { minQuantity: '10', targetQuantity: '50', maxPerPerson: '5', recruitDeadline: '', groupDeliveryDate: '', groupDeliveryMethod: 'direct' },
     images: [],
     varietyId: '',
-    selection: { colors: [], stemType: '외대', fragrance: 'none', bloomCondition: 'half', bundleUnit: '' },
+    selection: { colors: [], stemType: '외대', fragrance: 'none', bloomCondition: 'half', careLevel: 'normal', bundleUnit: '' },
     sellerNote: '',
     content: { headline: '', description: '', isEditedByUser: false },
     sellerOverride: false,

@@ -28,11 +28,18 @@ const BLOOM_OPTIONS = [
   { value: 'full', label: '활짝', icon: '🌺' },
 ] as const
 
+const CARE_OPTIONS = [
+  { value: 'easy', label: '쉬움', icon: '😊' },
+  { value: 'normal', label: '보통', icon: '🌿' },
+  { value: 'hard', label: '어려움', icon: '🌡️' },
+] as const
+
 export interface SelectionForm {
   colors: string[]
   stemType: '외대' | '쌍대' | '가지' | '3대'
   fragrance: 'none' | 'light' | 'strong'
   bloomCondition: 'bud' | 'half' | 'full'
+  careLevel: 'easy' | 'normal' | 'hard'
   bundleUnit: string
 }
 
@@ -148,6 +155,26 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
               variant="outline"
               color="gray"
               style={value.bloomCondition === v ? activeStyle : {}}
+            >
+              {icon} {label}
+            </Button>
+          ))}
+        </Group>
+      </Paper>
+
+      <Paper radius="lg" shadow="xs" p="md">
+        <Text size="xs" fw={500} c="dimmed" mb="xs">관리 난이도</Text>
+        <Group gap="xs">
+          {CARE_OPTIONS.map(({ value: v, label, icon }) => (
+            <Button
+              key={v}
+              onClick={() => set('careLevel', v as SelectionForm['careLevel'])}
+              flex={1}
+              size="md"
+              radius="xl"
+              variant="outline"
+              color="gray"
+              style={value.careLevel === v ? activeStyle : {}}
             >
               {icon} {label}
             </Button>
