@@ -90,4 +90,10 @@ export class UpsertBannerDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  updatedAt?: unknown;
+
+  @IsOptional()
+  createdAt?: unknown;
 }
