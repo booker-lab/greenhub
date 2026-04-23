@@ -68,7 +68,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           const done = currentQuantity >= targetQuantity
           return (
             <>
-              <Progress value={pct} size="xs" color={done ? 'gray' : 'brand'} mt={6} radius="xl" />
+              <Progress value={pct} size="sm" color={done ? 'gray' : 'green'} mt={6} radius="xl" />
               <Text size="xs" c={done ? 'gray.5' : 'brand.6'} mt={2} fw={500}>
                 {done ? '모집 완료' : `${currentQuantity}/${targetQuantity}개 모집 중`}
               </Text>
