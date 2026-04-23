@@ -7,7 +7,9 @@
     "dev:api": "pnpm --filter api start:dev",
     "build": "pnpm --filter ./packages/shared build && pnpm -r --filter './apps/*' build",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test:e2e": "pnpm --filter e2e test",
+    "test:e2e:ui": "pnpm --filter e2e test:ui"
   },
   "devDependencies": {
     "typescript": "^5.5.0"
