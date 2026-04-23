@@ -44,7 +44,7 @@ export default function HomePage() {
           {groupLoading ? (
             <Group gap="sm" wrap="nowrap">
               {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} height={200} width={140} radius="md" style={{ flexShrink: 0 }} />
+                <Skeleton key={i} height={200} radius="md" style={{ flexShrink: 0, width: 'calc((min(100vw, 430px) - 48px) / 3)' }} />
               ))}
             </Group>
           ) : (
@@ -55,7 +55,7 @@ export default function HomePage() {
                     key={product.id}
                     component={Link}
                     href={`/products/${product.id}`}
-                    style={{ width: 140, flexShrink: 0, textDecoration: 'none' }}
+                    style={{ width: 'calc((min(100vw, 430px) - 48px) / 3)', flexShrink: 0, textDecoration: 'none' }}
                   >
                     <Box
                       style={{
