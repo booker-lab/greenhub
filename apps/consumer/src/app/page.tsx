@@ -5,6 +5,7 @@ import { Container, Text, Box, Title, SimpleGrid, Skeleton, Stack, Divider, Grou
 import ProductCard from '@/components/ProductCard'
 import BrandHeader from '@/components/BrandHeader'
 import HeroBanner from '@/components/HeroBanner'
+import DeadlineSection from '@/components/DeadlineSection'
 import { useProducts } from '@/hooks/useProducts'
 
 export default function HomePage() {
@@ -87,6 +88,9 @@ export default function HomePage() {
           )}
         </Box>
       )}
+
+      {/* 마감 임박 섹션 */}
+      {!groupLoading && <DeadlineSection products={groupProducts} />}
 
       {/* 상품 목록 */}
       <Box>
