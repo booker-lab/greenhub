@@ -60,12 +60,9 @@ export default function EditProductPage() {
           saleType: data.saleType ?? 'normal',
           images: data.images ?? [],
           varietyId: data.varietyId ?? '',
-          selection: data.selection ?? {
-            colors: data.colors ?? [],
-            fragrance: 'none',
-            bloomCondition: 'half',
-            bundleUnit: '',
-          },
+          selection: data.selection
+            ? { careLevel: 'normal', ...data.selection }
+            : { colors: data.colors ?? [], fragrance: 'none', bloomCondition: 'half', careLevel: 'normal', bundleUnit: '' },
           sellerNote: data.sellerNote ?? data.description ?? '',
           content: data.content ?? {
             headline: data.name ?? '',

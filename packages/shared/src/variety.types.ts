@@ -1,6 +1,4 @@
-import type { Category, ColorOption, FragranceLevel, StemType } from './product.types.js'
-
-export type CareLevel = 'easy' | 'normal' | 'hard'
+import type { Category, ColorOption, FragranceLevel, StemType, CareLevel } from './product.types.js'
 export type FlowerSize = 'small' | 'medium' | 'large'  // 소륜 / 중륜 / 대륜
 export type PlantSize = 'small' | 'medium' | 'large'   // 소형 / 중형 / 대형
 
