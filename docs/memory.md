@@ -2,19 +2,20 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-23 (소비자앱 상세 UX 2차 개선 완료 — 케어 아이콘 카드 + 썸네일 스트립)
+최종 수정: 2026-04-23 (공동구매 전용 페이지 + 홈/카테고리 분리 + Firestore 마이그레이션 검증)
 
-## 이번 세션 완료 내역 (2026-04-23 저녁)
+## 이번 세션 완료 내역 (2026-04-23 야간)
 
 | # | 작업 | 결과 |
 |---|------|------|
-| 1 | 케어 아이콘 카드 3개 (🌸개화상태·💨향기·⭐관리난이도) | ✅ |
-| 2 | 향기 소스 버그 수정 (variety.fragranceLevel → product.selection.fragrance) | ✅ |
-| 3 | 관리 난이도를 셀러 직접 설정 필드로 전환 (Selection.careLevel 추가) | ✅ |
-| 4 | CareLevel 타입 product.types로 이동 (순환의존 해소) | ✅ |
-| 5 | TouchSelector 관리 난이도 셀렉터 UI 추가 (개화상태↔판매단위 사이) | ✅ |
-| 6 | 썸네일 스트립 (dot 인디케이터 → 56×56 가로 스크롤) | ✅ |
-| 7 | shared 패키지 빌드 + 전체 타입 체크 통과 + 배포 확인 | ✅ |
+| 1 | Firestore 마이그레이션 검증 (65건 전 통과, 이미 완료 확인) | ✅ |
+| 2 | ProductCard groupSummary 버그 수정 (minQuantity → targetQuantity) | ✅ |
+| 3 | useProducts saleType 파라미터 추가 (group/direct + dep array 포함) | ✅ |
+| 4 | BottomNav: 검색 탭 → 공구 탭 교체 (5탭 유지, GroupBuyIcon 추가) | ✅ |
+| 5 | /groupbuy 전용 페이지 신규 생성 (히어로 배너 + 모집 중/완료 분리 그리드) | ✅ |
+| 6 | 홈: 공동구매란 배너 → 공구 하이라이트 가로 스크롤 섹션 교체 | ✅ |
+| 7 | 카테고리: 공동구매 탭 추가 + saleType 필터 연동 | ✅ |
+| 8 | 타입 체크 통과 + 배포 + greenlove.co.kr 전 화면 검증 | ✅ |
 
 ---
 
@@ -55,6 +56,7 @@
 | 121 | 공동구매 수량 기반 전환 | ✅ 2026-04-23 구현 완료 |
 | 122 | Firestore 마이그레이션 적용 + E2E 검증 | ✅ 2026-04-23 완료 (6/6 통과) |
 | 123 | 소비자앱 UX 2차 (케어 아이콘 카드 + 썸네일 스트립) | ✅ 2026-04-23 완료 |
+| 124 | 공동구매 전용 페이지 분리 (/groupbuy + 홈 하이라이트 + 카테고리 탭) | ✅ 2026-04-23 완료 |
 
 ---
 
@@ -100,6 +102,8 @@
 - **가격 입력**: Mantine `NumberInput` + `thousandSeparator=","` + `hideControls`
 - **공동구매**: 수량 기반 전환 완료 — minQuantity/targetQuantity/maxPerPerson/currentQuantity. Firestore 마이그레이션 스크립트: `scripts/migrate-groupbuy-quantity.mjs`
 - **E2E 검증 스크립트**: `scripts/verify-groupbuy-migration.mjs` — Firestore+API 자동 검증 (65건 통과)
+- **공동구매 전용 페이지**: `/groupbuy` (모집 중/완료 분리), BottomNav 공구 탭, 홈 가로 스크롤 하이라이트, 카테고리 공동구매 탭 — 모두 `useProducts(category, colors, saleType)` 공통 기반 사용
+- **ProductCard groupSummary 수량 표시**: `targetQuantity` 기준 (minQuantity 아님)
 - **useStoreProducts firebaseReady 가드 금지**: 가드 추가 시 상품 목록 미표시 버그 발생. 원인: 이중 인스턴스. 절대 추가하지 말 것.
 - **Vercel SW 400 에러**: `worker/index.ts` NetworkOnly로 수정 완료. 브라우저 재시작 또는 DevTools → "Update on reload" 시 해소.
 - **CareLevel 타입 위치**: `product.types.ts`에 정의 (variety.types.ts → 이동). variety.types.ts가 product.types.ts를 import하므로 역방향 시 순환의존 발생.
