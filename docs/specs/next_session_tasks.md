@@ -1,10 +1,27 @@
 # 다음 세션 작업 목록
 
-> 최종 수정: 2026-04-23 | 소비자앱 상품 상세 UX 2차 개선 완료 (케어 아이콘 카드 + 썸네일 스트립)
+> 최종 수정: 2026-04-23 야간 | 공동구매 전용 페이지 분리 + Firestore 마이그레이션 검증 완료
 
 ---
 
-## [1순위] Firestore 마이그레이션 적용 — 즉시 실행 가능
+## ✅ [완료] Firestore 마이그레이션 적용 — 2026-04-23 검증 완료
+
+dry-run 결과 5건 전부 이미 수량 기반으로 전환되어 있었음. verify 스크립트 65건 전 통과.
+
+---
+
+## ✅ [완료] 공동구매 전용 페이지 분리 — 2026-04-23 완료
+
+- `/groupbuy` 전용 페이지 (히어로 배너 + 모집 중/완료 분리 그리드)
+- BottomNav: 검색 탭 → 공구 탭 (GroupBuyIcon, 5탭 유지)
+- 홈: "공동구매란?" 배너 → 공구 하이라이트 가로 스크롤 섹션
+- 카테고리: 공동구매 탭 추가 + saleType 필터 연동
+- ProductCard groupSummary 버그 수정 (minQuantity → targetQuantity)
+- greenlove.co.kr 전 화면 검증 완료
+
+---
+
+## [구 1순위] Firestore 마이그레이션 적용 — 즉시 실행 가능
 
 **배경**: 공동구매 수량 기반 전환 코드는 Railway에 배포 완료.
 기존 Firestore 문서(groupProductConfig, products.groupSummary)의 필드명이 아직 인원 기반이므로 마이그레이션 필요.
