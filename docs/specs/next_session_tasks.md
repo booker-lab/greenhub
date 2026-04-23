@@ -1,6 +1,6 @@
 # 다음 세션 작업 목록
 
-> 최종 수정: 2026-04-23 | 공동구매 수량 기반 전환 완료, Firestore 마이그레이션 대기 중
+> 최종 수정: 2026-04-23 | 소비자앱 상품 상세 UX 1차 개선 완료 (TopBar + CTABar)
 
 ---
 
@@ -61,6 +61,47 @@ NAVERPAY_CHANNEL_KEY=...
 ## [5순위] GreenLoveBrandSection 브랜드 이미지 — 디자이너 이미지 수령 후
 
 - 디자이너 이미지 파일 수령 후 교체
+
+---
+
+## [6순위] 소비자앱 상품 상세 UX 2차 개선 — 다음 세션 즉시 착수 가능
+
+> 2026-04-23 1차 개선(TopBar + CTABar) 완료 후 이어서 진행할 항목.
+> 모두 프론트엔드 전용 작업 — 백엔드 변경 없음.
+
+### 6-1. 케어 아이콘 뱃지 (속성 테이블 → 아이콘 카드)
+
+**현재**: 품종·색상·향기·개화상태 등을 텍스트 행(row) 테이블로 표시
+**목표**: 핵심 속성 3개를 아이콘 + 짧은 라벨 카드로 시각화 (가로 배치)
+
+표시 항목 (variety 데이터 활용, 추가 API 호출 없음):
+| 아이콘 | 라벨 | 데이터 소스 |
+|--------|------|------------|
+| 🌸 꽃 | 개화 상태 | `selection.bloomCondition` → bud/half/full 한글 변환 |
+| 💨 향기 | 향기 강도 | `variety.fragranceLevel` → none/light/strong 한글 변환 |
+| ⭐ 난이도 | 관리 난이도 | `variety.careLevel` → easy/normal/hard 한글 변환 |
+
+- `varietyId` 없는 구 상품은 카드 미표시 (기존 graceful 처리 유지)
+- 변경 파일: `apps/consumer/src/app/products/[id]/page.tsx` 속성 테이블 블록 교체
+
+### 6-2. 이미지 썸네일 스트립
+
+**현재**: 이미지 하단 dot 인디케이터 (가로 6px 원형)
+**목표**: dot 대신 썸네일 이미지 4~5개 가로 스크롤 스트립
+
+구현 방식:
+- 메인 캐러셀 하단에 썸네일 row 추가 (height: 64px)
+- 선택된 썸네일 border 강조 (`brand.6` 컬러)
+- 썸네일 클릭 시 메인 캐러셀 해당 이미지로 스크롤
+- 이미지 1개인 경우 썸네일 스트립 미표시
+- 변경 파일: `apps/consumer/src/app/products/[id]/page.tsx` 캐러셀 블록
+
+### ✅ 6-3. 공동구매 전용 CTA — 2026-04-23 완료
+
+CTABar 구현 시 이미 포함됨:
+```typescript
+const ctaLabel = isFull ? '모집 완료' : isGroup ? '공구 참여하기' : '바로 결제'
+```
 
 ---
 
