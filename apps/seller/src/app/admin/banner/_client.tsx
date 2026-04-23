@@ -62,7 +62,7 @@ export default function AdminBannerClient() {
         <Switch
           label="배너 활성화"
           checked={form.isActive ?? true}
-          onChange={(e) => setForm((f) => ({ ...f, isActive: e.currentTarget.checked }))}
+          onChange={(e) => setForm({ ...form, isActive: e.currentTarget.checked })}
         />
       </Group>
 
