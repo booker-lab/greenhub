@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Param,
   Body,
@@ -21,6 +22,7 @@ import {
   SuspendUserDto,
   SetCommissionDto,
   ForceRefundDto,
+  UpsertBannerDto,
 } from './dto/admin.dto';
 
 @Controller('admin')
@@ -116,5 +118,17 @@ export class AdminController {
   @Get('invite')
   getInvites() {
     return this.admin.getInvites();
+  }
+
+  // ── Banner ───────────────────────────────────────────────────────
+
+  @Get('banner')
+  getBanner() {
+    return this.admin.getBanner();
+  }
+
+  @Put('banner')
+  upsertBanner(@Body() dto: UpsertBannerDto) {
+    return this.admin.upsertBanner(dto);
   }
 }

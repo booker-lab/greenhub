@@ -312,6 +312,65 @@ export function useAdminDrivers() {
   return { drivers, loading, error, reload: load, approve, toggleSuspend }
 }
 
+// ── Banner ───────────────────────────────────────────────────────
+
+export interface BannerCta {
+  label: string
+  href: string
+}
+
+export interface AdminBanner {
+  imageUrl?: string
+  tagText?: string
+  headline?: string
+  subText?: string
+  cta1?: BannerCta
+  cta2?: BannerCta
+  isActive?: boolean
+}
+
+export function useAdminBanner() {
+  const { data: session } = useSession()
+  const [banner, setBanner] = useState<AdminBanner | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(async () => {
+    if (!session?.user.accessToken) return
+    setLoading(true)
+    try {
+      const res = await apiFetch('/admin/banner', session.user.accessToken)
+      if (res.ok) {
+        const data = await res.json()
+        setBanner(data)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [session?.user.accessToken])
+
+  useEffect(() => { load() }, [load])
+
+  const save = async (dto: AdminBanner): Promise<boolean> => {
+    if (!session?.user.accessToken) return false
+    setSaving(true)
+    try {
+      const res = await apiFetch('/admin/banner', session.user.accessToken, {
+        method: 'PUT',
+        body: JSON.stringify(dto),
+      })
+      if (res.ok) { await load(); return true }
+      return false
+    } catch {
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return { banner, loading, saving, save, reload: load }
+}
+
 // ── Invite ───────────────────────────────────────────────────────
 
 export function useAdminInvite() {

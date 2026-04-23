@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Container, Text, Box, Title, SimpleGrid, Skeleton, Stack, Divider, Group, Badge, ScrollArea } from '@mantine/core'
 import ProductCard from '@/components/ProductCard'
 import BrandHeader from '@/components/BrandHeader'
+import HeroBanner from '@/components/HeroBanner'
 import { useProducts } from '@/hooks/useProducts'
 
 export default function HomePage() {
@@ -18,6 +19,9 @@ export default function HomePage() {
     <Container size="sm" px="md" pt="lg" pb={80}>
       {/* 헤더 */}
       <BrandHeader />
+
+      {/* 히어로 배너 */}
+      <HeroBanner />
 
       {/* 공구 하이라이트 섹션 */}
       {(groupLoading || activeGroupProducts.length > 0) && (
@@ -49,7 +53,7 @@ export default function HomePage() {
             </Group>
           ) : (
             <ScrollArea scrollbarSize={0}>
-              <Group gap="sm" wrap="nowrap" pb={4}>
+              <Group gap="sm" wrap="nowrap" pb={4} pr="md">
                 {activeGroupProducts.map((product) => (
                   <Box
                     key={product.id}

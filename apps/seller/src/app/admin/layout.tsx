@@ -41,6 +41,7 @@ export default async function AdminLayout({
                 { href: '/admin/orders', label: '주문' },
                 { href: '/admin/settlements', label: '정산' },
                 { href: '/admin/invite', label: '초대' },
+                { href: '/admin/banner', label: '배너' },
               ].map((item) => (
                 <a
                   key={item.href}

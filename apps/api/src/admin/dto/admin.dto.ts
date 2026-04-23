@@ -49,3 +49,39 @@ export class QueryAdminDriversDto {
   @IsString()
   status?: 'pending' | 'approved' | 'suspended';
 }
+
+export class BannerCtaDto {
+  @IsString()
+  label: string;
+
+  @IsString()
+  href: string;
+}
+
+export class UpsertBannerDto {
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  tagText?: string;
+
+  @IsOptional()
+  @IsString()
+  headline?: string;
+
+  @IsOptional()
+  @IsString()
+  subText?: string;
+
+  @IsOptional()
+  cta1?: BannerCtaDto;
+
+  @IsOptional()
+  cta2?: BannerCtaDto;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
