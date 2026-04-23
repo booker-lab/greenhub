@@ -2,7 +2,23 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-23 심야 (히어로 배너 관리 기능 구현 + 공구 하이라이트 카드 3등분 고정)
+최종 수정: 2026-04-24 오전 (e2e 테스트 셋업 + 공구 진행률 바 + 마감 임박 섹션 + 공구 현황 UI 개선)
+
+## 이번 세션 완료 내역 (2026-04-24)
+
+| # | 작업 | 결과 |
+|---|------|------|
+| 1 | Seller: 배너 활성화 Switch `e.currentTarget` null 오류 수정 (`setForm({...form, isActive})` 패턴) | ✅ |
+| 2 | Seller: `favicon.ico` 404 에러 해결 — consumer 파비콘 복사 | ✅ |
+| 3 | Consumer: `ProductCard` 공구 상품 진행률 바 추가 (Mantine Progress, green, sm) | ✅ |
+| 4 | Consumer: 홈 `DeadlineSection` 신규 — 마감 24h 이내 공구 가로 스크롤 + 카운트다운 타이머 | ✅ |
+| 5 | E2E: Playwright `apps/e2e` 셋업 — consumer·seller·driver 28개 테스트 전 통과 | ✅ |
+| 6 | Vercel 빌드 오류 연쇄 수정 — lockfile 미커밋, 잘못된 `.npmrc` 제거 | ✅ |
+| 7 | Consumer SW 캐시 문제 진단 — Workbox `bad-precaching-response` 원인 파악, SW Unregister로 해소 | ✅ |
+| 8 | Consumer: 공동구매 현황 카드 UI 강화 — 수량 36px 대형 표시, Progress xl, 카운트다운 배지 | ✅ |
+| 9 | [향후과제] 공동구매 현황 카드 디자인 재설계 — 벤치마킹 후 착수 예정으로 기록 | 📝 |
+
+---
 
 ## 이번 세션 완료 내역 (2026-04-23 심야)
 
@@ -76,6 +92,10 @@
 | 123 | 소비자앱 UX 2차 (케어 아이콘 카드 + 썸네일 스트립) | ✅ 2026-04-23 완료 |
 | 124 | 공동구매 전용 페이지 분리 (/groupbuy + 홈 하이라이트 + 카테고리 탭) | ✅ 2026-04-23 완료 |
 | 125 | 히어로 배너 관리 기능 (admin 편집 + consumer 표시 + Storage rules) | ✅ 2026-04-23 완료 |
+| 126 | Seller 배너 토글 버그 수정 + 파비콘 추가 | ✅ 2026-04-24 완료 |
+| 127 | Consumer 공구 카드 진행률 바 + 마감 임박 가로 스크롤 섹션 | ✅ 2026-04-24 완료 |
+| 128 | Playwright e2e 테스트 셋업 (28개 통과) | ✅ 2026-04-24 완료 |
+| 129 | Consumer 공동구매 현황 카드 UI 강화 (임시) | ✅ 2026-04-24 완료 (재설계 예정) |
 
 ---
 
@@ -127,6 +147,10 @@
 - **Storage rules**: 상품 이미지 `products/{storeId}/`, 배너 이미지 `banners/` — 둘 다 인증된 사용자 쓰기 허용, 누구나 읽기. 규칙 변경 후 반드시 `firebase deploy --only storage`.
 - **ProductCard groupSummary 수량 표시**: `targetQuantity` 기준 (minQuantity 아님)
 - **useStoreProducts firebaseReady 가드 금지**: 가드 추가 시 상품 목록 미표시 버그 발생. 원인: 이중 인스턴스. 절대 추가하지 말 것.
+- **Playwright e2e**: `apps/e2e/` — `pnpm test:e2e` 실행. 인증 필요 테스트는 `TEST_SELLER_EMAIL` / `TEST_SELLER_PASSWORD` / `TEST_DRIVER_EMAIL` / `TEST_DRIVER_PASSWORD` 환경변수 세팅 시 활성화.
+- **Vercel 빌드 규칙**: lockfile 변경 커밋 시 반드시 `pnpm-lock.yaml` 함께 커밋. `.npmrc`에 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` 등 env var 형태 키 작성 금지 — pnpm install 오류 유발.
+- **Consumer SW 캐시 문제**: 새 배포 후 Workbox `bad-precaching-response` 에러 발생 시 DevTools → Application → Service Workers → Unregister 후 새로고침.
+- **Switch onChange 패턴**: `setForm((f) => ({...f, isActive: e.currentTarget.checked}))` 금지 — updater 내부에서 currentTarget은 null. `setForm({...form, isActive: e.currentTarget.checked})` 사용.
 - **Vercel SW 400 에러**: `worker/index.ts` NetworkOnly로 수정 완료. 브라우저 재시작 또는 DevTools → "Update on reload" 시 해소.
 - **CareLevel 타입 위치**: `product.types.ts`에 정의 (variety.types.ts → 이동). variety.types.ts가 product.types.ts를 import하므로 역방향 시 순환의존 발생.
 - **Selection.careLevel 하위 호환**: optional 필드 — 기존 상품은 undefined → 아이콘 카드 미표시. 셀러 수정 저장 시 Firestore에 기록됨.
