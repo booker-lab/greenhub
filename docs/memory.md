@@ -2,18 +2,19 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-23 (소비자앱 상품 상세 UX 개선 — 고정 TopBar + CTABar 구현 완료, 배포 확인)
+최종 수정: 2026-04-23 (소비자앱 상세 UX 2차 개선 완료 — 케어 아이콘 카드 + 썸네일 스트립)
 
-## 이번 세션 완료 내역 (2026-04-23 오후)
+## 이번 세션 완료 내역 (2026-04-23 저녁)
 
 | # | 작업 | 결과 |
 |---|------|------|
-| 1 | 소비자앱 UX 레퍼런스 검토 + 적용 항목 선별 | ✅ |
-| 2 | 보류 항목(후기/케어가이드/Q&A) next_session_tasks.md 기록 | ✅ |
-| 3 | ProductTopBar 신규 생성 (고정 상단바: 뒤로/로고/홈/장바구니) | ✅ |
-| 4 | ProductCTABar 신규 생성 (고정 하단바: 총금액+장바구니+결제) | ✅ |
-| 5 | BottomNav /products/ 경로 숨김 처리 | ✅ |
-| 6 | 배포 + 브라우저 실 확인 | ✅ |
+| 1 | 케어 아이콘 카드 3개 (🌸개화상태·💨향기·⭐관리난이도) | ✅ |
+| 2 | 향기 소스 버그 수정 (variety.fragranceLevel → product.selection.fragrance) | ✅ |
+| 3 | 관리 난이도를 셀러 직접 설정 필드로 전환 (Selection.careLevel 추가) | ✅ |
+| 4 | CareLevel 타입 product.types로 이동 (순환의존 해소) | ✅ |
+| 5 | TouchSelector 관리 난이도 셀렉터 UI 추가 (개화상태↔판매단위 사이) | ✅ |
+| 6 | 썸네일 스트립 (dot 인디케이터 → 56×56 가로 스크롤) | ✅ |
+| 7 | shared 패키지 빌드 + 전체 타입 체크 통과 + 배포 확인 | ✅ |
 
 ---
 
@@ -21,12 +22,10 @@
 
 | 순위 | 작업 | 조건 |
 |------|------|------|
-| ~~1~~ | ~~**Firestore 마이그레이션 적용**~~ | ✅ 완료 |
-| 2 | **네이버페이 채널키 연결** | 승인 이메일 수신 후 |
-| 3 | **알리고 ↔ 카카오 채널 연동 + 템플릿 심사** | 그린러브 사업자등록증 발급 후 |
-| 4 | **SELLER_ORDER_BATCH 스케줄러** | 알림톡 연동 후 |
-| 5 | **GreenLoveBrandSection 브랜드 이미지** | 디자이너 이미지 수령 후 |
-| 6 | **소비자앱 상세 UX 2차** (케어 아이콘 뱃지 + 썸네일 스트립) | 즉시 가능 |
+| 1 | **네이버페이 채널키 연결** | 승인 이메일 수신 후 |
+| 2 | **알리고 ↔ 카카오 채널 연동 + 템플릿 심사** | 그린러브 사업자등록증 발급 후 |
+| 3 | **SELLER_ORDER_BATCH 스케줄러** | 알림톡 연동 후 |
+| 4 | **GreenLoveBrandSection 브랜드 이미지** | 디자이너 이미지 수령 후 |
 
 ---
 
@@ -55,6 +54,7 @@
 | 120 | 알리고 ↔ 카카오 연동 | ⏸ 사업자등록증 후 |
 | 121 | 공동구매 수량 기반 전환 | ✅ 2026-04-23 구현 완료 |
 | 122 | Firestore 마이그레이션 적용 + E2E 검증 | ✅ 2026-04-23 완료 (6/6 통과) |
+| 123 | 소비자앱 UX 2차 (케어 아이콘 카드 + 썸네일 스트립) | ✅ 2026-04-23 완료 |
 
 ---
 
@@ -102,3 +102,6 @@
 - **E2E 검증 스크립트**: `scripts/verify-groupbuy-migration.mjs` — Firestore+API 자동 검증 (65건 통과)
 - **useStoreProducts firebaseReady 가드 금지**: 가드 추가 시 상품 목록 미표시 버그 발생. 원인: 이중 인스턴스. 절대 추가하지 말 것.
 - **Vercel SW 400 에러**: `worker/index.ts` NetworkOnly로 수정 완료. 브라우저 재시작 또는 DevTools → "Update on reload" 시 해소.
+- **CareLevel 타입 위치**: `product.types.ts`에 정의 (variety.types.ts → 이동). variety.types.ts가 product.types.ts를 import하므로 역방향 시 순환의존 발생.
+- **Selection.careLevel 하위 호환**: optional 필드 — 기존 상품은 undefined → 아이콘 카드 미표시. 셀러 수정 저장 시 Firestore에 기록됨.
+- **shared 타입 변경 시 필수**: `pnpm --filter @greenhub/shared build` 후 dist 커밋.
