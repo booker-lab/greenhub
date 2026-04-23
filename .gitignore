@@ -19,3 +19,7 @@ backups/
 
 # TypeScript 빌드 캐시
 *.tsbuildinfo
+
+# Playwright
+playwright-report/
+test-results/
