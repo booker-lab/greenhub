@@ -5,6 +5,40 @@
 
 ---
 
+## [2026-04-23] CareLevel 타입 위치 — product.types.ts로 이동
+
+### 결정: `CareLevel = 'easy' | 'normal' | 'hard'`를 `variety.types.ts`에서 `product.types.ts`로 이동
+
+**배경**
+- `variety.types.ts`는 `product.types.ts`를 import함 (`Category`, `FragranceLevel` 등)
+- `Selection` 인터페이스에 `careLevel` 추가 시 `product.types.ts`에서 `variety.types.ts`를 역참조하면 순환 의존 발생
+
+**결정**
+- `CareLevel` 정의를 `product.types.ts`로 이동
+- `variety.types.ts`에서 `CareLevel`을 `product.types.ts`로부터 import
+- `Selection.careLevel?: CareLevel` (optional — 기존 상품 하위 호환)
+
+**이유**: 순환 의존 없이 `careLevel`을 셀러 설정 필드로 사용 가능. variety 도큐먼트 없이도 동작.
+
+---
+
+## [2026-04-23] 관리 난이도(careLevel) — variety 속성 → 셀러 직접 설정 필드 전환
+
+### 결정: `careLevel`을 `Variety` 도큐먼트 속성이 아닌 `product.selection.careLevel`로 관리
+
+**배경**
+- 소비자앱 케어 아이콘 카드에서 `variety.careLevel`을 표시하려 했으나 대부분 상품의 variety 도큐먼트가 없거나 미로드
+- `fragrance`는 이미 `product.selection.fragrance`로 상품별 설정 구조
+
+**결정**
+- `careLevel`을 `product.selection`에 추가 — 셀러가 상품 등록·수정 시 직접 선택
+- `TouchSelector`에 관리 난이도 셀렉터 UI 추가 (개화상태↔판매단위 사이)
+- 기존 상품 기본값: `'normal'` (edit/page.tsx fallback)
+
+**이유**: variety 도큐먼트 의존 제거, 상품별 특성 반영 가능, 셀러 UX 일관성 유지.
+
+---
+
 ## [2026-04-11] storeId 구조 — dear-orchid 하드코딩 제거 결정
 
 ### 결정: Firestore 데이터 + 프론트 코드 전체를 UUID 기반으로 통일
