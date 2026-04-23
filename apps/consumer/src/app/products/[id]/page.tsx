@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import {
   Container, Box, Text, Title, Button, Group, Stack, Badge,
-  Paper, Progress, ActionIcon, Checkbox, Skeleton, Divider,
+  Paper, Progress, ActionIcon, Checkbox, Skeleton, Divider, SimpleGrid,
 } from '@mantine/core'
 import { useProduct, useStore, useVariety } from '@/hooks/useProducts'
 import { useGroupProduct } from '@/hooks/useGroupProduct'
@@ -14,7 +14,7 @@ import { useCart } from '@/hooks/useCart'
 import GreenLoveBrandSection from '@/components/GreenLoveBrandSection'
 import ProductTopBar from '@/components/ProductTopBar'
 import ProductCTABar from '@/components/ProductCTABar'
-import type { SaleType, DeliveryMethod } from '@greenhub/shared'
+import type { DeliveryMethod } from '@greenhub/shared'
 
 const deliveryLabels: Record<DeliveryMethod, string> = {
   direct: '꽃차 직배송',
@@ -27,6 +27,9 @@ const FRAGRANCE_LABEL: Record<string, string> = {
 }
 const BLOOM_LABEL: Record<string, string> = {
   bud: '봉오리', half: '반개화', full: '활짝 핌',
+}
+const CARE_LABEL: Record<string, string> = {
+  easy: '쉬움', normal: '보통', hard: '어려움',
 }
 
 export default function ProductDetailPage({
@@ -83,6 +86,18 @@ export default function ProductDetailPage({
   const headline = product.content?.headline ?? null
   const description = product.content?.description ?? product.description ?? null
   const displayColors = product.selection?.colors ?? product.colors ?? []
+
+  const careCards = [
+    product.selection?.bloomCondition
+      ? { icon: '🌸', label: '개화 상태', value: BLOOM_LABEL[product.selection.bloomCondition] ?? product.selection.bloomCondition }
+      : null,
+    variety
+      ? { icon: '💨', label: '향기', value: FRAGRANCE_LABEL[variety.fragranceLevel] ?? variety.fragranceLevel }
+      : null,
+    variety
+      ? { icon: '⭐', label: '관리 난이도', value: CARE_LABEL[variety.careLevel] ?? variety.careLevel }
+      : null,
+  ].filter((c): c is { icon: string; label: string; value: string } => c !== null)
 
   function handleAddToCart() {
     if (!product) return
@@ -203,6 +218,21 @@ export default function ProductDetailPage({
 
         <Divider mb="lg" />
 
+        {/* 케어 아이콘 카드 */}
+        {careCards.length > 0 && (
+          <Paper bg="gray.0" radius="md" p="md" mb="md" style={{ border: '1px solid var(--mantine-color-gray-2)' }}>
+            <SimpleGrid cols={careCards.length} spacing="xs">
+              {careCards.map(({ icon, label, value }) => (
+                <Stack key={label} gap={4} align="center">
+                  <Text size="xl" style={{ lineHeight: 1 }}>{icon}</Text>
+                  <Text size="sm" fw={600} c="dark">{value}</Text>
+                  <Text size="xs" c="gray.4">{label}</Text>
+                </Stack>
+              ))}
+            </SimpleGrid>
+          </Paper>
+        )}
+
         {/* 속성 테이블 — varietyId 있는 신규 상품만 표시 */}
         {product.varietyId && (
           <Box mb="lg">
@@ -211,8 +241,6 @@ export default function ProductDetailPage({
               {([
                 variety ? ['품종', variety.name] : null,
                 displayColors.length > 0 ? ['색상', displayColors.join(' · ')] : null,
-                variety ? ['향기', FRAGRANCE_LABEL[variety.fragranceLevel] ?? variety.fragranceLevel] : null,
-                product.selection?.bloomCondition ? ['개화 상태', BLOOM_LABEL[product.selection.bloomCondition]] : null,
                 variety ? ['추천 관상 기간', variety.bloomDuration] : null,
                 product.selection?.bundleUnit ? ['판매 단위', product.selection.bundleUnit] : null,
                 product.selection?.stemType ? ['출하 형태', product.selection.stemType] : null,
