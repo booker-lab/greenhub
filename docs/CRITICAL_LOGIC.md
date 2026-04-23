@@ -5,6 +5,39 @@
 
 ---
 
+## [2026-04-23] 히어로 배너 관리 — updatedAt 양방향 방어 패턴
+
+### 결정: DTO에서 수락 + 서비스에서 스트립 (두 레이어 모두 처리)
+
+**배경**
+- `forbidNonWhitelisted: true` ValidationPipe 환경에서, 배너 조회 후 form state에 `updatedAt` (Timestamp 직렬화 문자열)이 포함됨
+- 저장 시 그대로 PUT body에 포함 → `"property updatedAt should not exist"` 400 반환
+
+**결정**
+1. **클라이언트**: `useAdmin.ts` `save()` 함수에서 `updatedAt/createdAt` 제거 후 전송
+2. **DTO**: `updatedAt?: unknown`, `createdAt?: unknown` 추가 → 클라이언트 버그 있어도 400 차단
+3. **서비스**: `const { updatedAt: _u, createdAt: _c, ...fields } = dto` — Firestore write 전에 반드시 스트립
+
+**이유**: 클라이언트 방어만으로는 레이스컨디션·실수 가능성 있음. 서비스 레이어에서 Timestamp 필드를 직접 주입하므로 클라이언트 값은 무시해야 안전.
+
+**이 패턴 적용 조건**: 서버에서 Timestamp.now()로 덮어쓰는 필드가 DTO에 흘러들어올 가능성이 있는 모든 PUT/PATCH 엔드포인트.
+
+---
+
+## [2026-04-23] 히어로 배너 — Firestore 단일 문서 구조 채택
+
+### 결정: `banners/main_hero` 고정 doc (컬렉션 아님)
+
+**배경**: 배너가 1개 (메인 홈 히어로). 복수 배너 운영 계획 없음.
+
+**결정**: `set({ merge: true })` 방식으로 upsert — 초기 문서 없어도 생성됨. 배너 비활성화는 `isActive: false`로 처리 (문서 삭제 X).
+
+**공개 엔드포인트 위치**: `app.controller.ts`의 `GET /banner` — AdminModule이 아닌 최상위 컨트롤러. 인증 없이 consumer 앱이 직접 호출.
+
+**이유**: 향후 배너 수가 늘어도 `banners/{bannerType}` 패턴(예: `banners/category_hero`)으로 확장 가능. 컬렉션 쿼리 추가 비용 없음.
+
+---
+
 ## [2026-04-23] CareLevel 타입 위치 — product.types.ts로 이동
 
 ### 결정: `CareLevel = 'easy' | 'normal' | 'hard'`를 `variety.types.ts`에서 `product.types.ts`로 이동

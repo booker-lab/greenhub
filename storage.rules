@@ -6,5 +6,11 @@ service firebase.storage {
       allow read: if true;
       allow write: if request.auth != null;
     }
+
+    // 배너 이미지: 인증된 사용자만 업로드, 누구나 읽기
+    match /banners/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
   }
 }

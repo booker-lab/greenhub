@@ -353,9 +353,52 @@ PATCH /admin/drivers/:userId/suspend
 
 ---
 
+## 7. 배너 관리
+
+### Firestore 스키마 — `banners/main_hero`
+
+```ts
+{
+  imageUrl?: string        // Firebase Storage URL
+  tagText?: string         // 배지 텍스트 (예: "🌿 신상품 출시")
+  headline?: string        // 메인 헤드라인
+  subText?: string         // 서브 텍스트
+  cta1?: { label: string; href: string }
+  cta2?: { label: string; href: string }
+  isActive: boolean        // false면 consumer 앱에 미표시
+  updatedAt: Timestamp     // 서버 자동 관리
+}
+```
+
+**구조 결정**: 단일 고정 문서(`banners/main_hero`). 복수 배너 시 `banners/{bannerType}` 패턴으로 확장.
+
+### API 엔드포인트
+
+| 메서드 | 경로 | 인증 | 설명 |
+|--------|------|------|------|
+| `GET` | `/admin/banner` | admin | 현재 배너 조회 |
+| `PUT` | `/admin/banner` | admin | 배너 업서트 (merge) |
+| `GET` | `/banner` | 없음 | consumer 앱용 공개 조회 |
+
+**공개 엔드포인트 위치**: `app.controller.ts` (AdminModule 아님) — NestJS 최상위 컨트롤러에서 직접 Firestore 조회.
+
+### 이미지 업로드
+
+Firebase Storage 경로: `banners/main_hero/{uuid}`. Storage rules: 인증된 사용자 쓰기, 누구나 읽기.
+
+### updatedAt 처리 규칙
+
+클라이언트가 GET 후 form에 `updatedAt`을 포함해 PUT할 때 400을 방지하기 위한 **양방향 방어 패턴**:
+1. `UpsertBannerDto`에 `updatedAt?: unknown` 허용 필드 포함
+2. `upsertBanner()` 서비스에서 spread 전 반드시 제거: `const { updatedAt: _u, createdAt: _c, ...fields } = dto`
+3. `useAdmin.ts` save() 에서도 제거 후 전송
+
+---
+
 ## 변경 이력
 
 | 날짜 | 내용 |
 |------|------|
 | 2026-04-01 | 초안 작성 — 구현 완료 후 소급 문서화 (정합성 검토 세션) |
 | 2026-04-03 | §4-6 드라이버 관리 API 추가 + 사전 승인 플로우 문서화 — E2E 검증 완료 |
+| 2026-04-23 | §7 배너 관리 API 추가 — 히어로 배너 admin 편집 기능 구현 |
