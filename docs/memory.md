@@ -2,7 +2,25 @@
 
 > **SSOT** — 세션 종료 시 항상 최신화. 200라인 초과 시 50라인 이내 요약.
 
-최종 수정: 2026-04-23 (공동구매 전용 페이지 + 홈/카테고리 분리 + Firestore 마이그레이션 검증)
+최종 수정: 2026-04-23 심야 (히어로 배너 관리 기능 구현 + 공구 하이라이트 카드 3등분 고정)
+
+## 이번 세션 완료 내역 (2026-04-23 심야)
+
+| # | 작업 | 결과 |
+|---|------|------|
+| 1 | Firebase Storage rules `banners/` 경로 추가 + `firebase deploy --only storage` | ✅ |
+| 2 | API: `UpsertBannerDto` + `BannerCtaDto` DTO 신규 추가 (중첩 검증 포함) | ✅ |
+| 3 | API: `admin.service.ts` `getBanner` / `upsertBanner` 구현 (updatedAt 스트립 패턴) | ✅ |
+| 4 | API: `GET /admin/banner`, `PUT /admin/banner` 엔드포인트 (admin 전용) | ✅ |
+| 5 | API: `GET /banner` 공개 엔드포인트 (`app.controller.ts` — 인증 없음) | ✅ |
+| 6 | Seller: `useAdminBanner` 훅 + `AdminBanner` 인터페이스 (`useAdmin.ts`) | ✅ |
+| 7 | Seller: `/admin/banner` 페이지 + 이미지 업로드 UI + 텍스트/CTA 편집 | ✅ |
+| 8 | Seller: admin layout 배너 탭 추가 | ✅ |
+| 9 | Consumer: `HeroBanner` 컴포넌트 신규 (`isActive === true`일 때만 렌더) | ✅ |
+| 10 | Consumer: 홈 공구 하이라이트 카드 — ScrollArea 제거 → `Group grow` 3등분 고정 | ✅ |
+| 11 | E2E 검증: 배너 저장·표시·이미지 업로드 전 화면 통과 | ✅ |
+
+---
 
 ## 이번 세션 완료 내역 (2026-04-23 야간)
 
@@ -57,6 +75,7 @@
 | 122 | Firestore 마이그레이션 적용 + E2E 검증 | ✅ 2026-04-23 완료 (6/6 통과) |
 | 123 | 소비자앱 UX 2차 (케어 아이콘 카드 + 썸네일 스트립) | ✅ 2026-04-23 완료 |
 | 124 | 공동구매 전용 페이지 분리 (/groupbuy + 홈 하이라이트 + 카테고리 탭) | ✅ 2026-04-23 완료 |
+| 125 | 히어로 배너 관리 기능 (admin 편집 + consumer 표시 + Storage rules) | ✅ 2026-04-23 완료 |
 
 ---
 
@@ -103,6 +122,9 @@
 - **공동구매**: 수량 기반 전환 완료 — minQuantity/targetQuantity/maxPerPerson/currentQuantity. Firestore 마이그레이션 스크립트: `scripts/migrate-groupbuy-quantity.mjs`
 - **E2E 검증 스크립트**: `scripts/verify-groupbuy-migration.mjs` — Firestore+API 자동 검증 (65건 통과)
 - **공동구매 전용 페이지**: `/groupbuy` (모집 중/완료 분리), BottomNav 공구 탭, 홈 가로 스크롤 하이라이트, 카테고리 공동구매 탭 — 모두 `useProducts(category, colors, saleType)` 공통 기반 사용
+- **히어로 배너**: Firestore `banners/main_hero` 단일 문서. `GET /banner` 공개 엔드포인트. `isActive: true`일 때만 consumer 앱에 표시. 이미지는 Firebase Storage `banners/main_hero/` 경로에 저장. updatedAt은 서버 관리 — 클라이언트에서 PUT 시 반드시 제거 후 전송 (양방향 방어 패턴).
+- **Mantine Group grow**: `ScrollArea` 대신 사용 시 자식 요소 균등 분할. `minWidth: 0` 필수 (flex 자식 shrink). `slice(0, N)`으로 개수 제한.
+- **Storage rules**: 상품 이미지 `products/{storeId}/`, 배너 이미지 `banners/` — 둘 다 인증된 사용자 쓰기 허용, 누구나 읽기. 규칙 변경 후 반드시 `firebase deploy --only storage`.
 - **ProductCard groupSummary 수량 표시**: `targetQuantity` 기준 (minQuantity 아님)
 - **useStoreProducts firebaseReady 가드 금지**: 가드 추가 시 상품 목록 미표시 버그 발생. 원인: 이중 인스턴스. 절대 추가하지 말 것.
 - **Vercel SW 400 에러**: `worker/index.ts` NetworkOnly로 수정 완료. 브라우저 재시작 또는 DevTools → "Update on reload" 시 해소.
