@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsBoolean, IsNumber, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsNumber, Min, Max, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QueryAdminSettlementsDto {
@@ -51,11 +51,13 @@ export class QueryAdminDriversDto {
 }
 
 export class BannerCtaDto {
+  @IsOptional()
   @IsString()
-  label: string;
+  label?: string;
 
+  @IsOptional()
   @IsString()
-  href: string;
+  href?: string;
 }
 
 export class UpsertBannerDto {
@@ -76,9 +78,13 @@ export class UpsertBannerDto {
   subText?: string;
 
   @IsOptional()
+  @ValidateNested()
+  @Type(() => BannerCtaDto)
   cta1?: BannerCtaDto;
 
   @IsOptional()
+  @ValidateNested()
+  @Type(() => BannerCtaDto)
   cta2?: BannerCtaDto;
 
   @IsOptional()
