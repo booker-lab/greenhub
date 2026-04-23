@@ -12,6 +12,8 @@ import { useGroupProduct } from '@/hooks/useGroupProduct'
 import { useDailyCap } from '@/hooks/useDailyCap'
 import { useCart } from '@/hooks/useCart'
 import GreenLoveBrandSection from '@/components/GreenLoveBrandSection'
+import ProductTopBar from '@/components/ProductTopBar'
+import ProductCTABar from '@/components/ProductCTABar'
 import type { SaleType, DeliveryMethod } from '@greenhub/shared'
 
 const deliveryLabels: Record<DeliveryMethod, string> = {
@@ -116,12 +118,10 @@ export default function ProductDetailPage({
 
   return (
     <Container size="sm" p={0}>
-      {/* 뒤로가기 */}
-      <Box px="md" pt="md">
-        <Button variant="transparent" size="sm" c="gray.5" onClick={() => router.back()} pl={0}>
-          ← 뒤로
-        </Button>
-      </Box>
+      <ProductTopBar />
+
+      {/* TopBar 높이만큼 상단 여백 */}
+      <Box style={{ paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>
 
       {/* 이미지 캐러셀 */}
       <Box style={{ position: 'relative' }}>
@@ -175,7 +175,7 @@ export default function ProductDetailPage({
         )}
       </Box>
 
-      <Stack gap={0} px="md" pt="lg" pb={100}>
+      <Stack gap={0} px="md" pt="lg" pb={88}>
         {/* headline — AI 생성 마케팅 문구 */}
         {headline && (
           <Text
@@ -371,22 +371,6 @@ export default function ProductDetailPage({
           </Paper>
         )}
 
-        {/* 합계 */}
-        <Group justify="space-between" py="md" mb="md" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
-          <Text size="sm" c="gray.5">총 금액</Text>
-          <Text size="xl" fw={800} c="dark">{totalAmount.toLocaleString()}원</Text>
-        </Group>
-
-        {/* CTA 버튼 */}
-        <Group gap="xs" mb="xl">
-          <Button flex={1} variant="default" radius="md" size="lg" onClick={handleAddToCart}>
-            장바구니
-          </Button>
-          <Button flex={2} color="brand" radius="md" size="lg" disabled={!canBuy} onClick={handleBuyNow}>
-            {isFull ? '모집 완료' : '바로 결제'}
-          </Button>
-        </Group>
-
         {/* Green Love 브랜드 섹션 */}
         <Divider mb="xl" />
         <Box mb="xl">
@@ -422,6 +406,16 @@ export default function ProductDetailPage({
           </Box>
         )}
       </Stack>
+      </Box>
+
+      <ProductCTABar
+        totalAmount={totalAmount}
+        isGroup={isGroup}
+        isFull={isFull}
+        canBuy={canBuy}
+        onAddToCart={handleAddToCart}
+        onBuyNow={handleBuyNow}
+      />
     </Container>
   )
 }
