@@ -8,7 +8,7 @@ import { useCart } from '@/hooks/useCart'
 const tabs = [
   { href: '/', label: '홈', icon: HomeIcon, showBadge: false },
   { href: '/category', label: '카테고리', icon: CategoryIcon, showBadge: false },
-  { href: '/search', label: '검색', icon: SearchIcon, showBadge: false },
+  { href: '/groupbuy', label: '공구', icon: GroupBuyIcon, showBadge: false },
   { href: '/cart', label: '장바구니', icon: CartIcon, showBadge: true },
   { href: '/mypage', label: 'MY', icon: MyIcon, showBadge: false },
 ] as const
@@ -115,11 +115,13 @@ function CategoryIcon({ active }: { active: boolean }) {
   )
 }
 
-function SearchIcon({ active }: { active: boolean }) {
+function GroupBuyIcon({ active }: { active: boolean }) {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--green-primary)' : '#9CA3AF'} strokeWidth={active ? 2.2 : 2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   )
 }
