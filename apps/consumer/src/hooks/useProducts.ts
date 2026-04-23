@@ -20,7 +20,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
  * API를 통해 활성 상품 목록 조회
  * @param category 카테고리 필터 (없으면 전체)
  */
-export function useProducts(category?: Category, colors?: ColorOption[]) {
+export function useProducts(category?: Category, colors?: ColorOption[], saleType?: 'group' | 'direct') {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -37,6 +37,7 @@ export function useProducts(category?: Category, colors?: ColorOption[]) {
         if (colors && colors.length > 0) {
           colors.forEach((c) => params.append('colors', c))
         }
+        if (saleType) params.set('saleType', saleType)
         const res = await fetch(`${API_URL}/products?${params}`)
         if (!res.ok) throw new Error(`서버 오류 ${res.status}`)
         const data = await res.json()
@@ -52,7 +53,7 @@ export function useProducts(category?: Category, colors?: ColorOption[]) {
     }
     fetchProducts()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, colorKey])
+  }, [category, colorKey, saleType])
 
   return { products, loading, error }
 }

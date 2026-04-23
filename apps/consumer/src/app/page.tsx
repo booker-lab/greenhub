@@ -1,34 +1,90 @@
 'use client'
 
-import { Container, Text, Box, Title, SimpleGrid, Skeleton, Stack, Divider } from '@mantine/core'
+import Link from 'next/link'
+import { Container, Text, Box, Title, SimpleGrid, Skeleton, Stack, Divider, Group, Badge, ScrollArea } from '@mantine/core'
 import ProductCard from '@/components/ProductCard'
 import BrandHeader from '@/components/BrandHeader'
 import { useProducts } from '@/hooks/useProducts'
 
 export default function HomePage() {
   const { products, loading, error } = useProducts()
+  const { products: groupProducts, loading: groupLoading } = useProducts(undefined, undefined, 'group')
+
+  const activeGroupProducts = groupProducts.filter(
+    (p) => !p.groupSummary || p.groupSummary.currentQuantity < p.groupSummary.targetQuantity
+  )
 
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
       {/* 헤더 */}
       <BrandHeader />
 
-      {/* 공동구매 안내 배너 */}
-      <Box
-        mb="xl"
-        p="lg"
-        style={{
-          background: 'var(--mantine-color-gray-0)',
-          borderRadius: 'var(--mantine-radius-md)',
-          borderLeft: '4px solid var(--mantine-color-brand-6)',
-        }}
-      >
-        <Text fw={700} size="sm" c="brand.7" mb={4}>공동구매란?</Text>
-        <Text size="sm" c="gray.6" style={{ lineHeight: 1.6 }}>
-          함께 구매하면 배송비를 절약할 수 있어요.
-          최소 인원이 모이면 주문이 확정됩니다.
-        </Text>
-      </Box>
+      {/* 공구 하이라이트 섹션 */}
+      {(groupLoading || activeGroupProducts.length > 0) && (
+        <Box mb="xl">
+          <Group justify="space-between" mb="sm">
+            <Group gap={8}>
+              <Text fw={700} size="sm" c="dark">⚡ 진행 중 공동구매</Text>
+              {!groupLoading && (
+                <Badge variant="light" color="brand" size="xs">{activeGroupProducts.length}</Badge>
+              )}
+            </Group>
+            <Text
+              component={Link}
+              href="/groupbuy"
+              size="xs"
+              c="brand.6"
+              fw={600}
+              style={{ textDecoration: 'none' }}
+            >
+              전체 보기 →
+            </Text>
+          </Group>
+
+          {groupLoading ? (
+            <Group gap="sm" wrap="nowrap">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} height={200} width={140} radius="md" style={{ flexShrink: 0 }} />
+              ))}
+            </Group>
+          ) : (
+            <ScrollArea scrollbarSize={0}>
+              <Group gap="sm" wrap="nowrap" pb={4}>
+                {activeGroupProducts.map((product) => (
+                  <Box
+                    key={product.id}
+                    component={Link}
+                    href={`/products/${product.id}`}
+                    style={{ width: 140, flexShrink: 0, textDecoration: 'none' }}
+                  >
+                    <Box
+                      style={{
+                        aspectRatio: '4/5',
+                        borderRadius: 'var(--mantine-radius-md)',
+                        overflow: 'hidden',
+                        background: 'var(--mantine-color-gray-1)',
+                        marginBottom: 6,
+                      }}
+                    >
+                      <img
+                        src={product.images?.[0] ?? '/icons/icon-192x192.png'}
+                        alt={product.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </Box>
+                    <Text size="xs" fw={600} c="dark" lineClamp={2}>{product.name}</Text>
+                    <Text size="xs" c="brand.6" fw={500} mt={2}>
+                      {product.groupSummary
+                        ? `${product.groupSummary.currentQuantity}/${product.groupSummary.targetQuantity}개`
+                        : '모집 중'}
+                    </Text>
+                  </Box>
+                ))}
+              </Group>
+            </ScrollArea>
+          )}
+        </Box>
+      )}
 
       {/* 상품 목록 */}
       <Box>

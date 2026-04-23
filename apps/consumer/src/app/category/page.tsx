@@ -6,8 +6,9 @@ import ProductCard from '@/components/ProductCard'
 import { useProducts } from '@/hooks/useProducts'
 import type { Category, ColorOption } from '@greenhub/shared'
 
-const TABS: { label: string; value: Category | undefined }[] = [
+const TABS: { label: string; value: Category | undefined; saleType?: 'group' | 'direct' }[] = [
   { label: '전체', value: undefined },
+  { label: '공동구매', value: undefined, saleType: 'group' },
   { label: '절화', value: 'cut_flower' },
   { label: '난', value: 'orchid' },
   { label: '관엽', value: 'foliage' },
@@ -30,9 +31,11 @@ const COLOR_CHIPS: { label: string; value: ColorOption; hex: string }[] = [
 ]
 
 export default function CategoryPage() {
-  const [selected, setSelected] = useState<Category | undefined>(undefined)
+  const [selectedTab, setSelectedTab] = useState(0)
   const [selectedColors, setSelectedColors] = useState<ColorOption[]>([])
-  const { products, loading, error } = useProducts(selected, selectedColors)
+
+  const activeTab = TABS[selectedTab]
+  const { products, loading, error } = useProducts(activeTab.value, selectedColors, activeTab.saleType)
 
   function toggleColor(color: ColorOption) {
     setSelectedColors((prev) =>
@@ -54,12 +57,12 @@ export default function CategoryPage() {
         style={{ overflowX: 'auto', scrollbarWidth: 'none' }}
       >
         <Group gap={0} wrap="nowrap">
-          {TABS.map((tab) => {
-            const isActive = selected === tab.value
+          {TABS.map((tab, idx) => {
+            const isActive = selectedTab === idx
             return (
               <UnstyledButton
                 key={tab.label}
-                onClick={() => setSelected(tab.value)}
+                onClick={() => setSelectedTab(idx)}
                 style={{
                   flexShrink: 0,
                   padding: '8px 16px',
