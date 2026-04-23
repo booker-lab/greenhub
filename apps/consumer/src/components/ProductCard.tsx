@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Card, Text, Badge, Box, Group } from '@mantine/core'
+import { Card, Text, Badge, Box, Group, Progress } from '@mantine/core'
 import type { Product } from '@greenhub/shared'
 
 interface ProductCardProps {
@@ -62,13 +62,19 @@ export default function ProductCard({ product }: ProductCardProps) {
             </Text>
           ) : null
         })()}
-        {product.saleType === 'group' && product.groupSummary && (
-          <Text size="xs" c="brand.6" mt={4} fw={500}>
-            {product.groupSummary.currentQuantity >= product.groupSummary.targetQuantity
-              ? '모집 완료'
-              : `${product.groupSummary.currentQuantity}/${product.groupSummary.targetQuantity}개 모집 중`}
-          </Text>
-        )}
+        {product.saleType === 'group' && product.groupSummary && (() => {
+          const { currentQuantity, targetQuantity } = product.groupSummary
+          const pct = Math.min((currentQuantity / targetQuantity) * 100, 100)
+          const done = currentQuantity >= targetQuantity
+          return (
+            <>
+              <Progress value={pct} size="xs" color={done ? 'gray' : 'brand'} mt={6} radius="xl" />
+              <Text size="xs" c={done ? 'gray.5' : 'brand.6'} mt={2} fw={500}>
+                {done ? '모집 완료' : `${currentQuantity}/${targetQuantity}개 모집 중`}
+              </Text>
+            </>
+          )
+        })()}
       </Box>
     </Card>
   )
