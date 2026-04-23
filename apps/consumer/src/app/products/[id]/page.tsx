@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useState, useRef } from 'react'
+import { use, useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import {
@@ -54,6 +54,23 @@ export default function ProductDetailPage({
   const [groupConsent, setGroupConsent] = useState(false)
   const [activeImageIdx, setActiveImageIdx] = useState(0)
   const carouselRef = useRef<HTMLDivElement>(null)
+  const [countdown, setCountdown] = useState('')
+
+  useEffect(() => {
+    const deadline = groupConfig?.recruitDeadline
+    if (!deadline) return
+    const tick = () => {
+      const diff = new Date(deadline).getTime() - Date.now()
+      if (diff <= 0) { setCountdown('마감'); return }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      setCountdown(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [groupConfig?.recruitDeadline])
 
   if (loading) {
     return (
@@ -302,47 +319,60 @@ export default function ProductDetailPage({
         {/* 공동구매 실시간 정보 */}
         {isGroup && groupConfig && (
           <Paper
-            bg={isFull ? 'gray.0' : 'brand.0'}
-            radius="md"
-            p="md"
+            radius="lg"
+            p="lg"
             mb="lg"
-            style={{ border: '1px solid var(--mantine-color-brand-2)' }}
+            style={{
+              border: `2px solid ${isFull ? 'var(--mantine-color-gray-3)' : 'var(--mantine-color-brand-4)'}`,
+              background: isFull ? 'var(--mantine-color-gray-0)' : 'linear-gradient(135deg, var(--mantine-color-brand-0), #fff)',
+            }}
           >
-            <Group justify="space-between" mb="sm">
-              <Text fw={700} size="sm" c={isFull ? 'gray.6' : 'brand.8'}>공동구매 현황</Text>
-              {isFull && <Badge color="gray" variant="filled" size="sm">모집 완료</Badge>}
+            {/* 헤더 */}
+            <Group justify="space-between" mb="md">
+              <Text fw={800} size="md" c={isFull ? 'gray.6' : 'brand.8'}>⚡ 공동구매 현황</Text>
+              {isFull
+                ? <Badge color="gray" variant="filled" radius="xl">모집 완료</Badge>
+                : countdown && <Badge color="red" variant="filled" radius="xl" style={{ fontFamily: 'monospace', fontSize: 13 }}>{countdown}</Badge>
+              }
             </Group>
-            <Group justify="space-between" mb={4}>
-              <Text size="sm" c="gray.5">현재 수량</Text>
-              <Text size="sm" fw={700} c="brand.8">
-                {groupConfig.currentQuantity}/{groupConfig.targetQuantity}개
+
+            {/* 수량 강조 */}
+            <Box ta="center" mb="md">
+              <Text style={{ fontSize: 36, fontWeight: 900, lineHeight: 1, color: isFull ? 'var(--mantine-color-gray-5)' : 'var(--mantine-color-brand-7)' }}>
+                {groupConfig.currentQuantity}
+                <Text span style={{ fontSize: 18, fontWeight: 500, color: 'var(--mantine-color-gray-5)' }}>
+                  {' '}/ {groupConfig.targetQuantity}개
+                </Text>
               </Text>
-            </Group>
-            <Group justify="space-between" mb="sm">
-              <Text size="sm" c="gray.5">최소 수량</Text>
-              <Text size="sm" fw={600}>{groupConfig.minQuantity}개</Text>
-            </Group>
+              <Text size="xs" c="gray.4" mt={4}>최소 {groupConfig.minQuantity}개 이상 모이면 확정</Text>
+            </Box>
+
+            {/* 진행률 바 */}
             <Progress
-              value={Math.min(
-                (groupConfig.currentQuantity / groupConfig.minQuantity) * 100,
-                100,
-              )}
-              color="brand"
-              size="md"
+              value={Math.min((groupConfig.currentQuantity / groupConfig.minQuantity) * 100, 100)}
+              color={isFull ? 'gray' : 'brand'}
+              size="xl"
               radius="xl"
+              mb="md"
             />
-            <Group justify="space-between" mt="sm">
-              <Text size="xs" c="gray.4">
-                모집 마감:{' '}
-                {new Date(groupConfig.recruitDeadline).toLocaleString('ko-KR', {
-                  month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                })}
+
+            {/* 마감 / 배송 */}
+            <Group justify="space-between">
+              <Text size="xs" c="gray.5">
+                마감{' '}
+                <Text span fw={600} c={isFull ? 'gray.5' : 'brand.7'}>
+                  {new Date(groupConfig.recruitDeadline).toLocaleString('ko-KR', {
+                    month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                  })}
+                </Text>
               </Text>
-              <Text size="xs" c="brand.7" fw={600}>
-                배송:{' '}
-                {new Date(groupConfig.groupDeliveryDate).toLocaleDateString('ko-KR', {
-                  month: 'long', day: 'numeric', weekday: 'short',
-                })}
+              <Text size="xs" c="gray.5">
+                배송{' '}
+                <Text span fw={600} c="brand.7">
+                  {new Date(groupConfig.groupDeliveryDate).toLocaleDateString('ko-KR', {
+                    month: 'long', day: 'numeric', weekday: 'short',
+                  })}
+                </Text>
               </Text>
             </Group>
           </Paper>
