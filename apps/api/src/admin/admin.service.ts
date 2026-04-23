@@ -281,9 +281,10 @@ export class AdminService {
   }
 
   async upsertBanner(dto: UpsertBannerDto) {
+    const { updatedAt: _u, createdAt: _c, ...fields } = dto as UpsertBannerDto & Record<string, unknown>;
     const ref = this.firestore.doc('banners/main_hero');
     await ref.set(
-      { ...dto, updatedAt: this.firestore.Timestamp.now() },
+      { ...fields, updatedAt: this.firestore.Timestamp.now() },
       { merge: true },
     );
     const snap = await ref.get();
