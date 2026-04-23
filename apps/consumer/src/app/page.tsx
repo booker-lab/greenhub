@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Container, Text, Box, Title, SimpleGrid, Skeleton, Stack, Divider, Group, Badge, ScrollArea } from '@mantine/core'
+import { Container, Text, Box, Title, SimpleGrid, Skeleton, Stack, Divider, Group, Badge } from '@mantine/core'
 import ProductCard from '@/components/ProductCard'
 import BrandHeader from '@/components/BrandHeader'
 import HeroBanner from '@/components/HeroBanner'
@@ -52,8 +52,8 @@ export default function HomePage() {
               ))}
             </Group>
           ) : (
-            <ScrollArea scrollbarSize={0}>
-              <Group gap="sm" wrap="nowrap" pb={4} pr="md">
+            <Box style={{ overflowX: 'auto', overflowY: 'visible', marginRight: -16, paddingRight: 16 }}>
+              <Group gap="sm" wrap="nowrap" pb={4} style={{ paddingRight: 16 }}>
                 {activeGroupProducts.map((product) => (
                   <Box
                     key={product.id}
@@ -85,7 +85,7 @@ export default function HomePage() {
                   </Box>
                 ))}
               </Group>
-            </ScrollArea>
+            </Box>
           )}
         </Box>
       )}
