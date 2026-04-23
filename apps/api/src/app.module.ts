@@ -26,6 +26,7 @@ import { AppService } from './app.service';
     AppService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
+
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),

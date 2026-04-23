@@ -13,6 +13,7 @@ import {
   SuspendUserDto,
   SetCommissionDto,
   ForceRefundDto,
+  UpsertBannerDto,
 } from './dto/admin.dto';
 
 @Injectable()
@@ -270,5 +271,22 @@ export class AdminService {
       .limit(50) as any).get();
 
     return snap.docs.map((d: any) => d.data());
+  }
+
+  // ── Banner ───────────────────────────────────────────────────────
+
+  async getBanner() {
+    const snap = await this.firestore.doc('banners/main_hero').get();
+    return snap.exists ? snap.data() : null;
+  }
+
+  async upsertBanner(dto: UpsertBannerDto) {
+    const ref = this.firestore.doc('banners/main_hero');
+    await ref.set(
+      { ...dto, updatedAt: this.firestore.Timestamp.now() },
+      { merge: true },
+    );
+    const snap = await ref.get();
+    return snap.data();
   }
 }
