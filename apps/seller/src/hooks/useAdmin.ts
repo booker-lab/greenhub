@@ -354,10 +354,12 @@ export function useAdminBanner() {
   const save = async (dto: AdminBanner): Promise<boolean> => {
     if (!session?.user.accessToken) return false
     setSaving(true)
+    // 서버 관리 필드 제거 (forbidNonWhitelisted 대응)
+    const { updatedAt: _u, createdAt: _c, ...payload } = dto as AdminBanner & Record<string, unknown>
     try {
       const res = await apiFetch('/admin/banner', session.user.accessToken, {
         method: 'PUT',
-        body: JSON.stringify(dto),
+        body: JSON.stringify(payload),
       })
       if (res.ok) { await load(); return true }
       return false
