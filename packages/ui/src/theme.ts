@@ -17,17 +17,17 @@ export const theme = createTheme({
   primaryColor: 'brand',
   colors: { brand },
   fontFamily: "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-  defaultRadius: 'sm',
+  defaultRadius: 16,
   focusRing: 'auto',
   components: {
     Button: {
-      defaultProps: { radius: 'md' },
+      defaultProps: { radius: 16 },
     },
     TextInput: {
-      defaultProps: { radius: 'md' },
+      defaultProps: { radius: 16 },
     },
     Card: {
-      defaultProps: { radius: 'md', shadow: 'sm', withBorder: false },
+      defaultProps: { radius: 16, shadow: undefined, withBorder: true },
     },
   },
 });

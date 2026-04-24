@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Box, Text, Group, Badge } from '@mantine/core'
+import { Box } from '@mantine/core'
 import type { Product } from '@greenhub/shared'
 
 const DEADLINE_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -39,56 +39,68 @@ function DeadlineCard({ product }: { product: Product }) {
       href={`/products/${product.id}`}
       style={{ textDecoration: 'none', flexShrink: 0, width: 140 }}
     >
-      <Box
-        style={{
-          aspectRatio: '4/5',
-          borderRadius: 10,
-          overflow: 'hidden',
-          background: 'var(--mantine-color-gray-1)',
-          position: 'relative',
-          marginBottom: 6,
-        }}
-      >
+      <Box style={{
+        aspectRatio: '4/5',
+        borderRadius: 'var(--radius-sm)',
+        overflow: 'hidden',
+        background: 'var(--color-border)',
+        position: 'relative',
+        marginBottom: 6,
+      }}>
         <img
           src={product.images?.[0] ?? '/icons/icon-192x192.png'}
           alt={product.name}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
-        <Box
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: '4px 8px',
-            background: 'rgba(0,0,0,0.55)',
-            textAlign: 'center',
-          }}
-        >
-          <Text size="xs" fw={700} c="white" ff="monospace">{countdown}</Text>
+        <Box style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: '4px 8px',
+          background: 'rgba(0,0,0,0.55)',
+          textAlign: 'center',
+        }}>
+          <span style={{
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-bold)',
+            color: 'var(--color-bg)',
+            fontFamily: 'monospace',
+          }}>{countdown}</span>
         </Box>
       </Box>
 
-      <Text size="xs" fw={600} c="dark" lineClamp={2} mb={4}>{product.name}</Text>
+      <p style={{
+        fontSize: 'var(--font-size-sm)',
+        fontWeight: 'var(--fw-medium)',
+        color: 'var(--color-text)',
+        margin: '0 0 4px',
+        overflow: 'hidden',
+        display: '-webkit-box',
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: 'vertical',
+      }}>{product.name}</p>
 
-      <Box
-        style={{
-          height: 4,
-          borderRadius: 99,
-          background: 'var(--mantine-color-gray-2)',
-          overflow: 'hidden',
-        }}
-      >
-        <Box
-          style={{
-            height: '100%',
-            width: `${pct}%`,
-            background: 'var(--mantine-color-brand-6)',
-            borderRadius: 99,
-          }}
-        />
+      <Box style={{
+        height: 4,
+        borderRadius: 'var(--radius-full)',
+        background: 'var(--color-border)',
+        overflow: 'hidden',
+      }}>
+        <Box style={{
+          height: '100%',
+          width: `${pct}%`,
+          background: 'var(--color-primary)',
+          borderRadius: 'var(--radius-full)',
+        }} />
       </Box>
-      <Text size="xs" c="brand.6" mt={2} fw={500}>{currentQuantity}/{targetQuantity}개</Text>
+      <p style={{
+        fontSize: 'var(--font-size-sm)',
+        color: 'var(--color-primary)',
+        marginTop: 2,
+        marginBottom: 0,
+        fontWeight: 'var(--fw-medium)',
+      }}>{currentQuantity}/{targetQuantity}개</p>
     </Box>
   )
 }
@@ -109,23 +121,30 @@ export default function DeadlineSection({ products }: DeadlineSectionProps) {
 
   return (
     <Box mb="xl">
-      <Group justify="space-between" mb="sm">
-        <Group gap={6}>
-          <Text fw={700} size="sm" c="dark">🔥 마감 임박</Text>
-          <Badge variant="filled" color="red" size="xs">{soon.length}</Badge>
-        </Group>
-      </Group>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
+            🔥 마감 임박
+          </span>
+          <span style={{
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-bold)',
+            color: 'var(--color-bg)',
+            background: '#ef4444',
+            borderRadius: 'var(--radius-full)',
+            padding: '1px 7px',
+          }}>{soon.length}</span>
+        </div>
+      </div>
 
-      <Box
-        style={{
-          display: 'flex',
-          gap: 12,
-          overflowX: 'auto',
-          paddingBottom: 4,
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-      >
+      <Box style={{
+        display: 'flex',
+        gap: 12,
+        overflowX: 'auto',
+        paddingBottom: 4,
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+      }}>
         {soon.map((p) => (
           <DeadlineCard key={p.id} product={p} />
         ))}
