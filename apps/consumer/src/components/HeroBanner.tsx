@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Box, Text } from '@mantine/core'
+import { Box } from '@mantine/core'
 
 interface BannerCta {
   label: string
@@ -38,9 +38,9 @@ export default function HeroBanner() {
       mb="lg"
       style={{
         position: 'relative',
-        borderRadius: 16,
+        borderRadius: 'var(--radius)',
         overflow: 'hidden',
-        backgroundColor: '#F5F2EE',
+        backgroundColor: 'var(--color-primary-surface)',
         minHeight: 200,
       }}
     >
@@ -62,51 +62,56 @@ export default function HeroBanner() {
 
       <Box style={{ position: 'relative', zIndex: 1, padding: '24px 20px' }}>
         {banner.tagText && (
-          <Text
-            size="xs"
-            fw={600}
-            mb={8}
-            style={{
-              display: 'inline-block',
-              backgroundColor: 'rgba(255,255,255,0.7)',
-              padding: '2px 10px',
-              borderRadius: 20,
-              color: 'var(--mantine-color-gray-7)',
-            }}
-          >
+          <span style={{
+            display: 'inline-block',
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-medium)',
+            color: 'var(--color-text-secondary)',
+            backgroundColor: 'rgba(255,255,255,0.7)',
+            padding: '2px 10px',
+            borderRadius: 'var(--radius-full)',
+            marginBottom: 8,
+          }}>
             {banner.tagText}
-          </Text>
+          </span>
         )}
 
         {banner.headline && (
-          <Text
-            fw={800}
-            lh={1.3}
-            mb={8}
-            style={{ fontSize: 22, whiteSpace: 'pre-line', color: '#1a1a1a' }}
-          >
+          <p style={{
+            fontSize: 'var(--font-size-xl)',
+            fontWeight: 'var(--fw-bold)',
+            lineHeight: 1.3,
+            color: 'var(--color-text)',
+            whiteSpace: 'pre-line',
+            margin: '0 0 8px',
+          }}>
             {banner.headline}
-          </Text>
+          </p>
         )}
 
         {banner.subText && (
-          <Text size="xs" c="gray.6" mb={16} style={{ whiteSpace: 'pre-line' }}>
+          <p style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+            whiteSpace: 'pre-line',
+            margin: '0 0 16px',
+          }}>
             {banner.subText}
-          </Text>
+          </p>
         )}
 
-        <Box style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {banner.cta1?.label && (
             <Box
               component={Link}
               href={banner.cta1.href}
               style={{
                 padding: '8px 16px',
-                borderRadius: 20,
-                backgroundColor: 'var(--green-primary, #3d8b5e)',
-                color: 'white',
-                fontSize: 13,
-                fontWeight: 600,
+                borderRadius: 'var(--radius-full)',
+                backgroundColor: 'var(--color-primary)',
+                color: 'var(--color-bg)',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 'var(--fw-bold)',
                 textDecoration: 'none',
               }}
             >
@@ -119,19 +124,19 @@ export default function HeroBanner() {
               href={banner.cta2.href}
               style={{
                 padding: '8px 16px',
-                borderRadius: 20,
-                backgroundColor: 'white',
-                color: 'var(--green-primary, #3d8b5e)',
-                fontSize: 13,
-                fontWeight: 600,
+                borderRadius: 'var(--radius-full)',
+                backgroundColor: 'var(--color-bg)',
+                color: 'var(--color-primary)',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 'var(--fw-bold)',
                 textDecoration: 'none',
-                border: '1px solid var(--green-primary, #3d8b5e)',
+                border: 'var(--border)',
               }}
             >
               {banner.cta2.label}
             </Box>
           )}
-        </Box>
+        </div>
       </Box>
     </Box>
   )

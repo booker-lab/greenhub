@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Card, Text, Badge, Box, Group, Progress } from '@mantine/core'
+import { Card, Box, Progress } from '@mantine/core'
 import type { Product } from '@greenhub/shared'
 
 interface ProductCardProps {
@@ -21,13 +21,10 @@ export default function ProductCard({ product }: ProductCardProps) {
     <Card
       component={Link}
       href={`/products/${product.id}`}
-      radius="md"
       p={0}
-      shadow="sm"
       style={{ overflow: 'hidden', display: 'block', textDecoration: 'none' }}
     >
-      {/* 이미지 */}
-      <Box style={{ position: 'relative', aspectRatio: '4/5', background: 'var(--mantine-color-gray-0)', overflow: 'hidden' }}>
+      <Box style={{ position: 'relative', aspectRatio: '4/5', background: 'var(--color-border)', overflow: 'hidden' }}>
         <img
           src={imgSrc}
           alt={product.name}
@@ -35,31 +32,67 @@ export default function ProductCard({ product }: ProductCardProps) {
         />
       </Box>
 
-      {/* 정보 */}
       <Box p="xs">
-        <Group gap={4} mb={4}>
-          <Badge size="sm" variant="light" color="gray" radius="sm">
+        <div style={{ display: 'flex', gap: 4, marginBottom: 4, flexWrap: 'wrap' }}>
+          <span style={{
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-medium)',
+            color: 'var(--color-text-secondary)',
+            background: 'var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '1px 8px',
+          }}>
             {categoryLabels[product.category] ?? product.category}
-          </Badge>
+          </span>
           {product.saleType === 'group' && (
-            <Badge size="sm" variant="filled" color="green" radius="sm">
+            <span style={{
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-medium)',
+              color: 'var(--color-primary)',
+              background: 'var(--color-primary-surface)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '1px 8px',
+            }}>
               공동구매
-            </Badge>
+            </span>
           )}
-        </Group>
-        <Text size="md" fw={600} c="dark" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+        </div>
+        <p style={{
+          fontSize: 'var(--font-size-md)',
+          fontWeight: 'var(--fw-medium)',
+          color: 'var(--color-text)',
+          margin: 0,
+          overflow: 'hidden',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+        }}>
           {product.name}
-        </Text>
-        <Text size="sm" fw={700} c="gray.7" mt={4}>
+        </p>
+        <p style={{
+          fontSize: 'var(--font-size-sm)',
+          fontWeight: 'var(--fw-bold)',
+          color: 'var(--color-text-secondary)',
+          marginTop: 4,
+          marginBottom: 0,
+        }}>
           {product.price.toLocaleString()}원
-        </Text>
+        </p>
         {(() => {
           const colors = product.selection?.colors ?? product.colors ?? []
           return colors.length > 0 ? (
-            <Text size="xs" c="gray.5" mt={4} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-disabled)',
+              marginTop: 4,
+              marginBottom: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
               {colors.slice(0, 3).join(' · ')}
               {colors.length > 3 && ` +${colors.length - 3}`}
-            </Text>
+            </p>
           ) : null
         })()}
         {product.saleType === 'group' && product.groupSummary && (() => {
@@ -68,10 +101,16 @@ export default function ProductCard({ product }: ProductCardProps) {
           const done = currentQuantity >= targetQuantity
           return (
             <>
-              <Progress value={pct} size="sm" color={done ? 'gray' : 'green'} mt={6} radius="xl" />
-              <Text size="xs" c={done ? 'gray.5' : 'brand.6'} mt={2} fw={500}>
+              <Progress value={pct} size="sm" color={done ? 'gray' : 'brand'} mt={6} radius="xl" />
+              <p style={{
+                fontSize: 'var(--font-size-sm)',
+                color: done ? 'var(--color-text-disabled)' : 'var(--color-primary)',
+                marginTop: 2,
+                marginBottom: 0,
+                fontWeight: 'var(--fw-medium)',
+              }}>
                 {done ? '모집 완료' : `${currentQuantity}/${targetQuantity}개 모집 중`}
-              </Text>
+              </p>
             </>
           )
         })()}

@@ -21,29 +21,39 @@ export default function GroupBuyPage() {
 
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
-      {/* 히어로 배너 */}
+      {/* 히어로 배너 — 플랫 미니멀 */}
       <Box
         mb="xl"
         p="lg"
         style={{
-          background: 'linear-gradient(135deg, var(--mantine-color-brand-0) 0%, var(--mantine-color-brand-1) 100%)',
-          borderRadius: 'var(--mantine-radius-lg)',
-          border: '1px solid var(--mantine-color-brand-2)',
+          backgroundColor: 'var(--color-primary-surface)',
+          borderRadius: 'var(--radius)',
+          border: 'var(--border)',
         }}
       >
-        <Group gap={8} mb={6}>
-          <Text fw={800} size="lg" c="brand.8">⚡ 공동구매</Text>
-          <Badge variant="filled" color="brand" size="sm" radius="sm">진행 중</Badge>
-        </Group>
-        <Text size="sm" c="brand.7" style={{ lineHeight: 1.6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>
+            ⚡ 공동구매
+          </span>
+          <span style={{
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-medium)',
+            color: 'var(--color-bg)',
+            background: 'var(--color-primary)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '1px 8px',
+          }}>
+            진행 중
+          </span>
+        </div>
+        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6, margin: '0 0 8px' }}>
           함께 모이면 더 저렴하게! 목표 수량이 채워지면 주문이 확정됩니다.
-        </Text>
-        <Text size="xs" c="brand.5" mt={8}>
+        </p>
+        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)', margin: 0, fontWeight: 'var(--fw-medium)' }}>
           현재 {loading ? '...' : `${products.length}개`} 공구 진행 중
-        </Text>
+        </p>
       </Box>
 
-      {/* 로딩 */}
       {loading && (
         <SimpleGrid cols={2} spacing="sm">
           {[...Array(4)].map((_, i) => (
@@ -52,33 +62,35 @@ export default function GroupBuyPage() {
         </SimpleGrid>
       )}
 
-      {/* 에러 */}
       {!loading && error && (
         <Stack align="center" py={48}>
-          <Text size="sm" c="gray.4">{error}</Text>
+          <Text size="sm" style={{ color: 'var(--color-text-disabled)' }}>{error}</Text>
         </Stack>
       )}
 
-      {/* 빈 상태 */}
       {!loading && !error && products.length === 0 && (
         <Stack align="center" py={64}>
-          <Text size="2xl">🌱</Text>
-          <Text size="sm" c="gray.4">진행 중인 공동구매가 없습니다.</Text>
-          <Text size="xs" c="gray.3">
+          <Text size="xl">🌱</Text>
+          <Text size="sm" style={{ color: 'var(--color-text-disabled)' }}>진행 중인 공동구매가 없습니다.</Text>
+          <Text size="sm" style={{ color: 'var(--color-text-disabled)' }}>
             <Link href="/" style={{ color: 'inherit' }}>전체 상품 보기</Link>
           </Text>
         </Stack>
       )}
 
-      {/* 모집 중 상품 */}
       {!loading && active.length > 0 && (
         <Box mb="xl">
-          <Stack gap={4} mb="md">
-            <Group gap={8}>
-              <Title order={5} fw={700} c="dark">모집 중</Title>
-              <Badge variant="light" color="brand" size="sm">{active.length}</Badge>
-            </Group>
-          </Stack>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>모집 중</span>
+            <span style={{
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-medium)',
+              color: 'var(--color-primary)',
+              background: 'var(--color-primary-surface)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '1px 8px',
+            }}>{active.length}</span>
+          </div>
           <SimpleGrid cols={2} spacing="sm">
             {active.map((product) => (
               <ProductCard key={product.id} product={product} />
@@ -87,15 +99,19 @@ export default function GroupBuyPage() {
         </Box>
       )}
 
-      {/* 모집 완료 상품 */}
       {!loading && full.length > 0 && (
         <Box>
-          <Stack gap={4} mb="md">
-            <Group gap={8}>
-              <Title order={5} fw={700} c="gray.5">모집 완료</Title>
-              <Badge variant="light" color="gray" size="sm">{full.length}</Badge>
-            </Group>
-          </Stack>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text-disabled)' }}>모집 완료</span>
+            <span style={{
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-medium)',
+              color: 'var(--color-text-disabled)',
+              background: 'var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '1px 8px',
+            }}>{full.length}</span>
+          </div>
           <SimpleGrid cols={2} spacing="sm" style={{ opacity: 0.6 }}>
             {full.map((product) => (
               <ProductCard key={product.id} product={product} />
