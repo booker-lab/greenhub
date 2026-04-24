@@ -54,7 +54,7 @@ function OrderSuccessContent() {
           <>
             <Text size="xl" style={{ fontSize: 56 }}>⏳</Text>
             <Title order={2}>결제 확인 중...</Title>
-            <Text c="gray.5" size="sm" ta="center">
+            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }} ta="center">
               잠시만 기다려주세요. 결제 완료 후 자동으로 업데이트됩니다.
             </Text>
           </>
@@ -65,15 +65,15 @@ function OrderSuccessContent() {
           <>
             <Text style={{ fontSize: 56 }}>✅</Text>
             <Title order={2}>주문이 완료되었습니다</Title>
-            <Text fw={600} c="brand.6">{STATUS_LABELS[order.status]}</Text>
+            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>{STATUS_LABELS[order.status]}</Text>
             {order.status === 'RECRUITING' && (
-              <Text c="gray.5" size="sm">공동구매 목표 달성 시 주문이 확정됩니다.</Text>
+              <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>공동구매 목표 달성 시 주문이 확정됩니다.</Text>
             )}
-            <Text c="gray.4" size="xs" mt="xs">주문번호: {orderId}</Text>
+            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }} mt="xs">주문번호: {orderId}</Text>
             <Button color="brand" radius="md" size="md" mt="lg" onClick={() => router.push('/mypage')}>
               주문 내역 보기
             </Button>
-            <Button variant="transparent" c="gray.5" size="sm" onClick={() => router.push('/')}>
+            <Button variant="transparent" style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }} onClick={() => router.push('/')}>
               홈으로
             </Button>
           </>
@@ -84,10 +84,10 @@ function OrderSuccessContent() {
           <>
             <Text style={{ fontSize: 56 }}>❌</Text>
             <Title order={2}>결제가 취소되었습니다</Title>
-            <Text c="gray.5" size="sm" ta="center">
+            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }} ta="center">
               {order.cancelReason ?? '결제 처리 중 오류가 발생했습니다.'}
             </Text>
-            <Text c="gray.4" size="xs">잠시 후 홈 화면으로 이동합니다.</Text>
+            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>잠시 후 홈 화면으로 이동합니다.</Text>
           </>
         )}
 
@@ -96,7 +96,7 @@ function OrderSuccessContent() {
           <>
             <Text style={{ fontSize: 56 }}>⚠️</Text>
             <Title order={2}>주문 정보를 불러올 수 없습니다</Title>
-            <Text c="gray.5" size="sm">{error}</Text>
+            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>{error}</Text>
             <Button color="brand" radius="md" mt="md" onClick={() => router.push('/')}>
               홈으로
             </Button>

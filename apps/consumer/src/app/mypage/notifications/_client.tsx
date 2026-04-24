@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Box, Group, Text, Button, Stack, Alert } from '@mantine/core'
+import { ChevronLeft } from 'lucide-react'
 import { useNotifications } from '@/hooks/useNotifications'
 import type { Notification, NotificationTemplateCode } from '@greenhub/shared'
 
@@ -83,40 +84,26 @@ function NotificationItem({
       onClick={() => { onRead(); if (notification.orderId) onOrderClick() }}
       style={{
         display: 'flex', gap: 12, padding: '14px 16px',
-        background: isRead ? '#fff' : '#F0F7F4',
-        borderBottom: '1px solid #f0f0f0',
+        background: isRead ? 'var(--color-bg)' : 'var(--color-primary-surface)',
+        borderBottom: '1px solid var(--color-border)',
         cursor: notification.orderId ? 'pointer' : 'default',
       }}
     >
-      {/* 아이콘 */}
-      <Box
-        style={{
-          width: 36, height: 36, borderRadius: '50%', background: '#e8f5e9',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18, flexShrink: 0,
-        }}
-      >
+      <Box style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--color-primary-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
         {icon}
       </Box>
 
-      {/* 내용 */}
       <Box style={{ flex: 1, minWidth: 0 }}>
         <Group justify="space-between" gap="xs" align="flex-start">
-          <Text size="xs" fw={isRead ? 500 : 700} c="dark">{label}</Text>
-          <Text size="xs" c="gray.4" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{date}</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: isRead ? 'var(--fw-medium)' : 'var(--fw-bold)', color: 'var(--color-text)' }}>{label}</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)', whiteSpace: 'nowrap', flexShrink: 0 }}>{date}</Text>
         </Group>
-        {productName && <Text size="xs" c="gray.5" mt={3}>{productName}</Text>}
-        {notification.orderId && <Text size="xs" c="brand.6" mt={3}>주문 상세 보기 ›</Text>}
+        {productName && <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} mt={3}>{productName}</Text>}
+        {notification.orderId && <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }} mt={3}>주문 상세 보기 ›</Text>}
       </Box>
 
-      {/* 안읽음 점 */}
       {!isRead && (
-        <Box
-          style={{
-            width: 7, height: 7, borderRadius: '50%',
-            background: 'var(--green-primary)', flexShrink: 0, marginTop: 6,
-          }}
-        />
+        <Box style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--color-primary)', flexShrink: 0, marginTop: 6 }} />
       )}
     </Box>
   )
@@ -142,43 +129,31 @@ export default function NotificationsClient() {
 
   return (
     <Box style={{ maxWidth: 480, margin: '0 auto', paddingBottom: 80 }}>
-      {/* 헤더 */}
-      <Group
-        px="md"
-        pt="lg"
-        pb="sm"
-        gap="xs"
-        style={{
-          position: 'sticky', top: 0, background: '#fff', zIndex: 10,
-          borderBottom: '1px solid #f0f0f0',
-        }}
-      >
-        <Button variant="transparent" c="dark" pl={0} onClick={() => router.back()} style={{ fontSize: 20 }}>←</Button>
-        <Text fw={700} size="lg" style={{ flex: 1 }}>알림 내역</Text>
+      <Group px="md" pt="lg" pb="sm" gap="xs" style={{ position: 'sticky', top: 0, background: 'var(--color-bg)', zIndex: 10, borderBottom: '1px solid var(--color-border)' }}>
+        <Button variant="transparent" style={{ color: 'var(--color-text)' }} pl={0} onClick={() => router.back()}>
+          <ChevronLeft size={20} />
+        </Button>
+        <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)', flex: 1 }}>알림 내역</Text>
         {unreadCount > 0 && (
-          <Button variant="transparent" size="xs" c="brand.6" onClick={markAllRead}>모두 읽음</Button>
+          <Button variant="transparent" size="xs" style={{ color: 'var(--color-primary)' }} onClick={markAllRead}>모두 읽음</Button>
         )}
       </Group>
 
-      {/* 오류 */}
       {error && (
         <Alert color="red" variant="light" m="md">
-          <Text size="sm">{error}</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
         </Alert>
       )}
 
-      {/* 로딩 */}
-      {loading && <Text ta="center" c="gray.4" py={60} size="sm">불러오는 중...</Text>}
+      {loading && <Text ta="center" style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }} py={60}>불러오는 중...</Text>}
 
-      {/* 빈 상태 */}
       {!loading && !error && notifications.length === 0 && (
         <Stack align="center" py={60} px="lg">
           <Text size="xl">🔔</Text>
-          <Text size="sm" c="gray.4">알림 내역이 없습니다.</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>알림 내역이 없습니다.</Text>
         </Stack>
       )}
 
-      {/* 목록 */}
       {!loading && notifications.length > 0 && (
         <Box>
           {notifications.map((n) => (

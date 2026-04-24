@@ -7,6 +7,7 @@ import {
   Container, Box, Group, Text, Button, Stack, Paper, Badge,
   Modal, TextInput, Alert,
 } from '@mantine/core'
+import { ChevronLeft } from 'lucide-react'
 import { useAddresses } from '@/hooks/useAddresses'
 import type { SavedAddress } from '@greenhub/shared'
 import type { AddressFormData } from '@/hooks/useAddresses'
@@ -29,15 +30,15 @@ function AddressCard({
       <Group justify="space-between" align="flex-start" mb="xs">
         <Box style={{ flex: 1, minWidth: 0 }}>
           <Group gap="xs" mb={4}>
-            <Text fw={700} size="sm">{addr.label}</Text>
+            <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}>{addr.label}</Text>
             {addr.isDefault && (
               <Badge size="xs" color="brand" variant="light">기본</Badge>
             )}
           </Group>
-          <Text size="sm" c="gray.6" style={{ lineHeight: 1.5 }}>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
             {addr.address}{addr.addressDetail ? ` ${addr.addressDetail}` : ''}
           </Text>
-          <Text size="xs" c="gray.4" mt={2}>{addr.zipCode}</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mt={2}>{addr.zipCode}</Text>
         </Box>
       </Group>
       <Group gap="xs" mt="xs">
@@ -106,7 +107,7 @@ function AddressFormModal({
 
           {fieldError && (
             <Alert color="red" variant="light" p="xs">
-              <Text size="sm">{fieldError}</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{fieldError}</Text>
             </Alert>
           )}
 
@@ -159,24 +160,23 @@ export default function AddressesClient() {
 
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
-      {/* 헤더 */}
       <Group gap="xs" mb="lg">
-        <Button variant="transparent" c="dark" pl={0} onClick={() => router.back()} style={{ fontSize: 20 }}>←</Button>
-        <Text fw={700} size="lg">배송지 관리</Text>
+        <Button variant="transparent" style={{ color: 'var(--color-text)' }} pl={0} onClick={() => router.back()}>
+          <ChevronLeft size={20} />
+        </Button>
+        <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}>배송지 관리</Text>
       </Group>
 
-      {/* 오류 */}
       {(error || actionError) && (
         <Alert color="red" variant="light" mb="md">
-          <Text size="sm">{error ?? actionError}</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error ?? actionError}</Text>
         </Alert>
       )}
 
-      {/* 목록 */}
       {loading ? (
-        <Text ta="center" c="gray.4" py={40} size="sm">불러오는 중...</Text>
+        <Text ta="center" style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }} py={40}>불러오는 중...</Text>
       ) : addresses.length === 0 ? (
-        <Text ta="center" c="gray.4" py={48} size="sm">등록된 배송지가 없습니다.</Text>
+        <Text ta="center" style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }} py={48}>등록된 배송지가 없습니다.</Text>
       ) : (
         <Stack gap="sm" mb="lg">
           {addresses.map((addr) => (
@@ -191,12 +191,10 @@ export default function AddressesClient() {
         </Stack>
       )}
 
-      {/* 추가 버튼 */}
       <Button fullWidth color="brand" radius="md" size="md" onClick={() => setModal({ mode: 'add' })}>
         + 배송지 추가
       </Button>
 
-      {/* 모달 */}
       <AddressFormModal
         opened={modal !== null}
         initial={getInitialForm(modal?.mode === 'edit' ? modal.addr : undefined)}

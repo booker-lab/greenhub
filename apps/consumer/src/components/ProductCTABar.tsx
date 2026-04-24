@@ -29,8 +29,8 @@ export default function ProductCTABar({
         left: 0,
         right: 0,
         zIndex: 100,
-        backgroundColor: 'var(--mantine-color-white)',
-        boxShadow: '0 -2px 12px rgba(0,0,0,0.08)',
+        backgroundColor: 'var(--color-bg)',
+        borderTop: 'var(--border)',
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
@@ -42,9 +42,9 @@ export default function ProductCTABar({
         }}
       >
         {/* 총 금액 */}
-        <Text size="xs" c="gray.5" mb={6}>
+        <Text mb={6} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
           총 금액{' '}
-          <Text span fw={700} size="sm" c="dark">
+          <Text span style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-md)', color: 'var(--color-text)' }}>
             {totalAmount.toLocaleString()}원
           </Text>
         </Text>
@@ -55,19 +55,21 @@ export default function ProductCTABar({
             flex={1}
             variant="default"
             radius="md"
-            size="md"
+            size="lg"
             onClick={onAddToCart}
           >
             장바구니
           </Button>
           <Button
             flex={2}
-            color="brand"
+            size="lg"
             radius="md"
-            size="md"
             disabled={!canBuy}
             onClick={onBuyNow}
-            style={isFull ? { backgroundColor: 'var(--mantine-color-gray-5)' } : undefined}
+            style={{
+              backgroundColor: isFull ? 'var(--color-text-disabled)' : 'var(--color-primary)',
+              color: 'var(--color-bg)',
+            }}
           >
             {ctaLabel}
           </Button>

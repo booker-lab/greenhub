@@ -4,6 +4,7 @@ import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Container, Box, Text, Title, Button, Paper, Stack, Alert, Stepper, Group, Divider } from '@mantine/core'
+import { ChevronLeft } from 'lucide-react'
 import { useOrderStatus } from '@/hooks/useOrderStatus'
 import type { Order, OrderStatus } from '@greenhub/shared'
 
@@ -40,30 +41,13 @@ function getCurrentStepIndex(steps: OrderStatus[], status: OrderStatus): number 
 
 function PickupCodeCard({ code, address }: { code: string; address: string }) {
   return (
-    <Paper
-      radius="md"
-      p="lg"
-      mb="md"
-      ta="center"
-      withBorder
-      style={{ borderColor: 'var(--mantine-color-brand-4)', borderWidth: 2 }}
-    >
-      <Text size="sm" fw={600} c="brand.6" mb="xs">픽업 코드</Text>
-      <Text
-        fw={900}
-        ta="center"
-        mb="xs"
-        style={{
-          fontSize: 36,
-          letterSpacing: 8,
-          fontFamily: 'monospace',
-          color: 'var(--mantine-color-dark-8)',
-        }}
-      >
+    <Paper radius="md" p="lg" mb="md" ta="center" withBorder style={{ borderColor: 'var(--color-primary)', borderWidth: 2 }}>
+      <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }} mb="xs">픽업 코드</Text>
+      <Text ta="center" mb="xs" style={{ fontSize: 36, letterSpacing: 8, fontFamily: 'monospace', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
         {code}
       </Text>
-      <Text size="xs" c="gray.6">수령 장소: {address}</Text>
-      <Text size="xs" c="gray.5" mt={4}>코드를 제시하고 수령하세요</Text>
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>수령 장소: {address}</Text>
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mt={4}>코드를 제시하고 수령하세요</Text>
     </Paper>
   )
 }
@@ -85,10 +69,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     try {
       const res = await fetch(`${API_URL}/stores/${order.storeId}/orders/${orderId}/cancel`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.user.accessToken}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.user.accessToken}` },
       })
       if (res.ok) setCancelDone(true)
     } finally {
@@ -102,10 +83,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     try {
       const res = await fetch(`${API_URL}/stores/${order.storeId}/orders/${orderId}/review`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.user.accessToken}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.user.accessToken}` },
       })
       if (res.ok) setConfirmed(true)
     } finally {
@@ -114,14 +92,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   if (loading) {
-    return <Box py={60} ta="center"><Text c="gray.4">로딩 중...</Text></Box>
+    return <Box py={60} ta="center"><Text style={{ color: 'var(--color-text-disabled)' }}>로딩 중...</Text></Box>
   }
 
   if (error || !order) {
     return (
       <Container size="sm" px="md" py="lg">
-        <Button variant="transparent" c="gray.5" onClick={() => router.push('/mypage')} pl={0} mb="md">← 뒤로</Button>
-        <Text ta="center" c="red.7" py={40} size="sm">주문 정보를 불러올 수 없습니다.</Text>
+        <Button variant="transparent" style={{ color: 'var(--color-text-secondary)' }} onClick={() => router.push('/mypage')} pl={0} mb="md">
+          <ChevronLeft size={16} /> 뒤로
+        </Button>
+        <Text ta="center" style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }} py={40}>주문 정보를 불러올 수 없습니다.</Text>
       </Container>
     )
   }
@@ -139,123 +119,85 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
-      {/* 헤더 */}
-      <Button variant="transparent" c="gray.5" onClick={() => router.push('/mypage')} pl={0} mb="sm">← 뒤로</Button>
-      <Title order={3} fw={700} c="dark" mb={4}>주문 상세</Title>
-      <Text size="xs" c="gray.4" mb="lg">주문번호: {orderId}</Text>
+      <Button variant="transparent" style={{ color: 'var(--color-text-secondary)' }} onClick={() => router.push('/mypage')} pl={0} mb="sm">
+        <ChevronLeft size={16} /> 뒤로
+      </Button>
+      <Title order={3} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }} mb={4}>주문 상세</Title>
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb="lg">주문번호: {orderId}</Text>
 
-      {/* 주문 정보 요약 */}
       <Paper withBorder radius="md" p="md" mb="lg">
         <Stack gap={8}>
           <Group justify="space-between">
-            <Text size="sm" c="gray.5">배송 방식</Text>
-            <Text size="sm" fw={600} c="dark">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>배송 방식</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
               {order.deliveryMethod === 'hub' ? '거점 픽업' : order.deliveryMethod === 'parcel' ? '택배' : '직배송'}
               {order.saleType === 'group' && ' (공동구매)'}
             </Text>
           </Group>
           {order.deliveryAddress?.address && (
             <Group justify="space-between" align="flex-start">
-              <Text size="sm" c="gray.5" style={{ flexShrink: 0 }}>배송지</Text>
-              <Text size="sm" fw={500} c="dark" ta="right" style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', flexShrink: 0 }}>배송지</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text)', flex: 1, marginLeft: 12 }} ta="right">
                 {order.deliveryAddress.address} {order.deliveryAddress.addressDetail}
               </Text>
             </Group>
           )}
           {order.requestedDeliveryDate && (
             <Group justify="space-between">
-              <Text size="sm" c="gray.5">배송 희망일</Text>
-              <Text size="sm" fw={600} c="dark">{order.requestedDeliveryDate}</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>배송 희망일</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>{order.requestedDeliveryDate}</Text>
             </Group>
           )}
           <Divider />
           <Group justify="space-between">
-            <Text size="sm" c="gray.5">결제 금액</Text>
-            <Text size="md" fw={800} c="dark">{order.totalAmount.toLocaleString('ko-KR')}원</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>결제 금액</Text>
+            <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>{order.totalAmount.toLocaleString('ko-KR')}원</Text>
           </Group>
         </Stack>
       </Paper>
 
-      {/* 공동구매 모집 중 안내 + 취소 버튼 */}
       {order.status === 'RECRUITING' && !cancelDone && (
         <Alert color="blue" variant="light" radius="md" mb="lg" title="공동구매 모집 중">
-          <Text size="sm" c="gray.7" mb="xs" style={{ lineHeight: 1.6 }}>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }} mb="xs">
             모집 마감일까지 참여 인원이 충족되면 주문이 확정됩니다.
             확정 이후에는 취소·환불이 불가합니다.
           </Text>
-          <Text size="xs" c="gray.5" mb="md">
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb="md">
             모집 마감 후 인원 미달 시 자동으로 취소되고 전액 환불됩니다.
           </Text>
-          <Button
-            fullWidth
-            radius="md"
-            size="sm"
-            variant="outline"
-            color="red"
-            loading={cancelling}
-            disabled={cancelling}
-            onClick={handleCancel}
-          >
+          <Button fullWidth radius="md" size="sm" variant="outline" color="red" loading={cancelling} disabled={cancelling} onClick={handleCancel}>
             공동구매 참여 취소
           </Button>
         </Alert>
       )}
 
-      {/* 취소 상태 */}
       {(isCancelled || cancelDone) && (
         <Alert color="red" variant="light" radius="md" mb="lg" ta="center">
-          <Text fw={700} c="red.7" mb={4}>주문이 취소되었습니다</Text>
-          {order.cancelReason && <Text size="sm" c="gray.5">사유: {order.cancelReason}</Text>}
+          <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-danger)' }} mb={4}>주문이 취소되었습니다</Text>
+          {order.cancelReason && <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>사유: {order.cancelReason}</Text>}
         </Alert>
       )}
 
-      {/* 픽업 코드 */}
       {showPickupCode && (
         <PickupCodeCard code={order.pickupCode!} address={order.deliveryAddress?.address ?? ''} />
       )}
 
-      {/* 구매 확정 버튼 */}
       {(isReviewable || confirmed) && (
-        <Button
-          fullWidth
-          radius="md"
-          size="md"
-          mb="lg"
-          disabled={confirming || confirmed}
-          loading={confirming}
-          variant={confirmed ? 'outline' : 'filled'}
-          color="brand"
-          onClick={handleConfirm}
-        >
+        <Button fullWidth radius="md" size="md" mb="lg" disabled={confirming || confirmed} loading={confirming} variant={confirmed ? 'outline' : 'filled'} color="brand" onClick={handleConfirm}>
           {confirmed ? '✓ 구매 확정 완료' : '구매 확정'}
         </Button>
       )}
 
-      {/* 상태 타임라인 (Stepper) */}
       {!isCancelled && !cancelDone && (
         <Box>
-          <Text fw={700} size="sm" c="dark" mb="md">배송 현황</Text>
-          <Stepper
-            active={currentIdx}
-            color="brand"
-            size="sm"
-            orientation="vertical"
-            styles={{
-              stepLabel: { fontWeight: 600 },
-              stepDescription: { fontSize: 12 },
-            }}
-          >
+          <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }} mb="md">배송 현황</Text>
+          <Stepper active={currentIdx} color="brand" size="sm" orientation="vertical" styles={{ stepLabel: { fontWeight: 600 }, stepDescription: { fontSize: 12 } }}>
             {steps.map((stepStatus) => {
               const label =
                 stepStatus === 'DELIVERED' && order.status === 'REVIEWED'
                   ? '배송 완료 · 구매 확정'
                   : (STATUS_LABELS[stepStatus] ?? stepStatus)
-              return (
-                <Stepper.Step
-                  key={stepStatus}
-                  label={label}
-                />
-              )
+              return <Stepper.Step key={stepStatus} label={label} />
             })}
           </Stepper>
         </Box>

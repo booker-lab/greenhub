@@ -256,34 +256,34 @@ function CheckoutForm({
       <Title order={2} mb="lg">결제</Title>
 
       {/* 주문 요약 */}
-      <Paper bg="gray.0" radius="md" p="md" mb="lg">
-        <Text fw={600} size="sm" mb="xs">주문 정보</Text>
+      <Paper radius="md" p="md" mb="lg" style={{ background: 'var(--color-surface-muted)' }}>
+        <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }} mb="xs">주문 정보</Text>
         <Stack gap={4}>
           {items.length > 0 ? (
             <>
               {items.map((item) => (
                 <Group key={item.productId} justify="space-between">
-                  <Text size="sm" c="gray.5" style={{ flex: 1 }}>{item.name} × {item.quantity}</Text>
-                  <Text size="sm">{(item.price * item.quantity).toLocaleString()}원</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', flex: 1 }}>{item.name} × {item.quantity}</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)' }}>{(item.price * item.quantity).toLocaleString()}원</Text>
                 </Group>
               ))}
             </>
           ) : singleSummary && (
             <Group justify="space-between">
-              <Text size="sm" c="gray.5">수량</Text>
-              <Text size="sm">{singleSummary.quantity}개</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>수량</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{singleSummary.quantity}개</Text>
             </Group>
           )}
           {singleSummary && (
             <Group justify="space-between">
-              <Text size="sm" c="gray.5">배송 방법</Text>
-              <Text size="sm">{DELIVERY_LABELS[singleSummary.deliveryMethod]}</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>배송 방법</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{DELIVERY_LABELS[singleSummary.deliveryMethod]}</Text>
             </Group>
           )}
           {totalAmount > 0 && (
             <Group justify="space-between" mt={4}>
-              <Text size="sm" fw={600}>결제 금액</Text>
-              <Text size="sm" fw={600}>{totalAmount.toLocaleString()}원</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>결제 금액</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>{totalAmount.toLocaleString()}원</Text>
             </Group>
           )}
         </Stack>
@@ -291,7 +291,7 @@ function CheckoutForm({
 
       {/* 배송지 */}
       <Stack gap="sm" mb="lg">
-        <Text fw={600} size="sm">배송지</Text>
+        <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}>배송지</Text>
         <Group gap="xs" align="flex-end">
           <TextInput
             style={{ flex: 1 }}
@@ -320,7 +320,7 @@ function CheckoutForm({
 
       {/* 결제 수단 */}
       <Stack gap="xs" mb="lg">
-        <Text fw={600} size="sm">결제 수단</Text>
+        <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}>결제 수단</Text>
         {PAYMENT_OPTIONS.map(({ method, label, icon }) => {
           const isSelected = paymentMethod === method
           return (
@@ -330,7 +330,7 @@ function CheckoutForm({
               radius="md"
               onClick={() => onPaymentMethodChange(method)}
               style={{
-                border: `2px solid ${isSelected ? 'var(--green-primary)' : 'var(--mantine-color-gray-3)'}`,
+                border: `2px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
@@ -338,7 +338,7 @@ function CheckoutForm({
               }}
             >
               <span>{icon}</span>
-              <Text fw={isSelected ? 700 : 400} size="sm">{label}</Text>
+              <Text style={{ fontWeight: isSelected ? 'var(--fw-bold)' : 'var(--fw-medium)', fontSize: 'var(--font-size-sm)' }}>{label}</Text>
             </Paper>
           )
         })}
@@ -346,7 +346,7 @@ function CheckoutForm({
 
       {error && (
         <Alert color="red" variant="light" mb="sm">
-          <Text size="sm">{error}</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
         </Alert>
       )}
 

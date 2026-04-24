@@ -20,7 +20,7 @@ export default function CartPage() {
       <Container size="sm" px="md" py={64}>
         <Stack align="center" gap="md">
           <Text size="xl">🛒</Text>
-          <Text c="gray.5">장바구니가 비어있습니다.</Text>
+          <Text style={{ color: 'var(--color-text-disabled)' }}>장바구니가 비어있습니다.</Text>
           <Button component={Link} href="/" color="brand" radius="md">
             쇼핑하러 가기
           </Button>
@@ -33,8 +33,8 @@ export default function CartPage() {
     <Container size="sm" px="md" pt="lg" pb={100}>
       {/* 헤더 */}
       <Group justify="space-between" mb="lg">
-        <Title order={3} fw={700} c="dark">장바구니</Title>
-        <Button variant="transparent" size="xs" c="gray.4" onClick={clearCart}>
+        <Title order={3} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>장바구니</Title>
+        <Button variant="transparent" size="xs" style={{ color: 'var(--color-text-disabled)' }} onClick={clearCart}>
           전체 삭제
         </Button>
       </Group>
@@ -53,7 +53,7 @@ export default function CartPage() {
                   width: 72,
                   height: 72,
                   borderRadius: 8,
-                  background: 'var(--mantine-color-gray-1)',
+                  background: 'var(--color-surface-muted)',
                   overflow: 'hidden',
                   display: 'block',
                 }}
@@ -70,15 +70,15 @@ export default function CartPage() {
                 <Text
                   component={Link}
                   href={`/products/${item.productId}`}
-                  size="sm"
-                  fw={600}
-                  c="dark"
                   style={{
                     display: 'block',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                     textDecoration: 'none',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: 'var(--fw-bold)',
+                    color: 'var(--color-text)',
                   }}
                 >
                   {item.name}
@@ -88,7 +88,7 @@ export default function CartPage() {
                   <Badge size="xs" color="brand" variant="light" mt={4}>공동구매</Badge>
                 )}
 
-                <Text size="md" fw={700} c="dark" mt={6}>
+                <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }} mt={6}>
                   {(item.price * item.quantity).toLocaleString()}원
                 </Text>
 
@@ -102,7 +102,7 @@ export default function CartPage() {
                   >
                     −
                   </ActionIcon>
-                  <Text size="sm" fw={600} w={24} ta="center">{item.quantity}</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }} w={24} ta="center">{item.quantity}</Text>
                   <ActionIcon
                     size="lg"
                     variant="default"
@@ -114,7 +114,7 @@ export default function CartPage() {
                   <Button
                     variant="transparent"
                     size="xs"
-                    c="gray.4"
+                    style={{ color: 'var(--color-text-disabled)' }}
                     ml="auto"
                     onClick={() => removeItem(item.productId)}
                   >
@@ -133,18 +133,18 @@ export default function CartPage() {
         p="lg"
         mb="md"
         style={{
-          background: 'var(--mantine-color-dark-8)',
-          color: '#fff',
+          background: 'var(--color-text)',
+          color: 'var(--color-bg)',
         }}
       >
         <Group justify="space-between" mb={8}>
-          <Text size="sm" c="dark.1">상품 수</Text>
-          <Text size="sm" c="white">{itemCount}개</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>상품 수</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-bg)' }}>{itemCount}개</Text>
         </Group>
-        <Divider color="dark.6" mb={12} />
+        <Divider mb={12} style={{ borderColor: 'rgba(255,255,255,0.15)' }} />
         <Group justify="space-between">
-          <Text size="sm" fw={600} c="dark.1">총 결제 금액</Text>
-          <Text size="xl" fw={800} c="white">{totalAmount.toLocaleString()}원</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text-secondary)' }}>총 결제 금액</Text>
+          <Text style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--fw-bold)', color: 'var(--color-bg)' }}>{totalAmount.toLocaleString()}원</Text>
         </Group>
       </Paper>
 

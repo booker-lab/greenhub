@@ -1,5 +1,6 @@
 'use client'
 
+import type React from 'react'
 import Link from 'next/link'
 import { Card, Box, Progress } from '@mantine/core'
 import type { Product } from '@greenhub/shared'
@@ -22,7 +23,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       component={Link}
       href={`/products/${product.id}`}
       p={0}
-      style={{ overflow: 'hidden', display: 'block', textDecoration: 'none' }}
+      style={{ overflow: 'hidden', display: 'block', textDecoration: 'none', border: 'var(--border)' }}
     >
       <Box style={{ position: 'relative', aspectRatio: '4/5', background: 'var(--color-border)', overflow: 'hidden' }}>
         <img
@@ -101,7 +102,13 @@ export default function ProductCard({ product }: ProductCardProps) {
           const done = currentQuantity >= targetQuantity
           return (
             <>
-              <Progress value={pct} size="sm" color={done ? 'gray' : 'brand'} mt={6} radius="xl" />
+              <Progress
+                value={pct}
+                size="sm"
+                mt={6}
+                radius="xl"
+                style={{ '--progress-color': done ? 'var(--color-text-disabled)' : 'var(--color-primary)' } as React.CSSProperties}
+              />
               <p style={{
                 fontSize: 'var(--font-size-sm)',
                 color: done ? 'var(--color-text-disabled)' : 'var(--color-primary)',

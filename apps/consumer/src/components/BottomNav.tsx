@@ -55,7 +55,7 @@ export default function BottomNav() {
                       position: 'absolute',
                       top: -6,
                       right: -10,
-                      background: '#ef4444',
+                      background: 'var(--color-danger)',
                       color: 'var(--color-bg)',
                       fontSize: 10,
                       fontWeight: 'var(--fw-bold)',
@@ -72,8 +72,8 @@ export default function BottomNav() {
                   )}
                 </Box>
                 <Text
-                  size="xs"
                   style={{
+                    fontSize: 'var(--font-size-sm)',
                     fontWeight: isActive ? 'var(--fw-bold)' : 'var(--fw-medium)',
                     color: isActive ? 'var(--color-primary)' : 'var(--color-text-disabled)',
                   }}
