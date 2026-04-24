@@ -14,6 +14,7 @@ const TABS: { label: string; value: Category | undefined; saleType?: 'group' | '
   { label: '관엽', value: 'foliage' },
 ]
 
+// 꽃 색상 데이터 — hex 유지 필수 (브랜드 컬러 예외)
 const COLOR_CHIPS: { label: string; value: ColorOption; hex: string }[] = [
   { label: '레드', value: '레드', hex: '#E53E3E' },
   { label: '핑크', value: '핑크', hex: '#ED64A6' },
@@ -47,7 +48,7 @@ export default function CategoryPage() {
     <Container size="sm" pb={96}>
       {/* 헤더 */}
       <Box px="md" pt="lg" pb="md">
-        <Title order={3} fw={700} c="dark">카테고리</Title>
+        <Title order={3} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>카테고리</Title>
       </Box>
 
       {/* 카테고리 탭 */}
@@ -68,9 +69,9 @@ export default function CategoryPage() {
                   padding: '8px 16px',
                   fontSize: 14,
                   fontWeight: isActive ? 700 : 400,
-                  color: isActive ? 'var(--mantine-color-dark-7)' : 'var(--mantine-color-gray-5)',
+                  color: isActive ? 'var(--color-text)' : 'var(--color-text-disabled)',
                   borderBottom: isActive
-                    ? '2px solid var(--mantine-color-dark-7)'
+                    ? '2px solid var(--color-text)'
                     : '2px solid transparent',
                   transition: 'all 0.15s',
                 }}
@@ -112,17 +113,19 @@ export default function CategoryPage() {
                     borderRadius: '50%',
                     backgroundColor: chip.hex,
                     border: isActive
-                      ? '2px solid var(--mantine-color-dark-7)'
-                      : '2px solid var(--mantine-color-gray-3)',
-                    outline: isActive ? '2px solid var(--mantine-color-dark-7)' : '2px solid transparent',
+                      ? '2px solid var(--color-text)'
+                      : '2px solid var(--color-border)',
+                    outline: isActive ? '2px solid var(--color-text)' : '2px solid transparent',
                     outlineOffset: 2,
                     transition: 'outline 0.1s',
                   }}
                 />
                 <Text
-                  size="xs"
-                  c={isActive ? 'dark' : 'gray.5'}
-                  fw={isActive ? 700 : 400}
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: isActive ? 'var(--color-text)' : 'var(--color-text-disabled)',
+                    fontWeight: isActive ? 'var(--fw-bold)' : 'var(--fw-medium)',
+                  }}
                 >
                   {chip.label}
                 </Text>
@@ -145,19 +148,19 @@ export default function CategoryPage() {
         )}
 
         {!loading && error && (
-          <Text ta="center" py={48} c="gray.4" size="sm">{error}</Text>
+          <Text ta="center" py={48} style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>{error}</Text>
         )}
 
         {!loading && !error && products.length === 0 && (
           <Stack align="center" py={64}>
             <Text size="xl">🌱</Text>
-            <Text size="sm" c="gray.4">해당 카테고리 상품이 없습니다.</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>해당 카테고리 상품이 없습니다.</Text>
           </Stack>
         )}
 
         {!loading && products.length > 0 && (
           <>
-            <Text size="xs" c="gray.4" mb="sm" fw={500}>{products.length}개 상품</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)', fontWeight: 'var(--fw-medium)' }} mb="sm">{products.length}개 상품</Text>
             <SimpleGrid cols={2} spacing="sm">
               {products.map((product) => (
                 <ProductCard key={product.id} product={product} />

@@ -29,6 +29,26 @@
   --radius-sm: 8px;
   --radius-full: 9999px;
   --border: 1px solid var(--color-border);
+
+  /* ── Mobile UX ── */
+  --touch-target: 44px;
+  --color-danger: #ef4444;
+  --color-danger-surface: #fff5f5;
+
+  /* ── Semantic Status ── */
+  --color-surface-muted: #f8f9fa;
+  --color-status-info-bg: #e7f5ff;
+  --color-status-info-text: #1971c2;
+  --color-status-warning-bg: #fff4e6;
+  --color-status-warning-text: #e8590c;
+  --color-caution-bg: #fffde7;
+  --color-caution-border: #ffd43b;
+}
+
+/* 300ms 탭 딜레이 제거 + 텍스트 선택 방지 (모바일 버튼/링크) */
+button, a, [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Badge — Pretendard 한글 글자 잘림 방지

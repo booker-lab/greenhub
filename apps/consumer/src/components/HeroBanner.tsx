@@ -106,7 +106,10 @@ export default function HeroBanner() {
               component={Link}
               href={banner.cta1.href}
               style={{
-                padding: '8px 16px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                minHeight: 'var(--touch-target)',
+                padding: '0 20px',
                 borderRadius: 'var(--radius-full)',
                 backgroundColor: 'var(--color-primary)',
                 color: 'var(--color-bg)',
@@ -123,7 +126,10 @@ export default function HeroBanner() {
               component={Link}
               href={banner.cta2.href}
               style={{
-                padding: '8px 16px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                minHeight: 'var(--touch-target)',
+                padding: '0 20px',
                 borderRadius: 'var(--radius-full)',
                 backgroundColor: 'var(--color-bg)',
                 color: 'var(--color-primary)',

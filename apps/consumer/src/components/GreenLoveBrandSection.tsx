@@ -14,19 +14,19 @@ export default function GreenLoveBrandSection() {
       py="xl"
       px="md"
       style={{
-        background: 'linear-gradient(135deg, var(--green-bg) 0%, #f0faf0 100%)',
-        borderRadius: 16,
+        background: 'var(--color-primary-surface)',
+        borderRadius: 'var(--radius)',
       }}
     >
       <Stack gap="md">
         <Stack gap={4}>
-          <Text size="xs" fw={600} c="var(--green-primary)" tt="uppercase">
+          <Text tt="uppercase" style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>
             Green Love
           </Text>
-          <Text size="lg" fw={700} c="dark">
+          <Text style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
             화훼 농가 직거래 플랫폼
           </Text>
-          <Text size="sm" c="gray.6" style={{ lineHeight: 1.6 }}>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
             그린러브는 꽃을 사랑하는 농가와 소비자를 직접 연결합니다.
           </Text>
         </Stack>
@@ -36,8 +36,8 @@ export default function GreenLoveBrandSection() {
             <Group key={title} gap="sm" align="flex-start">
               <Text size="xl" style={{ lineHeight: 1 }}>{icon}</Text>
               <Box>
-                <Text size="sm" fw={600} c="dark">{title}</Text>
-                <Text size="xs" c="gray.5">{desc}</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>{title}</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{desc}</Text>
               </Box>
             </Group>
           ))}

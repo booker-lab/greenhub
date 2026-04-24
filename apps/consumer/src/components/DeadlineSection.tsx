@@ -130,7 +130,7 @@ export default function DeadlineSection({ products }: DeadlineSectionProps) {
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-bold)',
             color: 'var(--color-bg)',
-            background: '#ef4444',
+            background: 'var(--color-danger)',
             borderRadius: 'var(--radius-full)',
             padding: '1px 7px',
           }}>{soon.length}</span>

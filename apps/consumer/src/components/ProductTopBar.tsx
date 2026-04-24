@@ -1,7 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Box, Text } from '@mantine/core'
+import { Box } from '@mantine/core'
+import { ChevronLeft, Home, ShoppingCart } from 'lucide-react'
 import { useCart } from '@/hooks/useCart'
 
 export default function ProductTopBar() {
@@ -17,8 +18,8 @@ export default function ProductTopBar() {
         left: 0,
         right: 0,
         zIndex: 100,
-        backgroundColor: 'var(--mantine-color-white)',
-        boxShadow: '0 1px 8px rgba(0,0,0,0.08)',
+        backgroundColor: 'var(--color-bg)',
+        borderBottom: 'var(--border)',
         height: 'calc(52px + env(safe-area-inset-top))',
         paddingTop: 'env(safe-area-inset-top)',
       }}
@@ -31,8 +32,8 @@ export default function ProductTopBar() {
           maxWidth: 430,
           margin: '0 auto',
           height: 52,
-          paddingLeft: 8,
-          paddingRight: 12,
+          paddingLeft: 4,
+          paddingRight: 8,
         }}
       >
         {/* 뒤로가기 */}
@@ -42,64 +43,79 @@ export default function ProductTopBar() {
             background: 'none',
             border: 'none',
             cursor: 'pointer',
-            padding: '8px 10px',
+            minWidth: 'var(--touch-target)',
+            minHeight: 'var(--touch-target)',
             display: 'flex',
             alignItems: 'center',
-            gap: 4,
-            color: 'var(--mantine-color-dark-6)',
+            gap: 2,
+            color: 'var(--color-text)',
+            padding: '0 8px',
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-          <Text size="sm" fw={500} c="dark.6">뒤로</Text>
+          <ChevronLeft size={22} strokeWidth={2.2} />
+          <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}>뒤로</span>
         </button>
 
         {/* 로고 */}
-        <Text
-          fw={800}
-          size="lg"
-          style={{ letterSpacing: '-0.5px', color: 'var(--green-primary)' }}
-        >
+        <span style={{
+          fontSize: 'var(--font-size-lg)',
+          fontWeight: 'var(--fw-bold)',
+          letterSpacing: '-0.5px',
+          color: 'var(--color-primary)',
+        }}>
           Green Love
-        </Text>
+        </span>
 
         {/* 홈 + 장바구니 */}
-        <Box style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <Box style={{ display: 'flex', alignItems: 'center' }}>
           <button
             onClick={() => router.push('/')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              minWidth: 'var(--touch-target)',
+              minHeight: 'var(--touch-target)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-text-secondary)',
+            }}
             aria-label="홈으로"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
+            <Home size={22} strokeWidth={1.8} />
           </button>
 
           <button
             onClick={() => router.push('/cart')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center', position: 'relative' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              minWidth: 'var(--touch-target)',
+              minHeight: 'var(--touch-target)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative',
+              color: 'var(--color-text-secondary)',
+            }}
             aria-label="장바구니"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="9" cy="21" r="1" />
-              <circle cx="20" cy="21" r="1" />
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-            </svg>
+            <ShoppingCart size={22} strokeWidth={1.8} />
             {itemCount > 0 && (
               <Box
                 style={{
                   position: 'absolute',
-                  top: 2,
-                  right: 2,
-                  background: '#ef4444',
-                  color: '#fff',
+                  top: 6,
+                  right: 4,
+                  background: 'var(--color-danger)',
+                  color: 'var(--color-bg)',
                   fontSize: 10,
-                  fontWeight: 700,
+                  fontWeight: 'var(--fw-bold)',
                   minWidth: 16,
                   height: 16,
-                  borderRadius: 99,
+                  borderRadius: 'var(--radius-full)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

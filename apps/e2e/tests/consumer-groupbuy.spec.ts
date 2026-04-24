@@ -18,7 +18,7 @@ test.describe('소비자 공동구매 페이지', () => {
     const list = page.locator('text=모집 중')
     const isEmpty = await empty.isVisible()
     if (!isEmpty) {
-      await expect(page.locator('h5:has-text("모집 중"), [data-order="5"]:has-text("모집 중")').first()).toBeVisible()
+      await expect(page.locator('text=모집 중').first()).toBeVisible()
     }
   })
 

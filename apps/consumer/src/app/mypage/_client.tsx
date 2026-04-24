@@ -24,31 +24,31 @@ const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
 
 type StatusColorKey = { bg: string; text: string }
 const STATUS_COLORS: Partial<Record<OrderStatus, StatusColorKey>> = {
-  PENDING:    { bg: 'var(--mantine-color-gray-1)',   text: 'var(--mantine-color-gray-6)' },
-  RECRUITING: { bg: 'var(--mantine-color-blue-0)',   text: 'var(--mantine-color-blue-7)' },
-  CONFIRMED:  { bg: 'var(--mantine-color-blue-0)',   text: 'var(--mantine-color-blue-7)' },
-  ACCEPTED:   { bg: 'var(--mantine-color-brand-0)',  text: 'var(--mantine-color-brand-7)' },
-  PREPARING:  { bg: 'var(--mantine-color-brand-0)',  text: 'var(--mantine-color-brand-7)' },
-  DELIVERING: { bg: 'var(--mantine-color-orange-0)', text: 'var(--mantine-color-orange-7)' },
-  HUB_ARRIVED:{ bg: 'var(--mantine-color-orange-0)', text: 'var(--mantine-color-orange-7)' },
-  PICKED_UP:  { bg: 'var(--mantine-color-brand-0)',  text: 'var(--mantine-color-brand-7)' },
-  DELIVERED:  { bg: 'var(--mantine-color-brand-0)',  text: 'var(--mantine-color-brand-7)' },
-  CANCELLED:  { bg: 'var(--mantine-color-red-0)',    text: 'var(--mantine-color-red-7)' },
-  REVIEWED:   { bg: 'var(--mantine-color-gray-1)',   text: 'var(--mantine-color-gray-6)' },
+  PENDING:    { bg: 'var(--color-surface-muted)',       text: 'var(--color-text-secondary)' },
+  RECRUITING: { bg: 'var(--color-status-info-bg)',      text: 'var(--color-status-info-text)' },
+  CONFIRMED:  { bg: 'var(--color-status-info-bg)',      text: 'var(--color-status-info-text)' },
+  ACCEPTED:   { bg: 'var(--color-primary-surface)',     text: 'var(--color-primary)' },
+  PREPARING:  { bg: 'var(--color-primary-surface)',     text: 'var(--color-primary)' },
+  DELIVERING: { bg: 'var(--color-status-warning-bg)',   text: 'var(--color-status-warning-text)' },
+  HUB_ARRIVED:{ bg: 'var(--color-status-warning-bg)',   text: 'var(--color-status-warning-text)' },
+  PICKED_UP:  { bg: 'var(--color-primary-surface)',     text: 'var(--color-primary)' },
+  DELIVERED:  { bg: 'var(--color-primary-surface)',     text: 'var(--color-primary)' },
+  CANCELLED:  { bg: 'var(--color-danger-surface)',      text: 'var(--color-danger)' },
+  REVIEWED:   { bg: 'var(--color-surface-muted)',       text: 'var(--color-text-secondary)' },
 }
 
 const ACCENT_COLORS: Partial<Record<OrderStatus, string>> = {
-  PENDING:    'var(--mantine-color-gray-4)',
-  RECRUITING: 'var(--mantine-color-blue-5)',
-  CONFIRMED:  'var(--mantine-color-blue-5)',
-  ACCEPTED:   'var(--mantine-color-brand-5)',
-  PREPARING:  'var(--mantine-color-brand-5)',
-  DELIVERING: 'var(--mantine-color-orange-5)',
-  HUB_ARRIVED:'var(--mantine-color-orange-5)',
-  PICKED_UP:  'var(--mantine-color-brand-5)',
-  DELIVERED:  'var(--mantine-color-brand-5)',
-  CANCELLED:  'var(--mantine-color-red-5)',
-  REVIEWED:   'var(--mantine-color-gray-4)',
+  PENDING:    'var(--color-text-disabled)',
+  RECRUITING: 'var(--color-status-info-text)',
+  CONFIRMED:  'var(--color-status-info-text)',
+  ACCEPTED:   'var(--color-primary)',
+  PREPARING:  'var(--color-primary)',
+  DELIVERING: 'var(--color-status-warning-text)',
+  HUB_ARRIVED:'var(--color-status-warning-text)',
+  PICKED_UP:  'var(--color-primary)',
+  DELIVERED:  'var(--color-primary)',
+  CANCELLED:  'var(--color-danger)',
+  REVIEWED:   'var(--color-text-disabled)',
 }
 
 function formatDate(iso: string) {
@@ -58,8 +58,8 @@ function formatDate(iso: string) {
 }
 
 function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
-  const colorScheme = STATUS_COLORS[order.status] ?? { bg: 'var(--mantine-color-gray-1)', text: 'var(--mantine-color-gray-6)' }
-  const accentColor = ACCENT_COLORS[order.status] ?? 'var(--mantine-color-gray-4)'
+  const colorScheme = STATUS_COLORS[order.status] ?? { bg: 'var(--color-surface-muted)', text: 'var(--color-text-secondary)' }
+  const accentColor = ACCENT_COLORS[order.status] ?? 'var(--color-text-disabled)'
   const label = STATUS_LABELS[order.status] ?? order.status
 
   return (
@@ -68,35 +68,26 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
       style={{
         display: 'block',
         width: '100%',
-        background: '#fff',
-        border: '1px solid var(--mantine-color-gray-2)',
+        background: 'var(--color-bg)',
+        border: '1px solid var(--color-border)',
         borderLeft: `4px solid ${accentColor}`,
         borderRadius: 10,
         padding: '14px 16px',
       }}
     >
       <Group justify="space-between" mb={8}>
-        <Box
-          style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: colorScheme.text,
-            background: colorScheme.bg,
-            padding: '3px 10px',
-            borderRadius: 20,
-          }}
-        >
+        <Box style={{ fontSize: 12, fontWeight: 700, color: colorScheme.text, background: colorScheme.bg, padding: '3px 10px', borderRadius: 20 }}>
           {label}
         </Box>
-        <Text size="xs" c="gray.4">{formatDate(order.createdAt)}</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{formatDate(order.createdAt)}</Text>
       </Group>
-      <Text size="sm" fw={600} c="dark" mb={4}>
+      <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }} mb={4}>
         {order.saleType === 'group' ? '[공동구매] ' : ''}
         {order.deliveryMethod === 'hub' ? '거점 픽업' : order.deliveryMethod === 'parcel' ? '택배' : '직배송'}
       </Text>
       <Group justify="space-between">
-        <Text size="xs" c="gray.5">수량 {order.quantity}개</Text>
-        <Text size="sm" fw={700} c="dark">{order.totalAmount.toLocaleString('ko-KR')}원</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>수량 {order.quantity}개</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>{order.totalAmount.toLocaleString('ko-KR')}원</Text>
       </Group>
     </UnstyledButton>
   )
@@ -114,7 +105,7 @@ export default function MyPageClient() {
   }, [status, router])
 
   if (status === 'loading') {
-    return <Box py={60} ta="center"><Text c="gray.4">로딩 중...</Text></Box>
+    return <Box py={60} ta="center"><Text style={{ color: 'var(--color-text-disabled)' }}>로딩 중...</Text></Box>
   }
 
   if (!session) return null
@@ -122,25 +113,13 @@ export default function MyPageClient() {
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
       {/* 프로필 */}
-      <Box
-        mb="xl"
-        p="lg"
-        style={{
-          background: 'var(--mantine-color-brand-0)',
-          borderRadius: 'var(--mantine-radius-md)',
-        }}
-      >
+      <Box mb="xl" p="lg" style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius-sm)' }}>
         <Group justify="space-between" align="flex-start">
           <Box>
-            <Title order={4} fw={700} c="dark" mb={4}>{session.user?.name ?? '사용자'}</Title>
-            <Text size="sm" c="gray.6">{session.user?.email}</Text>
+            <Title order={4} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }} mb={4}>{session.user?.name ?? '사용자'}</Title>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>{session.user?.email}</Text>
           </Box>
-          <Button
-            variant="default"
-            size="xs"
-            radius="sm"
-            onClick={() => signOut({ callbackUrl: '/' })}
-          >
+          <Button variant="default" size="xs" radius="sm" onClick={() => signOut({ callbackUrl: '/' })}>
             로그아웃
           </Button>
         </Group>
@@ -149,22 +128,18 @@ export default function MyPageClient() {
       {/* 주문 내역 */}
       <Box mb="xl">
         <Stack gap={4} mb="md">
-          <Title order={5} fw={700} c="dark">주문 내역</Title>
+          <Title order={5} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>주문 내역</Title>
           <Divider />
         </Stack>
-        {loading && <Text ta="center" c="gray.4" py="lg" size="sm">불러오는 중...</Text>}
-        {!loading && error && <Text c="red.7" size="sm" py="xs">주문 내역을 불러올 수 없습니다.</Text>}
+        {loading && <Text ta="center" style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }} py="lg">불러오는 중...</Text>}
+        {!loading && error && <Text style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }} py="xs">주문 내역을 불러올 수 없습니다.</Text>}
         {!loading && !error && orders.length === 0 && (
-          <Text ta="center" c="gray.4" py="xl" size="sm">주문 내역이 없습니다.</Text>
+          <Text ta="center" style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }} py="xl">주문 내역이 없습니다.</Text>
         )}
         {!loading && orders.length > 0 && (
           <Stack gap="sm">
             {orders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                onClick={() => router.push(`/mypage/orders/${order.id}`)}
-              />
+              <OrderCard key={order.id} order={order} onClick={() => router.push(`/mypage/orders/${order.id}`)} />
             ))}
           </Stack>
         )}
@@ -173,41 +148,17 @@ export default function MyPageClient() {
       {/* 메뉴 */}
       <Box mb="xl">
         <Stack gap={4} mb="md">
-          <Title order={5} fw={700} c="dark">내 정보</Title>
+          <Title order={5} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>내 정보</Title>
           <Divider />
         </Stack>
         <Stack gap="xs">
-          <UnstyledButton
-            onClick={() => router.push('/mypage/notifications')}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              width: '100%',
-              background: '#fff',
-              border: '1px solid var(--mantine-color-gray-2)',
-              borderRadius: 10,
-              padding: '14px 16px',
-            }}
-          >
-            <Text size="sm" fw={500} c="dark">알림 내역</Text>
-            <Text c="gray.4" size="md">›</Text>
+          <UnstyledButton onClick={() => router.push('/mypage/notifications')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 10, padding: '14px 16px' }}>
+            <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text)' }}>알림 내역</Text>
+            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-md)' }}>›</Text>
           </UnstyledButton>
-          <UnstyledButton
-            onClick={() => router.push('/mypage/addresses')}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              width: '100%',
-              background: '#fff',
-              border: '1px solid var(--mantine-color-gray-2)',
-              borderRadius: 10,
-              padding: '14px 16px',
-            }}
-          >
-            <Text size="sm" fw={500} c="dark">배송지 목록 · 추가 · 수정</Text>
-            <Text c="gray.4" size="md">›</Text>
+          <UnstyledButton onClick={() => router.push('/mypage/addresses')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 10, padding: '14px 16px' }}>
+            <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text)' }}>배송지 목록 · 추가 · 수정</Text>
+            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-md)' }}>›</Text>
           </UnstyledButton>
         </Stack>
       </Box>
@@ -215,7 +166,7 @@ export default function MyPageClient() {
       {/* 앱 설치 */}
       <Box>
         <Stack gap={4} mb="md">
-          <Title order={5} fw={700} c="dark">앱 설치</Title>
+          <Title order={5} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>앱 설치</Title>
           <Divider />
         </Stack>
         <A2HSButton />
