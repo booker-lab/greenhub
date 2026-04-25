@@ -49,10 +49,10 @@ export interface AdminSettlement {
 export interface InviteToken {
   token: string
   createdBy: string
-  usedAt: unknown | null
+  usedAt: string | null
   usedBy: string | null
-  expiresAt: unknown
-  createdAt: unknown
+  expiresAt: string | null
+  createdAt: string | null
 }
 
 // ── Stores ───────────────────────────────────────────────────────

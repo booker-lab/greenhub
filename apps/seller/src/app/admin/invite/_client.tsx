@@ -109,11 +109,7 @@ export default function AdminInviteClient() {
               <Box component="tbody">
                 {invites.map((inv) => {
                   const isUsed = !!inv.usedAt
-                  const expDate = inv.expiresAt && typeof (inv.expiresAt as any).toDate === 'function'
-                    ? (inv.expiresAt as any).toDate()
-                    : inv.expiresAt
-                      ? new Date(inv.expiresAt as string)
-                      : null
+                  const expDate = inv.expiresAt ? new Date(inv.expiresAt) : null
                   const isExpired = expDate ? expDate < new Date() : false
 
                   return (
