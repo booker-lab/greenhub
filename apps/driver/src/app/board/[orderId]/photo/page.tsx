@@ -104,13 +104,13 @@ export default function PhotoPage({
       }}>
         <button
           onClick={() => { stream?.getTracks().forEach((t) => t.stop()); router.back(); }}
-          style={{ color: "white", padding: 4, background: "none", border: "none", cursor: "pointer" }}
+          style={{ color: 'var(--color-bg)', padding: 4, background: "none", border: "none", cursor: "pointer" }}
         >
           <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <Text c="white" fw={600}>거점 하차 인증 사진</Text>
+        <Text style={{ color: 'var(--color-bg)', fontWeight: 'var(--fw-bold)' }}>거점 하차 인증 사진</Text>
       </header>
 
       {/* 카메라 / 미리보기 */}
@@ -120,11 +120,11 @@ export default function PhotoPage({
             position: "absolute", inset: 0,
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24,
           }}>
-            <Text c="white" size="sm">하차 물품을 촬영해주세요</Text>
-            <Button onClick={startCamera} color="white" c="dark" radius="md">
+            <Text style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }}>하차 물품을 촬영해주세요</Text>
+            <Button onClick={startCamera} color="white" style={{ color: 'var(--color-text)' }} radius="md">
               카메라 시작
             </Button>
-            {error && <Text c="red.4" size="sm" ta="center" px="xl">{error}</Text>}
+            {error && <Text style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }} ta="center" px="xl">{error}</Text>}
           </div>
         )}
 
@@ -142,8 +142,8 @@ export default function PhotoPage({
                 onClick={capture}
                 style={{
                   width: 64, height: 64, borderRadius: "50%",
-                  backgroundColor: "white", border: "4px solid var(--green-primary)",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)", cursor: "pointer",
+                  backgroundColor: 'var(--color-bg)', border: '4px solid var(--color-primary)',
+                  cursor: "pointer",
                 }}
               />
             </div>
@@ -198,8 +198,8 @@ export default function PhotoPage({
       {error && captured && (
         <div style={{
           position: "absolute", top: 80, left: 16, right: 16,
-          backgroundColor: "#ef4444", color: "white",
-          fontSize: 14, textAlign: "center", padding: "8px 16px", borderRadius: 12,
+          backgroundColor: 'var(--color-danger)', color: 'var(--color-bg)',
+          fontSize: 'var(--font-size-sm)', textAlign: "center", padding: "8px 16px", borderRadius: 12,
         }}>
           {error}
         </div>

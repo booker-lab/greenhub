@@ -90,13 +90,13 @@ export default function MapPage() {
           position: "sticky",
           top: 0,
           zIndex: 10,
-          backgroundColor: "var(--mantine-color-white)",
-          borderBottom: "1px solid var(--mantine-color-gray-2)",
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: 'var(--border)',
           padding: "16px",
         }}
       >
         <Title order={4}>오늘 배송 경로</Title>
-        <Text size="xs" c="dimmed" mt={2}>총 {orders.length}건</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mt={2}>총 {orders.length}건</Text>
       </Box>
 
       {/* 지도 플레이스홀더 */}
@@ -106,19 +106,19 @@ export default function MapPage() {
         h={192}
         style={{
           borderRadius: 16,
-          backgroundColor: "var(--mantine-color-gray-1)",
-          border: "1px solid var(--mantine-color-gray-3)",
+          backgroundColor: 'var(--color-surface-muted)',
+          border: 'var(--border)',
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
         <Stack align="center" gap={4}>
-          <svg width="40" height="40" fill="none" stroke="var(--mantine-color-gray-5)" viewBox="0 0 24 24">
+          <svg width="40" height="40" fill="none" stroke="var(--color-text-disabled)" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
           </svg>
-          <Text size="xs" c="dimmed">카카오맵 SDK 연동 후 활성화</Text>
-          <Text size="xs" c="dimmed">NEXT_PUBLIC_KAKAO_MAP_KEY 설정 필요</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>카카오맵 SDK 연동 후 활성화</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>NEXT_PUBLIC_KAKAO_MAP_KEY 설정 필요</Text>
         </Stack>
       </Box>
 
@@ -126,7 +126,7 @@ export default function MapPage() {
       <Box style={{ flex: 1, padding: "16px" }}>
         {sorted.length === 0 ? (
           <Box style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 128 }}>
-            <Text size="sm" c="dimmed">오늘 배송 주문이 없습니다</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>오늘 배송 주문이 없습니다</Text>
           </Box>
         ) : (
           <Stack gap="xs">
@@ -142,9 +142,9 @@ export default function MapPage() {
                     display: "flex",
                     alignItems: "center",
                     gap: 12,
-                    backgroundColor: "var(--mantine-color-white)",
+                    backgroundColor: 'var(--color-bg)',
                     borderRadius: 12,
-                    border: "1px solid var(--mantine-color-gray-2)",
+                    border: 'var(--border)',
                     padding: "12px 16px",
                   }}
                 >
@@ -154,10 +154,10 @@ export default function MapPage() {
                       height: 24,
                       flexShrink: 0,
                       borderRadius: "50%",
-                      backgroundColor: "var(--green-primary)",
-                      color: "white",
-                      fontSize: 11,
-                      fontWeight: 700,
+                      backgroundColor: 'var(--color-primary)',
+                      color: 'var(--color-bg)',
+                      fontSize: 'var(--font-size-sm)',
+                      fontWeight: 'var(--fw-bold)',
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -166,8 +166,8 @@ export default function MapPage() {
                     {idx + 1}
                   </Box>
                   <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Text size="sm" fw={500} truncate="end">{order.buyerName ?? "소비자"}</Text>
-                    <Text size="xs" c="dimmed" truncate="end">{addr}</Text>
+                    <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} truncate="end">{order.buyerName ?? "소비자"}</Text>
+                    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} truncate="end">{addr}</Text>
                   </Box>
                   <Badge
                     size="xs"

@@ -76,14 +76,14 @@ export default function BoardClient() {
           position: "sticky",
           top: 0,
           zIndex: 10,
-          backgroundColor: "var(--mantine-color-white)",
-          borderBottom: "1px solid var(--mantine-color-gray-2)",
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: 'var(--border)',
           padding: "16px 16px 0",
         }}
       >
         <Box mb="sm">
           <Title order={4}>오늘 배송</Title>
-          <Text size="xs" c="dimmed">{today}</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{today}</Text>
         </Box>
 
         {/* 탭 */}
@@ -99,10 +99,10 @@ export default function BoardClient() {
                 flex: 1,
                 padding: "12px 0",
                 textAlign: "center",
-                fontSize: 14,
-                fontWeight: 600,
-                borderBottom: `2px solid ${tab === key ? "var(--green-primary)" : "transparent"}`,
-                color: tab === key ? "var(--green-primary)" : "var(--mantine-color-gray-5)",
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 'var(--fw-bold)',
+                borderBottom: `2px solid ${tab === key ? "var(--color-primary)" : "transparent"}`,
+                color: tab === key ? "var(--color-primary)" : "var(--color-text-disabled)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -128,11 +128,11 @@ export default function BoardClient() {
       <Box component="main" style={{ flex: 1, padding: "16px" }}>
         {orders.length === 0 ? (
           <Stack align="center" justify="center" h={192} gap="xs">
-            <Text size="sm" c="dimmed">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
               {tab === "preparing" ? "오늘 수거할 주문이 없습니다" : "현재 배송 중인 주문이 없습니다"}
             </Text>
             {tab === "preparing" && (
-              <Anchor size="xs" c="brand.6" onClick={() => router.push("/map")}>
+              <Anchor style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }} onClick={() => router.push("/map")}>
                 지도에서 경로 보기
               </Anchor>
             )}

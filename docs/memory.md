@@ -7,19 +7,24 @@
 
 ---
 
-## ✅ 셀러앱 디자인 시스템 리팩토링 — 전체 완료
+## ✅ Consumer + Seller 디자인 시스템 리팩토링 완료
 
-**플랜 전문**: `docs/specs/seller-design-system-refactor-plan.md`
-**완료 일자**: 2026-04-25 · tsc --noEmit 0 errors 검증 완료
+| 앱 | 플랜 | 완료일 |
+|----|------|--------|
+| Consumer (T0~T13) | `docs/specs/design-system.md` | 2026-04-25 |
+| Seller (ST1~ST17) | `docs/specs/seller-design-system-refactor-plan.md` | 2026-04-25 |
 
-| 단계 | 상태 |
-|------|------|
-| 1단계 ST1~5 (공통 기반) | ✅ |
-| 2단계 ST6~9 (상품 관리) | ✅ |
-| 3단계 ST10~13 (주문·정산·설정) | ✅ |
-| 4단계 ST14~17 (허브·어드민·검증) | ✅ |
+tsc --noEmit 양쪽 0 errors 검증 완료.
 
-**다음 작업**: 미정 (신규 기능 요청 대기)
+---
+
+## ✅ 드라이버앱 디자인 시스템 리팩토링 완료
+
+| 앱 | 플랜 | 완료일 |
+|----|------|--------|
+| Driver (DT1~DT11) | `docs/specs/driver-design-system-refactor-plan.md` | 2026-04-25 |
+
+tsc --noEmit 0 errors, 구 변수/hex 잔존 0건 검증 완료.
 
 ---
 
