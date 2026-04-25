@@ -14,6 +14,7 @@
     "@mantine/core": "^9.0.0",
     "@mantine/hooks": "^9.0.0",
     "firebase": "^12.11.0",
+    "lucide-react": "^1.11.0",
     "next": "16.2.1",
     "next-auth": "5.0.0-beta.30",
     "react": "19.2.4",

@@ -45,7 +45,7 @@ export default function AdminSettlementsClient() {
       <Group justify="space-between" mb="md">
         <Title order={4}>
           정산 목록{' '}
-          <Text component="span" fz="sm" fw={400} c="dimmed">({settlements.length})</Text>
+          <Text component="span" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>({settlements.length})</Text>
         </Title>
       </Group>
 
@@ -64,7 +64,7 @@ export default function AdminSettlementsClient() {
           value={fromFilter}
           onChange={(e) => setFromFilter(e.target.value)}
           style={{
-            border: '1px solid var(--mantine-color-gray-3)',
+            border: '1px solid var(--color-border)',
             borderRadius: 6,
             padding: '8px 12px',
             fontSize: 14,
@@ -75,7 +75,7 @@ export default function AdminSettlementsClient() {
           value={toFilter}
           onChange={(e) => setToFilter(e.target.value)}
           style={{
-            border: '1px solid var(--mantine-color-gray-3)',
+            border: '1px solid var(--color-border)',
             borderRadius: 6,
             padding: '8px 12px',
             fontSize: 14,
@@ -86,48 +86,48 @@ export default function AdminSettlementsClient() {
       {/* 요약 카드 */}
       {settlements.length > 0 && (
         <SimpleGrid cols={2} mb="md">
-          <Paper radius="lg" style={{ border: '1px solid var(--mantine-color-gray-1)' }} p="md">
-            <Text size="xs" c="dimmed" mb={4}>플랫폼 수수료 합계</Text>
-            <Text fz="lg" fw={700}>₩{totalFee.toLocaleString()}</Text>
+          <Paper radius="lg" style={{ border: '1px solid var(--color-border)' }} p="md">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={4}>플랫폼 수수료 합계</Text>
+            <Text style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--fw-bold)' }}>₩{totalFee.toLocaleString()}</Text>
           </Paper>
-          <Paper radius="lg" style={{ border: '1px solid var(--mantine-color-gray-1)' }} p="md">
-            <Text size="xs" c="dimmed" mb={4}>판매자 지급 합계</Text>
-            <Text fz="lg" fw={700} c="green.7">₩{totalNet.toLocaleString()}</Text>
+          <Paper radius="lg" style={{ border: '1px solid var(--color-border)' }} p="md">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={4}>판매자 지급 합계</Text>
+            <Text style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>₩{totalNet.toLocaleString()}</Text>
           </Paper>
         </SimpleGrid>
       )}
 
       {loading ? (
-        <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
+        <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>불러오는 중...</Text>
       ) : (
-        <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--mantine-color-gray-1)', overflow: 'hidden' }}>
+        <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}>
           {settlements.length === 0 ? (
-            <Text ta="center" py={64} c="dimmed">정산 내역이 없습니다.</Text>
+            <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>정산 내역이 없습니다.</Text>
           ) : (
             <Box component="table" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
-              <Box component="thead" style={{ backgroundColor: 'var(--mantine-color-gray-0)', borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
+              <Box component="thead" style={{ backgroundColor: 'var(--color-surface-muted)', borderBottom: '1px solid var(--color-border)' }}>
                 <tr>
-                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>스토어</Box>
-                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>거래금액</Box>
-                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>수수료</Box>
-                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>지급액</Box>
-                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상태</Box>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>스토어</Box>
+                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>거래금액</Box>
+                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>수수료</Box>
+                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>지급액</Box>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>상태</Box>
                   <Box component="th" style={{ padding: '12px 16px' }} />
                 </tr>
               </Box>
               <Box component="tbody">
                 {settlements.map((s) => (
-                  <Box component="tr" key={s.id} style={{ borderTop: '1px solid var(--mantine-color-gray-0)' }}>
+                  <Box component="tr" key={s.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                     <Box component="td" style={{ padding: '12px 16px' }}>
-                      <Text fz={12} c="dimmed" ff="monospace">{s.storeId.slice(0, 8)}…</Text>
+                      <Text style={{ fontSize: 12, color: 'var(--color-text-disabled)' }} ff="monospace">{s.storeId.slice(0, 8)}…</Text>
                     </Box>
-                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--mantine-color-gray-7)' }}>
+                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--color-text-secondary)' }}>
                       ₩{s.totalAmount.toLocaleString()}
                     </Box>
-                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--mantine-color-red-5)' }}>
+                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--color-danger)' }}>
                       ₩{s.platformFee.toLocaleString()}
                     </Box>
-                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 500, color: 'var(--mantine-color-green-7)' }}>
+                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 500, color: 'var(--color-primary)' }}>
                       ₩{s.netAmount.toLocaleString()}
                     </Box>
                     <Box component="td" style={{ padding: '12px 16px' }}>

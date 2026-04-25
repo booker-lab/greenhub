@@ -88,9 +88,9 @@ export default function EditProductPage() {
 
   if (notFound) {
     return (
-      <Box style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <Text size="sm" c="dimmed">상품을 찾을 수 없습니다</Text>
-        <UnstyledButton onClick={() => router.back()} style={{ color: 'var(--green-primary)', textDecoration: 'underline', fontSize: 14 }}>
+      <Box style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>상품을 찾을 수 없습니다</Text>
+        <UnstyledButton onClick={() => router.back()} style={{ color: 'var(--color-primary)', textDecoration: 'underline', fontSize: 'var(--font-size-sm)' }}>
           돌아가기
         </UnstyledButton>
       </Box>
@@ -99,8 +99,8 @@ export default function EditProductPage() {
 
   if (!initialData) {
     return (
-      <Box style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Loader size="sm" color="var(--green-primary)" />
+      <Box style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader size="sm" color="var(--color-primary)" />
       </Box>
     )
   }

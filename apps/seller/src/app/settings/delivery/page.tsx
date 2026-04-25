@@ -86,8 +86,8 @@ export default function DeliverySettingsPage() {
 
   if (loading) {
     return (
-      <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Text size="sm" c="dimmed">불러오는 중...</Text>
+      <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>불러오는 중...</Text>
       </Box>
     )
   }
@@ -95,7 +95,7 @@ export default function DeliverySettingsPage() {
   return (
     <Box
       component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', padding: '32px 16px' }}
+      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)', padding: '32px 16px' }}
     >
       <Container size="xs">
         <Group gap="sm" mb="lg">
@@ -104,13 +104,13 @@ export default function DeliverySettingsPage() {
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </ActionIcon>
-          <Title order={2} fz="xl">배송비 설정</Title>
+          <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>배송비 설정</Title>
         </Group>
 
         <Stack gap="md">
           {/* 배송 방법별 기본 배송비 */}
           <Paper radius="lg" shadow="sm" p="lg">
-            <Text size="xs" fw={600} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }} mb="md">
+            <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)', textTransform: 'uppercase', letterSpacing: '0.05em' }} mb="md">
               기본 배송비
             </Text>
             <Stack gap="sm">
@@ -120,7 +120,7 @@ export default function DeliverySettingsPage() {
                 { label: '택배', field: 'parcelFee' },
               ] as { label: string; field: keyof DeliveryConfig }[]).map(({ label, field }) => (
                 <Group key={field} justify="space-between" gap="md">
-                  <Text size="sm" c="gray.7" w={80}>{label}</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} w={80}>{label}</Text>
                   <Group gap="xs" style={{ flex: 1 }}>
                     <input
                       type="number"
@@ -131,13 +131,13 @@ export default function DeliverySettingsPage() {
                       style={{
                         flex: 1,
                         padding: '8px 12px',
-                        border: '1px solid var(--mantine-color-gray-3)',
+                        border: '1px solid var(--color-border)',
                         borderRadius: 12,
                         fontSize: 14,
                         textAlign: 'right',
                       }}
                     />
-                    <Text size="sm" c="dimmed" style={{ flexShrink: 0 }}>원</Text>
+                    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)', flexShrink: 0 }}>원</Text>
                   </Group>
                 </Group>
               ))}
@@ -146,7 +146,7 @@ export default function DeliverySettingsPage() {
 
           {/* 무료 배송 기준 */}
           <Paper radius="lg" shadow="sm" p="lg">
-            <Text size="xs" fw={600} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }} mb="md">
+            <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)', textTransform: 'uppercase', letterSpacing: '0.05em' }} mb="md">
               무료 배송 기준금액
             </Text>
             <Stack gap="sm">
@@ -156,7 +156,7 @@ export default function DeliverySettingsPage() {
                 { label: '택배', field: 'freeThresholdParcel' },
               ] as { label: string; field: keyof DeliveryConfig }[]).map(({ label, field }) => (
                 <Group key={field} justify="space-between" gap="md">
-                  <Text size="sm" c="gray.7" w={80}>{label}</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} w={80}>{label}</Text>
                   <Group gap="xs" style={{ flex: 1 }}>
                     <input
                       type="number"
@@ -167,13 +167,13 @@ export default function DeliverySettingsPage() {
                       style={{
                         flex: 1,
                         padding: '8px 12px',
-                        border: '1px solid var(--mantine-color-gray-3)',
+                        border: '1px solid var(--color-border)',
                         borderRadius: 12,
                         fontSize: 14,
                         textAlign: 'right',
                       }}
                     />
-                    <Text size="sm" c="dimmed" style={{ flexShrink: 0 }}>원</Text>
+                    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)', flexShrink: 0 }}>원</Text>
                   </Group>
                 </Group>
               ))}
@@ -184,18 +184,18 @@ export default function DeliverySettingsPage() {
           <Paper radius="lg" shadow="sm" p="lg">
             <Group justify="space-between">
               <Stack gap={2}>
-                <Text size="sm" fw={500} c="gray.8">기상 제한 배송</Text>
-                <Text size="xs" c="dimmed">악천후 시 배송 제한 활성화</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text)' }}>기상 제한 배송</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>악천후 시 배송 제한 활성화</Text>
               </Stack>
               <Switch
                 checked={config.weatherRestrictionActive}
                 onChange={(e) => setConfig((prev) => ({ ...prev, weatherRestrictionActive: e.currentTarget.checked }))}
-                color="var(--green-primary)"
+                color="brand"
               />
             </Group>
           </Paper>
 
-          {error && <Text size="sm" c="red" ta="center">{error}</Text>}
+          {error && <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} ta="center">{error}</Text>}
 
           <Button
             onClick={handleSave}
@@ -203,7 +203,7 @@ export default function DeliverySettingsPage() {
             fullWidth
             size="md"
             radius="xl"
-            style={{ backgroundColor: saved ? '#3B82F6' : 'var(--green-primary)' }}
+            style={{ backgroundColor: saved ? 'var(--color-status-info-text)' : 'var(--color-primary)' }}
           >
             {saving ? '저장 중...' : saved ? '저장 완료!' : '저장'}
           </Button>

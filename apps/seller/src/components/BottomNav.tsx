@@ -27,7 +27,7 @@ export default function BottomNav() {
         left: 0,
         right: 0,
         zIndex: 50,
-        backgroundColor: 'var(--mantine-color-white)',
+        backgroundColor: 'var(--color-bg)',
         boxShadow: '0 -2px 12px rgba(0,0,0,0.08)',
         height: 'calc(64px + env(safe-area-inset-bottom))',
         paddingBottom: 'env(safe-area-inset-bottom)',
@@ -49,7 +49,11 @@ export default function BottomNav() {
           >
             <Stack align="center" justify="center" gap={2} h="100%">
               <Icon active={isActive} />
-              <Text size="xs" fw={isActive ? 600 : 500} c={isActive ? 'var(--green-primary)' : 'gray.4'}>
+              <Text style={{
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 'var(--fw-medium)',
+                color: isActive ? 'var(--color-primary)' : 'var(--color-text-disabled)',
+              }}>
                 {tab.label}
               </Text>
             </Stack>
@@ -64,7 +68,7 @@ export default function BottomNav() {
 // ─── Icons (inline SVG) ──────────────────────────────────────────
 
 function OrderIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--green-primary)' : '#9CA3AF'
+  const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)'
   const sw = active ? 2.2 : 2
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
@@ -75,7 +79,7 @@ function OrderIcon({ active }: { active: boolean }) {
 }
 
 function ProductIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--green-primary)' : '#9CA3AF'
+  const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)'
   const sw = active ? 2.2 : 2
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
@@ -86,7 +90,7 @@ function ProductIcon({ active }: { active: boolean }) {
 }
 
 function SettlementIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--green-primary)' : '#9CA3AF'
+  const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)'
   const sw = active ? 2.2 : 2
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
@@ -97,7 +101,7 @@ function SettlementIcon({ active }: { active: boolean }) {
 }
 
 function HubIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--green-primary)' : '#9CA3AF'
+  const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)'
   const sw = active ? 2.2 : 2
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
@@ -108,7 +112,7 @@ function HubIcon({ active }: { active: boolean }) {
 }
 
 function SettingsIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--green-primary)' : '#9CA3AF'
+  const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)'
   const sw = active ? 2.2 : 2
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">

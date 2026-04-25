@@ -17,14 +17,16 @@ export function Row({
 }) {
   return (
     <Group justify="space-between" align="flex-start" gap="xs">
-      <Text size="sm" c="dimmed" style={{ flexShrink: 0 }}>{label}</Text>
+      <Text style={{ flexShrink: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{label}</Text>
       <Text
-        size="sm"
         ta="right"
-        style={{ wordBreak: 'break-all' }}
-        fw={bold ? 700 : mono ? 400 : undefined}
-        c={bold ? 'gray.9' : highlight ? 'var(--green-primary)' : mono ? 'gray.6' : 'gray.7'}
         ff={mono ? 'monospace' : undefined}
+        style={{
+          wordBreak: 'break-all',
+          fontSize: 'var(--font-size-sm)',
+          fontWeight: bold ? 'var(--fw-bold)' : undefined,
+          color: bold ? 'var(--color-text)' : highlight ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+        }}
       >
         {value}
       </Text>

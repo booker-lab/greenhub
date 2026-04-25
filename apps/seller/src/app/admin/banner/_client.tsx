@@ -52,7 +52,7 @@ export default function AdminBannerClient() {
   }
 
   if (loading) {
-    return <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
+    return <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>불러오는 중...</Text>
   }
 
   return (
@@ -68,8 +68,8 @@ export default function AdminBannerClient() {
 
       <Stack gap="md">
         {/* 이미지 */}
-        <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--mantine-color-gray-1)' }}>
-          <Text size="sm" fw={600} mb="sm">배경 이미지</Text>
+        <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--color-border)' }}>
+          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">배경 이미지</Text>
           {form.imageUrl && (
             <Box mb="sm" style={{ borderRadius: 12, overflow: 'hidden', maxHeight: 180 }}>
               <img src={form.imageUrl} alt="배너 미리보기" style={{ width: '100%', objectFit: 'cover' }} />
@@ -83,10 +83,10 @@ export default function AdminBannerClient() {
               gap: 8,
               padding: '8px 16px',
               borderRadius: 8,
-              border: '1px solid var(--mantine-color-gray-3)',
+              border: '1px solid var(--color-border)',
               cursor: uploading ? 'not-allowed' : 'pointer',
               fontSize: 14,
-              color: 'var(--mantine-color-gray-7)',
+              color: 'var(--color-text-secondary)',
             }}
           >
             {uploading ? <Loader size="xs" /> : '이미지 업로드'}
@@ -95,8 +95,8 @@ export default function AdminBannerClient() {
         </Paper>
 
         {/* 텍스트 */}
-        <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--mantine-color-gray-1)' }}>
-          <Text size="sm" fw={600} mb="sm">텍스트</Text>
+        <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--color-border)' }}>
+          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">텍스트</Text>
           <Stack gap="sm">
             <TextInput
               label="태그 문구"
@@ -124,8 +124,8 @@ export default function AdminBannerClient() {
         </Paper>
 
         {/* CTA 버튼 */}
-        <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--mantine-color-gray-1)' }}>
-          <Text size="sm" fw={600} mb="sm">버튼</Text>
+        <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--color-border)' }}>
+          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">버튼</Text>
           <Stack gap="sm">
             <Group grow>
               <TextInput
@@ -163,7 +163,7 @@ export default function AdminBannerClient() {
           disabled={saving}
           size="md"
           radius="xl"
-          style={{ backgroundColor: saved ? 'var(--mantine-color-green-6)' : 'var(--green-primary)' }}
+          style={{ backgroundColor: saved ? 'var(--color-primary-light)' : 'var(--color-primary)' }}
         >
           {saving ? '저장 중...' : saved ? '저장 완료!' : '저장하기'}
         </Button>

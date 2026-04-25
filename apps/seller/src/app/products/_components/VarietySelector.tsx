@@ -37,7 +37,7 @@ export default function VarietySelector({ category, value, onChange, onVarietyCh
   }, [category, token])
 
   if (varieties.length === 0) {
-    return <Text size="sm" c="dimmed">등록된 품종이 없습니다</Text>
+    return <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>등록된 품종이 없습니다</Text>
   }
 
   const groups = varieties.reduce<Record<string, Variety[]>>((acc, v) => {

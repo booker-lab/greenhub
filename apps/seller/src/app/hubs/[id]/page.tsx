@@ -16,6 +16,7 @@ import {
   Title,
   UnstyledButton,
 } from '@mantine/core'
+import { ChevronLeft } from 'lucide-react'
 
 interface Hub {
   id: string
@@ -94,12 +95,12 @@ export default function HubDetailPage() {
   const orderId = (o: HubOrder) => o.id ?? o.orderId ?? ''
 
   return (
-    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}>
       <Box
         component="header"
         style={{
-          backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: '1px solid var(--color-border)',
           padding: '16px',
           position: 'sticky',
           top: 0,
@@ -109,9 +110,7 @@ export default function HubDetailPage() {
         <Container size="sm">
           <Group gap="sm">
             <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
+              <ChevronLeft size={20} />
             </ActionIcon>
             <Title order={3}>
               {hub ? hub.name : '거점 상세'}
@@ -122,10 +121,10 @@ export default function HubDetailPage() {
 
       <Container size="sm" px="md" py="md">
         <Stack gap="md">
-          {error && <Text size="sm" c="red">{error}</Text>}
+          {error && <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{error}</Text>}
 
           {loading ? (
-            <Text size="sm" c="dimmed" ta="center" py={80}>불러오는 중...</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} ta="center" py={80}>불러오는 중...</Text>
           ) : hub ? (
             <>
               {/* 거점 정보 카드 */}
@@ -140,12 +139,12 @@ export default function HubDetailPage() {
                   >
                     {hub.isActive ? '운영 중' : '비활성'}
                   </Badge>
-                  <Text size="sm" c="gray.7">{hub.address}</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>{hub.address}</Text>
                   {hub.addressDetail && (
-                    <Text size="xs" c="dimmed">{hub.addressDetail}</Text>
+                    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{hub.addressDetail}</Text>
                   )}
                   {hub.operatingHours && (
-                    <Text size="xs" c="dimmed">운영시간: {hub.operatingHours}</Text>
+                    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>운영시간: {hub.operatingHours}</Text>
                   )}
                 </Stack>
               </Paper>
@@ -153,18 +152,18 @@ export default function HubDetailPage() {
               {/* 픽업 대기 주문 목록 */}
               <Box>
                 <Group justify="space-between" mb="xs">
-                  <Text fw={600} size="sm" c="gray.7">픽업 대기 주문</Text>
-                  <Text size="xs" c="dimmed">{orders.length}건</Text>
+                  <Text style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>픽업 대기 주문</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{orders.length}건</Text>
                 </Group>
 
                 {orders.length === 0 ? (
                   <Paper radius="lg" px="md" py={40} shadow="xs">
-                    <Stack align="center" c="dimmed">
+                    <Stack align="center" style={{ color: 'var(--color-text-disabled)' }}>
                       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                         <path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />
                         <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
                       </svg>
-                      <Text size="sm">픽업 대기 주문이 없습니다</Text>
+                      <Text style={{ fontSize: 'var(--font-size-sm)' }}>픽업 대기 주문이 없습니다</Text>
                     </Stack>
                   </Paper>
                 ) : (
@@ -186,19 +185,19 @@ export default function HubDetailPage() {
                               <Badge color="yellow" variant="light" radius="xl" size="xs">
                                 픽업 대기
                               </Badge>
-                              <Text size="xs" c="dimmed">{formatTime(order.createdAt)}</Text>
+                              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{formatTime(order.createdAt)}</Text>
                             </Group>
                             {order.items && order.items.length > 0 && (
-                              <Text size="sm" fw={500} truncate>
+                              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} truncate>
                                 {order.items[0].name}
                                 {order.items.length > 1 && ` 외 ${order.items.length - 1}건`}
                               </Text>
                             )}
-                            <Text size="sm" c="dimmed" mt={2}>
+                            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mt={2}>
                               {order.totalAmount?.toLocaleString()}원
                             </Text>
                           </Box>
-                          <Box c="gray.3">
+                          <Box style={{ color: 'var(--color-text-disabled)' }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M9 18l6-6-6-6" />
                             </svg>

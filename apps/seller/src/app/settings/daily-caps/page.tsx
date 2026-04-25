@@ -131,7 +131,7 @@ export default function DailyCapsPage() {
   return (
     <Box
       component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', padding: '32px 16px' }}
+      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)', padding: '32px 16px' }}
     >
       <Container size="xs">
         <Group gap="sm" mb="lg">
@@ -140,10 +140,10 @@ export default function DailyCapsPage() {
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </ActionIcon>
-          <Title order={2} fz="xl">배송 슬롯 설정</Title>
+          <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>배송 슬롯 설정</Title>
         </Group>
 
-        <Text size="xs" c="dimmed" mb="md" style={{ lineHeight: 1.6 }}>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)', lineHeight: 1.6 }} mb="md">
           날짜를 탭하면 해당 날짜의 최대 배송 슬롯(총 수량)을 설정할 수 있습니다.
         </Text>
 
@@ -155,7 +155,7 @@ export default function DailyCapsPage() {
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </ActionIcon>
-            <Text fw={600}>{monthLabel}</Text>
+            <Text style={{ fontWeight: 'var(--fw-medium)' }}>{monthLabel}</Text>
             <ActionIcon variant="subtle" color="gray" onClick={nextMonth}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M9 18l6-6-6-6" />
@@ -166,14 +166,14 @@ export default function DailyCapsPage() {
           {/* 요일 헤더 */}
           <SimpleGrid cols={7} mb={4}>
             {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
-              <Text key={d} ta="center" size="xs" c="dimmed" py={4}>{d}</Text>
+              <Text key={d} ta="center" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} py={4}>{d}</Text>
             ))}
           </SimpleGrid>
 
           {/* 날짜 그리드 */}
           {loading ? (
             <Box py={32} style={{ textAlign: 'center' }}>
-              <Text size="sm" c="dimmed">불러오는 중...</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>불러오는 중...</Text>
             </Box>
           ) : (
             calendar.map((week, wi) => (
@@ -196,26 +196,25 @@ export default function DailyCapsPage() {
                         borderRadius: 12,
                         opacity: isPast ? 0.4 : 1,
                         cursor: isPast ? 'not-allowed' : 'pointer',
-                        backgroundColor: isToday ? 'var(--green-bg)' : undefined,
+                        backgroundColor: isToday ? 'var(--color-primary-surface)' : undefined,
                       }}
                     >
-                      <Text
-                        size="xs"
-                        fw={500}
-                        c={isToday ? 'var(--green-primary)' : 'gray.7'}
-                      >
+                      <Text style={{
+                        fontSize: 'var(--font-size-sm)',
+                        fontWeight: 'var(--fw-medium)',
+                        color: isToday ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                      }}>
                         {parseInt(date.split('-')[2], 10)}
                       </Text>
-                      <Text
-                        size="xs"
-                        mt={2}
-                        fw={cap ? 600 : undefined}
-                        c={cap ? 'blue' : 'gray.3'}
-                      >
+                      <Text mt={2} style={{
+                        fontSize: 'var(--font-size-sm)',
+                        fontWeight: cap ? 'var(--fw-medium)' : undefined,
+                        color: cap ? 'var(--color-status-info-text)' : 'var(--color-text-disabled)',
+                      }}>
                         {cap ? cap.totalCap : '—'}
                       </Text>
                       {cap && (cap.usedSlots ?? 0) > 0 && (
-                        <Text fz={10} c="dimmed">{cap.usedSlots}↑</Text>
+                        <Text style={{ fontSize: 10, color: 'var(--color-text-disabled)' }}>{cap.usedSlots}↑</Text>
                       )}
                     </UnstyledButton>
                   )
@@ -228,7 +227,7 @@ export default function DailyCapsPage() {
         {/* 편집 패널 */}
         {editing && (
           <Paper radius="lg" shadow="sm" p="lg">
-            <Text size="sm" fw={500} c="gray.8" mb="sm">
+            <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text)' }} mb="sm">
               {editing} 슬롯 설정
             </Text>
             <Group align="center" gap="sm">
@@ -240,16 +239,16 @@ export default function DailyCapsPage() {
                 style={{
                   flex: 1,
                   padding: '12px 16px',
-                  border: '1px solid var(--mantine-color-gray-3)',
+                  border: '1px solid var(--color-border)',
                   borderRadius: 12,
                   fontSize: 14,
                   textAlign: 'right',
                 }}
                 autoFocus
               />
-              <Text size="sm" c="dimmed">개</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>개</Text>
             </Group>
-            <Text size="xs" c="dimmed" mt={6}>0 = 해당일 배송 불가</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mt={6}>0 = 해당일 배송 불가</Text>
             <Group gap="xs" mt="md">
               <Button
                 onClick={() => setEditing(null)}
@@ -267,7 +266,7 @@ export default function DailyCapsPage() {
                 flex={1}
                 size="sm"
                 radius="xl"
-                style={{ backgroundColor: 'var(--green-primary)' }}
+                style={{ backgroundColor: 'var(--color-primary)' }}
               >
                 {saving ? '저장 중...' : '저장'}
               </Button>

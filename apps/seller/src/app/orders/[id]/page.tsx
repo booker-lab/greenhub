@@ -13,6 +13,7 @@ import {
   ActionIcon, Badge, Box, Button, Container, Group,
   Loader, Modal, Paper, Stack, Text, Textarea, Title, UnstyledButton,
 } from '@mantine/core'
+import { ChevronLeft } from 'lucide-react'
 import { Row, STATUS_LABEL_MAP, STATUS_COLOR_MAP, DELIVERY_LABEL_MAP } from './_components/OrderRow'
 
 function toDate(v: unknown): Date {
@@ -126,17 +127,17 @@ export default function OrderDetailPage() {
 
   if (loading) {
     return (
-      <Box style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Loader size="sm" color="var(--green-primary)" />
+      <Box style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader size="sm" color="brand" />
       </Box>
     )
   }
 
   if (!order) {
     return (
-      <Box style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <Text size="sm" c="dimmed">주문을 찾을 수 없습니다</Text>
-        <UnstyledButton onClick={() => router.back()} style={{ color: 'var(--green-primary)', textDecoration: 'underline', fontSize: 14 }}>
+      <Box style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>주문을 찾을 수 없습니다</Text>
+        <UnstyledButton onClick={() => router.back()} style={{ color: 'var(--color-primary)', textDecoration: 'underline', fontSize: 14 }}>
           돌아가기
         </UnstyledButton>
       </Box>
@@ -151,14 +152,12 @@ export default function OrderDetailPage() {
     : groupConfig?.groupDeliveryDate?.slice(0, 10) ?? null
 
   return (
-    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', paddingBottom: 96 }}>
-      <Box component="header" style={{ backgroundColor: 'var(--mantine-color-white)', borderBottom: '1px solid var(--mantine-color-gray-1)', padding: '16px', position: 'sticky', top: 0, zIndex: 10 }}>
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)', paddingBottom: 96 }}>
+      <Box component="header" style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', padding: '16px', position: 'sticky', top: 0, zIndex: 10 }}>
         <Container size="sm">
           <Group gap="sm">
             <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 12H5M12 5l-7 7 7 7" />
-              </svg>
+              <ChevronLeft size={20} />
             </ActionIcon>
             <Title order={3}>주문 상세</Title>
           </Group>
@@ -172,24 +171,28 @@ export default function OrderDetailPage() {
               <Badge color={STATUS_COLOR_MAP[order.status]} variant="light" radius="xl" size="md">
                 {STATUS_LABEL_MAP[order.status]}
               </Badge>
-              <Text size="xs" c={order.status === 'RECRUITING' ? 'orange.6' : 'dimmed'} fw={order.status === 'RECRUITING' ? 600 : 400}>
+              <Text style={{
+                fontSize: 'var(--font-size-sm)',
+                color: order.status === 'RECRUITING' ? 'var(--color-status-warning-text)' : 'var(--color-text-disabled)',
+                fontWeight: order.status === 'RECRUITING' ? 'var(--fw-medium)' : undefined,
+              }}>
                 {order.status === 'RECRUITING' && groupConfig
                   ? formatDeadlineCountdown(groupConfig.recruitDeadline)
                   : toDate(order.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </Text>
             </Group>
-            <Text fw={700}>주문 #{order.id.slice(-8).toUpperCase()}</Text>
-            <Text size="xs" c="dimmed" mt={2}>{order.saleType === 'group' ? '공동구매' : '일반 판매'}</Text>
+            <Text style={{ fontWeight: 'var(--fw-bold)' }}>주문 #{order.id.slice(-8).toUpperCase()}</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mt={2}>{order.saleType === 'group' ? '공동구매' : '일반 판매'}</Text>
           </Paper>
 
           <Paper radius="lg" shadow="xs" p="md">
-            <Text fw={600} size="sm" c="gray.7" mb="xs">상품 정보</Text>
+            <Text style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} mb="xs">상품 정보</Text>
             <Stack gap={6}>
               <Row label="상품 ID" value={order.productId} mono />
               <Row label="수량" value={`${order.quantity}개`} />
               <Row label="상품 금액" value={`₩${(order.totalAmount - order.deliveryFee).toLocaleString()}`} />
               <Row label="배송비" value={`₩${order.deliveryFee.toLocaleString()}`} />
-              <Box style={{ borderTop: '1px solid var(--mantine-color-gray-1)', paddingTop: 8, marginTop: 4 }}>
+              <Box style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginTop: 4 }}>
                 <Row label="결제 금액" value={`₩${order.totalAmount.toLocaleString()}`} bold />
               </Box>
             </Stack>
@@ -197,7 +200,7 @@ export default function OrderDetailPage() {
 
           {order.saleType === 'group' && groupConfig && (
             <Paper radius="lg" shadow="xs" p="md">
-              <Text fw={600} size="sm" c="gray.7" mb="xs">공동구매 현황</Text>
+              <Text style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} mb="xs">공동구매 현황</Text>
               <Stack gap={6}>
                 <Row label="현재 수량" value={`${groupConfig.currentQuantity} / ${groupConfig.targetQuantity}개 (최소 ${groupConfig.minQuantity}개)`} />
                 <Row label="모집 마감일" value={new Date(groupConfig.recruitDeadline).toLocaleDateString('ko-KR')} />
@@ -207,7 +210,7 @@ export default function OrderDetailPage() {
           )}
 
           <Paper radius="lg" shadow="xs" p="md">
-            <Text fw={600} size="sm" c="gray.7" mb="xs">배송 정보</Text>
+            <Text style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} mb="xs">배송 정보</Text>
             <Stack gap={6}>
               <Row label="배송 수단" value={DELIVERY_LABEL_MAP[order.deliveryMethod]} />
               {order.saleType === 'normal' && order.requestedDeliveryDate && (
@@ -221,9 +224,9 @@ export default function OrderDetailPage() {
                 </>
               ) : (
                 order.pickupCode && (
-                  <Paper mt="xs" p="sm" radius="md" style={{ backgroundColor: 'var(--green-bg)', textAlign: 'center' }}>
-                    <Text size="xs" c="dimmed" mb={4}>픽업 코드</Text>
-                    <Text fz={24} fw={700} style={{ letterSpacing: '0.2em', color: 'var(--green-primary)' }}>{order.pickupCode}</Text>
+                  <Paper mt="xs" p="sm" radius="md" style={{ backgroundColor: 'var(--color-primary-surface)', textAlign: 'center' }}>
+                    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={4}>픽업 코드</Text>
+                    <Text style={{ fontSize: 24, letterSpacing: '0.2em', fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>{order.pickupCode}</Text>
                   </Paper>
                 )
               )}
@@ -234,32 +237,32 @@ export default function OrderDetailPage() {
           </Paper>
 
           {order.status === 'CANCELLED' && order.cancelReason && (
-            <Paper radius="lg" p="md" style={{ backgroundColor: '#FEF2F2' }}>
-              <Text fw={600} size="sm" c="red" mb="xs">취소 사유</Text>
-              <Text size="sm" c="red.7">{order.cancelReason}</Text>
+            <Paper radius="lg" p="md" style={{ backgroundColor: 'var(--color-danger-surface)' }}>
+              <Text style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mb="xs">취소 사유</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{order.cancelReason}</Text>
             </Paper>
           )}
 
-          {actionError && <Text size="sm" c="red" ta="center">{actionError}</Text>}
+          {actionError && <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} ta="center">{actionError}</Text>}
 
           {showPrepareForm && (
             <Paper radius="lg" shadow="xs" p="md">
-              <Text fw={600} size="sm" c="gray.7" mb="sm">드라이버 수거 예정 시각 설정</Text>
+              <Text style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} mb="sm">드라이버 수거 예정 시각 설정</Text>
               {deliveryDate && (
-                <Text size="xs" c="dimmed" mb="xs">
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb="xs">
                   {order.saleType === 'normal' ? '소비자 희망 배송일' : '공동구매 배송 예정일'}:{' '}
-                  <Text component="span" fw={500} c="gray.7">{new Date(deliveryDate).toLocaleDateString('ko-KR')}</Text>
+                  <Text component="span" style={{ fontWeight: 'var(--fw-medium)', color: 'var(--color-text-secondary)' }}>{new Date(deliveryDate).toLocaleDateString('ko-KR')}</Text>
                 </Text>
               )}
               <input
                 type="datetime-local"
                 value={preparedAtInput}
                 onChange={(e) => setPreparedAtInput(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 12, fontSize: 14, marginBottom: 8 }}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 12, fontSize: 14, marginBottom: 8 }}
               />
-              <Text size="xs" c="dimmed" mb="sm">설정하지 않아도 준비 시작 처리는 가능합니다.</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb="sm">설정하지 않아도 준비 시작 처리는 가능합니다.</Text>
               <Group gap="xs">
-                <Button onClick={handlePrepare} disabled={actionLoading} flex={1} size="md" radius="xl" fw={600} style={{ backgroundColor: 'var(--green-primary)' }}>
+                <Button onClick={handlePrepare} disabled={actionLoading} flex={1} size="md" radius="xl" style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}>
                   {actionLoading ? '처리 중...' : '준비 시작 확인'}
                 </Button>
                 <Button onClick={() => { setShowPrepareForm(false); setPreparedAtInput('') }} flex={1} size="md" radius="xl" variant="outline" color="gray">
@@ -272,7 +275,7 @@ export default function OrderDetailPage() {
           {!isReadonly && !showPrepareForm && (
             <Stack gap="xs">
               {canPrepare && (
-                <Button onClick={() => setShowPrepareForm(true)} disabled={actionLoading} fullWidth size="lg" radius="xl" fw={600} style={{ backgroundColor: 'var(--green-primary)' }}>
+                <Button onClick={() => setShowPrepareForm(true)} disabled={actionLoading} fullWidth size="lg" radius="xl" style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}>
                   준비 시작
                 </Button>
               )}
@@ -285,7 +288,7 @@ export default function OrderDetailPage() {
           )}
 
           {isReadonly && order.status !== 'CANCELLED' && (
-            <Text ta="center" size="xs" c="dimmed" py="xs">
+            <Text ta="center" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} py="xs">
               발송 이후 단계입니다. 취소가 필요한 경우 소비자 반품 신청을 통해 처리됩니다.
             </Text>
           )}
@@ -295,18 +298,18 @@ export default function OrderDetailPage() {
       <Modal
         opened={showCancelModal}
         onClose={() => { setShowCancelModal(false); setCancelReason(''); setActionError(null) }}
-        title={<Text fw={700}>강제 취소</Text>}
+        title={<Text style={{ fontWeight: 'var(--fw-bold)' }}>강제 취소</Text>}
         radius="lg"
       >
         <Stack gap="sm">
-          <Text size="sm" c="dimmed">취소 사유를 입력하세요. 소비자에게 알림톡으로 전달됩니다.</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>취소 사유를 입력하세요. 소비자에게 알림톡으로 전달됩니다.</Text>
           <Textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="취소 사유 입력 (최소 5자)" rows={3} radius="md" />
           {cancelReason.length > 0 && cancelReason.trim().length < 5 && (
-            <Text size="xs" c="red">최소 5자 이상 입력해주세요</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>최소 5자 이상 입력해주세요</Text>
           )}
-          {actionError && <Text size="xs" c="red">{actionError}</Text>}
+          {actionError && <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{actionError}</Text>}
           <Group gap="xs">
-            <Button onClick={handleCancel} disabled={actionLoading || cancelReason.trim().length < 5} flex={1} color="red" radius="xl" fw={600}>
+            <Button onClick={handleCancel} disabled={actionLoading || cancelReason.trim().length < 5} flex={1} color="red" radius="xl" style={{ fontWeight: 'var(--fw-medium)' }}>
               {actionLoading ? '처리 중...' : '취소 확정'}
             </Button>
             <Button onClick={() => { setShowCancelModal(false); setCancelReason(''); setActionError(null) }} flex={1} radius="xl" variant="outline" color="gray">

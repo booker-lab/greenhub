@@ -16,7 +16,7 @@ export default function AdminUsersClient() {
   }
 
   if (loading) {
-    return <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
+    return <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>불러오는 중...</Text>
   }
 
   return (
@@ -24,31 +24,31 @@ export default function AdminUsersClient() {
       <Group justify="space-between" mb="md">
         <Title order={4}>
           소비자 계정{' '}
-          <Text component="span" fz="sm" fw={400} c="dimmed">({users.length})</Text>
+          <Text component="span" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>({users.length})</Text>
         </Title>
       </Group>
 
-      <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--mantine-color-gray-1)', overflow: 'hidden' }}>
+      <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {users.length === 0 ? (
-          <Text ta="center" py={64} c="dimmed">등록된 소비자가 없습니다.</Text>
+          <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>등록된 소비자가 없습니다.</Text>
         ) : (
           <Box component="table" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
-            <Box component="thead" style={{ backgroundColor: 'var(--mantine-color-gray-0)', borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
+            <Box component="thead" style={{ backgroundColor: 'var(--color-surface-muted)', borderBottom: '1px solid var(--color-border)' }}>
               <tr>
-                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>이름</Box>
-                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>이메일</Box>
-                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상태</Box>
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>이름</Box>
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>이메일</Box>
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>상태</Box>
                 <Box component="th" style={{ padding: '12px 16px' }} />
               </tr>
             </Box>
             <Box component="tbody">
               {users.map((user) => (
-                <Box component="tr" key={user.id} style={{ borderTop: '1px solid var(--mantine-color-gray-0)' }}>
+                <Box component="tr" key={user.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                   <Box component="td" style={{ padding: '12px 16px' }}>
-                    <Text fw={500}>{user.name}</Text>
-                    <Text fz={12} c="dimmed" ff="monospace">{user.id.slice(0, 8)}…</Text>
+                    <Text style={{ fontWeight: 'var(--fw-medium)' }}>{user.name}</Text>
+                    <Text style={{ fontSize: 12, color: 'var(--color-text-disabled)' }} ff="monospace">{user.id.slice(0, 8)}…</Text>
                   </Box>
-                  <Box component="td" style={{ padding: '12px 16px', color: 'var(--mantine-color-gray-7)' }}>
+                  <Box component="td" style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}>
                     {user.email}
                   </Box>
                   <Box component="td" style={{ padding: '12px 16px' }}>

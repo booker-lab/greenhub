@@ -38,8 +38,8 @@ export default function AIPreviewPanel({
   if (loading || regenerating) {
     return (
       <Stack align="center" py="xl" gap="md">
-        <Loader size="md" color="var(--green-primary)" />
-        <Text size="sm" c="dimmed">AI가 상세 페이지를 작성하는 중...</Text>
+        <Loader size="md" color="var(--color-primary)" />
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>AI가 상세 페이지를 작성하는 중...</Text>
       </Stack>
     )
   }
@@ -50,10 +50,10 @@ export default function AIPreviewPanel({
         <Alert color="yellow" title="가드레일 충돌 감지">
           <Stack gap="xs">
             {conflicts.map((c, i) => (
-              <Text key={i} size="sm">
+              <Text key={i} style={{ fontSize: 'var(--font-size-sm)' }}>
                 {c.message}
                 <br />
-                <Text component="span" c="gray.6" size="xs">{c.suggestion}</Text>
+                <Text component="span" style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>{c.suggestion}</Text>
               </Text>
             ))}
           </Stack>
@@ -69,7 +69,7 @@ export default function AIPreviewPanel({
       )}
 
       <Paper radius="lg" shadow="xs" p="md">
-        <Text size="xs" fw={500} c="dimmed" mb="xs">헤드라인 (AI 생성)</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">���드라인 (AI 생성)</Text>
         <TextInput
           value={headline}
           onChange={(e) => onHeadlineChange(e.target.value)}
@@ -77,13 +77,13 @@ export default function AIPreviewPanel({
           size="md"
           radius="md"
         />
-        <Text size="xs" c={headline.length > 15 ? 'orange' : 'gray.4'} ta="right" mt={4}>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: headline.length > 15 ? 'var(--color-status-warning-text)' : 'var(--color-text-disabled)' }} ta="right" mt={4}>
           {headline.length} / 15자 권장
         </Text>
       </Paper>
 
       <Paper radius="lg" shadow="xs" p="md">
-        <Text size="xs" fw={500} c="dimmed" mb="xs">상세 설명 (AI 생성)</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">상세 설명 (AI 생성)</Text>
         <Textarea
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
@@ -111,7 +111,7 @@ export default function AIPreviewPanel({
         centered
         size="xs"
       >
-        <Text size="sm" mb="md">
+        <Text style={{ fontSize: 'var(--font-size-sm)' }} mb="md">
           직접 편집한 내용이 있습니다. 새로 생성하면 편집 내용이 사라집니다.
         </Text>
         <Group justify="flex-end" gap="xs">

@@ -17,13 +17,13 @@ export default function SettingsPage() {
   const { data: session } = useSession()
 
   return (
-    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}>
       {/* 헤더 */}
       <Box
         component="header"
         style={{
-          backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: '1px solid var(--color-border)',
           padding: '16px',
         }}
       >
@@ -36,8 +36,8 @@ export default function SettingsPage() {
         <Stack gap="sm">
           {/* 계정 섹션 */}
           <Paper radius="lg" shadow="xs" style={{ overflow: 'hidden' }}>
-            <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-gray-0)' }}>
-              <Text size="xs" fw={600} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--color-border)' }}>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 계정
               </Text>
             </Box>
@@ -46,7 +46,7 @@ export default function SettingsPage() {
               href="/onboarding"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', width: '100%' }}
             >
-              <Text size="sm" c="gray.8">사업자 프로필 수정</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>사업자 프로필 수정</Text>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2">
                 <path d="M9 18l6-6-6-6" />
               </svg>
@@ -59,17 +59,17 @@ export default function SettingsPage() {
                 justifyContent: 'space-between',
                 padding: '16px',
                 width: '100%',
-                borderTop: '1px solid var(--mantine-color-gray-0)',
+                borderTop: '1px solid var(--color-border)',
               }}
             >
-              <Text size="sm" c="red">로그아웃</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>로그아웃</Text>
             </UnstyledButton>
           </Paper>
 
           {/* 배송 섹션 */}
           <Paper radius="lg" shadow="xs" style={{ overflow: 'hidden' }}>
-            <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-gray-0)' }}>
-              <Text size="xs" fw={600} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--color-border)' }}>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 배송
               </Text>
             </Box>
@@ -78,7 +78,7 @@ export default function SettingsPage() {
               href="/settings/delivery"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', width: '100%' }}
             >
-              <Text size="sm" c="gray.8">배송비 설정 / 기상 제한</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>배송비 설정 / 기상 제한</Text>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2">
                 <path d="M9 18l6-6-6-6" />
               </svg>
@@ -92,10 +92,10 @@ export default function SettingsPage() {
                 justifyContent: 'space-between',
                 padding: '16px',
                 width: '100%',
-                borderTop: '1px solid var(--mantine-color-gray-0)',
+                borderTop: '1px solid var(--color-border)',
               }}
             >
-              <Text size="sm" c="gray.8">배송 슬롯 (Daily Cap)</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>배송 슬롯 (Daily Cap)</Text>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2">
                 <path d="M9 18l6-6-6-6" />
               </svg>
@@ -104,14 +104,14 @@ export default function SettingsPage() {
 
           {/* 정보 섹션 */}
           <Paper radius="lg" shadow="xs" style={{ overflow: 'hidden' }}>
-            <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-gray-0)' }}>
-              <Text size="xs" fw={600} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--color-border)' }}>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 정보
               </Text>
             </Box>
             <Group justify="space-between" px="md" py="md">
-              <Text size="sm" c="gray.8">앱 버전</Text>
-              <Text size="sm" c="dimmed">0.1.0</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>앱 버전</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>0.1.0</Text>
             </Group>
           </Paper>
         </Stack>

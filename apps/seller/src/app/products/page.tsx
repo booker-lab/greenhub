@@ -41,13 +41,13 @@ export default function ProductsPage() {
   })
 
   return (
-    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}>
       {/* 헤더 */}
       <Box
         component="header"
         style={{
-          backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: '1px solid var(--color-border)',
           padding: '16px',
           position: 'sticky',
           top: 0,
@@ -62,7 +62,7 @@ export default function ProductsPage() {
               href="/products/new"
               size="xs"
               radius="md"
-              style={{ backgroundColor: 'var(--green-primary)' }}
+              style={{ backgroundColor: 'var(--color-primary)' }}
             >
               + 등록
             </Button>
@@ -71,7 +71,7 @@ export default function ProductsPage() {
       </Box>
 
       {/* 필터 탭 */}
-      <Box style={{ backgroundColor: 'var(--mantine-color-white)', borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
+      <Box style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
         <Container size="sm">
           <Group gap={0}>
             {(['all', 'active', 'inactive'] as ProductFilter[]).map((f) => (
@@ -81,11 +81,11 @@ export default function ProductsPage() {
                 style={{
                   flex: 1,
                   padding: '12px 16px',
-                  fontSize: 14,
-                  fontWeight: 500,
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 'var(--fw-medium)',
                   textAlign: 'center',
-                  borderBottom: `2px solid ${filter === f ? 'var(--green-primary)' : 'transparent'}`,
-                  color: filter === f ? 'var(--green-primary)' : 'var(--mantine-color-gray-6)',
+                  borderBottom: `2px solid ${filter === f ? 'var(--color-primary)' : 'transparent'}`,
+                  color: filter === f ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                 }}
               >
                 {f === 'all'
@@ -104,23 +104,22 @@ export default function ProductsPage() {
         <Stack gap="sm">
           {loading && (
             <Group justify="center" py={80}>
-              <Loader size="sm" color="var(--green-primary)" />
+              <Loader size="sm" color="var(--color-primary)" />
             </Group>
           )}
 
           {!loading && filtered.length === 0 && (
-            <Stack align="center" justify="center" py={80} c="dimmed">
+            <Stack align="center" justify="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <rect x="2" y="7" width="20" height="14" rx="2" />
                 <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
               </svg>
-              <Text size="sm">등록된 상품이 없습니다</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)' }}>등록된 상품이 없습니다</Text>
               <Text
                 component={Link}
                 href="/products/new"
-                size="md"
                 mt="xs"
-                style={{ color: 'var(--green-primary)', fontWeight: 500 }}
+                style={{ color: 'var(--color-primary)', fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-md)' }}
               >
                 상품 등록하기 →
               </Text>
@@ -191,7 +190,7 @@ function ProductCard({
             width: 64,
             height: 64,
             borderRadius: 12,
-            backgroundColor: 'var(--mantine-color-gray-1)',
+            backgroundColor: 'var(--color-surface-muted)',
             flexShrink: 0,
             overflow: 'hidden',
             display: 'flex',
@@ -202,7 +201,7 @@ function ProductCard({
           {product.images[0] ? (
             <img src={product.images[0]} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <Box c="gray.4">
+            <Box style={{ color: 'var(--color-text-disabled)' }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <rect x="3" y="3" width="18" height="18" rx="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
@@ -214,8 +213,8 @@ function ProductCard({
 
         {/* 정보 */}
         <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text fw={600} size="sm" truncate>{product.name}</Text>
-          <Text size="xs" c="dimmed" mt={2}>
+          <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }} truncate>{product.name}</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mt={2}>
             {CATEGORY_LABEL[product.category]} · ₩{product.price.toLocaleString()}
             {product.saleType === 'group' && ' · 공동구매'}
           </Text>
