@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { useStoreProducts } from '@/hooks/useStoreProducts'
@@ -196,10 +197,11 @@ function ProductCard({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            position: 'relative',
           }}
         >
           {product.images[0] ? (
-            <img src={product.images[0]} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <Image fill src={product.images[0]} alt={product.name} sizes="64px" style={{ objectFit: 'cover' }} />
           ) : (
             <Box style={{ color: 'var(--color-text-disabled)' }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

@@ -1,6 +1,7 @@
 'use client'
 
 import type React from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { Card, Box, Progress } from '@mantine/core'
 import type { Product } from '@greenhub/shared'
@@ -26,10 +27,12 @@ export default function ProductCard({ product }: ProductCardProps) {
       style={{ overflow: 'hidden', display: 'block', textDecoration: 'none', border: 'var(--border)' }}
     >
       <Box style={{ position: 'relative', aspectRatio: '4/5', background: 'var(--color-border)', overflow: 'hidden' }}>
-        <img
+        <Image
+          fill
           src={imgSrc}
           alt={product.name}
-          style={{ objectFit: 'cover', width: '100%', height: '100%' }}
+          sizes="(max-width: 600px) 50vw, 33vw"
+          style={{ objectFit: 'cover' }}
         />
       </Box>
 

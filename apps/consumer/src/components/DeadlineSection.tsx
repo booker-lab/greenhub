@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { Box } from '@mantine/core'
 import type { Product } from '@greenhub/shared'
@@ -47,10 +48,12 @@ function DeadlineCard({ product }: { product: Product }) {
         position: 'relative',
         marginBottom: 6,
       }}>
-        <img
+        <Image
+          fill
           src={product.images?.[0] ?? '/icons/icon-192x192.png'}
           alt={product.name}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          sizes="140px"
+          style={{ objectFit: 'cover' }}
         />
         <Box style={{
           position: 'absolute',
