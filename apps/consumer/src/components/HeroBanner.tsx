@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { Box } from '@mantine/core'
 
@@ -45,19 +46,16 @@ export default function HeroBanner() {
       }}
     >
       {banner.imageUrl && (
-        <img
-          src={banner.imageUrl}
-          alt="배너"
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: 0,
-            height: '100%',
-            width: '50%',
-            objectFit: 'cover',
-            objectPosition: 'center',
-          }}
-        />
+        <div style={{ position: 'absolute', right: 0, top: 0, width: '50%', height: '100%' }}>
+          <Image
+            fill
+            src={banner.imageUrl}
+            alt="배너"
+            sizes="50vw"
+            priority
+            style={{ objectFit: 'cover', objectPosition: 'center' }}
+          />
+        </div>
       )}
 
       <Box style={{ position: 'relative', zIndex: 1, padding: '24px 20px' }}>

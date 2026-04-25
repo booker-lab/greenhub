@@ -1,6 +1,7 @@
 'use client'
 
 import { use, useState, useRef, useEffect } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import {
@@ -176,9 +177,9 @@ export default function ProductDetailPage({
         {(product.images?.length ? product.images : ['/icons/icon-192x192.png']).map((src, i) => (
           <Box
             key={i}
-            style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start', aspectRatio: '4/5', overflow: 'hidden' }}
+            style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start', aspectRatio: '4/5', overflow: 'hidden', position: 'relative' }}
           >
-            <img src={src} alt={`${product.name} ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <Image fill src={src} alt={`${product.name} ${i + 1}`} sizes="100vw" style={{ objectFit: 'cover' }} />
           </Box>
         ))}
       </Box>
@@ -196,10 +197,10 @@ export default function ProductDetailPage({
               style={{
                 flexShrink: 0, width: 56, height: 56, borderRadius: 6, overflow: 'hidden', cursor: 'pointer',
                 border: activeImageIdx === i ? '2px solid var(--color-primary)' : '2px solid transparent',
-                transition: 'border-color 0.15s',
+                transition: 'border-color 0.15s', position: 'relative',
               }}
             >
-              <img src={src} alt={`${product.name} 썸네일 ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <Image fill src={src} alt={`${product.name} 썸네일 ${i + 1}`} sizes="56px" style={{ objectFit: 'cover' }} />
             </Box>
           ))}
         </Box>
@@ -270,7 +271,7 @@ export default function ProductDetailPage({
         {(product.images?.length ?? 0) > 0 && (
           <Box mx={-16} mb="lg">
             {product.images!.map((src, i) => (
-              <img key={i} src={src} alt={`${product.name} 상세 ${i + 1}`} style={{ width: '100%', display: 'block' }} />
+              <img key={i} src={src} alt={`${product.name} 상세 ${i + 1}`} loading="lazy" style={{ width: '100%', display: 'block' }} />
             ))}
           </Box>
         )}
@@ -396,7 +397,7 @@ export default function ProductDetailPage({
             <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} mb="sm">판매자 정보</Text>
             <Group gap="sm" mb="sm">
               {store.logoUrl ? (
-                <img src={store.logoUrl} alt={store.name} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
+                <Image src={store.logoUrl} alt={store.name} width={44} height={44} style={{ borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
                 <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-primary-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-primary)', fontWeight: 700, fontSize: 16 }}>
                   {store.name[0]}

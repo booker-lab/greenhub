@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { useSession } from 'next-auth/react'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { storage } from '@/lib/firebase'
@@ -71,8 +72,8 @@ export default function AdminBannerClient() {
         <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--color-border)' }}>
           <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">배경 이미지</Text>
           {form.imageUrl && (
-            <Box mb="sm" style={{ borderRadius: 12, overflow: 'hidden', maxHeight: 180 }}>
-              <img src={form.imageUrl} alt="배너 미리보기" style={{ width: '100%', objectFit: 'cover' }} />
+            <Box mb="sm" style={{ borderRadius: 12, overflow: 'hidden', height: 180, position: 'relative' }}>
+              <Image fill src={form.imageUrl} alt="배너 미리보기" sizes="100vw" style={{ objectFit: 'cover' }} />
             </Box>
           )}
           <Box
