@@ -52,7 +52,7 @@ export default function DriversClient() {
       <Title order={4} mb="md">드라이버 관리</Title>
 
       {/* 탭 */}
-      <Box mb="md" style={{ borderBottom: '1px solid var(--mantine-color-gray-2)' }}>
+      <Box mb="md" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <Group gap={4}>
           {STATUS_TABS.map((t) => (
             <UnstyledButton
@@ -62,9 +62,9 @@ export default function DriversClient() {
                 padding: '8px 16px',
                 fontSize: 14,
                 fontWeight: 500,
-                borderBottom: `2px solid ${tab === t.value ? 'var(--green-primary)' : 'transparent'}`,
+                borderBottom: `2px solid ${tab === t.value ? 'var(--color-primary)' : 'transparent'}`,
                 marginBottom: -1,
-                color: tab === t.value ? 'var(--green-primary)' : 'var(--mantine-color-gray-5)',
+                color: tab === t.value ? 'var(--color-primary)' : 'var(--color-text-disabled)',
               }}
             >
               {t.label}
@@ -74,9 +74,9 @@ export default function DriversClient() {
       </Box>
 
       {loading ? (
-        <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
+        <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>불러오는 중...</Text>
       ) : drivers.length === 0 ? (
-        <Text ta="center" py={80} c="dimmed">드라이버가 없습니다.</Text>
+        <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>드라이버가 없습니다.</Text>
       ) : (
         <Stack gap="xs">
           {drivers.map((driver) => (
@@ -85,15 +85,15 @@ export default function DriversClient() {
               radius="lg"
               px="md"
               py="sm"
-              style={{ border: '1px solid var(--mantine-color-gray-2)' }}
+              style={{ border: '1px solid var(--color-border)' }}
             >
               <Group justify="space-between" gap="md">
                 <Box style={{ minWidth: 0 }}>
                   <Group gap="xs" mb={2}>
-                    <Text fw={500} size="sm" truncate>{driver.name}</Text>
+                    <Text style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-sm)' }} truncate>{driver.name}</Text>
                     <DriverBadge driver={driver} />
                   </Group>
-                  <Text size="xs" c="dimmed" truncate>{driver.email ?? '이메일 없음'}</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} truncate>{driver.email ?? '이메일 없음'}</Text>
                 </Box>
 
                 <Group gap="xs" style={{ flexShrink: 0 }}>

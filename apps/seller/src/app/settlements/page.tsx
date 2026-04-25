@@ -163,12 +163,12 @@ export default function SettlementsPage() {
   ]
 
   return (
-    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}>
       <Box
         component="header"
         style={{
-          backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: '1px solid var(--color-border)',
           padding: '16px',
           position: 'sticky',
           top: 0,
@@ -182,8 +182,8 @@ export default function SettlementsPage() {
 
       <Box
         style={{
-          backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: '1px solid var(--color-border)',
           position: 'sticky',
           top: 57,
           zIndex: 10,
@@ -201,8 +201,8 @@ export default function SettlementsPage() {
                   fontSize: 14,
                   fontWeight: 500,
                   textAlign: 'center',
-                  borderBottom: `2px solid ${activeTab === tab.key ? 'var(--green-primary)' : 'transparent'}`,
-                  color: activeTab === tab.key ? 'var(--green-primary)' : 'var(--mantine-color-gray-6)',
+                  borderBottom: `2px solid ${activeTab === tab.key ? 'var(--color-primary)' : 'transparent'}`,
+                  color: activeTab === tab.key ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                 }}
               >
                 {tab.label}
@@ -216,32 +216,32 @@ export default function SettlementsPage() {
         {/* 일별 요약 */}
         {activeTab === 'daily' && (
           <Paper radius="lg" p="lg" shadow="xs">
-            <Text size="sm" c="dimmed" mb="md">{todayLabel}</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb="md">{todayLabel}</Text>
             {summaryLoading ? (
-              <Text size="sm" c="dimmed" ta="center" py="md">불러오는 중...</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} ta="center" py="md">불러오는 중...</Text>
             ) : summaryError ? (
-              <Text size="sm" c="red" ta="center" py="md">{summaryError}</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} ta="center" py="md">{summaryError}</Text>
             ) : (
               <Stack gap="sm">
                 <Group justify="space-between">
-                  <Text size="sm" c="gray.6">완료 건수</Text>
-                  <Text fw={600}>{summary?.count ?? 0}건</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>완료 건수</Text>
+                  <Text style={{ fontWeight: 'var(--fw-medium)' }}>{summary?.count ?? 0}건</Text>
                 </Group>
                 <Group justify="space-between">
-                  <Text size="sm" c="gray.6">총 매출</Text>
-                  <Text fw={600}>{toKRW(summary?.totalAmount ?? 0)}</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>총 매출</Text>
+                  <Text style={{ fontWeight: 'var(--fw-medium)' }}>{toKRW(summary?.totalAmount ?? 0)}</Text>
                 </Group>
                 <Group justify="space-between">
-                  <Text size="sm" c="gray.6">플랫폼 수수료</Text>
-                  <Text size="sm" c="dimmed">−{toKRW(summary?.totalPlatformFee ?? 0)}</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>플랫폼 수수료</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>−{toKRW(summary?.totalPlatformFee ?? 0)}</Text>
                 </Group>
                 <Divider />
                 <Group justify="space-between">
-                  <Text size="sm" fw={500} c="gray.7">정산 예정</Text>
-                  <Text fw={700} style={{ color: 'var(--green-primary)' }}>{toKRW(summary?.totalNetAmount ?? 0)}</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-secondary)' }}>정산 예정</Text>
+                  <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>{toKRW(summary?.totalNetAmount ?? 0)}</Text>
                 </Group>
                 {summary && summary.count > 0 && (
-                  <SimpleGrid cols={2} mt="xs" style={{ borderTop: '1px solid var(--mantine-color-gray-0)', paddingTop: 8 }}>
+                  <SimpleGrid cols={2} mt="xs" style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
                     {(Object.entries(summary.byStatus) as [SettlementStatus, number][])
                       .filter(([, v]) => v > 0)
                       .map(([status, count]) => (
@@ -260,7 +260,7 @@ export default function SettlementsPage() {
         {activeTab === 'period' && (
           <Stack gap="md">
             <Paper radius="lg" p="lg" shadow="xs">
-              <Text size="sm" c="dimmed" mb="md">조회 기간을 선택하세요</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb="md">조회 기간을 선택하세요</Text>
               <Group gap="xs" mb="md">
                 <input
                   type="date"
@@ -269,12 +269,12 @@ export default function SettlementsPage() {
                   style={{
                     flex: 1,
                     padding: '8px 12px',
-                    border: '1px solid var(--mantine-color-gray-3)',
+                    border: '1px solid var(--color-border)',
                     borderRadius: 12,
                     fontSize: 14,
                   }}
                 />
-                <Text c="dimmed">~</Text>
+                <Text style={{ color: 'var(--color-text-disabled)' }}>~</Text>
                 <input
                   type="date"
                   value={to}
@@ -282,7 +282,7 @@ export default function SettlementsPage() {
                   style={{
                     flex: 1,
                     padding: '8px 12px',
-                    border: '1px solid var(--mantine-color-gray-3)',
+                    border: '1px solid var(--color-border)',
                     borderRadius: 12,
                     fontSize: 14,
                   }}
@@ -294,21 +294,21 @@ export default function SettlementsPage() {
                 fullWidth
                 size="md"
                 radius="xl"
-                style={{ backgroundColor: 'var(--green-primary)' }}
+                style={{ backgroundColor: 'var(--color-primary)' }}
               >
                 {listLoading ? '조회 중...' : '조회'}
               </Button>
             </Paper>
 
-            {listError && <Text size="sm" c="red" ta="center">{listError}</Text>}
+            {listError && <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} ta="center">{listError}</Text>}
 
             {settlements.length > 0 && (
               <Stack gap="xs">
                 <Group justify="space-between" px={4}>
-                  <Text size="xs" c="dimmed">{settlements.length}건 조회됨</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{settlements.length}건 조회됨</Text>
                   <UnstyledButton
                     onClick={() => downloadCSV(settlements, from, to)}
-                    style={{ fontSize: 12, color: 'var(--green-primary)', fontWeight: 500 }}
+                    style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 500 }}
                   >
                     CSV 다운로드
                   </UnstyledButton>
@@ -316,14 +316,14 @@ export default function SettlementsPage() {
                 {settlements.map((s) => (
                   <Paper key={s.id} radius="md" px="md" py="sm" shadow="xs">
                     <Group justify="space-between" mb={4}>
-                      <Text size="xs" c="dimmed">{s.orderId.slice(0, 8)}…</Text>
+                      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{s.orderId.slice(0, 8)}…</Text>
                       <Badge color={STATUS_COLOR[s.status]} variant="light" size="xs" radius="xl">
                         {STATUS_LABEL[s.status]}
                       </Badge>
                     </Group>
                     <Group justify="space-between">
-                      <Text size="sm" c="gray.6">{toDateStr(s.settledAt._seconds)}</Text>
-                      <Text fw={600}>{toKRW(s.netAmount)}</Text>
+                      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>{toDateStr(s.settledAt._seconds)}</Text>
+                      <Text style={{ fontWeight: 'var(--fw-medium)' }}>{toKRW(s.netAmount)}</Text>
                     </Group>
                   </Paper>
                 ))}
@@ -336,17 +336,17 @@ export default function SettlementsPage() {
         {activeTab === 'orders' && (
           <Box>
             {listLoading ? (
-              <Text size="sm" c="dimmed" ta="center" py={80}>불러오는 중...</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} ta="center" py={80}>불러오는 중...</Text>
             ) : settlements.length === 0 ? (
-              <Stack align="center" justify="center" py={80} c="dimmed">
-                <Text size="sm">정산 완료된 주문이 없습니다</Text>
+              <Stack align="center" justify="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+                <Text style={{ fontSize: 'var(--font-size-sm)' }}>정산 완료된 주문이 없습니다</Text>
               </Stack>
             ) : (
               <Stack gap="xs">
                 <Group justify="flex-end" px={4}>
                   <UnstyledButton
                     onClick={() => downloadCSV(settlements, '', '')}
-                    style={{ fontSize: 12, color: 'var(--green-primary)', fontWeight: 500 }}
+                    style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 500 }}
                   >
                     CSV 다운로드
                   </UnstyledButton>
@@ -354,17 +354,17 @@ export default function SettlementsPage() {
                 {settlements.map((s) => (
                   <Paper key={s.id} radius="md" px="md" py="sm" shadow="xs">
                     <Group justify="space-between" mb={4}>
-                      <Text size="xs" c="dimmed">{s.orderId.slice(0, 8)}…</Text>
+                      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{s.orderId.slice(0, 8)}…</Text>
                       <Badge color={STATUS_COLOR[s.status]} variant="light" size="xs" radius="xl">
                         {STATUS_LABEL[s.status]}
                       </Badge>
                     </Group>
                     <Group justify="space-between">
                       <Stack gap={0}>
-                        <Text size="sm" c="gray.6">{toDateStr(s.settledAt._seconds)}</Text>
-                        <Text size="xs" c="dimmed">수수료 {toKRW(s.platformFee)}</Text>
+                        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>{toDateStr(s.settledAt._seconds)}</Text>
+                        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>수수료 {toKRW(s.platformFee)}</Text>
                       </Stack>
-                      <Text fw={600}>{toKRW(s.netAmount)}</Text>
+                      <Text style={{ fontWeight: 'var(--fw-medium)' }}>{toKRW(s.netAmount)}</Text>
                     </Group>
                   </Paper>
                 ))}

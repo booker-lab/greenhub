@@ -50,8 +50,8 @@ interface Props {
 }
 
 const activeStyle = {
-  backgroundColor: 'var(--green-primary)',
-  borderColor: 'var(--green-primary)',
+  backgroundColor: 'var(--color-primary)',
+  borderColor: 'var(--color-primary)',
   color: 'white',
 }
 
@@ -74,7 +74,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
   return (
     <Stack gap="sm">
       <Paper radius="lg" shadow="xs" p="md">
-        <Text size="xs" fw={500} c="dimmed" mb="xs">출하 형태</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">출하 형태</Text>
         <Group gap="xs">
           {stemOptions.map(({ value: v, label, desc }) => (
             <Button
@@ -88,8 +88,8 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
               style={value.stemType === v ? activeStyle : {}}
             >
               <Stack gap={0} align="center">
-                <Text size="sm" fw={600}>{label}</Text>
-                <Text size="10px" c={value.stemType === v ? 'white' : 'dimmed'}>{desc}</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>{label}</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: value.stemType === v ? 'white' : 'var(--color-text-disabled)' }}>{desc}</Text>
               </Stack>
             </Button>
           ))}
@@ -97,8 +97,8 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
       </Paper>
 
       <Paper radius="lg" shadow="xs" p="md">
-        <Text size="xs" fw={500} c="dimmed" mb="xs">
-          색상 <Text component="span" c="gray.4">(복수 선택 가능)</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">
+          색상 <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>(복수 선택 가능)</Text>
         </Text>
         <Group gap="xs" style={{ flexWrap: 'wrap' }}>
           {COLOR_OPTIONS.map((color) => (
@@ -111,9 +111,9 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
               color="gray"
               style={{
                 cursor: 'pointer',
-                backgroundColor: value.colors.includes(color) ? 'var(--green-bg)' : undefined,
-                color: value.colors.includes(color) ? 'var(--green-primary)' : undefined,
-                borderColor: value.colors.includes(color) ? 'var(--green-primary)' : undefined,
+                backgroundColor: value.colors.includes(color) ? 'var(--color-primary-surface)' : undefined,
+                color: value.colors.includes(color) ? 'var(--color-primary)' : undefined,
+                borderColor: value.colors.includes(color) ? 'var(--color-primary)' : undefined,
               }}
             >
               {color}
@@ -123,7 +123,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
       </Paper>
 
       <Paper radius="lg" shadow="xs" p="md">
-        <Text size="xs" fw={500} c="dimmed" mb="xs">향기</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">향기</Text>
         <Group gap="xs">
           {FRAGRANCE_OPTIONS.map(({ value: v, label, icon }) => (
             <Button
@@ -143,7 +143,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
       </Paper>
 
       <Paper radius="lg" shadow="xs" p="md">
-        <Text size="xs" fw={500} c="dimmed" mb="xs">개화 상태</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">개화 상태</Text>
         <Group gap="xs">
           {BLOOM_OPTIONS.map(({ value: v, label, icon }) => (
             <Button
@@ -163,7 +163,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
       </Paper>
 
       <Paper radius="lg" shadow="xs" p="md">
-        <Text size="xs" fw={500} c="dimmed" mb="xs">관리 난이도</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">관리 난이도</Text>
         <Group gap="xs">
           {CARE_OPTIONS.map(({ value: v, label, icon }) => (
             <Button
@@ -183,7 +183,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
       </Paper>
 
       <Paper radius="lg" shadow="xs" p="md">
-        <Text size="xs" fw={500} c="dimmed" mb="xs">판매 단위</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">판매 단위</Text>
         <TextInput
           placeholder="예: 1분, 3묶음, 1박스"
           value={value.bundleUnit}

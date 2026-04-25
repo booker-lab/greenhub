@@ -63,8 +63,8 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
 
   return (
     <Paper radius="lg" shadow="xs" p="md">
-      <Text size="xs" fw={500} c="dimmed" mb="xs">
-        사진 <Text component="span" c="gray.4">({images.length}/5 · 첫 번째가 대표 사진)</Text>
+      <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">
+        사진 <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>({images.length}/5 · 첫 번째가 대표 사진)</Text>
       </Text>
       <Group gap="xs" style={{ overflowX: 'auto', paddingBottom: 4, flexWrap: 'nowrap' }}>
         {images.map((url, idx) => (
@@ -77,7 +77,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
               height: 80,
               borderRadius: 12,
               overflow: 'hidden',
-              backgroundColor: 'var(--mantine-color-gray-1)',
+              backgroundColor: 'var(--color-surface-muted)',
             }}
           >
             <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -87,7 +87,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                   position: 'absolute',
                   bottom: 4,
                   left: 4,
-                  backgroundColor: 'var(--green-primary)',
+                  backgroundColor: 'var(--color-primary)',
                   color: 'white',
                   fontSize: 9,
                   fontWeight: 700,
@@ -175,20 +175,20 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
               width: 80,
               height: 80,
               borderRadius: 12,
-              border: '2px dashed var(--mantine-color-gray-3)',
+              border: '2px dashed var(--color-border)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 4,
               fontSize: 12,
-              color: 'var(--mantine-color-gray-5)',
+              color: 'var(--color-text-disabled)',
               backgroundColor: 'transparent',
               cursor: uploading ? 'not-allowed' : 'pointer',
             }}
           >
             {uploading ? (
-              <Loader size="xs" color="var(--green-primary)" />
+              <Loader size="xs" color="var(--color-primary)" />
             ) : (
               <>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

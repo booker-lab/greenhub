@@ -59,17 +59,17 @@ const STATUS_COLOR: Record<OrderStatus, string> = {
 }
 
 const ACCENT_BORDER: Record<OrderStatus, string> = {
-  ACCEPTED: 'var(--mantine-color-blue-5)',
-  CONFIRMED: 'var(--mantine-color-blue-5)',
-  RECRUITING: 'var(--mantine-color-blue-5)',
-  PREPARING: 'var(--mantine-color-orange-5)',
-  DELIVERING: 'var(--mantine-color-violet-5)',
-  HUB_ARRIVED: 'var(--mantine-color-violet-5)',
-  CANCELLED: 'var(--mantine-color-red-4)',
-  PENDING: 'var(--mantine-color-gray-4)',
-  DELIVERED: 'var(--mantine-color-green-5)',
-  PICKED_UP: 'var(--mantine-color-green-5)',
-  REVIEWED: 'var(--mantine-color-gray-4)',
+  ACCEPTED: 'var(--color-status-info-text)',
+  CONFIRMED: 'var(--color-status-info-text)',
+  RECRUITING: 'var(--color-status-info-text)',
+  PREPARING: 'var(--color-status-warning-text)',
+  DELIVERING: '#7048e8',
+  HUB_ARRIVED: '#7048e8',
+  CANCELLED: 'var(--color-danger)',
+  PENDING: 'var(--color-text-disabled)',
+  DELIVERED: 'var(--color-primary)',
+  PICKED_UP: 'var(--color-primary)',
+  REVIEWED: 'var(--color-text-disabled)',
 }
 
 const DELIVERY_LABEL: Record<string, string> = {
@@ -102,13 +102,13 @@ export default function OrdersPage() {
   )
 
   return (
-    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}>
       {/* 헤더 */}
       <Box
         component="header"
         style={{
-          backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-2)',
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: '1px solid var(--color-border)',
           padding: '16px',
           position: 'sticky',
           top: 0,
@@ -117,16 +117,16 @@ export default function OrdersPage() {
       >
         <Container size="sm">
           <Group justify="space-between">
-            <Title order={3} fw={700}>주문 관리</Title>
+            <Title order={3} style={{ fontWeight: 'var(--fw-bold)' }}>주문 관리</Title>
             <Group gap={6}>
               {loading || !firebaseReady ? (
-                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--mantine-color-yellow-5)' }} />
+                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--color-caution-border)' }} />
               ) : error ? (
-                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--mantine-color-red-5)' }} />
+                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--color-danger)' }} />
               ) : (
-                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--mantine-color-green-5)' }} />
+                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--color-primary)' }} />
               )}
-              <Text size="xs" c="dimmed">
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
                 {loading || !firebaseReady ? '연결 중' : error ? '연결 오류' : '실시간 연결'}
               </Text>
             </Group>
@@ -137,8 +137,8 @@ export default function OrdersPage() {
       {/* 상태 탭 */}
       <Box
         style={{
-          backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-2)',
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: '1px solid var(--color-border)',
           position: 'sticky',
           top: 57,
           zIndex: 10,
@@ -155,8 +155,8 @@ export default function OrdersPage() {
                   padding: '12px 16px',
                   fontSize: 14,
                   fontWeight: activeTab === tab.key ? 700 : 400,
-                  borderBottom: `2px solid ${activeTab === tab.key ? 'var(--mantine-color-dark-7)' : 'transparent'}`,
-                  color: activeTab === tab.key ? 'var(--mantine-color-dark-7)' : 'var(--mantine-color-gray-5)',
+                  borderBottom: `2px solid ${activeTab === tab.key ? 'var(--color-text)' : 'transparent'}`,
+                  color: activeTab === tab.key ? 'var(--color-text)' : 'var(--color-text-disabled)',
                   transition: 'all 0.15s',
                 }}
               >
@@ -186,12 +186,12 @@ export default function OrdersPage() {
           )}
 
           {!loading && firebaseReady && filteredOrders.length === 0 && (
-            <Stack align="center" justify="center" py={80} c="dimmed">
+            <Stack align="center" justify="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M9 11l3 3L22 4" />
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
               </svg>
-              <Text size="sm">현재 해당 주문이 없습니다</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)' }}>현재 해당 주문이 없습니다</Text>
             </Stack>
           )}
 
@@ -276,18 +276,18 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
         <Badge color={STATUS_COLOR[order.status]} variant="light" radius="xl">
           {STATUS_LABEL[order.status]}
         </Badge>
-        <Text size="xs" c="dimmed">{formatRelativeTime(order.createdAt)}</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{formatRelativeTime(order.createdAt)}</Text>
       </Group>
 
       {/* 주문 정보 */}
-      <Text fw={700} size="sm" mb={4} c="dark">
+      <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }} mb={4}>
         주문 #{order.id.slice(-6).toUpperCase()}
       </Text>
-      <Text size="sm" c="dimmed" mb={6}>
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={6}>
         {DELIVERY_LABEL[order.deliveryMethod]}
         {order.requestedDeliveryDate && ` · ${order.requestedDeliveryDate}`}
       </Text>
-      <Text size="xl" fw={800} c="dark" mb="sm">
+      <Text style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }} mb="sm">
         {order.totalAmount.toLocaleString()}원
       </Text>
 
@@ -297,11 +297,10 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
           p="md"
           radius="md"
           mb="sm"
-          bg="blue.0"
-          style={{ border: '1px solid var(--mantine-color-blue-2)' }}
+          style={{ background: 'var(--color-status-info-bg)', border: '1px solid var(--color-border)' }}
           onClick={(e) => e.stopPropagation()}
         >
-          <Text size="xs" c="blue.7" fw={600} mb="xs">드라이버 수거 예정 시간 (선택)</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-status-info-text)', fontWeight: 'var(--fw-medium)' }} mb="xs">드라이버 수거 예정 시간 (선택)</Text>
           <input
             type="datetime-local"
             value={preparedAtInput}
@@ -309,11 +308,11 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
             style={{
               width: '100%',
               padding: '8px 12px',
-              border: '1px solid var(--mantine-color-gray-3)',
+              border: '1px solid var(--color-border)',
               borderRadius: 8,
               fontSize: 14,
               marginBottom: 8,
-              background: '#fff',
+              background: 'var(--color-bg)',
             }}
           />
           <Group gap="xs">
@@ -380,13 +379,13 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
           py="xs"
           onClick={(e) => e.stopPropagation()}
         >
-          <Text size="xs" fw={600}>공동구매 모집 중</Text>
-          <Text size="xs" c="gray.6" mt={2}>모집 마감 후 인원 충족 시 자동 확정됩니다.</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>공동구매 모집 중</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} mt={2}>모집 마감 후 인원 충족 시 자동 확정됩니다.</Text>
         </Alert>
       )}
 
       {actionError && (
-        <Text size="xs" c="red" mt="xs">{actionError}</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt="xs">{actionError}</Text>
       )}
 
       {order.status === 'HUB_ARRIVED' && order.pickupCode && (
@@ -394,14 +393,13 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
           mt="xs"
           p="sm"
           radius="md"
-          bg="brand.0"
+          style={{ background: 'var(--color-primary-surface)' }}
           ta="center"
           onClick={(e) => e.stopPropagation()}
         >
-          <Text size="xs" c="brand.6" fw={600} mb={4}>픽업 코드</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }} mb={4}>픽업 코드</Text>
           <Text
-            fw={900}
-            style={{ fontSize: 24, letterSpacing: '0.2em', fontFamily: 'monospace', color: 'var(--mantine-color-brand-7)' }}
+            style={{ fontSize: 24, letterSpacing: '0.2em', fontFamily: 'monospace', fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
           >
             {order.pickupCode}
           </Text>

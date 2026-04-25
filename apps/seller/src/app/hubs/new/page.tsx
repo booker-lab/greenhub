@@ -16,6 +16,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core'
+import { ChevronLeft } from 'lucide-react'
 
 export default function NewHubPage() {
   const { data: session } = useSession()
@@ -66,23 +67,21 @@ export default function NewHubPage() {
   return (
     <Box
       component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)', padding: '32px 16px' }}
+      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)', padding: '32px 16px' }}
     >
       <Container size="xs">
         <Group gap="sm" mb="lg">
           <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
+            <ChevronLeft size={20} />
           </ActionIcon>
-          <Title order={2} fz="xl">거점 등록</Title>
+          <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>거점 등록</Title>
         </Group>
 
         <Paper radius="lg" shadow="sm" p="lg">
           <form onSubmit={handleSubmit}>
             <Stack gap="md">
               <TextInput
-                label={<>거점 이름 <Text component="span" c="red">*</Text></>}
+                label={<>거점 이름 <Text component="span" style={{ color: 'var(--color-danger)' }}>*</Text></>}
                 name="name"
                 value={form.name}
                 onChange={handleChange}
@@ -92,7 +91,7 @@ export default function NewHubPage() {
               />
 
               <TextInput
-                label={<>주소 <Text component="span" c="red">*</Text></>}
+                label={<>주소 <Text component="span" style={{ color: 'var(--color-danger)' }}>*</Text></>}
                 name="address"
                 value={form.address}
                 onChange={handleChange}
@@ -102,7 +101,7 @@ export default function NewHubPage() {
               />
 
               <TextInput
-                label={<>상세 주소 <Text component="span" c="dimmed" fw={400}>(선택)</Text></>}
+                label={<>상세 주소 <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>(선택)</Text></>}
                 name="addressDetail"
                 value={form.addressDetail}
                 onChange={handleChange}
@@ -111,7 +110,7 @@ export default function NewHubPage() {
               />
 
               <TextInput
-                label={<>운영 시간 <Text component="span" c="dimmed" fw={400}>(선택)</Text></>}
+                label={<>운영 시간 <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>(선택)</Text></>}
                 name="operatingHours"
                 value={form.operatingHours}
                 onChange={handleChange}
@@ -119,7 +118,7 @@ export default function NewHubPage() {
                 radius="xl"
               />
 
-              {error && <Text size="xs" c="red" ta="center">{error}</Text>}
+              {error && <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} ta="center">{error}</Text>}
 
               <Button
                 type="submit"
@@ -128,7 +127,7 @@ export default function NewHubPage() {
                 size="md"
                 radius="xl"
                 mt="xs"
-                style={{ backgroundColor: 'var(--green-primary)' }}
+                style={{ backgroundColor: 'var(--color-primary)' }}
               >
                 {loading ? '등록 중...' : '거점 등록'}
               </Button>

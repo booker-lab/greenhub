@@ -14,6 +14,7 @@ import {
   Text,
   Title,
 } from '@mantine/core'
+import { ChevronLeft } from 'lucide-react'
 
 type Step = 'input' | 'success' | 'error'
 
@@ -105,12 +106,12 @@ export default function HubPickupPage() {
   const isFilled = digits.every((d) => d !== '')
 
   return (
-    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}>
       <Box
         component="header"
         style={{
-          backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-1)',
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: '1px solid var(--color-border)',
           padding: '16px',
           position: 'sticky',
           top: 0,
@@ -120,9 +121,7 @@ export default function HubPickupPage() {
         <Container size="sm">
           <Group gap="sm">
             <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
+              <ChevronLeft size={20} />
             </ActionIcon>
             <Title order={3}>픽업 코드 확인</Title>
           </Group>
@@ -138,34 +137,34 @@ export default function HubPickupPage() {
                   width: 80,
                   height: 80,
                   borderRadius: '50%',
-                  backgroundColor: 'var(--mantine-color-green-1)',
+                  backgroundColor: 'var(--color-primary-surface)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2.5">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
               </Box>
               <Title order={3}>픽업 완료!</Title>
-              <Text size="sm" c="dimmed">주문이 PICKED_UP 상태로 전환되었습니다.</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>주문이 PICKED_UP 상태로 전환되었습니다.</Text>
               <Button
                 onClick={() => router.push(`/hubs/${hubId}`)}
                 size="md"
                 radius="xl"
                 mt="md"
-                style={{ backgroundColor: 'var(--green-primary)' }}
+                style={{ backgroundColor: 'var(--color-primary)' }}
               >
                 거점으로 돌아가기
               </Button>
             </Stack>
           ) : (
             <>
-              <Text size="sm" c="dimmed" mb={4} ta="center">
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={4} ta="center">
                 소비자의 픽업 코드 6자리를 입력하세요
               </Text>
-              <Text size="xs" c="dimmed" mb="xl" ta="center">
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb="xl" ta="center">
                 소비자가 소비자 앱에서 확인한 코드를 제시합니다
               </Text>
 
@@ -191,21 +190,21 @@ export default function HubPickupPage() {
                       borderRadius: 12,
                       border: `2px solid ${
                         step === 'error'
-                          ? '#F87171'
+                          ? 'var(--color-danger)'
                           : digit
-                            ? 'var(--green-primary)'
-                            : 'var(--mantine-color-gray-3)'
+                            ? 'var(--color-primary)'
+                            : 'var(--color-border)'
                       }`,
                       backgroundColor: step === 'error'
-                        ? '#FEF2F2'
+                        ? 'var(--color-danger-surface)'
                         : digit
-                          ? 'var(--green-bg)'
-                          : 'white',
+                          ? 'var(--color-primary-surface)'
+                          : 'var(--color-bg)',
                       color: step === 'error'
-                        ? '#EF4444'
+                        ? 'var(--color-danger)'
                         : digit
-                          ? 'var(--green-primary)'
-                          : 'var(--mantine-color-gray-9)',
+                          ? 'var(--color-primary)'
+                          : 'var(--color-text)',
                       outline: 'none',
                     }}
                   />
@@ -213,7 +212,7 @@ export default function HubPickupPage() {
               </Group>
 
               {step === 'error' && errorMsg && (
-                <Text size="sm" c="red" mb="md" ta="center">{errorMsg}</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mb="md" ta="center">{errorMsg}</Text>
               )}
 
               <Button
@@ -223,8 +222,7 @@ export default function HubPickupPage() {
                 maw={320}
                 size="lg"
                 radius="xl"
-                fw={600}
-                style={{ backgroundColor: 'var(--green-primary)' }}
+                style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}
               >
                 {loading ? '확인 중...' : '픽업 확인'}
               </Button>

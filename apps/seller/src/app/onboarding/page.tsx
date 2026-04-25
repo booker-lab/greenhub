@@ -127,12 +127,12 @@ export default function OnboardingPage() {
   return (
     <Box
       component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--green-bg)', padding: '32px 16px' }}
+      style={{ minHeight: '100vh', backgroundColor: 'var(--color-bg)', padding: '32px 16px' }}
     >
       <Container size="xs">
         <Stack align="center" gap="xs" mb="xl">
-          <Title order={2} fz="xl">사업자 정보 등록</Title>
-          <Text size="sm" c="dimmed">서비스 시작 전 한 번만 입력합니다</Text>
+          <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>사업자 정보 등록</Title>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>서비스 시작 전 한 번만 입력합니다</Text>
         </Stack>
 
         <Paper radius="lg" shadow="sm" p="lg">
@@ -145,23 +145,23 @@ export default function OnboardingPage() {
                     width: 80,
                     height: 80,
                     borderRadius: '50%',
-                    border: '2px dashed var(--mantine-color-gray-3)',
+                    border: '2px dashed var(--color-border)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     overflow: 'hidden',
-                    backgroundColor: 'var(--mantine-color-gray-0)',
+                    backgroundColor: 'var(--color-surface-muted)',
                   }}
                 >
                   {logoPreview ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={logoPreview} alt="로고 미리보기" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <Text fz={24} c="gray.3">🏪</Text>
+                    <Text style={{ fontSize: 'var(--font-size-2xl)', color: 'var(--color-border)' }}>🏪</Text>
                   )}
                 </Box>
                 <label style={{ cursor: 'pointer' }}>
-                  <Text size="sm" c="var(--green-primary)" fw={500}>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}>
                     {logoUploading ? '업로드 중...' : '로고 사진 선택'}
                   </Text>
                   <input
@@ -172,13 +172,13 @@ export default function OnboardingPage() {
                     disabled={logoUploading}
                   />
                 </label>
-                <Text size="xs" c="dimmed">선택 사항 · JPG, PNG, WebP 권장</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>선택 사항 · JPG, PNG, WebP 권장</Text>
               </Stack>
 
               <Divider />
 
               <TextInput
-                label={<>상호명 <Text component="span" c="red">*</Text></>}
+                label={<>상호명 <Text component="span" style={{ color: 'var(--color-danger)' }}>*</Text></>}
                 name="name"
                 value={form.name}
                 onChange={handleChange}
@@ -188,7 +188,7 @@ export default function OnboardingPage() {
               />
 
               <TextInput
-                label={<>대표자명 <Text component="span" c="red">*</Text></>}
+                label={<>대표자명 <Text component="span" style={{ color: 'var(--color-danger)' }}>*</Text></>}
                 name="ceoName"
                 value={form.ceoName}
                 onChange={handleChange}
@@ -198,7 +198,7 @@ export default function OnboardingPage() {
               />
 
               <TextInput
-                label={<>연락처 <Text component="span" c="red">*</Text></>}
+                label={<>연락처 <Text component="span" style={{ color: 'var(--color-danger)' }}>*</Text></>}
                 name="phone"
                 value={form.phone}
                 onChange={handleChange}
@@ -208,7 +208,7 @@ export default function OnboardingPage() {
               />
 
               <TextInput
-                label={<>소재지 <Text component="span" c="red">*</Text></>}
+                label={<>소재지 <Text component="span" style={{ color: 'var(--color-danger)' }}>*</Text></>}
                 name="address"
                 value={form.address}
                 onChange={handleChange}
@@ -220,7 +220,7 @@ export default function OnboardingPage() {
               <Divider />
 
               <TextInput
-                label={<>사업자등록번호 <Text component="span" c="dimmed" fw={400}>(선택)</Text></>}
+                label={<>사업자등록번호 <Text component="span" style={{ color: 'var(--color-text-disabled)', fontWeight: 400 }}>(선택)</Text></>}
                 name="businessNumber"
                 value={form.businessNumber}
                 onChange={handleChange}
@@ -229,7 +229,7 @@ export default function OnboardingPage() {
               />
 
               {error && (
-                <Text size="xs" c="red" ta="center">{error}</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} ta="center">{error}</Text>
               )}
 
               <Button
@@ -239,7 +239,7 @@ export default function OnboardingPage() {
                 size="md"
                 radius="xl"
                 mt="xs"
-                style={{ backgroundColor: 'var(--green-primary)' }}
+                style={{ backgroundColor: 'var(--color-primary)' }}
               >
                 {loading ? '저장 중...' : '저장 후 시작하기'}
               </Button>

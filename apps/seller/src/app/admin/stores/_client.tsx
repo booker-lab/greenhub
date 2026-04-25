@@ -39,7 +39,7 @@ export default function AdminStoresClient() {
 
   if (loading) {
     return (
-      <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
+      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>불러오는 중...</Text>
     )
   }
 
@@ -48,29 +48,29 @@ export default function AdminStoresClient() {
       <Group justify="space-between" mb="md">
         <Title order={4}>
           판매자 목록{' '}
-          <Text component="span" fz="sm" fw={400} c="dimmed">({stores.length})</Text>
+          <Text component="span" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>({stores.length})</Text>
         </Title>
       </Group>
 
-      <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--mantine-color-gray-1)', overflow: 'hidden' }}>
+      <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {stores.length === 0 ? (
-          <Text ta="center" py={64} c="dimmed">등록된 판매자가 없습니다.</Text>
+          <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>등록된 판매자가 없습니다.</Text>
         ) : (
           <Box component="table" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
-            <Box component="thead" style={{ backgroundColor: 'var(--mantine-color-gray-0)', borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
+            <Box component="thead" style={{ backgroundColor: 'var(--color-surface-muted)', borderBottom: '1px solid var(--color-border)' }}>
               <tr>
-                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상호</Box>
-                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상태</Box>
-                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>수수료율</Box>
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>상호</Box>
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>상태</Box>
+                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>수수료율</Box>
                 <Box component="th" style={{ padding: '12px 16px' }} />
               </tr>
             </Box>
             <Box component="tbody" style={{ borderTop: 'none' }}>
               {stores.map((store) => (
-                <Box component="tr" key={store.id} style={{ borderTop: '1px solid var(--mantine-color-gray-0)' }}>
+                <Box component="tr" key={store.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                   <Box component="td" style={{ padding: '12px 16px' }}>
-                    <Text fw={500}>{store.name || '(미설정)'}</Text>
-                    <Text fz={12} c="dimmed" ff="monospace">{store.id.slice(0, 8)}…</Text>
+                    <Text style={{ fontWeight: 'var(--fw-medium)' }}>{store.name || '(미설정)'}</Text>
+                    <Text style={{ fontSize: 12, color: 'var(--color-text-disabled)' }} ff="monospace">{store.id.slice(0, 8)}…</Text>
                   </Box>
                   <Box component="td" style={{ padding: '12px 16px' }}>
                     <Badge
@@ -94,7 +94,7 @@ export default function AdminStoresClient() {
                           placeholder="0.05"
                           style={{
                             width: 80,
-                            border: '1px solid var(--mantine-color-gray-3)',
+                            border: '1px solid var(--color-border)',
                             borderRadius: 6,
                             padding: '4px 8px',
                             fontSize: 14,
@@ -120,7 +120,7 @@ export default function AdminStoresClient() {
                         </Button>
                       </Group>
                     ) : (
-                      <Text c="gray.7">
+                      <Text style={{ color: 'var(--color-text-secondary)' }}>
                         {store.commissionRate !== undefined
                           ? `${(store.commissionRate * 100).toFixed(1)}%`
                           : '기본'}

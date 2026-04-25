@@ -52,7 +52,7 @@ export default function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'var(--color-bg)',
         padding: '0 16px',
       }}
     >
@@ -65,7 +65,7 @@ export default function LoginPage() {
                 width: 56,
                 height: 56,
                 borderRadius: 16,
-                backgroundColor: 'var(--green-primary)',
+                backgroundColor: 'var(--color-primary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -76,8 +76,8 @@ export default function LoginPage() {
                 <polyline points="9 22 9 12 15 12 15 22" />
               </svg>
             </Box>
-            <Title order={2} fz="xl">Green Love 판매자</Title>
-            <Text size="sm" c="dimmed">판매자 계정으로 로그인하세요</Text>
+            <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>Green Love 판매자</Title>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>판매자 계정으로 로그인하세요</Text>
           </Stack>
 
           <Stack gap="md">
@@ -124,7 +124,7 @@ export default function LoginPage() {
                   size="md"
                 />
                 {error && (
-                  <Text size="xs" c="red" ta="center">{error}</Text>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} ta="center">{error}</Text>
                 )}
                 <Button
                   type="submit"
@@ -132,14 +132,14 @@ export default function LoginPage() {
                   fullWidth
                   size="md"
                   radius="xl"
-                  style={{ backgroundColor: 'var(--green-primary)' }}
+                  style={{ backgroundColor: 'var(--color-primary)' }}
                 >
                   {loading ? '로그인 중...' : '로그인'}
                 </Button>
               </Stack>
             </form>
 
-            <Text size="xs" c="dimmed" ta="center">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} ta="center">
               계정이 없으신가요? 관리자에게 문의하세요.
             </Text>
           </Stack>

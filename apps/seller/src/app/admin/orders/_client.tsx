@@ -54,7 +54,7 @@ export default function AdminOrdersClient() {
       <Group justify="space-between" mb="md">
         <Title order={4}>
           전체 주문{' '}
-          <Text component="span" fz="sm" fw={400} c="dimmed">({orders.length})</Text>
+          <Text component="span" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>({orders.length})</Text>
         </Title>
       </Group>
 
@@ -79,37 +79,37 @@ export default function AdminOrdersClient() {
       </Group>
 
       {loading ? (
-        <Text ta="center" py={80} c="dimmed">불러오는 중...</Text>
+        <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>불러오는 중...</Text>
       ) : (
-        <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--mantine-color-gray-1)', overflow: 'hidden' }}>
+        <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}>
           {orders.length === 0 ? (
-            <Text ta="center" py={64} c="dimmed">주문이 없습니다.</Text>
+            <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>주문이 없습니다.</Text>
           ) : (
             <Box component="table" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
-              <Box component="thead" style={{ backgroundColor: 'var(--mantine-color-gray-0)', borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
+              <Box component="thead" style={{ backgroundColor: 'var(--color-surface-muted)', borderBottom: '1px solid var(--color-border)' }}>
                 <tr>
-                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>주문ID</Box>
-                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>스토어</Box>
-                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>상태</Box>
-                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--mantine-color-gray-6)' }}>금액</Box>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>주문ID</Box>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>스토어</Box>
+                  <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>상태</Box>
+                  <Box component="th" style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>금액</Box>
                   <Box component="th" style={{ padding: '12px 16px' }} />
                 </tr>
               </Box>
               <Box component="tbody">
                 {orders.map((order) => (
-                  <Box component="tr" key={order.id} style={{ borderTop: '1px solid var(--mantine-color-gray-0)' }}>
+                  <Box component="tr" key={order.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                     <Box component="td" style={{ padding: '12px 16px' }}>
-                      <Text fz={12} c="dimmed" ff="monospace">{order.id.slice(0, 12)}…</Text>
+                      <Text style={{ fontSize: 12, color: 'var(--color-text-disabled)' }} ff="monospace">{order.id.slice(0, 12)}…</Text>
                     </Box>
                     <Box component="td" style={{ padding: '12px 16px' }}>
-                      <Text fz={12} c="dimmed" ff="monospace">{order.storeId.slice(0, 8)}…</Text>
+                      <Text style={{ fontSize: 12, color: 'var(--color-text-disabled)' }} ff="monospace">{order.storeId.slice(0, 8)}…</Text>
                     </Box>
                     <Box component="td" style={{ padding: '12px 16px' }}>
                       <Badge color={getStatusColor(order.status)} variant="light" radius="xl">
                         {STATUS_LABEL[order.status] ?? order.status}
                       </Badge>
                     </Box>
-                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--mantine-color-gray-7)' }}>
+                    <Box component="td" style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--color-text-secondary)' }}>
                       ₩{order.totalAmount.toLocaleString()}
                     </Box>
                     <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>

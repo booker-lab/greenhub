@@ -262,19 +262,19 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
             <ImageUpload storeId={storeId} images={form.images} onChange={(images) => set('images', images)} onError={(msg) => setError(msg)} />
             <TextInput placeholder="상품명" value={form.name} onChange={(e) => set('name', e.target.value)} radius="xl" size="md" />
             <Paper radius="lg" shadow="xs" p="md">
-              <Text size="xs" fw={500} c="dimmed" mb="xs">카테고리</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">카테고리</Text>
               <Group gap="xs">
                 {CATEGORIES.map(({ value, label }) => (
                   <Button key={value} onClick={() => set('category', value)} flex={1} size="sm" radius="xl"
                     variant={form.category === value ? 'filled' : 'outline'} color="gray"
-                    style={form.category === value ? { backgroundColor: 'var(--green-primary)', borderColor: 'var(--green-primary)', color: 'white' } : {}}>
+                    style={form.category === value ? { backgroundColor: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: 'white' } : {}}>
                     {label}
                   </Button>
                 ))}
               </Group>
             </Paper>
             <Paper radius="lg" shadow="xs" p="md">
-              <Text size="xs" fw={500} c="dimmed" mb="xs">품종 선택</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">품종 선택</Text>
               <VarietySelector
                 category={form.category}
                 value={form.varietyId}
@@ -306,31 +306,31 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
       case 5:
         return (
           <Stack gap="sm">
-            <NumberInput placeholder="가격" leftSection={<Text size="sm" c="dimmed">₩</Text>}
+            <NumberInput placeholder="가격" leftSection={<Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>₩</Text>}
               thousandSeparator="," min={0} hideControls
               value={form.price === '' ? '' : Number(form.price)}
               onChange={(val) => set('price', val === '' ? '' : String(val))}
               radius="xl" size="md" />
             <Paper radius="lg" shadow="xs" p="md">
-              <Text size="xs" fw={500} c="dimmed" mb="xs">배송 사이즈</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">배송 사이즈</Text>
               <Group gap="xs">
                 {DELIVERY_SIZES.map(({ value, label }) => (
                   <Button key={value} onClick={() => set('deliverySize', value)} flex={1} size="sm" radius="xl"
                     variant="outline" color="gray"
-                    style={form.deliverySize === value ? { backgroundColor: 'var(--green-primary)', borderColor: 'var(--green-primary)', color: 'white' } : {}}>
+                    style={form.deliverySize === value ? { backgroundColor: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: 'white' } : {}}>
                     {label}
                   </Button>
                 ))}
               </Group>
             </Paper>
             <Paper radius="lg" shadow="xs" p="md">
-              <Text size="xs" fw={500} c="dimmed" mb="sm">판매 방식</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="sm">판매 방식</Text>
               <Group gap="xl">
                 {(['normal', 'group'] as const).map((type) => (
                   <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                     <input type="radio" name="saleType" checked={form.saleType === type} onChange={() => set('saleType', type)}
-                      style={{ accentColor: 'var(--green-primary)', width: 16, height: 16 }} />
-                    <Text size="sm" c="gray.7">{type === 'normal' ? '일반 판매' : '공동구매'}</Text>
+                      style={{ accentColor: 'var(--color-primary)', width: 16, height: 16 }} />
+                    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>{type === 'normal' ? '일반 판매' : '공동구매'}</Text>
                   </label>
                 ))}
               </Group>
@@ -342,8 +342,8 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
   }
 
   return (
-    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
-      <Box component="header" style={{ backgroundColor: 'var(--mantine-color-white)', borderBottom: '1px solid var(--mantine-color-gray-1)', padding: '16px', position: 'sticky', top: 0, zIndex: 10 }}>
+    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}>
+      <Box component="header" style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', padding: '16px', position: 'sticky', top: 0, zIndex: 10 }}>
         <Container size="sm">
           <Group justify="space-between">
             <Group gap="sm">
@@ -355,10 +355,10 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
               <Title order={3}>{mode === 'create' ? '상품 등록' : '상품 수정'}</Title>
             </Group>
             <Group gap="xs">
-              <UnstyledButton onClick={handleDraftReset} style={{ fontSize: 13, color: 'var(--mantine-color-gray-4)' }}>
+              <UnstyledButton onClick={handleDraftReset} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
                 초기화
               </UnstyledButton>
-              <UnstyledButton onClick={handleDraftSave} style={{ fontSize: 14, fontWeight: 500, color: draftSaved ? 'var(--green-primary)' : 'var(--mantine-color-gray-6)' }}>
+              <UnstyledButton onClick={handleDraftSave} style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: draftSaved ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>
                 {draftSaved ? '저장됨 ✓' : '임시저장'}
               </UnstyledButton>
             </Group>
@@ -366,7 +366,7 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
         </Container>
       </Box>
 
-      <Box style={{ backgroundColor: 'var(--mantine-color-white)', borderBottom: '1px solid var(--mantine-color-gray-1)', padding: '8px 16px' }}>
+      <Box style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', padding: '8px 16px' }}>
         <Container size="sm">
           <Group gap={0}>
             {STEP_LABELS.map((label, i) => {
@@ -377,14 +377,14 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
                 <Box key={s} style={{ flex: 1, textAlign: 'center', padding: '4px 2px' }}>
                   <Box style={{
                     width: 24, height: 24, borderRadius: '50%', margin: '0 auto 2px',
-                    backgroundColor: active ? 'var(--green-primary)' : done ? 'var(--green-bg)' : 'var(--mantine-color-gray-2)',
+                    backgroundColor: active ? 'var(--color-primary)' : done ? 'var(--color-primary-surface)' : 'var(--color-border)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: 600,
-                    color: active ? 'white' : done ? 'var(--green-primary)' : 'var(--mantine-color-gray-5)',
+                    fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)',
+                    color: active ? 'white' : done ? 'var(--color-primary)' : 'var(--color-text-disabled)',
                   }}>
                     {done ? '✓' : s}
                   </Box>
-                  <Text size="10px" c={active ? 'var(--green-primary)' : 'gray.4'} fw={active ? 600 : 400}>
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: active ? 'var(--color-primary)' : 'var(--color-text-disabled)', fontWeight: active ? 'var(--fw-medium)' : 400 }}>
                     {label}
                   </Text>
                 </Box>
@@ -397,7 +397,7 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
       <Container size="sm" px="md" py="md" pb={96}>
         <Stack gap="sm">
           {renderStep()}
-          {error && <Text size="sm" c="red" ta="center" px="xs">{error}</Text>}
+          {error && <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} ta="center" px="xs">{error}</Text>}
           <Group gap="xs" mt="xs">
             {step > 1 && (
               <Button onClick={goPrev} variant="outline" color="gray" flex={1} size="lg" radius="xl">
@@ -405,13 +405,13 @@ export default function ProductForm({ mode, productId, storeId, token, initialDa
               </Button>
             )}
             {step < 5 ? (
-              <Button onClick={goNext} flex={1} size="lg" radius="xl" fw={600}
-                style={{ backgroundColor: 'var(--green-primary)' }}>
+              <Button onClick={goNext} flex={1} size="lg" radius="xl"
+                style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}>
                 다음
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={submitting} flex={1} size="lg" radius="xl" fw={600}
-                style={{ backgroundColor: 'var(--green-primary)' }}>
+              <Button onClick={handleSubmit} disabled={submitting} flex={1} size="lg" radius="xl"
+                style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}>
                 {submitting ? '처리 중...' : mode === 'create' ? '등록하기' : '저장하기'}
               </Button>
             )}

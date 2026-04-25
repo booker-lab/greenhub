@@ -32,24 +32,24 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
         marginTop: visible ? 16 : 0,
       }}
     >
-      <Box style={{ borderTop: '1px solid var(--mantine-color-gray-1)', paddingTop: 16 }}>
+      <Box style={{ borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
         <Group gap="xs" mb="sm">
           <Box style={{ flex: 1 }}>
-            <Text size="xs" c="dimmed" mb={4}>최소 수량</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={4}>최소 수량</Text>
             <input
               type="number" placeholder="10" min={1}
               value={config.minQuantity}
               onChange={(e) => setGroupConfig('minQuantity', e.target.value)}
-              style={{ width: '100%', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 12, padding: '10px 12px', fontSize: 14 }}
+              style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 12, padding: '10px 12px', fontSize: 'var(--font-size-sm)' }}
             />
           </Box>
           <Box style={{ flex: 1 }}>
-            <Text size="xs" c="dimmed" mb={4}>목표 수량</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={4}>목표 수량</Text>
             <input
               type="number" placeholder="50" min={1}
               value={config.targetQuantity}
               onChange={(e) => setGroupConfig('targetQuantity', e.target.value)}
-              style={{ width: '100%', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 12, padding: '10px 12px', fontSize: 14 }}
+              style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 12, padding: '10px 12px', fontSize: 'var(--font-size-sm)' }}
             />
           </Box>
         </Group>
@@ -59,7 +59,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
             type="number" placeholder="5" min={1}
             value={config.maxPerPerson}
             onChange={(e) => setGroupConfig('maxPerPerson', e.target.value)}
-            style={{ width: '100%', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 12, padding: '10px 12px', fontSize: 14 }}
+            style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 12, padding: '10px 12px', fontSize: 'var(--font-size-sm)' }}
           />
         </Box>
 
@@ -69,7 +69,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
             type="datetime-local"
             value={config.recruitDeadline}
             onChange={(e) => setGroupConfig('recruitDeadline', e.target.value)}
-            style={{ width: '100%', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 12, padding: '10px 12px', fontSize: 14 }}
+            style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 12, padding: '10px 12px', fontSize: 'var(--font-size-sm)' }}
           />
         </Box>
 
@@ -79,7 +79,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
             type="date"
             value={config.groupDeliveryDate}
             onChange={(e) => setGroupConfig('groupDeliveryDate', e.target.value)}
-            style={{ width: '100%', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 12, padding: '10px 12px', fontSize: 14 }}
+            style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 12, padding: '10px 12px', fontSize: 'var(--font-size-sm)' }}
           />
         </Box>
 
@@ -93,7 +93,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
                 onClick={() => setGroupConfig('groupDeliveryMethod', value as 'direct' | 'parcel')}
                 flex={1} size="sm" radius="xl" variant="outline" color="gray"
                 style={config.groupDeliveryMethod === value
-                  ? { backgroundColor: 'var(--green-bg)', borderColor: 'var(--green-primary)', color: 'var(--green-primary)' }
+                  ? { backgroundColor: 'var(--color-primary-surface)', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }
                   : {}}
               >
                 {label}

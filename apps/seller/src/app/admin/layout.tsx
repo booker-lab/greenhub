@@ -14,12 +14,12 @@ export default async function AdminLayout({
   }
 
   return (
-    <Box style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+    <Box style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}>
       <Box
         component="header"
         style={{
-          backgroundColor: 'var(--mantine-color-white)',
-          borderBottom: '1px solid var(--mantine-color-gray-2)',
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: '1px solid var(--color-border)',
           position: 'sticky',
           top: 0,
           zIndex: 10,
@@ -27,8 +27,8 @@ export default async function AdminLayout({
       >
         <Container size="lg" px="md" py="sm">
           <Group justify="space-between">
-            <Text fw={700} fz="lg">관리자 콘솔</Text>
-            <Badge color="red" variant="light" fw={600}>ADMIN</Badge>
+            <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}>관리자 콘솔</Text>
+            <Badge color="red" variant="light" style={{ fontWeight: 'var(--fw-medium)' }}>ADMIN</Badge>
           </Group>
         </Container>
         <Box style={{ overflowX: 'auto' }}>
@@ -52,7 +52,7 @@ export default async function AdminLayout({
                     borderRadius: 6,
                     fontSize: 14,
                     fontWeight: 500,
-                    color: 'var(--mantine-color-gray-6)',
+                    color: 'var(--color-text-secondary)',
                     textDecoration: 'none',
                   }}
                 >
