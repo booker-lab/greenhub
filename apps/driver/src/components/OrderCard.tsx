@@ -52,20 +52,20 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
           <Badge color={badge.color} variant="light" size="md">
             {badge.label}
           </Badge>
-          <Text size="xs" c="dimmed">
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             {tab === "preparing"
               ? `수거 ${formatTime(order.preparedAt)}`
               : `배송 시작 ${formatTime(order.updatedAt)}`}
           </Text>
         </Group>
-        <Text fw={600} size="sm">
+        <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}>
           {order.buyerName ?? "소비자"}
         </Text>
-        <Text size="sm" c="dimmed" truncate="end">
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} truncate="end">
           {displayLocation}
         </Text>
         {order.productName && (
-          <Text size="xs" c="dimmed">
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             {order.productName}
             {order.quantity && order.quantity > 1 ? ` 외 ${order.quantity - 1}건` : ""}
           </Text>

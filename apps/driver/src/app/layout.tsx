@@ -1,14 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
 import { ColorSchemeScript } from "@mantine/core";
 import Providers from "./providers";
 import BottomNav from "@/components/BottomNav";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Green Love 드라이버",
@@ -35,13 +29,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={geistSans.variable} suppressHydrationWarning>
+    <html lang="ko" suppressHydrationWarning>
       <head>
         <ColorSchemeScript />
       </head>
       <body>
         <Providers>
-          <div style={{ maxWidth: 430, margin: '0 auto', backgroundColor: '#ffffff', minHeight: '100dvh' }}>
+          <div style={{ maxWidth: 430, margin: '0 auto', backgroundColor: 'var(--color-bg)', minHeight: '100dvh' }}>
             {children}
           </div>
           <BottomNav />

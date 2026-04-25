@@ -15,12 +15,12 @@ export default async function LoginPage({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#FFFFFF",
+        backgroundColor: 'var(--color-bg)',
         padding: "0 16px",
       }}
     >
       <Box w="100%" style={{ maxWidth: 400 }}>
-        <Paper radius="lg" shadow="sm" p="xl">
+        <Paper radius="lg" p="xl" style={{ border: 'var(--border)' }}>
           {/* 로고 */}
           <Stack align="center" gap="xs" mb="xl">
             <Box
@@ -28,28 +28,28 @@ export default async function LoginPage({
                 width: 56,
                 height: 56,
                 borderRadius: 16,
-                backgroundColor: "var(--green-primary)",
+                backgroundColor: 'var(--color-primary)',
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-bg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="1" y="3" width="15" height="13" rx="1" />
                 <path d="M16 8h4l3 3v5h-7V8z" />
                 <circle cx="5.5" cy="18.5" r="2.5" />
                 <circle cx="18.5" cy="18.5" r="2.5" />
               </svg>
             </Box>
-            <Title order={2} fz="xl">Green Love 드라이버</Title>
-            <Text size="sm" c="dimmed">드라이버 계정으로 로그인하세요</Text>
+            <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>Green Love 드라이버</Title>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>드라이버 계정으로 로그인하세요</Text>
           </Stack>
 
           {/* 승인 대기 안내 */}
           {pending === "true" && (
             <Alert color="yellow" radius="md" mb="md">
-              <Text size="sm" fw={600} mb={4}>승인 대기 중입니다</Text>
-              <Text size="xs">
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }} mb={4}>승인 대기 중입니다</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)' }}>
                 관리자 승인 후 이용할 수 있습니다.<br />
                 승인이 완료되면 다시 로그인해 주세요.
               </Text>

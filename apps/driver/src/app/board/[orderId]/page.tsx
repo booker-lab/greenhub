@@ -102,15 +102,15 @@ export default function OrderDetailPage({
           position: "sticky",
           top: 0,
           zIndex: 10,
-          backgroundColor: "var(--mantine-color-white)",
-          borderBottom: "1px solid var(--mantine-color-gray-2)",
+          backgroundColor: 'var(--color-bg)',
+          borderBottom: 'var(--border)',
           padding: "16px",
           display: "flex",
           alignItems: "center",
           gap: 12,
         }}
       >
-        <UnstyledButton onClick={() => router.back()} style={{ color: "var(--mantine-color-gray-6)", padding: 4 }}>
+        <UnstyledButton onClick={() => router.back()} style={{ color: 'var(--color-text-secondary)', padding: 4 }}>
           <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
@@ -119,7 +119,7 @@ export default function OrderDetailPage({
           <Badge color="green" variant="light" size="sm">
             {METHOD_LABEL[order.deliveryMethod] ?? order.deliveryMethod}
           </Badge>
-          {isDelivering && <Text size="sm" fw={600} c="blue">배송 중</Text>}
+          {isDelivering && <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>배송 중</Text>}
         </Group>
       </Box>
 
@@ -129,7 +129,7 @@ export default function OrderDetailPage({
           {/* 주문 정보 */}
           <Card radius="xl" withBorder p="md">
             <Stack gap="sm">
-              <Text size="sm" fw={600} c="dimmed">주문 정보</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text-disabled)' }}>주문 정보</Text>
               <InfoRow label="상품" value={`${order.productName ?? "-"}${order.quantity ? ` × ${order.quantity}` : ""}`} />
               {isPreparing && <InfoRow label="수거 예정" value={preparedAtStr} />}
               {isHub ? (
@@ -147,7 +147,7 @@ export default function OrderDetailPage({
           {/* 연락처 */}
           <Card radius="xl" withBorder p="md">
             <Stack gap="sm">
-              <Text size="sm" fw={600} c="dimmed">연락처</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text-disabled)' }}>연락처</Text>
               {isPreparing && order.sellerPhone && <ContactRow label="판매자" phone={order.sellerPhone} />}
               {isDelivering && !isHub && order.buyerPhone && <ContactRow label="소비자" phone={order.buyerPhone} />}
               {isDelivering && isHub && order.sellerPhone && <ContactRow label="판매자" phone={order.sellerPhone} />}
@@ -181,8 +181,8 @@ export default function OrderDetailPage({
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <Group justify="space-between" align="flex-start">
-      <Text size="sm" c="dimmed">{label}</Text>
-      <Text size="sm" fw={500} ta="right" style={{ maxWidth: "60%" }}>{value}</Text>
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{label}</Text>
+      <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', maxWidth: "60%" }} ta="right">{value}</Text>
     </Group>
   );
 }
@@ -191,8 +191,8 @@ function ContactRow({ label, phone }: { label: string; phone: string }) {
   return (
     <Group justify="space-between" align="center">
       <Stack gap={2}>
-        <Text size="xs" c="dimmed">{label}</Text>
-        <Text size="sm" fw={500}>{phone}</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{label}</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>{phone}</Text>
       </Stack>
       <Anchor
         component="a"
@@ -201,10 +201,10 @@ function ContactRow({ label, phone }: { label: string; phone: string }) {
           display: "flex",
           alignItems: "center",
           gap: 6,
-          backgroundColor: "var(--green-pale)",
-          color: "var(--green-dark)",
-          fontWeight: 600,
-          fontSize: 14,
+          backgroundColor: 'var(--color-primary-surface)',
+          color: 'var(--color-primary-dark)',
+          fontWeight: 'var(--fw-bold)',
+          fontSize: 'var(--font-size-sm)',
           padding: "8px 16px",
           borderRadius: 12,
           textDecoration: "none",

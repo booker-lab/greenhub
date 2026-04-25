@@ -34,20 +34,20 @@ export default async function ProfilePage() {
                     width: 60,
                     height: 60,
                     borderRadius: "50%",
-                    backgroundColor: "var(--green-pale)",
+                    backgroundColor: 'var(--color-primary-surface)',
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Text c="brand.6" fw={700} fz={20}>
+                  <Text style={{ color: 'var(--color-primary)', fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-xl)' }}>
                     {user.name?.[0] ?? "D"}
                   </Text>
                 </Box>
               )}
               <Stack gap={2}>
-                <Text fw={700}>{user.name ?? "드라이버"}</Text>
-                <Text size="sm" c="dimmed">{user.email ?? ""}</Text>
+                <Text style={{ fontWeight: 'var(--fw-bold)' }}>{user.name ?? "드라이버"}</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{user.email ?? ""}</Text>
               </Stack>
             </Group>
           </Card>
@@ -55,16 +55,16 @@ export default async function ProfilePage() {
           {/* 계정 정보 */}
           <Card radius="xl" withBorder p={0}>
             <Group justify="space-between" align="center" px="md" py="md">
-              <Text size="sm" c="dimmed">연결된 계정</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>연결된 계정</Text>
               <Group gap="xs">
                 <Box style={{ width: 16, height: 16, borderRadius: "50%", backgroundColor: "#FEE500" }} />
-                <Text size="sm" fw={500}>카카오</Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>카카오</Text>
               </Group>
             </Group>
             <Divider />
             <Group justify="space-between" align="center" px="md" py="md">
-              <Text size="sm" c="dimmed">앱 버전</Text>
-              <Text size="sm" c="dimmed">1.0.0</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>앱 버전</Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>1.0.0</Text>
             </Group>
           </Card>
 
