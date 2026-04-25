@@ -28,6 +28,21 @@ tsc --noEmit 0 errors, 구 변수/hex 잔존 0건 검증 완료.
 
 ---
 
+## 🔜 다음 세션 — 드라이버앱 E2E 검증
+
+**스펙 파일**: `apps/e2e/tests/driver-design-system.spec.ts`
+**실행**: `pnpm test:e2e -- --grep "드라이버 디자인 시스템"`
+
+| 테스트 그룹 | 조건 | 체크 항목 |
+|------------|------|----------|
+| 로그인 페이지 (공개) | 환경변수 불필요 | 렌더링·카카오 #FEE500 유지·구 변수 미사용·Paper border |
+| 라우팅 (공개) | 환경변수 불필요 | /board·/map·/profile 미인증 리디렉션 |
+| 인증 화면 | `DRIVER_SESSION_COOKIE` 필요 | 보드 탭·BottomNav borderTop·지도·프로필 |
+
+**DRIVER_SESSION_COOKIE 준비법**: 브라우저에서 드라이버 로그인 후 DevTools → Application → Cookies → `next-auth.session-token` 값 복사 후 JSON 배열로 구성.
+
+---
+
 ## 배포 현황
 
 | 항목 | 값 |
