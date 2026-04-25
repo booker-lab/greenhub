@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { Container, Box, Title, Text, SimpleGrid, Skeleton, Stack, Group, Badge } from '@mantine/core'
+import { Container, Box, Text, SimpleGrid, Skeleton, Stack } from '@mantine/core'
 import ProductCard from '@/components/ProductCard'
 import { useProducts } from '@/hooks/useProducts'
 
@@ -64,15 +64,15 @@ export default function GroupBuyPage() {
 
       {!loading && error && (
         <Stack align="center" py={48}>
-          <Text size="sm" style={{ color: 'var(--color-text-disabled)' }}>{error}</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{error}</Text>
         </Stack>
       )}
 
       {!loading && !error && products.length === 0 && (
         <Stack align="center" py={64}>
           <Text size="xl">🌱</Text>
-          <Text size="sm" style={{ color: 'var(--color-text-disabled)' }}>진행 중인 공동구매가 없습니다.</Text>
-          <Text size="sm" style={{ color: 'var(--color-text-disabled)' }}>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>진행 중인 공동구매가 없습니다.</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             <Link href="/" style={{ color: 'inherit' }}>전체 상품 보기</Link>
           </Text>
         </Stack>

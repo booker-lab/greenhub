@@ -54,7 +54,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
           </Box>
         </Group>
         <Box mb="sm">
-          <Text size="xs" c="dimmed" mb={4}>1인 최대 구매 수량</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={4}>1인 최대 구매 수량</Text>
           <input
             type="number" placeholder="5" min={1}
             value={config.maxPerPerson}
@@ -64,7 +64,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
         </Box>
 
         <Box mb="sm">
-          <Text size="xs" c="dimmed" mb={4}>모집 마감일시</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={4}>모집 마감일시</Text>
           <input
             type="datetime-local"
             value={config.recruitDeadline}
@@ -74,7 +74,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
         </Box>
 
         <Box mb="sm">
-          <Text size="xs" c="dimmed" mb={4}>배송 예정일</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={4}>배송 예정일</Text>
           <input
             type="date"
             value={config.groupDeliveryDate}
@@ -84,7 +84,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
         </Box>
 
         <Box>
-          <Text size="xs" c="dimmed" mb={4}>배송 수단</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={4}>배송 수단</Text>
           <Group gap="xs">
             {GROUP_DELIVERY_METHODS.map(({ value, label }) => (
               <Button
