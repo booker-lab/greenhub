@@ -1,6 +1,3 @@
-'use client'
-
-import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Box } from '@mantine/core'
@@ -22,28 +19,21 @@ interface Banner {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
-export default function HeroBanner() {
-  const [banner, setBanner] = useState<Banner | null>(null)
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    fetch(`${API_URL}/banner`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data?.isActive) setBanner(data) })
-      .catch(() => {})
-      .finally(() => setLoaded(true))
-  }, [])
-
-  if (!loaded) return (
-    <Box
-      mb="lg"
-      style={{
-        minHeight: 200,
-        borderRadius: 'var(--radius)',
-        background: 'var(--color-primary-surface)',
-      }}
-    />
-  )
+export default async function HeroBanner() {
+  let banner: Banner | null = null
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 3000)
+    const res = await fetch(`${API_URL}/banner`, {
+      next: { revalidate: 60 },
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    if (res.ok) {
+      const data = await res.json()
+      if (data?.isActive) banner = data
+    }
+  } catch {}
 
   if (!banner) return null
 
