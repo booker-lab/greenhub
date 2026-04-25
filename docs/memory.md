@@ -11,8 +11,8 @@
 
 | 앱 | 플랜 | 완료일 |
 |----|------|--------|
-| Consumer (T0~T13) | `docs/specs/design-system.md` | 2026-04-25 |
-| Seller (ST1~ST17) | `docs/specs/seller-design-system-refactor-plan.md` | 2026-04-25 |
+| Consumer (T0~T13) | `docs/specs/frontend-design-system.md` | 2026-04-25 |
+| Seller (ST1~ST17) | `docs/specs/frontend-design-system.md` | 2026-04-25 |
 
 tsc --noEmit 양쪽 0 errors 검증 완료.
 
@@ -22,7 +22,7 @@ tsc --noEmit 양쪽 0 errors 검증 완료.
 
 | 앱 | 플랜 | 완료일 |
 |----|------|--------|
-| Driver (DT1~DT11) | `docs/specs/driver-design-system-refactor-plan.md` | 2026-04-25 |
+| Driver (DT1~DT11) | `docs/specs/frontend-design-system.md` | 2026-04-25 |
 
 tsc --noEmit 0 errors, 구 변수/hex 잔존 0건 검증 완료.
 
@@ -30,6 +30,7 @@ tsc --noEmit 0 errors, 구 변수/hex 잔존 0건 검증 완료.
 
 ## 🔜 다음 세션 — 드라이버앱 E2E 검증
 
+**통합 문서**: `docs/specs/frontend-design-system.md`  
 **스펙 파일**: `apps/e2e/tests/driver-design-system.spec.ts`
 **실행**: `pnpm test:e2e -- --grep "드라이버 디자인 시스템"`
 
