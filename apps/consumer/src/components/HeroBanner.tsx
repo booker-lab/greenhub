@@ -24,13 +24,26 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 export default function HeroBanner() {
   const [banner, setBanner] = useState<Banner | null>(null)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     fetch(`${API_URL}/banner`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => { if (data?.isActive) setBanner(data) })
       .catch(() => {})
+      .finally(() => setLoaded(true))
   }, [])
+
+  if (!loaded) return (
+    <Box
+      mb="lg"
+      style={{
+        minHeight: 200,
+        borderRadius: 'var(--radius)',
+        background: 'var(--color-primary-surface)',
+      }}
+    />
+  )
 
   if (!banner) return null
 
