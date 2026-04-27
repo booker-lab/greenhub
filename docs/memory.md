@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-04-27
+최종 수정: 2026-04-28
 
 ---
 
@@ -17,32 +17,20 @@
 | next/image 전환 (1·2순위 최적화) | `b3d0625` | 2026-04-26 |
 | HeroBanner CLS 스켈레톤 수정 | `bc25031` | 2026-04-26 |
 | **HeroBanner SSR 전환 + products/[id] 분리 (3순위)** | `a1560c5` | 2026-04-27 |
+| **5순위: www 리디렉션 제거** (Vercel 대시보드) | 코드 변경 없음 | 2026-04-28 |
 
 ---
 
-## 🔜 다음 세션 — 5·6순위 성능 최적화
+## 🔜 다음 세션 — 6순위 성능 최적화 + 폰트 self-hosting
 
-### 5순위: www 리디렉션 제거
-
-**플랜**: `docs/specs/perf-redirect-optimization.md`
-
-착수 순서:
-1. T0: `curl -I https://www.greenlove.co.kr` 로 리디렉션 체인 진단
-2. T1: Vercel 대시보드 → Domains → www 리디렉션 설정 최적화
-3. T2: HSTS 헤더 추가 (T0 결과에서 HTTP→HTTPS 반복 확인 시만)
-4. T3: 빌드 검증 (T2 적용 시)
-5. T4: 재측정
-
-**주의**: 주 작업이 Vercel 대시보드 설정 — 코드 변경 최소.
-
-### 6순위: Mantine CSS Treeshaking
+### 6순위: Mantine CSS Treeshaking + Pretendard self-hosting
 
 **플랜**: `docs/specs/perf-mantine-treeshaking.md`
 
 착수 순서:
 1. T0: 3앱 + @greenhub/ui 패키지에서 실제 사용 Mantine 컴포넌트 목록 추출 (필수)
 2. T1: Consumer globals.css → 선택적 import 전환
-3. T2: @greenhub/ui style.css Mantine import 중복 여부 확인
+3. T2: @greenhub/ui style.css Mantine import 중복 여부 확인 + Pretendard jsdelivr → self-hosting 전환
 4. T3: Seller · Driver 동일 적용
 5. T4: **시각적 회귀 검사 (생략 금지)**
 6. T5: tsc + 빌드 + CSS 크기 비교
@@ -95,3 +83,4 @@
 - **HeroBanner SSR 주의**: AbortController 3초 timeout 필수 — API 미구동 시 빌드 hang 방지
 - **products/[id] 구조**: page.tsx(서버) + ProductImages/ProductInfo/ProductActions(_components/). useGroupProduct·useDailyCap은 onSnapshot 실시간이라 클라이언트 유지
 - **Store 공개 API 없음**: useStore는 클라이언트 훅 유지 (서버 이전 불가)
+- **Pretendard 폰트**: `packages/ui/src/style.css`에서 jsdelivr CDN `@import` 중. PWA SW(`aggressiveFrontEndNavCaching`)가 외부 CDN 캐싱 실패 시 `ERR_FAILED` 발생 → 6순위 작업 시 self-hosting 전환 권장
