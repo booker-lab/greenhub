@@ -52,27 +52,28 @@
 ### T0 — 사용 컴포넌트 전체 목록 추출 (착수 전 필수)
 
 ```bash
+# 싱글/더블쿼트 모두 잡기 위해 mantine/core 패턴 사용
 # Consumer
-grep -rh "from '@mantine/core'" apps/consumer/src --include="*.tsx" --include="*.ts" \
+grep -rh "mantine/core" apps/consumer/src --include="*.tsx" --include="*.ts" \
   | grep -o '{[^}]*}' | tr ',' '\n' | sed 's/[{ ]//g' | sort -u
 
 # Seller
-grep -rh "from '@mantine/core'" apps/seller/src --include="*.tsx" --include="*.ts" \
+grep -rh "mantine/core" apps/seller/src --include="*.tsx" --include="*.ts" \
   | grep -o '{[^}]*}' | tr ',' '\n' | sed 's/[{ ]//g' | sort -u
 
 # Driver
-grep -rh "from '@mantine/core'" apps/driver/src --include="*.tsx" --include="*.ts" \
+grep -rh "mantine/core" apps/driver/src --include="*.tsx" --include="*.ts" \
   | grep -o '{[^}]*}' | tr ',' '\n' | sed 's/[{ ]//g' | sort -u
 
 # 공유 UI 패키지
-grep -rh "from '@mantine/core'" packages/ui/src --include="*.tsx" --include="*.ts" \
+grep -rh "mantine/core" packages/ui/src --include="*.tsx" --include="*.ts" \
   | grep -o '{[^}]*}' | tr ',' '\n' | sed 's/[{ ]//g' | sort -u
 ```
 
 결과에서:
 1. 컴포넌트 목록 정리
-2. 각 컴포넌트의 CSS 파일 존재 여부 확인: `ls node_modules/@mantine/core/styles/`
-3. 컴포넌트 간 CSS 의존성 확인 (Mantine 문서 참조)
+2. 각 컴포넌트의 CSS 파일 존재 여부 확인: `ls apps/consumer/node_modules/@mantine/core/styles/`
+3. **Mantine v9 주의**: `Select.css` 없음 → `Combobox.css`로 통합됨. CSS 내부 @import 없음 → 의존 CSS 직접 import 필요
 
 **이 목록 없이 T1 진행 금지.**
 
