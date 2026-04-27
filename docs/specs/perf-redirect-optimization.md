@@ -1,7 +1,20 @@
 # 성능 최적화 5순위 — www 리디렉션 제거
 
-> 작성: 2026-04-27
+> 작성: 2026-04-27 / 완료: 2026-04-28
 > 목표: www.greenlove.co.kr 접속 시 apex 리디렉션 RTT 제거 → FCP -500~800ms 전 앱
+
+## ✅ 완료 결과 (2026-04-28)
+
+| 항목 | 결과 |
+|------|------|
+| 진단 | 예상과 반대 — apex → www 308 (www가 Primary였음) |
+| 조치 | Vercel 대시보드: greenlove.co.kr = Production, www → 308 redirect |
+| T2 HSTS | Vercel 자동 처리 확인 → 스킵 |
+| T3 빌드 | 코드 변경 없음 → 스킵 |
+| 최종 확인 | `https://greenlove.co.kr` 200 OK / `https://www.greenlove.co.kr` 308 → apex ✅ |
+| 부가 조치 | Railway Hobby 플랜 결제 (Trial 만료로 API 오프라인이었음) |
+
+---
 
 ---
 

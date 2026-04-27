@@ -1,7 +1,7 @@
 # 성능 최적화 6순위 — Mantine CSS Treeshaking
 
-> 작성: 2026-04-27
-> 목표: Consumer/Seller/Driver 전체 CSS 번들 -20~30KB
+> 작성: 2026-04-27 / 수정: 2026-04-28
+> 목표: Consumer/Seller/Driver 전체 CSS 번들 -20~30KB + Pretendard 폰트 self-hosting (PWA SW 에러 해소)
 
 ---
 
@@ -114,14 +114,26 @@ T0 결과를 바탕으로 각 앱의 `globals.css` 수정.
 
 ---
 
-### T2 — @greenhub/ui 패키지 style.css 확인 및 분리 여부 결정
+### T2 — @greenhub/ui 패키지 style.css 확인 및 Pretendard self-hosting 전환
 
 ```bash
-cat packages/ui/src/style.css 2>/dev/null || cat packages/ui/style.css 2>/dev/null
+cat packages/ui/src/style.css
 ```
 
-- ui 패키지가 자체 `@import '@mantine/core/styles.css'`를 포함하고 있다면 → 중복 로드 발생
+**Mantine 중복 확인**:
+- ui 패키지가 자체 `@import '@mantine/core/styles.css'`를 포함 시 → 중복 로드
 - 중복 시: ui 패키지의 Mantine CSS import 제거, 각 앱이 직접 관리
+
+**Pretendard self-hosting 전환** (PWA SW `ERR_FAILED` 해소):
+- 현재: `packages/ui/src/style.css`에서 jsdelivr CDN `@import` 사용
+- 문제: `aggressiveFrontEndNavCaching` 서비스워커가 외부 CDN 캐싱 실패 → 폰트 로드 오류
+- 해결: Pretendard Variable 폰트 파일을 `packages/ui/public/fonts/` 또는 각 앱 `public/fonts/`에 복사 후 `@font-face` 직접 선언
+- 참고: `pretendard` npm 패키지 또는 직접 다운로드 가능
+
+```bash
+# pretendard 패키지 설치 여부 확인
+cat pnpm-lock.yaml | grep pretendard
+```
 
 ---
 
