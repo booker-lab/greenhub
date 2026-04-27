@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.1",
   "scripts": {
+    "postinstall": "node scripts/copy-fonts.cjs",
     "dev:consumer": "pnpm --filter consumer dev",
     "dev:api": "pnpm --filter api start:dev",
     "build": "pnpm --filter ./packages/shared build && pnpm -r --filter './apps/*' build",
@@ -28,5 +29,8 @@
       "@firebase/util",
       "unrs-resolver"
     ]
+  },
+  "dependencies": {
+    "pretendard": "^1.3.9"
   }
 }

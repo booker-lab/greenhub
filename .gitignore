@@ -23,3 +23,6 @@ backups/
 # Playwright
 playwright-report/
 test-results/
+
+# Pretendard 폰트 (postinstall로 자동 복사됨)
+apps/*/public/fonts/
