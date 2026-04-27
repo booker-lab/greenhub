@@ -103,8 +103,7 @@ export default async function HeroBanner() {
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {banner.cta1?.label && (
-            <Box
-              component={Link}
+            <Link
               href={banner.cta1.href}
               style={{
                 display: 'inline-flex',
@@ -120,11 +119,10 @@ export default async function HeroBanner() {
               }}
             >
               {banner.cta1.label}
-            </Box>
+            </Link>
           )}
           {banner.cta2?.label && (
-            <Box
-              component={Link}
+            <Link
               href={banner.cta2.href}
               style={{
                 display: 'inline-flex',
@@ -141,7 +139,7 @@ export default async function HeroBanner() {
               }}
             >
               {banner.cta2.label}
-            </Box>
+            </Link>
           )}
         </div>
       </Box>
