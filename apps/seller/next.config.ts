@@ -21,8 +21,8 @@ const nextConfig: NextConfig = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default withBundleAnalyzer(withPWA({
   dest: "public",
-  cacheOnFrontEndNav: true,
-  aggressiveFrontEndNavCaching: true,
+  cacheOnFrontEndNav: false,
+  aggressiveFrontEndNavCaching: false,
   reloadOnOnline: true,
   cleanupOutdatedCaches: true,
   disable: process.env.NODE_ENV === "development",
