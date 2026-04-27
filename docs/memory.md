@@ -18,25 +18,31 @@
 | HeroBanner CLS 스켈레톤 수정 | `bc25031` | 2026-04-26 |
 | **HeroBanner SSR 전환 + products/[id] 분리 (3순위)** | `a1560c5` | 2026-04-27 |
 | **5순위: www 리디렉션 제거** (Vercel 대시보드) | 코드 변경 없음 | 2026-04-28 |
+| **6순위: Mantine CSS treeshaking + Pretendard self-hosting** | `d8e7d02` | 2026-04-28 |
+| **PWA RSC CORS 오류 수정** (aggressiveFrontEndNavCaching 비활성화) | `ccab465` | 2026-04-28 |
 
 ---
 
-## 🔜 다음 세션 — 6순위 성능 최적화 + 폰트 self-hosting
+## 🔜 다음 세션 착수 작업
 
-### 6순위: Mantine CSS Treeshaking + Pretendard self-hosting
+### 1. e2e 검증 실행
 
-**플랜**: `docs/specs/perf-mantine-treeshaking.md`
+배포 완료 후 e2e 실행:
+```bash
+pnpm --filter e2e exec playwright test perf-css-regression --reporter=list
+pnpm test:e2e
+```
 
-착수 순서:
-1. T0: 3앱 + @greenhub/ui 패키지에서 실제 사용 Mantine 컴포넌트 목록 추출 (필수)
-2. T1: Consumer globals.css → 선택적 import 전환
-3. T2: @greenhub/ui style.css Mantine import 중복 여부 확인 + Pretendard jsdelivr → self-hosting 전환
-4. T3: Seller · Driver 동일 적용
-5. T4: **시각적 회귀 검사 (생략 금지)**
-6. T5: tsc + 빌드 + CSS 크기 비교
-7. T6: Lighthouse 재측정
+### 2. 홈 상품 Skeleton 고정 확인
 
-**주의**: T0 컴포넌트 목록 없이 진행 금지. 시각적 회귀 위험 있음.
+- **증상**: `greenlove.co.kr` 홈에서 공동구매·전체상품 섹션이 Skeleton 고정
+- **유력 원인**: Railway API cold start (배포 직후 일시적) 또는 클라이언트 Firebase 연결
+- **확인 방법**: 탭 줄인 후 새로고침 → 지속되면 Vercel 환경변수 `NEXT_PUBLIC_API_URL` 확인
+- **관련 훅**: `apps/consumer/src/hooks/useProducts.ts` — `NEXT_PUBLIC_API_URL/products` 호출
+
+### 3. 브라우저 서비스워커 강제 초기화 (첫 방문 시 권장)
+
+개발자도구 → Application → Service Workers → Unregister 후 새로고침
 
 ---
 
@@ -49,7 +55,20 @@
 | CLS | 0.204 | **0** | ~0 |
 | TBT | 230ms | **0ms** | <150ms |
 
-**주의**: 3순위 측정은 데스크탑 기준 (로컬 환경 모바일 PAGE_HUNG). 실사용자 모바일 수치는 Vercel Speed Insights 확인 필요.
+**모바일 실측 미완료** — Vercel Speed Insights에서 확인 필요.
+
+---
+
+## 6순위 작업 결과 (2026-04-28)
+
+| 항목 | 결과 |
+|------|------|
+| Mantine CSS | 239KB → Consumer 72KB / Seller 79KB / Driver 50KB (raw) |
+| Pretendard | jsdelivr CDN 제거 → `public/fonts/` self-hosting |
+| 폰트 복사 | `scripts/copy-fonts.cjs` + `postinstall` 자동 실행 |
+| Mantine v9 주의 | `TextInput.css` / `Select.css` / `Textarea.css` 없음 — `Input.css` + `Combobox.css`로 대체 |
+| Driver import | 더블쿼트(`"`) 사용 — 싱글쿼트 grep 불가, 스펙 수정 완료 |
+| PWA 버그 | `aggressiveFrontEndNavCaching: true` → RSC 요청 서비스워커 캐시 실패로 CORS 오류. `false`로 수정 |
 
 ---
 
@@ -82,5 +101,5 @@
 - **Vercel 빌드**: lockfile 변경 시 `pnpm-lock.yaml` 반드시 함께 커밋
 - **HeroBanner SSR 주의**: AbortController 3초 timeout 필수 — API 미구동 시 빌드 hang 방지
 - **products/[id] 구조**: page.tsx(서버) + ProductImages/ProductInfo/ProductActions(_components/). useGroupProduct·useDailyCap은 onSnapshot 실시간이라 클라이언트 유지
-- **Store 공개 API 없음**: useStore는 클라이언트 훅 유지 (서버 이전 불가)
-- **Pretendard 폰트**: `packages/ui/src/style.css`에서 jsdelivr CDN `@import` 중. PWA SW(`aggressiveFrontEndNavCaching`)가 외부 CDN 캐싱 실패 시 `ERR_FAILED` 발생 → 6순위 작업 시 self-hosting 전환 권장
+- **Mantine CSS 선택적 import**: `aggressiveFrontEndNavCaching: false` 필수 유지 — true 복원 시 RSC CORS 재발
+- **Pretendard 폰트**: pnpm install 시 `scripts/copy-fonts.cjs`가 자동 실행되어 각 앱 `public/fonts/`에 복사됨. git에 woff2 미포함
