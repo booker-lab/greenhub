@@ -26,5 +26,18 @@ export default withBundleAnalyzer(withPWA({
   reloadOnOnline: true,
   cleanupOutdatedCaches: true,
   disable: process.env.NODE_ENV === "development",
-  customWorkerSrc: "worker",
+  workboxOptions: {
+    runtimeCaching: [
+      // Firestore WebChannel — 캐시 불가
+      {
+        urlPattern: /firestore\.googleapis\.com/,
+        handler: 'NetworkOnly',
+      },
+      // Next.js JS 청크 — 구 캐시로 인한 404 방지
+      {
+        urlPattern: /\/_next\/static\/chunks\//,
+        handler: 'NetworkFirst',
+      },
+    ],
+  },
 } as any)(nextConfig));
