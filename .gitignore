@@ -27,10 +27,8 @@ test-results/
 # Pretendard 폰트 — git 추적 (Vercel static 배포 보장)
 # apps/*/public/fonts/
 
-# next-pwa 빌드 생성 파일 (next build 시 자동 생성됨)
-apps/*/public/sw.js
+# next-pwa 빌드 생성 파일 — sw.js·worker-*.js는 git 추적 (Vercel 서빙 보장)
 apps/*/public/sw.js.map
 apps/*/public/workbox-*.js
 apps/*/public/workbox-*.js.map
-apps/*/public/worker-*.js
 apps/*/public/swe-worker-*.js
