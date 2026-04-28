@@ -26,3 +26,11 @@ test-results/
 
 # Pretendard 폰트 (postinstall로 자동 복사됨)
 apps/*/public/fonts/
+
+# next-pwa 빌드 생성 파일 (next build 시 자동 생성됨)
+apps/*/public/sw.js
+apps/*/public/sw.js.map
+apps/*/public/workbox-*.js
+apps/*/public/workbox-*.js.map
+apps/*/public/worker-*.js
+apps/*/public/swe-worker-*.js
