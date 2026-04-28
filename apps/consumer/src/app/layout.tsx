@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: "Green Love",
   description: "신선한 화훼·농산물 직거래 플랫폼",
   manifest: "/manifest.json",
+  icons: { icon: "/icons/icon-192x192.png" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

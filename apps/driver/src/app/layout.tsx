@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: "Green Love 드라이버",
   description: "Green Love 드라이버 배송 앱",
   manifest: "/manifest.json",
+  icons: { icon: "/icons/icon-192x192.png" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
