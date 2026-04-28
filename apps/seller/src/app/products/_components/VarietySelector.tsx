@@ -60,19 +60,9 @@ export default function VarietySelector({ category, value, onChange, onVarietyCh
         onVarietyChange?.(varieties.find((vr) => vr.id === v) ?? null)
       }}
       clearable
-      searchable
       size="md"
       radius="xl"
       maxDropdownHeight={240}
-      filter={({ options, search }) => {
-        const q = search.toLowerCase()
-        const groups = options as { group: string; items: { value: string; label: string }[] }[]
-        const filtered = groups.map(g => ({
-          ...g,
-          items: q ? g.items.filter(i => i.label.toLowerCase().includes(q)) : g.items.slice(0, 20),
-        })).filter(g => g.items.length > 0)
-        return filtered
-      }}
     />
   )
 }
