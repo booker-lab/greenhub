@@ -1,6 +1,5 @@
 .vercel
 
-# PWA - 빌드 시 자동 생성되므로 추적하지 않음
-public/sw.js
+# PWA - sw.js·worker-*.js는 git 추적 (Vercel 서빙 보장)
 public/workbox-*.js
 public/swe-worker-*.js
