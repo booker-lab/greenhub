@@ -1,7 +1,7 @@
-/* Pretendard Variable — self-hosting (PWA 서비스워커 캐시 대응) */
+/* Pretendard Variable — webpack 번들링 (Vercel .next/static/media 서빙 보장) */
 @font-face {
   font-family: 'Pretendard Variable';
-  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+  src: url('../../public/fonts/PretendardVariable.woff2') format('woff2-variations');
   font-weight: 45 920;
   font-style: normal;
   font-display: swap;
