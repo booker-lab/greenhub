@@ -69,7 +69,7 @@ export default function AIPreviewPanel({
       )}
 
       <Paper radius="lg" shadow="xs" p="md">
-        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">���드라인 (AI 생성)</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">헤드라인 (AI 생성)</Text>
         <TextInput
           value={headline}
           onChange={(e) => onHeadlineChange(e.target.value)}
