@@ -63,6 +63,7 @@ export default function VarietySelector({ category, value, onChange, onVarietyCh
       size="md"
       radius="xl"
       maxDropdownHeight={240}
+      comboboxProps={{ position: 'bottom', middlewares: { flip: false } }}
     />
   )
 }
