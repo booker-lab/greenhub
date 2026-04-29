@@ -7,6 +7,7 @@ RUN npm install -g pnpm@10.32.1
 
 # 모노레포 루트 파일 복사
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY scripts/ ./scripts/
 
 # 공유 패키지 복사
 COPY packages/ ./packages/
