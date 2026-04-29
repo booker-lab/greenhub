@@ -23,6 +23,10 @@ export class SelectionDto {
 
   @IsString()
   bundleUnit: string;
+
+  @IsOptional()
+  @IsEnum(['easy', 'normal', 'hard'])
+  careLevel?: string;
 }
 
 export class GenerateContentDto {
@@ -31,7 +35,7 @@ export class GenerateContentDto {
   varietyId?: string;
 
   @IsOptional()
-  @IsEnum(['orchid', 'cut_flower', 'plant'])
+  @IsEnum(['orchid', 'cut_flower', 'foliage'])
   category?: string;
 
   @ValidateNested()
