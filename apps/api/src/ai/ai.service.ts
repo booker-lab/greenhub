@@ -24,7 +24,7 @@ export class AiService {
     const apiKey = this.config.get<string>('GEMINI_API_KEY');
     if (!apiKey) throw new InternalServerErrorException('GEMINI_API_KEY가 설정되지 않았습니다.');
     const genAI = new GoogleGenerativeAI(apiKey);
-    this.model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    this.model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   }
 
   async generateProductContent(params: GenerateContentParams): Promise<GenerateContentResult> {
