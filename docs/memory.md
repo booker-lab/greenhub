@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-04-28
+최종 수정: 2026-05-01
 
 ---
 
@@ -20,29 +20,30 @@
 | **5순위: www 리디렉션 제거** (Vercel 대시보드) | 코드 변경 없음 | 2026-04-28 |
 | **6순위: Mantine CSS treeshaking + Pretendard self-hosting** | `d8e7d02` | 2026-04-28 |
 | **PWA RSC CORS 오류 수정** (aggressiveFrontEndNavCaching 비활성화) | `ccab465` | 2026-04-28 |
+| **상품등록 플로우 버그 4건 수정** (AI JSON 파싱·foliage 키·careLevel DTO·isEditedByUser) | `b9f35f4` | 2026-05-01 |
 
 ---
 
 ## 🔜 다음 세션 착수 작업
 
-### 1. e2e 검증 실행
+### 1. Checkout 버튼 비활성화
 
-배포 완료 후 e2e 실행:
-```bash
-pnpm --filter e2e exec playwright test perf-css-regression --reporter=list
-pnpm test:e2e
-```
+- **직배송 불가 날짜**: 꽃차 직배송 불가 날짜 → 버튼 disabled
+- **거점픽업 미선택**: hubId 미선택 시 버튼 disabled
+- **파일**: `apps/consumer/src/app/checkout/page.tsx`
 
 ### 2. 홈 상품 Skeleton 고정 확인
 
 - **증상**: `greenlove.co.kr` 홈에서 공동구매·전체상품 섹션이 Skeleton 고정
-- **유력 원인**: Railway API cold start (배포 직후 일시적) 또는 클라이언트 Firebase 연결
-- **확인 방법**: 탭 줄인 후 새로고침 → 지속되면 Vercel 환경변수 `NEXT_PUBLIC_API_URL` 확인
+- **유력 원인**: Railway API cold start 또는 클라이언트 Firebase 연결
 - **관련 훅**: `apps/consumer/src/hooks/useProducts.ts` — `NEXT_PUBLIC_API_URL/products` 호출
 
-### 3. 브라우저 서비스워커 강제 초기화 (첫 방문 시 권장)
+### 3. e2e 검증 실행
 
-개발자도구 → Application → Service Workers → Unregister 후 새로고침
+```bash
+pnpm --filter e2e exec playwright test perf-css-regression --reporter=list
+pnpm test:e2e
+```
 
 ---
 
