@@ -174,10 +174,7 @@ export class ProductsService {
     }
 
     const { groupConfig, content, ...fields } = dto;
-    // headline 편집 시 isEditedByUser 자동 세팅
-    const contentUpdate = content
-      ? { content: { ...content, isEditedByUser: true } }
-      : {};
+    const contentUpdate = content ? { content } : {};
     await this.firestore.doc(`products/${productId}`).update({
       ...fields,
       ...contentUpdate,
