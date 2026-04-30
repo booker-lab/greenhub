@@ -9,6 +9,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+
 import { Type } from 'class-transformer';
 
 export class GroupConfigDto {
@@ -54,6 +55,10 @@ export class SelectionDto {
 
   @IsString()
   bundleUnit: string;
+
+  @IsOptional()
+  @IsEnum(['easy', 'normal', 'hard'])
+  careLevel?: string;
 }
 
 export class ContentDto {

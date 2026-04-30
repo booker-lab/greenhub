@@ -38,22 +38,35 @@ export class AiService {
       throw new InternalServerErrorException(`Gemini 호출 실패: ${e?.message ?? e}`);
     }
 
-    // JSON 코드블록 제거
-    const jsonText = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-
-    // Gemini가 JSON 문자열 안에 실제 줄바꿈을 출력할 경우 이스케이프 처리
-    const fixedJson = jsonText.replace(/"[^"]*"/gs, (m) =>
-      m.replace(/\n/g, '\\n').replace(/\r/g, ''),
-    );
-
-    try {
-      const parsed = JSON.parse(fixedJson);
-      return {
-        headline: parsed.headline ?? '',
-        description: parsed.description ?? '',
-      };
-    } catch {
-      throw new InternalServerErrorException(`AI 응답 파싱 실패. 원문: ${jsonText.slice(0, 200)}`);
+    // 앞뒤 설명 텍스트·코드블록과 무관하게 JSON 객체 블록 직접 추출
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new InternalServerErrorException(
+        `AI 응답에서 JSON을 찾을 수 없습니다. 원문: ${text.slice(0, 200)}`,
+      );
     }
+
+    let parsed: { headline?: unknown; description?: unknown };
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch {
+      // 문자열 값 내 리터럴 줄바꿈 이스케이프 후 재시도
+      // ("(?:[^"\\]|\\.)*") 는 \" 포함 JSON 문자열을 올바르게 매칭함
+      const fixed = jsonMatch[0].replace(/("(?:[^"\\]|\\.)*")/gs, (m) =>
+        m.replace(/\n/g, '\\n').replace(/\r/g, ''),
+      );
+      try {
+        parsed = JSON.parse(fixed);
+      } catch {
+        throw new InternalServerErrorException(
+          `AI 응답 파싱 실패. 원문: ${jsonMatch[0].slice(0, 200)}`,
+        );
+      }
+    }
+
+    return {
+      headline: typeof parsed.headline === 'string' ? parsed.headline : '',
+      description: typeof parsed.description === 'string' ? parsed.description : '',
+    };
   }
 }
