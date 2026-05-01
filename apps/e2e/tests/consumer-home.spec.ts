@@ -9,7 +9,7 @@ test.describe('소비자 홈', () => {
 
   test('페이지 정상 렌더링', async ({ page }) => {
     await expect(page).toHaveTitle(/Green Love/)
-    await expect(page.locator('text=그린러브')).toBeVisible()
+    await expect(page.getByText('그린러브', { exact: true })).toBeVisible()
   })
 
   test('공동구매 섹션 존재', async ({ page }) => {
