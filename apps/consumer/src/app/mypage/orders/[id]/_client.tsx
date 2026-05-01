@@ -191,7 +191,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       {!isCancelled && !cancelDone && (
         <Box>
           <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }} mb="md">배송 현황</Text>
-          <Stepper active={currentIdx} color="brand" size="sm" orientation="vertical" styles={{ stepLabel: { fontWeight: 600 }, stepDescription: { fontSize: 12 } }}>
+          <Stepper active={currentIdx} color="brand" size="sm" orientation="vertical" styles={{ stepLabel: { fontWeight: 'var(--fw-bold)' }, stepDescription: { fontSize: 12 } }}>
             {steps.map((stepStatus) => {
               const label =
                 stepStatus === 'DELIVERED' && order.status === 'REVIEWED'

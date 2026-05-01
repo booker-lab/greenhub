@@ -209,7 +209,7 @@ export default function ProductActions({ product }: Props) {
             {store.logoUrl ? (
               <Image src={store.logoUrl} alt={store.name} width={44} height={44} style={{ borderRadius: '50%', objectFit: 'cover' }} />
             ) : (
-              <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-primary-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-primary)', fontWeight: 700, fontSize: 16 }}>
+              <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-primary-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-primary)', fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-md)' }}>
                 {store.name[0]}
               </Box>
             )}

@@ -52,7 +52,7 @@ export default function CartPage() {
                   flexShrink: 0,
                   width: 72,
                   height: 72,
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-sm)',
                   background: 'var(--color-surface-muted)',
                   overflow: 'hidden',
                   display: 'block',

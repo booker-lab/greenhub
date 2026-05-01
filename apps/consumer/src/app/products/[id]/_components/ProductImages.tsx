@@ -60,7 +60,7 @@ export default function ProductImages({ images, name }: Props) {
                 carouselRef.current?.scrollTo({ left: i * carouselRef.current.offsetWidth, behavior: 'smooth' })
               }}
               style={{
-                flexShrink: 0, width: 56, height: 56, borderRadius: 6, overflow: 'hidden', cursor: 'pointer',
+                flexShrink: 0, width: 56, height: 56, borderRadius: 'var(--radius-sm)', overflow: 'hidden', cursor: 'pointer',
                 border: activeIdx === i ? '2px solid var(--color-primary)' : '2px solid transparent',
                 transition: 'border-color 0.15s', position: 'relative',
               }}

@@ -71,12 +71,12 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
         background: 'var(--color-bg)',
         border: '1px solid var(--color-border)',
         borderLeft: `4px solid ${accentColor}`,
-        borderRadius: 10,
+        borderRadius: 'var(--radius-sm)',
         padding: '14px 16px',
       }}
     >
       <Group justify="space-between" mb={8}>
-        <Box style={{ fontSize: 12, fontWeight: 700, color: colorScheme.text, background: colorScheme.bg, padding: '3px 10px', borderRadius: 20 }}>
+        <Box style={{ fontSize: 12, fontWeight: 'var(--fw-bold)', color: colorScheme.text, background: colorScheme.bg, padding: '3px 10px', borderRadius: 'var(--radius-full)' }}>
           {label}
         </Box>
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{formatDate(order.createdAt)}</Text>
@@ -152,11 +152,11 @@ export default function MyPageClient() {
           <Divider />
         </Stack>
         <Stack gap="xs">
-          <UnstyledButton onClick={() => router.push('/mypage/notifications')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 10, padding: '14px 16px' }}>
+          <UnstyledButton onClick={() => router.push('/mypage/notifications')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '14px 16px' }}>
             <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text)' }}>알림 내역</Text>
             <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-md)' }}>›</Text>
           </UnstyledButton>
-          <UnstyledButton onClick={() => router.push('/mypage/addresses')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 10, padding: '14px 16px' }}>
+          <UnstyledButton onClick={() => router.push('/mypage/addresses')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '14px 16px' }}>
             <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text)' }}>배송지 목록 · 추가 · 수정</Text>
             <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-md)' }}>›</Text>
           </UnstyledButton>
