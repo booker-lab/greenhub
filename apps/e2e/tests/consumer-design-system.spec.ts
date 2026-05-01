@@ -141,10 +141,10 @@ test.describe('Consumer DS — 상품 상세 페이지', () => {
     if (count > 0) {
       const href = await firstProductLink.getAttribute('href')
       await page.goto(BASE + href)
-      await page.waitForLoadState('networkidle')
+      await page.waitForLoadState('load')
     } else {
       await page.goto(BASE + '/products/test')
-      await page.waitForLoadState('networkidle')
+      await page.waitForLoadState('load')
     }
 
     const critical = errors.filter(

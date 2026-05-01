@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-02
+최종 수정: 2026-05-02 (세션2)
 
 ---
 
@@ -22,26 +22,16 @@
 | DS 지침 준수 감사 + 아토믹 플랜 수립 | 문서만 | 2026-05-02 |
 | DS 리팩토링 T0~T9 완료 (위반 18건 수정) | `9a5d45f` | 2026-05-02 |
 | e2e DS 회귀 스펙 추가 (consumer-design-system.spec.ts) | `50acdbc` | 2026-05-02 |
+| e2e products/[id] 타임아웃 수정 (networkidle→load) | TBD | 2026-05-02 |
 
 ---
 
 ## 🔜 다음 세션 착수 작업
 
-**DS 리팩토링 완료** — Consumer 디자인 시스템 지침 위반 18건 전부 수정 완료. `tsc --noEmit` 통과. 커밋·푸시 완료.
+**e2e DS 검증 완료** — 28/28 통과. `products/[id]` networkidle 타임아웃 버그 수정 완료.
 
-### 🔜 다음 세션 최우선: e2e 검증
+### 🔜 다음 세션 최우선
 
-```bash
-pnpm test:e2e
-# 또는 DS 스펙만 단독 실행:
-pnpm --filter e2e exec playwright test consumer-design-system --reporter=list
-```
-
-**검증 스펙**: `apps/e2e/tests/consumer-design-system.spec.ts`
-- 대상 페이지: mypage 3개 라우트, cart, category, 상품 상세
-- 검증 항목: CSS 토큰 해석(--color-text-disabled, --radius-sm, --font-size-sm/md, --fw-bold) + JS 에러 없음
-
-e2e 통과 후:
 - 네이버페이 채널키 승인 이메일 수신 후 Vercel 환경변수 설정
 - 알리고 ↔ 카카오 연동 (사업자등록증 발급 후)
 
