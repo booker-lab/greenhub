@@ -67,8 +67,8 @@ export default function CategoryPage() {
                 style={{
                   flexShrink: 0,
                   padding: '8px 16px',
-                  fontSize: 14,
-                  fontWeight: isActive ? 700 : 400,
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: isActive ? 'var(--fw-bold)' : 'normal',
                   color: isActive ? 'var(--color-text)' : 'var(--color-text-disabled)',
                   borderBottom: isActive
                     ? '2px solid var(--color-text)'

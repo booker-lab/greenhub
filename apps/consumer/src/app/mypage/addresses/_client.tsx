@@ -96,7 +96,7 @@ function AddressFormModal({
       onClose={onClose}
       title={initial.label ? '배송지 수정' : '배송지 추가'}
       radius="md"
-      styles={{ title: { fontWeight: 700, fontSize: 17 } }}
+      styles={{ title: { fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' } }}
     >
       <form onSubmit={handleSubmit}>
         <Stack gap="sm">
