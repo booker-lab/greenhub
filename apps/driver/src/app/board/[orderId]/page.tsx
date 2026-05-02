@@ -127,8 +127,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         <UnstyledButton
           onClick={() => router.back()}
           style={{ color: 'var(--color-text-secondary)', padding: 4 }}
+          aria-label="뒤로가기"
         >
-          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -302,7 +303,7 @@ function ContactRow({ label, phone }: { label: string; phone: string }) {
           textDecoration: 'none',
         }}
       >
-        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
