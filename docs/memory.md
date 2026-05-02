@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-02 (세션3)
+최종 수정: 2026-05-03 (세션4)
 
 ---
 
@@ -19,22 +19,29 @@
 | Mantine CSS treeshaking + Pretendard self-hosting (6순위) | `d8e7d02` | 2026-04-28 |
 | PWA RSC CORS 오류 수정 | `ccab465` | 2026-04-28 |
 | 상품등록 플로우 버그 4건 수정 | `b9f35f4` | 2026-05-01 |
-| DS 지침 준수 감사 + 아토믹 플랜 수립 | 문서만 | 2026-05-02 |
 | DS 리팩토링 T0~T9 완료 (위반 18건 수정) | `9a5d45f` | 2026-05-02 |
-| e2e DS 회귀 스펙 추가 (consumer-design-system.spec.ts) | `50acdbc` | 2026-05-02 |
-| e2e 전체 suite 검증 + 스펙 버그 3건 수정 | `3d23fd6` | 2026-05-02 |
+| e2e DS 회귀 스펙 추가 + 전체 suite 검증 | `50acdbc` `3d23fd6` | 2026-05-02 |
+| 툴체인 도입 (TruffleHog + Just + Biome) | `0c77aca`~`0a6faa0` | 2026-05-03 |
 
 ---
 
 ## 🔜 다음 세션 착수 작업
 
-### 최우선 — 툴체인 도입 (스펙 완료)
+### 최우선 — a11y 접근성 수정 38건
 
-`docs/specs/toolchain-trufflehog-just-biome.md` 참조. 순서:
+`docs/specs/a11y-fix-plan.md` 참조.
 
-1. **Phase 1**: TruffleHog 설치 → git 히스토리 스캔
-2. **Phase 2**: Just 설치 → Justfile 작성
-3. **Phase 3**: Biome 점진 도입 (consumer/seller/driver → api 순)
+| 규칙 | 건수 | 우선순위 |
+|------|------|---------|
+| `noSvgWithoutTitle` (장식용 SVG에 aria-hidden 추가) | 32 | 2순위 |
+| `useButtonType` (`<button>` type 명시) | 5 | 1순위 |
+| `noAutofocus` (autofocus 제거) | 1 | 3순위 |
+
+### 2순위 — e2e DS 검증 (지난 세션 잔여)
+
+```bash
+pnpm --filter e2e exec playwright test consumer-design-system --reporter=list
+```
 
 ### 외부 조건 대기
 
@@ -43,10 +50,25 @@
 
 ---
 
+## 툴체인 현황 (2026-05-03 기준)
+
+| 도구 | 상태 | 역할 |
+|------|------|------|
+| TruffleHog 3.95.2 | ✅ | git 히스토리 시크릿 스캔 |
+| Just 1.50.0 | ✅ | 태스크 러너 (Justfile) |
+| Biome 2.4.14 | ✅ | consumer/seller/driver 린터+포매터, api 포매터 |
+
+**biome.json 주요 설정**:
+- `unsafeParameterDecoratorsEnabled: true` — NestJS 파라미터 데코레이터 파싱
+- CSS `@import` 순서 규칙 off — Mantine CSS 패턴 false positive
+- a11y 규칙 3종 `warn` — 다음 세션 처리 예정
+
+---
+
 ## 성능 현황
 
-| 지표 | 기준선(모바일) | 3순위 후(데스크탑) | 목표 |
-|------|--------------|------------------|------|
+| 지표 | 기준선(모바일) | 최적화 후 | 목표 |
+|------|--------------|----------|------|
 | Performance | 53 | **99** | 80+ |
 | LCP | 19.2s | **0.9s** | <3s |
 | CLS | 0.204 | **0** | ~0 |
@@ -64,21 +86,12 @@
 
 ---
 
-## 외부 조건 대기
-
-| 항목 | 조건 |
-|------|------|
-| 네이버페이 채널키 | 승인 이메일 수신 후 Vercel 환경변수 설정 |
-| 알리고 ↔ 카카오 연동 | 그린러브 사업자등록증 발급 후 |
-
----
-
 ## 핵심 기술 특이사항
 
 - **gemini-3-flash-preview**: 유효한 모델명 (2025-12 출시), 변경 금지
 - **shared 타입 변경 시**: `pnpm --filter @greenhub/shared build` 후 dist 커밋 필수
 - **useStoreProducts firebaseReady 가드 금지**: 이중 인스턴스로 상품 목록 미표시
-- **next/image 예외 3곳**: seller onboarding logoPreview, ImageUpload, consumer 상세 이미지 — blob URL이므로 `<img>` 유지
+- **`<img>` 예외 3곳**: seller onboarding logoPreview, ImageUpload, consumer 상세 이미지 — blob URL이므로 biome `noImgElement` warn 유지
 - **Mantine CSS 선택적 import**: `aggressiveFrontEndNavCaching: false` 필수 유지
 - **Pretendard 폰트**: `scripts/copy-fonts.cjs` postinstall 자동 실행, git에 woff2 미포함
-- **DS 폰트 예외**: BottomNav/ProductTopBar 라벨(10px), 주문상태 뱃지(12px), 카운트다운(13px), Stepper 설명(12px) — `apps/consumer/CLAUDE.md` 등록 완료
+- **DS 폰트 예외**: BottomNav/ProductTopBar 라벨(10px), 주문상태 뱃지(12px), 카운트다운(13px), Stepper 설명(12px)
