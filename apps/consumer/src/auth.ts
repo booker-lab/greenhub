@@ -81,6 +81,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!['consumer', 'admin'].includes(data.user.role)) return false;
 
       user.id = data.user.id;
+      user.email = data.user.email ?? user.email;
       user.accessToken = data.accessToken;
       user.refreshToken = data.refreshToken;
       user.role = data.user.role;
@@ -104,6 +105,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     session({ session, token }) {
       session.user.id = token.id as string;
+      session.user.email = (token.email as string) ?? session.user.email;
       session.user.accessToken = token.accessToken as string;
       session.user.role = token.role as string;
       // name이 없거나 placeholder인 경우 email 앞부분 사용
