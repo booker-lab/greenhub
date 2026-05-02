@@ -38,6 +38,7 @@ export default function ProductTopBar() {
       >
         {/* 뒤로가기 */}
         <button
+          type="button"
           onClick={() => router.back()}
           style={{
             background: 'none',
@@ -73,6 +74,7 @@ export default function ProductTopBar() {
         {/* 홈 + 장바구니 */}
         <Box style={{ display: 'flex', alignItems: 'center' }}>
           <button
+            type="button"
             onClick={() => router.push('/')}
             style={{
               background: 'none',
@@ -91,6 +93,7 @@ export default function ProductTopBar() {
           </button>
 
           <button
+            type="button"
             onClick={() => router.push('/cart')}
             style={{
               background: 'none',

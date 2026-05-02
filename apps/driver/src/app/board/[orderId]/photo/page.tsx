@@ -115,6 +115,7 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
         }}
       >
         <button
+          type="button"
           onClick={() => {
             stream?.getTracks().forEach((t) => t.stop());
             router.back();
@@ -204,6 +205,7 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
               }}
             >
               <button
+                type="button"
                 onClick={capture}
                 style={{
                   width: 64,
