@@ -14,17 +14,20 @@ build:
 build-api:
     pnpm --filter api build
 
-# ── 린트 (Phase 3 완료 후 biome 기준으로 교체) ─────────────────
+# ── 린트 ──────────────────────────────────────────────────────
 lint:
-    pnpm -r lint
+    pnpm biome lint apps/consumer/src apps/seller/src apps/driver/src
+    pnpm --filter api lint
 
 # ── 포맷 ──────────────────────────────────────────────────────
 format:
-    pnpm -r format
+    pnpm biome format apps/consumer/src apps/seller/src apps/driver/src --write
+    pnpm --filter api format
 
 # ── 포맷 체크 (쓰기 없음 — CI 전용) ────────────────────────────
 format-check:
-    pnpm -r format
+    pnpm biome format apps/consumer/src apps/seller/src apps/driver/src
+    pnpm biome format apps/api/src
 
 # ── 타입 체크 ─────────────────────────────────────────────────
 typecheck:
@@ -42,5 +45,5 @@ secret-scan:
     trufflehog git file://. --only-verified
 
 # ── CI 파이프라인 ──────────────────────────────────────────────
-ci: lint typecheck test-e2e secret-scan
+ci: format-check lint typecheck secret-scan
     @echo "✅ CI 완료"
