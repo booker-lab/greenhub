@@ -116,6 +116,7 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
       >
         <button
           type="button"
+          aria-label="뒤로가기"
           onClick={() => {
             stream?.getTracks().forEach((t) => t.stop());
             router.back();
@@ -128,7 +129,7 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
             cursor: 'pointer',
           }}
         >
-          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"

@@ -126,6 +126,8 @@ export default function MapPage() {
             fill="none"
             stroke="var(--color-text-disabled)"
             viewBox="0 0 24 24"
+            aria-hidden="true"
+            focusable="false"
           >
             <path
               strokeLinecap="round"
