@@ -208,6 +208,8 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
+                  aria-hidden="true"
+                  focusable="false"
                 >
                   <path d="M12 5v14M5 12h14" />
                 </svg>

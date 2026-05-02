@@ -140,6 +140,8 @@ export default function HubPickupPage() {
                   fill="none"
                   stroke="var(--color-primary)"
                   strokeWidth="2.5"
+                  aria-hidden="true"
+                  focusable="false"
                 >
                   <path d="M20 6L9 17l-5-5" />
                 </svg>

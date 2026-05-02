@@ -149,6 +149,8 @@ export default function DailyCapsPage() {
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
+              aria-hidden="true"
+              focusable="false"
             >
               <path d="M15 18l-6-6 6-6" />
             </svg>
@@ -180,6 +182,8 @@ export default function DailyCapsPage() {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
+                aria-hidden="true"
+                focusable="false"
               >
                 <path d="M15 18l-6-6 6-6" />
               </svg>
@@ -193,6 +197,8 @@ export default function DailyCapsPage() {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
+                aria-hidden="true"
+                focusable="false"
               >
                 <path d="M9 18l6-6-6-6" />
               </svg>

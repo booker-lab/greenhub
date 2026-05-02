@@ -64,6 +64,8 @@ export default function SettingsPage() {
                 fill="none"
                 stroke="#9CA3AF"
                 strokeWidth="2"
+                aria-hidden="true"
+                focusable="false"
               >
                 <path d="M9 18l6-6-6-6" />
               </svg>
@@ -121,6 +123,8 @@ export default function SettingsPage() {
                 fill="none"
                 stroke="#9CA3AF"
                 strokeWidth="2"
+                aria-hidden="true"
+                focusable="false"
               >
                 <path d="M9 18l6-6-6-6" />
               </svg>
@@ -147,6 +151,8 @@ export default function SettingsPage() {
                 fill="none"
                 stroke="#9CA3AF"
                 strokeWidth="2"
+                aria-hidden="true"
+                focusable="false"
               >
                 <path d="M9 18l6-6-6-6" />
               </svg>
