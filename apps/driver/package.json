@@ -6,7 +6,9 @@
     "dev": "next dev --webpack --port 3003",
     "prebuild": "node ../../scripts/copy-fonts.cjs",
     "build": "next build --webpack",
-    "start": "next start"
+    "start": "next start",
+    "lint": "biome lint src",
+    "format": "biome format src --write"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
