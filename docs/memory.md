@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-03 (세션4)
+최종 수정: 2026-05-03 (세션5)
 
 ---
 
@@ -22,26 +22,21 @@
 | DS 리팩토링 T0~T9 완료 (위반 18건 수정) | `9a5d45f` | 2026-05-02 |
 | e2e DS 회귀 스펙 추가 + 전체 suite 검증 | `50acdbc` `3d23fd6` | 2026-05-02 |
 | 툴체인 도입 (TruffleHog + Just + Biome) | `0c77aca`~`0a6faa0` | 2026-05-03 |
+| a11y 접근성 38건 수정 (biome error 승격) | `30a21f7`~`988a43f` | 2026-05-03 |
 
 ---
 
 ## 🔜 다음 세션 착수 작업
 
-### 최우선 — a11y 접근성 수정 38건
+### 최우선 — e2e DS 회귀 검증
 
-`docs/specs/a11y-fix-plan.md` 참조.
-
-| 규칙 | 건수 | 우선순위 |
-|------|------|---------|
-| `noSvgWithoutTitle` (장식용 SVG에 aria-hidden 추가) | 32 | 2순위 |
-| `useButtonType` (`<button>` type 명시) | 5 | 1순위 |
-| `noAutofocus` (autofocus 제거) | 1 | 3순위 |
-
-### 2순위 — e2e DS 검증 (지난 세션 잔여)
+a11y 수정으로 변경된 파일이 다수 → DS 회귀 확인 필요.
 
 ```bash
 pnpm --filter e2e exec playwright test consumer-design-system --reporter=list
 ```
+
+실패 시: `docs/specs/` 내 해당 스펙 파일 확인 후 수정.
 
 ### 외부 조건 대기
 
@@ -61,7 +56,7 @@ pnpm --filter e2e exec playwright test consumer-design-system --reporter=list
 **biome.json 주요 설정**:
 - `unsafeParameterDecoratorsEnabled: true` — NestJS 파라미터 데코레이터 파싱
 - CSS `@import` 순서 규칙 off — Mantine CSS 패턴 false positive
-- a11y 규칙 3종 `warn` — 다음 세션 처리 예정
+- a11y 규칙 3종 전부 수정 완료 → `recommended` 기본 error로 복귀
 
 ---
 
