@@ -1,7 +1,7 @@
-import { Container } from '@mantine/core'
-import BrandHeader from '@/components/BrandHeader'
-import HeroBanner from '@/components/HeroBanner'
-import HomeProductList from '@/components/HomeProductList'
+import { Container } from '@mantine/core';
+import BrandHeader from '@/components/BrandHeader';
+import HeroBanner from '@/components/HeroBanner';
+import HomeProductList from '@/components/HomeProductList';
 
 export default function HomePage() {
   return (
@@ -10,5 +10,5 @@ export default function HomePage() {
       <HeroBanner />
       <HomeProductList />
     </Container>
-  )
+  );
 }

@@ -1,16 +1,12 @@
-import { auth } from '@/auth'
-import { redirect } from 'next/navigation'
-import { Box, Badge, Container, Group, Text } from '@mantine/core'
+import { auth } from '@/auth';
+import { redirect } from 'next/navigation';
+import { Box, Badge, Container, Group, Text } from '@mantine/core';
 
-export default async function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const session = await auth()
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
 
   if (!session?.user || session.user.role !== 'admin') {
-    redirect('/orders')
+    redirect('/orders');
   }
 
   return (
@@ -27,8 +23,12 @@ export default async function AdminLayout({
       >
         <Container size="lg" px="md" py="sm">
           <Group justify="space-between">
-            <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}>관리자 콘솔</Text>
-            <Badge color="red" variant="light" style={{ fontWeight: 'var(--fw-medium)' }}>ADMIN</Badge>
+            <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}>
+              관리자 콘솔
+            </Text>
+            <Badge color="red" variant="light" style={{ fontWeight: 'var(--fw-medium)' }}>
+              ADMIN
+            </Badge>
           </Group>
         </Container>
         <Box style={{ overflowX: 'auto' }}>
@@ -63,7 +63,9 @@ export default async function AdminLayout({
           </Container>
         </Box>
       </Box>
-      <Container size="lg" px="md" py="lg">{children}</Container>
+      <Container size="lg" px="md" py="lg">
+        {children}
+      </Container>
     </Box>
-  )
+  );
 }

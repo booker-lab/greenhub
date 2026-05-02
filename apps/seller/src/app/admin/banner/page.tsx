@@ -1,5 +1,5 @@
-import AdminBannerClient from './_client'
+import AdminBannerClient from './_client';
 
 export default function AdminBannerPage() {
-  return <AdminBannerClient />
+  return <AdminBannerClient />;
 }

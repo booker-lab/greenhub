@@ -1,18 +1,30 @@
-'use client'
+'use client';
 
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Container, Box, Group, Text, Title, Button, ActionIcon, Paper, Stack, Badge, Divider } from '@mantine/core'
-import { useCart } from '@/hooks/useCart'
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  Container,
+  Box,
+  Group,
+  Text,
+  Title,
+  Button,
+  ActionIcon,
+  Paper,
+  Stack,
+  Badge,
+  Divider,
+} from '@mantine/core';
+import { useCart } from '@/hooks/useCart';
 
 export default function CartPage() {
-  const router = useRouter()
-  const { items, updateQuantity, removeItem, clearCart, totalAmount, itemCount } = useCart()
+  const router = useRouter();
+  const { items, updateQuantity, removeItem, clearCart, totalAmount, itemCount } = useCart();
 
   function handleCheckout() {
-    if (items.length === 0) return
-    sessionStorage.setItem('checkout_cart', JSON.stringify(items))
-    router.push('/checkout?from=cart')
+    if (items.length === 0) return;
+    sessionStorage.setItem('checkout_cart', JSON.stringify(items));
+    router.push('/checkout?from=cart');
   }
 
   if (items.length === 0) {
@@ -26,15 +38,22 @@ export default function CartPage() {
           </Button>
         </Stack>
       </Container>
-    )
+    );
   }
 
   return (
     <Container size="sm" px="md" pt="lg" pb={100}>
       {/* 헤더 */}
       <Group justify="space-between" mb="lg">
-        <Title order={3} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>장바구니</Title>
-        <Button variant="transparent" size="xs" style={{ color: 'var(--color-text-disabled)' }} onClick={clearCart}>
+        <Title order={3} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
+          장바구니
+        </Title>
+        <Button
+          variant="transparent"
+          size="xs"
+          style={{ color: 'var(--color-text-disabled)' }}
+          onClick={clearCart}
+        >
           전체 삭제
         </Button>
       </Group>
@@ -85,10 +104,19 @@ export default function CartPage() {
                 </Text>
 
                 {item.saleType === 'group' && (
-                  <Badge size="xs" color="brand" variant="light" mt={4}>공동구매</Badge>
+                  <Badge size="xs" color="brand" variant="light" mt={4}>
+                    공동구매
+                  </Badge>
                 )}
 
-                <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }} mt={6}>
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-md)',
+                    fontWeight: 'var(--fw-bold)',
+                    color: 'var(--color-text)',
+                  }}
+                  mt={6}
+                >
                   {(item.price * item.quantity).toLocaleString()}원
                 </Text>
 
@@ -102,7 +130,13 @@ export default function CartPage() {
                   >
                     −
                   </ActionIcon>
-                  <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }} w={24} ta="center">{item.quantity}</Text>
+                  <Text
+                    style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+                    w={24}
+                    ta="center"
+                  >
+                    {item.quantity}
+                  </Text>
                   <ActionIcon
                     size="lg"
                     variant="default"
@@ -138,13 +172,33 @@ export default function CartPage() {
         }}
       >
         <Group justify="space-between" mb={8}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>상품 수</Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-bg)' }}>{itemCount}개</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            상품 수
+          </Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-bg)' }}>
+            {itemCount}개
+          </Text>
         </Group>
         <Divider mb={12} style={{ borderColor: 'rgba(255,255,255,0.15)' }} />
         <Group justify="space-between">
-          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text-secondary)' }}>총 결제 금액</Text>
-          <Text style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--fw-bold)', color: 'var(--color-bg)' }}>{totalAmount.toLocaleString()}원</Text>
+          <Text
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-bold)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            총 결제 금액
+          </Text>
+          <Text
+            style={{
+              fontSize: 'var(--font-size-xl)',
+              fontWeight: 'var(--fw-bold)',
+              color: 'var(--color-bg)',
+            }}
+          >
+            {totalAmount.toLocaleString()}원
+          </Text>
         </Group>
       </Paper>
 
@@ -153,5 +207,5 @@ export default function CartPage() {
         결제하기
       </Button>
     </Container>
-  )
+  );
 }

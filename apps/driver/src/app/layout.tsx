@@ -1,27 +1,27 @@
-import type { Metadata, Viewport } from "next";
-import { ColorSchemeScript } from "@mantine/core";
-import Providers from "./providers";
-import BottomNav from "@/components/BottomNav";
-import "./globals.css";
+import type { Metadata, Viewport } from 'next';
+import { ColorSchemeScript } from '@mantine/core';
+import Providers from './providers';
+import BottomNav from '@/components/BottomNav';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: "Green Love 드라이버",
-  description: "Green Love 드라이버 배송 앱",
-  manifest: "/manifest.json",
-  icons: { icon: "/icons/icon-192x192.png" },
+  title: 'Green Love 드라이버',
+  description: 'Green Love 드라이버 배송 앱',
+  manifest: '/manifest.json',
+  icons: { icon: '/icons/icon-192x192.png' },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
-    title: "그린러브드라이버",
+    statusBarStyle: 'black-translucent',
+    title: '그린러브드라이버',
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#2D6A4F",
-  width: "device-width",
+  themeColor: '#2D6A4F',
+  width: 'device-width',
   initialScale: 1,
   minimumScale: 1,
-  viewportFit: "cover",
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({
@@ -36,7 +36,14 @@ export default function RootLayout({
       </head>
       <body>
         <Providers>
-          <div style={{ maxWidth: 430, margin: '0 auto', backgroundColor: 'var(--color-bg)', minHeight: '100dvh' }}>
+          <div
+            style={{
+              maxWidth: 430,
+              margin: '0 auto',
+              backgroundColor: 'var(--color-bg)',
+              minHeight: '100dvh',
+            }}
+          >
             {children}
           </div>
           <BottomNav />

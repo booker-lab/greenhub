@@ -1,9 +1,9 @@
-'use client'
+'use client';
 
-import dynamic from 'next/dynamic'
+import dynamic from 'next/dynamic';
 
-const DriversClient = dynamic(() => import('./_client'), { ssr: false })
+const DriversClient = dynamic(() => import('./_client'), { ssr: false });
 
 export default function AdminDriversPage() {
-  return <DriversClient />
+  return <DriversClient />;
 }

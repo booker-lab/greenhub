@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { Card, Badge, Text, Stack, Group } from "@mantine/core";
+import Link from 'next/link';
+import { Card, Badge, Text, Stack, Group } from '@mantine/core';
 
 type Order = {
   id: string;
@@ -16,26 +16,26 @@ type Order = {
 };
 
 const METHOD_BADGE: Record<string, { label: string; color: string }> = {
-  direct: { label: "직배송", color: "green" },
-  hub: { label: "거점 픽업", color: "blue" },
-  parcel: { label: "택배", color: "gray" },
+  direct: { label: '직배송', color: 'green' },
+  hub: { label: '거점 픽업', color: 'blue' },
+  parcel: { label: '택배', color: 'gray' },
 };
 
 function formatTime(ts?: { seconds: number } | null) {
-  if (!ts) return "시간 미정";
-  return new Date(ts.seconds * 1000).toLocaleTimeString("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
+  if (!ts) return '시간 미정';
+  return new Date(ts.seconds * 1000).toLocaleTimeString('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
 export default function OrderCard({ order, tab }: { order: Order; tab: string }) {
   const badge = METHOD_BADGE[order.deliveryMethod] ?? METHOD_BADGE.direct;
   const displayAddress =
-    order.deliveryMethod === "hub" ? order.hubAddress ?? "-" : order.address ?? "-";
+    order.deliveryMethod === 'hub' ? (order.hubAddress ?? '-') : (order.address ?? '-');
   const displayLocation =
-    order.deliveryMethod === "hub"
-      ? `${order.hubName ?? "거점"} · ${displayAddress}`
+    order.deliveryMethod === 'hub'
+      ? `${order.hubName ?? '거점'} · ${displayAddress}`
       : displayAddress;
 
   return (
@@ -45,7 +45,7 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
       radius="xl"
       withBorder
       p="md"
-      style={{ textDecoration: "none" }}
+      style={{ textDecoration: 'none' }}
     >
       <Stack gap="xs">
         <Group justify="space-between" align="center">
@@ -53,21 +53,24 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
             {badge.label}
           </Badge>
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            {tab === "preparing"
+            {tab === 'preparing'
               ? `수거 ${formatTime(order.preparedAt)}`
               : `배송 시작 ${formatTime(order.updatedAt)}`}
           </Text>
         </Group>
         <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}>
-          {order.buyerName ?? "소비자"}
+          {order.buyerName ?? '소비자'}
         </Text>
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} truncate="end">
+        <Text
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          truncate="end"
+        >
           {displayLocation}
         </Text>
         {order.productName && (
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             {order.productName}
-            {order.quantity && order.quantity > 1 ? ` 외 ${order.quantity - 1}건` : ""}
+            {order.quantity && order.quantity > 1 ? ` 외 ${order.quantity - 1}건` : ''}
           </Text>
         )}
       </Stack>

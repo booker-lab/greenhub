@@ -1,10 +1,10 @@
-import { auth } from "@/auth";
-import { redirect } from "next/navigation";
+import { auth } from '@/auth';
+import { redirect } from 'next/navigation';
 
 export default async function Home() {
   const session = await auth();
-  if (session?.user.role === "admin") {
-    redirect("/admin/stores");
+  if (session?.user.role === 'admin') {
+    redirect('/admin/stores');
   }
-  redirect("/orders");
+  redirect('/orders');
 }

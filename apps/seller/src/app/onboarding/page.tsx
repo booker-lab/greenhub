@@ -1,11 +1,11 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { storage } from '@/lib/firebase'
-import { apiFetch } from '@/lib/api'
+import { useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '@/lib/firebase';
+import { apiFetch } from '@/lib/api';
 import {
   Box,
   Button,
@@ -16,15 +16,15 @@ import {
   Text,
   TextInput,
   Title,
-} from '@mantine/core'
+} from '@mantine/core';
 
 export default function OnboardingPage() {
-  const { data: session, update } = useSession()
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [logoUploading, setLogoUploading] = useState(false)
-  const [logoPreview, setLogoPreview] = useState('')
-  const [error, setError] = useState('')
+  const { data: session, update } = useSession();
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState('');
+  const [error, setError] = useState('');
 
   const [form, setForm] = useState({
     name: '',
@@ -33,65 +33,66 @@ export default function OnboardingPage() {
     address: '',
     businessNumber: '',
     logoUrl: '',
-  })
+  });
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
     if (!ALLOWED_TYPES.includes(file.type)) {
-      setError('JPG, PNG, WebP 파일만 업로드 가능합니다.')
-      return
+      setError('JPG, PNG, WebP 파일만 업로드 가능합니다.');
+      return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      setError('로고 파일 크기는 2MB 이하만 가능합니다.')
-      return
+      setError('로고 파일 크기는 2MB 이하만 가능합니다.');
+      return;
     }
 
-    setLogoUploading(true)
-    setError('')
+    setLogoUploading(true);
+    setError('');
     try {
-      const storageRef = ref(storage, `logos/${session?.user.id ?? 'unknown'}_${Date.now()}`)
-      await uploadBytes(storageRef, file)
-      const url = await getDownloadURL(storageRef)
-      setLogoPreview(url)
-      setForm((prev) => ({ ...prev, logoUrl: url }))
+      const storageRef = ref(storage, `logos/${session?.user.id ?? 'unknown'}_${Date.now()}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      setLogoPreview(url);
+      setForm((prev) => ({ ...prev, logoUrl: url }));
     } catch {
-      setError('로고 업로드에 실패했습니다. 다시 시도해주세요.')
+      setError('로고 업로드에 실패했습니다. 다시 시도해주세요.');
     } finally {
-      setLogoUploading(false)
+      setLogoUploading(false);
     }
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const { name, value } = e.target
+    const { name, value } = e.target;
     if (name === 'phone') {
-      const digits = value.replace(/\D/g, '').slice(0, 11)
-      let formatted = digits
-      if (digits.length > 7) formatted = `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
-      else if (digits.length > 3) formatted = `${digits.slice(0, 3)}-${digits.slice(3)}`
-      setForm((prev) => ({ ...prev, phone: formatted }))
-      return
+      const digits = value.replace(/\D/g, '').slice(0, 11);
+      let formatted = digits;
+      if (digits.length > 7)
+        formatted = `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+      else if (digits.length > 3) formatted = `${digits.slice(0, 3)}-${digits.slice(3)}`;
+      setForm((prev) => ({ ...prev, phone: formatted }));
+      return;
     }
-    setForm((prev) => ({ ...prev, [name]: value }))
+    setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+    e.preventDefault();
     if (!session?.user.storeId && !form.name) {
-      setError('상호명을 입력해주세요.')
-      return
+      setError('상호명을 입력해주세요.');
+      return;
     }
-    setError('')
-    setLoading(true)
+    setError('');
+    setLoading(true);
 
-    const storeId = session?.user.storeId
-    const token = session?.user.accessToken
+    const storeId = session?.user.storeId;
+    const token = session?.user.accessToken;
     if (!token) {
-      setError('로그인 정보를 확인해주세요.')
-      setLoading(false)
-      return
+      setError('로그인 정보를 확인해주세요.');
+      setLoading(false);
+      return;
     }
 
     const body = JSON.stringify({
@@ -101,27 +102,27 @@ export default function OnboardingPage() {
       address: form.address,
       businessNumber: form.businessNumber || undefined,
       logoUrl: form.logoUrl || undefined,
-    })
+    });
 
-    let res: Response
+    let res: Response;
     if (!storeId) {
-      res = await apiFetch('/stores', token, { method: 'POST', body })
+      res = await apiFetch('/stores', token, { method: 'POST', body });
       if (res.ok) {
-        const data = await res.json()
-        await update({ storeId: data.storeId })
+        const data = await res.json();
+        await update({ storeId: data.storeId });
       }
     } else {
-      res = await apiFetch(`/stores/${storeId}`, token, { method: 'PATCH', body })
+      res = await apiFetch(`/stores/${storeId}`, token, { method: 'PATCH', body });
     }
 
-    setLoading(false)
+    setLoading(false);
 
     if (!res.ok) {
-      setError('저장에 실패했습니다. 다시 시도해주세요.')
-      return
+      setError('저장에 실패했습니다. 다시 시도해주세요.');
+      return;
     }
 
-    router.push('/orders')
+    router.push('/orders');
   }
 
   return (
@@ -131,8 +132,12 @@ export default function OnboardingPage() {
     >
       <Container size="xs">
         <Stack align="center" gap="xs" mb="xl">
-          <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>사업자 정보 등록</Title>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>서비스 시작 전 한 번만 입력합니다</Text>
+          <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
+            사업자 정보 등록
+          </Title>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            서비스 시작 전 한 번만 입력합니다
+          </Text>
         </Stack>
 
         <Paper radius="lg" shadow="sm" p="lg">
@@ -155,13 +160,27 @@ export default function OnboardingPage() {
                 >
                   {logoPreview ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={logoPreview} alt="로고 미리보기" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img
+                      src={logoPreview}
+                      alt="로고 미리보기"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
                   ) : (
-                    <Text style={{ fontSize: 'var(--font-size-2xl)', color: 'var(--color-border)' }}>🏪</Text>
+                    <Text
+                      style={{ fontSize: 'var(--font-size-2xl)', color: 'var(--color-border)' }}
+                    >
+                      🏪
+                    </Text>
                   )}
                 </Box>
                 <label style={{ cursor: 'pointer' }}>
-                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}>
+                  <Text
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-primary)',
+                      fontWeight: 'var(--fw-medium)',
+                    }}
+                  >
                     {logoUploading ? '업로드 중...' : '로고 사진 선택'}
                   </Text>
                   <input
@@ -172,13 +191,24 @@ export default function OnboardingPage() {
                     disabled={logoUploading}
                   />
                 </label>
-                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>선택 사항 · JPG, PNG, WebP 권장</Text>
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                >
+                  선택 사항 · JPG, PNG, WebP 권장
+                </Text>
               </Stack>
 
               <Divider />
 
               <TextInput
-                label={<>상호명 <Text component="span" style={{ color: 'var(--color-danger)' }}>*</Text></>}
+                label={
+                  <>
+                    상호명{' '}
+                    <Text component="span" style={{ color: 'var(--color-danger)' }}>
+                      *
+                    </Text>
+                  </>
+                }
                 name="name"
                 value={form.name}
                 onChange={handleChange}
@@ -188,7 +218,14 @@ export default function OnboardingPage() {
               />
 
               <TextInput
-                label={<>대표자명 <Text component="span" style={{ color: 'var(--color-danger)' }}>*</Text></>}
+                label={
+                  <>
+                    대표자명{' '}
+                    <Text component="span" style={{ color: 'var(--color-danger)' }}>
+                      *
+                    </Text>
+                  </>
+                }
                 name="ceoName"
                 value={form.ceoName}
                 onChange={handleChange}
@@ -198,7 +235,14 @@ export default function OnboardingPage() {
               />
 
               <TextInput
-                label={<>연락처 <Text component="span" style={{ color: 'var(--color-danger)' }}>*</Text></>}
+                label={
+                  <>
+                    연락처{' '}
+                    <Text component="span" style={{ color: 'var(--color-danger)' }}>
+                      *
+                    </Text>
+                  </>
+                }
                 name="phone"
                 value={form.phone}
                 onChange={handleChange}
@@ -208,7 +252,14 @@ export default function OnboardingPage() {
               />
 
               <TextInput
-                label={<>소재지 <Text component="span" style={{ color: 'var(--color-danger)' }}>*</Text></>}
+                label={
+                  <>
+                    소재지{' '}
+                    <Text component="span" style={{ color: 'var(--color-danger)' }}>
+                      *
+                    </Text>
+                  </>
+                }
                 name="address"
                 value={form.address}
                 onChange={handleChange}
@@ -220,7 +271,17 @@ export default function OnboardingPage() {
               <Divider />
 
               <TextInput
-                label={<>사업자등록번호 <Text component="span" style={{ color: 'var(--color-text-disabled)', fontWeight: 400 }}>(선택)</Text></>}
+                label={
+                  <>
+                    사업자등록번호{' '}
+                    <Text
+                      component="span"
+                      style={{ color: 'var(--color-text-disabled)', fontWeight: 400 }}
+                    >
+                      (선택)
+                    </Text>
+                  </>
+                }
                 name="businessNumber"
                 value={form.businessNumber}
                 onChange={handleChange}
@@ -229,7 +290,12 @@ export default function OnboardingPage() {
               />
 
               {error && (
-                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} ta="center">{error}</Text>
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+                  ta="center"
+                >
+                  {error}
+                </Text>
               )}
 
               <Button
@@ -248,5 +314,5 @@ export default function OnboardingPage() {
         </Paper>
       </Container>
     </Box>
-  )
+  );
 }

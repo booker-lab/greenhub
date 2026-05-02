@@ -1,10 +1,10 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useSession } from 'next-auth/react'
-import { useOrders, TAB_STATUSES } from '@/hooks/useOrders'
-import type { Order, OrderStatus } from '@greenhub/shared'
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { useOrders, TAB_STATUSES } from '@/hooks/useOrders';
+import type { Order, OrderStatus } from '@greenhub/shared';
 import {
   Alert,
   Badge,
@@ -18,9 +18,9 @@ import {
   Text,
   Title,
   UnstyledButton,
-} from '@mantine/core'
+} from '@mantine/core';
 
-type StatusTab = 'pending' | 'preparing' | 'delivering' | 'done' | 'cancelled'
+type StatusTab = 'pending' | 'preparing' | 'delivering' | 'done' | 'cancelled';
 
 const TABS: { key: StatusTab; label: string }[] = [
   { key: 'pending', label: '처리 필요' },
@@ -28,7 +28,7 @@ const TABS: { key: StatusTab; label: string }[] = [
   { key: 'delivering', label: '배송 중' },
   { key: 'done', label: '완료' },
   { key: 'cancelled', label: '취소' },
-]
+];
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: '대기',
@@ -42,7 +42,7 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   DELIVERED: '배송 완료',
   CANCELLED: '취소',
   REVIEWED: '구매 확정',
-}
+};
 
 const STATUS_COLOR: Record<OrderStatus, string> = {
   ACCEPTED: 'blue',
@@ -56,7 +56,7 @@ const STATUS_COLOR: Record<OrderStatus, string> = {
   DELIVERED: 'green',
   PICKED_UP: 'green',
   REVIEWED: 'green',
-}
+};
 
 const ACCENT_BORDER: Record<OrderStatus, string> = {
   ACCEPTED: 'var(--color-status-info-text)',
@@ -70,39 +70,41 @@ const ACCENT_BORDER: Record<OrderStatus, string> = {
   DELIVERED: 'var(--color-primary)',
   PICKED_UP: 'var(--color-primary)',
   REVIEWED: 'var(--color-text-disabled)',
-}
+};
 
 const DELIVERY_LABEL: Record<string, string> = {
   direct: '꽃차 직배송',
   hub: '거점 픽업',
   parcel: '택배',
-}
+};
 
 function formatRelativeTime(iso: unknown): string {
-  const date = iso && typeof iso === 'object' && 'toDate' in iso
-    ? (iso as { toDate(): Date }).toDate()
-    : new Date(iso as string)
-  const diff = Date.now() - date.getTime()
-  const min = Math.floor(diff / 60000)
-  if (min < 1) return '방금 전'
-  if (min < 60) return `${min}분 전`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}시간 전`
-  return `${Math.floor(hr / 24)}일 전`
+  const date =
+    iso && typeof iso === 'object' && 'toDate' in iso
+      ? (iso as { toDate(): Date }).toDate()
+      : new Date(iso as string);
+  const diff = Date.now() - date.getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return '방금 전';
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  return `${Math.floor(hr / 24)}일 전`;
 }
 
 export default function OrdersPage() {
-  const { data: session } = useSession()
-  const storeId = session?.user.storeId ?? null
-  const { orders, loading, error, counts, firebaseReady } = useOrders(storeId)
-  const [activeTab, setActiveTab] = useState<StatusTab>('pending')
+  const { data: session } = useSession();
+  const storeId = session?.user.storeId ?? null;
+  const { orders, loading, error, counts, firebaseReady } = useOrders(storeId);
+  const [activeTab, setActiveTab] = useState<StatusTab>('pending');
 
-  const filteredOrders = orders.filter((o) =>
-    TAB_STATUSES[activeTab].includes(o.status)
-  )
+  const filteredOrders = orders.filter((o) => TAB_STATUSES[activeTab].includes(o.status));
 
   return (
-    <Box component="main" style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}>
+    <Box
+      component="main"
+      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}
+    >
       {/* 헤더 */}
       <Box
         component="header"
@@ -117,16 +119,41 @@ export default function OrdersPage() {
       >
         <Container size="sm">
           <Group justify="space-between">
-            <Title order={3} style={{ fontWeight: 'var(--fw-bold)' }}>주문 관리</Title>
+            <Title order={3} style={{ fontWeight: 'var(--fw-bold)' }}>
+              주문 관리
+            </Title>
             <Group gap={6}>
               {loading || !firebaseReady ? (
-                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--color-caution-border)' }} />
+                <Box
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--color-caution-border)',
+                  }}
+                />
               ) : error ? (
-                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--color-danger)' }} />
+                <Box
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--color-danger)',
+                  }}
+                />
               ) : (
-                <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--color-primary)' }} />
+                <Box
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--color-primary)',
+                  }}
+                />
               )}
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              >
                 {loading || !firebaseReady ? '연결 중' : error ? '연결 오류' : '실시간 연결'}
               </Text>
             </Group>
@@ -162,11 +189,7 @@ export default function OrdersPage() {
               >
                 {tab.label}
                 {counts[tab.key] > 0 && (
-                  <Badge
-                    size="xs"
-                    ml={6}
-                    color={tab.key === 'pending' ? 'red' : 'gray'}
-                  >
+                  <Badge size="xs" ml={6} color={tab.key === 'pending' ? 'red' : 'gray'}>
                     {counts[tab.key]}
                   </Badge>
                 )}
@@ -186,8 +209,20 @@ export default function OrdersPage() {
           )}
 
           {!loading && firebaseReady && filteredOrders.length === 0 && (
-            <Stack align="center" justify="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <Stack
+              align="center"
+              justify="center"
+              py={80}
+              style={{ color: 'var(--color-text-disabled)' }}
+            >
+              <svg
+                width="48"
+                height="48"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
                 <path d="M9 11l3 3L22 4" />
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
               </svg>
@@ -201,20 +236,23 @@ export default function OrdersPage() {
         </Stack>
       </Container>
     </Box>
-  )
+  );
 }
 
 function OrderCard({ order, storeId }: { order: Order; storeId: string | null }) {
-  const router = useRouter()
-  const { data: session } = useSession()
-  const [actionLoading, setActionLoading] = useState(false)
-  const [showPrepareForm, setShowPrepareForm] = useState(false)
-  const [preparedAtInput, setPreparedAtInput] = useState('')
-  const [actionError, setActionError] = useState<string | null>(null)
+  const router = useRouter();
+  const { data: session } = useSession();
+  const [actionLoading, setActionLoading] = useState(false);
+  const [showPrepareForm, setShowPrepareForm] = useState(false);
+  const [preparedAtInput, setPreparedAtInput] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  async function handleStatusChange(status: OrderStatus, extra?: { reason?: string; preparedAt?: string }) {
-    setActionLoading(true)
-    setActionError(null)
+  async function handleStatusChange(
+    status: OrderStatus,
+    extra?: { reason?: string; preparedAt?: string },
+  ) {
+    setActionLoading(true);
+    setActionError(null);
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/stores/${storeId}/orders/${order.id}/status`,
@@ -225,40 +263,41 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
             Authorization: `Bearer ${session?.user.accessToken}`,
           },
           body: JSON.stringify({ status, ...extra }),
-        }
-      )
+        },
+      );
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        setActionError(`오류 ${res.status}: ${body?.message ?? '상태 변경 실패'}`)
+        const body = await res.json().catch(() => ({}));
+        setActionError(`오류 ${res.status}: ${body?.message ?? '상태 변경 실패'}`);
       }
     } catch {
-      setActionError('네트워크 오류가 발생했습니다')
+      setActionError('네트워크 오류가 발생했습니다');
     } finally {
-      setActionLoading(false)
+      setActionLoading(false);
     }
   }
 
   async function handlePrepare() {
     const extra = preparedAtInput
       ? { preparedAt: new Date(preparedAtInput).toISOString() }
-      : undefined
-    await handleStatusChange('PREPARING', extra)
-    setShowPrepareForm(false)
-    setPreparedAtInput('')
+      : undefined;
+    await handleStatusChange('PREPARING', extra);
+    setShowPrepareForm(false);
+    setPreparedAtInput('');
   }
 
   async function handleCancel() {
-    const reason = prompt('취소 사유를 입력하세요 (최소 5자)')
+    const reason = prompt('취소 사유를 입력하세요 (최소 5자)');
     if (!reason || reason.trim().length < 5) {
-      if (reason !== null) alert('취소 사유는 최소 5자 이상 입력해주세요.')
-      return
+      if (reason !== null) alert('취소 사유는 최소 5자 이상 입력해주세요.');
+      return;
     }
-    await handleStatusChange('CANCELLED', { reason: reason.trim() })
+    await handleStatusChange('CANCELLED', { reason: reason.trim() });
   }
 
-  const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED'
-  const canCancel = order.status === 'ACCEPTED' || order.status === 'CONFIRMED' || order.status === 'PREPARING'
-  const accentColor = ACCENT_BORDER[order.status]
+  const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED';
+  const canCancel =
+    order.status === 'ACCEPTED' || order.status === 'CONFIRMED' || order.status === 'PREPARING';
+  const accentColor = ACCENT_BORDER[order.status];
 
   return (
     <Paper
@@ -276,18 +315,34 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
         <Badge color={STATUS_COLOR[order.status]} variant="light" radius="xl">
           {STATUS_LABEL[order.status]}
         </Badge>
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{formatRelativeTime(order.createdAt)}</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          {formatRelativeTime(order.createdAt)}
+        </Text>
       </Group>
 
       {/* 주문 정보 */}
-      <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }} mb={4}>
+      <Text
+        style={{
+          fontWeight: 'var(--fw-bold)',
+          fontSize: 'var(--font-size-sm)',
+          color: 'var(--color-text)',
+        }}
+        mb={4}
+      >
         주문 #{order.id.slice(-6).toUpperCase()}
       </Text>
       <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={6}>
         {DELIVERY_LABEL[order.deliveryMethod]}
         {order.requestedDeliveryDate && ` · ${order.requestedDeliveryDate}`}
       </Text>
-      <Text style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }} mb="sm">
+      <Text
+        style={{
+          fontSize: 'var(--font-size-xl)',
+          fontWeight: 'var(--fw-bold)',
+          color: 'var(--color-text)',
+        }}
+        mb="sm"
+      >
         {order.totalAmount.toLocaleString()}원
       </Text>
 
@@ -297,10 +352,22 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
           p="md"
           radius="md"
           mb="sm"
-          style={{ background: 'var(--color-status-info-bg)', border: '1px solid var(--color-border)' }}
+          style={{
+            background: 'var(--color-status-info-bg)',
+            border: '1px solid var(--color-border)',
+          }}
           onClick={(e) => e.stopPropagation()}
         >
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-status-info-text)', fontWeight: 'var(--fw-medium)' }} mb="xs">드라이버 수거 예정 시간 (선택)</Text>
+          <Text
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-status-info-text)',
+              fontWeight: 'var(--fw-medium)',
+            }}
+            mb="xs"
+          >
+            드라이버 수거 예정 시간 (선택)
+          </Text>
           <input
             type="datetime-local"
             value={preparedAtInput}
@@ -327,7 +394,10 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
               확인
             </Button>
             <Button
-              onClick={() => { setShowPrepareForm(false); setPreparedAtInput('') }}
+              onClick={() => {
+                setShowPrepareForm(false);
+                setPreparedAtInput('');
+              }}
               flex={1}
               size="sm"
               radius="md"
@@ -379,13 +449,22 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
           py="xs"
           onClick={(e) => e.stopPropagation()}
         >
-          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>공동구매 모집 중</Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} mt={2}>모집 마감 후 인원 충족 시 자동 확정됩니다.</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>
+            공동구매 모집 중
+          </Text>
+          <Text
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            mt={2}
+          >
+            모집 마감 후 인원 충족 시 자동 확정됩니다.
+          </Text>
         </Alert>
       )}
 
       {actionError && (
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt="xs">{actionError}</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt="xs">
+          {actionError}
+        </Text>
       )}
 
       {order.status === 'HUB_ARRIVED' && order.pickupCode && (
@@ -397,14 +476,29 @@ function OrderCard({ order, storeId }: { order: Order; storeId: string | null })
           ta="center"
           onClick={(e) => e.stopPropagation()}
         >
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }} mb={4}>픽업 코드</Text>
           <Text
-            style={{ fontSize: 24, letterSpacing: '0.2em', fontFamily: 'monospace', fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-primary)',
+              fontWeight: 'var(--fw-medium)',
+            }}
+            mb={4}
+          >
+            픽업 코드
+          </Text>
+          <Text
+            style={{
+              fontSize: 24,
+              letterSpacing: '0.2em',
+              fontFamily: 'monospace',
+              fontWeight: 'var(--fw-bold)',
+              color: 'var(--color-primary-dark)',
+            }}
           >
             {order.pickupCode}
           </Text>
         </Paper>
       )}
     </Paper>
-  )
+  );
 }

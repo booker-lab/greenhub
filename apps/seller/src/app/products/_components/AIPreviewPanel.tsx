@@ -1,47 +1,67 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { Alert, Button, Group, Loader, Modal, Paper, Stack, Text, Textarea, TextInput } from '@mantine/core'
+import { useState } from 'react';
+import {
+  Alert,
+  Button,
+  Group,
+  Loader,
+  Modal,
+  Paper,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+} from '@mantine/core';
 
 export interface ConflictWarning {
-  field: string
-  message: string
-  suggestion: string
+  field: string;
+  message: string;
+  suggestion: string;
 }
 
 interface Props {
-  loading: boolean
-  headline: string
-  description: string
-  isEditedByUser: boolean
-  conflicts: ConflictWarning[]
-  onHeadlineChange: (v: string) => void
-  onDescriptionChange: (v: string) => void
-  onRegenerate: () => Promise<void>
-  onSellerOverride: () => void
+  loading: boolean;
+  headline: string;
+  description: string;
+  isEditedByUser: boolean;
+  conflicts: ConflictWarning[];
+  onHeadlineChange: (v: string) => void;
+  onDescriptionChange: (v: string) => void;
+  onRegenerate: () => Promise<void>;
+  onSellerOverride: () => void;
 }
 
 export default function AIPreviewPanel({
-  loading, headline, description, isEditedByUser,
-  conflicts, onHeadlineChange, onDescriptionChange, onRegenerate, onSellerOverride,
+  loading,
+  headline,
+  description,
+  isEditedByUser,
+  conflicts,
+  onHeadlineChange,
+  onDescriptionChange,
+  onRegenerate,
+  onSellerOverride,
 }: Props) {
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [regenerating, setRegenerating] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   async function handleRegenerate() {
-    setConfirmOpen(false)
-    setRegenerating(true)
-    await onRegenerate()
-    setRegenerating(false)
+    setConfirmOpen(false);
+    setRegenerating(true);
+    await onRegenerate();
+    setRegenerating(false);
   }
 
   if (loading || regenerating) {
     return (
       <Stack align="center" py="xl" gap="md">
         <Loader size="md" color="var(--color-primary)" />
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>AI가 상세 페이지를 작성하는 중...</Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          AI가 상세 페이지를 작성하는 중...
+        </Text>
       </Stack>
-    )
+    );
   }
 
   return (
@@ -53,7 +73,12 @@ export default function AIPreviewPanel({
               <Text key={i} style={{ fontSize: 'var(--font-size-sm)' }}>
                 {c.message}
                 <br />
-                <Text component="span" style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>{c.suggestion}</Text>
+                <Text
+                  component="span"
+                  style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
+                >
+                  {c.suggestion}
+                </Text>
               </Text>
             ))}
           </Stack>
@@ -69,7 +94,16 @@ export default function AIPreviewPanel({
       )}
 
       <Paper radius="lg" shadow="xs" p="md">
-        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">헤드라인 (AI 생성)</Text>
+        <Text
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-medium)',
+            color: 'var(--color-text-disabled)',
+          }}
+          mb="xs"
+        >
+          헤드라인 (AI 생성)
+        </Text>
         <TextInput
           value={headline}
           onChange={(e) => onHeadlineChange(e.target.value)}
@@ -77,13 +111,32 @@ export default function AIPreviewPanel({
           size="md"
           radius="md"
         />
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: headline.length > 15 ? 'var(--color-status-warning-text)' : 'var(--color-text-disabled)' }} ta="right" mt={4}>
+        <Text
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color:
+              headline.length > 15
+                ? 'var(--color-status-warning-text)'
+                : 'var(--color-text-disabled)',
+          }}
+          ta="right"
+          mt={4}
+        >
           {headline.length} / 15자 권장
         </Text>
       </Paper>
 
       <Paper radius="lg" shadow="xs" p="md">
-        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">상세 설명 (AI 생성)</Text>
+        <Text
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-medium)',
+            color: 'var(--color-text-disabled)',
+          }}
+          mb="xs"
+        >
+          상세 설명 (AI 생성)
+        </Text>
         <Textarea
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
@@ -115,10 +168,14 @@ export default function AIPreviewPanel({
           직접 편집한 내용이 있습니다. 새로 생성하면 편집 내용이 사라집니다.
         </Text>
         <Group justify="flex-end" gap="xs">
-          <Button variant="subtle" color="gray" onClick={() => setConfirmOpen(false)}>취소</Button>
-          <Button color="red" onClick={handleRegenerate}>새로 생성</Button>
+          <Button variant="subtle" color="gray" onClick={() => setConfirmOpen(false)}>
+            취소
+          </Button>
+          <Button color="red" onClick={handleRegenerate}>
+            새로 생성
+          </Button>
         </Group>
       </Modal>
     </Stack>
-  )
+  );
 }

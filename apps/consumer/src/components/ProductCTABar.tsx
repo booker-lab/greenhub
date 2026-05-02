@@ -1,14 +1,14 @@
-'use client'
+'use client';
 
-import { Box, Button, Group, Text } from '@mantine/core'
+import { Box, Button, Group, Text } from '@mantine/core';
 
 interface Props {
-  totalAmount: number
-  isGroup: boolean
-  isFull: boolean
-  canBuy: boolean
-  onAddToCart: () => void
-  onBuyNow: () => void
+  totalAmount: number;
+  isGroup: boolean;
+  isFull: boolean;
+  canBuy: boolean;
+  onAddToCart: () => void;
+  onBuyNow: () => void;
 }
 
 export default function ProductCTABar({
@@ -19,7 +19,7 @@ export default function ProductCTABar({
   onAddToCart,
   onBuyNow,
 }: Props) {
-  const ctaLabel = isFull ? '모집 완료' : isGroup ? '공구 참여하기' : '바로 결제'
+  const ctaLabel = isFull ? '모집 완료' : isGroup ? '공구 참여하기' : '바로 결제';
 
   return (
     <Box
@@ -42,22 +42,26 @@ export default function ProductCTABar({
         }}
       >
         {/* 총 금액 */}
-        <Text mb={6} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+        <Text
+          mb={6}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        >
           총 금액{' '}
-          <Text span style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-md)', color: 'var(--color-text)' }}>
+          <Text
+            span
+            style={{
+              fontWeight: 'var(--fw-bold)',
+              fontSize: 'var(--font-size-md)',
+              color: 'var(--color-text)',
+            }}
+          >
             {totalAmount.toLocaleString()}원
           </Text>
         </Text>
 
         {/* 버튼 */}
         <Group gap={8} style={{ flexWrap: 'nowrap' }}>
-          <Button
-            flex={1}
-            variant="default"
-            radius="md"
-            size="lg"
-            onClick={onAddToCart}
-          >
+          <Button flex={1} variant="default" radius="md" size="lg" onClick={onAddToCart}>
             장바구니
           </Button>
           <Button
@@ -76,5 +80,5 @@ export default function ProductCTABar({
         </Group>
       </Box>
     </Box>
-  )
+  );
 }

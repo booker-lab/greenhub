@@ -1,8 +1,8 @@
-'use client'
-import dynamic from 'next/dynamic'
+'use client';
+import dynamic from 'next/dynamic';
 
-const AdminInviteClient = dynamic(() => import('./_client'), { ssr: false })
+const AdminInviteClient = dynamic(() => import('./_client'), { ssr: false });
 
 export default function AdminInvitePage() {
-  return <AdminInviteClient />
+  return <AdminInviteClient />;
 }

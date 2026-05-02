@@ -1,16 +1,28 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import Image from 'next/image'
-import { useSession } from 'next-auth/react'
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { storage } from '@/lib/firebase'
-import { useAdminBanner, type AdminBanner } from '@/hooks/useAdmin'
-import { Box, Button, Group, Loader, Paper, Stack, Text, TextInput, Textarea, Title, Switch } from '@mantine/core'
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
+import { useSession } from 'next-auth/react';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '@/lib/firebase';
+import { useAdminBanner, type AdminBanner } from '@/hooks/useAdmin';
+import {
+  Box,
+  Button,
+  Group,
+  Loader,
+  Paper,
+  Stack,
+  Text,
+  TextInput,
+  Textarea,
+  Title,
+  Switch,
+} from '@mantine/core';
 
 export default function AdminBannerClient() {
-  const { data: session } = useSession()
-  const { banner, loading, saving, save } = useAdminBanner()
+  const { data: session } = useSession();
+  const { banner, loading, saving, save } = useAdminBanner();
 
   const [form, setForm] = useState<AdminBanner>({
     imageUrl: '',
@@ -20,40 +32,44 @@ export default function AdminBannerClient() {
     cta1: { label: '', href: '' },
     cta2: { label: '', href: '' },
     isActive: true,
-  })
-  const [uploading, setUploading] = useState(false)
-  const [saved, setSaved] = useState(false)
+  });
+  const [uploading, setUploading] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (banner) setForm({ ...form, ...banner })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [banner])
+    if (banner) setForm({ ...form, ...banner });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [banner, form]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !session?.user) return
-    setUploading(true)
+    const file = e.target.files?.[0];
+    if (!file || !session?.user) return;
+    setUploading(true);
     try {
-      const r = storageRef(storage, `banners/main_hero/${Date.now()}_${file.name}`)
-      await uploadBytes(r, file)
-      const url = await getDownloadURL(r)
-      setForm((f) => ({ ...f, imageUrl: url }))
+      const r = storageRef(storage, `banners/main_hero/${Date.now()}_${file.name}`);
+      await uploadBytes(r, file);
+      const url = await getDownloadURL(r);
+      setForm((f) => ({ ...f, imageUrl: url }));
     } finally {
-      setUploading(false)
-      e.target.value = ''
+      setUploading(false);
+      e.target.value = '';
     }
-  }
+  };
 
   const handleSave = async () => {
-    const ok = await save(form)
+    const ok = await save(form);
     if (ok) {
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     }
-  }
+  };
 
   if (loading) {
-    return <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>불러오는 중...</Text>
+    return (
+      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+        불러오는 중...
+      </Text>
+    );
   }
 
   return (
@@ -70,10 +86,21 @@ export default function AdminBannerClient() {
       <Stack gap="md">
         {/* 이미지 */}
         <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--color-border)' }}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">배경 이미지</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">
+            배경 이미지
+          </Text>
           {form.imageUrl && (
-            <Box mb="sm" style={{ borderRadius: 12, overflow: 'hidden', height: 180, position: 'relative' }}>
-              <Image fill src={form.imageUrl} alt="배너 미리보기" sizes="100vw" style={{ objectFit: 'cover' }} />
+            <Box
+              mb="sm"
+              style={{ borderRadius: 12, overflow: 'hidden', height: 180, position: 'relative' }}
+            >
+              <Image
+                fill
+                src={form.imageUrl}
+                alt="배너 미리보기"
+                sizes="100vw"
+                style={{ objectFit: 'cover' }}
+              />
             </Box>
           )}
           <Box
@@ -91,13 +118,21 @@ export default function AdminBannerClient() {
             }}
           >
             {uploading ? <Loader size="xs" /> : '이미지 업로드'}
-            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} disabled={uploading} />
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleImageUpload}
+              disabled={uploading}
+            />
           </Box>
         </Paper>
 
         {/* 텍스트 */}
         <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--color-border)' }}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">텍스트</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">
+            텍스트
+          </Text>
           <Stack gap="sm">
             <TextInput
               label="태그 문구"
@@ -126,20 +161,26 @@ export default function AdminBannerClient() {
 
         {/* CTA 버튼 */}
         <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--color-border)' }}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">버튼</Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">
+            버튼
+          </Text>
           <Stack gap="sm">
             <Group grow>
               <TextInput
                 label="버튼1 텍스트"
                 placeholder="지금 인기상품 보기"
                 value={form.cta1?.label ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, cta1: { ...f.cta1!, label: e.target.value } }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, cta1: { ...f.cta1!, label: e.target.value } }))
+                }
               />
               <TextInput
                 label="버튼1 링크"
                 placeholder="/products"
                 value={form.cta1?.href ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, cta1: { ...f.cta1!, href: e.target.value } }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, cta1: { ...f.cta1!, href: e.target.value } }))
+                }
               />
             </Group>
             <Group grow>
@@ -147,13 +188,17 @@ export default function AdminBannerClient() {
                 label="버튼2 텍스트"
                 placeholder="공구 참여하기"
                 value={form.cta2?.label ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, cta2: { ...f.cta2!, label: e.target.value } }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, cta2: { ...f.cta2!, label: e.target.value } }))
+                }
               />
               <TextInput
                 label="버튼2 링크"
                 placeholder="/groupbuy"
                 value={form.cta2?.href ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, cta2: { ...f.cta2!, href: e.target.value } }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, cta2: { ...f.cta2!, href: e.target.value } }))
+                }
               />
             </Group>
           </Stack>
@@ -170,5 +215,5 @@ export default function AdminBannerClient() {
         </Button>
       </Stack>
     </Box>
-  )
+  );
 }

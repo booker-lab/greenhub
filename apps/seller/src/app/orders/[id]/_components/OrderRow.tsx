@@ -1,6 +1,6 @@
-'use client'
+'use client';
 
-import { Box, Group, Text } from '@mantine/core'
+import { Group, Text } from '@mantine/core';
 
 export function Row({
   label,
@@ -9,15 +9,23 @@ export function Row({
   highlight,
   mono,
 }: {
-  label: string
-  value: string
-  bold?: boolean
-  highlight?: boolean
-  mono?: boolean
+  label: string;
+  value: string;
+  bold?: boolean;
+  highlight?: boolean;
+  mono?: boolean;
 }) {
   return (
     <Group justify="space-between" align="flex-start" gap="xs">
-      <Text style={{ flexShrink: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>{label}</Text>
+      <Text
+        style={{
+          flexShrink: 0,
+          fontSize: 'var(--font-size-sm)',
+          color: 'var(--color-text-disabled)',
+        }}
+      >
+        {label}
+      </Text>
       <Text
         ta="right"
         ff={mono ? 'monospace' : undefined}
@@ -25,13 +33,17 @@ export function Row({
           wordBreak: 'break-all',
           fontSize: 'var(--font-size-sm)',
           fontWeight: bold ? 'var(--fw-bold)' : undefined,
-          color: bold ? 'var(--color-text)' : highlight ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+          color: bold
+            ? 'var(--color-text)'
+            : highlight
+              ? 'var(--color-primary)'
+              : 'var(--color-text-secondary)',
         }}
       >
         {value}
       </Text>
     </Group>
-  )
+  );
 }
 
 export const STATUS_LABEL_MAP: Record<string, string> = {
@@ -46,7 +58,7 @@ export const STATUS_LABEL_MAP: Record<string, string> = {
   DELIVERED: '배송 완료',
   CANCELLED: '취소',
   REVIEWED: '구매 확정',
-}
+};
 
 export const STATUS_COLOR_MAP: Record<string, string> = {
   ACCEPTED: 'orange',
@@ -60,10 +72,10 @@ export const STATUS_COLOR_MAP: Record<string, string> = {
   DELIVERED: 'green',
   PICKED_UP: 'green',
   REVIEWED: 'green',
-}
+};
 
 export const DELIVERY_LABEL_MAP: Record<string, string> = {
   direct: '꽃차 직배송',
   hub: '거점 픽업',
   parcel: '택배',
-}
+};
