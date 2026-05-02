@@ -1,0 +1,7 @@
+detectors:
+  - name: Generic
+    allowlist:
+      regexes:
+        - "example\\.com"
+        - "REPLACE_ME"
+        - "your-.*-here"
