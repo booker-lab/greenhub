@@ -1,45 +1,45 @@
 /* Pretendard Variable — webpack 번들링 (Vercel .next/static/media 서빙 보장) */
 @font-face {
-  font-family: 'Pretendard Variable';
-  src: url('../../public/fonts/PretendardVariable.woff2') format('woff2-variations');
+  font-family: "Pretendard Variable";
+  src: url("../../public/fonts/PretendardVariable.woff2") format("woff2-variations");
   font-weight: 45 920;
   font-style: normal;
   font-display: swap;
 }
 
 /* Mantine v9 — 선택적 CSS import (사용 컴포넌트만) */
-@import '@mantine/core/styles/global.css';
-@import '@mantine/core/styles/baseline.css';
-@import '@mantine/core/styles/default-css-variables.css';
+@import "@mantine/core/styles/global.css";
+@import "@mantine/core/styles/baseline.css";
+@import "@mantine/core/styles/default-css-variables.css";
 
 /* 내부 공통 의존 */
-@import '@mantine/core/styles/ScrollArea.css';
-@import '@mantine/core/styles/VisuallyHidden.css';
-@import '@mantine/core/styles/UnstyledButton.css';
-@import '@mantine/core/styles/InlineInput.css';
-@import '@mantine/core/styles/Input.css';
-@import '@mantine/core/styles/Paper.css';
-@import '@mantine/core/styles/CloseButton.css';
+@import "@mantine/core/styles/ScrollArea.css";
+@import "@mantine/core/styles/VisuallyHidden.css";
+@import "@mantine/core/styles/UnstyledButton.css";
+@import "@mantine/core/styles/InlineInput.css";
+@import "@mantine/core/styles/Input.css";
+@import "@mantine/core/styles/Paper.css";
+@import "@mantine/core/styles/CloseButton.css";
 
 /* 사용 컴포넌트 */
-@import '@mantine/core/styles/ActionIcon.css';
-@import '@mantine/core/styles/Alert.css';
-@import '@mantine/core/styles/Badge.css';
-@import '@mantine/core/styles/Button.css';
-@import '@mantine/core/styles/Card.css';
-@import '@mantine/core/styles/Container.css';
-@import '@mantine/core/styles/Divider.css';
-@import '@mantine/core/styles/Group.css';
-@import '@mantine/core/styles/PasswordInput.css';
-@import '@mantine/core/styles/Progress.css';
-@import '@mantine/core/styles/SimpleGrid.css';
-@import '@mantine/core/styles/Skeleton.css';
-@import '@mantine/core/styles/Stack.css';
-@import '@mantine/core/styles/Stepper.css';
-@import '@mantine/core/styles/Text.css';
-@import '@mantine/core/styles/Title.css';
+@import "@mantine/core/styles/ActionIcon.css";
+@import "@mantine/core/styles/Alert.css";
+@import "@mantine/core/styles/Badge.css";
+@import "@mantine/core/styles/Button.css";
+@import "@mantine/core/styles/Card.css";
+@import "@mantine/core/styles/Container.css";
+@import "@mantine/core/styles/Divider.css";
+@import "@mantine/core/styles/Group.css";
+@import "@mantine/core/styles/PasswordInput.css";
+@import "@mantine/core/styles/Progress.css";
+@import "@mantine/core/styles/SimpleGrid.css";
+@import "@mantine/core/styles/Skeleton.css";
+@import "@mantine/core/styles/Stack.css";
+@import "@mantine/core/styles/Stepper.css";
+@import "@mantine/core/styles/Text.css";
+@import "@mantine/core/styles/Title.css";
 
-@import '@greenhub/ui/style.css';
+@import "@greenhub/ui/style.css";
 
 body {
   background-color: var(--color-bg);

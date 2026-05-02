@@ -9,34 +9,32 @@ export type FirestoreValue =
   | { nullValue: null }
   | { timestampValue: string }
   | { mapValue: { fields?: Record<string, FirestoreValue> } }
-  | { arrayValue: { values?: FirestoreValue[] } }
+  | { arrayValue: { values?: FirestoreValue[] } };
 
 export function parseFirestoreValue(val: FirestoreValue): unknown {
-  if ('stringValue' in val) return val.stringValue
-  if ('integerValue' in val) return Number(val.integerValue)
-  if ('doubleValue' in val) return val.doubleValue
-  if ('booleanValue' in val) return val.booleanValue
-  if ('nullValue' in val) return null
-  if ('timestampValue' in val) return val.timestampValue
+  if ('stringValue' in val) return val.stringValue;
+  if ('integerValue' in val) return Number(val.integerValue);
+  if ('doubleValue' in val) return val.doubleValue;
+  if ('booleanValue' in val) return val.booleanValue;
+  if ('nullValue' in val) return null;
+  if ('timestampValue' in val) return val.timestampValue;
   if ('mapValue' in val) {
-    const fields = val.mapValue.fields ?? {}
-    return Object.fromEntries(
-      Object.entries(fields).map(([k, v]) => [k, parseFirestoreValue(v)]),
-    )
+    const fields = val.mapValue.fields ?? {};
+    return Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, parseFirestoreValue(v)]));
   }
   if ('arrayValue' in val) {
-    return (val.arrayValue.values ?? []).map(parseFirestoreValue)
+    return (val.arrayValue.values ?? []).map(parseFirestoreValue);
   }
-  return null
+  return null;
 }
 
 export function parseFirestoreDoc<T>(doc: {
-  name: string
-  fields: Record<string, FirestoreValue>
+  name: string;
+  fields: Record<string, FirestoreValue>;
 }): T {
-  const id = doc.name.split('/').pop()!
+  const id = doc.name.split('/').pop()!;
   const data = Object.fromEntries(
     Object.entries(doc.fields).map(([k, v]) => [k, parseFirestoreValue(v)]),
-  )
-  return { id, ...data } as T
+  );
+  return { id, ...data } as T;
 }

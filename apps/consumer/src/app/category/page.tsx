@@ -1,10 +1,21 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { Container, Box, Title, Text, Group, SimpleGrid, Skeleton, Stack, Divider, UnstyledButton } from '@mantine/core'
-import ProductCard from '@/components/ProductCard'
-import { useProducts } from '@/hooks/useProducts'
-import type { Category, ColorOption } from '@greenhub/shared'
+import { useState } from 'react';
+import {
+  Container,
+  Box,
+  Title,
+  Text,
+  Group,
+  SimpleGrid,
+  Skeleton,
+  Stack,
+  Divider,
+  UnstyledButton,
+} from '@mantine/core';
+import ProductCard from '@/components/ProductCard';
+import { useProducts } from '@/hooks/useProducts';
+import type { Category, ColorOption } from '@greenhub/shared';
 
 const TABS: { label: string; value: Category | undefined; saleType?: 'group' | 'direct' }[] = [
   { label: '전체', value: undefined },
@@ -12,7 +23,7 @@ const TABS: { label: string; value: Category | undefined; saleType?: 'group' | '
   { label: '절화', value: 'cut_flower' },
   { label: '난', value: 'orchid' },
   { label: '관엽', value: 'foliage' },
-]
+];
 
 // 꽃 색상 데이터 — hex 유지 필수 (브랜드 컬러 예외)
 const COLOR_CHIPS: { label: string; value: ColorOption; hex: string }[] = [
@@ -29,37 +40,39 @@ const COLOR_CHIPS: { label: string; value: ColorOption; hex: string }[] = [
   { label: '베이지', value: '베이지', hex: '#FEFCBF' },
   { label: '블랙', value: '블랙', hex: '#1A202C' },
   { label: '그레이', value: '그레이', hex: '#A0AEC0' },
-]
+];
 
 export default function CategoryPage() {
-  const [selectedTab, setSelectedTab] = useState(0)
-  const [selectedColors, setSelectedColors] = useState<ColorOption[]>([])
+  const [selectedTab, setSelectedTab] = useState(0);
+  const [selectedColors, setSelectedColors] = useState<ColorOption[]>([]);
 
-  const activeTab = TABS[selectedTab]
-  const { products, loading, error } = useProducts(activeTab.value, selectedColors, activeTab.saleType)
+  const activeTab = TABS[selectedTab];
+  const { products, loading, error } = useProducts(
+    activeTab.value,
+    selectedColors,
+    activeTab.saleType,
+  );
 
   function toggleColor(color: ColorOption) {
     setSelectedColors((prev) =>
-      prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]
-    )
+      prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color],
+    );
   }
 
   return (
     <Container size="sm" pb={96}>
       {/* 헤더 */}
       <Box px="md" pt="lg" pb="md">
-        <Title order={3} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>카테고리</Title>
+        <Title order={3} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
+          카테고리
+        </Title>
       </Box>
 
       {/* 카테고리 탭 */}
-      <Box
-        px="md"
-        pb="sm"
-        style={{ overflowX: 'auto', scrollbarWidth: 'none' }}
-      >
+      <Box px="md" pb="sm" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
         <Group gap={0} wrap="nowrap">
           {TABS.map((tab, idx) => {
-            const isActive = selectedTab === idx
+            const isActive = selectedTab === idx;
             return (
               <UnstyledButton
                 key={tab.label}
@@ -70,30 +83,23 @@ export default function CategoryPage() {
                   fontSize: 'var(--font-size-sm)',
                   fontWeight: isActive ? 'var(--fw-bold)' : 'normal',
                   color: isActive ? 'var(--color-text)' : 'var(--color-text-disabled)',
-                  borderBottom: isActive
-                    ? '2px solid var(--color-text)'
-                    : '2px solid transparent',
+                  borderBottom: isActive ? '2px solid var(--color-text)' : '2px solid transparent',
                   transition: 'all 0.15s',
                 }}
               >
                 {tab.label}
               </UnstyledButton>
-            )
+            );
           })}
         </Group>
         <Divider mt={0} />
       </Box>
 
       {/* 색상 필터 */}
-      <Box
-        px="md"
-        py="sm"
-        mb="sm"
-        style={{ overflowX: 'auto', scrollbarWidth: 'none' }}
-      >
+      <Box px="md" py="sm" mb="sm" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
         <Group gap={12} wrap="nowrap">
           {COLOR_CHIPS.map((chip) => {
-            const isActive = selectedColors.includes(chip.value)
+            const isActive = selectedColors.includes(chip.value);
             return (
               <UnstyledButton
                 key={chip.value}
@@ -130,7 +136,7 @@ export default function CategoryPage() {
                   {chip.label}
                 </Text>
               </UnstyledButton>
-            )
+            );
           })}
         </Group>
       </Box>
@@ -148,19 +154,36 @@ export default function CategoryPage() {
         )}
 
         {!loading && error && (
-          <Text ta="center" py={48} style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>{error}</Text>
+          <Text
+            ta="center"
+            py={48}
+            style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+          >
+            {error}
+          </Text>
         )}
 
         {!loading && !error && products.length === 0 && (
           <Stack align="center" py={64}>
             <Text size="xl">🌱</Text>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>해당 카테고리 상품이 없습니다.</Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+              해당 카테고리 상품이 없습니다.
+            </Text>
           </Stack>
         )}
 
         {!loading && products.length > 0 && (
           <>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)', fontWeight: 'var(--fw-medium)' }} mb="sm">{products.length}개 상품</Text>
+            <Text
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--color-text-disabled)',
+                fontWeight: 'var(--fw-medium)',
+              }}
+              mb="sm"
+            >
+              {products.length}개 상품
+            </Text>
             <SimpleGrid cols={2} spacing="sm">
               {products.map((product) => (
                 <ProductCard key={product.id} product={product} />
@@ -170,5 +193,5 @@ export default function CategoryPage() {
         )}
       </Box>
     </Container>
-  )
+  );
 }

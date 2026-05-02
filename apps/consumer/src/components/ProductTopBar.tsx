@@ -1,13 +1,13 @@
-'use client'
+'use client';
 
-import { useRouter } from 'next/navigation'
-import { Box } from '@mantine/core'
-import { ChevronLeft, Home, ShoppingCart } from 'lucide-react'
-import { useCart } from '@/hooks/useCart'
+import { useRouter } from 'next/navigation';
+import { Box } from '@mantine/core';
+import { ChevronLeft, Home, ShoppingCart } from 'lucide-react';
+import { useCart } from '@/hooks/useCart';
 
 export default function ProductTopBar() {
-  const router = useRouter()
-  const { itemCount } = useCart()
+  const router = useRouter();
+  const { itemCount } = useCart();
 
   return (
     <Box
@@ -53,16 +53,20 @@ export default function ProductTopBar() {
           }}
         >
           <ChevronLeft size={22} strokeWidth={2.2} />
-          <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}>뒤로</span>
+          <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}>
+            뒤로
+          </span>
         </button>
 
         {/* 로고 */}
-        <span style={{
-          fontSize: 'var(--font-size-lg)',
-          fontWeight: 'var(--fw-bold)',
-          letterSpacing: '-0.5px',
-          color: 'var(--color-primary)',
-        }}>
+        <span
+          style={{
+            fontSize: 'var(--font-size-lg)',
+            fontWeight: 'var(--fw-bold)',
+            letterSpacing: '-0.5px',
+            color: 'var(--color-primary)',
+          }}
+        >
           Green Love
         </span>
 
@@ -129,5 +133,5 @@ export default function ProductTopBar() {
         </Box>
       </Box>
     </Box>
-  )
+  );
 }

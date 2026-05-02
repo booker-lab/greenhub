@@ -1,18 +1,18 @@
-'use client'
+'use client';
 
-import { useEffect } from 'react'
-import { SessionProvider, useSession, signOut } from 'next-auth/react'
-import { MantineProvider } from '@mantine/core'
-import { theme } from '@greenhub/ui'
+import { useEffect } from 'react';
+import { SessionProvider, useSession, signOut } from 'next-auth/react';
+import { MantineProvider } from '@mantine/core';
+import { theme } from '@greenhub/ui';
 
 function TokenErrorGuard({ children }: { children: React.ReactNode }) {
-  const { data: session } = useSession()
+  const { data: session } = useSession();
   useEffect(() => {
     if (session?.user?.tokenError) {
-      signOut({ callbackUrl: '/login' })
+      signOut({ callbackUrl: '/login' });
     }
-  }, [session?.user?.tokenError])
-  return <>{children}</>
+  }, [session?.user?.tokenError]);
+  return <>{children}</>;
 }
 
 export default function Providers({ children }: { children: React.ReactNode }) {
@@ -22,5 +22,5 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         <TokenErrorGuard>{children}</TokenErrorGuard>
       </SessionProvider>
     </MantineProvider>
-  )
+  );
 }

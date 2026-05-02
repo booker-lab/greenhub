@@ -1,6 +1,6 @@
-import NextAuth from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import Kakao from "next-auth/providers/kakao";
+import NextAuth from 'next-auth';
+import Credentials from 'next-auth/providers/credentials';
+import Kakao from 'next-auth/providers/kakao';
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
@@ -8,11 +8,11 @@ const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
 async function refreshAccessToken(token: Record<string, unknown>) {
   try {
     const res = await fetch(`${API}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: token.refreshToken }),
     });
-    if (!res.ok) throw new Error("refresh failed");
+    if (!res.ok) throw new Error('refresh failed');
     const data = await res.json();
     return {
       ...token,
@@ -22,7 +22,7 @@ async function refreshAccessToken(token: Record<string, unknown>) {
       error: undefined,
     };
   } catch {
-    return { ...token, error: "RefreshTokenError" };
+    return { ...token, error: 'RefreshTokenError' };
   }
 }
 
@@ -34,13 +34,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
     Credentials({
       credentials: {
-        email: { label: "이메일", type: "email" },
-        password: { label: "비밀번호", type: "password" },
+        email: { label: '이메일', type: 'email' },
+        password: { label: '비밀번호', type: 'password' },
       },
       async authorize(credentials) {
         const res = await fetch(`${API}/auth/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: credentials.email,
             password: credentials.password,
@@ -48,7 +48,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
         if (!res.ok) return null;
         const data = await res.json();
-        if (!["seller", "admin"].includes(data.user.role)) return null;
+        if (!['seller', 'admin'].includes(data.user.role)) return null;
         return {
           id: data.user.id,
           email: data.user.email,
@@ -63,22 +63,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
-      if (account?.provider !== "kakao") return true;
+      if (account?.provider !== 'kakao') return true;
 
       const res = await fetch(`${API}/auth/kakao-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           kakaoId: profile?.sub ?? account.providerAccountId,
-          name: profile?.name ?? user.name ?? "카카오사용자",
+          name: profile?.name ?? user.name ?? '카카오사용자',
           email: profile?.email ?? user.email,
-          targetRole: "seller",
+          targetRole: 'seller',
         }),
       });
       if (!res.ok) return false;
 
       const data = await res.json();
-      if (!["seller", "admin"].includes(data.user.role)) return false;
+      if (!['seller', 'admin'].includes(data.user.role)) return false;
 
       user.id = data.user.id;
       user.accessToken = data.accessToken;
@@ -98,7 +98,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           storeId: user.storeId,
         };
       }
-      if (trigger === "update" && session?.storeId) {
+      if (trigger === 'update' && session?.storeId) {
         token.storeId = session.storeId;
       }
       if (Date.now() < (token.accessTokenExpires as number)) {
@@ -112,15 +112,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.storeId = token.storeId as string | null;
       // name이 없거나 placeholder인 경우 email 앞부분 사용
       const rawName = token.name as string | undefined;
-      session.user.name = rawName && rawName !== '???' ? rawName : (session.user.email?.split('@')[0] ?? '사용자');
+      session.user.name =
+        rawName && rawName !== '???' ? rawName : (session.user.email?.split('@')[0] ?? '사용자');
       if (token.error) {
-        session.user.accessToken = "";
+        session.user.accessToken = '';
         session.user.tokenError = true;
       }
       return session;
     },
   },
   pages: {
-    signIn: "/login",
+    signIn: '/login',
   },
 });

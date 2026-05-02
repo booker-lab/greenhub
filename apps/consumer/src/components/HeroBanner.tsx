@@ -1,41 +1,41 @@
-import Image from 'next/image'
-import Link from 'next/link'
-import { Box } from '@mantine/core'
+import Image from 'next/image';
+import Link from 'next/link';
+import { Box } from '@mantine/core';
 
 interface BannerCta {
-  label: string
-  href: string
+  label: string;
+  href: string;
 }
 
 interface Banner {
-  imageUrl?: string
-  tagText?: string
-  headline?: string
-  subText?: string
-  cta1?: BannerCta
-  cta2?: BannerCta
-  isActive?: boolean
+  imageUrl?: string;
+  tagText?: string;
+  headline?: string;
+  subText?: string;
+  cta1?: BannerCta;
+  cta2?: BannerCta;
+  isActive?: boolean;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export default async function HeroBanner() {
-  let banner: Banner | null = null
+  let banner: Banner | null = null;
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 3000)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(`${API_URL}/banner`, {
       next: { revalidate: 60 },
       signal: controller.signal,
-    })
-    clearTimeout(timeout)
+    });
+    clearTimeout(timeout);
     if (res.ok) {
-      const data = await res.json()
-      if (data?.isActive) banner = data
+      const data = await res.json();
+      if (data?.isActive) banner = data;
     }
   } catch {}
 
-  if (!banner) return null
+  if (!banner) return null;
 
   return (
     <Box
@@ -63,40 +63,46 @@ export default async function HeroBanner() {
 
       <Box style={{ position: 'relative', zIndex: 1, padding: '24px 20px' }}>
         {banner.tagText && (
-          <span style={{
-            display: 'inline-block',
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-medium)',
-            color: 'var(--color-text-secondary)',
-            backgroundColor: 'rgba(255,255,255,0.7)',
-            padding: '2px 10px',
-            borderRadius: 'var(--radius-full)',
-            marginBottom: 8,
-          }}>
+          <span
+            style={{
+              display: 'inline-block',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-medium)',
+              color: 'var(--color-text-secondary)',
+              backgroundColor: 'rgba(255,255,255,0.7)',
+              padding: '2px 10px',
+              borderRadius: 'var(--radius-full)',
+              marginBottom: 8,
+            }}
+          >
             {banner.tagText}
           </span>
         )}
 
         {banner.headline && (
-          <p style={{
-            fontSize: 'var(--font-size-xl)',
-            fontWeight: 'var(--fw-bold)',
-            lineHeight: 1.3,
-            color: 'var(--color-text)',
-            whiteSpace: 'pre-line',
-            margin: '0 0 8px',
-          }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-xl)',
+              fontWeight: 'var(--fw-bold)',
+              lineHeight: 1.3,
+              color: 'var(--color-text)',
+              whiteSpace: 'pre-line',
+              margin: '0 0 8px',
+            }}
+          >
             {banner.headline}
           </p>
         )}
 
         {banner.subText && (
-          <p style={{
-            fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-secondary)',
-            whiteSpace: 'pre-line',
-            margin: '0 0 16px',
-          }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-secondary)',
+              whiteSpace: 'pre-line',
+              margin: '0 0 16px',
+            }}
+          >
             {banner.subText}
           </p>
         )}
@@ -144,5 +150,5 @@ export default async function HeroBanner() {
         </div>
       </Box>
     </Box>
-  )
+  );
 }

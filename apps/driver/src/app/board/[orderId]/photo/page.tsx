@@ -1,21 +1,17 @@
-"use client";
+'use client';
 
-import { useRef, useState } from "react";
-import { useSession } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { storage } from "@/lib/firebase";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { apiFetch } from "@/lib/api";
-import { use } from "react";
-import { Button, Text, Loader } from "@mantine/core";
+import { useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { storage } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { apiFetch } from '@/lib/api';
+import { use } from 'react';
+import { Button, Text, Loader } from '@mantine/core';
 
-export default function PhotoPage({
-  params,
-}: {
-  params: Promise<{ orderId: string }>;
-}) {
+export default function PhotoPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
-  const storeId = useSearchParams().get("storeId") ?? "";
+  const storeId = useSearchParams().get('storeId') ?? '';
   const { data: session } = useSession();
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -24,13 +20,13 @@ export default function PhotoPage({
   const [captured, setCaptured] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   async function startCamera() {
-    setError("");
+    setError('');
     try {
       const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
+        video: { facingMode: 'environment' },
         audio: false,
       });
       setStream(s);
@@ -39,7 +35,7 @@ export default function PhotoPage({
         videoRef.current.play();
       }
     } catch {
-      setError("카메라 접근 권한이 필요합니다.");
+      setError('카메라 접근 권한이 필요합니다.');
     }
   }
 
@@ -48,17 +44,17 @@ export default function PhotoPage({
     const canvas = canvasRef.current;
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
-    canvas.getContext("2d")?.drawImage(videoRef.current, 0, 0);
+    canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
     canvas.toBlob(
       (b) => {
         if (!b) return;
         setBlob(b);
-        setCaptured(canvas.toDataURL("image/jpeg", 0.85));
+        setCaptured(canvas.toDataURL('image/jpeg', 0.85));
         stream?.getTracks().forEach((t) => t.stop());
         setStream(null);
       },
-      "image/jpeg",
-      0.85
+      'image/jpeg',
+      0.85,
     );
   }
 
@@ -71,60 +67,114 @@ export default function PhotoPage({
   async function upload() {
     if (!blob || !session) return;
     setUploading(true);
-    setError("");
+    setError('');
     try {
       const timestamp = Date.now();
       const storageRef = ref(storage, `deliveryPhotos/${orderId}_${timestamp}.jpg`);
-      await uploadBytes(storageRef, blob, { contentType: "image/jpeg" });
+      await uploadBytes(storageRef, blob, { contentType: 'image/jpeg' });
       const photoUrl = await getDownloadURL(storageRef);
 
       const res = await apiFetch(
         `/stores/${storeId}/orders/${orderId}/status`,
         session.user.accessToken,
-        { method: "PATCH", body: JSON.stringify({ status: "HUB_ARRIVED", photoUrl }) }
+        { method: 'PATCH', body: JSON.stringify({ status: 'HUB_ARRIVED', photoUrl }) },
       );
-      if (!res.ok) throw new Error("상태 전환 실패");
+      if (!res.ok) throw new Error('상태 전환 실패');
 
-      router.replace("/board?tab=preparing");
+      router.replace('/board?tab=preparing');
     } catch {
-      setError("업로드 실패. 다시 시도해주세요.");
+      setError('업로드 실패. 다시 시도해주세요.');
     } finally {
       setUploading(false);
     }
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, backgroundColor: "#000", display: "flex", flexDirection: "column" }}>
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: '#000',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       {/* 헤더 */}
-      <header style={{
-        position: "absolute", top: 0, left: 0, right: 0, zIndex: 20,
-        display: "flex", alignItems: "center", gap: 12,
-        padding: "16px",
-        background: "linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)",
-      }}>
+      <header
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '16px',
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)',
+        }}
+      >
         <button
-          onClick={() => { stream?.getTracks().forEach((t) => t.stop()); router.back(); }}
-          style={{ color: 'var(--color-bg)', padding: 4, background: "none", border: "none", cursor: "pointer" }}
+          onClick={() => {
+            stream?.getTracks().forEach((t) => t.stop());
+            router.back();
+          }}
+          style={{
+            color: 'var(--color-bg)',
+            padding: 4,
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+          }}
         >
           <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
           </svg>
         </button>
-        <Text style={{ color: 'var(--color-bg)', fontWeight: 'var(--fw-bold)' }}>거점 하차 인증 사진</Text>
+        <Text style={{ color: 'var(--color-bg)', fontWeight: 'var(--fw-bold)' }}>
+          거점 하차 인증 사진
+        </Text>
       </header>
 
       {/* 카메라 / 미리보기 */}
-      <div style={{ flex: 1, position: "relative" }}>
+      <div style={{ flex: 1, position: 'relative' }}>
         {!stream && !captured && (
-          <div style={{
-            position: "absolute", inset: 0,
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24,
-          }}>
-            <Text style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }}>하차 물품을 촬영해주세요</Text>
-            <Button onClick={startCamera} color="white" style={{ color: 'var(--color-text)' }} radius="md">
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 24,
+            }}
+          >
+            <Text style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }}>
+              하차 물품을 촬영해주세요
+            </Text>
+            <Button
+              onClick={startCamera}
+              color="white"
+              style={{ color: 'var(--color-text)' }}
+              radius="md"
+            >
               카메라 시작
             </Button>
-            {error && <Text style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }} ta="center" px="xl">{error}</Text>}
+            {error && (
+              <Text
+                style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}
+                ta="center"
+                px="xl"
+              >
+                {error}
+              </Text>
+            )}
           </div>
         )}
 
@@ -132,18 +182,36 @@ export default function PhotoPage({
           <>
             <video
               ref={videoRef}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
               playsInline
               muted
             />
-            <canvas ref={canvasRef} style={{ display: "none" }} />
-            <div style={{ position: "absolute", bottom: 32, left: 0, right: 0, display: "flex", justifyContent: "center" }}>
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 32,
+                left: 0,
+                right: 0,
+                display: 'flex',
+                justifyContent: 'center',
+              }}
+            >
               <button
                 onClick={capture}
                 style={{
-                  width: 64, height: 64, borderRadius: "50%",
-                  backgroundColor: 'var(--color-bg)', border: '4px solid var(--color-primary)',
-                  cursor: "pointer",
+                  width: 64,
+                  height: 64,
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--color-bg)',
+                  border: '4px solid var(--color-primary)',
+                  cursor: 'pointer',
                 }}
               />
             </div>
@@ -156,20 +224,33 @@ export default function PhotoPage({
             <img
               src={captured}
               alt="촬영 미리보기"
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
             />
-            <canvas ref={canvasRef} style={{ display: "none" }} />
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
           </>
         )}
       </div>
 
       {/* 하단 버튼 */}
       {captured && (
-        <div style={{
-          position: "absolute", bottom: 0, left: 0, right: 0,
-          display: "flex", gap: 12, padding: "16px 16px 32px",
-          background: "linear-gradient(to top, rgba(0,0,0,0.7), transparent)",
-        }}>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            gap: 12,
+            padding: '16px 16px 32px',
+            background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+          }}
+        >
           <Button
             flex={1}
             onClick={retake}
@@ -190,17 +271,26 @@ export default function PhotoPage({
             size="lg"
             leftSection={uploading ? <Loader size="xs" color="white" /> : null}
           >
-            {uploading ? "업로드 중..." : "업로드"}
+            {uploading ? '업로드 중...' : '업로드'}
           </Button>
         </div>
       )}
 
       {error && captured && (
-        <div style={{
-          position: "absolute", top: 80, left: 16, right: 16,
-          backgroundColor: 'var(--color-danger)', color: 'var(--color-bg)',
-          fontSize: 'var(--font-size-sm)', textAlign: "center", padding: "8px 16px", borderRadius: 12,
-        }}>
+        <div
+          style={{
+            position: 'absolute',
+            top: 80,
+            left: 16,
+            right: 16,
+            backgroundColor: 'var(--color-danger)',
+            color: 'var(--color-bg)',
+            fontSize: 'var(--font-size-sm)',
+            textAlign: 'center',
+            padding: '8px 16px',
+            borderRadius: 12,
+          }}
+        >
           {error}
         </div>
       )}

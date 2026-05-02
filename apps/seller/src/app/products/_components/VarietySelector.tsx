@@ -1,31 +1,37 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { Select, Text } from '@mantine/core'
+import { useEffect, useState } from 'react';
+import { Select, Text } from '@mantine/core';
 
 interface Variety {
-  id: string
-  name: string
-  subCategory: string
-  availableStemTypes?: string[]
+  id: string;
+  name: string;
+  subCategory: string;
+  availableStemTypes?: string[];
 }
 
 interface Props {
-  category: string
-  value: string
-  onChange: (id: string) => void
-  onVarietyChange?: (variety: Variety | null) => void
-  token: string
+  category: string;
+  value: string;
+  onChange: (id: string) => void;
+  onVarietyChange?: (variety: Variety | null) => void;
+  token: string;
 }
 
 const SUB_LABEL: Record<string, string> = {
   phalaenopsis: '호접란',
   dendrobium: '덴드로비움',
   cymbidium: '심비디움',
-}
+};
 
-export default function VarietySelector({ category, value, onChange, onVarietyChange, token }: Props) {
-  const [varieties, setVarieties] = useState<Variety[]>([])
+export default function VarietySelector({
+  category,
+  value,
+  onChange,
+  onVarietyChange,
+  token,
+}: Props) {
+  const [varieties, setVarieties] = useState<Variety[]>([]);
 
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/varieties?category=${category}`, {
@@ -33,22 +39,26 @@ export default function VarietySelector({ category, value, onChange, onVarietyCh
     })
       .then((r) => r.json())
       .then((data) => setVarieties(Array.isArray(data) ? data : []))
-      .catch(() => {})
-  }, [category, token])
+      .catch(() => {});
+  }, [category, token]);
 
   if (varieties.length === 0) {
-    return <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>등록된 품종이 없습니다</Text>
+    return (
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        등록된 품종이 없습니다
+      </Text>
+    );
   }
 
   const groups = varieties.reduce<Record<string, Variety[]>>((acc, v) => {
-    ;(acc[v.subCategory] ??= []).push(v)
-    return acc
-  }, {})
+    (acc[v.subCategory] ??= []).push(v);
+    return acc;
+  }, {});
 
   const data = Object.entries(groups).map(([sub, items]) => ({
     group: SUB_LABEL[sub] ?? sub,
     items: items.map((v) => ({ value: v.id, label: v.name })),
-  }))
+  }));
 
   return (
     <Select
@@ -56,8 +66,8 @@ export default function VarietySelector({ category, value, onChange, onVarietyCh
       data={data}
       value={value || null}
       onChange={(v) => {
-        onChange(v ?? '')
-        onVarietyChange?.(varieties.find((vr) => vr.id === v) ?? null)
+        onChange(v ?? '');
+        onVarietyChange?.(varieties.find((vr) => vr.id === v) ?? null);
       }}
       clearable
       size="md"
@@ -65,5 +75,5 @@ export default function VarietySelector({ category, value, onChange, onVarietyCh
       maxDropdownHeight={240}
       comboboxProps={{ position: 'bottom', middlewares: { flip: false } }}
     />
-  )
+  );
 }

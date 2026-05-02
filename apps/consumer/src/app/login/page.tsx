@@ -1,40 +1,50 @@
-'use client'
+'use client';
 
-import { signIn } from 'next-auth/react'
-import { useSearchParams } from 'next/navigation'
-import { Suspense, useState } from 'react'
-import { Container, Title, TextInput, PasswordInput, Button, Text, Alert, Stack, Divider } from '@mantine/core'
+import { signIn } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import {
+  Container,
+  Title,
+  TextInput,
+  PasswordInput,
+  Button,
+  Text,
+  Alert,
+  Stack,
+  Divider,
+} from '@mantine/core';
 
 function LoginForm() {
-  const searchParams = useSearchParams()
-  const raw = searchParams.get('callbackUrl') ?? '/'
+  const searchParams = useSearchParams();
+  const raw = searchParams.get('callbackUrl') ?? '/';
   // Open Redirect 방지: 반드시 상대경로(/)로 시작해야 함
-  const callbackUrl = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/'
+  const callbackUrl = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/';
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
     const result = await signIn('credentials', {
       email,
       password,
       redirect: false,
-    })
+    });
 
     if (result?.error) {
-      setError('이메일 또는 비밀번호가 올바르지 않습니다.')
-      setLoading(false)
-      return
+      setError('이메일 또는 비밀번호가 올바르지 않습니다.');
+      setLoading(false);
+      return;
     }
 
-    window.location.href = callbackUrl
-  }
+    window.location.href = callbackUrl;
+  };
 
   return (
     <Stack gap="sm">
@@ -76,31 +86,26 @@ function LoginForm() {
             </Alert>
           )}
 
-          <Button
-            type="submit"
-            loading={loading}
-            fullWidth
-            color="brand"
-            radius="md"
-            mt="xs"
-          >
+          <Button type="submit" loading={loading} fullWidth color="brand" radius="md" mt="xs">
             로그인
           </Button>
         </Stack>
       </form>
     </Stack>
-  )
+  );
 }
 
 export default function LoginPage() {
   return (
     <Container size={400} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
       <Stack gap="lg" w="100%">
-        <Title order={1} ta="center" style={{ color: 'var(--color-primary)' }}>Green Love</Title>
+        <Title order={1} ta="center" style={{ color: 'var(--color-primary)' }}>
+          Green Love
+        </Title>
         <Suspense fallback={<div style={{ height: 240 }} />}>
           <LoginForm />
         </Suspense>
       </Stack>
     </Container>
-  )
+  );
 }

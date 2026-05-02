@@ -1,46 +1,48 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { useAdminStores } from '@/hooks/useAdmin'
-import { Badge, Box, Button, Group, Paper, Stack, Text, TextInput, Title } from '@mantine/core'
+import { useState } from 'react';
+import { useAdminStores } from '@/hooks/useAdmin';
+import { Badge, Box, Button, Group, Paper, Text, Title } from '@mantine/core';
 
 const STATUS_LABEL: Record<string, string> = {
   active: '운영중',
   invited: '초대됨',
   suspended: '정지',
-}
+};
 
 const STATUS_COLOR: Record<string, string> = {
   active: 'green',
   invited: 'yellow',
   suspended: 'gray',
-}
+};
 
 export default function AdminStoresClient() {
-  const { stores, loading, setCommission } = useAdminStores()
-  const [editId, setEditId] = useState<string | null>(null)
-  const [rateInput, setRateInput] = useState('')
-  const [saving, setSaving] = useState(false)
+  const { stores, loading, setCommission } = useAdminStores();
+  const [editId, setEditId] = useState<string | null>(null);
+  const [rateInput, setRateInput] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const handleSave = async (storeId: string) => {
-    const rate = parseFloat(rateInput)
-    if (isNaN(rate) || rate < 0 || rate > 1) {
-      alert('0~1 사이의 수수료율을 입력하세요 (예: 0.05 = 5%)')
-      return
+    const rate = parseFloat(rateInput);
+    if (Number.isNaN(rate) || rate < 0 || rate > 1) {
+      alert('0~1 사이의 수수료율을 입력하세요 (예: 0.05 = 5%)');
+      return;
     }
-    setSaving(true)
-    const ok = await setCommission(storeId, rate)
-    setSaving(false)
+    setSaving(true);
+    const ok = await setCommission(storeId, rate);
+    setSaving(false);
     if (ok) {
-      setEditId(null)
-      setRateInput('')
+      setEditId(null);
+      setRateInput('');
     }
-  }
+  };
 
   if (loading) {
     return (
-      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>불러오는 중...</Text>
-    )
+      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+        불러오는 중...
+      </Text>
+    );
   }
 
   return (
@@ -48,36 +50,93 @@ export default function AdminStoresClient() {
       <Group justify="space-between" mb="md">
         <Title order={4}>
           판매자 목록{' '}
-          <Text component="span" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>({stores.length})</Text>
+          <Text
+            component="span"
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
+            ({stores.length})
+          </Text>
         </Title>
       </Group>
 
-      <Paper radius="lg" shadow="xs" style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <Paper
+        radius="lg"
+        shadow="xs"
+        style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
+      >
         {stores.length === 0 ? (
-          <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>등록된 판매자가 없습니다.</Text>
+          <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>
+            등록된 판매자가 없습니다.
+          </Text>
         ) : (
-          <Box component="table" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
-            <Box component="thead" style={{ backgroundColor: 'var(--color-surface-muted)', borderBottom: '1px solid var(--color-border)' }}>
+          <Box
+            component="table"
+            style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}
+          >
+            <Box
+              component="thead"
+              style={{
+                backgroundColor: 'var(--color-surface-muted)',
+                borderBottom: '1px solid var(--color-border)',
+              }}
+            >
               <tr>
-                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>상호</Box>
-                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>상태</Box>
-                <Box component="th" style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>수수료율</Box>
+                <Box
+                  component="th"
+                  style={{
+                    textAlign: 'left',
+                    padding: '12px 16px',
+                    fontWeight: 500,
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  상호
+                </Box>
+                <Box
+                  component="th"
+                  style={{
+                    textAlign: 'left',
+                    padding: '12px 16px',
+                    fontWeight: 500,
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  상태
+                </Box>
+                <Box
+                  component="th"
+                  style={{
+                    textAlign: 'left',
+                    padding: '12px 16px',
+                    fontWeight: 500,
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  수수료율
+                </Box>
                 <Box component="th" style={{ padding: '12px 16px' }} />
               </tr>
             </Box>
             <Box component="tbody" style={{ borderTop: 'none' }}>
               {stores.map((store) => (
-                <Box component="tr" key={store.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                <Box
+                  component="tr"
+                  key={store.id}
+                  style={{ borderTop: '1px solid var(--color-border)' }}
+                >
                   <Box component="td" style={{ padding: '12px 16px' }}>
-                    <Text style={{ fontWeight: 'var(--fw-medium)' }}>{store.name || '(미설정)'}</Text>
-                    <Text style={{ fontSize: 12, color: 'var(--color-text-disabled)' }} ff="monospace">{store.id.slice(0, 8)}…</Text>
+                    <Text style={{ fontWeight: 'var(--fw-medium)' }}>
+                      {store.name || '(미설정)'}
+                    </Text>
+                    <Text
+                      style={{ fontSize: 12, color: 'var(--color-text-disabled)' }}
+                      ff="monospace"
+                    >
+                      {store.id.slice(0, 8)}…
+                    </Text>
                   </Box>
                   <Box component="td" style={{ padding: '12px 16px' }}>
-                    <Badge
-                      color={STATUS_COLOR[store.status] ?? 'gray'}
-                      variant="light"
-                      radius="xl"
-                    >
+                    <Badge color={STATUS_COLOR[store.status] ?? 'gray'} variant="light" radius="xl">
                       {STATUS_LABEL[store.status] ?? store.status}
                     </Badge>
                   </Box>
@@ -110,7 +169,10 @@ export default function AdminStoresClient() {
                           저장
                         </Button>
                         <Button
-                          onClick={() => { setEditId(null); setRateInput('') }}
+                          onClick={() => {
+                            setEditId(null);
+                            setRateInput('');
+                          }}
                           size="xs"
                           variant="subtle"
                           color="gray"
@@ -131,8 +193,8 @@ export default function AdminStoresClient() {
                     {editId !== store.id && (
                       <Button
                         onClick={() => {
-                          setEditId(store.id)
-                          setRateInput(String(store.commissionRate ?? ''))
+                          setEditId(store.id);
+                          setRateInput(String(store.commissionRate ?? ''));
                         }}
                         size="xs"
                         variant="subtle"
@@ -149,5 +211,5 @@ export default function AdminStoresClient() {
         )}
       </Paper>
     </Box>
-  )
+  );
 }

@@ -1,70 +1,80 @@
-'use client'
+'use client';
 
-import { useRef, useState } from 'react'
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { storage } from '@/lib/firebase'
-import { Badge, Box, Group, Loader, Paper, Stack, Text } from '@mantine/core'
+import { useRef, useState } from 'react';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '@/lib/firebase';
+import { Box, Group, Loader, Paper, Text } from '@mantine/core';
 
 interface ImageUploadProps {
-  storeId: string
-  images: string[]
-  onChange: (images: string[]) => void
-  onError: (msg: string) => void
+  storeId: string;
+  images: string[];
+  onChange: (images: string[]) => void;
+  onError: (msg: string) => void;
 }
 
 export default function ImageUpload({ storeId, images, onChange, onError }: ImageUploadProps) {
-  const [uploading, setUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-  const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
   async function handleFiles(files: FileList | null) {
-    if (!files || images.length >= 5) return
-    const toUpload = Array.from(files).slice(0, 5 - images.length)
+    if (!files || images.length >= 5) return;
+    const toUpload = Array.from(files).slice(0, 5 - images.length);
 
     for (const file of toUpload) {
       if (!ALLOWED_TYPES.includes(file.type)) {
-        onError('JPG, PNG, WebP, GIF 파일만 업로드 가능합니다.')
-        return
+        onError('JPG, PNG, WebP, GIF 파일만 업로드 가능합니다.');
+        return;
       }
       if (file.size > MAX_SIZE) {
-        onError('파일 크기는 5MB 이하만 가능합니다.')
-        return
+        onError('파일 크기는 5MB 이하만 가능합니다.');
+        return;
       }
     }
 
-    setUploading(true)
+    setUploading(true);
     try {
       const urls = await Promise.all(
         toUpload.map(async (file) => {
-          const r = storageRef(storage, `products/${storeId}/${Date.now()}_${file.name}`)
-          await uploadBytes(r, file)
-          return getDownloadURL(r)
+          const r = storageRef(storage, `products/${storeId}/${Date.now()}_${file.name}`);
+          await uploadBytes(r, file);
+          return getDownloadURL(r);
         }),
-      )
-      onChange([...images, ...urls])
+      );
+      onChange([...images, ...urls]);
     } catch {
-      onError('이미지 업로드에 실패했습니다.')
+      onError('이미지 업로드에 실패했습니다.');
     } finally {
-      setUploading(false)
+      setUploading(false);
     }
   }
 
   function remove(idx: number) {
-    onChange(images.filter((_, i) => i !== idx))
+    onChange(images.filter((_, i) => i !== idx));
   }
 
   function setAsMain(idx: number) {
-    const reordered = [...images]
-    reordered.unshift(reordered.splice(idx, 1)[0])
-    onChange(reordered)
+    const reordered = [...images];
+    reordered.unshift(reordered.splice(idx, 1)[0]);
+    onChange(reordered);
   }
 
   return (
     <Paper radius="lg" shadow="xs" p="md">
-      <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', color: 'var(--color-text-disabled)' }} mb="xs">
-        사진 <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>({images.length}/5 · 첫 번째가 대표 사진)</Text>
+      <Text
+        style={{
+          fontSize: 'var(--font-size-sm)',
+          fontWeight: 'var(--fw-medium)',
+          color: 'var(--color-text-disabled)',
+        }}
+        mb="xs"
+      >
+        사진{' '}
+        <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>
+          ({images.length}/5 · 첫 번째가 대표 사진)
+        </Text>
       </Text>
       <Group gap="xs" style={{ overflowX: 'auto', paddingBottom: 4, flexWrap: 'nowrap' }}>
         {images.map((url, idx) => (
@@ -191,7 +201,14 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
               <Loader size="xs" color="var(--color-primary)" />
             ) : (
               <>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M12 5v14M5 12h14" />
                 </svg>
                 <span>사진 추가</span>
@@ -206,8 +223,11 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
         accept="image/*"
         multiple
         style={{ display: 'none' }}
-        onChange={(e) => { handleFiles(e.target.files); e.target.value = '' }}
+        onChange={(e) => {
+          handleFiles(e.target.files);
+          e.target.value = '';
+        }}
       />
     </Paper>
-  )
+  );
 }

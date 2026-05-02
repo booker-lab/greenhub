@@ -1,8 +1,8 @@
-'use client'
-import dynamic from 'next/dynamic'
+'use client';
+import dynamic from 'next/dynamic';
 
-const AdminUsersClient = dynamic(() => import('./_client'), { ssr: false })
+const AdminUsersClient = dynamic(() => import('./_client'), { ssr: false });
 
 export default function AdminUsersPage() {
-  return <AdminUsersClient />
+  return <AdminUsersClient />;
 }
