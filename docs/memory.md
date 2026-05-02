@@ -28,9 +28,15 @@
 
 ## 🔜 다음 세션 착수 작업
 
-**e2e 전체 suite 113/138 통과 (24 skipped=인증필요, 1 flaky=네트워크)** — 모든 실제 검증 항목 green.
+### 최우선 — 툴체인 도입 (스펙 완료)
 
-### 🔜 다음 세션 최우선
+`docs/specs/toolchain-trufflehog-just-biome.md` 참조. 순서:
+
+1. **Phase 1**: TruffleHog 설치 → git 히스토리 스캔
+2. **Phase 2**: Just 설치 → Justfile 작성
+3. **Phase 3**: Biome 점진 도입 (consumer/seller/driver → api 순)
+
+### 외부 조건 대기
 
 - 네이버페이 채널키 승인 이메일 수신 후 Vercel 환경변수 설정
 - 알리고 ↔ 카카오 연동 (사업자등록증 발급 후)
