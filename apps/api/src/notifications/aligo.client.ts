@@ -21,9 +21,7 @@ export class AligoClient {
     variables: Record<string, string>,
   ): Promise<{ success: boolean; errorMessage?: string }> {
     if (!this.apiKey || !this.userId) {
-      console.warn(
-        `[AligoClient] API 키 미설정 — 알림톡 스킵 [${templateCode}] → ${phone}`,
-      );
+      console.warn(`[AligoClient] API 키 미설정 — 알림톡 스킵 [${templateCode}] → ${phone}`);
       return { success: true };
     }
 
@@ -39,10 +37,10 @@ export class AligoClient {
         message_1: this.buildMessage(templateCode, variables),
       });
 
-      const res = await fetch(
-        'https://kakaoapi.aligo.in/akv10/alimtalk/send/',
-        { method: 'POST', body: params },
-      );
+      const res = await fetch('https://kakaoapi.aligo.in/akv10/alimtalk/send/', {
+        method: 'POST',
+        body: params,
+      });
       const json = (await res.json()) as { code: number; message: string };
       if (json.code !== 0) {
         return { success: false, errorMessage: json.message };
@@ -53,10 +51,7 @@ export class AligoClient {
     }
   }
 
-  private buildMessage(
-    templateCode: string,
-    variables: Record<string, string>,
-  ): string {
+  private buildMessage(templateCode: string, variables: Record<string, string>): string {
     // 실제 배포 시 알리고 등록 템플릿 본문 사용
     return `[${templateCode}] ${JSON.stringify(variables)}`;
   }

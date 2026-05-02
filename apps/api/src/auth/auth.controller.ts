@@ -83,29 +83,20 @@ export class AuthController {
   @Delete('me/addresses/:addressId')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  deleteAddress(
-    @CurrentUser() user: JwtPayload,
-    @Param('addressId') addressId: string,
-  ) {
+  deleteAddress(@CurrentUser() user: JwtPayload, @Param('addressId') addressId: string) {
     return this.authService.deleteAddress(user.sub, addressId);
   }
 
   @Patch('me/addresses/:addressId/default')
   @UseGuards(JwtAuthGuard)
-  setDefaultAddress(
-    @CurrentUser() user: JwtPayload,
-    @Param('addressId') addressId: string,
-  ) {
+  setDefaultAddress(@CurrentUser() user: JwtPayload, @Param('addressId') addressId: string) {
     return this.authService.setDefaultAddress(user.sub, addressId);
   }
 
   @Patch('me/fcm-token')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  updateFcmToken(
-    @CurrentUser() user: JwtPayload,
-    @Body('fcmToken') fcmToken: string,
-  ) {
+  updateFcmToken(@CurrentUser() user: JwtPayload, @Body('fcmToken') fcmToken: string) {
     return this.authService.updateFcmToken(user.sub, fcmToken);
   }
 

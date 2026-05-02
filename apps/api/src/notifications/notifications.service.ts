@@ -100,9 +100,7 @@ export class NotificationsService {
     const terminalStatuses = ['PENDING', 'CANCELLED', 'REVIEWED'];
     const promises = snap.docs
       .filter((doc) => !terminalStatuses.includes(doc.data()['status'] as string))
-      .map((doc) =>
-        this.sendToUser(doc.data()['userId'], templateCode, variables, doc.id),
-      );
+      .map((doc) => this.sendToUser(doc.data()['userId'], templateCode, variables, doc.id));
     await Promise.all(promises);
   }
 
@@ -178,9 +176,7 @@ export class NotificationsService {
 
     for (const doc of snap.docs) {
       const gc = doc.data();
-      const productSnap = await this.firestore
-        .doc(`products/${gc['productId']}`)
-        .get();
+      const productSnap = await this.firestore.doc(`products/${gc['productId']}`).get();
       const productName = productSnap.data()?.['name'] ?? '';
 
       await this.sendToGroupParticipants(gc['productId'], 'GROUP_DEADLINE_SOON', {
@@ -196,10 +192,7 @@ export class NotificationsService {
   // Private helpers
   // ────────────────────────────────────────────────────────────
 
-  private async confirmGroupBuy(
-    productId: string,
-    gc: Record<string, unknown>,
-  ) {
+  private async confirmGroupBuy(productId: string, gc: Record<string, unknown>) {
     const ordersSnap = await this.firestore
       .collection('orders')
       .where('productId', '==', productId)
@@ -210,9 +203,7 @@ export class NotificationsService {
 
     const now = this.firestore.Timestamp.now();
     const batch = this.firestore.db.batch();
-    ordersSnap.docs.forEach((d) =>
-      batch.update(d.ref, { status: 'CONFIRMED', updatedAt: now }),
-    );
+    ordersSnap.docs.forEach((d) => batch.update(d.ref, { status: 'CONFIRMED', updatedAt: now }));
     await batch.commit();
 
     const productSnap = await this.firestore.doc(`products/${productId}`).get();
@@ -235,10 +226,7 @@ export class NotificationsService {
     }
   }
 
-  private async cancelGroupBuyLack(
-    productId: string,
-    gc: Record<string, unknown>,
-  ) {
+  private async cancelGroupBuyLack(productId: string, gc: Record<string, unknown>) {
     const ordersSnap = await this.firestore
       .collection('orders')
       .where('productId', '==', productId)
@@ -251,9 +239,7 @@ export class NotificationsService {
     const now = this.firestore.Timestamp.now();
 
     await Promise.all(
-      ordersSnap.docs.map((doc) =>
-        this.payments.processRefundByOrderId(doc.id, reason),
-      ),
+      ordersSnap.docs.map((doc) => this.payments.processRefundByOrderId(doc.id, reason)),
     );
 
     const batch = this.firestore.db.batch();

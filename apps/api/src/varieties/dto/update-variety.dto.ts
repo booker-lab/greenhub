@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsEnum,
-  IsBoolean,
-  IsArray,
-  IsOptional,
-} from 'class-validator';
+import { IsString, IsEnum, IsBoolean, IsArray, IsOptional } from 'class-validator';
 
 export class UpdateVarietyDto {
   @IsOptional()

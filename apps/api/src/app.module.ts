@@ -22,18 +22,15 @@ import { AppService } from './app.service';
 
 @Module({
   controllers: [AppController],
-  providers: [
-    AppService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-  ],
+  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot({
       throttlers: [
-        { name: 'default', ttl: 60000, limit: 100 },  // 일반: 1분 100회
-        { name: 'auth', ttl: 60000, limit: 10 },       // 인증: 1분 10회
+        { name: 'default', ttl: 60000, limit: 100 }, // 일반: 1분 100회
+        { name: 'auth', ttl: 60000, limit: 10 }, // 인증: 1분 10회
       ],
     }),
     FirestoreModule,

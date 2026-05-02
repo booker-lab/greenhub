@@ -5,15 +5,15 @@ import { buildProductContentPrompt } from './prompts/product-content.prompt';
 import type { Selection, Variety } from '@greenhub/shared';
 
 export interface GenerateContentParams {
-  variety: Variety | null
-  selection: Selection
-  sellerNote: string
-  category?: string
+  variety: Variety | null;
+  selection: Selection;
+  sellerNote: string;
+  category?: string;
 }
 
 export interface GenerateContentResult {
-  headline: string
-  description: string
+  headline: string;
+  description: string;
 }
 
 @Injectable()

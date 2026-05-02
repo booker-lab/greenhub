@@ -15,10 +15,7 @@ export class NotificationsController {
   }
 
   @Patch('me/preferences')
-  updatePreferences(
-    @CurrentUser() user: JwtPayload,
-    @Body() preferences: Record<string, boolean>,
-  ) {
+  updatePreferences(@CurrentUser() user: JwtPayload, @Body() preferences: Record<string, boolean>) {
     return this.notificationsService.updatePreferences(user.sub, preferences);
   }
 }

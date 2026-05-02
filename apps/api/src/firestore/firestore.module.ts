@@ -12,9 +12,7 @@ import { FirestoreService } from './firestore.service';
       useFactory: (config: ConfigService) => {
         if (admin.apps.length > 0) return admin.apps[0]!;
         const credential = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-          ? admin.credential.cert(
-              JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON),
-            )
+          ? admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON))
           : admin.credential.applicationDefault();
         return admin.initializeApp({
           credential,

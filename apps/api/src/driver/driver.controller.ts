@@ -15,10 +15,7 @@ export class DriverController {
   // GET /driver/orders?status=PREPARING,DELIVERING
   // 드라이버는 storeId 불문 자신에게 할당된(또는 수거 대기 중인) 주문 조회
   @Get('orders')
-  getOrders(
-    @CurrentUser() user: JwtPayload,
-    @Query('status') status?: string,
-  ) {
+  getOrders(@CurrentUser() user: JwtPayload, @Query('status') status?: string) {
     return this.driver.getOrders(user.sub, status);
   }
 }

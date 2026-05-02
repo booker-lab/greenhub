@@ -1,4 +1,12 @@
-import { IsOptional, IsString, IsBoolean, IsNumber, Min, Max, ValidateNested } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsBoolean,
+  IsNumber,
+  Min,
+  Max,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QueryAdminSettlementsDto {

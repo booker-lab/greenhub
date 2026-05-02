@@ -18,14 +18,19 @@ export class AiController {
   @Post('generate-content')
   async generateContent(@Body() dto: GenerateContentDto) {
     const variety = dto.varietyId
-      ? (await this.varietiesService.findOne(dto.varietyId)) as unknown as Variety
+      ? ((await this.varietiesService.findOne(dto.varietyId)) as unknown as Variety)
       : null;
 
     const selection = dto.selection as unknown as Selection;
     const sellerNote = dto.sellerNote ?? '';
 
     const conflicts = this.validator.validate(sellerNote, selection, variety);
-    const content = await this.aiService.generateProductContent({ variety, selection, sellerNote, category: dto.category });
+    const content = await this.aiService.generateProductContent({
+      variety,
+      selection,
+      sellerNote,
+      category: dto.category,
+    });
 
     return { ...content, conflicts };
   }

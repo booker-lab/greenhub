@@ -43,9 +43,7 @@ export class OrdersLifecycleService {
 
     const allowed = getAllowedTransitions(role ?? 'consumer', currentStatus);
     if (!allowed.includes(dto.status)) {
-      throw new ForbiddenException(
-        `${currentStatus} → ${dto.status} 전환은 허용되지 않습니다.`,
-      );
+      throw new ForbiddenException(`${currentStatus} → ${dto.status} 전환은 허용되지 않습니다.`);
     }
 
     const update: Record<string, unknown> = {
@@ -96,12 +94,7 @@ export class OrdersLifecycleService {
     return { orderId, status: dto.status };
   }
 
-  async cancelOrder(
-    storeId: string,
-    orderId: string,
-    userId: string,
-    reason?: string,
-  ) {
+  async cancelOrder(storeId: string, orderId: string, userId: string, reason?: string) {
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException();
@@ -119,9 +112,7 @@ export class OrdersLifecycleService {
     await this.payments.processRefundByOrderId(orderId, cancelReason);
 
     // 주문 상태 + 공동구매 참여자 수 원자적 업데이트
-    const gcRef = this.firestore.doc(
-      `groupProductConfig/${order['productId']}`,
-    );
+    const gcRef = this.firestore.doc(`groupProductConfig/${order['productId']}`);
     const now = this.firestore.Timestamp.now();
 
     await this.firestore.runTransaction(async (t) => {
@@ -177,12 +168,7 @@ export class OrdersLifecycleService {
     return { orderId, status: 'REVIEWED' };
   }
 
-  async confirmPickup(
-    storeId: string,
-    orderId: string,
-    userId: string,
-    pickupCode: string,
-  ) {
+  async confirmPickup(storeId: string, orderId: string, userId: string, pickupCode: string) {
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException();
@@ -255,7 +241,9 @@ export class OrdersLifecycleService {
     const isGroup = order['saleType'] === 'group';
 
     // 공동구매 전용 템플릿 오버라이드 (스펙: 전체 참여자 알림 필요)
-    const GROUP_TEMPLATE_OVERRIDES: Partial<Record<OrderStatus, Partial<Record<OrderStatus, string>>>> = {
+    const GROUP_TEMPLATE_OVERRIDES: Partial<
+      Record<OrderStatus, Partial<Record<OrderStatus, string>>>
+    > = {
       PREPARING: { DELIVERING: 'GROUP_DELIVERING' },
       DELIVERING: { DELIVERED: 'GROUP_DELIVERED' },
     };
@@ -268,7 +256,12 @@ export class OrdersLifecycleService {
     if (!templateCode) return;
 
     const variables: Record<string, string> = { orderId };
-    const GROUP_TEMPLATES = ['GROUP_PREPARING', 'GROUP_DELIVERING', 'GROUP_DELIVERED', 'GROUP_CONFIRMED'];
+    const GROUP_TEMPLATES = [
+      'GROUP_PREPARING',
+      'GROUP_DELIVERING',
+      'GROUP_DELIVERED',
+      'GROUP_CONFIRMED',
+    ];
 
     if (isGroup && GROUP_TEMPLATES.includes(templateCode)) {
       await this.notifications.sendToGroupParticipants(

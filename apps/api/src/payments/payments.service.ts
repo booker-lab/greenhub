@@ -1,4 +1,11 @@
-import { Injectable, BadRequestException, ForbiddenException, Inject, forwardRef, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+  Logger,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FirestoreService } from '../firestore/firestore.service';
 import { PortoneClient } from './portone.client';
@@ -7,12 +14,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/audit/audit.service';
 
 // 환불 가능 상태
-const REFUNDABLE_STATUSES = [
-  'ACCEPTED',
-  'RECRUITING',
-  'CONFIRMED',
-  'PREPARING',
-];
+const REFUNDABLE_STATUSES = ['ACCEPTED', 'RECRUITING', 'CONFIRMED', 'PREPARING'];
 
 @Injectable()
 export class PaymentsService {
@@ -60,8 +62,7 @@ export class PaymentsService {
       return { ok: false, reason: 'amount_mismatch' };
     }
 
-    const newStatus =
-      order['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED';
+    const newStatus = order['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED';
 
     const now = this.firestore.Timestamp.now();
 
@@ -97,7 +98,9 @@ export class PaymentsService {
       orderId,
     );
 
-    this.logger.log(`payment.completed orderId=${orderId} userId=${order['userId']} amount=${paymentData.amount.total} status=${newStatus}`);
+    this.logger.log(
+      `payment.completed orderId=${orderId} userId=${order['userId']} amount=${paymentData.amount.total} status=${newStatus}`,
+    );
 
     return { ok: true, status: newStatus };
   }
@@ -148,12 +151,7 @@ export class PaymentsService {
   /**
    * 판매자 환불 엔드포인트용 — 상태 검증 포함
    */
-  async refundOrder(
-    storeId: string,
-    orderId: string,
-    requesterId: string,
-    reason?: string,
-  ) {
+  async refundOrder(storeId: string, orderId: string, requesterId: string, reason?: string) {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!orderSnap.exists || orderSnap.data()!['storeId'] !== storeId) {
       throw new BadRequestException('주문을 찾을 수 없습니다.');
@@ -162,12 +160,12 @@ export class PaymentsService {
 
     // 환불 가능 상태 검증
     if (!REFUNDABLE_STATUSES.includes(order['status'])) {
-      throw new ForbiddenException(
-        `${order['status']} 상태에서는 환불할 수 없습니다.`,
-      );
+      throw new ForbiddenException(`${order['status']} 상태에서는 환불할 수 없습니다.`);
     }
 
-    this.logger.log(`payment.refunded orderId=${orderId} storeId=${storeId} requesterId=${requesterId} reason=${reason ?? '판매자 취소'}`);
+    this.logger.log(
+      `payment.refunded orderId=${orderId} storeId=${storeId} requesterId=${requesterId} reason=${reason ?? '판매자 취소'}`,
+    );
     await this.processRefundByOrderId(orderId, reason ?? '판매자 취소');
     return { ok: true };
   }
@@ -187,11 +185,7 @@ export class PaymentsService {
     if (paySnap.empty) return; // 결제 기록 없으면 스킵 (PENDING 상태 등)
 
     const payment = paySnap.docs[0].data();
-    await this.portone.refund(
-      payment['portonePaymentId'],
-      payment['amount'],
-      reason,
-    );
+    await this.portone.refund(payment['portonePaymentId'], payment['amount'], reason);
 
     const now = this.firestore.Timestamp.now();
     await paySnap.docs[0].ref.update({
@@ -237,16 +231,11 @@ export class PaymentsService {
     ];
 
     if (order['deliveryMethod'] !== 'parcel') {
-      const dateStr = (order['createdAt'] as any)
-        .toDate()
-        .toISOString()
-        .split('T')[0];
+      const dateStr = (order['createdAt'] as any).toDate().toISOString().split('T')[0];
       const capId = `${order['storeId']}_${dateStr}`;
       updates.push(
         this.firestore.doc(`dailyCaps/${capId}`).update({
-          usedSlots: this.firestore.FieldValue.increment(
-            -(order['quantity'] as number),
-          ),
+          usedSlots: this.firestore.FieldValue.increment(-(order['quantity'] as number)),
         }),
       );
     }

@@ -8,11 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import {
-  generatePickupCode,
-  detectMetropolitan,
-  calcDeliveryFee,
-} from './orders.helpers';
+import { generatePickupCode, detectMetropolitan, calcDeliveryFee } from './orders.helpers';
 
 @Injectable()
 export class OrdersCreateService {
@@ -35,9 +31,7 @@ export class OrdersCreateService {
         .where('productId', '==', dto.productId)
         .where('saleType', '==', 'group')
         .get();
-      const hasActive = existingSnap.docs.some(
-        (d) => d.data()['status'] !== 'CANCELLED',
-      );
+      const hasActive = existingSnap.docs.some((d) => d.data()['status'] !== 'CANCELLED');
       if (hasActive) {
         throw new ConflictException('이미 참여 중인 공동구매입니다.');
       }
@@ -60,13 +54,14 @@ export class OrdersCreateService {
     const productData = product.data()!;
     const rawBuyerName: string = userSnap.data()?.['name'] ?? '';
     const buyerEmail: string = userSnap.data()?.['email'] ?? '';
-    const buyerName: string = rawBuyerName && rawBuyerName !== '???' ? rawBuyerName : (buyerEmail.split('@')[0] || userId);
+    const buyerName: string =
+      rawBuyerName && rawBuyerName !== '???' ? rawBuyerName : buyerEmail.split('@')[0] || userId;
     const buyerPhone: string | null = userSnap.data()?.['phone'] ?? null;
     const sellerPhone: string | null = storeSnap.data()?.['phone'] ?? null;
     const hubData = (hubSnap as any)?.exists ? (hubSnap as any).data() : null;
     const hubName: string | null = hubData?.['name'] ?? null;
     const hubAddress: string | null = hubData
-      ? ([hubData['address'], hubData['addressDetail']].filter(Boolean).join(' ') || null)
+      ? [hubData['address'], hubData['addressDetail']].filter(Boolean).join(' ') || null
       : null;
 
     // 배송비 계산
@@ -91,7 +86,9 @@ export class OrdersCreateService {
 
         // 문서 없으면 셀러가 해당 날짜 슬롯을 미설정 — 주문 차단
         if (!capSnap.exists) {
-          throw new ConflictException('판매자가 해당 날짜의 배송 운영을 준비 중입니다. 택배 배송을 이용하거나 다른 날짜를 선택해주세요.');
+          throw new ConflictException(
+            '판매자가 해당 날짜의 배송 운영을 준비 중입니다. 택배 배송을 이용하거나 다른 날짜를 선택해주세요.',
+          );
         }
         const cap = capSnap.data()!;
         if (cap['usedSlots'] + dto.quantity > cap['totalCap']) {
@@ -104,9 +101,7 @@ export class OrdersCreateService {
 
       // 공동구매: 수량 누적 + 목표 수량·maxPerPerson 검증
       if (dto.saleType === 'group') {
-        const gcRef = this.firestore.doc(
-          `groupProductConfig/${dto.productId}`,
-        );
+        const gcRef = this.firestore.doc(`groupProductConfig/${dto.productId}`);
         const gcSnap = await t.get(gcRef);
         // 설정 문서 없으면 공동구매 자체를 허용하지 않음 (무제한 참여 방지)
         if (!gcSnap.exists) {
@@ -134,9 +129,7 @@ export class OrdersCreateService {
           setImmediate(() => {
             this.notifications
               .processGroupBuyEarlyConfirm(dto.productId)
-              .catch((err) =>
-                console.error('[GroupBuy] 조기 확정 트리거 실패', err),
-              );
+              .catch((err) => console.error('[GroupBuy] 조기 확정 트리거 실패', err));
           });
         }
       }
@@ -150,7 +143,9 @@ export class OrdersCreateService {
         productId: dto.productId,
         productName: productData['name'] as string,
         buyerName,
-        address: [dto.deliveryAddress.address, dto.deliveryAddress.addressDetail].filter(Boolean).join(' '),
+        address: [dto.deliveryAddress.address, dto.deliveryAddress.addressDetail]
+          .filter(Boolean)
+          .join(' '),
         buyerPhone,
         sellerPhone,
         hubName,
@@ -163,8 +158,7 @@ export class OrdersCreateService {
         deliveryAddress: dto.deliveryAddress,
         isMetropolitan,
         hubId: dto.deliveryMethod === 'hub' ? (dto.hubId ?? null) : null,
-        pickupCode:
-          dto.deliveryMethod === 'hub' ? generatePickupCode() : null,
+        pickupCode: dto.deliveryMethod === 'hub' ? generatePickupCode() : null,
         totalAmount: productData['price'] * dto.quantity + deliveryFee,
         requestedDeliveryDate: dto.requestedDeliveryDate ?? null,
         preparedAt: null,
@@ -172,9 +166,7 @@ export class OrdersCreateService {
         groupBuyConsent: dto.groupBuyConsent
           ? {
               agreed: true,
-              agreedAt: this.firestore.Timestamp.fromDate(
-                new Date(dto.groupBuyConsent.agreedAt),
-              ),
+              agreedAt: this.firestore.Timestamp.fromDate(new Date(dto.groupBuyConsent.agreedAt)),
               userId,
             }
           : null,
@@ -193,9 +185,7 @@ export class OrdersCreateService {
     };
   }
 
-  private async getDeliveryConfig(
-    storeId: string,
-  ): Promise<Record<string, number>> {
+  private async getDeliveryConfig(storeId: string): Promise<Record<string, number>> {
     const snap = await this.firestore.doc(`deliveryFeeConfig/${storeId}`).get();
     if (snap.exists) return snap.data() as Record<string, number>;
     // 문서 없는 경우 기본값 (신규 스토어 또는 미설정 시)

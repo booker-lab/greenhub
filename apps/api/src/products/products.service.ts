@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -14,9 +10,7 @@ export class ProductsService {
   constructor(private readonly firestore: FirestoreService) {}
 
   async getProducts(storeId: string, query: ProductQueryDto) {
-    let ref = this.firestore
-      .collection('products')
-      .where('storeId', '==', storeId);
+    let ref = this.firestore.collection('products').where('storeId', '==', storeId);
 
     const isActive = query.isActive !== false;
     ref = ref.where('isActive', '==', isActive) as any;
@@ -45,12 +39,8 @@ export class ProductsService {
     // 정렬
     const sort = query.sort ?? 'latest';
     if (sort === 'price_asc') products.sort((a, b) => a['price'] - b['price']);
-    else if (sort === 'price_desc')
-      products.sort((a, b) => b['price'] - a['price']);
-    else
-      products.sort(
-        (a, b) => (b['createdAt']?.seconds ?? 0) - (a['createdAt']?.seconds ?? 0),
-      );
+    else if (sort === 'price_desc') products.sort((a, b) => b['price'] - a['price']);
+    else products.sort((a, b) => (b['createdAt']?.seconds ?? 0) - (a['createdAt']?.seconds ?? 0));
 
     // groupSummary 병합 (공동구매 상품만)
     const groupProductIds = products
@@ -64,9 +54,7 @@ export class ProductsService {
         .collection('groupProductConfig')
         .where('productId', 'in', groupProductIds.slice(0, 30))
         .get();
-      gcSnap.docs.forEach((d) =>
-        groupConfigMap.set(d.data()['productId'], d.data()),
-      );
+      gcSnap.docs.forEach((d) => groupConfigMap.set(d.data()['productId'], d.data()));
     }
 
     // 스펙 응답: { items: ProductSummary[], total: number }
@@ -88,7 +76,10 @@ export class ProductsService {
             currentQuantity: gc['currentQuantity'],
             minQuantity: gc['minQuantity'],
             targetQuantity: gc['targetQuantity'],
-            recruitDeadline: typeof (gc['recruitDeadline'] as { toDate?: () => Date })?.toDate === 'function' ? (gc['recruitDeadline'] as { toDate: () => Date }).toDate().toISOString() : gc['recruitDeadline'],
+            recruitDeadline:
+              typeof (gc['recruitDeadline'] as { toDate?: () => Date })?.toDate === 'function'
+                ? (gc['recruitDeadline'] as { toDate: () => Date }).toDate().toISOString()
+                : gc['recruitDeadline'],
           };
         }
       }
@@ -107,9 +98,7 @@ export class ProductsService {
 
     let groupConfig: Record<string, unknown> | null = null;
     if (product['saleType'] === 'group') {
-      const gc = await this.firestore
-        .doc(`groupProductConfig/${productId}`)
-        .get();
+      const gc = await this.firestore.doc(`groupProductConfig/${productId}`).get();
       groupConfig = gc.exists ? (gc.data() as Record<string, unknown>) : null;
     }
 
@@ -125,12 +114,7 @@ export class ProductsService {
     return { ...product };
   }
 
-  async createProduct(
-    storeId: string,
-    sellerId: string,
-    dto: CreateProductDto,
-    role?: string,
-  ) {
+  async createProduct(storeId: string, sellerId: string, dto: CreateProductDto, role?: string) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
 
     const productId = uuidv4();
@@ -235,21 +219,24 @@ export class ProductsService {
     return { caps: snap.docs.map((d) => d.data()) };
   }
 
-  async updateDailyCap(storeId: string, date: string, sellerId: string, totalCap: number, role?: string) {
+  async updateDailyCap(
+    storeId: string,
+    date: string,
+    sellerId: string,
+    totalCap: number,
+    role?: string,
+  ) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
     const docId = `${storeId}_${date}`;
-    await this.firestore.doc(`dailyCaps/${docId}`).set(
-      { id: docId, storeId, date, totalCap },
-      { merge: true },
-    );
+    await this.firestore
+      .doc(`dailyCaps/${docId}`)
+      .set({ id: docId, storeId, date, totalCap }, { merge: true });
     const snap = await this.firestore.doc(`dailyCaps/${docId}`).get();
     return snap.data();
   }
 
   async getDeliveryConfig(storeId: string) {
-    const snap = await this.firestore
-      .doc(`deliveryFeeConfig/${storeId}`)
-      .get();
+    const snap = await this.firestore.doc(`deliveryFeeConfig/${storeId}`).get();
     if (!snap.exists) {
       return {
         storeId,
@@ -272,10 +259,9 @@ export class ProductsService {
     role?: string,
   ) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
-    await this.firestore.doc(`deliveryFeeConfig/${storeId}`).set(
-      { storeId, ...dto, updatedAt: this.firestore.Timestamp.now() },
-      { merge: true },
-    );
+    await this.firestore
+      .doc(`deliveryFeeConfig/${storeId}`)
+      .set({ storeId, ...dto, updatedAt: this.firestore.Timestamp.now() }, { merge: true });
     return this.getDeliveryConfig(storeId);
   }
 
@@ -303,30 +289,44 @@ export class ProductsService {
     const sort = query.sort ?? 'latest';
     if (sort === 'price_asc') products.sort((a: any, b: any) => a['price'] - b['price']);
     else if (sort === 'price_desc') products.sort((a: any, b: any) => b['price'] - a['price']);
-    else products.sort((a: any, b: any) => (b['createdAt']?.seconds ?? 0) - (a['createdAt']?.seconds ?? 0));
+    else
+      products.sort(
+        (a: any, b: any) => (b['createdAt']?.seconds ?? 0) - (a['createdAt']?.seconds ?? 0),
+      );
 
-    const groupProductIds = products.filter((p: any) => p['saleType'] === 'group').map((p: any) => p['id'] as string);
+    const groupProductIds = products
+      .filter((p: any) => p['saleType'] === 'group')
+      .map((p: any) => p['id'] as string);
     const groupConfigMap = new Map<string, Record<string, unknown>>();
     if (groupProductIds.length > 0) {
-      const gcSnap = await this.firestore.collection('groupProductConfig')
-        .where('productId', 'in', groupProductIds.slice(0, 30)).get();
+      const gcSnap = await this.firestore
+        .collection('groupProductConfig')
+        .where('productId', 'in', groupProductIds.slice(0, 30))
+        .get();
       gcSnap.docs.forEach((d: any) => groupConfigMap.set(d.data()['productId'], d.data()));
     }
 
     const items = products.map((p: any) => {
       const summary: Record<string, unknown> = {
-        id: p['id'], storeId: p['storeId'], name: p['name'], price: p['price'],
+        id: p['id'],
+        storeId: p['storeId'],
+        name: p['name'],
+        price: p['price'],
         images: Array.isArray(p['images']) ? [p['images'][0]] : [],
         category: p['category'],
         colors: p['selection']?.['colors'] ?? p['colors'] ?? [],
-        saleType: p['saleType'], isActive: p['isActive'],
+        saleType: p['saleType'],
+        isActive: p['isActive'],
       };
       if (p['saleType'] === 'group') {
         const gc = groupConfigMap.get(p['id'] as string);
-        if (gc) summary['groupSummary'] = {
-          currentQuantity: gc['currentQuantity'], minQuantity: gc['minQuantity'],
-          targetQuantity: gc['targetQuantity'], recruitDeadline: gc['recruitDeadline'],
-        };
+        if (gc)
+          summary['groupSummary'] = {
+            currentQuantity: gc['currentQuantity'],
+            minQuantity: gc['minQuantity'],
+            targetQuantity: gc['targetQuantity'],
+            recruitDeadline: gc['recruitDeadline'],
+          };
       }
       return summary;
     });

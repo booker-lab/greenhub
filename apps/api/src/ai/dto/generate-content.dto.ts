@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsEnum,
-  IsArray,
-  IsOptional,
-  ValidateNested,
-} from 'class-validator';
+import { IsString, IsEnum, IsArray, IsOptional, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class SelectionDto {
@@ -46,4 +40,3 @@ export class GenerateContentDto {
   @IsString()
   sellerNote?: string;
 }
-

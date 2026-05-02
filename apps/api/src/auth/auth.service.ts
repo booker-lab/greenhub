@@ -73,19 +73,27 @@ export class AuthService {
       .get();
 
     if (snap.empty) {
-      await this.audit.log('auth.login.failed', { detail: { email: dto.email, reason: 'user_not_found' } });
+      await this.audit.log('auth.login.failed', {
+        detail: { email: dto.email, reason: 'user_not_found' },
+      });
       throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
     }
 
     const userData = snap.docs[0].data();
     const valid = await bcrypt.compare(dto.password, userData['passwordHash']);
     if (!valid) {
-      await this.audit.log('auth.login.failed', { userId: userData['id'], detail: { email: dto.email, reason: 'wrong_password' } });
+      await this.audit.log('auth.login.failed', {
+        userId: userData['id'],
+        detail: { email: dto.email, reason: 'wrong_password' },
+      });
       throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
     }
 
     if (userData['suspended'] === true) {
-      await this.audit.log('auth.login.suspended', { userId: userData['id'], detail: { email: dto.email } });
+      await this.audit.log('auth.login.suspended', {
+        userId: userData['id'],
+        detail: { email: dto.email },
+      });
       throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
     }
 
@@ -246,11 +254,12 @@ export class AuthService {
     }
 
     const role = userData['role'] as string;
-    const allowedRoles = dto.targetRole === 'consumer'
-      ? ['consumer', 'admin']
-      : dto.targetRole === 'seller'
-        ? ['seller', 'admin']
-        : ['driver', 'admin'];  // driver 앱 또는 targetRole 미지정
+    const allowedRoles =
+      dto.targetRole === 'consumer'
+        ? ['consumer', 'admin']
+        : dto.targetRole === 'seller'
+          ? ['seller', 'admin']
+          : ['driver', 'admin']; // driver 앱 또는 targetRole 미지정
     if (userData['suspended'] === true) {
       await this.audit.log('auth.login.suspended', { userId: userData['id'] as string });
       throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
@@ -270,7 +279,9 @@ export class AuthService {
       storeId: (userData['storeId'] as string) ?? undefined,
     });
 
-    this.logger.log(`auth.kakao.success userId=${userData['id']} role=${role} targetRole=${dto.targetRole}`);
+    this.logger.log(
+      `auth.kakao.success userId=${userData['id']} role=${role} targetRole=${dto.targetRole}`,
+    );
     return { accessToken, refreshToken, user: this.sanitizeUser(userData) };
   }
 
@@ -279,15 +290,13 @@ export class AuthService {
     try {
       payload = this.jwt.verify(refreshToken, {
         secret: this.config.get('JWT_REFRESH_SECRET'),
-      }) as JwtPayload;
+      });
     } catch {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
     }
 
     // Rotation: Firestore에 저장된 토큰과 일치하는지 검증
-    const tokenSnap = await this.firestore
-      .doc(`refreshTokens/${payload.sub}`)
-      .get();
+    const tokenSnap = await this.firestore.doc(`refreshTokens/${payload.sub}`).get();
     if (tokenSnap.exists && tokenSnap.data()!['token'] !== refreshToken) {
       // Firestore에 다른 토큰이 존재 = 탈취 후 재사용 시도 — 모든 세션 무효화
       await this.firestore.doc(`refreshTokens/${payload.sub}`).delete();

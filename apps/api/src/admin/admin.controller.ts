@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Patch,
-  Param,
-  Body,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -39,10 +29,7 @@ export class AdminController {
   }
 
   @Patch('stores/:storeId/commission')
-  setCommission(
-    @Param('storeId') storeId: string,
-    @Body() dto: SetCommissionDto,
-  ) {
+  setCommission(@Param('storeId') storeId: string, @Body() dto: SetCommissionDto) {
     return this.admin.setCommission(storeId, dto);
   }
 
@@ -54,10 +41,7 @@ export class AdminController {
   }
 
   @Patch('users/:userId/status')
-  suspendUser(
-    @Param('userId') userId: string,
-    @Body() dto: SuspendUserDto,
-  ) {
+  suspendUser(@Param('userId') userId: string, @Body() dto: SuspendUserDto) {
     return this.admin.suspendUser(userId, dto);
   }
 
@@ -69,10 +53,7 @@ export class AdminController {
   }
 
   @Post('orders/:orderId/refund')
-  forceRefund(
-    @Param('orderId') orderId: string,
-    @Body() dto: ForceRefundDto,
-  ) {
+  forceRefund(@Param('orderId') orderId: string, @Body() dto: ForceRefundDto) {
     return this.admin.forceRefund(orderId, dto);
   }
 
@@ -101,10 +82,7 @@ export class AdminController {
   }
 
   @Patch('drivers/:userId/suspend')
-  suspendDriver(
-    @Param('userId') userId: string,
-    @Body() dto: SuspendUserDto,
-  ) {
+  suspendDriver(@Param('userId') userId: string, @Body() dto: SuspendUserDto) {
     return this.admin.suspendDriver(userId, dto);
   }
 

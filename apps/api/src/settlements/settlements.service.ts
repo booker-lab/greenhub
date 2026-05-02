@@ -13,16 +13,11 @@ export class SettlementsService {
     private readonly firestore: FirestoreService,
     private readonly config: ConfigService,
   ) {
-    this.feeRate = parseFloat(
-      this.config.get<string>('PLATFORM_FEE_RATE') ?? '0.05',
-    );
+    this.feeRate = parseFloat(this.config.get<string>('PLATFORM_FEE_RATE') ?? '0.05');
   }
 
   // **자동 생성**: 주문이 완료 상태(REVIEWED/DELIVERED/PICKED_UP)에 도달 시 호출
-  async createSettlement(
-    order: Record<string, unknown>,
-    completedStatus: string,
-  ): Promise<void> {
+  async createSettlement(order: Record<string, unknown>, completedStatus: string): Promise<void> {
     const orderId = order['id'] as string;
     const ref = this.firestore.doc(`settlements/${orderId}`);
 
@@ -60,26 +55,16 @@ export class SettlementsService {
   ) {
     await this.verifyOwnership(storeId, requesterId, role);
 
-    let ref = this.firestore
-      .collection('settlements')
-      .where('storeId', '==', storeId) as any;
+    let ref = this.firestore.collection('settlements').where('storeId', '==', storeId) as any;
 
     if (dto.from) {
-      ref = ref.where(
-        'settledAt',
-        '>=',
-        this.firestore.Timestamp.fromDate(new Date(dto.from)),
-      );
+      ref = ref.where('settledAt', '>=', this.firestore.Timestamp.fromDate(new Date(dto.from)));
     }
     if (dto.to) {
       // to 날짜 23:59:59까지 포함
       const toDate = new Date(dto.to);
       toDate.setHours(23, 59, 59, 999);
-      ref = ref.where(
-        'settledAt',
-        '<=',
-        this.firestore.Timestamp.fromDate(toDate),
-      );
+      ref = ref.where('settledAt', '<=', this.firestore.Timestamp.fromDate(toDate));
     }
 
     ref = ref.orderBy('settledAt', 'asc');
@@ -90,12 +75,7 @@ export class SettlementsService {
     return { settlements, total: settlements.length };
   }
 
-  async getSummary(
-    storeId: string,
-    requesterId: string,
-    role: string,
-    dto: QuerySummaryDto,
-  ) {
+  async getSummary(storeId: string, requesterId: string, role: string, dto: QuerySummaryDto) {
     await this.verifyOwnership(storeId, requesterId, role);
 
     const targetDate = dto.date ?? new Date().toISOString().split('T')[0];
@@ -103,19 +83,13 @@ export class SettlementsService {
     const end = new Date(targetDate);
     end.setHours(23, 59, 59, 999);
 
-    const snap = await (this.firestore
-      .collection('settlements')
-      .where('storeId', '==', storeId)
-      .where(
-        'settledAt',
-        '>=',
-        this.firestore.Timestamp.fromDate(start),
-      )
-      .where(
-        'settledAt',
-        '<=',
-        this.firestore.Timestamp.fromDate(end),
-      ) as any).get();
+    const snap = await (
+      this.firestore
+        .collection('settlements')
+        .where('storeId', '==', storeId)
+        .where('settledAt', '>=', this.firestore.Timestamp.fromDate(start))
+        .where('settledAt', '<=', this.firestore.Timestamp.fromDate(end)) as any
+    ).get();
 
     const settlements: Record<string, unknown>[] = snap.docs.map((d: any) => d.data());
 

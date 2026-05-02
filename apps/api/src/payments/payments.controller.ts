@@ -48,12 +48,7 @@ export class PaymentsController {
     );
 
     try {
-      this.portone.verifyWebhookSignature(
-        webhookId,
-        webhookTimestamp,
-        rawBody!,
-        webhookSignature,
-      );
+      this.portone.verifyWebhookSignature(webhookId, webhookTimestamp, rawBody!, webhookSignature);
     } catch (e) {
       this.logger.error(`webhook sig verify failed: ${(e as Error).message}`);
       await this.audit.log('payment.webhook.invalid_sig', {
@@ -70,10 +65,7 @@ export class PaymentsController {
 
   @Get(':paymentId')
   @UseGuards(JwtAuthGuard)
-  getPayment(
-    @Param('paymentId') paymentId: string,
-    @CurrentUser() user: JwtPayload,
-  ) {
+  getPayment(@Param('paymentId') paymentId: string, @CurrentUser() user: JwtPayload) {
     return this.paymentsService.getPayment(paymentId, user.sub);
   }
 }
