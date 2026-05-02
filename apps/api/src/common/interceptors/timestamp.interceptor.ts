@@ -13,7 +13,7 @@ function isTimestamp(v: unknown): boolean {
   return (
     typeof v === 'object' &&
     v !== null &&
-    '_seconds' in (v as object) &&
+    '_seconds' in (v) &&
     typeof (v as Record<string, unknown>)['toDate'] === 'function'
   );
 }
@@ -26,7 +26,7 @@ function serializeDeep(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(serializeDeep);
   if (typeof value === 'object') {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as object)) {
+    for (const [k, v] of Object.entries(value)) {
       out[k] = serializeDeep(v);
     }
     return out;

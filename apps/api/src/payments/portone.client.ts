@@ -1,4 +1,9 @@
-import { Injectable, InternalServerErrorException, UnauthorizedException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  UnauthorizedException,
+  Logger,
+} from '@nestjs/common';
 import * as crypto from 'crypto';
 import { ConfigService } from '@nestjs/config';
 
@@ -33,7 +38,9 @@ export class PortoneClient {
   ): void {
     // 서명 헤더가 없으면 포트원 콘솔에서 서명 미설정 — 검증 스킵
     if (!signatureHeader) {
-      this.logger.warn('webhook-signature header absent — skipping verification (configure signing key in Portone console)');
+      this.logger.warn(
+        'webhook-signature header absent — skipping verification (configure signing key in Portone console)',
+      );
       return;
     }
 
@@ -58,9 +65,7 @@ export class PortoneClient {
       .digest('base64');
 
     // 헤더 형식: "v1,<sig1> v1,<sig2>" (복수 서명 지원)
-    const signatures = signatureHeader
-      .split(' ')
-      .map((s) => s.replace(/^v[0-9]+,/, ''));
+    const signatures = signatureHeader.split(' ').map((s) => s.replace(/^v[0-9]+,/, ''));
 
     const isValid = signatures.some((sig) => sig === expectedSig);
     if (!isValid) {
@@ -69,35 +74,27 @@ export class PortoneClient {
   }
 
   async getPayment(paymentId: string): Promise<PortonePaymentData> {
-    const res = await fetch(
-      `${this.baseUrl}/payments/${encodeURIComponent(paymentId)}`,
-      { headers: { Authorization: `PortOne ${this.secret}` } },
-    );
+    const res = await fetch(`${this.baseUrl}/payments/${encodeURIComponent(paymentId)}`, {
+      headers: { Authorization: `PortOne ${this.secret}` },
+    });
     if (!res.ok) {
-      throw new InternalServerErrorException(
-        `Portone 결제 조회 실패: ${res.status}`,
-      );
+      throw new InternalServerErrorException(`Portone 결제 조회 실패: ${res.status}`);
     }
     return res.json() as Promise<PortonePaymentData>;
   }
 
   async refund(paymentId: string, amount: number, reason: string): Promise<void> {
-    const res = await fetch(
-      `${this.baseUrl}/payments/${encodeURIComponent(paymentId)}/cancel`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `PortOne ${this.secret}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ reason, amount }),
+    const res = await fetch(`${this.baseUrl}/payments/${encodeURIComponent(paymentId)}/cancel`, {
+      method: 'POST',
+      headers: {
+        Authorization: `PortOne ${this.secret}`,
+        'Content-Type': 'application/json',
       },
-    );
+      body: JSON.stringify({ reason, amount }),
+    });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({})) as { message?: string };
-      throw new InternalServerErrorException(
-        `Portone 환불 실패: ${body.message ?? res.status}`,
-      );
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new InternalServerErrorException(`Portone 환불 실패: ${body.message ?? res.status}`);
     }
   }
 }

@@ -7,14 +7,14 @@ export type AuditAction =
   | 'auth.login.failed'
   | 'auth.login.suspended'
   | 'auth.logout'
-  | 'auth.token.stolen'           // refresh token 재사용 감지
+  | 'auth.token.stolen' // refresh token 재사용 감지
   | 'auth.kakao.success'
   | 'auth.kakao.forbidden'
   | 'payment.completed'
   | 'payment.refunded'
-  | 'payment.amount_tampered'     // 금액 위변조 감지
+  | 'payment.amount_tampered' // 금액 위변조 감지
   | 'payment.webhook.invalid_sig' // 서명 검증 실패
-  | 'access.forbidden';           // 권한 없는 접근 시도
+  | 'access.forbidden'; // 권한 없는 접근 시도
 
 export interface AuditLog {
   id: string;

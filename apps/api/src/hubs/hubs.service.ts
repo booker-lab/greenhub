@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { CreateHubDto, UpdateHubDto } from './dto/create-hub.dto';
@@ -14,10 +10,12 @@ export class HubsService {
   async getHubs(storeId: string, requesterId: string) {
     await this.verifyOwnership(storeId, requesterId);
 
-    const snap = await (this.firestore
-      .collection('hubs')
-      .where('storeId', '==', storeId)
-      .orderBy('createdAt', 'asc') as any).get();
+    const snap = await (
+      this.firestore
+        .collection('hubs')
+        .where('storeId', '==', storeId)
+        .orderBy('createdAt', 'asc') as any
+    ).get();
 
     return { hubs: snap.docs.map((d: any) => d.data()) };
   }
@@ -55,12 +53,7 @@ export class HubsService {
     return { id: hubId };
   }
 
-  async updateHub(
-    storeId: string,
-    hubId: string,
-    requesterId: string,
-    dto: UpdateHubDto,
-  ) {
+  async updateHub(storeId: string, hubId: string, requesterId: string, dto: UpdateHubDto) {
     await this.verifyOwnership(storeId, requesterId);
 
     const snap = await this.firestore.doc(`hubs/${hubId}`).get();
@@ -85,12 +78,7 @@ export class HubsService {
     return { id: hubId };
   }
 
-  async getHubOrders(
-    storeId: string,
-    hubId: string,
-    requesterId: string,
-    status?: string,
-  ) {
+  async getHubOrders(storeId: string, hubId: string, requesterId: string, status?: string) {
     await this.verifyOwnership(storeId, requesterId);
 
     const hubSnap = await this.firestore.doc(`hubs/${hubId}`).get();
@@ -99,9 +87,9 @@ export class HubsService {
     }
 
     // hubId 단일 필드 쿼리 (자동 인덱스) — status는 앱 레이어 필터 (복합 인덱스 불필요)
-    const snap = await (this.firestore
-      .collection('orders')
-      .where('hubId', '==', hubId) as any).get();
+    const snap = await (
+      this.firestore.collection('orders').where('hubId', '==', hubId) as any
+    ).get();
 
     let orders = snap.docs.map((d: any) => d.data());
     if (status) {

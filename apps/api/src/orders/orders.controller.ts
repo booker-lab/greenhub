@@ -28,10 +28,7 @@ export class OrdersPublicController {
   }
 
   @Get(':orderId')
-  getOrderById(
-    @Param('orderId') orderId: string,
-    @CurrentUser() user: JwtPayload,
-  ) {
+  getOrderById(@Param('orderId') orderId: string, @CurrentUser() user: JwtPayload) {
     return this.ordersService.getOrderById(orderId, user.sub);
   }
 }
@@ -107,12 +104,7 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Body('pickupCode') pickupCode: string,
   ) {
-    return this.ordersService.confirmPickup(
-      storeId,
-      orderId,
-      user.sub,
-      pickupCode,
-    );
+    return this.ordersService.confirmPickup(storeId, orderId, user.sub, pickupCode);
   }
 
   @Patch(':orderId/hub-confirm')
@@ -123,11 +115,6 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Body('pickupCode') pickupCode: string,
   ) {
-    return this.ordersService.hubConfirmPickup(
-      storeId,
-      orderId,
-      user.sub,
-      pickupCode,
-    );
+    return this.ordersService.hubConfirmPickup(storeId, orderId, user.sub, pickupCode);
   }
 }

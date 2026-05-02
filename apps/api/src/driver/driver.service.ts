@@ -9,9 +9,7 @@ export class DriverService {
 
   async getOrders(driverId: string, statusQuery?: string) {
     const requestedStatuses = statusQuery
-      ? statusQuery.split(',').filter((s) =>
-          DRIVER_VISIBLE_STATUSES.includes(s as any),
-        )
+      ? statusQuery.split(',').filter((s) => DRIVER_VISIBLE_STATUSES.includes(s as any))
       : [...DRIVER_VISIBLE_STATUSES];
 
     if (requestedStatuses.length === 0) return [];

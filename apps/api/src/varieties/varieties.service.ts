@@ -38,7 +38,10 @@ export class VarietiesService {
   async update(id: string, dto: UpdateVarietyDto) {
     const doc = await this.firestore.collection('varieties').doc(id).get();
     if (!doc.exists) throw new NotFoundException(`품종을 찾을 수 없습니다: ${id}`);
-    await this.firestore.collection('varieties').doc(id).update({ ...dto });
+    await this.firestore
+      .collection('varieties')
+      .doc(id)
+      .update({ ...dto });
     return { id, ...doc.data(), ...dto };
   }
 }

@@ -14,8 +14,10 @@ const FRAGRANCE_LABEL: Record<string, string> = {
 
 const CATEGORY_GUIDE: Record<string, string> = {
   orchid: '관상 기간과 선물·경조사 용도를 중심으로 설명하세요.',
-  cut_flower: '신선도와 보관 방법(물에 담그기, 서늘한 곳 보관 등)을 2문장에 포함하고, 꽃다발·화환 활용을 제안하세요.',
-  foliage: '햇빛·물 주기 등 간단한 관리법을 2문장에 포함하고, 공간 인테리어나 반려식물로서의 감성을 제안하세요.',
+  cut_flower:
+    '신선도와 보관 방법(물에 담그기, 서늘한 곳 보관 등)을 2문장에 포함하고, 꽃다발·화환 활용을 제안하세요.',
+  foliage:
+    '햇빛·물 주기 등 간단한 관리법을 2문장에 포함하고, 공간 인테리어나 반려식물로서의 감성을 제안하세요.',
 };
 
 export function buildProductContentPrompt(params: GenerateContentParams): string {
@@ -42,9 +44,7 @@ export function buildProductContentPrompt(params: GenerateContentParams): string
 - 판매 단위: ${selection.bundleUnit || '미입력'}
 `;
 
-  const noteSection = sellerNote
-    ? `[판매자 메모]\n${sellerNote}`
-    : '[판매자 메모] 없음';
+  const noteSection = sellerNote ? `[판매자 메모]\n${sellerNote}` : '[판매자 메모] 없음';
 
   return `당신은 화훼 농산물 직거래 플랫폼 '그린러브'의 상품 소개 문구 작성 전문가입니다.
 

@@ -21,10 +21,7 @@ export class StoresController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  createStore(
-    @CurrentUser() user: JwtPayload,
-    @Body() dto: UpdateStoreDto,
-  ) {
+  createStore(@CurrentUser() user: JwtPayload, @Body() dto: UpdateStoreDto) {
     return this.storesService.createStore(user.sub, dto);
   }
 

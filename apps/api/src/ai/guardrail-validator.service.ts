@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import type { Selection, Variety } from '@greenhub/shared';
 
 export interface ConflictWarning {
-  field: string
-  message: string
-  suggestion: string
+  field: string;
+  message: string;
+  suggestion: string;
 }
 
 @Injectable()

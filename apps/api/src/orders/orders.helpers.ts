@@ -22,17 +22,16 @@ export const CONSUMER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> =
 };
 
 // 알림이 필요한 전환과 템플릿 코드 매핑
-export const NOTIFICATION_MAP: Partial<
-  Record<OrderStatus, Partial<Record<OrderStatus, string>>>
-> = {
-  ACCEPTED: { PREPARING: 'ORDER_PREPARING' },
-  CONFIRMED: { PREPARING: 'GROUP_PREPARING' },
-  PREPARING: { DELIVERING: 'ORDER_DELIVERING' },
-  DELIVERING: {
-    HUB_ARRIVED: 'ORDER_HUB_ARRIVED',
-    DELIVERED: 'ORDER_DELIVERED',
-  },
-};
+export const NOTIFICATION_MAP: Partial<Record<OrderStatus, Partial<Record<OrderStatus, string>>>> =
+  {
+    ACCEPTED: { PREPARING: 'ORDER_PREPARING' },
+    CONFIRMED: { PREPARING: 'GROUP_PREPARING' },
+    PREPARING: { DELIVERING: 'ORDER_DELIVERING' },
+    DELIVERING: {
+      HUB_ARRIVED: 'ORDER_HUB_ARRIVED',
+      DELIVERED: 'ORDER_DELIVERED',
+    },
+  };
 
 export function generatePickupCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));

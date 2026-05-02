@@ -27,18 +27,12 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Get()
-  getProducts(
-    @Param('storeId') storeId: string,
-    @Query() query: ProductQueryDto,
-  ) {
+  getProducts(@Param('storeId') storeId: string, @Query() query: ProductQueryDto) {
     return this.productsService.getProducts(storeId, query);
   }
 
   @Get(':productId')
-  getProduct(
-    @Param('storeId') storeId: string,
-    @Param('productId') productId: string,
-  ) {
+  getProduct(@Param('storeId') storeId: string, @Param('productId') productId: string) {
     return this.productsService.getProduct(storeId, productId);
   }
 
@@ -62,13 +56,7 @@ export class ProductsController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: Partial<CreateProductDto>,
   ) {
-    return this.productsService.updateProduct(
-      storeId,
-      productId,
-      user.sub,
-      dto,
-      user.role,
-    );
+    return this.productsService.updateProduct(storeId, productId, user.sub, dto, user.role);
   }
 
   @Patch(':productId/active')
@@ -80,7 +68,13 @@ export class ProductsController {
     @CurrentUser() user: JwtPayload,
     @Body('isActive', ParseBoolPipe) isActive: boolean,
   ) {
-    return this.productsService.toggleProductActive(storeId, productId, user.sub, isActive, user.role);
+    return this.productsService.toggleProductActive(
+      storeId,
+      productId,
+      user.sub,
+      isActive,
+      user.role,
+    );
   }
 
   @Delete(':productId')

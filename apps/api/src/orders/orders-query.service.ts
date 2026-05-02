@@ -46,7 +46,19 @@ export class OrdersQueryService {
       throw new ForbiddenException();
     }
 
-    const VALID_STATUSES = ['PENDING','RECRUITING','CONFIRMED','ACCEPTED','PREPARING','DELIVERING','HUB_ARRIVED','PICKED_UP','DELIVERED','CANCELLED','REVIEWED'];
+    const VALID_STATUSES = [
+      'PENDING',
+      'RECRUITING',
+      'CONFIRMED',
+      'ACCEPTED',
+      'PREPARING',
+      'DELIVERING',
+      'HUB_ARRIVED',
+      'PICKED_UP',
+      'DELIVERED',
+      'CANCELLED',
+      'REVIEWED',
+    ];
     const VALID_SALE_TYPES = ['normal', 'group'];
 
     if (query.status && !VALID_STATUSES.includes(query.status)) {
@@ -56,9 +68,7 @@ export class OrdersQueryService {
       throw new BadRequestException(`유효하지 않은 saleType: ${query.saleType}`);
     }
 
-    let ref = this.firestore
-      .collection('orders')
-      .where('storeId', '==', storeId) as any;
+    let ref = this.firestore.collection('orders').where('storeId', '==', storeId) as any;
 
     if (query.userId) ref = ref.where('userId', '==', query.userId);
     if (query.status) ref = ref.where('status', '==', query.status);
@@ -86,10 +96,7 @@ export class OrdersQueryService {
   }
 
   async getMyOrders(requesterId: string) {
-    const snap = await this.firestore
-      .collection('orders')
-      .where('userId', '==', requesterId)
-      .get();
+    const snap = await this.firestore.collection('orders').where('userId', '==', requesterId).get();
     return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
   }
 }

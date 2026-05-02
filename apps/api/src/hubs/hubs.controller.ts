@@ -23,10 +23,7 @@ export class HubsController {
   constructor(private readonly hubsService: HubsService) {}
 
   @Get()
-  getHubs(
-    @Param('storeId') storeId: string,
-    @CurrentUser() user: JwtPayload,
-  ) {
+  getHubs(@Param('storeId') storeId: string, @CurrentUser() user: JwtPayload) {
     return this.hubsService.getHubs(storeId, user.sub);
   }
 

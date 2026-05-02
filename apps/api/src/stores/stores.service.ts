@@ -12,14 +12,11 @@ import { UpdateStoreDto } from './dto/update-store.dto';
 export class StoresService {
   constructor(private readonly firestore: FirestoreService) {}
 
-  async createStore(
-    requesterId: string,
-    dto: UpdateStoreDto,
-  ): Promise<{ storeId: string }> {
+  async createStore(requesterId: string, dto: UpdateStoreDto): Promise<{ storeId: string }> {
     // 이미 스토어가 있는지 확인
-    const existing = await (this.firestore
-      .collection('stores')
-      .where('ownerId', '==', requesterId) as any).get();
+    const existing = await (
+      this.firestore.collection('stores').where('ownerId', '==', requesterId) as any
+    ).get();
     if (!existing.empty) {
       throw new ConflictException('이미 스토어가 존재합니다');
     }
@@ -96,8 +93,7 @@ export class StoresService {
 
     // **온보딩 완료 판별**: 필수 4개 필드 모두 채워지면 status를 active로 전환
     const merged = { ...storeData, ...updatePayload };
-    const isOnboardingComplete =
-      merged.name && merged.ceoName && merged.phone && merged.address;
+    const isOnboardingComplete = merged.name && merged.ceoName && merged.phone && merged.address;
 
     if (isOnboardingComplete && storeData?.status === 'invited') {
       updatePayload.status = 'active';

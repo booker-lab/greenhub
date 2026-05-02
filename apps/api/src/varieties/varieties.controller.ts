@@ -1,13 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { VarietiesService } from './varieties.service';
 import { CreateVarietyDto } from './dto/create-variety.dto';
 import { UpdateVarietyDto } from './dto/update-variety.dto';

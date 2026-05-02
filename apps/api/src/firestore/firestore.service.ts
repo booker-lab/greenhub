@@ -17,9 +17,7 @@ export class FirestoreService {
     return this.db.doc(path);
   }
 
-  runTransaction<T>(
-    fn: (t: admin.firestore.Transaction) => Promise<T>,
-  ): Promise<T> {
+  runTransaction<T>(fn: (t: admin.firestore.Transaction) => Promise<T>): Promise<T> {
     return this.db.runTransaction(fn);
   }
 

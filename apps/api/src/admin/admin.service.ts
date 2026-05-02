@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -26,9 +22,9 @@ export class AdminService {
   // ── Stores ──────────────────────────────────────────────────────
 
   async getStores() {
-    const snap = await (this.firestore
-      .collection('stores')
-      .orderBy('createdAt', 'desc') as any).get();
+    const snap = await (
+      this.firestore.collection('stores').orderBy('createdAt', 'desc') as any
+    ).get();
 
     return {
       stores: snap.docs.map((d: any) => d.data()),
@@ -51,10 +47,12 @@ export class AdminService {
   // ── Users ────────────────────────────────────────────────────────
 
   async getUsers() {
-    const snap = await (this.firestore
-      .collection('users')
-      .where('role', '==', 'consumer')
-      .orderBy('createdAt', 'desc') as any).get();
+    const snap = await (
+      this.firestore
+        .collection('users')
+        .where('role', '==', 'consumer')
+        .orderBy('createdAt', 'desc') as any
+    ).get();
 
     return {
       users: snap.docs.map((d: any) => {
@@ -128,20 +126,12 @@ export class AdminService {
       query = query.where('storeId', '==', dto.storeId);
     }
     if (dto.from) {
-      query = query.where(
-        'settledAt',
-        '>=',
-        this.firestore.Timestamp.fromDate(new Date(dto.from)),
-      );
+      query = query.where('settledAt', '>=', this.firestore.Timestamp.fromDate(new Date(dto.from)));
     }
     if (dto.to) {
       const toDate = new Date(dto.to);
       toDate.setHours(23, 59, 59, 999);
-      query = query.where(
-        'settledAt',
-        '<=',
-        this.firestore.Timestamp.fromDate(toDate),
-      );
+      query = query.where('settledAt', '<=', this.firestore.Timestamp.fromDate(toDate));
     }
 
     query = query.orderBy('settledAt', 'desc').limit(500);
@@ -180,10 +170,9 @@ export class AdminService {
 
   async getDrivers(dto: QueryAdminDriversDto) {
     // 복합 인덱스 없이도 동작하도록 role 단일 필터 후 메모리 필터링
-    const snap = await (this.firestore
-      .collection('users')
-      .where('role', '==', 'driver')
-      .limit(100) as any).get();
+    const snap = await (
+      this.firestore.collection('users').where('role', '==', 'driver').limit(100) as any
+    ).get();
 
     let drivers = snap.docs.map((d: any) => {
       const { passwordHash: _pw, ...user } = d.data();
@@ -198,9 +187,7 @@ export class AdminService {
       drivers = drivers.filter((d: any) => d.suspended);
     }
 
-    drivers.sort((a: any, b: any) =>
-      (b.createdAt?._seconds ?? 0) - (a.createdAt?._seconds ?? 0),
-    );
+    drivers.sort((a: any, b: any) => (b.createdAt?._seconds ?? 0) - (a.createdAt?._seconds ?? 0));
 
     return { drivers, total: drivers.length };
   }
@@ -265,10 +252,9 @@ export class AdminService {
   }
 
   async getInvites() {
-    const snap = await (this.firestore
-      .collection('invites')
-      .orderBy('createdAt', 'desc')
-      .limit(50) as any).get();
+    const snap = await (
+      this.firestore.collection('invites').orderBy('createdAt', 'desc').limit(50) as any
+    ).get();
 
     return snap.docs.map((d: any) => d.data());
   }
@@ -281,12 +267,13 @@ export class AdminService {
   }
 
   async upsertBanner(dto: UpsertBannerDto) {
-    const { updatedAt: _u, createdAt: _c, ...fields } = dto as UpsertBannerDto & Record<string, unknown>;
+    const {
+      updatedAt: _u,
+      createdAt: _c,
+      ...fields
+    } = dto as UpsertBannerDto & Record<string, unknown>;
     const ref = this.firestore.doc('banners/main_hero');
-    await ref.set(
-      { ...fields, updatedAt: this.firestore.Timestamp.now() },
-      { merge: true },
-    );
+    await ref.set({ ...fields, updatedAt: this.firestore.Timestamp.now() }, { merge: true });
     const snap = await ref.get();
     return snap.data();
   }
