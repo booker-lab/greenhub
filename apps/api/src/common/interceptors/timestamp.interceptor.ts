@@ -13,7 +13,7 @@ function isTimestamp(v: unknown): boolean {
   return (
     typeof v === 'object' &&
     v !== null &&
-    '_seconds' in (v) &&
+    '_seconds' in v &&
     typeof (v as Record<string, unknown>)['toDate'] === 'function'
   );
 }
