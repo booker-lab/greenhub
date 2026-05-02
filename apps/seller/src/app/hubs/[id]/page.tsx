@@ -205,6 +205,8 @@ export default function HubDetailPage() {
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="1.5"
+                        aria-hidden="true"
+                        focusable="false"
                       >
                         <path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />
                         <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
@@ -274,6 +276,8 @@ export default function HubDetailPage() {
                               fill="none"
                               stroke="currentColor"
                               strokeWidth="2"
+                              aria-hidden="true"
+                              focusable="false"
                             >
                               <path d="M9 18l6-6-6-6" />
                             </svg>
