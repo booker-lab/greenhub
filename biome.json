@@ -32,11 +32,6 @@
       "performance": {
         "noImgElement": "warn"
       },
-      "a11y": {
-        "noSvgWithoutTitle": "warn",
-        "useButtonType": "warn",
-        "noAutofocus": "warn"
-      }
     }
   },
   "overrides": [
