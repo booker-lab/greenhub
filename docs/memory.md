@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-03 (세션6)
+최종 수정: 2026-05-05 (세션7)
 
 ---
 
@@ -12,41 +12,41 @@
 | 항목 | 커밋 | 완료일 |
 |------|------|--------|
 | Consumer 디자인 시스템 (T0~T13) | `0ff8ada` | 2026-04-25 |
-| Seller 디자인 시스템 (ST1~ST17) | `e2cccd8` | 2026-04-25 |
-| Driver 디자인 시스템 (DT1~DT11) | `e64b629` | 2026-04-25 |
-| next/image 전환 (1·2순위 최적화) | `b3d0625` | 2026-04-26 |
-| HeroBanner SSR 전환 + products/[id] 분리 (3순위) | `a1560c5` | 2026-04-27 |
-| Mantine CSS treeshaking + Pretendard self-hosting (6순위) | `d8e7d02` | 2026-04-28 |
-| PWA RSC CORS 오류 수정 | `ccab465` | 2026-04-28 |
-| 상품등록 플로우 버그 4건 수정 | `b9f35f4` | 2026-05-01 |
-| DS 리팩토링 T0~T9 완료 (위반 18건 수정) | `9a5d45f` | 2026-05-02 |
-| e2e DS 회귀 스펙 추가 + 전체 suite 검증 | `50acdbc` `3d23fd6` | 2026-05-02 |
-| 툴체인 도입 (TruffleHog + Just + Biome) | `0c77aca`~`0a6faa0` | 2026-05-03 |
-| a11y 접근성 38건 수정 (biome error 승격) | `30a21f7`~`988a43f` | 2026-05-03 |
-| **Consumer DS e2e 검증 28/28 pass** | `948c9e0` | 2026-05-03 |
-| **e2e 실 검증 6개 스펙 파일 추가** (60 pass / 2 skip) | `세션6` | 2026-05-03 |
-| **fix: 카카오 로그인 이메일 미표시 수정** | `271572d` | 2026-05-03 |
+| Seller/Driver 디자인 시스템 | `e2cccd8` `e64b629` | 2026-04-25 |
+| 성능 최적화 1·2·3·6순위 (Perf 53→99) | `b3d0625`~`d8e7d02` | 2026-04-26~28 |
+| PWA RSC CORS 수정 | `ccab465` | 2026-04-28 |
+| 상품등록 플로우 버그 4건 | `b9f35f4` | 2026-05-01 |
+| DS 리팩토링 T0~T9 (위반 18건) + e2e 회귀 스펙 | `9a5d45f`~`3d23fd6` | 2026-05-02 |
+| 툴체인 도입 (TruffleHog·Just·Biome) | `0c77aca`~`0a6faa0` | 2026-05-03 |
+| a11y 접근성 38건 수정 | `30a21f7`~`988a43f` | 2026-05-03 |
+| e2e 실 검증 스펙 추가 (60 pass) + 카카오 이메일 fix | `4b7876d` | 2026-05-03 |
+| **세션7: seller/driver e2e 재검증** (38 pass) | — | 2026-05-03 |
+| **세션7: Just 1.50.0 재설치 (바이너리 누락 수정)** | — | 2026-05-03 |
+| **세션7: 셀러앱 e2e 인증 자동화** (26 pass / 2 skip) | 세션7 | 2026-05-05 |
 
 ---
 
 ## 🔜 다음 세션 착수 작업
 
-### 최우선 — e2e 인증 후 테스트 활성화
+### 1순위 — 최적화 4순위: Driver Kakao Maps 연동
+- **선행 조건**: Kakao Developers 콘솔에서 JavaScript 앱 키 발급
+- `NEXT_PUBLIC_KAKAO_MAP_KEY` Vercel 환경변수 설정
+- `map/page.tsx` 지도 플레이스홀더 → 실제 SDK 연동 + `dynamic()` 분리
+- **효과**: Driver 초기 번들 -200KB
 
-각 spec 파일 하단 주석 블록 해제 + `global-setup.ts` 작성:
-- `consumer-cart.spec.ts` — 빈 상태 UI, 수량 증감, 삭제, 결제 이동
-- `consumer-checkout.spec.ts` — 결제 UI 렌더링, 버튼 비활성화
-- `consumer-mypage.spec.ts` — 프로필, 주문 목록, 배송지 CRUD
-
-```bash
-# storageState 세팅 후
-pnpm --filter e2e exec playwright test --reporter=list
-```
+### 2순위 — Seller 기능 플로우 e2e 추가
+- `seller-orders.spec.ts` — 주문 상태 탭 전환, 카드 렌더링 (인증 포함)
+- `seller-product-create.spec.ts` — 상품 등록 폼 렌더링·입력 (submit 전까지)
+- 테스트 계정: `seller@test.com` / `test1234` (`apps/e2e/.env` 설정됨)
 
 ### 외부 조건 대기
 
 - 네이버페이 채널키 승인 이메일 수신 후 Vercel 환경변수 설정
 - 알리고 ↔ 카카오 연동 (사업자등록증 발급 후)
+
+### 향후 조건부 작업
+
+- consumer cart·checkout·mypage 인증 후 e2e (카카오 OAuth 자동화 불가 → 이메일 로그인 추가 시 활성화)
 
 ---
 
@@ -64,8 +64,10 @@ pnpm --filter e2e exec playwright test --reporter=list
 | `consumer-search` | ✅ | 검색창, 입력, 초기화 |
 | `consumer-mypage` | ⚠️ 비인증만 | storageState 필요 |
 | `perf-css-regression` | ✅ | |
-| `seller-design-system` | ✅ | |
-| `driver-design-system` | ✅ | |
+| `seller-design-system` | ✅ 26/26 | 인증 후 주문·정산·설정·거점·상품목록 검증 완료 (2026-05-03) |
+| `seller-banner` | ✅ | 공개 2개 pass / 배너토글은 admin 권한 필요로 skip |
+| `driver-design-system` | ✅ 22/22 | biome·a11y 이후 재검증 완료 (2026-05-03) |
+| `driver` | ✅ | 공개 3개 pass |
 
 ---
 

@@ -24,7 +24,8 @@ const sellerEmail = process.env['TEST_SELLER_EMAIL']
 const sellerPassword = process.env['TEST_SELLER_PASSWORD']
 
 test.describe('셀러 배너 토글 (인증 필요)', () => {
-  test.skip(!sellerEmail || !sellerPassword, '환경변수 TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD 필요')
+  // admin 권한 계정 필요 — TEST_SELLER_EMAIL은 seller role이므로 /admin/banner 접근 불가
+  test.skip(true, 'admin 권한 계정 필요 (TEST_SELLER_EMAIL은 seller role)')
 
   test('배너 활성화 토글 클릭 시 에러 없음', async ({ page }) => {
     await page.goto(`${BASE}/login`)
