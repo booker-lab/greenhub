@@ -83,7 +83,7 @@ export default function OrdersPage() {
       </Box>
 
       {/* Summary Bar */}
-      <Box style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', padding: '8px 0' }}>
+      <Box style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', padding: '8px 0', position: 'sticky', top: 57, zIndex: 9 }}>
         <Container size="sm">
           <Group gap="md">
             {SUMMARY_BAR_ITEMS.map((item) => (
