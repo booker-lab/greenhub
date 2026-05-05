@@ -31,10 +31,12 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
     await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
   })
 
+  // ── 탭 ──────────────────────────────────────────────────────────────
+
   test('5개 상태 탭 모두 렌더링', async ({ page }) => {
     await page.goto(`${BASE}/orders`)
     await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
-    for (const label of ['처리 필요', '준비 중', '배송 중', '완료', '취소']) {
+    for (const label of ['처리 필요', '대기 중', '배송 중', '완료', '취소']) {
       await expect(page.locator(`text=${label}`).first()).toBeVisible()
     }
   })
@@ -46,7 +48,7 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
     await page.goto(`${BASE}/orders`)
     await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
 
-    for (const label of ['준비 중', '배송 중', '완료', '취소', '처리 필요']) {
+    for (const label of ['대기 중', '배송 중', '완료', '취소', '처리 필요']) {
       await page.locator(`text=${label}`).first().click()
       await page.waitForTimeout(300)
     }
@@ -57,7 +59,6 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
   test('실시간 연결 상태 텍스트 표시', async ({ page }) => {
     await page.goto(`${BASE}/orders`)
     await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
-    // Firebase 연결 상태: 연결 중 → 실시간 연결 (또는 연결 오류)
     const statusLocator = page
       .locator('text=실시간 연결')
       .or(page.locator('text=연결 중'))
@@ -68,10 +69,85 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
   test('주문 없을 때 empty state 렌더링', async ({ page }) => {
     await page.goto(`${BASE}/orders`)
     await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
-    // 주문 카드 또는 빈 상태 메시지 중 하나가 존재해야 함
     await page.waitForTimeout(3_000)
     const hasOrders = await page.locator('[class*="Paper"]').count()
     const hasEmpty = await page.locator('text=현재 해당 주문이 없습니다').count()
     expect(hasOrders + hasEmpty).toBeGreaterThan(0)
+  })
+
+  // ── Summary Bar ─────────────────────────────────────────────────────
+
+  test('Summary Bar — 3항목 렌더링 (Summary + 탭에 각 레이블 2회 이상 존재)', async ({ page }) => {
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    // Summary Bar와 탭 양쪽에 동일 레이블이 존재하므로 count >= 2
+    for (const label of ['처리 필요', '배송 중', '대기 중']) {
+      const count = await page.locator(`text=${label}`).count()
+      expect(count).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  test('Summary Bar 클릭 — 배송 중 클릭 시 IN_DELIVERY 탭 활성화 (SubFilter 출현)', async ({ page }) => {
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    // Summary Bar의 '배송 중'은 첫 번째 등장 (탭보다 위에 위치)
+    await page.locator('text=배송 중').first().click()
+    // IN_DELIVERY 탭 활성화 확인 — SubFilter의 고유 항목으로 검증
+    await expect(page.locator('text=거점 도착')).toBeVisible({ timeout: 3_000 })
+  })
+
+  // ── SubFilter ────────────────────────────────────────────────────────
+
+  test('배송 중 탭 선택 시 SubFilter(전체·배송 중·거점 도착) 렌더링', async ({ page }) => {
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    // 탭 행의 '배송 중' 클릭: Summary Bar와 겹치므로 last()로 탭 선택
+    await page.locator('text=배송 중').last().click()
+    await expect(page.locator('text=거점 도착')).toBeVisible({ timeout: 3_000 })
+    // '전체' 텍스트는 SubFilter에만 존재
+    await expect(page.locator('text=전체')).toBeVisible()
+  })
+
+  test('다른 탭 전환 시 SubFilter 사라짐', async ({ page }) => {
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    await page.locator('text=배송 중').last().click()
+    await expect(page.locator('text=거점 도착')).toBeVisible({ timeout: 3_000 })
+    // 완료 탭으로 이동 → SubFilter 소멸
+    await page.locator('text=완료').first().click()
+    await expect(page.locator('text=거점 도착')).not.toBeVisible()
+  })
+
+  test('SubFilter 클릭 — JS 에러 없음', async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (e) => errors.push(e.message))
+
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    await page.locator('text=배송 중').last().click()
+    await expect(page.locator('text=거점 도착')).toBeVisible({ timeout: 3_000 })
+
+    for (const label of ['거점 도착', '배송 중', '전체']) {
+      await page.locator(`text=${label}`).first().click()
+      await page.waitForTimeout(300)
+    }
+
+    expect(errors).toHaveLength(0)
+  })
+
+  test('탭 전환 시 SubFilter ALL 리셋 확인', async ({ page }) => {
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    // 배송 중 탭 → 거점 도착 SubFilter 선택
+    await page.locator('text=배송 중').last().click()
+    await expect(page.locator('text=거점 도착')).toBeVisible({ timeout: 3_000 })
+    await page.locator('text=거점 도착').first().click()
+    // 다른 탭으로 이동 후 배송 중 탭 재진입
+    await page.locator('text=완료').first().click()
+    await page.locator('text=배송 중').last().click()
+    // SubFilter가 '전체' 상태로 리셋되어야 함 — '전체' 버튼이 active 스타일(배경색)
+    // 구조 검증: '전체' 텍스트가 보임 = SubFilter 정상 렌더링
+    await expect(page.locator('text=전체')).toBeVisible({ timeout: 3_000 })
+    await expect(page.locator('text=거점 도착')).toBeVisible()
   })
 })

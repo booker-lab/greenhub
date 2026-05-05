@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-05 (세션8)
+최종 수정: 2026-05-06 (세션9)
 
 ---
 
@@ -24,18 +24,25 @@
 | **세션7: Just 1.50.0 재설치 (바이너리 누락 수정)** | — | 2026-05-03 |
 | **세션7: 셀러앱 e2e 인증 자동화** (26 pass / 2 skip) | 세션7 | 2026-05-05 |
 | **세션8: seller-orders + seller-product-create e2e** (32 pass) | `f211709` | 2026-05-05 |
+| **세션9: OrderGroup 리팩토링 3세션 완료** (_constants·useOrders·page.tsx) | — | 2026-05-06 |
 
 ---
 
 ## 🔜 다음 세션 착수 작업
 
-### 1순위 — 최적화 4순위: Driver Kakao Maps 연동
+### 1순위 — seller-orders OrderGroup e2e 검증 (배포 후)
+- `seller-orders.spec.ts` 업데이트 완료 (16개 → 22개 테스트)
+- 배포 후 `pnpm --filter e2e exec playwright test seller-orders` 실행
+- 신규 검증 항목: Summary Bar 렌더링·클릭, SubFilter 렌더링·소멸·리셋·JS에러
+
+### 2순위 — 최적화 4순위: Driver Kakao Maps 연동
 - **선행 조건**: Kakao Developers 콘솔에서 JavaScript 앱 키 발급
 - `NEXT_PUBLIC_KAKAO_MAP_KEY` Vercel 환경변수 설정
 - `map/page.tsx` 지도 플레이스홀더 → 실제 SDK 연동 + `dynamic()` 분리
 - **효과**: Driver 초기 번들 -200KB
 
 ### ~~2순위 — Seller 기능 플로우 e2e 추가~~ ✅ 완료 (2026-05-05, 32 pass)
+### ~~OrderGroup 리팩토링 3세션~~ ✅ 완료 (2026-05-06, tsc clean)
 
 ### 외부 조건 대기
 
@@ -92,7 +99,7 @@
 | `consumer-mypage` | ⚠️ 비인증만 | storageState 필요 |
 | `perf-css-regression` | ✅ | |
 | `seller-design-system` | ✅ 26/26 | 인증 후 주문·정산·설정·거점·상품목록 검증 완료 (2026-05-03) |
-| `seller-orders` | ✅ 16/16 | 주문 헤더·탭 전환·연결 상태·empty state (2026-05-05) |
+| `seller-orders` | ⏳ 22/22 대기 | OrderGroup 리팩토링 배포 후 검증 필요 (Summary Bar·SubFilter 포함) |
 | `seller-product-create` | ✅ 16/16 | 스텝 인디케이터·유효성·Step 전환·임시저장·초기화 (2026-05-05) |
 | `seller-banner` | ✅ | 공개 2개 pass / 배너토글은 admin 권한 필요로 skip |
 | `driver-design-system` | ✅ 22/22 | biome·a11y 이후 재검증 완료 (2026-05-03) |
