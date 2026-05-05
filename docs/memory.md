@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-05 (세션7)
+최종 수정: 2026-05-05 (세션8)
 
 ---
 
@@ -23,6 +23,7 @@
 | **세션7: seller/driver e2e 재검증** (38 pass) | — | 2026-05-03 |
 | **세션7: Just 1.50.0 재설치 (바이너리 누락 수정)** | — | 2026-05-03 |
 | **세션7: 셀러앱 e2e 인증 자동화** (26 pass / 2 skip) | 세션7 | 2026-05-05 |
+| **세션8: seller-orders + seller-product-create e2e** (32 pass) | `f211709` | 2026-05-05 |
 
 ---
 
@@ -34,10 +35,7 @@
 - `map/page.tsx` 지도 플레이스홀더 → 실제 SDK 연동 + `dynamic()` 분리
 - **효과**: Driver 초기 번들 -200KB
 
-### 2순위 — Seller 기능 플로우 e2e 추가
-- `seller-orders.spec.ts` — 주문 상태 탭 전환, 카드 렌더링 (인증 포함)
-- `seller-product-create.spec.ts` — 상품 등록 폼 렌더링·입력 (submit 전까지)
-- 테스트 계정: `seller@test.com` / `test1234` (`apps/e2e/.env` 설정됨)
+### ~~2순위 — Seller 기능 플로우 e2e 추가~~ ✅ 완료 (2026-05-05, 32 pass)
 
 ### 외부 조건 대기
 
@@ -47,6 +45,35 @@
 ### 향후 조건부 작업
 
 - consumer cart·checkout·mypage 인증 후 e2e (카카오 OAuth 자동화 불가 → 이메일 로그인 추가 시 활성화)
+
+---
+
+## 🛠 셀러앱 향후 구현 과제 (세션8 분석, 2026-05-05)
+
+> 코드 전수 분석 결과 도출. 우선순위 순.
+
+### 🔴 버그 (실사용 시 문제)
+
+| # | 위치 | 문제 | 난이도 |
+|---|------|------|--------|
+| B1 | `apps/seller/src/app/onboarding/page.tsx` | 설정→사업자 프로필 수정 시 폼이 빈값으로 열림 (기존 데이터 미로드) | 低 |
+| B2 | `apps/seller/src/app/products/page.tsx:169~199` | 상품 활성/비활성 토글·삭제 API 실패 시 에러 피드백 없음 | 低 |
+
+### 🟡 기능 공백
+
+| # | 위치 | 문제 | 난이도 |
+|---|------|------|--------|
+| G1 | `apps/seller/src/app/hubs/[id]/page.tsx` | 거점 정보 수정 불가 (읽기 전용) — 삭제 후 재등록만 가능 | 中 |
+| G2 | `apps/seller/src/app/orders/[id]/page.tsx:286` | 주문 상세 상품 정보에 raw Firebase ID 노출 (`productId`) — 상품명으로 교체 필요 | 低 |
+| G3 | `apps/seller/src/app/settlements/page.tsx:122` | 일별 정산 요약이 오늘 날짜만 조회 가능 — 날짜 선택기 필요 | 低 |
+| G4 | `apps/seller/src/app/page.tsx` | 홈(`/`)이 `/orders` 리디렉션만 존재 — 대시보드(오늘 주문·매출 요약) 미구현 | 高 |
+
+### 🟢 경미한 개선
+
+| # | 위치 | 문제 | 난이도 |
+|---|------|------|--------|
+| M1 | `apps/seller/src/app/settings/page.tsx:184` | 앱 버전 `"0.1.0"` 하드코딩 | 低 |
+| M2 | — | 새 주문 푸시 알림 없음 (Firebase 실시간 리스너만 존재, 백그라운드 미지원) | 高 |
 
 ---
 
@@ -65,6 +92,8 @@
 | `consumer-mypage` | ⚠️ 비인증만 | storageState 필요 |
 | `perf-css-regression` | ✅ | |
 | `seller-design-system` | ✅ 26/26 | 인증 후 주문·정산·설정·거점·상품목록 검증 완료 (2026-05-03) |
+| `seller-orders` | ✅ 16/16 | 주문 헤더·탭 전환·연결 상태·empty state (2026-05-05) |
+| `seller-product-create` | ✅ 16/16 | 스텝 인디케이터·유효성·Step 전환·임시저장·초기화 (2026-05-05) |
 | `seller-banner` | ✅ | 공개 2개 pass / 배너토글은 admin 권한 필요로 skip |
 | `driver-design-system` | ✅ 22/22 | biome·a11y 이후 재검증 완료 (2026-05-03) |
 | `driver` | ✅ | 공개 3개 pass |
