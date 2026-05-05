@@ -5,20 +5,14 @@ import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestor
 import { onAuthStateChanged } from 'firebase/auth';
 import { db, firebaseAuth } from '@/lib/firebase';
 import type { Order, OrderStatus } from '@greenhub/shared';
+import { STATUS_GROUP_MAP, type OrderGroup } from '@/app/orders/_constants';
 
-export const TAB_STATUSES: Record<string, OrderStatus[]> = {
-  pending: ['PENDING', 'RECRUITING', 'ACCEPTED', 'CONFIRMED'],
-  preparing: ['PREPARING'],
-  delivering: ['DELIVERING', 'HUB_ARRIVED'],
-  done: ['DELIVERED', 'PICKED_UP', 'REVIEWED'],
-  cancelled: ['CANCELLED'],
-};
 
 interface UseOrdersResult {
   orders: Order[];
   loading: boolean;
   error: string | null;
-  counts: Record<string, number>;
+  groupCounts: Record<OrderGroup, number>;
   firebaseReady: boolean;
 }
 
@@ -69,13 +63,19 @@ export function useOrders(storeId: string | null): UseOrdersResult {
     return unsubscribe;
   }, [storeId, firebaseReady]);
 
-  const counts = useMemo(() => {
-    const result: Record<string, number> = {};
-    for (const [tab, statuses] of Object.entries(TAB_STATUSES)) {
-      result[tab] = orders.filter((o) => statuses.includes(o.status)).length;
+  const groupCounts = useMemo(() => {
+    const result = {
+      ACTION_REQUIRED: 0,
+      WAITING: 0,
+      IN_DELIVERY: 0,
+      DONE: 0,
+      CANCELLED: 0,
+    } as Record<OrderGroup, number>;
+    for (const order of orders) {
+      result[STATUS_GROUP_MAP[order.status]] += 1;
     }
     return result;
   }, [orders]);
 
-  return { orders, loading, error, counts, firebaseReady };
+  return { orders, loading, error, groupCounts, firebaseReady };
 }
