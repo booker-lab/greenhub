@@ -3,11 +3,11 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-08 (세션15 — E2E_TEST 게이팅 + consumer 인증 e2e 10케이스 추가 + 44pass)
+최종 수정: 2026-05-08 (세션16 — Vercel E2E_TEST 배포 검증 + e2e 스펙 버그 2건 수정)
 
 ---
 
-## ✅ 완료된 작업 (세션15까지)
+## ✅ 완료된 작업 (세션16까지)
 
 | 항목 | 완료일 |
 |------|--------|
@@ -21,6 +21,8 @@
 | **E2E_TEST 게이팅** — consumer/seller auth.ts Credentials 조건부 활성화 | 2026-05-08 |
 | **e2e.consumer@test.com** 계정 생성 + e2e .env 반영 | 2026-05-08 |
 | **consumer 인증 e2e 10케이스** 추가 (cart·mypage·checkout) — 44/44 pass | 2026-05-08 |
+| **Vercel E2E_TEST=true 배포 검증** — 전체 e2e 252 clean pass + 0 persistent fail | 2026-05-08 |
+| **e2e 스펙 버그 2건** — DS 탭 레이블 stale·orders empty state 셀렉터 수정 | 2026-05-08 |
 
 ---
 
@@ -50,11 +52,6 @@
 
 ---
 
-### 🟢 2순위 — e2e 배포 후 검증
-- `pnpm --filter e2e exec playwright test seller-auth-invite seller-orders`
-- seller-auth-invite 4케이스 전체 pass 확인
-- seller-orders 22케이스 pass 확인
-
 ### 🟢 1순위 — 셀러앱 대시보드 + 주문 플로우 UX (그릴 확정)
 - **G4** `seller/app/page.tsx` — 홈 대시보드: 지표카드 4개(신규·전체·취소·재고) + 딥링크
 - **G2** `seller/app/orders/[id]/page.tsx:286` — raw Firebase ID → 상품명 교체
@@ -65,11 +62,10 @@
 - **B2** `seller/app/products/page.tsx:169` — 토글·삭제 에러 피드백
 - **G3** `seller/app/settlements/page.tsx:122` — 일별 정산 날짜 선택기
 
-### ✅ 3순위 — E2E_TEST 게이팅 + consumer 인증 e2e 확장 (세션15 완료)
-- consumer/seller auth.ts Credentials E2E_TEST=true 조건부 게이팅 완료
-- e2e.consumer@test.com 계정 생성 + e2e .env 반영 완료
-- consumer-cart(3) · consumer-mypage(4) · consumer-checkout(3) 인증 스펙 10케이스 추가 — 44/44 pass
-- **⚠️ 남은 사용자 액션**: Vercel consumer·seller 앱 env에 `E2E_TEST=true` 추가 → Redeploy
+### ✅ 3순위 — E2E_TEST 게이팅 + Vercel 배포 검증 (세션15·16 완료)
+- Vercel consumer·seller `E2E_TEST=true` + `NEXT_PUBLIC_E2E_TEST=true` 적용 완료
+- 전체 e2e 274테스트: 252 clean pass · 7 flaky(retry 통과) · 16 skip · 0 persistent fail
+- e2e 스펙 stale 버그 2건 수정 (DS 탭 레이블 `'준비 중'→'대기 중'`, orders empty state 셀렉터)
 
 ### 🔵 향후 과제
 - G1: `seller/app/hubs/[id]` 거점 수정 페이지

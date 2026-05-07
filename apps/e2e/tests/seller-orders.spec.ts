@@ -63,16 +63,24 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
       .locator('text=실시간 연결')
       .or(page.locator('text=연결 중'))
       .or(page.locator('text=연결 오류'))
-    await expect(statusLocator.first()).toBeVisible({ timeout: 8_000 })
+    await expect(statusLocator.first()).toBeVisible({ timeout: 12_000 })
   })
 
   test('주문 없을 때 empty state 렌더링', async ({ page }) => {
     await page.goto(`${BASE}/orders`)
     await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
-    await page.waitForTimeout(3_000)
-    const hasOrders = await page.locator('[class*="Paper"]').count()
+    // Firestore RTL 연결 완료 대기 (mobile 네트워크 지연 고려)
+    await expect(
+      page.locator('text=실시간 연결').or(page.locator('text=연결 오류'))
+    ).toBeVisible({ timeout: 10_000 })
+    // 연결 후 empty state 또는 주문 카드 출현 확인
     const hasEmpty = await page.locator('text=현재 해당 주문이 없습니다').count()
-    expect(hasOrders + hasEmpty).toBeGreaterThan(0)
+    const hasOrderBadge = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('span')).some((el) =>
+        ['대기', '결제 완료', '주문 확정', '모집 중', '준비 중', '배송 중', '거점 도착', '픽업 완료', '배송 완료', '취소'].includes((el.textContent ?? '').trim())
+      )
+    )
+    expect(hasEmpty > 0 || hasOrderBadge).toBe(true)
   })
 
   // ── Summary Bar ─────────────────────────────────────────────────────

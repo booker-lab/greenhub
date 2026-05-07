@@ -64,7 +64,7 @@ test.describe('셀러 디자인 시스템 — 인증 화면', () => {
     await page.goto(`${BASE}/orders`)
     await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
     // 상태 탭 5개 확인
-    for (const label of ['처리 필요', '준비 중', '배송 중', '완료', '취소']) {
+    for (const label of ['처리 필요', '대기 중', '배송 중', '완료', '취소']) {
       await expect(page.locator(`text=${label}`).first()).toBeVisible()
     }
     // JS 에러 없음
