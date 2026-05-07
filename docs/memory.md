@@ -3,11 +3,11 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-08 (세션13 종료 — BUG-SEC 초대 토큰 검증 구현 + 1순위 기완료 확인)
+최종 수정: 2026-05-08 (세션14 종료 — next-auth beta.31 업데이트 + consumer tsc 수정 + e2e 44 pass)
 
 ---
 
-## ✅ 완료된 작업 (세션13까지)
+## ✅ 완료된 작업 (세션14까지)
 
 | 항목 | 완료일 |
 |------|--------|
@@ -18,30 +18,50 @@
 | OrderGroup 리팩토링 + seller-orders e2e 22개 스펙 확장 | 2026-05-06 |
 | 그릴 세션(11·12) — e2e 전략·배포인프라·대시보드+주문 플로우 UX 확정 | 2026-05-07 |
 | **BUG-SEC: 초대 토큰 검증** — register() seller 필수 검증 + 트랜잭션 | 2026-05-08 |
-| **1순위 기완료 확인** — Firestore Rules·Custom Token·signInWithCustomToken 이미 구현 | 2026-05-08 |
+| **next-auth beta.30 → beta.31** — consumer/seller/driver 3앱 업데이트 | 2026-05-08 |
+| consumer tsc 기존 버그 2건 수정 (DeadlineSection·useProducts) | 2026-05-08 |
+| consumer e2e 44/44 pass (home·groupbuy·product-detail·search) | 2026-05-08 |
 
 ---
 
 ## 🔜 다음 세션 작업 순서 (즉시 착수)
 
-### 🟡 1순위 — next-auth beta.30 → beta.31 업데이트
-- `pnpm add next-auth@beta --filter consumer --filter seller --filter driver`
+### 🟡 1순위 — 로컬 .env Portone V2 키 정리
 
-### 🟡 2순위 — 로컬 .env Portone 키 정리
-- `apps/api/.env`에 `PORTONE_V2_SECRET`, `PORTONE_WEBHOOK_SECRET` 추가
+**목표**: `apps/api/.env`에 Portone V2 API 시크릿 + 웹훅 서명 키 추가
 
-### 🟢 3순위 — seller-auth-invite e2e 4개 + seller-orders e2e 22개 검증
+**코드 현황** (`apps/api/src/payments/portone.client.ts`):
+- `PORTONE_V2_SECRET` — `config.get('PORTONE_V2_SECRET', '')` → Bearer 토큰으로 Portone V2 API 호출
+- `PORTONE_WEBHOOK_SECRET` — `config.get('PORTONE_WEBHOOK_SECRET', '')` → Svix 서명 검증 (`whsec_` 접두사)
+- 현재 `.env`에 V1 키(`PORTONE_API_KEY`, `PORTONE_API_SECRET`)는 있으나 **V2 키 2개 누락**
+- 키 미설정 시 warn 로그만 출력하고 크래시 없음 (graceful fallback) — 결제 조회/환불은 빈 토큰으로 401
+
+**아토믹 태스크**:
+
+| # | 태스크 | 담당 | 정합성 검사 |
+|---|--------|------|-------------|
+| T1 | Portone 콘솔(admin.portone.io) → 결제 연동 → **V2 API 시크릿 키** 확인/발급 | 사용자 | — |
+| T2 | Portone 콘솔 → 웹훅 → 서명 키(whsec_...) 확인/생성 | 사용자 | — |
+| T3 | `apps/api/.env`에 두 키 추가 | Claude | `.env`에 키 존재 grep 확인 |
+| T4 | `pnpm --filter api start:dev` 재시작 → PortoneClient warn 로그 미출력 확인 | Claude | 로그 grep `PORTONE.*not set` 없음 |
+| T5 | (선택) Portone 콘솔 → 테스트 웹훅 발송 → 서명 검증 통과 로그 확인 | Claude | `webhook received` 로그 + 200 응답 |
+
+> **T1·T2는 사용자가 콘솔에서 키를 먼저 가져와야 Claude가 T3 진행 가능**
+
+---
+
+### 🟢 2순위 — e2e 배포 후 검증
 - `pnpm --filter e2e exec playwright test seller-auth-invite seller-orders`
-- **seller-auth-invite**: 배포 완료 후 4케이스 전체 pass 확인 필요
-- **seller-orders**: 배포 환경 검증 대기
+- seller-auth-invite 4케이스 전체 pass 확인
+- seller-orders 22케이스 pass 확인
 
-### 🟢 4순위 — 셀러앱 대시보드 + 주문 플로우 (그릴 확정, CRITICAL_LOGIC.md [2026-05-07])
+### 🟢 3순위 — 셀러앱 대시보드 + 주문 플로우 UX (그릴 확정)
 - **G4** `seller/app/page.tsx` — 홈 대시보드: 지표카드 4개(신규·전체·취소·재고) + 딥링크
 - **G2** `seller/app/orders/[id]/page.tsx:286` — raw Firebase ID → 상품명 교체
 - 주문 상세 공동구매 모집 현황 표시 + preparedAt 빠른 선택지 UI
 - **B1** `seller/app/onboarding/page.tsx` — 사업자 프로필 빈 폼 수정
 
-### 🟢 5순위 — 셀러앱 나머지
+### 🟢 4순위 — 셀러앱 나머지
 - **B2** `seller/app/products/page.tsx:169` — 토글·삭제 에러 피드백
 - **G3** `seller/app/settlements/page.tsx:122` — 일별 정산 날짜 선택기
 
@@ -57,7 +77,7 @@
 
 ---
 
-## e2e 커버리지 (2026-05-08)
+## e2e 커버리지 (2026-05-08 세션14 기준)
 
 | 파일 | 상태 |
 |------|------|
@@ -77,6 +97,7 @@
 | 항목 | 값 |
 |------|-----|
 | TruffleHog 3.95.2 / Just 1.50.0 / Biome 2.4.14 | ✅ |
+| next-auth | 5.0.0-beta.31 (consumer·seller·driver) |
 | Lighthouse Performance | 99 (기준선 53) |
 | Railway API | `https://api-production-13e7.up.railway.app` |
 | Vercel Consumer | `https://greenlove.co.kr` |
@@ -95,3 +116,4 @@
 - **preparedAt**: 분단위 피커 폐기 → 빠른 선택지 UI (오늘 2시/4시/내일 오전) 확정
 - **카카오 이메일**: scope 미포함 시 null → `token.email ?? session.user.email`
 - **seller register inviteToken**: seller role 가입 시 필수, consumer·driver는 불필요
+- **Portone V2**: `.env`에 `PORTONE_V2_SECRET`·`PORTONE_WEBHOOK_SECRET` 미설정 시 warn만 출력, 결제 API는 401 반환
