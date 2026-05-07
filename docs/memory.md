@@ -28,27 +28,9 @@
 
 ## 🔜 다음 세션 작업 순서 (즉시 착수)
 
-### 🟡 1순위 — 로컬 .env Portone V2 키 정리
+### ✅ Portone V2 키 정리 — 완료
 
-**목표**: `apps/api/.env`에 Portone V2 API 시크릿 + 웹훅 서명 키 추가
-
-**코드 현황** (`apps/api/src/payments/portone.client.ts`):
-- `PORTONE_V2_SECRET` — `config.get('PORTONE_V2_SECRET', '')` → Bearer 토큰으로 Portone V2 API 호출
-- `PORTONE_WEBHOOK_SECRET` — `config.get('PORTONE_WEBHOOK_SECRET', '')` → Svix 서명 검증 (`whsec_` 접두사)
-- 현재 `.env`에 V1 키(`PORTONE_API_KEY`, `PORTONE_API_SECRET`)는 있으나 **V2 키 2개 누락**
-- 키 미설정 시 warn 로그만 출력하고 크래시 없음 (graceful fallback) — 결제 조회/환불은 빈 토큰으로 401
-
-**아토믹 태스크**:
-
-| # | 태스크 | 담당 | 정합성 검사 |
-|---|--------|------|-------------|
-| T1 | Portone 콘솔(admin.portone.io) → 결제 연동 → **V2 API 시크릿 키** 확인/발급 | 사용자 | — |
-| T2 | Portone 콘솔 → 웹훅 → 서명 키(whsec_...) 확인/생성 | 사용자 | — |
-| T3 | `apps/api/.env`에 두 키 추가 | Claude | `.env`에 키 존재 grep 확인 |
-| T4 | `pnpm --filter api start:dev` 재시작 → PortoneClient warn 로그 미출력 확인 | Claude | 로그 grep `PORTONE.*not set` 없음 |
-| T5 | (선택) Portone 콘솔 → 테스트 웹훅 발송 → 서명 검증 통과 로그 확인 | Claude | `webhook received` 로그 + 200 응답 |
-
-> **T1·T2는 사용자가 콘솔에서 키를 먼저 가져와야 Claude가 T3 진행 가능**
+- `PORTONE_V2_SECRET` · `PORTONE_WEBHOOK_SECRET(whsec_...)` 모두 `apps/api/.env` 반영 완료 (2026-05-08)
 
 ---
 
