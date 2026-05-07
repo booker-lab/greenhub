@@ -8,10 +8,11 @@ import type { Product } from '@greenhub/shared';
 
 const DEADLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-function useCountdown(deadline: string) {
+function useCountdown(deadline: string | undefined) {
   const [label, setLabel] = useState('');
 
   useEffect(() => {
+    if (!deadline) return;
     const tick = () => {
       const diff = new Date(deadline).getTime() - Date.now();
       if (diff <= 0) {
