@@ -1068,3 +1068,95 @@ const sellerCancellable = ['ACCEPTED', 'CONFIRMED', 'PREPARING']
 - Firestore 기존 groupProductConfig 마이그레이션 필요
 
 **우선순위**: MVP E2E 완료 후 Phase 2 구현
+
+---
+
+## [2026-05-08] BUG-SEC — 셀러 초대 토큰 검증 구현
+
+### 결정: POST /auth/register의 seller role에 inviteToken 필수 검증 + 트랜잭션 처리
+
+**배경**
+- `RegisterDto`에 `inviteToken` 필드 자체가 없어 누구나 `role: 'seller'`로 자유 가입 가능한 상태였음
+- 관리자 초대 토큰 생성(`POST /admin/invite`) 로직은 이미 구현되어 있었으나 가입 시 검증 누락
+
+**구현 내용**
+- `register.dto.ts`: `inviteToken?: string` 추가 (`@IsOptional`)
+- `auth.service.ts` register(): seller role 시 3단계 검증
+  1. `inviteToken` 없음 → **403** "판매자 계정은 초대 토큰이 필요합니다"
+  2. Firestore `invites/{token}` 미존재 → **403** "유효하지 않은 초대 토큰입니다"
+  3. `expiresAt < Date.now()` → **410** "만료된 초대 토큰입니다"
+  4. `usedAt !== null` → **409** "이미 사용된 초대 토큰입니다"
+- 사용자 생성 + `invites/{token}` usedAt·usedBy 업데이트를 **단일 Firestore 트랜잭션**으로 묶음
+  - 트랜잭션 내 재검증으로 동시 요청 경쟁 조건(race condition) 방지
+- consumer·driver는 영향 없음 (inviteToken optional, 검증 블록 미진입)
+
+**정합성 확인**
+- 클라이언트 앱에서 `/auth/register` 직접 호출 없음 → 프론트엔드 변경 불필요
+- Firestore Rules `invites` 컬렉션: catch-all `if false` → Admin SDK 서버만 접근 → Rules 변경 불필요
+- `GET /auth/firebase-token` + `signInWithCustomToken()` — seller/driver 앱 모두 이미 구현 완료 확인
+- Firestore Rules `orders` — 이미 `request.auth != null + storeId/role` 검증 구현 완료 확인 (1순위 기작업)
+
+**e2e 스펙**: `apps/e2e/tests/seller-auth-invite.spec.ts` 4케이스 (배포 후 검증)
+
+---
+
+## [2026-05-07] 셀러앱 홈 대시보드 + 주문 배송 플로우 UX 설계 확정 (세션12 그릴)
+
+### D1~D4 — 홈 대시보드 지표 구조
+
+| 결정 | 내용 |
+|------|------|
+| 매출 기준 | 주문 접수(결제 완료) 기준 — "오늘 얼마나 바쁜가" 파악용 |
+| 홈 강조 지표 | **신규(미처리) 주문 건수** 별도 강조 — 전체보다 "지금 처리할 것" 행동 유발 |
+| 요약 뷰 범위 | 전체 주문 + 취소 + 재고 부족 한 화면에서 파악 |
+| 홈↔목록 관계 | 홈 카드 탭 → 해당 필터된 주문 목록 딥링크 (홈은 숫자 카드만) |
+
+### D5~D9 — 주문 상태 전환 UX
+
+| 결정 | 내용 |
+|------|------|
+| 상태 전환 진입점 | 상세 페이지 진입 → 내용 확인 → "준비 시작" 버튼 (목록 빠른 전환 없음) |
+| 동일 상품 집계 뷰 | "호접란 백조 3건" 집계 표시 — MVP 이후 구현 |
+| 공동구매 상세 | 전체 모집 현황(총 N건, 목표 달성 여부) 표시 필수 |
+| 공동구매 알림 | CONFIRMED 시 셀러 알림 — 코드 확인 완료 (`sendToStoreOwner`) |
+| 공동구매 뱃지 | 주문 카드에 이미 구현됨 — 추가 작업 없음 |
+
+**공동구매 RECRUITING→CONFIRMED 자동 처리 확인 (코드 근거)**
+- 선착순: `orders-create.service.ts:128` `setImmediate(() => processGroupBuyEarlyConfirm())`
+- 기한 만료: `notifications.service.ts` `@Cron(EVERY_MINUTE)` → `confirmGroupBuy()` 또는 `cancelGroupBuyLack()`
+- **셀러 수동 확정 없음 — 완전 자동**
+
+### D10~D12 — PREPARING 전환 UX
+
+| 결정 | 내용 |
+|------|------|
+| preparedAt UX | **빠른 선택지** (오늘 오후 2시 / 오늘 오후 4시 / 내일 오전) — 분단위 피커 폐기 |
+| 택배 MVP | 상태 전환만, 운송장 번호 입력 UI 없음 |
+| 택배 API 향후 | CJ대한통운 등 택배사 API 연동 — 향후 구현 과제 등록 (규모 확장 시) |
+
+### D13~D17 — 셀러 가입 및 온보딩
+
+| 결정 | 내용 |
+|------|------|
+| 셀러 가입 방식 | 관리자가 미팅 후 초대 토큰 발급 — 자유 가입 불가 (BUG-SEC 수정과 직결) |
+| 온보딩 단계 | ①사업자 프로필 → ②거점 등록 → ③상품 등록 → ④첫 주문 대기 |
+| 사업자 프로필 UI | 당근비즈 벤치마킹 — MVP 이후 별도 구현 |
+| 거점 등록 | G1 구현 전까지 온보딩 체크리스트에서 제외 (현재 껍데기) |
+| 신규/기존 판별 | 거점 + 상품 등록 여부 조합 (`ONBOARDING | ACTIVE`) |
+
+### 이번 세션 구현 범위 (확정)
+
+| # | 항목 | 연결 |
+|---|------|------|
+| 1 | 홈 대시보드 — 지표 카드 4개 + 딥링크 | G4 |
+| 2 | 주문 상세 — raw Firebase ID → 상품명 교체 | G2 |
+| 3 | 주문 상세 — 공동구매 모집 현황 표시 | 신규 |
+| 4 | preparedAt 빠른 선택지 UI | 신규 |
+| 5 | 사업자 프로필 빈 폼 수정 | B1 |
+
+### 제외 (MVP 이후)
+
+- 거점 수정 페이지 G1 — 별도 세션
+- 사업자 프로필 당근비즈 UI — 벤치마킹 후 설계
+- 택배 API 연동 — 규모 확장 시
+- 동일 상품 집계 뷰 ("백조 3건") — MVP 이후

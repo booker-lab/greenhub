@@ -1,6 +1,7 @@
 import {
   Injectable,
   ConflictException,
+  GoneException,
   UnauthorizedException,
   NotFoundException,
   ForbiddenException,
@@ -32,6 +33,29 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    // T2: seller는 inviteToken 필수 — 존재·만료·재사용 검증
+    if (dto.role === 'seller') {
+      if (!dto.inviteToken) {
+        throw new ForbiddenException('판매자 계정은 초대 토큰이 필요합니다.');
+      }
+
+      const inviteSnap = await this.firestore.doc(`invites/${dto.inviteToken}`).get();
+
+      if (!inviteSnap.exists) {
+        throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
+      }
+
+      const invite = inviteSnap.data()!;
+
+      if ((invite['expiresAt'] as admin.firestore.Timestamp).toMillis() < Date.now()) {
+        throw new GoneException('만료된 초대 토큰입니다.');
+      }
+
+      if (invite['usedAt'] !== null) {
+        throw new ConflictException('이미 사용된 초대 토큰입니다.');
+      }
+    }
+
     const existing = await this.firestore
       .collection('users')
       .where('email', '==', dto.email)
@@ -46,7 +70,7 @@ export class AuthService {
     const userId = uuidv4();
     const now = this.firestore.Timestamp.now();
 
-    await this.firestore.doc(`users/${userId}`).set({
+    const userDoc = {
       id: userId,
       email: dto.email,
       name: dto.name,
@@ -59,9 +83,26 @@ export class AuthService {
       fcmToken: null,
       createdAt: now,
       updatedAt: now,
-    });
+    };
 
-    // 스펙: 201 { userId }
+    // T3: seller — 사용자 생성 + 토큰 소비를 단일 트랜잭션으로 묶어 정합성 보장
+    if (dto.role === 'seller' && dto.inviteToken) {
+      await this.firestore.runTransaction(async (tx) => {
+        const inviteRef = this.firestore.doc(`invites/${dto.inviteToken!}`);
+        const inviteDoc = await tx.get(inviteRef);
+
+        // 트랜잭션 내 재검증 — 동시 요청으로 인한 경쟁 조건 방지
+        if (!inviteDoc.exists || inviteDoc.data()!['usedAt'] !== null) {
+          throw new ConflictException('이미 사용된 초대 토큰입니다.');
+        }
+
+        tx.set(this.firestore.doc(`users/${userId}`), userDoc);
+        tx.update(inviteRef, { usedAt: now, usedBy: userId });
+      });
+    } else {
+      await this.firestore.doc(`users/${userId}`).set(userDoc);
+    }
+
     return { userId };
   }
 
