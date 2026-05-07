@@ -3,11 +3,11 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-08 (세션16 — Vercel E2E_TEST 배포 검증 + e2e 스펙 버그 2건 수정)
+최종 수정: 2026-05-08 (세션17 — G4 셀러앱 홈 대시보드 구현 + e2e 검증)
 
 ---
 
-## ✅ 완료된 작업 (세션16까지)
+## ✅ 완료된 작업 (세션17까지)
 
 | 항목 | 완료일 |
 |------|--------|
@@ -18,42 +18,27 @@
 | OrderGroup 리팩토링 + seller-orders e2e 22개 스펙 확장 | 2026-05-06 |
 | 그릴 세션(11·12) — e2e 전략·배포인프라·대시보드+주문 플로우 UX 확정 | 2026-05-07 |
 | **BUG-SEC: 초대 토큰 검증** + next-auth beta.31 업데이트 | 2026-05-08 |
-| **E2E_TEST 게이팅** — consumer/seller auth.ts Credentials 조건부 활성화 | 2026-05-08 |
-| **e2e.consumer@test.com** 계정 생성 + e2e .env 반영 | 2026-05-08 |
-| **consumer 인증 e2e 10케이스** 추가 (cart·mypage·checkout) — 44/44 pass | 2026-05-08 |
-| **Vercel E2E_TEST=true 배포 검증** — 전체 e2e 252 clean pass + 0 persistent fail | 2026-05-08 |
-| **e2e 스펙 버그 2건** — DS 탭 레이블 stale·orders empty state 셀렉터 수정 | 2026-05-08 |
+| **E2E_TEST 게이팅** + consumer 인증 e2e 10케이스 + Vercel 검증 | 2026-05-08 |
+| **G4: 셀러앱 홈 대시보드** — 지표카드 4개 + 딥링크 + e2e 10케이스 | 2026-05-08 |
 
 ---
 
 ## 🔜 다음 세션 작업 순서 (즉시 착수)
 
-### ✅ Portone V2 키 정리 — 완료
-
-- `PORTONE_V2_SECRET` · `PORTONE_WEBHOOK_SECRET(whsec_...)` 모두 `apps/api/.env` 반영 완료 (2026-05-08)
-
----
-
-### 🟢 1순위 — 셀러앱 대시보드 + 주문 플로우 UX (그릴 확정)
-- **G4** `seller/app/page.tsx` — 홈 대시보드: 지표카드 4개(신규·전체·취소·재고) + 딥링크
+### 🟢 1순위 — 셀러앱 주문 플로우 UX (그릴 확정)
 - **G2** `seller/app/orders/[id]/page.tsx:286` — raw Firebase ID → 상품명 교체
-- 주문 상세 공동구매 모집 현황 표시 + preparedAt 빠른 선택지 UI
-- **B1** `seller/app/onboarding/page.tsx` — 사업자 프로필 빈 폼 수정
+- 주문 상세 preparedAt 빠른 선택지 UI (오늘 2시/4시/내일 오전)
+- **B1** `seller/app/onboarding/page.tsx` — 사업자 프로필 빈 폼 수정 (기존 데이터 pre-fill)
 
 ### 🟢 2순위 — 셀러앱 나머지 버그·기능
 - **B2** `seller/app/products/page.tsx:169` — 토글·삭제 에러 피드백
 - **G3** `seller/app/settlements/page.tsx:122` — 일별 정산 날짜 선택기
 
-### ✅ 3순위 — E2E_TEST 게이팅 + Vercel 배포 검증 (세션15·16 완료)
-- Vercel consumer·seller `E2E_TEST=true` + `NEXT_PUBLIC_E2E_TEST=true` 적용 완료
-- 전체 e2e 274테스트: 252 clean pass · 7 flaky(retry 통과) · 16 skip · 0 persistent fail
-- e2e 스펙 stale 버그 2건 수정 (DS 탭 레이블 `'준비 중'→'대기 중'`, orders empty state 셀렉터)
-
 ### 🔵 향후 과제
 - G1: `seller/app/hubs/[id]` 거점 수정 페이지
 - Driver Kakao Maps SDK 연동
 - 택배 API 연동 (규모 확장 시)
-- 셀러앱 UX 방향 확정 후 구현 (신규 온보딩 체크리스트 + 일상 워크플로우 — 사용자 구상 중)
+- 셀러앱 UX 방향 확정 후 구현
 
 ### 외부 대기
 - 네이버페이 채널키 승인 → Vercel 환경변수
@@ -61,19 +46,18 @@
 
 ---
 
-## e2e 커버리지 (2026-05-08 세션15 기준)
+## e2e 커버리지 (2026-05-08 세션17 기준)
 
 | 파일 | 상태 |
 |------|------|
 | consumer-home·groupbuy·auth·product-detail·search | ✅ |
 | consumer-design-system | ✅ 28/28 |
-| consumer-cart | ✅ 비인증 3 + 인증 3 (44/44) |
-| consumer-mypage | ✅ 비인증 6 + 인증 4 (44/44) |
-| consumer-checkout | ✅ 비인증 3 + 인증 3 (44/44) |
+| consumer-cart·mypage·checkout | ✅ 비인증 + 인증 (44/44) |
 | seller-design-system | ✅ 26/26 |
 | seller-orders | ✅ 24/24 |
 | seller-product-create | ✅ 16/16 |
 | seller-auth-invite | ✅ 8/8 |
+| **seller-home-dashboard** | ✅ 10케이스 (17 clean + 3 flaky retry pass) |
 | driver-design-system·driver | ✅ |
 
 ---
@@ -102,4 +86,6 @@
 - **preparedAt**: 분단위 피커 폐기 → 빠른 선택지 UI (오늘 2시/4시/내일 오전) 확정
 - **카카오 이메일**: scope 미포함 시 null → `token.email ?? session.user.email`
 - **seller register inviteToken**: seller role 가입 시 필수, consumer·driver는 불필요
-- **Portone V2**: `.env`에 `PORTONE_V2_SECRET`·`PORTONE_WEBHOOK_SECRET` 미설정 시 warn만 출력, 결제 API는 401 반환
+- **Portone V2**: `PORTONE_V2_SECRET`·`PORTONE_WEBHOOK_SECRET(whsec_...)` `apps/api/.env` 반영 완료
+- **orders ?tab= 딥링크**: `useSearchParams` 대신 `window.location.search` 사용 (Next.js Suspense 빌드 에러 방지)
+- **seller/app/page.tsx**: 서버→클라이언트 컴포넌트 전환 완료, `useOrders`+`useStoreProducts` 실시간 연동
