@@ -57,7 +57,7 @@ export function useProducts(
     }
     fetchProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, saleType, colors.length, colors.forEach, colors]);
+  }, [category, saleType, _colorKey]);
 
   return { products, loading, error };
 }
