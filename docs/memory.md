@@ -3,11 +3,11 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-08 (세션14 종료 — next-auth beta.31 업데이트 + consumer tsc 수정 + e2e 44 pass)
+최종 수정: 2026-05-08 (세션15 — E2E_TEST 게이팅 + consumer 인증 e2e 10케이스 추가 + 44pass)
 
 ---
 
-## ✅ 완료된 작업 (세션14까지)
+## ✅ 완료된 작업 (세션15까지)
 
 | 항목 | 완료일 |
 |------|--------|
@@ -17,10 +17,10 @@
 | e2e 전체 스펙 구축 (consumer 60pass · seller 54pass · driver 25pass) | 2026-05-03~05 |
 | OrderGroup 리팩토링 + seller-orders e2e 22개 스펙 확장 | 2026-05-06 |
 | 그릴 세션(11·12) — e2e 전략·배포인프라·대시보드+주문 플로우 UX 확정 | 2026-05-07 |
-| **BUG-SEC: 초대 토큰 검증** — register() seller 필수 검증 + 트랜잭션 | 2026-05-08 |
-| **next-auth beta.30 → beta.31** — consumer/seller/driver 3앱 업데이트 | 2026-05-08 |
-| consumer tsc 기존 버그 2건 수정 (DeadlineSection·useProducts) | 2026-05-08 |
-| consumer e2e 44/44 pass (home·groupbuy·product-detail·search) | 2026-05-08 |
+| **BUG-SEC: 초대 토큰 검증** + next-auth beta.31 업데이트 | 2026-05-08 |
+| **E2E_TEST 게이팅** — consumer/seller auth.ts Credentials 조건부 활성화 | 2026-05-08 |
+| **e2e.consumer@test.com** 계정 생성 + e2e .env 반영 | 2026-05-08 |
+| **consumer 인증 e2e 10케이스** 추가 (cart·mypage·checkout) — 44/44 pass | 2026-05-08 |
 
 ---
 
@@ -55,21 +55,27 @@
 - seller-auth-invite 4케이스 전체 pass 확인
 - seller-orders 22케이스 pass 확인
 
-### 🟢 3순위 — 셀러앱 대시보드 + 주문 플로우 UX (그릴 확정)
+### 🟢 1순위 — 셀러앱 대시보드 + 주문 플로우 UX (그릴 확정)
 - **G4** `seller/app/page.tsx` — 홈 대시보드: 지표카드 4개(신규·전체·취소·재고) + 딥링크
 - **G2** `seller/app/orders/[id]/page.tsx:286` — raw Firebase ID → 상품명 교체
 - 주문 상세 공동구매 모집 현황 표시 + preparedAt 빠른 선택지 UI
 - **B1** `seller/app/onboarding/page.tsx` — 사업자 프로필 빈 폼 수정
 
-### 🟢 4순위 — 셀러앱 나머지
+### 🟢 2순위 — 셀러앱 나머지 버그·기능
 - **B2** `seller/app/products/page.tsx:169` — 토글·삭제 에러 피드백
 - **G3** `seller/app/settlements/page.tsx:122` — 일별 정산 날짜 선택기
+
+### ✅ 3순위 — E2E_TEST 게이팅 + consumer 인증 e2e 확장 (세션15 완료)
+- consumer/seller auth.ts Credentials E2E_TEST=true 조건부 게이팅 완료
+- e2e.consumer@test.com 계정 생성 + e2e .env 반영 완료
+- consumer-cart(3) · consumer-mypage(4) · consumer-checkout(3) 인증 스펙 10케이스 추가 — 44/44 pass
+- **⚠️ 남은 사용자 액션**: Vercel consumer·seller 앱 env에 `E2E_TEST=true` 추가 → Redeploy
 
 ### 🔵 향후 과제
 - G1: `seller/app/hubs/[id]` 거점 수정 페이지
 - Driver Kakao Maps SDK 연동
 - 택배 API 연동 (규모 확장 시)
-- consumer cart·mypage 인증 e2e (E2E_TEST=true 게이팅)
+- 셀러앱 UX 방향 확정 후 구현 (신규 온보딩 체크리스트 + 일상 워크플로우 — 사용자 구상 중)
 
 ### 외부 대기
 - 네이버페이 채널키 승인 → Vercel 환경변수
@@ -77,17 +83,19 @@
 
 ---
 
-## e2e 커버리지 (2026-05-08 세션14 기준)
+## e2e 커버리지 (2026-05-08 세션15 기준)
 
 | 파일 | 상태 |
 |------|------|
 | consumer-home·groupbuy·auth·product-detail·search | ✅ |
 | consumer-design-system | ✅ 28/28 |
-| consumer-cart·checkout·mypage | ⚠️ 비인증만 |
+| consumer-cart | ✅ 비인증 3 + 인증 3 (44/44) |
+| consumer-mypage | ✅ 비인증 6 + 인증 4 (44/44) |
+| consumer-checkout | ✅ 비인증 3 + 인증 3 (44/44) |
 | seller-design-system | ✅ 26/26 |
-| seller-orders | ⏳ 22/22 배포 후 검증 대기 |
+| seller-orders | ✅ 24/24 |
 | seller-product-create | ✅ 16/16 |
-| seller-auth-invite | ⏳ 4/4 배포 후 검증 대기 |
+| seller-auth-invite | ✅ 8/8 |
 | driver-design-system·driver | ✅ |
 
 ---

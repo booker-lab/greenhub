@@ -116,55 +116,52 @@ export default function LoginPage() {
               카카오로 시작하기
             </Button>
 
-            <Divider label="또는" labelPosition="center" />
+            {/* E2E 테스트 전용 — MVP 출시 시 이 블록 전체 제거 */}
+            {process.env.NEXT_PUBLIC_E2E_TEST === 'true' && (
+              <>
+                <Divider label="또는" labelPosition="center" />
 
-            {/* 이메일 로그인 */}
-            <form onSubmit={handleSubmit}>
-              <Stack gap="sm">
-                <TextInput
-                  type="email"
-                  placeholder="이메일"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  radius="xl"
-                  size="md"
-                />
-                <PasswordInput
-                  placeholder="비밀번호"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  radius="xl"
-                  size="md"
-                />
-                {error && (
-                  <Text
-                    style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-                    ta="center"
-                  >
-                    {error}
-                  </Text>
-                )}
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  fullWidth
-                  size="md"
-                  radius="xl"
-                  style={{ backgroundColor: 'var(--color-primary)' }}
-                >
-                  {loading ? '로그인 중...' : '로그인'}
-                </Button>
-              </Stack>
-            </form>
-
-            <Text
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              ta="center"
-            >
-              계정이 없으신가요? 관리자에게 문의하세요.
-            </Text>
+                <form onSubmit={handleSubmit}>
+                  <Stack gap="sm">
+                    <TextInput
+                      type="email"
+                      placeholder="이메일"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      radius="xl"
+                      size="md"
+                    />
+                    <PasswordInput
+                      placeholder="비밀번호"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      radius="xl"
+                      size="md"
+                    />
+                    {error && (
+                      <Text
+                        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+                        ta="center"
+                      >
+                        {error}
+                      </Text>
+                    )}
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      fullWidth
+                      size="md"
+                      radius="xl"
+                      style={{ backgroundColor: 'var(--color-primary)' }}
+                    >
+                      {loading ? '로그인 중...' : '로그인'}
+                    </Button>
+                  </Stack>
+                </form>
+              </>
+            )}
           </Stack>
         </Paper>
       </Container>

@@ -2,8 +2,11 @@ import { test, expect } from '@playwright/test'
 
 const BASE = 'https://greenlove.co.kr'
 
-// /mypage/* 는 미들웨어로 보호됨 → 비로그인 시 /login 리디렉트
+const consumerEmail = process.env['TEST_CONSUMER_EMAIL']
+const consumerPassword = process.env['TEST_CONSUMER_PASSWORD']
+const skipAuth = !consumerEmail || !consumerPassword
 
+// /mypage/* 는 미들웨어로 보호됨 → 비로그인 시 /login 리디렉트
 test.describe('Consumer — 마이페이지 (비인증)', () => {
   test('/mypage — 비로그인 시 /login 리디렉트', async ({ page }) => {
     await page.goto(`${BASE}/mypage`)
@@ -47,42 +50,61 @@ test.describe('Consumer — 마이페이지 (비인증)', () => {
   })
 
   test('로그인 페이지 — BottomNav MY 탭 노출', async ({ page }) => {
-    // /mypage 리디렉트 후 로그인 페이지에서 BottomNav 확인
     await page.goto(`${BASE}/mypage`)
     await page.waitForLoadState('networkidle')
-    // BottomNav label은 'MY' (대문자)
     await expect(page.getByText('MY')).toBeVisible()
   })
 })
 
-// ── 인증 후 마이페이지 테스트 (storageState 설정 필요) ───────────────
-// test.describe('Consumer — 마이페이지 (인증)', () => {
-//   test.use({ storageState: 'e2e/.auth/user.json' })
-//
-//   test('프로필 — 사용자 이름·이메일 표시', async ({ page }) => {
-//     await page.goto(`${BASE}/mypage`)
-//     await page.waitForLoadState('networkidle')
-//     await expect(page.getByText(/@/)).toBeVisible()
-//   })
-//
-//   test('주문 목록 렌더링 또는 빈 상태 안내', async ({ page }) => {
-//     await page.goto(`${BASE}/mypage`)
-//     await page.waitForLoadState('networkidle')
-//     const empty = page.getByText('주문 내역이 없습니다')
-//     const orderCard = page.locator('button').first()
-//     const hasOrders = (await orderCard.count()) > 0
-//     if (!hasOrders) await expect(empty).toBeVisible()
-//   })
-//
-//   test('/mypage/addresses — 배송지 추가 폼 노출', async ({ page }) => {
-//     await page.goto(`${BASE}/mypage/addresses`)
-//     await page.waitForLoadState('networkidle')
-//     await expect(page.locator('body')).toBeVisible()
-//   })
-//
-//   test('/mypage/notifications — 알림 목록 또는 빈 상태', async ({ page }) => {
-//     await page.goto(`${BASE}/mypage/notifications`)
-//     await page.waitForLoadState('networkidle')
-//     await expect(page.locator('body')).toBeVisible()
-//   })
-// })
+// ── 인증 후 마이페이지 테스트 ─────────────────────────────────────────────
+
+test.describe('Consumer — 마이페이지 (인증)', () => {
+  test.skip(skipAuth, '환경변수 TEST_CONSUMER_EMAIL / TEST_CONSUMER_PASSWORD 필요')
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto(`${BASE}/login`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel('이메일').fill(consumerEmail!)
+    await page.getByLabel('비밀번호').fill(consumerPassword!)
+    await page.getByRole('button', { name: '로그인' }).click()
+    await page.waitForURL((url) => !url.pathname.includes('login'), { timeout: 15_000 })
+  })
+
+  test('프로필 — 이메일 표시', async ({ page }) => {
+    await page.goto(`${BASE}/mypage`)
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByText(/@/)).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('주문 목록 렌더링 또는 빈 상태 안내', async ({ page }) => {
+    await page.goto(`${BASE}/mypage`)
+    await page.waitForLoadState('networkidle')
+    const empty = page.getByText('주문 내역이 없습니다')
+    const hasOrders = (await page.locator('[data-testid="order-card"]').count()) > 0
+    if (!hasOrders) await expect(empty).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('/mypage/addresses — JS 에러 없이 렌더링', async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (e) => errors.push(e.message))
+    await page.goto(`${BASE}/mypage/addresses`)
+    await page.waitForLoadState('networkidle')
+    const critical = errors.filter(
+      (e) => !e.includes('hydration') && !e.includes('ChunkLoad')
+    )
+    expect(critical).toHaveLength(0)
+    await expect(page.locator('body')).toBeVisible()
+  })
+
+  test('/mypage/notifications — JS 에러 없이 렌더링', async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (e) => errors.push(e.message))
+    await page.goto(`${BASE}/mypage/notifications`)
+    await page.waitForLoadState('networkidle')
+    const critical = errors.filter(
+      (e) => !e.includes('hydration') && !e.includes('ChunkLoad')
+    )
+    expect(critical).toHaveLength(0)
+    await expect(page.locator('body')).toBeVisible()
+  })
+})
