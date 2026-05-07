@@ -32,34 +32,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.KAKAO_CLIENT_ID!,
       clientSecret: process.env.KAKAO_CLIENT_SECRET!,
     }),
-    Credentials({
-      credentials: {
-        email: { label: '이메일', type: 'email' },
-        password: { label: '비밀번호', type: 'password' },
-      },
-      async authorize(credentials) {
-        const res = await fetch(`${API}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: credentials.email,
-            password: credentials.password,
+    // E2E 테스트 전용 — 프로덕션은 Kakao 단독 사용
+    ...(process.env.E2E_TEST === 'true'
+      ? [
+          Credentials({
+            credentials: {
+              email: { label: '이메일', type: 'email' },
+              password: { label: '비밀번호', type: 'password' },
+            },
+            async authorize(credentials) {
+              const res = await fetch(`${API}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email: credentials.email,
+                  password: credentials.password,
+                }),
+              });
+              if (!res.ok) return null;
+              const data = await res.json();
+              if (!['seller', 'admin'].includes(data.user.role)) return null;
+              return {
+                id: data.user.id,
+                email: data.user.email,
+                name: data.user.name,
+                role: data.user.role,
+                storeId: data.user.storeId ?? null,
+                accessToken: data.accessToken,
+                refreshToken: data.refreshToken,
+              };
+            },
           }),
-        });
-        if (!res.ok) return null;
-        const data = await res.json();
-        if (!['seller', 'admin'].includes(data.user.role)) return null;
-        return {
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.name,
-          role: data.user.role,
-          storeId: data.user.storeId ?? null,
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
-        };
-      },
-    }),
+        ]
+      : []),
   ],
   callbacks: {
     async signIn({ user, account, profile }) {

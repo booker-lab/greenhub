@@ -1071,6 +1071,56 @@ const sellerCancellable = ['ACCEPTED', 'CONFIRMED', 'PREPARING']
 
 ---
 
+## [2026-05-08] E2E 인증 테스트 — E2E_TEST 환경 게이팅 패턴 확정
+
+### 결정: Credentials provider를 E2E_TEST=true 환경에서만 조건부 활성화
+
+**배경**
+- consumer 앱은 카카오 OAuth 단독 → Playwright storageState 확보 불가
+- seller 앱도 프로덕션에서는 카카오 로그인이 주 경로, 이메일 로그인은 e2e용
+- "임시 추가 → 나중에 제거" 패턴은 프로덕션 노출 위험 + 실제 제거 안 되는 기술부채 유발
+
+**결정**
+```ts
+// auth.ts (consumer·seller 공통 패턴)
+providers: [
+  KakaoProvider(...),
+  ...(process.env.E2E_TEST === 'true' ? [CredentialsProvider(...)] : []),
+]
+```
+- Vercel 프로덕션: `E2E_TEST` 환경변수 없음 → 이메일 로그인 비노출
+- Playwright `.env`: `E2E_TEST=true` → Credentials provider 활성 → storageState 확보 가능
+
+**커버리지 범위 확정**
+| 스펙 | 방향 |
+|------|------|
+| consumer-cart | E2E_TEST 게이팅 후 인증 테스트 추가 |
+| consumer-mypage | E2E_TEST 게이팅 후 인증 테스트 추가 |
+| consumer-checkout | 실결제(카카오페이) 자동화 불가 → "결제 버튼 노출까지"만 커버 후 수동 QA |
+
+**이유**: 제거할 코드가 아니므로 기술부채 없음. 프로덕션 노출 위험 없이 인증 후 CRUD 자동화 가능.
+
+---
+
+## [2026-05-08] CI/CD 전략 — 현 구조 유지 결정
+
+### 결정: GitHub Actions 미도입, Vercel/Railway GitOps 그대로 유지
+
+**배경**
+- main 브랜치 push 시 Vercel·Railway 자동 빌드/배포 (Git 연동 자체 GitOps)
+- `.github` 디렉토리 없음 — GitHub Actions CI 전혀 없는 상태
+
+**결정 근거**
+- 1인 개발 + 빠른 수정 사이클 → PR 기반 CI는 오버엔지니어링
+- Playwright e2e는 실 브라우저 + Vercel 배포 URL 필요 → CI 구성 비용 대비 ROI 낮음
+- 하반기 오픈 전까지 더 가치 있는 구현 과제 우선
+
+**향후 재검토 기준** (해당 시 GitHub Actions 추가)
+- 팀원 합류로 PR 리뷰 프로세스 도입 시
+- 빌드 실패 배포 사고가 반복될 시
+
+---
+
 ## [2026-05-08] BUG-SEC — 셀러 초대 토큰 검증 구현
 
 ### 결정: POST /auth/register의 seller role에 inviteToken 필수 검증 + 트랜잭션 처리
@@ -1160,3 +1210,24 @@ const sellerCancellable = ['ACCEPTED', 'CONFIRMED', 'PREPARING']
 - 사업자 프로필 당근비즈 UI — 벤치마킹 후 설계
 - 택배 API 연동 — 규모 확장 시
 - 동일 상품 집계 뷰 ("백조 3건") — MVP 이후
+
+---
+
+## [결정 #CL-19] MVP 출시 전 이메일 로그인 코드 전면 제거 (2026-05-08)
+
+**배경**: E2E 자동화 테스트를 위해 임시로 이메일/비밀번호 로그인(Credentials provider)을 추가했다. 프로덕션 로그인은 카카오·네이버(향후)만 허용하며, 이메일 인증은 절대 MVP에 포함하지 않는다.
+
+**MVP 출시 직전 반드시 제거할 항목**:
+
+| # | 파일 | 제거 대상 |
+|---|------|-----------|
+| 1 | `apps/consumer/src/auth.ts` | `E2E_TEST === 'true'` 조건 블록 전체 (Credentials provider) |
+| 2 | `apps/seller/src/auth.ts` | `E2E_TEST === 'true'` 조건 블록 전체 (Credentials provider) |
+| 3 | `apps/consumer/src/app/login/page.tsx` | `NEXT_PUBLIC_E2E_TEST === 'true'` 조건 블록 전체 (Divider + 이메일 폼) |
+| 4 | `apps/seller/src/app/login/page.tsx` | `NEXT_PUBLIC_E2E_TEST === 'true'` 조건 블록 전체 (Divider + 이메일 폼) |
+| 5 | Vercel (consumer 앱) | `E2E_TEST`, `NEXT_PUBLIC_E2E_TEST` 환경변수 삭제 |
+| 6 | Vercel (seller 앱) | `E2E_TEST`, `NEXT_PUBLIC_E2E_TEST` 환경변수 삭제 |
+| 7 | `apps/e2e/tests/consumer-auth.spec.ts` | `skipEmailForm` 가드 + 이메일 폼 의존 테스트 3건 |
+| 8 | `apps/e2e/.env` | `TEST_CONSUMER_EMAIL`, `TEST_CONSUMER_PASSWORD`, `E2E_TEST` 라인 |
+
+**코드 식별자**: 각 파일에 `E2E 테스트 전용 — MVP 출시 시 이 블록 전체 제거` 주석으로 표시됨.

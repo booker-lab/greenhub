@@ -58,39 +58,44 @@ function LoginForm() {
         카카오로 시작하기
       </Button>
 
-      <Divider label="또는" labelPosition="center" />
+      {/* E2E 테스트 전용 — MVP 출시 시 이 블록 전체 제거 */}
+      {process.env.NEXT_PUBLIC_E2E_TEST === 'true' && (
+        <>
+          <Divider label="또는" labelPosition="center" />
 
-      <form onSubmit={handleSubmit}>
-        <Stack gap="sm">
-          <TextInput
-            label="이메일"
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="example@email.com"
-            radius="md"
-          />
-          <PasswordInput
-            label="비밀번호"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="비밀번호 입력"
-            radius="md"
-          />
+          <form onSubmit={handleSubmit}>
+            <Stack gap="sm">
+              <TextInput
+                label="이메일"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="example@email.com"
+                radius="md"
+              />
+              <PasswordInput
+                label="비밀번호"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="비밀번호 입력"
+                radius="md"
+              />
 
-          {error && (
-            <Alert color="red" variant="light" p="sm">
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
-            </Alert>
-          )}
+              {error && (
+                <Alert color="red" variant="light" p="sm">
+                  <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
+                </Alert>
+              )}
 
-          <Button type="submit" loading={loading} fullWidth color="brand" radius="md" mt="xs">
-            로그인
-          </Button>
-        </Stack>
-      </form>
+              <Button type="submit" loading={loading} fullWidth color="brand" radius="md" mt="xs">
+                로그인
+              </Button>
+            </Stack>
+          </form>
+        </>
+      )}
     </Stack>
   );
 }
