@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useSearchParams } from 'next/navigation';
 import { useOrders } from '@/hooks/useOrders';
 import { OrderCard } from './_components/OrderCard';
 import {
@@ -30,14 +29,14 @@ export default function OrdersPage() {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
   const { orders, loading, error, groupCounts, firebaseReady } = useOrders(storeId);
-  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<OrderGroup>('ACTION_REQUIRED');
   const [subFilter, setSubFilter] = useState<'ALL' | 'DELIVERING' | 'HUB_ARRIVED'>('ALL');
 
   useEffect(() => {
-    const tab = searchParams.get('tab') as OrderGroup | null;
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') as OrderGroup | null;
     if (tab && VALID_TABS.has(tab)) setActiveTab(tab);
-  }, [searchParams]);
+  }, []);
 
   const filteredOrders = orders.filter((o) => {
     if (STATUS_GROUP_MAP[o.status] !== activeTab) return false;
