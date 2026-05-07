@@ -17,4 +17,8 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  inviteToken?: string;
 }
