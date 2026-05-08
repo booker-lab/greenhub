@@ -1,26 +1,35 @@
 # 다음 세션 작업 목록
 
-> 최종 수정: 2026-05-08 (세션18 종료)
-> e2e: 169 passed / 1 flaky(retry pass) / 8 skipped — 전체 통과
+> 최종 수정: 2026-05-09 (세션19 종료)
+> e2e: 169 passed / 1 flaky(retry pass) / 8 skipped (세션18 기준, 세션19 보안 패치 후 미검증)
 
 ---
 
-## ⚡ 세션19 시작 시 즉시 할 일
+## ⚡ 세션20 시작 시 즉시 할 일
 
-### 1. 실 검증 (눈으로 직접 확인)
+### 1. 보안 패치 e2e 회귀 검증
 
-> 상세 가이드: `docs/specs/session18-visual-verify.md`
+세션19에서 Next.js 16.2.5 + React 19.2.6 + login 리팩토링이 이루어졌으므로
+기존 e2e 전체가 정상 통과하는지 확인이 필요합니다.
 
-`https://seller.greenlove.co.kr` 에서 아래 6개 기능을 브라우저로 직접 확인:
+```bash
+pnpm --filter e2e test
+```
 
-| 기능 | 확인 위치 | 핵심 체크 |
-|------|-----------|-----------|
-| ① Firebase 429 fix | 로그인 → Console | 에러 없음 |
-| ② G2 상품명 | `/orders/[id]` | "상품명" 라벨 + 실제 이름 |
-| ③ preparedAt UI | 주문 상세 → 준비 시작 | 버튼 3개 출현 |
-| ④ B1 온보딩 pre-fill | `/onboarding` | 기존 데이터 자동 채워짐 |
-| ⑤ B2 에러 피드백 | `/products` | 뱃지·버튼 정상 |
-| ⑥ G3 날짜 선택기 | `/settlements` 일별 탭 | date input 존재·max 오늘 이하 |
+핵심 확인 항목:
+
+| 스펙 파일 | 확인 포인트 |
+|-----------|-------------|
+| seller-auth-invite | credentials 로그인 폼 정상 동작 (login/_form.tsx 분리 후) |
+| consumer-auth | credentials 로그인 + Open Redirect 방지 |
+| consumer-cart / seller-orders | proxy.ts 인증 보호 경상 유지 |
+
+### 2. 보안 헤더 시각 확인
+
+배포된 사이트에서 DevTools → Network → 응답 헤더 확인:
+- `X-Frame-Options: SAMEORIGIN`
+- `X-Content-Type-Options: nosniff`
+- `Strict-Transport-Security: max-age=63072000; ...`
 
 ---
 
@@ -45,15 +54,15 @@
 
 ---
 
-## ✅ 세션18 완료 항목 (참고)
+## ✅ 세션19 완료 항목 (보안 패치)
 
-| 항목 | 커밋 |
+| 항목 | 내용 |
 |------|------|
-| Firebase 429 fix — FirebaseReadyContext 도입 | `3a8f6fc` |
-| G2: 주문 상세 상품명 표시 | `3a8f6fc` |
-| preparedAt 빠른 선택 UI (KST-aware UTC) | `3a8f6fc` |
-| B1: 온보딩 pre-fill + GET /stores/:storeId API | `3a8f6fc` |
-| B2: 상품 토글·삭제 에러 피드백 | `3a8f6fc` |
-| G3: 일별 정산 날짜 선택기 (SSR-safe) | `3a8f6fc` |
-| e2e 스펙 4종 신규 (31 tests) | `3a8f6fc` |
-| e2e beforeEach 타임아웃 25s + /home 패턴 수정 | `11d99c2` |
+| Next.js 16.2.1 → 16.2.5 | CVE 6건(High) 포함 12건 패치 |
+| React 19.2.4 → 19.2.6 | react-server-dom-* 취약점 패치 |
+| HTTP 보안 헤더 | 3앱 next.config.ts — X-Frame-Options, HSTS 등 5종 추가 |
+| auth.ts 강화 | `secret: process.env.AUTH_SECRET` + `trustHost: true` (3앱) |
+| login 서버 컴포넌트 분리 | consumer·seller — NEXT_PUBLIC_E2E_TEST 제거, E2E_TEST 단일화 |
+| API CORS 강화 | production 환경에서 origin:null 요청 차단 |
+| Vercel 환경변수 | AUTH_SECRET 3앱 추가, E2E_TEST Preview 전용, NEXT_PUBLIC_E2E_TEST 삭제 |
+| Railway 확인 | NODE_ENV=production 기설정 확인 |
