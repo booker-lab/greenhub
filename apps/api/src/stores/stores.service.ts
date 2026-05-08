@@ -12,6 +12,22 @@ import { UpdateStoreDto } from './dto/update-store.dto';
 export class StoresService {
   constructor(private readonly firestore: FirestoreService) {}
 
+  async getStore(storeId: string, requesterId: string) {
+    const snap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다');
+    const data = snap.data()!;
+    if (data.ownerId !== requesterId) throw new ForbiddenException('해당 스토어에 대한 권한이 없습니다');
+    return {
+      id: storeId,
+      name: data.name ?? '',
+      ceoName: data.ceoName ?? '',
+      phone: data.phone ?? '',
+      address: data.address ?? '',
+      businessNumber: data.businessNumber ?? null,
+      logoUrl: data.logoUrl ?? null,
+    };
+  }
+
   async createStore(requesterId: string, dto: UpdateStoreDto): Promise<{ storeId: string }> {
     // 이미 스토어가 있는지 확인
     const existing = await (

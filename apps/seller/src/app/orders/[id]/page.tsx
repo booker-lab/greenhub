@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
+import { useFirebaseReady } from '@/app/providers';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { apiFetch } from '@/lib/api';
@@ -62,15 +62,16 @@ export default function OrderDetailPage() {
   const router = useRouter();
   const orderId = params.id as string;
   const { data: session } = useSession();
-  const { firebaseReady } = useFirebaseAuth();
+  const firebaseReady = useFirebaseReady();
   const storeId = session?.user.storeId ?? null;
   const token = session?.user.accessToken ?? '';
 
   const [order, setOrder] = useState<Order | null>(null);
   const [groupConfig, setGroupConfig] = useState<GroupProductConfig | null>(null);
+  const [productName, setProductName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPrepareForm, setShowPrepareForm] = useState(false);
-  const [preparedAtInput, setPreparedAtInput] = useState('');
+  const [preparedAt, setPreparedAt] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -85,6 +86,17 @@ export default function OrderDetailPage() {
     });
     return unsubscribe;
   }, [orderId, firebaseReady]);
+
+  useEffect(() => {
+    if (!order) return;
+    if (order.productName) {
+      setProductName(order.productName);
+      return;
+    }
+    getDoc(doc(db, 'products', order.productId)).then((snap) => {
+      if (snap.exists()) setProductName((snap.data() as { name: string }).name ?? null);
+    });
+  }, [order?.productId, order?.productName]);
 
   useEffect(() => {
     if (!order || order.saleType !== 'group') return;
@@ -102,15 +114,16 @@ export default function OrderDetailPage() {
     });
   }, [order?.productId, order?.saleType, order]);
 
-  useEffect(() => {
-    if (!showPrepareForm || !order) return;
-    if (preparedAtInput) return;
-    const baseDate =
-      order.saleType === 'normal'
-        ? order.requestedDeliveryDate
-        : groupConfig?.groupDeliveryDate?.slice(0, 10);
-    if (baseDate) setPreparedAtInput(`${baseDate.slice(0, 10)}T09:00`);
-  }, [showPrepareForm, order, groupConfig, preparedAtInput]);
+  function makePreparedAtOptions(): { label: string; iso: string }[] {
+    const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const todayKST = nowKST.toISOString().slice(0, 10);
+    const tomorrowKST = new Date(nowKST.getTime() + 86400000).toISOString().slice(0, 10);
+    return [
+      { label: '오늘 오후 2시', iso: `${todayKST}T05:00:00.000Z` },
+      { label: '오늘 오후 4시', iso: `${todayKST}T07:00:00.000Z` },
+      { label: '내일 오전 9시', iso: `${tomorrowKST}T00:00:00.000Z` },
+    ];
+  }
 
   async function handlePrepare() {
     if (!storeId || !order) return;
@@ -118,14 +131,14 @@ export default function OrderDetailPage() {
     setActionError(null);
     try {
       const body: Record<string, string> = { status: 'PREPARING' };
-      if (preparedAtInput) body.preparedAt = new Date(preparedAtInput).toISOString();
+      if (preparedAt) body.preparedAt = preparedAt;
       const res = await apiFetch(`/stores/${storeId}/orders/${order.id}/status`, token, {
         method: 'PATCH',
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
       setShowPrepareForm(false);
-      setPreparedAtInput('');
+      setPreparedAt(null);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : '오류가 발생했습니다');
     } finally {
@@ -283,7 +296,7 @@ export default function OrderDetailPage() {
               상품 정보
             </Text>
             <Stack gap={6}>
-              <Row label="상품 ID" value={order.productId} mono />
+              <Row label="상품명" value={productName ?? order.productId} />
               <Row label="수량" value={`${order.quantity}개`} />
               <Row
                 label="상품 금액"
@@ -454,24 +467,28 @@ export default function OrderDetailPage() {
                   </Text>
                 </Text>
               )}
-              <input
-                type="datetime-local"
-                value={preparedAtInput}
-                onChange={(e) => setPreparedAtInput(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 12,
-                  fontSize: 14,
-                  marginBottom: 8,
-                }}
-              />
+              <Group gap="xs" mb="xs">
+                {makePreparedAtOptions().map((opt) => (
+                  <Button
+                    key={opt.iso}
+                    size="xs"
+                    radius="xl"
+                    variant={preparedAt === opt.iso ? 'filled' : 'outline'}
+                    color={preparedAt === opt.iso ? 'green' : 'gray'}
+                    onClick={() => setPreparedAt(preparedAt === opt.iso ? null : opt.iso)}
+                    style={{ flex: 1, fontWeight: 'var(--fw-medium)' }}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </Group>
               <Text
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
                 mb="sm"
               >
-                설정하지 않아도 준비 시작 처리는 가능합니다.
+                {preparedAt
+                  ? `선택됨: ${new Date(preparedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                  : '선택하지 않아도 준비 시작 처리는 가능합니다.'}
               </Text>
               <Group gap="xs">
                 <Button
@@ -490,7 +507,7 @@ export default function OrderDetailPage() {
                 <Button
                   onClick={() => {
                     setShowPrepareForm(false);
-                    setPreparedAtInput('');
+                    setPreparedAt(null);
                   }}
                   flex={1}
                   size="md"

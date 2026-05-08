@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
+import { apiFetch } from '@/lib/api';
 import type { Product } from '@greenhub/shared';
 import {
   Badge,
@@ -165,35 +166,41 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
   const { data: session } = useSession();
   const [toggling, setToggling] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleToggleActive() {
+    if (!storeId) return;
     setToggling(true);
+    setError(null);
     try {
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/stores/${storeId}/products/${product.id}/active`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session?.user.accessToken}`,
-          },
-          body: JSON.stringify({ isActive: !product.isActive }),
-        },
+      const res = await apiFetch(
+        `/stores/${storeId}/products/${product.id}/active`,
+        session?.user.accessToken ?? '',
+        { method: 'PATCH', body: JSON.stringify({ isActive: !product.isActive }) },
       );
+      if (!res.ok) throw new Error(`상태 변경 실패 (${res.status})`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '오류가 발생했습니다');
     } finally {
       setToggling(false);
     }
   }
 
   async function handleDelete() {
+    if (!storeId) return;
     if (!confirm(`"${product.name}" 상품을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`))
       return;
     setDeleting(true);
+    setError(null);
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/stores/${storeId}/products/${product.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${session?.user.accessToken}` },
-      });
+      const res = await apiFetch(
+        `/stores/${storeId}/products/${product.id}`,
+        session?.user.accessToken ?? '',
+        { method: 'DELETE' },
+      );
+      if (!res.ok) throw new Error(`삭제 실패 (${res.status})`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '오류가 발생했습니다');
     } finally {
       setDeleting(false);
     }
@@ -257,6 +264,14 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
             {CATEGORY_LABEL[product.category]} · ₩{product.price.toLocaleString()}
             {product.saleType === 'group' && ' · 공동구매'}
           </Text>
+          {error && (
+            <Text
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+              mt={4}
+            >
+              {error}
+            </Text>
+          )}
           <Group gap="xs" mt="xs">
             {/* 활성/비활성 토글 */}
             <Badge

@@ -23,10 +23,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/admin/stores', request.url));
   }
 
-  // 온보딩 완료 후 /onboarding 재접근 시 /orders로 이동
-  if (!isAdmin && session.user.storeId && pathname === '/onboarding') {
-    return NextResponse.redirect(new URL('/orders', request.url));
-  }
+  // storeId 있어도 /onboarding 재접근 허용 — 설정 > 사업자 정보 수정 경로
 
   return NextResponse.next();
 }

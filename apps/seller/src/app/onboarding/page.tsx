@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -34,6 +34,26 @@ export default function OnboardingPage() {
     businessNumber: '',
     logoUrl: '',
   });
+
+  useEffect(() => {
+    const storeId = session?.user.storeId;
+    const token = session?.user.accessToken;
+    if (!storeId || !token) return;
+    apiFetch(`/stores/${storeId}`, token)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setForm({
+          name: data.name ?? '',
+          ceoName: data.ceoName ?? '',
+          phone: data.phone ?? '',
+          address: data.address ?? '',
+          businessNumber: data.businessNumber ?? '',
+          logoUrl: data.logoUrl ?? '',
+        });
+        if (data.logoUrl) setLogoPreview(data.logoUrl);
+      });
+  }, [session?.user.storeId, session?.user.accessToken]);
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
