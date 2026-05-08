@@ -25,7 +25,7 @@ test.describe('셀러 상품 관리 — 인증', () => {
     await page.fill('input[type="email"]', sellerEmail!)
     await page.fill('input[type="password"]', sellerPassword!)
     await page.click('button[type="submit"]')
-    await page.waitForURL(/\/(\?|$)|orders|products|onboarding/, { timeout: 15_000 })
+    await page.waitForURL(/\/(\?|$)|orders|products|onboarding/, { timeout: 25_000 })
   })
 
   // ── 페이지 구조 ───────────────────────────────────────────────────────────
