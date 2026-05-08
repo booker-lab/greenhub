@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
+import { useFirebaseReady } from '@/app/providers';
 import { useOrders } from '@/hooks/useOrders';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import Link from 'next/link';
@@ -49,7 +49,7 @@ export default function Home() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const storeId = session?.user.storeId ?? null;
-  const { firebaseReady } = useFirebaseAuth();
+  const firebaseReady = useFirebaseReady();
   const { orders, loading, error, groupCounts } = useOrders(storeId);
   const { products } = useStoreProducts(storeId);
 

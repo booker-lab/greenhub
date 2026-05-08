@@ -107,19 +107,26 @@ export default function SettlementsPage() {
   const token = session?.user.accessToken;
 
   const today = new Date().toISOString().split('T')[0];
-  const todayLabel = new Date().toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  });
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedDateLabel, setSelectedDateLabel] = useState('');
+
+  useEffect(() => {
+    setSelectedDateLabel(
+      new Date(selectedDate + 'T00:00:00').toLocaleDateString('ko-KR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'short',
+      }),
+    );
+  }, [selectedDate]);
 
   const fetchSummary = useCallback(async () => {
     if (!storeId || !token) return;
     setSummaryLoading(true);
     setSummaryError('');
     try {
-      const res = await apiFetch(`/stores/${storeId}/settlements/summary?date=${today}`, token);
+      const res = await apiFetch(`/stores/${storeId}/settlements/summary?date=${selectedDate}`, token);
       if (res.ok) {
         setSummary(await res.json());
       } else {
@@ -131,7 +138,7 @@ export default function SettlementsPage() {
     } finally {
       setSummaryLoading(false);
     }
-  }, [storeId, token, today]);
+  }, [storeId, token, selectedDate]);
 
   const fetchSettlements = useCallback(
     async (f?: string, t?: string) => {
@@ -225,12 +232,24 @@ export default function SettlementsPage() {
         {/* 일별 요약 */}
         {activeTab === 'daily' && (
           <Paper radius="lg" p="lg" shadow="xs">
-            <Text
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              mb="md"
-            >
-              {todayLabel}
-            </Text>
+            <Group justify="space-between" align="center" mb="md">
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+                {selectedDateLabel}
+              </Text>
+              <input
+                type="date"
+                value={selectedDate}
+                max={today}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 12,
+                  fontSize: 13,
+                  color: 'var(--color-text-secondary)',
+                }}
+              />
+            </Group>
             {summaryLoading ? (
               <Text
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
