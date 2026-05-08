@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-08 (세션18 — 1순위·2순위 기능 구현 + e2e 전체 169/178 통과)
+최종 수정: 2026-05-09 (세션19 — 보안 패치 10건)
 
 ---
 
@@ -21,6 +21,7 @@
 | **E2E_TEST 게이팅** + consumer 인증 e2e 10케이스 + Vercel 검증 | 2026-05-08 |
 | **G4: 셀러앱 홈 대시보드** — 지표카드 4개 + 딥링크 + e2e 10케이스 | 2026-05-08 |
 | **세션18**: Firebase 429 fix, G2 상품명, preparedAt UI, B1 pre-fill, B2 에러피드백, G3 날짜 선택기 | 2026-05-08 |
+| **세션19**: 보안 패치 — Next.js 16.2.5 + React 19.2.6, HTTP 보안 헤더, auth.ts 강화, E2E 플래그 정리, API CORS 강화 | 2026-05-09 |
 
 ---
 
@@ -70,6 +71,15 @@
 | Vercel Seller | `https://seller.greenlove.co.kr` |
 
 ---
+
+## 보안 특이사항 (세션19 추가)
+
+- **Next.js proxy.ts**: Next.js 16 공식 미들웨어 파일 컨벤션 (middleware.ts → proxy.ts로 변경됨), 정상 동작
+- **AUTH_SECRET**: 3앱 Vercel에 추가 완료. `secret: process.env.AUTH_SECRET` + `trustHost: true` auth.ts에 명시
+- **E2E_TEST**: Vercel Preview 환경 전용으로 변경. `NEXT_PUBLIC_E2E_TEST` 삭제 — login/page.tsx 서버 컴포넌트로 전환하여 단일 변수로 통합
+- **login/_form.tsx**: consumer·seller 로그인 폼을 클라이언트 컴포넌트로 분리 (`showCredentials` prop 수신)
+- **HTTP 보안 헤더**: 3앱 next.config.ts에 `X-Frame-Options`, `X-Content-Type-Options`, `HSTS`, `Referrer-Policy`, `Permissions-Policy` 추가
+- **API CORS**: `NODE_ENV=production`일 때 origin 없는 요청 차단 (Railway에 NODE_ENV=production 확인 완료)
 
 ## 핵심 기술 특이사항
 

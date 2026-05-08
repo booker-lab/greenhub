@@ -28,6 +28,8 @@ async function refreshAccessToken(token: Record<string, unknown>) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET,
+  trustHost: true,
   providers: [
     Kakao({
       clientId: process.env.KAKAO_CLIENT_ID!,
