@@ -3,11 +3,11 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-08 (세션17 — G4 셀러앱 홈 대시보드 구현 + e2e 검증)
+최종 수정: 2026-05-08 (세션18 — 1순위·2순위 기능 구현 + e2e 전체 169/178 통과)
 
 ---
 
-## ✅ 완료된 작업 (세션17까지)
+## ✅ 완료된 작업 (세션18까지)
 
 | 항목 | 완료일 |
 |------|--------|
@@ -20,19 +20,11 @@
 | **BUG-SEC: 초대 토큰 검증** + next-auth beta.31 업데이트 | 2026-05-08 |
 | **E2E_TEST 게이팅** + consumer 인증 e2e 10케이스 + Vercel 검증 | 2026-05-08 |
 | **G4: 셀러앱 홈 대시보드** — 지표카드 4개 + 딥링크 + e2e 10케이스 | 2026-05-08 |
+| **세션18**: Firebase 429 fix, G2 상품명, preparedAt UI, B1 pre-fill, B2 에러피드백, G3 날짜 선택기 | 2026-05-08 |
 
 ---
 
 ## 🔜 다음 세션 작업 순서 (즉시 착수)
-
-### 🟢 1순위 — 셀러앱 주문 플로우 UX (그릴 확정)
-- **G2** `seller/app/orders/[id]/page.tsx:286` — raw Firebase ID → 상품명 교체
-- 주문 상세 preparedAt 빠른 선택지 UI (오늘 2시/4시/내일 오전)
-- **B1** `seller/app/onboarding/page.tsx` — 사업자 프로필 빈 폼 수정 (기존 데이터 pre-fill)
-
-### 🟢 2순위 — 셀러앱 나머지 버그·기능
-- **B2** `seller/app/products/page.tsx:169` — 토글·삭제 에러 피드백
-- **G3** `seller/app/settlements/page.tsx:122` — 일별 정산 날짜 선택기
 
 ### 🔵 향후 과제
 - G1: `seller/app/hubs/[id]` 거점 수정 페이지
@@ -57,7 +49,11 @@
 | seller-orders | ✅ 24/24 |
 | seller-product-create | ✅ 16/16 |
 | seller-auth-invite | ✅ 8/8 |
-| **seller-home-dashboard** | ✅ 10케이스 (17 clean + 3 flaky retry pass) |
+| **seller-home-dashboard** | ✅ 10케이스 |
+| seller-order-detail (G2+preparedAt) | ✅ 6케이스 |
+| seller-onboarding (B1 pre-fill+API) | ✅ 8케이스 |
+| seller-products (B2) | ✅ 8케이스 |
+| seller-settlements (G3) | ✅ 8케이스 |
 | driver-design-system·driver | ✅ |
 
 ---
@@ -89,3 +85,6 @@
 - **Portone V2**: `PORTONE_V2_SECRET`·`PORTONE_WEBHOOK_SECRET(whsec_...)` `apps/api/.env` 반영 완료
 - **orders ?tab= 딥링크**: `useSearchParams` 대신 `window.location.search` 사용 (Next.js Suspense 빌드 에러 방지)
 - **seller/app/page.tsx**: 서버→클라이언트 컴포넌트 전환 완료, `useOrders`+`useStoreProducts` 실시간 연동
+- **Firebase 429 fix**: `FirebaseReadyContext` — `useFirebaseAuth` 단일 호출(providers.tsx), 하위는 context 소비
+- **GET /stores/:storeId**: Railway API 신규 엔드포인트, 소유권 체크 후 반환
+- **proxy.ts**: storeId 보유 유저도 `/onboarding` 재접근 허용 (설정 > 사업자 정보 수정 경로)
