@@ -12,6 +12,10 @@ export default defineConfig({
   use: {
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // 옵션 B: 모든 요청에 e2e 게이팅 토큰 주입 (헤더 없으면 authorize null 반환)
+    extraHTTPHeaders: process.env['E2E_TEST_SECRET']
+      ? { 'x-e2e-test-token': process.env['E2E_TEST_SECRET'] }
+      : {},
   },
   projects: [
     {
