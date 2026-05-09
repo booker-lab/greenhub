@@ -35,38 +35,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.KAKAO_CLIENT_ID!,
       clientSecret: process.env.KAKAO_CLIENT_SECRET!,
     }),
-    // E2E 테스트 전용 — 프로덕션은 Kakao 단독 사용
-    ...(process.env.E2E_TEST === 'true'
-      ? [
-          Credentials({
-            credentials: {
-              email: { label: '이메일', type: 'email' },
-              password: { label: '비밀번호', type: 'password' },
-            },
-            async authorize(credentials) {
-              const res = await fetch(`${API}/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  email: credentials.email,
-                  password: credentials.password,
-                }),
-              });
-              if (!res.ok) return null;
-              const data = await res.json();
-              if (!['consumer', 'admin'].includes(data.user.role)) return null;
-              return {
-                id: data.user.id,
-                email: data.user.email,
-                name: data.user.name,
-                role: data.user.role,
-                accessToken: data.accessToken,
-                refreshToken: data.refreshToken,
-              };
-            },
+    // E2E 헤더 게이팅 — 일치하는 x-e2e-test-token 없으면 즉시 거부.
+    // SECRET 미설정 시 모든 credentials 요청 차단(안전 기본값).
+    Credentials({
+      credentials: {
+        email: { label: '이메일', type: 'email' },
+        password: { label: '비밀번호', type: 'password' },
+      },
+      async authorize(credentials, request) {
+        const expected = process.env.E2E_TEST_SECRET;
+        if (!expected) return null;
+        const got = request?.headers?.get('x-e2e-test-token');
+        if (got !== expected) return null;
+        const res = await fetch(`${API}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: credentials.email,
+            password: credentials.password,
           }),
-        ]
-      : []),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!['consumer', 'admin'].includes(data.user.role)) return null;
+        return {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.name,
+          role: data.user.role,
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+        };
+      },
+    }),
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
