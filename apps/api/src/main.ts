@@ -20,11 +20,8 @@ async function bootstrap() {
 
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin) {
-        // 프로덕션에서는 origin 없는 요청 차단 (개발 환경에서만 허용)
-        if (process.env.NODE_ENV === 'production') return callback(new Error('CORS rejected: no origin'));
-        return callback(null, true);
-      }
+      // origin 없는 요청(헬스체크, 서버 간 통신)은 CORS 대상 아님 — 허용
+      if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       callback(new Error(`CORS blocked: ${origin}`));
     },
