@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { loginViaCredentials } from './_helpers/auth'
 
 const BASE = 'https://seller.greenlove.co.kr'
 
@@ -53,11 +54,7 @@ test.describe('셀러 디자인 시스템 — 인증 화면', () => {
   test.skip(skipAuth, '환경변수 TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD 필요')
 
   test.beforeEach(async ({ page }) => {
-    await page.goto(`${BASE}/login`)
-    await page.fill('input[type="email"]', sellerEmail!)
-    await page.fill('input[type="password"]', sellerPassword!)
-    await page.click('button[type="submit"]')
-    await page.waitForURL(/\/(\?|$)|orders|products|onboarding/, { timeout: 25_000 })
+    await loginViaCredentials(page, BASE, sellerEmail!, sellerPassword!)
   })
 
   test('주문 관리 — 탭/헤더 렌더링', async ({ page }) => {

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { loginViaCredentials } from './_helpers/auth'
 
 const BASE = 'https://seller.greenlove.co.kr'
 
@@ -28,11 +29,7 @@ test.describe('셀러 배너 토글 (인증 필요)', () => {
   test.skip(true, 'admin 권한 계정 필요 (TEST_SELLER_EMAIL은 seller role)')
 
   test('배너 활성화 토글 클릭 시 에러 없음', async ({ page }) => {
-    await page.goto(`${BASE}/login`)
-    await page.fill('input[type="email"]', sellerEmail!)
-    await page.fill('input[type="password"]', sellerPassword!)
-    await page.click('button[type="submit"]')
-    await page.waitForURL(/admin/, { timeout: 15_000 })
+    await loginViaCredentials(page, BASE, sellerEmail!, sellerPassword!)
 
     await page.goto(`${BASE}/admin/banner`)
     await page.waitForSelector('text=히어로 배너 관리', { timeout: 10_000 })

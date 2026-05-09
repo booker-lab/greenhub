@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { loginViaCredentials } from './_helpers/auth'
 
 const BASE = 'https://greenlove.co.kr'
 
@@ -38,12 +39,7 @@ test.describe('Consumer — 장바구니 (인증)', () => {
   test.skip(skipAuth, '환경변수 TEST_CONSUMER_EMAIL / TEST_CONSUMER_PASSWORD 필요')
 
   test.beforeEach(async ({ page }) => {
-    await page.goto(`${BASE}/login`)
-    await page.waitForLoadState('networkidle')
-    await page.getByLabel('이메일').fill(consumerEmail!)
-    await page.getByLabel('비밀번호').fill(consumerPassword!)
-    await page.getByRole('button', { name: '로그인' }).click()
-    await page.waitForURL((url) => !url.pathname.includes('login'), { timeout: 15_000 })
+    await loginViaCredentials(page, BASE, consumerEmail!, consumerPassword!)
   })
 
   test('빈 장바구니 — 안내 UI 렌더링', async ({ page }) => {
