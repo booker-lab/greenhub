@@ -37,10 +37,10 @@
 
 ## 후속 기능 작업 순서
 
+- **🚨 BUG-INFRA**: Firebase Identity Toolkit CORS 차단 (세션22 발견). `https://seller.greenlove.co.kr` Origin이 `identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken` preflight에서 ACAO 헤더 받지 못해 `signInWithCustomToken` 실패. seller `/orders` Firestore RTL 연결 안 됨 → 실시간 알림 미작동 가능성. **운영 영향**: 카카오 로그인 셀러도 영향 가능. **확인**: Firebase Console → Authentication → Authorized domains, Google Cloud Console → API Credentials → HTTP referrer restrictions
 - G1: `seller/app/hubs/[id]` 거점 수정 페이지
 - Driver Kakao Maps SDK 연동
 - 네이버페이 채널키 승인 → Vercel 환경변수
-- consumer@test.com 강한비번 전환 (현재 test1234 — 편의 결정)
 - driver app에도 옵션 B 헤더 게이팅 적용 (현재 미적용)
 - 옵션 A 보강 (#CL-21) — Production env에서 `E2E_TEST_SECRET` 제거 + Preview env 분리
 
