@@ -3,3 +3,4 @@
 # PWA - sw.js·worker-*.js는 git 추적 (Vercel 서빙 보장)
 public/workbox-*.js
 public/swe-worker-*.js
+.env*.local
