@@ -1213,21 +1213,51 @@ providers: [
 
 ---
 
-## [결정 #CL-19] MVP 출시 전 이메일 로그인 코드 전면 제거 (2026-05-08)
+## [결정 #CL-19] (SUPERSEDED by #CL-20, 2026-05-10) MVP 출시 전 이메일 로그인 코드 전면 제거 (2026-05-08)
 
-**배경**: E2E 자동화 테스트를 위해 임시로 이메일/비밀번호 로그인(Credentials provider)을 추가했다. 프로덕션 로그인은 카카오·네이버(향후)만 허용하며, 이메일 인증은 절대 MVP에 포함하지 않는다.
+**상태**: 세션22(2026-05-10)에 #CL-20 옵션 B 헤더 게이팅으로 대체. `E2E_TEST`/`NEXT_PUBLIC_E2E_TEST` 게이트는 production 보안 결함을 유발했고(폼 노출), 옵션 B는 폼 자체를 노출하지 않으면서 e2e 인증을 헤더 토큰으로 게이팅한다. MVP 출시 정리는 #CL-20을 따른다.
 
-**MVP 출시 직전 반드시 제거할 항목**:
+---
 
-| # | 파일 | 제거 대상 |
-|---|------|-----------|
-| 1 | `apps/consumer/src/auth.ts` | `E2E_TEST === 'true'` 조건 블록 전체 (Credentials provider) |
-| 2 | `apps/seller/src/auth.ts` | `E2E_TEST === 'true'` 조건 블록 전체 (Credentials provider) |
-| 3 | `apps/consumer/src/app/login/page.tsx` | `NEXT_PUBLIC_E2E_TEST === 'true'` 조건 블록 전체 (Divider + 이메일 폼) |
-| 4 | `apps/seller/src/app/login/page.tsx` | `NEXT_PUBLIC_E2E_TEST === 'true'` 조건 블록 전체 (Divider + 이메일 폼) |
-| 5 | Vercel (consumer 앱) | `E2E_TEST`, `NEXT_PUBLIC_E2E_TEST` 환경변수 삭제 |
-| 6 | Vercel (seller 앱) | `E2E_TEST`, `NEXT_PUBLIC_E2E_TEST` 환경변수 삭제 |
-| 7 | `apps/e2e/tests/consumer-auth.spec.ts` | `skipEmailForm` 가드 + 이메일 폼 의존 테스트 3건 |
-| 8 | `apps/e2e/.env` | `TEST_CONSUMER_EMAIL`, `TEST_CONSUMER_PASSWORD`, `E2E_TEST` 라인 |
+## [결정 #CL-20] 옵션 B — 헤더 게이팅 기반 E2E 인증 (2026-05-10, 세션22)
 
-**코드 식별자**: 각 파일에 `E2E 테스트 전용 — MVP 출시 시 이 블록 전체 제거` 주석으로 표시됨.
+**배경**: `E2E_TEST=true` env 게이트는 Vercel Production env에 잘못 설정 시 일반 사용자에게 이메일 폼이 노출되는 결함이 있었다(세션19~20 부수효과). 게이트를 env 노출에서 **요청 헤더**로 옮기면 폼 자체가 노출되지 않는다.
+
+**핵심 규칙**:
+
+1. `apps/{seller,consumer}/src/auth.ts`의 Credentials Provider는 **상시 등록**하되 `authorize(credentials, request)`에서 `request.headers.get('x-e2e-test-token')`이 `process.env.E2E_TEST_SECRET`과 정확히 일치할 때만 통과. 그 외(헤더 부재·SECRET 미설정 포함) **즉시 null 반환**.
+2. `login/page.tsx`의 `showCredentials` 플래그는 항상 false로 고정(env 미존재). 폼은 어떤 환경에서도 DOM에 렌더링되지 않는다.
+3. `apps/e2e/playwright.config.ts`는 `extraHTTPHeaders: { 'x-e2e-test-token': process.env.E2E_TEST_SECRET }`로 모든 e2e 요청에 헤더 자동 주입.
+4. e2e spec의 인증은 `apps/e2e/tests/_helpers/auth.ts`의 `loginViaCredentials(page, base, email, password)` 헬퍼로 통일. NextAuth `/api/auth/csrf` + `/api/auth/callback/credentials` 직접 호출.
+5. `E2E_TEST_SECRET`은 seller·consumer × Production·Preview·Development(총 6개) Vercel env에 동일값 + `apps/{seller,consumer}/.env.local`·`apps/e2e/.env`에 동일값. 32자(openssl rand -base64 24).
+
+**MVP 출시 직전 정리 항목** (#CL-19 대체):
+
+| # | 파일 | 정리 |
+|---|------|------|
+| 1 | `apps/{seller,consumer}/src/auth.ts` | Credentials Provider 블록 전체 제거 (Kakao만 남김) |
+| 2 | `apps/{seller,consumer}/src/app/login/_form.tsx` | `showCredentials` prop·이메일 폼 분기 제거 |
+| 3 | `apps/{seller,consumer}/src/app/login/page.tsx` | `showCredentials` 변수·전달 제거 |
+| 4 | Vercel × 6환경 | `E2E_TEST_SECRET` 삭제 |
+| 5 | `apps/{seller,consumer}/.env.local`·`apps/e2e/.env` | `E2E_TEST_SECRET` 삭제 |
+| 6 | `apps/e2e/tests/_helpers/auth.ts`·`apps/e2e/playwright.config.ts` | helper·extraHTTPHeaders 제거 |
+| 7 | `apps/e2e/tests/consumer-auth.spec.ts` | `skipEmailForm` 가드 + 폼 의존 테스트 3건 제거 |
+
+**검증 시나리오** (세션22 통과 기준):
+- `curl /login | grep -c 'type="email"'` = 0 (seller·consumer)
+- `POST /api/auth/callback/credentials` 헤더 없이 → `Location: /login?error=CredentialsSignin&code=credentials`
+- 정상 SECRET 헤더로 → `Location: <callbackUrl>` (성공)
+
+---
+
+## [향후 과제 #CL-21] 옵션 A — Preview env 분리 (보강 작업, 미정)
+
+**의도**: 옵션 B는 production·preview에 동일 SECRET을 두므로 SECRET 유출 시 production 인증이 위험. 옵션 A는 Production env에 `E2E_TEST_SECRET` 자체를 두지 않고 Preview env에만 두어 attack surface를 더 줄인다.
+
+**작업 항목**:
+1. seller·consumer 21개 e2e spec의 `const BASE = '...'` 하드코딩을 `process.env.SELLER_BASE` / `CONSUMER_BASE`로 환경변수화.
+2. Preview deployment에 안정 alias 부여 (e.g. `e2e-seller-preview.vercel.app`) 또는 PR 트리거 시 동적 deployment URL 주입.
+3. Production Vercel env에서 `E2E_TEST_SECRET` 삭제. Preview·Development만 유지.
+4. e2e CI 워크플로를 Preview alias 대상으로 실행.
+
+**범위 추정**: 21개 spec 환경변수화 + alias 운영 설정. 세션22 범위 외 follow-up.

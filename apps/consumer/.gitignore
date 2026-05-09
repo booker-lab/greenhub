@@ -47,3 +47,5 @@ public/swe-worker-*.js
 next-env.d.ts
 
 .vercel
+
+.vercel

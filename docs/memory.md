@@ -3,98 +3,86 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/memory_archive_20260425.md`
 
-최종 수정: 2026-05-09 (세션19 — 보안 패치 10건)
+최종 수정: 2026-05-10 (세션22 — 보안 결함 정리 + 옵션 B 헤더 게이팅 도입)
 
 ---
 
-## ✅ 완료된 작업 (세션18까지)
+## ✅ 완료된 작업 (세션22까지)
 
 | 항목 | 완료일 |
 |------|--------|
-| Consumer/Seller/Driver 디자인 시스템 + 성능 최적화(53→99) | 2026-04-25~28 |
-| PWA RSC CORS 수정 + 상품등록 버그 4건 | 2026-04-28~05-01 |
-| DS 리팩토링(18건) + 툴체인(TruffleHog·Just·Biome) + a11y(38건) | 2026-05-02~03 |
-| e2e 전체 스펙 구축 (consumer 60pass · seller 54pass · driver 25pass) | 2026-05-03~05 |
-| OrderGroup 리팩토링 + seller-orders e2e 22개 스펙 확장 | 2026-05-06 |
-| 그릴 세션(11·12) — e2e 전략·배포인프라·대시보드+주문 플로우 UX 확정 | 2026-05-07 |
-| **BUG-SEC: 초대 토큰 검증** + next-auth beta.31 업데이트 | 2026-05-08 |
-| **E2E_TEST 게이팅** + consumer 인증 e2e 10케이스 + Vercel 검증 | 2026-05-08 |
-| **G4: 셀러앱 홈 대시보드** — 지표카드 4개 + 딥링크 + e2e 10케이스 | 2026-05-08 |
-| **세션18**: Firebase 429 fix, G2 상품명, preparedAt UI, B1 pre-fill, B2 에러피드백, G3 날짜 선택기 | 2026-05-08 |
-| **세션19**: 보안 패치 — Next.js 16.2.5 + React 19.2.6, HTTP 보안 헤더, auth.ts 강화, E2E 플래그 정리, API CORS 강화 | 2026-05-09 |
+| Consumer/Seller/Driver DS + 성능(53→99) + PWA/CORS + 상품등록 버그 | 2026-04-25~05-01 |
+| DS 리팩토링·툴체인·a11y·e2e 전체 구축·OrderGroup 리팩토링 | 2026-05-02~06 |
+| BUG-SEC 초대토큰·next-auth beta.31·G4 셀러 대시보드 | 2026-05-08 |
+| **세션18**: G2 상품명·preparedAt UI·B1 pre-fill·B2 에러피드백·G3 날짜선택기 | 2026-05-08 |
+| **세션19**: 보안 패치 — Next.js 16.2.5 + React 19.2.6 CVE, HTTP 보안헤더, auth.ts 강화 | 2026-05-09 |
+| **세션20**: 루트 vercel.json 삭제·Railway CORS fix·login force-dynamic·E2E_TEST 값 수정 | 2026-05-10 |
+| **세션21**: 세션20이 남긴 허위 BLOCKER 검증·정정 | 2026-05-10 |
+| **세션22**: E2E 보안 결함 정리 — Vercel `E2E_TEST` Production 제거·약한비번 54건 일소·**옵션 B 헤더 게이팅 도입** | 2026-05-10 |
 
 ---
 
-## 🔜 다음 세션 작업 순서 (즉시 착수)
+## ✅ 세션22 — 보안 결함 정리 (BLOCKER 해소)
 
-### 🔵 향후 과제
+**트랙별 결과**:
+- **트랙 1**: seller·consumer Vercel `E2E_TEST` Production env 삭제 + 재배포 → `/login` HTML에서 `type="email"`·`type="password"` 0건 확인
+- **트랙 2**: `scripts/delete-test-accounts.mjs --apply`로 54건 user + 2건 refreshToken 삭제. seller@test.com만 보존 결정. 새 e2e consumer로 `consumer@test.com` 생성(test1234 — 사용자 결정, 강한비번 권장은 follow-up). `seller-auth-invite.spec.ts`에 `afterAll` cleanup + `scripts/cleanup-spec-residue.mjs` 헬퍼 추가
+- **트랙 3 옵션 B**: `E2E_TEST_SECRET` 32자 6환경 적용. `auth.ts`(seller·consumer) Credentials Provider 상시 등록 + `request.headers.get('x-e2e-test-token')` 검증. `apps/e2e/tests/_helpers/auth.ts` + `playwright.config.ts extraHTTPHeaders` 도입. 12개 spec helper migration 완료
+- **트랙 4 통합 검증 5종**: 폼 노출 0, 약한비번 401, 보존 200, Firestore email-provider 2건(seller·consumer), 헤더 없는 credentials 호출 → `error=CredentialsSignin` ✓
+
+**상세 설계**: [docs/CRITICAL_LOGIC.md](CRITICAL_LOGIC.md) #CL-20 (옵션 B), #CL-21 (옵션 A 향후 과제)
+**원본 가이드**: [docs/specs/session22-prep.md](specs/session22-prep.md)
+
+---
+
+## 후속 기능 작업 순서
+
 - G1: `seller/app/hubs/[id]` 거점 수정 페이지
 - Driver Kakao Maps SDK 연동
-- 택배 API 연동 (규모 확장 시)
-- 셀러앱 UX 방향 확정 후 구현
-
-### 외부 대기
 - 네이버페이 채널키 승인 → Vercel 환경변수
-- 알리고↔카카오 연동 → 사업자등록증 발급 후
+- consumer@test.com 강한비번 전환 (현재 test1234 — 편의 결정)
+- driver app에도 옵션 B 헤더 게이팅 적용 (현재 미적용)
+- 옵션 A 보강 (#CL-21) — Production env에서 `E2E_TEST_SECRET` 제거 + Preview env 분리
 
 ---
 
-## e2e 커버리지 (2026-05-08 세션17 기준)
-
-| 파일 | 상태 |
-|------|------|
-| consumer-home·groupbuy·auth·product-detail·search | ✅ |
-| consumer-design-system | ✅ 28/28 |
-| consumer-cart·mypage·checkout | ✅ 비인증 + 인증 (44/44) |
-| seller-design-system | ✅ 26/26 |
-| seller-orders | ✅ 24/24 |
-| seller-product-create | ✅ 16/16 |
-| seller-auth-invite | ✅ 8/8 |
-| **seller-home-dashboard** | ✅ 10케이스 |
-| seller-order-detail (G2+preparedAt) | ✅ 6케이스 |
-| seller-onboarding (B1 pre-fill+API) | ✅ 8케이스 |
-| seller-products (B2) | ✅ 8케이스 |
-| seller-settlements (G3) | ✅ 8케이스 |
-| driver-design-system·driver | ✅ |
-
----
-
-## 툴체인·성능·배포
+## e2e 인증 패턴 (옵션 B 이후)
 
 | 항목 | 값 |
 |------|-----|
-| TruffleHog 3.95.2 / Just 1.50.0 / Biome 2.4.14 | ✅ |
-| next-auth | 5.0.0-beta.31 (consumer·seller·driver) |
-| Lighthouse Performance | 99 (기준선 53) |
-| Railway API | `https://api-production-13e7.up.railway.app` |
-| Vercel Consumer | `https://greenlove.co.kr` |
-| Vercel Seller | `https://seller.greenlove.co.kr` |
+| 헬퍼 | `apps/e2e/tests/_helpers/auth.ts` `loginViaCredentials(page, base, email, password)` |
+| 호출 패턴 | `test.beforeEach`에서 1줄 호출 (NextAuth `/api/auth/csrf` + `/api/auth/callback/credentials` 직접) |
+| 헤더 주입 | `playwright.config.ts extraHTTPHeaders.x-e2e-test-token = process.env.E2E_TEST_SECRET` |
+| 검증 통과 | seller-orders 11/12, consumer-cart·checkout·mypage·seller-onboarding 각 1 |
 
 ---
 
-## 보안 특이사항 (세션19 추가)
+## 툴체인·배포
 
-- **Next.js proxy.ts**: Next.js 16 공식 미들웨어 파일 컨벤션 (middleware.ts → proxy.ts로 변경됨), 정상 동작
-- **AUTH_SECRET**: 3앱 Vercel에 추가 완료. `secret: process.env.AUTH_SECRET` + `trustHost: true` auth.ts에 명시
-- **E2E_TEST**: Vercel Preview 환경 전용으로 변경. `NEXT_PUBLIC_E2E_TEST` 삭제 — login/page.tsx 서버 컴포넌트로 전환하여 단일 변수로 통합
-- **login/_form.tsx**: consumer·seller 로그인 폼을 클라이언트 컴포넌트로 분리 (`showCredentials` prop 수신)
-- **HTTP 보안 헤더**: 3앱 next.config.ts에 `X-Frame-Options`, `X-Content-Type-Options`, `HSTS`, `Referrer-Policy`, `Permissions-Policy` 추가
-- **API CORS**: `NODE_ENV=production`일 때 origin 없는 요청 차단 (Railway에 NODE_ENV=production 확인 완료)
+| 항목 | 값 |
+|------|-----|
+| Railway API | `https://api-production-13e7.up.railway.app` |
+| Vercel Consumer | `https://greenlove.co.kr` |
+| Vercel Seller | `https://seller.greenlove.co.kr` |
+| next-auth | 5.0.0-beta.31 |
+| Lighthouse Perf | 99 |
+
+---
 
 ## 핵심 기술 특이사항
 
+- **login/page.tsx (seller·consumer)**: `export const dynamic = 'force-dynamic'` — 옵션 B 도입 후 폼 노출은 항상 false지만 force-dynamic은 유지(런타임 env 평가 보장)
+- **E2E_TEST_SECRET**: Vercel seller·consumer × Production·Preview·Development 6환경 동일값. `apps/{seller,consumer}/.env.local`·`apps/e2e/.env`에도 동일값. 32자 base64. **MVP 출시 시 #CL-20 정리표대로 삭제**
+- **Railway CORS**: no-origin 요청 허용(헬스체크) — `if (!origin) return callback(null, true)` 유지 필수
 - **gemini-3-flash-preview**: 유효한 모델명, 변경 금지
+- **aggressiveFrontEndNavCaching: false**: 변경 금지 (RSC CORS 재발)
 - **shared 타입 변경 시**: `pnpm --filter @greenhub/shared build` 후 dist 커밋 필수
 - **useStoreProducts firebaseReady 가드 금지**: 이중 인스턴스 버그
-- **aggressiveFrontEndNavCaching: false**: 변경 금지 (RSC CORS 재발)
 - **DS 폰트 예외**: BottomNav/ProductTopBar(10px), 주문상태뱃지(12px), 카운트다운(13px)
-- **공동구매 CONFIRMED**: 시스템 자동 (선착순 + 매 1분 크론) — 셀러 수동 확정 없음
-- **preparedAt**: 분단위 피커 폐기 → 빠른 선택지 UI (오늘 2시/4시/내일 오전) 확정
-- **카카오 이메일**: scope 미포함 시 null → `token.email ?? session.user.email`
-- **seller register inviteToken**: seller role 가입 시 필수, consumer·driver는 불필요
-- **Portone V2**: `PORTONE_V2_SECRET`·`PORTONE_WEBHOOK_SECRET(whsec_...)` `apps/api/.env` 반영 완료
-- **orders ?tab= 딥링크**: `useSearchParams` 대신 `window.location.search` 사용 (Next.js Suspense 빌드 에러 방지)
-- **seller/app/page.tsx**: 서버→클라이언트 컴포넌트 전환 완료, `useOrders`+`useStoreProducts` 실시간 연동
-- **Firebase 429 fix**: `FirebaseReadyContext` — `useFirebaseAuth` 단일 호출(providers.tsx), 하위는 context 소비
-- **GET /stores/:storeId**: Railway API 신규 엔드포인트, 소유권 체크 후 반환
-- **proxy.ts**: storeId 보유 유저도 `/onboarding` 재접근 허용 (설정 > 사업자 정보 수정 경로)
+- **공동구매 CONFIRMED**: 시스템 자동 (선착순+크론) — 셀러 수동 확정 없음
+- **preparedAt**: 빠른 선택지 UI (오늘 2시/4시/내일 오전) 확정
+- **seller register inviteToken**: seller role 가입 시 필수
+- **Portone V2**: PORTONE_V2_SECRET·PORTONE_WEBHOOK_SECRET `apps/api/.env` 반영 완료
+- **orders ?tab= 딥링크**: `window.location.search` 사용 (Suspense 빌드 에러 방지)
+- **proxy.ts**: Next.js 16 미들웨어 컨벤션 파일명, 정상 동작
+- **AUTH_SECRET**: 3앱 Vercel 설정 완료
