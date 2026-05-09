@@ -1,9 +1,9 @@
 # Green Love — 프로젝트 메모리
 
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
-> 아카이브: `docs/memory_archive_20260425.md`
+> 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-10 (세션22 — 보안 결함 정리 + 옵션 B 헤더 게이팅 도입)
+최종 수정: 2026-05-10 (세션23 — docs 구조 재편)
 
 ---
 
@@ -31,7 +31,7 @@
 - **트랙 4 통합 검증 5종**: 폼 노출 0, 약한비번 401, 보존 200, Firestore email-provider 2건(seller·consumer), 헤더 없는 credentials 호출 → `error=CredentialsSignin` ✓
 
 **상세 설계**: [docs/CRITICAL_LOGIC.md](CRITICAL_LOGIC.md) #CL-20 (옵션 B), #CL-21 (옵션 A 향후 과제)
-**원본 가이드**: [docs/specs/session22-prep.md](specs/session22-prep.md)
+**원본 가이드**: [docs/archive/sessions/session22-prep.md](archive/sessions/session22-prep.md)
 
 ---
 
