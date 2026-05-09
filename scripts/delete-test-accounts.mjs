@@ -2,7 +2,7 @@
  * 테스트 계정 일괄 정리 스크립트
  *
  * 정책:
- *  - 보존: seller@test.com (e2e seller 인증 전용)
+ *  - 보존: seller@test.com, consumer@test.com (e2e 인증 전용)
  *  - 삭제 대상:
  *      ① 명시 리스트: consumer_test@greenhub.dev, customer@test.com, e2e.consumer@test.com, test@test.com, test@example.com
  *      ② 패턴 매칭: ^(consumer|driver)-sec-\d+@example\.com$
@@ -31,7 +31,7 @@ const serviceAccount = require(join(__dirname, '../apps/api/firebase-adminsdk.js
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 
-const PROTECT_EMAILS = ['seller@test.com'];
+const PROTECT_EMAILS = ['seller@test.com', 'consumer@test.com'];
 
 const EXPLICIT_DELETE_EMAILS = [
   'consumer_test@greenhub.dev',
@@ -39,7 +39,6 @@ const EXPLICIT_DELETE_EMAILS = [
   'e2e.consumer@test.com',
   'test@test.com',
   'test@example.com',
-  'consumer@test.com',
 ];
 
 const PATTERN_DELETE_REGEX = /^(consumer|driver)-sec-\d+@example\.com$/;
