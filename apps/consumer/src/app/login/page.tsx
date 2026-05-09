@@ -2,6 +2,8 @@ import { Suspense } from 'react';
 import { Container, Title, Stack } from '@mantine/core';
 import { LoginForm } from './_form';
 
+export const dynamic = 'force-dynamic';
+
 export default function LoginPage() {
   const showCredentials = process.env.E2E_TEST === 'true';
 
