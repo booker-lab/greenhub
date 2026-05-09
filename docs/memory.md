@@ -37,7 +37,6 @@
 
 ## 후속 기능 작업 순서
 
-- **🚨 BUG-INFRA**: Firebase Identity Toolkit CORS 차단 (세션22 발견). `https://seller.greenlove.co.kr` Origin이 `identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken` preflight에서 ACAO 헤더 받지 못해 `signInWithCustomToken` 실패. seller `/orders` Firestore RTL 연결 안 됨 → 실시간 알림 미작동 가능성. **운영 영향**: 카카오 로그인 셀러도 영향 가능. **확인**: Firebase Console → Authentication → Authorized domains, Google Cloud Console → API Credentials → HTTP referrer restrictions
 - G1: `seller/app/hubs/[id]` 거점 수정 페이지
 - Driver Kakao Maps SDK 연동
 - 네이버페이 채널키 승인 → Vercel 환경변수
@@ -52,8 +51,8 @@
 |------|-----|
 | 헬퍼 | `apps/e2e/tests/_helpers/auth.ts` `loginViaCredentials(page, base, email, password)` |
 | 호출 패턴 | `test.beforeEach`에서 1줄 호출 (NextAuth `/api/auth/csrf` + `/api/auth/callback/credentials` 직접) |
-| 헤더 주입 | `playwright.config.ts extraHTTPHeaders.x-e2e-test-token = process.env.E2E_TEST_SECRET` |
-| 검증 통과 | seller-orders 11/12, consumer-cart·checkout·mypage·seller-onboarding 각 1 |
+| 헤더 주입 | helper의 csrf GET + credentials POST 두 호출에만 명시적 (`headers: { 'x-e2e-test-token': SECRET }`) — **전역 extraHTTPHeaders 사용 금지** (Firebase Identity Toolkit 등 third-party API에 헤더가 따라가 CORS preflight 차단됨) |
+| 검증 통과 | seller-orders 12/12, consumer-cart·checkout·mypage·seller-onboarding 각 1 |
 
 ---
 

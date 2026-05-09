@@ -63,26 +63,31 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
     await expect(statusLocator.first()).toBeVisible({ timeout: 12_000 })
   })
 
-  // BLOCKED: Firebase Identity Toolkit signInWithCustomToken CORS 차단으로
-  // Firestore RTL이 연결되지 않아 '연결 중'에서 멈춤. 도메인 인증 설정 필요 (Firebase Console).
-  // Origin: https://seller.greenlove.co.kr → identitytoolkit.googleapis.com에 대한 ACAO 헤더 부재.
-  // 해결되면 skip 해제.
-  test.skip('주문 없을 때 empty state 렌더링', async ({ page }) => {
+  test('주문 없을 때 empty state 렌더링', async ({ page }) => {
     await page.goto(`${BASE}/orders`)
     await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    // Firestore RTL 연결 완료 대기 — '연결 중' 초기 상태도 매칭 (line 56 테스트와 일관)
     await expect(
       page
         .locator('text=실시간 연결')
         .or(page.locator('text=연결 중'))
         .or(page.locator('text=연결 오류'))
-    ).toBeVisible({ timeout: 12_000 })
-    const hasEmpty = await page.locator('text=현재 해당 주문이 없습니다').count()
-    const hasOrderBadge = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('span')).some((el) =>
-        ['대기', '결제 완료', '주문 확정', '모집 중', '준비 중', '배송 중', '거점 도착', '픽업 완료', '배송 완료', '취소'].includes((el.textContent ?? '').trim())
+    ).toBeVisible({ timeout: 15_000 })
+    // 연결 후 empty state 또는 주문 카드 출현을 polling으로 대기 (RTL 데이터 도착 지연 고려)
+    await expect
+      .poll(
+        async () => {
+          const hasEmpty = await page.locator('text=현재 해당 주문이 없습니다').count()
+          const hasOrderBadge = await page.evaluate(() =>
+            Array.from(document.querySelectorAll('span')).some((el) =>
+              ['대기', '결제 완료', '주문 확정', '모집 중', '준비 중', '배송 중', '거점 도착', '픽업 완료', '배송 완료', '취소'].includes((el.textContent ?? '').trim()),
+            ),
+          )
+          return hasEmpty > 0 || hasOrderBadge
+        },
+        { timeout: 15_000 },
       )
-    )
-    expect(hasEmpty > 0 || hasOrderBadge).toBe(true)
+      .toBe(true)
   })
 
   // ── Summary Bar ─────────────────────────────────────────────────────
