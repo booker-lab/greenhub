@@ -2,8 +2,9 @@
  * 옵션 B (헤더 게이팅) 인증 헬퍼.
  *
  * 프로덕션 빌드는 이메일 폼을 노출하지 않으므로 NextAuth Credentials 엔드포인트를
- * 직접 호출해 세션을 발급받는다. x-e2e-test-token 헤더는 playwright.config.ts의
- * extraHTTPHeaders로 자동 주입된다.
+ * 직접 호출해 세션을 발급받는다. x-e2e-test-token 헤더는 NextAuth credentials POST
+ * 한 번에만 필요하므로 이 호출에만 명시적으로 주입한다 (전역 extraHTTPHeaders는
+ * Firebase 등 third-party API에서 CORS preflight 차단 문제를 유발해 사용 안 함).
  *
  * Auth.js v5(next-auth 5.0.0-beta.31) 기준.
  *
@@ -19,13 +20,20 @@ export async function loginViaCredentials(
   email: string,
   password: string,
 ): Promise<void> {
-  const csrfRes = await page.request.get(`${base}/api/auth/csrf`)
+  const secret = process.env['E2E_TEST_SECRET']
+  if (!secret) {
+    throw new Error('E2E_TEST_SECRET env not set — required for 옵션 B 헤더 게이팅')
+  }
+  const headers = { 'x-e2e-test-token': secret }
+
+  const csrfRes = await page.request.get(`${base}/api/auth/csrf`, { headers })
   if (!csrfRes.ok()) {
     throw new Error(`csrf fetch failed: ${csrfRes.status()} ${await csrfRes.text()}`)
   }
   const { csrfToken } = await csrfRes.json()
 
   const res = await page.request.post(`${base}/api/auth/callback/credentials`, {
+    headers,
     form: {
       email,
       password,
