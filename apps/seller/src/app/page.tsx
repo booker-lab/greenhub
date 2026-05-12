@@ -56,7 +56,6 @@ export default function Home() {
   useEffect(() => {
     if (status === 'loading') return;
     if (status === 'unauthenticated') { router.replace('/login'); return; }
-    if (session?.user.role === 'admin') { router.replace('/admin/stores'); return; }
   }, [status, session, router]);
 
   if (status === 'loading' || !session) {
