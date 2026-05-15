@@ -422,6 +422,132 @@
 
 ---
 
+## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
+
+> 기준일: 2026-05-15 (세션25 #CL-25 정리 후)
+> 진입점: 다음 세션 시작 시 본 §12 우선순위 표 → 항목 상세 순서로 확인.
+
+### 12-1. 우선순위
+
+| 순위 | 항목 | 범주 | 의존성 |
+|------|------|------|--------|
+| 🔴 P0 | #CL-21 옵션 A 보강 — Production env에서 `E2E_TEST_SECRET` 제거 | 보안 | 4단계 다중 PR |
+| 🟠 P1 | #CL-23 인증 race 해소 — `storageState` 패턴 도입 | 인프라/DX | 단독 진행 가능 |
+| 🟠 P1 | Railway `/auth/login` latency·실패율 계측 | 관측 | storageState 도입 직전·직후 |
+| 🟡 P2 | Vercel function cold-start mitigation 검토 | 성능 | 계측 데이터 기반 |
+| 🟡 P2 | `CRITICAL_LOGIC.md` 1342라인 — CLAUDE.md §1 한도 정책 결정 | 문서 정책 | 단독 |
+| 🟢 P3 | `useOrderActions` 훅 통합 (detail/OrderCard 시그니처 통일) | DX | UI 리팩토링 사이클 |
+| 🟢 P3 | `/admin/banner` prerender 실패 — Firebase env 누락 | 환경설정 | 환경변수 점검만 |
+| 🟢 P3 | G1: `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 | 기능 | — |
+| 🟢 P3 | Driver Kakao Maps SDK 연동 | 기능 | — |
+| 🟢 P3 | consumer@test.com 강한비번 전환 (현재 test1234 — 편의 결정) | 보안 | 단독 |
+| ⏳ 외부 | 네이버페이 채널키 승인 → Vercel 환경변수 설정 | 외부 연동 | 승인 메일 대기 |
+
+### 12-2. 상세 작업
+
+#### [ ] P0 — #CL-21 옵션 A 보강: Production env 분리 (4단계 다중 PR)
+
+**배경**: 옵션 B 헤더 게이팅(#CL-20)으로 폼 노출은 차단됐으나 SECRET이 production·preview에 동일하게 존재 → SECRET 유출 시 production 인증 위험. 옵션 A는 Production env에서 `E2E_TEST_SECRET` 자체를 제거해 attack surface 축소.
+
+**현재 차단 사유**: 21개 e2e spec의 `BASE`가 Production 도메인 하드코딩 상태. Production env에서 SECRET을 단순 제거하면 전체 e2e 인증 깨짐. 4단계 순차 진행 필수.
+
+- [ ] 1. Vercel Preview alias 운영 설정 (e.g. `e2e-seller-preview.vercel.app`, `e2e-consumer-preview.vercel.app`)
+- [ ] 2. 21개 spec `BASE` 환경변수화 (`SELLER_BASE`·`CONSUMER_BASE`·`DRIVER_BASE`) + `apps/e2e/.env` 추가
+- [ ] 3. e2e CI 워크플로를 Preview alias 대상으로 전환
+- [ ] 4. Production Vercel env에서 `E2E_TEST_SECRET` 삭제 + 빈 커밋 재배포
+
+**검증**: 옵션 B 5종 통합 검증 재실행(#CL-20) — Production에서는 헤더 있어도 SECRET 미설정으로 거부, Preview에서는 정상 통과.
+
+**참조**: [docs/CRITICAL_LOGIC.md #CL-21](CRITICAL_LOGIC.md)
+
+---
+
+#### [ ] P1 — #CL-23 인증 race 해소: `storageState` 패턴 도입
+
+**배경**: 세션24 진단 결과 NextAuth credentials POST가 200 OK + 빈 body + set-cookie 없음 반환 케이스가 일관 관측 (mobile 편중, 시간 누적 효과). 세션25 smoke에서도 12 spec 중 4건 동일 패턴 실패 재현.
+
+**근본 원인 가설**: Vercel function cold-start 또는 Railway `/auth/login` 일시 부하. 모든 spec이 매번 인증 호출 → N×spec 만큼 인증 부하.
+
+**해소**: Playwright `globalSetup`에서 1회 로그인 → `storageState` 파일 저장 → 모든 spec이 재사용. Railway 인증 호출이 N → 1로 감소.
+
+- [ ] 1. `apps/e2e/global-setup.ts` 신설 — seller·consumer 각 1회 `loginViaCredentials` → `context.storageState({path})` 저장
+- [ ] 2. `playwright.config.ts`에 `globalSetup` 등록 + projects별 `use.storageState` 지정
+- [ ] 3. spec들에서 개별 `loginViaCredentials` 호출 제거 (또는 옵션화)
+- [ ] 4. seller-orders·consumer-cart·seller-settlements 등 회귀 12+ spec 통과 검증
+
+**참조**: [docs/CRITICAL_LOGIC.md #CL-23](CRITICAL_LOGIC.md)
+
+---
+
+#### [ ] P1 — Railway `/auth/login` latency·실패율 계측
+
+storageState 도입 효과 측정용 베이스라인. 순서 권장: storageState 작업 **직전** 1회 + **직후** 1회 측정해 비교.
+
+- [ ] Railway 로그에서 `/auth/login` 응답시간 p50/p95/p99 + 실패율 추출
+- [ ] (옵션) 별도 헬스체크 endpoint로 정기 수치화
+
+---
+
+#### [ ] P2 — Vercel function cold-start mitigation 검토
+
+NextAuth API route의 cold start가 set-cookie 누락의 또 다른 원인일 가능성. 위 P1 계측 데이터 확보 후 데이터 기반 결정.
+
+- [ ] Vercel Function `regions` · `memory` 조정 검토
+- [ ] (옵션) ISR pre-warm cron으로 핵심 라우트 워밍
+
+---
+
+#### [ ] P2 — `CRITICAL_LOGIC.md` 한도 정책 결정
+
+**현황**: 1342라인 (세션25 #CL-25까지). CLAUDE.md §1는 단일 파일 500라인 모듈화 한도.
+
+**고려 옵션**:
+- 옵션 1: **분기별 archive** — `CRITICAL_LOGIC_2026Q1.md` 등으로 분리, 현행 파일은 최근 분기만 유지
+- 옵션 2: **도메인별 분리** — auth/payment/schema 디렉터리 구조 (검색성 trade-off)
+- 옵션 3: **한도 예외 명시** — CLAUDE.md §1에 "누적 결정 로그 파일은 예외" 명시 (BACKLOG.md도 동일 사례)
+
+**결정 후 작업**: 선택 옵션에 따라 파일 재구성 + CLAUDE.md 갱신 + memory 업데이트.
+
+---
+
+#### [ ] P3 — `useOrderActions` 훅 통합
+
+**배경**: 세션23 #CL-22에서 분리됐던 항목. detail용 `useOrderDetailActions`(모달 reason + apiFetch)와 OrderCard용 `useOrderActions`(prompt() reason + raw fetch) 시그니처 불일치.
+
+**처리 방침**: UI 리팩토링 사이클에서 양쪽 일괄 정비. 단순 통합 시 동작 변경 위험.
+
+---
+
+#### [ ] P3 — `/admin/banner` prerender 실패
+
+**배경**: 세션23 빌드 검증에서 `auth/invalid-api-key` 발견. Firebase 환경변수 누락이 원인. admin/banner 페이지 자체는 분할 작업과 무관.
+
+**처리**: Vercel admin/seller 환경변수 점검 → 누락된 Firebase config 추가 → 재배포 검증.
+
+---
+
+#### [ ] P3 — 기타 기능 작업
+
+- [ ] G1: `apps/seller/src/app/hubs/[id]/page.tsx` — 거점 수정 페이지 (Phase B 잔여)
+- [ ] Driver Kakao Maps SDK 연동
+- [ ] consumer@test.com 강한비번 전환 — 현재 test1234 (편의 결정)
+
+#### [⏳] 외부 대기
+
+- [ ] 네이버페이 채널키 승인 → Vercel `NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY` 환경변수 설정 (admin.pay.naver.com 심사 결과 대기)
+
+### 12-3. 본 사이클 완료 항목 (참고)
+
+| 세션 | 결정 ID | 내용 |
+|------|---------|------|
+| 22 | #CL-20 | 옵션 B 헤더 게이팅 도입 — `auth.ts` Credentials를 `x-e2e-test-token`으로 게이팅, 12 spec helper migration |
+| 22 | — | Vercel `E2E_TEST` Production env 삭제 + 약한비번 54건 일소 (보존 2건) |
+| 23 | #CL-22 | 셀러 페이지 분할 — `orders/[id]` 629→217·`settlements` 531→116 (fatal constraint 해소) |
+| 24 | #CL-23 | e2e 회귀 검증 (회귀 0건) + 인증 헬퍼 진단 강화 (set-cookie 검증 throw) |
+| 25 | #CL-25 | biome.json 파싱 에러 해소 + `.env.vercel.tmp` gitignore 보강 + driver Credentials provider 부재 검증 |
+
+---
+
 ## 변경 이력
 
 | 날짜 | 내용 |
@@ -464,3 +590,7 @@
 | 2026-04-07 | **네이버페이 결제 코드 준비**: usePayment paymentMethod 분기 + checkout 결제수단 선택 UI (채널키 없으면 자동 숨김) |
 | 2026-04-08 | **seller admin 루트 리다이렉트**: page.tsx role 분기 — admin → /admin/stores |
 | 2026-04-08 | **프론트엔드 보안 감사 및 수정**: Critical 5건·High 9건·Medium 10건+ 식별 / SEC-01~07·09~11 수정 완료 |
+| 2026-05-10 | **세션22**: 보안 결함 정리 — Vercel `E2E_TEST` Production 제거·약한비번 54건 일소·옵션 B 헤더 게이팅 도입 (#CL-20) |
+| 2026-05-15 | **세션23**: 셀러 fatal constraint 해소 — `orders/[id]`·`settlements` 페이지 분할 (#CL-22) |
+| 2026-05-15 | **세션24**: e2e 회귀 검증 (회귀 0건) + 인증 헬퍼 진단 강화 (#CL-23) |
+| 2026-05-15 | **세션25**: 사전 결함 정리 — biome 파싱 에러·`.env.vercel.tmp` gitignore·driver Credentials 부재 검증 (#CL-25) / §12 후속 정비 백로그 신설 |

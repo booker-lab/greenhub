@@ -38,13 +38,14 @@
 
 ---
 
-## 후속 기능 작업 순서
+## 후속 작업 — SSOT: `docs/BACKLOG.md` §12
 
-- G1: `seller/app/hubs/[id]` 거점 수정 페이지
-- Driver Kakao Maps SDK 연동
-- 네이버페이 채널키 승인 → Vercel 환경변수
-- 옵션 A 보강 (#CL-21) — Production env에서 `E2E_TEST_SECRET` 제거 + Preview env 분리 (4단계 다중 PR — 세션25 #CL-25 검증 결과)
-- e2e 인증 인프라 race 해소 (#CL-23) — storageState 패턴 도입 + Railway `/auth/login` 계측
+다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
+
+- 🔴 P0: #CL-21 옵션 A 보강 (Production env `E2E_TEST_SECRET` 제거, 4단계 다중 PR)
+- 🟠 P1: #CL-23 인증 race 해소 (`storageState` 패턴) + Railway `/auth/login` 계측
+- 🟡 P2: Vercel cold-start 검토 / `CRITICAL_LOGIC.md` 1342라인 한도 정책 결정
+- 🟢 P3: `useOrderActions` 통합·`/admin/banner` env·G1 거점 수정·Driver Maps SDK
 
 ---
 
