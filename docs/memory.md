@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-10 (세션23 — docs 구조 재편)
+최종 수정: 2026-05-15 (세션23 — 셀러 페이지 분할)
 
 ---
 
@@ -19,6 +19,7 @@
 | **세션20**: 루트 vercel.json 삭제·Railway CORS fix·login force-dynamic·E2E_TEST 값 수정 | 2026-05-10 |
 | **세션21**: 세션20이 남긴 허위 BLOCKER 검증·정정 | 2026-05-10 |
 | **세션22**: E2E 보안 결함 정리 — Vercel `E2E_TEST` Production 제거·약한비번 54건 일소·**옵션 B 헤더 게이팅 도입** | 2026-05-10 |
+| **세션23**: 셀러 fatal constraint 해소 — `orders/[id]` 629→217·`settlements` 531→116 분할 (#CL-22) | 2026-05-15 |
 
 ---
 

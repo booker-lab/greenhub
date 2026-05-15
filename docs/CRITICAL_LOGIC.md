@@ -1263,3 +1263,35 @@ providers: [
 4. e2e CI 워크플로를 Preview alias 대상으로 실행.
 
 **범위 추정**: 21개 spec 환경변수화 + alias 운영 설정. 세션22 범위 외 follow-up.
+
+---
+
+## [결정 #CL-22] 셀러 페이지 분할 — fatal constraint 해소 (2026-05-15, 세션23)
+
+**배경**: CLAUDE.md §1 fatal constraint(단일 파일 500라인 한계)를 두 페이지가 위반했다.
+- `apps/seller/src/app/orders/[id]/page.tsx` — 629라인
+- `apps/seller/src/app/settlements/page.tsx` — 531라인
+
+향후 UI/UX 리팩토링 진입 전, **동작 변경 없는 순수 구조 분할**로 한계를 해소했다.
+
+**Track A — orders/[id] 분할 (629 → 217)**:
+- `_lib.ts` — 유틸·상수 (`toDate`, `formatDeadlineCountdown`, `makePreparedAtOptions`, `READONLY_STATUSES`, `CANCELLABLE_STATUSES`)
+- `_hooks/useOrderDetail.ts` — Firestore `onSnapshot` + `productName`·`groupConfig` 보조 fetch
+- `_hooks/useOrderDetailActions.ts` — `handlePrepare`·`handleCancel` (detail 페이지 전용 시그니처)
+- `_components/OrderInfoSection.tsx` — 상태 헤더 + 상품/공동구매/배송/취소사유 4 Paper
+- `_components/PrepareForm.tsx` — 준비 시작 빠른 선택지 UI
+- `_components/CancelOrderModal.tsx` — 취소 모달
+
+**Track B — settlements 분할 (531 → 116)**:
+- `_lib.ts` — `toKRW`, `toDateStr`, `downloadCSV`
+- `_constants.ts` — 타입·`STATUS_LABEL`·`STATUS_COLOR`·`TABS`
+- `_hooks/useSettlements.ts` — summary + list fetch + 자동 useEffect
+- `_components/DailySummaryTab.tsx` / `PeriodTab.tsx` / `OrdersTab.tsx` / `SettlementListItem.tsx`
+
+**기존 `useOrderActions` 훅과 통합하지 않은 이유**: detail 페이지는 모달 reason 입력 + ISO `preparedAt` + `apiFetch` 사용. 기존 훅은 `prompt()` reason + `datetime-local` 입력 + raw `fetch` 사용. 시그니처와 인증 경로 불일치로 단순 통합 시 동작 변경 위험. 향후 UI 리팩토링 사이클에서 양쪽을 한 번에 정비할 예정.
+
+**정합성 검증**:
+- `npx tsc --noEmit` 통과
+- `npx next build --webpack` — TypeScript 컴파일 + tsc 통과. Prerender 단계에서 `/admin/banner`가 `auth/invalid-api-key`로 실패하나 admin/banner는 본 작업 범위 외이며 Firebase 환경변수 누락이 원인(사전 결함)
+- Biome lint 실행 불가 — `biome.json:35:5`에 trailing comma 파싱 에러(사전 결함, 별도 처리 필요)
+- e2e 텍스트 셀렉터("주문 상세", "상품명", "준비 시작" 등) 모두 보존
