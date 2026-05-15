@@ -1,0 +1,42 @@
+name: Sync preview branch
+
+# main 에 푸시되면 preview 브랜치를 자동으로 최신화한다.
+# preview 는 영구 e2e 환경 브랜치이므로 항상 main 과 동기 상태여야 한다.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 동시 실행 방지 — preview push 충돌 회피
+concurrency:
+  group: sync-preview
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: preview
+          fetch-depth: 0
+
+      - name: Merge main into preview
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git merge origin/main --no-edit -m "chore(preview): sync main into preview"
+          git push origin preview
+
+      # GITHUB_TOKEN 으로 만든 push 는 다른 워크플로(e2e.yml 의 push 트리거)를
+      # 재귀 방지 정책상 발화시키지 않는다. workflow_dispatch 는 발화하므로
+      # 동기화 직후 e2e 를 명시적으로 디스패치한다.
+      - name: Trigger E2E workflow on preview
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run e2e.yml --ref preview
