@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-15 (세션24 — e2e 회귀 검증)
+최종 수정: 2026-05-15 (세션25 — 사전 결함 정리)
 
 ---
 
@@ -21,6 +21,7 @@
 | **세션22**: E2E 보안 결함 정리 — Vercel `E2E_TEST` Production 제거·약한비번 54건 일소·**옵션 B 헤더 게이팅 도입** | 2026-05-10 |
 | **세션23**: 셀러 fatal constraint 해소 — `orders/[id]` 629→217·`settlements` 531→116 분할 (#CL-22) | 2026-05-15 |
 | **세션24**: 세션23 e2e 회귀 검증 (회귀 0건) + 인증 헬퍼 진단 강화 (#CL-23) | 2026-05-15 |
+| **세션25**: 사전 결함 정리 — biome.json 파싱 에러·`.env.vercel.tmp` gitignore·driver Credentials 부재 확인 (#CL-25) | 2026-05-15 |
 
 ---
 
@@ -42,8 +43,7 @@
 - G1: `seller/app/hubs/[id]` 거점 수정 페이지
 - Driver Kakao Maps SDK 연동
 - 네이버페이 채널키 승인 → Vercel 환경변수
-- driver app에도 옵션 B 헤더 게이팅 적용 (현재 미적용)
-- 옵션 A 보강 (#CL-21) — Production env에서 `E2E_TEST_SECRET` 제거 + Preview env 분리
+- 옵션 A 보강 (#CL-21) — Production env에서 `E2E_TEST_SECRET` 제거 + Preview env 분리 (4단계 다중 PR — 세션25 #CL-25 검증 결과)
 - e2e 인증 인프라 race 해소 (#CL-23) — storageState 패턴 도입 + Railway `/auth/login` 계측
 
 ---
