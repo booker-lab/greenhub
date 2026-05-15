@@ -1295,3 +1295,29 @@ providers: [
 - `npx next build --webpack` — TypeScript 컴파일 + tsc 통과. Prerender 단계에서 `/admin/banner`가 `auth/invalid-api-key`로 실패하나 admin/banner는 본 작업 범위 외이며 Firebase 환경변수 누락이 원인(사전 결함)
 - Biome lint 실행 불가 — `biome.json:35:5`에 trailing comma 파싱 에러(사전 결함, 별도 처리 필요)
 - e2e 텍스트 셀렉터("주문 상세", "상품명", "준비 시작" 등) 모두 보존
+
+---
+
+## [결정 #CL-23] e2e 인증 헬퍼 진단 강화 (2026-05-15, 세션24)
+
+**배경**: 세션23 분할 리팩토링 회귀 검증을 위해 셀러 spec 3종(`seller-orders`, `seller-order-detail`, `seller-settlements`)을 chromium+mobile 2 projects로 실행한 결과, mobile 편중의 flake가 관측되었다. 페이지 스냅샷이 모두 카카오 로그인 페이지였는데, `loginViaCredentials`가 success를 반환한 직후의 케이스였다.
+
+**진단**: `apps/e2e/tests/_helpers/auth.ts`에 set-cookie 헤더 카운트 + BrowserContext cookie jar 검증을 추가한 결과, 실패 케이스에서 `set-cookie count=0, body.url=null`이 일관되게 관측됨. NextAuth credentials POST가 200 OK + 빈 body + set-cookie 없음을 반환하는 케이스다.
+
+**root cause 가설**: Vercel function 또는 Railway `/auth/login` 호출의 일시적 실패. 다음 정황 근거:
+- mobile 단독 26/26 통과, chromium 단독 25/26 통과 (각 단독은 95~100%)
+- chromium+mobile 합치면 44/52로 악화 (약 85%)
+- workers=1로 직렬 실행해도 41/52 — 동시성 race 아님
+- 시간에 따른 누적 효과로 추정 (rate limiting 또는 Railway cold-start)
+
+**결정**: helper에서 명시적 throw로 가시화 (단일 시도). playwright test-level `retries: 1`이 의미 있게 동작하도록 cookie 누락을 즉시 throw한다. retry 루프를 helper에 넣으면 인증 호출 빈도가 늘어나 부하가 증가하므로 채택하지 않음(실험 검증: retry 3회 + 600ms wait → 19 fail로 악화).
+
+**해소 보류 사유**: 분할 리팩토링과 무관한 인증 인프라 이슈이며, 본 세션의 1차 목적(세션23 회귀 검증)은 0건으로 완료되었다. 본격 해소는 다음 후속 작업에서 진행:
+- `storageState` 패턴 도입 검토 — global setup에서 1회 로그인 + 모든 spec 재사용, Railway 인증 호출 N→1
+- Railway `/auth/login` latency·실패율 계측
+- Vercel function cold-start mitigation 검토
+
+**helper 변경 요지**:
+- credentials POST 후 `page.context().cookies(base)`에서 `authjs.session-token` 존재 검증
+- 미발견 시 `set-cookie count`·`body.url`·`cookie names` 포함 throw
+- retry 루프 미도입 (단일 시도, playwright 레벨 retry에 위임)
