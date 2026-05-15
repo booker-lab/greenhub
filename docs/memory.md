@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-15 (세션26 — #CL-21 옵션 A 보강 완료)
+최종 수정: 2026-05-16 (세션27 — #CL-21 후속 e2e CI 활성화 완료)
 
 ---
 
@@ -23,6 +23,7 @@
 | **세션24**: 세션23 e2e 회귀 검증 (회귀 0건) + 인증 헬퍼 진단 강화 (#CL-23) | 2026-05-15 |
 | **세션25**: 사전 결함 정리 — biome.json 파싱 에러·`.env.vercel.tmp` gitignore·driver Credentials 부재 확인 (#CL-25) | 2026-05-15 |
 | **세션26**: #CL-21 옵션 A 보강 — Production env `E2E_TEST_SECRET` 제거 + Preview SSO bypass 도입 | 2026-05-15 |
+| **세션27**: #CL-21 후속 — repo Secrets 11개 등록 + `sync-preview.yml` 자동 머지 워크플로 + e2e CI 가동 | 2026-05-16 |
 
 ---
 
@@ -52,15 +53,24 @@
 
 ---
 
+## 세션27 — #CL-21 후속: e2e CI 활성화
+
+- gh CLI 2.92.0 winget 설치(`C:\Program Files\GitHub CLI`) → `booker-lab` 인증(ADMIN).
+- `gh secret set`으로 repo Secrets 11개 등록 (`apps/e2e/.env` 값 그대로).
+- `.github/workflows/sync-preview.yml` 신설 — `main` push → `preview` 자동 merge·push → `gh workflow run e2e.yml` 디스패치. (GITHUB_TOKEN push는 재귀방지로 e2e push트리거 미발화 → workflow_dispatch로 우회.)
+- `e2e.yml` `pnpm/action-setup version:9` 고정 제거 (packageManager pnpm@10.32.1 충돌).
+- **e2e CI 가동 확인**: 124 passed / 37 failed. 37건 전부 셀러 인증 spec — `set-cookie count=0` = **#CL-23 인증 race** (CI는 spec별 독립 인증으로 race 증폭). 셀러앱 코드 무변경이므로 회귀 아님.
+
+---
+
 ## 후속 작업 — SSOT: `docs/BACKLOG.md` §12
 
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
-- ✅ P0: #CL-21 옵션 A 보강 — 세션26 완료
-- 🟠 **P1 (다음 세션 최우선)**: #CL-21 후속 — GitHub repo Secrets 11개 등록 + `preview` 브랜치 동기화 운영 → e2e CI 활성화
-- 🟠 P1: #CL-23 인증 race 해소 (`storageState` 패턴) + Railway `/auth/login` 계측
+- ✅ P0: #CL-21 옵션 A 보강 (세션26) / ✅ P1: #CL-21 후속 e2e CI 활성화 (세션27)
+- 🟠 **P1 (다음 세션 최우선)**: #CL-23 인증 race 해소 (`storageState` 패턴) — e2e CI에서 37건 재현 중 + Railway `/auth/login` 계측
 - 🟡 P2: Vercel cold-start 검토 / `CRITICAL_LOGIC.md` 한도 정책 결정
-- 🟢 P3: `useOrderActions` 통합·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·GitHub Secrets 등록
+- 🟢 P3: `useOrderActions` 통합·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·consumer 강한비번
 
 ---
 
