@@ -431,7 +431,7 @@
 
 | 순위 | 항목 | 범주 | 의존성 |
 |------|------|------|--------|
-| 🔴 P0 | #CL-21 옵션 A 보강 — Production env에서 `E2E_TEST_SECRET` 제거 | 보안 | 4단계 다중 PR |
+| ✅ P0 | #CL-21 옵션 A 보강 — Production env에서 `E2E_TEST_SECRET` 제거 (2026-05-15 세션26 완료) | 보안 | 4단계 다중 PR |
 | 🟠 P1 | #CL-23 인증 race 해소 — `storageState` 패턴 도입 | 인프라/DX | 단독 진행 가능 |
 | 🟠 P1 | Railway `/auth/login` latency·실패율 계측 | 관측 | storageState 도입 직전·직후 |
 | 🟡 P2 | Vercel function cold-start mitigation 검토 | 성능 | 계측 데이터 기반 |
@@ -445,18 +445,19 @@
 
 ### 12-2. 상세 작업
 
-#### [ ] P0 — #CL-21 옵션 A 보강: Production env 분리 (4단계 다중 PR)
+#### [x] P0 — #CL-21 옵션 A 보강: Production env 분리 (4단계, 2026-05-15 세션26 완료)
 
 **배경**: 옵션 B 헤더 게이팅(#CL-20)으로 폼 노출은 차단됐으나 SECRET이 production·preview에 동일하게 존재 → SECRET 유출 시 production 인증 위험. 옵션 A는 Production env에서 `E2E_TEST_SECRET` 자체를 제거해 attack surface 축소.
 
-**현재 차단 사유**: 21개 e2e spec의 `BASE`가 Production 도메인 하드코딩 상태. Production env에서 SECRET을 단순 제거하면 전체 e2e 인증 깨짐. 4단계 순차 진행 필수.
+- [x] 1. `preview` 브랜치 신설 → Vercel branch Preview 배포 자동 생성 (`{project}-git-preview-…vercel.app`)
+- [x] 2. 21개 spec `BASE` 환경변수화 (`SELLER_BASE`·`CONSUMER_BASE`·`DRIVER_BASE`) + `apps/e2e/.env` 추가
+- [x] 3. `.github/workflows/e2e.yml` 신설 — `preview` 브랜치 push 시 Preview 대상 e2e
+- [x] 4. Vercel seller·consumer Production env에서 `E2E_TEST_SECRET` 삭제 + 빈 커밋 재배포
+- [x] 3.5. Preview SSO 우회 — Protection Bypass for Automation + `global-setup.ts` storageState
 
-- [ ] 1. Vercel Preview alias 운영 설정 (e.g. `e2e-seller-preview.vercel.app`, `e2e-consumer-preview.vercel.app`)
-- [ ] 2. 21개 spec `BASE` 환경변수화 (`SELLER_BASE`·`CONSUMER_BASE`·`DRIVER_BASE`) + `apps/e2e/.env` 추가
-- [ ] 3. e2e CI 워크플로를 Preview alias 대상으로 전환
-- [ ] 4. Production Vercel env에서 `E2E_TEST_SECRET` 삭제 + 빈 커밋 재배포
+**검증 완료**: 옵션 B 4종 — Production seller·consumer는 유효 헤더로도 거부, Preview는 정상 통과. smoke seller-orders 11/12·consumer-mypage 9/10.
 
-**검증**: 옵션 B 5종 통합 검증 재실행(#CL-20) — Production에서는 헤더 있어도 SECRET 미설정으로 거부, Preview에서는 정상 통과.
+**잔여 후속**: GitHub repo Secrets 등록 전까지 CI 미동작. `preview` 브랜치 ↔ `main` 주기 동기화 필요.
 
 **참조**: [docs/CRITICAL_LOGIC.md #CL-21](CRITICAL_LOGIC.md)
 

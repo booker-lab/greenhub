@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-15 (세션25 — 사전 결함 정리)
+최종 수정: 2026-05-15 (세션26 — #CL-21 옵션 A 보강 완료)
 
 ---
 
@@ -22,6 +22,7 @@
 | **세션23**: 셀러 fatal constraint 해소 — `orders/[id]` 629→217·`settlements` 531→116 분할 (#CL-22) | 2026-05-15 |
 | **세션24**: 세션23 e2e 회귀 검증 (회귀 0건) + 인증 헬퍼 진단 강화 (#CL-23) | 2026-05-15 |
 | **세션25**: 사전 결함 정리 — biome.json 파싱 에러·`.env.vercel.tmp` gitignore·driver Credentials 부재 확인 (#CL-25) | 2026-05-15 |
+| **세션26**: #CL-21 옵션 A 보강 — Production env `E2E_TEST_SECRET` 제거 + Preview SSO bypass 도입 | 2026-05-15 |
 
 ---
 
@@ -38,14 +39,27 @@
 
 ---
 
+## 세션26 — #CL-21 옵션 A 보강 완료
+
+- `preview` 브랜치 신설 → Vercel branch Preview 배포(`{project}-git-preview-…vercel.app`) 자동화. 21개 spec `BASE` 환경변수화. `.github/workflows/e2e.yml` 신설.
+- Vercel seller·consumer **Production** env `E2E_TEST_SECRET` 삭제 (Preview·Development 유지) + 빈 커밋 재배포.
+- **Preview SSO 우회**: Preview는 Vercel Authentication(SSO) 기본 보호 → Protection Bypass for Automation 시크릿 3개 발급. `global-setup.ts`가 bypass 쿼리로 `_vercel_jwt` 쿠키 발급 → `storageState`(`apps/e2e/.bypass-state.json`) 재사용. bypass 헤더도 전역 주입 금지(Firebase CORS).
+- 검증: Production 유효 헤더로도 거부 / Preview 정상. smoke seller-orders 11/12·consumer-mypage 9/10.
+- **주의**: PowerShell `Get-Content -Raw`가 UTF-8을 CP949로 오독 → 한글 mojibake 손상. spec 일괄 편집 시 Python(명시적 utf-8) 또는 Edit 도구 사용.
+- **잔여**: GitHub repo Secrets 등록 전 CI 미동작. `preview` ↔ `main` 주기 동기화 필요.
+
+상세: [docs/CRITICAL_LOGIC.md](CRITICAL_LOGIC.md) #CL-21
+
+---
+
 ## 후속 작업 — SSOT: `docs/BACKLOG.md` §12
 
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
-- 🔴 P0: #CL-21 옵션 A 보강 (Production env `E2E_TEST_SECRET` 제거, 4단계 다중 PR)
+- ✅ P0: #CL-21 옵션 A 보강 — 세션26 완료
 - 🟠 P1: #CL-23 인증 race 해소 (`storageState` 패턴) + Railway `/auth/login` 계측
-- 🟡 P2: Vercel cold-start 검토 / `CRITICAL_LOGIC.md` 1342라인 한도 정책 결정
-- 🟢 P3: `useOrderActions` 통합·`/admin/banner` env·G1 거점 수정·Driver Maps SDK
+- 🟡 P2: Vercel cold-start 검토 / `CRITICAL_LOGIC.md` 한도 정책 결정
+- 🟢 P3: `useOrderActions` 통합·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·GitHub Secrets 등록
 
 ---
 
@@ -56,7 +70,9 @@
 | 헬퍼 | `apps/e2e/tests/_helpers/auth.ts` `loginViaCredentials(page, base, email, password)` |
 | 호출 패턴 | `test.beforeEach`에서 1줄 호출 (NextAuth `/api/auth/csrf` + `/api/auth/callback/credentials` 직접) |
 | 헤더 주입 | helper의 csrf GET + credentials POST 두 호출에만 명시적 (`headers: { 'x-e2e-test-token': SECRET }`) — **전역 extraHTTPHeaders 사용 금지** (Firebase Identity Toolkit 등 third-party API에 헤더가 따라가 CORS preflight 차단됨) |
-| 검증 통과 | seller-orders 12/12, consumer-cart·checkout·mypage·seller-onboarding 각 1 |
+| BASE | `process.env.SELLER_BASE/CONSUMER_BASE/DRIVER_BASE` (Preview branch URL) — `apps/e2e/.env` |
+| Preview SSO 우회 | `global-setup.ts`가 `_vercel_jwt` bypass 쿠키 발급 → `storageState`(`apps/e2e/.bypass-state.json`) 재사용. bypass 시크릿은 `*_BYPASS_SECRET` env |
+| 검증 통과 | seller-orders 11/12·consumer-mypage 9/10 (잔여 1건씩 #CL-23 race flake) |
 
 ---
 
@@ -75,7 +91,8 @@
 ## 핵심 기술 특이사항
 
 - **login/page.tsx (seller·consumer)**: `export const dynamic = 'force-dynamic'` — 옵션 B 도입 후 폼 노출은 항상 false지만 force-dynamic은 유지(런타임 env 평가 보장)
-- **E2E_TEST_SECRET**: Vercel seller·consumer × Production·Preview·Development 6환경 동일값. `apps/{seller,consumer}/.env.local`·`apps/e2e/.env`에도 동일값. 32자 base64. **MVP 출시 시 #CL-20 정리표대로 삭제**
+- **E2E_TEST_SECRET**: 세션26부터 Vercel seller·consumer는 **Preview·Development만** (Production 제거 — #CL-21). `apps/e2e/.env`에 동일값. 32자. **MVP 출시 시 #CL-20 정리표대로 Preview도 삭제**
+- **VERCEL bypass**: Preview 배포는 SSO 보호 → 3개 프로젝트 Protection Bypass for Automation 시크릿. e2e는 `_vercel_jwt` 쿠키로 우회 (`global-setup.ts`)
 - **Railway CORS**: no-origin 요청 허용(헬스체크) — `if (!origin) return callback(null, true)` 유지 필수
 - **gemini-3-flash-preview**: 유효한 모델명, 변경 금지
 - **aggressiveFrontEndNavCaching: false**: 변경 금지 (RSC CORS 재발)
