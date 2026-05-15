@@ -5,19 +5,31 @@
 
 ---
 
-## T0. 진입 — 세션27 e2e 실패 37건 재검토 (먼저 수행)
+## T0. 진입 — 세션27 e2e 실패 37건 재검토 (먼저 수행) ✅ 완료 (2026-05-16 세션28)
 
 세션27 e2e CI 풀런 결과를 **다시 열어 분류를 확정**한 뒤 작업을 시작한다. 추정만으로 코드를 고치지 않는다.
 
-- [ ] run **25926181316** 로그 재확인 — `gh run view 25926181316 --log-failed`
-- [ ] 실패 리포트 아티팩트 확보 — `gh run download 25926181316 -n playwright-report -D /tmp/s27-report`
-- [ ] 37건을 아래 3분류로 확정 (세션27 추정 → 증거로 확정/반증):
-  - **분류 A — 인증 race**: `auth.ts:64` throw `set-cookie count=0`. 셀러 인증 spec 대부분. → T1~T4가 해소 대상.
-  - **분류 B — 데이터 의존 flake**: `consumer-groupbuy`(모집 중 섹션)·`consumer-mypage`(주문 목록)·`consumer-home`(공동구매 섹션). storageState와 무관할 수 있음.
-  - **분류 C — `waitForLoadState` 타임아웃**: `perf-css-regression` Seller 로그인 2건. networkidle 미정착 의심(셀러 페이지 상시 연결).
-- [ ] **정합성 검토**: 분류별 건수 합 = 37 확인. A가 다수임을 확인(아니면 T1 설계 재검토). B·C는 T5로 분리 기록.
+- [x] run **25926181316** 로그 재확인 — `gh run view 25926181316 --log-failed` (UTF-16 → UTF-8 변환 후 분석)
+- [x] 실패 리포트 아티팩트 확보 — artifact 7020759918 zip 다운로드 → 37개 `error-context.md` page snapshot 확보
+- [x] 37건을 증거로 확정 (세션27 추정 → **증거로 정정**)
+- [x] **정합성 검토**: 분류별 합 = 23+5+2+7 = **37 일치**. A=23(62%)으로 다수 확인 → T1 설계(storageState) 유지. B·C·D는 T5 분리 기록.
 
-→ 산출: 분류 확정표. 이후 태스크는 분류 A를 푼다.
+### 분류 확정표 (증거 기반 — 진입 가이드 가설 정정)
+
+| 분류 | 건수 | 증거 | spec | storageState 효과 |
+|------|------|------|------|-------------------|
+| **A — 인증 race** | **23** | `auth.ts:64` throw `set-cookie count=0` (page=about:blank, 93줄 context) | seller-orders ×7, seller-product-create ×8, seller-products ×7, seller-settlements:30 ×1 | ✅ T1~T4가 해소 |
+| **B — Railway API "Failed to fetch"** | **5** | page snapshot에 `Failed to fetch` / `불러올 수 없습니다` 노출. 페이지는 **인증·렌더 정상** | consumer-groupbuy:14, consumer-mypage:75, seller-onboarding:46(pre-fill 0), seller-onboarding:77, seller-settlements:99 | ❌ 무관 — Railway 안정성 |
+| **C — waitForLoadState 타임아웃** | **2** | `page.waitForLoadState('networkidle')` 30s 초과 | perf-css-regression:87, :103 | ❌ 무관 — networkidle 전략 |
+| **D — 대시보드 realtime "연결 중" 미정착** | **7** | page snapshot: `홈` 렌더 + 카드 정상, 단 indicator가 `연결 중`에서 미정착. spec OR-locator가 `연결 중` 누락 | seller-home-dashboard:47,59,69,82,92,103,115 | ❌ 무관 — Firestore 리스너 / spec 갭 |
+
+**진입 가이드 가설 대비 정정 사항**:
+- 세션27 추정 「셀러 인증 spec 대부분(~33) = A」 → **반증**. 셀러 33건 중 A는 23건뿐, 나머지 10건은 D(7)·B(3).
+- 세션27 추정 「B = consumer-groupbuy·mypage·**home**」 → consumer-home은 **실패 없음**. B의 실체는 generic flake가 아니라 **Railway API `Failed to fetch`** (consumer 2 + seller 3).
+- 신규 **분류 D** 발견 — 진입 가이드에 없던 카테고리.
+- CI는 `--project=chromium`만 실행 (e2e.yml) → **37건 전부 chromium, mobile 0건**. config의 mobile project는 CI 미실행.
+
+→ **T1~T4는 분류 A(23건) 해소가 목표.** T4 완료 기준은 「A 23→0」. 잔여 B·C·D 14건은 T5 분리 기록.
 
 ---
 
