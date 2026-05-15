@@ -45,8 +45,27 @@ export async function loginViaCredentials(
   if (!res.ok()) {
     throw new Error(`signIn failed: ${res.status()} ${await res.text()}`)
   }
-  const body = await res.json().catch(() => ({}) as { url?: string })
+  const body = (await res.json().catch(() => ({}))) as { url?: string }
   if (body?.url && /[?&]error=/.test(body.url)) {
     throw new Error(`signIn rejected: ${body.url}`)
+  }
+
+  // 세션 쿠키 발급 검증 — credentials POST 응답의 set-cookie가 BrowserContext의
+  // cookie jar에 들어갔는지 직접 확인. Vercel/Railway 일시 부하 상황에서 set-cookie
+  // 없는 200 응답이 관측되며(세션24 진단), 그대로 page.goto()가 진행되면 카카오
+  // 로그인 페이지로 리다이렉트되어 텍스트 셀렉터 매칭이 실패한다. 명시적 throw로
+  // playwright test-level retry(retries: 1)가 정상 동작하도록 가시화한다.
+  const cookies = await page.context().cookies(base)
+  const sessionCookie = cookies.find((c) => /authjs\.session-token/.test(c.name))
+  if (!sessionCookie) {
+    const setCookieCount = res
+      .headersArray()
+      .filter((h) => h.name.toLowerCase() === 'set-cookie').length
+    throw new Error(
+      `session cookie not in context after signIn — ` +
+        `set-cookie count=${setCookieCount}, ` +
+        `body.url=${body?.url ?? 'null'}, ` +
+        `cookie names=[${cookies.map((c) => c.name).join(', ')}]`,
+    )
   }
 }
