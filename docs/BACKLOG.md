@@ -424,14 +424,16 @@
 
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
-> 기준일: 2026-05-15 (세션25 #CL-25 정리 후)
+> 기준일: 2026-05-15 (세션26 #CL-21 완료 후)
 > 진입점: 다음 세션 시작 시 본 §12 우선순위 표 → 항목 상세 순서로 확인.
+> **다음 세션 최우선**: §12-2 「P1 — #CL-21 후속: e2e CI 활성화」 (GitHub Secrets 등록 + preview 동기화).
 
 ### 12-1. 우선순위
 
 | 순위 | 항목 | 범주 | 의존성 |
 |------|------|------|--------|
 | ✅ P0 | #CL-21 옵션 A 보강 — Production env에서 `E2E_TEST_SECRET` 제거 (2026-05-15 세션26 완료) | 보안 | 4단계 다중 PR |
+| 🟠 P1 | #CL-21 후속 — GitHub repo Secrets 등록 + `preview` 브랜치 동기화 (e2e CI 활성화 전제) | 인프라/DX | 단독 진행 가능 |
 | 🟠 P1 | #CL-23 인증 race 해소 — `storageState` 패턴 도입 | 인프라/DX | 단독 진행 가능 |
 | 🟠 P1 | Railway `/auth/login` latency·실패율 계측 | 관측 | storageState 도입 직전·직후 |
 | 🟡 P2 | Vercel function cold-start mitigation 검토 | 성능 | 계측 데이터 기반 |
@@ -457,7 +459,26 @@
 
 **검증 완료**: 옵션 B 4종 — Production seller·consumer는 유효 헤더로도 거부, Preview는 정상 통과. smoke seller-orders 11/12·consumer-mypage 9/10.
 
-**잔여 후속**: GitHub repo Secrets 등록 전까지 CI 미동작. `preview` 브랜치 ↔ `main` 주기 동기화 필요.
+**잔여 후속**: 아래 「P1 — #CL-21 후속」 참조.
+
+**참조**: [docs/CRITICAL_LOGIC.md #CL-21](CRITICAL_LOGIC.md)
+
+---
+
+#### [ ] P1 — #CL-21 후속: e2e CI 활성화 (GitHub Secrets 등록 + preview 동기화)
+
+**배경**: 세션26에서 `.github/workflows/e2e.yml`을 신설했으나 GitHub repo Secrets가 미등록 → `preview` 브랜치 push 시 워크플로가 시크릿 미해석으로 실패한다. CI를 실제 가동하려면 아래 등록·운영 필요. **다음 세션 진입점.**
+
+**1. GitHub repo Secrets 등록 (11개)** — repo Settings → Secrets and variables → Actions. 모든 값은 `apps/e2e/.env`(gitignore)에 존재. `gh secret set <NAME> --body "<값>"` 또는 대시보드.
+- [ ] `SELLER_BASE` · `CONSUMER_BASE` · `DRIVER_BASE` — Preview branch URL
+- [ ] `SELLER_BYPASS_SECRET` · `CONSUMER_BYPASS_SECRET` · `DRIVER_BYPASS_SECRET` — Vercel Protection Bypass
+- [ ] `E2E_TEST_SECRET` — 옵션 B 헤더 게이팅 토큰
+- [ ] `TEST_SELLER_EMAIL` · `TEST_SELLER_PASSWORD` · `TEST_CONSUMER_EMAIL` · `TEST_CONSUMER_PASSWORD`
+- [ ] 등록 후 `preview` 브랜치 빈 커밋 push → Actions 워크플로 1회 green 확인
+
+**2. `preview` 브랜치 동기화 운영** — `preview`는 영구 e2e 환경 브랜치. `main` 머지 후 `preview`도 최신화해야 e2e가 최신 코드를 검증한다.
+- [ ] 운영 방식 결정: (a) 수동 `git checkout preview && git merge main && git push`, 또는 (b) `main` push 시 `preview` 자동 머지 워크플로 추가
+- 현재 상태: `preview` = `main` (동기, 세션26 종료 시점)
 
 **참조**: [docs/CRITICAL_LOGIC.md #CL-21](CRITICAL_LOGIC.md)
 
