@@ -1,19 +1,19 @@
-import { test, expect } from '@playwright/test'
+﻿import { test, expect } from '@playwright/test'
 
-const BASE = 'https://driver.greenlove.co.kr'
+const BASE = process.env['DRIVER_BASE'] ?? 'https://driver.greenlove.co.kr'
 
-// ── 공개 접근 가능 페이지 ──────────────────────────────────────────
+// ?? 怨듦컻 ?묎렐 媛???섏씠吏 ??????????????????????????????????????????
 
-test.describe('드라이버 디자인 시스템 — 로그인 페이지', () => {
-  test('로그인 페이지 정상 렌더링', async ({ page }) => {
+test.describe('?쒕씪?대쾭 ?붿옄???쒖뒪????濡쒓렇???섏씠吏', () => {
+  test('濡쒓렇???섏씠吏 ?뺤긽 ?뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/login`)
     await expect(page.locator('body')).toBeVisible()
-    await expect(page.locator('text=Green Love 드라이버')).toBeVisible()
-    await expect(page.locator('text=드라이버 계정으로 로그인하세요')).toBeVisible()
-    await expect(page.locator('text=카카오로 시작하기')).toBeVisible()
+    await expect(page.locator('text=Green Love ?쒕씪?대쾭')).toBeVisible()
+    await expect(page.locator('text=?쒕씪?대쾭 怨꾩젙?쇰줈 濡쒓렇?명븯?몄슂')).toBeVisible()
+    await expect(page.locator('text=移댁뭅?ㅻ줈 ?쒖옉?섍린')).toBeVisible()
   })
 
-  test('로그인 페이지 — JS 에러 없음', async ({ page }) => {
+  test('濡쒓렇???섏씠吏 ??JS ?먮윭 ?놁쓬', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(`${BASE}/login`)
@@ -21,21 +21,21 @@ test.describe('드라이버 디자인 시스템 — 로그인 페이지', () => 
     expect(errors.filter((e) => !e.includes('hydration'))).toHaveLength(0)
   })
 
-  test('로그인 페이지 — 카카오 예외 색상(#FEE500) 유지', async ({ page }) => {
+  test('濡쒓렇???섏씠吏 ??移댁뭅???덉쇅 ?됱긽(#FEE500) ?좎?', async ({ page }) => {
     await page.goto(`${BASE}/login`)
     const kakaoBtn = page.locator('button[type="submit"]').first()
     await expect(kakaoBtn).toBeVisible()
     const bg = await kakaoBtn.evaluate((el) =>
       (el as HTMLElement).style.backgroundColor
     )
-    // 카카오 브랜드 컬러 #FEE500 보존 확인
+    // 移댁뭅??釉뚮옖??而щ윭 #FEE500 蹂댁〈 ?뺤씤
     expect(bg.toLowerCase()).toMatch(/fee500|rgb\(254,\s*229,\s*0\)/)
   })
 
-  test('로그인 페이지 — 구 green-* CSS 변수 미사용', async ({ page }) => {
+  test('濡쒓렇???섏씠吏 ??援?green-* CSS 蹂??誘몄궗??, async ({ page }) => {
     await page.goto(`${BASE}/login`)
-    // --mantine-color-* 는 Mantine 컴포넌트 내부 주입 변수이므로 허용
-    // 우리 코드에서 직접 사용한 구버전 --green-* 변수만 위반으로 판정
+    // --mantine-color-* ??Mantine 而댄룷?뚰듃 ?대? 二쇱엯 蹂?섏씠誘濡??덉슜
+    // ?곕━ 肄붾뱶?먯꽌 吏곸젒 ?ъ슜??援щ쾭??--green-* 蹂?섎쭔 ?꾨컲?쇰줈 ?먯젙
     const violation = await page.evaluate(() => {
       const all = document.querySelectorAll<HTMLElement>('[style]')
       const bad: string[] = []
@@ -54,10 +54,9 @@ test.describe('드라이버 디자인 시스템 — 로그인 페이지', () => 
     expect(violation).toHaveLength(0)
   })
 
-  test('로그인 페이지 — Paper border 적용 (shadow 제거)', async ({ page }) => {
+  test('濡쒓렇???섏씠吏 ??Paper border ?곸슜 (shadow ?쒓굅)', async ({ page }) => {
     await page.goto(`${BASE}/login`)
-    // Paper 컨테이너: boxShadow 없고 border 있어야 함
-    const paperEl = await page.evaluate(() => {
+    // Paper 而⑦뀒?대꼫: boxShadow ?녾퀬 border ?덉뼱????    const paperEl = await page.evaluate(() => {
       const papers = document.querySelectorAll<HTMLElement>('[style*="border"]')
       for (const el of papers) {
         const s = el.style
@@ -69,36 +68,35 @@ test.describe('드라이버 디자인 시스템 — 로그인 페이지', () => 
   })
 })
 
-// ── 리디렉션 검증 ─────────────────────────────────────────────────
+// ?? 由щ뵒?됱뀡 寃利??????????????????????????????????????????????????
 
-test.describe('드라이버 디자인 시스템 — 라우팅', () => {
-  test('미인증 → /board 접근 시 login 리디렉션', async ({ page }) => {
+test.describe('?쒕씪?대쾭 ?붿옄???쒖뒪?????쇱슦??, () => {
+  test('誘몄씤利???/board ?묎렐 ??login 由щ뵒?됱뀡', async ({ page }) => {
     await page.goto(`${BASE}/board`)
     await expect(page).toHaveURL(/login|signin|auth/, { timeout: 10_000 })
   })
 
-  test('미인증 → /map 접근 시 login 리디렉션', async ({ page }) => {
+  test('誘몄씤利???/map ?묎렐 ??login 由щ뵒?됱뀡', async ({ page }) => {
     await page.goto(`${BASE}/map`)
     await expect(page).toHaveURL(/login|signin|auth/, { timeout: 10_000 })
   })
 
-  test('미인증 → /profile 접근 시 login 리디렉션', async ({ page }) => {
+  test('誘몄씤利???/profile ?묎렐 ??login 由щ뵒?됱뀡', async ({ page }) => {
     await page.goto(`${BASE}/profile`)
     await expect(page).toHaveURL(/login|signin|auth/, { timeout: 10_000 })
   })
 })
 
-// ── 인증 후 핵심 화면 검증 ────────────────────────────────────────
-// 드라이버 앱은 카카오 OAuth 전용 — 자동 로그인 테스트는 세션 쿠키 주입 방식 필요
-// DRIVER_SESSION_COOKIE 환경변수 세팅 시 활성화
-
+// ?? ?몄쬆 ???듭떖 ?붾㈃ 寃利?????????????????????????????????????????
+// ?쒕씪?대쾭 ?깆? 移댁뭅??OAuth ?꾩슜 ???먮룞 濡쒓렇???뚯뒪?몃뒗 ?몄뀡 荑좏궎 二쇱엯 諛⑹떇 ?꾩슂
+// DRIVER_SESSION_COOKIE ?섍꼍蹂???명똿 ???쒖꽦??
 const sessionCookie = process.env['DRIVER_SESSION_COOKIE']
 
-test.describe('드라이버 디자인 시스템 — 인증 화면 (세션 주입)', () => {
-  test.skip(!sessionCookie, '환경변수 DRIVER_SESSION_COOKIE 필요')
+test.describe('?쒕씪?대쾭 ?붿옄???쒖뒪?????몄쬆 ?붾㈃ (?몄뀡 二쇱엯)', () => {
+  test.skip(!sessionCookie, '?섍꼍蹂??DRIVER_SESSION_COOKIE ?꾩슂')
 
   test.beforeEach(async ({ page, context }) => {
-    // next-auth 세션 쿠키 주입
+    // next-auth ?몄뀡 荑좏궎 二쇱엯
     const cookies = JSON.parse(sessionCookie!) as Array<{
       name: string; value: string; domain?: string; path?: string
     }>
@@ -107,18 +105,18 @@ test.describe('드라이버 디자인 시스템 — 인증 화면 (세션 주입
     )
   })
 
-  test('배송 보드 — 헤더 + 탭 렌더링', async ({ page }) => {
+  test('諛곗넚 蹂대뱶 ???ㅻ뜑 + ???뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/board`)
-    await expect(page.locator('text=오늘 배송')).toBeVisible({ timeout: 10_000 })
-    await expect(page.locator('text=수거 대기')).toBeVisible()
-    await expect(page.locator('text=배송 중')).toBeVisible()
+    await expect(page.locator('text=?ㅻ뒛 諛곗넚')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?섍굅 ?湲?)).toBeVisible()
+    await expect(page.locator('text=諛곗넚 以?)).toBeVisible()
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.waitForTimeout(500)
     expect(errors.filter((e) => !e.includes('hydration'))).toHaveLength(0)
   })
 
-  test('배송 보드 — 구 Mantine 변수 미사용', async ({ page }) => {
+  test('諛곗넚 蹂대뱶 ??援?Mantine 蹂??誘몄궗??, async ({ page }) => {
     await page.goto(`${BASE}/board`)
     await page.waitForLoadState('networkidle')
     const violation = await page.evaluate(() => {
@@ -139,7 +137,7 @@ test.describe('드라이버 디자인 시스템 — 인증 화면 (세션 주입
     expect(violation).toHaveLength(0)
   })
 
-  test('배송 보드 — BottomNav borderTop 적용 (boxShadow 제거)', async ({ page }) => {
+  test('諛곗넚 蹂대뱶 ??BottomNav borderTop ?곸슜 (boxShadow ?쒓굅)', async ({ page }) => {
     await page.goto(`${BASE}/board`)
     await page.waitForLoadState('networkidle')
     const result = await page.evaluate(() => {
@@ -157,20 +155,20 @@ test.describe('드라이버 디자인 시스템 — 인증 화면 (세션 주입
     expect(result.hasBoxShadow).toBe(false)
   })
 
-  test('지도 페이지 — 렌더링', async ({ page }) => {
+  test('吏???섏씠吏 ???뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/map`)
-    await expect(page.locator('text=오늘 배송 경로')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?ㅻ뒛 諛곗넚 寃쎈줈')).toBeVisible({ timeout: 10_000 })
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.waitForTimeout(500)
     expect(errors.filter((e) => !e.includes('hydration'))).toHaveLength(0)
   })
 
-  test('내 정보 — 렌더링', async ({ page }) => {
+  test('???뺣낫 ???뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/profile`)
-    await expect(page.locator('text=내 정보')).toBeVisible({ timeout: 10_000 })
-    await expect(page.locator('text=연결된 계정')).toBeVisible()
-    await expect(page.locator('text=앱 버전')).toBeVisible()
-    await expect(page.locator('text=로그아웃')).toBeVisible()
+    await expect(page.locator('text=???뺣낫')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?곌껐??怨꾩젙')).toBeVisible()
+    await expect(page.locator('text=??踰꾩쟾')).toBeVisible()
+    await expect(page.locator('text=濡쒓렇?꾩썐')).toBeVisible()
   })
 })

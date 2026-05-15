@@ -1,73 +1,73 @@
-import { test, expect } from '@playwright/test'
+﻿import { test, expect } from '@playwright/test'
 import { loginViaCredentials } from './_helpers/auth'
 
-const BASE = 'https://seller.greenlove.co.kr'
+const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
 
-// ── 비인증 ────────────────────────────────────────────────────────────────────
+// ?? 鍮꾩씤利?????????????????????????????????????????????????????????????????????
 
-test.describe('셀러 정산 관리 — 공개', () => {
-  test('미인증 접근 시 login 리디렉션', async ({ page }) => {
+test.describe('????뺤궛 愿由???怨듦컻', () => {
+  test('誘몄씤利??묎렐 ??login 由щ뵒?됱뀡', async ({ page }) => {
     await page.goto(`${BASE}/settlements`)
     await expect(page).toHaveURL(/login|signin|auth/, { timeout: 10_000 })
   })
 })
 
-// ── 인증 후 ───────────────────────────────────────────────────────────────────
+// ?? ?몄쬆 ?????????????????????????????????????????????????????????????????????
 
 const sellerEmail = process.env['TEST_SELLER_EMAIL']
 const sellerPassword = process.env['TEST_SELLER_PASSWORD']
 const skipAuth = !sellerEmail || !sellerPassword
 
-test.describe('셀러 정산 관리 — 인증', () => {
-  test.skip(skipAuth, '환경변수 TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD 필요')
+test.describe('????뺤궛 愿由????몄쬆', () => {
+  test.skip(skipAuth, '?섍꼍蹂??TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD ?꾩슂')
 
   test.beforeEach(async ({ page }) => {
     await loginViaCredentials(page, BASE, sellerEmail!, sellerPassword!)
   })
 
-  // ── 페이지 구조 ───────────────────────────────────────────────────────────
+  // ?? ?섏씠吏 援ъ“ ???????????????????????????????????????????????????????????
 
-  test('정산 관리 헤더 렌더링', async ({ page }) => {
+  test('?뺤궛 愿由??ㅻ뜑 ?뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/settlements`)
-    await expect(page.locator('text=정산 관리')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?뺤궛 愿由?)).toBeVisible({ timeout: 10_000 })
   })
 
-  test('탭 3개 렌더링 (일별 요약·기간별 조회·주문별 상세)', async ({ page }) => {
+  test('??3媛??뚮뜑留?(?쇰퀎 ?붿빟쨌湲곌컙蹂?議고쉶쨌二쇰Ц蹂??곸꽭)', async ({ page }) => {
     await page.goto(`${BASE}/settlements`)
-    await expect(page.locator('text=정산 관리')).toBeVisible({ timeout: 10_000 })
-    for (const label of ['일별 요약', '기간별 조회', '주문별 상세']) {
+    await expect(page.locator('text=?뺤궛 愿由?)).toBeVisible({ timeout: 10_000 })
+    for (const label of ['?쇰퀎 ?붿빟', '湲곌컙蹂?議고쉶', '二쇰Ц蹂??곸꽭']) {
       await expect(page.locator(`text=${label}`)).toBeVisible()
     }
   })
 
-  // ── G3: 일별 날짜 선택기 ──────────────────────────────────────────────────
+  // ?? G3: ?쇰퀎 ?좎쭨 ?좏깮湲???????????????????????????????????????????????????
 
-  test('G3 — 일별 요약 탭에 날짜 선택기(date input) 렌더링', async ({ page }) => {
+  test('G3 ???쇰퀎 ?붿빟 ??뿉 ?좎쭨 ?좏깮湲?date input) ?뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/settlements`)
-    await expect(page.locator('text=정산 관리')).toBeVisible({ timeout: 10_000 })
-    await page.locator('text=일별 요약').click()
+    await expect(page.locator('text=?뺤궛 愿由?)).toBeVisible({ timeout: 10_000 })
+    await page.locator('text=?쇰퀎 ?붿빟').click()
 
-    // date input 존재 확인
+    // date input 議댁옱 ?뺤씤
     await expect(page.locator('input[type="date"]').first()).toBeVisible({ timeout: 5_000 })
   })
 
-  test('G3 — 날짜 선택기 max 값이 오늘 이하', async ({ page }) => {
+  test('G3 ???좎쭨 ?좏깮湲?max 媛믪씠 ?ㅻ뒛 ?댄븯', async ({ page }) => {
     await page.goto(`${BASE}/settlements`)
-    await expect(page.locator('text=정산 관리')).toBeVisible({ timeout: 10_000 })
-    await page.locator('text=일별 요약').click()
+    await expect(page.locator('text=?뺤궛 愿由?)).toBeVisible({ timeout: 10_000 })
+    await page.locator('text=?쇰퀎 ?붿빟').click()
 
     const today = new Date().toISOString().split('T')[0]
     const maxAttr = await page.locator('input[type="date"]').first().getAttribute('max')
     expect(maxAttr).toBe(today)
   })
 
-  test('G3 — 날짜 변경 시 JS 에러 없음', async ({ page }) => {
+  test('G3 ???좎쭨 蹂寃???JS ?먮윭 ?놁쓬', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
 
     await page.goto(`${BASE}/settlements`)
-    await expect(page.locator('text=정산 관리')).toBeVisible({ timeout: 10_000 })
-    await page.locator('text=일별 요약').click()
+    await expect(page.locator('text=?뺤궛 愿由?)).toBeVisible({ timeout: 10_000 })
+    await page.locator('text=?쇰퀎 ?붿빟').click()
 
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
     await page.locator('input[type="date"]').first().fill(yesterday)
@@ -76,34 +76,32 @@ test.describe('셀러 정산 관리 — 인증', () => {
     expect(errors).toHaveLength(0)
   })
 
-  test('G3 — 날짜 변경 후 날짜 레이블 갱신', async ({ page }) => {
+  test('G3 ???좎쭨 蹂寃????좎쭨 ?덉씠釉?媛깆떊', async ({ page }) => {
     await page.goto(`${BASE}/settlements`)
-    await expect(page.locator('text=정산 관리')).toBeVisible({ timeout: 10_000 })
-    await page.locator('text=일별 요약').click()
+    await expect(page.locator('text=?뺤궛 愿由?)).toBeVisible({ timeout: 10_000 })
+    await page.locator('text=?쇰퀎 ?붿빟').click()
 
-    // 어제 날짜로 변경
-    const yesterday = new Date(Date.now() - 86400000)
+    // ?댁젣 ?좎쭨濡?蹂寃?    const yesterday = new Date(Date.now() - 86400000)
     const yesterdayStr = yesterday.toISOString().split('T')[0]
     const yesterdayDay = yesterday.getDate().toString()
 
     await page.locator('input[type="date"]').first().fill(yesterdayStr)
     await page.waitForTimeout(300)
 
-    // 날짜 레이블에 어제 일(day) 숫자가 포함되어야 함
-    const labelLocator = page.locator(`text=${yesterdayDay}일`)
+    // ?좎쭨 ?덉씠釉붿뿉 ?댁젣 ??day) ?レ옄媛 ?ы븿?섏뼱????    const labelLocator = page.locator(`text=${yesterdayDay}??)
     await expect(labelLocator.first()).toBeVisible({ timeout: 3_000 })
   })
 
-  // ── 탭 전환 ──────────────────────────────────────────────────────────────
+  // ?? ???꾪솚 ??????????????????????????????????????????????????????????????
 
-  test('탭 전환 시 JS 에러 없음', async ({ page }) => {
+  test('???꾪솚 ??JS ?먮윭 ?놁쓬', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
 
     await page.goto(`${BASE}/settlements`)
-    await expect(page.locator('text=정산 관리')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?뺤궛 愿由?)).toBeVisible({ timeout: 10_000 })
 
-    for (const label of ['기간별 조회', '주문별 상세', '일별 요약']) {
+    for (const label of ['湲곌컙蹂?議고쉶', '二쇰Ц蹂??곸꽭', '?쇰퀎 ?붿빟']) {
       await page.locator(`text=${label}`).click()
       await page.waitForTimeout(500)
     }

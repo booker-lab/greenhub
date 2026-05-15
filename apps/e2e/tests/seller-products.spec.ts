@@ -1,91 +1,91 @@
-import { test, expect } from '@playwright/test'
+﻿import { test, expect } from '@playwright/test'
 import { loginViaCredentials } from './_helpers/auth'
 
-const BASE = 'https://seller.greenlove.co.kr'
+const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
 
-// ── 비인증 ────────────────────────────────────────────────────────────────────
+// ?? 鍮꾩씤利?????????????????????????????????????????????????????????????????????
 
-test.describe('셀러 상품 관리 — 공개', () => {
-  test('미인증 접근 시 login 리디렉션', async ({ page }) => {
+test.describe('????곹뭹 愿由???怨듦컻', () => {
+  test('誘몄씤利??묎렐 ??login 由щ뵒?됱뀡', async ({ page }) => {
     await page.goto(`${BASE}/products`)
     await expect(page).toHaveURL(/login|signin|auth/, { timeout: 10_000 })
   })
 })
 
-// ── 인증 후 ───────────────────────────────────────────────────────────────────
+// ?? ?몄쬆 ?????????????????????????????????????????????????????????????????????
 
 const sellerEmail = process.env['TEST_SELLER_EMAIL']
 const sellerPassword = process.env['TEST_SELLER_PASSWORD']
 const skipAuth = !sellerEmail || !sellerPassword
 
-test.describe('셀러 상품 관리 — 인증', () => {
-  test.skip(skipAuth, '환경변수 TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD 필요')
+test.describe('????곹뭹 愿由????몄쬆', () => {
+  test.skip(skipAuth, '?섍꼍蹂??TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD ?꾩슂')
 
   test.beforeEach(async ({ page }) => {
     await loginViaCredentials(page, BASE, sellerEmail!, sellerPassword!)
   })
 
-  // ── 페이지 구조 ───────────────────────────────────────────────────────────
+  // ?? ?섏씠吏 援ъ“ ???????????????????????????????????????????????????????????
 
-  test('상품 관리 헤더 렌더링', async ({ page }) => {
+  test('?곹뭹 愿由??ㅻ뜑 ?뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/products`)
-    await expect(page.locator('text=상품 관리')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?곹뭹 愿由?)).toBeVisible({ timeout: 10_000 })
   })
 
-  test('필터 탭 3개 렌더링 (전체·판매 중·비활성)', async ({ page }) => {
+  test('?꾪꽣 ??3媛??뚮뜑留?(?꾩껜쨌?먮ℓ 以뫢룸퉬?쒖꽦)', async ({ page }) => {
     await page.goto(`${BASE}/products`)
-    await expect(page.locator('text=상품 관리')).toBeVisible({ timeout: 10_000 })
-    await expect(page.locator('text=전체').first()).toBeVisible()
-    await expect(page.locator('text=판매 중').first()).toBeVisible()
-    await expect(page.locator('text=비활성').first()).toBeVisible()
+    await expect(page.locator('text=?곹뭹 愿由?)).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?꾩껜').first()).toBeVisible()
+    await expect(page.locator('text=?먮ℓ 以?).first()).toBeVisible()
+    await expect(page.locator('text=鍮꾪솢??).first()).toBeVisible()
   })
 
-  test('+ 등록 버튼 렌더링', async ({ page }) => {
+  test('+ ?깅줉 踰꾪듉 ?뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/products`)
-    await expect(page.locator('text=+ 등록').first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=+ ?깅줉').first()).toBeVisible({ timeout: 10_000 })
   })
 
-  test('상품 목록 진입 시 JS 에러 없음', async ({ page }) => {
+  test('?곹뭹 紐⑸줉 吏꾩엯 ??JS ?먮윭 ?놁쓬', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
 
     await page.goto(`${BASE}/products`)
-    await expect(page.locator('text=상품 관리')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?곹뭹 愿由?)).toBeVisible({ timeout: 10_000 })
     await page.waitForTimeout(500)
 
     expect(errors).toHaveLength(0)
   })
 
-  // ── B2: 상품 카드 액션 버튼 ────────────────────────────────────────────────
+  // ?? B2: ?곹뭹 移대뱶 ?≪뀡 踰꾪듉 ????????????????????????????????????????????????
 
-  test('B2 — 상품 있을 때 토글·수정·삭제 뱃지 렌더링', async ({ page }) => {
+  test('B2 ???곹뭹 ?덉쓣 ???좉?쨌?섏젙쨌??젣 諭껋? ?뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/products`)
-    await expect(page.locator('text=상품 관리')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?곹뭹 愿由?)).toBeVisible({ timeout: 10_000 })
 
-    // 상품이 없으면 skip
-    const hasProduct = await page.locator('text=판매 중').count() > 1 ||
-      await page.locator('text=비활성').count() > 1
+    // ?곹뭹???놁쑝硫?skip
+    const hasProduct = await page.locator('text=?먮ℓ 以?).count() > 1 ||
+      await page.locator('text=鍮꾪솢??).count() > 1
     if (!hasProduct) return
 
-    // 카드 내 뱃지 확인: 판매 중 / 비활성 (토글), 수정, 삭제
-    const toggleBadge = page.locator('text=판매 중, text=비활성').or(
-      page.locator('text=수정')
+    // 移대뱶 ??諭껋? ?뺤씤: ?먮ℓ 以?/ 鍮꾪솢??(?좉?), ?섏젙, ??젣
+    const toggleBadge = page.locator('text=?먮ℓ 以? text=鍮꾪솢??).or(
+      page.locator('text=?섏젙')
     )
-    await expect(page.locator('text=수정').first()).toBeVisible()
-    await expect(page.locator('text=삭제').first()).toBeVisible()
+    await expect(page.locator('text=?섏젙').first()).toBeVisible()
+    await expect(page.locator('text=??젣').first()).toBeVisible()
   })
 
-  test('B2 — 토글 클릭 시 JS 에러 없음', async ({ page }) => {
+  test('B2 ???좉? ?대┃ ??JS ?먮윭 ?놁쓬', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
 
     await page.goto(`${BASE}/products`)
-    await expect(page.locator('text=상품 관리')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?곹뭹 愿由?)).toBeVisible({ timeout: 10_000 })
     await page.waitForTimeout(1_000)
 
-    // 상품이 있으면 토글 클릭 시도
-    const toggleBadge = page.locator('text=판매 중').nth(1)
-      .or(page.locator('text=비활성').nth(1))
+    // ?곹뭹???덉쑝硫??좉? ?대┃ ?쒕룄
+    const toggleBadge = page.locator('text=?먮ℓ 以?).nth(1)
+      .or(page.locator('text=鍮꾪솢??).nth(1))
     if (await toggleBadge.count() > 0) {
       await toggleBadge.first().click()
       await page.waitForTimeout(500)
@@ -94,14 +94,14 @@ test.describe('셀러 상품 관리 — 인증', () => {
     expect(errors).toHaveLength(0)
   })
 
-  test('B2 — 필터 탭 전환 시 JS 에러 없음', async ({ page }) => {
+  test('B2 ???꾪꽣 ???꾪솚 ??JS ?먮윭 ?놁쓬', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
 
     await page.goto(`${BASE}/products`)
-    await expect(page.locator('text=상품 관리')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=?곹뭹 愿由?)).toBeVisible({ timeout: 10_000 })
 
-    for (const label of ['판매 중', '비활성', '전체']) {
+    for (const label of ['?먮ℓ 以?, '鍮꾪솢??, '?꾩껜']) {
       await page.locator(`text=${label}`).first().click()
       await page.waitForTimeout(300)
     }

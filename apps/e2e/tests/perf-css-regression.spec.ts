@@ -6,13 +6,17 @@ import { test, expect } from '@playwright/test'
  * - Pretendard self-hosting 후 폰트 로딩 여부
  */
 
+const CONSUMER_BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr'
+const SELLER_BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
+const DRIVER_BASE = process.env['DRIVER_BASE'] ?? 'https://driver.greenlove.co.kr'
+
 // ── Consumer ────────────────────────────────────────────────────────
 
 test.describe('Consumer — CSS 회귀', () => {
   test('홈 — JS 에러 없음', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
-    await page.goto('https://greenlove.co.kr')
+    await page.goto(CONSUMER_BASE)
     await page.waitForLoadState('networkidle')
     const critical = errors.filter(
       (e) => !e.includes('hydration') && !e.includes('ChunkLoad')
@@ -21,13 +25,13 @@ test.describe('Consumer — CSS 회귀', () => {
   })
 
   test('홈 — Pretendard 폰트 파일 200 응답', async ({ request }) => {
-    const fontRes = await request.get('https://greenlove.co.kr/fonts/PretendardVariable.woff2')
+    const fontRes = await request.get(`${CONSUMER_BASE}/fonts/PretendardVariable.woff2`)
     expect(fontRes.status()).toBe(200)
     expect(fontRes.headers()['content-type']).toMatch(/font|octet/)
   })
 
   test('홈 — Pretendard 폰트 CSS 변수 적용', async ({ page }) => {
-    await page.goto('https://greenlove.co.kr')
+    await page.goto(CONSUMER_BASE)
     const fontFamily = await page.evaluate(() =>
       getComputedStyle(document.body).fontFamily
     )
@@ -35,7 +39,7 @@ test.describe('Consumer — CSS 회귀', () => {
   })
 
   test('홈 — Badge 컴포넌트 스타일 정상', async ({ page }) => {
-    await page.goto('https://greenlove.co.kr')
+    await page.goto(CONSUMER_BASE)
     const badge = page.locator('.mantine-Badge-root, [class*="Badge"]').first()
     const count = await badge.count()
     if (count > 0) {
@@ -47,7 +51,7 @@ test.describe('Consumer — CSS 회귀', () => {
   })
 
   test('홈 — Button 컴포넌트 스타일 정상', async ({ page }) => {
-    await page.goto('https://greenlove.co.kr')
+    await page.goto(CONSUMER_BASE)
     await page.waitForLoadState('networkidle')
     const btn = page.locator('button:visible').first()
     const count = await btn.count()
@@ -60,7 +64,7 @@ test.describe('Consumer — CSS 회귀', () => {
   })
 
   test('로그인 — PasswordInput 렌더링 정상', async ({ page }) => {
-    await page.goto('https://greenlove.co.kr/login')
+    await page.goto(`${CONSUMER_BASE}/login`)
     await expect(page.locator('input[type="password"]')).toBeVisible()
   })
 
@@ -71,7 +75,7 @@ test.describe('Consumer — CSS 회귀', () => {
         externalFonts.push(req.url())
       }
     })
-    await page.goto('https://greenlove.co.kr')
+    await page.goto(CONSUMER_BASE)
     await page.waitForLoadState('networkidle')
     expect(externalFonts).toHaveLength(0)
   })
@@ -83,7 +87,7 @@ test.describe('Seller — CSS 회귀', () => {
   test('로그인 — JS 에러 없음', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
-    await page.goto('https://seller.greenlove.co.kr/login')
+    await page.goto(`${SELLER_BASE}/login`)
     await page.waitForLoadState('networkidle')
     const critical = errors.filter(
       (e) => !e.includes('hydration') && !e.includes('ChunkLoad')
@@ -92,7 +96,7 @@ test.describe('Seller — CSS 회귀', () => {
   })
 
   test('로그인 — Pretendard 폰트 파일 200 응답', async ({ request }) => {
-    const fontRes = await request.get('https://seller.greenlove.co.kr/fonts/PretendardVariable.woff2')
+    const fontRes = await request.get(`${SELLER_BASE}/fonts/PretendardVariable.woff2`)
     expect(fontRes.status()).toBe(200)
   })
 
@@ -103,13 +107,13 @@ test.describe('Seller — CSS 회귀', () => {
         externalFonts.push(req.url())
       }
     })
-    await page.goto('https://seller.greenlove.co.kr/login')
+    await page.goto(`${SELLER_BASE}/login`)
     await page.waitForLoadState('networkidle')
     expect(externalFonts).toHaveLength(0)
   })
 
   test('로그인 — TextInput 렌더링 정상', async ({ page }) => {
-    await page.goto('https://seller.greenlove.co.kr/login')
+    await page.goto(`${SELLER_BASE}/login`)
     await expect(page.locator('input[type="email"]')).toBeVisible()
     await expect(page.locator('input[type="password"]')).toBeVisible()
   })
@@ -121,7 +125,7 @@ test.describe('Driver — CSS 회귀', () => {
   test('로그인 — JS 에러 없음', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
-    await page.goto('https://driver.greenlove.co.kr/login')
+    await page.goto(`${DRIVER_BASE}/login`)
     await page.waitForLoadState('networkidle')
     const critical = errors.filter(
       (e) => !e.includes('hydration') && !e.includes('ChunkLoad')
@@ -130,7 +134,7 @@ test.describe('Driver — CSS 회귀', () => {
   })
 
   test('로그인 — Pretendard 폰트 파일 200 응답', async ({ request }) => {
-    const fontRes = await request.get('https://driver.greenlove.co.kr/fonts/PretendardVariable.woff2')
+    const fontRes = await request.get(`${DRIVER_BASE}/fonts/PretendardVariable.woff2`)
     expect(fontRes.status()).toBe(200)
   })
 
@@ -141,13 +145,13 @@ test.describe('Driver — CSS 회귀', () => {
         externalFonts.push(req.url())
       }
     })
-    await page.goto('https://driver.greenlove.co.kr/login')
+    await page.goto(`${DRIVER_BASE}/login`)
     await page.waitForLoadState('networkidle')
     expect(externalFonts).toHaveLength(0)
   })
 
   test('로그인 — 카카오 버튼 렌더링 정상', async ({ page }) => {
-    await page.goto('https://driver.greenlove.co.kr/login')
+    await page.goto(`${DRIVER_BASE}/login`)
     await expect(page.locator('text=카카오로 시작하기')).toBeVisible()
   })
 })

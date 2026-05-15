@@ -1,45 +1,42 @@
-import { test, expect } from '@playwright/test'
+﻿import { test, expect } from '@playwright/test'
 import { loginViaCredentials } from './_helpers/auth'
 
-const BASE = 'https://seller.greenlove.co.kr'
+const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
 
-test.describe('셀러 배너 관리', () => {
-  test('미인증 접근 시 로그인 페이지로 리디렉션', async ({ page }) => {
+test.describe('???諛곕꼫 愿由?, () => {
+  test('誘몄씤利??묎렐 ??濡쒓렇???섏씠吏濡?由щ뵒?됱뀡', async ({ page }) => {
     await page.goto(`${BASE}/admin/banner`)
-    // 인증되지 않으면 로그인 페이지로 redirect 되어야 함
-    await expect(page).toHaveURL(/login|signin|auth/, { timeout: 10_000 })
+    // ?몄쬆?섏? ?딆쑝硫?濡쒓렇???섏씠吏濡?redirect ?섏뼱????    await expect(page).toHaveURL(/login|signin|auth/, { timeout: 10_000 })
   })
 
-  test('로그인 페이지 정상 렌더링', async ({ page }) => {
+  test('濡쒓렇???섏씠吏 ?뺤긽 ?뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/login`)
     await expect(page.locator('body')).toBeVisible()
-    // 로그인 폼 요소 존재 확인
+    // 濡쒓렇?????붿냼 議댁옱 ?뺤씤
     const input = page.locator('input[type="email"], input[type="text"]')
     await expect(input.first()).toBeVisible()
   })
 })
 
-// 실제 로그인 후 토글 검증은 아래 블록에서 확장
-// TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD 환경변수 세팅 시 활성화
-const sellerEmail = process.env['TEST_SELLER_EMAIL']
+// ?ㅼ젣 濡쒓렇?????좉? 寃利앹? ?꾨옒 釉붾줉?먯꽌 ?뺤옣
+// TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD ?섍꼍蹂???명똿 ???쒖꽦??const sellerEmail = process.env['TEST_SELLER_EMAIL']
 const sellerPassword = process.env['TEST_SELLER_PASSWORD']
 
-test.describe('셀러 배너 토글 (인증 필요)', () => {
-  // admin 권한 계정 필요 — TEST_SELLER_EMAIL은 seller role이므로 /admin/banner 접근 불가
-  test.skip(true, 'admin 권한 계정 필요 (TEST_SELLER_EMAIL은 seller role)')
+test.describe('???諛곕꼫 ?좉? (?몄쬆 ?꾩슂)', () => {
+  // admin 沅뚰븳 怨꾩젙 ?꾩슂 ??TEST_SELLER_EMAIL? seller role?대?濡?/admin/banner ?묎렐 遺덇?
+  test.skip(true, 'admin 沅뚰븳 怨꾩젙 ?꾩슂 (TEST_SELLER_EMAIL? seller role)')
 
-  test('배너 활성화 토글 클릭 시 에러 없음', async ({ page }) => {
+  test('諛곕꼫 ?쒖꽦???좉? ?대┃ ???먮윭 ?놁쓬', async ({ page }) => {
     await loginViaCredentials(page, BASE, sellerEmail!, sellerPassword!)
 
     await page.goto(`${BASE}/admin/banner`)
-    await page.waitForSelector('text=히어로 배너 관리', { timeout: 10_000 })
+    await page.waitForSelector('text=?덉뼱濡?諛곕꼫 愿由?, { timeout: 10_000 })
 
-    // 토글 클릭
+    // ?좉? ?대┃
     const toggle = page.locator('role=switch')
     await toggle.click()
 
-    // JS 에러가 없어야 함
-    const errors: string[] = []
+    // JS ?먮윭媛 ?놁뼱????    const errors: string[] = []
     page.on('pageerror', (err) => errors.push(err.message))
     await page.waitForTimeout(500)
     expect(errors.filter(e => e.includes('Cannot read properties of null'))).toHaveLength(0)
