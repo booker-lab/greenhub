@@ -57,6 +57,7 @@
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
 - ✅ P0: #CL-21 옵션 A 보강 — 세션26 완료
+- 🟠 **P1 (다음 세션 최우선)**: #CL-21 후속 — GitHub repo Secrets 11개 등록 + `preview` 브랜치 동기화 운영 → e2e CI 활성화
 - 🟠 P1: #CL-23 인증 race 해소 (`storageState` 패턴) + Railway `/auth/login` 계측
 - 🟡 P2: Vercel cold-start 검토 / `CRITICAL_LOGIC.md` 한도 정책 결정
 - 🟢 P3: `useOrderActions` 통합·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·GitHub Secrets 등록
