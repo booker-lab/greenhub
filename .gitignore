@@ -14,6 +14,10 @@ firebase-adminsdk*.json
 
 .vercel
 
+# Vercel CLI 환경변수 임시 파일 (절대 커밋 금지)
+.env.vercel.tmp
+apps/*/.env.vercel.tmp
+
 # Firestore 로컬 백업
 backups/
 
