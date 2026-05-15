@@ -68,7 +68,7 @@
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
 - ✅ P0: #CL-21 옵션 A 보강 (세션26) / ✅ P1: #CL-21 후속 e2e CI 활성화 (세션27)
-- 🟠 **P1 (다음 세션 최우선)**: #CL-23 인증 race 해소 (`storageState` 패턴) — e2e CI에서 37건 재현 중 + Railway `/auth/login` 계측
+- 🟠 **P1 (다음 세션 최우선)**: #CL-23 인증 race 해소 (`storageState` 패턴) — e2e CI 37건 재현 중. 진입 가이드 [docs/archive/sessions/session28-prep.md](archive/sessions/session28-prep.md) — T0 실패 재검토부터 아토믹 태스크 + 정합성 검토로 진행
 - 🟡 P2: Vercel cold-start 검토 / `CRITICAL_LOGIC.md` 한도 정책 결정
 - 🟢 P3: `useOrderActions` 통합·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·consumer 강한비번
 

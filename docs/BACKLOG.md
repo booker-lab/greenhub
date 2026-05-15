@@ -497,11 +497,16 @@
 
 **해소**: Playwright `globalSetup`에서 1회 로그인 → `storageState` 파일 저장 → 모든 spec이 재사용. Railway 인증 호출이 N → 1로 감소.
 
-- [ ] 1. `apps/e2e/global-setup.ts` 신설 — seller·consumer 각 1회 `loginViaCredentials` → `context.storageState({path})` 저장
-- [ ] 2. `playwright.config.ts`에 `globalSetup` 등록 + projects별 `use.storageState` 지정
-- [ ] 3. spec들에서 개별 `loginViaCredentials` 호출 제거 (또는 옵션화)
-- [ ] 4. seller-orders·consumer-cart·seller-settlements 등 회귀 12+ spec 통과 검증
+**진행 방식**: 아토믹 태스크 단위(한 태스크 = 한 커밋), 각 태스크 끝에 정합성 검토. 세션 진입 시 **세션27 e2e 실패 37건(run 25926181316) 재검토·분류 확정**부터 시작. 태스크 분해·정합성 검토 항목은 진입 가이드 참조.
 
+- [ ] T0. 세션27 실패 37건 재검토 → 인증 race / 데이터 flake / waitForLoadState 3분류 확정
+- [ ] T1. `apps/e2e/global-setup.ts` **확장**(신설 아님 — SSO 우회용으로 이미 존재) — seller·consumer 1회 로그인 → 세션 쿠키 포함 storageState 저장
+- [ ] T2. `playwright.config.ts` + spec storageState 배선 — 미인증/인증 spec 분리
+- [ ] T3. spec 개별 `loginViaCredentials` 호출 제거 (헬퍼는 globalSetup이 쓰므로 유지)
+- [ ] T4. e2e CI 풀런 회귀 검증 — 인증 race 실패 0건 목표
+- [ ] T5. 잔여 분류(데이터 flake·waitForLoadState) 분리 기록 + Railway `/auth/login` 계측
+
+**진입 가이드**: [docs/archive/sessions/session28-prep.md](archive/sessions/session28-prep.md)
 **참조**: [docs/CRITICAL_LOGIC.md #CL-23](CRITICAL_LOGIC.md)
 
 ---
