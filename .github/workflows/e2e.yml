@@ -33,6 +33,9 @@ jobs:
           SELLER_BASE: ${{ secrets.SELLER_BASE }}
           CONSUMER_BASE: ${{ secrets.CONSUMER_BASE }}
           DRIVER_BASE: ${{ secrets.DRIVER_BASE }}
+          SELLER_BYPASS_SECRET: ${{ secrets.SELLER_BYPASS_SECRET }}
+          CONSUMER_BYPASS_SECRET: ${{ secrets.CONSUMER_BYPASS_SECRET }}
+          DRIVER_BYPASS_SECRET: ${{ secrets.DRIVER_BYPASS_SECRET }}
           E2E_TEST_SECRET: ${{ secrets.E2E_TEST_SECRET }}
           TEST_SELLER_EMAIL: ${{ secrets.TEST_SELLER_EMAIL }}
           TEST_SELLER_PASSWORD: ${{ secrets.TEST_SELLER_PASSWORD }}

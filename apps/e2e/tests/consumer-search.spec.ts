@@ -1,18 +1,18 @@
-﻿import { test, expect } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 
 const BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr'
 
-test.describe('Consumer ??寃???섏씠吏', () => {
-  test('/search ??寃?됱갹 ?먮룞 ?ъ빱??諛??뚮뜑留?, async ({ page }) => {
+test.describe('Consumer — 검색 페이지', () => {
+  test('/search — 검색창 자동 포커스 및 렌더링', async ({ page }) => {
     await page.goto(`${BASE}/search`)
     await page.waitForLoadState('networkidle')
 
-    const input = page.getByPlaceholder('?곹뭹紐낆쓣 寃?됲븯?몄슂')
+    const input = page.getByPlaceholder('상품명을 검색하세요')
     await expect(input).toBeVisible()
     await expect(input).toBeFocused()
   })
 
-  test('/search ??JS ?먮윭 ?놁쓬', async ({ page }) => {
+  test('/search — JS 에러 없음', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(`${BASE}/search`)
@@ -23,41 +23,44 @@ test.describe('Consumer ??寃???섏씠吏', () => {
     expect(critical).toHaveLength(0)
   })
 
-  test('寃?됱뼱 ?낅젰 ????寃곌낵 ?곸뿭 鍮??곹깭', async ({ page }) => {
+  test('검색어 입력 전 — 결과 영역 빈 상태', async ({ page }) => {
     await page.goto(`${BASE}/search`)
     await page.waitForLoadState('networkidle')
 
-    // query ?놁쓣 ??filtered = [] ???곹뭹 移대뱶 ?놁쓬
+    // query 없을 때 filtered = [] → 상품 카드 없음
     const productCards = page.locator('a[href^="/products/"]')
     expect(await productCards.count()).toBe(0)
   })
 
-  test('寃?됱뼱 ?낅젰 ??寃곌낵 ?먮뒗 "寃곌낵 ?놁쓬" ?쒖떆', async ({ page }) => {
+  test('검색어 입력 → 결과 또는 "결과 없음" 표시', async ({ page }) => {
     await page.goto(`${BASE}/search`)
     await page.waitForLoadState('networkidle')
 
-    const input = page.getByPlaceholder('?곹뭹紐낆쓣 寃?됲븯?몄슂')
-    await input.fill('?λ?')
-    // ?곗씠??濡쒕뵫 ?湲?    await page.waitForTimeout(1500)
+    const input = page.getByPlaceholder('상품명을 검색하세요')
+    await input.fill('장미')
+    // 데이터 로딩 대기
+    await page.waitForTimeout(1500)
 
     const cards = page.locator('a[href^="/products/"]')
-    const noResult = page.getByText(/寃곌낵媛 ?놁뒿?덈떎|?놁뒿?덈떎/)
+    const noResult = page.getByText(/결과가 없습니다|없습니다/)
     const cardCount = await cards.count()
 
-    // 寃곌낵媛 ?덇굅???놁쓬 硫붿떆吏媛 ?덉뼱????    if (cardCount > 0) {
+    // 결과가 있거나 없음 메시지가 있어야 함
+    if (cardCount > 0) {
       await expect(cards.first()).toBeVisible()
     } else {
-      // 寃곌낵 ?놁쓬 硫붿떆吏 ?먮뒗 鍮??곹깭 (?먮윭 ?놁씠 ?뚮뜑)
+      // 결과 없음 메시지 또는 빈 상태 (에러 없이 렌더)
       await expect(page.locator('body')).toBeVisible()
     }
   })
 
-  test('寃??寃곌낵 移대뱶 ?대┃ ??/products/[id] ?대룞', async ({ page }) => {
+  test('검색 결과 카드 클릭 → /products/[id] 이동', async ({ page }) => {
     await page.goto(`${BASE}/search`)
     await page.waitForLoadState('networkidle')
 
-    const input = page.getByPlaceholder('?곹뭹紐낆쓣 寃?됲븯?몄슂')
-    // 吏㏃? 寃?됱뼱濡?寃곌낵媛 ?섏삱 媛?μ꽦 ?믪씠湲?    await input.fill('苑?)
+    const input = page.getByPlaceholder('상품명을 검색하세요')
+    // 짧은 검색어로 결과가 나올 가능성 높이기
+    await input.fill('꽃')
     await page.waitForTimeout(1500)
 
     const firstCard = page.locator('a[href^="/products/"]').first()
@@ -65,20 +68,20 @@ test.describe('Consumer ??寃???섏씠吏', () => {
       await firstCard.click()
       await expect(page).toHaveURL(/\/products\//)
     } else {
-      test.skip(true, '寃??寃곌낵 ?놁쓬 ???섍꼍???곕씪 skip')
+      test.skip(true, '검색 결과 없음 — 환경에 따라 skip')
     }
   })
 
-  test('X 踰꾪듉 ?대┃ ??寃?됱뼱 珥덇린??, async ({ page }) => {
+  test('X 버튼 클릭 → 검색어 초기화', async ({ page }) => {
     await page.goto(`${BASE}/search`)
     await page.waitForLoadState('networkidle')
 
-    const input = page.getByPlaceholder('?곹뭹紐낆쓣 寃?됲븯?몄슂')
-    await input.fill('?뚯뒪??)
-    await expect(input).toHaveValue('?뚯뒪??)
+    const input = page.getByPlaceholder('상품명을 검색하세요')
+    await input.fill('테스트')
+    await expect(input).toHaveValue('테스트')
 
-    // 珥덇린??踰꾪듉 (??
-    const clearBtn = page.getByRole('button').filter({ hasText: '?? })
+    // 초기화 버튼 (✕)
+    const clearBtn = page.getByRole('button').filter({ hasText: '✕' })
     await expect(clearBtn).toBeVisible()
     await clearBtn.click()
 

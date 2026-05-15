@@ -1,4 +1,4 @@
-﻿import { test, expect } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import { loginViaCredentials } from './_helpers/auth'
 
 const BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr'
@@ -7,15 +7,15 @@ const consumerEmail = process.env['TEST_CONSUMER_EMAIL']
 const consumerPassword = process.env['TEST_CONSUMER_PASSWORD']
 const skipAuth = !consumerEmail || !consumerPassword
 
-// /mypage/* ??誘몃뱾?⑥뼱濡?蹂댄샇????鍮꾨줈洹몄씤 ??/login 由щ뵒?됲듃
-test.describe('Consumer ??留덉씠?섏씠吏 (鍮꾩씤利?', () => {
-  test('/mypage ??鍮꾨줈洹몄씤 ??/login 由щ뵒?됲듃', async ({ page }) => {
+// /mypage/* 는 미들웨어로 보호됨 → 비로그인 시 /login 리디렉트
+test.describe('Consumer — 마이페이지 (비인증)', () => {
+  test('/mypage — 비로그인 시 /login 리디렉트', async ({ page }) => {
     await page.goto(`${BASE}/mypage`)
     await page.waitForLoadState('networkidle')
     await expect(page).toHaveURL(/\/login/)
   })
 
-  test('/mypage ??JS ?먮윭 ?놁쓬', async ({ page }) => {
+  test('/mypage — JS 에러 없음', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(`${BASE}/mypage`)
@@ -26,19 +26,19 @@ test.describe('Consumer ??留덉씠?섏씠吏 (鍮꾩씤利?', () => {
     expect(critical).toHaveLength(0)
   })
 
-  test('/mypage/addresses ??鍮꾨줈洹몄씤 ??/login 由щ뵒?됲듃', async ({ page }) => {
+  test('/mypage/addresses — 비로그인 시 /login 리디렉트', async ({ page }) => {
     await page.goto(`${BASE}/mypage/addresses`)
     await page.waitForLoadState('networkidle')
     await expect(page).toHaveURL(/\/login/)
   })
 
-  test('/mypage/notifications ??鍮꾨줈洹몄씤 ??/login 由щ뵒?됲듃', async ({ page }) => {
+  test('/mypage/notifications — 비로그인 시 /login 리디렉트', async ({ page }) => {
     await page.goto(`${BASE}/mypage/notifications`)
     await page.waitForLoadState('networkidle')
     await expect(page).toHaveURL(/\/login/)
   })
 
-  test('/mypage/orders/[id] ??鍮꾨줈洹몄씤 ??/login 由щ뵒?됲듃', async ({ page }) => {
+  test('/mypage/orders/[id] — 비로그인 시 /login 리디렉트', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(`${BASE}/mypage/orders/nonexistent-order-id-00000`)
@@ -50,37 +50,37 @@ test.describe('Consumer ??留덉씠?섏씠吏 (鍮꾩씤利?', () => {
     expect(critical).toHaveLength(0)
   })
 
-  test('濡쒓렇???섏씠吏 ??BottomNav MY ???몄텧', async ({ page }) => {
+  test('로그인 페이지 — BottomNav MY 탭 노출', async ({ page }) => {
     await page.goto(`${BASE}/mypage`)
     await page.waitForLoadState('networkidle')
     await expect(page.getByText('MY')).toBeVisible()
   })
 })
 
-// ?? ?몄쬆 ??留덉씠?섏씠吏 ?뚯뒪???????????????????????????????????????????????
+// ── 인증 후 마이페이지 테스트 ─────────────────────────────────────────────
 
-test.describe('Consumer ??留덉씠?섏씠吏 (?몄쬆)', () => {
-  test.skip(skipAuth, '?섍꼍蹂??TEST_CONSUMER_EMAIL / TEST_CONSUMER_PASSWORD ?꾩슂')
+test.describe('Consumer — 마이페이지 (인증)', () => {
+  test.skip(skipAuth, '환경변수 TEST_CONSUMER_EMAIL / TEST_CONSUMER_PASSWORD 필요')
 
   test.beforeEach(async ({ page }) => {
     await loginViaCredentials(page, BASE, consumerEmail!, consumerPassword!)
   })
 
-  test('?꾨줈?????대찓???쒖떆', async ({ page }) => {
+  test('프로필 — 이메일 표시', async ({ page }) => {
     await page.goto(`${BASE}/mypage`)
     await page.waitForLoadState('networkidle')
     await expect(page.getByText(/@/)).toBeVisible({ timeout: 10_000 })
   })
 
-  test('二쇰Ц 紐⑸줉 ?뚮뜑留??먮뒗 鍮??곹깭 ?덈궡', async ({ page }) => {
+  test('주문 목록 렌더링 또는 빈 상태 안내', async ({ page }) => {
     await page.goto(`${BASE}/mypage`)
     await page.waitForLoadState('networkidle')
-    const empty = page.getByText('二쇰Ц ?댁뿭???놁뒿?덈떎')
+    const empty = page.getByText('주문 내역이 없습니다')
     const hasOrders = (await page.locator('[data-testid="order-card"]').count()) > 0
     if (!hasOrders) await expect(empty).toBeVisible({ timeout: 10_000 })
   })
 
-  test('/mypage/addresses ??JS ?먮윭 ?놁씠 ?뚮뜑留?, async ({ page }) => {
+  test('/mypage/addresses — JS 에러 없이 렌더링', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(`${BASE}/mypage/addresses`)
@@ -92,7 +92,7 @@ test.describe('Consumer ??留덉씠?섏씠吏 (?몄쬆)', () => {
     await expect(page.locator('body')).toBeVisible()
   })
 
-  test('/mypage/notifications ??JS ?먮윭 ?놁씠 ?뚮뜑留?, async ({ page }) => {
+  test('/mypage/notifications — JS 에러 없이 렌더링', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(`${BASE}/mypage/notifications`)

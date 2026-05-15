@@ -1,20 +1,20 @@
-﻿import { test, expect } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 
 /**
- * DS 由ы뙥?좊쭅 T0~T9 ?뚭? 寃利?(2026-05-02)
- * - ?섎뱶肄붾뵫 hex/?レ옄媛???CSS 蹂???꾪솚 ???뚮뜑留??뺤긽 ?щ?
- * - 媛??섏씠吏 JS ?먮윭 ?놁쓬 + ?듭떖 UI ?붿냼 媛?쒖꽦 ?뺤씤
+ * DS 리팩토링 T0~T9 회귀 검증 (2026-05-02)
+ * - 하드코딩 hex/숫자값 → CSS 변수 전환 후 렌더링 정상 여부
+ * - 각 페이지 JS 에러 없음 + 핵심 UI 요소 가시성 확인
  */
 
 const BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr'
 
-// ?? T1: mypage fallback ??#999 ??var(--color-text-disabled) ??????????
+// ── T1: mypage fallback — #999 → var(--color-text-disabled) ──────────
 
-test.describe('Consumer DS ??mypage ?섏씠吏援?, () => {
+test.describe('Consumer DS — mypage 페이지군', () => {
   const mypageRoutes = ['/mypage', '/mypage/addresses', '/mypage/notifications']
 
   for (const route of mypageRoutes) {
-    test(`${route} ??JS ?먮윭 ?놁쓬`, async ({ page }) => {
+    test(`${route} — JS 에러 없음`, async ({ page }) => {
       const errors: string[] = []
       page.on('pageerror', (e) => errors.push(e.message))
       await page.goto(BASE + route)
@@ -26,7 +26,7 @@ test.describe('Consumer DS ??mypage ?섏씠吏援?, () => {
     })
   }
 
-  test('mypage ??--color-text-disabled ?좏겙 ?뺤긽 ?댁꽍', async ({ page }) => {
+  test('mypage — --color-text-disabled 토큰 정상 해석', async ({ page }) => {
     await page.goto(BASE + '/mypage')
     await page.waitForLoadState('networkidle')
     const tokenValue = await page.evaluate(() => {
@@ -39,10 +39,10 @@ test.describe('Consumer DS ??mypage ?섏씠吏援?, () => {
   })
 })
 
-// ?? T2: cart ??borderRadius: 8 ??var(--radius-sm) ???????????????????
+// ── T2: cart — borderRadius: 8 → var(--radius-sm) ───────────────────
 
-test.describe('Consumer DS ??cart ?섏씠吏', () => {
-  test('cart ??JS ?먮윭 ?놁쓬', async ({ page }) => {
+test.describe('Consumer DS — cart 페이지', () => {
+  test('cart — JS 에러 없음', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(BASE + '/cart')
@@ -53,7 +53,7 @@ test.describe('Consumer DS ??cart ?섏씠吏', () => {
     expect(critical).toHaveLength(0)
   })
 
-  test('cart ??--radius-sm ?좏겙 ?뺤긽 ?댁꽍', async ({ page }) => {
+  test('cart — --radius-sm 토큰 정상 해석', async ({ page }) => {
     await page.goto(BASE + '/cart')
     await page.waitForLoadState('networkidle')
     const tokenValue = await page.evaluate(() => {
@@ -66,10 +66,10 @@ test.describe('Consumer DS ??cart ?섏씠吏', () => {
   })
 })
 
-// ?? T3: category ??fontSize/fontWeight ??var() ???????????????????????
+// ── T3: category — fontSize/fontWeight → var() ───────────────────────
 
-test.describe('Consumer DS ??category ?섏씠吏', () => {
-  test('category ??JS ?먮윭 ?놁쓬', async ({ page }) => {
+test.describe('Consumer DS — category 페이지', () => {
+  test('category — JS 에러 없음', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(BASE + '/category')
@@ -80,14 +80,14 @@ test.describe('Consumer DS ??category ?섏씠吏', () => {
     expect(critical).toHaveLength(0)
   })
 
-  test('category ????踰꾪듉 ?뚮뜑留??뺤긽', async ({ page }) => {
+  test('category — 탭 버튼 렌더링 정상', async ({ page }) => {
     await page.goto(BASE + '/category')
     await page.waitForLoadState('networkidle')
     const tabs = page.locator('button').first()
     await expect(tabs).toBeVisible()
   })
 
-  test('category ??--font-size-sm ?좏겙 ?뺤긽 ?댁꽍 (??5px)', async ({ page }) => {
+  test('category — --font-size-sm 토큰 정상 해석 (≥15px)', async ({ page }) => {
     await page.goto(BASE + '/category')
     const tokenValue = await page.evaluate(() => {
       return getComputedStyle(document.documentElement)
@@ -100,10 +100,10 @@ test.describe('Consumer DS ??category ?섏씠吏', () => {
   })
 })
 
-// ?? T4~T6: mypage ?섏쐞 ?대씪?댁뼵??而댄룷?뚰듃 ??????????????????????????
+// ── T4~T6: mypage 하위 클라이언트 컴포넌트 ──────────────────────────
 
-test.describe('Consumer DS ??mypage ?대씪?댁뼵??而댄룷?뚰듃', () => {
-  test('mypage ???ㅻ뜑 紐⑸줉 ?곸뿭 ?뚮뜑留??뺤긽 (borderRadius ?좏겙)', async ({ page }) => {
+test.describe('Consumer DS — mypage 클라이언트 컴포넌트', () => {
+  test('mypage — 오더 목록 영역 렌더링 정상 (borderRadius 토큰)', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(BASE + '/mypage')
@@ -114,7 +114,7 @@ test.describe('Consumer DS ??mypage ?대씪?댁뼵??而댄룷?뚰듃', () => {
     expect(critical).toHaveLength(0)
   })
 
-  test('mypage/addresses ??JS ?먮윭 ?놁쓬', async ({ page }) => {
+  test('mypage/addresses — JS 에러 없음', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(BASE + '/mypage/addresses')
@@ -126,10 +126,10 @@ test.describe('Consumer DS ??mypage ?대씪?댁뼵??而댄룷?뚰듃', () => {
   })
 })
 
-// ?? T7~T8: ?곹뭹 ?곸꽭 而댄룷?뚰듃 ???????????????????????????????????????
+// ── T7~T8: 상품 상세 컴포넌트 ───────────────────────────────────────
 
-test.describe('Consumer DS ???곹뭹 ?곸꽭 ?섏씠吏', () => {
-  test('products/[id] ??JS ?먮윭 ?놁쓬', async ({ page }) => {
+test.describe('Consumer DS — 상품 상세 페이지', () => {
+  test('products/[id] — JS 에러 없음', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(BASE)
@@ -153,7 +153,7 @@ test.describe('Consumer DS ???곹뭹 ?곸꽭 ?섏씠吏', () => {
     expect(critical).toHaveLength(0)
   })
 
-  test('products/[id] ??--radius-sm/--fw-bold/--font-size-md ?좏겙 紐⑤몢 ?댁꽍', async ({ page }) => {
+  test('products/[id] — --radius-sm/--fw-bold/--font-size-md 토큰 모두 해석', async ({ page }) => {
     await page.goto(BASE)
     await page.waitForLoadState('networkidle')
 
@@ -172,10 +172,10 @@ test.describe('Consumer DS ???곹뭹 ?곸꽭 ?섏씠吏', () => {
   })
 })
 
-// ?? ?덉쇅 ??ぉ 怨듭떇 ?뺤씤 ???????????????????????????????????????????????
+// ── 예외 항목 공식 확인 ───────────────────────────────────────────────
 
-test.describe('Consumer DS ??怨듭떇 ?덉쇅 compact 而댄룷?뚰듃', () => {
-  test('????JS ?먮윭 ?놁쓬 (BottomNav쨌ProductTopBar 10px ?덉쇅 ?ы븿)', async ({ page }) => {
+test.describe('Consumer DS — 공식 예외 compact 컴포넌트', () => {
+  test('홈 — JS 에러 없음 (BottomNav·ProductTopBar 10px 예외 포함)', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(BASE)
