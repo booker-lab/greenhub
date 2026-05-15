@@ -1344,3 +1344,21 @@ providers: [
 - `git status` — `.env.vercel.tmp` 미추적 확인
 - `Grep "Credentials" apps/driver/src/` — 0 매치 재확인
 
+---
+
+## [결정 #CL-26] e2e CI 활성화 — repo Secrets + preview 자동 머지 (2026-05-16, 세션27)
+
+**배경**: #CL-21(세션26)에서 `.github/workflows/e2e.yml`을 신설했으나 GitHub repo Secrets 미등록으로 미가동 상태였다. 이를 가동시키고 `preview` 브랜치 상시 동기화 체계를 확정.
+
+**결정 1 — Secrets 등록 방식**: `gh secret set` CLI 사용. `apps/e2e/.env`(gitignore) 11개 값을 그대로 repo Secrets로 등록. gh CLI는 winget으로 설치(2.92.0), `booker-lab` 계정 인증(ADMIN).
+
+**결정 2 — preview 동기화: 자동 머지 워크플로 채택** (수동 머지 대비):
+- `.github/workflows/sync-preview.yml` — `main` push 시 `preview` 체크아웃 → `merge origin/main` → push.
+- **GITHUB_TOKEN 재귀 방지 이슈**: GITHUB_TOKEN으로 만든 push는 다른 워크플로의 `push` 트리거를 발화시키지 않음 → `preview` push가 `e2e.yml`을 자동 실행하지 못함. 해소: sync 잡 마지막에 `gh workflow run e2e.yml --ref preview`로 명시 디스패치(`workflow_dispatch`는 재귀 방지 대상 아님).
+
+**결정 3 — e2e.yml pnpm 버전**: `pnpm/action-setup`의 `version: 9` 고정 제거. `package.json` `packageManager`(pnpm@10.32.1)와 충돌(ERR_PNPM_BAD_PM_VERSION). 액션이 packageManager 필드를 자동 인식하도록 위임.
+
+**가동 결과**: CI end-to-end 정상 (124 passed, 아티팩트 업로드). 37건 실패는 전부 셀러 인증 spec, `auth.ts:64` 진단이 잡은 `set-cookie count=0` → **#CL-23 인증 race**. 셀러앱 코드 무변경이므로 회귀 아님. CI 풀런은 spec별 독립 인증으로 race를 로컬 대비 증폭(4→37건) → #CL-23 storageState 도입 시급성 입증.
+
+**잔여 운영 메모**: sync-preview가 e2e를 즉시 디스패치하므로 Vercel preview 재빌드 중 실행될 수 있음. #CL-23 해소 후 배포 readiness 대기 단계 추가 검토.
+

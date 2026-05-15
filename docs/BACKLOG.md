@@ -426,14 +426,14 @@
 
 > 기준일: 2026-05-15 (세션26 #CL-21 완료 후)
 > 진입점: 다음 세션 시작 시 본 §12 우선순위 표 → 항목 상세 순서로 확인.
-> **다음 세션 최우선**: §12-2 「P1 — #CL-21 후속: e2e CI 활성화」 (GitHub Secrets 등록 + preview 동기화).
+> **다음 세션 최우선**: §12-2 「P1 — #CL-23 인증 race 해소: storageState 패턴」 (e2e CI에서 37건 실패로 재현 중).
 
 ### 12-1. 우선순위
 
 | 순위 | 항목 | 범주 | 의존성 |
 |------|------|------|--------|
 | ✅ P0 | #CL-21 옵션 A 보강 — Production env에서 `E2E_TEST_SECRET` 제거 (2026-05-15 세션26 완료) | 보안 | 4단계 다중 PR |
-| 🟠 P1 | #CL-21 후속 — GitHub repo Secrets 등록 + `preview` 브랜치 동기화 (e2e CI 활성화 전제) | 인프라/DX | 단독 진행 가능 |
+| ✅ P1 | #CL-21 후속 — GitHub repo Secrets 11개 등록 + `preview` 자동 머지 워크플로 (2026-05-16 세션27 완료) | 인프라/DX | 단독 진행 가능 |
 | 🟠 P1 | #CL-23 인증 race 해소 — `storageState` 패턴 도입 | 인프라/DX | 단독 진행 가능 |
 | 🟠 P1 | Railway `/auth/login` latency·실패율 계측 | 관측 | storageState 도입 직전·직후 |
 | 🟡 P2 | Vercel function cold-start mitigation 검토 | 성능 | 계측 데이터 기반 |
@@ -465,20 +465,25 @@
 
 ---
 
-#### [ ] P1 — #CL-21 후속: e2e CI 활성화 (GitHub Secrets 등록 + preview 동기화)
+#### [x] P1 — #CL-21 후속: e2e CI 활성화 (2026-05-16 세션27 완료)
 
-**배경**: 세션26에서 `.github/workflows/e2e.yml`을 신설했으나 GitHub repo Secrets가 미등록 → `preview` 브랜치 push 시 워크플로가 시크릿 미해석으로 실패한다. CI를 실제 가동하려면 아래 등록·운영 필요. **다음 세션 진입점.**
+**배경**: 세션26에서 `.github/workflows/e2e.yml`을 신설했으나 GitHub repo Secrets가 미등록 → `preview` 브랜치 push 시 워크플로가 시크릿 미해석으로 실패했다.
 
-**1. GitHub repo Secrets 등록 (11개)** — repo Settings → Secrets and variables → Actions. 모든 값은 `apps/e2e/.env`(gitignore)에 존재. `gh secret set <NAME> --body "<값>"` 또는 대시보드.
-- [ ] `SELLER_BASE` · `CONSUMER_BASE` · `DRIVER_BASE` — Preview branch URL
-- [ ] `SELLER_BYPASS_SECRET` · `CONSUMER_BYPASS_SECRET` · `DRIVER_BYPASS_SECRET` — Vercel Protection Bypass
-- [ ] `E2E_TEST_SECRET` — 옵션 B 헤더 게이팅 토큰
-- [ ] `TEST_SELLER_EMAIL` · `TEST_SELLER_PASSWORD` · `TEST_CONSUMER_EMAIL` · `TEST_CONSUMER_PASSWORD`
-- [ ] 등록 후 `preview` 브랜치 빈 커밋 push → Actions 워크플로 1회 green 확인
+**1. GitHub repo Secrets 등록 (11개)** — `gh secret set`으로 `apps/e2e/.env` 11개 값 전부 등록 완료.
+- [x] `SELLER_BASE` · `CONSUMER_BASE` · `DRIVER_BASE`
+- [x] `SELLER_BYPASS_SECRET` · `CONSUMER_BYPASS_SECRET` · `DRIVER_BYPASS_SECRET`
+- [x] `E2E_TEST_SECRET`
+- [x] `TEST_SELLER_EMAIL` · `TEST_SELLER_PASSWORD` · `TEST_CONSUMER_EMAIL` · `TEST_CONSUMER_PASSWORD`
 
-**2. `preview` 브랜치 동기화 운영** — `preview`는 영구 e2e 환경 브랜치. `main` 머지 후 `preview`도 최신화해야 e2e가 최신 코드를 검증한다.
-- [ ] 운영 방식 결정: (a) 수동 `git checkout preview && git merge main && git push`, 또는 (b) `main` push 시 `preview` 자동 머지 워크플로 추가
-- 현재 상태: `preview` = `main` (동기, 세션26 종료 시점)
+**2. `preview` 브랜치 동기화 — 자동 머지 워크플로 채택**
+- [x] `.github/workflows/sync-preview.yml` 신설 — `main` push 시 `preview` 자동 merge·push + e2e 디스패치. 검증: `origin/preview` = `origin/main` 자동 동기 확인.
+
+**3. e2e.yml 버그 수정**
+- [x] `pnpm/action-setup` `version: 9` 고정 제거 → `package.json` `packageManager`(pnpm@10.32.1) 자동 사용 (ERR_PNPM_BAD_PM_VERSION 해소).
+
+**가동 결과**: CI 워크플로 end-to-end 정상 가동 (124 passed, 리포트 아티팩트 업로드). 단 **37건 실패** — 전부 셀러 인증 spec, `auth.ts:64` 진단 throw가 잡은 `set-cookie count=0` = **#CL-23 인증 race와 동일 시그니처**. CI는 12 spec×독립 인증으로 race를 로컬(4건)보다 증폭. → 아래 #CL-23 항목이 직접 후속.
+
+**잔여 운영 메모**: sync-preview가 e2e를 즉시 디스패치 → Vercel preview 재빌드 중 실행 가능성. #CL-23 해소 후 배포 readiness 대기 단계 추가 검토.
 
 **참조**: [docs/CRITICAL_LOGIC.md #CL-21](CRITICAL_LOGIC.md)
 
@@ -486,7 +491,7 @@
 
 #### [ ] P1 — #CL-23 인증 race 해소: `storageState` 패턴 도입
 
-**배경**: 세션24 진단 결과 NextAuth credentials POST가 200 OK + 빈 body + set-cookie 없음 반환 케이스가 일관 관측 (mobile 편중, 시간 누적 효과). 세션25 smoke에서도 12 spec 중 4건 동일 패턴 실패 재현.
+**배경**: 세션24 진단 결과 NextAuth credentials POST가 200 OK + 빈 body + set-cookie 없음 반환 케이스가 일관 관측 (mobile 편중, 시간 누적 효과). 세션25 smoke에서 12 spec 중 4건, **세션27 e2e CI 풀런에서 37건** 동일 패턴 실패 재현 (`auth.ts:64` 진단 throw — `set-cookie count=0`). CI는 spec마다 독립 인증 → race 증폭.
 
 **근본 원인 가설**: Vercel function cold-start 또는 Railway `/auth/login` 일시 부하. 모든 spec이 매번 인증 호출 → N×spec 만큼 인증 부하.
 
@@ -616,3 +621,4 @@ NextAuth API route의 cold start가 set-cookie 누락의 또 다른 원인일 �
 | 2026-05-15 | **세션23**: 셀러 fatal constraint 해소 — `orders/[id]`·`settlements` 페이지 분할 (#CL-22) |
 | 2026-05-15 | **세션24**: e2e 회귀 검증 (회귀 0건) + 인증 헬퍼 진단 강화 (#CL-23) |
 | 2026-05-15 | **세션25**: 사전 결함 정리 — biome 파싱 에러·`.env.vercel.tmp` gitignore·driver Credentials 부재 검증 (#CL-25) / §12 후속 정비 백로그 신설 |
+| 2026-05-16 | **세션27**: #CL-21 후속 — gh CLI 설치·repo Secrets 11개 등록·`sync-preview.yml` 자동 머지 워크플로 신설·e2e.yml pnpm 충돌 수정. e2e CI 가동(124 passed/37 fail). 37건은 #CL-23 인증 race로 확정 |
