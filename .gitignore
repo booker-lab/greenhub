@@ -20,6 +20,8 @@ apps/*/.env.vercel.tmp
 
 # e2e Vercel Deployment Protection 우회 쿠키 저장소 (서명 JWT 포함, 커밋 금지)
 apps/e2e/.bypass-state.json
+# e2e 인증 세션 쿠키 저장소 (seller·consumer 세션 토큰 포함, 커밋 금지) #CL-23
+apps/e2e/.auth-state.json
 
 # Firestore 로컬 백업
 backups/
