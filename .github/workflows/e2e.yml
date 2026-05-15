@@ -1,0 +1,49 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [preview]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+
+      - name: Run E2E tests (Preview)
+        env:
+          SELLER_BASE: ${{ secrets.SELLER_BASE }}
+          CONSUMER_BASE: ${{ secrets.CONSUMER_BASE }}
+          DRIVER_BASE: ${{ secrets.DRIVER_BASE }}
+          E2E_TEST_SECRET: ${{ secrets.E2E_TEST_SECRET }}
+          TEST_SELLER_EMAIL: ${{ secrets.TEST_SELLER_EMAIL }}
+          TEST_SELLER_PASSWORD: ${{ secrets.TEST_SELLER_PASSWORD }}
+          TEST_CONSUMER_EMAIL: ${{ secrets.TEST_CONSUMER_EMAIL }}
+          TEST_CONSUMER_PASSWORD: ${{ secrets.TEST_CONSUMER_PASSWORD }}
+        run: pnpm --filter e2e exec playwright test --project=chromium
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/e2e/playwright-report/
+          retention-days: 7

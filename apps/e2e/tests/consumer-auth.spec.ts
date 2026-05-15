@@ -1,57 +1,57 @@
-import { test, expect } from '@playwright/test'
+﻿import { test, expect } from '@playwright/test'
 
-const BASE = 'https://greenlove.co.kr'
+const BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr'
 
-// E2E_TEST=true 시에만 이메일 폼이 렌더링됨 (NEXT_PUBLIC_E2E_TEST 게이팅)
+// E2E_TEST=true ?쒖뿉留??대찓???쇱씠 ?뚮뜑留곷맖 (NEXT_PUBLIC_E2E_TEST 寃뚯씠??
 const skipEmailForm = process.env['E2E_TEST'] !== 'true'
 
-test.describe('Consumer — 인증 플로우', () => {
-  test('/login — 카카오 로그인 버튼 렌더링', async ({ page }) => {
+test.describe('Consumer ???몄쬆 ?뚮줈??, () => {
+  test('/login ??移댁뭅??濡쒓렇??踰꾪듉 ?뚮뜑留?, async ({ page }) => {
     await page.goto(`${BASE}/login`)
     await page.waitForLoadState('networkidle')
 
     await expect(page.getByText('Green Love')).toBeVisible()
-    await expect(page.getByText('카카오로 시작하기')).toBeVisible()
+    await expect(page.getByText('移댁뭅?ㅻ줈 ?쒖옉?섍린')).toBeVisible()
   })
 
-  test('/login — 이메일 폼 렌더링 (E2E_TEST 전용)', async ({ page }) => {
-    test.skip(skipEmailForm, 'NEXT_PUBLIC_E2E_TEST=true 설정 및 배포 필요')
+  test('/login ???대찓?????뚮뜑留?(E2E_TEST ?꾩슜)', async ({ page }) => {
+    test.skip(skipEmailForm, 'NEXT_PUBLIC_E2E_TEST=true ?ㅼ젙 諛?諛고룷 ?꾩슂')
     await page.goto(`${BASE}/login`)
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByLabel('이메일')).toBeVisible()
-    await expect(page.getByLabel('비밀번호')).toBeVisible()
-    await expect(page.getByRole('button', { name: '로그인' })).toBeVisible()
+    await expect(page.getByLabel('?대찓??)).toBeVisible()
+    await expect(page.getByLabel('鍮꾨?踰덊샇')).toBeVisible()
+    await expect(page.getByRole('button', { name: '濡쒓렇?? })).toBeVisible()
   })
 
-  test('/login — 잘못된 이메일 형식 → 브라우저 유효성 에러 (submit 차단)', async ({ page }) => {
-    test.skip(skipEmailForm, 'NEXT_PUBLIC_E2E_TEST=true 설정 및 배포 필요')
+  test('/login ???섎せ???대찓???뺤떇 ??釉뚮씪?곗? ?좏슚???먮윭 (submit 李⑤떒)', async ({ page }) => {
+    test.skip(skipEmailForm, 'NEXT_PUBLIC_E2E_TEST=true ?ㅼ젙 諛?諛고룷 ?꾩슂')
     await page.goto(`${BASE}/login`)
     await page.waitForLoadState('networkidle')
 
-    await page.getByLabel('이메일').fill('invalid-email')
-    await page.getByLabel('비밀번호').fill('password123')
-    await page.getByRole('button', { name: '로그인' }).click()
+    await page.getByLabel('?대찓??).fill('invalid-email')
+    await page.getByLabel('鍮꾨?踰덊샇').fill('password123')
+    await page.getByRole('button', { name: '濡쒓렇?? }).click()
 
-    // HTML5 type="email" 유효성 검사로 form submit이 차단되어 URL 변경 없음
+    // HTML5 type="email" ?좏슚??寃?щ줈 form submit??李⑤떒?섏뼱 URL 蹂寃??놁쓬
     await expect(page).toHaveURL(/\/login/)
   })
 
-  test('/login — 잘못된 자격증명 → 에러 메시지 표시', async ({ page }) => {
-    test.skip(skipEmailForm, 'NEXT_PUBLIC_E2E_TEST=true 설정 및 배포 필요')
+  test('/login ???섎せ???먭꺽利앸챸 ???먮윭 硫붿떆吏 ?쒖떆', async ({ page }) => {
+    test.skip(skipEmailForm, 'NEXT_PUBLIC_E2E_TEST=true ?ㅼ젙 諛?諛고룷 ?꾩슂')
     await page.goto(`${BASE}/login`)
     await page.waitForLoadState('networkidle')
 
-    await page.getByLabel('이메일').fill('wrong@example.com')
-    await page.getByLabel('비밀번호').fill('wrongpassword')
-    await page.getByRole('button', { name: '로그인' }).click()
+    await page.getByLabel('?대찓??).fill('wrong@example.com')
+    await page.getByLabel('鍮꾨?踰덊샇').fill('wrongpassword')
+    await page.getByRole('button', { name: '濡쒓렇?? }).click()
 
     await expect(
-      page.getByText('이메일 또는 비밀번호가 올바르지 않습니다.')
+      page.getByText('?대찓???먮뒗 鍮꾨?踰덊샇媛 ?щ컮瑜댁? ?딆뒿?덈떎.')
     ).toBeVisible({ timeout: 10_000 })
   })
 
-  test('/cart — 비로그인 시 /login으로 리디렉트', async ({ page }) => {
+  test('/cart ??鍮꾨줈洹몄씤 ??/login?쇰줈 由щ뵒?됲듃', async ({ page }) => {
     await page.goto(`${BASE}/cart`)
     await page.waitForLoadState('networkidle')
 
@@ -59,14 +59,14 @@ test.describe('Consumer — 인증 플로우', () => {
     await expect(page.getByText('Green Love')).toBeVisible()
   })
 
-  test('/checkout — 비로그인 시 /login으로 리디렉트', async ({ page }) => {
+  test('/checkout ??鍮꾨줈洹몄씤 ??/login?쇰줈 由щ뵒?됲듃', async ({ page }) => {
     await page.goto(`${BASE}/checkout?from=cart`)
     await page.waitForLoadState('networkidle')
 
     await expect(page).toHaveURL(/\/login/)
   })
 
-  test('/login — callbackUrl 파라미터 오픈 리디렉트 방어', async ({ page }) => {
+  test('/login ??callbackUrl ?뚮씪誘명꽣 ?ㅽ뵂 由щ뵒?됲듃 諛⑹뼱', async ({ page }) => {
     await page.goto(`${BASE}/login?callbackUrl=https://evil.com`)
     await page.waitForLoadState('networkidle')
     await expect(page.getByText('Green Love')).toBeVisible()
