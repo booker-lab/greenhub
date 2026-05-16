@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-16 (세션30 — CRITICAL_LOGIC.md 한도 정책)
+최종 수정: 2026-05-16 (세션31 — P2-A 계측 + throttler fix)
 
 ---
 
@@ -27,6 +27,7 @@
 | **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴(T0~T5). CI 풀런 124/37→145/16·146/15, race 0건 | 2026-05-16 |
 | **세션29**: e2e 잔여 B·C·D 전부 해소 — C(perf-css networkidle 제거)·B·D 단일 원인 CORS fix(#CL-28). 재배포 후 풀런 167/0 | 2026-05-16 |
 | **세션30**: P2-C #CL-29 — 누적 결정 로그 한도 정책(500라인 예외+1000라인 트리거). CRITICAL_LOGIC.md 1415→229라인 아카이브 분리 | 2026-05-16 |
+| **세션31**: P2-A Railway latency 계측(synthetic) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30) | 2026-05-16 |
 
 ---
 
@@ -78,6 +79,15 @@
 
 ---
 
+## 세션31 — P2-A Railway latency 계측 + throttler fix (#CL-30)
+
+- **P2-A 완료**: Railway 배포 로그에 요청 단위 로그가 전무 → synthetic 측정 스크립트 `scripts/measure-api-latency.mjs` 신설(Railway CLI로 대시보드 없이 접근, 60초 윈도우당 8회 페이싱). `/auth/login` p50 922ms·p95 1551ms·p99 1687ms·**0% 실패**, `/health` p50 409ms. 서버 작업 ≈ ~510ms(Firestore 조회+bcrypt factor-12+토큰 발급, bcrypt 지배적). ~0.9s steady는 e2e 차단 요인 아님 → P2-B(cold-start) 데이터상 불필요 종결(moot).
+- **throttler 버그 발견·수정 (#CL-30)**: 측정 중 `/health`가 ~10~19회 후 429. `ThrottlerModule`의 named throttler는 전 라우트 전역 적용 → `auth`(10/분) 등록만으로 `/health` 등 비인증 라우트까지 10/분에 묶여 `default`(100/분) 무효화. 수정: `auth` throttler 제거 + 인증 라우트(register·login·kakao-login·refresh)에 `@Throttle({default:{limit:10}})` 라우트 한정 오버라이드. 커밋 `23e3528` 재배포 후 헤더 검증 — `/health` `x-ratelimit-limit:100`·`/auth/login` `:10`.
+
+상세: [docs/CRITICAL_LOGIC.md](CRITICAL_LOGIC.md) #CL-30
+
+---
+
 ## 세션30 — CRITICAL_LOGIC.md 한도 정책 (#CL-29)
 
 - **P2-C 완료**: 누적 결정 로그(`CRITICAL_LOGIC.md`·`BACKLOG.md`·memory 아카이브)는 시계열 append-only — 분리 시 이력 파편화·#CL 연속성/앵커 손상. **500라인 모듈화 한도 예외**로 CLAUDE.md §1 명시. 단 무한 증가 방어로 **1000라인 초과 시 종결 엔트리 아카이브**(크기 기준, 죽은 엔트리만).
@@ -102,9 +112,9 @@
 
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
-- ✅ #CL-21 옵션 A(세션26)·CI(세션27) / ✅ #CL-23 인증 race(세션28) / ✅ #CL-28 B·C·D(세션29) / ✅ #CL-29 결정 로그 한도 정책(세션30)
-- 🟡 **P2 (다음 세션 최우선)**: Railway `/auth/login` 로그 계측 (Railway 대시보드 접근 필요) / Vercel cold-start(P2-A 의존)
-- 🟢 P3: `useOrderActions`·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·consumer 강한비번
+- ✅ #CL-21 옵션 A(세션26)·CI(세션27) / ✅ #CL-23 인증 race(세션28) / ✅ #CL-28 B·C·D(세션29) / ✅ #CL-29 한도 정책(세션30) / ✅ #CL-30 P2-A 계측+throttler fix(세션31)
+- ⏹️ P2-B Vercel cold-start — #CL-30으로 데이터상 불필요 판정(moot)
+- 🟢 **P3 (다음 세션)**: `/admin/banner` env 점검 · consumer 강한비번 · `useOrderActions` 통합 · G1 거점 수정 · Driver Maps SDK
 
 ---
 
@@ -139,6 +149,7 @@
 - **E2E_TEST_SECRET**: 세션26부터 Vercel seller·consumer는 **Preview·Development만** (Production 제거 — #CL-21). `apps/e2e/.env`에 동일값. 32자. **MVP 출시 시 #CL-20 정리표대로 Preview도 삭제**
 - **VERCEL bypass**: Preview 배포는 SSO 보호 → 3개 프로젝트 Protection Bypass for Automation 시크릿. e2e는 `_vercel_jwt` 쿠키로 우회 (`global-setup.ts`)
 - **Railway CORS**: no-origin 요청 허용(헬스체크) — `if (!origin) return callback(null, true)` 유지 필수. Vercel preview origin은 `main.ts` 팀 스코프 정규식으로 허용(#CL-28) — `CORS_ORIGIN` env는 프로덕션 도메인만
+- **Railway throttler**: `app.module.ts`는 `default`(100/분) 단일 등록 — named throttler 추가 시 전 라우트 전역 적용되므로 금지. 인증 라우트만 `auth.controller`의 `@Throttle({default:{limit:10}})`로 오버라이드 (#CL-30)
 - **gemini-3-flash-preview**: 유효한 모델명, 변경 금지
 - **aggressiveFrontEndNavCaching: false**: 변경 금지 (RSC CORS 재발)
 - **shared 타입 변경 시**: `pnpm --filter @greenhub/shared build` 후 dist 커밋 필수

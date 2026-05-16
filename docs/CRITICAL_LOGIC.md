@@ -227,3 +227,47 @@
 
 **적용 (세션30)**: `#CL-19`(2026-05-08) 경계로 분할. 2026-03~04 #CL 이전 종결 엔트리 1208라인을 `archive/CRITICAL_LOGIC_archive_20260516.md`로 이관. 활성 파일 1415→229라인(헤더 + #CL-19~#CL-29 + 아카이브 포인터). 정합성 검토: #CL 참조 링크 무손상, 아카이브 이동 섹션 참조 2건(`BACKLOG.md` 거점 픽업·`orders.md` 판매자 취소 권한) 경로 정정.
 
+---
+
+## [결정 #CL-30] Railway throttler 전역 누수 수정 + /auth/login latency 계측 (2026-05-16, 세션31)
+
+### 배경: P2-A 계측 — Railway에는 요청 로그가 없다
+
+P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된 항목. Railway CLI(4.35.0, `tazan1988`) 로그인으로 대시보드 없이 접근 가능 확인. 단 Railway 배포 로그에는 NestJS 부팅 로그만 있고 **요청 단위 로그·latency 계측이 전무**(`TimestampInterceptor`는 응답 직렬화 전용, 요청 로깅 인터셉터 없음) → 기존 로그에서 latency 추출 불가. synthetic 측정 스크립트 `scripts/measure-api-latency.mjs` 도입(60초 윈도우당 8회 페이싱).
+
+### 발견: ThrottlerModule 전역 누수 (설정 버그)
+
+측정 중 `/health`가 ~10~19회 후 429 반환. 429 응답 body `ThrottlerException` + 헤더 `retry-after-auth: 60`·`x-ratelimit-limit: 100`으로 확정 — NestJS `ThrottlerModule`은 등록된 **모든** named throttler를 **전 라우트에 전역 적용**한다. `app.module.ts`가 `default`(100/분)·`auth`(10/분) 2개를 등록 → 모든 엔드포인트가 binding 한도 10/분에 묶임. `@Throttle({ auth: {} })` 데코레이터는 throttler를 *스코프*하지 않고 옵션만 오버라이드하므로, `auth` throttler 등록 자체만으로 `/health`·`/products` 등 비인증 라우트까지 10/분 제한. 주석의 의도("일반 100, 인증 10")가 무효화된 상태였다.
+
+영향 범위: throttler 스토리지 키는 라우트별로 분리돼 일반 사용자는 여러 엔드포인트로 분산 → 가시적 장애는 드물었으나, 단일 엔드포인트 >10/분 호출 시 429(Railway 헬스체크·실시간 폴링 등 잠재 위험).
+
+### 결정: 단일 `default` throttler + 인증 라우트 @Throttle 오버라이드
+
+- `app.module.ts`: `auth` throttler 제거, `default`(100/분) 단일 등록.
+- `auth.controller.ts`: register·login·kakao-login·refresh의 `@Throttle({ auth: {} })` → `@Throttle(AUTH_THROTTLE)`, `AUTH_THROTTLE = { default: { limit: 10, ttl: 60000 } }` — 전역 `default`를 해당 라우트에서만 10/분으로 오버라이드.
+- 일반 100/분·인증 10/분 의도 복원. `@SkipThrottle()`(firebase-token·payments webhook)은 단일 throttler에서도 정상.
+- **적용 조건**: 코드 머지만으로 무효 — Railway 재배포 필요. 커밋 `23e3528` push가 Railway GitHub 자동 재배포 트리거.
+
+### P2-A latency 계측 결과 (재배포 전, commit `c5ee52f` 기준)
+
+측정 환경: Railway 리전 `asia-southeast1`(싱가포르) ↔ 측정 클라이언트.
+
+| endpoint | n | min | p50 | p95 | p99 | 실패율 |
+|----------|---|-----|-----|-----|-----|--------|
+| GET /health | 60+ | 379ms | 409ms | ~440ms | (cold 1.0~1.1s) | 0% |
+| POST /auth/login | 24 | 848ms | 922ms | 1551ms | 1687ms | 0% |
+
+- `/health` 정상 구간 379~443ms — 순수 네트워크 왕복. 매 프로세스 첫 요청만 ~1.0s(DNS+TLS+undici 초기화).
+- `/auth/login` 서버 작업 ≈ 922−410 ≈ **~510ms** (Firestore email 조회 + bcrypt factor-12 비교 + JWT 서명 + Firestore 토큰 set). bcrypt 12가 지배적.
+- p95/p99(1.5~1.7s)는 62초 idle 후 첫 요청의 keep-alive 소켓 만료→TLS 재handshake 영향 — 서버 tail 아닌 측정 아티팩트.
+- 0% 실패. #CL-23으로 인증 호출은 풀런당 2회로 구조상 확정 → ~0.9s steady latency는 e2e 차단 요인 아님(#CL-28 cold-start 반증 재확인). P2-B는 별도 데이터 불필요로 판단.
+
+### 검증 (재배포 후, 2026-05-16)
+
+커밋 `23e3528` Railway 자동 재배포 완료 후 응답 헤더로 확인:
+- `GET /health` → `x-ratelimit-limit: 100` — fix 전 `auth`(10/분) → `default`(100/분) 회복.
+- `POST /auth/login` → `x-ratelimit-limit: 10` — `@Throttle` 오버라이드 정상 동작, brute-force 방어 유지.
+- 일반 100/분·인증 10/분 의도 복원 확인.
+
+**부수 관측**: 응답 헤더 `x-ratelimit-remaining`이 연속 요청에 격번 감소(99→99→98→98) → Railway가 복수 컨테이너로 분산 처리 중. NestJS throttler 스토리지는 컨테이너별 in-memory라 단일 IP 실효 한도가 컨테이너 수만큼 배수가 된다(본 수정 이전부터의 특성, 신규 결함 아님). 엄격한 전역 제한이 필요하면 공유 스토리지(Redis) 백엔드가 필요 — 본 수정 범위 외, 필요 시 별도 항목으로 등재.
+
