@@ -40,6 +40,8 @@ jobs:
           TEST_SELLER_PASSWORD: ${{ secrets.TEST_SELLER_PASSWORD }}
           TEST_CONSUMER_EMAIL: ${{ secrets.TEST_CONSUMER_EMAIL }}
           TEST_CONSUMER_PASSWORD: ${{ secrets.TEST_CONSUMER_PASSWORD }}
+          # cleanup-spec-residue.mjs — seller-auth-invite afterAll 잔여물 정리용 firebase-admin 인증
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: pnpm --filter e2e exec playwright test --project=chromium
 
       - name: Upload test report
