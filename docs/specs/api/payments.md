@@ -3,7 +3,7 @@
 > **작성일**: 2026-03-26
 > **최종 수정**: 2026-03-27 (Portone V2 마이그레이션 반영)
 > **상태**: 현행화 완료
-> **연관 문서**: `orders.md`, `CRITICAL_LOGIC.md`, `1단계 요구사항 정의.md`
+> **연관 문서**: `orders.md`, `CRITICAL_LOGIC.md`, `docs/design/소비자-1단계-요구사항.md`
 
 ---
 
