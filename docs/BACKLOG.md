@@ -429,6 +429,7 @@
 > **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
 > **세션30 완료**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택·아카이브 분리(1415→229라인).
 > **세션31 완료**: P2-A Railway latency 계측(`/auth/login` p50 922ms·0% 실패) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30).
+> **세션32 완료**: e2e 안정성 2건 해소 — `consumer-groupbuy:14` flake + `cleanup-spec-residue` CI 인증 실패. 풀런 167/0 유지·cleanup `users=2` 정상 동작.
 > **다음 세션 최우선**: P3 단독 항목 (`/admin/banner` env 점검 / consumer 강한비번). P2-B는 #CL-30으로 데이터 불필요 판정.
 
 ### 12-1. 우선순위
@@ -569,6 +570,30 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 
 ---
 
+#### [x] 세션32 — e2e 안정성 2건 해소 (2026-05-17)
+
+세션31 T0에서 발견·기록만 했던 e2e 안정성 이슈 2건. 167/0 베이스라인을
+견고히 하기 위해 P3 착수 전 우선 처리.
+
+**[x] consumer-groupbuy:14 flake** — 완료·검증
+- 원인: `waitForSelector('모집 중').catch()` 후 `empty.isVisible()`가 false면
+  "모집 중"을 강제 단언하는데, 페이지 로딩 중이면 리스트도 empty-state도 없어
+  `isEmpty=false`로 오판.
+- 수정: `list.or(empty)`가 visible 될 때까지 대기한 뒤 분기. (커밋 `abd2a13`)
+
+**[x] cleanup-spec-residue CI 인증 실패** — 완료·검증
+- 원인: `scripts/cleanup-spec-residue.mjs`가 gitignore된 로컬 키
+  `apps/api/firebase-adminsdk.json`을 `require` → CI 러너엔 파일 부재로 `exit=1`,
+  seller-auth-invite `afterAll` 정리가 CI에서 무력화(세션22 이후 상존).
+- 수정: `FIREBASE_SERVICE_ACCOUNT_JSON` env 우선·로컬 키 fallback(`firestore.module.ts`와
+  동일 규약) + `e2e.yml` env 주입 + repo Secret 등록. (커밋 `b095023`)
+- 후속: Secret을 Windows gh CLI 파이프로 업로드 시 선두 BOM(U+FEFF) 혼입 →
+  `JSON.parse` 실패. env JSON BOM/공백 제거 방어 + Secret 재업로드(no-BOM). (커밋 `4934468`)
+- **검증**: e2e 풀런 run 25965438455 **167 passed / 0 failed**,
+  cleanup 로그 `users=2 tokens=0 skipped=0` (잔여 계정 2건 정상 삭제).
+
+---
+
 #### [⏹️] P2 — Vercel function cold-start mitigation 검토 (moot)
 
 당초 NextAuth API route cold start가 set-cookie 누락 원인일 가능성으로 등재. 그러나 #CL-28(set-cookie race = CORS)·#CL-30(P2-A 계측 0% 실패·~0.9s steady)으로 **cold-start는 e2e 차단 요인이 아님이 2중 확인**됨. 별도 mitigation 작업은 데이터상 불필요 — 실사용 성능 이슈가 관측되면 그때 재등재.
@@ -680,3 +705,4 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 | 2026-05-16 | **세션29**: e2e 잔여 B·C·D 해소. T0 run 25952638293 재확인(B5·C2·D8·flake1). C — perf-css `networkidle` 제거(vercel.live 상시 연결 원인, 로컬 15/15 통과). B·D — trace로 단일 원인 확정: Railway API가 Vercel preview origin에 CORS 미허용 → `apiFetch`·`/auth/firebase-token` 차단. `main.ts`에 팀 스코프 정규식 추가 (#CL-28). 재배포(c5ee52f push 자동 트리거) 후 풀런 run 25957177092 **167 passed / 0 failed / 11 skipped** — B5·D8 + 인증 race 전부 해소 |
 | 2026-05-16 | **세션30**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택(누적 결정 로그는 500라인 모듈화 예외 + 1000라인 초과 시 종결 엔트리 아카이브). `#CL-19` 경계로 분할 — 2026-03~04 종결 엔트리 1208라인을 `archive/CRITICAL_LOGIC_archive_20260516.md`로 이관, 활성 파일 1415→229라인. `CLAUDE.md` §1 예외 규칙 명시 |
 | 2026-05-16 | **세션31**: P2-A Railway latency 계측 — synthetic 측정 스크립트 `scripts/measure-api-latency.mjs` 신설(Railway CLI 접근, `/auth/login` p50 922ms·0% 실패·서버작업 ~510ms). 계측 중 throttler 전역 누수 버그 발견 — `auth`(10/분) throttler가 `/health` 등 비인증 라우트까지 적용. `app.module.ts` `auth` throttler 제거 + 인증 라우트 `@Throttle` 라우트한정 오버라이드 (#CL-30). 재배포(23e3528) 후 헤더 검증, e2e run 25962635875 167/0. P2-B는 moot 종결 |
+| 2026-05-17 | **세션32**: e2e 안정성 2건 해소. ① `consumer-groupbuy:14` flake — `list.or(empty)` 확정 렌더 대기로 오판 차단(`abd2a13`). ② `cleanup-spec-residue` CI 인증 실패 — `FIREBASE_SERVICE_ACCOUNT_JSON` env 기반 인증 전환 + `e2e.yml`·repo Secret 등록(`b095023`), Windows gh CLI 파이프 BOM 혼입 방어 + Secret no-BOM 재업로드(`4934468`). 풀런 run 25965438455 **167/0**, cleanup `users=2` 정상 삭제 |
