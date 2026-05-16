@@ -1388,3 +1388,26 @@ providers: [
 
 **잔여 후속**: B·C·D는 BACKLOG §12-2에 분리 기록. Railway `/auth/login` 로그 기반 latency 계측은 Railway 대시보드 접근 필요(미수행) — 인증 호출 N→1 감소는 e2e 구조상 확정(67+→2).
 
+---
+
+## [결정 #CL-28] Railway API CORS — Vercel preview origin 패턴 허용 (2026-05-16, 세션29)
+
+### 결정: `main.ts` origin 콜백에 팀 스코프 한정 정규식 추가
+
+**배경**: 세션29 T0에서 잔여 e2e 실패 B(5건)·D(8건)를 trace로 재조사한 결과 **단일 근본 원인**이 드러났다. 두 분류 모두 브라우저 콘솔에 동일 CORS 에러:
+> `Access to fetch at 'https://api-production-13e7.up.railway.app/...' from origin 'https://greenhub-seller-git-preview-...vercel.app' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header`
+
+- **B** = 앱 `apiFetch`(REST) 호출이 preview origin에서 CORS 차단 → `Failed to fetch`.
+- **D** = `useFirebaseAuth`의 `/auth/firebase-token` fetch가 같은 CORS로 실패 → `signInWithCustomToken` 미실행 → `firebaseReady=false` → 대시보드 indicator가 `연결 중` 고착. **D는 독립 버그가 아니라 B의 하위 증상.**
+- 진입 가이드의 cold-start 가설 반증: 실패가 풀런 04:24~04:34 전구간 분포(초반 편중 아님), `firestore.googleapis.com`은 정상 200 → Railway origin만 선택적 차단 = CORS 일치.
+
+**원인**: `main.ts`의 `allowedOrigins.includes(origin)`는 정확 일치만 허용. Railway `CORS_ORIGIN` env에 프로덕션 도메인만 있고 Vercel preview 배포 도메인은 누락. preview URL은 브랜치/배포마다 달라 정적 목록으로 관리 불가.
+
+**결정**: origin 콜백에 정규식 한 줄 추가 —
+`/^https:\/\/[a-z0-9-]+-git-[a-z0-9-]+-jos-projects-d1cecc0c\.vercel\.app$/`
+- `jos-projects-d1cecc0c` **팀 스코프로 한정** — 임의 `*.vercel.app` 전체 개방 아님(`credentials: true` 환경 보안 고려).
+- `-git-` 필수 매칭 → 브랜치 preview만 허용, 프로덕션 Vercel alias는 비대상.
+- 검증: seller·consumer·driver preview 3종 통과 / 프로덕션 도메인·타 팀·임의 vercel.app 거부.
+
+**적용 조건**: 코드 머지만으로는 무효 — **Railway API 재배포 필요**. 배포 후 다음 e2e 풀런에서 B 5건·D 8건 동시 해소 예상. D spec은 변경하지 않음(완화 시 "정상 미연결"과 버그 구분력 상실 — 가이드 D 정합성 검토 준수).
+
