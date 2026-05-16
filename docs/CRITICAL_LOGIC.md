@@ -287,3 +287,25 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **검증**: env 미주입 로컬 빌드 — 수정 전 `/admin/banner` prerender 크래시 재현, 수정 후 빌드 성공(전 라우트 정상 출력). 커밋 `32738fb`.
 
+
+---
+
+## [결정 #CL-32] seller 프론트엔드 리팩토링 — SDD 레이어 분리 (2026-05-17, 세션36)
+
+### 결정: 셀러앱 프론트엔드를 5개 Phase로 구조 정비
+
+**배경**: 사용자 요청으로 셀러앱 프론트엔드 전수 진단 후 리팩토링. `ProductForm.tsx` 705라인 = Fatal Constraint(500라인) 위반. API 호출 방식 3종 파편화, `useAdmin.ts` 462라인(거의 동일한 훅 7개 복붙), `useOrderActions`↔`useOrderDetailActions` 시그니처 불일치(BACKLOG P3), 페이지 셸/상태 UI 중복.
+
+**Phase 1 — ProductForm 분리**: `ProductForm.tsx` 705→154라인. `useProductForm`(상태·draft·AI·검증·제출 240줄) 훅 + `productForm.types.ts`(타입·상수·defaultForm) + `Step1Basic`/`Step5Pricing` 스텝 본문 + `StepIndicator` + `FormPrimitives`(FieldCard·ChoiceRow 공유) 추출.
+
+**Phase 2 — API 레이어 통일**: `lib/api.ts`에 `apiJson<T>()` + `ApiError` 추가. `res.ok` 검사·JSON 언래핑·서버 `message` 추출을 한 곳에 묶음. 기존 `apiFetch`(raw Response)는 유지. ProductForm·useOrderActions의 raw `fetch` 마이그레이션.
+
+**Phase 3 — useAdmin 팩토리화**: 462→341라인. 제네릭 `useAdminList<T>`(data/loading/error + 토큰 가드 + 자동 로드) 코어 + `runAction`/`withQuery`/`pick` 헬퍼. 7훅이 코어 위 얇은 래퍼로 재작성. 부수 효과 — !res.ok·네트워크 오류 메시지가 `apiJson` 경유로 단일화("…조회 중 오류 발생").
+
+**Phase 4 — 주문 액션 훅 통합 (BACKLOG P3 종결)**: 공통 코어 `useOrderStatusUpdate`(PATCH·loading·error) 신설. `useOrderActions`(OrderCard·prompt 취소)와 `useOrderDetailActions`(상세·모달 취소)가 코어를 공유 — fetch·에러 처리는 한 곳, 사유 입력 UI만 래퍼에서 분기. 시그니처는 `updateStatus(status, extra)`로 통일. 두 훅의 외부 반환 형태는 보존(소비처 무수정).
+
+**Phase 5 — 공통 UI 컴포넌트**: `components/`에 `PageShell`·`PageHeader`(sticky prop)·`EmptyState`·`LoadingState` 신설. 표준 헤더·로딩·빈 상태를 쓰던 9개 페이지 치환(products·orders·order detail·product edit·settings·settlements·hubs×3 + ProductForm). 로딩 표시를 `LoadingState`(스피너)로 통일 — 일부 페이지의 "불러오는 중…" 텍스트 변형 제거.
+
+**제외**: `app/page.tsx`(홈)는 `100dvh` 사용 — PageShell `100vh` 치환 시 모바일 뷰포트 회귀 우려로 미변환. admin `page.tsx`+`_client.tsx` 분리(#CL-31 패턴)는 의도된 설계라 유지.
+
+**검증**: `pnpm --filter seller build` 성공 — TypeScript 통과, 22개 라우트 전부 생성. biome lint 신규 에러 0건(잔존 2건은 `VarietySelector`·`app/page.tsx` 사전 결함). e2e는 push 시 CI에서 검증(베이스라인 167 passed).

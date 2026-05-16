@@ -4,8 +4,9 @@ import { useState, useRef, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
-import { ActionIcon, Box, Button, Container, Group, Stack, Text, Title } from '@mantine/core';
-import { ChevronLeft } from 'lucide-react';
+import { Box, Button, Container, Group, Stack, Text, Title } from '@mantine/core';
+import { PageShell } from '@/components/PageShell';
+import { PageHeader } from '@/components/PageHeader';
 
 type Step = 'input' | 'success' | 'error';
 
@@ -93,30 +94,8 @@ export default function HubPickupPage() {
   const isFilled = digits.every((d) => d !== '');
 
   return (
-    <Box
-      component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}
-    >
-      <Box
-        component="header"
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          padding: '16px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <Container size="sm">
-          <Group gap="sm">
-            <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
-              <ChevronLeft size={20} />
-            </ActionIcon>
-            <Title order={3}>픽업 코드 확인</Title>
-          </Group>
-        </Container>
-      </Box>
+    <PageShell>
+      <PageHeader title="픽업 코드 확인" onBack={() => router.back()} />
 
       <Container size="sm" px="md" py={40}>
         <Stack align="center">
@@ -251,6 +230,6 @@ export default function HubPickupPage() {
           )}
         </Stack>
       </Container>
-    </Box>
+    </PageShell>
   );
 }

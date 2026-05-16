@@ -6,6 +6,9 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { apiFetch } from '@/lib/api';
+import { PageShell } from '@/components/PageShell';
+import { PageHeader } from '@/components/PageHeader';
+import { EmptyState, LoadingState } from '@/components/StateViews';
 import type { Product } from '@greenhub/shared';
 import {
   Badge,
@@ -13,11 +16,9 @@ import {
   Button,
   Container,
   Group,
-  Loader,
   Paper,
   Stack,
   Text,
-  Title,
   UnstyledButton,
 } from '@mantine/core';
 
@@ -42,37 +43,21 @@ export default function ProductsPage() {
   });
 
   return (
-    <Box
-      component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}
-    >
-      {/* 헤더 */}
-      <Box
-        component="header"
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          padding: '16px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <Container size="sm">
-          <Group justify="space-between">
-            <Title order={3}>상품 관리</Title>
-            <Button
-              component={Link}
-              href="/products/new"
-              size="xs"
-              radius="md"
-              style={{ backgroundColor: 'var(--color-primary)' }}
-            >
-              + 등록
-            </Button>
-          </Group>
-        </Container>
-      </Box>
+    <PageShell>
+      <PageHeader
+        title="상품 관리"
+        right={
+          <Button
+            component={Link}
+            href="/products/new"
+            size="xs"
+            radius="md"
+            style={{ backgroundColor: 'var(--color-primary)' }}
+          >
+            + 등록
+          </Button>
+        }
+      />
 
       {/* 필터 탭 */}
       <Box
@@ -111,46 +96,41 @@ export default function ProductsPage() {
       {/* 상품 목록 */}
       <Container size="sm" px="md" py="md">
         <Stack gap="sm">
-          {loading && (
-            <Group justify="center" py={80}>
-              <Loader size="sm" color="var(--color-primary)" />
-            </Group>
-          )}
+          {loading && <LoadingState />}
 
           {!loading && filtered.length === 0 && (
-            <Stack
-              align="center"
-              justify="center"
-              py={80}
-              style={{ color: 'var(--color-text-disabled)' }}
-            >
-              <svg
-                width="48"
-                height="48"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <rect x="2" y="7" width="20" height="14" rx="2" />
-                <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
-              </svg>
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>등록된 상품이 없습니다</Text>
-              <Text
-                component={Link}
-                href="/products/new"
-                mt="xs"
-                style={{
-                  color: 'var(--color-primary)',
-                  fontWeight: 'var(--fw-medium)',
-                  fontSize: 'var(--font-size-md)',
-                }}
-              >
-                상품 등록하기 →
-              </Text>
-            </Stack>
+            <EmptyState
+              icon={
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <rect x="2" y="7" width="20" height="14" rx="2" />
+                  <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+                </svg>
+              }
+              text="등록된 상품이 없습니다"
+              action={
+                <Text
+                  component={Link}
+                  href="/products/new"
+                  mt="xs"
+                  style={{
+                    color: 'var(--color-primary)',
+                    fontWeight: 'var(--fw-medium)',
+                    fontSize: 'var(--font-size-md)',
+                  }}
+                >
+                  상품 등록하기 →
+                </Text>
+              }
+            />
           )}
 
           {filtered.map((product) => (
@@ -158,7 +138,7 @@ export default function ProductsPage() {
           ))}
         </Stack>
       </Container>
-    </Box>
+    </PageShell>
   );
 }
 

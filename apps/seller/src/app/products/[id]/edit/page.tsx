@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import ProductForm from '../../_components/ProductForm';
 import type { ProductFormData } from '../../_components/ProductForm';
-import { Box, Loader, Text, UnstyledButton } from '@mantine/core';
+import { Box, Text, UnstyledButton } from '@mantine/core';
+import { LoadingState } from '@/components/StateViews';
 
 // Firestore Timestamp | ISO string → YYYY-MM-DD
 function toISODate(value: unknown): Date | null {
@@ -126,19 +127,7 @@ export default function EditProductPage() {
   }
 
   if (!initialData) {
-    return (
-      <Box
-        style={{
-          minHeight: '100vh',
-          backgroundColor: 'var(--color-surface-muted)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Loader size="sm" color="var(--color-primary)" />
-      </Box>
-    );
+    return <LoadingState fullPage />;
   }
 
   return (
