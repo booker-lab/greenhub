@@ -2,19 +2,10 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import {
-  ActionIcon,
-  Box,
-  Button,
-  Container,
-  Group,
-  Loader,
-  Stack,
-  Text,
-  Title,
-  UnstyledButton,
-} from '@mantine/core';
-import { ChevronLeft } from 'lucide-react';
+import { Box, Button, Container, Stack, Text, UnstyledButton } from '@mantine/core';
+import { PageShell } from '@/components/PageShell';
+import { PageHeader } from '@/components/PageHeader';
+import { LoadingState } from '@/components/StateViews';
 import { CANCELLABLE_STATUSES, READONLY_STATUSES } from './_lib';
 import { useOrderDetail } from './_hooks/useOrderDetail';
 import { useOrderDetailActions } from './_hooks/useOrderDetailActions';
@@ -47,19 +38,7 @@ export default function OrderDetailPage() {
   } = useOrderDetailActions(storeId, orderId);
 
   if (loading) {
-    return (
-      <Box
-        style={{
-          minHeight: '100vh',
-          backgroundColor: 'var(--color-surface-muted)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Loader size="sm" color="brand" />
-      </Box>
-    );
+    return <LoadingState fullPage />;
   }
 
   if (!order) {
@@ -97,34 +76,8 @@ export default function OrderDetailPage() {
       : (groupConfig?.groupDeliveryDate?.slice(0, 10) ?? null);
 
   return (
-    <Box
-      component="main"
-      style={{
-        minHeight: '100vh',
-        backgroundColor: 'var(--color-surface-muted)',
-        paddingBottom: 96,
-      }}
-    >
-      <Box
-        component="header"
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          padding: '16px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <Container size="sm">
-          <Group gap="sm">
-            <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
-              <ChevronLeft size={20} />
-            </ActionIcon>
-            <Title order={3}>주문 상세</Title>
-          </Group>
-        </Container>
-      </Box>
+    <PageShell paddingBottom={96}>
+      <PageHeader title="주문 상세" onBack={() => router.back()} />
 
       <Container size="sm" px="md" py="md">
         <Stack gap="sm">
@@ -212,6 +165,6 @@ export default function OrderDetailPage() {
         }}
         onConfirm={handleCancel}
       />
-    </Box>
+    </PageShell>
   );
 }

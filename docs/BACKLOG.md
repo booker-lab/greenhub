@@ -32,7 +32,7 @@
 
 ## 1. seller 앱 (`apps/seller`)
 
-> 설계 문서: `docs/판매자 설계 - 1단계 요구사항 정의.md`, `docs/판매자 설계 - 2단계 IA.md`
+> 설계 문서: `docs/design/판매자-1단계-요구사항.md`, `docs/design/판매자-2단계-IA.md`
 > 배포: Vercel (Root Directory: `apps/seller`)
 
 ### 1-1. 인프라 / 공통
@@ -424,15 +424,17 @@
 
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
-> 기준일: 2026-05-16 (세션31 — P2-A 계측 + throttler fix)
-> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session35-prep.md](archive/sessions/session35-prep.md) → 본 §12 우선순위 표 순서로 확인.
+> 기준일: 2026-05-17 (세션35 — docs 정리)
+> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session36-prep.md](archive/sessions/session36-prep.md) → 본 §12 우선순위 표 순서로 확인.
 > **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
 > **세션30 완료**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택·아카이브 분리(1415→229라인).
 > **세션31 완료**: P2-A Railway latency 계측(`/auth/login` p50 922ms·0% 실패) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30).
 > **세션32 완료**: e2e 안정성 2건 해소 — `consumer-groupbuy:14` flake + `cleanup-spec-residue` CI 인증 실패. 풀런 167/0 유지·cleanup `users=2` 정상 동작.
 > **세션33 완료**: P3 `/admin/banner` prerender 실패 해소 — firebase `getAuth` 지연 초기화 (#CL-31). 코드로 종결, Vercel 환경변수 조치 불필요로 확정.
 > **세션34 완료**: P3 consumer@test.com 강한비번 전환 — Firestore `passwordHash` 갱신 + `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 교체. 풀런 167/0 유지.
-> **다음 세션 최우선**: P3 잔여 기능 항목 (`useOrderActions` 통합 / G1 거점 수정 페이지 / Driver Kakao Maps SDK).
+> **세션35 완료**: docs 정리 — `memory.md` 200라인 한도 요약·아카이브(197→50라인) + 폴더 이동으로 깨진 상호 참조 링크 14곳 수정 + 변경 이력 순서·누락 보정. 코드 변경 없음.
+> **세션36 완료**: seller 프론트엔드 리팩토링 5-Phase (#CL-32) — ProductForm 705→154라인(Fatal Constraint 해소), API 레이어 `apiJson` 통일, useAdmin 462→341 팩토리화, `useOrderActions` 통합(P3 종결), 공통 UI 컴포넌트 9개 페이지 치환. 빌드 통과.
+> **다음 세션 최우선**: P3 잔여 기능 항목 (G1 거점 수정 페이지 / Driver Kakao Maps SDK).
 
 ### 12-1. 우선순위
 
@@ -447,7 +449,7 @@
 | ✅ P2 | Railway throttler 전역 누수 수정 — `auth` throttler 제거 (#CL-30, 2026-05-16 세션31) | 인프라/버그 | — |
 | ⏹️ P2 | Vercel function cold-start mitigation 검토 — #CL-30으로 데이터상 불필요 판정 (moot) | 성능 | — |
 | ✅ P2 | `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3+ 채택, 아카이브 분리 (2026-05-16 세션30 완료) | 문서 정책 | 단독 |
-| 🟢 P3 | `useOrderActions` 훅 통합 (detail/OrderCard 시그니처 통일) | DX | UI 리팩토링 사이클 |
+| ✅ P3 | seller 프론트엔드 리팩토링 5-Phase — `useOrderActions` 통합 포함 (#CL-32, 2026-05-17 세션36) | DX/구조 | — |
 | ✅ P3 | `/admin/banner` prerender 실패 — firebase getAuth 지연 초기화 (2026-05-17 세션33 완료) | 환경설정 | — |
 | 🟢 P3 | G1: `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 | 기능 | — |
 | 🟢 P3 | Driver Kakao Maps SDK 연동 | 기능 | — |
@@ -709,11 +711,13 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 | 2026-05-15 | **세션23**: 셀러 fatal constraint 해소 — `orders/[id]`·`settlements` 페이지 분할 (#CL-22) |
 | 2026-05-15 | **세션24**: e2e 회귀 검증 (회귀 0건) + 인증 헬퍼 진단 강화 (#CL-23) |
 | 2026-05-15 | **세션25**: 사전 결함 정리 — biome 파싱 에러·`.env.vercel.tmp` gitignore·driver Credentials 부재 검증 (#CL-25) / §12 후속 정비 백로그 신설 |
+| 2026-05-15 | **세션26**: #CL-21 옵션 A 보강 — `preview` 브랜치 신설(Vercel branch Preview 자동 배포)·21개 spec `BASE` 환경변수화·`.github/workflows/e2e.yml` 신설. Vercel seller·consumer Production env `E2E_TEST_SECRET` 삭제(Preview·Development 유지·#CL-21). Preview SSO 우회 — Protection Bypass 시크릿 3개 + `global-setup.ts` `_vercel_jwt` storageState 도입 |
 | 2026-05-16 | **세션27**: #CL-21 후속 — gh CLI 설치·repo Secrets 11개 등록·`sync-preview.yml` 자동 머지 워크플로 신설·e2e.yml pnpm 충돌 수정. e2e CI 가동(124 passed/37 fail). 37건은 #CL-23 인증 race로 확정 |
 | 2026-05-16 | **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴 도입(T0~T5). 실패 37건 증거 재분류(A23/B5/C2/D7), globalSetup 세션 쿠키 발급 + 11개 인증 describe 배선 + spec 로그인 제거. CI 2회 풀런 124/37→145/16·146/15, `set-cookie count=0` 0건. 잔여 B·C·D는 §12-2 분리 기록 (#CL-27) |
 | 2026-05-16 | **세션29**: e2e 잔여 B·C·D 해소. T0 run 25952638293 재확인(B5·C2·D8·flake1). C — perf-css `networkidle` 제거(vercel.live 상시 연결 원인, 로컬 15/15 통과). B·D — trace로 단일 원인 확정: Railway API가 Vercel preview origin에 CORS 미허용 → `apiFetch`·`/auth/firebase-token` 차단. `main.ts`에 팀 스코프 정규식 추가 (#CL-28). 재배포(c5ee52f push 자동 트리거) 후 풀런 run 25957177092 **167 passed / 0 failed / 11 skipped** — B5·D8 + 인증 race 전부 해소 |
 | 2026-05-16 | **세션30**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택(누적 결정 로그는 500라인 모듈화 예외 + 1000라인 초과 시 종결 엔트리 아카이브). `#CL-19` 경계로 분할 — 2026-03~04 종결 엔트리 1208라인을 `archive/CRITICAL_LOGIC_archive_20260516.md`로 이관, 활성 파일 1415→229라인. `CLAUDE.md` §1 예외 규칙 명시 |
 | 2026-05-16 | **세션31**: P2-A Railway latency 계측 — synthetic 측정 스크립트 `scripts/measure-api-latency.mjs` 신설(Railway CLI 접근, `/auth/login` p50 922ms·0% 실패·서버작업 ~510ms). 계측 중 throttler 전역 누수 버그 발견 — `auth`(10/분) throttler가 `/health` 등 비인증 라우트까지 적용. `app.module.ts` `auth` throttler 제거 + 인증 라우트 `@Throttle` 라우트한정 오버라이드 (#CL-30). 재배포(23e3528) 후 헤더 검증, e2e run 25962635875 167/0. P2-B는 moot 종결 |
+| 2026-05-17 | **세션32**: e2e 안정성 2건 해소. ① `consumer-groupbuy:14` flake — `list.or(empty)` 확정 렌더 대기로 오판 차단(`abd2a13`). ② `cleanup-spec-residue` CI 인증 실패 — `FIREBASE_SERVICE_ACCOUNT_JSON` env 기반 인증 전환 + `e2e.yml`·repo Secret 등록(`b095023`), Windows gh CLI 파이프 BOM 혼입 방어 + Secret no-BOM 재업로드(`4934468`). 풀런 run 25965438455 **167/0**, cleanup `users=2` 정상 삭제 |
 | 2026-05-17 | **세션33**: P3 `/admin/banner` prerender 실패 해소. 원인 — `firebase.ts`가 모듈 로드 시 `getAuth(app)` 평가 → apiKey 부재 시 동기 throw → 빌드 prerender 첫 firebase-import 페이지 크래시. `getAuth`/`getStorage` 지연 초기화 함수로 전환(사용처 전부 클라이언트 런타임). env 미주입 로컬 빌드 — 수정 전 크래시 재현, 수정 후 빌드 성공. Vercel은 env 존재로 무영향(환경변수 조치 불필요 확정). 커밋 `32738fb` (#CL-31) |
 | 2026-05-17 | **세션34**: P3 consumer@test.com 강한비번 전환. `reset-user-password.mjs`로 Firestore `passwordHash`를 30자 랜덤 비번(bcrypt-12)으로 갱신, `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 동기 교체. `/auth/login` curl로 새 비번 200·기존 401 확인, e2e 풀런 run 25966655016 **167/0**. 세션22 편의 결정(`feedback_security_convenience`)을 보안 우선으로 재확인·전환 |
-| 2026-05-17 | **세션32**: e2e 안정성 2건 해소. ① `consumer-groupbuy:14` flake — `list.or(empty)` 확정 렌더 대기로 오판 차단(`abd2a13`). ② `cleanup-spec-residue` CI 인증 실패 — `FIREBASE_SERVICE_ACCOUNT_JSON` env 기반 인증 전환 + `e2e.yml`·repo Secret 등록(`b095023`), Windows gh CLI 파이프 BOM 혼입 방어 + Secret no-BOM 재업로드(`4934468`). 풀런 run 25965438455 **167/0**, cleanup `users=2` 정상 삭제 |
+| 2026-05-17 | **세션35**: docs 정리 세션 — P3 잔여 3건은 사용자 결정으로 별도 세션 이관. `memory.md` 200라인 한도 임박(197) → 50라인 이내 요약(50라인)·세션22~34 상세를 `archive/memory_archive_20260517.md`로 아카이브. 폴더 이동(`docs/design/`·`docs/specs/api/`)으로 깨진 design↔api spec 상호 참조 링크 14곳 수정. 본 변경 이력 — 세션32 행 순서 보정·누락된 세션26 행 추가. 코드 변경 없음 |

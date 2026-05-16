@@ -1,30 +1,15 @@
 'use client';
 
-import { signOut, useSession } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 import Link from 'next/link';
-import { Box, Container, Group, Paper, Stack, Text, Title, UnstyledButton } from '@mantine/core';
+import { Box, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
+import { PageShell } from '@/components/PageShell';
+import { PageHeader } from '@/components/PageHeader';
 
 export default function SettingsPage() {
-  const { data: session } = useSession();
-
   return (
-    <Box
-      component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}
-    >
-      {/* 헤더 */}
-      <Box
-        component="header"
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          padding: '16px',
-        }}
-      >
-        <Container size="sm">
-          <Title order={3}>설정</Title>
-        </Container>
-      </Box>
+    <PageShell>
+      <PageHeader title="설정" sticky={false} />
 
       <Container size="sm" px="md" py="md">
         <Stack gap="sm">
@@ -187,6 +172,6 @@ export default function SettingsPage() {
           </Paper>
         </Stack>
       </Container>
-    </Box>
+    </PageShell>
   );
 }

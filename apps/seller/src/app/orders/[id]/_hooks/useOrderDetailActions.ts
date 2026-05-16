@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useSession } from 'next-auth/react';
-import { apiFetch } from '@/lib/api';
+import { useOrderStatusUpdate } from '@/hooks/useOrderStatusUpdate';
 
 export interface UseOrderDetailActionsResult {
   actionLoading: boolean;
@@ -20,58 +19,34 @@ export interface UseOrderDetailActionsResult {
   handleCancel: () => Promise<void>;
 }
 
+/** 주문 상세 페이지용 액션 — 프리셋 준비 폼 + 모달 취소 사유. */
 export function useOrderDetailActions(
   storeId: string | null,
   orderId: string,
 ): UseOrderDetailActionsResult {
-  const { data: session } = useSession();
-  const token = session?.user.accessToken ?? '';
-
-  const [actionLoading, setActionLoading] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const { actionLoading, actionError, setActionError, updateStatus } = useOrderStatusUpdate(
+    storeId,
+    orderId,
+  );
   const [showPrepareForm, setShowPrepareForm] = useState(false);
   const [preparedAt, setPreparedAt] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
 
   async function handlePrepare() {
-    if (!storeId) return;
-    setActionLoading(true);
-    setActionError(null);
-    try {
-      const body: Record<string, string> = { status: 'PREPARING' };
-      if (preparedAt) body.preparedAt = preparedAt;
-      const res = await apiFetch(`/stores/${storeId}/orders/${orderId}/status`, token, {
-        method: 'PATCH',
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
+    const ok = await updateStatus('PREPARING', preparedAt ? { preparedAt } : undefined);
+    if (ok) {
       setShowPrepareForm(false);
       setPreparedAt(null);
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : '오류가 발생했습니다');
-    } finally {
-      setActionLoading(false);
     }
   }
 
   async function handleCancel() {
-    if (!storeId) return;
     if (cancelReason.trim().length < 5) return;
-    setActionLoading(true);
-    setActionError(null);
-    try {
-      const res = await apiFetch(`/stores/${storeId}/orders/${orderId}/status`, token, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'CANCELLED', reason: cancelReason.trim() }),
-      });
-      if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
+    const ok = await updateStatus('CANCELLED', { reason: cancelReason.trim() });
+    if (ok) {
       setShowCancelModal(false);
       setCancelReason('');
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : '오류가 발생했습니다');
-    } finally {
-      setActionLoading(false);
     }
   }
 
