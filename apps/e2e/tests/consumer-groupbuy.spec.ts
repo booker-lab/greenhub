@@ -12,13 +12,13 @@ test.describe('소비자 공동구매 페이지', () => {
   })
 
   test('모집 중 섹션 존재', async ({ page }) => {
-    // 로딩 완료 대기
-    await page.waitForSelector('text=모집 중', { timeout: 10_000 }).catch(() => {})
     const empty = page.locator('text=진행 중인 공동구매가 없습니다')
-    const list = page.locator('text=모집 중')
-    const isEmpty = await empty.isVisible()
-    if (!isEmpty) {
-      await expect(page.locator('text=모집 중').first()).toBeVisible()
+    const list = page.locator('text=모집 중').first()
+    // 리스트(모집 중) 또는 empty-state 중 하나가 확정 렌더될 때까지 대기.
+    // 느린 로드로 둘 다 미렌더 상태에서 isEmpty=false 로 오판하던 flake 차단.
+    await expect(list.or(empty)).toBeVisible({ timeout: 15_000 })
+    if (!(await empty.isVisible())) {
+      await expect(list).toBeVisible()
     }
   })
 
