@@ -271,3 +271,19 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **부수 관측**: 응답 헤더 `x-ratelimit-remaining`이 연속 요청에 격번 감소(99→99→98→98) → Railway가 복수 컨테이너로 분산 처리 중. NestJS throttler 스토리지는 컨테이너별 in-memory라 단일 IP 실효 한도가 컨테이너 수만큼 배수가 된다(본 수정 이전부터의 특성, 신규 결함 아님). 엄격한 전역 제한이 필요하면 공유 스토리지(Redis) 백엔드가 필요 — 본 수정 범위 외, 필요 시 별도 항목으로 등재.
 
+---
+
+## [결정 #CL-31] seller Firebase SDK 지연 초기화 — `/admin/banner` prerender 실패 해소 (2026-05-17, 세션33)
+
+### 결정: `getAuth`/`getStorage`를 모듈 로드 시점이 아닌 첫 사용 시점에 초기화
+
+**배경**: #CL-22 세션23 빌드 검증에서 사전 결함으로 기록만 했던 `/admin/banner` prerender 실패(`auth/invalid-api-key`)를 본 세션에서 종결. 로컬 빌드(`pnpm build`)로 재현 — `Generating static pages` 단계에서 `/admin/banner` prerender가 `FirebaseError: auth/invalid-api-key`로 크래시하며 빌드 중단.
+
+**원인**: `apps/seller/src/lib/firebase.ts`가 모듈 최상위에서 `getAuth(app)`를 평가. Firebase Auth의 `getAuth()`는 `apiKey`가 없으면 **동기적으로 `auth/invalid-api-key`를 throw**한다(`getStorage`·`initializeApp`·`getFirestore`는 미throw). Next.js 빌드는 prerender 단계에서 페이지 모듈 그래프를 평가 → firebase를 import하는 첫 페이지(`/admin/banner`, 알파벳 우선)가 throw → 빌드 전체 abort. `/admin/banner` 자체 버그가 아니라 firebase 모듈 로드 부수효과.
+
+**Vercel 무영향 확인**: seller 앱은 Vercel에 정상 배포·동작 중(e2e 풀런 167/0). `NEXT_PUBLIC_*`는 빌드 시점 인라인이므로 Vercel 빌드 env에는 firebase 변수가 존재 → Vercel 빌드는 깨지지 않음. 실패는 firebase 변수가 비표준 파일 `apps/seller/.env.vercel.local`에만 있고 Next.js가 로드하는 `.env.local`엔 없는 **로컬·env 미주입 빌드 한정**. BACKLOG의 "Vercel 환경변수 점검" 항목은 데이터상 불필요 — Vercel 대시보드 조치 없이 코드로 종결.
+
+**결정**: `getAuth`/`getStorage`를 지연 초기화 함수 `getFirebaseAuth()`/`getFirebaseStorage()`로 전환(메모이즈). 사용처(`useFirebaseAuth`·`useOrders`·`onboarding`·`ImageUpload`·`admin/banner`)가 전부 `useEffect`·async 핸들러 = 클라이언트 런타임이라 모듈 로드 시점 평가가 불필요. prerender(SSR)는 `useEffect`를 실행하지 않으므로 firebase 인증을 더 이상 평가하지 않는다. `db`(`getFirestore`)는 미throw이므로 즉시 초기화 유지. consumer 앱 `firebase.ts`는 `getAuth`/`getStorage` 미사용이라 무영향(수정 불필요).
+
+**검증**: env 미주입 로컬 빌드 — 수정 전 `/admin/banner` prerender 크래시 재현, 수정 후 빌드 성공(전 라우트 정상 출력). 커밋 `32738fb`.
+

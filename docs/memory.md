@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-17 (세션32 — e2e 안정성 2건 해소)
+최종 수정: 2026-05-17 (세션33 — `/admin/banner` prerender 실패 해소)
 
 ---
 
@@ -29,6 +29,7 @@
 | **세션30**: P2-C #CL-29 — 누적 결정 로그 한도 정책(500라인 예외+1000라인 트리거). CRITICAL_LOGIC.md 1415→229라인 아카이브 분리 | 2026-05-16 |
 | **세션31**: P2-A Railway latency 계측(synthetic) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30) | 2026-05-16 |
 | **세션32**: e2e 안정성 2건 — consumer-groupbuy flake + cleanup-spec-residue CI 인증(env 전환·BOM 방어). 풀런 167/0 | 2026-05-17 |
+| **세션33**: P3 `/admin/banner` prerender 실패 해소 — seller firebase `getAuth` 지연 초기화 (#CL-31) | 2026-05-17 |
 
 ---
 
@@ -80,6 +81,15 @@
 
 ---
 
+## 세션33 — `/admin/banner` prerender 실패 해소 (#CL-31)
+
+- **원인**: `apps/seller/src/lib/firebase.ts`가 모듈 최상위에서 `getAuth(app)` 평가 → `apiKey` 부재 시 `getAuth`가 동기 throw(`auth/invalid-api-key`). 빌드 prerender가 firebase를 import하는 첫 페이지(`/admin/banner`, 알파벳 우선)를 평가하다 크래시 → 빌드 abort. 페이지 자체 버그 아님.
+- **Vercel 무영향**: 셀러 앱 정상 배포·e2e 167/0 → Vercel 빌드 env엔 firebase 변수 존재. 실패는 변수가 비표준 `.env.vercel.local`에만 있고 `.env.local`엔 없는 로컬·env 미주입 빌드 한정. BACKLOG의 "Vercel 환경변수 점검"은 불필요로 확정.
+- **수정**: `getAuth`/`getStorage`를 지연 초기화 함수 `getFirebaseAuth()`/`getFirebaseStorage()`로 전환(메모이즈). 사용처(`useFirebaseAuth`·`useOrders`·`onboarding`·`ImageUpload`·`admin/banner`) 전부 클라이언트 런타임이라 모듈 로드 평가 불필요. `db`는 미throw로 즉시 초기화 유지.
+- **검증**: env 미주입 로컬 빌드 — 수정 전 크래시 재현, 수정 후 빌드 성공(전 라우트). 커밋 `32738fb`.
+
+---
+
 ## 세션32 — e2e 안정성 2건 해소
 
 - **consumer-groupbuy:14 flake**: `waitForSelector('모집 중').catch()` 후 `empty.isVisible()`가 false면 "모집 중"을 강제 단언 — 페이지 로딩 중이면 리스트도 empty-state도 미렌더라 오판. `list.or(empty)` 확정 렌더 대기 후 분기로 수정 (커밋 `abd2a13`).
@@ -123,8 +133,9 @@
 
 - ✅ #CL-21 옵션 A(세션26)·CI(세션27) / ✅ #CL-23 인증 race(세션28) / ✅ #CL-28 B·C·D(세션29) / ✅ #CL-29 한도 정책(세션30) / ✅ #CL-30 P2-A 계측+throttler fix(세션31)
 - ✅ 세션32 e2e 안정성 2건 — consumer-groupbuy flake · cleanup-spec-residue CI 인증
+- ✅ 세션33 P3 `/admin/banner` prerender 실패 — firebase getAuth 지연 초기화(#CL-31)
 - ⏹️ P2-B Vercel cold-start — #CL-30으로 데이터상 불필요 판정(moot)
-- 🟢 **P3 (다음 세션)**: `/admin/banner` env 점검 · consumer 강한비번 · `useOrderActions` 통합 · G1 거점 수정 · Driver Maps SDK
+- 🟢 **P3 (다음 세션)**: consumer 강한비번 · `useOrderActions` 통합 · G1 거점 수정 · Driver Maps SDK
 
 ---
 
@@ -172,4 +183,5 @@
 - **Portone V2**: PORTONE_V2_SECRET·PORTONE_WEBHOOK_SECRET `apps/api/.env` 반영 완료
 - **orders ?tab= 딥링크**: `window.location.search` 사용 (Suspense 빌드 에러 방지)
 - **proxy.ts**: Next.js 16 미들웨어 컨벤션 파일명, 정상 동작
+- **seller firebase.ts**: `getAuth`/`getStorage`는 지연 초기화 함수 `getFirebaseAuth()`/`getFirebaseStorage()`로만 노출 — 모듈 최상위 호출 금지(`getAuth`가 apiKey 부재 시 동기 throw → 빌드 prerender 크래시, #CL-31). `db`는 미throw로 즉시 초기화 유지
 - **AUTH_SECRET**: 3앱 Vercel 설정 완료
