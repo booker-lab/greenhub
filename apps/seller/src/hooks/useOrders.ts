@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
-import { db, firebaseAuth } from '@/lib/firebase';
+import { db, getFirebaseAuth } from '@/lib/firebase';
 import type { Order, OrderStatus } from '@greenhub/shared';
 import { STATUS_GROUP_MAP, type OrderGroup } from '@/app/orders/_constants';
 
@@ -28,7 +28,7 @@ export function useOrders(storeId: string | null): UseOrdersResult {
 
   // Firebase Auth 완료 대기 (signInWithCustomToken race condition 방지)
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), (user) => {
       setFirebaseReady(!!user);
     });
     return unsubscribe;

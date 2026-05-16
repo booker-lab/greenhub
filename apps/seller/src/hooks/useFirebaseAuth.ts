@@ -7,7 +7,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
 } from 'firebase/auth';
-import { firebaseAuth } from '@/lib/firebase';
+import { getFirebaseAuth } from '@/lib/firebase';
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -22,7 +22,7 @@ export function useFirebaseAuth() {
   const [firebaseReady, setFirebaseReady] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), (user) => {
       setFirebaseReady(!!user);
     });
     return unsubscribe;
@@ -37,14 +37,14 @@ export function useFirebaseAuth() {
           if (!res.ok) throw new Error(`firebase-token fetch failed: ${res.status}`);
           return res.text();
         })
-        .then((token: string) => signInWithCustomToken(firebaseAuth, token))
+        .then((token: string) => signInWithCustomToken(getFirebaseAuth(), token))
         .catch((err) => {
           console.error('[useFirebaseAuth]', err);
         });
     }
 
     if (status === 'unauthenticated') {
-      firebaseSignOut(firebaseAuth).catch(() => {});
+      firebaseSignOut(getFirebaseAuth()).catch(() => {});
     }
   }, [status, session?.user.accessToken]);
 

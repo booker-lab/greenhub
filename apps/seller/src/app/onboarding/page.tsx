@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+import { getFirebaseStorage } from '@/lib/firebase';
 import { apiFetch } from '@/lib/api';
 import {
   Box,
@@ -72,7 +72,10 @@ export default function OnboardingPage() {
     setLogoUploading(true);
     setError('');
     try {
-      const storageRef = ref(storage, `logos/${session?.user.id ?? 'unknown'}_${Date.now()}`);
+      const storageRef = ref(
+        getFirebaseStorage(),
+        `logos/${session?.user.id ?? 'unknown'}_${Date.now()}`,
+      );
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
       setLogoPreview(url);
