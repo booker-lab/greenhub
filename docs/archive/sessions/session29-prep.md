@@ -4,6 +4,12 @@
 > 선행: 세션28 #CL-23 인증 race 해소 완료 (#CL-27 — storageState 패턴)
 > 진행 원칙: **아토믹 태스크 단위** — 한 태스크 = 한 커밋. 각 태스크 끝에 **정합성 검토** 수행 후 통과해야 다음 진행.
 
+> **[세션29 종료 — 결과]** 본 가이드 소비 완료. T0 재확인(run 25952638293 — B5·C2·D8·flake1, 인증 race 0건).
+> **C 완료** (커밋 `0d466f1`): perf-css `networkidle` 제거 — 원인은 Vercel preview `vercel.live` 위젯 상시 연결. 로컬 15/15 통과.
+> **B·D 단일 원인 확정** (커밋 `6542ecc`, #CL-28): 가이드의 B(Railway)·D(realtime)는 별개가 아니라 **동일 CORS 원인**. Railway API가 Vercel preview origin에 CORS 헤더 미발급 → `apiFetch`·`/auth/firebase-token` 차단 → D는 `firebaseReady=false`로 인한 하위 증상. cold-start 가설 반증. `main.ts`에 팀 스코프 정규식 추가.
+> **잔여**: Railway API 재배포 → e2e 풀런으로 B5·D8 해소 검증. D spec 무변경. 다음 진입점은 `docs/BACKLOG.md` §12-1 「다음 세션 최우선」.
+> 아래 본문은 세션28 작성 원안(참고용 보존) — B·D는 위 결과로 대체됨.
+
 ---
 
 ## 배경
