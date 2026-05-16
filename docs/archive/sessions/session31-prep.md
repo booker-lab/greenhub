@@ -22,6 +22,37 @@
 **권장 순서**: P2-A 착수 가능 여부를 먼저 사용자에게 확인. Railway 대시보드 접근이
 불가하면 P2-A·P2-B는 보류하고 **P3 단독 항목**(env 점검·강한비번 등)을 우선 처리한다.
 
+---
+
+## 핸드오프 — 착수 가능성 분류
+
+다음 세션에서 **무엇을 바로 집을 수 있는가**를 우선순위가 아니라 *착수 조건* 기준으로 분류한다.
+
+### 🟢 즉시 착수 가능 (외부 의존 없음 — 권장 1순위)
+
+| 항목 | 범위 | 규모 | 산출물 |
+|------|------|------|--------|
+| **P3 `/admin/banner` prerender 실패** | Vercel admin/seller 프로젝트 Firebase env 점검 → 누락 config 추가 → 재배포 검증 | 소 (env 점검+재배포) | `auth/invalid-api-key` 해소, 빌드 prerender 통과 |
+| **P3 consumer@test.com 강한비번 전환** | Firebase Auth 비번 교체 + `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 갱신 + e2e 풀런 검증 | 소 | 편의 결정(test1234) → 보안 정상화. `feedback_security_convenience` 재확인 필요 |
+
+### 🟡 사용자 협조 필요 (착수 전 확인)
+
+| 항목 | 막힌 조건 | 비고 |
+|------|----------|------|
+| **P2-A Railway `/auth/login` 로그 계측** | Railway 대시보드 접근 | 세션28·29·30 **3회 이월**. #CL-28로 e2e 차단 요인 아님이 확정 → 긴급도 낮음. 사용자가 접근 못 하면 계속 보류 가능 |
+
+### 🟠 조건부 / 다른 작업 의존 (단독 착수 비권장)
+
+| 항목 | 의존·사유 |
+|------|-----------|
+| **P2-B Vercel cold-start mitigation** | P2-A 계측 데이터 선행 — 데이터 없이 착수 금지 |
+| **P3 `useOrderActions` 훅 통합** | detail/OrderCard 시그니처 불일치 — 단순 통합 시 동작 변경 위험. UI 리팩토링 사이클에서 일괄 |
+| **P3 G1 거점 수정 페이지** | `hubs/[id]/page.tsx` 신규 기능 구현 — 규모 중~대, 별도 기능 세션 권장 |
+| **P3 Driver Kakao Maps SDK** | 신규 SDK 연동 — 별도 기능 세션 권장 |
+
+**세션31 권장 시나리오**: T0(회귀 점검) → 사용자에게 P2-A(Railway 접근) 가능 여부 질의 →
+가능하면 P2-A, 불가하면 🟢 2종(`/admin/banner` env → consumer 강한비번)을 아토믹 커밋으로 순차 처리.
+
 > ⚠️ **P2-A는 세션28·29에서 각각 한 번씩 가이드에 포함됐으나 Railway 대시보드 접근
 > 조건 미충족으로 이월된 항목**이다(세션28-prep line 89, 세션29-prep line 107).
 > #CL-28에서 cold-start 가설이 CORS로 반증되어 **순수 latency 계측으로 격하**됐다 —
