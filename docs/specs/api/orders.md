@@ -258,7 +258,7 @@ PATCH /stores/:storeId/orders/:orderId/status
 
 > **설계 결정 (2026-03-28)**: 판매자 강제 취소는 `DELIVERING` 이전(`ACCEPTED` · `CONFIRMED` · `PREPARING`)까지만 허용.
 > 발송(`DELIVERING`) 이후에는 소비자가 반품 신청 → 판매자 수락 루트로만 처리.
-> 발송 후 판매자 일방 취소는 표준 e-커머스에 없는 개념이며, 드라이버가 이미 상품을 픽업한 상태에서 취소 시 상품 회수 처리가 모호해지는 운영 문제가 있음. (`CRITICAL_LOGIC.md` §판매자 취소 권한 참조)
+> 발송 후 판매자 일방 취소는 표준 e-커머스에 없는 개념이며, 드라이버가 이미 상품을 픽업한 상태에서 취소 시 상품 회수 처리가 모호해지는 운영 문제가 있음. (`CRITICAL_LOGIC.md` archive §판매자 취소 권한 참조)
 
 ---
 

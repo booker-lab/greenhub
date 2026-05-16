@@ -122,7 +122,7 @@
 
 > **MVP 결정**: seller가 직접 `/hubs/[id]/pickup`에서 코드 입력 확인 (패턴 C)
 > **Phase 2 트리거**: 협력 업체(꽃집·과일가게 등) 계약 확정 시
-> 설계 결정 상세: `CRITICAL_LOGIC.md` §2026-03-28 거점 픽업 확인 방식
+> 설계 결정 상세: `archive/CRITICAL_LOGIC_archive_20260516.md` §2026-03-28 거점 픽업 확인 방식
 
 - [ ] `users.role: 'hub_staff'` 신규 역할 추가
 - [ ] `hubs.staffIds: string[]` 관계 필드 + Firestore 스키마 반영
@@ -427,7 +427,8 @@
 > 기준일: 2026-05-16 (세션29 — e2e 잔여 B·C·D 해소)
 > 진입점: 다음 세션 시작 시 [docs/archive/sessions/session30-prep.md](archive/sessions/session30-prep.md) → 본 §12 우선순위 표 순서로 확인.
 > **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
-> **다음 세션 최우선**: P2-C `CRITICAL_LOGIC.md` 한도 정책(단독 착수 가능). P2-A Railway 로그 계측은 Railway 대시보드 접근 필요.
+> **세션30 완료**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택·아카이브 분리(1415→229라인).
+> **다음 세션 최우선**: P2-A Railway `/auth/login` 로그 계측 (Railway 대시보드 접근 — 사용자 협조 필요). P2-B는 P2-A 데이터 의존.
 
 ### 12-1. 우선순위
 
@@ -440,7 +441,7 @@
 | ✅ P3 | e2e 잔여 C — perf-css `networkidle` 제거 (2026-05-16 세션29 완료) | e2e | — |
 | 🟡 P2 | Railway `/auth/login` 로그 계측 — N→1 구조는 확정, 로그 latency 잔여 | 관측 | Railway 대시보드 접근 |
 | 🟡 P2 | Vercel function cold-start mitigation 검토 | 성능 | 계측 데이터 기반 |
-| 🟡 P2 | `CRITICAL_LOGIC.md` 1390라인 — CLAUDE.md §1 한도 정책 결정 | 문서 정책 | 단독 |
+| ✅ P2 | `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3+ 채택, 아카이브 분리 (2026-05-16 세션30 완료) | 문서 정책 | 단독 |
 | 🟢 P3 | `useOrderActions` 훅 통합 (detail/OrderCard 시그니처 통일) | DX | UI 리팩토링 사이클 |
 | 🟢 P3 | `/admin/banner` prerender 실패 — Firebase env 누락 | 환경설정 | 환경변수 점검만 |
 | 🟢 P3 | G1: `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 | 기능 | — |
@@ -548,16 +549,19 @@ NextAuth API route의 cold start가 set-cookie 누락의 또 다른 원인일 �
 
 ---
 
-#### [ ] P2 — `CRITICAL_LOGIC.md` 한도 정책 결정
+#### [x] P2 — `CRITICAL_LOGIC.md` 한도 정책 결정 (2026-05-16 세션30 완료)
 
-**현황**: 1342라인 (세션25 #CL-25까지). CLAUDE.md §1는 단일 파일 500라인 모듈화 한도.
+**현황(착수 시)**: 1415라인 (#CL-28까지). CLAUDE.md §1는 단일 파일 500라인 모듈화 한도.
 
-**고려 옵션**:
-- 옵션 1: **분기별 archive** — `CRITICAL_LOGIC_2026Q1.md` 등으로 분리, 현행 파일은 최근 분기만 유지
-- 옵션 2: **도메인별 분리** — auth/payment/schema 디렉터리 구조 (검색성 trade-off)
-- 옵션 3: **한도 예외 명시** — CLAUDE.md §1에 "누적 결정 로그 파일은 예외" 명시 (BACKLOG.md도 동일 사례)
+**결정 — 옵션 3 변형 채택** (사용자 협의):
+- 누적 시계열 결정 로그는 코드 모듈과 성격이 달라(분리 시 이력 파편화·#CL 연속성·앵커 링크 손상) 500라인 모듈화 한도의 **예외**로 명시. `BACKLOG.md`·memory 아카이브도 동일 부류.
+- 단, 무한 증가 방어를 위해 **크기 기반 트리거** 추가: `CRITICAL_LOGIC.md` 1000라인 초과 시 종결·SUPERSEDED 엔트리를 `docs/archive/`로 이관, 활성 파일 ~500라인으로 축소. (옵션 1의 분기 기준 대신 크기 기준 — 죽은 엔트리만 이관해 #CL 연속성 보존.)
 
-**결정 후 작업**: 선택 옵션에 따라 파일 재구성 + CLAUDE.md 갱신 + memory 업데이트.
+**적용 작업 (완료)**:
+- [x] `#CL-19`(2026-05-08) 경계로 분할 — 2026-03~04 #CL 이전 종결 엔트리(1208라인)를 `docs/archive/CRITICAL_LOGIC_archive_20260516.md`로 이관.
+- [x] 활성 `CRITICAL_LOGIC.md` → 229라인(헤더 + #CL-19~#CL-29 + 아카이브 포인터).
+- [x] `CLAUDE.md` §1에 누적 결정 로그 예외 + 1000라인 트리거 규칙 명시, §2 체크리스트 단서 추가.
+- [x] 정합성 검토 — `CRITICAL_LOGIC.md` 참조 링크 점검: #CL-19~28 참조는 활성 파일 유지로 무손상. 아카이브로 이동한 섹션 참조 2건(`BACKLOG.md` §거점 픽업, `orders/orders.md` §판매자 취소 권한) 아카이브 경로로 정정.
 
 ---
 
@@ -648,3 +652,4 @@ NextAuth API route의 cold start가 set-cookie 누락의 또 다른 원인일 �
 | 2026-05-16 | **세션27**: #CL-21 후속 — gh CLI 설치·repo Secrets 11개 등록·`sync-preview.yml` 자동 머지 워크플로 신설·e2e.yml pnpm 충돌 수정. e2e CI 가동(124 passed/37 fail). 37건은 #CL-23 인증 race로 확정 |
 | 2026-05-16 | **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴 도입(T0~T5). 실패 37건 증거 재분류(A23/B5/C2/D7), globalSetup 세션 쿠키 발급 + 11개 인증 describe 배선 + spec 로그인 제거. CI 2회 풀런 124/37→145/16·146/15, `set-cookie count=0` 0건. 잔여 B·C·D는 §12-2 분리 기록 (#CL-27) |
 | 2026-05-16 | **세션29**: e2e 잔여 B·C·D 해소. T0 run 25952638293 재확인(B5·C2·D8·flake1). C — perf-css `networkidle` 제거(vercel.live 상시 연결 원인, 로컬 15/15 통과). B·D — trace로 단일 원인 확정: Railway API가 Vercel preview origin에 CORS 미허용 → `apiFetch`·`/auth/firebase-token` 차단. `main.ts`에 팀 스코프 정규식 추가 (#CL-28). 재배포(c5ee52f push 자동 트리거) 후 풀런 run 25957177092 **167 passed / 0 failed / 11 skipped** — B5·D8 + 인증 race 전부 해소 |
+| 2026-05-16 | **세션30**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택(누적 결정 로그는 500라인 모듈화 예외 + 1000라인 초과 시 종결 엔트리 아카이브). `#CL-19` 경계로 분할 — 2026-03~04 종결 엔트리 1208라인을 `archive/CRITICAL_LOGIC_archive_20260516.md`로 이관, 활성 파일 1415→229라인. `CLAUDE.md` §1 예외 규칙 명시 |
