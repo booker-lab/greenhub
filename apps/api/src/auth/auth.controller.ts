@@ -21,33 +21,36 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtPayload } from './types/jwt-payload.type';
 
+// 인증 엔드포인트는 brute-force 방어로 1분 10회 — 전역 'default'(100/분) 오버라이드.
+const AUTH_THROTTLE = { default: { limit: 10, ttl: 60000 } };
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  @Throttle({ auth: {} })
+  @Throttle(AUTH_THROTTLE)
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ auth: {} })
+  @Throttle(AUTH_THROTTLE)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 
   @Post('kakao-login')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ auth: {} })
+  @Throttle(AUTH_THROTTLE)
   kakaoLogin(@Body() dto: KakaoLoginDto) {
     return this.authService.kakaoLogin(dto);
   }
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ auth: {} })
+  @Throttle(AUTH_THROTTLE)
   refresh(@Body('refreshToken') refreshToken: string) {
     return this.authService.refresh(refreshToken);
   }
