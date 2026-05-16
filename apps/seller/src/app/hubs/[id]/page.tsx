@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { apiFetch } from '@/lib/api';
-import { Badge, Box, Container, Group, Paper, Stack, Text } from '@mantine/core';
+import { Badge, Box, Button, Container, Group, Paper, Stack, Text } from '@mantine/core';
 import { PageShell } from '@/components/PageShell';
 import { PageHeader } from '@/components/PageHeader';
 import { LoadingState } from '@/components/StateViews';
@@ -93,7 +94,24 @@ export default function HubDetailPage() {
 
   return (
     <PageShell>
-      <PageHeader title={hub ? hub.name : '거점 상세'} onBack={() => router.back()} />
+      <PageHeader
+        title={hub ? hub.name : '거점 상세'}
+        onBack={() => router.back()}
+        right={
+          hub ? (
+            <Button
+              component={Link}
+              href={`/hubs/${hubId}/edit`}
+              size="xs"
+              variant="light"
+              color="gray"
+              radius="md"
+            >
+              수정
+            </Button>
+          ) : undefined
+        }
+      />
 
       <Container size="sm" px="md" py="md">
         <Stack gap="md">
