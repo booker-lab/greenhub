@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-16 (세션28 — #CL-23 인증 race 해소: storageState 패턴)
+최종 수정: 2026-05-16 (세션29 — e2e 잔여 B·C·D 해소)
 
 ---
 
@@ -25,6 +25,7 @@
 | **세션26**: #CL-21 옵션 A 보강 — Production env `E2E_TEST_SECRET` 제거 + Preview SSO bypass 도입 | 2026-05-15 |
 | **세션27**: #CL-21 후속 — repo Secrets 11개 등록 + `sync-preview.yml` 자동 머지 워크플로 + e2e CI 가동 | 2026-05-16 |
 | **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴(T0~T5). CI 풀런 124/37→145/16·146/15, race 0건 | 2026-05-16 |
+| **세션29**: e2e 잔여 B·C·D 해소 — C 완료(perf-css networkidle 제거), B·D 단일 원인 CORS fix(#CL-28, Railway 재배포 대기) | 2026-05-16 |
 
 ---
 
@@ -76,14 +77,25 @@
 
 ---
 
+## 세션29 — e2e 잔여 B·C·D 해소 (#CL-28)
+
+- **T0 재확인**: 최신 풀런 run 25952638293 — B 5·C 2·D 8·flake 1 (세션28과 동일, 인증 race 0건 유지).
+- **C 완료**: `perf-css-regression:87·:103` Seller 로그인 — `waitForLoadState('networkidle')`가 Vercel preview의 `vercel.live` 피드백 위젯 상시 연결로 30s 타임아웃. trace로 확정(리소스 ~2.7s 완료, Firebase 호출 0). `networkidle` 제거 → 폼 렌더 + 1.5s 정착. 로컬 perf-css 15/15 통과.
+- **B·D 단일 원인**: trace 콘솔에서 CORS 에러 확정 — Railway API가 Vercel preview origin에 `Access-Control-Allow-Origin` 미발급. B = `apiFetch` 차단, D = `/auth/firebase-token` fetch 차단 → `firebaseReady=false` → 대시보드 `연결 중` 고착. **D는 B의 하위 증상.** cold-start 가설 반증(전구간 분포·firestore는 정상).
+- **수정**: `apps/api/src/main.ts` origin 콜백에 팀 스코프(`jos-projects-d1cecc0c`) 한정 정규식 추가. **Railway 재배포 후 풀런 검증 잔여** — D spec은 무변경.
+
+상세: [docs/CRITICAL_LOGIC.md](CRITICAL_LOGIC.md) #CL-28
+
+---
+
 ## 후속 작업 — SSOT: `docs/BACKLOG.md` §12
 
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
-- ✅ P0 #CL-21 옵션 A(세션26) / ✅ P1 #CL-21 후속 CI(세션27) / ✅ P1 #CL-23 인증 race storageState(세션28)
-- 🟠 **P1 (다음 세션 후보)**: e2e 잔여 B — Railway API `Failed to fetch` 5건 / Railway `/auth/login` 로그 계측 — 진입 가이드 [session29-prep.md](archive/sessions/session29-prep.md)
-- 🟡 P2: e2e 잔여 D realtime 미정착 8건 / Vercel cold-start / `CRITICAL_LOGIC.md` 한도 정책
-- 🟢 P3: e2e 잔여 C waitForLoadState 2건 / `useOrderActions`·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·consumer 강한비번
+- ✅ #CL-21 옵션 A(세션26)·CI(세션27) / ✅ #CL-23 인증 race(세션28) / ✅ #CL-28 C 완료(세션29)
+- 🟠 **P1 (다음 세션 최우선)**: Railway API 재배포(#CL-28 CORS fix 반영) → e2e 풀런으로 B 5·D 8 해소 검증
+- 🟡 P2: Railway `/auth/login` 로그 계측 / Vercel cold-start / `CRITICAL_LOGIC.md` 한도 정책
+- 🟢 P3: `useOrderActions`·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·consumer 강한비번
 
 ---
 
@@ -117,7 +129,7 @@
 - **login/page.tsx (seller·consumer)**: `export const dynamic = 'force-dynamic'` — 옵션 B 도입 후 폼 노출은 항상 false지만 force-dynamic은 유지(런타임 env 평가 보장)
 - **E2E_TEST_SECRET**: 세션26부터 Vercel seller·consumer는 **Preview·Development만** (Production 제거 — #CL-21). `apps/e2e/.env`에 동일값. 32자. **MVP 출시 시 #CL-20 정리표대로 Preview도 삭제**
 - **VERCEL bypass**: Preview 배포는 SSO 보호 → 3개 프로젝트 Protection Bypass for Automation 시크릿. e2e는 `_vercel_jwt` 쿠키로 우회 (`global-setup.ts`)
-- **Railway CORS**: no-origin 요청 허용(헬스체크) — `if (!origin) return callback(null, true)` 유지 필수
+- **Railway CORS**: no-origin 요청 허용(헬스체크) — `if (!origin) return callback(null, true)` 유지 필수. Vercel preview origin은 `main.ts` 팀 스코프 정규식으로 허용(#CL-28) — `CORS_ORIGIN` env는 프로덕션 도메인만
 - **gemini-3-flash-preview**: 유효한 모델명, 변경 금지
 - **aggressiveFrontEndNavCaching: false**: 변경 금지 (RSC CORS 재발)
 - **shared 타입 변경 시**: `pnpm --filter @greenhub/shared build` 후 dist 커밋 필수

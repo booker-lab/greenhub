@@ -424,9 +424,9 @@
 
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
-> 기준일: 2026-05-15 (세션26 #CL-21 완료 후)
+> 기준일: 2026-05-16 (세션29 — e2e 잔여 B·C·D 해소)
 > 진입점: 다음 세션 시작 시 본 §12 우선순위 표 → 항목 상세 순서로 확인.
-> **다음 세션 최우선**: §12-2 「P1 — #CL-23 인증 race 해소: storageState 패턴」 (e2e CI에서 37건 실패로 재현 중).
+> **다음 세션 최우선**: Railway API 재배포(#CL-28 CORS fix 반영) → e2e 풀런으로 B 5·D 8 해소 검증.
 
 ### 12-1. 우선순위
 
@@ -435,10 +435,9 @@
 | ✅ P0 | #CL-21 옵션 A 보강 — Production env에서 `E2E_TEST_SECRET` 제거 (2026-05-15 세션26 완료) | 보안 | 4단계 다중 PR |
 | ✅ P1 | #CL-21 후속 — GitHub repo Secrets 11개 등록 + `preview` 자동 머지 워크플로 (2026-05-16 세션27 완료) | 인프라/DX | 단독 진행 가능 |
 | ✅ P1 | #CL-23 인증 race 해소 — `storageState` 패턴 도입 (2026-05-16 세션28 완료) | 인프라/DX | 단독 진행 가능 |
-| 🟠 P1 | e2e 잔여 B — Railway API `Failed to fetch` 5건 (#CL-23 T0 분류) | 인프라/관측 | Railway 안정성 |
-| 🟡 P2 | e2e 잔여 D — 대시보드 realtime 미정착 8건 (#CL-23 T0 분류) | e2e/기능 | Firestore 리스너 |
-| 🟢 P3 | e2e 잔여 C — perf-css `waitForLoadState` 타임아웃 2건 (#CL-23 T0 분류) | e2e | networkidle 전략 |
-| 🟠 P1 | Railway `/auth/login` 로그 계측 — N→1 구조는 확정, 로그 latency 잔여 | 관측 | Railway 대시보드 접근 |
+| 🟠 P1 | e2e 잔여 B·D — Railway CORS preview origin (#CL-28) — 코드 완료, **Railway 재배포 + 풀런 검증 대기** | 인프라 | Railway 재배포 |
+| ✅ P3 | e2e 잔여 C — perf-css `networkidle` 제거 (2026-05-16 세션29 완료) | e2e | — |
+| 🟡 P2 | Railway `/auth/login` 로그 계측 — N→1 구조는 확정, 로그 latency 잔여 | 관측 | Railway 대시보드 접근 |
 | 🟡 P2 | Vercel function cold-start mitigation 검토 | 성능 | 계측 데이터 기반 |
 | 🟡 P2 | `CRITICAL_LOGIC.md` 1390라인 — CLAUDE.md §1 한도 정책 결정 | 문서 정책 | 단독 |
 | 🟢 P3 | `useOrderActions` 훅 통합 (detail/OrderCard 시그니처 통일) | DX | UI 리팩토링 사이클 |
@@ -512,31 +511,27 @@
 
 ---
 
-#### [ ] P1 — e2e 잔여 B: Railway API `Failed to fetch` 5건
+#### [~] 세션29 — e2e 잔여 B·C·D 해소 (2026-05-16)
 
-#CL-23 T4 후 잔여. 페이지는 인증·렌더 정상이나 앱의 REST 호출이 `Failed to fetch`로 실패 → 데이터 영역이 에러/빈 상태. storageState와 무관 — Railway API 가용성 문제.
+세션28 #CL-23 T4 후 잔여 14~15건. 세션29 T0에서 최신 풀런 run 25952638293으로 재확인 — **B 5 · C 2 · D 8 · flake 1** (세션28과 동일, 인증 race `set-cookie count=0` 0건 유지 → #CL-27 회귀 없음).
 
-- [ ] 대상: `consumer-groupbuy:14`·`consumer-mypage:74`·`seller-onboarding:45`·`seller-onboarding:76`·`seller-settlements:98` (+ `consumer-home:15` 간헐)
-- [ ] Railway API 응답 안정성 점검 (cold-start·일시 부하) — 아래 「Railway 로그 계측」과 병행
+**진입 가이드**: [docs/archive/sessions/session29-prep.md](archive/sessions/session29-prep.md)
 
-**진입 가이드 (B·C·D 공통)**: [docs/archive/sessions/session29-prep.md](archive/sessions/session29-prep.md) — T0 재확인 + 분류별 아토믹 태스크·정합성 검토
+**[x] C — perf-css `waitForLoadState` 타임아웃 2건** — 완료·검증
+- 대상: `perf-css-regression:87`·`:103` (Seller 로그인).
+- 원인(trace 확정): Vercel preview의 `vercel.live` 피드백 위젯 상시 연결로 `networkidle`(500ms 무네트워크) 영영 미정착. 페이지 리소스는 ~2.7s 내 전부 완료·Firebase 호출 0건 → 앱 버그 아님.
+- 수정: `networkidle` 대기 제거 → 로그인 폼 렌더 대기 + 1.5s 정착. 로컬 perf-css 15/15 통과. (커밋 `0d466f1`)
 
-#### [ ] P2 — e2e 잔여 D: 대시보드 realtime 미정착 8건
+**[~] B·D — Railway API CORS preview origin 누락** — 코드 완료, **Railway 재배포 대기**
+- B 대상: `consumer-groupbuy:14`·`consumer-mypage:74`·`seller-onboarding:45`·`:76`·`seller-settlements:98`. D 대상: `seller-home-dashboard` ×7 + `seller-orders:65`.
+- 원인(trace 확정): Railway API가 Vercel preview origin에 `Access-Control-Allow-Origin` 미발급 → CORS 차단. B = 앱 `apiFetch` REST 호출 실패. D = `useFirebaseAuth`의 `/auth/firebase-token` fetch 실패 → `firebaseReady=false` → 대시보드 indicator `연결 중` 고착. **D는 독립 버그가 아닌 B의 하위 증상 — 단일 원인.**
+- cold-start 가설 반증: 실패가 풀런 04:24~04:34 전구간 분포, `firestore.googleapis.com`은 정상 200 → Railway origin만 선택적 차단 = CORS.
+- 수정: `apps/api/src/main.ts` origin 콜백에 `jos-projects-d1cecc0c` 팀 스코프 한정 정규식 추가. (커밋 `6542ecc`, #CL-28)
+- [ ] **잔여**: Railway API 재배포 → 다음 e2e 풀런에서 B 5·D 8 해소 검증. D spec은 무변경(완화 시 "정상 미연결"과 버그 구분력 상실).
 
-`seller-home-dashboard` ×7 + `seller-orders:65`. 페이지·카드는 정상 렌더되나 Firestore realtime 연결 indicator가 `연결 중`에서 미정착 → 종료 상태(`실시간 연결`/`연결 오류`)를 기다리는 단언이 타임아웃.
+#### [ ] P2 — Railway `/auth/login` 로그 계측
 
-- [ ] 원인 규명 — Firestore 리스너 미연결(BUG-03 인접: Firebase Auth 없는 구독) vs CI 환경 networkidle
-- [ ] spec OR-locator가 `연결 중`을 누락 — spec 보정 또는 리스너 수정 결정
-
-#### [ ] P3 — e2e 잔여 C: perf-css `waitForLoadState` 타임아웃 2건
-
-`perf-css-regression:87`·`:103`. `page.waitForLoadState('networkidle')`가 30s 초과 — 셀러 로그인 페이지가 상시 연결로 networkidle 미정착 추정.
-
-- [ ] `networkidle` → `domcontentloaded` + 명시적 대기로 전략 교체 검토
-
-#### [ ] P1 — Railway `/auth/login` 로그 계측
-
-#CL-23으로 인증 호출은 풀런당 67회+retry → 2회로 **구조상 N→1 확정**. 로그 기반 latency 수치화는 잔여.
+#CL-23으로 인증 호출은 풀런당 67회+retry → 2회로 **구조상 N→1 확정**. 로그 기반 latency 수치화는 잔여. (세션29: B의 cold-start 가설은 CORS로 반증됨 #CL-28 — 본 항목은 순수 latency 계측으로 격하, B 차단 요인 아님.)
 
 - [ ] Railway 대시보드/로그에서 `/auth/login` 응답시간 p50/p95/p99 + 실패율 추출 (Railway 접근 필요)
 - [ ] (옵션) 별도 헬스체크 endpoint로 정기 수치화
@@ -651,3 +646,4 @@ NextAuth API route의 cold start가 set-cookie 누락의 또 다른 원인일 �
 | 2026-05-15 | **세션25**: 사전 결함 정리 — biome 파싱 에러·`.env.vercel.tmp` gitignore·driver Credentials 부재 검증 (#CL-25) / §12 후속 정비 백로그 신설 |
 | 2026-05-16 | **세션27**: #CL-21 후속 — gh CLI 설치·repo Secrets 11개 등록·`sync-preview.yml` 자동 머지 워크플로 신설·e2e.yml pnpm 충돌 수정. e2e CI 가동(124 passed/37 fail). 37건은 #CL-23 인증 race로 확정 |
 | 2026-05-16 | **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴 도입(T0~T5). 실패 37건 증거 재분류(A23/B5/C2/D7), globalSetup 세션 쿠키 발급 + 11개 인증 describe 배선 + spec 로그인 제거. CI 2회 풀런 124/37→145/16·146/15, `set-cookie count=0` 0건. 잔여 B·C·D는 §12-2 분리 기록 (#CL-27) |
+| 2026-05-16 | **세션29**: e2e 잔여 B·C·D 해소. T0 run 25952638293 재확인(B5·C2·D8·flake1). C — perf-css `networkidle` 제거(vercel.live 상시 연결 원인, 로컬 15/15 통과). B·D — trace로 단일 원인 확정: Railway API가 Vercel preview origin에 CORS 미허용 → `apiFetch`·`/auth/firebase-token` 차단. `main.ts`에 팀 스코프 정규식 추가 (#CL-28). **Railway 재배포 후 풀런 검증 잔여** |
