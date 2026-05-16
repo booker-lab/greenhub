@@ -434,10 +434,13 @@
 |------|------|------|--------|
 | ✅ P0 | #CL-21 옵션 A 보강 — Production env에서 `E2E_TEST_SECRET` 제거 (2026-05-15 세션26 완료) | 보안 | 4단계 다중 PR |
 | ✅ P1 | #CL-21 후속 — GitHub repo Secrets 11개 등록 + `preview` 자동 머지 워크플로 (2026-05-16 세션27 완료) | 인프라/DX | 단독 진행 가능 |
-| 🟠 P1 | #CL-23 인증 race 해소 — `storageState` 패턴 도입 | 인프라/DX | 단독 진행 가능 |
-| 🟠 P1 | Railway `/auth/login` latency·실패율 계측 | 관측 | storageState 도입 직전·직후 |
+| ✅ P1 | #CL-23 인증 race 해소 — `storageState` 패턴 도입 (2026-05-16 세션28 완료) | 인프라/DX | 단독 진행 가능 |
+| 🟠 P1 | e2e 잔여 B — Railway API `Failed to fetch` 5건 (#CL-23 T0 분류) | 인프라/관측 | Railway 안정성 |
+| 🟡 P2 | e2e 잔여 D — 대시보드 realtime 미정착 8건 (#CL-23 T0 분류) | e2e/기능 | Firestore 리스너 |
+| 🟢 P3 | e2e 잔여 C — perf-css `waitForLoadState` 타임아웃 2건 (#CL-23 T0 분류) | e2e | networkidle 전략 |
+| 🟠 P1 | Railway `/auth/login` 로그 계측 — N→1 구조는 확정, 로그 latency 잔여 | 관측 | Railway 대시보드 접근 |
 | 🟡 P2 | Vercel function cold-start mitigation 검토 | 성능 | 계측 데이터 기반 |
-| 🟡 P2 | `CRITICAL_LOGIC.md` 1342라인 — CLAUDE.md §1 한도 정책 결정 | 문서 정책 | 단독 |
+| 🟡 P2 | `CRITICAL_LOGIC.md` 1390라인 — CLAUDE.md §1 한도 정책 결정 | 문서 정책 | 단독 |
 | 🟢 P3 | `useOrderActions` 훅 통합 (detail/OrderCard 시그니처 통일) | DX | UI 리팩토링 사이클 |
 | 🟢 P3 | `/admin/banner` prerender 실패 — Firebase env 누락 | 환경설정 | 환경변수 점검만 |
 | 🟢 P3 | G1: `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 | 기능 | — |
@@ -489,33 +492,51 @@
 
 ---
 
-#### [ ] P1 — #CL-23 인증 race 해소: `storageState` 패턴 도입
+#### [x] P1 — #CL-23 인증 race 해소: `storageState` 패턴 도입 (2026-05-16 세션28 완료)
 
-**배경**: 세션24 진단 결과 NextAuth credentials POST가 200 OK + 빈 body + set-cookie 없음 반환 케이스가 일관 관측 (mobile 편중, 시간 누적 효과). 세션25 smoke에서 12 spec 중 4건, **세션27 e2e CI 풀런에서 37건** 동일 패턴 실패 재현 (`auth.ts:64` 진단 throw — `set-cookie count=0`). CI는 spec마다 독립 인증 → race 증폭.
+**배경**: NextAuth credentials POST가 200 OK + 빈 body + set-cookie 없음 반환하는 race가 세션27 e2e CI 풀런(run 25926181316)에서 37건 재현. spec마다 `beforeEach(loginViaCredentials)` → 인증 호출 N×spec 누적이 race 증폭.
 
-**근본 원인 가설**: Vercel function cold-start 또는 Railway `/auth/login` 일시 부하. 모든 spec이 매번 인증 호출 → N×spec 만큼 인증 부하.
+**해소**: `globalSetup`에서 seller·consumer 1회 로그인 → `.auth-state.json` storageState 저장 → 인증 spec이 `test.use({ storageState })`로 재사용. 인증 호출 풀런당 67회+retry → 2회.
 
-**해소**: Playwright `globalSetup`에서 1회 로그인 → `storageState` 파일 저장 → 모든 spec이 재사용. Railway 인증 호출이 N → 1로 감소.
+- [x] T0. 실패 37건 증거 재분류 — A 인증 race 23 / B Railway `Failed to fetch` 5 / C waitForLoadState 2 / D realtime 미정착 7. (커밋 1da31fa)
+- [x] T1. `global-setup.ts` 확장 — seller·consumer storageState 발급 + globalSetup 로그인 재시도(보강). (786cc9d, 52d33e0)
+- [x] T2. `playwright.config.ts` + 11개 인증 describe `test.use({ storageState })` 배선. (0d65812)
+- [x] T3. spec 개별 `loginViaCredentials` 제거 (헬퍼·globalSetup은 유지). (cb5b77b)
+- [x] T4. e2e CI 2회 연속 풀런 — `set-cookie count=0` 두 번 모두 0건. 124/37 → 145/16, 146/15.
+- [x] T5. 잔여 B·C·D 분리 기록(본 §12-2) + 인증 호출 N→1 구조 확정.
 
-**진행 방식**: 아토믹 태스크 단위(한 태스크 = 한 커밋), 각 태스크 끝에 정합성 검토. 세션 진입 시 **세션27 e2e 실패 37건(run 25926181316) 재검토·분류 확정**부터 시작. 태스크 분해·정합성 검토 항목은 진입 가이드 참조.
+**결과**: 인증 race 23→0 해소 확정. 잔여 14~15건은 storageState 무관(아래 B·C·D 항목).
 
-- [ ] T0. 세션27 실패 37건 재검토 → 인증 race / 데이터 flake / waitForLoadState 3분류 확정
-- [ ] T1. `apps/e2e/global-setup.ts` **확장**(신설 아님 — SSO 우회용으로 이미 존재) — seller·consumer 1회 로그인 → 세션 쿠키 포함 storageState 저장
-- [ ] T2. `playwright.config.ts` + spec storageState 배선 — 미인증/인증 spec 분리
-- [ ] T3. spec 개별 `loginViaCredentials` 호출 제거 (헬퍼는 globalSetup이 쓰므로 유지)
-- [ ] T4. e2e CI 풀런 회귀 검증 — 인증 race 실패 0건 목표
-- [ ] T5. 잔여 분류(데이터 flake·waitForLoadState) 분리 기록 + Railway `/auth/login` 계측
-
-**진입 가이드**: [docs/archive/sessions/session28-prep.md](archive/sessions/session28-prep.md)
-**참조**: [docs/CRITICAL_LOGIC.md #CL-23](CRITICAL_LOGIC.md)
+**진입 가이드**: [docs/archive/sessions/session28-prep.md](archive/sessions/session28-prep.md) (T0 분류 확정표 포함)
+**참조**: [docs/CRITICAL_LOGIC.md #CL-27](CRITICAL_LOGIC.md)
 
 ---
 
-#### [ ] P1 — Railway `/auth/login` latency·실패율 계측
+#### [ ] P1 — e2e 잔여 B: Railway API `Failed to fetch` 5건
 
-storageState 도입 효과 측정용 베이스라인. 순서 권장: storageState 작업 **직전** 1회 + **직후** 1회 측정해 비교.
+#CL-23 T4 후 잔여. 페이지는 인증·렌더 정상이나 앱의 REST 호출이 `Failed to fetch`로 실패 → 데이터 영역이 에러/빈 상태. storageState와 무관 — Railway API 가용성 문제.
 
-- [ ] Railway 로그에서 `/auth/login` 응답시간 p50/p95/p99 + 실패율 추출
+- [ ] 대상: `consumer-groupbuy:14`·`consumer-mypage:74`·`seller-onboarding:45`·`seller-onboarding:76`·`seller-settlements:98` (+ `consumer-home:15` 간헐)
+- [ ] Railway API 응답 안정성 점검 (cold-start·일시 부하) — 아래 「Railway 로그 계측」과 병행
+
+#### [ ] P2 — e2e 잔여 D: 대시보드 realtime 미정착 8건
+
+`seller-home-dashboard` ×7 + `seller-orders:65`. 페이지·카드는 정상 렌더되나 Firestore realtime 연결 indicator가 `연결 중`에서 미정착 → 종료 상태(`실시간 연결`/`연결 오류`)를 기다리는 단언이 타임아웃.
+
+- [ ] 원인 규명 — Firestore 리스너 미연결(BUG-03 인접: Firebase Auth 없는 구독) vs CI 환경 networkidle
+- [ ] spec OR-locator가 `연결 중`을 누락 — spec 보정 또는 리스너 수정 결정
+
+#### [ ] P3 — e2e 잔여 C: perf-css `waitForLoadState` 타임아웃 2건
+
+`perf-css-regression:87`·`:103`. `page.waitForLoadState('networkidle')`가 30s 초과 — 셀러 로그인 페이지가 상시 연결로 networkidle 미정착 추정.
+
+- [ ] `networkidle` → `domcontentloaded` + 명시적 대기로 전략 교체 검토
+
+#### [ ] P1 — Railway `/auth/login` 로그 계측
+
+#CL-23으로 인증 호출은 풀런당 67회+retry → 2회로 **구조상 N→1 확정**. 로그 기반 latency 수치화는 잔여.
+
+- [ ] Railway 대시보드/로그에서 `/auth/login` 응답시간 p50/p95/p99 + 실패율 추출 (Railway 접근 필요)
 - [ ] (옵션) 별도 헬스체크 endpoint로 정기 수치화
 
 ---
@@ -627,3 +648,4 @@ NextAuth API route의 cold start가 set-cookie 누락의 또 다른 원인일 �
 | 2026-05-15 | **세션24**: e2e 회귀 검증 (회귀 0건) + 인증 헬퍼 진단 강화 (#CL-23) |
 | 2026-05-15 | **세션25**: 사전 결함 정리 — biome 파싱 에러·`.env.vercel.tmp` gitignore·driver Credentials 부재 검증 (#CL-25) / §12 후속 정비 백로그 신설 |
 | 2026-05-16 | **세션27**: #CL-21 후속 — gh CLI 설치·repo Secrets 11개 등록·`sync-preview.yml` 자동 머지 워크플로 신설·e2e.yml pnpm 충돌 수정. e2e CI 가동(124 passed/37 fail). 37건은 #CL-23 인증 race로 확정 |
+| 2026-05-16 | **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴 도입(T0~T5). 실패 37건 증거 재분류(A23/B5/C2/D7), globalSetup 세션 쿠키 발급 + 11개 인증 describe 배선 + spec 로그인 제거. CI 2회 풀런 124/37→145/16·146/15, `set-cookie count=0` 0건. 잔여 B·C·D는 §12-2 분리 기록 (#CL-27) |

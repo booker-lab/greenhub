@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-16 (세션27 — #CL-21 후속 e2e CI 활성화 완료)
+최종 수정: 2026-05-16 (세션28 — #CL-23 인증 race 해소: storageState 패턴)
 
 ---
 
@@ -24,6 +24,7 @@
 | **세션25**: 사전 결함 정리 — biome.json 파싱 에러·`.env.vercel.tmp` gitignore·driver Credentials 부재 확인 (#CL-25) | 2026-05-15 |
 | **세션26**: #CL-21 옵션 A 보강 — Production env `E2E_TEST_SECRET` 제거 + Preview SSO bypass 도입 | 2026-05-15 |
 | **세션27**: #CL-21 후속 — repo Secrets 11개 등록 + `sync-preview.yml` 자동 머지 워크플로 + e2e CI 가동 | 2026-05-16 |
+| **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴(T0~T5). CI 풀런 124/37→145/16·146/15, race 0건 | 2026-05-16 |
 
 ---
 
@@ -63,14 +64,26 @@
 
 ---
 
+## 세션28 — #CL-23 인증 race 해소: storageState 패턴 (#CL-27)
+
+- **T0 재분류**: s27 실패 37건을 run 로그 + error-context 37개 증거로 재분류 — A 인증 race 23 / B Railway `Failed to fetch` 5 / C waitForLoadState 2 / D realtime 미정착 7. 「셀러 33건 전부 A」 가설 반증.
+- **T1~T3**: `global-setup.ts`가 seller·consumer 1회 로그인 → `.auth-state.json` 발급. 11개 인증 describe에 `test.use({ storageState })` 배선, spec 개별 `loginViaCredentials` 제거. globalSetup 로그인은 race 흡수용 재시도 3회 — #CL-23의 helper-retry 기각과 구분(globalSetup 단일 지점이라 N 미증폭).
+- **T4 검증**: e2e CI 2회 연속 풀런 124/37 → **145/16 · 146/15**. `set-cookie count=0` 두 번 모두 0건 → 인증 race 23→0 확정.
+- **잔여 14~15건**: B·C·D + flake, 전부 storageState 무관 → `BACKLOG.md §12-2` 분리 기록.
+- 인증 호출 풀런당 67회+retry → 2회.
+
+상세: [docs/CRITICAL_LOGIC.md](CRITICAL_LOGIC.md) #CL-27
+
+---
+
 ## 후속 작업 — SSOT: `docs/BACKLOG.md` §12
 
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
-- ✅ P0: #CL-21 옵션 A 보강 (세션26) / ✅ P1: #CL-21 후속 e2e CI 활성화 (세션27)
-- 🟠 **P1 (다음 세션 최우선)**: #CL-23 인증 race 해소 (`storageState` 패턴) — e2e CI 37건 재현 중. 진입 가이드 [docs/archive/sessions/session28-prep.md](archive/sessions/session28-prep.md) — T0 실패 재검토부터 아토믹 태스크 + 정합성 검토로 진행
-- 🟡 P2: Vercel cold-start 검토 / `CRITICAL_LOGIC.md` 한도 정책 결정
-- 🟢 P3: `useOrderActions` 통합·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·consumer 강한비번
+- ✅ P0 #CL-21 옵션 A(세션26) / ✅ P1 #CL-21 후속 CI(세션27) / ✅ P1 #CL-23 인증 race storageState(세션28)
+- 🟠 **P1 (다음 세션 후보)**: e2e 잔여 B — Railway API `Failed to fetch` 5건 / Railway `/auth/login` 로그 계측
+- 🟡 P2: e2e 잔여 D realtime 미정착 8건 / Vercel cold-start / `CRITICAL_LOGIC.md` 한도 정책
+- 🟢 P3: e2e 잔여 C waitForLoadState 2건 / `useOrderActions`·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·consumer 강한비번
 
 ---
 
@@ -79,11 +92,11 @@
 | 항목 | 값 |
 |------|-----|
 | 헬퍼 | `apps/e2e/tests/_helpers/auth.ts` `loginViaCredentials(page, base, email, password)` |
-| 호출 패턴 | `test.beforeEach`에서 1줄 호출 (NextAuth `/api/auth/csrf` + `/api/auth/callback/credentials` 직접) |
+| 호출 패턴 | globalSetup이 seller·consumer 1회 로그인 → `.auth-state.json` storageState 발급(#CL-27). 인증 spec은 describe 상단 `test.use({ storageState: AUTH_STATE_PATH })`만 — spec 개별 `loginViaCredentials` 호출 없음. 헬퍼는 globalSetup이 사용 |
 | 헤더 주입 | helper의 csrf GET + credentials POST 두 호출에만 명시적 (`headers: { 'x-e2e-test-token': SECRET }`) — **전역 extraHTTPHeaders 사용 금지** (Firebase Identity Toolkit 등 third-party API에 헤더가 따라가 CORS preflight 차단됨) |
 | BASE | `process.env.SELLER_BASE/CONSUMER_BASE/DRIVER_BASE` (Preview branch URL) — `apps/e2e/.env` |
 | Preview SSO 우회 | `global-setup.ts`가 `_vercel_jwt` bypass 쿠키 발급 → `storageState`(`apps/e2e/.bypass-state.json`) 재사용. bypass 시크릿은 `*_BYPASS_SECRET` env |
-| 검증 통과 | seller-orders 11/12·consumer-mypage 9/10 (잔여 1건씩 #CL-23 race flake) |
+| 검증 통과 | e2e CI 2회 풀런 145/16·146/15, 인증 race 0건 (#CL-27). 잔여 B·C·D는 BACKLOG §12-2 |
 
 ---
 
