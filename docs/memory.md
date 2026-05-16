@@ -81,7 +81,7 @@
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
 - ✅ P0 #CL-21 옵션 A(세션26) / ✅ P1 #CL-21 후속 CI(세션27) / ✅ P1 #CL-23 인증 race storageState(세션28)
-- 🟠 **P1 (다음 세션 후보)**: e2e 잔여 B — Railway API `Failed to fetch` 5건 / Railway `/auth/login` 로그 계측
+- 🟠 **P1 (다음 세션 후보)**: e2e 잔여 B — Railway API `Failed to fetch` 5건 / Railway `/auth/login` 로그 계측 — 진입 가이드 [session29-prep.md](archive/sessions/session29-prep.md)
 - 🟡 P2: e2e 잔여 D realtime 미정착 8건 / Vercel cold-start / `CRITICAL_LOGIC.md` 한도 정책
 - 🟢 P3: e2e 잔여 C waitForLoadState 2건 / `useOrderActions`·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·consumer 강한비번
 

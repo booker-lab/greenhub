@@ -519,6 +519,8 @@
 - [ ] 대상: `consumer-groupbuy:14`·`consumer-mypage:74`·`seller-onboarding:45`·`seller-onboarding:76`·`seller-settlements:98` (+ `consumer-home:15` 간헐)
 - [ ] Railway API 응답 안정성 점검 (cold-start·일시 부하) — 아래 「Railway 로그 계측」과 병행
 
+**진입 가이드 (B·C·D 공통)**: [docs/archive/sessions/session29-prep.md](archive/sessions/session29-prep.md) — T0 재확인 + 분류별 아토믹 태스크·정합성 검토
+
 #### [ ] P2 — e2e 잔여 D: 대시보드 realtime 미정착 8건
 
 `seller-home-dashboard` ×7 + `seller-orders:65`. 페이지·카드는 정상 렌더되나 Firestore realtime 연결 indicator가 `연결 중`에서 미정착 → 종료 상태(`실시간 연결`/`연결 오류`)를 기다리는 단언이 타임아웃.
