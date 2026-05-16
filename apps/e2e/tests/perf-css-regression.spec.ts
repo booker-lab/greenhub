@@ -88,7 +88,10 @@ test.describe('Seller — CSS 회귀', () => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(`${SELLER_BASE}/login`)
-    await page.waitForLoadState('networkidle')
+    // networkidle은 Vercel preview의 vercel.live 피드백 위젯 상시 연결로 정착하지 않음
+    // → 로그인 폼 렌더 + 짧은 정착 대기로 교체 (hydration 런타임 에러 표면화)
+    await expect(page.locator('input[type="email"]')).toBeVisible()
+    await page.waitForTimeout(1500)
     const critical = errors.filter(
       (e) => !e.includes('hydration') && !e.includes('ChunkLoad')
     )
@@ -108,7 +111,10 @@ test.describe('Seller — CSS 회귀', () => {
       }
     })
     await page.goto(`${SELLER_BASE}/login`)
-    await page.waitForLoadState('networkidle')
+    // networkidle은 Vercel preview의 vercel.live 피드백 위젯 상시 연결로 정착하지 않음
+    // → 로그인 폼 렌더 + 짧은 정착 대기로 교체 (CSS @font-face 요청 수집 완료 보장)
+    await expect(page.locator('input[type="email"]')).toBeVisible()
+    await page.waitForTimeout(1500)
     expect(externalFonts).toHaveLength(0)
   })
 
