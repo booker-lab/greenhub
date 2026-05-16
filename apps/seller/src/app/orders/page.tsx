@@ -11,17 +11,10 @@ import {
   IN_DELIVERY_SUBFILTERS,
   type OrderGroup,
 } from './_constants';
-import {
-  Badge,
-  Box,
-  Container,
-  Group,
-  Loader,
-  Stack,
-  Text,
-  Title,
-  UnstyledButton,
-} from '@mantine/core';
+import { Badge, Box, Container, Group, Stack, Text, UnstyledButton } from '@mantine/core';
+import { PageShell } from '@/components/PageShell';
+import { PageHeader } from '@/components/PageHeader';
+import { EmptyState, LoadingState } from '@/components/StateViews';
 
 const VALID_TABS = new Set<OrderGroup>(['ACTION_REQUIRED', 'WAITING', 'IN_DELIVERY', 'DONE', 'CANCELLED']);
 
@@ -47,48 +40,30 @@ export default function OrdersPage() {
   });
 
   return (
-    <Box
-      component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}
-    >
-      {/* 헤더 */}
-      <Box
-        component="header"
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          padding: '16px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <Container size="sm">
-          <Group justify="space-between">
-            <Title order={3} style={{ fontWeight: 'var(--fw-bold)' }}>
-              주문 관리
-            </Title>
-            <Group gap={6}>
-              <Box
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  backgroundColor:
-                    loading || !firebaseReady
-                      ? 'var(--color-caution-border)'
-                      : error
-                        ? 'var(--color-danger)'
-                        : 'var(--color-primary)',
-                }}
-              />
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-                {loading || !firebaseReady ? '연결 중' : error ? '연결 오류' : '실시간 연결'}
-              </Text>
-            </Group>
+    <PageShell>
+      <PageHeader
+        title="주문 관리"
+        right={
+          <Group gap={6}>
+            <Box
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                backgroundColor:
+                  loading || !firebaseReady
+                    ? 'var(--color-caution-border)'
+                    : error
+                      ? 'var(--color-danger)'
+                      : 'var(--color-primary)',
+              }}
+            />
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+              {loading || !firebaseReady ? '연결 중' : error ? '연결 오류' : '실시간 연결'}
+            </Text>
           </Group>
-        </Container>
-      </Box>
+        }
+      />
 
       {/* Summary Bar */}
       <Box style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', padding: '8px 0', position: 'sticky', top: 57, zIndex: 9 }}>
@@ -179,29 +154,27 @@ export default function OrdersPage() {
       {/* 주문 목록 */}
       <Container size="sm" px="md" py="md">
         <Stack gap="sm">
-          {(loading || !firebaseReady) && (
-            <Group justify="center" py={80}>
-              <Loader size="sm" color="brand" />
-            </Group>
-          )}
+          {(loading || !firebaseReady) && <LoadingState />}
 
           {!loading && firebaseReady && filteredOrders.length === 0 && (
-            <Stack align="center" justify="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
-              <svg
-                width="48"
-                height="48"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M9 11l3 3L22 4" />
-                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-              </svg>
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>현재 해당 주문이 없습니다</Text>
-            </Stack>
+            <EmptyState
+              icon={
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M9 11l3 3L22 4" />
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>
+              }
+              text="현재 해당 주문이 없습니다"
+            />
           )}
 
           {filteredOrders.map((order) => (
@@ -209,6 +182,6 @@ export default function OrdersPage() {
           ))}
         </Stack>
       </Container>
-    </Box>
+    </PageShell>
   );
 }

@@ -4,18 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/api';
-import {
-  Badge,
-  Box,
-  Button,
-  Container,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  Title,
-  UnstyledButton,
-} from '@mantine/core';
+import { PageShell } from '@/components/PageShell';
+import { PageHeader } from '@/components/PageHeader';
+import { EmptyState, LoadingState } from '@/components/StateViews';
+import { Badge, Button, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
 
 interface Hub {
   id: string;
@@ -78,36 +70,21 @@ export default function HubsPage() {
   }
 
   return (
-    <Box
-      component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}
-    >
-      <Box
-        component="header"
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          padding: '16px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <Container size="sm">
-          <Group justify="space-between">
-            <Title order={3}>거점 관리</Title>
-            <Button
-              component={Link}
-              href="/hubs/new"
-              size="xs"
-              radius="md"
-              style={{ backgroundColor: 'var(--color-primary)' }}
-            >
-              + 거점 등록
-            </Button>
-          </Group>
-        </Container>
-      </Box>
+    <PageShell>
+      <PageHeader
+        title="거점 관리"
+        right={
+          <Button
+            component={Link}
+            href="/hubs/new"
+            size="xs"
+            radius="md"
+            style={{ backgroundColor: 'var(--color-primary)' }}
+          >
+            + 거점 등록
+          </Button>
+        }
+      />
 
       <Container size="sm" px="md" py="md">
         {error && (
@@ -117,47 +94,40 @@ export default function HubsPage() {
         )}
 
         {loading ? (
-          <Text
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            ta="center"
-            py={80}
-          >
-            불러오는 중...
-          </Text>
+          <LoadingState />
         ) : hubs.length === 0 ? (
-          <Stack
-            align="center"
-            justify="center"
-            py={80}
-            style={{ color: 'var(--color-text-disabled)' }}
-          >
-            <svg
-              width="48"
-              height="48"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
-            <Text style={{ fontSize: 'var(--font-size-sm)' }}>등록된 거점이 없습니다</Text>
-            <Text
-              component={Link}
-              href="/hubs/new"
-              mt="xs"
-              style={{
-                fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-primary)',
-                fontWeight: 500,
-              }}
-            >
-              거점 등록하기 →
-            </Text>
-          </Stack>
+          <EmptyState
+            icon={
+              <svg
+                width="48"
+                height="48"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+            }
+            text="등록된 거점이 없습니다"
+            action={
+              <Text
+                component={Link}
+                href="/hubs/new"
+                mt="xs"
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-primary)',
+                  fontWeight: 500,
+                }}
+              >
+                거점 등록하기 →
+              </Text>
+            }
+          />
         ) : (
           <Stack gap="sm">
             {hubs.map((hub) => (
@@ -242,6 +212,6 @@ export default function HubsPage() {
           </Stack>
         )}
       </Container>
-    </Box>
+    </PageShell>
   );
 }

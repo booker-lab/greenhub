@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Container, Group, Title, UnstyledButton } from '@mantine/core';
+import { Box, Container, Group, UnstyledButton } from '@mantine/core';
+import { PageShell } from '@/components/PageShell';
+import { PageHeader } from '@/components/PageHeader';
 import type { SettlementTab } from './_constants';
 import { TABS } from './_constants';
 import { useSettlements } from './_hooks/useSettlements';
@@ -30,25 +32,8 @@ export default function SettlementsPage() {
   } = useSettlements(activeTab);
 
   return (
-    <Box
-      component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}
-    >
-      <Box
-        component="header"
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          padding: '16px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <Container size="sm">
-          <Title order={3}>정산 관리</Title>
-        </Container>
-      </Box>
+    <PageShell>
+      <PageHeader title="정산 관리" />
 
       <Box
         style={{
@@ -111,6 +96,6 @@ export default function SettlementsPage() {
           <OrdersTab settlements={settlements} listLoading={listLoading} />
         )}
       </Container>
-    </Box>
+    </PageShell>
   );
 }
