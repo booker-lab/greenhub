@@ -2,7 +2,7 @@
 
 > **작성일**: 2026-03-26
 > **상태**: Draft (4단계 개발 선행 문서)
-> **연관 문서**: `CRITICAL_LOGIC.md`, `1단계 요구사항 정의.md`, `2단계 IA.md`
+> **연관 문서**: `CRITICAL_LOGIC.md`, `docs/design/소비자-1단계-요구사항.md`, `docs/design/소비자-2단계-IA.md`
 
 ---
 
