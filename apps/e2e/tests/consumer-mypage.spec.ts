@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginViaCredentials } from './_helpers/auth'
+import { AUTH_STATE_PATH, loginViaCredentials } from './_helpers/auth'
 
 const BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr'
 
@@ -60,6 +60,9 @@ test.describe('Consumer — 마이페이지 (비인증)', () => {
 // ── 인증 후 마이페이지 테스트 ─────────────────────────────────────────────
 
 test.describe('Consumer — 마이페이지 (인증)', () => {
+  // #CL-23: globalSetup이 발급한 세션 쿠키 재사용 — spec별 로그인 호출 제거
+  test.use({ storageState: AUTH_STATE_PATH })
+
   test.skip(skipAuth, '환경변수 TEST_CONSUMER_EMAIL / TEST_CONSUMER_PASSWORD 필요')
 
   test.beforeEach(async ({ page }) => {
