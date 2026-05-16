@@ -6,13 +6,14 @@ SDD(Spec-Driven Design) 아키텍처에 기반하며, 비즈니스 로직과 인
 ## 1. Fatal Constraints [절대 불가 조건]
 
 - **모듈화 기준**: 단일 파일이 **500라인을 초과**하면 즉시 하위 모듈로의 기능 분리(Refactoring)를 수행합니다.
+- **모듈화 예외 — 누적 결정 로그**: `docs/CRITICAL_LOGIC.md`, `docs/BACKLOG.md`, memory 아카이브는 시계열 append-only 로그이므로 500라인 모듈화 한도의 **예외**입니다(코드 모듈이 아니라 분리 시 이력이 파편화됨). 단, `CRITICAL_LOGIC.md`가 **1000라인을 초과**하면 종결·SUPERSEDED 엔트리를 `docs/archive/`로 이관해 활성 파일을 **~500라인**으로 축소합니다.
 - **Memory SSOT Guard**: `docs/memory.md`가 **200라인을 초과**하면 작업을 즉시 중단하고 **50라인 이내로 요약** 후 아카이브화합니다. (최우선 순위)
 
 ## 2. 응답 자가 검증 프로토콜 (Verification Protocol)
 
 모든 작업 완료 및 사용자 응답 직전, 아래 체크리스트를 내부적으로 확인합니다.
 
-- [ ] **Line Count**: 수정된 파일이 500라인을 초과하지 않는가?
+- [ ] **Line Count**: 수정된 파일이 500라인을 초과하지 않는가? (누적 결정 로그는 §1 예외 규칙 적용)
 - [ ] **Memory Density**: `memory.md`가 200라인을 넘지 않았으며, 요약 지침을 준수했는가?
 - [ ] **Check** : 작업에 성공했다면 체크박스에 완료 체크를 했는가?
 
