@@ -9,9 +9,14 @@
  *
  * #CL-23: 세션 쿠키를 spec마다 발급하면 Railway /auth/login 호출이 N×spec으로
  * 누적돼 인증 race(set-cookie 누락)가 시간 누적으로 증폭된다. globalSetup에서
- * 풀런 시작 시점에 1회만 로그인해 인증 호출을 N→1로 줄인다. loginViaCredentials
- * 의 set-cookie 검증 throw는 그대로 두어, 로그인이 실패하면 globalSetup이 즉시
- * 실패(fail-fast)하도록 한다 — race가 가시화되어야 retry 판단이 가능하다.
+ * 풀런 시작 시점에 1회만 로그인해 인증 호출을 N→1로 줄인다.
+ *
+ * globalSetup이 풀런의 단일 진입점이므로, 여기서 로그인이 한 번 race에 걸리면
+ * 풀런 전체가 0건 실행으로 중단된다. set-cookie race는 fresh 상태에서도 기저
+ * 발생률이 있으므로(#CL-23 T3 관측), loginViaCredentials의 throw를 제한적으로
+ * 재시도(LOGIN_MAX_ATTEMPTS회)해 흡수한다. 재시도를 모두 소진하면 throw를
+ * 그대로 전파해 fail-fast한다 — N→1 목표는 유지되며(최대 3회 시도) race가
+ * 끝내 가시화된다.
  *
  * 헤더(x-vercel-protection-bypass)를 use.extraHTTPHeaders로 전역 주입하지
  * 않는 이유: 앱의 Firebase 호출에도 커스텀 헤더가 따라가 CORS preflight가
@@ -21,7 +26,7 @@
  * driver는 Credentials provider가 없어(Kakao OAuth 전용, #CL-25) 인증 세션
  * 발급 대상에서 제외한다.
  */
-import { chromium } from '@playwright/test'
+import { chromium, type Page } from '@playwright/test'
 import { config as loadEnv } from 'dotenv'
 import { resolve } from 'path'
 import {
@@ -38,6 +43,10 @@ const BYPASS_TARGETS = [
   { name: 'DRIVER', base: process.env['DRIVER_BASE'], secret: process.env['DRIVER_BYPASS_SECRET'] },
 ]
 
+// globalSetup 로그인 race 흡수용 재시도 횟수·간격
+const LOGIN_MAX_ATTEMPTS = 3
+const LOGIN_RETRY_DELAY_MS = 2_000
+
 // driver 제외 — Credentials provider 부재(Kakao 전용, #CL-25)
 const CREDENTIAL_TARGETS = [
   {
@@ -53,6 +62,34 @@ const CREDENTIAL_TARGETS = [
     password: process.env['TEST_CONSUMER_PASSWORD'],
   },
 ]
+
+/**
+ * loginViaCredentials를 set-cookie race에 한해 제한적으로 재시도한다.
+ * 마지막 시도까지 실패하면 마지막 에러를 그대로 throw해 fail-fast한다.
+ */
+async function loginWithRetry(
+  page: Page,
+  base: string,
+  email: string,
+  password: string,
+  name: string,
+): Promise<void> {
+  for (let attempt = 1; attempt <= LOGIN_MAX_ATTEMPTS; attempt++) {
+    try {
+      await loginViaCredentials(page, base, email, password)
+      if (attempt > 1) {
+        console.warn(`globalSetup: ${name} 로그인 ${attempt}회차 성공`)
+      }
+      return
+    } catch (err) {
+      if (attempt === LOGIN_MAX_ATTEMPTS) throw err
+      console.warn(
+        `globalSetup: ${name} 로그인 ${attempt}/${LOGIN_MAX_ATTEMPTS}회차 실패 — 재시도\n  ${String(err)}`,
+      )
+      await page.waitForTimeout(LOGIN_RETRY_DELAY_MS)
+    }
+  }
+}
 
 export default async function globalSetup(): Promise<void> {
   const browser = await chromium.launch()
@@ -89,7 +126,7 @@ export default async function globalSetup(): Promise<void> {
       )
       continue
     }
-    await loginViaCredentials(page, base, email, password)
+    await loginWithRetry(page, base, email, password, name)
   }
 
   // 우회 + seller·consumer 세션 쿠키 누적 상태 저장 — 인증 spec의 storageState
