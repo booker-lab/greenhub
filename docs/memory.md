@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-16 (세션29 — e2e 잔여 B·C·D 해소)
+최종 수정: 2026-05-16 (세션30 — CRITICAL_LOGIC.md 한도 정책)
 
 ---
 
@@ -26,6 +26,7 @@
 | **세션27**: #CL-21 후속 — repo Secrets 11개 등록 + `sync-preview.yml` 자동 머지 워크플로 + e2e CI 가동 | 2026-05-16 |
 | **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴(T0~T5). CI 풀런 124/37→145/16·146/15, race 0건 | 2026-05-16 |
 | **세션29**: e2e 잔여 B·C·D 전부 해소 — C(perf-css networkidle 제거)·B·D 단일 원인 CORS fix(#CL-28). 재배포 후 풀런 167/0 | 2026-05-16 |
+| **세션30**: P2-C #CL-29 — 누적 결정 로그 한도 정책(500라인 예외+1000라인 트리거). CRITICAL_LOGIC.md 1415→229라인 아카이브 분리 | 2026-05-16 |
 
 ---
 
@@ -77,6 +78,14 @@
 
 ---
 
+## 세션30 — CRITICAL_LOGIC.md 한도 정책 (#CL-29)
+
+- **P2-C 완료**: 누적 결정 로그(`CRITICAL_LOGIC.md`·`BACKLOG.md`·memory 아카이브)는 시계열 append-only — 분리 시 이력 파편화·#CL 연속성/앵커 손상. **500라인 모듈화 한도 예외**로 CLAUDE.md §1 명시. 단 무한 증가 방어로 **1000라인 초과 시 종결 엔트리 아카이브**(크기 기준, 죽은 엔트리만).
+- **적용**: `#CL-19` 경계 분할 — 2026-03~04 종결 엔트리 1208라인을 `archive/CRITICAL_LOGIC_archive_20260516.md`로 이관. 활성 파일 1415→**229라인**. 참조 링크 정합성 검토 완료.
+- 상세: `docs/CRITICAL_LOGIC.md` #CL-29.
+
+---
+
 ## 세션29 — e2e 잔여 B·C·D 해소 (#CL-28)
 
 - **T0 재확인**: 최신 풀런 run 25952638293 — B 5·C 2·D 8·flake 1 (세션28과 동일, 인증 race 0건 유지).
@@ -93,8 +102,8 @@
 
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
-- ✅ #CL-21 옵션 A(세션26)·CI(세션27) / ✅ #CL-23 인증 race(세션28) / ✅ #CL-28 B·C·D 전부(세션29)
-- 🟡 **P2 (다음 세션 최우선)**: Railway `/auth/login` 로그 계측 / Vercel cold-start / `CRITICAL_LOGIC.md` 한도 정책
+- ✅ #CL-21 옵션 A(세션26)·CI(세션27) / ✅ #CL-23 인증 race(세션28) / ✅ #CL-28 B·C·D(세션29) / ✅ #CL-29 결정 로그 한도 정책(세션30)
+- 🟡 **P2 (다음 세션 최우선)**: Railway `/auth/login` 로그 계측 (Railway 대시보드 접근 필요) / Vercel cold-start(P2-A 의존)
 - 🟢 P3: `useOrderActions`·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·consumer 강한비번
 
 ---
