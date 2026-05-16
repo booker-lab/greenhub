@@ -110,6 +110,17 @@ export default async function globalSetup(): Promise<void> {
     await page.goto(url, { waitUntil: 'domcontentloaded' })
   }
 
+  // bypass 루프의 마지막 page.goto는 미인증 루트(/)이므로 앱이 클라이언트
+  // 사이드로 /login 리다이렉트를 시작한다. 이 in-flight 네비게이션이 남아
+  // 있으면 이후 context.storageState() 호출이
+  //   "Navigation to X is interrupted by another navigation to X/login"
+  // 으로 실패한다(세션36 run 25970814882 — flake 확정). 우회·인증 상태는
+  // 모두 도메인 스코프 쿠키이므로 about:blank로 이동해도 손실이 없다.
+  // 여기서 한 번 네비게이션을 종료하면 이후 두 storageState() 호출이 모두
+  // 안정 상태에서 수행된다 (loginViaCredentials는 page.request만 사용 —
+  // 페이지를 네비게이트하지 않음).
+  await page.goto('about:blank')
+
   // 우회 쿠키만 담긴 상태 저장 — 미인증/SSO 우회 spec의 기본 storageState
   await context.storageState({ path: BYPASS_STATE_PATH })
 
