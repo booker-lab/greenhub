@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-17 (세션33 — `/admin/banner` prerender 실패 해소)
+최종 수정: 2026-05-17 (세션34 — consumer 강한비번 전환)
 
 ---
 
@@ -30,6 +30,7 @@
 | **세션31**: P2-A Railway latency 계측(synthetic) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30) | 2026-05-16 |
 | **세션32**: e2e 안정성 2건 — consumer-groupbuy flake + cleanup-spec-residue CI 인증(env 전환·BOM 방어). 풀런 167/0 | 2026-05-17 |
 | **세션33**: P3 `/admin/banner` prerender 실패 해소 — seller firebase `getAuth` 지연 초기화 (#CL-31) | 2026-05-17 |
+| **세션34**: P3 consumer@test.com 강한비번 전환 — Firestore `passwordHash` + `.env`·repo Secret 동기 교체, 풀런 167/0 | 2026-05-17 |
 
 ---
 
@@ -78,6 +79,14 @@
 - 인증 호출 풀런당 67회+retry → 2회.
 
 상세: [docs/CRITICAL_LOGIC.md](CRITICAL_LOGIC.md) #CL-27
+
+---
+
+## 세션34 — consumer 강한비번 전환
+
+- **배경**: 세션22에 편의 우선으로 채택한 `consumer@test.com` 약한비번(`test1234!`)을 보안 follow-up으로 전환. 사용자가 보안 우선으로 정책 재확인.
+- **처리**: `scripts/reset-user-password.mjs`로 Firestore `users` 문서 `passwordHash`를 30자 랜덤 비번(bcrypt-12)으로 갱신. `apps/e2e/.env`(gitignored)·repo Secret `TEST_CONSUMER_PASSWORD` 동기 교체(`gh secret set --body`로 BOM 회피). `/auth/login` 직접 curl — 새 비번 200·기존 401 확인.
+- **검증**: e2e 풀런 run 25966655016 **167 passed / 0 failed / 11 skipped**. `seller@test.com`은 본 항목 범위 밖 — 약한비번 유지.
 
 ---
 
@@ -134,8 +143,9 @@
 - ✅ #CL-21 옵션 A(세션26)·CI(세션27) / ✅ #CL-23 인증 race(세션28) / ✅ #CL-28 B·C·D(세션29) / ✅ #CL-29 한도 정책(세션30) / ✅ #CL-30 P2-A 계측+throttler fix(세션31)
 - ✅ 세션32 e2e 안정성 2건 — consumer-groupbuy flake · cleanup-spec-residue CI 인증
 - ✅ 세션33 P3 `/admin/banner` prerender 실패 — firebase getAuth 지연 초기화(#CL-31)
+- ✅ 세션34 P3 consumer 강한비번 전환 — 풀런 167/0
 - ⏹️ P2-B Vercel cold-start — #CL-30으로 데이터상 불필요 판정(moot)
-- 🟢 **P3 (다음 세션)**: consumer 강한비번 · `useOrderActions` 통합 · G1 거점 수정 · Driver Maps SDK
+- 🟢 **P3 (다음 세션)**: `useOrderActions` 통합 · G1 거점 수정 · Driver Maps SDK
 
 ---
 
