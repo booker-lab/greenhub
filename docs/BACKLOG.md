@@ -424,11 +424,12 @@
 
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
-> 기준일: 2026-05-16 (세션29 — e2e 잔여 B·C·D 해소)
-> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session31-prep.md](archive/sessions/session31-prep.md) → 본 §12 우선순위 표 순서로 확인.
+> 기준일: 2026-05-16 (세션31 — P2-A 계측 + throttler fix)
+> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session32-prep.md](archive/sessions/session32-prep.md) → 본 §12 우선순위 표 순서로 확인.
 > **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
 > **세션30 완료**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택·아카이브 분리(1415→229라인).
-> **다음 세션 최우선**: P2-A Railway `/auth/login` 로그 계측 (Railway 대시보드 접근 — 사용자 협조 필요). P2-B는 P2-A 데이터 의존.
+> **세션31 완료**: P2-A Railway latency 계측(`/auth/login` p50 922ms·0% 실패) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30).
+> **다음 세션 최우선**: P3 단독 항목 (`/admin/banner` env 점검 / consumer 강한비번). P2-B는 #CL-30으로 데이터 불필요 판정.
 
 ### 12-1. 우선순위
 
@@ -439,8 +440,9 @@
 | ✅ P1 | #CL-23 인증 race 해소 — `storageState` 패턴 도입 (2026-05-16 세션28 완료) | 인프라/DX | 단독 진행 가능 |
 | ✅ P1 | e2e 잔여 B·D — Railway CORS preview origin (#CL-28) — 재배포·풀런 검증 완료 (2026-05-16 세션29) | 인프라 | — |
 | ✅ P3 | e2e 잔여 C — perf-css `networkidle` 제거 (2026-05-16 세션29 완료) | e2e | — |
-| 🟡 P2 | Railway `/auth/login` 로그 계측 — N→1 구조는 확정, 로그 latency 잔여 | 관측 | Railway 대시보드 접근 |
-| 🟡 P2 | Vercel function cold-start mitigation 검토 | 성능 | 계측 데이터 기반 |
+| ✅ P2 | Railway `/auth/login` 로그 계측 — synthetic 측정 완료 (2026-05-16 세션31) | 관측 | — |
+| ✅ P2 | Railway throttler 전역 누수 수정 — `auth` throttler 제거 (#CL-30, 2026-05-16 세션31) | 인프라/버그 | — |
+| ⏹️ P2 | Vercel function cold-start mitigation 검토 — #CL-30으로 데이터상 불필요 판정 (moot) | 성능 | — |
 | ✅ P2 | `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3+ 채택, 아카이브 분리 (2026-05-16 세션30 완료) | 문서 정책 | 단독 |
 | 🟢 P3 | `useOrderActions` 훅 통합 (detail/OrderCard 시그니처 통일) | DX | UI 리팩토링 사이클 |
 | 🟢 P3 | `/admin/banner` prerender 실패 — Firebase env 누락 | 환경설정 | 환경변수 점검만 |
@@ -531,21 +533,45 @@
 - 수정: `apps/api/src/main.ts` origin 콜백에 `jos-projects-d1cecc0c` 팀 스코프 한정 정규식 추가. (커밋 `6542ecc`, #CL-28)
 - [x] **검증 완료**: `c5ee52f` push가 Railway 자동 재배포 트리거 → preview origin CORS 발급·비매칭(`evil.example.com`) 차단 curl 확인 → e2e 풀런 run 25957177092 **167 passed / 0 failed / 11 skipped**. B 5·D 8 + 인증 race 전부 해소. D spec 무변경.
 
-#### [ ] P2 — Railway `/auth/login` 로그 계측
+#### [x] P2 — Railway `/auth/login` 로그 계측 (2026-05-16 세션31 완료)
 
-#CL-23으로 인증 호출은 풀런당 67회+retry → 2회로 **구조상 N→1 확정**. 로그 기반 latency 수치화는 잔여. (세션29: B의 cold-start 가설은 CORS로 반증됨 #CL-28 — 본 항목은 순수 latency 계측으로 격하, B 차단 요인 아님.)
+#CL-23으로 인증 호출은 풀런당 67회+retry → 2회로 **구조상 N→1 확정**. 본 세션에서 latency 수치화 완료.
 
-- [ ] Railway 대시보드/로그에서 `/auth/login` 응답시간 p50/p95/p99 + 실패율 추출 (Railway 접근 필요)
-- [ ] (옵션) 별도 헬스체크 endpoint로 정기 수치화
+**계측 방법**: Railway 배포 로그에는 요청 단위 로그가 전무 → synthetic 측정 스크립트 `scripts/measure-api-latency.mjs` 신설(Railway CLI로 대시보드 없이 접근). 측정 환경: Railway 리전 `asia-southeast1` ↔ 측정 클라이언트.
+
+| endpoint | n | min | p50 | p95 | p99 | 실패율 |
+|----------|---|-----|-----|-----|-----|--------|
+| GET /health | 60+ | 379ms | 409ms | ~440ms | cold 1.0~1.1s | 0% |
+| POST /auth/login | 24 | 848ms | 922ms | 1551ms | 1687ms | 0% |
+
+- `/auth/login` 서버 작업 ≈ ~510ms (Firestore 조회 + bcrypt factor-12 + JWT 서명 + 토큰 set). bcrypt-12 지배적.
+- p95/p99(1.5~1.7s)는 62초 idle 후 첫 요청의 TLS 재handshake 측정 아티팩트 — 서버 tail 아님.
+- 0% 실패. ~0.9s steady latency는 e2e 차단 요인 아님(#CL-28 cold-start 반증 재확인).
+
+- [x] `/auth/login` 응답시간 p50/p95/p99 + 실패율 추출 — `measure-api-latency.mjs`
+- [x] (옵션) 정기 수치화 — 별도 endpoint 대신 재사용 가능 측정 스크립트 채택
+- [x] **부수 발견·수정**: throttler 전역 누수 버그 (#CL-30, 아래 항목)
+
+상세: [docs/CRITICAL_LOGIC.md #CL-30](CRITICAL_LOGIC.md)
 
 ---
 
-#### [ ] P2 — Vercel function cold-start mitigation 검토
+#### [x] P2 — Railway throttler 전역 누수 수정 (2026-05-16 세션31 완료)
 
-NextAuth API route의 cold start가 set-cookie 누락의 또 다른 원인일 가능성. 위 P1 계측 데이터 확보 후 데이터 기반 결정.
+P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`의 named throttler는 **전 라우트에 전역 적용**되므로, `auth`(10/분) throttler 등록만으로 `/health` 등 비인증 라우트까지 10/분에 묶여 `default`(100/분) 의도가 무효화된 상태였다.
 
-- [ ] Vercel Function `regions` · `memory` 조정 검토
-- [ ] (옵션) ISR pre-warm cron으로 핵심 라우트 워밍
+- [x] `app.module.ts`: `auth` throttler 제거 → `default`(100/분) 단일 등록
+- [x] `auth.controller.ts`: register·login·kakao-login·refresh를 `@Throttle({ default: { limit: 10, ttl: 60000 } })`로 라우트 한정 오버라이드
+- [x] 커밋 `23e3528` push → Railway 자동 재배포
+- [x] 검증 — 재배포 후 응답 헤더: `/health` `x-ratelimit-limit:100`·`/auth/login` `x-ratelimit-limit:10`
+
+상세: [docs/CRITICAL_LOGIC.md #CL-30](CRITICAL_LOGIC.md)
+
+---
+
+#### [⏹️] P2 — Vercel function cold-start mitigation 검토 (moot)
+
+당초 NextAuth API route cold start가 set-cookie 누락 원인일 가능성으로 등재. 그러나 #CL-28(set-cookie race = CORS)·#CL-30(P2-A 계측 0% 실패·~0.9s steady)으로 **cold-start는 e2e 차단 요인이 아님이 2중 확인**됨. 별도 mitigation 작업은 데이터상 불필요 — 실사용 성능 이슈가 관측되면 그때 재등재.
 
 ---
 
@@ -653,3 +679,4 @@ NextAuth API route의 cold start가 set-cookie 누락의 또 다른 원인일 �
 | 2026-05-16 | **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴 도입(T0~T5). 실패 37건 증거 재분류(A23/B5/C2/D7), globalSetup 세션 쿠키 발급 + 11개 인증 describe 배선 + spec 로그인 제거. CI 2회 풀런 124/37→145/16·146/15, `set-cookie count=0` 0건. 잔여 B·C·D는 §12-2 분리 기록 (#CL-27) |
 | 2026-05-16 | **세션29**: e2e 잔여 B·C·D 해소. T0 run 25952638293 재확인(B5·C2·D8·flake1). C — perf-css `networkidle` 제거(vercel.live 상시 연결 원인, 로컬 15/15 통과). B·D — trace로 단일 원인 확정: Railway API가 Vercel preview origin에 CORS 미허용 → `apiFetch`·`/auth/firebase-token` 차단. `main.ts`에 팀 스코프 정규식 추가 (#CL-28). 재배포(c5ee52f push 자동 트리거) 후 풀런 run 25957177092 **167 passed / 0 failed / 11 skipped** — B5·D8 + 인증 race 전부 해소 |
 | 2026-05-16 | **세션30**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택(누적 결정 로그는 500라인 모듈화 예외 + 1000라인 초과 시 종결 엔트리 아카이브). `#CL-19` 경계로 분할 — 2026-03~04 종결 엔트리 1208라인을 `archive/CRITICAL_LOGIC_archive_20260516.md`로 이관, 활성 파일 1415→229라인. `CLAUDE.md` §1 예외 규칙 명시 |
+| 2026-05-16 | **세션31**: P2-A Railway latency 계측 — synthetic 측정 스크립트 `scripts/measure-api-latency.mjs` 신설(Railway CLI 접근, `/auth/login` p50 922ms·0% 실패·서버작업 ~510ms). 계측 중 throttler 전역 누수 버그 발견 — `auth`(10/분) throttler가 `/health` 등 비인증 라우트까지 적용. `app.module.ts` `auth` throttler 제거 + 인증 라우트 `@Throttle` 라우트한정 오버라이드 (#CL-30). 재배포(23e3528) 후 헤더 검증, e2e run 25962635875 167/0. P2-B는 moot 종결 |
