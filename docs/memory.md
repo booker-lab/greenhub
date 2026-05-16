@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `docs/archive/memory_archive_20260425.md`
 
-최종 수정: 2026-05-16 (세션31 — P2-A 계측 + throttler fix)
+최종 수정: 2026-05-17 (세션32 — e2e 안정성 2건 해소)
 
 ---
 
@@ -28,6 +28,7 @@
 | **세션29**: e2e 잔여 B·C·D 전부 해소 — C(perf-css networkidle 제거)·B·D 단일 원인 CORS fix(#CL-28). 재배포 후 풀런 167/0 | 2026-05-16 |
 | **세션30**: P2-C #CL-29 — 누적 결정 로그 한도 정책(500라인 예외+1000라인 트리거). CRITICAL_LOGIC.md 1415→229라인 아카이브 분리 | 2026-05-16 |
 | **세션31**: P2-A Railway latency 계측(synthetic) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30) | 2026-05-16 |
+| **세션32**: e2e 안정성 2건 — consumer-groupbuy flake + cleanup-spec-residue CI 인증(env 전환·BOM 방어). 풀런 167/0 | 2026-05-17 |
 
 ---
 
@@ -79,6 +80,14 @@
 
 ---
 
+## 세션32 — e2e 안정성 2건 해소
+
+- **consumer-groupbuy:14 flake**: `waitForSelector('모집 중').catch()` 후 `empty.isVisible()`가 false면 "모집 중"을 강제 단언 — 페이지 로딩 중이면 리스트도 empty-state도 미렌더라 오판. `list.or(empty)` 확정 렌더 대기 후 분기로 수정 (커밋 `abd2a13`).
+- **cleanup-spec-residue CI 인증 실패**: 스크립트가 gitignore된 로컬 키 `apps/api/firebase-adminsdk.json`을 `require` → CI 러너 부재로 `exit=1`, seller-auth-invite `afterAll` 정리 무력화(세션22 이후 상존). `FIREBASE_SERVICE_ACCOUNT_JSON` env 우선·로컬 키 fallback(`firestore.module.ts`와 동일 규약) 전환 + `e2e.yml` env 주입 + repo Secret 등록 (커밋 `b095023`). 후속: Windows gh CLI 파이프 업로드 시 선두 BOM(U+FEFF) 혼입 → `JSON.parse` 실패 → BOM 제거 방어 + Secret no-BOM 재업로드 (커밋 `4934468`).
+- **검증**: e2e 풀런 run 25965438455 **167 passed / 0 failed**, cleanup 로그 `users=2 tokens=0 skipped=0` (세션22 이후 처음으로 CI에서 잔여 계정 정리 동작).
+
+---
+
 ## 세션31 — P2-A Railway latency 계측 + throttler fix (#CL-30)
 
 - **P2-A 완료**: Railway 배포 로그에 요청 단위 로그가 전무 → synthetic 측정 스크립트 `scripts/measure-api-latency.mjs` 신설(Railway CLI로 대시보드 없이 접근, 60초 윈도우당 8회 페이싱). `/auth/login` p50 922ms·p95 1551ms·p99 1687ms·**0% 실패**, `/health` p50 409ms. 서버 작업 ≈ ~510ms(Firestore 조회+bcrypt factor-12+토큰 발급, bcrypt 지배적). ~0.9s steady는 e2e 차단 요인 아님 → P2-B(cold-start) 데이터상 불필요 종결(moot).
@@ -113,6 +122,7 @@
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
 - ✅ #CL-21 옵션 A(세션26)·CI(세션27) / ✅ #CL-23 인증 race(세션28) / ✅ #CL-28 B·C·D(세션29) / ✅ #CL-29 한도 정책(세션30) / ✅ #CL-30 P2-A 계측+throttler fix(세션31)
+- ✅ 세션32 e2e 안정성 2건 — consumer-groupbuy flake · cleanup-spec-residue CI 인증
 - ⏹️ P2-B Vercel cold-start — #CL-30으로 데이터상 불필요 판정(moot)
 - 🟢 **P3 (다음 세션)**: `/admin/banner` env 점검 · consumer 강한비번 · `useOrderActions` 통합 · G1 거점 수정 · Driver Maps SDK
 
@@ -150,6 +160,7 @@
 - **VERCEL bypass**: Preview 배포는 SSO 보호 → 3개 프로젝트 Protection Bypass for Automation 시크릿. e2e는 `_vercel_jwt` 쿠키로 우회 (`global-setup.ts`)
 - **Railway CORS**: no-origin 요청 허용(헬스체크) — `if (!origin) return callback(null, true)` 유지 필수. Vercel preview origin은 `main.ts` 팀 스코프 정규식으로 허용(#CL-28) — `CORS_ORIGIN` env는 프로덕션 도메인만
 - **Railway throttler**: `app.module.ts`는 `default`(100/분) 단일 등록 — named throttler 추가 시 전 라우트 전역 적용되므로 금지. 인증 라우트만 `auth.controller`의 `@Throttle({default:{limit:10}})`로 오버라이드 (#CL-30)
+- **cleanup-spec-residue 인증**: `FIREBASE_SERVICE_ACCOUNT_JSON` env 우선·로컬 키 fallback. gh CLI Secret을 Windows `Get-Content \| gh secret set` 파이프로 업로드 시 선두 BOM 혼입 위험 → `[Console]::OutputEncoding`을 no-BOM UTF-8로 설정 후 업로드 (세션32)
 - **gemini-3-flash-preview**: 유효한 모델명, 변경 금지
 - **aggressiveFrontEndNavCaching: false**: 변경 금지 (RSC CORS 재발)
 - **shared 타입 변경 시**: `pnpm --filter @greenhub/shared build` 후 dist 커밋 필수
