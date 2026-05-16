@@ -425,13 +425,14 @@
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
 > 기준일: 2026-05-16 (세션31 — P2-A 계측 + throttler fix)
-> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session34-prep.md](archive/sessions/session34-prep.md) → 본 §12 우선순위 표 순서로 확인.
+> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session35-prep.md](archive/sessions/session35-prep.md) → 본 §12 우선순위 표 순서로 확인.
 > **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
 > **세션30 완료**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택·아카이브 분리(1415→229라인).
 > **세션31 완료**: P2-A Railway latency 계측(`/auth/login` p50 922ms·0% 실패) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30).
 > **세션32 완료**: e2e 안정성 2건 해소 — `consumer-groupbuy:14` flake + `cleanup-spec-residue` CI 인증 실패. 풀런 167/0 유지·cleanup `users=2` 정상 동작.
 > **세션33 완료**: P3 `/admin/banner` prerender 실패 해소 — firebase `getAuth` 지연 초기화 (#CL-31). 코드로 종결, Vercel 환경변수 조치 불필요로 확정.
-> **다음 세션 최우선**: P3 잔여 단독·기능 항목 (consumer 강한비번 / `useOrderActions` 통합 / G1 거점 수정 페이지 / Driver Kakao Maps SDK).
+> **세션34 완료**: P3 consumer@test.com 강한비번 전환 — Firestore `passwordHash` 갱신 + `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 교체. 풀런 167/0 유지.
+> **다음 세션 최우선**: P3 잔여 기능 항목 (`useOrderActions` 통합 / G1 거점 수정 페이지 / Driver Kakao Maps SDK).
 
 ### 12-1. 우선순위
 
@@ -450,7 +451,7 @@
 | ✅ P3 | `/admin/banner` prerender 실패 — firebase getAuth 지연 초기화 (2026-05-17 세션33 완료) | 환경설정 | — |
 | 🟢 P3 | G1: `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 | 기능 | — |
 | 🟢 P3 | Driver Kakao Maps SDK 연동 | 기능 | — |
-| 🟢 P3 | consumer@test.com 강한비번 전환 (현재 test1234 — 편의 결정) | 보안 | 단독 |
+| ✅ P3 | consumer@test.com 강한비번 전환 — 30자 랜덤 비번 (2026-05-17 세션34 완료) | 보안 | 단독 |
 | ⏳ 외부 | 네이버페이 채널키 승인 → Vercel 환경변수 설정 | 외부 연동 | 승인 메일 대기 |
 
 ### 12-2. 상세 작업
@@ -635,11 +636,16 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 
 ---
 
+#### [x] P3 — consumer@test.com 강한비번 전환 (2026-05-17 세션34 완료)
+
+**배경**: 세션22에서 `consumer@test.com` 발급 시 편의 우선으로 약한비번(`test1234!`)을 채택. 보안 follow-up으로 등재돼 있었다. 세션34에 사용자가 보안 우선으로 정책을 재확인 → 전환 착수.
+
+**처리**: `scripts/reset-user-password.mjs`로 Firestore `users` 문서 `passwordHash`를 30자 랜덤 비번(bcrypt-12)으로 갱신. `apps/e2e/.env`(gitignored)·repo Secret `TEST_CONSUMER_PASSWORD` 동기 교체. `/auth/login` curl — 새 비번 200·기존 비번 401 확인. e2e 풀런 run 25966655016 **167 passed / 0 failed / 11 skipped**. `seller@test.com`은 본 항목 범위 밖이라 약한비번 유지.
+
 #### [ ] P3 — 기타 기능 작업
 
 - [ ] G1: `apps/seller/src/app/hubs/[id]/page.tsx` — 거점 수정 페이지 (Phase B 잔여)
 - [ ] Driver Kakao Maps SDK 연동
-- [ ] consumer@test.com 강한비번 전환 — 현재 test1234 (편의 결정)
 
 #### [⏳] 외부 대기
 
@@ -709,4 +715,5 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 | 2026-05-16 | **세션30**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택(누적 결정 로그는 500라인 모듈화 예외 + 1000라인 초과 시 종결 엔트리 아카이브). `#CL-19` 경계로 분할 — 2026-03~04 종결 엔트리 1208라인을 `archive/CRITICAL_LOGIC_archive_20260516.md`로 이관, 활성 파일 1415→229라인. `CLAUDE.md` §1 예외 규칙 명시 |
 | 2026-05-16 | **세션31**: P2-A Railway latency 계측 — synthetic 측정 스크립트 `scripts/measure-api-latency.mjs` 신설(Railway CLI 접근, `/auth/login` p50 922ms·0% 실패·서버작업 ~510ms). 계측 중 throttler 전역 누수 버그 발견 — `auth`(10/분) throttler가 `/health` 등 비인증 라우트까지 적용. `app.module.ts` `auth` throttler 제거 + 인증 라우트 `@Throttle` 라우트한정 오버라이드 (#CL-30). 재배포(23e3528) 후 헤더 검증, e2e run 25962635875 167/0. P2-B는 moot 종결 |
 | 2026-05-17 | **세션33**: P3 `/admin/banner` prerender 실패 해소. 원인 — `firebase.ts`가 모듈 로드 시 `getAuth(app)` 평가 → apiKey 부재 시 동기 throw → 빌드 prerender 첫 firebase-import 페이지 크래시. `getAuth`/`getStorage` 지연 초기화 함수로 전환(사용처 전부 클라이언트 런타임). env 미주입 로컬 빌드 — 수정 전 크래시 재현, 수정 후 빌드 성공. Vercel은 env 존재로 무영향(환경변수 조치 불필요 확정). 커밋 `32738fb` (#CL-31) |
+| 2026-05-17 | **세션34**: P3 consumer@test.com 강한비번 전환. `reset-user-password.mjs`로 Firestore `passwordHash`를 30자 랜덤 비번(bcrypt-12)으로 갱신, `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 동기 교체. `/auth/login` curl로 새 비번 200·기존 401 확인, e2e 풀런 run 25966655016 **167/0**. 세션22 편의 결정(`feedback_security_convenience`)을 보안 우선으로 재확인·전환 |
 | 2026-05-17 | **세션32**: e2e 안정성 2건 해소. ① `consumer-groupbuy:14` flake — `list.or(empty)` 확정 렌더 대기로 오판 차단(`abd2a13`). ② `cleanup-spec-residue` CI 인증 실패 — `FIREBASE_SERVICE_ACCOUNT_JSON` env 기반 인증 전환 + `e2e.yml`·repo Secret 등록(`b095023`), Windows gh CLI 파이프 BOM 혼입 방어 + Secret no-BOM 재업로드(`4934468`). 풀런 run 25965438455 **167/0**, cleanup `users=2` 정상 삭제 |
