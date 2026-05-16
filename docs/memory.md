@@ -10,11 +10,11 @@
 ## 진행 현황
 
 세션22까지 + 세션23~36 완료. 직전 **세션35** = docs 정리, **세션36** = seller 프론트엔드 리팩토링 5-Phase (#CL-32).
-e2e 베이스라인 **167 passed / 0 failed / 11 skipped** (run 25966655016). 설계 결정 정본은 `docs/CRITICAL_LOGIC.md` #CL-19~#CL-32, 세션별 상세는 아카이브.
+e2e 베이스라인 **167 passed / 0 failed / 11 skipped** (run 25970814882, 세션36 머지 후). 설계 결정 정본은 `docs/CRITICAL_LOGIC.md` #CL-19~#CL-32, 세션별 상세는 아카이브.
 
-**다음 세션 진입점**: SSOT `docs/BACKLOG.md` §12.
-잔여 **P3 기능 2건**: G1 거점 수정 페이지(`hubs/[id]`) · Driver Kakao Maps SDK.
-(P0·P1·P2 + e2e 안정성 + `/admin/banner` + consumer 강한비번 + seller 프론트 리팩토링 종결. P2-B는 #CL-30으로 moot.)
+**다음 세션 진입점**: `docs/archive/sessions/session37-prep.md` · SSOT `docs/BACKLOG.md` §12.
+잔여: **P3 기능 2건**(G1 거점 수정 페이지 `hubs/[id]` · Driver Kakao Maps SDK) + **P4 정비 2건**(global-setup flake 보강 · CI 액션 Node.js 20 deprecation — 세션36 관찰 등재).
+(P0·P1·P2·P3 구조 + e2e 안정성 + `/admin/banner` + consumer 강한비번 + seller 프론트 리팩토링 종결. P2-B는 #CL-30으로 moot.)
 
 ---
 

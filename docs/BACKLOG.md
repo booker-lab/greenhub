@@ -425,7 +425,7 @@
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
 > 기준일: 2026-05-17 (세션35 — docs 정리)
-> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session36-prep.md](archive/sessions/session36-prep.md) → 본 §12 우선순위 표 순서로 확인.
+> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session37-prep.md](archive/sessions/session37-prep.md) → 본 §12 우선순위 표 순서로 확인.
 > **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
 > **세션30 완료**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택·아카이브 분리(1415→229라인).
 > **세션31 완료**: P2-A Railway latency 계측(`/auth/login` p50 922ms·0% 실패) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30).
@@ -454,6 +454,8 @@
 | 🟢 P3 | G1: `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 | 기능 | — |
 | 🟢 P3 | Driver Kakao Maps SDK 연동 | 기능 | — |
 | ✅ P3 | consumer@test.com 강한비번 전환 — 30자 랜덤 비번 (2026-05-17 세션34 완료) | 보안 | 단독 |
+| 🟢 P4 | global-setup flake 보강 — `storageState` 직전 navigation 안정 대기 (세션36 관찰) | e2e 안정성 | 단독 |
+| 🟢 P4 | CI 액션 Node.js 20 deprecation 대응 — 2026-06-02 강제 전환 (세션36 관찰) | CI 유지보수 | 단독 |
 | ⏳ 외부 | 네이버페이 채널키 승인 → Vercel 환경변수 설정 | 외부 연동 | 승인 메일 대기 |
 
 ### 12-2. 상세 작업
@@ -620,11 +622,11 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 
 ---
 
-#### [ ] P3 — `useOrderActions` 훅 통합
+#### [x] P3 — `useOrderActions` 훅 통합 (2026-05-17 세션36 완료)
 
 **배경**: 세션23 #CL-22에서 분리됐던 항목. detail용 `useOrderDetailActions`(모달 reason + apiFetch)와 OrderCard용 `useOrderActions`(prompt() reason + raw fetch) 시그니처 불일치.
 
-**처리 방침**: UI 리팩토링 사이클에서 양쪽 일괄 정비. 단순 통합 시 동작 변경 위험.
+**처리**: seller 프론트엔드 5-Phase 리팩토링(#CL-32)의 Phase 4로 일괄 정비. 공통 코어 `useOrderStatusUpdate`(PATCH·loading·error) 신설 — 두 훅이 코어를 공유하고 사유 입력 UI(prompt vs 모달)만 래퍼에서 분기. 시그니처는 `updateStatus(status, extra)`로 통일, 외부 반환 형태는 보존(소비처 무수정). e2e 167/0 회귀 없음(run 25970814882 재실행). 상세: [docs/CRITICAL_LOGIC.md #CL-32](CRITICAL_LOGIC.md)
 
 ---
 
@@ -648,6 +650,13 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 
 - [ ] G1: `apps/seller/src/app/hubs/[id]/page.tsx` — 거점 수정 페이지 (Phase B 잔여)
 - [ ] Driver Kakao Maps SDK 연동
+
+#### [ ] P4 — e2e 안정성·CI 정비 (세션36 관찰 등재)
+
+**배경**: 세션36 머지 후 e2e 1차 실행이 `global-setup.ts:133` `context.storageState()`에서 실패 — `Navigation interrupted by another navigation to /login`. 재실행은 167/0 통과 → flake 확정(코드 무관, consumer 앱 미변경).
+
+- [ ] **global-setup flake 보강**: `loginWithRetry`는 `loginViaCredentials`의 throw만 흡수하고, 로그인 성공 후 `storageState` 시점의 in-flight 네비게이션 레이스는 못 잡는다. `global-setup.ts:133` `context.storageState()` 직전에 `page.waitForLoadState('networkidle')`(또는 명시적 안정 대기)를 넣어 레이스 창을 닫는다. 규모 소(小). #CL-23/#CL-27 인증 레이스 계열의 잔여 보강.
+- [ ] **CI 액션 Node.js 20 deprecation**: `actions/checkout@v4`·`actions/setup-node@v4`·`actions/upload-artifact@v4`·`pnpm/action-setup@v4`가 Node.js 20 — 2026-06-02 강제 Node.js 24 전환. 각 액션 최신 버전으로 갱신하거나 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` 설정. `.github/workflows/*.yml` 전반 점검.
 
 #### [⏳] 외부 대기
 
