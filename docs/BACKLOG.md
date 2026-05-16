@@ -425,12 +425,13 @@
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
 > 기준일: 2026-05-16 (세션31 — P2-A 계측 + throttler fix)
-> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session33-prep.md](archive/sessions/session33-prep.md) → 본 §12 우선순위 표 순서로 확인.
+> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session34-prep.md](archive/sessions/session34-prep.md) → 본 §12 우선순위 표 순서로 확인.
 > **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
 > **세션30 완료**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택·아카이브 분리(1415→229라인).
 > **세션31 완료**: P2-A Railway latency 계측(`/auth/login` p50 922ms·0% 실패) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30).
 > **세션32 완료**: e2e 안정성 2건 해소 — `consumer-groupbuy:14` flake + `cleanup-spec-residue` CI 인증 실패. 풀런 167/0 유지·cleanup `users=2` 정상 동작.
-> **다음 세션 최우선**: P3 단독 항목 (`/admin/banner` env 점검 / consumer 강한비번). P2-B는 #CL-30으로 데이터 불필요 판정.
+> **세션33 완료**: P3 `/admin/banner` prerender 실패 해소 — firebase `getAuth` 지연 초기화 (#CL-31). 코드로 종결, Vercel 환경변수 조치 불필요로 확정.
+> **다음 세션 최우선**: P3 잔여 단독·기능 항목 (consumer 강한비번 / `useOrderActions` 통합 / G1 거점 수정 페이지 / Driver Kakao Maps SDK).
 
 ### 12-1. 우선순위
 
@@ -446,7 +447,7 @@
 | ⏹️ P2 | Vercel function cold-start mitigation 검토 — #CL-30으로 데이터상 불필요 판정 (moot) | 성능 | — |
 | ✅ P2 | `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3+ 채택, 아카이브 분리 (2026-05-16 세션30 완료) | 문서 정책 | 단독 |
 | 🟢 P3 | `useOrderActions` 훅 통합 (detail/OrderCard 시그니처 통일) | DX | UI 리팩토링 사이클 |
-| 🟢 P3 | `/admin/banner` prerender 실패 — Firebase env 누락 | 환경설정 | 환경변수 점검만 |
+| ✅ P3 | `/admin/banner` prerender 실패 — firebase getAuth 지연 초기화 (2026-05-17 세션33 완료) | 환경설정 | — |
 | 🟢 P3 | G1: `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 | 기능 | — |
 | 🟢 P3 | Driver Kakao Maps SDK 연동 | 기능 | — |
 | 🟢 P3 | consumer@test.com 강한비번 전환 (현재 test1234 — 편의 결정) | 보안 | 단독 |
@@ -624,11 +625,13 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 
 ---
 
-#### [ ] P3 — `/admin/banner` prerender 실패
+#### [x] P3 — `/admin/banner` prerender 실패 (2026-05-17 세션33 완료)
 
-**배경**: 세션23 빌드 검증에서 `auth/invalid-api-key` 발견. Firebase 환경변수 누락이 원인. admin/banner 페이지 자체는 분할 작업과 무관.
+**배경**: 세션23 빌드 검증(#CL-22)에서 `auth/invalid-api-key`를 사전 결함으로 기록. admin/banner 페이지 자체는 무관.
 
-**처리**: Vercel admin/seller 환경변수 점검 → 누락된 Firebase config 추가 → 재배포 검증.
+**원인 확정**: `apps/seller/src/lib/firebase.ts`가 모듈 최상위에서 `getAuth(app)`를 평가 → `apiKey` 부재 시 `getAuth`가 동기 throw → 빌드 prerender 단계에서 firebase를 import하는 첫 페이지(`/admin/banner`)가 크래시. Vercel 빌드는 env 존재로 무영향(앱 정상 배포·e2e 167/0) — 실패는 로컬·env 미주입 빌드 한정.
+
+**처리**: `getAuth`/`getStorage`를 지연 초기화 함수(`getFirebaseAuth`/`getFirebaseStorage`)로 전환. 사용처가 전부 클라이언트 런타임(useEffect·핸들러)이라 모듈 로드 시점 평가 불필요. 검증 — 수정 전 로컬 빌드 크래시 재현, 수정 후 빌드 성공. 커밋 `32738fb`. 상세: [docs/CRITICAL_LOGIC.md #CL-31](CRITICAL_LOGIC.md)
 
 ---
 
@@ -705,4 +708,5 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 | 2026-05-16 | **세션29**: e2e 잔여 B·C·D 해소. T0 run 25952638293 재확인(B5·C2·D8·flake1). C — perf-css `networkidle` 제거(vercel.live 상시 연결 원인, 로컬 15/15 통과). B·D — trace로 단일 원인 확정: Railway API가 Vercel preview origin에 CORS 미허용 → `apiFetch`·`/auth/firebase-token` 차단. `main.ts`에 팀 스코프 정규식 추가 (#CL-28). 재배포(c5ee52f push 자동 트리거) 후 풀런 run 25957177092 **167 passed / 0 failed / 11 skipped** — B5·D8 + 인증 race 전부 해소 |
 | 2026-05-16 | **세션30**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택(누적 결정 로그는 500라인 모듈화 예외 + 1000라인 초과 시 종결 엔트리 아카이브). `#CL-19` 경계로 분할 — 2026-03~04 종결 엔트리 1208라인을 `archive/CRITICAL_LOGIC_archive_20260516.md`로 이관, 활성 파일 1415→229라인. `CLAUDE.md` §1 예외 규칙 명시 |
 | 2026-05-16 | **세션31**: P2-A Railway latency 계측 — synthetic 측정 스크립트 `scripts/measure-api-latency.mjs` 신설(Railway CLI 접근, `/auth/login` p50 922ms·0% 실패·서버작업 ~510ms). 계측 중 throttler 전역 누수 버그 발견 — `auth`(10/분) throttler가 `/health` 등 비인증 라우트까지 적용. `app.module.ts` `auth` throttler 제거 + 인증 라우트 `@Throttle` 라우트한정 오버라이드 (#CL-30). 재배포(23e3528) 후 헤더 검증, e2e run 25962635875 167/0. P2-B는 moot 종결 |
+| 2026-05-17 | **세션33**: P3 `/admin/banner` prerender 실패 해소. 원인 — `firebase.ts`가 모듈 로드 시 `getAuth(app)` 평가 → apiKey 부재 시 동기 throw → 빌드 prerender 첫 firebase-import 페이지 크래시. `getAuth`/`getStorage` 지연 초기화 함수로 전환(사용처 전부 클라이언트 런타임). env 미주입 로컬 빌드 — 수정 전 크래시 재현, 수정 후 빌드 성공. Vercel은 env 존재로 무영향(환경변수 조치 불필요 확정). 커밋 `32738fb` (#CL-31) |
 | 2026-05-17 | **세션32**: e2e 안정성 2건 해소. ① `consumer-groupbuy:14` flake — `list.or(empty)` 확정 렌더 대기로 오판 차단(`abd2a13`). ② `cleanup-spec-residue` CI 인증 실패 — `FIREBASE_SERVICE_ACCOUNT_JSON` env 기반 인증 전환 + `e2e.yml`·repo Secret 등록(`b095023`), Windows gh CLI 파이프 BOM 혼입 방어 + Secret no-BOM 재업로드(`4934468`). 풀런 run 25965438455 **167/0**, cleanup `users=2` 정상 삭제 |
