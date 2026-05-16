@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginViaCredentials } from './_helpers/auth'
+import { AUTH_STATE_PATH, loginViaCredentials } from './_helpers/auth'
 
 const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
 
@@ -19,6 +19,9 @@ const sellerPassword = process.env['TEST_SELLER_PASSWORD']
 const skipAuth = !sellerEmail || !sellerPassword
 
 test.describe('셀러 주문 상세 — 인증', () => {
+  // #CL-23: globalSetup이 발급한 세션 쿠키 재사용 — spec별 로그인 호출 제거
+  test.use({ storageState: AUTH_STATE_PATH })
+
   test.skip(skipAuth, '환경변수 TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD 필요')
 
   test.beforeEach(async ({ page }) => {

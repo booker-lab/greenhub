@@ -12,7 +12,17 @@
  *   await loginViaCredentials(page, 'https://seller.greenlove.co.kr', email, password)
  *   await page.goto(`${BASE}/orders`)
  */
+import { resolve } from 'path'
 import type { Page } from '@playwright/test'
+
+/**
+ * globalSetup이 발급하는 storageState 파일 경로 (SSOT).
+ *  - BYPASS_STATE_PATH — Vercel SSO 우회 쿠키만. 미인증 spec 기본 상태.
+ *  - AUTH_STATE_PATH   — 우회 + seller·consumer 세션 쿠키. 인증 spec이
+ *    test.use({ storageState: AUTH_STATE_PATH })로 재사용한다 (#CL-23).
+ */
+export const BYPASS_STATE_PATH = resolve(__dirname, '../../.bypass-state.json')
+export const AUTH_STATE_PATH = resolve(__dirname, '../../.auth-state.json')
 
 export async function loginViaCredentials(
   page: Page,

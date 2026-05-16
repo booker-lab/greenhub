@@ -24,12 +24,13 @@
 import { chromium } from '@playwright/test'
 import { config as loadEnv } from 'dotenv'
 import { resolve } from 'path'
-import { loginViaCredentials } from './tests/_helpers/auth'
+import {
+  AUTH_STATE_PATH,
+  BYPASS_STATE_PATH,
+  loginViaCredentials,
+} from './tests/_helpers/auth'
 
 loadEnv({ path: resolve(__dirname, '.env') })
-
-export const BYPASS_STATE_PATH = resolve(__dirname, '.bypass-state.json')
-export const AUTH_STATE_PATH = resolve(__dirname, '.auth-state.json')
 
 const BYPASS_TARGETS = [
   { name: 'SELLER', base: process.env['SELLER_BASE'], secret: process.env['SELLER_BYPASS_SECRET'] },
