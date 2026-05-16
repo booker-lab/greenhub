@@ -1362,3 +1362,29 @@ providers: [
 
 **잔여 운영 메모**: sync-preview가 e2e를 즉시 디스패치하므로 Vercel preview 재빌드 중 실행될 수 있음. #CL-23 해소 후 배포 readiness 대기 단계 추가 검토.
 
+---
+
+## [결정 #CL-27] e2e 인증 storageState 패턴 도입 — #CL-23 race 해소 (2026-05-16, 세션28)
+
+**배경**: #CL-23 인증 race가 세션27 e2e CI 풀런(run 25926181316)에서 37건 실패로 재현. spec마다 `beforeEach(loginViaCredentials)`가 NextAuth credentials POST를 호출 → 인증 호출이 N×spec으로 누적, `set-cookie count=0`(200 OK + 빈 set-cookie) race가 시간 누적으로 증폭됐다.
+
+**T0 — 실패 37건 증거 기반 재분류** (run 로그 + error-context 37개 page snapshot):
+- **A 인증 race 23건** — `auth.ts` throw `set-cookie count=0`. seller-orders·product-create·products·settlements:30. → storageState 해소 대상.
+- **B Railway API `Failed to fetch` 5건** — 페이지는 인증·렌더 정상, REST 호출만 실패. consumer-groupbuy·mypage, seller-onboarding ×2, seller-settlements:98.
+- **C waitForLoadState 타임아웃 2건** — perf-css-regression ×2.
+- **D 대시보드 realtime 미정착 8건** — seller-home-dashboard ×7 + seller-orders:65(인증 race에 가려져 있던 데이터 의존). Firestore 리스너가 `연결 중`에서 미정착.
+- 진입 가이드의 「셀러 33건 = 전부 A」 가설을 반증 — A는 23건뿐.
+
+**결정**: Playwright `globalSetup`에서 seller·consumer 1회씩 로그인 → `.auth-state.json` storageState 저장 → 인증 spec이 `test.use({ storageState })`로 재사용. 인증 호출이 풀런당 **67회(인증 테스트 수)+retry → 2회**로 감소.
+- `.bypass-state.json`(SSO 우회 쿠키만)·`.auth-state.json`(우회 + 세션 쿠키) 2파일 분리 발급. 미인증 spec은 기본 `.bypass-state.json` 유지.
+- driver 제외 — Credentials provider 부재(Kakao 전용, #CL-25).
+
+**globalSetup 재시도 — #CL-23의 helper-retry 기각과 구분**: #CL-23은 helper 내 retry를 기각했다(spec×테스트마다 retry → N 증폭, 실험상 악화). 본 결정의 retry는 **globalSetup 단일 지점**에 둔다 — 최대 3회(2s 간격)여도 풀런당 2~6회로, N을 키우지 않는다. globalSetup이 풀런 단일 진입점이라 1회 race에 전체가 0건 중단되므로(T3 관측), 기저 race를 흡수하되 소진 시 throw로 fail-fast 유지.
+
+**검증 — T4 e2e CI 2회 연속 풀런**:
+- 베이스라인(s27) 124 passed / 37 failed → run 25951442053 **145/16**, run 25952075877 **146/15**.
+- `set-cookie count=0` 두 풀런 모두 **0건** — 인증 race 23→0 해소 확정.
+- 잔여 14~15건은 전부 B·C·D (storageState 무관). 두 풀런 차이는 `consumer-home:15`(Railway 데이터 flake) 1건뿐.
+
+**잔여 후속**: B·C·D는 BACKLOG §12-2에 분리 기록. Railway `/auth/login` 로그 기반 latency 계측은 Railway 대시보드 접근 필요(미수행) — 인증 호출 N→1 감소는 e2e 구조상 확정(67+→2).
+

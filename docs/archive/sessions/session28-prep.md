@@ -33,7 +33,7 @@
 
 ---
 
-## T1. `global-setup.ts` 확장 — 인증 storageState 발급
+## T1. `global-setup.ts` 확장 — 인증 storageState 발급 ✅ 완료 (커밋 786cc9d·52d33e0)
 
 기존 `global-setup.ts`는 Vercel SSO 우회 쿠키(`_vercel_jwt`)만 `.bypass-state.json`에 저장한다(#CL-21). 여기에 **세션 쿠키 발급을 1회 추가**한다.
 
@@ -48,7 +48,7 @@
 
 ---
 
-## T2. `playwright.config.ts` · spec storageState 배선
+## T2. `playwright.config.ts` · spec storageState 배선 ✅ 완료 (커밋 0d65812)
 
 미인증 동작을 검증하는 spec(`/cart 비로그인 → /login 리디렉트` 등)이 깨지지 않도록 **인증/미인증 상태를 분리**한다.
 
@@ -61,7 +61,7 @@
 
 ---
 
-## T3. spec 개별 `loginViaCredentials` 호출 제거
+## T3. spec 개별 `loginViaCredentials` 호출 제거 ✅ 완료 (커밋 cb5b77b)
 
 인증 spec의 `beforeEach` 로그인 호출을 제거(또는 옵션화)해 Railway 인증 호출을 N→1로 줄인다.
 
@@ -74,7 +74,7 @@
 
 ---
 
-## T4. 회귀 검증 — e2e CI 풀런
+## T4. 회귀 검증 — e2e CI 풀런 ✅ 완료 (run 25951442053·25952075877 — 145/16·146/15, race 0건)
 
 - [ ] `preview` 동기화 후 e2e 풀런 (`main` push → `sync-preview` 자동, 또는 `gh workflow run e2e.yml --ref preview`).
 - [ ] 세션27 베이스라인 **124 passed / 37 failed**와 비교.
@@ -83,7 +83,7 @@
 
 ---
 
-## T5. 잔여 분류 처리 + Railway 계측
+## T5. 잔여 분류 처리 + Railway 계측 ✅ 완료 (B·C·D BACKLOG §12-2 분리 기록 / 인증 호출 67+→2 구조 확정)
 
 - [ ] **분류 B·C** — T4 후에도 남으면 원인별로 BACKLOG에 별도 항목 분리 기록(데이터 시드 의존 / `waitForLoadState` 전략 등). 이번 세션 범위에 무리하게 포함하지 않는다.
 - [ ] **Railway `/auth/login` 계측** (BACKLOG §12-2 인접 P1) — storageState 도입 **직전**(세션27 run 25926181316이 baseline 역할)·**직후**(T4 run) Railway 로그에서 `/auth/login` p50/p95/p99 + 실패율 비교.
