@@ -25,7 +25,7 @@
 | **세션26**: #CL-21 옵션 A 보강 — Production env `E2E_TEST_SECRET` 제거 + Preview SSO bypass 도입 | 2026-05-15 |
 | **세션27**: #CL-21 후속 — repo Secrets 11개 등록 + `sync-preview.yml` 자동 머지 워크플로 + e2e CI 가동 | 2026-05-16 |
 | **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴(T0~T5). CI 풀런 124/37→145/16·146/15, race 0건 | 2026-05-16 |
-| **세션29**: e2e 잔여 B·C·D 해소 — C 완료(perf-css networkidle 제거), B·D 단일 원인 CORS fix(#CL-28, Railway 재배포 대기) | 2026-05-16 |
+| **세션29**: e2e 잔여 B·C·D 전부 해소 — C(perf-css networkidle 제거)·B·D 단일 원인 CORS fix(#CL-28). 재배포 후 풀런 167/0 | 2026-05-16 |
 
 ---
 
@@ -82,7 +82,8 @@
 - **T0 재확인**: 최신 풀런 run 25952638293 — B 5·C 2·D 8·flake 1 (세션28과 동일, 인증 race 0건 유지).
 - **C 완료**: `perf-css-regression:87·:103` Seller 로그인 — `waitForLoadState('networkidle')`가 Vercel preview의 `vercel.live` 피드백 위젯 상시 연결로 30s 타임아웃. trace로 확정(리소스 ~2.7s 완료, Firebase 호출 0). `networkidle` 제거 → 폼 렌더 + 1.5s 정착. 로컬 perf-css 15/15 통과.
 - **B·D 단일 원인**: trace 콘솔에서 CORS 에러 확정 — Railway API가 Vercel preview origin에 `Access-Control-Allow-Origin` 미발급. B = `apiFetch` 차단, D = `/auth/firebase-token` fetch 차단 → `firebaseReady=false` → 대시보드 `연결 중` 고착. **D는 B의 하위 증상.** cold-start 가설 반증(전구간 분포·firestore는 정상).
-- **수정**: `apps/api/src/main.ts` origin 콜백에 팀 스코프(`jos-projects-d1cecc0c`) 한정 정규식 추가. **Railway 재배포 후 풀런 검증 잔여** — D spec은 무변경.
+- **수정**: `apps/api/src/main.ts` origin 콜백에 팀 스코프(`jos-projects-d1cecc0c`) 한정 정규식 추가. D spec 무변경.
+- **검증 완료**: `c5ee52f` push가 Railway 자동 재배포 트리거 → preview origin CORS 발급·비매칭 차단 curl 확인 → e2e 풀런 run 25957177092 **167 passed / 0 failed / 11 skipped**. B 5·D 8 + 인증 race 전부 해소(178→0 fail).
 
 상세: [docs/CRITICAL_LOGIC.md](CRITICAL_LOGIC.md) #CL-28
 
@@ -92,9 +93,8 @@
 
 다음 세션 진입점은 [docs/BACKLOG.md](BACKLOG.md) **§12 후속 인프라·보안 정비**. 우선순위 표 → 항목 상세 순으로 확인.
 
-- ✅ #CL-21 옵션 A(세션26)·CI(세션27) / ✅ #CL-23 인증 race(세션28) / ✅ #CL-28 C 완료(세션29)
-- 🟠 **P1 (다음 세션 최우선)**: Railway API 재배포(#CL-28 CORS fix 반영) → e2e 풀런으로 B 5·D 8 해소 검증
-- 🟡 P2: Railway `/auth/login` 로그 계측 / Vercel cold-start / `CRITICAL_LOGIC.md` 한도 정책
+- ✅ #CL-21 옵션 A(세션26)·CI(세션27) / ✅ #CL-23 인증 race(세션28) / ✅ #CL-28 B·C·D 전부(세션29)
+- 🟡 **P2 (다음 세션 최우선)**: Railway `/auth/login` 로그 계측 / Vercel cold-start / `CRITICAL_LOGIC.md` 한도 정책
 - 🟢 P3: `useOrderActions`·`/admin/banner` env·G1 거점 수정·Driver Maps SDK·consumer 강한비번
 
 ---
