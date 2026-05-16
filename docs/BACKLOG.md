@@ -425,7 +425,7 @@
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
 > 기준일: 2026-05-16 (세션31 — P2-A 계측 + throttler fix)
-> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session32-prep.md](archive/sessions/session32-prep.md) → 본 §12 우선순위 표 순서로 확인.
+> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session33-prep.md](archive/sessions/session33-prep.md) → 본 §12 우선순위 표 순서로 확인.
 > **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
 > **세션30 완료**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택·아카이브 분리(1415→229라인).
 > **세션31 완료**: P2-A Railway latency 계측(`/auth/login` p50 922ms·0% 실패) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30).
