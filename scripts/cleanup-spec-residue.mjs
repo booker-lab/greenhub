@@ -15,10 +15,29 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-const serviceAccount = require(join(__dirname, '../apps/api/firebase-adminsdk.json'));
 
-initializeApp({ credential: cert(serviceAccount) });
+/**
+ * 인증 자격 해석 — apps/api/firestore.module.ts 와 동일 규약.
+ *  1. FIREBASE_SERVICE_ACCOUNT_JSON env (CI 러너 — 서비스 계정 키 JSON 문자열)
+ *  2. apps/api/firebase-adminsdk.json 로컬 키 (개발자 머신, gitignore 대상)
+ */
+function resolveCredential() {
+  const envJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (envJson) {
+    return cert(JSON.parse(envJson));
+  }
+  try {
+    const require = createRequire(import.meta.url);
+    return cert(require(join(__dirname, '../apps/api/firebase-adminsdk.json')));
+  } catch {
+    console.error(
+      '[cleanup-spec-residue] no credential — set FIREBASE_SERVICE_ACCOUNT_JSON env or place apps/api/firebase-adminsdk.json',
+    );
+    process.exit(1);
+  }
+}
+
+initializeApp({ credential: resolveCredential() });
 const db = getFirestore();
 
 const PROTECT_EMAILS = ['seller@test.com', 'consumer@test.com'];
