@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { AUTH_STATE_PATH, loginViaCredentials } from './_helpers/auth'
+import { AUTH_STATE_PATH } from './_helpers/auth'
 
 const BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr'
 
@@ -46,10 +46,6 @@ test.describe('Consumer — 결제 (인증)', () => {
   test.use({ storageState: AUTH_STATE_PATH })
 
   test.skip(skipAuth, '환경변수 TEST_CONSUMER_EMAIL / TEST_CONSUMER_PASSWORD 필요')
-
-  test.beforeEach(async ({ page }) => {
-    await loginViaCredentials(page, BASE, consumerEmail!, consumerPassword!)
-  })
 
   test('/checkout — 결제 UI 핵심 요소 렌더링', async ({ page }) => {
     const mockCartItems = [
