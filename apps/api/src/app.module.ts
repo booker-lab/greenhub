@@ -27,11 +27,13 @@ import { AppService } from './app.service';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    // 'default' 단일 throttler만 전역 등록 — 일반 라우트 1분 100회.
+    // 인증 라우트(register/login/kakao-login/refresh)는 auth.controller에서
+    // @Throttle로 1분 10회 오버라이드. 등록된 모든 throttler는 전 라우트에
+    // 전역 적용되므로, 별도 'auth' throttler를 두면 /health 등 비인증
+    // 라우트까지 10/분으로 묶인다 (P2-A 계측 발견 — #CL-30).
     ThrottlerModule.forRoot({
-      throttlers: [
-        { name: 'default', ttl: 60000, limit: 100 }, // 일반: 1분 100회
-        { name: 'auth', ttl: 60000, limit: 10 }, // 인증: 1분 10회
-      ],
+      throttlers: [{ name: 'default', ttl: 60000, limit: 100 }],
     }),
     FirestoreModule,
     AuditModule,
