@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { AUTH_STATE_PATH, loginViaCredentials } from './_helpers/auth'
+import { AUTH_STATE_PATH } from './_helpers/auth'
 
 const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
 
@@ -23,10 +23,6 @@ test.describe('셀러 정산 관리 — 인증', () => {
   test.use({ storageState: AUTH_STATE_PATH })
 
   test.skip(skipAuth, '환경변수 TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD 필요')
-
-  test.beforeEach(async ({ page }) => {
-    await loginViaCredentials(page, BASE, sellerEmail!, sellerPassword!)
-  })
 
   // ── 페이지 구조 ───────────────────────────────────────────────────────────
 
