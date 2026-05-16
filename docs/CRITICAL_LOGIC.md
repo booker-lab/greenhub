@@ -1409,5 +1409,7 @@ providers: [
 - `-git-` 필수 매칭 → 브랜치 preview만 허용, 프로덕션 Vercel alias는 비대상.
 - 검증: seller·consumer·driver preview 3종 통과 / 프로덕션 도메인·타 팀·임의 vercel.app 거부.
 
-**적용 조건**: 코드 머지만으로는 무효 — **Railway API 재배포 필요**. 배포 후 다음 e2e 풀런에서 B 5건·D 8건 동시 해소 예상. D spec은 변경하지 않음(완화 시 "정상 미연결"과 버그 구분력 상실 — 가이드 D 정합성 검토 준수).
+**적용 조건**: 코드 머지만으로는 무효 — Railway API 재배포 필요. `c5ee52f` push가 Railway GitHub 자동 재배포를 트리거.
+
+**검증 완료 (2026-05-16 세션29)**: 재배포 후 preview origin(`*-git-*-jos-projects-d1cecc0c.vercel.app`)에 `Access-Control-Allow-Origin` 발급·비매칭 origin(`evil.example.com`) 차단을 curl preflight로 확인. e2e 풀런 run 25957177092 결과 **167 passed / 0 failed / 11 skipped** — B 5건·D 8건 동시 해소, 인증 race 0건 유지. D spec은 변경하지 않음(완화 시 "정상 미연결"과 버그 구분력 상실 — 가이드 D 정합성 검토 준수).
 

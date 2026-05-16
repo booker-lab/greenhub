@@ -425,8 +425,9 @@
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
 > 기준일: 2026-05-16 (세션29 — e2e 잔여 B·C·D 해소)
-> 진입점: 다음 세션 시작 시 본 §12 우선순위 표 → 항목 상세 순서로 확인.
-> **다음 세션 최우선**: Railway API 재배포(#CL-28 CORS fix 반영) → e2e 풀런으로 B 5·D 8 해소 검증.
+> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session30-prep.md](archive/sessions/session30-prep.md) → 본 §12 우선순위 표 순서로 확인.
+> **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
+> **다음 세션 최우선**: P2-C `CRITICAL_LOGIC.md` 한도 정책(단독 착수 가능). P2-A Railway 로그 계측은 Railway 대시보드 접근 필요.
 
 ### 12-1. 우선순위
 
@@ -435,7 +436,7 @@
 | ✅ P0 | #CL-21 옵션 A 보강 — Production env에서 `E2E_TEST_SECRET` 제거 (2026-05-15 세션26 완료) | 보안 | 4단계 다중 PR |
 | ✅ P1 | #CL-21 후속 — GitHub repo Secrets 11개 등록 + `preview` 자동 머지 워크플로 (2026-05-16 세션27 완료) | 인프라/DX | 단독 진행 가능 |
 | ✅ P1 | #CL-23 인증 race 해소 — `storageState` 패턴 도입 (2026-05-16 세션28 완료) | 인프라/DX | 단독 진행 가능 |
-| 🟠 P1 | e2e 잔여 B·D — Railway CORS preview origin (#CL-28) — 코드 완료, **Railway 재배포 + 풀런 검증 대기** | 인프라 | Railway 재배포 |
+| ✅ P1 | e2e 잔여 B·D — Railway CORS preview origin (#CL-28) — 재배포·풀런 검증 완료 (2026-05-16 세션29) | 인프라 | — |
 | ✅ P3 | e2e 잔여 C — perf-css `networkidle` 제거 (2026-05-16 세션29 완료) | e2e | — |
 | 🟡 P2 | Railway `/auth/login` 로그 계측 — N→1 구조는 확정, 로그 latency 잔여 | 관측 | Railway 대시보드 접근 |
 | 🟡 P2 | Vercel function cold-start mitigation 검토 | 성능 | 계측 데이터 기반 |
@@ -511,7 +512,7 @@
 
 ---
 
-#### [~] 세션29 — e2e 잔여 B·C·D 해소 (2026-05-16)
+#### [x] 세션29 — e2e 잔여 B·C·D 해소 (2026-05-16)
 
 세션28 #CL-23 T4 후 잔여 14~15건. 세션29 T0에서 최신 풀런 run 25952638293으로 재확인 — **B 5 · C 2 · D 8 · flake 1** (세션28과 동일, 인증 race `set-cookie count=0` 0건 유지 → #CL-27 회귀 없음).
 
@@ -522,12 +523,12 @@
 - 원인(trace 확정): Vercel preview의 `vercel.live` 피드백 위젯 상시 연결로 `networkidle`(500ms 무네트워크) 영영 미정착. 페이지 리소스는 ~2.7s 내 전부 완료·Firebase 호출 0건 → 앱 버그 아님.
 - 수정: `networkidle` 대기 제거 → 로그인 폼 렌더 대기 + 1.5s 정착. 로컬 perf-css 15/15 통과. (커밋 `0d466f1`)
 
-**[~] B·D — Railway API CORS preview origin 누락** — 코드 완료, **Railway 재배포 대기**
+**[x] B·D — Railway API CORS preview origin 누락** — 해소 완료·검증
 - B 대상: `consumer-groupbuy:14`·`consumer-mypage:74`·`seller-onboarding:45`·`:76`·`seller-settlements:98`. D 대상: `seller-home-dashboard` ×7 + `seller-orders:65`.
 - 원인(trace 확정): Railway API가 Vercel preview origin에 `Access-Control-Allow-Origin` 미발급 → CORS 차단. B = 앱 `apiFetch` REST 호출 실패. D = `useFirebaseAuth`의 `/auth/firebase-token` fetch 실패 → `firebaseReady=false` → 대시보드 indicator `연결 중` 고착. **D는 독립 버그가 아닌 B의 하위 증상 — 단일 원인.**
 - cold-start 가설 반증: 실패가 풀런 04:24~04:34 전구간 분포, `firestore.googleapis.com`은 정상 200 → Railway origin만 선택적 차단 = CORS.
 - 수정: `apps/api/src/main.ts` origin 콜백에 `jos-projects-d1cecc0c` 팀 스코프 한정 정규식 추가. (커밋 `6542ecc`, #CL-28)
-- [ ] **잔여**: Railway API 재배포 → 다음 e2e 풀런에서 B 5·D 8 해소 검증. D spec은 무변경(완화 시 "정상 미연결"과 버그 구분력 상실).
+- [x] **검증 완료**: `c5ee52f` push가 Railway 자동 재배포 트리거 → preview origin CORS 발급·비매칭(`evil.example.com`) 차단 curl 확인 → e2e 풀런 run 25957177092 **167 passed / 0 failed / 11 skipped**. B 5·D 8 + 인증 race 전부 해소. D spec 무변경.
 
 #### [ ] P2 — Railway `/auth/login` 로그 계측
 
@@ -646,4 +647,4 @@ NextAuth API route의 cold start가 set-cookie 누락의 또 다른 원인일 �
 | 2026-05-15 | **세션25**: 사전 결함 정리 — biome 파싱 에러·`.env.vercel.tmp` gitignore·driver Credentials 부재 검증 (#CL-25) / §12 후속 정비 백로그 신설 |
 | 2026-05-16 | **세션27**: #CL-21 후속 — gh CLI 설치·repo Secrets 11개 등록·`sync-preview.yml` 자동 머지 워크플로 신설·e2e.yml pnpm 충돌 수정. e2e CI 가동(124 passed/37 fail). 37건은 #CL-23 인증 race로 확정 |
 | 2026-05-16 | **세션28**: #CL-23 인증 race 해소 — e2e storageState 패턴 도입(T0~T5). 실패 37건 증거 재분류(A23/B5/C2/D7), globalSetup 세션 쿠키 발급 + 11개 인증 describe 배선 + spec 로그인 제거. CI 2회 풀런 124/37→145/16·146/15, `set-cookie count=0` 0건. 잔여 B·C·D는 §12-2 분리 기록 (#CL-27) |
-| 2026-05-16 | **세션29**: e2e 잔여 B·C·D 해소. T0 run 25952638293 재확인(B5·C2·D8·flake1). C — perf-css `networkidle` 제거(vercel.live 상시 연결 원인, 로컬 15/15 통과). B·D — trace로 단일 원인 확정: Railway API가 Vercel preview origin에 CORS 미허용 → `apiFetch`·`/auth/firebase-token` 차단. `main.ts`에 팀 스코프 정규식 추가 (#CL-28). **Railway 재배포 후 풀런 검증 잔여** |
+| 2026-05-16 | **세션29**: e2e 잔여 B·C·D 해소. T0 run 25952638293 재확인(B5·C2·D8·flake1). C — perf-css `networkidle` 제거(vercel.live 상시 연결 원인, 로컬 15/15 통과). B·D — trace로 단일 원인 확정: Railway API가 Vercel preview origin에 CORS 미허용 → `apiFetch`·`/auth/firebase-token` 차단. `main.ts`에 팀 스코프 정규식 추가 (#CL-28). 재배포(c5ee52f push 자동 트리거) 후 풀런 run 25957177092 **167 passed / 0 failed / 11 skipped** — B5·D8 + 인증 race 전부 해소 |
