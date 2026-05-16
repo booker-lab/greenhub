@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
-import { ActionIcon, Badge, Box, Container, Group, Paper, Stack, Text, Title } from '@mantine/core';
-import { ChevronLeft } from 'lucide-react';
+import { Badge, Box, Container, Group, Paper, Stack, Text } from '@mantine/core';
+import { PageShell } from '@/components/PageShell';
+import { PageHeader } from '@/components/PageHeader';
+import { LoadingState } from '@/components/StateViews';
 
 interface Hub {
   id: string;
@@ -90,30 +92,8 @@ export default function HubDetailPage() {
   const orderId = (o: HubOrder) => o.id ?? o.orderId ?? '';
 
   return (
-    <Box
-      component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}
-    >
-      <Box
-        component="header"
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          padding: '16px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <Container size="sm">
-          <Group gap="sm">
-            <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
-              <ChevronLeft size={20} />
-            </ActionIcon>
-            <Title order={3}>{hub ? hub.name : '거점 상세'}</Title>
-          </Group>
-        </Container>
-      </Box>
+    <PageShell>
+      <PageHeader title={hub ? hub.name : '거점 상세'} onBack={() => router.back()} />
 
       <Container size="sm" px="md" py="md">
         <Stack gap="md">
@@ -124,13 +104,7 @@ export default function HubDetailPage() {
           )}
 
           {loading ? (
-            <Text
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              ta="center"
-              py={80}
-            >
-              불러오는 중...
-            </Text>
+            <LoadingState />
           ) : hub ? (
             <>
               {/* 거점 정보 카드 */}
@@ -292,6 +266,6 @@ export default function HubDetailPage() {
           ) : null}
         </Stack>
       </Container>
-    </Box>
+    </PageShell>
   );
 }
