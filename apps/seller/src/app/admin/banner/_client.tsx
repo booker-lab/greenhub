@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+import { getFirebaseStorage } from '@/lib/firebase';
 import { useAdminBanner, type AdminBanner } from '@/hooks/useAdmin';
 import {
   Box,
@@ -46,7 +46,7 @@ export default function AdminBannerClient() {
     if (!file || !session?.user) return;
     setUploading(true);
     try {
-      const r = storageRef(storage, `banners/main_hero/${Date.now()}_${file.name}`);
+      const r = storageRef(getFirebaseStorage(), `banners/main_hero/${Date.now()}_${file.name}`);
       await uploadBytes(r, file);
       const url = await getDownloadURL(r);
       setForm((f) => ({ ...f, imageUrl: url }));

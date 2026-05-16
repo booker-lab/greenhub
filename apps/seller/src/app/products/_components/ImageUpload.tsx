@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+import { getFirebaseStorage } from '@/lib/firebase';
 import { Box, Group, Loader, Paper, Text } from '@mantine/core';
 
 interface ImageUploadProps {
@@ -38,7 +38,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
     try {
       const urls = await Promise.all(
         toUpload.map(async (file) => {
-          const r = storageRef(storage, `products/${storeId}/${Date.now()}_${file.name}`);
+          const r = storageRef(getFirebaseStorage(), `products/${storeId}/${Date.now()}_${file.name}`);
           await uploadBytes(r, file);
           return getDownloadURL(r);
         }),
