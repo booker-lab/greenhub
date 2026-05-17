@@ -425,7 +425,7 @@
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
 > 기준일: 2026-05-17 (세션35 — docs 정리)
-> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session37-prep.md](archive/sessions/session37-prep.md) → 본 §12 우선순위 표 순서로 확인.
+> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session38-prep.md](archive/sessions/session38-prep.md) → 본 §12 우선순위 표 순서로 확인.
 > **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
 > **세션30 완료**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택·아카이브 분리(1415→229라인).
 > **세션31 완료**: P2-A Railway latency 계측(`/auth/login` p50 922ms·0% 실패) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30).
@@ -434,7 +434,8 @@
 > **세션34 완료**: P3 consumer@test.com 강한비번 전환 — Firestore `passwordHash` 갱신 + `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 교체. 풀런 167/0 유지.
 > **세션35 완료**: docs 정리 — `memory.md` 200라인 한도 요약·아카이브(197→50라인) + 폴더 이동으로 깨진 상호 참조 링크 14곳 수정 + 변경 이력 순서·누락 보정. 코드 변경 없음.
 > **세션36 완료**: seller 프론트엔드 리팩토링 5-Phase (#CL-32) — ProductForm 705→154라인(Fatal Constraint 해소), API 레이어 `apiJson` 통일, useAdmin 462→341 팩토리화, `useOrderActions` 통합(P3 종결), 공통 UI 컴포넌트 9개 페이지 치환. 빌드 통과.
-> **다음 세션 최우선**: P3 잔여 기능 항목 (G1 거점 수정 페이지 / Driver Kakao Maps SDK).
+> **세션37 완료**: P4 2건 + P3 G1 — global-setup `about:blank` storageState 레이스 해소(`be4fa2c`), CI 액션 node24 전환(checkout/setup-node v6·upload-artifact v7·pnpm/action-setup v6, node-version 22, `eb15e4e`), 거점 수정 페이지 신규(`hubs/[id]/edit`, `3888522`). Driver Kakao Maps SDK는 사용자 요청으로 차기 세션 이월.
+> **다음 세션 최우선**: P3 Driver Kakao Maps SDK 연동 (§12-1 우선순위 표 참조).
 
 ### 12-1. 우선순위
 
@@ -451,11 +452,11 @@
 | ✅ P2 | `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3+ 채택, 아카이브 분리 (2026-05-16 세션30 완료) | 문서 정책 | 단독 |
 | ✅ P3 | seller 프론트엔드 리팩토링 5-Phase — `useOrderActions` 통합 포함 (#CL-32, 2026-05-17 세션36) | DX/구조 | — |
 | ✅ P3 | `/admin/banner` prerender 실패 — firebase getAuth 지연 초기화 (2026-05-17 세션33 완료) | 환경설정 | — |
-| 🟢 P3 | G1: `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 | 기능 | — |
+| ✅ P3 | G1: `hubs/[id]/edit/page.tsx` 거점 수정 페이지 — GET 프리필 + apiJson PATCH + 상세 헤더 진입 버튼 (2026-05-17 세션37, `3888522`) | 기능 | — |
 | 🟢 P3 | Driver Kakao Maps SDK 연동 | 기능 | — |
 | ✅ P3 | consumer@test.com 강한비번 전환 — 30자 랜덤 비번 (2026-05-17 세션34 완료) | 보안 | 단독 |
-| 🟢 P4 | global-setup flake 보강 — `storageState` 직전 navigation 안정 대기 (세션36 관찰) | e2e 안정성 | 단독 |
-| 🟢 P4 | CI 액션 Node.js 20 deprecation 대응 — 2026-06-02 강제 전환 (세션36 관찰) | CI 유지보수 | 단독 |
+| ✅ P4 | global-setup flake 보강 — bypass 루프 직후 `about:blank` 이동으로 `storageState` 레이스 해소 (2026-05-17 세션37, `be4fa2c`) | e2e 안정성 | 단독 |
+| ✅ P4 | CI 액션 Node.js 20 deprecation 대응 — checkout/setup-node v6·upload-artifact v7·pnpm/action-setup v6, node-version 22 (2026-05-17 세션37, `eb15e4e`) | CI 유지보수 | 단독 |
 | ⏳ 외부 | 네이버페이 채널키 승인 → Vercel 환경변수 설정 | 외부 연동 | 승인 메일 대기 |
 
 ### 12-2. 상세 작업
