@@ -8,7 +8,7 @@ const tabs = [
   { href: '/orders', label: '주문', icon: OrderIcon },
   { href: '/products', label: '상품', icon: ProductIcon },
   { href: '/settlements', label: '정산', icon: SettlementIcon },
-  { href: '/hubs', label: '거점', icon: HubIcon },
+  { href: '/prep', label: '준비', icon: PrepIcon },
   { href: '/settings', label: '설정', icon: SettingsIcon },
 ] as const;
 
@@ -130,7 +130,7 @@ function SettlementIcon({ active }: { active: boolean }) {
   );
 }
 
-function HubIcon({ active }: { active: boolean }) {
+function PrepIcon({ active }: { active: boolean }) {
   const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)';
   const sw = active ? 2.2 : 2;
   return (
@@ -146,8 +146,10 @@ function HubIcon({ active }: { active: boolean }) {
       aria-hidden="true"
       focusable="false"
     >
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-      <circle cx="12" cy="10" r="3" />
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="M9 12h6" />
+      <path d="M9 16h6" />
     </svg>
   );
 }
