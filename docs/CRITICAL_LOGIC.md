@@ -309,3 +309,24 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 **제외**: `app/page.tsx`(홈)는 `100dvh` 사용 — PageShell `100vh` 치환 시 모바일 뷰포트 회귀 우려로 미변환. admin `page.tsx`+`_client.tsx` 분리(#CL-31 패턴)는 의도된 설계라 유지.
 
 **검증**: `pnpm --filter seller build` 성공 — TypeScript 통과, 22개 라우트 전부 생성. biome lint 신규 에러 0건(잔존 2건은 `VarietySelector`·`app/page.tsx` 사전 결함). e2e는 push 시 CI에서 검증(베이스라인 167 passed).
+
+
+---
+
+## [결정 #CL-33] 셀러앱 내비게이션 IA 재구성 — 홈 진입점 + 준비 탭 (2026-05-18, 세션39)
+
+### 결정: BottomNav 5탭 재편 + 홈 대시보드 재구성
+
+**배경**: #CL-32는 코드 구조 정비였고 내비게이션 IA는 미감사. 세션38 전체 페이지 UX 감사에서 3대 문제 도출 — ① 홈(`/`)이 고아 페이지(BottomNav에 홈 진입점 없음) ② 홈 대시보드 정보 밀도 얕음 ③ 준비 물량이 주문 건별로 흩어짐. 네이버 스마트스토어센터 벤치마크로 플랜 수립(`docs/specs/frontend/seller-home-dashboard-plan.md`), 세션39에서 8 아토믹 태스크로 구현.
+
+**홈 진입점**: `PageHeader`에 `position:absolute` 정중앙 홈 아이콘 추가. `usePathname()`으로 홈 경로에서는 숨김. 좌측 뒤로가기와 분리 — 좌/우 zone 길이와 무관하게 위치 불변.
+
+**BottomNav 재편**: `주문·상품·정산·거점·설정` → `주문·상품·정산·준비·설정`. 거점 탭 제거 — 거점 관리(`/hubs` 이하)는 한 번 맞추는 구성 작업이라 설정 하위로 이동(설정에 "거점" 섹션 신설). `/hubs` 라우트·로직은 불변, 진입 경로만 설정 경유로 변경. 준비(`/prep`) 탭 신설 — 셀러의 매일 핵심 업무라 하단 고정. **주문 탭=건별 처리, 준비 탭=상품별 집계**로 역할 분리.
+
+**홈 대시보드**: "오늘 할 일" 카드(명령형 체크리스트 — 신규 주문/발송 지연/비활성 상품, 건수 0이면 줄 숨김) + 현황 카드 3개(주문 파이프라인 4칸·정산·상품). 카드 기준은 "변하는 현황이 있는 영역만" — 설정·거점은 구성이라 제외. 정산 summary만 신규 fetch(`useDashboardSummary`, `apiJson`), 나머지는 기존 Firestore 실시간 훅 재사용.
+
+**준비 물량 집계**: 주문 1건=상품 1개 구조라 `productId`별 `quantity` 합산이 곧 픽업 리스트. 미발송 상태(`ACCEPTED`/`CONFIRMED`/`PREPARING`)만, `requestedDeliveryDate` 기준 오늘분(집계표)/지연분(섹션) 분리, 미래분 제외. **공동구매는 배송일이 `groupProductConfig` 별도 문서라 1차 범위 제외**(사용자 결정) — 후속 작업으로 BACKLOG 등재.
+
+**원칙**: 기존 훅·API·비즈니스 로직 불변 — UI·내비게이션 레이어만. e2e 영향 점검 — 거점 관련 spec은 `/hubs` URL 직접 접근이라 BottomNav 탭 제거 무영향.
+
+**검증**: T1~T8 각 1커밋, 타입체크·`pnpm --filter seller build`(23라우트) 성공, biome 신규 에러 0건. 커밋 `7a01168`~`da99954`.

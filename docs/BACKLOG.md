@@ -416,6 +416,12 @@
 | UX-02 | High | 결제 중 뒤로가기/새로고침 방지 없음 (유령 주문 위험) | ✅ 2026-04-08 |
 | UX-03 | High | accessToken 만료 시 사용자 안내 없음 → TokenErrorGuard로 해결 | ✅ |
 | UX-06 | Medium | 주소 입력 Daum 우편번호 미연동 | ✅ 2026-04-08 |
+| UX-07 | Medium | 셀러앱 탭 스타일 2종 혼재 — 주문(검정 underline) vs 상품·정산(초록) | 📋 세션38 감사 |
+| UX-08 | Medium | 셀러 상품 카드 Badge-as-button — 상태 표시와 액션 버튼 시각 미구분 | 📋 세션38 감사 |
+| UX-09 | Low | 셀러앱 `confirm()` vs Modal 혼재 — 삭제 확인 패턴 불일치 | 📋 세션38 감사 |
+| UX-10 | Low | 주문 페이지 3중 sticky 스택 — 목록 가시 영역 축소 | 📋 세션38 감사 |
+
+> **UX-07~10 상세**: 화면별 진단·우선순위는 [docs/specs/frontend/seller-ux-audit.md](specs/frontend/seller-ux-audit.md).
 
 > **BUG-03 처리 전략**: 현재 Firestore Rules `orders allow read: if true`로 열려 있어 즉시 영향 없음.
 > Rules를 인증 필요로 강화할 시점에 Firebase Custom Token 발급 API 추가 + 3개 앱 `signInWithCustomToken()` 연동을 함께 처리할 것.
@@ -425,7 +431,7 @@
 ## 12. 후속 인프라·보안 정비 (세션22~25 잔여)
 
 > 기준일: 2026-05-17 (세션35 — docs 정리)
-> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session38-prep.md](archive/sessions/session38-prep.md) → 본 §12 우선순위 표 순서로 확인.
+> 진입점: 다음 세션 시작 시 [docs/archive/sessions/session40-prep.md](archive/sessions/session40-prep.md) → 본 §12 우선순위 표 순서로 확인.
 > **세션29 완료**: §12-2 e2e 잔여 B·C·D 전부 해소 (run 25957177092 — 167 passed / 0 failed).
 > **세션30 완료**: P2-C `CRITICAL_LOGIC.md` 한도 정책 — 옵션 3 변형 채택·아카이브 분리(1415→229라인).
 > **세션31 완료**: P2-A Railway latency 계측(`/auth/login` p50 922ms·0% 실패) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30).
@@ -435,6 +441,8 @@
 > **세션35 완료**: docs 정리 — `memory.md` 200라인 한도 요약·아카이브(197→50라인) + 폴더 이동으로 깨진 상호 참조 링크 14곳 수정 + 변경 이력 순서·누락 보정. 코드 변경 없음.
 > **세션36 완료**: seller 프론트엔드 리팩토링 5-Phase (#CL-32) — ProductForm 705→154라인(Fatal Constraint 해소), API 레이어 `apiJson` 통일, useAdmin 462→341 팩토리화, `useOrderActions` 통합(P3 종결), 공통 UI 컴포넌트 9개 페이지 치환. 빌드 통과.
 > **세션37 완료**: P4 2건 + P3 G1 — global-setup `about:blank` storageState 레이스 해소(`be4fa2c`), CI 액션 node24 전환(checkout/setup-node v6·upload-artifact v7·pnpm/action-setup v6, node-version 22, `eb15e4e`), 거점 수정 페이지 신규(`hubs/[id]/edit`, `3888522`). Driver Kakao Maps SDK는 사용자 요청으로 차기 세션 이월.
+> **세션38**: 셀러 홈 대시보드 + 준비 물량 재구성 — 전체 페이지 UX 감사 + 네이버 스마트스토어센터 벤치마크 → 8 아토믹 태스크 플랜 수립([seller-home-dashboard-plan.md](specs/frontend/seller-home-dashboard-plan.md)). 코드 변경 없음(설계·논의만). 거점 탭→설정 이동·준비 물량 탭(`/prep`) 신설 등 BottomNav IA 재구성 포함.
+> **세션39 완료**: P3 셀러 홈 대시보드 재구성 — 세션38 플랜 T1~T8 전부 구현 (#CL-33, `7a01168`~`da99954`). PageHeader 홈 아이콘·홈 대시보드(오늘 할 일+현황 카드 3개)·BottomNav 거점→준비 탭 교체·준비 물량 탭(`/prep`) 신설·ConnectionStatus 추출. 타입체크·빌드(23라우트)·biome 신규 에러 0건. 준비 물량 공동구매는 1차 범위 제외(후속 등재).
 > **다음 세션 최우선**: P3 Driver Kakao Maps SDK 연동 (§12-1 우선순위 표 참조).
 
 ### 12-1. 우선순위
@@ -454,6 +462,9 @@
 | ✅ P3 | `/admin/banner` prerender 실패 — firebase getAuth 지연 초기화 (2026-05-17 세션33 완료) | 환경설정 | — |
 | ✅ P3 | G1: `hubs/[id]/edit/page.tsx` 거점 수정 페이지 — GET 프리필 + apiJson PATCH + 상세 헤더 진입 버튼 (2026-05-17 세션37, `3888522`) | 기능 | — |
 | 🟢 P3 | Driver Kakao Maps SDK 연동 | 기능 | — |
+| ✅ P3 | 셀러 홈 대시보드 + 준비 물량 재구성 — 8 아토믹 태스크 (#CL-33, 2026-05-18 세션39 완료) | UX/기능 | `specs/frontend/seller-home-dashboard-plan.md` |
+| 🟢 P4 | 준비 물량 탭 — 공동구매 주문 포함 (배송일 `groupProductConfig` 별도 fetch 필요, 세션39 분리) | UX/기능 | — |
+| 🟢 P4 | 당일 배송 컷오프 — 소비자 앱 배송일 선택 시간 제약 (세션38 분리) | 소비자 UX | — |
 | ✅ P3 | consumer@test.com 강한비번 전환 — 30자 랜덤 비번 (2026-05-17 세션34 완료) | 보안 | 단독 |
 | ✅ P4 | global-setup flake 보강 — bypass 루프 직후 `about:blank` 이동으로 `storageState` 레이스 해소 (2026-05-17 세션37, `be4fa2c`) | e2e 안정성 | 단독 |
 | ✅ P4 | CI 액션 Node.js 20 deprecation 대응 — checkout/setup-node v6·upload-artifact v7·pnpm/action-setup v6, node-version 22 (2026-05-17 세션37, `eb15e4e`) | CI 유지보수 | 단독 |
