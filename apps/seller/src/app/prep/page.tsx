@@ -11,6 +11,7 @@ import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { PageShell } from '@/components/PageShell';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, LoadingState } from '@/components/StateViews';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { aggregatePrep, type PrepLine } from '@/lib/prep';
 
 function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accent?: boolean }) {
@@ -64,12 +65,6 @@ export default function PrepPage() {
   );
 
   const isConnecting = loading || !firebaseReady;
-  const dotColor = isConnecting
-    ? 'var(--color-caution-border)'
-    : error
-      ? 'var(--color-danger)'
-      : 'var(--color-primary)';
-  const connLabel = isConnecting ? '연결 중' : error ? '연결 오류' : '실시간 연결';
 
   const todayLabel = new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
   const todayTotal = today.reduce((sum, l) => sum + l.quantity, 0);
@@ -79,14 +74,7 @@ export default function PrepPage() {
       <PageHeader
         title="준비 물량"
         right={
-          <Group gap={6}>
-            <Box
-              style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: dotColor }}
-            />
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              {connLabel}
-            </Text>
-          </Group>
+          <ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />
         }
       />
 
