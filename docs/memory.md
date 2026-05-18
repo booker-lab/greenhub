@@ -10,7 +10,7 @@
 ## 진행 현황
 
 세션22까지 + 세션23~39 완료. 직전 **세션38** = 셀러 홈 대시보드 재구성 플랜 수립, **세션39** = 그 플랜 T1~T8 전부 구현 (#CL-33). PageHeader 중앙 홈 아이콘·홈 대시보드(오늘 할 일 카드 + 주문/정산/상품 현황 카드 3개)·BottomNav 거점→준비 탭 교체·거점 관리 설정 하위 이동·준비 물량 탭(`/prep`, productId별 집계) 신설·ConnectionStatus 공통 컴포넌트화. 태스크당 1커밋, 타입체크·빌드(23라우트)·biome 신규 에러 0건.
-e2e 베이스라인 **167 passed / 0 failed / 11 skipped** (run 25970814882) — 세션39는 로컬 빌드까지 검증, e2e CI는 push 시 확인. 설계 결정 정본은 `docs/CRITICAL_LOGIC.md` #CL-19~#CL-33, 세션별 상세는 아카이브.
+e2e 베이스라인 **170 passed / 0 failed / 11 skipped** (run 26017068777, 세션39) — 홈 대시보드 spec 재작성·`seller-prep.spec.ts` 신설로 167→170. 설계 결정 정본은 `docs/CRITICAL_LOGIC.md` #CL-19~#CL-33, 세션별 상세는 아카이브.
 
 **다음 세션 진입점**: `docs/archive/sessions/session40-prep.md` · SSOT `docs/BACKLOG.md` §12.
 잔여 **P3 기능 1건**: Driver Kakao Maps SDK 연동. P4 후속 2건 — 준비 물량 공동구매 포함, 당일 배송 컷오프.
