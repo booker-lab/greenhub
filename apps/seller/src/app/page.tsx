@@ -6,48 +6,17 @@ import { useRouter } from 'next/navigation';
 import { useFirebaseReady } from '@/app/providers';
 import { useOrders } from '@/hooks/useOrders';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
-import Link from 'next/link';
-import { Box, Container, Group, Paper, Stack, Text } from '@mantine/core';
+import { useDashboardSummary } from '@/hooks/useDashboardSummary';
+import { Box, Container, Group, Stack, Text } from '@mantine/core';
 import { PageShell } from '@/components/PageShell';
 import { PageHeader } from '@/components/PageHeader';
 import { LoadingState } from '@/components/StateViews';
 import { TodayTasksCard } from '@/app/_components/TodayTasksCard';
-
-interface MetricCardProps {
-  label: string;
-  value: number;
-  href: string;
-  accent?: boolean;
-}
-
-function MetricCard({ label, value, href, accent }: MetricCardProps) {
-  return (
-    <Paper
-      component={Link}
-      href={href}
-      radius="lg"
-      shadow="xs"
-      p="md"
-      style={{ flex: 1, minWidth: 0, textDecoration: 'none', display: 'block' }}
-    >
-      <Stack gap={4} align="center">
-        <Text
-          style={{
-            fontSize: 28,
-            fontWeight: 'var(--fw-bold)',
-            color: accent ? 'var(--color-danger)' : 'var(--color-text)',
-            lineHeight: 1,
-          }}
-        >
-          {value}
-        </Text>
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-          {label}
-        </Text>
-      </Stack>
-    </Paper>
-  );
-}
+import {
+  OrderStatusCard,
+  SettlementCard,
+  ProductStatusCard,
+} from '@/app/_components/StatusCards';
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -56,6 +25,7 @@ export default function Home() {
   const firebaseReady = useFirebaseReady();
   const { orders, loading, error, groupCounts } = useOrders(storeId);
   const { products } = useStoreProducts(storeId);
+  const { summary, loading: summaryLoading, error: summaryError } = useDashboardSummary();
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -74,8 +44,6 @@ export default function Home() {
       : 'var(--color-primary)';
   const connLabel = isConnecting ? '연결 중' : error ? '연결 오류' : '실시간 연결';
 
-  const inactiveCount = products.filter((p) => !p.isActive).length;
-
   return (
     <PageShell>
       <PageHeader
@@ -93,39 +61,12 @@ export default function Home() {
       />
 
       <Container size="sm" py="md">
-        <Stack gap="md" mb="md">
+        <Stack gap="md">
           <TodayTasksCard orders={orders} products={products} />
+          <OrderStatusCard groupCounts={groupCounts} />
+          <SettlementCard summary={summary} loading={summaryLoading} error={summaryError} />
+          <ProductStatusCard products={products} />
         </Stack>
-
-        <Text
-          style={{
-            fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-disabled)',
-            marginBottom: 8,
-            fontWeight: 'var(--fw-medium)',
-          }}
-        >
-          주문 현황
-        </Text>
-        <Group gap="xs" mb="md" grow>
-          <MetricCard label="신규 주문" value={groupCounts.ACTION_REQUIRED} href="/orders" accent={groupCounts.ACTION_REQUIRED > 0} />
-          <MetricCard label="전체 주문" value={orders.length} href="/orders" />
-          <MetricCard label="취소" value={groupCounts.CANCELLED} href="/orders?tab=CANCELLED" />
-        </Group>
-
-        <Text
-          style={{
-            fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-disabled)',
-            marginBottom: 8,
-            fontWeight: 'var(--fw-medium)',
-          }}
-        >
-          상품 현황
-        </Text>
-        <Group gap="xs" grow>
-          <MetricCard label="비활성 상품" value={inactiveCount} href="/products" accent={inactiveCount > 0} />
-        </Group>
       </Container>
     </PageShell>
   );
