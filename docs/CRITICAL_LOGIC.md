@@ -329,4 +329,4 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **원칙**: 기존 훅·API·비즈니스 로직 불변 — UI·내비게이션 레이어만. e2e 영향 점검 — 거점 관련 spec은 `/hubs` URL 직접 접근이라 BottomNav 탭 제거 무영향.
 
-**검증**: T1~T8 각 1커밋, 타입체크·`pnpm --filter seller build`(23라우트) 성공, biome 신규 에러 0건. 커밋 `7a01168`~`da99954`.
+**검증**: T1~T8 각 1커밋, 타입체크·`pnpm --filter seller build`(23라우트) 성공, biome 신규 에러 0건. e2e 풀런 **170 passed / 0 failed / 11 skipped**(run 26017068777) — `seller-home-dashboard.spec.ts` 새 레이아웃으로 재작성·`seller-prep.spec.ts` 신설로 신규 베이스라인 170(기존 167+3). 커밋 `7a01168`~`fd34c65`.
