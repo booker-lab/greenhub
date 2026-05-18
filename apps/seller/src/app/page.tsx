@@ -11,6 +11,7 @@ import { Box, Container, Group, Paper, Stack, Text } from '@mantine/core';
 import { PageShell } from '@/components/PageShell';
 import { PageHeader } from '@/components/PageHeader';
 import { LoadingState } from '@/components/StateViews';
+import { TodayTasksCard } from '@/app/_components/TodayTasksCard';
 
 interface MetricCardProps {
   label: string;
@@ -92,6 +93,10 @@ export default function Home() {
       />
 
       <Container size="sm" py="md">
+        <Stack gap="md" mb="md">
+          <TodayTasksCard orders={orders} products={products} />
+        </Stack>
+
         <Text
           style={{
             fontSize: 'var(--font-size-sm)',
