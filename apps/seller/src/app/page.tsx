@@ -7,7 +7,10 @@ import { useFirebaseReady } from '@/app/providers';
 import { useOrders } from '@/hooks/useOrders';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import Link from 'next/link';
-import { Box, Container, Group, Loader, Paper, Stack, Text, Title } from '@mantine/core';
+import { Box, Container, Group, Paper, Stack, Text } from '@mantine/core';
+import { PageShell } from '@/components/PageShell';
+import { PageHeader } from '@/components/PageHeader';
+import { LoadingState } from '@/components/StateViews';
 
 interface MetricCardProps {
   label: string;
@@ -59,11 +62,7 @@ export default function Home() {
   }, [status, session, router]);
 
   if (status === 'loading' || !session) {
-    return (
-      <Box style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100dvh' }}>
-        <Loader size="sm" color="var(--color-primary)" />
-      </Box>
-    );
+    return <LoadingState fullPage />;
   }
 
   const isConnecting = loading || !firebaseReady;
@@ -77,32 +76,20 @@ export default function Home() {
   const inactiveCount = products.filter((p) => !p.isActive).length;
 
   return (
-    <Box component="main" style={{ minHeight: '100dvh', backgroundColor: 'var(--color-surface-muted)' }}>
-      <Box
-        component="header"
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          padding: '16px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <Container size="sm">
-          <Group justify="space-between">
-            <Title order={3} style={{ fontWeight: 'var(--fw-bold)' }}>
-              홈
-            </Title>
-            <Group gap={6}>
-              <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: dotColor }} />
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-                {connLabel}
-              </Text>
-            </Group>
+    <PageShell>
+      <PageHeader
+        title="홈"
+        right={
+          <Group gap={6}>
+            <Box
+              style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: dotColor }}
+            />
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+              {connLabel}
+            </Text>
           </Group>
-        </Container>
-      </Box>
+        }
+      />
 
       <Container size="sm" py="md">
         <Text
@@ -132,9 +119,9 @@ export default function Home() {
           상품 현황
         </Text>
         <Group gap="xs" grow>
-          <MetricCard label="재고부족" value={inactiveCount} href="/products" accent={inactiveCount > 0} />
+          <MetricCard label="비활성 상품" value={inactiveCount} href="/products" accent={inactiveCount > 0} />
         </Group>
       </Container>
-    </Box>
+    </PageShell>
   );
 }
