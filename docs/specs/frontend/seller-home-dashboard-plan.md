@@ -228,7 +228,9 @@ UX는 감사한 적이 없다. 세션38 전체 페이지 감사 + 사용자 논�
 ## 구현 결과 (세션39)
 
 T1~T8 전부 구현 완료 — 각 태스크 1커밋, 타입체크·빌드(23라우트)·biome
-신규 에러 0건. 커밋 `7a01168`(T1)~`da99954`(T8). #CL-33 등재(D4 IA).
+신규 에러 0건. e2e 풀런 170 passed / 0 failed / 11 skipped(run 26017068777
+— `seller-home-dashboard.spec.ts` 재작성·`seller-prep.spec.ts` 신설).
+커밋 `7a01168`(T1)~`fd34c65`(e2e 스펙). #CL-33 등재(D4 IA).
 
 - **준비 물량 공동구매 미포함 확정**: D5 "구현 확인" 메모대로 사용자가 1차
   범위를 일반 주문 한정으로 결정. `aggregatePrep`이 `saleType==='group'`을

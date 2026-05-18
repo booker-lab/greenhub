@@ -29,10 +29,11 @@
 
 ## T0. 착수 전 확인 (먼저 수행)
 
-- [ ] 세션39 커밋 푸시 여부 확인 — 미푸시 시 push → `sync-preview.yml`이
-  preview 머지 후 `e2e.yml` 자동 트리거. 베이스라인 167/0 회귀 없음 확인.
+- [ ] 최신 e2e 베이스라인 유지 확인 — `gh run list --workflow=e2e.yml`.
   - gh CLI: `C:\Program Files\GitHub CLI\gh.exe` (PATH 미등록 — `&` 호출).
-  - 베이스라인: run 25970814882 (167 passed / 0 failed / 11 skipped).
+  - 베이스라인: run 26017068777 (**170** passed / 0 failed / 11 skipped, 세션39).
+  - 주의: `sync-preview` 직후 e2e는 Vercel preview 재배포 전 stale 코드를 칠 수
+    있음(세션39 1차 run 실패 원인). preview 재배포 완료 후 e2e 재실행 권장.
 - [ ] `docs/memory.md`(~52라인)·`CRITICAL_LOGIC.md`(~350라인) 한도 여유 확인.
 
 ## Kakao Maps SDK — 선결 사항

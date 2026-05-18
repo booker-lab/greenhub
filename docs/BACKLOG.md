@@ -442,7 +442,7 @@
 > **세션36 완료**: seller 프론트엔드 리팩토링 5-Phase (#CL-32) — ProductForm 705→154라인(Fatal Constraint 해소), API 레이어 `apiJson` 통일, useAdmin 462→341 팩토리화, `useOrderActions` 통합(P3 종결), 공통 UI 컴포넌트 9개 페이지 치환. 빌드 통과.
 > **세션37 완료**: P4 2건 + P3 G1 — global-setup `about:blank` storageState 레이스 해소(`be4fa2c`), CI 액션 node24 전환(checkout/setup-node v6·upload-artifact v7·pnpm/action-setup v6, node-version 22, `eb15e4e`), 거점 수정 페이지 신규(`hubs/[id]/edit`, `3888522`). Driver Kakao Maps SDK는 사용자 요청으로 차기 세션 이월.
 > **세션38**: 셀러 홈 대시보드 + 준비 물량 재구성 — 전체 페이지 UX 감사 + 네이버 스마트스토어센터 벤치마크 → 8 아토믹 태스크 플랜 수립([seller-home-dashboard-plan.md](specs/frontend/seller-home-dashboard-plan.md)). 코드 변경 없음(설계·논의만). 거점 탭→설정 이동·준비 물량 탭(`/prep`) 신설 등 BottomNav IA 재구성 포함.
-> **세션39 완료**: P3 셀러 홈 대시보드 재구성 — 세션38 플랜 T1~T8 전부 구현 (#CL-33, `7a01168`~`da99954`). PageHeader 홈 아이콘·홈 대시보드(오늘 할 일+현황 카드 3개)·BottomNav 거점→준비 탭 교체·준비 물량 탭(`/prep`) 신설·ConnectionStatus 추출. 타입체크·빌드(23라우트)·biome 신규 에러 0건. 준비 물량 공동구매는 1차 범위 제외(후속 등재).
+> **세션39 완료**: P3 셀러 홈 대시보드 재구성 — 세션38 플랜 T1~T8 전부 구현 (#CL-33, `7a01168`~`fd34c65`). PageHeader 홈 아이콘·홈 대시보드(오늘 할 일+현황 카드 3개)·BottomNav 거점→준비 탭 교체·준비 물량 탭(`/prep`) 신설·ConnectionStatus 추출. 타입체크·빌드(23라우트)·biome 신규 에러 0건. e2e 풀런 **170 passed / 0 failed / 11 skipped**(run 26017068777, 167→170 — 홈 spec 재작성·prep spec 신설). 준비 물량 공동구매는 1차 범위 제외(후속 등재).
 > **다음 세션 최우선**: P3 Driver Kakao Maps SDK 연동 (§12-1 우선순위 표 참조).
 
 ### 12-1. 우선순위
