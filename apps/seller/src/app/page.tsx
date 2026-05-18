@@ -31,7 +31,7 @@ export default function Home() {
   useEffect(() => {
     if (status === 'loading') return;
     if (status === 'unauthenticated') { router.replace('/login'); return; }
-  }, [status, session, router]);
+  }, [status, router]);
 
   if (status === 'loading' || !session) {
     return <LoadingState fullPage />;
