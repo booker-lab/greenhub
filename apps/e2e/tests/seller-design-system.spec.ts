@@ -83,6 +83,8 @@ test.describe('셀러 디자인 시스템 — 인증 화면', () => {
     await expect(page.getByRole('heading', { name: '설정' })).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('text=배송비 설정 / 기상 제한')).toBeVisible()
     await expect(page.locator('text=배송 슬롯 (Daily Cap)')).toBeVisible()
+    // 세션39(#CL-33): 거점 관리가 설정 하위로 이동
+    await expect(page.locator('text=거점 관리')).toBeVisible()
   })
 
   test('거점 관리 — 목록 렌더링', async ({ page }) => {
