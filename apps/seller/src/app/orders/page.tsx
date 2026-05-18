@@ -15,6 +15,7 @@ import { Badge, Box, Container, Group, Stack, Text, UnstyledButton } from '@mant
 import { PageShell } from '@/components/PageShell';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, LoadingState } from '@/components/StateViews';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 const VALID_TABS = new Set<OrderGroup>(['ACTION_REQUIRED', 'WAITING', 'IN_DELIVERY', 'DONE', 'CANCELLED']);
 
@@ -44,24 +45,7 @@ export default function OrdersPage() {
       <PageHeader
         title="주문 관리"
         right={
-          <Group gap={6}>
-            <Box
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                backgroundColor:
-                  loading || !firebaseReady
-                    ? 'var(--color-caution-border)'
-                    : error
-                      ? 'var(--color-danger)'
-                      : 'var(--color-primary)',
-              }}
-            />
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              {loading || !firebaseReady ? '연결 중' : error ? '연결 오류' : '실시간 연결'}
-            </Text>
-          </Group>
+          <ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />
         }
       />
 
