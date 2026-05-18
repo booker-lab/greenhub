@@ -7,10 +7,11 @@ import { useFirebaseReady } from '@/app/providers';
 import { useOrders } from '@/hooks/useOrders';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
-import { Box, Container, Group, Stack, Text } from '@mantine/core';
+import { Container, Stack } from '@mantine/core';
 import { PageShell } from '@/components/PageShell';
 import { PageHeader } from '@/components/PageHeader';
 import { LoadingState } from '@/components/StateViews';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { TodayTasksCard } from '@/app/_components/TodayTasksCard';
 import {
   OrderStatusCard,
@@ -36,27 +37,12 @@ export default function Home() {
     return <LoadingState fullPage />;
   }
 
-  const isConnecting = loading || !firebaseReady;
-  const dotColor = isConnecting
-    ? 'var(--color-caution-border)'
-    : error
-      ? 'var(--color-danger)'
-      : 'var(--color-primary)';
-  const connLabel = isConnecting ? '연결 중' : error ? '연결 오류' : '실시간 연결';
-
   return (
     <PageShell>
       <PageHeader
         title="홈"
         right={
-          <Group gap={6}>
-            <Box
-              style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: dotColor }}
-            />
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              {connLabel}
-            </Text>
-          </Group>
+          <ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />
         }
       />
 
