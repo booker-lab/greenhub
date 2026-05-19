@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import type { SaleType } from '@greenhub/shared';
 import { useOrders } from '@/hooks/useOrders';
 import { DateSection } from './_components/DateSection';
+import { SaleTypeToggle } from './_components/SaleTypeToggle';
 import {
   DATE_PRESETS,
   GROUP_TABS,
@@ -29,11 +31,19 @@ export default function OrdersPage() {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
   const { orders, loading, error, groupCounts, firebaseReady } = useOrders(storeId);
+  const [saleType, setSaleType] = useState<SaleType>('normal');
   const [activeTab, setActiveTab] = useState<OrderGroup>('ACTION_REQUIRED');
   const [subFilter, setSubFilter] = useState<'ALL' | 'DELIVERING' | 'HUB_ARRIVED'>('ALL');
   const [datePreset, setDatePreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+
+  const handleSaleTypeChange = (next: SaleType) => {
+    setSaleType(next);
+    setDatePreset('week');
+    setCustomFrom('');
+    setCustomTo('');
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -43,9 +53,12 @@ export default function OrdersPage() {
 
   const customInvalid =
     datePreset === 'custom' && !!customFrom && !!customTo && customFrom > customTo;
-  const dateRange = getDateRange(datePreset, activeTab, customFrom, customTo);
+  // 공구 토글은 날짜 필터 칩 미노출 → 범위 계산 자체를 일반에서만 수행
+  const dateRange =
+    saleType === 'normal' ? getDateRange(datePreset, activeTab, customFrom, customTo) : null;
 
   const filteredOrders = orders.filter((o) => {
+    if (saleType === 'group' ? o.saleType !== 'group' : o.saleType === 'group') return false;
     if (STATUS_GROUP_MAP[o.status] !== activeTab) return false;
     if (activeTab === 'IN_DELIVERY' && subFilter !== 'ALL' && o.status !== subFilter) {
       return false;
@@ -67,66 +80,71 @@ export default function OrdersPage() {
         }
       />
 
-      {/* 날짜 범위 필터 */}
-      <Box style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
-        <Container size="sm" py="xs">
-          <Group gap="xs">
-            {DATE_PRESETS.map((p) => (
-              <UnstyledButton
-                key={p.key}
-                onClick={() => setDatePreset(p.key)}
-                style={{
-                  padding: '6px 14px',
-                  fontSize: 'var(--font-size-sm)',
-                  borderRadius: 99,
-                  backgroundColor:
-                    datePreset === p.key ? 'var(--color-text)' : 'var(--color-surface-muted)',
-                  color: datePreset === p.key ? 'var(--color-bg)' : 'var(--color-text-disabled)',
-                  transition: 'all 0.15s',
-                }}
-              >
-                {p.label}
-              </UnstyledButton>
-            ))}
-          </Group>
+      {/* 판매 유형 토글 — 일반/공구 1차 분기 */}
+      <SaleTypeToggle value={saleType} onChange={handleSaleTypeChange} />
 
-          {datePreset === 'custom' && (
-            <Group gap="xs" mt="xs" align="center">
-              <input
-                type="date"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                style={{
-                  padding: '6px 10px',
-                  fontSize: 'var(--font-size-sm)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 8,
-                  color: 'var(--color-text)',
-                }}
-              />
-              <Text style={{ color: 'var(--color-text-disabled)' }}>~</Text>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                style={{
-                  padding: '6px 10px',
-                  fontSize: 'var(--font-size-sm)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 8,
-                  color: 'var(--color-text)',
-                }}
-              />
+      {/* 날짜 범위 필터 — 일반 토글에서만 노출 (공구는 1차 미노출) */}
+      {saleType === 'normal' && (
+        <Box style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
+          <Container size="sm" py="xs">
+            <Group gap="xs">
+              {DATE_PRESETS.map((p) => (
+                <UnstyledButton
+                  key={p.key}
+                  onClick={() => setDatePreset(p.key)}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 'var(--font-size-sm)',
+                    borderRadius: 99,
+                    backgroundColor:
+                      datePreset === p.key ? 'var(--color-text)' : 'var(--color-surface-muted)',
+                    color: datePreset === p.key ? 'var(--color-bg)' : 'var(--color-text-disabled)',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {p.label}
+                </UnstyledButton>
+              ))}
             </Group>
-          )}
 
-          {customInvalid && (
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt={4}>
-              시작일이 종료일보다 늦습니다
-            </Text>
-          )}
-        </Container>
-      </Box>
+            {datePreset === 'custom' && (
+              <Group gap="xs" mt="xs" align="center">
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  style={{
+                    padding: '6px 10px',
+                    fontSize: 'var(--font-size-sm)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 8,
+                    color: 'var(--color-text)',
+                  }}
+                />
+                <Text style={{ color: 'var(--color-text-disabled)' }}>~</Text>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  style={{
+                    padding: '6px 10px',
+                    fontSize: 'var(--font-size-sm)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 8,
+                    color: 'var(--color-text)',
+                  }}
+                />
+              </Group>
+            )}
+
+            {customInvalid && (
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt={4}>
+                시작일이 종료일보다 늦습니다
+              </Text>
+            )}
+          </Container>
+        </Box>
+      )}
 
       {/* 상태 탭 */}
       <Box
