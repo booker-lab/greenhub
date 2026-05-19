@@ -3,18 +3,23 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-18 (세션39 — 셀러 홈 대시보드 재구성 구현)
+최종 수정: 2026-05-19 (세션41 — 셀러 주문 탭 리팩토링 플랜 정합성 검토)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~39 완료. 직전 **세션38** = 셀러 홈 대시보드 재구성 플랜 수립, **세션39** = 그 플랜 T1~T8 전부 구현 (#CL-33). PageHeader 중앙 홈 아이콘·홈 대시보드(오늘 할 일 카드 + 주문/정산/상품 현황 카드 3개)·BottomNav 거점→준비 탭 교체·거점 관리 설정 하위 이동·준비 물량 탭(`/prep`, productId별 집계) 신설·ConnectionStatus 공통 컴포넌트화. 태스크당 1커밋, 타입체크·빌드(23라우트)·biome 신규 에러 0건.
-e2e 베이스라인 **170 passed / 0 failed / 11 skipped** (run 26017068777, 세션39) — 홈 대시보드 spec 재작성·`seller-prep.spec.ts` 신설로 167→170. 설계 결정 정본은 `docs/CRITICAL_LOGIC.md` #CL-19~#CL-33, 세션별 상세는 아카이브.
+세션22까지 + 세션23~41 완료. **세션40** = 셀러 주문 탭 감사 + T1~T7 리팩토링 플랜 수립(코드 변경 없음).
+**세션41** = 그 플랜 정합성 검토(코드 변경 없음) — 플랜↔코드·문서 대조로 **불일치 7건 발견, 전부 문서 반영**.
+주요 정정: ① T1에 `ACCENT_BORDER` 동반 교정 추가(미반영 시 카드 뱃지·좌측보더 색 불일치) ② T2에 요약바
+제거 e2e 회귀 반영(`seller-orders.spec.ts` Summary Bar 테스트 2건 삭제 + 탭 뱃지 테스트 신설 → 베이스라인 170→169)
+③ `session42-prep.md` T2 탭 sticky `top` 좌표 자기모순 해소(`top: var(--header-height)` 단일화)
+④ T4 EmptyState는 `children` 미지원→`action` prop, sticky footer는 BottomNav 전역 렌더로 `bottom:0` 불가.
+검토 상세: `session41-prep.md` §검토 결과. BUG-16·UX-11은 별도 후속(BACKLOG §12 등재).
 
-**다음 세션 진입점**: `docs/archive/sessions/session40-prep.md` · SSOT `docs/BACKLOG.md` §12.
-잔여 **P3 기능 1건**: Driver Kakao Maps SDK 연동. P4 후속 2건 — 준비 물량 공동구매 포함, 당일 배송 컷오프.
-(P0·P1·P2·P3 구조/G1 + e2e 안정성 + P4 정비 + `/admin/banner` + consumer 강한비번 + seller 프론트 리팩토링 + 홈 대시보드 재구성 종결. P2-B는 #CL-30으로 moot.)
+**다음 세션 진입점**: `docs/archive/sessions/session42-prep.md` (= 세션 A, T1+T2 구현) · 플랜 `docs/specs/frontend/seller-orders-refactor-plan.md`.
+세션42=A(T1+T2) → B(T3+T4) → C(T5+T6) → D(T7 검증) 순서. e2e 베이스라인 170/0 (T2 후 169/0 예상).
+잔여 P3: Driver Kakao Maps SDK + 셀러 주문 탭 리팩토링(세션 A~D). P4: 준비 물량 공동구매·당일 배송 컷오프.
 
 ---
 
