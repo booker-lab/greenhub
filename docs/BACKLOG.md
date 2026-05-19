@@ -67,6 +67,7 @@
   - **셀러 앱**: 주문 상세에서 `parcel + PREPARING` 조건일 때 "택배 발송 완료" 버튼 추가 → `DELIVERING` 전환
   - **드라이버 앱**: 보드 쿼리에 `deliveryMethod in ['direct', 'hub']` 필터 추가 — 택배 주문 제거
   - 관련 파일: `seller/orders/[id]/page.tsx`, `driver/board/_client.tsx`
+- [ ] **[P4] 픽업 코드 `fontSize: 24` 토큰화** — 주문 탭 리팩토링(세션45 T7) 검토 시 발견. `OrderCard.tsx:98`·`OrderInfoSection.tsx:156`의 픽업 코드 monospace 표시가 인라인 `fontSize: 24`. 디자인 토큰 부재(`sm`/`xl`만 존재)로 미치환. `style.css`에 `--font-size-2xl`(24px) 신설 후 2곳 치환. 의도적 큰 표시이므로 우선순위 낮음.
 
 ### 1-4. 상품 관리 (`/products`)
 
