@@ -331,7 +331,7 @@ sticky는 탭 1개만 남긴다. `top` 매직넘버는 CSS 변수로 대체.
 
 ---
 
-### [ ] T7 — 타입체크 + e2e + 정합성 최종 검토
+### [x] T7 — 타입체크 + e2e + 정합성 최종 검토 (세션45 완료)
 
 **실행 명령:**
 ```bash
@@ -340,17 +340,18 @@ pnpm --filter e2e exec playwright test --project=chromium
 ```
 
 **코드 정합성 체크리스트:**
-- [ ] `useOrderActions.ts` 파일 삭제 완료 — `grep -r useOrderActions apps/seller/src` = 0건
-- [ ] `SUMMARY_BAR_ITEMS` 완전 제거 — `grep -r SUMMARY_BAR_ITEMS apps/seller/src` = 0건
-- [ ] 색상 상수 단일 출처 — `STATUS_COLOR`가 `_constants.ts` 한 곳에만 존재
-- [ ] `prompt(` / `alert(` — `grep -r "prompt\|alert(" apps/seller/src` = 0건 (seller 내)
-- [ ] `fontSize: [0-9]` 인라인 하드코딩 — orders 관련 파일에 잔여 없음
-- [ ] `top: 57` / `top: 114` 매직넘버 잔여 없음
+- [x] `useOrderActions.ts` 파일 삭제 완료 — `grep -r useOrderActions apps/seller/src` = 0건
+- [x] `SUMMARY_BAR_ITEMS` 완전 제거 — `grep -r SUMMARY_BAR_ITEMS apps/seller/src` = 0건
+- [x] 색상 상수 단일 출처 — `STATUS_COLOR`가 orders `_constants.ts` 한 곳에만 존재 (settlements·admin은 별도 도메인 타입)
+- [x] `prompt(` / `alert(` — orders 도메인 0건 (admin 페이지 잔존분은 본 리팩토링 범위 외)
+- [⚠] `fontSize: [0-9]` 인라인 — orders에 `fontSize: 24` 2건 잔존(픽업 코드 표시, 24용 토큰 부재) → BACKLOG §1-3 P4 등재
+- [x] `top: 57` / `top: 114` — orders 0건 (settlements/page.tsx 잔존분은 범위 외)
 
-**e2e 기준:**
+**e2e 결과 (세션45):**
 - 세션39 베이스라인 170 passed → T2에서 Summary Bar 테스트 **2건 삭제 + 탭 뱃지 테스트 1건 신설**
-  = **169 passed / 0 failed** 예상 (세션41 검토 반영)
-- 주문 탭 관련 spec 우선 확인: `seller-orders.spec.ts`, `seller-order-detail.spec.ts`
+  = **169 passed 예상** (세션41 검토 반영)
+- CI run `26086973797` (preview, workflow_dispatch) — **169 passed / 0 failed / 11 skipped** ✅ 예상치 정확 일치
+- 타입체크 `npx tsc --noEmit` 0건, biome lint orders 클린
 
 ---
 
@@ -362,7 +363,7 @@ pnpm --filter e2e exec playwright test --project=chromium
 | **세션42 (세션 A)** | T1 + T2 | 소 | 버그 수정 + sticky 정리. 빌드 리스크 낮음. 진입: `session42-prep.md` |
 | **세션 B** | T3 + T4 | 중 | 카드 경량화 + 상세 개선. 독립적 |
 | **세션 C** | T5 + T6 | 대 | 날짜 필터 + 그룹 헤더. 주요 신기능. T5 먼저 커밋 후 T6 진행 |
-| **세션 D** | T7 | 소 | 구현 후 정합성 검토 + 타입체크 + e2e 풀런 |
+| **세션 D (세션45)** | T7 | 소 | ✅ 완료 — 정합성 검토 + 타입체크 0건 + e2e 169 passed |
 
 > 세션 C는 규모가 크면 T5 단독 세션 + T6 단독 세션으로 분리 가능.
 > 세션41 검토는 **구현 전** 플랜 점검, 세션 D(T7)는 **구현 후** 결과 검증으로 역할이 다름.
