@@ -4,7 +4,9 @@ import {
   IsEnum,
   IsOptional,
   ValidateNested,
+  ValidateIf,
   IsBoolean,
+  Matches,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -50,9 +52,11 @@ export class CreateOrderDto {
   @Type(() => DeliveryAddressDto)
   deliveryAddress: DeliveryAddressDto;
 
-  @IsOptional()
+  // 일반 주문(슬롯 검증 대상)에서만 필수 — 택배·공동구매는 옵셔널
+  @ValidateIf((o) => o.saleType === 'normal' && o.deliveryMethod !== 'parcel')
   @IsString()
-  requestedDeliveryDate?: string; // YYYY-MM-DD
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'requestedDeliveryDate는 YYYY-MM-DD 형식이어야 합니다.' })
+  requestedDeliveryDate?: string;
 
   @IsOptional()
   @ValidateNested()
