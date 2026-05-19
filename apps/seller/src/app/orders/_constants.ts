@@ -1,4 +1,7 @@
-import type { Order, OrderStatus } from '@greenhub/shared';
+import type { GroupProductConfig, Order, OrderStatus } from '@greenhub/shared';
+
+/** productId → groupProductConfig 스냅샷 (공동구매 주문 배송일 조인용) */
+export type GroupConfigMap = Record<string, Pick<GroupProductConfig, 'groupDeliveryDate'>>;
 
 // ─── OrderGroup 레이어 ───────────────────────────────────────────────────────
 
@@ -117,10 +120,22 @@ function endOfDay(d: Date): Date {
 
 /**
  * 필터 기준 날짜를 반환. 활성 탭은 배송 예정일, 아카이브 탭은 주문 생성일.
+ * 공동구매 주문(`saleType === 'group'`)은 활성 탭에서 `groupConfigMap[productId]?.groupDeliveryDate`를 우선 사용.
  * 파싱 불가·null이면 `null` (→ 날짜 필터에서 제외되지 않고 "날짜 미정" 그룹으로 내려감).
  */
-export function getOrderDate(order: Order, tab: OrderGroup): Date | null {
-  const raw = isArchiveTab(tab) ? order.createdAt : order.requestedDeliveryDate;
+export function getOrderDate(
+  order: Order,
+  tab: OrderGroup,
+  groupConfigMap?: GroupConfigMap,
+): Date | null {
+  let raw: string | null | undefined;
+  if (isArchiveTab(tab)) {
+    raw = order.createdAt;
+  } else if (order.saleType === 'group') {
+    raw = groupConfigMap?.[order.productId]?.groupDeliveryDate ?? null;
+  } else {
+    raw = order.requestedDeliveryDate;
+  }
   if (!raw) return null;
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
@@ -198,13 +213,17 @@ export interface GroupHeaderMeta {
  * - 'undated': requestedDeliveryDate = null (공동구매 등) — 최하단
  * 그룹 내 정렬은 활성 탭 createdAt ASC, 아카이브 탭 createdAt DESC.
  */
-export function groupOrdersByDate(orders: Order[], tab: OrderGroup): DateGroup[] {
+export function groupOrdersByDate(
+  orders: Order[],
+  tab: OrderGroup,
+  groupConfigMap?: GroupConfigMap,
+): DateGroup[] {
   const archive = isArchiveTab(tab);
   const todayKey = toDateKey(new Date());
   const buckets = new Map<string, Order[]>();
 
   for (const order of orders) {
-    const d = getOrderDate(order, tab);
+    const d = getOrderDate(order, tab, groupConfigMap);
     let key: string;
     if (!d) {
       key = 'undated';
