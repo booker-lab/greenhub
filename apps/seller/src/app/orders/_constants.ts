@@ -169,6 +169,94 @@ export function getDateRange(
   return { from, to };
 }
 
+// ─── 날짜 그룹 헤더 (T6) ─────────────────────────────────────────────────────
+
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** 로컬 기준 'YYYY-MM-DD' 문자열 (UTC 변환 없이 표시일 기준 그룹핑) */
+function toDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export interface DateGroup {
+  dateKey: string; // 'overdue' | 'YYYY-MM-DD' | 'undated'
+  orders: Order[];
+}
+
+export interface GroupHeaderMeta {
+  label: string;
+  urgency: 'overdue' | 'today' | 'normal';
+}
+
+/**
+ * 필터된 주문을 날짜 그룹으로 분할·정렬.
+ * - 'overdue': 배송 예정일 경과 (활성 탭 한정) — 최상단
+ * - 'YYYY-MM-DD': 해당 날짜 — 활성 탭 ASC, 아카이브 탭 DESC
+ * - 'undated': requestedDeliveryDate = null (공동구매 등) — 최하단
+ * 그룹 내 정렬은 활성 탭 createdAt ASC, 아카이브 탭 createdAt DESC.
+ */
+export function groupOrdersByDate(orders: Order[], tab: OrderGroup): DateGroup[] {
+  const archive = isArchiveTab(tab);
+  const todayKey = toDateKey(new Date());
+  const buckets = new Map<string, Order[]>();
+
+  for (const order of orders) {
+    const d = getOrderDate(order, tab);
+    let key: string;
+    if (!d) {
+      key = 'undated';
+    } else {
+      const dayKey = toDateKey(d);
+      key = !archive && dayKey < todayKey ? 'overdue' : dayKey;
+    }
+    const arr = buckets.get(key);
+    if (arr) arr.push(order);
+    else buckets.set(key, [order]);
+  }
+
+  for (const arr of buckets.values()) {
+    arr.sort((a, b) =>
+      archive ? b.createdAt.localeCompare(a.createdAt) : a.createdAt.localeCompare(b.createdAt),
+    );
+  }
+
+  const entries = [...buckets.entries()];
+  entries.sort(([a], [b]) => {
+    if (a === 'overdue') return -1;
+    if (b === 'overdue') return 1;
+    if (a === 'undated') return 1;
+    if (b === 'undated') return -1;
+    return archive ? b.localeCompare(a) : a.localeCompare(b);
+  });
+
+  return entries.map(([dateKey, groupOrders]) => ({ dateKey, orders: groupOrders }));
+}
+
+/** 그룹 헤더 라벨·강조 메타 반환 */
+export function getGroupHeaderMeta(dateKey: string, archive: boolean): GroupHeaderMeta {
+  if (dateKey === 'overdue') return { label: '지연', urgency: 'overdue' };
+  if (dateKey === 'undated') return { label: '날짜 미정', urgency: 'normal' };
+
+  const d = new Date(`${dateKey}T00:00:00`);
+  const todayKey = toDateKey(new Date());
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = toDateKey(yesterday);
+  const md = `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAYS[d.getDay()]})`;
+
+  if (archive) {
+    if (dateKey === todayKey) return { label: '오늘', urgency: 'normal' };
+    if (dateKey === yesterdayKey) return { label: '어제', urgency: 'normal' };
+    return { label: md, urgency: 'normal' };
+  }
+
+  if (dateKey === todayKey) return { label: '오늘 배송', urgency: 'today' };
+  return { label: md, urgency: 'normal' };
+}
+
 export function formatRelativeTime(iso: unknown): string {
   const date =
     iso && typeof iso === 'object' && 'toDate' in iso
