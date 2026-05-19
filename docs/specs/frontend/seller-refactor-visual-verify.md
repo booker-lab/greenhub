@@ -1,6 +1,6 @@
 # 프론트 리팩토링 — 육안 검증 체크리스트
 
-> 작성: 2026-05-19 (세션45 종료 후) · 최종 갱신: 2026-05-20 (세션50 종료 후)
+> 작성: 2026-05-19 (세션45 종료 후) · 최종 갱신: 2026-05-20 (세션51 — T6 시드 + 신규 e2e spec)
 > 목적: 완료된 셀러앱·소비자앱 프론트 리팩토링 결과를 **브라우저에서 사람이 직접 눈으로** 확인.
 > 범위: 코드/타입체크/e2e가 아닌 **실사용 화면 검증** 전용. 리팩토링 세션이 끝날 때마다 이 문서에 섹션을 추가한다.
 
@@ -14,6 +14,7 @@
 | 소비자 계정 | `consumer@test.com` / (세션34 강한비번 — `test_accounts` 메모리 참조) |
 | 진입 | 로그인 후 하단 BottomNav로 각 탭 이동 |
 | 권장 뷰포트 | 모바일 PWA 폭 (≤480px) — 데스크톱 브라우저는 모바일 모드로 |
+| e2e 시드 (T6) | `node scripts/seed-e2e-orders.mjs` — 셀러 store에 `e2e-normal-order-001` + `e2e-group-order-001` + `groupProductConfig`, 소비자 활성 상품 store에 14일치 `dailyCaps` 시드 |
 
 검증 표기: 통과 `[x]` · 실패 `[ ]`(메모란에 현상 기재) · 해당없음 `[-]`
 
@@ -231,6 +232,23 @@
 | 86 | 일반 토글로 전환 후 다시 공구 | 그룹 헤더가 정상 재계산(stale 데이터 없음) | [ ] | |
 | 87 | 공구 상품 셀러가 `groupDeliveryDate` 변경 후 페이지 재진입 | 변경된 날짜로 그룹 헤더 갱신됨 | [ ] | onSnapshot이 아닌 getDoc — 새 진입 필요 |
 | 88 | 공구 토글 활성 시 콘솔/네트워크 | `groupProductConfig` fetch가 표시 후보 productId 개수만큼만(중복 제거) 발생 | [-] | 개발자 도구 검증 |
+
+### D-T6 — e2e 회귀 가드 (세션51 시드 + 신규 spec)
+
+> 선행: 위 검증 환경의 `seed-e2e-orders.mjs` 1회 실행.
+> 신규 e2e: `apps/e2e/tests/consumer-delivery-date.spec.ts`, `seller-orders.spec.ts`(T6 섹션 추가).
+> 로컬 풀런이 #CL-23 set-cookie race로 막힐 수 있어 수동 검증 보조.
+
+| # | 확인 항목 | 통과 기준 | 결과 | 메모 |
+|---|----------|----------|:----:|------|
+| 89 | 시드 스크립트 실행 결과 콘솔 | `dailyCaps 14건`, `e2e-normal-order-001`, `e2e-group-order-001`, `groupProductConfig/e2e-group-product-001` 모두 OK | [ ] | |
+| 90 | 셀러 주문 탭 일반 토글 (시드 후) | "E2E 일반 상품" 카드가 처리 필요 그룹 + `requestedDeliveryDate` 일자 헤더에 노출 | [ ] | |
+| 91 | 셀러 주문 탭 공구 토글 (시드 후) | "E2E 공구 상품" 카드가 처리 필요 그룹 + `2026-05-26` 류 `groupDeliveryDate` 헤더에 노출 | [ ] | |
+| 92 | DevTools — `getByTestId('sale-type-toggle-normal')` 쿼리 | 콘솔에서 1개 매칭 | [ ] | 개발자 도구 |
+| 93 | DevTools — `getByTestId('sale-type-toggle-group')` 쿼리 | 콘솔에서 1개 매칭 | [ ] | 개발자 도구 |
+| 94 | 소비자 일반 상품 상세 (시드 후) | `DeliveryDatePicker`에 `N석` 표기된 활성 일자가 14일 범위 내 다수 노출 | [ ] | |
+| 95 | 소비자 택배 배송 토글 | 캘린더 즉시 미노출(슬롯 미검증 분기) | [ ] | |
+| 96 | 신규 spec preview 동기화 후 CI 풀런 | `consumer-delivery-date.spec.ts` + `seller-orders.spec.ts` 신규 5건 모두 passed | [-] | `sync-preview` 후 e2e workflow |
 
 ---
 
