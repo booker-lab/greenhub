@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation';
 import type { Order } from '@greenhub/shared';
 import { Alert, Badge, Button, Group, Paper, Text } from '@mantine/core';
-import { useOrderActions } from '@/hooks/useOrderActions';
 import {
   ACCENT_BORDER,
   DELIVERY_LABEL,
@@ -12,22 +11,10 @@ import {
   formatRelativeTime,
 } from '../_constants';
 
-export function OrderCard({ order, storeId }: { order: Order; storeId: string | null }) {
+export function OrderCard({ order }: { order: Order }) {
   const router = useRouter();
-  const {
-    actionLoading,
-    actionError,
-    showPrepareForm,
-    setShowPrepareForm,
-    preparedAtInput,
-    setPreparedAtInput,
-    handlePrepare,
-    handleCancel,
-  } = useOrderActions(storeId, order.id);
 
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED';
-  const canCancel =
-    order.status === 'ACCEPTED' || order.status === 'CONFIRMED' || order.status === 'PREPARING';
 
   return (
     <Paper
@@ -65,76 +52,18 @@ export function OrderCard({ order, storeId }: { order: Order; storeId: string | 
         {order.totalAmount.toLocaleString()}원
       </Text>
 
-      {/* 준비 시작 폼 */}
-      {showPrepareForm && (
-        <Paper
-          p="md"
-          radius="md"
-          mb="sm"
-          style={{ background: 'var(--color-status-info-bg)', border: '1px solid var(--color-border)' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Text
-            style={{
-              fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-status-info-text)',
-              fontWeight: 'var(--fw-medium)',
-            }}
-            mb="xs"
-          >
-            드라이버 수거 예정 시간 (선택)
-          </Text>
-          <input
-            type="datetime-local"
-            value={preparedAtInput}
-            onChange={(e) => setPreparedAtInput(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid var(--color-border)',
-              borderRadius: 8,
-              fontSize: 14,
-              marginBottom: 8,
-              background: 'var(--color-bg)',
-            }}
-          />
-          <Group gap="xs">
-            <Button onClick={handlePrepare} disabled={actionLoading} flex={1} size="sm" radius="md" color="brand">
-              확인
-            </Button>
-            <Button
-              onClick={() => { setShowPrepareForm(false); setPreparedAtInput(''); }}
-              flex={1}
-              size="sm"
-              radius="md"
-              variant="default"
-            >
-              취소
-            </Button>
-          </Group>
-        </Paper>
-      )}
-
-      {/* 액션 버튼 */}
-      {!showPrepareForm && (canPrepare || canCancel) && (
+      {/* 액션 버튼 — 준비 시작은 상세 페이지에서 수행 */}
+      {canPrepare && (
         <Group gap="xs" onClick={(e) => e.stopPropagation()}>
-          {canPrepare && (
-            <Button
-              onClick={() => setShowPrepareForm(true)}
-              disabled={actionLoading}
-              flex={1}
-              size="sm"
-              radius="md"
-              color="brand"
-            >
-              준비 시작
-            </Button>
-          )}
-          {canCancel && (
-            <Button onClick={handleCancel} disabled={actionLoading} flex={1} size="sm" radius="md" variant="outline" color="red">
-              강제 취소
-            </Button>
-          )}
+          <Button
+            onClick={() => router.push(`/orders/${order.id}`)}
+            flex={1}
+            size="sm"
+            radius="md"
+            color="brand"
+          >
+            준비 시작
+          </Button>
         </Group>
       )}
 
@@ -147,12 +76,6 @@ export function OrderCard({ order, storeId }: { order: Order; storeId: string | 
             모집 마감 후 인원 충족 시 자동 확정됩니다.
           </Text>
         </Alert>
-      )}
-
-      {actionError && (
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt="xs">
-          {actionError}
-        </Text>
       )}
 
       {order.status === 'HUB_ARRIVED' && order.pickupCode && (
