@@ -109,6 +109,23 @@ export default function CartPage() {
                   </Badge>
                 )}
 
+                {item.requestedDeliveryDate && (
+                  <Text
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-text-disabled)',
+                    }}
+                    mt={4}
+                  >
+                    배송 희망일{' '}
+                    {new Date(item.requestedDeliveryDate).toLocaleDateString('ko-KR', {
+                      month: 'long',
+                      day: 'numeric',
+                      weekday: 'short',
+                    })}
+                  </Text>
+                )}
+
                 <Text
                   style={{
                     fontSize: 'var(--font-size-md)',

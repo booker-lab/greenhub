@@ -49,6 +49,7 @@ function SingleCheckoutContent() {
   const saleType = (params.get('saleType') ?? 'normal') as SaleType;
   const deliveryMethod = (params.get('deliveryMethod') ?? 'direct') as DeliveryMethod;
   const totalAmount = Number(params.get('totalAmount') ?? 0);
+  const requestedDeliveryDate = params.get('requestedDeliveryDate') ?? undefined;
 
   const [product, setProduct] = useState<Product | null>(null);
 
@@ -75,6 +76,7 @@ function SingleCheckoutContent() {
     saleType,
     deliveryMethod,
     deliveryAddress: address,
+    ...(requestedDeliveryDate ? { requestedDeliveryDate } : {}),
     ...(saleType === 'group' && {
       groupBuyConsent: { agreed: true, agreedAt: new Date().toISOString() },
     }),
@@ -107,7 +109,7 @@ function SingleCheckoutContent() {
       canPay={canPay}
       error={error}
       onPay={requestPayment}
-      singleSummary={{ quantity, deliveryMethod }}
+      singleSummary={{ quantity, deliveryMethod, requestedDeliveryDate }}
     />
   );
 }
@@ -164,6 +166,9 @@ function CartCheckoutContent() {
           saleType: item.saleType,
           deliveryMethod: item.deliveryMethod,
           deliveryAddress: address,
+          ...(item.requestedDeliveryDate
+            ? { requestedDeliveryDate: item.requestedDeliveryDate }
+            : {}),
           ...(item.saleType === 'group' && {
             groupBuyConsent: { agreed: true, agreedAt: new Date().toISOString() },
           }),
@@ -230,7 +235,11 @@ interface CheckoutFormProps {
   canPay: boolean;
   error: string | null;
   onPay: () => void;
-  singleSummary?: { quantity: number; deliveryMethod: DeliveryMethod };
+  singleSummary?: {
+    quantity: number;
+    deliveryMethod: DeliveryMethod;
+    requestedDeliveryDate?: string;
+  };
 }
 
 const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
@@ -302,20 +311,37 @@ function CheckoutForm({
         <Stack gap={4}>
           {items.length > 0
             ? items.map((item) => (
-                <Group key={item.productId} justify="space-between">
-                  <Text
-                    style={{
-                      fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-secondary)',
-                      flex: 1,
-                    }}
-                  >
-                    {item.name} × {item.quantity}
-                  </Text>
-                  <Text style={{ fontSize: 'var(--font-size-sm)' }}>
-                    {(item.price * item.quantity).toLocaleString()}원
-                  </Text>
-                </Group>
+                <Stack key={item.productId} gap={2}>
+                  <Group justify="space-between">
+                    <Text
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text-secondary)',
+                        flex: 1,
+                      }}
+                    >
+                      {item.name} × {item.quantity}
+                    </Text>
+                    <Text style={{ fontSize: 'var(--font-size-sm)' }}>
+                      {(item.price * item.quantity).toLocaleString()}원
+                    </Text>
+                  </Group>
+                  {item.requestedDeliveryDate && (
+                    <Text
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text-disabled)',
+                      }}
+                    >
+                      배송 희망일{' '}
+                      {new Date(item.requestedDeliveryDate).toLocaleDateString('ko-KR', {
+                        month: 'long',
+                        day: 'numeric',
+                        weekday: 'short',
+                      })}
+                    </Text>
+                  )}
+                </Stack>
               ))
             : singleSummary && (
                 <Group justify="space-between">
@@ -341,6 +367,22 @@ function CheckoutForm({
               </Text>
               <Text style={{ fontSize: 'var(--font-size-sm)' }}>
                 {DELIVERY_LABELS[singleSummary.deliveryMethod]}
+              </Text>
+            </Group>
+          )}
+          {singleSummary?.requestedDeliveryDate && (
+            <Group justify="space-between">
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
+                배송 희망일
+              </Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)' }}>
+                {new Date(singleSummary.requestedDeliveryDate).toLocaleDateString('ko-KR', {
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'short',
+                })}
               </Text>
             </Group>
           )}
