@@ -1,4 +1,4 @@
-import type { OrderStatus } from '@greenhub/shared';
+import type { Order, OrderStatus } from '@greenhub/shared';
 
 // ─── OrderGroup 레이어 ───────────────────────────────────────────────────────
 
@@ -84,6 +84,90 @@ export const DELIVERY_LABEL: Record<string, string> = {
   hub: '거점 픽업',
   parcel: '택배',
 };
+
+// ─── 날짜 범위 필터 (T5) ─────────────────────────────────────────────────────
+
+export type DateRangePreset = 'today' | 'week' | 'month' | 'custom';
+
+export const DATE_PRESETS: { key: DateRangePreset; label: string }[] = [
+  { key: 'today', label: '오늘' },
+  { key: 'week', label: '이번 주' },
+  { key: 'month', label: '이번 달' },
+  { key: 'custom', label: '직접 입력' },
+];
+
+/** 아카이브 탭(완료·취소)은 `createdAt`, 그 외 활성 탭은 `requestedDeliveryDate` 기준 */
+const ARCHIVE_TABS = new Set<OrderGroup>(['DONE', 'CANCELLED']);
+
+export function isArchiveTab(tab: OrderGroup): boolean {
+  return ARCHIVE_TABS.has(tab);
+}
+
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+/**
+ * 필터 기준 날짜를 반환. 활성 탭은 배송 예정일, 아카이브 탭은 주문 생성일.
+ * 파싱 불가·null이면 `null` (→ 날짜 필터에서 제외되지 않고 "날짜 미정" 그룹으로 내려감).
+ */
+export function getOrderDate(order: Order, tab: OrderGroup): Date | null {
+  const raw = isArchiveTab(tab) ? order.createdAt : order.requestedDeliveryDate;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * 프리셋·탭에 따른 날짜 범위(inclusive)를 반환. `custom`은 from/to 입력값 사용.
+ * 입력이 비었거나 from > to면 `null` (→ 호출부에서 날짜 필터 미적용).
+ */
+export function getDateRange(
+  preset: DateRangePreset,
+  tab: OrderGroup,
+  customFrom = '',
+  customTo = '',
+): { from: Date; to: Date } | null {
+  const today = startOfDay(new Date());
+  const archive = isArchiveTab(tab);
+
+  if (preset === 'today') {
+    return { from: today, to: endOfDay(today) };
+  }
+
+  if (preset === 'week') {
+    if (archive) {
+      const from = new Date(today);
+      from.setDate(from.getDate() - 6);
+      return { from, to: endOfDay(today) };
+    }
+    const to = new Date(today);
+    to.setDate(to.getDate() + 6);
+    return { from: today, to: endOfDay(to) };
+  }
+
+  if (preset === 'month') {
+    const from = new Date(today.getFullYear(), today.getMonth(), 1);
+    const to = endOfDay(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+    return { from, to };
+  }
+
+  // custom
+  if (!customFrom || !customTo) return null;
+  const from = startOfDay(new Date(customFrom));
+  const to = endOfDay(new Date(customTo));
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
+  if (from > to) return null;
+  return { from, to };
+}
 
 export function formatRelativeTime(iso: unknown): string {
   const date =
