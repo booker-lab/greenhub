@@ -3,24 +3,24 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-19 (세션42 — 셀러 주문 탭 리팩토링 세션 A: T1+T2)
+최종 수정: 2026-05-19 (세션43 — 셀러 주문 탭 리팩토링 세션 B: T3+T4)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~42 완료. **세션40** = 셀러 주문 탭 감사 + T1~T7 리팩토링 플랜 수립.
-**세션41** = 플랜 정합성 검토(불일치 7건 발견·문서 반영). **세션42**(세션 A) = T1+T2 구현 — 태스크당 1커밋.
-T1(`2c4de86`): 상태 색상 버그 수정 — `_constants.ts` STATUS_COLOR를 D1 기준으로 교정(ACCEPTED·CONFIRMED·
-RECRUITING orange / PREPARING blue), `ACCENT_BORDER` 동반 교정, `OrderRow.tsx` 중복 상수 3개 삭제 후
-`_constants` import, 주문번호 카드 표시 6자→8자. T2(`20345eb`): 요약바 제거 — `globals.css`에
-`--header-height`·`--bottom-nav-height` 변수 신설, 탭 sticky `top: var(--header-height)` 단일화,
-인라인 fontSize 토큰화, `SUMMARY_BAR_ITEMS` 삭제, e2e Summary Bar 테스트 2건 삭제+탭 뱃지 테스트 신설.
-seller 타입체크 통과(`pnpm --filter seller exec tsc --noEmit`). 색상 육안 확인·e2e 풀런은 미수행(세션 D).
-BUG-16·UX-11은 별도 후속(BACKLOG §12 등재).
+세션22까지 + 세션23~43 완료. **세션40** = 셀러 주문 탭 감사 + T1~T7 리팩토링 플랜 수립.
+**세션41** = 플랜 정합성 검토(불일치 7건 발견·문서 반영). **세션42**(세션 A) = T1+T2. **세션43**(세션 B) = T3+T4 — 태스크당 1커밋.
+T3(`4fa1daf`): OrderCard 경량화 — 인라인 준비 폼·datetime-local input·강제 취소 버튼 제거(D3 prompt() PWA 위반),
+"준비 시작" 버튼은 상세 페이지 이동으로 교체(canPrepare 시), `useOrderActions.ts` 삭제·미사용 storeId prop 제거,
+HUB_ARRIVED 픽업 코드 블록 유지. T4(`907203d`): 주문 상세 개선 — not-found 인라인 Box → 공통 `EmptyState`
+(돋보기 SVG·돌아가기는 action prop), 액션 버튼을 하단 고정 footer로 이동(D4 — `position:fixed`,
+`bottom: calc(var(--bottom-nav-height)+safe-area)`, BottomNav 전역 렌더라 bottom:0 불가), showPrepareForm·
+READONLY 시 footer 미노출, PageShell paddingBottom 200/96 분기, 인라인 fontSize:14 토큰화.
+seller 타입체크 통과·biome 신규 에러 0건. sticky footer 육안 검증·e2e 풀런은 미수행(세션 D).
 
-**다음 세션 진입점**: `docs/archive/sessions/session43-prep.md` (= 세션 B, T3+T4 구현) · 플랜 `docs/specs/frontend/seller-orders-refactor-plan.md` §T3·§T4.
-세션42=A(T1+T2 ✅) → B(T3+T4) → C(T5+T6) → D(T7 검증) 순서. e2e 베이스라인 170/0 (T2 후 169/0 예상).
+**다음 세션 진입점**: `docs/archive/sessions/session44-prep.md` (= 세션 C, T5+T6 구현) · 플랜 `docs/specs/frontend/seller-orders-refactor-plan.md` §T5·§T6.
+세션42=A(T1+T2 ✅) → 43=B(T3+T4 ✅) → C(T5+T6) → D(T7 검증) 순서. e2e 베이스라인 170/0.
 잔여 P3: Driver Kakao Maps SDK + 셀러 주문 탭 리팩토링(세션 A~D). P4: 준비 물량 공동구매·당일 배송 컷오프.
 
 ---
