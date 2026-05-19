@@ -3,11 +3,18 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useOrders } from '@/hooks/useOrders';
-import { OrderCard } from './_components/OrderCard';
+import { DateSection } from './_components/DateSection';
 import {
+  DATE_PRESETS,
   GROUP_TABS,
   STATUS_GROUP_MAP,
   IN_DELIVERY_SUBFILTERS,
+  getDateRange,
+  getGroupHeaderMeta,
+  getOrderDate,
+  groupOrdersByDate,
+  isArchiveTab,
+  type DateRangePreset,
   type OrderGroup,
 } from './_constants';
 import { Badge, Box, Container, Group, Stack, Text, UnstyledButton } from '@mantine/core';
@@ -24,6 +31,9 @@ export default function OrdersPage() {
   const { orders, loading, error, groupCounts, firebaseReady } = useOrders(storeId);
   const [activeTab, setActiveTab] = useState<OrderGroup>('ACTION_REQUIRED');
   const [subFilter, setSubFilter] = useState<'ALL' | 'DELIVERING' | 'HUB_ARRIVED'>('ALL');
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('week');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -31,10 +41,19 @@ export default function OrdersPage() {
     if (tab && VALID_TABS.has(tab)) setActiveTab(tab);
   }, []);
 
+  const customInvalid =
+    datePreset === 'custom' && !!customFrom && !!customTo && customFrom > customTo;
+  const dateRange = getDateRange(datePreset, activeTab, customFrom, customTo);
+
   const filteredOrders = orders.filter((o) => {
     if (STATUS_GROUP_MAP[o.status] !== activeTab) return false;
-    if (activeTab === 'IN_DELIVERY' && subFilter !== 'ALL') {
-      return o.status === subFilter;
+    if (activeTab === 'IN_DELIVERY' && subFilter !== 'ALL' && o.status !== subFilter) {
+      return false;
+    }
+    if (dateRange) {
+      const d = getOrderDate(o, activeTab);
+      // requestedDeliveryDate = null(공동구매 등)은 제외하지 않고 "날짜 미정"으로 내려보냄 (T6)
+      if (d && (d < dateRange.from || d > dateRange.to)) return false;
     }
     return true;
   });
@@ -47,6 +66,67 @@ export default function OrdersPage() {
           <ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />
         }
       />
+
+      {/* 날짜 범위 필터 */}
+      <Box style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
+        <Container size="sm" py="xs">
+          <Group gap="xs">
+            {DATE_PRESETS.map((p) => (
+              <UnstyledButton
+                key={p.key}
+                onClick={() => setDatePreset(p.key)}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 'var(--font-size-sm)',
+                  borderRadius: 99,
+                  backgroundColor:
+                    datePreset === p.key ? 'var(--color-text)' : 'var(--color-surface-muted)',
+                  color: datePreset === p.key ? 'var(--color-bg)' : 'var(--color-text-disabled)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {p.label}
+              </UnstyledButton>
+            ))}
+          </Group>
+
+          {datePreset === 'custom' && (
+            <Group gap="xs" mt="xs" align="center">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: 'var(--font-size-sm)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 8,
+                  color: 'var(--color-text)',
+                }}
+              />
+              <Text style={{ color: 'var(--color-text-disabled)' }}>~</Text>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: 'var(--font-size-sm)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 8,
+                  color: 'var(--color-text)',
+                }}
+              />
+            </Group>
+          )}
+
+          {customInvalid && (
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt={4}>
+              시작일이 종료일보다 늦습니다
+            </Text>
+          )}
+        </Container>
+      </Box>
 
       {/* 상태 탭 */}
       <Box
@@ -112,9 +192,9 @@ export default function OrdersPage() {
         </Box>
       )}
 
-      {/* 주문 목록 */}
+      {/* 주문 목록 — 날짜 그룹 섹션 */}
       <Container size="sm" px="md" py="md">
-        <Stack gap="sm">
+        <Stack gap="lg">
           {(loading || !firebaseReady) && <LoadingState />}
 
           {!loading && firebaseReady && filteredOrders.length === 0 && (
@@ -138,9 +218,15 @@ export default function OrdersPage() {
             />
           )}
 
-          {filteredOrders.map((order) => (
-            <OrderCard key={order.id} order={order} storeId={storeId} />
-          ))}
+          {!loading &&
+            firebaseReady &&
+            groupOrdersByDate(filteredOrders, activeTab).map((group) => (
+              <DateSection
+                key={group.dateKey}
+                meta={getGroupHeaderMeta(group.dateKey, isArchiveTab(activeTab))}
+                orders={group.orders}
+              />
+            ))}
         </Stack>
       </Container>
     </PageShell>

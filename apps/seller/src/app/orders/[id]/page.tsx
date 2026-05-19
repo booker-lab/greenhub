@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Box, Button, Container, Stack, Text, UnstyledButton } from '@mantine/core';
 import { PageShell } from '@/components/PageShell';
 import { PageHeader } from '@/components/PageHeader';
-import { LoadingState } from '@/components/StateViews';
+import { EmptyState, LoadingState } from '@/components/StateViews';
 import { CANCELLABLE_STATUSES, READONLY_STATUSES } from './_lib';
 import { useOrderDetail } from './_hooks/useOrderDetail';
 import { useOrderDetailActions } from './_hooks/useOrderDetailActions';
@@ -48,21 +48,40 @@ export default function OrderDetailPage() {
           minHeight: '100vh',
           backgroundColor: 'var(--color-surface-muted)',
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 12,
         }}
       >
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-          주문을 찾을 수 없습니다
-        </Text>
-        <UnstyledButton
-          onClick={() => router.back()}
-          style={{ color: 'var(--color-primary)', textDecoration: 'underline', fontSize: 14 }}
-        >
-          돌아가기
-        </UnstyledButton>
+        <EmptyState
+          icon={
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.35-4.35" />
+            </svg>
+          }
+          text="주문을 찾을 수 없습니다"
+          action={
+            <UnstyledButton
+              onClick={() => router.back()}
+              style={{
+                color: 'var(--color-primary)',
+                textDecoration: 'underline',
+                fontSize: 'var(--font-size-sm)',
+              }}
+            >
+              돌아가기
+            </UnstyledButton>
+          }
+        />
       </Box>
     );
   }
@@ -70,13 +89,14 @@ export default function OrderDetailPage() {
   const isReadonly = READONLY_STATUSES.includes(order.status);
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED';
   const canCancel = CANCELLABLE_STATUSES.includes(order.status);
+  const showFooter = !isReadonly && !showPrepareForm && (canPrepare || canCancel);
   const deliveryDate =
     order.saleType === 'normal'
       ? order.requestedDeliveryDate
       : (groupConfig?.groupDeliveryDate?.slice(0, 10) ?? null);
 
   return (
-    <PageShell paddingBottom={96}>
+    <PageShell paddingBottom={showFooter ? 200 : 96}>
       <PageHeader title="주문 상세" onBack={() => router.back()} />
 
       <Container size="sm" px="md" py="md">
@@ -107,7 +127,32 @@ export default function OrderDetailPage() {
             />
           )}
 
-          {!isReadonly && !showPrepareForm && (
+          {isReadonly && order.status !== 'CANCELLED' && (
+            <Text
+              ta="center"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              py="xs"
+            >
+              발송 이후 단계입니다. 취소가 필요한 경우 소비자 반품 신청을 통해 처리됩니다.
+            </Text>
+          )}
+        </Stack>
+      </Container>
+
+      {/* 액션 버튼 — BottomNav 위에 고정 (D4) */}
+      {showFooter && (
+        <Box
+          style={{
+            position: 'fixed',
+            left: 0,
+            right: 0,
+            bottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom))',
+            backgroundColor: 'var(--color-bg)',
+            borderTop: '1px solid var(--color-border)',
+            zIndex: 20,
+          }}
+        >
+          <Container size="sm" px="md" py="sm">
             <Stack gap="xs">
               {canPrepare && (
                 <Button
@@ -138,19 +183,9 @@ export default function OrderDetailPage() {
                 </Button>
               )}
             </Stack>
-          )}
-
-          {isReadonly && order.status !== 'CANCELLED' && (
-            <Text
-              ta="center"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              py="xs"
-            >
-              발송 이후 단계입니다. 취소가 필요한 경우 소비자 반품 신청을 통해 처리됩니다.
-            </Text>
-          )}
-        </Stack>
-      </Container>
+          </Container>
+        </Box>
+      )}
 
       <CancelOrderModal
         opened={showCancelModal}
