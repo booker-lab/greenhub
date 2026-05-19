@@ -49,7 +49,15 @@ export function useOrders(storeId: string | null): UseOrdersResult {
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order);
+        const items = snap.docs.map((d) => {
+          const data = d.data();
+          // Firestore Timestamp → ISO8601 문자열 정규화 (Order 타입은 string).
+          // 미변환 시 localeCompare/new Date()가 깨짐 (useStoreProducts와 동일 패턴).
+          for (const key of ['createdAt', 'updatedAt', 'requestedDeliveryDate', 'preparedAt']) {
+            if (data[key]?.toDate) data[key] = data[key].toDate().toISOString();
+          }
+          return { id: d.id, ...data } as Order;
+        });
         setOrders(items);
         setLoading(false);
         setError(null);
