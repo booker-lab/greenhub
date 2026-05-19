@@ -59,15 +59,36 @@ Firestore 실데이터 진단(`scripts/diag-order-dates.mjs`):
 
 ## 설계 결정
 
+> **세션47 검토 반영 (2026-05-20)** — 아래 D1·D3에 코드 대조 결과로
+> 중대한 정정이 반영됐다. ⚠️ 표시 항목 참조.
+
 ### D1. 일반 상품 배송일 — 소비자가 슬롯 열린 날짜에서 선택
 
 상품 상세 페이지(`ProductActions.tsx`)에 배송일 선택 UI를 신설한다.
 사용자 결정: **선택 시점 = 상품 상세** (체크아웃 아님 — `useDailyCap`이 이미
 `ProductActions`에 연결돼 있어 자연스러움).
 
-- 셀러 슬롯 캘린더의 거울상 — `GET /stores/{id}/daily-caps?from=&to=`로
-  월 범위 슬롯 조회, **`totalCap - usedSlots > 0`인 날짜만 선택 가능**.
-- 과거 날짜·슬롯 미설정 날짜·마감(잔여 0) 날짜는 disabled.
+- ⚠️ **세션47 정정 — 데이터 접근은 Firestore 직접 쿼리, REST API 아님.**
+  플랜 초안은 `GET /stores/{id}/daily-caps?from=&to=`를 소비자가 호출한다고
+  가정했으나, 코드 대조 결과 **`DailyCapsController`는 `@Roles('seller',
+  'admin')` 가드**가 걸려 있어 소비자 JWT로는 403. 또한 소비자 측
+  `useDailyCap`은 처음부터 REST가 아니라 Firestore `onSnapshot`
+  (`doc(db, 'dailyCaps', docId)`)으로 단일 날짜 문서를 구독한다.
+  → **`useDailyCap`을 월 범위 Firestore 쿼리로 확장**한다:
+  `query(collection(db,'dailyCaps'), where('storeId','==',id),
+  where('date','>=',from), where('date','<=',to))`. 셀러 API
+  `getDailyCaps`의 쿼리 형태와 동일하므로 Firestore 보안 규칙만
+  소비자 read 허용이면 됨(규칙 확인 필요 — 미해결 항목 추가).
+- ⚠️ **세션47 정정 — `usedSlots` 부재 가능성.** `updateDailyCap`은
+  `set({ id, storeId, date, totalCap }, {merge:true})`만 한다 —
+  `usedSlots` 필드는 **주문이 한 건이라도 들어와 `orders-create`
+  트랜잭션이 `t.update`로 써야 비로소 생긴다.** 따라서 슬롯 미소모 날짜의
+  `dailyCaps` 문서에는 `usedSlots`가 **아예 없다.** picker 잔여 계산은
+  `totalCap - (usedSlots ?? 0) > 0`으로 **널 병합 필수.**
+  (`useDailyCap`의 현재 `remainingSlots` 계산은 `dailyCap.usedSlots`를
+  직접 빼지만 슬롯 0인 신규 문서에서 `undefined` 산술 → `NaN` 버그
+  소지. T1에서 동반 수정.)
+- 과거 날짜·슬롯 미설정(문서 없음) 날짜·마감(잔여 0) 날짜는 disabled.
 - 선택값을 `handleBuyNow`의 `URLSearchParams`와 `handleAddToCart`의
   `addItem` 양쪽에 `requestedDeliveryDate`로 전달.
 - 공동구매(`saleType: group`)일 때는 이 UI 미노출 — 배송일이 이미
@@ -80,6 +101,16 @@ Firestore 실데이터 진단(`scripts/diag-order-dates.mjs`):
 셀러 주문 탭이 공구 주문의 배송일을 읽으려면 `groupProductConfig`를
 productId별로 fetch·조인해야 한다(D4 참조).
 
+> **세션47 검토 — `groupDeliveryDate` 타입 확정.** `GroupProductConfig`
+> 타입(`product.types.ts:57`)은 `groupDeliveryDate: string`(ISO8601).
+> 세션46 진단의 "Timestamp vs string 혼재" 우려는 **저장소(Firestore)
+> 레벨에서는 Timestamp**일 수 있으나, 소비자 `useGroupProduct`가
+> `onSnapshot` 콜백에서 `data.groupDeliveryDate?.toDate &&
+> ...toISOString()`로 이미 정규화한다. ⚠️ **T5의 셀러 측 조인은 이
+> 정규화를 거치지 않으므로** `groupProductConfig` 문서를 직접 읽으면
+> Firestore Timestamp일 수 있다 — T5 조인 코드에서 `useGroupProduct`와
+> 동일한 `toDate()` 정규화를 반드시 적용한다.
+
 ### D3. API — 선택 배송일 기준 슬롯 검증
 
 `orders-create.service.ts`의 `capId` 산출을 **주문 당일 고정 → 선택
@@ -90,8 +121,23 @@ productId별로 fetch·조인해야 한다(D4 참조).
 - `capId = ${storeId}_${dto.requestedDeliveryDate}` (일반 주문).
 - 공동구매·택배(`parcel`)는 기존대로 슬롯 미검증 — 분기 유지.
 - 슬롯 미설정/마감 시 기존 `ConflictException` 메시지 재사용.
+- ⚠️ **세션47 정정 — `dateStr`/`capId` 사용처는 한 곳뿐.**
+  코드 대조 결과 `orders-create.service.ts`의 `new Date()` 당일 고정은
+  78~79줄 **단 1쌍**(`dateStr`, `capId`)이며 84줄 트랜잭션 내
+  `dailyCaps/${capId}` 참조 외 다른 사용처 없음. `payments.service` 등
+  타 모듈의 `dailyCaps` 참조도 없음(grep 확인). → 변경 범위는 78~79·163줄
+  3곳으로 좁다.
+- ⚠️ **세션47 정정 — 슬롯 검증 분기 조건.** 현재 84줄 가드는
+  `deliveryMethod !== 'parcel' && saleType !== 'group'`. 즉 **택배는
+  배송 방법이, 공구는 판매 유형이 기준.** `requestedDeliveryDate` 필수화도
+  이 조건과 정확히 일치해야 함 — `saleType==='normal' &&
+  deliveryMethod!=='parcel'`인 주문만 배송일 필수. (일반 상품을 택배로
+  주문하면 슬롯 미검증이므로 배송일도 불필요 — DTO `@ValidateIf`에 두
+  조건 모두 반영.)
+- `requestedDeliveryDate` 저장값(163줄 `dto.requestedDeliveryDate ?? null`)
+  — 슬롯 검증 대상 주문은 필수값, 그 외(택배·공구)는 `null` 유지.
 - **로직 변경 주의**: 슬롯 차감 날짜가 바뀌므로 `dailyCaps` 트랜잭션
-  영향. 기존 "당일 슬롯" 가정 코드 전수 점검.
+  영향. 위 정정으로 사용처는 좁으나 분기 조건 정합성에 주의.
 
 ### D4. 셀러 주문 탭 — 일반/공구 대칭 토글 IA
 
@@ -122,6 +168,22 @@ productId별로 fetch·조인해야 한다(D4 참조).
 > **정합성 주의**: `getOrderDate(order, tab)`는 현재 활성/아카이브 탭만
 > 분기. saleType 분기가 추가되면 시그니처가 `getOrderDate(order, tab,
 > groupConfigMap)` 형태로 확장된다. T6 `groupOrdersByDate`도 동반 수정.
+>
+> **세션47 검토 — 호출처·확장 범위 확정.** 코드 대조 결과:
+> - `getOrderDate` 호출처는 `page.tsx:54`(필터)·`_constants.ts:207`
+>   (`groupOrdersByDate` 내부) **2곳뿐.** 둘 다 시그니처 확장 시 동반
+>   수정 필요. `groupOrdersByDate`는 `page.tsx:223`에서 호출.
+> - 현재 `getOrderDate`는 `order.requestedDeliveryDate`를 직접 읽는다.
+>   공구 분기는 `groupConfigMap`이 없으면 동작 불가 → **T4(토글)
+>   단계에서는 `getOrderDate` 시그니처를 건드리지 말고, T5에서 한 번에
+>   `groupConfigMap` 파라미터를 추가**한다. T4는 `filteredOrders`
+>   `saleType` 1차 분기만. (T4·T5 의존 순서 근거 — 플랜대로 맞음.)
+> - ⚠️ **e2e 셀렉터 충돌 위험.** `seller-orders.spec.ts`는 전부
+>   `page.locator('text=라벨')` 방식. saleType 토글 라벨을 "공동구매"로
+>   하면 공구 주문 카드·기존 텍스트와 `text=` 매칭이 모호해질 수 있다.
+>   토글 라벨은 **"일반"/"공구"** 등 짧고 고유한 문자열을 쓰거나
+>   토글에 `data-testid`를 부여한다. T4 구현 시 spec 36·48줄 라벨 루프
+>   영향 확인.
 
 ---
 
@@ -144,34 +206,51 @@ productId별로 fetch·조인해야 한다(D4 참조).
 태스크는 **소비자 → API → 셀러** 순서로 의존. 앞 태스크가 데이터를
 채워야 뒤 태스크가 검증 가능하므로 순서 고정.
 
-### [ ] T1 — 소비자 배송일 선택 UI (상품 상세)
+### [x] T1 — 소비자 배송일 선택 UI (상품 상세) ✅ 세션48 (커밋 5281188)
 
 **변경 파일:** `consumer/.../ProductActions.tsx`, `hooks/useDailyCap.ts`(확장),
 신규 `_components/DeliveryDatePicker.tsx`
 
-- `useDailyCap`을 단일 날짜 → **월 범위 조회**로 확장 (또는 신규 훅
-  `useDeliverySlots(storeId, year, month)`). `daily-caps?from=&to=` 사용.
+- ⚠️ `useDailyCap`을 단일 날짜 `doc()` 구독 → **월 범위
+  `collection('dailyCaps')` Firestore 쿼리**로 확장 (또는 신규 훅
+  `useDeliverySlots(storeId, from, to)`). **REST `daily-caps` API 아님**
+  — 그 컨트롤러는 셀러 전용 가드(세션47 D1 정정 참조).
 - `DeliveryDatePicker` 신규 — 셀러 `daily-caps` 캘린더의 소비자용 거울상.
-  `totalCap - usedSlots > 0`인 날짜만 활성, 과거·미설정·마감 disabled.
+  ⚠️ `totalCap - (usedSlots ?? 0) > 0`인 날짜만 활성 (`usedSlots`는
+  슬롯 미소모 문서에 부재 — 널 병합 필수). 과거·미설정·마감 disabled.
 - `ProductActions`에 picker 배치 — `saleType: normal`일 때만 노출.
-- 미선택 시 `canBuy = false` (일반 주문 한정).
+- 미선택 시 `canBuy = false` (일반 주문 한정). 현재
+  `canBuy = isGroup ? ... : true`(76줄)를 일반 분기에서 배송일 선택
+  여부로 교체.
+- ⚠️ 기존 `useDailyCap`의 `remainingSlots` 계산(`useDailyCap.ts:54`)
+  `dailyCap.totalCap - dailyCap.usedSlots` — `usedSlots` 부재 시 `NaN`.
+  훅 확장 시 `?? 0` 동반 수정.
 
 **정합성 확인:**
 - [ ] 공동구매 상품에서는 picker 미노출 (배송일은 `groupConfig` 고정)
-- [ ] 슬롯 0인 날짜·과거 날짜 선택 불가
-- [ ] 기존 "오늘 잔여 배송 가능 N건" 표시(218줄)와 충돌·중복 없음
+- [ ] 슬롯 0인 날짜·과거 날짜·문서 없는 날짜 선택 불가
+- [ ] `usedSlots` 부재 문서에서 잔여 계산이 `NaN` 아님
+- [ ] 기존 "오늘 잔여 배송 가능 N건" 표시(`ProductActions.tsx:218`)와
+      충돌·중복 없음 (picker 도입 시 이 표시는 제거 또는 picker에 통합 검토)
+- [ ] Firestore 보안 규칙 — 소비자 `dailyCaps` 컬렉션 쿼리 허용 확인
 - [ ] 타입체크 통과
 
-### [ ] T2 — 배송일을 체크아웃·장바구니로 전달
+### [x] T2 — 배송일을 체크아웃·장바구니로 전달 ✅ 세션48 (커밋 35cf229)
 
 **변경 파일:** `ProductActions.tsx`, `checkout/page.tsx`,
 `hooks/useCart.ts`, `cart` 관련 컴포넌트
 
-- `handleBuyNow` — `URLSearchParams`에 `requestedDeliveryDate` 추가.
+- `handleBuyNow` — `URLSearchParams`에 `requestedDeliveryDate` 추가
+  (`ProductActions.tsx:92~106`).
 - `handleAddToCart` — `addItem`에 `requestedDeliveryDate` 추가
-  (`useCart` 아이템 타입 확장).
+  (`ProductActions.tsx:78~90`). ⚠️ `useCart`의 `CartItem` 인터페이스
+  (`useCart.ts:8~17`)에 `requestedDeliveryDate?: string` 필드 추가 —
+  localStorage 직렬화 구조라 옵셔널로 두면 기존 장바구니와 하위 호환.
 - `checkout/page.tsx` — URL 파라미터에서 `requestedDeliveryDate`를 읽어
-  `orderRequest`(`CreateOrderRequest`)에 포함.
+  `orderRequest`(`CreateOrderRequest`, `:72`)에 포함. 장바구니 경유
+  분기(`:164` `satisfies CreateOrderRequest`)에도 아이템별 배송일 반영.
+- `CreateOrderRequest` 타입(`order.types.ts:76`)은 `requestedDeliveryDate?:
+  string`로 **이미 존재** — 타입 변경 불필요.
 - 장바구니 경유 시 아이템별 배송일 유지·표시.
 
 **정합성 확인:**
@@ -291,13 +370,27 @@ pnpm --filter e2e exec playwright test --project=chromium
 
 ## 미해결 — 착수 전 확정 필요 항목
 
-세션47 검토 또는 각 태스크 착수 시 확정:
+> 세션47 검토에서 일부 항목 확정. ✅ = 확정, ⬜ = 잔여.
 
-- **T1**: 배송일 선택 가능 범위 상한 — 며칠 앞까지? (셀러가 슬롯을 연
+- ⬜ **T1**: 배송일 선택 가능 범위 상한 — 며칠 앞까지? (셀러가 슬롯을 연
   날짜까지만 자동 제한되나, 캘린더 월 이동 범위 정책 필요)
-- **T3**: 기존 `null` 배송일 주문(레거시 23건) 처리 — 마이그레이션 불필요
-  (셀러 주문 탭에서 "날짜 미정"으로 안전 처리). 단 명시 확인.
-- **T5**: 공구 토글의 날짜 필터(T5 칩) 노출 여부 — 공구는 배송일이
-  공구 단위라 필터 효용이 낮을 수 있음. 1차 미노출 후보.
-- **e2e**: 테스트 시드 데이터에 미래 `dailyCaps` 슬롯 추가 필요
-  (배송일 선택 단계 테스트용).
+  *세션47 의견*: picker는 슬롯 문서가 있는 날짜만 활성이므로 상한은
+  사실상 셀러가 슬롯을 연 최대 날짜. 캘린더 월 이동은 **당월 + 익월
+  2개월** 정도로 제한 권장(쿼리 범위·UI 단순화). T1 착수 시 최종 결정.
+- ✅ **T3**: 기존 `null` 배송일 주문(레거시 23건) — **마이그레이션 불필요
+  확정.** 셀러 주문 탭 `getOrderDate`가 `null`을 "날짜 미정"(`undated`)
+  그룹으로 안전 처리(`_constants.ts:124`·`209`). 회귀 없음.
+- ✅ **T5**: 공구 토글의 날짜 필터 칩 — **1차 미노출 확정.** 공구는
+  배송일이 공구(productId) 단위라 날짜 범위 필터 효용이 낮고,
+  `getDateRange`가 활성/아카이브 탭 기준으로만 동작해 공구 의미와
+  어긋남. 공구 토글에서는 날짜 필터 칩 영역을 숨기고 날짜 그룹 헤더만
+  표시.
+- ⬜ **e2e**: 테스트 시드 데이터에 미래 `dailyCaps` 슬롯 추가 필요
+  (배송일 선택 단계 테스트용). 시드 스크립트 위치·방식은 T6 착수 시 확정.
+- ⬜ **신규(세션47)**: **Firestore 보안 규칙 — 소비자 `dailyCaps`
+  컬렉션 read 허용 확인.** D1이 소비자 측 `useDailyCap`을 월 범위
+  `collection('dailyCaps')` 쿼리로 확장하므로, 보안 규칙이 소비자
+  (비-셀러) 인증 사용자의 `dailyCaps` read를 허용해야 한다. 현재
+  `useDailyCap`은 `doc()` 단건 구독으로 이미 동작 중이므로 read 자체는
+  열려 있을 가능성이 높으나, **컬렉션 `where` 쿼리는 규칙 평가가 다를
+  수 있어** T1 착수 직전 `firestore.rules` 확인 필수.

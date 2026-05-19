@@ -3,28 +3,41 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-20 (세션46 — 배송일 데이터 공백 진단 + 배송일 선택 기능 플랜 수립)
+최종 수정: 2026-05-20 (세션48 — T1+T2 구현: 소비자 배송일 선택 UI)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~46 완료. 셀러 주문 탭 리팩토링(T1~T7, 세션41~45) 종결.
-**세션46**: 실서비스 검증 중 발견·대응 2건.
-- **핫픽스**(`5a2b993`): `useOrders`가 Firestore Timestamp를 변환 없이 내보내 주문 페이지가
-  `createdAt.localeCompare` 크래시 → ISO 문자열 정규화(`useStoreProducts`와 동일 패턴). 배포 완료.
-- **진단**: 주문이 전부 "날짜 미정" 그룹으로 표시되는 현상 추적 → 일반 주문 23건 전부
-  `requestedDeliveryDate=null`. **소비자 앱에 일반 상품 배송일 선택 기능이 처음부터 없음** —
-  주문 탭 T5·T6은 채워질 수 없는 필드를 전제로 설계됐던 것. 공동구매 배송일은
-  `groupProductConfig.groupDeliveryDate`에 정상 존재(별도 컬렉션).
-- **플랜 수립**: `specs/frontend/delivery-date-selection-plan.md` (T1~T6) — 소비자 일반 상품
-  배송일 선택(상품 상세, `daily-caps` API 재사용)·API 슬롯 검증을 선택일 기준으로·셀러 주문 탭
-  일반/공구 대칭 토글·공구 배송일 조인. 셀러 슬롯 캘린더·공구 배송일 등록 UI는 이미 완성(재사용).
+세션22까지 + 세션23~48 완료. 셀러 주문 탭 리팩토링(T1~T7, 세션41~45) 종결.
 
-**다음 세션 진입점**: 세션47 = 배송일 선택 플랜 **정합성 검토**(구현 전, 코드 변경 없음).
-진입 문서 `archive/sessions/session47-prep.md`. 검토 통과 후 세션48(T1+T2) 구현.
+**세션46**: 일반 주문 23건 전부 `requestedDeliveryDate=null` 진단 — 소비자 앱에
+일반 상품 배송일 선택 기능 부재. 보완 플랜 `delivery-date-selection-plan.md`(T1~T6).
+별건 핫픽스 `5a2b993`(`useOrders` Timestamp→ISO 정규화).
+
+**세션47**: 위 플랜 정합성 검토(코드 변경 없음). 5건 정정 ⚠️ 직접 반영 — daily-caps
+REST는 셀러 가드라 소비자는 Firestore 컬렉션 직접 쿼리, `usedSlots`는 트랜잭션 후 생성이라
+`?? 0` 필수, `orders-create` 당일고정은 78~79줄 1쌍, slot 분기는
+`deliveryMethod!=='parcel'&&saleType!=='group'`, `getOrderDate` 호출처 2곳·시그니처 확장은
+T5에서, `groupDeliveryDate`는 셀러 조인 시 Timestamp 정규화 필요.
+
+**세션48**: **T1+T2 구현 완료**(소비자 배송일 선택 UI).
+- T1(`5281188`): `useDeliverySlots` 신규 훅(월범위 `collection('dailyCaps')` Firestore 쿼리,
+  REST 회피). `DeliveryDatePicker` 컴포넌트(당월+익월 2개월 이동, 잔여 `totalCap-(usedSlots??0)>0`
+  날짜만 활성). `ProductActions`에 picker 배치(`!isGroup && deliveryMethod!=='parcel'`).
+  `canBuy` 일반 분기를 배송일 선택 여부로 교체. `useDailyCap.remainingSlots` `?? 0` 동반 수정.
+  기존 "오늘 잔여 배송 가능 N건" 표시 제거. `firestore.rules` 확인 — `dailyCaps allow read: if true`로
+  컬렉션 쿼리 허용(수정 불필요).
+- T2(`35cf229`): `CartItem.requestedDeliveryDate?` 옵셔널 추가(localStorage 하위 호환).
+  `handleBuyNow`/`handleAddToCart`/`checkout` 단일·장바구니 양쪽 모두 배송일 전달.
+  체크아웃 요약·장바구니 카드에 ko-KR 포맷 표시. `CreateOrderRequest` 타입 변경 없음.
+- 사용자 결정: 캘린더 월 이동 범위 = 당월+익월 2개월(권장안 채택).
+- consumer 타입체크 양호. #CL 등재 없음(D3·D4가 본격 변경 — 세션49·50으로 이연 유지).
+
+**다음 세션 진입점**: 세션49 = T3 구현(API 슬롯 검증을 선택 배송일 기준으로). 백엔드 한정,
+회귀 리스크 큼 — 단독 세션. 진입 문서 `archive/sessions/session49-prep.md`.
 잔여 백로그 — P3 Driver Kakao Maps SDK, P4 준비 물량 공동구매·픽업 코드 fontSize 토큰화,
-BUG-16 택배 주문 상태 전환 갭. (당일 배송 컷오프는 배송일 선택 플랜에 흡수됨)
+BUG-16 택배 주문 상태 전환 갭.
 
 ---
 
