@@ -3,14 +3,17 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useOrders } from '@/hooks/useOrders';
-import { OrderCard } from './_components/OrderCard';
+import { DateSection } from './_components/DateSection';
 import {
   DATE_PRESETS,
   GROUP_TABS,
   STATUS_GROUP_MAP,
   IN_DELIVERY_SUBFILTERS,
   getDateRange,
+  getGroupHeaderMeta,
   getOrderDate,
+  groupOrdersByDate,
+  isArchiveTab,
   type DateRangePreset,
   type OrderGroup,
 } from './_constants';
@@ -189,9 +192,9 @@ export default function OrdersPage() {
         </Box>
       )}
 
-      {/* 주문 목록 */}
+      {/* 주문 목록 — 날짜 그룹 섹션 */}
       <Container size="sm" px="md" py="md">
-        <Stack gap="sm">
+        <Stack gap="lg">
           {(loading || !firebaseReady) && <LoadingState />}
 
           {!loading && firebaseReady && filteredOrders.length === 0 && (
@@ -215,9 +218,15 @@ export default function OrdersPage() {
             />
           )}
 
-          {filteredOrders.map((order) => (
-            <OrderCard key={order.id} order={order} />
-          ))}
+          {!loading &&
+            firebaseReady &&
+            groupOrdersByDate(filteredOrders, activeTab).map((group) => (
+              <DateSection
+                key={group.dateKey}
+                meta={getGroupHeaderMeta(group.dateKey, isArchiveTab(activeTab))}
+                orders={group.orders}
+              />
+            ))}
         </Stack>
       </Container>
     </PageShell>
