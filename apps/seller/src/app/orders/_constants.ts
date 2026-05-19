@@ -37,12 +37,6 @@ export const IN_DELIVERY_SUBFILTERS: { key: 'ALL' | 'DELIVERING' | 'HUB_ARRIVED'
   { key: 'HUB_ARRIVED', label: '거점 도착' },
 ];
 
-export const SUMMARY_BAR_ITEMS: { group: OrderGroup; label: string }[] = [
-  { group: 'ACTION_REQUIRED', label: '처리 필요' },
-  { group: 'IN_DELIVERY',     label: '배송 중' },
-  { group: 'WAITING',         label: '대기 중' },
-];
-
 export const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: '대기',
   RECRUITING: '모집 중',

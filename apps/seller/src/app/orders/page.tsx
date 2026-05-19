@@ -7,7 +7,6 @@ import { OrderCard } from './_components/OrderCard';
 import {
   GROUP_TABS,
   STATUS_GROUP_MAP,
-  SUMMARY_BAR_ITEMS,
   IN_DELIVERY_SUBFILTERS,
   type OrderGroup,
 } from './_constants';
@@ -49,35 +48,13 @@ export default function OrdersPage() {
         }
       />
 
-      {/* Summary Bar */}
-      <Box style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', padding: '8px 0', position: 'sticky', top: 57, zIndex: 9 }}>
-        <Container size="sm">
-          <Group gap="md">
-            {SUMMARY_BAR_ITEMS.map((item) => (
-              <UnstyledButton
-                key={item.group}
-                onClick={() => setActiveTab(item.group)}
-                style={{ textAlign: 'center' }}
-              >
-                <Text style={{ fontSize: 20, fontWeight: 'var(--fw-bold)', color: 'var(--color-text)', lineHeight: 1 }}>
-                  {groupCounts[item.group]}
-                </Text>
-                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)', marginTop: 2 }}>
-                  {item.label}
-                </Text>
-              </UnstyledButton>
-            ))}
-          </Group>
-        </Container>
-      </Box>
-
       {/* 상태 탭 */}
       <Box
         style={{
           backgroundColor: 'var(--color-bg)',
           borderBottom: '1px solid var(--color-border)',
           position: 'sticky',
-          top: 114,
+          top: 'var(--header-height)',
           zIndex: 10,
         }}
       >
@@ -90,7 +67,7 @@ export default function OrdersPage() {
                 style={{
                   flexShrink: 0,
                   padding: '12px 16px',
-                  fontSize: 14,
+                  fontSize: 'var(--font-size-sm)',
                   fontWeight: activeTab === tab.key ? 700 : 400,
                   borderBottom: `2px solid ${activeTab === tab.key ? 'var(--color-text)' : 'transparent'}`,
                   color: activeTab === tab.key ? 'var(--color-text)' : 'var(--color-text-disabled)',
@@ -120,7 +97,7 @@ export default function OrdersPage() {
                   onClick={() => setSubFilter(sf.key)}
                   style={{
                     padding: '6px 14px',
-                    fontSize: 13,
+                    fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
                     backgroundColor: subFilter === sf.key ? 'var(--color-text)' : 'transparent',
                     color: subFilter === sf.key ? 'var(--color-bg)' : 'var(--color-text-disabled)',
