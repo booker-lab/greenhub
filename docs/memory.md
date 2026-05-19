@@ -3,29 +3,26 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-20 (세션50 — T4·T5 구현: 셀러 주문 탭 IA 재구성 + 공구 배송일 조인)
+최종 수정: 2026-05-20 (세션51 — T6 e2e 회귀 가드: 시드 스크립트 + 신규 spec + 육안 검증 보강)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~50 완료. 셀러 주문 탭 리팩토링(T1~T7, 세션41~45) 종결.
+세션22까지 + 세션23~51 완료. 셀러 주문 탭 리팩토링(T1~T7) + 소비자 배송일 풀스택(T1~T3) + 셀러 IA 재구성(T4~T5) 종결.
 
-**세션46~49 요약**: 소비자 배송일 선택 풀스택 완성 — T1(`5281188` `DeliveryDatePicker` + `useDeliverySlots`),
-T2(`35cf229` 장바구니·체크아웃 배송일 전달, `e4c376c` CheckoutForm 추출),
-T3(`4e1576a` API 슬롯 검증을 선택 배송일 기준으로 — DTO `@ValidateIf` + service `dateStr/capId` 분기 이동, #CL-34).
-세션49에서 `app.controller.spec.ts` 사전 결함 별건 해결(`57c0dd1`, mock FirestoreService + /health 테스트).
+**세션46~50 요약**: 소비자 배송일 풀스택 + 셀러 토글/공구 조인. T1(`5281188` DeliveryDatePicker), T2(`35cf229` 카트·체크아웃 배송일 전달, `e4c376c` CheckoutForm 추출),
+T3(`4e1576a` 슬롯 검증 선택일자 기준, #CL-34), T4(`2c6c89d` SaleTypeToggle), T5(`bffce2a` useGroupConfigs/공구 배송일 조인, #CL-35).
 
-**세션50**: **T4+T5 구현 완료** — 셀러 주문 탭 IA 재구성. 2커밋.
-- T4(`2c6c89d`): `SaleTypeToggle` 신설(`data-testid="sale-type-toggle-{normal|group}"`). `saleType` 상태로 `filteredOrders` 1차 분기,
-  날짜 필터 칩은 normal에서만 노출(공구 1차 미노출, 세션47 확정). 토글 전환 시 datePreset/custom 입력 초기화.
-- T5(`bffce2a`): `useGroupConfigs(productIds, enabled)` 훅 신설 — 공구 토글 활성 시 표시 후보 productId Set + `Promise.all`로
-  `groupProductConfig` 일괄 fetch. Firestore Timestamp → ISO 정규화. `_constants.ts`에 `GroupConfigMap` 타입 + `getOrderDate`/`groupOrdersByDate`
-  선택 인자 `groupConfigMap?` 추가. `saleType==='group'` 활성 탭에서 `groupConfigMap[productId]?.groupDeliveryDate` 우선, 미존재면 "날짜 미정".
-- 검증: seller 타입체크 통과(exit 0), biome 신규 에러 0건(baseline 3개 유지: page 2 + _constants 1), `pnpm --filter seller build` 통과(23라우트).
-- #CL-35 등재(`CRITICAL_LOGIC.md` 382라인, 한도 여유).
+**세션51 (T6 e2e 회귀 가드)**:
+- 시드 스크립트 `scripts/seed-e2e-orders.mjs` 신설 — firebase-admin으로 ① 활성 상품 보유 store에 14일치 dailyCaps(totalCap=10), ② 셀러 store(`9b2cb652`)에 일반 1건+공구 1건 주문(`e2e-` prefix · ACCEPTED) + `groupProductConfig.groupDeliveryDate`(오늘 +7일). 멱등 set으로 재실행 안전.
+- 신규 spec `consumer-delivery-date.spec.ts`(2건 — DeliveryDatePicker 활성 일자 노출 + 택배 분기 미노출).
+- `seller-orders.spec.ts`에 T6 섹션 5건 추가 — testid 노출, 토글 전환 시 칩 미노출, 공구 카드 표시, groupDeliveryDate 헤더, datePreset week 초기화.
+- 라벨 정합: `'이번 주' / '직접 입력'`(DATE_PRESETS 일치).
+- 로컬 풀런이 #CL-23 set-cookie race로 막혀, 육안 검증 D-T6(#89~#96) 섹션을 `seller-refactor-visual-verify.md`에 추가 + 시드 안내. preview 동기화 후 CI가 최종 검증 경로.
+- #CL-35에 T6 후속 fragment 등재(CRITICAL_LOGIC.md 396라인, 1000 한도 여유).
 
-**다음 세션 진입점**: 세션51 = T6(e2e 시드 슬롯 + spec 보강 — 토글/공구 조인 회귀 가드). 진입 문서 `archive/sessions/session51-prep.md`.
+**다음 세션 진입점**: 세션52 = preview 동기화 후 CI 풀런으로 신규 spec 검증 + 잔여 백로그 진입. 진입 문서 `archive/sessions/session52-prep.md`.
 잔여 백로그 — P3 Driver Kakao Maps SDK, P4 준비 물량 공동구매·픽업 코드 fontSize 토큰화, BUG-16 택배 주문 상태 전환 갭.
 
 ---
@@ -37,6 +34,7 @@ T3(`4e1576a` API 슬롯 검증을 선택 배송일 기준으로 — DTO `@Valida
 - **헤더 주입**: csrf GET + credentials POST 두 호출에만 `x-e2e-test-token` 명시. **전역 extraHTTPHeaders 금지** (Firebase 등 third-party API CORS preflight 차단).
 - **BASE**: `SELLER_BASE/CONSUMER_BASE/DRIVER_BASE` (Preview branch URL) — `apps/e2e/.env`.
 - **Preview SSO 우회**: `global-setup.ts`가 `_vercel_jwt` bypass 쿠키 발급 → `.bypass-state.json` 재사용. 시크릿 `*_BYPASS_SECRET`. bypass 헤더도 전역 주입 금지.
+- **#CL-23 set-cookie race**: 로컬·CI 모두 간헐적으로 set-cookie 누락. globalSetup은 3회 재시도. 로컬 풀런 막힐 시 시드 + 수동 육안 검증으로 보조.
 
 ---
 
@@ -61,3 +59,4 @@ T3(`4e1576a` API 슬롯 검증을 선택 배송일 기준으로 — DTO `@Valida
 - **도메인·기타**: 공동구매 CONFIRMED 시스템 자동(선착순+크론, 셀러 수동 확정 없음) · preparedAt 빠른 선택지 UI · seller register inviteToken 필수 · Portone V2 시크릿 `apps/api/.env` 반영 · orders `?tab=` 딥링크는 `window.location.search` · `proxy.ts` Next.js 16 미들웨어 컨벤션 · AUTH_SECRET 3앱 Vercel 완료.
 - **Windows 인코딩**: 한글 파일 일괄 편집 시 PowerShell `Get-Content`/`Set-Content` 금지(UTF-8 손상) — Python(명시적 utf-8) 또는 Edit 도구 사용.
 - **seller 프론트 구조(#CL-32)**: Railway API 호출은 `lib/api.ts`의 `apiJson<T>()`(에러 시 `ApiError` throw) 사용 — raw `fetch` 금지. 페이지 셸은 `components/`의 `PageShell`/`PageHeader`/`EmptyState`/`LoadingState` 재사용. 주문 상태 변경은 `useOrderStatusUpdate` 코어 경유. 관리자 목록 훅은 `useAdminList` 팩토리. ProductForm은 `useProductForm` 훅 + 스텝 컴포넌트로 분리.
+- **e2e 시드 (T6)**: `scripts/seed-e2e-orders.mjs` — 활성 상품 store에 14일치 dailyCaps + 셀러 store에 `e2e-` prefix 일반/공구 주문 + groupProductConfig. 멱등 set. `cleanup-spec-residue.mjs` 보존 정책.

@@ -380,3 +380,11 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **미해결**: T6(e2e 시드 슬롯 + spec 보강 — 토글/공구 조인 회귀 가드)는 세션51로 이연. e2e에서 `data-testid="sale-type-toggle-group"` 클릭 후 `groupProductConfig` 시드 의존 시나리오 점검 필요.
 
+### T6 후속 (2026-05-20, 세션51): e2e 회귀 가드
+
+**시드 스크립트** `scripts/seed-e2e-orders.mjs` 신설 — `firebase-admin` SDK로 ① 활성 상품 보유 store에 14일치 `dailyCaps`(totalCap=10), ② 셀러 store(`9b2cb652`)에 일반 1건 + 공구 1건 주문(`e2e-` prefix · ACCEPTED), 공구 상품 `groupProductConfig.groupDeliveryDate`(오늘 +7일) 시드. 멱등 set으로 재실행 안전.
+
+**신규 spec**: `apps/e2e/tests/consumer-delivery-date.spec.ts`(2건 — DeliveryDatePicker 활성 일자 노출 + 택배 분기 미노출). `seller-orders.spec.ts`에 T6 섹션(5건 — testid 노출, 토글 전환, 공구 카드 표시, groupDeliveryDate 헤더, datePreset 초기화). 토글 라벨은 `'이번 주' / '직접 입력'`(DATE_PRESETS와 일치).
+
+**수동 검증 보조**: 로컬에서 seller 로그인 set-cookie race(#CL-23)로 풀런이 막힐 수 있어, `docs/specs/frontend/seller-refactor-visual-verify.md` D-T6 섹션(#89~#96)에 시드 후 육안 검증 항목 추가. preview 동기화 후 CI 풀런이 최종 검증 경로.
+
