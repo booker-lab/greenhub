@@ -37,12 +37,6 @@ export const IN_DELIVERY_SUBFILTERS: { key: 'ALL' | 'DELIVERING' | 'HUB_ARRIVED'
   { key: 'HUB_ARRIVED', label: '거점 도착' },
 ];
 
-export const SUMMARY_BAR_ITEMS: { group: OrderGroup; label: string }[] = [
-  { group: 'ACTION_REQUIRED', label: '처리 필요' },
-  { group: 'IN_DELIVERY',     label: '배송 중' },
-  { group: 'WAITING',         label: '대기 중' },
-];
-
 export const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: '대기',
   RECRUITING: '모집 중',
@@ -58,10 +52,10 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
 };
 
 export const STATUS_COLOR: Record<OrderStatus, string> = {
-  ACCEPTED: 'blue',
-  CONFIRMED: 'blue',
-  RECRUITING: 'blue',
-  PREPARING: 'orange',
+  ACCEPTED: 'orange',
+  CONFIRMED: 'orange',
+  RECRUITING: 'orange',
+  PREPARING: 'blue',
   DELIVERING: 'violet',
   HUB_ARRIVED: 'violet',
   CANCELLED: 'red',
@@ -72,10 +66,10 @@ export const STATUS_COLOR: Record<OrderStatus, string> = {
 };
 
 export const ACCENT_BORDER: Record<OrderStatus, string> = {
-  ACCEPTED: 'var(--color-status-info-text)',
-  CONFIRMED: 'var(--color-status-info-text)',
-  RECRUITING: 'var(--color-status-info-text)',
-  PREPARING: 'var(--color-status-warning-text)',
+  ACCEPTED: 'var(--color-status-warning-text)',
+  CONFIRMED: 'var(--color-status-warning-text)',
+  RECRUITING: 'var(--color-status-warning-text)',
+  PREPARING: 'var(--color-status-info-text)',
   DELIVERING: '#7048e8',
   HUB_ARRIVED: '#7048e8',
   CANCELLED: 'var(--color-danger)',

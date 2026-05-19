@@ -47,10 +47,16 @@
 
 @import "@greenhub/ui/style.css";
 
+:root {
+  /* 레이아웃 고정 영역 높이 — sticky 좌표·padding 공유 토큰 */
+  --header-height: 57px;
+  --bottom-nav-height: 64px;
+}
+
 body {
   background-color: var(--color-bg);
   padding-top: env(safe-area-inset-top);
-  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }

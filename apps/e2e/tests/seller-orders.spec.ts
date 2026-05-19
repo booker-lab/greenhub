@@ -89,25 +89,29 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
       .toBe(true)
   })
 
-  // ── Summary Bar ─────────────────────────────────────────────────────
+  // ── 탭 뱃지 ──────────────────────────────────────────────────────────
+  // 세션42 T2: 요약바 제거 — 건수 표시가 탭 뱃지로 흡수됨
 
-  test('Summary Bar — 3항목 렌더링 (Summary + 탭에 각 레이블 2회 이상 존재)', async ({ page }) => {
+  test('탭 뱃지 — 건수가 숫자로 표시됨', async ({ page }) => {
     await page.goto(`${BASE}/orders`)
     await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
-    // Summary Bar와 탭 양쪽에 동일 레이블이 존재하므로 count >= 2
-    for (const label of ['처리 필요', '배송 중', '대기 중']) {
-      const count = await page.locator(`text=${label}`).count()
-      expect(count).toBeGreaterThanOrEqual(2)
+    // RTL 연결 완료 후 groupCounts 확정 → 뱃지 렌더
+    await expect(
+      page
+        .locator('text=실시간 연결')
+        .or(page.locator('text=연결 중'))
+        .or(page.locator('text=연결 오류')),
+    ).toBeVisible({ timeout: 15_000 })
+    // 각 탭 버튼에 건수 뱃지가 있으면 그 텍스트는 숫자여야 함
+    for (const label of ['처리 필요', '대기 중', '배송 중', '완료', '취소']) {
+      const badge = page
+        .locator('button', { hasText: label })
+        .locator('.mantine-Badge-root')
+      if ((await badge.count()) > 0) {
+        const txt = (await badge.first().textContent())?.trim() ?? ''
+        expect(txt).toMatch(/^\d+$/)
+      }
     }
-  })
-
-  test('Summary Bar 클릭 — 배송 중 클릭 시 IN_DELIVERY 탭 활성화 (SubFilter 출현)', async ({ page }) => {
-    await page.goto(`${BASE}/orders`)
-    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
-    // Summary Bar의 '배송 중'은 첫 번째 등장 (탭보다 위에 위치)
-    await page.locator('text=배송 중').first().click()
-    // IN_DELIVERY 탭 활성화 확인 — SubFilter의 고유 항목으로 검증
-    await expect(page.locator('text=거점 도착')).toBeVisible({ timeout: 3_000 })
   })
 
   // ── SubFilter ────────────────────────────────────────────────────────

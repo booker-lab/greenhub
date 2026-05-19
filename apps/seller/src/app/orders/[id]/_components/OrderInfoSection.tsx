@@ -3,7 +3,8 @@
 import { Badge, Box, Group, Paper, Stack, Text } from '@mantine/core';
 import type { GroupProductConfig, Order } from '@greenhub/shared';
 import { formatDeadlineCountdown, toDate } from '../_lib';
-import { DELIVERY_LABEL_MAP, Row, STATUS_COLOR_MAP, STATUS_LABEL_MAP } from './OrderRow';
+import { DELIVERY_LABEL, STATUS_COLOR, STATUS_LABEL } from '../../_constants';
+import { Row } from './OrderRow';
 
 interface OrderInfoSectionProps {
   order: Order;
@@ -16,8 +17,8 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
     <>
       <Paper radius="lg" shadow="xs" p="md">
         <Group justify="space-between" mb="sm">
-          <Badge color={STATUS_COLOR_MAP[order.status]} variant="light" radius="xl" size="md">
-            {STATUS_LABEL_MAP[order.status]}
+          <Badge color={STATUS_COLOR[order.status]} variant="light" radius="xl" size="md">
+            {STATUS_LABEL[order.status]}
           </Badge>
           <Text
             style={{
@@ -116,7 +117,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           배송 정보
         </Text>
         <Stack gap={6}>
-          <Row label="배송 수단" value={DELIVERY_LABEL_MAP[order.deliveryMethod]} />
+          <Row label="배송 수단" value={DELIVERY_LABEL[order.deliveryMethod]} />
           {order.saleType === 'normal' && order.requestedDeliveryDate && (
             <Row
               label="희망 배송일"

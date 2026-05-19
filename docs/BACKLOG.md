@@ -60,9 +60,13 @@
 - [x] `/orders/[id]` 주문 상세
   - 상품·수량·금액·배송 정보 표시
   - "준비 시작" 버튼 (preparedAt datetime 입력) → `PATCH .../status { PREPARING }`
-  - **"배송 시작" 버튼** (PREPARING → DELIVERING) ✅ 2026-03-28 추가
+  - **"배송 시작" 버튼** (PREPARING → DELIVERING) ✅ 2026-03-28 추가 — **드라이버 앱 전용**
   - "강제 취소" 모달 (사유 최소 5자) → `PATCH .../status { CANCELLED }`
   - 읽기 전용 상태 (배송 중 이후)
+- [ ] **[BUG-16] 택배 주문 상태 전환 갭** — `deliveryMethod: 'parcel'`인 주문이 PREPARING 상태 도달 시 셀러가 발송 처리할 방법 없음. 드라이버 앱에 `deliveryMethod` 필터 없어 택배 주문도 수거 대기 목록에 노출됨.
+  - **셀러 앱**: 주문 상세에서 `parcel + PREPARING` 조건일 때 "택배 발송 완료" 버튼 추가 → `DELIVERING` 전환
+  - **드라이버 앱**: 보드 쿼리에 `deliveryMethod in ['direct', 'hub']` 필터 추가 — 택배 주문 제거
+  - 관련 파일: `seller/orders/[id]/page.tsx`, `driver/board/_client.tsx`
 
 ### 1-4. 상품 관리 (`/products`)
 
@@ -443,7 +447,8 @@
 > **세션37 완료**: P4 2건 + P3 G1 — global-setup `about:blank` storageState 레이스 해소(`be4fa2c`), CI 액션 node24 전환(checkout/setup-node v6·upload-artifact v7·pnpm/action-setup v6, node-version 22, `eb15e4e`), 거점 수정 페이지 신규(`hubs/[id]/edit`, `3888522`). Driver Kakao Maps SDK는 사용자 요청으로 차기 세션 이월.
 > **세션38**: 셀러 홈 대시보드 + 준비 물량 재구성 — 전체 페이지 UX 감사 + 네이버 스마트스토어센터 벤치마크 → 8 아토믹 태스크 플랜 수립([seller-home-dashboard-plan.md](specs/frontend/seller-home-dashboard-plan.md)). 코드 변경 없음(설계·논의만). 거점 탭→설정 이동·준비 물량 탭(`/prep`) 신설 등 BottomNav IA 재구성 포함.
 > **세션39 완료**: P3 셀러 홈 대시보드 재구성 — 세션38 플랜 T1~T8 전부 구현 (#CL-33, `7a01168`~`fd34c65`). PageHeader 홈 아이콘·홈 대시보드(오늘 할 일+현황 카드 3개)·BottomNav 거점→준비 탭 교체·준비 물량 탭(`/prep`) 신설·ConnectionStatus 추출. 타입체크·빌드(23라우트)·biome 신규 에러 0건. e2e 풀런 **170 passed / 0 failed / 11 skipped**(run 26017068777, 167→170 — 홈 spec 재작성·prep spec 신설). 준비 물량 공동구매는 1차 범위 제외(후속 등재).
-> **다음 세션 최우선**: P3 Driver Kakao Maps SDK 연동 (§12-1 우선순위 표 참조).
+> **세션40**: 셀러 주문 탭 리팩토링 설계 — UX 감사 + 코드 리뷰 + 사용자 논의 → T1~T7 아토믹 태스크 플랜 수립([seller-orders-refactor-plan.md](specs/frontend/seller-orders-refactor-plan.md)). 코드 변경 없음(설계·논의만). BUG-16 택배 갭·UX-11 주문번호 통합 별도 등재.
+> **다음 세션 최우선**: 세션41 = 셀러 주문 탭 리팩토링 **플랜 정합성 검토** (구현 전, 진입 문서 `archive/sessions/session41-prep.md`). 검토 통과 후 세션42(세션 A, T1+T2) 구현 진입.
 
 ### 12-1. 우선순위
 
@@ -465,6 +470,9 @@
 | ✅ P3 | 셀러 홈 대시보드 + 준비 물량 재구성 — 8 아토믹 태스크 (#CL-33, 2026-05-18 세션39 완료) | UX/기능 | `specs/frontend/seller-home-dashboard-plan.md` |
 | 🟢 P4 | 준비 물량 탭 — 공동구매 주문 포함 (배송일 `groupProductConfig` 별도 fetch 필요, 세션39 분리) | UX/기능 | — |
 | 🟢 P4 | 당일 배송 컷오프 — 소비자 앱 배송일 선택 시간 제약 (세션38 분리) | 소비자 UX | — |
+| 🟢 P3 | **셀러 주문 탭 리팩토링** — T1~T7 아토믹 태스크 (세션 A~D 분배). 색상 버그·sticky 정리·카드 경량화·날짜 필터·날짜 그룹 헤더 포함 (세션40 설계 완료) | UX/버그 | `specs/frontend/seller-orders-refactor-plan.md` |
+| 🟢 P3 | **[BUG-16] 택배 주문 상태 전환 갭** — 셀러 앱 "택배 발송 완료" 버튼 추가 + 드라이버 보드 parcel 필터 (세션40 논의) | 버그/기능 | §1-3 상세 |
+| 🟢 P3 | **[UX-11] 주문번호 통합** — 백엔드 `orderNumber` 필드(`YYYYMMDD-NNNNNN`) 신설, 소비자·셀러 앱 표시 일치. 현재 소비자=전체 Firestore ID / 셀러=뒷 6~8자로 서로 다른 번호를 보임 (세션40 논의) | UX/백엔드 | `shared` Order 타입 + API + 3곳 프론트 |
 | ✅ P3 | consumer@test.com 강한비번 전환 — 30자 랜덤 비번 (2026-05-17 세션34 완료) | 보안 | 단독 |
 | ✅ P4 | global-setup flake 보강 — bypass 루프 직후 `about:blank` 이동으로 `storageState` 레이스 해소 (2026-05-17 세션37, `be4fa2c`) | e2e 안정성 | 단독 |
 | ✅ P4 | CI 액션 Node.js 20 deprecation 대응 — checkout/setup-node v6·upload-artifact v7·pnpm/action-setup v6, node-version 22 (2026-05-17 세션37, `eb15e4e`) | CI 유지보수 | 단독 |
