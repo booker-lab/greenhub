@@ -3,39 +3,30 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-20 (세션49 — T3 구현: API 슬롯 검증을 선택 배송일 기준으로)
+최종 수정: 2026-05-20 (세션50 — T4·T5 구현: 셀러 주문 탭 IA 재구성 + 공구 배송일 조인)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~49 완료. 셀러 주문 탭 리팩토링(T1~T7, 세션41~45) 종결.
+세션22까지 + 세션23~50 완료. 셀러 주문 탭 리팩토링(T1~T7, 세션41~45) 종결.
 
-**세션46~48**: 소비자 배송일 선택 기능 — 진단·플랜·UI 구현. 세션46에서 일반 주문 23건 전부
-`requestedDeliveryDate=null` 진단 후 `delivery-date-selection-plan.md`(T1~T6) 수립.
-세션47 정합성 검토(코드 무변경, 5건 정정 직접 반영). 세션48 T1+T2 구현:
-- T1(`5281188`): `useDeliverySlots` 훅(월범위 `collection('dailyCaps')` 쿼리, REST 회피).
-  `DeliveryDatePicker`(당월+익월 2개월, 잔여 `totalCap-(usedSlots??0)>0` 활성).
-  `ProductActions`에 picker 배치, `canBuy` 일반 분기를 배송일 선택 여부로 교체.
-  `useDailyCap.remainingSlots` `?? 0` 동반. `firestore.rules` `dailyCaps allow read:if true` 확인.
-- T2(`35cf229`): `CartItem.requestedDeliveryDate?` 옵셔널(localStorage 하위호환).
-  `handleBuyNow`/`handleAddToCart`/`checkout` 모두 배송일 전달. 체크아웃·장바구니 ko-KR 포맷.
-- `e4c376c`: `checkout/page.tsx` 500라인 한도 준수 — `CheckoutForm` 추출.
+**세션46~49 요약**: 소비자 배송일 선택 풀스택 완성 — T1(`5281188` `DeliveryDatePicker` + `useDeliverySlots`),
+T2(`35cf229` 장바구니·체크아웃 배송일 전달, `e4c376c` CheckoutForm 추출),
+T3(`4e1576a` API 슬롯 검증을 선택 배송일 기준으로 — DTO `@ValidateIf` + service `dateStr/capId` 분기 이동, #CL-34).
+세션49에서 `app.controller.spec.ts` 사전 결함 별건 해결(`57c0dd1`, mock FirestoreService + /health 테스트).
 
-**세션49**: **T3 구현 완료**(API 슬롯 검증을 선택 배송일 기준으로) — `4e1576a` 1커밋.
-- DTO: `requestedDeliveryDate`에 `@ValidateIf(o=>o.saleType==='normal' && o.deliveryMethod!=='parcel')`
-  + `@Matches(/^\d{4}-\d{2}-\d{2}$/)` 적용. 슬롯 검증 대상에서만 필수, 그 외 옵셔널.
-- service: `dateStr`/`capId` 산출을 슬롯 검증 분기 안으로 이동, `new Date()` 당일 고정 →
-  `dto.requestedDeliveryDate!` 사용. 분기 조건이 DTO·service에서 완전 일치(회귀 표면 최소).
-- 검증: `apps/api` 타입체크 통과. `pnpm --filter api test`의 `app.controller.spec.ts` 1건 실패는
-  baseline에서도 동일 — FirestoreService provider 누락 **사전 결함**(T3 무관, `git stash` 확인).
-  별건 커밋 `57c0dd1`로 해결 — mock provider 추가 + `/health` 테스트 신설(2 passed).
-- #CL-34 등재(`CRITICAL_LOGIC.md` 358라인, 한도 여유).
+**세션50**: **T4+T5 구현 완료** — 셀러 주문 탭 IA 재구성. 2커밋.
+- T4(`2c6c89d`): `SaleTypeToggle` 신설(`data-testid="sale-type-toggle-{normal|group}"`). `saleType` 상태로 `filteredOrders` 1차 분기,
+  날짜 필터 칩은 normal에서만 노출(공구 1차 미노출, 세션47 확정). 토글 전환 시 datePreset/custom 입력 초기화.
+- T5(`bffce2a`): `useGroupConfigs(productIds, enabled)` 훅 신설 — 공구 토글 활성 시 표시 후보 productId Set + `Promise.all`로
+  `groupProductConfig` 일괄 fetch. Firestore Timestamp → ISO 정규화. `_constants.ts`에 `GroupConfigMap` 타입 + `getOrderDate`/`groupOrdersByDate`
+  선택 인자 `groupConfigMap?` 추가. `saleType==='group'` 활성 탭에서 `groupConfigMap[productId]?.groupDeliveryDate` 우선, 미존재면 "날짜 미정".
+- 검증: seller 타입체크 통과(exit 0), biome 신규 에러 0건(baseline 3개 유지: page 2 + _constants 1), `pnpm --filter seller build` 통과(23라우트).
+- #CL-35 등재(`CRITICAL_LOGIC.md` 382라인, 한도 여유).
 
-**다음 세션 진입점**: 세션50 = T4·T5(셀러 주문 탭 IA 보강 — `getOrderDate` 시그니처 확장,
-공구 날짜필터 미노출 등). 진입 문서 `archive/sessions/session50-prep.md`.
-잔여 백로그 — T6 e2e 시드 슬롯 정비, P3 Driver Kakao Maps SDK, P4 준비 물량 공동구매·
-픽업 코드 fontSize 토큰화, BUG-16 택배 주문 상태 전환 갭.
+**다음 세션 진입점**: 세션51 = T6(e2e 시드 슬롯 + spec 보강 — 토글/공구 조인 회귀 가드). 진입 문서 `archive/sessions/session51-prep.md`.
+잔여 백로그 — P3 Driver Kakao Maps SDK, P4 준비 물량 공동구매·픽업 코드 fontSize 토큰화, BUG-16 택배 주문 상태 전환 갭.
 
 ---
 

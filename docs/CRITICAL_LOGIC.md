@@ -356,3 +356,27 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 - saleType=='normal' && deliveryMethod!='parcel' → DTO 필수, 서비스 슬롯 검증 진입 — 정합.
 
 **미해결**: e2e 시드 슬롯 정비(T6, 세션50 이후)는 별건. T4·T5(셀러 주문 탭 IA 보강)는 세션50으로 이연.
+
+
+---
+
+## [결정 #CL-35] 셀러 주문 탭 IA 재구성 — 일반/공구 대칭 토글 + 공동구매 배송일 조인 (2026-05-20, 세션50)
+
+### 결정: 셀러 주문 탭 최상단에 `SaleTypeToggle`을 두고 일반/공구를 1차 분기, 공구 분기에서는 `groupProductConfig.groupDeliveryDate`를 일괄 fetch해 날짜 그룹의 기준으로 사용
+
+**배경**: 세션48~49로 일반 주문은 신규 생성 시점부터 `requestedDeliveryDate`가 채워지지만, 셀러 주문 탭의 IA는 일반/공구 비대칭이었다. 공구 주문은 `requestedDeliveryDate=null`이라 그 자리에서는 "날짜 미정"으로만 보였고, 실제 배송 예정일(`groupProductConfig.groupDeliveryDate`)은 별도 문서라 셀러가 같은 화면에서 동시에 다루기 어려웠다. 세션47 검토에서 토글 + 조인 패턴 확정.
+
+**토글 1차 분기**: `apps/seller/src/app/orders/_components/SaleTypeToggle.tsx` 신설 — `data-testid="sale-type-toggle-{normal|group}"` 부여(e2e 라벨 충돌 회피). `PageHeader` 아래에 배치, `saleType` 상태(`'normal' | 'group'`, 기본 `'normal'`)로 `filteredOrders`의 가장 바깥 분기. 토글 전환 시 `datePreset='week'`·`customFrom/To=''`로 날짜 필터 초기화(공구는 칩 미노출이라 자연스럽게 무효화), 상태 탭은 유지.
+
+**날짜 칩은 normal 전용**: 공구는 `groupDeliveryDate` 분포가 좁아 1차 미노출(세션47 확정). 코드상 `dateRange` 산출 자체를 `saleType==='normal'`에서만 수행 → 공구 토글에서 날짜 필터 절대 미적용.
+
+**공구 배송일 조인**: 공구 토글 활성 시 `orders` 중 `saleType==='group' && STATUS_GROUP_MAP=activeTab`인 productId를 수집, 신규 훅 `useGroupConfigs(productIds, enabled)`가 Set으로 중복 제거 후 `Promise.all`로 `groupProductConfig` 문서를 일괄 fetch. 정렬된 join key로 의존성 안정화(매 렌더 새 배열 참조에 흔들리지 않음). Firestore Timestamp는 ISO 문자열로 정규화(`useGroupProduct`와 동일 패턴) — 셀러 경로는 `getDoc` 직접 호출이라 `onSnapshot` 자동 변환 없음을 고려.
+
+**`getOrderDate`·`groupOrdersByDate` 시그니처 확장**: 선택 인자 `groupConfigMap?: GroupConfigMap` 추가, 기본 동작은 기존 호출과 동일. `saleType==='group'` 활성 탭에서 `groupConfigMap[productId]?.groupDeliveryDate`를 우선 사용, 미존재면 `null` → "날짜 미정" 그룹으로 안전 처리. 일반 주문 분기는 그대로 — 회귀 표면이 분기 격리로 작음.
+
+**원칙**: 신규 fetch 경로는 공구 토글에서만, 일반 토글은 기존 실시간 구독만 사용. `useOrders` 자체는 불변 — 토글 인지 책임을 페이지로 격리해 훅 SoC 유지.
+
+**검증**: T4 1커밋(`2c6c89d`), T5 1커밋(`bffce2a`). `apps/seller` 타입체크 통과(exit 0), biome 신규 에러 0건(baseline 3개 동일 유지: `page.tsx` 2개 + `_constants.ts` 1개), `pnpm --filter seller build` 통과(23라우트, `/orders` static prerender 영향 없음).
+
+**미해결**: T6(e2e 시드 슬롯 + spec 보강 — 토글/공구 조인 회귀 가드)는 세션51로 이연. e2e에서 `data-testid="sale-type-toggle-group"` 클릭 후 `groupProductConfig` 시드 의존 시나리오 점검 필요.
+
