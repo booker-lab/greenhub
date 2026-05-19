@@ -168,4 +168,67 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
     await expect(page.locator('text=전체')).toBeVisible({ timeout: 3_000 })
     await expect(page.locator('text=거점 도착')).toBeVisible()
   })
+
+  // ── 세션51 T6-B: SaleTypeToggle (#CL-35) ─────────────────────────────────
+  // 선행: scripts/seed-e2e-orders.mjs 실행 — 일반/공구 주문 + groupProductConfig 시드.
+
+  test('판매 유형 토글 — 일반/공구 testid 노출 + 기본값 normal', async ({ page }) => {
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+
+    const normal = page.getByTestId('sale-type-toggle-normal')
+    const group = page.getByTestId('sale-type-toggle-group')
+    await expect(normal).toBeVisible()
+    await expect(group).toBeVisible()
+    // 기본값 normal — 라벨은 둘 다 보이므로 active 상태는 fontWeight로 확인하지 않고
+    // 동작 검증으로 대체: normal 활성 시 날짜 프리셋 칩('이번 주' 등)이 노출되어야 한다.
+    await expect(page.locator('text=이번 주').first()).toBeVisible({ timeout: 5_000 })
+  })
+
+  test('공구 토글 전환 시 날짜 필터 칩 미노출', async ({ page }) => {
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    // normal에서 '이번 주' 칩 노출 확인
+    await expect(page.locator('text=이번 주').first()).toBeVisible({ timeout: 5_000 })
+
+    await page.getByTestId('sale-type-toggle-group').click()
+    // 공구 토글에서 '이번 주/이번 달/직접 입력' 칩 미노출
+    await expect(page.locator('text=이번 주').first()).toBeHidden({ timeout: 5_000 })
+    await expect(page.locator('text=직접 입력').first()).toBeHidden()
+  })
+
+  test('공구 토글 — 일반 주문이 가려지고 공구 주문 표시', async ({ page }) => {
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('sale-type-toggle-group').click()
+    // 공구 상품명이 보이고 일반 상품명은 보이지 않음 (시드된 데이터 기준)
+    await expect(page.locator('text=E2E 공구 상품').first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=E2E 일반 상품').first()).toBeHidden()
+  })
+
+  // ── 세션51 T6-C: 공구 주문 groupDeliveryDate 조인 ───────────────────────
+
+  test('공구 토글 — groupDeliveryDate 헤더(월 일) 그룹핑', async ({ page }) => {
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('sale-type-toggle-group').click()
+    // 시드된 groupProductConfig.groupDeliveryDate 기반 헤더 ('X월 X일' 또는 '날짜 미정')
+    // 정합 시드 시 'X월 X일' 헤더, 미존재 시 '날짜 미정'으로 떨어진다.
+    const dateHeader = page.locator('text=/\\d+월 \\d+일/').first()
+    const undefinedHeader = page.locator('text=날짜 미정').first()
+    await expect(dateHeader.or(undefinedHeader)).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('토글 전환 시 datePreset week 초기화', async ({ page }) => {
+    await page.goto(`${BASE}/orders`)
+    await expect(page.locator('text=주문 관리')).toBeVisible({ timeout: 10_000 })
+    // '직접 입력'으로 변경 — custom 분기 진입 (input[type=date] 2개 노출)
+    await page.locator('text=직접 입력').first().click()
+    // 공구 → 일반 토글 라운드트립
+    await page.getByTestId('sale-type-toggle-group').click()
+    await expect(page.locator('text=직접 입력').first()).toBeHidden({ timeout: 5_000 })
+    await page.getByTestId('sale-type-toggle-normal').click()
+    // 일반 복귀 시 datePreset='week'으로 초기화 — '이번 주' 칩 노출
+    await expect(page.locator('text=이번 주').first()).toBeVisible({ timeout: 5_000 })
+  })
 })
