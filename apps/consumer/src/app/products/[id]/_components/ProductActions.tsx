@@ -18,11 +18,11 @@ import {
   Divider,
 } from '@mantine/core';
 import { useGroupProduct } from '@/hooks/useGroupProduct';
-import { useDailyCap } from '@/hooks/useDailyCap';
 import { useStore } from '@/hooks/useProducts';
 import { useCart } from '@/hooks/useCart';
 import GreenLoveBrandSection from '@/components/GreenLoveBrandSection';
 import ProductCTABar from '@/components/ProductCTABar';
+import DeliveryDatePicker from './DeliveryDatePicker';
 import type { Product, DeliveryMethod } from '@greenhub/shared';
 
 const deliveryLabels: Record<DeliveryMethod, string> = {
@@ -39,7 +39,6 @@ export default function ProductActions({ product }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
   const { config: groupConfig } = useGroupProduct(product.saleType === 'group' ? product.id : null);
-  const { remainingSlots } = useDailyCap(product.storeId ?? null);
   const { store } = useStore(product.storeId ?? null);
   const { addItem } = useCart();
 
@@ -47,6 +46,7 @@ export default function ProductActions({ product }: Props) {
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('direct');
   const [groupConsent, setGroupConsent] = useState(false);
   const [countdown, setCountdown] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState<string | null>(null);
 
   useEffect(() => {
     const deadline = groupConfig?.recruitDeadline;
@@ -73,7 +73,12 @@ export default function ProductActions({ product }: Props) {
   const isFull =
     isGroup && !!groupConfig && groupConfig.currentQuantity >= groupConfig.targetQuantity;
   const totalAmount = product.price * quantity;
-  const canBuy = isGroup ? groupConsent && !isFull : true;
+  // 일반 상품의 배송일 선택은 슬롯 검증 대상(택배 제외)일 때만 필수.
+  // 택배는 slot 미검증 분기이므로 배송일도 불필요 (플랜 D3 분기 조건 일치).
+  const needsDeliveryDate = !isGroup && deliveryMethod !== 'parcel';
+  const canBuy = isGroup
+    ? groupConsent && !isFull
+    : !needsDeliveryDate || deliveryDate !== null;
 
   function handleAddToCart() {
     addItem({
@@ -215,18 +220,6 @@ export default function ProductActions({ product }: Props) {
         </Paper>
       )}
 
-      {remainingSlots > 0 && (
-        <Text
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          mb="md"
-        >
-          오늘 잔여 배송 가능:{' '}
-          <Text span style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text-secondary)' }}>
-            {remainingSlots}건
-          </Text>
-        </Text>
-      )}
-
       <Paper radius="md" p="md" mb="md" style={{ background: 'var(--color-surface-muted)' }}>
         <Text
           style={{
@@ -254,6 +247,15 @@ export default function ProductActions({ product }: Props) {
           ))}
         </Group>
       </Paper>
+
+      {/* 일반 상품 배송일 선택 — 공동구매는 groupConfig 고정, 택배는 슬롯 미검증이라 미노출 */}
+      {needsDeliveryDate && (
+        <DeliveryDatePicker
+          storeId={product.storeId ?? null}
+          value={deliveryDate}
+          onChange={setDeliveryDate}
+        />
+      )}
 
       <Paper radius="md" p="md" mb="lg" style={{ background: 'var(--color-surface-muted)' }}>
         <Text
