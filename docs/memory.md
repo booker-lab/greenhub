@@ -3,24 +3,23 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-19 (세션44 — 셀러 주문 탭 리팩토링 세션 C: T5+T6)
+최종 수정: 2026-05-19 (세션45 — 셀러 주문 탭 리팩토링 세션 D: T7 검증 완료)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~44 완료. **세션40** = 셀러 주문 탭 감사 + T1~T7 리팩토링 플랜 수립.
-**세션41** = 플랜 정합성 검토. **세션42**(A) = T1+T2. **세션43**(B) = T3+T4. **세션44**(C) = T5+T6 — 태스크당 1커밋.
-T5(`92886d7`): 날짜 범위 필터 신설 — `DateRangePreset` + datePreset/customFrom/customTo 상태(기본 'week'),
-필터 칩 UI(PageHeader 아래·sticky 탭 위), `_constants.ts`에 `getDateRange(preset,tab)`·`getOrderDate`·`isArchiveTab`
-유틸 추가(활성 탭 requestedDeliveryDate·아카이브 탭 createdAt 기준), `requestedDeliveryDate=null`은 필터 제외 안 함.
-T6(`72b93d0`): 날짜 그룹 헤더 — `groupOrdersByDate`(overdue/YYYY-MM-DD/undated 버킷·정렬)·`getGroupHeaderMeta`
-유틸 추가, `DateSection.tsx` 컴포넌트 신설(overdue/today danger 틴트·🔴), 목록을 그룹 섹션 렌더링으로 교체.
-seller 타입체크 통과·biome 신규 에러 0건. 육안 검증·e2e 풀런은 미수행(세션 D).
+세션22까지 + 세션23~45 완료. **셀러 주문 탭 리팩토링(플랜 T1~T7) 전부 완료** — 세션40 감사·플랜 →
+41 정합성 검토 → 42(A) T1+T2 → 43(B) T3+T4 → 44(C) T5+T6 → 45(D) T7. 태스크당 1커밋.
+- T1~T2(`2c4de86`·`20345eb`): 상태 색상 버그 수정 + 상수 통합 + 요약바 제거·sticky 단일화.
+- T3~T4(세션43): OrderCard 경량화(`useOrderActions` 삭제·강제취소 제거) + 주문 상세 EmptyState·sticky footer.
+- T5(`92886d7`): 날짜 범위 필터 — `DateRangePreset`/`getDateRange`/`getOrderDate`/`isArchiveTab`(활성 탭 requestedDeliveryDate·아카이브 탭 createdAt 기준).
+- T6(`72b93d0`): 날짜 그룹 헤더 — `groupOrdersByDate`/`getGroupHeaderMeta` + `DateSection.tsx`(overdue/today danger 틴트).
+- T7(세션45): 타입체크 0건·biome 클린·정합성 grep 통과. e2e CI run `26086973797` **169 passed / 0 failed / 11 skipped**(예상치 일치).
+  잔여 1건 — 픽업 코드 `fontSize:24` 2곳 토큰 부재로 미치환 → BACKLOG §1-3 P4 등재.
 
-**다음 세션 진입점**: `docs/archive/sessions/session45-prep.md` (= 세션 D, T7 검증) · 플랜 §T7.
-세션42=A(✅) → 43=B(✅) → 44=C(✅) → D(T7 타입체크+e2e 풀런+정합성 최종 검토) 순서. e2e 베이스라인 170/0.
-잔여 P3: Driver Kakao Maps SDK. P4: 준비 물량 공동구매·당일 배송 컷오프.
+**다음 세션 진입점**: 주문 탭 리팩토링 종료. 잔여 백로그 — P3 Driver Kakao Maps SDK,
+P4 준비 물량 공동구매·당일 배송 컷오프·픽업 코드 fontSize 토큰화, BUG-16 택배 주문 상태 전환 갭.
 
 ---
 
