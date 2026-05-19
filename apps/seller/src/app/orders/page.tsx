@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import type { SaleType } from '@greenhub/shared';
 import { useOrders } from '@/hooks/useOrders';
+import { useGroupConfigs } from '@/hooks/useGroupConfigs';
 import { DateSection } from './_components/DateSection';
 import { SaleTypeToggle } from './_components/SaleTypeToggle';
 import {
@@ -57,6 +58,15 @@ export default function OrdersPage() {
   const dateRange =
     saleType === 'normal' ? getDateRange(datePreset, activeTab, customFrom, customTo) : null;
 
+  // 공구 토글일 때만 표시 후보 productId를 모아 groupProductConfig 일괄 fetch
+  const groupProductIds =
+    saleType === 'group'
+      ? orders
+          .filter((o) => o.saleType === 'group' && STATUS_GROUP_MAP[o.status] === activeTab)
+          .map((o) => o.productId)
+      : [];
+  const groupConfigMap = useGroupConfigs(groupProductIds, saleType === 'group');
+
   const filteredOrders = orders.filter((o) => {
     if (saleType === 'group' ? o.saleType !== 'group' : o.saleType === 'group') return false;
     if (STATUS_GROUP_MAP[o.status] !== activeTab) return false;
@@ -64,7 +74,7 @@ export default function OrdersPage() {
       return false;
     }
     if (dateRange) {
-      const d = getOrderDate(o, activeTab);
+      const d = getOrderDate(o, activeTab, groupConfigMap);
       // requestedDeliveryDate = null(공동구매 등)은 제외하지 않고 "날짜 미정"으로 내려보냄 (T6)
       if (d && (d < dateRange.from || d > dateRange.to)) return false;
     }
@@ -238,7 +248,7 @@ export default function OrdersPage() {
 
           {!loading &&
             firebaseReady &&
-            groupOrdersByDate(filteredOrders, activeTab).map((group) => (
+            groupOrdersByDate(filteredOrders, activeTab, groupConfigMap).map((group) => (
               <DateSection
                 key={group.dateKey}
                 meta={getGroupHeaderMeta(group.dateKey, isArchiveTab(activeTab))}
