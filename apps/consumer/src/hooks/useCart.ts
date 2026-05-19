@@ -14,6 +14,8 @@ export interface CartItem {
   saleType: SaleType;
   deliveryMethod: DeliveryMethod;
   storeId: string;
+  /** 일반 상품 한정 'YYYY-MM-DD' — 슬롯 검증 대상 주문만 채워짐. 옵셔널로 기존 장바구니와 하위 호환. */
+  requestedDeliveryDate?: string;
 }
 
 // ─── External store for SSR-safe localStorage ─────────────────────

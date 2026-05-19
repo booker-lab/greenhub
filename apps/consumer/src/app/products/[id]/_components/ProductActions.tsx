@@ -90,6 +90,7 @@ export default function ProductActions({ product }: Props) {
       deliveryMethod,
       storeId: product.storeId,
       quantity,
+      ...(needsDeliveryDate && deliveryDate ? { requestedDeliveryDate: deliveryDate } : {}),
     });
     router.push('/cart');
   }
@@ -102,6 +103,9 @@ export default function ProductActions({ product }: Props) {
       deliveryMethod,
       totalAmount: String(totalAmount),
     });
+    if (needsDeliveryDate && deliveryDate) {
+      p.set('requestedDeliveryDate', deliveryDate);
+    }
     const checkoutUrl = `/checkout?${p.toString()}`;
     if (!session) {
       signIn(undefined, { callbackUrl: checkoutUrl });
