@@ -3,23 +3,28 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-19 (세션45 — 셀러 주문 탭 리팩토링 세션 D: T7 검증 완료)
+최종 수정: 2026-05-20 (세션46 — 배송일 데이터 공백 진단 + 배송일 선택 기능 플랜 수립)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~45 완료. **셀러 주문 탭 리팩토링(플랜 T1~T7) 전부 완료** — 세션40 감사·플랜 →
-41 정합성 검토 → 42(A) T1+T2 → 43(B) T3+T4 → 44(C) T5+T6 → 45(D) T7. 태스크당 1커밋.
-- T1~T2(`2c4de86`·`20345eb`): 상태 색상 버그 수정 + 상수 통합 + 요약바 제거·sticky 단일화.
-- T3~T4(세션43): OrderCard 경량화(`useOrderActions` 삭제·강제취소 제거) + 주문 상세 EmptyState·sticky footer.
-- T5(`92886d7`): 날짜 범위 필터 — `DateRangePreset`/`getDateRange`/`getOrderDate`/`isArchiveTab`(활성 탭 requestedDeliveryDate·아카이브 탭 createdAt 기준).
-- T6(`72b93d0`): 날짜 그룹 헤더 — `groupOrdersByDate`/`getGroupHeaderMeta` + `DateSection.tsx`(overdue/today danger 틴트).
-- T7(세션45): 타입체크 0건·biome 클린·정합성 grep 통과. e2e CI run `26086973797` **169 passed / 0 failed / 11 skipped**(예상치 일치).
-  잔여 1건 — 픽업 코드 `fontSize:24` 2곳 토큰 부재로 미치환 → BACKLOG §1-3 P4 등재.
+세션22까지 + 세션23~46 완료. 셀러 주문 탭 리팩토링(T1~T7, 세션41~45) 종결.
+**세션46**: 실서비스 검증 중 발견·대응 2건.
+- **핫픽스**(`5a2b993`): `useOrders`가 Firestore Timestamp를 변환 없이 내보내 주문 페이지가
+  `createdAt.localeCompare` 크래시 → ISO 문자열 정규화(`useStoreProducts`와 동일 패턴). 배포 완료.
+- **진단**: 주문이 전부 "날짜 미정" 그룹으로 표시되는 현상 추적 → 일반 주문 23건 전부
+  `requestedDeliveryDate=null`. **소비자 앱에 일반 상품 배송일 선택 기능이 처음부터 없음** —
+  주문 탭 T5·T6은 채워질 수 없는 필드를 전제로 설계됐던 것. 공동구매 배송일은
+  `groupProductConfig.groupDeliveryDate`에 정상 존재(별도 컬렉션).
+- **플랜 수립**: `specs/frontend/delivery-date-selection-plan.md` (T1~T6) — 소비자 일반 상품
+  배송일 선택(상품 상세, `daily-caps` API 재사용)·API 슬롯 검증을 선택일 기준으로·셀러 주문 탭
+  일반/공구 대칭 토글·공구 배송일 조인. 셀러 슬롯 캘린더·공구 배송일 등록 UI는 이미 완성(재사용).
 
-**다음 세션 진입점**: 주문 탭 리팩토링 종료. 잔여 백로그 — P3 Driver Kakao Maps SDK,
-P4 준비 물량 공동구매·당일 배송 컷오프·픽업 코드 fontSize 토큰화, BUG-16 택배 주문 상태 전환 갭.
+**다음 세션 진입점**: 세션47 = 배송일 선택 플랜 **정합성 검토**(구현 전, 코드 변경 없음).
+진입 문서 `archive/sessions/session47-prep.md`. 검토 통과 후 세션48(T1+T2) 구현.
+잔여 백로그 — P3 Driver Kakao Maps SDK, P4 준비 물량 공동구매·픽업 코드 fontSize 토큰화,
+BUG-16 택배 주문 상태 전환 갭. (당일 배송 컷오프는 배송일 선택 플랜에 흡수됨)
 
 ---
 
