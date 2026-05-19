@@ -108,17 +108,17 @@ grep -n "fontSize: [0-9]" apps/seller/src/app/orders/page.tsx
 # 타입체크
 pnpm --filter seller tsc --noEmit
 ```
-- [ ] `seller-orders.spec.ts` Summary Bar 테스트 2건 삭제 + 탭 뱃지 테스트 신설 완료
+- [x] `seller-orders.spec.ts` Summary Bar 테스트 2건 삭제 + 탭 뱃지 테스트 신설 완료
 
 ---
 
 ## 세션 A 완료 기준
 
-- [ ] T1 커밋 완료 + 타입체크 통과
-- [ ] T2 커밋 완료 + 타입체크 통과
-- [ ] 목록 카드 뱃지 색 = 상세 뱃지 색 (브라우저에서 육안 확인)
-- [ ] 카드 좌측 보더 색 = 카드 뱃지 색 (`ACCENT_BORDER` 동반 교정 확인)
-- [ ] sticky가 탭 1개 — 스크롤 시 헤더와 탭만 고정됨 확인
+- [x] T1 커밋 완료 + 타입체크 통과 (`2c4de86`)
+- [x] T2 커밋 완료 + 타입체크 통과 (`20345eb`)
+- [ ] 목록 카드 뱃지 색 = 상세 뱃지 색 (브라우저에서 육안 확인 — 세션 D e2e 풀런 시)
+- [x] 카드 좌측 보더 색 = 카드 뱃지 색 (`ACCENT_BORDER` 동반 교정 확인 — 코드 정합성)
+- [ ] sticky가 탭 1개 — 스크롤 시 헤더와 탭만 고정됨 확인 (브라우저 육안 — 세션 D)
 
 ---
 
