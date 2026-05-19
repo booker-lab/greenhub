@@ -29,6 +29,7 @@
   `dto.requestedDeliveryDate!` 사용. 분기 조건이 DTO·service에서 완전 일치(회귀 표면 최소).
 - 검증: `apps/api` 타입체크 통과. `pnpm --filter api test`의 `app.controller.spec.ts` 1건 실패는
   baseline에서도 동일 — FirestoreService provider 누락 **사전 결함**(T3 무관, `git stash` 확인).
+  별건 커밋 `57c0dd1`로 해결 — mock provider 추가 + `/health` 테스트 신설(2 passed).
 - #CL-34 등재(`CRITICAL_LOGIC.md` 358라인, 한도 여유).
 
 **다음 세션 진입점**: 세션50 = T4·T5(셀러 주문 탭 IA 보강 — `getOrderDate` 시그니처 확장,
