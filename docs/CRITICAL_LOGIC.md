@@ -330,3 +330,29 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 **원칙**: 기존 훅·API·비즈니스 로직 불변 — UI·내비게이션 레이어만. e2e 영향 점검 — 거점 관련 spec은 `/hubs` URL 직접 접근이라 BottomNav 탭 제거 무영향.
 
 **검증**: T1~T8 각 1커밋, 타입체크·`pnpm --filter seller build`(23라우트) 성공, biome 신규 에러 0건. e2e 풀런 **170 passed / 0 failed / 11 skipped**(run 26017068777) — `seller-home-dashboard.spec.ts` 새 레이아웃으로 재작성·`seller-prep.spec.ts` 신설로 신규 베이스라인 170(기존 167+3). 커밋 `7a01168`~`fd34c65`.
+
+---
+
+## [결정 #CL-34] 일반 주문 슬롯 검증을 선택 배송일 기준으로 (2026-05-20, 세션49)
+
+### 결정: `orders-create.service`의 `capId` 산출을 `new Date()` 당일 고정에서 `dto.requestedDeliveryDate`로 전환
+
+**배경**: 세션48까지 소비자 측 배송일 선택 UI(T1)와 체크아웃·장바구니 전달(T2)이 완성되어 일반 주문은 `requestedDeliveryDate`를 가지고 API에 도달하지만, `orders-create.service.ts`는 여전히 `new Date()` 당일 기준으로 `capId`를 산출해 슬롯 검증·차감이 주문일에 묶여 있었다. 소비자가 미래 일자를 선택해도 검증 대상은 **오늘** 슬롯이라 UX(미래 일자 선택 가능)와 서버 측 검증(오늘만 검증)이 어긋났다. 세션49에서 마지막 고리를 잇는다.
+
+**DTO 필수화**: `CreateOrderDto.requestedDeliveryDate`에 `@ValidateIf((o) => o.saleType === 'normal' && o.deliveryMethod !== 'parcel')` + `@Matches(/^\d{4}-\d{2}-\d{2}$/)` 적용. **분기 조건은 서비스 레이어의 슬롯 검증 가드(84줄)와 완전 동일** — 슬롯 검증 대상은 필수, 그 외(택배·공동구매)는 옵셔널 유지(null 저장). 입력 누락 시 400(BadRequest)으로 사전 차단.
+
+**capId 산출 이동**: `dateStr`/`capId` 산출을 트랜잭션 바깥(`new Date()` 고정)에서 슬롯 검증 분기(`deliveryMethod !== 'parcel' && saleType !== 'group'`) 안으로 이동. `dateStr = dto.requestedDeliveryDate!`(non-null 단언은 ValidateIf 동치성으로 안전), `capId = ${storeId}_${dateStr}` 그대로. 택배·공동구매 분기는 `capId`를 산출하지 않으므로 어떤 영향도 없음.
+
+**저장값 유지**: 163줄 `requestedDeliveryDate: dto.requestedDeliveryDate ?? null`은 변경 없음 — 택배·공구는 `null`, 일반 주문은 선택 일자가 저장되어 셀러 준비 탭(#CL-33) 집계에 그대로 활용 가능.
+
+**원칙**: 비즈니스 로직 변경 최소화 — `usedSlots/totalCap` 차감 로직·에러 메시지 모두 기존 유지. 변경된 것은 "어느 날짜 슬롯을 보는가"뿐. 분기 조건이 DTO·서비스에서 일치하므로 회귀 표면이 작다.
+
+**검증**: T3 1커밋(`4e1576a`), `apps/api` 타입체크 통과. 기존 jest 1건(`app.controller.spec.ts`)은 baseline에서도 실패하는 **사전 결함**(FirestoreService provider 누락) — T3 변경과 무관(`git stash`로 검증). 분기 일치성은 코드 리뷰로 확인:
+
+- DTO `ValidateIf((o) => o.saleType === 'normal' && o.deliveryMethod !== 'parcel')`
+- service 슬롯 검증 가드 `dto.deliveryMethod !== 'parcel' && dto.saleType !== 'group'`
+- saleType=='group'인 경우 ValidateIf가 false라 옵셔널, 서비스에서도 슬롯 검증 분기 미진입 — 정합.
+- saleType=='normal' && deliveryMethod=='parcel' → ValidateIf false 옵셔널, 서비스 슬롯 검증 미진입 — 정합.
+- saleType=='normal' && deliveryMethod!='parcel' → DTO 필수, 서비스 슬롯 검증 진입 — 정합.
+
+**미해결**: e2e 시드 슬롯 정비(T6, 세션50 이후)는 별건. T4·T5(셀러 주문 탭 IA 보강)는 세션50으로 이연.
