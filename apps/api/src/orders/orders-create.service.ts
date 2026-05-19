@@ -75,12 +75,13 @@ export class OrdersCreateService {
 
     const orderId = uuidv4();
     const now = this.firestore.Timestamp.now();
-    const dateStr = new Date().toISOString().split('T')[0];
-    const capId = `${storeId}_${dateStr}`;
 
     await this.firestore.runTransaction(async (t) => {
       // Daily Cap 검증 (hub/direct 배송만 슬롯 소모, 공동구매 제외)
       if (dto.deliveryMethod !== 'parcel' && dto.saleType !== 'group') {
+        // DTO ValidateIf로 같은 분기에서 필수화됨 — 미도달 시 400으로 사전 차단
+        const dateStr = dto.requestedDeliveryDate!;
+        const capId = `${storeId}_${dateStr}`;
         const capRef = this.firestore.doc(`dailyCaps/${capId}`);
         const capSnap = await t.get(capRef);
 
