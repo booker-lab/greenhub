@@ -52,7 +52,7 @@ export function OrderCard({ order, storeId }: { order: Order; storeId: string | 
         style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}
         mb={4}
       >
-        주문 #{order.id.slice(-6).toUpperCase()}
+        주문 #{order.id.slice(-8).toUpperCase()}
       </Text>
       <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={6}>
         {DELIVERY_LABEL[order.deliveryMethod]}
