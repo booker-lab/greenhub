@@ -170,7 +170,7 @@ sticky는 탭 1개만 남긴다. `top` 매직넘버는 CSS 변수로 대체.
 
 ## 아토믹 태스크 목록
 
-### [ ] T1 — 상수 통합 + 색상 버그 수정
+### [x] T1 — 상수 통합 + 색상 버그 수정 (세션42 완료 · `2c4de86`)
 
 **변경 파일:** `orders/_constants.ts`, `orders/[id]/_components/OrderRow.tsx`
 
@@ -193,7 +193,7 @@ sticky는 탭 1개만 남긴다. `top` 매직넘버는 CSS 변수로 대체.
 
 ---
 
-### [ ] T2 — 요약바 제거 + sticky 단일화
+### [x] T2 — 요약바 제거 + sticky 단일화 (세션42 완료 · `20345eb`)
 
 **변경 파일:** `orders/page.tsx`, `orders/_constants.ts`, `app/globals.css`, `apps/e2e/tests/seller-orders.spec.ts`
 
