@@ -19,7 +19,7 @@ RECRUITING orange / PREPARING blue), `ACCENT_BORDER` 동반 교정, `OrderRow.ts
 seller 타입체크 통과(`pnpm --filter seller exec tsc --noEmit`). 색상 육안 확인·e2e 풀런은 미수행(세션 D).
 BUG-16·UX-11은 별도 후속(BACKLOG §12 등재).
 
-**다음 세션 진입점**: 세션 B = T3(OrderCard 경량화)+T4(주문 상세 개선) · 플랜 `docs/specs/frontend/seller-orders-refactor-plan.md` §T3·§T4.
+**다음 세션 진입점**: `docs/archive/sessions/session43-prep.md` (= 세션 B, T3+T4 구현) · 플랜 `docs/specs/frontend/seller-orders-refactor-plan.md` §T3·§T4.
 세션42=A(T1+T2 ✅) → B(T3+T4) → C(T5+T6) → D(T7 검증) 순서. e2e 베이스라인 170/0 (T2 후 169/0 예상).
 잔여 P3: Driver Kakao Maps SDK + 셀러 주문 탭 리팩토링(세션 A~D). P4: 준비 물량 공동구매·당일 배송 컷오프.
 
