@@ -139,7 +139,7 @@ export default function OrdersPage() {
           )}
 
           {filteredOrders.map((order) => (
-            <OrderCard key={order.id} order={order} storeId={storeId} />
+            <OrderCard key={order.id} order={order} />
           ))}
         </Stack>
       </Container>

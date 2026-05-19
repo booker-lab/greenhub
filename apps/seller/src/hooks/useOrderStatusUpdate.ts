@@ -12,8 +12,8 @@ export interface OrderStatusExtra {
 
 /**
  * 주문 상태 변경 PATCH의 공통 코어.
- * OrderCard용 `useOrderActions`·상세용 `useOrderDetailActions`가 이 훅을 공유한다 —
- * fetch·에러 처리는 여기 한 곳, 사유 입력 UI(prompt vs 모달)만 래퍼에서 분기.
+ * 상세 페이지의 `useOrderDetailActions`가 이 훅을 사용한다 —
+ * fetch·에러 처리는 여기 한 곳, 사유 입력 UI(모달)는 래퍼에서 담당.
  */
 export function useOrderStatusUpdate(storeId: string | null, orderId: string) {
   const { data: session } = useSession();
