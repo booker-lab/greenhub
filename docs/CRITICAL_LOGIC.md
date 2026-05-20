@@ -388,3 +388,29 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **수동 검증 보조**: 로컬에서 seller 로그인 set-cookie race(#CL-23)로 풀런이 막힐 수 있어, `docs/specs/frontend/seller-refactor-visual-verify.md` D-T6 섹션(#89~#96)에 시드 후 육안 검증 항목 추가. preview 동기화 후 CI 풀런이 최종 검증 경로.
 
+---
+
+## [결정 #CL-36] 셀러앱 탭 스타일 단일화 — `SegmentedTabs` 공통 컴포넌트 (2026-05-20, 세션54)
+
+**배경**: UX-07 — 셀러 주문 탭(검정 `--color-text` + active 700)과 상품·정산 탭(초록 `--color-primary` + medium)이 시각 패턴 2종으로 혼재. 동일 UI 어포던스를 다르게 표현해 앱 정체성·일관성을 떨어뜨림. 세션53 진단 + 사용자 결정으로 단일화 진입.
+
+**핵심 규칙**:
+
+1. **신설 컴포넌트** `apps/seller/src/components/SegmentedTabs.tsx` (~80라인) — 셀러앱의 모든 페이지 상위 탭은 본 컴포넌트로 통일. Props: `tabs: { key, label, count?, badgeColor? }[]` · `value` · `onChange` · `sticky?` (default false) · `topOffset?` (default `var(--header-height)`) · `layout?: 'flex' | 'scroll'` (default flex).
+2. **시각 토큰**: active = `var(--color-primary)`(초록) + `fontWeight 700` + `borderBottom 2px solid var(--color-primary)`. inactive = `var(--color-text-secondary)` + `fontWeight var(--fw-medium)`. 폰트 사이즈는 `var(--font-size-sm)` 통일.
+3. **카운트 Badge**: `count > 0`일 때만 Mantine `Badge size="xs"`로 렌더, `badgeColor: 'red' | 'gray'` (default gray). 카운트 0이거나 미정의면 미렌더. 카운트가 항상 있어야 하는 케이스(상품 탭 전체/판매중/비활성 0건도 표시)는 `label`에 인라인.
+4. **레이아웃**: `layout='flex'` (균등 분할, 탭 3개 이하) vs `layout='scroll'` (탭 많아 모바일 가로 스크롤 필요, 주문 탭 5+). `flex`는 `flex: 1`, `scroll`은 `overflowX: auto + flexShrink: 0`.
+5. **sticky 정책**: 페이지별 IA 결정에 위임 (주문·정산 sticky=true / 상품 sticky=false). sticky=true이면 `top` 기본값 `var(--header-height)`로 헤더 바로 아래에 부착. 매직넘버 직접 지정 금지.
+
+**치환 대상**:
+- `apps/seller/src/app/orders/page.tsx:160-195` → sticky + scroll + count + ACTION_REQUIRED 빨강
+- `apps/seller/src/app/products/page.tsx:62-94` → flex, 카운트는 label 인라인
+- `apps/seller/src/app/settlements/page.tsx:37-69` → sticky + flex, `top: 57` 매직넘버 동시 해소
+
+**범위 외**:
+- `apps/seller/src/app/orders/_components/SaleTypeToggle.tsx` 일반/공구 1차 분기 토글 — 다른 토큰(검정·pill 형태)으로 의도적 차별화. SegmentedTabs 적용 안 함.
+- `apps/seller/src/app/admin/drivers/_client.tsx:89` admin 탭 — admin 영역은 별도 검토 후 결정 (다른 세션).
+- `orders` 페이지의 `IN_DELIVERY` SubFilter row — pill 형태로 시각 의도 다름.
+
+**검증**: seller 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · biome 신규 0건. e2e 회귀 풀런은 Railway 복구 후. 셀렉터 영향 — `getByRole('button')` + 텍스트 기반이면 영향 없음.
+

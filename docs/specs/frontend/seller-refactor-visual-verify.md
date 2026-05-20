@@ -261,3 +261,25 @@
 | # | 확인 항목 | 통과 기준 | 결과 | 메모 |
 |---|----------|----------|:----:|------|
 | — | (정산 리팩토링 태스크별 항목 추가) | | | |
+
+---
+
+## F. 셀러 UX 잔여 정합 (세션54~ · #CL-36 · `seller-ux-residual-plan.md`)
+
+### F-T-UX1 — 탭 스타일 단일화 `SegmentedTabs` (세션54)
+
+플랜: [seller-ux-residual-plan.md](seller-ux-residual-plan.md) T-UX1. 신설 컴포넌트 `apps/seller/src/components/SegmentedTabs.tsx` + 3페이지 치환.
+
+| # | 확인 항목 | 통과 기준 | 결과 | 메모 |
+|---|----------|----------|:----:|------|
+| 97 | 주문 페이지 상태 탭 색상 | active=초록(`--color-primary`)·inactive=secondary 회색. 검정 잔재 없음 | | |
+| 98 | 주문 탭 active 강조 | active 폰트 굵기 700, inactive medium | | |
+| 99 | 주문 탭 sticky 동작 | 스크롤 시 헤더 바로 아래(`var(--header-height)`)에 고정 | | |
+| 100 | 주문 탭 카운트 Badge | count>0인 탭만 Badge. ACTION_REQUIRED는 빨강, 나머지 회색 | | |
+| 101 | 주문 탭 모바일 스크롤 | 탭 5+가 가로 스크롤 가능, 스크롤바 미노출 | | |
+| 102 | 상품 페이지 필터 탭 시각 | 주문 탭과 동일 패턴(초록·active 700) | | |
+| 103 | 상품 탭 카운트 인라인 | 라벨에 `전체 N` 형태로 표시(0건 포함) | | |
+| 104 | 상품 탭 non-sticky | 스크롤 시 상단 고정 안 됨(원래 정책 유지) | | |
+| 105 | 정산 페이지 탭 시각 | 주문·상품 탭과 동일 패턴 | | |
+| 106 | 정산 탭 sticky 위치 | `top:57` 매직넘버 제거되고 `var(--header-height)`로 고정 | | |
+| 107 | 회귀 — 3페이지 클릭 동작 | 탭 클릭 시 활성 전환·콘텐츠 변경 정상 | | |

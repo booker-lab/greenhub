@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-20 (세션53 — UX-07~10 진단 + 아토믹 태스크 플랜 수립)
+최종 수정: 2026-05-20 (세션54 — T-UX1 탭 단일화 `SegmentedTabs` #CL-36)
 
 ---
 
@@ -20,7 +20,14 @@
 - **플랜 수립**: [seller-ux-residual-plan.md](specs/frontend/seller-ux-residual-plan.md) 147라인 — **T-UX1** 탭 단일화(`SegmentedTabs` 신설 + 3페이지 치환), **T-UX2** 상품 카드 Badge 분리(Switch+ActionIcon), **T-UX3** `ConfirmModal` 공통 컴포넌트 + 6건 교체, **T-UX4a/b/c** fontSize 토큰화 분할, **T-UX5** 정합성 검토. 각 태스크 단독 PR/세션 단위·상호 무관·결정 사항 명시.
 - **코드 변경 없음**: 신규 문서 1건(플랜) + BACKLOG/memory 갱신만.
 
-**다음 세션 진입점**: 세션54 = **세션53 플랜 정합성 검토(사용자 합의·결정 사항 확정) → T-UX1 진입**. 진입 문서 `archive/sessions/session54-prep.md`. Railway 복구 상태와 무관하게 진행 가능(T-UX5의 e2e 검증만 복구 대기).
+**세션54 (T-UX1 완료, #CL-36)**:
+- **정합성 검토 OK**: 세션53 진단(UX-09 confirm 6건·UX-07 탭 3페이지·`top:57`·fontSize ~30곳)이 세션54 진입 시점과 완전 일치. 사용자 결정 — 색상 `--color-primary`·강조 medium+active 700·sticky·Badge·컴포넌트 위치 모두 권장안 채택.
+- **신설**: `apps/seller/src/components/SegmentedTabs.tsx`(~80라인) — Props `tabs/value/onChange/sticky/topOffset/layout`. `count > 0` Badge·`layout='flex'|'scroll'`·sticky default `var(--header-height)`.
+- **치환**: `orders/page.tsx`(sticky+scroll+count+ACTION_REQUIRED 빨강) · `products/page.tsx`(flex, 카운트 label 인라인) · `settlements/page.tsx`(sticky+flex, `top: 57` 매직넘버 → `var(--header-height)` 동시 해소).
+- **검증**: seller 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome 자동 포맷 후 신규 0건. 미사용 import 정리(orders `Badge`·products `UnstyledButton`·settlements `Box/Group/UnstyledButton`).
+- **문서**: BACKLOG §11-3 UX-07 ✅·§12 활동 로그·§12-1 우선순위 표 갱신, CRITICAL_LOGIC #CL-36 추가, visual-verify F-T-UX1 섹션 #97~107 추가.
+
+**다음 세션 진입점**: 세션55 = **T-UX3 ConfirmModal 공통 컴포넌트 + native confirm() 6곳 교체**(플랜 §1 T-UX3, 권장 순서). 진입 문서 `archive/sessions/session55-prep.md`. Railway Outage와 무관하게 진행 가능.
 
 ---
 

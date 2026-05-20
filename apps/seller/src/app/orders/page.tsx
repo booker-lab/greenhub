@@ -1,32 +1,39 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
 import type { SaleType } from '@greenhub/shared';
-import { useOrders } from '@/hooks/useOrders';
+import { Box, Container, Group, Stack, Text, UnstyledButton } from '@mantine/core';
+import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
+import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useGroupConfigs } from '@/hooks/useGroupConfigs';
+import { useOrders } from '@/hooks/useOrders';
 import { DateSection } from './_components/DateSection';
 import { SaleTypeToggle } from './_components/SaleTypeToggle';
 import {
   DATE_PRESETS,
+  type DateRangePreset,
   GROUP_TABS,
-  STATUS_GROUP_MAP,
-  IN_DELIVERY_SUBFILTERS,
   getDateRange,
   getGroupHeaderMeta,
   getOrderDate,
   groupOrdersByDate,
+  IN_DELIVERY_SUBFILTERS,
   isArchiveTab,
-  type DateRangePreset,
   type OrderGroup,
+  STATUS_GROUP_MAP,
 } from './_constants';
-import { Badge, Box, Container, Group, Stack, Text, UnstyledButton } from '@mantine/core';
-import { PageShell } from '@/components/PageShell';
-import { PageHeader } from '@/components/PageHeader';
-import { EmptyState, LoadingState } from '@/components/StateViews';
-import { ConnectionStatus } from '@/components/ConnectionStatus';
 
-const VALID_TABS = new Set<OrderGroup>(['ACTION_REQUIRED', 'WAITING', 'IN_DELIVERY', 'DONE', 'CANCELLED']);
+const VALID_TABS = new Set<OrderGroup>([
+  'ACTION_REQUIRED',
+  'WAITING',
+  'IN_DELIVERY',
+  'DONE',
+  'CANCELLED',
+]);
 
 export default function OrdersPage() {
   const { data: session } = useSession();
@@ -85,9 +92,7 @@ export default function OrdersPage() {
     <PageShell>
       <PageHeader
         title="주문 관리"
-        right={
-          <ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />
-        }
+        right={<ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />}
       />
 
       {/* 판매 유형 토글 — 일반/공구 1차 분기 */}
@@ -95,7 +100,12 @@ export default function OrdersPage() {
 
       {/* 날짜 범위 필터 — 일반 토글에서만 노출 (공구는 1차 미노출) */}
       {saleType === 'normal' && (
-        <Box style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
+        <Box
+          style={{
+            backgroundColor: 'var(--color-bg)',
+            borderBottom: '1px solid var(--color-border)',
+          }}
+        >
           <Container size="sm" py="xs">
             <Group gap="xs">
               {DATE_PRESETS.map((p) => (
@@ -148,7 +158,10 @@ export default function OrdersPage() {
             )}
 
             {customInvalid && (
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt={4}>
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+                mt={4}
+              >
                 시작일이 종료일보다 늦습니다
               </Text>
             )}
@@ -157,46 +170,31 @@ export default function OrdersPage() {
       )}
 
       {/* 상태 탭 */}
-      <Box
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          position: 'sticky',
-          top: 'var(--header-height)',
-          zIndex: 10,
+      <SegmentedTabs
+        tabs={GROUP_TABS.map((tab) => ({
+          key: tab.key,
+          label: tab.label,
+          count: groupCounts[tab.key],
+          badgeColor: tab.key === 'ACTION_REQUIRED' ? 'red' : 'gray',
+        }))}
+        value={activeTab}
+        onChange={(key) => {
+          setActiveTab(key);
+          setSubFilter('ALL');
         }}
-      >
-        <Container size="sm">
-          <Group gap={0} style={{ overflowX: 'auto', flexWrap: 'nowrap', scrollbarWidth: 'none' }}>
-            {GROUP_TABS.map((tab) => (
-              <UnstyledButton
-                key={tab.key}
-                onClick={() => { setActiveTab(tab.key); setSubFilter('ALL'); }}
-                style={{
-                  flexShrink: 0,
-                  padding: '12px 16px',
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: activeTab === tab.key ? 700 : 400,
-                  borderBottom: `2px solid ${activeTab === tab.key ? 'var(--color-text)' : 'transparent'}`,
-                  color: activeTab === tab.key ? 'var(--color-text)' : 'var(--color-text-disabled)',
-                  transition: 'all 0.15s',
-                }}
-              >
-                {tab.label}
-                {groupCounts[tab.key] > 0 && (
-                  <Badge size="xs" ml={6} color={tab.key === 'ACTION_REQUIRED' ? 'red' : 'gray'}>
-                    {groupCounts[tab.key]}
-                  </Badge>
-                )}
-              </UnstyledButton>
-            ))}
-          </Group>
-        </Container>
-      </Box>
+        sticky
+        layout="scroll"
+      />
 
       {/* SubFilter — IN_DELIVERY 탭 선택 시에만 렌더링 */}
       {activeTab === 'IN_DELIVERY' && (
-        <Box style={{ backgroundColor: 'var(--color-surface-muted)', borderBottom: '1px solid var(--color-border)', padding: '6px 0' }}>
+        <Box
+          style={{
+            backgroundColor: 'var(--color-surface-muted)',
+            borderBottom: '1px solid var(--color-border)',
+            padding: '6px 0',
+          }}
+        >
           <Container size="sm">
             <Group gap={0}>
               {IN_DELIVERY_SUBFILTERS.map((sf) => (
