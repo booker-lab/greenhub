@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-21 (세션57 — T-UX4a admin fontSize 토큰화 17건)
+최종 수정: 2026-05-21 (세션58 — T-UX4b 본 화면 fontSize 토큰화 10건 + `--font-size-xs` 신설 #CL-38)
 
 ---
 
@@ -43,7 +43,13 @@
 - **변경 17건/7파일**: `admin/layout.tsx:53`·`banner/_client.tsx:116`·`drivers/_client.tsx:122`·`invite/_client.tsx:144,224`·`settlements/_client.tsx:91,102,158,235`·`orders/_client.tsx:103,169,177`·`stores/_client.tsx:74,132,159`·`users/_client.tsx:63,119` 모두 `fontSize: 'var(--font-size-sm)'`.
 - **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome `--write` 7파일 자동 포맷 + 전체 baseline **64→63 errors**(자동수정 부수효과)·admin 폴더 errors 0건. 시각 검증은 사용자 합의로 생략(정적 검증만).
 
-**다음 세션 진입점**: 세션58 = **T-UX4b 셀러 본 화면 + settings fontSize 토큰화** (플랜 §1 T-UX4b). 진입 문서 `archive/sessions/session58-prep.md`. Railway Outage 무관.
+**세션58 (T-UX4b 완료, #CL-38)**:
+- **사용자 결정 2건**: ① `daily-caps:277 fontSize:10`(셀 내부 usedSlots 카운트 보조) → **신규 토큰 `--font-size-xs: 12px` 신설** 후 `var(--font-size-xs)` 적용(+2px) ② `hubs/pickup:180 fontSize:20`(OTP 입력 박스 48×56) → `var(--font-size-xl)` 채택(변동 0). 검증 강도 — 정적 검증으로 갈음(스팟 체크 생략).
+- **변경 10건/5파일**: `settlements/_components/{DailySummaryTab,OrdersTab,PeriodTab}.tsx` 5건(모두 sm) · `hubs/[id]/pickup/page.tsx:180`(xl) · `settings/daily-caps/page.tsx:277`(xs)·`:313`(sm) · `settings/delivery/page.tsx:181,244`(sm).
+- **신규 #CL-38**: `--font-size-xs: 12px` 신설 + 사용 기준(의도적 작은 보조 인디케이터에 한정). 세션57 "12·14→sm 통일"은 유지, xs는 보완.
+- **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome `--write` 대상 폴더 errors 0건·warnings 3건(기존)·전체 baseline 63→**50 errors**(자동수정 부수효과)·신규 0건.
+
+**다음 세션 진입점**: 세션59 = **T-UX4c products `_components` 7건 fontSize 토큰화** (플랜 §1 T-UX4c). 진입 문서 `archive/sessions/session59-prep.md`. Railway Outage 무관.
 
 ---
 

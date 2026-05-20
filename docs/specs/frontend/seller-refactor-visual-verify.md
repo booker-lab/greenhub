@@ -331,3 +331,22 @@
 | 132 | 회귀 — admin 숫자 리터럴 잔존 | `grep -rn "fontSize:\s*[0-9]" apps/seller/src/app/admin` 0건 | ✅ | 세션57 검증 |
 | 133 | 회귀 — 빌드 | `pnpm --filter seller build` 23라우트 + 타입체크 exit 0 | ✅ | 세션57 검증 |
 | 134 | 회귀 — biome 베이스라인 | `pnpm -w biome check apps/seller` errors 64→63(자동 포맷 부수효과) 신규 0건 | ✅ | 세션57 검증 |
+
+### F-T-UX4b — 셀러 본 화면 fontSize 토큰화 10건 + `--font-size-xs` 신설 (세션58 · #CL-38)
+
+플랜: [seller-ux-residual-plan.md](seller-ux-residual-plan.md) T-UX4b. settlements 3파일·hubs/pickup·settings 2파일의 하드코딩 `fontSize: 숫자` 10건 → `var(--font-size-*)`. 위험 케이스 2건은 사용자 결정으로 처리: `daily-caps:277` `fontSize:10`(셀 내부 보조) → **`--font-size-xs: 12px` 신설**(#CL-38) 후 xs(+2px) 적용 · `hubs/pickup:180` `fontSize:20`(OTP 입력 박스) → xl(변동 0). 시각 검증은 정적 검증으로 갈음(사용자 합의).
+
+| # | 확인 항목 | 통과 기준 | 결과 | 메모 |
+|---|----------|----------|:----:|------|
+| 135 | settlements 일별 탭 | `/settlements` 일별 폼 날짜 input 폰트(`DailySummaryTab.tsx:42` 13→sm) | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 136 | settlements 주문 탭 | `/settlements` 주문 탭 CSV 다운로드 라벨(`OrdersTab.tsx:46` 12→sm) | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 137 | settlements 기간 탭 | `/settlements` 기간 탭 from·to date input·CSV 라벨(`PeriodTab.tsx:48,61,91`) | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 138 | 거점 픽업 OTP | `/hubs/[id]/pickup` 6자리 OTP 입력 박스 강조 폰트(`pickup/page.tsx:180` 20→xl, 변동 0) | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 139 | daily-caps 셀 카운트 | `/settings/daily-caps` 그리드 셀 내부 usedSlots `↑` 카운트(`daily-caps:277` 10→**xs(12px)**, +2px) | ⏹️ 생략 | 의도적 작은 보조 인디케이터 — 정적 검증으로 갈음 |
+| 140 | daily-caps 편집 입력 | `/settings/daily-caps` 편집 패널 totalCap 입력(`daily-caps:313` 14→sm) | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 141 | delivery 옵션 입력 | `/settings/delivery` 직배송/거점/택배 비용 입력(`delivery:181`) · 무료 배송 기준 입력(`delivery:244`) 14→sm | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 142 | 회귀 — 토큰 신설 확인 | `packages/ui/src/style.css` `--font-size-xs: 12px` 존재 | ✅ | 세션58 검증 |
+| 143 | 회귀 — settlements/hubs/settings 숫자 리터럴 잔존 | `grep -rnE "fontSize:\s*[0-9]+" apps/seller/src/app/{settlements,hubs,settings}` 0건 | ✅ | 세션58 검증(잔여 7건은 모두 products `_components` — T-UX4c 범위) |
+| 144 | 회귀 — 빌드 | `pnpm --filter seller build` 23라우트 + 타입체크 exit 0 | ✅ | 세션58 검증 |
+| 145 | 회귀 — biome 대상 폴더 | `pnpm -w biome check apps/seller/src/app/{settlements,hubs,settings}` errors 0건 | ✅ | warnings 3건(기존), 신규 0건 |
+| 146 | 회귀 — biome 전체 베이스라인 | `pnpm -w biome check apps/seller/src` errors 63→50(자동 포맷 부수효과) 신규 0건 | ✅ | 세션58 검증 |

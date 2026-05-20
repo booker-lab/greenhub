@@ -45,7 +45,7 @@ export function PeriodTab({
               padding: '8px 12px',
               border: '1px solid var(--color-border)',
               borderRadius: 12,
-              fontSize: 14,
+              fontSize: 'var(--font-size-sm)',
             }}
           />
           <Text style={{ color: 'var(--color-text-disabled)' }}>~</Text>
@@ -58,7 +58,7 @@ export function PeriodTab({
               padding: '8px 12px',
               border: '1px solid var(--color-border)',
               borderRadius: 12,
-              fontSize: 14,
+              fontSize: 'var(--font-size-sm)',
             }}
           />
         </Group>
@@ -88,7 +88,11 @@ export function PeriodTab({
             </Text>
             <UnstyledButton
               onClick={() => downloadCSV(settlements, from, to)}
-              style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 500 }}
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--color-primary)',
+                fontWeight: 500,
+              }}
             >
               CSV 다운로드
             </UnstyledButton>

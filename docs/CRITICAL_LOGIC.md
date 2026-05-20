@@ -443,3 +443,25 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **검증**: seller 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · biome baseline 72→68 errors(import 정렬 자동수정), 신규 0건. e2e 영향 없음 예상 — 백엔드 호출 경로 불변, 셀렉터는 텍스트 기반이면 모달 라벨로 매핑 가능(필요 시 Railway 복구 후 점검).
 
+---
+
+## [결정 #CL-38] 디자인 시스템 폰트 토큰 `--font-size-xs: 12px` 신설 (2026-05-21, 세션58)
+
+**배경**: T-UX4b 셀러 본 화면 fontSize 토큰화 진행 중 `apps/seller/src/app/settings/daily-caps/page.tsx:277` 의 `fontSize: 10`(일일 캡 그리드 셀 내부 `usedSlots` 카운트 보조 인디케이터)을 처리할 때, 기존 토큰 최저값 `sm = 15px`로 흡수 시 +5px 큰 변화로 셀 비좁음·줄바꿈 위험. 한편 세션57 T-UX4a에서 12px·14px 보조 텍스트 17건을 모두 sm으로 통일했으나, 본 화면에서 시각적으로 의도적인 "작은 보조 텍스트"는 디자인 의도 보존이 더 적합.
+
+**핵심 규칙**:
+
+1. **신설 토큰**: `packages/ui/src/style.css` `:root` 에 `--font-size-xs: 12px` 추가. 정의 위치는 `--font-size-sm: 15px` 직전(작은→큰 순).
+2. **사용 기준**: **셀 내부 보조 인디케이터·카운트 라벨 등 "의도적으로 작게 디자인된 시각 요소"** 에 한정. 일반 본문 텍스트는 계속 sm 이상 사용.
+3. **세션57 정책과의 관계**: 세션57의 "12·14 → sm 통일"은 admin 데이터 표(저빈도 사용자 노출)의 보조 텍스트에 적용된 가독성 개선 정책으로 유지. 본 결정은 그것을 뒤집지 않고, **명시적으로 "작아야 하는" 자리에만 xs를 허용**하는 보완. 일반 보조 텍스트는 여전히 sm 권장.
+4. **신설 토큰 부재 영역**: 9px·10px·11px 같은 sub-12px 값은 토큰 신설하지 않음(시각 잡음·접근성 하한 우려). 잔존 시 xs로 흡수하거나 sm으로 끌어올림.
+
+**적용 (세션58)**:
+- `apps/seller/src/app/settings/daily-caps/page.tsx:277` (usedSlots `↑` 카운트) — `fontSize: 10` → `fontSize: 'var(--font-size-xs)'` (+2px, 의도적 작은 보조 텍스트 유지).
+
+**범위 외**:
+- products `_components/ImageUpload.tsx` 의 `fontSize: 9` 4건은 T-UX4c(세션59)에서 본 정책으로 판단(흡수 vs 회피). 본 세션 미적용.
+- AIPreviewPanel `styles.input.fontSize: 15` 같은 Mantine API 경로는 T-UX5 정합성 검토에서 별도 처리.
+
+**검증**: seller 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · 본 세션 대상 폴더(settlements/hubs/settings) biome errors 0건 · 전체 seller baseline 50 errors(세션57 63→50 추가 자동수정 효과, 신규 0건). 시각 검증은 사용자 합의로 생략(정적 검증만).
+
