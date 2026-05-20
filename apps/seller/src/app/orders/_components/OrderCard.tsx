@@ -95,7 +95,7 @@ export function OrderCard({ order }: { order: Order }) {
           </Text>
           <Text
             style={{
-              fontSize: 24,
+              fontSize: 'var(--font-size-2xl)',
               letterSpacing: '0.2em',
               fontFamily: 'monospace',
               fontWeight: 'var(--fw-bold)',
