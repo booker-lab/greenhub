@@ -298,3 +298,18 @@
 | 113 | 정산 지급 모달 | `/admin/settlements` "지급처리" → ConfirmModal(blue) 표시, 확인 시 상태 paid로 갱신 | | |
 | 114 | 사용자 정지/해제 모달 | `/admin/users` 정상 계정 → "계정 정지"(red), 정지된 계정 → "계정 정지 해제"(green) | | |
 | 115 | 회귀 — native confirm 잔존 | `apps/seller/src` 전역 `confirm(` 호출 0건(grep 검증) | | |
+
+### F-T-UX2 — 상품 카드 Switch + Button 분리 (세션56)
+
+플랜: [seller-ux-residual-plan.md](seller-ux-residual-plan.md) T-UX2. `apps/seller/src/app/products/page.tsx` ProductCard에서 Badge×3 → `Switch`(활성 토글) + `Button subtle`×2(수정·삭제) 분리.
+
+| # | 확인 항목 | 통과 기준 | 결과 | 메모 |
+|---|----------|----------|:----:|------|
+| 116 | 활성 토글 — 외관 | `/products` 카드의 상품명 우측에 Mantine Switch(초록, sm) 표시. 활성 상품 = 켜짐, 비활성 = 꺼짐 | | |
+| 117 | 활성 토글 — 동작 | Switch 클릭 시 즉시 PATCH 호출(`/active`), 처리 중 disabled, 성공 시 상태 반영. 에러 시 카드 내부 인라인 메시지 | | |
+| 118 | 활성 토글 — 접근성 | Switch에 aria-label("판매 중 — 클릭하여 비활성" 또는 "비활성 — 클릭하여 판매 중으로") 부여 | | |
+| 119 | 수정 버튼 | 액션 row의 "수정" Button(xs subtle gray) 클릭 시 `/products/[id]/edit` 이동 | | |
+| 120 | 삭제 버튼 — 외관 | 액션 row의 "삭제" Button(xs subtle red) 클릭 시 ConfirmModal(세션55) 열림 | | |
+| 121 | 삭제 버튼 — 로딩 | 확인 시 Button `loading` prop으로 스피너 표시, ConfirmModal `loading` 가드 동작 | | |
+| 122 | 레이아웃 회귀 | 카드 높이·정렬 자연스러움, 상품명 truncate 정상, 액션 row는 수정·삭제 2개만 | | |
+| 123 | 회귀 — Badge 잔존 | `apps/seller/src/app/products/page.tsx`에 `<Badge` 사용 0건(grep 검증) | | |

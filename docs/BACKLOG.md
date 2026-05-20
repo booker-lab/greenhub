@@ -422,7 +422,7 @@
 | UX-03 | High | accessToken 만료 시 사용자 안내 없음 → TokenErrorGuard로 해결 | ✅ |
 | UX-06 | Medium | 주소 입력 Daum 우편번호 미연동 | ✅ 2026-04-08 |
 | UX-07 | Medium | 셀러앱 탭 스타일 2종 혼재 — 주문(검정 underline) vs 상품·정산(초록) | ✅ 세션54 T-UX1 (`SegmentedTabs` 공통 컴포넌트 신설·3페이지 치환·`top:57` 매직넘버 해소) |
-| UX-08 | Medium | 셀러 상품 카드 Badge-as-button — 상태 표시와 액션 버튼 시각 미구분 | 📋 세션53 플랜 T-UX2 |
+| UX-08 | Medium | 셀러 상품 카드 Badge-as-button — 상태 표시와 액션 버튼 시각 미구분 | ✅ 세션56 T-UX2 (활성 토글 `Switch`·수정/삭제 `Button subtle`·상품명 우측 Switch + 액션 row 분리) |
 | UX-09 | Low | 셀러앱 `confirm()` vs Modal 혼재 — 삭제 확인 패턴 불일치 (6건 잔존) | ✅ 세션55 T-UX3 (`ConfirmModal` 공통 컴포넌트 신설·6건 교체, products는 ProductCard 내부 state 예외) |
 | UX-10 | Low | 주문 페이지 3중 sticky 스택 — 목록 가시 영역 축소 | ⏹️ 세션41~45 자연 해소 (sticky 1곳·`top: var(--header-height)` 토큰화 완료, 세션53 진단으로 확정) |
 
@@ -456,6 +456,7 @@
 > **세션53**: Railway Outage 미복구 확인(`status.railway.com` Major Outage 지속) → 백엔드 무관 작업으로 전환. **UX-07~10 진단 + 아토믹 태스크 플랜 수립** ([seller-ux-residual-plan.md](specs/frontend/seller-ux-residual-plan.md), T-UX1~5). 진단 결과 — UX-07 탭 혼재 유지·UX-08 상품 카드 Badge×3 유지·UX-09 native `confirm()` 6건 잔존(hubs·products·admin/drivers×2·admin/settlements·admin/users)·UX-10 사실상 자연 해소(세션41~45 리팩토링으로 sticky 1곳만 남음). 추가로 `fontSize` 하드코딩 ~30곳 발견 → T-UX4a/b/c로 분리. 코드 변경 없음(플랜·BACKLOG·memory만). 다음 세션 진입 문서 `archive/sessions/session54-prep.md` — **정합성 검토(플랜 자체 사용자 합의·결정 사항 확정) 후 T-UX1 진입**.
 > **세션54 완료**: T-UX1 탭 스타일 단일화 — `apps/seller/src/components/SegmentedTabs.tsx` 신설(80라인, 초록 + active 700 + sticky/layout prop + count Badge) + 3페이지 치환(`orders:160-195` sticky/scroll, `products:62-94` flex, `settlements:37-69` sticky + `top: 57` 매직넘버 → `var(--header-height)` 동시 해소). 사용자 결정 사항 — 색상 `--color-primary`·강조 medium/active 700·sticky·Badge·컴포넌트 위치 모두 권장안 채택. 셀러 타입체크 통과(exit 0)·`pnpm --filter seller build` 통과(23라우트)·biome 자동 포맷 후 신규 0건. 코드 변경: SegmentedTabs.tsx 신설 + 3페이지 + 미사용 import 정리. UX-07 ✅ 마킹. 다음 세션 진입 문서 `archive/sessions/session55-prep.md` — T-UX3 ConfirmModal 진입.
 > **세션55 완료**: T-UX3 ConfirmModal 공통 컴포넌트 — `apps/seller/src/components/ConfirmModal.tsx` 신설(~75라인, props: `opened/title/message/confirmLabel/cancelLabel/confirmColor/loading/onConfirm/onClose`, `whiteSpace: pre-line`로 다행 메시지 지원) + native `confirm()` 6건 교체 (#CL-37 정책 정착). 사용자 결정 사항 — 자체 컴포넌트(Mantine Modal 직접 사용)·페이지 단일 state(products는 ProductCard 내부 state 예외)·권장 props 시그니처 모두 채택. 치환 결과: ① `hubs/page.tsx` 거점 삭제(red, page state) ② `products/page.tsx` ProductCard 상품 삭제(red, card state 예외) ③ `admin/drivers/_client.tsx` 승인/정지/해제 3액션을 `PendingAction` 타입+ACTION_META 룩업으로 통합(green/red/gray) ④ `admin/settlements/_client.tsx` 지급 처리(blue, alert는 실패 시 유지) ⑤ `admin/users/_client.tsx` 정지/해제 가변 라벨·색상. 셀러 타입체크 통과(exit 0)·`pnpm --filter seller build` 통과(23라우트)·biome 자동 포맷 후 신규 0건(전체 baseline 72→68 errors, import 정렬 4건 자동수정). UX-09 ✅ 마킹. 다음 세션 진입 문서 `archive/sessions/session56-prep.md` — T-UX2 상품 카드 Badge 분리.
+> **세션56 완료**: T-UX2 상품 카드 Badge → Switch+Button 분리 — `apps/seller/src/app/products/page.tsx` ProductCard에서 Badge×3(판매중 토글/수정/삭제) → ① 활성 토글 `Switch`(상품명 우측, 상품명 라인에 `Group justify=space-between`로 배치, size=sm·color=green, aria-label로 상태 명시) ② 수정 `Button size=xs variant=subtle color=gray` `component={Link}` ③ 삭제 `Button size=xs variant=subtle color=red` + `loading={deleting}`. 사용자 결정 사항 — Switch 채택(ActionIcon/Badge 거절)·Button subtle 채택·삭제 red subtle·상품명 우측 Switch + 액션 row 분리 모두 권장안 채택. 셀러 타입체크 통과(exit 0)·`pnpm --filter seller build` 통과(23라우트)·biome 자동 포맷 후 products/page.tsx 자체 이슈 0건·전체 baseline 68→64 errors(Badge 4건 제거). 코드 변경: imports `Badge` 제거 + `Switch` 추가, ProductCard 본문 ~30라인 교체. UX-08 ✅ 마킹. 다음 세션 진입 문서 `archive/sessions/session57-prep.md` — T-UX4a admin fontSize 토큰화.
 
 ### 12-1. 우선순위
 
@@ -481,7 +482,7 @@
 | 🟢 P3 | **[BUG-16] 택배 주문 상태 전환 갭** — 셀러 앱 "택배 발송 완료" 버튼 추가 + 드라이버 보드 parcel 필터 (세션40 논의) | 버그/기능 | §1-3 상세 |
 | 🟢 P3 | **[UX-11] 주문번호 통합** — 백엔드 `orderNumber` 필드(`YYYYMMDD-NNNNNN`) 신설, 소비자·셀러 앱 표시 일치. 현재 소비자=전체 Firestore ID / 셀러=뒷 6~8자로 서로 다른 번호를 보임 (세션40 논의) | UX/백엔드 | `shared` Order 타입 + API + 3곳 프론트 |
 | ✅ P3 | consumer@test.com 강한비번 전환 — 30자 랜덤 비번 (2026-05-17 세션34 완료) | 보안 | 단독 |
-| 🟢 P3 | **셀러 UX 잔여(UX-07~09) 정합** — ✅ T-UX1 탭 단일화(세션54)·✅ T-UX3 ConfirmModal 6곳 교체(세션55)·T-UX2 상품 카드 Badge 분리·T-UX4a/b/c fontSize 토큰화·T-UX5 정합성 검토. UX-10은 자연 해소(⏹️). Railway 무관 | UX/DX | `specs/frontend/seller-ux-residual-plan.md` (세션53 수립) |
+| 🟢 P3 | **셀러 UX 잔여(UX-07~09) 정합** — ✅ T-UX1 탭 단일화(세션54)·✅ T-UX3 ConfirmModal 6곳 교체(세션55)·✅ T-UX2 상품 카드 Switch+Button 분리(세션56)·T-UX4a/b/c fontSize 토큰화·T-UX5 정합성 검토. UX-10은 자연 해소(⏹️). Railway 무관 | UX/DX | `specs/frontend/seller-ux-residual-plan.md` (세션53 수립) |
 | ✅ P4 | global-setup flake 보강 — bypass 루프 직후 `about:blank` 이동으로 `storageState` 레이스 해소 (2026-05-17 세션37, `be4fa2c`) | e2e 안정성 | 단독 |
 | ✅ P4 | CI 액션 Node.js 20 deprecation 대응 — checkout/setup-node v6·upload-artifact v7·pnpm/action-setup v6, node-version 22 (2026-05-17 세션37, `eb15e4e`) | CI 유지보수 | 단독 |
 | ⏳ 외부 | 네이버페이 채널키 승인 → Vercel 환경변수 설정 | 외부 연동 | 승인 메일 대기 |
