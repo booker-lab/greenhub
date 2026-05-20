@@ -119,7 +119,7 @@ export default function DriversClient() {
               onClick={() => setTab(t.value)}
               style={{
                 padding: '8px 16px',
-                fontSize: 14,
+                fontSize: 'var(--font-size-sm)',
                 fontWeight: 500,
                 borderBottom: `2px solid ${tab === t.value ? 'var(--color-primary)' : 'transparent'}`,
                 marginBottom: -1,

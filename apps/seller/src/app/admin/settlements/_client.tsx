@@ -88,7 +88,7 @@ export default function AdminSettlementsClient() {
             border: '1px solid var(--color-border)',
             borderRadius: 6,
             padding: '8px 12px',
-            fontSize: 14,
+            fontSize: 'var(--font-size-sm)',
           }}
         />
         <input
@@ -99,7 +99,7 @@ export default function AdminSettlementsClient() {
             border: '1px solid var(--color-border)',
             borderRadius: 6,
             padding: '8px 12px',
-            fontSize: 14,
+            fontSize: 'var(--font-size-sm)',
           }}
         />
       </Group>
@@ -155,7 +155,7 @@ export default function AdminSettlementsClient() {
           ) : (
             <Box
               component="table"
-              style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}
+              style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
             >
               <Box
                 component="thead"
@@ -232,7 +232,10 @@ export default function AdminSettlementsClient() {
                   >
                     <Box component="td" style={{ padding: '12px 16px' }}>
                       <Text
-                        style={{ fontSize: 12, color: 'var(--color-text-disabled)' }}
+                        style={{
+                          fontSize: 'var(--font-size-sm)',
+                          color: 'var(--color-text-disabled)',
+                        }}
                         ff="monospace"
                       >
                         {s.storeId.slice(0, 8)}…

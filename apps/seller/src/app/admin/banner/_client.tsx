@@ -1,11 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Image from 'next/image';
-import { useSession } from 'next-auth/react';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getFirebaseStorage } from '@/lib/firebase';
-import { useAdminBanner, type AdminBanner } from '@/hooks/useAdmin';
 import {
   Box,
   Button,
@@ -13,12 +7,18 @@ import {
   Loader,
   Paper,
   Stack,
-  Text,
-  TextInput,
-  Textarea,
-  Title,
   Switch,
+  Text,
+  Textarea,
+  TextInput,
+  Title,
 } from '@mantine/core';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import Image from 'next/image';
+import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+import { type AdminBanner, useAdminBanner } from '@/hooks/useAdmin';
+import { getFirebaseStorage } from '@/lib/firebase';
 
 export default function AdminBannerClient() {
   const { data: session } = useSession();
@@ -113,7 +113,7 @@ export default function AdminBannerClient() {
               borderRadius: 8,
               border: '1px solid var(--color-border)',
               cursor: uploading ? 'not-allowed' : 'pointer',
-              fontSize: 14,
+              fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-secondary)',
             }}
           >

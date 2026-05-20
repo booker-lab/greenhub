@@ -1,8 +1,8 @@
 'use client';
 
+import { Badge, Box, Button, Group, Paper, Select, Text, TextInput, Title } from '@mantine/core';
 import { useState } from 'react';
 import { useAdminOrders } from '@/hooks/useAdmin';
-import { Badge, Box, Button, Group, Paper, Select, Text, TextInput, Title } from '@mantine/core';
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: '결제대기',
@@ -100,7 +100,7 @@ export default function AdminOrdersClient() {
           ) : (
             <Box
               component="table"
-              style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}
+              style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
             >
               <Box
                 component="thead"
@@ -166,7 +166,10 @@ export default function AdminOrdersClient() {
                   >
                     <Box component="td" style={{ padding: '12px 16px' }}>
                       <Text
-                        style={{ fontSize: 12, color: 'var(--color-text-disabled)' }}
+                        style={{
+                          fontSize: 'var(--font-size-sm)',
+                          color: 'var(--color-text-disabled)',
+                        }}
                         ff="monospace"
                       >
                         {order.id.slice(0, 12)}…
@@ -174,7 +177,10 @@ export default function AdminOrdersClient() {
                     </Box>
                     <Box component="td" style={{ padding: '12px 16px' }}>
                       <Text
-                        style={{ fontSize: 12, color: 'var(--color-text-disabled)' }}
+                        style={{
+                          fontSize: 'var(--font-size-sm)',
+                          color: 'var(--color-text-disabled)',
+                        }}
                         ff="monospace"
                       >
                         {order.storeId.slice(0, 8)}…

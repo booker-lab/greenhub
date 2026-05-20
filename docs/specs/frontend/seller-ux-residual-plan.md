@@ -89,7 +89,8 @@ T-UX1~4 상호 무관(다른 파일 영역). 순서는 자유, 권장은 **T-UX1
 ### T-UX4 — `fontSize` 하드코딩 토큰화 (잔여)
 
 - **목적**: 디자인 시스템 일관성 + 향후 글로벌 폰트 스케일 변경 시 단일 진입점.
-- **현황**: `packages/ui/src/style.css`에 `--font-size-xs`(11px? 확인), `--font-size-sm`(13/14px?), `--font-size-md`(15/16px?), `--font-size-2xl`(24px, 세션52 추가) 등 정의 (T-UX4 진입 시 정확한 매핑 확인 필요).
+- **진행 상태**: ✅ **T-UX4a 완료**(세션57, admin 17건 → `var(--font-size-sm)` 통일). T-UX4b/c 미진행.
+- **현황 (세션57 확정)**: `packages/ui/src/style.css` 정의 = `--font-size-sm: 15px` · `md: 16px` · `lg: 18px` · `xl: 20px` · `2xl: 24px`. **xs 미정의·사용 0건**(셀러 본 화면도 sm~2xl만 운용). 세션57 매핑 정책 — 12·14 모두 sm으로 통일(가독성·정의 일관성 우선).
 - **치환 대상** (`fontSize: <숫자>` → `var(--font-size-*)`):
   - admin 9파일 (`drivers/_client.tsx`·`invite/_client.tsx`×2·`layout.tsx`·`users/_client.tsx`×2·`settlements/_client.tsx`×4·`orders/_client.tsx`×3·`banner/_client.tsx`·`stores/_client.tsx`×3)
   - settlements 컴포넌트 (`page.tsx:56`은 T-UX1에서 처리됨·`DailySummaryTab.tsx:42`·`OrdersTab.tsx:46`·`PeriodTab.tsx:48,61,91`)
