@@ -48,7 +48,7 @@ export function OrderStatusCard({ groupCounts }: { groupCounts: Record<OrderGrou
                 <Stack gap={2} align="center">
                   <Text
                     style={{
-                      fontSize: 24,
+                      fontSize: 'var(--font-size-2xl)',
                       fontWeight: 'var(--fw-bold)',
                       lineHeight: 1,
                       color: accent ? 'var(--color-danger)' : 'var(--color-text)',
