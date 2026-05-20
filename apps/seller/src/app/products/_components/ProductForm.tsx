@@ -1,17 +1,17 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { Button, Container, Group, Stack, Text, UnstyledButton } from '@mantine/core';
-import { PageShell } from '@/components/PageShell';
+import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/PageHeader';
-import TouchSelector from './TouchSelector';
-import SellerNoteInput from './SellerNoteInput';
+import { PageShell } from '@/components/PageShell';
 import AIPreviewPanel from './AIPreviewPanel';
+import type { ProductFormProps } from './productForm.types';
+import SellerNoteInput from './SellerNoteInput';
 import { StepIndicator } from './StepIndicator';
 import { Step1Basic } from './steps/Step1Basic';
 import { Step5Pricing } from './steps/Step5Pricing';
+import TouchSelector from './TouchSelector';
 import { useProductForm } from './useProductForm';
-import type { ProductFormProps } from './productForm.types';
 
 export type { ProductFormData, ProductFormProps } from './productForm.types';
 
@@ -43,10 +43,7 @@ export default function ProductForm(props: ProductFormProps) {
         );
       case 3:
         return (
-          <SellerNoteInput
-            value={f.form.sellerNote}
-            onChange={(v) => f.set('sellerNote', v)}
-          />
+          <SellerNoteInput value={f.form.sellerNote} onChange={(v) => f.set('sellerNote', v)} />
         );
       case 4:
         return (

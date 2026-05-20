@@ -1,13 +1,9 @@
 'use client';
 
 import { Group, NumberInput, Stack, Text } from '@mantine/core';
-import GroupConfigSection from '../GroupConfigSection';
 import { ChoiceRow, FieldCard } from '../FormPrimitives';
-import {
-  DELIVERY_SIZES,
-  type GroupConfigForm,
-  type ProductFormData,
-} from '../productForm.types';
+import GroupConfigSection from '../GroupConfigSection';
+import { DELIVERY_SIZES, type GroupConfigForm, type ProductFormData } from '../productForm.types';
 
 interface Step5PricingProps {
   form: ProductFormData;

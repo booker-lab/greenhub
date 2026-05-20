@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-21 (세션58 — T-UX4b 본 화면 fontSize 토큰화 10건 + `--font-size-xs` 신설 #CL-38)
+최종 수정: 2026-05-21 (세션59 — T-UX4c products `_components` fontSize 토큰화 7건, T-UX4 종결)
 
 ---
 
@@ -49,7 +49,13 @@
 - **신규 #CL-38**: `--font-size-xs: 12px` 신설 + 사용 기준(의도적 작은 보조 인디케이터에 한정). 세션57 "12·14→sm 통일"은 유지, xs는 보완.
 - **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome `--write` 대상 폴더 errors 0건·warnings 3건(기존)·전체 baseline 63→**50 errors**(자동수정 부수효과)·신규 0건.
 
-**다음 세션 진입점**: 세션59 = **T-UX4c products `_components` 7건 fontSize 토큰화** (플랜 §1 T-UX4c). 진입 문서 `archive/sessions/session59-prep.md`. Railway Outage 무관.
+**세션59 (T-UX4c 완료 · T-UX4 시리즈 종결)**:
+- **변경 7건/3파일**: `products/_components/ImageUpload.tsx` 5건(9·9·9·11·12→**xs**, 80×80 썸네일 오버레이 라벨·✕ 삭제 버튼·"사진 추가" 빈 박스 — #CL-38 "의도적 작은 보조 인디케이터" 정책 일관 적용) · `AIPreviewPanel.tsx:147` Mantine `styles.input.fontSize: 15`→`var(--font-size-sm)` · `SellerNoteInput.tsx:38` Mantine `styles.input.fontSize: 16`→`var(--font-size-md)`. Mantine `styles` prop도 emotion 통해 CSS 변수 통과 — 타입체크 exit 0으로 검증.
+- **사용자 결정 4건**: 9px 4건 → **xs 흡수**(권장) · 11/12px 2건 → **둘 다 xs**(권장) · Mantine styles 2건 → **양쪽 토큰화**(권장) · 검증 강도 → **정적 검증만**(시각 검증 생략).
+- **검증**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome `--write` 대상 폴더 자체 errors 0건·전체 baseline 63(세션58 종료 시 stash 측정)→**1 error/3 warnings**(자동수정 부수효과 -62·잔여 1 error는 `VarietySelector.tsx:54 noAssignInExpressions` 기존 코드·작업 무관)·신규 0건.
+- **잔여 `fontSize: <숫자>` grep 0건 확인 — T-UX4 시리즈(a/b/c) 종결**. #CL 신규 등재 불필요(#CL-38 정책 그대로 적용).
+
+**다음 세션 진입점**: 세션60 = **T-UX5 정합성 검토** — `confirm(` 잔존 0건·인라인 `fontSize: <숫자>` 잔존 0건·신설 토큰 #CL 등재·visual-verify 완비 확인. 변경 없으면 0.5세션 종결 예상. 진입 문서 `archive/sessions/session60-prep.md`. Railway Outage 무관.
 
 ---
 

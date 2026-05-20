@@ -89,7 +89,7 @@ T-UX1~4 상호 무관(다른 파일 영역). 순서는 자유, 권장은 **T-UX1
 ### T-UX4 — `fontSize` 하드코딩 토큰화 (잔여)
 
 - **목적**: 디자인 시스템 일관성 + 향후 글로벌 폰트 스케일 변경 시 단일 진입점.
-- **진행 상태**: ✅ **T-UX4a 완료**(세션57, admin 17건 → `var(--font-size-sm)` 통일). ✅ **T-UX4b 완료**(세션58, settlements/hubs/settings 10건/5파일 + `--font-size-xs: 12px` 신설 #CL-38). T-UX4c 미진행.
+- **진행 상태**: ✅ **T-UX4a 완료**(세션57, admin 17건 → `var(--font-size-sm)` 통일). ✅ **T-UX4b 완료**(세션58, settlements/hubs/settings 10건/5파일 + `--font-size-xs: 12px` 신설 #CL-38). ✅ **T-UX4c 완료**(세션59, products `_components` 7건/3파일 — ImageUpload 5건 xs · AIPreviewPanel Mantine styles.input 15→sm · SellerNoteInput Mantine styles.input 16→md).
 - **현황 (세션58 확정)**: `packages/ui/src/style.css` 정의 = `--font-size-xs: 12px`(세션58 신설) · `--font-size-sm: 15px` · `md: 16px` · `lg: 18px` · `xl: 20px` · `2xl: 24px`. 세션57 매핑 정책 — 12·14 모두 sm으로 통일(가독성). 세션58 보완 정책(#CL-38) — **의도적으로 작은 보조 인디케이터(셀 내부 카운트 라벨 등)에만 xs 허용**, 일반 보조 텍스트는 여전히 sm.
 - **치환 대상** (`fontSize: <숫자>` → `var(--font-size-*)`):
   - admin 9파일 (`drivers/_client.tsx`·`invite/_client.tsx`×2·`layout.tsx`·`users/_client.tsx`×2·`settlements/_client.tsx`×4·`orders/_client.tsx`×3·`banner/_client.tsx`·`stores/_client.tsx`×3)

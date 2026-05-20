@@ -1,10 +1,10 @@
 'use client';
 
 import { Stack, TextInput } from '@mantine/core';
-import ImageUpload from '../ImageUpload';
-import VarietySelector from '../VarietySelector';
 import { ChoiceRow, FieldCard } from '../FormPrimitives';
+import ImageUpload from '../ImageUpload';
 import { CATEGORIES, type ProductFormData } from '../productForm.types';
+import VarietySelector from '../VarietySelector';
 
 interface Step1BasicProps {
   storeId: string;

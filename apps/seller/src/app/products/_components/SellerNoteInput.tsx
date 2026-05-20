@@ -35,7 +35,7 @@ export default function SellerNoteInput({ value, onChange }: Props) {
         onChange={(e) => onChange(e.target.value.slice(0, MAX))}
         minRows={5}
         radius="md"
-        styles={{ input: { fontSize: 16, lineHeight: 1.6 } }}
+        styles={{ input: { fontSize: 'var(--font-size-md)', lineHeight: 1.6 } }}
       />
       <Text
         style={{

@@ -350,3 +350,21 @@
 | 144 | 회귀 — 빌드 | `pnpm --filter seller build` 23라우트 + 타입체크 exit 0 | ✅ | 세션58 검증 |
 | 145 | 회귀 — biome 대상 폴더 | `pnpm -w biome check apps/seller/src/app/{settlements,hubs,settings}` errors 0건 | ✅ | warnings 3건(기존), 신규 0건 |
 | 146 | 회귀 — biome 전체 베이스라인 | `pnpm -w biome check apps/seller/src` errors 63→50(자동 포맷 부수효과) 신규 0건 | ✅ | 세션58 검증 |
+
+### F-T-UX4c — products `_components` fontSize 토큰화 7건 (세션59)
+
+플랜: [seller-ux-residual-plan.md](seller-ux-residual-plan.md) T-UX4c. products `_components` 3파일의 하드코딩 `fontSize: 숫자` 7건 → `var(--font-size-*)`. **9·11·12px 5건은 모두 xs로 흡수**(#CL-38 "의도적 작은 보조 인디케이터" 정책 일관 적용 — 80×80 썸네일 오버레이 라벨·✕ 삭제 버튼·"사진 추가" 빈 박스 라벨, 9→12px·11→12px·12→12px). **Mantine `styles.input.fontSize` 2건**(AIPreviewPanel 15→sm·SellerNoteInput 16→md)도 토큰 인젝션 — emotion이 CSS 변수 통과 처리, 타입체크 exit 0으로 검증 완료(T-UX5 정합성 검토에서 "Mantine API 경로 예외" 명시 회피). 시각 검증은 정적 검증으로 갈음(사용자 합의).
+
+| # | 확인 항목 | 통과 기준 | 결과 | 메모 |
+|---|----------|----------|:----:|------|
+| 147 | 이미지 업로드 — 대표 배지 | `/products/new` 이미지 첫 칸 좌하단 "대표" 라벨(`ImageUpload.tsx:102` 9→xs, +3px) | ⏹️ 생략 | 80×80 썸네일 오버레이 — 정적 검증으로 갈음 |
+| 148 | 이미지 업로드 — 대표 설정 버튼 | 이미지 2번째 이후 좌하단 "대표 설정" 라벨(`ImageUpload.tsx:121` 9→xs) | ⏹️ 생략 | 동일 |
+| 149 | 이미지 업로드 — 순번 인디케이터 | 좌상단 1·2·3·4·5 순번 원형 배지(`ImageUpload.tsx:140` 9→xs) | ⏹️ 생략 | 16×16 원 안 글리프 — 정적 검증으로 갈음 |
+| 150 | 이미지 업로드 — ✕ 삭제 버튼 | 우상단 20×20 ✕ 버튼 글리프(`ImageUpload.tsx:168` 11→xs, +1px) | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 151 | 이미지 업로드 — "사진 추가" 빈 박스 | 80×80 점선 박스 안 "사진 추가" 라벨(`ImageUpload.tsx:194` 12→xs, 변동 0) | ⏹️ 생략 | 정의값 일치 — 정적 검증으로 갈음 |
+| 152 | AI 프리뷰 — 상세 설명 Textarea | `/products/new` AI 생성 후 상세 설명 Mantine Textarea 입력 폰트(`AIPreviewPanel.tsx:147` styles.input 15→sm, 변동 0) | ⏹️ 생략 | Mantine emotion CSS 변수 통과 — 정적 검증으로 갈음 |
+| 153 | 셀러 노트 입력 Textarea | `/products/new` 셀러 노트 Mantine Textarea 입력 폰트(`SellerNoteInput.tsx:38` styles.input 16→md, 변동 0) | ⏹️ 생략 | 동일 |
+| 154 | 회귀 — products 숫자 리터럴 잔존 | `grep -rnE "fontSize:\s*[0-9]+" apps/seller/src/app/products` 0건 | ✅ | 세션59 검증 |
+| 155 | 회귀 — seller 전역 숫자 리터럴 잔존 | `grep -rnE "fontSize:\s*[0-9]+" apps/seller/src --include="*.tsx"` 0건 (T-UX4 시리즈 종결) | ✅ | 세션59 검증 |
+| 156 | 회귀 — 빌드 | `pnpm --filter seller build` 23라우트 + 타입체크 exit 0 | ✅ | 세션59 검증 |
+| 157 | 회귀 — biome 전체 베이스라인 | `pnpm -w biome check apps/seller/src` errors 63→1(자동 포맷 부수효과 -62, 잔여 1건은 `VarietySelector.tsx:54` 기존 코드) 신규 0건 | ✅ | 세션59 검증 |
