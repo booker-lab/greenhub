@@ -153,7 +153,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
                 </Text>
                 <Text
                   style={{
-                    fontSize: 24,
+                    fontSize: 'var(--font-size-2xl)',
                     letterSpacing: '0.2em',
                     fontWeight: 'var(--fw-bold)',
                     color: 'var(--color-primary)',
