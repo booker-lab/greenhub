@@ -313,3 +313,21 @@
 | 121 | 삭제 버튼 — 로딩 | 확인 시 Button `loading` prop으로 스피너 표시, ConfirmModal `loading` 가드 동작 | | |
 | 122 | 레이아웃 회귀 | 카드 높이·정렬 자연스러움, 상품명 truncate 정상, 액션 row는 수정·삭제 2개만 | | |
 | 123 | 회귀 — Badge 잔존 | `apps/seller/src/app/products/page.tsx`에 `<Badge` 사용 0건(grep 검증) | | |
+
+### F-T-UX4a — admin fontSize 토큰화 17건 (세션57)
+
+플랜: [seller-ux-residual-plan.md](seller-ux-residual-plan.md) T-UX4a. `apps/seller/src/app/admin/**` 의 하드코딩 `fontSize: 숫자` 17건(`layout.tsx`·`banner/_client.tsx`·`drivers/_client.tsx`·`invite/_client.tsx`×2·`settlements/_client.tsx`×4·`orders/_client.tsx`×3·`stores/_client.tsx`×3·`users/_client.tsx`×2) → `fontSize: 'var(--font-size-sm)'`. 매핑은 12·14 모두 sm(15px)로 통일(현 토큰 정의에 xs 미정의·미사용 — 5단계 sm/md/lg/xl/2xl만 운용 중). 시각 검증은 정적 검증으로 갈음(사용자 합의).
+
+| # | 확인 항목 | 통과 기준 | 결과 | 메모 |
+|---|----------|----------|:----:|------|
+| 124 | admin 레이아웃 메뉴 | `/admin` 탭 라벨(`layout.tsx:53`) 폰트 자연스러움 | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 125 | 배너 업로드 폼 | `/admin/banner` 업로드 버튼 폰트 | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 126 | 드라이버 카드 | `/admin/drivers` 탭 라벨 폰트 | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 127 | 초대 코드 표 | `/admin/invite` 표 셀·만료일 폰트 | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 128 | 정산 필터·표 | `/admin/settlements` 날짜 입력·표·storeId 폰트 | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 129 | 주문 표 | `/admin/orders` 표·orderId/storeId 폰트 | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 130 | 스토어 표 | `/admin/stores` 표·storeId·수수료 입력 폰트 | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 131 | 사용자 표 | `/admin/users` 표·userId 폰트 | ⏹️ 생략 | 정적 검증으로 갈음 |
+| 132 | 회귀 — admin 숫자 리터럴 잔존 | `grep -rn "fontSize:\s*[0-9]" apps/seller/src/app/admin` 0건 | ✅ | 세션57 검증 |
+| 133 | 회귀 — 빌드 | `pnpm --filter seller build` 23라우트 + 타입체크 exit 0 | ✅ | 세션57 검증 |
+| 134 | 회귀 — biome 베이스라인 | `pnpm -w biome check apps/seller` errors 64→63(자동 포맷 부수효과) 신규 0건 | ✅ | 세션57 검증 |

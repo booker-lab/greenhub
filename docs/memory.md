@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-21 (세션56 — T-UX2 상품 카드 Switch+Button 분리)
+최종 수정: 2026-05-21 (세션57 — T-UX4a admin fontSize 토큰화 17건)
 
 ---
 
@@ -35,10 +35,15 @@
 
 **세션56 (T-UX2 완료)**:
 - **사용자 결정**: 활성 토글 `Switch`(ActionIcon/Badge 거절)·수정·삭제 `Button subtle`·삭제 `color=red`·상품명 우측 Switch + 액션 row는 수정·삭제만 — 모두 권장안 채택.
-- **변경**: `apps/seller/src/app/products/page.tsx` ProductCard ① Badge×3 제거(판매중 토글/수정/삭제) → ② 상품명 라인 `Group justify=space-between`에 `Switch size=sm color=green` 배치(aria-label로 토글 상태·동작 명시) ③ 액션 row `Button size=xs variant=subtle`로 수정(`color=gray component={Link}`)·삭제(`color=red loading={deleting}`) 2개. imports `Badge` 제거 + `Switch` 추가. ConfirmModal 연동 및 `confirmOpen`/`error`/`toggling`/`deleting` state 그대로 유지.
-- **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome 자동 포맷 후 products/page.tsx 자체 이슈 0건, 전체 baseline **68→64 errors**(Badge 4건 제거 효과)·신규 0건.
+- **변경**: `apps/seller/src/app/products/page.tsx` ProductCard ① Badge×3 제거 → ② 상품명 라인 `Group justify=space-between`에 `Switch size=sm color=green` ③ 액션 row `Button size=xs variant=subtle`로 수정(gray Link)·삭제(red loading) 2개. imports `Badge` 제거 + `Switch` 추가.
+- **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome 자동 포맷 후 자체 이슈 0건, 전체 baseline **68→64 errors**·신규 0건.
 
-**다음 세션 진입점**: 세션57 = **T-UX4a admin fontSize 토큰화** (플랜 §1 T-UX4a). 진입 문서 `archive/sessions/session57-prep.md`. Railway Outage와 무관하게 진행 가능.
+**세션57 (T-UX4a 완료)**:
+- **매핑 재설계**: 진입점 권장 `12→xs, 14→sm`은 현 토큰 정의(`packages/ui/src/style.css`: sm=15·md=16·lg=18·xl=20·2xl=24, **xs 미정의·사용 0건**)와 불일치. 사용자 결정으로 **12·14 모두 sm(15px)로 통일** — 12px 보조 텍스트 6건은 +3px 가독성 개선, 14px 11건은 +1px 미세 확대. 정책 변경 아니므로 #CL 신규 등재 없음.
+- **변경 17건/7파일**: `admin/layout.tsx:53`·`banner/_client.tsx:116`·`drivers/_client.tsx:122`·`invite/_client.tsx:144,224`·`settlements/_client.tsx:91,102,158,235`·`orders/_client.tsx:103,169,177`·`stores/_client.tsx:74,132,159`·`users/_client.tsx:63,119` 모두 `fontSize: 'var(--font-size-sm)'`.
+- **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome `--write` 7파일 자동 포맷 + 전체 baseline **64→63 errors**(자동수정 부수효과)·admin 폴더 errors 0건. 시각 검증은 사용자 합의로 생략(정적 검증만).
+
+**다음 세션 진입점**: 세션58 = **T-UX4b 셀러 본 화면 + settings fontSize 토큰화** (플랜 §1 T-UX4b). 진입 문서 `archive/sessions/session58-prep.md`. Railway Outage 무관.
 
 ---
 

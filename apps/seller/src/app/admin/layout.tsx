@@ -1,6 +1,6 @@
-import { auth } from '@/auth';
+import { Badge, Box, Container, Group, Text } from '@mantine/core';
 import { redirect } from 'next/navigation';
-import { Box, Badge, Container, Group, Text } from '@mantine/core';
+import { auth } from '@/auth';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -50,7 +50,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                     flexShrink: 0,
                     padding: '6px 12px',
                     borderRadius: 6,
-                    fontSize: 14,
+                    fontSize: 'var(--font-size-sm)',
                     fontWeight: 500,
                     color: 'var(--color-text-secondary)',
                     textDecoration: 'none',

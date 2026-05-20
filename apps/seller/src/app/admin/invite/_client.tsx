@@ -1,8 +1,8 @@
 'use client';
 
+import { Badge, Box, Button, Group, Paper, Text, Title } from '@mantine/core';
 import { useEffect, useRef, useState } from 'react';
 import { useAdminInvite } from '@/hooks/useAdmin';
-import { Badge, Box, Button, Group, Paper, Text, Title } from '@mantine/core';
 
 export default function AdminInviteClient() {
   const { invites, loading, generating, generate } = useAdminInvite();
@@ -141,7 +141,7 @@ export default function AdminInviteClient() {
           ) : (
             <Box
               component="table"
-              style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}
+              style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
             >
               <Box
                 component="thead"
@@ -221,7 +221,7 @@ export default function AdminInviteClient() {
                         style={{
                           padding: '12px 16px',
                           color: 'var(--color-text-disabled)',
-                          fontSize: 12,
+                          fontSize: 'var(--font-size-sm)',
                         }}
                       >
                         {expDate ? expDate.toLocaleDateString('ko-KR') : '-'}

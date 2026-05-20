@@ -60,7 +60,7 @@ export default function AdminUsersClient() {
         ) : (
           <Box
             component="table"
-            style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}
+            style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
           >
             <Box
               component="thead"
@@ -116,7 +116,10 @@ export default function AdminUsersClient() {
                   <Box component="td" style={{ padding: '12px 16px' }}>
                     <Text style={{ fontWeight: 'var(--fw-medium)' }}>{user.name}</Text>
                     <Text
-                      style={{ fontSize: 12, color: 'var(--color-text-disabled)' }}
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text-disabled)',
+                      }}
                       ff="monospace"
                     >
                       {user.id.slice(0, 8)}…
