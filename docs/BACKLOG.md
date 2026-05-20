@@ -67,7 +67,7 @@
   - **셀러 앱**: 주문 상세에서 `parcel + PREPARING` 조건일 때 "택배 발송 완료" 버튼 추가 → `DELIVERING` 전환
   - **드라이버 앱**: 보드 쿼리에 `deliveryMethod in ['direct', 'hub']` 필터 추가 — 택배 주문 제거
   - 관련 파일: `seller/orders/[id]/page.tsx`, `driver/board/_client.tsx`
-- [ ] **[P4] 픽업 코드 `fontSize: 24` 토큰화** — 주문 탭 리팩토링(세션45 T7) 검토 시 발견. `OrderCard.tsx:98`·`OrderInfoSection.tsx:156`의 픽업 코드 monospace 표시가 인라인 `fontSize: 24`. 디자인 토큰 부재(`sm`/`xl`만 존재)로 미치환. `style.css`에 `--font-size-2xl`(24px) 신설 후 2곳 치환. 의도적 큰 표시이므로 우선순위 낮음.
+- [x] **[P4] 픽업 코드 `fontSize: 24` 토큰화** ✅ 2026-05-20 (세션52 T7-B) — `OrderCard.tsx:98`·`OrderInfoSection.tsx:156`·`StatusCards.tsx:51` 3곳을 `var(--font-size-2xl)`로 치환. 토큰은 `packages/ui/src/style.css:25`에 24px로 이미 정의되어 있어 신설 불필요. 빌드·타입체크 통과, biome baseline 동일(신규 0건).
 
 ### 1-4. 상품 관리 (`/products`)
 
@@ -451,7 +451,8 @@
 > **세션40**: 셀러 주문 탭 리팩토링 설계 — UX 감사 + 코드 리뷰 + 사용자 논의 → T1~T7 아토믹 태스크 플랜 수립([seller-orders-refactor-plan.md](specs/frontend/seller-orders-refactor-plan.md)). 코드 변경 없음(설계·논의만). BUG-16 택배 갭·UX-11 주문번호 통합 별도 등재.
 > **세션41~45 완료**: 셀러 주문 탭 리팩토링 T1~T7 전부 구현 — 색상 버그·sticky 정리(세션42)·카드 경량화·상세 sticky footer(세션43)·날짜 필터·날짜 그룹 헤더(세션44)·검증(세션45). e2e 169 passed. 육안 검증 체크리스트 `specs/frontend/seller-refactor-visual-verify.md` 신설.
 > **세션46**: 실서비스 검증 중 주문 페이지 크래시 핫픽스(`useOrders` Firestore Timestamp 정규화, `5a2b993`) + 배송일 데이터 공백 진단. 일반 주문 23건 전부 `requestedDeliveryDate=null` — 소비자 앱에 일반 상품 배송일 선택 기능 부재 확인. 배송일 선택 + 셀러 주문 IA 재구성 플랜 수립([delivery-date-selection-plan.md](specs/frontend/delivery-date-selection-plan.md), T1~T6).
-> **다음 세션 최우선**: 세션47 = 배송일 선택 기능 **플랜 정합성 검토** (구현 전, 진입 문서 `archive/sessions/session47-prep.md`). 검토 통과 후 세션48(T1+T2) 구현 진입.
+> **세션47~51 완료**: 배송일 선택 + 셀러 IA 재구성 T1~T6 전부 구현 (#CL-34·#CL-35) — T1·T2 소비자 배송일 캘린더+체크아웃 전달(세션48), T3 API 슬롯 검증 선택 배송일 기준(세션49), T4·T5 셀러 주문 탭 일반/공구 토글+공구 배송일 조인(세션50), T6 e2e 시드 + 토글/공구 spec 신설(세션51, `ed2fc95`). e2e 풀런은 세션51 머지 직후 신규 spec 검증 예정이었으나 Railway API 다운으로 미검증.
+> **세션52**: T7-A — e2e 풀런 4회 연속 실패 원인 진단. 직접 `/auth/login` POST 결과 Railway `api-production-13e7.up.railway.app` 전체 엔드포인트가 404 'Application not found'. `status.railway.com`이 **Major Outage**(GCP가 Railway 조직 계정 차단 → Edge Network·Control Plane 마비)로 확인 — 우리 인스턴스는 무사하지만 Edge가 워크로드 라우팅 불가. set-cookie race·시크릿 회전 아님, 재배포 의미 없음. 복구 ETA 없음(GCP 직접 소통 중). T7-B — P4 fontSize 토큰화 완료(§1-3 참조). 잔여 — Railway 복구 후 e2e 재실행, BUG-16, Driver Kakao Maps SDK, UX-11, 백엔드 단일 장애점 회고(§12-1 신규 등재).
 
 ### 12-1. 우선순위
 
@@ -472,7 +473,7 @@
 | 🟢 P3 | Driver Kakao Maps SDK 연동 | 기능 | — |
 | ✅ P3 | 셀러 홈 대시보드 + 준비 물량 재구성 — 8 아토믹 태스크 (#CL-33, 2026-05-18 세션39 완료) | UX/기능 | `specs/frontend/seller-home-dashboard-plan.md` |
 | 🟢 P4 | 준비 물량 탭 — 공동구매 주문 포함 (배송일 `groupProductConfig` 별도 fetch 필요, 세션39 분리) | UX/기능 | — |
-| 🟢 P2 | **배송일 선택 기능 + 셀러 주문 IA 재구성** — T1~T6 아토믹 태스크 (세션47 검토~51 분배). 소비자 일반 상품 배송일 선택(상품 상세)·API 슬롯 검증 변경·셀러 주문 탭 일반/공구 대칭 토글·공구 배송일 조인. 세션46 진단으로 신설 — "당일 배송 컷오프" 항목 흡수 | 기능/UX | `specs/frontend/delivery-date-selection-plan.md` |
+| ✅ P2 | **배송일 선택 기능 + 셀러 주문 IA 재구성** — T1~T6 (#CL-34·#CL-35, 세션47~51 완료). 소비자 일반 상품 배송일 선택·API 슬롯 검증 변경·셀러 일반/공구 토글·공구 배송일 조인·e2e 시드+신규 spec | 기능/UX | `specs/frontend/delivery-date-selection-plan.md` |
 | ✅ P3 | 셀러 주문 탭 리팩토링 — T1~T7 아토믹 태스크 (세션41~45 완료). 색상 버그·sticky 정리·카드 경량화·날짜 필터·날짜 그룹 헤더 | UX/버그 | `specs/frontend/seller-orders-refactor-plan.md` |
 | 🟢 P3 | **[BUG-16] 택배 주문 상태 전환 갭** — 셀러 앱 "택배 발송 완료" 버튼 추가 + 드라이버 보드 parcel 필터 (세션40 논의) | 버그/기능 | §1-3 상세 |
 | 🟢 P3 | **[UX-11] 주문번호 통합** — 백엔드 `orderNumber` 필드(`YYYYMMDD-NNNNNN`) 신설, 소비자·셀러 앱 표시 일치. 현재 소비자=전체 Firestore ID / 셀러=뒷 6~8자로 서로 다른 번호를 보임 (세션40 논의) | UX/백엔드 | `shared` Order 타입 + API + 3곳 프론트 |
@@ -480,6 +481,7 @@
 | ✅ P4 | global-setup flake 보강 — bypass 루프 직후 `about:blank` 이동으로 `storageState` 레이스 해소 (2026-05-17 세션37, `be4fa2c`) | e2e 안정성 | 단독 |
 | ✅ P4 | CI 액션 Node.js 20 deprecation 대응 — checkout/setup-node v6·upload-artifact v7·pnpm/action-setup v6, node-version 22 (2026-05-17 세션37, `eb15e4e`) | CI 유지보수 | 단독 |
 | ⏳ 외부 | 네이버페이 채널키 승인 → Vercel 환경변수 설정 | 외부 연동 | 승인 메일 대기 |
+| 🔵 검토 | **백엔드 호스팅 단일 장애점 회고** — 2026-05-19~20 Railway Major Outage(원인: GCP가 Railway 조직 계정 차단 → Edge Network·Control Plane 마비, 모든 워크로드 404 'Application not found'). 우리 인스턴스 자체는 무사했고 재배포 불가, 복구 ETA 없음. MVP 출시 시 단일 의존 위험. 옵션 — ① Railway 유지(멀티클라우드 다변화 대기) ② Fly.io/Render 등 대안 백엔드 컨틴전시 확보 ③ API 핫스탠바이. 다음 세션 논의 후 결정. | 인프라/리스크 | 세션53+ 논의 |
 
 ### 12-2. 상세 작업
 

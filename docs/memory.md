@@ -3,27 +3,21 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-20 (세션51 — T6 e2e 회귀 가드: 시드 스크립트 + 신규 spec + 육안 검증 보강)
+최종 수정: 2026-05-20 (세션52 — T7-A Railway 다운 진단 + T7-B P4 fontSize 토큰화)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~51 완료. 셀러 주문 탭 리팩토링(T1~T7) + 소비자 배송일 풀스택(T1~T3) + 셀러 IA 재구성(T4~T5) 종결.
+세션22까지 + 세션23~52 완료. 셀러 주문 탭 리팩토링(T1~T7) + 배송일 풀스택+셀러 IA(T1~T6) + P4 fontSize 토큰화 종결.
 
-**세션46~50 요약**: 소비자 배송일 풀스택 + 셀러 토글/공구 조인. T1(`5281188` DeliveryDatePicker), T2(`35cf229` 카트·체크아웃 배송일 전달, `e4c376c` CheckoutForm 추출),
-T3(`4e1576a` 슬롯 검증 선택일자 기준, #CL-34), T4(`2c6c89d` SaleTypeToggle), T5(`bffce2a` useGroupConfigs/공구 배송일 조인, #CL-35).
+**세션46~51 요약**: 배송일 풀스택+셀러 IA T1~T6. T1(`5281188`), T2(`35cf229`+`e4c376c`), T3(`4e1576a` #CL-34), T4(`2c6c89d`), T5(`bffce2a` #CL-35), T6(`ed2fc95` e2e 시드+신규 spec, 세션51).
 
-**세션51 (T6 e2e 회귀 가드)**:
-- 시드 스크립트 `scripts/seed-e2e-orders.mjs` 신설 — firebase-admin으로 ① 활성 상품 보유 store에 14일치 dailyCaps(totalCap=10), ② 셀러 store(`9b2cb652`)에 일반 1건+공구 1건 주문(`e2e-` prefix · ACCEPTED) + `groupProductConfig.groupDeliveryDate`(오늘 +7일). 멱등 set으로 재실행 안전.
-- 신규 spec `consumer-delivery-date.spec.ts`(2건 — DeliveryDatePicker 활성 일자 노출 + 택배 분기 미노출).
-- `seller-orders.spec.ts`에 T6 섹션 5건 추가 — testid 노출, 토글 전환 시 칩 미노출, 공구 카드 표시, groupDeliveryDate 헤더, datePreset week 초기화.
-- 라벨 정합: `'이번 주' / '직접 입력'`(DATE_PRESETS 일치).
-- 로컬 풀런이 #CL-23 set-cookie race로 막혀, 육안 검증 D-T6(#89~#96) 섹션을 `seller-refactor-visual-verify.md`에 추가 + 시드 안내. preview 동기화 후 CI가 최종 검증 경로.
-- #CL-35에 T6 후속 fragment 등재(CRITICAL_LOGIC.md 396라인, 1000 한도 여유).
+**세션52 (T7-A 진단 + T7-B P4 토큰화)**:
+- **T7-A — CI 풀런 4회 연속 실패 원인 진단**: 직접 `/auth/login` POST 결과 Railway `api-production-13e7.up.railway.app` **모든 엔드포인트가 404 'Application not found'**. `status.railway.com`이 Major Outage 발표 — **GCP가 Railway 조직 계정 차단 → Edge Network·Control Plane 마비**(우리 인스턴스 자체는 무사, Edge가 워크로드 라우팅 불가). set-cookie race·시크릿 회전·내부 코드 회귀 모두 아님, 재배포 의미 없음. NextAuth signin이 `?error=CredentialsSignin`으로 302되는 건 `authorize()`가 API fetch 실패 시 `null` 반환하는 정상 경로. 복구 ETA 없음(Railway가 GCP 지원팀과 직접 소통 중).
+- **T7-B — P4 fontSize 토큰화**: `OrderCard.tsx:98`·`OrderInfoSection.tsx:156`·`StatusCards.tsx:51` 3곳을 `var(--font-size-2xl)`로 치환. 토큰은 `packages/ui/src/style.css:25`에 24px로 이미 정의되어 있어 신설 불필요(백로그 설명이 부정확했음). 타입체크 통과·빌드 통과(23라우트)·biome baseline 동일(신규 0건).
 
-**다음 세션 진입점**: 세션52 = preview 동기화 후 CI 풀런으로 신규 spec 검증 + 잔여 백로그 진입. 진입 문서 `archive/sessions/session52-prep.md`.
-잔여 백로그 — P3 Driver Kakao Maps SDK, P4 준비 물량 공동구매·픽업 코드 fontSize 토큰화, BUG-16 택배 주문 상태 전환 갭.
+**다음 세션 진입점**: 세션53 = Railway 복구 확인 + e2e 풀런 검증 + 잔여 백로그 진입. 진입 문서 `archive/sessions/session53-prep.md`. 잔여 백로그 — BUG-16 택배 상태 전환 갭, P3 Driver Kakao Maps SDK, UX-11 주문번호 통합.
 
 ---
 
