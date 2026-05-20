@@ -1,7 +1,7 @@
 'use client';
 
 import type { Product } from '@greenhub/shared';
-import { Badge, Box, Button, Container, Group, Paper, Stack, Text } from '@mantine/core';
+import { Box, Button, Container, Group, Paper, Stack, Switch, Text } from '@mantine/core';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -203,9 +203,24 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
 
         {/* 정보 */}
         <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }} truncate>
-            {product.name}
-          </Text>
+          <Group gap="xs" justify="space-between" wrap="nowrap" align="center">
+            <Text
+              style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}
+              truncate
+            >
+              {product.name}
+            </Text>
+            <Switch
+              checked={product.isActive}
+              onChange={handleToggleActive}
+              disabled={toggling}
+              size="sm"
+              color="green"
+              aria-label={
+                product.isActive ? '판매 중 — 클릭하여 비활성' : '비활성 — 클릭하여 판매 중으로'
+              }
+            />
+          </Group>
           <Text
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             mt={2}
@@ -219,40 +234,24 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
             </Text>
           )}
           <Group gap="xs" mt="xs">
-            {/* 활성/비활성 토글 */}
-            <Badge
-              component="button"
-              onClick={handleToggleActive}
-              style={{ cursor: toggling ? 'not-allowed' : 'pointer' }}
-              color={product.isActive ? 'green' : 'gray'}
-              variant="light"
-              radius="xl"
-              size="md"
-            >
-              {product.isActive ? '판매 중' : '비활성'}
-            </Badge>
-            <Badge
+            <Button
               component={Link}
               href={`/products/${product.id}/edit`}
+              size="xs"
+              variant="subtle"
               color="gray"
-              variant="light"
-              radius="xl"
-              size="md"
-              style={{ cursor: 'pointer' }}
             >
               수정
-            </Badge>
-            <Badge
-              component="button"
-              onClick={() => setConfirmOpen(true)}
-              style={{ cursor: deleting ? 'not-allowed' : 'pointer' }}
+            </Button>
+            <Button
+              size="xs"
+              variant="subtle"
               color="red"
-              variant="light"
-              radius="xl"
-              size="md"
+              onClick={() => setConfirmOpen(true)}
+              loading={deleting}
             >
-              {deleting ? '삭제 중...' : '삭제'}
-            </Badge>
+              삭제
+            </Button>
           </Group>
         </Box>
       </Group>

@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-21 (세션55 — T-UX3 ConfirmModal 공통 컴포넌트 #CL-37)
+최종 수정: 2026-05-21 (세션56 — T-UX2 상품 카드 Switch+Button 분리)
 
 ---
 
@@ -33,7 +33,12 @@
 - **치환 6건**: ① hubs 거점 삭제(red, page state) ② products ProductCard 상품 삭제(red, card state 예외) ③ admin/drivers 승인/정지/해제 3액션을 `PendingAction`+`ACTION_META` 룩업으로 통합(green/red/gray) ④ admin/settlements 지급 처리(blue, 실패 시 alert 유지) ⑤ admin/users 정지/해제 가변 라벨·색상.
 - **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome baseline 72→68 errors(import 정렬 4건 자동수정)·신규 0건.
 
-**다음 세션 진입점**: 세션56 = **T-UX2 상품 카드 Badge-as-button 분리** (플랜 §1 T-UX2). 진입 문서 `archive/sessions/session56-prep.md`. Railway Outage와 무관하게 진행 가능.
+**세션56 (T-UX2 완료)**:
+- **사용자 결정**: 활성 토글 `Switch`(ActionIcon/Badge 거절)·수정·삭제 `Button subtle`·삭제 `color=red`·상품명 우측 Switch + 액션 row는 수정·삭제만 — 모두 권장안 채택.
+- **변경**: `apps/seller/src/app/products/page.tsx` ProductCard ① Badge×3 제거(판매중 토글/수정/삭제) → ② 상품명 라인 `Group justify=space-between`에 `Switch size=sm color=green` 배치(aria-label로 토글 상태·동작 명시) ③ 액션 row `Button size=xs variant=subtle`로 수정(`color=gray component={Link}`)·삭제(`color=red loading={deleting}`) 2개. imports `Badge` 제거 + `Switch` 추가. ConfirmModal 연동 및 `confirmOpen`/`error`/`toggling`/`deleting` state 그대로 유지.
+- **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome 자동 포맷 후 products/page.tsx 자체 이슈 0건, 전체 baseline **68→64 errors**(Badge 4건 제거 효과)·신규 0건.
+
+**다음 세션 진입점**: 세션57 = **T-UX4a admin fontSize 토큰화** (플랜 §1 T-UX4a). 진입 문서 `archive/sessions/session57-prep.md`. Railway Outage와 무관하게 진행 가능.
 
 ---
 
