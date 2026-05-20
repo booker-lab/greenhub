@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Select, Text } from '@mantine/core';
+import { useEffect, useState } from 'react';
 
 interface Variety {
   id: string;
