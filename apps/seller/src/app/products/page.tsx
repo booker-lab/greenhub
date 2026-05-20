@@ -6,6 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useState } from 'react';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
@@ -115,6 +116,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
   const [toggling, setToggling] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function handleToggleActive() {
     if (!storeId) return;
@@ -136,8 +138,6 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
 
   async function handleDelete() {
     if (!storeId) return;
-    if (!confirm(`"${product.name}" 상품을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`))
-      return;
     setDeleting(true);
     setError(null);
     try {
@@ -147,6 +147,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
         { method: 'DELETE' },
       );
       if (!res.ok) throw new Error(`삭제 실패 (${res.status})`);
+      setConfirmOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : '오류가 발생했습니다');
     } finally {
@@ -243,7 +244,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
             </Badge>
             <Badge
               component="button"
-              onClick={handleDelete}
+              onClick={() => setConfirmOpen(true)}
               style={{ cursor: deleting ? 'not-allowed' : 'pointer' }}
               color="red"
               variant="light"
@@ -255,6 +256,18 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
           </Group>
         </Box>
       </Group>
+
+      <ConfirmModal
+        opened={confirmOpen}
+        title="상품 삭제"
+        message={`"${product.name}" 상품을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`}
+        confirmLabel="삭제"
+        loading={deleting}
+        onConfirm={handleDelete}
+        onClose={() => {
+          if (!deleting) setConfirmOpen(false);
+        }}
+      />
     </Paper>
   );
 }

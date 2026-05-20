@@ -1,7 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-import { useAdminSettlements } from '@/hooks/useAdmin';
 import {
   Badge,
   Box,
@@ -13,6 +11,9 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { useState } from 'react';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { useAdminSettlements } from '@/hooks/useAdmin';
 
 const STATUS_LABEL: Record<string, string> = {
   pending: '대기',
@@ -38,13 +39,18 @@ export default function AdminSettlementsClient() {
     to: toFilter || undefined,
   });
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [payTargetId, setPayTargetId] = useState<string | null>(null);
 
-  const handlePay = async (settlementId: string) => {
-    if (!confirm('이 정산을 지급 완료 처리하시겠습니까?')) return;
-    setProcessingId(settlementId);
-    const ok = await markAsPaid(settlementId);
-    setProcessingId(null);
-    if (!ok) alert('처리에 실패했습니다.');
+  const runPay = async () => {
+    if (!payTargetId) return;
+    setProcessingId(payTargetId);
+    try {
+      const ok = await markAsPaid(payTargetId);
+      setPayTargetId(null);
+      if (!ok) alert('처리에 실패했습니다.');
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   const totalNet = settlements.reduce((sum, s) => sum + s.netAmount, 0);
@@ -271,7 +277,7 @@ export default function AdminSettlementsClient() {
                     <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
                       {s.status === 'confirmed' && (
                         <Button
-                          onClick={() => handlePay(s.id)}
+                          onClick={() => setPayTargetId(s.id)}
                           disabled={processingId === s.id}
                           size="xs"
                           variant="outline"
@@ -289,6 +295,19 @@ export default function AdminSettlementsClient() {
           )}
         </Paper>
       )}
+
+      <ConfirmModal
+        opened={payTargetId !== null}
+        title="정산 지급 처리"
+        message="이 정산을 지급 완료 처리하시겠습니까?"
+        confirmLabel="지급 완료"
+        confirmColor="blue"
+        loading={processingId !== null}
+        onConfirm={runPay}
+        onClose={() => {
+          if (processingId === null) setPayTargetId(null);
+        }}
+      />
     </Box>
   );
 }

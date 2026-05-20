@@ -14,7 +14,7 @@
 |------|---------------------|------------------------|------|
 | UX-07 탭 스타일 2종 혼재 | 주문(검정 underline) vs 상품·정산(초록 underline) | **혼재 유지** — `orders/page.tsx:178-181` 검정·700, `products/page.tsx:78-83` 초록·medium, `settlements/page.tsx:53-65` 초록·500 + `top: 57` 매직넘버·`fontSize: 14` 하드코딩 | T-UX1 |
 | UX-08 Badge-as-button | 상품 카드 판매중·수정·삭제가 같은 pill | **유지** — `products/page.tsx:257-289` Badge×3 | T-UX2 |
-| UX-09 confirm() vs Modal | 삭제 확인 native | **6건 잔존** — `hubs/page.tsx:61`·`products/page.tsx:171`·`admin/drivers/_client.tsx:58,66`·`admin/settlements/_client.tsx:43`·`admin/users/_client.tsx:13` | T-UX3 |
+| UX-09 confirm() vs Modal | 삭제 확인 native | ✅ 세션55 종결 — `ConfirmModal` 신설 + 6곳 교체 | T-UX3 ✅ |
 | UX-10 주문 3중 sticky | 헤더+요약바+탭 모두 sticky | **사실상 해소** — 현재 sticky 1곳(`orders/page.tsx:164` 상태 탭)뿐. `top: var(--header-height)` 토큰화도 완료 | 종결 (작업 없음) |
 
 추가로 진단 중 발견한 잔재(플랜에 포함):
@@ -65,7 +65,10 @@ T-UX1~4 상호 무관(다른 파일 영역). 순서는 자유, 권장은 **T-UX1
 - **검증**: typecheck/build/biome, dev 서버에서 토글·수정·삭제 동작 + 시각 구분 확인. e2e `apps/e2e/tests/seller-products.spec.ts`(있다면)에서 `getByRole('button', { name: '삭제' })` 셀렉터 영향 점검.
 - **추정**: 1세션 (스타일+토글 패턴 결정 + UX 검증).
 
-### T-UX3 — 공통 `ConfirmModal` + native `confirm()` 6건 교체
+### T-UX3 — 공통 `ConfirmModal` + native `confirm()` 6건 교체 ✅ 세션55 완료
+
+> 결과: `apps/seller/src/components/ConfirmModal.tsx` 신설(~75라인). 6건 전부 교체. 페이지 단일 state(products는 ProductCard 내부 state 예외). 셀러 타입체크·빌드(23라우트)·biome 신규 0건 통과. #CL-37 정책 등재. 상세는 `docs/archive/sessions/session55-prep.md` 결과 반영.
+
 
 - **목적**: 삭제·승인·정지 확인 패턴 통일. native confirm은 모바일 PWA에서 OS chrome 의존이라 일관성·접근성 모두 떨어짐.
 - **신설**: `apps/seller/src/components/ConfirmModal.tsx`
