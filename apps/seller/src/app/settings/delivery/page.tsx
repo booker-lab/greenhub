@@ -1,9 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { apiFetch } from '@/lib/api';
 import {
   ActionIcon,
   Box,
@@ -16,6 +12,10 @@ import {
   Text,
   Title,
 } from '@mantine/core';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/api';
 
 interface DeliveryConfig {
   directFee: number;
@@ -178,7 +178,7 @@ export default function DeliverySettingsPage() {
                         padding: '8px 12px',
                         border: '1px solid var(--color-border)',
                         borderRadius: 12,
-                        fontSize: 14,
+                        fontSize: 'var(--font-size-sm)',
                         textAlign: 'right',
                       }}
                     />
@@ -241,7 +241,7 @@ export default function DeliverySettingsPage() {
                         padding: '8px 12px',
                         border: '1px solid var(--color-border)',
                         borderRadius: 12,
-                        fontSize: 14,
+                        fontSize: 'var(--font-size-sm)',
                         textAlign: 'right',
                       }}
                     />

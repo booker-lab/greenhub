@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { apiFetch } from '@/lib/api';
 import { Badge, Box, Button, Container, Group, Paper, Stack, Text } from '@mantine/core';
-import { PageShell } from '@/components/PageShell';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
+import { apiFetch } from '@/lib/api';
 
 interface Hub {
   id: string;

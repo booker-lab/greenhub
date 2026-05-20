@@ -1,9 +1,5 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { apiFetch } from '@/lib/api';
 import {
   ActionIcon,
   Box,
@@ -16,6 +12,10 @@ import {
   Title,
   UnstyledButton,
 } from '@mantine/core';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { useCallback, useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/api';
 
 interface DailyCap {
   date: string;
@@ -274,7 +274,12 @@ export default function DailyCapsPage() {
                         {cap ? cap.totalCap : '—'}
                       </Text>
                       {cap && (cap.usedSlots ?? 0) > 0 && (
-                        <Text style={{ fontSize: 10, color: 'var(--color-text-disabled)' }}>
+                        <Text
+                          style={{
+                            fontSize: 'var(--font-size-xs)',
+                            color: 'var(--color-text-disabled)',
+                          }}
+                        >
                           {cap.usedSlots}↑
                         </Text>
                       )}
@@ -310,7 +315,7 @@ export default function DailyCapsPage() {
                   padding: '12px 16px',
                   border: '1px solid var(--color-border)',
                   borderRadius: 12,
-                  fontSize: 14,
+                  fontSize: 'var(--font-size-sm)',
                   textAlign: 'right',
                 }}
               />

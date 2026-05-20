@@ -1,12 +1,12 @@
 'use client';
 
-import { signOut } from 'next-auth/react';
-import Link from 'next/link';
 import { Box, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
+import Link from 'next/link';
+import { signOut } from 'next-auth/react';
 import type { ReactNode } from 'react';
-import { PageShell } from '@/components/PageShell';
 import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
 
 /** 설정 섹션 카드 — 대문자 라벨 헤더 + 행 목록. */
 function SectionCard({ label, children }: { label: string; children: ReactNode }) {
@@ -90,7 +90,9 @@ export default function SettingsPage() {
               <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
                 앱 버전
               </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              >
                 0.1.0
               </Text>
             </Group>
