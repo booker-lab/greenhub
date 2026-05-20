@@ -1,15 +1,16 @@
 'use client';
 
+import { Container } from '@mantine/core';
 import { useState } from 'react';
-import { Box, Container, Group, UnstyledButton } from '@mantine/core';
-import { PageShell } from '@/components/PageShell';
 import { PageHeader } from '@/components/PageHeader';
-import type { SettlementTab } from './_constants';
-import { TABS } from './_constants';
-import { useSettlements } from './_hooks/useSettlements';
+import { PageShell } from '@/components/PageShell';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { DailySummaryTab } from './_components/DailySummaryTab';
 import { OrdersTab } from './_components/OrdersTab';
 import { PeriodTab } from './_components/PeriodTab';
+import type { SettlementTab } from './_constants';
+import { TABS } from './_constants';
+import { useSettlements } from './_hooks/useSettlements';
 
 export default function SettlementsPage() {
   const [activeTab, setActiveTab] = useState<SettlementTab>('daily');
@@ -35,38 +36,7 @@ export default function SettlementsPage() {
     <PageShell>
       <PageHeader title="정산 관리" />
 
-      <Box
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          position: 'sticky',
-          top: 57,
-          zIndex: 10,
-        }}
-      >
-        <Container size="sm">
-          <Group gap={0}>
-            {TABS.map((tab) => (
-              <UnstyledButton
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                style={{
-                  flex: 1,
-                  padding: '12px 16px',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  textAlign: 'center',
-                  borderBottom: `2px solid ${activeTab === tab.key ? 'var(--color-primary)' : 'transparent'}`,
-                  color:
-                    activeTab === tab.key ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                }}
-              >
-                {tab.label}
-              </UnstyledButton>
-            ))}
-          </Group>
-        </Container>
-      </Box>
+      <SegmentedTabs<SettlementTab> tabs={TABS} value={activeTab} onChange={setActiveTab} sticky />
 
       <Container size="sm" px="md" py="md">
         {activeTab === 'daily' && (

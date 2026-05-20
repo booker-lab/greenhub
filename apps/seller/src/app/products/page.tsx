@@ -1,26 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import type { Product } from '@greenhub/shared';
+import { Badge, Box, Button, Container, Group, Paper, Stack, Text } from '@mantine/core';
 import Image from 'next/image';
-import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+import { useState } from 'react';
+import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
+import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { apiFetch } from '@/lib/api';
-import { PageShell } from '@/components/PageShell';
-import { PageHeader } from '@/components/PageHeader';
-import { EmptyState, LoadingState } from '@/components/StateViews';
-import type { Product } from '@greenhub/shared';
-import {
-  Badge,
-  Box,
-  Button,
-  Container,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  UnstyledButton,
-} from '@mantine/core';
 
 type ProductFilter = 'all' | 'active' | 'inactive';
 
@@ -60,38 +51,15 @@ export default function ProductsPage() {
       />
 
       {/* 필터 탭 */}
-      <Box
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        <Container size="sm">
-          <Group gap={0}>
-            {(['all', 'active', 'inactive'] as ProductFilter[]).map((f) => (
-              <UnstyledButton
-                key={f}
-                onClick={() => setFilter(f)}
-                style={{
-                  flex: 1,
-                  padding: '12px 16px',
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: 'var(--fw-medium)',
-                  textAlign: 'center',
-                  borderBottom: `2px solid ${filter === f ? 'var(--color-primary)' : 'transparent'}`,
-                  color: filter === f ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                }}
-              >
-                {f === 'all'
-                  ? `전체 ${products.length}`
-                  : f === 'active'
-                    ? `판매 중 ${products.filter((p) => p.isActive).length}`
-                    : `비활성 ${products.filter((p) => !p.isActive).length}`}
-              </UnstyledButton>
-            ))}
-          </Group>
-        </Container>
-      </Box>
+      <SegmentedTabs<ProductFilter>
+        tabs={[
+          { key: 'all', label: `전체 ${products.length}` },
+          { key: 'active', label: `판매 중 ${products.filter((p) => p.isActive).length}` },
+          { key: 'inactive', label: `비활성 ${products.filter((p) => !p.isActive).length}` },
+        ]}
+        value={filter}
+        onChange={setFilter}
+      />
 
       {/* 상품 목록 */}
       <Container size="sm" px="md" py="md">
@@ -245,10 +213,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
             {product.saleType === 'group' && ' · 공동구매'}
           </Text>
           {error && (
-            <Text
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-              mt={4}
-            >
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt={4}>
               {error}
             </Text>
           )}
