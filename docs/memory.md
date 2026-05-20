@@ -3,21 +3,24 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-20 (세션52 — T7-A Railway 다운 진단 + T7-B P4 fontSize 토큰화)
+최종 수정: 2026-05-20 (세션53 — UX-07~10 진단 + 아토믹 태스크 플랜 수립)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~52 완료. 셀러 주문 탭 리팩토링(T1~T7) + 배송일 풀스택+셀러 IA(T1~T6) + P4 fontSize 토큰화 종결.
+세션22까지 + 세션23~53 완료. 셀러 주문 탭 리팩토링(T1~T7) + 배송일 풀스택+셀러 IA(T1~T6) + P4 fontSize 토큰화 종결. 세션53은 Railway Outage 지속으로 백엔드 무관 작업(UX 잔여 플랜)으로 전환.
 
 **세션46~51 요약**: 배송일 풀스택+셀러 IA T1~T6. T1(`5281188`), T2(`35cf229`+`e4c376c`), T3(`4e1576a` #CL-34), T4(`2c6c89d`), T5(`bffce2a` #CL-35), T6(`ed2fc95` e2e 시드+신규 spec, 세션51).
 
-**세션52 (T7-A 진단 + T7-B P4 토큰화)**:
-- **T7-A — CI 풀런 4회 연속 실패 원인 진단**: 직접 `/auth/login` POST 결과 Railway `api-production-13e7.up.railway.app` **모든 엔드포인트가 404 'Application not found'**. `status.railway.com`이 Major Outage 발표 — **GCP가 Railway 조직 계정 차단 → Edge Network·Control Plane 마비**(우리 인스턴스 자체는 무사, Edge가 워크로드 라우팅 불가). set-cookie race·시크릿 회전·내부 코드 회귀 모두 아님, 재배포 의미 없음. NextAuth signin이 `?error=CredentialsSignin`으로 302되는 건 `authorize()`가 API fetch 실패 시 `null` 반환하는 정상 경로. 복구 ETA 없음(Railway가 GCP 지원팀과 직접 소통 중).
-- **T7-B — P4 fontSize 토큰화**: `OrderCard.tsx:98`·`OrderInfoSection.tsx:156`·`StatusCards.tsx:51` 3곳을 `var(--font-size-2xl)`로 치환. 토큰은 `packages/ui/src/style.css:25`에 24px로 이미 정의되어 있어 신설 불필요(백로그 설명이 부정확했음). 타입체크 통과·빌드 통과(23라우트)·biome baseline 동일(신규 0건).
+**세션52 요약**: T7-A — Railway `api-production-13e7.up.railway.app` 전 엔드포인트 404. 원인은 GCP가 Railway 조직 계정 차단(Major Outage), 재배포 무효, 복구 ETA 없음. T7-B — P4 fontSize 토큰화 3곳(`var(--font-size-2xl)`).
 
-**다음 세션 진입점**: 세션53 = Railway 복구 확인 + e2e 풀런 검증 + 잔여 백로그 진입. 진입 문서 `archive/sessions/session53-prep.md`. 잔여 백로그 — BUG-16 택배 상태 전환 갭, P3 Driver Kakao Maps SDK, UX-11 주문번호 통합.
+**세션53 (UX-07~10 플랜 수립)**:
+- **진단**: Railway Outage 미복구 확인 → 백엔드 무관 작업으로 전환. UX-07~10 현재 코드 상태 진단 — UX-07 탭 혼재 유지(주문 검정/700 vs 상품·정산 초록/medium), UX-08 상품 카드 Badge×3 유지, UX-09 native `confirm()` **6건 잔존**(hubs:61·products:171·admin/drivers:58,66·admin/settlements:43·admin/users:13), **UX-10 사실상 자연 해소**(세션41~45 리팩토링으로 sticky 1곳·`top: var(--header-height)` 토큰화 완료). 추가로 `fontSize` 하드코딩 ~30곳 발견(admin 9파일·settlements/hubs/settings 본 화면·products _components).
+- **플랜 수립**: [seller-ux-residual-plan.md](specs/frontend/seller-ux-residual-plan.md) 147라인 — **T-UX1** 탭 단일화(`SegmentedTabs` 신설 + 3페이지 치환), **T-UX2** 상품 카드 Badge 분리(Switch+ActionIcon), **T-UX3** `ConfirmModal` 공통 컴포넌트 + 6건 교체, **T-UX4a/b/c** fontSize 토큰화 분할, **T-UX5** 정합성 검토. 각 태스크 단독 PR/세션 단위·상호 무관·결정 사항 명시.
+- **코드 변경 없음**: 신규 문서 1건(플랜) + BACKLOG/memory 갱신만.
+
+**다음 세션 진입점**: 세션54 = **세션53 플랜 정합성 검토(사용자 합의·결정 사항 확정) → T-UX1 진입**. 진입 문서 `archive/sessions/session54-prep.md`. Railway 복구 상태와 무관하게 진행 가능(T-UX5의 e2e 검증만 복구 대기).
 
 ---
 
