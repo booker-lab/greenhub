@@ -283,3 +283,18 @@
 | 105 | 정산 페이지 탭 시각 | 주문·상품 탭과 동일 패턴 | | |
 | 106 | 정산 탭 sticky 위치 | `top:57` 매직넘버 제거되고 `var(--header-height)`로 고정 | | |
 | 107 | 회귀 — 3페이지 클릭 동작 | 탭 클릭 시 활성 전환·콘텐츠 변경 정상 | | |
+
+### F-T-UX3 — 공통 `ConfirmModal` + native confirm 6곳 교체 (세션55)
+
+플랜: [seller-ux-residual-plan.md](seller-ux-residual-plan.md) T-UX3 · 결정: [#CL-37](../../CRITICAL_LOGIC.md). 신설 `apps/seller/src/components/ConfirmModal.tsx` + 6건 교체.
+
+| # | 확인 항목 | 통과 기준 | 결과 | 메모 |
+|---|----------|----------|:----:|------|
+| 108 | 거점 삭제 모달 | `/hubs` 거점 카드 "삭제" 클릭 → ConfirmModal 열림, 제목 "거점 삭제", confirm 라벨 "삭제"(red) | | |
+| 109 | 거점 삭제 처리 | 확인 시 "처리 중..." 표시 후 카드 제거, 모달 닫힘. 취소/외부 클릭 시 무변화 | | |
+| 110 | 상품 삭제 모달 | `/products` 카드 "삭제" Badge 클릭 → 모달 메시지에 상품명 동적 표시 + `\n` 다행 처리 | | |
+| 111 | 상품 삭제 동시성 | 처리 중 외부 클릭/ESC로 닫히지 않음(loading 가드), 완료 시 자동 닫힘 | | |
+| 112 | 드라이버 3액션 분기 | `/admin/drivers` 승인=초록·정지=빨강·해제=회색으로 confirmColor·라벨 변경, 1개 모달로 통합 | | |
+| 113 | 정산 지급 모달 | `/admin/settlements` "지급처리" → ConfirmModal(blue) 표시, 확인 시 상태 paid로 갱신 | | |
+| 114 | 사용자 정지/해제 모달 | `/admin/users` 정상 계정 → "계정 정지"(red), 정지된 계정 → "계정 정지 해제"(green) | | |
+| 115 | 회귀 — native confirm 잔존 | `apps/seller/src` 전역 `confirm(` 호출 0건(grep 검증) | | |

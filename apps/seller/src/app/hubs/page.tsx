@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
-import Link from 'next/link';
-import { apiFetch } from '@/lib/api';
-import { PageShell } from '@/components/PageShell';
-import { PageHeader } from '@/components/PageHeader';
-import { EmptyState, LoadingState } from '@/components/StateViews';
 import { Badge, Button, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
+import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+import { useCallback, useEffect, useState } from 'react';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
+import { EmptyState, LoadingState } from '@/components/StateViews';
+import { apiFetch } from '@/lib/api';
 
 interface Hub {
   id: string;
@@ -23,6 +24,8 @@ export default function HubsPage() {
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const storeId = session?.user.storeId;
   const token = session?.user.accessToken;
@@ -58,14 +61,20 @@ export default function HubsPage() {
 
   async function deleteHub(hubId: string) {
     if (!storeId || !token) return;
-    if (!confirm('거점을 삭제하시겠습니까?')) return;
-    const res = await apiFetch(`/stores/${storeId}/hubs/${hubId}`, token, {
-      method: 'DELETE',
-    });
-    if (res.ok) {
-      setHubs((prev) => prev.filter((h) => h.id !== hubId));
-    } else {
-      setError('삭제에 실패했습니다');
+    setDeleting(true);
+    try {
+      const res = await apiFetch(`/stores/${storeId}/hubs/${hubId}`, token, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setHubs((prev) => prev.filter((h) => h.id !== hubId));
+        setDeleteTargetId(null);
+      } else {
+        setError('삭제에 실패했습니다');
+        setDeleteTargetId(null);
+      }
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -197,7 +206,7 @@ export default function HubsPage() {
                       {hub.isActive ? '비활성화' : '활성화'}
                     </Button>
                     <Button
-                      onClick={() => deleteHub(hub.id)}
+                      onClick={() => setDeleteTargetId(hub.id)}
                       size="xs"
                       variant="light"
                       color="red"
@@ -212,6 +221,20 @@ export default function HubsPage() {
           </Stack>
         )}
       </Container>
+
+      <ConfirmModal
+        opened={deleteTargetId !== null}
+        title="거점 삭제"
+        message="거점을 삭제하시겠습니까?"
+        confirmLabel="삭제"
+        loading={deleting}
+        onConfirm={() => {
+          if (deleteTargetId) deleteHub(deleteTargetId);
+        }}
+        onClose={() => {
+          if (!deleting) setDeleteTargetId(null);
+        }}
+      />
     </PageShell>
   );
 }

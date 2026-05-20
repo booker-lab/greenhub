@@ -3,13 +3,13 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-20 (세션54 — T-UX1 탭 단일화 `SegmentedTabs` #CL-36)
+최종 수정: 2026-05-21 (세션55 — T-UX3 ConfirmModal 공통 컴포넌트 #CL-37)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~53 완료. 셀러 주문 탭 리팩토링(T1~T7) + 배송일 풀스택+셀러 IA(T1~T6) + P4 fontSize 토큰화 종결. 세션53은 Railway Outage 지속으로 백엔드 무관 작업(UX 잔여 플랜)으로 전환.
+세션22까지 + 세션23~54 완료. 셀러 주문 탭 리팩토링(T1~T7) + 배송일 풀스택+셀러 IA(T1~T6) + P4 fontSize 토큰화 종결. 세션53부터 Railway Outage 지속으로 백엔드 무관 작업(UX 잔여 플랜)으로 전환.
 
 **세션46~51 요약**: 배송일 풀스택+셀러 IA T1~T6. T1(`5281188`), T2(`35cf229`+`e4c376c`), T3(`4e1576a` #CL-34), T4(`2c6c89d`), T5(`bffce2a` #CL-35), T6(`ed2fc95` e2e 시드+신규 spec, 세션51).
 
@@ -27,7 +27,13 @@
 - **검증**: seller 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome 자동 포맷 후 신규 0건. 미사용 import 정리(orders `Badge`·products `UnstyledButton`·settlements `Box/Group/UnstyledButton`).
 - **문서**: BACKLOG §11-3 UX-07 ✅·§12 활동 로그·§12-1 우선순위 표 갱신, CRITICAL_LOGIC #CL-36 추가, visual-verify F-T-UX1 섹션 #97~107 추가.
 
-**다음 세션 진입점**: 세션55 = **T-UX3 ConfirmModal 공통 컴포넌트 + native confirm() 6곳 교체**(플랜 §1 T-UX3, 권장 순서). 진입 문서 `archive/sessions/session55-prep.md`. Railway Outage와 무관하게 진행 가능.
+**세션55 (T-UX3 완료, #CL-37)**:
+- **사용자 결정**: 자체 컴포넌트(Mantine Modal 직접 사용)·페이지 단일 state(products는 ProductCard 내부 state 예외)·권장 props 시그니처 채택.
+- **신설**: `apps/seller/src/components/ConfirmModal.tsx` (~75라인) — `opened/title/message(string|ReactNode)/confirmLabel/cancelLabel/confirmColor(default red)/loading/onConfirm/onClose`, `whiteSpace: pre-line`로 다행 메시지 지원.
+- **치환 6건**: ① hubs 거점 삭제(red, page state) ② products ProductCard 상품 삭제(red, card state 예외) ③ admin/drivers 승인/정지/해제 3액션을 `PendingAction`+`ACTION_META` 룩업으로 통합(green/red/gray) ④ admin/settlements 지급 처리(blue, 실패 시 alert 유지) ⑤ admin/users 정지/해제 가변 라벨·색상.
+- **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome baseline 72→68 errors(import 정렬 4건 자동수정)·신규 0건.
+
+**다음 세션 진입점**: 세션56 = **T-UX2 상품 카드 Badge-as-button 분리** (플랜 §1 T-UX2). 진입 문서 `archive/sessions/session56-prep.md`. Railway Outage와 무관하게 진행 가능.
 
 ---
 

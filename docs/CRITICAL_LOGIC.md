@@ -414,3 +414,32 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **검증**: seller 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · biome 신규 0건. e2e 회귀 풀런은 Railway 복구 후. 셀렉터 영향 — `getByRole('button')` + 텍스트 기반이면 영향 없음.
 
+---
+
+## [결정 #CL-37] 셀러앱 확인 모달 공통 컴포넌트 — `ConfirmModal` + native `confirm()` 금지 (2026-05-21, 세션55)
+
+**배경**: UX-09 — 셀러앱 destructive/critical 액션(삭제·승인·정지·지급) 확인이 native `window.confirm()` 6곳에 잔존. native confirm은 모바일 PWA에서 OS chrome 의존이라 디자인 일관성·접근성·라벨 가변성 모두 떨어짐. 세션53 진단 → 세션55에서 공통 컴포넌트 + 일괄 교체.
+
+**핵심 규칙**:
+
+1. **신설 컴포넌트** `apps/seller/src/components/ConfirmModal.tsx` (~75라인) — 셀러앱의 모든 단순 확인 모달은 본 컴포넌트로 통일. Mantine `Modal` 직접 사용(`@mantine/modals` 의존성 추가 거절: 기존 패턴 일관성·번들 최소).
+2. **Props 시그니처**: `opened: boolean` · `title: string` · `message: string | ReactNode` · `confirmLabel?: string` (default `'확인'`) · `cancelLabel?: string` (default `'취소'`) · `confirmColor?: string` (default `'red'`) · `loading?: boolean` · `onConfirm: () => void | Promise<void>` · `onClose: () => void`. message가 string이면 `whiteSpace: pre-line`으로 `\n` 처리.
+3. **상태 관리 정책**: **페이지 단일 state + targetId/액션 메타** 패턴이 표준. 카드별 state는 prop drilling/메모리 누수 위험으로 지양. 단 ProductCard처럼 카드 자체가 자체 비동기 상태(`deleting`/`error`)를 이미 가진 경우는 **카드 내부 state 유지가 합리적 예외** (세션55 products 채택).
+4. **다중 액션 통합**: 같은 페이지 내 confirm-type 액션이 여럿이면 액션 종류를 enum 타입으로 묶고 `ACTION_META: Record<Action, { title, message, confirmLabel, confirmColor }>` 룩업으로 ConfirmModal 1개에 매핑. 세션55 `admin/drivers/_client.tsx`가 `DriverAction = 'approve' | 'suspend' | 'unsuspend'`로 모범 사례.
+5. **로딩 중 닫힘 차단**: `onClose`에서 `if (!loading)` / `if (processingId === null)` 가드 필수 — 비동기 처리 중 모달이 닫혀 race가 발생하지 않도록.
+6. **native confirm 금지**: 셀러앱 코드에서 `window.confirm(`/`confirm(` 신규 사용 금지. PR/리뷰 시점 grep 검증 권장.
+
+**치환 결과 (세션55)**:
+- `hubs/page.tsx` 거점 삭제 (red, page state)
+- `products/page.tsx` ProductCard 상품 삭제 (red, **card state 예외**, name 동적 메시지)
+- `admin/drivers/_client.tsx` 승인/정지/해제 3액션 (green/red/gray, `PendingAction` 통합)
+- `admin/settlements/_client.tsx` 지급 처리 (blue, 실패 시 `alert` 유지 — 별도 에러 패턴)
+- `admin/users/_client.tsx` 정지/해제 가변 (red/green, currentlySuspended 기반)
+
+**범위 외**:
+- `apps/seller/src/app/orders/[id]/_components/CancelOrderModal.tsx` — 취소 사유 입력이 필수인 도메인 모달. ConfirmModal로 일반화하지 않음.
+- 단순 알림(`alert()`)은 본 결정 범위 밖. Notification 패턴은 별도 검토.
+- consumer/driver 앱 — 본 결정은 seller 한정.
+
+**검증**: seller 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · biome baseline 72→68 errors(import 정렬 자동수정), 신규 0건. e2e 영향 없음 예상 — 백엔드 호출 경로 불변, 셀렉터는 텍스트 기반이면 모달 라벨로 매핑 가능(필요 시 Railway 복구 후 점검).
+
