@@ -1,6 +1,7 @@
 'use client';
 
 import { Badge, Box, Button, Group, Paper, Text, Title } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useAdminStores } from '@/hooks/useAdmin';
 
@@ -25,7 +26,11 @@ export default function AdminStoresClient() {
   const handleSave = async (storeId: string) => {
     const rate = parseFloat(rateInput);
     if (Number.isNaN(rate) || rate < 0 || rate > 1) {
-      alert('0~1 사이의 수수료율을 입력하세요 (예: 0.05 = 5%)');
+      notifications.show({
+        color: 'orange',
+        title: '입력 값을 확인하세요',
+        message: '0~1 사이의 수수료율을 입력해야 합니다 (예: 0.05 = 5%).',
+      });
       return;
     }
     setSaving(true);
