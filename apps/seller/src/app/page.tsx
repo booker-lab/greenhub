@@ -1,23 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { Container, Stack } from '@mantine/core';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { useEffect } from 'react';
+import { OrderStatusCard, ProductStatusCard, SettlementCard } from '@/app/_components/StatusCards';
+import { TodayTasksCard } from '@/app/_components/TodayTasksCard';
 import { useFirebaseReady } from '@/app/providers';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
+import { LoadingState } from '@/components/StateViews';
+import { useDashboardSummary } from '@/hooks/useDashboardSummary';
 import { useOrders } from '@/hooks/useOrders';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
-import { useDashboardSummary } from '@/hooks/useDashboardSummary';
-import { Container, Stack } from '@mantine/core';
-import { PageShell } from '@/components/PageShell';
-import { PageHeader } from '@/components/PageHeader';
-import { LoadingState } from '@/components/StateViews';
-import { ConnectionStatus } from '@/components/ConnectionStatus';
-import { TodayTasksCard } from '@/app/_components/TodayTasksCard';
-import {
-  OrderStatusCard,
-  SettlementCard,
-  ProductStatusCard,
-} from '@/app/_components/StatusCards';
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -30,7 +26,10 @@ export default function Home() {
 
   useEffect(() => {
     if (status === 'loading') return;
-    if (status === 'unauthenticated') { router.replace('/login'); return; }
+    if (status === 'unauthenticated') {
+      router.replace('/login');
+      return;
+    }
   }, [status, router]);
 
   if (status === 'loading' || !session) {
@@ -41,9 +40,7 @@ export default function Home() {
     <PageShell>
       <PageHeader
         title="홈"
-        right={
-          <ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />
-        }
+        right={<ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />}
       />
 
       <Container size="sm" py="md">

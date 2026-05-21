@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import {
-  signInWithCustomToken,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  signInWithCustomToken,
 } from 'firebase/auth';
+import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
 import { getFirebaseAuth } from '@/lib/firebase';
 
 const API = process.env.NEXT_PUBLIC_API_URL!;

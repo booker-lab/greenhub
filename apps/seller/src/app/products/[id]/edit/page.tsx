@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Box, Text, UnstyledButton } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import ProductForm from '../../_components/ProductForm';
-import type { ProductFormData } from '../../_components/ProductForm';
-import { Box, Text, UnstyledButton } from '@mantine/core';
+import { useEffect, useState } from 'react';
 import { LoadingState } from '@/components/StateViews';
+import type { ProductFormData } from '../../_components/ProductForm';
+import ProductForm from '../../_components/ProductForm';
 
 // Firestore Timestamp | ISO string → YYYY-MM-DD
 function toISODate(value: unknown): Date | null {

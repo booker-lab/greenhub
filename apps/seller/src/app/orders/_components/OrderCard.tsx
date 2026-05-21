@@ -1,14 +1,14 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import type { Order } from '@greenhub/shared';
 import { Alert, Badge, Button, Group, Paper, Text } from '@mantine/core';
+import { useRouter } from 'next/navigation';
 import {
   ACCENT_BORDER,
   DELIVERY_LABEL,
+  formatRelativeTime,
   STATUS_COLOR,
   STATUS_LABEL,
-  formatRelativeTime,
 } from '../_constants';
 
 export function OrderCard({ order }: { order: Order }) {
@@ -36,7 +36,11 @@ export function OrderCard({ order }: { order: Order }) {
 
       {/* 주문 정보 */}
       <Text
-        style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}
+        style={{
+          fontWeight: 'var(--fw-bold)',
+          fontSize: 'var(--font-size-sm)',
+          color: 'var(--color-text)',
+        }}
         mb={2}
       >
         주문 #{order.id.slice(-8).toUpperCase()}
@@ -55,7 +59,11 @@ export function OrderCard({ order }: { order: Order }) {
         {order.requestedDeliveryDate && ` · ${order.requestedDeliveryDate}`}
       </Text>
       <Text
-        style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
+        style={{
+          fontSize: 'var(--font-size-xl)',
+          fontWeight: 'var(--fw-bold)',
+          color: 'var(--color-text)',
+        }}
         mb="sm"
       >
         {order.totalAmount.toLocaleString()}원
@@ -77,11 +85,21 @@ export function OrderCard({ order }: { order: Order }) {
       )}
 
       {order.status === 'RECRUITING' && (
-        <Alert color="blue" variant="light" radius="md" mt="xs" py="xs" onClick={(e) => e.stopPropagation()}>
+        <Alert
+          color="blue"
+          variant="light"
+          radius="md"
+          mt="xs"
+          py="xs"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>
             공동구매 모집 중
           </Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} mt={2}>
+          <Text
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            mt={2}
+          >
             모집 마감 후 인원 충족 시 자동 확정됩니다.
           </Text>
         </Alert>
@@ -97,7 +115,11 @@ export function OrderCard({ order }: { order: Order }) {
           onClick={(e) => e.stopPropagation()}
         >
           <Text
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-primary)',
+              fontWeight: 'var(--fw-medium)',
+            }}
             mb={4}
           >
             픽업 코드

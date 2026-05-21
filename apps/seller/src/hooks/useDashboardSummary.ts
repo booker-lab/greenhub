@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { apiJson } from '@/lib/api';
+import { useEffect, useState } from 'react';
 import type { Summary } from '@/app/settlements/_constants';
+import { apiJson } from '@/lib/api';
 
 interface UseDashboardSummaryResult {
   summary: Summary | null;
