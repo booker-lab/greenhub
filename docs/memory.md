@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-21 (세션60 — T-UX5 정합성 검토 완료, 셀러 UX 잔여 플랜 종결)
+최종 수정: 2026-05-21 (세션61 — e2e 풀런 회귀 가드 fix, consumer testid + seller productName)
 
 ---
 
@@ -66,7 +66,19 @@
 - **회귀 가드**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome 신규 0건(잔존 40 errors/16 warnings 모두 작업 무관 기존 — organize-imports/format/noNonNullAssertion/noArrayIndexKey 사전 누적, 세션59 메모의 "1 error"는 stash 비교 시점 표현, 실제 baseline은 자동 포맷 미적용 상태 기준).
 - **BACKLOG §12-1 셀러 UX 잔여 행 ✅ 종결 마킹**. 플랜 SSOT T-UX5 체크리스트 5/6 ✅(e2e 1건은 디스패치만 본 세션, 결과 확인은 차기).
 - **e2e 풀런 디스패치**: main에 누적된 8개 커밋(세션53 플랜 + T-UX1~4c + visual-verify F-VISUAL-PATH) 푸시 → sync-preview 자동 머지 → preview 재배포 → `gh workflow run "E2E Tests"`. 세션51 머지(`ed2fc95`) 이후 첫 풀런, 누적 5세션 분량 회귀 검증. baseline = 세션39 170 passed / 0 failed / 11 skipped. 결과는 차기 세션 분석.
-- **다음 세션 진입점**: 세션61 = **e2e 풀런 결과 분석 + 회귀 발견 시 수정**. 통과 시 다음 우선순위(BUG-16 택배 갭·UX-11 주문번호 통합·Driver Kakao Maps SDK·백엔드 단일 장애점 회고) 중 선택.
+
+**세션61 (e2e 풀런 회귀 가드 fix, `f6c275b`)**:
+- **세션60 dispatch 결과**: 자동 26203591175·수동 26203663981·로컬 시드 후 재dispatch 26204055994 — **3회 연속 동일 2건 실패** (`consumer-mypage.spec.ts:74` + `seller-orders.spec.ts:200`). 동일 실패 = stale 무관(`reference_e2e_preview_race` 유효) + 시드 누락도 아님(로컬 멱등 시드 재실행 후에도 동일).
+- **스크린샷 아티팩트 직접 대조로 원인 확정 — 회귀가 아닌 누적 selector 불일치**:
+  - consumer mypage: 주문 2건 정상 렌더링되었지만 OrderCard에 `data-testid="order-card"` 부재 → 테스트 `hasOrders=false`로 잘못 판정 → 실제 주문이 있어 빈 상태 텍스트도 미노출.
+  - seller orders: 공구 토글 후 카드 렌더링됐지만 `주문 #RDER-001`(`id.slice(-8).toUpperCase()`)만 표시·productName 미노출 → `text=E2E 공구 상품` 매칭 실패.
+- **누적 결함의 트리거**: `ed2fc95`(세션51) e2e 시드 추가 이후 노출 — 이전엔 Firestore에 시드 부재로 빈 상태 분기/카드 0개로 흘러 통과해온 운. UX4 fontSize 토큰화는 회귀 윈도우(2026-05-19 15:14~22:13) **이후** 머지로 무관 확정.
+- **수정 적용 2건**:
+  - `apps/consumer/src/app/mypage/_client.tsx:79` OrderCard `UnstyledButton`에 `data-testid="order-card"` 부여.
+  - `apps/seller/src/app/orders/_components/OrderCard.tsx:42` 주문번호 라인 아래에 `{order.productName && <Text lineClamp={1}>}` 옵셔널 한 줄 추가(UX 개선 겸 e2e 가드). 사용자 결정 — UX 변경 옵션 채택.
+- **검증**: consumer/seller 타입체크 exit 0·두 앱 빌드 통과. ① 자동 dispatch 26204659238(sync-preview success 7초 후) — `seller-orders.spec.ts:200 ✓` 통과로 seller fix 작동 확인, 하지만 `consumer-mypage:74`는 fail(Vercel 실배포 완료 전 stale). ② 수동 dispatch 26204985493(sync-preview 후 11분 차) — **success 전건 통과**.
+- **`reference_e2e_preview_race` 메모리 보강 후보**: sync-preview workflow가 success로 떨어져도 Vercel 실배포 완료까진 시간이 더 필요 → **자동 dispatch는 stale 가능성 일관 재현**(세션60·세션61 양쪽 확인). 차기 dispatch는 sync-preview 종료 후 5분+ 대기 권장.
+- **다음 세션 진입점**: BUG-16(택배 갭)·UX-11(주문번호 통합)·Driver Kakao Maps SDK·백엔드 단일 장애점 회고 중 선택. 진입 문서 미작성.
 
 ---
 
