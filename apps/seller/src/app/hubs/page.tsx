@@ -1,6 +1,7 @@
 'use client';
 
 import { Badge, Button, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
@@ -8,7 +9,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiJson } from '@/lib/api';
 
 interface Hub {
   id: string;
@@ -34,11 +35,10 @@ export default function HubsPage() {
     if (!storeId || !token) return;
     setLoading(true);
     try {
-      const res = await apiFetch(`/stores/${storeId}/hubs`, token);
-      if (res.ok) {
-        const data = await res.json();
-        setHubs(data.hubs);
-      }
+      const data = await apiJson<{ hubs: Hub[] }>(`/stores/${storeId}/hubs`, token);
+      setHubs(data.hubs);
+    } catch {
+      // GET 실패는 silent (초기 로딩 노이즈 방지)
     } finally {
       setLoading(false);
     }
@@ -50,12 +50,18 @@ export default function HubsPage() {
 
   async function toggleActive(hub: Hub) {
     if (!storeId || !token) return;
-    const res = await apiFetch(`/stores/${storeId}/hubs/${hub.id}`, token, {
-      method: 'PATCH',
-      body: JSON.stringify({ isActive: !hub.isActive }),
-    });
-    if (res.ok) {
+    try {
+      await apiJson(`/stores/${storeId}/hubs/${hub.id}`, token, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: !hub.isActive }),
+      });
       setHubs((prev) => prev.map((h) => (h.id === hub.id ? { ...h, isActive: !hub.isActive } : h)));
+    } catch (e) {
+      notifications.show({
+        color: 'red',
+        title: '거점 상태 변경 실패',
+        message: e instanceof ApiError ? e.message : '거점 상태 변경에 실패했습니다',
+      });
     }
   }
 
@@ -63,16 +69,14 @@ export default function HubsPage() {
     if (!storeId || !token) return;
     setDeleting(true);
     try {
-      const res = await apiFetch(`/stores/${storeId}/hubs/${hubId}`, token, {
+      await apiJson(`/stores/${storeId}/hubs/${hubId}`, token, {
         method: 'DELETE',
       });
-      if (res.ok) {
-        setHubs((prev) => prev.filter((h) => h.id !== hubId));
-        setDeleteTargetId(null);
-      } else {
-        setError('삭제에 실패했습니다');
-        setDeleteTargetId(null);
-      }
+      setHubs((prev) => prev.filter((h) => h.id !== hubId));
+      setDeleteTargetId(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : '삭제에 실패했습니다');
+      setDeleteTargetId(null);
     } finally {
       setDeleting(false);
     }
