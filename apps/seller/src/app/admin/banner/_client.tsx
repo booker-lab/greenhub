@@ -171,6 +171,7 @@ export default function AdminBannerClient() {
                 placeholder="지금 인기상품 보기"
                 value={form.cta1?.label ?? ''}
                 onChange={(e) =>
+                  // biome-ignore lint/style/noNonNullAssertion: cta1 undefined 시 spread는 빈 객체로 안전하게 처리됨
                   setForm((f) => ({ ...f, cta1: { ...f.cta1!, label: e.target.value } }))
                 }
               />
@@ -179,6 +180,7 @@ export default function AdminBannerClient() {
                 placeholder="/products"
                 value={form.cta1?.href ?? ''}
                 onChange={(e) =>
+                  // biome-ignore lint/style/noNonNullAssertion: cta1 undefined 시 spread는 빈 객체로 안전하게 처리됨
                   setForm((f) => ({ ...f, cta1: { ...f.cta1!, href: e.target.value } }))
                 }
               />
@@ -189,6 +191,7 @@ export default function AdminBannerClient() {
                 placeholder="공구 참여하기"
                 value={form.cta2?.label ?? ''}
                 onChange={(e) =>
+                  // biome-ignore lint/style/noNonNullAssertion: cta2 undefined 시 spread는 빈 객체로 안전하게 처리됨
                   setForm((f) => ({ ...f, cta2: { ...f.cta2!, label: e.target.value } }))
                 }
               />
@@ -197,6 +200,7 @@ export default function AdminBannerClient() {
                 placeholder="/groupbuy"
                 value={form.cta2?.href ?? ''}
                 onChange={(e) =>
+                  // biome-ignore lint/style/noNonNullAssertion: cta2 undefined 시 spread는 빈 객체로 안전하게 처리됨
                   setForm((f) => ({ ...f, cta2: { ...f.cta2!, href: e.target.value } }))
                 }
               />

@@ -162,6 +162,7 @@ export default function HubPickupPage() {
               <Group gap="xs" mb="xl">
                 {digits.map((digit, i) => (
                   <input
+                    // biome-ignore lint/suspicious/noArrayIndexKey: OTP 6자리 고정 박스 — reorder 없음
                     key={i}
                     ref={(el) => {
                       inputRefs.current[i] = el;

@@ -9,6 +9,7 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { getFirebaseAuth } from '@/lib/firebase';
 
+// biome-ignore lint/style/noNonNullAssertion: NEXT_PUBLIC_API_URL은 Next 빌드 시점에 인라인 보장
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
 /**
