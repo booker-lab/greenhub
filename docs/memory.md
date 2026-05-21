@@ -55,7 +55,9 @@
 - **검증**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome `--write` 대상 폴더 자체 errors 0건·전체 baseline 63(세션58 종료 시 stash 측정)→**1 error/3 warnings**(자동수정 부수효과 -62·잔여 1 error는 `VarietySelector.tsx:54 noAssignInExpressions` 기존 코드·작업 무관)·신규 0건.
 - **잔여 `fontSize: <숫자>` grep 0건 확인 — T-UX4 시리즈(a/b/c) 종결**. #CL 신규 등재 불필요(#CL-38 정책 그대로 적용).
 
-**다음 세션 진입점**: 세션60 = **T-UX5 정합성 검토** — `confirm(` 잔존 0건·인라인 `fontSize: <숫자>` 잔존 0건·신설 토큰 #CL 등재·visual-verify 완비 확인. 변경 없으면 0.5세션 종결 예상. 진입 문서 `archive/sessions/session60-prep.md`. Railway Outage 무관.
+**세션59 후속 — F-VISUAL-PATH 통합 시각 검증 경로 신설**: 사용자 요청으로 `seller-refactor-visual-verify.md`에 **F-VISUAL-PATH 섹션**(V0~V10, #158~210) 추가. 세션54~59의 F-T-UX1~4 시리즈 시각 검증을 한 번의 로그인 동선으로 묶음 — V1 주문(sticky·Badge) → V2 상품(Switch·Button·Badge 회귀) → V3 상품 등록(이미지 라벨 xs·Mantine Textarea) → V4 정산 → V5 픽업 OTP → V6 daily-caps → V7 delivery → V8 거점 삭제 모달 → V9 admin(3액션·지급·정지) → V10 회귀 가드(grep 잔존·콘솔 에러). 정적 검증으로 갈음한 22건 + F-T-UX1~3 미체크 27건 모두 포함. DevTools Computed `font-size` 측정으로 토큰화 검증. 문서 271→399라인(500 한도 여유).
+
+**다음 세션 진입점**: 세션60 = **T-UX5 정합성 검토** — `confirm(` 잔존 0건·인라인 `fontSize: <숫자>` 잔존 0건·신설 토큰 #CL 등재·visual-verify 완비 확인. F-VISUAL-PATH 사용자 직접 검증은 별도 시점에 진행. 변경 없으면 0.5세션 종결 예상. 진입 문서 `archive/sessions/session60-prep.md`. Railway Outage 무관.
 
 ---
 
