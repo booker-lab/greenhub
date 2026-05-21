@@ -1,8 +1,8 @@
 'use client';
 
+import { Badge, Box, Button, Group, Paper, Text, Title } from '@mantine/core';
 import { useState } from 'react';
 import { useAdminStores } from '@/hooks/useAdmin';
-import { Badge, Box, Button, Group, Paper, Text, Title } from '@mantine/core';
 
 const STATUS_LABEL: Record<string, string> = {
   active: '운영중',
@@ -71,7 +71,7 @@ export default function AdminStoresClient() {
         ) : (
           <Box
             component="table"
-            style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}
+            style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
           >
             <Box
               component="thead"
@@ -129,7 +129,10 @@ export default function AdminStoresClient() {
                       {store.name || '(미설정)'}
                     </Text>
                     <Text
-                      style={{ fontSize: 12, color: 'var(--color-text-disabled)' }}
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text-disabled)',
+                      }}
                       ff="monospace"
                     >
                       {store.id.slice(0, 8)}…
@@ -156,7 +159,7 @@ export default function AdminStoresClient() {
                             border: '1px solid var(--color-border)',
                             borderRadius: 6,
                             padding: '4px 8px',
-                            fontSize: 14,
+                            fontSize: 'var(--font-size-sm)',
                           }}
                         />
                         <Button

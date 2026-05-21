@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { apiFetch } from '@/lib/api';
 import { Box, Button, Container, Group, Stack, Text, Title } from '@mantine/core';
-import { PageShell } from '@/components/PageShell';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
+import { apiFetch } from '@/lib/api';
 
 type Step = 'input' | 'success' | 'error';
 
@@ -177,7 +177,7 @@ export default function HubPickupPage() {
                       width: 48,
                       height: 56,
                       textAlign: 'center',
-                      fontSize: 20,
+                      fontSize: 'var(--font-size-xl)',
                       fontWeight: 700,
                       borderRadius: 12,
                       border: `2px solid ${

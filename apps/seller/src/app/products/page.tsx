@@ -1,26 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import type { Product } from '@greenhub/shared';
+import { Box, Button, Container, Group, Paper, Stack, Switch, Text } from '@mantine/core';
 import Image from 'next/image';
-import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+import { useState } from 'react';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
+import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { apiFetch } from '@/lib/api';
-import { PageShell } from '@/components/PageShell';
-import { PageHeader } from '@/components/PageHeader';
-import { EmptyState, LoadingState } from '@/components/StateViews';
-import type { Product } from '@greenhub/shared';
-import {
-  Badge,
-  Box,
-  Button,
-  Container,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  UnstyledButton,
-} from '@mantine/core';
 
 type ProductFilter = 'all' | 'active' | 'inactive';
 
@@ -60,38 +52,15 @@ export default function ProductsPage() {
       />
 
       {/* 필터 탭 */}
-      <Box
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        <Container size="sm">
-          <Group gap={0}>
-            {(['all', 'active', 'inactive'] as ProductFilter[]).map((f) => (
-              <UnstyledButton
-                key={f}
-                onClick={() => setFilter(f)}
-                style={{
-                  flex: 1,
-                  padding: '12px 16px',
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: 'var(--fw-medium)',
-                  textAlign: 'center',
-                  borderBottom: `2px solid ${filter === f ? 'var(--color-primary)' : 'transparent'}`,
-                  color: filter === f ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                }}
-              >
-                {f === 'all'
-                  ? `전체 ${products.length}`
-                  : f === 'active'
-                    ? `판매 중 ${products.filter((p) => p.isActive).length}`
-                    : `비활성 ${products.filter((p) => !p.isActive).length}`}
-              </UnstyledButton>
-            ))}
-          </Group>
-        </Container>
-      </Box>
+      <SegmentedTabs<ProductFilter>
+        tabs={[
+          { key: 'all', label: `전체 ${products.length}` },
+          { key: 'active', label: `판매 중 ${products.filter((p) => p.isActive).length}` },
+          { key: 'inactive', label: `비활성 ${products.filter((p) => !p.isActive).length}` },
+        ]}
+        value={filter}
+        onChange={setFilter}
+      />
 
       {/* 상품 목록 */}
       <Container size="sm" px="md" py="md">
@@ -147,6 +116,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
   const [toggling, setToggling] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function handleToggleActive() {
     if (!storeId) return;
@@ -168,8 +138,6 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
 
   async function handleDelete() {
     if (!storeId) return;
-    if (!confirm(`"${product.name}" 상품을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`))
-      return;
     setDeleting(true);
     setError(null);
     try {
@@ -179,6 +147,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
         { method: 'DELETE' },
       );
       if (!res.ok) throw new Error(`삭제 실패 (${res.status})`);
+      setConfirmOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : '오류가 발생했습니다');
     } finally {
@@ -234,9 +203,24 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
 
         {/* 정보 */}
         <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }} truncate>
-            {product.name}
-          </Text>
+          <Group gap="xs" justify="space-between" wrap="nowrap" align="center">
+            <Text
+              style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}
+              truncate
+            >
+              {product.name}
+            </Text>
+            <Switch
+              checked={product.isActive}
+              onChange={handleToggleActive}
+              disabled={toggling}
+              size="sm"
+              color="green"
+              aria-label={
+                product.isActive ? '판매 중 — 클릭하여 비활성' : '비활성 — 클릭하여 판매 중으로'
+              }
+            />
+          </Group>
           <Text
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             mt={2}
@@ -245,51 +229,44 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
             {product.saleType === 'group' && ' · 공동구매'}
           </Text>
           {error && (
-            <Text
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-              mt={4}
-            >
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt={4}>
               {error}
             </Text>
           )}
           <Group gap="xs" mt="xs">
-            {/* 활성/비활성 토글 */}
-            <Badge
-              component="button"
-              onClick={handleToggleActive}
-              style={{ cursor: toggling ? 'not-allowed' : 'pointer' }}
-              color={product.isActive ? 'green' : 'gray'}
-              variant="light"
-              radius="xl"
-              size="md"
-            >
-              {product.isActive ? '판매 중' : '비활성'}
-            </Badge>
-            <Badge
+            <Button
               component={Link}
               href={`/products/${product.id}/edit`}
+              size="xs"
+              variant="subtle"
               color="gray"
-              variant="light"
-              radius="xl"
-              size="md"
-              style={{ cursor: 'pointer' }}
             >
               수정
-            </Badge>
-            <Badge
-              component="button"
-              onClick={handleDelete}
-              style={{ cursor: deleting ? 'not-allowed' : 'pointer' }}
+            </Button>
+            <Button
+              size="xs"
+              variant="subtle"
               color="red"
-              variant="light"
-              radius="xl"
-              size="md"
+              onClick={() => setConfirmOpen(true)}
+              loading={deleting}
             >
-              {deleting ? '삭제 중...' : '삭제'}
-            </Badge>
+              삭제
+            </Button>
           </Group>
         </Box>
       </Group>
+
+      <ConfirmModal
+        opened={confirmOpen}
+        title="상품 삭제"
+        message={`"${product.name}" 상품을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`}
+        confirmLabel="삭제"
+        loading={deleting}
+        onConfirm={handleDelete}
+        onClose={() => {
+          if (!deleting) setConfirmOpen(false);
+        }}
+      />
     </Paper>
   );
 }

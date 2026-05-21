@@ -43,7 +43,11 @@ export function OrdersTab({ settlements, listLoading }: OrdersTabProps) {
       <Group justify="flex-end" px={4}>
         <UnstyledButton
           onClick={() => downloadCSV(settlements, '', '')}
-          style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 500 }}
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-primary)',
+            fontWeight: 500,
+          }}
         >
           CSV 다운로드
         </UnstyledButton>

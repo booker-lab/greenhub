@@ -3,21 +3,70 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-20 (세션52 — T7-A Railway 다운 진단 + T7-B P4 fontSize 토큰화)
+최종 수정: 2026-05-21 (세션60 — T-UX5 정합성 검토 완료, 셀러 UX 잔여 플랜 종결)
 
 ---
 
 ## 진행 현황
 
-세션22까지 + 세션23~52 완료. 셀러 주문 탭 리팩토링(T1~T7) + 배송일 풀스택+셀러 IA(T1~T6) + P4 fontSize 토큰화 종결.
+세션22까지 + 세션23~54 완료. 셀러 주문 탭 리팩토링(T1~T7) + 배송일 풀스택+셀러 IA(T1~T6) + P4 fontSize 토큰화 종결. 세션53부터 Railway Outage 지속으로 백엔드 무관 작업(UX 잔여 플랜)으로 전환.
 
 **세션46~51 요약**: 배송일 풀스택+셀러 IA T1~T6. T1(`5281188`), T2(`35cf229`+`e4c376c`), T3(`4e1576a` #CL-34), T4(`2c6c89d`), T5(`bffce2a` #CL-35), T6(`ed2fc95` e2e 시드+신규 spec, 세션51).
 
-**세션52 (T7-A 진단 + T7-B P4 토큰화)**:
-- **T7-A — CI 풀런 4회 연속 실패 원인 진단**: 직접 `/auth/login` POST 결과 Railway `api-production-13e7.up.railway.app` **모든 엔드포인트가 404 'Application not found'**. `status.railway.com`이 Major Outage 발표 — **GCP가 Railway 조직 계정 차단 → Edge Network·Control Plane 마비**(우리 인스턴스 자체는 무사, Edge가 워크로드 라우팅 불가). set-cookie race·시크릿 회전·내부 코드 회귀 모두 아님, 재배포 의미 없음. NextAuth signin이 `?error=CredentialsSignin`으로 302되는 건 `authorize()`가 API fetch 실패 시 `null` 반환하는 정상 경로. 복구 ETA 없음(Railway가 GCP 지원팀과 직접 소통 중).
-- **T7-B — P4 fontSize 토큰화**: `OrderCard.tsx:98`·`OrderInfoSection.tsx:156`·`StatusCards.tsx:51` 3곳을 `var(--font-size-2xl)`로 치환. 토큰은 `packages/ui/src/style.css:25`에 24px로 이미 정의되어 있어 신설 불필요(백로그 설명이 부정확했음). 타입체크 통과·빌드 통과(23라우트)·biome baseline 동일(신규 0건).
+**세션52 요약**: T7-A — Railway `api-production-13e7.up.railway.app` 전 엔드포인트 404. 원인은 GCP가 Railway 조직 계정 차단(Major Outage), 재배포 무효, 복구 ETA 없음. T7-B — P4 fontSize 토큰화 3곳(`var(--font-size-2xl)`).
 
-**다음 세션 진입점**: 세션53 = Railway 복구 확인 + e2e 풀런 검증 + 잔여 백로그 진입. 진입 문서 `archive/sessions/session53-prep.md`. 잔여 백로그 — BUG-16 택배 상태 전환 갭, P3 Driver Kakao Maps SDK, UX-11 주문번호 통합.
+**세션53 (UX-07~10 플랜 수립)**:
+- **진단**: Railway Outage 미복구 확인 → 백엔드 무관 작업으로 전환. UX-07~10 현재 코드 상태 진단 — UX-07 탭 혼재 유지(주문 검정/700 vs 상품·정산 초록/medium), UX-08 상품 카드 Badge×3 유지, UX-09 native `confirm()` **6건 잔존**(hubs:61·products:171·admin/drivers:58,66·admin/settlements:43·admin/users:13), **UX-10 사실상 자연 해소**(세션41~45 리팩토링으로 sticky 1곳·`top: var(--header-height)` 토큰화 완료). 추가로 `fontSize` 하드코딩 ~30곳 발견(admin 9파일·settlements/hubs/settings 본 화면·products _components).
+- **플랜 수립**: [seller-ux-residual-plan.md](specs/frontend/seller-ux-residual-plan.md) 147라인 — **T-UX1** 탭 단일화(`SegmentedTabs` 신설 + 3페이지 치환), **T-UX2** 상품 카드 Badge 분리(Switch+ActionIcon), **T-UX3** `ConfirmModal` 공통 컴포넌트 + 6건 교체, **T-UX4a/b/c** fontSize 토큰화 분할, **T-UX5** 정합성 검토. 각 태스크 단독 PR/세션 단위·상호 무관·결정 사항 명시.
+- **코드 변경 없음**: 신규 문서 1건(플랜) + BACKLOG/memory 갱신만.
+
+**세션54 (T-UX1 완료, #CL-36)**:
+- **정합성 검토 OK**: 세션53 진단(UX-09 confirm 6건·UX-07 탭 3페이지·`top:57`·fontSize ~30곳)이 세션54 진입 시점과 완전 일치. 사용자 결정 — 색상 `--color-primary`·강조 medium+active 700·sticky·Badge·컴포넌트 위치 모두 권장안 채택.
+- **신설**: `apps/seller/src/components/SegmentedTabs.tsx`(~80라인) — Props `tabs/value/onChange/sticky/topOffset/layout`. `count > 0` Badge·`layout='flex'|'scroll'`·sticky default `var(--header-height)`.
+- **치환**: `orders/page.tsx`(sticky+scroll+count+ACTION_REQUIRED 빨강) · `products/page.tsx`(flex, 카운트 label 인라인) · `settlements/page.tsx`(sticky+flex, `top: 57` 매직넘버 → `var(--header-height)` 동시 해소).
+- **검증**: seller 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome 자동 포맷 후 신규 0건. 미사용 import 정리(orders `Badge`·products `UnstyledButton`·settlements `Box/Group/UnstyledButton`).
+- **문서**: BACKLOG §11-3 UX-07 ✅·§12 활동 로그·§12-1 우선순위 표 갱신, CRITICAL_LOGIC #CL-36 추가, visual-verify F-T-UX1 섹션 #97~107 추가.
+
+**세션55 (T-UX3 완료, #CL-37)**:
+- **사용자 결정**: 자체 컴포넌트(Mantine Modal 직접 사용)·페이지 단일 state(products는 ProductCard 내부 state 예외)·권장 props 시그니처 채택.
+- **신설**: `apps/seller/src/components/ConfirmModal.tsx` (~75라인) — `opened/title/message(string|ReactNode)/confirmLabel/cancelLabel/confirmColor(default red)/loading/onConfirm/onClose`, `whiteSpace: pre-line`로 다행 메시지 지원.
+- **치환 6건**: ① hubs 거점 삭제(red, page state) ② products ProductCard 상품 삭제(red, card state 예외) ③ admin/drivers 승인/정지/해제 3액션을 `PendingAction`+`ACTION_META` 룩업으로 통합(green/red/gray) ④ admin/settlements 지급 처리(blue, 실패 시 alert 유지) ⑤ admin/users 정지/해제 가변 라벨·색상.
+- **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome baseline 72→68 errors(import 정렬 4건 자동수정)·신규 0건.
+
+**세션56 (T-UX2 완료)**:
+- **사용자 결정**: 활성 토글 `Switch`(ActionIcon/Badge 거절)·수정·삭제 `Button subtle`·삭제 `color=red`·상품명 우측 Switch + 액션 row는 수정·삭제만 — 모두 권장안 채택.
+- **변경**: `apps/seller/src/app/products/page.tsx` ProductCard ① Badge×3 제거 → ② 상품명 라인 `Group justify=space-between`에 `Switch size=sm color=green` ③ 액션 row `Button size=xs variant=subtle`로 수정(gray Link)·삭제(red loading) 2개. imports `Badge` 제거 + `Switch` 추가.
+- **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome 자동 포맷 후 자체 이슈 0건, 전체 baseline **68→64 errors**·신규 0건.
+
+**세션57 (T-UX4a 완료)**:
+- **매핑 재설계**: 진입점 권장 `12→xs, 14→sm`은 현 토큰 정의(`packages/ui/src/style.css`: sm=15·md=16·lg=18·xl=20·2xl=24, **xs 미정의·사용 0건**)와 불일치. 사용자 결정으로 **12·14 모두 sm(15px)로 통일** — 12px 보조 텍스트 6건은 +3px 가독성 개선, 14px 11건은 +1px 미세 확대. 정책 변경 아니므로 #CL 신규 등재 없음.
+- **변경 17건/7파일**: `admin/layout.tsx:53`·`banner/_client.tsx:116`·`drivers/_client.tsx:122`·`invite/_client.tsx:144,224`·`settlements/_client.tsx:91,102,158,235`·`orders/_client.tsx:103,169,177`·`stores/_client.tsx:74,132,159`·`users/_client.tsx:63,119` 모두 `fontSize: 'var(--font-size-sm)'`.
+- **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome `--write` 7파일 자동 포맷 + 전체 baseline **64→63 errors**(자동수정 부수효과)·admin 폴더 errors 0건. 시각 검증은 사용자 합의로 생략(정적 검증만).
+
+**세션58 (T-UX4b 완료, #CL-38)**:
+- **사용자 결정 2건**: ① `daily-caps:277 fontSize:10`(셀 내부 usedSlots 카운트 보조) → **신규 토큰 `--font-size-xs: 12px` 신설** 후 `var(--font-size-xs)` 적용(+2px) ② `hubs/pickup:180 fontSize:20`(OTP 입력 박스 48×56) → `var(--font-size-xl)` 채택(변동 0). 검증 강도 — 정적 검증으로 갈음(스팟 체크 생략).
+- **변경 10건/5파일**: `settlements/_components/{DailySummaryTab,OrdersTab,PeriodTab}.tsx` 5건(모두 sm) · `hubs/[id]/pickup/page.tsx:180`(xl) · `settings/daily-caps/page.tsx:277`(xs)·`:313`(sm) · `settings/delivery/page.tsx:181,244`(sm).
+- **신규 #CL-38**: `--font-size-xs: 12px` 신설 + 사용 기준(의도적 작은 보조 인디케이터에 한정). 세션57 "12·14→sm 통일"은 유지, xs는 보완.
+- **검증**: 셀러 타입체크(exit 0)·`pnpm --filter seller build`(23라우트)·biome `--write` 대상 폴더 errors 0건·warnings 3건(기존)·전체 baseline 63→**50 errors**(자동수정 부수효과)·신규 0건.
+
+**세션59 (T-UX4c 완료 · T-UX4 시리즈 종결)**:
+- **변경 7건/3파일**: `products/_components/ImageUpload.tsx` 5건(9·9·9·11·12→**xs**, 80×80 썸네일 오버레이 라벨·✕ 삭제 버튼·"사진 추가" 빈 박스 — #CL-38 "의도적 작은 보조 인디케이터" 정책 일관 적용) · `AIPreviewPanel.tsx:147` Mantine `styles.input.fontSize: 15`→`var(--font-size-sm)` · `SellerNoteInput.tsx:38` Mantine `styles.input.fontSize: 16`→`var(--font-size-md)`. Mantine `styles` prop도 emotion 통해 CSS 변수 통과 — 타입체크 exit 0으로 검증.
+- **사용자 결정 4건**: 9px 4건 → **xs 흡수**(권장) · 11/12px 2건 → **둘 다 xs**(권장) · Mantine styles 2건 → **양쪽 토큰화**(권장) · 검증 강도 → **정적 검증만**(시각 검증 생략).
+- **검증**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome `--write` 대상 폴더 자체 errors 0건·전체 baseline 63(세션58 종료 시 stash 측정)→**1 error/3 warnings**(자동수정 부수효과 -62·잔여 1 error는 `VarietySelector.tsx:54 noAssignInExpressions` 기존 코드·작업 무관)·신규 0건.
+- **잔여 `fontSize: <숫자>` grep 0건 확인 — T-UX4 시리즈(a/b/c) 종결**. #CL 신규 등재 불필요(#CL-38 정책 그대로 적용).
+
+**세션59 후속 — F-VISUAL-PATH 통합 시각 검증 경로 신설**: 사용자 요청으로 `seller-refactor-visual-verify.md`에 **F-VISUAL-PATH 섹션**(V0~V10, #158~210) 추가. 세션54~59의 F-T-UX1~4 시리즈 시각 검증을 한 번의 로그인 동선으로 묶음 — V1 주문(sticky·Badge) → V2 상품(Switch·Button·Badge 회귀) → V3 상품 등록(이미지 라벨 xs·Mantine Textarea) → V4 정산 → V5 픽업 OTP → V6 daily-caps → V7 delivery → V8 거점 삭제 모달 → V9 admin(3액션·지급·정지) → V10 회귀 가드(grep 잔존·콘솔 에러). 정적 검증으로 갈음한 22건 + F-T-UX1~3 미체크 27건 모두 포함. DevTools Computed `font-size` 측정으로 토큰화 검증. 문서 271→399라인(500 한도 여유).
+
+**Railway 복구 확인 (2026-05-21, 세션59 후속)**: `status.railway.com` Fully Operational(Dashboard 99.72%·Station 99.75%·Deployments 99.69% uptime). 세션52~58 Railway 무관 작업으로 우회하던 모든 항목이 다시 풀스택 검증 가능 상태. **누적 미검증 변경: 세션51 머지(`ed2fc95`) 이후 한 번도 e2e 풀런되지 않음** — 세션53~59의 셀러 UX 5세션 분량(SegmentedTabs·ConfirmModal·Switch·fontSize) + 세션51 신규 spec(`consumer-delivery-date.spec.ts`·`seller-orders.spec.ts` T6) 모두 풀런 미적용. baseline = 세션39 170 passed / 0 failed / 11 skipped.
+
+**다음 세션 진입점**: 세션60 = **T-UX5 정합성 검토 + e2e 풀런 재개**(Railway 복구로 §2-6 e2e 항목 부활). F-VISUAL-PATH 사용자 직접 검증은 별도 시점. 진입 문서 `archive/sessions/session60-prep.md` §2-6 갱신됨.
+
+**세션60 (T-UX5 완료 · 셀러 UX 잔여 플랜 종결)**:
+- **정적 검증 6/6 통과(코드 변경 0건)**: ① 토큰 6종(xs/sm/md/lg/xl/2xl) 사용처 매핑 ✅ ② 인라인 `fontSize:<숫자>` grep 0건 ③ `confirm(` grep 0건 ④ BACKLOG §11-3 UX-07/08/09 ✅·UX-10 ⏹️ 마킹 ⑤ visual-verify F-T-UX1/2/3/4a/4b/4c + F-VISUAL-PATH 존재 ⑥ #CL-36/37/38 등재.
+- **회귀 가드**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome 신규 0건(잔존 40 errors/16 warnings 모두 작업 무관 기존 — organize-imports/format/noNonNullAssertion/noArrayIndexKey 사전 누적, 세션59 메모의 "1 error"는 stash 비교 시점 표현, 실제 baseline은 자동 포맷 미적용 상태 기준).
+- **BACKLOG §12-1 셀러 UX 잔여 행 ✅ 종결 마킹**. 플랜 SSOT T-UX5 체크리스트 5/6 ✅(e2e 1건은 디스패치만 본 세션, 결과 확인은 차기).
+- **e2e 풀런 디스패치**: main에 누적된 8개 커밋(세션53 플랜 + T-UX1~4c + visual-verify F-VISUAL-PATH) 푸시 → sync-preview 자동 머지 → preview 재배포 → `gh workflow run "E2E Tests"`. 세션51 머지(`ed2fc95`) 이후 첫 풀런, 누적 5세션 분량 회귀 검증. baseline = 세션39 170 passed / 0 failed / 11 skipped. 결과는 차기 세션 분석.
+- **다음 세션 진입점**: 세션61 = **e2e 풀런 결과 분석 + 회귀 발견 시 수정**. 통과 시 다음 우선순위(BUG-16 택배 갭·UX-11 주문번호 통합·Driver Kakao Maps SDK·백엔드 단일 장애점 회고) 중 선택.
 
 ---
 

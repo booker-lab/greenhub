@@ -1,7 +1,5 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useAdminDrivers, type AdminDriver, type DriverStatus } from '@/hooks/useAdmin';
 import {
   Badge,
   Box,
@@ -13,6 +11,40 @@ import {
   Title,
   UnstyledButton,
 } from '@mantine/core';
+import { useMemo, useState } from 'react';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { type AdminDriver, type DriverStatus, useAdminDrivers } from '@/hooks/useAdmin';
+
+type DriverAction = 'approve' | 'suspend' | 'unsuspend';
+
+interface PendingAction {
+  userId: string;
+  action: DriverAction;
+}
+
+const ACTION_META: Record<
+  DriverAction,
+  { title: string; message: string; confirmLabel: string; confirmColor: string }
+> = {
+  approve: {
+    title: '드라이버 승인',
+    message: '이 드라이버를 승인하시겠습니까?',
+    confirmLabel: '승인',
+    confirmColor: 'green',
+  },
+  suspend: {
+    title: '드라이버 정지',
+    message: '이 드라이버를 정지하시겠습니까?',
+    confirmLabel: '정지',
+    confirmColor: 'red',
+  },
+  unsuspend: {
+    title: '드라이버 정지 해제',
+    message: '정지를 해제하시겠습니까?',
+    confirmLabel: '해제',
+    confirmColor: 'gray',
+  },
+};
 
 const STATUS_TABS: { value: DriverStatus; label: string }[] = [
   { value: 'all', label: '전체' },
@@ -44,6 +76,7 @@ function DriverBadge({ driver }: { driver: AdminDriver }) {
 export default function DriversClient() {
   const [tab, setTab] = useState<DriverStatus>('pending');
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
   const { drivers: allDrivers, loading, approve, toggleSuspend } = useAdminDrivers();
 
   const drivers = useMemo(() => {
@@ -54,20 +87,22 @@ export default function DriversClient() {
     return allDrivers;
   }, [allDrivers, tab]);
 
-  const handleApprove = async (userId: string) => {
-    if (!confirm('이 드라이버를 승인하시겠습니까?')) return;
-    setProcessingId(userId);
-    await approve(userId);
-    setProcessingId(null);
+  const runPending = async () => {
+    if (!pending) return;
+    setProcessingId(pending.userId);
+    try {
+      if (pending.action === 'approve') {
+        await approve(pending.userId);
+      } else {
+        await toggleSuspend(pending.userId, pending.action === 'suspend');
+      }
+      setPending(null);
+    } finally {
+      setProcessingId(null);
+    }
   };
 
-  const handleSuspend = async (userId: string, suspended: boolean) => {
-    const msg = suspended ? '이 드라이버를 정지하시겠습니까?' : '정지를 해제하시겠습니까?';
-    if (!confirm(msg)) return;
-    setProcessingId(userId);
-    await toggleSuspend(userId, suspended);
-    setProcessingId(null);
-  };
+  const pendingMeta = pending ? ACTION_META[pending.action] : null;
 
   return (
     <Box>
@@ -84,7 +119,7 @@ export default function DriversClient() {
               onClick={() => setTab(t.value)}
               style={{
                 padding: '8px 16px',
-                fontSize: 14,
+                fontSize: 'var(--font-size-sm)',
                 fontWeight: 500,
                 borderBottom: `2px solid ${tab === t.value ? 'var(--color-primary)' : 'transparent'}`,
                 marginBottom: -1,
@@ -137,7 +172,7 @@ export default function DriversClient() {
                 <Group gap="xs" style={{ flexShrink: 0 }}>
                   {!driver.driverApproved && !driver.suspended && (
                     <Button
-                      onClick={() => handleApprove(driver.id)}
+                      onClick={() => setPending({ userId: driver.id, action: 'approve' })}
                       disabled={processingId === driver.id}
                       size="xs"
                       color="green"
@@ -148,7 +183,7 @@ export default function DriversClient() {
                   )}
                   {!driver.suspended ? (
                     <Button
-                      onClick={() => handleSuspend(driver.id, true)}
+                      onClick={() => setPending({ userId: driver.id, action: 'suspend' })}
                       disabled={processingId === driver.id}
                       size="xs"
                       variant="light"
@@ -159,7 +194,7 @@ export default function DriversClient() {
                     </Button>
                   ) : (
                     <Button
-                      onClick={() => handleSuspend(driver.id, false)}
+                      onClick={() => setPending({ userId: driver.id, action: 'unsuspend' })}
                       disabled={processingId === driver.id}
                       size="xs"
                       variant="light"
@@ -175,6 +210,19 @@ export default function DriversClient() {
           ))}
         </Stack>
       )}
+
+      <ConfirmModal
+        opened={pending !== null}
+        title={pendingMeta?.title ?? ''}
+        message={pendingMeta?.message ?? ''}
+        confirmLabel={pendingMeta?.confirmLabel}
+        confirmColor={pendingMeta?.confirmColor}
+        loading={processingId !== null}
+        onConfirm={runPending}
+        onClose={() => {
+          if (processingId === null) setPending(null);
+        }}
+      />
     </Box>
   );
 }

@@ -1,21 +1,29 @@
 'use client';
 
-import { useState } from 'react';
-import { useAdminUsers } from '@/hooks/useAdmin';
 import { Badge, Box, Button, Group, Paper, Text, Title } from '@mantine/core';
+import { useState } from 'react';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { useAdminUsers } from '@/hooks/useAdmin';
+
+interface PendingUserAction {
+  userId: string;
+  currentlySuspended: boolean;
+}
 
 export default function AdminUsersClient() {
   const { users, loading, toggleSuspend } = useAdminUsers();
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingUserAction | null>(null);
 
-  const handleToggle = async (userId: string, currentlySuspended: boolean) => {
-    if (
-      !confirm(currentlySuspended ? '계정 정지를 해제하시겠습니까?' : '이 계정을 정지하시겠습니까?')
-    )
-      return;
-    setProcessingId(userId);
-    await toggleSuspend(userId, !currentlySuspended);
-    setProcessingId(null);
+  const runPending = async () => {
+    if (!pending) return;
+    setProcessingId(pending.userId);
+    try {
+      await toggleSuspend(pending.userId, !pending.currentlySuspended);
+      setPending(null);
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   if (loading) {
@@ -52,7 +60,7 @@ export default function AdminUsersClient() {
         ) : (
           <Box
             component="table"
-            style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}
+            style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
           >
             <Box
               component="thead"
@@ -108,7 +116,10 @@ export default function AdminUsersClient() {
                   <Box component="td" style={{ padding: '12px 16px' }}>
                     <Text style={{ fontWeight: 'var(--fw-medium)' }}>{user.name}</Text>
                     <Text
-                      style={{ fontSize: 12, color: 'var(--color-text-disabled)' }}
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text-disabled)',
+                      }}
                       ff="monospace"
                     >
                       {user.id.slice(0, 8)}…
@@ -127,7 +138,9 @@ export default function AdminUsersClient() {
                   </Box>
                   <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
                     <Button
-                      onClick={() => handleToggle(user.id, !!user.suspended)}
+                      onClick={() =>
+                        setPending({ userId: user.id, currentlySuspended: !!user.suspended })
+                      }
                       disabled={processingId === user.id}
                       size="xs"
                       variant="outline"
@@ -143,6 +156,23 @@ export default function AdminUsersClient() {
           </Box>
         )}
       </Paper>
+
+      <ConfirmModal
+        opened={pending !== null}
+        title={pending?.currentlySuspended ? '계정 정지 해제' : '계정 정지'}
+        message={
+          pending?.currentlySuspended
+            ? '계정 정지를 해제하시겠습니까?'
+            : '이 계정을 정지하시겠습니까?'
+        }
+        confirmLabel={pending?.currentlySuspended ? '해제' : '정지'}
+        confirmColor={pending?.currentlySuspended ? 'green' : 'red'}
+        loading={processingId !== null}
+        onConfirm={runPending}
+        onClose={() => {
+          if (processingId === null) setPending(null);
+        }}
+      />
     </Box>
   );
 }

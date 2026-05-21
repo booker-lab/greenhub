@@ -39,7 +39,7 @@ export function DailySummaryTab({
             padding: '6px 10px',
             border: '1px solid var(--color-border)',
             borderRadius: 12,
-            fontSize: 13,
+            fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text-secondary)',
           }}
         />

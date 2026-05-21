@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import {
   Alert,
   Button,
@@ -13,6 +12,7 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core';
+import { useState } from 'react';
 
 export interface ConflictWarning {
   field: string;
@@ -144,7 +144,7 @@ export default function AIPreviewPanel({
           autosize
           minRows={5}
           radius="md"
-          styles={{ input: { fontSize: 15, lineHeight: 1.7 } }}
+          styles={{ input: { fontSize: 'var(--font-size-sm)', lineHeight: 1.7 } }}
         />
       </Paper>
 

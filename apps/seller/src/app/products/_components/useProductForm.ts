@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
 import type { ConflictWarning } from './AIPreviewPanel';
 import {
+  defaultForm,
   type GroupConfigForm,
   type ProductFormData,
   type ProductFormProps,
-  defaultForm,
 } from './productForm.types';
 
 /** ProductForm의 상태·검증·임시저장·제출 로직을 모두 담는 훅. */

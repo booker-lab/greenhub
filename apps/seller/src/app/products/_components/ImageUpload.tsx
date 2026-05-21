@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getFirebaseStorage } from '@/lib/firebase';
 import { Box, Group, Loader, Paper, Text } from '@mantine/core';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { useRef, useState } from 'react';
+import { getFirebaseStorage } from '@/lib/firebase';
 
 interface ImageUploadProps {
   storeId: string;
@@ -38,7 +38,10 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
     try {
       const urls = await Promise.all(
         toUpload.map(async (file) => {
-          const r = storageRef(getFirebaseStorage(), `products/${storeId}/${Date.now()}_${file.name}`);
+          const r = storageRef(
+            getFirebaseStorage(),
+            `products/${storeId}/${Date.now()}_${file.name}`,
+          );
           await uploadBytes(r, file);
           return getDownloadURL(r);
         }),
@@ -99,7 +102,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                   left: 4,
                   backgroundColor: 'var(--color-primary)',
                   color: 'white',
-                  fontSize: 9,
+                  fontSize: 'var(--font-size-xs)',
                   fontWeight: 700,
                   padding: '2px 6px',
                   borderRadius: 4,
@@ -118,7 +121,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                   left: 4,
                   backgroundColor: 'rgba(0,0,0,0.55)',
                   color: 'white',
-                  fontSize: 9,
+                  fontSize: 'var(--font-size-xs)',
                   fontWeight: 700,
                   padding: '2px 6px',
                   borderRadius: 4,
@@ -137,7 +140,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                 left: 4,
                 backgroundColor: 'rgba(0,0,0,0.5)',
                 color: 'white',
-                fontSize: 9,
+                fontSize: 'var(--font-size-xs)',
                 fontWeight: 700,
                 width: 16,
                 height: 16,
@@ -165,7 +168,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 11,
+                fontSize: 'var(--font-size-xs)',
                 border: 'none',
                 cursor: 'pointer',
               }}
@@ -191,7 +194,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
               alignItems: 'center',
               justifyContent: 'center',
               gap: 4,
-              fontSize: 12,
+              fontSize: 'var(--font-size-xs)',
               color: 'var(--color-text-disabled)',
               backgroundColor: 'transparent',
               cursor: uploading ? 'not-allowed' : 'pointer',

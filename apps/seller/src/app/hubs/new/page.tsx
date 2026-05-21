@@ -1,9 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { apiFetch } from '@/lib/api';
 import {
   ActionIcon,
   Box,
@@ -17,6 +13,10 @@ import {
   Title,
 } from '@mantine/core';
 import { ChevronLeft } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { useState } from 'react';
+import { apiFetch } from '@/lib/api';
 
 export default function NewHubPage() {
   const { data: session } = useSession();

@@ -388,3 +388,80 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **수동 검증 보조**: 로컬에서 seller 로그인 set-cookie race(#CL-23)로 풀런이 막힐 수 있어, `docs/specs/frontend/seller-refactor-visual-verify.md` D-T6 섹션(#89~#96)에 시드 후 육안 검증 항목 추가. preview 동기화 후 CI 풀런이 최종 검증 경로.
 
+---
+
+## [결정 #CL-36] 셀러앱 탭 스타일 단일화 — `SegmentedTabs` 공통 컴포넌트 (2026-05-20, 세션54)
+
+**배경**: UX-07 — 셀러 주문 탭(검정 `--color-text` + active 700)과 상품·정산 탭(초록 `--color-primary` + medium)이 시각 패턴 2종으로 혼재. 동일 UI 어포던스를 다르게 표현해 앱 정체성·일관성을 떨어뜨림. 세션53 진단 + 사용자 결정으로 단일화 진입.
+
+**핵심 규칙**:
+
+1. **신설 컴포넌트** `apps/seller/src/components/SegmentedTabs.tsx` (~80라인) — 셀러앱의 모든 페이지 상위 탭은 본 컴포넌트로 통일. Props: `tabs: { key, label, count?, badgeColor? }[]` · `value` · `onChange` · `sticky?` (default false) · `topOffset?` (default `var(--header-height)`) · `layout?: 'flex' | 'scroll'` (default flex).
+2. **시각 토큰**: active = `var(--color-primary)`(초록) + `fontWeight 700` + `borderBottom 2px solid var(--color-primary)`. inactive = `var(--color-text-secondary)` + `fontWeight var(--fw-medium)`. 폰트 사이즈는 `var(--font-size-sm)` 통일.
+3. **카운트 Badge**: `count > 0`일 때만 Mantine `Badge size="xs"`로 렌더, `badgeColor: 'red' | 'gray'` (default gray). 카운트 0이거나 미정의면 미렌더. 카운트가 항상 있어야 하는 케이스(상품 탭 전체/판매중/비활성 0건도 표시)는 `label`에 인라인.
+4. **레이아웃**: `layout='flex'` (균등 분할, 탭 3개 이하) vs `layout='scroll'` (탭 많아 모바일 가로 스크롤 필요, 주문 탭 5+). `flex`는 `flex: 1`, `scroll`은 `overflowX: auto + flexShrink: 0`.
+5. **sticky 정책**: 페이지별 IA 결정에 위임 (주문·정산 sticky=true / 상품 sticky=false). sticky=true이면 `top` 기본값 `var(--header-height)`로 헤더 바로 아래에 부착. 매직넘버 직접 지정 금지.
+
+**치환 대상**:
+- `apps/seller/src/app/orders/page.tsx:160-195` → sticky + scroll + count + ACTION_REQUIRED 빨강
+- `apps/seller/src/app/products/page.tsx:62-94` → flex, 카운트는 label 인라인
+- `apps/seller/src/app/settlements/page.tsx:37-69` → sticky + flex, `top: 57` 매직넘버 동시 해소
+
+**범위 외**:
+- `apps/seller/src/app/orders/_components/SaleTypeToggle.tsx` 일반/공구 1차 분기 토글 — 다른 토큰(검정·pill 형태)으로 의도적 차별화. SegmentedTabs 적용 안 함.
+- `apps/seller/src/app/admin/drivers/_client.tsx:89` admin 탭 — admin 영역은 별도 검토 후 결정 (다른 세션).
+- `orders` 페이지의 `IN_DELIVERY` SubFilter row — pill 형태로 시각 의도 다름.
+
+**검증**: seller 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · biome 신규 0건. e2e 회귀 풀런은 Railway 복구 후. 셀렉터 영향 — `getByRole('button')` + 텍스트 기반이면 영향 없음.
+
+---
+
+## [결정 #CL-37] 셀러앱 확인 모달 공통 컴포넌트 — `ConfirmModal` + native `confirm()` 금지 (2026-05-21, 세션55)
+
+**배경**: UX-09 — 셀러앱 destructive/critical 액션(삭제·승인·정지·지급) 확인이 native `window.confirm()` 6곳에 잔존. native confirm은 모바일 PWA에서 OS chrome 의존이라 디자인 일관성·접근성·라벨 가변성 모두 떨어짐. 세션53 진단 → 세션55에서 공통 컴포넌트 + 일괄 교체.
+
+**핵심 규칙**:
+
+1. **신설 컴포넌트** `apps/seller/src/components/ConfirmModal.tsx` (~75라인) — 셀러앱의 모든 단순 확인 모달은 본 컴포넌트로 통일. Mantine `Modal` 직접 사용(`@mantine/modals` 의존성 추가 거절: 기존 패턴 일관성·번들 최소).
+2. **Props 시그니처**: `opened: boolean` · `title: string` · `message: string | ReactNode` · `confirmLabel?: string` (default `'확인'`) · `cancelLabel?: string` (default `'취소'`) · `confirmColor?: string` (default `'red'`) · `loading?: boolean` · `onConfirm: () => void | Promise<void>` · `onClose: () => void`. message가 string이면 `whiteSpace: pre-line`으로 `\n` 처리.
+3. **상태 관리 정책**: **페이지 단일 state + targetId/액션 메타** 패턴이 표준. 카드별 state는 prop drilling/메모리 누수 위험으로 지양. 단 ProductCard처럼 카드 자체가 자체 비동기 상태(`deleting`/`error`)를 이미 가진 경우는 **카드 내부 state 유지가 합리적 예외** (세션55 products 채택).
+4. **다중 액션 통합**: 같은 페이지 내 confirm-type 액션이 여럿이면 액션 종류를 enum 타입으로 묶고 `ACTION_META: Record<Action, { title, message, confirmLabel, confirmColor }>` 룩업으로 ConfirmModal 1개에 매핑. 세션55 `admin/drivers/_client.tsx`가 `DriverAction = 'approve' | 'suspend' | 'unsuspend'`로 모범 사례.
+5. **로딩 중 닫힘 차단**: `onClose`에서 `if (!loading)` / `if (processingId === null)` 가드 필수 — 비동기 처리 중 모달이 닫혀 race가 발생하지 않도록.
+6. **native confirm 금지**: 셀러앱 코드에서 `window.confirm(`/`confirm(` 신규 사용 금지. PR/리뷰 시점 grep 검증 권장.
+
+**치환 결과 (세션55)**:
+- `hubs/page.tsx` 거점 삭제 (red, page state)
+- `products/page.tsx` ProductCard 상품 삭제 (red, **card state 예외**, name 동적 메시지)
+- `admin/drivers/_client.tsx` 승인/정지/해제 3액션 (green/red/gray, `PendingAction` 통합)
+- `admin/settlements/_client.tsx` 지급 처리 (blue, 실패 시 `alert` 유지 — 별도 에러 패턴)
+- `admin/users/_client.tsx` 정지/해제 가변 (red/green, currentlySuspended 기반)
+
+**범위 외**:
+- `apps/seller/src/app/orders/[id]/_components/CancelOrderModal.tsx` — 취소 사유 입력이 필수인 도메인 모달. ConfirmModal로 일반화하지 않음.
+- 단순 알림(`alert()`)은 본 결정 범위 밖. Notification 패턴은 별도 검토.
+- consumer/driver 앱 — 본 결정은 seller 한정.
+
+**검증**: seller 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · biome baseline 72→68 errors(import 정렬 자동수정), 신규 0건. e2e 영향 없음 예상 — 백엔드 호출 경로 불변, 셀렉터는 텍스트 기반이면 모달 라벨로 매핑 가능(필요 시 Railway 복구 후 점검).
+
+---
+
+## [결정 #CL-38] 디자인 시스템 폰트 토큰 `--font-size-xs: 12px` 신설 (2026-05-21, 세션58)
+
+**배경**: T-UX4b 셀러 본 화면 fontSize 토큰화 진행 중 `apps/seller/src/app/settings/daily-caps/page.tsx:277` 의 `fontSize: 10`(일일 캡 그리드 셀 내부 `usedSlots` 카운트 보조 인디케이터)을 처리할 때, 기존 토큰 최저값 `sm = 15px`로 흡수 시 +5px 큰 변화로 셀 비좁음·줄바꿈 위험. 한편 세션57 T-UX4a에서 12px·14px 보조 텍스트 17건을 모두 sm으로 통일했으나, 본 화면에서 시각적으로 의도적인 "작은 보조 텍스트"는 디자인 의도 보존이 더 적합.
+
+**핵심 규칙**:
+
+1. **신설 토큰**: `packages/ui/src/style.css` `:root` 에 `--font-size-xs: 12px` 추가. 정의 위치는 `--font-size-sm: 15px` 직전(작은→큰 순).
+2. **사용 기준**: **셀 내부 보조 인디케이터·카운트 라벨 등 "의도적으로 작게 디자인된 시각 요소"** 에 한정. 일반 본문 텍스트는 계속 sm 이상 사용.
+3. **세션57 정책과의 관계**: 세션57의 "12·14 → sm 통일"은 admin 데이터 표(저빈도 사용자 노출)의 보조 텍스트에 적용된 가독성 개선 정책으로 유지. 본 결정은 그것을 뒤집지 않고, **명시적으로 "작아야 하는" 자리에만 xs를 허용**하는 보완. 일반 보조 텍스트는 여전히 sm 권장.
+4. **신설 토큰 부재 영역**: 9px·10px·11px 같은 sub-12px 값은 토큰 신설하지 않음(시각 잡음·접근성 하한 우려). 잔존 시 xs로 흡수하거나 sm으로 끌어올림.
+
+**적용 (세션58)**:
+- `apps/seller/src/app/settings/daily-caps/page.tsx:277` (usedSlots `↑` 카운트) — `fontSize: 10` → `fontSize: 'var(--font-size-xs)'` (+2px, 의도적 작은 보조 텍스트 유지).
+
+**범위 외**:
+- products `_components/ImageUpload.tsx` 의 `fontSize: 9` 4건은 T-UX4c(세션59)에서 본 정책으로 판단(흡수 vs 회피). 본 세션 미적용.
+- AIPreviewPanel `styles.input.fontSize: 15` 같은 Mantine API 경로는 T-UX5 정합성 검토에서 별도 처리.
+
+**검증**: seller 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · 본 세션 대상 폴더(settlements/hubs/settings) biome errors 0건 · 전체 seller baseline 50 errors(세션57 63→50 추가 자동수정 효과, 신규 0건). 시각 검증은 사용자 합의로 생략(정적 검증만).
+
