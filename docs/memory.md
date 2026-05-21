@@ -90,7 +90,7 @@
 - **사전 정합성 검토**: 5/5 통과 — 직전 세션 머지 OK·baseline 40e/16w 일치·`noNonNullAssertion`만 6→8 미세 drift(같은 카테고리, 동일 처리 방침)·pnpm-lock 정합·500라인 신규 위반 없음.
 - **Phase A 자동 수정(`2f100e1`)**: `biome check --write`로 30파일 정리. organizeImports 26 + useTemplate 1 + noUnusedImports 1 자동 해소(기대 ~15건보다 큰 폭). 의미 변경 없음(import 정렬·destructuring 포맷팅). 40e/16w → 1e/16w.
 - **Phase B+C 수동 fix(`09061df`)**: ① **ImageUpload 인덱스 키 → url 키**(setAsMain reorder 시 stale state 방지) ② 안정 키 4건(pickup OTP·AIPreviewPanel·daily-caps 캘린더 2건) biome-ignore + 사유 ③ VarietySelector groupBy 누적 패턴 biome-ignore ④ noNonNullAssertion 8건 모두 biome-ignore + 사유(auth.ts env 3건·useFirebaseAuth env 1건·banner cta1/cta2 spread fallback 4건) ⑤ Phase A에서 누락된 FIXABLE 2건은 warning 등급이라 수동(useSettlements 템플릿 리터럴·useOrders OrderStatus 미사용 import).
-- **최종 baseline**: **0 errors / 2 warnings** (목표 5건 이내 초과 달성). 잔여 2 warnings는 `noImgElement`(onboarding·ImageUpload) — Next/Image 마이그레이션 별건(범위 외).
+- **최종 baseline**: **0 errors / 2 warnings** (목표 5건 이내 초과 달성). 잔여 2 warnings는 `noImgElement`(onboarding:186·ImageUpload:96) — Next/Image 마이그레이션 별건(범위 외), **BACKLOG PERF-01로 등재**(Firebase Storage 도메인 화이트리스트·LCP 측정 동반 필요).
 - **검증**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome 신규 0건·e2e 영향 없음(정적 코드 변경만).
 - **사용자 결정 채택**: ImageUpload url 기반 키(reorder 실재 시나리오 존재)·env 변수는 biome-ignore + 사유(가드 추가 대비 가독성 우위).
 - **다음 세션 진입 = 세션63 T-CLEAN2** — `@mantine/notifications` 도입 + alert 3건 치환. 진입 시 사전 정합성 5항목 + Notifications 위치/자동 닫힘 시간/성공 알림 도입 여부 등 사용자 결정 3건 확인 필요.
