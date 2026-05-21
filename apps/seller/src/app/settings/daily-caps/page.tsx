@@ -12,10 +12,11 @@ import {
   Title,
   UnstyledButton,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiJson } from '@/lib/api';
 
 interface DailyCap {
   date: string;
@@ -70,13 +71,15 @@ export default function DailyCapsPage() {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const to = `${year}-${mm}-${String(daysInMonth).padStart(2, '0')}`;
     try {
-      const res = await apiFetch(`/stores/${storeId}/daily-caps?from=${from}&to=${to}`, token);
-      if (res.ok) {
-        const data = await res.json();
-        const map: Record<string, DailyCap> = {};
-        for (const cap of data.caps) map[cap.date] = cap;
-        setCaps(map);
-      }
+      const data = await apiJson<{ caps: DailyCap[] }>(
+        `/stores/${storeId}/daily-caps?from=${from}&to=${to}`,
+        token,
+      );
+      const map: Record<string, DailyCap> = {};
+      for (const cap of data.caps) map[cap.date] = cap;
+      setCaps(map);
+    } catch {
+      // GET 실패는 silent (초기 로딩 노이즈 방지)
     } finally {
       setLoading(false);
     }
@@ -110,14 +113,18 @@ export default function DailyCapsPage() {
     if (Number.isNaN(totalCap) || totalCap < 0) return;
     setSaving(true);
     try {
-      const res = await apiFetch(`/stores/${storeId}/daily-caps/${date}`, token, {
+      await apiJson(`/stores/${storeId}/daily-caps/${date}`, token, {
         method: 'PATCH',
         body: JSON.stringify({ totalCap }),
       });
-      if (res.ok) {
-        setCaps((prev) => ({ ...prev, [date]: { ...prev[date], date, totalCap } }));
-        setEditing(null);
-      }
+      setCaps((prev) => ({ ...prev, [date]: { ...prev[date], date, totalCap } }));
+      setEditing(null);
+    } catch (e) {
+      notifications.show({
+        color: 'red',
+        title: '설정 저장 실패',
+        message: e instanceof ApiError ? e.message : '일일 캡 저장에 실패했습니다',
+      });
     } finally {
       setSaving(false);
     }
