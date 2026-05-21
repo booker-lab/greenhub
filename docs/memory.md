@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-21 (세션59 — T-UX4c products `_components` fontSize 토큰화 7건, T-UX4 종결)
+최종 수정: 2026-05-21 (세션60 — T-UX5 정합성 검토 완료, 셀러 UX 잔여 플랜 종결)
 
 ---
 
@@ -57,7 +57,16 @@
 
 **세션59 후속 — F-VISUAL-PATH 통합 시각 검증 경로 신설**: 사용자 요청으로 `seller-refactor-visual-verify.md`에 **F-VISUAL-PATH 섹션**(V0~V10, #158~210) 추가. 세션54~59의 F-T-UX1~4 시리즈 시각 검증을 한 번의 로그인 동선으로 묶음 — V1 주문(sticky·Badge) → V2 상품(Switch·Button·Badge 회귀) → V3 상품 등록(이미지 라벨 xs·Mantine Textarea) → V4 정산 → V5 픽업 OTP → V6 daily-caps → V7 delivery → V8 거점 삭제 모달 → V9 admin(3액션·지급·정지) → V10 회귀 가드(grep 잔존·콘솔 에러). 정적 검증으로 갈음한 22건 + F-T-UX1~3 미체크 27건 모두 포함. DevTools Computed `font-size` 측정으로 토큰화 검증. 문서 271→399라인(500 한도 여유).
 
-**다음 세션 진입점**: 세션60 = **T-UX5 정합성 검토** — `confirm(` 잔존 0건·인라인 `fontSize: <숫자>` 잔존 0건·신설 토큰 #CL 등재·visual-verify 완비 확인. F-VISUAL-PATH 사용자 직접 검증은 별도 시점에 진행. 변경 없으면 0.5세션 종결 예상. 진입 문서 `archive/sessions/session60-prep.md`. Railway Outage 무관.
+**Railway 복구 확인 (2026-05-21, 세션59 후속)**: `status.railway.com` Fully Operational(Dashboard 99.72%·Station 99.75%·Deployments 99.69% uptime). 세션52~58 Railway 무관 작업으로 우회하던 모든 항목이 다시 풀스택 검증 가능 상태. **누적 미검증 변경: 세션51 머지(`ed2fc95`) 이후 한 번도 e2e 풀런되지 않음** — 세션53~59의 셀러 UX 5세션 분량(SegmentedTabs·ConfirmModal·Switch·fontSize) + 세션51 신규 spec(`consumer-delivery-date.spec.ts`·`seller-orders.spec.ts` T6) 모두 풀런 미적용. baseline = 세션39 170 passed / 0 failed / 11 skipped.
+
+**다음 세션 진입점**: 세션60 = **T-UX5 정합성 검토 + e2e 풀런 재개**(Railway 복구로 §2-6 e2e 항목 부활). F-VISUAL-PATH 사용자 직접 검증은 별도 시점. 진입 문서 `archive/sessions/session60-prep.md` §2-6 갱신됨.
+
+**세션60 (T-UX5 완료 · 셀러 UX 잔여 플랜 종결)**:
+- **정적 검증 6/6 통과(코드 변경 0건)**: ① 토큰 6종(xs/sm/md/lg/xl/2xl) 사용처 매핑 ✅ ② 인라인 `fontSize:<숫자>` grep 0건 ③ `confirm(` grep 0건 ④ BACKLOG §11-3 UX-07/08/09 ✅·UX-10 ⏹️ 마킹 ⑤ visual-verify F-T-UX1/2/3/4a/4b/4c + F-VISUAL-PATH 존재 ⑥ #CL-36/37/38 등재.
+- **회귀 가드**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome 신규 0건(잔존 40 errors/16 warnings 모두 작업 무관 기존 — organize-imports/format/noNonNullAssertion/noArrayIndexKey 사전 누적, 세션59 메모의 "1 error"는 stash 비교 시점 표현, 실제 baseline은 자동 포맷 미적용 상태 기준).
+- **BACKLOG §12-1 셀러 UX 잔여 행 ✅ 종결 마킹**. 플랜 SSOT T-UX5 체크리스트 5/6 ✅(e2e 1건은 디스패치만 본 세션, 결과 확인은 차기).
+- **e2e 풀런 디스패치**: main에 누적된 8개 커밋(세션53 플랜 + T-UX1~4c + visual-verify F-VISUAL-PATH) 푸시 → sync-preview 자동 머지 → preview 재배포 → `gh workflow run "E2E Tests"`. 세션51 머지(`ed2fc95`) 이후 첫 풀런, 누적 5세션 분량 회귀 검증. baseline = 세션39 170 passed / 0 failed / 11 skipped. 결과는 차기 세션 분석.
+- **다음 세션 진입점**: 세션61 = **e2e 풀런 결과 분석 + 회귀 발견 시 수정**. 통과 시 다음 우선순위(BUG-16 택배 갭·UX-11 주문번호 통합·Driver Kakao Maps SDK·백엔드 단일 장애점 회고) 중 선택.
 
 ---
 

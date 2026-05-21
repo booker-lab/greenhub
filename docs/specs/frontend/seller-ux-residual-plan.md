@@ -105,16 +105,18 @@ T-UX1~4 상호 무관(다른 파일 영역). 순서는 자유, 권장은 **T-UX1
 - **검증**: 각 sub-task마다 typecheck/build/biome + dev 서버에서 시각 회귀 없음 확인. e2e 영향 없음(스타일만).
 - **추정**: 1~3세션 (분할 정책에 따라).
 
-### T-UX5 — 정합성 검토 (회귀·문서·SSOT)
+### T-UX5 — 정합성 검토 (회귀·문서·SSOT) ✅ 세션60 완료
+
+> 결과: 정적 검증·문서 정합 6항목 전부 통과. 코드 변경 0건. e2e 풀런은 본 세션 내 디스패치(결과는 별도 기록).
 
 - **목적**: T-UX1~4 머지 후 디자인 시스템·육안 검증 체크리스트·SSOT 정합성 확인.
 - **체크리스트**:
-  - [ ] `packages/ui/src/style.css` 정의된 모든 `--font-size-*` 토큰이 실제 사용처와 매핑되는가? 신설 토큰이 있으면 `CRITICAL_LOGIC.md`에 결정 기록.
-  - [ ] `seller-refactor-visual-verify.md` (육안 검증 체크리스트)에 UX-07~09 항목 추가 — 탭 일관성·상품 카드 액션 구분·삭제 모달 6곳.
-  - [ ] `apps/seller` 전역에서 `confirm(` 잔존 0건 (grep 검증).
-  - [ ] `apps/seller` 전역에서 인라인 `fontSize: <숫자>` 잔존 0건 (grep 검증, AIPreviewPanel `styles.input.fontSize` 같은 Mantine API 경로는 예외 처리 — 결정 기록).
-  - [ ] BACKLOG §11-3 UX-07·08·09 상태 ✅로 마킹 + 세션 번호·커밋 해시 기록. UX-10은 "세션41~45에서 자연 해소"로 ⏹️ 마킹.
-  - [ ] e2e 풀런 (Railway 복구 후) 회귀 0건 — 특히 셀러 주문/상품/정산 spec, admin spec(있다면).
+  - [x] `packages/ui/src/style.css` 정의된 모든 `--font-size-*` 토큰이 실제 사용처와 매핑되는가? 신설 토큰이 있으면 `CRITICAL_LOGIC.md`에 결정 기록. — xs/sm/md/lg/xl/2xl 6종 전부 사용 중(grep 확인). #CL-38(xs 신설) 등재 완료.
+  - [x] `seller-refactor-visual-verify.md` (육안 검증 체크리스트)에 UX-07~09 항목 추가 — 탭 일관성·상품 카드 액션 구분·삭제 모달 6곳. — F-T-UX1~4c + F-VISUAL-PATH(V0~V10) 모두 신설 완료.
+  - [x] `apps/seller` 전역에서 `confirm(` 잔존 0건 (grep 검증). — 0건.
+  - [x] `apps/seller` 전역에서 인라인 `fontSize: <숫자>` 잔존 0건 (grep 검증, AIPreviewPanel `styles.input.fontSize` 같은 Mantine API 경로는 예외 처리 — 결정 기록). — 0건(Mantine `styles` prop도 세션59에서 emotion CSS 변수 통과 검증 후 토큰화 완료).
+  - [x] BACKLOG §11-3 UX-07·08·09 상태 ✅로 마킹 + 세션 번호·커밋 해시 기록. UX-10은 "세션41~45에서 자연 해소"로 ⏹️ 마킹. — 모두 마킹 확인.
+  - [ ] e2e 풀런 (Railway 복구 후) 회귀 0건 — 특히 셀러 주문/상품/정산 spec, admin spec(있다면). — 세션60 내 push + sync-preview + workflow_dispatch 진행(결과는 다음 세션 검증).
 - **추정**: 0.5세션 (검토만, 변경 없으면 종결).
 
 ---
