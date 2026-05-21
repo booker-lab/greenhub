@@ -1,4 +1,5 @@
 import { ColorSchemeScript } from '@mantine/core';
+import '@mantine/notifications/styles.css';
 import type { Metadata, Viewport } from 'next';
 import { Geist } from 'next/font/google';
 import BottomNav from '@/components/BottomNav';

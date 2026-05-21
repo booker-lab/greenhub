@@ -2,6 +2,7 @@
 
 import { theme } from '@greenhub/ui';
 import { MantineProvider } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
 import { SessionProvider, signOut, useSession } from 'next-auth/react';
 import { createContext, useContext, useEffect } from 'react';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
@@ -27,6 +28,7 @@ function TokenErrorGuard({ children }: { children: React.ReactNode }) {
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider theme={theme}>
+      <Notifications position="top-right" autoClose={4000} />
       <SessionProvider>
         <TokenErrorGuard>{children}</TokenErrorGuard>
       </SessionProvider>

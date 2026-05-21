@@ -309,6 +309,9 @@ importers:
       '@mantine/hooks':
         specifier: ^9.0.0
         version: 9.0.0(react@19.2.6)
+      '@mantine/notifications':
+        specifier: ^9.0.1
+        version: 9.0.1(@mantine/core@9.0.0(@mantine/hooks@9.0.0(react@19.2.6))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@mantine/hooks@9.0.0(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       firebase:
         specifier: ^12.11.0
         version: 12.11.0
