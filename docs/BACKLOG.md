@@ -489,6 +489,7 @@
 | 🟢 P3 | **[UX-11] 주문번호 통합** — 백엔드 `orderNumber` 필드(`YYYYMMDD-NNNNNN`) 신설, 소비자·셀러 앱 표시 일치. 현재 소비자=전체 Firestore ID / 셀러=뒷 6~8자로 서로 다른 번호를 보임 (세션40 논의) | UX/백엔드 | `shared` Order 타입 + API + 3곳 프론트 |
 | ✅ P3 | consumer@test.com 강한비번 전환 — 30자 랜덤 비번 (2026-05-17 세션34 완료) | 보안 | 단독 |
 | ✅ P3 | **셀러 UX 잔여(UX-07~09) 정합** — ✅ T-UX1 탭 단일화(세션54)·✅ T-UX3 ConfirmModal 6곳 교체(세션55)·✅ T-UX2 상품 카드 Switch+Button 분리(세션56)·✅ T-UX4a admin fontSize 토큰화 17건(세션57)·✅ T-UX4b 본 화면 fontSize 토큰화 10건+`--font-size-xs` 신설(세션58, #CL-38)·✅ T-UX4c products `_components` 7건 토큰화(세션59 — 잔여 인라인 fontSize 0건)·✅ T-UX5 정합성 검토(세션60 — 정적 6/6 통과·코드 변경 0건). UX-10은 자연 해소(⏹️). Railway 무관 | UX/DX | `specs/frontend/seller-ux-residual-plan.md` (세션53 수립) |
+| 🟢 P3 | **셀러앱 정리 작업(T-CLEAN1~3)** — 세션 28~60 리팩토링 종합 점검 도출 후속 3건. ✅ T-CLEAN1 biome baseline 정리(40e/16w → **0e/2w**, 세션62 완료 `2f100e1`+`09061df`)·T-CLEAN2 native `alert()` 3건 → Mantine notifications(#CL-39 예정, 세션63)·T-CLEAN3 products/page.tsx → `apiJson` 마이그레이션(#CL-32 P2 잔여분, 세션64). 각 세션 진입 시 사전 정합성 검토 후 진입. Railway 무관 | DX/UX | `specs/frontend/seller-cleanup-plan.md` (세션61 수립) |
 | ✅ P4 | global-setup flake 보강 — bypass 루프 직후 `about:blank` 이동으로 `storageState` 레이스 해소 (2026-05-17 세션37, `be4fa2c`) | e2e 안정성 | 단독 |
 | ✅ P4 | CI 액션 Node.js 20 deprecation 대응 — checkout/setup-node v6·upload-artifact v7·pnpm/action-setup v6, node-version 22 (2026-05-17 세션37, `eb15e4e`) | CI 유지보수 | 단독 |
 | ⏳ 외부 | 네이버페이 채널키 승인 → Vercel 환경변수 설정 | 외부 연동 | 승인 메일 대기 |

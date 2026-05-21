@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-21 (세션61 — e2e 풀런 회귀 가드 fix, consumer testid + seller productName)
+최종 수정: 2026-05-21 (세션62 — T-CLEAN1 biome baseline 정리 완료, 40e/16w → 0e/2w)
 
 ---
 
@@ -79,6 +79,21 @@
 - **검증**: consumer/seller 타입체크 exit 0·두 앱 빌드 통과. ① 자동 dispatch 26204659238(sync-preview success 7초 후) — `seller-orders.spec.ts:200 ✓` 통과로 seller fix 작동 확인, 하지만 `consumer-mypage:74`는 fail(Vercel 실배포 완료 전 stale). ② 수동 dispatch 26204985493(sync-preview 후 11분 차) — **success 전건 통과**.
 - **`reference_e2e_preview_race` 메모리 보강 후보**: sync-preview workflow가 success로 떨어져도 Vercel 실배포 완료까진 시간이 더 필요 → **자동 dispatch는 stale 가능성 일관 재현**(세션60·세션61 양쪽 확인). 차기 dispatch는 sync-preview 종료 후 5분+ 대기 권장.
 - **다음 세션 진입점**: BUG-16(택배 갭)·UX-11(주문번호 통합)·Driver Kakao Maps SDK·백엔드 단일 장애점 회고 중 선택. 진입 문서 미작성.
+
+**세션61 후속 — 셀러앱 리팩토링 종합 점검 + 정리 플랜 수립 (코드 변경 없음)**:
+- **점검**: 세션 28~60 셀러 프론트엔드 리팩토링 전수 검토 — 전반 양호(500라인 한도 0건 위반·#CL-27~38 9건 결정 일관·공통 컴포넌트 3종 깔끔·API 레이어 통일·디자인 토큰 100% 커버). 개선 필요 4건 도출 — P0 native `alert()` 3건(admin/orders·settlements·stores) / P1 biome 40 errors 16 warnings(organizeImports FIXABLE 약 25건·noNonNullAssertion 6·noArrayIndexKey 5 등) / P2 products ProductCard `apiFetch` 잔존(#CL-32 P2 미봉합) / P3 useGroupConfigs N회 fetch(스케일 시점 회고).
+- **플랜 신설**: `docs/specs/frontend/seller-cleanup-plan.md` — T-CLEAN1(Lint 정리, 세션62) → T-CLEAN2(alert → Mantine notifications, 세션63, #CL-39 예정) → T-CLEAN3(products → apiJson, 세션64) 3 아토믹 세션. **각 세션 진입 시 사전 정합성 검토 후 진입**(이전 세션 머지/baseline/의존성/e2e/500라인 5항목).
+- **사용자 결정 4건**: ① 진행 순서 = 회귀 표면 작은 것부터(Lint→alert→apiJson) ② Lint 범위 = FIXABLE 자동 + 명확한 수동 fix(목표 5건 이내·위험 케이스는 biome-ignore + 사유) ③ alert 대체 = `@mantine/notifications` 도입(신규 의존성·#CL-39 등재 예정) ④ 정합성 검토 시점 = 세션 진입 시 사전 검토.
+- **BACKLOG §12-1**에 셀러앱 정리 작업 행 추가. **다음 세션 진입 = 세션62 T-CLEAN1**, 진입 문서 `docs/archive/sessions/session62-prep.md` 작성 완료 — 진입 시 사전 정합성 5항목 + 사용자 결정 2건(ImageUpload 키·auth.ts env 가드) 확인 후 Phase A/B/C 진행.
+
+**세션62 (T-CLEAN1 완료, `2f100e1`+`09061df`)**:
+- **사전 정합성 검토**: 5/5 통과 — 직전 세션 머지 OK·baseline 40e/16w 일치·`noNonNullAssertion`만 6→8 미세 drift(같은 카테고리, 동일 처리 방침)·pnpm-lock 정합·500라인 신규 위반 없음.
+- **Phase A 자동 수정(`2f100e1`)**: `biome check --write`로 30파일 정리. organizeImports 26 + useTemplate 1 + noUnusedImports 1 자동 해소(기대 ~15건보다 큰 폭). 의미 변경 없음(import 정렬·destructuring 포맷팅). 40e/16w → 1e/16w.
+- **Phase B+C 수동 fix(`09061df`)**: ① **ImageUpload 인덱스 키 → url 키**(setAsMain reorder 시 stale state 방지) ② 안정 키 4건(pickup OTP·AIPreviewPanel·daily-caps 캘린더 2건) biome-ignore + 사유 ③ VarietySelector groupBy 누적 패턴 biome-ignore ④ noNonNullAssertion 8건 모두 biome-ignore + 사유(auth.ts env 3건·useFirebaseAuth env 1건·banner cta1/cta2 spread fallback 4건) ⑤ Phase A에서 누락된 FIXABLE 2건은 warning 등급이라 수동(useSettlements 템플릿 리터럴·useOrders OrderStatus 미사용 import).
+- **최종 baseline**: **0 errors / 2 warnings** (목표 5건 이내 초과 달성). 잔여 2 warnings는 `noImgElement`(onboarding·ImageUpload) — Next/Image 마이그레이션 별건(범위 외).
+- **검증**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome 신규 0건·e2e 영향 없음(정적 코드 변경만).
+- **사용자 결정 채택**: ImageUpload url 기반 키(reorder 실재 시나리오 존재)·env 변수는 biome-ignore + 사유(가드 추가 대비 가독성 우위).
+- **다음 세션 진입 = 세션63 T-CLEAN2** — `@mantine/notifications` 도입 + alert 3건 치환. 진입 시 사전 정합성 5항목 + Notifications 위치/자동 닫힘 시간/성공 알림 도입 여부 등 사용자 결정 3건 확인 필요.
 
 ---
 
