@@ -78,6 +78,7 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
   return (
     <UnstyledButton
       onClick={onClick}
+      data-testid="order-card"
       style={{
         display: 'block',
         width: '100%',
