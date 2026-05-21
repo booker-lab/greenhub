@@ -70,6 +70,7 @@ export default function AIPreviewPanel({
         <Alert color="yellow" title="가드레일 충돌 감지">
           <Stack gap="xs">
             {conflicts.map((c, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: AI 응답 1회성 list — reorder/insert 없음
               <Text key={i} style={{ fontSize: 'var(--font-size-sm)' }}>
                 {c.message}
                 <br />

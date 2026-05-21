@@ -230,8 +230,10 @@ export default function DailyCapsPage() {
             </Box>
           ) : (
             calendar.map((week, wi) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: 캘린더 주 인덱스 — 5~6주 고정, reorder 없음
               <SimpleGrid key={wi} cols={7}>
                 {week.map((date, di) => {
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 캘린더 빈칸(요일 시프트) — 위치 고정 키
                   if (!date) return <Box key={di} />;
                   const cap = caps[date];
                   const isToday = date === todayStr;

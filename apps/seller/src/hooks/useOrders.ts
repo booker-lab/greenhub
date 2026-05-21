@@ -1,6 +1,6 @@
 'use client';
 
-import type { Order, OrderStatus } from '@greenhub/shared';
+import type { Order } from '@greenhub/shared';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';

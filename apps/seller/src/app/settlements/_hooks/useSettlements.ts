@@ -49,7 +49,7 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
 
   useEffect(() => {
     setSelectedDateLabel(
-      new Date(selectedDate + 'T00:00:00').toLocaleDateString('ko-KR', {
+      new Date(`${selectedDate}T00:00:00`).toLocaleDateString('ko-KR', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',

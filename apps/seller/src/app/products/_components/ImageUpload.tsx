@@ -82,7 +82,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
       <Group gap="xs" style={{ overflowX: 'auto', paddingBottom: 4, flexWrap: 'nowrap' }}>
         {images.map((url, idx) => (
           <Box
-            key={idx}
+            key={url}
             style={{
               position: 'relative',
               flexShrink: 0,
