@@ -1,17 +1,17 @@
 'use client';
 
-import { useMemo } from 'react';
-import Link from 'next/link';
-import { useSession } from 'next-auth/react';
 import { Box, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
+import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+import { useMemo } from 'react';
 import { useFirebaseReady } from '@/app/providers';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
+import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useOrders } from '@/hooks/useOrders';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
-import { PageShell } from '@/components/PageShell';
-import { PageHeader } from '@/components/PageHeader';
-import { EmptyState, LoadingState } from '@/components/StateViews';
-import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { aggregatePrep, type PrepLine } from '@/lib/prep';
 
 function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accent?: boolean }) {
@@ -59,10 +59,7 @@ export default function PrepPage() {
   const { orders, loading, error } = useOrders(storeId);
   const { products } = useStoreProducts(storeId);
 
-  const { today, delayed } = useMemo(
-    () => aggregatePrep(orders, products),
-    [orders, products],
-  );
+  const { today, delayed } = useMemo(() => aggregatePrep(orders, products), [orders, products]);
 
   const isConnecting = loading || !firebaseReady;
 
@@ -73,9 +70,7 @@ export default function PrepPage() {
     <PageShell>
       <PageHeader
         title="준비 물량"
-        right={
-          <ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />
-        }
+        right={<ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />}
       />
 
       <Container size="sm" px="md" py="md">
@@ -89,9 +84,7 @@ export default function PrepPage() {
           <Stack gap="md">
             {today.length > 0 && (
               <Paper radius="lg" shadow="xs" p="md">
-                <Text
-                  style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}
-                >
+                <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>
                   오늘 준비 물량 ({todayLabel})
                 </Text>
                 <Box mt="sm">
@@ -151,7 +144,10 @@ export default function PrepPage() {
                   }}
                 >
                   <Text
-                    style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-text-secondary)',
+                    }}
                   >
                     주문 관리에서 처리하기
                   </Text>

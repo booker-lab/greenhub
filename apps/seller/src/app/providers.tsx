@@ -1,9 +1,9 @@
 'use client';
 
-import { createContext, useContext, useEffect } from 'react';
-import { SessionProvider, useSession, signOut } from 'next-auth/react';
-import { MantineProvider } from '@mantine/core';
 import { theme } from '@greenhub/ui';
+import { MantineProvider } from '@mantine/core';
+import { SessionProvider, signOut, useSession } from 'next-auth/react';
+import { createContext, useContext, useEffect } from 'react';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 
 const FirebaseReadyContext = createContext(false);
@@ -20,9 +20,7 @@ function TokenErrorGuard({ children }: { children: React.ReactNode }) {
     }
   }, [session?.user?.tokenError]);
   return (
-    <FirebaseReadyContext.Provider value={firebaseReady}>
-      {children}
-    </FirebaseReadyContext.Provider>
+    <FirebaseReadyContext.Provider value={firebaseReady}>{children}</FirebaseReadyContext.Provider>
   );
 }
 

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import type { Product } from '@greenhub/shared';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { db } from '@/lib/firebase';
 
 interface UseStoreProductsResult {
   products: Product[];

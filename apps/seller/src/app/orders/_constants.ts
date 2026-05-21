@@ -5,38 +5,36 @@ export type GroupConfigMap = Record<string, Pick<GroupProductConfig, 'groupDeliv
 
 // ─── OrderGroup 레이어 ───────────────────────────────────────────────────────
 
-export type OrderGroup =
-  | 'ACTION_REQUIRED'
-  | 'WAITING'
-  | 'IN_DELIVERY'
-  | 'DONE'
-  | 'CANCELLED';
+export type OrderGroup = 'ACTION_REQUIRED' | 'WAITING' | 'IN_DELIVERY' | 'DONE' | 'CANCELLED';
 
 export const STATUS_GROUP_MAP: Record<OrderStatus, OrderGroup> = {
-  PENDING:     'ACTION_REQUIRED',
-  RECRUITING:  'ACTION_REQUIRED',
-  ACCEPTED:    'ACTION_REQUIRED',
-  CONFIRMED:   'ACTION_REQUIRED',
-  PREPARING:   'WAITING',
-  DELIVERING:  'IN_DELIVERY',
+  PENDING: 'ACTION_REQUIRED',
+  RECRUITING: 'ACTION_REQUIRED',
+  ACCEPTED: 'ACTION_REQUIRED',
+  CONFIRMED: 'ACTION_REQUIRED',
+  PREPARING: 'WAITING',
+  DELIVERING: 'IN_DELIVERY',
   HUB_ARRIVED: 'IN_DELIVERY',
-  DELIVERED:   'DONE',
-  PICKED_UP:   'DONE',
-  REVIEWED:    'DONE',
-  CANCELLED:   'CANCELLED',
+  DELIVERED: 'DONE',
+  PICKED_UP: 'DONE',
+  REVIEWED: 'DONE',
+  CANCELLED: 'CANCELLED',
 };
 
 export const GROUP_TABS: { key: OrderGroup; label: string }[] = [
   { key: 'ACTION_REQUIRED', label: '처리 필요' },
-  { key: 'WAITING',         label: '대기 중' },
-  { key: 'IN_DELIVERY',     label: '배송 중' },
-  { key: 'DONE',            label: '완료' },
-  { key: 'CANCELLED',       label: '취소' },
+  { key: 'WAITING', label: '대기 중' },
+  { key: 'IN_DELIVERY', label: '배송 중' },
+  { key: 'DONE', label: '완료' },
+  { key: 'CANCELLED', label: '취소' },
 ];
 
-export const IN_DELIVERY_SUBFILTERS: { key: 'ALL' | 'DELIVERING' | 'HUB_ARRIVED'; label: string }[] = [
-  { key: 'ALL',         label: '전체' },
-  { key: 'DELIVERING',  label: '배송 중' },
+export const IN_DELIVERY_SUBFILTERS: {
+  key: 'ALL' | 'DELIVERING' | 'HUB_ARRIVED';
+  label: string;
+}[] = [
+  { key: 'ALL', label: '전체' },
+  { key: 'DELIVERING', label: '배송 중' },
   { key: 'HUB_ARRIVED', label: '거점 도착' },
 ];
 

@@ -1,11 +1,4 @@
-import {
-  Box,
-  Container,
-  Paper,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core';
+import { Box, Container, Paper, Stack, Text, Title } from '@mantine/core';
 import { LoginForm } from './_form';
 
 export const dynamic = 'force-dynamic';

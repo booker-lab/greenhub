@@ -1,13 +1,13 @@
 'use client';
 
-import Link from 'next/link';
-import { Fragment } from 'react';
+import type { Product } from '@greenhub/shared';
 import { Group, Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
-import type { Product } from '@greenhub/shared';
-import { DashboardCard } from '@/components/DashboardCard';
+import Link from 'next/link';
+import { Fragment } from 'react';
 import type { OrderGroup } from '@/app/orders/_constants';
 import type { Summary } from '@/app/settlements/_constants';
+import { DashboardCard } from '@/components/DashboardCard';
 
 // ─── 주문 처리 현황 카드 ──────────────────────────────────────────
 
@@ -40,11 +40,7 @@ export function OrderStatusCard({ groupCounts }: { groupCounts: Record<OrderGrou
                   style={{ flexShrink: 0, marginTop: 8 }}
                 />
               )}
-              <UnstyledButton
-                component={Link}
-                href={step.href}
-                style={{ flex: 1, minWidth: 0 }}
-              >
+              <UnstyledButton component={Link} href={step.href} style={{ flex: 1, minWidth: 0 }}>
                 <Stack gap={2} align="center">
                   <Text
                     style={{

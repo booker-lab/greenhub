@@ -38,12 +38,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <Stack
-      align="center"
-      justify="center"
-      py={80}
-      style={{ color: 'var(--color-text-disabled)' }}
-    >
+    <Stack align="center" justify="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
       {icon}
       <Text style={{ fontSize: 'var(--font-size-sm)' }}>{text}</Text>
       {action}

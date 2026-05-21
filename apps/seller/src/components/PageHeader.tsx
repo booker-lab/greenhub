@@ -1,10 +1,10 @@
 'use client';
 
+import type { MantineSize } from '@mantine/core';
 import { ActionIcon, Box, Container, Group, Title } from '@mantine/core';
 import { ChevronLeft, Home } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { MantineSize } from '@mantine/core';
 import type { ReactNode } from 'react';
 
 interface PageHeaderProps {
