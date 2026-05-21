@@ -37,10 +37,19 @@ export function OrderCard({ order }: { order: Order }) {
       {/* 주문 정보 */}
       <Text
         style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}
-        mb={4}
+        mb={2}
       >
         주문 #{order.id.slice(-8).toUpperCase()}
       </Text>
+      {order.productName && (
+        <Text
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          mb={4}
+          lineClamp={1}
+        >
+          {order.productName}
+        </Text>
+      )}
       <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={6}>
         {DELIVERY_LABEL[order.deliveryMethod]}
         {order.requestedDeliveryDate && ` · ${order.requestedDeliveryDate}`}
