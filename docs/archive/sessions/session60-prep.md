@@ -51,10 +51,24 @@ T-UX4c 완료. products `_components` 7건/3파일 토큰화. `ImageUpload.tsx` 
 - [ ] #CL-36(`SegmentedTabs` 신설, 세션54), #CL-37(`ConfirmModal` + native confirm 금지, 세션55), #CL-38(`--font-size-xs: 12px` 신설 + 사용 기준, 세션58) 모두 등재 확인.
 - [ ] T-UX4c 작업에서 **#CL 신규 등재 없음**(#CL-38 그대로 적용) — 정합성 검토 시 신규 결정 발생하지 않았는지 재확인.
 
-### 2-6. e2e 회귀 (Railway 복구 후만)
+### 2-6. e2e 회귀 (Railway 복구됨 — 2026-05-21 사용자 확인, `status.railway.com` Fully Operational)
 
-- [ ] e2e 풀런 회귀 0건 — 특히 셀러 주문/상품/정산 spec, admin spec(있다면).
-- **현재 보류**: Railway Major Outage 미복구. T-UX5 본 세션에서는 정적 검증만 수행, e2e는 Railway 복구 후 별도 세션에서 풀런.
+> **상태 변경**: 세션59 후속 사용자 확인 시점에 Railway 전면 복구(Dashboard 99.72%·Station 99.75%·Deployments 99.69% uptime). 본 항목은 더 이상 보류 사유 없음 — T-UX5에 본격 포함한다.
+
+**누적된 미검증 변경 (세션51 머지 이후 — 한 번도 풀런되지 않음)**:
+- 세션53~54: T-UX1 `SegmentedTabs` 신설 + 3페이지 치환 (주문/상품/정산 탭 셀렉터 변경 가능)
+- 세션55: T-UX3 `ConfirmModal` 6곳 교체 (native `confirm()` → Modal — `page.on('dialog')` 핸들러를 쓰던 spec이 있다면 영향)
+- 세션56: T-UX2 상품 카드 Badge×3 → Switch+Button (`getByRole('button', { name: '삭제' })` 등 셀렉터 변동)
+- 세션57~59: T-UX4a/b/c fontSize 토큰화 (CSS만, e2e 영향 거의 없음)
+
+**검증 절차**:
+- [ ] `sync-preview` 워크플로가 main → preview를 자동 머지·디스패치 (또는 수동 `workflow_dispatch`)
+- [ ] e2e CI 풀런 결과 — **세션39 baseline 170 passed / 0 failed / 11 skipped** 와 비교, 신규 실패 0건
+- [ ] 신규 spec 검증: `consumer-delivery-date.spec.ts` + `seller-orders.spec.ts` T6 섹션 (세션51 `ed2fc95` 머지 후 한 번도 풀런 안 됨)
+- [ ] 영향 가능 셀렉터 회귀: 삭제 모달 6곳·상품 카드 Switch·탭 active 색상
+- [ ] 회귀 발견 시 본 세션 내 수정 또는 sub-task 분리
+
+**참고**: `reference_e2e_preview_race.md` 메모리 — sync-preview 직후 e2e는 stale preview를 칠 수 있음 → 재배포 확인 후 재실행.
 
 ---
 
@@ -63,7 +77,7 @@ T-UX4c 완료. products `_components` 7건/3파일 토큰화. `ImageUpload.tsx` 
 T-UX5는 정적 검증·문서 확인이 주된 작업이라 사용자 결정이 거의 없음. 단:
 
 - [ ] **회귀 발견 시 처리**: §2 체크리스트 중 하나라도 미충족이면 **본 세션 내 수정** vs **신규 sub-task로 분리** 결정. 권장 **본 세션 내 수정**(작업 단위가 작을 가능성 높음).
-- [ ] **e2e 풀런 보류 처리**: §2-6은 Railway 복구 후로 미루고 본 세션은 정적 검증만 완료. 권장 **수락**(Railway 무관 작업).
+- [ ] **e2e 풀런 진행 여부**: ~~Railway 복구 후로 미루기~~ → **Railway 복구 확인됨(2026-05-21)**. T-UX5 본 세션에 e2e 풀런 포함 권장(누적 미검증 변경 5세션 분량 정리). 별도 항목으로 분리 시 본 세션은 정적 검증만 완료.
 - [ ] **셀러 UX 잔여 플랜 종결 마킹**: T-UX5 통과 시 BACKLOG §12-1 "셀러 UX 잔여(UX-07~09) 정합" 행을 ✅로 종결 마킹.
 
 ---
