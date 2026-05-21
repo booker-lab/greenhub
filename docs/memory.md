@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-21 (세션63 — T-CLEAN2 native alert → @mantine/notifications 단일화, #CL-39 등재)
+최종 수정: 2026-05-21 (세션64 — T-CLEAN3 Phase A ProductCard apiJson 마이그레이션, #CL-32 P2 부분 봉합)
 
 ---
 
@@ -44,6 +44,14 @@
 - **검증**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome 신규 0건·e2e 영향 없음(정적 코드 변경만).
 - **사용자 결정 채택**: ImageUpload url 기반 키(reorder 실재 시나리오 존재)·env 변수는 biome-ignore + 사유(가드 추가 대비 가독성 우위).
 - **다음 세션 진입 = 세션63 T-CLEAN2** — `@mantine/notifications` 도입 + alert 3건 치환. 진입 시 사전 정합성 5항목 + Notifications 위치/자동 닫힘 시간/성공 알림 도입 여부 등 사용자 결정 3건 확인 필요.
+
+**세션64 (T-CLEAN3 Phase A 완료)**:
+- **사전 정합성 검토 5/5 통과 (1 drift)**: 직전 머지 OK·plan baseline "잔존 19파일" → 실측 **9파일**(api.ts 제외)로 정정·`apiJson<T>`/`ApiError(status,message)` 시그니처 변경 없음·e2e 170p/0f/11s 유지·500라인 한도 안전(products/page.tsx 272→유사).
+- **사용자 결정 2건 (전부 권장안)**: ① 에러 메시지 톤 = **useAdmin 계열 통일**(`ApiError.message` 우선 + 사용자 친화 폴백) ② Phase B 잔존 8파일 = **본 세션 미진행, BACKLOG `T-CLEAN3-B` 별건 등재** (회귀 표면·세션 아토믹성 우선).
+- **변경**: `apps/seller/src/app/products/page.tsx` ProductCard. ① import `apiFetch` → `ApiError, apiJson` ② `handleToggleActive` PATCH — `await apiJson(...)` + `catch (e) { setError(e instanceof ApiError ? e.message : '상품 상태 변경에 실패했습니다') }` ③ `handleDelete` DELETE — 동일 패턴 + 폴백 "상품 삭제에 실패했습니다"·성공 시 `setConfirmOpen(false)` 보존. 자체 state(`toggling`/`deleting`/`error`/`confirmOpen`)는 #CL-37 §3 카드 내부 state 예외 유지. biome `--write` 자동 포맷 1건 동반(DELETE 호출 한 줄로 정리).
+- **검증**: 셀러 타입체크 exit 0·`pnpm --filter seller build` 23라우트·biome **0 errors / 2 warnings**(T-CLEAN1 baseline 동일·회귀 0건).
+- **범위 외 명시**: 잔존 `apiFetch` 8파일(hubs 4·settlements 훅·settings 2·onboarding) → `T-CLEAN3-B` 별건. 멀티파트/스트리밍은 raw `apiFetch` 유지(인프라 함수).
+- **다음 세션 진입점**: `T-CLEAN3-B` / BUG-16(택배 갭) / UX-11(주문번호 통합) / Driver Kakao Maps SDK / 백엔드 단일 장애점 회고 중 사용자 선택. 진입 문서 미작성.
 
 **세션63 (T-CLEAN2 완료, `80a7e51`+`35f8410`, #CL-39)**:
 - **사전 정합성 검토 5/5 통과**: alert 3건 일치(settlements:50·orders:44·stores:28)·`@mantine/notifications` 미설치·core/hooks 9.0.0 존재·T-CLEAN1 baseline 0e/2w 일치·pnpm-lock 정합.

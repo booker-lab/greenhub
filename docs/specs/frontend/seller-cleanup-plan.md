@@ -127,7 +127,7 @@ seller baseline **40 errors / 16 warnings → 5 errors 이내**.
 
 ---
 
-## T-CLEAN3 — products/page.tsx → `apiJson` 마이그레이션 (세션 64)
+## T-CLEAN3 — products/page.tsx → `apiJson` 마이그레이션 (세션 64) ✅ Phase A 완료
 
 ### 목표
 #CL-32 Phase 2(API 레이어 통일) **잔여분 봉합**. raw `apiFetch` + `res.ok` 직접 검사 → `apiJson` + `ApiError` catch 패턴.
