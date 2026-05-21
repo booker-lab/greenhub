@@ -12,7 +12,7 @@ import { PageShell } from '@/components/PageShell';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiJson } from '@/lib/api';
 
 type ProductFilter = 'all' | 'active' | 'inactive';
 
@@ -123,14 +123,13 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
     setToggling(true);
     setError(null);
     try {
-      const res = await apiFetch(
+      await apiJson(
         `/stores/${storeId}/products/${product.id}/active`,
         session?.user.accessToken ?? '',
         { method: 'PATCH', body: JSON.stringify({ isActive: !product.isActive }) },
       );
-      if (!res.ok) throw new Error(`상태 변경 실패 (${res.status})`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '오류가 발생했습니다');
+      setError(e instanceof ApiError ? e.message : '상품 상태 변경에 실패했습니다');
     } finally {
       setToggling(false);
     }
@@ -141,15 +140,12 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
     setDeleting(true);
     setError(null);
     try {
-      const res = await apiFetch(
-        `/stores/${storeId}/products/${product.id}`,
-        session?.user.accessToken ?? '',
-        { method: 'DELETE' },
-      );
-      if (!res.ok) throw new Error(`삭제 실패 (${res.status})`);
+      await apiJson(`/stores/${storeId}/products/${product.id}`, session?.user.accessToken ?? '', {
+        method: 'DELETE',
+      });
       setConfirmOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '오류가 발생했습니다');
+      setError(e instanceof ApiError ? e.message : '상품 삭제에 실패했습니다');
     } finally {
       setDeleting(false);
     }
