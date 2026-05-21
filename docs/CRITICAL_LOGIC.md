@@ -465,3 +465,41 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **검증**: seller 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · 본 세션 대상 폴더(settlements/hubs/settings) biome errors 0건 · 전체 seller baseline 50 errors(세션57 63→50 추가 자동수정 효과, 신규 0건). 시각 검증은 사용자 합의로 생략(정적 검증만).
 
+## [결정 #CL-39] 셀러앱 알림 패턴 — `@mantine/notifications` 단일화, native `alert()` 금지 (2026-05-21, 세션63)
+
+**배경**: 세션61 셀러앱 종합 점검에서 #CL-37 `ConfirmModal`로 native `confirm()` 6건은 0건으로 정리되었으나, native `alert()` 3건(admin/orders·settlements·stores)이 잔존. native alert는 ① 모바일 PWA에서 시스템 다이얼로그가 앱 컨텍스트를 깨고 ② 디자인 토큰 적용 불가 ③ a11y/role 미흡 ④ 자동 닫힘·다중 스택 처리 불가로 ConfirmModal 정책 일관성을 해침. 단일화 표준이 필요.
+
+**핵심 규칙**:
+
+1. **금지**: 셀러앱 코드 전역에서 native `alert()`·`confirm()`·`prompt()` 신규 도입 금지. 기존은 점진 치환 대상.
+   - 예외: `confirm()` 형태의 "삭제·해제 등 액션 확정"은 [[#CL-37]] `ConfirmModal` 사용.
+   - `prompt()`는 폼 컴포넌트로 분리(현재 admin/orders 환불 사유는 잔존 prompt — 본 결정 범위 외, 별건 평가).
+2. **알림 컴포넌트**: `@mantine/notifications` 9.x. `apps/seller/src/app/providers.tsx`에서 `<Notifications position="top-right" autoClose={4000} />` 단일 등록. `apps/seller/src/app/layout.tsx`에서 `@mantine/notifications/styles.css` 1회 import.
+3. **호출 패턴**:
+   ```tsx
+   import { notifications } from '@mantine/notifications';
+   notifications.show({
+     color: 'red',     // 실패=red, 경고=orange, 성공=green
+     title: '간결한 제목',
+     message: '한 문장 설명. 사용자가 다음 행동을 취할 수 있는 정보 포함.',
+   });
+   ```
+4. **톤·색 규칙**:
+   - `color: 'red'` — API 실패·서버 오류 등 사용자 책임 외 실패.
+   - `color: 'orange'` — 입력 검증 실패·경고 (사용자가 수정 가능한 항목).
+   - `color: 'green'` — 성공 알림. 본 세션은 도입하지 않음(별건). 신규 도입 시 본 정책으로 통일.
+5. **위치·시간 결정 근거**: `position='top-right'`은 admin 페이지의 PC 사용 비중과 Mantine default 친화. `autoClose=4000ms`는 짧은 한글 메시지 가독에 충분. 변경 필요 시 본 결정 갱신.
+
+**적용 (세션63 T-CLEAN2)**:
+- `apps/seller/src/app/admin/orders/_client.tsx:44` (환불 실패) — red.
+- `apps/seller/src/app/admin/settlements/_client.tsx:50` (지급 실패) — red.
+- `apps/seller/src/app/admin/stores/_client.tsx:28` (수수료율 입력 검증) — orange.
+- Grep `alert\(` apps/seller/src → **0건** 달성.
+
+**범위 외**:
+- consumer·driver 앱: 본 결정은 셀러앱 한정. 동일 정책 확장은 별건.
+- 성공 알림(`color: 'green'`) 선제적 도입: 사용자 결정으로 본 세션 미도입.
+- admin/orders `prompt('환불 사유...')`: 폼 UI로의 마이그레이션은 별건.
+
+**검증**: 셀러 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · biome **0 errors / 2 warnings** (T-CLEAN1 baseline 동일, 회귀 0건) · `@mantine/notifications` 9.0.1 peer mismatch(9.0.0/9.0.1) 빌드 무영향 확인.
+
