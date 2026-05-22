@@ -91,6 +91,14 @@
       ]
     },
     {
+      "collectionGroup": "settlements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "settledAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "hubs",
       "queryScope": "COLLECTION",
       "fields": [

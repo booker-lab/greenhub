@@ -143,24 +143,29 @@ export class AdminService {
     };
   }
 
+  // N1: 트랜잭션 내 status 재확인 후 paid 전이 — 더블클릭/동시 클릭 이중 paid 경합 차단.
+  // 비트랜잭션이면 두 요청이 모두 confirmed를 읽고 둘 다 paid update → paidAt 갱신 경합.
   async markAsPaid(settlementId: string) {
     const ref = this.firestore.doc(`settlements/${settlementId}`);
-    const snap = await ref.get();
-    if (!snap.exists) throw new NotFoundException('정산 내역을 찾을 수 없습니다.');
 
-    const data = snap.data()!;
-    if (data['status'] === 'paid') {
-      throw new BadRequestException('이미 지급 완료된 정산입니다.');
-    }
-    if (data['status'] !== 'confirmed') {
-      throw new BadRequestException('confirmed 상태의 정산만 지급 처리할 수 있습니다.');
-    }
+    await this.firestore.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) throw new NotFoundException('정산 내역을 찾을 수 없습니다.');
 
-    const now = this.firestore.Timestamp.now();
-    await ref.update({
-      status: 'paid',
-      paidAt: now,
-      updatedAt: now,
+      const data = snap.data()!;
+      if (data['status'] === 'paid') {
+        throw new BadRequestException('이미 지급 완료된 정산입니다.');
+      }
+      if (data['status'] !== 'confirmed') {
+        throw new BadRequestException('confirmed 상태의 정산만 지급 처리할 수 있습니다.');
+      }
+
+      const now = this.firestore.Timestamp.now();
+      t.update(ref, {
+        status: 'paid',
+        paidAt: now,
+        updatedAt: now,
+      });
     });
 
     return { settlementId, status: 'paid' };
