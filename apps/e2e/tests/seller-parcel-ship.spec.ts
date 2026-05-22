@@ -25,6 +25,10 @@ test.describe('셀러 택배 발송 완료 — 인증', () => {
     await page.goto(`${BASE}/orders/${PARCEL_ORDER_ID}`)
     await expect(page.locator('text=주문 상세')).toBeVisible({ timeout: 10_000 })
 
+    // UX-11 회귀 가드: 시드 주문은 orderNumber가 발급돼 있으므로 폴백(#id) 분기를 타지 않고
+    // YYYYMMDD-NNNNNN 그대로 노출돼야 한다 (OrderInfoSection: 주문 {orderNumber ?? #id}).
+    await expect(page.locator('text=주문 20260101-000003')).toBeVisible({ timeout: 10_000 })
+
     const shipBtn = page.locator('text=택배 발송 완료')
     const canShip = (await shipBtn.count()) > 0
     if (!canShip) {

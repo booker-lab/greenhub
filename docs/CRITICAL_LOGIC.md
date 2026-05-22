@@ -530,3 +530,28 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **검증**: 셀러·드라이버·API 타입체크 exit 0 · API 단위 테스트 2/2 · 셀러 23라우트·드라이버 9라우트 빌드 · 셀러 biome 0e/2w(baseline 동일). e2e 풀런은 머지 후 dispatch.
 
+---
+
+## [결정 #CL-41] orderNumber 정책 — `YYYYMMDD-NNNNNN` 일자별 카운터 발급 + ID 폴백 (2026-05-22, 세션68~69)
+
+**배경 (UX-11)**: 주문 식별자가 uuid(`order.id`)뿐이라 사용자·셀러가 UUID 일부를 읽어야 했다(`#id.slice(-8)`). 백로그 §12-1에 사람이 읽을 수 있는 주문번호 요구가 있었다.
+
+**핵심 규칙**:
+
+1. **패턴**: `YYYYMMDD-NNNNNN` — KST 일자 + 일별 6자리 시퀀스(`String(seq).padStart(6, '0')`). 예: `20260522-000001`.
+2. **발급 위치 (동시성)**: `orders-create.service.ts`의 기존 `runTransaction` **내부**에서 발급. 카운터 문서 `orderCounters/YYYYMMDD`(`{ seq, updatedAt }` 단일 문서)를 트랜잭션 **첫 read**로 읽고(Firestore의 read-before-write 규칙), 모든 검증 후 write 단계에서 `t.set(counterRef, { seq }, { merge: true })`로 증가분을 커밋한 뒤 주문 문서에 `orderNumber` 주입. 자정 경계 동시 주문 충돌은 트랜잭션 재시도로 해결.
+   - 단일 문서 write QPS ~1 한계는 MVP 트래픽에 충분. 고트래픽 전환 시 샤딩 카운터로 별건 검토.
+3. **백필 안 함 (사용자 결정 ③)**: 기존 운영 주문은 `orderNumber` 부재 → shared `Order.orderNumber?: string`(optional). 프론트 표시 5곳 모두 `orderNumber ?? <ID 폴백>` 패턴:
+   - 셀러 OrderCard·OrderInfoSection: `?? '#'+id.slice(-8).toUpperCase()`
+   - 셀러 admin: `?? id.slice(0,12)+'…'` (AdminOrder 타입에도 필드 추가)
+   - 소비자 mypage 상세·결제성공: `?? orderId`(전체 ID). 결제성공은 `useOrderStatus`가 응답 `orderNumber`를 자동 수신 → 리다이렉트 URL 변경 불필요.
+   - 드라이버 OrderCard는 buyerName만 표시 → 변경 불필요.
+4. **취소 시 보존**: 취소·환불돼도 orderNumber는 소멸·재사용하지 않고 그대로 유지(§UX-11 범위 외).
+5. **e2e 시드 정합성**: `seed-e2e-orders.mjs`의 3주문에 고정 과거 일자 prefix `20260101-00000{1,2,3}` 주입 — 실데이터 카운터와 충돌 회피 + 폴백 분기를 안 타도록(`seller-parcel-ship.spec.ts`가 `주문 20260101-000003` 노출 회귀 가드).
+
+**적용**: 세션68(`cf79560`) shared 타입·orders-create.service(발급+응답)·프론트 5곳 · 세션69 seed/spec·본 등재.
+
+**범위 외**: 카운터 문서 TTL/정리 · 백필 스크립트 · 결제수단별 prefix 분기.
+
+**연관**: [#CL-40] (BUG-16 parcel 직행 — 동일 세션 묶음).
+
