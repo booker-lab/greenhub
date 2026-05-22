@@ -1,4 +1,7 @@
-import { IsDateString, IsOptional } from 'class-validator';
+import { IsDateString, IsIn, IsOptional } from 'class-validator';
+import type { SettlementStatus } from '../settlements.service';
+
+const SETTLEMENT_STATUSES: SettlementStatus[] = ['pending', 'confirmed', 'paid', 'cancelled'];
 
 export class QuerySettlementsDto {
   @IsDateString()
@@ -8,6 +11,10 @@ export class QuerySettlementsDto {
   @IsDateString()
   @IsOptional()
   to?: string;
+
+  @IsIn(SETTLEMENT_STATUSES)
+  @IsOptional()
+  status?: SettlementStatus;
 }
 
 export class QuerySummaryDto {

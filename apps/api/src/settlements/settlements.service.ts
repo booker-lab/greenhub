@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { FirestoreService } from '../firestore/firestore.service';
 import { QuerySettlementsDto, QuerySummaryDto } from './dto/query-settlements.dto';
+import { calcFee } from './_lib/fee-calculator';
+import { aggregateSettlements } from './_lib/settlement-aggregator';
 
 export type SettlementStatus = 'pending' | 'confirmed' | 'paid' | 'cancelled';
 
@@ -32,8 +34,7 @@ export class SettlementsService {
     const ref = this.firestore.doc(`settlements/${orderId}`);
 
     const totalAmount = (order['totalAmount'] as number) ?? 0;
-    const platformFee = Math.floor(totalAmount * this.feeRate);
-    const netAmount = totalAmount - platformFee;
+    const { platformFee, netAmount } = calcFee(totalAmount, this.feeRate);
 
     await this.firestore.runTransaction(async (t) => {
       // 트랜잭션 내 중복 재확인 — 동시 호출 중 한쪽만 set 통과
@@ -70,6 +71,9 @@ export class SettlementsService {
 
     let ref = this.firestore.collection('settlements').where('storeId', '==', storeId) as any;
 
+    if (dto.status) {
+      ref = ref.where('status', '==', dto.status);
+    }
     if (dto.from) {
       ref = ref.where('settledAt', '>=', this.firestore.Timestamp.fromDate(new Date(dto.from)));
     }
@@ -106,31 +110,15 @@ export class SettlementsService {
 
     const settlements: Record<string, unknown>[] = snap.docs.map((d: any) => d.data());
 
-    const byStatus: Record<SettlementStatus, number> = {
-      pending: 0,
-      confirmed: 0,
-      paid: 0,
-      cancelled: 0,
-    };
-    let totalAmount = 0;
-    let totalPlatformFee = 0;
-    let totalNetAmount = 0;
-
-    for (const s of settlements) {
-      const status = s['status'] as SettlementStatus;
-      if (status in byStatus) byStatus[status]++;
-      totalAmount += (s['totalAmount'] as number) ?? 0;
-      totalPlatformFee += (s['platformFee'] as number) ?? 0;
-      totalNetAmount += (s['netAmount'] as number) ?? 0;
-    }
+    const agg = aggregateSettlements(settlements);
 
     return {
       date: targetDate,
-      count: settlements.length,
-      totalAmount,
-      totalPlatformFee,
-      totalNetAmount,
-      byStatus,
+      count: agg.count,
+      totalAmount: agg.totalAmount,
+      totalPlatformFee: agg.totalPlatformFee,
+      totalNetAmount: agg.totalNetAmount,
+      byStatus: agg.byStatus,
     };
   }
 
