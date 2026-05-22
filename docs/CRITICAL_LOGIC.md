@@ -555,3 +555,24 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: [#CL-40] (BUG-16 parcel 직행 — 동일 세션 묶음).
 
+---
+
+## [결정 #CL-42] CI e2e seed step 신설 — 인증 규약 단일화 (`resolveCredential`) (2026-05-22, 세션70~71)
+
+**배경 (3회 재발)**: `e2e.yml`에 **seed 단계가 없어** CI 러너가 stale/빈 Firestore로 spec을 실행 → 시드 의존 spec(주문 카드·parcel·orderNumber)이 자동 dispatch 1차에 깨지고, 매번 사람이 로컬에서 시드를 재주입하는 수동 루프가 세션61·67·69 3회 반복됨.
+
+**치명 갭(GAP-1)**: seed step만 추가하면 즉시 크래시. `seed-e2e-orders.mjs:22`가 로컬 `apps/api/firebase-adminsdk.json`을 **하드코딩 require** → 그 파일은 gitignore 대상이라 CI 체크아웃에 부재 → `MODULE_NOT_FOUND`.
+
+**핵심 규칙**:
+
+1. **인증 규약 단일화**: seed·cleanup 두 스크립트 모두 `resolveCredential()` 사용 — ① `FIREBASE_SERVICE_ACCOUNT_JSON` env(CI, JSON 문자열, BOM trim) ② `apps/api/firebase-adminsdk.json` 로컬 폴백(개발자 머신). `cleanup-spec-residue.mjs:24-46`의 검증된 함수를 seed에 **이식**(중복 허용 — 2회 시점 YAGNI, 3번째 스크립트 생기면 공유 모듈 추출 재평가).
+2. **CI 시크릿 재사용(신규 0건)**: e2e.yml에 이미 등록된 `FIREBASE_SERVICE_ACCOUNT_JSON`(cleanup용)을 seed step env로 재사용. 사용자 결정.
+3. **step 배치**: `Install Playwright` 이후 · `Run E2E` 이전. seed `process.exit(1)`로 step fail → 후속 test 미실행(silent pass 방지).
+4. **멱등·정리 무충돌**: seed는 `e2e-` prefix set 덮어쓰기, cleanup은 `e2e-` 시드 보존 → seed→test→cleanup 순서 충돌 0.
+
+**적용**: 세션71 — `seed-e2e-orders.mjs` resolveCredential 이식(로컬 폴백 회귀 검증 통과) · `e2e.yml` seed step 신설 · 본 등재.
+
+**범위 외(별건)**: B(stale preview race — sync-preview success≠Vercel 실배포) · seed 동적 일자 고정화 · 공유 인증 모듈 추출.
+
+**연관**: [#CL-41] (seed 시드 정합성 — 동일 스크립트), `reference_e2e_preview_race`(B 별건).
+

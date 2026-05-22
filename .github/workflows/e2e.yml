@@ -27,6 +27,13 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter e2e exec playwright install --with-deps chromium
 
+      # 시드 의존 spec(주문 카드·parcel·orderNumber) 1차 통과 보장 — 세션61·67·69 3회 재발 종결(#CL-42).
+      # seed 실패 시 process.exit(1)로 step fail → 후속 test 미실행(silent pass 방지).
+      - name: Seed E2E fixtures (Firestore)
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: node scripts/seed-e2e-orders.mjs
+
       - name: Run E2E tests (Preview)
         env:
           SELLER_BASE: ${{ secrets.SELLER_BASE }}
