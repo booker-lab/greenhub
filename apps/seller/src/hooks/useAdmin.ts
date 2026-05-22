@@ -1,5 +1,6 @@
 'use client';
 
+import type { SettlementStatus } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
@@ -42,8 +43,9 @@ export interface AdminSettlement {
   totalAmount: number;
   platformFee: number;
   netAmount: number;
-  status: string;
+  status: SettlementStatus; // N3: string → 공유 SettlementStatus(SSOT)
   settledAt: unknown;
+  confirmedAt?: unknown | null; // N8: B-1 confirm 배치 신규 필드(어드민도 표시 대비)
   paidAt: unknown | null;
 }
 

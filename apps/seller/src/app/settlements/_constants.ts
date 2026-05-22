@@ -1,5 +1,9 @@
+// 정산 상태 타입·라벨·색 SSOT = @greenhub/shared (F-1/S4). 셀러 로컬 정의 제거 후 re-export.
+export { STATUS_LABEL, STATUS_COLOR } from '@greenhub/shared';
+export type { SettlementStatus } from '@greenhub/shared';
+import type { SettlementStatus } from '@greenhub/shared';
+
 export type SettlementTab = 'daily' | 'period' | 'orders';
-export type SettlementStatus = 'pending' | 'confirmed' | 'paid' | 'cancelled';
 
 export interface Settlement {
   id: string;
@@ -19,20 +23,6 @@ export interface Summary {
   totalNetAmount: number;
   byStatus: Record<SettlementStatus, number>;
 }
-
-export const STATUS_LABEL: Record<SettlementStatus, string> = {
-  pending: '정산 대기',
-  confirmed: '확정',
-  paid: '지급 완료',
-  cancelled: '취소',
-};
-
-export const STATUS_COLOR: Record<SettlementStatus, string> = {
-  pending: 'yellow',
-  confirmed: 'blue',
-  paid: 'green',
-  cancelled: 'red',
-};
 
 export const TABS: { key: SettlementTab; label: string }[] = [
   { key: 'daily', label: '일별 요약' },

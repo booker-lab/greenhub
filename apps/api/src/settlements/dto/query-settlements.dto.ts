@@ -1,7 +1,5 @@
 import { IsDateString, IsIn, IsOptional } from 'class-validator';
-import type { SettlementStatus } from '../settlements.service';
-
-const SETTLEMENT_STATUSES: SettlementStatus[] = ['pending', 'confirmed', 'paid', 'cancelled'];
+import { SETTLEMENT_STATUSES, type SettlementStatus } from '@greenhub/shared';
 
 export class QuerySettlementsDto {
   @IsDateString()
