@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-22 (세션71 — CI-SEED 종결 #CL-42 + B(PREVIEW-GATE) 구현 종결 #CL-43, race 루프 근본 종결)
+최종 수정: 2026-05-23 (세션81 — SETTLE-REFACTOR 격자 재검토 완료, S1~S5 정합성 확정 #CL-44/45, 차기=S6 잔여 검증)
 
 ---
 
@@ -80,6 +80,13 @@
 - **T4 검증 (run `26279110149` success 5m38s)**: 폴링 step **403 안 남**(GAP-2 권한 실증) + ~5m30s 3앱 배포 대기(driver 09:16:01·consumer 09:16:48·seller 09:17:49) → **e2e dispatch 09:17:51(마지막 배포 후)** = race 차단 정량 입증 → 자동 e2e run `26279363879` **1차 success**(6m13s). CI-SEED(시드)+PREVIEW-GATE(fresh) 결합으로 **자동 dispatch 1차 통과** — 세션39·60·61·67·69 "자동 1차 실패→수동 재dispatch" 루프 **근본 종결**.
 - **T5**: #CL-43 등재(CRITICAL_LOGIC) · `reference_e2e_preview_race` 메모리 "게이트 자동 해소" 갱신(수동 5분 대기 권장 폐지) · 본 기록.
 - **다음 세션 진입점**: Driver Kakao Maps SDK(세션53 Outage 이후 미진행) · 백엔드 단일장애점 회고(Railway Outage 교훈) · UX-11 T14 수동 검증 2건(운영 폴백 스크린샷·orderCounters Console — 사용자 몫).
+
+**세션72~81 (SETTLE-REFACTOR 정산 탭 리팩토링, #CL-44·#CL-45)**:
+- **핵심 발견(세션72~74)**: 정산 `pending→confirmed` 전이 코드가 **코드베이스 전체 부재** → 전 정산 pending 고착·어드민 "지급처리" 버튼(confirmed에서만 노출) 영구 미표시(A-1 단절). 16파일 전수검사로 정합 갭 N1~N11 도출. #CL-44(confirm 배치)·#CL-45(정합 갭 묶음) 등재. 로드맵 S1~S6(각 DoD=빌드+타입체크, 검증은 S6 일괄).
+- **구현(세션75~79, 6태스크 종결)**: S1=B-1 confirm 배치(`@Cron 04:00 KST`)+B-2 인덱스+N9 / S2=B-5·B-6 write 4종 전부 트랜잭션·paid/cancelled 미덮어씀 대칭 / S3=B-3 SDD `_lib/` 분리+B-4 status 필터+N2 hook / S4=F-1 타입·상수 SSOT **4중→1** `packages/shared/settlement.types.ts` / S5=F-2 어드민 화면 `_components`+`_lib` 분리(311→92행)+N10 정산일시 컬럼·정렬 desc 통일+N11 합계 confirmed+paid 한정. 커밋 main 푸시(최종 `f5c941e`).
+- **세션80 (S6 진입·선결① 해소)**: `firebase deploy --only firestore:indexes --project green-e4fe3` 라이브 배포 — settlements `status+settledAt` 인덱스 등록 → confirm 배치 `FAILED_PRECONDITION` 리스크 제거. ⚙️ firebase-tools v15.12.0 손상(@google-cloud/pubsub 모듈 누락→deploy exit 2)을 v15.18.0 재설치로 복구. **CI 자동 인덱스 배포는 여전히 부재** — 향후 수동 반복 필요.
+- **세션81 (격자 재검토 전수 실행·완료, 코드 변경 0)**: S1~S5 정합성을 **9체크포인트×14파일 교차 검증** — 상태머신 역전이 대칭·트랜잭션 4종·타입 SSOT 1곳·백프론트 연결·정렬 desc·SDD 분리·라인≤500·인덱스·빌드 **전부 통과**. shared+api build·셀러 `tsc --noEmit` 에러 0 재확인. #CL-45에 결과 append.
+- **다음 세션 진입점 = S6 잔여 검증**: ① 선결②(셀러 정렬 desc 육안 — 목록 최신순 노출) ② 전 구간 e2e(마감 경과 pending 시드→배치→confirmed→지급처리→paid) ③ 셀러·어드민 라벨/색/정렬 육안 일치 ④ T-기록(#CL-44/45 적용결과·`settlements.md` 현행화). 상세: `docs/specs/api/settlement-refactor-plan.md` T-검증, BACKLOG §13 S6, memory `project_settle_s1_s5_review_plan.md`·`project_settle_s6_preconditions.md`.
 
 **세션67 (BUG-16 택배 발송 완료 동선 구현, `2ad71e3`, #CL-40)**:
 - **사전 정합성 5/5 통과**: 진입 문서 `parcel-and-order-number-plan.md`(세션66 작성) 라인 전부 코드와 일치(helpers 94·lifecycle 281·seller page 205·driver board 157)·`updateStatus(status,extra)` 코어 훅 재사용 가능·`deliveryMethod`는 shared `Order` 타입에 존재·500라인 한도 안전.
