@@ -576,3 +576,23 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: [#CL-41] (seed 시드 정합성 — 동일 스크립트), `reference_e2e_preview_race`(B 별건).
 
+---
+
+## [결정 #CL-43] sync-preview 배포 게이트 — SHA-매칭 deployments 폴링 (2026-05-22, 세션71)
+
+**배경 (B / stale preview race)**: `sync-preview.yml`이 success로 떨어진 직후 e2e를 dispatch하지만, Vercel 실배포는 2~4분 더 걸려 e2e가 **stale(이전 커밋) 배포본**을 검사함(세션39·60·61 재현, 자동 1차 실패→수동 재dispatch 루프). #CL-42(CI-SEED)에서 "범위 외 별건"으로 분리됐던 B를 트리거 단계에서 해소.
+
+**핵심 규칙**:
+
+1. **SHA-매칭(시각 비교 폐기)**: 폴링 종료 조건 = 3앱 각각 `deployment.sha == preview HEAD SHA`인 deployment의 최신 status `state == 'success'`. deployment.sha = preview HEAD commit SHA와 정확히 일치(실측). 시각(`created_at`) 비교는 시계 오차·재시도에 취약해 폐기(GAP-1).
+2. **별칭 재포인팅 전제(T0 실측 확정)**: e2e BASE는 고정 별칭 `-git-preview-`, deployment URL은 커밋별 `-<hash>-`로 직접 다름. 그러나 Vercel은 커밋 빌드 success 시 별칭을 그 커밋으로 재포인팅 — 별칭/커밋 URL이 **동일 `/_next/static/chunks` 해시**를 서빙함을 bypass 쿠키로 대조 확인. 따라서 sha-매칭 success = e2e BASE가 새 커밋을 서빙하게 된 정확한 신호(GAP-4). 별칭 헬스체크 폴링 불요.
+3. **권한**: `permissions:`에 `deployments: read` 추가 — `GITHUB_TOKEN`에 기본 부재라 `gh api .../deployments` 403 방지(GAP-2, 워크플로 run에서 실증).
+4. **environment 이름 인코딩**: 3종 모두 구분자가 en-dash(U+2013 '–', 일반 hyphen 아님). consumer는 앱명에 하이픈 없음(`Preview – greenhubconsumer`, seller/driver와 표기 불일치). `encodeURIComponent`로 인코딩(GAP-3).
+5. **timeout fail-fast**: 10분 폴링 초과 시 `exit 1` → e2e dispatch 차단 → stale e2e 헛수고 대신 배포 지연 원인 노출(사용자 결정). 미완 앱 로그 출력.
+
+**적용**: 세션71 — `scripts/wait-preview-deploy.mjs` 신설(SHA-매칭 폴링, success/fail-fast 로컬 실측) · `sync-preview.yml` `deployments:read` + Trigger E2E 직전 폴링 step. **T4 검증(run 26279110149)**: 폴링이 ~5m30s 3앱 배포 완료 대기(driver 09:16:01·consumer 09:16:48·seller 09:17:49) → e2e dispatch 09:17:51(마지막 배포 후) → e2e run 26279363879 1차 success. CI-SEED와 결합해 자동 dispatch 1차 통과(시드+fresh 배포 양쪽 보장) — 세션39·60·61·67·69 race 루프 종결.
+
+**범위 외(별건)**: e2e.yml 자체 헬스체크 · Vercel Deploy Hook/Checks API 연동 · seed 동적 일자 고정화 · 폴링 스크립트 공유 인증 모듈(GITHUB_TOKEN만 사용, 해당 없음).
+
+**연관**: [#CL-42] (CI-SEED — B를 별건 분리한 결정, 본 #CL-43이 그 B 해소), `reference_e2e_preview_race`(수동 5분 대기 권장 → 게이트로 자동 해소).
+

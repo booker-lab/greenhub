@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-22 (세션71 — CI-SEED 구현 종결 #CL-42 + B(PREVIEW-GATE) 선설계, 차기 구현 진입)
+최종 수정: 2026-05-22 (세션71 — CI-SEED 종결 #CL-42 + B(PREVIEW-GATE) 구현 종결 #CL-43, race 루프 근본 종결)
 
 ---
 
@@ -72,7 +72,14 @@
 - **사용자 결정 2건**: ① 대기 = **deployments API 폴링**(고정sleep·헬스체크 대비 정밀) ② timeout 시 = **fail-fast**(stale e2e 헛수고 대신 배포 지연 노출).
 - **핵심 실측 발견**: ① deployment `sha` 필드 = preview HEAD SHA 정확 일치(`821c845`↔`821c845`) → **시각 비교 아닌 SHA-매칭**으로 폴링 종료(GAP-1). ② sync-preview `permissions:`에 deployments 부재 → `deployments:read` 추가 필요(GAP-2). ③ environment 이름 en-dash(U+2013)+consumer 표기 불일치(`Preview – greenhubconsumer` 하이픈 없음, GAP-3). ④ e2e BASE는 고정 별칭 `-git-preview-`인데 deployment target_url은 커밋 URL `-1e8vowfys-` → 별칭 재포인팅 전제 T0 실측 검증(GAP-4). **CI-SEED push 자연실험으로 race 정량 입증**: 자동 e2e 05:56:31 시작 vs preview 재배포 05:59~06:01 완료(stale 확정, 단 워크플로 변경뿐이라 176 passed).
 - **플랜**: §3 아토믹 T0(별칭 재포인팅 실측)→T1(권한)→T2(폴링 step)→T3(관측성)→T4(push 검증)→T5(#CL-43). 정합성 8항목 실측(C6 권한·C8 별칭만 조치/T0 잔여).
-- **다음 세션 진입 = 구현(플랜 §3 T0~T5)**. T0 게이트(별칭 재포인팅 전제) 먼저 실측. #CL-43 후보.
+
+**세션71 후속 — B(PREVIEW-GATE) 구현 종결 (커밋 `1c421ca` push, #CL-43)**:
+- **T0 게이트 실측 통과**: docs-only 커밋도 Vercel 3앱 재배포함(skip 안 함 — 트리거 걱정 해소). deployment `sha`=preview HEAD(`70816ec`) 일치. **GAP-4 확정** — bypass 쿠키로 별칭 URL(`-git-preview-`)과 커밋 URL이 **동일 `/_next/static/chunks` 해시** 서빙 대조 → success 시 Vercel이 별칭을 그 커밋으로 재포인팅 입증(별칭 헬스체크 폴링 불요·에스컬레이션 불요).
+- **T1**: [sync-preview.yml](../.github/workflows/sync-preview.yml) `permissions:`에 `deployments:read` 추가(GAP-2).
+- **T2/T3**: [scripts/wait-preview-deploy.mjs](../scripts/wait-preview-deploy.mjs) 신설 — SHA-매칭(시각비교 폐기 GAP-1)+최신 status success 판정, en-dash·consumer 표기 인코딩(GAP-3), timeout 10분 fail-fast, 앱별 success/미완 로그(T3). `execSync('gh api')` 방식. `PREVIEW_HEAD_SHA`·`WAIT_TIMEOUT_MS` env 오버라이드(검증용). Trigger E2E step 직전 폴링 step 삽입. **로컬 단독 검증**: success(배포완료 커밋→즉시 exit0)·fail-fast(미배포 SHA+짧은 timeout→미완 앱 노출 exit1) 양쪽 실측.
+- **T4 검증 (run `26279110149` success 5m38s)**: 폴링 step **403 안 남**(GAP-2 권한 실증) + ~5m30s 3앱 배포 대기(driver 09:16:01·consumer 09:16:48·seller 09:17:49) → **e2e dispatch 09:17:51(마지막 배포 후)** = race 차단 정량 입증 → 자동 e2e run `26279363879` **1차 success**(6m13s). CI-SEED(시드)+PREVIEW-GATE(fresh) 결합으로 **자동 dispatch 1차 통과** — 세션39·60·61·67·69 "자동 1차 실패→수동 재dispatch" 루프 **근본 종결**.
+- **T5**: #CL-43 등재(CRITICAL_LOGIC) · `reference_e2e_preview_race` 메모리 "게이트 자동 해소" 갱신(수동 5분 대기 권장 폐지) · 본 기록.
+- **다음 세션 진입점**: Driver Kakao Maps SDK(세션53 Outage 이후 미진행) · 백엔드 단일장애점 회고(Railway Outage 교훈) · UX-11 T14 수동 검증 2건(운영 폴백 스크린샷·orderCounters Console — 사용자 몫).
 
 **세션67 (BUG-16 택배 발송 완료 동선 구현, `2ad71e3`, #CL-40)**:
 - **사전 정합성 5/5 통과**: 진입 문서 `parcel-and-order-number-plan.md`(세션66 작성) 라인 전부 코드와 일치(helpers 94·lifecycle 281·seller page 205·driver board 157)·`updateStatus(status,extra)` 코어 훅 재사용 가능·`deliveryMethod`는 shared `Order` 타입에 존재·500라인 한도 안전.
