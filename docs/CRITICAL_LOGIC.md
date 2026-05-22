@@ -596,3 +596,40 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: [#CL-42] (CI-SEED — B를 별건 분리한 결정, 본 #CL-43이 그 B 해소), `reference_e2e_preview_race`(수동 5분 대기 권장 → 게이트로 자동 해소).
 
+---
+
+## [결정 #CL-44] 정산 confirm 마감 배치 — pending→confirmed 자동 확정 (2026-05-22, 세션72~74)
+
+**배경 (치명 갭 / A-1 워크플로 단절)**: `settlements.md §2`는 상태 흐름을 `pending → confirmed → paid`로 명시하나, **`pending → confirmed` 전이 코드가 코드베이스 전체에 부재**(Grep 실측). createSettlement는 항상 pending 생성([settlements.service.ts:41](../apps/api/src/settlements/settlements.service.ts#L41)), markAsPaid는 confirmed에서만 지급 허용([admin.service.ts:155](../apps/api/src/admin/admin.service.ts#L155)) → **전 정산 pending 영구 고착 → 어드민 "지급처리" 버튼이 confirmed에서만 렌더돼 영구 미노출**([_client.tsx:288](../apps/seller/src/app/admin/settlements/_client.tsx#L288)). 정산 핵심 워크플로 단절.
+
+**핵심 규칙**:
+
+1. **마감 배치로 confirm 전이(사용자 결정)**: 실시간 운영자 확인 대신 `@Cron('0 4 * * *')`(매일 04:00 KST) 배치가 `settledAt`이 마감 경계(`지금 - SETTLEMENT_CONFIRM_DELAY_DAYS일`, 기본 **1**) 경과한 pending을 confirmed 일괄 전이. payments `cleanupPendingOrders` cron 패턴 동형(쿼리→개별 처리). 신규 의존성 0(`@nestjs/schedule` 기설치).
+2. **트랜잭션 멱등 + 취소 경합 차단(GAP-1)**: 쿼리 `status==pending AND settledAt<cutoff` 후 각 문서를 **트랜잭션 내 재확인(pending일 때만)** confirmed + confirmedAt set. cancelled는 절대 미덮어씀(cron 중복 실행·배치 중 주문 취소 경합 무해).
+3. **KST 보정 필수(T0 실측)**: 서버 TZ 설정 전무(Grep) → UTC 기준. cutoff를 KST로 명시 보정하거나 `@Cron` `{ timeZone: 'Asia/Seoul' }` 옵션(@nestjs/schedule v6 지원, 우선).
+4. **복합 인덱스 + 수동 배포(GAP-3, T0 정정)**: 배치 쿼리 `status+settledAt`(storeId 없음)는 신규 2필드 인덱스 필요(기존 `storeId+status+settledAt`은 storeId 필수라 부적용). **CI 자동 배포 부재 확정** → `firebase deploy --only firestore:indexes` 수동 실행 필수(미배포 시 `FAILED_PRECONDITION`).
+
+**적용 결과(세션75 S1 구현 완료, 미커밋)**: B-1 = `confirmDueSettlements()` 신설([settlements.service.ts](../apps/api/src/settlements/settlements.service.ts)) — `@Cron('0 4 * * *', { timeZone: 'Asia/Seoul' })`(v6 `timeZone?: string` 정식 지원 실측 확인), 쿼리 후 `runTransaction`으로 문서별 재확인(pending일 때만 confirmed+confirmedAt) → cancelled 미덮어씀. createSettlement에 `confirmedAt: null` 추가. B-2 = `firestore.indexes.json`에 `status ASC + settledAt ASC` 2필드 인덱스 추가. N9 = 컨트롤러 클래스 레벨 `@UseGuards(JwtAuthGuard, RolesGuard) @Roles('admin')`([admin.controller.ts:18-21](../apps/api/src/admin/admin.controller.ts#L18-L21))로 이미 보호 확인 → 메서드 레벨 추가 불필요. **DoD: `pnpm --filter api build` 통과(타입체크 포함).** 잔여: 인덱스 수동 배포(`firebase deploy --only firestore:indexes`)는 운영 배포 시점 실행.
+
+**연관**: [#CL-45] (동일 정산 리팩토링의 정합 갭 묶음 — 본 #CL-44가 핵심 워크플로 복구, #CL-45가 부수 정합), `docs/specs/api/settlement-refactor-plan.md`(전체 플랜·태스크 분해).
+
+---
+
+## [결정 #CL-45] 정산 도메인 정합 갭 일괄 — 트랜잭션·역전이 가드·SSOT·UX (2026-05-22, 세션74)
+
+**배경 (전수 검사 발견)**: 세션74 정산 탭 16파일 전수 검사에서 #CL-44(confirm)와 **독립된 정합 갭 다수 발견**(N1·N6~N11). #CL-44가 워크플로를 복구해도 이 갭들이 남으면 데이터 정합·회계·UX 신뢰가 깨짐. confirm과 별 축이라 분리 기록.
+
+**핵심 규칙**:
+
+1. **정산 write 3종 트랜잭션화(N1+N6, 치명 — 회계 경합)**: create·cancel·markAsPaid가 **전부 비트랜잭션 read→write**(confirm 배치만 트랜잭션이라 비대칭). markAsPaid 더블클릭 이중 paid(N1), createSettlement 동시 전이 시 중복확인 통과 후 2회 set 경합(N6). → 3종 트랜잭션 내 재확인 적용(B-5).
+2. **cancelSettlement paid 역전이 가드(N7, 치명 — 회계 손실)**: 현 cancelSettlement는 status 무관 무조건 cancelled update → **이미 paid된 정산도 주문 취소 시 cancelled로 덮임**(지급 후 회계 불일치). #CL-44 GAP-1의 "cancelled 미덮어씀"과 **대칭으로 "paid 미덮어씀" 가드 신설**(B-6).
+3. **타입 SSOT 4중→1(N3·N8)**: SettlementStatus/STATUS_LABEL/STATUS_COLOR가 백엔드·셀러·어드민·useAdmin **4곳** 정의 + 값 불일치(pending "정산 대기"/yellow vs "대기"/gray). `packages/shared`로 통합(셀러본 채택, API도 `@greenhub/shared` workspace 의존 확정 — T0). 앱별 필드 집합 불일치(셀러 Settlement가 storeId/paidAt/confirmedAt 누락)는 합집합 정의(F-1).
+4. **어드민 화면 UX 정합(N10·N11)**: 어드민 합계가 status 무관 전건 합산 → cancelled/pending 포함 **지급액 과대 표시**(N11). 정산일시 컬럼 부재·정렬 방향 셀러와 반대(N10). 합계를 confirmed+paid 한정, 정산일시 표시(F-2).
+5. **스테일 클레임 정정(세션72 §0)**: orders-lifecycle:144 인코딩 손상 = **사실 아님**(바이트 실측 정상, 정산 전 파일 mojibake 0건). 인코딩 태스크 불필요.
+
+**적용 계획(세션74 확정)**: S2 = B-5+B-6(치명 정합 — confirm과 독립). S3 = B-3(SDD 분리)+B-4(status 필터+N2 hook 연결). S4 = F-1(SSOT). S5 = F-2(어드민 분리+N10·N11). N9(어드민 정산 엔드포인트 role 가드)는 S1에서 1줄 확인 흡수. 각 세션 DoD = 빌드+타입체크 통과, 검증(e2e·육안)은 S6 통합 세션 일괄.
+
+**적용 결과(세션76 S2 구현 완료, 미커밋 — 규칙 1·2 해소)**: B-5 = 정산 write 3종 전부 `runTransaction` 적용. ① `createSettlement`([settlements.service.ts:30-57](../apps/api/src/settlements/settlements.service.ts#L30-L57)) — `get(exists)→set`을 트랜잭션으로 묶어 동시 전이 중복생성 경합 차단(N6). ② `markAsPaid`([admin.service.ts:146-170](../apps/api/src/admin/admin.service.ts#L146-L170)) — 트랜잭션 내 status 재확인 후 paid → 더블클릭 이중 paid 차단(N1). ③ `cancelSettlement`([settlements.service.ts:170-192](../apps/api/src/settlements/settlements.service.ts#L170-L192)) — 트랜잭션화 + cancelled 멱등 skip. B-6 = `cancelSettlement`에 **paid 역전이 가드** 신설 — `status==='paid'`면 cancelled 미적용·`logger.warn` 후 return(N7 회계 손실 차단). #CL-44 GAP-1 "cancelled 미덮어씀"과 대칭("paid 미덮어씀"). 결과: 정산 write 4종(create·cancel·markAsPaid·confirm 배치) **전부 트랜잭션**. **DoD: `pnpm --filter api build` 통과(타입체크 포함).** 잔여: S3(B-3·B-4).
+
+**연관**: [#CL-44] (confirm 배치 — 본 #CL-45가 그 부수 정합 갭 묶음), `docs/specs/api/settlement-refactor-plan.md §2.7`(전수 검사 N1~N11 실측).
+

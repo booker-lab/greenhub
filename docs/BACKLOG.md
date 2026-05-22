@@ -27,6 +27,7 @@
 | ✅ | 보안 수정 후 E2E 검증 (결제·로그인·admin 3앱 접근) (2026-04-10) | 테스트 |
 | 💡 | 카드 결제 PG사 계약 | 외부 연동 |
 | 🔵 | 다중 판매자 상점 페이지 (소비자 앱) | Phase 2 |
+| 🔴 0 | SETTLE-REFACTOR — 정산 confirm 배치 + 정합 갭(아래 §10) | 정산/치명 |
 
 ---
 
@@ -716,6 +717,30 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 | 23 | #CL-22 | 셀러 페이지 분할 — `orders/[id]` 629→217·`settlements` 531→116 (fatal constraint 해소) |
 | 24 | #CL-23 | e2e 회귀 검증 (회귀 0건) + 인증 헬퍼 진단 강화 (set-cookie 검증 throw) |
 | 25 | #CL-25 | biome.json 파싱 에러 해소 + `.env.vercel.tmp` gitignore 보강 + driver Credentials provider 부재 검증 |
+
+---
+
+## 13. SETTLE-REFACTOR — 정산 confirm 배치 + 정합 갭 (세션74 확정, 미구현)
+
+> 결정 로그: #CL-44(confirm 배치)·#CL-45(정합 갭 일괄). 전체 플랜·태스크: `docs/specs/api/settlement-refactor-plan.md`. **각 세션 DoD = 빌드+타입체크 통과**(검증은 S6 일괄). 사용자 지시로 **미커밋 유지**.
+
+**🔴 치명 (정산 워크플로 단절·회계 정합)**
+
+- [x] **S1**(세션75 구현·미커밋, 빌드 통과) — B-1 confirm 마감 배치 신설(`@Cron('0 4 * * *', { timeZone:'Asia/Seoul' })`, pending→confirmed `runTransaction` 멱등·cancelled 미덮어씀) + B-2 `status+settledAt` 2필드 인덱스 추가 + N9 컨트롤러 레벨 `@Roles('admin')` 보호 확인(추가 불필요). createSettlement에 `confirmedAt:null` 추가. → A-1 워크플로 복구. **잔여: 인덱스 수동 배포는 운영 배포 시점.**
+- [x] **S2**(세션76 구현·미커밋, 빌드 통과) — B-5 정산 write 3종(create·cancel·markAsPaid) `runTransaction`화(N1 이중 paid·N6 중복생성 경합 차단) + B-6 cancelSettlement paid 역전이 가드(N7 — paid면 cancelled 미적용·warn). 결과: 정산 write 4종(+confirm 배치) 전부 트랜잭션, "cancelled/paid 미덮어씀" 대칭 완성.
+
+**🟡 구조·SSOT**
+
+- [ ] **S3** — B-3 SDD 레이어 분리(service.ts → `_lib/` fee-calculator·aggregator) + B-4 status 필터(DTO·service) + N2 셀러 hook 연결.
+- [ ] **S4** — F-1 상태 타입·상수 SSOT 4중→1(`packages/shared/settlement.types.ts`, 셀러본 "정산 대기"/yellow, N3·N4·N8 반영, confirmedAt 공유 타입 포함).
+
+**🟢 UX 일관**
+
+- [ ] **S5** — F-2 어드민 정산 화면 구조 분리(셀러 `_components/` 패턴) + N10(정산일시 컬럼·정렬 통일) + N11(합계 confirmed+paid 한정) / F-3 공용 DateInput(선택).
+
+**검증·기록**
+
+- [ ] **S6** — T-검증(마감 pending 시드→배치→confirmed→markAsPaid→paid 전 구간 e2e + 셀러·어드민 라벨/색 육안 + `seller-settlements.spec` 회귀) + T-기록(#CL-44/45 적용 결과·`settlements.md` 현행화·memory).
 
 ---
 
