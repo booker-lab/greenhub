@@ -41,7 +41,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           </Text>
         </Group>
         <Text style={{ fontWeight: 'var(--fw-bold)' }}>
-          주문 #{order.id.slice(-8).toUpperCase()}
+          주문 {order.orderNumber ?? `#${order.id.slice(-8).toUpperCase()}`}
         </Text>
         <Text
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}

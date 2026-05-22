@@ -76,7 +76,19 @@ export class OrdersCreateService {
     const orderId = uuidv4();
     const now = this.firestore.Timestamp.now();
 
+    // T8: orderNumber 발급 — 카운터 read는 트랜잭션 첫 read로 배치 (write 전 read 규칙 준수)
+    const kstDate = new Date(Date.now() + 9 * 3600 * 1000);
+    const yyyymmdd = kstDate.toISOString().slice(0, 10).replace(/-/g, '');
+    const counterRef = this.firestore.doc(`orderCounters/${yyyymmdd}`);
+
+    let orderNumber = '';
+
     await this.firestore.runTransaction(async (t) => {
+      // T8: 일자별 카운터 read (모든 write 이전에 수행)
+      const counterSnap = await t.get(counterRef);
+      const seq = (counterSnap.exists ? (counterSnap.data()!['seq'] as number) : 0) + 1;
+      orderNumber = `${yyyymmdd}-${String(seq).padStart(6, '0')}`;
+
       // Daily Cap 검증 (hub/direct 배송만 슬롯 소모, 공동구매 제외)
       if (dto.deliveryMethod !== 'parcel' && dto.saleType !== 'group') {
         // DTO ValidateIf로 같은 분기에서 필수화됨 — 미도달 시 400으로 사전 차단
@@ -137,8 +149,12 @@ export class OrdersCreateService {
 
       const isMetropolitan = detectMetropolitan(dto.deliveryAddress.address);
 
+      // T8: 카운터 증가분 commit (read 이후 write)
+      t.set(counterRef, { seq, updatedAt: now }, { merge: true });
+
       t.set(this.firestore.doc(`orders/${orderId}`), {
         id: orderId,
+        orderNumber,
         storeId,
         userId,
         productId: dto.productId,
@@ -178,6 +194,7 @@ export class OrdersCreateService {
 
     return {
       orderId,
+      orderNumber,
       portonePaymentParams: {
         name: productData['name'],
         amount: productData['price'] * dto.quantity + deliveryFee,

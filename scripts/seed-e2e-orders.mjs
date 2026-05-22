@@ -146,6 +146,7 @@ async function seedSellerOrders() {
   const NORMAL_ORDER_ID = 'e2e-normal-order-001';
   await db.doc(`orders/${NORMAL_ORDER_ID}`).set({
     id: NORMAL_ORDER_ID,
+    orderNumber: '20260101-000001', // UX-11: 고정 과거 일자 prefix로 실데이터 카운터 충돌 회피
     storeId: SELLER_STORE_ID,
     userId: CONSUMER_USER_ID,
     productId: NORMAL_PRODUCT_ID,
@@ -179,6 +180,7 @@ async function seedSellerOrders() {
   const GROUP_ORDER_ID = 'e2e-group-order-001';
   await db.doc(`orders/${GROUP_ORDER_ID}`).set({
     id: GROUP_ORDER_ID,
+    orderNumber: '20260101-000002', // UX-11
     storeId: SELLER_STORE_ID,
     userId: CONSUMER_USER_ID,
     productId: GROUP_PRODUCT_ID,
@@ -216,6 +218,7 @@ async function seedSellerOrders() {
   const PARCEL_ORDER_ID = 'e2e-parcel-order-001';
   await db.doc(`orders/${PARCEL_ORDER_ID}`).set({
     id: PARCEL_ORDER_ID,
+    orderNumber: '20260101-000003', // UX-11
     storeId: SELLER_STORE_ID,
     userId: CONSUMER_USER_ID,
     productId: NORMAL_PRODUCT_ID,

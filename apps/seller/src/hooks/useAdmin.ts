@@ -26,6 +26,7 @@ export interface AdminUser {
 
 export interface AdminOrder {
   id: string;
+  orderNumber?: string;
   storeId: string;
   userId: string;
   status: string;
