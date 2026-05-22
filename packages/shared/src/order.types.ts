@@ -29,6 +29,7 @@ export interface GroupBuyConsent {
 
 export interface Order {
   id: string
+  orderNumber?: string               // YYYYMMDD-NNNNNN. 신규 발급분만 존재 — 기존 주문은 undefined (폴백 표시)
   storeId: string
   userId: string
   productId: string

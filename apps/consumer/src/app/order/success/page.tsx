@@ -84,7 +84,7 @@ function OrderSuccessContent() {
               style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
               mt="xs"
             >
-              주문번호: {orderId}
+              주문번호: {order.orderNumber ?? orderId}
             </Text>
             <Button
               color="brand"
