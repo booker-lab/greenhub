@@ -60,12 +60,12 @@
 - **플랜**: `docs/specs/api/e2e-ci-seed-plan.md` — §2 정합성·§3 아토믹 T0~T5(T0 진입게이트 Firestore 프로젝트 동일성→T1 seed env화 로컬단독검증→T2 yml step→T3 실패가드→T4 자동dispatch 1차통과=성공지표→T5 #CL-42). B(stale preview race)는 별건 분리(§5).
 - **다음 세션 진입 = 구현(플랜 §3 T0~T5)**. 진입 시 T0 게이트(Firestore 프로젝트 동일성) 먼저 확인. #CL-42 후보(CI seed 인증 규약 단일화). 잔여 후보: Driver Kakao Maps·백엔드 단일장애점 회고·B(stale race).
 
-**세션71 (CI-SEED 구현 종결, 본 세션 커밋 예정, #CL-42)**:
+**세션71 (CI-SEED 구현 종결, 커밋 `2e53fa1` push, #CL-42)**:
 - **T1 — seed 인증 env-우선화**: [seed-e2e-orders.mjs](../../scripts/seed-e2e-orders.mjs) 22행 하드코딩 require 제거 → `cleanup-spec-residue.mjs:24-46` `resolveCredential()`(env-우선+로컬폴백+BOM방어) 이식. **로컬 폴백 회귀 검증 통과**(env 미설정 `node scripts/seed-e2e-orders.mjs` → "🎉 E2E 시드 완료", 멱등 set이라 안전). 중복 허용(2회 시점 YAGNI).
 - **T2/T3 — e2e.yml seed step 신설**: `Install Playwright` 직후·`Run E2E` 직전에 `Seed E2E fixtures (Firestore)` step 추가. env `FIREBASE_SERVICE_ACCOUNT_JSON`(이미 등록된 cleanup용 시크릿 **재사용, 신규 0건**). 실패 가드 주석 2줄(seed exit(1)→step fail→silent pass 방지). yml 들여쓰기·step 순서 육안 검증 통과(YAML 파서 부재로 Read 확인).
 - **T5 — 결정 로그·메모리**: #CL-42 등재(CRITICAL_LOGIC, CI seed 인증 규약 단일화)·BACKLOG CI-SEED 행 ✅·본 기록.
-- **잔여**: **T0(Firestore 프로젝트 동일성)·T4(자동 dispatch 1차 통과)는 사용자 확인 몫** — T0은 `FIREBASE_SERVICE_ACCOUNT_JSON` project_id = preview Firestore 일치 확인(단일 프로젝트 전제), T4는 push 후 자동 e2e run에서 seed step "🎉" 로그 + 시드 의존 spec 1차 통과 관찰(=3회 재발 패턴 종결 지표). B(stale preview race) 잔존 시 §범위 외 별건.
-- **다음 세션 진입점**: T4 관찰 결과 확인 후 — Driver Kakao Maps·백엔드 단일장애점 회고·B(stale preview race) 별건 중 사용자 선택.
+- **T0/T4 종결 (run `26271119584` success)**: push → sync-preview success → **자동 e2e run 1차에 step7 seed success + step8 `176 passed (4.7m)` 0 failed**. seed 로그 "🎉 E2E 시드 완료"(dailyCaps 14건·normal/group/parcel 3주문 CI write 성공). **GAP-1 봉합 입증**(로컬 키 없는 CI에서 resolveCredential env-우선 인증 성공). **T0도 사실상 입증**(틀린 프로젝트면 seed write 실패했을 것 → 동일 `green-e4fe3` 확정). 로컬 단서 전부 `green-e4fe3` 단일 일치(admin키·API .env·3앱 NEXT_PUBLIC·seller .env.vercel.local). **세션61·67·69 3회 재발 "자동 1차 실패→로컬 수동 재주입" 루프 근본 종결**. B(stale preview race)는 이번 미발현, §범위 외 별건 유지.
+- **다음 세션 진입점**: Driver Kakao Maps·백엔드 단일장애점 회고·B(stale preview race) 별건 중 사용자 선택.
 
 **세션67 (BUG-16 택배 발송 완료 동선 구현, `2ad71e3`, #CL-40)**:
 - **사전 정합성 5/5 통과**: 진입 문서 `parcel-and-order-number-plan.md`(세션66 작성) 라인 전부 코드와 일치(helpers 94·lifecycle 281·seller page 205·driver board 157)·`updateStatus(status,extra)` 코어 훅 재사용 가능·`deliveryMethod`는 shared `Order` 타입에 존재·500라인 한도 안전.
