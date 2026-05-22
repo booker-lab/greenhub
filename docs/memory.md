@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-22 (세션71 — CI-SEED 구현 종결, e2e.yml seed step 신설, #CL-42 등재)
+최종 수정: 2026-05-22 (세션71 — CI-SEED 구현 종결 #CL-42 + B(PREVIEW-GATE) 선설계, 차기 구현 진입)
 
 ---
 
@@ -65,7 +65,14 @@
 - **T2/T3 — e2e.yml seed step 신설**: `Install Playwright` 직후·`Run E2E` 직전에 `Seed E2E fixtures (Firestore)` step 추가. env `FIREBASE_SERVICE_ACCOUNT_JSON`(이미 등록된 cleanup용 시크릿 **재사용, 신규 0건**). 실패 가드 주석 2줄(seed exit(1)→step fail→silent pass 방지). yml 들여쓰기·step 순서 육안 검증 통과(YAML 파서 부재로 Read 확인).
 - **T5 — 결정 로그·메모리**: #CL-42 등재(CRITICAL_LOGIC, CI seed 인증 규약 단일화)·BACKLOG CI-SEED 행 ✅·본 기록.
 - **T0/T4 종결 (run `26271119584` success)**: push → sync-preview success → **자동 e2e run 1차에 step7 seed success + step8 `176 passed (4.7m)` 0 failed**. seed 로그 "🎉 E2E 시드 완료"(dailyCaps 14건·normal/group/parcel 3주문 CI write 성공). **GAP-1 봉합 입증**(로컬 키 없는 CI에서 resolveCredential env-우선 인증 성공). **T0도 사실상 입증**(틀린 프로젝트면 seed write 실패했을 것 → 동일 `green-e4fe3` 확정). 로컬 단서 전부 `green-e4fe3` 단일 일치(admin키·API .env·3앱 NEXT_PUBLIC·seller .env.vercel.local). **세션61·67·69 3회 재발 "자동 1차 실패→로컬 수동 재주입" 루프 근본 종결**. B(stale preview race)는 이번 미발현, §범위 외 별건 유지.
-- **다음 세션 진입점**: Driver Kakao Maps·백엔드 단일장애점 회고·B(stale preview race) 별건 중 사용자 선택.
+- **다음 세션 진입점**: **B(PREVIEW-GATE) 구현** — 선설계 완료(`docs/specs/api/preview-deploy-gate-plan.md`). 그 외 Driver Kakao Maps·백엔드 단일장애점 회고.
+
+**세션71 후속 — B(PREVIEW-GATE) 선설계 (코드 변경 0, 미커밋→본 세션 커밋 예정)**:
+- **목표**: CI-SEED §범위 외로 분리됐던 B(stale preview race) 해소 플랜. sync-preview가 e2e dispatch 전 Vercel 재배포 완료를 기다리게 게이트.
+- **사용자 결정 2건**: ① 대기 = **deployments API 폴링**(고정sleep·헬스체크 대비 정밀) ② timeout 시 = **fail-fast**(stale e2e 헛수고 대신 배포 지연 노출).
+- **핵심 실측 발견**: ① deployment `sha` 필드 = preview HEAD SHA 정확 일치(`821c845`↔`821c845`) → **시각 비교 아닌 SHA-매칭**으로 폴링 종료(GAP-1). ② sync-preview `permissions:`에 deployments 부재 → `deployments:read` 추가 필요(GAP-2). ③ environment 이름 en-dash(U+2013)+consumer 표기 불일치(`Preview – greenhubconsumer` 하이픈 없음, GAP-3). ④ e2e BASE는 고정 별칭 `-git-preview-`인데 deployment target_url은 커밋 URL `-1e8vowfys-` → 별칭 재포인팅 전제 T0 실측 검증(GAP-4). **CI-SEED push 자연실험으로 race 정량 입증**: 자동 e2e 05:56:31 시작 vs preview 재배포 05:59~06:01 완료(stale 확정, 단 워크플로 변경뿐이라 176 passed).
+- **플랜**: §3 아토믹 T0(별칭 재포인팅 실측)→T1(권한)→T2(폴링 step)→T3(관측성)→T4(push 검증)→T5(#CL-43). 정합성 8항목 실측(C6 권한·C8 별칭만 조치/T0 잔여).
+- **다음 세션 진입 = 구현(플랜 §3 T0~T5)**. T0 게이트(별칭 재포인팅 전제) 먼저 실측. #CL-43 후보.
 
 **세션67 (BUG-16 택배 발송 완료 동선 구현, `2ad71e3`, #CL-40)**:
 - **사전 정합성 5/5 통과**: 진입 문서 `parcel-and-order-number-plan.md`(세션66 작성) 라인 전부 코드와 일치(helpers 94·lifecycle 281·seller page 205·driver board 157)·`updateStatus(status,extra)` 코어 훅 재사용 가능·`deliveryMethod`는 shared `Order` 타입에 존재·500라인 한도 안전.
