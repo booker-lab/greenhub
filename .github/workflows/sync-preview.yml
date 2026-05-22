@@ -19,6 +19,7 @@ jobs:
     permissions:
       contents: write
       actions: write
+      deployments: read
 
     steps:
       - uses: actions/checkout@v6
@@ -32,6 +33,16 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git merge origin/main --no-edit -m "chore(preview): sync main into preview"
           git push origin preview
+
+      # sync-preview success ≠ Vercel 실배포 완료. 여기서 막지 않으면 아래 e2e
+      # dispatch 가 stale(이전 커밋) preview 를 검사한다(세션39·60·61 race).
+      # 3앱 Preview deployment 가 현재 preview HEAD 로 success 할 때까지 폴링하고,
+      # timeout 시 fail-fast(exit 1)로 e2e dispatch 를 차단해 배포 지연을 노출한다.
+      # node 는 ubuntu-latest 기본 설치본(v20+) 사용 — 의존성 없음(gh CLI + 빌트인만).
+      - name: Wait for preview deploy (SHA-matched deployments poll)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/wait-preview-deploy.mjs
 
       # GITHUB_TOKEN 으로 만든 push 는 다른 워크플로(e2e.yml 의 push 트리거)를
       # 재귀 방지 정책상 발화시키지 않는다. workflow_dispatch 는 발화하므로
