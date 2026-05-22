@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-22 (세션67 — BUG-16 택배 발송 완료 동선 구현, #CL-40 등재)
+최종 수정: 2026-05-22 (세션69 — UX-11 orderNumber 통합 종결, e2e 풀런 통과, #CL-41 등재)
 
 ---
 
@@ -44,6 +44,14 @@
 - **검증**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome 신규 0건·e2e 영향 없음(정적 코드 변경만).
 - **사용자 결정 채택**: ImageUpload url 기반 키(reorder 실재 시나리오 존재)·env 변수는 biome-ignore + 사유(가드 추가 대비 가독성 우위).
 - **다음 세션 진입 = 세션63 T-CLEAN2** — `@mantine/notifications` 도입 + alert 3건 치환. 진입 시 사전 정합성 5항목 + Notifications 위치/자동 닫힘 시간/성공 알림 도입 여부 등 사용자 결정 3건 확인 필요.
+
+**세션68~69 (UX-11 orderNumber 통합 종결, `cf79560`+`a3ea5ba`, #CL-41)**:
+- **세션68(T7~T11, `cf79560`)**: shared `Order.orderNumber?:string`(T7)·`orders-create.service` 트랜잭션 내 `orderCounters/YYYYMMDD` 카운터로 `YYYYMMDD-NNNNNN` 발급(카운터 read를 첫 read로 배치=write 전 read 규칙)+응답 본문 포함(T8/T9)·프론트 표시 5곳 폴백 `orderNumber ?? <ID>`(셀러 OrderCard·OrderInfoSection·admin+AdminOrder타입, 소비자 mypage상세·결제성공)(T10)·드라이버 OrderCard는 buyerName 표시라 변경 불필요(T11). 빌드 부산물 동반 커밋(shared dist `.d.ts/.map` Railway 빌드용·seller sw.js) — 직전 BUG-16 커밋·`426e87e` 선례 따라 1커밋 포함.
+- **세션69(T12~T14, `a3ea5ba`)**: T12 `seed-e2e-orders.mjs` 3주문에 `orderNumber` 주입(`20260101-00000{1,2,3}` 고정 과거일자 prefix로 실데이터 카운터 충돌 회피·멱등 set)+`seller-parcel-ship.spec.ts`에 `주문 20260101-000003` 노출 회귀 가드 1건. T13 #CL-41 등재(CRITICAL_LOGIC 557행). 
+- **검증**: 세션68 정적검증 전건 통과(shared 빌드 clean·API tsc/build exit 0·API테스트 2/2·셀러23·소비자13·드라이버7 라우트·셀러 biome 0e/2w). **e2e 풀런 — 자동 dispatch(26270139186) parcel spec 1건 실패 = stale preview**(sync-preview 완료 직후 시작, 세션60·61 패턴 재현), **수동 dispatch(26270156134) 30초 후 시작 → 176 passed/0 failed, parcel-ship:22 회귀가드 ✓**. 로컬 멱등 시드 재실행으로 Firestore에 orderNumber 주입 후 통과(e2e.yml seed 단계 부재 갭 여전).
+- **T14 사용자 수동 잔여 2건(자동화 불가)**: ① 운영 기존 주문(orderNumber 없음) 셀러·소비자 ID 폴백 정상 표시 스크린샷 ② 신규 주문 1건 발생 시 `orderCounters/YYYYMMDD` seq 생성·증가 Console 확인(첫 쓰기 Firestore 권한 전제).
+- **범위 외(#CL-41)**: 카운터 TTL/정리·백필 스크립트(결정③ ID폴백)·결제수단별 prefix·취소 시 번호 보존.
+- **다음 세션 진입점**: Driver Kakao Maps SDK·백엔드 단일 장애점 회고·e2e.yml seed step 추가(세션61·67·69 3회 재발) 중 사용자 선택. 진입 문서 미작성.
 
 **세션67 (BUG-16 택배 발송 완료 동선 구현, `2ad71e3`, #CL-40)**:
 - **사전 정합성 5/5 통과**: 진입 문서 `parcel-and-order-number-plan.md`(세션66 작성) 라인 전부 코드와 일치(helpers 94·lifecycle 281·seller page 205·driver board 157)·`updateStatus(status,extra)` 코어 훅 재사용 가능·`deliveryMethod`는 shared `Order` 타입에 존재·500라인 한도 안전.
