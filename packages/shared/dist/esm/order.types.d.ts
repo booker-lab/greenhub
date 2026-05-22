@@ -13,6 +13,7 @@ export interface GroupBuyConsent {
 }
 export interface Order {
     id: string;
+    orderNumber?: string;
     storeId: string;
     userId: string;
     productId: string;

@@ -179,7 +179,7 @@ export default function AdminOrdersClient() {
                         }}
                         ff="monospace"
                       >
-                        {order.id.slice(0, 12)}…
+                        {order.orderNumber ?? `${order.id.slice(0, 12)}…`}
                       </Text>
                     </Box>
                     <Box component="td" style={{ padding: '12px 16px' }}>

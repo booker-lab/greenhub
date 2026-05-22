@@ -43,7 +43,7 @@ export function OrderCard({ order }: { order: Order }) {
         }}
         mb={2}
       >
-        주문 #{order.id.slice(-8).toUpperCase()}
+        주문 {order.orderNumber ?? `#${order.id.slice(-8).toUpperCase()}`}
       </Text>
       {order.productName && (
         <Text

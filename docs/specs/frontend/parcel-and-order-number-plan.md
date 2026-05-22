@@ -277,8 +277,8 @@ const displayNumber = order.orderNumber ?? `#${order.id.slice(-8).toUpperCase()}
 |------|------|--------|
 | **세션66 (사전 정합성)** | 본 플랜 작성 + 사용자 4건 결정 | 본 문서 |
 | **세션67** | BUG-16 T1~T6 전부 | helpers/lifecycle/seller-orders/driver-board 4파일 + e2e spec 신설. 1세션 봉합. |
-| **세션68** | UX-11 T7~T11 (백엔드 + 프론트 5곳) | shared 타입·create.service·표시 5곳. 정적 검증 종결. |
-| **세션69** | UX-11 T12~T14 (e2e·CRITICAL_LOGIC·실서비스 검증) | e2e 풀런 + 실데이터 폴백 확인 + #CL 등재 |
+| **세션68 ✅** | UX-11 T7~T11 (백엔드 + 프론트 5곳) | shared 타입·create.service·표시 5곳. 정적 검증 종결(8파일 미커밋). **→ §7 세션69 진입 플랜 참조** |
+| **세션69** | UX-11 T12~T14 (e2e·CRITICAL_LOGIC·실서비스 검증) | 세션68 커밋 → e2e 풀런 + 실데이터 폴백 확인 + #CL-41 등재. 절차 §7 |
 
 **병합 최소 단위**: 세션67 1 커밋, 세션68 1 커밋, 세션69 1 커밋(또는 e2e fix별 분리).
 
@@ -315,3 +315,83 @@ const displayNumber = order.orderNumber ?? `#${order.id.slice(-8).toUpperCase()}
 | e2e 시드 주문에 orderNumber 부재로 spec 깨짐 | T12 결정 — 시드도 패턴 일치 발급 |
 | 실서비스 기존 주문 폴백 누락 | T14 회귀 가드(스크린샷 검증) |
 | Railway Outage 재발 | UX-11은 백엔드 의존 → Outage 발생 시 BUG-16만 완료하고 UX-11 보류 가능 |
+
+---
+
+## 7. 세션69 진입 플랜 (T12~T14)
+
+> 작성: 2026-05-22 (세션68 종료 시점). **세션68에서 T7~T11 + 정적 검증 전부 완료**, 미커밋 상태.
+
+### 7-0. 세션68 완료 현황 (재개 전 사실관계)
+
+**구현 완료 — 8파일 변경(미커밋)**:
+
+| 태스크 | 파일 | 변경 |
+|--------|------|------|
+| T7 | `packages/shared/src/order.types.ts:33` | `orderNumber?: string` 추가 |
+| T8 | `apps/api/src/orders/orders-create.service.ts:76-88, 140-142` | `orderCounters/YYYYMMDD` read(트랜잭션 첫 read)·`YYYYMMDD-NNNNNN` 발급·카운터 write·문서 주입 |
+| T9 | `apps/api/src/orders/orders-create.service.ts` return | 응답 본문 `orderNumber` 추가 |
+| T10-a | `apps/seller/src/app/orders/_components/OrderCard.tsx:46` | `orderNumber ?? '#'+id.slice(-8)` |
+| T10-b | `apps/seller/src/app/orders/[id]/_components/OrderInfoSection.tsx:44` | 동일 |
+| T10-c | `apps/seller/src/app/admin/orders/_client.tsx:182` + `apps/seller/src/hooks/useAdmin.ts:29`(AdminOrder 필드) | `orderNumber ?? id.slice(0,12)…` |
+| T10-d | `apps/consumer/src/app/mypage/orders/[id]/_client.tsx:202` | `order.orderNumber ?? orderId` |
+| T10-e | `apps/consumer/src/app/order/success/page.tsx:87` | `order.orderNumber ?? orderId` (useOrderStatus가 응답 orderNumber 자동 수신 → URL 변경 불필요) |
+| T11 | (드라이버 OrderCard) | **변경 불필요 확인** — buyerName 표시, 주문번호 미표시 |
+
+**정적 검증 전부 통과**: shared 빌드 clean · API `tsc --noEmit` exit 0 · API `nest build` exit 0 · API 단위 테스트 **2/2** · 셀러 빌드 **23라우트** · 소비자 13라우트 · 드라이버 7라우트 · 셀러 biome **0e/2w**(베이스라인). 소비자·드라이버 biome 실패는 **기존 베이스라인**(변경 파일 신규 0e/0w 확인).
+
+**빌드 부산물(커밋 정책 결정 필요)**: `packages/shared/dist/order.types.d.ts(.map)`(추적 대상, shared 빌드 재생성), `apps/seller/public/sw.js`(PWA SW 재생성).
+
+### 7-1. 재개 첫 단계 — 세션68 커밋
+
+세션69 진입 시 **먼저 세션68 분량을 1커밋**으로 봉합(아직 미커밋). 빌드 부산물 포함 여부는 사용자에게 확인. 커밋 메시지: `feat(orders): orderNumber 발급+표시 통합 (UX-11 T7~T11)`. 한글 멀티라인은 `git commit -F <파일>` 사용([reference_git_commit_multiline]).
+
+### 7-2. T12 — e2e 시드 + 회귀 가드 spec
+
+**결정 확정(§5/§6)**: 시드도 패턴 일치 발급 — e2e가 폴백 분기를 안 타도록.
+
+**파일 ① `scripts/seed-e2e-orders.mjs`** — 현재 4주문(normal·group·parcel + dailyCaps) 모두 `orderNumber` 부재. 각 `db.doc(orders/...).set({...})`에 추가:
+
+| 주문 ID | 추가할 orderNumber |
+|---------|-------------------|
+| `e2e-normal-order-001` (147행) | `'20260101-000001'` |
+| `e2e-group-order-001` (180행) | `'20260101-000002'` |
+| `e2e-parcel-order-001` (217행) | `'20260101-000003'` |
+
+(고정 과거 일자 `20260101` prefix로 실데이터 카운터와 충돌 회피, 멱등 set 유지)
+
+**파일 ② 회귀 가드 spec** — 현재 `seller-orders.spec.ts`/`consumer-mypage.spec.ts`에 주문번호 assertion **전무**(grep 확인). 택1:
+- (권장) 기존 `seller-order-detail.spec.ts`에 1 assertion 추가 — parcel 주문 상세에서 `주문 20260101-000003` 텍스트 노출 확인. spec 신설보다 표면 작음.
+- 또는 `consumer-mypage.spec.ts`에 `주문번호: 20260101-00000X` 확인.
+
+### 7-3. T13 — CRITICAL_LOGIC.md 등재 (#CL-41)
+
+**파일 `docs/CRITICAL_LOGIC.md`**(현재 532행, 1000 한도 안전). #CL-41 "orderNumber 정책" 신설:
+- **What**: `YYYYMMDD-NNNNNN`(KST 일자 + 일별 6자리 시퀀스), `orderCounters/YYYYMMDD` 단일 카운터 문서, 트랜잭션 내 발급
+- **Why**: 사용자·셀러가 UUID 대신 식별 가능한 번호 필요(백로그 §12-1). 일별 카운터는 MVP 트래픽(단일 문서 write QPS ~1)에 충분
+- **How**: 신규만 발급, 기존 주문 백필 안 함(사용자 결정 ③) → 프론트 5곳 `orderNumber ?? <ID 폴백>`. 취소돼도 번호 보존(§UX-11 범위 외)
+- 연관: #CL-40(BUG-16 parcel 직행)
+
+### 7-4. T14 — e2e 풀런 + 실서비스 회귀 검증
+
+**전제**: Railway 가동 + Firestore `orderCounters` 쓰기 권한. 백엔드 변경 동반이므로 **풀런 필수**.
+
+1. **로컬 시드 재실행**: `node scripts/seed-e2e-orders.mjs` (orderNumber 주입분 반영)
+2. **sync-preview 후 11분 대기 → 수동 dispatch** ([reference_e2e_preview_race]) — stale preview 회피
+3. **⚠️ CI 시드 갭(세션61·67 재발 패턴)**: `.github/workflows/e2e.yml`에 **seed 단계 없음**(line 25~45 확인). 1차 e2e 실패 시 회귀 의심 전에 **로컬 멱등 시드 재주입 후 재실행**부터 시도. (근본 해결: e2e.yml에 seed step 추가 — 별건 검토)
+4. **실데이터 폴백 회귀 가드**: 운영 기존 주문(orderNumber 없음)이 셀러·소비자 화면에서 ID 폴백으로 정상 표시되는지 스크린샷
+5. **Firestore Console**: `orderCounters/YYYYMMDD` 문서 생성·`seq` 증가 확인(신규 주문 1건 발생 시)
+
+### 7-5. 세션69 사후 검증 체크리스트 (T14 6종 = §2 T14 동일)
+
+- [ ] 세션68 변경분 커밋 완료
+- [ ] 셀러·소비자·드라이버·API 타입체크/빌드 재확인(시드·spec만 바뀌면 생략 가능)
+- [ ] biome baseline 유지
+- [ ] e2e 풀런 전 spec 통과(주문번호 회귀 가드 포함)
+- [ ] 실데이터 폴백 스크린샷
+- [ ] `orderCounters` 문서 증가 확인
+- [ ] #CL-41 등재 + `docs/memory.md` 최신화(200행 한도)
+
+### 7-6. 세션69 진입 1줄 요약 (memory.md 갱신용)
+
+> 세션68 완료: UX-11 T7~T11(orderNumber 발급+표시 5곳) 구현·정적검증 전부 통과(8파일 미커밋). 세션69 진입: ① 세션68 커밋 → T12(시드 orderNumber 주입 3건 + 회귀 spec) → T13(#CL-41) → T14(e2e 풀런·실데이터 폴백·카운터 확인). **주의**: e2e.yml seed 갭 → 1차 실패 시 로컬 멱등 시드 재주입 우선.

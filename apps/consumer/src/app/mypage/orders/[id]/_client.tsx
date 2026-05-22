@@ -199,7 +199,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
         mb="lg"
       >
-        주문번호: {orderId}
+        주문번호: {order.orderNumber ?? orderId}
       </Text>
 
       <Paper withBorder radius="md" p="md" mb="lg">
