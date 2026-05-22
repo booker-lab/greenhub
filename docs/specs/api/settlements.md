@@ -89,6 +89,9 @@ Authorization: Bearer <seller JWT>
 }
 ```
 
+> **정렬 일관성(F-2/S5)**: 셀러·어드민 정산 목록 모두 `settledAt DESC`(최신순) 통일.
+> 이전엔 셀러 `asc`·어드민 `desc`로 방향이 달라 화면 간 UX가 불일치했다(N10).
+
 ### 3-2. 날짜별 요약 조회
 
 ```
@@ -153,3 +156,29 @@ settlements: storeId ASC + settledAt ASC (기간 조회)
 settlements: storeId ASC + status ASC + settledAt ASC (스토어별 상태 필터)
 settlements: status ASC + settledAt ASC (confirm 마감 배치 §4-1 — storeId 없는 전역 쿼리)
 ```
+
+---
+
+## 6. 어드민 정산 화면 (F-2/S5)
+
+어드민 정산 화면(`apps/seller/src/app/admin/settlements/`)은 셀러 정산 화면과 동일한
+`_components/` 분리 패턴을 따른다.
+
+### 6-1. 컴포넌트 구조
+
+| 컴포넌트 | 책임 |
+|---------|------|
+| `_client.tsx` | 상태·핸들러 오케스트레이션 (필터값·지급 처리·모달) |
+| `_components/SettlementFilters.tsx` | 스토어 ID·기간(from/to) 필터 입력 |
+| `_components/SummaryCards.tsx` | 수수료 합계·지급 합계 카드 |
+| `_components/SettlementTable.tsx` | 정산 목록 표 (정산일시 컬럼 포함) + 지급처리 버튼 |
+
+### 6-2. 합계 산정 기준 (N11)
+
+요약 카드의 `totalFee`/`totalNet`은 **`confirmed` + `paid` 정산만** 합산한다.
+`pending`(미확정)·`cancelled`(취소)는 실제 지급 대상이 아니므로 제외 — 이전엔 status 무관
+전건 합산이라 지급액이 과대 표시됐다.
+
+### 6-3. 정산일시 컬럼 (N10)
+
+어드민 표에 `settledAt` 컬럼을 추가(셀러 화면과 동형). 정렬은 §3-1 노트대로 양 화면 `desc` 통일.
