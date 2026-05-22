@@ -36,9 +36,11 @@ export default function BoardClient() {
   useEffect(() => {
     if (!firebaseReady) return;
 
+    // BUG-16 T4: parcel 주문은 셀러가 직접 발송하므로 드라이버 수거 대기 목록에서 제외.
     const qPreparing = query(
       collection(db, 'orders'),
       where('status', '==', 'PREPARING'),
+      where('deliveryMethod', 'in', ['direct', 'hub']),
       orderBy('preparedAt', 'asc'),
     );
     const unsubPreparing = onSnapshot(qPreparing, (snap) => {
