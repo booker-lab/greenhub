@@ -503,3 +503,30 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **검증**: 셀러 타입체크(exit 0) · `pnpm --filter seller build`(23라우트) · biome **0 errors / 2 warnings** (T-CLEAN1 baseline 동일, 회귀 0건) · `@mantine/notifications` 9.0.1 peer mismatch(9.0.0/9.0.1) 빌드 무영향 확인.
 
+---
+
+## [결정 #CL-40] 택배(parcel) 발송 완료 — 셀러 `PREPARING → DELIVERED` 직행 + deliveryMethod 가드 (2026-05-22, 세션67)
+
+**배경 (BUG-16)**: 택배 주문은 드라이버가 수거하지 않고 셀러가 택배사에 직접 발송한다. 그러나 기존 FSM(`SELLER_TRANSITIONS`)에는 셀러의 `PREPARING → DELIVERED` 경로가 없어 API가 전환을 거부 → 택배 주문이 PREPARING에 영구 고착되는 갭이 존재했다. 직접/허브 주문은 `PREPARING → DELIVERING`(드라이버)을 거치므로, 택배만 직행 경로가 필요하다.
+
+**핵심 규칙**:
+
+1. **FSM 확장**: `SELLER_TRANSITIONS`에 `PREPARING: ['DELIVERED']` 추가. 중간 `DELIVERING` 단계를 두지 않는 이유 — ① 택배는 드라이버 배차가 없어 `DELIVERING`이 무의미 ② `DELIVERING` 전환 시 `driverId = requesterId` 자동 기록 로직이 셀러 ID로 오염됨 ③ `DELIVERED` 직행 시 기존 정산 자동 생성(`createSettlement(order, 'DELIVERED')`) 로직을 그대로 활용.
+2. **가드 (필수)**: FSM만으로는 셀러가 direct/hub 주문도 임의로 DELIVERED 마킹 가능 → `orders-lifecycle.service.ts`의 `updateStatus()`에서 `getAllowedTransitions` 통과 직후 가드 삽입:
+   ```ts
+   if (role === 'seller' && currentStatus === 'PREPARING' &&
+       dto.status === 'DELIVERED' && order['deliveryMethod'] !== 'parcel') {
+     throw new ForbiddenException('택배 발송 완료는 택배 주문에서만 가능합니다.');
+   }
+   ```
+   admin은 본래 전 전환 권한 보유 → 가드는 `role === 'seller'`만 검사하여 admin 우회 허용.
+3. **알림**: `NOTIFICATION_MAP`에 `PREPARING: { DELIVERED: 'ORDER_DELIVERED' }` 매핑 추가 — 기존 DELIVERING→DELIVERED 템플릿 재사용. 미추가 시 발송 완료 알림이 안 감.
+4. **드라이버 보드 정합성**: parcel 주문이 드라이버 수거 대기 목록에 잘못 노출되지 않도록 `board/_client.tsx` 쿼리에 `where('deliveryMethod', 'in', ['direct', 'hub'])` 추가. **Firestore 복합 인덱스**(`status + deliveryMethod + preparedAt`) 첫 배포 시 자동 생성 필요 — Console 에러 링크 클릭.
+5. **UI (#CL-37 일관성)**: 셀러 주문 상세의 "택배 발송 완료" 버튼은 무모달 — 명시적 버튼 클릭이 의도 표명이므로 ConfirmModal 불필요. `canShipParcel = deliveryMethod === 'parcel' && status === 'PREPARING'`.
+
+**적용 (세션67, `2ad71e3`)**: `orders.helpers.ts`(FSM+알림) · `orders-lifecycle.service.ts`(가드) · `useOrderDetailActions.ts`(`handleShipParcel`) · `orders/[id]/page.tsx`(버튼) · `driver board/_client.tsx`(필터) · `seed-e2e-orders.mjs`(parcel 시드) · `seller-parcel-ship.spec.ts`(신규).
+
+**범위 외**: 운송장 번호 입력·택배사 API 연동(MVP 외) · 드라이버 admin parcel 별도 조회(별건) · 발송 실패 재시도(별건).
+
+**검증**: 셀러·드라이버·API 타입체크 exit 0 · API 단위 테스트 2/2 · 셀러 23라우트·드라이버 9라우트 빌드 · 셀러 biome 0e/2w(baseline 동일). e2e 풀런은 머지 후 dispatch.
+

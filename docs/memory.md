@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-21 (세션65 — T-CLEAN3-B 잔존 apiFetch 8파일 일괄 마이그레이션, #CL-32 P2 종결)
+최종 수정: 2026-05-22 (세션67 — BUG-16 택배 발송 완료 동선 구현, #CL-40 등재)
 
 ---
 
@@ -44,6 +44,15 @@
 - **검증**: 셀러 타입체크 exit 0·`pnpm --filter seller build`(23라우트)·biome 신규 0건·e2e 영향 없음(정적 코드 변경만).
 - **사용자 결정 채택**: ImageUpload url 기반 키(reorder 실재 시나리오 존재)·env 변수는 biome-ignore + 사유(가드 추가 대비 가독성 우위).
 - **다음 세션 진입 = 세션63 T-CLEAN2** — `@mantine/notifications` 도입 + alert 3건 치환. 진입 시 사전 정합성 5항목 + Notifications 위치/자동 닫힘 시간/성공 알림 도입 여부 등 사용자 결정 3건 확인 필요.
+
+**세션67 (BUG-16 택배 발송 완료 동선 구현, `2ad71e3`, #CL-40)**:
+- **사전 정합성 5/5 통과**: 진입 문서 `parcel-and-order-number-plan.md`(세션66 작성) 라인 전부 코드와 일치(helpers 94·lifecycle 281·seller page 205·driver board 157)·`updateStatus(status,extra)` 코어 훅 재사용 가능·`deliveryMethod`는 shared `Order` 타입에 존재·500라인 한도 안전.
+- **변경 7파일(+e2e spec 신설)**: ① `orders.helpers.ts` `SELLER_TRANSITIONS.PREPARING:['DELIVERED']` + `NOTIFICATION_MAP.PREPARING.DELIVERED:'ORDER_DELIVERED'` ② `orders-lifecycle.service.ts` `role==='seller' && PREPARING→DELIVERED && deliveryMethod!=='parcel'` ForbiddenException 가드(getAllowedTransitions 직후) ③ `useOrderDetailActions.ts` `handleShipParcel=()=>updateStatus('DELIVERED')` ④ `orders/[id]/page.tsx` `canShipParcel` 분기 + "택배 발송 완료" 버튼(무모달, #CL-37) ⑤ `driver board/_client.tsx` 수거 대기 쿼리에 `where('deliveryMethod','in',['direct','hub'])` ⑥ `seed-e2e-orders.mjs` parcel+PREPARING 주문 1건(`e2e-parcel-order-001`) ⑦ `seller-parcel-ship.spec.ts` 신규.
+- **설계 판단(전부 플랜 권장안)**: PREPARING→DELIVERED 직행(중간 DELIVERING 무의미·driverId 오염 회피·정산 자동생성 재사용)·발송 버튼 무모달·드라이버 부재 검증은 카카오 OAuth storageState 부재로 정적 검증 갈음.
+- **검증**: 셀러·드라이버·API 타입체크 exit 0·API 단위테스트 2/2·셀러 23라우트·드라이버 9라우트 빌드·셀러 biome **0e/2w**(baseline 동일, `--write` 자동 포맷 1건: page.tsx showFooter 한 줄). **e2e 풀런 176 passed/0 failed**(run 26269373487) — 1차 실패는 회귀 아닌 **CI 시드 미실행**(e2e.yml에 seed 단계 없음·로컬 멱등 시드 재실행으로 `e2e-parcel-order-001` Firestore 주입 후 통과, 세션61 패턴 재현). parcel spec 2건(:22 발송 전환·:45 direct 버튼 부재) 모두 ✓.
+- **Firestore 인덱스 주의**: T4 `status+deliveryMethod+preparedAt` 복합 인덱스 첫 배포 시 Console 자동생성 링크 클릭 필요(드라이버 보드 진입 확인).
+- **범위 외**: 운송장 번호·택배사 API(MVP 외)·드라이버 admin parcel 별도조회(별건).
+- **다음 세션 진입점**: **UX-11(주문번호 통합, T7~T14 — 같은 플랜 문서 §2)**·Driver Kakao Maps SDK·백엔드 단일 장애점 회고 중 사용자 선택. UX-11은 #CL-41 예정(orderNumber 정책).
 
 **세션65 (T-CLEAN3-B 완료, `5f3d75f`)**:
 - **사전 정합성 5/5 통과**: 직전 머지 `2291fc9` OK·잔존 8파일 grep 일치·`apiJson<T>`/`ApiError(status,message)` 시그니처 무변경·T-CLEAN1 baseline 0e/2w 유지·500라인 신규 위반 없음.
