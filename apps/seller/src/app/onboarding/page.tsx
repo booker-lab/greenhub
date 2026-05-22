@@ -1,11 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getFirebaseStorage } from '@/lib/firebase';
-import { apiFetch } from '@/lib/api';
 import {
   Box,
   Button,
@@ -17,6 +11,12 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+import { ApiError, apiJson } from '@/lib/api';
+import { getFirebaseStorage } from '@/lib/firebase';
 
 export default function OnboardingPage() {
   const { data: session, update } = useSession();
@@ -39,10 +39,15 @@ export default function OnboardingPage() {
     const storeId = session?.user.storeId;
     const token = session?.user.accessToken;
     if (!storeId || !token) return;
-    apiFetch(`/stores/${storeId}`, token)
-      .then((res) => (res.ok ? res.json() : null))
+    apiJson<{
+      name?: string;
+      ceoName?: string;
+      phone?: string;
+      address?: string;
+      businessNumber?: string;
+      logoUrl?: string;
+    }>(`/stores/${storeId}`, token)
       .then((data) => {
-        if (!data) return;
         setForm({
           name: data.name ?? '',
           ceoName: data.ceoName ?? '',
@@ -52,6 +57,9 @@ export default function OnboardingPage() {
           logoUrl: data.logoUrl ?? '',
         });
         if (data.logoUrl) setLogoPreview(data.logoUrl);
+      })
+      .catch(() => {
+        // 기존 store GET 실패 시 빈 폼 유지 (silent)
       });
   }, [session?.user.storeId, session?.user.accessToken]);
 
@@ -127,25 +135,22 @@ export default function OnboardingPage() {
       logoUrl: form.logoUrl || undefined,
     });
 
-    let res: Response;
-    if (!storeId) {
-      res = await apiFetch('/stores', token, { method: 'POST', body });
-      if (res.ok) {
-        const data = await res.json();
+    try {
+      if (!storeId) {
+        const data = await apiJson<{ storeId: string }>('/stores', token, {
+          method: 'POST',
+          body,
+        });
         await update({ storeId: data.storeId });
+      } else {
+        await apiJson(`/stores/${storeId}`, token, { method: 'PATCH', body });
       }
-    } else {
-      res = await apiFetch(`/stores/${storeId}`, token, { method: 'PATCH', body });
+      router.push('/orders');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : '저장에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
-
-    if (!res.ok) {
-      setError('저장에 실패했습니다. 다시 시도해주세요.');
-      return;
-    }
-
-    router.push('/orders');
   }
 
   return (

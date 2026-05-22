@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiJson } from '@/lib/api';
 
 interface Hub {
   id: string;
@@ -60,27 +60,17 @@ export default function HubDetailPage() {
     if (!storeId || !token) return;
     setLoading(true);
     try {
-      const [hubRes, ordersRes] = await Promise.all([
-        apiFetch(`/stores/${storeId}/hubs/${hubId}`, token),
-        apiFetch(`/stores/${storeId}/hubs/${hubId}/orders?status=HUB_ARRIVED`, token),
+      const [hubData, ordersData] = await Promise.all([
+        apiJson<Hub>(`/stores/${storeId}/hubs/${hubId}`, token),
+        apiJson<{ orders?: HubOrder[] }>(
+          `/stores/${storeId}/hubs/${hubId}/orders?status=HUB_ARRIVED`,
+          token,
+        ),
       ]);
-
-      if (!hubRes.ok) {
-        setError('거점 정보를 불러올 수 없습니다');
-        return;
-      }
-      if (!ordersRes.ok) {
-        setError('주문 목록을 불러올 수 없습니다');
-        return;
-      }
-
-      const hubData = await hubRes.json();
-      const ordersData = await ordersRes.json();
-
       setHub(hubData);
       setOrders(ordersData.orders ?? []);
-    } catch {
-      setError('네트워크 오류가 발생했습니다');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : '네트워크 오류가 발생했습니다');
     } finally {
       setLoading(false);
     }

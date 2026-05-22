@@ -1,9 +1,9 @@
 'use client';
 
-import { Badge, Box, Group, Paper, Stack, Text } from '@mantine/core';
 import type { GroupProductConfig, Order } from '@greenhub/shared';
-import { formatDeadlineCountdown, toDate } from '../_lib';
+import { Badge, Box, Group, Paper, Stack, Text } from '@mantine/core';
 import { DELIVERY_LABEL, STATUS_COLOR, STATUS_LABEL } from '../../_constants';
+import { formatDeadlineCountdown, toDate } from '../_lib';
 import { Row } from './OrderRow';
 
 interface OrderInfoSectionProps {

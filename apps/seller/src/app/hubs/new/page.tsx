@@ -16,7 +16,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiJson } from '@/lib/api';
 
 export default function NewHubPage() {
   const { data: session } = useSession();
@@ -44,7 +44,7 @@ export default function NewHubPage() {
     setError('');
     setLoading(true);
     try {
-      const res = await apiFetch(`/stores/${storeId}/hubs`, token, {
+      await apiJson(`/stores/${storeId}/hubs`, token, {
         method: 'POST',
         body: JSON.stringify({
           name: form.name,
@@ -53,12 +53,9 @@ export default function NewHubPage() {
           operatingHours: form.operatingHours || undefined,
         }),
       });
-      if (res.ok) {
-        router.push('/hubs');
-      } else {
-        const data = await res.json();
-        setError(data.message ?? '저장에 실패했습니다');
-      }
+      router.push('/hubs');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : '저장에 실패했습니다');
     } finally {
       setLoading(false);
     }

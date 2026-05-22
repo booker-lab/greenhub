@@ -10,11 +10,7 @@ interface ConnectionStatusProps {
 }
 
 /** Firestore 실시간 구독 상태 dot + 텍스트. PageHeader right slot 공용. */
-export function ConnectionStatus({
-  loading,
-  error,
-  firebaseReady = true,
-}: ConnectionStatusProps) {
+export function ConnectionStatus({ loading, error, firebaseReady = true }: ConnectionStatusProps) {
   const connecting = loading || !firebaseReady;
   const color = connecting
     ? 'var(--color-caution-border)'

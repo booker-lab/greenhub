@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiJson } from '@/lib/api';
 
 type Step = 'input' | 'success' | 'error';
 
@@ -66,26 +66,25 @@ export default function HubPickupPage() {
     setLoading(true);
     setErrorMsg('');
     try {
-      const res = await apiFetch(`/stores/${storeId}/orders/${orderId}/hub-confirm`, token, {
+      await apiJson(`/stores/${storeId}/orders/${orderId}/hub-confirm`, token, {
         method: 'PATCH',
         body: JSON.stringify({ pickupCode }),
       });
-      if (res.ok) {
-        setStep('success');
-      } else {
-        const data = await res.json();
-        setErrorMsg(data.message ?? '코드 확인에 실패했습니다');
+      setStep('success');
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setErrorMsg(e.message);
         setStep('error');
         setDigits(['', '', '', '', '', '']);
         setTimeout(() => {
           setStep('input');
           inputRefs.current[0]?.focus();
         }, 2000);
+      } else {
+        setErrorMsg('네트워크 오류가 발생했습니다');
+        setStep('error');
+        setTimeout(() => setStep('input'), 2000);
       }
-    } catch {
-      setErrorMsg('네트워크 오류가 발생했습니다');
-      setStep('error');
-      setTimeout(() => setStep('input'), 2000);
     } finally {
       setLoading(false);
     }
@@ -162,6 +161,7 @@ export default function HubPickupPage() {
               <Group gap="xs" mb="xl">
                 {digits.map((digit, i) => (
                   <input
+                    // biome-ignore lint/suspicious/noArrayIndexKey: OTP 6자리 고정 박스 — reorder 없음
                     key={i}
                     ref={(el) => {
                       inputRefs.current[i] = el;

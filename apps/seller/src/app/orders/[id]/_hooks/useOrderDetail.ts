@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useFirebaseReady } from '@/app/providers';
 import type { GroupProductConfig, Order } from '@greenhub/shared';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { useFirebaseReady } from '@/app/providers';
+import { db } from '@/lib/firebase';
 
 export interface UseOrderDetailResult {
   order: Order | null;

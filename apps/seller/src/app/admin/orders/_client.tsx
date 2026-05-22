@@ -1,6 +1,7 @@
 'use client';
 
 import { Badge, Box, Button, Group, Paper, Select, Text, TextInput, Title } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useAdminOrders } from '@/hooks/useAdmin';
 
@@ -41,7 +42,13 @@ export default function AdminOrdersClient() {
     setProcessingId(orderId);
     const ok = await forceRefund(orderId, reason || undefined);
     setProcessingId(null);
-    if (!ok) alert('환불 처리에 실패했습니다.');
+    if (!ok) {
+      notifications.show({
+        color: 'red',
+        title: '환불 처리 실패',
+        message: '주문 환불 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+      });
+    }
   };
 
   const statusOptions = [

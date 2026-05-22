@@ -1,8 +1,8 @@
 'use client';
 
+import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Box, UnstyledButton, Stack, Text } from '@mantine/core';
 
 const tabs = [
   { href: '/orders', label: '주문', icon: OrderIcon },

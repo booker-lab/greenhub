@@ -11,6 +11,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { useAdminSettlements } from '@/hooks/useAdmin';
@@ -47,7 +48,13 @@ export default function AdminSettlementsClient() {
     try {
       const ok = await markAsPaid(payTargetId);
       setPayTargetId(null);
-      if (!ok) alert('처리에 실패했습니다.');
+      if (!ok) {
+        notifications.show({
+          color: 'red',
+          title: '지급 처리 실패',
+          message: '정산 지급 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+        });
+      }
     } finally {
       setProcessingId(null);
     }

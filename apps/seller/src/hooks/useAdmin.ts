@@ -1,7 +1,7 @@
 'use client';
 
-import { type DependencyList, useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { type DependencyList, useCallback, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
 
 // ── Types ────────────────────────────────────────────────────────
@@ -152,11 +152,13 @@ function pick<T>(key: string) {
 // ── Stores ───────────────────────────────────────────────────────
 
 export function useAdminStores() {
-  const { items: stores, loading, error, reload, token } = useAdminList<AdminStore>(
-    () => '/admin/stores',
-    pick<AdminStore>('stores'),
-    '판매자 목록',
-  );
+  const {
+    items: stores,
+    loading,
+    error,
+    reload,
+    token,
+  } = useAdminList<AdminStore>(() => '/admin/stores', pick<AdminStore>('stores'), '판매자 목록');
 
   const setCommission = async (storeId: string, rate: number) => {
     const ok = await runAction(token, `/admin/stores/${storeId}/commission`, {
@@ -173,11 +175,13 @@ export function useAdminStores() {
 // ── Users ────────────────────────────────────────────────────────
 
 export function useAdminUsers() {
-  const { items: users, loading, error, reload, token } = useAdminList<AdminUser>(
-    () => '/admin/users',
-    pick<AdminUser>('users'),
-    '사용자 목록',
-  );
+  const {
+    items: users,
+    loading,
+    error,
+    reload,
+    token,
+  } = useAdminList<AdminUser>(() => '/admin/users', pick<AdminUser>('users'), '사용자 목록');
 
   const toggleSuspend = async (userId: string, suspended: boolean) => {
     const ok = await runAction(token, `/admin/users/${userId}/status`, {
@@ -194,7 +198,13 @@ export function useAdminUsers() {
 // ── Orders ───────────────────────────────────────────────────────
 
 export function useAdminOrders(filters?: { storeId?: string; status?: string }) {
-  const { items: orders, loading, error, reload, token } = useAdminList<AdminOrder>(
+  const {
+    items: orders,
+    loading,
+    error,
+    reload,
+    token,
+  } = useAdminList<AdminOrder>(
     () => withQuery('/admin/orders', { storeId: filters?.storeId, status: filters?.status }),
     pick<AdminOrder>('orders'),
     '주문 목록',
@@ -216,7 +226,13 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
 // ── Settlements ──────────────────────────────────────────────────
 
 export function useAdminSettlements(filters?: { storeId?: string; from?: string; to?: string }) {
-  const { items: settlements, loading, error, reload, token } = useAdminList<AdminSettlement>(
+  const {
+    items: settlements,
+    loading,
+    error,
+    reload,
+    token,
+  } = useAdminList<AdminSettlement>(
     () =>
       withQuery('/admin/settlements', {
         storeId: filters?.storeId,
@@ -242,7 +258,13 @@ export function useAdminSettlements(filters?: { storeId?: string; from?: string;
 // ── Drivers ──────────────────────────────────────────────────────
 
 export function useAdminDrivers() {
-  const { items: drivers, loading, error, reload, token } = useAdminList<AdminDriver>(
+  const {
+    items: drivers,
+    loading,
+    error,
+    reload,
+    token,
+  } = useAdminList<AdminDriver>(
     () => '/admin/drivers',
     pick<AdminDriver>('drivers'),
     '드라이버 목록',
@@ -295,8 +317,11 @@ export function useAdminBanner() {
     if (!token) return false;
     setSaving(true);
     // 서버 관리 필드 제거 (forbidNonWhitelisted 대응)
-    const { updatedAt: _u, createdAt: _c, ...payload } = dto as AdminBanner &
-      Record<string, unknown>;
+    const {
+      updatedAt: _u,
+      createdAt: _c,
+      ...payload
+    } = dto as AdminBanner & Record<string, unknown>;
     try {
       await apiJson('/admin/banner', token, { method: 'PUT', body: JSON.stringify(payload) });
       await load();
@@ -314,7 +339,12 @@ export function useAdminBanner() {
 // ── Invite ───────────────────────────────────────────────────────
 
 export function useAdminInvite() {
-  const { items: invites, loading, reload, token } = useAdminList<InviteToken>(
+  const {
+    items: invites,
+    loading,
+    reload,
+    token,
+  } = useAdminList<InviteToken>(
     () => '/admin/invite',
     (data) => (Array.isArray(data) ? (data as InviteToken[]) : []),
     '초대 토큰',

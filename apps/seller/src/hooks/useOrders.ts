@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import type { Order } from '@greenhub/shared';
 import { onAuthStateChanged } from 'firebase/auth';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { useEffect, useMemo, useState } from 'react';
+import { type OrderGroup, STATUS_GROUP_MAP } from '@/app/orders/_constants';
 import { db, getFirebaseAuth } from '@/lib/firebase';
-import type { Order, OrderStatus } from '@greenhub/shared';
-import { STATUS_GROUP_MAP, type OrderGroup } from '@/app/orders/_constants';
-
 
 interface UseOrdersResult {
   orders: Order[];

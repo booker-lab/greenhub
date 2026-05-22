@@ -211,6 +211,39 @@ async function seedSellerOrders() {
     updatedAt: now,
   });
   console.log(`  ✅ orders/${GROUP_ORDER_ID} (saleType=group, groupDeliveryDate=${toDateStr(groupDeliveryDate)})`);
+
+  // 2-6) 택배 주문 (deliveryMethod=parcel, status=PREPARING → 셀러 "택배 발송 완료" 동선 BUG-16 T5)
+  const PARCEL_ORDER_ID = 'e2e-parcel-order-001';
+  await db.doc(`orders/${PARCEL_ORDER_ID}`).set({
+    id: PARCEL_ORDER_ID,
+    storeId: SELLER_STORE_ID,
+    userId: CONSUMER_USER_ID,
+    productId: NORMAL_PRODUCT_ID,
+    productName: 'E2E 택배 상품',
+    buyerName: 'E2E 소비자',
+    address: '부산 테스트로 9',
+    buyerPhone: '010-0000-0001',
+    sellerPhone: '010-0000-0000',
+    hubName: null,
+    hubAddress: null,
+    quantity: 1,
+    saleType: 'normal',
+    status: 'PREPARING',
+    deliveryMethod: 'parcel',
+    deliveryFee: 4000,
+    deliveryAddress: { address: '부산 테스트로 9', addressDetail: '202호', zipCode: '46000' },
+    isMetropolitan: false,
+    hubId: null,
+    pickupCode: null,
+    totalAmount: 14000,
+    requestedDeliveryDate: dateStr,
+    preparedAt: now,
+    cancelReason: null,
+    groupBuyConsent: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  console.log(`  ✅ orders/${PARCEL_ORDER_ID} (deliveryMethod=parcel, status=PREPARING)`);
 }
 
 async function main() {

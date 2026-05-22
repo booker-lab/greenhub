@@ -51,6 +51,7 @@ export default function VarietySelector({
   }
 
   const groups = varieties.reduce<Record<string, Variety[]>>((acc, v) => {
+    // biome-ignore lint/suspicious/noAssignInExpressions: groupBy 누적 패턴 — 의도된 inline 초기화
     (acc[v.subCategory] ??= []).push(v);
     return acc;
   }, {});

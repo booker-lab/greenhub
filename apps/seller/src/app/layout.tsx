@@ -1,8 +1,9 @@
+import { ColorSchemeScript } from '@mantine/core';
+import '@mantine/notifications/styles.css';
 import type { Metadata, Viewport } from 'next';
 import { Geist } from 'next/font/google';
-import { ColorSchemeScript } from '@mantine/core';
-import Providers from './providers';
 import BottomNav from '@/components/BottomNav';
+import Providers from './providers';
 import './globals.css';
 
 const geistSans = Geist({

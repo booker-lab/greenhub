@@ -2,6 +2,7 @@ import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
 
+// biome-ignore lint/style/noNonNullAssertion: NEXT_PUBLIC_API_URL은 Next 빌드 시점에 인라인 보장
 const API = process.env.NEXT_PUBLIC_API_URL!;
 const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
 
@@ -31,7 +32,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   providers: [
     Kakao({
+      // biome-ignore lint/style/noNonNullAssertion: KAKAO_CLIENT_ID는 서버 env로 배포 시점 보장
       clientId: process.env.KAKAO_CLIENT_ID!,
+      // biome-ignore lint/style/noNonNullAssertion: KAKAO_CLIENT_SECRET는 서버 env로 배포 시점 보장
       clientSecret: process.env.KAKAO_CLIENT_SECRET!,
     }),
     // E2E 헤더 게이팅 — 일치하는 x-e2e-test-token 없으면 즉시 거부.

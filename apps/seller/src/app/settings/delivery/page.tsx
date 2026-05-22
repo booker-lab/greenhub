@@ -15,7 +15,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiJson } from '@/lib/api';
 
 interface DeliveryConfig {
   directFee: number;
@@ -51,10 +51,12 @@ export default function DeliverySettingsPage() {
 
   useEffect(() => {
     if (!storeId || !token) return;
-    apiFetch(`/stores/${storeId}/delivery-config`, token)
-      .then((res) => (res.ok ? res.json() : null))
+    apiJson<Partial<DeliveryConfig>>(`/stores/${storeId}/delivery-config`, token)
       .then((data) => {
-        if (data) setConfig({ ...DEFAULTS, ...data });
+        setConfig({ ...DEFAULTS, ...data });
+      })
+      .catch(() => {
+        // GET 실패는 silent (DEFAULTS 유지)
       })
       .finally(() => setLoading(false));
   }, [storeId, token]);
@@ -69,16 +71,14 @@ export default function DeliverySettingsPage() {
     setSaving(true);
     setError('');
     try {
-      const res = await apiFetch(`/stores/${storeId}/delivery-config`, token, {
+      await apiJson(`/stores/${storeId}/delivery-config`, token, {
         method: 'PATCH',
         body: JSON.stringify(config),
       });
-      if (res.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-      } else {
-        setError('저장에 실패했습니다');
-      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : '저장에 실패했습니다');
     } finally {
       setSaving(false);
     }

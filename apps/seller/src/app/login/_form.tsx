@@ -1,16 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { Button, Divider, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useRouter } from 'next/navigation';
-import {
-  Button,
-  Divider,
-  Stack,
-  Text,
-  TextInput,
-  PasswordInput,
-} from '@mantine/core';
+import { signIn } from 'next-auth/react';
+import { useState } from 'react';
 
 export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const router = useRouter();
@@ -50,7 +43,14 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
         radius="xl"
         style={{ backgroundColor: '#FEE500', color: '#191919' }}
         leftSection={
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="#191919" aria-hidden="true" focusable="false">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="#191919"
+            aria-hidden="true"
+            focusable="false"
+          >
             <path d="M12 3C6.477 3 2 6.477 2 10.5c0 2.59 1.524 4.868 3.842 6.26L4.5 21l4.574-2.437A11.6 11.6 0 0 0 12 18.75c5.523 0 10-3.477 10-7.5S17.523 3 12 3z" />
           </svg>
         }

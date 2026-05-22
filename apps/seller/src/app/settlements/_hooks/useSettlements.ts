@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiJson } from '@/lib/api';
 import type { Settlement, SettlementTab, Summary } from '../_constants';
 
 export interface UseSettlementsResult {
@@ -49,7 +49,7 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
 
   useEffect(() => {
     setSelectedDateLabel(
-      new Date(selectedDate + 'T00:00:00').toLocaleDateString('ko-KR', {
+      new Date(`${selectedDate}T00:00:00`).toLocaleDateString('ko-KR', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
@@ -63,18 +63,13 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
     setSummaryLoading(true);
     setSummaryError('');
     try {
-      const res = await apiFetch(
+      const data = await apiJson<Summary>(
         `/stores/${storeId}/settlements/summary?date=${selectedDate}`,
         token,
       );
-      if (res.ok) {
-        setSummary(await res.json());
-      } else {
-        const body = await res.text().catch(() => '');
-        setSummaryError(`API 오류 ${res.status}: ${body || '알 수 없는 오류'}`);
-      }
+      setSummary(data);
     } catch (e) {
-      setSummaryError(`네트워크 오류: ${String(e)}`);
+      setSummaryError(e instanceof ApiError ? e.message : `네트워크 오류: ${String(e)}`);
     } finally {
       setSummaryLoading(false);
     }
@@ -89,13 +84,13 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
         const params = new URLSearchParams();
         if (f) params.set('from', f);
         if (t) params.set('to', t);
-        const res = await apiFetch(`/stores/${storeId}/settlements?${params.toString()}`, token);
-        if (res.ok) {
-          const data = await res.json();
-          setSettlements(data.settlements);
-        } else {
-          setListError('조회에 실패했습니다');
-        }
+        const data = await apiJson<{ settlements: Settlement[] }>(
+          `/stores/${storeId}/settlements?${params.toString()}`,
+          token,
+        );
+        setSettlements(data.settlements);
+      } catch (e) {
+        setListError(e instanceof ApiError ? e.message : '조회에 실패했습니다');
       } finally {
         setListLoading(false);
       }

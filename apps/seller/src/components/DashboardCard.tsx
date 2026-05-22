@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { Group, Paper, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 interface DashboardCardProps {
@@ -32,9 +32,7 @@ export function DashboardCard({
             href={moreHref}
             style={{ display: 'flex', alignItems: 'center', gap: 2 }}
           >
-            <Text
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            >
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
               {moreLabel}
             </Text>
             <ChevronRight size={14} color="var(--color-text-disabled)" />

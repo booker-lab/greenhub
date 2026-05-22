@@ -1,17 +1,17 @@
 'use client';
 
+import { Box, Button, Container, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Box, Button, Container, Stack, Text, UnstyledButton } from '@mantine/core';
-import { PageShell } from '@/components/PageShell';
 import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
-import { CANCELLABLE_STATUSES, READONLY_STATUSES } from './_lib';
-import { useOrderDetail } from './_hooks/useOrderDetail';
-import { useOrderDetailActions } from './_hooks/useOrderDetailActions';
 import { CancelOrderModal } from './_components/CancelOrderModal';
 import { OrderInfoSection } from './_components/OrderInfoSection';
 import { PrepareForm } from './_components/PrepareForm';
+import { useOrderDetail } from './_hooks/useOrderDetail';
+import { useOrderDetailActions } from './_hooks/useOrderDetailActions';
+import { CANCELLABLE_STATUSES, READONLY_STATUSES } from './_lib';
 
 export default function OrderDetailPage() {
   const params = useParams();
@@ -35,6 +35,7 @@ export default function OrderDetailPage() {
     setCancelReason,
     handlePrepare,
     handleCancel,
+    handleShipParcel,
   } = useOrderDetailActions(storeId, orderId);
 
   if (loading) {
@@ -89,7 +90,9 @@ export default function OrderDetailPage() {
   const isReadonly = READONLY_STATUSES.includes(order.status);
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED';
   const canCancel = CANCELLABLE_STATUSES.includes(order.status);
-  const showFooter = !isReadonly && !showPrepareForm && (canPrepare || canCancel);
+  // BUG-16 T3: 택배 주문은 PREPARING 단계에서 셀러가 직접 발송 완료 가능.
+  const canShipParcel = order.deliveryMethod === 'parcel' && order.status === 'PREPARING';
+  const showFooter = !isReadonly && !showPrepareForm && (canPrepare || canCancel || canShipParcel);
   const deliveryDate =
     order.saleType === 'normal'
       ? order.requestedDeliveryDate
@@ -167,6 +170,21 @@ export default function OrderDetailPage() {
                   }}
                 >
                   준비 시작
+                </Button>
+              )}
+              {canShipParcel && (
+                <Button
+                  onClick={handleShipParcel}
+                  disabled={actionLoading}
+                  fullWidth
+                  size="lg"
+                  radius="xl"
+                  style={{
+                    backgroundColor: 'var(--color-primary)',
+                    fontWeight: 'var(--fw-medium)',
+                  }}
+                >
+                  택배 발송 완료
                 </Button>
               )}
               {canCancel && (
