@@ -741,6 +741,7 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 **검증·기록**
 
 - [ ] **S6** — T-검증(마감 pending 시드→배치→confirmed→markAsPaid→paid 전 구간 e2e + 셀러·어드민 라벨/색 육안 + `seller-settlements.spec` 회귀) + T-기록(#CL-44/45 적용 결과·`settlements.md` 현행화·memory).
+  - ⚠️ **S6 검증 선결 조건(미완)**: `firestore.indexes.json`의 `status+settledAt` 2필드 인덱스는 **코드에만 반영, 실제 배포 미실행**. CI 자동배포 부재 → **검증 전 `firebase deploy --only firestore:indexes` 수동 실행 필수**. 미배포 시 `confirmDueSettlements` 배치 쿼리가 `FAILED_PRECONDITION`을 내 confirm 전이 자체가 실패함(전 구간 e2e 불가). **검증 첫 단계 = 인덱스 배포 완료 확인.**
 
 ---
 
