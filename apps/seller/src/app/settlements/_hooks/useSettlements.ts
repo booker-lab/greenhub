@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, apiJson } from '@/lib/api';
-import type { Settlement, SettlementTab, Summary } from '../_constants';
+import type { Settlement, SettlementStatus, SettlementTab, Summary } from '../_constants';
 
 export interface UseSettlementsResult {
   selectedDate: string;
@@ -25,7 +25,7 @@ export interface UseSettlementsResult {
   listError: string;
 
   fetchSummary: () => Promise<void>;
-  fetchSettlements: (f?: string, t?: string) => Promise<void>;
+  fetchSettlements: (f?: string, t?: string, status?: SettlementStatus) => Promise<void>;
 }
 
 export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
@@ -76,7 +76,7 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
   }, [storeId, token, selectedDate]);
 
   const fetchSettlements = useCallback(
-    async (f?: string, t?: string) => {
+    async (f?: string, t?: string, status?: SettlementStatus) => {
       if (!storeId || !token) return;
       setListLoading(true);
       setListError('');
@@ -84,6 +84,7 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
         const params = new URLSearchParams();
         if (f) params.set('from', f);
         if (t) params.set('to', t);
+        if (status) params.set('status', status);
         const data = await apiJson<{ settlements: Settlement[] }>(
           `/stores/${storeId}/settlements?${params.toString()}`,
           token,
