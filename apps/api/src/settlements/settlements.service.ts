@@ -86,7 +86,8 @@ export class SettlementsService {
       ref = ref.where('settledAt', '<=', this.firestore.Timestamp.fromDate(toDate));
     }
 
-    ref = ref.orderBy('settledAt', 'asc');
+    // N10(F-2): 어드민(desc)과 정렬 방향 통일 — 양 화면 settledAt 최신순.
+    ref = ref.orderBy('settledAt', 'desc');
 
     const snap = await ref.get();
     const settlements = snap.docs.map((d: any) => d.data());
