@@ -7,6 +7,8 @@ import type { OrderStatus } from './dto/update-status.dto';
 export const SELLER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   ACCEPTED: ['PREPARING'],
   CONFIRMED: ['PREPARING'],
+  // 택배 발송 완료 — parcel 주문만 (lifecycle service에서 deliveryMethod 가드, BUG-16 T1)
+  PREPARING: ['DELIVERED'],
 };
 
 // 드라이버 허용 상태 전환
@@ -26,7 +28,7 @@ export const NOTIFICATION_MAP: Partial<Record<OrderStatus, Partial<Record<OrderS
   {
     ACCEPTED: { PREPARING: 'ORDER_PREPARING' },
     CONFIRMED: { PREPARING: 'GROUP_PREPARING' },
-    PREPARING: { DELIVERING: 'ORDER_DELIVERING' },
+    PREPARING: { DELIVERING: 'ORDER_DELIVERING', DELIVERED: 'ORDER_DELIVERED' },
     DELIVERING: {
       HUB_ARRIVED: 'ORDER_HUB_ARRIVED',
       DELIVERED: 'ORDER_DELIVERED',

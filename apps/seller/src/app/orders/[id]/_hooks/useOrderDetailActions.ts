@@ -17,6 +17,7 @@ export interface UseOrderDetailActionsResult {
   setCancelReason: (v: string) => void;
   handlePrepare: () => Promise<void>;
   handleCancel: () => Promise<void>;
+  handleShipParcel: () => Promise<void>;
 }
 
 /** 주문 상세 페이지용 액션 — 프리셋 준비 폼 + 모달 취소 사유. */
@@ -50,6 +51,11 @@ export function useOrderDetailActions(
     }
   }
 
+  // BUG-16 T3: 택배 발송 완료 — PREPARING → DELIVERED 직행 (백엔드가 parcel 가드).
+  async function handleShipParcel() {
+    await updateStatus('DELIVERED');
+  }
+
   return {
     actionLoading,
     actionError,
@@ -64,5 +70,6 @@ export function useOrderDetailActions(
     setCancelReason,
     handlePrepare,
     handleCancel,
+    handleShipParcel,
   };
 }

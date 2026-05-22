@@ -46,6 +46,17 @@ export class OrdersLifecycleService {
       throw new ForbiddenException(`${currentStatus} → ${dto.status} 전환은 허용되지 않습니다.`);
     }
 
+    // BUG-16 T2: 셀러의 PREPARING → DELIVERED는 택배(parcel) 주문에서만 허용.
+    // direct/hub 주문은 드라이버 수거(DELIVERING)를 거쳐야 하므로 셀러 임의 발송 완료 차단.
+    if (
+      role === 'seller' &&
+      currentStatus === 'PREPARING' &&
+      dto.status === 'DELIVERED' &&
+      order['deliveryMethod'] !== 'parcel'
+    ) {
+      throw new ForbiddenException('택배 발송 완료는 택배 주문에서만 가능합니다.');
+    }
+
     const update: Record<string, unknown> = {
       status: dto.status,
       updatedAt: this.firestore.Timestamp.now(),
