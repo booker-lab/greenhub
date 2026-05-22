@@ -732,7 +732,7 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 **🟡 구조·SSOT**
 
 - [x] **S3**(세션77 구현, 빌드+타입체크 통과) — B-3 SDD 레이어 분리(service.ts → `_lib/fee-calculator.ts`(`calcFee`)·`_lib/settlement-aggregator.ts`(`aggregateSettlements`) 추출, service 208→196행) + B-4 status 필터(`QuerySettlementsDto.status` `@IsIn` + `getSettlements` where 절, 기존 `storeId+status+settledAt` 인덱스 재사용 — 신규 인덱스 불필요) + N2 셀러 `useSettlements.fetchSettlements(f,t,status?)` status 전송 연결. `settlements.md` §2(confirmedAt)·§3-1(status 파라미터)·§4-1(confirm 배치)·§5(인덱스) 선설계 갱신.
-- [ ] **S4** — F-1 상태 타입·상수 SSOT 4중→1(`packages/shared/settlement.types.ts`, 셀러본 "정산 대기"/yellow, N3·N4·N8 반영, confirmedAt 공유 타입 포함).
+- [x] **S4**(세션78 구현, shared 빌드+API 빌드+셀러 타입체크 통과) — F-1 상태 타입·상수 SSOT **4중→1**. `packages/shared/src/settlement.types.ts` 신설(`SettlementStatus`·`SETTLEMENT_STATUSES`·`STATUS_LABEL`·`STATUS_COLOR` 셀러본 "정산 대기"/yellow·공유 `Settlement` 필드 합집합). 통합: 백엔드 service(import+re-export)·aggregator(`SettlementStatusKey` 제거)·DTO(배열 제거)·셀러 `_constants`(re-export, `_lib`/components 경로 무변경 N4)·어드민 `_client`(셀러본 표기 통일)·`useAdmin.AdminSettlement.status`→`SettlementStatus`+`confirmedAt?`(N3·N8).
 
 **🟢 UX 일관**
 

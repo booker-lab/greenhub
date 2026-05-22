@@ -4,20 +4,17 @@
  * getSummary의 byStatus 카운트·금액 합산 루프를 추출.
  * Firestore 의존 없음(이미 읽어온 문서 배열만 받음) → 단위 테스트 용이.
  *
- * 주의: SettlementStatus 타입은 settlements.service.ts가 SSOT(F-1/S4에서 packages/shared로 이관 예정).
- * 순환 import를 피하려고 여기서는 상태 키 목록을 자체 보유한다.
+ * 상태 타입·키 목록 SSOT = @greenhub/shared(F-1/S4). 로컬 SettlementStatusKey 제거.
  */
 
-export type SettlementStatusKey = 'pending' | 'confirmed' | 'paid' | 'cancelled';
-
-const STATUS_KEYS: SettlementStatusKey[] = ['pending', 'confirmed', 'paid', 'cancelled'];
+import { SETTLEMENT_STATUSES, type SettlementStatus } from '@greenhub/shared';
 
 export interface SettlementAggregate {
   count: number;
   totalAmount: number;
   totalPlatformFee: number;
   totalNetAmount: number;
-  byStatus: Record<SettlementStatusKey, number>;
+  byStatus: Record<SettlementStatus, number>;
 }
 
 /**
@@ -27,7 +24,7 @@ export interface SettlementAggregate {
 export function aggregateSettlements(
   settlements: Record<string, unknown>[],
 ): SettlementAggregate {
-  const byStatus: Record<SettlementStatusKey, number> = {
+  const byStatus: Record<SettlementStatus, number> = {
     pending: 0,
     confirmed: 0,
     paid: 0,
@@ -38,8 +35,8 @@ export function aggregateSettlements(
   let totalNetAmount = 0;
 
   for (const s of settlements) {
-    const status = s['status'] as SettlementStatusKey;
-    if (STATUS_KEYS.includes(status)) byStatus[status]++;
+    const status = s['status'] as SettlementStatus;
+    if (SETTLEMENT_STATUSES.includes(status)) byStatus[status]++;
     totalAmount += (s['totalAmount'] as number) ?? 0;
     totalPlatformFee += (s['platformFee'] as number) ?? 0;
     totalNetAmount += (s['netAmount'] as number) ?? 0;

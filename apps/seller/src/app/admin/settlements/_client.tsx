@@ -13,22 +13,10 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
+// 정산 라벨/색 SSOT = @greenhub/shared (F-1/S4). 어드민 로컬 정의 제거 — 셀러본 채택으로 표기 통일.
+import { STATUS_COLOR, STATUS_LABEL } from '@greenhub/shared';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { useAdminSettlements } from '@/hooks/useAdmin';
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: '대기',
-  confirmed: '확정',
-  paid: '지급완료',
-  cancelled: '취소',
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  pending: 'gray',
-  confirmed: 'blue',
-  paid: 'green',
-  cancelled: 'red',
-};
 
 export default function AdminSettlementsClient() {
   const [storeFilter, setStoreFilter] = useState('');

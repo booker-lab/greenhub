@@ -6,7 +6,9 @@ import { QuerySettlementsDto, QuerySummaryDto } from './dto/query-settlements.dt
 import { calcFee } from './_lib/fee-calculator';
 import { aggregateSettlements } from './_lib/settlement-aggregator';
 
-export type SettlementStatus = 'pending' | 'confirmed' | 'paid' | 'cancelled';
+// 정산 상태 타입 SSOT = @greenhub/shared (F-1/S4). DTO 등 기존 import 경로 유지를 위해 re-export + 로컬 사용.
+import type { SettlementStatus } from '@greenhub/shared';
+export type { SettlementStatus } from '@greenhub/shared';
 
 @Injectable()
 export class SettlementsService {
