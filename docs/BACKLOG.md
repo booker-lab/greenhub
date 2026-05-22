@@ -741,7 +741,7 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 **검증·기록**
 
 - [ ] **S6** — T-검증(마감 pending 시드→배치→confirmed→markAsPaid→paid 전 구간 e2e + 셀러·어드민 라벨/색 육안 + `seller-settlements.spec` 회귀) + T-기록(#CL-44/45 적용 결과·`settlements.md` 현행화·memory).
-  - ⚠️ **S6 선결①(인덱스 배포)**: `firestore.indexes.json`의 `status+settledAt` 2필드 인덱스는 **코드에만 반영, 실제 배포 미실행**. CI 자동배포 부재 → **검증 전 `firebase deploy --only firestore:indexes` 수동 실행 필수**. 미배포 시 `confirmDueSettlements` 배치 쿼리가 `FAILED_PRECONDITION`을 내 confirm 전이 자체가 실패함(전 구간 e2e 불가). **검증 첫 단계 = 인덱스 배포 완료 확인.**
+  - [x] **S6 선결①(인덱스 배포) — 세션80 완료**: `firebase deploy --only firestore:indexes --project green-e4fe3` 실행 성공(`Deploy complete!`). `firebase firestore:indexes`로 라이브 확인 — settlements `status ASC + settledAt ASC` 2필드 인덱스(B-2) 실제 등록됨. → `confirmDueSettlements` 배치 쿼리 `FAILED_PRECONDITION` 리스크 해소. ⚙️ 배포 전 firebase-tools v15.12.0 손상(`@google-cloud/pubsub` 누락 모듈 → deploy 즉시 exit 2) → `npm i -g firebase-tools@latest`(v15.18.0)로 복구 후 배포 성공.
   - ⚠️ **S6 선결②(셀러 정렬 회귀)**: S5(세션79)에서 셀러 백엔드 `getSettlements` 정렬을 `asc→desc`로 변경(N10, 어드민과 통일). **셀러 정산 화면도 settledAt를 표시**하므로 정렬 방향이 바뀜 → `seller-settlements.spec.ts` 회귀 + 셀러 화면 육안 확인 시 **목록 순서가 최신순(desc)으로 의도대로 노출되는지** 검증 대상. 기존 spec이 순서를 단언(assert)한다면 desc 기준으로 갱신 필요.
 
 ---
