@@ -29,6 +29,7 @@
 | `status` | `SettlementStatus` | 정산 상태 |
 | `completedStatus` | `string` | 트리거된 주문 완료 상태 (REVIEWED/DELIVERED/PICKED_UP) |
 | `settledAt` | `Timestamp` | 주문 완료 시각 |
+| `confirmedAt` | `Timestamp \| null` | confirm 마감 배치가 `confirmed` 전이한 시각 (§4-1) |
 | `paidAt` | `Timestamp \| null` | 판매자 지급 시각 |
 | `createdAt` | `Timestamp` | 문서 생성 시각 |
 | `updatedAt` | `Timestamp` | 문서 최종 수정 시각 |
@@ -55,9 +56,17 @@ pending → confirmed → paid
 ### 3-1. 기간별 정산 목록 조회
 
 ```
-GET /stores/:storeId/settlements?from=YYYY-MM-DD&to=YYYY-MM-DD
+GET /stores/:storeId/settlements?from=YYYY-MM-DD&to=YYYY-MM-DD&status=pending
 Authorization: Bearer <seller JWT>
 ```
+
+**쿼리 파라미터**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|------|------|
+| `from` | `YYYY-MM-DD` | 선택 | `settledAt` 하한 (포함) |
+| `to` | `YYYY-MM-DD` | 선택 | `settledAt` 상한 (해당일 23:59:59까지 포함) |
+| `status` | `SettlementStatus` | 선택 | 정산 상태 필터 (`pending`/`confirmed`/`paid`/`cancelled`). `status` 단독 사용 시 `status + settledAt` 인덱스(§5) 필요 |
 
 **응답**
 
@@ -118,11 +127,27 @@ Authorization: Bearer <seller JWT>
 
 **플랫폼 수수료율**: `PLATFORM_FEE_RATE` 환경변수 (기본값 `0.05`)
 
+### 4-1. confirm 마감 배치 (`pending → confirmed` 자동 확정)
+
+`SettlementsService.confirmDueSettlements()`가 `@Cron('0 4 * * *', { timeZone: 'Asia/Seoul' })`로
+**매일 04:00 KST** 실행된다. `settledAt`이 마감 경계를 지난 `pending` 정산을 `confirmed`로 전이한다.
+
+- **마감 경계(cutoff)** = `지금 - SETTLEMENT_CONFIRM_DELAY_DAYS일` (env, 기본 `1`).
+- **쿼리**: `status == 'pending' AND settledAt < cutoff` → `status + settledAt` 복합 인덱스 필요(§5).
+- **멱등·경합 차단**: 문서별 트랜잭션 내 `status === 'pending'` 재확인 후에만 `confirmed` + `confirmedAt` set.
+  배치 도중 `cancelSettlement`가 `cancelled`로 바꿨다면 skip → **`cancelled` 미덮어씀**.
+- **TZ**: 서버 TZ 미설정이라 `@Cron` `timeZone` 옵션으로 KST 보정.
+
+> **배경**: 스펙(§2)은 `pending → confirmed → paid`를 명시하나 confirm 전이 코드가 부재해
+> 전 정산이 `pending` 고착 → 어드민 "지급처리" 버튼(`confirmed`에서만 노출)이 영구 미표시였다.
+> 이 배치가 누락 고리를 복구한다. (결정 로그 #CL-44)
+
 ---
 
 ## 5. 인덱스 요구사항
 
 ```
 settlements: storeId ASC + settledAt ASC (기간 조회)
-settlements: storeId ASC + settledAt ASC + status ASC (상태 필터)
+settlements: storeId ASC + status ASC + settledAt ASC (스토어별 상태 필터)
+settlements: status ASC + settledAt ASC (confirm 마감 배치 §4-1 — storeId 없는 전역 쿼리)
 ```
