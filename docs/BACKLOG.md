@@ -731,7 +731,7 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 
 **🟡 구조·SSOT**
 
-- [ ] **S3** — B-3 SDD 레이어 분리(service.ts → `_lib/` fee-calculator·aggregator) + B-4 status 필터(DTO·service) + N2 셀러 hook 연결.
+- [x] **S3**(세션77 구현, 빌드+타입체크 통과) — B-3 SDD 레이어 분리(service.ts → `_lib/fee-calculator.ts`(`calcFee`)·`_lib/settlement-aggregator.ts`(`aggregateSettlements`) 추출, service 208→196행) + B-4 status 필터(`QuerySettlementsDto.status` `@IsIn` + `getSettlements` where 절, 기존 `storeId+status+settledAt` 인덱스 재사용 — 신규 인덱스 불필요) + N2 셀러 `useSettlements.fetchSettlements(f,t,status?)` status 전송 연결. `settlements.md` §2(confirmedAt)·§3-1(status 파라미터)·§4-1(confirm 배치)·§5(인덱스) 선설계 갱신.
 - [ ] **S4** — F-1 상태 타입·상수 SSOT 4중→1(`packages/shared/settlement.types.ts`, 셀러본 "정산 대기"/yellow, N3·N4·N8 반영, confirmedAt 공유 타입 포함).
 
 **🟢 UX 일관**
