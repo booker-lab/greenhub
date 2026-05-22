@@ -51,7 +51,14 @@
 - **검증**: 세션68 정적검증 전건 통과(shared 빌드 clean·API tsc/build exit 0·API테스트 2/2·셀러23·소비자13·드라이버7 라우트·셀러 biome 0e/2w). **e2e 풀런 — 자동 dispatch(26270139186) parcel spec 1건 실패 = stale preview**(sync-preview 완료 직후 시작, 세션60·61 패턴 재현), **수동 dispatch(26270156134) 30초 후 시작 → 176 passed/0 failed, parcel-ship:22 회귀가드 ✓**. 로컬 멱등 시드 재실행으로 Firestore에 orderNumber 주입 후 통과(e2e.yml seed 단계 부재 갭 여전).
 - **T14 사용자 수동 잔여 2건(자동화 불가)**: ① 운영 기존 주문(orderNumber 없음) 셀러·소비자 ID 폴백 정상 표시 스크린샷 ② 신규 주문 1건 발생 시 `orderCounters/YYYYMMDD` seq 생성·증가 Console 확인(첫 쓰기 Firestore 권한 전제).
 - **범위 외(#CL-41)**: 카운터 TTL/정리·백필 스크립트(결정③ ID폴백)·결제수단별 prefix·취소 시 번호 보존.
-- **다음 세션 진입점**: Driver Kakao Maps SDK·백엔드 단일 장애점 회고·e2e.yml seed step 추가(세션61·67·69 3회 재발) 중 사용자 선택. 진입 문서 미작성.
+
+**세션70 (CI-SEED 진단·선설계만, 미커밋 → 본 세션 커밋 예정)**:
+- **작업**: 후보 "e2e.yml seed step 추가"(세션61·67·69 **3회 재발**한 1차 자동 run 실패 갭) 진단 + 아토믹 플랜 수립. **코드 변경 0**(SDD 선설계, 사용자 결정).
+- **핵심 발견**: [seed-e2e-orders.mjs:22](../../scripts/seed-e2e-orders.mjs#L22)가 로컬 `apps/api/firebase-adminsdk.json`을 **하드코딩 require** → gitignore 대상이라 CI 체크아웃에 부재 → step만 추가하면 `MODULE_NOT_FOUND` 즉시 크래시. 그냥 진행했으면 CI 깨질 함정.
+- **해법 확정**: [cleanup-spec-residue.mjs:24](../../scripts/cleanup-spec-residue.mjs#L24) `resolveCredential()`(env-우선+로컬폴백+BOM방어, 검증됨)을 seed에 이식 + e2e.yml에 `FIREBASE_SERVICE_ACCOUNT_JSON`(이미 44행 등록 시크릿) env로 seed step 신설. **신규 시크릿 0건**(사용자 결정).
+- **사전 정합성 8항목 전부 실측 통과**: firebase-admin 루트 의존(C2)·gitignore 키 제외 확정(C3)·resolveCredential 순수함수(C4)·seed import 표면 firebase-admin+빌트인만(C5)·cleanup은 spec afterAll 호출이라 yml step 충돌 0(C6)·4개 spec이 seed 선행 주석화(C7)·seed exit(1) silent pass 불가(C8).
+- **플랜**: `docs/specs/api/e2e-ci-seed-plan.md` — §2 정합성·§3 아토믹 T0~T5(T0 진입게이트 Firestore 프로젝트 동일성→T1 seed env화 로컬단독검증→T2 yml step→T3 실패가드→T4 자동dispatch 1차통과=성공지표→T5 #CL-42). B(stale preview race)는 별건 분리(§5).
+- **다음 세션 진입 = 구현(플랜 §3 T0~T5)**. 진입 시 T0 게이트(Firestore 프로젝트 동일성) 먼저 확인. #CL-42 후보(CI seed 인증 규약 단일화). 잔여 후보: Driver Kakao Maps·백엔드 단일장애점 회고·B(stale race).
 
 **세션67 (BUG-16 택배 발송 완료 동선 구현, `2ad71e3`, #CL-40)**:
 - **사전 정합성 5/5 통과**: 진입 문서 `parcel-and-order-number-plan.md`(세션66 작성) 라인 전부 코드와 일치(helpers 94·lifecycle 281·seller page 205·driver board 157)·`updateStatus(status,extra)` 코어 훅 재사용 가능·`deliveryMethod`는 shared `Order` 타입에 존재·500라인 한도 안전.
