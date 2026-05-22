@@ -18,10 +18,37 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-const serviceAccount = require(join(__dirname, '../apps/api/firebase-adminsdk.json'));
 
-initializeApp({ credential: cert(serviceAccount) });
+/**
+ * 인증 자격 해석 — cleanup-spec-residue.mjs:24-46 과 동일 규약(검증된 패턴 이식, #CL-42).
+ *  1. FIREBASE_SERVICE_ACCOUNT_JSON env (CI 러너 — 서비스 계정 키 JSON 문자열)
+ *  2. apps/api/firebase-adminsdk.json 로컬 키 (개발자 머신 폴백, gitignore 대상)
+ */
+function resolveCredential() {
+  const envJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (envJson) {
+    try {
+      // BOM(U+FEFF)/주변 공백 제거 — Windows gh CLI 파이프 업로드 시 BOM 혼입 방어
+      const raw = envJson.trim();
+      const json = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+      return cert(JSON.parse(json));
+    } catch (e) {
+      console.error(`[seed-e2e-orders] FIREBASE_SERVICE_ACCOUNT_JSON 파싱 실패: ${e.message}`);
+      process.exit(1);
+    }
+  }
+  try {
+    const require = createRequire(import.meta.url);
+    return cert(require(join(__dirname, '../apps/api/firebase-adminsdk.json')));
+  } catch {
+    console.error(
+      '[seed-e2e-orders] no credential — set FIREBASE_SERVICE_ACCOUNT_JSON env or place apps/api/firebase-adminsdk.json',
+    );
+    process.exit(1);
+  }
+}
+
+initializeApp({ credential: resolveCredential() });
 const db = getFirestore();
 
 // ─── 컨텍스트 ─────────────────────────────────────────────────────────────

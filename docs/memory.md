@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-22 (세션69 — UX-11 orderNumber 통합 종결, e2e 풀런 통과, #CL-41 등재)
+최종 수정: 2026-05-22 (세션71 — CI-SEED 구현 종결, e2e.yml seed step 신설, #CL-42 등재)
 
 ---
 
@@ -59,6 +59,13 @@
 - **사전 정합성 8항목 전부 실측 통과**: firebase-admin 루트 의존(C2)·gitignore 키 제외 확정(C3)·resolveCredential 순수함수(C4)·seed import 표면 firebase-admin+빌트인만(C5)·cleanup은 spec afterAll 호출이라 yml step 충돌 0(C6)·4개 spec이 seed 선행 주석화(C7)·seed exit(1) silent pass 불가(C8).
 - **플랜**: `docs/specs/api/e2e-ci-seed-plan.md` — §2 정합성·§3 아토믹 T0~T5(T0 진입게이트 Firestore 프로젝트 동일성→T1 seed env화 로컬단독검증→T2 yml step→T3 실패가드→T4 자동dispatch 1차통과=성공지표→T5 #CL-42). B(stale preview race)는 별건 분리(§5).
 - **다음 세션 진입 = 구현(플랜 §3 T0~T5)**. 진입 시 T0 게이트(Firestore 프로젝트 동일성) 먼저 확인. #CL-42 후보(CI seed 인증 규약 단일화). 잔여 후보: Driver Kakao Maps·백엔드 단일장애점 회고·B(stale race).
+
+**세션71 (CI-SEED 구현 종결, 본 세션 커밋 예정, #CL-42)**:
+- **T1 — seed 인증 env-우선화**: [seed-e2e-orders.mjs](../../scripts/seed-e2e-orders.mjs) 22행 하드코딩 require 제거 → `cleanup-spec-residue.mjs:24-46` `resolveCredential()`(env-우선+로컬폴백+BOM방어) 이식. **로컬 폴백 회귀 검증 통과**(env 미설정 `node scripts/seed-e2e-orders.mjs` → "🎉 E2E 시드 완료", 멱등 set이라 안전). 중복 허용(2회 시점 YAGNI).
+- **T2/T3 — e2e.yml seed step 신설**: `Install Playwright` 직후·`Run E2E` 직전에 `Seed E2E fixtures (Firestore)` step 추가. env `FIREBASE_SERVICE_ACCOUNT_JSON`(이미 등록된 cleanup용 시크릿 **재사용, 신규 0건**). 실패 가드 주석 2줄(seed exit(1)→step fail→silent pass 방지). yml 들여쓰기·step 순서 육안 검증 통과(YAML 파서 부재로 Read 확인).
+- **T5 — 결정 로그·메모리**: #CL-42 등재(CRITICAL_LOGIC, CI seed 인증 규약 단일화)·BACKLOG CI-SEED 행 ✅·본 기록.
+- **잔여**: **T0(Firestore 프로젝트 동일성)·T4(자동 dispatch 1차 통과)는 사용자 확인 몫** — T0은 `FIREBASE_SERVICE_ACCOUNT_JSON` project_id = preview Firestore 일치 확인(단일 프로젝트 전제), T4는 push 후 자동 e2e run에서 seed step "🎉" 로그 + 시드 의존 spec 1차 통과 관찰(=3회 재발 패턴 종결 지표). B(stale preview race) 잔존 시 §범위 외 별건.
+- **다음 세션 진입점**: T4 관찰 결과 확인 후 — Driver Kakao Maps·백엔드 단일장애점 회고·B(stale preview race) 별건 중 사용자 선택.
 
 **세션67 (BUG-16 택배 발송 완료 동선 구현, `2ad71e3`, #CL-40)**:
 - **사전 정합성 5/5 통과**: 진입 문서 `parcel-and-order-number-plan.md`(세션66 작성) 라인 전부 코드와 일치(helpers 94·lifecycle 281·seller page 205·driver board 157)·`updateStatus(status,extra)` 코어 훅 재사용 가능·`deliveryMethod`는 shared `Order` 타입에 존재·500라인 한도 안전.
