@@ -49,6 +49,8 @@ pending → confirmed → paid
 | `paid` | 지급 완료 |
 | `cancelled` | 정산 취소 (주문 환불 등) |
 
+> **타입 SSOT(F-1/S4)**: `SettlementStatus`·`STATUS_LABEL`("정산 대기"/"확정"/"지급 완료"/"취소")·`STATUS_COLOR`(yellow/blue/green/red)는 `packages/shared/src/settlement.types.ts`가 단일 정의처. 백엔드는 타입만, 셀러·어드민 화면은 라벨/색 상수까지 import한다(이전 백엔드·셀러·어드민·useAdmin 4중 정의·값 불일치 해소).
+
 ---
 
 ## 3. API 명세
