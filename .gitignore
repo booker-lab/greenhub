@@ -43,3 +43,6 @@ apps/*/public/workbox-*.js.map
 apps/*/public/swe-worker-*.js
 
 .vercel
+
+# Claude Code 로컬 설정·스케줄러 락 (머신·사용자 한정)
+.claude/
