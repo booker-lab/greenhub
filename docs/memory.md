@@ -3,11 +3,17 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-23 (세션81 — SETTLE-REFACTOR 격자 재검토 완료, S1~S5 정합성 확정 #CL-44/45, 차기=S6 잔여 검증)
+최종 수정: 2026-05-24 (세션85 — 타임존 KST 보정 #CL-48 T1~T6 구현·정합성 통과 종결)
 
 ---
 
 ## 진행 현황
+
+**세션82~85 요약 (상세는 MEMORY.md 헤더·project 메모리·CRITICAL_LOGIC 참조)**:
+- **세션82**: SETTLE-REFACTOR S6 e2e 측면 통과(육안만 사용자 위임).
+- **세션83**: 셀러앱 M-PATH 육안 검증 완주·종결(시각 회귀 0). 운영 결함 4건 발견 — #CL-46 정산 desc 인덱스 부재·#CL-47 정산일시 Invalid Date 수정·배포(`701717e`), 나머지 BACKLOG 등재. 멀티앱 리팩토링 로드맵 신설.
+- **세션84**: 타임존 KST 보정 #CL-48 플랜·정합성 검토(구현 미착수).
+- **세션85 (#CL-48 구현 종결)**: `new Date().toISOString()` UTC 기준 → KST 00:00~08:59 날짜 전날 밀림 해소. **공통 util `todayKST()`/`toDateStrKST()`를 `@greenhub/shared`에 신설**(shared 첫 런타임 함수·dual ESM/CJS 검증) → 미보정 3곳(daily-caps:134·useSettlements:36·useDashboardSummary:30) 치환 + `orders/_lib.ts` 인라인 흡수(신·구 수식 동등 노드실측으로 ISO불변 가드, daily-caps 라인53~55 `now`/`year`/`month`는 불변). **vitest 신설**(프로젝트 첫 유닛테스트, `date.test.ts` 5케이스 `vi.setSystemTime` KST경계 가드, tsconfig에 `*.test.ts` exclude). 정합성 C1~C7 전부 통과(셀러 tsc+next build exit0·biome신규0·미보정 grep0). **차기: BACKLOG 잔여(버튼크기·status필터UI·어드민반응형·⏰CI Node20 2026-06-02 시한) 또는 로드맵상 소비자앱 리팩토링.**
 
 세션22까지 + 세션23~54 완료. 셀러 주문 탭 리팩토링(T1~T7) + 배송일 풀스택+셀러 IA(T1~T6) + P4 fontSize 토큰화 종결. 세션53부터 Railway Outage 지속으로 백엔드 무관 작업(UX 잔여 플랜)으로 전환.
 

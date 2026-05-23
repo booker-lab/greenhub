@@ -16,6 +16,7 @@ import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
+import { todayKST } from '@greenhub/shared';
 import { ApiError, apiJson } from '@/lib/api';
 
 interface DailyCap {
@@ -131,7 +132,7 @@ export default function DailyCapsPage() {
   }
 
   const calendar = buildCalendar(year, month);
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = todayKST();
   const monthLabel = new Date(year, month).toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',

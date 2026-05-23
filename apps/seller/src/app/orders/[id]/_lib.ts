@@ -1,4 +1,4 @@
-import type { OrderStatus } from '@greenhub/shared';
+import { type OrderStatus, todayKST, toDateStrKST } from '@greenhub/shared';
 
 export function toDate(v: unknown): Date {
   if (v && typeof v === 'object' && 'toDate' in v) return (v as { toDate(): Date }).toDate();
@@ -15,13 +15,12 @@ export function formatDeadlineCountdown(deadline: string): string {
 }
 
 export function makePreparedAtOptions(): { label: string; iso: string }[] {
-  const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
-  const todayKST = nowKST.toISOString().slice(0, 10);
-  const tomorrowKST = new Date(nowKST.getTime() + 86400000).toISOString().slice(0, 10);
+  const today = todayKST();
+  const tomorrow = toDateStrKST(new Date(Date.now() + 86400000));
   return [
-    { label: '오늘 오후 2시', iso: `${todayKST}T05:00:00.000Z` },
-    { label: '오늘 오후 4시', iso: `${todayKST}T07:00:00.000Z` },
-    { label: '내일 오전 9시', iso: `${tomorrowKST}T00:00:00.000Z` },
+    { label: '오늘 오후 2시', iso: `${today}T05:00:00.000Z` },
+    { label: '오늘 오후 4시', iso: `${today}T07:00:00.000Z` },
+    { label: '내일 오전 9시', iso: `${tomorrow}T00:00:00.000Z` },
   ];
 }
 
