@@ -667,3 +667,20 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: [#CL-46](같은 정산 목록 화면 — 인덱스 해소 후 드러난 2차 결함), `apps/api/.../timestamp.interceptor.ts`(ISO 변환 출처), `seller-refactor-visual-verify.md` M4 #243.
 
+---
+
+## [#CL-48] `toISOString()` 날짜 추출 KST 미보정 — 자정~오전9시 하루 밀림
+
+**발견(세션83 M-PATH M5)**: 사용자가 KST 5/24 00:52(자정 직후) 배송 슬롯 캘린더에서 **5/23이 "오늘"로 표시·과거 차단 오작동**. 원인 — `new Date().toISOString()`은 **UTC 기준**이라 KST(UTC+9)의 **00:00~08:59**에는 `split('T')[0]`/`slice(0,10)` 추출 날짜가 **전날**로 밀림.
+
+**영향(세션84 실측, 전수 일치)**: 셀러 src 전역 `toISOString` 날짜추출 5곳 중 미보정 3곳 — ① [daily-caps/page.tsx:134](../apps/seller/src/app/settings/daily-caps/page.tsx#L134) `todayStr`(캘린더 isToday/isPast 직접 오판) ② [useSettlements.ts:36](../apps/seller/src/app/settlements/_hooks/useSettlements.ts#L36)(일별요약 기본일) ③ [useDashboardSummary.ts:30](../apps/seller/src/hooks/useDashboardSummary.ts#L30)(홈 정산예정일). 보정됨 2곳은 [orders/[id]/_lib.ts:18~20](../apps/seller/src/app/orders/[id]/_lib.ts#L18)(라인18 `+9h`, 정상 패턴·결함 아님).
+
+**결정(세션84)**:
+1. **공통 util `todayKST()`/`toDateStrKST()`를 `@greenhub/shared`에 신설**(`packages/shared/src/date.ts`) — 사용자 결정. shared가 '타입 전용'→'런타임 함수 포함'으로 성격 확장(dual ESM/CJS 빌드 검증 필수). SSOT 원칙 우선.
+2. 미보정 3곳 교체 + 정상 패턴 `_lib.ts` 인라인도 util로 흡수(중복 제거). **`daily-caps:53~55` `now`/`year`/`month`는 로컬시간(=KST) 기준이라 불변** — 라인134 추출만 교체.
+3. **테스트 인프라 부재(셀러·shared `.test.ts` 0건) 확인** → `packages/shared`에 **vitest 신설**(프로젝트 첫 유닛테스트), `vi.setSystemTime`으로 KST 경계(UTC 15:00=KST 자정) 회귀 가드.
+
+**플랜**: [timezone-kst-fix-plan.md](specs/frontend/timezone-kst-fix-plan.md) T1~T6 + 정합성 검토 §5-1(구현 전 완료).
+
+**연관**: [#CL-46]·[#CL-47](같은 세션83 M-PATH 발견 라이브 결함 계열), BACKLOG `[타임존-UTC]`.
+
