@@ -27,7 +27,7 @@
 | ✅ | 보안 수정 후 E2E 검증 (결제·로그인·admin 3앱 접근) (2026-04-10) | 테스트 |
 | 💡 | 카드 결제 PG사 계약 | 외부 연동 |
 | 🔵 | 다중 판매자 상점 페이지 (소비자 앱) | Phase 2 |
-| 🔴 0 | SETTLE-REFACTOR — 정산 confirm 배치 + 정합 갭(아래 §10) | 정산/치명 |
+| 🟢 검증 | SETTLE-REFACTOR — 정산 confirm 배치 + 정합 갭(아래 §13). 구현 6태스크+S6 자동검증 종결(세션82), 런타임 전이 입증만 사용자 위임 | 정산/치명 |
 
 ---
 
@@ -740,9 +740,11 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 
 **검증·기록**
 
-- [ ] **S6** — T-검증(마감 pending 시드→배치→confirmed→markAsPaid→paid 전 구간 e2e + 셀러·어드민 라벨/색 육안 + `seller-settlements.spec` 회귀) + T-기록(#CL-44/45 적용 결과·`settlements.md` 현행화·memory).
+- [~] **S6** — 자동 검증분 완료(세션82), 런타임 전이 입증만 사용자 위임 잔여. T-검증(빌드·e2e·문서) + T-기록(#CL-44/45 적용 결과·`settlements.md` 현행화·memory) 종결.
+  - [x] **S6 자동 검증(세션82)**: ① 빌드 3종(`@greenhub/shared` build·`api` build·셀러 `tsc --noEmit`) 에러 0. ② e2e 라이브 preview 풀런(run `26297450405`, 최신 main 반영) **176 passed / 0 failed / 13 skipped** — `seller-settlements.spec.ts` 전 케이스(비인증 1+인증 7) 통과, S5 정렬 `asc→desc`에도 회귀 0. ③ 육안 체크리스트 `seller-refactor-visual-verify.md` E 섹션(E-T1~E-T3, 211~223) 신설.
   - [x] **S6 선결①(인덱스 배포) — 세션80 완료**: `firebase deploy --only firestore:indexes --project green-e4fe3` 실행 성공(`Deploy complete!`). `firebase firestore:indexes`로 라이브 확인 — settlements `status ASC + settledAt ASC` 2필드 인덱스(B-2) 실제 등록됨. → `confirmDueSettlements` 배치 쿼리 `FAILED_PRECONDITION` 리스크 해소. ⚙️ 배포 전 firebase-tools v15.12.0 손상(`@google-cloud/pubsub` 누락 모듈 → deploy 즉시 exit 2) → `npm i -g firebase-tools@latest`(v15.18.0)로 복구 후 배포 성공.
-  - ⚠️ **S6 선결②(셀러 정렬 회귀)**: S5(세션79)에서 셀러 백엔드 `getSettlements` 정렬을 `asc→desc`로 변경(N10, 어드민과 통일). **셀러 정산 화면도 settledAt를 표시**하므로 정렬 방향이 바뀜 → `seller-settlements.spec.ts` 회귀 + 셀러 화면 육안 확인 시 **목록 순서가 최신순(desc)으로 의도대로 노출되는지** 검증 대상. 기존 spec이 순서를 단언(assert)한다면 desc 기준으로 갱신 필요.
+  - [x] **S6 선결②(셀러 정렬 회귀) — e2e 측면 통과(세션82)**: S5(세션79)에서 셀러 백엔드 `getSettlements` 정렬을 `asc→desc`로 변경(N10, 어드민과 통일). `seller-settlements.spec.ts`가 순서를 단언하지 않으므로 e2e 회귀 0건(예상대로) → spec 갱신 불필요. **육안(목록 최신순 desc 노출)만 사용자 직접 확인 잔여**(E-T1 #211).
+  - ⏳ **S6 런타임 전이 입증(사용자 위임)**: (a) 셀러·어드민 화면 라벨/색/정렬 육안(E-T1·E-T2), (b) **A-1 단절 해소 = pending→confirmed→paid 전 구간**은 라이브 배치 자연 대기 — 다음 04:00 KST에 `confirmDueSettlements`가 마감 경과 pending을 confirmed 전이 → 어드민 "지급처리" 노출 → markAsPaid → paid 확인(E-T3 #219~223). 선결① 인덱스 배포로 배치 정상 동작 전제 충족.
 
 ---
 
@@ -802,3 +804,4 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 | 2026-05-17 | **세션33**: P3 `/admin/banner` prerender 실패 해소. 원인 — `firebase.ts`가 모듈 로드 시 `getAuth(app)` 평가 → apiKey 부재 시 동기 throw → 빌드 prerender 첫 firebase-import 페이지 크래시. `getAuth`/`getStorage` 지연 초기화 함수로 전환(사용처 전부 클라이언트 런타임). env 미주입 로컬 빌드 — 수정 전 크래시 재현, 수정 후 빌드 성공. Vercel은 env 존재로 무영향(환경변수 조치 불필요 확정). 커밋 `32738fb` (#CL-31) |
 | 2026-05-17 | **세션34**: P3 consumer@test.com 강한비번 전환. `reset-user-password.mjs`로 Firestore `passwordHash`를 30자 랜덤 비번(bcrypt-12)으로 갱신, `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 동기 교체. `/auth/login` curl로 새 비번 200·기존 401 확인, e2e 풀런 run 25966655016 **167/0**. 세션22 편의 결정(`feedback_security_convenience`)을 보안 우선으로 재확인·전환 |
 | 2026-05-17 | **세션35**: docs 정리 세션 — P3 잔여 3건은 사용자 결정으로 별도 세션 이관. `memory.md` 200라인 한도 임박(197) → 50라인 이내 요약(50라인)·세션22~34 상세를 `archive/memory_archive_20260517.md`로 아카이브. 폴더 이동(`docs/design/`·`docs/specs/api/`)으로 깨진 design↔api spec 상호 참조 링크 14곳 수정. 본 변경 이력 — 세션32 행 순서 보정·누락된 세션26 행 추가. 코드 변경 없음 |
+| 2026-05-23 | **세션82**: SETTLE-REFACTOR S6 통합 검증 — 자동 검증분 종결. 빌드 3종(shared·api·셀러 tsc) 에러 0 + e2e 라이브 preview 풀런 run `26297450405` **176 passed / 0 failed / 13 skipped**(`seller-settlements.spec` 전 케이스 통과, S5 정렬 `asc→desc`에도 회귀 0 → 선결② e2e 측면 통과). 육안 체크리스트 `seller-refactor-visual-verify.md` E 섹션(E-T1~E-T3, 211~223) 신설. #CL-45에 S6 검증 결과 append. **런타임 전이 입증(pending→confirmed→paid)은 라이브 배치 자연 대기·육안으로 사용자 위임**. 코드 변경 0(검증·문서만) |
