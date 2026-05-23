@@ -252,15 +252,50 @@
 
 ---
 
-## E. 정산 탭 리팩토링 — (예정)
+## E. 정산 탭 리팩토링 (SETTLE-REFACTOR S1~S6 · #CL-44/45)
 
-> 정산 탭 리팩토링 세션 완료 후 이 섹션을 채운다.
-> 작성 형식: 위 섹션들과 동일 — 태스크(T#)별 표, `#` 연번은 88 이후로 이어서 부여.
-> 플랜 SSOT: (정산 리팩토링 플랜 문서 경로 — 작성 시 기입)
+> 작성: 2026-05-23 (세션82 — S6 통합 검증) · 연번 211부터.
+> 플랜 SSOT: [settlement-refactor-plan.md](../api/settlement-refactor-plan.md) (T-검증)
+> 결정: #CL-44(confirm 배치)·#CL-45(정합 갭 일괄) — [CRITICAL_LOGIC.md](../../CRITICAL_LOGIC.md)
+> 진입: 셀러 BottomNav **[정산]** 탭 / 어드민 `/admin/settlements`.
+> **핵심 입증 목표**: A-1 단절 해소 = `pending → confirmed → paid` 전 구간이 실제로 흐른다.
+> 검증 표기: 통과 `[x]` · 실패 `[ ]`(메모 기재) · 해당없음 `[-]`
+
+### E-T1 — 셀러 정산 화면 (S3·S4·S5)
+
+진입: 셀러 BottomNav **[정산]** 탭.
 
 | # | 확인 항목 | 통과 기준 | 결과 | 메모 |
 |---|----------|----------|:----:|------|
-| — | (정산 리팩토링 태스크별 항목 추가) | | | |
+| 211 | 정산 목록 정렬 (선결②) | 정산일시(`settledAt`) 기준 **최신순(desc)** 노출. 위→아래로 날짜가 내림차순 | [ ] | S5 N10, asc→desc 변경 회귀 |
+| 212 | 상태 라벨 | pending="**정산 대기**" 등 shared SSOT 라벨로 표시 | [ ] | S4 SSOT(packages/shared) |
+| 213 | 상태 색상 | pending=**노랑(yellow)** 계열. 셀러본 색 정책 일관 | [ ] | S4 STATUS_COLOR |
+| 214 | status 필터 동작 | 상태 필터 변경 시 목록이 해당 status만으로 즉시 갱신(백엔드까지 연결) | [ ] | S3 N2 hook→service |
+
+### E-T2 — 어드민 정산 화면 (S5/F-2)
+
+진입: `/admin/settlements` (셀러 계정이 admin 권한일 때).
+
+| # | 확인 항목 | 통과 기준 | 결과 | 메모 |
+|---|----------|----------|:----:|------|
+| 215 | 정산일시 컬럼 | 표에 **정산일시** 컬럼 노출, `settledAt` 값 정상 포맷 | [ ] | S5 N10 |
+| 216 | 정렬 desc | 어드민도 정산일시 **최신순(desc)** — 셀러와 방향 통일 | [ ] | S5 N10 |
+| 217 | 라벨·색 셀러 일치 | 동일 status의 라벨·색이 셀러 화면과 **동일**(shared SSOT 공유) | [ ] | S4/F-2 |
+| 218 | 합계 카드(sumPayable) | 지급 대상 합계가 **confirmed + paid** 한정으로 집계(pending 미포함) | [ ] | S5 N11 |
+
+### E-T3 — 전이 입증: pending → confirmed → paid (T-검증 B, A-1 해소)
+
+> 전이 검증 방식(세션82 사용자 결정): **라이브 배치 자연 대기**. `@Cron('0 4 * * *', { timeZone: 'Asia/Seoul' })` `confirmDueSettlements` 배치가 다음 04:00 KST에 마감 경과 pending을 confirmed로 전이하는 것을 확인. 별도 수동 시드 없음.
+
+| # | 확인 항목 | 통과 기준 | 결과 | 메모 |
+|---|----------|----------|:----:|------|
+| 219 | 마감 경과 pending 존재 | `settledAt`이 (지금 − SETTLEMENT_CONFIRM_DELAY_DAYS일) 이전인 pending 정산이 1건 이상 | [ ] | 배치 대상 전제 |
+| 220 | 배치 후 confirmed 전이 | 다음 04:00 KST 경과 후 위 정산이 **confirmed**로 전이 (어드민/셀러 화면에서 확인) | [ ] | #CL-44 입증·인덱스 무에러 |
+| 221 | 어드민 "지급처리" 버튼 노출 | confirmed 정산 행에 **"지급처리"** 버튼 노출(pending에선 미노출) | [ ] | N5 — confirmed 전제 |
+| 222 | markAsPaid → paid | "지급처리" → ConfirmModal(blue) 확인 → 상태 **paid**로 갱신 | [ ] | F-T-UX3 #113 재확인 |
+| 223 | A-1 단절 해소 종합 | 위 전이가 끊김 없이 흐름 = 전 정산 pending 고착 문제 해소 입증 | [ ] | **S6 핵심 DoD** |
+
+> **참고 — 배치 로그/모니터링**: 라이브 배치가 도는지 운영 로그에서 `confirmDueSettlements` 실행·전이 건수 확인 가능. FAILED_PRECONDITION(인덱스 미배포)은 선결①(세션80 배포)로 해소됨.
 
 ---
 
