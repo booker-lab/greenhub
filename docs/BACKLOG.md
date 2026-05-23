@@ -94,6 +94,7 @@
 - [x] (Should Have) CSV 다운로드 ✅ 2026-04-02
 - [x] **[#CL-46] 정산 목록 desc 인덱스 부재 (라이브 500)** ✅ 2026-05-24 (세션83 M-PATH M4 발견·해소) — S5 정렬 asc→desc 전환 후 desc 복합 인덱스 미배포로 [주문별 상세]·어드민 정산 목록 500. `firestore.indexes.json`에 desc 3종(`storeId+settledAt`, `storeId+status+settledAt`, `status+settledAt`) 추가·배포·빌드 완료 검증(`scripts/test-settlement-query.mjs`).
 - [x] **[#CL-47] 정산일시 "Invalid Date"** ✅ 2026-05-24 (세션83 M-PATH M4) — API `TimestampInterceptor`가 settledAt을 ISO 문자열로 보내는데 화면이 `._seconds` 객체 가정 → Invalid Date(셀러)/`-`(어드민). 양 화면 `toDateStr`을 ISO·`{_seconds}`·number 방어 파싱으로 통일, 셀러 타입 `string | {_seconds}` 정정. **배포·화면 재확인 완료(정산일시 정상 표시)**.
+- [ ] **[검증시드-정리] 난플렉스(80189070) 육안 검증용 시드 데이터 정리** (2026-05-24 세션83) — M-PATH 육안 검증 위해 `reset-store-data.mjs --apply`로 난플렉스를 리팩토링 스키마 더미로 재시드함(주문 7·상품 3·정산 4상태, prefix `reset-*`/`visual-settle-*`). 운영 DB(green-e4fe3)에 잔존 중. 실서비스 오픈 전 정리 필요. 회수: `node scripts/seed-settlements-visual.mjs --clean`(정산 4건) + `reset-*` 주문/상품은 admin 콘솔 또는 스크립트로 개별 삭제. 단 dailyCaps는 소비자 e2e 베이스라인이라 보존. **실데이터 영업 시작 시점에 일괄 정리.**
 - [ ] **[정산-status필터UI] 셀러 정산 [주문별 상세] status 필터 UI 미노출** (2026-05-24 세션83 M-PATH #245 발견) — 백엔드(`getSettlements` status param)·hook(`useSettlements.fetchSettlements(status)`)은 status 필터를 지원하나, `OrdersTab.tsx`에 사용자가 조작할 필터 칩/토글 UI가 없어 status 필터를 화면에서 쓸 수 없음(현재 전체 목록만). E-T1 #214 기준(hook→service 배선)은 충족하나 UX 미완. 주문 탭의 상태 탭 패턴(전체/대기/확정/지급완료/취소)을 OrdersTab에 추가해 `fetchSettlements(status)` 연결 검토.
 
 ### 1-6. 거점 관리 (`/hubs`)
