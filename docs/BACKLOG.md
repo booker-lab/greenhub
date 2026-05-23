@@ -46,6 +46,7 @@
 - [x] `proxy.ts` — 미로그인→/login, storeId 없음→/onboarding
 - [x] `src/lib/api.ts` — `apiFetch` 헬퍼 (Bearer 토큰 자동 주입)
 - [x] `src/lib/firebase.ts` — Firestore + Storage export
+- [ ] **[타임존-UTC] `toISOString()` 날짜 추출 KST 미보정 — 자정~오전9시 하루 밀림** (2026-05-24 세션83 M-PATH M5 발견) — 사용자가 KST 5/24 00:52(자정 직후)에 배송 슬롯 캘린더에서 **5/23이 "오늘"로 표시·과거 차단 오작동** 발견. 원인: `new Date().toISOString()`은 UTC 기준 → KST 00:00~08:59에는 전날 날짜 반환. KST 보정 없는 3곳: ① `settings/daily-caps/page.tsx:134`(`todayStr` — 과거날짜 차단·isToday 판정 오작동, 직접 영향) ② `settlements/_hooks/useSettlements.ts:36`(일별요약 기본 날짜) ③ `hooks/useDashboardSummary.ts:30`(홈 정산 예정 날짜). **정상 패턴 참고**: `orders/[id]/_lib.ts:18` = `new Date(Date.now() + 9*3600*1000).toISOString().slice(0,10)`(KST 보정됨, 결함 아님). **조치**: KST 보정 공통 util(`todayKST()`) 신설해 3곳 교체. 영향범위 넓어 별도 작업·테스트 필요.
 
 ### 1-2. 인증 / 온보딩
 
@@ -92,7 +93,8 @@
 - [x] 주문별 상세 탭
 - [x] (Should Have) CSV 다운로드 ✅ 2026-04-02
 - [x] **[#CL-46] 정산 목록 desc 인덱스 부재 (라이브 500)** ✅ 2026-05-24 (세션83 M-PATH M4 발견·해소) — S5 정렬 asc→desc 전환 후 desc 복합 인덱스 미배포로 [주문별 상세]·어드민 정산 목록 500. `firestore.indexes.json`에 desc 3종(`storeId+settledAt`, `storeId+status+settledAt`, `status+settledAt`) 추가·배포·빌드 완료 검증(`scripts/test-settlement-query.mjs`).
-- [x] **[#CL-47] 정산일시 "Invalid Date"** ✅ 2026-05-24 (세션83 M-PATH M4) — API `TimestampInterceptor`가 settledAt을 ISO 문자열로 보내는데 화면이 `._seconds` 객체 가정 → Invalid Date(셀러)/`-`(어드민). 양 화면 `toDateStr`을 ISO·`{_seconds}`·number 방어 파싱으로 통일, 셀러 타입 `string | {_seconds}` 정정. **배포 후 화면 재확인 필요**.
+- [x] **[#CL-47] 정산일시 "Invalid Date"** ✅ 2026-05-24 (세션83 M-PATH M4) — API `TimestampInterceptor`가 settledAt을 ISO 문자열로 보내는데 화면이 `._seconds` 객체 가정 → Invalid Date(셀러)/`-`(어드민). 양 화면 `toDateStr`을 ISO·`{_seconds}`·number 방어 파싱으로 통일, 셀러 타입 `string | {_seconds}` 정정. **배포·화면 재확인 완료(정산일시 정상 표시)**.
+- [ ] **[정산-status필터UI] 셀러 정산 [주문별 상세] status 필터 UI 미노출** (2026-05-24 세션83 M-PATH #245 발견) — 백엔드(`getSettlements` status param)·hook(`useSettlements.fetchSettlements(status)`)은 status 필터를 지원하나, `OrdersTab.tsx`에 사용자가 조작할 필터 칩/토글 UI가 없어 status 필터를 화면에서 쓸 수 없음(현재 전체 목록만). E-T1 #214 기준(hook→service 배선)은 충족하나 UX 미완. 주문 탭의 상태 탭 패턴(전체/대기/확정/지급완료/취소)을 OrdersTab에 추가해 `fetchSettlements(status)` 연결 검토.
 
 ### 1-6. 거점 관리 (`/hubs`)
 
@@ -126,6 +128,7 @@
 - [x] `/admin/settlements` — 판매자별 정산 처리 (이체 완료) ✅ 2026-04-03
 - [x] `/admin/invite` — 초대 토큰 발급 ✅ 2026-04-03
 - [x] `/admin/drivers` — 드라이버 승인 대기·승인·정지 관리 ✅ 2026-04-03
+- [ ] **[어드민-반응형] `/admin/*` 모바일 PWA 폭 미최적화** (2026-05-24 세션83 M-PATH M5 #246/247 발견) — 셀러 앱은 모바일(≤480px) 리팩토링됐으나 어드민 콘솔은 데스크톱 테이블 그대로라, 정산 테이블(7컬럼: 스토어·정산일시·거래금액·수수료·지급액·**상태·지급처리버튼**)에서 모바일 폭 시 **마지막 상태·버튼 컬럼이 화면 밖으로 잘림**(가로 스크롤도 없음) → 어드민이 모바일에서 "지급처리" 버튼에 접근 불가. 버튼 로직 자체는 정상(`SettlementTable.tsx:134` confirmed 행에만 노출). **조치 방향**: 어드민 테이블을 모바일 카드형으로 전환하거나 가로 스크롤 컨테이너 적용. 정산 외 stores/users/orders/drivers 테이블도 동일 점검 필요. 어드민 전반 반응형 리팩토링 트랙으로.
 
 ### 1-9. 거점 스태프 권한 구조 — Phase 2 (운영 거점 계약 확정 후)
 
