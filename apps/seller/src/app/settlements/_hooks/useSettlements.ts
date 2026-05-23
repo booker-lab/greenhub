@@ -2,6 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
+import { todayKST } from '@greenhub/shared';
 import { ApiError, apiJson } from '@/lib/api';
 import type { Settlement, SettlementStatus, SettlementTab, Summary } from '../_constants';
 
@@ -33,7 +34,7 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
   const storeId = session?.user.storeId;
   const token = session?.user.accessToken;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKST();
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedDateLabel, setSelectedDateLabel] = useState('');
 

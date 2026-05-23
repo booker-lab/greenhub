@@ -682,5 +682,7 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **플랜**: [timezone-kst-fix-plan.md](specs/frontend/timezone-kst-fix-plan.md) T1~T6 + 정합성 검토 §5-1(구현 전 완료).
 
+**구현 완료(세션85)**: T1~T6 전부 완료. ① [date.ts](../packages/shared/src/date.ts) 신설 + index.ts export — dual ESM/CJS 빌드 검증(CJS require·ESM import 양쪽 해소). ② 미보정 3곳 `todayKST()` 치환. ③ `_lib.ts` 인라인 흡수(`todayKST()`+`toDateStrKST()`) — **신·구 수식 동등성 노드 실측(KST 자정 경계 today/tomorrow 일치)으로 ISO/라벨 불변 가드(C3)**. ④ **vitest 신설**([date.test.ts](../packages/shared/src/date.test.ts) 5케이스 통과, `vi.setSystemTime`으로 UTC 14:59→전날·15:30→당일 경계 가드) — 프로젝트 첫 유닛테스트. 정합성 C1~C7 전부 통과: 셀러 `tsc --noEmit` exit 0, biome 신규 0(기존 `<img>` 경고 2건 무관), 셀러 src KST 미보정 잔존 grep 0건. tsconfig(esm/cjs)에 `*.test.ts` exclude 추가로 빌드 산출물 미오염.
+
 **연관**: [#CL-46]·[#CL-47](같은 세션83 M-PATH 발견 라이브 결함 계열), BACKLOG `[타임존-UTC]`.
 
