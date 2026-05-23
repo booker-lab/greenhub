@@ -27,6 +27,13 @@ jobs:
           ref: preview
           fetch-depth: 0
 
+      # wait-preview-deploy.mjs 는 액션이 아니라 러너 기본 Node 로 직접 실행되므로
+      # 러너 OS 변동에 좌우되지 않도록 Node 버전을 명시 고정한다(e2e.yml 과 동일 22).
+      # npm 의존성 없음(child_process + gh CLI 빌트인만) → cache/install 불필요.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
       - name: Merge main into preview
         run: |
           git config user.name "github-actions[bot]"

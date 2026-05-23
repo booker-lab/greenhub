@@ -709,7 +709,7 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 **배경**: 세션36 머지 후 e2e 1차 실행이 `global-setup.ts:133` `context.storageState()`에서 실패 — `Navigation interrupted by another navigation to /login`. 재실행은 167/0 통과 → flake 확정(코드 무관, consumer 앱 미변경).
 
 - [ ] **global-setup flake 보강**: `loginWithRetry`는 `loginViaCredentials`의 throw만 흡수하고, 로그인 성공 후 `storageState` 시점의 in-flight 네비게이션 레이스는 못 잡는다. `global-setup.ts:133` `context.storageState()` 직전에 `page.waitForLoadState('networkidle')`(또는 명시적 안정 대기)를 넣어 레이스 창을 닫는다. 규모 소(小). #CL-23/#CL-27 인증 레이스 계열의 잔여 보강.
-- [ ] **CI 액션 Node.js 20 deprecation**: `actions/checkout@v4`·`actions/setup-node@v4`·`actions/upload-artifact@v4`·`pnpm/action-setup@v4`가 Node.js 20 — 2026-06-02 강제 Node.js 24 전환. 각 액션 최신 버전으로 갱신하거나 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` 설정. `.github/workflows/*.yml` 전반 점검.
+- [x] **CI 액션 Node.js 20 deprecation** ✅ 2026-05-24 (세션86 정합성 검토로 기 해소 확정) — 본 항목 기재 시점(@v4)과 달리 실제 워크플로는 이미 `eb15e4e`(세션37)에서 v4→v6/v7 전환 완료: `checkout@v6`·`setup-node@v6`·`upload-artifact@v7`·`pnpm/action-setup@v6`. 각 핀 태그 `action.yml`의 `runs.using`이 전부 **node24**임을 공식 소스로 확인, `uses:` 전수에 v4 잔존 0건. **추가 보강(세션86)**: `sync-preview.yml`의 `node wait-preview-deploy.mjs` step은 액션이 아니라 러너 기본 Node로 실행돼 버전 미고정이었음 → `setup-node@v6`(node 22) step 명시 추가로 러너 OS 변동 격리.
 
 #### [⏳] 외부 대기
 
