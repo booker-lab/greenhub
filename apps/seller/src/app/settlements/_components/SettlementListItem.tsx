@@ -25,7 +25,7 @@ export function SettlementListItem({ settlement: s, showFee }: SettlementListIte
         {showFee ? (
           <Stack gap={0}>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-              {toDateStr(s.settledAt._seconds)}
+              {toDateStr(s.settledAt)}
             </Text>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
               수수료 {toKRW(s.platformFee)}
@@ -33,7 +33,7 @@ export function SettlementListItem({ settlement: s, showFee }: SettlementListIte
           </Stack>
         ) : (
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-            {toDateStr(s.settledAt._seconds)}
+            {toDateStr(s.settledAt)}
           </Text>
         )}
         <Text style={{ fontWeight: 'var(--fw-medium)' }}>{toKRW(s.netAmount)}</Text>

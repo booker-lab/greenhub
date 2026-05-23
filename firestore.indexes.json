@@ -99,6 +99,31 @@
       ]
     },
     {
+      "collectionGroup": "settlements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "storeId", "order": "ASCENDING" },
+        { "fieldPath": "settledAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "settlements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "storeId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "settledAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "settlements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "settledAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "hubs",
       "queryScope": "COLLECTION",
       "fields": [
