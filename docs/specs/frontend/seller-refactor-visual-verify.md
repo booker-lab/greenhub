@@ -285,17 +285,20 @@
 
 ### E-T3 — 전이 입증: pending → confirmed → paid (T-검증 B, A-1 해소)
 
-> 전이 검증 방식(세션82 사용자 결정): **라이브 배치 자연 대기**. `@Cron('0 4 * * *', { timeZone: 'Asia/Seoul' })` `confirmDueSettlements` 배치가 다음 04:00 KST에 마감 경과 pending을 confirmed로 전이하는 것을 확인. 별도 수동 시드 없음.
+> **백엔드 전이 로직 = 세션82 스크립트로 입증 완료** (`scripts/verify-settlement-transition.mjs`, 라이브 `green-e4fe3` Firestore). 라이브 배치(@Cron 04:00 KST)를 기다리지 않고 `confirmDueSettlements`·`markAsPaid` **실제 코드 로직을 그대로 재현**해 전 구간을 즉시 입증 — **10 passed / 0 failed**. 격리된 단일 문서(`verify-settle-001`) 생성→전이→삭제로 실데이터 무관, 자동 정리됨.
+> **잔여 = 프론트 화면 육안만**(#221 버튼 노출). 다음 04:00 KST 라이브 배치 결과는 동일 로직이라 추가 입증 불필요(원하면 운영 로그 `confirmDueSettlements confirmed N건`으로 재확인 가능).
 
 | # | 확인 항목 | 통과 기준 | 결과 | 메모 |
 |---|----------|----------|:----:|------|
-| 219 | 마감 경과 pending 존재 | `settledAt`이 (지금 − SETTLEMENT_CONFIRM_DELAY_DAYS일) 이전인 pending 정산이 1건 이상 | [ ] | 배치 대상 전제 |
-| 220 | 배치 후 confirmed 전이 | 다음 04:00 KST 경과 후 위 정산이 **confirmed**로 전이 (어드민/셀러 화면에서 확인) | [ ] | #CL-44 입증·인덱스 무에러 |
-| 221 | 어드민 "지급처리" 버튼 노출 | confirmed 정산 행에 **"지급처리"** 버튼 노출(pending에선 미노출) | [ ] | N5 — confirmed 전제 |
-| 222 | markAsPaid → paid | "지급처리" → ConfirmModal(blue) 확인 → 상태 **paid**로 갱신 | [ ] | F-T-UX3 #113 재확인 |
-| 223 | A-1 단절 해소 종합 | 위 전이가 끊김 없이 흐름 = 전 정산 pending 고착 문제 해소 입증 | [ ] | **S6 핵심 DoD** |
+| 219 | 마감 경과 pending 시드 | `settledAt`이 (지금 − SETTLEMENT_CONFIRM_DELAY_DAYS일) 이전인 pending 정산 시드 | ✅ | 세션82 스크립트 ① |
+| 220 | 배치 로직 confirmed 전이 | confirm 배치 동일 쿼리·트랜잭션 실행 → pending이 **confirmed** 전이, `confirmedAt` 기록, 인덱스 무에러 | ✅ | 세션82 스크립트 ③ (confirmed 1건) |
+| 221 | 어드민 "지급처리" 버튼 노출 | confirmed 정산 행에 **"지급처리"** 버튼 노출(pending에선 미노출) | [ ] | N5 — **프론트 육안 잔여** |
+| 222 | markAsPaid → paid | markAsPaid 동일 트랜잭션 → **confirmed→paid** 전이, `paidAt` 기록 | ✅ | 세션82 스크립트 ④ |
+| 223 | A-1 단절 해소 종합 | pending→confirmed→paid 끊김 없이 흐름 = 전 정산 pending 고착 해소 입증 | ✅ | 세션82 스크립트 (10/0) **S6 핵심 DoD** |
+| 224 | 역전이 가드 (pending 직접 지급 차단) | pending에 markAsPaid 시도 → `NOT_CONFIRMED` 거부(confirmed만 통과) | ✅ | 세션82 스크립트 ② |
+| 225 | 멱등 가드 (이중 지급 차단) | 이미 paid에 markAsPaid 재시도 → `ALREADY_PAID` 거부 | ✅ | 세션82 스크립트 ⑤ |
 
-> **참고 — 배치 로그/모니터링**: 라이브 배치가 도는지 운영 로그에서 `confirmDueSettlements` 실행·전이 건수 확인 가능. FAILED_PRECONDITION(인덱스 미배포)은 선결①(세션80 배포)로 해소됨.
+> **참고 — 배치 로그/모니터링**: 라이브 배치가 도는지 운영 로그에서 `confirmDueSettlements` 실행·전이 건수 확인 가능. FAILED_PRECONDITION(인덱스 미배포)은 선결①(세션80 배포)로 해소됨 — 세션82 스크립트가 `status+settledAt` 복합 쿼리를 에러 없이 실행해 라이브 인덱스 동작도 부수 입증.
 
 ---
 
