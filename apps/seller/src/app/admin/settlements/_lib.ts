@@ -1,14 +1,21 @@
 // 어드민 정산 화면 공용 유틸 (F-2/S5).
 import type { AdminSettlement } from '@/hooks/useAdmin';
 
-/** Firestore Timestamp 직렬화 형태(`{ _seconds }`) → 'M월 D일 HH:mm' KST 표기. */
+/**
+ * 정산일시 표기 — settledAt 직렬화 형태가 호출 경로마다 다름(#CL-46).
+ * API TimestampInterceptor는 ISO 문자열, Firestore raw 직렬화는 `{ _seconds }`.
+ * 양쪽 모두 방어적으로 파싱하고, 불가하면 '-'.
+ */
 export function toDateStr(ts: unknown): string {
-  const seconds =
-    ts && typeof ts === 'object' && '_seconds' in ts
-      ? (ts as { _seconds: number })._seconds
-      : null;
-  if (seconds === null) return '-';
-  return new Date(seconds * 1000).toLocaleDateString('ko-KR', {
+  let date: Date | null = null;
+  if (typeof ts === 'string') {
+    const d = new Date(ts);
+    date = Number.isNaN(d.getTime()) ? null : d;
+  } else if (ts && typeof ts === 'object' && '_seconds' in ts) {
+    date = new Date((ts as { _seconds: number })._seconds * 1000);
+  }
+  if (!date || Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('ko-KR', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',

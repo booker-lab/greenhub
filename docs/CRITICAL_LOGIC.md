@@ -643,3 +643,27 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: [#CL-44] (confirm 배치 — 본 #CL-45가 그 부수 정합 갭 묶음), `docs/specs/api/settlement-refactor-plan.md §2.7`(전수 검사 N1~N11 실측), `docs/specs/frontend/seller-refactor-visual-verify.md` E 섹션(육안 검증 211~223).
 
+---
+
+## [#CL-46] 정산 목록 desc 인덱스 부재 — S5 정렬 전환의 인덱스 미반영 (라이브 500 결함)
+
+**발견(세션83 M-PATH M4 육안 검증)**: 셀러 정산 탭 [주문별 상세] 및 어드민 정산 목록이 **라이브에서 500(FAILED_PRECONDITION) 에러**로 빈 화면. 원인 — S5(세션79 N10)에서 정산 정렬을 `settledAt` **asc→desc**로 통일했으나([settlements.service.ts:90](../apps/api/src/settlements/settlements.service.ts#L90), [admin.service.ts:137](../apps/api/src/admin/admin.service.ts#L137)), `firestore.indexes.json`의 settlements 복합 인덱스는 **전부 `settledAt ASCENDING`** 으로만 존재 → `where(storeId==) + orderBy(settledAt desc)` 및 `+where(status==)` 쿼리가 매칭 인덱스 없어 실패. admin SDK 재현 시 에러 메시지 `The query requires an index` + 인덱스 생성 URL 동반(원인 100% 확정).
+
+**왜 못 잡았나(#CL-45 격자 재검토의 모순 누락)**: 세션81 격자 재검토 ⑤항은 "정렬 desc 통일(셀러·어드민 양쪽 desc)"을 확인했고, ⑧항은 "인덱스 status+settledAt 라이브 배포됨(선결①)"이라 적었으나 — **그 인덱스는 ASC였다.** ⑤(desc 쿼리)와 ⑧(asc 인덱스)이 상호 모순인데 교차검증이 방향(order)까지 대조하지 않아 통과로 오판. 세션82 e2e 풀런(176/0)도 통과했는데, preview 환경에 우연히 해당 인덱스가 (다른 경로로) 존재했거나 e2e 시드 정산 부재로 빈 쿼리가 인덱스 없이도 통과한 것으로 추정(미확정). **교훈: 복합 인덱스 검증은 fieldPath뿐 아니라 order(ASC/DESC)까지 쿼리와 1:1 대조해야 한다.**
+
+**조치(세션83)**: `firestore.indexes.json`에 desc 복합 인덱스 3종 추가 후 `firebase deploy --only firestore:indexes` 배포 — ① `storeId ASC, settledAt DESC`(셀러 목록·어드민 storeId) ② `storeId ASC, status ASC, settledAt DESC`(status 필터) ③ `status ASC, settledAt DESC`(대칭 보강). 검증: `scripts/test-settlement-query.mjs`로 동일 쿼리 admin SDK 실행 → 빌드 완료 후 정상 반환 확인.
+
+**연관**: [#CL-45] ⑤·⑧항(모순 누락 지점), `firestore.indexes.json`(settlements desc 3종), `scripts/test-settlement-query.mjs`(재현·검증), `seller-refactor-visual-verify.md` M4 #243.
+
+---
+
+## [#CL-47] 정산일시 "Invalid Date" — TimestampInterceptor(ISO) vs 화면(`_seconds`) 직렬화 불일치
+
+**발견(세션83 M-PATH M4, #CL-46 인덱스 해소 직후)**: 정산 목록(셀러 [주문별 상세]·어드민)이 뜨자 모든 행의 정산일시가 **"Invalid Date"**(셀러) / **"-"**(어드민)로 표시. 원인 — API 전역 `TimestampInterceptor`([apps/api/src/common/interceptors/timestamp.interceptor.ts:24](../apps/api/src/common/interceptors/timestamp.interceptor.ts#L24))가 모든 Firestore Timestamp를 **`toDate().toISOString()` ISO 문자열**로 변환해 응답하는데, 화면 코드는 **`settledAt._seconds`(객체)** 를 가정 → `undefined` → `new Date(undefined*1000)=Invalid Date`(셀러 [SettlementListItem.tsx](../apps/seller/src/app/settlements/_components/SettlementListItem.tsx)), 어드민은 `'_seconds' in ts` false라 `'-'` 반환([admin/settlements/_lib.ts](../apps/seller/src/app/admin/settlements/_lib.ts)).
+
+**왜 못 잡았나**: 셀러 `Settlement` 타입([settlements/_constants.ts:15](../apps/seller/src/app/settlements/_constants.ts#L15))이 `settledAt: { _seconds: number }`로 **실제 응답(ISO 문자열)과 다르게 정의**돼 있었고, TS는 타입 정의를 신뢰하므로 컴파일 통과. e2e도 정산일시 텍스트값 단언이 없어 미검출. shared `Settlement.settledAt`은 `unknown`(직렬화 경로별 차이 허용 주석 있음)이라 셀러/어드민 로컬 타입에서 잘못 좁힌 게 근인.
+
+**조치(세션83)**: 양 화면 `toDateStr`을 **ISO 문자열·`{_seconds}`·number 모두 방어적 파싱**(불가 시 '-')으로 통일. 셀러 `_constants.ts` 타입을 `string | { _seconds: number }`로 정정, `SettlementListItem`은 `s.settledAt`(통째) 전달, CSV는 `toISO` 헬퍼 신설. 셀러 `tsc --noEmit` 통과. **배포 필요**(운영=main 동기).
+
+**연관**: [#CL-46](같은 정산 목록 화면 — 인덱스 해소 후 드러난 2차 결함), `apps/api/.../timestamp.interceptor.ts`(ISO 변환 출처), `seller-refactor-visual-verify.md` M4 #243.
+

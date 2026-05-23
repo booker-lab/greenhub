@@ -69,6 +69,7 @@
   - **드라이버 앱**: 보드 쿼리에 `deliveryMethod in ['direct', 'hub']` 필터 추가 — 택배 주문 제거
   - 관련 파일: `seller/orders/[id]/page.tsx`, `driver/board/_client.tsx`
 - [x] **[P4] 픽업 코드 `fontSize: 24` 토큰화** ✅ 2026-05-20 (세션52 T7-B) — `OrderCard.tsx:98`·`OrderInfoSection.tsx:156`·`StatusCards.tsx:51` 3곳을 `var(--font-size-2xl)`로 치환. 토큰은 `packages/ui/src/style.css:25`에 24px로 이미 정의되어 있어 신설 불필요. 빌드·타입체크 통과, biome baseline 동일(신규 0건).
+- [ ] **[UI-버튼크기] 주문 "준비 시작" 버튼 크기 불일치** (2026-05-23 세션83 M-PATH #234 육안 발견) — 동일 액션 "준비 시작" 버튼이 위치마다 크기 괴리: 목록 카드 `OrderCard.tsx:78` = `size="sm"`·`radius="md"`, 상세 footer `orders/[id]/page.tsx:165` = `size="lg"`·`radius="xl"` (2단계 차). 사용자가 카드→상세 이동 시 같은 버튼이 갑자기 커져 괴리감. **판단 필요**: 상세 footer를 주 CTA로 의도한 위계인지, 아니면 단일화할지. 단일화 시 footer를 `size="md"`로 한 단계 낮추는 방향 검토(터치 타깃 유지). 시각 회귀 정책상 토큰 값 변경 금지·한 단계 위/아래 토큰으로만 조정.
 
 ### 1-4. 상품 관리 (`/products`)
 
@@ -90,6 +91,8 @@
 - [x] 기간별 조회 탭 — `GET .../settlements?from=&to=`
 - [x] 주문별 상세 탭
 - [x] (Should Have) CSV 다운로드 ✅ 2026-04-02
+- [x] **[#CL-46] 정산 목록 desc 인덱스 부재 (라이브 500)** ✅ 2026-05-24 (세션83 M-PATH M4 발견·해소) — S5 정렬 asc→desc 전환 후 desc 복합 인덱스 미배포로 [주문별 상세]·어드민 정산 목록 500. `firestore.indexes.json`에 desc 3종(`storeId+settledAt`, `storeId+status+settledAt`, `status+settledAt`) 추가·배포·빌드 완료 검증(`scripts/test-settlement-query.mjs`).
+- [x] **[#CL-47] 정산일시 "Invalid Date"** ✅ 2026-05-24 (세션83 M-PATH M4) — API `TimestampInterceptor`가 settledAt을 ISO 문자열로 보내는데 화면이 `._seconds` 객체 가정 → Invalid Date(셀러)/`-`(어드민). 양 화면 `toDateStr`을 ISO·`{_seconds}`·number 방어 파싱으로 통일, 셀러 타입 `string | {_seconds}` 정정. **배포 후 화면 재확인 필요**.
 
 ### 1-6. 거점 관리 (`/hubs`)
 

@@ -12,7 +12,9 @@ export interface Settlement {
   platformFee: number;
   netAmount: number;
   status: SettlementStatus;
-  settledAt: { _seconds: number };
+  // settledAt 직렬화 형태가 호출 경로마다 다름(#CL-46): API TimestampInterceptor=ISO 문자열,
+  // Firestore raw 직렬화=`{ _seconds }`. toDateStr/toISO가 둘 다 처리.
+  settledAt: string | { _seconds: number };
 }
 
 export interface Summary {
