@@ -46,7 +46,7 @@
 - [x] `proxy.ts` — 미로그인→/login, storeId 없음→/onboarding
 - [x] `src/lib/api.ts` — `apiFetch` 헬퍼 (Bearer 토큰 자동 주입)
 - [x] `src/lib/firebase.ts` — Firestore + Storage export
-- [ ] **[타임존-UTC] `toISOString()` 날짜 추출 KST 미보정 — 자정~오전9시 하루 밀림** (2026-05-24 세션83 M-PATH M5 발견) — 사용자가 KST 5/24 00:52(자정 직후)에 배송 슬롯 캘린더에서 **5/23이 "오늘"로 표시·과거 차단 오작동** 발견. 원인: `new Date().toISOString()`은 UTC 기준 → KST 00:00~08:59에는 전날 날짜 반환. KST 보정 없는 3곳: ① `settings/daily-caps/page.tsx:134`(`todayStr` — 과거날짜 차단·isToday 판정 오작동, 직접 영향) ② `settlements/_hooks/useSettlements.ts:36`(일별요약 기본 날짜) ③ `hooks/useDashboardSummary.ts:30`(홈 정산 예정 날짜). **정상 패턴 참고**: `orders/[id]/_lib.ts:18` = `new Date(Date.now() + 9*3600*1000).toISOString().slice(0,10)`(KST 보정됨, 결함 아님). **조치**: KST 보정 공통 util(`todayKST()`) 신설해 3곳 교체. 영향범위 넓어 별도 작업·테스트 필요.
+- [x] **[타임존-UTC #CL-48] `toISOString()` 날짜 추출 KST 미보정 — 자정~오전9시 하루 밀림** ✅ 2026-05-25 세션85 종결 — 공통 util `todayKST()`/`toDateStrKST()`를 `@greenhub/shared`에 신설(shared 첫 런타임 함수) → 미보정 3곳(daily-caps:134·useSettlements:36·useDashboardSummary:30) 치환 + `orders/_lib.ts` 인라인 흡수. **vitest 신설**(date.test.ts 5케이스 KST경계). 셀러 tsc+next build exit0, 미보정 grep0건. 상세 [project_timezone_kst_fix]. (이하 원 발견 기록 보존) (2026-05-24 세션83 M-PATH M5 발견) — 사용자가 KST 5/24 00:52(자정 직후)에 배송 슬롯 캘린더에서 **5/23이 "오늘"로 표시·과거 차단 오작동** 발견. 원인: `new Date().toISOString()`은 UTC 기준 → KST 00:00~08:59에는 전날 날짜 반환. KST 보정 없는 3곳: ① `settings/daily-caps/page.tsx:134`(`todayStr` — 과거날짜 차단·isToday 판정 오작동, 직접 영향) ② `settlements/_hooks/useSettlements.ts:36`(일별요약 기본 날짜) ③ `hooks/useDashboardSummary.ts:30`(홈 정산 예정 날짜). **정상 패턴 참고**: `orders/[id]/_lib.ts:18` = `new Date(Date.now() + 9*3600*1000).toISOString().slice(0,10)`(KST 보정됨, 결함 아님). **조치**: KST 보정 공통 util(`todayKST()`) 신설해 3곳 교체. 영향범위 넓어 별도 작업·테스트 필요.
 
 ### 1-2. 인증 / 온보딩
 
@@ -65,12 +65,11 @@
   - **"배송 시작" 버튼** (PREPARING → DELIVERING) ✅ 2026-03-28 추가 — **드라이버 앱 전용**
   - "강제 취소" 모달 (사유 최소 5자) → `PATCH .../status { CANCELLED }`
   - 읽기 전용 상태 (배송 중 이후)
-- [ ] **[BUG-16] 택배 주문 상태 전환 갭** — `deliveryMethod: 'parcel'`인 주문이 PREPARING 상태 도달 시 셀러가 발송 처리할 방법 없음. 드라이버 앱에 `deliveryMethod` 필터 없어 택배 주문도 수거 대기 목록에 노출됨.
-  - **셀러 앱**: 주문 상세에서 `parcel + PREPARING` 조건일 때 "택배 발송 완료" 버튼 추가 → `DELIVERING` 전환
-  - **드라이버 앱**: 보드 쿼리에 `deliveryMethod in ['direct', 'hub']` 필터 추가 — 택배 주문 제거
-  - 관련 파일: `seller/orders/[id]/page.tsx`, `driver/board/_client.tsx`
+- [x] **[BUG-16] 택배 주문 상태 전환 갭** ✅ 2026-05-21 세션67 종결 (`2ad71e3`, e2e 176p/0f) — 본 §1-3 항목은 stale 표기였음(세션86 정합성 검토로 정정). 실측: 셀러 `orders/[id]/page.tsx:94`(`canShipParcel`)+`:187`("택배 발송 완료" 버튼)+`_hooks/useOrderDetailActions.ts:54`(BUG-16 T3) / 드라이버 `board/_client.tsx:43`(`where('deliveryMethod','in',['direct','hub'])`, BUG-16 T4) 모두 구현됨. 종결 상세는 §3 P3 라인 참조(#CL-40).
+  - **셀러 앱**: 주문 상세에서 `parcel + PREPARING` 조건일 때 "택배 발송 완료" 버튼 → `DELIVERED` 직행(백엔드 parcel 가드) ✅
+  - **드라이버 앱**: 보드 쿼리에 `deliveryMethod in ['direct', 'hub']` 필터 — 택배 주문 제거 ✅
 - [x] **[P4] 픽업 코드 `fontSize: 24` 토큰화** ✅ 2026-05-20 (세션52 T7-B) — `OrderCard.tsx:98`·`OrderInfoSection.tsx:156`·`StatusCards.tsx:51` 3곳을 `var(--font-size-2xl)`로 치환. 토큰은 `packages/ui/src/style.css:25`에 24px로 이미 정의되어 있어 신설 불필요. 빌드·타입체크 통과, biome baseline 동일(신규 0건).
-- [ ] **[UI-버튼크기] 주문 "준비 시작" 버튼 크기 불일치** (2026-05-23 세션83 M-PATH #234 육안 발견) — 동일 액션 "준비 시작" 버튼이 위치마다 크기 괴리: 목록 카드 `OrderCard.tsx:78` = `size="sm"`·`radius="md"`, 상세 footer `orders/[id]/page.tsx:165` = `size="lg"`·`radius="xl"` (2단계 차). 사용자가 카드→상세 이동 시 같은 버튼이 갑자기 커져 괴리감. **판단 필요**: 상세 footer를 주 CTA로 의도한 위계인지, 아니면 단일화할지. 단일화 시 footer를 `size="md"`로 한 단계 낮추는 방향 검토(터치 타깃 유지). 시각 회귀 정책상 토큰 값 변경 금지·한 단계 위/아래 토큰으로만 조정.
+- [ ] **[UI-버튼크기] 주문 "준비 시작" 버튼 크기 불일치** (2026-05-23 세션83 M-PATH #234 육안 발견) — 동일 액션 "준비 시작" 버튼이 위치마다 크기 괴리: 목록 카드 `OrderCard.tsx:78` = `size="sm"`·`radius="md"`, 상세 footer `orders/[id]/page.tsx:165` = `size="lg"`·`radius="xl"` (2단계 차). 사용자가 카드→상세 이동 시 같은 버튼이 갑자기 커져 괴리감. **판단 필요**: 상세 footer를 주 CTA로 의도한 위계인지, 아니면 단일화할지. 단일화 시 footer를 `size="md"`로 한 단계 낮추는 방향 검토(터치 타깃 유지). 시각 회귀 정책상 토큰 값 변경 금지·한 단계 위/아래 토큰으로만 조정. **→ 아토믹 플랜·정합성 체크포인트: [button-size-unify-plan.md](specs/frontend/button-size-unify-plan.md) (세션86). 단일화 여부 A/B는 착수 전 사용자 확정 필요.**
 
 ### 1-4. 상품 관리 (`/products`)
 
@@ -95,7 +94,7 @@
 - [x] **[#CL-46] 정산 목록 desc 인덱스 부재 (라이브 500)** ✅ 2026-05-24 (세션83 M-PATH M4 발견·해소) — S5 정렬 asc→desc 전환 후 desc 복합 인덱스 미배포로 [주문별 상세]·어드민 정산 목록 500. `firestore.indexes.json`에 desc 3종(`storeId+settledAt`, `storeId+status+settledAt`, `status+settledAt`) 추가·배포·빌드 완료 검증(`scripts/test-settlement-query.mjs`).
 - [x] **[#CL-47] 정산일시 "Invalid Date"** ✅ 2026-05-24 (세션83 M-PATH M4) — API `TimestampInterceptor`가 settledAt을 ISO 문자열로 보내는데 화면이 `._seconds` 객체 가정 → Invalid Date(셀러)/`-`(어드민). 양 화면 `toDateStr`을 ISO·`{_seconds}`·number 방어 파싱으로 통일, 셀러 타입 `string | {_seconds}` 정정. **배포·화면 재확인 완료(정산일시 정상 표시)**.
 - [ ] **[검증시드-정리] 난플렉스(80189070) 육안 검증용 시드 데이터 정리** (2026-05-24 세션83) — M-PATH 육안 검증 위해 `reset-store-data.mjs --apply`로 난플렉스를 리팩토링 스키마 더미로 재시드함(주문 7·상품 3·정산 4상태, prefix `reset-*`/`visual-settle-*`). 운영 DB(green-e4fe3)에 잔존 중. 실서비스 오픈 전 정리 필요. 회수: `node scripts/seed-settlements-visual.mjs --clean`(정산 4건) + `reset-*` 주문/상품은 admin 콘솔 또는 스크립트로 개별 삭제. 단 dailyCaps는 소비자 e2e 베이스라인이라 보존. **실데이터 영업 시작 시점에 일괄 정리.**
-- [ ] **[정산-status필터UI] 셀러 정산 [주문별 상세] status 필터 UI 미노출** (2026-05-24 세션83 M-PATH #245 발견) — 백엔드(`getSettlements` status param)·hook(`useSettlements.fetchSettlements(status)`)은 status 필터를 지원하나, `OrdersTab.tsx`에 사용자가 조작할 필터 칩/토글 UI가 없어 status 필터를 화면에서 쓸 수 없음(현재 전체 목록만). E-T1 #214 기준(hook→service 배선)은 충족하나 UX 미완. 주문 탭의 상태 탭 패턴(전체/대기/확정/지급완료/취소)을 OrdersTab에 추가해 `fetchSettlements(status)` 연결 검토.
+- [x] **[정산-status필터UI] 셀러 정산 [주문별 상세] status 필터 UI** ✅ 2026-05-25 (세션86 T1~T3 구현·정합성 C1~C6 통과) — `OrdersTab.tsx`에 공통 `SegmentedTabs<SettlementFilterKey>`(전체+SSOT 4상태, `layout="scroll"`) 추가, `activeStatus` state·`fetchSettlements(_,_,status)` 배선(page.tsx prop 전달). `_constants.ts`에 `SETTLEMENT_FILTER_TABS`/`SettlementFilterKey` 추가(라벨은 shared `STATUS_LABEL` 재사용, 로컬 정의 0). early return→삼항 재배치로 로딩·빈 결과에서도 탭 유지(C6). 셀러 tsc·next build exit0, biome `0e/2w`(신규 0). **로직·API·hook 불변, UI 레이어만.** 아토믹 플랜: [settlement-status-filter-plan.md](specs/frontend/settlement-status-filter-plan.md). **육안 검증(C4 모바일 가로 스크롤 등 17항목)은 다음 세션 위임**: [settlement-status-filter-visual-verify.md](specs/frontend/settlement-status-filter-visual-verify.md).
 
 ### 1-6. 거점 관리 (`/hubs`)
 
@@ -129,7 +128,7 @@
 - [x] `/admin/settlements` — 판매자별 정산 처리 (이체 완료) ✅ 2026-04-03
 - [x] `/admin/invite` — 초대 토큰 발급 ✅ 2026-04-03
 - [x] `/admin/drivers` — 드라이버 승인 대기·승인·정지 관리 ✅ 2026-04-03
-- [ ] **[어드민-반응형] `/admin/*` 모바일 PWA 폭 미최적화** (2026-05-24 세션83 M-PATH M5 #246/247 발견) — 셀러 앱은 모바일(≤480px) 리팩토링됐으나 어드민 콘솔은 데스크톱 테이블 그대로라, 정산 테이블(7컬럼: 스토어·정산일시·거래금액·수수료·지급액·**상태·지급처리버튼**)에서 모바일 폭 시 **마지막 상태·버튼 컬럼이 화면 밖으로 잘림**(가로 스크롤도 없음) → 어드민이 모바일에서 "지급처리" 버튼에 접근 불가. 버튼 로직 자체는 정상(`SettlementTable.tsx:134` confirmed 행에만 노출). **조치 방향**: 어드민 테이블을 모바일 카드형으로 전환하거나 가로 스크롤 컨테이너 적용. 정산 외 stores/users/orders/drivers 테이블도 동일 점검 필요. 어드민 전반 반응형 리팩토링 트랙으로.
+- [ ] **[어드민-반응형] `/admin/*` 모바일 PWA 폭 미최적화** (2026-05-24 세션83 M-PATH M5 #246/247 발견) — 셀러 앱은 모바일(≤480px) 리팩토링됐으나 어드민 콘솔은 데스크톱 테이블 그대로라, 정산 테이블(7컬럼: 스토어·정산일시·거래금액·수수료·지급액·**상태·지급처리버튼**)에서 모바일 폭 시 **마지막 상태·버튼 컬럼이 화면 밖으로 잘림**(가로 스크롤도 없음) → 어드민이 모바일에서 "지급처리" 버튼에 접근 불가. 버튼 로직 자체는 정상(`SettlementTable.tsx:134` confirmed 행에만 노출). **조치 방향**: 어드민 테이블을 모바일 카드형으로 전환하거나 가로 스크롤 컨테이너 적용. 정산 외 stores/users/orders/drivers 테이블도 동일 점검 필요. 어드민 전반 반응형 리팩토링 트랙으로. **→ 아토믹 플랜·정합성 체크포인트: [admin-responsive-plan.md](specs/frontend/admin-responsive-plan.md) (세션86). 카드형 vs 가로스크롤 A/B/C 착수 시 확정·Phase 분할.**
 
 ### 1-9. 거점 스태프 권한 구조 — Phase 2 (운영 거점 계약 확정 후)
 

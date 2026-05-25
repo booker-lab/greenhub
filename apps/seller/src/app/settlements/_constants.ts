@@ -1,9 +1,18 @@
 // 정산 상태 타입·라벨·색 SSOT = @greenhub/shared (F-1/S4). 셀러 로컬 정의 제거 후 re-export.
-export { STATUS_LABEL, STATUS_COLOR } from '@greenhub/shared';
+export { STATUS_LABEL, STATUS_COLOR, SETTLEMENT_STATUSES } from '@greenhub/shared';
 export type { SettlementStatus } from '@greenhub/shared';
+import { SETTLEMENT_STATUSES, STATUS_LABEL } from '@greenhub/shared';
 import type { SettlementStatus } from '@greenhub/shared';
 
 export type SettlementTab = 'daily' | 'period' | 'orders';
+
+// [주문별 상세] status 필터 탭 키. 'all'(전체) + SSOT 4상태. 신규 라벨/색 정의 0 (T1).
+export type SettlementFilterKey = 'all' | SettlementStatus;
+
+export const SETTLEMENT_FILTER_TABS: { key: SettlementFilterKey; label: string }[] = [
+  { key: 'all', label: '전체' },
+  ...SETTLEMENT_STATUSES.map((s) => ({ key: s, label: STATUS_LABEL[s] })),
+];
 
 export interface Settlement {
   id: string;
