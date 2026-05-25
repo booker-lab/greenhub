@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { Badge, Box, Button, Group, Paper, Stack, Switch, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useAdminStores } from '@/hooks/useAdmin';
@@ -9,19 +9,22 @@ const STATUS_LABEL: Record<string, string> = {
   active: '운영중',
   invited: '초대됨',
   suspended: '정지',
+  archived: '정리됨',
 };
 
 const STATUS_COLOR: Record<string, string> = {
   active: 'green',
   invited: 'yellow',
   suspended: 'gray',
+  archived: 'gray',
 };
 
 export default function AdminStoresClient() {
-  const { stores, loading, setCommission } = useAdminStores();
+  const { stores, loading, setCommission, archiveStore, restoreStore } = useAdminStores();
   const [editId, setEditId] = useState<string | null>(null);
   const [rateInput, setRateInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const handleSave = async (storeId: string) => {
     const rate = parseFloat(rateInput);
@@ -116,6 +119,49 @@ export default function AdminStoresClient() {
       </Button>
     );
 
+  const handleArchive = async (store: (typeof stores)[number]) => {
+    const label = store.name || '(미설정)';
+    if (!window.confirm(`${label} 판매자를 정리할까요? 주문·정산 기록은 보존됩니다.`)) return;
+    try {
+      await archiveStore(store.id);
+    } catch (e) {
+      // 기록 가드(400) 등 차단 사유를 서버 메시지 그대로 안내
+      notifications.show({
+        color: 'red',
+        title: '정리할 수 없습니다',
+        message: e instanceof Error ? e.message : '판매자 정리 중 오류가 발생했습니다.',
+      });
+    }
+  };
+
+  const handleRestore = async (store: (typeof stores)[number]) => {
+    try {
+      await restoreStore(store.id);
+    } catch (e) {
+      notifications.show({
+        color: 'red',
+        title: '복구할 수 없습니다',
+        message: e instanceof Error ? e.message : '판매자 복구 중 오류가 발생했습니다.',
+      });
+    }
+  };
+
+  // 치우기/복구 버튼 — 테이블·카드 공용
+  const renderArchiveButton = (store: (typeof stores)[number]) =>
+    editId !== store.id &&
+    (store.status === 'archived' ? (
+      <Button onClick={() => handleRestore(store)} size="xs" variant="subtle" color="blue">
+        복구
+      </Button>
+    ) : (
+      <Button onClick={() => handleArchive(store)} size="xs" variant="subtle" color="red">
+        치우기
+      </Button>
+    ));
+
+  // 평소엔 archived 숨김, 토글 시 전체 표시
+  const visible = showArchived ? stores : stores.filter((s) => s.status !== 'archived');
+
   return (
     <Box>
       <Group justify="space-between" mb="md">
@@ -125,12 +171,18 @@ export default function AdminStoresClient() {
             component="span"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
-            ({stores.length})
+            ({visible.length})
           </Text>
         </Title>
+        <Switch
+          size="sm"
+          label="정리된 판매자 보기"
+          checked={showArchived}
+          onChange={(e) => setShowArchived(e.currentTarget.checked)}
+        />
       </Group>
 
-      {stores.length === 0 ? (
+      {visible.length === 0 ? (
         <Paper
           radius="lg"
           shadow="xs"
@@ -144,7 +196,7 @@ export default function AdminStoresClient() {
         <>
           {/* 모바일(<sm): 카드 리스트 — 수수료율·설정 버튼 잘림 방지 */}
           <Stack gap="sm" hiddenFrom="sm">
-            {stores.map((store) => (
+            {visible.map((store) => (
               <Paper
                 key={store.id}
                 radius="md"
@@ -174,7 +226,10 @@ export default function AdminStoresClient() {
                 </Group>
                 <Group justify="space-between" align="center" mt="xs">
                   {renderRate(store)}
-                  {renderSetButton(store)}
+                  <Group gap="xs">
+                    {renderSetButton(store)}
+                    {renderArchiveButton(store)}
+                  </Group>
                 </Group>
               </Paper>
             ))}
@@ -236,7 +291,7 @@ export default function AdminStoresClient() {
               </tr>
             </Box>
             <Box component="tbody" style={{ borderTop: 'none' }}>
-              {stores.map((store) => (
+              {visible.map((store) => (
                 <Box
                   component="tr"
                   key={store.id}
@@ -263,7 +318,10 @@ export default function AdminStoresClient() {
                   </Box>
                   <Box component="td" style={{ padding: '12px 16px' }}>{renderRate(store)}</Box>
                   <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
-                    {renderSetButton(store)}
+                    <Group gap="xs" justify="flex-end">
+                      {renderSetButton(store)}
+                      {renderArchiveButton(store)}
+                    </Group>
                   </Box>
                 </Box>
               ))}

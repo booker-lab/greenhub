@@ -44,6 +44,43 @@ export class AdminService {
     return { storeId, commissionRate: dto.rate };
   }
 
+  // 판매자 "치우기"(아카이브) — 영구 삭제 아님, status='archived' 표시.
+  // 기록 가드: 주문·정산 기록이 하나라도 있으면 차단(법적 책임·이력 보존).
+  async archiveStore(storeId: string) {
+    const ref = this.firestore.doc(`stores/${storeId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+
+    // 존재 여부만 확인하면 되므로 limit(1) — 쿼리 비용 최소화.
+    const [orderSnap, settlementSnap] = await Promise.all([
+      (this.firestore.collection('orders').where('storeId', '==', storeId).limit(1) as any).get(),
+      (
+        this.firestore.collection('settlements').where('storeId', '==', storeId).limit(1) as any
+      ).get(),
+    ]);
+    if (!orderSnap.empty || !settlementSnap.empty) {
+      throw new BadRequestException('주문·정산 기록이 있는 판매자는 정리할 수 없습니다.');
+    }
+
+    const now = this.firestore.Timestamp.now();
+    await ref.update({ status: 'archived', archivedAt: now, updatedAt: now });
+    return { storeId, status: 'archived' };
+  }
+
+  // 아카이브 복구 — active 복원 + archivedAt 제거.
+  async restoreStore(storeId: string) {
+    const ref = this.firestore.doc(`stores/${storeId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+
+    await ref.update({
+      status: 'active',
+      archivedAt: this.firestore.FieldValue.delete(),
+      updatedAt: this.firestore.Timestamp.now(),
+    });
+    return { storeId, status: 'active' };
+  }
+
   // ── Users ────────────────────────────────────────────────────────
 
   async getUsers() {
