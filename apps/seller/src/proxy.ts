@@ -18,8 +18,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/onboarding', request.url));
   }
 
-  // admin이 /onboarding 접근 시 /admin으로 이동
-  if (isAdmin && pathname === '/onboarding') {
+  // 순수 어드민(store 없음)이 /onboarding 접근 시 /admin으로 이동.
+  // 겸직 계정(admin + storeId)은 자기 store 프로필 수정이 필요하므로 제외 (#CL-52)
+  if (isAdmin && !session.user.storeId && pathname === '/onboarding') {
     return NextResponse.redirect(new URL('/admin/stores', request.url));
   }
 

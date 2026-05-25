@@ -60,7 +60,7 @@
 
 ## 3. 정합성 체크포인트 (착수 세션에서 검증)
 
-> **✅ 세션86 종결** — T1~T3 구현·자동 검증 통과. C4·C3·C6 시각 항목은 [육안 검증 문서](settlement-status-filter-visual-verify.md)로 위임(다음 세션).
+> **✅ 세션86 종결** — T1~T3 구현·자동 검증 통과. C4·C3·C6 시각 항목은 통합 [육안 검증 문서](pending-visual-verify.md) §1-V로 위임(다음 세션).
 
 - [x] **C1** status 5탭이 SSOT(`SETTLEMENT_STATUSES`+`STATUS_LABEL`)에서만 파생되는가 (로컬 재정의 0) — `SETTLEMENT_FILTER_TABS`가 shared 배열·라벨 `.map`으로 파생, 로컬 정의 0 ✅
 - [x] **C2** 탭 클릭 시 `fetchSettlements(_, _, status)`가 정확히 호출되는가 — `handleChange`에서 `key==='all'?undefined:key` 전달 ✅
