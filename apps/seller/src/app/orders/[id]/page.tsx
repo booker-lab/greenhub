@@ -162,7 +162,7 @@ export default function OrderDetailPage() {
                   onClick={() => setShowPrepareForm(true)}
                   disabled={actionLoading}
                   fullWidth
-                  size="lg"
+                  size="md"
                   radius="xl"
                   style={{
                     backgroundColor: 'var(--color-primary)',
@@ -177,7 +177,7 @@ export default function OrderDetailPage() {
                   onClick={handleShipParcel}
                   disabled={actionLoading}
                   fullWidth
-                  size="lg"
+                  size="md"
                   radius="xl"
                   style={{
                     backgroundColor: 'var(--color-primary)',
@@ -192,7 +192,7 @@ export default function OrderDetailPage() {
                   onClick={() => setShowCancelModal(true)}
                   disabled={actionLoading}
                   fullWidth
-                  size="lg"
+                  size="md"
                   radius="xl"
                   variant="outline"
                   color="red"

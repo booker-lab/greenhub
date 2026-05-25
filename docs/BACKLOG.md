@@ -69,7 +69,7 @@
   - **셀러 앱**: 주문 상세에서 `parcel + PREPARING` 조건일 때 "택배 발송 완료" 버튼 → `DELIVERED` 직행(백엔드 parcel 가드) ✅
   - **드라이버 앱**: 보드 쿼리에 `deliveryMethod in ['direct', 'hub']` 필터 — 택배 주문 제거 ✅
 - [x] **[P4] 픽업 코드 `fontSize: 24` 토큰화** ✅ 2026-05-20 (세션52 T7-B) — `OrderCard.tsx:98`·`OrderInfoSection.tsx:156`·`StatusCards.tsx:51` 3곳을 `var(--font-size-2xl)`로 치환. 토큰은 `packages/ui/src/style.css:25`에 24px로 이미 정의되어 있어 신설 불필요. 빌드·타입체크 통과, biome baseline 동일(신규 0건).
-- [ ] **[UI-버튼크기] 주문 "준비 시작" 버튼 크기 불일치** (2026-05-23 세션83 M-PATH #234 육안 발견) — 동일 액션 "준비 시작" 버튼이 위치마다 크기 괴리: 목록 카드 `OrderCard.tsx:78` = `size="sm"`·`radius="md"`, 상세 footer `orders/[id]/page.tsx:165` = `size="lg"`·`radius="xl"` (2단계 차). 사용자가 카드→상세 이동 시 같은 버튼이 갑자기 커져 괴리감. **판단 필요**: 상세 footer를 주 CTA로 의도한 위계인지, 아니면 단일화할지. 단일화 시 footer를 `size="md"`로 한 단계 낮추는 방향 검토(터치 타깃 유지). 시각 회귀 정책상 토큰 값 변경 금지·한 단계 위/아래 토큰으로만 조정. **→ 아토믹 플랜·정합성 체크포인트: [button-size-unify-plan.md](specs/frontend/button-size-unify-plan.md) (세션86). 단일화 여부 A/B는 착수 전 사용자 확정 필요.**
+- [x] **[UI-버튼크기] 주문 "준비 시작" 버튼 크기 불일치** ✅ 2026-05-25 (세션87, #CL-50) — **B(단일화) 사용자 확정** → 상세 footer 3버튼(준비 시작·택배 발송 완료·강제 취소) `size="lg"`→`size="md"` 한 단계 하향(`orders/[id]/page.tsx:165·180·195`). `radius="xl"`·`fullWidth` 유지(시각 회귀 정책: 한 축만 변경, 터치 타깃 보존), 카드 `sm` 유지(목록 밀도). 결과 2단계→1단계 차로 괴리 완화. 부수 효과: footer `md`가 `PrepareForm.tsx`(이미 `md`) 폼 버튼과 정합 → 폼 진입 점프도 해소. C1~C5 통과(tsc0·biome신규0·build0, 로직 불변). 잔여=육안 검증(정산 status 필터와 일괄). 발견: 2026-05-23 세션83 M-PATH #234. 플랜=[button-size-unify-plan.md](specs/frontend/button-size-unify-plan.md).
 
 ### 1-4. 상품 관리 (`/products`)
 
