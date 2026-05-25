@@ -779,3 +779,29 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: 원인 커밋=`63e56c2`. 커밋=`2d30296`. 육안 검증=`pending-visual-verify.md` §3(42~52). 잔여 육안=#42 프로필 폼 진입·#46~47 어드민→셀러 링크.
 
+---
+
+## [#CL-53] 어드민 판매자 "치우기"(아카이브) + 어드민 e2e 인프라 신설 (2026-05-25~26, 세션90)
+
+**기능 배경**: 어드민 판매자 목록([stores/_client.tsx](../apps/seller/src/app/admin/stores/_client.tsx))에 시드·온보딩 테스트로 들어온 빈 판매자가 운영 판매자(난플렉스)와 섞여 지저분. 목록에서 치울 길이 없었음.
+
+**설계 결정 — `/further`→`/grill-me` 확정안**: 주문·정산 기록 **없는 판매자만** "치우기"(`store.status='archived'`, **영구삭제 아님 — 법적 책임 대비 기록 보존**) → 평소 숨김, "정리된 판매자 보기" 토글로 표시+복구.
+
+**grill-me가 막아낸 핵심 (왜 이 범위인가)**:
+- **원래 안전장치 "정지된 판매자만 치우기"는 성립 불가** — `toggleSuspend`는 `users`(소비자·드라이버)만 대상, **판매자 정지 기능 자체가 코드베이스에 없음**.
+- **셀러앱 가드 [proxy.ts](../apps/seller/src/proxy.ts)는 `storeId`만 봄**(store.status 무시) → store를 archived로 바꿔도 영업이 안 막힘. 그래서 **"빈 판매자만 치운다"**로 범위를 좁혀 "판매자 정지 시스템 신설"(큰 작업)을 회피.
+- **실수 방지 = 기록 있으면 서버 400 차단**(난플렉스 등 운영 판매자는 주문 있어 자동 보호) + `window.confirm`.
+
+**구현(T1~T5)**: T1 [admin.service.ts](../apps/api/src/admin/admin.service.ts) `archiveStore`(orders·settlements `.where('storeId','==',id).limit(1)` 기록 가드→`BadRequestException` 또는 `status='archived'`)/`restoreStore`(`FieldValue.delete()`로 archivedAt 제거 — 래퍼는 [firestore.service.ts:24-26](../apps/api/src/firestore/firestore.service.ts#L24-L26)에 노출 확인) · T2 controller `PATCH stores/:id/archive`·`/restore`(클래스 `@Roles('admin')` 상속) · T3 [useAdmin.ts](../apps/seller/src/hooks/useAdmin.ts) — 차단 사유 UI 전달 위해 `runAction`(에러 삼킴) 대신 `apiJson` 직접 호출로 `ApiError` 전파 · T4 `showArchived` 토글+`visible` 필터 · T5 `renderArchiveButton`(치우기/복구+notification)+`STATUS archived='정리됨'`. **데스크톱 테이블+모바일 카드 양쪽.** 정합성 C1~C6 통과(tsc0·biome0·build0·500라인 최대388·archived 기록조회 회귀0·기록가드400). 커밋 `d10c60f` push·배포.
+
+**어드민 e2e 인프라 신설 (프로젝트 첫 어드민 e2e)**: 어드민 e2e는 3중 차단(admin 전용 스펙 0개·테스트 계정 seller role·백엔드 `@Roles('admin')` 403)으로 불가였음. **사용자 확정 = 전용 e2e admin 계정 + 읽기 전용 스모크(운영 DB 쓰기 0)**. 전용 계정 `e2e-admin@test.com`(role=admin·storeId 없는 순수 어드민·특수문자 없는 28자 비번), [admin-store-archive.spec.ts](../apps/e2e/tests/admin-store-archive.spec.ts) 8테스트(chromium·mobile×4) 통과. 커밋 `b72298b`+`20c8e7a`.
+
+**⚠️ 라이브 실행에서 잡은 함정 3건 (다음 앱 e2e에도 재발 가능 — 규약화)**:
+1. **admin 세션이 seller에 가려짐** — admin은 어드민 화면=셀러앱 `/admin/*` 경로라 `SELLER_BASE` 공유. NextAuth `authjs.session-token` 쿠키 슬롯이 **도메인당 1개**뿐 → 같은 BrowserContext에 seller·admin 누적 시 마지막 것만 남아 충돌(증상: admin인데 셀러 "주문 관리" 화면 노출). **해결 = admin 전용 컨텍스트에서 `.admin-state.json` 격리 발급**([auth.ts](../apps/e2e/tests/_helpers/auth.ts) `ADMIN_STATE_PATH`, [global-setup.ts](../apps/e2e/global-setup.ts) 별도 컨텍스트). `.gitignore` 추가(세션 토큰).
+2. **`networkidle` 무한 대기** — 셀러/어드민 화면은 SSE "실시간 연결"이 상시 열려 networkidle에 도달 못 해 timeout. **해결 = `domcontentloaded` + 명시적 요소(`getByText`) 대기.**
+3. **비번 `#` 문자가 dotenv에서 주석 처리** — `.env`의 `TEST_ADMIN_PASSWORD`에 `#` 포함 시 그 이후가 잘림(24→14자) → 로그인 거부(set-cookie 0, 인증 race 아님). **해결 = 특수문자 없는 비번**(또는 `.env`에서 따옴표). 진단 핵심 = bcrypt `compare=true`로 DB 데이터 무결을 먼저 확인해 원인을 인증경로로 격리.
+
+**부수 발견**: `admin@test.com`이 이미 **카카오 consumer 계정**으로 운영 DB 실재(2026-04-06) → 로그인 `where('email').limit(1).docs[0]` 비결정성. 전용 계정을 `e2e-admin@test.com`으로 분리해 회피.
+
+**연관**: 계획서=`docs/plans/admin-store-archive-plan.md`. 육안=`pending-visual-verify.md` §4(#53~59, 상태변경 클릭은 e2e 미수행→육안 전용). 커밋=`d10c60f`·`b72298b`·`20c8e7a`. 잔여=상태변경(치우기·복구·차단) 육안만.
+
