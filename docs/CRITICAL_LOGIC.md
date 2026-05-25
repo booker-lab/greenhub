@@ -722,7 +722,7 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **빌드 주의**: 셀러는 `npm run build`(=`next build --webpack`)로 실행. 맨 `npx next build`는 Next16 Turbopack/webpack config 충돌로 실패(코드 무관).
 
-**잔여**: 육안 검증 1건(카드→상세 크기 점프 완화) — 정산 status 필터 육안과 일괄 진행 정책. [settlement-status-filter-visual-verify.md](specs/frontend/settlement-status-filter-visual-verify.md)에 항목 합류.
+**잔여**: 육안 검증 1건(카드→상세 크기 점프 완화) — 정산 status 필터 육안과 일괄 진행 정책. 통합 문서 [pending-visual-verify.md](specs/frontend/pending-visual-verify.md) §1-B에 항목 합류.
 
 **연관**: 선행 정합성 검토=[#CL-49], 플랜=button-size-unify-plan.md, 다음 작업=어드민 반응형(`app-refactor-roadmap.md` §3).
 
@@ -752,4 +752,26 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 **잔여**: 모바일 폭 카드 레이아웃 육안 검증(5개 화면). 데스크톱 회귀는 DOM 불변이라 안전.
 
 **연관**: 선행 정합성 검토=[#CL-49], 플랜=admin-responsive-plan.md, 로드맵=`app-refactor-roadmap.md` §3 어드민 트랙. 다음=어드민 반응형 잔여(헤더/필터 등) 또는 소비자앱 리팩토링.
+
+---
+
+## [#CL-52] 겸직 계정(admin+seller) 역할 분리 — "어드민=store 없음" 전제 무효화 해소 (2026-05-25, 세션89)
+
+**배경**: 셀러앱 설정 탭 "사업자 프로필 수정"([settings/page.tsx:68](../apps/seller/src/app/settings/page.tsx#L68), `href="/onboarding"`) 클릭 시 어드민 계정은 프로필 수정 화면 대신 `/admin/stores`로 튕김. 사용자는 어드민이면서 동시에 디어 오키드 store의 판매자인 **겸직 계정**(`role==='admin'` + `storeId` 보유).
+
+**근본 원인 — 깨진 전제**: 커밋 `63e56c2`(2026-04-07) "fix: seller proxy — admin role onboarding 리다이렉트 제외"가 **"admin은 storeId 없이 정상 운영되므로"**라는 전제로 [proxy.ts](../apps/seller/src/proxy.ts)에 `isAdmin && pathname==='/onboarding' → /admin/stores` 분기를 추가. 당시엔 참이었으나, 겸직 계정 등장으로 전제 무효화. 데이터 모델은 이미 겸직 지원(role·storeId 독립 필드, [auth.ts:67-68](../apps/seller/src/auth.ts#L67-L68)) — 문제는 가드·UI가 `isAdmin` 단일 boolean으로만 분기하는 점.
+
+**설계 결정 — 방향 A(전제 보정) 채택, 방향 B(모드 전환 상태) 기각 (사용자 확정)**:
+- **A=전제 보정+양방향 문**: 가드가 `role`+`storeId`를 함께 보게 하고, 두 영역(`/admin/*` ↔ 셀러 화면)에 링크 추가. **별도 "모드 상태" 없음 — URL 네임스페이스가 곧 모드.**
+- **B=전환 설계 기각 근거**: ① `/admin/*`와 셀러 화면은 이미 독립 레이아웃·가드로 물리 분리 = URL이 이미 모드 신호. ② 부족한 건 "상태"가 아니라 "문(門)"(링크)일 뿐. ③ 겸직 계정 현재 사실상 1명·저빈도 전환(YAGNI). ④ A→B 확장은 쉬우나 역행은 어려움.
+- **겸직 판정 SSOT**: `role==='admin' && !!storeId`. 로그인 수단(카카오/이메일) 무관 — 역할 조합으로만 판정(특정 계정 하드코딩 금지, 확장성·기존 권한판정 일관성).
+
+**구현 범위(3변경)**:
+1. [proxy.ts:22](../apps/seller/src/proxy.ts#L22) 가드 보정 — `isAdmin && !storeId && pathname==='/onboarding'`로 조건 강화(겸직은 `/onboarding` 정상 허용, 순수 어드민만 콘솔로).
+2. 셀러→어드민 문 — 설정 탭에 "관리자 콘솔" 행 추가, 겸직(`role==='admin' && storeId`)일 때만 노출.
+3. 어드민→셀러 문 — [admin/layout.tsx](../apps/seller/src/app/admin/layout.tsx) 헤더에 "셀러 화면으로" 링크, 겸직일 때만 노출.
+
+**정합성 체크포인트**: C1 겸직 `/onboarding` 진입·프로필 수정 정상 / C2 순수 어드민은 기존대로 콘솔 귀결(회귀0) / C3 일반 셀러 무영향(링크 미노출) / C4 tsc0·biome0·build0 / C5 500라인 한도.
+
+**연관**: 원인 커밋=`63e56c2`. 다음=구현 후 육안 검증(겸직 동선 양방향).
 

@@ -3,7 +3,7 @@
 import { Box, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { signOut } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 import type { ReactNode } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
@@ -58,6 +58,10 @@ function LinkRow({
 }
 
 export default function SettingsPage() {
+  const { data: session } = useSession();
+  // 겸직 계정(어드민 + 자기 store 보유)만 관리자 콘솔 진입 노출 (#CL-52)
+  const isDualRole = session?.user.role === 'admin' && !!session.user.storeId;
+
   return (
     <PageShell>
       <PageHeader title="설정" sticky={false} />
@@ -75,6 +79,12 @@ export default function SettingsPage() {
               </Text>
             </UnstyledButton>
           </SectionCard>
+
+          {isDualRole && (
+            <SectionCard label="관리자">
+              <LinkRow href="/admin/stores" label="관리자 콘솔로 이동" />
+            </SectionCard>
+          )}
 
           <SectionCard label="배송">
             <LinkRow href="/settings/delivery" label="배송비 설정 / 기상 제한" />
