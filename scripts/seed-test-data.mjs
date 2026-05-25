@@ -98,7 +98,7 @@ async function seed() {
   // admin user (e2e 어드민 스모크 전용) — storeId 없음 = 순수 어드민
   await db.doc(`users/${ADMIN_ID}`).set({
     id: ADMIN_ID,
-    email: 'admin@test.com',
+    email: 'e2e-admin@test.com',
     name: '테스트 어드민',
     phone: '010-0000-0001',
     role: 'admin',
@@ -116,9 +116,9 @@ async function seed() {
   console.log(`  storeId  : ${STORE_ID}`);
   console.log(`  productId: ${PRODUCT_ID}`);
   console.log(`  price    : 100원`);
-  console.log(`  admin    : admin@test.com (role=admin, 비번은 reset-user-password.mjs로 설정)`);
+  console.log(`  admin    : e2e-admin@test.com (role=admin, 비번은 reset-user-password.mjs로 설정)`);
   console.log(`\n💡 consumer 앱에서 회원가입 후 주문 테스트 진행하세요.`);
-  console.log(`💡 어드민 e2e 전:  node scripts/reset-user-password.mjs admin@test.com <비번>`);
+  console.log(`💡 어드민 e2e 전:  node scripts/reset-user-password.mjs e2e-admin@test.com <비번>`);
 }
 
 seed().catch(console.error).finally(() => process.exit());

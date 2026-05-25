@@ -23,6 +23,10 @@ import type { Page } from '@playwright/test'
  */
 export const BYPASS_STATE_PATH = resolve(__dirname, '../../.bypass-state.json')
 export const AUTH_STATE_PATH = resolve(__dirname, '../../.auth-state.json')
+// admin은 seller와 같은 도메인(SELLER_BASE)을 공유 → 같은 컨텍스트에 누적하면
+// authjs.session-token 쿠키가 1슬롯뿐이라 마지막 로그인만 남고 충돌한다.
+// admin 전용 컨텍스트에서 별도 발급해 seller 세션과 격리한다.
+export const ADMIN_STATE_PATH = resolve(__dirname, '../../.admin-state.json')
 
 export async function loginViaCredentials(
   page: Page,
