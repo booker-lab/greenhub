@@ -688,3 +688,41 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: [#CL-46]·[#CL-47](같은 세션83 M-PATH 발견 라이브 결함 계열), BACKLOG `[타임존-UTC]`.
 
+---
+
+## [#CL-49] BACKLOG 잔여 4건 정합성 검토 — BUG-16 stale 판정 + 3건 아토믹 플랜 수립 (2026-05-25, 세션86)
+
+**배경**: 사용자가 BACKLOG 잔여 4건([BUG-16]·[정산-status필터UI]·[어드민-반응형]·[UI-버튼크기])을 각 독립 세션 아토믹 태스크로 분해 요청. 착수 전 4건 전수 코드 실측.
+
+**핵심 발견 — 백로그 stale 2건(코드 변경 없이 표기 정정)**:
+1. **[BUG-16] 택배 주문 상태 갭 = 이미 완료(세션67 `2ad71e3`)**. §1-3에 `[ ]`로 잔존했으나 실측상 셀러([orders/[id]/page.tsx:94](../apps/seller/src/app/orders/[id]/page.tsx#L94) `canShipParcel`·[:187](../apps/seller/src/app/orders/[id]/page.tsx#L187) 버튼·[useOrderDetailActions.ts:54](../apps/seller/src/app/orders/[id]/_hooks/useOrderDetailActions.ts#L54) "BUG-16 T3")·드라이버([board/_client.tsx:43](../apps/driver/src/app/board/_client.tsx#L43) `where('deliveryMethod','in',['direct','hub'])` "BUG-16 T4") **양쪽 모두 구현됨**. §3 P3 라인500에 종결 기록(e2e 176p/0f) 존재 — §1-3 `[ ]`만 stale. **사용자 결정: stale 정정만**(재검증 불요).
+2. **[#CL-48 타임존] = 세션85 종결**인데 §1-1 `[ ]` 잔존 → `[x]` 정정.
+
+**실착수 유효 3건(실측으로 결함·레퍼런스 확정)**:
+- **[정산-status필터UI]**: hook([useSettlements.ts:29·88](../apps/seller/src/app/settlements/_hooks/useSettlements.ts#L29))·백엔드는 status 지원, [OrdersTab.tsx](../apps/seller/src/app/settlements/_components/OrdersTab.tsx) UI만 부재 확정. 이식 레퍼런스=주문 탭 공통 `SegmentedTabs<T>`([orders/page.tsx:173](../apps/seller/src/app/orders/page.tsx#L173)), 상태 SSOT=`SETTLEMENT_STATUSES`/`STATUS_LABEL`([settlement.types.ts:13](../packages/shared/src/settlement.types.ts#L13)). 규모 소~중, 리스크 낮음.
+- **[어드민-반응형]**: 어드민 `<table>` 5곳(settlements·orders·stores·invite·users) 모두 `overflowX` 래퍼 없음 확정. 정산 7컬럼 마지막 상태·지급처리버튼 모바일 잘림([SettlementTable.tsx:48·134](../apps/seller/src/app/admin/settlements/_components/SettlementTable.tsx#L48)). 카드형 vs 가로스크롤 A/B/C는 착수 시 확정. 규모 중~대(Phase 분할), 로드맵 §3 어드민 트랙 진입점.
+- **[UI-버튼크기]**: 카드 `sm/md`([OrderCard.tsx:78](../apps/seller/src/app/orders/_components/OrderCard.tsx#L78)) vs 상세 footer `lg/xl`([orders/[id]/page.tsx:165](../apps/seller/src/app/orders/[id]/page.tsx#L165)) 2단계 차 확정. **버그 아닌 위계 설계 판단** — A(의도된 위계, 변경0) / B(단일화, footer `lg→md` 한 단계) 착수 전 사용자 확정 필수. 규모 소.
+
+**산출물(세션86, 코드 변경 0 — 문서만)**: 플랜 3종 신설 — [settlement-status-filter-plan.md](specs/frontend/settlement-status-filter-plan.md)·[admin-responsive-plan.md](specs/frontend/admin-responsive-plan.md)·[button-size-unify-plan.md](specs/frontend/button-size-unify-plan.md). 각 아토믹 태스크 + 정합성 체크포인트 포함. BACKLOG 4건 모두 링크·표기 정정.
+
+**연관**: BUG-16 종결=[#CL-40], 타임존=[#CL-48], 어드민 트랙=`app-refactor-roadmap.md` §3.
+
+---
+
+## [#CL-50] [UI-버튼크기] 단일화 — B(괴리 완화) 확정, footer `lg→md` 한 단계 (2026-05-25, 세션87)
+
+**배경**: [#CL-49]에서 수립한 [button-size-unify-plan.md](specs/frontend/button-size-unify-plan.md)의 §2 A/B 설계 판단을 착수 도입부에 사용자에게 제시 → **B(단일화) 확정**. "준비 시작" 동일 액션이 목록 카드 `sm`과 상세 footer `lg`로 2단계 차여서 카드→상세 이동 시 시각 괴리.
+
+**핵심 규칙(시각 회귀 정책)**:
+1. **한 축만 변경** — footer 3버튼(준비 시작·택배 발송 완료·강제 취소)을 `size="lg"`→`size="md"` 한 단계만 하향. `radius="xl"`·`fullWidth`는 **유지**(두 축 동시 변경 시 회귀 추적 곤란, 터치 타깃 보존).
+2. **카드 `sm` 유지** — 목록 밀도상 카드를 올리지 않음. 결과적으로 2단계→1단계 차로 괴리 완화(완전 동일화 아님 — 위계는 보존).
+3. **부수 정합(설계 근거 강화)**: footer `md`가 [PrepareForm.tsx:80·89](../apps/seller/src/app/orders/[id]/_components/PrepareForm.tsx#L80)의 폼 버튼(이미 `md`/`xl`)과 일치 → 준비 시작 → 폼 진입 시 크기 점프도 함께 해소. `radius="xl"` 유지 판단도 PrepareForm과 일치해 정합.
+
+**구현(세션87, 파일 1개 — 로직·API 불변)**: [orders/[id]/page.tsx:165·180·195](../apps/seller/src/app/orders/[id]/page.tsx#L165) footer 3버튼 `lg→md`. 정합성 C1~C5 전부 통과: A/B 확정(C1)·footer 3버튼 동일 size(C2, orders 내 `size="lg"` 잔존 grep 0)·한 단계·토큰 불변(C3)·풀폭 유지(C4)·`tsc --noEmit` exit0·biome 신규0·`npm run build`(`--webpack`) exit0(C5).
+
+**빌드 주의**: 셀러는 `npm run build`(=`next build --webpack`)로 실행. 맨 `npx next build`는 Next16 Turbopack/webpack config 충돌로 실패(코드 무관).
+
+**잔여**: 육안 검증 1건(카드→상세 크기 점프 완화) — 정산 status 필터 육안과 일괄 진행 정책. [settlement-status-filter-visual-verify.md](specs/frontend/settlement-status-filter-visual-verify.md)에 항목 합류.
+
+**연관**: 선행 정합성 검토=[#CL-49], 플랜=button-size-unify-plan.md, 다음 작업=어드민 반응형(`app-refactor-roadmap.md` §3).
+
