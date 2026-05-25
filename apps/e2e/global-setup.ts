@@ -48,6 +48,7 @@ const LOGIN_MAX_ATTEMPTS = 3
 const LOGIN_RETRY_DELAY_MS = 2_000
 
 // driver 제외 — Credentials provider 부재(Kakao 전용, #CL-25)
+// admin은 별도 도메인이 없다 — 어드민 화면은 셀러앱 내 /admin/* 경로이므로 SELLER_BASE 재사용.
 const CREDENTIAL_TARGETS = [
   {
     name: 'SELLER',
@@ -60,6 +61,12 @@ const CREDENTIAL_TARGETS = [
     base: process.env['CONSUMER_BASE'],
     email: process.env['TEST_CONSUMER_EMAIL'],
     password: process.env['TEST_CONSUMER_PASSWORD'],
+  },
+  {
+    name: 'ADMIN',
+    base: process.env['SELLER_BASE'],
+    email: process.env['TEST_ADMIN_EMAIL'],
+    password: process.env['TEST_ADMIN_PASSWORD'],
   },
 ]
 
