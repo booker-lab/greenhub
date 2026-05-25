@@ -24,6 +24,11 @@ const STORE_ID  = 'test-store-001';
 // ── 2. 소비자 계정 (이미 Vercel에서 가입했다면 해당 userId 사용)
 const CONSUMER_ID = 'test-consumer-001';
 
+// ── 3. 어드민 계정 (e2e 어드민 스모크 전용) ──
+//  순수 어드민: storeId 없음(겸직 아님). role='admin'이라 /admin/* 접근 가능.
+//  passwordHash는 placeholder — 실제 로그인 비번은 reset-user-password.mjs로 별도 설정.
+const ADMIN_ID = 'test-admin-001';
+
 async function seed() {
   console.log('🌱 Firestore 시드 시작...\n');
 
@@ -90,12 +95,30 @@ async function seed() {
   });
   console.log(`✅ users/${SELLER_ID}`);
 
+  // admin user (e2e 어드민 스모크 전용) — storeId 없음 = 순수 어드민
+  await db.doc(`users/${ADMIN_ID}`).set({
+    id: ADMIN_ID,
+    email: 'admin@test.com',
+    name: '테스트 어드민',
+    phone: '010-0000-0001',
+    role: 'admin',
+    providers: ['email'],
+    passwordHash: '$2b$12$dummy',   // placeholder — reset-user-password.mjs로 실비번 설정
+    savedAddresses: [],
+    fcmToken: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  console.log(`✅ users/${ADMIN_ID} (role=admin)`);
+
   console.log('\n🎉 시드 완료!');
   console.log(`\n📋 테스트에 필요한 값:`);
   console.log(`  storeId  : ${STORE_ID}`);
   console.log(`  productId: ${PRODUCT_ID}`);
   console.log(`  price    : 100원`);
+  console.log(`  admin    : admin@test.com (role=admin, 비번은 reset-user-password.mjs로 설정)`);
   console.log(`\n💡 consumer 앱에서 회원가입 후 주문 테스트 진행하세요.`);
+  console.log(`💡 어드민 e2e 전:  node scripts/reset-user-password.mjs admin@test.com <비번>`);
 }
 
 seed().catch(console.error).finally(() => process.exit());
