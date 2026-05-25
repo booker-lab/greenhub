@@ -134,3 +134,28 @@
 | R1 | 기록 존재 검사 쿼리 비용(orders·settlements 2회 조회) | `.limit(1)`로 존재만 확인 |
 | R2 | 규모 증가 시 프론트 필터 비효율 | (B) 서버 includeArchived로 승격(문서화됨) |
 | R3 | `STATUS_LABEL`에 'archived' 라벨 미정 | T3에서 "정리됨" 라벨·회색 배지 추가 |
+
+---
+
+## 9. 어드민 e2e 인프라 신설 (세션90 후속)
+
+> 배경: e2e 스펙은 consumer/seller/driver만 존재, **어드민 전용 스펙·계정이 0개**(3중 차단:
+> ①admin 스펙 부재 ②테스트 계정 seller role ③백엔드 `@Roles('admin')` 403).
+> 사용자 확정: **전용 e2e admin 계정 신설 + 읽기 전용 스모크**(운영 DB 쓰기 0).
+
+| 작업 | 파일 | 내용 |
+| :--- | :--- | :--- |
+| A1 | `scripts/seed-test-data.mjs` | admin user(`test-admin-001`, `role:'admin'`, **storeId 없음=순수 어드민**) 추가, 비번은 placeholder |
+| A2 | `apps/e2e/global-setup.ts` | `CREDENTIAL_TARGETS`에 ADMIN(base=`SELLER_BASE` 재사용, `TEST_ADMIN_*`) |
+| A3 | `apps/e2e/tests/admin-store-archive.spec.ts` | 비인증 가드 + 인증 스모크(진입·토글·버튼 노출, **클릭=상태변경 안 함**) |
+| A4 | `apps/e2e/.env` | `TEST_ADMIN_EMAIL/PASSWORD`(gitignore됨) |
+
+**검증:** playwright `--list` 8테스트 인식(chromium·mobile×4), 비인증 1건 실제 통과(global-setup 회귀0·ADMIN 미설정 시 자동 skip 확인).
+
+**운영 실행 절차(사용자 영역):**
+1. `node scripts/seed-test-data.mjs` — admin@test.com 계정 생성(운영 DB 쓰기)
+2. `node scripts/reset-user-password.mjs admin@test.com <비번>` — 실비번 설정
+3. `apps/e2e/.env`의 `TEST_ADMIN_PASSWORD`에 같은 비번 기입
+4. `cd apps/e2e && npx playwright test admin-store-archive` — 8테스트 실행
+
+⚠️ **비번 값은 사용자 결정 필요**(seller=약한 비번 `test1234`, consumer=강한 비번 — [feedback_security_convenience] 정책).
