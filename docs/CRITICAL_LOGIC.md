@@ -726,3 +726,30 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: 선행 정합성 검토=[#CL-49], 플랜=button-size-unify-plan.md, 다음 작업=어드민 반응형(`app-refactor-roadmap.md` §3).
 
+---
+
+## [#CL-51] [어드민-반응형] 5개 테이블 모바일 카드형 전환 — C-full 확정, `hiddenFrom`/`visibleFrom` 분기 도입 (2026-05-25, 세션88)
+
+**배경**: [#CL-49]에서 수립한 [admin-responsive-plan.md](specs/frontend/admin-responsive-plan.md)의 §2 A(가로스크롤)/B(카드형)/C(하이브리드) 설계 판단을 착수 도입부에 제시. 어드민 콘솔(`apps/seller/src/app/admin`) 5개 테이블(settlements·orders·stores·invite·users)이 데스크톱 `<table>` 그대로라, 모바일 폭에서 마지막 컬럼(상태·지급처리/강제환불/정지·복구/수수료설정 버튼)이 잘리고 부모 `Paper`가 `overflow:hidden`이라 가로 스크롤도 불가 → 어드민이 모바일에서 핵심 액션 버튼에 접근 불가(#246/247).
+
+**설계 결정**:
+1. **C-full(5곳 전부 카드형) 사용자 확정** — A(가로스크롤)·C(정산만 카드)보다 가독성 최상. 5개 테이블 모두 모바일 카드 분기 적용.
+2. **breakpoint = `sm`(768px) 사용자 확정** — 폰=카드, 태블릿·데스크톱=테이블. 어드민 콘솔 특성상 태블릿+에서는 테이블 가독성이 우위.
+3. **분기 방식 = Mantine `hiddenFrom`/`visibleFrom` prop** — 셀러 앱 최초 반응형 분기 도입(기존 코드에 `useMediaQuery`·`@media`·`hiddenFrom` 전무 확인). prop 방식 채택 근거: SSR 안전(하이드레이션 미스매치 없음)·JS 불필요·데스크톱 회귀 리스크 최소. 모바일 카드=`<Stack hiddenFrom="sm">`, 데스크톱 테이블=`<Paper visibleFrom="sm">`로 기존 `<table>`을 감싸기만 함(테이블 DOM·스타일 완전 불변).
+
+**핵심 규칙(시각 회귀 0 정책)**:
+- 데스크톱 `<table>`은 `visibleFrom="sm"` Paper로 **감싸기만** — 내부 thead/tbody/td DOM·스타일 일절 미수정(C3 회귀 0 보장).
+- 카드는 셀러 [SettlementListItem.tsx](../apps/seller/src/app/settlements/_components/SettlementListItem.tsx)(`Paper`+`Group justify="space-between"`+`Stack`) 패턴 재사용.
+- Badge/라벨은 SSOT 재사용 — 정산=`STATUS_LABEL`/`STATUS_COLOR`(@greenhub/shared), 나머지는 각 파일 로컬 맵 그대로(기존 테이블과 동일 소스).
+- **로직 불변** — hook(`useAdmin*`)·API·액션 핸들러(`onPay`/`forceRefund`/`toggleSuspend`/`setCommission`) 미수정.
+
+**중복 제거**: stores는 수수료 표시/편집(`renderRate`)·설정 진입(`renderSetButton`)을 컴포넌트 내부 헬퍼로 추출해 테이블·카드 공용(편집 폼 중복 방지).
+
+**구현(세션88, 파일 5개)**: [SettlementTable.tsx](../apps/seller/src/app/admin/settlements/_components/SettlementTable.tsx)·[orders/_client.tsx](../apps/seller/src/app/admin/orders/_client.tsx)·[stores/_client.tsx](../apps/seller/src/app/admin/stores/_client.tsx)·[invite/_client.tsx](../apps/seller/src/app/admin/invite/_client.tsx)·[users/_client.tsx](../apps/seller/src/app/admin/users/_client.tsx). 정합성 C1~C6 전부 통과: 모바일 지급처리 버튼 접근(C1)·5테이블 전수 카드 분기(C2)·데스크톱 테이블 DOM 불변(C3)·SSOT·셀러 카드 패턴 재사용(C4)·`tsc`0·biome 0·`npm run build` exit0·인라인 hex/fontSize 위반 0(C5)·전 파일 500라인 한도 내(최대 309, C6).
+
+**e2e**: 미실행. 어드민 전용 e2e 부재(`*admin*.spec.ts` 0건) + 변경이 순수 표현 레이어(로직·DOM 데스크톱 불변)라 e2e 회귀 대상 없음. 본 검증=모바일 폭 카드 육안(운영 단일 DB·카카오 로그인·DevTools/실기기 PWA — 사용자 위임).
+
+**잔여**: 모바일 폭 카드 레이아웃 육안 검증(5개 화면). 데스크톱 회귀는 DOM 불변이라 안전.
+
+**연관**: 선행 정합성 검토=[#CL-49], 플랜=admin-responsive-plan.md, 로드맵=`app-refactor-roadmap.md` §3 어드민 트랙. 다음=어드민 반응형 잔여(헤더/필터 등) 또는 소비자앱 리팩토링.
+
