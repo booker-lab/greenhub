@@ -128,7 +128,7 @@
 - [x] `/admin/settlements` — 판매자별 정산 처리 (이체 완료) ✅ 2026-04-03
 - [x] `/admin/invite` — 초대 토큰 발급 ✅ 2026-04-03
 - [x] `/admin/drivers` — 드라이버 승인 대기·승인·정지 관리 ✅ 2026-04-03
-- [ ] **[어드민-반응형] `/admin/*` 모바일 PWA 폭 미최적화** (2026-05-24 세션83 M-PATH M5 #246/247 발견) — 셀러 앱은 모바일(≤480px) 리팩토링됐으나 어드민 콘솔은 데스크톱 테이블 그대로라, 정산 테이블(7컬럼: 스토어·정산일시·거래금액·수수료·지급액·**상태·지급처리버튼**)에서 모바일 폭 시 **마지막 상태·버튼 컬럼이 화면 밖으로 잘림**(가로 스크롤도 없음) → 어드민이 모바일에서 "지급처리" 버튼에 접근 불가. 버튼 로직 자체는 정상(`SettlementTable.tsx:134` confirmed 행에만 노출). **조치 방향**: 어드민 테이블을 모바일 카드형으로 전환하거나 가로 스크롤 컨테이너 적용. 정산 외 stores/users/orders/drivers 테이블도 동일 점검 필요. 어드민 전반 반응형 리팩토링 트랙으로. **→ 아토믹 플랜·정합성 체크포인트: [admin-responsive-plan.md](specs/frontend/admin-responsive-plan.md) (세션86). 카드형 vs 가로스크롤 A/B/C 착수 시 확정·Phase 분할.**
+- [x] **[어드민-반응형] `/admin/*` 모바일 PWA 폭 미최적화** ✅ 2026-05-25 세션88 (#246/247 종결, #CL-51) — 5개 테이블(settlements·orders·stores·invite·users)을 **C-full(전부 카드형)·breakpoint `sm`(768px)** 으로 전환. Mantine `hiddenFrom`/`visibleFrom` 분기 도입(셀러 앱 최초 반응형 분기), 데스크톱 테이블 DOM 불변(회귀 0). 모바일에서 지급처리/강제환불/정지·복구/수수료설정 버튼 카드 내 풀폭 노출로 접근 결함 해소. 정합성 C1~C6 통과(tsc·biome·build exit0, 500라인 한도, SSOT 토큰 0위반). e2e=어드민 스펙 부재+순수 표현 레이어라 대상 없음. **잔여=모바일 폭 카드 육안 검증(사용자 위임).** 상세 [#CL-51], 플랜 [admin-responsive-plan.md](specs/frontend/admin-responsive-plan.md).
 
 ### 1-9. 거점 스태프 권한 구조 — Phase 2 (운영 거점 계약 확정 후)
 
