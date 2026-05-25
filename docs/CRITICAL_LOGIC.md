@@ -805,3 +805,23 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: 계획서=`docs/plans/admin-store-archive-plan.md`. 육안=`pending-visual-verify.md` §4(#53~59, 상태변경 클릭은 e2e 미수행→육안 전용). 커밋=`d10c60f`·`b72298b`·`20c8e7a`. 잔여=상태변경(치우기·복구·차단) 육안만.
 
+## [#CL-54] 어드민 탭별 SDD 분리 — settlements 모범 패턴을 나머지 6개 탭에 적용 (2026-05-26, 세션91)
+
+**배경**: 어드민 7개 탭 중 **settlements만 `_lib`(순수함수)/`_components`(테이블·필터·요약) 분리**(SETTLE-REFACTOR 선례, `_client.tsx` 92라인 조립만). 나머지 6개(stores·orders·invite·users·drivers·banner)는 모놀리식 `_client.tsx`(223~335라인)에 fetch·상태·테이블·카드·모달이 뭉쳐 있었음. 반응형(#CL-51, 세션88)은 이미 완료. 이번은 **표현 레이어 SDD 분리만**(로직·hook·API 불변).
+
+**사용자 확정 2건(AskUserQuestion)**: ① 범위 = **SDD 전면 분리**(settlements 패턴) ② 단위 = **한 탭씩 완결 후 커밋**(stores부터).
+
+**분리 패턴(6개 탭 공통)**: ① `thBase` 스타일 상수 추출(테이블 `<th>` 인라인 스타일 반복 제거) ② 테이블/카드를 한 컴포넌트로 묶고 **로딩·빈결과 가드를 컴포넌트 안으로** 이동 ③ 라벨/색·필터·상태판정 중복 로직을 `_lib.ts`로 SSOT화. **순수 변환 함수가 없는 탭(users·banner)은 `_lib` 미생성 — 과분할 회피.**
+
+**탭별 결과(라인 변화·분리물·커밋)**:
+- **stores** 335→118 — `_lib`(STATUS_LABEL/COLOR·filterVisible·formatRate)+`StoresTable`. 커밋 `354475a`.
+- **orders** 309→63 — `_lib`(STATUS_LABEL·getStatusColor·REFUNDABLE·buildStatusOptions)+`OrdersFilters`·`OrdersTable`. 커밋 `83998d0`.
+- **invite** 291→61 — `_lib`(inviteStatus 판정 **테이블·카드 중복 제거**·만료 포맷 2종)+`InviteGenerator`·`InviteHistoryTable`. 커밋 `44c311b`.
+- **users** 234→76 — `UsersTable`만(`_lib` 미생성, 라벨 분기 단순). 커밋 `5bf29ff`.
+- **drivers** 228→92 — `_lib`(ACTION_META·STATUS_TABS·filterByTab+DriverAction/PendingAction 타입)+`DriverBadge`·`DriverList`. 커밋 `124768a`.
+- **banner** 223→97 — 섹션 3분할(`BannerImageSection`·`BannerTextSection`·`BannerCtaSection`, `_lib` 미생성). 커밋 `cb2d114`.
+
+**정합성(탭마다 반복)**: tsc0 · biome0(자동 포맷만, 신규 경고 0) · `npm run build`0 · 500라인 한도(전 탭 최대 212라인). **DOM 동일 → 시각 회귀 0.** e2e는 순수 표현 레이어라 회귀 위험 낮음.
+
+**연관**: 로드맵 `app-refactor-roadmap.md`(어드민 미착수🔴→완료✅, 커밋 `e6a2e55`). 잔여=상태변경(치우기·환불·승인 등) 육안 `pending-visual-verify.md` §4. 다음 리팩토링 차례=드라이버 앱(로드맵 §4). 커밋=`354475a`·`83998d0`·`44c311b`·`5bf29ff`·`124768a`·`cb2d114`·`e6a2e55`.
+
