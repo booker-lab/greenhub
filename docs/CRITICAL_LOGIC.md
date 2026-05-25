@@ -773,5 +773,9 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **정합성 체크포인트**: C1 겸직 `/onboarding` 진입·프로필 수정 정상 / C2 순수 어드민은 기존대로 콘솔 귀결(회귀0) / C3 일반 셀러 무영향(링크 미노출) / C4 tsc0·biome0·build0 / C5 500라인 한도.
 
-**연관**: 원인 커밋=`63e56c2`. 다음=구현 후 육안 검증(겸직 동선 양방향).
+**커밋·배포(세션89)**: 커밋 `2d30296` main push → Vercel 운영 배포. **운영 육안 1차 통과** — `seller.greenlove.co.kr/settings`에서 겸직 계정(정연, kakaoId 4827841177)에 "관리자" 섹션 + "관리자 콘솔로 이동" 행 정상 노출(§3 #44). **데이터 진단 확정**: 운영 admin 계정은 정연 1명, 연결 store는 "디어 오키드"가 아니라 **난플렉스**(`80189070-...`) — "디어 오키드"는 onboarding placeholder 예시였을 뿐. 백엔드 체인(`kakaoLogin`→`sanitizeUser` storeId 전달) 정상 확인.
+
+**보안 방어선 검증(사용자 질의 — 일반 셀러가 링크로 어드민 침투 가능?)**: **불가. 이번 변경의 보안 영향 0.** 추가물은 `<a href>` 링크 한 줄(UI 편의)일 뿐, 권한 판정은 백엔드가 담당. 방어 4겹 확인 — ① UI 노출 게이팅(`isDualRole`, 보안 아님) ② 프론트 서버가드 [admin/layout.tsx:8](../apps/seller/src/app/admin/layout.tsx#L8) `role!=='admin'→redirect('/orders')` ③ **API 가드 [admin.controller.ts:18-20](../apps/api/src/admin/admin.controller.ts#L18-L20) 클래스 전체 `@UseGuards(JwtAuthGuard,RolesGuard)`+`@Roles('admin')` → 셀러 토큰 403** ④ JWT 서명 [jwt.strategy.ts:13](../apps/api/src/auth/strategies/jwt.strategy.ts#L13) `JWT_SECRET` 검증·role은 [auth.service.ts:319](../apps/api/src/auth/auth.service.ts#L319) Firestore 실제 문서에서 주입(클라 위조 시 서명 깨져 401). 셀러가 `/admin/*` 주소 직접 입력해도 ②에서 redirect, 우회해도 ③에서 데이터 0(403). **권장(미실행, 사용자 충분 판단)**: 셀러 JWT→admin 컨트롤러 403 백엔드 단위테스트(첫 어드민 보안 테스트) — 카카오 storageState 부재로 e2e보다 단위테스트가 현실적.
+
+**연관**: 원인 커밋=`63e56c2`. 커밋=`2d30296`. 육안 검증=`pending-visual-verify.md` §3(42~52). 잔여 육안=#42 프로필 폼 진입·#46~47 어드민→셀러 링크.
 
