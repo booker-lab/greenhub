@@ -33,6 +33,16 @@ export class AdminController {
     return this.admin.setCommission(storeId, dto);
   }
 
+  @Patch('stores/:storeId/archive')
+  archiveStore(@Param('storeId') storeId: string) {
+    return this.admin.archiveStore(storeId);
+  }
+
+  @Patch('stores/:storeId/restore')
+  restoreStore(@Param('storeId') storeId: string) {
+    return this.admin.restoreStore(storeId);
+  }
+
   // ── Users ────────────────────────────────────────────────────────
 
   @Get('users')

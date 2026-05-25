@@ -172,7 +172,21 @@ export function useAdminStores() {
     return ok;
   };
 
-  return { stores, loading, error, reload, setCommission };
+  // 치우기 — 기록 가드 차단(400) 사유를 UI에 그대로 안내해야 하므로
+  // runAction(에러 삼킴) 대신 apiJson을 직접 호출해 ApiError를 전파한다.
+  const archiveStore = async (storeId: string) => {
+    if (!token) return;
+    await apiJson(`/admin/stores/${storeId}/archive`, token, { method: 'PATCH' });
+    await reload();
+  };
+
+  const restoreStore = async (storeId: string) => {
+    if (!token) return;
+    await apiJson(`/admin/stores/${storeId}/restore`, token, { method: 'PATCH' });
+    await reload();
+  };
+
+  return { stores, loading, error, reload, setCommission, archiveStore, restoreStore };
 }
 
 // ── Users ────────────────────────────────────────────────────────
