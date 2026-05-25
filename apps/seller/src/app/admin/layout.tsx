@@ -26,9 +26,26 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}>
               관리자 콘솔
             </Text>
-            <Badge color="red" variant="light" style={{ fontWeight: 'var(--fw-medium)' }}>
-              ADMIN
-            </Badge>
+            <Group gap="sm">
+              {/* 겸직 계정(어드민 + 자기 store 보유)만 셀러 화면 복귀 링크 노출 (#CL-52) */}
+              {session.user.storeId && (
+                <Text
+                  component="a"
+                  href="/orders"
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: 'var(--fw-medium)',
+                    color: 'var(--color-primary)',
+                    textDecoration: 'none',
+                  }}
+                >
+                  셀러 화면으로
+                </Text>
+              )}
+              <Badge color="red" variant="light" style={{ fontWeight: 'var(--fw-medium)' }}>
+                ADMIN
+              </Badge>
+            </Group>
           </Group>
         </Container>
         <Box style={{ overflowX: 'auto' }}>
