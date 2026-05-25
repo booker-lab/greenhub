@@ -11,7 +11,7 @@
 |----|------|--------------|----------|------|
 | **셀러** | `apps/seller` | ✅ **완료** (A~F, 세션39~59) | ✅ 완료 (M-PATH, 세션83) | 기준선·레퍼런스 패턴 |
 | **소비자** | `apps/consumer` | ⚠️ 부분 (DS 감사만, 2026-05-02) | ⏳ C 섹션 미진행 | 디자인시스템 위반 18건 목록 존재 |
-| **어드민** | `apps/seller/src/app/admin` | 🔴 미착수 | 🔴 미진행 | **모바일 반응형 미적용**(세션83 발견) |
+| **어드민** | `apps/seller/src/app/admin` | ✅ **완료** (반응형 세션88 + SDD 분리 세션91) | ⏳ 상태변경 육안만 | 7개 탭 전부 _lib/_components 분리 |
 | **드라이버** | `apps/driver` | 🔴 미착수 | 🔴 미진행 | board·map·login·profile |
 
 ---
@@ -32,11 +32,14 @@
 - **남은 육안**: M-PATH C 섹션(소비자 배송일 선택 #58~73) — 소비자 계정·소비자 앱 진입. 상품 상세→장바구니→체크아웃 흐름. 시드 베이스라인 = `seed-e2e-orders.mjs` dailyCaps 14일치.
 - 라우트: cart·category·checkout·groupbuy·login·mypage·products·search·order.
 
-### 3. 어드민 — 🔴 미착수
+### 3. 어드민 — ✅ 완료
 
-- **세션83 발견 결함**(BACKLOG 등재): 어드민 콘솔(`apps/seller/src/app/admin`)이 **모바일 PWA 폭 미최적화** — 정산 테이블 7컬럼 중 상태·지급처리버튼이 화면 밖으로 잘림. stores/users/orders/drivers 테이블도 동일 점검 필요.
-- **방향**: 데스크톱 테이블 → 모바일 카드형 전환 또는 가로 스크롤. 셀러 컴포넌트(SegmentedTabs·ConfirmModal·토큰) 재사용.
-- 탭: 판매자·소비자·드라이버·주문·정산·초대·배너.
+- **반응형(세션88, #CL-51)**: 5개 테이블(settlements·orders·stores·invite·users) 모바일 카드형 전환 — 세션83 발견 "정산 테이블 7컬럼 잘림" 결함 해소. `hiddenFrom`/`visibleFrom` 분기.
+- **SDD 분리(세션91, #CL-54)**: settlements 모범 패턴(`_lib`·`_components` 분리, `_client`는 조립만)을 나머지 6개 탭(stores·orders·invite·users·drivers·banner)에 적용. 각 탭 모놀리식 `_client`(223~335라인)를 순수함수(`_lib.ts`)·표현 컴포넌트(`_components/`)로 분해.
+  - 원칙: 로직·hook·API 불변, DOM 동일(시각 회귀 0). 라벨/색·필터·상태판정 등 중복 로직을 `_lib`로 SSOT화. 순수함수 없는 탭(users·banner)은 `_lib` 미생성(과분할 회피).
+  - 정합성: 탭마다 tsc0·biome0·build0·500라인 한도(최대 212라인) 통과 후 개별 커밋.
+- 탭: 판매자(stores)·소비자(users)·드라이버(drivers)·주문(orders)·정산(settlements)·초대(invite)·배너(banner).
+- **잔여**: 상태변경(치우기·복구·차단·환불·승인) 육안 검증 — `pending-visual-verify.md` §4. 순수 표현 레이어 리팩토링이라 e2e 회귀 위험은 낮음.
 
 ### 4. 드라이버앱 — 🔴 미착수
 
