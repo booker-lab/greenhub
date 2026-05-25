@@ -22,6 +22,8 @@ apps/*/.env.vercel.tmp
 apps/e2e/.bypass-state.json
 # e2e 인증 세션 쿠키 저장소 (seller·consumer 세션 토큰 포함, 커밋 금지) #CL-23
 apps/e2e/.auth-state.json
+# e2e 어드민 세션 쿠키 저장소 (admin 세션 토큰 포함, 커밋 금지) #CL-53
+apps/e2e/.admin-state.json
 
 # Firestore 로컬 백업
 backups/

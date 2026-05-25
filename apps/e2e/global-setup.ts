@@ -30,6 +30,7 @@ import { chromium, type Page } from '@playwright/test'
 import { config as loadEnv } from 'dotenv'
 import { resolve } from 'path'
 import {
+  ADMIN_STATE_PATH,
   AUTH_STATE_PATH,
   BYPASS_STATE_PATH,
   loginViaCredentials,
@@ -48,7 +49,6 @@ const LOGIN_MAX_ATTEMPTS = 3
 const LOGIN_RETRY_DELAY_MS = 2_000
 
 // driver 제외 — Credentials provider 부재(Kakao 전용, #CL-25)
-// admin은 별도 도메인이 없다 — 어드민 화면은 셀러앱 내 /admin/* 경로이므로 SELLER_BASE 재사용.
 const CREDENTIAL_TARGETS = [
   {
     name: 'SELLER',
@@ -62,13 +62,19 @@ const CREDENTIAL_TARGETS = [
     email: process.env['TEST_CONSUMER_EMAIL'],
     password: process.env['TEST_CONSUMER_PASSWORD'],
   },
-  {
-    name: 'ADMIN',
-    base: process.env['SELLER_BASE'],
-    email: process.env['TEST_ADMIN_EMAIL'],
-    password: process.env['TEST_ADMIN_PASSWORD'],
-  },
 ]
+
+// admin은 어드민 화면이 셀러앱 내 /admin/* 경로라 SELLER_BASE를 공유한다.
+// seller와 같은 도메인 → authjs.session-token 쿠키 슬롯이 1개뿐이라 같은
+// 컨텍스트에 누적하면 충돌한다. admin 전용 컨텍스트에서 우회 쿠키 + admin
+// 세션만 담아 .admin-state.json으로 격리 발급한다(어드민 spec이 재사용).
+const ADMIN_TARGET = {
+  name: 'ADMIN',
+  base: process.env['SELLER_BASE'],
+  bypassSecret: process.env['SELLER_BYPASS_SECRET'],
+  email: process.env['TEST_ADMIN_EMAIL'],
+  password: process.env['TEST_ADMIN_PASSWORD'],
+}
 
 /**
  * loginViaCredentials를 set-cookie race에 한해 제한적으로 재시도한다.
@@ -149,6 +155,36 @@ export default async function globalSetup(): Promise<void> {
 
   // 우회 + seller·consumer 세션 쿠키 누적 상태 저장 — 인증 spec의 storageState
   await context.storageState({ path: AUTH_STATE_PATH })
+
+  // 3. admin 세션 — seller와 같은 도메인이라 별도 컨텍스트에서 격리 발급.
+  //    seller 세션 쿠키가 없는 깨끗한 컨텍스트에 우회 쿠키 + admin 세션만 담는다.
+  //    시크릿 미설정 시 빈(.bypass만) 상태로 발급 — 어드민 인증 spec은 test.skip 처리됨.
+  const adminCtx = await browser.newContext()
+  const adminPage = await adminCtx.newPage()
+  if (ADMIN_TARGET.base?.includes('.vercel.app')) {
+    if (!ADMIN_TARGET.bypassSecret) {
+      throw new Error('globalSetup: SELLER_BYPASS_SECRET 미설정 — admin Preview SSO 우회 불가')
+    }
+    const url = `${ADMIN_TARGET.base}/?x-vercel-protection-bypass=${ADMIN_TARGET.bypassSecret}&x-vercel-set-bypass-cookie=true`
+    await adminPage.goto(url, { waitUntil: 'domcontentloaded' })
+    await adminPage.goto('about:blank')
+  }
+  if (ADMIN_TARGET.base && ADMIN_TARGET.email && ADMIN_TARGET.password) {
+    await loginWithRetry(
+      adminPage,
+      ADMIN_TARGET.base,
+      ADMIN_TARGET.email,
+      ADMIN_TARGET.password,
+      ADMIN_TARGET.name,
+    )
+  } else {
+    console.warn(
+      'globalSetup: ADMIN 인증 시크릿(TEST_ADMIN_EMAIL/PASSWORD) 미설정 — ' +
+        '세션 쿠키 생략 (어드민 인증 spec은 test.skip 처리됨)',
+    )
+  }
+  await adminCtx.storageState({ path: ADMIN_STATE_PATH })
+  await adminCtx.close()
 
   await browser.close()
 }
