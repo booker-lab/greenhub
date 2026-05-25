@@ -63,7 +63,11 @@ export default function SettlementsPage() {
           />
         )}
         {activeTab === 'orders' && (
-          <OrdersTab settlements={settlements} listLoading={listLoading} />
+          <OrdersTab
+            settlements={settlements}
+            listLoading={listLoading}
+            fetchSettlements={fetchSettlements}
+          />
         )}
       </Container>
     </PageShell>
