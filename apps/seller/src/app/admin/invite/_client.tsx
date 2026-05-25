@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Text, Title } from '@mantine/core';
+import { Badge, Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
 import { useEffect, useRef, useState } from 'react';
 import { useAdminInvite } from '@/hooks/useAdmin';
 
@@ -128,17 +128,69 @@ export default function AdminInviteClient() {
         <Text ta="center" py={32} style={{ color: 'var(--color-text-disabled)' }}>
           불러오는 중...
         </Text>
-      ) : (
+      ) : invites.length === 0 ? (
         <Paper
           radius="lg"
           shadow="xs"
           style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
         >
-          {invites.length === 0 ? (
-            <Text ta="center" py={48} style={{ color: 'var(--color-text-disabled)' }}>
-              발급된 토큰이 없습니다.
-            </Text>
-          ) : (
+          <Text ta="center" py={48} style={{ color: 'var(--color-text-disabled)' }}>
+            발급된 토큰이 없습니다.
+          </Text>
+        </Paper>
+      ) : (
+        <>
+          {/* 모바일(<sm): 카드 리스트 — 만료일 컬럼 잘림 방지 */}
+          <Stack gap="sm" hiddenFrom="sm">
+            {invites.map((inv) => {
+              const isUsed = !!inv.usedAt;
+              const expDate = inv.expiresAt ? new Date(inv.expiresAt) : null;
+              const isExpired = expDate ? expDate < new Date() : false;
+              return (
+                <Paper
+                  key={inv.token}
+                  radius="md"
+                  px="md"
+                  py="sm"
+                  shadow="xs"
+                  style={{ border: '1px solid var(--color-border)' }}
+                >
+                  <Group justify="space-between" mb="xs">
+                    <Text
+                      component="code"
+                      ff="monospace"
+                      style={{ letterSpacing: '0.1em', color: 'var(--color-text)' }}
+                    >
+                      {inv.token}
+                    </Text>
+                    <Badge
+                      color={isUsed ? 'gray' : isExpired ? 'red' : 'green'}
+                      variant="light"
+                      radius="xl"
+                    >
+                      {isUsed ? '사용됨' : isExpired ? '만료' : '유효'}
+                    </Badge>
+                  </Group>
+                  <Text
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-text-disabled)',
+                    }}
+                  >
+                    만료 {expDate ? expDate.toLocaleDateString('ko-KR') : '-'}
+                  </Text>
+                </Paper>
+              );
+            })}
+          </Stack>
+
+          {/* 데스크톱(≥sm): 기존 테이블 유지(시각 회귀 0) */}
+          <Paper
+            radius="lg"
+            shadow="xs"
+            style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
+            visibleFrom="sm"
+          >
             <Box
               component="table"
               style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
@@ -231,8 +283,8 @@ export default function AdminInviteClient() {
                 })}
               </Box>
             </Box>
-          )}
-        </Paper>
+          </Paper>
+        </>
       )}
     </Box>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Text, Title } from '@mantine/core';
+import { Badge, Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { useAdminUsers } from '@/hooks/useAdmin';
@@ -48,20 +48,75 @@ export default function AdminUsersClient() {
         </Title>
       </Group>
 
-      <Paper
-        radius="lg"
-        shadow="xs"
-        style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-      >
-        {users.length === 0 ? (
+      {users.length === 0 ? (
+        <Paper
+          radius="lg"
+          shadow="xs"
+          style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
+        >
           <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>
             등록된 소비자가 없습니다.
           </Text>
-        ) : (
-          <Box
-            component="table"
-            style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
+        </Paper>
+      ) : (
+        <>
+          {/* 모바일(<sm): 카드 리스트 — 상태·정지/복구 버튼 잘림 방지 */}
+          <Stack gap="sm" hiddenFrom="sm">
+            {users.map((user) => (
+              <Paper
+                key={user.id}
+                radius="md"
+                px="md"
+                py="sm"
+                shadow="xs"
+                style={{ border: '1px solid var(--color-border)' }}
+              >
+                <Group justify="space-between" mb="xs" align="flex-start">
+                  <Box style={{ minWidth: 0, flex: 1 }}>
+                    <Text style={{ fontWeight: 'var(--fw-medium)' }}>{user.name}</Text>
+                    <Text
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text-secondary)',
+                        wordBreak: 'break-all',
+                      }}
+                    >
+                      {user.email}
+                    </Text>
+                  </Box>
+                  <Badge color={user.suspended ? 'red' : 'green'} variant="light" radius="xl">
+                    {user.suspended ? '정지됨' : '정상'}
+                  </Badge>
+                </Group>
+                <Group justify="flex-end" mt="xs">
+                  <Button
+                    onClick={() =>
+                      setPending({ userId: user.id, currentlySuspended: !!user.suspended })
+                    }
+                    disabled={processingId === user.id}
+                    size="xs"
+                    variant="outline"
+                    color={user.suspended ? 'green' : 'red'}
+                    radius="md"
+                  >
+                    {processingId === user.id ? '처리중…' : user.suspended ? '복구' : '정지'}
+                  </Button>
+                </Group>
+              </Paper>
+            ))}
+          </Stack>
+
+          {/* 데스크톱(≥sm): 기존 테이블 유지(시각 회귀 0) */}
+          <Paper
+            radius="lg"
+            shadow="xs"
+            style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
+            visibleFrom="sm"
           >
+            <Box
+              component="table"
+              style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
+            >
             <Box
               component="thead"
               style={{
@@ -154,8 +209,9 @@ export default function AdminUsersClient() {
               ))}
             </Box>
           </Box>
-        )}
-      </Paper>
+          </Paper>
+        </>
+      )}
 
       <ConfirmModal
         opened={pending !== null}
