@@ -825,3 +825,19 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: 로드맵 `app-refactor-roadmap.md`(어드민 미착수🔴→완료✅, 커밋 `e6a2e55`). 잔여=상태변경(치우기·환불·승인 등) 육안 `pending-visual-verify.md` §4. 다음 리팩토링 차례=드라이버 앱(로드맵 §4). 커밋=`354475a`·`83998d0`·`44c311b`·`5bf29ff`·`124768a`·`cb2d114`·`e6a2e55`.
 
+## [#CL-55] 어드민 stores 탭 — `StoreStatus` SSOT 3중 불일치 교정 (PR-A C1·C2) (2026-05-26, 세션93)
+
+**배경**: 어드민 탭 개선(#CL-55, 세션92 진단) 첫 PR. store status가 3곳에서 어긋남 — `@greenhub/shared` `StoreStatus`=`invited|active|suspended`(**archived 없음**), 어드민 [_lib.ts](../apps/seller/src/app/admin/stores/_lib.ts) 로컬 맵=invited·active·suspended·**archived 추가**, 실제 `stores.service`가 set하는 값=invited→active→archived(**suspended는 어디서도 set 안 됨, 죽은 값**). 어드민 `_lib.ts:4` 주석이 자인.
+
+**세션93 사전 grep 3종(§A-0a)**: ① `rg "store\.status"`=**0건** ② `rg "'suspended'"`=9건 **전부 store 무관**(DriverStatus·admin.dto/service·auth.service·drivers/_lib·store.types 본인) ③ `rg "StoreStatus"`=활성 3건(`store.types.ts:1, 12`·`stores/_lib.ts:4` 주석). consumer/driver는 store status 미분기. → 세션92 스냅샷과 일치, 영향 범위 1곳뿐이라 T0 안전.
+
+**커밋 C1 (`6c474ce`) — T0 shared `StoreStatus` 교정**: `packages/shared/src/store.types.ts:1` `'invited'|'active'|'suspended'` → `'invited'|'active'|'archived'`. shared 재빌드(dist `.d.ts`+`.map` 동반 커밋, 본 저장소 관례). 같은 커밋에 SDD [`admin-tab-stores-plan.md`](../docs/specs/frontend/admin/admin-tab-stores-plan.md) §A-0a grep 표 채움 포함(미추적 신규 SDD라 함께 트래킹).
+
+**커밋 C2 (`1bd259a`) — T1+T2 어드민 union 적용 + 죽은 '정지' 라벨 제거**: ① [useAdmin.ts:14](../apps/seller/src/hooks/useAdmin.ts#L14) `AdminStore.status: string` → `StoreStatus` import 후 적용 ② [_lib.ts](../apps/seller/src/app/admin/stores/_lib.ts) `STATUS_LABEL`·`STATUS_COLOR`를 `Record<string,string>` → `Record<StoreStatus,string>` 좁힘 ③ `suspended:'정지'`·`suspended:'gray'` 항목 삭제(세션90 grill-me 결론 "판매자 정지 기능 없음"과 일치) ④ 주석 갱신(불일치 자인 → 정합성 확보 기록). **`StoresTable.tsx`의 `?? store.status`·`?? 'gray'` 폴백은 미래 union 확장 안전망으로 유지**(SDD 지시).
+
+**정합성 — 두 커밋 공통(C1·C2 각각 검토)**: tsc 4앱(seller·consumer·driver·api) 0 errors / biome **변동 0**(baseline=변경후 동일: seller 0e/2w·consumer 7e/25w·driver 2e/5w·api 0e/0w) / 4앱 빌드 통과(seller=어드민 포함 23+ 라우트·api=Nest) / 500라인 한도(_lib.ts 27·useAdmin.ts 388·store.types.ts 25) / SSOT 키가 union과 정확히 일치.
+
+**SDD 구도 (PR-A는 1/5 PR)**: PR-A(C1+C2 SSOT 교정, **이번 종결**) → PR-B(C3 T6+T9 검색·필터·정렬·URL 쿼리 + 빈결과 2종) → PR-C(C4 T3 `parseRate` 순수함수+vitest 9) → PR-D(C5 T4 NumberInput, 시각 회귀 격리) → PR-E(E1 어드민 stores e2e 8 케이스, 세션90 인프라 재사용). 본 PR-A는 신규 기능 0·시각 회귀 0이라 별도 육안 불요(통합 육안 §추가 항목만 다음 세션에 등록).
+
+**연관**: SDD [`docs/specs/frontend/admin/admin-tab-stores-plan.md`](../docs/specs/frontend/admin/admin-tab-stores-plan.md) §A-0a~A-3 · 인덱스 [`admin-tabs-improve-plan.md`](../docs/specs/frontend/admin-tabs-improve-plan.md). 다음 세션 진입 = PR-B(C3) 또는 PR-D(C5 시각 격리 우선) 사용자 선택. 커밋 `6c474ce`·`1bd259a` push.
+
