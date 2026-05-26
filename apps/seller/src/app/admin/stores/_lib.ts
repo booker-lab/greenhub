@@ -1,18 +1,18 @@
+import type { StoreStatus } from '@greenhub/shared';
 import type { AdminStore } from '@/hooks/useAdmin';
 
 // 판매자 상태 라벨/색 — stores 탭 표현 SSOT(테이블·카드 공용).
-// shared StoreStatus는 archived 미포함이라 어드민 표시는 로컬 맵으로 둔다.
-export const STATUS_LABEL: Record<string, string> = {
+// 키는 shared StoreStatus union(invited|active|archived)과 정확히 일치.
+// 호출부(StoresTable)는 `?? store.status` 폴백을 유지해 미래 union 확장 시 안전망 제공.
+export const STATUS_LABEL: Record<StoreStatus, string> = {
   active: '운영중',
   invited: '초대됨',
-  suspended: '정지',
   archived: '정리됨',
 };
 
-export const STATUS_COLOR: Record<string, string> = {
+export const STATUS_COLOR: Record<StoreStatus, string> = {
   active: 'green',
   invited: 'yellow',
-  suspended: 'gray',
   archived: 'gray',
 };
 
