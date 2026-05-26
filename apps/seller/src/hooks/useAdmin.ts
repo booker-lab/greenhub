@@ -1,6 +1,6 @@
 'use client';
 
-import type { SettlementStatus } from '@greenhub/shared';
+import type { SettlementStatus, StoreStatus } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
@@ -11,7 +11,7 @@ export interface AdminStore {
   id: string;
   name: string;
   ownerId: string;
-  status: string;
+  status: StoreStatus;
   commissionRate?: number;
   createdAt: unknown;
 }
