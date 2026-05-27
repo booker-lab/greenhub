@@ -3,14 +3,14 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-28 (어드민 stores 탭 PR-B C3 코드 완료·육안 대기 #CL-55)
+최종 수정: 2026-05-28 (어드민 stores 탭 PR-B C3 구현 세션 종결·육안 위임 #CL-55)
 
 ---
 
 ## 진행 현황
 
-**2026-05-28 후속 작업 (어드민 stores 탭 PR-B C3 코드 완료·육안 대기 #CL-55)**:
-- 지정 SDD `admin-tab-stores-plan.md`에 따라 **T6+T9 구현 완료**. 기존 "정리된 판매자 보기" Switch를 상태 Select(전체·활성·초대됨·운영중·정리됨, 기본 활성)로 흡수하고, 상호명 검색·새로고침·데스크톱 헤더 정렬·모바일 정렬 Select·조건 불일치 초기화·URL 쿼리 동기(`keyword/status/sort/dir`, 기본값 생략)를 추가. `_lib.ts`가 필터/정렬/빈결과/options SSOT를 담당하고 API·도메인 규칙은 불변. 기존 읽기전용 `admin-store-archive.spec.ts`는 삭제된 토글 대신 상태 필터 기본값을 확인하도록 갱신, `pending-visual-verify.md` #55·#60 현행화. **정합성**: 4앱 tsc 0, seller biome 신규 0(기존 `<img>` warning 2건만), seller build 23라우트 통과, 변경 코드 최대 `StoresTable.tsx` 274라인(T5 300행 트리거 미발동), e2e 8사례 수집 정상. **잔여**: 로컬 런타임 `AUTH_SECRET` 부재(`Auth.js MissingSecret`, `/api/auth/csrf` 500)로 인증 스모크 실행 전 차단되어 배포 환경 육안·상호작용 검증 대기.
+**2026-05-28 후속 작업 (어드민 stores 탭 PR-B C3 구현 세션 종결·육안 위임 #CL-55, `76f8f17`)**:
+- 지정 SDD `admin-tab-stores-plan.md`에 따라 **T6+T9 구현 종결**. 기존 "정리된 판매자 보기" Switch를 상태 Select(전체·활성·초대됨·운영중·정리됨, 기본 활성)로 흡수하고, 상호명 검색·새로고침·데스크톱 헤더 정렬·모바일 정렬 Select·조건 불일치 초기화·URL 쿼리 동기(`keyword/status/sort/dir`, 기본값 생략)를 추가. `_lib.ts`가 필터/정렬/빈결과/options SSOT를 담당하고 API·도메인 규칙은 불변. 기존 읽기전용 `admin-store-archive.spec.ts`는 삭제된 토글 대신 상태 필터 기본값을 확인하도록 갱신, `pending-visual-verify.md` #55·#60 현행화. **정합성**: 4앱 tsc 0, seller biome 신규 0(기존 `<img>` warning 2건만), seller build 23라우트 통과, 변경 코드 최대 `StoresTable.tsx` 274라인(T5 300행 트리거 미발동), e2e 8사례 수집 정상. **배포 후 육안 위임**: 로컬 런타임 `AUTH_SECRET` 부재(`Auth.js MissingSecret`, `/api/auth/csrf` 500)로 인증 스모크는 실행 전 차단. **다음 구현 진입 = PR-C(C4) `parseRate` 순수함수 + vitest 9케이스.**
 
 **세션82~85 요약 (상세는 MEMORY.md 헤더·project 메모리·CRITICAL_LOGIC 참조)**:
 - **세션82**: SETTLE-REFACTOR S6 e2e 측면 통과(육안만 사용자 위임).

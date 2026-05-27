@@ -3,7 +3,7 @@
 > **출처:** `admin-tabs-improve-plan.md` §A (세션92 진단).
 > **세션91**에 SDD 분리·반응형 카드형은 끝났다. 본 문서는 그 위의 **타입 안전·SSOT 정리·기능 부재**를 한 탭으로 떼어 누적·관리한다.
 > **진행 방식:** 한 탭씩 진단·확정 → 한 태스크씩 완결 후 커밋(세션91 패턴).
-> **진행 상태:** PR-A(C1·C2) 완료(`6c474ce`, `1bd259a`) · **PR-B(C3) 코드 완료·육안 대기(2026-05-28)**.
+> **진행 상태:** PR-A(C1·C2) 완료(`6c474ce`, `1bd259a`) · **PR-B(C3) 구현 종결(`76f8f17`, 배포·육안 위임, 2026-05-28)**.
 > **2026-05-26 갱신:** grill-me 13개 분기 답변 반영 — PR 단위 분리, default='활성', 모바일 정렬 대칭, URL 쿼리 동기, 빈결과 2종 분기, parseRate 시그니처 확정 등.
 
 ## 0. 공통 정합성 검토 기준 (모든 어드민 탭 공통)
@@ -235,7 +235,7 @@ feat(admin): #CL-55 stores 탭 검색·필터·정렬·새로고침 추가
   - 빈결과 2종 분기 메시지.
   - URL 공유 시 필터 상태 복원.
 
-**PR-B 구현 결과 (2026-05-28):**
+**PR-B 구현 결과 (2026-05-28, 커밋 `76f8f17`):**
 - `StoresFilters` 신설, 기존 archived Switch를 상태 Select(기본 `current` = 활성)로 흡수했다.
 - `_lib.ts`에 `filterStores`·`sortStores`·`getEmptyKind` 및 필터/정렬 옵션 SSOT를 추가했다.
 - `_client.tsx`가 `keyword`·`status`·`sort`·`dir` 쿼리를 동기화하며, 기본값 쿼리는 생략한다.
@@ -251,6 +251,7 @@ feat(admin): #CL-55 stores 탭 검색·필터·정렬·새로고침 추가
 - [x] C6 가드 — 로딩·데이터 없음·조건 불일치에서 필터 영역을 유지하도록 렌더 구조 교체.
 - [ ] C7 육안·URL 상호작용 — 로컬 런타임 `AUTH_SECRET` 부재(`Auth.js MissingSecret`, `/api/auth/csrf` 500)로 인증 스모크 실행 전 차단, 배포 환경 육안으로 이관(`pending-visual-verify.md` #55·#60).
 - [x] e2e 수집 확인 — 갱신된 `admin-store-archive.spec.ts` 8개 사례가 `playwright test --list`에 정상 수집됨.
+- [x] C3 구현 세션 종결 — 배포 후 육안 확인만 `pending-visual-verify.md` #55·#60으로 위임.
 
 ---
 
@@ -517,8 +518,9 @@ test(e2e): #CL-55 어드민 stores 검색·필터·정렬·수수료 e2e 8 케�
 **총 5개 PR / 6개 커밋 / 9개 아토믹 태스크(T0·T1·T2·T3·T4·T6·T9·T_E1·T5선택).**
 
 ## A-4. 차기 진입점
-- **다음 세션 = PR-A 착수**: §A-0a grep 3종 실행 → 결과 표 채움 → C1 T0 코드 변경.
-- 코드 완료 후 = T4 시각 회귀 + 필터 동작 육안(`pending-visual-verify.md` §추가).
+- **다음 구현 세션 = PR-C(C4)**: T3 `parseRate(input): ParseRateResult` 순수함수 추출 + vitest 9케이스.
+- **배포 후 육안 잔여**: PR-B 검색·필터·정렬·새로고침·URL 복원은 `pending-visual-verify.md` #55·#60에서 확인.
+- PR-D(C5 NumberInput)는 PR-C 완료 후 시각 회귀 단독 격리로 진행한다.
 - T7·T8 = 본 문서 §A-2 제외 항목 별도 SDD 선설계.
 
 ---
