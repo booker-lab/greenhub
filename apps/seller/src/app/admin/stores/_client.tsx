@@ -13,6 +13,7 @@ import {
   DEFAULT_STATUS_FILTER,
   filterStores,
   getEmptyKind,
+  parseRate,
   parseSort,
   parseStatusFilter,
   type StoreSort,
@@ -70,8 +71,8 @@ export default function AdminStoresClient() {
   };
 
   const handleSave = async (storeId: string) => {
-    const rate = parseFloat(rateInput);
-    if (Number.isNaN(rate) || rate < 0 || rate > 1) {
+    const parsed = parseRate(rateInput);
+    if (!parsed.ok) {
       notifications.show({
         color: 'orange',
         title: '입력 값을 확인하세요',
@@ -80,7 +81,7 @@ export default function AdminStoresClient() {
       return;
     }
     setSaving(true);
-    const ok = await setCommission(storeId, rate);
+    const ok = await setCommission(storeId, parsed.rate);
     setSaving(false);
     if (ok) {
       setEditId(null);
