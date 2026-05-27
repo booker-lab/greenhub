@@ -921,3 +921,13 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **후속 범위 승격 결정 (2026-05-28)**: 사용자가 본 PR 범위에서 제외됐던 T7(판매자 상세 드릴다운)과 T8(플랫폼 기본 수수료율 설정)을 향후 구현 작업으로 등록하도록 확정했다. 두 작업은 PR-A~E의 종결 상태를 변경하지 않으며, 각각 집계 API·라우트 및 전역 config·적용 정책이라는 새 계약을 포함하므로 `docs/BACKLOG.md` 미완료 항목으로 승격하고 구현 전 별도 SDD 작성을 게이트로 둔다.
 
+---
+
+## [#CL-55 / 머지 후 CI] 고정 preview 정산 날짜 검증의 KST 계약 교정 (2026-05-28)
+
+**관찰**: PR #3 병합 뒤 `Sync preview branch`는 SHA 일치 배포까지 성공했지만, 후속 `E2E Tests` 실행 `26526534062`는 기존 `seller-settlements.spec.ts` 한 건에서만 실패했다. CI 실행 시각은 UTC `2026-05-27`이지만 앱의 날짜 선택기는 `todayKST()` 계약에 따라 `2026-05-28`을 노출해, 테스트의 UTC 기대값이 실제 제품 계약보다 하루 뒤처졌다.
+
+**결정**: 정산 e2e 날짜 입력 기대값을 앱과 같은 UTC+9 날짜 문자열 계산으로 통일한다. `max` 단언뿐 아니라 어제 날짜 입력·레이블 단언도 같은 보조 함수로 계산해 KST 자정 경계에서 재발하지 않게 한다. admin stores 신규 스펙의 CI 건너뜀은 Actions에 `TEST_ADMIN_EMAIL/PASSWORD` 시크릿이 없는 기존 구성 때문이며, PR-E의 인증 가능한 임시 프리뷰 16/16 검증 근거는 유지한다.
+
+**사전 검증**: 변경 스펙 `biome check` 통과 · 인증 가능한 프리뷰 대상으로 `seller-settlements.spec.ts`와 `admin-stores-filter-sort.spec.ts`를 함께 실행해 `chromium` **16/16 통과**.
+

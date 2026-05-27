@@ -9,6 +9,9 @@
 
 ## 진행 현황
 
+**2026-05-28 후속 작업 (어드민 stores PR #3 병합 후 고정 preview CI 교정 #CL-55)**:
+- PR #3은 `main`에 merge commit `c982ad5`로 반영됐고 `preview` SHA `d6aaf60` 배포 동기화도 통과했다. 후속 e2e `26526534062`는 신규 stores가 아닌 기존 정산 날짜 단언 한 건에서 UTC `2026-05-27` 대 KST `2026-05-28` 불일치로 실패해, `seller-settlements.spec.ts` 기대값을 앱의 KST 계약과 맞췄다. 변경 스펙 biome 및 인증 프리뷰 대상 정산+stores `chromium` **16/16 통과**. Actions에 admin 인증 시크릿은 없어 CI admin 사례는 기존대로 skip되며, PR-E 임시 프리뷰 16/16 실행 근거와 육안 잔여 위임은 유지한다.
+
 **2026-05-28 후속 작업 (어드민 stores 탭 PR-E E1 프리뷰 실행 검증 종결 #CL-55)**:
 - PR-D 육안 위임 상태에서 진행한 `admin-stores-filter-sort.spec.ts`는 인증 컨텍스트를 재사용하되 `GET /admin/stores` fixture와 `PATCH /commission` 가로채기로 운영 쓰기를 차단한다. 작업 트리를 seller 임시 프리뷰 `greenhub-seller-blkcqzhnf-jos-projects-d1cecc0c.vercel.app`에 배포해 `READY`를 확인하고 실행했으며, 실행 중 Mantine `Select`에 대한 모호한 label 선택자와 내부 키 단언 결함을 `combobox` 정확 역할·표시값 단언으로 교정했다. **정합성**: 관련 biome 통과, seller vitest 9/9, 4앱 tsc 0, seller build 통과, Playwright 수집 16건, 프리뷰 런타임 **16/16 통과**(27.3초). **잔여**: `pending-visual-verify.md`의 운영 상태변경·NumberInput 시각/실저장 육안 항목만 유지.
 - 사용자 확정 후속 구현: 본 범위에서 제외됐던 **T7 판매자 상세 드릴다운**과 **T8 플랫폼 기본 수수료율 설정**을 `BACKLOG.md` §1-8·§12-1 미완료 작업으로 등록했다. PR-A~E 종결은 유지하며, 두 작업 모두 새 API/데이터 정책을 포함하므로 착수 전 별도 SDD가 필수다.
