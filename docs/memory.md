@@ -3,11 +3,21 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-28 (어드민 stores 탭 PR-B C3 구현 세션 종결·육안 위임 #CL-55)
+최종 수정: 2026-05-28 (어드민 stores 탭 PR-E E1 프리뷰 실행 검증 종결 #CL-55)
 
 ---
 
 ## 진행 현황
+
+**2026-05-28 후속 작업 (어드민 stores 탭 PR-E E1 프리뷰 실행 검증 종결 #CL-55)**:
+- PR-D 육안 위임 상태에서 진행한 `admin-stores-filter-sort.spec.ts`는 인증 컨텍스트를 재사용하되 `GET /admin/stores` fixture와 `PATCH /commission` 가로채기로 운영 쓰기를 차단한다. 작업 트리를 seller 임시 프리뷰 `greenhub-seller-blkcqzhnf-jos-projects-d1cecc0c.vercel.app`에 배포해 `READY`를 확인하고 실행했으며, 실행 중 Mantine `Select`에 대한 모호한 label 선택자와 내부 키 단언 결함을 `combobox` 정확 역할·표시값 단언으로 교정했다. **정합성**: 관련 biome 통과, seller vitest 9/9, 4앱 tsc 0, seller build 통과, Playwright 수집 16건, 프리뷰 런타임 **16/16 통과**(27.3초). **잔여**: `pending-visual-verify.md`의 운영 상태변경·NumberInput 시각/실저장 육안 항목만 유지.
+- 사용자 확정 후속 구현: 본 범위에서 제외됐던 **T7 판매자 상세 드릴다운**과 **T8 플랫폼 기본 수수료율 설정**을 `BACKLOG.md` §1-8·§12-1 미완료 작업으로 등록했다. PR-A~E 종결은 유지하며, 두 작업 모두 새 API/데이터 정책을 포함하므로 착수 전 별도 SDD가 필수다.
+
+**2026-05-28 후속 작업 (어드민 stores 탭 PR-D C5 구현 종결·육안 위임 #CL-55)**:
+- 지정 SDD의 T4에 따라 `StoresTable.tsx` 공용 편집 입력을 native input에서 Mantine `NumberInput`으로 교체했다. `clampBehavior="strict"`로 0~1 범위 밖 직접 입력을 차단하고 `inputMode="decimal"`을 명시했으며, 값은 `String(value)`로 PR-C `parseRate` 경로에 전달한다. **정합성**: vitest 9/9, 4앱 tsc 0, seller biome 신규 0(기존 `<img>` warning 2건만), seller build 통과, 변경 코드 최대 `StoresTable.tsx` 294라인(300행 선택 분할 기준 미만). **육안 위임**: 로컬은 `AUTH_SECRET` 부재와 `proxy.ts:14`의 빈 `session.user.role` 접근 오류로 `/admin/stores` 렌더 전 차단되어 `pending-visual-verify.md` #61~#66에 남겼다. **다음 구현 진입 = PR-E(e2e), 단 PR-D 육안 통과 후.**
+
+**2026-05-28 후속 작업 (어드민 stores 탭 PR-C C4 구현 세션 종결 #CL-55)**:
+- 지정 SDD `admin-tab-stores-plan.md`에 따라 **T3 `parseRate(input): ParseRateResult` 순수함수 추출을 종결**했다. `_lib.ts`가 `EMPTY | NOT_NUMBER | OUT_OF_RANGE` 결과를 반환하고 `_client.tsx`는 이를 사용하되 기존 오류 알림 문자열을 유지해 시각·사용자 행동을 바꾸지 않았다. 테스트 소유 경로에 맞춰 seller 작업공간에 `vitest` 실행 기반을 연결하고 `_lib.test.ts` 9케이스를 신설했다. **정합성**: vitest 9/9, 4앱 tsc 0, seller biome 신규 0(기존 `<img>` warning 2건만), seller build 통과, 변경 코드 최대 `_client.tsx` 177라인·활성 SDD 447라인. **다음 구현 진입 = PR-D(C5) `NumberInput` 시각 회귀 격리.** PR-B 배포 후 육안 위임(#55·#60)은 유지.
 
 **2026-05-28 후속 작업 (어드민 stores 탭 PR-B C3 구현 세션 종결·육안 위임 #CL-55, `76f8f17`)**:
 - 지정 SDD `admin-tab-stores-plan.md`에 따라 **T6+T9 구현 종결**. 기존 "정리된 판매자 보기" Switch를 상태 Select(전체·활성·초대됨·운영중·정리됨, 기본 활성)로 흡수하고, 상호명 검색·새로고침·데스크톱 헤더 정렬·모바일 정렬 Select·조건 불일치 초기화·URL 쿼리 동기(`keyword/status/sort/dir`, 기본값 생략)를 추가. `_lib.ts`가 필터/정렬/빈결과/options SSOT를 담당하고 API·도메인 규칙은 불변. 기존 읽기전용 `admin-store-archive.spec.ts`는 삭제된 토글 대신 상태 필터 기본값을 확인하도록 갱신, `pending-visual-verify.md` #55·#60 현행화. **정합성**: 4앱 tsc 0, seller biome 신규 0(기존 `<img>` warning 2건만), seller build 23라우트 통과, 변경 코드 최대 `StoresTable.tsx` 274라인(T5 300행 트리거 미발동), e2e 8사례 수집 정상. **배포 후 육안 위임**: 로컬 런타임 `AUTH_SECRET` 부재(`Auth.js MissingSecret`, `/api/auth/csrf` 500)로 인증 스모크는 실행 전 차단. **다음 구현 진입 = PR-C(C4) `parseRate` 순수함수 + vitest 9케이스.**
