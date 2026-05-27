@@ -21,6 +21,8 @@ export type StoreSortKey = 'name' | 'status' | 'rate';
 export type SortDirection = 'asc' | 'desc';
 export type StoreSortValue = `${StoreSortKey}:${SortDirection}`;
 export type StoreEmptyKind = 'no-data' | 'no-match' | 'has-data';
+export type ParseRateError = 'EMPTY' | 'NOT_NUMBER' | 'OUT_OF_RANGE';
+export type ParseRateResult = { ok: true; rate: number } | { ok: false; errorCode: ParseRateError };
 
 export interface StoreFilters {
   keyword: string;
@@ -104,6 +106,15 @@ export function sortStores(stores: AdminStore[], sort: StoreSort): AdminStore[] 
 export function getEmptyKind(stores: AdminStore[], filtered: AdminStore[]): StoreEmptyKind {
   if (stores.length === 0) return 'no-data';
   return filtered.length === 0 ? 'no-match' : 'has-data';
+}
+
+export function parseRate(input: string): ParseRateResult {
+  const trimmed = input.trim();
+  if (trimmed === '') return { ok: false, errorCode: 'EMPTY' };
+  const rate = Number.parseFloat(trimmed);
+  if (Number.isNaN(rate)) return { ok: false, errorCode: 'NOT_NUMBER' };
+  if (rate < 0 || rate > 1) return { ok: false, errorCode: 'OUT_OF_RANGE' };
+  return { ok: true, rate };
 }
 
 // 수수료율 표시 문자열 — 미설정 시 '기본'.
