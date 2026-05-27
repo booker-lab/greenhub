@@ -1,11 +1,31 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import {
+  Badge,
+  Box,
+  Button,
+  Group,
+  NumberInput,
+  Paper,
+  Stack,
+  Text,
+  UnstyledButton,
+} from '@mantine/core';
 import type { AdminStore } from '@/hooks/useAdmin';
-import { formatRate, STATUS_COLOR, STATUS_LABEL } from '../_lib';
+import {
+  formatRate,
+  STATUS_COLOR,
+  STATUS_LABEL,
+  type StoreEmptyKind,
+  type StoreSort,
+  type StoreSortKey,
+} from '../_lib';
 
 interface StoresTableProps {
   stores: AdminStore[];
+  loading: boolean;
+  emptyKind: StoreEmptyKind;
+  sort: StoreSort;
   editId: string | null;
   rateInput: string;
   saving: boolean;
@@ -15,6 +35,8 @@ interface StoresTableProps {
   onSave: (storeId: string) => void;
   onArchive: (store: AdminStore) => void;
   onRestore: (store: AdminStore) => void;
+  onResetFilters: () => void;
+  onSortChange: (sort: StoreSort) => void;
 }
 
 const thBase = {
@@ -23,8 +45,40 @@ const thBase = {
   color: 'var(--color-text-secondary)',
 };
 
+interface SortHeaderProps {
+  label: string;
+  sortKey: StoreSortKey;
+  sort: StoreSort;
+  onSortChange: (sort: StoreSort) => void;
+}
+
+function SortHeader({ label, sortKey, sort, onSortChange }: SortHeaderProps) {
+  const active = sort.key === sortKey;
+  const direction = active && sort.direction === 'asc' ? 'desc' : 'asc';
+  const indicator = active ? (sort.direction === 'asc' ? '↑' : '↓') : '↕';
+
+  return (
+    <UnstyledButton
+      onClick={() => onSortChange({ key: sortKey, direction })}
+      aria-label={`${label} ${direction === 'asc' ? '오름차순' : '내림차순'} 정렬`}
+    >
+      <Group gap={4} wrap="nowrap">
+        <Text component="span" inherit>
+          {label}
+        </Text>
+        <Text component="span" inherit style={{ color: 'var(--color-text-disabled)' }}>
+          {indicator}
+        </Text>
+      </Group>
+    </UnstyledButton>
+  );
+}
+
 export function StoresTable({
   stores,
+  loading,
+  emptyKind,
+  sort,
   editId,
   rateInput,
   saving,
@@ -34,17 +88,30 @@ export function StoresTable({
   onSave,
   onArchive,
   onRestore,
+  onResetFilters,
+  onSortChange,
 }: StoresTableProps) {
-  if (stores.length === 0) {
+  if (loading || emptyKind !== 'has-data') {
     return (
       <Paper
         radius="lg"
         shadow="xs"
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
       >
-        <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>
-          등록된 판매자가 없습니다.
-        </Text>
+        <Stack align="center" gap="sm" py={64}>
+          <Text ta="center" style={{ color: 'var(--color-text-disabled)' }}>
+            {loading
+              ? '불러오는 중...'
+              : emptyKind === 'no-match'
+                ? '조건에 맞는 판매자가 없습니다.'
+                : '등록된 판매자가 없습니다.'}
+          </Text>
+          {!loading && emptyKind === 'no-match' && (
+            <Button size="xs" variant="light" color="gray" onClick={onResetFilters}>
+              필터 초기화
+            </Button>
+          )}
+        </Stack>
       </Paper>
     );
   }
@@ -53,21 +120,19 @@ export function StoresTable({
   const renderRate = (store: AdminStore) =>
     editId === store.id ? (
       <Group gap="xs">
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          max="1"
+        <NumberInput
+          min={0}
+          max={1}
+          step={0.01}
+          decimalScale={2}
+          clampBehavior="strict"
+          inputMode="decimal"
           value={rateInput}
-          onChange={(e) => onRateInput(e.target.value)}
+          onChange={(value) => onRateInput(String(value))}
           placeholder="0.05"
-          style={{
-            width: 80,
-            border: '1px solid var(--color-border)',
-            borderRadius: 6,
-            padding: '4px 8px',
-            fontSize: 'var(--font-size-sm)',
-          }}
+          size="xs"
+          radius="sm"
+          w={104}
         />
         <Button
           onClick={() => onSave(store.id)}
@@ -170,13 +235,18 @@ export function StoresTable({
           >
             <tr>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                상호
+                <SortHeader label="상호" sortKey="name" sort={sort} onSortChange={onSortChange} />
               </Box>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                상태
+                <SortHeader label="상태" sortKey="status" sort={sort} onSortChange={onSortChange} />
               </Box>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                수수료율
+                <SortHeader
+                  label="수수료율"
+                  sortKey="rate"
+                  sort={sort}
+                  onSortChange={onSortChange}
+                />
               </Box>
               <Box component="th" style={{ padding: '12px 16px' }} />
             </tr>
