@@ -841,3 +841,24 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: SDD [`docs/specs/frontend/admin/admin-tab-stores-plan.md`](../docs/specs/frontend/admin/admin-tab-stores-plan.md) §A-0a~A-3 · 인덱스 [`admin-tabs-improve-plan.md`](../docs/specs/frontend/admin-tabs-improve-plan.md). 다음 세션 진입 = PR-B(C3) 또는 PR-D(C5 시각 격리 우선) 사용자 선택. 커밋 `6c474ce`·`1bd259a` push.
 
+---
+
+## [#CL-55 / PR-B C3] 어드민 stores 검색·필터·정렬·새로고침 + URL 복원 (2026-05-28, 구현 세션 종결)
+
+**선행**: PR-A(C1·C2, `6c474ce`·`1bd259a`)로 `StoreStatus`가 `invited|active|archived`에 정합된 뒤 진행. 본 작업은 `admin-tab-stores-plan.md`의 T6+T9이며 백엔드·데이터모델은 변경하지 않는다.
+
+**설계 결정**:
+1. 기존 "정리된 판매자 보기" Switch는 상태 Select로 흡수한다. 항목은 **전체·활성·초대됨·운영중·정리됨**, 기본값은 **활성**(`invited|active`, archived 숨김)으로 기존 기본 노출 체감을 보존한다.
+2. `'활성'` URL 값은 `status=current`로 표현한다. `status=active`는 실제 단일 상태인 `'운영중'`과 충돌하므로 사용하지 않는다.
+3. URL 쿼리는 `keyword/status/sort/dir`만 사용하며 기본값(`status=current`, `sort=name`, `dir=asc`)은 생략한다. 기존 `/admin/stores` 진입 주소를 유지하면서 변경 조건만 공유·뒤로가기 복원한다.
+4. 정렬 조작은 화면 폭에 맞춘다. 데스크톱은 테이블 헤더 토글, 모바일 카드는 상단 Select를 사용해 카드 내부 액션 영역을 흔들지 않는다.
+5. 빈 결과는 데이터 자체 없음과 조건 불일치를 분리한다. 조건 불일치일 때만 "필터 초기화" 동선을 제공한다.
+
+**구현(`76f8f17`)**: [StoresFilters.tsx](../apps/seller/src/app/admin/stores/_components/StoresFilters.tsx) 신설 · [_lib.ts](../apps/seller/src/app/admin/stores/_lib.ts)에 필터/정렬/빈결과/options SSOT 추가 · [_client.tsx](../apps/seller/src/app/admin/stores/_client.tsx)에 URL 상태 동기화·새로고침 배선 · [StoresTable.tsx](../apps/seller/src/app/admin/stores/_components/StoresTable.tsx)에 정렬 헤더·조건 불일치 가드 추가 · 기존 읽기 전용 [admin-store-archive.spec.ts](../apps/e2e/tests/admin-store-archive.spec.ts)는 삭제된 Switch 대신 상태 필터 기본값을 확인하도록 갱신.
+
+**정합성**: seller·consumer·driver·api tsc 0 · seller biome 신규 0(기존 `<img>` warning 2건만 잔존) · seller build 성공(`/admin/stores` 포함 23라우트) · 최대 변경 코드 `StoresTable.tsx` 274라인으로 300행 선택 분할 트리거와 500라인 절대 한도 모두 미발동 · 갱신 e2e 8사례 수집 정상.
+
+**검증 위임 사유**: 로컬 런타임에 `AUTH_SECRET`이 없어 `Auth.js MissingSecret`이 발생하고 `/api/auth/csrf`가 500을 반환해 인증 스모크가 실행 전에 차단됐다. 따라서 배포 후 상호작용 육안은 [pending-visual-verify.md](../docs/specs/frontend/pending-visual-verify.md) #55·#60으로 위임한다.
+
+**차기 진입**: PR-C(C4) `parseRate(input): ParseRateResult` 순수함수 추출 + vitest 9케이스. PR-D(C5 NumberInput)는 PR-C 이후 시각 회귀 단독 격리로 진행.
+
