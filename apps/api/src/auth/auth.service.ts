@@ -346,6 +346,12 @@ export class AuthService {
     }
     // tokenSnap.exists === false: rotation 도입 이전 발급 토큰 (정상 허용, 이후 DB에 기록됨)
 
+    const userSnap = await this.firestore.doc(`users/${payload.sub}`).get();
+    if (userSnap.exists && userSnap.data()?.suspended === true) {
+      await this.audit.log('auth.login.suspended', { userId: payload.sub });
+      throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
+    }
+
     return this.issueTokens({
       sub: payload.sub,
       role: payload.role,
