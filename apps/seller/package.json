@@ -7,6 +7,7 @@
     "prebuild": "node ../../scripts/copy-fonts.cjs",
     "build": "next build --webpack",
     "start": "next start",
+    "test": "vitest run",
     "lint": "biome lint src",
     "format": "biome format src --write"
   },
@@ -32,6 +33,7 @@
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",
     "typescript": "^5",
+    "vitest": "^3.0.0",
     "workbox-routing": "^7.4.0",
     "workbox-strategies": "^7.4.0"
   }
