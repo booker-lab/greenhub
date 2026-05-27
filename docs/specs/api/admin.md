@@ -127,7 +127,8 @@ PATCH /admin/users/:userId/status
 ```
 
 > Firestore `users/{userId}.suspended` 필드를 토글한다.
-> 정지된 사용자는 로그인 시 `401` 반환 (auth.service.ts 검증 필요 — 현재 미구현, 추후 추가).
+> 정지된 사용자는 이메일/카카오 로그인 및 refresh token 교환 시 `401`을 반환한다.
+> 이미 발급된 access token은 자연 만료(최대 1시간)까지 유효할 수 있다.
 
 ---
 
@@ -346,7 +347,7 @@ PATCH /admin/drivers/:userId/suspend
 
 | 항목 | 상태 | 비고 |
 |------|------|------|
-| `suspended` 사용자 로그인 차단 | 🔲 미구현 | `auth.service.ts` 로그인 시 suspended 검증 추가 필요 |
+| `suspended` 사용자 로그인·refresh 차단 | ✅ 구현 | 로그인 차단 기존 구현 + refresh 차단 #CL-55 users S1 (`be5def9`) |
 | 주문 목록 페이지네이션 | 🔲 MVP 제외 | 현재 200건 하드 리밋 |
 | admin 활동 로그 | 🔲 미구현 | 강제 환불·정지 등 감사 로그 |
 | 다중 admin 지원 | ✅ 지원 | role='admin' 사용자 수 제한 없음 |

@@ -15,7 +15,7 @@
 | orders(주문) | ✅ 세션93 / 🔄 셀러앱 연계 추가 | ⬜ 미착수 (D1 선결) | [admin-tab-orders-plan.md](./admin/admin-tab-orders-plan.md) |
 | drivers(기사) | ✅ 세션93 / 세션95 `/further` 확정 | 🟡 착수 대기 (T1+T2 확정) | [admin-tab-drivers-plan.md](./admin/admin-tab-drivers-plan.md) |
 | settlements(정산) | ✅ 세션94 / 🔄 셀러 정산 교차 참조 | ⬜ 미착수 | [admin-tab-settlements-plan.md](./admin/admin-tab-settlements-plan.md) |
-| users(소비자) | ✅ 세션96 / ✅ 세션92 grill-me 종결 (S1~S6 플랜 확정) | 🟢 S1(D1) 착수 가능 | [admin-tab-users-plan.md](./admin/admin-tab-users-plan.md) |
+| users(소비자) | ✅ 세션96 / ✅ 세션92 grill-me 종결 (S1~S6 플랜 확정) | 🟡 S1 구현·branch push (`be5def9`), S2 진입 준비 / main 병합·배포 대기 | [admin-tab-users-plan.md](./admin/admin-tab-users-plan.md) |
 | invite(초대) | ✅ 세션97 / 세션98 Further 확장 | 🟡 착수 대기 (F1+F2+F3+F4+F6 확정) | [admin-tab-invite-plan.md](./admin/admin-tab-invite-plan.md) |
 | banner(배너) | ✅ 세션95 / 세션92 Further 다중 배너 모델 확정 | ⬜ 미착수 (D-G1 4건 선결) | [admin-tab-banner-plan.md](./admin/admin-tab-banner-plan.md) |
 
@@ -55,5 +55,6 @@
 - 프로젝트 메모리: `c:\Users\tazan\.claude\projects\c--Develop-greenhub\memory\project_admin_tabs_improve.md`
 
 ## 변경 이력
+- **users S1 (2026-05-27, `be5def9`)**: refresh 정지 차단과 Jest 회귀 테스트 구현·branch push 완료. S2 인계 문서 준비.
 - **세션99 (2026-05-26)**: 통합 본문(1019라인) → 7개 탭별 SDD로 분할. 본 문서는 인덱스로 축소.
 - 세션92~98: 통합 본문에 §A~§G 누적(stores→orders→drivers→settlements→users→invite→banner).

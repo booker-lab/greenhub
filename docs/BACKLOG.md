@@ -124,6 +124,7 @@
 
 - [x] `/admin/stores` — 판매자 목록 + 수수료 설정 ✅ 2026-04-03
 - [x] `/admin/users` — 소비자 계정 조회·정지·복구 ✅ 2026-04-03
+- [~] **[#CL-55 users 탭 개선]** S1 refresh 정지 차단 ✅ branch push `be5def9`; S2~S6 잔여(가입일·전화/reload → 검색·필터 → limit → E2E → 육안). `main` 병합·배포 전.
 - [x] `/admin/orders` — 전체 주문 조회·환불 강제 처리 ✅ 2026-04-03
 - [x] `/admin/settlements` — 판매자별 정산 처리 (이체 완료) ✅ 2026-04-03
 - [x] `/admin/invite` — 초대 토큰 발급 ✅ 2026-04-03

@@ -235,6 +235,8 @@ POST /auth/refresh
 ```
 
 > NextAuth.js가 내부적으로 처리. 클라이언트에서 직접 호출 불필요.
+> refresh token rotation 검증 후 `users/{sub}.suspended === true`이면 `401`을 반환하며 새 access/refresh token을 발급하지 않는다.
+> 이미 발급된 access token은 자연 만료(최대 1시간)까지 유효할 수 있다.
 
 ---
 

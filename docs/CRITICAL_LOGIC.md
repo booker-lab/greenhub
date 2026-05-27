@@ -841,3 +841,13 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: SDD [`docs/specs/frontend/admin/admin-tab-stores-plan.md`](../docs/specs/frontend/admin/admin-tab-stores-plan.md) §A-0a~A-3 · 인덱스 [`admin-tabs-improve-plan.md`](../docs/specs/frontend/admin-tabs-improve-plan.md). 다음 세션 진입 = PR-B(C3) 또는 PR-D(C5 시각 격리 우선) 사용자 선택. 커밋 `6c474ce`·`1bd259a` push.
 
+## [#CL-55] 어드민 users S1 — 정지 계정 refresh 재발급 차단 (2026-05-27~28)
+
+**결함**: 이메일·카카오 로그인은 이미 `users/{id}.suspended === true`를 `401`로 차단했지만, `refresh()`는 정지 여부를 읽지 않았다. access token 1시간, refresh token 30일 정책에서 정지 사용자가 기존 refresh token으로 최대 30일 새 access token을 계속 받을 수 있었다.
+
+**결정 및 구현 (`be5def9`, `codex/admin-users-s1-refresh-suspend` push)**: [auth.service.ts](../apps/api/src/auth/auth.service.ts)의 refresh token rotation 검증 직후 `users/{payload.sub}`를 조회한다. 문서가 존재하고 `suspended === true`이면 `auth.login.suspended` 감사 이벤트를 남긴 뒤 기존 로그인과 같은 정지 메시지의 `UnauthorizedException`을 반환한다. 정지 순간 기존 access token을 강제 폐기하거나 refresh token 문서를 삭제하지는 않으며, 최대 1시간 자연 만료 정책을 유지한다.
+
+**테스트와 정합성**: 계획서의 Vitest 가정과 달리 API의 기존 runner는 Jest였다. [auth.service.spec.ts](../apps/api/src/auth/auth.service.spec.ts)에 정지 refresh가 발급·rotation write 없이 거부되는 케이스와 정상 refresh가 계속 rotation 되는 케이스를 추가했다. `pnpm --filter api test -- --runInBand` 4/4, `pnpm --filter api exec tsc --noEmit`, `pnpm --filter api build`는 통과했다. API 전역 lint는 기존 `408 errors / 20 warnings` baseline으로 실패했고, 신규 spec 및 추가 refresh 블록에서 새 Biome 진단은 발견되지 않았다.
+
+**잔여 게이트**: 이 기록은 feature branch 상태이며 `main` 병합·배포 전이다. 정지 사용자 refresh의 live `401` 검증은 users S1~S4 배포 후 S5 E2E에서 수행한다. 다음 구현 진입점은 S2(T1+T2: `UsersTable` 가입일·전화 표시와 `_client` reload 버튼)다.
+

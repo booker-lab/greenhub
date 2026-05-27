@@ -38,19 +38,19 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 |------|------|------|
 | 검색(이름·이메일·전화) | ❌ 없음 | drivers·orders 모두 검색 부재(공통 부채)이나 **소비자는 증가 속도 1위 집단** |
 | 상태 필터(정상/정지) | ❌ 전체만 | drivers는 `STATUS_TABS`(대기/승인/정지) 보유 — 비대칭 |
-| 정렬·페이지네이션 | ❌ 없음 | — |
+| 정렬·페이지네이션 | 🟡 `createdAt desc` 정렬 기구현, 페이지네이션 없음 | 정렬은 본 계획 작성 전 `getUsers()`에 선행 반영됨 |
 | **백엔드 limit** | ❌ **없음**(`getUsers`가 limit 없는 전량 `.get()`) | orders는 `limit(200)`, drivers `limit(100)`, settlements `limit(500)` — **users만 무제한** |
 
-→ **소비자는 판매자·드라이버와 달리 수가 빠르게 늘어나는 집단인데 검색·필터·정렬·페이지가 전무.**
+→ **소비자는 판매자·드라이버와 달리 수가 빠르게 늘어나는 집단인데 검색·필터·페이지네이션이 전무하고, 정렬만 선행 구현돼 있다.**
 운영 규모가 커지면 특정 소비자를 찾을 방법이 없고, 백엔드 `getUsers`도 limit 없는 전량 로드라 **확장성 결함**(타 탭 대비 유일하게 하드캡조차 없음).
 
-## E-3. 정합성 진단 — 🔴 정지(suspended) 효과 결함 (grill-me 조사 결과)
+## E-3. 정합성 진단 및 S1 적용 — 정지(suspended) 효과 결함
 
 | 레이어 | suspended 체크 | 위치 |
 |--------|---------------|------|
 | 비번 로그인 | `userData.suspended===true` → 401 차단 | `auth.service.ts:133` |
 | 카카오 로그인 | `userData.suspended===true` → 401 차단 | `auth.service.ts:304` |
-| **refresh 토큰 교환** | ❌ **체크 없음** | `auth.service.ts:329 refresh()` |
+| **refresh 토큰 교환** | ✅ **S1에서 401 차단 추가** | `auth.service.ts:329 refresh()` (`be5def9`) |
 | 이미 발급된 access JWT | ❌ 체크 없음 | (가드·주문 경로에 suspended 검사 부재) |
 
 **세션92 조사 결과 (실측):**
@@ -63,6 +63,11 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 
 → **사용자 확정(D1) = `refresh()`에 suspended 한 줄 추가.** 차단 지연 최대 1시간(access 자연 만료)
   수용, JwtAuthGuard 매요청 DB read 회피로 비용 0. 가장 작은 변경·가장 큰 효과.
+
+**S1 적용 결과 (2026-05-27, `be5def9`, branch push):**
+- refresh token rotation 검증 후 `users/{sub}`를 조회하고, `suspended === true`이면 기존 로그인과 같은 메시지 및 `auth.login.suspended` 감사 이벤트로 `401`을 반환한다.
+- 정상 사용자의 refresh token rotation은 Jest 회귀 테스트로 고정했다. API 테스트 러너는 계획 당시 가정한 Vitest가 아니라 기존 Jest 설정을 사용한다.
+- `origin/codex/admin-users-s1-refresh-suspend`까지 push 완료. `main` 병합·배포와 S5 live E2E는 아직 진행하지 않았다.
 
 ## E-4. 기능 부재 (표시 정보)
 
@@ -83,10 +88,12 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 
 ### 그룹 D — 정지 결함 차단 (최우선, 코드 시작 전)
 
-#### **D1. refresh()에 suspended 차단 추가** (백엔드 단독, 독립 PR)
+#### **D1. refresh()에 suspended 차단 추가** (백엔드 단독) — ✅ S1 구현·branch push
 - **변경:** `apps/api/src/auth/auth.service.ts:329 refresh()` 메서드에서 user 문서 조회 후 `userData.suspended===true`면 401. `auth.service.ts:133`·`:304`의 기존 로그인 차단 로직과 동일 패턴.
 - **선택:** 정지 시 `refreshTokens/{userId}` 즉시 delete까지는 하지 않음(차단 지연 최대 1시간 수용, 단순성 우선).
-- **테스트:** vitest로 refresh-suspended 케이스 신설(현재 auth에 단위테스트 부재 시 인프라부터). e2e는 §E-9 참조.
+- **테스트:** `apps/api/src/auth/auth.service.spec.ts`에 Jest 2케이스 신설(정지 refresh 401·정상 rotation 발급). e2e는 §E-9에서 배포 후 수행.
+- **결과:** 커밋 `be5def9`, 브랜치 `codex/admin-users-s1-refresh-suspend` push 완료. API Jest 4/4·`tsc --noEmit`·build 통과.
+- **검증 메모:** API 전체 ESLint는 기존 baseline `408 errors / 20 warnings`로 실패했다. 신규 spec과 추가 refresh 블록에는 신규 Biome 진단이 없다.
 - **위험:** 0. 기존 로그인 차단 로직 재사용. 인증 정상 사용자 영향 없음.
 - **선행 = 없음.** T1~T4와 무관(parallel 가능하나 우선순위 최상).
 
@@ -127,14 +134,14 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 - **선행 = T1·T2 PR 머지 후(컴포넌트 트리 안정화 후).**
 - **위험:** C6 가드 누락 시 필터 사라짐 회귀. tsc·biome·build 통과 + 육안 검증.
 
-#### **T4. getUsers 백엔드 limit·정렬 (E-2 한도)**
-- **변경:** `apps/api/src/admin/admin.service.ts:86 getUsers()`에 `.orderBy('createdAt','desc').limit(N)` 추가.
+#### **T4. getUsers 백엔드 limit 정책 (E-2 한도)**
+- **변경:** `apps/api/src/admin/admin.service.ts:86 getUsers()`의 기존 `.orderBy('createdAt','desc')` 뒤에 `.limit(N)`을 추가한다.
 - **limit 값:** **사용자가 현 운영 user 수 확인 후 결정.**
   - <100 = 보류(BACKLOG에만 기록)
   - 100~1,000 = `limit(5000)` (T3 클라이언트 필터와 모순 없는 큰 캡)
   - 1,000+ = 서버 검색(Firestore where prefix) 별도 SDD로 승격
 - **선행 = T3 PR 머지 후(클라이언트 필터의 한계 측정 후 적정 limit 결정 가능).**
-- **위험:** 정렬 추가 시 Firestore 복합 인덱스 필요 가능 → 배포 전 인덱스 확인(세션80 선례).
+- **위험:** 기존 정렬과 신규 limit 조합에 Firestore 인덱스 확인이 필요할 수 있음 → 배포 전 확인(세션80 선례).
 
 ### 별도 SDD — 본 범위 제외 (E-7 제외군)
 - **F3** 소비자→주문 드릴다운 — orders 백엔드 `userId` 필터 + stores F7·orders F3과 어드민 교차 필터 일괄 SDD
@@ -150,10 +157,10 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 
 | 세션 | 범위 | 산출물 | 정합성 | 비고 |
 |------|------|--------|--------|------|
-| **S1** | D1 단독 | `auth.service.ts` refresh()에 suspended 차단 + vitest | C1~C3 (백엔드 only) | 정지 결함 30일→1시간 단축. 가장 시급 |
-| **S2** | T1+T2 묶음 | `UsersTable.tsx` 가입일·전화 표시 + `_client.tsx` 새로고침 버튼 | C1~C5, C7 | 저위험. 모바일 카드 높이 회귀 의도적 |
+| **S1** | D1 단독 | `auth.service.ts` + `auth.service.spec.ts` (Jest) | ✅ 구현·검증·branch push | `be5def9`; main 병합·배포·S5 대기 |
+| **S2** | T1+T2 묶음 | `UsersTable.tsx` 가입일·전화 표시 + `_client.tsx` 새로고침 버튼 | ➡️ 다음 세션 | 저위험. 모바일 카드 높이 회귀 의도적 |
 | **S3** | T3 단독 | `UsersFilters.tsx`·`_lib.ts`·`_lib.test.ts` 신설 + `_client.tsx` 통합 | C1~C7 전부 | 본 범위 핵심. vitest 첫 통과 후 PR |
-| **S4** | T4 단독 | `admin.service.ts:getUsers` limit·orderBy + 인덱스 배포 | C1~C3, 인덱스 확인 | user 수 확인 후 limit 값 확정 |
+| **S4** | T4 단독 | `admin.service.ts:getUsers` limit 정책·적용 + 필요 시 인덱스 확인 | C1~C3, 인덱스 확인 | `orderBy(createdAt desc)`는 선행 구현됨 |
 | **S5** | e2e | §E-9 시나리오 4건 라이브 수행 | playwright 0 fail | S1~S4 코드 머지 후 |
 | **S6** | 육안 종결 | `pending-visual-verify.md` §추가 항목 전수 통과 | 사용자 확정 | 운영 배포 후 |
 
@@ -169,7 +176,7 @@ S4 (T4 limit)            ─┘
        ↓
       S6 (육안)
 ```
-- **S1은 S2~S4와 독립** — 백엔드 단독, 가장 먼저(우선순위 최상) 혹은 병행 가능
+- **S1은 feature branch에서 완료** — S2는 `be5def9`를 포함한 브랜치에서 시작하거나 S1 병합 후 새 브랜치를 만든다
 - **S2 → S3 → S4 순차** — T3 필터가 T1·T2 변경된 UsersTable 위에서 동작, T4 limit는 T3 필터의 한계 측정 후
 - **S5는 S1~S4 전부 머지된 환경에서만** — e2e가 검색·필터·정지·refresh 차단을 모두 검증
 
@@ -187,26 +194,26 @@ S4 (T4 limit)            ─┘
 
 각 세션 커밋 직전 아래를 빠짐없이 통과한다. **하나라도 실패하면 커밋 금지.**
 
-### S1 (D1 백엔드) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/api && npx tsc --noEmit` 0
-- [ ] **C2 biome 0** — `npm run lint --workspace=apps/api` 신규 경고 0
-- [ ] **C3 build 0** — `cd apps/api && npm run build` 0
-- [ ] **vitest** — `auth.service.test.ts`에 refresh-suspended 케이스 추가, 통과
-- [ ] **회귀 0** — 기존 로그인·refresh 정상 경로 테스트 통과
-- [ ] **수동 확인** — 정지된 사용자로 refresh API 호출 → 401 응답
+### S1 (D1 백엔드) 체크리스트 — branch 완료 (`be5def9`)
+- [x] **C1 tsc 0** — `pnpm --filter api exec tsc --noEmit` 통과
+- [~] **C2 신규 진단 0 확인** — 신규 spec의 Biome/ESLint와 추가 refresh 블록의 신규 Biome 진단은 0. 단 API 전역 `pnpm --filter api lint`는 기존 baseline `408 errors / 20 warnings`로 실패(범위 외 부채)
+- [x] **C3 build 0** — `pnpm --filter api build` 통과
+- [x] **Jest** — `auth.service.spec.ts` 신규 2케이스와 API 전체 test `4/4` 통과
+- [x] **회귀 0** — 정상 refresh token rotation 단위테스트 통과, 로그인 로직은 변경하지 않음
+- [ ] **운영/API 확인** — 아직 배포 전. S1~S4 배포 후 S5 live E2E에서 정지 사용자 refresh `401`을 확인
 
 ### S2 (T1+T2) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/admin && npx tsc --noEmit` 0
-- [ ] **C2 biome 0** — `npm run lint --workspace=apps/admin` 신규 경고 0
-- [ ] **C3 build 0** — `cd apps/admin && npm run build` 0(⚠️ `npx next build` 금지)
+- [ ] **C1 tsc 0** — `pnpm --filter seller exec tsc --noEmit` 통과
+- [ ] **C2 biome 0** — `pnpm exec biome check apps/seller/src/app/admin/users` 신규 진단 0
+- [ ] **C3 build 0** — `pnpm --filter seller build` 통과(⚠️ `npx next build` 금지)
 - [ ] **C4 500라인** — `UsersTable.tsx` 라인 측정 (현 160 + 가입일·전화 컬럼·카드 줄 → ~200 예상, 한도 내)
-- [ ] **C5 SSOT** — 색·라벨 하드코딩 0, `toDateStrKST` 재사용
+- [ ] **C5 SSOT** — 색·라벨 하드코딩 0, `createdAt` 직렬화 형태를 확인한 뒤 기존 KST 날짜 변환 패턴 재사용
 - [ ] **C7 시각 회귀** — 데스크톱 테이블 컬럼 너비 회귀 0(기존 컬럼 유지), 모바일 카드 높이 증가는 의도
 
 ### S3 (T3 검색·필터) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/admin && npx tsc --noEmit` 0
-- [ ] **C2 biome 0** — 신규 경고 0
-- [ ] **C3 build 0** — `npm run build` 0
+- [ ] **C1 tsc 0** — `pnpm --filter seller exec tsc --noEmit` 통과
+- [ ] **C2 biome 0** — `pnpm exec biome check apps/seller/src/app/admin/users` 신규 진단 0
+- [ ] **C3 build 0** — `pnpm --filter seller build` 통과
 - [ ] **C4 500라인** — `_client.tsx`·`UsersFilters.tsx`·`_lib.ts` 모두 한도 내
 - [ ] **C5 SSOT** — `SegmentedTabs` 재사용, 라벨 하드코딩 0
 - [ ] **C6 가드** — 로딩 중에도 `<UsersFilters>` 렌더, 빈결과(both 분기)에서도 필터 유지
@@ -216,11 +223,11 @@ S4 (T4 limit)            ─┘
 - [ ] **검색 매칭** — 이름·이메일·전화 부분일치(전화는 하이픈 제거 후) 수동 확인
 
 ### S4 (T4 백엔드 limit) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/api && npx tsc --noEmit` 0
-- [ ] **C2 biome 0** — 신규 경고 0
-- [ ] **C3 build 0** — `npm run build` 0
-- [ ] **인덱스** — `orderBy('createdAt','desc')` 필요 시 `firestore.indexes.json` 갱신·배포 확인(세션80 선례)
-- [ ] **회귀 0** — 어드민 users 탭 데이터 로딩 정상, 정렬 순서 신규(최신순) 확인
+- [ ] **C1 tsc 0** — `pnpm --filter api exec tsc --noEmit` 통과
+- [ ] **C2 신규 진단 0** — API lint baseline 부채와 분리해 변경 블록의 신규 진단이 없는지 확인
+- [ ] **C3 build 0** — `pnpm --filter api build` 통과
+- [ ] **인덱스** — 기구현된 `orderBy('createdAt','desc')`와 신규 limit 조합에 추가 인덱스가 필요한지 확인(세션80 선례)
+- [ ] **회귀 0** — 어드민 users 탭 데이터 로딩 정상, 기존 최신순 정렬 유지 확인
 - [ ] **수동 확인** — limit 값이 실제 user 수보다 큰지 재확인
 
 ### S5 (e2e) 체크리스트 — §E-9에서 상세
@@ -277,7 +284,7 @@ S4 (T4 limit)            ─┘
 
 ### e2e 파일 구조
 ```
-apps/admin/e2e/
+apps/e2e/tests/
   users-suspend-refresh.spec.ts      # E2E-1
   users-display-fields.spec.ts       # E2E-2 (가입일·전화)
   users-reload.spec.ts               # E2E-3
@@ -300,11 +307,11 @@ apps/admin/e2e/
 
 | 다음 세션 | 진입 명령 | 산출물 위치 |
 |----------|----------|------------|
-| S1 시작 | `apps/api/src/auth/auth.service.ts:329 refresh()` 메서드 열기 | `auth.service.ts` + `auth.service.test.ts`(또는 신설) |
-| S2 시작 | `apps/admin/src/app/(authed)/admin/_components/UsersTable.tsx` 열기 | UsersTable + `_client.tsx` |
+| S1 완료 | `be5def9` 포함 여부 및 branch push 확인 | `auth.service.ts` + `auth.service.spec.ts` (Jest) |
+| S2 시작 | `apps/seller/src/app/admin/users/_components/UsersTable.tsx`와 `apps/seller/src/app/admin/users/_client.tsx` 열기 | UsersTable + `_client.tsx` |
 | S3 시작 | S2 머지 확인 후 `_components/UsersFilters.tsx` 신설 | UsersFilters·`_lib.ts`·`_lib.test.ts`·`_client.tsx` |
 | S4 시작 | 사용자에게 운영 user 수 재확인, limit 값 확정 후 `admin.service.ts:86` | `admin.service.ts` + `firestore.indexes.json`(필요 시) |
-| S5 시작 | S1~S4 운영 배포 확인 후 `apps/admin/e2e/` 4 spec 신설 | 시나리오 §E-9 |
+| S5 시작 | S1~S4 운영 배포 확인 후 `apps/e2e/tests/`에 users spec 신설 | 시나리오 §E-9 |
 | S6 시작 | 운영 환경에서 `pending-visual-verify.md` §추가 항목 사용자 직접 확인 | 통합 육안 문서 |
 
 ---
@@ -334,4 +341,5 @@ apps/admin/e2e/
 - 세션86 정산 status 필터 — C6(로딩·빈결과에서 필터 유지) 가드 패턴.
 - 세션85 타임존 KST 보정 — `toDateStrKST`(T1 가입일 표시 재사용) + vitest 첫 도입.
 - 세션80 인덱스 배포 — T4 Firestore 복합 인덱스 추가 시 절차 선례.
-- **세션92 grill-me** — 본 계획서 전 분기 해소. D1(refresh 1줄)·F2(마스킹 없음)·§E-11 분리·커밋 순서·vitest 동반 확정.
+- **세션92 grill-me** — 본 계획서 전 분기 해소. D1(refresh 1줄)·F2(마스킹 없음)·§E-11 분리·커밋 순서·단위테스트 동반 확정(구현 시 API runner가 Jest임을 확인).
+- **S1 (2026-05-27, `be5def9`)** — `refresh()` 정지 차단과 Jest 회귀 테스트 구현, `origin/codex/admin-users-s1-refresh-suspend` push 완료. 계획의 Vitest 가정·UI/E2E 경로·기구현 정렬 정보를 실제 코드 기준으로 보정.
