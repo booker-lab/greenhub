@@ -11,7 +11,7 @@
 ## 탭별 SDD (분할 본문)
 | 탭 | 진단 | 구현 | SDD |
 |----|------|------|------|
-| stores(판매자) | ✅ 세션92 | 🟡 착수 대기 (T0+T1+T2+T6+T9·T3+T4 확정) | [admin-tab-stores-plan.md](./admin/admin-tab-stores-plan.md) |
+| stores(판매자) | ✅ 세션92 | 🟡 PR-A(C1·C2) 완료 · PR-B(C3: T6+T9) 코드 완료/육안 대기(2026-05-28) | [admin-tab-stores-plan.md](./admin/admin-tab-stores-plan.md) |
 | orders(주문) | ✅ 세션93 / 🔄 셀러앱 연계 추가 | ⬜ 미착수 (D1 선결) | [admin-tab-orders-plan.md](./admin/admin-tab-orders-plan.md) |
 | drivers(기사) | ✅ 세션93 / 세션95 `/further` 확정 | 🟡 착수 대기 (T1+T2 확정) | [admin-tab-drivers-plan.md](./admin/admin-tab-drivers-plan.md) |
 | settlements(정산) | ✅ 세션94 / 🔄 셀러 정산 교차 참조 | ⬜ 미착수 | [admin-tab-settlements-plan.md](./admin/admin-tab-settlements-plan.md) |

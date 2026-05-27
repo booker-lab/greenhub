@@ -2,7 +2,8 @@
 
 > **출처:** `admin-tabs-improve-plan.md` §A (세션92 진단).
 > **세션91**에 SDD 분리·반응형 카드형은 끝났다. 본 문서는 그 위의 **타입 안전·SSOT 정리·기능 부재**를 한 탭으로 떼어 누적·관리한다.
-> **진행 방식:** 한 탭씩 진단·확정 → 한 태스크씩 완결 후 커밋(세션91 패턴). **구현 미착수.**
+> **진행 방식:** 한 탭씩 진단·확정 → 한 태스크씩 완결 후 커밋(세션91 패턴).
+> **진행 상태:** PR-A(C1·C2) 완료(`6c474ce`, `1bd259a`) · **PR-B(C3) 코드 완료·육안 대기(2026-05-28)**.
 > **2026-05-26 갱신:** grill-me 13개 분기 답변 반영 — PR 단위 분리, default='활성', 모바일 정렬 대칭, URL 쿼리 동기, 빈결과 2종 분기, parseRate 시그니처 확정 등.
 
 ## 0. 공통 정합성 검토 기준 (모든 어드민 탭 공통)
@@ -164,7 +165,7 @@ _lib.ts STATUS_LABEL·STATUS_COLOR도 Record<StoreStatus, string>로 정합.
 **신규 파일 (1):**
 - `apps/seller/src/app/admin/stores/_components/StoresFilters.tsx` — 검색 `TextInput` + 상태 `Select` + 새로고침 `Button` + (모바일) 정렬 `Select`.
 
-**변경 파일 (3):**
+**변경 파일 (4):**
 - `apps/seller/src/app/admin/stores/_lib.ts`:
   - `filterStores(stores, { keyword, status })` 신설. 기존 `filterVisible` 흡수.
   - `sortStores(stores, { key, dir })` 신설. key='name'|'status'|'rate', dir='asc'|'desc'.
@@ -173,6 +174,7 @@ _lib.ts STATUS_LABEL·STATUS_COLOR도 Record<StoreStatus, string>로 정합.
 - `apps/seller/src/app/admin/stores/_client.tsx`:
   - `showArchived` Switch 삭제 → `StoresFilters` 도입.
   - URL searchParams 동기: `?keyword=&status=&sort=&dir=` (Q8) — `useSearchParams`+`useRouter` 사용.
+  - 기본값(`status=current`, `sort=name`, `dir=asc`)은 URL에서 생략해 기존 `/admin/stores` 진입 주소를 유지한다. 사용자가 값을 변경한 경우에만 쿼리에 기록한다.
   - 빈결과 2종 분기 렌더링 (Q10):
     - `no-data`: "등록된 가게가 없습니다."
     - `no-match`: "조건에 맞는 가게가 없습니다." + [필터 초기화] 버튼.
@@ -180,6 +182,9 @@ _lib.ts STATUS_LABEL·STATUS_COLOR도 Record<StoreStatus, string>로 정합.
 - `apps/seller/src/app/admin/stores/_components/StoresTable.tsx`:
   - 데스크톱: 헤더에 정렬 토글(이름·상태·수수료율) 클릭 시 sort 변경.
   - 모바일: 정렬 미적용(상단 Select가 대신함) — 카드 영역 일관성 유지.
+- `apps/e2e/tests/admin-store-archive.spec.ts`:
+  - 세션90 읽기 전용 스모크의 삭제 대상 Switch 확인을 상태 Select 노출·기본값 확인으로 치환.
+  - 신규 상호작용 e2e 8건은 PR-E에 유지하고, 본 변경은 기존 검사 파손 방지에만 한정.
 
 **상태 Select 항목 (Q3 결정):**
 ```
@@ -188,6 +193,7 @@ _lib.ts STATUS_LABEL·STATUS_COLOR도 Record<StoreStatus, string>로 정합.
 - **default = '활성'** (invited + active 둘 다 포함, archived 제외).
 - '활성' = invited OR active, '초대됨' = invited만, '운영중' = active만, '정리됨' = archived만.
 - `_lib.ts STATUS_FILTER_OPTIONS` 상수로 SSOT 관리.
+- URL 값에서 `'활성'`은 `status=current`로 표현한다(`active`는 `'운영중'` 단일 상태 의미와 충돌 방지).
 
 **모바일 정렬 Select 항목 (Q4 결정):**
 ```
@@ -228,6 +234,23 @@ feat(admin): #CL-55 stores 탭 검색·필터·정렬·새로고침 추가
   - 모바일 카드 상단 정렬 Select.
   - 빈결과 2종 분기 메시지.
   - URL 공유 시 필터 상태 복원.
+
+**PR-B 구현 결과 (2026-05-28):**
+- `StoresFilters` 신설, 기존 archived Switch를 상태 Select(기본 `current` = 활성)로 흡수했다.
+- `_lib.ts`에 `filterStores`·`sortStores`·`getEmptyKind` 및 필터/정렬 옵션 SSOT를 추가했다.
+- `_client.tsx`가 `keyword`·`status`·`sort`·`dir` 쿼리를 동기화하며, 기본값 쿼리는 생략한다.
+- 데스크톱은 헤더 정렬 토글, 모바일은 정렬 Select를 사용하며 새로고침과 조건 불일치 초기화 동선을 추가했다.
+- 기존 읽기 전용 `admin-store-archive.spec.ts`는 제거된 Switch 대신 상태 필터 기본값을 확인하도록 갱신했다(PR-E 신규 상호작용 8건은 미착수 유지).
+
+**정합성 검토 (PR-B 코드 완료 시점):**
+- [x] C1 tsc 0 — seller·consumer·driver·api 4앱 통과.
+- [x] C2 biome 신규 0 — seller 잔존 warning 2건(`<img>`, 기존 PERF-01)만 확인. 변경 stores 경로 0건.
+- [x] C3 build 0 — `pnpm --filter seller build` 통과(`/admin/stores` 포함 23라우트).
+- [x] C4 500라인 — `_client.tsx` 160, `_lib.ts` 96, `StoresFilters.tsx` 66, `StoresTable.tsx` 274라인. T5 300라인 트리거도 미발동.
+- [x] C5 SSOT — 상태·정렬 옵션과 상태 라벨/색을 `_lib.ts` 한 곳에서 관리.
+- [x] C6 가드 — 로딩·데이터 없음·조건 불일치에서 필터 영역을 유지하도록 렌더 구조 교체.
+- [ ] C7 육안·URL 상호작용 — 로컬 런타임 `AUTH_SECRET` 부재(`Auth.js MissingSecret`, `/api/auth/csrf` 500)로 인증 스모크 실행 전 차단, 배포 환경 육안으로 이관(`pending-visual-verify.md` #55·#60).
+- [x] e2e 수집 확인 — 갱신된 `admin-store-archive.spec.ts` 8개 사례가 `playwright test --list`에 정상 수집됨.
 
 ---
 
