@@ -1,6 +1,16 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
+import {
+  Badge,
+  Box,
+  Button,
+  Group,
+  NumberInput,
+  Paper,
+  Stack,
+  Text,
+  UnstyledButton,
+} from '@mantine/core';
 import type { AdminStore } from '@/hooks/useAdmin';
 import {
   formatRate,
@@ -110,21 +120,19 @@ export function StoresTable({
   const renderRate = (store: AdminStore) =>
     editId === store.id ? (
       <Group gap="xs">
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          max="1"
+        <NumberInput
+          min={0}
+          max={1}
+          step={0.01}
+          decimalScale={2}
+          clampBehavior="strict"
+          inputMode="decimal"
           value={rateInput}
-          onChange={(e) => onRateInput(e.target.value)}
+          onChange={(value) => onRateInput(String(value))}
           placeholder="0.05"
-          style={{
-            width: 80,
-            border: '1px solid var(--color-border)',
-            borderRadius: 6,
-            padding: '4px 8px',
-            fontSize: 'var(--font-size-sm)',
-          }}
+          size="xs"
+          radius="sm"
+          w={104}
         />
         <Button
           onClick={() => onSave(store.id)}
