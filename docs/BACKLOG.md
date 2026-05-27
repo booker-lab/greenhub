@@ -129,6 +129,8 @@
 - [x] `/admin/invite` — 초대 토큰 발급 ✅ 2026-04-03
 - [x] `/admin/drivers` — 드라이버 승인 대기·승인·정지 관리 ✅ 2026-04-03
 - [x] **[어드민-반응형] `/admin/*` 모바일 PWA 폭 미최적화** ✅ 2026-05-25 세션88 (#246/247 종결, #CL-51) — 5개 테이블(settlements·orders·stores·invite·users)을 **C-full(전부 카드형)·breakpoint `sm`(768px)** 으로 전환. Mantine `hiddenFrom`/`visibleFrom` 분기 도입(셀러 앱 최초 반응형 분기), 데스크톱 테이블 DOM 불변(회귀 0). 모바일에서 지급처리/강제환불/정지·복구/수수료설정 버튼 카드 내 풀폭 노출로 접근 결함 해소. 정합성 C1~C6 통과(tsc·biome·build exit0, 500라인 한도, SSOT 토큰 0위반). e2e=어드민 스펙 부재+순수 표현 레이어라 대상 없음. **잔여=모바일 폭 카드 육안 검증(사용자 위임).** 상세 [#CL-51], 플랜 [admin-responsive-plan.md](specs/frontend/admin-responsive-plan.md).
+- [ ] **[ADMIN-STORES-T7] 판매자 상세 드릴다운** — `/admin/stores`에서 store별 주문·정산 집계와 상세 화면으로 진입하는 운영 동선. 집계 API·상세 라우트·관리자 권한 경계·목록 URL 복원 계약을 포함하므로 **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-stores-plan.md` T7.
+- [ ] **[ADMIN-STORES-T8] 플랫폼 기본 수수료율 설정** — 신규/기존 store에 적용할 전역 기본 수수료 정책과 설정 UI. 전역 config 데이터모델·store별 override 우선순위·소급 여부·`parseRate(input, { min, max })` 확장을 포함하므로 **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-stores-plan.md` T8.
 
 ### 1-9. 거점 스태프 권한 구조 — Phase 2 (운영 거점 계약 확정 후)
 
@@ -494,6 +496,8 @@
 | 🟢 P3 | Driver Kakao Maps SDK 연동 | 기능 | — |
 | ✅ P3 | 셀러 홈 대시보드 + 준비 물량 재구성 — 8 아토믹 태스크 (#CL-33, 2026-05-18 세션39 완료) | UX/기능 | `specs/frontend/seller-home-dashboard-plan.md` |
 | 🟢 P4 | 준비 물량 탭 — 공동구매 주문 포함 (배송일 `groupProductConfig` 별도 fetch 필요, 세션39 분리) | UX/기능 | — |
+| 🟢 P3 | **[ADMIN-STORES-T7] 판매자 상세 드릴다운** — store별 주문·정산 집계 API + 상세 라우트 + 목록 URL 복원. 사용자 요청으로 후속 구현 확정(2026-05-28) | 기능/어드민 | `specs/frontend/admin/admin-tab-stores-plan.md` T7, 별도 SDD 선행 |
+| 🟢 P3 | **[ADMIN-STORES-T8] 플랫폼 기본 수수료율 설정** — 전역 config 모델 + override/소급 정책 + 수수료 검증 확장. 사용자 요청으로 후속 구현 확정(2026-05-28) | 기능/정책 | `specs/frontend/admin/admin-tab-stores-plan.md` T8, 별도 SDD 선행 |
 | ✅ P2 | **배송일 선택 기능 + 셀러 주문 IA 재구성** — T1~T6 (#CL-34·#CL-35, 세션47~51 완료). 소비자 일반 상품 배송일 선택·API 슬롯 검증 변경·셀러 일반/공구 토글·공구 배송일 조인·e2e 시드+신규 spec | 기능/UX | `specs/frontend/delivery-date-selection-plan.md` |
 | ✅ P3 | 셀러 주문 탭 리팩토링 — T1~T7 아토믹 태스크 (세션41~45 완료). 색상 버그·sticky 정리·카드 경량화·날짜 필터·날짜 그룹 헤더 | UX/버그 | `specs/frontend/seller-orders-refactor-plan.md` |
 | ✅ P3 | **[BUG-16] 택배 주문 상태 전환 갭** — 셀러 "택배 발송 완료" 버튼(PREPARING→DELIVERED 직행)+드라이버 보드 parcel 제외 필터+lifecycle 가드 (#CL-40, 2026-05-21 세션67 완료 `2ad71e3`). e2e 풀런 176p/0f | 버그/기능 | §1-3 상세 |

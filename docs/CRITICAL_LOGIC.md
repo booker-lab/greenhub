@@ -825,3 +825,99 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **연관**: 로드맵 `app-refactor-roadmap.md`(어드민 미착수🔴→완료✅, 커밋 `e6a2e55`). 잔여=상태변경(치우기·환불·승인 등) 육안 `pending-visual-verify.md` §4. 다음 리팩토링 차례=드라이버 앱(로드맵 §4). 커밋=`354475a`·`83998d0`·`44c311b`·`5bf29ff`·`124768a`·`cb2d114`·`e6a2e55`.
 
+## [#CL-55] 어드민 stores 탭 — `StoreStatus` SSOT 3중 불일치 교정 (PR-A C1·C2) (2026-05-26, 세션93)
+
+**배경**: 어드민 탭 개선(#CL-55, 세션92 진단) 첫 PR. store status가 3곳에서 어긋남 — `@greenhub/shared` `StoreStatus`=`invited|active|suspended`(**archived 없음**), 어드민 [_lib.ts](../apps/seller/src/app/admin/stores/_lib.ts) 로컬 맵=invited·active·suspended·**archived 추가**, 실제 `stores.service`가 set하는 값=invited→active→archived(**suspended는 어디서도 set 안 됨, 죽은 값**). 어드민 `_lib.ts:4` 주석이 자인.
+
+**세션93 사전 grep 3종(§A-0a)**: ① `rg "store\.status"`=**0건** ② `rg "'suspended'"`=9건 **전부 store 무관**(DriverStatus·admin.dto/service·auth.service·drivers/_lib·store.types 본인) ③ `rg "StoreStatus"`=활성 3건(`store.types.ts:1, 12`·`stores/_lib.ts:4` 주석). consumer/driver는 store status 미분기. → 세션92 스냅샷과 일치, 영향 범위 1곳뿐이라 T0 안전.
+
+**커밋 C1 (`6c474ce`) — T0 shared `StoreStatus` 교정**: `packages/shared/src/store.types.ts:1` `'invited'|'active'|'suspended'` → `'invited'|'active'|'archived'`. shared 재빌드(dist `.d.ts`+`.map` 동반 커밋, 본 저장소 관례). 같은 커밋에 SDD [`admin-tab-stores-plan.md`](../docs/specs/frontend/admin/admin-tab-stores-plan.md) §A-0a grep 표 채움 포함(미추적 신규 SDD라 함께 트래킹).
+
+**커밋 C2 (`1bd259a`) — T1+T2 어드민 union 적용 + 죽은 '정지' 라벨 제거**: ① [useAdmin.ts:14](../apps/seller/src/hooks/useAdmin.ts#L14) `AdminStore.status: string` → `StoreStatus` import 후 적용 ② [_lib.ts](../apps/seller/src/app/admin/stores/_lib.ts) `STATUS_LABEL`·`STATUS_COLOR`를 `Record<string,string>` → `Record<StoreStatus,string>` 좁힘 ③ `suspended:'정지'`·`suspended:'gray'` 항목 삭제(세션90 grill-me 결론 "판매자 정지 기능 없음"과 일치) ④ 주석 갱신(불일치 자인 → 정합성 확보 기록). **`StoresTable.tsx`의 `?? store.status`·`?? 'gray'` 폴백은 미래 union 확장 안전망으로 유지**(SDD 지시).
+
+**정합성 — 두 커밋 공통(C1·C2 각각 검토)**: tsc 4앱(seller·consumer·driver·api) 0 errors / biome **변동 0**(baseline=변경후 동일: seller 0e/2w·consumer 7e/25w·driver 2e/5w·api 0e/0w) / 4앱 빌드 통과(seller=어드민 포함 23+ 라우트·api=Nest) / 500라인 한도(_lib.ts 27·useAdmin.ts 388·store.types.ts 25) / SSOT 키가 union과 정확히 일치.
+
+**SDD 구도 (PR-A는 1/5 PR)**: PR-A(C1+C2 SSOT 교정, **이번 종결**) → PR-B(C3 T6+T9 검색·필터·정렬·URL 쿼리 + 빈결과 2종) → PR-C(C4 T3 `parseRate` 순수함수+vitest 9) → PR-D(C5 T4 NumberInput, 시각 회귀 격리) → PR-E(E1 어드민 stores e2e 8 케이스, 세션90 인프라 재사용). 본 PR-A는 신규 기능 0·시각 회귀 0이라 별도 육안 불요(통합 육안 §추가 항목만 다음 세션에 등록).
+
+**연관**: SDD [`docs/specs/frontend/admin/admin-tab-stores-plan.md`](../docs/specs/frontend/admin/admin-tab-stores-plan.md) §A-0a~A-3 · 인덱스 [`admin-tabs-improve-plan.md`](../docs/specs/frontend/admin-tabs-improve-plan.md). 다음 세션 진입 = PR-B(C3) 또는 PR-D(C5 시각 격리 우선) 사용자 선택. 커밋 `6c474ce`·`1bd259a` push.
+
+---
+
+## [#CL-55 / PR-B C3] 어드민 stores 검색·필터·정렬·새로고침 + URL 복원 (2026-05-28, 구현 세션 종결)
+
+**선행**: PR-A(C1·C2, `6c474ce`·`1bd259a`)로 `StoreStatus`가 `invited|active|archived`에 정합된 뒤 진행. 본 작업은 `admin-tab-stores-plan.md`의 T6+T9이며 백엔드·데이터모델은 변경하지 않는다.
+
+**설계 결정**:
+1. 기존 "정리된 판매자 보기" Switch는 상태 Select로 흡수한다. 항목은 **전체·활성·초대됨·운영중·정리됨**, 기본값은 **활성**(`invited|active`, archived 숨김)으로 기존 기본 노출 체감을 보존한다.
+2. `'활성'` URL 값은 `status=current`로 표현한다. `status=active`는 실제 단일 상태인 `'운영중'`과 충돌하므로 사용하지 않는다.
+3. URL 쿼리는 `keyword/status/sort/dir`만 사용하며 기본값(`status=current`, `sort=name`, `dir=asc`)은 생략한다. 기존 `/admin/stores` 진입 주소를 유지하면서 변경 조건만 공유·뒤로가기 복원한다.
+4. 정렬 조작은 화면 폭에 맞춘다. 데스크톱은 테이블 헤더 토글, 모바일 카드는 상단 Select를 사용해 카드 내부 액션 영역을 흔들지 않는다.
+5. 빈 결과는 데이터 자체 없음과 조건 불일치를 분리한다. 조건 불일치일 때만 "필터 초기화" 동선을 제공한다.
+
+**구현(`76f8f17`)**: [StoresFilters.tsx](../apps/seller/src/app/admin/stores/_components/StoresFilters.tsx) 신설 · [_lib.ts](../apps/seller/src/app/admin/stores/_lib.ts)에 필터/정렬/빈결과/options SSOT 추가 · [_client.tsx](../apps/seller/src/app/admin/stores/_client.tsx)에 URL 상태 동기화·새로고침 배선 · [StoresTable.tsx](../apps/seller/src/app/admin/stores/_components/StoresTable.tsx)에 정렬 헤더·조건 불일치 가드 추가 · 기존 읽기 전용 [admin-store-archive.spec.ts](../apps/e2e/tests/admin-store-archive.spec.ts)는 삭제된 Switch 대신 상태 필터 기본값을 확인하도록 갱신.
+
+**정합성**: seller·consumer·driver·api tsc 0 · seller biome 신규 0(기존 `<img>` warning 2건만 잔존) · seller build 성공(`/admin/stores` 포함 23라우트) · 최대 변경 코드 `StoresTable.tsx` 274라인으로 300행 선택 분할 트리거와 500라인 절대 한도 모두 미발동 · 갱신 e2e 8사례 수집 정상.
+
+**검증 위임 사유**: 로컬 런타임에 `AUTH_SECRET`이 없어 `Auth.js MissingSecret`이 발생하고 `/api/auth/csrf`가 500을 반환해 인증 스모크가 실행 전에 차단됐다. 따라서 배포 후 상호작용 육안은 [pending-visual-verify.md](../docs/specs/frontend/pending-visual-verify.md) #55·#60으로 위임한다.
+
+**차기 진입**: PR-C(C4) `parseRate(input): ParseRateResult` 순수함수 추출 + vitest 9케이스. PR-D(C5 NumberInput)는 PR-C 이후 시각 회귀 단독 격리로 진행.
+
+---
+
+## [#CL-55 / PR-C C4] 어드민 stores 수수료 입력 검증 순수함수화 + 단위 테스트 (2026-05-28, 구현 세션 종결)
+
+**선행**: PR-B(C3, `76f8f17`)까지의 검색·필터·정렬·URL 복원 코드는 유지한다. 본 작업은 `admin-tab-stores-plan.md`의 T3이며 수수료 저장 API와 입력 UI는 변경하지 않는다.
+
+**설계 결정**:
+1. 입력 문자열 해석은 [_lib.ts](../apps/seller/src/app/admin/stores/_lib.ts)의 `parseRate(input): ParseRateResult`로 분리한다. 성공은 `rate`, 실패는 `EMPTY | NOT_NUMBER | OUT_OF_RANGE` 코드만 반환하므로 표현 계층과 검증 규칙의 책임을 나눈다.
+2. 순수 추출 C7 기준을 지키기 위해 [_client.tsx](../apps/seller/src/app/admin/stores/_client.tsx)의 기존 사용자 알림 문구는 모든 실패 코드에서 그대로 유지한다. 오류별 문구 세분화는 사용자 행동 변경이므로 별도 UX 범위다.
+3. 세션85의 `vitest`는 `packages/shared`에만 존재했다. 로직 소유 경로인 `apps/seller`에서 테스트를 실행할 수 있도록 seller 작업공간에 `test` 스크립트와 `vitest` 개발 의존성을 연결한다.
+
+**구현**: `_lib.ts`에 `ParseRateError`·`ParseRateResult`·`parseRate` 추가 · `_client.tsx`의 인라인 검증을 `parseRate` 결과 분기로 치환 · [_lib.test.ts](../apps/seller/src/app/admin/stores/_lib.test.ts) 신설(정상·경계·빈값·공백·비숫자·범위 초과·trim 총 9건) · `apps/seller/package.json`/`pnpm-lock.yaml` 테스트 실행 기반 추가.
+
+**정합성**: `pnpm --filter seller test` **9/9 통과** · seller/consumer/driver/api `tsc --noEmit` 통과 · seller biome 신규 0(기존 `<img>` warning 2건만) · `pnpm --filter seller build` 통과(`/admin/stores` 포함) · 변경 코드 라인 한도 `_lib.ts` 123, `_client.tsx` 177, `_lib.test.ts` 40으로 전부 500 미만. 누적돼 500행을 넘은 활성 SDD는 완료된 PR-A·PR-B 절차 중복을 본 결정 로그 참조 요약으로 접어 `admin-tab-stores-plan.md` 447행으로 축소했다.
+
+**차기 진입**: PR-D(C5) native 수수료 입력을 Mantine `NumberInput`으로 교체하는 시각 회귀 격리 작업. PR-B 배포 후 육안 잔여는 기존 `pending-visual-verify.md` #55·#60에서 계속 관리한다.
+
+---
+
+## [#CL-55 / PR-D C5] 어드민 stores 수수료 입력 Mantine NumberInput 교체 (2026-05-28, 구현 종결·육안 위임)
+
+**선행**: PR-C의 `parseRate(input): ParseRateResult` 검증 규칙과 기존 저장 API는 유지한다. 본 작업은 입력 표현 계층 교체와 시각 회귀 격리에 한정한다.
+
+**설계 결정**:
+1. [StoresTable.tsx](../apps/seller/src/app/admin/stores/_components/StoresTable.tsx)의 공용 편집 렌더에 Mantine `NumberInput`을 적용한다. 공용 렌더 한 곳을 바꿔 데스크톱 테이블과 모바일 카드가 같은 입력 계약을 사용한다.
+2. `min={0}`·`max={1}`만으로 저장 전 직접 입력을 방치하지 않도록 `clampBehavior="strict"`를 지정하고, 모바일 소수 입력 의도는 `inputMode="decimal"`로 명시한다. `step={0.01}`·`decimalScale={2}`는 수수료 입력 정밀도를 UI에서 드러낸다.
+3. `NumberInput`의 `number | string` 결과는 호출 경계에서 `String(value)`로 정규화한다. 검증·저장 책임은 계속 PR-C `parseRate`와 `_client.tsx`에 두어 표현 컴포넌트가 비즈니스 규칙을 소유하지 않게 한다.
+
+**구현**: native `<input type="number">`를 `<NumberInput ... />`으로 치환하고 `size="xs"`·`radius="sm"`·`w={104}`로 기존 인라인 편집 밀도를 보존했다.
+
+**정합성**: `pnpm --filter seller test` **9/9 통과** · seller/consumer/driver/api `tsc --noEmit` 통과 · seller biome 신규 0(기존 `<img>` warning 2건만) · `pnpm --filter seller build` 통과(`/admin/stores` 포함) · `StoresTable.tsx` 294라인, `_client.tsx` 177라인, `_lib.ts` 123라인으로 코드 파일 전부 500라인 미만이며 300행 선택 분할 기준도 미발동.
+
+**육안 위임 사유**: 로컬 `http://localhost:3010/admin/stores` 확인은 `AUTH_SECRET` 부재의 `Auth.js MissingSecret`과 [proxy.ts](../apps/seller/src/proxy.ts)의 비어 있는 `session.user.role` 접근 오류로 입력 UI 렌더 전에 차단됐다. 따라서 데스크톱·모바일 배치, focus, 증감/소수 키보드, 범위 차단, 정상 저장 육안은 [pending-visual-verify.md](../docs/specs/frontend/pending-visual-verify.md) #61~#66으로 위임한다.
+
+**차기 진입**: PR-D 배포 후 육안 통과를 선행 조건으로 PR-E 어드민 stores e2e 스펙을 신설한다.
+
+---
+
+## [#CL-55 / PR-E E1] 어드민 stores 상호작용 e2e 데이터 격리 결정 (2026-05-28, 프리뷰 검증 종결)
+
+**진입 조건 처리**: PR-D의 브라우저 육안은 로컬 인증 환경 차단으로 사용자 검증에 위임됐다. 사용자가 해당 위임 상태로 PR-E 진행을 지시했으므로, 시각 확인 완료를 기다리지 않고 회귀 자동화를 착수하며 육안 잔여는 기존 `pending-visual-verify.md` #61~#66에서 독립 관리한다.
+
+**발견 사항**: 계획의 검색·상태 필터 검증은 이름에 `디어`가 포함된 판매자와 `archived` 판매자를 요구하지만, 기존 [seed-test-data.mjs](../scripts/seed-test-data.mjs)는 `테스트 꽃 농장` 한 건만 생성하고 상태 조합을 보장하지 않는다. 또한 수수료 저장 클릭을 실 API로 실행하면 회귀 검증이 운영 데이터 변경을 수반한다.
+
+**설계 결정**:
+1. 세션90의 [admin-store-archive.spec.ts](../apps/e2e/tests/admin-store-archive.spec.ts)는 실제 인증 세션과 실 API 목록 렌더 스모크로 그대로 둔다.
+2. 신규 `admin-stores-filter-sort.spec.ts`는 `.admin-state.json` 인증 컨텍스트를 재사용하되, 상호작용별 `GET /admin/stores`만 상태 3종·수수료율 3종 fixture로 응답한다. 이 범위는 PR-A~D가 소유하는 화면 필터·정렬·URL·입력 계약이며 API 비즈니스 로직이 아니다.
+3. 수수료 입력 사례의 `PATCH /admin/stores/:id/commission`은 테스트 컨텍스트에서 응답을 가로채고 요청 본문을 관찰한다. 따라서 `1.5` 범위 밖 값 차단을 확인하면서도 실제 DB 쓰기를 발생시키지 않는다.
+
+**의도**: 인증 경계의 실연결 스모크와 표현 계층 상태 변환 회귀를 역할별로 분리해, 데이터 상태·테스트 순서·운영 쓰기에 영향받지 않는 반복 가능한 PR-E 검증을 만든다.
+
+**구현**: [admin-stores-filter-sort.spec.ts](../apps/e2e/tests/admin-stores-filter-sort.spec.ts)에 8개 시나리오를 신설했다. 기본 활성 필터, 검색, 정리됨 상태와 URL, 새로고침 재조회, 반응형 정렬 URL, 빈결과 초기화, 직접 URL 복원, `NumberInput` 범위 밖 저장 차단을 다루며 `chromium`·`mobile` 양쪽에서 수집된다.
+
+**정합성**: 관련 `biome check` 통과 · seller `vitest` **9/9 통과** · seller/consumer/driver/api `tsc --noEmit` 통과 · seller build 통과(`/admin/stores` 포함) · `playwright test admin-stores-filter-sort --list`에서 **16건 수집**(8시나리오×2 viewport) · 종결 시점 신규 e2e 파일 192라인, 활성 SDD 447라인, 본 누적 로그 923라인으로 1000라인 이관 기준 미만.
+
+**런타임 검증 종결**: 작업 트리를 seller 임시 프리뷰 `greenhub-seller-blkcqzhnf-jos-projects-d1cecc0c.vercel.app`에 반영하고 Vercel 상태 `READY`를 확인한 뒤 해당 주소를 `SELLER_BASE`로 지정했다. 첫 실행에서 `getByLabel('상태'|'정렬')`가 정렬 버튼·목록까지 포괄하는 선택자 결함과 Mantine `Select`가 내부 키가 아닌 표시값(`활성`·`운영중`)을 입력값으로 노출하는 단언 결함을 발견했다. 신규 스펙을 `combobox` 정확 역할과 표시값 단언으로 보정한 뒤 동일 프리뷰에서 `pnpm test:e2e -- admin-stores-filter-sort` **16/16 통과**(27.3초)를 확인했다. `GET` fixture와 `PATCH` 가로채기 원칙은 유지되어 운영 DB 쓰기는 발생하지 않는다.
+
+**후속 범위 승격 결정 (2026-05-28)**: 사용자가 본 PR 범위에서 제외됐던 T7(판매자 상세 드릴다운)과 T8(플랫폼 기본 수수료율 설정)을 향후 구현 작업으로 등록하도록 확정했다. 두 작업은 PR-A~E의 종결 상태를 변경하지 않으며, 각각 집계 API·라우트 및 전역 config·적용 정책이라는 새 계약을 포함하므로 `docs/BACKLOG.md` 미완료 항목으로 승격하고 구현 전 별도 SDD 작성을 게이트로 둔다.
+
