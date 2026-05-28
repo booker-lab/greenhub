@@ -3,14 +3,14 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-28 (어드민 stores 탭 PR-E E1 프리뷰 실행 검증 종결 #CL-55)
+최종 수정: 2026-05-28 (어드민 stores PR-E 머지·고정 preview CI 종결 #CL-55)
 
 ---
 
 ## 진행 현황
 
 **2026-05-28 후속 작업 (어드민 stores PR #3 병합 후 고정 preview CI 교정 #CL-55)**:
-- PR #3은 `main`에 merge commit `c982ad5`로 반영됐고 `preview` SHA `d6aaf60` 배포 동기화도 통과했다. 후속 e2e `26526534062`는 신규 stores가 아닌 기존 정산 날짜 단언 한 건에서 UTC `2026-05-27` 대 KST `2026-05-28` 불일치로 실패해, `seller-settlements.spec.ts` 기대값을 앱의 KST 계약과 맞췄다. 변경 스펙 biome 및 인증 프리뷰 대상 정산+stores `chromium` **16/16 통과**. Actions에 admin 인증 시크릿은 없어 CI admin 사례는 기존대로 skip되며, PR-E 임시 프리뷰 16/16 실행 근거와 육안 잔여 위임은 유지한다.
+- PR #3은 `main`에 merge commit `c982ad5`로 반영됐고, 고정 preview CI에서 드러난 기존 정산 날짜 UTC/KST 결함은 PR #4(`1a924a7`, merge `8827b87`)로 교정했다. 변경 스펙 biome 및 인증 프리뷰 대상 정산+stores `chromium` **16/16 통과**, `Sync preview branch` `26527167757`과 후속 `E2E Tests` `26527463226`도 **성공**했다. Actions에 admin 인증 시크릿은 없어 CI admin 사례는 기존대로 skip되며, PR-E 인증 프리뷰 실행 근거와 육안 잔여 위임은 유지한다.
 
 **2026-05-28 후속 작업 (어드민 stores 탭 PR-E E1 프리뷰 실행 검증 종결 #CL-55)**:
 - PR-D 육안 위임 상태에서 진행한 `admin-stores-filter-sort.spec.ts`는 인증 컨텍스트를 재사용하되 `GET /admin/stores` fixture와 `PATCH /commission` 가로채기로 운영 쓰기를 차단한다. 작업 트리를 seller 임시 프리뷰 `greenhub-seller-blkcqzhnf-jos-projects-d1cecc0c.vercel.app`에 배포해 `READY`를 확인하고 실행했으며, 실행 중 Mantine `Select`에 대한 모호한 label 선택자와 내부 키 단언 결함을 `combobox` 정확 역할·표시값 단언으로 교정했다. **정합성**: 관련 biome 통과, seller vitest 9/9, 4앱 tsc 0, seller build 통과, Playwright 수집 16건, 프리뷰 런타임 **16/16 통과**(27.3초). **잔여**: `pending-visual-verify.md`의 운영 상태변경·NumberInput 시각/실저장 육안 항목만 유지.
