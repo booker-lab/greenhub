@@ -931,3 +931,5 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **사전 검증**: 변경 스펙 `biome check` 통과 · 인증 가능한 프리뷰 대상으로 `seller-settlements.spec.ts`와 `admin-stores-filter-sort.spec.ts`를 함께 실행해 `chromium` **16/16 통과**.
 
+**병합 후 종결**: 보정 커밋 `1a924a7`을 PR #4로 merge(`8827b87`)한 뒤 `Sync preview branch` 실행 `26527167757`이 SHA 일치 고정 preview 배포를 통과했고, 이어진 `E2E Tests` 실행 `26527463226`도 성공했다. `pending-visual-verify.md`의 육안 잔여는 본 자동 종결과 분리해 미완료로 유지한다.
+
