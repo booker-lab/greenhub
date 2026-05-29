@@ -48,11 +48,11 @@ export const ACTION_META: Record<DriverAction, DriverActionMeta> = {
   },
 };
 
-export const STATUS_TABS: { value: DriverStatus; label: string }[] = [
-  { value: 'all', label: '전체' },
-  { value: 'pending', label: '승인 대기' },
-  { value: 'approved', label: '승인 완료' },
-  { value: 'suspended', label: '정지됨' },
+export const STATUS_TABS: { key: DriverStatus; label: string }[] = [
+  { key: 'all', label: '전체' },
+  { key: 'pending', label: '승인 대기' },
+  { key: 'approved', label: '승인 완료' },
+  { key: 'suspended', label: '정지됨' },
 ];
 
 export function filterDrivers(drivers: AdminDriver[], keyword: string): AdminDriver[] {

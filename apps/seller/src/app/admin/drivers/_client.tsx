@@ -1,10 +1,11 @@
 'use client';
 
-import { ActionIcon, Box, Group, TextInput, Title, Tooltip, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Box, Group, TextInput, Title, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { RotateCw, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { type DriverStatus, useAdminDrivers } from '@/hooks/useAdmin';
 import { DriverList } from './_components/DriverList';
 import {
@@ -78,26 +79,8 @@ export default function DriversClient() {
         value={keyword}
       />
 
-      {/* 탭 */}
-      <Box mb="md" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <Group gap={4}>
-          {STATUS_TABS.map((t) => (
-            <UnstyledButton
-              key={t.value}
-              onClick={() => setTab(t.value)}
-              style={{
-                padding: '8px 16px',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: 500,
-                borderBottom: `2px solid ${tab === t.value ? 'var(--color-primary)' : 'transparent'}`,
-                marginBottom: -1,
-                color: tab === t.value ? 'var(--color-primary)' : 'var(--color-text-disabled)',
-              }}
-            >
-              {t.label}
-            </UnstyledButton>
-          ))}
-        </Group>
+      <Box mb="md">
+        <SegmentedTabs tabs={STATUS_TABS} value={tab} onChange={setTab} layout="scroll" />
       </Box>
 
       <DriverList
