@@ -199,8 +199,23 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - [x] **S4-6.** **커밋** — `feat(admin): #CL-55 drivers 탭 가입일 표시 (T3)`.
 - [x] **S4-7.** **배포 확인** — seller 프리뷰 `https://greenhub-seller-jzcy0ohgh-jos-projects-d1cecc0c.vercel.app`가 READY. 실제 가입일 육안 통과는 `pending-visual-verify.md` §14 #220~#221에서 계속 추적한다.
 
+### 세션 S5 — T4·T5 (검색·새로고침)
+
+> **세션 단독 목표**: 드라이버 탭에 이름·이메일 검색과 수동 새로고침 버튼을 추가한다. 백엔드 계약은 변경하지 않고, 현재 status 탭의 서버 응답 목록 안에서만 클라이언트 검색을 수행한다.
+
+#### S5 체크리스트
+- [x] **S5-1.** `_lib.ts`에 `filterDrivers()`와 빈결과 분기 유틸을 추가해 이름·이메일 부분일치 검색을 순수 함수로 분리한다.
+- [x] **S5-2.** `_client.tsx`에서 검색어 상태와 200ms debounce를 추가하고 `useMemo`로 필터링된 목록을 계산한다.
+- [x] **S5-3.** `_client.tsx` 헤더 우측에 `reload` ActionIcon을 노출하고, 클릭 시 현재 status 탭 조건을 유지한 채 목록을 재조회한다.
+- [x] **S5-4.** `DriverList`가 원본 목록 없음과 검색 결과 없음 메시지를 구분해 표시한다.
+- [x] **S5-5.** 로딩·빈결과 상태에서도 제목, 새로고침, 검색 입력, status 탭이 유지된다.
+- [x] **S5-6.** **육안 검증 문서 `pending-visual-verify.md` §14에 검색·새로고침·모바일 배치 항목을 추가한다.**
+- [x] **S5-7.** **정합성검토** — 변경 파일 Biome 0, `pnpm typecheck` 0, `pnpm --filter seller build` 0, 500라인 제한 통과. `admin-drivers-status-filter.spec.ts`에는 검색·새로고침 fixture e2e를 추가했으나, 운영 기본 URL은 미배포 UI라 실패하고 로컬은 인증 API 기준 URL 누락(`undefined/auth/login`)으로 globalSetup이 차단되어 배포 후 재실행으로 남긴다.
+- [x] **S5-8.** **커밋** — `feat(admin): #CL-55 drivers 탭 검색·새로고침 추가 (T4 T5)`.
+- [x] **S5-9.** **배포 확인** — seller 프리뷰 `https://greenhub-seller-9vwkn5kkz-jos-projects-d1cecc0c.vercel.app`가 READY. 인증 환경에서 실제 육안검증은 §14 #222~#226 신규 항목으로 추적한다.
+
 ### 제외(별도 세션 — §C-4·§C-5 보존)
-- **F1** 검색(이름·이메일) / **F2** 새로고침 버튼 / **F4** 드라이버 상세(전화·차량, 데이터모델 선확인 필요) / **F5** 정렬·페이지네이션·`limit(100)` 한도 / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R1** 액션 버튼 메타화 / **R2** 공통 `SegmentedTabs` 통일.
+- **F4** 드라이버 상세(전화·차량, 데이터모델 선확인 필요) / **F5** 정렬·페이지네이션·`limit(100)` 한도 / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R1** 액션 버튼 메타화 / **R2** 공통 `SegmentedTabs` 통일.
 
 ### 차기 진입점(C-8 보강)
 - **S1(T1) → 운영 배포·육안 → S2(T2) → 운영 배포·육안 → S3(e2e) → CI 통과 → 종결**.

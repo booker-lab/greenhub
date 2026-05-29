@@ -1,5 +1,5 @@
 import { toDateStrKST } from '@greenhub/shared';
-import type { DriverStatus } from '@/hooks/useAdmin';
+import type { AdminDriver, DriverStatus } from '@/hooks/useAdmin';
 
 export type DriverAction = 'approve' | 'suspend' | 'unsuspend';
 
@@ -39,6 +39,23 @@ export const STATUS_TABS: { value: DriverStatus; label: string }[] = [
   { value: 'approved', label: '승인 완료' },
   { value: 'suspended', label: '정지됨' },
 ];
+
+export function filterDrivers(drivers: AdminDriver[], keyword: string): AdminDriver[] {
+  const query = keyword.trim().toLowerCase();
+  if (!query) return drivers;
+
+  return drivers.filter((driver) =>
+    [driver.name, driver.email].some((value) => value?.toLowerCase().includes(query)),
+  );
+}
+
+export function getDriverEmptyMessage(
+  source: AdminDriver[],
+  filtered: AdminDriver[],
+): string | undefined {
+  if (source.length > 0 && filtered.length === 0) return '검색 결과가 없습니다.';
+  return undefined;
+}
 
 function toDate(value: unknown): Date | null {
   if (value instanceof Date) return value;

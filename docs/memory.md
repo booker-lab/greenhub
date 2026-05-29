@@ -196,3 +196,7 @@
 - `admin-tab-drivers-plan.md`에 S4(T3)를 추가하고, 드라이버 카드 이메일 아래에 `가입일 YYYY-MM-DD`를 표시했다. 날짜 포맷은 shared `toDateStrKST()`를 재사용하며 Firestore Timestamp 계열과 string/number 입력을 안전하게 처리한다.
 - `pending-visual-verify.md` §14 #220~#221에 가입일 표시와 모바일 배치 육안검증 항목을 추가했다. 로컬 브라우저/e2e는 기존 `AUTH_SECRET` 누락과 Firebase `auth/invalid-api-key` 환경 문제로 `/login`에서 차단되어 프리뷰/운영 인증 세션 확인으로 남겼다.
 - 검증: 변경 파일 Biome 0, `pnpm --filter seller exec tsc --noEmit` 0, `pnpm typecheck` 0, `pnpm --filter seller build` 0. seller 프리뷰 `https://greenhub-seller-jzcy0ohgh-jos-projects-d1cecc0c.vercel.app` READY. 첫 배포 시도에서 consumer preview가 1건 생성됐으나 production 영향은 없다.
+
+## 2026-05-29 어드민 드라이버 탭 S5 검색·새로고침
+- `/admin/drivers`에 이름·이메일 검색과 헤더 새로고침 ActionIcon을 추가했다. 검색은 현재 status 서버 응답 안에서만 클라이언트 필터링하며 원본 없음과 검색 결과 없음 메시지를 분리했다.
+- `pending-visual-verify.md` §14 #222~#226에 검색·빈결과·새로고침·로딩 유지·모바일 배치 항목을 추가했고, seller 프리뷰 `https://greenhub-seller-9vwkn5kkz-jos-projects-d1cecc0c.vercel.app` READY를 확인했다.

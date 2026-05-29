@@ -1,17 +1,34 @@
 'use client';
 
-import { Box, Group, Title, UnstyledButton } from '@mantine/core';
-import { useState } from 'react';
+import { ActionIcon, Box, Group, TextInput, Title, Tooltip, UnstyledButton } from '@mantine/core';
+import { useDebouncedValue } from '@mantine/hooks';
+import { RotateCw, Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { type DriverStatus, useAdminDrivers } from '@/hooks/useAdmin';
 import { DriverList } from './_components/DriverList';
-import { ACTION_META, type DriverAction, type PendingAction, STATUS_TABS } from './_lib';
+import {
+  ACTION_META,
+  type DriverAction,
+  filterDrivers,
+  getDriverEmptyMessage,
+  type PendingAction,
+  STATUS_TABS,
+} from './_lib';
 
 export default function DriversClient() {
   const [tab, setTab] = useState<DriverStatus>('pending');
+  const [keyword, setKeyword] = useState('');
+  const [debouncedKeyword] = useDebouncedValue(keyword, 200);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
-  const { drivers, loading, approve, toggleSuspend } = useAdminDrivers({ status: tab });
+  const { drivers, loading, reload, approve, toggleSuspend } = useAdminDrivers({ status: tab });
+
+  const filteredDrivers = useMemo(
+    () => filterDrivers(drivers, debouncedKeyword),
+    [drivers, debouncedKeyword],
+  );
+  const emptyMessage = getDriverEmptyMessage(drivers, filteredDrivers);
 
   const runPending = async () => {
     if (!pending) return;
@@ -34,9 +51,32 @@ export default function DriversClient() {
 
   return (
     <Box>
-      <Title order={4} mb="md">
-        드라이버 관리
-      </Title>
+      <Group justify="space-between" mb="md">
+        <Title order={4}>드라이버 관리</Title>
+        <Tooltip label="새로고침">
+          <ActionIcon
+            aria-label="드라이버 목록 새로고침"
+            color="gray"
+            loading={loading}
+            onClick={reload}
+            radius="md"
+            variant="subtle"
+          >
+            <RotateCw size={18} />
+          </ActionIcon>
+        </Tooltip>
+      </Group>
+
+      <TextInput
+        aria-label="드라이버 검색"
+        leftSection={<Search size={16} />}
+        mb="xs"
+        onChange={(event) => setKeyword(event.currentTarget.value)}
+        placeholder="이름, 이메일 검색"
+        radius="md"
+        size="sm"
+        value={keyword}
+      />
 
       {/* 탭 */}
       <Box mb="md" style={{ borderBottom: '1px solid var(--color-border)' }}>
@@ -61,9 +101,10 @@ export default function DriversClient() {
       </Box>
 
       <DriverList
-        drivers={drivers}
+        drivers={filteredDrivers}
         loading={loading}
         processingId={processingId}
+        emptyMessage={emptyMessage}
         onAction={handleAction}
       />
 
