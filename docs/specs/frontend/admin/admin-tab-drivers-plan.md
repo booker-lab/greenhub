@@ -174,16 +174,16 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 > **선행 조건**: S1·S2 모두 운영 배포·육안 통과 완료. 코드 변경은 e2e 스펙 외 0.
 
 #### S3 체크리스트
-- [ ] **S3-1.** 세션 90 어드민 e2e 인프라(`tests/admin/*.spec.ts` 또는 동등) 위치·진입점 확인. `project_admin_store_archive.md` 함정 3건(세션격리·networkidle·dotenv#) 미리 확인.
-- [ ] **S3-2.** 신규 스펙 `tests/admin/drivers-status-filter.spec.ts` 작성 — 시나리오 4건:
+- [x] **S3-1.** 세션 90 어드민 e2e 인프라(`apps/e2e/tests/*.spec.ts`) 위치·진입점 확인. `ADMIN_STATE_PATH` 세션 격리, `domcontentloaded` 대기, `.env` 로드 패턴을 재사용했다.
+- [x] **S3-2.** 신규 스펙 `apps/e2e/tests/admin-drivers-status-filter.spec.ts` 작성 — 시나리오 4건:
   - **사례 A**: '승인대기' 탭 진입 → `GET /admin/drivers?status=pending` 호출 관측 → 응답 명단 = 화면 카드 명단(이름·id 1:1 비교).
   - **사례 B**: '승인완료' 탭 진입 → `?status=approved` 관측 → 명단 일치.
   - **사례 C**: '정지' 탭 진입 → `?status=suspended` 관측 → 명단 일치.
   - **사례 D**: '전체' 탭 진입 → **status 쿼리 미전달**(`/admin/drivers`로 호출되는지 확인) → 정지 포함 전부 노출.
-- [ ] **S3-3.** approve/toggleSuspend 액션 검증은 **본 e2e 범위 밖**(grill-me Q-P2 확정 — 운영 데이터 부수효과 우려).
-- [ ] **S3-4.** 시드 = 현 운영 데이터 사용. 4탭 모두 모수가 있는지 e2e 전 사전 점검 — 부족 탭이 있으면 그 탭만 최소 시드 추가.
-- [ ] **S3-5.** **정합성검토** — e2e 통과(4/4) + tsc 0 + biome 0. 빌드는 변경 없음.
-- [ ] **S3-6.** **커밋** — `test(admin): #CL-55 drivers 탭 status 서버 필터 e2e 4건 (S3)`. 푸시는 사용자 지시 대기.
+- [x] **S3-3.** approve/toggleSuspend 액션 검증은 **본 e2e 범위 밖**(grill-me Q-P2 확정 — 운영 데이터 부수효과 우려).
+- [x] **S3-4.** 시드 = 운영 쓰기 없이 네트워크 fixture 사용. 4탭 모수는 pending/approved/suspended 3개 fixture로 보장하고, 전체 탭은 정지 포함 3건을 검증했다.
+- [x] **S3-5.** **정합성검토** — 로컬 최신 seller 서버 기준 e2e 8/8(chromium·mobile), `pnpm typecheck` 0, 변경 파일 biome 0. 빌드는 변경 없음.
+- [x] **S3-6.** **커밋** — `test(admin): #CL-55 drivers 탭 status 서버 필터 e2e 4건 (S3)`. 푸시는 사용자 지시 대기.
 - [ ] **S3-7.** **CI 통과 후 #CL-55 §C 종결 선언** — 세션 메모리 `project_admin_tabs_improve.md` 갱신.
 
 ### 제외(별도 세션 — §C-4·§C-5 보존)
