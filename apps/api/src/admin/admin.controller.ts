@@ -116,6 +116,11 @@ export class AdminController {
     return this.admin.getInvites();
   }
 
+  @Post('invite/:token/revoke')
+  revokeInvite(@Param('token') token: string, @CurrentUser() user: JwtPayload) {
+    return this.admin.revokeInvite(token, user.sub);
+  }
+
   // ── Banner ───────────────────────────────────────────────────────
 
   @Get('banner')

@@ -72,6 +72,26 @@ function createOrdersService(count = 2) {
   return { service, query, firestore };
 }
 
+function createInviteRevokeService(invite: Record<string, unknown> | null) {
+  const tx = {
+    get: jest.fn().mockResolvedValue({
+      exists: invite !== null,
+      data: () => invite,
+    }),
+    set: jest.fn(),
+  };
+  const ref = { path: 'invites/INVITE1234567890' };
+  const firestore = {
+    doc: jest.fn().mockReturnValue(ref),
+    runTransaction: jest.fn((handler) => handler(tx)),
+    Timestamp: {
+      now: jest.fn(() => 'now'),
+    },
+  };
+  const service = new AdminService(firestore as never, {} as never);
+  return { service, tx, ref };
+}
+
 describe('AdminService.bulkMarkAsPaid', () => {
   const createService = () =>
     new AdminService({} as never, {} as never) as AdminService & {
@@ -151,6 +171,59 @@ describe('AdminService.getOrders', () => {
     expect(firestore.Timestamp.fromDate).toHaveBeenCalledWith(new Date('2026-05-29T01:00:00.000Z'));
     expect(query.startAfter).toHaveBeenCalledWith(new Date('2026-05-29T01:00:00.000Z'));
     expect(query.limit).toHaveBeenCalledWith(2);
+  });
+});
+
+describe('AdminService.revokeInvite', () => {
+  const validInvite = {
+    usedAt: null,
+    revokedAt: null,
+    expiresAt: { toMillis: () => Date.now() + 60_000 },
+  };
+
+  it('유효한 토큰에 취소 시각과 취소 관리자를 기록한다', async () => {
+    const { service, tx, ref } = createInviteRevokeService(validInvite);
+
+    await expect(service.revokeInvite('INVITE1234567890', 'admin-1')).resolves.toEqual({
+      ok: true,
+    });
+
+    expect(tx.set).toHaveBeenCalledWith(
+      ref,
+      { revokedAt: 'now', revokedBy: 'admin-1' },
+      { merge: true },
+    );
+  });
+
+  it('이미 사용된 토큰은 409 reason으로 거절한다', async () => {
+    const { service, tx } = createInviteRevokeService({ ...validInvite, usedAt: 'used' });
+
+    await expect(service.revokeInvite('INVITE1234567890', 'admin-1')).rejects.toMatchObject({
+      status: 409,
+      response: { reason: 'already_used' },
+    });
+    expect(tx.set).not.toHaveBeenCalled();
+  });
+
+  it('이미 취소된 토큰은 409 reason으로 거절한다', async () => {
+    const { service } = createInviteRevokeService({ ...validInvite, revokedAt: 'revoked' });
+
+    await expect(service.revokeInvite('INVITE1234567890', 'admin-1')).rejects.toMatchObject({
+      status: 409,
+      response: { reason: 'already_revoked' },
+    });
+  });
+
+  it('만료된 토큰은 409 reason으로 거절한다', async () => {
+    const { service } = createInviteRevokeService({
+      ...validInvite,
+      expiresAt: { toMillis: () => Date.now() - 60_000 },
+    });
+
+    await expect(service.revokeInvite('INVITE1234567890', 'admin-1')).rejects.toMatchObject({
+      status: 409,
+      response: { reason: 'expired' },
+    });
   });
 });
 
