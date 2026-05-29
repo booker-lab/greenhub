@@ -161,4 +161,9 @@
 - `/admin/invite` 발급 내역 위에 300ms debounce 검색 입력을 추가했고, 4자 이상 검색 결과가 없으면 `일치하는 토큰이 없습니다.`를 표시한다.
 - `pending-visual-verify-20260529.md` §23 #201~#206에 검색 관련 육안검증 항목을 추가했다.
 - 검증: API 단위 테스트 `admin.service.spec.ts` 42/42, API·seller tsc 0, API·seller build 0, 변경 파일 Biome 0. 첫 seller tsc는 stale `.next/types`로 실패했으나 build 후 재실행 통과. 변경 코드 파일과 `memory.md`는 500/200라인 미만.
-- 다음: S-D(T10~T11) 취소 동작·취소 토큰 가입 차단 e2e.
+
+## 2026-05-29 어드민 초대 탭 S-D e2e 검증
+- `admin-tab-invite-plan.md` S-D(T10~T12)의 스펙 작성 범위를 진행했다. `apps/e2e/tests/admin-invite-revoke.spec.ts`에서 어드민 초대 취소 확인창·취소 후 `취소됨` 상태·`already_revoked` 알림·prefix 검색 복귀를 네트워크 fixture로 검증한다.
+- 취소 토큰 가입 차단은 `AuthService.register()`의 사전 검증과 트랜잭션 재검증 두 지점 단위 테스트로 고정했다. 취소 토큰은 사용자 생성과 invite `usedAt` 소비 처리 없이 `취소된 초대 토큰입니다.`로 거부된다.
+- `pending-visual-verify-20260529.md` §24 #207~#210에 S-D 이후 육안검증 항목을 추가했다. 실제 운영/프리뷰에서는 확인창 배치, `취소됨` orange 배지, reason 알림 위치, 검색 결과 행/카드 배치를 확인하면 된다.
+- 검증: API `auth.service.spec.ts` 4/4 통과, 변경 TS 파일 Biome 0. Playwright 스펙은 기본 운영 도메인에서 이전 UI를 보고 실패했고, `SELLER_BASE=http://localhost:3016` 로컬 실행은 `AUTH_SECRET` 등 로컬 Auth.js 설정 부재로 `/api/auth/csrf` 500 차단됐다. 새 UI 배포 또는 로컬 인증 env 보정 후 `pnpm --filter e2e test -- admin-invite-revoke.spec.ts` 재실행 필요.
