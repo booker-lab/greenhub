@@ -1,12 +1,14 @@
 import { Controller, Get } from '@nestjs/common';
+// biome-ignore lint/style/useImportType: Nest 생성자 주입 런타임 메타데이터에 클래스 값이 필요하다.
 import { AppService } from './app.service';
-import { FirestoreService } from './firestore/firestore.service';
+// biome-ignore lint/style/useImportType: Nest 생성자 주입 런타임 메타데이터에 클래스 값이 필요하다.
+import { BannerQueryService } from './banners/banner-query.service';
 
 @Controller()
 export class AppController {
   constructor(
     private readonly appService: AppService,
-    private readonly firestore: FirestoreService,
+    private readonly banners: BannerQueryService,
   ) {}
 
   @Get()
@@ -21,7 +23,11 @@ export class AppController {
 
   @Get('banner')
   async getBanner() {
-    const snap = await this.firestore.doc('banners/main_hero').get();
-    return snap.exists ? snap.data() : null;
+    return this.banners.getLegacyMainBanner();
+  }
+
+  @Get('banners/active')
+  async getActiveBanners() {
+    return this.banners.getActiveBanners();
   }
 }

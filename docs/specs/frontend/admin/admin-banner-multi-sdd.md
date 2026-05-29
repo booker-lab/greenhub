@@ -290,3 +290,11 @@
 - 육안 검증: [`../pending-visual-verify.md`](../pending-visual-verify.md)
 - 어드민 e2e 인프라 선례: 세션90 (`d10c60f`).
 - KST 유틸 선례: 세션85 `todayKST()` / `toDateStrKST()` (vitest 신설).
+## 7. 2026-05-30 S4 진행 현황
+
+- [x] **S4-U1a 데이터 모델** — `@greenhub/shared`에 `BannerKind`, `AdminBanner`, `ActiveBannersResponse`를 추가하고 API DTO에서 `kind`, `startDate`, `endDate`를 검증하도록 확장했다.
+- [x] **S4-U1b 마이그레이션 스크립트** — `apps/api/src/scripts/migrate-banners-kind.ts`로 기존 `banners/main_hero` 문서에 `kind:'default'`와 `id:'main_hero'`를 병합하는 일회성 스크립트를 추가했다.
+- [x] **S4-U2a CRUD 엔드포인트** — `AdminBannersService`를 별도 인프라 서비스로 분리하고 `GET/POST/PUT/DELETE /admin/banners`를 추가했다. 기존 `GET/PUT /admin/banner`는 기본 배너 호환 경로로 유지했다.
+- [x] **S4-U2b orphan cleanup** — 기간 배너 삭제 및 이미지 교체 시 Firebase Storage URL을 파싱해 기존 파일 삭제를 시도한다. 파싱 불가 외부 URL은 무시한다.
+- [x] **S4-U3 손님용 조회** — `GET /banners/active`를 추가해 KST 오늘 기준 기간 배너 목록과 기본 배너를 반환한다. 기존 `GET /banner`는 한 세션 병행 유지한다.
+- [x] **S4-U2c 유닛 테스트** — 기간 필수값, 기간 역전, CTA 비대칭, 기본 배너 삭제 차단, Storage cleanup, KST 활성 필터를 Jest로 검증했다.

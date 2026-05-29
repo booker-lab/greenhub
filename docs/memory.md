@@ -35,3 +35,7 @@
 ## 다음 진입점
 
 - 인증 가능한 프리뷰 또는 운영 미적용 환경에서 `pending-visual-verify.md` §15 #231~#237을 확인한 뒤, 다중 배너 SDD Phase 3로 진입한다.
+- 2026-05-30 어드민 배너 다중 배너 SDD S4를 진행했다. `AdminBannersService`와 `BannerQueryService`를 분리해 `/admin/banners` CRUD, 기존 `/admin/banner` 호환, 공개 `/banners/active` 조회, `kind:'default'` 삭제 차단, scheduled 기간 검증, CTA 비대칭 검증, Storage orphan cleanup을 추가했다.
+- 공유 패키지에 `BannerKind`, `AdminBanner`, `ActiveBannersResponse`를 추가하고 dist 산출물을 갱신했다. `migrate-banners-kind.ts` 일회성 스크립트로 기존 `banners/main_hero`에 `kind:'default'`와 `id:'main_hero'`를 병합할 수 있게 했다.
+- 검증: Biome 0, `pnpm --filter api test -- admin-banners.service.spec.ts banner-query.service.spec.ts --runInBand` 6/6, `pnpm --filter api exec tsc --noEmit` 0, shared/api/seller/consumer/driver build 0. 루트 `npm run build`는 기존 필터 문제로 shared만 빌드하고 앱은 매칭하지 못했다.
+- 육안검증 항목은 `pending-visual-verify-20260529.md` §27 #240~#245에 추가했다. `pending-visual-verify.md` 본문은 500라인에 가까워 분리 문서를 사용했다.

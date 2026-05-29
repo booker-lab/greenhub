@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -6,15 +17,19 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 // biome-ignore lint/style/useImportType: Nest 생성자 주입 런타임 메타데이터에 클래스 값이 필요하다.
 import { AdminService } from './admin.service';
+// biome-ignore lint/style/useImportType: Nest 생성자 주입에는 런타임 클래스 값이 필요하다.
+import { AdminBannersService } from './admin-banners.service';
 // biome-ignore lint/style/useImportType: Nest ValidationPipe가 DTO 클래스 메타타입을 런타임에 사용한다.
 import {
   BulkPaySettlementsDto,
+  CreateBannerDto,
   ForceRefundDto,
   QueryAdminDriversDto,
   QueryAdminOrdersDto,
   QueryAdminSettlementsDto,
   SetCommissionDto,
   SuspendUserDto,
+  UpdateBannerDto,
   UpsertBannerDto,
 } from './dto/admin.dto';
 
@@ -22,7 +37,10 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly banners: AdminBannersService,
+  ) {}
 
   // ── Stores ──────────────────────────────────────────────────────
 
@@ -125,11 +143,31 @@ export class AdminController {
 
   @Get('banner')
   getBanner() {
-    return this.admin.getBanner();
+    return this.banners.getBanner();
   }
 
   @Put('banner')
   upsertBanner(@Body() dto: UpsertBannerDto) {
-    return this.admin.upsertBanner(dto);
+    return this.banners.upsertBanner(dto);
+  }
+
+  @Get('banners')
+  listBanners() {
+    return this.banners.listBanners();
+  }
+
+  @Post('banners')
+  createBanner(@Body() dto: CreateBannerDto) {
+    return this.banners.createBanner(dto);
+  }
+
+  @Put('banners/:id')
+  updateBanner(@Param('id') id: string, @Body() dto: UpdateBannerDto) {
+    return this.banners.updateBanner(id, dto);
+  }
+
+  @Delete('banners/:id')
+  deleteBanner(@Param('id') id: string) {
+    return this.banners.deleteBanner(id);
   }
 }

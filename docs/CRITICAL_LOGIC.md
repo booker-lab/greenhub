@@ -638,3 +638,12 @@
 **검증 경계**: 액션 실패 시 ConfirmModal은 닫지 않고 빨간 notification만 표시해 재시도 가능성을 유지한다. 자동 탭 이동, 낙관적 카드 이동, 백엔드 계약 변경은 범위 밖이다.
 
 ---
+## 2026-05-30 — #CL-55 admin banner multi API foundation
+
+**결정**: 다중 배너 Phase 3는 기존 `AdminService`에 누적하지 않고 `AdminBannersService`와 `BannerQueryService`로 분리한다.
+
+**이유**: `admin.service.ts`가 500라인 한도에 근접해 있었고, 관리자 CRUD와 손님 활성 배너 조회는 각각 권한·검증과 공개 조회·KST 필터라는 다른 책임을 가진다.
+
+**계약**: 기존 `GET/PUT /admin/banner` 및 `GET /banner`는 기본 배너 호환 경로로 유지한다. 신규 경로는 `GET/POST/PUT/DELETE /admin/banners`, `GET /banners/active`이며, `kind:'default'` 배너 삭제는 422로 차단한다.
+
+---
