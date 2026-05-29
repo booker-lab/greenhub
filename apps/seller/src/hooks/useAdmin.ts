@@ -103,6 +103,11 @@ export interface AdminBanner {
   isActive?: boolean;
 }
 
+export interface AdminActionResult {
+  ok: boolean;
+  reason?: string;
+}
+
 // ── Core ─────────────────────────────────────────────────────────
 
 /**
@@ -428,8 +433,8 @@ export function useAdminBanner() {
     load();
   }, [load]);
 
-  const save = async (dto: AdminBanner): Promise<boolean> => {
-    if (!token) return false;
+  const save = async (dto: AdminBanner): Promise<AdminActionResult> => {
+    if (!token) return { ok: false, reason: '관리자 인증이 필요합니다.' };
     setSaving(true);
     // 서버 관리 필드 제거 (forbidNonWhitelisted 대응)
     const {
@@ -440,9 +445,12 @@ export function useAdminBanner() {
     try {
       await apiJson('/admin/banner', token, { method: 'PUT', body: JSON.stringify(payload) });
       await load();
-      return true;
-    } catch {
-      return false;
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: error instanceof Error ? error.message : '배너 저장 중 오류가 발생했습니다.',
+      };
     } finally {
       setSaving(false);
     }
