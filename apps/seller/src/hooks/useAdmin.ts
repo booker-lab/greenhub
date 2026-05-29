@@ -1,6 +1,6 @@
 'use client';
 
-import type { SettlementStatus, StoreStatus } from '@greenhub/shared';
+import type { OrderStatus, SettlementStatus, StoreStatus } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
@@ -30,11 +30,31 @@ export interface AdminOrder {
   orderNumber?: string;
   storeId: string;
   userId: string;
-  status: string;
+  productId?: string;
+  productName?: string;
+  buyerName?: string;
+  buyerPhone?: string | null;
+  status: OrderStatus;
   totalAmount: number;
   deliveryMethod: string;
+  saleType?: string;
+  quantity?: number;
+  deliveryAddress?: {
+    address?: string;
+    addressDetail?: string;
+    zipCode?: string;
+  } | null;
+  address?: string;
+  requestedDeliveryDate?: string | null;
+  preparedAt?: string | null;
+  courierCompany?: string | null;
+  trackingNumber?: string | null;
+  cancelReason?: string | null;
   createdAt: unknown;
+  updatedAt?: unknown;
 }
+
+export type AdminOrderSort = 'createdAt_desc' | 'createdAt_asc';
 
 export interface AdminSettlement {
   id: string;
@@ -47,6 +67,11 @@ export interface AdminSettlement {
   settledAt: unknown;
   confirmedAt?: unknown | null; // N8: B-1 confirm 배치 신규 필드(어드민도 표시 대비)
   paidAt: unknown | null;
+}
+
+export interface BulkPaySettlementsResult {
+  ok: string[];
+  failed: { id: string; reason: string }[];
 }
 
 export interface InviteToken {
@@ -152,6 +177,11 @@ function pick<T>(key: string) {
   return (data: unknown): T[] => (data as Record<string, T[]>)?.[key] ?? [];
 }
 
+interface AdminOrdersResponse {
+  orders?: AdminOrder[];
+  nextCursor?: string | null;
+}
+
 // ── Stores ───────────────────────────────────────────────────────
 
 export function useAdminStores() {
@@ -214,35 +244,90 @@ export function useAdminUsers() {
 
 // ── Orders ───────────────────────────────────────────────────────
 
-export function useAdminOrders(filters?: { storeId?: string; status?: string }) {
-  const {
-    items: orders,
-    loading,
-    error,
-    reload,
-    token,
-  } = useAdminList<AdminOrder>(
-    () => withQuery('/admin/orders', { storeId: filters?.storeId, status: filters?.status }),
-    pick<AdminOrder>('orders'),
-    '주문 목록',
-    [filters?.storeId, filters?.status],
+export function useAdminOrders(filters?: {
+  storeId?: string;
+  status?: OrderStatus;
+  sort?: AdminOrderSort;
+  limit?: number;
+}) {
+  const { data: session } = useSession();
+  const token = session?.user.accessToken;
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const sort = filters?.sort ?? 'createdAt_desc';
+  const limit = String(filters?.limit ?? 50);
+
+  const buildOrdersPath = useCallback(
+    (cursor?: string | null) =>
+      withQuery('/admin/orders', {
+        storeId: filters?.storeId,
+        status: filters?.status,
+        sort,
+        limit,
+        cursor: cursor ?? undefined,
+      }),
+    [filters?.storeId, filters?.status, sort, limit],
   );
+
+  const load = useCallback(
+    async (cursor?: string | null) => {
+      if (!token) return;
+      const append = Boolean(cursor);
+      if (append) setLoadingMore(true);
+      else setLoading(true);
+      try {
+        const data = await apiJson<AdminOrdersResponse>(buildOrdersPath(cursor), token);
+        setOrders((current) =>
+          append ? [...current, ...(data.orders ?? [])] : (data.orders ?? []),
+        );
+        setNextCursor(data.nextCursor ?? null);
+        setError(null);
+      } catch {
+        setError('주문 목록 조회 중 오류 발생');
+      } finally {
+        if (append) setLoadingMore(false);
+        else setLoading(false);
+      }
+    },
+    [buildOrdersPath, token],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const forceRefund = async (orderId: string, reason?: string) => {
     const ok = await runAction(token, `/admin/orders/${orderId}/refund`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
     });
-    if (ok) await reload();
+    if (ok) await load();
     return ok;
   };
 
-  return { orders, loading, error, reload, forceRefund };
+  return {
+    orders,
+    loading,
+    loadingMore,
+    error,
+    hasMore: Boolean(nextCursor),
+    reload: () => load(),
+    loadMore: () => load(nextCursor),
+    forceRefund,
+  };
 }
 
 // ── Settlements ──────────────────────────────────────────────────
 
-export function useAdminSettlements(filters?: { storeId?: string; from?: string; to?: string }) {
+export function useAdminSettlements(filters?: {
+  storeId?: string;
+  from?: string;
+  to?: string;
+  status?: SettlementStatus;
+}) {
   const {
     items: settlements,
     loading,
@@ -255,10 +340,11 @@ export function useAdminSettlements(filters?: { storeId?: string; from?: string;
         storeId: filters?.storeId,
         from: filters?.from,
         to: filters?.to,
+        status: filters?.status,
       }),
     pick<AdminSettlement>('settlements'),
     '정산 목록',
-    [filters?.storeId, filters?.from, filters?.to],
+    [filters?.storeId, filters?.from, filters?.to, filters?.status],
   );
 
   const markAsPaid = async (settlementId: string) => {
@@ -269,7 +355,21 @@ export function useAdminSettlements(filters?: { storeId?: string; from?: string;
     return ok;
   };
 
-  return { settlements, loading, error, reload, markAsPaid };
+  const bulkMarkAsPaid = async (ids: string[]): Promise<BulkPaySettlementsResult | null> => {
+    if (!token || ids.length === 0) return null;
+    try {
+      const result = await apiJson<BulkPaySettlementsResult>('/admin/settlements/bulk-pay', token, {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+      });
+      await reload();
+      return result;
+    } catch {
+      return null;
+    }
+  };
+
+  return { settlements, loading, error, reload, markAsPaid, bulkMarkAsPaid };
 }
 
 // ── Drivers ──────────────────────────────────────────────────────

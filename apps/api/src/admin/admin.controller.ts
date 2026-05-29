@@ -1,17 +1,20 @@
-import { Controller, Get, Post, Put, Patch, Param, Body, Query, UseGuards } from '@nestjs/common';
-import { AdminService } from './admin.service';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import type { JwtPayload } from '../auth/types/jwt-payload.type';
+// biome-ignore lint/style/useImportType: Nest 생성자 주입 런타임 메타데이터에 클래스 값이 필요하다.
+import { AdminService } from './admin.service';
+// biome-ignore lint/style/useImportType: Nest ValidationPipe가 DTO 클래스 메타타입을 런타임에 사용한다.
 import {
-  QueryAdminSettlementsDto,
-  QueryAdminOrdersDto,
-  QueryAdminDriversDto,
-  SuspendUserDto,
-  SetCommissionDto,
+  BulkPaySettlementsDto,
   ForceRefundDto,
+  QueryAdminDriversDto,
+  QueryAdminOrdersDto,
+  QueryAdminSettlementsDto,
+  SetCommissionDto,
+  SuspendUserDto,
   UpsertBannerDto,
 } from './dto/admin.dto';
 
@@ -77,6 +80,11 @@ export class AdminController {
   @Patch('settlements/:settlementId/pay')
   markAsPaid(@Param('settlementId') settlementId: string) {
     return this.admin.markAsPaid(settlementId);
+  }
+
+  @Post('settlements/bulk-pay')
+  bulkMarkAsPaid(@Body() dto: BulkPaySettlementsDto) {
+    return this.admin.bulkMarkAsPaid(dto.ids);
   }
 
   // ── Drivers ──────────────────────────────────────────────────────

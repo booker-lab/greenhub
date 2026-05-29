@@ -1,10 +1,15 @@
 'use client';
 
-import { Box, Group, Text, Title } from '@mantine/core';
+import { ActionIcon, Box, Group, Text, Title, Tooltip } from '@mantine/core';
+import { useDebouncedValue } from '@mantine/hooks';
+import { RotateCw } from 'lucide-react';
+import { useMemo } from 'react';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import type { AdminUser } from '@/hooks/useAdmin';
 import { useAdminUsers } from '@/hooks/useAdmin';
+import { filterUsers, getUserEmptyKind, type UserStatusFilter } from './_lib';
+import { UsersFilters } from './_components/UsersFilters';
 import { UsersTable } from './_components/UsersTable';
 
 interface PendingUserAction {
@@ -13,9 +18,19 @@ interface PendingUserAction {
 }
 
 export default function AdminUsersClient() {
-  const { users, loading, toggleSuspend } = useAdminUsers();
+  const { users, loading, reload, toggleSuspend } = useAdminUsers();
+  const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState<UserStatusFilter>('all');
+  const [debouncedKeyword] = useDebouncedValue(keyword, 200);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingUserAction | null>(null);
+
+  const filteredUsers = useMemo(
+    () => filterUsers(users, { keyword: debouncedKeyword, status }),
+    [users, debouncedKeyword, status],
+  );
+  const emptyKind = getUserEmptyKind(users, filteredUsers);
+  const emptyMessage = emptyKind === 'no-match' ? '검색 결과가 없습니다.' : undefined;
 
   const runPending = async () => {
     if (!pending) return;
@@ -31,14 +46,6 @@ export default function AdminUsersClient() {
   const handleToggle = (user: AdminUser) =>
     setPending({ userId: user.id, currentlySuspended: !!user.suspended });
 
-  if (loading) {
-    return (
-      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
-        불러오는 중...
-      </Text>
-    );
-  }
-
   return (
     <Box>
       <Group justify="space-between" mb="md">
@@ -51,9 +58,34 @@ export default function AdminUsersClient() {
             ({users.length})
           </Text>
         </Title>
+        <Tooltip label="새로고침">
+          <ActionIcon
+            aria-label="소비자 계정 새로고침"
+            color="gray"
+            loading={loading}
+            onClick={reload}
+            radius="md"
+            variant="subtle"
+          >
+            <RotateCw size={18} />
+          </ActionIcon>
+        </Tooltip>
       </Group>
 
-      <UsersTable users={users} processingId={processingId} onToggle={handleToggle} />
+      <UsersFilters
+        keyword={keyword}
+        status={status}
+        onKeywordChange={setKeyword}
+        onStatusChange={setStatus}
+      />
+
+      <UsersTable
+        users={filteredUsers}
+        loading={loading}
+        processingId={processingId}
+        emptyMessage={emptyMessage}
+        onToggle={handleToggle}
+      />
 
       <ConfirmModal
         opened={pending !== null}

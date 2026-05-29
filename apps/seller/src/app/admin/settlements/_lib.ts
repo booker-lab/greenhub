@@ -1,4 +1,5 @@
 // 어드민 정산 화면 공용 유틸 (F-2/S5).
+import { toDateStrKST } from '@greenhub/shared';
 import type { AdminSettlement } from '@/hooks/useAdmin';
 
 /**
@@ -15,9 +16,7 @@ export function toDateStr(ts: unknown): string {
     date = new Date((ts as { _seconds: number })._seconds * 1000);
   }
   if (!date || Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString('ko-KR', {
-    month: 'short',
-    day: 'numeric',
+  return toDateStrKST(date, {
     hour: '2-digit',
     minute: '2-digit',
   });

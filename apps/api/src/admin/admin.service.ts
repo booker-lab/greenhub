@@ -1,16 +1,36 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import type { OrderStatus } from '@greenhub/shared';
+import { BadRequestException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
+// biome-ignore lint/style/useImportType: Nest 생성자 주입 런타임 메타데이터에 클래스 값이 필요하다.
 import { FirestoreService } from '../firestore/firestore.service';
+// biome-ignore lint/style/useImportType: Nest 생성자 주입 런타임 메타데이터에 클래스 값이 필요하다.
 import { PaymentsService } from '../payments/payments.service';
-import {
-  QueryAdminSettlementsDto,
-  QueryAdminOrdersDto,
-  QueryAdminDriversDto,
-  SuspendUserDto,
-  SetCommissionDto,
+import type {
   ForceRefundDto,
+  QueryAdminDriversDto,
+  QueryAdminOrdersDto,
+  QueryAdminSettlementsDto,
+  SetCommissionDto,
+  SuspendUserDto,
   UpsertBannerDto,
 } from './dto/admin.dto';
+
+const ADMIN_USERS_LIMIT = 5000;
+const ADMIN_ORDERS_DEFAULT_LIMIT = 50;
+const DEFAULT_FORCE_REFUND_REASON = '관리자 강제 환불';
+const RISK_FORCE_REFUND_STATUSES: OrderStatus[] = [
+  'DELIVERING',
+  'HUB_ARRIVED',
+  'PICKED_UP',
+  'DELIVERED',
+  'REVIEWED',
+];
+const RISK_FORCE_REFUND_REASON_MESSAGE = '배달 후 환불은 사유(5자 이상)가 필수입니다.';
+
+type BulkPayFailure = {
+  id: string;
+  reason: string;
+};
 
 @Injectable()
 export class AdminService {
@@ -88,7 +108,8 @@ export class AdminService {
       this.firestore
         .collection('users')
         .where('role', '==', 'consumer')
-        .orderBy('createdAt', 'desc') as any
+        .orderBy('createdAt', 'desc')
+        .limit(ADMIN_USERS_LIMIT) as any
     ).get();
 
     return {
@@ -124,25 +145,54 @@ export class AdminService {
       query = query.where('status', '==', dto.status);
     }
 
-    query = query.orderBy('createdAt', 'desc').limit(200);
+    const sortDirection = dto.sort === 'createdAt_asc' ? 'asc' : 'desc';
+    const limit = dto.limit ?? ADMIN_ORDERS_DEFAULT_LIMIT;
+    query = query.orderBy('createdAt', sortDirection);
+    if (dto.cursor) {
+      query = query.startAfter(this.firestore.Timestamp.fromDate(new Date(dto.cursor)));
+    }
+    query = query.limit(limit + 1);
     const snap = await query.get();
+    const docs = snap.docs.slice(0, limit);
+    const nextDoc = snap.docs.length > limit ? docs.at(-1) : null;
 
     return {
-      orders: snap.docs.map((d: any) => d.data()),
-      total: snap.size,
+      orders: docs.map((d: any) => d.data()),
+      total: docs.length,
+      nextCursor: nextDoc ? this.toIsoCursor(nextDoc.data()?.createdAt) : null,
     };
+  }
+
+  private toIsoCursor(value: unknown): string | null {
+    if (!value) return null;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value !== null && 'toDate' in value) {
+      const date = (value as { toDate?: () => Date }).toDate?.();
+      return date ? date.toISOString() : null;
+    }
+    return null;
   }
 
   async forceRefund(orderId: string, dto: ForceRefundDto) {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!orderSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
 
-    const order = orderSnap.data()!;
-    if (order['status'] === 'CANCELLED') {
+    const order = orderSnap.data();
+    if (!order) throw new NotFoundException('주문을 찾을 수 없습니다.');
+    const status = order.status as OrderStatus;
+    if (status === 'CANCELLED') {
       throw new BadRequestException('이미 취소된 주문입니다.');
     }
+    const trimmedReason = dto.reason?.trim();
+    if (
+      RISK_FORCE_REFUND_STATUSES.includes(status) &&
+      (!trimmedReason || trimmedReason.length < 5)
+    ) {
+      throw new BadRequestException(RISK_FORCE_REFUND_REASON_MESSAGE);
+    }
 
-    const reason = dto.reason ?? '관리자 강제 환불';
+    const reason = trimmedReason || DEFAULT_FORCE_REFUND_REASON;
     await this.payments.processRefundByOrderId(orderId, reason);
 
     await this.firestore.doc(`orders/${orderId}`).update({
@@ -161,6 +211,9 @@ export class AdminService {
 
     if (dto.storeId) {
       query = query.where('storeId', '==', dto.storeId);
+    }
+    if (dto.status) {
+      query = query.where('status', '==', dto.status);
     }
     if (dto.from) {
       query = query.where('settledAt', '>=', this.firestore.Timestamp.fromDate(new Date(dto.from)));
@@ -189,11 +242,12 @@ export class AdminService {
       const snap = await t.get(ref);
       if (!snap.exists) throw new NotFoundException('정산 내역을 찾을 수 없습니다.');
 
-      const data = snap.data()!;
-      if (data['status'] === 'paid') {
+      const data = snap.data();
+      if (!data) throw new NotFoundException('정산 내역을 찾을 수 없습니다.');
+      if (data.status === 'paid') {
         throw new BadRequestException('이미 지급 완료된 정산입니다.');
       }
-      if (data['status'] !== 'confirmed') {
+      if (data.status !== 'confirmed') {
         throw new BadRequestException('confirmed 상태의 정산만 지급 처리할 수 있습니다.');
       }
 
@@ -209,6 +263,46 @@ export class AdminService {
   }
 
   // ── Drivers ──────────────────────────────────────────────────────
+
+  async bulkMarkAsPaid(ids: string[]) {
+    const uniqueIds = [...new Set(ids)];
+    const ok: string[] = [];
+    const failed: BulkPayFailure[] = [];
+
+    for (const id of uniqueIds) {
+      try {
+        await this.markAsPaid(id);
+        ok.push(id);
+      } catch (error) {
+        failed.push({ id, reason: this.getBulkPayFailureReason(error) });
+      }
+    }
+
+    return { ok, failed };
+  }
+
+  private getBulkPayFailureReason(error: unknown) {
+    if (error instanceof NotFoundException) {
+      return '정산 내역을 찾을 수 없습니다.';
+    }
+    if (error instanceof BadRequestException) {
+      const response = error.getResponse();
+      const message =
+        typeof response === 'object' && response !== null && 'message' in response
+          ? (response as { message?: unknown }).message
+          : error.message;
+
+      if (typeof message === 'string' && message.length > 0) return message;
+      if (Array.isArray(message) && typeof message[0] === 'string') return message[0];
+    }
+    if (error instanceof HttpException && error.message.length > 0) {
+      return error.message;
+    }
+    if (error instanceof Error && error.message.length > 0) {
+      return error.message;
+    }
+    return '지급 처리에 실패했습니다.';
+  }
 
   async getDrivers(dto: QueryAdminDriversDto) {
     // 복합 인덱스 없이도 동작하도록 role 단일 필터 후 메모리 필터링
@@ -239,8 +333,9 @@ export class AdminService {
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('드라이버를 찾을 수 없습니다.');
 
-    const data = snap.data()!;
-    if (data['role'] !== 'driver') {
+    const data = snap.data();
+    if (!data) throw new NotFoundException('드라이버를 찾을 수 없습니다.');
+    if (data.role !== 'driver') {
       throw new BadRequestException('드라이버 계정이 아닙니다.');
     }
 
@@ -256,8 +351,9 @@ export class AdminService {
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('드라이버를 찾을 수 없습니다.');
 
-    const data = snap.data()!;
-    if (data['role'] !== 'driver') {
+    const data = snap.data();
+    if (!data) throw new NotFoundException('드라이버를 찾을 수 없습니다.');
+    if (data.role !== 'driver') {
       throw new BadRequestException('드라이버 계정이 아닙니다.');
     }
 

@@ -1,11 +1,14 @@
 'use client';
 
 import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { toDateStrKST } from '@greenhub/shared';
 import type { AdminUser } from '@/hooks/useAdmin';
 
 interface UsersTableProps {
   users: AdminUser[];
+  loading: boolean;
   processingId: string | null;
+  emptyMessage?: string;
   onToggle: (user: AdminUser) => void;
 }
 
@@ -16,7 +19,48 @@ const thBase = {
   color: 'var(--color-text-secondary)',
 };
 
-export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
+function toDate(value: unknown): Date | null {
+  if (value instanceof Date) return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (!value || typeof value !== 'object') return null;
+
+  const record = value as {
+    _seconds?: number;
+    seconds?: number;
+    toDate?: () => Date;
+  };
+  if (typeof record.toDate === 'function') return record.toDate();
+  const seconds = record._seconds ?? record.seconds;
+  return typeof seconds === 'number' ? new Date(seconds * 1000) : null;
+}
+
+function formatCreatedAt(value: unknown): string {
+  const date = toDate(value);
+  return date ? toDateStrKST(date) : '-';
+}
+
+function formatPhone(value: string | undefined): string {
+  return value?.trim() || '-';
+}
+
+export function UsersTable({
+  users,
+  loading,
+  processingId,
+  emptyMessage = '등록된 소비자가 없습니다.',
+  onToggle,
+}: UsersTableProps) {
+  if (loading) {
+    return (
+      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+        불러오는 중...
+      </Text>
+    );
+  }
+
   if (users.length === 0) {
     return (
       <Paper
@@ -25,7 +69,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
       >
         <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>
-          등록된 소비자가 없습니다.
+          {emptyMessage}
         </Text>
       </Paper>
     );
@@ -55,6 +99,22 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                   }}
                 >
                   {user.email}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-xs)',
+                    color: 'var(--color-text-disabled)',
+                  }}
+                >
+                  가입일 {formatCreatedAt(user.createdAt)}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-xs)',
+                    color: 'var(--color-text-disabled)',
+                  }}
+                >
+                  전화 {formatPhone(user.phone)}
                 </Text>
               </Box>
               <Badge color={user.suspended ? 'red' : 'green'} variant="light" radius="xl">
@@ -103,6 +163,12 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                 이메일
               </Box>
               <Box component="th" style={thBase}>
+                가입일
+              </Box>
+              <Box component="th" style={thBase}>
+                전화
+              </Box>
+              <Box component="th" style={thBase}>
                 상태
               </Box>
               <Box component="th" style={{ padding: '12px 16px' }} />
@@ -132,6 +198,18 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                   style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}
                 >
                   {user.email}
+                </Box>
+                <Box
+                  component="td"
+                  style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}
+                >
+                  {formatCreatedAt(user.createdAt)}
+                </Box>
+                <Box
+                  component="td"
+                  style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}
+                >
+                  {formatPhone(user.phone)}
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px' }}>
                   <Badge color={user.suspended ? 'red' : 'green'} variant="light" radius="xl">

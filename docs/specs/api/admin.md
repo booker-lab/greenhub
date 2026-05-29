@@ -99,6 +99,7 @@ GET /admin/users
 ```
 
 > `role === 'consumer'` 사용자만 반환. `passwordHash` 필드 제외.
+> `createdAt desc` 최신순으로 최대 5000건을 반환한다. 검색·상태 필터는 현재 admin 클라이언트에서 수행하므로, 서버는 무제한 전체 읽기를 하지 않는다.
 
 **Response** `200`
 ```ts
@@ -127,7 +128,8 @@ PATCH /admin/users/:userId/status
 ```
 
 > Firestore `users/{userId}.suspended` 필드를 토글한다.
-> 정지된 사용자는 로그인 시 `401` 반환 (auth.service.ts 검증 필요 — 현재 미구현, 추후 추가).
+> 정지된 사용자는 이메일·카카오 로그인과 `/auth/refresh`에서 `401`을 반환한다.
+> 이미 발급된 access token은 자연 만료까지 유효하므로 최대 1시간 지연은 허용한다.
 
 ---
 
@@ -184,7 +186,7 @@ POST /admin/orders/:orderId/refund
 #### 정산 목록 조회
 
 ```
-GET /admin/settlements?storeId=:storeId&from=YYYY-MM-DD&to=YYYY-MM-DD
+GET /admin/settlements?storeId=:storeId&from=YYYY-MM-DD&to=YYYY-MM-DD&status=:status
 ```
 
 | 파라미터 | 필수 | 설명 |
@@ -192,8 +194,9 @@ GET /admin/settlements?storeId=:storeId&from=YYYY-MM-DD&to=YYYY-MM-DD
 | `storeId` | - | 특정 스토어 필터 |
 | `from` | - | 정산 시작일 (settledAt >=) |
 | `to` | - | 정산 종료일 (settledAt <=, 23:59:59) |
+| `status` | - | `pending` / `confirmed` / `paid` / `cancelled` 상태 필터 |
 
-> 최대 500건 반환 (settledAt desc).
+> 최대 500건 반환 (settledAt desc). `status` 값은 `@greenhub/shared`의 `SETTLEMENT_STATUSES`만 허용한다.
 
 **Response** `200`
 ```ts
@@ -218,6 +221,33 @@ PATCH /admin/settlements/:settlementId/pay
 **Response** `200`
 ```ts
 { settlementId: string, status: 'paid' }
+```
+
+---
+
+#### 정산 일괄 지급 처리
+
+```
+POST /admin/settlements/bulk-pay
+```
+
+**Request Body**
+```ts
+{ ids: string[] }   // 1~500개, 서버에서 중복 제거
+```
+
+**처리 규칙**
+- `confirmed` 상태만 `paid`로 전환 가능
+- 단건 지급과 같은 조건부 트랜잭션을 ID별로 반복
+- 한 건이 실패해도 나머지 건은 계속 처리
+- 실패 사유는 운영자가 바로 볼 수 있는 문자열로 반환
+
+**Response** `200`
+```ts
+{
+  ok: string[]
+  failed: Array<{ id: string; reason: string }>
+}
 ```
 
 ---
@@ -346,7 +376,7 @@ PATCH /admin/drivers/:userId/suspend
 
 | 항목 | 상태 | 비고 |
 |------|------|------|
-| `suspended` 사용자 로그인 차단 | 🔲 미구현 | `auth.service.ts` 로그인 시 suspended 검증 추가 필요 |
+| `suspended` 사용자 차단 | ✅ 구현 | 로그인 및 refresh 토큰 교환 시 401, 기존 access token은 자연 만료 |
 | 주문 목록 페이지네이션 | 🔲 MVP 제외 | 현재 200건 하드 리밋 |
 | admin 활동 로그 | 🔲 미구현 | 강제 환불·정지 등 감사 로그 |
 | 다중 admin 지원 | ✅ 지원 | role='admin' 사용자 수 제한 없음 |
@@ -402,3 +432,7 @@ Firebase Storage 경로: `banners/main_hero/{uuid}`. Storage rules: 인증된 �
 | 2026-04-01 | 초안 작성 — 구현 완료 후 소급 문서화 (정합성 검토 세션) |
 | 2026-04-03 | §4-6 드라이버 관리 API 추가 + 사전 승인 플로우 문서화 — E2E 검증 완료 |
 | 2026-04-23 | §7 배너 관리 API 추가 — 히어로 배너 admin 편집 기능 구현 |
+| 2026-05-29 | 소비자 정지 효과 보강 — `/auth/refresh`에서 정지 사용자 401 차단 |
+| 2026-05-29 | 소비자 목록 조회 최신순·최대 5000건 제한 추가 — 무제한 Firestore 읽기 방지 |
+| 2026-05-29 | 정산 일괄 지급 API 추가 — `POST /admin/settlements/bulk-pay`, 부분 성공 응답 |
+| 2026-05-29 | 어드민 정산 목록 `status` 쿼리 필터 추가 — shared 정산 상태 SSOT 사용 |

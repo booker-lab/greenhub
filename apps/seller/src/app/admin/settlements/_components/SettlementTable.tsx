@@ -1,8 +1,7 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
-// 정산 라벨/색 SSOT = @greenhub/shared (F-1/S4).
 import { STATUS_COLOR, STATUS_LABEL } from '@greenhub/shared';
+import { Badge, Box, Button, Checkbox, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminSettlement } from '@/hooks/useAdmin';
 import { toDateStr } from '../_lib';
 
@@ -10,7 +9,12 @@ interface SettlementTableProps {
   settlements: AdminSettlement[];
   loading: boolean;
   processingId: string | null;
+  selectedIds: string[];
+  selectableIds: string[];
+  bulkProcessing: boolean;
   onPay: (id: string) => void;
+  onToggleSelected: (id: string, checked: boolean) => void;
+  onToggleAllSelected: (checked: boolean) => void;
 }
 
 const thBase = {
@@ -23,8 +27,18 @@ export function SettlementTable({
   settlements,
   loading,
   processingId,
+  selectedIds,
+  selectableIds,
+  bulkProcessing,
   onPay,
+  onToggleSelected,
+  onToggleAllSelected,
 }: SettlementTableProps) {
+  const selectableCount = selectableIds.length;
+  const selectedCount = selectedIds.length;
+  const allSelected = selectableCount > 0 && selectedCount === selectableCount;
+  const someSelected = selectedCount > 0 && selectedCount < selectableCount;
+
   if (loading) {
     return (
       <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
@@ -49,67 +63,86 @@ export function SettlementTable({
 
   return (
     <>
-      {/* 모바일(<sm): 카드 리스트 — 마지막 컬럼(상태·지급처리) 잘림 방지 */}
       <Stack gap="sm" hiddenFrom="sm">
-        {settlements.map((s) => (
-          <Paper
-            key={s.id}
-            radius="md"
-            px="md"
-            py="sm"
-            shadow="xs"
-            style={{ border: '1px solid var(--color-border)' }}
-          >
-            <Group justify="space-between" mb="xs">
-              <Text
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-disabled)',
-                }}
-                ff="monospace"
-              >
-                {s.storeId.slice(0, 8)}…
-              </Text>
-              <Badge color={STATUS_COLOR[s.status] ?? 'gray'} variant="light" radius="xl">
-                {STATUS_LABEL[s.status] ?? s.status}
-              </Badge>
-            </Group>
-            <Text
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-              mb={4}
+        {settlements.map((settlement) => {
+          const selectable = settlement.status === 'confirmed';
+          const checked = selectedIds.includes(settlement.id);
+
+          return (
+            <Paper
+              key={settlement.id}
+              radius="md"
+              px="md"
+              py="sm"
+              shadow="xs"
+              style={{ border: '1px solid var(--color-border)' }}
             >
-              {toDateStr(s.settledAt)}
-            </Text>
-            <Group justify="space-between" gap="xs">
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                거래 ₩{s.totalAmount.toLocaleString()}
-              </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
-                수수료 ₩{s.platformFee.toLocaleString()}
-              </Text>
-            </Group>
-            <Group justify="space-between" align="center" mt="xs">
-              <Text style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
-                지급액 ₩{s.netAmount.toLocaleString()}
-              </Text>
-              {s.status === 'confirmed' && (
-                <Button
-                  onClick={() => onPay(s.id)}
-                  disabled={processingId === s.id}
-                  size="xs"
-                  variant="outline"
-                  color="blue"
-                  radius="md"
+              <Group justify="space-between" align="flex-start" mb="xs" gap="xs">
+                <Group gap="xs" align="flex-start">
+                  <Checkbox
+                    aria-label={`${settlement.storeId.slice(0, 8)} 정산 선택`}
+                    checked={checked}
+                    disabled={!selectable || bulkProcessing}
+                    onChange={(event) =>
+                      onToggleSelected(settlement.id, event.currentTarget.checked)
+                    }
+                  />
+                  <Text
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-text-disabled)',
+                    }}
+                    ff="monospace"
+                  >
+                    {settlement.storeId.slice(0, 8)}...
+                  </Text>
+                </Group>
+                <Badge
+                  color={STATUS_COLOR[settlement.status] ?? 'gray'}
+                  variant="light"
+                  radius="xl"
                 >
-                  {processingId === s.id ? '처리중…' : '지급처리'}
-                </Button>
-              )}
-            </Group>
-          </Paper>
-        ))}
+                  {STATUS_LABEL[settlement.status] ?? settlement.status}
+                </Badge>
+              </Group>
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                mb={4}
+              >
+                {toDateStr(settlement.settledAt)}
+              </Text>
+              <Group justify="space-between" gap="xs">
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  거래 {settlement.totalAmount.toLocaleString()}원
+                </Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+                  수수료 {settlement.platformFee.toLocaleString()}원
+                </Text>
+              </Group>
+              <Group justify="space-between" align="center" mt="xs">
+                <Text style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
+                  지급액 {settlement.netAmount.toLocaleString()}원
+                </Text>
+                {settlement.status === 'confirmed' && (
+                  <Button
+                    onClick={() => onPay(settlement.id)}
+                    disabled={processingId === settlement.id || bulkProcessing}
+                    size="xs"
+                    variant="outline"
+                    color="blue"
+                    radius="md"
+                  >
+                    {processingId === settlement.id ? '처리중...' : '지급처리'}
+                  </Button>
+                )}
+              </Group>
+            </Paper>
+          );
+        })}
       </Stack>
 
-      {/* 데스크톱(≥sm): 기존 테이블 유지(시각 회귀 0) */}
       <Paper
         radius="lg"
         shadow="xs"
@@ -128,10 +161,18 @@ export function SettlementTable({
             }}
           >
             <tr>
+              <Box component="th" style={{ padding: '12px 16px', width: 52 }}>
+                <Checkbox
+                  aria-label="지급 가능한 정산 전체 선택"
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  disabled={selectableCount === 0 || bulkProcessing}
+                  onChange={(event) => onToggleAllSelected(event.currentTarget.checked)}
+                />
+              </Box>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
                 스토어
               </Box>
-              {/* N10: 정산일시 컬럼 추가(셀러 화면과 동형) */}
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
                 정산일시
               </Box>
@@ -151,73 +192,100 @@ export function SettlementTable({
             </tr>
           </Box>
           <Box component="tbody">
-            {settlements.map((s) => (
-              <Box component="tr" key={s.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Text
-                    style={{
-                      fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-disabled)',
-                    }}
-                    ff="monospace"
-                  >
-                    {s.storeId.slice(0, 8)}…
-                  </Text>
-                </Box>
+            {settlements.map((settlement) => {
+              const selectable = settlement.status === 'confirmed';
+              const checked = selectedIds.includes(settlement.id);
+
+              return (
                 <Box
-                  component="td"
-                  style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}
+                  component="tr"
+                  key={settlement.id}
+                  style={{ borderTop: '1px solid var(--color-border)' }}
                 >
-                  {toDateStr(s.settledAt)}
-                </Box>
-                <Box
-                  component="td"
-                  style={{
-                    padding: '12px 16px',
-                    textAlign: 'right',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  ₩{s.totalAmount.toLocaleString()}
-                </Box>
-                <Box
-                  component="td"
-                  style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--color-danger)' }}
-                >
-                  ₩{s.platformFee.toLocaleString()}
-                </Box>
-                <Box
-                  component="td"
-                  style={{
-                    padding: '12px 16px',
-                    textAlign: 'right',
-                    fontWeight: 500,
-                    color: 'var(--color-primary)',
-                  }}
-                >
-                  ₩{s.netAmount.toLocaleString()}
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Badge color={STATUS_COLOR[s.status] ?? 'gray'} variant="light" radius="xl">
-                    {STATUS_LABEL[s.status] ?? s.status}
-                  </Badge>
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
-                  {s.status === 'confirmed' && (
-                    <Button
-                      onClick={() => onPay(s.id)}
-                      disabled={processingId === s.id}
-                      size="xs"
-                      variant="outline"
-                      color="blue"
-                      radius="md"
+                  <Box component="td" style={{ padding: '12px 16px' }}>
+                    <Checkbox
+                      aria-label={`${settlement.storeId.slice(0, 8)} 정산 선택`}
+                      checked={checked}
+                      disabled={!selectable || bulkProcessing}
+                      onChange={(event) =>
+                        onToggleSelected(settlement.id, event.currentTarget.checked)
+                      }
+                    />
+                  </Box>
+                  <Box component="td" style={{ padding: '12px 16px' }}>
+                    <Text
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text-disabled)',
+                      }}
+                      ff="monospace"
                     >
-                      {processingId === s.id ? '처리중…' : '지급처리'}
-                    </Button>
-                  )}
+                      {settlement.storeId.slice(0, 8)}...
+                    </Text>
+                  </Box>
+                  <Box
+                    component="td"
+                    style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}
+                  >
+                    {toDateStr(settlement.settledAt)}
+                  </Box>
+                  <Box
+                    component="td"
+                    style={{
+                      padding: '12px 16px',
+                      textAlign: 'right',
+                      color: 'var(--color-text-secondary)',
+                    }}
+                  >
+                    {settlement.totalAmount.toLocaleString()}원
+                  </Box>
+                  <Box
+                    component="td"
+                    style={{
+                      padding: '12px 16px',
+                      textAlign: 'right',
+                      color: 'var(--color-danger)',
+                    }}
+                  >
+                    {settlement.platformFee.toLocaleString()}원
+                  </Box>
+                  <Box
+                    component="td"
+                    style={{
+                      padding: '12px 16px',
+                      textAlign: 'right',
+                      fontWeight: 500,
+                      color: 'var(--color-primary)',
+                    }}
+                  >
+                    {settlement.netAmount.toLocaleString()}원
+                  </Box>
+                  <Box component="td" style={{ padding: '12px 16px' }}>
+                    <Badge
+                      color={STATUS_COLOR[settlement.status] ?? 'gray'}
+                      variant="light"
+                      radius="xl"
+                    >
+                      {STATUS_LABEL[settlement.status] ?? settlement.status}
+                    </Badge>
+                  </Box>
+                  <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    {settlement.status === 'confirmed' && (
+                      <Button
+                        onClick={() => onPay(settlement.id)}
+                        disabled={processingId === settlement.id || bulkProcessing}
+                        size="xs"
+                        variant="outline"
+                        color="blue"
+                        radius="md"
+                      >
+                        {processingId === settlement.id ? '처리중...' : '지급처리'}
+                      </Button>
+                    )}
+                  </Box>
                 </Box>
-              </Box>
-            ))}
+              );
+            })}
           </Box>
         </Box>
       </Paper>
