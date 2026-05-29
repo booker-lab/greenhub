@@ -3,7 +3,7 @@
 import type { OrderStatus, SettlementStatus, StoreStatus } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
-import { apiJson } from '@/lib/api';
+import { ApiError, apiJson } from '@/lib/api';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -79,9 +79,13 @@ export interface InviteToken {
   createdBy: string;
   usedAt: string | null;
   usedBy: string | null;
+  revokedAt?: string | null;
+  revokedBy?: string | null;
   expiresAt: string | null;
   createdAt: string | null;
 }
+
+export type InviteRevokeReason = 'already_used' | 'already_revoked' | 'expired' | 'unknown';
 
 export type DriverStatus = 'all' | 'pending' | 'approved' | 'suspended';
 
@@ -484,5 +488,22 @@ export function useAdminInvite() {
     }
   };
 
-  return { invites, loading, generating, generate, reload };
+  const revoke = async (
+    inviteToken: string,
+  ): Promise<{ ok: true } | { ok: false; reason: InviteRevokeReason }> => {
+    if (!token) return { ok: false, reason: 'unknown' };
+    try {
+      await apiJson(`/admin/invite/${inviteToken}/revoke`, token, { method: 'POST' });
+      await reload();
+      return { ok: true };
+    } catch (error) {
+      const reason = error instanceof ApiError ? error.reason : undefined;
+      if (reason === 'already_used' || reason === 'already_revoked' || reason === 'expired') {
+        return { ok: false, reason };
+      }
+      return { ok: false, reason: 'unknown' };
+    }
+  };
+
+  return { invites, loading, generating, generate, revoke, reload };
 }

@@ -261,48 +261,49 @@
 ### 세션 S-B (그룹 B) — 토큰 취소 풀스택
 
 **선결 확인:**
-- [ ] T0 산출 표 재확인 — T4 거부 가드 위치 확정 (1곳/2곳)
+- [x] T0 산출 표 재확인 — T4 거부 가드 위치 확정 (1곳/2곳)
+  - 재확인(2026-05-29): `AuthService.register()`의 사전 검증과 트랜잭션 내 재검증 2곳 모두 `revokedAt` 차단을 적용했다.
 
 **아토믹 태스크 (커밋 4):**
-- [ ] **T4** — 백엔드 revoke 엔드포인트 + 거부 가드 (한 커밋 강제)
+- [x] **T4** — 백엔드 revoke 엔드포인트 + 거부 가드 (한 커밋 강제)
   - 정합성 검토:
-    - [ ] C1 tsc 0 (api·admin·seller 3앱 — `InviteToken` 타입 변경 영향)
-    - [ ] C2 biome 0 (api)
-    - [ ] C3 `npm run build` 0 (api)
-    - [ ] C4 500라인 이하 (`admin.service.ts`·`admin.controller.ts`)
-    - [ ] C5 reason 코드 enum 또는 const SSOT
-    - [ ] C8 — 거부 가드 위치 (T0 산출) 양쪽 다 적용 확인 (T11에서 자동 검증)
+    - [x] C1 tsc 0 (api·admin·seller 3앱 — `InviteToken` 타입 변경 영향)
+    - [x] C2 biome 0 (api admin 변경 파일; `auth.service.ts` 전체 lint는 기존 부채로 별도)
+    - [x] C3 `npm run build` 0 (api)
+    - [x] C4 500라인 이하 (`admin.service.ts`·`admin.controller.ts`)
+    - [x] C5 reason 코드 enum 또는 const SSOT
+    - [x] C8 — 거부 가드 위치 (T0 산출) 양쪽 다 적용 확인 (T11에서 자동 검증)
   - 커밋: `feat(api): #CL-55 invite revoke 엔드포인트 + 거부 가드 (T4)`
 
-- [ ] **T5** — 프론트 hook revoke + 타입 확장
+- [x] **T5** — 프론트 hook revoke + 타입 확장
   - 정합성 검토:
-    - [ ] C1 tsc 0 (admin)
-    - [ ] C2 biome 0
-    - [ ] C3 build 0
-    - [ ] C4 500라인 이하
-    - [ ] C6 호출 후 목록 갱신 동작
+    - [x] C1 tsc 0 (admin)
+    - [x] C2 biome 0
+    - [x] C3 build 0
+    - [x] C4 500라인 이하
+    - [x] C6 호출 후 목록 갱신 동작
   - 커밋: `feat(admin): #CL-55 invite revoke hook + revokedAt 타입 (T5)`
 
-- [ ] **T6** — `_lib.ts` inviteStatus '취소됨' 추가
+- [x] **T6** — `_lib.ts` inviteStatus '취소됨' 추가
   - 정합성 검토:
-    - [ ] C1·C2·C3·C4 통과
-    - [ ] C5 — `'orange'` 부채 명시 (`_lib.ts` 주석 + 본 문서 §F-6 부채 표)
-    - [ ] C7 — 기존 토큰 상태 표시 회귀 0 (revokedAt 없는 토큰은 분기 미진입)
+    - [x] C1·C2·C3·C4 통과
+    - [x] C5 — `'orange'` 부채 명시 (`_lib.ts` 주석 + 본 문서 §F-6 부채 표)
+    - [x] C7 — 기존 토큰 상태 표시 회귀 0 (revokedAt 없는 토큰은 분기 미진입)
   - 커밋: `feat(admin): #CL-55 invite '취소됨' 상태 + 우선순위 (T6)`
 
-- [ ] **T7** — UI 취소 버튼 + 확인창 + reason별 notification
+- [x] **T7** — UI 취소 버튼 + 확인창 + reason별 notification
   - 정합성 검토:
-    - [ ] C1·C2·C3·C4 통과
-    - [ ] C5 라벨 SSOT
-    - [ ] C6 — 로딩·빈결과·이미 취소 중 동시 클릭 가드
-    - [ ] C7 — **시각 변경 큼(버튼 추가, 확인창, '취소됨' 배지)** — 격리 권장, 육안 필수
+    - [x] C1·C2·C3·C4 통과
+    - [x] C5 라벨 SSOT
+    - [x] C6 — 로딩·빈결과·이미 취소 중 동시 클릭 가드
+    - [x] C7 — **시각 변경 큼(버튼 추가, 확인창, '취소됨' 배지)** — 격리 권장, 육안 필수
     - [ ] **수동 1회 (e2e 전 스모크):** 발급 → 취소 → '취소됨' 배지 → 새로고침 유지
   - 커밋: `feat(admin): #CL-55 invite 취소 버튼 + 확인창 (T7)`
 
 **세션 종료 절차:**
-- [ ] 4개 커밋 사용자 보고 → push 승인 대기 (T4·T11 사이 머지 갭 위험 — 가능하면 T11까지 끝낸 뒤 push)
-- [ ] `pending-visual-verify.md` 항목 4~6 작성 (취소 동작·'취소됨' 배지·이중 가드)
-- [ ] `docs/memory.md` 최신화
+- [x] 사용자 보고용 커밋 작성 — T4~T7은 사용자 요청에 따라 하나의 풀스택 커밋으로 묶음
+- [x] `pending-visual-verify.md` 항목 4~6 작성 (취소 동작·'취소됨' 배지·이중 가드)
+- [x] `docs/memory.md` 최신화
 
 > **⚠️ 머지 갭 주의:** T4 push 후 T11(거부 가드 e2e)가 통과하기 전까지는 "취소된 토큰으로 가입 시도 시 거부" 동작이 자동 검증되지 않는다. 운영 배포는 **세션 S-D 완료(T11 그린) 후**로 미루는 것을 강력 권장.
 

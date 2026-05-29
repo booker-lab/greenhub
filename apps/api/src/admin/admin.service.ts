@@ -1,5 +1,11 @@
 import type { OrderStatus } from '@greenhub/shared';
-import { BadRequestException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 // biome-ignore lint/style/useImportType: Nest 생성자 주입 런타임 메타데이터에 클래스 값이 필요하다.
 import { FirestoreService } from '../firestore/firestore.service';
@@ -26,10 +32,22 @@ const RISK_FORCE_REFUND_STATUSES: OrderStatus[] = [
   'REVIEWED',
 ];
 const RISK_FORCE_REFUND_REASON_MESSAGE = '배달 후 환불은 사유(5자 이상)가 필수입니다.';
+const INVITE_REVOKE_REASON_MESSAGE: Record<InviteRevokeReason, string> = {
+  already_used: '이미 사용된 초대 토큰입니다.',
+  already_revoked: '이미 취소된 초대 토큰입니다.',
+  expired: '만료된 초대 토큰입니다.',
+};
 
 type BulkPayFailure = {
   id: string;
   reason: string;
+};
+
+type InviteRevokeReason = 'already_used' | 'already_revoked' | 'expired';
+type InviteRevokeData = {
+  usedAt?: unknown;
+  revokedAt?: unknown;
+  expiresAt?: unknown;
 };
 
 @Injectable()
@@ -395,6 +413,52 @@ export class AdminService {
     ).get();
 
     return snap.docs.map((d: any) => d.data());
+  }
+
+  async revokeInvite(token: string, adminId: string) {
+    const ref = this.firestore.doc(`invites/${token}`);
+
+    await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException('초대 토큰을 찾을 수 없습니다.');
+
+      const invite = snap.data();
+      if (!invite) throw new NotFoundException('초대 토큰을 찾을 수 없습니다.');
+
+      const reason = this.getInviteRevokeBlockReason(invite);
+      if (reason) throw this.createInviteRevokeConflict(reason);
+
+      const now = this.firestore.Timestamp.now();
+      tx.set(ref, { revokedAt: now, revokedBy: adminId }, { merge: true });
+    });
+
+    return { ok: true };
+  }
+
+  private getInviteRevokeBlockReason(invite: InviteRevokeData): InviteRevokeReason | null {
+    if (invite.usedAt !== null && invite.usedAt !== undefined) return 'already_used';
+    if (invite.revokedAt !== null && invite.revokedAt !== undefined) return 'already_revoked';
+    const expiresAtMs = this.toInviteExpiresAtMs(invite.expiresAt);
+    if (Number.isFinite(expiresAtMs) && expiresAtMs < Date.now()) return 'expired';
+    return null;
+  }
+
+  private toInviteExpiresAtMs(value: unknown): number {
+    if (typeof value === 'object' && value !== null && 'toMillis' in value) {
+      const toMillis = (value as { toMillis?: unknown }).toMillis;
+      return typeof toMillis === 'function' ? toMillis() : Number.NaN;
+    }
+    if (typeof value === 'string' || typeof value === 'number' || value instanceof Date) {
+      return new Date(value).getTime();
+    }
+    return Number.NaN;
+  }
+
+  private createInviteRevokeConflict(reason: InviteRevokeReason) {
+    return new ConflictException({
+      message: INVITE_REVOKE_REASON_MESSAGE[reason],
+      reason,
+    });
   }
 
   // ── Banner ───────────────────────────────────────────────────────

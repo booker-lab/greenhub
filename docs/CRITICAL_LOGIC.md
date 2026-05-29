@@ -606,3 +606,15 @@
 **검증 경계**: clipboard는 `navigator.clipboard` 실패 시 textarea `execCommand('copy')` 폴백을 시도하고, 폴백도 실패하면 빨간 notification으로 실패를 드러낸다. `revokedAt` 취소 상태와 prefix 검색은 다음 세션 S-B/S-C 범위다.
 
 ---
+
+## 2026-05-29 — CL-63 어드민 초대 토큰 취소
+
+**결정**: `/admin/invite`는 유효 토큰만 취소할 수 있고, 취소는 토큰 문서를 삭제하지 않고 `revokedAt`·`revokedBy`를 병합 기록한다.
+
+**이유**: 운영자가 잘못 발급했거나 노출된 토큰을 즉시 막아야 하지만, 발급 이력과 CS 추적성은 유지해야 한다. 삭제 방식은 “왜 가입이 안 됐는지”를 설명하기 어렵고, 사용됨·만료 토큰 취소는 가입 이력과 만료 정책을 흐릴 수 있다.
+
+**검증 경계**: revoke API는 이미 사용됨·이미 취소됨·만료를 모두 HTTP 409와 reason(`already_used`·`already_revoked`·`expired`)으로 반환한다. 판매자 가입 경로는 `AuthService.register()`의 사전 검증과 트랜잭션 내 재검증 두 지점 모두에서 `revokedAt`을 차단한다. UI는 유효 토큰에만 취소 버튼을 보이고, 확인창에서 토큰 16자와 가입 불가 문구를 명시한다.
+
+**잔여**: 취소된 토큰으로 가입 시도 시 거부되는 흐름은 T11 e2e에서 자동화해야 하며, 운영/프리뷰 육안 확인은 `pending-visual-verify-20260529.md` §22에 남긴다.
+
+---

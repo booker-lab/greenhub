@@ -5,6 +5,7 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public reason?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -39,8 +40,8 @@ export async function apiJson<T = unknown>(
 ): Promise<T> {
   const res = await apiFetch(path, token, options);
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { message?: string };
-    throw new ApiError(res.status, body?.message ?? `서버 오류 (${res.status})`);
+    const body = (await res.json().catch(() => ({}))) as { message?: string; reason?: string };
+    throw new ApiError(res.status, body?.message ?? `서버 오류 (${res.status})`, body?.reason);
   }
   return (await res.json().catch(() => ({}))) as T;
 }

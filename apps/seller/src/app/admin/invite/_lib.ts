@@ -4,14 +4,17 @@ import type { InviteToken } from '@/hooks/useAdmin';
 // 초대 토큰 상태(사용됨/만료/유효) 판정 — 테이블·카드 공용(중복 제거).
 export interface InviteStatus {
   label: string;
-  color: 'gray' | 'red' | 'green';
+  color: 'gray' | 'red' | 'green' | 'orange';
   expDate: Date | null;
 }
 
 export function inviteStatus(inv: InviteToken): InviteStatus {
   const isUsed = !!inv.usedAt;
+  const isRevoked = !!inv.revokedAt;
   const expDate = inv.expiresAt ? new Date(inv.expiresAt) : null;
   const isExpired = expDate ? expDate < new Date() : false;
+  // 부채: 초대 상태 색상은 디자인 토큰 SSOT 도입 전까지 Mantine 색상명으로 유지한다.
+  if (isRevoked) return { label: '취소됨', color: 'orange', expDate };
   return {
     label: isUsed ? '사용됨' : isExpired ? '만료' : '유효',
     color: isUsed ? 'gray' : isExpired ? 'red' : 'green',

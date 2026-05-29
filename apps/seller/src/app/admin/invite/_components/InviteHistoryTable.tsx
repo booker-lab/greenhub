@@ -1,7 +1,7 @@
 'use client';
 
 import { ActionIcon, Badge, Box, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
-import { Check, Copy } from 'lucide-react';
+import { Ban, Check, Copy } from 'lucide-react';
 import type { InviteToken } from '@/hooks/useAdmin';
 import { formatExpiry, formatInviteDateTime, inviteStatus } from '../_lib';
 
@@ -9,7 +9,9 @@ interface InviteHistoryTableProps {
   invites: InviteToken[];
   loading: boolean;
   copiedToken: string | null;
+  revokingToken: string | null;
   onCopyToken: (token: string) => void;
+  onRevokeToken: (token: string) => void;
 }
 
 const thBase = {
@@ -44,11 +46,37 @@ function CopyTokenButton({
   );
 }
 
+function RevokeTokenButton({
+  token,
+  loading,
+  onRevokeToken,
+}: {
+  token: string;
+  loading: boolean;
+  onRevokeToken: (token: string) => void;
+}) {
+  return (
+    <Tooltip label="토큰 취소">
+      <ActionIcon
+        aria-label={`${token} 취소`}
+        variant="subtle"
+        color="orange"
+        loading={loading}
+        onClick={() => onRevokeToken(token)}
+      >
+        <Ban size={16} />
+      </ActionIcon>
+    </Tooltip>
+  );
+}
+
 export function InviteHistoryTable({
   invites,
   loading,
   copiedToken,
+  revokingToken,
   onCopyToken,
+  onRevokeToken,
 }: InviteHistoryTableProps) {
   if (loading) {
     return (
@@ -79,6 +107,7 @@ export function InviteHistoryTable({
         {invites.map((inv) => {
           const { label, color, expDate } = inviteStatus(inv);
           const copied = copiedToken === inv.token;
+          const canRevoke = label === '유효';
           return (
             <Paper
               key={inv.token}
@@ -98,6 +127,13 @@ export function InviteHistoryTable({
                     {inv.token}
                   </Text>
                   <CopyTokenButton token={inv.token} copied={copied} onCopyToken={onCopyToken} />
+                  {canRevoke ? (
+                    <RevokeTokenButton
+                      token={inv.token}
+                      loading={revokingToken === inv.token}
+                      onRevokeToken={onRevokeToken}
+                    />
+                  ) : null}
                 </Group>
                 <Badge color={color} variant="light" radius="xl">
                   {label}
@@ -160,6 +196,9 @@ export function InviteHistoryTable({
                 복사
               </Box>
               <Box component="th" style={thBase}>
+                취소
+              </Box>
+              <Box component="th" style={thBase}>
                 상태
               </Box>
               <Box component="th" style={thBase}>
@@ -177,6 +216,7 @@ export function InviteHistoryTable({
             {invites.map((inv) => {
               const { label, color, expDate } = inviteStatus(inv);
               const copied = copiedToken === inv.token;
+              const canRevoke = label === '유효';
               return (
                 <Box
                   component="tr"
@@ -194,6 +234,17 @@ export function InviteHistoryTable({
                   </Box>
                   <Box component="td" style={tdBase}>
                     <CopyTokenButton token={inv.token} copied={copied} onCopyToken={onCopyToken} />
+                  </Box>
+                  <Box component="td" style={tdBase}>
+                    {canRevoke ? (
+                      <RevokeTokenButton
+                        token={inv.token}
+                        loading={revokingToken === inv.token}
+                        onRevokeToken={onRevokeToken}
+                      />
+                    ) : (
+                      '-'
+                    )}
                   </Box>
                   <Box component="td" style={tdBase}>
                     <Badge color={color} variant="light" radius="xl">

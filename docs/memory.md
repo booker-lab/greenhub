@@ -2,7 +2,7 @@
 > **SSOT**: 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` · `archive/memory_archive_20260529.md`
 
-최종 수정: 2026-05-29 (어드민 orders 세션δ T7 e2e 완료)
+최종 수정: 2026-05-29 (어드민 초대 탭 S-B 토큰 취소)
 
 ---
 
@@ -148,3 +148,10 @@
 - clipboard 실패 시 textarea 폴백과 실패 notification을 추가했고, 발급 직후 복사와 행별 복사가 같은 `copiedToken` 상태를 공유하도록 정리했다.
 - `pending-visual-verify-20260529.md` §21 #189~#194에 육안검증 항목을 추가했다. 메인 `pending-visual-verify.md`는 500라인 가드 때문에 2026-05-29 추가 묶음 인덱스만 남기고 하위 문서로 분리했다. 로컬 dev 서버는 기존 `AUTH_SECRET`/Firebase env 문제로 `/admin/invite` 실제 화면 진입이 차단되어 운영/프리뷰 육안 확인 대상으로 남았다.
 - 검증: shared build, shared `date.test.ts` 12/12, seller tsc 0, 변경 파일 Biome 0, seller build 0. `memory.md`는 200라인 미만, 변경 코드 파일은 모두 500라인 미만.
+
+## 2026-05-29 어드민 초대 탭 S-B 토큰 취소
+- `admin-tab-invite-plan.md` S-B(T4~T7)를 이어서 `POST /admin/invite/:token/revoke`와 `AdminService.revokeInvite()`를 추가했다. 유효 토큰만 `revokedAt`·`revokedBy`로 병합 기록하고, 사용됨·이미 취소됨·만료는 409 reason으로 거절한다.
+- `AuthService.register()`의 초대 토큰 사전 검증과 트랜잭션 내 재검증 양쪽에 `revokedAt` 차단을 추가해 취소 토큰 가입을 막았다.
+- `/admin/invite` hook·타입·상태 판정·UI를 확장했다. 유효 토큰에만 취소 아이콘이 보이고, Mantine 확인창은 토큰 전체 16자와 가입 불가 문구를 보여준다. `@mantine/modals`를 seller 의존성에 추가하고 Provider에 연결했다.
+- `pending-visual-verify-20260529.md` §22 #195~#200에 육안검증 항목을 추가했다. 로컬 브라우저는 `/admin/invite`가 `/login`으로 리다이렉트되고 기존 Firebase 공개 env/Auth.js 설정 오류로 실제 화면 진입이 차단되어 운영/프리뷰 확인 대상으로 남겼다.
+- 검증: API 단위 테스트 `admin.service.spec.ts` 42/42, API·seller tsc 0, API·seller build 0, shared build 0, seller 변경 파일 Biome 0, API admin 변경 파일 Biome 0. `auth.service.ts`를 포함한 API 전체 lint는 기존 `any`·non-null 부채로 실패한다. 변경 코드 파일과 `memory.md`는 500/200라인 미만.

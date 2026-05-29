@@ -21,6 +21,12 @@ import { AddressDto } from './dto/address.dto';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import type { JwtPayload } from './types/jwt-payload.type';
 
+type InviteData = {
+  expiresAt: admin.firestore.Timestamp;
+  revokedAt?: unknown;
+  usedAt: unknown;
+};
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -45,13 +51,20 @@ export class AuthService {
         throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
       }
 
-      const invite = inviteSnap.data()!;
+      const invite = inviteSnap.data() as InviteData | undefined;
+      if (!invite) {
+        throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
+      }
 
-      if ((invite['expiresAt'] as admin.firestore.Timestamp).toMillis() < Date.now()) {
+      if (invite.expiresAt.toMillis() < Date.now()) {
         throw new GoneException('만료된 초대 토큰입니다.');
       }
 
-      if (invite['usedAt'] !== null) {
+      if (invite.revokedAt !== null && invite.revokedAt !== undefined) {
+        throw new ConflictException('취소된 초대 토큰입니다.');
+      }
+
+      if (invite.usedAt !== null) {
         throw new ConflictException('이미 사용된 초대 토큰입니다.');
       }
     }
@@ -87,12 +100,27 @@ export class AuthService {
 
     // T3: seller — 사용자 생성 + 토큰 소비를 단일 트랜잭션으로 묶어 정합성 보장
     if (dto.role === 'seller' && dto.inviteToken) {
+      const inviteToken = dto.inviteToken;
       await this.firestore.runTransaction(async (tx) => {
-        const inviteRef = this.firestore.doc(`invites/${dto.inviteToken!}`);
+        const inviteRef = this.firestore.doc(`invites/${inviteToken}`);
         const inviteDoc = await tx.get(inviteRef);
 
         // 트랜잭션 내 재검증 — 동시 요청으로 인한 경쟁 조건 방지
-        if (!inviteDoc.exists || inviteDoc.data()!['usedAt'] !== null) {
+        if (!inviteDoc.exists) {
+          throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
+        }
+
+        const invite = inviteDoc.data() as InviteData | undefined;
+        if (!invite) {
+          throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
+        }
+        if (invite.revokedAt !== null && invite.revokedAt !== undefined) {
+          throw new ConflictException('취소된 초대 토큰입니다.');
+        }
+        if (invite.expiresAt.toMillis() < Date.now()) {
+          throw new GoneException('만료된 초대 토큰입니다.');
+        }
+        if (invite.usedAt !== null) {
           throw new ConflictException('이미 사용된 초대 토큰입니다.');
         }
 
