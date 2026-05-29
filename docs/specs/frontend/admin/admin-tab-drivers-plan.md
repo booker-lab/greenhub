@@ -248,6 +248,20 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - [x] **S7-6.** **커밋** — `refactor(admin): #CL-55 drivers 탭 SegmentedTabs 통일 (R2)`.
 - [x] **S7-7.** **배포 확인** — seller 프리뷰 `https://greenhub-seller-e8kj81qno-jos-projects-d1cecc0c.vercel.app`가 READY. 실제 육안 회귀는 `pending-visual-verify-20260529.md` §25 #231~#234에서 추적한다. 로컬 e2e는 `AUTH_SECRET` 누락으로 `/api/auth/csrf` 500에서 차단됐고, 기본 운영 URL 대상 실행은 아직 이전 배포를 보아 2/10만 통과했다.
 
+### 세션 S8 — F6 (액션 후 위치 안내 알림)
+
+> **세션 단독 목표**: 승인·정지·정지 해제 성공 후 카드가 현재 status 탭에서 사라질 수 있음을 성공 알림으로 설명한다. 서버 필터, 액션 API, 카드 자동 이동 정책은 변경하지 않는다.
+
+#### S8 체크리스트
+- [x] **S8-1.** `ACTION_META`에 액션별 성공 알림 문구를 추가한다.
+- [x] **S8-2.** `_client.tsx`의 `runPending()`에서 액션 성공 시 초록 notification, 실패 시 빨간 notification을 표시한다.
+- [x] **S8-3.** 성공 알림 문구는 이동 확인 위치를 포함한다. 승인·정지 해제는 `승인 완료 탭`, 정지는 `정지됨 탭`을 안내한다.
+- [x] **S8-4.** 액션 실패 시 모달은 닫지 않고 재시도 가능 상태를 유지한다.
+- [x] **S8-5.** `admin-drivers-status-filter.spec.ts`에 승인 성공 알림 회귀를 추가한다.
+- [x] **S8-6.** **육안 검증 문서 `pending-visual-verify-20260529.md`에 드라이버 액션 결과 알림 항목을 추가한다.**
+- [x] **S8-7.** **정합성검토** — 변경 파일 Biome 0, `pnpm --filter seller build` 0, 빌드 후 `pnpm --filter seller exec tsc --noEmit` 0, 500라인 제한 통과. 관련 e2e는 기본 운영 URL이 이전 배포를 보아 실패했고, 로컬 새 코드 대상은 `AUTH_SECRET`·`NEXT_PUBLIC_API_URL` 보강 후에도 Firebase 공개 env 미주입(`auth/invalid-api-key`) 오버레이로 `/admin/drivers` 진입 전 차단되어 `pending-visual-verify-20260529.md` §26에서 운영/프리뷰 육안 확인으로 추적한다.
+- [ ] **S8-8.** **커밋** — `feat(admin): #CL-55 drivers 탭 액션 결과 알림 추가 (F6)`.
+
 ---
 
 ## 참고 문서

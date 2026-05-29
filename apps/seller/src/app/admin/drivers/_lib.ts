@@ -8,6 +8,7 @@ type DriverActionMeta = {
   message: string;
   confirmLabel: string;
   confirmColor: string;
+  successMessage: string;
   buttonLabel: string;
   buttonColor: string;
   buttonVariant?: 'light';
@@ -25,6 +26,7 @@ export const ACTION_META: Record<DriverAction, DriverActionMeta> = {
     message: '이 드라이버를 승인하시겠습니까?',
     confirmLabel: '승인',
     confirmColor: 'green',
+    successMessage: '드라이버를 승인했습니다. 승인 완료 탭에서 확인할 수 있습니다.',
     buttonLabel: '승인',
     buttonColor: 'green',
   },
@@ -33,6 +35,7 @@ export const ACTION_META: Record<DriverAction, DriverActionMeta> = {
     message: '이 드라이버를 정지하시겠습니까?',
     confirmLabel: '정지',
     confirmColor: 'red',
+    successMessage: '드라이버를 정지했습니다. 정지됨 탭에서 확인할 수 있습니다.',
     buttonLabel: '정지',
     buttonColor: 'red',
     buttonVariant: 'light',
@@ -42,6 +45,7 @@ export const ACTION_META: Record<DriverAction, DriverActionMeta> = {
     message: '정지를 해제하시겠습니까?',
     confirmLabel: '해제',
     confirmColor: 'gray',
+    successMessage: '드라이버 정지를 해제했습니다. 승인 완료 탭에서 확인할 수 있습니다.',
     buttonLabel: '정지 해제',
     buttonColor: 'gray',
     buttonVariant: 'light',

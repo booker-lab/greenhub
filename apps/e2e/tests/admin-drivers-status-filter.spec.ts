@@ -41,34 +41,52 @@ interface DriversRequest {
 
 interface DriversMockState {
   requests: DriversRequest[];
+  approvedIds: Set<string>;
 }
 
-function filterDrivers(status: string | null) {
+function currentDrivers(state: DriversMockState) {
+  return DRIVERS_FIXTURE.map((driver) =>
+    state.approvedIds.has(driver.id) ? { ...driver, driverApproved: true } : driver,
+  );
+}
+
+function filterDrivers(state: DriversMockState, status: string | null) {
+  const drivers = currentDrivers(state);
   if (status === 'pending') {
-    return DRIVERS_FIXTURE.filter((driver) => !driver.driverApproved && !driver.suspended);
+    return drivers.filter((driver) => !driver.driverApproved && !driver.suspended);
   }
   if (status === 'approved') {
-    return DRIVERS_FIXTURE.filter((driver) => driver.driverApproved && !driver.suspended);
+    return drivers.filter((driver) => driver.driverApproved && !driver.suspended);
   }
-  if (status === 'suspended') {
-    return DRIVERS_FIXTURE.filter((driver) => driver.suspended);
-  }
-  return DRIVERS_FIXTURE;
+  if (status === 'suspended') return drivers.filter((driver) => driver.suspended);
+  return drivers;
 }
 
 async function installDriversApiFixture(page: Page): Promise<DriversMockState> {
-  const state: DriversMockState = { requests: [] };
+  const state: DriversMockState = { requests: [], approvedIds: new Set() };
 
   await page.route('**/admin/drivers**', async (route) => {
     const request = route.request();
+    const url = new URL(request.url());
+    const approveMatch = url.pathname.match(/^\/admin\/drivers\/([^/]+)\/approve$/);
+
+    if (request.method() === 'PATCH' && approveMatch) {
+      state.approvedIds.add(approveMatch[1]);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+      return;
+    }
+
     if (request.method() !== 'GET' || !request.headers().authorization) {
       await route.continue();
       return;
     }
 
-    const url = new URL(request.url());
     const status = url.searchParams.get('status');
-    const drivers = filterDrivers(status);
+    const drivers = filterDrivers(state, status);
     state.requests.push({ pathname: url.pathname, status });
 
     await route.fulfill({
@@ -168,5 +186,17 @@ test.describe('Admin - 드라이버 status 서버 필터 회귀', () => {
     await expect.poll(() => state.requests.length).toBeGreaterThan(requestCount);
     await expectLatestRequest(state, 'pending');
     await expect(page.getByLabel('드라이버 검색')).toHaveValue('pending-driver');
+  });
+
+  test('승인 성공 후 확인 위치 알림을 표시한다', async ({ page }) => {
+    await openDrivers(page);
+
+    await page.getByRole('button', { name: '승인', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: '승인', exact: true }).click();
+
+    await expect(
+      page.getByText('드라이버를 승인했습니다. 승인 완료 탭에서 확인할 수 있습니다.'),
+    ).toBeVisible();
+    await expect(page.getByText('대기 드라이버')).toHaveCount(0);
   });
 });
