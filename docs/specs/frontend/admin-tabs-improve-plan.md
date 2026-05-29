@@ -16,7 +16,7 @@
 | drivers(기사) | ✅ 세션93 / 세션95 `/further` 확정 | 🟡 착수 대기 (T1+T2 확정) | [admin-tab-drivers-plan.md](./admin/admin-tab-drivers-plan.md) |
 | settlements(정산) | ✅ 세션94 / 🔄 셀러 정산 교차 참조 | ⬜ 미착수 | [admin-tab-settlements-plan.md](./admin/admin-tab-settlements-plan.md) |
 | users(소비자) | ✅ 세션96 / ✅ 세션92 grill-me 종결 (S1~S6 플랜 확정) | 🟢 S1(D1) 착수 가능 | [admin-tab-users-plan.md](./admin/admin-tab-users-plan.md) |
-| invite(초대) | ✅ 세션97 / 세션98 Further 확장 | 🟡 착수 대기 (F1+F2+F3+F4+F6 확정) | [admin-tab-invite-plan.md](./admin/admin-tab-invite-plan.md) |
+| invite(초대) | ✅ 세션97 / 세션98 Further 확장 / ✅ 세션99 §F 종결 | ✅ S-A~S-D 완료, e2e 6/6 통과, 육안검증 위임 | [admin-tab-invite-plan.md](./admin/admin-tab-invite-plan.md) |
 | banner(배너) | ✅ 세션95 / 세션92 Further 다중 배너 모델 확정 | ⬜ 미착수 (D-G1 4건 선결) | [admin-tab-banner-plan.md](./admin/admin-tab-banner-plan.md) |
 
 ## 공통 정합성 검토 기준 (모든 어드민 탭 공통)
