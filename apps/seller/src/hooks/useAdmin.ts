@@ -368,7 +368,7 @@ export function useAdminSettlements(filters?: {
 
 // ── Drivers ──────────────────────────────────────────────────────
 
-export function useAdminDrivers() {
+export function useAdminDrivers(filters: { status: DriverStatus }) {
   const {
     items: drivers,
     loading,
@@ -376,9 +376,13 @@ export function useAdminDrivers() {
     reload,
     token,
   } = useAdminList<AdminDriver>(
-    () => '/admin/drivers',
+    () =>
+      withQuery('/admin/drivers', {
+        status: filters.status === 'all' ? undefined : filters.status,
+      }),
     pick<AdminDriver>('drivers'),
     '드라이버 목록',
+    [filters.status],
   );
 
   const approve = async (userId: string) => {

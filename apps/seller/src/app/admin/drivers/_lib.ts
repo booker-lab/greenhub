@@ -1,4 +1,4 @@
-import type { AdminDriver, DriverStatus } from '@/hooks/useAdmin';
+import type { DriverStatus } from '@/hooks/useAdmin';
 
 export type DriverAction = 'approve' | 'suspend' | 'unsuspend';
 
@@ -38,11 +38,3 @@ export const STATUS_TABS: { value: DriverStatus; label: string }[] = [
   { value: 'approved', label: '승인 완료' },
   { value: 'suspended', label: '정지됨' },
 ];
-
-// 탭별 드라이버 필터 — 승인/정지 상태 조합.
-export function filterByTab(drivers: AdminDriver[], tab: DriverStatus): AdminDriver[] {
-  if (tab === 'pending') return drivers.filter((d) => !d.driverApproved && !d.suspended);
-  if (tab === 'approved') return drivers.filter((d) => d.driverApproved && !d.suspended);
-  if (tab === 'suspended') return drivers.filter((d) => d.suspended);
-  return drivers;
-}
