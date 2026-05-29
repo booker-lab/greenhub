@@ -307,3 +307,10 @@
 - [x] **S5-U6 입력 검증 통합** — CTA 비대칭, 기간 누락, 종료일 < 시작일을 저장 전 차단하고 서버 검증과 같은 사용자 안내를 보여준다.
 - [x] **S5-T4 라이브 미리보기** — Drawer 안에 손님 히어로 배너와 같은 구성의 미리보기 패널을 추가해 입력값과 CTA가 즉시 반영되게 했다.
 - [x] **육안검증 등록** — `pending-visual-verify-20260529.md` §28 #246~#254에 S5 UI 검증 항목을 추가했다.
+
+## 9. 2026-05-30 S6 진행 현황
+
+- [x] **S6-U9a server fetch 변경** — 소비자 `HeroBanner`가 기존 `/banner` 단건 대신 `/banners/active`를 조회하고 `scheduled` 뒤에 기본 배너를 붙여 슬라이드 배열을 만든다. `revalidate: 60`은 유지한다.
+- [x] **S6-U8a 자체 캐러셀 클라이언트** — 잠금 파일 변동을 줄이기 위해 `@mantine/carousel` 추가 대신 자체 `HeroBannerCarousel`을 도입한다. 자동 5초 전환, 점 인디케이터, hover/focus/사용자 조작 중지 계약은 동일하게 유지한다.
+- [x] **S6-U8b 1장 정적 표시** — 슬라이드가 1장뿐이면 캐러셀 컨트롤과 자동 전환 없이 `HeroBannerSlide`만 렌더한다.
+- [x] **S6-U8c 슬라이드 분리** — 기존 `HeroBanner` 마크업을 `HeroBannerSlide`로 분리해 서버 fetch와 시각 표현을 분리한다. CTA는 label과 href가 모두 있을 때만 노출한다.
