@@ -2,6 +2,7 @@
 
 import { ActionIcon, Box, Group, TextInput, Title, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
 import { RotateCw, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -33,14 +34,26 @@ export default function DriversClient() {
 
   const runPending = async () => {
     if (!pending) return;
-    setProcessingId(pending.userId);
+    const current = pending;
+    setProcessingId(current.userId);
     try {
-      if (pending.action === 'approve') {
-        await approve(pending.userId);
+      const ok =
+        current.action === 'approve'
+          ? await approve(current.userId)
+          : await toggleSuspend(current.userId, current.action === 'suspend');
+
+      if (ok) {
+        notifications.show({
+          color: 'green',
+          message: ACTION_META[current.action].successMessage,
+        });
+        setPending(null);
       } else {
-        await toggleSuspend(pending.userId, pending.action === 'suspend');
+        notifications.show({
+          color: 'red',
+          message: '드라이버 상태 변경에 실패했습니다. 잠시 후 다시 시도해주세요.',
+        });
       }
-      setPending(null);
     } finally {
       setProcessingId(null);
     }
