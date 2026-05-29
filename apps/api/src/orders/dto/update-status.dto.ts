@@ -31,4 +31,12 @@ export class UpdateStatusDto {
   @IsOptional()
   @IsUrl()
   photoUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  courierCompany?: string;
+
+  @IsOptional()
+  @IsString()
+  trackingNumber?: string;
 }

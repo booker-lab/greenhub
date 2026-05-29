@@ -176,6 +176,12 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
               highlight
             />
           )}
+          {order.deliveryMethod === 'parcel' && order.courierCompany && (
+            <Row label="택배사" value={order.courierCompany} highlight />
+          )}
+          {order.deliveryMethod === 'parcel' && order.trackingNumber && (
+            <Row label="운송장번호" value={order.trackingNumber} highlight />
+          )}
         </Stack>
       </Paper>
 

@@ -13,11 +13,13 @@ export interface UseOrderDetailActionsResult {
   setPreparedAt: (v: string | null) => void;
   showCancelModal: boolean;
   setShowCancelModal: (v: boolean) => void;
+  showParcelShipModal: boolean;
+  setShowParcelShipModal: (v: boolean) => void;
   cancelReason: string;
   setCancelReason: (v: string) => void;
   handlePrepare: () => Promise<void>;
   handleCancel: () => Promise<void>;
-  handleShipParcel: () => Promise<void>;
+  handleShipParcel: (payload: { courierCompany: string; trackingNumber: string }) => Promise<void>;
 }
 
 /** 주문 상세 페이지용 액션 — 프리셋 준비 폼 + 모달 취소 사유. */
@@ -32,6 +34,7 @@ export function useOrderDetailActions(
   const [showPrepareForm, setShowPrepareForm] = useState(false);
   const [preparedAt, setPreparedAt] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showParcelShipModal, setShowParcelShipModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
 
   async function handlePrepare() {
@@ -52,8 +55,11 @@ export function useOrderDetailActions(
   }
 
   // BUG-16 T3: 택배 발송 완료 — PREPARING → DELIVERED 직행 (백엔드가 parcel 가드).
-  async function handleShipParcel() {
-    await updateStatus('DELIVERED');
+  async function handleShipParcel(payload: { courierCompany: string; trackingNumber: string }) {
+    const ok = await updateStatus('DELIVERED', payload);
+    if (ok) {
+      setShowParcelShipModal(false);
+    }
   }
 
   return {
@@ -66,6 +72,8 @@ export function useOrderDetailActions(
     setPreparedAt,
     showCancelModal,
     setShowCancelModal,
+    showParcelShipModal,
+    setShowParcelShipModal,
     cancelReason,
     setCancelReason,
     handlePrepare,

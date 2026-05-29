@@ -1,24 +1,24 @@
 'use client';
 
-import { use, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import type { Order, OrderStatus } from '@greenhub/shared';
 import {
-  Container,
+  Alert,
   Box,
-  Text,
-  Title,
   Button,
+  Container,
+  Divider,
+  Group,
   Paper,
   Stack,
-  Alert,
   Stepper,
-  Group,
-  Divider,
+  Text,
+  Title,
 } from '@mantine/core';
 import { ChevronLeft } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { use, useState } from 'react';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
-import type { Order, OrderStatus } from '@greenhub/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -177,9 +177,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     order.status !== 'REVIEWED' &&
     (order.status === 'DELIVERED' || order.status === 'PICKED_UP');
   const currentIdx = getCurrentStepIndex(steps, order.status);
-  const showPickupCode =
+  const pickupCode =
     order.pickupCode &&
-    (order.status === 'HUB_ARRIVED' || order.status === 'PICKED_UP' || order.status === 'REVIEWED');
+    (order.status === 'HUB_ARRIVED' || order.status === 'PICKED_UP' || order.status === 'REVIEWED')
+      ? order.pickupCode
+      : null;
 
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
@@ -266,6 +268,42 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </Text>
             </Group>
           )}
+          {order.deliveryMethod === 'parcel' && order.courierCompany && (
+            <Group justify="space-between">
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
+                택배사
+              </Text>
+              <Text
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 'var(--fw-bold)',
+                  color: 'var(--color-text)',
+                }}
+              >
+                {order.courierCompany}
+              </Text>
+            </Group>
+          )}
+          {order.deliveryMethod === 'parcel' && order.trackingNumber && (
+            <Group justify="space-between">
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
+                운송장번호
+              </Text>
+              <Text
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 'var(--fw-bold)',
+                  color: 'var(--color-text)',
+                }}
+              >
+                {order.trackingNumber}
+              </Text>
+            </Group>
+          )}
           <Divider />
           <Group justify="space-between">
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
@@ -331,8 +369,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Alert>
       )}
 
-      {showPickupCode && (
-        <PickupCodeCard code={order.pickupCode!} address={order.deliveryAddress?.address ?? ''} />
+      {pickupCode && (
+        <PickupCodeCard code={pickupCode} address={order.deliveryAddress?.address ?? ''} />
       )}
 
       {(isReviewable || confirmed) && (

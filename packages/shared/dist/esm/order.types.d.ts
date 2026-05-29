@@ -29,6 +29,8 @@ export interface Order {
     totalAmount: number;
     requestedDeliveryDate: string | null;
     preparedAt: string | null;
+    courierCompany?: string | null;
+    trackingNumber?: string | null;
     cancelReason: string | null;
     groupBuyConsent: GroupBuyConsent | null;
     createdAt: string;
