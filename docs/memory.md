@@ -167,3 +167,7 @@
 - 취소 토큰 가입 차단은 `AuthService.register()`의 사전 검증과 트랜잭션 재검증 두 지점 단위 테스트로 고정했다. 취소 토큰은 사용자 생성과 invite `usedAt` 소비 처리 없이 `취소된 초대 토큰입니다.`로 거부된다.
 - `pending-visual-verify-20260529.md` §24 #207~#210에 S-D 이후 육안검증 항목을 추가했다. 실제 운영/프리뷰에서는 확인창 배치, `취소됨` orange 배지, reason 알림 위치, 검색 결과 행/카드 배치를 확인하면 된다.
 - 검증: API `auth.service.spec.ts` 4/4 통과, 변경 TS 파일 Biome 0. 기본 운영 도메인 실행은 이전 UI를 보고 실패했지만, 로컬 seller env를 `AUTH_SECRET`/API URL 기준으로 보정한 뒤 `SELLER_BASE=http://127.0.0.1:3016 pnpm --filter e2e test -- admin-invite-revoke.spec.ts`를 재실행해 chromium·mobile 합산 6/6 통과했다.
+
+## 2026-05-29 어드민 초대 탭 육안검증 인덱스 정리
+- 메인 `pending-visual-verify.md`의 2026-05-29 추가 묶음 인덱스에 초대 탭 §22~§24 링크를 보강했다. 실제 항목 본문은 500라인 가드 때문에 `pending-visual-verify-20260529.md`에 유지한다.
+- 코드 변경은 없고 문서 정합성만 보강했다. `memory.md`는 200라인 미만, 수정 문서는 모두 500라인 미만이다.
