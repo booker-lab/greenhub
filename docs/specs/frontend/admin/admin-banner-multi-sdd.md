@@ -325,3 +325,8 @@
 
 - [x] **S6-U9b 호환 엔드포인트 제거** — 소비자 `HeroBanner`가 `/banners/active`만 사용함을 확인하고 공개 구 엔드포인트 `GET /banner`와 `BannerQueryService.getLegacyMainBanner()`를 제거한다.
 - [x] **일회성 마이그레이션 스크립트 정리** — `banners/main_hero`에 `kind:'default'`를 병합하던 `apps/api/src/scripts/migrate-banners-kind.ts`를 삭제한다. 마이그레이션 실행 기록과 멱등성 검증은 S7 로그에 남긴다.
+
+## 12. 2026-05-30 S7 후속 배포 확인
+
+- [x] **최신 커밋 배포 확인** — Vercel에서 consumer `greenhubconsumer-5dv3695i6...`, seller `greenhub-seller-kwe5uc92c...`, driver `greenhub-driver-6ehgggbr7...`가 커밋 `0f5146a` 기준 READY임을 확인했다. 연결된 Vercel 프로젝트 목록에는 별도 api 프로젝트가 없어 API는 기존 로컬 빌드·테스트 결과로 유지 검증한다.
+- [x] **육안검증 추가 등록** — `pending-visual-verify-20260529.md` §32 #268에 커밋 `0f5146a` 배포 상태에서 `/banners/active` 전환과 구 `/banner` 제거 후속 확인 항목을 추가했다.
