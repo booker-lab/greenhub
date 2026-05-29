@@ -647,3 +647,10 @@
 **계약**: 기존 `GET/PUT /admin/banner` 및 `GET /banner`는 기본 배너 호환 경로로 유지한다. 신규 경로는 `GET/POST/PUT/DELETE /admin/banners`, `GET /banners/active`이며, `kind:'default'` 배너 삭제는 422로 차단한다.
 
 ---
+## 2026-05-30 — #CL-55 배너 캐러셀 구현 방식
+
+**결정**: 소비자 첫 화면 다중 배너 캐러셀은 신규 `@mantine/carousel` 의존성 없이 자체 클라이언트 컴포넌트로 구현한다.
+
+**이유**: 원 계획은 `@mantine/carousel` 또는 자체 슬라이드를 허용하며, 이번 S6의 필수 계약은 `GET /banners/active` 소비, 기본 배너 마지막 배치, 1장 정적 표시, 5초 자동 전환, 점 인디케이터, hover/사용자 조작 시 자동 전환 중지다. 자체 구현으로 잠금 파일과 번들 변동을 줄이면서 동일 계약을 충족할 수 있다.
+
+**계약**: `HeroBanner` 서버 컴포넌트는 `/banners/active`를 `revalidate: 60`으로 조회해 `scheduled + default` 배열을 만들고, 클라이언트 캐러셀은 슬라이드가 1장일 때 자동 전환과 인디케이터를 렌더하지 않는다. CTA는 label과 href가 모두 있을 때만 노출한다.

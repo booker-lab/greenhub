@@ -41,3 +41,5 @@
 - 육안검증 항목은 `pending-visual-verify-20260529.md` §27 #240~#245에 추가했다. `pending-visual-verify.md` 본문은 500라인에 가까워 분리 문서를 사용했다.
 - 2026-05-30 어드민 배너 다중 배너 SDD S5를 진행했다. `/admin/banner`를 목록형 UI로 바꾸고 `useAdminBanners` 훅, 기본/기간 배너 목록, 추가·수정 Drawer, 기간 입력, 저장 전 검증, 라이브 미리보기를 추가했다. `useAdmin.ts`는 397라인으로 줄여 500라인 한도를 지켰다.
 - S5 육안검증 항목은 `pending-visual-verify-20260529.md` §28 #246~#254에 추가했다. 검증: `pnpm --filter seller lint`는 기존 `noImgElement` 경고 2건만 출력, `pnpm --filter seller build` 0.
+- 2026-05-30 어드민 배너 다중 배너 SDD S6를 진행했다. 소비자 `HeroBanner`가 `/banners/active`를 조회해 기간 배너 뒤에 기본 배너를 붙이고, `HeroBannerSlide`와 자체 `HeroBannerCarousel`로 1장 정적 표시·2장 이상 5초 자동 전환·점 인디케이터·hover/focus/사용자 조작 중지를 구현했다.
+- S6 결정으로 신규 `@mantine/carousel` 의존성은 추가하지 않고 자체 캐러셀을 사용하기로 `CRITICAL_LOGIC.md`에 기록했다. 육안검증은 `pending-visual-verify-20260529.md` §29 #255~#260에 추가했다. 검증은 변경 파일 Biome 0, consumer tsc 0, consumer/api/seller/driver build 0, 브라우저 localhost 첫 화면 콘솔 오류 0건까지 확인했다. 전체 consumer lint는 기존 오류 때문에 실패했다.
