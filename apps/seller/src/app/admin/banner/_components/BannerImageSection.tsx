@@ -8,9 +8,15 @@ interface BannerImageSectionProps {
   imageUrl?: string;
   uploading: boolean;
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  error?: string | null;
 }
 
-export function BannerImageSection({ imageUrl, uploading, onUpload }: BannerImageSectionProps) {
+export function BannerImageSection({
+  imageUrl,
+  uploading,
+  onUpload,
+  error,
+}: BannerImageSectionProps) {
   return (
     <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--color-border)' }}>
       <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">
@@ -47,12 +53,17 @@ export function BannerImageSection({ imageUrl, uploading, onUpload }: BannerImag
         {uploading ? <Loader size="xs" /> : '이미지 업로드'}
         <input
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp"
           style={{ display: 'none' }}
           onChange={onUpload}
           disabled={uploading}
         />
       </Box>
+      {error && (
+        <Text mt="xs" size="sm" c="red">
+          {error}
+        </Text>
+      )}
     </Paper>
   );
 }
