@@ -343,30 +343,30 @@
 **아토믹 태스크 (커밋 2~3):**
 - [x] **T10** — `apps/e2e/tests/admin-invite-revoke.spec.ts` 신설
   - 정합성 검토:
-    - [ ] e2e 그린 (취소 동작 시나리오) — 운영 기본 실행은 아직 이전 UI, 로컬 실행은 Auth.js 설정 500으로 차단
+    - [x] e2e 그린 (취소 동작 시나리오) — `SELLER_BASE=http://127.0.0.1:3016 pnpm --filter e2e test -- admin-invite-revoke.spec.ts` 6/6 통과
     - [x] 세션 격리·networkidle·dotenv# 함정 (세션90 선례) 회피
     - [x] 셀렉터 안정성 — role 기반 우선
   - 커밋: `test(admin): #CL-55 invite revoke guard e2e`
 
 - [x] **T11** — 거부 가드 e2e (C8 핵심)
   - 정합성 검토:
-    - [ ] e2e 그린 (어드민 취소 → `취소됨` 상태 갱신) — 새 UI 배포/로컬 인증 env 보정 후 재실행 필요
+    - [x] e2e 그린 (어드민 취소 → `취소됨` 상태 갱신) — 로컬 seller env 보정 후 chromium·mobile 통과
     - [x] reason 코드 검증 (`already_revoked`)
     - [x] 취소 토큰 가입 거부는 `AuthService.register()` 사전 검증·트랜잭션 재검증 단위 테스트로 고정
   - 커밋: `test(admin): #CL-55 invite revoke guard e2e`
 
 - [x] **T12 (선택)** — 검색 e2e
   - 정합성 검토:
-    - [ ] e2e 그린 (prefix 검색 → 결과 / 검색어 지움 → 전체 복귀) — 새 UI 배포/로컬 인증 env 보정 후 재실행 필요
+    - [x] e2e 그린 (prefix 검색 → 결과 / 검색어 지움 → 전체 복귀) — 로컬 seller env 보정 후 chromium·mobile 통과
   - 커밋: `test(admin): #CL-55 invite revoke guard e2e`
 
 **세션 종료 절차 (=#CL-55 §F 전체 종결):**
-- [ ] 모든 e2e 그린 → 로컬 커밋 완료, push는 사용자 별도 승인 전 대기
+- [x] 모든 e2e 그린 → 로컬 커밋 완료, push는 사용자 별도 승인 전 대기
 - [ ] push 후 운영 배포 확인 (sync-preview race 주의 — `reference_e2e_preview_race.md`)
 - [x] `pending-visual-verify.md` 항목 1~7 사용자에게 육안 위임
-- [x] `docs/memory.md` 최신화 — S-D 스펙 작성 및 재검증 대기 기록
+- [x] `docs/memory.md` 최신화 — S-D e2e 6/6 통과 기록
 - [-] `MEMORY.md` invite 진행표 ✅로 갱신 — 루트 `MEMORY.md` 없음, `docs/memory.md`만 갱신
-- [ ] `admin-tabs-improve-plan.md` §F 진행표 종결 마킹
+- [x] `admin-tabs-improve-plan.md` §F 진행표 종결 마킹
 
 ---
 
