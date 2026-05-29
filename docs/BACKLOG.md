@@ -714,6 +714,11 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 - [ ] **[ADMIN-ORDERS-F3-FULL] 어드민 주문 정식 상세** — 현재는 `/admin/orders` 목록 응답 기반 1차 읽기 전용 모달만 완료. 후속으로 상품 라인별 상세, 결제 타임라인, 상태 변경 이력, 별도 상세 조회 API/라우트를 설계한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` B-9. **별도 SDD 선작성 후 구현**.
 - [ ] **[ADMIN-ORDERS-F5-ADV] 어드민 주문 고급 페이지네이션** — 1차 `createdAt` cursor `더 보기`는 완료. 후속으로 총 건수 정확 계산, 이전 페이지, 임의 페이지 번호, `createdAt` 외 컬럼 정렬을 검토한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` B-10. **별도 SDD 선작성 후 구현**.
 - [ ] **[ORDER-STATUS-LABEL-SSOT] 주문 상태 라벨 4앱 통일** — 어드민·셀러·소비자 주문 상태 라벨 표현을 shared SSOT로 통합한다. 현재 `픽업완료`/`픽업 완료`처럼 앱별 표기 차이가 있어 전 앱 영향 범위와 회귀 검증을 별도 설계한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` C-out. **별도 SDD 선작성 후 구현**.
+- [ ] **[ADMIN-INVITE-F6-F5-ADV] 어드민 초대 검색·페이지네이션 고도화** — 발급량 100건 도달 시 현재 prefix 검색(F5)과 `더 보기` 페이지네이션(F6)을 묶어 정렬·필터·cursor 정책을 재설계한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md` F6·D4. **별도 SDD 선작성 후 구현**.
+- [ ] **[ADMIN-INVITE-SCALE-1000] 어드민 초대 1000건 이상 발급량 대응** — 발급량 1000건 이상에서 prefix 검색과 `createdAt` 정렬의 결과 누락 가능성, 인덱스 전략, 운영 검색 동선을 재검토한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md` D3. **별도 SDD 선작성 후 구현**.
+- [ ] **[ADMIN-INVITE-F7-EXPIRY] 어드민 초대 만료기간 지정** — 현재 7일 고정인 `generateInvite`를 `generateInvite(days?: number)` 형태로 파라미터화하고, 어드민 UI Select와 백엔드 검증 범위를 설계한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md` F7. **별도 SDD 선작성 후 구현**.
+- [ ] **[ADMIN-INVITE-SELLER-ROLLBACK] 가입 완료 판매자 되돌리기 정책** — 초대 토큰 단독 기능이 아니라 판매자 정지·삭제·복구 정책과 감사 로그를 포함하는 어드민 전역 정책으로 설계한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md`, `docs/specs/frontend/admin/admin-tab-users-plan.md` E-6 D1. **정책 선결 후 별도 SDD**.
+- [ ] **[ADMIN-INVITE-REVOKE-NONVALID] 사용됨·만료 토큰 취소 정책** — 현재 범위는 유효 토큰만 취소하며 사용됨·만료 토큰은 409로 거절한다. 사용됨·만료 토큰을 취소 대상으로 넓힐지, 판매자 상태·감사 로그·표시 라벨에 어떤 영향을 줄지 별도 정책으로 검토한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md` F-0·F-3 제외 항목. **정책 선결 후 별도 SDD**.
 
 #### [ ] P4 — e2e 안정성·CI 정비 (세션36 관찰 등재)
 

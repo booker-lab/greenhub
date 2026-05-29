@@ -420,9 +420,11 @@
 ### 본 탭이 직접 참조하는 외부 문서
 - **육안 검증 (코드 완료 후 §추가)** — [`../pending-visual-verify.md`](../pending-visual-verify.md) — F-5 7개 항목.
 - **선결 결정·별도 SDD 후보 (이번 범위 제외)**
-  - **F6 페이지네이션 + F5 고도화** — 발급량 100건 도달 시 묶어 별도 SDD.
-  - **F7 만료기간 지정** — `generateInvite(days?: number)` 파라미터화 + UI Select.
-  - **이미 가입한 판매자 되돌리기** — [`./admin-tab-users-plan.md`](./admin-tab-users-plan.md) E-6 D1(어드민 전역 정지/삭제 정책)과 동일 계열. 선결 결정 필요.
+  - **F6 페이지네이션 + F5 고도화** — `BACKLOG.md` **ADMIN-INVITE-F6-F5-ADV**로 승격. 발급량 100건 도달 시 묶어 별도 SDD.
+  - **발급량 1000건 이상 대응** — `BACKLOG.md` **ADMIN-INVITE-SCALE-1000**으로 승격. prefix 검색과 정렬·필터 정합 재설계.
+  - **F7 만료기간 지정** — `BACKLOG.md` **ADMIN-INVITE-F7-EXPIRY**로 승격. `generateInvite(days?: number)` 파라미터화 + UI Select.
+  - **이미 가입한 판매자 되돌리기** — `BACKLOG.md` **ADMIN-INVITE-SELLER-ROLLBACK**으로 승격. [`./admin-tab-users-plan.md`](./admin-tab-users-plan.md) E-6 D1(어드민 전역 정지/삭제 정책)과 동일 계열. 선결 결정 필요.
+  - **사용됨·만료 토큰 취소** — `BACKLOG.md` **ADMIN-INVITE-REVOKE-NONVALID**로 승격. 판매자 상태·감사 로그 정책 선결 필요.
 
 ### 상위 인덱스 · 로드맵
 - 통합 인덱스: [`../admin-tabs-improve-plan.md`](../admin-tabs-improve-plan.md)
