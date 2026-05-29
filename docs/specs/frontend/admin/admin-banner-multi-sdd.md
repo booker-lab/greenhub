@@ -314,3 +314,9 @@
 - [x] **S6-U8a 자체 캐러셀 클라이언트** — 잠금 파일 변동을 줄이기 위해 `@mantine/carousel` 추가 대신 자체 `HeroBannerCarousel`을 도입한다. 자동 5초 전환, 점 인디케이터, hover/focus/사용자 조작 중지 계약은 동일하게 유지한다.
 - [x] **S6-U8b 1장 정적 표시** — 슬라이드가 1장뿐이면 캐러셀 컨트롤과 자동 전환 없이 `HeroBannerSlide`만 렌더한다.
 - [x] **S6-U8c 슬라이드 분리** — 기존 `HeroBanner` 마크업을 `HeroBannerSlide`로 분리해 서버 fetch와 시각 표현을 분리한다. CTA는 label과 href가 모두 있을 때만 노출한다.
+
+## 10. 2026-05-30 S7 진행 현황
+
+- [x] **S7 육안검증 등록** — `pending-visual-verify-20260529.md` §30 #261~#265에 배포 반영, 마이그레이션 멱등성, G-11.2 성공 기준 장면, C8 기본 배너 회귀, C9 KST 기간 경계 확인 항목을 추가했다.
+- [x] **S7 배포 확인** — Vercel에서 consumer·seller·driver 최신 코드 커밋 `3fe9337` 배포가 모두 READY임을 확인했다. 연결된 Vercel 프로젝트 목록에는 별도 api 프로젝트가 없어 API는 로컬 빌드·테스트로 검증한다.
+- [x] **S7 자동 검증** — API 배너 유닛 테스트 6/6, api·seller·consumer 타입체크 0, shared·api·seller·consumer·driver 빌드 0을 확인했다. seller 첫 빌드는 consumer 빌드와 `copy-fonts`가 동시에 실행되어 파일 잠금 충돌이 났고, 순차 재실행으로 통과했다. 공개 e2e(`seller-banner.spec.ts`, `consumer-home.spec.ts`)는 14 passed, 인증 필요 2 skipped로 끝났다.

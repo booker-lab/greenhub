@@ -43,3 +43,6 @@
 - S5 육안검증 항목은 `pending-visual-verify-20260529.md` §28 #246~#254에 추가했다. 검증: `pnpm --filter seller lint`는 기존 `noImgElement` 경고 2건만 출력, `pnpm --filter seller build` 0.
 - 2026-05-30 어드민 배너 다중 배너 SDD S6를 진행했다. 소비자 `HeroBanner`가 `/banners/active`를 조회해 기간 배너 뒤에 기본 배너를 붙이고, `HeroBannerSlide`와 자체 `HeroBannerCarousel`로 1장 정적 표시·2장 이상 5초 자동 전환·점 인디케이터·hover/focus/사용자 조작 중지를 구현했다.
 - S6 결정으로 신규 `@mantine/carousel` 의존성은 추가하지 않고 자체 캐러셀을 사용하기로 `CRITICAL_LOGIC.md`에 기록했다. 육안검증은 `pending-visual-verify-20260529.md` §29 #255~#260에 추가했다. 검증은 변경 파일 Biome 0, consumer tsc 0, consumer/api/seller/driver build 0, 브라우저 localhost 첫 화면 콘솔 오류 0건까지 확인했다. 전체 consumer lint는 기존 오류 때문에 실패했다.
+- 2026-05-30 어드민 배너 다중 배너 SDD S7 closeout을 진행했다. `pending-visual-verify-20260529.md` §30 #261~#265에 배포 반영, 마이그레이션 멱등성, G-11.2 성공 기준, C8, C9 육안검증 항목을 추가했다.
+- S7 검증: API 배너 유닛 테스트 6/6, api·seller·consumer 타입체크 0, shared·api·seller·consumer·driver 빌드 0. seller 첫 빌드는 consumer 빌드와 병렬 실행한 `copy-fonts` 파일 잠금 충돌로 실패했으나 순차 재실행으로 통과했다. 공개 e2e는 `seller-banner.spec.ts`, `consumer-home.spec.ts` 14 passed, 인증 필요 2 skipped.
+- Vercel 배포 확인: consumer `greenhubconsumer-p3tyba39e...`, seller `greenhub-seller-fr5lf9zyh...`, driver `greenhub-driver-izn1g6sjo...`가 최신 코드 커밋 `3fe9337` 기준 READY다. 연결된 Vercel 프로젝트 목록에는 별도 api 프로젝트가 없다.
