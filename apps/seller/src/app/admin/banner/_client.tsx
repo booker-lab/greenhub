@@ -21,6 +21,10 @@ const DEFAULT_BANNER_FORM: AdminBanner = {
   isActive: true,
 };
 
+const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGE_SIZE_LABEL = '2MB';
+
 function hasPartialCta(cta?: { label?: string; href?: string }) {
   const hasLabel = Boolean(cta?.label?.trim());
   const hasHref = Boolean(cta?.href?.trim());
@@ -38,6 +42,16 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+function validateBannerImage(file: File): string | null {
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    return 'PNG, JPG, WebP 이미지만 업로드할 수 있습니다.';
+  }
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    return `이미지는 ${MAX_IMAGE_SIZE_LABEL} 이하로 업로드해주세요.`;
+  }
+  return null;
+}
+
 export default function AdminBannerClient() {
   const { data: session } = useSession();
   const { banner, loading, saving, save } = useAdminBanner();
@@ -46,6 +60,7 @@ export default function AdminBannerClient() {
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [ctaError, setCtaError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   useEffect(() => {
     if (banner) setForm({ ...DEFAULT_BANNER_FORM, ...banner });
@@ -54,18 +69,27 @@ export default function AdminBannerClient() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !session?.user) return;
+
+    const validationMessage = validateBannerImage(file);
+    setImageError(validationMessage);
+    if (validationMessage) {
+      notifications.show({ color: 'red', message: validationMessage });
+      e.target.value = '';
+      return;
+    }
+
     setUploading(true);
     try {
       const r = storageRef(getFirebaseStorage(), `banners/main_hero/${Date.now()}_${file.name}`);
       await uploadBytes(r, file);
       const url = await getDownloadURL(r);
       setForm((f) => ({ ...f, imageUrl: url }));
+      setImageError(null);
       notifications.show({ color: 'green', message: '배너 이미지를 업로드했습니다.' });
     } catch (error) {
-      notifications.show({
-        color: 'red',
-        message: getErrorMessage(error, '이미지 업로드 중 오류가 발생했습니다.'),
-      });
+      const message = getErrorMessage(error, '이미지 업로드 중 오류가 발생했습니다.');
+      setImageError(message);
+      notifications.show({ color: 'red', message });
     } finally {
       setUploading(false);
       e.target.value = '';
@@ -118,6 +142,7 @@ export default function AdminBannerClient() {
           imageUrl={form.imageUrl}
           uploading={uploading}
           onUpload={handleImageUpload}
+          error={imageError}
         />
         <BannerTextSection form={form} setForm={setForm} />
         <BannerCtaSection form={form} setForm={setForm} error={ctaError} />

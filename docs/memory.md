@@ -2,7 +2,7 @@
 > **SSOT**: 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 최신 아카이브: `archive/memory_archive_20260530.md`
 
-최종 수정: 2026-05-30 (어드민 배너 T1·T2·T3)
+최종 수정: 2026-05-30 (어드민 배너 T5a)
 
 ## 최신 진행 현황
 
@@ -22,6 +22,7 @@
 - 커밋 `605f143`을 push했고 seller 프리뷰 `https://greenhub-seller-kq2loonje-jos-projects-d1cecc0c.vercel.app`가 READY가 됐다. branch alias는 `https://greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app`다.
 - 향후 작업으로 `ADMIN-DRIVERS-F4`(드라이버 상세 정보), `ADMIN-DRIVERS-F5`(정렬·페이지네이션), `DRIVER-APP-REFACTOR`를 `BACKLOG.md`와 `admin-tab-drivers-plan.md`에 명시했다.
 - 2026-05-30 어드민 배너 탭 T1·T2·T3를 완료했다. `useEffect` hydrate deps를 `[banner]`로 교정하고, CTA 문구·URL 비대칭 저장 차단, 저장·이미지 업로드 실패 알림, CTA 모바일 1열 배치(T6 일부)를 반영했다. 커밋 `1605023`을 push했고 seller 프리뷰 `https://greenhub-seller-f2k6j1erj-jos-projects-d1cecc0c.vercel.app`가 READY가 됐다. `pending-visual-verify.md` §15 #231~#236에 육안검증 항목을 등록했다.
+- 2026-05-30 어드민 배너 T5a를 완료했다. 업로드 전 PNG/JPG/WebP와 2MB 이하를 검증하고 실패 사유를 알림·인라인 오류로 표시한다. `pending-visual-verify.md` §15 #237에 육안검증 항목을 추가했다. 검증: 변경 파일 Biome 0, seller tsc 0, seller·consumer·driver·api build 0. 루트 `npm run build`는 앱 필터가 매칭되지 않아 앱 빌드가 생략되는 현상을 확인했다.
 - 미추적 파일 `.codex/`, `AGENTS.md`는 사용자/환경 산출물 가능성이 있어 건드리지 않는다.
 
 ## 검증 기준
@@ -33,4 +34,4 @@
 
 ## 다음 진입점
 
-- 인증 가능한 프리뷰 또는 운영 미적용 환경에서 `pending-visual-verify.md` §15 #231~#236을 확인한 뒤, `admin-tab-banner-plan.md`의 다음 단계 T5a 또는 다중 배너 SDD Phase 3로 진입한다.
+- 인증 가능한 프리뷰 또는 운영 미적용 환경에서 `pending-visual-verify.md` §15 #231~#237을 확인한 뒤, 다중 배너 SDD Phase 3로 진입한다.
