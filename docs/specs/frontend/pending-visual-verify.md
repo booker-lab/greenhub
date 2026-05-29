@@ -447,3 +447,6 @@
 - `pending-visual-verify-20260529.md` §19 #175~#181 — 어드민 주문 상세 읽기 전용 모달
 - `pending-visual-verify-20260529.md` §20 #182~#188 — 어드민 주문 정렬·커서 페이지네이션
 - `pending-visual-verify-20260529.md` §21 #189~#194 — 어드민 초대 발급 내역 보기 개선
+- `pending-visual-verify-20260529.md` §22 #195~#200 — 어드민 초대 토큰 취소
+- `pending-visual-verify-20260529.md` §23 #201~#206 — 어드민 초대 토큰 prefix 검색
+- `pending-visual-verify-20260529.md` §24 #207~#210 — 어드민 초대 취소 자동 검증 후 육안 확인
