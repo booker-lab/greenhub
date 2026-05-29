@@ -2,7 +2,7 @@
 > **SSOT**: 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` · `archive/memory_archive_20260529.md`
 
-최종 수정: 2026-05-29 (어드민 드라이버 탭 S2 타입 정규화)
+최종 수정: 2026-05-29 (어드민 드라이버 탭 S3 e2e)
 
 ---
 
@@ -92,6 +92,11 @@
 - `admin-tab-drivers-plan.md` S2(T2)를 진행해 `AdminService.getDrivers()` 내부 `any`를 로컬 `DriverRow` 타입으로 좁히고, `createdAt` 정렬 접근도 `unknown` 가드로 정리했다.
 - `DriverBadge`와 `DriverList`의 `suspended` 옵셔널 분기를 `!!driver.suspended` 기반 상수로 명시했고, `AdminDriver.suspended?: boolean`은 유지했다.
 - `pending-visual-verify.md` §14 #219에 S2 런타임 회귀 확인 항목을 추가했다. 검증: API/seller/consumer/driver tsc 0, 변경 파일 Biome 0, 루트 build 0(앱 필터 미매칭), API·seller 개별 build 0. 변경 파일과 `memory.md`는 라인 제한 미만.
+
+## 2026-05-29 어드민 드라이버 탭 S3 e2e
+- `apps/e2e/tests/admin-drivers-status-filter.spec.ts`를 추가해 pending/approved/suspended/all 4탭의 요청 쿼리와 화면 명단을 네트워크 fixture로 검증했다.
+- `pending-visual-verify.md` §14 #211~#214·#219를 자동 검증 통과로 체크했고, #215~#218은 운영/프리뷰 육안 확인으로 유지했다.
+- 검증: 변경 파일 Biome 0, 로컬 최신 seller fixture e2e 8/8, `pnpm typecheck` 0. 기본 운영 `SELLER_BASE`는 아직 구버전 번들이라 status 쿼리 검증 실패.
 
 ## 2026-05-29 판매자 택배 운송장 필수화
 - `seller-orders-improve-plan.md` 짠A를 이어서 택배 `PREPARING → DELIVERED` 전환 전 택배사와 운송장번호를 받는 Mantine 모달을 추가했다.

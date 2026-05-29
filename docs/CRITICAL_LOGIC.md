@@ -618,3 +618,13 @@
 **잔여**: 취소된 토큰으로 가입 시도 시 거부되는 흐름은 T11 e2e에서 자동화해야 하며, 운영/프리뷰 육안 확인은 `pending-visual-verify-20260529.md` §22에 남긴다.
 
 ---
+
+## 2026-05-29 — CL-55 어드민 드라이버 status 서버 필터 e2e fixture화
+
+**결정**: 드라이버 status 필터 S3 e2e는 운영 드라이버 데이터를 직접 시드하거나 승인·정지 상태를 변경하지 않고, Playwright `page.route('**/admin/drivers**')` 네트워크 fixture로 `pending`·`approved`·`suspended`·`all` 응답을 고정한다.
+
+**이유**: 운영 단일 DB의 드라이버 승인·정지 상태를 쓰기 없이 보호하면서도, 프론트 hook이 실제로 보내는 URL 쿼리와 화면 카드 명단의 1:1 정합성을 검증하기 위해서다.
+
+**검증**: 로컬 최신 seller 서버(`SELLER_BASE=http://localhost:3017`)에서 `admin-drivers-status-filter.spec.ts`가 chromium·mobile 합산 8/8 통과했다. 기본 운영 `SELLER_BASE` 실행은 아직 구버전 배포 번들을 바라봐 status 쿼리 기대가 실패하므로, 배포 후 CI 또는 프리뷰 재실행으로 최종 종결한다.
+
+---
