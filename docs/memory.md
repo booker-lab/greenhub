@@ -49,3 +49,4 @@
 - 2026-05-30 어드민 배너 S7 후속 정리를 진행했다. 소비자 `HeroBanner`가 `/banners/active`만 사용함을 확인하고 공개 구 엔드포인트 `GET /banner`, `BannerQueryService.getLegacyMainBanner()`, 일회성 `apps/api/src/scripts/migrate-banners-kind.ts`를 제거했다.
 - 해당 결정은 `CRITICAL_LOGIC.md`에 기록했고, SDD는 `admin-banner-multi-sdd.md` §11에 완료 체크했다. 육안검증은 `pending-visual-verify-20260529.md` §31 #266~#267에 추가했다.
 - 검증: API 배너 테스트 6/6, `pnpm typecheck` 0, 변경 코드 파일 Biome 0, `pnpm --filter api build` 0, `pnpm --filter consumer build` 0, `pnpm --filter seller build` 0. 전체 `pnpm exec biome check .`는 기존 `.vercel/output` 생성물과 `.claude/settings.local.json`, `apps/api/tsconfig.json` 포맷 이슈로 실패했다.
+- 2026-05-30 후속 배포 확인: Vercel에서 consumer `greenhubconsumer-5dv3695i6...`, seller `greenhub-seller-kwe5uc92c...`, driver `greenhub-driver-6ehgggbr7...`가 최신 커밋 `0f5146a` 기준 READY다. `pending-visual-verify-20260529.md` §32 #268에 최신 배포 육안 확인 항목을 추가했고, `admin-banner-multi-sdd.md` §12에 배포 확인을 체크했다.
