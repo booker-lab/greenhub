@@ -2,8 +2,10 @@
 
 import type { SaleType } from '@greenhub/shared';
 import { Box, Container, Group, Stack, Text, UnstyledButton } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
@@ -11,18 +13,29 @@ import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useGroupConfigs } from '@/hooks/useGroupConfigs';
 import { useOrders } from '@/hooks/useOrders';
+import { apiJson } from '@/lib/api';
+import { BulkParcelShipModal, type BulkParcelShipPayload } from './_components/BulkParcelShipModal';
 import { DateSection } from './_components/DateSection';
+import { OrderBulkActionBar } from './_components/OrderBulkActionBar';
+import { OrderPriorityAlert } from './_components/OrderPriorityAlert';
 import { SaleTypeToggle } from './_components/SaleTypeToggle';
 import {
+  canBulkPrepareOrder,
+  canBulkShipParcelOrder,
   DATE_PRESETS,
   type DateRangePreset,
   GROUP_TABS,
+  getBulkParcelShipEligibleIds,
+  getBulkPrepareEligibleIds,
   getDateRange,
+  getGroupConfigProductIds,
   getGroupHeaderMeta,
+  getOrderAlertMeta,
   getOrderDate,
   groupOrdersByDate,
   IN_DELIVERY_SUBFILTERS,
   isArchiveTab,
+  isOrderOverdue,
   type OrderGroup,
   STATUS_GROUP_MAP,
 } from './_constants';
@@ -45,6 +58,10 @@ export default function OrdersPage() {
   const [datePreset, setDatePreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+  const [bulkConfirmOpened, setBulkConfirmOpened] = useState(false);
+  const [bulkParcelShipOpened, setBulkParcelShipOpened] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const handleSaleTypeChange = (next: SaleType) => {
     setSaleType(next);
@@ -65,14 +82,10 @@ export default function OrdersPage() {
   const dateRange =
     saleType === 'normal' ? getDateRange(datePreset, activeTab, customFrom, customTo) : null;
 
-  // 공구 토글일 때만 표시 후보 productId를 모아 groupProductConfig 일괄 fetch
-  const groupProductIds =
-    saleType === 'group'
-      ? orders
-          .filter((o) => o.saleType === 'group' && STATUS_GROUP_MAP[o.status] === activeTab)
-          .map((o) => o.productId)
-      : [];
+  // 공구 우선 알림은 현재 탭 밖의 지연 주문도 세야 하므로 공구 전체 productId를 조인한다.
+  const groupProductIds = getGroupConfigProductIds(orders, saleType);
   const groupConfigMap = useGroupConfigs(groupProductIds, saleType === 'group');
+  const orderAlertMeta = getOrderAlertMeta(orders, saleType, groupConfigMap);
 
   const filteredOrders = orders.filter((o) => {
     if (saleType === 'group' ? o.saleType !== 'group' : o.saleType === 'group') return false;
@@ -83,10 +96,159 @@ export default function OrdersPage() {
     if (dateRange) {
       const d = getOrderDate(o, activeTab, groupConfigMap);
       // requestedDeliveryDate = null(공동구매 등)은 제외하지 않고 "날짜 미정"으로 내려보냄 (T6)
-      if (d && (d < dateRange.from || d > dateRange.to)) return false;
+      if (
+        d &&
+        !isOrderOverdue(o, activeTab, groupConfigMap) &&
+        (d < dateRange.from || d > dateRange.to)
+      ) {
+        return false;
+      }
     }
     return true;
   });
+
+  const bulkActionMode = activeTab === 'WAITING' ? 'shipParcel' : 'prepare';
+  const bulkEligibleIds = useMemo(
+    () =>
+      bulkActionMode === 'shipParcel'
+        ? getBulkParcelShipEligibleIds(filteredOrders)
+        : getBulkPrepareEligibleIds(filteredOrders),
+    [bulkActionMode, filteredOrders],
+  );
+  const selectedBulkOrders = useMemo(
+    () =>
+      filteredOrders.filter(
+        (order) =>
+          selectedOrderIds.has(order.id) &&
+          (bulkActionMode === 'shipParcel'
+            ? canBulkShipParcelOrder(order)
+            : canBulkPrepareOrder(order)),
+      ),
+    [bulkActionMode, filteredOrders, selectedOrderIds],
+  );
+
+  useEffect(() => {
+    setSelectedOrderIds((current) => {
+      const eligible = new Set(bulkEligibleIds);
+      const next = new Set([...current].filter((id) => eligible.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [bulkEligibleIds]);
+
+  const resetDateFilters = () => {
+    setDatePreset('week');
+    setCustomFrom('');
+    setCustomTo('');
+  };
+
+  const openActionRequired = () => {
+    setActiveTab('ACTION_REQUIRED');
+    setSubFilter('ALL');
+    resetDateFilters();
+  };
+
+  const openOverdue = (tab: OrderGroup) => {
+    setActiveTab(tab);
+    setSubFilter('ALL');
+    resetDateFilters();
+  };
+
+  const setOrderSelected = (orderId: string, selected: boolean) => {
+    setSelectedOrderIds((current) => {
+      const next = new Set(current);
+      if (selected) next.add(orderId);
+      else next.delete(orderId);
+      return next;
+    });
+  };
+
+  const selectAllBulkEligible = () => {
+    setSelectedOrderIds(new Set(bulkEligibleIds));
+  };
+
+  const clearBulkSelection = () => {
+    setSelectedOrderIds(new Set());
+  };
+
+  const handleBulkPrepare = async () => {
+    if (!storeId || selectedBulkOrders.length === 0) return;
+    setBulkLoading(true);
+    try {
+      const token = session?.user.accessToken ?? '';
+      const results = await Promise.allSettled(
+        selectedBulkOrders.map((order) =>
+          apiJson(`/stores/${storeId}/orders/${order.id}/status`, token, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'PREPARING' }),
+          }),
+        ),
+      );
+      const failed = results.filter((result) => result.status === 'rejected').length;
+      const success = results.length - failed;
+      setSelectedOrderIds((current) => {
+        const completed = new Set(
+          selectedBulkOrders
+            .filter((_, index) => results[index]?.status === 'fulfilled')
+            .map((order) => order.id),
+        );
+        return new Set([...current].filter((id) => !completed.has(id)));
+      });
+      setBulkConfirmOpened(false);
+      notifications.show({
+        color: failed === 0 ? 'green' : 'orange',
+        title: failed === 0 ? '준비 시작 완료' : '일부 주문만 처리됐습니다',
+        message:
+          failed === 0
+            ? `${success}건을 준비 중으로 변경했습니다.`
+            : `성공 ${success}건, 실패 ${failed}건`,
+      });
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkParcelShip = async (payloads: BulkParcelShipPayload[]) => {
+    if (!storeId || payloads.length === 0) return;
+    setBulkLoading(true);
+    try {
+      const token = session?.user.accessToken ?? '';
+      const payloadByOrderId = new Map(payloads.map((payload) => [payload.orderId, payload]));
+      const results = await Promise.allSettled(
+        selectedBulkOrders.map((order) => {
+          const payload = payloadByOrderId.get(order.id);
+          return apiJson(`/stores/${storeId}/orders/${order.id}/status`, token, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              status: 'DELIVERED',
+              courierCompany: payload?.courierCompany,
+              trackingNumber: payload?.trackingNumber,
+            }),
+          });
+        }),
+      );
+      const failed = results.filter((result) => result.status === 'rejected').length;
+      const success = results.length - failed;
+      setSelectedOrderIds((current) => {
+        const completed = new Set(
+          selectedBulkOrders
+            .filter((_, index) => results[index]?.status === 'fulfilled')
+            .map((order) => order.id),
+        );
+        return new Set([...current].filter((id) => !completed.has(id)));
+      });
+      setBulkParcelShipOpened(false);
+      notifications.show({
+        color: failed === 0 ? 'green' : 'orange',
+        title: failed === 0 ? '택배 발송 완료' : '일부 주문만 처리됐습니다',
+        message:
+          failed === 0
+            ? `${success}건을 배송 완료로 변경했습니다.`
+            : `성공 ${success}건, 실패 ${failed}건`,
+      });
+    } finally {
+      setBulkLoading(false);
+    }
+  };
 
   return (
     <PageShell>
@@ -221,6 +383,29 @@ export default function OrdersPage() {
       {/* 주문 목록 — 날짜 그룹 섹션 */}
       <Container size="sm" px="md" py="md">
         <Stack gap="lg">
+          {!loading && firebaseReady && (
+            <OrderPriorityAlert
+              meta={orderAlertMeta}
+              onOpenActionRequired={openActionRequired}
+              onOpenOverdue={openOverdue}
+            />
+          )}
+
+          {!loading && firebaseReady && (
+            <OrderBulkActionBar
+              mode={bulkActionMode}
+              eligibleCount={bulkEligibleIds.length}
+              selectedCount={selectedBulkOrders.length}
+              loading={bulkLoading}
+              onSelectAll={selectAllBulkEligible}
+              onClear={clearBulkSelection}
+              onSubmit={() => {
+                if (bulkActionMode === 'shipParcel') setBulkParcelShipOpened(true);
+                else setBulkConfirmOpened(true);
+              }}
+            />
+          )}
+
           {(loading || !firebaseReady) && <LoadingState />}
 
           {!loading && firebaseReady && filteredOrders.length === 0 && (
@@ -251,10 +436,35 @@ export default function OrdersPage() {
                 key={group.dateKey}
                 meta={getGroupHeaderMeta(group.dateKey, isArchiveTab(activeTab))}
                 orders={group.orders}
+                selectedOrderIds={selectedOrderIds}
+                bulkActionMode={bulkActionMode}
+                onSelectedChange={setOrderSelected}
               />
             ))}
         </Stack>
       </Container>
+
+      <ConfirmModal
+        opened={bulkConfirmOpened}
+        title="선택한 주문을 준비 중으로 바꿀까요?"
+        message={`${selectedBulkOrders.length}건의 주문을 한 번에 준비 중으로 변경합니다.`}
+        confirmLabel="준비 시작"
+        confirmColor="brand"
+        loading={bulkLoading}
+        onConfirm={handleBulkPrepare}
+        onClose={() => {
+          if (!bulkLoading) setBulkConfirmOpened(false);
+        }}
+      />
+      <BulkParcelShipModal
+        opened={bulkParcelShipOpened}
+        orders={selectedBulkOrders}
+        loading={bulkLoading}
+        onConfirm={handleBulkParcelShip}
+        onClose={() => {
+          if (!bulkLoading) setBulkParcelShipOpened(false);
+        }}
+      />
     </PageShell>
   );
 }

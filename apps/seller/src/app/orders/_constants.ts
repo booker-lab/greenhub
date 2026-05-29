@@ -86,6 +86,17 @@ export const DELIVERY_LABEL: Record<string, string> = {
   parcel: '택배',
 };
 
+export type BulkActionMode = 'prepare' | 'shipParcel';
+
+export const COURIER_OPTIONS = [
+  'CJ대한통운',
+  '우체국택배',
+  '한진택배',
+  '롯데택배',
+  '로젠택배',
+  '기타',
+];
+
 // ─── 날짜 범위 필터 (T5) ─────────────────────────────────────────────────────
 
 export type DateRangePreset = 'today' | 'week' | 'month' | 'custom';
@@ -137,6 +148,74 @@ export function getOrderDate(
   if (!raw) return null;
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function isOrderOverdue(
+  order: Order,
+  tab: OrderGroup,
+  groupConfigMap?: GroupConfigMap,
+): boolean {
+  if (isArchiveTab(tab)) return false;
+  const d = getOrderDate(order, tab, groupConfigMap);
+  if (!d) return false;
+  return toDateKey(d) < toDateKey(new Date());
+}
+
+export interface OrderAlertMeta {
+  actionRequiredCount: number;
+  overdueCount: number;
+  overdueTab: OrderGroup | null;
+}
+
+export function getOrderAlertMeta(
+  orders: Order[],
+  saleType: Order['saleType'],
+  groupConfigMap?: GroupConfigMap,
+): OrderAlertMeta {
+  const scopedOrders = orders.filter((order) =>
+    saleType === 'group' ? order.saleType === 'group' : order.saleType !== 'group',
+  );
+  const actionRequiredCount = scopedOrders.filter(
+    (order) => STATUS_GROUP_MAP[order.status] === 'ACTION_REQUIRED',
+  ).length;
+  const overdueByTab = new Map<OrderGroup, number>();
+
+  for (const order of scopedOrders) {
+    const tab = STATUS_GROUP_MAP[order.status];
+    if (!isOrderOverdue(order, tab, groupConfigMap)) continue;
+    overdueByTab.set(tab, (overdueByTab.get(tab) ?? 0) + 1);
+  }
+
+  const overduePriority: OrderGroup[] = ['ACTION_REQUIRED', 'WAITING', 'IN_DELIVERY'];
+  const overdueTab = overduePriority.find((tab) => (overdueByTab.get(tab) ?? 0) > 0) ?? null;
+  const overdueCount = [...overdueByTab.values()].reduce((sum, count) => sum + count, 0);
+
+  return { actionRequiredCount, overdueCount, overdueTab };
+}
+
+export function getGroupConfigProductIds(orders: Order[], saleType: Order['saleType']): string[] {
+  if (saleType !== 'group') return [];
+  return [
+    ...new Set(
+      orders.filter((order) => order.saleType === 'group').map((order) => order.productId),
+    ),
+  ];
+}
+
+export function canBulkPrepareOrder(order: Order): boolean {
+  return order.status === 'ACCEPTED' || order.status === 'CONFIRMED';
+}
+
+export function canBulkShipParcelOrder(order: Order): boolean {
+  return order.status === 'PREPARING' && order.deliveryMethod === 'parcel';
+}
+
+export function getBulkPrepareEligibleIds(orders: Order[]): string[] {
+  return orders.filter(canBulkPrepareOrder).map((order) => order.id);
+}
+
+export function getBulkParcelShipEligibleIds(orders: Order[]): string[] {
+  return orders.filter(canBulkShipParcelOrder).map((order) => order.id);
 }
 
 /**

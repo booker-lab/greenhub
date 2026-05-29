@@ -2,10 +2,24 @@
 
 import type { Order } from '@greenhub/shared';
 import { Box, Stack, Text } from '@mantine/core';
-import type { GroupHeaderMeta } from '../_constants';
+import type { BulkActionMode, GroupHeaderMeta } from '../_constants';
 import { OrderCard } from './OrderCard';
 
-export function DateSection({ meta, orders }: { meta: GroupHeaderMeta; orders: Order[] }) {
+interface DateSectionProps {
+  meta: GroupHeaderMeta;
+  orders: Order[];
+  selectedOrderIds?: Set<string>;
+  bulkActionMode?: BulkActionMode;
+  onSelectedChange?: (orderId: string, selected: boolean) => void;
+}
+
+export function DateSection({
+  meta,
+  orders,
+  selectedOrderIds,
+  bulkActionMode = 'prepare',
+  onSelectedChange,
+}: DateSectionProps) {
   const danger = meta.urgency === 'overdue' || meta.urgency === 'today';
 
   return (
@@ -30,7 +44,13 @@ export function DateSection({ meta, orders }: { meta: GroupHeaderMeta; orders: O
       </Box>
 
       {orders.map((order) => (
-        <OrderCard key={order.id} order={order} />
+        <OrderCard
+          key={order.id}
+          order={order}
+          selected={selectedOrderIds?.has(order.id) ?? false}
+          bulkActionMode={bulkActionMode}
+          onSelectedChange={onSelectedChange}
+        />
       ))}
     </Stack>
   );

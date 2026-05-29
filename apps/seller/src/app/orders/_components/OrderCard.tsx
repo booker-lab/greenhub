@@ -1,20 +1,40 @@
 'use client';
 
 import type { Order } from '@greenhub/shared';
-import { Alert, Badge, Button, Group, Paper, Text } from '@mantine/core';
+import { Alert, Badge, Button, Checkbox, Group, Paper, Text } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import {
   ACCENT_BORDER,
+  type BulkActionMode,
+  canBulkPrepareOrder,
+  canBulkShipParcelOrder,
   DELIVERY_LABEL,
   formatRelativeTime,
   STATUS_COLOR,
   STATUS_LABEL,
 } from '../_constants';
 
-export function OrderCard({ order }: { order: Order }) {
+interface OrderCardProps {
+  order: Order;
+  selected?: boolean;
+  bulkActionMode?: BulkActionMode;
+  onSelectedChange?: (orderId: string, selected: boolean) => void;
+}
+
+export function OrderCard({
+  order,
+  selected = false,
+  bulkActionMode = 'prepare',
+  onSelectedChange,
+}: OrderCardProps) {
   const router = useRouter();
 
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED';
+  const canShipParcel = order.status === 'PREPARING' && order.deliveryMethod === 'parcel';
+  const selectable =
+    !!onSelectedChange &&
+    (bulkActionMode === 'shipParcel' ? canBulkShipParcelOrder(order) : canBulkPrepareOrder(order));
+  const selectionLabel = bulkActionMode === 'shipParcel' ? '일괄 택배 발송 선택' : '일괄 준비 선택';
 
   return (
     <Paper
@@ -26,9 +46,19 @@ export function OrderCard({ order }: { order: Order }) {
     >
       {/* 상단: 상태 뱃지 + 시간 */}
       <Group justify="space-between" mb="xs">
-        <Badge color={STATUS_COLOR[order.status]} variant="light" radius="xl">
-          {STATUS_LABEL[order.status]}
-        </Badge>
+        <Group gap="xs">
+          {selectable && (
+            <Checkbox
+              aria-label={`${order.orderNumber ?? order.id} ${selectionLabel}`}
+              checked={selected}
+              onChange={(event) => onSelectedChange(order.id, event.currentTarget.checked)}
+              onClick={(event) => event.stopPropagation()}
+            />
+          )}
+          <Badge color={STATUS_COLOR[order.status]} variant="light" radius="xl">
+            {STATUS_LABEL[order.status]}
+          </Badge>
+        </Group>
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
           {formatRelativeTime(order.createdAt)}
         </Text>
@@ -80,6 +110,20 @@ export function OrderCard({ order }: { order: Order }) {
             color="brand"
           >
             준비 시작
+          </Button>
+        </Group>
+      )}
+
+      {canShipParcel && (
+        <Group gap="xs" onClick={(e) => e.stopPropagation()}>
+          <Button
+            onClick={() => router.push(`/orders/${order.id}`)}
+            flex={1}
+            size="sm"
+            radius="md"
+            color="brand"
+          >
+            택배 발송 완료
           </Button>
         </Group>
       )}
