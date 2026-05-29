@@ -224,8 +224,8 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - [x] **S6-3.** `DriverList.tsx`는 `getDriverActions()` 결과를 map으로 렌더하고, 처리 중 라벨은 기존 `처리중…` 동작을 유지한다.
 - [x] **S6-4.** **육안 검증 문서 `pending-visual-verify.md` §14에 버튼 메타화 회귀 확인 항목을 추가한다.**
 - [x] **S6-5.** **정합성검토** — 변경 파일 Biome 0, `pnpm --filter seller exec tsc --noEmit` 0, `pnpm --filter seller build` 0, 500라인 제한 통과. `admin-drivers-status-filter.spec.ts`는 10건 수집을 확인했고, 실제 운영/인증 프리뷰 육안 회귀는 `pending-visual-verify.md` §14 #227~#230에 유지한다.
-- [ ] **S6-6.** **커밋** — `refactor(admin): #CL-55 drivers 탭 액션 버튼 메타화 (R1)`.
-- [ ] **S6-7.** **배포 확인** — seller 프리뷰 READY 확인 후 인증 환경에서 실제 육안검증은 §14 신규 항목으로 추적한다.
+- [x] **S6-6.** **커밋** — `refactor(admin): #CL-55 drivers 탭 액션 버튼 메타화 (R1)`.
+- [x] **S6-7.** **배포 확인** — seller 프리뷰 `https://greenhub-seller-g123e4tg0-jos-projects-d1cecc0c.vercel.app`가 READY. branch alias `https://greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app`도 연결됐다. 인증 환경에서 실제 육안검증은 §14 #227~#230으로 추적한다.
 
 ### 제외(별도 세션 — §C-4·§C-5 보존)
 - **F4** 드라이버 상세(전화·차량, 데이터모델 선확인 필요) / **F5** 정렬·페이지네이션·`limit(100)` 한도 / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R2** 공통 `SegmentedTabs` 통일.

@@ -12,8 +12,8 @@
 - `DriverList.tsx`는 `getDriverActions()` 결과를 map으로 렌더한다. 기존 버튼 노출, 스타일, ConfirmModal 문구, 처리 중 라벨 동작은 유지한다.
 - `pending-visual-verify.md` §14 #227~#230에 액션 버튼 노출·스타일·확인창·처리 중 라벨 회귀 육안검증 항목을 추가했다.
 - 검증: 변경 파일 Biome 0, `pnpm --filter seller exec tsc --noEmit` 0, `pnpm --filter seller build` 0, `admin-drivers-status-filter.spec.ts` 10건 수집. 수정 코드 파일은 500라인 미만, `memory.md`는 50라인 미만이다.
+- 커밋 `d85f2fc`를 push했고 seller 프리뷰 `https://greenhub-seller-g123e4tg0-jos-projects-d1cecc0c.vercel.app`가 READY가 됐다.
 - 미추적 파일 `.codex/`, `AGENTS.md`는 사용자/환경 산출물 가능성이 있어 건드리지 않는다.
-- 현재 브랜치 `codex/admin-stores-closeout`는 원격보다 커밋 1개 앞서 있다.
 
 ## 검증 기준
 
@@ -24,5 +24,4 @@
 
 ## 다음 진입점
 
-- R1 변경을 커밋하고 seller 프리뷰 배포 READY를 확인한다.
 - 인증 가능한 프리뷰 또는 운영 미적용 환경에서 `pending-visual-verify.md` §14 #227~#230을 확인한다.
