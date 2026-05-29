@@ -8,6 +8,8 @@ import { apiJson } from '@/lib/api';
 export interface OrderStatusExtra {
   reason?: string;
   preparedAt?: string;
+  courierCompany?: string;
+  trackingNumber?: string;
 }
 
 /**

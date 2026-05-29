@@ -8,6 +8,7 @@ import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { CancelOrderModal } from './_components/CancelOrderModal';
 import { OrderInfoSection } from './_components/OrderInfoSection';
+import { ParcelShipModal } from './_components/ParcelShipModal';
 import { PrepareForm } from './_components/PrepareForm';
 import { useOrderDetail } from './_hooks/useOrderDetail';
 import { useOrderDetailActions } from './_hooks/useOrderDetailActions';
@@ -31,6 +32,8 @@ export default function OrderDetailPage() {
     setPreparedAt,
     showCancelModal,
     setShowCancelModal,
+    showParcelShipModal,
+    setShowParcelShipModal,
     cancelReason,
     setCancelReason,
     handlePrepare,
@@ -174,7 +177,7 @@ export default function OrderDetailPage() {
               )}
               {canShipParcel && (
                 <Button
-                  onClick={handleShipParcel}
+                  onClick={() => setShowParcelShipModal(true)}
                   disabled={actionLoading}
                   fullWidth
                   size="md"
@@ -217,6 +220,15 @@ export default function OrderDetailPage() {
           setActionError(null);
         }}
         onConfirm={handleCancel}
+      />
+      <ParcelShipModal
+        opened={showParcelShipModal}
+        actionLoading={actionLoading}
+        onClose={() => {
+          setShowParcelShipModal(false);
+          setActionError(null);
+        }}
+        onConfirm={handleShipParcel}
       />
     </PageShell>
   );

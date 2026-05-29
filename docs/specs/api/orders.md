@@ -467,3 +467,10 @@ export interface CreateOrderRequest {
 | 2026-04-02 | `PATCH /status` body에 `photoUrl` 파라미터 추가 (거점 하차 인증) |
 | 2026-04-02 | `GET /orders` 쿼리에 `driverId` 파라미터 추가 (Phase 2 예고) |
 | 2026-04-23 | 공동구매 수량 기반 전환 — participants → quantity 용어 통일 전체 반영 |
+
+## 2026-05-29 — 택배 발송 완료 운송장 필드
+
+- **필드**: 주문은 택배 발송 완료 시 `courierCompany?: string | null`, `trackingNumber?: string | null`을 가질 수 있다.
+- **전환 규칙**: 판매자 권한의 택배 주문 `PREPARING → DELIVERED` 전환은 `courierCompany`와 3자 이상 `trackingNumber`가 있어야 한다.
+- **저장 규칙**: API는 두 값을 trim 후 주문 문서에 저장한다.
+- **비범위**: 택배사 API 연동, 배송조회 URL 생성, 다중 운송장 저장은 포함하지 않는다.

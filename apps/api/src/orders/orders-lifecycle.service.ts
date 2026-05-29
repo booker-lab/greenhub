@@ -1,14 +1,18 @@
 import {
+  BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
-  ForbiddenException,
-  BadRequestException,
 } from '@nestjs/common';
+// biome-ignore lint/style/useImportType: Nest DI 런타임 메타데이터에 클래스 값이 필요하다.
 import { FirestoreService } from '../firestore/firestore.service';
-import { UpdateStatusDto, OrderStatus } from './dto/update-status.dto';
+// biome-ignore lint/style/useImportType: Nest DI 런타임 메타데이터에 클래스 값이 필요하다.
 import { NotificationsService } from '../notifications/notifications.service';
+// biome-ignore lint/style/useImportType: Nest DI 런타임 메타데이터에 클래스 값이 필요하다.
 import { PaymentsService } from '../payments/payments.service';
+// biome-ignore lint/style/useImportType: Nest DI 런타임 메타데이터에 클래스 값이 필요하다.
 import { SettlementsService } from '../settlements/settlements.service';
+import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
 
 @Injectable()
@@ -28,17 +32,17 @@ export class OrdersLifecycleService {
     requesterRole?: string,
   ) {
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
-    if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+    const order = snap.data();
+    if (!snap.exists || !order || order.storeId !== storeId) {
       throw new NotFoundException();
     }
-    const order = snap.data()!;
-    const currentStatus = order['status'] as OrderStatus;
+    const currentStatus = order.status as OrderStatus;
 
     // JWT role을 우선 사용, 없으면 Firestore fallback
     let role = requesterRole;
     if (!role) {
       const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
-      role = userSnap.data()?.['role'] ?? 'consumer';
+      role = userSnap.data()?.role ?? 'consumer';
     }
 
     const allowed = getAllowedTransitions(role ?? 'consumer', currentStatus);
@@ -52,30 +56,46 @@ export class OrdersLifecycleService {
       role === 'seller' &&
       currentStatus === 'PREPARING' &&
       dto.status === 'DELIVERED' &&
-      order['deliveryMethod'] !== 'parcel'
+      order.deliveryMethod !== 'parcel'
     ) {
       throw new ForbiddenException('택배 발송 완료는 택배 주문에서만 가능합니다.');
+    }
+
+    const isSellerParcelShip =
+      role === 'seller' &&
+      currentStatus === 'PREPARING' &&
+      dto.status === 'DELIVERED' &&
+      order.deliveryMethod === 'parcel';
+    const courierCompany = dto.courierCompany?.trim();
+    const trackingNumber = dto.trackingNumber?.trim();
+
+    if (isSellerParcelShip && (!courierCompany || !trackingNumber || trackingNumber.length < 3)) {
+      throw new BadRequestException('택배사와 운송장번호를 입력해야 발송 완료할 수 있습니다.');
     }
 
     const update: Record<string, unknown> = {
       status: dto.status,
       updatedAt: this.firestore.Timestamp.now(),
     };
-    if (dto.reason) update['cancelReason'] = dto.reason;
+    if (dto.reason) update.cancelReason = dto.reason;
     if (dto.status === 'PREPARING' && dto.preparedAt) {
       const date = new Date(dto.preparedAt);
-      if (isNaN(date.getTime())) {
+      if (Number.isNaN(date.getTime())) {
         throw new BadRequestException('preparedAt must be a valid ISO8601 date');
       }
-      update['preparedAt'] = this.firestore.Timestamp.fromDate(date);
+      update.preparedAt = this.firestore.Timestamp.fromDate(date);
     }
     // DELIVERING 전환 시 driverId 자동 기록
     if (dto.status === 'DELIVERING') {
-      update['driverId'] = requesterId;
+      update.driverId = requesterId;
     }
     // HUB_ARRIVED 전환 시 photoUrl 저장
     if (dto.status === 'HUB_ARRIVED' && dto.photoUrl) {
-      update['deliveryPhotoUrl'] = dto.photoUrl;
+      update.deliveryPhotoUrl = dto.photoUrl;
+    }
+    if (isSellerParcelShip) {
+      update.courierCompany = courierCompany;
+      update.trackingNumber = trackingNumber;
     }
 
     await this.firestore.doc(`orders/${orderId}`).update(update);
@@ -107,13 +127,13 @@ export class OrdersLifecycleService {
 
   async cancelOrder(storeId: string, orderId: string, userId: string, reason?: string) {
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
-    if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+    const order = snap.data();
+    if (!snap.exists || !order || order.storeId !== storeId) {
       throw new NotFoundException();
     }
-    const order = snap.data()!;
 
-    if (order['userId'] !== userId) throw new ForbiddenException();
-    if (order['status'] !== 'RECRUITING') {
+    if (order.userId !== userId) throw new ForbiddenException();
+    if (order.status !== 'RECRUITING') {
       throw new ForbiddenException('RECRUITING 상태에서만 취소 가능합니다.');
     }
 
@@ -123,7 +143,7 @@ export class OrdersLifecycleService {
     await this.payments.processRefundByOrderId(orderId, cancelReason);
 
     // 주문 상태 + 공동구매 참여자 수 원자적 업데이트
-    const gcRef = this.firestore.doc(`groupProductConfig/${order['productId']}`);
+    const gcRef = this.firestore.doc(`groupProductConfig/${order.productId}`);
     const now = this.firestore.Timestamp.now();
 
     await this.firestore.runTransaction(async (t) => {
@@ -136,7 +156,7 @@ export class OrdersLifecycleService {
       });
       if (gcSnap.exists) {
         t.update(gcRef, {
-          currentQuantity: this.firestore.FieldValue.increment(-(order['quantity'] as number)),
+          currentQuantity: this.firestore.FieldValue.increment(-(order.quantity as number)),
         });
       }
     });
@@ -148,7 +168,7 @@ export class OrdersLifecycleService {
     await this.notifications.sendToUser(
       userId,
       'GROUP_CANCELLED_SELF',
-      { orderId, productId: order['productId'] as string },
+      { orderId, productId: order.productId as string },
       orderId,
     );
 
@@ -157,14 +177,14 @@ export class OrdersLifecycleService {
 
   async reviewOrder(storeId: string, orderId: string, userId: string) {
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
-    if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+    const order = snap.data();
+    if (!snap.exists || !order || order.storeId !== storeId) {
       throw new NotFoundException();
     }
-    const order = snap.data()!;
-    if (order['userId'] !== userId) throw new ForbiddenException();
+    if (order.userId !== userId) throw new ForbiddenException();
 
     const reviewableStatuses = ['DELIVERED', 'PICKED_UP'];
-    if (!reviewableStatuses.includes(order['status'])) {
+    if (!reviewableStatuses.includes(order.status)) {
       throw new BadRequestException('DELIVERED 또는 PICKED_UP 상태에서만 리뷰 가능합니다.');
     }
 
@@ -181,15 +201,15 @@ export class OrdersLifecycleService {
 
   async confirmPickup(storeId: string, orderId: string, userId: string, pickupCode: string) {
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
-    if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+    const order = snap.data();
+    if (!snap.exists || !order || order.storeId !== storeId) {
       throw new NotFoundException();
     }
-    const order = snap.data()!;
-    if (order['userId'] !== userId) throw new ForbiddenException();
-    if (order['status'] !== 'HUB_ARRIVED') {
+    if (order.userId !== userId) throw new ForbiddenException();
+    if (order.status !== 'HUB_ARRIVED') {
       throw new BadRequestException('HUB_ARRIVED 상태에서만 픽업 확인 가능');
     }
-    if (order['pickupCode'] !== pickupCode) {
+    if (order.pickupCode !== pickupCode) {
       throw new BadRequestException('픽업 코드가 올바르지 않습니다.');
     }
 
@@ -212,20 +232,20 @@ export class OrdersLifecycleService {
   ) {
     // seller 소유권 검증
     const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
-    if (!storeSnap.exists || storeSnap.data()?.['ownerId'] !== requesterId) {
+    if (!storeSnap.exists || storeSnap.data()?.ownerId !== requesterId) {
       throw new ForbiddenException('해당 스토어에 대한 권한이 없습니다');
     }
 
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
-    if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+    const order = snap.data();
+    if (!snap.exists || !order || order.storeId !== storeId) {
       throw new NotFoundException();
     }
-    const order = snap.data()!;
 
-    if (order['status'] !== 'HUB_ARRIVED') {
+    if (order.status !== 'HUB_ARRIVED') {
       throw new BadRequestException('HUB_ARRIVED 상태에서만 픽업 확인 가능');
     }
-    if (order['pickupCode'] !== pickupCode) {
+    if (order.pickupCode !== pickupCode) {
       throw new BadRequestException('픽업 코드가 올바르지 않습니다.');
     }
 
@@ -249,7 +269,7 @@ export class OrdersLifecycleService {
     to: OrderStatus,
     orderId: string,
   ) {
-    const isGroup = order['saleType'] === 'group';
+    const isGroup = order.saleType === 'group';
 
     // 공동구매 전용 템플릿 오버라이드 (스펙: 전체 참여자 알림 필요)
     const GROUP_TEMPLATE_OVERRIDES: Partial<
@@ -276,13 +296,13 @@ export class OrdersLifecycleService {
 
     if (isGroup && GROUP_TEMPLATES.includes(templateCode)) {
       await this.notifications.sendToGroupParticipants(
-        order['productId'] as string,
+        order.productId as string,
         templateCode as any,
         variables,
       );
     } else {
       await this.notifications.sendToUser(
-        order['userId'] as string,
+        order.userId as string,
         templateCode as any,
         variables,
         orderId,
