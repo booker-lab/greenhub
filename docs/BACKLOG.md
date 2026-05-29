@@ -129,6 +129,10 @@
 - [x] `/admin/invite` — 초대 토큰 발급 ✅ 2026-04-03
 - [x] `/admin/drivers` — 드라이버 승인 대기·승인·정지 관리 ✅ 2026-04-03
 - [x] **[어드민-반응형] `/admin/*` 모바일 PWA 폭 미최적화** ✅ 2026-05-25 세션88 (#246/247 종결, #CL-51) — 5개 테이블(settlements·orders·stores·invite·users)을 **C-full(전부 카드형)·breakpoint `sm`(768px)** 으로 전환. Mantine `hiddenFrom`/`visibleFrom` 분기 도입(셀러 앱 최초 반응형 분기), 데스크톱 테이블 DOM 불변(회귀 0). 모바일에서 지급처리/강제환불/정지·복구/수수료설정 버튼 카드 내 풀폭 노출로 접근 결함 해소. 정합성 C1~C6 통과(tsc·biome·build exit0, 500라인 한도, SSOT 토큰 0위반). e2e=어드민 스펙 부재+순수 표현 레이어라 대상 없음. **잔여=모바일 폭 카드 육안 검증(사용자 위임).** 상세 [#CL-51], 플랜 [admin-responsive-plan.md](specs/frontend/admin-responsive-plan.md).
+- [x] **[어드민-users 개선 S1~S5] 소비자 탭 검색·필터·표시·정지 refresh 차단** ✅ 2026-05-29 (#CL-55 §E) — S1 `/auth/refresh` 정지 사용자 401 차단+단위 테스트, S2 가입일·전화·새로고침 버튼, S3 이름·이메일·전화 검색+전체/정상/정지 필터+vitest, S4 `createdAt desc`·`limit(5000)`+Firestore 인덱스 정의, S5 `admin-users.spec.ts` 14건 신설. **잔여=새 코드 반영 프리뷰에서 S5 재실행, 인덱스 운영 배포, §5 육안 검증.**
+- [ ] **[ADMIN-SETTLEMENTS-F4] 스토어명 표시·Select화** — `/admin/settlements` 필터와 행/카드가 `storeId` 중심이라 운영자가 가게를 식별하기 어렵다. `useAdminStores` 재사용 또는 경량 `{id→name}` 매핑을 검토하고, 스토어명 Select 필터·표시·검색 계약을 포함해 **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-settlements-plan.md` F4.
+- [ ] **[ADMIN-SETTLEMENTS-F3] 500건 하드캡 페이지네이션** — 현재 `getSettlements`가 최대 500건으로 제한되어 초과분이 조용히 누락될 수 있다. 커서 기반 페이지네이션, "더 있음" 표시, 정렬·status·storeId·기간 복합 필터의 커서 계약, Firestore 인덱스 영향을 포함해 **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-settlements-plan.md` F3.
+- [ ] **[ADMIN-SETTLEMENTS-A1] 입금일 표시** — `/admin/settlements` 행/카드에 `confirmedAt`·`paidAt` 기반 입금 예정/완료 시점을 표시해 운영자가 지급 상태를 한눈에 확인하도록 한다. 셀러 정산 화면 T3 패턴이 안정된 뒤 표현 규칙을 맞춰 흡수 검토하며, **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-settlements-plan.md` D-11 A1.
 - [ ] **[ADMIN-STORES-T7] 판매자 상세 드릴다운** — `/admin/stores`에서 store별 주문·정산 집계와 상세 화면으로 진입하는 운영 동선. 집계 API·상세 라우트·관리자 권한 경계·목록 URL 복원 계약을 포함하므로 **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-stores-plan.md` T7.
 - [ ] **[ADMIN-STORES-T8] 플랫폼 기본 수수료율 설정** — 신규/기존 store에 적용할 전역 기본 수수료 정책과 설정 UI. 전역 config 데이터모델·store별 override 우선순위·소급 여부·`parseRate(input, { min, max })` 확장을 포함하므로 **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-stores-plan.md` T8.
 
@@ -706,6 +710,10 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 
 - [ ] G1: `apps/seller/src/app/hubs/[id]/page.tsx` — 거점 수정 페이지 (Phase B 잔여)
 - [ ] Driver Kakao Maps SDK 연동
+- [ ] **[ADMIN-ORDERS-A2] 어드민 송장번호 사후 수정** — 셀러 측 “송장 저장 후 수정 허용 여부” 정책이 확정되면, 어드민 주문 상세에서도 같은 정책·검증·감사 로그 기준으로 송장번호 수정 동선을 검토한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` B-8.5 A2. **별도 SDD 선작성 후 구현**.
+- [ ] **[ADMIN-ORDERS-F3-FULL] 어드민 주문 정식 상세** — 현재는 `/admin/orders` 목록 응답 기반 1차 읽기 전용 모달만 완료. 후속으로 상품 라인별 상세, 결제 타임라인, 상태 변경 이력, 별도 상세 조회 API/라우트를 설계한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` B-9. **별도 SDD 선작성 후 구현**.
+- [ ] **[ADMIN-ORDERS-F5-ADV] 어드민 주문 고급 페이지네이션** — 1차 `createdAt` cursor `더 보기`는 완료. 후속으로 총 건수 정확 계산, 이전 페이지, 임의 페이지 번호, `createdAt` 외 컬럼 정렬을 검토한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` B-10. **별도 SDD 선작성 후 구현**.
+- [ ] **[ORDER-STATUS-LABEL-SSOT] 주문 상태 라벨 4앱 통일** — 어드민·셀러·소비자 주문 상태 라벨 표현을 shared SSOT로 통합한다. 현재 `픽업완료`/`픽업 완료`처럼 앱별 표기 차이가 있어 전 앱 영향 범위와 회귀 검증을 별도 설계한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` C-out. **별도 SDD 선작성 후 구현**.
 
 #### [ ] P4 — e2e 안정성·CI 정비 (세션36 관찰 등재)
 
