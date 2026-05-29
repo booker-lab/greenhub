@@ -246,7 +246,7 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - [x] **S7-4.** **육안 검증 문서 `pending-visual-verify-20260529.md`에 드라이버 탭 공통화 회귀 항목을 추가한다.**
 - [x] **S7-5.** **정합성검토** — 변경 파일 Biome 0, `pnpm --filter seller exec tsc --noEmit` 0, `pnpm --filter seller build` 0, 500라인 제한 통과.
 - [x] **S7-6.** **커밋** — `refactor(admin): #CL-55 drivers 탭 SegmentedTabs 통일 (R2)`.
-- [ ] **S7-7.** **배포 확인** — seller 프리뷰 READY 확인 후, 실제 육안 회귀는 추가된 육안검증 항목에서 추적한다.
+- [x] **S7-7.** **배포 확인** — seller 프리뷰 `https://greenhub-seller-e8kj81qno-jos-projects-d1cecc0c.vercel.app`가 READY. 실제 육안 회귀는 `pending-visual-verify-20260529.md` §25 #231~#234에서 추적한다. 로컬 e2e는 `AUTH_SECRET` 누락으로 `/api/auth/csrf` 500에서 차단됐고, 기본 운영 URL 대상 실행은 아직 이전 배포를 보아 2/10만 통과했다.
 
 ---
 
