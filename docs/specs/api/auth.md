@@ -235,6 +235,8 @@ POST /auth/refresh
 ```
 
 > NextAuth.js가 내부적으로 처리. 클라이언트에서 직접 호출 불필요.
+> 리프레시 토큰 rotation 검증 후 `users/{userId}.suspended === true`이면 `401`을 반환한다.
+> 이미 발급된 access token은 자연 만료까지 유효하지만, 정지 사용자는 새 access token을 받을 수 없다.
 
 ---
 
@@ -327,6 +329,7 @@ PATCH /auth/me/fcm-token
 |------|----------|
 | 비밀번호 저장 | bcrypt (saltRounds: 12) |
 | JWT 만료 | accessToken 1시간 / refreshToken 30일 |
+| 정지 사용자 차단 | 이메일·카카오 로그인 및 `/auth/refresh`에서 `suspended === true`이면 401 |
 | storeId 위조 | JWT 클레임 `storeId`와 경로 `:storeId` 일치 검증 (Guard) |
 | 타인 주문 접근 | `userId` 클레임과 `orders.userId` 일치 검증 |
 | 소셜 계정 연결 | 동일 이메일로 이미 존재하는 계정에 provider 추가 병합 |
@@ -383,3 +386,4 @@ export interface UserProfile {
 | 날짜 | 내용 |
 |------|------|
 | 2026-03-26 | 초안 작성 — PWA 설계 문서 + 1단계 요구사항 기반 통합 |
+| 2026-05-29 | 정지 사용자 refresh 차단 명세 추가 — 새 access token 재발급 방지 |
