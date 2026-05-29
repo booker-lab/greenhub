@@ -2,11 +2,11 @@
 
 import { Paper, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import type { Dispatch, SetStateAction } from 'react';
-import type { AdminBanner, BannerCta } from '@/hooks/useAdmin';
+import type { AdminBannerForm, BannerCta } from '@/hooks/useAdmin';
 
 interface BannerCtaSectionProps {
-  form: AdminBanner;
-  setForm: Dispatch<SetStateAction<AdminBanner>>;
+  form: AdminBannerForm;
+  setForm: Dispatch<SetStateAction<AdminBannerForm>>;
   error?: string | null;
 }
 
@@ -14,7 +14,7 @@ type CtaKey = 'cta1' | 'cta2';
 type CtaField = keyof BannerCta;
 
 function updateCta(
-  setForm: Dispatch<SetStateAction<AdminBanner>>,
+  setForm: Dispatch<SetStateAction<AdminBannerForm>>,
   key: CtaKey,
   field: CtaField,
   value: string,

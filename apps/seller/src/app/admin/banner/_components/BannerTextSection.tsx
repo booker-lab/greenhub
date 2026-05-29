@@ -2,11 +2,11 @@
 
 import { Paper, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import type { Dispatch, SetStateAction } from 'react';
-import type { AdminBanner } from '@/hooks/useAdmin';
+import type { AdminBannerForm } from '@/hooks/useAdmin';
 
 interface BannerTextSectionProps {
-  form: AdminBanner;
-  setForm: Dispatch<SetStateAction<AdminBanner>>;
+  form: AdminBannerForm;
+  setForm: Dispatch<SetStateAction<AdminBannerForm>>;
 }
 
 export function BannerTextSection({ form, setForm }: BannerTextSectionProps) {

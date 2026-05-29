@@ -39,3 +39,5 @@
 - 공유 패키지에 `BannerKind`, `AdminBanner`, `ActiveBannersResponse`를 추가하고 dist 산출물을 갱신했다. `migrate-banners-kind.ts` 일회성 스크립트로 기존 `banners/main_hero`에 `kind:'default'`와 `id:'main_hero'`를 병합할 수 있게 했다.
 - 검증: Biome 0, `pnpm --filter api test -- admin-banners.service.spec.ts banner-query.service.spec.ts --runInBand` 6/6, `pnpm --filter api exec tsc --noEmit` 0, shared/api/seller/consumer/driver build 0. 루트 `npm run build`는 기존 필터 문제로 shared만 빌드하고 앱은 매칭하지 못했다.
 - 육안검증 항목은 `pending-visual-verify-20260529.md` §27 #240~#245에 추가했다. `pending-visual-verify.md` 본문은 500라인에 가까워 분리 문서를 사용했다.
+- 2026-05-30 어드민 배너 다중 배너 SDD S5를 진행했다. `/admin/banner`를 목록형 UI로 바꾸고 `useAdminBanners` 훅, 기본/기간 배너 목록, 추가·수정 Drawer, 기간 입력, 저장 전 검증, 라이브 미리보기를 추가했다. `useAdmin.ts`는 397라인으로 줄여 500라인 한도를 지켰다.
+- S5 육안검증 항목은 `pending-visual-verify-20260529.md` §28 #246~#254에 추가했다. 검증: `pnpm --filter seller lint`는 기존 `noImgElement` 경고 2건만 출력, `pnpm --filter seller build` 0.
