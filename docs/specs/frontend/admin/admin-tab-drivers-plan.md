@@ -235,6 +235,19 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - 각 세션 사이 사용자 운영 배포·육안 통과 대기 반드시.
 - 육안 = `pending-visual-verify.md` §5(S1 단계에서 신설).
 
+### 세션 S7 — R2 (공통 SegmentedTabs 통일)
+
+> **세션 단독 목표**: 드라이버 status 탭의 인라인 스타일 중복을 공통 `SegmentedTabs`로 통일한다. 탭 키·서버 재조회·검색·새로고침·액션 동작은 변경하지 않는다.
+
+#### S7 체크리스트
+- [x] **S7-1.** `STATUS_TABS`를 공통 `SegmentedTabs` 입력 형식(`key`, `label`)으로 맞춘다.
+- [x] **S7-2.** `_client.tsx`의 탭 인라인 JSX와 `UnstyledButton` 의존을 제거하고 `SegmentedTabs`를 사용한다.
+- [x] **S7-3.** `SegmentedTabs`는 모바일 폭에서 4개 탭이 잘리지 않도록 `layout="scroll"`로 호출한다.
+- [x] **S7-4.** **육안 검증 문서 `pending-visual-verify-20260529.md`에 드라이버 탭 공통화 회귀 항목을 추가한다.**
+- [x] **S7-5.** **정합성검토** — 변경 파일 Biome 0, `pnpm --filter seller exec tsc --noEmit` 0, `pnpm --filter seller build` 0, 500라인 제한 통과.
+- [x] **S7-6.** **커밋** — `refactor(admin): #CL-55 drivers 탭 SegmentedTabs 통일 (R2)`.
+- [ ] **S7-7.** **배포 확인** — seller 프리뷰 READY 확인 후, 실제 육안 회귀는 추가된 육안검증 항목에서 추적한다.
+
 ---
 
 ## 참고 문서
