@@ -155,3 +155,10 @@
 - `/admin/invite` hook·타입·상태 판정·UI를 확장했다. 유효 토큰에만 취소 아이콘이 보이고, Mantine 확인창은 토큰 전체 16자와 가입 불가 문구를 보여준다. `@mantine/modals`를 seller 의존성에 추가하고 Provider에 연결했다.
 - `pending-visual-verify-20260529.md` §22 #195~#200에 육안검증 항목을 추가했다. 로컬 브라우저는 `/admin/invite`가 `/login`으로 리다이렉트되고 기존 Firebase 공개 env/Auth.js 설정 오류로 실제 화면 진입이 차단되어 운영/프리뷰 확인 대상으로 남겼다.
 - 검증: API 단위 테스트 `admin.service.spec.ts` 42/42, API·seller tsc 0, API·seller build 0, shared build 0, seller 변경 파일 Biome 0, API admin 변경 파일 Biome 0. `auth.service.ts`를 포함한 API 전체 lint는 기존 `any`·non-null 부채로 실패한다. 변경 코드 파일과 `memory.md`는 500/200라인 미만.
+
+## 2026-05-29 어드민 초대 탭 S-C prefix 검색
+- `GET /admin/invite?q=`가 4자 이상 토큰 prefix만 Firestore range 검색하고, 3자 이하는 기존 최신 50건으로 보호한다.
+- `/admin/invite` 발급 내역 위에 300ms debounce 검색 입력을 추가했고, 4자 이상 검색 결과가 없으면 `일치하는 토큰이 없습니다.`를 표시한다.
+- `pending-visual-verify-20260529.md` §23 #201~#206에 검색 관련 육안검증 항목을 추가했다.
+- 검증: API 단위 테스트 `admin.service.spec.ts` 42/42, API·seller tsc 0, API·seller build 0, 변경 파일 Biome 0. 첫 seller tsc는 stale `.next/types`로 실패했으나 build 후 재실행 통과. 변경 코드 파일과 `memory.md`는 500/200라인 미만.
+- 다음: S-D(T10~T11) 취소 동작·취소 토큰 가입 차단 e2e.

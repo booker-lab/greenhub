@@ -1,19 +1,26 @@
 'use client';
 
-import { Box, Group, Text, Title } from '@mantine/core';
+import { Box, Group, Text, TextInput, Title } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
+import { Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { type InviteRevokeReason, useAdminInvite } from '@/hooks/useAdmin';
 import { InviteGenerator } from './_components/InviteGenerator';
 import { InviteHistoryTable } from './_components/InviteHistoryTable';
 
 export default function AdminInviteClient() {
-  const { invites, loading, generating, generate, revoke } = useAdminInvite();
+  const { invites, loading, generating, query, setQuery, generate, revoke } = useAdminInvite();
   const [lastToken, setLastToken] = useState<{ token: string; expiresAt: string } | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [revokingToken, setRevokingToken] = useState<string | null>(null);
+  const [searchValue, setSearchValue] = useState(query);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(searchValue), 300);
+    return () => clearTimeout(timer);
+  }, [searchValue, setQuery]);
 
   useEffect(() => {
     return () => {
@@ -122,9 +129,18 @@ export default function AdminInviteClient() {
       >
         발급 내역
       </Text>
+      <TextInput
+        aria-label="초대 토큰 검색"
+        leftSection={<Search size={16} />}
+        value={searchValue}
+        onChange={(event) => setSearchValue(event.currentTarget.value)}
+        placeholder="토큰 4자 이상 검색"
+        mb="sm"
+      />
       <InviteHistoryTable
         invites={invites}
         loading={loading}
+        searchActive={query.trim().length >= 4}
         copiedToken={copiedToken}
         revokingToken={revokingToken}
         onCopyToken={handleCopyToken}

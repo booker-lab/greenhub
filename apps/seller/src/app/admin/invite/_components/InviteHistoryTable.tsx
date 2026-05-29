@@ -8,6 +8,7 @@ import { formatExpiry, formatInviteDateTime, inviteStatus } from '../_lib';
 interface InviteHistoryTableProps {
   invites: InviteToken[];
   loading: boolean;
+  searchActive: boolean;
   copiedToken: string | null;
   revokingToken: string | null;
   onCopyToken: (token: string) => void;
@@ -73,6 +74,7 @@ function RevokeTokenButton({
 export function InviteHistoryTable({
   invites,
   loading,
+  searchActive,
   copiedToken,
   revokingToken,
   onCopyToken,
@@ -94,7 +96,7 @@ export function InviteHistoryTable({
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
       >
         <Text ta="center" py={48} style={{ color: 'var(--color-text-disabled)' }}>
-          발급된 토큰이 없습니다.
+          {searchActive ? '일치하는 토큰이 없습니다.' : '발급된 토큰이 없습니다.'}
         </Text>
       </Paper>
     );

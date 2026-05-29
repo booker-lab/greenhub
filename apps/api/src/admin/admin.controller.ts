@@ -112,8 +112,8 @@ export class AdminController {
   }
 
   @Get('invite')
-  getInvites() {
-    return this.admin.getInvites();
+  getInvites(@Query('q') q?: string) {
+    return this.admin.getInvites(q);
   }
 
   @Post('invite/:token/revoke')
