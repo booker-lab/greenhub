@@ -57,8 +57,6 @@ export class AdminService {
     private readonly payments: PaymentsService,
   ) {}
 
-  // ── Stores ──────────────────────────────────────────────────────
-
   async getStores() {
     const snap = await (
       this.firestore.collection('stores').orderBy('createdAt', 'desc') as any
@@ -119,8 +117,6 @@ export class AdminService {
     return { storeId, status: 'active' };
   }
 
-  // ── Users ────────────────────────────────────────────────────────
-
   async getUsers() {
     const snap = await (
       this.firestore
@@ -150,8 +146,6 @@ export class AdminService {
     });
     return { userId, suspended: dto.suspended };
   }
-
-  // ── Orders ───────────────────────────────────────────────────────
 
   async getOrders(dto: QueryAdminOrdersDto) {
     let query = this.firestore.collection('orders') as any;
@@ -280,8 +274,6 @@ export class AdminService {
     return { settlementId, status: 'paid' };
   }
 
-  // ── Drivers ──────────────────────────────────────────────────────
-
   async bulkMarkAsPaid(ids: string[]) {
     const uniqueIds = [...new Set(ids)];
     const ok: string[] = [];
@@ -323,25 +315,40 @@ export class AdminService {
   }
 
   async getDrivers(dto: QueryAdminDriversDto) {
+    type DriverRow = {
+      id: string;
+      name: string;
+      email: string | null;
+      driverApproved: boolean;
+      suspended?: boolean;
+      createdAt: unknown;
+    };
+
     // 복합 인덱스 없이도 동작하도록 role 단일 필터 후 메모리 필터링
     const snap = await (
       this.firestore.collection('users').where('role', '==', 'driver').limit(100) as any
     ).get();
 
-    let drivers = snap.docs.map((d: any) => {
-      const { passwordHash: _pw, ...user } = d.data();
-      return user;
-    });
+    let drivers: DriverRow[] = snap.docs.map(
+      (d: { data: () => DriverRow & { passwordHash?: unknown } }) => {
+        const { passwordHash: _pw, ...user } = d.data();
+        return user;
+      },
+    );
 
     if (dto.status === 'pending') {
-      drivers = drivers.filter((d: any) => !d.driverApproved && !d.suspended);
+      drivers = drivers.filter((d) => !d.driverApproved && !d.suspended);
     } else if (dto.status === 'approved') {
-      drivers = drivers.filter((d: any) => d.driverApproved && !d.suspended);
+      drivers = drivers.filter((d) => d.driverApproved && !d.suspended);
     } else if (dto.status === 'suspended') {
-      drivers = drivers.filter((d: any) => d.suspended);
+      drivers = drivers.filter((d) => d.suspended);
     }
 
-    drivers.sort((a: any, b: any) => (b.createdAt?._seconds ?? 0) - (a.createdAt?._seconds ?? 0));
+    const getCreatedSeconds = (value: unknown) =>
+      typeof value === 'object' && value !== null && '_seconds' in value
+        ? ((value as { _seconds?: number })._seconds ?? 0)
+        : 0;
+    drivers.sort((a, b) => getCreatedSeconds(b.createdAt) - getCreatedSeconds(a.createdAt));
 
     return { drivers, total: drivers.length };
   }

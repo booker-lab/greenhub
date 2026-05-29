@@ -152,11 +152,11 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 > **선행 조건**: S1이 운영 배포·육안 통과 완료. S1 미통과 상태에서 S2 진입 금지.
 
 #### S2 체크리스트
-- [ ] **S2-1.** `admin.service.ts` `getDrivers` 내부에 로컬 `interface DriverRow` 신설 — `id`·`name`·`email`·`driverApproved: boolean`·`suspended?: boolean`·`createdAt: unknown`. `d.data() as DriverRow`로 좁히기.
-- [ ] **S2-2.** `DriverBadge.tsx`에서 `suspended` 분기를 `!!driver.suspended`로 명시.
-- [ ] **S2-3.** `DriverList.tsx`에서 액션 버튼 분기(`driver.suspended ? '복구' : '정지'`)를 `!!driver.suspended` 기준으로 명시.
-- [ ] **S2-4.** `AdminDriver.suspended`는 **옵셔널 유지**(`suspended?: boolean`) — 데이터 진실 보존. 타입 변경 금지.
-- [ ] **S2-5.** **정합성검토 (C1~C7 — §0 공통 기준)**.
+- [x] **S2-1.** `admin.service.ts` `getDrivers` 내부에 로컬 `DriverRow` 타입 신설 — `id`·`name`·`email`·`driverApproved: boolean`·`suspended?: boolean`·`createdAt: unknown`. `d.data()` 반환 타입을 좁힘.
+- [x] **S2-2.** `DriverBadge.tsx`에서 `suspended` 분기를 `!!driver.suspended`로 명시.
+- [x] **S2-3.** `DriverList.tsx`에서 액션 버튼 분기(`driver.suspended ? '복구' : '정지'`)를 `!!driver.suspended` 기준으로 명시.
+- [x] **S2-4.** `AdminDriver.suspended`는 **옵셔널 유지**(`suspended?: boolean`) — 데이터 진실 보존. 타입 변경 금지.
+- [x] **S2-5.** **정합성검토 (C1~C7 — §0 공통 기준)**.
   - C1 tsc 0 (특히 `getDrivers` 좁히기로 `any` 경고 사라지는지 확인)
   - C2 biome 0
   - C3 `npm run build` 0
@@ -164,7 +164,7 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
   - C5 SSOT 토큰 (변경 없음)
   - C6 가드 유지 (변경 없음)
   - C7 시각 회귀 0 (런타임 영향 0 → DOM 동일)
-- [ ] **S2-6.** **커밋** — `refactor(admin): #CL-55 drivers 탭 any 제거·suspended 분기 정규화 (T2)`. 푸시·배포는 사용자 지시 대기.
+- [x] **S2-6.** **커밋** — `refactor(admin): #CL-55 drivers 탭 any 제거·suspended 분기 정규화 (T2)`. 푸시·배포는 사용자 지시 대기.
 - [ ] **S2-7.** **운영 배포 후 육안 통과 (§5 재사용 — 시각·기능 회귀 0 확인)** — 통과 시 S2 종결, S3 진입 가능.
 
 ### 세션 S3 — e2e (4탭 재조회·자명 노출 증명)

@@ -2,7 +2,7 @@
 > **SSOT**: 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` · `archive/memory_archive_20260529.md`
 
-최종 수정: 2026-05-29 (어드민 초대 탭 S-B 토큰 취소)
+최종 수정: 2026-05-29 (어드민 드라이버 탭 S2 타입 정규화)
 
 ---
 
@@ -87,6 +87,11 @@
 - 신규 기능은 `docs/specs/` 선설계 후 구현한다.
 - 결정 발생 시 `docs/CRITICAL_LOGIC.md`에 기록한다. 1000라인 초과 시 종결·SUPERSEDED 항목을 `docs/archive/`로 이관한다.
 - 단일 코드 파일 500라인 초과 금지. `docs/CRITICAL_LOGIC.md`, `docs/BACKLOG.md`, memory archive는 누적 로그 예외다.
+
+## 2026-05-29 어드민 드라이버 탭 S2 타입 정규화
+- `admin-tab-drivers-plan.md` S2(T2)를 진행해 `AdminService.getDrivers()` 내부 `any`를 로컬 `DriverRow` 타입으로 좁히고, `createdAt` 정렬 접근도 `unknown` 가드로 정리했다.
+- `DriverBadge`와 `DriverList`의 `suspended` 옵셔널 분기를 `!!driver.suspended` 기반 상수로 명시했고, `AdminDriver.suspended?: boolean`은 유지했다.
+- `pending-visual-verify.md` §14 #219에 S2 런타임 회귀 확인 항목을 추가했다. 검증: API/seller/consumer/driver tsc 0, 변경 파일 Biome 0, 루트 build 0(앱 필터 미매칭), API·seller 개별 build 0. 변경 파일과 `memory.md`는 라인 제한 미만.
 
 ## 2026-05-29 판매자 택배 운송장 필수화
 - `seller-orders-improve-plan.md` 짠A를 이어서 택배 `PREPARING → DELIVERED` 전환 전 택배사와 운송장번호를 받는 Mantine 모달을 추가했다.
