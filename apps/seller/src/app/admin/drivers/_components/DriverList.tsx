@@ -2,7 +2,7 @@
 
 import { Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminDriver } from '@/hooks/useAdmin';
-import type { DriverAction } from '../_lib';
+import { type DriverAction, formatDriverCreatedAt } from '../_lib';
 import { DriverBadge } from './DriverBadge';
 
 interface DriverListProps {
@@ -58,6 +58,11 @@ export function DriverList({ drivers, loading, processingId, onAction }: DriverL
                   truncate
                 >
                   {driver.email ?? '이메일 없음'}
+                </Text>
+                <Text
+                  style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-disabled)' }}
+                >
+                  가입일 {formatDriverCreatedAt(driver.createdAt)}
                 </Text>
               </Box>
 
