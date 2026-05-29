@@ -1,6 +1,7 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { Eye } from 'lucide-react';
 import type { AdminOrder } from '@/hooks/useAdmin';
 import { getStatusColor, REFUNDABLE, STATUS_LABEL } from '../_lib';
 
@@ -8,7 +9,8 @@ interface OrdersTableProps {
   orders: AdminOrder[];
   loading: boolean;
   processingId: string | null;
-  onRefund: (orderId: string) => void;
+  onView: (order: AdminOrder) => void;
+  onRefund: (order: AdminOrder) => void;
 }
 
 const thBase = {
@@ -17,7 +19,35 @@ const thBase = {
   color: 'var(--color-text-secondary)',
 };
 
-export function OrdersTable({ orders, loading, processingId, onRefund }: OrdersTableProps) {
+function hasTracking(order: AdminOrder) {
+  return Boolean(order.courierCompany?.trim() && order.trackingNumber?.trim());
+}
+
+function TrackingInfo({ order }: { order: AdminOrder }) {
+  if (!hasTracking(order)) {
+    return (
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        -
+      </Text>
+    );
+  }
+
+  return (
+    <Stack gap={2}>
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+        {order.courierCompany}
+      </Text>
+      <Text
+        ff="monospace"
+        style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-disabled)' }}
+      >
+        {order.trackingNumber}
+      </Text>
+    </Stack>
+  );
+}
+
+export function OrdersTable({ orders, loading, processingId, onView, onRefund }: OrdersTableProps) {
   if (loading) {
     return (
       <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
@@ -77,22 +107,43 @@ export function OrdersTable({ orders, loading, processingId, onRefund }: OrdersT
             >
               스토어 {order.storeId.slice(0, 8)}…
             </Text>
+            <Group justify="space-between" align="flex-start" mt="xs" gap="md">
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              >
+                송장
+              </Text>
+              <Box style={{ textAlign: 'right', minWidth: 0 }}>
+                <TrackingInfo order={order} />
+              </Box>
+            </Group>
             <Group justify="space-between" align="center" mt="xs">
               <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
                 ₩{order.totalAmount.toLocaleString()}
               </Text>
-              {REFUNDABLE.includes(order.status) && (
+              <Group gap="xs">
                 <Button
-                  onClick={() => onRefund(order.id)}
-                  disabled={processingId === order.id}
+                  onClick={() => onView(order)}
                   size="xs"
-                  variant="outline"
-                  color="red"
+                  variant="light"
+                  color="gray"
                   radius="md"
                 >
-                  {processingId === order.id ? '처리중…' : '강제환불'}
+                  상세
                 </Button>
-              )}
+                {REFUNDABLE.includes(order.status) && (
+                  <Button
+                    onClick={() => onRefund(order)}
+                    disabled={processingId === order.id}
+                    size="xs"
+                    variant="outline"
+                    color="red"
+                    radius="md"
+                  >
+                    {processingId === order.id ? '처리중…' : '강제환불'}
+                  </Button>
+                )}
+              </Group>
             </Group>
           </Paper>
         ))}
@@ -125,6 +176,9 @@ export function OrdersTable({ orders, loading, processingId, onRefund }: OrdersT
               </Box>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
                 상태
+              </Box>
+              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
+                송장
               </Box>
               <Box component="th" style={{ ...thBase, textAlign: 'right' }}>
                 금액
@@ -166,6 +220,9 @@ export function OrdersTable({ orders, loading, processingId, onRefund }: OrdersT
                     {STATUS_LABEL[order.status] ?? order.status}
                   </Badge>
                 </Box>
+                <Box component="td" style={{ padding: '12px 16px' }}>
+                  <TrackingInfo order={order} />
+                </Box>
                 <Box
                   component="td"
                   style={{
@@ -177,18 +234,32 @@ export function OrdersTable({ orders, loading, processingId, onRefund }: OrdersT
                   ₩{order.totalAmount.toLocaleString()}
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
-                  {REFUNDABLE.includes(order.status) && (
-                    <Button
-                      onClick={() => onRefund(order.id)}
-                      disabled={processingId === order.id}
-                      size="xs"
-                      variant="outline"
-                      color="red"
-                      radius="md"
-                    >
-                      {processingId === order.id ? '처리중…' : '강제환불'}
-                    </Button>
-                  )}
+                  <Group gap="xs" justify="flex-end">
+                    <Tooltip label="상세 보기">
+                      <ActionIcon
+                        aria-label={`${order.orderNumber ?? order.id} 상세 보기`}
+                        onClick={() => onView(order)}
+                        variant="subtle"
+                        color="gray"
+                        radius="md"
+                        size="sm"
+                      >
+                        <Eye size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                    {REFUNDABLE.includes(order.status) && (
+                      <Button
+                        onClick={() => onRefund(order)}
+                        disabled={processingId === order.id}
+                        size="xs"
+                        variant="outline"
+                        color="red"
+                        radius="md"
+                      >
+                        {processingId === order.id ? '처리중…' : '강제환불'}
+                      </Button>
+                    )}
+                  </Group>
                 </Box>
               </Box>
             ))}

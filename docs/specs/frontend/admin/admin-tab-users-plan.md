@@ -128,12 +128,9 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 - **위험:** C6 가드 누락 시 필터 사라짐 회귀. tsc·biome·build 통과 + 육안 검증.
 
 #### **T4. getUsers 백엔드 limit·정렬 (E-2 한도)**
-- **변경:** `apps/api/src/admin/admin.service.ts:86 getUsers()`에 `.orderBy('createdAt','desc').limit(N)` 추가.
-- **limit 값:** **사용자가 현 운영 user 수 확인 후 결정.**
-  - <100 = 보류(BACKLOG에만 기록)
-  - 100~1,000 = `limit(5000)` (T3 클라이언트 필터와 모순 없는 큰 캡)
-  - 1,000+ = 서버 검색(Firestore where prefix) 별도 SDD로 승격
-- **선행 = T3 PR 머지 후(클라이언트 필터의 한계 측정 후 적정 limit 결정 가능).**
+- **변경:** `apps/api/src/admin/admin.service.ts:86 getUsers()`에 `.orderBy('createdAt','desc').limit(5000)` 추가.
+- **limit 값:** `5000`으로 확정. T3 클라이언트 필터와 모순 없는 큰 캡을 두되, 5000건 초과 운영 규모가 확인되면 서버 검색·커서 페이지네이션을 별도 SDD로 승격한다.
+- **선행 = T3 PR 머지 후(클라이언트 필터의 한계 측정 후 적정 limit 결정 가능).** 2026-05-29 S4에서 반영 완료.
 - **위험:** 정렬 추가 시 Firestore 복합 인덱스 필요 가능 → 배포 전 인덱스 확인(세션80 선례).
 
 ### 별도 SDD — 본 범위 제외 (E-7 제외군)
@@ -154,7 +151,7 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 | **S2** | T1+T2 묶음 | `UsersTable.tsx` 가입일·전화 표시 + `_client.tsx` 새로고침 버튼 | C1~C5, C7 | 저위험. 모바일 카드 높이 회귀 의도적 |
 | **S3** | T3 단독 | `UsersFilters.tsx`·`_lib.ts`·`_lib.test.ts` 신설 + `_client.tsx` 통합 | C1~C7 전부 | 본 범위 핵심. vitest 첫 통과 후 PR |
 | **S4** | T4 단독 | `admin.service.ts:getUsers` limit·orderBy + 인덱스 배포 | C1~C3, 인덱스 확인 | user 수 확인 후 limit 값 확정 |
-| **S5** | e2e | §E-9 시나리오 4건 라이브 수행 | playwright 0 fail | S1~S4 코드 머지 후 |
+| **S5** | e2e | `apps/e2e/tests/admin-users.spec.ts` 신설 | 새 코드 반영 프리뷰에서 playwright 0 fail | fixture 격리로 운영 DB 쓰기 0 |
 | **S6** | 육안 종결 | `pending-visual-verify.md` §추가 항목 전수 통과 | 사용자 확정 | 운영 배포 후 |
 
 ### 세션 간 의존
@@ -188,48 +185,56 @@ S4 (T4 limit)            ─┘
 각 세션 커밋 직전 아래를 빠짐없이 통과한다. **하나라도 실패하면 커밋 금지.**
 
 ### S1 (D1 백엔드) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/api && npx tsc --noEmit` 0
-- [ ] **C2 biome 0** — `npm run lint --workspace=apps/api` 신규 경고 0
-- [ ] **C3 build 0** — `cd apps/api && npm run build` 0
-- [ ] **vitest** — `auth.service.test.ts`에 refresh-suspended 케이스 추가, 통과
-- [ ] **회귀 0** — 기존 로그인·refresh 정상 경로 테스트 통과
+- [x] **C1 tsc 0** — `pnpm --filter api exec tsc --noEmit` 0 (2026-05-29)
+- [ ] **C2 biome 0** — `pnpm --filter api lint`는 기존 ESLint 부채 409 errors/24 warnings로 실패. 신규 `auth.service.spec.ts` 단독 ESLint는 0.
+- [x] **C3 build 0** — `pnpm --filter api build` 0 (2026-05-29)
+- [x] **jest** — `auth.service.spec.ts`에 refresh-suspended 케이스 추가, 2/2 통과 (api 현재 테스트 러너는 jest)
+- [x] **회귀 0** — 정상 사용자 refresh rotation 후 새 토큰 발급 케이스 통과
 - [ ] **수동 확인** — 정지된 사용자로 refresh API 호출 → 401 응답
 
 ### S2 (T1+T2) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/admin && npx tsc --noEmit` 0
-- [ ] **C2 biome 0** — `npm run lint --workspace=apps/admin` 신규 경고 0
-- [ ] **C3 build 0** — `cd apps/admin && npm run build` 0(⚠️ `npx next build` 금지)
-- [ ] **C4 500라인** — `UsersTable.tsx` 라인 측정 (현 160 + 가입일·전화 컬럼·카드 줄 → ~200 예상, 한도 내)
-- [ ] **C5 SSOT** — 색·라벨 하드코딩 0, `toDateStrKST` 재사용
+- [x] **C1 tsc 0** — `pnpm --filter seller exec tsc --noEmit` 0 (2026-05-29)
+- [ ] **C2 biome 0** — `pnpm --filter seller lint` 종료 코드 0, 기존 `<img>` 경고 2건 유지. 신규 users/proxy 경고 0.
+- [x] **C3 build 0** — `pnpm --filter seller build` 0 (2026-05-29, `next build --webpack`)
+- [x] **C4 500라인** — `_client.tsx` 108, `UsersTable.tsx` 236, `proxy.ts` 36 (2026-05-29 최종 재측정)
+- [x] **C5 SSOT** — 가입일은 shared `toDateStrKST` 재사용, 전화 빈값은 `-` 표시
 - [ ] **C7 시각 회귀** — 데스크톱 테이블 컬럼 너비 회귀 0(기존 컬럼 유지), 모바일 카드 높이 증가는 의도
 
 ### S3 (T3 검색·필터) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/admin && npx tsc --noEmit` 0
-- [ ] **C2 biome 0** — 신규 경고 0
-- [ ] **C3 build 0** — `npm run build` 0
-- [ ] **C4 500라인** — `_client.tsx`·`UsersFilters.tsx`·`_lib.ts` 모두 한도 내
-- [ ] **C5 SSOT** — `SegmentedTabs` 재사용, 라벨 하드코딩 0
-- [ ] **C6 가드** — 로딩 중에도 `<UsersFilters>` 렌더, 빈결과(both 분기)에서도 필터 유지
-- [ ] **C7 시각 회귀** — 신규 검색·필터는 의도, 기존 테이블·카드 회귀 0
-- [ ] **vitest** — `_lib.test.ts` 5케이스 전부 통과
-- [ ] **디바운스 동작** — 키 입력 → 200ms 후 필터 적용(콘솔 측정)
-- [ ] **검색 매칭** — 이름·이메일·전화 부분일치(전화는 하이픈 제거 후) 수동 확인
+- [x] **C1 tsc 0** — `pnpm --filter seller exec tsc --noEmit` 0 (2026-05-29)
+- [x] **C2 biome 0** — `pnpm --filter seller lint` 종료 코드 0, 기존 `<img>` 경고 2건만 유지(신규 users 경고 0)
+- [x] **C3 build 0** — `pnpm --filter seller build` 0 (2026-05-29, `next build --webpack`)
+- [x] **C4 500라인** — `_client.tsx` 108, `UsersFilters.tsx` 38, `_lib.ts` 49, `_lib.test.ts` 79, `UsersTable.tsx` 236 (2026-05-29 최종 재측정)
+- [x] **C5 SSOT** — `USER_STATUS_TABS`와 `UserStatusFilter`를 `_lib.ts`에 두고 `SegmentedTabs` 재사용
+- [x] **C6 가드** — `<UsersFilters>`를 `<UsersTable>` 위에 고정 렌더, 로딩·빈결과 분기에서도 유지
+- [ ] **C7 시각 회귀** — 로컬 `/admin/users`는 인증·Firebase env 오류로 실제 관리자 화면 육안 확인 미완료
+- [x] **vitest** — `_lib.test.ts` 8케이스 전부 통과
+- [x] **디바운스 동작** — `useDebouncedValue(keyword, 200)`로 적용
+- [x] **검색 매칭** — 이름·이메일 대소문자 부분일치, 전화 하이픈 제거 매칭을 vitest로 확인
 
 ### S4 (T4 백엔드 limit) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/api && npx tsc --noEmit` 0
-- [ ] **C2 biome 0** — 신규 경고 0
-- [ ] **C3 build 0** — `npm run build` 0
-- [ ] **인덱스** — `orderBy('createdAt','desc')` 필요 시 `firestore.indexes.json` 갱신·배포 확인(세션80 선례)
+- [x] **C1 tsc 0** — `pnpm --filter api exec tsc --noEmit` 0 (2026-05-29)
+- [ ] **C2 biome 0** — `pnpm --filter api exec eslint src/admin/admin.service.ts src/auth/auth.service.ts src/auth/auth.service.spec.ts`는 기존 `any` 계열 ESLint 부채 148 errors/1 warning으로 실패. S4 신규 변경 자체의 타입체크·빌드는 통과.
+- [x] **C3 build 0** — `pnpm --filter api build` 0 (2026-05-29)
+- [ ] **인덱스** — `firestore.indexes.json`에 `users(role ASC, createdAt DESC)` 추가 완료. 운영 배포 확인은 미완료.
 - [ ] **회귀 0** — 어드민 users 탭 데이터 로딩 정상, 정렬 순서 신규(최신순) 확인
 - [ ] **수동 확인** — limit 값이 실제 user 수보다 큰지 재확인
 
 ### S5 (e2e) 체크리스트 — §E-9에서 상세
 
+- [x] **e2e 파일 신설** — `apps/e2e/tests/admin-users.spec.ts` 7시나리오 × 2프로젝트 = 14건 수집 대상
+- [x] **데이터 격리** — `GET /admin/users`, `PATCH /admin/users/:id/status`를 Playwright route fixture로 가로채 운영 DB 쓰기 0
+- [x] **표시 필드 커버** — 데스크톱 테이블과 모바일 카드의 가입일·전화 표시 검증 포함
+- [x] **새로고침 커버** — `reload` 클릭 시 목록 재조회 count 증가 검증 포함
+- [x] **검색·상태 필터 커버** — 이름·이메일·전화 검색, 전체·정상·정지 탭, 검색 결과 없음 문구 검증 포함
+- [x] **정지 모달 회귀 커버** — 검색·필터 적용 상태에서 ConfirmModal과 `suspended: true` 요청 본문 검증 포함
+- [ ] **playwright 0 fail** — 현재 `SELLER_BASE`가 운영 기존 화면을 가리켜 `소비자 검색` 미노출로 14/14 실패. 새 코드 반영 프리뷰 또는 운영 배포 후 재실행 필요.
+
 ---
 
 ## E-9. e2e 작업 플랜 (세션 S5)
 
-**전제:** S1~S4 모든 코드가 머지·운영 배포 완료 + 어드민 e2e 인프라(세션90 신설, 8/8 통과) 재사용.
+**전제:** S1~S4 모든 코드가 머지·프리뷰 또는 운영 배포 완료 + 어드민 e2e 인프라(세션90 신설, 8/8 통과) 재사용.
 
 **환경:**
 - 운영 단일 Firestore(green-e4fe3) + 카카오 로그인만 가능(`reference_visual_verify_env`)
@@ -277,22 +282,18 @@ S4 (T4 limit)            ─┘
 
 ### e2e 파일 구조
 ```
-apps/admin/e2e/
-  users-suspend-refresh.spec.ts      # E2E-1
-  users-display-fields.spec.ts       # E2E-2 (가입일·전화)
-  users-reload.spec.ts               # E2E-3
-  users-search-filter.spec.ts        # E2E-4
-  fixtures/
-    seed-users-search.ts             # E2E-4용 시드
-    seed-suspended-user.ts           # E2E-1용 시드
+apps/e2e/tests/
+  admin-users.spec.ts                # E2E-2~4 + 정지 모달 회귀, route fixture 격리
+apps/api/src/auth/
+  auth.service.spec.ts               # E2E-1의 핵심인 refresh 정지 차단을 단위 레벨에서 직접 검증
 ```
 
 ### e2e 정합성 가드
-- [ ] **세션 격리** — 각 spec은 새 BrowserContext(세션90 함정)
-- [ ] **networkidle 회피** — `waitForLoadState('domcontentloaded')` + 명시적 셀렉터 대기
-- [ ] **dotenv #** — `.env.e2e`에 `#` 포함 값 금지(세션90 함정)
-- [ ] **시드 idempotent** — 재실행 가능, 이전 테스트 잔재 cleanup
-- [ ] **playwright 0 fail** — 4 spec × 평균 2 case = ~8/8 통과 목표
+- [x] **세션 격리** — `ADMIN_STATE_PATH` 재사용, seller 세션과 분리
+- [x] **networkidle 회피** — `domcontentloaded` + 명시적 셀렉터 대기
+- [x] **dotenv #** — 세션90의 admin 인증 규칙 재사용
+- [x] **시드 idempotent** — 실제 시드 대신 route fixture 사용, 이전 테스트 잔재 없음
+- [ ] **playwright 0 fail** — 현재 운영 기존 화면 대상 실행은 14/14 실패. 새 코드 반영 대상에서 재실행 필요
 
 ---
 

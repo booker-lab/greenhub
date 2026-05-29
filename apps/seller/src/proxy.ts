@@ -7,7 +7,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 미로그인 → /login 리다이렉트
-  if (!session) {
+  if (!session?.user) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

@@ -202,6 +202,9 @@
 - **F3 500건 하드캡** — 페이지네이션/커서 백엔드 변경. 부채 기록만.
 - **confirmedAt 단독 표시** — D-11 A1로 위임(셀러 T3 완료 후 흡수 검토).
 
+> 2026-05-29 사용자 요청으로 위 3건을 향후 구현 작업으로 `docs/BACKLOG.md`에 등록했다:
+> `ADMIN-SETTLEMENTS-F4`, `ADMIN-SETTLEMENTS-F3`, `ADMIN-SETTLEMENTS-A1`.
+
 ## D-7. 커밋 단위 요약 (세션91 패턴 — 한 태스크 1커밋)
 
 | 세션 | 커밋 수 | 태스크 |
@@ -289,3 +292,29 @@
 - 세션80 정산 복합 인덱스 배포 — T4 인덱스 확인의 직접 선례.
 - 세션88 어드민 반응형(#246/247) — `SettlementTable.tsx` 모바일 카드형.
 - 세션91 SDD 분리 — `settlements`가 첫 분리 탭(과분할 회피 기준).
+
+---
+
+## D-12. 진행 기록 (2026-05-29)
+
+- **N+0 완료**: F2 일괄 지급 별도 SDD를 `admin-tab-settlements-bulk-pay-plan.md`로 신설했다.
+- **결정 요약**: `POST /admin/settlements/bulk-pay`는 `{ ids }`를 받아 `{ ok, failed }`를 반환하며, 단건 지급과 같은 조건부 트랜잭션을 건별 반복해 부분 성공을 허용한다.
+- **육안검증 등록**: 구현 후 확인 항목을 `pending-visual-verify.md` §6 #80~#89에 추가했다.
+- **N+1 완료**: T-F2a~c 백엔드 DTO·service·controller를 구현했다. `BulkPaySettlementsDto`, `AdminService.bulkMarkAsPaid(ids)`, `POST /admin/settlements/bulk-pay`가 추가되었고, 성공·부분 실패·전체 실패 단위 테스트를 신설했다.
+- **육안검증 추가 등록**: 백엔드 라우트 반영 확인 항목을 `pending-visual-verify.md` §6 #90에 추가했다.
+- **N+2 완료**: T-F2d~e 프론트 hook·다중 선택 UI를 구현했다. `useAdminSettlements.bulkMarkAsPaid(ids)`를 추가하고, `/admin/settlements` 데스크톱 테이블·모바일 카드에 `confirmed` 전용 체크박스, 전체 선택, 선택 건수·지급 합계 액션 바, 일괄 지급 확인 모달, 성공·부분 실패 알림을 연결했다.
+- **육안검증 추가 등록**: 프론트 반영 확인 상태를 `pending-visual-verify.md` §6 설명에 갱신했다. 실제 지급 처리는 운영 DB 쓰기 위험이 있으므로 테스트 DB, fixture 프리뷰, 또는 되돌릴 수 있는 검증 데이터에서만 수행한다.
+- **N+3 그룹 A 완료**: T1/T2/T3/T7을 반영했다. shared `toDateStrKST`에 `hour`·`minute` 옵션을 추가하고 어드민 정산일시 표시를 `YYYY-MM-DD HH:mm` KST로 통일했다. `useAdminSettlements`의 `error`·`reload`를 `_client.tsx`에서 구독해 조회 실패 Alert와 헤더 새로고침 ActionIcon을 노출했으며, `SummaryCards` 라벨에는 confirmed+paid 한정 합계 설명 Tooltip을 연결했다.
+- **육안검증 추가 등록**: `pending-visual-verify.md` §6 #91~#94에 KST 정산일시, 조회 실패 배너, 합계 툴팁, 새로고침 버튼 확인 항목을 추가했다.
+- **검증 완료**: `pnpm --filter ./packages/shared build`, `pnpm --filter ./packages/shared test`, `pnpm --filter seller exec tsc --noEmit`, `pnpm --filter consumer exec tsc --noEmit`, `pnpm --filter driver exec tsc --noEmit`, `pnpm --filter api exec tsc --noEmit`, `pnpm --filter seller build`, `pnpm exec biome check packages/shared/src/date.ts packages/shared/src/date.test.ts apps/seller/src/app/admin/settlements/_lib.ts apps/seller/src/app/admin/settlements/_client.tsx apps/seller/src/app/admin/settlements/_components/SummaryCards.tsx` 통과.
+- **N+4 그룹 B 완료**: T4a 확인 결과 `firestore.indexes.json`에 `settlements(status ASC, settledAt DESC)`와 `settlements(storeId ASC, status ASC, settledAt DESC)`가 이미 존재하므로 새 인덱스 추가 없이 진행했다. T4b/T5로 `GET /admin/settlements?status=` DTO·service 배선과 어드민 status 탭 UI를 반영했다.
+- **육안검증 추가 등록**: `pending-visual-verify.md` §7 #95~#101에 status 탭 노출, 기본값, 상태별 조회, 복합 필터, 인덱스 오류 없음, 선택 상태 정리, 모바일 배치를 등록했다.
+- **N+5 그룹 C 완료**: T6으로 native `<input type="date">`를 Mantine `DatePickerInput`으로 교체하고, 빠른 기간 3버튼(이번 주·이번 달·지난달)을 같은 필터 영역에 통합했다. 선결 util이 아직 없어서 shared `periodRange(thisWeek|thisMonth|lastMonth)`를 KST·월요일 시작 기준으로 추가하고 어드민 정산 필터가 이를 재사용하도록 연결했다.
+- **육안검증 추가 등록**: `pending-visual-verify.md` §8 #102~#108에 빠른 기간 버튼, KST 월요일 시작, DatePicker 직접 선택, clear 동작, status·storeId 조합, 모바일 배치, 날짜 스타일 로드 확인 항목을 등록했다.
+- **N+6 E3/E5 진행**: route fixture 기반 `apps/e2e/tests/admin-settlements.spec.ts`를 신설해 status 탭 재조회, 일괄 지급 선택·부분 실패, 실패 건 선택 유지, 새로고침·단건 지급 회귀, 빠른 기간 KST from/to 쿼리를 운영 DB 쓰기 없이 검증하도록 했다.
+- **육안검증 추가 등록**: `pending-visual-verify.md` §9 #109~#114에 N+6 e2e 재실행, status 통합 회귀, 일괄 지급 알림, 새로고침·단건 지급 공존, 빠른 기간·DatePicker 복합 조합, 모바일 통합 배치 확인 항목을 등록했다.
+- **N+6 e2e 재실행 완료**: 새 seller preview(`greenhub-seller-e0w9ozr5s`)에서 최초 4/10 통과·6 실패를 확인했다. 실패 원인은 구현이 아니라 `apps/e2e/tests/admin-settlements.spec.ts`의 route fixture가 쿼리 포함 `GET /admin/settlements?status=...`를 잡지 못한 테스트 인프라 결함이었다. route 정규식 보정 후 동일 preview에서 `SELLER_BASE=<새 프리뷰> pnpm --filter e2e test -- admin-settlements.spec.ts` 10/10 통과. `pending-visual-verify.md` §9 #109 체크.
+- **N+6 E1/E2 완료**: shared build/test, seller·consumer·driver·api `tsc --noEmit`, API unit test, seller·consumer·driver·api build, 정산 변경 파일 `biome check`를 재실행해 통과했다. 루트 `pnpm build`는 PowerShell에서 스크립트의 `--filter './apps/*'` 따옴표가 그대로 전달되어 앱 필터가 미적중했으므로 앱별 build로 대체 검증했다.
+- **E2 감사 결과**: 변경 코드 파일은 모두 500라인 미만이다. `docs/CRITICAL_LOGIC.md`·`docs/BACKLOG.md`는 누적 로그 예외이고, `pnpm-lock.yaml`은 생성 산출물이라 모듈 분리 대상에서 제외했다. 정산 status 라벨·색 정의는 shared SSOT에만 남아 있으며, UI/API의 `confirmed`·`paid` 문자열은 상태 전이 조건 또는 테스트 픽스처로 확인했다.
+- **육안검증 추가 등록**: `pending-visual-verify.md` §9 #115에 E1/E2 자동 정합성 재검증 완료 항목을 추가하고 체크했다. 실화면 최종 확인은 §9 #110~#114에 유지했다.
+- **N+6 §9 육안검증 완료**: 동일 seller preview에서 `admin-settlements.spec.ts`를 재실행해 10/10 통과를 재확인했다. 추가로 route fixture 기반 데스크톱·375px 모바일 캡처를 생성해 status 탭, 빠른 기간, DatePicker, 선택 액션 바, 일괄 지급 모달 배치를 확인했고, 모바일 `documentElement.scrollWidth/clientWidth = 375/375`로 문서 가로 스크롤 0을 확인했다. `pending-visual-verify.md` §9 #110~#114를 체크 완료했다.
