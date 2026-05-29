@@ -214,8 +214,21 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - [x] **S5-8.** **커밋** — `feat(admin): #CL-55 drivers 탭 검색·새로고침 추가 (T4 T5)`.
 - [x] **S5-9.** **배포 확인** — seller 프리뷰 `https://greenhub-seller-9vwkn5kkz-jos-projects-d1cecc0c.vercel.app`가 READY. 인증 환경에서 실제 육안검증은 §14 #222~#226 신규 항목으로 추적한다.
 
+### 세션 S6 — R1 (액션 버튼 메타화)
+
+> **세션 단독 목표**: 승인·정지·정지 해제 버튼의 라벨·색·variant를 `_lib.ts`의 `ACTION_META`로 모아 ConfirmModal 문구와 버튼 렌더링의 SSOT를 맞춘다. 런타임 동작과 백엔드 계약은 변경하지 않는다.
+
+#### S6 체크리스트
+- [x] **S6-1.** `ACTION_META`에 버튼 렌더링 메타(`buttonLabel`, `buttonColor`, `buttonVariant`)를 추가한다.
+- [x] **S6-2.** `_lib.ts`에 `getDriverActions(driver)` 순수 함수를 추가해 승인·정지·정지 해제 노출 조건을 한곳에서 계산한다.
+- [x] **S6-3.** `DriverList.tsx`는 `getDriverActions()` 결과를 map으로 렌더하고, 처리 중 라벨은 기존 `처리중…` 동작을 유지한다.
+- [x] **S6-4.** **육안 검증 문서 `pending-visual-verify.md` §14에 버튼 메타화 회귀 확인 항목을 추가한다.**
+- [x] **S6-5.** **정합성검토** — 변경 파일 Biome 0, `pnpm --filter seller exec tsc --noEmit` 0, `pnpm --filter seller build` 0, 500라인 제한 통과. `admin-drivers-status-filter.spec.ts`는 10건 수집을 확인했고, 실제 운영/인증 프리뷰 육안 회귀는 `pending-visual-verify.md` §14 #227~#230에 유지한다.
+- [ ] **S6-6.** **커밋** — `refactor(admin): #CL-55 drivers 탭 액션 버튼 메타화 (R1)`.
+- [ ] **S6-7.** **배포 확인** — seller 프리뷰 READY 확인 후 인증 환경에서 실제 육안검증은 §14 신규 항목으로 추적한다.
+
 ### 제외(별도 세션 — §C-4·§C-5 보존)
-- **F4** 드라이버 상세(전화·차량, 데이터모델 선확인 필요) / **F5** 정렬·페이지네이션·`limit(100)` 한도 / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R1** 액션 버튼 메타화 / **R2** 공통 `SegmentedTabs` 통일.
+- **F4** 드라이버 상세(전화·차량, 데이터모델 선확인 필요) / **F5** 정렬·페이지네이션·`limit(100)` 한도 / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R2** 공통 `SegmentedTabs` 통일.
 
 ### 차기 진입점(C-8 보강)
 - **S1(T1) → 운영 배포·육안 → S2(T2) → 운영 배포·육안 → S3(e2e) → CI 통과 → 종결**.
