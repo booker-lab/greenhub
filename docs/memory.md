@@ -19,6 +19,7 @@
 - 2026-05-30 S8(F6)을 진행했다. 승인·정지·정지 해제 성공 시 초록 알림으로 확인 위치(`승인 완료 탭`/`정지됨 탭`)를 안내하고, 실패 시 빨간 알림을 띄우되 ConfirmModal은 닫지 않도록 했다.
 - `admin-drivers-status-filter.spec.ts`에 승인 성공 알림 회귀를 추가했고, `pending-visual-verify-20260529.md` §26 #235~#239에 액션 결과 알림 육안검증 항목을 등록했다.
 - S8 검증: 변경 파일 Biome 0, `pnpm --filter seller build` 0, 빌드 후 `pnpm --filter seller exec tsc --noEmit` 0. e2e는 기본 운영 URL이 이전 배포를 봐 실패했고, 로컬 새 코드 대상은 Firebase 공개 env 미주입(`auth/invalid-api-key`) 오버레이로 `/admin/drivers` 진입 전 차단됐다.
+- 커밋 `605f143`을 push했고 seller 프리뷰 `https://greenhub-seller-kq2loonje-jos-projects-d1cecc0c.vercel.app`가 READY가 됐다. branch alias는 `https://greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app`다.
 - 미추적 파일 `.codex/`, `AGENTS.md`는 사용자/환경 산출물 가능성이 있어 건드리지 않는다.
 
 ## 검증 기준

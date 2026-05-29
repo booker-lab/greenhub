@@ -260,7 +260,8 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - [x] **S8-5.** `admin-drivers-status-filter.spec.ts`에 승인 성공 알림 회귀를 추가한다.
 - [x] **S8-6.** **육안 검증 문서 `pending-visual-verify-20260529.md`에 드라이버 액션 결과 알림 항목을 추가한다.**
 - [x] **S8-7.** **정합성검토** — 변경 파일 Biome 0, `pnpm --filter seller build` 0, 빌드 후 `pnpm --filter seller exec tsc --noEmit` 0, 500라인 제한 통과. 관련 e2e는 기본 운영 URL이 이전 배포를 보아 실패했고, 로컬 새 코드 대상은 `AUTH_SECRET`·`NEXT_PUBLIC_API_URL` 보강 후에도 Firebase 공개 env 미주입(`auth/invalid-api-key`) 오버레이로 `/admin/drivers` 진입 전 차단되어 `pending-visual-verify-20260529.md` §26에서 운영/프리뷰 육안 확인으로 추적한다.
-- [ ] **S8-8.** **커밋** — `feat(admin): #CL-55 drivers 탭 액션 결과 알림 추가 (F6)`.
+- [x] **S8-8.** **커밋** — `feat(admin): #CL-55 drivers 탭 액션 결과 알림 추가`.
+- [x] **S8-9.** **배포 확인** — seller 프리뷰 `https://greenhub-seller-kq2loonje-jos-projects-d1cecc0c.vercel.app`가 READY. branch alias `https://greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app`도 연결됐다. 실제 육안 회귀는 `pending-visual-verify-20260529.md` §26 #235~#239에서 추적한다.
 
 ---
 
