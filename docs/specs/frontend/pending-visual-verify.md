@@ -403,7 +403,7 @@
 
 | # | 확인 항목 | 통과 기준 | 결과 | 메모 |
 |---|----------|----------|:----:|------|
-| 211 | 승인 대기 탭 진입 | `GET /admin/drivers?status=pending` 호출, 응답 명단과 화면 카드 명단이 1:1 일치 | [x] | 2026-05-29 로컬 최신 seller fixture e2e 통과. seller 프리뷰 `greenhub-seller-2lfg12n15-jos-projects-d1cecc0c.vercel.app` READY |
+| 211 | 승인 대기 탭 진입 | `GET /admin/drivers?status=pending` 호출, 응답 명단과 화면 카드 명단이 1:1 일치 | [x] | 2026-05-29 로컬 최신 seller fixture e2e 통과. seller 프리뷰 branch alias `greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app` READY |
 | 212 | 승인 완료 탭 진입 | `GET /admin/drivers?status=approved` 호출, 승인 완료 드라이버만 노출 | [x] | 2026-05-29 로컬 최신 seller fixture e2e 통과. 프리뷰 e2e는 Vercel Authentication 401로 차단 |
 | 213 | 정지 탭 진입 | `GET /admin/drivers?status=suspended` 호출, 정지 드라이버만 노출 | [x] | 2026-05-29 로컬 최신 seller fixture e2e 통과 |
 | 214 | 전체 탭 진입 | `GET /admin/drivers`처럼 status 쿼리 없이 호출, 정지 포함 전체 명단 노출 | [x] | 2026-05-29 로컬 최신 seller fixture e2e 통과 |
@@ -433,7 +433,7 @@
 | §13 주문 세션δ 환불 모달 | 부분 통과 | #140·#141은 최종 육안 확인 유지 | 로컬 seller fixture, chromium·mobile e2e |
 | §19 주문 상세 모달 | 대기 | #175~#181 새 코드 반영 프리뷰 또는 인증 환경 확인 필요 | 새 코드 반영 프리뷰 또는 로컬 인증 환경 |
 | §20 주문 정렬·커서 페이지네이션 | 대기 | #182~#188 운영/프리뷰 육안 확인 필요 | 새 코드 반영 프리뷰 또는 로컬 인증 환경 |
-| §14 드라이버 status 서버 필터 | 부분 통과 | #215~#218은 운영/프리뷰 육안 확인 유지. 프리뷰 배포는 READY, e2e 직접 실행은 Vercel Authentication 401로 차단 | 로컬 seller fixture chromium·mobile e2e 8/8, seller preview `greenhub-seller-2lfg12n15-jos-projects-d1cecc0c.vercel.app` |
+| §14 드라이버 status 서버 필터 | 부분 통과 | #215~#218은 운영/프리뷰 육안 확인 유지. 프리뷰 배포는 READY, e2e 직접 실행은 Vercel Authentication 401로 차단 | 로컬 seller fixture chromium·mobile e2e 8/8, seller preview branch alias `greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app` |
 | §16 판매자 주문 우선 알림 배너 | 대기 | #155~#161 운영/프리뷰 육안 확인 필요 | 새 코드 반영 프리뷰 또는 로컬 인증 환경 |
 | §17 판매자 주문 일괄 준비 시작 | 대기 | #162~#167 운영/프리뷰 육안 확인 필요 | 새 코드 반영 프리뷰 또는 로컬 인증 환경 |
 | §18 판매자 주문 일괄 택배 발송 | 대기 | #168~#174 운영/프리뷰 육안 확인 필요 | 새 코드 반영 프리뷰 또는 로컬 인증 환경 |

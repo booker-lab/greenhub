@@ -97,7 +97,7 @@
 - `apps/e2e/tests/admin-drivers-status-filter.spec.ts`를 추가해 pending/approved/suspended/all 4탭의 요청 쿼리와 화면 명단을 네트워크 fixture로 검증했다.
 - `pending-visual-verify.md` §14 #211~#214·#219를 자동 검증 통과로 체크했고, #215~#218은 운영/프리뷰 육안 확인으로 유지했다.
 - 검증: 변경 파일 Biome 0, 로컬 최신 seller fixture e2e 8/8, `pnpm typecheck` 0. 기본 운영 `SELLER_BASE`는 아직 구버전 번들이라 status 쿼리 검증 실패.
-- 2026-05-29 `6f007dc`를 `codex/admin-stores-closeout`에 push했고 seller 프리뷰 `greenhub-seller-2lfg12n15-jos-projects-d1cecc0c.vercel.app`가 READY가 되었다. 프리뷰 e2e는 Vercel Authentication이 `/api/auth/csrf`를 401로 막아 차단되어, 로컬 fixture e2e 8/8과 배포 READY를 종결 근거로 남긴다.
+- 2026-05-29 `codex/admin-stores-closeout` 최신 커밋을 push했고 seller 프리뷰 branch alias `greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app`가 READY가 되었다. 프리뷰 e2e는 Vercel Authentication이 `/api/auth/csrf`를 401로 막아 차단되어, 로컬 fixture e2e 8/8과 배포 READY를 종결 근거로 남긴다.
 
 ## 2026-05-29 판매자 택배 운송장 필수화
 - `seller-orders-improve-plan.md` 짠A를 이어서 택배 `PREPARING → DELIVERED` 전환 전 택배사와 운송장번호를 받는 Mantine 모달을 추가했다.
