@@ -2,7 +2,7 @@
 
 import { Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminDriver } from '@/hooks/useAdmin';
-import { type DriverAction, formatDriverCreatedAt } from '../_lib';
+import { ACTION_META, type DriverAction, formatDriverCreatedAt, getDriverActions } from '../_lib';
 import { DriverBadge } from './DriverBadge';
 
 interface DriverListProps {
@@ -39,7 +39,7 @@ export function DriverList({
   return (
     <Stack gap="xs">
       {drivers.map((driver) => {
-        const isSuspended = !!driver.suspended;
+        const actions = getDriverActions(driver);
 
         return (
           <Paper
@@ -74,40 +74,22 @@ export function DriverList({
               </Box>
 
               <Group gap="xs" style={{ flexShrink: 0 }}>
-                {!driver.driverApproved && !isSuspended && (
-                  <Button
-                    onClick={() => onAction(driver.id, 'approve')}
-                    disabled={processingId === driver.id}
-                    size="xs"
-                    color="green"
-                    radius="md"
-                  >
-                    {processingId === driver.id ? '처리중…' : '승인'}
-                  </Button>
-                )}
-                {!isSuspended ? (
-                  <Button
-                    onClick={() => onAction(driver.id, 'suspend')}
-                    disabled={processingId === driver.id}
-                    size="xs"
-                    variant="light"
-                    color="red"
-                    radius="md"
-                  >
-                    정지
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => onAction(driver.id, 'unsuspend')}
-                    disabled={processingId === driver.id}
-                    size="xs"
-                    variant="light"
-                    color="gray"
-                    radius="md"
-                  >
-                    정지 해제
-                  </Button>
-                )}
+                {actions.map((action) => {
+                  const meta = ACTION_META[action];
+                  return (
+                    <Button
+                      key={action}
+                      onClick={() => onAction(driver.id, action)}
+                      disabled={processingId === driver.id}
+                      size="xs"
+                      variant={meta.buttonVariant}
+                      color={meta.buttonColor}
+                      radius="md"
+                    >
+                      {processingId === driver.id ? '처리중…' : meta.buttonLabel}
+                    </Button>
+                  );
+                })}
               </Group>
             </Group>
           </Paper>
