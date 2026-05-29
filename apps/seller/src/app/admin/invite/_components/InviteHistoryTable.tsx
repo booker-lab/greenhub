@@ -1,12 +1,15 @@
 'use client';
 
-import { Badge, Box, Group, Paper, Stack, Text } from '@mantine/core';
+import { ActionIcon, Badge, Box, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { Check, Copy } from 'lucide-react';
 import type { InviteToken } from '@/hooks/useAdmin';
-import { formatExpiry, inviteStatus } from '../_lib';
+import { formatExpiry, formatInviteDateTime, inviteStatus } from '../_lib';
 
 interface InviteHistoryTableProps {
   invites: InviteToken[];
   loading: boolean;
+  copiedToken: string | null;
+  onCopyToken: (token: string) => void;
 }
 
 const thBase = {
@@ -16,7 +19,37 @@ const thBase = {
   color: 'var(--color-text-secondary)',
 };
 
-export function InviteHistoryTable({ invites, loading }: InviteHistoryTableProps) {
+const tdBase = { padding: '12px 16px' };
+
+function CopyTokenButton({
+  token,
+  copied,
+  onCopyToken,
+}: {
+  token: string;
+  copied: boolean;
+  onCopyToken: (token: string) => void;
+}) {
+  return (
+    <Tooltip label={copied ? '복사됨' : '토큰 복사'}>
+      <ActionIcon
+        aria-label={`${token} 복사`}
+        variant="subtle"
+        color={copied ? 'green' : 'gray'}
+        onClick={() => onCopyToken(token)}
+      >
+        {copied ? <Check size={16} /> : <Copy size={16} />}
+      </ActionIcon>
+    </Tooltip>
+  );
+}
+
+export function InviteHistoryTable({
+  invites,
+  loading,
+  copiedToken,
+  onCopyToken,
+}: InviteHistoryTableProps) {
   if (loading) {
     return (
       <Text ta="center" py={32} style={{ color: 'var(--color-text-disabled)' }}>
@@ -45,6 +78,7 @@ export function InviteHistoryTable({ invites, loading }: InviteHistoryTableProps
       <Stack gap="sm" hiddenFrom="sm">
         {invites.map((inv) => {
           const { label, color, expDate } = inviteStatus(inv);
+          const copied = copiedToken === inv.token;
           return (
             <Paper
               key={inv.token}
@@ -55,25 +89,46 @@ export function InviteHistoryTable({ invites, loading }: InviteHistoryTableProps
               style={{ border: '1px solid var(--color-border)' }}
             >
               <Group justify="space-between" mb="xs">
-                <Text
-                  component="code"
-                  ff="monospace"
-                  style={{ letterSpacing: '0.1em', color: 'var(--color-text)' }}
-                >
-                  {inv.token}
-                </Text>
+                <Group gap="xs">
+                  <Text
+                    component="code"
+                    ff="monospace"
+                    style={{ letterSpacing: '0.1em', color: 'var(--color-text)' }}
+                  >
+                    {inv.token}
+                  </Text>
+                  <CopyTokenButton token={inv.token} copied={copied} onCopyToken={onCopyToken} />
+                </Group>
                 <Badge color={color} variant="light" radius="xl">
                   {label}
                 </Badge>
               </Group>
-              <Text
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-disabled)',
-                }}
-              >
-                만료 {formatExpiry(expDate)}
-              </Text>
+              <Stack gap={4}>
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-disabled)',
+                  }}
+                >
+                  발급 {formatInviteDateTime(inv.createdAt)}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-disabled)',
+                  }}
+                >
+                  사용 {formatInviteDateTime(inv.usedAt)}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-disabled)',
+                  }}
+                >
+                  만료 {formatExpiry(expDate)}
+                </Text>
+              </Stack>
             </Paper>
           );
         })}
@@ -102,7 +157,16 @@ export function InviteHistoryTable({ invites, loading }: InviteHistoryTableProps
                 토큰
               </Box>
               <Box component="th" style={thBase}>
+                복사
+              </Box>
+              <Box component="th" style={thBase}>
                 상태
+              </Box>
+              <Box component="th" style={thBase}>
+                발급일
+              </Box>
+              <Box component="th" style={thBase}>
+                사용일
               </Box>
               <Box component="th" style={thBase}>
                 만료일
@@ -112,13 +176,14 @@ export function InviteHistoryTable({ invites, loading }: InviteHistoryTableProps
           <Box component="tbody">
             {invites.map((inv) => {
               const { label, color, expDate } = inviteStatus(inv);
+              const copied = copiedToken === inv.token;
               return (
                 <Box
                   component="tr"
                   key={inv.token}
                   style={{ borderTop: '1px solid var(--color-border)' }}
                 >
-                  <Box component="td" style={{ padding: '12px 16px' }}>
+                  <Box component="td" style={tdBase}>
                     <Text
                       component="code"
                       ff="monospace"
@@ -127,7 +192,10 @@ export function InviteHistoryTable({ invites, loading }: InviteHistoryTableProps
                       {inv.token}
                     </Text>
                   </Box>
-                  <Box component="td" style={{ padding: '12px 16px' }}>
+                  <Box component="td" style={tdBase}>
+                    <CopyTokenButton token={inv.token} copied={copied} onCopyToken={onCopyToken} />
+                  </Box>
+                  <Box component="td" style={tdBase}>
                     <Badge color={color} variant="light" radius="xl">
                       {label}
                     </Badge>
@@ -135,7 +203,27 @@ export function InviteHistoryTable({ invites, loading }: InviteHistoryTableProps
                   <Box
                     component="td"
                     style={{
-                      padding: '12px 16px',
+                      ...tdBase,
+                      color: 'var(--color-text-disabled)',
+                      fontSize: 'var(--font-size-sm)',
+                    }}
+                  >
+                    {formatInviteDateTime(inv.createdAt)}
+                  </Box>
+                  <Box
+                    component="td"
+                    style={{
+                      ...tdBase,
+                      color: 'var(--color-text-disabled)',
+                      fontSize: 'var(--font-size-sm)',
+                    }}
+                  >
+                    {formatInviteDateTime(inv.usedAt)}
+                  </Box>
+                  <Box
+                    component="td"
+                    style={{
+                      ...tdBase,
                       color: 'var(--color-text-disabled)',
                       fontSize: 'var(--font-size-sm)',
                     }}

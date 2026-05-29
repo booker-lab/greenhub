@@ -216,44 +216,45 @@
 ### 세션 S-A (선결 + 그룹 A) — 보기 개선
 
 **선결 작업 (커밋 0):**
-- [ ] **T0** — `consumeInvite`·`signup` 경로 grep, 분기 표 작성 → 본 문서 T4 명세 보완.
+- [x] **T0** — `consumeInvite`·`signup` 경로 grep, 분기 표 작성 → 본 문서 T4 명세 보완.
+  - 산출(2026-05-29): 별도 `consumeInvite` 함수는 없고, 셀러 가입 경로는 `AuthService.register()` 한 곳이다. 단, 같은 메서드 안에 **사전 검증**(`inviteSnap` exists/expired/used)과 **트랜잭션 내 재검증**(`inviteDoc.exists || usedAt`)이 2단계로 존재한다. T4 `revokedAt` 거부 가드는 두 단계 모두에 추가해야 한다.
 
 **아토믹 태스크 (커밋 3):**
-- [ ] **T1** — 행별 토큰 복사 버튼 (모든 상태 노출)
+- [x] **T1** — 행별 토큰 복사 버튼 (모든 상태 노출)
   - 정합성 검토 (커밋 직전):
-    - [ ] C1 tsc 0 (admin 앱)
-    - [ ] C2 biome 0 (신규 0)
-    - [ ] C3 `npm run build` 0
-    - [ ] C4 `InviteHistoryTable.tsx` 500라인 이하
-    - [ ] C5 라벨·색 SSOT 준수
-    - [ ] C6 로딩·빈결과에서도 복사 동작
-    - [ ] C7 시각 회귀 — 버튼 추가 외 변경 0
+    - [x] C1 tsc 0 (admin 앱)
+    - [x] C2 biome 0 (신규 0)
+    - [x] C3 `npm run build` 0
+    - [x] C4 `InviteHistoryTable.tsx` 500라인 이하
+    - [x] C5 라벨·색 SSOT 준수
+    - [x] C6 로딩·빈결과에서도 복사 동작
+    - [x] C7 시각 회귀 — 버튼 추가 외 변경 0
   - 커밋: `feat(admin): #CL-55 invite 행별 토큰 복사 (T1)`
 
-- [ ] **T2** — 발급일·사용일 컬럼 + `toDateTimeStrKST` util + vitest
+- [x] **T2** — 발급일·사용일 컬럼 + `toDateTimeStrKST` util + vitest
   - 정합성 검토:
-    - [ ] C1 tsc 0 (admin·shared 양쪽)
-    - [ ] C2 biome 0
-    - [ ] C3 build 0
-    - [ ] C4 500라인 이하
-    - [ ] C5 라벨 SSOT (포맷 함수도 SSOT화)
-    - [ ] C6 로딩·빈결과에서도 컬럼 헤더 유지
-    - [ ] C7 컬럼 2개 추가 — 모바일 카드 행 추가 (육안 대상)
-    - [ ] **vitest** — `toDateTimeStrKST` 케이스 통과
+    - [x] C1 tsc 0 (admin·shared 양쪽)
+    - [x] C2 biome 0
+    - [x] C3 build 0
+    - [x] C4 500라인 이하
+    - [x] C5 라벨 SSOT (포맷 함수도 SSOT화)
+    - [x] C6 로딩·빈결과에서도 컬럼 헤더 유지
+    - [x] C7 컬럼 2개 추가 — 모바일 카드 행 추가 (육안 대상)
+    - [x] **vitest** — `toDateTimeStrKST` 케이스 통과
   - 커밋: `feat(admin): #CL-55 invite 발급일·사용일 컬럼 + toDateTimeStrKST SSOT (T2)`
 
-- [ ] **T3** — clipboard try/catch + 폴백 + notification
+- [x] **T3** — clipboard try/catch + 폴백 + notification
   - 정합성 검토:
-    - [ ] C1·C2·C3·C4·C5·C6 통과
-    - [ ] C7 시각 변경 0 (실패 시 notification만 추가)
+    - [x] C1·C2·C3·C4·C5·C6 통과
+    - [x] C7 시각 변경 0 (실패 시 notification만 추가)
     - [ ] 수동 1회: HTTPS 아닌 환경(localhost 외) 또는 권한 거부 모킹 시 notification 노출
   - 커밋: `feat(admin): #CL-55 invite clipboard 폴백 (T3)`
 
 **세션 종료 절차:**
 - [ ] 3개 커밋 사용자 보고 → push 승인 대기
-- [ ] `pending-visual-verify.md` §추가에 항목 1~3 작성 (행별 복사·발급일/사용일·clipboard 폴백)
-- [ ] `docs/memory.md` 최신화 — 세션 S-A 완료, T4~T11 다음 세션
-- [ ] `MEMORY.md` invite 항목 갱신
+- [x] `pending-visual-verify-20260529.md` §21 #189~#194 작성 (행별 복사·발급일/사용일·clipboard 폴백)
+- [x] `docs/memory.md` 최신화 — 세션 S-A 완료, T4~T11 다음 세션
+- [-] `MEMORY.md` invite 항목 갱신 — 루트 `MEMORY.md` 파일 없음, `docs/memory.md`만 갱신.
 
 ---
 

@@ -1,3 +1,4 @@
+import { toDateTimeStrKST } from '@greenhub/shared';
 import type { InviteToken } from '@/hooks/useAdmin';
 
 // 초대 토큰 상태(사용됨/만료/유효) 판정 — 테이블·카드 공용(중복 제거).
@@ -30,4 +31,11 @@ export function formatExpiryLong(expiresAt: string): string {
     month: 'long',
     day: 'numeric',
   });
+}
+
+// 초대 내역 일시 표기(MM-DD HH:mm, KST) — 테이블·카드 공용.
+export function formatInviteDateTime(value: string | null | undefined): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : toDateTimeStrKST(date);
 }
