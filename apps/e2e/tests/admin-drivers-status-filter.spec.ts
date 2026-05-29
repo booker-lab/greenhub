@@ -149,4 +149,24 @@ test.describe('Admin - 드라이버 status 서버 필터 회귀', () => {
     await expectLatestRequest(state, null);
     await expectVisibleDrivers(page, ['대기 드라이버', '승인 드라이버', '정지 드라이버']);
   });
+
+  test('검색과 새로고침은 현재 status 탭을 유지한다', async ({ page }) => {
+    const state = await openDrivers(page);
+
+    await page.getByLabel('드라이버 검색').fill('approved');
+
+    await expect(page.getByText('검색 결과가 없습니다.')).toBeVisible();
+    await expectVisibleDrivers(page, []);
+
+    await page.getByLabel('드라이버 검색').fill('pending-driver');
+
+    await expectVisibleDrivers(page, ['대기 드라이버']);
+
+    const requestCount = state.requests.length;
+    await page.getByLabel('드라이버 목록 새로고침').click();
+
+    await expect.poll(() => state.requests.length).toBeGreaterThan(requestCount);
+    await expectLatestRequest(state, 'pending');
+    await expect(page.getByLabel('드라이버 검색')).toHaveValue('pending-driver');
+  });
 });

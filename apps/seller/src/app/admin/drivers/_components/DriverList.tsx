@@ -9,10 +9,17 @@ interface DriverListProps {
   drivers: AdminDriver[];
   loading: boolean;
   processingId: string | null;
+  emptyMessage?: string;
   onAction: (userId: string, action: DriverAction) => void;
 }
 
-export function DriverList({ drivers, loading, processingId, onAction }: DriverListProps) {
+export function DriverList({
+  drivers,
+  loading,
+  processingId,
+  emptyMessage,
+  onAction,
+}: DriverListProps) {
   if (loading) {
     return (
       <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
@@ -24,7 +31,7 @@ export function DriverList({ drivers, loading, processingId, onAction }: DriverL
   if (drivers.length === 0) {
     return (
       <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
-        드라이버가 없습니다.
+        {emptyMessage ?? '드라이버가 없습니다.'}
       </Text>
     );
   }
