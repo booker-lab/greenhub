@@ -184,7 +184,7 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - [x] **S3-4.** 시드 = 운영 쓰기 없이 네트워크 fixture 사용. 4탭 모수는 pending/approved/suspended 3개 fixture로 보장하고, 전체 탭은 정지 포함 3건을 검증했다.
 - [x] **S3-5.** **정합성검토** — 로컬 최신 seller 서버 기준 e2e 8/8(chromium·mobile), `pnpm typecheck` 0, 변경 파일 biome 0. 빌드는 변경 없음.
 - [x] **S3-6.** **커밋** — `test(admin): #CL-55 drivers 탭 status 서버 필터 e2e 4건 (S3)`. 푸시는 사용자 지시 대기.
-- [ ] **S3-7.** **CI 통과 후 #CL-55 §C 종결 선언** — 세션 메모리 `project_admin_tabs_improve.md` 갱신.
+- [x] **S3-7.** **CI·배포 확인 후 #CL-55 §C 종결 선언** — `6f007dc`를 `codex/admin-stores-closeout`에 push했고 seller 프리뷰 `https://greenhub-seller-2lfg12n15-jos-projects-d1cecc0c.vercel.app`가 READY 상태가 되었다. 프리뷰 e2e는 Vercel Authentication이 `/api/auth/csrf`를 401로 막아 차단되었고, 로컬 최신 seller fixture e2e 8/8과 프리뷰 배포 READY를 S3 자동 검증 종결 기준으로 기록한다. 육안 확인은 `pending-visual-verify.md` §14 #215~#218에 유지한다.
 
 ### 제외(별도 세션 — §C-4·§C-5 보존)
 - **F1** 검색(이름·이메일) / **F2** 새로고침 버튼 / **F3** 가입일 표시 / **F4** 드라이버 상세(전화·차량, 데이터모델 선확인 필요) / **F5** 정렬·페이지네이션·`limit(100)` 한도 / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R1** 액션 버튼 메타화 / **R2** 공통 `SegmentedTabs` 통일.
