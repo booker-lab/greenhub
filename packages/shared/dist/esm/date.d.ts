@@ -8,8 +8,22 @@
  * 주의: 이 파일은 shared 패키지 최초의 '런타임 함수'다(기존은 타입/상수 전용).
  * dual ESM/CJS 빌드(tsc + tsc -p tsconfig.cjs.json) 양쪽에 정상 산출되어야 한다.
  */
+export interface ToDateStrKSTOptions {
+    hour?: '2-digit';
+    minute?: '2-digit';
+}
+export type PeriodRangeKey = 'thisWeek' | 'thisMonth' | 'lastMonth';
+export interface PeriodRange {
+    from: string;
+    to: string;
+    label: string;
+}
 /** KST 기준 오늘 날짜를 YYYY-MM-DD로 반환 (UTC 자정~오전9시 하루 밀림 방지) */
 export declare function todayKST(): string;
 /** 주어진 시각의 KST 기준 날짜를 YYYY-MM-DD로 반환 */
-export declare function toDateStrKST(date: Date): string;
+export declare function toDateStrKST(date: Date, options?: ToDateStrKSTOptions): string;
+/** 주어진 시각의 KST 기준 날짜와 시각을 MM-DD HH:mm으로 반환 */
+export declare function toDateTimeStrKST(date: Date): string;
+/** KST 기준 빠른 기간 범위. 이번 주는 월요일 시작, 종료일은 오늘이다. */
+export declare function periodRange(key: PeriodRangeKey, now?: Date): PeriodRange;
 //# sourceMappingURL=date.d.ts.map

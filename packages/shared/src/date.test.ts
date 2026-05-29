@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { todayKST, toDateStrKST } from './date.js';
+import { periodRange, toDateStrKST, toDateTimeStrKST, todayKST } from './date.js';
 
 describe('todayKST', () => {
   afterEach(() => {
@@ -38,5 +38,48 @@ describe('toDateStrKST', () => {
     const base = new Date('2026-05-24T03:00:00Z'); // KST 5/24 정오
     const next = new Date(base.getTime() + 86400000); // KST 5/25 정오
     expect(toDateStrKST(next)).toBe('2026-05-25');
+  });
+
+  it('시분 옵션이 있으면 KST 기준 HH:mm을 함께 반환한다', () => {
+    expect(
+      toDateStrKST(new Date('2026-05-23T15:30:00Z'), {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    ).toBe('2026-05-24 00:30');
+  });
+
+  it('시 옵션만 있으면 KST 기준 HH를 함께 반환한다', () => {
+    expect(toDateStrKST(new Date('2026-05-24T03:00:00Z'), { hour: '2-digit' })).toBe(
+      '2026-05-24 12',
+    );
+  });
+});
+
+describe('toDateTimeStrKST', () => {
+  it('초대 내역용 MM-DD HH:mm 포맷을 KST 기준으로 반환한다', () => {
+    expect(toDateTimeStrKST(new Date('2026-05-23T15:30:00Z'))).toBe('05-24 00:30');
+  });
+});
+
+describe('periodRange', () => {
+  it('이번 주 범위는 KST 월요일부터 오늘까지 반환한다', () => {
+    const range = periodRange('thisWeek', new Date('2026-05-27T03:00:00Z'));
+    expect(range).toEqual({ from: '2026-05-25', to: '2026-05-27', label: '이번 주' });
+  });
+
+  it('이번 달 범위는 KST 월초부터 오늘까지 반환한다', () => {
+    const range = periodRange('thisMonth', new Date('2026-05-27T03:00:00Z'));
+    expect(range).toEqual({ from: '2026-05-01', to: '2026-05-27', label: '이번 달' });
+  });
+
+  it('지난달 범위는 이전 달 전체를 반환한다', () => {
+    const range = periodRange('lastMonth', new Date('2026-05-27T03:00:00Z'));
+    expect(range).toEqual({ from: '2026-04-01', to: '2026-04-30', label: '지난달' });
+  });
+
+  it('연도 경계의 지난달 범위를 올바르게 반환한다', () => {
+    const range = periodRange('lastMonth', new Date('2026-01-05T03:00:00Z'));
+    expect(range).toEqual({ from: '2025-12-01', to: '2025-12-31', label: '지난달' });
   });
 });
