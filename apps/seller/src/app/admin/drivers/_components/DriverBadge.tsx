@@ -4,7 +4,9 @@ import { Badge } from '@mantine/core';
 import type { AdminDriver } from '@/hooks/useAdmin';
 
 export function DriverBadge({ driver }: { driver: AdminDriver }) {
-  if (driver.suspended)
+  const isSuspended = !!driver.suspended;
+
+  if (isSuspended)
     return (
       <Badge color="red" variant="light" radius="xl">
         정지됨
