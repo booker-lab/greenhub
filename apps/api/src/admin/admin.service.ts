@@ -407,10 +407,18 @@ export class AdminService {
     };
   }
 
-  async getInvites() {
-    const snap = await (
-      this.firestore.collection('invites').orderBy('createdAt', 'desc').limit(50) as any
-    ).get();
+  async getInvites(q?: string) {
+    const prefix = q?.trim().toUpperCase();
+    const shouldSearch = prefix && prefix.length >= 4;
+    const query = shouldSearch
+      ? (this.firestore
+          .collection('invites')
+          .where('token', '>=', prefix)
+          .where('token', '<', `${prefix}\uf8ff`)
+          .orderBy('token')
+          .limit(50) as any)
+      : (this.firestore.collection('invites').orderBy('createdAt', 'desc').limit(50) as any);
+    const snap = await query.get();
 
     return snap.docs.map((d: any) => d.data());
   }

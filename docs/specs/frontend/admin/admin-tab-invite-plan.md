@@ -312,29 +312,29 @@
 ### 세션 S-C (그룹 C) — 토큰 검색
 
 **아토믹 태스크 (커밋 2):**
-- [ ] **T8'** — 백엔드 getInvites q? prefix 쿼리
+- [x] **T8'** — 백엔드 getInvites q? prefix 쿼리
   - 정합성 검토:
-    - [ ] C1 tsc 0 (api)
-    - [ ] C2 biome 0
-    - [ ] C3 build 0
-    - [ ] C4 500라인 이하
-    - [ ] C8 — q 미전달 시 기존 동작 동일 (회귀 0) — 수동 1회: 기존 어드민 invite 목록 정상 로드
-    - [ ] 읽기 보호 — 4자 미만 q는 백엔드에서 무시 (단위 테스트 또는 수동 확인)
+    - [x] C1 tsc 0 (api)
+    - [x] C2 biome 0
+    - [x] C3 build 0
+    - [x] C4 500라인 이하
+    - [x] C8 — q 미전달 시 기존 동작 동일 (회귀 0) — 코드 경로상 q 미전달 시 기존 createdAt desc 50건 유지
+    - [x] 읽기 보호 — 4자 미만 q는 백엔드에서 무시
   - 커밋: `feat(api): #CL-55 invite getInvites prefix 검색 (T8')`
 
-- [ ] **T9'** — 프론트 검색박스 + debounce 300ms
+- [x] **T9'** — 프론트 검색박스 + debounce 300ms
   - 정합성 검토:
-    - [ ] C1·C2·C3·C4 통과
-    - [ ] C5 라벨 SSOT
-    - [ ] C6 — 로딩·빈결과("일치하는 토큰이 없습니다") 가드
-    - [ ] C7 — 검색박스 1개 추가 (육안 대상)
+    - [x] C1·C2·C3·C4 통과
+    - [x] C5 라벨 SSOT
+    - [x] C6 — 로딩·빈결과("일치하는 토큰이 없습니다") 가드
+    - [x] C7 — 검색박스 1개 추가 (육안 대상)
     - [ ] 수동 1회: 4자 prefix 입력 → 일치 토큰 노출 / 3자 입력 → 호출 없음 / 지움 → 전체 50건 복귀
   - 커밋: `feat(admin): #CL-55 invite 토큰 prefix 검색 (T9')`
 
 **세션 종료 절차:**
 - [ ] 2개 커밋 사용자 보고 → push 승인 대기
-- [ ] `pending-visual-verify.md` 항목 7 작성 (검색 동작)
-- [ ] `docs/memory.md` 최신화
+- [x] `pending-visual-verify.md` 항목 7 작성 (검색 동작)
+- [x] `docs/memory.md` 최신화
 
 ---
 

@@ -3,7 +3,10 @@
 import type { OrderStatus, SettlementStatus, StoreStatus } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
-import { ApiError, apiJson } from '@/lib/api';
+import { apiJson } from '@/lib/api';
+
+export { useAdminInvite } from './useAdminInvite';
+export type { InviteRevokeReason, InviteToken } from './useAdminInvite';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -73,19 +76,6 @@ export interface BulkPaySettlementsResult {
   ok: string[];
   failed: { id: string; reason: string }[];
 }
-
-export interface InviteToken {
-  token: string;
-  createdBy: string;
-  usedAt: string | null;
-  usedBy: string | null;
-  revokedAt?: string | null;
-  revokedBy?: string | null;
-  expiresAt: string | null;
-  createdAt: string | null;
-}
-
-export type InviteRevokeReason = 'already_used' | 'already_revoked' | 'expired' | 'unknown';
 
 export type DriverStatus = 'all' | 'pending' | 'approved' | 'suspended';
 
@@ -455,55 +445,4 @@ export function useAdminBanner() {
   };
 
   return { banner, loading, saving, save, reload: load };
-}
-
-// ── Invite ───────────────────────────────────────────────────────
-
-export function useAdminInvite() {
-  const {
-    items: invites,
-    loading,
-    reload,
-    token,
-  } = useAdminList<InviteToken>(
-    () => '/admin/invite',
-    (data) => (Array.isArray(data) ? (data as InviteToken[]) : []),
-    '초대 토큰',
-  );
-  const [generating, setGenerating] = useState(false);
-
-  const generate = async (): Promise<{ token: string; expiresAt: string } | null> => {
-    if (!token) return null;
-    setGenerating(true);
-    try {
-      const data = await apiJson<{ token: string; expiresAt: string }>('/admin/invite', token, {
-        method: 'POST',
-      });
-      await reload();
-      return data;
-    } catch {
-      return null;
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const revoke = async (
-    inviteToken: string,
-  ): Promise<{ ok: true } | { ok: false; reason: InviteRevokeReason }> => {
-    if (!token) return { ok: false, reason: 'unknown' };
-    try {
-      await apiJson(`/admin/invite/${inviteToken}/revoke`, token, { method: 'POST' });
-      await reload();
-      return { ok: true };
-    } catch (error) {
-      const reason = error instanceof ApiError ? error.reason : undefined;
-      if (reason === 'already_used' || reason === 'already_revoked' || reason === 'expired') {
-        return { ok: false, reason };
-      }
-      return { ok: false, reason: 'unknown' };
-    }
-  };
-
-  return { invites, loading, generating, generate, revoke, reload };
 }
