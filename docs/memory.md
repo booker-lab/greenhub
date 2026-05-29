@@ -175,3 +175,8 @@
 ## 2026-05-29 어드민 초대 탭 향후 작업 등록
 - 사용자 요청으로 초대 탭의 제외 항목을 BACKLOG P3 향후 작업으로 승격했다. 등록 항목은 `ADMIN-INVITE-F6-F5-ADV`, `ADMIN-INVITE-SCALE-1000`, `ADMIN-INVITE-F7-EXPIRY`, `ADMIN-INVITE-SELLER-ROLLBACK`, `ADMIN-INVITE-REVOKE-NONVALID` 5건이다.
 - `admin-tab-invite-plan.md` 참고 문서에도 각 항목이 BACKLOG로 승격됐음을 표시했다.
+
+## 2026-05-29 어드민 드라이버 탭 S1 status 서버 필터 배선
+- `admin-tab-drivers-plan.md` S1(T1)을 진행해 `useAdminDrivers({ status })`가 `all` 외 탭에서 `/admin/drivers?status=pending|approved|suspended`를 호출하도록 배선했다. `_client.tsx`의 `filterByTab` 호출과 `_lib.ts`의 클라이언트 필터 함수는 제거했다.
+- `pending-visual-verify.md` §14 #211~#218에 드라이버 4탭, 전체 탭 status 쿼리 미전달, 승인/정지 후 목록 이동, 로딩·빈결과, 시각 회귀 육안검증 항목을 추가했다.
+- 검증: `pnpm typecheck` 0, 변경 파일 Biome 0, `pnpm --filter seller build` 0. `pnpm lint` 전체는 기존 consumer/driver 진단으로 실패했고, `pnpm --filter seller lint`는 기존 경고 2건만 출력 후 0 종료. 변경 파일과 `memory.md`는 라인 제한 미만.

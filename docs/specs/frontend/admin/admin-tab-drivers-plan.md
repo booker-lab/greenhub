@@ -127,14 +127,14 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 > **세션 단독 목표**: 백엔드 status 분기 활성화 + 클라 필터 잔재 제거. 런타임 동작 변화 1건, 시각 회귀 0 보장.
 
 #### S1 체크리스트
-- [ ] **S1-1.** `useAdminDrivers`를 `useAdminDrivers({ status }: { status: DriverStatus })`로 시그니처 확장.
-- [ ] **S1-2.** hook 내부에서 `status === 'all' ? undefined : status`로 분기, `withQuery('/admin/drivers', { status: <분기결과> })` 합성.
-- [ ] **S1-3.** `useAdminList`의 `deps`에 `[status]` 전달(타 탭 선례 동형, 탭 전환 시 자동 재조회 발생).
-- [ ] **S1-4.** `_client.tsx`에서 `filterByTab(allDrivers, tab)` 호출 제거 → hook 반환 `drivers` 직접 사용. `useAdminDrivers({ status: tab })`으로 호출부 갱신.
-- [ ] **S1-5.** `_lib.ts`의 `filterByTab` 함수 **재사용처 0 확인 후 완전 제거**. (Grep `filterByTab` repo-wide)
-- [ ] **S1-6.** 로딩·빈결과에서도 탭 UI 유지 — `_client.tsx` early return 제거·삼항 재배치(세션86 C6 가드 동형).
-- [ ] **S1-7.** **육안 검증 문서 `pending-visual-verify.md` §5(어드민 드라이버 4탭) 신설** — 코드 완료 직후·**커밋 전**. 항목 = ① 4탭 각각 진입 시 모수 일치 ② 'all' 탭 = 정지 포함 전부 ③ approve 후 카드 사라짐(승인대기 → 승인완료) ④ suspend 후 카드 사라짐(승인완료 → 정지) ⑤ 시각 회귀 0.
-- [ ] **S1-8.** **정합성검토 (C1~C7 — §0 공통 기준)**.
+- [x] **S1-1.** `useAdminDrivers`를 `useAdminDrivers({ status }: { status: DriverStatus })`로 시그니처 확장.
+- [x] **S1-2.** hook 내부에서 `status === 'all' ? undefined : status`로 분기, `withQuery('/admin/drivers', { status: <분기결과> })` 합성.
+- [x] **S1-3.** `useAdminList`의 `deps`에 `[status]` 전달(타 탭 선례 동형, 탭 전환 시 자동 재조회 발생).
+- [x] **S1-4.** `_client.tsx`에서 `filterByTab(allDrivers, tab)` 호출 제거 → hook 반환 `drivers` 직접 사용. `useAdminDrivers({ status: tab })`으로 호출부 갱신.
+- [x] **S1-5.** `_lib.ts`의 `filterByTab` 함수 **재사용처 0 확인 후 완전 제거**. (Grep `filterByTab` repo-wide)
+- [x] **S1-6.** 로딩·빈결과에서도 탭 UI 유지 — `_client.tsx` early return 제거·삼항 재배치(세션86 C6 가드 동형).
+- [x] **S1-7.** **육안 검증 문서 `pending-visual-verify.md` §14(어드민 드라이버 4탭) 신설** — 코드 완료 직후·**커밋 전**. 항목 = ① 4탭 각각 진입 시 모수 일치 ② 'all' 탭 = 정지 포함 전부 ③ approve 후 카드 사라짐(승인대기 → 승인완료) ④ suspend 후 카드 사라짐(승인완료 → 정지) ⑤ 시각 회귀 0.
+- [x] **S1-8.** **정합성검토 (C1~C7 — §0 공통 기준)**.
   - C1 tsc 0 (admin·seller·consumer)
   - C2 biome 0 (신규 경고 0)
   - C3 `npm run build` 0 (⚠️ `npx next build` 금지)
@@ -142,7 +142,7 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
   - C5 SSOT 토큰 (status 라벨은 기존 `_lib` STATUS_TABS 재사용)
   - C6 가드 유지 (로딩·빈결과에서 탭 표시)
   - C7 시각 회귀 0 (DOM 동일)
-- [ ] **S1-9.** **커밋** — `refactor(admin): #CL-55 drivers 탭 status 서버 필터 배선 (T1)`. 푸시·배포는 사용자 지시 대기.
+- [x] **S1-9.** **커밋** — `refactor(admin): #CL-55 drivers 탭 status 서버 필터 배선 (T1)`. 푸시·배포는 사용자 지시 대기.
 - [ ] **S1-10.** **운영 배포 후 육안 통과 (§5 체크리스트)** — 통과 시 S1 종결, S2 진입 가능.
 
 ### 세션 S2 — T2 (타입 정합)

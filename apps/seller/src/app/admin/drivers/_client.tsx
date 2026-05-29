@@ -1,25 +1,17 @@
 'use client';
 
 import { Box, Group, Title, UnstyledButton } from '@mantine/core';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { type DriverStatus, useAdminDrivers } from '@/hooks/useAdmin';
 import { DriverList } from './_components/DriverList';
-import {
-  ACTION_META,
-  type DriverAction,
-  filterByTab,
-  type PendingAction,
-  STATUS_TABS,
-} from './_lib';
+import { ACTION_META, type DriverAction, type PendingAction, STATUS_TABS } from './_lib';
 
 export default function DriversClient() {
   const [tab, setTab] = useState<DriverStatus>('pending');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
-  const { drivers: allDrivers, loading, approve, toggleSuspend } = useAdminDrivers();
-
-  const drivers = useMemo(() => filterByTab(allDrivers, tab), [allDrivers, tab]);
+  const { drivers, loading, approve, toggleSuspend } = useAdminDrivers({ status: tab });
 
   const runPending = async () => {
     if (!pending) return;
