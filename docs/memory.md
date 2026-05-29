@@ -21,7 +21,7 @@
 - S8 검증: 변경 파일 Biome 0, `pnpm --filter seller build` 0, 빌드 후 `pnpm --filter seller exec tsc --noEmit` 0. e2e는 기본 운영 URL이 이전 배포를 봐 실패했고, 로컬 새 코드 대상은 Firebase 공개 env 미주입(`auth/invalid-api-key`) 오버레이로 `/admin/drivers` 진입 전 차단됐다.
 - 커밋 `605f143`을 push했고 seller 프리뷰 `https://greenhub-seller-kq2loonje-jos-projects-d1cecc0c.vercel.app`가 READY가 됐다. branch alias는 `https://greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app`다.
 - 향후 작업으로 `ADMIN-DRIVERS-F4`(드라이버 상세 정보), `ADMIN-DRIVERS-F5`(정렬·페이지네이션), `DRIVER-APP-REFACTOR`를 `BACKLOG.md`와 `admin-tab-drivers-plan.md`에 명시했다.
-- 2026-05-30 어드민 배너 탭 T1·T2·T3를 완료했다. `useEffect` hydrate deps를 `[banner]`로 교정하고, CTA 문구·URL 비대칭 저장 차단, 저장·이미지 업로드 실패 알림, CTA 모바일 1열 배치(T6 일부)를 반영했다. `pending-visual-verify.md` §15 #231~#236에 육안검증 항목을 등록했다.
+- 2026-05-30 어드민 배너 탭 T1·T2·T3를 완료했다. `useEffect` hydrate deps를 `[banner]`로 교정하고, CTA 문구·URL 비대칭 저장 차단, 저장·이미지 업로드 실패 알림, CTA 모바일 1열 배치(T6 일부)를 반영했다. 커밋 `1605023`을 push했고 seller 프리뷰 `https://greenhub-seller-f2k6j1erj-jos-projects-d1cecc0c.vercel.app`가 READY가 됐다. `pending-visual-verify.md` §15 #231~#236에 육안검증 항목을 등록했다.
 - 미추적 파일 `.codex/`, `AGENTS.md`는 사용자/환경 산출물 가능성이 있어 건드리지 않는다.
 
 ## 검증 기준
@@ -33,4 +33,4 @@
 
 ## 다음 진입점
 
-- 인증 가능한 프리뷰 또는 운영 미적용 환경에서 `pending-visual-verify-20260529.md` §26 #235~#239를 확인한다.
+- 인증 가능한 프리뷰 또는 운영 미적용 환경에서 `pending-visual-verify.md` §15 #231~#236을 확인한 뒤, `admin-tab-banner-plan.md`의 다음 단계 T5a 또는 다중 배너 SDD Phase 3로 진입한다.
