@@ -5,6 +5,14 @@ import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
 
+export { useAdminBanner, useAdminBanners } from './useAdminBanners';
+export type {
+  AdminActionResult,
+  AdminBanner,
+  AdminBannerForm,
+  BannerCta,
+  BannerKind,
+} from './useAdminBanners';
 export { useAdminInvite } from './useAdminInvite';
 export type { InviteRevokeReason, InviteToken } from './useAdminInvite';
 
@@ -86,26 +94,6 @@ export interface AdminDriver {
   driverApproved: boolean;
   suspended?: boolean;
   createdAt: unknown;
-}
-
-export interface BannerCta {
-  label: string;
-  href: string;
-}
-
-export interface AdminBanner {
-  imageUrl?: string;
-  tagText?: string;
-  headline?: string;
-  subText?: string;
-  cta1?: BannerCta;
-  cta2?: BannerCta;
-  isActive?: boolean;
-}
-
-export interface AdminActionResult {
-  ok: boolean;
-  reason?: string;
 }
 
 // ── Core ─────────────────────────────────────────────────────────
@@ -406,55 +394,4 @@ export function useAdminDrivers(filters: { status: DriverStatus }) {
   };
 
   return { drivers, loading, error, reload, approve, toggleSuspend };
-}
-
-// ── Banner ───────────────────────────────────────────────────────
-
-export function useAdminBanner() {
-  const { data: session } = useSession();
-  const token = session?.user.accessToken;
-  const [banner, setBanner] = useState<AdminBanner | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      setBanner(await apiJson<AdminBanner>('/admin/banner', token));
-    } catch {
-      // 배너 미설정 등 — 무시
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const save = async (dto: AdminBanner): Promise<AdminActionResult> => {
-    if (!token) return { ok: false, reason: '관리자 인증이 필요합니다.' };
-    setSaving(true);
-    // 서버 관리 필드 제거 (forbidNonWhitelisted 대응)
-    const {
-      updatedAt: _u,
-      createdAt: _c,
-      ...payload
-    } = dto as AdminBanner & Record<string, unknown>;
-    try {
-      await apiJson('/admin/banner', token, { method: 'PUT', body: JSON.stringify(payload) });
-      await load();
-      return { ok: true };
-    } catch (error) {
-      return {
-        ok: false,
-        reason: error instanceof Error ? error.message : '배너 저장 중 오류가 발생했습니다.',
-      };
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return { banner, loading, saving, save, reload: load };
 }
