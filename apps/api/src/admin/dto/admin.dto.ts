@@ -1,4 +1,10 @@
-import { type OrderStatus, SETTLEMENT_STATUSES, type SettlementStatus } from '@greenhub/shared';
+import {
+  BANNER_KINDS,
+  type BannerKind,
+  type OrderStatus,
+  SETTLEMENT_STATUSES,
+  type SettlementStatus,
+} from '@greenhub/shared';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -153,4 +159,31 @@ export class UpsertBannerDto {
 
   @IsOptional()
   createdAt?: unknown;
+}
+
+export class CreateBannerDto extends UpsertBannerDto {
+  @IsIn(BANNER_KINDS)
+  kind: BannerKind;
+
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+}
+
+export class UpdateBannerDto extends UpsertBannerDto {
+  @IsOptional()
+  @IsIn(BANNER_KINDS)
+  kind?: BannerKind;
+
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
 }

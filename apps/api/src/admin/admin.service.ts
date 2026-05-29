@@ -18,7 +18,6 @@ import type {
   QueryAdminSettlementsDto,
   SetCommissionDto,
   SuspendUserDto,
-  UpsertBannerDto,
 } from './dto/admin.dto';
 
 const ADMIN_USERS_LIMIT = 5000;
@@ -478,20 +477,4 @@ export class AdminService {
 
   // ── Banner ───────────────────────────────────────────────────────
 
-  async getBanner() {
-    const snap = await this.firestore.doc('banners/main_hero').get();
-    return snap.exists ? snap.data() : null;
-  }
-
-  async upsertBanner(dto: UpsertBannerDto) {
-    const {
-      updatedAt: _u,
-      createdAt: _c,
-      ...fields
-    } = dto as UpsertBannerDto & Record<string, unknown>;
-    const ref = this.firestore.doc('banners/main_hero');
-    await ref.set({ ...fields, updatedAt: this.firestore.Timestamp.now() }, { merge: true });
-    const snap = await ref.get();
-    return snap.data();
-  }
 }
