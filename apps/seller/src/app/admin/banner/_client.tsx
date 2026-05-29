@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Button, Group, Stack, Switch, Text, Title } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -10,26 +11,45 @@ import { BannerCtaSection } from './_components/BannerCtaSection';
 import { BannerImageSection } from './_components/BannerImageSection';
 import { BannerTextSection } from './_components/BannerTextSection';
 
+const DEFAULT_BANNER_FORM: AdminBanner = {
+  imageUrl: '',
+  tagText: '',
+  headline: '',
+  subText: '',
+  cta1: { label: '', href: '' },
+  cta2: { label: '', href: '' },
+  isActive: true,
+};
+
+function hasPartialCta(cta?: { label?: string; href?: string }) {
+  const hasLabel = Boolean(cta?.label?.trim());
+  const hasHref = Boolean(cta?.href?.trim());
+  return hasLabel !== hasHref;
+}
+
+function validateCta(form: AdminBanner): string | null {
+  if (hasPartialCta(form.cta1) || hasPartialCta(form.cta2)) {
+    return '버튼 문구와 URL은 둘 다 입력하거나 둘 다 비워주세요.';
+  }
+  return null;
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function AdminBannerClient() {
   const { data: session } = useSession();
   const { banner, loading, saving, save } = useAdminBanner();
 
-  const [form, setForm] = useState<AdminBanner>({
-    imageUrl: '',
-    tagText: '',
-    headline: '',
-    subText: '',
-    cta1: { label: '', href: '' },
-    cta2: { label: '', href: '' },
-    isActive: true,
-  });
+  const [form, setForm] = useState<AdminBanner>(DEFAULT_BANNER_FORM);
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [ctaError, setCtaError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (banner) setForm({ ...form, ...banner });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [banner, form]);
+    if (banner) setForm({ ...DEFAULT_BANNER_FORM, ...banner });
+  }, [banner]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -40,6 +60,12 @@ export default function AdminBannerClient() {
       await uploadBytes(r, file);
       const url = await getDownloadURL(r);
       setForm((f) => ({ ...f, imageUrl: url }));
+      notifications.show({ color: 'green', message: '배너 이미지를 업로드했습니다.' });
+    } catch (error) {
+      notifications.show({
+        color: 'red',
+        message: getErrorMessage(error, '이미지 업로드 중 오류가 발생했습니다.'),
+      });
     } finally {
       setUploading(false);
       e.target.value = '';
@@ -47,11 +73,25 @@ export default function AdminBannerClient() {
   };
 
   const handleSave = async () => {
-    const ok = await save(form);
-    if (ok) {
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+    const validationMessage = validateCta(form);
+    setCtaError(validationMessage);
+    if (validationMessage) {
+      notifications.show({ color: 'red', message: validationMessage });
+      return;
     }
+
+    const result = await save(form);
+    if (result.ok) {
+      setSaved(true);
+      notifications.show({ color: 'green', message: '배너를 저장했습니다.' });
+      setTimeout(() => setSaved(false), 2000);
+      return;
+    }
+
+    notifications.show({
+      color: 'red',
+      message: result.reason ?? '배너 저장 중 오류가 발생했습니다.',
+    });
   };
 
   if (loading) {
@@ -80,11 +120,11 @@ export default function AdminBannerClient() {
           onUpload={handleImageUpload}
         />
         <BannerTextSection form={form} setForm={setForm} />
-        <BannerCtaSection form={form} setForm={setForm} />
+        <BannerCtaSection form={form} setForm={setForm} error={ctaError} />
 
         <Button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || uploading}
           size="md"
           radius="xl"
           style={{ backgroundColor: saved ? 'var(--color-primary-light)' : 'var(--color-primary)' }}
