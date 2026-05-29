@@ -171,3 +171,7 @@
 ## 2026-05-29 어드민 초대 탭 육안검증 인덱스 정리
 - 메인 `pending-visual-verify.md`의 2026-05-29 추가 묶음 인덱스에 초대 탭 §22~§24 링크를 보강했다. 실제 항목 본문은 500라인 가드 때문에 `pending-visual-verify-20260529.md`에 유지한다.
 - 코드 변경은 없고 문서 정합성만 보강했다. `memory.md`는 200라인 미만, 수정 문서는 모두 500라인 미만이다.
+
+## 2026-05-29 어드민 초대 탭 향후 작업 등록
+- 사용자 요청으로 초대 탭의 제외 항목을 BACKLOG P3 향후 작업으로 승격했다. 등록 항목은 `ADMIN-INVITE-F6-F5-ADV`, `ADMIN-INVITE-SCALE-1000`, `ADMIN-INVITE-F7-EXPIRY`, `ADMIN-INVITE-SELLER-ROLLBACK`, `ADMIN-INVITE-REVOKE-NONVALID` 5건이다.
+- `admin-tab-invite-plan.md` 참고 문서에도 각 항목이 BACKLOG로 승격됐음을 표시했다.
