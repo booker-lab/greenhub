@@ -21,11 +21,6 @@ export class AppController {
     return { status: 'ok', timestamp: new Date().toISOString() };
   }
 
-  @Get('banner')
-  async getBanner() {
-    return this.banners.getLegacyMainBanner();
-  }
-
   @Get('banners/active')
   async getActiveBanners() {
     return this.banners.getActiveBanners();

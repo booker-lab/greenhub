@@ -2,7 +2,7 @@
 > **SSOT**: 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 최신 아카이브: `archive/memory_archive_20260530.md`
 
-최종 수정: 2026-05-30 (어드민 배너 T5a)
+최종 수정: 2026-05-30 (어드민 배너 공개 조회 호환 정리)
 
 ## 최신 진행 현황
 
@@ -46,3 +46,6 @@
 - 2026-05-30 어드민 배너 다중 배너 SDD S7 closeout을 진행했다. `pending-visual-verify-20260529.md` §30 #261~#265에 배포 반영, 마이그레이션 멱등성, G-11.2 성공 기준, C8, C9 육안검증 항목을 추가했다.
 - S7 검증: API 배너 유닛 테스트 6/6, api·seller·consumer 타입체크 0, shared·api·seller·consumer·driver 빌드 0. seller 첫 빌드는 consumer 빌드와 병렬 실행한 `copy-fonts` 파일 잠금 충돌로 실패했으나 순차 재실행으로 통과했다. 공개 e2e는 `seller-banner.spec.ts`, `consumer-home.spec.ts` 14 passed, 인증 필요 2 skipped.
 - Vercel 배포 확인: consumer `greenhubconsumer-p3tyba39e...`, seller `greenhub-seller-fr5lf9zyh...`, driver `greenhub-driver-izn1g6sjo...`가 최신 코드 커밋 `3fe9337` 기준 READY다. 연결된 Vercel 프로젝트 목록에는 별도 api 프로젝트가 없다.
+- 2026-05-30 어드민 배너 S7 후속 정리를 진행했다. 소비자 `HeroBanner`가 `/banners/active`만 사용함을 확인하고 공개 구 엔드포인트 `GET /banner`, `BannerQueryService.getLegacyMainBanner()`, 일회성 `apps/api/src/scripts/migrate-banners-kind.ts`를 제거했다.
+- 해당 결정은 `CRITICAL_LOGIC.md`에 기록했고, SDD는 `admin-banner-multi-sdd.md` §11에 완료 체크했다. 육안검증은 `pending-visual-verify-20260529.md` §31 #266~#267에 추가했다.
+- 검증: API 배너 테스트 6/6, `pnpm typecheck` 0, 변경 코드 파일 Biome 0, `pnpm --filter api build` 0, `pnpm --filter consumer build` 0, `pnpm --filter seller build` 0. 전체 `pnpm exec biome check .`는 기존 `.vercel/output` 생성물과 `.claude/settings.local.json`, `apps/api/tsconfig.json` 포맷 이슈로 실패했다.

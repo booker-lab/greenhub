@@ -320,3 +320,8 @@
 - [x] **S7 육안검증 등록** — `pending-visual-verify-20260529.md` §30 #261~#265에 배포 반영, 마이그레이션 멱등성, G-11.2 성공 기준 장면, C8 기본 배너 회귀, C9 KST 기간 경계 확인 항목을 추가했다.
 - [x] **S7 배포 확인** — Vercel에서 consumer·seller·driver 최신 코드 커밋 `3fe9337` 배포가 모두 READY임을 확인했다. 연결된 Vercel 프로젝트 목록에는 별도 api 프로젝트가 없어 API는 로컬 빌드·테스트로 검증한다.
 - [x] **S7 자동 검증** — API 배너 유닛 테스트 6/6, api·seller·consumer 타입체크 0, shared·api·seller·consumer·driver 빌드 0을 확인했다. seller 첫 빌드는 consumer 빌드와 `copy-fonts`가 동시에 실행되어 파일 잠금 충돌이 났고, 순차 재실행으로 통과했다. 공개 e2e(`seller-banner.spec.ts`, `consumer-home.spec.ts`)는 14 passed, 인증 필요 2 skipped로 끝났다.
+
+## 11. 2026-05-30 S7 후속 정리
+
+- [x] **S6-U9b 호환 엔드포인트 제거** — 소비자 `HeroBanner`가 `/banners/active`만 사용함을 확인하고 공개 구 엔드포인트 `GET /banner`와 `BannerQueryService.getLegacyMainBanner()`를 제거한다.
+- [x] **일회성 마이그레이션 스크립트 정리** — `banners/main_hero`에 `kind:'default'`를 병합하던 `apps/api/src/scripts/migrate-banners-kind.ts`를 삭제한다. 마이그레이션 실행 기록과 멱등성 검증은 S7 로그에 남긴다.

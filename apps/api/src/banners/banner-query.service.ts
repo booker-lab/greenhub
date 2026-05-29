@@ -8,11 +8,6 @@ import { FirestoreService } from '../firestore/firestore.service';
 export class BannerQueryService {
   constructor(private readonly firestore: FirestoreService) {}
 
-  async getLegacyMainBanner() {
-    const snap = await this.firestore.doc('banners/main_hero').get();
-    return snap.exists ? this.toBanner(snap.id, snap.data()) : null;
-  }
-
   async getActiveBanners(): Promise<ActiveBannersResponse> {
     const snap = await this.firestore.collection('banners').get();
     const today = todayKST();
