@@ -654,3 +654,12 @@
 **이유**: 원 계획은 `@mantine/carousel` 또는 자체 슬라이드를 허용하며, 이번 S6의 필수 계약은 `GET /banners/active` 소비, 기본 배너 마지막 배치, 1장 정적 표시, 5초 자동 전환, 점 인디케이터, hover/사용자 조작 시 자동 전환 중지다. 자체 구현으로 잠금 파일과 번들 변동을 줄이면서 동일 계약을 충족할 수 있다.
 
 **계약**: `HeroBanner` 서버 컴포넌트는 `/banners/active`를 `revalidate: 60`으로 조회해 `scheduled + default` 배열을 만들고, 클라이언트 캐러셀은 슬라이드가 1장일 때 자동 전환과 인디케이터를 렌더하지 않는다. CTA는 label과 href가 모두 있을 때만 노출한다.
+
+---
+## 2026-05-30 — #CL-55 배너 공개 조회 호환 종료
+
+**결정**: 소비자 공개 배너 조회의 SSOT를 `GET /banners/active`로 확정하고, 구 `GET /banner` 엔드포인트와 일회성 `migrate-banners-kind` 스크립트를 제거한다.
+
+**이유**: S7에서 consumer·seller·driver 최신 배포가 READY임을 확인했고, 소비자 `HeroBanner`가 이미 `/banners/active`만 호출한다. 구 단건 엔드포인트와 마이그레이션 스크립트를 계속 유지하면 새 다중 배너 계약과 낡은 단건 계약이 병존해 운영·테스트 경계가 흐려진다.
+
+**계약**: 공개 조회는 `{ scheduled, default }` 응답을 반환하는 `/banners/active`만 사용한다. 기존 `GET/PUT /admin/banner` 관리자 호환 경로는 기본 배너 편집 호환을 위해 유지하되, 손님용 단건 `GET /banner`는 제거한다.
