@@ -412,6 +412,8 @@
 | 217 | 로딩·빈결과 상태 | 로딩/빈결과에서도 4개 탭 UI가 유지되고 탭 전환 가능 | [ ] | |
 | 218 | 시각 회귀 | 데스크톱·모바일에서 탭, 카드, 버튼 겹침·가로 스크롤·텍스트 넘침 0 | [ ] | |
 | 219 | S2 타입 정규화 회귀 | 승인 대기·승인 완료·정지 카드의 배지와 승인/정지/정지 해제 버튼 노출이 S1과 동일 | [x] | 2026-05-29 e2e에서 배지·정지 해제 버튼 노출 확인 |
+| 220 | 가입일 표시 | 각 드라이버 카드 이메일 아래에 `가입일 YYYY-MM-DD` 또는 `가입일 -`가 표시되고 KST 날짜 포맷을 사용 | [ ] | seller 프리뷰 `greenhub-seller-jzcy0ohgh-jos-projects-d1cecc0c.vercel.app` READY. 로컬은 `AUTH_SECRET` 누락·Firebase `auth/invalid-api-key`로 `/login`에서 차단 |
+| 221 | 가입일 모바일 배치 | 375px 폭에서 이름·배지·이메일·가입일·액션 버튼이 겹치거나 잘리지 않음 | [ ] | seller 프리뷰 `greenhub-seller-jzcy0ohgh-jos-projects-d1cecc0c.vercel.app` 또는 운영 인증 세션에서 확인 |
 
 ## 검증 결과 요약 (검증 완료 후 기재)
 
@@ -433,7 +435,7 @@
 | §13 주문 세션δ 환불 모달 | 부분 통과 | #140·#141은 최종 육안 확인 유지 | 로컬 seller fixture, chromium·mobile e2e |
 | §19 주문 상세 모달 | 대기 | #175~#181 새 코드 반영 프리뷰 또는 인증 환경 확인 필요 | 새 코드 반영 프리뷰 또는 로컬 인증 환경 |
 | §20 주문 정렬·커서 페이지네이션 | 대기 | #182~#188 운영/프리뷰 육안 확인 필요 | 새 코드 반영 프리뷰 또는 로컬 인증 환경 |
-| §14 드라이버 status 서버 필터 | 부분 통과 | #215~#218은 운영/프리뷰 육안 확인 유지. 프리뷰 배포는 READY, e2e 직접 실행은 Vercel Authentication 401로 차단 | 로컬 seller fixture chromium·mobile e2e 8/8, seller preview branch alias `greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app` |
+| §14 드라이버 status 서버 필터·가입일 | 부분 통과 | #215~#218, #220~#221은 운영/프리뷰 육안 확인 유지. T3 seller 프리뷰는 READY, 로컬 직접 진입은 인증 환경값 누락으로 차단 | 로컬 seller fixture chromium·mobile e2e 8/8, T3 seller preview `greenhub-seller-jzcy0ohgh-jos-projects-d1cecc0c.vercel.app` |
 | §16 판매자 주문 우선 알림 배너 | 대기 | #155~#161 운영/프리뷰 육안 확인 필요 | 새 코드 반영 프리뷰 또는 로컬 인증 환경 |
 | §17 판매자 주문 일괄 준비 시작 | 대기 | #162~#167 운영/프리뷰 육안 확인 필요 | 새 코드 반영 프리뷰 또는 로컬 인증 환경 |
 | §18 판매자 주문 일괄 택배 발송 | 대기 | #168~#174 운영/프리뷰 육안 확인 필요 | 새 코드 반영 프리뷰 또는 로컬 인증 환경 |

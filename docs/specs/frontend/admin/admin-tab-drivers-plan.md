@@ -186,8 +186,21 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - [x] **S3-6.** **커밋** — `test(admin): #CL-55 drivers 탭 status 서버 필터 e2e 4건 (S3)`. 푸시는 사용자 지시 대기.
 - [x] **S3-7.** **CI·배포 확인 후 #CL-55 §C 종결 선언** — `codex/admin-stores-closeout` 최신 커밋을 push했고 seller 프리뷰 branch alias `https://greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app`가 READY 상태가 되었다. 프리뷰 e2e는 Vercel Authentication이 `/api/auth/csrf`를 401로 막아 차단되었고, 로컬 최신 seller fixture e2e 8/8과 프리뷰 배포 READY를 S3 자동 검증 종결 기준으로 기록한다. 육안 확인은 `pending-visual-verify.md` §14 #215~#218에 유지한다.
 
+### 세션 S4 — T3 (가입일 표시)
+
+> **세션 단독 목표**: 드라이버 카드에 이미 수신 중인 `createdAt`을 KST 날짜로 표시한다. 데이터 모델·API 계약 변경 없이 화면 정보만 보강한다.
+
+#### S4 체크리스트
+- [x] **S4-1.** `_lib.ts`에 `formatDriverCreatedAt()`을 추가하고 shared `toDateStrKST()`를 재사용한다.
+- [x] **S4-2.** Firestore Timestamp 계열(`toDate`, `seconds`, `_seconds`)과 ISO/string/number 입력을 안전하게 처리하고, 해석 불가 값은 `-`로 표시한다.
+- [x] **S4-3.** `DriverList.tsx` 카드 본문에 `가입일 YYYY-MM-DD` 메타 텍스트를 추가한다.
+- [x] **S4-4.** **육안 검증 문서 `pending-visual-verify.md` §14에 가입일 표시·모바일 배치 항목을 추가한다.**
+- [x] **S4-5.** **정합성검토** — 변경 파일 Biome 0, `pnpm typecheck` 0, `pnpm --filter seller build` 0. 로컬 브라우저/e2e는 기존 `AUTH_SECRET` 누락과 Firebase `auth/invalid-api-key` 환경 문제로 `/admin/drivers` 진입 전 차단되어, 실제 카드 육안은 `pending-visual-verify.md` §14 #220~#221에 유지한다.
+- [x] **S4-6.** **커밋** — `feat(admin): #CL-55 drivers 탭 가입일 표시 (T3)`.
+- [x] **S4-7.** **배포 확인** — seller 프리뷰 `https://greenhub-seller-jzcy0ohgh-jos-projects-d1cecc0c.vercel.app`가 READY. 실제 가입일 육안 통과는 `pending-visual-verify.md` §14 #220~#221에서 계속 추적한다.
+
 ### 제외(별도 세션 — §C-4·§C-5 보존)
-- **F1** 검색(이름·이메일) / **F2** 새로고침 버튼 / **F3** 가입일 표시 / **F4** 드라이버 상세(전화·차량, 데이터모델 선확인 필요) / **F5** 정렬·페이지네이션·`limit(100)` 한도 / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R1** 액션 버튼 메타화 / **R2** 공통 `SegmentedTabs` 통일.
+- **F1** 검색(이름·이메일) / **F2** 새로고침 버튼 / **F4** 드라이버 상세(전화·차량, 데이터모델 선확인 필요) / **F5** 정렬·페이지네이션·`limit(100)` 한도 / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R1** 액션 버튼 메타화 / **R2** 공통 `SegmentedTabs` 통일.
 
 ### 차기 진입점(C-8 보강)
 - **S1(T1) → 운영 배포·육안 → S2(T2) → 운영 배포·육안 → S3(e2e) → CI 통과 → 종결**.

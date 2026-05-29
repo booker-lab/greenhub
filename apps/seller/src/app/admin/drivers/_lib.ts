@@ -1,3 +1,4 @@
+import { toDateStrKST } from '@greenhub/shared';
 import type { DriverStatus } from '@/hooks/useAdmin';
 
 export type DriverAction = 'approve' | 'suspend' | 'unsuspend';
@@ -38,3 +39,26 @@ export const STATUS_TABS: { value: DriverStatus; label: string }[] = [
   { value: 'approved', label: '승인 완료' },
   { value: 'suspended', label: '정지됨' },
 ];
+
+function toDate(value: unknown): Date | null {
+  if (value instanceof Date) return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (!value || typeof value !== 'object') return null;
+
+  const record = value as {
+    _seconds?: number;
+    seconds?: number;
+    toDate?: () => Date;
+  };
+  if (typeof record.toDate === 'function') return record.toDate();
+  const seconds = record._seconds ?? record.seconds;
+  return typeof seconds === 'number' ? new Date(seconds * 1000) : null;
+}
+
+export function formatDriverCreatedAt(value: unknown): string {
+  const date = toDate(value);
+  return date ? toDateStrKST(date) : '-';
+}
