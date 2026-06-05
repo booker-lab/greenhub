@@ -9,6 +9,8 @@
     "build": "pnpm --filter ./packages/shared build && pnpm -r --filter './apps/*' build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
+    "release:plan": "node scripts/ops/preview-release-train.mjs plan",
+    "release:stage": "node scripts/ops/preview-release-train.mjs stage",
     "test:e2e": "pnpm --filter e2e test",
     "test:e2e:ui": "pnpm --filter e2e test:ui"
   },

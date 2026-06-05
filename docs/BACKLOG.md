@@ -26,8 +26,11 @@
 | ✅ | 백엔드+인프라 보안 취약점 11건 수정 (2026-04-09) | 보안 |
 | ✅ | 보안 수정 후 E2E 검증 (결제·로그인·admin 3앱 접근) (2026-04-10) | 테스트 |
 | 💡 | 카드 결제 PG사 계약 | 외부 연동 |
-| 🔵 | 다중 판매자 상점 페이지 (소비자 앱) | Phase 2 |
+| ✅ | 다중 판매자 상점 페이지 (소비자 앱) — `CONSUMER-STORES-PHASE2` S1~S7 완료 | Phase 2 |
 | 🟢 검증 | SETTLE-REFACTOR — 정산 confirm 배치 + 정합 갭(아래 §13). 구현 6태스크+S6 자동검증 종결(세션82), 런타임 전이 입증만 사용자 위임 | 정산/치명 |
+| 💡 향후 | VF-008 — 정상 상호명 확인과 별도 승인 후 운영 Firestore 판매자 `name` 정리 | 운영 데이터 |
+| 💡 향후 | VF-011 — 정상 이름 확인과 별도 승인 후 운영 Firestore 소비자 `name` 정리 | 운영 데이터 |
+| 💡 향후 | 육안 검증 보류 묶음 — 인증 가능한 `375px` seller·admin 모바일 환경, 운영 쓰기 승인, 테스트 데이터가 필요한 항목은 `visual-verify-handoff-20260601.md` §4에서 재개 | 검증 환경 |
 
 ---
 
@@ -130,11 +133,14 @@
 - [x] `/admin/drivers` — 드라이버 승인 대기·승인·정지 관리 ✅ 2026-04-03
 - [x] **[어드민-반응형] `/admin/*` 모바일 PWA 폭 미최적화** ✅ 2026-05-25 세션88 (#246/247 종결, #CL-51) — 5개 테이블(settlements·orders·stores·invite·users)을 **C-full(전부 카드형)·breakpoint `sm`(768px)** 으로 전환. Mantine `hiddenFrom`/`visibleFrom` 분기 도입(셀러 앱 최초 반응형 분기), 데스크톱 테이블 DOM 불변(회귀 0). 모바일에서 지급처리/강제환불/정지·복구/수수료설정 버튼 카드 내 풀폭 노출로 접근 결함 해소. 정합성 C1~C6 통과(tsc·biome·build exit0, 500라인 한도, SSOT 토큰 0위반). e2e=어드민 스펙 부재+순수 표현 레이어라 대상 없음. **잔여=모바일 폭 카드 육안 검증(사용자 위임).** 상세 [#CL-51], 플랜 [admin-responsive-plan.md](specs/frontend/admin-responsive-plan.md).
 - [x] **[어드민-users 개선 S1~S5] 소비자 탭 검색·필터·표시·정지 refresh 차단** ✅ 2026-05-29 (#CL-55 §E) — S1 `/auth/refresh` 정지 사용자 401 차단+단위 테스트, S2 가입일·전화·새로고침 버튼, S3 이름·이메일·전화 검색+전체/정상/정지 필터+vitest, S4 `createdAt desc`·`limit(5000)`+Firestore 인덱스 정의, S5 `admin-users.spec.ts` 14건 신설. **잔여=새 코드 반영 프리뷰에서 S5 재실행, 인덱스 운영 배포, §5 육안 검증.**
-- [ ] **[ADMIN-SETTLEMENTS-F4] 스토어명 표시·Select화** — `/admin/settlements` 필터와 행/카드가 `storeId` 중심이라 운영자가 가게를 식별하기 어렵다. `useAdminStores` 재사용 또는 경량 `{id→name}` 매핑을 검토하고, 스토어명 Select 필터·표시·검색 계약을 포함해 **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-settlements-plan.md` F4.
-- [ ] **[ADMIN-SETTLEMENTS-F3] 500건 하드캡 페이지네이션** — 현재 `getSettlements`가 최대 500건으로 제한되어 초과분이 조용히 누락될 수 있다. 커서 기반 페이지네이션, "더 있음" 표시, 정렬·status·storeId·기간 복합 필터의 커서 계약, Firestore 인덱스 영향을 포함해 **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-settlements-plan.md` F3.
-- [ ] **[ADMIN-SETTLEMENTS-A1] 입금일 표시** — `/admin/settlements` 행/카드에 `confirmedAt`·`paidAt` 기반 입금 예정/완료 시점을 표시해 운영자가 지급 상태를 한눈에 확인하도록 한다. 셀러 정산 화면 T3 패턴이 안정된 뒤 표현 규칙을 맞춰 흡수 검토하며, **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-settlements-plan.md` D-11 A1.
-- [ ] **[ADMIN-STORES-T7] 판매자 상세 드릴다운** — `/admin/stores`에서 store별 주문·정산 집계와 상세 화면으로 진입하는 운영 동선. 집계 API·상세 라우트·관리자 권한 경계·목록 URL 복원 계약을 포함하므로 **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-stores-plan.md` T7.
-- [ ] **[ADMIN-STORES-T8] 플랫폼 기본 수수료율 설정** — 신규/기존 store에 적용할 전역 기본 수수료 정책과 설정 UI. 전역 config 데이터모델·store별 override 우선순위·소급 여부·`parseRate(input, { min, max })` 확장을 포함하므로 **별도 SDD 선작성 후 구현**. 출처: `specs/frontend/admin/admin-tab-stores-plan.md` T8.
+- [x] **[ADMIN-SETTLEMENTS-F4] 스토어명 표시·Select화** ✅ 2026-06-03 (#CL-82) — 기존 `useAdminStores()`를 재사용해 검색 가능한 스토어명 `Select`와 `storeId -> name` 표시 사전을 연결했다. 정산 API의 `storeId` 계약은 유지하고, 목록에 없는 과거·고아 ID는 축약 ID로 대체 표시한다. 별도 SDD: `specs/frontend/admin/admin-settlements-store-name-plan.md`.
+- [x] **[ADMIN-SETTLEMENTS-F3] 500건 하드캡 페이지네이션** ✅ 2026-06-03 (#CL-83) — 별도 SDD 후 `GET /admin/settlements`에 `limit`·`cursor`·`nextCursor`를 추가했다. 기본 100건씩 조회하고 `더 보기`로 다음 페이지를 이어 붙인다. 기존 `settledAt desc` 인덱스를 재사용하기 위해 커서는 `settledAt` ISO 문자열로 유지한다. 별도 SDD: `specs/frontend/admin/admin-settlements-pagination-plan.md`.
+- [x] **[ADMIN-SETTLEMENTS-A1] 입금일 표시** ✅ 2026-06-03 (#CL-81) — `/admin/settlements` 행/카드의 상태 Badge 아래에 `paidAt` 기반 `입금 완료 YYYY-MM-DD HH:mm`, `confirmedAt` 기반 `지급 대기 · 확정 YYYY-MM-DD HH:mm`을 표시한다. 백엔드에 없는 입금 예정일은 추정하지 않고, 과거 `confirmedAt` 누락 데이터는 `지급 대기`로 폴백한다. 별도 SDD: `specs/frontend/admin/admin-settlements-payment-timing-plan.md`.
+- [x] **[ADMIN-STORES-T7] 판매자 상세 드릴다운** ✅ 2026-06-03 (#CL-84) — 별도 SDD 후 `GET /admin/stores/:storeId/summary`와 `/admin/stores/[id]` 읽기 전용 상세를 추가했다. 상세는 스토어·owner 기본 정보, 주문 상태별 건수·총액, 정산 상태별 건수·플랫폼 수수료·실지급 합계를 표시하고, 목록 필터 복원은 `back` 쿼리로 처리한다. 별도 SDD: `specs/frontend/admin/admin-stores-detail-drilldown-plan.md`.
+- [x] **[ADMIN-STORES-T8] 플랫폼 기본 수수료율 설정** ✅ 2026-06-03 (#CL-85) — 별도 SDD 후 `platform/config.defaultCommissionRate`, `GET /admin/platform-config`, `PATCH /admin/platform-config/default-commission`, `/admin/stores` 기본 수수료율 설정 패널을 추가했다. 스토어별 `commissionRate` override 우선, 기존 스토어 소급 없음, 신규 스토어 생성 시 현재 기본값 복사로 확정했다. 별도 SDD: `specs/frontend/admin/admin-stores-default-commission-plan.md`.
+- [x] **[ADMIN-DRIVERS-F4] 드라이버 상세 정보 추가** ✅ 2026-06-03 (#CL-86) — 별도 SDD 후 `/admin/drivers` 응답과 카드에 `phone`을 추가했다. 차량 정보는 현재 저장 경로가 없으므로 선택 필드가 있을 때만 표시하고, 없으면 `차량 정보 미등록`으로 명시한다. 전화번호 검색도 함께 보강했다. 별도 SDD: `specs/frontend/admin/admin-drivers-detail-info-plan.md`.
+- [x] **[ADMIN-DRIVERS-F5] 정렬·페이지네이션** ✅ 2026-06-03 (#CL-87) — 별도 SDD `specs/frontend/admin/admin-drivers-pagination-plan.md` 선작성 후 `GET /admin/drivers?status=&sort=&limit=&cursor=` 계약으로 확장. `driverApproved`/`suspended` 기반 status 쿼리, `suspended` 누락 문서 보정, `createdAt` asc/desc 정렬, `limit+1` 기반 `nextCursor`, seller `더 보기` append UI, Firestore `users` 복합 인덱스를 추가했다. `useAdminDrivers`는 전용 hook으로 분리해 `useAdmin.ts` 500라인 접근을 해소했다.
+- [x] **[DRIVER-APP-REFACTOR] 드라이버 앱 리팩토링** ✅ 2026-06-03 (#CL-88~#CL-90) — 별도 SDD `specs/frontend/driver-app-refactor-plan.md` 선작성 후 `board`·`map`의 타입·라벨·시간/주소 표시·최근접 경로 정렬·카카오내비 URL 생성 순수 로직을 `_lib.ts`로 분리했다. 2차로 `board/[orderId]` 상세 표시·CTA·연락처 판정과 사진 업로드 Storage 경로·payload 생성을 `_lib.ts`로 분리했고, 3차로 `photo/page.tsx`의 시각 레이아웃을 `PhotoCaptureView`로 분리했다. Firestore 쿼리·상태 전환 API·Kakao Maps SDK 연동은 불변.
 
 ### 1-9. 거점 스태프 권한 구조 — Phase 2 (운영 거점 계약 확정 후)
 
@@ -142,12 +148,15 @@
 > **Phase 2 트리거**: 협력 업체(꽃집·과일가게 등) 계약 확정 시
 > 설계 결정 상세: `archive/CRITICAL_LOGIC_archive_20260516.md` §2026-03-28 거점 픽업 확인 방식
 
-- [ ] `users.role: 'hub_staff'` 신규 역할 추가
-- [ ] `hubs.staffIds: string[]` 관계 필드 + Firestore 스키마 반영
-- [ ] seller 앱 스태프 초대 링크 발급 UI (`/hubs/[id]/settings`)
-- [ ] API: `hub_staff` JWT 처리 + hubId 스코핑 미들웨어
-- [ ] hub_staff 전용 온보딩 플로우 (seller 앱 내 분기)
-- [ ] `/admin` 영역 구축 시 함께 설계 (§1-8과 병행)
+- [x] `users.role: 'hub_staff'` 신규 역할 추가 ✅ 2026-06-05 — `@greenhub/shared`와 API JWT/Role 타입에 반영. 1차 로그인·온보딩 UI는 제외하고 기존 이메일 계정이 `hub_staff` 역할을 가질 수 있는 타입 토대를 마련했다.
+- [x] `hubs.staffIds: string[]` 관계 필드 + Firestore 스키마 반영 ✅ 2026-06-05 — 새 거점 생성 시 `staffIds: []`를 저장하고, 기존 거점의 누락 값은 빈 배열로 취급한다. `hub_staff`는 배정된 거점의 목록·상세·주문 조회만 가능하다.
+- [x] seller 앱 스태프 초대 링크 발급 UI ✅ 2026-06-05 — 별도 SDD `hub-staff-invite-onboarding-plan.md`와 `#CL-115`에서 `hubStaffInvites` 분리 계약을 확정했다. `/hubs/[id]` 상세에서 만료 기간별 초대 링크를 발급·복사하고, API는 `POST /stores/:storeId/hubs/:hubId/staff-invite`를 제공한다.
+- [x] seller 앱 스태프 목록 조회·권한 회수 UI ✅ 2026-06-05 — `#CL-118`에서 권한 회수는 `hubs.staffIds` 제거, `hub_staff` 계정 정지, refresh token 삭제까지 포함하기로 확정했다. `/hubs/[id]` 상세에서 배정 스태프 목록과 회수 확인창을 제공하고, API는 `GET /stores/:storeId/hubs/:hubId/staff`, `DELETE /stores/:storeId/hubs/:hubId/staff/:staffId`를 제공한다.
+- [x] seller 앱 스태프 초대 목록 조회·취소 UI ✅ 2026-06-05 — `#CL-122`에서 초대 취소는 문서 삭제가 아니라 `revokedAt`·`revokedBy` 감사 필드 기록으로 확정했다. API는 `GET /stores/:storeId/hubs/:hubId/staff-invites`, `DELETE /stores/:storeId/hubs/:hubId/staff-invites/:token`을 제공하고, `/hubs/[id]` 상세에서 발급 초대 상태와 취소 액션을 제공한다.
+- [x] API: `hub_staff` JWT 처리 + hubId 스코핑 미들웨어 ✅ 2026-06-05 — JWT role 타입과 거점 서비스 읽기 스코핑은 반영. 후속으로 `hub_staff` 가입 시 `storeId`·`hubId` 저장과 `hubs.staffIds` 배정 트랜잭션을 추가했고, 이번 작업에서 API/shared JWT 타입·Auth 토큰 발급·refresh·seller 세션에 `hubId`를 포함했다. 거점 API는 경로 `storeId`·`hubId`와 JWT 스코프를 먼저 대조한 뒤 기존 `hubs.staffIds` 배정 검증을 유지한다. 다중 거점 배정은 `hubIds` 병행 스코프와 기존 스태프 추가 배정 UI/API까지 완료했으며, 주문 상태 변경 권한은 후속 SDD로 분리.
+- [x] hub_staff 전용 온보딩 플로우 (seller 앱 내 분기) ✅ 2026-06-05 — `hub_staff`는 `/onboarding` 강제 이동 대상에서 제외하고 `/hubs`로 진입한다. `/staff-invite?token=...` 공개 화면과 Kakao 기반 초대 수락을 구현했고, 콜백은 `targetRole:'hub_staff'`와 초대 토큰을 API에 전달한다.
+- [x] hub_staff 현장 픽업 확인 CTA ✅ 2026-06-05 — `#CL-124`와 `hub-staff-invite-onboarding-plan.md` §11에 따라 `/hubs/[id]`의 `HUB_ARRIVED` 주문 카드에 주문 식별 정보, 픽업 코드, 명시적인 `픽업 확인` 버튼을 노출했다. 상태 전이와 권한 검증은 기존 `hub-confirm` API 계약을 유지한다.
+- [x] `/admin` 영역 권한 설계 연계 ✅ 2026-06-05 (#CL-125) — `hub_staff` 도입 이후에도 `/admin/*` UI·API는 `role='admin'` 전용으로 유지한다. 거점 스태프 초대·배정·회수는 admin 승격 경로를 만들지 않고, `RolesGuard` 단위 테스트로 `hub_staff`의 admin 엔드포인트 차단을 고정했다.
 
 ---
 
@@ -248,20 +257,23 @@
 
 ---
 
-## 6. 다중 판매자 확장 — Phase 2 (`apps/consumer` + `apps/api`)
+## 6. 다중 판매자 확장 — Phase 2 (`apps/consumer` + `apps/api`) ✅ 2026-06-04 1차 완료
 
 > MVP는 단일 판매자(dear-orchid) 하드코딩 구조. 다중 판매자 등록 시 아래 작업으로 확장.
+> 2026-06-04 기준 `CONSUMER-STORES-PHASE2` S1~S7 완료: 공개 상점 API, 소비자 상점 목록·상세, 홈·하단 내비 진입, 상품 상세 상점 복귀, 장바구니·바로구매 `storeId` 무결성, fixture 회귀 테스트까지 종결.
 
 ### 6-1. API 추가
 
-- [ ] `GET /stores` — active 상점 목록 (이름·로고·주소·카테고리 요약)
-- [ ] `GET /stores/:storeId` — 상점 상세 + 해당 상점 상품 목록
+- [x] `GET /public/stores` — active 상점 목록 (이름·로고·주소·상품 수·거점 수) ✅ 2026-06-04 `CONSUMER-STORES-PHASE2-S1`
+- [x] `GET /public/stores/:storeId` — 공개 상점 상세 + 해당 상점 active 상품 목록 ✅ 2026-06-04 `CONSUMER-STORES-PHASE2-S1`
 
 ### 6-2. 소비자 앱 화면 추가
 
-- [ ] `app/stores/page.tsx` — 상점 목록 (카드 그리드: 로고·상호명·거점 수·판매 상품 수)
-- [ ] `app/stores/[storeId]/page.tsx` — 상점 상세 (프로필 + 판매 상품 + 운영 거점 목록)
-- [ ] 홈 화면 하드코딩 `STORE_ID = 'dear-orchid'` → 동적 `storeId` 처리로 전환
+- [x] `app/stores/page.tsx` — 상점 목록 (카드 그리드: 로고·상호명·거점 수·판매 상품 수) ✅ 2026-06-04
+- [x] `app/stores/[storeId]/page.tsx` — 상점 상세 (프로필 + 판매 상품 목록) ✅ 2026-06-04
+- [x] 홈 화면 하드코딩 `STORE_ID = 'dear-orchid'` → 동적 `storeId` 처리로 전환 ✅ 2026-06-04 `CONSUMER-STORES-PHASE2-S4` — 소비자 코드 감사 결과 `dear-orchid`/`STORE_ID` 하드코딩은 남아 있지 않다. 홈·상점·상품 상세은 공개 상품 응답의 `storeId`를 사용하고, 바로구매 결제는 상품 로딩 전 또는 `storeId` 누락 시 결제 버튼을 비활성화해 빈 상점 주문 경로를 차단한다.
+- [x] 장바구니 주문 무결성 보강 ✅ 2026-06-04 `CONSUMER-STORES-PHASE2-S5` — 상품 상세의 장바구니·바로 결제 CTA를 같은 구매 가능 조건으로 묶고, `storeId` 누락 또는 배송 날짜 누락 항목은 결제 화면에서 재검증해 API 호출 전 차단한다. 장바구니 결제 완료 시 `checkout_cart`와 `greenhub_cart`를 함께 비운다.
+- [x] 상품 상세 상점 진입 보강 ✅ 2026-06-04 `CONSUMER-STORES-PHASE2-S6` — 상품 상세 하단 판매자 정보가 공개 `/public/stores/:storeId` 응답을 재사용하고 `/stores/:storeId`로 이동하는 링크 카드가 되도록 연결했다. 장바구니·바로구매 `storeId` 계약은 변경하지 않는다.
 
 ### 6-3. 판매자 앱 연동 포인트
 
@@ -497,16 +509,16 @@
 | ✅ P3 | seller 프론트엔드 리팩토링 5-Phase — `useOrderActions` 통합 포함 (#CL-32, 2026-05-17 세션36) | DX/구조 | — |
 | ✅ P3 | `/admin/banner` prerender 실패 — firebase getAuth 지연 초기화 (2026-05-17 세션33 완료) | 환경설정 | — |
 | ✅ P3 | G1: `hubs/[id]/edit/page.tsx` 거점 수정 페이지 — GET 프리필 + apiJson PATCH + 상세 헤더 진입 버튼 (2026-05-17 세션37, `3888522`) | 기능 | — |
-| 🟢 P3 | Driver Kakao Maps SDK 연동 | 기능 | — |
+| ✅ P3 | Driver Kakao Maps SDK 연동 — `NEXT_PUBLIC_KAKAO_MAP_KEY`가 있고 주문 좌표가 있을 때 Kakao Maps JavaScript SDK로 `/map` 마커·경로선을 표시한다. 키·좌표·SDK 로드 실패 시 기존 플레이스홀더를 유지한다. (2026-06-03, #CL-92) | 기능 | `specs/frontend/driver-kakao-map-plan.md` |
 | ✅ P3 | 셀러 홈 대시보드 + 준비 물량 재구성 — 8 아토믹 태스크 (#CL-33, 2026-05-18 세션39 완료) | UX/기능 | `specs/frontend/seller-home-dashboard-plan.md` |
-| 🟢 P4 | 준비 물량 탭 — 공동구매 주문 포함 (배송일 `groupProductConfig` 별도 fetch 필요, 세션39 분리) | UX/기능 | — |
-| 🟢 P3 | **[ADMIN-STORES-T7] 판매자 상세 드릴다운** — store별 주문·정산 집계 API + 상세 라우트 + 목록 URL 복원. 사용자 요청으로 후속 구현 확정(2026-05-28) | 기능/어드민 | `specs/frontend/admin/admin-tab-stores-plan.md` T7, 별도 SDD 선행 |
-| 🟢 P3 | **[ADMIN-STORES-T8] 플랫폼 기본 수수료율 설정** — 전역 config 모델 + override/소급 정책 + 수수료 검증 확장. 사용자 요청으로 후속 구현 확정(2026-05-28) | 기능/정책 | `specs/frontend/admin/admin-tab-stores-plan.md` T8, 별도 SDD 선행 |
+| ✅ P4 | 준비 물량 탭 — 공동구매 주문 포함 ✅ 2026-06-04 (#CL-111) — 기존 `useGroupConfigs()` 조인을 재사용해 공구 주문은 `groupProductConfig.groupDeliveryDate` 기준으로 오늘분·지연분에 합산한다. 설정 누락·파싱 불가 공구 주문은 날짜 미정으로 간주해 집계에서 제외한다. | UX/기능 | `specs/frontend/delivery-date-selection-plan.md` T5a |
+| ✅ P3 | **[ADMIN-STORES-T7] 판매자 상세 드릴다운** — `GET /admin/stores/:storeId/summary` + `/admin/stores/[id]` 읽기 전용 상세 구현 완료(2026-06-03, #CL-84). 주문·정산 집계와 목록 URL 복원을 포함한다. | 기능/어드민 | `specs/frontend/admin/admin-stores-detail-drilldown-plan.md` |
+| ✅ P3 | **[ADMIN-STORES-T8] 플랫폼 기본 수수료율 설정** — `platform/config.defaultCommissionRate` + 어드민 설정 패널 구현 완료(2026-06-03, #CL-85). 스토어 override 우선·기존 스토어 소급 없음·신규 스토어 기본값 복사 정책을 포함한다. | 기능/정책 | `specs/frontend/admin/admin-stores-default-commission-plan.md` |
 | ✅ P2 | **배송일 선택 기능 + 셀러 주문 IA 재구성** — T1~T6 (#CL-34·#CL-35, 세션47~51 완료). 소비자 일반 상품 배송일 선택·API 슬롯 검증 변경·셀러 일반/공구 토글·공구 배송일 조인·e2e 시드+신규 spec | 기능/UX | `specs/frontend/delivery-date-selection-plan.md` |
 | ✅ P3 | 셀러 주문 탭 리팩토링 — T1~T7 아토믹 태스크 (세션41~45 완료). 색상 버그·sticky 정리·카드 경량화·날짜 필터·날짜 그룹 헤더 | UX/버그 | `specs/frontend/seller-orders-refactor-plan.md` |
 | ✅ P3 | **[BUG-16] 택배 주문 상태 전환 갭** — 셀러 "택배 발송 완료" 버튼(PREPARING→DELIVERED 직행)+드라이버 보드 parcel 제외 필터+lifecycle 가드 (#CL-40, 2026-05-21 세션67 완료 `2ad71e3`). e2e 풀런 176p/0f | 버그/기능 | §1-3 상세 |
 | ✅ P3 | **[UX-11] 주문번호 통합** — 백엔드 `orderNumber`(`YYYYMMDD-NNNNNN`) `orderCounters/YYYYMMDD` 카운터 발급+프론트 5곳 ID 폴백 표시 (#CL-41, 세션68~69 완료 `cf79560`+`a3ea5ba`). e2e 풀런 176p/0f | UX/백엔드 | `parcel-and-order-number-plan.md` |
-| 🟢 P4 | **[PERF-01] 셀러 `<img>` → `next/image` 마이그레이션** — 세션62 T-CLEAN1 잔여 2 warnings(`lint/performance/noImgElement`). 위치 2곳: ① `onboarding/page.tsx:186`(1회성 화면, LCP 영향 적음) ② `products/_components/ImageUpload.tsx:96`(80×80 고정 썸네일, Firebase Storage `getDownloadURL` 동적 URL). 동반 작업: `next.config.js` `images.remotePatterns`에 Firebase Storage 도메인 등록·placeholder/sizes 속성 설계·LCP 영향 측정. 별건으로 분리(세션62 시점 작업 회귀 표면 최소화). Railway 무관 | 성능/DX | 세션62 도출 (T-CLEAN1 plan §범위 외) |
+| ✅ P4 | **[PERF-01] 셀러 `<img>` → `next/image` 마이그레이션** — 2026-06-04 (#CL-102) 별도 SDD 후 온보딩 로고 미리보기와 상품 업로드 80px 썸네일의 잔여 `<img>` 2곳을 `next/image` `fill` + `sizes="80px"`로 전환했다. 기존 `firebasestorage.googleapis.com` remote pattern을 재사용해 설정 변경 없이 경고를 해소했다. 검증: 변경 파일 Biome, `rg "<img" apps/seller/src` 잔여 0, seller 빌드, seller 타입체크 통과. Railway 무관 | 성능/DX | `specs/frontend/seller-image-next-migration-plan.md` |
 | ✅ P3 | consumer@test.com 강한비번 전환 — 30자 랜덤 비번 (2026-05-17 세션34 완료) | 보안 | 단독 |
 | ✅ P3 | **셀러 UX 잔여(UX-07~09) 정합** — ✅ T-UX1 탭 단일화(세션54)·✅ T-UX3 ConfirmModal 6곳 교체(세션55)·✅ T-UX2 상품 카드 Switch+Button 분리(세션56)·✅ T-UX4a admin fontSize 토큰화 17건(세션57)·✅ T-UX4b 본 화면 fontSize 토큰화 10건+`--font-size-xs` 신설(세션58, #CL-38)·✅ T-UX4c products `_components` 7건 토큰화(세션59 — 잔여 인라인 fontSize 0건)·✅ T-UX5 정합성 검토(세션60 — 정적 6/6 통과·코드 변경 0건). UX-10은 자연 해소(⏹️). Railway 무관 | UX/DX | `specs/frontend/seller-ux-residual-plan.md` (세션53 수립) |
 | ✅ P3 | **셀러앱 정리 작업(T-CLEAN1~3)** — 세션 28~60 리팩토링 종합 점검 도출 후속 3건. ✅ T-CLEAN1 biome baseline 정리(40e/16w → **0e/2w**, 세션62 완료 `2f100e1`+`09061df`)·✅ T-CLEAN2 native `alert()` 3건 → `@mantine/notifications`(0건 달성·#CL-39 등재, 세션63 완료 `80a7e51`+`35f8410`)·✅ T-CLEAN3 Phase A ProductCard `apiJson` 마이그레이션(#CL-32 P2 부분 봉합, 세션64 완료). 각 세션 진입 시 사전 정합성 검토 후 진입. Railway 무관 | DX/UX | `specs/frontend/seller-cleanup-plan.md` (세션61 수립) |
@@ -708,23 +720,24 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
 
 #### [ ] P3 — 기타 기능 작업
 
-- [ ] G1: `apps/seller/src/app/hubs/[id]/page.tsx` — 거점 수정 페이지 (Phase B 잔여)
-- [ ] Driver Kakao Maps SDK 연동
-- [ ] **[ADMIN-ORDERS-A2] 어드민 송장번호 사후 수정** — 셀러 측 “송장 저장 후 수정 허용 여부” 정책이 확정되면, 어드민 주문 상세에서도 같은 정책·검증·감사 로그 기준으로 송장번호 수정 동선을 검토한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` B-8.5 A2. **별도 SDD 선작성 후 구현**.
-- [ ] **[ADMIN-ORDERS-F3-FULL] 어드민 주문 정식 상세** — 현재는 `/admin/orders` 목록 응답 기반 1차 읽기 전용 모달만 완료. 후속으로 상품 라인별 상세, 결제 타임라인, 상태 변경 이력, 별도 상세 조회 API/라우트를 설계한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` B-9. **별도 SDD 선작성 후 구현**.
-- [ ] **[ADMIN-ORDERS-F5-ADV] 어드민 주문 고급 페이지네이션** — 1차 `createdAt` cursor `더 보기`는 완료. 후속으로 총 건수 정확 계산, 이전 페이지, 임의 페이지 번호, `createdAt` 외 컬럼 정렬을 검토한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` B-10. **별도 SDD 선작성 후 구현**.
-- [ ] **[ORDER-STATUS-LABEL-SSOT] 주문 상태 라벨 4앱 통일** — 어드민·셀러·소비자 주문 상태 라벨 표현을 shared SSOT로 통합한다. 현재 `픽업완료`/`픽업 완료`처럼 앱별 표기 차이가 있어 전 앱 영향 범위와 회귀 검증을 별도 설계한다. 출처: `docs/specs/frontend/admin/admin-tab-orders-plan.md` C-out. **별도 SDD 선작성 후 구현**.
-- [ ] **[ADMIN-INVITE-F6-F5-ADV] 어드민 초대 검색·페이지네이션 고도화** — 발급량 100건 도달 시 현재 prefix 검색(F5)과 `더 보기` 페이지네이션(F6)을 묶어 정렬·필터·cursor 정책을 재설계한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md` F6·D4. **별도 SDD 선작성 후 구현**.
-- [ ] **[ADMIN-INVITE-SCALE-1000] 어드민 초대 1000건 이상 발급량 대응** — 발급량 1000건 이상에서 prefix 검색과 `createdAt` 정렬의 결과 누락 가능성, 인덱스 전략, 운영 검색 동선을 재검토한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md` D3. **별도 SDD 선작성 후 구현**.
-- [ ] **[ADMIN-INVITE-F7-EXPIRY] 어드민 초대 만료기간 지정** — 현재 7일 고정인 `generateInvite`를 `generateInvite(days?: number)` 형태로 파라미터화하고, 어드민 UI Select와 백엔드 검증 범위를 설계한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md` F7. **별도 SDD 선작성 후 구현**.
-- [ ] **[ADMIN-INVITE-SELLER-ROLLBACK] 가입 완료 판매자 되돌리기 정책** — 초대 토큰 단독 기능이 아니라 판매자 정지·삭제·복구 정책과 감사 로그를 포함하는 어드민 전역 정책으로 설계한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md`, `docs/specs/frontend/admin/admin-tab-users-plan.md` E-6 D1. **정책 선결 후 별도 SDD**.
-- [ ] **[ADMIN-INVITE-REVOKE-NONVALID] 사용됨·만료 토큰 취소 정책** — 현재 범위는 유효 토큰만 취소하며 사용됨·만료 토큰은 409로 거절한다. 사용됨·만료 토큰을 취소 대상으로 넓힐지, 판매자 상태·감사 로그·표시 라벨에 어떤 영향을 줄지 별도 정책으로 검토한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md` F-0·F-3 제외 항목. **정책 선결 후 별도 SDD**.
+- [x] G1: `apps/seller/src/app/hubs/[id]/edit/page.tsx` — 거점 수정 페이지 (Phase B 잔여, 2026-05-17 세션37 완료)
+- [x] Driver Kakao Maps SDK 연동 — 2026-06-03 `DRIVER-KAKAO-MAP-SDK` 완료. 키·좌표가 있으면 지도, 없으면 기존 플레이스홀더 유지.
+- [x] **[ADMIN-ORDERS-A2] 어드민 송장번호 사후 수정** — 2026-06-03 `#CL-96`에서 어드민 전용 사후 정정으로 범위를 제한했다. `PATCH /admin/orders/:orderId/tracking`과 `/admin/orders/[id]` 정정 UI를 추가하며, 미발송 무송장 주문은 기존 셀러 발송 플로우로 남긴다. 출처: `docs/specs/frontend/admin/admin-orders-tracking-edit-plan.md`.
+- [x] **[ADMIN-ORDERS-F3-FULL] 어드민 주문 정식 상세** ✅ 2026-06-03 (#CL-93) — 별도 SDD 후 `GET /admin/orders/:orderId`와 `/admin/orders/[id]` 읽기 전용 상세를 추가했다. 응답은 `order`, `store`, `buyer`, `payment`, `items`, `timeline`으로 분리하고, 현재 단일 상품 주문 스키마 기준 상품 라인과 관측 가능한 상태 타임라인만 표시한다. 송장 사후 수정·상태 이력 저장소·결제 쓰기는 제외했다. 상세: `docs/specs/frontend/admin/admin-orders-detail-full-plan.md`.
+- [x] **[ADMIN-ORDERS-F5-ADV] 어드민 주문 고급 페이지네이션** ✅ 2026-06-03 (#CL-94) — 별도 SDD 후 `page` 기반 총 건수·현재 페이지·총 페이지 메타와 페이지 번호 UI를 추가했다. 기존 cursor 계약은 호환용으로 유지하고, `createdAt` 외 컬럼 정렬은 이번 범위에서 제외했다. 깊은 offset 탐색 비용이 운영 문제가 되면 서버 검색·커서 스택·전용 집계 문서를 별도 SDD로 승격한다. 상세: `docs/specs/frontend/admin/admin-orders-advanced-pagination-plan.md`.
+- [x] **[ORDER-STATUS-LABEL-SSOT] 주문 상태 라벨 4앱 통일** ✅ 2026-06-03 (#CL-95) — `@greenhub/shared`에 `ORDER_STATUSES`·`ORDER_STATUS_LABEL`·`ORDER_STATUS_COLOR`를 추가하고, 어드민 주문 목록·상세·모달, 셀러 주문 목록·상세, 소비자 마이페이지 목록·상세·주문 성공 화면을 shared 라벨로 전환했다. `픽업완료`/`픽업 완료`, `배달중`/`배송 중` 차이는 API FSM 표 기준의 긴 사용자 문구로 통일했다. 별도 SDD: `docs/specs/frontend/admin/admin-tab-orders-plan.md` B-13.
+- [x] **[ADMIN-INVITE-F6-F5-ADV] 어드민 초대 검색·페이지네이션 고도화** ✅ 2026-06-04 (#CL-97) — 별도 SDD 후 기존 4자 prefix 검색에 `limit/cursor/nextCursor` 계약과 `더 보기` UI를 추가했다. 검색 중에는 `token` 커서, 기본 목록은 `createdAt desc` ISO 커서를 사용하며, 1000건 이상 발급량 대응은 별도 백로그로 유지한다. 상세: `docs/specs/frontend/admin/admin-invite-advanced-pagination-plan.md`.
+- [x] **[ADMIN-INVITE-SCALE-1000] 어드민 초대 1000건 이상 발급량 대응** — 발급량 1000건 이상에서 prefix 검색과 `createdAt` 정렬의 결과 누락 가능성, 인덱스 전략, 운영 검색 동선을 재검토한다. 출처: `docs/specs/frontend/admin/admin-tab-invite-plan.md` D3. **별도 SDD 선작성 후 구현**. 완료: `docs/specs/frontend/admin/admin-invite-scale-1000-plan.md`, #CL-98.
+  - [x] **[ADMIN-INVITE-F7-EXPIRY] 어드민 초대 만료기간 지정** ✅ 2026-06-04 (#CL-99) — 별도 SDD 후 `POST /admin/invite`에 `expiresInDays` 선택 필드를 추가하고, 기본 7일 호환과 1~30일 검증 범위를 확정했다. 어드민 UI는 `3일/7일/14일/30일` Select로 제한한다. 상세: `docs/specs/frontend/admin/admin-invite-expiry-plan.md`.
+- [x] **[ADMIN-INVITE-SELLER-ROLLBACK] 가입 완료 판매자 되돌리기 정책** ✅ 2026-06-04 (#CL-101) — 별도 SDD 후 1차 범위를 스토어 미연결 판매자 계정 정지와 refresh token 폐기, 초대 문서 rollback 감사 필드 기록으로 제한했다. 스토어 연결 판매자 lifecycle은 후속 SDD로 분리한다. 상세: `docs/specs/frontend/admin/admin-invite-seller-rollback-plan.md`.
+- [x] **[ADMIN-SELLER-LIFECYCLE] 스토어 연결 판매자 rollback 최소 정책** ✅ 2026-06-04 (#CL-103) — 별도 SDD 후 스토어가 연결됐더라도 주문·정산 기록이 0건이면 판매자 정지·refresh token 삭제·초대 rollback 감사 기록과 함께 스토어를 보존 아카이브하도록 확장했다. 주문·정산 기록이 있으면 `store_has_records`, 스토어 문서 누락은 `store_not_found`로 차단한다. 상세: `docs/specs/frontend/admin/admin-seller-lifecycle-plan.md`.
+- [x] **[ADMIN-INVITE-REVOKE-NONVALID] 사용됨·만료 토큰 취소 정책** ✅ 2026-06-04 (#CL-100) — 별도 SDD 후 사용됨·이미 취소됨·만료 토큰은 계속 취소 불가로 확정했다. `revokedAt`은 유효 토큰 회수 감사 이벤트에만 기록하고, 비유효 토큰은 reason 409와 쓰기 없음 계약으로 잠근다. 상세: `docs/specs/frontend/admin/admin-invite-revoke-nonvalid-plan.md`.
 
 #### [ ] P4 — e2e 안정성·CI 정비 (세션36 관찰 등재)
 
 **배경**: 세션36 머지 후 e2e 1차 실행이 `global-setup.ts:133` `context.storageState()`에서 실패 — `Navigation interrupted by another navigation to /login`. 재실행은 167/0 통과 → flake 확정(코드 무관, consumer 앱 미변경).
 
-- [ ] **global-setup flake 보강**: `loginWithRetry`는 `loginViaCredentials`의 throw만 흡수하고, 로그인 성공 후 `storageState` 시점의 in-flight 네비게이션 레이스는 못 잡는다. `global-setup.ts:133` `context.storageState()` 직전에 `page.waitForLoadState('networkidle')`(또는 명시적 안정 대기)를 넣어 레이스 창을 닫는다. 규모 소(小). #CL-23/#CL-27 인증 레이스 계열의 잔여 보강.
+- [x] **global-setup flake 보강** ✅ 2026-06-03 (#CL-91) — `storageState` 저장을 `saveStorageStateWhenIdle()`로 공통화했다. BYPASS/AUTH/ADMIN 저장 직전에 `about:blank` `load` 안정화와 3회 짧은 재시도를 수행해 미인증 루트의 `/login` 리다이렉트와 저장 시점 레이스를 흡수한다. 짧은 어드민 드라이버 E2E는 globalSetup을 통과해 본문 단언까지 진입했다.
 - [x] **CI 액션 Node.js 20 deprecation** ✅ 2026-05-24 (세션86 정합성 검토로 기 해소 확정) — 본 항목 기재 시점(@v4)과 달리 실제 워크플로는 이미 `eb15e4e`(세션37)에서 v4→v6/v7 전환 완료: `checkout@v6`·`setup-node@v6`·`upload-artifact@v7`·`pnpm/action-setup@v6`. 각 핀 태그 `action.yml`의 `runs.using`이 전부 **node24**임을 공식 소스로 확인, `uses:` 전수에 v4 잔존 0건. **추가 보강(세션86)**: `sync-preview.yml`의 `node wait-preview-deploy.mjs` step은 액션이 아니라 러너 기본 Node로 실행돼 버전 미고정이었음 → `setup-node@v6`(node 22) step 명시 추가로 러너 OS 변동 격리.
 
 #### [⏳] 외부 대기
