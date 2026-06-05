@@ -1,22 +1,61 @@
+import type { ProductSummary, PublicStoreDetail, PublicStoreSummary } from '@greenhub/shared';
 import {
+  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
-  ForbiddenException,
-  ConflictException,
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
+import { getDefaultCommissionRate } from '../admin/admin-platform-config.helpers';
+// biome-ignore lint/style/useImportType: NestJS 생성자 주입 메타데이터에 런타임 값이 필요하다.
 import { FirestoreService } from '../firestore/firestore.service';
-import { UpdateStoreDto } from './dto/update-store.dto';
+import type { UpdateStoreDto } from './dto/update-store.dto';
 
 @Injectable()
 export class StoresService {
   constructor(private readonly firestore: FirestoreService) {}
 
-  async getStore(storeId: string, requesterId: string) {
+  async getPublicStores(): Promise<{ items: PublicStoreSummary[]; total: number }> {
+    const snap = await this.firestore.collection('stores').where('status', '==', 'active').get();
+    const items = await Promise.all(
+      snap.docs.map((doc: { id: string; data: () => Record<string, unknown> }) =>
+        this.toPublicStoreSummary(doc.id, doc.data()),
+      ),
+    );
+
+    items.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    return { items, total: items.length };
+  }
+
+  async getPublicStore(
+    storeId: string,
+  ): Promise<{ store: PublicStoreDetail; products: ProductSummary[] }> {
+    const snap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!snap.exists || snap.data()?.status !== 'active') {
+      throw new NotFoundException('스토어를 찾을 수 없습니다');
+    }
+
+    const store = await this.toPublicStoreDetail(storeId, snap.data() ?? {});
+    const productSnap = await this.firestore
+      .collection('products')
+      .where('storeId', '==', storeId)
+      .where('isActive', '==', true)
+      .get();
+    const products = productSnap.docs.map((doc: { data: () => Record<string, unknown> }) =>
+      this.toProductSummary(doc.data()),
+    );
+
+    products.sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko'));
+    return { store, products };
+  }
+
+  async getStore(storeId: string, requesterId: string, requesterRole?: string) {
     const snap = await this.firestore.doc(`stores/${storeId}`).get();
     if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다');
-    const data = snap.data()!;
-    if (data.ownerId !== requesterId) throw new ForbiddenException('해당 스토어에 대한 권한이 없습니다');
+    const data = snap.data() ?? {};
+    if (requesterRole !== 'admin' && data.ownerId !== requesterId) {
+      throw new ForbiddenException('해당 스토어에 대한 권한이 없습니다');
+    }
     return {
       id: storeId,
       name: data.name ?? '',
@@ -39,6 +78,7 @@ export class StoresService {
 
     const storeId = uuidv4();
     const now = this.firestore.Timestamp.now();
+    const commissionRate = await getDefaultCommissionRate(this.firestore);
 
     await this.firestore.doc(`stores/${storeId}`).set({
       id: storeId,
@@ -50,6 +90,7 @@ export class StoresService {
       businessNumber: dto.businessNumber ?? null,
       logoUrl: dto.logoUrl ?? null,
       status: 'active',
+      commissionRate,
       createdAt: now,
       updatedAt: now,
     });
@@ -81,6 +122,7 @@ export class StoresService {
     storeId: string,
     requesterId: string,
     dto: UpdateStoreDto,
+    requesterRole?: string,
   ): Promise<{ id: string }> {
     const storeRef = this.firestore.doc(`stores/${storeId}`);
     const storeSnap = await storeRef.get();
@@ -92,7 +134,7 @@ export class StoresService {
     const storeData = storeSnap.data();
 
     // **소유권 검증**: JWT의 storeId와 URL의 storeId가 일치해야 함
-    if (storeData?.ownerId !== requesterId) {
+    if (requesterRole !== 'admin' && storeData?.ownerId !== requesterId) {
       throw new ForbiddenException('해당 스토어에 대한 권한이 없습니다');
     }
 
@@ -118,5 +160,58 @@ export class StoresService {
     await storeRef.update(updatePayload);
 
     return { id: storeId };
+  }
+
+  private async toPublicStoreSummary(
+    storeId: string,
+    data: Record<string, unknown>,
+  ): Promise<PublicStoreSummary> {
+    const [products, hubs] = await Promise.all([
+      this.firestore
+        .collection('products')
+        .where('storeId', '==', storeId)
+        .where('isActive', '==', true)
+        .get(),
+      this.firestore
+        .collection('hubs')
+        .where('storeId', '==', storeId)
+        .where('isActive', '==', true)
+        .get(),
+    ]);
+
+    return {
+      id: storeId,
+      name: String(data.name ?? ''),
+      address: String(data.address ?? ''),
+      logoUrl: typeof data.logoUrl === 'string' ? data.logoUrl : null,
+      productCount: products.docs.length,
+      hubCount: hubs.docs.length,
+    };
+  }
+
+  private async toPublicStoreDetail(
+    storeId: string,
+    data: Record<string, unknown>,
+  ): Promise<PublicStoreDetail> {
+    return {
+      ...(await this.toPublicStoreSummary(storeId, data)),
+      phone: String(data.phone ?? ''),
+    };
+  }
+
+  private toProductSummary(data: Record<string, unknown>): ProductSummary {
+    const images = Array.isArray(data.images) ? data.images.filter(Boolean).slice(0, 1) : [];
+    const selection = data.selection as { colors?: unknown[] } | undefined;
+    return {
+      id: String(data.id ?? ''),
+      storeId: String(data.storeId ?? ''),
+      name: String(data.name ?? ''),
+      price: Number(data.price ?? 0),
+      images: images.map(String),
+      category: data.category as ProductSummary['category'],
+      colors: (selection?.colors ?? data.colors ?? []) as ProductSummary['colors'],
+      saleType: data.saleType as ProductSummary['saleType'],
+      isActive: data.isActive !== false,
+    };
   }
 }

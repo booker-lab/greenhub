@@ -119,6 +119,38 @@ Authorization: Bearer <seller JWT>
 
 ---
 
+### 3-3. 관리자 정산 목록 조회
+
+```
+GET /admin/settlements?status=confirmed&storeId=...&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=100&cursor=...
+Authorization: Bearer <admin JWT>
+```
+
+**쿼리 파라미터**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|------|------|
+| `storeId` | `string` | 선택 | 특정 스토어 정산만 조회 |
+| `status` | `SettlementStatus` | 선택 | 정산 상태 필터 |
+| `from` | `YYYY-MM-DD` | 선택 | `settledAt` 하한 (포함) |
+| `to` | `YYYY-MM-DD` | 선택 | `settledAt` 상한 (해당일 23:59:59까지 포함) |
+| `limit` | `number` | 선택 | 기본 100, 최대 500 |
+| `cursor` | `ISO datetime` | 선택 | 직전 페이지 마지막 `settledAt` 커서 |
+
+**응답**
+
+```json
+{
+  "settlements": [],
+  "total": 100,
+  "nextCursor": "2026-05-29T04:39:00.000Z"
+}
+```
+
+> **관리자 페이지네이션(F3)**: 응답의 `nextCursor`가 `null`이 아니면 프론트는 "더 보기"를 노출한다. 커서는 기존 `settledAt DESC` 인덱스를 재사용하기 위해 `settledAt` ISO 문자열로 유지한다.
+
+---
+
 ## 4. 자동 생성 트리거
 
 `orders.service.ts`의 `updateStatus()` 및 `reviewOrder()` / `confirmPickup()` 내에서
@@ -182,3 +214,16 @@ settlements: status ASC + settledAt ASC (confirm 마감 배치 §4-1 — storeId
 ### 6-3. 정산일시 컬럼 (N10)
 
 어드민 표에 `settledAt` 컬럼을 추가(셀러 화면과 동형). 정렬은 §3-1 노트대로 양 화면 `desc` 통일.
+
+### 6-4. 지급 상태 보조 문구
+
+어드민 정산 행·모바일 카드는 상태 Badge 아래에 지급 상태 보조 문구를 표시한다.
+
+| 상태 | 보조 문구 |
+|------|----------|
+| `paid` | `입금 완료 YYYY-MM-DD HH:mm` (`paidAt`) |
+| `confirmed` | `지급 대기 · 확정 YYYY-MM-DD HH:mm` (`confirmedAt`) |
+| `confirmed`이지만 `confirmedAt` 없음 | `지급 대기` |
+| `pending`, `cancelled` | 표시 없음 |
+
+백엔드에 입금 예정일 필드가 없으므로 예정 시각을 추정하지 않는다. 시각은 KST로 표시하며 ISO 문자열과 Firestore raw `{ _seconds }`를 모두 허용한다.

@@ -24,12 +24,16 @@ import {
   BulkPaySettlementsDto,
   CreateBannerDto,
   ForceRefundDto,
+  GenerateInviteDto,
   QueryAdminDriversDto,
+  QueryAdminInvitesDto,
   QueryAdminOrdersDto,
   QueryAdminSettlementsDto,
   SetCommissionDto,
+  SetDefaultCommissionDto,
   SuspendUserDto,
   UpdateBannerDto,
+  UpdateOrderTrackingDto,
   UpsertBannerDto,
 } from './dto/admin.dto';
 
@@ -44,9 +48,24 @@ export class AdminController {
 
   // ── Stores ──────────────────────────────────────────────────────
 
+  @Get('platform-config')
+  getPlatformConfig() {
+    return this.admin.getPlatformConfig();
+  }
+
+  @Patch('platform-config/default-commission')
+  setDefaultCommission(@Body() dto: SetDefaultCommissionDto) {
+    return this.admin.setDefaultCommission(dto);
+  }
+
   @Get('stores')
   getStores() {
     return this.admin.getStores();
+  }
+
+  @Get('stores/:storeId/summary')
+  getStoreSummary(@Param('storeId') storeId: string) {
+    return this.admin.getStoreSummary(storeId);
   }
 
   @Patch('stores/:storeId/commission')
@@ -83,9 +102,23 @@ export class AdminController {
     return this.admin.getOrders(dto);
   }
 
+  @Get('orders/:orderId')
+  getOrderDetail(@Param('orderId') orderId: string) {
+    return this.admin.getOrderDetail(orderId);
+  }
+
   @Post('orders/:orderId/refund')
   forceRefund(@Param('orderId') orderId: string, @Body() dto: ForceRefundDto) {
     return this.admin.forceRefund(orderId, dto);
+  }
+
+  @Patch('orders/:orderId/tracking')
+  updateOrderTracking(
+    @Param('orderId') orderId: string,
+    @Body() dto: UpdateOrderTrackingDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.admin.updateOrderTracking(orderId, dto, user.sub);
   }
 
   // ── Settlements ──────────────────────────────────────────────────
@@ -125,18 +158,23 @@ export class AdminController {
   // ── Invite ───────────────────────────────────────────────────────
 
   @Post('invite')
-  generateInvite(@CurrentUser() user: JwtPayload) {
-    return this.admin.generateInvite(user.sub);
+  generateInvite(@CurrentUser() user: JwtPayload, @Body() dto: GenerateInviteDto) {
+    return this.admin.generateInvite(user.sub, dto.expiresInDays);
   }
 
   @Get('invite')
-  getInvites(@Query('q') q?: string) {
-    return this.admin.getInvites(q);
+  getInvites(@Query() dto: QueryAdminInvitesDto) {
+    return this.admin.getInvites(dto);
   }
 
   @Post('invite/:token/revoke')
   revokeInvite(@Param('token') token: string, @CurrentUser() user: JwtPayload) {
     return this.admin.revokeInvite(token, user.sub);
+  }
+
+  @Post('invite/:token/rollback-seller')
+  rollbackInviteSeller(@Param('token') token: string, @CurrentUser() user: JwtPayload) {
+    return this.admin.rollbackInviteSeller(token, user.sub);
   }
 
   // ── Banner ───────────────────────────────────────────────────────

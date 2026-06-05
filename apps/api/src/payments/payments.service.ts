@@ -1,17 +1,17 @@
 import {
-  Injectable,
   BadRequestException,
   ForbiddenException,
-  Inject,
   forwardRef,
+  Inject,
+  Injectable,
   Logger,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { FirestoreService } from '../firestore/firestore.service';
-import { PortoneClient } from './portone.client';
-import { PortoneWebhookDto } from './dto/portone-webhook.dto';
+import type { AuditService } from '../common/audit/audit.service';
+import type { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { AuditService } from '../common/audit/audit.service';
+import type { PortoneWebhookDto } from './dto/portone-webhook.dto';
+import type { PortoneClient } from './portone.client';
 
 // 환불 가능 상태
 const REFUNDABLE_STATUSES = ['ACCEPTED', 'RECRUITING', 'CONFIRMED', 'PREPARING'];
@@ -34,7 +34,8 @@ export class PaymentsService {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!orderSnap.exists) return { ok: false, reason: 'order_not_found' };
 
-    const order = orderSnap.data()!;
+    const order = orderSnap.data();
+    if (!order) return { ok: false, reason: 'order_not_found' };
     // 멱등성: 이미 처리된 경우 스킵
     if (order['status'] !== 'PENDING') {
       return { ok: true, reason: 'already_processed' };
@@ -108,7 +109,8 @@ export class PaymentsService {
   async getPayment(paymentId: string, requesterId: string) {
     const snap = await this.firestore.doc(`payments/${paymentId}`).get();
     if (!snap.exists) throw new BadRequestException('결제 내역을 찾을 수 없습니다.');
-    const payment = snap.data()!;
+    const payment = snap.data();
+    if (!payment) throw new BadRequestException('결제 내역을 찾을 수 없습니다.');
 
     // 본인 결제이면 허용
     if (payment['userId'] === requesterId) return payment;
@@ -126,7 +128,8 @@ export class PaymentsService {
 
   async getPaymentByOrder(storeId: string, orderId: string, requesterId: string) {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
-    if (!orderSnap.exists || orderSnap.data()!['storeId'] !== storeId) {
+    const order = orderSnap.data();
+    if (!orderSnap.exists || !order || order['storeId'] !== storeId) {
       throw new BadRequestException('주문을 찾을 수 없습니다.');
     }
 
@@ -153,10 +156,10 @@ export class PaymentsService {
    */
   async refundOrder(storeId: string, orderId: string, requesterId: string, reason?: string) {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
-    if (!orderSnap.exists || orderSnap.data()!['storeId'] !== storeId) {
+    const order = orderSnap.data();
+    if (!orderSnap.exists || !order || order['storeId'] !== storeId) {
       throw new BadRequestException('주문을 찾을 수 없습니다.');
     }
-    const order = orderSnap.data()!;
 
     // 환불 가능 상태 검증
     if (!REFUNDABLE_STATUSES.includes(order['status'])) {
@@ -230,8 +233,12 @@ export class PaymentsService {
       }),
     ];
 
-    if (order['deliveryMethod'] !== 'parcel') {
-      const dateStr = (order['createdAt'] as any).toDate().toISOString().split('T')[0];
+    if (
+      order['saleType'] === 'normal' &&
+      order['deliveryMethod'] !== 'parcel' &&
+      typeof order['requestedDeliveryDate'] === 'string'
+    ) {
+      const dateStr = order['requestedDeliveryDate'];
       const capId = `${order['storeId']}_${dateStr}`;
       updates.push(
         this.firestore.doc(`dailyCaps/${capId}`).update({

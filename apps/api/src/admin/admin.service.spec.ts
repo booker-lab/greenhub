@@ -72,24 +72,103 @@ function createOrdersService(count = 2) {
   return { service, query, firestore };
 }
 
-function createInviteRevokeService(invite: Record<string, unknown> | null) {
-  const tx = {
-    get: jest.fn().mockResolvedValue({
-      exists: invite !== null,
-      data: () => invite,
+function createSettlementDocs(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    data: () => ({
+      id: `settlement-${index + 1}`,
+      settledAt: { toDate: () => new Date(Date.UTC(2026, 4, 29, 3, index)) },
     }),
-    set: jest.fn(),
+  }));
+}
+
+function createSettlementsService(count = 2) {
+  const docs = createSettlementDocs(count);
+  const query = {
+    where: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    startAfter: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    get: jest.fn().mockResolvedValue({ docs }),
   };
-  const ref = { path: 'invites/INVITE1234567890' };
   const firestore = {
-    doc: jest.fn().mockReturnValue(ref),
-    runTransaction: jest.fn((handler) => handler(tx)),
+    collection: jest.fn().mockReturnValue(query),
+    Timestamp: {
+      fromDate: jest.fn((date: Date) => date),
+    },
+  };
+  const service = new AdminService(firestore as never, {} as never);
+  return { service, query, firestore };
+}
+
+function createStoreSummaryService() {
+  const storeDoc = {
+    exists: true,
+    data: () => ({
+      id: 'store-1',
+      name: '디어 플라워',
+      ownerId: 'owner-1',
+      status: 'active',
+      commissionRate: 0.05,
+    }),
+  };
+  const ownerDoc = {
+    exists: true,
+    data: () => ({
+      id: 'owner-1',
+      name: '정연',
+      email: 'owner@example.com',
+      phone: '010-1234-5678',
+    }),
+  };
+  const orderDocs = [
+    { data: () => ({ id: 'order-1', status: 'CONFIRMED', totalAmount: 10000 }) },
+    { data: () => ({ id: 'order-2', status: 'DELIVERED', totalAmount: 20000 }) },
+    { data: () => ({ id: 'order-3', status: 'DELIVERED', totalAmount: 30000 }) },
+  ];
+  const settlementDocs = [
+    { data: () => ({ id: 'settle-1', status: 'confirmed', platformFee: 500, netAmount: 9500 }) },
+    { data: () => ({ id: 'settle-2', status: 'paid', platformFee: 1000, netAmount: 19000 }) },
+  ];
+  const orderQuery = {
+    where: jest.fn().mockReturnThis(),
+    get: jest.fn().mockResolvedValue({ docs: orderDocs, size: orderDocs.length }),
+  };
+  const settlementQuery = {
+    where: jest.fn().mockReturnThis(),
+    get: jest.fn().mockResolvedValue({ docs: settlementDocs, size: settlementDocs.length }),
+  };
+  const firestore = {
+    doc: jest.fn((path: string) => {
+      if (path === 'stores/store-1') return { get: jest.fn().mockResolvedValue(storeDoc) };
+      if (path === 'users/owner-1') return { get: jest.fn().mockResolvedValue(ownerDoc) };
+      return { get: jest.fn().mockResolvedValue({ exists: false }) };
+    }),
+    collection: jest.fn((name: string) => {
+      if (name === 'orders') return orderQuery;
+      if (name === 'settlements') return settlementQuery;
+      throw new Error(`예상하지 않은 컬렉션: ${name}`);
+    }),
+  };
+  const service = new AdminService(firestore as never, {} as never);
+  return { service, firestore, orderQuery, settlementQuery };
+}
+
+function createPlatformConfigService(config: Record<string, unknown> | null) {
+  const set = jest.fn().mockResolvedValue(undefined);
+  const firestore = {
+    doc: jest.fn().mockReturnValue({
+      get: jest.fn().mockResolvedValue({
+        exists: config !== null,
+        data: () => config,
+      }),
+      set,
+    }),
     Timestamp: {
       now: jest.fn(() => 'now'),
     },
   };
   const service = new AdminService(firestore as never, {} as never);
-  return { service, tx, ref };
+  return { service, set };
 }
 
 describe('AdminService.bulkMarkAsPaid', () => {
@@ -174,56 +253,99 @@ describe('AdminService.getOrders', () => {
   });
 });
 
-describe('AdminService.revokeInvite', () => {
-  const validInvite = {
-    usedAt: null,
-    revokedAt: null,
-    expiresAt: { toMillis: () => Date.now() + 60_000 },
-  };
+describe('AdminService.getSettlements', () => {
+  it('기본 100건 조회와 다음 커서를 반환한다', async () => {
+    const { service, query } = createSettlementsService(101);
 
-  it('유효한 토큰에 취소 시각과 취소 관리자를 기록한다', async () => {
-    const { service, tx, ref } = createInviteRevokeService(validInvite);
+    const result = await service.getSettlements({});
 
-    await expect(service.revokeInvite('INVITE1234567890', 'admin-1')).resolves.toEqual({
-      ok: true,
+    expect(result.settlements).toHaveLength(100);
+    expect(result.total).toBe(100);
+    expect(result.nextCursor).toBe('2026-05-29T04:39:00.000Z');
+    expect(query.orderBy).toHaveBeenCalledWith('settledAt', 'desc');
+    expect(query.limit).toHaveBeenCalledWith(101);
+  });
+
+  it('필터·limit·cursor를 쿼리에 적용한다', async () => {
+    const { service, query, firestore } = createSettlementsService();
+
+    await service.getSettlements({
+      storeId: 'store-1',
+      status: 'confirmed',
+      from: '2026-05-01',
+      to: '2026-05-31',
+      limit: 1,
+      cursor: '2026-05-29T01:00:00.000Z',
     });
 
-    expect(tx.set).toHaveBeenCalledWith(
-      ref,
-      { revokedAt: 'now', revokedBy: 'admin-1' },
-      { merge: true },
+    expect(query.where).toHaveBeenCalledWith('storeId', '==', 'store-1');
+    expect(query.where).toHaveBeenCalledWith('status', '==', 'confirmed');
+    expect(query.where).toHaveBeenCalledWith('settledAt', '>=', new Date('2026-05-01'));
+    expect(query.where).toHaveBeenCalledWith('settledAt', '<=', expect.any(Date));
+    expect(firestore.Timestamp.fromDate).toHaveBeenCalledWith(new Date('2026-05-29T01:00:00.000Z'));
+    expect(query.startAfter).toHaveBeenCalledWith(new Date('2026-05-29T01:00:00.000Z'));
+    expect(query.limit).toHaveBeenCalledWith(2);
+  });
+});
+
+describe('AdminService.getStoreSummary', () => {
+  it('스토어, owner, 주문·정산 집계를 반환한다', async () => {
+    const { service, orderQuery, settlementQuery } = createStoreSummaryService();
+
+    await expect(service.getStoreSummary('store-1')).resolves.toEqual({
+      store: expect.objectContaining({
+        id: 'store-1',
+        name: '디어 플라워',
+        ownerId: 'owner-1',
+      }),
+      owner: {
+        id: 'owner-1',
+        name: '정연',
+        email: 'owner@example.com',
+        phone: '010-1234-5678',
+      },
+      orders: {
+        totalCount: 3,
+        totalAmount: 60000,
+        byStatus: { CONFIRMED: 1, DELIVERED: 2 },
+      },
+      settlements: {
+        totalCount: 2,
+        platformFee: 1500,
+        netAmount: 28500,
+        byStatus: { confirmed: 1, paid: 1 },
+      },
+    });
+    expect(orderQuery.where).toHaveBeenCalledWith('storeId', '==', 'store-1');
+    expect(settlementQuery.where).toHaveBeenCalledWith('storeId', '==', 'store-1');
+  });
+
+  it('스토어가 없으면 404를 반환한다', async () => {
+    const { service } = createStoreSummaryService();
+
+    await expect(service.getStoreSummary('missing-store')).rejects.toThrow(
+      '스토어를 찾을 수 없습니다.',
     );
   });
+});
 
-  it('이미 사용된 토큰은 409 reason으로 거절한다', async () => {
-    const { service, tx } = createInviteRevokeService({ ...validInvite, usedAt: 'used' });
+describe('AdminService 플랫폼 설정', () => {
+  it('설정 문서가 없으면 기본 수수료율 0을 반환한다', async () => {
+    const { service } = createPlatformConfigService(null);
 
-    await expect(service.revokeInvite('INVITE1234567890', 'admin-1')).rejects.toMatchObject({
-      status: 409,
-      response: { reason: 'already_used' },
-    });
-    expect(tx.set).not.toHaveBeenCalled();
+    await expect(service.getPlatformConfig()).resolves.toEqual({ defaultCommissionRate: 0 });
   });
 
-  it('이미 취소된 토큰은 409 reason으로 거절한다', async () => {
-    const { service } = createInviteRevokeService({ ...validInvite, revokedAt: 'revoked' });
+  it('기본 수수료율을 저장한다', async () => {
+    const { service, set } = createPlatformConfigService({ defaultCommissionRate: 0.03 });
 
-    await expect(service.revokeInvite('INVITE1234567890', 'admin-1')).rejects.toMatchObject({
-      status: 409,
-      response: { reason: 'already_revoked' },
+    await expect(service.setDefaultCommission({ rate: 0.05 })).resolves.toEqual({
+      defaultCommissionRate: 0.05,
     });
-  });
-
-  it('만료된 토큰은 409 reason으로 거절한다', async () => {
-    const { service } = createInviteRevokeService({
-      ...validInvite,
-      expiresAt: { toMillis: () => Date.now() - 60_000 },
-    });
-
-    await expect(service.revokeInvite('INVITE1234567890', 'admin-1')).rejects.toMatchObject({
-      status: 409,
-      response: { reason: 'expired' },
-    });
+    expect(set).toHaveBeenCalledWith(
+      { defaultCommissionRate: 0.05, updatedAt: 'now' },
+      { merge: true },
+    );
   });
 });
 

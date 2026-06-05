@@ -1,21 +1,21 @@
 import {
-  Controller,
-  Post,
-  Get,
-  Patch,
   Body,
-  Param,
-  Query,
-  UseGuards,
+  Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
-import { OrdersService } from './orders.service';
-import { CreateOrderDto } from './dto/create-order.dto';
-import { UpdateStatusDto } from './dto/update-status.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { JwtPayload } from '../auth/types/jwt-payload.type';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import type { CreateOrderDto } from './dto/create-order.dto';
+import type { UpdateStatusDto } from './dto/update-status.dto';
+import type { OrdersService } from './orders.service';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
@@ -115,6 +115,6 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Body('pickupCode') pickupCode: string,
   ) {
-    return this.ordersService.hubConfirmPickup(storeId, orderId, user.sub, pickupCode);
+    return this.ordersService.hubConfirmPickup(storeId, orderId, user, pickupCode);
   }
 }

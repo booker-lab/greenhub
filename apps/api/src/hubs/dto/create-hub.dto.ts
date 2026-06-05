@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class CreateHubDto {
   @IsString()
@@ -56,4 +65,18 @@ export class UpdateHubDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+}
+
+export class CreateHubStaffInviteDto {
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  @IsOptional()
+  expiresInDays?: number;
+}
+
+export class AssignHubStaffDto {
+  @IsString()
+  @IsNotEmpty()
+  staffId: string;
 }
