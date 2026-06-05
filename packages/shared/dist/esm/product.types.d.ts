@@ -18,8 +18,8 @@ export interface GeneratedContent {
     description: string;
     isEditedByUser: boolean;
 }
-import type { SaleType, DeliveryMethod } from './order.types.js';
-export type { SaleType, DeliveryMethod };
+import type { DeliveryMethod, SaleType } from './order.types.js';
+export type { DeliveryMethod, SaleType };
 export interface GroupProductConfig {
     productId: string;
     minQuantity: number;
@@ -59,6 +59,7 @@ export interface Product {
 }
 export interface ProductSummary {
     id: string;
+    storeId?: string;
     name: string;
     price: number;
     images: string[];

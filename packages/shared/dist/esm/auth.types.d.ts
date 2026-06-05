@@ -1,9 +1,11 @@
-export type UserRole = 'consumer' | 'seller' | 'driver' | 'admin';
+export type UserRole = 'consumer' | 'seller' | 'driver' | 'hub_staff' | 'admin';
 export type AuthProvider = 'kakao' | 'naver' | 'email';
 export interface JwtPayload {
     sub: string;
     role: UserRole;
     storeId?: string;
+    hubId?: string;
+    hubIds?: string[];
     iat: number;
     exp: number;
 }
@@ -22,6 +24,8 @@ export interface UserProfile {
     phone: string | null;
     role: UserRole;
     storeId: string | null;
+    hubId?: string | null;
+    hubIds?: string[];
     providers: AuthProvider[];
     savedAddresses: SavedAddress[];
     fcmToken: string | null;

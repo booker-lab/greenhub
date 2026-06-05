@@ -22,3 +22,16 @@ export interface UpdateStoreRequest {
   businessNumber?: string;
   logoUrl?: string;
 }
+
+export interface PublicStoreSummary {
+  id: string;
+  name: string;
+  address: string;
+  logoUrl: string | null;
+  productCount: number;
+  hubCount: number;
+}
+
+export interface PublicStoreDetail extends PublicStoreSummary {
+  phone: string;
+}
