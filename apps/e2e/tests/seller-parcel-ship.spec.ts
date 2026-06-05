@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { AUTH_STATE_PATH } from './_helpers/auth';
+import { expectNoHorizontalOverflow, setMobileViewport } from './_helpers/responsive';
 
 // BUG-16 T5 — 셀러 택배 발송 완료 동선.
 // 시드: scripts/seed-e2e-orders.mjs 의 e2e-parcel-order-001
@@ -8,6 +9,8 @@ import { AUTH_STATE_PATH } from './_helpers/auth';
 
 const BASE = process.env.SELLER_BASE ?? 'https://seller.greenlove.co.kr';
 const PARCEL_ORDER_ID = 'e2e-parcel-order-001';
+const DELIVERED_PARCEL_ORDER_ID = 'e2e-parcel-delivered-order-001';
+const PARCEL_MODAL_ORDER_ID = 'e2e-parcel-modal-order-001';
 
 const sellerEmail = process.env.TEST_SELLER_EMAIL;
 const sellerPassword = process.env.TEST_SELLER_PASSWORD;
@@ -56,5 +59,30 @@ test.describe('셀러 택배 발송 완료 — 인증', () => {
     await page.goto(`${BASE}/orders/e2e-normal-order-001`);
     await expect(page.locator('text=주문 상세')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('text=택배 발송 완료')).not.toBeVisible();
+  });
+
+  test('배송 완료 택배 주문 상세에는 저장된 송장이 표시되고 발송 버튼이 없음', async ({ page }) => {
+    await page.goto(`${BASE}/orders/${DELIVERED_PARCEL_ORDER_ID}`);
+    await expect(page.locator('text=주문 상세')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('CJ대한통운')).toBeVisible();
+    await expect(page.getByText('1234567890')).toBeVisible();
+    await expect(page.locator('text=택배 발송 완료')).not.toBeVisible();
+  });
+
+  test('모바일 택배 발송 모달은 입력과 버튼을 화면 폭 안에 수납함', async ({ page }) => {
+    await setMobileViewport(page);
+    await page.goto(`${BASE}/orders/${PARCEL_MODAL_ORDER_ID}`);
+    await expect(page.locator('text=주문 상세')).toBeVisible({ timeout: 10_000 });
+    await page.locator('text=택배 발송 완료').click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('combobox', { name: '택배사' })).toBeVisible();
+    await expect(page.getByLabel('운송장번호')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: '취소' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: '발송 완료', exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+
+    await dialog.getByRole('button', { name: '취소' }).click();
   });
 });

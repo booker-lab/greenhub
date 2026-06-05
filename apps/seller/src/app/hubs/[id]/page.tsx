@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
+import { HubStaffInvitePanel } from './_components/HubStaffInvitePanel';
 
 interface Hub {
   id: string;
@@ -158,6 +159,10 @@ export default function HubDetailPage() {
                 </Stack>
               </Paper>
 
+              {storeId && token && session?.user.role === 'seller' && (
+                <HubStaffInvitePanel hubId={hubId} storeId={storeId} token={token} />
+              )}
+
               {/* 픽업 대기 주문 목록 */}
               <Box>
                 <Group justify="space-between" mb="xs">
@@ -200,73 +205,75 @@ export default function HubDetailPage() {
                   </Paper>
                 ) : (
                   <Stack gap="sm">
-                    {orders.map((order) => (
-                      <Paper
-                        key={orderId(order)}
-                        component="button"
-                        radius="lg"
-                        px="md"
-                        py="md"
-                        shadow="xs"
-                        onClick={() =>
-                          router.push(`/hubs/${hubId}/pickup?orderId=${orderId(order)}`)
-                        }
-                        style={{ width: '100%', cursor: 'pointer', textAlign: 'left' }}
-                      >
-                        <Group justify="space-between" gap="xs">
-                          <Box style={{ flex: 1, minWidth: 0 }}>
-                            <Group gap="xs" mb={4}>
-                              <Badge color="yellow" variant="light" radius="xl" size="xs">
-                                픽업 대기
-                              </Badge>
+                    {orders.map((order) => {
+                      const resolvedOrderId = orderId(order);
+                      return (
+                        <Paper key={resolvedOrderId} radius="lg" px="md" py="md" shadow="xs">
+                          <Group justify="space-between" align="flex-start" gap="sm">
+                            <Box style={{ flex: 1, minWidth: 0 }}>
+                              <Group gap="xs" mb={4}>
+                                <Badge color="yellow" variant="light" radius="xl" size="xs">
+                                  픽업 대기
+                                </Badge>
+                                <Text
+                                  style={{
+                                    fontSize: 'var(--font-size-sm)',
+                                    color: 'var(--color-text-disabled)',
+                                  }}
+                                >
+                                  {formatTime(order.createdAt)}
+                                </Text>
+                              </Group>
+                              {order.items && order.items.length > 0 && (
+                                <Text
+                                  style={{
+                                    fontSize: 'var(--font-size-sm)',
+                                    fontWeight: 'var(--fw-medium)',
+                                  }}
+                                  truncate
+                                >
+                                  {order.items[0].name}
+                                  {order.items.length > 1 && ` 외 ${order.items.length - 1}건`}
+                                </Text>
+                              )}
                               <Text
                                 style={{
                                   fontSize: 'var(--font-size-sm)',
                                   color: 'var(--color-text-disabled)',
                                 }}
+                                mt={2}
                               >
-                                {formatTime(order.createdAt)}
+                                {order.totalAmount?.toLocaleString()}원
                               </Text>
-                            </Group>
-                            {order.items && order.items.length > 0 && (
-                              <Text
-                                style={{
-                                  fontSize: 'var(--font-size-sm)',
-                                  fontWeight: 'var(--fw-medium)',
-                                }}
-                                truncate
-                              >
-                                {order.items[0].name}
-                                {order.items.length > 1 && ` 외 ${order.items.length - 1}건`}
-                              </Text>
-                            )}
-                            <Text
-                              style={{
-                                fontSize: 'var(--font-size-sm)',
-                                color: 'var(--color-text-disabled)',
-                              }}
-                              mt={2}
+                              <Group gap="xs" mt={8}>
+                                <Text
+                                  style={{
+                                    fontSize: 'var(--font-size-xs)',
+                                    color: 'var(--color-text-disabled)',
+                                  }}
+                                >
+                                  주문 {order.orderId ?? resolvedOrderId}
+                                </Text>
+                                {order.pickupCode && (
+                                  <Badge color="gray" variant="outline" radius="xl" size="xs">
+                                    코드 {order.pickupCode}
+                                  </Badge>
+                                )}
+                              </Group>
+                            </Box>
+                            <Button
+                              component={Link}
+                              href={`/hubs/${hubId}/pickup?orderId=${resolvedOrderId}`}
+                              size="xs"
+                              radius="md"
+                              style={{ flexShrink: 0, backgroundColor: 'var(--color-primary)' }}
                             >
-                              {order.totalAmount?.toLocaleString()}원
-                            </Text>
-                          </Box>
-                          <Box style={{ color: 'var(--color-text-disabled)' }}>
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              aria-hidden="true"
-                              focusable="false"
-                            >
-                              <path d="M9 18l6-6-6-6" />
-                            </svg>
-                          </Box>
-                        </Group>
-                      </Paper>
-                    ))}
+                              픽업 확인
+                            </Button>
+                          </Group>
+                        </Paper>
+                      );
+                    })}
                   </Stack>
                 )}
               </Box>

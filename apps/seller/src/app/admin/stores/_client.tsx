@@ -5,7 +5,8 @@ import { notifications } from '@mantine/notifications';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { AdminStore } from '@/hooks/useAdmin';
-import { useAdminStores } from '@/hooks/useAdmin';
+import { useAdminPlatformConfig, useAdminStores } from '@/hooks/useAdmin';
+import { DefaultCommissionPanel } from './_components/DefaultCommissionPanel';
 import { StoresFilters } from './_components/StoresFilters';
 import { StoresTable } from './_components/StoresTable';
 import {
@@ -29,6 +30,12 @@ interface StoreViewState {
 
 export default function AdminStoresClient() {
   const { stores, loading, reload, setCommission, archiveStore, restoreStore } = useAdminStores();
+  const {
+    config,
+    loading: configLoading,
+    reload: reloadConfig,
+    setDefaultCommission,
+  } = useAdminPlatformConfig();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -39,7 +46,9 @@ export default function AdminStoresClient() {
   }));
   const [editId, setEditId] = useState<string | null>(null);
   const [rateInput, setRateInput] = useState('');
+  const [defaultRateInput, setDefaultRateInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [savingDefault, setSavingDefault] = useState(false);
 
   useEffect(() => {
     setView({
@@ -48,6 +57,10 @@ export default function AdminStoresClient() {
       sort: parseSort(searchParams.get('sort'), searchParams.get('dir')),
     });
   }, [searchParams]);
+
+  useEffect(() => {
+    setDefaultRateInput(String(config.defaultCommissionRate));
+  }, [config.defaultCommissionRate]);
 
   const updateView = (patch: Partial<StoreViewState>) => {
     const next = { ...view, ...patch };
@@ -70,8 +83,14 @@ export default function AdminStoresClient() {
     updateView({ keyword: '', status: DEFAULT_STATUS_FILTER });
   };
 
+  const getDetailHref = (store: AdminStore) => {
+    const current = searchParams.toString();
+    const back = current ? `${pathname}?${current}` : pathname;
+    return `/admin/stores/${store.id}?back=${encodeURIComponent(back)}`;
+  };
+
   const handleSave = async (storeId: string) => {
-    const parsed = parseRate(rateInput);
+    const parsed = parseRate(rateInput, { min: 0, max: 1 });
     if (!parsed.ok) {
       notifications.show({
         color: 'orange',
@@ -87,6 +106,29 @@ export default function AdminStoresClient() {
       setEditId(null);
       setRateInput('');
     }
+  };
+
+  const handleSaveDefaultRate = async () => {
+    const parsed = parseRate(defaultRateInput, { min: 0, max: 1 });
+    if (!parsed.ok) {
+      notifications.show({
+        color: 'orange',
+        title: '입력 값을 확인하세요',
+        message: '0~1 사이의 기본 수수료율을 입력해야 합니다 (예: 0.05 = 5%).',
+      });
+      return;
+    }
+    setSavingDefault(true);
+    const ok = await setDefaultCommission(parsed.rate);
+    if (ok) {
+      await Promise.all([reload(), reloadConfig()]);
+      notifications.show({
+        color: 'green',
+        title: '기본 수수료율을 저장했습니다',
+        message: `신규 판매자 기본값은 ${(parsed.rate * 100).toFixed(1)}%입니다.`,
+      });
+    }
+    setSavingDefault(false);
   };
 
   const handleStartEdit = (store: AdminStore) => {
@@ -127,7 +169,7 @@ export default function AdminStoresClient() {
   };
 
   const filtered = filterStores(stores, { keyword: view.keyword, status: view.status });
-  const visible = sortStores(filtered, view.sort);
+  const visible = sortStores(filtered, view.sort, config.defaultCommissionRate);
   const emptyKind = getEmptyKind(stores, visible);
 
   return (
@@ -155,6 +197,15 @@ export default function AdminStoresClient() {
         onReload={reload}
       />
 
+      <DefaultCommissionPanel
+        value={defaultRateInput}
+        rate={config.defaultCommissionRate}
+        loading={configLoading}
+        saving={savingDefault}
+        onChange={setDefaultRateInput}
+        onSave={handleSaveDefaultRate}
+      />
+
       <StoresTable
         stores={visible}
         loading={loading}
@@ -163,6 +214,7 @@ export default function AdminStoresClient() {
         editId={editId}
         rateInput={rateInput}
         saving={saving}
+        defaultCommissionRate={config.defaultCommissionRate}
         onRateInput={setRateInput}
         onStartEdit={handleStartEdit}
         onCancelEdit={handleCancelEdit}
@@ -171,6 +223,7 @@ export default function AdminStoresClient() {
         onRestore={handleRestore}
         onResetFilters={resetFilters}
         onSortChange={(sort) => updateView({ sort })}
+        getDetailHref={getDetailHref}
       />
     </Box>
   );

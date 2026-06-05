@@ -2,10 +2,11 @@
 
 import type { PeriodRangeKey } from '@greenhub/shared';
 import { periodRange } from '@greenhub/shared';
-import { Button, Group, TextInput } from '@mantine/core';
+import { Button, Group, Select } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import 'dayjs/locale/ko';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
+import type { AdminStore } from '@/hooks/useAdmin';
 import { SETTLEMENT_FILTER_TABS, type SettlementFilterKey } from '../_constants';
 
 interface SettlementFiltersProps {
@@ -13,6 +14,8 @@ interface SettlementFiltersProps {
   fromFilter: string;
   toFilter: string;
   statusFilter: SettlementFilterKey;
+  stores: AdminStore[];
+  storesLoading: boolean;
   onStoreChange: (v: string) => void;
   onFromChange: (v: string) => void;
   onToChange: (v: string) => void;
@@ -26,6 +29,8 @@ export function SettlementFilters({
   fromFilter,
   toFilter,
   statusFilter,
+  stores,
+  storesLoading,
   onStoreChange,
   onFromChange,
   onToChange,
@@ -41,6 +46,13 @@ export function SettlementFilters({
     onFromChange(range.from);
     onToChange(range.to);
   };
+  const storeOptions = [
+    { value: '', label: '전체 스토어' },
+    ...stores.map((store) => ({
+      value: store.id,
+      label: store.name || '(미설정)',
+    })),
+  ];
 
   return (
     <>
@@ -51,11 +63,16 @@ export function SettlementFilters({
         layout="scroll"
       />
       <Group gap="sm" mb="md" mt="sm" style={{ flexWrap: 'wrap' }}>
-        <TextInput
-          placeholder="스토어 ID 필터"
+        <Select
+          label="스토어"
+          placeholder="전체 스토어"
           value={storeFilter}
-          onChange={(e) => onStoreChange(e.target.value)}
-          style={{ flex: 1, minWidth: 140 }}
+          onChange={(value) => onStoreChange(value ?? '')}
+          data={storeOptions}
+          disabled={storesLoading}
+          searchable
+          clearable
+          style={{ flex: 1, minWidth: 220 }}
           radius="md"
           size="sm"
         />

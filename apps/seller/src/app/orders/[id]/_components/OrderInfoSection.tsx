@@ -37,6 +37,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
                   day: 'numeric',
                   hour: '2-digit',
                   minute: '2-digit',
+                  hour12: false,
                 })}
           </Text>
         </Group>
@@ -172,6 +173,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
                 day: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit',
+                hour12: false,
               })}
               highlight
             />

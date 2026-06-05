@@ -2,7 +2,14 @@
 
 import { Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminDriver } from '@/hooks/useAdmin';
-import { ACTION_META, type DriverAction, formatDriverCreatedAt, getDriverActions } from '../_lib';
+import {
+  ACTION_META,
+  type DriverAction,
+  formatDriverContact,
+  formatDriverCreatedAt,
+  formatDriverVehicle,
+  getDriverActions,
+} from '../_lib';
 import { DriverBadge } from './DriverBadge';
 
 interface DriverListProps {
@@ -65,6 +72,16 @@ export function DriverList({
                   truncate
                 >
                   {driver.email ?? '이메일 없음'}
+                </Text>
+                <Text
+                  style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-disabled)' }}
+                >
+                  연락처 {formatDriverContact(driver)}
+                </Text>
+                <Text
+                  style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-disabled)' }}
+                >
+                  {formatDriverVehicle(driver)}
                 </Text>
                 <Text
                   style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-disabled)' }}

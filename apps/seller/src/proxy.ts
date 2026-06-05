@@ -3,8 +3,12 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 
 export async function proxy(request: NextRequest) {
-  const session = await auth();
   const { pathname } = request.nextUrl;
+  if (process.env.ENABLE_E2E_FIXTURES === 'true' && pathname.startsWith('/e2e/')) {
+    return NextResponse.next();
+  }
+
+  const session = await auth();
 
   // 미로그인 → /login 리다이렉트
   if (!session?.user) {
@@ -12,10 +16,15 @@ export async function proxy(request: NextRequest) {
   }
 
   const isAdmin = session.user.role === 'admin';
+  const isHubStaff = session.user.role === 'hub_staff';
 
   // 프로필 미완성(storeId 없음) → /onboarding 강제 이동 (admin 제외)
-  if (!isAdmin && !session.user.storeId && pathname !== '/onboarding') {
+  if (!isAdmin && !isHubStaff && !session.user.storeId && pathname !== '/onboarding') {
     return NextResponse.redirect(new URL('/onboarding', request.url));
+  }
+
+  if (isHubStaff && pathname === '/onboarding') {
+    return NextResponse.redirect(new URL('/hubs', request.url));
   }
 
   // 순수 어드민(store 없음)이 /onboarding 접근 시 /admin으로 이동.
@@ -31,6 +40,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!login|api|_next/static|_next/image|favicon.ico|manifest.json|icons|sw.js|workbox-.*\\.js).*)',
+    '/((?!login|staff-invite|api|_next/static|_next/image|favicon.ico|manifest.json|icons|sw.js|workbox-.*\\.js).*)',
   ],
 };

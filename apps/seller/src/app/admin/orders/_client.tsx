@@ -1,9 +1,19 @@
 'use client';
 
 import type { OrderStatus } from '@greenhub/shared';
-import { ActionIcon, Box, Button, Group, Switch, Text, Title, Tooltip } from '@mantine/core';
+import {
+  ActionIcon,
+  Alert,
+  Box,
+  Group,
+  Pagination,
+  Switch,
+  Text,
+  Title,
+  Tooltip,
+} from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { ChevronDown, RotateCw } from 'lucide-react';
+import { RotateCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { AdminOrder, AdminOrderSort } from '@/hooks/useAdmin';
 import { useAdminOrders, useAdminStores } from '@/hooks/useAdmin';
@@ -21,19 +31,25 @@ export default function AdminOrdersClient() {
   const [refundOrder, setRefundOrder] = useState<AdminOrder | null>(null);
   const [sort, setSort] = useState<AdminOrderSort>('createdAt_desc');
   const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(1);
   const { stores, loading: storesLoading } = useAdminStores();
-  const { orders, loading, loadingMore, hasMore, reload, loadMore, forceRefund } = useAdminOrders({
-    storeId: storeFilter || undefined,
-    status: statusFilter || undefined,
-    sort,
-    limit: pageSize,
-  });
+  const { orders, loading, error, total, currentPage, totalPages, reload, forceRefund } =
+    useAdminOrders({
+      storeId: storeFilter || undefined,
+      status: statusFilter || undefined,
+      sort,
+      limit: pageSize,
+      page,
+    });
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (includeArchivedStores || !storeFilter) return;
     const selectedStore = stores.find((store) => store.id === storeFilter);
-    if (selectedStore?.status === 'archived') setStoreFilter('');
+    if (selectedStore?.status === 'archived') {
+      setStoreFilter('');
+      setPage(1);
+    }
   }, [includeArchivedStores, storeFilter, stores]);
 
   useEffect(() => {
@@ -70,7 +86,7 @@ export default function AdminOrdersClient() {
             component="span"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
-            ({orders.length})
+            ({total}건)
           </Text>
         </Title>
         <Group gap="xs">
@@ -103,12 +119,30 @@ export default function AdminOrdersClient() {
         stores={stores}
         storesLoading={storesLoading}
         includeArchivedStores={includeArchivedStores}
-        onStoreChange={setStoreFilter}
-        onStatusChange={(value) => setStatusFilter(value as OrderStatus | '')}
-        onSortChange={setSort}
-        onPageSizeChange={setPageSize}
+        onStoreChange={(value) => {
+          setStoreFilter(value);
+          setPage(1);
+        }}
+        onStatusChange={(value) => {
+          setStatusFilter(value as OrderStatus | '');
+          setPage(1);
+        }}
+        onSortChange={(value) => {
+          setSort(value);
+          setPage(1);
+        }}
+        onPageSizeChange={(value) => {
+          setPageSize(value);
+          setPage(1);
+        }}
         onIncludeArchivedStoresChange={setIncludeArchivedStores}
       />
+
+      {error && (
+        <Alert color="red" mb="md" title="주문 목록을 불러오지 못했습니다.">
+          잠시 후 다시 시도해 주세요.
+        </Alert>
+      )}
 
       <OrdersTable
         orders={orders}
@@ -118,18 +152,20 @@ export default function AdminOrdersClient() {
         onRefund={setRefundOrder}
       />
 
-      {!loading && hasMore && (
-        <Group justify="center" mt="md">
-          <Button
-            color="gray"
-            leftSection={<ChevronDown size={16} />}
-            loading={loadingMore}
-            onClick={loadMore}
+      {!loading && totalPages > 1 && (
+        <Group justify="space-between" mt="md" gap="sm" wrap="wrap">
+          <Text size="sm" c="dimmed">
+            {currentPage} / {totalPages} 페이지
+          </Text>
+          <Pagination
+            value={page}
+            onChange={setPage}
+            total={totalPages}
+            siblings={1}
+            boundaries={1}
             radius="md"
-            variant="light"
-          >
-            더 보기
-          </Button>
+            size="sm"
+          />
         </Group>
       )}
 

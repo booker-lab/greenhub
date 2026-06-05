@@ -5,7 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { RotateCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { useAdminSettlements } from '@/hooks/useAdmin';
+import { useAdminSettlements, useAdminStores } from '@/hooks/useAdmin';
 import { SettlementFilters } from './_components/SettlementFilters';
 import { SettlementTable } from './_components/SettlementTable';
 import { SummaryCards } from './_components/SummaryCards';
@@ -17,7 +17,18 @@ export default function AdminSettlementsClient() {
   const [fromFilter, setFromFilter] = useState('');
   const [toFilter, setToFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<SettlementFilterKey>('all');
-  const { settlements, loading, error, reload, markAsPaid, bulkMarkAsPaid } = useAdminSettlements({
+  const { stores, loading: storesLoading } = useAdminStores();
+  const {
+    settlements,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    reload,
+    loadMore,
+    markAsPaid,
+    bulkMarkAsPaid,
+  } = useAdminSettlements({
     storeId: storeFilter || undefined,
     from: fromFilter || undefined,
     to: toFilter || undefined,
@@ -28,6 +39,10 @@ export default function AdminSettlementsClient() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkPayOpen, setBulkPayOpen] = useState(false);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const storeNames = useMemo(
+    () => Object.fromEntries(stores.map((store) => [store.id, store.name])),
+    [stores],
+  );
 
   const payableSettlements = useMemo(
     () => settlements.filter((settlement) => settlement.status === 'confirmed'),
@@ -155,6 +170,8 @@ export default function AdminSettlementsClient() {
         fromFilter={fromFilter}
         toFilter={toFilter}
         statusFilter={statusFilter}
+        stores={stores}
+        storesLoading={storesLoading}
         onStoreChange={setStoreFilter}
         onFromChange={setFromFilter}
         onToChange={setToFilter}
@@ -206,10 +223,19 @@ export default function AdminSettlementsClient() {
         selectedIds={selectedIds}
         selectableIds={selectableIds}
         bulkProcessing={bulkProcessing}
+        storeNames={storeNames}
         onPay={setPayTargetId}
         onToggleSelected={toggleSelected}
         onToggleAllSelected={toggleAllSelected}
       />
+
+      {hasMore && (
+        <Group justify="center" mt="md">
+          <Button color="gray" loading={loadingMore} onClick={loadMore} radius="md" variant="light">
+            더 보기
+          </Button>
+        </Group>
+      )}
 
       <ConfirmModal
         opened={payTargetId !== null}

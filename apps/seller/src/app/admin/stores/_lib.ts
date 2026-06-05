@@ -23,6 +23,10 @@ export type StoreSortValue = `${StoreSortKey}:${SortDirection}`;
 export type StoreEmptyKind = 'no-data' | 'no-match' | 'has-data';
 export type ParseRateError = 'EMPTY' | 'NOT_NUMBER' | 'OUT_OF_RANGE';
 export type ParseRateResult = { ok: true; rate: number } | { ok: false; errorCode: ParseRateError };
+export interface ParseRateOptions {
+  min?: number;
+  max?: number;
+}
 
 export interface StoreFilters {
   keyword: string;
@@ -88,12 +92,18 @@ export function filterStores(stores: AdminStore[], filters: StoreFilters): Admin
   });
 }
 
-export function sortStores(stores: AdminStore[], sort: StoreSort): AdminStore[] {
+export function sortStores(
+  stores: AdminStore[],
+  sort: StoreSort,
+  defaultCommissionRate?: number,
+): AdminStore[] {
   const direction = sort.direction === 'asc' ? 1 : -1;
   return [...stores].sort((a, b) => {
     let compared = 0;
     if (sort.key === 'rate') {
-      compared = (a.commissionRate ?? -1) - (b.commissionRate ?? -1);
+      compared =
+        effectiveRate(a.commissionRate, defaultCommissionRate) -
+        effectiveRate(b.commissionRate, defaultCommissionRate);
     } else if (sort.key === 'status') {
       compared = STATUS_LABEL[a.status].localeCompare(STATUS_LABEL[b.status], 'ko');
     } else {
@@ -108,16 +118,23 @@ export function getEmptyKind(stores: AdminStore[], filtered: AdminStore[]): Stor
   return filtered.length === 0 ? 'no-match' : 'has-data';
 }
 
-export function parseRate(input: string): ParseRateResult {
+export function parseRate(input: string, options: ParseRateOptions = {}): ParseRateResult {
+  const min = options.min ?? 0;
+  const max = options.max ?? 1;
   const trimmed = input.trim();
   if (trimmed === '') return { ok: false, errorCode: 'EMPTY' };
   const rate = Number.parseFloat(trimmed);
   if (Number.isNaN(rate)) return { ok: false, errorCode: 'NOT_NUMBER' };
-  if (rate < 0 || rate > 1) return { ok: false, errorCode: 'OUT_OF_RANGE' };
+  if (rate < min || rate > max) return { ok: false, errorCode: 'OUT_OF_RANGE' };
   return { ok: true, rate };
 }
 
-// 수수료율 표시 문자열 — 미설정 시 '기본'.
-export function formatRate(rate: number | undefined): string {
-  return rate !== undefined ? `${(rate * 100).toFixed(1)}%` : '기본';
+export function effectiveRate(rate: number | undefined, defaultRate = 0): number {
+  return rate ?? defaultRate;
+}
+
+// 수수료율 표시 문자열 — 미설정 시 전역 기본값을 명시한다.
+export function formatRate(rate: number | undefined, defaultRate = 0): string {
+  if (rate !== undefined) return `${(rate * 100).toFixed(1)}%`;
+  return `기본 ${(defaultRate * 100).toFixed(1)}%`;
 }

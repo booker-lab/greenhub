@@ -32,12 +32,7 @@ interface AdminBannersResponse {
 }
 
 function toPayload(form: AdminBannerForm) {
-  const {
-    id: _id,
-    createdAt: _createdAt,
-    updatedAt: _updatedAt,
-    ...payload
-  } = form;
+  const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...payload } = form;
   return payload;
 }
 

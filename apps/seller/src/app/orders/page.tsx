@@ -63,7 +63,12 @@ export default function OrdersPage() {
   const [bulkParcelShipOpened, setBulkParcelShipOpened] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
 
+  const clearBulkSelection = () => {
+    setSelectedOrderIds(new Set());
+  };
+
   const handleSaleTypeChange = (next: SaleType) => {
+    clearBulkSelection();
     setSaleType(next);
     setDatePreset('week');
     setCustomFrom('');
@@ -142,12 +147,14 @@ export default function OrdersPage() {
   };
 
   const openActionRequired = () => {
+    clearBulkSelection();
     setActiveTab('ACTION_REQUIRED');
     setSubFilter('ALL');
     resetDateFilters();
   };
 
   const openOverdue = (tab: OrderGroup) => {
+    clearBulkSelection();
     setActiveTab(tab);
     setSubFilter('ALL');
     resetDateFilters();
@@ -164,10 +171,6 @@ export default function OrdersPage() {
 
   const selectAllBulkEligible = () => {
     setSelectedOrderIds(new Set(bulkEligibleIds));
-  };
-
-  const clearBulkSelection = () => {
-    setSelectedOrderIds(new Set());
   };
 
   const handleBulkPrepare = async () => {
@@ -273,7 +276,10 @@ export default function OrdersPage() {
               {DATE_PRESETS.map((p) => (
                 <UnstyledButton
                   key={p.key}
-                  onClick={() => setDatePreset(p.key)}
+                  onClick={() => {
+                    clearBulkSelection();
+                    setDatePreset(p.key);
+                  }}
                   style={{
                     padding: '6px 14px',
                     fontSize: 'var(--font-size-sm)',
@@ -294,7 +300,10 @@ export default function OrdersPage() {
                 <input
                   type="date"
                   value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
+                  onChange={(e) => {
+                    clearBulkSelection();
+                    setCustomFrom(e.target.value);
+                  }}
                   style={{
                     padding: '6px 10px',
                     fontSize: 'var(--font-size-sm)',
@@ -307,7 +316,10 @@ export default function OrdersPage() {
                 <input
                   type="date"
                   value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
+                  onChange={(e) => {
+                    clearBulkSelection();
+                    setCustomTo(e.target.value);
+                  }}
                   style={{
                     padding: '6px 10px',
                     fontSize: 'var(--font-size-sm)',
@@ -341,6 +353,7 @@ export default function OrdersPage() {
         }))}
         value={activeTab}
         onChange={(key) => {
+          clearBulkSelection();
           setActiveTab(key);
           setSubFilter('ALL');
         }}
@@ -362,7 +375,10 @@ export default function OrdersPage() {
               {IN_DELIVERY_SUBFILTERS.map((sf) => (
                 <UnstyledButton
                   key={sf.key}
-                  onClick={() => setSubFilter(sf.key)}
+                  onClick={() => {
+                    clearBulkSelection();
+                    setSubFilter(sf.key);
+                  }}
                   style={{
                     padding: '6px 14px',
                     fontSize: 'var(--font-size-sm)',

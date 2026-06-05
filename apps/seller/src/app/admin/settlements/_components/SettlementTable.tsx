@@ -3,7 +3,7 @@
 import { STATUS_COLOR, STATUS_LABEL } from '@greenhub/shared';
 import { Badge, Box, Button, Checkbox, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminSettlement } from '@/hooks/useAdmin';
-import { toDateStr } from '../_lib';
+import { paymentTimingText, toDateStr } from '../_lib';
 
 interface SettlementTableProps {
   settlements: AdminSettlement[];
@@ -12,6 +12,7 @@ interface SettlementTableProps {
   selectedIds: string[];
   selectableIds: string[];
   bulkProcessing: boolean;
+  storeNames: Record<string, string>;
   onPay: (id: string) => void;
   onToggleSelected: (id: string, checked: boolean) => void;
   onToggleAllSelected: (checked: boolean) => void;
@@ -30,6 +31,7 @@ export function SettlementTable({
   selectedIds,
   selectableIds,
   bulkProcessing,
+  storeNames,
   onPay,
   onToggleSelected,
   onToggleAllSelected,
@@ -67,6 +69,9 @@ export function SettlementTable({
         {settlements.map((settlement) => {
           const selectable = settlement.status === 'confirmed';
           const checked = selectedIds.includes(settlement.id);
+          const paymentTiming = paymentTimingText(settlement);
+          const storeLabel =
+            storeNames[settlement.storeId] || `${settlement.storeId.slice(0, 8)}...`;
 
           return (
             <Paper
@@ -80,7 +85,7 @@ export function SettlementTable({
               <Group justify="space-between" align="flex-start" mb="xs" gap="xs">
                 <Group gap="xs" align="flex-start">
                   <Checkbox
-                    aria-label={`${settlement.storeId.slice(0, 8)} 정산 선택`}
+                    aria-label={`${storeLabel} 정산 선택`}
                     checked={checked}
                     disabled={!selectable || bulkProcessing}
                     onChange={(event) =>
@@ -92,18 +97,29 @@ export function SettlementTable({
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-disabled)',
                     }}
-                    ff="monospace"
                   >
-                    {settlement.storeId.slice(0, 8)}...
+                    {storeLabel}
                   </Text>
                 </Group>
-                <Badge
-                  color={STATUS_COLOR[settlement.status] ?? 'gray'}
-                  variant="light"
-                  radius="xl"
-                >
-                  {STATUS_LABEL[settlement.status] ?? settlement.status}
-                </Badge>
+                <Stack gap={2} align="flex-end">
+                  <Badge
+                    color={STATUS_COLOR[settlement.status] ?? 'gray'}
+                    variant="light"
+                    radius="xl"
+                  >
+                    {STATUS_LABEL[settlement.status] ?? settlement.status}
+                  </Badge>
+                  {paymentTiming && (
+                    <Text
+                      style={{
+                        fontSize: 'var(--font-size-xs)',
+                        color: 'var(--color-text-disabled)',
+                      }}
+                    >
+                      {paymentTiming}
+                    </Text>
+                  )}
+                </Stack>
               </Group>
               <Text
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
@@ -195,6 +211,9 @@ export function SettlementTable({
             {settlements.map((settlement) => {
               const selectable = settlement.status === 'confirmed';
               const checked = selectedIds.includes(settlement.id);
+              const paymentTiming = paymentTimingText(settlement);
+              const storeLabel =
+                storeNames[settlement.storeId] || `${settlement.storeId.slice(0, 8)}...`;
 
               return (
                 <Box
@@ -204,7 +223,7 @@ export function SettlementTable({
                 >
                   <Box component="td" style={{ padding: '12px 16px' }}>
                     <Checkbox
-                      aria-label={`${settlement.storeId.slice(0, 8)} 정산 선택`}
+                      aria-label={`${storeLabel} 정산 선택`}
                       checked={checked}
                       disabled={!selectable || bulkProcessing}
                       onChange={(event) =>
@@ -218,9 +237,8 @@ export function SettlementTable({
                         fontSize: 'var(--font-size-sm)',
                         color: 'var(--color-text-disabled)',
                       }}
-                      ff="monospace"
                     >
-                      {settlement.storeId.slice(0, 8)}...
+                      {storeLabel}
                     </Text>
                   </Box>
                   <Box
@@ -261,13 +279,25 @@ export function SettlementTable({
                     {settlement.netAmount.toLocaleString()}원
                   </Box>
                   <Box component="td" style={{ padding: '12px 16px' }}>
-                    <Badge
-                      color={STATUS_COLOR[settlement.status] ?? 'gray'}
-                      variant="light"
-                      radius="xl"
-                    >
-                      {STATUS_LABEL[settlement.status] ?? settlement.status}
-                    </Badge>
+                    <Stack gap={2} align="flex-start">
+                      <Badge
+                        color={STATUS_COLOR[settlement.status] ?? 'gray'}
+                        variant="light"
+                        radius="xl"
+                      >
+                        {STATUS_LABEL[settlement.status] ?? settlement.status}
+                      </Badge>
+                      {paymentTiming && (
+                        <Text
+                          style={{
+                            fontSize: 'var(--font-size-xs)',
+                            color: 'var(--color-text-disabled)',
+                          }}
+                        >
+                          {paymentTiming}
+                        </Text>
+                      )}
+                    </Stack>
                   </Box>
                   <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
                     {settlement.status === 'confirmed' && (

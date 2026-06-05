@@ -5,7 +5,6 @@ import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
 
-export { useAdminBanner, useAdminBanners } from './useAdminBanners';
 export type {
   AdminActionResult,
   AdminBanner,
@@ -13,8 +12,19 @@ export type {
   BannerCta,
   BannerKind,
 } from './useAdminBanners';
+export { useAdminBanner, useAdminBanners } from './useAdminBanners';
+export type { AdminDriver, DriverSort, DriverStatus } from './useAdminDrivers';
+export { useAdminDrivers } from './useAdminDrivers';
+export type { InviteRevokeReason, InviteRollbackReason, InviteToken } from './useAdminInvite';
 export { useAdminInvite } from './useAdminInvite';
-export type { InviteRevokeReason, InviteToken } from './useAdminInvite';
+export type {
+  AdminOrderDetail,
+  AdminOrderDetailEntity,
+  AdminOrderDetailItem,
+  AdminOrderPayment,
+  AdminOrderTimelineEvent,
+} from './useAdminOrderDetail';
+export { useAdminOrderDetail } from './useAdminOrderDetail';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -25,6 +35,10 @@ export interface AdminStore {
   status: StoreStatus;
   commissionRate?: number;
   createdAt: unknown;
+}
+
+export interface AdminPlatformConfig {
+  defaultCommissionRate: number;
 }
 
 export interface AdminUser {
@@ -85,15 +99,9 @@ export interface BulkPaySettlementsResult {
   failed: { id: string; reason: string }[];
 }
 
-export type DriverStatus = 'all' | 'pending' | 'approved' | 'suspended';
-
-export interface AdminDriver {
-  id: string;
-  name: string;
-  email: string | null;
-  driverApproved: boolean;
-  suspended?: boolean;
-  createdAt: unknown;
+interface AdminSettlementsResponse {
+  settlements?: AdminSettlement[];
+  nextCursor?: string | null;
 }
 
 // ── Core ─────────────────────────────────────────────────────────
@@ -166,6 +174,12 @@ function pick<T>(key: string) {
 
 interface AdminOrdersResponse {
   orders?: AdminOrder[];
+  total?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
   nextCursor?: string | null;
 }
 
@@ -206,6 +220,45 @@ export function useAdminStores() {
   return { stores, loading, error, reload, setCommission, archiveStore, restoreStore };
 }
 
+export function useAdminPlatformConfig() {
+  const { data: session } = useSession();
+  const token = session?.user.accessToken;
+  const [config, setConfig] = useState<AdminPlatformConfig>({ defaultCommissionRate: 0 });
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const data = await apiJson<AdminPlatformConfig>('/admin/platform-config', token);
+      setConfig(data);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const setDefaultCommission = async (rate: number) => {
+    if (!token) return false;
+    try {
+      const data = await apiJson<AdminPlatformConfig>(
+        '/admin/platform-config/default-commission',
+        token,
+        { method: 'PATCH', body: JSON.stringify({ rate }) },
+      );
+      setConfig(data);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  return { config, loading, reload: load, setDefaultCommission };
+}
+
 // ── Users ────────────────────────────────────────────────────────
 
 export function useAdminUsers() {
@@ -236,6 +289,7 @@ export function useAdminOrders(filters?: {
   status?: OrderStatus;
   sort?: AdminOrderSort;
   limit?: number;
+  page?: number;
 }) {
   const { data: session } = useSession();
   const token = session?.user.accessToken;
@@ -244,8 +298,13 @@ export function useAdminOrders(filters?: {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(filters?.page ?? 1);
+  const [totalPages, setTotalPages] = useState(1);
   const sort = filters?.sort ?? 'createdAt_desc';
   const limit = String(filters?.limit ?? 50);
+  const pageNumber = filters?.page ?? 1;
+  const page = String(pageNumber);
 
   const buildOrdersPath = useCallback(
     (cursor?: string | null) =>
@@ -254,9 +313,10 @@ export function useAdminOrders(filters?: {
         status: filters?.status,
         sort,
         limit,
+        page,
         cursor: cursor ?? undefined,
       }),
-    [filters?.storeId, filters?.status, sort, limit],
+    [filters?.storeId, filters?.status, sort, limit, page],
   );
 
   const load = useCallback(
@@ -270,16 +330,26 @@ export function useAdminOrders(filters?: {
         setOrders((current) =>
           append ? [...current, ...(data.orders ?? [])] : (data.orders ?? []),
         );
+        setTotal(data.total ?? data.orders?.length ?? 0);
+        setCurrentPage(data.page ?? pageNumber);
+        setTotalPages(data.totalPages ?? 1);
         setNextCursor(data.nextCursor ?? null);
         setError(null);
       } catch {
+        if (!append) {
+          setOrders([]);
+          setNextCursor(null);
+          setTotal(0);
+          setCurrentPage(pageNumber);
+          setTotalPages(1);
+        }
         setError('주문 목록 조회 중 오류 발생');
       } finally {
         if (append) setLoadingMore(false);
         else setLoading(false);
       }
     },
-    [buildOrdersPath, token],
+    [buildOrdersPath, pageNumber, token],
   );
 
   useEffect(() => {
@@ -300,7 +370,11 @@ export function useAdminOrders(filters?: {
     loading,
     loadingMore,
     error,
-    hasMore: Boolean(nextCursor),
+    total,
+    currentPage,
+    totalPages,
+    hasPrevious: currentPage > 1,
+    hasMore: Boolean(nextCursor) || currentPage < totalPages,
     reload: () => load(),
     loadMore: () => load(nextCursor),
     forceRefund,
@@ -314,31 +388,62 @@ export function useAdminSettlements(filters?: {
   from?: string;
   to?: string;
   status?: SettlementStatus;
+  limit?: number;
 }) {
-  const {
-    items: settlements,
-    loading,
-    error,
-    reload,
-    token,
-  } = useAdminList<AdminSettlement>(
-    () =>
+  const { data: session } = useSession();
+  const token = session?.user.accessToken;
+  const [settlements, setSettlements] = useState<AdminSettlement[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const limit = String(filters?.limit ?? 100);
+
+  const buildSettlementsPath = useCallback(
+    (cursor?: string | null) =>
       withQuery('/admin/settlements', {
         storeId: filters?.storeId,
         from: filters?.from,
         to: filters?.to,
         status: filters?.status,
+        limit,
+        cursor: cursor ?? undefined,
       }),
-    pick<AdminSettlement>('settlements'),
-    '정산 목록',
-    [filters?.storeId, filters?.from, filters?.to, filters?.status],
+    [filters?.storeId, filters?.from, filters?.to, filters?.status, limit],
   );
+
+  const load = useCallback(
+    async (cursor?: string | null) => {
+      if (!token) return;
+      const append = Boolean(cursor);
+      if (append) setLoadingMore(true);
+      else setLoading(true);
+      try {
+        const data = await apiJson<AdminSettlementsResponse>(buildSettlementsPath(cursor), token);
+        setSettlements((current) =>
+          append ? [...current, ...(data.settlements ?? [])] : (data.settlements ?? []),
+        );
+        setNextCursor(data.nextCursor ?? null);
+        setError(null);
+      } catch {
+        setError('정산 목록 조회 중 오류 발생');
+      } finally {
+        if (append) setLoadingMore(false);
+        else setLoading(false);
+      }
+    },
+    [buildSettlementsPath, token],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const markAsPaid = async (settlementId: string) => {
     const ok = await runAction(token, `/admin/settlements/${settlementId}/pay`, {
       method: 'PATCH',
     });
-    if (ok) await reload();
+    if (ok) await load();
     return ok;
   };
 
@@ -349,49 +454,22 @@ export function useAdminSettlements(filters?: {
         method: 'POST',
         body: JSON.stringify({ ids }),
       });
-      await reload();
+      await load();
       return result;
     } catch {
       return null;
     }
   };
 
-  return { settlements, loading, error, reload, markAsPaid, bulkMarkAsPaid };
-}
-
-// ── Drivers ──────────────────────────────────────────────────────
-
-export function useAdminDrivers(filters: { status: DriverStatus }) {
-  const {
-    items: drivers,
+  return {
+    settlements,
     loading,
+    loadingMore,
     error,
-    reload,
-    token,
-  } = useAdminList<AdminDriver>(
-    () =>
-      withQuery('/admin/drivers', {
-        status: filters.status === 'all' ? undefined : filters.status,
-      }),
-    pick<AdminDriver>('drivers'),
-    '드라이버 목록',
-    [filters.status],
-  );
-
-  const approve = async (userId: string) => {
-    const ok = await runAction(token, `/admin/drivers/${userId}/approve`, { method: 'PATCH' });
-    if (ok) await reload();
-    return ok;
+    hasMore: Boolean(nextCursor),
+    reload: () => load(),
+    loadMore: () => load(nextCursor),
+    markAsPaid,
+    bulkMarkAsPaid,
   };
-
-  const toggleSuspend = async (userId: string, suspended: boolean) => {
-    const ok = await runAction(token, `/admin/drivers/${userId}/suspend`, {
-      method: 'PATCH',
-      body: JSON.stringify({ suspended }),
-    });
-    if (ok) await reload();
-    return ok;
-  };
-
-  return { drivers, loading, error, reload, approve, toggleSuspend };
 }

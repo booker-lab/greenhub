@@ -22,6 +22,20 @@ export function toDateStr(ts: unknown): string {
   });
 }
 
+export function paymentTimingText(settlement: AdminSettlement): string | null {
+  if (settlement.status === 'paid') {
+    const paidAt = toDateStr(settlement.paidAt);
+    return paidAt === '-' ? null : `입금 완료 ${paidAt}`;
+  }
+
+  if (settlement.status === 'confirmed') {
+    const confirmedAt = toDateStr(settlement.confirmedAt);
+    return confirmedAt === '-' ? '지급 대기' : `지급 대기 · 확정 ${confirmedAt}`;
+  }
+
+  return null;
+}
+
 export function toKRW(n: number): string {
   return `₩${n.toLocaleString('ko-KR')}`;
 }

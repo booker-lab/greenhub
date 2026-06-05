@@ -357,6 +357,33 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
 - [x] UI 검증: 정렬·페이지 크기 Select와 `더 보기` 버튼이 필터·자동 새로고침과 함께 동작한다.
 - [x] 육안검증 등록: `pending-visual-verify.md` §20 #182~#188에 데스크톱·모바일 확인 항목을 추가한다.
 
+## B-11. F3-FULL 진행 — 어드민 주문 정식 상세 (2026-06-03)
+
+> 별도 SDD: [`admin-orders-detail-full-plan.md`](./admin-orders-detail-full-plan.md), 결정 로그: `#CL-93`.
+
+### 결정
+
+- **범위**: `GET /admin/orders/:orderId`와 `/admin/orders/[id]` 읽기 전용 상세를 추가한다.
+- **응답 구조**: `order`, `store`, `buyer`, `payment`, `items`, `timeline`으로 나눈다.
+- **상품 라인**: 현재 주문 스키마가 단일 상품 주문이므로 `productId/productName/quantity/totalAmount` 기반 단일 라인으로 표시한다.
+- **상태 타임라인**: 별도 이력 저장소를 추정하지 않고 `createdAt`, `preparedAt`, `updatedAt`, `cancelReason`, `status`처럼 주문 문서에 있는 관측 가능한 값만 표시한다.
+- **기존 모달**: 목록 응답 기반 모달은 유지하고, 모달에서 정식 상세 화면으로 이동할 수 있게 한다.
+
+### 제외
+
+- 송장번호 사후 수정
+- 상태 변경 이력 컬렉션 신설
+- 결제 환불 재처리 또는 상태 변경 쓰기
+- 다중 상품 라인 스키마 변경
+- 고급 페이지네이션
+
+### 정합성 체크
+
+- [x] SDD 선반영: 별도 SDD와 `#CL-93` 기록 후 구현했다.
+- [x] API 검증: 상세 응답 조립과 404 단위 테스트를 추가했다.
+- [x] 500라인 한도: `admin.service.ts`가 500라인에 가까워 주문 목록·상세 조회를 `admin-orders.helpers.ts`로 분리했다.
+- [x] 검증: API 상세/기존 단위 테스트 50/50, API·seller 타입체크, API·seller 빌드, 변경 파일 Biome, `git diff --check`를 통과했다.
+
 ## 참고 문서
 
 ### 본 탭이 직접 참조하는 외부 문서
@@ -371,6 +398,73 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
   - **F3 주문 상세 드릴다운** — 집계·조회 API+라우트 신설. SDD 미작성.
   - **F5 정렬·페이지네이션** — B-10에서 1차 커서 `더 보기`로 진행.
   - **C-out 라벨 4앱 통일** — 어드민·셀러·소비자 동시 변경. 별도 과제.
+
+## B-12. F5-ADV 진행 — 어드민 주문 고급 페이지네이션 (2026-06-03)
+
+> 상세 SDD: `admin-orders-advanced-pagination-plan.md`
+
+### 결정
+
+- `GET /admin/orders`는 `page`가 지정되면 `count()`와 `offset` 기반으로 `total`, `page`, `pageSize`, `totalPages`, `hasPrevious`, `hasNext`를 반환한다.
+- 기존 `cursor`/`nextCursor` 계약은 호환용으로 유지한다. `page`와 `cursor`가 동시에 오면 `page`가 우선한다.
+- 프론트는 `더 보기` 대신 페이지 번호 UI를 사용하고, 스토어·상태·정렬·페이지 크기 변경 시 1페이지로 복귀한다.
+- `createdAt` 외 컬럼 정렬은 제외한다. 깊은 `offset` 탐색 비용이 문제가 되면 별도 서버 검색 SDD로 승격한다.
+
+### 정합성 체크
+
+- [x] SDD 선반영: `admin-orders-advanced-pagination-plan.md`, `CRITICAL_LOGIC.md` `#CL-94`.
+- [x] API 계약: `QueryAdminOrdersDto.page`, `getOrdersPage()` page 메타 반환.
+- [x] UI 계약: `/admin/orders` 총 건수·페이지 번호 표시, 필터 변경 시 1페이지 복귀.
+- [x] 검증: API 단위, 전용 E2E fixture, 변경 파일 Biome, 타입체크·빌드.
+
+## B-13. C-out 진행 — 주문 상태 라벨 SSOT 통합 (2026-06-03)
+
+> 결정 로그: `#CL-95`.
+
+### 결정
+
+- `@greenhub/shared`에 `ORDER_STATUSES`, `ORDER_STATUS_LABEL`, `ORDER_STATUS_COLOR`를 둔다.
+- 라벨은 `docs/specs/api/orders.md` FSM 표의 사용자 문구를 기준으로 한다.
+- 어드민 주문 목록·상세·모달, 셀러 주문 목록·상세, 소비자 마이페이지 목록·상세, 주문 성공 화면은 모두 `ORDER_STATUS_LABEL`을 사용한다.
+- 기존 정산 `STATUS_LABEL` export와 충돌하지 않도록 주문 상수는 `ORDER_` 접두사를 쓴다.
+
+### 제외
+
+- 주문 상태 FSM 전이 정책 변경
+- 환불 허용 정책 변경
+- 소비자 화면의 CSS 토큰 기반 색상 구조 통합
+
+### 정합성 체크
+
+- [x] SDD 선반영: 본 섹션과 `#CL-95`에 라벨 SSOT 계약을 기록했다.
+- [x] 공유 계약: shared 주문 상태 전체에 라벨·색이 존재하는 단위 테스트를 추가했다.
+- [x] UI 연결: 어드민·셀러·소비자 라벨 맵을 shared 참조로 전환했다.
+- [x] 회귀 가드: 기존 어드민 E2E 기대 라벨을 새 SSOT 문구로 갱신했다.
+
+## B-14. A2 진행 — 어드민 송장번호 사후 정정 (2026-06-03)
+
+> 상세 SDD: `admin-orders-tracking-edit-plan.md`, 결정 로그: `#CL-96`.
+
+### 결정
+
+- `/admin/orders/[id]` 정식 상세에 송장 정정 액션을 추가한다.
+- 정정은 택배 주문에만 허용한다.
+- 아직 송장이 없는 `PREPARING` 주문은 어드민에서 발송 처리하지 않고 기존 셀러 발송 플로우로 남긴다.
+- API는 `PATCH /admin/orders/:orderId/tracking` 으로 두고, `trackingUpdatedAt`, `trackingUpdatedBy`, `updatedAt`을 함께 기록한다.
+
+### 제외
+
+- 발송 상태 전환
+- 분할 발송과 다중 송장
+- 택배사별 자릿수 검증
+- 배송조회 링크와 택배사 API 연동
+
+### 정합성 체크
+
+- [x] SDD 선반영: `admin-orders-tracking-edit-plan.md`, `#CL-96`.
+- [x] API 검증: 정상 정정, 비택배 차단, 미발송 무송장 주문 차단, 운송장번호 길이 검증.
+- [x] UI 검증: 정식 상세에서 정정 후 새 송장 표시.
+- [x] 변경 파일 500라인 이하, 타입체크·빌드·Biome.
 
 ### 상위 인덱스 · 로드맵
 - 통합 인덱스: [`../admin-tabs-improve-plan.md`](../admin-tabs-improve-plan.md)

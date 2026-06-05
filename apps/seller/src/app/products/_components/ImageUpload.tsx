@@ -2,6 +2,7 @@
 
 import { Box, Group, Loader, Paper, Text } from '@mantine/core';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import Image from 'next/image';
 import { useRef, useState } from 'react';
 import { getFirebaseStorage } from '@/lib/firebase';
 
@@ -93,7 +94,13 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
               backgroundColor: 'var(--color-surface-muted)',
             }}
           >
-            <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <Image
+              src={url}
+              alt={`상품 이미지 ${idx + 1}`}
+              fill
+              sizes="80px"
+              style={{ objectFit: 'cover' }}
+            />
             {idx === 0 ? (
               <Box
                 style={{

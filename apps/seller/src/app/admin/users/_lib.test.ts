@@ -58,9 +58,9 @@ describe('filterUsers', () => {
   });
 
   it('정지 상태는 suspended가 true인 사용자만 반환한다', () => {
-    expect(filterUsers(users, { keyword: '', status: 'suspended' }).map((user) => user.id)).toEqual([
-      'u2',
-    ]);
+    expect(filterUsers(users, { keyword: '', status: 'suspended' }).map((user) => user.id)).toEqual(
+      ['u2'],
+    );
   });
 });
 

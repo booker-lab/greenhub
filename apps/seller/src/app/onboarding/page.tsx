@@ -12,6 +12,7 @@ import {
   Title,
 } from '@mantine/core';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -25,6 +26,8 @@ export default function OnboardingPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState('');
   const [error, setError] = useState('');
+  const [storeLoading, setStoreLoading] = useState(false);
+  const [storeLoadError, setStoreLoadError] = useState('');
 
   const [form, setForm] = useState({
     name: '',
@@ -39,6 +42,8 @@ export default function OnboardingPage() {
     const storeId = session?.user.storeId;
     const token = session?.user.accessToken;
     if (!storeId || !token) return;
+    setStoreLoading(true);
+    setStoreLoadError('');
     apiJson<{
       name?: string;
       ceoName?: string;
@@ -58,8 +63,15 @@ export default function OnboardingPage() {
         });
         if (data.logoUrl) setLogoPreview(data.logoUrl);
       })
-      .catch(() => {
-        // 기존 store GET 실패 시 빈 폼 유지 (silent)
+      .catch((e) => {
+        setStoreLoadError(
+          e instanceof ApiError
+            ? `사업자 정보를 불러오지 못했습니다. ${e.message}`
+            : '사업자 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.',
+        );
+      })
+      .finally(() => {
+        setStoreLoading(false);
       });
   }, [session?.user.storeId, session?.user.accessToken]);
 
@@ -120,6 +132,10 @@ export default function OnboardingPage() {
 
     const storeId = session?.user.storeId;
     const token = session?.user.accessToken;
+    if (storeId && (storeLoading || storeLoadError)) {
+      setError(storeLoadError || '사업자 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
     if (!token) {
       setError('로그인 정보를 확인해주세요.');
       setLoading(false);
@@ -177,6 +193,7 @@ export default function OnboardingPage() {
                   style={{
                     width: 80,
                     height: 80,
+                    position: 'relative',
                     borderRadius: '50%',
                     border: '2px dashed var(--color-border)',
                     display: 'flex',
@@ -187,11 +204,12 @@ export default function OnboardingPage() {
                   }}
                 >
                   {logoPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <Image
                       src={logoPreview}
                       alt="로고 미리보기"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      fill
+                      sizes="80px"
+                      style={{ objectFit: 'cover' }}
                     />
                   ) : (
                     <Text
@@ -326,16 +344,29 @@ export default function OnboardingPage() {
                 </Text>
               )}
 
+              {storeLoadError && !error && (
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+                  ta="center"
+                >
+                  {storeLoadError}
+                </Text>
+              )}
+
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={loading || storeLoading || Boolean(storeLoadError)}
                 fullWidth
                 size="md"
                 radius="xl"
                 mt="xs"
                 style={{ backgroundColor: 'var(--color-primary)' }}
               >
-                {loading ? '저장 중...' : '저장 후 시작하기'}
+                {loading
+                  ? '저장 중...'
+                  : storeLoading
+                    ? '기존 정보 불러오는 중...'
+                    : '저장 후 시작하기'}
               </Button>
             </Stack>
           </form>

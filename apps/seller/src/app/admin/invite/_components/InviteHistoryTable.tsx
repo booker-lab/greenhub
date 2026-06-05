@@ -1,7 +1,7 @@
 'use client';
 
 import { ActionIcon, Badge, Box, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
-import { Ban, Check, Copy } from 'lucide-react';
+import { Ban, Check, Copy, Undo2 } from 'lucide-react';
 import type { InviteToken } from '@/hooks/useAdmin';
 import { formatExpiry, formatInviteDateTime, inviteStatus } from '../_lib';
 
@@ -11,8 +11,10 @@ interface InviteHistoryTableProps {
   searchActive: boolean;
   copiedToken: string | null;
   revokingToken: string | null;
+  rollingBackToken: string | null;
   onCopyToken: (token: string) => void;
   onRevokeToken: (token: string) => void;
+  onRollbackSeller: (token: string) => void;
 }
 
 const thBase = {
@@ -71,14 +73,40 @@ function RevokeTokenButton({
   );
 }
 
+function RollbackSellerButton({
+  token,
+  loading,
+  onRollbackSeller,
+}: {
+  token: string;
+  loading: boolean;
+  onRollbackSeller: (token: string) => void;
+}) {
+  return (
+    <Tooltip label="가입 판매자 되돌리기">
+      <ActionIcon
+        aria-label={`${token} 가입 판매자 되돌리기`}
+        variant="subtle"
+        color="red"
+        loading={loading}
+        onClick={() => onRollbackSeller(token)}
+      >
+        <Undo2 size={16} />
+      </ActionIcon>
+    </Tooltip>
+  );
+}
+
 export function InviteHistoryTable({
   invites,
   loading,
   searchActive,
   copiedToken,
   revokingToken,
+  rollingBackToken,
   onCopyToken,
   onRevokeToken,
+  onRollbackSeller,
 }: InviteHistoryTableProps) {
   if (loading) {
     return (
@@ -110,6 +138,7 @@ export function InviteHistoryTable({
           const { label, color, expDate } = inviteStatus(inv);
           const copied = copiedToken === inv.token;
           const canRevoke = label === '유효';
+          const canRollback = label === '사용됨';
           return (
             <Paper
               key={inv.token}
@@ -134,6 +163,13 @@ export function InviteHistoryTable({
                       token={inv.token}
                       loading={revokingToken === inv.token}
                       onRevokeToken={onRevokeToken}
+                    />
+                  ) : null}
+                  {canRollback ? (
+                    <RollbackSellerButton
+                      token={inv.token}
+                      loading={rollingBackToken === inv.token}
+                      onRollbackSeller={onRollbackSeller}
                     />
                   ) : null}
                 </Group>
@@ -201,6 +237,9 @@ export function InviteHistoryTable({
                 취소
               </Box>
               <Box component="th" style={thBase}>
+                되돌리기
+              </Box>
+              <Box component="th" style={thBase}>
                 상태
               </Box>
               <Box component="th" style={thBase}>
@@ -219,6 +258,7 @@ export function InviteHistoryTable({
               const { label, color, expDate } = inviteStatus(inv);
               const copied = copiedToken === inv.token;
               const canRevoke = label === '유효';
+              const canRollback = label === '사용됨';
               return (
                 <Box
                   component="tr"
@@ -243,6 +283,17 @@ export function InviteHistoryTable({
                         token={inv.token}
                         loading={revokingToken === inv.token}
                         onRevokeToken={onRevokeToken}
+                      />
+                    ) : (
+                      '-'
+                    )}
+                  </Box>
+                  <Box component="td" style={tdBase}>
+                    {canRollback ? (
+                      <RollbackSellerButton
+                        token={inv.token}
+                        loading={rollingBackToken === inv.token}
+                        onRollbackSeller={onRollbackSeller}
                       />
                     ) : (
                       '-'

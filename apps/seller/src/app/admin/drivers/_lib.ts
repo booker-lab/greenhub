@@ -64,7 +64,7 @@ export function filterDrivers(drivers: AdminDriver[], keyword: string): AdminDri
   if (!query) return drivers;
 
   return drivers.filter((driver) =>
-    [driver.name, driver.email].some((value) => value?.toLowerCase().includes(query)),
+    [driver.name, driver.email, driver.phone].some((value) => value?.toLowerCase().includes(query)),
   );
 }
 
@@ -104,4 +104,15 @@ function toDate(value: unknown): Date | null {
 export function formatDriverCreatedAt(value: unknown): string {
   const date = toDate(value);
   return date ? toDateStrKST(date) : '-';
+}
+
+export function formatDriverContact(driver: AdminDriver): string {
+  return driver.phone?.trim() || '미등록';
+}
+
+export function formatDriverVehicle(driver: AdminDriver): string {
+  const parts = [driver.vehicleType, driver.vehicleNumber]
+    .map((value) => value?.trim())
+    .filter(Boolean);
+  return parts.length > 0 ? `차량 ${parts.join(' · ')}` : '차량 정보 미등록';
 }

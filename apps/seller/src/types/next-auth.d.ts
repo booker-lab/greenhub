@@ -6,6 +6,8 @@ declare module 'next-auth' {
       accessToken: string;
       role: string;
       storeId: string | null;
+      hubId: string | null;
+      hubIds: string[];
       tokenError?: boolean;
     } & DefaultSession['user'];
   }
@@ -15,6 +17,8 @@ declare module 'next-auth' {
     refreshToken: string;
     role: string;
     storeId: string | null;
+    hubId: string | null;
+    hubIds: string[];
   }
 }
 
@@ -25,6 +29,8 @@ declare module 'next-auth/jwt' {
     accessTokenExpires: number;
     role: string;
     storeId: string | null;
+    hubId: string | null;
+    hubIds: string[];
     error?: string;
   }
 }
