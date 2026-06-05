@@ -1,19 +1,19 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
-import Script from 'next/script';
-import { useSession } from 'next-auth/react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { Container, Text } from '@mantine/core';
-import { usePayment, type PaymentMethod } from '@/hooks/usePayment';
 import type {
   CreateOrderRequest,
   DeliveryAddress,
   DeliveryMethod,
-  SaleType,
   Product,
+  SaleType,
 } from '@greenhub/shared';
-import type { CartItem } from '@/hooks/useCart';
+import { Container, Text } from '@mantine/core';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Script from 'next/script';
+import { useSession } from 'next-auth/react';
+import { Suspense, useEffect, useState } from 'react';
+import { type CartItem, useCart } from '@/hooks/useCart';
+import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
 import CheckoutForm from './_components/CheckoutForm';
 
 declare global {
@@ -27,7 +27,20 @@ declare global {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-const NAVERPAY_ENABLED = !!process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY;
+
+function getPaymentEnv(paymentMethod: PaymentMethod) {
+  const channelKey =
+    paymentMethod === 'naverpay'
+      ? process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY
+      : process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY;
+  const portoneStoreId = process.env.NEXT_PUBLIC_PORTONE_STORE_ID;
+
+  if (!channelKey || !portoneStoreId) {
+    throw new Error('결제 환경변수가 설정되지 않았습니다.');
+  }
+
+  return { channelKey, portoneStoreId };
+}
 
 // ── 단일 상품 결제 (상품 상세 → 바로 결제) ──────────────────────────────
 function SingleCheckoutContent() {
@@ -86,7 +99,8 @@ function SingleCheckoutContent() {
   }
 
   const isLoading = state === 'creating' || state === 'paying';
-  const canPay = !isLoading && !!address.address && !!address.zipCode && !!session;
+  const canPay =
+    !isLoading && !!address.address && !!address.zipCode && !!session && !!product?.storeId;
 
   return (
     <CheckoutForm
@@ -109,6 +123,7 @@ function SingleCheckoutContent() {
 function CartCheckoutContent() {
   const { data: session } = useSession();
   const router = useRouter();
+  const { clearCart } = useCart();
 
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [address, setAddress] = useState<DeliveryAddress>({
@@ -129,21 +144,30 @@ function CartCheckoutContent() {
 
   const totalAmount = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const isLoading = state === 'creating' || state === 'paying';
+  const cartValidationError =
+    cartItems.find((item) => !item.storeId) !== undefined
+      ? '상점 정보가 없는 상품이 있어 결제할 수 없습니다. 장바구니를 다시 담아 주세요.'
+      : cartItems.find(
+            (item) =>
+              item.saleType !== 'group' &&
+              item.deliveryMethod !== 'parcel' &&
+              !item.requestedDeliveryDate,
+          ) !== undefined
+        ? '배송 날짜가 없는 상품이 있어 결제할 수 없습니다. 장바구니를 다시 담아 주세요.'
+        : null;
   const canPay =
-    !isLoading && !!address.address && !!address.zipCode && !!session && cartItems.length > 0;
+    !cartValidationError &&
+    !isLoading &&
+    !!address.address &&
+    !!address.zipCode &&
+    !!session &&
+    cartItems.length > 0;
 
   async function handlePay() {
     if (state !== 'idle') return;
     setError(null);
 
     const accessToken = session?.user?.accessToken ?? '';
-    const channelKey =
-      paymentMethod === 'naverpay'
-        ? process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY!
-        : process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY!;
-    const easyPayProvider = paymentMethod === 'naverpay' ? 'NAVERPAY' : 'KAKAOPAY';
-    const PortOne = await import('@portone/browser-sdk/v2');
-
     let lastOrderId: string | null = null;
 
     for (const item of cartItems) {
@@ -175,8 +199,11 @@ function CartCheckoutContent() {
       lastOrderId = orderId;
 
       setState('paying');
+      const { channelKey, portoneStoreId } = getPaymentEnv(paymentMethod);
+      const easyPayProvider = paymentMethod === 'naverpay' ? 'NAVERPAY' : 'KAKAOPAY';
+      const PortOne = await import('@portone/browser-sdk/v2');
       const response = await PortOne.requestPayment({
-        storeId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID!,
+        storeId: portoneStoreId,
         paymentId: orderId,
         orderName: portonePaymentParams.name,
         totalAmount: portonePaymentParams.amount,
@@ -194,6 +221,7 @@ function CartCheckoutContent() {
     }
 
     sessionStorage.removeItem('checkout_cart');
+    clearCart();
     setState('done');
     if (lastOrderId) router.replace(`/order/success?orderId=${lastOrderId}`);
   }
@@ -208,7 +236,7 @@ function CartCheckoutContent() {
       onPaymentMethodChange={setPaymentMethod}
       isLoading={isLoading}
       canPay={canPay}
-      error={error}
+      error={error ?? cartValidationError}
       onPay={handlePay}
     />
   );

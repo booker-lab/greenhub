@@ -121,12 +121,12 @@ productId별로 fetch·조인해야 한다(D4 참조).
 - `capId = ${storeId}_${dto.requestedDeliveryDate}` (일반 주문).
 - 공동구매·택배(`parcel`)는 기존대로 슬롯 미검증 — 분기 유지.
 - 슬롯 미설정/마감 시 기존 `ConflictException` 메시지 재사용.
-- ⚠️ **세션47 정정 — `dateStr`/`capId` 사용처는 한 곳뿐.**
+- ⚠️ **세션47 정정 — 생성 시 `dateStr`/`capId` 사용처는 한 곳뿐.**
   코드 대조 결과 `orders-create.service.ts`의 `new Date()` 당일 고정은
   78~79줄 **단 1쌍**(`dateStr`, `capId`)이며 84줄 트랜잭션 내
-  `dailyCaps/${capId}` 참조 외 다른 사용처 없음. `payments.service` 등
-  타 모듈의 `dailyCaps` 참조도 없음(grep 확인). → 변경 범위는 78~79·163줄
-  3곳으로 좁다.
+  `dailyCaps/${capId}` 참조가 핵심이다. 결제 실패·타임아웃 보상 로직은
+  주문 문서에 저장된 `requestedDeliveryDate`를 사용해 같은 날짜 cap만
+  되돌린다.
 - ⚠️ **세션47 정정 — 슬롯 검증 분기 조건.** 현재 84줄 가드는
   `deliveryMethod !== 'parcel' && saleType !== 'group'`. 즉 **택배는
   배송 방법이, 공구는 판매 유형이 기준.** `requestedDeliveryDate` 필수화도
@@ -259,7 +259,7 @@ productId별로 fetch·조인해야 한다(D4 참조).
 - [ ] `CreateOrderRequest` 타입과 일치 (`requestedDeliveryDate?: string`)
 - [ ] 타입체크 통과
 
-### [ ] T3 — API 슬롯 검증을 선택 배송일 기준으로
+### [x] T3 — API 슬롯 검증을 선택 배송일 기준으로 ✅ 2026-06-05
 
 **변경 파일:** `api/.../orders-create.service.ts`,
 `api/.../dto/create-order.dto.ts`
@@ -270,15 +270,17 @@ productId별로 fetch·조인해야 한다(D4 참조).
   (일반 주문). 공동구매·`parcel`은 기존 분기 유지.
 - `requestedDeliveryDate` 저장값을 `dto` 값으로 (`?? null` 제거 — 일반은 필수).
 - 기존 "당일 슬롯" 가정 코드 전수 점검 (`dateStr` 사용처).
+- 결제 실패·타임아웃 보상은 `createdAt` 당일이 아니라 주문의
+  `requestedDeliveryDate` 기준으로 슬롯을 복구한다.
 
 **정합성 확인:**
-- [ ] 일반 주문 — 선택 배송일의 `dailyCaps` 문서로 슬롯 검증·차감
-- [ ] 공동구매·택배 주문 — 슬롯 미검증 분기 유지 (회귀 없음)
-- [ ] 슬롯 미설정/마감 날짜 주문 시 `ConflictException`
-- [ ] 배송일 누락된 일반 주문 요청 거부 (400)
-- [ ] API 타입체크·기존 테스트 통과
+- [x] 일반 주문 — 선택 배송일의 `dailyCaps` 문서로 슬롯 검증·차감
+- [x] 공동구매·택배 주문 — 슬롯 미검증 분기 유지 (회귀 없음)
+- [x] 슬롯 미설정/마감 날짜 주문 시 `ConflictException`
+- [x] 배송일 누락된 일반 주문 요청 거부 (400)
+- [x] API 타입체크·기존 테스트 통과
 
-### [ ] T4 — 셀러 주문 탭 일반/공구 대칭 토글
+### [x] T4 — 셀러 주문 탭 일반/공구 대칭 토글 ✅ 2026-06-05
 
 **변경 파일:** `seller/.../orders/page.tsx`, `orders/_constants.ts`,
 신규 `orders/_components/SaleTypeToggle.tsx`
@@ -290,31 +292,47 @@ productId별로 fetch·조인해야 한다(D4 참조).
 - 상태 탭·날짜 그룹은 토글 하위에서 기존대로 동작.
 
 **정합성 확인:**
-- [ ] 토글 전환 시 `filteredOrders` 즉시 갱신
-- [ ] 일반 토글 — 기존 T5·T6 동작 회귀 없음
-- [ ] 탭/날짜 필터 상태가 토글 전환 시 합리적으로 유지·초기화
-- [ ] 타입체크·biome 신규 에러 0건
+- [x] 토글 전환 시 `filteredOrders` 즉시 갱신
+- [x] 일반 토글 — 기존 날짜 필터·날짜 그룹 동작 회귀 없음
+- [x] 탭/날짜 필터 상태가 토글 전환 시 선택 해제·week 초기화로 정리됨
+- [x] 타입체크·biome 신규 에러 0건
 
-### [ ] T5 — 공동구매 배송일 조인 (셀러 주문 탭)
+### [x] T5a — 공동구매 배송일 조인 (준비 물량 탭) ✅ 2026-06-04
 
-**변경 파일:** `seller/.../orders/page.tsx`, `orders/_constants.ts`,
-`hooks/useOrders.ts` 또는 신규 조인 훅
+**변경 파일:** `seller/src/app/prep/page.tsx`, `seller/src/lib/prep.ts`,
+`hooks/useGroupConfigs.ts` 재사용
 
-- 공구 토글 활성 시 — 표시 중인 공구 주문들의 `productId` 집합에 대해
-  `groupProductConfig` 문서 fetch (productId별 `groupDeliveryDate`).
-- `getOrderDate(order, tab, groupConfigMap)` — 시그니처 확장:
-  `saleType: group`이면 `groupConfigMap[productId].groupDeliveryDate` 사용.
-- `groupOrdersByDate`도 동반 수정 — 공구 주문이 실제 배송일로 그룹핑.
-- 공구 토글의 날짜 필터 UI 적용 여부 결정 (1차 미노출 가능).
+- `준비 물량` 탭은 주문 관리 탭에서 이미 검증한 `useGroupConfigs()`를 재사용해
+  공동구매 주문 productId별 `groupDeliveryDate`를 조인한다.
+- `aggregatePrep()`은 일반 주문은 `requestedDeliveryDate`, 공동구매 주문은
+  `groupConfigMap[productId].groupDeliveryDate`를 기준으로 오늘분·지연분을
+  합산한다.
+- `groupProductConfig`가 없거나 날짜 파싱이 불가능한 공동구매 주문은 기존 미지정
+  주문처럼 준비 물량 집계에서 제외한다.
 
 **정합성 확인:**
-- [ ] 공구 주문이 `groupDeliveryDate` 기준 날짜 그룹으로 묶임
-- [ ] `groupProductConfig` 미존재 productId는 "날짜 미정"으로 안전 처리
-- [ ] fetch 횟수 과다 없음 (productId 중복 제거 후 조회)
-- [ ] 일반 토글 동작에 영향 없음 (`getOrderDate` 분기 격리)
-- [ ] 타입체크 통과
+- [x] 공구 주문이 `groupDeliveryDate` 기준으로 오늘분·지연분에 포함됨
+- [x] `groupProductConfig` 미존재 productId는 집계에서 제외
+- [x] fetch 횟수 과다 없음 (`useGroupConfigs`가 productId 중복 제거 후 조회)
+- [x] 일반 주문 집계 동작에 영향 없음
+- [x] 타입체크 통과
 
-### [ ] T6 — 타입체크 + e2e + 정합성 최종 검토
+### [x] T5b — 공동구매 배송일 조인 (셀러 주문 탭 후속) ✅ 2026-06-05
+
+주문 관리 탭의 공구 날짜 그룹핑은 `useGroupConfigs()`와
+`getOrderDate(order, tab, groupConfigMap)` 경로로 반영되어 있다. 공구 토글 활성 시
+공구 주문 전체 productId를 중복 제거해 `groupProductConfig`를 조회하고,
+`groupDeliveryDate`가 있으면 해당 일자로 그룹핑하며 없으면 "날짜 미정"으로 안전하게
+내린다. 날짜 필터 칩은 공구 토글에서 1차 미노출을 유지한다.
+
+**정합성 확인:**
+- [x] 공구 주문이 `groupDeliveryDate` 기준 날짜 그룹으로 묶임
+- [x] `groupProductConfig` 미존재 productId는 "날짜 미정"으로 안전 처리
+- [x] fetch 횟수 과다 없음 (productId 중복 제거 후 조회)
+- [x] 일반 토글 동작에 영향 없음 (`getOrderDate` 분기 격리)
+- [x] 타입체크·관련 단위 테스트·관련 Biome 통과
+
+### [x] T6 — 타입체크 + e2e + 정합성 최종 검토 ✅ 2026-06-05
 
 **실행:**
 ```bash
@@ -324,12 +342,25 @@ pnpm --filter seller tsc --noEmit
 pnpm --filter e2e exec playwright test --project=chromium
 ```
 
+**2026-06-05 최종 검증:**
+- [x] `pnpm --filter consumer exec tsc --noEmit`
+- [x] `pnpm --filter api exec tsc --noEmit`
+- [x] `pnpm --filter seller exec tsc --noEmit`
+- [x] 관련 순수 로직 테스트 `seller _constants + prep` 10/10
+- [x] 관련 Biome 0
+- [x] `scripts/seed-e2e-orders.mjs` 재실행으로 고정 `e2e-*` 주문과 미래 `dailyCaps`를 최신 날짜 기준으로 복구
+- [x] 최신 seller preview `greenhub-seller-9vyecdat4...`를 branch preview 별칭
+  `greenhub-seller-git-preview-jos-projects-d1cecc0c.vercel.app`에 연결
+- [x] 배송일 관련 E2E 부분 실행:
+  `consumer-delivery-date.spec.ts` + `seller-orders.spec.ts` chromium 결과 18 passed / 2 skipped.
+  소비자 2건은 인증 조건으로 skip됐고, seller 주문 18건은 모두 통과했다.
+
 **코드 정합성 체크리스트:**
-- [ ] `requestedDeliveryDate` — 일반 주문 신규 생성 시 항상 채워짐
+- [x] `requestedDeliveryDate` — 일반 주문 신규 생성 시 항상 채워짐
       (Firestore 신규 문서 진단으로 확인)
-- [ ] `capId` 산출에 `new Date()` 당일 고정 잔재 없음
-- [ ] `getOrderDate` saleType 분기가 일반/공구 모두 정확
-- [ ] e2e — 주문 생성 플로우에 배송일 선택 단계 반영
+- [x] `capId` 산출에 `new Date()` 당일 고정 잔재 없음
+- [x] `getOrderDate` saleType 분기가 일반/공구 모두 정확
+- [x] e2e — 주문 생성 플로우에 배송일 선택 단계 반영
       (기존 spec 회귀 + 신규 단계 추가)
 
 **e2e 영향 예측:**

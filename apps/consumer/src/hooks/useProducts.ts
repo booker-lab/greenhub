@@ -1,9 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import type {
+  Category,
+  ColorOption,
+  Product,
+  ProductSummary,
+  PublicStoreDetail,
+  PublicStoreSummary,
+  Variety,
+} from '@greenhub/shared';
 import { doc, getDoc } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import type { Product, Category, ColorOption, Variety } from '@greenhub/shared';
 
 export interface StoreInfo {
   id: string;
@@ -12,6 +20,11 @@ export interface StoreInfo {
   phone: string;
   address: string;
   logoUrl: string | null;
+}
+
+export interface PublicStoreDetailResponse {
+  store: PublicStoreDetail;
+  products: ProductSummary[];
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
@@ -29,7 +42,7 @@ export function useProducts(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const _colorKey = colors?.join(',') ?? '';
+  const colorKey = colors?.join(',') ?? '';
 
   useEffect(() => {
     setLoading(true);
@@ -38,8 +51,10 @@ export function useProducts(
       try {
         const params = new URLSearchParams({ isActive: 'true' });
         if (category) params.set('category', category);
-        if (colors && colors.length > 0) {
-          colors.forEach((c) => params.append('colors', c));
+        if (colorKey) {
+          for (const color of colorKey.split(',')) {
+            params.append('colors', color);
+          }
         }
         if (saleType) params.set('saleType', saleType);
         const res = await fetch(`${API_URL}/products?${params}`);
@@ -56,8 +71,7 @@ export function useProducts(
       }
     }
     fetchProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, saleType, _colorKey]);
+  }, [category, saleType, colorKey]);
 
   return { products, loading, error };
 }
@@ -122,6 +136,59 @@ export function useStore(storeId: string | null) {
   }, [storeId]);
 
   return { store, loading };
+}
+
+export function usePublicStores() {
+  const [stores, setStores] = useState<PublicStoreSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchStores() {
+      try {
+        const res = await fetch(`${API_URL}/public/stores`);
+        if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
+        const data = await res.json();
+        setStores(Array.isArray(data) ? data : (data.items ?? []));
+        setError(null);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : '상점 조회 실패');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchStores();
+  }, []);
+
+  return { stores, loading, error };
+}
+
+export function usePublicStore(storeId: string) {
+  const [detail, setDetail] = useState<PublicStoreDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!storeId) {
+      setLoading(false);
+      return;
+    }
+    async function fetchStore() {
+      try {
+        const res = await fetch(`${API_URL}/public/stores/${storeId}`);
+        if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
+        setDetail(await res.json());
+        setError(null);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : '상점 조회 실패');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchStore();
+  }, [storeId]);
+
+  return { detail, loading, error };
 }
 
 export function useVariety(varietyId: string | null | undefined) {

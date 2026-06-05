@@ -2,6 +2,7 @@ import type { AdminBanner, BannerCta } from '@greenhub/shared';
 import { Box } from '@mantine/core';
 import Image from 'next/image';
 import Link from 'next/link';
+import styles from './HeroBannerSlide.module.css';
 
 interface HeroBannerSlideProps {
   banner: AdminBanner;
@@ -42,17 +43,9 @@ export default function HeroBannerSlide({ banner, priority = false }: HeroBanner
   const cta2 = hasCta(banner.cta2) ? banner.cta2 : null;
 
   return (
-    <Box
-      style={{
-        position: 'relative',
-        overflow: 'hidden',
-        backgroundColor: 'var(--color-primary-surface)',
-        minHeight: 200,
-        height: '100%',
-      }}
-    >
+    <Box className={styles.slide} data-banner-id={banner.id}>
       {banner.imageUrl && (
-        <div style={{ position: 'absolute', right: 0, top: 0, width: '50%', height: '100%' }}>
+        <div className={styles.image}>
           <Image
             fill
             src={banner.imageUrl}
@@ -64,7 +57,7 @@ export default function HeroBannerSlide({ banner, priority = false }: HeroBanner
         </div>
       )}
 
-      <Box style={{ position: 'relative', zIndex: 1, padding: '24px 20px' }}>
+      <Box className={`${styles.content} ${banner.imageUrl ? styles.contentWithImage : ''}`}>
         {banner.tagText && (
           <span
             style={{

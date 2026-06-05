@@ -1,13 +1,14 @@
 'use client';
 
-import type React from 'react';
+import type { Product, ProductSummary } from '@greenhub/shared';
+import { Box, Card, Progress } from '@mantine/core';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Card, Box, Progress } from '@mantine/core';
-import type { Product } from '@greenhub/shared';
+import type React from 'react';
 
 interface ProductCardProps {
-  product: Product;
+  product: Product | ProductSummary;
+  href?: string;
 }
 
 const categoryLabels: Record<string, string> = {
@@ -16,13 +17,13 @@ const categoryLabels: Record<string, string> = {
   foliage: '관엽',
 };
 
-export default function ProductCard({ product }: ProductCardProps) {
+export default function ProductCard({ product, href }: ProductCardProps) {
   const imgSrc = product.images?.[0] ?? '/icons/icon-192x192.png';
 
   return (
     <Card
       component={Link}
-      href={`/products/${product.id}`}
+      href={href ?? `/products/${product.id}`}
       p={0}
       style={{
         overflow: 'hidden',
@@ -103,7 +104,10 @@ export default function ProductCard({ product }: ProductCardProps) {
           {product.price.toLocaleString()}원
         </p>
         {(() => {
-          const colors = product.selection?.colors ?? product.colors ?? [];
+          const colors =
+            'selection' in product
+              ? (product.selection?.colors ?? product.colors ?? [])
+              : (product.colors ?? []);
           return colors.length > 0 ? (
             <p
               style={{

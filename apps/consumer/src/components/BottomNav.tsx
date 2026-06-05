@@ -1,14 +1,15 @@
 'use client';
 
+import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
+import { Home, LayoutGrid, ShoppingCart, Store, User, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Box, UnstyledButton, Stack, Text } from '@mantine/core';
-import { Home, LayoutGrid, Users, ShoppingCart, User } from 'lucide-react';
 import { useCart } from '@/hooks/useCart';
 
 const tabs = [
   { href: '/', label: '홈', Icon: Home, showBadge: false },
   { href: '/category', label: '카테고리', Icon: LayoutGrid, showBadge: false },
+  { href: '/stores', label: '상점', Icon: Store, showBadge: false },
   { href: '/groupbuy', label: '공구', Icon: Users, showBadge: false },
   { href: '/cart', label: '장바구니', Icon: ShoppingCart, showBadge: true },
   { href: '/mypage', label: 'MY', Icon: User, showBadge: false },

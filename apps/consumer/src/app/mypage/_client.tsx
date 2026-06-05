@@ -1,36 +1,22 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useSession, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { ORDER_STATUS_LABEL, type Order, type OrderStatus } from '@greenhub/shared';
 import {
-  Container,
   Box,
-  Title,
-  Text,
+  Button,
+  Container,
+  Divider,
   Group,
   Stack,
-  Button,
+  Text,
+  Title,
   UnstyledButton,
-  Divider,
 } from '@mantine/core';
-import { useOrders } from '@/hooks/useOrders';
+import { useRouter } from 'next/navigation';
+import { signOut, useSession } from 'next-auth/react';
+import { useEffect } from 'react';
 import A2HSButton from '@/components/A2HSButton';
-import type { Order, OrderStatus } from '@greenhub/shared';
-
-const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
-  PENDING: '결제 확인 중',
-  RECRUITING: '모집 중',
-  CONFIRMED: '주문 확정',
-  ACCEPTED: '결제 완료',
-  PREPARING: '상품 준비 중',
-  DELIVERING: '배송 중',
-  HUB_ARRIVED: '거점 도착',
-  PICKED_UP: '픽업 완료',
-  DELIVERED: '배송 완료',
-  CANCELLED: '주문 취소',
-  REVIEWED: '구매 확정',
-};
+import { useOrders } from '@/hooks/useOrders';
 
 type StatusColorKey = { bg: string; text: string };
 const STATUS_COLORS: Partial<Record<OrderStatus, StatusColorKey>> = {
@@ -73,7 +59,7 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
     text: 'var(--color-text-secondary)',
   };
   const accentColor = ACCENT_COLORS[order.status] ?? 'var(--color-text-disabled)';
-  const label = STATUS_LABELS[order.status] ?? order.status;
+  const label = ORDER_STATUS_LABEL[order.status] ?? order.status;
 
   return (
     <UnstyledButton

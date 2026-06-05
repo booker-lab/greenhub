@@ -1,10 +1,10 @@
+import type { Product, Variety } from '@greenhub/shared';
+import { Box, Container } from '@mantine/core';
 import { notFound } from 'next/navigation';
-import { Container, Box } from '@mantine/core';
 import ProductTopBar from '@/components/ProductTopBar';
+import ProductActions from './_components/ProductActions';
 import ProductImages from './_components/ProductImages';
 import ProductInfo from './_components/ProductInfo';
-import ProductActions from './_components/ProductActions';
-import type { Product, Variety } from '@greenhub/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -28,16 +28,24 @@ async function fetchVariety(varietyId: string): Promise<Variety | null> {
   }
 }
 
-export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
+interface ProductDetailPageProps {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ fromStore?: string; storeName?: string }>;
+}
+
+export default async function ProductDetailPage({ params, searchParams }: ProductDetailPageProps) {
   const { id } = await params;
+  const query = searchParams ? await searchParams : {};
   const product = await fetchProduct(id);
   if (!product) notFound();
 
   const variety = product.varietyId ? await fetchVariety(product.varietyId) : null;
+  const backHref = query.fromStore ? `/stores/${encodeURIComponent(query.fromStore)}` : undefined;
+  const backLabel = query.fromStore ? '상점으로' : undefined;
 
   return (
     <Container size="sm" p={0}>
-      <ProductTopBar />
+      <ProductTopBar backHref={backHref} backLabel={backLabel} />
       <Box style={{ paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>
         <ProductImages images={product.images ?? []} name={product.name} />
         <ProductInfo product={product} variety={variety} />

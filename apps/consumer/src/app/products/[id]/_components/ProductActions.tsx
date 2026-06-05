@@ -1,29 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-import { useSession, signIn } from 'next-auth/react';
+import type { DeliveryMethod, Product } from '@greenhub/shared';
 import {
-  Box,
-  Text,
-  Button,
-  Group,
-  Stack,
-  Badge,
-  Paper,
-  Progress,
   ActionIcon,
+  Badge,
+  Box,
+  Button,
   Checkbox,
   Divider,
+  Group,
+  Paper,
+  Progress,
+  Stack,
+  Text,
 } from '@mantine/core';
-import { useGroupProduct } from '@/hooks/useGroupProduct';
-import { useStore } from '@/hooks/useProducts';
-import { useCart } from '@/hooks/useCart';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { signIn, useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
 import GreenLoveBrandSection from '@/components/GreenLoveBrandSection';
 import ProductCTABar from '@/components/ProductCTABar';
+import { useCart } from '@/hooks/useCart';
+import { useGroupProduct } from '@/hooks/useGroupProduct';
+import { usePublicStore } from '@/hooks/useProducts';
 import DeliveryDatePicker from './DeliveryDatePicker';
-import type { Product, DeliveryMethod } from '@greenhub/shared';
 
 const deliveryLabels: Record<DeliveryMethod, string> = {
   direct: '꽃차 직배송',
@@ -33,17 +34,19 @@ const deliveryLabels: Record<DeliveryMethod, string> = {
 
 interface Props {
   product: Product;
+  initialDeliveryMethod?: DeliveryMethod;
 }
 
-export default function ProductActions({ product }: Props) {
+export default function ProductActions({ product, initialDeliveryMethod = 'direct' }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
   const { config: groupConfig } = useGroupProduct(product.saleType === 'group' ? product.id : null);
-  const { store } = useStore(product.storeId ?? null);
+  const { detail: storeDetail } = usePublicStore(product.storeId ?? '');
+  const store = storeDetail?.store ?? null;
   const { addItem } = useCart();
 
   const [quantity, setQuantity] = useState(1);
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('direct');
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(initialDeliveryMethod);
   const [groupConsent, setGroupConsent] = useState(false);
   const [countdown, setCountdown] = useState('');
   const [deliveryDate, setDeliveryDate] = useState<string | null>(null);
@@ -76,9 +79,12 @@ export default function ProductActions({ product }: Props) {
   // 일반 상품의 배송일 선택은 슬롯 검증 대상(택배 제외)일 때만 필수.
   // 택배는 slot 미검증 분기이므로 배송일도 불필요 (플랜 D3 분기 조건 일치).
   const needsDeliveryDate = !isGroup && deliveryMethod !== 'parcel';
-  const canBuy = isGroup
-    ? groupConsent && !isFull
-    : !needsDeliveryDate || deliveryDate !== null;
+  const hasStoreId = !!product.storeId;
+  const canBuy = hasStoreId
+    ? isGroup
+      ? groupConsent && !isFull
+      : !needsDeliveryDate || deliveryDate !== null
+    : false;
 
   function handleAddToCart() {
     addItem({
@@ -348,8 +354,20 @@ export default function ProductActions({ product }: Props) {
         <GreenLoveBrandSection />
       </Box>
 
-      {store && (
-        <Box pt="xl" style={{ borderTop: '1px solid var(--color-border)' }}>
+      {store && product.storeId && (
+        <Paper
+          component={Link}
+          href={`/stores/${encodeURIComponent(product.storeId)}`}
+          radius="md"
+          p="md"
+          mb="xl"
+          style={{
+            border: 'var(--border)',
+            color: 'inherit',
+            display: 'block',
+            textDecoration: 'none',
+          }}
+        >
           <Text
             style={{
               fontWeight: 'var(--fw-bold)',
@@ -387,20 +405,21 @@ export default function ProductActions({ product }: Props) {
                 {store.name[0]}
               </Box>
             )}
-            <Box>
+            <Box style={{ minWidth: 0 }}>
               <Text
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   fontWeight: 'var(--fw-bold)',
                   color: 'var(--color-text)',
                 }}
+                lineClamp={1}
               >
                 {store.name}
               </Text>
               <Text
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
-                {store.ceoName}
+                상품 {store.productCount}개 · 거점 {store.hubCount}곳
               </Text>
             </Box>
           </Group>
@@ -412,7 +431,7 @@ export default function ProductActions({ product }: Props) {
               📞 {store.phone}
             </Text>
           </Stack>
-        </Box>
+        </Paper>
       )}
 
       <ProductCTABar
