@@ -1,42 +1,22 @@
+import { Badge, Card, Group, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
-import { Card, Badge, Text, Stack, Group } from '@mantine/core';
+import {
+  type DriverBoardOrder,
+  type DriverBoardTab,
+  getBoardOrderLocation,
+  getBoardOrderTimeLabel,
+  METHOD_BADGE,
+} from '@/app/board/_lib';
 
-type Order = {
-  id: string;
-  status: string;
-  deliveryMethod: string;
-  buyerName?: string;
-  address?: string;
-  hubName?: string;
-  hubAddress?: string;
-  productName?: string;
-  quantity?: number;
-  preparedAt?: { seconds: number } | null;
-  updatedAt?: { seconds: number } | null;
-};
-
-const METHOD_BADGE: Record<string, { label: string; color: string }> = {
-  direct: { label: '직배송', color: 'green' },
-  hub: { label: '거점 픽업', color: 'blue' },
-  parcel: { label: '택배', color: 'gray' },
-};
-
-function formatTime(ts?: { seconds: number } | null) {
-  if (!ts) return '시간 미정';
-  return new Date(ts.seconds * 1000).toLocaleTimeString('ko-KR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-export default function OrderCard({ order, tab }: { order: Order; tab: string }) {
+export default function OrderCard({
+  order,
+  tab,
+}: {
+  order: DriverBoardOrder;
+  tab: DriverBoardTab;
+}) {
   const badge = METHOD_BADGE[order.deliveryMethod] ?? METHOD_BADGE.direct;
-  const displayAddress =
-    order.deliveryMethod === 'hub' ? (order.hubAddress ?? '-') : (order.address ?? '-');
-  const displayLocation =
-    order.deliveryMethod === 'hub'
-      ? `${order.hubName ?? '거점'} · ${displayAddress}`
-      : displayAddress;
+  const displayLocation = getBoardOrderLocation(order);
 
   return (
     <Card
@@ -53,9 +33,7 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
             {badge.label}
           </Badge>
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            {tab === 'preparing'
-              ? `수거 ${formatTime(order.preparedAt)}`
-              : `배송 시작 ${formatTime(order.updatedAt)}`}
+            {getBoardOrderTimeLabel(order, tab)}
           </Text>
         </Group>
         <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}>
