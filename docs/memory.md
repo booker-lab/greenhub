@@ -36,10 +36,12 @@
 - `SKIP_CONSUMER_AUTH_SETUP=true pnpm --filter e2e test -- seller-parcel-ship.spec.ts --grep "배송 완료 택배|모바일 택배"` 4/4 통과.
 - `pnpm --filter e2e test -- consumer-mypage.spec.ts --grep "택배 주문 상세"` 실패. API 응답에는 `courierCompany`, `trackingNumber`가 있으나 consumer 프리뷰 DOM에 송장 행이 없다.
 - 2026-06-05 현재 개발 가지 재개 검증 재실행. `git diff --check`, 수정·신규 파일 500라인 가드, shared build, shared test 14/14, API/seller/consumer/driver `tsc --noEmit`, API hub_staff·roles·orders lifecycle 24/24, API admin 초대·드라이버·주문·서비스 70/70 통과. 변경 범위 `biome check --write`는 종료 코드 0이며 남은 항목은 실패가 아닌 `auth.service.ts` `useLiteralKeys` 정보성 제안이다.
+- 2026-06-05 `docs-policy` 웨이브 커밋 `0c0684f`를 push했다. Vercel Preview는 consumer `greenhubconsumer-9t9go7u8o...`, seller `greenhub-seller-4ovxr3uag...`, driver `greenhub-driver-1aovumb8h...` 모두 READY다. HTTP 확인은 consumer·seller 200 통과, driver는 Vercel 인증 보호로 앱 HTML 접근이 차단됐다.
 
 ## 다음 진입 후보
 
 - 조건 후보: 네이버페이 채널 키 승인 후 Vercel 환경변수 설정, 운영 인증 가능한 모바일 실기기 시각 검증 재개.
 - 운영 데이터 후보: 오서비스 스토어 및 `샘플팜스(80189070)` 시각 검증용 시드 정리.
 - 육안검증 후보: consumer 상세 `#147`을 최신 consumer 배포 또는 로컬 최신 빌드에서 재검증한다.
-- 2026-06-05 핸드오프 프롬프트 1번 재개. 범위는 **운영 관리자 기능 마감과 검증 종결**로 고정했고 새 기능 추가 없이 재검증을 우선했다. 재확인 결과: `git diff --check`, 수정·신규 파일 500라인 가드, shared build/test 14/14, API/seller/consumer/driver 타입체크, API 핵심 테스트 24/24·70/70·21/21 통과. seller admin/hooks Biome 5건은 `--write`로 정리 후 재검증 통과. `pnpm release:plan` 기준 커밋 분리는 `docs-policy -> shared-contracts -> api-backend -> consumer-web -> seller-admin -> driver-web -> e2e-ops` 순서를 유지한다.
+- 2026-06-05 핸드오프 프롬프트 1번 재개 검증. 범위는 **운영 관리자 기능 마감과 검증 종결**로 고정했다. 재확인 결과: `pnpm release:plan`, `git diff --check`, `docs/memory.md` 38라인, shared build/test 14/14, API/seller/consumer/driver 타입체크, API 핵심 테스트 24/24·70/70·18/18 통과. seller admin/hooks Biome 5건과 변경 API 파일 Biome는 종료 코드 0이며, API 변경 파일에는 `auth.service.ts` `useLiteralKeys` 정보와 `jwt.strategy.ts` 기존 non-null 경고가 남아 있다. 커밋 분리는 `shared-contracts -> api-backend -> consumer-web -> seller-admin -> driver-web -> e2e-ops`, 수동 검토는 `misc-review` 6개다.
+- 다음 릴리즈 트레인 진입점은 `shared-contracts` 웨이브다. `git add -A` 없이 `pnpm release:stage -- shared-contracts`로만 stage한다.
