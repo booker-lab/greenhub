@@ -1,2 +1,42 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ORDER_STATUS_COLOR = exports.ORDER_STATUS_LABEL = exports.ORDER_STATUSES = void 0;
+exports.ORDER_STATUSES = [
+    'PENDING',
+    'RECRUITING',
+    'CONFIRMED',
+    'ACCEPTED',
+    'PREPARING',
+    'DELIVERING',
+    'HUB_ARRIVED',
+    'PICKED_UP',
+    'DELIVERED',
+    'CANCELLED',
+    'REVIEWED',
+];
+exports.ORDER_STATUS_LABEL = {
+    PENDING: '결제 확인 중',
+    RECRUITING: '모집 중',
+    CONFIRMED: '주문 확정',
+    ACCEPTED: '결제 완료',
+    PREPARING: '상품 준비 중',
+    DELIVERING: '배송 중',
+    HUB_ARRIVED: '거점 도착',
+    PICKED_UP: '픽업 완료',
+    DELIVERED: '배송 완료',
+    CANCELLED: '주문 취소',
+    REVIEWED: '구매 확정',
+};
+exports.ORDER_STATUS_COLOR = {
+    PENDING: 'gray',
+    RECRUITING: 'orange',
+    CONFIRMED: 'orange',
+    ACCEPTED: 'orange',
+    PREPARING: 'blue',
+    DELIVERING: 'violet',
+    HUB_ARRIVED: 'violet',
+    PICKED_UP: 'green',
+    DELIVERED: 'green',
+    CANCELLED: 'red',
+    REVIEWED: 'green',
+};

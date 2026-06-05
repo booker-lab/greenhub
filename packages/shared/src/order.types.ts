@@ -11,6 +11,48 @@ export type OrderStatus =
   | 'CANCELLED'
   | 'REVIEWED';
 
+export const ORDER_STATUSES: OrderStatus[] = [
+  'PENDING',
+  'RECRUITING',
+  'CONFIRMED',
+  'ACCEPTED',
+  'PREPARING',
+  'DELIVERING',
+  'HUB_ARRIVED',
+  'PICKED_UP',
+  'DELIVERED',
+  'CANCELLED',
+  'REVIEWED',
+];
+
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  PENDING: '결제 확인 중',
+  RECRUITING: '모집 중',
+  CONFIRMED: '주문 확정',
+  ACCEPTED: '결제 완료',
+  PREPARING: '상품 준비 중',
+  DELIVERING: '배송 중',
+  HUB_ARRIVED: '거점 도착',
+  PICKED_UP: '픽업 완료',
+  DELIVERED: '배송 완료',
+  CANCELLED: '주문 취소',
+  REVIEWED: '구매 확정',
+};
+
+export const ORDER_STATUS_COLOR: Record<OrderStatus, string> = {
+  PENDING: 'gray',
+  RECRUITING: 'orange',
+  CONFIRMED: 'orange',
+  ACCEPTED: 'orange',
+  PREPARING: 'blue',
+  DELIVERING: 'violet',
+  HUB_ARRIVED: 'violet',
+  PICKED_UP: 'green',
+  DELIVERED: 'green',
+  CANCELLED: 'red',
+  REVIEWED: 'green',
+};
+
 export type DeliveryMethod = 'direct' | 'hub' | 'parcel';
 
 export type SaleType = 'normal' | 'group';

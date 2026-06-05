@@ -1,4 +1,7 @@
 export type OrderStatus = 'PENDING' | 'RECRUITING' | 'CONFIRMED' | 'ACCEPTED' | 'PREPARING' | 'DELIVERING' | 'HUB_ARRIVED' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED' | 'REVIEWED';
+export declare const ORDER_STATUSES: OrderStatus[];
+export declare const ORDER_STATUS_LABEL: Record<OrderStatus, string>;
+export declare const ORDER_STATUS_COLOR: Record<OrderStatus, string>;
 export type DeliveryMethod = 'direct' | 'hub' | 'parcel';
 export type SaleType = 'normal' | 'group';
 export interface DeliveryAddress {
