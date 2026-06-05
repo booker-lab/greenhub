@@ -1,10 +1,20 @@
 'use client';
 
+import { Box, Divider, SimpleGrid, Skeleton, Stack, Title } from '@mantine/core';
+import Image from 'next/image';
 import Link from 'next/link';
-import { Box, Title, SimpleGrid, Skeleton, Stack, Divider } from '@mantine/core';
-import ProductCard from '@/components/ProductCard';
 import DeadlineSection from '@/components/DeadlineSection';
+import HomeStorePreview from '@/components/HomeStorePreview';
+import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
+
+const GROUP_SKELETON_KEYS = ['group-skeleton-1', 'group-skeleton-2', 'group-skeleton-3'];
+const PRODUCT_SKELETON_KEYS = [
+  'home-product-skeleton-1',
+  'home-product-skeleton-2',
+  'home-product-skeleton-3',
+  'home-product-skeleton-4',
+];
 
 export default function HomeProductList() {
   const { products, loading, error } = useProducts();
@@ -70,8 +80,8 @@ export default function HomeProductList() {
 
           {groupLoading ? (
             <div style={{ display: 'flex', gap: 8 }}>
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} height={200} radius="md" style={{ flex: 1 }} />
+              {GROUP_SKELETON_KEYS.map((key) => (
+                <Skeleton key={key} height={200} radius="md" style={{ flex: 1 }} />
               ))}
             </div>
           ) : (
@@ -91,10 +101,12 @@ export default function HomeProductList() {
                       marginBottom: 6,
                     }}
                   >
-                    <img
+                    <Image
+                      fill
                       src={product.images?.[0] ?? '/icons/icon-192x192.png'}
                       alt={product.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      sizes="(max-width: 600px) 33vw, 140px"
+                      style={{ objectFit: 'cover' }}
                     />
                   </Box>
                   <p
@@ -132,6 +144,8 @@ export default function HomeProductList() {
 
       {!groupLoading && <DeadlineSection products={groupProducts} />}
 
+      <HomeStorePreview />
+
       <Box>
         <Stack gap={4} mb="md">
           <Title order={4} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
@@ -142,8 +156,8 @@ export default function HomeProductList() {
 
         {loading && (
           <SimpleGrid cols={2} spacing="sm">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} height={260} radius="md" />
+            {PRODUCT_SKELETON_KEYS.map((key) => (
+              <Skeleton key={key} height={260} radius="md" />
             ))}
           </SimpleGrid>
         )}

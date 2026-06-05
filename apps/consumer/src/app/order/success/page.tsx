@@ -1,24 +1,11 @@
 'use client';
 
-import { Suspense, useEffect } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { ORDER_STATUS_LABEL, type OrderStatus } from '@greenhub/shared';
+import { Button, Container, Stack, Text, Title } from '@mantine/core';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Container, Stack, Title, Text, Button } from '@mantine/core';
+import { Suspense, useEffect } from 'react';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
-import type { OrderStatus } from '@greenhub/shared';
-
-const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
-  PENDING: '결제 확인 중...',
-  RECRUITING: '공동구매 모집 중',
-  ACCEPTED: '주문 접수 완료',
-  PREPARING: '상품 준비 중',
-  DELIVERING: '배송 중',
-  HUB_ARRIVED: '거점 도착',
-  PICKED_UP: '픽업 완료',
-  DELIVERED: '배송 완료',
-  CANCELLED: '주문 취소',
-  REVIEWED: '리뷰 완료',
-};
 
 const SUCCESS_STATUSES: OrderStatus[] = ['ACCEPTED', 'RECRUITING'];
 
@@ -71,7 +58,7 @@ function OrderSuccessContent() {
             <Text style={{ fontSize: 56 }}>✅</Text>
             <Title order={2}>주문이 완료되었습니다</Title>
             <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>
-              {STATUS_LABELS[order.status]}
+              {ORDER_STATUS_LABEL[order.status]}
             </Text>
             {order.status === 'RECRUITING' && (
               <Text

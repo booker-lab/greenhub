@@ -1,6 +1,6 @@
 'use client';
 
-import type { Order, OrderStatus } from '@greenhub/shared';
+import { ORDER_STATUS_LABEL, type Order, type OrderStatus } from '@greenhub/shared';
 import {
   Alert,
   Box,
@@ -21,20 +21,6 @@ import { use, useState } from 'react';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-
-const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
-  PENDING: '결제 확인 중',
-  RECRUITING: '모집 중',
-  CONFIRMED: '주문 확정',
-  ACCEPTED: '결제 완료',
-  PREPARING: '상품 준비 중',
-  DELIVERING: '배송 중',
-  HUB_ARRIVED: '거점 도착',
-  PICKED_UP: '픽업 완료',
-  DELIVERED: '배송 완료',
-  CANCELLED: '주문 취소',
-  REVIEWED: '구매 확정',
-};
 
 function getTimelineSteps(order: Order): OrderStatus[] {
   if (order.saleType === 'group') {
@@ -182,6 +168,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     (order.status === 'HUB_ARRIVED' || order.status === 'PICKED_UP' || order.status === 'REVIEWED')
       ? order.pickupCode
       : null;
+  const hasParcelTracking = Boolean(order.courierCompany?.trim() || order.trackingNumber?.trim());
 
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
@@ -268,7 +255,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </Text>
             </Group>
           )}
-          {order.deliveryMethod === 'parcel' && order.courierCompany && (
+          {hasParcelTracking && order.courierCompany && (
             <Group justify="space-between">
               <Text
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
@@ -286,7 +273,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </Text>
             </Group>
           )}
-          {order.deliveryMethod === 'parcel' && order.trackingNumber && (
+          {hasParcelTracking && order.trackingNumber && (
             <Group justify="space-between">
               <Text
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
@@ -415,7 +402,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               const label =
                 stepStatus === 'DELIVERED' && order.status === 'REVIEWED'
                   ? '배송 완료 · 구매 확정'
-                  : (STATUS_LABELS[stepStatus] ?? stepStatus);
+                  : (ORDER_STATUS_LABEL[stepStatus] ?? stepStatus);
               return <Stepper.Step key={stepStatus} label={label} />;
             })}
           </Stepper>

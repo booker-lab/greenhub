@@ -61,7 +61,14 @@ export default function ProductCTABar({
 
         {/* 버튼 */}
         <Group gap={8} style={{ flexWrap: 'nowrap' }}>
-          <Button flex={1} variant="default" radius="md" size="lg" onClick={onAddToCart}>
+          <Button
+            flex={1}
+            variant="default"
+            radius="md"
+            size="lg"
+            disabled={!canBuy}
+            onClick={onAddToCart}
+          >
             장바구니
           </Button>
           <Button
