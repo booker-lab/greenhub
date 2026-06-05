@@ -1,86 +1,34 @@
 'use client';
 
+import { Badge, Box, Button, Stack, Text, Title } from '@mantine/core';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Box, Stack, Text, Title, Badge, Button } from '@mantine/core';
-
-type Order = {
-  id: string;
-  status: string;
-  deliveryMethod: string;
-  buyerName?: string;
-  address?: string;
-  hubName?: string;
-  hubAddress?: string;
-  lat?: number;
-  lng?: number;
-};
-
-function nearestNeighbor(orders: Order[]): Order[] {
-  if (orders.length <= 1) return orders;
-  const visited = new Set<string>();
-  const result: Order[] = [];
-  let current = orders[0];
-  result.push(current);
-  visited.add(current.id);
-
-  while (result.length < orders.length) {
-    let nearest: Order | null = null;
-    let minDist = Infinity;
-    for (const o of orders) {
-      if (visited.has(o.id)) continue;
-      if (!o.lat || !o.lng || !current.lat || !current.lng) {
-        nearest = o;
-        break;
-      }
-      const dist = Math.hypot(o.lat - current.lat, o.lng - current.lng);
-      if (dist < minDist) {
-        minDist = dist;
-        nearest = o;
-      }
-    }
-    if (!nearest) break;
-    result.push(nearest);
-    visited.add(nearest.id);
-    current = nearest;
-  }
-  return result;
-}
+import { KakaoRouteMap } from './_components/KakaoRouteMap';
+import {
+  buildKakaoNaviUrl,
+  type DriverMapOrder,
+  getMapOrderAddress,
+  getMapStatusBadge,
+  nearestNeighbor,
+} from './_lib';
 
 export default function MapPage() {
   const { firebaseReady } = useFirebaseAuth();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<DriverMapOrder[]>([]);
 
   useEffect(() => {
     if (!firebaseReady) return;
 
     const q = query(collection(db, 'orders'), where('status', 'in', ['PREPARING', 'DELIVERING']));
     const unsub = onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order));
+      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as DriverMapOrder));
     });
     return unsub;
   }, [firebaseReady]);
 
   const sorted = nearestNeighbor(orders);
-
-  function buildKakaoNaviUrl() {
-    if (sorted.length === 0) return '';
-    const last = sorted[sorted.length - 1];
-    const lastAddr = last.deliveryMethod === 'hub' ? (last.hubAddress ?? '') : (last.address ?? '');
-    return (
-      `kakaomap://route?ep=${last.lat ?? 0},${last.lng ?? 0}` +
-      `&eName=${encodeURIComponent(lastAddr)}` +
-      (sorted.length > 1
-        ? `&${sorted
-            .slice(0, -1)
-            .map((o, i) => (o.lat ? `via${i}Lat=${o.lat}&via${i}Lng=${o.lng}` : ''))
-            .filter(Boolean)
-            .join('&')}`
-        : '')
-    );
-  }
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -105,45 +53,7 @@ export default function MapPage() {
         </Text>
       </Box>
 
-      {/* 지도 플레이스홀더 */}
-      <Box
-        mx="md"
-        mt="md"
-        h={192}
-        style={{
-          borderRadius: 16,
-          backgroundColor: 'var(--color-surface-muted)',
-          border: 'var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Stack align="center" gap={4}>
-          <svg
-            width="40"
-            height="40"
-            fill="none"
-            stroke="var(--color-text-disabled)"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-            />
-          </svg>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            카카오맵 SDK 연동 후 활성화
-          </Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            NEXT_PUBLIC_KAKAO_MAP_KEY 설정 필요
-          </Text>
-        </Stack>
-      </Box>
+      <KakaoRouteMap orders={sorted} />
 
       {/* 경유지 목록 */}
       <Box style={{ flex: 1, padding: '16px' }}>
@@ -158,10 +68,7 @@ export default function MapPage() {
         ) : (
           <Stack gap="xs">
             {sorted.map((order, idx) => {
-              const addr =
-                order.deliveryMethod === 'hub'
-                  ? `${order.hubName ?? '거점'} · ${order.hubAddress ?? '-'}`
-                  : (order.address ?? '-');
+              const badge = getMapStatusBadge(order.status);
               return (
                 <Box
                   key={order.id}
@@ -206,15 +113,11 @@ export default function MapPage() {
                       }}
                       truncate="end"
                     >
-                      {addr}
+                      {getMapOrderAddress(order)}
                     </Text>
                   </Box>
-                  <Badge
-                    size="xs"
-                    color={order.status === 'DELIVERING' ? 'blue' : 'yellow'}
-                    variant="light"
-                  >
-                    {order.status === 'DELIVERING' ? '배송 중' : '수거 대기'}
+                  <Badge size="xs" color={badge.color} variant="light">
+                    {badge.label}
                   </Badge>
                 </Box>
               );
@@ -228,7 +131,7 @@ export default function MapPage() {
         <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
           <Button
             component="a"
-            href={buildKakaoNaviUrl()}
+            href={buildKakaoNaviUrl(sorted)}
             fullWidth
             size="lg"
             radius="xl"

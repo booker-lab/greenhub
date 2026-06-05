@@ -1,37 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { Anchor, Badge, Box, Stack, Text, Title, UnstyledButton } from '@mantine/core';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+import OrderCard from '@/components/OrderCard';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-import OrderCard from '@/components/OrderCard';
-import { Box, Stack, Title, Text, UnstyledButton, Badge, Anchor } from '@mantine/core';
-
-type Order = {
-  id: string;
-  status: string;
-  deliveryMethod: string;
-  buyerName?: string;
-  address?: string;
-  hubName?: string;
-  hubAddress?: string;
-  productName?: string;
-  quantity?: number;
-  preparedAt?: { seconds: number } | null;
-  deliveredAt?: { seconds: number } | null;
-};
+import { BOARD_TABS, type DriverBoardOrder, getBoardEmptyMessage, parseBoardTab } from './_lib';
 
 export default function BoardClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { data: session } = useSession();
   const { firebaseReady } = useFirebaseAuth();
-  const tab = searchParams.get('tab') ?? 'preparing';
+  const tab = parseBoardTab(searchParams.get('tab'));
 
-  const [preparing, setPreparing] = useState<Order[]>([]);
-  const [delivering, setDelivering] = useState<Order[]>([]);
+  const [preparing, setPreparing] = useState<DriverBoardOrder[]>([]);
+  const [delivering, setDelivering] = useState<DriverBoardOrder[]>([]);
 
   useEffect(() => {
     if (!firebaseReady) return;
@@ -44,7 +31,7 @@ export default function BoardClient() {
       orderBy('preparedAt', 'asc'),
     );
     const unsubPreparing = onSnapshot(qPreparing, (snap) => {
-      setPreparing(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order));
+      setPreparing(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as DriverBoardOrder));
     });
 
     const driverId = session?.user?.id;
@@ -57,7 +44,7 @@ export default function BoardClient() {
       : [where('status', '==', 'DELIVERING'), orderBy('updatedAt', 'asc')];
     const qDelivering = query(collection(db, 'orders'), ...deliveringConditions);
     const unsubDelivering = onSnapshot(qDelivering, (snap) => {
-      setDelivering(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order));
+      setDelivering(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as DriverBoardOrder));
     });
 
     return () => {
@@ -96,35 +83,35 @@ export default function BoardClient() {
 
         {/* 탭 */}
         <Box style={{ display: 'flex' }}>
-          {[
-            { key: 'preparing', label: '수거 대기', count: preparing.length },
-            { key: 'delivering', label: '배송 중', count: delivering.length },
-          ].map(({ key, label, count }) => (
-            <UnstyledButton
-              key={key}
-              onClick={() => router.replace(`/board?tab=${key}`)}
-              style={{
-                flex: 1,
-                padding: '12px 0',
-                textAlign: 'center',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-bold)',
-                borderBottom: `2px solid ${tab === key ? 'var(--color-primary)' : 'transparent'}`,
-                color: tab === key ? 'var(--color-primary)' : 'var(--color-text-disabled)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-              }}
-            >
-              {label}
-              {count > 0 && (
-                <Badge size="xs" color={key === 'preparing' ? 'red' : 'blue'} circle>
-                  {count}
-                </Badge>
-              )}
-            </UnstyledButton>
-          ))}
+          {BOARD_TABS.map(({ key, label, badgeColor }) => {
+            const count = key === 'preparing' ? preparing.length : delivering.length;
+            return (
+              <UnstyledButton
+                key={key}
+                onClick={() => router.replace(`/board?tab=${key}`)}
+                style={{
+                  flex: 1,
+                  padding: '12px 0',
+                  textAlign: 'center',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 'var(--fw-bold)',
+                  borderBottom: `2px solid ${tab === key ? 'var(--color-primary)' : 'transparent'}`,
+                  color: tab === key ? 'var(--color-primary)' : 'var(--color-text-disabled)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                {label}
+                {count > 0 && (
+                  <Badge size="xs" color={badgeColor} circle>
+                    {count}
+                  </Badge>
+                )}
+              </UnstyledButton>
+            );
+          })}
         </Box>
       </Box>
 
@@ -133,9 +120,7 @@ export default function BoardClient() {
         {orders.length === 0 ? (
           <Stack align="center" justify="center" h={192} gap="xs">
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              {tab === 'preparing'
-                ? '오늘 수거할 주문이 없습니다'
-                : '현재 배송 중인 주문이 없습니다'}
+              {getBoardEmptyMessage(tab)}
             </Text>
             {tab === 'preparing' && (
               <Anchor

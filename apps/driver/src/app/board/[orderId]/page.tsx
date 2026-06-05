@@ -1,63 +1,51 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { apiFetch } from '@/lib/api';
-import { use } from 'react';
-import { notifications } from '@mantine/notifications';
 import {
-  Box,
-  Stack,
-  Group,
-  Text,
-  Badge,
-  Card,
-  Button,
-  Loader,
-  UnstyledButton,
   Anchor,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Group,
+  Loader,
+  Stack,
+  Text,
+  UnstyledButton,
 } from '@mantine/core';
-
-type Order = {
-  id?: string;
-  storeId: string;
-  status: string;
-  deliveryMethod: string;
-  buyerName?: string;
-  address?: string;
-  deliveryAddress?: { address?: string };
-  hubName?: string;
-  hubAddress?: string;
-  productName?: string;
-  quantity?: number;
-  preparedAt?: { seconds: number } | null;
-  sellerPhone?: string;
-  buyerPhone?: string;
-};
-
-const METHOD_LABEL: Record<string, string> = {
-  direct: '직배송',
-  hub: '거점 픽업',
-  parcel: '택배',
-};
+import { notifications } from '@mantine/notifications';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { use, useEffect, useState } from 'react';
+import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
+import { apiFetch } from '@/lib/api';
+import { db } from '@/lib/firebase';
+import {
+  DETAIL_METHOD_LABEL,
+  type DriverOrderDetail,
+  formatPreparedTime,
+  getDeliveryAddress,
+  getDetailCta,
+  getProductSummary,
+  getVisibleContacts,
+  isDetailDelivering,
+  isDetailPreparing,
+  isHubOrder,
+} from './_lib';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
   const { data: session } = useSession();
   const router = useRouter();
   const { firebaseReady } = useFirebaseAuth();
-  const [order, setOrder] = useState<Order | null>(null);
+  const [order, setOrder] = useState<DriverOrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!firebaseReady) return;
 
     const unsub = onSnapshot(doc(db, 'orders', orderId), (snap) => {
-      if (snap.exists()) setOrder({ id: snap.id, ...snap.data() } as Order);
+      if (snap.exists()) setOrder({ id: snap.id, ...snap.data() } as DriverOrderDetail);
     });
     return unsub;
   }, [orderId, firebaseReady]);
@@ -97,15 +85,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
     );
   }
 
-  const isDelivering = order.status === 'DELIVERING';
-  const isPreparing = order.status === 'PREPARING';
-  const isHub = order.deliveryMethod === 'hub';
-  const preparedAtStr = order.preparedAt
-    ? new Date(order.preparedAt.seconds * 1000).toLocaleTimeString('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '시간 미정';
+  const isDelivering = isDetailDelivering(order);
+  const isPreparing = isDetailPreparing(order);
+  const isHub = isHubOrder(order);
+  const contacts = getVisibleContacts(order);
+  const cta = getDetailCta(order);
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -129,7 +113,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           style={{ color: 'var(--color-text-secondary)', padding: 4 }}
           aria-label="뒤로가기"
         >
-          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <svg
+            width="24"
+            height="24"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            focusable="false"
+          >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -140,7 +132,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         </UnstyledButton>
         <Group gap="xs">
           <Badge color="green" variant="light" size="sm">
-            {METHOD_LABEL[order.deliveryMethod] ?? order.deliveryMethod}
+            {DETAIL_METHOD_LABEL[order.deliveryMethod] ?? order.deliveryMethod}
           </Badge>
           {isDelivering && (
             <Text
@@ -171,21 +163,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               >
                 주문 정보
               </Text>
-              <InfoRow
-                label="상품"
-                value={`${order.productName ?? '-'}${order.quantity ? ` × ${order.quantity}` : ''}`}
-              />
-              {isPreparing && <InfoRow label="수거 예정" value={preparedAtStr} />}
+              <InfoRow label="상품" value={getProductSummary(order)} />
+              {isPreparing && (
+                <InfoRow label="수거 예정" value={formatPreparedTime(order.preparedAt)} />
+              )}
               {isHub ? (
                 <>
                   <InfoRow label="거점명" value={order.hubName ?? '-'} />
                   <InfoRow label="거점 주소" value={order.hubAddress ?? '-'} />
                 </>
               ) : (
-                <InfoRow
-                  label="배송지"
-                  value={order.address ?? order.deliveryAddress?.address ?? '-'}
-                />
+                <InfoRow label="배송지" value={getDeliveryAddress(order)} />
               )}
               {isPreparing && <InfoRow label="소비자" value={order.buyerName ?? '-'} />}
             </Stack>
@@ -203,15 +191,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               >
                 연락처
               </Text>
-              {isPreparing && order.sellerPhone && (
-                <ContactRow label="판매자" phone={order.sellerPhone} />
-              )}
-              {isDelivering && !isHub && order.buyerPhone && (
-                <ContactRow label="소비자" phone={order.buyerPhone} />
-              )}
-              {isDelivering && isHub && order.sellerPhone && (
-                <ContactRow label="판매자" phone={order.sellerPhone} />
-              )}
+              {contacts.map((contact) => (
+                <ContactRow key={`${contact.label}-${contact.phone}`} {...contact} />
+              ))}
             </Stack>
           </Card>
         </Stack>
@@ -219,40 +201,40 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
 
       {/* 하단 CTA */}
       <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
-        {isPreparing && (
+        {cta.kind === 'start-delivery' && (
           <Button
             fullWidth
             size="lg"
             radius="xl"
-            color="brand"
+            color={cta.color}
             loading={loading}
-            onClick={() => updateStatus('DELIVERING')}
+            onClick={() => updateStatus(cta.status)}
           >
-            수거 완료 / 배송 시작
+            {cta.label}
           </Button>
         )}
-        {isDelivering && !isHub && (
+        {cta.kind === 'complete-direct' && (
           <Button
             fullWidth
             size="lg"
             radius="xl"
-            color="brand"
+            color={cta.color}
             loading={loading}
-            onClick={() => updateStatus('DELIVERED')}
+            onClick={() => updateStatus(cta.status)}
           >
-            배송 완료
+            {cta.label}
           </Button>
         )}
-        {isDelivering && isHub && (
+        {cta.kind === 'hub-photo' && (
           <Button
             fullWidth
             size="lg"
             radius="xl"
-            color="blue"
+            color={cta.color}
             loading={loading}
             onClick={() => router.push(`/board/${orderId}/photo?storeId=${order.storeId}`)}
           >
-            거점 도착
+            {cta.label}
           </Button>
         )}
       </Box>
@@ -303,7 +285,15 @@ function ContactRow({ label, phone }: { label: string; phone: string }) {
           textDecoration: 'none',
         }}
       >
-        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <svg
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          focusable="false"
+        >
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
