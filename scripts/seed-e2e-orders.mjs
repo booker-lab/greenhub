@@ -11,11 +11,12 @@
  * 멱등성: ID가 'e2e-' prefix로 고정되어 재실행 시 set으로 덮어쓴다.
  * 정리: scripts/cleanup-spec-residue.mjs는 'e2e-' 시드를 보존한다(별도 정책).
  */
-import { initializeApp, cert } from 'firebase-admin/app';
+
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { cert, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -54,7 +55,6 @@ const db = getFirestore();
 // ─── 컨텍스트 ─────────────────────────────────────────────────────────────
 const CONSUMER_STORE_ID = '80189070-6a73-4bd1-901e-1b1b5af4d5e2'; // 난플렉스 (실제 활성 상품 보유)
 const SELLER_STORE_ID = '9b2cb652-ff77-46b9-a773-e1efa78fb763'; // 테스트 꽃농장 (seller@test.com)
-const SELLER_USER_ID = '424b9334-cc05-41b0-a451-840e88733446';
 const CONSUMER_USER_ID = '6822a381-6c71-4b66-9d6f-f60cd477a785';
 
 // 'YYYY-MM-DD' 변환 (KST 기준 — Firestore date 필드 일관성)
@@ -153,7 +153,9 @@ async function seedSellerOrders() {
     createdAt: now,
     updatedAt: now,
   });
-  console.log(`  ✅ groupProductConfig/${GROUP_PRODUCT_ID} groupDeliveryDate=${toDateStr(groupDeliveryDate)}`);
+  console.log(
+    `  ✅ groupProductConfig/${GROUP_PRODUCT_ID} groupDeliveryDate=${toDateStr(groupDeliveryDate)}`,
+  );
 
   // 2-3) 셀러 store용 dailyCaps — 일반 주문이 'X일' 헤더에 그룹핑되도록
   const normalDeliveryDate = new Date(today);
@@ -201,7 +203,9 @@ async function seedSellerOrders() {
     createdAt: now,
     updatedAt: now,
   });
-  console.log(`  ✅ orders/${NORMAL_ORDER_ID} (saleType=normal, status=ACCEPTED, deliveryDate=${dateStr})`);
+  console.log(
+    `  ✅ orders/${NORMAL_ORDER_ID} (saleType=normal, status=ACCEPTED, deliveryDate=${dateStr})`,
+  );
 
   // 2-5) 공구 주문 (status ACCEPTED → ACTION_REQUIRED 그룹, groupDeliveryDate 조인 검증)
   const GROUP_ORDER_ID = 'e2e-group-order-001';
@@ -239,7 +243,9 @@ async function seedSellerOrders() {
     createdAt: now,
     updatedAt: now,
   });
-  console.log(`  ✅ orders/${GROUP_ORDER_ID} (saleType=group, groupDeliveryDate=${toDateStr(groupDeliveryDate)})`);
+  console.log(
+    `  ✅ orders/${GROUP_ORDER_ID} (saleType=group, groupDeliveryDate=${toDateStr(groupDeliveryDate)})`,
+  );
 
   // 2-6) 택배 주문 (deliveryMethod=parcel, status=PREPARING → 셀러 "택배 발송 완료" 동선 BUG-16 T5)
   const PARCEL_ORDER_ID = 'e2e-parcel-order-001';
@@ -274,6 +280,78 @@ async function seedSellerOrders() {
     updatedAt: now,
   });
   console.log(`  ✅ orders/${PARCEL_ORDER_ID} (deliveryMethod=parcel, status=PREPARING)`);
+
+  // 2-7) 송장 표시 회귀 전용 완료 주문 — 쓰기 동선과 분리해 seller·consumer 읽기 계약을 검증
+  const DELIVERED_PARCEL_ORDER_ID = 'e2e-parcel-delivered-order-001';
+  await db.doc(`orders/${DELIVERED_PARCEL_ORDER_ID}`).set({
+    id: DELIVERED_PARCEL_ORDER_ID,
+    orderNumber: '20260101-000004',
+    storeId: SELLER_STORE_ID,
+    userId: CONSUMER_USER_ID,
+    productId: NORMAL_PRODUCT_ID,
+    productName: 'E2E 송장 확인 상품',
+    buyerName: 'E2E 소비자',
+    address: '부산 테스트로 9',
+    buyerPhone: '010-0000-0001',
+    sellerPhone: '010-0000-0000',
+    hubName: null,
+    hubAddress: null,
+    quantity: 1,
+    saleType: 'normal',
+    status: 'DELIVERED',
+    deliveryMethod: 'parcel',
+    deliveryFee: 4000,
+    deliveryAddress: { address: '부산 테스트로 9', addressDetail: '202호', zipCode: '46000' },
+    isMetropolitan: false,
+    hubId: null,
+    pickupCode: null,
+    totalAmount: 14000,
+    requestedDeliveryDate: dateStr,
+    preparedAt: now,
+    courierCompany: 'CJ대한통운',
+    trackingNumber: '1234567890',
+    cancelReason: null,
+    groupBuyConsent: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  console.log(
+    `  ✅ orders/${DELIVERED_PARCEL_ORDER_ID} (status=DELIVERED, trackingNumber=1234567890)`,
+  );
+
+  // 2-8) 모바일 모달 회귀 전용 주문 — 발송 쓰기 테스트와 상태를 공유하지 않는다.
+  const PARCEL_MODAL_ORDER_ID = 'e2e-parcel-modal-order-001';
+  await db.doc(`orders/${PARCEL_MODAL_ORDER_ID}`).set({
+    id: PARCEL_MODAL_ORDER_ID,
+    orderNumber: '20260101-000005',
+    storeId: SELLER_STORE_ID,
+    userId: CONSUMER_USER_ID,
+    productId: NORMAL_PRODUCT_ID,
+    productName: 'E2E 모바일 모달 상품',
+    buyerName: 'E2E 소비자',
+    address: '부산 테스트로 9',
+    buyerPhone: '010-0000-0001',
+    sellerPhone: '010-0000-0000',
+    hubName: null,
+    hubAddress: null,
+    quantity: 1,
+    saleType: 'normal',
+    status: 'PREPARING',
+    deliveryMethod: 'parcel',
+    deliveryFee: 4000,
+    deliveryAddress: { address: '부산 테스트로 9', addressDetail: '202호', zipCode: '46000' },
+    isMetropolitan: false,
+    hubId: null,
+    pickupCode: null,
+    totalAmount: 14000,
+    requestedDeliveryDate: dateStr,
+    preparedAt: now,
+    cancelReason: null,
+    groupBuyConsent: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  console.log(`  ✅ orders/${PARCEL_MODAL_ORDER_ID} (deliveryMethod=parcel, status=PREPARING)`);
 }
 
 async function main() {

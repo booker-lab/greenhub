@@ -17,6 +17,8 @@
 admin 계정은 별도 회원가입 경로가 없으며, **Firestore 콘솔에서 `users/{id}.role = 'admin'` 수동 설정**으로만 부여한다.
 (초대 토큰 발행 시 역할은 'seller'로 고정 — admin은 시스템 운영자 한정)
 
+`hub_staff` 도입 이후에도 `/admin/*`은 운영자 전용 경계를 유지한다. 거점 스태프 초대·추가 배정·권한 회수 경로는 `hub_staff`와 거점 `staffIds`만 변경하며, admin 역할 부여나 admin API 위임 경로를 만들지 않는다.
+
 ---
 
 ## 2. 접근 경로
@@ -138,21 +140,31 @@ PATCH /admin/users/:userId/status
 #### 주문 목록 조회 (전체)
 
 ```
-GET /admin/orders?storeId=:storeId&status=:status
+GET /admin/orders?storeId=:storeId&status=:status&sort=:sort&limit=:limit&page=:page&cursor=:cursor
 ```
 
 | 파라미터 | 필수 | 설명 |
 |----------|------|------|
 | `storeId` | - | 특정 스토어 필터 |
 | `status` | - | 주문 상태 필터 (`OrderStatus`) |
+| `sort` | - | `createdAt_desc`(기본) 또는 `createdAt_asc` |
+| `limit` | - | 1~100, 기본 50 |
+| `page` | - | 1 기반 페이지 번호. 지정 시 `count()`와 `offset` 기반 페이지 메타 반환 |
+| `cursor` | - | F5 1차 호환용 커서. `page`가 있으면 `page` 우선 |
 
-> 최대 200건 반환 (createdAt desc). 페이지네이션 미지원 — MVP 운영 규모 한정.
+> 관리자 화면은 `page` 기반 페이지네이션을 사용한다. 깊은 `offset` 탐색 비용이 문제 되는 규모가 되면 별도 서버 검색 SDD로 승격한다.
 
 **Response** `200`
 ```ts
 {
   orders: Order[],
-  total: number
+  total: number,
+  page?: number,
+  pageSize?: number,
+  totalPages?: number,
+  hasPrevious?: boolean,
+  hasNext?: boolean,
+  nextCursor?: string | null
 }
 ```
 
@@ -369,6 +381,14 @@ PATCH /admin/drivers/:userId/suspend
 | UI 접근 차단 | `admin/layout.tsx` (Server Component) — `session.user.role !== 'admin'` 시 `/` 리다이렉트 |
 | admin 계정 발급 | Firestore 콘솔 수동 설정만 허용 — 프로그래매틱 부여 경로 없음 |
 | 초대 경로 | seller 초대는 role='seller'로 고정 — admin 권한 위임 불가 |
+| hub_staff 경로 | 거점 스태프 초대·배정은 role='hub_staff'만 생성·연결 — admin 승격 불가 |
+
+### 5-1. `hub_staff`와 admin 경계
+
+- `hub_staff`는 seller 앱 세션에서 허용되지만 `/admin/*` UI 진입은 `admin/layout.tsx`의 `role === 'admin'` 검사를 통과해야 한다.
+- `/admin/*` API는 `AdminController` 클래스 레벨의 `@Roles('admin')` 계약을 따른다.
+- `RolesGuard`는 `hub_staff` 토큰을 admin 전용 엔드포인트에서 403으로 차단한다.
+- 거점 스태프 초대 수락, 기존 스태프 추가 배정, 권한 회수는 `users.role`을 `admin`으로 변경하지 않는다.
 
 ---
 

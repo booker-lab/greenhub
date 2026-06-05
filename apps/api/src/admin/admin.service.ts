@@ -1,28 +1,41 @@
 import type { OrderStatus } from '@greenhub/shared';
-import {
-  BadRequestException,
-  ConflictException,
-  HttpException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 // biome-ignore lint/style/useImportType: Nest 생성자 주입 런타임 메타데이터에 클래스 값이 필요하다.
 import { FirestoreService } from '../firestore/firestore.service';
 // biome-ignore lint/style/useImportType: Nest 생성자 주입 런타임 메타데이터에 클래스 값이 필요하다.
 import { PaymentsService } from '../payments/payments.service';
+import { getDriversPage } from './admin-drivers.helpers';
+import { revokeInviteToken, rollbackInviteSellerAccount } from './admin-invite-lifecycle.helpers';
+import { createInviteTokenPrefixes, getInvitesPage } from './admin-invites.helpers';
+import { updateAdminOrderTracking } from './admin-order-tracking.helpers';
+import { getAdminOrderDetail, getOrdersPage } from './admin-orders.helpers';
+import {
+  getDefaultCommissionRate,
+  setDefaultCommissionRate,
+} from './admin-platform-config.helpers';
+import {
+  bulkPayFailureReason,
+  settlementCursorDate,
+  settlementQueryLimit,
+  toIsoCursor,
+} from './admin-settlements.helpers';
+import { countByStatus, sumNumberField } from './admin-store-summary.helpers';
 import type {
   ForceRefundDto,
   QueryAdminDriversDto,
+  QueryAdminInvitesDto,
   QueryAdminOrdersDto,
   QueryAdminSettlementsDto,
   SetCommissionDto,
+  SetDefaultCommissionDto,
   SuspendUserDto,
+  UpdateOrderTrackingDto,
 } from './dto/admin.dto';
 
 const ADMIN_USERS_LIMIT = 5000;
-const ADMIN_ORDERS_DEFAULT_LIMIT = 50;
 const DEFAULT_FORCE_REFUND_REASON = '관리자 강제 환불';
+const DEFAULT_INVITE_EXPIRY_DAYS = 7;
 const RISK_FORCE_REFUND_STATUSES: OrderStatus[] = [
   'DELIVERING',
   'HUB_ARRIVED',
@@ -31,22 +44,10 @@ const RISK_FORCE_REFUND_STATUSES: OrderStatus[] = [
   'REVIEWED',
 ];
 const RISK_FORCE_REFUND_REASON_MESSAGE = '배달 후 환불은 사유(5자 이상)가 필수입니다.';
-const INVITE_REVOKE_REASON_MESSAGE: Record<InviteRevokeReason, string> = {
-  already_used: '이미 사용된 초대 토큰입니다.',
-  already_revoked: '이미 취소된 초대 토큰입니다.',
-  expired: '만료된 초대 토큰입니다.',
-};
 
 type BulkPayFailure = {
   id: string;
   reason: string;
-};
-
-type InviteRevokeReason = 'already_used' | 'already_revoked' | 'expired';
-type InviteRevokeData = {
-  usedAt?: unknown;
-  revokedAt?: unknown;
-  expiresAt?: unknown;
 };
 
 @Injectable()
@@ -64,6 +65,52 @@ export class AdminService {
     return {
       stores: snap.docs.map((d: any) => d.data()),
       total: snap.size,
+    };
+  }
+
+  async getPlatformConfig() {
+    return { defaultCommissionRate: await getDefaultCommissionRate(this.firestore) };
+  }
+
+  async setDefaultCommission(dto: SetDefaultCommissionDto) {
+    return setDefaultCommissionRate(this.firestore, dto.rate);
+  }
+
+  async getStoreSummary(storeId: string) {
+    const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!storeSnap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+
+    const storeData = (storeSnap.data() ?? {}) as Record<string, unknown>;
+    const store = { id: storeId, ...storeData };
+    const ownerId = typeof storeData.ownerId === 'string' ? storeData.ownerId : null;
+    const [ownerSnap, ordersSnap, settlementsSnap] = await Promise.all([
+      ownerId ? this.firestore.doc(`users/${ownerId}`).get() : Promise.resolve(null),
+      (this.firestore.collection('orders').where('storeId', '==', storeId) as any).get(),
+      (this.firestore.collection('settlements').where('storeId', '==', storeId) as any).get(),
+    ]);
+    const ownerData = ownerSnap?.exists ? ownerSnap.data() : null;
+
+    return {
+      store,
+      owner: ownerId
+        ? {
+            id: ownerId,
+            name: ownerData?.name ?? null,
+            email: ownerData?.email ?? null,
+            phone: ownerData?.phone ?? null,
+          }
+        : null,
+      orders: {
+        totalCount: ordersSnap.size,
+        totalAmount: sumNumberField(ordersSnap.docs, 'totalAmount'),
+        byStatus: countByStatus(ordersSnap.docs),
+      },
+      settlements: {
+        totalCount: settlementsSnap.size,
+        platformFee: sumNumberField(settlementsSnap.docs, 'platformFee'),
+        netAmount: sumNumberField(settlementsSnap.docs, 'netAmount'),
+        byStatus: countByStatus(settlementsSnap.docs),
+      },
     };
   }
 
@@ -147,42 +194,11 @@ export class AdminService {
   }
 
   async getOrders(dto: QueryAdminOrdersDto) {
-    let query = this.firestore.collection('orders') as any;
-
-    if (dto.storeId) {
-      query = query.where('storeId', '==', dto.storeId);
-    }
-    if (dto.status) {
-      query = query.where('status', '==', dto.status);
-    }
-
-    const sortDirection = dto.sort === 'createdAt_asc' ? 'asc' : 'desc';
-    const limit = dto.limit ?? ADMIN_ORDERS_DEFAULT_LIMIT;
-    query = query.orderBy('createdAt', sortDirection);
-    if (dto.cursor) {
-      query = query.startAfter(this.firestore.Timestamp.fromDate(new Date(dto.cursor)));
-    }
-    query = query.limit(limit + 1);
-    const snap = await query.get();
-    const docs = snap.docs.slice(0, limit);
-    const nextDoc = snap.docs.length > limit ? docs.at(-1) : null;
-
-    return {
-      orders: docs.map((d: any) => d.data()),
-      total: docs.length,
-      nextCursor: nextDoc ? this.toIsoCursor(nextDoc.data()?.createdAt) : null,
-    };
+    return getOrdersPage(this.firestore, dto);
   }
 
-  private toIsoCursor(value: unknown): string | null {
-    if (!value) return null;
-    if (value instanceof Date) return value.toISOString();
-    if (typeof value === 'string') return value;
-    if (typeof value === 'object' && value !== null && 'toDate' in value) {
-      const date = (value as { toDate?: () => Date }).toDate?.();
-      return date ? date.toISOString() : null;
-    }
-    return null;
+  async getOrderDetail(orderId: string) {
+    return getAdminOrderDetail(this.firestore, orderId);
   }
 
   async forceRefund(orderId: string, dto: ForceRefundDto) {
@@ -215,6 +231,10 @@ export class AdminService {
     return { ok: true, orderId };
   }
 
+  async updateOrderTracking(orderId: string, dto: UpdateOrderTrackingDto, adminId: string) {
+    return updateAdminOrderTracking(this.firestore, orderId, dto, adminId);
+  }
+
   // ── Settlements ──────────────────────────────────────────────────
 
   async getSettlements(dto: QueryAdminSettlementsDto) {
@@ -235,12 +255,22 @@ export class AdminService {
       query = query.where('settledAt', '<=', this.firestore.Timestamp.fromDate(toDate));
     }
 
-    query = query.orderBy('settledAt', 'desc').limit(500);
+    const limit = settlementQueryLimit(dto.limit);
+    const cursorDate = settlementCursorDate(dto.cursor);
+
+    query = query.orderBy('settledAt', 'desc');
+    if (cursorDate) {
+      query = query.startAfter(this.firestore.Timestamp.fromDate(cursorDate));
+    }
+    query = query.limit(limit + 1);
     const snap = await query.get();
+    const docs = snap.docs.slice(0, limit);
+    const nextDoc = snap.docs.length > limit ? docs.at(-1) : null;
 
     return {
-      settlements: snap.docs.map((d: any) => d.data()),
-      total: snap.size,
+      settlements: docs.map((d: any) => d.data()),
+      total: docs.length,
+      nextCursor: nextDoc ? toIsoCursor(nextDoc.data()?.settledAt) : null,
     };
   }
 
@@ -283,73 +313,15 @@ export class AdminService {
         await this.markAsPaid(id);
         ok.push(id);
       } catch (error) {
-        failed.push({ id, reason: this.getBulkPayFailureReason(error) });
+        failed.push({ id, reason: bulkPayFailureReason(error) });
       }
     }
 
     return { ok, failed };
   }
 
-  private getBulkPayFailureReason(error: unknown) {
-    if (error instanceof NotFoundException) {
-      return '정산 내역을 찾을 수 없습니다.';
-    }
-    if (error instanceof BadRequestException) {
-      const response = error.getResponse();
-      const message =
-        typeof response === 'object' && response !== null && 'message' in response
-          ? (response as { message?: unknown }).message
-          : error.message;
-
-      if (typeof message === 'string' && message.length > 0) return message;
-      if (Array.isArray(message) && typeof message[0] === 'string') return message[0];
-    }
-    if (error instanceof HttpException && error.message.length > 0) {
-      return error.message;
-    }
-    if (error instanceof Error && error.message.length > 0) {
-      return error.message;
-    }
-    return '지급 처리에 실패했습니다.';
-  }
-
   async getDrivers(dto: QueryAdminDriversDto) {
-    type DriverRow = {
-      id: string;
-      name: string;
-      email: string | null;
-      driverApproved: boolean;
-      suspended?: boolean;
-      createdAt: unknown;
-    };
-
-    // 복합 인덱스 없이도 동작하도록 role 단일 필터 후 메모리 필터링
-    const snap = await (
-      this.firestore.collection('users').where('role', '==', 'driver').limit(100) as any
-    ).get();
-
-    let drivers: DriverRow[] = snap.docs.map(
-      (d: { data: () => DriverRow & { passwordHash?: unknown } }) => {
-        const { passwordHash: _pw, ...user } = d.data();
-        return user;
-      },
-    );
-
-    if (dto.status === 'pending') {
-      drivers = drivers.filter((d) => !d.driverApproved && !d.suspended);
-    } else if (dto.status === 'approved') {
-      drivers = drivers.filter((d) => d.driverApproved && !d.suspended);
-    } else if (dto.status === 'suspended') {
-      drivers = drivers.filter((d) => d.suspended);
-    }
-
-    const getCreatedSeconds = (value: unknown) =>
-      typeof value === 'object' && value !== null && '_seconds' in value
-        ? ((value as { _seconds?: number })._seconds ?? 0)
-        : 0;
-    drivers.sort((a, b) => getCreatedSeconds(b.createdAt) - getCreatedSeconds(a.createdAt));
-
-    return { drivers, total: drivers.length };
+    return getDriversPage(this.firestore, dto);
   }
 
   async approveDriver(userId: string) {
@@ -390,16 +362,15 @@ export class AdminService {
 
   // ── Invite ───────────────────────────────────────────────────────
 
-  async generateInvite(adminId: string) {
+  async generateInvite(adminId: string, expiresInDays = DEFAULT_INVITE_EXPIRY_DAYS) {
     const token = uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase();
     const now = this.firestore.Timestamp.now();
-
-    // 7일 만료
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    const expiresAt = typeof now.toDate === 'function' ? now.toDate() : new Date();
+    expiresAt.setDate(expiresAt.getDate() + expiresInDays);
 
     await this.firestore.doc(`invites/${token}`).set({
       token,
+      tokenPrefixes: createInviteTokenPrefixes(token),
       createdBy: adminId,
       usedAt: null,
       usedBy: null,
@@ -413,68 +384,17 @@ export class AdminService {
     };
   }
 
-  async getInvites(q?: string) {
-    const prefix = q?.trim().toUpperCase();
-    const shouldSearch = prefix && prefix.length >= 4;
-    const query = shouldSearch
-      ? (this.firestore
-          .collection('invites')
-          .where('token', '>=', prefix)
-          .where('token', '<', `${prefix}\uf8ff`)
-          .orderBy('token')
-          .limit(50) as any)
-      : (this.firestore.collection('invites').orderBy('createdAt', 'desc').limit(50) as any);
-    const snap = await query.get();
-
-    return snap.docs.map((d: any) => d.data());
+  async getInvites(dto: QueryAdminInvitesDto) {
+    return getInvitesPage(this.firestore, dto);
   }
 
   async revokeInvite(token: string, adminId: string) {
-    const ref = this.firestore.doc(`invites/${token}`);
-
-    await this.firestore.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      if (!snap.exists) throw new NotFoundException('초대 토큰을 찾을 수 없습니다.');
-
-      const invite = snap.data();
-      if (!invite) throw new NotFoundException('초대 토큰을 찾을 수 없습니다.');
-
-      const reason = this.getInviteRevokeBlockReason(invite);
-      if (reason) throw this.createInviteRevokeConflict(reason);
-
-      const now = this.firestore.Timestamp.now();
-      tx.set(ref, { revokedAt: now, revokedBy: adminId }, { merge: true });
-    });
-
-    return { ok: true };
+    return revokeInviteToken(this.firestore, token, adminId);
   }
 
-  private getInviteRevokeBlockReason(invite: InviteRevokeData): InviteRevokeReason | null {
-    if (invite.usedAt !== null && invite.usedAt !== undefined) return 'already_used';
-    if (invite.revokedAt !== null && invite.revokedAt !== undefined) return 'already_revoked';
-    const expiresAtMs = this.toInviteExpiresAtMs(invite.expiresAt);
-    if (Number.isFinite(expiresAtMs) && expiresAtMs < Date.now()) return 'expired';
-    return null;
-  }
-
-  private toInviteExpiresAtMs(value: unknown): number {
-    if (typeof value === 'object' && value !== null && 'toMillis' in value) {
-      const toMillis = (value as { toMillis?: unknown }).toMillis;
-      return typeof toMillis === 'function' ? toMillis() : Number.NaN;
-    }
-    if (typeof value === 'string' || typeof value === 'number' || value instanceof Date) {
-      return new Date(value).getTime();
-    }
-    return Number.NaN;
-  }
-
-  private createInviteRevokeConflict(reason: InviteRevokeReason) {
-    return new ConflictException({
-      message: INVITE_REVOKE_REASON_MESSAGE[reason],
-      reason,
-    });
+  async rollbackInviteSeller(token: string, adminId: string) {
+    return rollbackInviteSellerAccount(this.firestore, token, adminId);
   }
 
   // ── Banner ───────────────────────────────────────────────────────
-
 }

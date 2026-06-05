@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { CreateOrderDto } from './dto/create-order.dto';
-import { UpdateStatusDto } from './dto/update-status.dto';
-import { OrdersCreateService } from './orders-create.service';
-import { OrdersQueryService } from './orders-query.service';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import type { CreateOrderDto } from './dto/create-order.dto';
+import type { UpdateStatusDto } from './dto/update-status.dto';
+import type { OrdersCreateService } from './orders-create.service';
+import type { OrdersLifecycleService } from './orders-lifecycle.service';
+import type { OrdersQueryService } from './orders-query.service';
 
 @Injectable()
 export class OrdersService {
@@ -51,8 +52,13 @@ export class OrdersService {
     return this.lifecycle.confirmPickup(storeId, orderId, userId, pickupCode);
   }
 
-  hubConfirmPickup(storeId: string, orderId: string, requesterId: string, pickupCode: string) {
-    return this.lifecycle.hubConfirmPickup(storeId, orderId, requesterId, pickupCode);
+  hubConfirmPickup(storeId: string, orderId: string, requester: JwtPayload, pickupCode: string) {
+    return this.lifecycle.hubConfirmPickup(storeId, orderId, requester.sub, pickupCode, {
+      role: requester.role,
+      storeId: requester.storeId,
+      hubId: requester.hubId,
+      hubIds: requester.hubIds,
+    });
   }
 
   getOrderById(orderId: string, requesterId: string) {

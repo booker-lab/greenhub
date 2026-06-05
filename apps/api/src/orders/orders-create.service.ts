@@ -1,14 +1,14 @@
 import {
+  BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
-  ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import { FirestoreService } from '../firestore/firestore.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { CreateOrderDto } from './dto/create-order.dto';
-import { generatePickupCode, detectMetropolitan, calcDeliveryFee } from './orders.helpers';
+import type { FirestoreService } from '../firestore/firestore.service';
+import type { NotificationsService } from '../notifications/notifications.service';
+import type { CreateOrderDto } from './dto/create-order.dto';
+import { calcDeliveryFee, detectMetropolitan, generatePickupCode } from './orders.helpers';
 
 @Injectable()
 export class OrdersCreateService {
@@ -48,10 +48,10 @@ export class OrdersCreateService {
       this.firestore.doc(`stores/${storeId}`).get(),
       dto.hubId ? this.firestore.doc(`hubs/${dto.hubId}`).get() : Promise.resolve(null),
     ]);
-    if (!product.exists || product.data()!['storeId'] !== storeId) {
+    const productData = product.data();
+    if (!product.exists || !productData || productData['storeId'] !== storeId) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
-    const productData = product.data()!;
     const rawBuyerName: string = userSnap.data()?.['name'] ?? '';
     const buyerEmail: string = userSnap.data()?.['email'] ?? '';
     const buyerName: string =
@@ -86,13 +86,16 @@ export class OrdersCreateService {
     await this.firestore.runTransaction(async (t) => {
       // T8: 일자별 카운터 read (모든 write 이전에 수행)
       const counterSnap = await t.get(counterRef);
-      const seq = (counterSnap.exists ? (counterSnap.data()!['seq'] as number) : 0) + 1;
+      const seq = (counterSnap.exists ? (counterSnap.data()?.['seq'] as number) : 0) + 1;
       orderNumber = `${yyyymmdd}-${String(seq).padStart(6, '0')}`;
 
-      // Daily Cap 검증 (hub/direct 배송만 슬롯 소모, 공동구매 제외)
+      // Daily Cap 검증 (일반 hub/direct 배송만 슬롯 소모)
       if (dto.deliveryMethod !== 'parcel' && dto.saleType !== 'group') {
         // DTO ValidateIf로 같은 분기에서 필수화됨 — 미도달 시 400으로 사전 차단
-        const dateStr = dto.requestedDeliveryDate!;
+        const dateStr = dto.requestedDeliveryDate;
+        if (!dateStr) {
+          throw new BadRequestException('requestedDeliveryDate가 필요합니다.');
+        }
         const capId = `${storeId}_${dateStr}`;
         const capRef = this.firestore.doc(`dailyCaps/${capId}`);
         const capSnap = await t.get(capRef);
@@ -103,12 +106,18 @@ export class OrdersCreateService {
             '판매자가 해당 날짜의 배송 운영을 준비 중입니다. 택배 배송을 이용하거나 다른 날짜를 선택해주세요.',
           );
         }
-        const cap = capSnap.data()!;
-        if (cap['usedSlots'] + dto.quantity > cap['totalCap']) {
+        const cap = capSnap.data();
+        if (!cap) {
+          throw new ConflictException(
+            '판매자가 해당 날짜의 배송 운영을 준비 중입니다. 택배 배송을 이용하거나 다른 날짜를 선택해주세요.',
+          );
+        }
+        const usedSlots = cap['usedSlots'] ?? 0;
+        if (usedSlots + dto.quantity > cap['totalCap']) {
           throw new ConflictException('당일 배송 슬롯이 마감되었습니다.');
         }
         t.update(capRef, {
-          usedSlots: cap['usedSlots'] + dto.quantity,
+          usedSlots: usedSlots + dto.quantity,
         });
       }
 
@@ -120,7 +129,10 @@ export class OrdersCreateService {
         if (!gcSnap.exists) {
           throw new ConflictException('공동구매 설정을 찾을 수 없습니다.');
         }
-        const gc = gcSnap.data()!;
+        const gc = gcSnap.data();
+        if (!gc) {
+          throw new ConflictException('공동구매 설정을 찾을 수 없습니다.');
+        }
 
         // 1인 최대 구매 수량 초과 검증
         if (dto.quantity > (gc['maxPerPerson'] as number)) {
@@ -177,7 +189,10 @@ export class OrdersCreateService {
         hubId: dto.deliveryMethod === 'hub' ? (dto.hubId ?? null) : null,
         pickupCode: dto.deliveryMethod === 'hub' ? generatePickupCode() : null,
         totalAmount: productData['price'] * dto.quantity + deliveryFee,
-        requestedDeliveryDate: dto.requestedDeliveryDate ?? null,
+        requestedDeliveryDate:
+          dto.saleType === 'normal' && dto.deliveryMethod !== 'parcel'
+            ? dto.requestedDeliveryDate
+            : null,
         preparedAt: null,
         cancelReason: null,
         groupBuyConsent: dto.groupBuyConsent

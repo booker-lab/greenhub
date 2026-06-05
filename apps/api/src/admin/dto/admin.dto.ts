@@ -36,6 +36,7 @@ const ORDER_STATUSES = [
 ] satisfies OrderStatus[];
 
 const ADMIN_ORDER_SORTS = ['createdAt_desc', 'createdAt_asc'] as const;
+const ADMIN_DRIVER_SORTS = ['createdAt_desc', 'createdAt_asc'] as const;
 
 export class QueryAdminSettlementsDto {
   @IsOptional()
@@ -53,6 +54,17 @@ export class QueryAdminSettlementsDto {
   @IsOptional()
   @IsIn(SETTLEMENT_STATUSES)
   status?: SettlementStatus;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  cursor?: string;
 }
 
 export class BulkPaySettlementsDto {
@@ -86,6 +98,13 @@ export class QueryAdminOrdersDto {
   @IsOptional()
   @IsString()
   cursor?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page?: number;
 }
 
 export class SuspendUserDto {
@@ -101,16 +120,67 @@ export class SetCommissionDto {
   rate: number;
 }
 
+export class SetDefaultCommissionDto extends SetCommissionDto {}
+
 export class ForceRefundDto {
   @IsOptional()
   @IsString()
   reason?: string;
 }
 
+export class UpdateOrderTrackingDto {
+  @IsString()
+  courierCompany: string;
+
+  @IsString()
+  trackingNumber: string;
+}
+
 export class QueryAdminDriversDto {
   @IsOptional()
-  @IsString()
+  @IsIn(['pending', 'approved', 'suspended'])
   status?: 'pending' | 'approved' | 'suspended';
+
+  @IsOptional()
+  @IsIn(ADMIN_DRIVER_SORTS)
+  sort?: (typeof ADMIN_DRIVER_SORTS)[number];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+}
+
+export class QueryAdminInvitesDto {
+  @IsOptional()
+  @IsString()
+  q?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+}
+
+export class GenerateInviteDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  expiresInDays?: number;
 }
 
 export class BannerCtaDto {

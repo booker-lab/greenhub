@@ -32,7 +32,7 @@
 ## 3. 역할(Role) 시스템
 
 ```ts
-type UserRole = 'consumer' | 'seller' | 'driver' | 'admin'
+type UserRole = 'consumer' | 'seller' | 'driver' | 'hub_staff' | 'admin'
 ```
 
 | 역할 | 대상 | 추가 클레임 | 지원 Provider |
@@ -40,14 +40,19 @@ type UserRole = 'consumer' | 'seller' | 'driver' | 'admin'
 | `consumer` | 소비자 앱 사용자 | - | 카카오, 네이버, 이메일 |
 | `seller` | 판매자 (디어 오키드) | `storeId` | **카카오, 이메일** (MVP: 네이버 미지원 — 단일 판매자이므로 불필요) |
 | `driver` | 배송기사 | - | 이메일 (운영자 수동 발급 예정) |
+| `hub_staff` | 거점 스태프 | `storeId`, `hubId`, `hubIds`, `hubs.staffIds` | 이메일, 카카오 초대 수락 |
 | `admin` | 플랫폼 운영자(개발자 본인) | - | 이메일 (Firestore 직접 수동 설정, 1회) |
+
+`hub_staff`는 seller 앱 안에서 거점 운영 화면에 진입할 수 있지만 admin 역할과 분리된다. 초대 수락·추가 배정·권한 회수 플로우는 `role: 'hub_staff'`와 거점 스코프만 다루며, `role: 'admin'`을 부여하거나 `/admin/*` API 접근 권한을 위임하지 않는다.
 
 JWT 페이로드 구조:
 ```ts
 {
   sub: string      // userId
   role: UserRole
-  storeId?: string // seller 전용
+  storeId?: string // seller, hub_staff 전용
+  hubId?: string | null // hub_staff 하위 호환 단일 거점 스코프
+  hubIds?: string[] // hub_staff 다중 거점 스코프
   iat: number
   exp: number
 }
@@ -110,6 +115,23 @@ JWT 페이로드 구조:
 
 ### 5-2. 판매자 초대 토큰 가입 (A안 — MVP)
 
+```
+
+### 5-3. 거점 스태프 초대 토큰 가입
+
+```
+1. 판매자 소유자가 /hubs/:hubId 에서 스태프 초대 링크를 발급
+   → hubStaffInvites/{token} 문서 생성 (기본 7일, 1회용)
+
+2. 스태프가 초대 토큰으로 가입
+   → POST /auth/register { role: 'hub_staff', inviteToken }
+
+3. API 트랜잭션 처리
+   → users/{userId}.role = 'hub_staff'
+   → users/{userId}.storeId = invite.storeId
+   → users/{userId}.hubId = invite.hubId
+   → hubs/{hubId}.staffIds arrayUnion(userId)
+   → hubStaffInvites/{token}.usedAt/usedBy 기록
 ```
 1. 운영자(admin)가 /admin/invite 에서 초대 토큰 생성
    → invite_tokens/{tokenId} 문서 생성 (24시간 유효, 1회용)
@@ -319,7 +341,7 @@ PATCH /auth/me/fcm-token
 | `PATCH /stores/:storeId/delivery-config` | ❌ | ✅ | ❌ | ✅ | - |
 | `GET /admin/*` | ❌ | ❌ | ❌ | ✅ | admin 전용 경로 전체 |
 
-> **admin 접근 원칙**: admin은 storeId 소유권 검증 없이 모든 storeId 데이터에 접근 가능. NestJS Guard에서 `role === 'admin'` 시 storeId 검증 우회.
+> **admin 접근 원칙**: admin은 storeId 소유권 검증 없이 모든 storeId 데이터에 접근 가능. 각 도메인 서비스의 소유권 검증에서 `role === 'admin'` 시 storeId 검증을 우회한다. `GET/PATCH /stores/:storeId`도 같은 원칙을 적용한다.
 
 ---
 
@@ -343,7 +365,7 @@ PATCH /auth/me/fcm-token
 ```ts
 // packages/shared/src/auth.types.ts
 
-export type UserRole = 'consumer' | 'seller' | 'driver' | 'admin'
+export type UserRole = 'consumer' | 'seller' | 'driver' | 'hub_staff' | 'admin'
 
 export type AuthProvider = 'kakao' | 'naver' | 'email'
 
@@ -387,3 +409,4 @@ export interface UserProfile {
 |------|------|
 | 2026-03-26 | 초안 작성 — PWA 설계 문서 + 1단계 요구사항 기반 통합 |
 | 2026-05-29 | 정지 사용자 refresh 차단 명세 추가 — 새 access token 재발급 방지 |
+| 2026-06-05 | `hub_staff` 역할 추가. 1차 범위는 `hubs.staffIds`에 배정된 거점 읽기·주문 조회만 허용 |

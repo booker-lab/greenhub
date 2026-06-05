@@ -15,6 +15,13 @@ import { SettlementsService } from '../settlements/settlements.service';
 import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
 
+type HubConfirmRequesterScope = {
+  role?: string;
+  storeId?: string | null;
+  hubId?: string | null;
+  hubIds?: string[];
+};
+
 @Injectable()
 export class OrdersLifecycleService {
   constructor(
@@ -229,10 +236,14 @@ export class OrdersLifecycleService {
     orderId: string,
     requesterId: string,
     pickupCode: string,
+    scope?: HubConfirmRequesterScope,
   ) {
     // seller 소유권 검증
     const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
-    if (!storeSnap.exists || storeSnap.data()?.ownerId !== requesterId) {
+    if (
+      scope?.role !== 'hub_staff' &&
+      (!storeSnap.exists || storeSnap.data()?.ownerId !== requesterId)
+    ) {
       throw new ForbiddenException('해당 스토어에 대한 권한이 없습니다');
     }
 
@@ -240,6 +251,10 @@ export class OrdersLifecycleService {
     const order = snap.data();
     if (!snap.exists || !order || order.storeId !== storeId) {
       throw new NotFoundException();
+    }
+
+    if (scope?.role === 'hub_staff') {
+      await this.verifyHubStaffPickupAccess(storeId, order, requesterId, scope);
     }
 
     if (order.status !== 'HUB_ARRIVED') {
@@ -262,6 +277,38 @@ export class OrdersLifecycleService {
   // ────────────────────────────────────────────────────────────
   // Private helpers
   // ────────────────────────────────────────────────────────────
+
+  private async verifyHubStaffPickupAccess(
+    storeId: string,
+    order: Record<string, unknown>,
+    requesterId: string,
+    scope: HubConfirmRequesterScope,
+  ) {
+    if (scope.storeId !== storeId) {
+      throw new ForbiddenException('해당 스토어에 대한 권한이 없습니다');
+    }
+
+    const hubId = typeof order.hubId === 'string' ? order.hubId : '';
+    if (!hubId || !this.hasScopedHub(scope, hubId)) {
+      throw new ForbiddenException('해당 거점에 대한 권한이 없습니다');
+    }
+
+    const hubSnap = await this.firestore.doc(`hubs/${hubId}`).get();
+    const hub = hubSnap.data() as { storeId?: string; staffIds?: string[] } | undefined;
+    if (!hubSnap.exists || hub?.storeId !== storeId) {
+      throw new NotFoundException();
+    }
+    if (!Array.isArray(hub.staffIds) || !hub.staffIds.includes(requesterId)) {
+      throw new ForbiddenException('해당 거점에 대한 권한이 없습니다');
+    }
+  }
+
+  private hasScopedHub(scope: HubConfirmRequesterScope, hubId: string): boolean {
+    if (Array.isArray(scope.hubIds) && scope.hubIds.length > 0) {
+      return scope.hubIds.includes(hubId);
+    }
+    return scope.hubId === hubId;
+  }
 
   private async sendTransitionNotification(
     order: Record<string, unknown>,

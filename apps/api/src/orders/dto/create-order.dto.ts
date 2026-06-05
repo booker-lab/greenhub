@@ -1,15 +1,16 @@
+import { Type } from 'class-transformer';
 import {
-  IsString,
-  IsNumber,
-  IsEnum,
-  IsOptional,
-  ValidateNested,
-  ValidateIf,
   IsBoolean,
+  IsDefined,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
   Matches,
   Min,
+  ValidateIf,
+  ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 
 class DeliveryAddressDto {
   @IsString()
@@ -54,8 +55,11 @@ export class CreateOrderDto {
 
   // 일반 주문(슬롯 검증 대상)에서만 필수 — 택배·공동구매는 옵셔널
   @ValidateIf((o) => o.saleType === 'normal' && o.deliveryMethod !== 'parcel')
+  @IsDefined({ message: 'requestedDeliveryDate가 필요합니다.' })
   @IsString()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'requestedDeliveryDate는 YYYY-MM-DD 형식이어야 합니다.' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'requestedDeliveryDate는 YYYY-MM-DD 형식이어야 합니다.',
+  })
   requestedDeliveryDate?: string;
 
   @IsOptional()

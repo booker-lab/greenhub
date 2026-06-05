@@ -1,24 +1,24 @@
 import {
-  Injectable,
   ConflictException,
-  GoneException,
-  UnauthorizedException,
-  NotFoundException,
   ForbiddenException,
+  GoneException,
+  Injectable,
   Logger,
+  NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+import type { ConfigService } from '@nestjs/config';
+import type { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as admin from 'firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
-import { FirestoreService } from '../firestore/firestore.service';
-import { AuditService } from '../common/audit/audit.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { UpdateMeDto } from './dto/update-me.dto';
-import { AddressDto } from './dto/address.dto';
-import { KakaoLoginDto } from './dto/kakao-login.dto';
+import type { AuditService } from '../common/audit/audit.service';
+import type { FirestoreService } from '../firestore/firestore.service';
+import type { AddressDto } from './dto/address.dto';
+import type { KakaoLoginDto } from './dto/kakao-login.dto';
+import type { LoginDto } from './dto/login.dto';
+import type { RegisterDto } from './dto/register.dto';
+import type { UpdateMeDto } from './dto/update-me.dto';
 import type { JwtPayload } from './types/jwt-payload.type';
 
 type InviteData = {
@@ -26,6 +26,19 @@ type InviteData = {
   revokedAt?: unknown;
   usedAt: unknown;
 };
+
+type HubStaffInviteData = InviteData & {
+  storeId?: unknown;
+  hubId?: unknown;
+};
+
+function normalizeHubIds(hubIds?: unknown, hubId?: unknown): string[] | undefined {
+  if (Array.isArray(hubIds)) {
+    const values = hubIds.filter((value): value is string => typeof value === 'string' && !!value);
+    return values.length ? Array.from(new Set(values)) : undefined;
+  }
+  return typeof hubId === 'string' && hubId ? [hubId] : undefined;
+}
 
 @Injectable()
 export class AuthService {
@@ -39,34 +52,13 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    // T2: seller는 inviteToken 필수 — 존재·만료·재사용 검증
-    if (dto.role === 'seller') {
+    // T2: seller와 hub_staff는 inviteToken 필수 — 존재·만료·재사용 검증
+    if (dto.role === 'seller' || dto.role === 'hub_staff') {
       if (!dto.inviteToken) {
-        throw new ForbiddenException('판매자 계정은 초대 토큰이 필요합니다.');
+        throw new ForbiddenException('초대 토큰이 필요합니다.');
       }
 
-      const inviteSnap = await this.firestore.doc(`invites/${dto.inviteToken}`).get();
-
-      if (!inviteSnap.exists) {
-        throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
-      }
-
-      const invite = inviteSnap.data() as InviteData | undefined;
-      if (!invite) {
-        throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
-      }
-
-      if (invite.expiresAt.toMillis() < Date.now()) {
-        throw new GoneException('만료된 초대 토큰입니다.');
-      }
-
-      if (invite.revokedAt !== null && invite.revokedAt !== undefined) {
-        throw new ConflictException('취소된 초대 토큰입니다.');
-      }
-
-      if (invite.usedAt !== null) {
-        throw new ConflictException('이미 사용된 초대 토큰입니다.');
-      }
+      await this.assertInviteUsable(this.getInvitePath(dto.role, dto.inviteToken));
     }
 
     const existing = await this.firestore
@@ -83,7 +75,7 @@ export class AuthService {
     const userId = uuidv4();
     const now = this.firestore.Timestamp.now();
 
-    const userDoc = {
+    const userDoc: Record<string, unknown> = {
       id: userId,
       email: dto.email,
       name: dto.name,
@@ -127,6 +119,8 @@ export class AuthService {
         tx.set(this.firestore.doc(`users/${userId}`), userDoc);
         tx.update(inviteRef, { usedAt: now, usedBy: userId });
       });
+    } else if (dto.role === 'hub_staff' && dto.inviteToken) {
+      await this.createHubStaffWithInvite(dto.inviteToken, userId, userDoc, now);
     } else {
       await this.firestore.doc(`users/${userId}`).set(userDoc);
     }
@@ -149,30 +143,32 @@ export class AuthService {
     }
 
     const userData = snap.docs[0].data();
-    const valid = await bcrypt.compare(dto.password, userData['passwordHash']);
+    const valid = await bcrypt.compare(dto.password, userData.passwordHash);
     if (!valid) {
       await this.audit.log('auth.login.failed', {
-        userId: userData['id'],
+        userId: userData.id,
         detail: { email: dto.email, reason: 'wrong_password' },
       });
       throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
     }
 
-    if (userData['suspended'] === true) {
+    if (userData.suspended === true) {
       await this.audit.log('auth.login.suspended', {
-        userId: userData['id'],
+        userId: userData.id,
         detail: { email: dto.email },
       });
       throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
     }
 
     const { accessToken, refreshToken } = await this.issueTokens({
-      sub: userData['id'],
-      role: userData['role'],
-      storeId: userData['storeId'] ?? undefined,
+      sub: userData.id,
+      role: userData.role,
+      storeId: userData.storeId ?? undefined,
+      hubId: userData.hubId ?? undefined,
+      hubIds: normalizeHubIds(userData.hubIds, userData.hubId),
     });
 
-    this.logger.log(`auth.login.success userId=${userData['id']} role=${userData['role']}`);
+    this.logger.log(`auth.login.success userId=${userData.id} role=${userData.role}`);
     const user = this.sanitizeUser(userData);
     return { accessToken, refreshToken, user };
   }
@@ -180,7 +176,7 @@ export class AuthService {
   async getMe(userId: string) {
     const snap = await this.firestore.doc(`users/${userId}`).get();
     if (!snap.exists) throw new NotFoundException('사용자를 찾을 수 없습니다.');
-    return this.sanitizeUser(snap.data()!);
+    return this.sanitizeUser(snap.data() ?? {});
   }
 
   private sanitizeUser(data: Record<string, unknown>) {
@@ -201,7 +197,7 @@ export class AuthService {
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException();
 
-    const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
+    const addresses: any[] = snap.data()?.savedAddresses ?? [];
     const newAddr = {
       id: uuidv4(),
       label: dto.label,
@@ -212,7 +208,9 @@ export class AuthService {
     };
 
     if (newAddr.isDefault) {
-      addresses.forEach((a) => (a.isDefault = false));
+      addresses.forEach((a) => {
+        a.isDefault = false;
+      });
     }
     addresses.push(newAddr);
 
@@ -228,12 +226,14 @@ export class AuthService {
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException();
 
-    const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
+    const addresses: any[] = snap.data()?.savedAddresses ?? [];
     const idx = addresses.findIndex((a) => a.id === addressId);
     if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
 
     if (dto.isDefault) {
-      addresses.forEach((a) => (a.isDefault = false));
+      addresses.forEach((a) => {
+        a.isDefault = false;
+      });
     }
     addresses[idx] = { ...addresses[idx], ...dto, id: addressId };
 
@@ -249,7 +249,7 @@ export class AuthService {
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException();
 
-    const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
+    const addresses: any[] = snap.data()?.savedAddresses ?? [];
     const filtered = addresses.filter((a) => a.id !== addressId);
 
     await ref.update({
@@ -263,11 +263,13 @@ export class AuthService {
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException();
 
-    const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
+    const addresses: any[] = snap.data()?.savedAddresses ?? [];
     const idx = addresses.findIndex((a) => a.id === addressId);
     if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
 
-    addresses.forEach((a) => (a.isDefault = false));
+    addresses.forEach((a) => {
+      a.isDefault = false;
+    });
     addresses[idx].isDefault = true;
 
     await ref.update({
@@ -301,6 +303,9 @@ export class AuthService {
       if (dto.targetRole === 'seller') {
         throw new ForbiddenException('판매자 계정은 관리자 초대로만 가입할 수 있습니다.');
       }
+      if (dto.targetRole === 'hub_staff' && !dto.inviteToken) {
+        throw new ForbiddenException('초대 토큰이 필요합니다.');
+      }
       const userId = uuidv4();
       const now = this.firestore.Timestamp.now();
       const newRole = dto.targetRole ?? 'driver';
@@ -319,7 +324,13 @@ export class AuthService {
         createdAt: now,
         updatedAt: now,
       };
-      await this.firestore.doc(`users/${userId}`).set(userData);
+      if (newRole === 'hub_staff' && dto.inviteToken) {
+        await this.createHubStaffWithInvite(dto.inviteToken, userId, userData, now);
+        const saved = await this.firestore.doc(`users/${userId}`).get();
+        userData = saved.data() as Record<string, unknown>;
+      } else {
+        await this.firestore.doc(`users/${userId}`).set(userData);
+      }
     }
 
     const role = userData['role'] as string;
@@ -328,7 +339,9 @@ export class AuthService {
         ? ['consumer', 'admin']
         : dto.targetRole === 'seller'
           ? ['seller', 'admin']
-          : ['driver', 'admin']; // driver 앱 또는 targetRole 미지정
+          : dto.targetRole === 'hub_staff'
+            ? ['hub_staff', 'admin']
+            : ['driver', 'admin']; // driver 앱 또는 targetRole 미지정
     if (userData['suspended'] === true) {
       await this.audit.log('auth.login.suspended', { userId: userData['id'] as string });
       throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
@@ -346,6 +359,8 @@ export class AuthService {
       sub: userData['id'] as string,
       role: role as JwtPayload['role'],
       storeId: (userData['storeId'] as string) ?? undefined,
+      hubId: (userData['hubId'] as string) ?? undefined,
+      hubIds: normalizeHubIds(userData['hubIds'], userData['hubId']),
     });
 
     this.logger.log(
@@ -366,7 +381,7 @@ export class AuthService {
 
     // Rotation: Firestore에 저장된 토큰과 일치하는지 검증
     const tokenSnap = await this.firestore.doc(`refreshTokens/${payload.sub}`).get();
-    if (tokenSnap.exists && tokenSnap.data()!['token'] !== refreshToken) {
+    if (tokenSnap.exists && tokenSnap.data()?.['token'] !== refreshToken) {
       // Firestore에 다른 토큰이 존재 = 탈취 후 재사용 시도 — 모든 세션 무효화
       await this.firestore.doc(`refreshTokens/${payload.sub}`).delete();
       await this.audit.log('auth.token.stolen', { userId: payload.sub });
@@ -383,8 +398,12 @@ export class AuthService {
 
     return this.issueTokens({
       sub: payload.sub,
-      role: payload.role,
-      storeId: payload.storeId,
+      role: (userData?.['role'] as JwtPayload['role'] | undefined) ?? payload.role,
+      storeId: userData ? (userData['storeId'] as string | null | undefined) : payload.storeId,
+      hubId: userData ? (userData['hubId'] as string | null | undefined) : payload.hubId,
+      hubIds: userData
+        ? normalizeHubIds(userData['hubIds'], userData['hubId'])
+        : normalizeHubIds(payload.hubIds, payload.hubId),
     });
   }
 
@@ -421,5 +440,63 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken };
+  }
+
+  private getInvitePath(role: string, inviteToken: string) {
+    return role === 'hub_staff' ? `hubStaffInvites/${inviteToken}` : `invites/${inviteToken}`;
+  }
+
+  private async assertInviteUsable(path: string) {
+    const inviteSnap = await this.firestore.doc(path).get();
+    if (!inviteSnap.exists) throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
+    this.assertInviteDataUsable(inviteSnap.data() as InviteData | undefined);
+  }
+
+  private assertInviteDataUsable(invite: InviteData | undefined): asserts invite is InviteData {
+    if (!invite) throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
+    if (invite.expiresAt.toMillis() < Date.now())
+      throw new GoneException('만료된 초대 토큰입니다.');
+    if (invite.revokedAt !== null && invite.revokedAt !== undefined) {
+      throw new ConflictException('취소된 초대 토큰입니다.');
+    }
+    if (invite.usedAt !== null) throw new ConflictException('이미 사용된 초대 토큰입니다.');
+  }
+
+  private async createHubStaffWithInvite(
+    inviteToken: string,
+    userId: string,
+    userDoc: Record<string, unknown>,
+    now: unknown,
+  ) {
+    await this.firestore.runTransaction(async (tx) => {
+      const inviteRef = this.firestore.doc(`hubStaffInvites/${inviteToken}`);
+      const inviteDoc = await tx.get(inviteRef);
+      if (!inviteDoc.exists) throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
+
+      const invite = inviteDoc.data() as HubStaffInviteData | undefined;
+      this.assertInviteDataUsable(invite);
+      if (typeof invite.storeId !== 'string' || typeof invite.hubId !== 'string') {
+        throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
+      }
+
+      const hubRef = this.firestore.doc(`hubs/${invite.hubId}`);
+      const hubDoc = await tx.get(hubRef);
+      const hub = hubDoc.data() as { storeId?: string } | undefined;
+      if (!hubDoc.exists || hub?.storeId !== invite.storeId) {
+        throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
+      }
+
+      tx.set(this.firestore.doc(`users/${userId}`), {
+        ...userDoc,
+        storeId: invite.storeId,
+        hubId: invite.hubId,
+        hubIds: [invite.hubId],
+      });
+      tx.update(inviteRef, { usedAt: now, usedBy: userId });
+      tx.update(hubRef, {
+        staffIds: this.firestore.FieldValue.arrayUnion(userId),
+        updatedAt: now,
+      });
+    });
   }
 }

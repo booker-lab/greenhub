@@ -18,6 +18,12 @@ describe('BannerQueryService', () => {
               endDate: '2026-05-30',
               createdAt: { toMillis: () => 2 },
             }),
+            doc('active-newer', {
+              kind: 'scheduled',
+              startDate: '2026-05-29',
+              endDate: '2026-05-31',
+              createdAt: { toMillis: () => 3 },
+            }),
             doc('main_hero', { headline: '기본 배너' }),
           ],
         }),
@@ -26,7 +32,10 @@ describe('BannerQueryService', () => {
     const service = new BannerQueryService(firestore as never);
 
     await expect(service.getActiveBanners()).resolves.toMatchObject({
-      scheduled: [{ id: 'active', kind: 'scheduled' }],
+      scheduled: [
+        { id: 'active-newer', kind: 'scheduled' },
+        { id: 'active', kind: 'scheduled' },
+      ],
       default: { id: 'main_hero', kind: 'default', headline: '기본 배너' },
     });
     jest.useRealTimers();
