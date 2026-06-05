@@ -6,6 +6,18 @@ import { useEffect, useState } from 'react';
 import { useFirebaseReady } from '@/app/providers';
 import { db } from '@/lib/firebase';
 
+const ORDER_DATE_KEYS = ['createdAt', 'updatedAt', 'requestedDeliveryDate', 'preparedAt'] as const;
+
+function normalizeOrder(id: string, data: Record<string, unknown>): Order {
+  for (const key of ORDER_DATE_KEYS) {
+    const value = data[key];
+    if (value && typeof value === 'object' && 'toDate' in value) {
+      data[key] = (value as { toDate(): Date }).toDate().toISOString();
+    }
+  }
+  return { id, ...data } as Order;
+}
+
 export interface UseOrderDetailResult {
   order: Order | null;
   productName: string | null;
@@ -24,7 +36,7 @@ export function useOrderDetail(orderId: string): UseOrderDetailResult {
     if (!orderId || !firebaseReady) return;
     const ref = doc(db, 'orders', orderId);
     const unsubscribe = onSnapshot(ref, (snap) => {
-      if (snap.exists()) setOrder({ id: snap.id, ...snap.data() } as Order);
+      if (snap.exists()) setOrder(normalizeOrder(snap.id, snap.data()));
       setLoading(false);
     });
     return unsubscribe;

@@ -1,13 +1,13 @@
 'use client';
 
-import { ActionIcon, Box, Group, TextInput, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Box, Button, Group, Select, TextInput, Title, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { RotateCw, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
-import { type DriverStatus, useAdminDrivers } from '@/hooks/useAdmin';
+import { type DriverSort, type DriverStatus, useAdminDrivers } from '@/hooks/useAdmin';
 import { DriverList } from './_components/DriverList';
 import {
   ACTION_META,
@@ -20,11 +20,13 @@ import {
 
 export default function DriversClient() {
   const [tab, setTab] = useState<DriverStatus>('pending');
+  const [sort, setSort] = useState<DriverSort>('createdAt_desc');
   const [keyword, setKeyword] = useState('');
   const [debouncedKeyword] = useDebouncedValue(keyword, 200);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
-  const { drivers, loading, reload, approve, toggleSuspend } = useAdminDrivers({ status: tab });
+  const { drivers, loading, loadingMore, hasMore, reload, loadMore, approve, toggleSuspend } =
+    useAdminDrivers({ status: tab, sort, limit: 100 });
 
   const filteredDrivers = useMemo(
     () => filterDrivers(drivers, debouncedKeyword),
@@ -92,6 +94,19 @@ export default function DriversClient() {
         value={keyword}
       />
 
+      <Select
+        aria-label="드라이버 정렬"
+        data={[
+          { value: 'createdAt_desc', label: '가입일 최신순' },
+          { value: 'createdAt_asc', label: '가입일 오래된순' },
+        ]}
+        mb="xs"
+        onChange={(value) => setSort((value as DriverSort | null) ?? 'createdAt_desc')}
+        radius="md"
+        size="sm"
+        value={sort}
+      />
+
       <Box mb="md">
         <SegmentedTabs tabs={STATUS_TABS} value={tab} onChange={setTab} layout="scroll" />
       </Box>
@@ -103,6 +118,19 @@ export default function DriversClient() {
         emptyMessage={emptyMessage}
         onAction={handleAction}
       />
+
+      {hasMore && (
+        <Button
+          fullWidth
+          loading={loadingMore}
+          mt="md"
+          onClick={loadMore}
+          radius="md"
+          variant="light"
+        >
+          더 보기
+        </Button>
+      )}
 
       <ConfirmModal
         opened={pending !== null}

@@ -1,4 +1,10 @@
-import type { GroupProductConfig, Order, OrderStatus } from '@greenhub/shared';
+import {
+  type GroupProductConfig,
+  ORDER_STATUS_COLOR,
+  ORDER_STATUS_LABEL,
+  type Order,
+  type OrderStatus,
+} from '@greenhub/shared';
 
 /** productId → groupProductConfig 스냅샷 (공동구매 주문 배송일 조인용) */
 export type GroupConfigMap = Record<string, Pick<GroupProductConfig, 'groupDeliveryDate'>>;
@@ -38,33 +44,9 @@ export const IN_DELIVERY_SUBFILTERS: {
   { key: 'HUB_ARRIVED', label: '거점 도착' },
 ];
 
-export const STATUS_LABEL: Record<OrderStatus, string> = {
-  PENDING: '대기',
-  RECRUITING: '모집 중',
-  CONFIRMED: '주문 확정',
-  ACCEPTED: '결제 완료',
-  PREPARING: '준비 중',
-  DELIVERING: '배송 중',
-  HUB_ARRIVED: '거점 도착',
-  PICKED_UP: '픽업 완료',
-  DELIVERED: '배송 완료',
-  CANCELLED: '취소',
-  REVIEWED: '구매 확정',
-};
+export const STATUS_LABEL = ORDER_STATUS_LABEL;
 
-export const STATUS_COLOR: Record<OrderStatus, string> = {
-  ACCEPTED: 'orange',
-  CONFIRMED: 'orange',
-  RECRUITING: 'orange',
-  PREPARING: 'blue',
-  DELIVERING: 'violet',
-  HUB_ARRIVED: 'violet',
-  CANCELLED: 'red',
-  PENDING: 'gray',
-  DELIVERED: 'green',
-  PICKED_UP: 'green',
-  REVIEWED: 'green',
-};
+export const STATUS_COLOR = ORDER_STATUS_COLOR;
 
 export const ACCENT_BORDER: Record<OrderStatus, string> = {
   ACCEPTED: 'var(--color-status-warning-text)',

@@ -45,6 +45,19 @@ function order(overrides: Partial<Order>): Order {
 }
 
 describe('seller order priority alert', () => {
+  it('처리 필요와 지연 주문이 없으면 빈 알림 메타를 반환한다', () => {
+    const orders = [
+      order({ id: 'waiting', status: 'PREPARING', requestedDeliveryDate: isoOffset(2) }),
+      order({ id: 'done', status: 'DELIVERED', requestedDeliveryDate: isoOffset(-2) }),
+    ];
+
+    expect(getOrderAlertMeta(orders, 'normal')).toEqual({
+      actionRequiredCount: 0,
+      overdueCount: 0,
+      overdueTab: null,
+    });
+  });
+
   it('처리 필요와 지연 주문 건수를 현재 판매 유형 기준으로 계산한다', () => {
     const orders = [
       order({ id: 'normal-action', status: 'ACCEPTED' }),

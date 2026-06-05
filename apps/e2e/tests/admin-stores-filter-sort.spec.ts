@@ -1,5 +1,10 @@
 import { expect, type Page, test } from '@playwright/test';
 import { ADMIN_STATE_PATH } from './_helpers/auth';
+import {
+  expectAdminTableSwitchAtSm,
+  expectNoHorizontalOverflow,
+  setMobileViewport,
+} from './_helpers/responsive';
 
 const BASE = process.env.SELLER_BASE ?? 'https://seller.greenlove.co.kr';
 
@@ -103,6 +108,35 @@ test.describe('Admin - 판매자 검색·필터·정렬·수수료 회귀', () =
     await expect(page.getByText('정리된 정원')).toHaveCount(0);
   });
 
+  test('모바일 카드는 수수료 액션과 편집 입력을 폭 안에 표시한다', async ({ page }) => {
+    await setMobileViewport(page);
+    await openStores(page);
+
+    await expect(page.locator('table')).not.toBeVisible();
+    await expect(mobileSortSelect(page)).toBeVisible();
+    await expect(page.getByText('디어 플라워').first()).toBeVisible();
+    await expect(page.getByText('e2e-stor…').first()).toBeVisible();
+    await expect(page.getByText('5.0%').first()).toBeVisible();
+    await expect(
+      page.locator('.mantine-Badge-root').filter({ hasText: '운영중' }).first(),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: '수수료 설정' })).toHaveCount(2);
+
+    await page.getByRole('button', { name: '수수료 설정' }).first().click();
+    const input = page.getByPlaceholder('0.05').first();
+    await expect(input).toBeVisible();
+    await expect(input).toHaveAttribute('inputmode', 'decimal');
+    await expect(page.locator('.mantine-NumberInput-control')).toHaveCount(4);
+    await expect(page.getByRole('button', { name: '저장' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: '취소' }).first()).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('sm 경계에서 카드와 테이블 표시를 전환한다', async ({ page }) => {
+    await openStores(page);
+    await expectAdminTableSwitchAtSm(page);
+  });
+
   test('검색어 입력은 일치 판매자만 남긴다', async ({ page }) => {
     await openStores(page);
 
@@ -188,5 +222,16 @@ test.describe('Admin - 판매자 검색·필터·정렬·수수료 회귀', () =
     await page.getByRole('button', { name: '저장' }).first().click({ force: true });
 
     await expect.poll(() => state.commissionRates.includes(1.5)).toBe(false);
+  });
+
+  test('정상 수수료 저장은 요청 본문과 표시값을 유지한다', async ({ page }) => {
+    const state = await openStores(page);
+
+    await page.getByRole('button', { name: '수수료 설정' }).first().click({ force: true });
+    await page.getByPlaceholder('0.05').first().fill('0.05', { force: true });
+    await page.getByRole('button', { name: '저장' }).first().click({ force: true });
+
+    await expect.poll(() => state.commissionRates).toContainEqual(0.05);
+    await expect(page.locator('p:visible', { hasText: '5.0%' }).first()).toBeVisible();
   });
 });

@@ -1,19 +1,37 @@
 'use client';
 
-import { Box, Group, Text, TextInput, Title } from '@mantine/core';
+import { Box, Button, Group, Text, TextInput, Title } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { type InviteRevokeReason, useAdminInvite } from '@/hooks/useAdmin';
+import {
+  type InviteRevokeReason,
+  type InviteRollbackReason,
+  useAdminInvite,
+} from '@/hooks/useAdmin';
 import { InviteGenerator } from './_components/InviteGenerator';
 import { InviteHistoryTable } from './_components/InviteHistoryTable';
 
 export default function AdminInviteClient() {
-  const { invites, loading, generating, query, setQuery, generate, revoke } = useAdminInvite();
+  const {
+    invites,
+    loading,
+    loadingMore,
+    generating,
+    query,
+    setQuery,
+    hasMore,
+    generate,
+    revoke,
+    rollbackSeller,
+    loadMore,
+  } = useAdminInvite();
   const [lastToken, setLastToken] = useState<{ token: string; expiresAt: string } | null>(null);
+  const [expiresInDays, setExpiresInDays] = useState('7');
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [revokingToken, setRevokingToken] = useState<string | null>(null);
+  const [rollingBackToken, setRollingBackToken] = useState<string | null>(null);
   const [searchValue, setSearchValue] = useState(query);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -29,7 +47,7 @@ export default function AdminInviteClient() {
   }, []);
 
   const handleGenerate = async () => {
-    const result = await generate();
+    const result = await generate(Number(expiresInDays));
     if (result) setLastToken(result);
   };
 
@@ -80,6 +98,17 @@ export default function AdminInviteClient() {
     return '토큰 취소에 실패했습니다. 잠시 후 다시 시도해 주세요.';
   };
 
+  const rollbackFailureMessage = (reason: InviteRollbackReason) => {
+    if (reason === 'not_used') return '아직 사용되지 않은 토큰입니다.';
+    if (reason === 'already_rolled_back') return '이미 되돌린 판매자입니다.';
+    if (reason === 'user_not_found') return '토큰과 연결된 판매자 계정을 찾을 수 없습니다.';
+    if (reason === 'not_seller') return '판매자 가입에 사용된 토큰이 아닙니다.';
+    if (reason === 'store_not_found') return '판매자와 연결된 스토어를 찾을 수 없습니다.';
+    if (reason === 'store_has_records')
+      return '주문·정산 기록이 있는 판매자는 초대 탭에서 되돌릴 수 없습니다.';
+    return '가입 판매자 되돌리기에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+  };
+
   const handleRevokeToken = (token: string) => {
     modals.openConfirmModal({
       title: '초대 토큰 취소',
@@ -105,6 +134,31 @@ export default function AdminInviteClient() {
     });
   };
 
+  const handleRollbackSeller = (token: string) => {
+    modals.openConfirmModal({
+      title: '가입 판매자 되돌리기',
+      children: (
+        <Text size="sm">
+          토큰 {token} 으로 가입한 판매자 계정을 정지하시겠습니까?
+          <br />
+          주문·정산 기록이 없는 판매자만 되돌릴 수 있습니다.
+        </Text>
+      ),
+      labels: { confirm: '되돌리기', cancel: '닫기' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        setRollingBackToken(token);
+        const result = await rollbackSeller(token);
+        setRollingBackToken(null);
+        if (result.ok) {
+          notifications.show({ color: 'green', message: '가입 판매자를 되돌렸습니다.' });
+          return;
+        }
+        notifications.show({ color: 'red', message: rollbackFailureMessage(result.reason) });
+      },
+    });
+  };
+
   return (
     <Box>
       <Group justify="space-between" mb="md">
@@ -114,7 +168,9 @@ export default function AdminInviteClient() {
       <InviteGenerator
         generating={generating}
         lastToken={lastToken}
+        expiresInDays={expiresInDays}
         copied={copiedToken === lastToken?.token}
+        onExpiresInDaysChange={setExpiresInDays}
         onGenerate={handleGenerate}
         onCopy={handleCopyLastToken}
       />
@@ -143,9 +199,18 @@ export default function AdminInviteClient() {
         searchActive={query.trim().length >= 4}
         copiedToken={copiedToken}
         revokingToken={revokingToken}
+        rollingBackToken={rollingBackToken}
         onCopyToken={handleCopyToken}
         onRevokeToken={handleRevokeToken}
+        onRollbackSeller={handleRollbackSeller}
       />
+      {hasMore ? (
+        <Group justify="center" mt="md">
+          <Button variant="light" loading={loadingMore} onClick={loadMore}>
+            더 보기
+          </Button>
+        </Group>
+      ) : null}
     </Box>
   );
 }

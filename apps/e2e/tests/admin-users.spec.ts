@@ -1,5 +1,10 @@
 import { expect, type Page, test } from '@playwright/test';
 import { ADMIN_STATE_PATH } from './_helpers/auth';
+import {
+  expectAdminTableSwitchAtSm,
+  expectNoHorizontalOverflow,
+  setMobileViewport,
+} from './_helpers/responsive';
 
 const BASE = process.env.SELLER_BASE ?? 'https://seller.greenlove.co.kr';
 
@@ -107,12 +112,37 @@ test.describe('Admin - 소비자 목록 S5 회귀', () => {
   });
 
   test('가입일과 전화가 모바일 카드에 표시된다', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 900 });
+    await setMobileViewport(page);
     await openUsers(page);
 
+    await expect(page.locator('table')).not.toBeVisible();
+    await expect(page.getByLabel('소비자 검색')).toBeVisible();
+    await expect(page.getByRole('button', { name: '전체', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '정상', exact: true }).first()).toBeVisible();
+    await expect(page.getByText('김민수').first()).toBeVisible();
+    await expect(page.getByText('minsu@example.com').first()).toBeVisible();
     await expect(page.getByText('가입일 2026-05-27')).toBeVisible();
     await expect(page.getByText('전화 010-1234-5678')).toBeVisible();
     await expect(page.getByText('전화 -')).toBeVisible();
+    await expect(
+      page.locator('.mantine-Badge-root').filter({ hasText: '정상' }).first(),
+    ).toBeVisible();
+    await expect(
+      page.locator('.mantine-Badge-root').filter({ hasText: '정지됨' }).first(),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: '정지', exact: true }).last()).toBeVisible();
+    await expect(page.getByRole('button', { name: '복구', exact: true })).toHaveCount(1);
+    await expectNoHorizontalOverflow(page);
+
+    await page.getByRole('button', { name: '복구', exact: true }).click();
+    await expect(page.getByText('계정 정지를 해제하시겠습니까?')).toBeVisible();
+    await page.getByRole('button', { name: '취소', exact: true }).last().click();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('sm 경계에서 카드와 테이블 표시를 전환한다', async ({ page }) => {
+    await openUsers(page);
+    await expectAdminTableSwitchAtSm(page);
   });
 
   test('새로고침 버튼은 소비자 목록을 재조회한다', async ({ page }) => {
@@ -159,6 +189,10 @@ test.describe('Admin - 소비자 목록 S5 회귀', () => {
     await search.fill('010-1234-5678');
     await expect(desktopRows(page)).toHaveCount(1);
     await expect(page.locator('table')).toContainText('김민수');
+
+    await search.fill('010-9999-8888');
+    await expect(desktopRows(page)).toHaveCount(1);
+    await expect(page.locator('table')).toContainText('이소라');
   });
 
   test('검색 결과가 없으면 전용 빈결과 문구를 표시하고 필터는 유지된다', async ({ page }) => {
@@ -180,12 +214,34 @@ test.describe('Admin - 소비자 목록 S5 회귀', () => {
     await page.getByRole('button', { name: '정상', exact: true }).click();
     await desktopRows(page).first().getByRole('button', { name: '정지', exact: true }).click();
 
-    await expect(page.getByText('소비자 계정을 정지할까요?')).toBeVisible();
-    await page.getByRole('button', { name: '정지하기' }).click();
+    await expect(page.getByText('이 계정을 정지하시겠습니까?')).toBeVisible();
+    await page.getByRole('button', { name: '정지', exact: true }).last().click();
 
-    await expect.poll(() => state.statusUpdates).toContainEqual({
-      userId: 'e2e-user-minsu',
-      suspended: true,
-    });
+    await expect
+      .poll(() => state.statusUpdates)
+      .toContainEqual({
+        userId: 'e2e-user-minsu',
+        suspended: true,
+      });
+  });
+
+  test('검색·필터 적용 상태에서도 복구 확인창과 요청 본문이 유지된다', async ({ page }) => {
+    await setMobileViewport(page);
+    const state = await openUsers(page);
+
+    await page.getByLabel('소비자 검색').fill('010-9999-8888');
+    await page.getByRole('button', { name: '정지', exact: true }).first().click();
+    await page.getByRole('button', { name: '복구', exact: true }).click();
+
+    await expect(page.getByText('계정 정지를 해제하시겠습니까?')).toBeVisible();
+    await page.getByRole('button', { name: '해제', exact: true }).click();
+
+    await expect
+      .poll(() => state.statusUpdates)
+      .toContainEqual({
+        userId: 'e2e-user-sora',
+        suspended: false,
+      });
+    await expectNoHorizontalOverflow(page);
   });
 });

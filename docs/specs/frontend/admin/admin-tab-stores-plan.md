@@ -398,7 +398,7 @@ test(e2e): #CL-55 어드민 stores 검색·필터·정렬·수수료 e2e 8 케�
 
 ### 후속 구현 백로그 (PR-A~E 범위 외, 별도 SDD 선행)
 - **T7 (B3). 판매자 상세 드릴다운** — store별 주문·정산 집계 API와 상세 라우트를 신설한다. 착수 전 집계 범위, 권한 경계, URL 복원 및 조회 성능을 별도 SDD로 확정한다.
-- **T8 (B4). 플랫폼 기본 수수료율 설정** — 전역 config 데이터모델과 적용 정책을 신설한다. 착수 전 기존 store별 수수료와의 우선순위·소급 여부를 별도 SDD로 확정하고, 도입 시 `parseRate(input, { min, max })`로 시그니처를 확장한다.
+- [x] **T8 (B4). 플랫폼 기본 수수료율 설정** — 전역 config 데이터모델과 적용 정책을 신설했다. 별도 SDD `admin-stores-default-commission-plan.md`와 `#CL-85`에서 store별 override 우선·기존 스토어 소급 없음·신규 스토어 기본값 복사 정책을 확정하고, `parseRate(input, { min, max })`로 시그니처를 확장했다.
 
 ## A-3. 작업 순서 요약 (한눈에)
 
@@ -433,7 +433,7 @@ test(e2e): #CL-55 어드민 stores 검색·필터·정렬·수수료 e2e 8 케�
 - **vitest 인프라** — 세션85 `packages/shared/src/__tests__/date.test.ts` 패턴 재사용.
 - **선설계가 필요한 확정 후속 구현 (이번 범위 제외)**
   - **T7 판매자 상세 드릴다운** — store별 주문·정산 집계 API+라우트 신설. `docs/BACKLOG.md` 등록 완료, SDD 미작성.
-  - **T8 플랫폼 기본 수수료율 설정** — 전역 config 데이터모델 신설. `docs/BACKLOG.md` 등록 완료, SDD 미작성.
+  - **T8 플랫폼 기본 수수료율 설정** — 전역 config 데이터모델 신설 완료. `docs/BACKLOG.md`와 별도 SDD `admin-stores-default-commission-plan.md`에 종결 기록.
 
 ### 상위 인덱스 · 로드맵
 - 통합 인덱스: [`../admin-tabs-improve-plan.md`](../admin-tabs-improve-plan.md)

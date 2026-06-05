@@ -222,13 +222,13 @@ S4 (T4 limit)            ─┘
 
 ### S5 (e2e) 체크리스트 — §E-9에서 상세
 
-- [x] **e2e 파일 신설** — `apps/e2e/tests/admin-users.spec.ts` 7시나리오 × 2프로젝트 = 14건 수집 대상
+- [x] **e2e 파일 신설** — `apps/e2e/tests/admin-users.spec.ts` 9시나리오 × 2프로젝트 = 18건
 - [x] **데이터 격리** — `GET /admin/users`, `PATCH /admin/users/:id/status`를 Playwright route fixture로 가로채 운영 DB 쓰기 0
 - [x] **표시 필드 커버** — 데스크톱 테이블과 모바일 카드의 가입일·전화 표시 검증 포함
 - [x] **새로고침 커버** — `reload` 클릭 시 목록 재조회 count 증가 검증 포함
 - [x] **검색·상태 필터 커버** — 이름·이메일·전화 검색, 전체·정상·정지 탭, 검색 결과 없음 문구 검증 포함
 - [x] **정지 모달 회귀 커버** — 검색·필터 적용 상태에서 ConfirmModal과 `suspended: true` 요청 본문 검증 포함
-- [ ] **playwright 0 fail** — 현재 `SELLER_BASE`가 운영 기존 화면을 가리켜 `소비자 검색` 미노출로 14/14 실패. 새 코드 반영 프리뷰 또는 운영 배포 후 재실행 필요.
+- [x] **playwright 0 fail** — 2026-06-02 최신 seller 고정 프리뷰 `greenhub-seller-2omkcjr8s-jos-projects-d1cecc0c.vercel.app`에서 chromium·mobile 18/18 통과. 전화 하이픈 정규화와 복구 `suspended:false` 요청 본문 포함.
 
 ---
 
@@ -293,7 +293,7 @@ apps/api/src/auth/
 - [x] **networkidle 회피** — `domcontentloaded` + 명시적 셀렉터 대기
 - [x] **dotenv #** — 세션90의 admin 인증 규칙 재사용
 - [x] **시드 idempotent** — 실제 시드 대신 route fixture 사용, 이전 테스트 잔재 없음
-- [ ] **playwright 0 fail** — 현재 운영 기존 화면 대상 실행은 14/14 실패. 새 코드 반영 대상에서 재실행 필요
+- [x] **playwright 0 fail** — 2026-06-02 최신 seller 고정 프리뷰에서 chromium·mobile 18/18 통과
 
 ---
 

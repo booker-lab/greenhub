@@ -9,11 +9,13 @@ export interface InviteStatus {
 }
 
 export function inviteStatus(inv: InviteToken): InviteStatus {
+  const isRolledBack = !!inv.sellerRollbackAt;
   const isUsed = !!inv.usedAt;
   const isRevoked = !!inv.revokedAt;
   const expDate = inv.expiresAt ? new Date(inv.expiresAt) : null;
   const isExpired = expDate ? expDate < new Date() : false;
   // 부채: 초대 상태 색상은 디자인 토큰 SSOT 도입 전까지 Mantine 색상명으로 유지한다.
+  if (isRolledBack) return { label: '되돌림', color: 'orange', expDate };
   if (isRevoked) return { label: '취소됨', color: 'orange', expDate };
   return {
     label: isUsed ? '사용됨' : isExpired ? '만료' : '유효',

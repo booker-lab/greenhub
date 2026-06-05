@@ -3,14 +3,13 @@
 import { ActionIcon, Box, Group, Text, Title, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { RotateCw } from 'lucide-react';
-import { useMemo } from 'react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import type { AdminUser } from '@/hooks/useAdmin';
 import { useAdminUsers } from '@/hooks/useAdmin';
-import { filterUsers, getUserEmptyKind, type UserStatusFilter } from './_lib';
 import { UsersFilters } from './_components/UsersFilters';
 import { UsersTable } from './_components/UsersTable';
+import { filterUsers, getUserEmptyKind, type UserStatusFilter } from './_lib';
 
 interface PendingUserAction {
   userId: string;

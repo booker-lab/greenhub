@@ -1,6 +1,7 @@
 'use client';
 
-import { Badge, Box, Divider, Modal, Stack, Text } from '@mantine/core';
+import { Badge, Box, Button, Divider, Modal, Stack, Text } from '@mantine/core';
+import Link from 'next/link';
 import type { AdminOrder } from '@/hooks/useAdmin';
 import { getStatusColor, STATUS_LABEL } from '../_lib';
 
@@ -66,7 +67,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
         </Text>
       </Box>
       <Box>
-        <Text size="sm" style={{ wordBreak: 'break-word' }}>
+        <Text component="div" size="sm" style={{ wordBreak: 'break-word' }}>
           {value || '-'}
         </Text>
       </Box>
@@ -114,6 +115,15 @@ export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
           <DetailRow label="사용자 ID" value={order.userId} />
           <DetailRow label="생성일" value={formatDate(order.createdAt)} />
           <DetailRow label="수정일" value={formatDate(order.updatedAt)} />
+          <Button
+            component={Link}
+            href={`/admin/orders/${encodeURIComponent(order.id)}?back=${encodeURIComponent('/admin/orders')}`}
+            radius="md"
+            variant="light"
+            color="gray"
+          >
+            정식 상세 열기
+          </Button>
         </Stack>
       )}
     </Modal>

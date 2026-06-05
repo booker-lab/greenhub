@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
@@ -59,13 +60,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
         if (!res.ok) return null;
         const data = await res.json();
-        if (!['seller', 'admin'].includes(data.user.role)) return null;
+        if (!['seller', 'hub_staff', 'admin'].includes(data.user.role)) return null;
         return {
           id: data.user.id,
           email: data.user.email,
           name: data.user.name,
           role: data.user.role,
           storeId: data.user.storeId ?? null,
+          hubId: data.user.hubId ?? null,
+          hubIds: data.user.hubIds ?? (data.user.hubId ? [data.user.hubId] : []),
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
         };
@@ -75,6 +78,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async signIn({ user, account, profile }) {
       if (account?.provider !== 'kakao') return true;
+      const inviteToken = (await cookies()).get('hub_staff_invite_token')?.value;
+      const targetRole = inviteToken ? 'hub_staff' : 'seller';
 
       const res = await fetch(`${API}/auth/kakao-login`, {
         method: 'POST',
@@ -83,19 +88,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           kakaoId: profile?.sub ?? account.providerAccountId,
           name: profile?.name ?? user.name ?? '카카오사용자',
           email: profile?.email ?? user.email,
-          targetRole: 'seller',
+          targetRole,
+          inviteToken,
         }),
       });
       if (!res.ok) return false;
 
       const data = await res.json();
-      if (!['seller', 'admin'].includes(data.user.role)) return false;
+      if (!['seller', 'hub_staff', 'admin'].includes(data.user.role)) return false;
 
       user.id = data.user.id;
       user.accessToken = data.accessToken;
       user.refreshToken = data.refreshToken;
       user.role = data.user.role;
       user.storeId = data.user.storeId ?? null;
+      user.hubId = data.user.hubId ?? null;
+      user.hubIds = data.user.hubIds ?? (data.user.hubId ? [data.user.hubId] : []);
       return true;
     },
     jwt({ token, user, trigger, session }) {
@@ -107,6 +115,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           accessTokenExpires: Date.now() + ACCESS_TOKEN_TTL,
           role: user.role,
           storeId: user.storeId,
+          hubId: user.hubId,
+          hubIds: user.hubIds,
         };
       }
       if (trigger === 'update' && session?.storeId) {
@@ -121,6 +131,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.accessToken = token.accessToken as string;
       session.user.role = token.role as string;
       session.user.storeId = token.storeId as string | null;
+      session.user.hubId = token.hubId as string | null;
+      session.user.hubIds = Array.isArray(token.hubIds) ? (token.hubIds as string[]) : [];
       // name이 없거나 placeholder인 경우 email 앞부분 사용
       const rawName = token.name as string | undefined;
       session.user.name =

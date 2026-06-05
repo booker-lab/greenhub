@@ -45,9 +45,9 @@
 - **안전장치 — 취소 확인창** — `Mantine modals.openConfirmModal`로 **토큰 전체 16자** + "취소 후엔 이 토큰으로 가입할 수 없습니다" 명시.
 
 ### 이번에 안 하는 것 (별도 SDD 또는 추후)
-- **이미 가입한 판매자 되돌리기** — 판매자 정지/삭제 정책 선결 필요(§E-6 D1과 동일 계열). 초대 탭 단독 범위 밖.
+- **이미 가입한 판매자 되돌리기** — 2026-06-04 `ADMIN-INVITE-SELLER-ROLLBACK` 1차 완료 후 `ADMIN-SELLER-LIFECYCLE`로 스토어 연결 판매자 최소 정책까지 완료. 주문·정산 기록이 없는 스토어는 보존 아카이브하고, 기록이 있으면 차단한다.
 - **F6. "더 보기" 페이지네이션** — grill-me Q3 결과 보류. CS 동선이 아니라 전수 열람용. 발급량 100건 도달 시 검색과 함께 묶어 별도 SDD.
-- **F7. 만료기간 7일 외 다른 값** — `generateInvite` 파라미터화. 저우선.
+- **F7. 만료기간 7일 외 다른 값** — `ADMIN-INVITE-F7-EXPIRY`로 별도 SDD 후 완료. `expiresInDays` 기본 7일, 허용 1~30일, UI Select `3/7/14/30일`.
 - **F8. clipboard 폴백** — T3로 별도 커밋 유지(한 태스크·한 커밋 원칙).
 - **사용된·만료 토큰 취소** — F-0 결정상 명시 제외.
 
@@ -81,7 +81,7 @@
 | **F2** | **토큰 취소(revoke) 불가** — generate/get만 존재 | `admin.service.ts:271-302`(DELETE 없음) | **중→상**(세션98 격상) | **신설**(POST `/admin/invite/:token/revoke`) | ✅ 포함 (T4~T7) |
 | **F5** | **토큰 검색 없음 — CS 응대 시 토큰을 직접 못 찾음** | `getInvites`에 쿼리 파라미터 없음 | **중→상**(세션98 grill-me 격상) | **변경**(`q?: string` prefix where 추가) | ✅ 포함 (T8'·T9') |
 | F6 | **페이지네이션 없음 — 51건째부터 영영 안 보임** | `admin.service.ts:298` limit(50) 하드코딩 | 알려진 한계 | 변경 | ❌ 별도 SDD (전수 열람용, CS 동선 아님) |
-| F7 | **만료기간 7일 고정** — 어드민 조절 불가 | `admin.service.ts:278-279` 하드코딩 | 낮음 | 변경 | ❌ 별도 SDD |
+| F7 | **만료기간 7일 고정** — 어드민 조절 불가 | `admin.service.ts` 초대 발급 | 낮음 | 변경 | ✅ 별도 SDD 완료 (`admin-invite-expiry-plan.md`, #CL-99) |
 | F8 | **clipboard 실패 무처리** — try/catch·폴백 없음(HTTPS 아님/권한거부 시 조용히 실패) | `_client.tsx:27` | 낮음 | 무변경 | ✅ 포함 (T3, 별도 커밋) |
 
 > **`InviteStatus` 라벨 확장** — 세션98 F2 도입으로 현 `_lib.ts:6` 유니언
@@ -198,8 +198,8 @@
 
 ### 제외 (별도 SDD — 본 확정에서 명시 제외)
 - **F6(페이지네이션 "더 보기")** — CS 동선이 아닌 전수 열람용. **운영 발급량 100건 도달 시 F5(검색)와 묶어 SDD.**
-- **F7(만료기간 지정)** — `generateInvite(days?: number)` 파라미터화 + UI Select.
-- **이미 가입한 판매자 되돌리기** — 판매자 정지/삭제 정책 선결(§E-6 D1과 동일 계열). 어드민 전역 정책.
+- **F7(만료기간 지정)** — 2026-06-04 `ADMIN-INVITE-F7-EXPIRY`로 완료. 기본 7일 호환, 1~30일 DTO 검증, UI Select `3/7/14/30일`.
+- **이미 가입한 판매자 되돌리기** — `admin-invite-seller-rollback-plan.md` 1차 완료. 스토어 미연결 판매자만 되돌리고, 스토어 연결 판매자는 어드민 전역 lifecycle 정책으로 남긴다.
 - **사용된·만료 토큰 취소** — F-0 결정상 명시 제외(가입한 판매자 영향 차단).
 - **F5 1000건 이상 발급량 대응** — prefix 검색은 createdAt desc 정렬과 별개라 결과 누락 가능. 운영 1000건 도달 시 재검토 항목.
 
@@ -376,7 +376,7 @@
 - **세션 S-B 진입 전 T0 산출 재확인** — 거부 가드 위치 미확정 상태로 T4 들어가면 안 됨.
 - **세션 S-D는 단독 세션 권장** — e2e 작성은 세션90 함정(세션격리·networkidle·dotenv#)으로 시간 소모 큼. T10·T11을 한 세션 내 끝내 C8 완성.
 - **육안 검증** — 코드 완료 후 `pending-visual-verify.md` §추가 7개 항목 사용자 위임.
-- **별도 SDD 후보** — F6(페이지네이션, 발급량 100건 시), F7(만료기간), 가입한 판매자 되돌리기.
+- **별도 SDD 후보** — 가입한 판매자 되돌리기 1차와 스토어 연결 판매자 최소 lifecycle은 완료됨. 주문·정산 기록이 있는 판매자의 정리 정책은 별도 운영 정책 후보로 유지. F6/F5 고도화와 F7 만료기간은 별도 SDD로 완료됨.
 
 ---
 
@@ -387,7 +387,7 @@
 | D1 | `_lib.ts` color 유니언에 `'orange'` 하드코딩 (C5 위반) | 세션98 grill-me Q8 | 디자인 시스템 SSOT 토큰 도입 시 일괄 교체 |
 | D2 | invite 라벨이 `@greenhub/shared`에 없음 | 세션91 F-1 진단 | invite 도메인이 store/order와 다른 라이프사이클 가지면 재검토 |
 | D3 | F5 prefix 검색은 createdAt desc 정렬과 별개 | 세션98 grill-me Q4 | 발급량 1000건 도달 시 정렬/필터 정합 재설계 |
-| D4 | F6 페이지네이션 부재 — 51건째 발견 불가 | 세션98 grill-me Q3 | 발급량 100건 도달 시 F6+F5 묶어 별도 SDD |
+| D4 | F6 페이지네이션 부재 — 51건째 발견 불가 | 세션98 grill-me Q3 | 2026-06-04 `ADMIN-INVITE-F6-F5-ADV`에서 검색·페이지네이션 커서 계약으로 해소 |
 
 ---
 
@@ -422,8 +422,8 @@
 - **선결 결정·별도 SDD 후보 (이번 범위 제외)**
   - **F6 페이지네이션 + F5 고도화** — `BACKLOG.md` **ADMIN-INVITE-F6-F5-ADV**로 승격. 발급량 100건 도달 시 묶어 별도 SDD.
   - **발급량 1000건 이상 대응** — `BACKLOG.md` **ADMIN-INVITE-SCALE-1000**으로 승격. prefix 검색과 정렬·필터 정합 재설계.
-  - **F7 만료기간 지정** — `BACKLOG.md` **ADMIN-INVITE-F7-EXPIRY**로 승격. `generateInvite(days?: number)` 파라미터화 + UI Select.
-  - **이미 가입한 판매자 되돌리기** — `BACKLOG.md` **ADMIN-INVITE-SELLER-ROLLBACK**으로 승격. [`./admin-tab-users-plan.md`](./admin-tab-users-plan.md) E-6 D1(어드민 전역 정지/삭제 정책)과 동일 계열. 선결 결정 필요.
+  - **F7 만료기간 지정** — `BACKLOG.md` **ADMIN-INVITE-F7-EXPIRY**로 승격 후 완료. `expiresInDays` 선택 필드 + UI Select.
+  - **이미 가입한 판매자 되돌리기** — `BACKLOG.md` **ADMIN-INVITE-SELLER-ROLLBACK** 1차 완료 후 **ADMIN-SELLER-LIFECYCLE**로 기록 없는 스토어 보존 아카이브 정책까지 완료. 기록 있는 판매자 처리는 별도 운영 정책으로 유지.
   - **사용됨·만료 토큰 취소** — `BACKLOG.md` **ADMIN-INVITE-REVOKE-NONVALID**로 승격. 판매자 상태·감사 로그 정책 선결 필요.
 
 ### 상위 인덱스 · 로드맵

@@ -10,9 +10,10 @@ import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
+import { useGroupConfigs } from '@/hooks/useGroupConfigs';
 import { useOrders } from '@/hooks/useOrders';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
-import { aggregatePrep, type PrepLine } from '@/lib/prep';
+import { aggregatePrep, isUnshipped, type PrepLine } from '@/lib/prep';
 
 function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accent?: boolean }) {
   return (
@@ -59,7 +60,22 @@ export default function PrepPage() {
   const { orders, loading, error } = useOrders(storeId);
   const { products } = useStoreProducts(storeId);
 
-  const { today, delayed } = useMemo(() => aggregatePrep(orders, products), [orders, products]);
+  const groupProductIds = useMemo(
+    () => [
+      ...new Set(
+        orders
+          .filter((order) => order.saleType === 'group' && isUnshipped(order))
+          .map((order) => order.productId),
+      ),
+    ],
+    [orders],
+  );
+  const groupConfigMap = useGroupConfigs(groupProductIds, groupProductIds.length > 0);
+
+  const { today, delayed } = useMemo(
+    () => aggregatePrep(orders, products, { groupConfigMap }),
+    [orders, products, groupConfigMap],
+  );
 
   const isConnecting = loading || !firebaseReady;
 

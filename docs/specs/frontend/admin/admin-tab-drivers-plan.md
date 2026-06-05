@@ -227,8 +227,11 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - [x] **S6-6.** **커밋** — `refactor(admin): #CL-55 drivers 탭 액션 버튼 메타화 (R1)`.
 - [x] **S6-7.** **배포 확인** — seller 프리뷰 `https://greenhub-seller-g123e4tg0-jos-projects-d1cecc0c.vercel.app`가 READY. branch alias `https://greenhub-seller-git-codex-admin-st-4007d3-jos-projects-d1cecc0c.vercel.app`도 연결됐다. 인증 환경에서 실제 육안검증은 §14 #227~#230으로 추적한다.
 
-### 제외(별도 세션 — §C-4·§C-5 보존)
-- **F4** 드라이버 상세(전화·차량, 데이터모델 선확인 필요) / **F5** 정렬·페이지네이션·`limit(100)` 한도 / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R2** 공통 `SegmentedTabs` 통일.
+### 향후 작업(별도 SDD — §C-4·§C-5 보존)
+- 완료됨: **F4**는 `ADMIN-DRIVERS-F4`로 처리했다. 현재 저장 경로가 있는 `users.phone`을 목록 응답·카드·검색에 추가하고, 차량 정보는 선택 필드가 있을 때만 표시하며 없으면 `차량 정보 미등록`으로 명시한다. 차량 정보 입력·보험 증명서는 별도 SDD로 분리한다.
+- **F5 정렬·페이지네이션** — 2026-06-03 `ADMIN-DRIVERS-F5`로 완료. 별도 SDD `admin-drivers-pagination-plan.md`와 `#CL-87`에서 `status/sort/limit/cursor`, `nextCursor`, `더 보기`, Firestore `users` 복합 인덱스 계약을 확정했다.
+- **드라이버 앱 리팩토링** — `../app-refactor-roadmap.md` §4를 차기 진입점으로 둔다.
+- 완료됨: **F6**은 S8 액션 결과 알림으로 처리했고, **R2**는 S7 `SegmentedTabs` 통일로 처리했다.
 
 ### 차기 진입점(C-8 보강)
 - **S1(T1) → 운영 배포·육안 → S2(T2) → 운영 배포·육안 → S3(e2e) → CI 통과 → 종결**.
@@ -275,6 +278,7 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - **선결 결정·별도 SDD 후보 (이번 범위 제외)**
   - **F4 드라이버 상세 정보** — 데이터모델(전화·차량 등) 필드 선확인 → 없으면 백엔드 신설.
   - **F5 정렬·페이지네이션** — 백엔드 쿼리·커서 변경. 현 규모 미달 부채.
+  - **드라이버 앱 리팩토링** — [`../app-refactor-roadmap.md`](../app-refactor-roadmap.md) §4에서 별도 진입.
 
 ### 상위 인덱스 · 로드맵
 - 통합 인덱스: [`../admin-tabs-improve-plan.md`](../admin-tabs-improve-plan.md)

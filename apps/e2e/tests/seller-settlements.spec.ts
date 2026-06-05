@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { AUTH_STATE_PATH } from './_helpers/auth';
+import { expectNoHorizontalOverflow, setMobileViewport } from './_helpers/responsive';
 
 const BASE = process.env.SELLER_BASE ?? 'https://seller.greenlove.co.kr';
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
@@ -112,5 +113,35 @@ test.describe('셀러 정산 관리 — 인증', () => {
     }
 
     expect(errors).toHaveLength(0);
+  });
+
+  test('주문별 상세 모바일 상태 탭은 가로 스크롤로 마지막 취소까지 접근 가능하다', async ({
+    page,
+  }) => {
+    await setMobileViewport(page);
+    await page.goto(`${BASE}/settlements`);
+    await expect(page.locator('text=정산 관리')).toBeVisible({ timeout: 10_000 });
+    await page.locator('text=주문별 상세').click();
+
+    for (const label of ['전체', '정산 대기', '확정', '지급 완료', '취소']) {
+      await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
+    }
+
+    const tabs = page.getByRole('button', { name: '전체', exact: true }).locator('..');
+    await expect
+      .poll(() =>
+        tabs.evaluate(
+          (element) =>
+            element.scrollWidth > element.clientWidth &&
+            getComputedStyle(element).scrollbarWidth === 'none',
+        ),
+      )
+      .toBe(true);
+
+    await page.getByRole('button', { name: '취소', exact: true }).evaluate((button) => {
+      button.scrollIntoView({ inline: 'end', block: 'nearest' });
+    });
+    await expect(page.getByRole('button', { name: '취소', exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
   });
 });

@@ -11,6 +11,7 @@ import {
   Text,
   UnstyledButton,
 } from '@mantine/core';
+import Link from 'next/link';
 import type { AdminStore } from '@/hooks/useAdmin';
 import {
   formatRate,
@@ -29,6 +30,7 @@ interface StoresTableProps {
   editId: string | null;
   rateInput: string;
   saving: boolean;
+  defaultCommissionRate: number;
   onRateInput: (v: string) => void;
   onStartEdit: (store: AdminStore) => void;
   onCancelEdit: () => void;
@@ -37,6 +39,7 @@ interface StoresTableProps {
   onRestore: (store: AdminStore) => void;
   onResetFilters: () => void;
   onSortChange: (sort: StoreSort) => void;
+  getDetailHref: (store: AdminStore) => string;
 }
 
 const thBase = {
@@ -82,6 +85,7 @@ export function StoresTable({
   editId,
   rateInput,
   saving,
+  defaultCommissionRate,
   onRateInput,
   onStartEdit,
   onCancelEdit,
@@ -90,6 +94,7 @@ export function StoresTable({
   onRestore,
   onResetFilters,
   onSortChange,
+  getDetailHref,
 }: StoresTableProps) {
   if (loading || emptyKind !== 'has-data') {
     return (
@@ -149,7 +154,7 @@ export function StoresTable({
       </Group>
     ) : (
       <Text style={{ color: 'var(--color-text-secondary)' }}>
-        {formatRate(store.commissionRate)}
+        {formatRate(store.commissionRate, defaultCommissionRate)}
       </Text>
     );
 
@@ -207,6 +212,15 @@ export function StoresTable({
             <Group justify="space-between" align="center" mt="xs">
               {renderRate(store)}
               <Group gap="xs">
+                <Button
+                  component={Link}
+                  href={getDetailHref(store)}
+                  size="xs"
+                  variant="subtle"
+                  color="gray"
+                >
+                  상세
+                </Button>
                 {renderSetButton(store)}
                 {renderArchiveButton(store)}
               </Group>
@@ -280,6 +294,15 @@ export function StoresTable({
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
                   <Group gap="xs" justify="flex-end">
+                    <Button
+                      component={Link}
+                      href={getDetailHref(store)}
+                      size="xs"
+                      variant="subtle"
+                      color="gray"
+                    >
+                      상세
+                    </Button>
                     {renderSetButton(store)}
                     {renderArchiveButton(store)}
                   </Group>

@@ -330,3 +330,26 @@
 
 - [x] **최신 커밋 배포 확인** — Vercel에서 consumer `greenhubconsumer-5dv3695i6...`, seller `greenhub-seller-kwe5uc92c...`, driver `greenhub-driver-6ehgggbr7...`가 커밋 `0f5146a` 기준 READY임을 확인했다. 연결된 Vercel 프로젝트 목록에는 별도 api 프로젝트가 없어 API는 기존 로컬 빌드·테스트 결과로 유지 검증한다.
 - [x] **육안검증 추가 등록** — `pending-visual-verify-20260529.md` §32 #268에 커밋 `0f5146a` 배포 상태에서 `/banners/active` 전환과 구 `/banner` 제거 후속 확인 항목을 추가했다.
+
+## 13. 2026-06-02 관리자 배너 fixture 회귀 보강
+
+- [x] **저장 실패 복구** — `/admin/banners` 저장 요청을 fixture `500`으로 실패시키고 저장 버튼 로딩이 해제되며 서버 실패 사유 알림이 표시되는지 검증한다.
+- [x] **Storage 업로드 실패 복구** — Firebase Storage 업로드 요청을 fixture `403`으로 실패시키고 업로드 로딩 해제, 빨간 알림·인라인 오류, 파일 입력 초기화를 검증한다.
+- [x] **375px 입력 배치** — CTA 문구·링크 입력이 모바일에서 1열로 쌓이고 Drawer 전체가 가로 넘침을 만들지 않는지 검증한다.
+- [x] **Drawer 폭·선택 CSS 보완** — fixture 모바일 검증에서 `Drawer.css` 누락과 `size="xl"` 고정 폭을 발견했다. seller `globals.css`에 Mantine `Drawer.css`를 추가하고 배너 Drawer 폭을 `min(780px, 100vw)`로 제한한다.
+- [x] **프리뷰 검증** — seller 프리뷰 `greenhub-seller-2omkcjr8s-jos-projects-d1cecc0c.vercel.app` `READY`, `seller-banner.spec.ts` chromium·mobile `10/10` 통과.
+
+## 14. 2026-06-02 관리자 기간 배너 수정·삭제 fixture 회귀 보강
+
+- [x] **성공형 가변 fixture** — 기간 배너가 포함된 목록 fixture에서 `PUT`·`DELETE` 요청을 반영하고 후속 `GET` 재조회가 변경된 목록을 반환하게 한다.
+- [x] **수정 저장 회귀** — 기간 배너 헤드라인 수정 저장 후 Drawer 닫힘, 성공 알림, 목록 헤드라인 갱신을 검증한다.
+- [x] **삭제 흐름 회귀** — 기간 배너 삭제 확인 후 성공 알림, 목록 제거, 기본 배너 유지와 기본 배너 삭제 버튼 미노출을 검증한다.
+- [x] **프리뷰 검증** — seller 프리뷰 `greenhub-seller-2omkcjr8s-jos-projects-d1cecc0c.vercel.app`에서 `seller-banner.spec.ts` chromium·mobile `12/12` 통과.
+
+## 15. 2026-06-02 소비자 다중 배너 캐러셀 fixture 회귀 보강
+
+- [x] **환경 변수 게이트 하네스** — `ENABLE_E2E_FIXTURES=true`일 때만 소비자 `e2e/hero-banner` 경로에서 실제 `HeroBannerCarousel`을 fixture 슬라이드로 렌더한다. 기본 환경에서는 `notFound()`로 차단한다.
+- [x] **다중 슬라이드 순서·전환** — 기간 배너 2장과 기본 배너 1장을 넣고 기간 배너 최신순·기본 배너 마지막 순서, 점 인디케이터 3개, 5초 자동 전환을 검증한다.
+- [x] **사용자 상호작용 정지** — 좌우 버튼 또는 점 인디케이터 조작 뒤 자동 전환이 멈추고, hover 또는 focus 중에는 자동 전환이 일시 정지되는지 검증한다.
+- [x] **KST 경계 책임 분리** — API `BannerQueryService` 단위 테스트에서 종료일이 오늘인 기간 배너 포함, 어제인 기간 배너 제외, `createdAt desc` 정렬을 검증한다.
+- [x] **검증 결과** — 로컬 consumer 하네스 직접 확인에서 콘솔 오류 0건과 5초 자동 전환을 확인했다. `consumer-banner-carousel.spec.ts` chromium `4/4`, API 배너 테스트 `6/6`, consumer 타입체크·빌드, 변경 파일 Biome을 통과했다. 기본 빌드의 `e2e/hero-banner`는 `404`를 반환한다.

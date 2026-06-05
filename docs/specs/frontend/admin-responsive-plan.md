@@ -52,6 +52,11 @@
 ### 공통 — 정합성 + 빌드
 - **T6**: 셀러 `tsc --noEmit`·`next build` exit0, biome 신규 0, 인라인 fontSize/hex 0(토큰 SSOT).
 
+### Phase 4 — 인증 모바일 자동 회귀 게이트
+- **T7**: fixture 인증을 사용하는 Playwright `mobile` 프로젝트에서 settlements·orders·stores·invite·users 카드 전환, 데스크톱 테이블 숨김, 핵심 액션 버튼 접근, `375px` 가로 넘침 0을 검증한다.
+- **T8**: 운영 Chrome의 뷰포트 강제 기능이 없는 동안 T7을 회귀 방지 근거로 사용한다. 실제 카드 간격·터치 감각·`768px` 전환 경계 육안 판정은 인증 가능한 모바일 브라우저 확보 후 별도로 종결한다.
+- **T9**: fixture 인증 Playwright에서 settlements·orders·stores·invite·users 전 화면의 `767px` 카드 유지와 `768px` 테이블 전환을 검증한다. 실제 카드 간격과 터치 감각 육안 판정은 인증 가능한 모바일 브라우저 확보 후 별도로 종결한다.
+
 ---
 
 ## 4. 정합성 체크포인트 (착수 세션에서 검증)
@@ -62,6 +67,8 @@
 - [ ] **C4** Badge/버튼이 SSOT(`STATUS_LABEL`·`STATUS_COLOR`)·공통 컴포넌트 재사용인가
 - [ ] **C5** 인라인 fontSize/hex 0, biome 신규 0, tsc/build exit0
 - [ ] **C6** 단일 파일 500라인 한도 — 카드형 추가 시 컴포넌트 분리(`_components/`)
+- [x] **C7** fixture 인증 `mobile` 프로젝트에서 5개 화면 카드 전환·테이블 숨김·핵심 버튼 접근·가로 넘침 0 자동 회귀 통과
+- [x] **C8** fixture 인증 Playwright에서 5개 화면 `767px` 카드 유지·`768px` 테이블 전환 자동 회귀 통과
 
 ---
 

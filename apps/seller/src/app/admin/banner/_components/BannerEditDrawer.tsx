@@ -41,7 +41,7 @@ export function BannerEditDrawer({
       onClose={onClose}
       title={form.kind === 'default' ? '기본 배너 수정' : form.id ? '기간 배너 수정' : '새 배너'}
       position="right"
-      size="xl"
+      size="min(780px, 100vw)"
       padding="lg"
     >
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
