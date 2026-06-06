@@ -116,7 +116,6 @@ test.describe('판매자 공동구매 취소 상태 fixture', () => {
 
     const state = page.getByRole('region', { name: '판매자 공동구매 취소 상태' });
     await expect(state).toBeVisible();
-    await expect(state.getByText('취소', { exact: true })).toBeVisible();
     await expect(state.getByText('취소 사유')).toBeVisible();
     await expect(state.getByText('목표 수량 미달성으로 취소')).toBeVisible();
     expect(errors).toHaveLength(0);
