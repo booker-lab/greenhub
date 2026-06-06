@@ -26,43 +26,48 @@
  * driver는 Credentials provider가 없어(Kakao OAuth 전용, #CL-25) 인증 세션
  * 발급 대상에서 제외한다.
  */
-import { chromium, type Page } from '@playwright/test'
-import { config as loadEnv } from 'dotenv'
-import { resolve } from 'path'
+
+import { resolve } from 'node:path';
+import { chromium, type Page } from '@playwright/test';
+import { config as loadEnv } from 'dotenv';
 import {
   ADMIN_STATE_PATH,
   AUTH_STATE_PATH,
   BYPASS_STATE_PATH,
   loginViaCredentials,
-} from './tests/_helpers/auth'
+} from './tests/_helpers/auth';
 
-loadEnv({ path: resolve(__dirname, '.env') })
+loadEnv({ path: resolve(__dirname, '.env') });
 
 const BYPASS_TARGETS = [
-  { name: 'SELLER', base: process.env['SELLER_BASE'], secret: process.env['SELLER_BYPASS_SECRET'] },
-  { name: 'CONSUMER', base: process.env['CONSUMER_BASE'], secret: process.env['CONSUMER_BYPASS_SECRET'] },
-  { name: 'DRIVER', base: process.env['DRIVER_BASE'], secret: process.env['DRIVER_BYPASS_SECRET'] },
-]
+  { name: 'SELLER', base: process.env.SELLER_BASE, secret: process.env.SELLER_BYPASS_SECRET },
+  { name: 'CONSUMER', base: process.env.CONSUMER_BASE, secret: process.env.CONSUMER_BYPASS_SECRET },
+  { name: 'DRIVER', base: process.env.DRIVER_BASE, secret: process.env.DRIVER_BYPASS_SECRET },
+];
 
 // globalSetup 로그인 race 흡수용 재시도 횟수·간격
-const LOGIN_MAX_ATTEMPTS = 3
-const LOGIN_RETRY_DELAY_MS = 2_000
+const LOGIN_MAX_ATTEMPTS = 3;
+const LOGIN_RETRY_DELAY_MS = 2_000;
+const STORAGE_STATE_MAX_ATTEMPTS = 3;
+const STORAGE_STATE_RETRY_DELAY_MS = 500;
 
 // driver 제외 — Credentials provider 부재(Kakao 전용, #CL-25)
+// 소비자 운영 인증이 일시적으로 세션 쿠키를 발급하지 않을 때 seller 전용
+// 회귀를 계속 실행할 수 있도록 선택 실행 게이트를 둔다.
 const CREDENTIAL_TARGETS = [
   {
     name: 'SELLER',
-    base: process.env['SELLER_BASE'],
-    email: process.env['TEST_SELLER_EMAIL'],
-    password: process.env['TEST_SELLER_PASSWORD'],
+    base: process.env.SELLER_BASE,
+    email: process.env.TEST_SELLER_EMAIL,
+    password: process.env.TEST_SELLER_PASSWORD,
   },
   {
     name: 'CONSUMER',
-    base: process.env['CONSUMER_BASE'],
-    email: process.env['TEST_CONSUMER_EMAIL'],
-    password: process.env['TEST_CONSUMER_PASSWORD'],
+    base: process.env.CONSUMER_BASE,
+    email: process.env.TEST_CONSUMER_EMAIL,
+    password: process.env.TEST_CONSUMER_PASSWORD,
   },
-]
+].filter(({ name }) => name !== 'CONSUMER' || process.env.SKIP_CONSUMER_AUTH_SETUP !== 'true');
 
 // admin은 어드민 화면이 셀러앱 내 /admin/* 경로라 SELLER_BASE를 공유한다.
 // seller와 같은 도메인 → authjs.session-token 쿠키 슬롯이 1개뿐이라 같은
@@ -70,11 +75,11 @@ const CREDENTIAL_TARGETS = [
 // 세션만 담아 .admin-state.json으로 격리 발급한다(어드민 spec이 재사용).
 const ADMIN_TARGET = {
   name: 'ADMIN',
-  base: process.env['SELLER_BASE'],
-  bypassSecret: process.env['SELLER_BYPASS_SECRET'],
-  email: process.env['TEST_ADMIN_EMAIL'],
-  password: process.env['TEST_ADMIN_PASSWORD'],
-}
+  base: process.env.SELLER_BASE,
+  bypassSecret: process.env.SELLER_BYPASS_SECRET,
+  email: process.env.TEST_ADMIN_EMAIL,
+  password: process.env.TEST_ADMIN_PASSWORD,
+};
 
 /**
  * loginViaCredentials를 set-cookie race에 한해 제한적으로 재시도한다.
@@ -89,38 +94,58 @@ async function loginWithRetry(
 ): Promise<void> {
   for (let attempt = 1; attempt <= LOGIN_MAX_ATTEMPTS; attempt++) {
     try {
-      await loginViaCredentials(page, base, email, password)
+      await loginViaCredentials(page, base, email, password);
       if (attempt > 1) {
-        console.warn(`globalSetup: ${name} 로그인 ${attempt}회차 성공`)
+        console.warn(`globalSetup: ${name} 로그인 ${attempt}회차 성공`);
       }
-      return
+      return;
     } catch (err) {
-      if (attempt === LOGIN_MAX_ATTEMPTS) throw err
+      if (attempt === LOGIN_MAX_ATTEMPTS) throw err;
       console.warn(
         `globalSetup: ${name} 로그인 ${attempt}/${LOGIN_MAX_ATTEMPTS}회차 실패 — 재시도\n  ${String(err)}`,
-      )
-      await page.waitForTimeout(LOGIN_RETRY_DELAY_MS)
+      );
+      await page.waitForTimeout(LOGIN_RETRY_DELAY_MS);
+    }
+  }
+}
+
+async function saveStorageStateWhenIdle(page: Page, path: string, name: string): Promise<void> {
+  for (let attempt = 1; attempt <= STORAGE_STATE_MAX_ATTEMPTS; attempt++) {
+    try {
+      await page.goto('about:blank', { waitUntil: 'load' });
+      await page.waitForLoadState('load');
+      await page.context().storageState({ path });
+      if (attempt > 1) {
+        console.warn(`globalSetup: ${name} storageState ${attempt}회차 성공`);
+      }
+      return;
+    } catch (err) {
+      if (attempt === STORAGE_STATE_MAX_ATTEMPTS) throw err;
+      console.warn(
+        `globalSetup: ${name} storageState ${attempt}/${STORAGE_STATE_MAX_ATTEMPTS}회차 실패 — 재시도\n  ${String(err)}`,
+      );
+      await page.waitForTimeout(STORAGE_STATE_RETRY_DELAY_MS);
     }
   }
 }
 
 export default async function globalSetup(): Promise<void> {
-  const browser = await chromium.launch()
-  const context = await browser.newContext()
-  const page = await context.newPage()
+  const browser = await chromium.launch();
+  const context = await browser.newContext();
+  const page = await context.newPage();
 
   // 1. Vercel SSO 우회 쿠키 발급 — Preview(.vercel.app) 도메인만 대상.
   //    credential 로그인이 /api/auth/* 를 호출하기 전에 먼저 발급돼야 한다
   //    (우회 쿠키 없이는 SSO 401 페이지가 응답된다).
   for (const { name, base, secret } of BYPASS_TARGETS) {
-    if (!base) throw new Error(`globalSetup: ${name}_BASE 미설정`)
+    if (!base) throw new Error(`globalSetup: ${name}_BASE 미설정`);
     // production 도메인은 Deployment Protection 대상이 아니므로 우회 불필요
-    if (!base.includes('.vercel.app')) continue
+    if (!base.includes('.vercel.app')) continue;
     if (!secret) {
-      throw new Error(`globalSetup: ${name}_BYPASS_SECRET 미설정 — Preview SSO 우회 불가`)
+      throw new Error(`globalSetup: ${name}_BYPASS_SECRET 미설정 — Preview SSO 우회 불가`);
     }
-    const url = `${base}/?x-vercel-protection-bypass=${secret}&x-vercel-set-bypass-cookie=true`
-    await page.goto(url, { waitUntil: 'domcontentloaded' })
+    const url = `${base}/?x-vercel-protection-bypass=${secret}&x-vercel-set-bypass-cookie=true`;
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
   }
 
   // bypass 루프의 마지막 page.goto는 미인증 루트(/)이므로 앱이 클라이언트
@@ -132,42 +157,39 @@ export default async function globalSetup(): Promise<void> {
   // 여기서 한 번 네비게이션을 종료하면 이후 두 storageState() 호출이 모두
   // 안정 상태에서 수행된다 (loginViaCredentials는 page.request만 사용 —
   // 페이지를 네비게이트하지 않음).
-  await page.goto('about:blank')
-
   // 우회 쿠키만 담긴 상태 저장 — 미인증/SSO 우회 spec의 기본 storageState
-  await context.storageState({ path: BYPASS_STATE_PATH })
+  await saveStorageStateWhenIdle(page, BYPASS_STATE_PATH, 'BYPASS');
 
   // 2. seller·consumer 세션 쿠키 발급 — 같은 컨텍스트에 누적.
   //    쿠키는 도메인 스코프이므로 우회 쿠키·앱별 세션이 충돌 없이 공존한다.
   for (const { name, base, email, password } of CREDENTIAL_TARGETS) {
-    if (!base) throw new Error(`globalSetup: ${name}_BASE 미설정`)
+    if (!base) throw new Error(`globalSetup: ${name}_BASE 미설정`);
     if (!email || !password) {
       // 시크릿 미설정 환경 — 세션 쿠키만 생략한다. 해당 인증 spec은 자체
       // test.skip(skipAuth) 로 건너뛰므로 .auth-state.json 자체는 발급한다.
       console.warn(
         `globalSetup: ${name} 인증 시크릿(TEST_${name}_EMAIL/PASSWORD) 미설정 — ` +
           `세션 쿠키 생략 (해당 인증 spec은 test.skip 처리됨)`,
-      )
-      continue
+      );
+      continue;
     }
-    await loginWithRetry(page, base, email, password, name)
+    await loginWithRetry(page, base, email, password, name);
   }
 
   // 우회 + seller·consumer 세션 쿠키 누적 상태 저장 — 인증 spec의 storageState
-  await context.storageState({ path: AUTH_STATE_PATH })
+  await saveStorageStateWhenIdle(page, AUTH_STATE_PATH, 'AUTH');
 
   // 3. admin 세션 — seller와 같은 도메인이라 별도 컨텍스트에서 격리 발급.
   //    seller 세션 쿠키가 없는 깨끗한 컨텍스트에 우회 쿠키 + admin 세션만 담는다.
   //    시크릿 미설정 시 빈(.bypass만) 상태로 발급 — 어드민 인증 spec은 test.skip 처리됨.
-  const adminCtx = await browser.newContext()
-  const adminPage = await adminCtx.newPage()
+  const adminCtx = await browser.newContext();
+  const adminPage = await adminCtx.newPage();
   if (ADMIN_TARGET.base?.includes('.vercel.app')) {
     if (!ADMIN_TARGET.bypassSecret) {
-      throw new Error('globalSetup: SELLER_BYPASS_SECRET 미설정 — admin Preview SSO 우회 불가')
+      throw new Error('globalSetup: SELLER_BYPASS_SECRET 미설정 — admin Preview SSO 우회 불가');
     }
-    const url = `${ADMIN_TARGET.base}/?x-vercel-protection-bypass=${ADMIN_TARGET.bypassSecret}&x-vercel-set-bypass-cookie=true`
-    await adminPage.goto(url, { waitUntil: 'domcontentloaded' })
-    await adminPage.goto('about:blank')
+    const url = `${ADMIN_TARGET.base}/?x-vercel-protection-bypass=${ADMIN_TARGET.bypassSecret}&x-vercel-set-bypass-cookie=true`;
+    await adminPage.goto(url, { waitUntil: 'domcontentloaded' });
   }
   if (ADMIN_TARGET.base && ADMIN_TARGET.email && ADMIN_TARGET.password) {
     await loginWithRetry(
@@ -176,15 +198,15 @@ export default async function globalSetup(): Promise<void> {
       ADMIN_TARGET.email,
       ADMIN_TARGET.password,
       ADMIN_TARGET.name,
-    )
+    );
   } else {
     console.warn(
       'globalSetup: ADMIN 인증 시크릿(TEST_ADMIN_EMAIL/PASSWORD) 미설정 — ' +
         '세션 쿠키 생략 (어드민 인증 spec은 test.skip 처리됨)',
-    )
+    );
   }
-  await adminCtx.storageState({ path: ADMIN_STATE_PATH })
-  await adminCtx.close()
+  await saveStorageStateWhenIdle(adminPage, ADMIN_STATE_PATH, 'ADMIN');
+  await adminCtx.close();
 
-  await browser.close()
+  await browser.close();
 }
