@@ -1,5 +1,13 @@
 # 단계별 Preview 릴리즈 파이프라인
 
+> 2026-06-06 분기 정정:
+>
+> **이 문서는 핸드오프 프롬프트 2번, 즉 개발·릴리즈 트레인 가지의 실행 기준이다.**
+> 프롬프트 1번의 육안검증 종결 흐름과 순서로 이어지지 않는다.
+>
+> - 1번 다음 진입점: `docs/specs/frontend/handoff-prompt-1-visual-closeout.md`
+> - 2번 다음 진입점: `docs/specs/ops/handoff-prompt-2-release-train.md`
+
 > 작성일: 2026-06-05
 >
 > 목적: 로컬 dev 서버에 의존하지 않고, 누적된 미푸시 작업을 작은 웨이브로 나누어 `commit -> push -> Vercel Preview -> 육안검증` 순서로 반복한다.

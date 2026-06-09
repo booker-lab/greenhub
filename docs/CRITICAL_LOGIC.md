@@ -274,3 +274,15 @@
 - **결정**: 거점 스태프 초대·배정·회수는 seller 거점 경로에서 처리하고, `/admin/*` UI와 API는 계속 `role='admin'` 전용으로 유지한다.
 - **이유**: `hub_staff`는 seller 운영 보조 역할이며 플랫폼 운영 관리자 권한과 목적이 다르다.
 - **계약**: `AdminController`는 `@Roles('admin')`를 유지하고, admin layout과 `RolesGuard`는 `hub_staff`를 admin 경로에서 차단한다.
+
+## [결정 #CL-128] 핸드오프 프롬프트 1번과 2번은 순서가 아니라 분기 식별자다 (2026-06-06)
+
+- **결정**: 프롬프트 1번은 `handoff-prompt-1-visual-closeout.md` 기준의 육안검증 종결 가지, 프롬프트 2번은 `handoff-prompt-2-release-train.md` 기준의 개발·릴리즈 트레인 가지로 분리한다.
+- **이유**: 번호만 보고 1번 완료 후 2번을 같은 작업선의 다음 순서로 인식하면, 육안검증 마감 흐름과 새 가지 개발·커밋 웨이브가 섞인다.
+- **계약**: 1번에서는 보류 체크리스트 중 현재 조건으로 닫을 수 있는 검증 묶음을 고르고, 2번에서는 `release:stage` 웨이브를 분리 커밋·Preview 검증한다. 두 가지의 다음 진입점은 서로 대체하지 않는다.
+
+## [결정 #CL-129] 셀러 검증 데이터 정리는 storeId 단위 dry-run 우선 스크립트로 제한 (2026-06-09)
+
+- **결정**: 셀러 대검증 전 테스트 데이터 정리는 `scripts/cleanup-seller-validation-data.mjs <storeId>`로 대상 `storeId` 하나만 조회하고, 기본 실행은 dry-run으로 제한한다.
+- **이유**: 운영 Firestore의 상품·주문·결제·정산 데이터는 삭제 영향이 크므로, 수동 콘솔 조작이나 광범위 쿼리보다 명시 범위와 사전 검토가 필요하다.
+- **계약**: 실제 삭제는 백업 이후 `--apply`를 명시한 경우에만 수행한다. 기본 범위는 `products`, `orders`, `payments`, `settlements`, 삭제 상품과 같은 ID의 `groupProductConfig`이며, `stores`, `users`, `deliveryFeeConfig`, `auditLogs`, `refreshTokens`는 정리 범위에서 제외한다.
