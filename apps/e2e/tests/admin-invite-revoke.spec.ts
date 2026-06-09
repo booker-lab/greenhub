@@ -1,5 +1,11 @@
 import { expect, type Page, test } from '@playwright/test';
-import { installInviteApiFixture, USED_TOKEN, VALID_TOKEN } from './_helpers/admin-invite-runtime';
+import {
+  EXPIRED_TOKEN,
+  GENERATED_TOKEN,
+  installInviteApiFixture,
+  USED_TOKEN,
+  VALID_TOKEN,
+} from './_helpers/admin-invite-runtime';
 import { ADMIN_STATE_PATH } from './_helpers/auth';
 import {
   expectAdminTableSwitchAtSm,
@@ -83,6 +89,44 @@ test.describe('Admin - 초대 토큰 취소 회귀', () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('table')).toContainText('취소됨');
     await expect(page.getByRole('button', { name: `${VALID_TOKEN} 취소` })).toHaveCount(0);
+  });
+
+  test('취소됨 배지는 orange 계열로 다른 상태와 구분된다', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const state = await openInvite(page);
+
+    await page.getByRole('button', { name: `${VALID_TOKEN} 취소` }).click();
+    await page.getByRole('button', { name: '취소', exact: true }).last().click();
+
+    await expect.poll(() => state.revokeRequests).toContainEqual(VALID_TOKEN);
+    const revokedBadge = page
+      .locator('table .mantine-Badge-root')
+      .filter({ hasText: '취소됨' })
+      .first();
+    const usedBadge = page
+      .locator('table .mantine-Badge-root')
+      .filter({ hasText: '사용됨' })
+      .first();
+    await expect(revokedBadge).toBeVisible();
+    await expect(usedBadge).toBeVisible();
+
+    const colors = await revokedBadge.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        color: style.color,
+        backgroundColor: style.backgroundColor,
+      };
+    });
+    const usedBackground = await usedBadge.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+
+    const rgb = colors.color.match(/\d+/g)?.map(Number) ?? [];
+    expect(colors.backgroundColor).not.toBe(usedBackground);
+    expect(rgb[0]).toBeGreaterThan(180);
+    expect(rgb[1]).toBeGreaterThanOrEqual(40);
+    expect(rgb[1]).toBeLessThan(190);
+    expect(rgb[2]).toBeLessThan(90);
   });
 
   test('사용된 토큰은 가입 판매자 되돌리기 후 되돌림 상태로 갱신한다', async ({ page }) => {
@@ -226,6 +270,39 @@ test.describe('Admin - 초대 토큰 취소 회귀', () => {
 
     await expect.poll(() => state.revokeRequests).toContainEqual(VALID_TOKEN);
     await expect(page.getByText('이미 취소된 토큰입니다.')).toBeVisible();
+  });
+
+  test('모바일 reason 알림은 주요 조작 영역을 가리지 않는다', async ({ page }) => {
+    await setMobileViewport(page);
+    const state = await openInvite(page);
+    state.failNextRevokeReason = 'already_revoked';
+
+    await page.getByRole('button', { name: `${VALID_TOKEN} 취소` }).click();
+    await page.getByRole('button', { name: '취소', exact: true }).last().click();
+
+    await expect.poll(() => state.revokeRequests).toContainEqual(VALID_TOKEN);
+    const notification = page.getByText('이미 취소된 토큰입니다.');
+    await expect(notification).toBeVisible();
+    const searchBox = page.getByLabel('초대 토큰 검색');
+    const generateButton = page.getByRole('button', { name: '새 토큰 생성' });
+    await expect(searchBox).toBeVisible();
+    await expect(generateButton).toBeVisible();
+
+    const boxes = await Promise.all([
+      notification.boundingBox(),
+      searchBox.boundingBox(),
+      generateButton.boundingBox(),
+    ]);
+    const [noticeBox, searchBoxRect, generateButtonRect] = boxes;
+    expect(noticeBox).not.toBeNull();
+    expect(searchBoxRect).not.toBeNull();
+    expect(generateButtonRect).not.toBeNull();
+    if (!noticeBox || !searchBoxRect || !generateButtonRect) return;
+
+    const noticeBottom = noticeBox.y + noticeBox.height;
+    expect(noticeBottom).toBeLessThan(searchBoxRect.y);
+    expect(noticeBottom).toBeLessThan(generateButtonRect.y);
+    await expectNoHorizontalOverflow(page);
   });
 
   for (const scenario of [

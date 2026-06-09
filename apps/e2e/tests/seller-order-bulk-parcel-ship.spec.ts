@@ -20,7 +20,7 @@ test.describe('판매자 주문 일괄 택배 발송 fixture', () => {
     await openFixture(page);
 
     const state = page.getByRole('region', { name: '일괄 택배 발송 모바일 상태' });
-    await expect(state.getByLabel('택배 발송 가능 1건')).toBeVisible();
+    await expect(state.getByLabel('택배 발송 가능 2건')).toBeVisible();
     await expect(state.getByLabel('20260603-000174 일괄 택배 발송 선택')).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
@@ -35,5 +35,28 @@ test.describe('판매자 주문 일괄 택배 발송 fixture', () => {
     await expect(dialog.getByRole('button', { name: '1건 발송 완료' })).toBeDisabled();
     await expectNoElementHorizontalOverflow(dialog);
     await expectNoHorizontalOverflow(page);
+  });
+
+  test('부분 실패 시 성공 주문만 배송 완료로 바꾸고 실패 주문 선택을 유지한다', async ({
+    page,
+  }) => {
+    await openFixture(page);
+
+    const state = page.getByRole('region', { name: '일괄 택배 발송 모바일 상태' });
+    await state.getByLabel('택배 발송 가능 2건').check();
+    await expect(state.getByText('2건 선택')).toBeVisible();
+    await state.getByRole('button', { name: '택배 발송', exact: true }).click();
+
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('운송장번호 20260603-000174').fill('1234567890');
+    await dialog.getByLabel('운송장번호 20260603-000173').fill('9876543210');
+    await dialog.getByRole('button', { name: '2건 발송 완료' }).click();
+
+    await expect(page.getByText('일부 주문만 처리됐습니다')).toBeVisible();
+    await expect(page.getByText('성공 1건, 실패 1건')).toBeVisible();
+    await expect(state.getByText('배송 완료')).toBeVisible();
+    await expect(state.getByLabel('20260603-000174 일괄 택배 발송 선택')).toHaveCount(0);
+    await expect(state.getByLabel('20260603-000173 일괄 택배 발송 선택')).toBeChecked();
+    await expect(state.getByText('1건 선택')).toBeVisible();
   });
 });

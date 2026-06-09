@@ -3,7 +3,7 @@ import type { Page, Route } from '@playwright/test';
 export const VALID_TOKEN = 'INVITEVALID00001';
 export const USED_TOKEN = 'INVITEUSED000001';
 export const EXPIRED_TOKEN = 'INVITEEXPIRED001';
-const GENERATED_TOKEN = 'INVITEGENERATED1';
+export const GENERATED_TOKEN = 'INVITEGENERATED1';
 
 type InviteFixture = {
   token: string;
