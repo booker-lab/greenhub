@@ -1,12 +1,69 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { ADMIN_STATE_PATH } from './_helpers/auth';
 
 // 어드민 화면은 셀러앱 내 /admin/* 경로 → SELLER_BASE 재사용
-const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr';
+const BASE = process.env.SELLER_BASE ?? 'https://seller.greenlove.co.kr';
 
-const adminEmail = process.env['TEST_ADMIN_EMAIL'];
-const adminPassword = process.env['TEST_ADMIN_PASSWORD'];
+const adminEmail = process.env.TEST_ADMIN_EMAIL;
+const adminPassword = process.env.TEST_ADMIN_PASSWORD;
 const skipAuth = !adminEmail || !adminPassword;
+
+async function installArchivedStoreSummaryFixture(page: Page) {
+  await page.route('**/admin/platform-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ defaultCommissionRate: 0.12 }),
+    });
+  });
+
+  await page.route('**/admin/stores/e2e-store-archived/summary', async (route) => {
+    if (route.request().method() !== 'GET' || !route.request().headers().authorization) {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        store: {
+          id: 'e2e-store-archived',
+          name: '정리된 정원',
+          ownerId: 'e2e-owner-archived',
+          status: 'archived',
+          commissionRate: 0.2,
+        },
+        owner: {
+          id: 'e2e-owner-archived',
+          name: '아카이브 판매자',
+          email: 'archived-store@example.com',
+          phone: '010-0000-0000',
+        },
+        orders: {
+          totalCount: 2,
+          totalAmount: 87_000,
+          byStatus: {
+            DELIVERED: 1,
+            CANCELLED: 1,
+          },
+        },
+        settlements: {
+          totalCount: 2,
+          platformFee: 6_100,
+          netAmount: 80_900,
+          byStatus: {
+            confirmed: 1,
+            paid: 1,
+          },
+        },
+      }),
+    });
+  });
+}
 
 // ── 비인증 가드 ──────────────────────────────────────────────────────
 test.describe('Admin — 판매자 목록 (비인증)', () => {
@@ -70,5 +127,28 @@ test.describe('Admin — 판매자 치우기 UI (인증)', () => {
       .isVisible()
       .catch(() => false);
     expect(hasStore || isEmpty || isFilteredEmpty).toBe(true);
+  });
+
+  test('archived 판매자 상세는 과거 주문과 정산 집계를 그대로 표시한다', async ({ page }) => {
+    await installArchivedStoreSummaryFixture(page);
+
+    await page.goto(`${BASE}/admin/stores/e2e-store-archived`, {
+      waitUntil: 'domcontentloaded',
+    });
+
+    await expect(page.getByRole('heading', { name: '판매자 상세' })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByRole('heading', { name: '정리된 정원' })).toBeVisible();
+    await expect(page.locator('.mantine-Badge-root').filter({ hasText: '정리됨' })).toBeVisible();
+    await expect(page.getByText('주문 수')).toBeVisible();
+    await expect(page.getByText('2건')).toBeVisible();
+    await expect(page.getByText('₩87,000')).toBeVisible();
+    await expect(page.getByText('₩6,100')).toBeVisible();
+    await expect(page.getByText('₩80,900')).toBeVisible();
+    await expect(page.getByText('배송 완료')).toBeVisible();
+    await expect(page.getByText('주문 취소')).toBeVisible();
+    await expect(page.getByText('확정')).toBeVisible();
+    await expect(page.getByText('지급 완료')).toBeVisible();
   });
 });

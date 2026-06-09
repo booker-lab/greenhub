@@ -14,6 +14,7 @@ import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useGroupConfigs } from '@/hooks/useGroupConfigs';
 import { useOrders } from '@/hooks/useOrders';
 import { apiJson } from '@/lib/api';
+import { bulkActionNotification, summarizeBulkActionResults } from './_bulkActionResults';
 import { BulkParcelShipModal, type BulkParcelShipPayload } from './_components/BulkParcelShipModal';
 import { DateSection } from './_components/DateSection';
 import { OrderBulkActionBar } from './_components/OrderBulkActionBar';
@@ -186,25 +187,12 @@ export default function OrdersPage() {
           }),
         ),
       );
-      const failed = results.filter((result) => result.status === 'rejected').length;
-      const success = results.length - failed;
+      const summary = summarizeBulkActionResults(selectedBulkOrders, results);
       setSelectedOrderIds((current) => {
-        const completed = new Set(
-          selectedBulkOrders
-            .filter((_, index) => results[index]?.status === 'fulfilled')
-            .map((order) => order.id),
-        );
-        return new Set([...current].filter((id) => !completed.has(id)));
+        return new Set([...current].filter((id) => !summary.completedIds.has(id)));
       });
       setBulkConfirmOpened(false);
-      notifications.show({
-        color: failed === 0 ? 'green' : 'orange',
-        title: failed === 0 ? '준비 시작 완료' : '일부 주문만 처리됐습니다',
-        message:
-          failed === 0
-            ? `${success}건을 준비 중으로 변경했습니다.`
-            : `성공 ${success}건, 실패 ${failed}건`,
-      });
+      notifications.show(bulkActionNotification('prepare', summary));
     } finally {
       setBulkLoading(false);
     }
@@ -229,25 +217,12 @@ export default function OrdersPage() {
           });
         }),
       );
-      const failed = results.filter((result) => result.status === 'rejected').length;
-      const success = results.length - failed;
+      const summary = summarizeBulkActionResults(selectedBulkOrders, results);
       setSelectedOrderIds((current) => {
-        const completed = new Set(
-          selectedBulkOrders
-            .filter((_, index) => results[index]?.status === 'fulfilled')
-            .map((order) => order.id),
-        );
-        return new Set([...current].filter((id) => !completed.has(id)));
+        return new Set([...current].filter((id) => !summary.completedIds.has(id)));
       });
       setBulkParcelShipOpened(false);
-      notifications.show({
-        color: failed === 0 ? 'green' : 'orange',
-        title: failed === 0 ? '택배 발송 완료' : '일부 주문만 처리됐습니다',
-        message:
-          failed === 0
-            ? `${success}건을 배송 완료로 변경했습니다.`
-            : `성공 ${success}건, 실패 ${failed}건`,
-      });
+      notifications.show(bulkActionNotification('parcelShip', summary));
     } finally {
       setBulkLoading(false);
     }

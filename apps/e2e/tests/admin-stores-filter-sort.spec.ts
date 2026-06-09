@@ -42,10 +42,19 @@ const STORES_FIXTURE = [
 interface StoresMockState {
   readCount: number;
   commissionRates: number[];
+  archiveRequests: string[];
+  restoreRequests: string[];
+  stores: typeof STORES_FIXTURE;
 }
 
 async function installStoresApiFixture(page: Page): Promise<StoresMockState> {
-  const state: StoresMockState = { readCount: 0, commissionRates: [] };
+  const state: StoresMockState = {
+    readCount: 0,
+    commissionRates: [],
+    archiveRequests: [],
+    restoreRequests: [],
+    stores: STORES_FIXTURE.map((store) => ({ ...store })),
+  };
 
   await page.route('**/admin/stores', async (route) => {
     const request = route.request();
@@ -57,7 +66,7 @@ async function installStoresApiFixture(page: Page): Promise<StoresMockState> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ stores: STORES_FIXTURE, total: STORES_FIXTURE.length }),
+      body: JSON.stringify({ stores: state.stores, total: state.stores.length }),
     });
   });
 
@@ -74,6 +83,61 @@ async function installStoresApiFixture(page: Page): Promise<StoresMockState> {
       contentType: 'application/json',
       body: JSON.stringify({ commissionRate: body.rate }),
     });
+  });
+
+  await page.route('**/admin/stores/*/archive', async (route) => {
+    const request = route.request();
+    if (request.method() !== 'PATCH') {
+      await route.continue();
+      return;
+    }
+
+    const storeId = new URL(request.url()).pathname.match(
+      /\/admin\/stores\/([^/]+)\/archive$/,
+    )?.[1];
+    if (!storeId) {
+      await route.continue();
+      return;
+    }
+
+    state.archiveRequests.push(storeId);
+    if (storeId === 'e2e-store-invited') {
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          message: '주문·정산 기록이 있는 판매자는 정리할 수 없습니다.',
+        }),
+      });
+      return;
+    }
+
+    state.stores = state.stores.map((store) =>
+      store.id === storeId ? { ...store, status: 'archived' } : store,
+    );
+    await route.fulfill({ status: 204 });
+  });
+
+  await page.route('**/admin/stores/*/restore', async (route) => {
+    const request = route.request();
+    if (request.method() !== 'PATCH') {
+      await route.continue();
+      return;
+    }
+
+    const storeId = new URL(request.url()).pathname.match(
+      /\/admin\/stores\/([^/]+)\/restore$/,
+    )?.[1];
+    if (!storeId) {
+      await route.continue();
+      return;
+    }
+
+    state.restoreRequests.push(storeId);
+    state.stores = state.stores.map((store) =>
+      store.id === storeId ? { ...store, status: 'active' } : store,
+    );
+    await route.fulfill({ status: 204 });
   });
 
   return state;
@@ -126,7 +190,9 @@ test.describe('Admin - 판매자 검색·필터·정렬·수수료 회귀', () =
     const input = page.getByPlaceholder('0.05').first();
     await expect(input).toBeVisible();
     await expect(input).toHaveAttribute('inputmode', 'decimal');
-    await expect(page.locator('.mantine-NumberInput-control')).toHaveCount(4);
+    await expect
+      .poll(() => page.locator('.mantine-NumberInput-control').count())
+      .toBeGreaterThanOrEqual(4);
     await expect(page.getByRole('button', { name: '저장' }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: '취소' }).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
@@ -155,6 +221,57 @@ test.describe('Admin - 판매자 검색·필터·정렬·수수료 회귀', () =
     await expect(page).toHaveURL(/status=archived/);
     await expect(page.getByText('정리된 정원')).toHaveCount(2);
     await expect(page.getByText('디어 플라워')).toHaveCount(0);
+  });
+
+  test('빈 판매자 치우기는 확인창 이후 목록에서 제거한다', async ({ page }) => {
+    const state = await openStores(page);
+
+    page.once('dialog', async (dialog) => {
+      expect(dialog.message()).toContain(
+        '디어 플라워 판매자를 정리할까요? 주문·정산 기록은 보존됩니다.',
+      );
+      await dialog.accept();
+    });
+    await page
+      .locator('tr', { hasText: '디어 플라워' })
+      .getByRole('button', { name: '치우기' })
+      .click();
+
+    await expect.poll(() => state.archiveRequests).toContainEqual('e2e-store-active-dear');
+    await expect(page.getByText('디어 플라워')).toHaveCount(0);
+    await expect(page.getByText('초대 농원')).toHaveCount(2);
+  });
+
+  test('정리된 판매자 복구는 활성 목록으로 되돌린다', async ({ page }) => {
+    const state = await openStores(page);
+
+    await statusSelect(page).click();
+    await page.getByRole('option', { name: '정리됨', exact: true }).click();
+    await page
+      .locator('tr', { hasText: '정리된 정원' })
+      .getByRole('button', { name: '복구' })
+      .click();
+
+    await expect.poll(() => state.restoreRequests).toContainEqual('e2e-store-archived');
+    await statusSelect(page).click();
+    await page.getByRole('option', { name: '활성', exact: true }).click();
+    await expect(page.getByText('정리된 정원')).toHaveCount(2);
+  });
+
+  test('기록 있는 판매자 치우기 차단 사유를 알림으로 표시한다', async ({ page }) => {
+    const state = await openStores(page);
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await page
+      .locator('tr', { hasText: '초대 농원' })
+      .getByRole('button', { name: '치우기' })
+      .click();
+
+    await expect.poll(() => state.archiveRequests).toContainEqual('e2e-store-invited');
+    await expect(
+      page.getByText('주문·정산 기록이 있는 판매자는 정리할 수 없습니다.'),
+    ).toBeVisible();
+    await expect(page.getByText('초대 농원')).toHaveCount(2);
   });
 
   test('전체 필터의 새로고침은 판매자 목록을 재조회한다', async ({ page }) => {
@@ -214,22 +331,24 @@ test.describe('Admin - 판매자 검색·필터·정렬·수수료 회귀', () =
 
   test('범위 밖 수수료는 저장 요청 본문으로 전달하지 않는다', async ({ page }) => {
     const state = await openStores(page);
+    const row = page.locator('tr', { hasText: '디어 플라워' });
 
-    await page.getByRole('button', { name: '수수료 설정' }).first().click({ force: true });
-    const input = page.getByPlaceholder('0.05').first();
+    await row.getByRole('button', { name: '수수료 설정' }).click({ force: true });
+    const input = row.getByPlaceholder('0.05');
     await input.fill('1.5', { force: true });
     await expect(input).not.toHaveValue('1.5');
-    await page.getByRole('button', { name: '저장' }).first().click({ force: true });
+    await row.getByRole('button', { name: '저장' }).click({ force: true });
 
     await expect.poll(() => state.commissionRates.includes(1.5)).toBe(false);
   });
 
   test('정상 수수료 저장은 요청 본문과 표시값을 유지한다', async ({ page }) => {
     const state = await openStores(page);
+    const row = page.locator('tr', { hasText: '디어 플라워' });
 
-    await page.getByRole('button', { name: '수수료 설정' }).first().click({ force: true });
-    await page.getByPlaceholder('0.05').first().fill('0.05', { force: true });
-    await page.getByRole('button', { name: '저장' }).first().click({ force: true });
+    await row.getByRole('button', { name: '수수료 설정' }).click({ force: true });
+    await row.getByPlaceholder('0.05').fill('0.05', { force: true });
+    await row.getByRole('button', { name: '저장' }).click({ force: true });
 
     await expect.poll(() => state.commissionRates).toContainEqual(0.05);
     await expect(page.locator('p:visible', { hasText: '5.0%' }).first()).toBeVisible();

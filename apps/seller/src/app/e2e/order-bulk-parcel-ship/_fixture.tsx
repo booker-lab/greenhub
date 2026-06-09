@@ -2,7 +2,12 @@
 
 import type { Order } from '@greenhub/shared';
 import { Container, Stack } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
+import {
+  bulkActionNotification,
+  summarizeBulkActionResults,
+} from '../../orders/_bulkActionResults';
 import { BulkParcelShipModal } from '../../orders/_components/BulkParcelShipModal';
 import { OrderBulkActionBar } from '../../orders/_components/OrderBulkActionBar';
 import { OrderCard } from '../../orders/_components/OrderCard';
@@ -36,9 +41,21 @@ const ORDER: Order = {
   productName: '모바일 송장 모달 폭 검증용 긴 상품명',
 };
 
+const FAILING_ORDER: Order = {
+  ...ORDER,
+  id: 'e2e-bulk-parcel-failing-order',
+  orderNumber: '20260603-000173',
+  productName: '부분 실패 결과 검증용 주문',
+};
+
 export function OrderBulkParcelShipFixture() {
-  const [selected, setSelected] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([ORDER, FAILING_ORDER]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [opened, setOpened] = useState(false);
+  const selectedOrders = orders.filter((order) => selectedIds.has(order.id));
+  const eligibleCount = orders.filter(
+    (order) => order.status === 'PREPARING' && order.deliveryMethod === 'parcel',
+  ).length;
 
   return (
     <Container size="sm" py="md">
@@ -46,28 +63,59 @@ export function OrderBulkParcelShipFixture() {
         <Stack gap="sm">
           <OrderBulkActionBar
             mode="shipParcel"
-            eligibleCount={1}
-            selectedCount={selected ? 1 : 0}
+            eligibleCount={eligibleCount}
+            selectedCount={selectedOrders.length}
             loading={false}
-            onSelectAll={() => setSelected(true)}
-            onClear={() => setSelected(false)}
+            onSelectAll={() => setSelectedIds(new Set(orders.map((order) => order.id)))}
+            onClear={() => setSelectedIds(new Set())}
             onSubmit={() => setOpened(true)}
           />
-          <OrderCard
-            order={ORDER}
-            selected={selected}
-            bulkActionMode="shipParcel"
-            onSelectedChange={(_orderId, nextSelected) => setSelected(nextSelected)}
-          />
+          {orders.map((order) => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              selected={selectedIds.has(order.id)}
+              bulkActionMode="shipParcel"
+              onSelectedChange={(orderId, nextSelected) => {
+                setSelectedIds((current) => {
+                  const next = new Set(current);
+                  if (nextSelected) next.add(orderId);
+                  else next.delete(orderId);
+                  return next;
+                });
+              }}
+            />
+          ))}
         </Stack>
       </section>
 
       <BulkParcelShipModal
         opened={opened}
-        orders={selected ? [ORDER] : []}
+        orders={selectedOrders}
         loading={false}
         onClose={() => setOpened(false)}
-        onConfirm={async () => setOpened(false)}
+        onConfirm={async () => {
+          const results = selectedOrders.map((order) =>
+            order.id === FAILING_ORDER.id
+              ? Promise.reject(new Error('fixture partial failure'))
+              : Promise.resolve(order.id),
+          );
+          const settled = await Promise.allSettled(results);
+          const summary = summarizeBulkActionResults(selectedOrders, settled);
+
+          setOrders((current) =>
+            current.map((order) =>
+              summary.completedIds.has(order.id)
+                ? { ...order, status: 'DELIVERED', updatedAt: '2026-06-03T01:30:00.000Z' }
+                : order,
+            ),
+          );
+          setSelectedIds(
+            (current) => new Set([...current].filter((id) => !summary.completedIds.has(id))),
+          );
+          setOpened(false);
+          notifications.show(bulkActionNotification('parcelShip', summary));
+        }}
       />
     </Container>
   );
