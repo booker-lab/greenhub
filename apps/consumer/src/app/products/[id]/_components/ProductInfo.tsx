@@ -1,5 +1,5 @@
-import { Box, Text, Title, Stack, Group, Badge, Divider, Paper, SimpleGrid } from '@mantine/core';
 import type { Product, Variety } from '@greenhub/shared';
+import { Badge, Box, Divider, Group, Paper, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 
 const FRAGRANCE_LABEL: Record<string, string> = {
   none: '없음',
@@ -153,7 +153,6 @@ export default function ProductInfo({ product, variety }: Props) {
                 variety ? ['품종', variety.name] : null,
                 displayColors.length > 0 ? ['색상', displayColors.join(' · ')] : null,
                 variety ? ['추천 관상 기간', variety.bloomDuration] : null,
-                product.selection?.bundleUnit ? ['판매 단위', product.selection.bundleUnit] : null,
                 product.selection?.stemType ? ['출하 형태', product.selection.stemType] : null,
               ] as ([string, string] | null)[]
             )

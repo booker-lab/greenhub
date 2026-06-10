@@ -1,5 +1,5 @@
-import { IsString, IsEnum, IsArray, IsOptional, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsArray, IsEnum, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class SelectionDto {
   @IsArray()
@@ -14,9 +14,6 @@ export class SelectionDto {
 
   @IsEnum(['bud', 'half', 'full'])
   bloomCondition: string;
-
-  @IsString()
-  bundleUnit: string;
 
   @IsOptional()
   @IsEnum(['easy', 'normal', 'hard'])

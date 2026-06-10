@@ -76,7 +76,6 @@ export function defaultForm(): ProductFormData {
       fragrance: 'none',
       bloomCondition: 'half',
       careLevel: 'normal',
-      bundleUnit: '',
     },
     sellerNote: '',
     content: { headline: '', description: '', isEditedByUser: false },

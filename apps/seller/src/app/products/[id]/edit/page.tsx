@@ -71,7 +71,6 @@ export default function EditProductPage() {
                 fragrance: 'none',
                 bloomCondition: 'half',
                 careLevel: 'normal',
-                bundleUnit: '',
               },
           sellerNote: data.sellerNote ?? data.description ?? '',
           content: data.content ?? {

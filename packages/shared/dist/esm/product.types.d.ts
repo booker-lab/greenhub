@@ -10,7 +10,6 @@ export interface Selection {
     stemType: StemType;
     fragrance: FragranceLevel;
     bloomCondition: BloomCondition;
-    bundleUnit: string;
     careLevel?: CareLevel;
 }
 export interface GeneratedContent {
