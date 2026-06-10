@@ -1,16 +1,15 @@
+import { Type } from 'class-transformer';
 import {
-  IsString,
-  IsNumber,
-  IsEnum,
   IsArray,
   IsBoolean,
+  IsEnum,
+  IsNumber,
   IsOptional,
+  IsString,
   IsUrl,
   Min,
   ValidateNested,
 } from 'class-validator';
-
-import { Type } from 'class-transformer';
 
 export class GroupConfigDto {
   @IsNumber()
@@ -52,9 +51,6 @@ export class SelectionDto {
 
   @IsEnum(['bud', 'half', 'full'])
   bloomCondition: string;
-
-  @IsString()
-  bundleUnit: string;
 
   @IsOptional()
   @IsEnum(['easy', 'normal', 'hard'])

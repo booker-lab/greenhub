@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, Button, Group, Paper, Stack, Text, TextInput } from '@mantine/core';
+import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
 
 const COLOR_OPTIONS = [
   '레드',
@@ -55,7 +55,6 @@ export interface SelectionForm {
   fragrance: 'none' | 'light' | 'strong';
   bloomCondition: 'bud' | 'half' | 'full';
   careLevel: 'easy' | 'normal' | 'hard';
-  bundleUnit: string;
 }
 
 interface Props {
@@ -252,26 +251,6 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
             </Button>
           ))}
         </Group>
-      </Paper>
-
-      <Paper radius="lg" shadow="xs" p="md">
-        <Text
-          style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-medium)',
-            color: 'var(--color-text-disabled)',
-          }}
-          mb="xs"
-        >
-          판매 단위
-        </Text>
-        <TextInput
-          placeholder="예: 1분, 3묶음, 1박스"
-          value={value.bundleUnit}
-          onChange={(e) => set('bundleUnit', e.target.value)}
-          size="md"
-          radius="xl"
-        />
       </Paper>
     </Stack>
   );

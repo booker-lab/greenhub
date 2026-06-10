@@ -41,7 +41,6 @@ export function buildProductContentPrompt(params: GenerateContentParams): string
 - 개화 상태: ${BLOOM_CONDITION_LABEL[selection.bloomCondition] ?? selection.bloomCondition}
 - 향기: ${FRAGRANCE_LABEL[selection.fragrance] ?? selection.fragrance}
 - 출하 형태: ${selection.stemType || '미선택'}
-- 판매 단위: ${selection.bundleUnit || '미입력'}
 `;
 
   const noteSection = sellerNote ? `[판매자 메모]\n${sellerNote}` : '[판매자 메모] 없음';

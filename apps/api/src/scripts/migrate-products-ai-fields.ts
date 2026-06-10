@@ -8,9 +8,9 @@
  *
  * 실행: ts-node -r tsconfig-paths/register src/scripts/migrate-products-ai-fields.ts
  */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as admin from 'firebase-admin';
-import * as path from 'path';
-import * as fs from 'fs';
 
 const serviceAccountPath = path.resolve(__dirname, '../../service-account.json');
 if (!admin.apps.length) {
@@ -47,7 +47,6 @@ async function migrateProducts() {
         colors: data.colors ?? [],
         fragrance: 'none',
         bloomCondition: 'half',
-        bundleUnit: '',
       },
       sellerNote: data.description ?? '',
       content: {
