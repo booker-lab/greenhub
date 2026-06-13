@@ -1,5 +1,13 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
+function normalizeApiMessage(status: number, message: unknown) {
+  const raw = Array.isArray(message) ? message.join(', ') : String(message || '');
+  if (status === 400 && raw.includes('should not exist')) {
+    return '입력 항목과 서버 저장 형식이 맞지 않아 저장하지 못했습니다. 잠시 후 다시 시도해주세요.';
+  }
+  return raw || `서버 오류 (${status})`;
+}
+
 /** API 응답이 2xx가 아닐 때 던지는 에러. `.message`는 서버 본문 메시지 또는 상태코드 폴백. */
 export class ApiError extends Error {
   constructor(
@@ -40,8 +48,15 @@ export async function apiJson<T = unknown>(
 ): Promise<T> {
   const res = await apiFetch(path, token, options);
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { message?: string; reason?: string };
-    throw new ApiError(res.status, body?.message ?? `서버 오류 (${res.status})`, body?.reason);
+    const apiBody = (await res.json().catch(() => ({}))) as {
+      message?: string | string[];
+      reason?: string;
+    };
+    throw new ApiError(
+      res.status,
+      normalizeApiMessage(res.status, apiBody?.message),
+      apiBody?.reason,
+    );
   }
   return (await res.json().catch(() => ({}))) as T;
 }
