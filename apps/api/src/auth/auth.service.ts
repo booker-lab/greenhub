@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
 import {
   ConflictException,
   ForbiddenException,
@@ -7,31 +8,28 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
-import type { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as admin from 'firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
-import type { AuditService } from '../common/audit/audit.service';
-import type { FirestoreService } from '../firestore/firestore.service';
+import { AuditService } from '../common/audit/audit.service';
+import { FirestoreService } from '../firestore/firestore.service';
 import type { AddressDto } from './dto/address.dto';
 import type { KakaoLoginDto } from './dto/kakao-login.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 import type { UpdateMeDto } from './dto/update-me.dto';
 import type { JwtPayload } from './types/jwt-payload.type';
-
 type InviteData = {
   expiresAt: admin.firestore.Timestamp;
   revokedAt?: unknown;
   usedAt: unknown;
 };
-
 type HubStaffInviteData = InviteData & {
   storeId?: unknown;
   hubId?: unknown;
 };
-
 function normalizeHubIds(hubIds?: unknown, hubId?: unknown): string[] | undefined {
   if (Array.isArray(hubIds)) {
     const values = hubIds.filter((value): value is string => typeof value === 'string' && !!value);
@@ -39,7 +37,6 @@ function normalizeHubIds(hubIds?: unknown, hubId?: unknown): string[] | undefine
   }
   return typeof hubId === 'string' && hubId ? [hubId] : undefined;
 }
-
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);

@@ -1,5 +1,6 @@
 import { type CanActivate, type ExecutionContext, Injectable } from '@nestjs/common';
-import type { Reflector } from '@nestjs/core';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { Reflector } from '@nestjs/core';
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { ROLES_KEY, type UserRole } from '../decorators/roles.decorator';
 

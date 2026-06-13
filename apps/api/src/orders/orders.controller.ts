@@ -13,9 +13,12 @@ import {
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import type { CreateOrderDto } from './dto/create-order.dto';
-import type { UpdateStatusDto } from './dto/update-status.dto';
-import type { OrdersService } from './orders.service';
+// biome-ignore lint/style/useImportType: Nest ValidationPipe가 DTO 클래스 메타타입을 런타임에 사용한다.
+import { CreateOrderDto } from './dto/create-order.dto';
+// biome-ignore lint/style/useImportType: Nest ValidationPipe가 DTO 클래스 메타타입을 런타임에 사용한다.
+import { UpdateStatusDto } from './dto/update-status.dto';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { OrdersService } from './orders.service';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard)

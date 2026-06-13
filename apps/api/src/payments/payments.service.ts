@@ -7,11 +7,14 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import type { AuditService } from '../common/audit/audit.service';
-import type { FirestoreService } from '../firestore/firestore.service';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { AuditService } from '../common/audit/audit.service';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { PortoneWebhookDto } from './dto/portone-webhook.dto';
-import type { PortoneClient } from './portone.client';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { PortoneClient } from './portone.client';
 
 // 환불 가능 상태
 const REFUNDABLE_STATUSES = ['ACCEPTED', 'RECRUITING', 'CONFIRMED', 'PREPARING'];

@@ -2,9 +2,12 @@ import { Injectable } from '@nestjs/common';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import type { UpdateStatusDto } from './dto/update-status.dto';
-import type { OrdersCreateService } from './orders-create.service';
-import type { OrdersLifecycleService } from './orders-lifecycle.service';
-import type { OrdersQueryService } from './orders-query.service';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { OrdersCreateService } from './orders-create.service';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { OrdersLifecycleService } from './orders-lifecycle.service';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { OrdersQueryService } from './orders-query.service';
 
 @Injectable()
 export class OrdersService {

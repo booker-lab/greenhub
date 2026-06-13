@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { FirestoreService } from '../firestore/firestore.service';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { FirestoreService } from '../firestore/firestore.service';
 
 type RequesterRole = 'consumer' | 'seller' | 'driver' | 'hub_staff' | 'admin';
 type HubData = Record<string, unknown> & {
