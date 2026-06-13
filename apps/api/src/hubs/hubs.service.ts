@@ -1,7 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
-import type { FirestoreService } from '../firestore/firestore.service';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { FirestoreService } from '../firestore/firestore.service';
 import type { CreateHubDto, CreateHubStaffInviteDto, UpdateHubDto } from './dto/create-hub.dto';
 
 type RequesterRole = JwtPayload['role'];

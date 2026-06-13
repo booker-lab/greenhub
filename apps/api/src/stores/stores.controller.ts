@@ -12,7 +12,8 @@ import {
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import type { UpdateStoreDto } from './dto/update-store.dto';
+// biome-ignore lint/style/useImportType: Nest ValidationPipe가 DTO 클래스 메타타입을 런타임에 사용한다.
+import { UpdateStoreDto } from './dto/update-store.dto';
 // biome-ignore lint/style/useImportType: NestJS 생성자 주입 메타데이터에 런타임 값이 필요하다.
 import { StoresService } from './stores.service';
 

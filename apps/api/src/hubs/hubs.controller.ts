@@ -14,14 +14,17 @@ import {
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import type {
+// biome-ignore lint/style/useImportType: Nest ValidationPipe가 DTO 클래스 메타타입을 런타임에 사용한다.
+import {
   AssignHubStaffDto,
   CreateHubDto,
   CreateHubStaffInviteDto,
   UpdateHubDto,
 } from './dto/create-hub.dto';
-import type { HubStaffInvitesService } from './hub-staff-invites.service';
-import type { HubsService } from './hubs.service';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { HubStaffInvitesService } from './hub-staff-invites.service';
+// biome-ignore lint/style/useImportType: Nest DI가 생성자 메타데이터에서 클래스 값을 사용한다.
+import { HubsService } from './hubs.service';
 
 @Controller('stores/:storeId/hubs')
 @UseGuards(JwtAuthGuard)
