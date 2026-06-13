@@ -22,7 +22,7 @@
 | headline 수정 | 셀러가 수정한 버전 저장, 재생성으로 덮어쓰기 금지 |
 | 카테고리 | MVP는 호접란(phalaenopsis) 20~30종 집중 |
 | 가드레일 DB | Firestore 수동 입력, 필요 시 Claude가 대신 추가 |
-| AI 모델 | Gemini 3 Flash Preview — `gemini-3-flash-preview` (Google AI Studio API 키) |
+| AI 모델 | Gemini 3.5 Flash — `gemini-3.5-flash` 기본, 장애 시 fallback 체인 사용 (Google AI Studio API 키) |
 | 가드레일 충돌 | AI 수정 제안 + 판매자 강행 등록 허용 (`sellerOverride: true`) |
 
 ---
@@ -32,7 +32,7 @@
 ```
 셀러 앱 (Next.js 15)
   ├─ Step 1: 품종 선택 (varietyId)
-  ├─ Step 2: 터치 선택 (color, fragrance, bloom, unit)
+  ├─ Step 2: 터치 선택 (color, fragrance, bloom)
   ├─ Step 3: 판매자 메모 (sellerNote)
   ├─ Step 4: AI 미리보기 (headline + description 편집)
   └─ Step 5: 게시
@@ -60,7 +60,6 @@ interface Selection {
   colors: ColorOption[]
   fragrance: 'none' | 'light' | 'strong'
   bloomCondition: 'bud' | 'half' | 'full'
-  bundleUnit: string
 }
 
 interface GeneratedContent {
@@ -163,7 +162,7 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
 ## Phase C — NestJS: AI 콘텐츠 생성 모듈
 
 - [x] C1. `GEMINI_API_KEY` 환경 변수 추가, `@google/generative-ai` 패키지 설치
-- [x] C2. `apps/api/src/ai/ai.service.ts` — Gemini 3 Flash Preview (`gemini-3-flash-preview`) 클라이언트 초기화
+- [x] C2. `apps/api/src/ai/ai.service.ts` — Gemini 3.5 Flash 기본 모델과 fallback 체인 초기화
 - [x] C3. `apps/api/src/ai/prompts/product-content.prompt.ts` — 프롬프트 템플릿
   - 시스템: 가드레일 사실 최우선, sellerNote 매끄럽게 확장, JSON 출력
   - 언어: 한국어, 시니어 친화적
@@ -183,7 +182,7 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
 ## Phase E — 셀러 앱: UI 구현
 
 - [x] E1. `VarietySelector.tsx` — 품종 드롭다운 (카테고리 그룹핑)
-- [x] E2. `TouchSelector.tsx` — 향기/개화상태/판매단위 아이콘 버튼 (큰 버튼, 시니어 UX)
+- [x] E2. `TouchSelector.tsx` — 향기/개화상태 아이콘 버튼 (큰 버튼, 시니어 UX)
 - [x] E3. 기존 ColorSelector → `TouchSelector` 섹션에 통합, 상태 변수 `colors[]` → `selection.colors`
 - [x] E4. `SellerNoteInput.tsx` — 큰 텍스트에어리어, 힌트 문구, 200자 카운터
 - [x] E5. `AIPreviewPanel.tsx`
@@ -194,7 +193,7 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
 - [x] E6. `ProductForm.tsx` — 5단계 스텝 구조 전환
   ```
   Step 1: 사진 업로드 + 품종 선택
-  Step 2: 터치 선택 (색상·향기·개화·단위)
+  Step 2: 터치 선택 (색상·향기·개화)
   Step 3: 판매자 메모 입력
   Step 4: AI 미리보기 + 편집
   Step 5: 가격·배송·공동구매 설정 + 게시
@@ -226,7 +225,7 @@ AI 제안: "이 품종은 원래 향기가 없다고 알려져 있어요. 수정
     | 향기 | `variety.fragranceLevel` |
     | 개화 상태 | `selection.bloomCondition` |
     | 추천 관상 기간 | `variety.bloomDuration` |
-    | 판매 단위 | `selection.bundleUnit` |
+    | 판매 단위 | 미표시 — 구매 수량은 주문 단계의 `quantity`로 처리 |
   - `varietyId` 없는 기존 상품은 테이블 미표시 (graceful 처리)
 - [x] F4. `apps/consumer/src/components/GreenLoveBrandSection.tsx` — 공통 브랜드 섹션 신규 생성
   - 모든 상품 상세 페이지 하단에 고정 노출 (AI 생성 아닌 정적 콘텐츠)
@@ -279,3 +278,24 @@ GEMINI_API_KEY=
 - 이미지 비전 분석: 품종 자동 매칭 정확도 향상
 - 소비자 상세 페이지: "판매자 직접 확인 정보" 배지 표시 (sellerOverride 상품)
 - 품종 관리 화면: Firestore 콘솔 대신 셀러 앱 내 UI
+
+---
+
+## 2026-06-10 운영 장애 보강
+
+**기본 모델은 `gemini-3.5-flash`로 전환하고, 과부하가 발생하면 `gemini-3.1-flash-lite`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` 순서로 fallback한다.**
+
+- 관측: 운영 `/ai/generate-content`가 같은 입력에서 201과 500을 반복했고, 로컬 동일 키 반복 호출에서 `gemini-3-flash-preview`가 `[503 Service Unavailable] This model is currently experiencing high demand`를 반환했다.
+- 범위: 상품 문구 생성의 비즈니스 규칙과 guardrail은 변경하지 않고, 외부 Gemini 호출 인프라 레이어에만 fallback을 둔다.
+- 기본값: `GEMINI_MODEL` 미설정 시 `gemini-3.5-flash`, `GEMINI_FALLBACK_MODEL` 미설정 시 `gemini-3.1-flash-lite`, `GEMINI_LEGACY_FALLBACK_MODEL` 미설정 시 `gemini-2.5-flash`, `GEMINI_LEGACY_FALLBACK_LITE_MODEL` 미설정 시 `gemini-2.5-flash-lite`.
+- 제약: fallback도 실패하면 기존처럼 500을 반환하되, 마지막 Gemini 오류를 포함한다.
+
+---
+
+## 2026-06-10 변경 결정 — 판매 단위 제거
+
+**결정**: 현재 MVP에서는 `selection.bundleUnit` 입력·표시·AI 프롬프트 전달을 제거한다.
+
+**이유**: 주문·결제·공동구매 수량 계약은 이미 `quantity`, `price`, `minQuantity`, `targetQuantity`, `maxPerPerson`로 처리된다. `1분`, `3묶음`, `1박스` 같은 자유 입력 판매 단위는 계산 기준이 아니므로 판매자에게 불필요한 판단 비용을 만든다.
+
+**향후 조건**: 나중에 포장 단위가 가격·재고·배송비 계산의 기준이 되면 자유 입력 `bundleUnit`을 되살리지 않고, `packageSize`, `unitLabel`, `baseQuantity` 같은 구조화 필드를 별도 SDD로 설계한다.

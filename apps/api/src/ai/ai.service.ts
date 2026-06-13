@@ -18,13 +18,19 @@ export interface GenerateContentResult {
 
 @Injectable()
 export class AiService {
-  private readonly model: GenerativeModel;
+  private readonly genAI: GoogleGenerativeAI;
+  private readonly modelNames: string[];
 
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.get<string>('GEMINI_API_KEY');
     if (!apiKey) throw new InternalServerErrorException('GEMINI_API_KEY가 설정되지 않았습니다.');
-    const genAI = new GoogleGenerativeAI(apiKey);
-    this.model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    this.genAI = new GoogleGenerativeAI(apiKey);
+    this.modelNames = [
+      this.config.get<string>('GEMINI_MODEL') ?? 'gemini-3.5-flash',
+      this.config.get<string>('GEMINI_FALLBACK_MODEL') ?? 'gemini-3.1-flash-lite',
+      this.config.get<string>('GEMINI_LEGACY_FALLBACK_MODEL') ?? 'gemini-2.5-flash',
+      this.config.get<string>('GEMINI_LEGACY_FALLBACK_LITE_MODEL') ?? 'gemini-2.5-flash-lite',
+    ].filter((model, index, models) => model && models.indexOf(model) === index);
   }
 
   async generateProductContent(params: GenerateContentParams): Promise<GenerateContentResult> {
@@ -32,8 +38,7 @@ export class AiService {
 
     let text: string;
     try {
-      const result = await this.model.generateContent(prompt);
-      text = result.response.text().trim();
+      text = await this.generateText(prompt);
     } catch (e: any) {
       throw new InternalServerErrorException(`Gemini 호출 실패: ${e?.message ?? e}`);
     }
@@ -68,5 +73,25 @@ export class AiService {
       headline: typeof parsed.headline === 'string' ? parsed.headline : '',
       description: typeof parsed.description === 'string' ? parsed.description : '',
     };
+  }
+
+  private async generateText(prompt: string): Promise<string> {
+    let lastError: unknown;
+
+    for (const modelName of this.modelNames) {
+      try {
+        const model = this.createModel(modelName);
+        const result = await model.generateContent(prompt);
+        return result.response.text().trim();
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError;
+  }
+
+  private createModel(modelName: string): GenerativeModel {
+    return this.genAI.getGenerativeModel({ model: modelName });
   }
 }

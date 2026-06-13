@@ -1,24 +1,4 @@
-import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsOptional, IsString, ValidateNested } from 'class-validator';
-
-export class SelectionDto {
-  @IsArray()
-  @IsString({ each: true })
-  colors: string[];
-
-  @IsEnum(['외대', '쌍대', '가지', '3대'])
-  stemType: string;
-
-  @IsEnum(['none', 'light', 'strong'])
-  fragrance: string;
-
-  @IsEnum(['bud', 'half', 'full'])
-  bloomCondition: string;
-
-  @IsOptional()
-  @IsEnum(['easy', 'normal', 'hard'])
-  careLevel?: string;
-}
+import { IsObject, IsOptional, IsString } from 'class-validator';
 
 export class GenerateContentDto {
   @IsOptional()
@@ -26,12 +6,12 @@ export class GenerateContentDto {
   varietyId?: string;
 
   @IsOptional()
-  @IsEnum(['orchid', 'cut_flower', 'foliage'])
+  @IsString()
   category?: string;
 
-  @ValidateNested()
-  @Type(() => SelectionDto)
-  selection: SelectionDto;
+  @IsOptional()
+  @IsObject()
+  selection?: Record<string, unknown>;
 
   @IsOptional()
   @IsString()
