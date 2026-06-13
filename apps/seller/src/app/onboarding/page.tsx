@@ -1,5 +1,6 @@
 'use client';
 
+import type { UpdateStoreRequest } from '@greenhub/shared';
 import {
   Box,
   Button,
@@ -11,6 +12,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { FirebaseError } from 'firebase/app';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -44,14 +46,7 @@ export default function OnboardingPage() {
     if (!storeId || !token) return;
     setStoreLoading(true);
     setStoreLoadError('');
-    apiJson<{
-      name?: string;
-      ceoName?: string;
-      phone?: string;
-      address?: string;
-      businessNumber?: string;
-      logoUrl?: string;
-    }>(`/stores/${storeId}`, token)
+    apiJson<UpdateStoreRequest>(`/stores/${storeId}`, token)
       .then((data) => {
         setForm({
           name: data.name ?? '',
@@ -100,7 +95,12 @@ export default function OnboardingPage() {
       const url = await getDownloadURL(storageRef);
       setLogoPreview(url);
       setForm((prev) => ({ ...prev, logoUrl: url }));
-    } catch {
+    } catch (e) {
+      if (e instanceof FirebaseError) {
+        console.error('로고 업로드 실패', { code: e.code, message: e.message });
+      } else {
+        console.error('로고 업로드 실패', e);
+      }
       setError('로고 업로드에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setLogoUploading(false);
@@ -134,6 +134,7 @@ export default function OnboardingPage() {
     const token = session?.user.accessToken;
     if (storeId && (storeLoading || storeLoadError)) {
       setError(storeLoadError || '사업자 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+      setLoading(false);
       return;
     }
     if (!token) {
@@ -142,14 +143,15 @@ export default function OnboardingPage() {
       return;
     }
 
-    const body = JSON.stringify({
+    const payload: UpdateStoreRequest = {
       name: form.name,
       ceoName: form.ceoName,
       phone: form.phone,
       address: form.address,
       businessNumber: form.businessNumber || undefined,
       logoUrl: form.logoUrl || undefined,
-    });
+    };
+    const body = JSON.stringify(payload);
 
     try {
       if (!storeId) {
