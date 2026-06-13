@@ -286,3 +286,33 @@
 - **결정**: 셀러 대검증 전 테스트 데이터 정리는 `scripts/cleanup-seller-validation-data.mjs <storeId>`로 대상 `storeId` 하나만 조회하고, 기본 실행은 dry-run으로 제한한다.
 - **이유**: 운영 Firestore의 상품·주문·결제·정산 데이터는 삭제 영향이 크므로, 수동 콘솔 조작이나 광범위 쿼리보다 명시 범위와 사전 검토가 필요하다.
 - **계약**: 실제 삭제는 백업 이후 `--apply`를 명시한 경우에만 수행한다. 기본 범위는 `products`, `orders`, `payments`, `settlements`, 삭제 상품과 같은 ID의 `groupProductConfig`이며, `stores`, `users`, `deliveryFeeConfig`, `auditLogs`, `refreshTokens`는 정리 범위에서 제외한다.
+
+## [결정 #CL-130] 판매자 로고는 `logos/` Storage 경계로 분리 (2026-06-10)
+
+- **결정**: 판매자 온보딩 로고 업로드는 Firebase Storage `logos/{allPaths=**}` 경로를 사용하고, 해당 경로는 공개 읽기와 인증 사용자 쓰기만 허용한다.
+- **이유**: 로고는 상품 이미지(`products/`)와 배너 이미지(`banners/`)의 수명주기와 소유 경계가 다르므로 별도 인프라 규칙으로 분리해야 한다.
+- **계약**: 사업자 정보 저장은 기존 API/Firestore 도메인에 유지하고, 이미지 업로드 권한은 `storage.rules`에서 관리한다. 운영 반영에는 `firebase deploy --only storage`가 필요하다.
+
+## [결정 #CL-131] 판매 단위 자유 입력은 MVP 상품 등록에서 제거 (2026-06-10)
+
+- **결정**: 셀러 상품 등록의 `selection.bundleUnit` 자유 입력, AI 프롬프트 전달, 소비자 상세 표시를 제거한다.
+- **이유**: 현재 주문·결제·공동구매 계약은 `quantity`, `price`, `minQuantity`, `targetQuantity`, `maxPerPerson`가 담당한다. 판매 단위가 계산 기준이 아닌 상태에서 `1분`, `3묶음`, `1박스`를 받으면 셀러에게 불필요한 판단 비용만 만든다.
+- **계약**: 향후 포장 단위가 가격·재고·배송비 계산 기준이 되면 `bundleUnit` 자유 입력 복구가 아니라 `packageSize`, `unitLabel`, `baseQuantity` 등 구조화 필드를 별도 SDD로 설계한다.
+
+## [결정 #CL-132] Gemini preview 종료 대응과 안정 모델 fallback (2026-06-10)
+
+- **결정**: 상품 AI 문구 생성 기본 모델을 `gemini-3.5-flash`로 전환하고, Gemini 호출이 실패하면 `gemini-3.1-flash-lite`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` 순서로 fallback한다. 모델명은 `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, `GEMINI_LEGACY_FALLBACK_MODEL`, `GEMINI_LEGACY_FALLBACK_LITE_MODEL` 환경변수로 분리한다.
+- **이유**: 2026-06-10 운영 `/ai/generate-content`에서 201 성공과 500 실패가 같은 입력으로 반복되었고, 로컬 동일 키 호출에서 `gemini-3-flash-preview`가 `[503 Service Unavailable] This model is currently experiencing high demand`를 간헐 반환했다. 공식 Gemini API 문서도 `gemini-3-flash-preview`에서 `gemini-3.5-flash`로의 모델명 갱신을 안내하므로 preview 모델 고정을 해소한다.
+- **계약**: guardrail, prompt, 상품 저장 스키마는 변경하지 않는다. fallback은 외부 Gemini 호출 인프라 복구 수단으로만 동작하며, fallback도 실패하면 마지막 Gemini 오류를 포함해 기존 500 흐름을 유지한다.
+
+## [결정 #CL-133] Nest 런타임 메타데이터 대상은 value import로 유지 (2026-06-10)
+
+- **결정**: `ValidationPipe` DTO, 컨트롤러 메서드 본문 DTO, Nest DI 생성자 주입 대상 클래스는 `import type`이 아니라 런타임 value import로 유지한다.
+- **이유**: TypeScript의 type-only import는 빌드 후 제거되므로 Nest가 `reflect-metadata`로 읽는 DTO/주입 대상이 `Function` 또는 빈 메타타입으로 남을 수 있다. 이 경우 whitelist 검증은 정상 필드를 `should not exist`로 거부하고, DI는 `UnknownDependenciesException`으로 기동 실패한다.
+- **계약**: 린터가 type import를 권장하더라도 Nest 런타임 메타데이터가 필요한 import에는 파일 단위가 아닌 해당 import 근처에 예외 주석을 남긴다.
+
+## [결정 #CL-134] AI 미리보기 payload 검증은 저장 API보다 관대하게 유지 (2026-06-10)
+
+- **결정**: `/ai/generate-content`의 `selection` DTO는 nested enum 검증을 하지 않고 객체 여부만 확인한 뒤, 컨트롤러에서 `colors`, `stemType`, `fragrance`, `bloomCondition`, `careLevel` 기본값과 병합한다.
+- **이유**: 상품 AI 미리보기는 저장 전 초안 생성 기능이며, 브라우저 draft나 프론트 bundle 값이 조금 달라도 400으로 차단되면 판매자 흐름이 끊긴다. 실제 상품 저장 검증은 별도 Product DTO와 도메인 로직에서 유지한다.
+- **계약**: AI 프롬프트와 guardrail은 보정된 selection을 입력으로 받는다. 누락값은 기본값으로 생성하고, 저장 시점의 필수값 검증은 기존 상품 등록 경계에서 수행한다.

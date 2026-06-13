@@ -12,7 +12,7 @@
 | **셀러** | `apps/seller` | ✅ **완료** (A~F, 세션39~59) | ✅ 완료 (M-PATH, 세션83) | 기준선·레퍼런스 패턴 |
 | **소비자** | `apps/consumer` | ⚠️ 부분 (DS 감사만, 2026-05-02) | ⏳ C 섹션 미진행 | 디자인시스템 위반 18건 목록 존재 |
 | **어드민** | `apps/seller/src/app/admin` | ✅ **완료** (반응형 세션88 + SDD 분리 세션91) | ⏳ 상태변경 육안만 | 7개 탭 전부 _lib/_components 분리 |
-| **드라이버** | `apps/driver` | 🔴 미착수 | 🔴 미진행 | board·map·login·profile |
+| **드라이버** | `apps/driver` | ✅ 완료 (board·map·photo·login·profile 분리 + Kakao 지도 1차) | ⏳ 운영 키·좌표 데이터 확인 필요 | 지도 실렌더 확인만 잔여 |
 
 ---
 
@@ -41,10 +41,11 @@
 - 탭: 판매자(stores)·소비자(users)·드라이버(drivers)·주문(orders)·정산(settlements)·초대(invite)·배너(banner).
 - **잔여**: 상태변경(치우기·복구·차단·환불·승인) 육안 검증 — `pending-visual-verify.md` §4. 순수 표현 레이어 리팩토링이라 e2e 회귀 위험은 낮음.
 
-### 4. 드라이버앱 — 🔴 미착수
+### 4. 드라이버앱 — ⚠️ 부분 완료
 
-- 라우트: board(수거 보드)·map·login·profile.
-- 착수 시 별도 감사·아토믹 플랜 작성.
+- 완료: `driver-app-refactor-plan.md`로 board·map 순수 로직, 상세/사진 업로드 판정, 사진 UI, login·profile 화면 조립 책임을 분리했다.
+- 완료: `driver-kakao-map-plan.md`로 `/map` Kakao Maps JavaScript SDK 1차 표시를 추가했다. 키·좌표가 없으면 기존 플레이스홀더를 유지한다.
+- 잔여 검증: 운영 `NEXT_PUBLIC_KAKAO_MAP_KEY`와 좌표 포함 주문 데이터가 있는 환경에서 실제 지도 렌더링 육안 확인.
 
 ---
 

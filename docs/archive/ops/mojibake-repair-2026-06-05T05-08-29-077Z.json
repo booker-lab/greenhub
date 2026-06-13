@@ -1,0 +1,35 @@
+[
+  {
+    "key": "store",
+    "collection": "stores",
+    "id": "9b2cb652-ff77-46b9-a773-e1efa78fb763",
+    "field": "name",
+    "label": "VF-008 판매자 상호",
+    "existedBeforeRepair": true,
+    "previousNameNote": "mojibake string confirmed before repair",
+    "repairedName": "테스트 상점",
+    "looksBroken": true
+  },
+  {
+    "key": "user",
+    "collection": "users",
+    "id": "69dcfab6-4dca-43c0-952d-908001257168",
+    "field": "name",
+    "label": "VF-011 소비자 이름",
+    "existedBeforeRepair": true,
+    "previousNameNote": "mojibake string confirmed before repair",
+    "repairedName": "E2E 검증 사용자",
+    "looksBroken": true
+  },
+  {
+    "key": "seller",
+    "collection": "users",
+    "id": "424b9334-cc05-41b0-a451-840e88733446",
+    "field": "name",
+    "label": "VF-008 연결 판매자 이름",
+    "existedBeforeRepair": true,
+    "previousNameNote": "mojibake string confirmed before repair",
+    "repairedName": "테스트 판매자",
+    "looksBroken": true
+  }
+]
