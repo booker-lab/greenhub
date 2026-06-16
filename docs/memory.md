@@ -2,7 +2,7 @@
 > SSOT: 세션 종료 시 최신 요약만 유지한다. 200라인 초과 시 50라인 이내로 압축한다.
 > 이전 이력은 `docs/archive/`, `docs/CRITICAL_LOGIC.md`, `docs/BACKLOG.md`를 참조한다.
 
-최종 수정: 2026-06-09
+최종 수정: 2026-06-17
 
 ## 현재 진행 요약
 
@@ -30,3 +30,16 @@
 - `docs-policy`와 `seller-admin` 변경을 분리 stage·커밋하고 Vercel Preview READY를 확인한다.
 - `misc-review`에 남은 `AGENTS.md`, hub staff 문서, archive/plan 파일은 이번 seller 검증 묶음에 섞지 말고 별도 검토한다.
 - 커밋 전 `pnpm release:plan`, staged diff, 파일 라인 수, `docs/memory.md` 라인 수를 다시 확인한다.
+- 2026-06-09 `docs/specs/full-flow-manual-test-guide.md` 추가. 셀러/소비자/드라이버 전체 흐름 수동 검증 준비, 상태 전이, 환경 변수, 테스트 데이터, E2E 연결, 정산 확인 항목을 정리했다.
+- 2026-06-09 소비자 홈에 남은 `테스트 장미 (E2E 전용)` 원인 확인 및 삭제. 세 번째 스토어 `test-store-001`의 `test-product-001`이었고, cleanup 스크립트로 1건 삭제 완료. 전체 products/orders 집계 0건, Firestore activeProducts 0건, 운영 API `GET /products?isActive=true` 응답 `items: [], total: 0` 확인.
+- 2026-06-10 상품 등록 `판매 단위` 자유 입력 제거. 현재 수량 계약은 `quantity`와 공동구매 수량 필드가 담당하고, 향후 포장 단위가 계산 기준이 되면 별도 SDD로 구조화 필드를 설계한다.
+
+- 2026-06-10 AI 생성 장애 원인은 `gemini-3-flash-preview`의 간헐 503 과부하로 확인. 공식 문서 기준 최신 기본값은 `gemini-3.5-flash`로 전환하고, `gemini-3.1-flash-lite` → `gemini-2.5-flash` → `gemini-2.5-flash-lite` fallback 체인으로 보강. `pnpm --filter api build`, 실제 `AiService` 3회, Chrome 육안검증 화면 성공.
+- 2026-06-11 판매자 온보딩 `should not exist` 수정이 후속 운영 배포로 덮인 것을 확인해 재배포. API Railway `abce0e41-3ccd-41f9-aa7a-3a4241f1743e`, seller Vercel `dpl_Gb2D6A8jJKuJt43Vx79fPbxEDZaV`가 운영 alias에 반영됐고 `/health`, `/onboarding` 200 확인.
+- 2026-06-10 운영 AI 생성 장애 복구. Railway API `cde0020d-d1f7-42a6-867e-a7589975ff57` 성공 배포, `/ai/generate-content` 최종 POST 201 확인. 원인은 프론트 payload와 AI DTO nested 검증 불일치 및 Nest DI type-only import 부팅 실패였고, AI 미리보기 DTO는 객체 수용 후 기본 selection 병합으로 완화했다. Chrome 운영 화면 육안검증에서 헤드라인/상세 설명 생성 성공.
+- 2026-06-13 소비자 앱 로그인 페이지 장바구니 배지 노출 원인 확인 및 수정. `BottomNav`가 인증 상태 없이 `localStorage.greenhub_cart` 기반 `useCart().itemCount`를 표시해 미로그인 화면에서도 이전 장바구니 수량이 보였다. `useSession().status === 'authenticated'`일 때만 배지를 표시하도록 제한했다.
+- 2026-06-13 `full-flow-manual-test-guide.md` 5.1~5.8 수동 검증을 대화별 핸드오프로 진행하도록 준비. 5.1 전용 새 Codex 대화 `019ebf97-59ee-7641-bcef-91060a04d241`를 생성했고, 완료 시 5.2 핸드오프 프롬프트를 남기도록 지시했다.
+- 2026-06-13 전체 거래 수동 검증은 5.1부터 사용자가 실제 Chrome 로그인 세션에서 육안 수행하는 방식으로 전환했다. Playwright preview에서 `POST /stores/:storeId/products`가 `selection.property bundleUnit should not exist` 400으로 차단된 사전 관찰을 남겼고, 실제 Chrome에서도 재현되면 5.1 차단 결함으로 기록한 뒤 5.2를 시작하지 않는다.
+- 2026-06-17 소비자 공구 탭 안정화+핵심개선 선 설계 문서 `docs/specs/frontend/consumer-groupbuy-tab-improve-plan.md`를 추가했다. 다음 진입은 공구 상태 유틸과 테스트부터 시작한다.
+- 2026-06-17 소비자 카테고리 탐색 완성형 선 설계와 구현을 진행했다. URL 쿼리를 필터 SSOT로 두고, `saleType` 계약을 `normal | group`로 정리했으며, 색상 접기/초기화, 정렬, 검색 진입, 공동구매 카드 보강, `consumer-category.spec.ts` fixture E2E를 추가했다. `pnpm --filter consumer build`, `pnpm --filter consumer exec tsc --noEmit`, 변경 파일 Biome, fixture E2E 5/5 통과. 로컬 브라우저 검증은 CORS 때문에 `127.0.0.1` 대신 `http://localhost:3001` 기준으로 확인한다.
+- 2026-06-17 소비자 홈 공동구매 미리보기 개선 구현. 이미지 부모 영역 고정, 남은 시간·남은 수량 표시, 목표 달성 상품 홈 미리보기 제외, `targetQuantity <= 0` fallback을 적용했다. 변경 파일 Biome와 `pnpm --filter consumer build` 통과, 전체 lint는 기존 이슈로 실패, Playwright 모킹 모바일 검증 통과.
