@@ -45,3 +45,4 @@
 - 2026-06-17 소비자 홈 공동구매 미리보기 개선 구현. 이미지 부모 영역 고정, 남은 시간·남은 수량 표시, 목표 달성 상품 홈 미리보기 제외, `targetQuantity <= 0` fallback을 적용했다. 변경 파일 Biome와 `pnpm --filter consumer build` 통과, 전체 lint는 기존 이슈로 실패, Playwright 모킹 모바일 검증 통과.
 - 2026-06-17 소비자 카테고리 탐색 보강. `ColorOption` 누락 색상 4종을 카테고리 칩에 추가하고 공개 상품 API의 공동구매 `recruitDeadline`을 ISO 문자열로 직렬화하도록 맞췄다.
 - 2026-06-17 소비자 lint 실패 원인을 재확인해 `docs/BACKLOG.md`에 `CONSUMER-LINT-BASELINE`으로 기록했다. 현재 실패 errors는 `useCart.ts`와 `useNotifications.ts`의 `forEach` 콜백 반환 2건이며, warnings 16건은 이미지, index key, non-null assertion 정리 과제다.
+- 2026-06-17 소비자 상점 탭 개선 구현. 공개 상점 훅 경계와 `StoreCard` 공통화, `/stores` 검색·정렬·결과 없음 상태, `consumer-stores.spec.ts` fixture 검증을 확인했다. `pnpm --filter consumer build`, `pnpm --filter e2e test tests/consumer-stores.spec.ts`, `git diff --check` 통과.

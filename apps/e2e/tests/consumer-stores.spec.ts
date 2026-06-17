@@ -106,10 +106,12 @@ test.describe('소비자 상점 탐색 fixture', () => {
     await expect(page.getByText('Store Beta')).toBeVisible();
     await expect(page.getByText('Store Alpha')).toBeHidden();
 
+    await page.getByLabel('상점 검색').fill('없는상점');
+    await expect(page.getByText('검색 조건에 맞는 상점이 없습니다.')).toBeVisible();
     await page.getByRole('button', { name: '검색 초기화' }).click();
     await expect(page.getByText('Store Alpha')).toBeVisible();
 
-    await page.getByLabel('상점 정렬').click();
+    await page.getByRole('combobox', { name: '상점 정렬' }).click();
     await page.getByRole('option', { name: '상품 수순' }).click();
 
     const cardTexts = await page
