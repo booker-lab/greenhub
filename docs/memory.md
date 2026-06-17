@@ -43,3 +43,5 @@
 - 2026-06-17 소비자 공구 탭 안정화+핵심개선 선 설계 문서 `docs/specs/frontend/consumer-groupbuy-tab-improve-plan.md`를 추가했다. 다음 진입은 공구 상태 유틸과 테스트부터 시작한다.
 - 2026-06-17 소비자 카테고리 탐색 완성형 선 설계와 구현을 진행했다. URL 쿼리를 필터 SSOT로 두고, `saleType` 계약을 `normal | group`로 정리했으며, 색상 접기/초기화, 정렬, 검색 진입, 공동구매 카드 보강, `consumer-category.spec.ts` fixture E2E를 추가했다. `pnpm --filter consumer build`, `pnpm --filter consumer exec tsc --noEmit`, 변경 파일 Biome, fixture E2E 5/5 통과. 로컬 브라우저 검증은 CORS 때문에 `127.0.0.1` 대신 `http://localhost:3001` 기준으로 확인한다.
 - 2026-06-17 소비자 홈 공동구매 미리보기 개선 구현. 이미지 부모 영역 고정, 남은 시간·남은 수량 표시, 목표 달성 상품 홈 미리보기 제외, `targetQuantity <= 0` fallback을 적용했다. 변경 파일 Biome와 `pnpm --filter consumer build` 통과, 전체 lint는 기존 이슈로 실패, Playwright 모킹 모바일 검증 통과.
+- 2026-06-17 소비자 카테고리 탐색 보강. `ColorOption` 누락 색상 4종을 카테고리 칩에 추가하고 공개 상품 API의 공동구매 `recruitDeadline`을 ISO 문자열로 직렬화하도록 맞췄다.
+- 2026-06-17 소비자 lint 실패 원인을 재확인해 `docs/BACKLOG.md`에 `CONSUMER-LINT-BASELINE`으로 기록했다. 현재 실패 errors는 `useCart.ts`와 `useNotifications.ts`의 `forEach` 콜백 반환 2건이며, warnings 16건은 이미지, index key, non-null assertion 정리 과제다.

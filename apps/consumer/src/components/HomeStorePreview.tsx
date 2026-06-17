@@ -4,7 +4,7 @@ import { Box, Card, Group, SimpleGrid, Skeleton, Stack, Text, Title } from '@man
 import { MapPin, Package, Store } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePublicStores } from '@/hooks/useProducts';
+import { usePublicStores } from '@/hooks/useStores';
 
 const STORE_PREVIEW_LIMIT = 3;
 const STORE_PREVIEW_SKELETON_KEYS = [

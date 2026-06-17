@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -54,7 +54,9 @@ export class ProductsService {
         .collection('groupProductConfig')
         .where('productId', 'in', groupProductIds.slice(0, 30))
         .get();
-      gcSnap.docs.forEach((d) => groupConfigMap.set(d.data()['productId'], d.data()));
+      gcSnap.docs.forEach((d) => {
+        groupConfigMap.set(d.data()['productId'], d.data());
+      });
     }
 
     // 스펙 응답: { items: ProductSummary[], total: number }
@@ -303,7 +305,9 @@ export class ProductsService {
         .collection('groupProductConfig')
         .where('productId', 'in', groupProductIds.slice(0, 30))
         .get();
-      gcSnap.docs.forEach((d: any) => groupConfigMap.set(d.data()['productId'], d.data()));
+      gcSnap.docs.forEach((d: any) => {
+        groupConfigMap.set(d.data()['productId'], d.data());
+      });
     }
 
     const items = products.map((p: any) => {
@@ -325,7 +329,10 @@ export class ProductsService {
             currentQuantity: gc['currentQuantity'],
             minQuantity: gc['minQuantity'],
             targetQuantity: gc['targetQuantity'],
-            recruitDeadline: gc['recruitDeadline'],
+            recruitDeadline:
+              typeof (gc['recruitDeadline'] as { toDate?: () => Date })?.toDate === 'function'
+                ? (gc['recruitDeadline'] as { toDate: () => Date }).toDate().toISOString()
+                : gc['recruitDeadline'],
           };
       }
       return summary;

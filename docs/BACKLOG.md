@@ -31,6 +31,7 @@
 | 💡 향후 | VF-008 — 정상 상호명 확인과 별도 승인 후 운영 Firestore 판매자 `name` 정리 | 운영 데이터 |
 | 💡 향후 | VF-011 — 정상 이름 확인과 별도 승인 후 운영 Firestore 소비자 `name` 정리 | 운영 데이터 |
 | 💡 향후 | 육안 검증 보류 묶음 — 인증 가능한 `375px` seller·admin 모바일 환경, 운영 쓰기 승인, 테스트 데이터가 필요한 항목은 `visual-verify-handoff-20260601.md` §4에서 재개 | 검증 환경 |
+| 💡 향후 | CONSUMER-LINT-BASELINE — `pnpm --filter consumer lint` 기존 실패 2건과 경고 16건 정리 | DX/품질 |
 
 ---
 
@@ -210,6 +211,10 @@
 - [x] 상품 상세 하단 판매자 정보 노출 (상호명·로고·연락처) ✅ 2026-04-02
 - [x] `/category` 카테고리 탭 필터 (Firestore 복합 인덱스 + 레이아웃) ✅ 2026-04-02
 - [x] `/search` 검색 페이지 (전체 상품 로드 후 클라이언트 필터) ✅ 2026-04-02
+
+### 품질 정리
+
+- [ ] **[CONSUMER-LINT-BASELINE] 소비자 앱 lint baseline 정리** (2026-06-17 발견) — `pnpm --filter consumer lint`가 기존 코드에서 `2 errors / 16 warnings`로 실패한다. **실패 원인 errors**: `src/hooks/useCart.ts:24`, `src/hooks/useNotifications.ts:94`의 `forEach` 콜백이 호출 결과를 반환해 `lint/suspicious/useIterableCallbackReturn`에 걸림. **warnings**: `<img>` 사용(`cart/page.tsx:80`, `ProductInfo.tsx:206`), 배열 index key(`groupbuy/page.tsx:82`, `DeliveryDatePicker.tsx:151·153`, `ProductImages.tsx:38·74`, `ProductInfo.tsx:207`), non-null assertion(`auth.ts`, `DeadlineSection.tsx`, `usePayment.ts`, `lib/firestore.ts`) 정리 필요. 처리 기준: 동작 변경 없이 콜백을 블록 body로 바꾸고, 이미지·key·환경변수 가드를 파일별로 나눠 수정한 뒤 `pnpm --filter consumer lint`를 0 errors로 통과시킨다.
 
 ---
 

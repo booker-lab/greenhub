@@ -5,7 +5,7 @@ import { MapPin, Phone, Store } from 'lucide-react';
 import Image from 'next/image';
 import { useParams } from 'next/navigation';
 import ProductCard from '@/components/ProductCard';
-import { usePublicStore } from '@/hooks/useProducts';
+import { usePublicStore } from '@/hooks/useStores';
 
 const PRODUCT_SKELETON_KEYS = [
   'store-product-skeleton-1',

@@ -23,7 +23,7 @@ import GreenLoveBrandSection from '@/components/GreenLoveBrandSection';
 import ProductCTABar from '@/components/ProductCTABar';
 import { useCart } from '@/hooks/useCart';
 import { useGroupProduct } from '@/hooks/useGroupProduct';
-import { usePublicStore } from '@/hooks/useProducts';
+import { usePublicStore } from '@/hooks/useStores';
 import DeliveryDatePicker from './DeliveryDatePicker';
 
 const deliveryLabels: Record<DeliveryMethod, string> = {

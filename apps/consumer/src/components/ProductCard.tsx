@@ -17,6 +17,18 @@ const categoryLabels: Record<string, string> = {
   foliage: '관엽',
 };
 
+function formatDeadline(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const diff = date.getTime() - Date.now();
+  if (diff <= 0) return '마감';
+
+  const hours = Math.ceil(diff / (1000 * 60 * 60));
+  if (hours < 24) return `${hours}시간 남음`;
+  return `${Math.ceil(hours / 24)}일 남음`;
+}
+
 export default function ProductCard({ product, href }: ProductCardProps) {
   const imgSrc = product.images?.[0] ?? '/icons/icon-192x192.png';
 
@@ -128,9 +140,12 @@ export default function ProductCard({ product, href }: ProductCardProps) {
         {product.saleType === 'group' &&
           product.groupSummary &&
           (() => {
-            const { currentQuantity, targetQuantity } = product.groupSummary;
-            const pct = Math.min((currentQuantity / targetQuantity) * 100, 100);
+            const { currentQuantity, minQuantity, targetQuantity, recruitDeadline } =
+              product.groupSummary;
+            const pct =
+              targetQuantity > 0 ? Math.min((currentQuantity / targetQuantity) * 100, 100) : 0;
             const done = currentQuantity >= targetQuantity;
+            const deadlineText = formatDeadline(recruitDeadline);
             return (
               <>
                 <Progress
@@ -156,6 +171,16 @@ export default function ProductCard({ product, href }: ProductCardProps) {
                   }}
                 >
                   {done ? '모집 완료' : `${currentQuantity}/${targetQuantity}개 모집 중`}
+                </p>
+                <p
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-disabled)',
+                    marginTop: 2,
+                    marginBottom: 0,
+                  }}
+                >
+                  최소 {minQuantity}개{deadlineText ? ` · ${deadlineText}` : ''}
                 </p>
               </>
             );
