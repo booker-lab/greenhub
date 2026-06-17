@@ -46,3 +46,4 @@
 - 2026-06-17 소비자 카테고리 탐색 보강. `ColorOption` 누락 색상 4종을 카테고리 칩에 추가하고 공개 상품 API의 공동구매 `recruitDeadline`을 ISO 문자열로 직렬화하도록 맞췄다.
 - 2026-06-17 소비자 lint 실패 원인을 재확인해 `docs/BACKLOG.md`에 `CONSUMER-LINT-BASELINE`으로 기록했다. 현재 실패 errors는 `useCart.ts`와 `useNotifications.ts`의 `forEach` 콜백 반환 2건이며, warnings 16건은 이미지, index key, non-null assertion 정리 과제다.
 - 2026-06-17 소비자 상점 탭 개선 구현. 공개 상점 훅 경계와 `StoreCard` 공통화, `/stores` 검색·정렬·결과 없음 상태, `consumer-stores.spec.ts` fixture 검증을 확인했다. `pnpm --filter consumer build`, `pnpm --filter e2e test tests/consumer-stores.spec.ts`, `git diff --check` 통과.
+- 2026-06-17 소비자 공구 탭 안정화 구현. 공유 `getGroupBuyStatus()`와 테스트를 추가하고, `/groupbuy` 모집 중·완료/종료·정보 확인 필요 분류, 공구 카드 표시, 상세 CTA와 판매자 지정 배송 방식 고정, API 공구 설정 30개 단위 병합, 공구 E2E 계약 보강을 완료했다. `pnpm --filter consumer exec tsc --noEmit`, `pnpm --filter consumer lint`, `pnpm --filter @greenhub/shared test`, `pnpm --filter api test -- products.service.spec.ts`, `pnpm --filter api build` 통과.

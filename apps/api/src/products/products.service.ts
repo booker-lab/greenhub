@@ -42,22 +42,11 @@ export class ProductsService {
     else if (sort === 'price_desc') products.sort((a, b) => b['price'] - a['price']);
     else products.sort((a, b) => (b['createdAt']?.seconds ?? 0) - (a['createdAt']?.seconds ?? 0));
 
-    // groupSummary 병합 (공동구매 상품만)
     const groupProductIds = products
       .filter((p) => p['saleType'] === 'group')
       .map((p) => p['id'] as string);
 
-    const groupConfigMap = new Map<string, Record<string, unknown>>();
-    if (groupProductIds.length > 0) {
-      // Firestore 'in' 쿼리는 30개 제한이지만 MVP는 충분
-      const gcSnap = await this.firestore
-        .collection('groupProductConfig')
-        .where('productId', 'in', groupProductIds.slice(0, 30))
-        .get();
-      gcSnap.docs.forEach((d) => {
-        groupConfigMap.set(d.data()['productId'], d.data());
-      });
-    }
+    const groupConfigMap = await this.getGroupConfigMap(groupProductIds);
 
     // 스펙 응답: { items: ProductSummary[], total: number }
     const items = products.map((p) => {
@@ -74,15 +63,7 @@ export class ProductsService {
       if (p['saleType'] === 'group') {
         const gc = groupConfigMap.get(p['id'] as string);
         if (gc) {
-          summary['groupSummary'] = {
-            currentQuantity: gc['currentQuantity'],
-            minQuantity: gc['minQuantity'],
-            targetQuantity: gc['targetQuantity'],
-            recruitDeadline:
-              typeof (gc['recruitDeadline'] as { toDate?: () => Date })?.toDate === 'function'
-                ? (gc['recruitDeadline'] as { toDate: () => Date }).toDate().toISOString()
-                : gc['recruitDeadline'],
-          };
+          summary['groupSummary'] = this.toGroupSummary(gc);
         }
       }
       return summary;
@@ -299,16 +280,7 @@ export class ProductsService {
     const groupProductIds = products
       .filter((p: any) => p['saleType'] === 'group')
       .map((p: any) => p['id'] as string);
-    const groupConfigMap = new Map<string, Record<string, unknown>>();
-    if (groupProductIds.length > 0) {
-      const gcSnap = await this.firestore
-        .collection('groupProductConfig')
-        .where('productId', 'in', groupProductIds.slice(0, 30))
-        .get();
-      gcSnap.docs.forEach((d: any) => {
-        groupConfigMap.set(d.data()['productId'], d.data());
-      });
-    }
+    const groupConfigMap = await this.getGroupConfigMap(groupProductIds);
 
     const items = products.map((p: any) => {
       const summary: Record<string, unknown> = {
@@ -324,16 +296,7 @@ export class ProductsService {
       };
       if (p['saleType'] === 'group') {
         const gc = groupConfigMap.get(p['id'] as string);
-        if (gc)
-          summary['groupSummary'] = {
-            currentQuantity: gc['currentQuantity'],
-            minQuantity: gc['minQuantity'],
-            targetQuantity: gc['targetQuantity'],
-            recruitDeadline:
-              typeof (gc['recruitDeadline'] as { toDate?: () => Date })?.toDate === 'function'
-                ? (gc['recruitDeadline'] as { toDate: () => Date }).toDate().toISOString()
-                : gc['recruitDeadline'],
-          };
+        if (gc) summary['groupSummary'] = this.toGroupSummary(gc);
       }
       return summary;
     });
@@ -358,5 +321,34 @@ export class ProductsService {
     if (!snap.exists || snap.data()!['ownerId'] !== sellerId) {
       throw new ForbiddenException('권한이 없습니다.');
     }
+  }
+
+  private async getGroupConfigMap(productIds: string[]) {
+    const groupConfigMap = new Map<string, Record<string, unknown>>();
+    for (let i = 0; i < productIds.length; i += 30) {
+      const batch = productIds.slice(i, i + 30);
+      if (batch.length === 0) continue;
+      const gcSnap = await this.firestore
+        .collection('groupProductConfig')
+        .where('productId', 'in', batch)
+        .get();
+      gcSnap.docs.forEach((d: any) => {
+        const data = d.data();
+        groupConfigMap.set(data['productId'], data);
+      });
+    }
+    return groupConfigMap;
+  }
+
+  private toGroupSummary(gc: Record<string, unknown>) {
+    return {
+      currentQuantity: gc['currentQuantity'],
+      minQuantity: gc['minQuantity'],
+      targetQuantity: gc['targetQuantity'],
+      recruitDeadline:
+        typeof (gc['recruitDeadline'] as { toDate?: () => Date })?.toDate === 'function'
+          ? (gc['recruitDeadline'] as { toDate: () => Date }).toDate().toISOString()
+          : gc['recruitDeadline'],
+    };
   }
 }

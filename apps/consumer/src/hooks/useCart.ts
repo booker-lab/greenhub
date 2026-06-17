@@ -21,7 +21,9 @@ export interface CartItem {
 // ─── External store for SSR-safe localStorage ─────────────────────
 let listeners: Array<() => void> = [];
 function emitChange() {
-  listeners.forEach((l) => l());
+  listeners.forEach((listener) => {
+    listener();
+  });
 }
 function subscribe(listener: () => void) {
   listeners = [...listeners, listener];

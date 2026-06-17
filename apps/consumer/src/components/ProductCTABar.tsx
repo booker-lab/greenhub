@@ -7,6 +7,7 @@ interface Props {
   isGroup: boolean;
   isFull: boolean;
   canBuy: boolean;
+  groupStatusLabel?: string;
   onAddToCart: () => void;
   onBuyNow: () => void;
 }
@@ -16,10 +17,15 @@ export default function ProductCTABar({
   isGroup,
   isFull,
   canBuy,
+  groupStatusLabel,
   onAddToCart,
   onBuyNow,
 }: Props) {
-  const ctaLabel = isFull ? '모집 완료' : isGroup ? '공구 참여하기' : '바로 결제';
+  const ctaLabel = isFull
+    ? (groupStatusLabel ?? '모집 완료')
+    : isGroup
+      ? '공구 참여하기'
+      : '바로 결제';
 
   return (
     <Box

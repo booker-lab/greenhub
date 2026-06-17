@@ -1,6 +1,7 @@
 export * from './auth.types.js';
 export * from './banner.types.js';
 export * from './date.js';
+export * from './groupbuy.js';
 export * from './notification.types.js';
 export * from './order.types.js';
 export * from './payment.types.js';

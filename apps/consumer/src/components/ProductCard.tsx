@@ -1,6 +1,7 @@
 'use client';
 
 import type { Product, ProductSummary } from '@greenhub/shared';
+import { getGroupBuyStatus } from '@greenhub/shared';
 import { Box, Card, Progress } from '@mantine/core';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -17,7 +18,8 @@ const categoryLabels: Record<string, string> = {
   foliage: '관엽',
 };
 
-function formatDeadline(value: string) {
+function formatDeadline(value: Date | string | null) {
+  if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
 
@@ -138,24 +140,24 @@ export default function ProductCard({ product, href }: ProductCardProps) {
           ) : null;
         })()}
         {product.saleType === 'group' &&
-          product.groupSummary &&
           (() => {
-            const { currentQuantity, minQuantity, targetQuantity, recruitDeadline } =
-              product.groupSummary;
-            const pct =
-              targetQuantity > 0 ? Math.min((currentQuantity / targetQuantity) * 100, 100) : 0;
-            const done = currentQuantity >= targetQuantity;
-            const deadlineText = formatDeadline(recruitDeadline);
+            const status = getGroupBuyStatus(product.groupSummary);
+            const deadlineText = formatDeadline(status.deadline);
+            const muted = !status.canParticipate;
+            const progressLabel =
+              status.targetQuantity > 0
+                ? `${status.currentQuantity}/${status.targetQuantity}개`
+                : '수량 확인 필요';
             return (
               <>
                 <Progress
-                  value={pct}
+                  value={status.targetProgress}
                   size="sm"
                   mt={6}
                   radius="xl"
                   style={
                     {
-                      '--progress-color': done
+                      '--progress-color': muted
                         ? 'var(--color-text-disabled)'
                         : 'var(--color-primary)',
                     } as React.CSSProperties
@@ -164,13 +166,15 @@ export default function ProductCard({ product, href }: ProductCardProps) {
                 <p
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    color: done ? 'var(--color-text-disabled)' : 'var(--color-primary)',
+                    color: muted ? 'var(--color-text-disabled)' : 'var(--color-primary)',
                     marginTop: 2,
                     marginBottom: 0,
                     fontWeight: 'var(--fw-medium)',
                   }}
                 >
-                  {done ? '모집 완료' : `${currentQuantity}/${targetQuantity}개 모집 중`}
+                  {status.canParticipate
+                    ? `${progressLabel} 모집 중 · ${status.remainingToTarget}개 남음`
+                    : status.label}
                 </p>
                 <p
                   style={{
@@ -180,7 +184,7 @@ export default function ProductCard({ product, href }: ProductCardProps) {
                     marginBottom: 0,
                   }}
                 >
-                  최소 {minQuantity}개{deadlineText ? ` · ${deadlineText}` : ''}
+                  최소 {status.minQuantity}개{deadlineText ? ` · ${deadlineText}` : ''}
                 </p>
               </>
             );
