@@ -3,20 +3,35 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { Container, Box, Text, SimpleGrid, Skeleton, Stack } from '@mantine/core';
+import { getGroupBuyStatus } from '@greenhub/shared';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 
 export default function GroupBuyPage() {
   const { products, loading, error } = useProducts(undefined, undefined, 'group');
 
-  const { active, full } = useMemo(() => {
-    const active = products.filter(
-      (p) => !p.groupSummary || p.groupSummary.currentQuantity < p.groupSummary.targetQuantity,
-    );
-    const full = products.filter(
-      (p) => p.groupSummary && p.groupSummary.currentQuantity >= p.groupSummary.targetQuantity,
-    );
-    return { active, full };
+  const { active, closed, needsCheck, urgentCount } = useMemo(() => {
+    const active = [];
+    const closed = [];
+    const needsCheck = [];
+    let urgentCount = 0;
+
+    for (const product of products) {
+      const status = getGroupBuyStatus(product.groupSummary);
+      if (status.status === 'recruiting') {
+        active.push(product);
+        const deadlineTime = status.deadline?.getTime() ?? 0;
+        if (deadlineTime > Date.now() && deadlineTime - Date.now() <= 24 * 60 * 60 * 1000) {
+          urgentCount += 1;
+        }
+      } else if (status.status === 'missing_config' || status.status === 'invalid_config') {
+        needsCheck.push(product);
+      } else {
+        closed.push(product);
+      }
+    }
+
+    return { active, closed, needsCheck, urgentCount };
   }, [products]);
 
   return (
@@ -72,14 +87,14 @@ export default function GroupBuyPage() {
             fontWeight: 'var(--fw-medium)',
           }}
         >
-          현재 {loading ? '...' : `${products.length}개`} 공구 진행 중
+          현재 {loading ? '...' : `${active.length}개`} 모집 중 · 마감 임박 {urgentCount}개
         </p>
       </Box>
 
       {loading && (
         <SimpleGrid cols={2} spacing="sm">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} height={260} radius="md" />
+          {['첫 번째', '두 번째', '세 번째', '네 번째'].map((label) => (
+            <Skeleton key={label} height={260} radius="md" />
           ))}
         </SimpleGrid>
       )}
@@ -139,8 +154,8 @@ export default function GroupBuyPage() {
         </Box>
       )}
 
-      {!loading && full.length > 0 && (
-        <Box>
+      {!loading && closed.length > 0 && (
+        <Box mb="xl">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <span
               style={{
@@ -149,7 +164,7 @@ export default function GroupBuyPage() {
                 color: 'var(--color-text-disabled)',
               }}
             >
-              모집 완료
+              모집 완료·종료
             </span>
             <span
               style={{
@@ -161,11 +176,44 @@ export default function GroupBuyPage() {
                 padding: '1px 8px',
               }}
             >
-              {full.length}
+              {closed.length}
             </span>
           </div>
           <SimpleGrid cols={2} spacing="sm" style={{ opacity: 0.6 }}>
-            {full.map((product) => (
+            {closed.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </SimpleGrid>
+        </Box>
+      )}
+
+      {!loading && needsCheck.length > 0 && (
+        <Box>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span
+              style={{
+                fontSize: 'var(--font-size-md)',
+                fontWeight: 'var(--fw-bold)',
+                color: 'var(--color-text-disabled)',
+              }}
+            >
+              정보 확인 필요
+            </span>
+            <span
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 'var(--fw-medium)',
+                color: 'var(--color-text-disabled)',
+                background: 'var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '1px 8px',
+              }}
+            >
+              {needsCheck.length}
+            </span>
+          </div>
+          <SimpleGrid cols={2} spacing="sm" style={{ opacity: 0.75 }}>
+            {needsCheck.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </SimpleGrid>

@@ -370,3 +370,9 @@
 - **결정**: 카테고리 색상 필터는 공유 `ColorOption` 전체 허용값을 노출하고, 공개 상품 API의 `groupSummary.recruitDeadline`은 소비자 카드가 바로 파싱 가능한 ISO 문자열로 직렬화한다.
 - **이유**: UI 색상 목록이 공유 타입보다 좁으면 합법 데이터가 URL 파서에서 누락되고, Firestore `Timestamp`가 그대로 내려가면 소비자 카드의 마감 표시가 환경별로 흔들릴 수 있다.
 - **계약**: `colors` URL 쿼리는 공유 허용값만 통과시키며, 공동구매 카드 표시는 API 응답의 직렬화된 `recruitDeadline`을 기준으로 한다.
+
+## [결정 #CL-144] 소비자 공동구매 참여 가능 여부는 공유 상태 유틸로 판정한다 (2026-06-17)
+
+- **결정**: 소비자 공동구매 목록, 카드, 상세 CTA는 `getGroupBuyStatus()`의 `recruiting` 상태만 참여 가능으로 본다.
+- **이유**: `currentQuantity >= targetQuantity`만 기준으로 삼으면 설정 누락, 마감 후 최소수량 미달, 마감 종료, 잘못된 수량·날짜가 모두 진행 중처럼 보일 수 있다. 참여 가능 여부는 표시 계층에서도 동일한 도메인 기준을 써야 한다.
+- **계약**: `missing_config`와 `invalid_config`는 정보 확인 필요로 분리하고 CTA를 비활성화한다. 공구 상세의 배송 방식과 배송일은 `groupProductConfig`의 판매자 지정값을 읽기 전용으로 사용하며, 상품 목록 API는 Firestore `in` 제한에 맞춰 공구 설정을 30개 단위로 병합한다.

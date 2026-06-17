@@ -1,6 +1,7 @@
 'use client';
 
 import type { DeliveryMethod, Product } from '@greenhub/shared';
+import { getGroupBuyStatus } from '@greenhub/shared';
 import {
   ActionIcon,
   Badge,
@@ -73,8 +74,10 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
   }, [groupConfig?.recruitDeadline]);
 
   const isGroup = product.saleType === 'group';
-  const isFull =
-    isGroup && !!groupConfig && groupConfig.currentQuantity >= groupConfig.targetQuantity;
+  const groupStatus = isGroup ? getGroupBuyStatus(groupConfig) : null;
+  const isGroupClosed = isGroup && groupStatus?.status !== 'recruiting';
+  const effectiveDeliveryMethod =
+    isGroup && groupConfig ? groupConfig.groupDeliveryMethod : deliveryMethod;
   const totalAmount = product.price * quantity;
   // 일반 상품의 배송일 선택은 슬롯 검증 대상(택배 제외)일 때만 필수.
   // 택배는 slot 미검증 분기이므로 배송일도 불필요 (플랜 D3 분기 조건 일치).
@@ -82,7 +85,7 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
   const hasStoreId = !!product.storeId;
   const canBuy = hasStoreId
     ? isGroup
-      ? groupConsent && !isFull
+      ? groupConsent && groupStatus?.canParticipate === true
       : !needsDeliveryDate || deliveryDate !== null
     : false;
 
@@ -93,7 +96,7 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
       price: product.price,
       image: product.images?.[0] ?? '',
       saleType: product.saleType,
-      deliveryMethod,
+      deliveryMethod: effectiveDeliveryMethod,
       storeId: product.storeId,
       quantity,
       ...(needsDeliveryDate && deliveryDate ? { requestedDeliveryDate: deliveryDate } : {}),
@@ -106,7 +109,7 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
       productId: product.id,
       quantity: String(quantity),
       saleType: product.saleType,
-      deliveryMethod,
+      deliveryMethod: effectiveDeliveryMethod,
       totalAmount: String(totalAmount),
     });
     if (needsDeliveryDate && deliveryDate) {
@@ -123,28 +126,30 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
   return (
     <Stack gap={0} px="md" pb={88}>
       {/* 공동구매 실시간 현황 */}
-      {isGroup && groupConfig && (
+      {isGroup && groupConfig && groupStatus && (
         <Paper
           radius="lg"
           p="lg"
           mb="lg"
           style={{
-            border: `2px solid ${isFull ? 'var(--color-border)' : 'var(--color-primary)'}`,
-            background: isFull ? 'var(--color-surface-muted)' : 'var(--color-primary-surface)',
+            border: `2px solid ${isGroupClosed ? 'var(--color-border)' : 'var(--color-primary)'}`,
+            background: isGroupClosed
+              ? 'var(--color-surface-muted)'
+              : 'var(--color-primary-surface)',
           }}
         >
           <Group justify="space-between" mb="md">
             <Text
               style={{
                 fontWeight: 'var(--fw-bold)',
-                color: isFull ? 'var(--color-text-secondary)' : 'var(--color-primary)',
+                color: isGroupClosed ? 'var(--color-text-secondary)' : 'var(--color-primary)',
               }}
             >
               ⚡ 공동구매 현황
             </Text>
-            {isFull ? (
+            {isGroupClosed ? (
               <Badge color="gray" variant="filled" radius="xl">
-                모집 완료
+                {groupStatus.label}
               </Badge>
             ) : (
               countdown && (
@@ -166,7 +171,7 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
                 fontSize: 36,
                 fontWeight: 'var(--fw-bold)',
                 lineHeight: 1,
-                color: isFull ? 'var(--color-text-disabled)' : 'var(--color-primary)',
+                color: isGroupClosed ? 'var(--color-text-disabled)' : 'var(--color-primary)',
               }}
             >
               {groupConfig.currentQuantity}
@@ -191,8 +196,8 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
           </Box>
 
           <Progress
-            value={Math.min((groupConfig.currentQuantity / groupConfig.minQuantity) * 100, 100)}
-            color={isFull ? 'gray' : 'brand'}
+            value={groupStatus.targetProgress}
+            color={isGroupClosed ? 'gray' : 'brand'}
             size="xl"
             radius="xl"
             mb="md"
@@ -205,7 +210,7 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
                 span
                 style={{
                   fontWeight: 'var(--fw-bold)',
-                  color: isFull ? 'var(--color-text-secondary)' : 'var(--color-primary)',
+                  color: isGroupClosed ? 'var(--color-text-secondary)' : 'var(--color-primary)',
                 }}
               >
                 {new Date(groupConfig.recruitDeadline).toLocaleString('ko-KR', {
@@ -230,6 +235,32 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
         </Paper>
       )}
 
+      {isGroup && !groupConfig && (
+        <Paper
+          radius="md"
+          p="md"
+          mb="lg"
+          style={{
+            background: 'var(--color-surface-muted)',
+            border: 'var(--border)',
+          }}
+        >
+          <Text
+            style={{
+              fontWeight: 'var(--fw-bold)',
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text)',
+            }}
+            mb={4}
+          >
+            공동구매 정보 확인 필요
+          </Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            모집 조건을 확인 중이라 현재는 참여할 수 없습니다.
+          </Text>
+        </Paper>
+      )}
+
       <Paper radius="md" p="md" mb="md" style={{ background: 'var(--color-surface-muted)' }}>
         <Text
           style={{
@@ -241,21 +272,27 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
         >
           배송 방법
         </Text>
-        <Group gap="xs">
-          {(['direct', 'hub', 'parcel'] as DeliveryMethod[]).map((method) => (
-            <Button
-              key={method}
-              size="sm"
-              radius="md"
-              variant={deliveryMethod === method ? 'filled' : 'default'}
-              color={deliveryMethod === method ? 'brand' : undefined}
-              style={{ flex: 1 }}
-              onClick={() => setDeliveryMethod(method)}
-            >
-              {deliveryLabels[method]}
-            </Button>
-          ))}
-        </Group>
+        {isGroup && groupConfig ? (
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            판매자가 지정한 배송 방법: {deliveryLabels[groupConfig.groupDeliveryMethod]}
+          </Text>
+        ) : (
+          <Group gap="xs">
+            {(['direct', 'hub', 'parcel'] as DeliveryMethod[]).map((method) => (
+              <Button
+                key={method}
+                size="sm"
+                radius="md"
+                variant={deliveryMethod === method ? 'filled' : 'default'}
+                color={deliveryMethod === method ? 'brand' : undefined}
+                style={{ flex: 1 }}
+                onClick={() => setDeliveryMethod(method)}
+              >
+                {deliveryLabels[method]}
+              </Button>
+            ))}
+          </Group>
+        )}
       </Paper>
 
       {/* 일반 상품 배송일 선택 — 공동구매는 groupConfig 고정, 택배는 슬롯 미검증이라 미노출 */}
@@ -340,9 +377,9 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
               >
                 공동구매{' '}
                 <Text span style={{ fontWeight: 'var(--fw-bold)' }}>
-                  확정 이후 취소·환불이 불가
+                  모집 확정 이후 취소가 제한
                 </Text>
-                함을 이해하고 동의합니다. (전자상거래법 제17조)
+                될 수 있으며, 목표수량 도달 또는 마감 후 최소수량 충족 시 주문이 확정됩니다.
               </Text>
             }
           />
@@ -437,8 +474,9 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
       <ProductCTABar
         totalAmount={totalAmount}
         isGroup={isGroup}
-        isFull={isFull}
+        isFull={isGroupClosed}
         canBuy={canBuy}
+        groupStatusLabel={groupStatus?.label}
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}
       />
