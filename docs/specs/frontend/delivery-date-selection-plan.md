@@ -68,6 +68,11 @@ Firestore 실데이터 진단(`scripts/diag-order-dates.mjs`):
 사용자 결정: **선택 시점 = 상품 상세** (체크아웃 아님 — `useDailyCap`이 이미
 `ProductActions`에 연결돼 있어 자연스러움).
 
+> **2026-06-17 운영 육안검증 보강** — 배송 방법과 배송 희망일 선택은 가격
+> 정보 바로 아래, 긴 상품 설명·상세 이미지보다 먼저 노출한다. 하단 고정 CTA가
+> 비활성화될 때는 “배송 희망일을 선택해 주세요.”처럼 사용자가 찾아야 할
+> 조건을 CTA 근처에서도 알려준다. 구매 조건은 숨겨진 하단 섹션에만 두지 않는다.
+
 - ⚠️ **세션47 정정 — 데이터 접근은 Firestore 직접 쿼리, REST API 아님.**
   플랜 초안은 `GET /stores/{id}/daily-caps?from=&to=`를 소비자가 호출한다고
   가정했으나, 코드 대조 결과 **`DailyCapsController`는 `@Roles('seller',

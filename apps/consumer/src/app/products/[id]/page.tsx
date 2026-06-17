@@ -48,8 +48,9 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
       <ProductTopBar backHref={backHref} backLabel={backLabel} />
       <Box style={{ paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>
         <ProductImages images={product.images ?? []} name={product.name} />
-        <ProductInfo product={product} variety={variety} />
-        <ProductActions product={product} />
+        <ProductInfo product={product} variety={variety}>
+          <ProductActions product={product} />
+        </ProductInfo>
       </Box>
     </Container>
   );
