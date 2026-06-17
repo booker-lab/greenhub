@@ -4,9 +4,7 @@ import type {
   Category,
   ColorOption,
   Product,
-  ProductSummary,
-  PublicStoreDetail,
-  PublicStoreSummary,
+  SaleType,
   Variety,
 } from '@greenhub/shared';
 import { doc, getDoc } from 'firebase/firestore';
@@ -22,12 +20,8 @@ export interface StoreInfo {
   logoUrl: string | null;
 }
 
-export interface PublicStoreDetailResponse {
-  store: PublicStoreDetail;
-  products: ProductSummary[];
-}
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+export type ProductSort = 'latest' | 'popular' | 'price_asc' | 'price_desc';
 
 /**
  * API를 통해 활성 상품 목록 조회
@@ -36,7 +30,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 export function useProducts(
   category?: Category,
   colors?: ColorOption[],
-  saleType?: 'group' | 'direct',
+  saleType?: SaleType,
+  sort: ProductSort = 'latest',
 ) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +40,7 @@ export function useProducts(
   const colorKey = colors?.join(',') ?? '';
 
   useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
     setProducts([]);
     async function fetchProducts() {
@@ -57,21 +53,23 @@ export function useProducts(
           }
         }
         if (saleType) params.set('saleType', saleType);
-        const res = await fetch(`${API_URL}/products?${params}`);
+        if (sort !== 'latest') params.set('sort', sort);
+        const res = await fetch(`${API_URL}/products?${params}`, { signal: controller.signal });
         if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
         const data = await res.json();
         const items: Product[] = Array.isArray(data) ? data : (data.items ?? []);
-        items.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
         setProducts(items);
         setError(null);
       } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === 'AbortError') return;
         setError(e instanceof Error ? e.message : '상품 조회 실패');
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     fetchProducts();
-  }, [category, saleType, colorKey]);
+    return () => controller.abort();
+  }, [category, saleType, colorKey, sort]);
 
   return { products, loading, error };
 }
@@ -136,59 +134,6 @@ export function useStore(storeId: string | null) {
   }, [storeId]);
 
   return { store, loading };
-}
-
-export function usePublicStores() {
-  const [stores, setStores] = useState<PublicStoreSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function fetchStores() {
-      try {
-        const res = await fetch(`${API_URL}/public/stores`);
-        if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
-        const data = await res.json();
-        setStores(Array.isArray(data) ? data : (data.items ?? []));
-        setError(null);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : '상점 조회 실패');
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchStores();
-  }, []);
-
-  return { stores, loading, error };
-}
-
-export function usePublicStore(storeId: string) {
-  const [detail, setDetail] = useState<PublicStoreDetailResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!storeId) {
-      setLoading(false);
-      return;
-    }
-    async function fetchStore() {
-      try {
-        const res = await fetch(`${API_URL}/public/stores/${storeId}`);
-        if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
-        setDetail(await res.json());
-        setError(null);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : '상점 조회 실패');
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchStore();
-  }, [storeId]);
-
-  return { detail, loading, error };
 }
 
 export function useVariety(varietyId: string | null | undefined) {

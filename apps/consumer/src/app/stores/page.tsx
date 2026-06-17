@@ -14,7 +14,7 @@ import {
 import { MapPin, Package, Store } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePublicStores } from '@/hooks/useProducts';
+import { usePublicStores } from '@/hooks/useStores';
 
 const STORE_SKELETON_KEYS = [
   'store-skeleton-1',
