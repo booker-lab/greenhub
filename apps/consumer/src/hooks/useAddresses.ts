@@ -34,6 +34,7 @@ export function useAddresses(): UseAddressesResult {
   const token = session?.user?.accessToken;
 
   useEffect(() => {
+    void _tick;
     if (!token) {
       setLoading(false);
       return;
@@ -64,7 +65,7 @@ export function useAddresses(): UseAddressesResult {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, _tick]);
 
   const addAddress = useCallback(
     async (data: AddressFormData) => {

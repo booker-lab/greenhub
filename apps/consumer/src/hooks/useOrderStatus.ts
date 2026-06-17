@@ -12,14 +12,17 @@ interface UseOrderStatusResult {
   order: Order | null;
   loading: boolean;
   error: string | null;
+  refetch: () => void;
 }
 
 export function useOrderStatus(orderId: string | null, accessToken?: string): UseOrderStatusResult {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [_tick, setTick] = useState(0);
 
   useEffect(() => {
+    void _tick;
     // accessToken이 undefined면 세션 아직 로딩 중 — 대기
     if (!orderId || accessToken === undefined) return;
     if (!orderId) {
@@ -64,7 +67,7 @@ export function useOrderStatus(orderId: string | null, accessToken?: string): Us
       cancelled = true;
       clearInterval(interval);
     };
-  }, [orderId, accessToken]);
+  }, [orderId, accessToken, _tick]);
 
-  return { order, loading, error };
+  return { order, loading, error, refetch: () => setTick((tick) => tick + 1) };
 }

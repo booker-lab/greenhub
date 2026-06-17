@@ -21,6 +21,7 @@ export function useOrders(): UseOrdersResult {
   const [_tick, setTick] = useState(0);
 
   useEffect(() => {
+    void _tick;
     const userId = session?.user?.id;
     const token = session?.user?.accessToken;
     if (!userId || !token) {
@@ -55,7 +56,7 @@ export function useOrders(): UseOrdersResult {
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id, session?.user?.accessToken]);
+  }, [session?.user?.id, session?.user?.accessToken, _tick]);
 
   return { orders, loading, error, refetch: () => setTick((t) => t + 1) };
 }
