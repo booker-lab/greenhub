@@ -13,6 +13,28 @@ const STORE = {
   hubCount: 1,
 };
 
+const STORES = [
+  STORE,
+  {
+    id: 'store-beta',
+    name: 'Store Beta',
+    address: 'Busan Haeundae',
+    phone: '010-2222-3333',
+    logoUrl: null,
+    productCount: 5,
+    hubCount: 3,
+  },
+  {
+    id: 'store-gamma',
+    name: 'Garden Gamma',
+    address: 'Daegu Suseong',
+    phone: '010-3333-4444',
+    logoUrl: null,
+    productCount: 1,
+    hubCount: 2,
+  },
+];
+
 const PRODUCT = {
   id: 'fixture-product-alpha',
   storeId: STORE.id,
@@ -31,17 +53,18 @@ async function installPublicStoreRoutes(page: Page) {
     if (url.pathname === '/public/stores') {
       return route.fulfill({
         json: {
-          items: [STORE],
-          total: 1,
+          items: STORES,
+          total: STORES.length,
         },
       });
     }
 
-    if (url.pathname === `/public/stores/${STORE.id}`) {
+    const detailStore = STORES.find((store) => url.pathname === `/public/stores/${store.id}`);
+    if (detailStore) {
       return route.fulfill({
         json: {
-          store: STORE,
-          products: [PRODUCT],
+          store: detailStore,
+          products: detailStore.id === STORE.id ? [PRODUCT] : [],
         },
       });
     }
@@ -72,6 +95,28 @@ test.describe('소비자 상점 탐색 fixture', () => {
     expect(productUrl.pathname).toBe(`/products/${PRODUCT.id}`);
     expect(productUrl.searchParams.get('fromStore')).toBe(STORE.id);
     expect(productUrl.searchParams.get('storeName')).toBe(STORE.name);
+  });
+
+  test('상점 목록에서 검색과 정렬을 클라이언트 상태로 적용한다', async ({ page }) => {
+    await installPublicStoreRoutes(page);
+
+    await page.goto(`${BASE}/stores`, { waitUntil: 'domcontentloaded' });
+
+    await page.getByLabel('상점 검색').fill('Busan');
+    await expect(page.getByText('Store Beta')).toBeVisible();
+    await expect(page.getByText('Store Alpha')).toBeHidden();
+
+    await page.getByRole('button', { name: '검색 초기화' }).click();
+    await expect(page.getByText('Store Alpha')).toBeVisible();
+
+    await page.getByLabel('상점 정렬').click();
+    await page.getByRole('option', { name: '상품 수순' }).click();
+
+    const cardTexts = await page
+      .locator('a[href^="/stores/"]')
+      .evaluateAll((cards) => cards.map((card) => card.textContent ?? ''));
+    expect(cardTexts[0]).toContain('Store Beta');
+    expect(cardTexts[1]).toContain('Store Alpha');
   });
 
   test('모바일 상점 상세는 가로 넘침 없이 상품 진입 링크를 유지한다', async ({ page }) => {
