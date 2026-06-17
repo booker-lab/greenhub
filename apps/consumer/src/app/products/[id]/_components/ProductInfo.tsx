@@ -1,5 +1,6 @@
 import type { Product, Variety } from '@greenhub/shared';
 import { Badge, Box, Divider, Group, Paper, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import type { ReactNode } from 'react';
 
 const FRAGRANCE_LABEL: Record<string, string> = {
   none: '없음',
@@ -20,9 +21,10 @@ const CARE_LABEL: Record<string, string> = {
 interface Props {
   product: Product;
   variety: Variety | null;
+  children?: ReactNode;
 }
 
-export default function ProductInfo({ product, variety }: Props) {
+export default function ProductInfo({ product, variety, children }: Props) {
   const isGroup = product.saleType === 'group';
   const headline = product.content?.headline ?? null;
   const description = product.content?.description ?? product.description ?? null;
@@ -98,6 +100,8 @@ export default function ProductInfo({ product, variety }: Props) {
       </Stack>
 
       <Divider mb="lg" />
+
+      {children}
 
       {careCards.length > 0 && (
         <Paper

@@ -88,6 +88,17 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
       ? groupConsent && groupStatus?.canParticipate === true
       : !needsDeliveryDate || deliveryDate !== null
     : false;
+  const disabledReason = !hasStoreId
+    ? '상점 정보가 없어 구매할 수 없어요.'
+    : isGroup
+      ? isGroupClosed
+        ? (groupStatus?.label ?? '모집이 종료되었어요.')
+        : !groupConsent
+          ? '공동구매 안내에 동의하면 참여할 수 있어요.'
+          : undefined
+      : needsDeliveryDate && deliveryDate === null
+        ? '배송 희망일을 선택하면 장바구니에 담을 수 있어요.'
+        : undefined;
 
   function handleAddToCart() {
     addItem({
@@ -124,7 +135,7 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
   }
 
   return (
-    <Stack gap={0} px="md" pb={88}>
+    <Stack gap={0} pb={88}>
       {/* 공동구매 실시간 현황 */}
       {isGroup && groupConfig && groupStatus && (
         <Paper
@@ -476,6 +487,7 @@ export default function ProductActions({ product, initialDeliveryMethod = 'direc
         isGroup={isGroup}
         isFull={isGroupClosed}
         canBuy={canBuy}
+        disabledReason={disabledReason}
         groupStatusLabel={groupStatus?.label}
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}

@@ -7,6 +7,7 @@ interface Props {
   isGroup: boolean;
   isFull: boolean;
   canBuy: boolean;
+  disabledReason?: string;
   groupStatusLabel?: string;
   onAddToCart: () => void;
   onBuyNow: () => void;
@@ -17,6 +18,7 @@ export default function ProductCTABar({
   isGroup,
   isFull,
   canBuy,
+  disabledReason,
   groupStatusLabel,
   onAddToCart,
   onBuyNow,
@@ -64,6 +66,19 @@ export default function ProductCTABar({
             {totalAmount.toLocaleString()}원
           </Text>
         </Text>
+
+        {!canBuy && disabledReason && (
+          <Text
+            mb={6}
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-medium)',
+              color: 'var(--color-primary)',
+            }}
+          >
+            {disabledReason}
+          </Text>
+        )}
 
         {/* 버튼 */}
         <Group gap={8} style={{ flexWrap: 'nowrap' }}>
