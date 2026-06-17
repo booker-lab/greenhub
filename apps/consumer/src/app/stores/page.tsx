@@ -3,7 +3,7 @@
 import {
   Button,
   Container,
-  Select,
+  Group,
   SimpleGrid,
   Skeleton,
   Stack,
@@ -29,7 +29,7 @@ const STORE_SORT_OPTIONS = [
   { value: 'name', label: '가나다순' },
   { value: 'products', label: '상품 수순' },
   { value: 'hubs', label: '거점 수순' },
-];
+] as const;
 
 function normalizeSearch(value: string) {
   return value.trim().toLocaleLowerCase('ko-KR');
@@ -76,13 +76,27 @@ export default function StoresPage() {
             leftSection={<Search size={16} />}
             aria-label="상점 검색"
           />
-          <Select
-            value={sort}
-            onChange={(value) => setSort((value as StoreSort | null) ?? 'name')}
-            data={STORE_SORT_OPTIONS}
-            allowDeselect={false}
-            aria-label="상점 정렬"
-          />
+          <Group gap={6} role="radiogroup" aria-label="상점 정렬" wrap="nowrap">
+            {STORE_SORT_OPTIONS.map((option) => {
+              const selected = sort === option.value;
+              return (
+                <Button
+                  key={option.value}
+                  type="button"
+                  size="xs"
+                  variant={selected ? 'filled' : 'default'}
+                  color={selected ? 'brand' : undefined}
+                  radius="xl"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setSort(option.value)}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
+          </Group>
         </Stack>
       )}
 

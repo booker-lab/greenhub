@@ -111,8 +111,7 @@ test.describe('소비자 상점 탐색 fixture', () => {
     await page.getByRole('button', { name: '검색 초기화' }).click();
     await expect(page.getByText('Store Alpha')).toBeVisible();
 
-    await page.getByRole('combobox', { name: '상점 정렬' }).click();
-    await page.getByRole('option', { name: '상품 수순' }).click();
+    await page.getByRole('radio', { name: '상품 수순' }).click();
 
     const cardTexts = await page
       .locator('a[href^="/stores/"]')
