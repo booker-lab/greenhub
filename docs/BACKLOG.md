@@ -788,6 +788,12 @@ P2-A 계측 중 `/health`가 ~10~19회 후 429 반환 발견. `ThrottlerModule`�
   - [x] **S6 전이 입증(세션82 — 라이브 스크립트로 즉시 완료)**: `scripts/verify-settlement-transition.mjs`가 `confirmDueSettlements`·`markAsPaid` 실제 로직을 재현해 라이브 `green-e4fe3`에서 **pending→confirmed→paid 전 구간 + 역전이/멱등 가드 입증 — 10 passed / 0 failed**. 격리 단일 문서(`verify-settle-001`) 생성→전이→삭제(실데이터 무관). `status+settledAt` 복합 쿼리 무에러로 인덱스 라이브 동작 부수 입증. **A-1 단절 라이브 해소 완료**(E-T3 #219·220·222·223·224·225 ✅).
   - ⏳ **S6 프론트 화면 육안(사용자 위임)**: (a) 셀러·어드민 화면 라벨/색/정렬 desc(E-T1·E-T2 #211~218), (b) 어드민 "지급처리" 버튼이 confirmed 행에만 노출(E-T3 #221). 백엔드 전이는 위 스크립트로 입증됐고, 다음 04:00 라이브 배치도 동일 로직이라 추가 입증 불필요(원하면 운영 로그 `confirmDueSettlements confirmed N건`으로 재확인).
 
+### CONSUMER-MYPAGE-E2E-FIXTURE — MY 주문 안심 개선 배포 후 잔여 검증
+
+- [ ] **원인 분리**: `consumer-mypage.spec.ts`를 preview 배포(`greenhubconsumer-cwjkdcswi-jos-projects-d1cecc0c.vercel.app`) 기준 재실행한 결과 9/11 통과, 인증 주문 목록과 고정 택배 주문 상세 2건 실패. 화면은 각각 `주문 내역을 불러올 수 없습니다`, `주문 정보를 불러올 수 없습니다`를 표시했다. 프론트 렌더링 회귀보다 테스트 계정·고정 주문 fixture·API 인증/데이터 계약 문제 가능성이 높다.
+- [ ] **보강 방향**: 고정 주문 ID `e2e-parcel-delivered-order-001` 존재 여부와 `consumer@test.com` 접근 권한을 API/Firestore fixture에서 확인한다. 주문 목록 테스트는 오류 상태도 명시적으로 단언하거나, fixture 기반으로 주문/빈 상태를 안정적으로 준비한 뒤 실행한다.
+- [ ] **재검증 기준**: preview URL 기준 `pnpm --filter e2e test -- consumer-mypage.spec.ts --project=chromium` 11/11 통과. 특히 MY 목록 주문 카드 또는 빈 상태, 택배 상세 `택배사`·`운송장번호` 표시를 확인한다.
+
 ---
 
 ## 변경 이력
