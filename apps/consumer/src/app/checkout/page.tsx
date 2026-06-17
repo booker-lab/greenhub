@@ -14,6 +14,7 @@ import { useSession } from 'next-auth/react';
 import { Suspense, useEffect, useState } from 'react';
 import { type CartItem, useCart } from '@/hooks/useCart';
 import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
+import { getCartValidationError } from '@/lib/cartValidation';
 import CheckoutForm from './_components/CheckoutForm';
 
 declare global {
@@ -144,17 +145,7 @@ function CartCheckoutContent() {
 
   const totalAmount = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const isLoading = state === 'creating' || state === 'paying';
-  const cartValidationError =
-    cartItems.find((item) => !item.storeId) !== undefined
-      ? '상점 정보가 없는 상품이 있어 결제할 수 없습니다. 장바구니를 다시 담아 주세요.'
-      : cartItems.find(
-            (item) =>
-              item.saleType !== 'group' &&
-              item.deliveryMethod !== 'parcel' &&
-              !item.requestedDeliveryDate,
-          ) !== undefined
-        ? '배송 날짜가 없는 상품이 있어 결제할 수 없습니다. 장바구니를 다시 담아 주세요.'
-        : null;
+  const cartValidationError = getCartValidationError(cartItems);
   const canPay =
     !cartValidationError &&
     !isLoading &&
