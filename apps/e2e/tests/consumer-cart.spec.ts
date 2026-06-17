@@ -60,6 +60,7 @@ test.describe('Consumer — 장바구니 (인증)', () => {
       saleType: 'normal',
       storeId: 'store-1',
       deliveryMethod: 'direct',
+      requestedDeliveryDate: '2026-06-20',
     }
     await page.goto(BASE)
     await page.evaluate((item) => {
@@ -82,6 +83,7 @@ test.describe('Consumer — 장바구니 (인증)', () => {
       saleType: 'normal',
       storeId: 'store-1',
       deliveryMethod: 'direct',
+      requestedDeliveryDate: '2026-06-20',
     }
     await page.goto(BASE)
     await page.evaluate((item) => {
@@ -91,5 +93,58 @@ test.describe('Consumer — 장바구니 (인증)', () => {
     await page.waitForLoadState('networkidle')
     await page.getByRole('button', { name: /결제하기/ }).click()
     await expect(page).toHaveURL(/\/checkout/, { timeout: 10_000 })
+  })
+
+  test('배송일 누락 항목 — 결제 전 차단', async ({ page }) => {
+    const mockItem = {
+      productId: 'test-product-missing-date',
+      name: '배송일 누락 상품',
+      price: 12000,
+      quantity: 1,
+      image: '',
+      saleType: 'normal',
+      storeId: 'store-1',
+      deliveryMethod: 'direct',
+    }
+    await page.goto(BASE)
+    await page.evaluate((item) => {
+      localStorage.setItem('greenhub_cart', JSON.stringify([item]))
+      sessionStorage.removeItem('checkout_cart')
+    }, mockItem)
+    await page.goto(`${BASE}/cart`)
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByText('배송일을 다시 선택해야 결제할 수 있어요.')).toBeVisible()
+    await expect(page.getByRole('link', { name: '다시 선택하기' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /결제하기/ })).toBeDisabled()
+    await expect(page).toHaveURL(/\/cart/)
+    await expect(
+      page.evaluate(() => sessionStorage.getItem('checkout_cart'))
+    ).resolves.toBeNull()
+  })
+
+  test('상점 정보 누락 항목 — 결제 전 차단', async ({ page }) => {
+    const mockItem = {
+      productId: 'test-product-missing-store',
+      name: '상점 정보 누락 상품',
+      price: 12000,
+      quantity: 1,
+      image: '',
+      saleType: 'normal',
+      storeId: '',
+      deliveryMethod: 'direct',
+      requestedDeliveryDate: '2026-06-20',
+    }
+    await page.goto(BASE)
+    await page.evaluate((item) => {
+      localStorage.setItem('greenhub_cart', JSON.stringify([item]))
+      sessionStorage.removeItem('checkout_cart')
+    }, mockItem)
+    await page.goto(`${BASE}/cart`)
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByText('상점 정보가 없어 다시 선택해야 결제할 수 있어요.')).toBeVisible()
+    await expect(page.getByRole('button', { name: /결제하기/ })).toBeDisabled()
+    await expect(
+      page.evaluate(() => sessionStorage.getItem('checkout_cart'))
+    ).resolves.toBeNull()
   })
 })
