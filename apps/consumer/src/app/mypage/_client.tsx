@@ -1,6 +1,5 @@
 'use client';
 
-import { ORDER_STATUS_LABEL, type Order, type OrderStatus } from '@greenhub/shared';
 import {
   Box,
   Button,
@@ -17,50 +16,9 @@ import { signOut, useSession } from 'next-auth/react';
 import { useEffect } from 'react';
 import A2HSButton from '@/components/A2HSButton';
 import { useOrders } from '@/hooks/useOrders';
+import { groupOrdersBySaleType, toOrderCardViewModel, type OrderCardViewModel } from './_lib';
 
-type StatusColorKey = { bg: string; text: string };
-const STATUS_COLORS: Partial<Record<OrderStatus, StatusColorKey>> = {
-  PENDING: { bg: 'var(--color-surface-muted)', text: 'var(--color-text-secondary)' },
-  RECRUITING: { bg: 'var(--color-status-info-bg)', text: 'var(--color-status-info-text)' },
-  CONFIRMED: { bg: 'var(--color-status-info-bg)', text: 'var(--color-status-info-text)' },
-  ACCEPTED: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary)' },
-  PREPARING: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary)' },
-  DELIVERING: { bg: 'var(--color-status-warning-bg)', text: 'var(--color-status-warning-text)' },
-  HUB_ARRIVED: { bg: 'var(--color-status-warning-bg)', text: 'var(--color-status-warning-text)' },
-  PICKED_UP: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary)' },
-  DELIVERED: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary)' },
-  CANCELLED: { bg: 'var(--color-danger-surface)', text: 'var(--color-danger)' },
-  REVIEWED: { bg: 'var(--color-surface-muted)', text: 'var(--color-text-secondary)' },
-};
-
-const ACCENT_COLORS: Partial<Record<OrderStatus, string>> = {
-  PENDING: 'var(--color-text-disabled)',
-  RECRUITING: 'var(--color-status-info-text)',
-  CONFIRMED: 'var(--color-status-info-text)',
-  ACCEPTED: 'var(--color-primary)',
-  PREPARING: 'var(--color-primary)',
-  DELIVERING: 'var(--color-status-warning-text)',
-  HUB_ARRIVED: 'var(--color-status-warning-text)',
-  PICKED_UP: 'var(--color-primary)',
-  DELIVERED: 'var(--color-primary)',
-  CANCELLED: 'var(--color-danger)',
-  REVIEWED: 'var(--color-text-disabled)',
-};
-
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
-}
-
-function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
-  const colorScheme = STATUS_COLORS[order.status] ?? {
-    bg: 'var(--color-surface-muted)',
-    text: 'var(--color-text-secondary)',
-  };
-  const accentColor = ACCENT_COLORS[order.status] ?? 'var(--color-text-disabled)';
-  const label = ORDER_STATUS_LABEL[order.status] ?? order.status;
-
+function OrderCard({ viewModel, onClick }: { viewModel: OrderCardViewModel; onClick: () => void }) {
   return (
     <UnstyledButton
       onClick={onClick}
@@ -70,7 +28,7 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
         width: '100%',
         background: 'var(--color-bg)',
         border: '1px solid var(--color-border)',
-        borderLeft: `4px solid ${accentColor}`,
+        borderLeft: `4px solid ${viewModel.accentColor}`,
         borderRadius: 'var(--radius-sm)',
         padding: '14px 16px',
       }}
@@ -80,16 +38,16 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
           style={{
             fontSize: 12,
             fontWeight: 'var(--fw-bold)',
-            color: colorScheme.text,
-            background: colorScheme.bg,
+            color: viewModel.statusColor.text,
+            background: viewModel.statusColor.bg,
             padding: '3px 10px',
             borderRadius: 'var(--radius-full)',
           }}
         >
-          {label}
+          {viewModel.actionSignal}
         </Box>
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-          {formatDate(order.createdAt)}
+          {viewModel.createdAtLabel}
         </Text>
       </Group>
       <Text
@@ -100,16 +58,15 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
         }}
         mb={4}
       >
-        {order.saleType === 'group' ? '[공동구매] ' : ''}
-        {order.deliveryMethod === 'hub'
-          ? '거점 픽업'
-          : order.deliveryMethod === 'parcel'
-            ? '택배'
-            : '직배송'}
+        {viewModel.saleTypeLabel ? `[${viewModel.saleTypeLabel}] ` : ''}
+        {viewModel.deliveryMethodLabel}
       </Text>
       <Group justify="space-between">
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-          수량 {order.quantity}개
+          {viewModel.quantityLabel}
+        </Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          {viewModel.statusLabel}
         </Text>
         <Text
           style={{
@@ -118,10 +75,37 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
             color: 'var(--color-text)',
           }}
         >
-          {order.totalAmount.toLocaleString('ko-KR')}원
+          {viewModel.totalAmountLabel}
         </Text>
       </Group>
     </UnstyledButton>
+  );
+}
+
+function OrderSection({
+  title,
+  orders,
+  onSelect,
+}: {
+  title: string;
+  orders: ReturnType<typeof groupOrdersBySaleType>['normalOrders'];
+  onSelect: (id: string) => void;
+}) {
+  if (orders.length === 0) return null;
+
+  return (
+    <Stack gap="xs">
+      <Text style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-disabled)' }}>
+        {title}
+      </Text>
+      {orders.map((order) => (
+        <OrderCard
+          key={order.id}
+          viewModel={toOrderCardViewModel(order)}
+          onClick={() => onSelect(order.id)}
+        />
+      ))}
+    </Stack>
   );
 }
 
@@ -129,6 +113,7 @@ export default function MyPageClient() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const { orders, loading, error } = useOrders();
+  const groupedOrders = groupOrdersBySaleType(orders);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -211,13 +196,16 @@ export default function MyPageClient() {
         )}
         {!loading && orders.length > 0 && (
           <Stack gap="sm">
-            {orders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                onClick={() => router.push(`/mypage/orders/${order.id}`)}
-              />
-            ))}
+            <OrderSection
+              title="일반 주문"
+              orders={groupedOrders.normalOrders}
+              onSelect={(id) => router.push(`/mypage/orders/${id}`)}
+            />
+            <OrderSection
+              title="공동구매 참여 내역"
+              orders={groupedOrders.groupOrders}
+              onSelect={(id) => router.push(`/mypage/orders/${id}`)}
+            />
           </Stack>
         )}
       </Box>

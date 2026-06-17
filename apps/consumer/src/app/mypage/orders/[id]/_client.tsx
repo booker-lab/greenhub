@@ -1,6 +1,6 @@
 'use client';
 
-import { ORDER_STATUS_LABEL, type Order, type OrderStatus } from '@greenhub/shared';
+import { ORDER_STATUS_LABEL, type Order } from '@greenhub/shared';
 import {
   Alert,
   Box,
@@ -19,23 +19,17 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { use, useState } from 'react';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
+import {
+  canConfirmPurchase,
+  getCurrentStepIndex,
+  getOrderDeliveryLabel,
+  getOrderStatusNotice,
+  getReceiptAction,
+  getTimelineSteps,
+  type ReceiptAction,
+} from './_lib';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-
-function getTimelineSteps(order: Order): OrderStatus[] {
-  if (order.saleType === 'group') {
-    return ['RECRUITING', 'CONFIRMED', 'PREPARING', 'DELIVERING', 'DELIVERED'];
-  }
-  if (order.deliveryMethod === 'hub') {
-    return ['ACCEPTED', 'PREPARING', 'DELIVERING', 'HUB_ARRIVED', 'PICKED_UP'];
-  }
-  return ['ACCEPTED', 'PREPARING', 'DELIVERING', 'DELIVERED'];
-}
-
-function getCurrentStepIndex(steps: OrderStatus[], status: OrderStatus): number {
-  if (status === 'REVIEWED') return steps.length;
-  return steps.indexOf(status);
-}
 
 function PickupCodeCard({ code, address }: { code: string; address: string }) {
   return (
@@ -80,20 +74,77 @@ function PickupCodeCard({ code, address }: { code: string; address: string }) {
   );
 }
 
+function ReceiptActionCard({ action }: { action: ReceiptAction }) {
+  if (action.type === 'none') return null;
+
+  if (action.type === 'pickup') {
+    return <PickupCodeCard code={action.code} address={action.address} />;
+  }
+
+  return (
+    <Paper withBorder radius="md" p="md" mb="md">
+      <Text
+        style={{
+          fontSize: 'var(--font-size-sm)',
+          fontWeight: 'var(--fw-bold)',
+          color: 'var(--color-text)',
+        }}
+        mb={6}
+      >
+        {action.title}
+      </Text>
+      {action.type === 'parcel' && (
+        <Stack gap={4} mb="xs">
+          {action.courierCompany && (
+            <Group justify="space-between">
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
+                택배사
+              </Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
+                {action.courierCompany}
+              </Text>
+            </Group>
+          )}
+          {action.trackingNumber && (
+            <Group justify="space-between">
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
+                운송장번호
+              </Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
+                {action.trackingNumber}
+              </Text>
+            </Group>
+          )}
+        </Stack>
+      )}
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+        {action.description}
+      </Text>
+    </Paper>
+  );
+}
+
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: orderId } = use(params);
   const router = useRouter();
   const { data: session } = useSession();
-  const { order, loading, error } = useOrderStatus(orderId, session?.user?.accessToken);
+  const { order, loading, error, refetch } = useOrderStatus(orderId, session?.user?.accessToken);
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelDone, setCancelDone] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   async function handleCancel() {
     if (!session?.user?.accessToken || !order) return;
     if (!confirm('공동구매 참여를 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.')) return;
     setCancelling(true);
+    setCancelError(null);
     try {
       const res = await fetch(`${API_URL}/stores/${order.storeId}/orders/${orderId}/cancel`, {
         method: 'PATCH',
@@ -102,15 +153,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           Authorization: `Bearer ${session.user.accessToken}`,
         },
       });
-      if (res.ok) setCancelDone(true);
+      if (!res.ok) throw new Error('공동구매 참여 취소에 실패했습니다.');
+      setCancelDone(true);
+      refetch();
+    } catch (e: unknown) {
+      setCancelError(e instanceof Error ? e.message : '공동구매 참여 취소에 실패했습니다.');
     } finally {
       setCancelling(false);
     }
   }
 
   async function handleConfirm() {
-    if (!session?.user?.accessToken || !order) return;
+    if (!session?.user?.accessToken || !order || !canConfirmPurchase(order)) return;
     setConfirming(true);
+    setConfirmError(null);
     try {
       const res = await fetch(`${API_URL}/stores/${order.storeId}/orders/${orderId}/review`, {
         method: 'PATCH',
@@ -119,7 +175,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           Authorization: `Bearer ${session.user.accessToken}`,
         },
       });
-      if (res.ok) setConfirmed(true);
+      if (!res.ok) throw new Error('구매 확정에 실패했습니다.');
+      setConfirmed(true);
+      refetch();
+    } catch (e: unknown) {
+      setConfirmError(e instanceof Error ? e.message : '구매 확정에 실패했습니다.');
     } finally {
       setConfirming(false);
     }
@@ -156,19 +216,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  const steps = getTimelineSteps(order);
-  const isCancelled = order.status === 'CANCELLED';
-  const isReviewable =
-    !confirmed &&
-    order.status !== 'REVIEWED' &&
-    (order.status === 'DELIVERED' || order.status === 'PICKED_UP');
-  const currentIdx = getCurrentStepIndex(steps, order.status);
-  const pickupCode =
-    order.pickupCode &&
-    (order.status === 'HUB_ARRIVED' || order.status === 'PICKED_UP' || order.status === 'REVIEWED')
-      ? order.pickupCode
-      : null;
-  const hasParcelTracking = Boolean(order.courierCompany?.trim() || order.trackingNumber?.trim());
+  const viewOrder: Order = confirmed ? { ...order, status: 'REVIEWED' } : order;
+  const steps = getTimelineSteps(viewOrder);
+  const isCancelled = viewOrder.status === 'CANCELLED';
+  const isReviewable = !confirmed && canConfirmPurchase(order);
+  const currentIdx = getCurrentStepIndex(steps, viewOrder.status);
+  const receiptAction = getReceiptAction(viewOrder);
+  const statusNotice = getOrderStatusNotice(viewOrder);
 
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
@@ -204,12 +258,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 color: 'var(--color-text)',
               }}
             >
-              {order.deliveryMethod === 'hub'
-                ? '거점 픽업'
-                : order.deliveryMethod === 'parcel'
-                  ? '택배'
-                  : '직배송'}
-              {order.saleType === 'group' && ' (공동구매)'}
+              {getOrderDeliveryLabel(order)}
             </Text>
           </Group>
           {order.deliveryAddress?.address && (
@@ -255,42 +304,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </Text>
             </Group>
           )}
-          {hasParcelTracking && order.courierCompany && (
-            <Group justify="space-between">
-              <Text
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-              >
-                택배사
-              </Text>
-              <Text
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: 'var(--fw-bold)',
-                  color: 'var(--color-text)',
-                }}
-              >
-                {order.courierCompany}
-              </Text>
-            </Group>
-          )}
-          {hasParcelTracking && order.trackingNumber && (
-            <Group justify="space-between">
-              <Text
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-              >
-                운송장번호
-              </Text>
-              <Text
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: 'var(--fw-bold)',
-                  color: 'var(--color-text)',
-                }}
-              >
-                {order.trackingNumber}
-              </Text>
-            </Group>
-          )}
           <Divider />
           <Group justify="space-between">
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
@@ -308,6 +321,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </Group>
         </Stack>
       </Paper>
+
+      <Alert
+        color={statusNotice.color}
+        variant="light"
+        radius="md"
+        mb="md"
+        title={statusNotice.title}
+      >
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          {statusNotice.description}
+        </Text>
+      </Alert>
 
       {order.status === 'RECRUITING' && !cancelDone && (
         <Alert color="blue" variant="light" radius="md" mb="lg" title="공동구매 모집 중">
@@ -340,6 +365,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           >
             공동구매 참여 취소
           </Button>
+          {cancelError && (
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt="xs">
+              {cancelError}
+            </Text>
+          )}
         </Alert>
       )}
 
@@ -356,8 +386,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Alert>
       )}
 
-      {pickupCode && (
-        <PickupCodeCard code={pickupCode} address={order.deliveryAddress?.address ?? ''} />
+      <ReceiptActionCard action={receiptAction} />
+
+      {confirmError && (
+        <Alert color="red" variant="light" radius="md" mb="md">
+          {confirmError}
+        </Alert>
       )}
 
       {(isReviewable || confirmed) && (
