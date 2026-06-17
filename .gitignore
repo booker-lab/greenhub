@@ -48,3 +48,6 @@ apps/*/public/swe-worker-*.js
 
 # Claude Code 로컬 설정·스케줄러 락 (머신·사용자 한정)
 .claude/
+
+# Codex 로컬 산출물·검증 캡처 (머신·세션 한정)
+.codex/
