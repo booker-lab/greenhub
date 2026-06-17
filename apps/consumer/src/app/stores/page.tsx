@@ -1,19 +1,19 @@
 'use client';
 
 import {
-  Box,
-  Card,
+  Button,
   Container,
-  Group,
+  Select,
   SimpleGrid,
   Skeleton,
   Stack,
   Text,
+  TextInput,
   Title,
 } from '@mantine/core';
-import { MapPin, Package, Store } from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
+import { RotateCcw, Search, Store } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import StoreCard from '@/components/StoreCard';
 import { usePublicStores } from '@/hooks/useStores';
 
 const STORE_SKELETON_KEYS = [
@@ -23,8 +23,38 @@ const STORE_SKELETON_KEYS = [
   'store-skeleton-4',
 ];
 
+type StoreSort = 'name' | 'products' | 'hubs';
+
+const STORE_SORT_OPTIONS = [
+  { value: 'name', label: '가나다순' },
+  { value: 'products', label: '상품 수순' },
+  { value: 'hubs', label: '거점 수순' },
+];
+
+function normalizeSearch(value: string) {
+  return value.trim().toLocaleLowerCase('ko-KR');
+}
+
 export default function StoresPage() {
   const { stores, loading, error } = usePublicStores();
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<StoreSort>('name');
+  const normalizedQuery = normalizeSearch(query);
+  const visibleStores = useMemo(() => {
+    const filtered = normalizedQuery
+      ? stores.filter((store) =>
+          `${store.name} ${store.address}`.toLocaleLowerCase('ko-KR').includes(normalizedQuery),
+        )
+      : stores;
+
+    return [...filtered].sort((a, b) => {
+      if (sort === 'products')
+        return b.productCount - a.productCount || a.name.localeCompare(b.name, 'ko-KR');
+      if (sort === 'hubs') return b.hubCount - a.hubCount || a.name.localeCompare(b.name, 'ko-KR');
+      return a.name.localeCompare(b.name, 'ko-KR');
+    });
+  }, [stores, normalizedQuery, sort]);
+  const hasSearch = normalizedQuery.length > 0;
 
   return (
     <Container size="sm" px="md" pt="lg" pb={96}>
@@ -36,6 +66,25 @@ export default function StoresPage() {
           판매자별 상품과 운영 거점을 확인하세요.
         </Text>
       </Stack>
+
+      {!loading && !error && stores.length > 0 && (
+        <Stack gap="xs" mb="md">
+          <TextInput
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder="상점명 또는 주소 검색"
+            leftSection={<Search size={16} />}
+            aria-label="상점 검색"
+          />
+          <Select
+            value={sort}
+            onChange={(value) => setSort((value as StoreSort | null) ?? 'name')}
+            data={STORE_SORT_OPTIONS}
+            allowDeselect={false}
+            aria-label="상점 정렬"
+          />
+        </Stack>
+      )}
 
       {loading && (
         <SimpleGrid cols={1} spacing="sm">
@@ -60,77 +109,28 @@ export default function StoresPage() {
         </Stack>
       )}
 
-      {!loading && stores.length > 0 && (
-        <SimpleGrid cols={1} spacing="sm">
-          {stores.map((store) => (
-            <Card
-              key={store.id}
-              component={Link}
-              href={`/stores/${store.id}`}
-              p="sm"
-              style={{ border: 'var(--border)', textDecoration: 'none' }}
+      {!loading && !error && stores.length > 0 && visibleStores.length === 0 && (
+        <Stack align="center" py={48}>
+          <Store size={32} color="var(--color-text-disabled)" />
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            검색 조건에 맞는 상점이 없습니다.
+          </Text>
+          {hasSearch && (
+            <Button
+              variant="light"
+              leftSection={<RotateCcw size={16} />}
+              onClick={() => setQuery('')}
             >
-              <Group wrap="nowrap" align="stretch">
-                <Box
-                  style={{
-                    position: 'relative',
-                    width: 84,
-                    flex: '0 0 84px',
-                    borderRadius: 'var(--radius)',
-                    overflow: 'hidden',
-                    background: 'var(--color-border)',
-                  }}
-                >
-                  <Image
-                    fill
-                    src={store.logoUrl ?? '/icons/icon-192x192.png'}
-                    alt={store.name}
-                    sizes="84px"
-                    style={{ objectFit: 'cover' }}
-                  />
-                </Box>
-                <Stack gap={6} style={{ minWidth: 0, flex: 1 }}>
-                  <Text
-                    style={{
-                      fontSize: 'var(--font-size-md)',
-                      fontWeight: 'var(--fw-bold)',
-                      color: 'var(--color-text)',
-                    }}
-                    lineClamp={1}
-                  >
-                    {store.name || '이름 없는 상점'}
-                  </Text>
-                  <Group gap={6} wrap="nowrap">
-                    <MapPin size={14} color="var(--color-text-disabled)" />
-                    <Text
-                      style={{
-                        fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-secondary)',
-                      }}
-                      lineClamp={1}
-                    >
-                      {store.address || '주소 미등록'}
-                    </Text>
-                  </Group>
-                  <Group gap="xs">
-                    <Text
-                      style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }}
-                    >
-                      상품 {store.productCount}개
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-disabled)',
-                      }}
-                    >
-                      거점 {store.hubCount}곳
-                    </Text>
-                  </Group>
-                </Stack>
-                <Package size={18} color="var(--color-text-disabled)" />
-              </Group>
-            </Card>
+              검색 초기화
+            </Button>
+          )}
+        </Stack>
+      )}
+
+      {!loading && !error && visibleStores.length > 0 && (
+        <SimpleGrid cols={1} spacing="sm">
+          {visibleStores.map((store) => (
+            <StoreCard key={store.id} store={store} />
           ))}
         </SimpleGrid>
       )}

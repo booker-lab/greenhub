@@ -1,9 +1,8 @@
 'use client';
 
-import { Box, Card, Group, SimpleGrid, Skeleton, Stack, Text, Title } from '@mantine/core';
-import { MapPin, Package, Store } from 'lucide-react';
-import Image from 'next/image';
+import { Box, Group, SimpleGrid, Skeleton, Stack, Text, Title } from '@mantine/core';
 import Link from 'next/link';
+import StoreCard from '@/components/StoreCard';
 import { usePublicStores } from '@/hooks/useStores';
 
 const STORE_PREVIEW_LIMIT = 3;
@@ -55,70 +54,7 @@ export default function HomeStorePreview() {
       ) : (
         <SimpleGrid cols={1} spacing="sm">
           {visibleStores.map((store) => (
-            <Card
-              key={store.id}
-              component={Link}
-              href={`/stores/${store.id}`}
-              p="sm"
-              style={{ border: 'var(--border)', textDecoration: 'none' }}
-            >
-              <Group wrap="nowrap" align="center">
-                <Box
-                  style={{
-                    position: 'relative',
-                    width: 64,
-                    height: 64,
-                    flex: '0 0 64px',
-                    borderRadius: 'var(--radius)',
-                    overflow: 'hidden',
-                    background: 'var(--color-border)',
-                  }}
-                >
-                  <Image
-                    fill
-                    src={store.logoUrl ?? '/icons/icon-192x192.png'}
-                    alt={store.name || '상점 로고'}
-                    sizes="64px"
-                    style={{ objectFit: 'cover' }}
-                  />
-                </Box>
-                <Stack gap={5} style={{ minWidth: 0, flex: 1 }}>
-                  <Group gap={6} wrap="nowrap">
-                    <Store size={15} color="var(--color-primary)" />
-                    <Text
-                      lineClamp={1}
-                      style={{
-                        fontSize: 'var(--font-size-md)',
-                        fontWeight: 'var(--fw-bold)',
-                        color: 'var(--color-text)',
-                      }}
-                    >
-                      {store.name || '이름 없는 상점'}
-                    </Text>
-                  </Group>
-                  <Group gap={6} wrap="nowrap">
-                    <MapPin size={14} color="var(--color-text-disabled)" />
-                    <Text
-                      lineClamp={1}
-                      style={{
-                        fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-secondary)',
-                      }}
-                    >
-                      {store.address || '주소 미등록'}
-                    </Text>
-                  </Group>
-                  <Group gap={6} wrap="nowrap">
-                    <Package size={14} color="var(--color-text-disabled)" />
-                    <Text
-                      style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }}
-                    >
-                      상품 {store.productCount}개 · 거점 {store.hubCount}곳
-                    </Text>
-                  </Group>
-                </Stack>
-              </Group>
-            </Card>
+            <StoreCard key={store.id} store={store} compact />
           ))}
         </SimpleGrid>
       )}
