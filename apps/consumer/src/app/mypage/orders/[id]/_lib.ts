@@ -43,7 +43,10 @@ export function getTimelineSteps(order: Order): OrderStatus[] {
 
 export function getCurrentStepIndex(steps: OrderStatus[], status: OrderStatus): number {
   if (status === 'REVIEWED') return steps.length;
-  return steps.indexOf(status);
+  const currentIndex = steps.indexOf(status);
+  const isLastReceiptStep =
+    currentIndex === steps.length - 1 && (status === 'DELIVERED' || status === 'PICKED_UP');
+  return isLastReceiptStep ? steps.length : currentIndex;
 }
 
 export function canConfirmPurchase(order: Pick<Order, 'status'>): boolean {
@@ -85,7 +88,23 @@ export function getReceiptAction(order: Order): ReceiptAction {
         description: '판매자가 등록한 택배 정보를 확인하세요.',
       };
     }
-    if (['ACCEPTED', 'CONFIRMED', 'PREPARING', 'DELIVERING'].includes(order.status)) {
+    if (order.status === 'DELIVERED') {
+      return {
+        type: 'waiting',
+        title: '배송 완료',
+        description:
+          '운송장 정보는 등록되어 있지 않지만 배송 완료 상태입니다. 상품을 받았다면 구매 확정을 진행하세요.',
+      };
+    }
+    if (order.status === 'DELIVERING') {
+      return {
+        type: 'waiting',
+        title: '배송 중',
+        description:
+          '운송장 정보가 아직 등록되지 않았습니다. 배송 상태는 이 화면에서 계속 확인할 수 있습니다.',
+      };
+    }
+    if (['ACCEPTED', 'CONFIRMED', 'PREPARING'].includes(order.status)) {
       return {
         type: 'waiting',
         title: '배송 준비 중',
