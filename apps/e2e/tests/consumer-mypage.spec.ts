@@ -73,6 +73,8 @@ test.describe('Consumer — 마이페이지 (인증)', () => {
     await page.goto(`${BASE}/mypage`);
     await page.waitForLoadState('networkidle');
     await expect(page.getByText('일반 주문')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('공동구매 참여 내역')).toBeVisible();
+    await expect(page.getByText('[공동구매] 직배송')).toBeVisible();
     const deliveredParcelCard = page
       .locator('[data-testid="order-card"]')
       .filter({ hasText: '확정 가능' })
@@ -102,7 +104,14 @@ test.describe('Consumer — 마이페이지 (인증)', () => {
     await expect(page.locator('body')).toBeVisible();
   });
 
-  test('택배 주문 상세 — 판매자가 저장한 택배사와 운송장번호 표시', async ({ page }) => {
+  test('수령 상세 — 픽업 코드와 택배 송장, 구매 확정 성공·실패 표시', async ({ page }) => {
+    await page.goto(`${BASE}/mypage/orders/e2e-mypage-hub-picked-order-001`);
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByText('픽업 코드')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('482731')).toBeVisible();
+    await expect(page.getByText('수령 장소: 부산 거점로 10')).toBeVisible();
+    await expect(page.getByRole('button', { name: '구매 확정', exact: true })).toBeVisible();
+
     await page.goto(`${BASE}/mypage/orders/e2e-parcel-delivered-order-001`);
     await page.waitForLoadState('networkidle');
     await expect(page.getByText('구매 확정이 가능합니다')).toBeVisible({ timeout: 10_000 });
