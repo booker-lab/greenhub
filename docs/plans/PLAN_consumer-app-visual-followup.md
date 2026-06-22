@@ -169,7 +169,34 @@
 **정합성 집중 검토**: `consumer@test.com` 소유권, `DELIVERED`·`PICKED_UP` 구매 확정 조건, 택배사·운송장 부분 누락 표시.
 **육안검증**: 로그인 MY 목록, 일반/공구 구분, 택배 상세, 거점 픽업 코드, 구매 확정 성공·실패를 확인한다.
 **커밋 예시**: `consumer: MY 주문 fixture와 수령 검증을 종결`
-**Conclusion**: [대기 — MY E2E 11/11과 인증 육안검증을 통과한다. 검증 결과 미기록]
+**Conclusion**: [완료 — 2026-06-22. `consumer@test.com` 소유의 택배 완료·픽업 완료·공동구매 주문 3건을 `global-setup.ts`에서 멱등 복구하도록 고정했다. MY 목록의 일반/공구 구분과 `확정 가능` 신호, 픽업 코드·수령 장소, 택배사·운송장, 구매 확정 실패·성공을 E2E로 보강했다. Biome, 소비자 lint 오류 0·기존 경고 14, 타입체크, build, `git diff --check`가 통과했고 최종 Preview `dpl_6oHtew8tXvvQ5Fa48tg89shTF3Eu`에서 chromium 11/11을 통과했다. 375px·1440px의 MY 목록·픽업 상세·택배 상세 6개 화면은 가로 넘침 0·콘솔 오류 0이며 하단 내비게이션 가림이 없었다. 동일 artifact를 Production `dpl_2NfvKCxpmj3KeBp9gCQwo1mpQx7W`로 승격해 커밋 `b7fb1e2`, `greenlove.co.kr`·`www.greenlove.co.kr` alias, 운영 루트 200과 비인증 MY 로그인 이동 200을 확인했다.]
+
+#### W1 종료 체크리스트
+
+- [x] 고정 MY fixture의 소유자·상태·수령 정보를 현재 인증 계약에 맞췄다.
+- [x] 목록·픽업·택배·구매 확정 성공·실패 기대값을 E2E로 고정했다.
+- [x] 수정 파일의 정합성·500라인 제한과 `memory.md` 200라인 제한을 확인했다.
+- [x] lint·타입체크·build·Biome·diff-check와 MY E2E 11/11을 통과했다.
+- [x] 구현 커밋 `fedf215`와 fixture 보강 커밋 `b7fb1e2`를 push했다.
+- [x] 최종 Preview `READY`, HTTP 200, 배포 커밋 일치를 확인했다.
+- [x] 375px·1440px에서 MY 목록·픽업 상세·택배 상세를 육안검증했다.
+- [x] 동일 artifact를 Production으로 승격하고 운영 도메인 핵심 경로를 확인했다.
+- [x] 선 설계 T7, 발견 큐, Conclusion, `docs/memory.md`를 종결 상태로 맞췄다.
+
+```text
+[W1 핸드오프]
+- 완료 범위: MY 전용 택배·픽업·공구 fixture 3건 멱등 복구, 목록 일반/공구 구분, 픽업 코드·택배 송장·구매 확정 성공/실패 검증 종결
+- 제외·새 발견: 고유 Preview URL은 Railway CORS 허용 목록 밖이라 인증 API 검증은 배포 커밋이 같은 고정 브랜치 alias에서 수행. 기능 결함은 아님
+- 커밋: fedf215 consumer: MY 주문 fixture와 수령 검증을 종결 / b7fb1e2 consumer: MY 픽업과 공구 fixture 검증을 보강
+- Preview 배포: dpl_6oHtew8tXvvQ5Fa48tg89shTF3Eu / greenhubconsumer-bnea90hc3-jos-projects-d1cecc0c.vercel.app / READY
+- Production 배포: dpl_2NfvKCxpmj3KeBp9gCQwo1mpQx7W / greenlove.co.kr / READY / HTTP 200
+- 자동 검증: Biome 3파일, lint 오류 0·경고 14, tsc, build, diff-check, MY chromium 11/11
+- 육안검증: 375px·1440px 목록·픽업·택배 6화면, 가로 넘침 0, 콘솔 오류 0, 하단 내비 가림 없음
+- 문서 갱신: CRITICAL_LOGIC #CL-149, MY 선 설계 T7, 발견 큐 C-MYPAGE-01, 본 PLAN Conclusion·체크박스, memory
+- 남은 문제: W1 기능 결함 없음. 고유 Preview URL CORS 제약은 기존 고정 브랜치 alias 검증 계약을 유지
+- 다음 묶음: W2
+- 다음 첫 행동: consumer-groupbuy.spec.ts와 consumer-cart.spec.ts를 현재 공유 getGroupBuyStatus()·cartValidation 계약과 대조해 2.1 선행 검증 범위를 확정한다.
+```
 
 ### W2. 공구·장바구니 운영 검증 종결
 

@@ -193,7 +193,7 @@ MY 탭의 1차 개선 목표는 주문 상태를 더 믿을 수 있게 만들고
 - [x] 배송지 저장 후 목록 갱신은 본 작업의 부수 안정화로 확인만 하고, UI 고도화는 별도 범위로 둔다.
 - [x] 기존 소비자 앱 전역 lint 경고는 본 태스크에서 새로 늘리지 않는다.
 
-### [ ] T7 — 검증과 육안 확인
+### [x] T7 — 검증과 육안 확인
 
 **실행:**
 
@@ -207,8 +207,8 @@ pnpm --filter e2e test -- consumer-mypage.spec.ts --project=chromium
 - [x] 빌드가 통과한다.
 - [x] MY 관련 신규 lint 오류가 없다.
 - [x] 비로그인 `/mypage`는 `/login`으로 이동한다.
-- [ ] 인증 상태에서 MY 목록, 주문 상세, 구매 확정 가능 상태를 육안 확인한다.
-- [ ] `consumer-mypage.spec.ts`의 깨진 한글 기대값이 있으면 실제 문자열 기준으로 정리한다.
+- [x] 인증 상태에서 MY 목록, 주문 상세, 구매 확정 가능 상태를 육안 확인한다.
+- [x] `consumer-mypage.spec.ts`의 기대값을 실제 한국어 문자열과 고정 fixture 계약으로 정리한다.
 
 ---
 
@@ -246,3 +246,10 @@ pnpm --filter e2e test -- consumer-mypage.spec.ts --project=chromium
 - [x] 택배 운송장 정보가 없을 때 소비자가 기다려야 하는 상태를 이해할 수 있다.
 - [x] 구매 확정 실패가 조용히 묻히지 않는다.
 - [x] 변경 파일은 모두 500라인 미만을 유지한다.
+
+## T7 검증 종결 기록 — 2026-06-22
+
+- `global-setup.ts`가 `consumer@test.com` 소유의 택배 완료·픽업 완료·공동구매 주문 3건만 멱등 복구한다.
+- Preview `dpl_6oHtew8tXvvQ5Fa48tg89shTF3Eu`에서 `consumer-mypage.spec.ts` chromium 11/11을 통과했다. 일반/공구 구분, 픽업 코드, 택배 송장, 구매 확정 실패·성공을 포함한다.
+- 375px·1440px의 MY 목록·픽업 상세·택배 상세 6개 화면에서 가로 넘침과 콘솔 오류가 없고, 하단 내비게이션이 마지막 상태를 가리지 않음을 확인했다.
+- 동일 artifact를 Production `dpl_2NfvKCxpmj3KeBp9gCQwo1mpQx7W`로 승격했다. `greenlove.co.kr` 루트 200, 비인증 `/mypage`의 `/login` 이동 후 200을 확인했다.
