@@ -6,6 +6,7 @@
 
 ## 현재 진행 요약
 
+- 소비자 앱 후속 실행 W0를 종결했다. lint 오류 0건·경고 14건 기준선, 커밋 `554eef3`, Preview `dpl_eQ4MXeRq2w2E3mj5AG8CFDhT1Caz` READY·HTTP 200, 장바구니 8/8·알림 2/2 smoke, 375px·데스크톱 육안검증을 완료했다. 다음 묶음은 W1 MY 주문 fixture·육안검증 종결이다.
 - 핸드오프 프롬프트 1번은 육안검증 종결 가지, 2번은 개발·릴리즈 트레인 가지로 분리했다. 다음 대화에서 번호를 순서로 해석하지 않는다.
 - 프롬프트 1번 육안검증은 현재 실행 가능한 항목을 종결했다. `#43`, `#79`는 운영 쓰기 승인 또는 전용 테스트 계정·정지 refresh token 조건 부재로 `[-]` 처리했다.
 - 프롬프트 2번 릴리즈 트레인은 `shared-contracts`, `api-backend`, `consumer-web`, `seller-admin`, `driver-web`, `e2e-ops`, 후속 consumer fixture 보정까지 커밋·푸시·Vercel Preview READY 확인이 끝났다.
@@ -46,7 +47,7 @@
 - 2026-06-17 소비자 카테고리 탐색 완성형 선 설계와 구현을 진행했다. URL 쿼리를 필터 SSOT로 두고, `saleType` 계약을 `normal | group`로 정리했으며, 색상 접기/초기화, 정렬, 검색 진입, 공동구매 카드 보강, `consumer-category.spec.ts` fixture E2E를 추가했다. `pnpm --filter consumer build`, `pnpm --filter consumer exec tsc --noEmit`, 변경 파일 Biome, fixture E2E 5/5 통과. 로컬 브라우저 검증은 CORS 때문에 `127.0.0.1` 대신 `http://localhost:3001` 기준으로 확인한다.
 - 2026-06-17 소비자 홈 공동구매 미리보기 개선 구현. 이미지 부모 영역 고정, 남은 시간·남은 수량 표시, 목표 달성 상품 홈 미리보기 제외, `targetQuantity <= 0` fallback을 적용했다. 변경 파일 Biome와 `pnpm --filter consumer build` 통과, 전체 lint는 기존 이슈로 실패, Playwright 모킹 모바일 검증 통과.
 - 2026-06-17 소비자 카테고리 탐색 보강. `ColorOption` 누락 색상 4종을 카테고리 칩에 추가하고 공개 상품 API의 공동구매 `recruitDeadline`을 ISO 문자열로 직렬화하도록 맞췄다.
-- 2026-06-17 소비자 lint 실패 원인을 재확인해 `docs/BACKLOG.md`에 `CONSUMER-LINT-BASELINE`으로 기록했다. 현재 실패 errors는 `useCart.ts`와 `useNotifications.ts`의 `forEach` 콜백 반환 2건이며, warnings 16건은 이미지, index key, non-null assertion 정리 과제다.
+- 2026-06-22 소비자 lint 기준선을 종결했다. `useCart.ts`·`useNotifications.ts`의 파일별 Biome 오류를 제거해 전체 lint 오류 0건을 고정했고, 잔여 경고 14건은 `CONSUMER-LINT-FOLLOWUP`으로 파일별 분리했다.
 - 2026-06-17 소비자 상점 탭 개선 구현. 공개 상점 훅 경계와 `StoreCard` 공통화, `/stores` 검색·정렬·결과 없음 상태, `consumer-stores.spec.ts` fixture 검증을 확인했다. `pnpm --filter consumer build`, `pnpm --filter e2e test tests/consumer-stores.spec.ts`, `git diff --check` 통과.
 - 2026-06-17 소비자 공구 탭 안정화 구현. 공유 `getGroupBuyStatus()`와 테스트를 추가하고, `/groupbuy` 모집 중·완료/종료·정보 확인 필요 분류, 공구 카드 표시, 상세 CTA와 판매자 지정 배송 방식 고정, API 공구 설정 30개 단위 병합, 공구 E2E 계약 보강을 완료했다. `pnpm --filter consumer exec tsc --noEmit`, `pnpm --filter consumer lint`, `pnpm --filter @greenhub/shared test`, `pnpm --filter api test -- products.service.spec.ts`, `pnpm --filter api build` 통과.
 - 2026-06-17 소비자 장바구니 결제 전 차단 구현. `cartValidation` 유틸을 장바구니와 checkout이 공유하고, 문제 항목 사유·`다시 선택하기`·결제 버튼 비활성화·`checkout_cart` 쓰기 차단을 적용했다. `pnpm --filter consumer lint`, `pnpm --filter consumer build`, 로컬 `CONSUMER_BASE=http://localhost:3002` 기준 `consumer-cart.spec.ts`, `consumer-checkout.spec.ts`, `git diff --check` 통과.
