@@ -282,7 +282,7 @@ async function seedSellerOrders() {
   console.log(`  ✅ orders/${PARCEL_ORDER_ID} (deliveryMethod=parcel, status=PREPARING)`);
 
   // 2-7) 송장 표시 회귀 전용 완료 주문 — 쓰기 동선과 분리해 seller·consumer 읽기 계약을 검증
-  await seedDeliveredParcelOrder(now, dateStr, NORMAL_PRODUCT_ID);
+  await seedMyPageOrders(now, dateStr, NORMAL_PRODUCT_ID, GROUP_PRODUCT_ID);
 
   // 2-8) 모바일 모달 회귀 전용 주문 — 발송 쓰기 테스트와 상태를 공유하지 않는다.
   const PARCEL_MODAL_ORDER_ID = 'e2e-parcel-modal-order-001';
@@ -362,10 +362,85 @@ async function seedDeliveredParcelOrder(
   );
 }
 
+async function seedMyPageOrders(
+  now = Timestamp.now(),
+  dateStr = toDateStr(new Date()),
+  normalProductId = 'e2e-normal-product-001',
+  groupProductId = 'e2e-group-product-001',
+) {
+  await seedDeliveredParcelOrder(now, dateStr, normalProductId);
+
+  const hubOrderId = 'e2e-mypage-hub-picked-order-001';
+  await db.doc(`orders/${hubOrderId}`).set({
+    id: hubOrderId,
+    orderNumber: '20260101-000006',
+    storeId: SELLER_STORE_ID,
+    userId: CONSUMER_USER_ID,
+    productId: normalProductId,
+    productName: 'E2E 픽업 확인 상품',
+    buyerName: 'E2E 소비자',
+    address: '부산 테스트로 9',
+    buyerPhone: '010-0000-0001',
+    sellerPhone: '010-0000-0000',
+    hubName: 'E2E 테스트 거점',
+    hubAddress: '부산 거점로 10',
+    quantity: 1,
+    saleType: 'normal',
+    status: 'PICKED_UP',
+    deliveryMethod: 'hub',
+    deliveryFee: 0,
+    deliveryAddress: null,
+    isMetropolitan: false,
+    hubId: 'e2e-hub-001',
+    pickupCode: '482731',
+    totalAmount: 10000,
+    requestedDeliveryDate: dateStr,
+    preparedAt: now,
+    cancelReason: null,
+    groupBuyConsent: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  console.log(`  ✅ orders/${hubOrderId} (status=PICKED_UP, pickupCode=482731)`);
+
+  const groupOrderId = 'e2e-mypage-group-order-001';
+  await db.doc(`orders/${groupOrderId}`).set({
+    id: groupOrderId,
+    orderNumber: '20260101-000007',
+    storeId: SELLER_STORE_ID,
+    userId: CONSUMER_USER_ID,
+    productId: groupProductId,
+    productName: 'E2E MY 공동구매 상품',
+    buyerName: 'E2E 소비자',
+    address: '서울 테스트로 1',
+    buyerPhone: '010-0000-0001',
+    sellerPhone: '010-0000-0000',
+    hubName: null,
+    hubAddress: null,
+    quantity: 1,
+    saleType: 'group',
+    status: 'ACCEPTED',
+    deliveryMethod: 'direct',
+    deliveryFee: 3000,
+    deliveryAddress: { address: '서울 테스트로 1', addressDetail: '101호', zipCode: '12345' },
+    isMetropolitan: true,
+    hubId: null,
+    pickupCode: null,
+    totalAmount: 18000,
+    requestedDeliveryDate: null,
+    preparedAt: null,
+    cancelReason: null,
+    groupBuyConsent: { agreed: true, agreedAt: now, userId: CONSUMER_USER_ID },
+    createdAt: now,
+    updatedAt: now,
+  });
+  console.log(`  ✅ orders/${groupOrderId} (saleType=group, status=ACCEPTED)`);
+}
+
 async function main() {
   console.log('🌱 E2E 시드 시작...');
   if (process.argv.includes('--consumer-mypage-only')) {
-    await seedDeliveredParcelOrder();
+    await seedMyPageOrders();
     console.log('\n🎉 MY 주문 E2E 시드 완료');
     return;
   }
