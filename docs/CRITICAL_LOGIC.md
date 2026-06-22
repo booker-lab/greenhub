@@ -394,3 +394,9 @@
 - **결정**: `consumer-app-visual-followup-plan.md`는 발견 큐로 유지하고, 실행 순서와 종료 기준은 `docs/plans/PLAN_consumer-app-visual-followup.md`를 별도 SSOT로 둔다.
 - **이유**: 기존 큐에는 완료 구현의 잔여 검증, 즉시 가능한 UI 개선, 정책 결정, API 계약 확장이 섞여 있다. 이를 한 번에 구현하면 비즈니스 상태와 표시 계층이 뒤섞이고 다음 작업자가 완료 기준을 오판할 수 있다.
 - **계약**: 각 작업 묶음은 선 설계, 아토믹 구현, 정합성 검토, 자동 검증, 독립 커밋, Preview 배포, 모바일·데스크톱 육안검증, 문서 종결, 다음 묶음 핸드오프 순서로 닫는다. Preview 육안검증 전에는 다음 묶음을 시작하지 않는다.
+
+## [결정 #CL-148] 소비자 후속 묶음은 Preview 검증 후 동일 artifact를 Production으로 승격한다 (2026-06-22)
+
+- **결정**: W1 이후 모든 소비자 후속 묶음은 Preview 자동·육안검증을 통과한 동일 artifact를 Production으로 승격하고 운영 도메인 검증까지 완료해야 종결한다.
+- **이유**: 실제 사용자 도메인에서 변경을 확인하려면 Production alias 반영이 필요하며, Preview만 검증하고 멈추면 운영 화면과 완료 기록 사이에 차이가 남는다.
+- **계약**: 검증 실패 시 Production 승격을 금지한다. 검증 통과 후에는 묶음별 재승인 없이 `vercel promote`로 동일 artifact를 승격하고, Production `READY`, 커밋 일치, 운영 도메인 HTTP 200과 핵심 화면을 기록한다. 운영 장애 시 다음 묶음을 시작하지 않고 직전 Production으로 rollback한다.
