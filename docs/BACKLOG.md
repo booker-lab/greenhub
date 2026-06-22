@@ -31,7 +31,22 @@
 | 💡 향후 | VF-008 — 정상 상호명 확인과 별도 승인 후 운영 Firestore 판매자 `name` 정리 | 운영 데이터 |
 | 💡 향후 | VF-011 — 정상 이름 확인과 별도 승인 후 운영 Firestore 소비자 `name` 정리 | 운영 데이터 |
 | 💡 향후 | 육안 검증 보류 묶음 — 인증 가능한 `375px` seller·admin 모바일 환경, 운영 쓰기 승인, 테스트 데이터가 필요한 항목은 `visual-verify-handoff-20260601.md` §4에서 재개 | 검증 환경 |
-| 💡 향후 | CONSUMER-LINT-BASELINE — `pnpm --filter consumer lint` 기존 실패 2건과 경고 16건 정리 | DX/품질 |
+| ✅ | CONSUMER-LINT-BASELINE — 훅 2개 오류 제거, 소비자 lint 오류 0건 기준선 확정 | DX/품질 |
+| 💡 향후 | CONSUMER-LINT-FOLLOWUP — 소비자 lint 경고 14건을 파일별로 정리 | DX/품질 |
+
+---
+
+## CONSUMER-LINT-FOLLOWUP — 소비자 lint 경고 14건
+
+> W0에서는 오류 0건 기준선만 고정한다. 아래 경고는 기능 변경과 섞지 않고 파일별 후속 작업으로 처리한다.
+
+- [ ] `DeliveryDatePicker.tsx`: 달력 주·빈 날짜의 index key 2건을 안정적인 날짜 기반 key로 교체한다.
+- [ ] `ProductImages.tsx`: 상품 이미지 index key 2건을 이미지 식별값 기반 key로 교체한다.
+- [ ] `ProductInfo.tsx`: 상세 이미지의 `<img>` 1건과 index key 1건을 이미지 정책과 함께 정리한다.
+- [ ] `auth.ts`: 필수 환경변수 non-null assertion 3건을 시작 시점 검증 계약으로 교체한다.
+- [ ] `DeadlineSection.tsx`: `groupSummary` non-null assertion 1건을 상태 가드와 일치시킨다.
+- [ ] `usePayment.ts`: 결제 환경변수 non-null assertion 3건을 결제수단별 설정 검증으로 교체한다.
+- [ ] `firestore.ts`: 문서 ID 추출 non-null assertion 1건을 명시적 오류 처리로 교체한다.
 
 ---
 
