@@ -2,7 +2,7 @@
 > SSOT: 세션 종료 시 최신 요약만 유지한다. 200라인 초과 시 50라인 이내로 압축한다.
 > 이전 이력은 `docs/archive/`, `docs/CRITICAL_LOGIC.md`, `docs/BACKLOG.md`를 참조한다.
 
-최종 수정: 2026-06-17
+최종 수정: 2026-06-22
 
 ## 현재 진행 요약
 
@@ -26,6 +26,8 @@
 - `ENABLE_E2E_FIXTURES=true` seller dev 서버와 `SELLER_FIXTURE_BASE=http://127.0.0.1:3011` 기준 `seller-order-bulk-parcel-ship.spec.ts` 2/2 통과.
 
 ## 다음 진입 후보
+
+- 소비자 앱 육안검증 후속 큐의 실행 Blueprint를 `docs/plans/PLAN_consumer-app-visual-followup.md`로 분리했다. W0 기준선 정리부터 W11 운영 데이터·경고 정리까지 의존성 순으로 진행하며, 각 묶음은 독립 커밋·Preview 배포·육안검증·핸드오프까지 닫은 뒤 다음 묶음으로 넘어간다.
 
 - `docs-policy`와 `seller-admin` 변경을 분리 stage·커밋하고 Vercel Preview READY를 확인한다.
 - `misc-review`에 남은 `AGENTS.md`, hub staff 문서, archive/plan 파일은 이번 seller 검증 묶음에 섞지 말고 별도 검토한다.

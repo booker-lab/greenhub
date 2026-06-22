@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
 import type { Notification } from '@greenhub/shared';
+import { useSession } from 'next-auth/react';
+import { useCallback, useEffect, useState } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const READ_KEY = 'gh_read_notifications';
