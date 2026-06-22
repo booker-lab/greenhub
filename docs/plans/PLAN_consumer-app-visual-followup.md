@@ -21,7 +21,7 @@
 - 주문·공구·장바구니에서 사용자가 가능한 행동을 오해하지 않는다.
 - 홈·카테고리·상점에서 탐색 밀도와 현재 조건이 명확하다.
 - 프론트 표시 규칙과 공유 타입·API 응답 계약이 일치한다.
-- 각 실행 묶음에 독립 커밋, Preview 주소, 검증 결과, 육안검증 체크가 남는다.
+- 각 실행 묶음에 독립 커밋, Preview·Production 주소, 검증 결과, 육안검증 체크가 남는다.
 - 다음 작업자는 직전 묶음의 핸드오프만 읽고 이어서 진행할 수 있다.
 
 ## 🎯 Origin Intent
@@ -70,9 +70,11 @@
 4. **자동 검증**: 태스크별 Verify와 묶음별 lint·build·관련 E2E를 통과한다.
 5. **독립 커밋**: 해당 묶음 파일만 stage하고 `consumer: <사용자 변화>` 형식으로 커밋한다.
 6. **Preview 배포**: 커밋을 push하고 Vercel Preview `READY`와 대상 경로 HTTP 200을 확인한다.
-7. **육안검증**: 375px 모바일과 데스크톱에서 체크리스트를 확인하고 캡처 또는 관찰 기록을 남긴다.
-8. **문서 종결**: 발견 큐 상태, 관련 선 설계 체크박스, 이 문서의 Conclusion을 갱신한다.
-9. **핸드오프**: 아래 핸드오프 템플릿을 채운 뒤 다음 묶음을 시작한다.
+7. **Preview 육안검증**: 375px 모바일과 데스크톱에서 체크리스트를 확인하고 캡처 또는 관찰 기록을 남긴다.
+8. **Production 승격**: Preview 검증을 통과한 동일 artifact를 Production으로 승격한다. 검증 실패 시 승격하지 않으며, 승격 실패 시 다음 묶음으로 넘어가지 않는다.
+9. **운영 도메인 검증**: Production `READY`, 배포 커밋 일치, 운영 도메인 HTTP 200과 핵심 화면을 확인한다. Production에서 테스트 Credentials가 비활성인 인증 경로는 Preview 인증 E2E 증거와 운영 비인증 smoke를 함께 기록한다.
+10. **문서 종결**: 발견 큐 상태, 관련 선 설계 체크박스, 이 문서의 Conclusion을 갱신한다.
+11. **핸드오프**: 아래 핸드오프 템플릿을 채운 뒤 다음 묶음을 시작한다.
 
 ### 공통 정합성 체크리스트
 
@@ -105,7 +107,7 @@
 
 ## Agent Completion Contract
 
-각 묶음은 Verify exit 0 → 독립 커밋 → Preview `READY` → 육안검증 체크 → 문서 Conclusion 갱신 순서로 종료한다. 구현만 끝난 상태를 `완료`로 기록하지 않는다.
+각 묶음은 Verify exit 0 → 독립 커밋 → Preview `READY` → Preview 육안검증 → 동일 artifact Production 승격 → 운영 도메인 검증 → 문서 Conclusion 갱신 순서로 종료한다. 구현이나 Preview 검증만 끝난 상태를 `완료`로 기록하지 않는다.
 
 > **에이전트 스코프**: 사용자가 PLAN 전체 실행을 요청하면 W0부터 Dependency 순서로 한 묶음씩 진행한다. 각 아토믹 태스크는 목표 파일 하나를 중심으로 수정하고, 묶음 종료 게이트가 닫히기 전 다음 묶음을 시작하지 않는다. 실행 중 새 결함은 현재 범위에 끼워 넣지 않고 발견 큐에 기록한다.
 
@@ -125,7 +127,7 @@
 
 **육안검증**: 없음. W0는 코드 동작 불변을 전제로 관련 소비자 E2E smoke를 통과한다.
 **커밋 예시**: `consumer: lint 기준선과 후속 작업 상태를 정리`
-**Conclusion**: [완료 — 2026-06-22. 소비자 lint 오류 2건을 제거하고 오류 0건·경고 14건 기준선을 확정했다. 경고는 `CONSUMER-LINT-FOLLOWUP`으로 파일별 분리했다. 파일별 Biome, 전체 lint, 타입체크, build, `git diff --check`가 통과했고, 커밋 `554eef3`의 Preview `dpl_eQ4MXeRq2w2E3mj5AG8CFDhT1Caz`가 `READY`·HTTP 200임을 확인했다. 해당 브랜치 Preview에서 장바구니 8/8·알림 2/2 smoke를 통과했으며, 375px·데스크톱 홈은 가로 넘침·오류 오버레이·콘솔 오류 없이 렌더됐다.]
+**Conclusion**: [완료 — 2026-06-22. 소비자 lint 오류 2건을 제거하고 오류 0건·경고 14건 기준선을 확정했다. 경고는 `CONSUMER-LINT-FOLLOWUP`으로 파일별 분리했다. 파일별 Biome, 전체 lint, 타입체크, build, `git diff --check`가 통과했고, 최종 커밋 `244f49d`의 Preview `dpl_6sjaVsNrPxJLEJZrU7yHgkPzLmkV`가 `READY`·HTTP 200임을 확인했다. 해당 브랜치 Preview에서 장바구니 8/8·알림 2/2 smoke를 통과했으며, 375px·데스크톱 홈은 가로 넘침·오류 오버레이·콘솔 오류 없이 렌더됐다. 동일 artifact를 Production `dpl_5cahZW5RbmnU3MiTHfbErH7so62j`로 승격해 `greenlove.co.kr`·`www.greenlove.co.kr` alias와 HTTP 200을 확인했다. Production 인증 E2E는 테스트 Credentials 비활성 정책에 따라 실행하지 않고 Preview 인증 E2E 증거를 유지한다.]
 
 #### W0 종료 체크리스트
 
@@ -136,14 +138,16 @@
 - [x] 독립 커밋 `554eef3`을 push했다.
 - [x] Vercel Preview `READY`, 루트 HTTP 200, 배포 커밋 일치를 확인했다.
 - [x] 브랜치 Preview를 375px·데스크톱에서 육안검증했다.
+- [x] 동일 artifact를 Production으로 승격하고 운영 도메인 HTTP 200을 확인했다.
 - [x] 발견 큐, BACKLOG, Conclusion, `docs/memory.md`를 종결 상태로 맞췄다.
 
 ```text
 [W0 핸드오프]
 - 완료 범위: 소비자 lint 오류 0건 기준선, 경고 14건 후속 분리, 실행 계획 SSOT 연결
 - 제외·새 발견: 기능 변경 없음. 고정 git-preview의 장바구니 2건 실패는 오래된 배포 불일치였고 현재 브랜치 Preview 8/8 통과로 종결
-- 커밋: 554eef3 consumer: lint 기준선과 후속 작업 상태를 정리
-- Preview 배포: dpl_eQ4MXeRq2w2E3mj5AG8CFDhT1Caz / greenhubconsumer-git-codex-consume-29d333-jos-projects-d1cecc0c.vercel.app / READY
+- 커밋: 554eef3 consumer: lint 기준선과 후속 작업 상태를 정리 / 244f49d 문서: W0 검증 종결과 W1 핸드오프 기록
+- Preview 배포: dpl_6sjaVsNrPxJLEJZrU7yHgkPzLmkV / greenhubconsumer-git-codex-consume-29d333-jos-projects-d1cecc0c.vercel.app / READY
+- Production 배포: dpl_5cahZW5RbmnU3MiTHfbErH7so62j / greenlove.co.kr / READY / HTTP 200
 - 자동 검증: Biome 2/2, lint 오류 0·경고 14, tsc, build, diff-check, 장바구니 8/8, 알림 2/2
 - 육안검증: 375px·데스크톱 홈 가로 넘침 0, 오류 오버레이 0, 콘솔 오류 0, 핵심 콘텐츠·하단 내비 정상
 - 문서 갱신: BACKLOG, CRITICAL_LOGIC, 발견 큐, 본 PLAN Conclusion·체크박스, memory
@@ -346,6 +350,7 @@
 - 제외·새 발견:
 - 커밋:
 - Preview 배포:
+- Production 배포:
 - 자동 검증:
 - 육안검증:
 - 문서 갱신:
@@ -356,9 +361,9 @@
 ## 전체 종료 체크리스트
 
 - [ ] W0~W11이 의존성 순서로 완료되었거나 범위 밖 사유가 기록됐다.
-- [ ] 각 묶음에 독립 커밋과 Preview 배포 증거가 있다.
+- [ ] 각 묶음에 독립 커밋과 Preview·Production 배포 증거가 있다.
 - [ ] 각 묶음의 모바일·데스크톱 육안검증 체크가 완료됐다.
 - [ ] 발견 큐와 탭별 선 설계 문서의 상태가 일치한다.
 - [ ] 수정 파일은 모두 500라인 이하이다.
 - [ ] `docs/memory.md`가 200라인 이하이며 최신 핸드오프를 가리킨다.
-- [ ] 운영 승격 대상은 Preview 확인 뒤 별도 승인과 함께 배포됐다.
+- [ ] 각 묶음은 Preview 검증 뒤 동일 artifact를 Production으로 승격하고 운영 도메인을 확인했다.
