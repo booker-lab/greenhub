@@ -27,6 +27,7 @@
  * 발급 대상에서 제외한다.
  */
 
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { chromium, type Page } from '@playwright/test';
 import { config as loadEnv } from 'dotenv';
@@ -130,6 +131,16 @@ async function saveStorageStateWhenIdle(page: Page, path: string, name: string):
 }
 
 export default async function globalSetup(): Promise<void> {
+  // MY 상세 회귀가 임시 운영 데이터의 잔존 여부에 의존하지 않도록 전용 주문만
+  // 멱등 복구한다. 전체 시드는 다른 테스트의 쓰기 상태를 덮어쓸 수 있어 실행하지 않는다.
+  execFileSync(
+    process.execPath,
+    [resolve(__dirname, '../../scripts/seed-e2e-orders.mjs'), '--consumer-mypage-only'],
+    {
+      stdio: 'inherit',
+    },
+  );
+
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();

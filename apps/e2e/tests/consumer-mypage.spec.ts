@@ -69,12 +69,17 @@ test.describe('Consumer — 마이페이지 (인증)', () => {
     await expect(page.getByText(/@/)).toBeVisible({ timeout: 10_000 });
   });
 
-  test('주문 목록 렌더링 또는 빈 상태 안내', async ({ page }) => {
+  test('주문 목록 — 고정 택배 주문의 일반 주문 구분과 확정 가능 신호 표시', async ({ page }) => {
     await page.goto(`${BASE}/mypage`);
     await page.waitForLoadState('networkidle');
-    const empty = page.getByText('주문 내역이 없습니다');
-    const hasOrders = (await page.locator('[data-testid="order-card"]').count()) > 0;
-    if (!hasOrders) await expect(empty).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('일반 주문')).toBeVisible({ timeout: 10_000 });
+    const deliveredParcelCard = page
+      .locator('[data-testid="order-card"]')
+      .filter({ hasText: '확정 가능' })
+      .filter({ hasText: '택배' })
+      .first();
+    await expect(deliveredParcelCard).toBeVisible();
+    await expect(deliveredParcelCard).toContainText('배송 완료');
   });
 
   test('/mypage/addresses — JS 에러 없이 렌더링', async ({ page }) => {
@@ -100,9 +105,22 @@ test.describe('Consumer — 마이페이지 (인증)', () => {
   test('택배 주문 상세 — 판매자가 저장한 택배사와 운송장번호 표시', async ({ page }) => {
     await page.goto(`${BASE}/mypage/orders/e2e-parcel-delivered-order-001`);
     await page.waitForLoadState('networkidle');
+    await expect(page.getByText('구매 확정이 가능합니다')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('택배 배송 정보')).toBeVisible();
     await expect(page.getByText('택배사')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('CJ대한통운')).toBeVisible();
     await expect(page.getByText('운송장번호')).toBeVisible();
     await expect(page.getByText('1234567890')).toBeVisible();
+
+    const reviewRoute = '**/stores/*/orders/e2e-parcel-delivered-order-001/review';
+    await page.route(reviewRoute, (route) =>
+      route.fulfill({ status: 500, contentType: 'application/json', body: '{}' }),
+    );
+    await page.getByRole('button', { name: '구매 확정', exact: true }).click();
+    await expect(page.getByText('구매 확정에 실패했습니다.')).toBeVisible();
+
+    await page.unroute(reviewRoute);
+    await page.getByRole('button', { name: '구매 확정', exact: true }).click();
+    await expect(page.getByRole('button', { name: '✓ 구매 확정 완료' })).toBeVisible();
   });
 });
