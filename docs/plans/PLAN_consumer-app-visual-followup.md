@@ -125,7 +125,31 @@
 
 **육안검증**: 없음. W0는 코드 동작 불변을 전제로 관련 소비자 E2E smoke를 통과한다.
 **커밋 예시**: `consumer: lint 기준선과 후속 작업 상태를 정리`
-**Conclusion**: [대기 — lint 기준선과 큐 상태를 현재 코드에 맞춘다. 검증 결과 미기록]
+**Conclusion**: [완료 — 2026-06-22. 소비자 lint 오류 2건을 제거하고 오류 0건·경고 14건 기준선을 확정했다. 경고는 `CONSUMER-LINT-FOLLOWUP`으로 파일별 분리했다. 파일별 Biome, 전체 lint, 타입체크, build, `git diff --check`가 통과했고, 커밋 `554eef3`의 Preview `dpl_eQ4MXeRq2w2E3mj5AG8CFDhT1Caz`가 `READY`·HTTP 200임을 확인했다. 해당 브랜치 Preview에서 장바구니 8/8·알림 2/2 smoke를 통과했으며, 375px·데스크톱 홈은 가로 넘침·오류 오버레이·콘솔 오류 없이 렌더됐다.]
+
+#### W0 종료 체크리스트
+
+- [x] 선 설계와 발견 큐의 lint 기준선을 현재 코드에 맞췄다.
+- [x] `useCart.ts`와 `useNotifications.ts`를 파일별 책임 안에서 수정했다.
+- [x] 수정 코드·문서의 정합성과 500라인 제한을 확인했다.
+- [x] 자동 검증과 관련 소비자 E2E smoke를 통과했다.
+- [x] 독립 커밋 `554eef3`을 push했다.
+- [x] Vercel Preview `READY`, 루트 HTTP 200, 배포 커밋 일치를 확인했다.
+- [x] 브랜치 Preview를 375px·데스크톱에서 육안검증했다.
+- [x] 발견 큐, BACKLOG, Conclusion, `docs/memory.md`를 종결 상태로 맞췄다.
+
+```text
+[W0 핸드오프]
+- 완료 범위: 소비자 lint 오류 0건 기준선, 경고 14건 후속 분리, 실행 계획 SSOT 연결
+- 제외·새 발견: 기능 변경 없음. 고정 git-preview의 장바구니 2건 실패는 오래된 배포 불일치였고 현재 브랜치 Preview 8/8 통과로 종결
+- 커밋: 554eef3 consumer: lint 기준선과 후속 작업 상태를 정리
+- Preview 배포: dpl_eQ4MXeRq2w2E3mj5AG8CFDhT1Caz / greenhubconsumer-git-codex-consume-29d333-jos-projects-d1cecc0c.vercel.app / READY
+- 자동 검증: Biome 2/2, lint 오류 0·경고 14, tsc, build, diff-check, 장바구니 8/8, 알림 2/2
+- 육안검증: 375px·데스크톱 홈 가로 넘침 0, 오류 오버레이 0, 콘솔 오류 0, 핵심 콘텐츠·하단 내비 정상
+- 문서 갱신: BACKLOG, CRITICAL_LOGIC, 발견 큐, 본 PLAN Conclusion·체크박스, memory
+- 다음 묶음: W1
+- 다음 첫 행동: consumer-mypage-receive-confirm-plan.md와 global-setup.ts의 고정 주문 fixture 계약을 대조하고, 선 설계를 먼저 갱신한다.
+```
 
 ### W1. MY 주문 fixture·육안검증 종결
 
