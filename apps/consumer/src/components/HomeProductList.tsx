@@ -1,6 +1,6 @@
 'use client';
 
-import type { Product } from '@greenhub/shared';
+import { getGroupBuyStatus, type Product } from '@greenhub/shared';
 import { Box, Divider, SimpleGrid, Skeleton, Stack, Title } from '@mantine/core';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -51,13 +51,7 @@ function getSafeQuantity(value: number | undefined) {
 }
 
 function isActiveGroupProduct(product: Product) {
-  const summary = product.groupSummary;
-  if (!summary) return true;
-
-  const targetQuantity = getSafeQuantity(summary.targetQuantity);
-  if (targetQuantity <= 0) return true;
-
-  return getSafeQuantity(summary.currentQuantity) < targetQuantity;
+  return getGroupBuyStatus(product.groupSummary).status === 'recruiting';
 }
 
 function GroupProductPreviewCard({ product, now }: { product: Product; now: number }) {
@@ -162,7 +156,7 @@ export default function HomeProductList() {
   return (
     <>
       {(groupLoading || activeGroupProducts.length > 0) && (
-        <Box mb="xl">
+        <Box mb="xl" data-testid="home-active-groupbuy">
           <div
             style={{
               display: 'flex',

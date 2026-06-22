@@ -1,5 +1,6 @@
 'use client';
 
+import { getGroupBuyStatus } from '@greenhub/shared';
 import {
   ActionIcon,
   Box,
@@ -52,6 +53,15 @@ export default function CategoryClient() {
     state.colors,
     state.saleType,
     state.sort,
+  );
+  const visibleProducts = useMemo(
+    () =>
+      state.saleType === 'group'
+        ? products.filter(
+            (product) => getGroupBuyStatus(product.groupSummary).status === 'recruiting',
+          )
+        : products,
+    [products, state.saleType],
   );
 
   function navigate(
@@ -235,7 +245,7 @@ export default function CategoryClient() {
               fontWeight: 'var(--fw-medium)',
             }}
           >
-            {loading ? '상품 불러오는 중' : `총 ${products.length}개`}
+            {loading ? '상품 불러오는 중' : `총 ${visibleProducts.length}개`}
           </Text>
           <Box style={{ position: 'relative' }}>
             <label htmlFor="category-sort" style={visuallyHidden}>
@@ -287,7 +297,7 @@ export default function CategoryClient() {
           </Stack>
         )}
 
-        {!loading && !error && products.length === 0 && (
+        {!loading && !error && visibleProducts.length === 0 && (
           <Stack align="center" py={64}>
             <Text size="xl">🌱</Text>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
@@ -306,9 +316,9 @@ export default function CategoryClient() {
           </Stack>
         )}
 
-        {!loading && products.length > 0 && (
+        {!loading && visibleProducts.length > 0 && (
           <SimpleGrid cols={2} spacing="sm">
-            {products.map((product) => (
+            {visibleProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </SimpleGrid>

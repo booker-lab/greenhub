@@ -42,6 +42,34 @@ const PRODUCTS = [
       recruitDeadline: '2099-12-31T00:00:00.000Z',
     },
   },
+  {
+    id: 'orchid-group-completed',
+    storeId: 'store-alpha',
+    name: '모집 완료 공동구매 난',
+    price: 45000,
+    images: ['/icons/icon-192x192.png'],
+    category: 'orchid',
+    colors: ['레드'],
+    saleType: 'group',
+    isActive: true,
+    groupSummary: {
+      currentQuantity: 30,
+      minQuantity: 10,
+      targetQuantity: 30,
+      recruitDeadline: '2099-12-31T00:00:00.000Z',
+    },
+  },
+  {
+    id: 'orchid-group-missing-config',
+    storeId: 'store-alpha',
+    name: '설정 확인 공동구매 난',
+    price: 35000,
+    images: ['/icons/icon-192x192.png'],
+    category: 'orchid',
+    colors: ['레드'],
+    saleType: 'group',
+    isActive: true,
+  },
 ];
 
 async function installProductRoute(page: Page, urls: string[] = []) {
@@ -107,7 +135,7 @@ test.describe('소비자 카테고리 탐색', () => {
     await expect(page.locator('a[href="/products/flower-normal-white"]')).toBeVisible();
   });
 
-  test('공동구매 탭은 모집 조건과 마감 정보를 보여준다', async ({ page }) => {
+  test('공동구매 탭은 모집 중 상품만 참여 가능 목록에 보여준다', async ({ page }) => {
     await installProductRoute(page);
     await page.goto(`${BASE}/category?saleType=group&colors=레드`);
 
@@ -115,6 +143,20 @@ test.describe('소비자 카테고리 탐색', () => {
     await expect(page.getByText('공동구매 난')).toBeVisible();
     await expect(page.getByText('8/30개 모집 중')).toBeVisible();
     await expect(page.getByText(/최소 10개/)).toBeVisible();
+    await expect(page.getByText('모집 완료 공동구매 난')).toBeHidden();
+    await expect(page.getByText('설정 확인 공동구매 난')).toBeHidden();
+    await expect(page.getByText('총 1개')).toBeVisible();
+  });
+
+  test('홈 진행 중 공동구매는 모집 중 상품만 보여준다', async ({ page }) => {
+    await installProductRoute(page);
+    await page.goto(BASE);
+
+    const preview = page.getByTestId('home-active-groupbuy');
+    await expect(preview.getByText('공동구매 난', { exact: true })).toBeVisible();
+    await expect(preview.getByText('모집 완료 공동구매 난')).toBeHidden();
+    await expect(preview.getByText('설정 확인 공동구매 난')).toBeHidden();
+    await expect(preview.getByText('1', { exact: true })).toBeVisible();
   });
 
   test('검색 버튼은 검색 화면으로 이동한다', async ({ page }) => {
