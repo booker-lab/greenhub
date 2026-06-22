@@ -282,42 +282,7 @@ async function seedSellerOrders() {
   console.log(`  ✅ orders/${PARCEL_ORDER_ID} (deliveryMethod=parcel, status=PREPARING)`);
 
   // 2-7) 송장 표시 회귀 전용 완료 주문 — 쓰기 동선과 분리해 seller·consumer 읽기 계약을 검증
-  const DELIVERED_PARCEL_ORDER_ID = 'e2e-parcel-delivered-order-001';
-  await db.doc(`orders/${DELIVERED_PARCEL_ORDER_ID}`).set({
-    id: DELIVERED_PARCEL_ORDER_ID,
-    orderNumber: '20260101-000004',
-    storeId: SELLER_STORE_ID,
-    userId: CONSUMER_USER_ID,
-    productId: NORMAL_PRODUCT_ID,
-    productName: 'E2E 송장 확인 상품',
-    buyerName: 'E2E 소비자',
-    address: '부산 테스트로 9',
-    buyerPhone: '010-0000-0001',
-    sellerPhone: '010-0000-0000',
-    hubName: null,
-    hubAddress: null,
-    quantity: 1,
-    saleType: 'normal',
-    status: 'DELIVERED',
-    deliveryMethod: 'parcel',
-    deliveryFee: 4000,
-    deliveryAddress: { address: '부산 테스트로 9', addressDetail: '202호', zipCode: '46000' },
-    isMetropolitan: false,
-    hubId: null,
-    pickupCode: null,
-    totalAmount: 14000,
-    requestedDeliveryDate: dateStr,
-    preparedAt: now,
-    courierCompany: 'CJ대한통운',
-    trackingNumber: '1234567890',
-    cancelReason: null,
-    groupBuyConsent: null,
-    createdAt: now,
-    updatedAt: now,
-  });
-  console.log(
-    `  ✅ orders/${DELIVERED_PARCEL_ORDER_ID} (status=DELIVERED, trackingNumber=1234567890)`,
-  );
+  await seedDeliveredParcelOrder(now, dateStr, NORMAL_PRODUCT_ID);
 
   // 2-8) 모바일 모달 회귀 전용 주문 — 발송 쓰기 테스트와 상태를 공유하지 않는다.
   const PARCEL_MODAL_ORDER_ID = 'e2e-parcel-modal-order-001';
@@ -354,8 +319,56 @@ async function seedSellerOrders() {
   console.log(`  ✅ orders/${PARCEL_MODAL_ORDER_ID} (deliveryMethod=parcel, status=PREPARING)`);
 }
 
+async function seedDeliveredParcelOrder(
+  now = Timestamp.now(),
+  dateStr = toDateStr(new Date()),
+  productId = 'e2e-normal-product-001',
+) {
+  const DELIVERED_PARCEL_ORDER_ID = 'e2e-parcel-delivered-order-001';
+  await db.doc(`orders/${DELIVERED_PARCEL_ORDER_ID}`).set({
+    id: DELIVERED_PARCEL_ORDER_ID,
+    orderNumber: '20260101-000004',
+    storeId: SELLER_STORE_ID,
+    userId: CONSUMER_USER_ID,
+    productId,
+    productName: 'E2E 송장 확인 상품',
+    buyerName: 'E2E 소비자',
+    address: '부산 테스트로 9',
+    buyerPhone: '010-0000-0001',
+    sellerPhone: '010-0000-0000',
+    hubName: null,
+    hubAddress: null,
+    quantity: 1,
+    saleType: 'normal',
+    status: 'DELIVERED',
+    deliveryMethod: 'parcel',
+    deliveryFee: 4000,
+    deliveryAddress: { address: '부산 테스트로 9', addressDetail: '202호', zipCode: '46000' },
+    isMetropolitan: false,
+    hubId: null,
+    pickupCode: null,
+    totalAmount: 14000,
+    requestedDeliveryDate: dateStr,
+    preparedAt: now,
+    courierCompany: 'CJ대한통운',
+    trackingNumber: '1234567890',
+    cancelReason: null,
+    groupBuyConsent: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  console.log(
+    `  ✅ orders/${DELIVERED_PARCEL_ORDER_ID} (status=DELIVERED, trackingNumber=1234567890)`,
+  );
+}
+
 async function main() {
   console.log('🌱 E2E 시드 시작...');
+  if (process.argv.includes('--consumer-mypage-only')) {
+    await seedDeliveredParcelOrder();
+    console.log('\n🎉 MY 주문 E2E 시드 완료');
+    return;
+  }
   await seedConsumerDailyCaps();
   await seedSellerOrders();
   console.log('\n🎉 E2E 시드 완료');
