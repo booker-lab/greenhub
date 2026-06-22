@@ -212,7 +212,32 @@
 **정합성 집중 검토**: `getGroupBuyStatus()` 단일 기준, 판매자 지정 배송 방식, `cartValidation`의 장바구니·checkout 공유.
 **육안검증**: 공구 세 구역, CTA 활성 조건, 문제 장바구니 항목 유지, `다시 선택하기`, 전체 결제 비활성을 확인한다.
 **커밋 예시**: `consumer: 공구와 장바구니 운영 검증을 고정`
-**Conclusion**: [대기 — 공구와 장바구니 Preview 검증을 닫는다. 검증 결과 미기록]
+**Conclusion**: [완료 — 2026-06-22. 공구 모집 중·완료·정보 확인 필요 3상태를 결정적 API fixture로 고정하고, 장바구니의 배송일·상점 정보 복합 누락 항목이 유지된 채 각 사유와 `다시 선택하기` 경로를 표시하며 전체 결제와 `checkout_cart` 기록을 차단하는 계약을 보강했다. 소비자 lint 오류 0·기존 경고 14, 타입체크, build, 변경 E2E Biome, `git diff --check`가 통과했다. 커밋 `dbda8e1`의 Preview `dpl_25u3e1xZsLFiWNR93tw9EDvUy5Ra`는 `READY`이며 chromium 15/15·mobile 15/15를 통과했다. 브랜치 alias의 375px·1440px 공구 화면은 가로 넘침 0, 콘텐츠 폭 제한, 하단 내비게이션 유지, 콘솔 오류·경고 0이었다. 동일 artifact를 Production `dpl_Ei7vJxiawQEynYepUEoV5q6eRq4E`로 승격해 `greenlove.co.kr` 루트·공구 HTTP 200과 비인증 장바구니 로그인 이동을 확인했다.]
+
+#### W2 종결 체크리스트
+- [x] 공구 모집 중·완료·정보 확인 필요 상태를 결정적 fixture로 고정했다.
+- [x] 문제 장바구니 항목 유지, 사유, 재선택 경로, 전체 결제 차단을 고정했다.
+- [x] 공유 `getGroupBuyStatus()`와 `cartValidation` 계약을 화면에서 재구현하지 않았음을 확인했다.
+- [x] 수정 파일 500라인 이하와 `memory.md` 200라인 이하를 확인했다.
+- [x] lint·타입체크·build·Biome·diff-check와 Preview E2E 30건을 통과했다.
+- [x] 독립 커밋 `dbda8e1`을 push했다.
+- [x] Preview `READY`, 배포 커밋 일치, 모바일·데스크톱 육안검증을 완료했다.
+- [x] 동일 artifact를 Production으로 승격하고 운영 핵심 경로를 확인했다.
+- [x] 발견 큐, Conclusion, `docs/memory.md`와 W3 핸드오프를 종결 상태로 맞췄다.
+
+```text
+[W2 핸드오프]
+- 완료 범위: 공구 3상태 결정적 fixture, 장바구니 복합 문제 유지·사유·재선택·결제 차단 계약, Preview·Production 검증
+- 제외·새 발견: 기능 결함 없음. 고유 Preview URL은 API CORS 제약이 있어 기존 브랜치 alias 육안검증 계약을 유지
+- 커밋: dbda8e1 consumer: 공구와 장바구니 운영 검증을 고정
+- Preview 배포: dpl_25u3e1xZsLFiWNR93tw9EDvUy5Ra / greenhubconsumer-dy7dfx1rh-jos-projects-d1cecc0c.vercel.app / READY
+- Production 배포: dpl_Ei7vJxiawQEynYepUEoV5q6eRq4E / greenlove.co.kr / READY / 루트·공구 HTTP 200
+- 자동 검증: lint 오류 0·기존 경고 14, tsc, build, Biome, diff-check, chromium 15/15, mobile 15/15
+- 육안검증: 375px·1440px 공구 가로 넘침 0, 430px 콘텐츠 폭, 하단 내비게이션 유지, 콘솔 오류·경고 0; 운영 장바구니 비인증 로그인 이동 정상
+- 문서 갱신: 발견 큐, PLAN W2 Conclusion·체크리스트, memory
+- 다음 묶음: W3
+- 다음 첫 행동: consumer-groupbuy-tab-improve-plan.md에서 홈·카테고리·공구의 `recruiting` 노출 정책을 대조하고 3.1 설계 결정을 먼저 확정한다.
+```
 
 ### W3. 공구 노출 정책 통일
 

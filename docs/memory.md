@@ -6,8 +6,8 @@
 
 ## 현재 진행 요약
 
-- 소비자 앱 후속 실행 W0를 종결했다. 최종 커밋 `244f49d`, Preview `dpl_6sjaVsNrPxJLEJZrU7yHgkPzLmkV`, Production `dpl_5cahZW5RbmnU3MiTHfbErH7so62j`가 `READY`이며 `greenlove.co.kr` HTTP 200을 확인했다. lint 오류 0건·경고 14건 기준선, 장바구니 8/8·알림 2/2 Preview smoke, 375px·데스크톱 육안검증을 완료했다.
-- 사용자 상시 결정에 따라 W1 이후 모든 묶음은 Preview 자동·육안검증 통과 후 동일 artifact를 Production으로 승격하고 운영 도메인 검증까지 마쳐야 종결한다. 다음 묶음은 W1 MY 주문 fixture·육안검증 종결이다.
+- 소비자 앱 후속 실행 W2를 종결했다. 커밋 `dbda8e1`, Preview `dpl_25u3e1xZsLFiWNR93tw9EDvUy5Ra`, Production `dpl_Ei7vJxiawQEynYepUEoV5q6eRq4E`가 `READY`이며 `greenlove.co.kr` 루트·공구 HTTP 200을 확인했다. 공구·장바구니 E2E는 chromium 15/15·mobile 15/15, 375px·1440px 공구 육안검증은 가로 넘침·콘솔 오류 0이었다.
+- 사용자 상시 결정에 따라 W1 이후 모든 묶음은 Preview 자동·육안검증 통과 후 동일 artifact를 Production으로 승격하고 운영 도메인 검증까지 마쳐야 종결한다. 다음 묶음은 W3 공구 노출 정책 통일이다.
 - 핸드오프 프롬프트 1번은 육안검증 종결 가지, 2번은 개발·릴리즈 트레인 가지로 분리했다. 다음 대화에서 번호를 순서로 해석하지 않는다.
 - 프롬프트 1번 육안검증은 현재 실행 가능한 항목을 종결했다. `#43`, `#79`는 운영 쓰기 승인 또는 전용 테스트 계정·정지 refresh token 조건 부재로 `[-]` 처리했다.
 - 프롬프트 2번 릴리즈 트레인은 `shared-contracts`, `api-backend`, `consumer-web`, `seller-admin`, `driver-web`, `e2e-ops`, 후속 consumer fixture 보정까지 커밋·푸시·Vercel Preview READY 확인이 끝났다.
@@ -30,6 +30,7 @@
 ## 다음 진입 후보
 
 - 소비자 앱 육안검증 후속 큐의 실행 Blueprint를 `docs/plans/PLAN_consumer-app-visual-followup.md`로 분리했다. W0 기준선 정리부터 W11 운영 데이터·경고 정리까지 의존성 순으로 진행하며, 각 묶음은 독립 커밋·Preview 배포·육안검증·핸드오프까지 닫은 뒤 다음 묶음으로 넘어간다.
+- 다음 첫 행동은 `consumer-groupbuy-tab-improve-plan.md`에서 홈·카테고리·공구의 `recruiting` 노출 정책을 대조하고 W3.1 설계 결정을 먼저 확정하는 것이다.
 
 - `docs-policy`와 `seller-admin` 변경을 분리 stage·커밋하고 Vercel Preview READY를 확인한다.
 - `misc-review`에 남은 `AGENTS.md`, hub staff 문서, archive/plan 파일은 이번 seller 검증 묶음에 섞지 말고 별도 검토한다.
