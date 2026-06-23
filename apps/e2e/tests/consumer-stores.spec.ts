@@ -160,15 +160,23 @@ test.describe('소비자 상점 탐색 fixture', () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test('상품 상세 fixture는 상점 복귀와 판매자 정보 링크를 유지한다', async ({ page }) => {
+  test('상점 상세 상품 링크는 복귀 맥락을 유지한다', async ({ page }) => {
     await installPublicStoreRoutes(page);
 
-    await page.goto(`${BASE}/e2e/store-product-detail`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/stores/store-alpha`, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(STORE.name)).toBeVisible();
-    await expect(page.locator('a[href="/stores/store-alpha"]')).toBeVisible();
 
-    await page.locator('header button').first().click();
+    const productLink = page.locator('a[href^="/products/fixture-product-alpha"]');
+    const productHref = await productLink.getAttribute('href');
+    expect(productHref).not.toBeNull();
+    const productUrl = new URL(productHref ?? '', BASE);
+    expect(productUrl.searchParams.get('fromStore')).toBe(STORE.id);
+    expect(productUrl.searchParams.get('storeName')).toBe(STORE.name);
+
+    await productLink.click();
+    await expect(page).toHaveURL(/\/products\/fixture-product-alpha/);
+    await page.goBack();
     await expect(page).toHaveURL(/\/stores\/store-alpha/);
   });
 });
