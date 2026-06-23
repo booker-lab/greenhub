@@ -1,0 +1,33 @@
+{
+  "exportedAt": "2026-06-23T14:52:39.764Z",
+  "mode": "before-store-address-repair",
+  "target": {
+    "collection": "stores",
+    "id": "9b2cb652-ff77-46b9-a773-e1efa78fb763",
+    "field": "address",
+    "label": "소비자 운영 테스트 상점 주소"
+  },
+  "existedBeforeRepair": true,
+  "currentDocument": {
+    "id": "9b2cb652-ff77-46b9-a773-e1efa78fb763",
+    "ownerId": "424b9334-cc05-41b0-a451-840e88733446",
+    "ceoName": "�׽�Ʈ����",
+    "phone": "010-0000-0000",
+    "address": "����� �׽�Ʈ�� �׽�Ʈ�� 1-1",
+    "businessNumber": "000-00-00000",
+    "logoUrl": null,
+    "status": "active",
+    "createdAt": {
+      "_seconds": 1777756073,
+      "_nanoseconds": 551000000
+    },
+    "updatedAt": {
+      "_seconds": 1777756073,
+      "_nanoseconds": 551000000
+    },
+    "name": "테스트 상점"
+  },
+  "currentAddress": "����� �׽�Ʈ�� �׽�Ʈ�� 1-1",
+  "approvedAddressCandidate": "경기도 이천시",
+  "looksBroken": true
+}
