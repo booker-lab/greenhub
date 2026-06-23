@@ -127,4 +127,46 @@ test.describe('소비자 공동구매 페이지', () => {
       }
     }
   });
+
+  test('홈 공동구매 미리보기는 컴팩트 카드 밀도를 유지한다', async ({ page }) => {
+    await installGroupProductRoute(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(BASE);
+
+    const preview = page.getByTestId('home-active-groupbuy');
+    await expect(preview).toBeVisible();
+    await expect(preview.getByText('모집 중 공구 상품')).toBeVisible();
+    await expect(preview.getByText('8/30개 · 22개 필요')).toBeVisible();
+
+    const metrics = await preview.evaluate((section) => {
+      const links = Array.from(section.querySelectorAll('a[href*="/products/"]')).slice(0, 3);
+      const linkRects = links.map((link) => link.getBoundingClientRect());
+      const imageRects = links.map((link) => {
+        const imageBox = link.querySelector('div');
+        return imageBox?.getBoundingClientRect();
+      });
+      const nav = document.querySelector('nav');
+      const nextSection = section.nextElementSibling;
+      return {
+        sectionHeight: section.getBoundingClientRect().height,
+        firstCardHeight: linkRects[0]?.height ?? 0,
+        firstCardWidth: linkRects[0]?.width ?? 0,
+        firstImageHeight: imageRects[0]?.height ?? 0,
+        firstImageWidth: imageRects[0]?.width ?? 0,
+        rowTop: linkRects[0]?.top ?? 0,
+        sameRow: linkRects.every((rect) => Math.abs(rect.top - (linkRects[0]?.top ?? 0)) < 2),
+        nextSectionTop: nextSection?.getBoundingClientRect().top ?? 0,
+        navTop: nav?.getBoundingClientRect().top ?? window.innerHeight,
+        bodyWidth: document.body.scrollWidth,
+        viewportWidth: window.innerWidth,
+      };
+    });
+
+    expect(metrics.sameRow).toBe(true);
+    expect(metrics.sectionHeight).toBeLessThanOrEqual(190);
+    expect(metrics.firstCardHeight).toBeLessThanOrEqual(155);
+    expect(Math.abs(metrics.firstImageHeight - metrics.firstImageWidth)).toBeLessThanOrEqual(2);
+    expect(metrics.nextSectionTop).toBeLessThan(metrics.navTop);
+    expect(metrics.bodyWidth).toBeLessThanOrEqual(metrics.viewportWidth);
+  });
 });
