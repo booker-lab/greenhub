@@ -28,7 +28,7 @@ export default function StoreDetailPage() {
     return (
       <Container size="sm" px="md" pt="lg" pb={96}>
         <Skeleton height={156} radius="md" mb="lg" />
-        <SimpleGrid cols={2} spacing="sm">
+        <SimpleGrid cols={2} spacing={8}>
           {PRODUCT_SKELETON_KEYS.map((key) => (
             <Skeleton key={key} height={260} radius="md" />
           ))}
@@ -113,7 +113,7 @@ export default function StoreDetailPage() {
           </Text>
         </Stack>
       ) : (
-        <SimpleGrid cols={2} spacing="sm">
+        <SimpleGrid cols={2} spacing={8} data-testid="store-product-grid">
           {products.map((product) => (
             <ProductCard
               key={product.id}

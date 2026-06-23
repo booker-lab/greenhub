@@ -1,7 +1,7 @@
 'use client';
 
 import type { PublicStoreSummary } from '@greenhub/shared';
-import { Box, Card, Group, Stack, Text } from '@mantine/core';
+import { Badge, Box, Card, Group, Stack, Text } from '@mantine/core';
 import { MapPin, Package, Store } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -13,6 +13,7 @@ interface StoreCardProps {
 
 export default function StoreCard({ store, compact = false }: StoreCardProps) {
   const imageSize = compact ? 64 : 84;
+  const isPreparing = store.productCount === 0;
 
   return (
     <Card
@@ -55,6 +56,11 @@ export default function StoreCard({ store, compact = false }: StoreCardProps) {
             >
               {store.name || '이름 없는 상점'}
             </Text>
+            {isPreparing && (
+              <Badge size="xs" color="gray" variant="light" radius="sm">
+                준비 중
+              </Badge>
+            )}
           </Group>
           <Group gap={6} wrap="nowrap">
             <MapPin size={14} color="var(--color-text-disabled)" />
@@ -71,7 +77,7 @@ export default function StoreCard({ store, compact = false }: StoreCardProps) {
           <Group gap={compact ? 6 : 'xs'} wrap="nowrap">
             {compact && <Package size={14} color="var(--color-text-disabled)" />}
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }}>
-              상품 {store.productCount}개
+              {isPreparing ? '상품 준비 중' : `상품 ${store.productCount}개`}
             </Text>
             <Text
               style={{
