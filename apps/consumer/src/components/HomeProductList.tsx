@@ -67,7 +67,8 @@ function GroupProductPreviewCard({ product, now }: { product: Product; now: numb
       style={{
         textDecoration: 'none',
         minWidth: 0,
-        flex: '1 1 0',
+        flex: '0 1 calc((100% - 16px) / 3)',
+        maxWidth: 'calc((100% - 16px) / 3)',
         display: 'block',
       }}
     >
@@ -76,11 +77,11 @@ function GroupProductPreviewCard({ product, now }: { product: Product; now: numb
           position: 'relative',
           display: 'block',
           width: '100%',
-          aspectRatio: '4/5',
+          aspectRatio: '1/1',
           borderRadius: 'var(--radius)',
           overflow: 'hidden',
           background: 'var(--color-border)',
-          marginBottom: 6,
+          marginBottom: 4,
         }}
       >
         <Image
@@ -100,7 +101,12 @@ function GroupProductPreviewCard({ product, now }: { product: Product; now: numb
             color: 'var(--color-bg)',
             fontSize: 'var(--font-size-xs)',
             fontWeight: 'var(--fw-bold)',
-            padding: '3px 8px',
+            lineHeight: 1.2,
+            padding: '2px 6px',
+            maxWidth: 'calc(100% - 12px)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}
         >
           {deadlineLabel}
@@ -110,13 +116,12 @@ function GroupProductPreviewCard({ product, now }: { product: Product; now: numb
         style={{
           fontSize: 'var(--font-size-sm)',
           fontWeight: 'var(--fw-bold)',
+          lineHeight: 1.25,
           color: 'var(--color-text)',
           margin: '0 0 2px',
-          minHeight: 38,
           overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
         }}
       >
         {product.name}
@@ -126,12 +131,15 @@ function GroupProductPreviewCard({ product, now }: { product: Product; now: numb
           fontSize: 'var(--font-size-sm)',
           color: 'var(--color-primary)',
           fontWeight: 'var(--fw-medium)',
+          lineHeight: 1.25,
           margin: 0,
-          overflowWrap: 'anywhere',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
         }}
       >
         {targetQuantity > 0
-          ? `${currentQuantity}/${targetQuantity}개 · ${remainingQuantity}개 더 필요`
+          ? `${currentQuantity}/${targetQuantity}개 · ${remainingQuantity}개 필요`
           : '모집 중'}
       </p>
     </Link>
@@ -156,13 +164,13 @@ export default function HomeProductList() {
   return (
     <>
       {(groupLoading || activeGroupProducts.length > 0) && (
-        <Box mb="xl" data-testid="home-active-groupbuy">
+        <Box mb="md" data-testid="home-active-groupbuy">
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: 12,
+              marginBottom: 4,
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -206,7 +214,12 @@ export default function HomeProductList() {
           {groupLoading ? (
             <div style={{ display: 'flex', gap: 8 }}>
               {GROUP_SKELETON_KEYS.map((key) => (
-                <Skeleton key={key} height={200} radius="md" style={{ flex: 1 }} />
+                <Skeleton
+                  key={key}
+                  height={160}
+                  radius="md"
+                  style={{ flex: '0 1 calc((100% - 16px) / 3)' }}
+                />
               ))}
             </div>
           ) : (
