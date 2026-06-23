@@ -442,3 +442,8 @@
 - **결정**: `ProductCard`는 `compact`, `discovery`, `store` variant를 가진다. 기본 `compact`는 기존 홈·검색·공구 화면을 보존하고, `/category`는 `discovery`, `/stores/[storeId]`는 `store`를 명시한다.
 - **이유**: 같은 상품 카드가 카테고리 탐색과 상점 상세에서 동일한 정보량을 표시하면 카테고리에서는 탐색 밀도가 낮아지고 상점 상세에서는 판매자 맥락과 중복된 보조 정보로 카드 높이가 커진다.
 - **계약**: 가격과 공동구매 상태는 모든 variant에서 유지한다. `discovery`는 탐색 조건 판단을 위해 카테고리·판매방식·색상·공구 최소 수량·마감을 유지하고, `store`는 색상 보조 줄을 숨기되 카테고리·공구 상태·가격·상품명과 접근성 이름을 유지한다. API 계약 확장과 가격·배송 필터는 후속 W8 이후로 분리한다.
+## [결정 #CL-156] 공개 상품 탐색 계약은 서버 필터 결과와 카드 힌트를 함께 반환한다 (2026-06-23)
+
+- **결정**: `GET /products`는 `priceMin`, `priceMax`, `deliveryMethod` 쿼리를 수용하고, 응답 `items`마다 `sellerSummary`, `deliverySummary`를 포함한다. `total`은 서버 쿼리와 서버 후처리 필터를 모두 적용한 전체 개수로 정의한다.
+- **이유**: 카테고리 화면이 가격·배송·판매자 정보를 프론트에서 추정하면 화면별 표시 기준이 갈라지고, W9의 필터 연결 시 서버 결과 개수와 화면 내 추가 필터 개수가 섞일 수 있다.
+- **계약**: 일반 상품의 배송 방식은 판매자 배송 설정 기준이며 `weatherRestrictionActive=true`일 때 `parcel`을 제외한다. 공동구매 상품은 `groupProductConfig.groupDeliveryMethod`만 사용한다. 스토어명이 없으면 `storeId`를 판매자명 fallback으로 사용한다. W8에서는 UI 필터 연결과 카드 표시를 수행하지 않는다.

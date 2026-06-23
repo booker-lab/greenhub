@@ -71,6 +71,17 @@ export interface Product {
   isActive: boolean;
   createdAt: string; // ISO8601
   updatedAt: string; // ISO8601
+  sellerSummary?: {
+    storeId: string;
+    name: string;
+  };
+  deliverySummary?: {
+    methods: DeliveryMethod[];
+    deliverySize: DeliverySize;
+    weatherRestricted: boolean;
+    groupDeliveryDate?: string;
+    deliveryFeeDiscount?: number;
+  };
   groupSummary?: {
     currentQuantity: number;
     minQuantity: number;
@@ -98,6 +109,17 @@ export interface ProductSummary {
   colors?: ColorOption[];
   saleType: SaleType;
   isActive: boolean;
+  sellerSummary?: {
+    storeId: string;
+    name: string;
+  };
+  deliverySummary?: {
+    methods: DeliveryMethod[];
+    deliverySize: DeliverySize;
+    weatherRestricted: boolean;
+    groupDeliveryDate?: string;
+    deliveryFeeDiscount?: number;
+  };
   groupSummary?: {
     currentQuantity: number;
     minQuantity: number;

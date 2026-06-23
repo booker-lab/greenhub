@@ -1,9 +1,9 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
-import { CreateProductDto } from './dto/create-product.dto';
-import { ProductQueryDto } from './dto/product-query.dto';
-import { UpdateDeliveryConfigDto } from './dto/update-delivery-config.dto';
+import type { CreateProductDto } from './dto/create-product.dto';
+import type { ProductQueryDto } from './dto/product-query.dto';
+import type { UpdateDeliveryConfigDto } from './dto/update-delivery-config.dto';
 
 @Injectable()
 export class ProductsService {
@@ -269,6 +269,8 @@ export class ProductsService {
       });
     }
 
+    products = this.filterByPrice(products, query);
+
     const sort = query.sort ?? 'latest';
     if (sort === 'price_asc') products.sort((a: any, b: any) => a['price'] - b['price']);
     else if (sort === 'price_desc') products.sort((a: any, b: any) => b['price'] - a['price']);
@@ -281,8 +283,22 @@ export class ProductsService {
       .filter((p: any) => p['saleType'] === 'group')
       .map((p: any) => p['id'] as string);
     const groupConfigMap = await this.getGroupConfigMap(groupProductIds);
+    const storeSummaryMap = await this.getStoreSummaryMap(products);
+    const deliveryConfigMap = await this.getDeliveryConfigMapForProducts(products);
+
+    if (query.deliveryMethod) {
+      products = products.filter((p: any) =>
+        this.productMatchesDeliveryMethod(
+          p,
+          query.deliveryMethod as string,
+          groupConfigMap,
+          deliveryConfigMap,
+        ),
+      );
+    }
 
     const items = products.map((p: any) => {
+      const gc = groupConfigMap.get(p['id'] as string);
       const summary: Record<string, unknown> = {
         id: p['id'],
         storeId: p['storeId'],
@@ -293,9 +309,10 @@ export class ProductsService {
         colors: p['selection']?.['colors'] ?? p['colors'] ?? [],
         saleType: p['saleType'],
         isActive: p['isActive'],
+        sellerSummary: this.toSellerSummary(p, storeSummaryMap),
+        deliverySummary: this.toDeliverySummary(p, gc, deliveryConfigMap),
       };
       if (p['saleType'] === 'group') {
-        const gc = groupConfigMap.get(p['id'] as string);
         if (gc) summary['groupSummary'] = this.toGroupSummary(gc);
       }
       return summary;
@@ -338,6 +355,116 @@ export class ProductsService {
       });
     }
     return groupConfigMap;
+  }
+
+  private filterByPrice(products: Record<string, unknown>[], query: ProductQueryDto) {
+    return products.filter((product) => {
+      const price = Number(product['price']);
+      if (Number.isNaN(price)) return false;
+      if (query.priceMin !== undefined && price < query.priceMin) return false;
+      if (query.priceMax !== undefined && price > query.priceMax) return false;
+      return true;
+    });
+  }
+
+  private async getStoreSummaryMap(products: Record<string, unknown>[]) {
+    const storeIds = this.getUniqueStoreIds(products);
+    const storeMap = new Map<string, Record<string, unknown>>();
+    await Promise.all(
+      storeIds.map(async (storeId) => {
+        const snap = await this.firestore.doc(`stores/${storeId}`).get();
+        if (snap.exists) storeMap.set(storeId, snap.data() as Record<string, unknown>);
+      }),
+    );
+    return storeMap;
+  }
+
+  private async getDeliveryConfigMapForProducts(products: Record<string, unknown>[]) {
+    const storeIds = this.getUniqueStoreIds(products);
+    const deliveryConfigMap = new Map<string, Record<string, unknown>>();
+    await Promise.all(
+      storeIds.map(async (storeId) => {
+        const snap = await this.firestore.doc(`deliveryFeeConfig/${storeId}`).get();
+        deliveryConfigMap.set(storeId, snap.exists ? (snap.data() as Record<string, unknown>) : {});
+      }),
+    );
+    return deliveryConfigMap;
+  }
+
+  private getUniqueStoreIds(products: Record<string, unknown>[]) {
+    return Array.from(
+      new Set(products.map((product) => product['storeId']).filter(Boolean) as string[]),
+    );
+  }
+
+  private productMatchesDeliveryMethod(
+    product: Record<string, unknown>,
+    deliveryMethod: string,
+    groupConfigMap: Map<string, Record<string, unknown>>,
+    deliveryConfigMap: Map<string, Record<string, unknown>>,
+  ) {
+    const methods =
+      product['saleType'] === 'group'
+        ? this.getGroupDeliveryMethods(product, groupConfigMap)
+        : this.getNormalDeliveryMethods(deliveryConfigMap.get(product['storeId'] as string));
+    return methods.includes(deliveryMethod);
+  }
+
+  private getGroupDeliveryMethods(
+    product: Record<string, unknown>,
+    groupConfigMap: Map<string, Record<string, unknown>>,
+  ) {
+    const config = groupConfigMap.get(product['id'] as string);
+    const method = config?.['groupDeliveryMethod'];
+    return typeof method === 'string' ? [method] : [];
+  }
+
+  private getNormalDeliveryMethods(deliveryConfig: Record<string, unknown> | undefined) {
+    const methods = ['direct', 'hub'];
+    if (deliveryConfig?.['weatherRestrictionActive'] !== true) methods.push('parcel');
+    return methods;
+  }
+
+  private toSellerSummary(
+    product: Record<string, unknown>,
+    storeSummaryMap: Map<string, Record<string, unknown>>,
+  ) {
+    const storeId = product['storeId'] as string;
+    const store = storeSummaryMap.get(storeId);
+    const name = typeof store?.['name'] === 'string' ? store['name'] : storeId;
+    return { storeId, name };
+  }
+
+  private toDeliverySummary(
+    product: Record<string, unknown>,
+    groupConfig: Record<string, unknown> | undefined,
+    deliveryConfigMap: Map<string, Record<string, unknown>>,
+  ) {
+    const isGroup = product['saleType'] === 'group';
+    const config = deliveryConfigMap.get(product['storeId'] as string);
+    const methods = isGroup
+      ? this.getGroupDeliveryMethods(
+          product,
+          new Map([[product['id'] as string, groupConfig ?? {}]]),
+        )
+      : this.getNormalDeliveryMethods(config);
+    const summary: Record<string, unknown> = {
+      methods,
+      deliverySize: product['deliverySize'],
+      weatherRestricted: config?.['weatherRestrictionActive'] === true,
+    };
+    if (isGroup && groupConfig) {
+      summary['groupDeliveryDate'] = this.toIsoDateValue(groupConfig['groupDeliveryDate']);
+      summary['deliveryFeeDiscount'] = groupConfig['deliveryFeeDiscount'];
+    }
+    return summary;
+  }
+
+  private toIsoDateValue(value: unknown) {
+    if (typeof (value as { toDate?: () => Date })?.toDate === 'function') {
+      return (value as { toDate: () => Date }).toDate().toISOString();
+    }
+    return value;
   }
 
   private toGroupSummary(gc: Record<string, unknown>) {

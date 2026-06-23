@@ -369,6 +369,45 @@ PATCH Body
 
 > **Timestamp 직렬화 규칙**: Firestore 스키마의 `Timestamp` 필드는 shared 타입에서 `string (ISO8601)`으로 표현합니다.
 
+## W8 공개 상품 탐색 계약
+
+`GET /products`는 공개 상품 탐색을 위해 아래 계약을 사용한다.
+
+### 쿼리
+
+| 쿼리 | 타입 | 계약 |
+| --- | --- | --- |
+| `priceMin` | `number` | 최소 상품 가격. 경계값을 포함한다. |
+| `priceMax` | `number` | 최대 상품 가격. 경계값을 포함한다. |
+| `deliveryMethod` | `direct \| hub \| parcel` | 일반 상품은 판매자 배송 설정, 공동구매 상품은 `groupDeliveryMethod`로 판정한다. |
+
+### 응답
+
+```ts
+{
+  items: ProductSummary[]
+  total: number // 서버 필터 적용 후 전체 개수. 클라이언트 화면 내 추가 필터 개수와 구분
+}
+```
+
+`ProductSummary`는 이후 UI 작업이 클라이언트 추정 없이 사용할 수 있도록 아래 필드를 노출한다.
+
+```ts
+{
+  sellerSummary?: {
+    storeId: string
+    name: string
+  }
+  deliverySummary?: {
+    methods: DeliveryMethod[]
+    deliverySize: DeliverySize
+    weatherRestricted: boolean
+    groupDeliveryDate?: string
+    deliveryFeeDiscount?: number
+  }
+}
+```
+
 ```ts
 // packages/shared/src/product.types.ts
 
