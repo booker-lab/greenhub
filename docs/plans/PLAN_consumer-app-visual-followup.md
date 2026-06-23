@@ -411,7 +411,17 @@
 **정합성 집중 검토**: 가격·공구 상태 같은 도메인 정보는 동일하고 표시 밀도만 달라진다.
 **육안검증**: 같은 상품을 카테고리와 상점 상세에서 비교해 정보 누락·중복·카드 높이 회귀가 없는지 확인한다.
 **커밋 예시**: `consumer: 상품 카드의 화면별 표시 밀도를 분리`
-**Conclusion**: [대기 — 카드 재사용과 화면별 밀도를 함께 유지한다. 검증 결과 미기록]
+**Conclusion**: [진행 중 — 2026-06-23. `ProductCard`에 `compact`, `discovery`, `store` variant 계약을 추가하고, 기본 `compact`는 홈·검색·공구 화면을 보존하도록 유지했다. `/category`는 `discovery`를 사용해 정사각형 탐색 카드로 표시하고, `/stores/[storeId]`는 `store`를 사용해 색상 보조 줄을 숨긴 조밀한 상점 상세 카드로 표시한다. 모든 variant는 상품명·카테고리·판매 방식·가격 접근성 이름과 공동구매 진행률 `aria-label`을 유지한다. 변경 파일 Biome, consumer lint 오류 0·기존 경고 14, consumer build, consumer tsc, git diff-check, 로컬 chromium/mobile `consumer-category.spec.ts`·`consumer-stores.spec.ts` 24/24, 로컬 Playwright 브라우저 스모크에서 `/category` discovery와 `/stores/[storeId]` store 카드 렌더링, 오류 오버레이 0, console error 0을 확인했다. Preview·Production 배포 검증은 아직 미기록.]
+
+#### W7 종료 체크리스트
+
+- [x] `compact`, `discovery`, `store`의 표시 필드와 접근성 계약을 선 설계에 확정했다.
+- [x] `ProductCard`의 기본 `compact`는 기존 사용처를 보존하고, 카테고리와 상점 상세만 명시 variant로 분리했다.
+- [x] 가격·공동구매 상태는 유지하고 화면별 표시 밀도만 분리했다.
+- [x] W8 이후 작업, API 계약 확장, 가격·배송 필터 추가는 수행하지 않았다.
+- [x] 변경 파일 500라인 이하와 `docs/memory.md` 200라인 이하를 확인했다.
+- [x] lint·build·타입체크·Biome·diff-check와 로컬 E2E chromium/mobile을 통과했다.
+- [ ] Preview `READY`, branch alias 375px·1440px 스모크, Production 승격, 운영 도메인 스모크를 완료했다.
 
 ### W8. 공개 상품 API 탐색 계약 확장
 

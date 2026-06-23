@@ -153,6 +153,7 @@ test.describe('소비자 상점 탐색 fixture', () => {
 
     await expect(page.getByText(STORE.name)).toBeVisible();
     await expect(page.getByText(PRODUCT.name)).toBeVisible();
+    await expect(page.locator('[data-product-card-variant="store"]')).toHaveCount(1);
     const gridColumns = await page.getByTestId('store-product-grid').evaluate((element) => {
       return getComputedStyle(element).gridTemplateColumns.split(' ').length;
     });

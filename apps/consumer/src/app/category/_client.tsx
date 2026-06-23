@@ -395,7 +395,7 @@ export default function CategoryClient() {
         {!loading && visibleProducts.length > 0 && (
           <SimpleGrid cols={2} spacing="sm">
             {visibleProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard key={product.id} product={product} variant="discovery" />
             ))}
           </SimpleGrid>
         )}
