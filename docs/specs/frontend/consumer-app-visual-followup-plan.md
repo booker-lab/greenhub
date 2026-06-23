@@ -89,8 +89,8 @@
 ## 10. 남은 작업 후보
 
 1. 소비자앱 사용자 흐름 기준 추가 구현 작업은 남아 있지 않다. W0~W11과 운영주소 보정 쓰기까지 완료됐다.
-2. CSS preload 경고: 기능 오류가 없는 낮은 우선순위 운영 진단 경고로 유지한다. 별도 성능 정리 세션이 열리기 전에는 소비자앱 후속 구현 차단 조건으로 보지 않는다.
-3. 검증 캡처 추가: 카테고리·상점·공구·장바구니·MY 탭 검증 캡처가 추가될 때마다 단계 표에 항목을 추가한다.
+2. CSS preload 경고: `docs/plans/PLAN_consumer-css-preload-warning.md`에서 기능 오류가 없는 낮은 우선순위 운영 진단 경고로 종결했다. 별도 성능 정리 세션이 열리기 전에는 소비자앱 후속 구현 차단 조건으로 보지 않는다.
+3. 검증 캡처 보강: 현재 W0~W11의 관찰 기록과 CSS warning 추적 결과로 종료 판정을 유지한다. 새 결함, 배포 회귀, 외부 감사 요청처럼 재현 증거가 필요한 경우에만 별도 계획으로 캡처를 추가한다.
 
 ## 11. 완료 요약
 
@@ -98,3 +98,4 @@
 - 최종 배포 게이트는 Preview `dpl_ECfJ6YwzSD9Rnt4eTQ6BnSnPiNFK`, Production `dpl_2P2LCSpg2QYGEKagynvcQnKBY1Qq`, 운영 도메인 `greenlove.co.kr` 기준으로 통과했다.
 - 고유 Preview URL은 운영 API CORS 정책으로 데이터 요청이 막힐 수 있어 branch alias 기준 육안검증을 유지한다.
 - 운영주소 보정은 `docs/plans/PLAN_consumer-address-data-repair.md` 기준으로 백업, dry-run, 명시적 승인, 적용, 공개 API와 운영 화면 재검증까지 완료됐다.
+- 검증 캡처 보강은 필수 잔여 작업이 아니다. 기존 관찰 기록에 없는 화면 결함이 새로 발견될 때만 별도 추적으로 전환한다.
