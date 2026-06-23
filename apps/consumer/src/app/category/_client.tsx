@@ -372,8 +372,11 @@ export default function CategoryClient() {
             <UnstyledButton
               component={Link}
               href="/category"
-              onClick={() => {
-                if (hasActiveFilters) router.replace('/category');
+              onClick={(event) => {
+                if (hasActiveFilters) {
+                  event.preventDefault();
+                  window.location.assign('/category');
+                }
               }}
               data-testid="category-empty-reset"
               style={{
