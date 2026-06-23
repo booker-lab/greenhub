@@ -291,7 +291,31 @@
 
 **육안검증**: 375px에서 첫 화면에 공동구매 카드와 다음 탐색 섹션의 시작이 함께 보이고, 이미지 잘림·텍스트 넘침이 없는지 확인한다.
 **커밋 예시**: `consumer: 홈 공동구매 미리보기를 컴팩트하게 개선`
-**Conclusion**: [대기 — 홈 미리보기의 탐색 밀도를 개선한다. 검증 결과 미기록]
+**Conclusion**: [완료 — 2026-06-23. 홈 공동구매 미리보기를 상세 배너형 카드에서 3열 컴팩트 카드로 줄였다. 이미지는 `1/1` 정사각형, 상품명·수량은 각각 1줄로 제한하고, 상품이 1~2개여도 3열 슬롯 폭을 유지한다. 변경 파일 Biome, 소비자 lint 오류 0·기존 경고 14, 타입체크, build, `git diff --check`, 로컬 chromium 7/7·mobile 7/7, Preview branch alias chromium 7/7·mobile 7/7이 통과했다. 구현 커밋 `fa5cb59`의 Preview `dpl_HugmSbz6EetFx7neoNT6y2NeTpv4`는 `READY`이며, 375px·1440px 홈 육안 지표에서 가로 넘침 0, 콘솔 오류 0, 오류 오버레이 0, 375px 공동구매 섹션 높이 181.7px를 확인했다. 동일 커밋을 Production `dpl_HEbiot7NChtj9AzkkcMJM3MrosZ9`로 승격해 `greenlove.co.kr` 루트·공구 HTTP 200과 운영 홈 375px·1440px 가로 넘침 0·콘솔 오류 0을 확인했다. 고유 Preview URL은 Vercel 보호 제약이 있어 branch alias 기준으로 검증했다.]
+
+#### W4 종료 체크리스트
+
+- [x] W4.1 컴팩트 카드 규격을 선 설계와 `CRITICAL_LOGIC`에 기록했다.
+- [x] 홈 공동구매 카드 이미지·텍스트·수량·간격을 컴팩트 규격으로 조정했다.
+- [x] 홈 카드 높이와 하단 내비게이션 회귀를 E2E로 고정했다.
+- [x] 변경 파일 500라인 이하와 `docs/memory.md` 200라인 이하를 확인했다.
+- [x] lint·타입체크·build·Biome·diff-check와 로컬·Preview E2E chromium/mobile을 통과했다.
+- [x] Preview와 Production 375px·1440px 홈 육안 지표에서 가로 넘침·콘솔 오류·오류 오버레이가 없음을 확인했다.
+- [x] 동일 artifact를 Production으로 승격하고 운영 핵심 경로를 확인했다.
+- [x] 발견 큐, 선 설계, Conclusion, `docs/memory.md`와 W5 핸드오프를 종결 상태로 맞췄다.
+
+#### W4 핸드오프
+
+- 구현 커밋: `fa5cb59`
+- 문서 커밋: 이 섹션 갱신 커밋
+- Preview: `dpl_HugmSbz6EetFx7neoNT6y2NeTpv4` / branch alias `greenhubconsumer-git-codex-consume-29d333-jos-projects-d1cecc0c.vercel.app` / `READY`
+- Production: `dpl_HEbiot7NChtj9AzkkcMJM3MrosZ9` / `greenlove.co.kr` / `READY`
+- 자동 검증: Biome, lint 오류 0·기존 경고 14, tsc, build, diff-check, 로컬 chromium 7/7·mobile 7/7, Preview branch alias chromium 7/7·mobile 7/7
+- 육안검증: Preview·Production 375px·1440px 홈 가로 넘침 0, 콘솔 오류 0, 오류 오버레이 0, 375px 공동구매 섹션 높이 181.7px
+- 남은 문제: 고유 Preview URL은 Vercel 보호 제약이 있어 branch alias 기준 검증을 유지한다. `www.greenlove.co.kr`은 canonical 리다이렉트 308을 반환한다.
+- 문서 갱신: CRITICAL_LOGIC #CL-151, 홈 공동구매 선 설계, 발견 큐 C-HOME-01·C-HOME-03, 본 PLAN W4 Conclusion·체크리스트, memory
+- 다음 묶음: W5
+- 다음 첫 행동: `consumer-category-exploration-plan.md`와 현재 `apps/consumer/src/app/category/_query.ts`의 URL 쿼리 계약을 대조하고 W5.1 활성 필터 라벨·해제 규칙을 순수 유틸로 먼저 확정한다.
 
 ### W5. 카테고리 필터 맥락 개선
 
