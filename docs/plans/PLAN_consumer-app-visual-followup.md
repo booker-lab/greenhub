@@ -253,7 +253,30 @@
 **정합성 집중 검토**: `recruiting`만 참여 가능, 실패·종료는 공구 탭에서 정보 제공, 누락 설정은 구매 CTA 비활성.
 **육안검증**: 같은 fixture가 홈에서는 숨겨지고 공구 탭에서는 올바른 상태 영역에 보이며 카테고리에서 참여 가능으로 오인되지 않는지 확인한다.
 **커밋 예시**: `consumer: 공구 참여 가능 노출 기준을 통일`
-**Conclusion**: [대기 — 세 화면의 공구 상태 정합성을 맞춘다. 검증 결과 미기록]
+**Conclusion**: [완료 — 2026-06-23. 홈·카테고리·공구의 참여 가능 기준을 공유 `getGroupBuyStatus()`의 `recruiting`으로 통일했다. 홈 진행 중 공동구매와 카테고리 공동구매 탭은 `recruiting`만 노출하고, 모집 완료·마감·실패·설정 오류 상태는 공구 탭의 상태별 정보 영역으로 분리한다. Biome, 소비자 build, 타입체크, lint 오류 0·기존 경고 14, `git diff --check`, 로컬 chromium 6/6·mobile 6/6, Preview branch alias chromium 6/6·mobile 6/6이 통과했다. 구현 커밋 `a243bb5`의 Preview `dpl_Bsph794hKAmhztqFFBcGavgnW77h`는 `READY`이며, 375px·1440px 홈·카테고리·공구 육안검증에서 가로 넘침 0, 콘솔 오류·경고 0, 상태별 분리 표시를 확인했다. 동일 artifact를 Production `dpl_2KRFF5nzqVtXP9E7UrnMeDSX5Ndb`로 승격해 `greenlove.co.kr`·`www.greenlove.co.kr` alias, 운영 루트·공구·카테고리 공동구매 HTTP 200, 375px·1440px 운영 육안검증 가로 넘침 0·콘솔 오류 0을 확인했다. 고유 Preview URL은 Vercel 보호·API CORS 제약이 있어 브랜치 alias와 인증 우회 상태로 검증했다.]
+
+#### W3 종료 체크리스트
+
+- [x] 3.1 선 설계와 `CRITICAL_LOGIC`에 `recruiting` 노출 정책 결정을 기록했다.
+- [x] 홈 미리보기와 카테고리 공동구매 탭이 공유 상태 유틸 기준으로 `recruiting`만 노출한다.
+- [x] 공구 탭은 실패·종료·설정 오류 상품을 참여 가능 목록과 분리해 정보 제공 영역에 유지한다.
+- [x] 변경 파일 Biome, 소비자 build, 타입체크, lint, `git diff --check`가 통과했다.
+- [x] 로컬 및 Preview branch alias E2E가 chromium·mobile에서 통과했다.
+- [x] Preview와 Production 375px·1440px 육안검증에서 가로 넘침·오류 오버레이·콘솔 오류가 없음을 확인했다.
+- [x] 발견 큐, Conclusion, `docs/memory.md`와 W4 핸드오프를 종결 상태로 맞췄다.
+
+#### W3 핸드오프
+
+- 구현 커밋: `a243bb5`
+- 문서 커밋: 이 섹션 갱신 커밋
+- Preview: `dpl_Bsph794hKAmhztqFFBcGavgnW77h`
+- Production: `dpl_2KRFF5nzqVtXP9E7UrnMeDSX5Ndb`
+- 자동 검증: 로컬 chromium 6/6·mobile 6/6, Preview branch alias chromium 6/6·mobile 6/6
+- 육안검증: Preview·Production 375px·1440px 홈·카테고리·공구 가로 넘침 0, 콘솔 오류·경고 0
+- 남은 문제: 고유 Preview URL API CORS·Vercel 보호 제약은 기능 결함이 아니며 branch alias 기준으로 검증한다.
+- 문서 갱신: CRITICAL_LOGIC #CL-150, 공구 탭 선 설계 4.4, 발견 큐 C-HOME-02·C-CATEGORY-02, 본 PLAN W3 Conclusion·체크리스트, memory
+- 다음 묶음: W4
+- 다음 첫 행동: `consumer-home-groupbuy-improve-plan.md`와 현재 `HomeProductList.tsx`의 홈 공동구매 카드 밀도를 대조하고 W4.1 컴팩트 카드 규격을 먼저 확정한다.
 
 ### W4. 홈 공동구매 컴팩트 카드
 
