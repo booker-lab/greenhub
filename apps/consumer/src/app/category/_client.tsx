@@ -372,6 +372,9 @@ export default function CategoryClient() {
             <UnstyledButton
               component={Link}
               href="/category"
+              onClick={() => {
+                if (hasActiveFilters) router.replace('/category');
+              }}
               data-testid="category-empty-reset"
               style={{
                 color: 'var(--color-primary)',
