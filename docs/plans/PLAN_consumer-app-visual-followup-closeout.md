@@ -35,4 +35,11 @@
 - 소비자앱 후속 W0~W11은 모두 완료됐다.
 - 운영주소 보정 쓰기는 `docs/plans/PLAN_consumer-address-data-repair.md` 기준으로 별도 완료됐다.
 - 소비자앱 사용자 흐름 기준으로 남은 추가 구현 작업은 없다.
-- 남은 항목은 기능 차단이 아닌 CSS preload warning 추적과 검증 캡처 보강뿐이다.
+- CSS preload warning 추적은 `docs/plans/PLAN_consumer-css-preload-warning.md` 기준으로 완료됐다.
+
+## 2026-06-24 검증 캡처 보강 판정
+
+- [x] W0~W11 각 묶음에는 Preview·Production 배포 증거와 375px·1440px 육안검증 관찰 기록이 있다.
+- [x] CSS preload warning 추적에서 운영·Preview 홈, `/stores`, 대표 상점 상세 총 6개 URL의 콘솔 error 0, page error 0, hydration 오류 0, 스타일 누락 0, 가로 넘침 0을 확인했다.
+- [x] 별도 이미지 캡처 파일은 발견되지 않았지만, 현재 문서화된 관찰 기록만으로 사용자 흐름 종료 판정을 유지할 수 있다.
+- [x] 추가 캡처는 새 결함, 배포 회귀, 외부 감사 요청처럼 재현 증거가 필요한 경우에만 별도 계획으로 수행한다.
