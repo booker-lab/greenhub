@@ -331,7 +331,30 @@
 **정합성 집중 검토**: URL이 SSOT이며 칩 삭제·전체 초기화·뒤로가기가 같은 쿼리 계약을 사용한다.
 **육안검증**: 긴 필터 조합의 가로 넘침, 칩 한 개 해제, 전체 초기화, 결과 없음 문구를 확인한다.
 **커밋 예시**: `consumer: 카테고리 필터 맥락과 빈 상태를 개선`
-**Conclusion**: [대기 — 필터 조건과 빈 상태 복구 행동을 명확히 한다. 검증 결과 미기록]
+**Conclusion**: [완료 — 2026-06-23. 카테고리 URL 쿼리 계약을 `parseCategoryQuery()` 기준으로 대조하고, 활성 필터 라벨·해제 규칙을 순수 유틸로 확정했다. 라벨은 공동구매·카테고리·색상·정렬 순서로 표시하고 `latest`는 기본값이라 제외한다. 활성 필터 칩과 전체 초기화는 실제 `href`를 가진 순수 앵커로 렌더링해 hydration 전후와 운영 alias 모두에서 URL 해제가 `/category` 계약과 일치하게 했다. 빈 상태는 활성 필터 여부에 따라 조건 해제 안내와 전체 초기화 행동을 분리했다. 변경 파일 Biome, 소비자 lint 오류 0·기존 경고 14, build, 타입체크, `git diff --check`, 로컬 chromium/mobile 16/16, Preview branch alias chromium/mobile 16/16이 통과했다. 최종 구현 커밋 `3a0cd44`의 Preview `dpl_HYsEAr2PDpYcNLMpPKARN5Xf9zCa`는 `READY`이며, branch alias 375px·1440px 스모크에서 가로 넘침 0, 오류 오버레이 0, 콘솔 오류 0, 칩 `관엽·레드·핑크·높은가격순`, 전체 초기화 후 `/category` 이동을 확인했다. 동일 artifact를 Production `dpl_EfWufbzpA73KVbmMt2V1coAY9ZQA`로 승격해 `greenlove.co.kr/category` 200, `www.greenlove.co.kr/category` 308 canonical redirect, 운영 375px·1440px 동일 스모크 통과를 확인했다. 고유 Preview URL은 Vercel 보호 제약이 있어 branch alias 기준 검증을 유지한다.]
+
+#### W5 종료 체크리스트
+
+- [x] `consumer-category-exploration-plan.md`와 `_query.ts` URL 쿼리 계약을 대조하고 W5 선 설계를 갱신했다.
+- [x] 활성 필터 라벨·개별 해제·전체 초기화 규칙을 순수 URL 유틸과 링크 계약으로 고정했다.
+- [x] 빈 상태 문구와 전체 초기화 행동을 E2E로 고정했다.
+- [x] 변경 파일 500라인 이하와 `docs/memory.md` 200라인 이하를 확인했다.
+- [x] lint·build·타입체크·Biome·diff-check와 로컬·Preview E2E chromium/mobile을 통과했다.
+- [x] Preview `READY`, branch alias 375px·1440px 스모크, Production 승격, 운영 도메인 스모크를 완료했다.
+- [x] W6 이후 작업, API 계약 확장, `ProductCard` variant 분리는 수행하지 않았다.
+
+#### W5 핸드오프
+
+- 완료 범위: 카테고리 활성 필터 요약, 조건별 해제 링크, 전체 초기화 링크, 필터 조건 기반 빈 상태 안내.
+- 제외·새 발견: W6 이후, 공개 상품 API 계약 확장, `ProductCard` variant 분리는 미진행. 고유 Preview URL은 Vercel 보호 제약으로 branch alias 검증 유지.
+- 커밋: `b37883a` / `299a199` / `b3e4a80` / `5cd13e5` / `2a220cb` / `3a0cd44`
+- Preview 배포: `dpl_HYsEAr2PDpYcNLMpPKARN5Xf9zCa` / `greenhubconsumer-7xil3ai24-jos-projects-d1cecc0c.vercel.app` / branch alias READY
+- Production 배포: `dpl_EfWufbzpA73KVbmMt2V1coAY9ZQA` / `greenlove.co.kr` READY / `www.greenlove.co.kr` 308 canonical redirect
+- 자동 검증: 변경 파일 Biome 통과, consumer lint 오류 0·기존 경고 14, consumer build, consumer tsc, git diff-check, 로컬 chromium/mobile 16/16, Preview branch alias chromium/mobile 16/16
+- 육안검증: Preview branch alias와 Production 375px·1440px에서 가로 넘침 0, 오류 오버레이 0, 콘솔 오류 0, 활성 칩 4개와 전체 초기화 `/category` 이동 확인
+- 문서 갱신: `consumer-category-exploration-plan.md`, CRITICAL_LOGIC #CL-153, 본 PLAN W5 Conclusion·체크리스트, memory
+- 다음 묶음: W6
+- 다음 첫 행동: `docs/specs/frontend/consumer-stores-tab-improve-plan.md`를 열어 상품 0개 상점의 하단 정렬·준비 중 표시 정책과 상점 상세 카드 밀도 기준을 먼저 확정한다.
 
 ### W6. 상점 노출 정책·카드 밀도
 
