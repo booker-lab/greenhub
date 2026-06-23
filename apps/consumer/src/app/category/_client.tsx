@@ -21,7 +21,13 @@ import { type CSSProperties, useMemo, useState } from 'react';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 import { CATEGORY_TABS, COLOR_CHIPS, SORT_CHOICES, type SortOption } from './_constants';
-import { buildCategoryQuery, parseCategoryQuery, toggleColor } from './_query';
+import {
+  buildActiveCategoryFilters,
+  buildCategoryQuery,
+  parseCategoryQuery,
+  RESET_CATEGORY_FILTERS_PATCH,
+  toggleColor,
+} from './_query';
 
 const SKELETON_KEYS = [
   'category-skeleton-1',
@@ -48,6 +54,8 @@ export default function CategoryClient() {
   const [colorsOpen, setColorsOpen] = useState(false);
   const params = useMemo(() => new URLSearchParams(searchParams.toString()), [searchParams]);
   const state = useMemo(() => parseCategoryQuery(params), [params]);
+  const activeFilters = useMemo(() => buildActiveCategoryFilters(state), [state]);
+  const hasActiveFilters = activeFilters.length > 0;
   const { products, loading, error } = useProducts(
     state.category,
     state.colors,
@@ -237,6 +245,62 @@ export default function CategoryClient() {
       <Divider mb="md" />
 
       <Box px="md">
+        {hasActiveFilters && (
+          <Box mb="md">
+            <Group justify="space-between" align="center" mb={8}>
+              <Text
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-secondary)',
+                  fontWeight: 'var(--fw-bold)',
+                }}
+              >
+                적용한 조건
+              </Text>
+              <UnstyledButton
+                data-testid="category-reset-all"
+                onClick={() => navigate(RESET_CATEGORY_FILTERS_PATCH, { replace: true })}
+                style={{
+                  color: 'var(--color-primary)',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 'var(--fw-bold)',
+                }}
+              >
+                전체 초기화
+              </UnstyledButton>
+            </Group>
+            <Group gap={8}>
+              {activeFilters.map((filter) => (
+                <UnstyledButton
+                  key={filter.key}
+                  data-testid={`category-active-filter-${filter.key}`}
+                  aria-label={`${filter.label} 조건 해제`}
+                  onClick={() => navigate(filter.removePatch, { replace: true })}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    maxWidth: '100%',
+                    minHeight: 32,
+                    padding: '6px 10px',
+                    border: 'var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--color-bg-muted)',
+                    color: 'var(--color-text)',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: 'var(--fw-medium)',
+                  }}
+                >
+                  <Text span truncate style={{ maxWidth: 160 }}>
+                    {filter.label}
+                  </Text>
+                  <X size={14} aria-hidden />
+                </UnstyledButton>
+              ))}
+            </Group>
+          </Box>
+        )}
+
         <Group justify="space-between" align="center" mb="sm">
           <Text
             style={{
@@ -301,17 +365,24 @@ export default function CategoryClient() {
           <Stack align="center" py={64}>
             <Text size="xl">🌱</Text>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              선택한 조건에 맞는 상품이 없습니다.
+              {hasActiveFilters
+                ? '선택한 조건에 맞는 상품이 없습니다. 조건을 하나씩 해제해 보세요.'
+                : '아직 등록된 상품이 없습니다.'}
             </Text>
             <UnstyledButton
-              onClick={() => router.push('/category')}
+              onClick={() =>
+                hasActiveFilters
+                  ? navigate(RESET_CATEGORY_FILTERS_PATCH, { replace: true })
+                  : router.push('/category')
+              }
+              data-testid="category-empty-reset"
               style={{
                 color: 'var(--color-primary)',
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
               }}
             >
-              전체 상품 보기
+              {hasActiveFilters ? '전체 조건 초기화' : '전체 상품 보기'}
             </UnstyledButton>
           </Stack>
         )}
