@@ -27,12 +27,16 @@ type StoreSort = 'name' | 'products' | 'hubs';
 
 const STORE_SORT_OPTIONS = [
   { value: 'name', label: '가나다순' },
-  { value: 'products', label: '상품 수순' },
+  { value: 'products', label: '구매 가능순' },
   { value: 'hubs', label: '거점 수순' },
 ] as const;
 
 function normalizeSearch(value: string) {
   return value.trim().toLocaleLowerCase('ko-KR');
+}
+
+function compareStoreAvailability(a: { productCount: number }, b: { productCount: number }) {
+  return Number(b.productCount > 0) - Number(a.productCount > 0);
 }
 
 export default function StoresPage() {
@@ -48,6 +52,8 @@ export default function StoresPage() {
       : stores;
 
     return [...filtered].sort((a, b) => {
+      const availability = compareStoreAvailability(a, b);
+      if (availability !== 0) return availability;
       if (sort === 'products')
         return b.productCount - a.productCount || a.name.localeCompare(b.name, 'ko-KR');
       if (sort === 'hubs') return b.hubCount - a.hubCount || a.name.localeCompare(b.name, 'ko-KR');

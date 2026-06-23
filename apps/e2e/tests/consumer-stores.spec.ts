@@ -33,6 +33,15 @@ const STORES = [
     productCount: 1,
     hubCount: 2,
   },
+  {
+    id: 'store-ready',
+    name: 'Ready Later',
+    address: 'Incheon Yeonsu',
+    phone: '010-4444-5555',
+    logoUrl: null,
+    productCount: 0,
+    hubCount: 9,
+  },
 ];
 
 const PRODUCT = {
@@ -102,6 +111,14 @@ test.describe('소비자 상점 탐색 fixture', () => {
 
     await page.goto(`${BASE}/stores`, { waitUntil: 'domcontentloaded' });
 
+    await expect(page.locator('a[href^="/stores/"]')).toHaveCount(STORES.length);
+    const initialCards = await page
+      .locator('a[href^="/stores/"]')
+      .evaluateAll((cards) => cards.map((card) => card.textContent ?? ''));
+    expect(initialCards.at(-1)).toContain('Ready Later');
+    await expect(page.getByText('준비 중', { exact: true })).toBeVisible();
+    await expect(page.getByText('상품 준비 중')).toBeVisible();
+
     await page.getByLabel('상점 검색').fill('Busan');
     await expect(page.getByText('Store Beta')).toBeVisible();
     await expect(page.getByText('Store Alpha')).toBeHidden();
@@ -111,13 +128,21 @@ test.describe('소비자 상점 탐색 fixture', () => {
     await page.getByRole('button', { name: '검색 초기화' }).click();
     await expect(page.getByText('Store Alpha')).toBeVisible();
 
-    await page.getByRole('radio', { name: '상품 수순' }).click();
+    await page.getByRole('radio', { name: '구매 가능순' }).click();
 
     const cardTexts = await page
       .locator('a[href^="/stores/"]')
       .evaluateAll((cards) => cards.map((card) => card.textContent ?? ''));
     expect(cardTexts[0]).toContain('Store Beta');
     expect(cardTexts[1]).toContain('Store Alpha');
+    expect(cardTexts.at(-1)).toContain('Ready Later');
+
+    await page.getByRole('radio', { name: '거점 수순' }).click();
+    const hubSortedCardTexts = await page
+      .locator('a[href^="/stores/"]')
+      .evaluateAll((cards) => cards.map((card) => card.textContent ?? ''));
+    expect(hubSortedCardTexts[0]).toContain('Store Beta');
+    expect(hubSortedCardTexts.at(-1)).toContain('Ready Later');
   });
 
   test('모바일 상점 상세는 가로 넘침 없이 상품 진입 링크를 유지한다', async ({ page }) => {
@@ -128,6 +153,10 @@ test.describe('소비자 상점 탐색 fixture', () => {
 
     await expect(page.getByText(STORE.name)).toBeVisible();
     await expect(page.getByText(PRODUCT.name)).toBeVisible();
+    const gridColumns = await page.getByTestId('store-product-grid').evaluate((element) => {
+      return getComputedStyle(element).gridTemplateColumns.split(' ').length;
+    });
+    expect(gridColumns).toBe(2);
     await expectNoHorizontalOverflow(page);
   });
 
