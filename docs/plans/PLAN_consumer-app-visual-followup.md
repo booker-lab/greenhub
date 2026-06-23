@@ -495,42 +495,6 @@
 | 11.3 | 승인된 데이터 정리 후 홈·상점 주소를 운영 화면에서 재확인한다. | `docs/specs/frontend/manual-visual-verify-checklist.md` | `git diff --check` |
 
 **정합성 집중 검토**: 운영 쓰기는 백업·dry-run·명시적 승인 뒤 수행하며 프론트 fallback으로 원본 훼손을 숨기지 않는다.
-**육안검증**: 홈·상점 목록·상점 상세 주소, 콘솔 경고의 감소, 기능 오류와 경고 구분을 확인한다.
-**커밋 예시**: `ops: 소비자 화면 운영 데이터와 경고 정리 절차를 기록`
-**Conclusion**: [대기 — 운영 데이터와 낮은 우선순위 경고를 별도 작업으로 종결한다. 검증 결과 미기록]
+**Conclusion**: [완료 — 2026-06-23. W11은 문서 중심 운영 정리 계약으로 종결했다. 깨진 주소 문자열은 홈·상점 UI fallback으로 숨기지 않고 `stores/{storeId}.address` 원본 데이터 보정 과제로 분리했으며, `docs/specs/ops/seller-validation-data-cleanup.md`에 대상 식별, 백업, dry-run, 정상 주소 후보 확인, 명시적 승인, `--apply` 후 공개 화면 재확인 절차를 고정했다. 기존 `scripts/ops/repair-mojibake-data.mjs`는 상호명·이름 allowlist 보정 스크립트이므로 주소 보정은 주소 전용 옵션 또는 별도 스크립트로만 확장한다. CSS preload 경고는 기능 오류와 분리해 `docs/specs/frontend/consumer-app-visual-followup-plan.md`에 낮은 우선순위 warning으로 기록했고, hydration 오류·콘솔 error·화면 깨짐이 없으면 이번 묶음에서 설정 변경 없이 닫는다. `docs/specs/frontend/manual-visual-verify-checklist.md`에는 승인 전 읽기 전용 확인과 승인 후 재확인 조건을 추가했다. 이번 작업에서는 운영 쓰기, 커밋, 배포를 수행하지 않았다.]
 
-## 계획 작성 검증
-
-- [x] 발견 큐의 미완료 ID를 W0~W11 실행 묶음에 연결했다.
-- [x] 완료 상태인 `C-CATEGORY-01`, `C-STORES-02`, `C-STORES-03`은 W0 대조 대상으로 유지하고 재구현 대상에서 제외했다.
-- [x] 각 묶음에 아토믹 태스크, 정합성 집중 검토, 커밋 예시, Preview 이후 육안검증 기준, Conclusion을 배치했다.
-- [x] 현재 계획 대상 코드 파일이 모두 500라인 이하임을 확인했다.
-- [x] `docs/memory.md`가 200라인 이하임을 확인했다.
-
-## 묶음별 핸드오프 템플릿
-
-각 묶음 종료 시 아래 내용을 이 문서의 해당 Conclusion 또는 세션 메모리에 남긴다.
-
-```text
-[Wn 핸드오프]
-- 완료 범위:
-- 제외·새 발견:
-- 커밋:
-- Preview 배포:
-- Production 배포:
-- 자동 검증:
-- 육안검증:
-- 문서 갱신:
-- 다음 묶음: Wn+1
-- 다음 첫 행동:
-```
-
-## 전체 종료 체크리스트
-
-- [ ] W0~W11이 의존성 순서로 완료되었거나 범위 밖 사유가 기록됐다.
-- [ ] 각 묶음에 독립 커밋과 Preview·Production 배포 증거가 있다.
-- [ ] 각 묶음의 모바일·데스크톱 육안검증 체크가 완료됐다.
-- [ ] 발견 큐와 탭별 선 설계 문서의 상태가 일치한다.
-- [ ] 수정 파일은 모두 500라인 이하이다.
-- [ ] `docs/memory.md`가 200라인 이하이며 최신 핸드오프를 가리킨다.
-- [ ] 각 묶음은 Preview 검증 뒤 동일 artifact를 Production으로 승격하고 운영 도메인을 확인했다.
+종료 템플릿: `docs/plans/PLAN_consumer-app-visual-followup-closeout.md`

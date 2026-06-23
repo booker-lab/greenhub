@@ -43,6 +43,8 @@
 - [x] **공개 배너 API 조회**: 운영 `/banners/active`가 `scheduled: []`, `default: main_hero`를 반환하고 구 `/banner`는 `404`임을 확인했다. 원본: `pending-visual-verify-20260529.md` §27 `#245`, §31 `#267`
 - [x] **공개 기본 배너 렌더 복구**: 소비자 최신 배포를 운영 승격한 뒤 데스크톱 `1280x720`과 모바일 `375x812`에서 기본 배너 1장 렌더를 확인했다. 기간 배너가 없어 좌우 버튼과 점 인디케이터는 숨겨졌다. 원본: §29 `#255`, §30 `#265`
 - [x] **공개 배너 캐러셀 잔여**: 환경 변수 게이트 하네스의 실제 `HeroBannerCarousel`과 API 단위 테스트로 기간 배너 최신순·기본 배너 마지막 순서, 자동 전환, 조작·hover·focus 정지, KST 오늘 종료 포함·어제 종료 제외를 확인했다. 원본: §29 `#256~#259`, §30 `#263~#264`
+- [ ] **소비자 상점 주소 데이터 정리 확인**: `/`, `/stores`, `/stores/{storeId}`에서 같은 상점 주소가 깨진 문자열로 보이면 운영 원본 `stores/{storeId}.address` 확인 대상으로 기록한다. 실제 보정은 `seller-validation-data-cleanup.md`의 백업·dry-run·명시적 승인 이후에만 진행하고, 승인 전에는 읽기 전용 확인만 수행한다.
+- [x] **소비자 CSS preload 경고 분리**: `/`, `/category`, `/stores` 콘솔에서 CSS preload warning만 반복되고 hydration 오류, 콘솔 error, 화면 깨짐이 없으면 기능 결함이 아니라 낮은 우선순위 운영 진단 경고로 기록한다.
 
 ### 2차: 판매자 기본 화면
 
@@ -145,3 +147,4 @@
 | 2026-06-06 | 소비자 주문 상세 송장 표시 재검증 | 로컬 consumer `e2e/order-cancel-status` | 환경 변수 게이트 fixture | `127.0.0.1:3013` consumer fixture에서 실제 주문 상세 컴포넌트가 송장 필드를 가진 주문의 택배사·운송장번호를 `deliveryMethod` 불일치와 무관하게 표시함을 확인했다. Playwright chromium 1/1 통과 |
 | 2026-06-06 | 일반 셀러·순수 어드민 역할 분리 회귀 | 운영 seller/API | 일반 seller + 순수 admin | `TEST_SELLER_*`는 `role=seller`+`storeId` 보유, `TEST_ADMIN_*`는 `role=admin`+`storeId` 없음임을 토큰 출력 없이 확인했다. `seller-onboarding.spec.ts` chromium에서 일반 셀러 관리자 링크 미노출·온보딩 자기 프로필 진입, 순수 어드민 `/onboarding`→`/admin/stores` 리다이렉트를 검증했다. 재실행 기준 12/12 통과. |
 | 2026-06-06 | 판매자 주문 일괄 택배 발송 결과 회귀 | 로컬 seller `e2e/order-bulk-parcel-ship` | 환경 변수 게이트 fixture | 성공 주문 `DELIVERED` 전환, 성공 주문 선택 해제, 실패 주문 선택 유지, `성공 1건, 실패 1건` 부분 실패 알림을 확인했다. `seller-order-bulk-parcel-ship.spec.ts` chromium 2/2 통과. 원본 `#173` 종결 |
+| 2026-06-23 | 소비자 W11 운영 데이터·경고 정리 계약 | 운영 소비자 공개 화면 | 공개 + 읽기 전용 | 깨진 상점 주소는 UI 보정이 아니라 `stores/{storeId}.address` 운영 데이터 정리 대상으로 분리했다. CSS preload warning은 기능 오류와 분리해 낮은 우선순위 경고로 기록한다. 운영 쓰기 없음 |
