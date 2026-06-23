@@ -6,8 +6,9 @@
 
 ## 현재 진행 요약
 
-- 소비자 앱 후속 실행 W4를 종결했다. 홈 공동구매 미리보기를 3열 컴팩트 카드로 줄였고, 구현 커밋 `fa5cb59`, Preview `dpl_HugmSbz6EetFx7neoNT6y2NeTpv4`, Production `dpl_HEbiot7NChtj9AzkkcMJM3MrosZ9`가 `READY`다. 로컬·Preview branch alias `consumer-groupbuy.spec.ts` chromium/mobile 7/7, 운영 홈 375px·1440px 가로 넘침 0·콘솔 오류 0을 확인했다.
-- 사용자 상시 결정에 따라 W1 이후 모든 묶음은 Preview 자동·육안검증 통과 후 동일 artifact를 Production으로 승격하고 운영 도메인 검증까지 마쳐야 종결한다. 다음 묶음은 W5 카테고리 필터 맥락 개선이다.
+- 소비자 앱 후속 실행 W5를 종결했다. 카테고리 활성 필터 라벨·개별 해제·전체 초기화를 URL 쿼리 SSOT와 순수 앵커 링크 계약으로 고정했고, 빈 상태 문구를 활성 필터 여부에 맞춰 분리했다. 최종 구현 커밋 `3a0cd44`, Preview `dpl_HYsEAr2PDpYcNLMpPKARN5Xf9zCa`, Production `dpl_EfWufbzpA73KVbmMt2V1coAY9ZQA`가 `READY`다. 로컬·Preview branch alias `consumer-category.spec.ts` chromium/mobile 16/16, 운영 375px·1440px 가로 넘침 0·오류 오버레이 0·콘솔 오류 0·전체 초기화 `/category` 이동을 확인했다.
+- 사용자 상시 결정에 따라 W1 이후 모든 묶음은 Preview 자동·육안검증 통과 후 동일 artifact를 Production으로 승격하고 운영 도메인 검증까지 마쳐야 종결한다. 다음 묶음은 W6 상점 노출 정책·카드 밀도다.
+- 문서작업 세션이 종료되면 다음 작업자가 바로 시작할 수 있도록 완료 묶음, 재수행 금지 범위, 다음 묶음, 첫 행동, 필수 참조 문서, 검증·배포 게이트, 알려진 제약을 담은 핸드오프 프롬프트를 작성한다.
 - 핸드오프 프롬프트 1번은 육안검증 종결 가지, 2번은 개발·릴리즈 트레인 가지로 분리했다. 다음 대화에서 번호를 순서로 해석하지 않는다.
 - 프롬프트 1번 육안검증은 현재 실행 가능한 항목을 종결했다. `#43`, `#79`는 운영 쓰기 승인 또는 전용 테스트 계정·정지 refresh token 조건 부재로 `[-]` 처리했다.
 - 프롬프트 2번 릴리즈 트레인은 `shared-contracts`, `api-backend`, `consumer-web`, `seller-admin`, `driver-web`, `e2e-ops`, 후속 consumer fixture 보정까지 커밋·푸시·Vercel Preview READY 확인이 끝났다.
@@ -17,6 +18,7 @@
 
 ## 최신 검증
 
+- W5: 변경 파일 Biome, `pnpm --filter consumer lint` 오류 0·기존 경고 14, `pnpm --filter consumer build`, `pnpm --filter consumer exec tsc --noEmit`, `git diff --check`, 로컬·Preview branch alias `consumer-category.spec.ts` chromium/mobile 16/16 통과. Production `greenlove.co.kr/category` 375px·1440px 스모크에서 가로 넘침 0, 오류 오버레이 0, 콘솔 오류 0, 전체 초기화 `/category` 이동 확인.
 - `git diff --check` 통과.
 - `pnpm exec biome check` 변경 핵심 파일 10개 통과.
 - `node --check scripts/cleanup-seller-validation-data.mjs` 통과.
@@ -29,8 +31,8 @@
 
 ## 다음 진입 후보
 
-- 소비자 앱 육안검증 후속 큐의 실행 Blueprint를 `docs/plans/PLAN_consumer-app-visual-followup.md`로 분리했다. W0~W4는 완료됐고, 다음은 W5다.
-- 다음 첫 행동은 `consumer-category-exploration-plan.md`와 현재 `apps/consumer/src/app/category/_query.ts`의 URL 쿼리 계약을 대조하고 W5.1 활성 필터 라벨·해제 규칙을 순수 유틸로 먼저 확정하는 것이다.
+- 소비자 앱 육안검증 후속 큐의 실행 Blueprint를 `docs/plans/PLAN_consumer-app-visual-followup.md`로 분리했다. W0~W5는 완료됐고, 다음은 W6이다.
+- 다음 첫 행동은 `docs/specs/frontend/consumer-stores-tab-improve-plan.md`를 열어 상품 0개 상점의 하단 정렬·준비 중 표시 정책과 상점 상세 카드 밀도 기준을 먼저 확정하는 것이다.
 
 - `docs-policy`와 `seller-admin` 변경을 분리 stage·커밋하고 Vercel Preview READY를 확인한다.
 - `misc-review`에 남은 `AGENTS.md`, hub staff 문서, archive/plan 파일은 이번 seller 검증 묶음에 섞지 말고 별도 검토한다.
