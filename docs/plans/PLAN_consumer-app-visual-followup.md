@@ -467,7 +467,7 @@
 
 **육안검증**: 가격 경계값, 복수 배송 방식, 긴 판매자명, 결과 0건, 서버 total과 렌더 개수를 확인한다.
 **커밋 예시**: `consumer: 가격과 배송 기준 상품 탐색을 추가`
-**Conclusion**: [대기 — API 계약 기반 확장 필터를 화면에 연결한다. 검증 결과 미기록]
+**Conclusion**: [완료 — 2026-06-23. W8 공개 상품 API 계약을 사용해 `/category`에 `priceMin`, `priceMax`, `deliveryMethod` URL 쿼리와 가격·배송 필터 UI를 연결했다. `useProducts`에는 확장 필터를 그대로 전달하고, 결과 개수는 서버 `total`을 기준으로 표시하되 공동구매 모집 가능 보정처럼 렌더 개수가 다르면 `총 N개 · 표시 M개`로 분리했다. `ProductCard`의 `discovery` variant는 `sellerSummary.name`과 `deliverySummary.methods`를 판매자·배송 힌트로 표시하며, 기존 `compact`와 `store` variant는 W7 표시 경계를 유지한다. 필터 UI는 `CategoryExtendedFilters`로 분리해 수정 코드 파일을 500라인 이하로 유지했다. 변경 파일 Biome, consumer lint 오류 0·기존 경고 14, consumer build, consumer tsc, git diff-check, 로컬 `consumer-category.spec.ts` chromium/mobile 18/18이 통과했다. 배포와 W10 이후 색상 그룹화·정렬 UI·스크롤 복원·공유 UX 개선, W11 운영 데이터 정리는 수행하지 않았다.]
 
 ### W10. 카테고리 보조 탐색 UX
 
@@ -481,9 +481,7 @@
 | 10.3 | 상세 복귀 anchor와 현재 조건 공유 행동을 추가한다. | `apps/consumer/src/app/category/page.tsx` | `pnpm --filter consumer build` |
 | 10.4 | 키보드·뒤로가기·링크 복사를 E2E로 고정한다. | `apps/e2e/tests/consumer-category.spec.ts` | `pnpm --filter e2e test -- consumer-category.spec.ts --project=chromium` |
 
-**육안검증**: 19색 탐색 부담, 선택 색 OR 안내, 정렬 버튼 넘침, 상세 복귀 위치, 공유 링크 재진입을 확인한다.
-**커밋 예시**: `consumer: 카테고리 보조 탐색과 공유 흐름을 개선`
-**Conclusion**: [대기 — 긴 카테고리 탐색의 조작 편의를 보강한다. 검증 결과 미기록]
+**Conclusion**: [완료 — 2026-06-23. `/category` 보조 탐색 UX를 W9 위에 이어 구현했다. 색상 필터는 공유 `ColorOption` 값을 유지한 채 `따뜻한 색`, `차가운 색`, `무채색`, `특수색` 그룹으로 분리하고 OR 의미 안내를 노출했다. 정렬은 native `select`에서 팝오버 없는 가로 버튼형 `radiogroup`으로 전환해 기존 `sort` URL·API 계약을 유지했다. 카테고리 상품 링크는 현재 조건과 상품 anchor를 `fromCategory` 내부 경로로 상품 상세에 전달하고, 상품 상세 뒤로가기는 안전한 `/category...` 경로만 `카테고리로` 복귀로 사용한다. 현재 조건 링크 복사는 Clipboard API를 사용하며 실패 시 수동 복사용 URL을 표시한다. `CategoryColorFilter`, `CategorySortShare`로 UI 책임을 분리해 `_client.tsx`를 500라인 이하로 유지했다. 검증은 `pnpm --filter consumer exec tsc --noEmit`, `pnpm --filter consumer build`, `pnpm --filter consumer lint` 오류 0·기존 경고 14, 변경 파일 Biome, `git diff --check`, 로컬 `consumer-category.spec.ts` chromium/mobile 20/20, 375px Playwright 스모크가 통과했다. 배포·커밋은 아직 수행하지 않았고, W11 운영 데이터 정리는 수행하지 않았다.]
 
 ### W11. 운영 데이터·경고 정리
 

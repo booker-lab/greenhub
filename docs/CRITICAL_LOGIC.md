@@ -447,3 +447,14 @@
 - **결정**: `GET /products`는 `priceMin`, `priceMax`, `deliveryMethod` 쿼리를 수용하고, 응답 `items`마다 `sellerSummary`, `deliverySummary`를 포함한다. `total`은 서버 쿼리와 서버 후처리 필터를 모두 적용한 전체 개수로 정의한다.
 - **이유**: 카테고리 화면이 가격·배송·판매자 정보를 프론트에서 추정하면 화면별 표시 기준이 갈라지고, W9의 필터 연결 시 서버 결과 개수와 화면 내 추가 필터 개수가 섞일 수 있다.
 - **계약**: 일반 상품의 배송 방식은 판매자 배송 설정 기준이며 `weatherRestrictionActive=true`일 때 `parcel`을 제외한다. 공동구매 상품은 `groupProductConfig.groupDeliveryMethod`만 사용한다. 스토어명이 없으면 `storeId`를 판매자명 fallback으로 사용한다. W8에서는 UI 필터 연결과 카드 표시를 수행하지 않는다.
+## [결정 #CL-157] 카테고리 확장 필터와 카드 힌트는 W8 공개 API 계약만 사용한다 (2026-06-23)
+
+- **결정**: `/category`는 `priceMin`, `priceMax`, `deliveryMethod`를 URL SSOT로 관리하고 `GET /products`에 그대로 전달한다. 결과 개수는 서버 `total`을 기본값으로 표시하며, 공동구매 모집 가능 보정처럼 렌더 개수가 달라지는 경우 `총 N개 · 표시 M개`로 분리한다. 판매자·배송 힌트는 `ProductCard`의 `discovery` variant에서만 `sellerSummary`와 `deliverySummary`를 사용해 표시한다.
+- **이유**: W9는 카테고리 확장 필터·정보 힌트 범위이므로 색상 그룹화, 정렬 UI 재설계, 스크롤 복원, 공유 UX 개선을 섞지 않는다. 서버 계약 필드만 사용해야 판매자명 fallback, 배송 방식, 날씨 제한 상태를 프론트에서 다시 추정하지 않는다.
+- **검증**: 카테고리 E2E가 가격·배송 URL 쿼리, API 전달, 서버 total 표시, 판매자·배송 힌트 렌더링을 함께 고정한다.
+
+## [결정 #CL-158] 카테고리 보조 탐색 UX는 URL SSOT와 내부 복귀 경로만 확장한다 (2026-06-23)
+
+- **결정**: `/category`의 색상 그룹화, OR 의미 안내, 버튼형 정렬, 상세 복귀 anchor, 현재 조건 링크 복사는 모두 기존 URL 쿼리 SSOT 위에서 동작한다. 상품 상세 복귀는 `fromCategory`에 담긴 안전한 `/category...` 내부 경로만 허용하고 외부 URL이나 다른 내부 경로는 무시한다.
+- **이유**: W10은 긴 탐색의 조작 편의와 공유성을 높이는 범위다. 필터 의미, API 쿼리, 구매 가능 판정까지 함께 바꾸면 W9의 서버 필터 계약과 상품 상세 구매 계약이 섞인다.
+- **계약**: 색상 다중 선택은 OR 의미를 유지하고 AND 전환은 별도 도메인 결정으로 분리한다. 정렬은 `sort` 쿼리만 갱신하며, 공유 링크는 origin·pathname·search만 복사한다. 상품 anchor는 `category-product-{productId}`로 고정한다.

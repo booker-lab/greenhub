@@ -77,6 +77,26 @@
 - 모든 variant의 링크 접근성 이름은 상품명, 카테고리, 판매 방식, 가격을 포함한다. 공동구매 진행률은 `aria-label`로 진행률을 전달한다.
 - 이번 범위에서는 API 응답 필드, 가격·배송 필터, 판매자·배송 힌트, 총 개수 계약을 확장하지 않는다.
 
+## W9 확장 필터·정보 힌트 계약
+
+- 카테고리 탐색 URL은 `priceMin`, `priceMax`, `deliveryMethod`를 추가 SSOT로 사용한다.
+- `priceMin`과 `priceMax`는 0 이상의 정수만 유효하다. 잘못된 값은 파서에서 버리고 URL 갱신 시 제거한다.
+- `deliveryMethod`는 공유 `DeliveryMethod` 계약의 `direct | hub | parcel`만 허용한다.
+- 가격·배송 필터는 `GET /products`의 W8 공개 상품 탐색 계약으로 그대로 전달한다.
+- 결과 개수의 기본 표시는 서버 응답 `total`을 사용한다. 공동구매 탭처럼 화면에서 모집 가능 상품만 추가 보정하는 경우에는 `총 N개 · 표시 M개`로 서버 total과 렌더 개수를 분리한다.
+- `ProductCard`의 `discovery` variant는 `sellerSummary.name`과 `deliverySummary.methods`를 힌트로 표시한다. 기존 `compact`, `store` variant는 W7 표시 경계를 유지한다.
+- 배송 힌트 라벨은 `direct=직배송`, `hub=거점 픽업`, `parcel=택배`로 표시한다. `weatherRestricted`가 true이면 택배 일시 중단 힌트를 덧붙인다.
+- 가격·배송 필터의 활성 조건 칩은 기존 활성 필터 칩과 같은 URL 제거 계약을 따른다.
+
+## W10 보조 탐색 UX 계약
+
+- 색상 필터는 공유 `ColorOption` 값을 유지하되 UI에서 `따뜻한 색`, `차가운 색`, `무채색`, `특수색` 그룹으로 묶어 보여준다. 그룹화는 표시 편의용이며 URL `colors` 값과 API 전달 값은 바꾸지 않는다.
+- 색상 다중 선택은 현재 API 계약대로 OR 조건이다. 화면에는 `선택한 색상 중 하나라도 포함된 상품을 보여줍니다.` 문구를 노출하고, AND 의미 변경은 별도 도메인 결정으로 분리한다.
+- 정렬은 native `select` 대신 팝오버 없는 가로 버튼형 `radiogroup`으로 제공한다. 선택 시 기존 `sort` URL 계약과 API 쿼리를 그대로 사용하며, `latest`는 기본값이라 URL에서 제거한다.
+- 카테고리 상품 카드 링크는 현재 `/category` 경로와 쿼리, 상품 anchor를 `fromCategory` 내부 경로로 상품 상세에 전달한다. 상세 상단 뒤로가기는 안전한 `/category...` 내부 경로만 수용하고 `카테고리로` 라벨을 표시한다.
+- 카테고리 상품 카드에는 `category-product-{productId}` anchor를 부여한다. 상세에서 복귀한 URL hash가 있으면 브라우저 기본 anchor 복원으로 목록 위치를 되찾는다.
+- `현재 조건 링크 복사` 행동은 현재 origin, pathname, search만 복사하고 hash는 포함하지 않는다. Clipboard API 실패 시 현재 URL 문자열을 화면에 노출해 수동 복사를 가능하게 한다.
+
 ## 화면 범위
 
 - 헤더 우측에 검색 진입 버튼을 제공한다.

@@ -1,10 +1,12 @@
-import type { Category, ColorOption, SaleType } from '@greenhub/shared';
+import type { Category, ColorOption, DeliveryMethod, SaleType } from '@greenhub/shared';
 import {
   CATEGORY_TABS,
   CATEGORY_VALUES,
   type CategoryTabValue,
   COLOR_CHIPS,
   COLOR_VALUES,
+  DELIVERY_METHOD_CHOICES,
+  DELIVERY_METHOD_VALUES,
   SALE_TYPE_VALUES,
   SORT_CHOICES,
   SORT_VALUES,
@@ -14,6 +16,9 @@ import {
 export type CategoryQueryPatch = {
   category?: Category | null;
   colors?: ColorOption[] | null;
+  deliveryMethod?: DeliveryMethod | null;
+  priceMax?: number | null;
+  priceMin?: number | null;
   saleType?: SaleType | null;
   sort?: SortOption | null;
 };
@@ -21,6 +26,9 @@ export type CategoryQueryPatch = {
 export interface CategoryQueryState {
   category?: Category;
   colors: ColorOption[];
+  deliveryMethod?: DeliveryMethod;
+  priceMax?: number;
+  priceMin?: number;
   saleType?: SaleType;
   sort: SortOption;
   activeTab: CategoryTabValue;
@@ -37,9 +45,12 @@ export function parseCategoryQuery(params: URLSearchParams): CategoryQueryState 
   const saleType = parseSaleType(params.get('saleType'));
   const colors = parseColors(params.get('colors'));
   const sort = parseSort(params.get('sort'));
+  const priceMin = parsePrice(params.get('priceMin'));
+  const priceMax = parsePrice(params.get('priceMax'));
+  const deliveryMethod = parseDeliveryMethod(params.get('deliveryMethod'));
   const activeTab: CategoryTabValue = saleType === 'group' ? 'group' : (category ?? 'all');
 
-  return { category, colors, saleType, sort, activeTab };
+  return { category, colors, deliveryMethod, priceMax, priceMin, saleType, sort, activeTab };
 }
 
 export function buildCategoryQuery(params: URLSearchParams, patch: CategoryQueryPatch) {
@@ -47,6 +58,9 @@ export function buildCategoryQuery(params: URLSearchParams, patch: CategoryQuery
 
   if ('category' in patch) setOrDelete(next, 'category', patch.category);
   if ('saleType' in patch) setOrDelete(next, 'saleType', patch.saleType);
+  if ('deliveryMethod' in patch) setOrDelete(next, 'deliveryMethod', patch.deliveryMethod);
+  if ('priceMin' in patch) setNumberOrDelete(next, 'priceMin', patch.priceMin);
+  if ('priceMax' in patch) setNumberOrDelete(next, 'priceMax', patch.priceMax);
   if ('sort' in patch) {
     if (!patch.sort || patch.sort === 'latest') next.delete('sort');
     else next.set('sort', patch.sort);
@@ -58,6 +72,13 @@ export function buildCategoryQuery(params: URLSearchParams, patch: CategoryQuery
 
   const query = next.toString();
   return query ? `/category?${query}` : '/category';
+}
+
+export function buildCategoryProductHref(productId: string, categoryHref: string) {
+  const productParams = new URLSearchParams({
+    fromCategory: `${categoryHref}#category-product-${productId}`,
+  });
+  return `/products/${encodeURIComponent(productId)}?${productParams.toString()}`;
 }
 
 export function toggleColor(colors: ColorOption[], color: ColorOption) {
@@ -99,6 +120,22 @@ export function buildActiveCategoryFilters(state: CategoryQueryState): ActiveCat
     });
   }
 
+  if (state.priceMin !== undefined || state.priceMax !== undefined) {
+    filters.push({
+      key: 'price-range',
+      label: getPriceRangeLabel(state.priceMin, state.priceMax),
+      removePatch: { priceMin: null, priceMax: null },
+    });
+  }
+
+  if (state.deliveryMethod) {
+    filters.push({
+      key: `delivery-${state.deliveryMethod}`,
+      label: getDeliveryMethodLabel(state.deliveryMethod),
+      removePatch: { deliveryMethod: null },
+    });
+  }
+
   return filters;
 }
 
@@ -109,6 +146,9 @@ export function hasActiveCategoryFilters(state: CategoryQueryState) {
 export const RESET_CATEGORY_FILTERS_PATCH: CategoryQueryPatch = {
   category: null,
   colors: null,
+  deliveryMethod: null,
+  priceMax: null,
+  priceMin: null,
   saleType: null,
   sort: null,
 };
@@ -125,6 +165,18 @@ function parseSort(value: string | null): SortOption {
   return SORT_VALUES.includes(value as SortOption) ? (value as SortOption) : 'latest';
 }
 
+function parseDeliveryMethod(value: string | null): DeliveryMethod | undefined {
+  return DELIVERY_METHOD_VALUES.includes(value as DeliveryMethod)
+    ? (value as DeliveryMethod)
+    : undefined;
+}
+
+function parsePrice(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : undefined;
+}
+
 function parseColors(value: string | null): ColorOption[] {
   if (!value) return [];
   const colors = value
@@ -138,6 +190,14 @@ function setOrDelete(params: URLSearchParams, key: string, value: string | null 
   else params.delete(key);
 }
 
+function setNumberOrDelete(params: URLSearchParams, key: string, value: number | null | undefined) {
+  if (value !== undefined && value !== null && Number.isFinite(value) && value >= 0) {
+    params.set(key, String(value));
+  } else {
+    params.delete(key);
+  }
+}
+
 function getCategoryLabel(category: Category) {
   return CATEGORY_TABS.find((tab) => tab.value === category)?.label ?? category;
 }
@@ -148,4 +208,17 @@ function getColorLabel(color: ColorOption) {
 
 function getSortLabel(sort: SortOption) {
   return SORT_CHOICES.find((choice) => choice.value === sort)?.label ?? sort;
+}
+
+function getDeliveryMethodLabel(method: DeliveryMethod) {
+  return DELIVERY_METHOD_CHOICES.find((choice) => choice.value === method)?.label ?? method;
+}
+
+function getPriceRangeLabel(priceMin?: number, priceMax?: number) {
+  if (priceMin !== undefined && priceMax !== undefined) {
+    return `${priceMin.toLocaleString()}원~${priceMax.toLocaleString()}원`;
+  }
+  if (priceMin !== undefined) return `${priceMin.toLocaleString()}원 이상`;
+  if (priceMax !== undefined) return `${priceMax.toLocaleString()}원 이하`;
+  return '가격';
 }

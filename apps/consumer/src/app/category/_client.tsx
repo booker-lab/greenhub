@@ -1,5 +1,6 @@
 'use client';
 
+import type { DeliveryMethod } from '@greenhub/shared';
 import { getGroupBuyStatus } from '@greenhub/shared';
 import {
   ActionIcon,
@@ -14,20 +15,24 @@ import {
   Title,
   UnstyledButton,
 } from '@mantine/core';
-import { ChevronDown, ChevronUp, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { type CSSProperties, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
-import { CATEGORY_TABS, COLOR_CHIPS, SORT_CHOICES, type SortOption } from './_constants';
+import CategoryColorFilter from './_color-filter';
+import { CATEGORY_TABS } from './_constants';
+import CategoryExtendedFilters from './_extended-filters';
 import {
   buildActiveCategoryFilters,
+  buildCategoryProductHref,
   buildCategoryQuery,
   parseCategoryQuery,
   RESET_CATEGORY_FILTERS_PATCH,
   toggleColor,
 } from './_query';
+import CategorySortShare from './_sort-share';
 
 const SKELETON_KEYS = [
   'category-skeleton-1',
@@ -36,31 +41,26 @@ const SKELETON_KEYS = [
   'category-skeleton-4',
 ];
 
-const visuallyHidden: CSSProperties = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  padding: 0,
-  margin: -1,
-  overflow: 'hidden',
-  clip: 'rect(0, 0, 0, 0)',
-  whiteSpace: 'nowrap',
-  border: 0,
-};
-
 export default function CategoryClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [colorsOpen, setColorsOpen] = useState(false);
+  const [priceMinInput, setPriceMinInput] = useState('');
+  const [priceMaxInput, setPriceMaxInput] = useState('');
   const params = useMemo(() => new URLSearchParams(searchParams.toString()), [searchParams]);
   const state = useMemo(() => parseCategoryQuery(params), [params]);
   const activeFilters = useMemo(() => buildActiveCategoryFilters(state), [state]);
   const hasActiveFilters = activeFilters.length > 0;
-  const { products, loading, error } = useProducts(
+  const { products, total, loading, error } = useProducts(
     state.category,
     state.colors,
     state.saleType,
     state.sort,
+    {
+      deliveryMethod: state.deliveryMethod,
+      priceMax: state.priceMax,
+      priceMin: state.priceMin,
+    },
   );
   const visibleProducts = useMemo(
     () =>
@@ -71,6 +71,16 @@ export default function CategoryClient() {
         : products,
     [products, state.saleType],
   );
+  const resultCountText =
+    total !== visibleProducts.length
+      ? `총 ${total}개 · 표시 ${visibleProducts.length}개`
+      : `총 ${total}개`;
+  const categoryHref = buildCategoryQuery(params, {});
+
+  useEffect(() => {
+    setPriceMinInput(state.priceMin === undefined ? '' : String(state.priceMin));
+    setPriceMaxInput(state.priceMax === undefined ? '' : String(state.priceMax));
+  }, [state.priceMax, state.priceMin]);
 
   function navigate(
     patch: Parameters<typeof buildCategoryQuery>[1],
@@ -79,6 +89,21 @@ export default function CategoryClient() {
     const nextHref = buildCategoryQuery(params, patch);
     if (options.replace) router.replace(nextHref);
     else router.push(nextHref);
+  }
+
+  function applyPriceFilter(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    navigate(
+      {
+        priceMax: parsePriceInput(priceMaxInput),
+        priceMin: parsePriceInput(priceMinInput),
+      },
+      { replace: true },
+    );
+  }
+
+  function toggleDeliveryMethod(deliveryMethod: DeliveryMethod | null) {
+    navigate({ deliveryMethod }, { replace: true });
   }
 
   return (
@@ -137,110 +162,25 @@ export default function CategoryClient() {
         <Divider mt={0} />
       </Box>
 
-      <Box px="md" py="sm">
-        <Group justify="space-between" align="center" wrap="nowrap">
-          <UnstyledButton
-            aria-expanded={colorsOpen}
-            aria-controls="category-color-panel"
-            onClick={() => setColorsOpen((open) => !open)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              color: 'var(--color-text)',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--fw-bold)',
-            }}
-          >
-            색상
-            {state.colors.length > 0 && (
-              <Text span style={{ color: 'var(--color-primary)', fontWeight: 'var(--fw-bold)' }}>
-                {state.colors.length}
-              </Text>
-            )}
-            {colorsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </UnstyledButton>
-          {state.colors.length > 0 && (
-            <UnstyledButton
-              data-testid="category-reset-colors"
-              onClick={() => navigate({ colors: null }, { replace: true })}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                color: 'var(--color-text-secondary)',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
-              }}
-            >
-              <X size={14} />
-              초기화
-            </UnstyledButton>
-          )}
-        </Group>
+      <CategoryColorFilter
+        colors={state.colors}
+        colorsOpen={colorsOpen}
+        onResetColors={() => navigate({ colors: null }, { replace: true })}
+        onToggleColor={(color) =>
+          navigate({ colors: toggleColor(state.colors, color) }, { replace: true })
+        }
+        onToggleOpen={() => setColorsOpen((open) => !open)}
+      />
 
-        {!colorsOpen && state.colors.length > 0 && (
-          <Text mt={6} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }}>
-            {state.colors.join(' · ')}
-          </Text>
-        )}
-
-        {colorsOpen && (
-          <Box
-            id="category-color-panel"
-            mt="sm"
-            style={{ overflowX: 'auto', scrollbarWidth: 'none' }}
-          >
-            <Group gap={12} wrap="nowrap">
-              {COLOR_CHIPS.map((chip) => {
-                const isActive = state.colors.includes(chip.value);
-                return (
-                  <UnstyledButton
-                    key={chip.value}
-                    aria-pressed={isActive}
-                    data-testid={`category-color-${chip.value}`}
-                    onClick={() =>
-                      navigate({ colors: toggleColor(state.colors, chip.value) }, { replace: true })
-                    }
-                    style={{
-                      flexShrink: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 5,
-                    }}
-                  >
-                    <Box
-                      style={{
-                        width: 30,
-                        height: 30,
-                        borderRadius: '50%',
-                        backgroundColor: chip.hex,
-                        border: isActive
-                          ? '2px solid var(--color-text)'
-                          : '2px solid var(--color-border)',
-                        outline: isActive
-                          ? '2px solid var(--color-primary)'
-                          : '2px solid transparent',
-                        outlineOffset: 2,
-                      }}
-                    />
-                    <Text
-                      style={{
-                        fontSize: 'var(--font-size-sm)',
-                        color: isActive ? 'var(--color-text)' : 'var(--color-text-disabled)',
-                        fontWeight: isActive ? 'var(--fw-bold)' : 'var(--fw-medium)',
-                      }}
-                    >
-                      {chip.label}
-                    </Text>
-                  </UnstyledButton>
-                );
-              })}
-            </Group>
-          </Box>
-        )}
-      </Box>
+      <CategoryExtendedFilters
+        deliveryMethod={state.deliveryMethod}
+        priceMaxInput={priceMaxInput}
+        priceMinInput={priceMinInput}
+        setPriceMaxInput={setPriceMaxInput}
+        setPriceMinInput={setPriceMinInput}
+        onApplyPriceFilter={applyPriceFilter}
+        onToggleDeliveryMethod={toggleDeliveryMethod}
+      />
 
       <Divider mb="md" />
 
@@ -303,46 +243,12 @@ export default function CategoryClient() {
           </Box>
         )}
 
-        <Group justify="space-between" align="center" mb="sm">
-          <Text
-            style={{
-              fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-text-disabled)',
-              fontWeight: 'var(--fw-medium)',
-            }}
-          >
-            {loading ? '상품 불러오는 중' : `총 ${visibleProducts.length}개`}
-          </Text>
-          <Box style={{ position: 'relative' }}>
-            <label htmlFor="category-sort" style={visuallyHidden}>
-              상품 정렬
-            </label>
-            <select
-              id="category-sort"
-              data-testid="category-sort"
-              value={state.sort}
-              onChange={(event) =>
-                navigate({ sort: event.currentTarget.value as SortOption }, { replace: true })
-              }
-              style={{
-                height: 34,
-                border: 'var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--color-bg)',
-                color: 'var(--color-text)',
-                padding: '0 28px 0 10px',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
-              }}
-            >
-              {SORT_CHOICES.map((choice) => (
-                <option key={choice.value} value={choice.value}>
-                  {choice.label}
-                </option>
-              ))}
-            </select>
-          </Box>
-        </Group>
+        <CategorySortShare
+          resultCountText={loading ? '상품 불러오는 중' : resultCountText}
+          sharePath={categoryHref}
+          sort={state.sort}
+          onSortChange={(sort) => navigate({ sort }, { replace: true })}
+        />
 
         {loading && (
           <SimpleGrid cols={2} spacing="sm">
@@ -395,11 +301,23 @@ export default function CategoryClient() {
         {!loading && visibleProducts.length > 0 && (
           <SimpleGrid cols={2} spacing="sm">
             {visibleProducts.map((product) => (
-              <ProductCard key={product.id} product={product} variant="discovery" />
+              <ProductCard
+                key={product.id}
+                href={buildCategoryProductHref(product.id, categoryHref)}
+                id={`category-product-${product.id}`}
+                product={product}
+                variant="discovery"
+              />
             ))}
           </SimpleGrid>
         )}
       </Box>
     </Container>
   );
+}
+
+function parsePriceInput(value: string) {
+  if (!value.trim()) return null;
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : null;
 }
