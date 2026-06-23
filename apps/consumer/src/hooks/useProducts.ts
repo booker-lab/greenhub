@@ -1,6 +1,13 @@
 'use client';
 
-import type { Category, ColorOption, Product, SaleType, Variety } from '@greenhub/shared';
+import type {
+  Category,
+  ColorOption,
+  DeliveryMethod,
+  Product,
+  SaleType,
+  Variety,
+} from '@greenhub/shared';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
@@ -17,6 +24,17 @@ export interface StoreInfo {
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 export type ProductSort = 'latest' | 'popular' | 'price_asc' | 'price_desc';
 
+export interface ProductListFilters {
+  priceMin?: number;
+  priceMax?: number;
+  deliveryMethod?: DeliveryMethod;
+}
+
+interface ProductListResponse {
+  items: Product[];
+  total: number;
+}
+
 /**
  * API를 통해 활성 상품 목록 조회
  * @param category 카테고리 필터 (없으면 전체)
@@ -26,17 +44,21 @@ export function useProducts(
   colors?: ColorOption[],
   saleType?: SaleType,
   sort: ProductSort = 'latest',
+  filters: ProductListFilters = {},
 ) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const colorKey = colors?.join(',') ?? '';
+  const { priceMin, priceMax, deliveryMethod } = filters;
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setProducts([]);
+    setTotal(0);
     async function fetchProducts() {
       try {
         const params = new URLSearchParams({ isActive: 'true' });
@@ -47,12 +69,16 @@ export function useProducts(
           }
         }
         if (saleType) params.set('saleType', saleType);
+        if (priceMin !== undefined) params.set('priceMin', String(priceMin));
+        if (priceMax !== undefined) params.set('priceMax', String(priceMax));
+        if (deliveryMethod) params.set('deliveryMethod', deliveryMethod);
         if (sort !== 'latest') params.set('sort', sort);
         const res = await fetch(`${API_URL}/products?${params}`, { signal: controller.signal });
         if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
-        const data = await res.json();
+        const data = (await res.json()) as Product[] | ProductListResponse;
         const items: Product[] = Array.isArray(data) ? data : (data.items ?? []);
         setProducts(items);
+        setTotal(Array.isArray(data) ? items.length : (data.total ?? items.length));
         setError(null);
       } catch (e: unknown) {
         if (e instanceof DOMException && e.name === 'AbortError') return;
@@ -63,9 +89,9 @@ export function useProducts(
     }
     fetchProducts();
     return () => controller.abort();
-  }, [category, saleType, colorKey, sort]);
+  }, [category, saleType, colorKey, sort, priceMin, priceMax, deliveryMethod]);
 
-  return { products, loading, error };
+  return { products, total, loading, error };
 }
 
 /**
