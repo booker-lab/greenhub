@@ -148,6 +148,37 @@ test.describe('소비자 카테고리 탐색', () => {
     await expect(page.getByText('총 1개')).toBeVisible();
   });
 
+  test('활성 필터 라벨에서 조건을 개별 해제하고 전체 초기화할 수 있다', async ({ page }) => {
+    await installProductRoute(page);
+    await page.goto(`${BASE}/category?category=orchid&colors=레드,핑크&sort=price_asc`);
+
+    await expect(page.getByTestId('category-active-filter-category-orchid')).toBeVisible();
+    await expect(page.getByTestId('category-active-filter-color-레드')).toBeVisible();
+    await expect(page.getByTestId('category-active-filter-color-핑크')).toBeVisible();
+    await expect(page.getByTestId('category-active-filter-sort-price_asc')).toBeVisible();
+
+    await page.getByTestId('category-active-filter-color-레드').click();
+    await expect(page).not.toHaveURL(/%EB%A0%88%EB%93%9C/);
+    await expect(page).toHaveURL(/%ED%95%91%ED%81%AC/);
+    await expect(page.getByTestId('category-active-filter-color-핑크')).toBeVisible();
+
+    await page.getByTestId('category-reset-all').click();
+    await expect(page).toHaveURL(`${BASE}/category`);
+    await expect(page.getByTestId('category-active-filter-category-orchid')).toBeHidden();
+  });
+
+  test('빈 상태는 활성 조건과 전체 초기화 행동을 함께 안내한다', async ({ page }) => {
+    await installProductRoute(page);
+    await page.goto(`${BASE}/category?category=foliage&colors=블랙&sort=price_desc`);
+
+    await expect(
+      page.getByText('선택한 조건에 맞는 상품이 없습니다. 조건을 하나씩 해제해 보세요.'),
+    ).toBeVisible();
+    await page.getByTestId('category-empty-reset').click();
+    await expect(page).toHaveURL(`${BASE}/category`);
+    await expect(page.getByText('총 5개')).toBeVisible();
+  });
+
   test('홈 진행 중 공동구매는 모집 중 상품만 보여준다', async ({ page }) => {
     await installProductRoute(page);
     await page.goto(BASE);
