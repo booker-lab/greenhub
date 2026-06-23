@@ -258,8 +258,9 @@ export default function CategoryClient() {
                 적용한 조건
               </Text>
               <UnstyledButton
+                component={Link}
+                href={buildCategoryQuery(params, RESET_CATEGORY_FILTERS_PATCH)}
                 data-testid="category-reset-all"
-                onClick={() => navigate(RESET_CATEGORY_FILTERS_PATCH, { replace: true })}
                 style={{
                   color: 'var(--color-primary)',
                   fontSize: 'var(--font-size-sm)',
@@ -272,10 +273,11 @@ export default function CategoryClient() {
             <Group gap={8}>
               {activeFilters.map((filter) => (
                 <UnstyledButton
+                  component={Link}
+                  href={buildCategoryQuery(params, filter.removePatch)}
                   key={filter.key}
                   data-testid={`category-active-filter-${filter.key}`}
                   aria-label={`${filter.label} 조건 해제`}
-                  onClick={() => navigate(filter.removePatch, { replace: true })}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
