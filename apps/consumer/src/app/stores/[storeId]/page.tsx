@@ -119,6 +119,7 @@ export default function StoreDetailPage() {
               key={product.id}
               product={product}
               href={productHref(product.id, store.id, store.name)}
+              variant="store"
             />
           ))}
         </SimpleGrid>

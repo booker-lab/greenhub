@@ -143,6 +143,7 @@ test.describe('소비자 카테고리 탐색', () => {
     await expect(page.getByText('공동구매 난')).toBeVisible();
     await expect(page.getByText('8/30개 모집 중')).toBeVisible();
     await expect(page.getByText(/최소 10개/)).toBeVisible();
+    await expect(page.locator('[data-product-card-variant="discovery"]')).toHaveCount(1);
     await expect(page.getByText('모집 완료 공동구매 난')).toBeHidden();
     await expect(page.getByText('설정 확인 공동구매 난')).toBeHidden();
     await expect(page.getByText('총 1개')).toBeVisible();
