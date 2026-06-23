@@ -2,7 +2,7 @@
 > SSOT: 세션 종료 시 최신 요약만 유지한다. 200라인 초과 시 50라인 이내로 압축한다.
 > 이전 이력은 `docs/archive/`, `docs/CRITICAL_LOGIC.md`, `docs/BACKLOG.md`를 참조한다.
 
-최종 수정: 2026-06-23
+최종 수정: 2026-06-24
 
 ## 현재 진행 요약
 
@@ -73,3 +73,4 @@
 - 2026-06-23 소비자 후속 발견 큐 표 정합성 정리 완료. `consumer-app-visual-followup-plan.md`를 W0~W11 완료 상태로 재정리했고, 운영주소 보정 쓰기는 `docs/plans/PLAN_consumer-address-data-repair.md`로 백업·dry-run·명시적 승인 기반 다음 대화 계획을 분리했다.
 - 2026-06-23 소비자 운영주소 보정 완료. `테스트 상점`의 `stores/9b2cb652-ff77-46b9-a773-e1efa78fb763.address` 깨짐을 운영 화면과 공개 API에서 확인했고, 정상 주소 후보 `경기도 이천시`로 승인받아 적용했다. dry-run 백업 `docs/archive/ops/store-address-repair-2026-06-23T14-51-21-111Z.json`, 적용 직전 백업 `docs/archive/ops/store-address-repair-2026-06-23T14-52-39-764Z.json`을 남겼으며 공개 API와 운영 홈·`/stores`·상점 상세에서 정상 표시를 확인했다.
 - 2026-06-23 소비자앱 추가작업 잔여 확인 완료. 발견 큐, 종료 체크리스트, 주소 보정 계획을 실제 상태에 맞춰 갱신했고 사용자 흐름 기준 남은 구현 작업은 없다고 판정했다. 잔여는 기능 차단이 아닌 CSS preload warning 추적과 검증 캡처 보강뿐이다.
+- 2026-06-24 CSS preload warning 추적 완료. `docs/plans/PLAN_consumer-css-preload-warning.md`를 추가하고 운영 `greenlove.co.kr`와 Preview branch alias의 홈·`/stores`·대표 상점 상세 총 6개 URL을 Chromium 콘솔로 수집했다. 홈 warning 0건, `/stores`와 대표 상세는 `/_next/static/css/2d41fe806411b45f.css` preload 미사용 warning 1건씩이며, 콘솔 error 0·page error 0·hydration 0·스타일 누락 0·가로 넘침 0으로 기능 결함이 아닌 낮은 우선순위 운영 진단 항목으로 종결했다. 구현 수정은 하지 않았고 `git diff --check`, 문서 라인 수, `pnpm --filter consumer build` 통과.
