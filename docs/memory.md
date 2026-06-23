@@ -2,12 +2,12 @@
 > SSOT: 세션 종료 시 최신 요약만 유지한다. 200라인 초과 시 50라인 이내로 압축한다.
 > 이전 이력은 `docs/archive/`, `docs/CRITICAL_LOGIC.md`, `docs/BACKLOG.md`를 참조한다.
 
-최종 수정: 2026-06-22
+최종 수정: 2026-06-23
 
 ## 현재 진행 요약
 
-- 소비자 앱 후속 실행 W3을 종결했다. 커밋 `a243bb5`, Preview `dpl_Bsph794hKAmhztqFFBcGavgnW77h`, Production `dpl_2KRFF5nzqVtXP9E7UrnMeDSX5Ndb`가 `READY`이며 `greenlove.co.kr` 루트·공구·카테고리 공동구매 HTTP 200을 확인했다. 홈·카테고리·공구의 참여 가능 기준은 `recruiting`으로 통일했고, 로컬·Preview E2E chromium/mobile 및 375px·1440px Preview·Production 육안검증은 가로 넘침·콘솔 오류 0이었다.
-- 사용자 상시 결정에 따라 W1 이후 모든 묶음은 Preview 자동·육안검증 통과 후 동일 artifact를 Production으로 승격하고 운영 도메인 검증까지 마쳐야 종결한다. 다음 묶음은 W4 홈 공동구매 컴팩트 카드다.
+- 소비자 앱 후속 실행 W4를 종결했다. 홈 공동구매 미리보기를 3열 컴팩트 카드로 줄였고, 구현 커밋 `fa5cb59`, Preview `dpl_HugmSbz6EetFx7neoNT6y2NeTpv4`, Production `dpl_HEbiot7NChtj9AzkkcMJM3MrosZ9`가 `READY`다. 로컬·Preview branch alias `consumer-groupbuy.spec.ts` chromium/mobile 7/7, 운영 홈 375px·1440px 가로 넘침 0·콘솔 오류 0을 확인했다.
+- 사용자 상시 결정에 따라 W1 이후 모든 묶음은 Preview 자동·육안검증 통과 후 동일 artifact를 Production으로 승격하고 운영 도메인 검증까지 마쳐야 종결한다. 다음 묶음은 W5 카테고리 필터 맥락 개선이다.
 - 핸드오프 프롬프트 1번은 육안검증 종결 가지, 2번은 개발·릴리즈 트레인 가지로 분리했다. 다음 대화에서 번호를 순서로 해석하지 않는다.
 - 프롬프트 1번 육안검증은 현재 실행 가능한 항목을 종결했다. `#43`, `#79`는 운영 쓰기 승인 또는 전용 테스트 계정·정지 refresh token 조건 부재로 `[-]` 처리했다.
 - 프롬프트 2번 릴리즈 트레인은 `shared-contracts`, `api-backend`, `consumer-web`, `seller-admin`, `driver-web`, `e2e-ops`, 후속 consumer fixture 보정까지 커밋·푸시·Vercel Preview READY 확인이 끝났다.
@@ -29,8 +29,8 @@
 
 ## 다음 진입 후보
 
-- 소비자 앱 육안검증 후속 큐의 실행 Blueprint를 `docs/plans/PLAN_consumer-app-visual-followup.md`로 분리했다. W0 기준선 정리부터 W11 운영 데이터·경고 정리까지 의존성 순으로 진행하며, 각 묶음은 독립 커밋·Preview 배포·육안검증·핸드오프까지 닫은 뒤 다음 묶음으로 넘어간다.
-- 다음 첫 행동은 `consumer-home-groupbuy-improve-plan.md`와 현재 `HomeProductList.tsx`의 홈 공동구매 카드 밀도를 대조하고 W4.1 컴팩트 카드 규격을 먼저 확정하는 것이다.
+- 소비자 앱 육안검증 후속 큐의 실행 Blueprint를 `docs/plans/PLAN_consumer-app-visual-followup.md`로 분리했다. W0~W4는 완료됐고, 다음은 W5다.
+- 다음 첫 행동은 `consumer-category-exploration-plan.md`와 현재 `apps/consumer/src/app/category/_query.ts`의 URL 쿼리 계약을 대조하고 W5.1 활성 필터 라벨·해제 규칙을 순수 유틸로 먼저 확정하는 것이다.
 
 - `docs-policy`와 `seller-admin` 변경을 분리 stage·커밋하고 Vercel Preview READY를 확인한다.
 - `misc-review`에 남은 `AGENTS.md`, hub staff 문서, archive/plan 파일은 이번 seller 검증 묶음에 섞지 말고 별도 검토한다.
