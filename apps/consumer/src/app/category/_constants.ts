@@ -1,4 +1,4 @@
-import type { Category, ColorOption, SaleType } from '@greenhub/shared';
+import type { Category, ColorOption, DeliveryMethod, SaleType } from '@greenhub/shared';
 
 export type SortOption = 'latest' | 'popular' | 'price_asc' | 'price_desc';
 
@@ -15,9 +15,19 @@ export interface ColorChip {
   hex: string;
 }
 
+export interface ColorGroup {
+  label: string;
+  values: ColorOption[];
+}
+
 export interface SortChoice {
   label: string;
   value: SortOption;
+}
+
+export interface DeliveryMethodChoice {
+  label: string;
+  value: DeliveryMethod;
 }
 
 export const CATEGORY_TABS: CategoryTab[] = [
@@ -61,3 +71,21 @@ export const CATEGORY_VALUES: Category[] = ['cut_flower', 'orchid', 'foliage'];
 export const COLOR_VALUES = COLOR_CHIPS.map((chip) => chip.value);
 export const SORT_VALUES = SORT_CHOICES.map((choice) => choice.value);
 export const SALE_TYPE_VALUES: SaleType[] = ['normal', 'group'];
+export const DELIVERY_METHOD_CHOICES: DeliveryMethodChoice[] = [
+  { label: '직배송', value: 'direct' },
+  { label: '거점 픽업', value: 'hub' },
+  { label: '택배', value: 'parcel' },
+];
+export const DELIVERY_METHOD_VALUES = DELIVERY_METHOD_CHOICES.map((choice) => choice.value);
+
+export const COLOR_GROUPS: ColorGroup[] = [
+  {
+    label: '따뜻한 색',
+    values: ['레드', '핑크', '연핑크', '로즈', '옐로우', '골드', '오렌지'],
+  },
+  { label: '차가운 색', values: ['퍼플', '바이올렛', '연보라', '블루', '그린'] },
+  { label: '무채색', values: ['화이트', '블랙', '그레이'] },
+  { label: '특수색', values: ['크림', '무늬', '브라운', '베이지'] },
+];
+
+export const COLOR_FILTER_HELP_TEXT = '선택한 색상 중 하나라도 포함된 상품을 보여줍니다.';

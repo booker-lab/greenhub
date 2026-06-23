@@ -13,6 +13,12 @@ const PRODUCTS = [
     colors: ['레드', '핑크'],
     saleType: 'normal',
     isActive: true,
+    sellerSummary: { storeId: 'store-alpha', name: '알파 꽃집' },
+    deliverySummary: {
+      methods: ['direct', 'hub'],
+      deliverySize: 'small',
+      weatherRestricted: false,
+    },
   },
   {
     id: 'flower-normal-white',
@@ -24,6 +30,12 @@ const PRODUCTS = [
     colors: ['화이트'],
     saleType: 'normal',
     isActive: true,
+    sellerSummary: { storeId: 'store-alpha', name: '알파 꽃집' },
+    deliverySummary: {
+      methods: ['parcel'],
+      deliverySize: 'small',
+      weatherRestricted: false,
+    },
   },
   {
     id: 'orchid-group-red',
@@ -35,6 +47,14 @@ const PRODUCTS = [
     colors: ['레드'],
     saleType: 'group',
     isActive: true,
+    sellerSummary: { storeId: 'store-alpha', name: '알파 꽃집' },
+    deliverySummary: {
+      methods: ['parcel'],
+      deliverySize: 'medium',
+      weatherRestricted: false,
+      groupDeliveryDate: '2099-12-31T00:00:00.000Z',
+      deliveryFeeDiscount: 0,
+    },
     groupSummary: {
       currentQuantity: 8,
       minQuantity: 10,
@@ -52,6 +72,12 @@ const PRODUCTS = [
     colors: ['레드'],
     saleType: 'group',
     isActive: true,
+    sellerSummary: { storeId: 'store-alpha', name: '알파 꽃집' },
+    deliverySummary: {
+      methods: ['parcel'],
+      deliverySize: 'medium',
+      weatherRestricted: false,
+    },
     groupSummary: {
       currentQuantity: 30,
       minQuantity: 10,
@@ -69,6 +95,12 @@ const PRODUCTS = [
     colors: ['레드'],
     saleType: 'group',
     isActive: true,
+    sellerSummary: { storeId: 'store-alpha', name: '알파 꽃집' },
+    deliverySummary: {
+      methods: ['direct'],
+      deliverySize: 'medium',
+      weatherRestricted: false,
+    },
   },
 ];
 
@@ -81,10 +113,18 @@ async function installProductRoute(page: Page, urls: string[] = []) {
     const category = url.searchParams.get('category');
     const saleType = url.searchParams.get('saleType');
     const colors = url.searchParams.getAll('colors');
+    const deliveryMethod = url.searchParams.get('deliveryMethod');
+    const priceMax = parseNumberParam(url.searchParams.get('priceMax'));
+    const priceMin = parseNumberParam(url.searchParams.get('priceMin'));
     const sort = url.searchParams.get('sort') ?? 'latest';
 
     if (category) items = items.filter((item) => item.category === category);
     if (saleType) items = items.filter((item) => item.saleType === saleType);
+    if (priceMin !== null) items = items.filter((item) => item.price >= priceMin);
+    if (priceMax !== null) items = items.filter((item) => item.price <= priceMax);
+    if (deliveryMethod) {
+      items = items.filter((item) => item.deliverySummary.methods.includes(deliveryMethod));
+    }
     if (colors.length > 0) {
       items = items.filter((item) => colors.some((color) => item.colors.includes(color)));
     }
@@ -93,6 +133,12 @@ async function installProductRoute(page: Page, urls: string[] = []) {
 
     await route.fulfill({ json: { items, total: items.length } });
   });
+}
+
+function parseNumberParam(value: string | null) {
+  if (!value) return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
 }
 
 test.describe('소비자 카테고리 탐색', () => {
@@ -113,6 +159,8 @@ test.describe('소비자 카테고리 탐색', () => {
     await page.goto(`${BASE}/category`);
 
     await page.getByRole('button', { name: '색상' }).click();
+    await expect(page.getByText('선택한 색상 중 하나라도 포함된 상품을 보여줍니다.')).toBeVisible();
+    await expect(page.getByText('따뜻한 색')).toBeVisible();
     const redChip = page.getByTestId('category-color-레드');
     await redChip.click();
 
@@ -128,11 +176,17 @@ test.describe('소비자 카테고리 탐색', () => {
     await installProductRoute(page, urls);
     await page.goto(`${BASE}/category`);
 
-    await page.getByTestId('category-sort').selectOption('price_asc');
+    await page.getByTestId('category-sort-price_asc').click();
 
     await expect(page).toHaveURL(/sort=price_asc/);
+    await expect(page.getByTestId('category-sort-price_asc')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
     await expect.poll(() => urls.some((url) => url.includes('sort=price_asc'))).toBe(true);
-    await expect(page.locator('a[href="/products/flower-normal-white"]')).toBeVisible();
+    await expect(
+      page.locator('a[href^="/products/flower-normal-white?fromCategory="]'),
+    ).toBeVisible();
   });
 
   test('공동구매 탭은 모집 중 상품만 참여 가능 목록에 보여준다', async ({ page }) => {
@@ -146,7 +200,7 @@ test.describe('소비자 카테고리 탐색', () => {
     await expect(page.locator('[data-product-card-variant="discovery"]')).toHaveCount(1);
     await expect(page.getByText('모집 완료 공동구매 난')).toBeHidden();
     await expect(page.getByText('설정 확인 공동구매 난')).toBeHidden();
-    await expect(page.getByText('총 1개')).toBeVisible();
+    await expect(page.getByText('총 3개 · 표시 1개')).toBeVisible();
   });
 
   test('활성 필터 라벨에서 조건을 개별 해제하고 전체 초기화할 수 있다', async ({ page }) => {
@@ -195,8 +249,86 @@ test.describe('소비자 카테고리 탐색', () => {
     await installProductRoute(page);
     await page.goto(`${BASE}/category`);
 
-    await page.getByRole('link', { name: '상품 검색' }).click();
+    const searchLink = page.locator('a[href="/search"][aria-label="상품 검색"]');
+    await expect(searchLink).toBeVisible();
+    await searchLink.click({ force: true });
 
     await expect(page).toHaveURL(/\/search$/);
+  });
+
+  test('가격과 배송 방식 필터를 URL과 API 쿼리에 반영하고 카드 힌트를 보여준다', async ({
+    page,
+  }) => {
+    const urls: string[] = [];
+    await installProductRoute(page, urls);
+    await page.goto(`${BASE}/category`);
+
+    await page.getByTestId('category-price-min').fill('25000');
+    await page.getByTestId('category-price-max').fill('42000');
+    await page.getByTestId('category-price-apply').click();
+    await expect(page).toHaveURL(/priceMin=25000/);
+    await expect(page).toHaveURL(/priceMax=42000/);
+
+    await page.getByTestId('category-delivery-parcel').click();
+
+    await expect(page).toHaveURL(/deliveryMethod=parcel/);
+    await expect
+      .poll(() =>
+        urls.some(
+          (url) =>
+            url.includes('priceMin=25000') &&
+            url.includes('priceMax=42000') &&
+            url.includes('deliveryMethod=parcel'),
+        ),
+      )
+      .toBe(true);
+    await expect(page.locator('a[href^="/products/orchid-group-red?fromCategory="]')).toBeVisible();
+    await expect(page.getByText('알파 꽃집').first()).toBeVisible();
+    await expect(page.getByText('택배').first()).toBeVisible();
+    await expect(page.getByText('총 1개')).toBeVisible();
+  });
+
+  test('상품 링크는 카테고리 복귀 anchor를 포함하고 현재 조건 링크를 복사한다', async ({
+    page,
+  }) => {
+    const copied: string[] = [];
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (value: string) => {
+            (window as typeof window & { __copiedCategoryLinks?: string[] }).__copiedCategoryLinks =
+              [
+                ...((window as typeof window & { __copiedCategoryLinks?: string[] })
+                  .__copiedCategoryLinks ?? []),
+                value,
+              ];
+          },
+        },
+      });
+    });
+    await installProductRoute(page);
+    await page.goto(`${BASE}/category?category=orchid&colors=레드&sort=price_desc`);
+
+    const productLink = page.locator('a[href^="/products/orchid-normal-red?fromCategory="]');
+    await expect(productLink).toBeVisible();
+    const href = await productLink.getAttribute('href');
+    const fromCategory = new URL(href ?? '', BASE).searchParams.get('fromCategory');
+    expect(fromCategory).toBe(
+      '/category?category=orchid&colors=%EB%A0%88%EB%93%9C&sort=price_desc#category-product-orchid-normal-red',
+    );
+    await expect(page.locator('#category-product-orchid-normal-red')).toBeVisible();
+
+    await page.getByTestId('category-share-link').click();
+    await expect(page.getByTestId('category-share-link')).toContainText('복사됨');
+    copied.push(
+      ...((await page.evaluate(
+        () =>
+          (window as typeof window & { __copiedCategoryLinks?: string[] }).__copiedCategoryLinks,
+      )) ?? []),
+    );
+    expect(copied.at(-1)).toBe(
+      `${BASE}/category?category=orchid&colors=%EB%A0%88%EB%93%9C&sort=price_desc`,
+    );
   });
 });

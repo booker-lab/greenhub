@@ -1,6 +1,6 @@
 'use client';
 
-import type { Product, ProductSummary } from '@greenhub/shared';
+import type { DeliveryMethod, DeliverySize, Product, ProductSummary } from '@greenhub/shared';
 import { getGroupBuyStatus } from '@greenhub/shared';
 import { Box, Card, Progress } from '@mantine/core';
 import Image from 'next/image';
@@ -8,10 +8,24 @@ import Link from 'next/link';
 import type React from 'react';
 
 type ProductCardVariant = 'compact' | 'discovery' | 'store';
+type ProductCardData = (Product | ProductSummary) & {
+  sellerSummary?: {
+    storeId: string;
+    name: string;
+  };
+  deliverySummary?: {
+    methods: DeliveryMethod[];
+    deliverySize: DeliverySize;
+    weatherRestricted: boolean;
+    groupDeliveryDate?: string;
+    deliveryFeeDiscount?: number;
+  };
+};
 
 interface ProductCardProps {
-  product: Product | ProductSummary;
+  product: ProductCardData;
   href?: string;
+  id?: string;
   variant?: ProductCardVariant;
 }
 
@@ -28,6 +42,7 @@ const variantConfig: Record<
     imageSizes: string;
     padding: string;
     showColors: boolean;
+    showInfoHints: boolean;
     groupMode: 'full' | 'summary';
   }
 > = {
@@ -36,6 +51,7 @@ const variantConfig: Record<
     imageSizes: '(max-width: 600px) 50vw, 33vw',
     padding: 'xs',
     showColors: true,
+    showInfoHints: false,
     groupMode: 'full',
   },
   discovery: {
@@ -43,6 +59,7 @@ const variantConfig: Record<
     imageSizes: '(max-width: 600px) 50vw, 33vw',
     padding: 'xs',
     showColors: true,
+    showInfoHints: true,
     groupMode: 'full',
   },
   store: {
@@ -50,6 +67,7 @@ const variantConfig: Record<
     imageSizes: '(max-width: 600px) 50vw, 240px',
     padding: '8px',
     showColors: false,
+    showInfoHints: false,
     groupMode: 'summary',
   },
 };
@@ -67,11 +85,17 @@ function formatDeadline(value: Date | string | null) {
   return `${Math.ceil(hours / 24)}일 남음`;
 }
 
-function getProductColors(product: Product | ProductSummary) {
+function getProductColors(product: ProductCardData) {
   return 'selection' in product
     ? (product.selection?.colors ?? product.colors ?? [])
     : (product.colors ?? []);
 }
+
+const deliveryMethodLabels: Record<DeliveryMethod, string> = {
+  direct: '직배송',
+  hub: '거점 픽업',
+  parcel: '택배',
+};
 
 function Badge({ children, tone }: { children: React.ReactNode; tone: 'neutral' | 'primary' }) {
   return (
@@ -111,11 +135,59 @@ function ColorSummary({ colors }: { colors: string[] }) {
   );
 }
 
+function ProductInfoHints({ product }: { product: ProductCardData }) {
+  const sellerName = product.sellerSummary?.name;
+  const methods = product.deliverySummary?.methods ?? [];
+  const deliveryLabel =
+    methods.length > 0
+      ? methods.map((method) => deliveryMethodLabels[method] ?? method).join(' · ')
+      : null;
+
+  if (!sellerName && !deliveryLabel) return null;
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      {sellerName && (
+        <p
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+            margin: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {sellerName}
+        </p>
+      )}
+      {deliveryLabel && (
+        <p
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: product.deliverySummary?.weatherRestricted
+              ? 'var(--color-text-disabled)'
+              : 'var(--color-text-secondary)',
+            marginTop: 2,
+            marginBottom: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {deliveryLabel}
+          {product.deliverySummary?.weatherRestricted ? ' · 택배 일시 중단' : ''}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function GroupBuySummary({
   product,
   mode,
 }: {
-  product: Product | ProductSummary;
+  product: ProductCardData;
   mode: 'full' | 'summary';
 }) {
   if (product.saleType !== 'group') return null;
@@ -175,7 +247,7 @@ function GroupBuySummary({
   );
 }
 
-export default function ProductCard({ product, href, variant = 'compact' }: ProductCardProps) {
+export default function ProductCard({ product, href, id, variant = 'compact' }: ProductCardProps) {
   const imgSrc = product.images?.[0] ?? '/icons/icon-192x192.png';
   const config = variantConfig[variant];
   const colors = getProductColors(product);
@@ -186,6 +258,7 @@ export default function ProductCard({ product, href, variant = 'compact' }: Prod
     <Card
       component={Link}
       href={href ?? `/products/${product.id}`}
+      id={id}
       p={0}
       aria-label={`${product.name}, ${categoryLabel}, ${saleLabel}, ${product.price.toLocaleString()}원`}
       data-product-card-variant={variant}
@@ -244,6 +317,7 @@ export default function ProductCard({ product, href, variant = 'compact' }: Prod
           {product.price.toLocaleString()}원
         </p>
         {config.showColors && <ColorSummary colors={colors} />}
+        {config.showInfoHints && <ProductInfoHints product={product} />}
         <GroupBuySummary product={product} mode={config.groupMode} />
       </Box>
     </Card>

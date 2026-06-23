@@ -30,7 +30,7 @@ async function fetchVariety(varietyId: string): Promise<Variety | null> {
 
 interface ProductDetailPageProps {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ fromStore?: string; storeName?: string }>;
+  searchParams?: Promise<{ fromCategory?: string; fromStore?: string; storeName?: string }>;
 }
 
 export default async function ProductDetailPage({ params, searchParams }: ProductDetailPageProps) {
@@ -40,8 +40,13 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
   if (!product) notFound();
 
   const variety = product.varietyId ? await fetchVariety(product.varietyId) : null;
-  const backHref = query.fromStore ? `/stores/${encodeURIComponent(query.fromStore)}` : undefined;
-  const backLabel = query.fromStore ? '상점으로' : undefined;
+  const categoryBackHref = getSafeCategoryBackHref(query.fromCategory);
+  const backHref = categoryBackHref
+    ? categoryBackHref
+    : query.fromStore
+      ? `/stores/${encodeURIComponent(query.fromStore)}`
+      : undefined;
+  const backLabel = categoryBackHref ? '카테고리로' : query.fromStore ? '상점으로' : undefined;
 
   return (
     <Container size="sm" p={0}>
@@ -54,4 +59,11 @@ export default async function ProductDetailPage({ params, searchParams }: Produc
       </Box>
     </Container>
   );
+}
+
+function getSafeCategoryBackHref(value?: string) {
+  if (!value) return undefined;
+  if (!value.startsWith('/category')) return undefined;
+  if (value.startsWith('//')) return undefined;
+  return value;
 }
