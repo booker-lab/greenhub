@@ -370,7 +370,31 @@
 
 **육안검증**: `상품 많은순` 의미, 0개 상점 배지·위치, 375px 상세 그리드 비교 밀도, 상품 상세 진입·복귀를 확인한다.
 **커밋 예시**: `consumer: 구매 가능 상점 탐색과 카드 밀도를 개선`
-**Conclusion**: [대기 — 상점 탐색 우선순위와 모바일 밀도를 맞춘다. 검증 결과 미기록]
+**Conclusion**: [완료 — 2026-06-23. 상품 0개 상점 정책을 선 설계와 `CRITICAL_LOGIC` #CL-154에 고정했다. `/stores` 기본 상품 수 정렬 라벨을 `구매 가능순`으로 바꾸고, 상품 0개 상점은 모든 정렬에서 구매 가능한 상점 뒤에 배치하며 `준비 중` 배지와 `상품 준비 중` 문구를 표시한다. 상점 상세 상품 그리드는 W7의 `ProductCard` variant 분리 없이 2열과 8px 간격으로 밀도를 조정했다. 변경 파일 Biome, `pnpm --filter consumer lint` 오류 0·기존 경고 14, `pnpm --filter consumer build`, `pnpm --filter consumer exec tsc --noEmit`, `git diff --check`, 로컬 chromium/mobile 8/8, Preview branch alias chromium/mobile 8/8이 통과했다. 구현 커밋 `8e3154f`와 E2E 보강 커밋 `6465f6c`를 push했고, 최종 Preview `dpl_AJVVyzhKpkoJfstfH7bijvHdLUzh`는 `READY`이며 branch alias 375px·1440px `/stores`와 첫 상점 상세에서 가로 넘침 0, 오류 오버레이 0, 콘솔 오류 0을 확인했다. 동일 artifact를 Production `dpl_Dr7taWvyPKy7o1EgP6YLQa8eyWQy`로 승격해 `greenlove.co.kr/stores` 200, `www.greenlove.co.kr/stores` 308 canonical redirect, 운영 375px·1440px `/stores`와 첫 상세 가로 넘침 0·콘솔 오류 0을 확인했다.]
+
+#### W6 종료 체크리스트
+
+- [x] 상품 0개 상점의 하단 정렬·준비 중 표시 정책과 상세 카드 밀도 기준을 선 설계에 확정했다.
+- [x] 상점 목록 정렬 라벨과 0개 상점 표시 규칙을 공개 상점 API 응답 필드만으로 적용했다.
+- [x] 상점 상세 상품 그리드의 모바일 밀도를 W7 variant 분리 없이 2열·8px 간격으로 조정했다.
+- [x] 정렬·준비 중·상세 진입 링크 계약을 E2E로 고정했다.
+- [x] 변경 파일 500라인 이하와 `docs/memory.md` 200라인 이하를 확인했다.
+- [x] lint·build·타입체크·Biome·diff-check와 로컬·Preview E2E chromium/mobile을 통과했다.
+- [x] Preview `READY`, branch alias 375px·1440px 스모크, Production 승격, 운영 도메인 스모크를 완료했다.
+- [x] W7 이후 작업, API 계약 확장, `ProductCard` variant 분리는 수행하지 않았다.
+
+#### W6 핸드오프
+
+- 완료 범위: 상품 0개 상점 하단 정렬, `준비 중` 배지와 `상품 준비 중` 문구, `구매 가능순` 라벨, 상점 상세 상품 그리드 2열·8px 밀도, 상점 상세 상품 링크 복귀 쿼리 E2E.
+- 제외·새 발견: W7 이후, 공개 상품 API 계약 확장, `ProductCard` variant 분리는 미진행. 운영 데이터의 깨진 주소 문자열은 W11 범위로 유지한다.
+- 커밋: `8e3154f` / `6465f6c`
+- Preview 배포: `dpl_AJVVyzhKpkoJfstfH7bijvHdLUzh` / `greenhubconsumer-9c8mglpml-jos-projects-d1cecc0c.vercel.app` / branch alias READY
+- Production 배포: `dpl_Dr7taWvyPKy7o1EgP6YLQa8eyWQy` / `greenlove.co.kr` READY / `www.greenlove.co.kr` 308 canonical redirect
+- 자동 검증: 변경 파일 Biome 통과, consumer lint 오류 0·기존 경고 14, consumer build, consumer tsc, git diff-check, 로컬 chromium/mobile 8/8, Preview branch alias chromium/mobile 8/8
+- 육안검증: Preview branch alias와 Production 375px·1440px `/stores`와 첫 상점 상세에서 가로 넘침 0, 오류 오버레이 0, 콘솔 오류 0, `구매 가능순`·`준비 중`·`상품 준비 중` 문구 확인
+- 문서 갱신: `consumer-stores-tab-improve-plan.md`, CRITICAL_LOGIC #CL-154, 본 PLAN W6 Conclusion·체크리스트, memory
+- 다음 묶음: W7
+- 다음 첫 행동: `consumer-category-exploration-plan.md`, `ProductCard.tsx`, 상점 상세 사용처를 대조해 `compact`, `discovery`, `store` variant의 표시 필드와 접근성 계약을 먼저 확정한다.
 
 ### W7. `ProductCard` 화면별 variant
 
