@@ -411,7 +411,7 @@
 **정합성 집중 검토**: 가격·공구 상태 같은 도메인 정보는 동일하고 표시 밀도만 달라진다.
 **육안검증**: 같은 상품을 카테고리와 상점 상세에서 비교해 정보 누락·중복·카드 높이 회귀가 없는지 확인한다.
 **커밋 예시**: `consumer: 상품 카드의 화면별 표시 밀도를 분리`
-**Conclusion**: [진행 중 — 2026-06-23. `ProductCard`에 `compact`, `discovery`, `store` variant 계약을 추가하고, 기본 `compact`는 홈·검색·공구 화면을 보존하도록 유지했다. `/category`는 `discovery`를 사용해 정사각형 탐색 카드로 표시하고, `/stores/[storeId]`는 `store`를 사용해 색상 보조 줄을 숨긴 조밀한 상점 상세 카드로 표시한다. 모든 variant는 상품명·카테고리·판매 방식·가격 접근성 이름과 공동구매 진행률 `aria-label`을 유지한다. 변경 파일 Biome, consumer lint 오류 0·기존 경고 14, consumer build, consumer tsc, git diff-check, 로컬 chromium/mobile `consumer-category.spec.ts`·`consumer-stores.spec.ts` 24/24, 로컬 Playwright 브라우저 스모크에서 `/category` discovery와 `/stores/[storeId]` store 카드 렌더링, 오류 오버레이 0, console error 0을 확인했다. Preview·Production 배포 검증은 아직 미기록.]
+**Conclusion**: [완료 — 2026-06-23. `ProductCard`에 `compact`, `discovery`, `store` variant 계약을 추가하고, 기본 `compact`는 홈·검색·공구 화면을 보존하도록 유지했다. `/category`는 `discovery`를 사용해 정사각형 탐색 카드로 표시하고, `/stores/[storeId]`는 `store`를 사용해 색상 보조 줄을 숨긴 조밀한 상점 상세 카드로 표시한다. 모든 variant는 상품명·카테고리·판매 방식·가격 접근성 이름과 공동구매 진행률 `aria-label`을 유지한다. 변경 파일 Biome, consumer lint 오류 0·기존 경고 14, consumer build, consumer tsc, git diff-check, 로컬 chromium/mobile `consumer-category.spec.ts`·`consumer-stores.spec.ts` 24/24, 로컬 Playwright 브라우저 스모크, Preview branch alias chromium/mobile 24/24가 통과했다. 구현 커밋 `afb37d8`을 push했고 Preview `dpl_8wxtf5FC836RY7UmLfNEzVTDu7mJ`는 `READY`이며 커밋이 일치한다. branch alias 375px·1440px `/category?saleType=group`, `/stores`, 첫 상점 상세에서 가로 넘침 0, 오류 오버레이 0, console error 0, discovery/store variant 렌더링을 확인했다. 동일 artifact를 Production `dpl_5eJxNgtTWSsF8VxSXsPzUdp73N58`로 승격해 `greenlove.co.kr/category` 200, `www.greenlove.co.kr/category` 308 canonical redirect, 운영 375px·1440px 동일 스모크 통과를 확인했다.]
 
 #### W7 종료 체크리스트
 
@@ -421,7 +421,20 @@
 - [x] W8 이후 작업, API 계약 확장, 가격·배송 필터 추가는 수행하지 않았다.
 - [x] 변경 파일 500라인 이하와 `docs/memory.md` 200라인 이하를 확인했다.
 - [x] lint·build·타입체크·Biome·diff-check와 로컬 E2E chromium/mobile을 통과했다.
-- [ ] Preview `READY`, branch alias 375px·1440px 스모크, Production 승격, 운영 도메인 스모크를 완료했다.
+- [x] Preview `READY`, branch alias 375px·1440px 스모크, Production 승격, 운영 도메인 스모크를 완료했다.
+
+#### W7 핸드오프
+
+- 완료 범위: `ProductCard` `compact`·`discovery`·`store` variant 계약, 카테고리 discovery 적용, 상점 상세 store 적용, variant E2E 고정.
+- 제외·새 발견: W8 이후, 공개 상품 API 계약 확장, 가격·배송 필터 추가는 미진행. 고유 Preview URL은 Vercel 보호 제약이 있어 branch alias 기준 검증을 유지한다.
+- 커밋: `afb37d8`
+- Preview 배포: `dpl_8wxtf5FC836RY7UmLfNEzVTDu7mJ` / `greenhubconsumer-45pa0anho-jos-projects-d1cecc0c.vercel.app` / branch alias READY
+- Production 배포: `dpl_5eJxNgtTWSsF8VxSXsPzUdp73N58` / `greenlove.co.kr` READY / `www.greenlove.co.kr` 308 canonical redirect
+- 자동 검증: 변경 파일 Biome 통과, consumer lint 오류 0·기존 경고 14, consumer build, consumer tsc, git diff-check, 로컬 chromium/mobile 24/24, Preview branch alias chromium/mobile 24/24
+- 육안검증: Preview branch alias와 Production 375px·1440px `/category?saleType=group`, `/stores`, 첫 상점 상세에서 가로 넘침 0, 오류 오버레이 0, console error 0, discovery/store variant 렌더링 확인
+- 문서 갱신: `consumer-category-exploration-plan.md`, CRITICAL_LOGIC #CL-155, 본 PLAN W7 Conclusion·체크리스트, memory
+- 다음 묶음: W8
+- 다음 첫 행동: `docs/specs/api/products.md`, `apps/api/src/products/products.service.ts`, `apps/consumer/src/hooks/useProducts.ts`를 대조해 공개 상품 목록의 가격·배송·판매자·total 응답 계약을 먼저 확정한다.
 
 ### W8. 공개 상품 API 탐색 계약 확장
 

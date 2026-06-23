@@ -6,8 +6,8 @@
 
 ## 현재 진행 요약
 
-- 소비자 앱 후속 실행 W6을 종결했다. 상품 0개 상점은 모든 정렬에서 구매 가능한 상점 뒤에 두고 `준비 중` 배지·`상품 준비 중` 문구를 표시하며, 상품 수 정렬 라벨은 `구매 가능순`으로 바꿨다. 상점 상세 상품 그리드는 W7 `ProductCard` variant 분리 없이 2열·8px 간격으로 조정했다. 커밋 `8e3154f` / `6465f6c`, Preview `dpl_AJVVyzhKpkoJfstfH7bijvHdLUzh`, Production `dpl_Dr7taWvyPKy7o1EgP6YLQa8eyWQy`가 `READY`다.
-- 사용자 상시 결정에 따라 W1 이후 모든 묶음은 Preview 자동·육안검증 통과 후 동일 artifact를 Production으로 승격하고 운영 도메인 검증까지 마쳐야 종결한다. 다음 묶음은 W7 `ProductCard` 화면별 variant다.
+- 소비자 앱 후속 실행 W7을 종결했다. `ProductCard`에 `compact`, `discovery`, `store` variant를 추가하고 `/category`는 discovery, `/stores/[storeId]`는 store를 적용했다. 커밋 `afb37d8`, Preview `dpl_8wxtf5FC836RY7UmLfNEzVTDu7mJ`, Production `dpl_5eJxNgtTWSsF8VxSXsPzUdp73N58`가 `READY`다.
+- 사용자 상시 결정에 따라 W1 이후 모든 묶음은 Preview 자동·육안검증 통과 후 동일 artifact를 Production으로 승격하고 운영 도메인 검증까지 마쳐야 종결한다. 다음 묶음은 W8 공개 상품 API 탐색 계약 확장이다.
 - 문서작업 세션이 종료되면 다음 작업자가 바로 시작할 수 있도록 완료 묶음, 재수행 금지 범위, 다음 묶음, 첫 행동, 필수 참조 문서, 검증·배포 게이트, 알려진 제약을 담은 핸드오프 프롬프트를 작성한다.
 - 핸드오프 프롬프트 1번은 육안검증 종결 가지, 2번은 개발·릴리즈 트레인 가지로 분리했다. 다음 대화에서 번호를 순서로 해석하지 않는다.
 - 프롬프트 1번 육안검증은 현재 실행 가능한 항목을 종결했다. `#43`, `#79`는 운영 쓰기 승인 또는 전용 테스트 계정·정지 refresh token 조건 부재로 `[-]` 처리했다.
