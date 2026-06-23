@@ -258,7 +258,7 @@ export default function CategoryClient() {
                 적용한 조건
               </Text>
               <UnstyledButton
-                component={Link}
+                component="a"
                 href={buildCategoryQuery(params, RESET_CATEGORY_FILTERS_PATCH)}
                 data-testid="category-reset-all"
                 style={{
@@ -273,7 +273,7 @@ export default function CategoryClient() {
             <Group gap={8}>
               {activeFilters.map((filter) => (
                 <UnstyledButton
-                  component={Link}
+                  component="a"
                   href={buildCategoryQuery(params, filter.removePatch)}
                   key={filter.key}
                   data-testid={`category-active-filter-${filter.key}`}
