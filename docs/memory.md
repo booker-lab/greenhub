@@ -69,3 +69,4 @@
 - 2026-06-23 소비자 후속 W10 카테고리 보조 탐색 UX 완료. 색상 그룹화·OR 안내, 버튼형 정렬, `fromCategory` 상세 복귀 anchor, 현재 조건 링크 복사를 추가했다. W11 운영 데이터 정리는 수행하지 않았다. 검증은 consumer tsc·build·lint, 변경 파일 Biome, diff-check, `consumer-category.spec.ts` chromium/mobile 20/20, 375px Playwright 스모크 통과.
 - 2026-06-23 소비자 후속 W11 운영 데이터·경고 정리 계약 완료. 깨진 상점 주소는 `stores/{storeId}.address` 원본 보정 과제로 분리하고 백업·dry-run·승인 절차를 문서화했다. CSS preload warning은 기능 오류와 분리된 낮은 우선순위 경고로 기록했다. 운영 쓰기·커밋·배포는 수행하지 않았다.
 - 2026-06-23 운영 원칙 보강: 작업 종료 전에는 구현·문서·검증·커밋 여부와 무관하게 반드시 다음 작업 핸드오프 프롬프트를 작성한다. 다음 묶음이 없으면 `전체 종료/배포 전 다음 행동`으로 쓰고, 최신 커밋, 작업트리 상태, 재수행 금지 범위, 남은 게이트, 운영 쓰기 금지 조건, 다음 첫 행동을 포함한다.
+- 2026-06-23 배포 게이트 완료. `codex/consumer-mypage-order-confirm` push 완료, Preview `dpl_ECfJ6YwzSD9Rnt4eTQ6BnSnPiNFK` READY 및 branch alias 육안검증 통과, 동일 artifact Production 승격 `dpl_2P2LCSpg2QYGEKagynvcQnKBY1Qq` READY, `greenlove.co.kr` 200 및 `www.greenlove.co.kr` 308→200 확인. 고유 Preview URL은 운영 API CORS로 데이터 fetch가 막혀 branch alias 기준으로 검증했다.
