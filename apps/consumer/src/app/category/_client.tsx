@@ -370,11 +370,8 @@ export default function CategoryClient() {
                 : '아직 등록된 상품이 없습니다.'}
             </Text>
             <UnstyledButton
-              onClick={() =>
-                hasActiveFilters
-                  ? navigate(RESET_CATEGORY_FILTERS_PATCH, { replace: true })
-                  : router.push('/category')
-              }
+              component={Link}
+              href="/category"
               data-testid="category-empty-reset"
               style={{
                 color: 'var(--color-primary)',
