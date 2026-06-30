@@ -182,3 +182,6 @@
 - **Windows 인코딩**: 한글 파일 일괄 편집 시 PowerShell `Get-Content`/`Set-Content` 금지(UTF-8 손상) — Python(명시적 utf-8) 또는 Edit 도구 사용.
 - **seller 프론트 구조(#CL-32)**: Railway API 호출은 `lib/api.ts`의 `apiJson<T>()`(에러 시 `ApiError` throw) 사용 — raw `fetch` 금지. 페이지 셸은 `components/`의 `PageShell`/`PageHeader`/`EmptyState`/`LoadingState` 재사용. 주문 상태 변경은 `useOrderStatusUpdate` 코어 경유. 관리자 목록 훅은 `useAdminList` 팩토리. ProductForm은 `useProductForm` 훅 + 스텝 컴포넌트로 분리.
 - **e2e 시드 (T6)**: `scripts/seed-e2e-orders.mjs` — 활성 상품 store에 14일치 dailyCaps + 셀러 store에 `e2e-` prefix 일반/공구 주문 + groupProductConfig. 멱등 set. `cleanup-spec-residue.mjs` 보존 정책.
+- 2026-07-01 clean PR 전환 진행. 기존 PR #6은 누적 103커밋이라 merge 전 범위가 과도해, `origin/main`에서 `codex/kakao-auth-k6-hardening` 브랜치를 만들고 문서 허브/아카이브, k6 계획·스크립트·결과, 카카오 서버 token 검증, API lint 부채 기록만 cherry-pick했다.
+- 2026-07-01 clean PR 기준 카카오 보강은 `main`에 존재하는 `consumer`, `seller`, `driver` 역할 범위로 제한했다. `hub_staff` 초대 정책은 기존 큰 브랜치에는 있었지만 `main` 기준 선행 기능이 아니므로 새 PR에는 포함하지 않았다.
+- 2026-07-01 새 PR의 수동 smoke는 consumer/seller/driver Preview에서 카카오 로그인 1회씩 확인하고, baseline k6는 production이 아니라 staging 또는 preview에서 별도 rate limit 정책을 정한 뒤 실행한다.

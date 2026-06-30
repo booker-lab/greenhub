@@ -933,3 +933,21 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **병합 후 종결**: 보정 커밋 `1a924a7`을 PR #4로 merge(`8827b87`)한 뒤 `Sync preview branch` 실행 `26527167757`이 SHA 일치 고정 preview 배포를 통과했고, 이어진 `E2E Tests` 실행 `26527463226`도 성공했다. `pending-visual-verify.md`의 육안 잔여는 본 자동 종결과 분리해 미완료로 유지한다.
 
+## [결정 #CL-162] docs 문서 허브와 장문 아카이브 인덱스화를 문서 운영 기준으로 둔다 (2026-06-29)
+
+- **결정**: `docs/README.md`, `docs/specs/README.md`, `docs/specs/frontend/README.md`, `docs/archive/README.md`를 문서 진입점으로 두고, 500라인을 넘는 장문 체크리스트·아카이브 원문은 기존 경로를 인덱스로 유지한 채 하위 파트 문서로 분리한다.
+- **이유**: 문서 수가 늘어나면 최신 SSOT와 과거 보존 문서가 섞여 다음 작업자가 잘못된 기준을 참조하기 쉽다. 기존 경로를 삭제하거나 대량 이동하면 오래된 결정·백로그 링크가 깨지므로, 인덱스 파일을 남기는 방식이 가장 안전하다.
+- **계약**: 신규 기능은 관련 `docs/specs/` 문서를 먼저 갱신하고, 긴 실행 동선은 상위 문서에 요약·링크만 남긴다. `archive/` 문서를 재개할 때는 archive 원문을 직접 수정하지 않고 현재 기준의 `specs` 또는 `plans` 문서로 승격한 뒤 작업한다.
+
+## [결정 #CL-163] k6 부하테스트는 단계 증분형 API 계측 체계로 운영한다 (2026-07-01)
+
+- **결정**: k6 부하테스트는 `smoke`, `baseline`, `launch`, `growth`, `spike`, `soak` 순서로 목표치를 올리고, production 쓰기 요청은 기본 금지한다.
+- **이유**: Green Hub는 Railway API, Firestore, Vercel 프론트, 외부 결제·알림 의존성이 분리되어 있어 한 번에 큰 부하를 걸면 병목 원인을 구분하기 어렵다. 단계별 기준선을 남기면 개선 전후 p95, 실패율, 429, 5xx를 같은 조건에서 비교할 수 있다.
+- **계약**: 상세 기준과 실행 명령은 `docs/specs/ops/k6-load-test-plan.md`를 SSOT로 삼는다. 쓰기 시나리오는 `K6_ENABLE_WRITES=true`가 있을 때만 실행하며 staging 또는 preview에서 먼저 검증한다.
+
+## [결정 #CL-164] 카카오 로그인은 API 서버 측 token 검증 후 JWT를 발급한다 (2026-07-01)
+
+- **결정**: `/auth/kakao-login`은 클라이언트가 전달한 `kakaoId`를 신뢰하지 않고, `kakaoAccessToken`으로 카카오 사용자 정보를 API 서버가 직접 검증한 뒤 Green Hub JWT를 발급한다.
+- **이유**: 현재 신뢰 경계가 프론트 callback에 치우치면 API 단독 호출에서 임의 `kakaoId`를 제출하는 위험이 남는다. 외부 OAuth 검증은 인증 보안 문제이고, k6 성능 부하는 내부 API 병목 측정 문제이므로 두 흐름을 분리해야 한다.
+- **계약**: 카카오 OAuth 반복 호출은 k6 부하테스트에서 제외한다. k6는 seed email/password 계정 또는 사전 발급 JWT를 사용하며, 카카오 로그인은 별도 smoke와 서버 측 token 검증 테스트로 다룬다.
+

@@ -28,6 +28,17 @@
 | 💡 | 카드 결제 PG사 계약 | 외부 연동 |
 | 🔵 | 다중 판매자 상점 페이지 (소비자 앱) | Phase 2 |
 | 🟢 검증 | SETTLE-REFACTOR — 정산 confirm 배치 + 정합 갭(아래 §13). 구현 6태스크+S6 자동검증 종결(세션82), 런타임 전이 입증만 사용자 위임 | 정산/치명 |
+| 💡 향후 | API-LINT-BASELINE — API 전체 ESLint 기존 any/unsafe 부채 분리 정리 | DX/품질 |
+
+---
+
+## API-LINT-BASELINE — API 전체 ESLint 기존 any/unsafe 부채
+
+> 2026-07-01 카카오 인증 보강 검증 중 API 전체 lint가 기존 `any`/unsafe 계열 오류로 실패했다. 이번 보안 보강 범위에서는 새 카카오 클라이언트/DTO 파일 직접 ESLint를 통과시켰고, 전체 API lint 기준선 정리는 별도 작업으로 분리한다.
+
+- [ ] `apps/api/src/auth/auth.service.ts`: Firestore `data()` 반환값과 주소 배열 처리의 `any` 흐름을 명시 타입/파서로 정리한다.
+- [ ] `apps/api/src/auth/auth.service.spec.ts`: Firestore mock helper와 카카오 회귀 테스트 mock의 `any` 반환/할당을 타입 있는 테스트 더블로 교체한다.
+- [ ] API lint 스크립트를 자동 수정용 `lint:fix`와 검증용 `lint:check`로 분리할지 결정한다.
 
 ---
 
