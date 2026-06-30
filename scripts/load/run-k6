@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+
+import('./run-k6.mjs').catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

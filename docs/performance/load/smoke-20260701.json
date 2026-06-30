@@ -1,0 +1,154 @@
+{
+    "metrics": {
+        "http_req_duration": {
+            "max": 727.4391,
+            "p(90)": 684.54344,
+            "p(95)": 705.99127,
+            "avg": 467.31996666666663,
+            "min": 161.56,
+            "med": 512.9608,
+            "thresholds": {
+                "p(95)<1000": false,
+                "p(99)<2500": false
+            }
+        },
+        "data_received": {
+            "rate": 2501.550972963596,
+            "count": 6606
+        },
+        "http_req_connecting": {
+            "p(95)": 72.06353999999999,
+            "avg": 26.6902,
+            "min": 0,
+            "med": 0,
+            "max": 80.0706,
+            "p(90)": 64.05648000000001
+        },
+        "iterations": {
+            "count": 1,
+            "rate": 0.3786786213992728
+        },
+        "http_req_duration{expected_response:true}": {
+            "med": 512.9608,
+            "max": 727.4391,
+            "p(90)": 684.54344,
+            "p(95)": 705.99127,
+            "avg": 467.31996666666663,
+            "min": 161.56
+        },
+        "http_req_sending": {
+            "med": 0.5047,
+            "max": 0.5242,
+            "p(90)": 0.5203,
+            "p(95)": 0.52225,
+            "avg": 0.3429666666666667,
+            "min": 0
+        },
+        "http_req_tls_handshaking": {
+            "avg": 44.1166,
+            "min": 0,
+            "med": 0,
+            "max": 132.3498,
+            "p(90)": 105.87984,
+            "p(95)": 119.11481999999998
+        },
+        "http_req_receiving": {
+            "avg": 0.6103333333333333,
+            "min": 0,
+            "med": 0,
+            "max": 1.831,
+            "p(90)": 1.4648,
+            "p(95)": 1.6478999999999997
+        },
+        "vus_max": {
+            "value": 1,
+            "min": 1,
+            "max": 1
+        },
+        "iteration_duration": {
+            "max": 2639.6278,
+            "p(90)": 2639.6278,
+            "p(95)": 2639.6278,
+            "avg": 2639.6278,
+            "min": 2639.6278,
+            "med": 2639.6278
+        },
+        "http_req_waiting": {
+            "avg": 466.3666666666666,
+            "min": 161.0358,
+            "med": 510.6251,
+            "max": 727.4391,
+            "p(90)": 684.0763000000001,
+            "p(95)": 705.7577
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 3,
+            "thresholds": {
+                "rate<0.01": false
+            },
+            "value": 0
+        },
+        "http_reqs": {
+            "count": 3,
+            "rate": 1.1360358641978183
+        },
+        "checks": {
+            "passes": 3,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "http_req_blocked": {
+            "avg": 78.2203,
+            "min": 0,
+            "med": 0,
+            "max": 234.6609,
+            "p(90)": 187.72872,
+            "p(95)": 211.19481
+        },
+        "data_sent": {
+            "count": 1899,
+            "rate": 719.110702037219
+        },
+        "vus": {
+            "value": 1,
+            "min": 1,
+            "max": 1
+        }
+    },
+    "setup_data": {
+        "consumerToken": null
+    },
+    "root_group": {
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "health 정상": {
+                    "name": "health 정상",
+                    "path": "::health 정상",
+                    "id": "8a5fab9ab43fc4f70bfaae737e819bb7",
+                    "passes": 1,
+                    "fails": 0
+                },
+                "공개 스토어 조회 성공": {
+                    "name": "공개 스토어 조회 성공",
+                    "path": "::공개 스토어 조회 성공",
+                    "id": "b8766b9e40279980e4cda493cf1a2d11",
+                    "passes": 1,
+                    "fails": 0
+                },
+                "공개 상품 조회 성공": {
+                    "path": "::공개 상품 조회 성공",
+                    "id": "b418df9e60ebc0627c05f616b78a990b",
+                    "passes": 1,
+                    "fails": 0,
+                    "name": "공개 상품 조회 성공"
+                }
+            },
+        "name": ""
+    }
+}
