@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { BannerQueryService } from './banners/banner-query.service';
 import { FirestoreService } from './firestore/firestore.service';
 
 describe('AppController', () => {
@@ -8,11 +9,18 @@ describe('AppController', () => {
   const firestoreMock = {
     doc: jest.fn(),
   };
+  const bannerQueryMock = {
+    getActiveBanners: jest.fn(),
+  };
 
   beforeEach(async () => {
     const app: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
-      providers: [AppService, { provide: FirestoreService, useValue: firestoreMock }],
+      providers: [
+        AppService,
+        { provide: FirestoreService, useValue: firestoreMock },
+        { provide: BannerQueryService, useValue: bannerQueryMock },
+      ],
     }).compile();
 
     appController = app.get<AppController>(AppController);

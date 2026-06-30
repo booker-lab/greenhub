@@ -76,8 +76,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider !== 'kakao') return true;
+      if (!account.access_token) return false;
       const inviteToken = (await cookies()).get('hub_staff_invite_token')?.value;
       const targetRole = inviteToken ? 'hub_staff' : 'seller';
 
@@ -85,9 +86,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          kakaoId: profile?.sub ?? account.providerAccountId,
-          name: profile?.name ?? user.name ?? '카카오사용자',
-          email: profile?.email ?? user.email,
+          kakaoAccessToken: account.access_token,
           targetRole,
           inviteToken,
         }),
