@@ -33,6 +33,7 @@
 | 💡 향후 | 육안 검증 보류 묶음 — 인증 가능한 `375px` seller·admin 모바일 환경, 운영 쓰기 승인, 테스트 데이터가 필요한 항목은 `visual-verify-handoff-20260601.md` §4에서 재개 | 검증 환경 |
 | ✅ | CONSUMER-LINT-BASELINE — 훅 2개 오류 제거, 소비자 lint 오류 0건 기준선 확정 | DX/품질 |
 | 💡 향후 | CONSUMER-LINT-FOLLOWUP — 소비자 lint 경고 14건을 파일별로 정리 | DX/품질 |
+| 💡 향후 | API-LINT-BASELINE — API 전체 ESLint 기존 any/unsafe 부채 분리 정리 | DX/품질 |
 
 ---
 
@@ -47,6 +48,16 @@
 - [ ] `DeadlineSection.tsx`: `groupSummary` non-null assertion 1건을 상태 가드와 일치시킨다.
 - [ ] `usePayment.ts`: 결제 환경변수 non-null assertion 3건을 결제수단별 설정 검증으로 교체한다.
 - [ ] `firestore.ts`: 문서 ID 추출 non-null assertion 1건을 명시적 오류 처리로 교체한다.
+
+---
+
+## API-LINT-BASELINE — API 전체 ESLint 기존 any/unsafe 부채
+
+> 2026-07-01 카카오 인증 보강 검증 중 API 전체 lint가 기존 `any`/unsafe 계열 오류로 실패했다. 이번 보안 보강 범위에서는 새 카카오 클라이언트/DTO 파일 직접 ESLint를 통과시켰고, 전체 API lint 기준선 정리는 별도 작업으로 분리한다.
+
+- [ ] `apps/api/src/auth/auth.service.ts`: Firestore `data()` 반환값과 주소 배열 처리의 `any` 흐름을 명시 타입/파서로 정리한다.
+- [ ] `apps/api/src/auth/auth.service.spec.ts`: Firestore mock helper와 카카오 회귀 테스트 mock의 `any` 반환/할당을 타입 있는 테스트 더블로 교체한다.
+- [ ] API lint 스크립트를 자동 수정용 `lint:fix`와 검증용 `lint:check`로 분리할지 결정한다.
 
 ---
 
