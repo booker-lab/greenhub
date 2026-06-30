@@ -325,4 +325,3 @@ seller 앱은 Firestore SDK 직접 사용이라 영향 없음.
 브랜드명 변경은 manifest.json + 화면 텍스트만 수정하면 되므로 코드 영향 없음.
 
 ---
-

@@ -302,4 +302,3 @@ useEffect(() => {
 - 도입 시 3개 앱 동시 적용 or `packages/shared/ui` 공통 컴포넌트 패키지로 추상화
 
 ---
-

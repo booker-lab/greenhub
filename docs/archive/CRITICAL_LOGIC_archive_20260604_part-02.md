@@ -254,4 +254,3 @@
 4. 일반 상태는 기존 동작을 유지하며, 빈 사유는 `관리자 강제 환불` 기본 사유로 저장한다.
 
 **검증**: `admin.service.spec.ts`에 11개 상태 × 3개 사유 조합을 추가했다. seller/api/consumer/driver 타입검사, 변경 파일 Biome, API 단위 테스트로 정합성을 확인하고, 운영 반영 후 회귀 확인은 `pending-visual-verify.md` §10에 위임한다.
-

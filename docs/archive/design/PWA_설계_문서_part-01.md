@@ -246,4 +246,3 @@ GET  /stores/:storeId/orders/:id        → consumer (자기 주문만) or selle
 | 단일 앱 + 역할 분기 | yourapp.com / yourapp.com/seller | 코드 공유 쉬움 | 번들 커짐 |
 
 ---
-
