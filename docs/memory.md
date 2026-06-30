@@ -185,3 +185,4 @@
 - 2026-07-01 clean PR 전환 진행. 기존 PR #6은 누적 103커밋이라 merge 전 범위가 과도해, `origin/main`에서 `codex/kakao-auth-k6-hardening` 브랜치를 만들고 문서 허브/아카이브, k6 계획·스크립트·결과, 카카오 서버 token 검증, API lint 부채 기록만 cherry-pick했다.
 - 2026-07-01 clean PR 기준 카카오 보강은 `main`에 존재하는 `consumer`, `seller`, `driver` 역할 범위로 제한했다. `hub_staff` 초대 정책은 기존 큰 브랜치에는 있었지만 `main` 기준 선행 기능이 아니므로 새 PR에는 포함하지 않았다.
 - 2026-07-01 새 PR의 수동 smoke는 consumer/seller/driver Preview에서 카카오 로그인 1회씩 확인하고, baseline k6는 production이 아니라 staging 또는 preview에서 별도 rate limit 정책을 정한 뒤 실행한다.
+- 2026-07-01 clean Draft PR #7(`codex/kakao-auth-k6-hardening`) 생성. PR #6은 대체 코멘트 후 close. Vercel Preview 3개(driver/seller/consumer) 모두 Ready, 로컬 검증은 API test/build, 3앱 typecheck, API 신규 auth 파일 ESLint, seller lint, `git diff --check` 통과. consumer/driver lint 실패는 `origin/main` 기준 기존 lint debt로 PR 본문에 분리 기록.
