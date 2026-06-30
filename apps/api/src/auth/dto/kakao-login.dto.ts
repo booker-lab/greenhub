@@ -1,17 +1,11 @@
-import { IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 export class KakaoLoginDto {
   @IsString()
-  kakaoId: string;
-
-  @IsString()
-  name: string;
+  kakaoAccessToken: string;
 
   @IsOptional()
-  @IsEmail()
-  email?: string;
-
-  @IsOptional()
+  @IsIn(['consumer', 'seller', 'driver', 'hub_staff'])
   @IsString()
   targetRole?: 'consumer' | 'seller' | 'driver' | 'hub_staff';
 

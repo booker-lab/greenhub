@@ -35,16 +35,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider !== 'kakao') return false;
+      if (!account.access_token) return false;
 
       const res = await fetch(`${API}/auth/kakao-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          kakaoId: profile?.sub ?? account.providerAccountId,
-          name: profile?.name ?? user.name ?? '카카오사용자',
-          email: profile?.email ?? user.email,
+          kakaoAccessToken: account.access_token,
           targetRole: 'driver',
         }),
       });

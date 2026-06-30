@@ -20,6 +20,8 @@ import type { KakaoLoginDto } from './dto/kakao-login.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 import type { UpdateMeDto } from './dto/update-me.dto';
+import { normalizeHubIds } from './hub-ids.util';
+import { KakaoClient } from './kakao.client';
 import type { JwtPayload } from './types/jwt-payload.type';
 type InviteData = {
   expiresAt: admin.firestore.Timestamp;
@@ -30,13 +32,6 @@ type HubStaffInviteData = InviteData & {
   storeId?: unknown;
   hubId?: unknown;
 };
-function normalizeHubIds(hubIds?: unknown, hubId?: unknown): string[] | undefined {
-  if (Array.isArray(hubIds)) {
-    const values = hubIds.filter((value): value is string => typeof value === 'string' && !!value);
-    return values.length ? Array.from(new Set(values)) : undefined;
-  }
-  return typeof hubId === 'string' && hubId ? [hubId] : undefined;
-}
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -45,6 +40,7 @@ export class AuthService {
     private readonly firestore: FirestoreService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly kakaoClient: KakaoClient,
     private readonly audit: AuditService,
   ) {}
 
@@ -277,9 +273,10 @@ export class AuthService {
   }
 
   async kakaoLogin(dto: KakaoLoginDto) {
+    const kakaoProfile = await this.kakaoClient.getUser(dto.kakaoAccessToken);
     const snap = await this.firestore
       .collection('users')
-      .where('kakaoId', '==', dto.kakaoId)
+      .where('kakaoId', '==', kakaoProfile.kakaoId)
       .limit(1)
       .get();
 
@@ -287,16 +284,14 @@ export class AuthService {
 
     if (!snap.empty) {
       userData = snap.docs[0].data();
-      // 기존 드라이버 계정에 driverApproved 필드가 없으면 true로 초기화 (MVP: 자동 승인)
       if (userData['role'] === 'driver' && userData['driverApproved'] === undefined) {
-        await this.firestore.doc(`users/${userData['id']}`).update({
+        await this.firestore.doc(`users/${String(userData['id'])}`).update({
           driverApproved: true,
           updatedAt: this.firestore.Timestamp.now(),
         });
         userData = { ...userData, driverApproved: true };
       }
     } else {
-      // seller는 admin 초대로만 가입 가능 — 카카오 신규 생성 불가
       if (dto.targetRole === 'seller') {
         throw new ForbiddenException('판매자 계정은 관리자 초대로만 가입할 수 있습니다.');
       }
@@ -305,12 +300,12 @@ export class AuthService {
       }
       const userId = uuidv4();
       const now = this.firestore.Timestamp.now();
-      const newRole = dto.targetRole ?? 'driver';
+      const newRole = dto.targetRole ?? 'consumer';
       userData = {
         id: userId,
-        kakaoId: dto.kakaoId,
-        email: dto.email ?? null,
-        name: dto.name,
+        kakaoId: kakaoProfile.kakaoId,
+        email: kakaoProfile.email,
+        name: kakaoProfile.name,
         phone: null,
         role: newRole,
         ...(newRole === 'driver' ? { driverApproved: true } : {}),
@@ -338,7 +333,9 @@ export class AuthService {
           ? ['seller', 'admin']
           : dto.targetRole === 'hub_staff'
             ? ['hub_staff', 'admin']
-            : ['driver', 'admin']; // driver 앱 또는 targetRole 미지정
+            : dto.targetRole === 'driver'
+              ? ['driver', 'admin']
+              : ['consumer', 'admin'];
     if (userData['suspended'] === true) {
       await this.audit.log('auth.login.suspended', { userId: userData['id'] as string });
       throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
@@ -361,7 +358,7 @@ export class AuthService {
     });
 
     this.logger.log(
-      `auth.kakao.success userId=${userData['id']} role=${role} targetRole=${dto.targetRole}`,
+      `auth.kakao.success userId=${String(userData['id'])} role=${role} targetRole=${dto.targetRole}`,
     );
     return { accessToken, refreshToken, user: this.sanitizeUser(userData) };
   }
