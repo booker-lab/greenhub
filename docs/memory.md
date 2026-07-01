@@ -3,7 +3,7 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-28 (어드민 stores PR-E 머지·고정 preview CI 종결 #CL-55)
+최종 수정: 2026-07-01 (카카오 Preview auth URL 정책 분리 #CL-56)
 
 ---
 

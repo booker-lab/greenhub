@@ -169,7 +169,8 @@ C:\Develop\greenhub 작업을 이어서 해줘.
 2. `docs/URLS.md`의 Preview auth URL 정책과 카카오 Redirect URI 목록이 충돌하지 않는지 검토한다.
 3. 필요하면 Vercel env 변경안만 제안하고, 실제 env 변경은 사용자 승인 전 실행하지 않는다.
 4. 카카오 콘솔 Redirect URI 변경도 사용자 승인 전 실행하지 않는다.
-5. 문서 PR을 열 준비가 되면 검증 결과와 남은 승인 항목을 PR 본문에 정리한다.
+5. PR #8 본문에 최신 검증 결과와 남은 승인 항목이 충분히 담겼는지 확인한다.
+6. PR #8을 Ready로 바꿀지는 사용자 승인 후 결정한다.
 
 금지:
 - production 쓰기 요청
