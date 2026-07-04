@@ -3,11 +3,14 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-05-28 (어드민 stores PR-E 머지·고정 preview CI 종결 #CL-55)
+최종 수정: 2026-07-01 (카카오 Preview auth URL 정책 분리 #CL-56)
 
 ---
 
 ## 진행 현황
+
+**2026-07-01 후속 작업 (카카오 Preview auth URL 정책 분리 #CL-56)**:
+- PR #7 Draft 범위와 섞지 않기 위해 `origin/main`에서 `codex/preview-auth-url-policy` 브랜치를 별도로 생성했다. consumer/driver는 Preview에도 `NEXTAUTH_URL`이 있어 production callback으로, seller는 Preview `NEXTAUTH_URL` 부재로 커밋별 Preview callback으로 잡히는 차이를 확인했다. 정책은 커밋별 Preview URL의 카카오 Redirect URI 등록 금지, Preview 완료 smoke는 stable branch Preview alias 또는 Auth.js redirect proxy 승인 후 진행으로 정리했다. 문서: `docs/specs/ops/preview-auth-url-policy.md`, 결정 로그 #CL-56, `docs/URLS.md` Preview Auth URL 정책.
 
 **2026-05-28 후속 작업 (어드민 stores PR #3 병합 후 고정 preview CI 교정 #CL-55)**:
 - PR #3은 `main`에 merge commit `c982ad5`로 반영됐고, 고정 preview CI에서 드러난 기존 정산 날짜 UTC/KST 결함은 PR #4(`1a924a7`, merge `8827b87`)로 교정했다. 변경 스펙 biome 및 인증 프리뷰 대상 정산+stores `chromium` **16/16 통과**, `Sync preview branch` `26527167757`과 후속 `E2E Tests` `26527463226`도 **성공**했다. Actions에 admin 인증 시크릿은 없어 CI admin 사례는 기존대로 skip되며, PR-E 인증 프리뷰 실행 근거와 육안 잔여 위임은 유지한다.
@@ -71,7 +74,7 @@
 
 **세션68~69 (UX-11 orderNumber 통합 종결, `cf79560`+`a3ea5ba`, #CL-41)**:
 - **세션68(T7~T11, `cf79560`)**: shared `Order.orderNumber?:string`(T7)·`orders-create.service` 트랜잭션 내 `orderCounters/YYYYMMDD` 카운터로 `YYYYMMDD-NNNNNN` 발급(카운터 read를 첫 read로 배치=write 전 read 규칙)+응답 본문 포함(T8/T9)·프론트 표시 5곳 폴백 `orderNumber ?? <ID>`(셀러 OrderCard·OrderInfoSection·admin+AdminOrder타입, 소비자 mypage상세·결제성공)(T10)·드라이버 OrderCard는 buyerName 표시라 변경 불필요(T11). 빌드 부산물 동반 커밋(shared dist `.d.ts/.map` Railway 빌드용·seller sw.js) — 직전 BUG-16 커밋·`426e87e` 선례 따라 1커밋 포함.
-- **세션69(T12~T14, `a3ea5ba`)**: T12 `seed-e2e-orders.mjs` 3주문에 `orderNumber` 주입(`20260101-00000{1,2,3}` 고정 과거일자 prefix로 실데이터 카운터 충돌 회피·멱등 set)+`seller-parcel-ship.spec.ts`에 `주문 20260101-000003` 노출 회귀 가드 1건. T13 #CL-41 등재(CRITICAL_LOGIC 557행). 
+- **세션69(T12~T14, `a3ea5ba`)**: T12 `seed-e2e-orders.mjs` 3주문에 `orderNumber` 주입(`20260101-00000{1,2,3}` 고정 과거일자 prefix로 실데이터 카운터 충돌 회피·멱등 set)+`seller-parcel-ship.spec.ts`에 `주문 20260101-000003` 노출 회귀 가드 1건. T13 #CL-41 등재(CRITICAL_LOGIC 557행).
 - **검증**: 세션68 정적검증 전건 통과(shared 빌드 clean·API tsc/build exit 0·API테스트 2/2·셀러23·소비자13·드라이버7 라우트·셀러 biome 0e/2w). **e2e 풀런 — 자동 dispatch(26270139186) parcel spec 1건 실패 = stale preview**(sync-preview 완료 직후 시작, 세션60·61 패턴 재현), **수동 dispatch(26270156134) 30초 후 시작 → 176 passed/0 failed, parcel-ship:22 회귀가드 ✓**. 로컬 멱등 시드 재실행으로 Firestore에 orderNumber 주입 후 통과(e2e.yml seed 단계 부재 갭 여전).
 - **T14 사용자 수동 잔여 2건(자동화 불가)**: ① 운영 기존 주문(orderNumber 없음) 셀러·소비자 ID 폴백 정상 표시 스크린샷 ② 신규 주문 1건 발생 시 `orderCounters/YYYYMMDD` seq 생성·증가 Console 확인(첫 쓰기 Firestore 권한 전제).
 - **범위 외(#CL-41)**: 카운터 TTL/정리·백필 스크립트(결정③ ID폴백)·결제수단별 prefix·취소 시 번호 보존.
