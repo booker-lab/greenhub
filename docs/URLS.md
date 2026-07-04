@@ -45,12 +45,24 @@
 
 ### Vercel 환경변수
 
-| 앱 | 변수명 | 값 |
-|----|--------|-----|
-| consumer | `NEXTAUTH_URL` | `https://greenlove.co.kr` |
-| seller | `NEXTAUTH_URL` | `https://seller.greenlove.co.kr` |
-| driver | `NEXTAUTH_URL` | `https://driver.greenlove.co.kr` |
-| 전체 | `NEXT_PUBLIC_API_URL` | `https://api-production-13e7.up.railway.app` |
+> 적용 환경은 2026-07-01 `vercel env ls` 기준이다. 값 자체는 내려받지 않았다.
+
+| 앱 | 변수명 | 문서 기준값 | 적용 환경 |
+|----|--------|-------------|-----------|
+| consumer | `NEXTAUTH_URL` | `https://greenlove.co.kr` | Production, Preview, Development |
+| seller | `NEXTAUTH_URL` | `https://seller.greenlove.co.kr` | Production, Development |
+| driver | `NEXTAUTH_URL` | `https://driver.greenlove.co.kr` | Production, Preview, Development |
+| 전체 | `NEXT_PUBLIC_API_URL` | `https://api-production-13e7.up.railway.app` | Production, Preview, Development |
+
+### Preview Auth URL 정책
+
+상세 정책은 `docs/specs/ops/preview-auth-url-policy.md`를 따른다.
+
+- Production 로그인은 앱별 production 도메인을 callback 기준으로 유지한다.
+- Preview에서 카카오 로그인 완료 smoke가 필요하면 stable branch Preview alias만 승인 대상으로 삼는다.
+- 커밋별 Preview URL은 카카오 Redirect URI에 등록하지 않는다.
+- `VERCEL_URL`은 커밋별 deployment URL이므로 OAuth callback 기준으로 사용하지 않는다.
+- `AUTH_URL`과 `NEXTAUTH_URL`은 같은 의미로 취급하며, 둘을 서로 다른 값으로 두지 않는다.
 
 ### Railway 환경변수
 
@@ -59,6 +71,9 @@
 | `CORS_ORIGIN` | `https://greenlove.co.kr,https://seller.greenlove.co.kr,https://driver.greenlove.co.kr` |
 
 ### 카카오 Redirect URI 전체 목록
+
+아래 목록은 production, 기존 Vercel project alias, local 개발 URL만 관리한다. 커밋별 Preview URL은 등록 금지다.
+stable branch Preview alias(`*-git-preview-*`)는 Preview 로그인 완료 smoke를 승인할 때만 별도로 추가한다.
 
 - `https://greenlove.co.kr/api/auth/callback/kakao`
 - `https://seller.greenlove.co.kr/api/auth/callback/kakao`

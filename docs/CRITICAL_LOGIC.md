@@ -933,3 +933,20 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **병합 후 종결**: 보정 커밋 `1a924a7`을 PR #4로 merge(`8827b87`)한 뒤 `Sync preview branch` 실행 `26527167757`이 SHA 일치 고정 preview 배포를 통과했고, 이어진 `E2E Tests` 실행 `26527463226`도 성공했다. `pending-visual-verify.md`의 육안 잔여는 본 자동 종결과 분리해 미완료로 유지한다.
 
+---
+
+## [결정 #CL-56] 카카오 Preview callback은 stable branch Preview alias 기준으로만 허용한다 (2026-07-01)
+
+**배경**: PR #7 수동 smoke에서 consumer와 driver Preview는 production callback으로, seller Preview는 커밋별 Vercel URL callback으로 잡혔다. 세 앱의 `auth.ts`는 모두 `trustHost: true`와 Kakao provider를 사용하므로 코드 분기가 원인이 아니었다. `vercel env ls` 확인 결과 consumer와 driver는 Preview에도 `NEXTAUTH_URL`이 있고, seller는 Preview `NEXTAUTH_URL`이 없어 Auth.js가 현재 요청 Host를 기준으로 callback을 만든 것으로 판단했다.
+
+**결정**:
+1. 카카오 Redirect URI에는 production 도메인, local 개발 URL, 기존 project alias, 승인된 stable branch Preview alias만 등록한다.
+2. 커밋별 Preview URL은 매 배포마다 바뀌므로 등록 금지한다.
+3. Preview 로그인 완료 smoke가 필요하면 stable branch Preview alias 또는 Auth.js redirect proxy 정책을 별도 승인 후 사용한다.
+4. `VERCEL_URL`은 커밋별 deployment URL이므로 OAuth callback 기준으로 사용하지 않는다.
+5. `AUTH_URL`과 `NEXTAUTH_URL`은 같은 의미로 취급하며 서로 다른 값을 동시에 두지 않는다.
+
+**범위 분리**: 이 결정은 PR #7의 카카오 서버 검증 보강과 k6 부하테스트 범위에 섞지 않는다. 별도 브랜치 `codex/preview-auth-url-policy`에서 문서 정책 PR로 다룬다.
+
+**연관 문서**: [Preview Auth URL 정책](specs/ops/preview-auth-url-policy.md), [URLS.md](URLS.md).
+
