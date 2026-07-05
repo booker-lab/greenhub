@@ -933,6 +933,56 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **병합 후 종결**: 보정 커밋 `1a924a7`을 PR #4로 merge(`8827b87`)한 뒤 `Sync preview branch` 실행 `26527167757`이 SHA 일치 고정 preview 배포를 통과했고, 이어진 `E2E Tests` 실행 `26527463226`도 성공했다. `pending-visual-verify.md`의 육안 잔여는 본 자동 종결과 분리해 미완료로 유지한다.
 
+---
+
+## [결정 #CL-56] 카카오 Preview callback은 stable branch Preview alias 기준으로만 허용한다 (2026-07-01)
+
+**배경**: PR #7 수동 smoke에서 consumer와 driver Preview는 production callback으로, seller Preview는 커밋별 Vercel URL callback으로 잡혔다. 세 앱의 `auth.ts`는 모두 `trustHost: true`와 Kakao provider를 사용하므로 코드 분기가 원인이 아니었다. `vercel env ls` 확인 결과 consumer와 driver는 Preview에도 `NEXTAUTH_URL`이 있고, seller는 Preview `NEXTAUTH_URL`이 없어 Auth.js가 현재 요청 Host를 기준으로 callback을 만든 것으로 판단했다.
+
+**결정**:
+1. 카카오 Redirect URI에는 production 도메인, local 개발 URL, 기존 project alias, 승인된 stable branch Preview alias만 등록한다.
+2. 커밋별 Preview URL은 매 배포마다 바뀌므로 등록 금지한다.
+3. Preview 로그인 완료 smoke가 필요하면 stable branch Preview alias 또는 Auth.js redirect proxy 정책을 별도 승인 후 사용한다.
+4. `VERCEL_URL`은 커밋별 deployment URL이므로 OAuth callback 기준으로 사용하지 않는다.
+5. `AUTH_URL`과 `NEXTAUTH_URL`은 같은 의미로 취급하며 서로 다른 값을 동시에 두지 않는다.
+
+**범위 분리**: 이 결정은 PR #7의 카카오 서버 검증 보강과 k6 부하테스트 범위에 섞지 않는다. 별도 브랜치 `codex/preview-auth-url-policy`에서 문서 정책 PR로 다룬다.
+
+**연관 문서**: [Preview Auth URL 정책](specs/ops/preview-auth-url-policy.md), [URLS.md](URLS.md).
+
+
+---
+
+## [결정 #CL-57] MVP 그린러브는 디어오키드 직접 판매용 예약·결제 화면으로 단순화한다 (2026-07-05)
+
+**배경**: 현재 디어오키드는 통신판매소매업 사업자와 사업자 계좌가 준비되어 있고, 그린러브에는 택배, 거점픽업, 직배송, 공동구매, 셀러앱 성격의 기능이 일부 구현되어 있다. 그러나 MVP 단계에서는 거점 계약, 택배 포장 표준, 직배송 수요 밀도, 공동구매 모집 기반, 외부 셀러 입점 구조가 아직 검증되지 않았다.
+
+**결정**: MVP의 그린러브는 별도 통신판매중개 플랫폼이 아니라 디어오키드가 운영하는 직접 판매용 브랜드/사이트로 간주한다. 고객 화면에서는 택배, 거점픽업, 공동구매, 셀러 입점, 셀러앱 진입점을 숨기고, 지정일 직접 전달을 전제로 한 예약·결제 흐름만 노출한다.
+
+**이유**: 준비되지 않은 배송·구매 방식을 고객에게 동시에 약속하면 운영 기준, 환불 기준, 재고 관리, 고객응대 채널이 분산된다. 이미 구현된 로직은 삭제하지 않고 설정 기반 비노출로 보류하면 향후 거점 계약, 택배 표준, 공동구매 수요가 검증된 뒤 다시 활성화할 수 있다.
+
+**후속 작업**: 숨김 대상 화면과 유지할 최소 주문 흐름을 `docs/plans/`의 실행 계획으로 분리하고, 구현 전 `docs/specs/`에서 MVP 판매·결제 노출 정책을 먼저 확정한다.
+
+---
+
+## [결정 #CL-58] Preview 로그인 완료 smoke 비지원 및 Preview Auth URL 제거 통일 (2026-07-05)
+
+**배경**: PR #8에서 Preview auth URL 정책을 문서화한 뒤, 후속 실행 방향으로 선택지 A를 채택했다. PR #8은 2026-07-04 16:21:48Z에 merge 완료되어 범위를 종료했고, PR #7(`codex/kakao-auth-k6-hardening`)은 Draft 상태로 유지하며 이번 Preview env 정책 범위와 섞지 않는다.
+
+**결정**:
+1. Preview에서는 카카오 로그인 완료 smoke를 지원하지 않는다. 허용 범위는 로그인 버튼 클릭 후 카카오 authorize URL 진입과 `redirect_uri` 관찰까지다.
+2. consumer/seller/driver Preview의 `NEXTAUTH_URL`/`AUTH_URL`은 제거하는 정책으로 통일한다. consumer와 driver의 Preview `NEXTAUTH_URL`은 제거 후보이며, seller의 Preview `NEXTAUTH_URL` 부재 상태는 유지한다. 세 앱 Preview에 `AUTH_URL`이 존재하면 역시 제거 후보다.
+3. 실제 Vercel env 삭제는 제거 대상 목록과 명령을 사용자에게 보고하고, 명시 승인을 받은 뒤에만 실행한다. 승인 전 `vercel env rm`, `vercel env pull`, env 값 조회는 실행하지 않는다.
+4. 카카오 콘솔 Redirect URI는 변경하지 않는다. 커밋별 Preview URL도 등록하지 않는다.
+
+**이유**: 카카오 Redirect URI는 정확 일치 기반이라 커밋별 Preview URL을 운영 대상으로 삼기 어렵다. A 정책은 Preview 로그인 완료 검증을 포기하는 대신, Preview env의 Auth.js 기준 URL을 세 앱 모두 같은 상태로 맞춰 production callback 사용과 커밋별 callback 사용이 앱마다 갈리는 문제를 제거한다.
+
+**후속 작업**: 사용자 승인 후에만 Vercel env 제거 명령을 실행하고, 이후 `vercel env ls` 수준의 이름/환경 목록으로 Preview `NEXTAUTH_URL`/`AUTH_URL` 부재를 확인한다.
+
+**실행 결과(2026-07-05)**: 사용자 승인 후 consumer Preview `NEXTAUTH_URL`과 driver Preview `NEXTAUTH_URL`을 삭제했다. consumer/driver/seller Preview `AUTH_URL`은 존재하지 않아 삭제 대상이 없었다. `vercel env ls preview --cwd apps/{consumer,driver,seller}`로 세 앱 Preview에 `NEXTAUTH_URL`/`AUTH_URL`이 남아 있지 않음을 확인했다. `vercel env pull`과 env 값 조회는 실행하지 않았다.
+
+---
+
 ## [결정 #CL-162] docs 문서 허브와 장문 아카이브 인덱스화를 문서 운영 기준으로 둔다 (2026-06-29)
 
 - **결정**: `docs/README.md`, `docs/specs/README.md`, `docs/specs/frontend/README.md`, `docs/archive/README.md`를 문서 진입점으로 두고, 500라인을 넘는 장문 체크리스트·아카이브 원문은 기존 경로를 인덱스로 유지한 채 하위 파트 문서로 분리한다.
@@ -950,4 +1000,3 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 - **결정**: `/auth/kakao-login`은 클라이언트가 전달한 `kakaoId`를 신뢰하지 않고, `kakaoAccessToken`으로 카카오 사용자 정보를 API 서버가 직접 검증한 뒤 Green Hub JWT를 발급한다.
 - **이유**: 현재 신뢰 경계가 프론트 callback에 치우치면 API 단독 호출에서 임의 `kakaoId`를 제출하는 위험이 남는다. 외부 OAuth 검증은 인증 보안 문제이고, k6 성능 부하는 내부 API 병목 측정 문제이므로 두 흐름을 분리해야 한다.
 - **계약**: 카카오 OAuth 반복 호출은 k6 부하테스트에서 제외한다. k6는 seed email/password 계정 또는 사전 발급 JWT를 사용하며, 카카오 로그인은 별도 smoke와 서버 측 token 검증 테스트로 다룬다.
-
