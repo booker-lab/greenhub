@@ -3,11 +3,14 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-07-01 (카카오 Preview auth URL 정책 분리 #CL-56)
+최종 수정: 2026-07-05 (Preview env 정책 A 실행 완료 #CL-58)
 
 ---
 
 ## 진행 현황
+
+**2026-07-05 후속 작업 (Preview env 정책 A 실행 완료 #CL-58)**:
+- PR #8은 2026-07-04 16:21:48Z에 merge 완료되어 범위를 종료했다. 후속으로 선택지 A를 채택해 Preview 카카오 로그인 완료 smoke는 지원하지 않고, consumer/seller/driver Preview의 `NEXTAUTH_URL`/`AUTH_URL`을 제거하는 정책으로 통일했다. 사용자 승인 후 consumer Preview `NEXTAUTH_URL`과 driver Preview `NEXTAUTH_URL`을 삭제했고, consumer/driver/seller Preview `AUTH_URL`은 존재하지 않음을 확인했다. 카카오 콘솔 Redirect URI는 변경하지 않았으며, Preview에서는 authorize 진입 smoke와 `redirect_uri` 관찰까지만 허용한다. `vercel env pull`과 env 값 조회는 실행하지 않았다. PR #7은 Draft 상태로 유지하고 이번 범위와 섞지 않는다.
 
 **2026-07-01 후속 작업 (카카오 Preview auth URL 정책 분리 #CL-56)**:
 - PR #7 Draft 범위와 섞지 않기 위해 `origin/main`에서 `codex/preview-auth-url-policy` 브랜치를 별도로 생성했다. consumer/driver는 Preview에도 `NEXTAUTH_URL`이 있어 production callback으로, seller는 Preview `NEXTAUTH_URL` 부재로 커밋별 Preview callback으로 잡히는 차이를 확인했다. 정책은 커밋별 Preview URL의 카카오 Redirect URI 등록 금지, Preview 완료 smoke는 stable branch Preview alias 또는 Auth.js redirect proxy 승인 후 진행으로 정리했다. 문서: `docs/specs/ops/preview-auth-url-policy.md`, 결정 로그 #CL-56, `docs/URLS.md` Preview Auth URL 정책.

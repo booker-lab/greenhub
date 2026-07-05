@@ -1,7 +1,7 @@
 # Preview Auth URL 정책
 
 > 작성일: 2026-07-01
-> 상태: Draft
+> 상태: A 실행 완료
 > 범위: consumer, seller, driver Preview 카카오 로그인 callback URL 정책
 
 ---
@@ -46,11 +46,11 @@ Auth.js v5는 `AUTH_URL`을 `NEXTAUTH_URL` alias로 취급한다. `trustHost: tr
 
 ## 3. 운영 정책 제안
 
-### 3-1. 권장 결론
+### 3-1. 선택 결론
 
-**기본 정책은 production callback만 안정적으로 유지하고, Preview 카카오 완료 smoke는 별도 승인된 stable branch Preview alias에서만 허용한다.**
+**선택지 A를 채택한다. Preview에서는 카카오 로그인 완료 smoke를 지원하지 않고, consumer/seller/driver Preview의 `NEXTAUTH_URL`/`AUTH_URL`을 제거하는 방식으로 통일한다.**
 
-그 이유는 카카오 Redirect URI가 정확 일치 기반이고, 커밋별 Preview URL은 무한히 늘어나며 운영 콘솔을 오염시키기 때문이다.
+그 이유는 카카오 Redirect URI가 정확 일치 기반이고, 커밋별 Preview URL은 무한히 늘어나며 운영 콘솔을 오염시키기 때문이다. Preview에서는 로그인 버튼 클릭 후 카카오 authorize URL 진입과 `redirect_uri` 관찰까지만 smoke 범위로 둔다. 카카오 callback을 거쳐 앱 세션까지 확인하는 로그인 완료 smoke는 production에서만 다루며, Preview에서는 실행하지 않는다.
 
 ### 3-2. 카카오 Redirect URI 등록 정책
 
@@ -67,18 +67,18 @@ Auth.js v5는 `AUTH_URL`을 `NEXTAUTH_URL` alias로 취급한다. `trustHost: tr
 | 환경 | 정책 |
 | --- | --- |
 | Production | 앱별 production 도메인을 `NEXTAUTH_URL` 또는 `AUTH_URL`로 설정 |
-| Preview 완료 smoke 비대상 | Preview `NEXTAUTH_URL`/`AUTH_URL`을 제거하거나 production callback 사용을 명시 |
-| Preview 완료 smoke 대상 | Preview `NEXTAUTH_URL` 또는 `AUTH_URL`을 stable branch Preview alias로 설정 |
+| Preview 완료 smoke 비대상(A, 선택됨) | consumer/seller/driver Preview의 `NEXTAUTH_URL`/`AUTH_URL`을 제거해 세 앱 정책을 통일 |
+| Preview 완료 smoke 대상(B, 비선택) | 별도 승인 후 Preview `NEXTAUTH_URL` 또는 `AUTH_URL`을 stable branch Preview alias로 설정 |
 | 모든 환경 | `VERCEL_URL`을 OAuth callback 기준으로 사용하지 않음 |
 
-`AUTH_URL`과 `NEXTAUTH_URL`은 같은 의미로 취급하므로 둘을 동시에 다른 값으로 두지 않는다. 신규 설정은 `AUTH_URL`로 통일하는 방안을 검토하되, 기존 프로젝트가 `NEXTAUTH_URL`을 쓰고 있으므로 전환은 별도 PR로 둔다.
+`AUTH_URL`과 `NEXTAUTH_URL`은 같은 의미로 취급하므로 둘을 동시에 다른 값으로 두지 않는다. 이번 A 정책에서는 Preview 환경의 두 변수를 모두 제거 대상으로 본다. 2026-07-05 사용자 승인 후 consumer/driver Preview `NEXTAUTH_URL`을 삭제했고, consumer/driver/seller Preview `AUTH_URL`은 존재하지 않음을 확인했다.
 
 ### 3-4. Preview smoke 단계 정의
 
 | 단계 | 허용 범위 | 조건 |
 | --- | --- | --- |
-| authorize 진입 smoke | 모든 Preview | 카카오 authorize URL 진입과 `redirect_uri` 관찰까지만 |
-| 완료 smoke | stable branch Preview alias 또는 production | 카카오 Redirect URI 등록과 환경변수 정책이 일치할 때만 |
+| authorize 진입 smoke | 모든 Preview | 로그인 버튼 클릭 후 카카오 authorize URL로 이동하는지와 `redirect_uri`가 어떤 값인지 관찰하는 데서 종료 |
+| 로그인 완료 smoke | Preview 비지원, production만 대상 | Preview에서는 카카오 callback과 앱 세션 발급까지 이어지는 완료 smoke를 실행하지 않음 |
 | k6 부하테스트 | 카카오 OAuth 제외 | seed email/password 또는 사전 발급 JWT만 사용 |
 
 ## 4. 아토믹 태스크
@@ -99,25 +99,29 @@ Auth.js v5는 `AUTH_URL`을 `NEXTAUTH_URL` alias로 취급한다. `trustHost: tr
 
 ### T2. Vercel 환경변수 정리안 확정
 
-- 상태: 대기(현황 재확인 완료)
+- 상태: 완료(2026-07-05 사용자 승인 후 실행)
 - 목표: consumer/seller/driver Preview의 `NEXTAUTH_URL` 또는 `AUTH_URL` 운영 방식을 하나로 맞춘다.
-- 선택지:
-  - A. Preview 완료 smoke 비대상: Preview `NEXTAUTH_URL` 제거 또는 production callback 사용 문서화
-  - B. Preview 완료 smoke 대상: 세 앱 모두 stable branch Preview alias로 통일
-- 검증: 변경 승인 후 `vercel env ls`에서 세 앱 Preview 적용 환경이 선택한 정책과 일치해야 한다.
+- 선택:
+  - A. Preview 완료 smoke 비지원: consumer/seller/driver Preview의 `NEXTAUTH_URL`/`AUTH_URL` 제거 통일
+  - B. Preview 완료 smoke 대상: 비선택. 세 앱 모두 stable branch Preview alias로 통일하는 방안은 이번 범위에서 실행하지 않는다.
+- 실행 결과:
+  - consumer Preview `NEXTAUTH_URL` 삭제 완료
+  - driver Preview `NEXTAUTH_URL` 삭제 완료
+  - consumer/driver/seller Preview `AUTH_URL` 부재 확인
+- 검증: `vercel env ls preview --cwd apps/{consumer,driver,seller}`에서 세 앱 Preview에 `NEXTAUTH_URL`/`AUTH_URL`이 남아 있지 않음을 확인했다. 값 조회나 `vercel env pull`은 사용하지 않았다.
 
 ### T3. 카카오 콘솔 Redirect URI 정리
 
-- 상태: 대기
+- 상태: 대기(이번 A 정책 작업에서는 변경하지 않음)
 - 목표: 카카오 Redirect URI 목록을 운영 정책과 일치시킨다.
 - 작업: production, local, 기존 project alias, 승인된 stable branch Preview alias만 남기고 커밋별 URL은 등록하지 않는다.
 - 검증: 카카오 콘솔 목록에 `-<commit-hash>-jos-projects` 형태 URL이 없다.
 
 ### T4. Preview 완료 smoke 절차 문서화
 
-- 상태: 대기
+- 상태: 완료(A 정책 반영)
 - 목표: Preview에서 어디까지 smoke 가능한지 체크리스트로 고정한다.
-- 작업: authorize 진입 smoke와 완료 smoke를 분리하고, 완료 smoke는 stable branch Preview alias 기준으로만 허용한다.
+- 작업: authorize 진입 smoke와 로그인 완료 smoke를 분리하고, A 정책에서는 Preview 로그인 완료 smoke를 비지원으로 고정한다.
 - 검증: PR 본문에 "authorize 진입 확인"과 "로그인 완료 확인"이 섞이지 않는다.
 
 ### T5. 별도 PR 운영
@@ -132,7 +136,8 @@ Auth.js v5는 `AUTH_URL`을 `NEXTAUTH_URL` alias로 취급한다. `trustHost: tr
 | 항목 | 판정 | 근거 |
 | --- | --- | --- |
 | PR #7 분리 | 통과 | `origin/main`에서 별도 브랜치를 생성해 정책 문서만 다룸 |
-| Production 쓰기 금지 | 통과 | Vercel env 목록 조회만 수행, env 값 변경 없음 |
+| Production 쓰기 금지 | 통과 | Vercel env 변경 없음 |
+| Preview env 변경 | 통과 | 사용자 승인 후 consumer/driver Preview `NEXTAUTH_URL` 삭제, 세 앱 Preview `AUTH_URL` 부재 확인 |
 | k6 baseline 금지 | 통과 | 부하테스트 실행 없음 |
 | 카카오 반복 호출 금지 | 통과 | 카카오 authorize 재호출 없이 기존 smoke 결과와 설정만 분석 |
 | 앱 역할 범위 | 통과 | consumer/seller/driver만 포함 |
@@ -153,8 +158,9 @@ C:\Develop\greenhub 작업을 이어서 해줘.
 - docs/memory.md
 
 현재 상태:
+- PR #8은 2026-07-04 16:21:48Z에 merge 완료됐고, 해당 범위는 종료됐다.
 - PR #7(`codex/kakao-auth-k6-hardening`)은 Draft 상태로 유지한다.
-- Preview auth URL 정책은 별도 브랜치 `codex/preview-auth-url-policy`에서 문서 PR로 분리한다.
+- Preview env 정책 A는 별도 브랜치 `codex/preview-env-policy-a`에서 문서와 실행 계획으로 분리한다.
 - `.codex/` 비추적 파일은 로컬 산출물이므로 stage하지 말 것.
 
 조사 결론:
@@ -162,15 +168,15 @@ C:\Develop\greenhub 작업을 이어서 해줘.
 - seller는 Preview `NEXTAUTH_URL`이 없어 현재 요청 Host, 즉 커밋별 Preview callback으로 잡힌다.
 - 세 앱의 `auth.ts` 구조는 본질적으로 동일하며, 차이는 코드 분기가 아니라 Vercel env 적용 환경이다.
 - 커밋별 Preview URL은 카카오 Redirect URI에 등록하지 않는다.
-- Preview 로그인 완료 smoke가 필요하면 stable branch Preview alias 또는 Auth.js redirect proxy 정책으로 별도 승인 후 진행한다.
+- 선택지 A를 채택해 Preview 로그인 완료 smoke는 지원하지 않는다.
+- consumer/seller/driver Preview의 `NEXTAUTH_URL`/`AUTH_URL`은 제거 통일한다.
+- 사용자 승인 후 consumer/driver Preview `NEXTAUTH_URL`을 삭제했고, consumer/driver/seller Preview `AUTH_URL`은 존재하지 않음을 확인했다.
 
 이번 목표:
-1. `docs/specs/ops/preview-auth-url-policy.md`의 아토믹 태스크와 정합성 검토를 최신 상태로 확인한다.
-2. `docs/URLS.md`의 Preview auth URL 정책과 카카오 Redirect URI 목록이 충돌하지 않는지 검토한다.
-3. 필요하면 Vercel env 변경안만 제안하고, 실제 env 변경은 사용자 승인 전 실행하지 않는다.
-4. 카카오 콘솔 Redirect URI 변경도 사용자 승인 전 실행하지 않는다.
-5. PR #8 본문에 최신 검증 결과와 남은 승인 항목이 충분히 담겼는지 확인한다.
-6. PR #8을 Ready로 바꿀지는 사용자 승인 후 결정한다.
+1. Vercel env 삭제 결과를 문서와 PR에 반영한다.
+2. env 값 조회와 `vercel env pull`을 실행하지 않는다.
+3. 카카오 콘솔 Redirect URI 변경도 실행하지 않는다.
+4. PR #7 Draft 범위와 Preview env 정책 A 범위를 섞지 않는다.
 
 금지:
 - production 쓰기 요청
