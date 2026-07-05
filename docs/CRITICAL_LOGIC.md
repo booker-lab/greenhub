@@ -981,14 +981,6 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 
 **실행 결과(2026-07-05)**: 사용자 승인 후 consumer Preview `NEXTAUTH_URL`과 driver Preview `NEXTAUTH_URL`을 삭제했다. consumer/driver/seller Preview `AUTH_URL`은 존재하지 않아 삭제 대상이 없었다. `vercel env ls preview --cwd apps/{consumer,driver,seller}`로 세 앱 Preview에 `NEXTAUTH_URL`/`AUTH_URL`이 남아 있지 않음을 확인했다. `vercel env pull`과 env 값 조회는 실행하지 않았다.
 
----
-
-## [결정 #CL-162] docs 문서 허브와 장문 아카이브 인덱스화를 문서 운영 기준으로 둔다 (2026-06-29)
-
-- **결정**: `docs/README.md`, `docs/specs/README.md`, `docs/specs/frontend/README.md`, `docs/archive/README.md`를 문서 진입점으로 두고, 500라인을 넘는 장문 체크리스트·아카이브 원문은 기존 경로를 인덱스로 유지한 채 하위 파트 문서로 분리한다.
-- **이유**: 문서 수가 늘어나면 최신 SSOT와 과거 보존 문서가 섞여 다음 작업자가 잘못된 기준을 참조하기 쉽다. 기존 경로를 삭제하거나 대량 이동하면 오래된 결정·백로그 링크가 깨지므로, 인덱스 파일을 남기는 방식이 가장 안전하다.
-- **계약**: 신규 기능은 관련 `docs/specs/` 문서를 먼저 갱신하고, 긴 실행 동선은 상위 문서에 요약·링크만 남긴다. `archive/` 문서를 재개할 때는 archive 원문을 직접 수정하지 않고 현재 기준의 `specs` 또는 `plans` 문서로 승격한 뒤 작업한다.
-
 ## [결정 #CL-163] k6 부하테스트는 단계 증분형 API 계측 체계로 운영한다 (2026-07-01)
 
 - **결정**: k6 부하테스트는 `smoke`, `baseline`, `launch`, `growth`, `spike`, `soak` 순서로 목표치를 올리고, production 쓰기 요청은 기본 금지한다.
