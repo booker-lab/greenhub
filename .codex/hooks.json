@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[강제 규칙] 이번 턴의 모든 출력을 반드시 한국어로 작성하라 — 응답 본문, 사고 과정(thinking), 도구 description, 코드 주석, git 커밋 메시지 전부 포함. 영어 문장 혼용 금지. 기술 용어·식별자·코드는 원문 유지 가능.\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}

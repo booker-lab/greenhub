@@ -16,6 +16,7 @@
     "load:admin": "k6 run tests/load/scenarios/admin-ops.js",
     "load:driver": "k6 run tests/load/scenarios/driver-ops.js",
     "load:throttle": "k6 run tests/load/scenarios/throttle-auth.js",
+    "load:check-baseline": "node scripts/load/check-baseline-readiness.mjs",
     "load:readiness": "node scripts/load/run-k6.mjs readiness",
     "load:run": "node scripts/load/run-k6.mjs",
     "test:e2e": "pnpm --filter e2e test",

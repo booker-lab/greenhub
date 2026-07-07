@@ -15,11 +15,23 @@ const scenarios = {
 
 const scenario = process.argv[2] || 'readiness';
 const script = scenarios[scenario];
+const profile = process.env.K6_PROFILE || 'smoke';
 
 if (!script) {
   console.error(`알 수 없는 k6 시나리오입니다: ${scenario}`);
   console.error(`사용 가능: ${Object.keys(scenarios).join(', ')}`);
   process.exit(1);
+}
+
+if (scenario === 'readiness' && profile === 'baseline') {
+  const readiness = spawnSync(process.execPath, ['scripts/load/check-baseline-readiness.mjs'], {
+    stdio: 'inherit',
+    shell: false,
+  });
+
+  if (readiness.status !== 0) {
+    process.exit(readiness.status ?? 1);
+  }
 }
 
 function findK6() {
@@ -48,7 +60,6 @@ if (!k6) {
 mkdirSync('docs/performance/load', { recursive: true });
 
 const now = new Date().toISOString().replace(/[:.]/g, '-');
-const profile = process.env.K6_PROFILE || 'smoke';
 const summaryPath =
   process.env.K6_SUMMARY_EXPORT || join('docs/performance/load', `${scenario}-${profile}-${now}.json`);
 
