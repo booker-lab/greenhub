@@ -1,8 +1,8 @@
 # 셀러앱 보안 Findings
 
-담당: 셀러앱 대화  
-수정 가능 범위: `apps/seller`  
-읽기 전용 참고 범위: `apps/api`, `packages/shared`, `firestore.rules`, `storage.rules`, `docs/specs/api/*`  
+담당: 셀러앱 대화
+수정 가능 범위: `apps/seller`
+읽기 전용 참고 범위: `apps/api`, `packages/shared`, `firestore.rules`, `storage.rules`, `docs/specs/api/*`
 수정 금지 범위: 셀러앱 외 모든 영역
 
 ## Findings
@@ -15,4 +15,3 @@
 
 | ID | 이유 | 관련 파일 | 공통 대화에 요청할 내용 |
 | --- | --- | --- | --- |
-

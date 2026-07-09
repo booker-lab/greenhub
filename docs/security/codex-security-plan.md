@@ -1,6 +1,6 @@
 # Codex Security 병렬 운영 계획
 
-작성일: 2026-07-07  
+작성일: 2026-07-07
 대상 저장소: `greenhub`
 
 ## 목적
@@ -132,4 +132,3 @@
 - 승인된 critical/high finding 수정 완료
 - 앱별 핵심 인증/권한/상태 전이 검증 통과
 - `docs/security/verification-log.md`에 최종 검증 결과 기록
-

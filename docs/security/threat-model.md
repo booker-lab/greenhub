@@ -1,6 +1,6 @@
 # Greenhub 보안 위협 모델
 
-작성일: 2026-07-07  
+작성일: 2026-07-07
 대상: 소비자앱, 셀러앱, 드라이버앱, API, Firebase rules
 
 ## 시스템 개요
@@ -126,4 +126,3 @@ Greenhub는 pnpm monorepo로 구성되어 있다.
 - 앱별 수정인가, 공통 API 수정인가
 - 기존 E2E나 unit test로 재현할 수 있는가
 - production 데이터 마이그레이션이 필요한가
-

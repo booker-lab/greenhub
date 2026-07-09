@@ -18,9 +18,9 @@ export default function (data) {
     'health 정상': (r) => r.status === 200 && r.json('status') === 'ok',
   });
 
-  const stores = http.get(`${API_BASE_URL}/public/stores`);
-  check(stores, {
-    '공개 스토어 조회 성공': (r) => r.status === 200,
+  const banner = http.get(`${API_BASE_URL}/banner`);
+  check(banner, {
+    '배너 조회 성공': (r) => r.status === 200,
   });
 
   const products = http.get(`${API_BASE_URL}/products`);

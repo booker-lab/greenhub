@@ -3,11 +3,14 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-07-05 (Preview env 정책 A 실행 완료 #CL-58)
+최종 수정: 2026-07-09 (MVP production 읽기 전용 probe 종결 #CL-165)
 
 ---
 
 ## 진행 현황
+
+**2026-07-09 후속 작업 (MVP production 읽기 전용 probe 종결 #CL-165)**:
+- staging Railway API `https://api-staging-94af.up.railway.app`가 production DB를 바라보는 상태라 정식 baseline/launch/growth/spike/soak는 보류했다. 대신 `K6_PROFILE=probe`, `K6_ENABLE_WRITES=false`, 계정 env 없음, seed store/product만 지정해 3분 production 읽기 전용 probe를 실행했다. 결과는 772/772 checks 통과, 실패율 0%, 전체 p95 512.30ms, public_read p95 526.03ms, checkout p95 425.13ms였다. 이 결과는 baseline이 아니라 MVP smoke/probe로만 판정하며, 실제 유입 증가나 429/5xx/지연 징후가 보이면 `BACKLOG.md`의 `LOAD-TEST-FORMAL`로 정식 부하테스트를 재개한다.
 
 **2026-07-05 후속 작업 (Preview env 정책 A 실행 완료 #CL-58)**:
 - PR #8은 2026-07-04 16:21:48Z에 merge 완료되어 범위를 종료했다. 후속으로 선택지 A를 채택해 Preview 카카오 로그인 완료 smoke는 지원하지 않고, consumer/seller/driver Preview의 `NEXTAUTH_URL`/`AUTH_URL`을 제거하는 정책으로 통일했다. 사용자 승인 후 consumer Preview `NEXTAUTH_URL`과 driver Preview `NEXTAUTH_URL`을 삭제했고, consumer/driver/seller Preview `AUTH_URL`은 존재하지 않음을 확인했다. 카카오 콘솔 Redirect URI는 변경하지 않았으며, Preview에서는 authorize 진입 smoke와 `redirect_uri` 관찰까지만 허용한다. `vercel env pull`과 env 값 조회는 실행하지 않았다. PR #7은 Draft 상태로 유지하고 이번 범위와 섞지 않는다.

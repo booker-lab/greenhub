@@ -28,9 +28,12 @@ Green Hub는 Consumer, Seller, Driver 프론트와 Railway API, Firestore를 함
 
 production API에는 전역 `100 req/min` 제한이 있으므로 단일 IP에서 baseline 이상을 실행하면 성능 병목보다 429 제한이 먼저 관찰된다. baseline 이상은 staging 또는 preview에서 부하테스트용 rate limit 정책을 명시적으로 둔 뒤 실행한다. production은 `smoke`와 소량 읽기 확인만 허용한다.
 
+MVP 단계에서 staging URL이 production DB를 그대로 보는 경우, 정식 `baseline`으로 기록하지 않고 `probe` profile의 production 읽기 전용 확인으로만 실행한다. `probe`는 3분 동안 공개 조회 2 VU와 checkout 읽기 1 VU만 실행하며, `K6_ENABLE_WRITES=false`를 필수로 둔다.
+
 | 단계 | 목적 | 지속 시간 | 주요 부하 | 통과 후 조치 |
 | --- | --- | --- | --- | --- |
 | 0. smoke | 스크립트와 계정 검증 | 1분 | 1 VU | 환경 변수와 seed 데이터 보정 |
+| 0-1. probe | MVP production 읽기 여유 확인 | 3분 | 공개 조회 2 VU, checkout 읽기 1 VU | baseline이 아니라 운영 읽기 probe로 기록 |
 | 1. baseline | 현재 기준선 확보 | 10분 | 공개 조회 20 VU, checkout 5 VU, 운영 조회 3 VU | p95와 실패율 기록 |
 | 2. launch | 출시 직후 예상 피크 | 15분 | 공개 조회 50 VU, checkout 10 VU, 운영 조회 5 VU | Firestore 인덱스와 API 병목 수정 |
 | 3. growth | 성장 여유 검증 | 20분 | 공개 조회 100 VU, checkout 20 VU, 운영 조회 10 VU | 캐시, 페이지네이션, 쿼리 구조 개선 |
@@ -42,14 +45,13 @@ production API에는 전역 `100 req/min` 제한이 있으므로 단일 IP에서
 ### smoke
 
 - `GET /health`
-- `GET /public/stores`
+- `GET /banner`
 - `GET /products`
 - 선택: `POST /auth/login`, `GET /auth/me`
 
 ### consumer-read
 
-- `GET /public/stores`
-- `GET /banners/active`
+- `GET /banner`
 - `GET /products`
 - `GET /products/:productId`
 - `GET /stores/:storeId/products`
@@ -91,7 +93,7 @@ production API에는 전역 `100 req/min` 제한이 있으므로 단일 IP에서
 | 이름 | 설명 |
 | --- | --- |
 | `K6_API_BASE_URL` | 테스트 대상 API 기본 URL |
-| `K6_PROFILE` | `smoke`, `baseline`, `launch`, `growth`, `spike`, `soak` |
+| `K6_PROFILE` | `smoke`, `probe`, `baseline`, `launch`, `growth`, `spike`, `soak` |
 | `K6_CONSUMER_EMAIL` | 소비자 테스트 계정 |
 | `K6_CONSUMER_PASSWORD` | 소비자 테스트 비밀번호 |
 | `K6_SELLER_EMAIL` | 판매자 테스트 계정 |
@@ -171,7 +173,7 @@ pnpm load:readiness
 ## 운영 가드
 
 - production 쓰기 요청은 기본 금지한다.
-- production에서는 `K6_PROFILE=smoke`만 기본 허용하고, baseline 이상은 staging 또는 preview에서 실행한다.
+- production에서는 `K6_PROFILE=smoke`와 `K6_PROFILE=probe`만 기본 허용하고, baseline 이상은 staging 또는 preview에서 실행한다.
 - `K6_ENABLE_WRITES=true`는 staging 또는 preview에서만 사용한다.
 - 외부 결제, SMS, push, OAuth 제공자에 반복 부하를 만들지 않는다.
 - 테스트 전후 seed 데이터와 Firestore 비용을 확인한다.

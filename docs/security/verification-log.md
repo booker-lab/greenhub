@@ -19,4 +19,3 @@
 | Firebase rules 검토 | 대기 |  |
 | secret 노출 점검 | 대기 |  |
 | 전체 build/typecheck/lint | 대기 |  |
-

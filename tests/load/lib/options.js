@@ -3,6 +3,13 @@ const profiles = {
     vus: 1,
     iterations: 1,
   },
+  probe: {
+    stages: [
+      { duration: '30s', target: 2 },
+      { duration: '2m', target: 2 },
+      { duration: '30s', target: 0 },
+    ],
+  },
   baseline: {
     stages: [
       { duration: '2m', target: 10 },

@@ -11,10 +11,7 @@ export default function () {
   const ids = targetIds();
 
   group('공개 탐색', () => {
-    check(http.get(`${API_BASE_URL}/public/stores`), {
-      '스토어 목록 성공': (r) => r.status === 200,
-    });
-    check(http.get(`${API_BASE_URL}/banners/active`), {
+    check(http.get(`${API_BASE_URL}/banner`), {
       '배너 조회 성공': (r) => r.status === 200,
     });
     check(http.get(`${API_BASE_URL}/products`), {
@@ -24,13 +21,13 @@ export default function () {
 
   group('상품 상세', () => {
     check(http.get(`${API_BASE_URL}/products/${ids.productId}`), {
-      '상품 상세 성공': (r) => r.status === 200 || r.status === 404,
+      '상품 상세 성공': (r) => r.status === 200,
     });
     check(http.get(`${API_BASE_URL}/stores/${ids.storeId}/products`), {
-      '스토어 상품 성공': (r) => r.status === 200 || r.status === 404,
+      '스토어 상품 성공': (r) => r.status === 200,
     });
     check(http.get(`${API_BASE_URL}/stores/${ids.storeId}/delivery-config`), {
-      '배송 설정 성공': (r) => r.status === 200 || r.status === 404,
+      '배송 설정 성공': (r) => r.status === 200,
     });
   });
 

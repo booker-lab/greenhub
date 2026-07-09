@@ -18,6 +18,14 @@ const profileConfig = {
     adminOps: 0,
     driverOps: 0,
   },
+  probe: {
+    duration: '3m',
+    publicRead: 2,
+    checkout: 1,
+    sellerOps: 0,
+    adminOps: 0,
+    driverOps: 0,
+  },
   baseline: {
     duration: '10m',
     publicRead: 20,

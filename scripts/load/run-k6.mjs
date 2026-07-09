@@ -34,6 +34,17 @@ if (scenario === 'readiness' && profile === 'baseline') {
   }
 }
 
+if (scenario === 'readiness' && profile === 'probe') {
+  const readiness = spawnSync(process.execPath, ['scripts/load/check-production-probe.mjs'], {
+    stdio: 'inherit',
+    shell: false,
+  });
+
+  if (readiness.status !== 0) {
+    process.exit(readiness.status ?? 1);
+  }
+}
+
 function findK6() {
   const candidates = [
     process.env.K6_BIN,

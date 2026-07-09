@@ -992,3 +992,10 @@ P2-A(Railway `/auth/login` latency 계측)는 세션28·29·30에 3회 이월된
 - **결정**: `/auth/kakao-login`은 클라이언트가 전달한 `kakaoId`를 신뢰하지 않고, `kakaoAccessToken`으로 카카오 사용자 정보를 API 서버가 직접 검증한 뒤 Green Hub JWT를 발급한다.
 - **이유**: 현재 신뢰 경계가 프론트 callback에 치우치면 API 단독 호출에서 임의 `kakaoId`를 제출하는 위험이 남는다. 외부 OAuth 검증은 인증 보안 문제이고, k6 성능 부하는 내부 API 병목 측정 문제이므로 두 흐름을 분리해야 한다.
 - **계약**: 카카오 OAuth 반복 호출은 k6 부하테스트에서 제외한다. k6는 seed email/password 계정 또는 사전 발급 JWT를 사용하며, 카카오 로그인은 별도 smoke와 서버 측 token 검증 테스트로 다룬다.
+
+## [결정 #CL-165] MVP 단계의 k6는 production 읽기 전용 probe로 종결하고 정식 부하테스트는 백로그로 이월한다 (2026-07-09)
+
+- **결정**: 현재 MVP 단계에서는 정식 baseline을 실행하지 않고 `K6_PROFILE=probe`, `K6_ENABLE_WRITES=false`의 낮은 강도 production 읽기 전용 probe로 성능 확인 범위를 종결한다.
+- **이유**: 준비된 staging URL은 production DB를 바라보므로 baseline 이상의 지속 부하를 걸 가치보다 운영 데이터와 rate limit 정책에 미치는 리스크가 크다. MVP 트래픽 규모에서는 3분 읽기 전용 probe로 API 경로와 기본 응답성을 확인하고, 더 큰 부하는 실제 유입 또는 운영 징후가 생길 때 다시 준비하는 편이 맞다.
+- **결과**: `https://api-staging-94af.up.railway.app` 대상 probe는 772/772 checks 통과, 실패율 0%, 전체 p95 512.30ms, public_read p95 526.03ms, checkout p95 425.13ms였다. 쓰기 요청, 로그인, seller/admin/driver 운영 조회는 실행하지 않았다.
+- **계약**: 정식 `baseline`/`launch`/`growth`/`spike`/`soak`는 production과 분리된 staging DB, seed 데이터/계정, rate limit 정책을 확정한 뒤 `BACKLOG.md`의 `LOAD-TEST-FORMAL`로 재개한다. baseline에서 429가 나오면 성능 실패가 아니라 rate limit 정책 미정합으로 중단한다.

@@ -15,20 +15,17 @@ export function publicReadFlow() {
   const ids = targetIds();
 
   group('public read', () => {
-    check(http.get(`${API_BASE_URL}/public/stores`, tagged('public_read')), {
-      'public stores ok': (r) => r.status === 200,
-    });
-    check(http.get(`${API_BASE_URL}/banners/active`, tagged('public_read')), {
-      'active banners ok': (r) => r.status === 200,
+    check(http.get(`${API_BASE_URL}/banner`, tagged('public_read')), {
+      'public banner ok': (r) => r.status === 200,
     });
     check(http.get(`${API_BASE_URL}/products`, tagged('public_read')), {
       'public products ok': (r) => r.status === 200,
     });
     check(http.get(`${API_BASE_URL}/products/${ids.productId}`, tagged('public_read')), {
-      'public product detail ok': (r) => r.status === 200 || r.status === 404,
+      'public product detail ok': (r) => r.status === 200,
     });
     check(http.get(`${API_BASE_URL}/stores/${ids.storeId}/products`, tagged('public_read')), {
-      'store products ok': (r) => r.status === 200 || r.status === 404,
+      'store products ok': (r) => r.status === 200,
     });
   });
 }
@@ -38,10 +35,10 @@ export function checkoutReadFlow(token) {
 
   group('checkout', () => {
     check(http.get(`${API_BASE_URL}/products/${ids.productId}`, tagged('checkout')), {
-      'checkout product ok': (r) => r.status === 200 || r.status === 404,
+      'checkout product ok': (r) => r.status === 200,
     });
     check(http.get(`${API_BASE_URL}/stores/${ids.storeId}/delivery-config`, tagged('checkout')), {
-      'checkout delivery config ok': (r) => r.status === 200 || r.status === 404,
+      'checkout delivery config ok': (r) => r.status === 200,
     });
 
     if (ENABLE_WRITES && token) {
