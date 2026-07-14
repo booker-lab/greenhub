@@ -1,4 +1,4 @@
-export type NotificationChannel = 'alimtalk' | 'fcm'
+export type NotificationChannel = 'alimtalk' | 'sms' | 'fcm'
 
 export type NotificationStatus = 'pending' | 'sent' | 'failed'
 
@@ -7,9 +7,15 @@ export type NotificationTemplateCode =
   | 'ORDER_ACCEPTED'
   | 'ORDER_PREPARING'
   | 'ORDER_DELIVERING'
+  | 'ORDER_DELIVERY_HELD'
+  | 'ORDER_REDELIVERY_PAYMENT_REQUESTED'
+  | 'ORDER_REDELIVERY_SCHEDULED'
   | 'ORDER_HUB_ARRIVED'
   | 'ORDER_DELIVERED'
   | 'ORDER_CANCELLED'
+  | 'ROUND_ORDER_CONFIRMED'
+  | 'OPERATION_ISSUE_CREATED'
+  | 'CUSTOMER_NOTICE_FAILED'
   // 공동구매
   | 'GROUP_JOINED'
   | 'GROUP_DEADLINE_SOON'
@@ -31,6 +37,9 @@ export interface Notification {
   phone: string | null
   fcmToken: string | null
   status: NotificationStatus
+  attemptCount?: number
+  maxAttempts?: number
+  fallbackChannel?: Extract<NotificationChannel, 'sms'> | null
   sentAt: string | null // ISO8601
   errorMessage: string | null
   createdAt: string // ISO8601

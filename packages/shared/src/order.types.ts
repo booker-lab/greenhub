@@ -5,6 +5,7 @@ export type OrderStatus =
   | 'ACCEPTED'
   | 'PREPARING'
   | 'DELIVERING'
+  | 'DELIVERY_HELD'
   | 'HUB_ARRIVED'
   | 'PICKED_UP'
   | 'DELIVERED'
@@ -27,9 +28,51 @@ export interface GroupBuyConsent {
   userId: string
 }
 
+export interface OrderItemSnapshot {
+  roundItemId: string | null
+  productId: string
+  productName: string
+  productImageUrl: string | null
+  unitPrice: number
+  quantity: number
+  subtotalAmount: number
+}
+
+export interface OrderAcquisitionSnapshot {
+  source: 'carrot' | 'direct' | 'unknown'
+  campaign: string | null
+  content: string | null
+  landingUrl: string | null
+  capturedAt: string // ISO8601
+}
+
+export interface DeliveryHoldSnapshot {
+  heldAt: string // ISO8601
+  reasonCode:
+    | 'WEATHER'
+    | 'ACCESS_UNAVAILABLE'
+    | 'ADDRESS_ISSUE'
+    | 'CUSTOMER_UNREACHABLE'
+    | 'OTHER'
+  reasonMessage: string
+  customerResponsible: boolean
+  redeliveryFee: number | null
+  nextContactAt: string | null // ISO8601
+  nextDeliveryAt: string | null // ISO8601
+  resolvedAt: string | null // ISO8601
+}
+
+export interface MarketingConsentInput {
+  agreed: boolean
+  channels: Array<'alimtalk' | 'sms'>
+  copyVersion: string
+  agreedAt?: string // ISO8601
+}
+
 export interface Order {
   id: string
   orderNumber?: string               // YYYYMMDD-NNNNNN. 신규 발급분만 존재 — 기존 주문은 undefined (폴백 표시)
+  schemaVersion?: 1 | 2
   storeId: string
   userId: string
   productId: string
@@ -47,6 +90,13 @@ export interface Order {
   preparedAt: string | null            // ISO8601 — 드라이버 수거 예정 시각 (판매자 설정)
   cancelReason: string | null
   groupBuyConsent: GroupBuyConsent | null
+  roundId?: string | null
+  roundName?: string | null
+  orderItems?: OrderItemSnapshot[]
+  acquisition?: OrderAcquisitionSnapshot | null
+  deliveryHold?: DeliveryHoldSnapshot | null
+  deliveryPhone?: string | null
+  deliveryPhotoIds?: string[]
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
   // Denormalized fields — 드라이버 앱 실시간 표시용
@@ -79,4 +129,12 @@ export interface CreateOrderRequest {
     agreed: true
     agreedAt: string // ISO8601
   }
+  roundId?: string
+  roundItems?: Array<{
+    roundItemId: string
+    quantity: number
+  }>
+  deliveryPhone?: string
+  marketingConsent?: MarketingConsentInput
+  acquisition?: OrderAcquisitionSnapshot
 }

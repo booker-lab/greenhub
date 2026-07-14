@@ -3,12 +3,14 @@
 > **SSOT** — 세션 종료 시 최신화. 200라인 초과 시 50라인 이내 요약 후 아카이브.
 > 아카이브: `archive/memory_archive_20260425.md` · `archive/memory_archive_20260517.md` (세션22~34 상세)
 
-최종 수정: 2026-07-09 (MVP production 읽기 전용 probe 종결 #CL-165)
+최종 수정: 2026-07-15 (주간 판매 회차·직배송 MVP Phase 0.1~0.6 완료)
 
 ---
 
 ## 진행 현황
 
+**2026-07-15 후속 작업 (주간 판매 회차·직배송 MVP Phase 0 완료)**:
+- `docs/specs/mvp-sales-round-direct-delivery.md` 명세를 신설하고 shared 계약(`sale-round.types.ts`, 주문 `DELIVERY_HELD`·다중 상품 스냅샷, 알림 문자 대체 코드, `Store.salesMode`)을 추가했다. 0.1 `git diff --check`, 0.2~0.5 shared typecheck, 0.6 shared build가 통과했으며 다음 Task-ID는 1.1이다.
 **2026-07-09 후속 작업 (MVP production 읽기 전용 probe 종결 #CL-165)**:
 - staging Railway API `https://api-staging-94af.up.railway.app`가 production DB를 바라보는 상태라 정식 baseline/launch/growth/spike/soak는 보류했다. 대신 `K6_PROFILE=probe`, `K6_ENABLE_WRITES=false`, 계정 env 없음, seed store/product만 지정해 3분 production 읽기 전용 probe를 실행했다. 결과는 772/772 checks 통과, 실패율 0%, 전체 p95 512.30ms, public_read p95 526.03ms, checkout p95 425.13ms였다. 이 결과는 baseline이 아니라 MVP smoke/probe로만 판정하며, 실제 유입 증가나 429/5xx/지연 징후가 보이면 `BACKLOG.md`의 `LOAD-TEST-FORMAL`로 정식 부하테스트를 재개한다.
 
