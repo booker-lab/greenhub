@@ -29,7 +29,7 @@ export class OrdersQueryService {
         throw new ForbiddenException();
       }
     }
-    return order;
+    return this.normalizeOrder(order);
   }
 
   async getOrders(
@@ -56,6 +56,7 @@ export class OrdersQueryService {
       'HUB_ARRIVED',
       'PICKED_UP',
       'DELIVERED',
+      'DELIVERY_HELD',
       'CANCELLED',
       'REVIEWED',
     ];
@@ -75,7 +76,7 @@ export class OrdersQueryService {
     if (query.saleType) ref = ref.where('saleType', '==', query.saleType);
 
     const snap = await ref.get();
-    return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    return snap.docs.map((d: any) => this.normalizeOrder({ id: d.id, ...d.data() }));
   }
 
   // ── Public (storeId-free) ─────────────────────────────────────────────────
@@ -92,11 +93,34 @@ export class OrdersQueryService {
         throw new ForbiddenException();
       }
     }
-    return order;
+    return this.normalizeOrder(order);
   }
 
   async getMyOrders(requesterId: string) {
     const snap = await this.firestore.collection('orders').where('userId', '==', requesterId).get();
-    return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    return snap.docs.map((d: any) => this.normalizeOrder({ id: d.id, ...d.data() }));
+  }
+
+  private normalizeOrder(order: Record<string, any>) {
+    if (Array.isArray(order['orderItems']) && order['orderItems'].length > 0) {
+      return order;
+    }
+    return {
+      ...order,
+      orderItems: [
+        {
+          productId: order['productId'],
+          productName: order['productName'],
+          productImageUrl: order['productImageUrl'] ?? null,
+          unitPrice:
+            typeof order['totalAmount'] === 'number' && typeof order['quantity'] === 'number'
+              ? Math.max(0, order['totalAmount'] - (order['deliveryFee'] ?? 0)) / order['quantity']
+              : null,
+          quantity: order['quantity'] ?? 1,
+          lineAmount:
+            typeof order['totalAmount'] === 'number' ? order['totalAmount'] - (order['deliveryFee'] ?? 0) : null,
+        },
+      ],
+    };
   }
 }

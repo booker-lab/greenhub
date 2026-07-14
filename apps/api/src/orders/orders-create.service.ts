@@ -3,18 +3,21 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { generatePickupCode, detectMetropolitan, calcDeliveryFee } from './orders.helpers';
+import { OrderCapacityService } from './order-capacity.service';
 
 @Injectable()
 export class OrdersCreateService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly capacity?: OrderCapacityService,
   ) {}
 
   async createOrder(storeId: string, userId: string, dto: CreateOrderDto) {
@@ -50,6 +53,9 @@ export class OrdersCreateService {
     ]);
     if (!product.exists || product.data()!['storeId'] !== storeId) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
+    }
+    if (storeSnap.data()?.['salesMode'] === 'round_direct' && dto.roundId && dto.roundItems) {
+      return this.createRoundDirectOrder(storeId, userId, dto, userSnap, storeSnap);
     }
     const productData = product.data()!;
     const rawBuyerName: string = userSnap.data()?.['name'] ?? '';
@@ -215,5 +221,136 @@ export class OrdersCreateService {
       freeThresholdHub: 30000,
       freeThresholdParcel: 50000,
     };
+  }
+
+  private async createRoundDirectOrder(
+    storeId: string,
+    userId: string,
+    dto: CreateOrderDto,
+    userSnap: any,
+    storeSnap: any,
+  ) {
+    if (!this.capacity) {
+      throw new ConflictException('회차 주문 용량 서비스가 연결되지 않았습니다.');
+    }
+    if (dto.deliveryMethod !== 'direct') {
+      throw new BadRequestException('회차 주문은 직접배송만 가능합니다.');
+    }
+    if (!dto.roundId || !dto.roundItems?.length) {
+      throw new BadRequestException('회차 주문 상품이 필요합니다.');
+    }
+
+    const roundSnap = await this.firestore.doc(`saleRounds/${dto.roundId}`).get();
+    if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
+      throw new NotFoundException('회차를 찾을 수 없습니다.');
+    }
+    const round = roundSnap.data()!;
+    const deliveryCity = round['deliveryRegion']?.['city'] as string | undefined;
+    if (!deliveryCity || !dto.deliveryAddress.address.includes(deliveryCity)) {
+      throw new BadRequestException('배송 가능 지역의 주소만 주문할 수 있습니다.');
+    }
+
+    const roundItems = await Promise.all(
+      dto.roundItems.map(async (item) => {
+        const snap = await this.firestore.doc(`saleRoundItems/${item.roundItemId}`).get();
+        if (!snap.exists || snap.data()?.['roundId'] !== dto.roundId) {
+          throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
+        }
+        const data = snap.data()!;
+        if (data['storeId'] !== storeId || data['status'] !== 'ACTIVE') {
+          throw new ConflictException('구매할 수 없는 회차 상품입니다.');
+        }
+        return {
+          roundItemId: item.roundItemId,
+          productId: data['productId'] as string,
+          productName: data['productNameSnapshot'] as string,
+          productImageUrl: data['productImageUrlSnapshot'] ?? null,
+          unitPrice: data['roundPrice'] as number,
+          quantity: item.quantity,
+          lineAmount: (data['roundPrice'] as number) * item.quantity,
+        };
+      }),
+    );
+
+    const orderId = uuidv4();
+    const reservation = await this.capacity.reserveCheckout({
+      storeId,
+      roundId: dto.roundId,
+      userId,
+      idempotencyKey: `checkout:${orderId}`,
+      deliveryAddress: dto.deliveryAddress,
+      items: dto.roundItems,
+    });
+
+    const buyerEmail: string = userSnap.data()?.['email'] ?? '';
+    const rawBuyerName: string = userSnap.data()?.['name'] ?? '';
+    const buyerName: string =
+      rawBuyerName && rawBuyerName !== '???' ? rawBuyerName : buyerEmail.split('@')[0] || userId;
+    const buyerPhone: string | null = userSnap.data()?.['phone'] ?? null;
+    const sellerPhone: string | null = storeSnap.data()?.['phone'] ?? null;
+    const now = this.firestore.Timestamp.now();
+    const totalAmount = roundItems.reduce((sum, item) => sum + item.lineAmount, 0);
+    const orderNumber = await this.nextOrderNumber(now);
+
+    const order = {
+      id: orderId,
+      orderNumber,
+      storeId,
+      userId,
+      productId: roundItems[0].productId,
+      productName: roundItems[0].productName,
+      buyerName,
+      buyerPhone,
+      sellerPhone,
+      address: [dto.deliveryAddress.address, dto.deliveryAddress.addressDetail]
+        .filter(Boolean)
+        .join(' '),
+      quantity: reservation.itemQuantityTotal,
+      saleType: 'normal',
+      status: 'PENDING',
+      deliveryMethod: 'direct',
+      deliveryFee: 0,
+      deliveryAddress: dto.deliveryAddress,
+      deliveryPhone: dto.deliveryPhone,
+      requestedDeliveryDate: dto.requestedDeliveryDate ?? null,
+      schemaVersion: 2,
+      roundId: dto.roundId,
+      reservationId: reservation.id,
+      orderItems: roundItems,
+      acquisition: dto.acquisition ?? null,
+      marketingConsent: dto.marketingConsent ?? null,
+      totalAmount,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.firestore.doc(`orders/${orderId}`).set(order);
+
+    return {
+      orderId,
+      orderNumber,
+      reservationId: reservation.id,
+      portonePaymentParams: {
+        name: roundItems.length === 1 ? roundItems[0].productName : `${roundItems[0].productName} 외`,
+        amount: totalAmount,
+        buyerName,
+      },
+    };
+  }
+
+  private async nextOrderNumber(now: unknown) {
+    const kstDate = new Date(Date.now() + 9 * 3600 * 1000);
+    const yyyymmdd = kstDate.toISOString().slice(0, 10).replace(/-/g, '');
+    const counterRef = this.firestore.doc(`orderCounters/${yyyymmdd}`);
+    let orderNumber = '';
+
+    await this.firestore.runTransaction(async (t) => {
+      const counterSnap = await t.get(counterRef);
+      const seq = (counterSnap.exists ? (counterSnap.data()!['seq'] as number) : 0) + 1;
+      orderNumber = `${yyyymmdd}-${String(seq).padStart(6, '0')}`;
+      t.set(counterRef, { seq, updatedAt: now }, { merge: true });
+    });
+
+    return orderNumber;
   }
 }

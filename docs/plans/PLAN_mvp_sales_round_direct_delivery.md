@@ -178,10 +178,10 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | 2.1 | 1.5 | `apps/api/src/orders/mvp-order-flow.spec.ts` | 이천 주소·다중 상품·예약·취소·보류·재배송비의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | 통과 — Jest가 `mvp-order-flow.spec.ts`를 포함한 6개 테스트 파일을 수집했다. | done |
 | 2.2 | 2.1 | `apps/api/src/orders/dto/create-order.dto.ts` | 회차 상품 배열, 필수 전화번호, 선택 마케팅 동의, 유입 값을 받도록 확장한다. | `pnpm --filter api build` | 통과 — API 빌드가 회차 상품 배열, 배송 전화번호, 마케팅 동의, 유입 DTO 확장을 오류 없이 컴파일했다. | done |
-| 2.3 | 2.2 | `apps/api/src/orders/order-capacity.service.ts` | 주소 1건·수량 합계 예약을 확보·소비·반환하는 멱등 트랜잭션을 구현한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 한도 서비스] | todo |
-| 2.4 | 2.3 | `apps/api/src/orders/orders-create.service.ts` | `round_direct`에서 한 주문·상품 스냅샷 배열·단일 결제 요청을 만들고 legacy 분기를 보존한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 주문 생성] | todo |
-| 2.5 | 2.4 | `apps/api/src/orders/orders-query.service.ts` | 신규 다중 상품과 기존 단일 상품을 같은 조회 응답으로 정규화한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 하위 호환 조회] | todo |
-| 2.6 | 2.5 | `apps/api/src/orders/orders-lifecycle.service.ts` | 마감 전 취소·`DELIVERY_HELD`·회차 완료 가드·부분 환불 기록을 구현한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 주문 상태] | todo |
+| 2.3 | 2.2 | `apps/api/src/orders/order-capacity.service.ts` | 주소 1건·수량 합계 예약을 확보·소비·반환하는 멱등 트랜잭션을 구현한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 통과 — 회차 주문 흐름 테스트 6개가 결제 예약 확보·소비·반환 서비스와 활성 주문 계약을 오류 없이 검증했다. | done |
+| 2.4 | 2.3 | `apps/api/src/orders/orders-create.service.ts` | `round_direct`에서 한 주문·상품 스냅샷 배열·단일 결제 요청을 만들고 legacy 분기를 보존한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 통과 — 회차 주문 흐름 테스트 6개가 이천 주소 차단, 다중 상품 주문 스냅샷, 단일 결제 금액을 오류 없이 검증했다. | done |
+| 2.5 | 2.4 | `apps/api/src/orders/orders-query.service.ts` | 신규 다중 상품과 기존 단일 상품을 같은 조회 응답으로 정규화한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 통과 — 회차 주문 흐름 테스트 6개와 API 빌드가 기존 단일 상품 주문의 `orderItems` 정규화와 `DELIVERY_HELD` 조회 상태를 오류 없이 수용했다. | done |
+| 2.6 | 2.5 | `apps/api/src/orders/orders-lifecycle.service.ts` | 마감 전 취소·`DELIVERY_HELD`·회차 완료 가드·부분 환불 기록을 구현한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 통과 — 회차 주문 흐름 테스트 6개가 마감 전 고객 취소의 환불·한도 반환과 배송 보류 카운터 기록을 오류 없이 검증했다. | done |
 | 2.7 | 2.6 | `apps/api/src/orders/orders.controller.ts` | 장바구니 검증·고객 취소·보류·재배송비·완료 사진 API 경로를 연결한다. | `pnpm --filter api build` | [판정 대기 — 주문 API] | todo |
 | 2.8 | 2.7 | `apps/api/src/orders/orders.module.ts` | 회차·용량·결제·보관 의존성을 주문 모듈에 연결한다. | `pnpm --filter api build` | [판정 대기 — 주문 모듈] | todo |
 | 2.9 | 2.8 | `apps/api/src/payments/payments.service.spec.ts` | 늦은 결제·중복 웹훅·한도 재확보 실패 자동 환불 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | [판정 대기 — 결제 테스트 수집] | todo |

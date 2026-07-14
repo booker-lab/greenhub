@@ -33,6 +33,7 @@ export class OrdersLifecycleService {
     }
     const order = snap.data()!;
     const currentStatus = order['status'] as OrderStatus;
+    const nextStatus = dto.status as string;
 
     // JWT role을 우선 사용, 없으면 Firestore fallback
     let role = requesterRole;
@@ -41,9 +42,13 @@ export class OrdersLifecycleService {
       role = userSnap.data()?.['role'] ?? 'consumer';
     }
 
+    const isRoundDeliveryHold =
+      order['schemaVersion'] === 2 &&
+      nextStatus === 'DELIVERY_HELD' &&
+      ['PREPARING', 'DELIVERING'].includes(currentStatus);
     const allowed = getAllowedTransitions(role ?? 'consumer', currentStatus);
-    if (!allowed.includes(dto.status)) {
-      throw new ForbiddenException(`${currentStatus} → ${dto.status} 전환은 허용되지 않습니다.`);
+    if (!isRoundDeliveryHold && !allowed.includes(dto.status)) {
+      throw new ForbiddenException(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
     }
 
     // BUG-16 T2: 셀러의 PREPARING → DELIVERED는 택배(parcel) 주문에서만 허용.
@@ -51,18 +56,18 @@ export class OrdersLifecycleService {
     if (
       role === 'seller' &&
       currentStatus === 'PREPARING' &&
-      dto.status === 'DELIVERED' &&
+      nextStatus === 'DELIVERED' &&
       order['deliveryMethod'] !== 'parcel'
     ) {
       throw new ForbiddenException('택배 발송 완료는 택배 주문에서만 가능합니다.');
     }
 
     const update: Record<string, unknown> = {
-      status: dto.status,
+      status: nextStatus,
       updatedAt: this.firestore.Timestamp.now(),
     };
     if (dto.reason) update['cancelReason'] = dto.reason;
-    if (dto.status === 'PREPARING' && dto.preparedAt) {
+    if (nextStatus === 'PREPARING' && dto.preparedAt) {
       const date = new Date(dto.preparedAt);
       if (isNaN(date.getTime())) {
         throw new BadRequestException('preparedAt must be a valid ISO8601 date');
@@ -70,18 +75,34 @@ export class OrdersLifecycleService {
       update['preparedAt'] = this.firestore.Timestamp.fromDate(date);
     }
     // DELIVERING 전환 시 driverId 자동 기록
-    if (dto.status === 'DELIVERING') {
+    if (nextStatus === 'DELIVERING') {
       update['driverId'] = requesterId;
     }
     // HUB_ARRIVED 전환 시 photoUrl 저장
-    if (dto.status === 'HUB_ARRIVED' && dto.photoUrl) {
+    if (nextStatus === 'HUB_ARRIVED' && dto.photoUrl) {
       update['deliveryPhotoUrl'] = dto.photoUrl;
     }
+    if (nextStatus === 'DELIVERY_HELD') {
+      update['deliveryHold'] = (dto as any).deliveryHold;
+    }
 
-    await this.firestore.doc(`orders/${orderId}`).update(update);
+    if (isRoundDeliveryHold && order['roundId']) {
+      await this.firestore.runTransaction(async (t) => {
+        const roundRef = this.firestore.doc(`saleRounds/${order['roundId']}`);
+        const roundSnap = await t.get(roundRef);
+        if (roundSnap.exists) {
+          const round = roundSnap.data()!;
+          const counters = this.nextRoundCounters(round['counters'], { heldOrderCount: 1 });
+          t.update(roundRef, { counters, updatedAt: update['updatedAt'] });
+        }
+        t.update(this.firestore.doc(`orders/${orderId}`), update);
+      });
+    } else {
+      await this.firestore.doc(`orders/${orderId}`).update(update);
+    }
 
     // 판매자 강제 취소 → 환불 + settlement 취소 반영
-    if (dto.status === 'CANCELLED') {
+    if (nextStatus === 'CANCELLED') {
       const refundableStatuses: OrderStatus[] = [
         'ACCEPTED',
         'RECRUITING',
@@ -95,14 +116,14 @@ export class OrdersLifecycleService {
     }
 
     // DELIVERED 전환 시 정산 자동 생성
-    if (dto.status === 'DELIVERED') {
+    if (nextStatus === 'DELIVERED') {
       await this.settlements.createSettlement(order, 'DELIVERED');
     }
 
     // 알림 발송
-    await this.sendTransitionNotification(order, currentStatus, dto.status, orderId);
+    await this.sendTransitionNotification(order, currentStatus, nextStatus as OrderStatus, orderId);
 
-    return { orderId, status: dto.status };
+    return { orderId, status: nextStatus };
   }
 
   async cancelOrder(storeId: string, orderId: string, userId: string, reason?: string) {
@@ -113,6 +134,10 @@ export class OrdersLifecycleService {
     const order = snap.data()!;
 
     if (order['userId'] !== userId) throw new ForbiddenException();
+    if (order['schemaVersion'] === 2 && order['roundId']) {
+      return this.cancelRoundOrder(storeId, orderId, order, reason);
+    }
+
     if (order['status'] !== 'RECRUITING') {
       throw new ForbiddenException('RECRUITING 상태에서만 취소 가능합니다.');
     }
@@ -288,5 +313,86 @@ export class OrdersLifecycleService {
         orderId,
       );
     }
+  }
+
+  private async cancelRoundOrder(
+    storeId: string,
+    orderId: string,
+    order: Record<string, unknown>,
+    reason?: string,
+  ) {
+    if (!['PENDING', 'ACCEPTED'].includes(order['status'] as string)) {
+      throw new ForbiddenException('마감 전 회차 주문만 취소할 수 있습니다.');
+    }
+
+    const roundRef = this.firestore.doc(`saleRounds/${order['roundId']}`);
+    const roundSnap = await this.firestore.doc(`saleRounds/${order['roundId']}`).get();
+    if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
+      throw new NotFoundException('회차를 찾을 수 없습니다.');
+    }
+    const round = roundSnap.data()!;
+    const closeAt = new Date(round['schedule']?.['orderCloseAt'] ?? 0).getTime();
+    if (!Number.isFinite(closeAt) || closeAt <= Date.now()) {
+      throw new ForbiddenException('주문 마감 후에는 직접 취소할 수 없습니다.');
+    }
+
+    const cancelReason = reason ?? '소비자 취소';
+    await this.payments.processRefundByOrderId(orderId, cancelReason);
+    const now = this.firestore.Timestamp.now();
+    const orderItems = Array.isArray(order['orderItems']) ? (order['orderItems'] as any[]) : [];
+    const itemQuantityTotal = orderItems.reduce((sum, item) => sum + (item['quantity'] ?? 0), 0);
+
+    await this.firestore.runTransaction(async (t) => {
+      const freshRoundSnap = await t.get(roundRef);
+      const freshRound = freshRoundSnap.exists ? freshRoundSnap.data()! : round;
+      const itemReads = await Promise.all(
+        orderItems
+          .filter((item) => item['roundItemId'])
+          .map(async (item) => ({
+            item,
+            ref: this.firestore.doc(`saleRoundItems/${item['roundItemId']}`),
+            snap: await t.get(this.firestore.doc(`saleRoundItems/${item['roundItemId']}`)),
+          })),
+      );
+
+      t.update(this.firestore.doc(`orders/${orderId}`), {
+        status: 'CANCELLED',
+        cancelReason,
+        updatedAt: now,
+      });
+      t.update(roundRef, {
+        counters: this.nextRoundCounters(freshRound['counters'], {
+          orderedDeliveryAddresses: -1,
+          orderedItemQuantity: -itemQuantityTotal,
+        }),
+        updatedAt: now,
+      });
+      for (const { item, ref, snap } of itemReads) {
+        const itemData = snap.exists ? snap.data()! : {};
+        t.update(ref, {
+          orderedQuantity: Math.max(0, (itemData['orderedQuantity'] ?? 0) - item['quantity']),
+          updatedAt: now,
+        });
+      }
+    });
+
+    await this.settlements.cancelSettlement(orderId);
+    return { orderId, status: 'CANCELLED' };
+  }
+
+  private nextRoundCounters(
+    raw: Record<string, number> | null | undefined,
+    delta: Record<string, number>,
+  ) {
+    const current = {
+      reservedDeliveryAddresses: raw?.['reservedDeliveryAddresses'] ?? 0,
+      reservedItemQuantity: raw?.['reservedItemQuantity'] ?? 0,
+      orderedDeliveryAddresses: raw?.['orderedDeliveryAddresses'] ?? 0,
+      orderedItemQuantity: raw?.['orderedItemQuantity'] ?? 0,
+      heldOrderCount: raw?.['heldOrderCount'] ?? 0,
+    };
+    return Object.fromEntries(
+      Object.entries(current).map(([key, value]) => [key, Math.max(0, value + (delta[key] ?? 0))]),
+    );
   }
 }
