@@ -167,11 +167,11 @@ flowchart TD
 ### Phase 1. 판매 회차 API
 | Task | Dependency | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1.1 | 0.6 | `apps/api/src/sale-rounds/sale-rounds.service.spec.ts` | 상태 자동 전환·두 한도·보류 주문 완료 차단의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | [판정 대기 — 테스트 수집] | todo |
-| 1.2 | 1.1 | `apps/api/src/sale-rounds/dto/sale-round.dto.ts` | 회차 생성·수정·복사 입력을 검증한다. | `pnpm --filter api build` | [판정 대기 — DTO 계약] | todo |
-| 1.3 | 1.2 | `apps/api/src/sale-rounds/sale-rounds.service.ts` | 회차 CRUD·복사·공개 조회·스케줄 전환을 트랜잭션으로 구현한다. | `pnpm --filter api test -- sale-rounds.service.spec.ts --runInBand` | [판정 대기 — 회차 서비스] | todo |
-| 1.4 | 1.3 | `apps/api/src/sale-rounds/sale-rounds.controller.ts` | 공개 회차 조회와 셀러 회차 관리 엔드포인트를 역할별로 노출한다. | `pnpm --filter api build` | [판정 대기 — 회차 API] | todo |
-| 1.5 | 1.4 | `apps/api/src/sale-rounds/sale-rounds.module.ts` | 회차 서비스를 주문 모듈에서 재사용할 수 있게 내보낸다. | `pnpm --filter api build` | [판정 대기 — 모듈 연결] | todo |
+| 1.1 | 0.6 | `apps/api/src/sale-rounds/sale-rounds.service.spec.ts` | 상태 자동 전환·두 한도·보류 주문 완료 차단의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | 통과 — Jest가 `sale-rounds.service.spec.ts`를 포함한 5개 테스트 파일을 수집했다. | done |
+| 1.2 | 1.1 | `apps/api/src/sale-rounds/dto/sale-round.dto.ts` | 회차 생성·수정·복사 입력을 검증한다. | `pnpm --filter api build` | 통과 — API 빌드가 회차 생성·수정·복사 DTO 계약을 오류 없이 컴파일했다. | done |
+| 1.3 | 1.2 | `apps/api/src/sale-rounds/sale-rounds.service.ts` | 회차 CRUD·복사·공개 조회·스케줄 전환을 트랜잭션으로 구현한다. | `pnpm --filter api test -- sale-rounds.service.spec.ts --runInBand` | 통과 — 회차 서비스 테스트 4개가 상태 자동 전환·배송지 한도·보류 완료 차단 계약을 검증했다. | done |
+| 1.4 | 1.3 | `apps/api/src/sale-rounds/sale-rounds.controller.ts` | 공개 회차 조회와 셀러 회차 관리 엔드포인트를 역할별로 노출한다. | `pnpm --filter api build` | 통과 — 공개 회차 조회와 셀러 관리 컨트롤러가 API 빌드에 포함되어 컴파일됐다. | done |
+| 1.5 | 1.4 | `apps/api/src/sale-rounds/sale-rounds.module.ts` | 회차 서비스를 주문 모듈에서 재사용할 수 있게 내보낸다. | `pnpm --filter api build` | 통과 — 회차 모듈이 컨트롤러와 서비스를 묶고 `SaleRoundsService`를 export한 상태로 API 빌드에 통과했다. | done |
 
 ### Phase 2. 회차 주문과 결제 복구
 | Task | Dependency | Target | Goal | Verify | Conclusion | Status |
