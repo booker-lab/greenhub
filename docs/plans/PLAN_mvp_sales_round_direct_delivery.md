@@ -186,7 +186,7 @@ flowchart TD
 | 2.7 | 2.6 | `apps/api/src/orders/orders.controller.ts` | 장바구니 검증·고객 취소·보류·재배송비·완료 사진 API 경로를 연결한다. | `pnpm --filter api build` | 통과 — 주문 컨트롤러가 회차 장바구니 검증, 고객 취소, 배송 보류, 재배송비, 배송 사진 경로를 빌드 오류 없이 노출한다. | done |
 | 2.8 | 2.7 | `apps/api/src/orders/orders.module.ts` | 용량·결제·재배송비 의존성을 주문 모듈에 연결한다. 보관 의존성은 생성 이후 Task 3.11·3.14에서 연결한다. | `pnpm --filter api build` | 통과 — `OrdersModule`이 `OrderCapacityModule`과 `PaymentsModule`을 가져오고 `OrderChargesService`를 provider로 등록한 상태에서 API 빌드에 성공했다. | done |
 | 2.9 | 2.8 | `apps/api/src/payments/payments.service.spec.ts` | 늦은 결제·중복 웹훅·한도 재확보 실패 자동 환불 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | 통과 — Jest가 `payments.service.spec.ts`를 포함한 8개 테스트 파일을 수집했다. | done |
-| 2.10 | 2.9 | `apps/api/src/payments/payments.service.ts` | 타임아웃 포트원 재조회와 주문·재배송비 결제의 멱등 확정을 구현한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | [판정 대기 — 결제 복구] | todo |
+| 2.10 | 2.9 | `apps/api/src/payments/payments.service.ts` | 타임아웃 포트원 재조회와 주문·재배송비 결제의 멱등 확정을 구현한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | 통과 — 결제 서비스 테스트 6개가 타임아웃 재조회, 기존·만료 예약 소비, 한도 실패 전액 환불, 중복 웹훅 멱등 확정을 검증했다. | done |
 | 2.11 | 2.10 | `apps/api/src/orders/order-charges.service.ts` | 고객 사유 첫 실패에 재배송비 결제 1회를 만들고 재실패는 운영 예외로 전환한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 재배송비] | todo |
 
 ### Phase 3. 알림·운영 예외·보관

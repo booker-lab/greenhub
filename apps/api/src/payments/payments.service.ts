@@ -1,21 +1,31 @@
+import { randomUUID } from 'node:crypto';
 import {
-  Injectable,
   BadRequestException,
   ForbiddenException,
-  Inject,
   forwardRef,
+  Inject,
+  Injectable,
   Logger,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { FirestoreService } from '../firestore/firestore.service';
-import { PortoneClient } from './portone.client';
-import { PortoneWebhookDto } from './dto/portone-webhook.dto';
-import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/audit/audit.service';
+import { FirestoreService } from '../firestore/firestore.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { OrderCapacityService } from '../orders/order-capacity.service';
+import { PortoneWebhookDto } from './dto/portone-webhook.dto';
+import { PortoneClient } from './portone.client';
 
 // 환불 가능 상태
 const REFUNDABLE_STATUSES = ['ACCEPTED', 'RECRUITING', 'CONFIRMED', 'PREPARING'];
+const PAYMENT_FINALIZATION_LOCK_MS = 5 * 60 * 1000;
+
+type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
+
+type PaymentClaim = {
+  order: Record<string, any>;
+  token: string;
+  latePayment: boolean;
+};
 
 @Injectable()
 export class PaymentsService {
@@ -37,8 +47,7 @@ export class PaymentsService {
     if (!orderSnap.exists) return { ok: false, reason: 'order_not_found' };
 
     const order = orderSnap.data()!;
-    // 멱등성: 이미 처리된 경우 스킵
-    if (order['status'] !== 'PENDING') {
+    if (!this.canFinalizePayment(order)) {
       return { ok: true, reason: 'already_processed' };
     }
 
@@ -48,75 +57,17 @@ export class PaymentsService {
     }
 
     if (dto.type !== 'Transaction.Paid') {
-      await this.cancelOrderWithSlotRecovery(orderId, order, 'payment_failed');
+      if (order['status'] === 'PENDING') {
+        await this.cancelOrderWithSlotRecovery(orderId, order, 'payment_failed');
+      }
       return { ok: true };
     }
 
-    // 금액 검증 (위변조 방지)
     const paymentData = await this.portone.getPayment(orderId);
-    if (paymentData.amount.total !== order['totalAmount']) {
-      await this.audit.log('payment.amount_tampered', {
-        userId: order['userId'] as string,
-        detail: { orderId, expected: order['totalAmount'], actual: paymentData.amount.total },
-      });
-      await this.portone.refund(orderId, paymentData.amount.total, '금액 위변조 감지');
-      await this.cancelOrderWithSlotRecovery(orderId, order, 'amount_mismatch');
-      return { ok: false, reason: 'amount_mismatch' };
+    if (order['status'] === 'CANCELLED' && paymentData.status !== 'PAID') {
+      return { ok: true, reason: 'payment_not_paid' };
     }
-
-    const newStatus = order['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED';
-
-    const now = this.firestore.Timestamp.now();
-
-    if (order['schemaVersion'] === 2 && order['reservationId']) {
-      await this.capacity.consumeReservation({
-        reservationId: order['reservationId'] as string,
-        orderId,
-        paymentId: orderId,
-      });
-    }
-
-    const paymentRecord = {
-      id: orderId,
-      orderId,
-      userId: order['userId'],
-      storeId: order['storeId'],
-      amount: paymentData.amount.total,
-      payMethod: paymentData.method?.type ?? null,
-      status: 'PAID',
-      portonePaymentId: orderId,
-      portoneTransactionId: paymentData.transactionId,
-      refundAmount: null,
-      refundedAt: null,
-      refundReason: null,
-      createdAt: now,
-      updatedAt: now,
-    };
-    let applied = false;
-    await this.firestore.runTransaction(async (tx) => {
-      const orderRef = this.firestore.doc(`orders/${orderId}`);
-      const freshOrder = await tx.get(orderRef);
-      if (!freshOrder.exists || freshOrder.data()?.['status'] !== 'PENDING') return;
-      tx.update(orderRef, { status: newStatus, updatedAt: now });
-      tx.set(this.firestore.doc(`payments/${orderId}`), paymentRecord);
-      applied = true;
-    });
-    if (!applied) return { ok: true, reason: 'already_processed' };
-
-    // 소비자 알림: 일반 결제 완료 / 공동구매 참여 완료
-    const buyerTemplateCode = newStatus === 'ACCEPTED' ? 'ORDER_ACCEPTED' : 'GROUP_JOINED';
-    await this.notifications.sendToUser(
-      order['userId'] as string,
-      buyerTemplateCode,
-      { orderId },
-      orderId,
-    );
-
-    this.logger.log(
-      `payment.completed orderId=${orderId} userId=${order['userId']} amount=${paymentData.amount.total} status=${newStatus}`,
-    );
-
-    return { ok: true, status: newStatus };
+    return this.finalizePaidOrder(orderId, paymentData);
   }
 
   async getPayment(paymentId: string, requesterId: string) {
@@ -223,11 +174,192 @@ export class PaymentsService {
 
     if (snap.empty) return;
 
-    const promises = snap.docs.map((doc) =>
-      this.cancelOrderWithSlotRecovery(doc.id, doc.data(), 'timeout'),
-    );
+    const promises = snap.docs.map(async (doc) => {
+      const paymentData = await this.portone.getPayment(doc.id);
+      if (paymentData.status === 'PAID') {
+        await this.finalizePaidOrder(doc.id, paymentData);
+        return;
+      }
+      await this.cancelOrderWithSlotRecovery(doc.id, doc.data(), 'timeout');
+    });
     await Promise.all(promises);
     console.log(`[PaymentsScheduler] PENDING 타임아웃 처리 ${snap.size}건`);
+  }
+
+  private async finalizePaidOrder(orderId: string, paymentData: PaymentData) {
+    const claim = await this.claimPaymentFinalization(orderId);
+    if (!claim) return { ok: true, reason: 'already_processed' };
+
+    const { order, token, latePayment } = claim;
+    if (paymentData.amount.total !== order['totalAmount']) {
+      await this.audit.log('payment.amount_tampered', {
+        userId: order['userId'] as string,
+        detail: { orderId, expected: order['totalAmount'], actual: paymentData.amount.total },
+      });
+      await this.portone.refund(orderId, paymentData.amount.total, '금액 위변조 감지');
+      await this.cancelOrderWithSlotRecovery(orderId, order, 'amount_mismatch');
+      return { ok: false, reason: 'amount_mismatch' };
+    }
+
+    let reservationId = order['reservationId'] as string | undefined;
+    if (order['schemaVersion'] === 2 && latePayment) {
+      try {
+        const reservation = await this.capacity.reserveCheckout({
+          storeId: order['storeId'] as string,
+          roundId: order['roundId'] as string,
+          userId: order['userId'] as string,
+          idempotencyKey: `late-payment:${orderId}`,
+          deliveryAddress: order['deliveryAddress'] as {
+            address: string;
+            addressDetail?: string | null;
+            zipCode?: string | null;
+          },
+          items: (order['orderItems'] as Array<Record<string, any>>).map((item) => ({
+            roundItemId: item['roundItemId'] as string,
+            quantity: item['quantity'] as number,
+          })),
+        });
+        reservationId = reservation.id;
+      } catch {
+        await this.portone.refund(orderId, paymentData.amount.total, '결제 만료 후 회차 한도 마감');
+        await this.markLatePaymentRefunded(orderId, token);
+        return { ok: false, reason: 'late_payment_refunded' };
+      }
+    }
+
+    try {
+      if (order['schemaVersion'] === 2 && reservationId) {
+        await this.capacity.consumeReservation({
+          reservationId,
+          orderId,
+          paymentId: orderId,
+        });
+      }
+      return await this.commitPaidOrder(orderId, paymentData, claim, reservationId);
+    } catch (error) {
+      await this.releasePaymentFinalization(orderId, token);
+      throw error;
+    }
+  }
+
+  private async claimPaymentFinalization(orderId: string): Promise<PaymentClaim | null> {
+    const token = randomUUID();
+    let claim: PaymentClaim | null = null;
+
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists) return;
+
+      const order = orderSnap.data() as Record<string, any>;
+      if (!this.canFinalizePayment(order)) return;
+      const currentLock = order['paymentFinalization'] as { expiresAt?: number } | null;
+      if (currentLock && (currentLock.expiresAt ?? 0) > Date.now()) return;
+
+      tx.update(orderRef, {
+        paymentFinalization: {
+          token,
+          expiresAt: Date.now() + PAYMENT_FINALIZATION_LOCK_MS,
+        },
+      });
+      claim = {
+        order,
+        token,
+        latePayment: order['status'] === 'CANCELLED',
+      };
+    });
+
+    return claim;
+  }
+
+  private async commitPaidOrder(
+    orderId: string,
+    paymentData: PaymentData,
+    claim: PaymentClaim,
+    reservationId?: string,
+  ) {
+    const { order, token } = claim;
+    const newStatus = order['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED';
+    const now = this.firestore.Timestamp.now();
+    const paymentRecord = {
+      id: orderId,
+      orderId,
+      userId: order['userId'],
+      storeId: order['storeId'],
+      amount: paymentData.amount.total,
+      payMethod: paymentData.method?.type ?? null,
+      status: 'PAID',
+      portonePaymentId: orderId,
+      portoneTransactionId: paymentData.transactionId,
+      refundAmount: null,
+      refundedAt: null,
+      refundReason: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    let applied = false;
+
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const freshOrder = await tx.get(orderRef);
+      const freshData = freshOrder.data() as Record<string, any> | undefined;
+      if (!freshOrder.exists || freshData?.['paymentFinalization']?.['token'] !== token) return;
+
+      tx.update(orderRef, {
+        status: newStatus,
+        ...(reservationId ? { reservationId } : {}),
+        paymentFinalization: null,
+        updatedAt: now,
+      });
+      tx.set(this.firestore.doc(`payments/${orderId}`), paymentRecord);
+      applied = true;
+    });
+    if (!applied) return { ok: true, reason: 'already_processed' };
+
+    const buyerTemplateCode = newStatus === 'ACCEPTED' ? 'ORDER_ACCEPTED' : 'GROUP_JOINED';
+    await this.notifications.sendToUser(
+      order['userId'] as string,
+      buyerTemplateCode,
+      { orderId },
+      orderId,
+    );
+    this.logger.log(
+      `payment.completed orderId=${orderId} userId=${order['userId']} amount=${paymentData.amount.total} status=${newStatus}`,
+    );
+
+    return { ok: true, status: newStatus };
+  }
+
+  private canFinalizePayment(order: Record<string, any>) {
+    return (
+      order['status'] === 'PENDING' ||
+      (order['status'] === 'CANCELLED' &&
+        order['cancelReason'] === 'timeout' &&
+        !order['latePaymentRefundedAt'])
+    );
+  }
+
+  private async markLatePaymentRefunded(orderId: string, token: string) {
+    const now = this.firestore.Timestamp.now();
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (orderSnap.data()?.['paymentFinalization']?.['token'] !== token) return;
+      tx.update(orderRef, {
+        latePaymentRefundedAt: now,
+        paymentFinalization: null,
+        updatedAt: now,
+      });
+    });
+  }
+
+  private async releasePaymentFinalization(orderId: string, token: string) {
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (orderSnap.data()?.['paymentFinalization']?.['token'] !== token) return;
+      tx.update(orderRef, { paymentFinalization: null });
+    });
   }
 
   private async cancelOrderWithSlotRecovery(
