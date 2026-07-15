@@ -1,9 +1,9 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { OrdersCreateService } from './orders-create.service';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
+import { OrdersQueryService } from './orders-query.service';
 
 type RecordData = Record<string, unknown>;
-
 function makeSnap(data: RecordData | null) {
   return {
     exists: data !== null,
@@ -11,7 +11,6 @@ function makeSnap(data: RecordData | null) {
     id: data?.['id'],
   };
 }
-
 function makeFirestore(initial: Record<string, RecordData>) {
   const records = new Map<string, RecordData>(Object.entries(initial));
   const writes: Array<{ op: string; path: string; data: RecordData }> = [];
@@ -27,7 +26,6 @@ function makeFirestore(initial: Record<string, RecordData>) {
       records.set(path, { ...(records.get(path) ?? {}), ...data });
     }),
   });
-
   const collection = (name: string) => {
     const filters: Array<[string, unknown]> = [];
     const query = {
@@ -48,7 +46,6 @@ function makeFirestore(initial: Record<string, RecordData>) {
     };
     return query;
   };
-
   const tx = {
     get: jest.fn(async (ref: { get: () => Promise<unknown> }) => ref.get()),
     set: jest.fn((ref: { set: (data: RecordData) => Promise<void> }, data: RecordData) =>
@@ -58,7 +55,6 @@ function makeFirestore(initial: Record<string, RecordData>) {
       ref.update(data),
     ),
   };
-
   const firestore = {
     doc,
     collection,
@@ -170,6 +166,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     processGroupBuyEarlyConfirm: jest.fn(),
   };
   const payments = { processRefundByOrderId: jest.fn() };
+  const capacity = { releaseReservation: jest.fn() };
   const settlements = {
     createSettlement: jest.fn(),
     cancelSettlement: jest.fn(),
@@ -199,13 +196,33 @@ describe('MVP 회차 주문 흐름 계약', () => {
         roundItems: [{ roundItemId: 'round-item-1', quantity: 1 }],
         deliveryPhone: '010-9999-0000',
         deliveryAddress: {
-          address: '서울특별시 강남구 테헤란로 1',
+          address: '서울특별시 강남구 이천시로 1',
           addressDetail: '101호',
           zipCode: '06234',
         },
       } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
 
+    expect(capacity.reserveCheckout).not.toHaveBeenCalled();
+  });
+
+  it('round_direct는 회차 필수값 누락과 중복 roundItemId를 legacy 경로로 우회시키지 않는다', async () => {
+    const { firestore } = makeFirestore(seedRoundRecords());
+    const capacity = { reserveCheckout: jest.fn() };
+    const service = new OrdersCreateService(firestore as never, notifications as never, capacity as never);
+    const base = {
+      productId: 'product-1', quantity: 1, saleType: 'normal', deliveryMethod: 'direct',
+      requestedDeliveryDate: '2026-07-21', deliveryPhone: '010-9999-0000',
+      deliveryAddress: { address: '경기도 이천시 중리천로 1', addressDetail: '', zipCode: '17373' },
+    };
+
+    await expect(service.createOrder('store-round', 'user-1', base as never)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.createOrder('store-round', 'user-1', {
+      ...base, roundId: 'round-1', roundItems: [
+        { roundItemId: 'round-item-1', quantity: 1 },
+        { roundItemId: 'round-item-1', quantity: 1 },
+      ],
+    } as never)).rejects.toBeInstanceOf(BadRequestException);
     expect(capacity.reserveCheckout).not.toHaveBeenCalled();
   });
 
@@ -255,6 +272,30 @@ describe('MVP 회차 주문 흐름 계약', () => {
       acquisition: expect.objectContaining({ source: 'carrot' }),
     });
     expect(orderWrite?.['orderItems']).toHaveLength(2);
+    expect((orderWrite?.['orderItems'] as RecordData[])[0]).toHaveProperty('subtotalAmount', 50000);
+    expect((orderWrite?.['orderItems'] as RecordData[])[0]).not.toHaveProperty('lineAmount');
+  });
+
+  it('주문 저장 실패 시 이미 확보한 예약을 즉시 반환한다', async () => {
+    const reservation = {
+      id: 'reservation-1', expiresAt: '2026-07-15T03:15:00.000+09:00', itemQuantityTotal: 1,
+      items: [{ roundItemId: 'round-item-1', productId: 'product-1', quantity: 1, unitPrice: 50000 }],
+    };
+    const capacity = {
+      reserveCheckout: jest.fn().mockResolvedValue(reservation),
+      releaseReservation: jest.fn().mockResolvedValue(undefined),
+    };
+    const { firestore } = makeFirestore(seedRoundRecords());
+    firestore.runTransaction = jest.fn().mockRejectedValue(new Error('저장 실패')) as never;
+    const service = new OrdersCreateService(firestore as never, notifications as never, capacity as never);
+
+    await expect(service.createOrder('store-round', 'user-1', {
+      productId: 'product-1', quantity: 1, saleType: 'normal', deliveryMethod: 'direct',
+      requestedDeliveryDate: '2026-07-21', roundId: 'round-1',
+      roundItems: [{ roundItemId: 'round-item-1', quantity: 1 }], deliveryPhone: '010-9999-0000',
+      deliveryAddress: { address: '경기도 이천시 중리천로 1', addressDetail: '', zipCode: '17373' },
+    } as never)).rejects.toThrow('저장 실패');
+    expect(capacity.releaseReservation).toHaveBeenCalledWith('reservation-1');
   });
 
   it('결제 예약은 배송지 1건과 주문 상품 수량 합계를 15분간 확보한다', async () => {
@@ -277,7 +318,6 @@ describe('MVP 회차 주문 흐름 계약', () => {
         { roundItemId: 'round-item-2', quantity: 1 },
       ],
     });
-
     expect(reservation).toMatchObject({
       status: 'HELD',
       deliveryAddressCount: 1,
@@ -288,6 +328,12 @@ describe('MVP 회차 주문 흐름 계약', () => {
         reservedDeliveryAddresses: 1,
         reservedItemQuantity: 3,
       }),
+    });
+    await service.consumeReservation({ reservationId: reservation.id, orderId: 'order-1' });
+    await service.releaseReservation(reservation.id);
+    await service.releaseReservation(reservation.id);
+    expect(records.get('saleRounds/round-1')).toMatchObject({
+      counters: expect.objectContaining({ reservedDeliveryAddresses: 0, reservedItemQuantity: 0, orderedDeliveryAddresses: 0, orderedItemQuantity: 0 }),
     });
   });
 
@@ -311,6 +357,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       notifications as never,
       payments as never,
       settlements as never,
+      capacity as never,
     );
 
     await expect(
@@ -318,6 +365,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     ).resolves.toMatchObject({ orderId: 'order-1', status: 'CANCELLED' });
 
     expect(payments.processRefundByOrderId).toHaveBeenCalledWith('order-1', '고객 요청');
+    expect(capacity.releaseReservation).toHaveBeenCalledWith('reservation-1');
     expect(records.get('saleRounds/round-1')).toMatchObject({
       counters: expect.objectContaining({
         orderedDeliveryAddresses: 0,
@@ -345,6 +393,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       notifications as never,
       payments as never,
       settlements as never,
+      capacity as never,
     );
 
     await expect(
@@ -373,6 +422,22 @@ describe('MVP 회차 주문 흐름 계약', () => {
     expect(records.get('saleRounds/round-1')).toMatchObject({
       counters: expect.objectContaining({ heldOrderCount: 1 }),
     });
+    await service.updateStatus('store-round', 'order-1', 'seller-1', { status: 'PREPARING' } as never, 'seller');
+    expect(records.get('saleRounds/round-1')).toMatchObject({
+      counters: expect.objectContaining({ heldOrderCount: 0 }),
+    });
+    expect(records.get('orders/order-1')?.['deliveryHold']).toMatchObject({ resolvedAt: expect.any(String) });
+  });
+
+  it('주문자라도 배송 보류 상태를 만들 수 없다', async () => {
+    const { firestore, writes } = makeFirestore(seedRoundRecords({
+      'orders/order-1': { id: 'order-1', storeId: 'store-round', userId: 'user-1', status: 'PREPARING', schemaVersion: 2, roundId: 'round-1', deliveryMethod: 'direct' },
+    }));
+    const service = new OrdersLifecycleService(firestore as never, notifications as never, payments as never, settlements as never, capacity as never);
+    await expect(service.updateStatus('store-round', 'order-1', 'user-1', {
+      status: 'DELIVERY_HELD', deliveryHold: { reasonCode: 'OTHER', reasonMessage: '위장 요청' },
+    } as never, 'consumer')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(writes.filter((write) => write.path === 'orders/order-1')).toHaveLength(0);
   });
 
   it('고객 사유 첫 배송 실패만 재배송비 결제 1회를 만들고 중복 청구를 막는다', async () => {
@@ -397,13 +462,15 @@ describe('MVP 회차 주문 흐름 계약', () => {
     await service.createRedeliveryFeeCharge({
       storeId: 'store-round',
       orderId: 'order-1',
+      requesterId: 'user-1',
       idempotencyKey: 'redelivery:order-1:first',
-    });
+    } as never);
     await service.createRedeliveryFeeCharge({
       storeId: 'store-round',
       orderId: 'order-1',
+      requesterId: 'user-1',
       idempotencyKey: 'redelivery:order-1:first',
-    });
+    } as never);
 
     const chargeWrites = writes.filter((write) => write.path.startsWith('orderCharges/'));
     expect(chargeWrites).toHaveLength(1);
@@ -414,5 +481,19 @@ describe('MVP 회차 주문 흐름 계약', () => {
       customerResponsible: true,
       status: 'PENDING',
     });
+    await expect(service.createRedeliveryFeeCharge({
+      storeId: 'store-round', orderId: 'order-1', requesterId: 'user-2', idempotencyKey: 'first',
+    } as never)).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  it('기존 lineAmount와 신규 주문 상품 금액을 subtotalAmount로 통일한다', async () => {
+    const { firestore } = makeFirestore(seedRoundRecords({
+      'orders/order-legacy': {
+        id: 'order-legacy', storeId: 'store-round', userId: 'user-1', status: 'ACCEPTED',
+        orderItems: [{ productId: 'product-1', productName: '호접란', unitPrice: 50000, quantity: 2, lineAmount: 100000 }],
+      },
+    }));
+    const result = await new OrdersQueryService(firestore as never).getOrder('store-round', 'order-legacy', 'user-1');
+    expect(result.orderItems[0]).toMatchObject({ subtotalAmount: 100000 });
+    expect(result.orderItems[0]).not.toHaveProperty('lineAmount');
   });
 });

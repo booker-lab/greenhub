@@ -4,11 +4,12 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: 실행 대기
+- **상태**: Task 2.8 완료 후 Task 2.9 진입 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
+- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했고, 원 계획 Task 2.8의 주문 모듈 의존성 연결까지 완료했다. 다음 진입점은 Task 2.9다.
 
 ## 업무 요약 (협업용)
 
@@ -182,8 +183,8 @@ flowchart TD
 | 2.4 | 2.3 | `apps/api/src/orders/orders-create.service.ts` | `round_direct`에서 한 주문·상품 스냅샷 배열·단일 결제 요청을 만들고 legacy 분기를 보존한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 통과 — 회차 주문 흐름 테스트 6개가 이천 주소 차단, 다중 상품 주문 스냅샷, 단일 결제 금액을 오류 없이 검증했다. | done |
 | 2.5 | 2.4 | `apps/api/src/orders/orders-query.service.ts` | 신규 다중 상품과 기존 단일 상품을 같은 조회 응답으로 정규화한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 통과 — 회차 주문 흐름 테스트 6개와 API 빌드가 기존 단일 상품 주문의 `orderItems` 정규화와 `DELIVERY_HELD` 조회 상태를 오류 없이 수용했다. | done |
 | 2.6 | 2.5 | `apps/api/src/orders/orders-lifecycle.service.ts` | 마감 전 취소·`DELIVERY_HELD`·회차 완료 가드·부분 환불 기록을 구현한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 통과 — 회차 주문 흐름 테스트 6개가 마감 전 고객 취소의 환불·한도 반환과 배송 보류 카운터 기록을 오류 없이 검증했다. | done |
-| 2.7 | 2.6 | `apps/api/src/orders/orders.controller.ts` | 장바구니 검증·고객 취소·보류·재배송비·완료 사진 API 경로를 연결한다. | `pnpm --filter api build` | [판정 대기 — 주문 API] | todo |
-| 2.8 | 2.7 | `apps/api/src/orders/orders.module.ts` | 회차·용량·결제·보관 의존성을 주문 모듈에 연결한다. | `pnpm --filter api build` | [판정 대기 — 주문 모듈] | todo |
+| 2.7 | 2.6 | `apps/api/src/orders/orders.controller.ts` | 장바구니 검증·고객 취소·보류·재배송비·완료 사진 API 경로를 연결한다. | `pnpm --filter api build` | 통과 — 주문 컨트롤러가 회차 장바구니 검증, 고객 취소, 배송 보류, 재배송비, 배송 사진 경로를 빌드 오류 없이 노출한다. | done |
+| 2.8 | 2.7 | `apps/api/src/orders/orders.module.ts` | 용량·결제·재배송비 의존성을 주문 모듈에 연결한다. 보관 의존성은 생성 이후 Task 3.11·3.14에서 연결한다. | `pnpm --filter api build` | 통과 — `OrdersModule`이 `OrderCapacityModule`과 `PaymentsModule`을 가져오고 `OrderChargesService`를 provider로 등록한 상태에서 API 빌드에 성공했다. | done |
 | 2.9 | 2.8 | `apps/api/src/payments/payments.service.spec.ts` | 늦은 결제·중복 웹훅·한도 재확보 실패 자동 환불 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | [판정 대기 — 결제 테스트 수집] | todo |
 | 2.10 | 2.9 | `apps/api/src/payments/payments.service.ts` | 타임아웃 포트원 재조회와 주문·재배송비 결제의 멱등 확정을 구현한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | [판정 대기 — 결제 복구] | todo |
 | 2.11 | 2.10 | `apps/api/src/orders/order-charges.service.ts` | 고객 사유 첫 실패에 재배송비 결제 1회를 만들고 재실패는 운영 예외로 전환한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 재배송비] | todo |
@@ -279,6 +280,6 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: 실행 전
-- **검증 결과**: 미실행
-- **잔여 위험**: 실제 알리고 템플릿 승인, 포트원 운영 채널, 이천 주소 판정 데이터 품질은 출시 전 운영 환경에서 확인한다.
+- **Status**: Task 2.8 완료 후 Task 2.9 진입 대기
+- **검증 결과**: 리뷰 보정의 API 단위 테스트 34개·보정 E2E 2개·API 빌드와 빌드 게이트 보정의 선택 회귀 검사·consumer build·seller build·전체 workspace build에 더해, Task 2.8에서 주문 모듈의 용량·결제·재배송비 필수 연결 상태로 API 빌드를 통과했다.
+- **잔여 위험**: PortOne 샌드박스 검증은 Task 2.10 전, Firebase Emulator 검증은 Task 6.4 전에 수행한다. 실제 알리고 템플릿 승인, 포트원 운영 채널, 이천 주소 판정 데이터 품질은 출시 전 운영 환경에서 확인한다.

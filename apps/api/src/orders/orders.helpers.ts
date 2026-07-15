@@ -8,13 +8,16 @@ export const SELLER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   ACCEPTED: ['PREPARING'],
   CONFIRMED: ['PREPARING'],
   // 택배 발송 완료 — parcel 주문만 (lifecycle service에서 deliveryMethod 가드, BUG-16 T1)
-  PREPARING: ['DELIVERED'],
+  PREPARING: ['DELIVERED', 'DELIVERY_HELD'],
+  DELIVERING: ['DELIVERY_HELD'],
+  DELIVERY_HELD: ['PREPARING', 'CANCELLED'],
 };
 
 // 드라이버 허용 상태 전환
 export const DRIVER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
-  PREPARING: ['DELIVERING'],
-  DELIVERING: ['HUB_ARRIVED', 'DELIVERED'],
+  PREPARING: ['DELIVERING', 'DELIVERY_HELD'],
+  DELIVERING: ['HUB_ARRIVED', 'DELIVERED', 'DELIVERY_HELD'],
+  DELIVERY_HELD: ['DELIVERING'],
 };
 
 // 소비자 허용 상태 전환

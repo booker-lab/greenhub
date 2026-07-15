@@ -6,7 +6,7 @@
     "postinstall": "node scripts/copy-fonts.cjs",
     "dev:consumer": "pnpm --filter consumer dev",
     "dev:api": "pnpm --filter api start:dev",
-    "build": "pnpm --filter ./packages/shared build && pnpm -r --filter './apps/*' build",
+    "build": "pnpm --filter @greenhub/shared build && pnpm --filter api --filter consumer --filter seller --filter driver build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "load:smoke": "k6 run tests/load/scenarios/smoke.js",

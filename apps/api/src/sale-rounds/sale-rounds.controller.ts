@@ -44,36 +44,49 @@ export class SaleRoundsController {
   }
 
   @Post()
-  createRound(@Param('storeId') storeId: string, @Body() dto: CreateSaleRoundDto) {
-    return this.saleRoundsService.createRound(storeId, dto);
+  createRound(
+    @Param('storeId') storeId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateSaleRoundDto,
+  ) {
+    return this.saleRoundsService.createRound(storeId, user.sub, user.role, dto);
   }
 
   @Post('copy')
-  copyRound(@Param('storeId') storeId: string, @Body() dto: CopySaleRoundDto) {
-    return this.saleRoundsService.copyRound(storeId, dto);
+  copyRound(
+    @Param('storeId') storeId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CopySaleRoundDto,
+  ) {
+    return this.saleRoundsService.copyRound(storeId, user.sub, user.role, dto);
   }
 
   @Patch(':roundId')
   updateRound(
     @Param('storeId') storeId: string,
     @Param('roundId') roundId: string,
+    @CurrentUser() user: JwtPayload,
     @Body() dto: UpdateSaleRoundDto,
   ) {
-    return this.saleRoundsService.updateRound(storeId, roundId, dto);
+    return this.saleRoundsService.updateRound(storeId, roundId, user.sub, user.role, dto);
   }
 
   @Patch(':roundId/status')
   updateStatus(
     @Param('storeId') storeId: string,
     @Param('roundId') roundId: string,
-    @CurrentUser() _user: JwtPayload,
+    @CurrentUser() user: JwtPayload,
     @Body() dto: UpdateSaleRoundStatusDto,
   ) {
-    return this.saleRoundsService.updateStatus(storeId, roundId, dto);
+    return this.saleRoundsService.updateStatus(storeId, roundId, user.sub, user.role, dto);
   }
 
   @Patch(':roundId/complete')
-  completeRound(@Param('storeId') storeId: string, @Param('roundId') roundId: string) {
-    return this.saleRoundsService.completeRound(storeId, roundId);
+  completeRound(
+    @Param('storeId') storeId: string,
+    @Param('roundId') roundId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.saleRoundsService.completeRound(storeId, roundId, user.sub, user.role);
   }
 }

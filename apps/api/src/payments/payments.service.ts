@@ -12,6 +12,7 @@ import { PortoneClient } from './portone.client';
 import { PortoneWebhookDto } from './dto/portone-webhook.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/audit/audit.service';
+import { OrderCapacityService } from '../orders/order-capacity.service';
 
 // 환불 가능 상태
 const REFUNDABLE_STATUSES = ['ACCEPTED', 'RECRUITING', 'CONFIRMED', 'PREPARING'];
@@ -26,6 +27,7 @@ export class PaymentsService {
     @Inject(forwardRef(() => NotificationsService))
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
+    private readonly capacity: OrderCapacityService,
   ) {}
 
   async handleWebhook(dto: PortoneWebhookDto) {
@@ -66,13 +68,15 @@ export class PaymentsService {
 
     const now = this.firestore.Timestamp.now();
 
-    await this.firestore.doc(`orders/${orderId}`).update({
-      status: newStatus,
-      updatedAt: now,
-    });
+    if (order['schemaVersion'] === 2 && order['reservationId']) {
+      await this.capacity.consumeReservation({
+        reservationId: order['reservationId'] as string,
+        orderId,
+        paymentId: orderId,
+      });
+    }
 
-    // 결제 기록 저장
-    await this.firestore.doc(`payments/${orderId}`).set({
+    const paymentRecord = {
       id: orderId,
       orderId,
       userId: order['userId'],
@@ -87,7 +91,17 @@ export class PaymentsService {
       refundReason: null,
       createdAt: now,
       updatedAt: now,
+    };
+    let applied = false;
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const freshOrder = await tx.get(orderRef);
+      if (!freshOrder.exists || freshOrder.data()?.['status'] !== 'PENDING') return;
+      tx.update(orderRef, { status: newStatus, updatedAt: now });
+      tx.set(this.firestore.doc(`payments/${orderId}`), paymentRecord);
+      applied = true;
     });
+    if (!applied) return { ok: true, reason: 'already_processed' };
 
     // 소비자 알림: 일반 결제 완료 / 공동구매 참여 완료
     const buyerTemplateCode = newStatus === 'ACCEPTED' ? 'ORDER_ACCEPTED' : 'GROUP_JOINED';
@@ -222,6 +236,19 @@ export class PaymentsService {
     reason: string,
   ) {
     const now = this.firestore.Timestamp.now();
+    if (order['schemaVersion'] === 2 && order['reservationId']) {
+      if (reason === 'timeout') {
+        await this.capacity.releaseReservation(order['reservationId'] as string, 'EXPIRED');
+      } else {
+        await this.capacity.releaseReservation(order['reservationId'] as string);
+      }
+      await this.firestore.doc(`orders/${orderId}`).update({
+        status: 'CANCELLED',
+        cancelReason: reason,
+        updatedAt: now,
+      });
+      return;
+    }
     const updates: Promise<unknown>[] = [
       this.firestore.doc(`orders/${orderId}`).update({
         status: 'CANCELLED',

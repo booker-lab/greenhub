@@ -103,7 +103,21 @@ export class OrdersQueryService {
 
   private normalizeOrder(order: Record<string, any>) {
     if (Array.isArray(order['orderItems']) && order['orderItems'].length > 0) {
-      return order;
+      return {
+        ...order,
+        orderItems: order['orderItems'].map((item: Record<string, any>) => {
+          const { lineAmount, ...normalized } = item;
+          return {
+            ...normalized,
+            subtotalAmount:
+              item['subtotalAmount'] ??
+              lineAmount ??
+              (typeof item['unitPrice'] === 'number' && typeof item['quantity'] === 'number'
+                ? item['unitPrice'] * item['quantity']
+                : null),
+          };
+        }),
+      };
     }
     return {
       ...order,
@@ -117,7 +131,7 @@ export class OrdersQueryService {
               ? Math.max(0, order['totalAmount'] - (order['deliveryFee'] ?? 0)) / order['quantity']
               : null,
           quantity: order['quantity'] ?? 1,
-          lineAmount:
+          subtotalAmount:
             typeof order['totalAmount'] === 'number' ? order['totalAmount'] - (order['deliveryFee'] ?? 0) : null,
         },
       ],

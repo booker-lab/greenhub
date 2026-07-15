@@ -10,6 +10,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
 import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
+import { OrderCapacityService } from './order-capacity.service';
 
 @Injectable()
 export class OrdersLifecycleService {
@@ -18,6 +19,7 @@ export class OrdersLifecycleService {
     private readonly notifications: NotificationsService,
     private readonly payments: PaymentsService,
     private readonly settlements: SettlementsService,
+    private readonly capacity: OrderCapacityService,
   ) {}
 
   async updateStatus(
@@ -41,13 +43,16 @@ export class OrdersLifecycleService {
       const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
       role = userSnap.data()?.['role'] ?? 'consumer';
     }
+    await this.assertOrderActionAccess(
+      storeId,
+      requesterId,
+      role ?? 'consumer',
+      order,
+      nextStatus,
+    );
 
-    const isRoundDeliveryHold =
-      order['schemaVersion'] === 2 &&
-      nextStatus === 'DELIVERY_HELD' &&
-      ['PREPARING', 'DELIVERING'].includes(currentStatus);
     const allowed = getAllowedTransitions(role ?? 'consumer', currentStatus);
-    if (!isRoundDeliveryHold && !allowed.includes(dto.status)) {
+    if (!allowed.includes(dto.status)) {
       throw new ForbiddenException(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
     }
 
@@ -62,9 +67,26 @@ export class OrdersLifecycleService {
       throw new ForbiddenException('택배 발송 완료는 택배 주문에서만 가능합니다.');
     }
 
+    if (nextStatus === 'CANCELLED') {
+      const refundableStatuses: OrderStatus[] = [
+        'ACCEPTED',
+        'RECRUITING',
+        'CONFIRMED',
+        'PREPARING',
+        'DELIVERY_HELD',
+      ];
+      if (refundableStatuses.includes(currentStatus)) {
+        await this.payments.processRefundByOrderId(orderId, dto.reason ?? '판매자 취소');
+      }
+      if (order['schemaVersion'] === 2 && order['reservationId']) {
+        await this.capacity.releaseReservation(order['reservationId'] as string);
+      }
+    }
+
+    const now = this.firestore.Timestamp.now();
     const update: Record<string, unknown> = {
       status: nextStatus,
-      updatedAt: this.firestore.Timestamp.now(),
+      updatedAt: now,
     };
     if (dto.reason) update['cancelReason'] = dto.reason;
     if (nextStatus === 'PREPARING' && dto.preparedAt) {
@@ -79,39 +101,52 @@ export class OrdersLifecycleService {
       update['driverId'] = requesterId;
     }
     // HUB_ARRIVED 전환 시 photoUrl 저장
-    if (nextStatus === 'HUB_ARRIVED' && dto.photoUrl) {
+    if ((nextStatus === 'HUB_ARRIVED' || nextStatus === 'DELIVERED') && dto.photoUrl) {
       update['deliveryPhotoUrl'] = dto.photoUrl;
     }
     if (nextStatus === 'DELIVERY_HELD') {
-      update['deliveryHold'] = (dto as any).deliveryHold;
+      const hold = (dto as any).deliveryHold as Record<string, unknown> | undefined;
+      if (!hold?.['reasonCode'] || !hold?.['reasonMessage']) {
+        throw new BadRequestException('배송 보류 사유가 필요합니다.');
+      }
+      update['deliveryHold'] = {
+        ...hold,
+        heldAt: this.toIso(now),
+        customerResponsible: hold['customerResponsible'] ?? false,
+        redeliveryFee: hold['redeliveryFee'] ?? null,
+        nextContactAt: hold['nextContactAt'] ?? null,
+        nextDeliveryAt: hold['nextDeliveryAt'] ?? null,
+        resolvedAt: null,
+      };
+    } else if (currentStatus === 'DELIVERY_HELD') {
+      update['deliveryHold'] = {
+        ...(order['deliveryHold'] as Record<string, unknown>),
+        resolvedAt: this.toIso(now),
+      };
     }
 
-    if (isRoundDeliveryHold && order['roundId']) {
+    const heldOrderDelta =
+      nextStatus === 'DELIVERY_HELD' ? 1 : currentStatus === 'DELIVERY_HELD' ? -1 : 0;
+    if (heldOrderDelta !== 0 && order['roundId']) {
       await this.firestore.runTransaction(async (t) => {
         const roundRef = this.firestore.doc(`saleRounds/${order['roundId']}`);
         const roundSnap = await t.get(roundRef);
-        if (roundSnap.exists) {
-          const round = roundSnap.data()!;
-          const counters = this.nextRoundCounters(round['counters'], { heldOrderCount: 1 });
-          t.update(roundRef, { counters, updatedAt: update['updatedAt'] });
+        if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
+          throw new NotFoundException('회차를 찾을 수 없습니다.');
         }
+        const round = roundSnap.data()!;
+        const counters = this.nextRoundCounters(round['counters'], {
+          heldOrderCount: heldOrderDelta,
+        });
+        t.update(roundRef, { counters, updatedAt: update['updatedAt'] });
         t.update(this.firestore.doc(`orders/${orderId}`), update);
       });
     } else {
       await this.firestore.doc(`orders/${orderId}`).update(update);
     }
 
-    // 판매자 강제 취소 → 환불 + settlement 취소 반영
+    // 판매자 강제 취소 → settlement 취소 반영
     if (nextStatus === 'CANCELLED') {
-      const refundableStatuses: OrderStatus[] = [
-        'ACCEPTED',
-        'RECRUITING',
-        'CONFIRMED',
-        'PREPARING',
-      ];
-      if (refundableStatuses.includes(currentStatus)) {
-        await this.payments.processRefundByOrderId(orderId, dto.reason ?? '판매자 취소');
-      }
       await this.settlements.cancelSettlement(orderId);
     }
 
@@ -268,6 +303,38 @@ export class OrdersLifecycleService {
   // Private helpers
   // ────────────────────────────────────────────────────────────
 
+  private async assertOrderActionAccess(
+    storeId: string,
+    requesterId: string,
+    role: string,
+    order: Record<string, unknown>,
+    nextStatus: string,
+  ) {
+    if (role === 'admin') return;
+    if (role === 'seller') {
+      const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
+      if (storeSnap.exists && storeSnap.data()?.['ownerId'] === requesterId) return;
+      throw new ForbiddenException('해당 스토어 주문을 변경할 권한이 없습니다.');
+    }
+    if (role === 'driver') {
+      if (order['driverId'] === requesterId) return;
+      if (!order['driverId'] && order['status'] === 'PREPARING' && nextStatus === 'DELIVERING') {
+        return;
+      }
+      throw new ForbiddenException('담당 기사만 배송 상태를 변경할 수 있습니다.');
+    }
+    if (role === 'consumer' && order['userId'] === requesterId) return;
+    throw new ForbiddenException('해당 주문을 변경할 권한이 없습니다.');
+  }
+
+  private toIso(value: unknown) {
+    if (value instanceof Date) return value.toISOString();
+    if (typeof (value as { toDate?: () => Date }).toDate === 'function') {
+      return (value as { toDate: () => Date }).toDate().toISOString();
+    }
+    return new Date(value as string | number).toISOString();
+  }
+
   private async sendTransitionNotification(
     order: Record<string, unknown>,
     from: OrderStatus,
@@ -321,6 +388,7 @@ export class OrdersLifecycleService {
     order: Record<string, unknown>,
     reason?: string,
   ) {
+    if (order['status'] === 'CANCELLED') return { orderId, status: 'CANCELLED' };
     if (!['PENDING', 'ACCEPTED'].includes(order['status'] as string)) {
       throw new ForbiddenException('마감 전 회차 주문만 취소할 수 있습니다.');
     }
@@ -338,42 +406,18 @@ export class OrdersLifecycleService {
 
     const cancelReason = reason ?? '소비자 취소';
     await this.payments.processRefundByOrderId(orderId, cancelReason);
+    if (order['reservationId']) {
+      await this.capacity.releaseReservation(order['reservationId'] as string);
+    }
     const now = this.firestore.Timestamp.now();
-    const orderItems = Array.isArray(order['orderItems']) ? (order['orderItems'] as any[]) : [];
-    const itemQuantityTotal = orderItems.reduce((sum, item) => sum + (item['quantity'] ?? 0), 0);
 
     await this.firestore.runTransaction(async (t) => {
-      const freshRoundSnap = await t.get(roundRef);
-      const freshRound = freshRoundSnap.exists ? freshRoundSnap.data()! : round;
-      const itemReads = await Promise.all(
-        orderItems
-          .filter((item) => item['roundItemId'])
-          .map(async (item) => ({
-            item,
-            ref: this.firestore.doc(`saleRoundItems/${item['roundItemId']}`),
-            snap: await t.get(this.firestore.doc(`saleRoundItems/${item['roundItemId']}`)),
-          })),
-      );
-
+      await t.get(roundRef);
       t.update(this.firestore.doc(`orders/${orderId}`), {
         status: 'CANCELLED',
         cancelReason,
         updatedAt: now,
       });
-      t.update(roundRef, {
-        counters: this.nextRoundCounters(freshRound['counters'], {
-          orderedDeliveryAddresses: -1,
-          orderedItemQuantity: -itemQuantityTotal,
-        }),
-        updatedAt: now,
-      });
-      for (const { item, ref, snap } of itemReads) {
-        const itemData = snap.exists ? snap.data()! : {};
-        t.update(ref, {
-          orderedQuantity: Math.max(0, (itemData['orderedQuantity'] ?? 0) - item['quantity']),
-          updatedAt: now,
-        });
-      }
     });
 
     await this.settlements.cancelSettlement(orderId);

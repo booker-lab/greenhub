@@ -7,11 +7,19 @@ import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { SettlementsModule } from '../settlements/settlements.module';
+import { OrderCapacityModule } from './order-capacity.module';
+import { OrderChargesService } from './order-charges.service';
 
 @Module({
-  imports: [NotificationsModule, PaymentsModule, SettlementsModule],
+  imports: [NotificationsModule, PaymentsModule, SettlementsModule, OrderCapacityModule],
   controllers: [OrdersPublicController, OrdersController],
-  providers: [OrdersService, OrdersCreateService, OrdersQueryService, OrdersLifecycleService],
+  providers: [
+    OrdersService,
+    OrdersCreateService,
+    OrdersQueryService,
+    OrdersLifecycleService,
+    OrderChargesService,
+  ],
   exports: [OrdersService],
 })
 export class OrdersModule {}

@@ -19,6 +19,7 @@ import { VarietiesModule } from './varieties/varieties.module';
 import { AiModule } from './ai/ai.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { SaleRoundsModule } from './sale-rounds/sale-rounds.module';
 
 @Module({
   controllers: [AppController],
@@ -49,6 +50,7 @@ import { AppService } from './app.service';
     DriverModule,
     VarietiesModule,
     AiModule,
+    SaleRoundsModule,
   ],
 })
 export class AppModule {}

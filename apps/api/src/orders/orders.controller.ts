@@ -12,7 +12,13 @@ import {
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { UpdateStatusDto } from './dto/update-status.dto';
+import {
+  AttachDeliveryPhotoDto,
+  CreateRedeliveryFeeDto,
+  HoldDeliveryDto,
+  UpdateStatusDto,
+} from './dto/update-status.dto';
+import { OrderChargesService } from './order-charges.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/types/jwt-payload.type';
@@ -36,7 +42,20 @@ export class OrdersPublicController {
 @Controller('stores/:storeId/orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly orderCharges: OrderChargesService,
+  ) {}
+
+  @Post('validate-cart')
+  @HttpCode(HttpStatus.OK)
+  validateCart(
+    @Param('storeId') storeId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateOrderDto,
+  ) {
+    return this.ordersService.validateCart(storeId, user.sub, dto);
+  }
 
   @Post()
   createOrder(
@@ -84,6 +103,59 @@ export class OrdersController {
     @Body('reason') reason?: string,
   ) {
     return this.ordersService.cancelOrder(storeId, orderId, user.sub, reason);
+  }
+
+  @Patch(':orderId/delivery-hold')
+  @HttpCode(HttpStatus.OK)
+  holdDelivery(
+    @Param('storeId') storeId: string,
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: HoldDeliveryDto,
+  ) {
+    return this.ordersService.updateStatus(
+      storeId,
+      orderId,
+      user.sub,
+      {
+        status: 'DELIVERY_HELD',
+        deliveryHold: dto.deliveryHold,
+      } as never,
+      user.role,
+    );
+  }
+
+  @Post(':orderId/redelivery-fee')
+  @HttpCode(HttpStatus.OK)
+  createRedeliveryFee(
+    @Param('storeId') storeId: string,
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateRedeliveryFeeDto,
+  ) {
+    return this.orderCharges.createRedeliveryFeeCharge({
+      storeId,
+      orderId,
+      requesterId: user.sub,
+      idempotencyKey: dto.idempotencyKey ?? 'first',
+    });
+  }
+
+  @Patch(':orderId/delivery-photo')
+  @HttpCode(HttpStatus.OK)
+  attachDeliveryPhoto(
+    @Param('storeId') storeId: string,
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: AttachDeliveryPhotoDto,
+  ) {
+    return this.ordersService.updateStatus(
+      storeId,
+      orderId,
+      user.sub,
+      { status: 'DELIVERED', photoUrl: dto.photoUrl } as never,
+      user.role,
+    );
   }
 
   @Patch(':orderId/review')

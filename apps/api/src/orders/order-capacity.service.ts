@@ -188,7 +188,15 @@ export class OrderCapacityService {
         result = reservation;
         return;
       }
-      if (reservation.status !== 'HELD') {
+      if (['RELEASED', 'EXPIRED'].includes(reservation.status)) {
+        result = reservation;
+        return;
+      }
+      const releasingConsumed = reservation.status === 'CONSUMED' && nextStatus === 'RELEASED';
+      const consumingHeld = reservation.status === 'HELD' && nextStatus === 'CONSUMED';
+      const releasingHeld =
+        reservation.status === 'HELD' && ['RELEASED', 'EXPIRED'].includes(nextStatus);
+      if (!releasingConsumed && !consumingHeld && !releasingHeld) {
         throw new ConflictException('이미 닫힌 결제 예약입니다.');
       }
 
@@ -204,6 +212,7 @@ export class OrderCapacityService {
       );
       const now = this.nowIso();
       const consumed = nextStatus === 'CONSUMED';
+      const wasConsumed = reservation.status === 'CONSUMED';
       const update: Partial<ReservationRecord> = {
         status: nextStatus,
         orderId: patch.orderId ?? reservation.orderId,
@@ -216,10 +225,14 @@ export class OrderCapacityService {
       tx.update(reservationRef, update);
       tx.update(roundRef, {
         counters: this.nextCounters(round['counters'], {
-          reservedDeliveryAddresses: -1,
-          reservedItemQuantity: -reservation.itemQuantityTotal,
-          orderedDeliveryAddresses: consumed ? 1 : 0,
-          orderedItemQuantity: consumed ? reservation.itemQuantityTotal : 0,
+          reservedDeliveryAddresses: wasConsumed ? 0 : -1,
+          reservedItemQuantity: wasConsumed ? 0 : -reservation.itemQuantityTotal,
+          orderedDeliveryAddresses: consumed ? 1 : wasConsumed ? -1 : 0,
+          orderedItemQuantity: consumed
+            ? reservation.itemQuantityTotal
+            : wasConsumed
+              ? -reservation.itemQuantityTotal
+              : 0,
         }),
         updatedAt: now,
       });
@@ -227,10 +240,14 @@ export class OrderCapacityService {
       reservation.items.forEach((item, index) => {
         const itemData = itemSnaps[index].data() as Record<string, any>;
         tx.update(this.firestore.doc(`saleRoundItems/${item.roundItemId}`), {
-          reservedQuantity: Math.max(0, (itemData['reservedQuantity'] ?? 0) - item.quantity),
+          reservedQuantity: wasConsumed
+            ? (itemData['reservedQuantity'] ?? 0)
+            : Math.max(0, (itemData['reservedQuantity'] ?? 0) - item.quantity),
           orderedQuantity: consumed
             ? (itemData['orderedQuantity'] ?? 0) + item.quantity
-            : (itemData['orderedQuantity'] ?? 0),
+            : wasConsumed
+              ? Math.max(0, (itemData['orderedQuantity'] ?? 0) - item.quantity)
+              : (itemData['orderedQuantity'] ?? 0),
           updatedAt: now,
         });
       });
@@ -275,10 +292,15 @@ export class OrderCapacityService {
 
   private normalizeItems(items: RoundItemInput[]) {
     if (!items.length) throw new BadRequestException('회차 상품이 필요합니다.');
+    const seen = new Set<string>();
     return items.map((item) => {
       if (!item.roundItemId || !Number.isInteger(item.quantity) || item.quantity < 1) {
         throw new BadRequestException('회차 상품 수량이 올바르지 않습니다.');
       }
+      if (seen.has(item.roundItemId)) {
+        throw new BadRequestException('같은 회차 상품을 중복으로 주문할 수 없습니다.');
+      }
+      seen.add(item.roundItemId);
       return { roundItemId: item.roundItemId, quantity: item.quantity };
     });
   }

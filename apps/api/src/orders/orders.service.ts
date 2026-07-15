@@ -17,6 +17,10 @@ export class OrdersService {
     return this.create.createOrder(storeId, userId, dto);
   }
 
+  validateCart(storeId: string, userId: string, dto: CreateOrderDto) {
+    return this.create.validateCart(storeId, userId, dto);
+  }
+
   getOrder(storeId: string, orderId: string, requesterId: string) {
     return this.query.getOrder(storeId, orderId, requesterId);
   }

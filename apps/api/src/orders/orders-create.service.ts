@@ -3,7 +3,6 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
-  Optional,
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
@@ -17,7 +16,7 @@ export class OrdersCreateService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly notifications: NotificationsService,
-    @Optional() private readonly capacity?: OrderCapacityService,
+    private readonly capacity: OrderCapacityService,
   ) {}
 
   async createOrder(storeId: string, userId: string, dto: CreateOrderDto) {
@@ -51,11 +50,12 @@ export class OrdersCreateService {
       this.firestore.doc(`stores/${storeId}`).get(),
       dto.hubId ? this.firestore.doc(`hubs/${dto.hubId}`).get() : Promise.resolve(null),
     ]);
+    if (!storeSnap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+    if (storeSnap.data()?.['salesMode'] === 'round_direct') {
+      return this.createRoundDirectOrder(storeId, userId, dto, userSnap, storeSnap);
+    }
     if (!product.exists || product.data()!['storeId'] !== storeId) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
-    }
-    if (storeSnap.data()?.['salesMode'] === 'round_direct' && dto.roundId && dto.roundItems) {
-      return this.createRoundDirectOrder(storeId, userId, dto, userSnap, storeSnap);
     }
     const productData = product.data()!;
     const rawBuyerName: string = userSnap.data()?.['name'] ?? '';
@@ -209,6 +209,85 @@ export class OrdersCreateService {
     };
   }
 
+  async validateCart(storeId: string, userId: string, dto: CreateOrderDto) {
+    const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!storeSnap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+    if (storeSnap.data()?.['salesMode'] !== 'round_direct') {
+      return { ok: true, salesMode: storeSnap.data()?.['salesMode'] ?? 'legacy' };
+    }
+    if (dto.deliveryMethod !== 'direct') {
+      throw new BadRequestException('회차 주문은 직접배송만 가능합니다.');
+    }
+    if (!dto.roundId || !dto.roundItems?.length) {
+      throw new BadRequestException('회차 주문 상품이 필요합니다.');
+    }
+    this.assertUniqueRoundItems(dto.roundItems);
+
+    const roundSnap = await this.firestore.doc(`saleRounds/${dto.roundId}`).get();
+    if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
+      throw new NotFoundException('회차를 찾을 수 없습니다.');
+    }
+    const round = roundSnap.data()!;
+    if (round['status'] !== 'OPEN') {
+      throw new ConflictException('현재 주문 가능한 회차가 아닙니다.');
+    }
+    const closeAt = new Date(round['schedule']?.['orderCloseAt'] ?? 0).getTime();
+    if (!Number.isFinite(closeAt) || closeAt <= Date.now()) {
+      throw new ConflictException('주문 마감된 회차입니다.');
+    }
+    const deliveryCity = round['deliveryRegion']?.['city'] as string | undefined;
+    this.assertDeliveryCity(dto.deliveryAddress.address, deliveryCity);
+
+    const items = await Promise.all(
+      dto.roundItems.map(async (input) => {
+        if (!Number.isInteger(input.quantity) || input.quantity < 1) {
+          throw new BadRequestException('회차 상품 수량이 올바르지 않습니다.');
+        }
+        const snap = await this.firestore.doc(`saleRoundItems/${input.roundItemId}`).get();
+        if (!snap.exists || snap.data()?.['roundId'] !== dto.roundId) {
+          throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
+        }
+        const item = snap.data()!;
+        if (item['storeId'] !== storeId || item['status'] !== 'ACTIVE') {
+          throw new ConflictException('구매할 수 없는 회차 상품입니다.');
+        }
+        const nextQuantity =
+          (item['reservedQuantity'] ?? 0) + (item['orderedQuantity'] ?? 0) + input.quantity;
+        if (nextQuantity > (item['saleLimitQuantity'] ?? 0)) {
+          throw new ConflictException('회차 상품 수량이 마감되었습니다.');
+        }
+        return {
+          roundItemId: input.roundItemId,
+          productId: item['productId'],
+          productName: item['productNameSnapshot'],
+          unitPrice: item['roundPrice'],
+          quantity: input.quantity,
+          subtotalAmount: item['roundPrice'] * input.quantity,
+        };
+      }),
+    );
+
+    const quantityTotal = items.reduce((sum, item) => sum + item.quantity, 0);
+    const counters = round['counters'] ?? {};
+    const limits = round['limits'] ?? {};
+    if ((counters['reservedDeliveryAddresses'] ?? 0) + (counters['orderedDeliveryAddresses'] ?? 0) + 1 > (limits['maxDeliveryAddresses'] ?? 0)) {
+      throw new ConflictException('이번 회차 배송지 한도가 마감되었습니다.');
+    }
+    if ((counters['reservedItemQuantity'] ?? 0) + (counters['orderedItemQuantity'] ?? 0) + quantityTotal > (limits['maxItemQuantity'] ?? 0)) {
+      throw new ConflictException('이번 회차 상품 수량 한도가 마감되었습니다.');
+    }
+
+    return {
+      ok: true,
+      salesMode: 'round_direct',
+      roundId: dto.roundId,
+      itemQuantityTotal: quantityTotal,
+      totalAmount: items.reduce((sum, item) => sum + item.subtotalAmount, 0),
+      items,
+      userId,
+    };
+  }
+
   private async getDeliveryConfig(storeId: string): Promise<Record<string, number>> {
     const snap = await this.firestore.doc(`deliveryFeeConfig/${storeId}`).get();
     if (snap.exists) return snap.data() as Record<string, number>;
@@ -230,15 +309,13 @@ export class OrdersCreateService {
     userSnap: any,
     storeSnap: any,
   ) {
-    if (!this.capacity) {
-      throw new ConflictException('회차 주문 용량 서비스가 연결되지 않았습니다.');
-    }
     if (dto.deliveryMethod !== 'direct') {
       throw new BadRequestException('회차 주문은 직접배송만 가능합니다.');
     }
     if (!dto.roundId || !dto.roundItems?.length) {
       throw new BadRequestException('회차 주문 상품이 필요합니다.');
     }
+    this.assertUniqueRoundItems(dto.roundItems);
 
     const roundSnap = await this.firestore.doc(`saleRounds/${dto.roundId}`).get();
     if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
@@ -246,9 +323,7 @@ export class OrdersCreateService {
     }
     const round = roundSnap.data()!;
     const deliveryCity = round['deliveryRegion']?.['city'] as string | undefined;
-    if (!deliveryCity || !dto.deliveryAddress.address.includes(deliveryCity)) {
-      throw new BadRequestException('배송 가능 지역의 주소만 주문할 수 있습니다.');
-    }
+    this.assertDeliveryCity(dto.deliveryAddress.address, deliveryCity);
 
     const roundItems = await Promise.all(
       dto.roundItems.map(async (item) => {
@@ -267,7 +342,7 @@ export class OrdersCreateService {
           productImageUrl: data['productImageUrlSnapshot'] ?? null,
           unitPrice: data['roundPrice'] as number,
           quantity: item.quantity,
-          lineAmount: (data['roundPrice'] as number) * item.quantity,
+          subtotalAmount: (data['roundPrice'] as number) * item.quantity,
         };
       }),
     );
@@ -289,12 +364,10 @@ export class OrdersCreateService {
     const buyerPhone: string | null = userSnap.data()?.['phone'] ?? null;
     const sellerPhone: string | null = storeSnap.data()?.['phone'] ?? null;
     const now = this.firestore.Timestamp.now();
-    const totalAmount = roundItems.reduce((sum, item) => sum + item.lineAmount, 0);
-    const orderNumber = await this.nextOrderNumber(now);
+    const totalAmount = roundItems.reduce((sum, item) => sum + item.subtotalAmount, 0);
 
     const order = {
       id: orderId,
-      orderNumber,
       storeId,
       userId,
       productId: roundItems[0].productId,
@@ -324,7 +397,13 @@ export class OrdersCreateService {
       updatedAt: now,
     };
 
-    await this.firestore.doc(`orders/${orderId}`).set(order);
+    let orderNumber: string;
+    try {
+      orderNumber = await this.saveRoundDirectOrder(orderId, order, now);
+    } catch (error) {
+      await this.capacity.releaseReservation(reservation.id);
+      throw error;
+    }
 
     return {
       orderId,
@@ -338,7 +417,7 @@ export class OrdersCreateService {
     };
   }
 
-  private async nextOrderNumber(now: unknown) {
+  private async saveRoundDirectOrder(orderId: string, order: Record<string, unknown>, now: unknown) {
     const kstDate = new Date(Date.now() + 9 * 3600 * 1000);
     const yyyymmdd = kstDate.toISOString().slice(0, 10).replace(/-/g, '');
     const counterRef = this.firestore.doc(`orderCounters/${yyyymmdd}`);
@@ -349,8 +428,25 @@ export class OrdersCreateService {
       const seq = (counterSnap.exists ? (counterSnap.data()!['seq'] as number) : 0) + 1;
       orderNumber = `${yyyymmdd}-${String(seq).padStart(6, '0')}`;
       t.set(counterRef, { seq, updatedAt: now }, { merge: true });
+      t.set(this.firestore.doc(`orders/${orderId}`), { ...order, orderNumber });
     });
 
     return orderNumber;
+  }
+
+  private assertUniqueRoundItems(items: Array<{ roundItemId: string }>) {
+    const ids = items.map((item) => item.roundItemId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException('같은 회차 상품을 중복으로 주문할 수 없습니다.');
+    }
+  }
+
+  private assertDeliveryCity(address: string, city?: string) {
+    if (!city) throw new BadRequestException('배송 가능 지역이 설정되지 않았습니다.');
+    const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const administrativeBoundary = new RegExp(`^(?:(?:경기도|경기)\\s+)?${escapedCity}(?:\\s|$)`);
+    if (!administrativeBoundary.test(address.trim())) {
+      throw new BadRequestException('배송 가능 지역의 주소만 주문할 수 있습니다.');
+    }
   }
 }
