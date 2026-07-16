@@ -10,6 +10,7 @@ import { OrdersService } from './orders.service';
 import { OrdersCreateService } from './orders-create.service';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { OrdersQueryService } from './orders-query.service';
+import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 
 @Module({
   imports: [
@@ -25,8 +26,9 @@ import { OrdersQueryService } from './orders-query.service';
     OrdersCreateService,
     OrdersQueryService,
     OrdersLifecycleService,
+    RoundOrderLifecycleService,
     OrderChargesService,
   ],
-  exports: [OrdersService],
+  exports: [OrdersService, RoundOrderLifecycleService],
 })
 export class OrdersModule {}

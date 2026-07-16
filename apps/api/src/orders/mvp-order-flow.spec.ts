@@ -1,7 +1,9 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { getAllowedTransitions } from './orders.helpers';
 import { OrdersCreateService } from './orders-create.service';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { OrdersQueryService } from './orders-query.service';
+import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 
 type RecordData = Record<string, unknown>;
 function makeSnap(data: RecordData | null) {
@@ -55,12 +57,18 @@ function makeFirestore(initial: Record<string, RecordData>) {
       ref.update(data),
     ),
   };
+  let transactionQueue = Promise.resolve();
   const firestore = {
     doc,
     collection,
-    runTransaction: jest.fn(async (callback: (transaction: typeof tx) => Promise<void>) =>
-      callback(tx),
-    ),
+    runTransaction: jest.fn((callback: (transaction: typeof tx) => Promise<void>) => {
+      const result = transactionQueue.then(() => callback(tx));
+      transactionQueue = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result;
+    }),
     Timestamp: {
       now: jest.fn(() => new Date('2026-07-15T03:00:00.000+09:00')),
       fromDate: jest.fn((date: Date) => date),
@@ -166,7 +174,10 @@ describe('MVP 회차 주문 흐름 계약', () => {
     processGroupBuyEarlyConfirm: jest.fn(),
   };
   const payments = { processRefundByOrderId: jest.fn() };
-  const capacity = { releaseReservation: jest.fn() };
+  const capacity = {
+    releaseReservation: jest.fn(),
+    releaseReservationInTransaction: jest.fn(),
+  };
   const settlements = {
     createSettlement: jest.fn(),
     cancelSettlement: jest.fn(),
@@ -175,6 +186,34 @@ describe('MVP 회차 주문 흐름 계약', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
+
+  it('역할별 기존 전환과 배송 보류 해소 상태를 보존한다', () => {
+    expect(getAllowedTransitions('consumer', 'DELIVERED')).toEqual(['REVIEWED']);
+    expect(getAllowedTransitions('seller', 'DELIVERY_HELD')).toEqual(['PREPARING', 'CANCELLED']);
+    expect(getAllowedTransitions('driver', 'DELIVERY_HELD')).toEqual(['DELIVERING']);
+    expect(getAllowedTransitions('admin', 'DELIVERY_HELD')).toEqual([
+      'PREPARING',
+      'CANCELLED',
+      'DELIVERING',
+    ]);
+  });
+
+  function makeLifecycle(firestore: Record<string, unknown>) {
+    const roundLifecycle = new RoundOrderLifecycleService(
+      firestore as never,
+      payments as never,
+      settlements as never,
+      capacity as never,
+    );
+    return new OrdersLifecycleService(
+      firestore as never,
+      notifications as never,
+      payments as never,
+      settlements as never,
+      capacity as never,
+      roundLifecycle,
+    );
+  }
 
   it('round_direct 주문은 이천시 밖 배송 주소를 결제 예약 전에 차단한다', async () => {
     const { firestore } = makeFirestore(seedRoundRecords());
@@ -469,20 +508,17 @@ describe('MVP 회차 주문 흐름 계약', () => {
         },
       }),
     );
-    const service = new OrdersLifecycleService(
-      firestore as never,
-      notifications as never,
-      payments as never,
-      settlements as never,
-      capacity as never,
-    );
+    const service = makeLifecycle(firestore);
 
     await expect(
       (service as any).cancelOrder('store-round', 'order-1', 'user-1', '고객 요청'),
     ).resolves.toMatchObject({ orderId: 'order-1', status: 'CANCELLED' });
 
     expect(payments.processRefundByOrderId).toHaveBeenCalledWith('order-1', '고객 요청');
-    expect(capacity.releaseReservation).toHaveBeenCalledWith('reservation-1');
+    expect(capacity.releaseReservationInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      'reservation-1',
+    );
     expect(records.get('saleRounds/round-1')).toMatchObject({
       counters: expect.objectContaining({
         orderedDeliveryAddresses: 0,
@@ -505,13 +541,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
         },
       }),
     );
-    const service = new OrdersLifecycleService(
-      firestore as never,
-      notifications as never,
-      payments as never,
-      settlements as never,
-      capacity as never,
-    );
+    const service = makeLifecycle(firestore);
 
     await expect(
       service.updateStatus(
@@ -554,6 +584,125 @@ describe('MVP 회차 주문 흐름 계약', () => {
     });
   });
 
+  it('같은 배송 보류 요청이 중복 실행돼도 회차 보류 주문 수는 한 번만 증가한다', async () => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-1': {
+          id: 'order-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'PREPARING',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          deliveryMethod: 'direct',
+        },
+      }),
+    );
+    const service = makeLifecycle(firestore);
+    const request = {
+      status: 'DELIVERY_HELD',
+      deliveryHold: {
+        reasonCode: 'ACCESS_UNAVAILABLE',
+        reasonMessage: '공동현관 출입 불가',
+        customerResponsible: false,
+      },
+    } as never;
+
+    const results = await Promise.allSettled([
+      service.updateStatus('store-round', 'order-1', 'seller-1', request, 'seller'),
+      service.updateStatus('store-round', 'order-1', 'seller-1', request, 'seller'),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(records.get('saleRounds/round-1')).toMatchObject({
+      counters: expect.objectContaining({ heldOrderCount: 1 }),
+    });
+  });
+
+  it('조회 뒤 주문 상태가 바뀐 오래된 전환 요청은 최신 상태 비교로 거부한다', async () => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-1': {
+          id: 'order-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'PREPARING',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          deliveryMethod: 'direct',
+        },
+      }),
+    );
+    const originalRunTransaction = firestore.runTransaction;
+    firestore.runTransaction = jest.fn(async (callback) => {
+      records.set('orders/order-1', {
+        ...records.get('orders/order-1')!,
+        status: 'DELIVERING',
+      });
+      return originalRunTransaction(callback);
+    }) as never;
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.updateStatus(
+        'store-round',
+        'order-1',
+        'seller-1',
+        {
+          status: 'DELIVERY_HELD',
+          deliveryHold: {
+            reasonCode: 'ACCESS_UNAVAILABLE',
+            reasonMessage: '공동현관 출입 불가',
+            customerResponsible: false,
+          },
+        } as never,
+        'seller',
+      ),
+    ).rejects.toThrow('주문 상태가 변경되었습니다.');
+    expect(records.get('saleRounds/round-1')).toMatchObject({
+      counters: expect.objectContaining({ heldOrderCount: 0 }),
+    });
+  });
+
+  it('환불 뒤 로컬 취소 실패는 환불을 반복하지 않는 재시도 상태를 보존한다', async () => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-1': {
+          id: 'order-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'ACCEPTED',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          reservationId: 'reservation-1',
+          orderItems: [{ roundItemId: 'round-item-1', quantity: 2 }],
+        },
+      }),
+    );
+    capacity.releaseReservationInTransaction = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('예약 반환 실패'))
+      .mockResolvedValueOnce(undefined);
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.cancelOrder('store-round', 'order-1', 'user-1', '고객 요청'),
+    ).rejects.toThrow('예약 반환 실패');
+    expect(records.get('orders/order-1')).toMatchObject({
+      status: 'ACCEPTED',
+      cancellation: expect.objectContaining({ status: 'LOCAL_FAILED' }),
+    });
+
+    await expect(
+      service.cancelOrder('store-round', 'order-1', 'user-1', '고객 요청'),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+    expect(payments.processRefundByOrderId).toHaveBeenCalledTimes(1);
+    expect(records.get('orders/order-1')).toMatchObject({
+      status: 'CANCELLED',
+      cancellation: expect.objectContaining({ status: 'COMPLETED' }),
+    });
+  });
+
   it('주문자라도 배송 보류 상태를 만들 수 없다', async () => {
     const { firestore, writes } = makeFirestore(
       seedRoundRecords({
@@ -568,13 +717,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
         },
       }),
     );
-    const service = new OrdersLifecycleService(
-      firestore as never,
-      notifications as never,
-      payments as never,
-      settlements as never,
-      capacity as never,
-    );
+    const service = makeLifecycle(firestore);
     await expect(
       service.updateStatus(
         'store-round',

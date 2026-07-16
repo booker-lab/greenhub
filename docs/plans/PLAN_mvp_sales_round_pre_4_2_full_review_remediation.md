@@ -196,11 +196,11 @@
 
 | Task | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 3.1 | `apps/api/src/orders/mvp-order-flow.spec.ts` | 중복 보류·오래된 전환·부분 취소의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 주문 수명주기 실패 계약. 검증 결과] | todo |
-| 3.2 | `apps/api/src/orders/round-order-lifecycle.service.ts` | 회차 주문 보류·취소 saga를 전용 서비스로 구현한다. | `pnpm --filter api build` | [판정 대기 — 회차 주문 수명주기 분리. 검증 결과] | todo |
-| 3.3 | `apps/api/src/orders/orders-lifecycle.service.ts` | 신규 주문 처리를 전용 서비스에 위임하고 legacy 경로를 보존한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 주문 facade 축소. 검증 결과] | todo |
-| 3.4 | `apps/api/src/orders/orders.helpers.ts` | 역할별 상태표를 보류 해소 계약과 일치시킨다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 주문 상태표 보정. 검증 결과] | todo |
-| 3.5 | `apps/api/src/orders/orders.module.ts` | 회차 주문 수명주기 서비스를 등록하고 export한다. | `pnpm --filter api build` | [판정 대기 — 주문 수명주기 모듈 연결. 검증 결과] | todo |
+| 3.1 | `apps/api/src/orders/mvp-order-flow.spec.ts` | 중복 보류·오래된 전환·부분 취소의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 중복 보류 1회 반영, 오래된 상태 거부, 환불 뒤 로컬 실패 재시도와 역할별 전환 보존을 포함한 22개 계약 통과. | done |
+| 3.2 | `apps/api/src/orders/round-order-lifecycle.service.ts` | 회차 주문 보류·취소 saga를 전용 서비스로 구현한다. | `pnpm --filter api build` | 최신 주문·회차를 같은 트랜잭션에서 비교하고 보류 카운터를 원자 갱신하며 취소를 `REFUNDING → LOCAL_PENDING|FAILED → COMPLETED`로 기록함. | done |
+| 3.3 | `apps/api/src/orders/orders-lifecycle.service.ts` | 신규 주문 처리를 전용 서비스에 위임하고 legacy 경로를 보존한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | `schemaVersion: 2` 회차 주문만 전용 서비스에 위임하고 공동구매·legacy 주문 수명주기 경로를 유지해 22개 계약 통과. | done |
+| 3.4 | `apps/api/src/orders/orders.helpers.ts` | 역할별 상태표를 보류 해소 계약과 일치시킨다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 소비자 리뷰, 판매자 보류 해소·취소, 기사 배송 재개, admin 합집합 전환 계약을 명시적으로 보존함. | done |
+| 3.5 | `apps/api/src/orders/orders.module.ts` | 회차 주문 수명주기 서비스를 등록하고 export한다. | `pnpm --filter api build` | 회차 주문 수명주기 서비스를 provider와 export에 등록하고 API 빌드 통과. | done |
 
 - **Unit Verify**: `pnpm --filter api test -- mvp-order-flow.spec.ts payments.service.spec.ts --runInBand`
 - **Exit**: 보류 카운터는 정확히 한 번 변하고 취소 재시도는 외부 환불을 반복하지 않는다.
