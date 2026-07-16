@@ -4,12 +4,12 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 3.3 완료, Task 3.4 착수 대기
+- **상태**: Task 3.4 완료, Task 3.5 착수 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
-- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. 다음 진입점은 Task 3.4다.
+- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. 다음 진입점은 Task 3.5다.
 
 ## 업무 요약 (협업용)
 
@@ -195,7 +195,7 @@ flowchart TD
 | 3.1 | 2.11 | `apps/api/src/notifications/notifications-delivery.spec.ts` | 알림톡 3회·문자 대체·키 누락·최종 실패 기록 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | 통과 — Jest가 신규 알림 전달 계약 파일을 포함한 12개 테스트 파일을 수집했다. 신규 7개 테스트 중 현재 구현이 이미 만족하는 성공·일반 알림 회귀 2개는 통과했고, 재시도·문자 대체·키 누락 실패 처리·`CUSTOMER_NOTICE_FAILED` 멱등 운영 예외 5개는 후속 구현 부재로 예상 실패했다. API 빌드, Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.2 | 3.1 | `apps/api/src/notifications/aligo.client.ts` | 재시도와 문자 대체를 구현하고 키 누락 성공 오판을 제거한다. | `pnpm --filter api test -- notifications-delivery.spec.ts --runInBand` | 통과 — 알림톡 즉시 성공, 최대 3회 시도 후 성공 중단, 3회 실패 후 동일 내용 문자 대체, 필수 설정 누락 실패, 문자 성공 시 일반 알림 회귀의 5개 계약이 통과했다. 전체 7개 중 남은 2개 실패는 Task 3.3 대상인 `CUSTOMER_NOTICE_FAILED` 생성과 멱등성 미구현으로 한정됐다. API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.3 | 3.2 | `apps/api/src/notifications/notifications.service.ts` | 거래 알림 실패를 기록하고 최종 실패만 운영 예외로 생성한다. | `pnpm --filter api test -- notifications-delivery.spec.ts --runInBand` | 통과 — 문자 대체 성공 시 일반 알림 1건만 유지하고, 최종 실패 시 주문·템플릿별 결정적 문서 ID와 `customer-notice-failed:{orderId}:{templateCode}` 멱등 키로 `CUSTOMER_NOTICE_FAILED` 운영 예외를 최대 1건 생성했다. 운영 예외에는 전화번호·본문·비밀값 없이 실패 단계와 주문 상태만 기록하며 주문 상태는 변경하지 않는다. 알림 전달 계약 7개 테스트, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
-| 3.4 | 3.3 | `apps/api/src/notifications/notifications.controller.ts` | 마케팅 동의·철회를 검증된 채널 값으로 저장하게 한다. | `pnpm --filter api build` | [판정 대기 — 동의 API] | todo |
+| 3.4 | 3.3 | `apps/api/src/notifications/notifications.controller.ts` | 마케팅 동의·철회를 검증된 채널 값으로 저장하게 한다. | `pnpm --filter api build` | 통과 — 기존 `PATCH /notifications/me/preferences`와 JWT 인증 흐름을 유지하고 `alimtalk`, `sms` 중 최소 한 채널의 엄격한 boolean만 허용했다. 알 수 없는 키와 잘못된 타입을 거부하고 인증 사용자 문서의 기존 설정과 병합해 요청하지 않은 채널을 보존하며 저장 완료 상태를 반환한다. 신규 설정 계약 12개와 기존 알림 전달 계약 7개, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.5 | 3.4 | `apps/api/src/operations/operations.service.spec.ts` | 중복 예외 통합·최신 상태 재검증·조치 감사 기록 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | [판정 대기 — 운영 테스트 수집] | todo |
 | 3.6 | 3.5 | `apps/api/src/operations/operations.service.ts` | 결제·환불·알림·재배송 최종 실패를 멱등 `확인 필요` 항목으로 관리한다. | `pnpm --filter api test -- operations.service.spec.ts --runInBand` | [판정 대기 — 운영 예외] | todo |
 | 3.7 | 3.6 | `apps/api/src/operations/operations.controller.ts` | 셀러의 재조회·환불 재시도·문자 재발송·조치 기록 API를 노출한다. | `pnpm --filter api build` | [판정 대기 — 조치 API] | todo |
@@ -280,6 +280,6 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 3.3 완료, Task 3.4 `todo`
-- **검증 결과**: 알림톡 즉시 성공, 최대 3회 재시도, 문자 대체, 설정 누락 실패, 문자 성공 시 운영 예외 미생성, 최종 실패 시 `CUSTOMER_NOTICE_FAILED` 생성, 동일 알림 재처리 멱등성의 7개 계약이 모두 통과했다. API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
-- **잔여 위험**: 재시도 간격·backoff·오류 분류·timeout·관측성·프로세스 재시작 이후 문자 발송 멱등성은 `BACKLOG.md`의 `NOTIFICATION-RETRY-POLICY`에서 별도 SDD로 다룬다. 다음 진입점은 Task 3.4 마케팅 동의 API다.
+- **Status**: Task 3.4 완료, Task 3.5 `todo`
+- **검증 결과**: 마케팅 설정은 `alimtalk`, `sms`의 실제 boolean만 허용하고 빈 입력·알 수 없는 키·문자열 boolean·숫자 값을 거부한다. JWT의 `sub`만 사용자 식별자로 사용하고 기존 설정과 부분 병합해 요청하지 않은 채널을 보존한다. 신규 설정 계약 12개와 기존 알림 전달 계약 7개, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+- **잔여 위험**: 마케팅 동의·철회 증거의 `marketingConsentLogs` 기록과 보관기간 만료 자동 파기는 Phase 3의 보관 작업에서 별도로 구현해야 한다. 다음 진입점은 Task 3.5 운영 예외 테스트 계약 고정이다.

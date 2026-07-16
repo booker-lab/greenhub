@@ -51,10 +51,20 @@ export class NotificationsService {
     return { items, total: items.length };
   }
 
-  async updatePreferences(userId: string, preferences: Record<string, boolean>) {
+  async updatePreferences(
+    userId: string,
+    preferences: Partial<Record<'alimtalk' | 'sms', boolean>>,
+  ) {
     const ref = this.firestore.doc(`users/${userId}`);
+    const current = await ref.get();
+    const currentPreferences =
+      (current.data()?.['notificationPreferences'] as Record<string, boolean> | undefined) ?? {};
+    const nextPreferences = {
+      ...currentPreferences,
+      ...preferences,
+    };
     await ref.update({
-      notificationPreferences: preferences,
+      notificationPreferences: nextPreferences,
       updatedAt: this.firestore.Timestamp.now(),
     });
     const snap = await ref.get();
