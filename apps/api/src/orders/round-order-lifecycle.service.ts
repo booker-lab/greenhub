@@ -95,6 +95,15 @@ export class RoundOrderLifecycleService {
     });
   }
 
+  async cancelForRound(input: {
+    storeId: string;
+    orderId: string;
+    expectedStatus: OrderStatus;
+    reason: string;
+  }) {
+    return this.cancel(input);
+  }
+
   private async cancel(input: {
     storeId: string;
     orderId: string;
@@ -165,15 +174,16 @@ export class RoundOrderLifecycleService {
         if (cancellationStatus === 'REFUNDING') {
           throw new ConflictException('주문 취소가 이미 처리 중입니다.');
         }
+        const needsRefund = order['status'] !== 'PENDING';
         tx.update(orderRef, {
           cancellation: {
-            status: 'REFUNDING',
+            status: needsRefund ? 'REFUNDING' : 'LOCAL_PENDING',
             reason: input.reason,
             updatedAt: this.toIso(this.firestore.Timestamp.now()),
           },
           updatedAt: this.firestore.Timestamp.now(),
         });
-        result = { done: false, needsRefund: true };
+        result = { done: false, needsRefund };
       }
     });
     return result;

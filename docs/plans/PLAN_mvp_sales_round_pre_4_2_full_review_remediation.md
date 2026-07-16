@@ -213,12 +213,12 @@
 
 | Task | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 4.1 | `packages/shared/src/sale-round.types.ts` | 회차 마감 원인과 운영 예외 action 정본의 확장 지점을 정의한다. | `pnpm --filter @greenhub/shared typecheck` | [판정 대기 — 회차 공통 계약 확장. 검증 결과] | todo |
-| 4.2 | `apps/api/src/sale-rounds/sale-rounds.service.spec.ts` | 조회 소유권·상태 경쟁·용량 재개·취소 정리의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- sale-rounds.service.spec.ts --runInBand` | [판정 대기 — 회차 상태 실패 계약. 검증 결과] | todo |
-| 4.3 | `apps/api/src/sale-rounds/sale-round-state.service.ts` | 상태 CAS·용량 재개·회차 취소 조정을 전용 서비스로 구현한다. | `pnpm --filter api build` | [판정 대기 — 회차 상태 서비스 분리. 검증 결과] | todo |
-| 4.4 | `apps/api/src/sale-rounds/sale-rounds.service.ts` | CRUD·목록 facade에 판매자 소유권 검사를 적용한다. | `pnpm --filter api test -- sale-rounds.service.spec.ts --runInBand` | [판정 대기 — 회차 facade 권한 보정. 검증 결과] | todo |
-| 4.5 | `apps/api/src/sale-rounds/sale-rounds.controller.ts` | 판매자 회차 읽기 요청에 인증 주체와 역할을 전달한다. | `pnpm --filter api build` | [판정 대기 — 회차 읽기 권한 연결. 검증 결과] | todo |
-| 4.6 | `apps/api/src/sale-rounds/sale-rounds.module.ts` | 회차 상태 서비스와 주문 수명주기 의존성을 등록한다. | `pnpm --filter api build` | [판정 대기 — 회차 모듈 연결. 검증 결과] | todo |
+| 4.1 | `packages/shared/src/sale-round.types.ts` | 회차 마감 원인과 운영 예외 action 정본의 확장 지점을 정의한다. | `pnpm --filter @greenhub/shared typecheck` | `CAPACITY`, `SCHEDULE_ENDED`, `MANUAL` 마감 원인과 회차 취소 단계, 운영 action union을 정의하고 typecheck 통과. | done |
+| 4.2 | `apps/api/src/sale-rounds/sale-rounds.service.spec.ts` | 조회 소유권·상태 경쟁·용량 재개·취소 정리의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- sale-rounds.service.spec.ts --runInBand` | 판매자 읽기 소유권, 상태 CAS, 자동 재개, 취소 전체 정리·재시도 계약을 추가해 11개 통과. | done |
+| 4.3 | `apps/api/src/sale-rounds/sale-round-state.service.ts` | 상태 CAS·용량 재개·회차 취소 조정을 전용 서비스로 구현한다. | `pnpm --filter api build` | 최신 상태 비교, 마감 원인 기반 재개, 주문 취소 saga 조정과 `LOCAL_FAILED` 재시도를 분리하고 API 빌드 통과. | done |
+| 4.4 | `apps/api/src/sale-rounds/sale-rounds.service.ts` | CRUD·목록 facade에 판매자 소유권 검사를 적용한다. | `pnpm --filter api test -- sale-rounds.service.spec.ts --runInBand` | 판매자 목록·상세·복사 경로에 스토어 소유권을 강제하고 상태 변경은 전용 서비스에 위임해 11개 통과. | done |
+| 4.5 | `apps/api/src/sale-rounds/sale-rounds.controller.ts` | 판매자 회차 읽기 요청에 인증 주체와 역할을 전달한다. | `pnpm --filter api build` | 판매자 목록·상세 조회에 JWT `sub`와 `role`을 전달하고 API 빌드 통과. | done |
+| 4.6 | `apps/api/src/sale-rounds/sale-rounds.module.ts` | 회차 상태 서비스와 주문 수명주기 의존성을 등록한다. | `pnpm --filter api build` | `OrdersModule`과 회차 상태 서비스를 등록해 Unit 3 주문 취소 saga 의존성을 연결하고 API 빌드 통과. | done |
 
 - **Unit Verify**: `pnpm --filter api test -- sale-rounds.service.spec.ts mvp-order-flow.spec.ts --runInBand`
 - **Exit**: 취소 회차에 활성 주문과 점유 카운터가 남지 않는다.

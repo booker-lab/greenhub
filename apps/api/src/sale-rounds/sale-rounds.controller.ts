@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { JwtPayload } from '../auth/types/jwt-payload.type';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import {
+import type {
   CopySaleRoundDto,
   CreateSaleRoundDto,
   UpdateSaleRoundDto,
@@ -34,13 +34,17 @@ export class SaleRoundsController {
   constructor(private readonly saleRoundsService: SaleRoundsService) {}
 
   @Get()
-  getRounds(@Param('storeId') storeId: string) {
-    return this.saleRoundsService.listSellerRounds(storeId);
+  getRounds(@Param('storeId') storeId: string, @CurrentUser() user: JwtPayload) {
+    return this.saleRoundsService.listSellerRounds(storeId, user.sub, user.role);
   }
 
   @Get(':roundId')
-  getRound(@Param('storeId') storeId: string, @Param('roundId') roundId: string) {
-    return this.saleRoundsService.getRound(storeId, roundId);
+  getRound(
+    @Param('storeId') storeId: string,
+    @Param('roundId') roundId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.saleRoundsService.getRound(storeId, roundId, user.sub, user.role);
   }
 
   @Post()

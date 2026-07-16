@@ -3,7 +3,7 @@
 > **SSOT**: 세션 종료 시 최신 상태만 유지한다. 200라인 초과 시 아카이브하고 50라인 이내 요약으로 갱신한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-17 (전수 리뷰 보정 Unit 3 완료)
+최종 수정: 2026-07-17 (전수 리뷰 보정 Unit 4 완료)
 
 ## 현재 진행
 
@@ -11,8 +11,8 @@
 - 전수 리뷰 기준 SHA: `7cbd068`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_pre_4_2_full_review_remediation.md`
 - 설계 결정: `docs/CRITICAL_LOGIC.md`의 `CL-167`
-- 완료: Unit 1 결제·예약 정합성, Unit 2 주문 조회·웹훅 보안, Unit 3 주문 수명주기 원자성
-- 다음: Unit 4 회차 소유권·마감·취소 정합성
+- 완료: Unit 1 결제·예약 정합성, Unit 2 주문 조회·웹훅 보안, Unit 3 주문 수명주기 원자성, Unit 4 회차 상태 정합성
+- 다음: Unit 5 주문 생성 원자성·요청 멱등성
 - 원 계획 `PLAN_mvp_sales_round_direct_delivery.md` Task 4.2는 Unit 10 완료 전까지 보류한다.
 
 ## 완료 계약
@@ -29,12 +29,15 @@
 - 회차 주문 취소는 환불과 로컬 정리를 단계 상태로 기록해 환불 성공 뒤 로컬 실패를 재시도한다.
 - 재시도 시 완료된 외부 환불은 반복하지 않고 예약 반환과 주문 취소 상태만 다시 적용한다.
 - legacy 주문 수명주기와 소비자·판매자·기사·admin 역할별 전환 계약은 유지한다.
+- 판매자는 실제 소유 스토어의 회차만 목록·상세 조회·변경할 수 있고 admin은 기존 권한을 유지한다.
+- 회차 상태 변경은 최신 상태 CAS로 보호하고 자동 마감은 `CAPACITY`와 `SCHEDULE_ENDED` 원인을 구분한다.
+- `CAPACITY` 자동 마감만 마감 전 용량 회복 시 다시 열며 일정·수동 마감은 유지한다.
+- 회차 취소는 Unit 3 주문 취소 saga로 활성 주문을 모두 정리한 뒤 확정하고 실패 시 `LOCAL_FAILED`로 재시도한다.
 
 ## 검증 상태
 
-- Unit 3 주문 흐름 22개, 결제 포함 28개, 전체 지정 조합 41개 통과.
-- Unit 2 주문 권한·PortOne 회귀 13개, API 빌드 통과.
-- API 빌드, 변경 코드 Biome lint 오류 수준 검사, `git diff --check`가 통과했다.
+- Unit 4 회차 계약 11개, 회차·주문 회귀 33개, 전체 지정 회귀 52개 통과.
+- shared typecheck, API 빌드, 변경 코드 Biome 오류 수준 검사, `git diff --check` 통과.
 
 ## 핸드오프 규칙
 
