@@ -210,7 +210,7 @@ flowchart TD
 ### Phase 4. 소비자앱 단순화
 | Task | Dependency | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 4.1 | 3.14 | `apps/e2e/tests/consumer-round-direct.spec.ts` | 홈·상세·장바구니·결제·주문상세 계약을 먼저 수집한다. | `pnpm --filter e2e exec playwright test consumer-round-direct --list` | [판정 대기 — 소비자 계약 수집] | todo |
+| 4.1 | 3.14 | `apps/e2e/tests/consumer-round-direct.spec.ts` | 홈·상세·장바구니·결제·주문상세 계약을 먼저 수집한다. | `pnpm --filter e2e exec playwright test consumer-round-direct --list` | 통과 — 현재·지난 회차 홈, 회차 가격·마감·직배송 상세, 같은 회차 장바구니와 변경·마감 제외, 다중 상품 단일 결제와 필수·선택 동의·변경 재확인, 다중 상품·배송 보류·재배송비·완료 사진·마감 전 취소 주문 상세를 논리 계약 10개로 수집했다. 공개 4개와 기존 `AUTH_STATE_PATH`를 재사용한 인증 6개를 `test.fixme`로 고정해 Task 4.2~4.18 구현 전 외부 서비스나 실제 데이터 호출 없이 보존했다. chromium·mobile 20개 테스트와 기존 소비자 5개 파일 68개 테스트 목록 수집, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 4.2 | 4.1 | `apps/consumer/src/hooks/useSaleRounds.ts` | 현재·지난 회차 공개 API 상태를 한 훅에서 제공한다. | `pnpm --filter consumer exec tsc --noEmit` | [판정 대기 — 회차 조회 훅] | todo |
 | 4.3 | 4.2 | `apps/consumer/src/lib/acquisition.ts` | 당근 유입 값을 보관해 주문 요청에 스냅샷으로 전달한다. | `pnpm --filter consumer exec tsc --noEmit` | [판정 대기 — 유입 추적] | todo |
 | 4.4 | 4.3 | `apps/consumer/src/components/HomeProductList.tsx` | 현재 회차·마감·직배송 조건·지난 회차 순서로 홈을 재구성한다. | `pnpm --filter consumer exec tsc --noEmit` | [판정 대기 — 홈 단순화] | todo |
@@ -280,6 +280,6 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 3.14 완료, Task 4.1 `todo`
-- **검증 결과**: AppModule의 기존 회차·운영 예외 모듈 등록을 보존하고 누락된 `RetentionModule`만 추가했다. 신규 AppModule 계약 테스트로 세 기능 모듈의 단일 등록과 provider 비중복을 고정했으며, 관련 15개 스위트 94개 테스트, API 빌드, 변경 TypeScript 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
-- **잔여 위험**: 주문·드라이버의 배송 사진 업로드·조회 실제 호출 경로는 아직 연결되지 않았고, 보관 파기 실행 스케줄·운영 진입점도 이 Task에서 추가하지 않았다. 다음 Task 4.1은 소비자 홈·상세·장바구니·결제·주문상세의 회차 직배송 계약을 수집하는 범위이며, 서버 Storage 공개 URL·클라이언트 직접 업로드·공개 권한이나 주문·드라이버 호출 경로를 선행 변경하지 않아야 한다.
+- **Status**: Task 4.1 완료, Task 4.2 `todo`
+- **검증 결과**: 소비자 홈·상품 상세·장바구니·결제·주문 상세의 회차 직배송 논리 계약 10개를 공개 4개·인증 6개 `test.fixme`로 수집했다. 기존 인증 상태 파일을 재사용했고 별도 fixture나 실제 결제·Firebase·Storage·외부 서비스 호출을 추가하지 않았다. chromium·mobile 20개 신규 테스트와 관련 기존 소비자 5개 파일 68개 테스트 목록 수집, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+- **잔여 위험**: 수집한 계약은 Task 4.2~4.18 구현 전이므로 의도적으로 `fixme` 상태이며 실제 화면 동작은 아직 충족하지 않는다. 다음 Task 4.2는 현재·지난 회차 공개 API 상태를 제공하는 `useSaleRounds` 훅만 구현하고, 홈·상세·장바구니·결제·주문 상세 화면이나 legacy 주문·택배·거점픽업·공동구매 동작을 선행 변경하지 않아야 한다. 주문·드라이버 배송 사진 호출 경로와 Storage 공개 경계도 그대로 유지한다.

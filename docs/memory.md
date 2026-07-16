@@ -3,11 +3,11 @@
 > **SSOT**: 세션 종료 시 최신 상태만 유지한다. 200라인 초과 시 아카이브하고 50라인 이내 요약으로 갱신한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260715_before_round_direct_task2.md`
 
-최종 수정: 2026-07-17 (Task 3.14 애플리케이션 모듈 최종 연결 완료)
+최종 수정: 2026-07-17 (Task 4.1 소비자 회차 직배송 계약 수집 완료)
 
 ## 현재 진행
 
-- 브랜치 `codex/mvp-sales-round-direct`, Task 3.14 로컬 변경 검증 완료.
+- 브랜치 `codex/mvp-sales-round-direct`, Task 4.1 로컬 변경 검증 완료.
 - Task 2.10은 실제 100원 결제·웹훅·늦은 결제·전액 환불까지 완료해 `done`이다.
 - Task 2.11은 재배송비 1회 생성과 재실패 운영 예외 전환까지 완료해 `done`이다.
 - Task 3.1은 알림톡 재시도·문자 대체·최종 실패 운영 예외의 실패 테스트 계약을 고정해 `done`이다.
@@ -24,6 +24,7 @@
 - Task 3.12는 비공개 배송 사진 Storage 서비스를 구현해 `done`이다.
 - Task 3.13은 `StorageService` provider/export와 보관 삭제 어댑터 주입을 연결해 `done`이다.
 - Task 3.14는 회차·운영 예외 등록을 보존하고 누락된 `RetentionModule`만 `AppModule`에 연결해 `done`이다.
+- Task 4.1은 소비자 회차 직배송 화면 계약 10개를 외부 호출 없는 `test.fixme`로 수집해 `done`이다.
 - 로컬 커밋은 push하지 않았다.
 
 ## 환경
@@ -59,7 +60,7 @@
 
 ## 다음 진입
 
-- Task 4.1에서 소비자 홈·상세·장바구니·결제·주문상세의 회차 직배송 e2e 계약을 수집한다.
+- Task 4.2에서 현재·지난 회차 공개 API 상태를 제공하는 `useSaleRounds` 훅을 구현한다.
 
 ## 세션 완료 인계 규칙
 
@@ -188,3 +189,9 @@
 - 신규 AppModule 계약 테스트는 회차·운영 예외·보관 모듈이 각각 한 번만 등록되고 기능 provider가 AppModule에 중복 등록되지 않는지 확인한다.
 - Firebase Admin 앱·Storage provider를 재등록하거나 새 `forwardRef`를 추가하지 않았고 주문·드라이버 배송 사진 호출 경로와 공개 Storage 경계도 변경하지 않았다.
 - 관련 15개 스위트 94개 테스트, API 빌드, 변경 TypeScript 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+
+## Task 4.1 결과
+
+- 홈·상품 상세·장바구니·결제·주문 상세의 회차 직배송 논리 계약 10개를 공개 4개·인증 6개 `test.fixme`로 수집했다.
+- chromium·mobile 20개 신규 테스트와 기존 소비자 5개 파일 68개 테스트 목록 수집, Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+- 기존 `AUTH_STATE_PATH`를 재사용했고 별도 fixture, 실제 결제·Firebase·Storage·외부 서비스 호출, 소비자 화면 구현은 추가하지 않았다.
