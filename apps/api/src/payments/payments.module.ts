@@ -1,6 +1,7 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OrderCapacityModule } from '../orders/order-capacity.module';
+import { OrderChargePaymentService } from './order-charge-payment.service';
 import { PaymentFinalizationService } from './payment-finalization.service';
 import { PaymentRefundService } from './payment-refund.service';
 import { PaymentsController, RefundController } from './payments.controller';
@@ -10,7 +11,13 @@ import { PortoneClient } from './portone.client';
 @Module({
   imports: [forwardRef(() => NotificationsModule), OrderCapacityModule],
   controllers: [PaymentsController, RefundController],
-  providers: [PaymentsService, PaymentFinalizationService, PaymentRefundService, PortoneClient],
+  providers: [
+    PaymentsService,
+    PaymentFinalizationService,
+    PaymentRefundService,
+    OrderChargePaymentService,
+    PortoneClient,
+  ],
   exports: [PaymentsService],
 })
 export class PaymentsModule {}

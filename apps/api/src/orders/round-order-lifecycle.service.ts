@@ -117,6 +117,7 @@ export class RoundOrderLifecycleService {
     if (claimed.needsRefund) {
       try {
         await this.payments.processRefundByOrderId(input.orderId, input.reason);
+        await this.payments.refundOrderChargesByOrderId(input.orderId, input.reason);
       } catch (error) {
         await this.recordCancellationState(input.orderId, 'REFUND_FAILED', input.reason);
         throw error;

@@ -190,7 +190,10 @@ describe('MVP 회차 주문 흐름 계약', () => {
     sendToGroupParticipants: jest.fn(),
     processGroupBuyEarlyConfirm: jest.fn(),
   };
-  const payments = { processRefundByOrderId: jest.fn() };
+  const payments = {
+    processRefundByOrderId: jest.fn(),
+    refundOrderChargesByOrderId: jest.fn(),
+  };
   const capacity = {
     releaseReservation: jest.fn(),
     releaseReservationInTransaction: jest.fn(),
@@ -807,7 +810,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     const operations = new OperationsService(firestore, {}, {});
     const service = new OrderChargesService(firestore, operations);
 
-    await service.createRedeliveryFeeCharge({
+    const first = await service.createRedeliveryFeeCharge({
       storeId: 'store-round',
       orderId: 'order-1',
       requesterId: 'user-1',
@@ -828,8 +831,17 @@ describe('MVP 회차 주문 흐름 계약', () => {
       attemptNumber: 1,
       customerResponsible: true,
       status: 'PENDING',
+      portonePaymentId: expect.stringMatching(/^order-charge-/),
     });
-    expect(retried).toMatchObject({ id: chargeWrites[0].data.id });
+    expect(first).toMatchObject({
+      id: chargeWrites[0].data.id,
+      portonePaymentParams: {
+        paymentId: chargeWrites[0].data.portonePaymentId,
+        amount: 5000,
+        name: '고객 사유 재배송비',
+      },
+    });
+    expect(retried).toEqual(first);
     expect(records.get('orders/order-1')).toMatchObject({
       redeliveryChargeId: chargeWrites[0].data.id,
       redeliveryChargeHoldAt: '2026-07-21T01:00:00.000Z',
@@ -842,6 +854,71 @@ describe('MVP 회차 주문 흐름 계약', () => {
         idempotencyKey: 'first',
       } as never),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('결제된 재배송비가 있는 주문 취소는 본 결제와 재배송비를 각각 한 번만 환불한다', async () => {
+    const { firestore } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-1': {
+          id: 'order-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'ACCEPTED',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          reservationId: 'reservation-1',
+          redeliveryChargeId: 'charge-1',
+          orderItems: [{ roundItemId: 'round-item-1', quantity: 1 }],
+        },
+        'orderCharges/charge-1': {
+          id: 'charge-1',
+          orderId: 'order-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          type: 'REDELIVERY_FEE',
+          status: 'PAID',
+          amount: 5000,
+          portonePaymentId: 'order-charge-charge-1',
+        },
+      }),
+    );
+    const service = makeLifecycle(firestore);
+
+    await service.cancelOrder('store-round', 'order-1', 'user-1', '고객 요청');
+    await service.cancelOrder('store-round', 'order-1', 'user-1', '고객 요청');
+
+    expect(payments.processRefundByOrderId).toHaveBeenCalledTimes(1);
+    expect(payments.refundOrderChargesByOrderId).toHaveBeenCalledTimes(1);
+    expect(payments.refundOrderChargesByOrderId).toHaveBeenCalledWith('order-1', '고객 요청');
+  });
+
+  it('재배송비 환불 실패는 주문 취소를 완료하지 않고 재시도 상태를 남긴다', async () => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-1': {
+          id: 'order-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'ACCEPTED',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          reservationId: 'reservation-1',
+          redeliveryChargeId: 'charge-1',
+          orderItems: [{ roundItemId: 'round-item-1', quantity: 1 }],
+        },
+      }),
+    );
+    payments.refundOrderChargesByOrderId.mockRejectedValueOnce(new Error('재배송비 환불 실패'));
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.cancelOrder('store-round', 'order-1', 'user-1', '고객 요청'),
+    ).rejects.toThrow('재배송비 환불 실패');
+
+    expect(records.get('orders/order-1')).toMatchObject({
+      status: 'ACCEPTED',
+      cancellation: expect.objectContaining({ status: 'REFUND_FAILED' }),
+    });
   });
 
   it('고객 사유 재배송 실패는 새 결제 없이 운영 예외 1건으로 전환한다', async () => {

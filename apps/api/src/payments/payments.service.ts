@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger } from '@ne
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { FirestoreService } from '../firestore/firestore.service';
 import type { PortoneWebhookDto } from './dto/portone-webhook.dto';
+import type { OrderChargePaymentService } from './order-charge-payment.service';
 import type { PaymentFinalizationService } from './payment-finalization.service';
 import type { PaymentRefundService } from './payment-refund.service';
 import { type PortoneClient, PortoneError } from './portone.client';
@@ -17,10 +18,14 @@ export class PaymentsService {
     private readonly portone: PortoneClient,
     private readonly finalization: PaymentFinalizationService,
     private readonly refunds: PaymentRefundService,
+    private readonly orderChargePayments: OrderChargePaymentService,
   ) {}
 
   async handleWebhook(dto: PortoneWebhookDto) {
     const orderId = dto.data.paymentId;
+    if (this.orderChargePayments.isOrderChargePaymentId(orderId)) {
+      return this.orderChargePayments.handleWebhook(dto.type, orderId);
+    }
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!orderSnap.exists) return { ok: false, reason: 'order_not_found' };
     const order = orderSnap.data() as Record<string, any>;
@@ -90,6 +95,10 @@ export class PaymentsService {
 
   async processRefundByOrderId(orderId: string, reason: string): Promise<void> {
     await this.refunds.refundByOrderId(orderId, reason);
+  }
+
+  async refundOrderChargesByOrderId(orderId: string, reason: string): Promise<void> {
+    await this.orderChargePayments.refundByOrderId(orderId, reason);
   }
 
   @Cron(CronExpression.EVERY_MINUTE)

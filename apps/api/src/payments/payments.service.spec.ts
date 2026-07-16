@@ -1,3 +1,4 @@
+import { OrderChargePaymentService } from './order-charge-payment.service';
 import { PaymentFinalizationService } from './payment-finalization.service';
 import { PaymentRefundService } from './payment-refund.service';
 import { PaymentsService } from './payments.service';
@@ -232,6 +233,9 @@ describe('결제 facade 위임', () => {
       portone as never,
       finalization as never,
       { refundByOrderId: jest.fn() } as never,
+      {
+        isOrderChargePaymentId: jest.fn().mockReturnValue(false),
+      } as never,
     );
 
     await service.handleWebhook({
@@ -242,5 +246,132 @@ describe('결제 facade 위임', () => {
 
     expect(finalization.finalizePaidOrder).toHaveBeenCalledTimes(1);
     expect(finalization.cancelPendingOrder).toHaveBeenCalledWith('order-1', 'timeout');
+  });
+});
+
+describe('재배송비 결제 수명주기', () => {
+  function makeChargePayment() {
+    const { firestore, records } = makeFirestore({
+      'orders/order-1': {
+        id: 'order-1',
+        storeId: 'store-1',
+        userId: 'user-1',
+        status: 'DELIVERY_HELD',
+        redeliveryChargeId: 'charge-1',
+      },
+      'orderCharges/charge-1': {
+        id: 'charge-1',
+        orderId: 'order-1',
+        storeId: 'store-1',
+        userId: 'user-1',
+        type: 'REDELIVERY_FEE',
+        status: 'PENDING',
+        amount: 5000,
+        portonePaymentId: 'order-charge-charge-1',
+        paidAt: null,
+        failedAt: null,
+        refundedAt: null,
+      },
+    });
+    const portone = {
+      getPayment: jest.fn().mockResolvedValue({
+        amount: { total: 5000 },
+        status: 'PAID',
+        method: { type: 'CARD' },
+        transactionId: 'charge-tx-1',
+      }),
+      refund: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new OrderChargePaymentService(firestore as never, portone as never);
+    return { service, firestore, records, portone };
+  }
+
+  it('재배송비 결제 웹훅은 서버 검증 뒤 PENDING 청구를 PAID로 확정한다', async () => {
+    const fixture = makeChargePayment();
+    const facade = new PaymentsService(
+      fixture.firestore as never,
+      fixture.portone as never,
+      {} as never,
+      {} as never,
+      fixture.service,
+    );
+
+    await expect(
+      facade.handleWebhook({
+        type: 'Transaction.Paid',
+        data: { paymentId: 'order-charge-charge-1' },
+      } as never),
+    ).resolves.toMatchObject({ ok: true, status: 'PAID' });
+
+    expect(fixture.records.get('orderCharges/charge-1')).toMatchObject({
+      status: 'PAID',
+      portoneTransactionId: 'charge-tx-1',
+      paidAt: expect.anything(),
+    });
+  });
+
+  it('재배송비 실패 웹훅과 중복 웹훅은 FAILED 상태로 한 번만 수렴한다', async () => {
+    const fixture = makeChargePayment();
+    const facade = new PaymentsService(
+      fixture.firestore as never,
+      fixture.portone as never,
+      {} as never,
+      {} as never,
+      fixture.service,
+    );
+
+    await facade.handleWebhook({
+      type: 'Transaction.Failed',
+      data: { paymentId: 'order-charge-charge-1' },
+    } as never);
+    await facade.handleWebhook({
+      type: 'Transaction.Failed',
+      data: { paymentId: 'order-charge-charge-1' },
+    } as never);
+
+    expect(fixture.records.get('orderCharges/charge-1')).toMatchObject({
+      status: 'FAILED',
+      failedAt: expect.anything(),
+    });
+    expect(fixture.portone.getPayment).not.toHaveBeenCalled();
+  });
+
+  it('재배송비 결제 금액이나 주문 관계가 다르면 확정하지 않는다', async () => {
+    const fixture = makeChargePayment();
+    fixture.portone.getPayment.mockResolvedValue({
+      amount: { total: 4000 },
+      status: 'PAID',
+      method: { type: 'CARD' },
+      transactionId: 'charge-tx-1',
+    });
+
+    await expect(
+      fixture.service.handleWebhook('Transaction.Paid', 'order-charge-charge-1'),
+    ).rejects.toThrow('재배송비 결제 정보가 일치하지 않습니다.');
+
+    expect(fixture.records.get('orderCharges/charge-1')?.status).toBe('PENDING');
+  });
+
+  it('재배송비 환불의 동시 호출과 완료 뒤 재시도는 PortOne을 한 번만 호출한다', async () => {
+    const fixture = makeChargePayment();
+    fixture.records.set('orderCharges/charge-1', {
+      ...fixture.records.get('orderCharges/charge-1')!,
+      status: 'PAID',
+      paidAt: new Date('2026-07-17T00:00:00.000Z'),
+    });
+
+    await Promise.all([
+      fixture.service.refundByOrderId('order-1', '주문 취소'),
+      fixture.service.refundByOrderId('order-1', '주문 취소'),
+    ]);
+    await fixture.service.refundByOrderId('order-1', '주문 취소');
+
+    expect(fixture.portone.refund).toHaveBeenCalledTimes(1);
+    expect(fixture.portone.refund).toHaveBeenCalledWith('order-charge-charge-1', 5000, '주문 취소');
+    expect(fixture.records.get('orderCharges/charge-1')).toMatchObject({
+      status: 'REFUNDED',
+      refundedAt: expect.anything(),
+      refundClaim: null,
+    });
   });
 });

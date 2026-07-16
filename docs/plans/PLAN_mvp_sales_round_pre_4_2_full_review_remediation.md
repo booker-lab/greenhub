@@ -251,13 +251,13 @@
 
 | Task | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 6.1 | `apps/api/src/orders/mvp-order-flow.spec.ts` | 재배송비 결제 파라미터·중복 요청·취소 환불의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 재배송비 주문 계약. 검증 결과] | todo |
-| 6.2 | `apps/api/src/payments/payments.service.spec.ts` | 재배송비 웹훅 확정·실패·중복의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | [판정 대기 — 재배송비 결제 계약. 검증 결과] | todo |
-| 6.3 | `apps/api/src/orders/order-charges.service.ts` | 안정적인 PortOne paymentId와 결제 요청 파라미터를 생성한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 재배송비 청구 생성. 검증 결과] | todo |
-| 6.4 | `apps/api/src/payments/order-charge-payment.service.ts` | 재배송비 결제 확정·실패·환불을 멱등 서비스로 구현한다. | `pnpm --filter api build` | [판정 대기 — 재배송비 결제 서비스. 검증 결과] | todo |
-| 6.5 | `apps/api/src/payments/payments.service.ts` | 재배송비 paymentId를 전용 결제 서비스로 라우팅한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | [판정 대기 — 재배송비 웹훅 라우팅. 검증 결과] | todo |
-| 6.6 | `apps/api/src/payments/payments.module.ts` | 재배송비 결제 서비스를 provider로 등록한다. | `pnpm --filter api build` | [판정 대기 — 재배송비 모듈 연결. 검증 결과] | todo |
-| 6.7 | `apps/api/src/orders/round-order-lifecycle.service.ts` | 주문 취소에서 결제된 재배송비를 함께 환불한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 재배송비 취소 환불. 검증 결과] | todo |
+| 6.1 | `apps/api/src/orders/mvp-order-flow.spec.ts` | 재배송비 결제 파라미터·중복 요청·취소 환불의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 안정 paymentId·동일 청구 응답·취소 환불·환불 실패 재시도 계약을 추가해 26개 통과. | done |
+| 6.2 | `apps/api/src/payments/payments.service.spec.ts` | 재배송비 웹훅 확정·실패·중복의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | 웹훅 확정·실패·금액 불일치·중복 환불 계약을 추가해 10개 통과. | done |
+| 6.3 | `apps/api/src/orders/order-charges.service.ts` | 안정적인 PortOne paymentId와 결제 요청 파라미터를 생성한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 청구 ID 기반 paymentId와 금액·이름을 반환하고 같은 보류 요청은 같은 청구·파라미터로 수렴함. | done |
+| 6.4 | `apps/api/src/payments/order-charge-payment.service.ts` | 재배송비 결제 확정·실패·환불을 멱등 서비스로 구현한다. | `pnpm --filter api build` | 청구·주문·사용자·스토어·금액을 검증하고 PENDING→PAID\|FAILED→REFUNDED와 환불 claim을 구현함. | done |
+| 6.5 | `apps/api/src/payments/payments.service.ts` | 재배송비 paymentId를 전용 결제 서비스로 라우팅한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | `order-charge-` paymentId 웹훅과 주문별 재배송비 환불을 전용 서비스에 위임해 10개 통과. | done |
+| 6.6 | `apps/api/src/payments/payments.module.ts` | 재배송비 결제 서비스를 provider로 등록한다. | `pnpm --filter api build` | `OrderChargePaymentService`를 provider로 등록하고 API와 전체 빌드 통과. | done |
+| 6.7 | `apps/api/src/orders/round-order-lifecycle.service.ts` | 주문 취소에서 결제된 재배송비를 함께 환불한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 본 결제 뒤 PAID 재배송비를 환불하며 실패 시 `REFUND_FAILED`, 중복 취소 시 외부 환불 미반복 계약으로 26개 통과. | done |
 
 - **Unit Verify**: `pnpm --filter api test -- mvp-order-flow.spec.ts payments.service.spec.ts --runInBand`
 - **Exit**: 재배송비는 `PENDING → PAID|FAILED → REFUNDED` 상태를 실제 웹훅과 환불로 가진다.

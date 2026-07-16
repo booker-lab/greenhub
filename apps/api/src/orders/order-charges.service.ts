@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -6,7 +7,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { createHash } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationsService } from '../operations/operations.service';
 
@@ -55,7 +55,7 @@ export class OrderChargesService {
           throw new ConflictException('기존 재배송비 결제 기록을 확인할 수 없습니다.');
         }
         if (order['redeliveryChargeHoldAt'] === heldAt) {
-          result = previousChargeSnap.data();
+          result = this.withPaymentParams(previousChargeSnap.data()!);
           return;
         }
         result = await this.escalateRepeatedFailure(tx, orderRef, order, input, heldAt);
@@ -65,7 +65,7 @@ export class OrderChargesService {
       const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
       const existing = await tx.get(chargeRef);
       if (existing.exists) {
-        result = existing.data();
+        result = this.withPaymentParams(existing.data()!);
         tx.update(orderRef, {
           redeliveryChargeId: chargeId,
           redeliveryChargeHoldAt: heldAt,
@@ -78,7 +78,8 @@ export class OrderChargesService {
         throw new BadRequestException('재배송비 금액이 올바르지 않습니다.');
       }
       const now = this.firestore.Timestamp.now();
-      result = {
+      const portonePaymentId = `order-charge-${chargeId}`;
+      const charge = {
         id: chargeId,
         orderId: input.orderId,
         storeId: input.storeId,
@@ -89,7 +90,7 @@ export class OrderChargesService {
         reason: '고객 사유 재배송비',
         attemptNumber: 1,
         customerResponsible: true,
-        portonePaymentId: null,
+        portonePaymentId,
         idempotencyKey: input.idempotencyKey,
         paidAt: null,
         failedAt: null,
@@ -97,7 +98,8 @@ export class OrderChargesService {
         createdAt: now,
         updatedAt: now,
       };
-      tx.set(chargeRef, result);
+      result = this.withPaymentParams(charge);
+      tx.set(chargeRef, charge);
       tx.update(orderRef, {
         redeliveryChargeId: chargeId,
         redeliveryChargeHoldAt: heldAt,
@@ -158,5 +160,16 @@ export class OrderChargesService {
       .update(`${input.storeId}:${input.orderId}:${input.requesterId}:${input.idempotencyKey}`)
       .digest('hex')
       .slice(0, 32);
+  }
+
+  private withPaymentParams(charge: Record<string, any>) {
+    return {
+      ...charge,
+      portonePaymentParams: {
+        paymentId: charge['portonePaymentId'],
+        amount: charge['amount'],
+        name: charge['reason'],
+      },
+    };
   }
 }
