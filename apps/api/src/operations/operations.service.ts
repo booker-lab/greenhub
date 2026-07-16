@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -26,6 +32,11 @@ type CreateIssueInput = Record<string, unknown> & {
   latestSnapshot?: Record<string, unknown>;
 };
 
+type FirestoreTransaction = {
+  get: (ref: ReturnType<FirestoreService['doc']>) => Promise<{ exists: boolean; data(): unknown }>;
+  set: (ref: ReturnType<FirestoreService['doc']>, data: Record<string, unknown>) => void;
+};
+
 type ExecuteActionInput = {
   issueId: string;
   actorId: string;
@@ -35,17 +46,23 @@ type ExecuteActionInput = {
 @Injectable()
 export class OperationsService {
   constructor(
+    @Inject(FirestoreService)
     private readonly firestore: FirestoreService,
+    @Inject(forwardRef(() => PaymentsService))
     private readonly payments: PaymentsService,
+    @Inject(forwardRef(() => NotificationsService))
     private readonly notifications: NotificationsService,
   ) {}
 
-  async createOrMergeIssue(input: CreateIssueInput): Promise<OperationIssue> {
+  async createOrMergeIssue(
+    input: CreateIssueInput,
+    transaction?: FirestoreTransaction,
+  ): Promise<OperationIssue> {
     const issueId = this.issueId(input.idempotencyKey);
     const issueRef = this.firestore.doc(`operationIssues/${issueId}`);
     let result: OperationIssue | null = null;
 
-    await this.firestore.runTransaction(async (tx) => {
+    const createOrRead = async (tx: FirestoreTransaction) => {
       const existing = await tx.get(issueRef);
       if (existing.exists) {
         result = existing.data() as OperationIssue;
@@ -64,7 +81,13 @@ export class OperationsService {
       } as OperationIssue;
       tx.set(issueRef, issue);
       result = issue;
-    });
+    };
+
+    if (transaction) {
+      await createOrRead(transaction);
+    } else {
+      await this.firestore.runTransaction(createOrRead);
+    }
 
     return result!;
   }

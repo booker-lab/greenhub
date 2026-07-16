@@ -1,8 +1,8 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { createHash } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
+import { OperationsService } from '../operations/operations.service';
 import { PaymentsService } from '../payments/payments.service';
 import { AligoClient } from './aligo.client';
 
@@ -31,10 +31,14 @@ export type NotificationTemplateCode =
 @Injectable()
 export class NotificationsService {
   constructor(
+    @Inject(FirestoreService)
     private readonly firestore: FirestoreService,
+    @Inject(AligoClient)
     private readonly aligo: AligoClient,
     @Inject(forwardRef(() => PaymentsService))
     private readonly payments: PaymentsService,
+    @Inject(forwardRef(() => OperationsService))
+    private readonly operations: OperationsService,
   ) {}
 
   async getUserNotifications(userId: string) {
@@ -309,17 +313,9 @@ export class NotificationsService {
     orderId: string,
     templateCode: NotificationTemplateCode,
   ) {
-    const idempotencyKey = `customer-notice-failed:${orderId}:${templateCode}`;
-    const issueId = createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 32);
-    const issueRef = this.firestore.doc(`operationIssues/${issueId}`);
-    const existingIssue = await issueRef.get();
-    if (existingIssue.exists) return;
-
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     const order = orderSnap.exists ? orderSnap.data()! : {};
-    const now = this.firestore.Timestamp.now();
-    await issueRef.set({
-      id: issueId,
+    await this.operations.createOrMergeIssue({
       storeId: (order['storeId'] as string | undefined) ?? '',
       orderId,
       paymentId: null,
@@ -328,16 +324,12 @@ export class NotificationsService {
       severity: 'warning',
       title: '고객 안내 최종 실패',
       message: '알림톡 재시도와 문자 대체가 모두 실패하여 운영 확인이 필요합니다.',
-      idempotencyKey,
+      idempotencyKey: `customer-notice-failed:${orderId}:${templateCode}`,
       latestSnapshot: {
         orderStatus: order['status'] ?? null,
         templateCode,
         failureStage: 'sms_fallback',
       },
-      actions: [],
-      resolvedAt: null,
-      createdAt: now,
-      updatedAt: now,
     });
   }
 }

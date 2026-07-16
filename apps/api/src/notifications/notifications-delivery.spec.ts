@@ -145,7 +145,21 @@ describe('회차 직배송 알림 전달 계약', () => {
         sendAlimtalk: jest.fn().mockResolvedValue(finalResult),
       };
       const payments = {};
-      const service = new (NotificationsService as any)(firestore, aligo, payments);
+      const operations = {
+        createOrMergeIssue: jest.fn(async (data: Data) => {
+          const path = `operationIssues/${String(data.idempotencyKey)}`;
+          if (records.has(path)) return records.get(path);
+          const issue = {
+            ...data,
+            id: path.slice('operationIssues/'.length),
+            status: 'OPEN',
+          };
+          writes.push({ path, data: issue });
+          records.set(path, issue);
+          return issue;
+        }),
+      };
+      const service = new (NotificationsService as any)(firestore, aligo, payments, operations);
       return { service: service as NotificationsService, records, writes, aligo };
     }
 

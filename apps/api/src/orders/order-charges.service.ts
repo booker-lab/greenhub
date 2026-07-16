@@ -2,15 +2,22 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
+import { OperationsService } from '../operations/operations.service';
 
 @Injectable()
 export class OrderChargesService {
-  constructor(private readonly firestore: FirestoreService) {}
+  constructor(
+    @Inject(FirestoreService)
+    private readonly firestore: FirestoreService,
+    @Inject(OperationsService)
+    private readonly operations: OperationsService,
+  ) {}
 
   async createRedeliveryFeeCharge(input: {
     storeId: string;
@@ -112,36 +119,28 @@ export class OrderChargesService {
     },
     heldAt: string,
   ) {
-    const issueId = this.issueId(input.storeId, input.orderId);
-    const issueRef = this.firestore.doc(`operationIssues/${issueId}`);
-    const existingIssue = await tx.get(issueRef);
-    if (existingIssue.exists) return existingIssue.data();
-
     const now = this.firestore.Timestamp.now();
-    const issue = {
-      id: issueId,
-      storeId: input.storeId,
-      orderId: input.orderId,
-      paymentId: null,
-      type: 'REDELIVERY_FAILED',
-      status: 'OPEN',
-      severity: 'warning',
-      title: '고객 사유 재배송 실패',
-      message: '유료 재배송까지 실패하여 운영 확인이 필요합니다.',
-      idempotencyKey: `redelivery-failed:${input.orderId}`,
-      latestSnapshot: {
-        orderStatus: order['status'],
-        deliveryHold: order['deliveryHold'],
-        redeliveryChargeId: order['redeliveryChargeId'],
+    const issue = await this.operations.createOrMergeIssue(
+      {
+        storeId: input.storeId,
+        orderId: input.orderId,
+        paymentId: null,
+        type: 'REDELIVERY_FAILED',
+        status: 'OPEN',
+        severity: 'warning',
+        title: '고객 사유 재배송 실패',
+        message: '유료 재배송까지 실패하여 운영 확인이 필요합니다.',
+        idempotencyKey: `redelivery-failed:${input.orderId}`,
+        latestSnapshot: {
+          orderStatus: order['status'],
+          deliveryHold: order['deliveryHold'],
+          redeliveryChargeId: order['redeliveryChargeId'],
+        },
       },
-      actions: [],
-      resolvedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    };
-    tx.set(issueRef, issue);
+      tx,
+    );
     tx.update(orderRef, {
-      redeliveryFailureIssueId: issueId,
+      redeliveryFailureIssueId: issue.id,
       redeliveryFailureHoldAt: heldAt,
       requiresOperationalReview: true,
       updatedAt: now,
@@ -157,13 +156,6 @@ export class OrderChargesService {
   }) {
     return createHash('sha256')
       .update(`${input.storeId}:${input.orderId}:${input.requesterId}:${input.idempotencyKey}`)
-      .digest('hex')
-      .slice(0, 32);
-  }
-
-  private issueId(storeId: string, orderId: string) {
-    return createHash('sha256')
-      .update(`${storeId}:${orderId}:REDELIVERY_FAILED`)
       .digest('hex')
       .slice(0, 32);
   }

@@ -72,7 +72,7 @@ describe('알림 마케팅 동의 설정 계약', () => {
         now: jest.fn(() => new Date('2026-07-17T09:00:00.000+09:00')),
       },
     };
-    const service = new (NotificationsService as any)(firestore, {}, {});
+    const service = new (NotificationsService as any)(firestore, {}, {}, {});
 
     await expect(service.updatePreferences('current-user', { alimtalk: false })).resolves.toEqual({
       alimtalk: false,

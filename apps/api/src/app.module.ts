@@ -20,6 +20,7 @@ import { AiModule } from './ai/ai.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { SaleRoundsModule } from './sale-rounds/sale-rounds.module';
+import { OperationsModule } from './operations/operations.module';
 
 @Module({
   controllers: [AppController],
@@ -51,6 +52,7 @@ import { SaleRoundsModule } from './sale-rounds/sale-rounds.module';
     VarietiesModule,
     AiModule,
     SaleRoundsModule,
+    OperationsModule,
   ],
 })
 export class AppModule {}

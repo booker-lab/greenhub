@@ -458,7 +458,9 @@ describe('MVP 회차 주문 흐름 계약', () => {
         },
       }),
     );
-    const service = new OrderChargesService(firestore);
+    const { OperationsService } = require('../operations/operations.service');
+    const operations = new OperationsService(firestore, {}, {});
+    const service = new OrderChargesService(firestore, operations);
 
     await service.createRedeliveryFeeCharge({
       storeId: 'store-round',
@@ -503,7 +505,9 @@ describe('MVP 회차 주문 흐름 계약', () => {
         },
       },
     }));
-    const service = new OrderChargesService(firestore);
+    const { OperationsService } = require('../operations/operations.service');
+    const operations = new OperationsService(firestore, {}, {});
+    const service = new OrderChargesService(firestore, operations);
     await service.createRedeliveryFeeCharge({
       storeId: 'store-round', orderId: 'order-1', requesterId: 'user-1', idempotencyKey: 'first',
     });
@@ -543,7 +547,9 @@ describe('MVP 회차 주문 흐름 계약', () => {
         deliveryHold: { customerResponsible, redeliveryFee, heldAt: '2026-07-21T01:00:00.000Z' },
       },
     }));
-    const service = new OrderChargesService(firestore);
+    const { OperationsService } = require('../operations/operations.service');
+    const operations = new OperationsService(firestore, {}, {});
+    const service = new OrderChargesService(firestore, operations);
 
     await expect(service.createRedeliveryFeeCharge({
       storeId: 'store-round', orderId: 'order-1', requesterId: 'user-1', idempotencyKey: 'first',
@@ -561,7 +567,9 @@ describe('MVP 회차 주문 흐름 계약', () => {
         },
       },
     }));
-    const service = new OrderChargesService(firestore);
+    const { OperationsService } = require('../operations/operations.service');
+    const operations = new OperationsService(firestore, {}, {});
+    const service = new OrderChargesService(firestore, operations);
 
     await expect(service.createRedeliveryFeeCharge({
       storeId: 'store-round', orderId: 'order-legacy', requesterId: 'user-1',
