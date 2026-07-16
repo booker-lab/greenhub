@@ -1,5 +1,5 @@
-import { IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsOptional, IsString, ValidateNested } from 'class-validator';
 
 class WebhookData {
   @IsString()
@@ -11,6 +11,10 @@ class WebhookData {
   @IsOptional()
   @IsString()
   transactionId?: string;
+
+  @IsOptional()
+  @IsString()
+  cancellationId?: string;
 }
 
 export class PortoneWebhookDto {

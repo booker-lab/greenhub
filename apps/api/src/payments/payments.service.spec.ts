@@ -379,7 +379,17 @@ describe('PaymentsService 회차 예약 연결', () => {
     expect(portone.refund).toHaveBeenCalledWith('order-1', 100000, expect.any(String));
     expect(capacity.consumeReservation).not.toHaveBeenCalled();
     expect(order.status).toBe('CANCELLED');
-    expect(paymentWrites).toHaveLength(0);
+    expect(paymentWrites).toHaveLength(1);
+    expect(paymentWrites[0]).toMatchObject({
+      id: 'order-1',
+      orderId: 'order-1',
+      amount: 100000,
+      status: 'CANCELLED',
+      portonePaymentId: 'order-1',
+      portoneTransactionId: 'tx-1',
+      refundAmount: 100000,
+      refundReason: '결제 만료 후 회차 한도 마감',
+    });
     expect(notifications.sendToUser).not.toHaveBeenCalled();
   });
 });

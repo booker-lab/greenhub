@@ -18,6 +18,7 @@ import { PortoneClient, PortoneError } from './portone.client';
 // 환불 가능 상태
 const REFUNDABLE_STATUSES = ['ACCEPTED', 'RECRUITING', 'CONFIRMED', 'PREPARING'];
 const PAYMENT_FINALIZATION_LOCK_MS = 5 * 60 * 1000;
+const LATE_PAYMENT_REFUND_REASON = '결제 만료 후 회차 한도 마감';
 
 type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
 
@@ -247,8 +248,14 @@ export class PaymentsService {
         });
         reservationId = reservation.id;
       } catch {
-        await this.portone.refund(orderId, paymentData.amount.total, '결제 만료 후 회차 한도 마감');
-        await this.markLatePaymentRefunded(orderId, token);
+        await this.portone.refund(orderId, paymentData.amount.total, LATE_PAYMENT_REFUND_REASON);
+        await this.markLatePaymentRefunded(
+          orderId,
+          token,
+          order,
+          paymentData,
+          LATE_PAYMENT_REFUND_REASON,
+        );
         return { ok: false, reason: 'late_payment_refunded' };
       }
     }
@@ -365,7 +372,13 @@ export class PaymentsService {
     );
   }
 
-  private async markLatePaymentRefunded(orderId: string, token: string) {
+  private async markLatePaymentRefunded(
+    orderId: string,
+    token: string,
+    order: Record<string, any>,
+    paymentData: PaymentData,
+    reason: string,
+  ) {
     const now = this.firestore.Timestamp.now();
     await this.firestore.runTransaction(async (tx) => {
       const orderRef = this.firestore.doc(`orders/${orderId}`);
@@ -374,6 +387,22 @@ export class PaymentsService {
       tx.update(orderRef, {
         latePaymentRefundedAt: now,
         paymentFinalization: null,
+        updatedAt: now,
+      });
+      tx.set(this.firestore.doc(`payments/${orderId}`), {
+        id: orderId,
+        orderId,
+        userId: order['userId'],
+        storeId: order['storeId'],
+        amount: paymentData.amount.total,
+        payMethod: paymentData.method?.type ?? null,
+        status: 'CANCELLED',
+        portonePaymentId: orderId,
+        portoneTransactionId: paymentData.transactionId,
+        refundAmount: paymentData.amount.total,
+        refundedAt: now,
+        refundReason: reason,
+        createdAt: now,
         updatedAt: now,
       });
     });
