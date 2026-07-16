@@ -4,12 +4,12 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 3.11 완료, Task 3.12 착수 대기
+- **상태**: Task 3.12 완료, Task 3.13 착수 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
-- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. Task 3.7은 셀러·관리자 인증, 스토어 소유권 검증, 안전한 목록·상세·재조회 응답과 환불·문자 조치 API를 구현했다. Task 3.8은 운영 모듈과 런타임 라우트를 연결하고 알림·재배송 최종 실패 생성 경로를 공통 운영 서비스로 전환했다. Task 3.9는 배송 사진 90일, 마케팅 동의와 분쟁 기록 3년, 계약·결제·공급 기록 5년, 분쟁·법적 보존 연장과 멱등 파기 계약을 실패 테스트 8개로 고정했다. Task 3.10은 목적별 법정 기록 저장과 만료 쿼리, 분쟁·법적 보존 제외, 연결 사진과 Firestore 문서의 멱등 파기를 구현했다. Task 3.11은 `FirestoreModule`을 가져오는 `RetentionModule`에 보관 서비스를 provider로 등록하고 export했다. 다음 진입점은 Task 3.12이다.
+- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. Task 3.7은 셀러·관리자 인증, 스토어 소유권 검증, 안전한 목록·상세·재조회 응답과 환불·문자 조치 API를 구현했다. Task 3.8은 운영 모듈과 런타임 라우트를 연결하고 알림·재배송 최종 실패 생성 경로를 공통 운영 서비스로 전환했다. Task 3.9는 배송 사진 90일, 마케팅 동의와 분쟁 기록 3년, 계약·결제·공급 기록 5년, 분쟁·법적 보존 연장과 멱등 파기 계약을 실패 테스트 8개로 고정했다. Task 3.10은 목적별 법정 기록 저장과 만료 쿼리, 분쟁·법적 보존 제외, 연결 사진과 Firestore 문서의 멱등 파기를 구현했다. Task 3.11은 `FirestoreModule`을 가져오는 `RetentionModule`에 보관 서비스를 provider로 등록하고 export했다. Task 3.12는 배송 사진의 서버 비공개 업로드, 주문 권한 확인 뒤 15분 V4 읽기 서명 URL, 보관 서비스용 삭제 어댑터를 구현했다. 다음 진입점은 Task 3.13이다.
 
 ## 업무 요약 (협업용)
 
@@ -203,7 +203,7 @@ flowchart TD
 | 3.9 | 3.8 | `apps/api/src/retention/retention.service.spec.ts` | 90일·3년·5년 만료와 분쟁 연장 파기 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | 통과 — Jest가 신규 보관 계약 파일을 포함한 17개 테스트 파일을 수집했다. 신규 8개 테스트는 배송 사진 90일, 마케팅 동의·분쟁 기록 3년, 계약·결제·공급 기록 5년의 목적별 `expiresAt`, 진행 중 분쟁과 법적 보존 사유의 파기 제외, 미만료 제외, 목적별 쿼리 분리, 모의 Firestore 배치·Storage 삭제와 재실행 멱등성, 개인정보·비밀값 배제를 고정했다. 8개 모두 `apps/api/src/retention/retention.service.ts` 부재를 명시하는 예상 실패로 확인했다. 기존 운영 예외·알림·결제·주문 6개 스위트 55개 테스트, API 빌드, Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.10 | 3.9 | `apps/api/src/retention/retention.service.ts` | 법정 기록 분리 저장과 Firestore·Storage 정기 파기를 구현한다. | `pnpm --filter api test -- retention.service.spec.ts --runInBand` | 통과 — 배송 사진 90일, 마케팅 동의와 환불·분쟁·고객응대 기록 3년, 계약·결제·공급 기록 5년의 목적별 `expiresAt`과 분리 컬렉션 저장을 구현했다. 목적별 만료 쿼리에서 진행 중 분쟁과 `legalHold`를 제외하고, 연결 사진은 Storage 삭제 어댑터로 제거한 뒤 Firestore 문서를 단일 배치로 삭제하며 빈 대상에는 부작용을 만들지 않는다. 신규 8개와 기존 6개 스위트 55개 테스트, API 빌드, Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.11 | 3.10 | `apps/api/src/retention/retention.module.ts` | 보관 서비스를 주문·결제·알림에서 재사용할 수 있게 내보낸다. | `pnpm --filter api build` | 통과 — `RetentionModule`이 `FirestoreModule`을 가져오고 `RetentionService`를 provider로 등록해 export한다. Storage 구현·토큰, `AppModule`, 주문·결제·알림 호출 경로는 후속 Task 범위로 유지했다. 신규 모듈 계약 2개를 포함한 보관·운영 예외·알림·결제·주문 8개 스위트 68개 테스트, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
-| 3.12 | 3.11 | `apps/api/src/firestore/storage.service.ts` | 배송 사진을 비공개 업로드하고 권한 확인 후 단기 서명 URL을 발급한다. | `pnpm --filter api build` | [판정 대기 — 사진 저장소] | todo |
+| 3.12 | 3.11 | `apps/api/src/firestore/storage.service.ts` | 배송 사진을 비공개 업로드하고 권한 확인 후 단기 서명 URL을 발급한다. | `pnpm --filter api build` | 통과 — `deliveryPhotos/{orderId}/{photoId}.jpg` 경로에 JPEG를 서버 업로드하고 private/no-store 메타데이터와 CRC32C 검증을 적용했다. 업로드는 관리자·스토어 소유 셀러·배정 기사, 읽기는 여기에 주문자 본인을 추가해 서버가 주문과 스토어 경계를 확인한 뒤에만 허용한다. 읽기 URL은 V4 읽기 전용 15분 만료로 발급하며 공개 ACL·공개 URL·클라이언트 직접 업로드 경로는 만들지 않았다. 보관 서비스가 재사용할 `deleteObject`는 배송 사진 경로만 받고 미존재 삭제를 멱등 처리한다. 신규 Storage 5개를 포함한 관련 13개 스위트 89개 테스트, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.13 | 3.12 | `apps/api/src/firestore/firestore.module.ts` | 서버 Storage 어댑터를 주입·내보내도록 Firebase 인프라 모듈을 확장한다. | `pnpm --filter api build` | [판정 대기 — Storage 연결] | todo |
 | 3.14 | 3.13 | `apps/api/src/app.module.ts` | 회차·운영 예외·보관 모듈을 애플리케이션에 최종 연결한다. | `pnpm --filter api build` | [판정 대기 — API 통합] | todo |
 
@@ -280,6 +280,6 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 3.11 완료, Task 3.12 `todo`
-- **검증 결과**: `RetentionModule`이 `FirestoreModule`을 가져오고 `RetentionService`를 provider로 등록해 다른 모듈에서 재사용할 수 있도록 export한다. 신규 모듈 계약 2개를 포함한 보관·운영 예외·알림·결제·주문 8개 스위트 68개 테스트, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
-- **잔여 위험**: 실제 서버 Storage 구현과 명시적 Storage 주입 연결은 아직 없으며 `RetentionModule`도 런타임에 연결되지 않았다. 다음 Task 3.12에서는 `apps/api/src/firestore/storage.service.ts` 범위에서 비공개 업로드와 권한 확인 후 단기 서명 URL 발급을 구현하고, `FirestoreModule` 연결과 `AppModule` 최종 연결은 각각 Task 3.13·3.14까지 선행하지 않아야 한다.
+- **Status**: Task 3.12 완료, Task 3.13 `todo`
+- **검증 결과**: 서버 Storage 서비스가 배송 사진을 고정 비공개 경로에 업로드하고, 주문·스토어 권한을 통과한 요청에만 15분 V4 읽기 서명 URL을 발급하며, 보관 파기에서 재사용할 멱등 삭제 어댑터를 제공한다. 신규 Storage 5개를 포함한 보관·운영 예외·알림·결제·주문 관련 13개 스위트 89개 테스트, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+- **잔여 위험**: `StorageService`는 아직 `FirestoreModule` provider/export에 등록되지 않아 런타임 주입 경로가 없고 `RetentionService`의 삭제 의존성과도 연결되지 않았다. 다음 Task 3.13에서는 Firebase 인프라 모듈 안에서 서버 Storage 어댑터를 명시적으로 주입·내보내고 보관 모듈 의존성을 연결하되, `AppModule` 최종 연결과 주문·드라이버 실제 호출 경로 변경은 Task 3.14 이후 범위까지 선행하지 않아야 한다.

@@ -56,7 +56,7 @@
 
 ## 다음 진입
 
-- Task 3.12에서 서버 Storage 서비스의 비공개 업로드와 권한 확인 후 단기 서명 URL 발급을 구현한다.
+- Task 3.13에서 `FirestoreModule`에 서버 Storage 어댑터 provider/export를 연결하고 `RetentionService`의 삭제 의존성을 명시적으로 주입한다.
 
 ## 세션 완료 인계 규칙
 
@@ -161,3 +161,11 @@
 - `RetentionModule`은 `FirestoreModule`을 가져오고 `RetentionService`를 provider로 등록해 export한다.
 - 실제 Storage 구현·주입 연결, `AppModule`, 주문·결제·알림 호출 경로는 후속 Task 범위로 남겼다.
 - 신규 모듈 계약 2개를 포함한 보관·운영 예외·알림·결제·주문 8개 스위트 68개 테스트, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+
+## Task 3.12 결과
+
+- `StorageService`는 배송 사진 JPEG를 `deliveryPhotos/{orderId}/{photoId}.jpg`에 서버 업로드하고 공개 ACL 없이 private/no-store 메타데이터와 CRC32C 검증을 적용한다.
+- 업로드는 관리자·스토어 소유 셀러·배정 기사, 읽기는 여기에 주문자 본인을 추가해 주문과 스토어 경계를 확인한 뒤 허용한다.
+- 읽기 URL은 V4 읽기 전용 15분 만료로 발급하고, 삭제 어댑터는 배송 사진 경로만 허용하며 미존재 객체 삭제를 멱등 처리한다.
+- `FirestoreModule` provider/export, `RetentionService` 주입 연결, `AppModule`, 주문·드라이버 실제 호출 경로는 후속 Task 범위로 남겼다.
+- 신규 Storage 5개를 포함한 관련 13개 스위트 89개 테스트, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
