@@ -13,7 +13,7 @@ import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrderCapacityService } from '../orders/order-capacity.service';
 import { PortoneWebhookDto } from './dto/portone-webhook.dto';
-import { PortoneClient } from './portone.client';
+import { PortoneClient, PortoneError } from './portone.client';
 
 // 환불 가능 상태
 const REFUNDABLE_STATUSES = ['ACCEPTED', 'RECRUITING', 'CONFIRMED', 'PREPARING'];
@@ -175,15 +175,41 @@ export class PaymentsService {
     if (snap.empty) return;
 
     const promises = snap.docs.map(async (doc) => {
-      const paymentData = await this.portone.getPayment(doc.id);
-      if (paymentData.status === 'PAID') {
-        await this.finalizePaidOrder(doc.id, paymentData);
-        return;
+      try {
+        const paymentData = await this.portone.getPayment(doc.id);
+        if (paymentData.status === 'PAID') {
+          await this.finalizePaidOrder(doc.id, paymentData);
+          return;
+        }
+        await this.cancelOrderWithSlotRecovery(doc.id, doc.data(), 'timeout');
+      } catch (error) {
+        if (
+          error instanceof PortoneError &&
+          error.status === 404 &&
+          error.type === 'PAYMENT_NOT_FOUND'
+        ) {
+          await this.cancelOrderWithSlotRecovery(doc.id, doc.data(), 'timeout');
+          return;
+        }
+        this.logPendingOrderCleanupError(doc.id, error);
       }
-      await this.cancelOrderWithSlotRecovery(doc.id, doc.data(), 'timeout');
     });
     await Promise.all(promises);
-    console.log(`[PaymentsScheduler] PENDING 타임아웃 처리 ${snap.size}건`);
+    this.logger.log(`[PaymentsScheduler] PENDING 타임아웃 확인 ${snap.size}건`);
+  }
+
+  private logPendingOrderCleanupError(orderId: string, error: unknown) {
+    if (error instanceof PortoneError) {
+      this.logger.error(
+        `[PaymentsScheduler] 결제 조회 보류 orderId=${orderId} status=${error.status} type=${error.type} message=${error.message}`,
+      );
+      return;
+    }
+    const message =
+      error instanceof Error ? error.message.replace(/[\r\n\t]/g, ' ').slice(0, 500) : 'unknown';
+    this.logger.error(
+      `[PaymentsScheduler] 결제 조회 보류 orderId=${orderId} networkError=${message}`,
+    );
   }
 
   private async finalizePaidOrder(orderId: string, paymentData: PaymentData) {
@@ -367,6 +393,9 @@ export class PaymentsService {
     order: Record<string, unknown>,
     reason: string,
   ) {
+    const latestOrderSnap = await this.firestore.doc(`orders/${orderId}`).get();
+    if (!latestOrderSnap.exists || latestOrderSnap.data()?.['status'] !== 'PENDING') return;
+
     const now = this.firestore.Timestamp.now();
     if (order['schemaVersion'] === 2 && order['reservationId']) {
       if (reason === 'timeout') {
@@ -390,7 +419,9 @@ export class PaymentsService {
     ];
 
     if (order['deliveryMethod'] !== 'parcel') {
-      const dateStr = (order['createdAt'] as any).toDate().toISOString().split('T')[0];
+      const dateStr =
+        (order['requestedDeliveryDate'] as string | undefined) ??
+        (order['createdAt'] as any).toDate().toISOString().split('T')[0];
       const capId = `${order['storeId']}_${dateStr}`;
       updates.push(
         this.firestore.doc(`dailyCaps/${capId}`).update({

@@ -4,12 +4,12 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 2.8 완료 후 Task 2.9 진입 대기
+- **상태**: Task 2.10 PortOne 샌드박스 외부 환경 검증 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
-- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했고, 원 계획 Task 2.8의 주문 모듈 의존성 연결까지 완료했다. 다음 진입점은 Task 2.9다.
+- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했고, 원 계획 Task 2.10 구현과 모킹 테스트까지 완료했다. 다음 진입점은 PortOne 샌드박스 외부 환경 게이트 재검증이며, 통과 전에는 Task 2.11을 시작하지 않는다.
 
 ## 업무 요약 (협업용)
 
@@ -186,7 +186,7 @@ flowchart TD
 | 2.7 | 2.6 | `apps/api/src/orders/orders.controller.ts` | 장바구니 검증·고객 취소·보류·재배송비·완료 사진 API 경로를 연결한다. | `pnpm --filter api build` | 통과 — 주문 컨트롤러가 회차 장바구니 검증, 고객 취소, 배송 보류, 재배송비, 배송 사진 경로를 빌드 오류 없이 노출한다. | done |
 | 2.8 | 2.7 | `apps/api/src/orders/orders.module.ts` | 용량·결제·재배송비 의존성을 주문 모듈에 연결한다. 보관 의존성은 생성 이후 Task 3.11·3.14에서 연결한다. | `pnpm --filter api build` | 통과 — `OrdersModule`이 `OrderCapacityModule`과 `PaymentsModule`을 가져오고 `OrderChargesService`를 provider로 등록한 상태에서 API 빌드에 성공했다. | done |
 | 2.9 | 2.8 | `apps/api/src/payments/payments.service.spec.ts` | 늦은 결제·중복 웹훅·한도 재확보 실패 자동 환불 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | 통과 — Jest가 `payments.service.spec.ts`를 포함한 8개 테스트 파일을 수집했다. | done |
-| 2.10 | 2.9 | `apps/api/src/payments/payments.service.ts` | 타임아웃 포트원 재조회와 주문·재배송비 결제의 멱등 확정을 구현한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | 통과 — 결제 서비스 테스트 6개가 타임아웃 재조회, 기존·만료 예약 소비, 한도 실패 전액 환불, 중복 웹훅 멱등 확정을 검증했다. | done |
+| 2.10 | 2.9 | `apps/api/src/payments/payments.service.ts` | 타임아웃 포트원 재조회와 주문·재배송비 결제의 멱등 확정을 구현한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | 검증 대기 — 2026-07-16 staging V2 Secret 인증 200과 지정 결제의 `404 PAYMENT_NOT_FOUND`를 확인했다. `PLAN_portone_payment_not_found_timeout_remediation.md`에서 전용 오류 분류와 주문별 scheduler 격리를 보정해 단위 테스트 21개와 API 빌드를 통과했고, Railway staging deployment `00851584-79a3-419e-8097-d7ba1b08cfb5`에서 legacy·회차 주문이 `CANCELLED/timeout`, 예약이 `EXPIRED`, 회차·상품 예약 한도가 0으로 복구됐으며 결제 문서는 생성되지 않았다. V2 인증 401과 처리 가능한 404 오류 로그도 사라졌다. 다만 실제 `PAID`·실결제액, 중복 웹훅 멱등성, 만료 예약 재확보, 한도 실패 전액 환불, 환불 후 원격·로컬 상태 일치는 미검증이므로 `done`으로 판정하지 않는다. | todo |
 | 2.11 | 2.10 | `apps/api/src/orders/order-charges.service.ts` | 고객 사유 첫 실패에 재배송비 결제 1회를 만들고 재실패는 운영 예외로 전환한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 재배송비] | todo |
 
 ### Phase 3. 알림·운영 예외·보관
@@ -280,6 +280,6 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 2.8 완료 후 Task 2.9 진입 대기
-- **검증 결과**: 리뷰 보정의 API 단위 테스트 34개·보정 E2E 2개·API 빌드와 빌드 게이트 보정의 선택 회귀 검사·consumer build·seller build·전체 workspace build에 더해, Task 2.8에서 주문 모듈의 용량·결제·재배송비 필수 연결 상태로 API 빌드를 통과했다.
-- **잔여 위험**: PortOne 샌드박스 검증은 Task 2.10 전, Firebase Emulator 검증은 Task 6.4 전에 수행한다. 실제 알리고 템플릿 승인, 포트원 운영 채널, 이천 주소 판정 데이터 품질은 출시 전 운영 환경에서 확인한다.
+- **Status**: Task 2.10 PortOne 샌드박스 외부 환경 검증 대기
+- **검증 결과**: Task 2.10 모킹 테스트와 API 빌드에 더해 staging V2 인증 200, `PAYMENT_NOT_FOUND` 전용 분류, 주문별 scheduler 격리, 두 timeout 주문 취소, 회차 예약 `EXPIRED`, 예약 한도 반환을 실측했다. Railway staging 최종 deployment는 `00851584-79a3-419e-8097-d7ba1b08cfb5`다.
+- **잔여 위험**: PortOne 외부 환경 게이트의 실제 `PAID`·실결제액, 중복 웹훅, 늦은 결제 한도 재확보, 실패 시 전액 환불, 환불 후 원격·로컬 상태 일치가 미통과 상태이므로 Task 2.10은 검증 대기이며 Task 2.11에 진입할 수 없다. Preview 정상 로그인용 staging Kakao OAuth를 준비한 뒤 실제 100원 테스트 결제로 남은 계약을 실측해야 한다.

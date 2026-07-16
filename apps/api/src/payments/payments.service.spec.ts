@@ -1,4 +1,5 @@
 import { PaymentsService } from './payments.service';
+import { PortoneError } from './portone.client';
 
 type Data = Record<string, any>;
 
@@ -55,12 +56,22 @@ describe('PaymentsService 회차 예약 연결', () => {
     };
     const firestore = {
       doc,
-      runTransaction: jest.fn(async (callback: (tx: Data) => Promise<void>) => callback({
-        get: (ref: Data) => ref.get(),
-        update: (ref: Data, data: Data) => ref.update(data),
-        set: (ref: Data, data: Data) => ref.set(data),
-      })),
-      collection: jest.fn((name: string) => name === 'orders' ? orderQuery : ({ where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn() })),
+      runTransaction: jest.fn(async (callback: (tx: Data) => Promise<void>) =>
+        callback({
+          get: (ref: Data) => ref.get(),
+          update: (ref: Data, data: Data) => ref.update(data),
+          set: (ref: Data, data: Data) => ref.set(data),
+        }),
+      ),
+      collection: jest.fn((name: string) =>
+        name === 'orders'
+          ? orderQuery
+          : {
+              where: jest.fn().mockReturnThis(),
+              limit: jest.fn().mockReturnThis(),
+              get: jest.fn(),
+            },
+      ),
       Timestamp: {
         now: jest.fn(() => new Date('2026-07-15T03:00:00.000+09:00')),
         fromDate: jest.fn((date: Date) => date),
@@ -97,6 +108,7 @@ describe('PaymentsService 회차 예약 연결', () => {
       service,
       order,
       orderRef,
+      doc,
       paymentWrites,
       portone,
       notifications,
@@ -180,6 +192,144 @@ describe('PaymentsService 회차 예약 연결', () => {
     expect(capacity.releaseReservation).not.toHaveBeenCalled();
     expect(portone.refund).not.toHaveBeenCalled();
     expect(order.status).toBe('ACCEPTED');
+  });
+
+  it('404 PAYMENT_NOT_FOUND 주문은 timeout 취소하고 회차 예약을 EXPIRED로 반환한다', async () => {
+    const { service, capacity, order, portone } = makeService();
+    portone.getPayment.mockRejectedValue(
+      new PortoneError(404, 'PAYMENT_NOT_FOUND', 'payment not found'),
+    );
+
+    await expect(service.cleanupPendingOrders()).resolves.toBeUndefined();
+
+    expect(capacity.releaseReservation).toHaveBeenCalledWith('reservation-1', 'EXPIRED');
+    expect(order).toMatchObject({ status: 'CANCELLED', cancelReason: 'timeout' });
+    expect(portone.refund).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [401, 'UNAUTHORIZED'],
+    [403, 'FORBIDDEN'],
+    [404, 'UNKNOWN_RESOURCE'],
+    [429, 'TOO_MANY_REQUESTS'],
+    [500, 'INTERNAL_SERVER_ERROR'],
+  ])('%i %s 조회 오류에서는 주문과 예약을 변경하지 않는다', async (status, type) => {
+    const { service, capacity, order, orderRef, portone } = makeService();
+    portone.getPayment.mockRejectedValue(new PortoneError(status, type, 'remote failure'));
+
+    await expect(service.cleanupPendingOrders()).resolves.toBeUndefined();
+
+    expect(order.status).toBe('PENDING');
+    expect(orderRef.update).not.toHaveBeenCalled();
+    expect(capacity.releaseReservation).not.toHaveBeenCalled();
+    expect(capacity.consumeReservation).not.toHaveBeenCalled();
+  });
+
+  it('네트워크 조회 오류에서는 주문과 예약을 변경하지 않는다', async () => {
+    const { service, capacity, order, orderRef, portone } = makeService();
+    portone.getPayment.mockRejectedValue(new TypeError('fetch failed'));
+
+    await expect(service.cleanupPendingOrders()).resolves.toBeUndefined();
+
+    expect(order.status).toBe('PENDING');
+    expect(orderRef.update).not.toHaveBeenCalled();
+    expect(capacity.releaseReservation).not.toHaveBeenCalled();
+  });
+
+  it('한 주문의 조회 실패를 격리하고 다른 PAYMENT_NOT_FOUND 주문을 계속 처리한다', async () => {
+    const firstOrder = {
+      id: 'order-failed',
+      status: 'PENDING',
+      schemaVersion: 2,
+      reservationId: 'reservation-failed',
+    };
+    const secondOrder = {
+      id: 'order-timeout',
+      status: 'PENDING',
+      schemaVersion: 2,
+      reservationId: 'reservation-timeout',
+    };
+    const orderRefs = new Map(
+      [firstOrder, secondOrder].map((order) => [
+        order.id,
+        {
+          get: jest.fn(async () => ({ exists: true, data: () => order })),
+          update: jest.fn(async (update: Data) => Object.assign(order, update)),
+        },
+      ]),
+    );
+    const firestore = {
+      collection: jest.fn(() => ({
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn(async () => ({
+          empty: false,
+          size: 2,
+          docs: [
+            { id: firstOrder.id, data: () => firstOrder },
+            { id: secondOrder.id, data: () => secondOrder },
+          ],
+        })),
+      })),
+      doc: jest.fn((path: string) => orderRefs.get(path.replace('orders/', ''))),
+      Timestamp: {
+        now: jest.fn(() => new Date('2026-07-15T03:00:00.000+09:00')),
+        fromDate: jest.fn((date: Date) => date),
+      },
+      FieldValue: { increment: jest.fn((value: number) => value) },
+    };
+    const portone = {
+      getPayment: jest
+        .fn()
+        .mockRejectedValueOnce(new PortoneError(503, 'UNAVAILABLE', 'temporary failure'))
+        .mockRejectedValueOnce(new PortoneError(404, 'PAYMENT_NOT_FOUND', 'payment not found')),
+    };
+    const capacity = {
+      releaseReservation: jest.fn().mockResolvedValue({ status: 'EXPIRED' }),
+    };
+    const service = new (PaymentsService as any)(
+      firestore,
+      portone,
+      { sendToUser: jest.fn() },
+      { log: jest.fn() },
+      capacity,
+    ) as PaymentsService;
+
+    await expect(service.cleanupPendingOrders()).resolves.toBeUndefined();
+
+    expect(firstOrder.status).toBe('PENDING');
+    expect(secondOrder).toMatchObject({ status: 'CANCELLED', cancelReason: 'timeout' });
+    expect(capacity.releaseReservation).toHaveBeenCalledTimes(1);
+    expect(capacity.releaseReservation).toHaveBeenCalledWith('reservation-timeout', 'EXPIRED');
+  });
+
+  it('scheduler 재실행 시 이미 취소된 주문의 예약 한도를 중복 반환하지 않는다', async () => {
+    const fixture = makeService();
+    fixture.portone.getPayment.mockRejectedValue(
+      new PortoneError(404, 'PAYMENT_NOT_FOUND', 'payment not found'),
+    );
+
+    await fixture.service.cleanupPendingOrders();
+    await fixture.service.cleanupPendingOrders();
+
+    expect(fixture.capacity.releaseReservation).toHaveBeenCalledTimes(1);
+    expect(fixture.orderRef.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('legacy 직접배송 timeout은 requestedDeliveryDate 기준 dailyCaps를 반환한다', async () => {
+    const fixture = makeService({
+      schemaVersion: 1,
+      reservationId: undefined,
+      requestedDeliveryDate: '2026-07-21',
+      createdAt: { toDate: () => new Date('2026-07-15T00:00:00.000Z') },
+    });
+    fixture.portone.getPayment.mockRejectedValue(
+      new PortoneError(404, 'PAYMENT_NOT_FOUND', 'payment not found'),
+    );
+
+    await fixture.service.cleanupPendingOrders();
+
+    expect(fixture.doc).toHaveBeenCalledWith('dailyCaps/store-1_2026-07-21');
+    expect(fixture.order).toMatchObject({ status: 'CANCELLED', cancelReason: 'timeout' });
   });
 
   it('만료 취소 뒤 늦은 결제는 한도를 새로 확보하고 주문을 한 번만 확정한다', async () => {

@@ -1,10 +1,5 @@
-import {
-  Injectable,
-  InternalServerErrorException,
-  UnauthorizedException,
-  Logger,
-} from '@nestjs/common';
-import * as crypto from 'crypto';
+import * as crypto from 'node:crypto';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 interface PortonePaymentData {
@@ -15,6 +10,17 @@ interface PortonePaymentData {
   method?: { type: string };
 }
 
+export class PortoneError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly type: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'PortoneError';
+  }
+}
+
 @Injectable()
 export class PortoneClient {
   private readonly secret: string;
@@ -23,6 +29,32 @@ export class PortoneClient {
 
   constructor(private readonly config: ConfigService) {
     this.secret = config.get<string>('PORTONE_V2_SECRET', '');
+  }
+
+  private sanitizeDiagnosticField(value: unknown): string {
+    if (typeof value !== 'string') return 'unknown';
+    return value.replace(/[\r\n\t]/g, ' ').slice(0, 500);
+  }
+
+  private async createResponseError(res: Response, action: string): Promise<PortoneError> {
+    let type = 'unknown';
+    let message = 'unknown';
+    try {
+      const body = (await res.json()) as { type?: unknown; message?: unknown };
+      type = this.sanitizeDiagnosticField(body.type);
+      message = this.sanitizeDiagnosticField(body.message);
+    } catch {
+      type = 'unparseable';
+      message = 'PortOne 응답 본문을 JSON으로 해석하지 못함';
+    }
+
+    if (res.status !== 404 || type !== 'PAYMENT_NOT_FOUND') {
+      const label = res.status === 401 ? 'PortOne V2 인증 실패' : 'PortOne API 오류';
+      this.logger.error(
+        `${label} action=${action} status=${res.status} type=${type} message=${message}`,
+      );
+    }
+    return new PortoneError(res.status, type, message);
   }
 
   /**
@@ -78,7 +110,7 @@ export class PortoneClient {
       headers: { Authorization: `PortOne ${this.secret}` },
     });
     if (!res.ok) {
-      throw new InternalServerErrorException(`Portone 결제 조회 실패: ${res.status}`);
+      throw await this.createResponseError(res, 'getPayment');
     }
     return res.json() as Promise<PortonePaymentData>;
   }
@@ -93,8 +125,7 @@ export class PortoneClient {
       body: JSON.stringify({ reason, amount }),
     });
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { message?: string };
-      throw new InternalServerErrorException(`Portone 환불 실패: ${body.message ?? res.status}`);
+      throw await this.createResponseError(res, 'refund');
     }
   }
 }
