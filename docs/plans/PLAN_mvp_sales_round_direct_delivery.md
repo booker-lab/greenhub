@@ -4,12 +4,12 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 2.10 완료, Task 2.11 착수 대기
+- **상태**: Task 2.11 완료, Task 3.1 착수 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
-- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. 다음 진입점은 아직 미착수인 Task 2.11이다.
+- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. 다음 진입점은 Task 3.1이다.
 
 ## 업무 요약 (협업용)
 
@@ -187,7 +187,7 @@ flowchart TD
 | 2.8 | 2.7 | `apps/api/src/orders/orders.module.ts` | 용량·결제·재배송비 의존성을 주문 모듈에 연결한다. 보관 의존성은 생성 이후 Task 3.11·3.14에서 연결한다. | `pnpm --filter api build` | 통과 — `OrdersModule`이 `OrderCapacityModule`과 `PaymentsModule`을 가져오고 `OrderChargesService`를 provider로 등록한 상태에서 API 빌드에 성공했다. | done |
 | 2.9 | 2.8 | `apps/api/src/payments/payments.service.spec.ts` | 늦은 결제·중복 웹훅·한도 재확보 실패 자동 환불 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | 통과 — Jest가 `payments.service.spec.ts`를 포함한 8개 테스트 파일을 수집했다. | done |
 | 2.10 | 2.9 | `apps/api/src/payments/payments.service.ts` | 타임아웃 포트원 재조회와 주문·재배송비 결제의 멱등 확정을 구현한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | 통과 — 2026-07-17 KST Railway staging deployment `187e2ba9-e589-4dff-bee9-21fff9e17f7c`와 Firebase `green-staging-74557`에서 실제 100원 `PAID`, 주문·결제 금액 일치, `PAID` 웹훅 재발송 멱등성, timeout 후 새 예약 `CONSUMED`와 주문 `ACCEPTED` 복구, 한도 재확보 실패 시 PortOne 100원 전액 환불, 로컬 결제 `CANCELLED`·환불액 100원 기록, `CANCELLED` 웹훅 HTTP 200, 재발송 후 환불 1건·수량 불변을 확인했다. 관련 4개 스위트 31개 테스트, API 빌드, Biome 오류 수준 검사와 `git diff --check`가 통과했다. 상세 증거는 `REPORT_task_2_10_portone_staging_e2e.md`에 기록했다. | done |
-| 2.11 | 2.10 | `apps/api/src/orders/order-charges.service.ts` | 고객 사유 첫 실패에 재배송비 결제 1회를 만들고 재실패는 운영 예외로 전환한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 재배송비] | todo |
+| 2.11 | 2.10 | `apps/api/src/orders/order-charges.service.ts` | 고객 사유 첫 실패에 재배송비 결제 1회를 만들고 재실패는 운영 예외로 전환한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 통과 — 첫 고객 사유 보류에만 주문 문서와 원자적으로 재배송비 1건을 만들고, 같은 보류의 다른 멱등 키 재처리는 기존 결제를 반환하며, 새 고객 사유 보류는 추가 결제 없이 멱등 `REDELIVERY_FAILED` 운영 예외 1건과 운영 확인 표시로 전환했다. 권한·비고객 사유·legacy 회귀를 포함한 주문 흐름 14개 테스트, 일반 결제 16개 테스트, API 빌드, Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 
 ### Phase 3. 알림·운영 예외·보관
 | Task | Dependency | Target | Goal | Verify | Conclusion | Status |
@@ -280,6 +280,6 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 2.10 완료, Task 2.11 `todo`
-- **검증 결과**: `PAYMENT_NOT_FOUND` timeout 복구에 더해 실제 100원 정상 결제, 웹훅 중복 멱등성, timeout 후 예약 재확보 성공, 재확보 실패 전액 환불, 취소 웹훅 수신, 환불 후 PortOne·Firestore 상태 일치를 staging에서 실측했다. Railway staging 최종 deployment는 `187e2ba9-e589-4dff-bee9-21fff9e17f7c`, Vercel branch Preview는 `dpl_8cyvKwafAaUbytqndvtJL2vKP2Tm`이다.
-- **잔여 위험**: Task 2.10 외부 결제 게이트의 차단 사항은 없다. Task 2.11은 의존성만 충족됐으며 아직 코드·문서 변경을 시작하지 않았다.
+- **Status**: Task 2.11 완료, Task 3.1 `todo`
+- **검증 결과**: Task 2.10의 staging 실제 결제 게이트에 이어 Task 2.11에서 고객 사유 첫 보류의 재배송비 1건 생성, 같은 보류 재처리 멱등성, 새 고객 사유 보류의 운영 예외 전환, 권한·비고객 사유·legacy 회귀를 로컬 테스트와 빌드로 닫았다.
+- **잔여 위험**: Task 2.11 범위의 차단 사항은 없다. 운영 예외의 조회·조치·해결 수명주기는 후속 Task 3.6~3.8 범위이며 아직 구현하지 않았다.

@@ -440,9 +440,9 @@ describe('MVP 회차 주문 흐름 계약', () => {
     expect(writes.filter((write) => write.path === 'orders/order-1')).toHaveLength(0);
   });
 
-  it('고객 사유 첫 배송 실패만 재배송비 결제 1회를 만들고 중복 청구를 막는다', async () => {
+  it('고객 사유 첫 배송 실패만 재배송비 결제 1회를 만들고 같은 보류의 중복 청구를 막는다', async () => {
     const { OrderChargesService } = require('./order-charges.service');
-    const { firestore, writes } = makeFirestore(
+    const { firestore, records, writes } = makeFirestore(
       seedRoundRecords({
         'orders/order-1': {
           id: 'order-1',
@@ -453,6 +453,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
           deliveryHold: {
             customerResponsible: true,
             redeliveryFee: 5000,
+            heldAt: '2026-07-21T01:00:00.000Z',
           },
         },
       }),
@@ -465,11 +466,11 @@ describe('MVP 회차 주문 흐름 계약', () => {
       requesterId: 'user-1',
       idempotencyKey: 'redelivery:order-1:first',
     } as never);
-    await service.createRedeliveryFeeCharge({
+    const retried = await service.createRedeliveryFeeCharge({
       storeId: 'store-round',
       orderId: 'order-1',
       requesterId: 'user-1',
-      idempotencyKey: 'redelivery:order-1:first',
+      idempotencyKey: 'redelivery:order-1:retry',
     } as never);
 
     const chargeWrites = writes.filter((write) => write.path.startsWith('orderCharges/'));
@@ -481,10 +482,94 @@ describe('MVP 회차 주문 흐름 계약', () => {
       customerResponsible: true,
       status: 'PENDING',
     });
+    expect(retried).toMatchObject({ id: chargeWrites[0].data.id });
+    expect(records.get('orders/order-1')).toMatchObject({
+      redeliveryChargeId: chargeWrites[0].data.id,
+      redeliveryChargeHoldAt: '2026-07-21T01:00:00.000Z',
+    });
     await expect(service.createRedeliveryFeeCharge({
       storeId: 'store-round', orderId: 'order-1', requesterId: 'user-2', idempotencyKey: 'first',
     } as never)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('고객 사유 재배송 실패는 새 결제 없이 운영 예외 1건으로 전환한다', async () => {
+    const { OrderChargesService } = require('./order-charges.service');
+    const { firestore, records, writes } = makeFirestore(seedRoundRecords({
+      'orders/order-1': {
+        id: 'order-1', storeId: 'store-round', userId: 'user-1', status: 'DELIVERY_HELD',
+        schemaVersion: 2,
+        deliveryHold: {
+          customerResponsible: true, redeliveryFee: 5000, heldAt: '2026-07-21T01:00:00.000Z',
+        },
+      },
+    }));
+    const service = new OrderChargesService(firestore);
+    await service.createRedeliveryFeeCharge({
+      storeId: 'store-round', orderId: 'order-1', requesterId: 'user-1', idempotencyKey: 'first',
     });
+    records.set('orders/order-1', {
+      ...records.get('orders/order-1')!,
+      deliveryHold: {
+        customerResponsible: true, redeliveryFee: 5000, heldAt: '2026-07-22T01:00:00.000Z',
+      },
+    });
+
+    const issue = await service.createRedeliveryFeeCharge({
+      storeId: 'store-round', orderId: 'order-1', requesterId: 'user-1', idempotencyKey: 'second',
+    });
+    const retried = await service.createRedeliveryFeeCharge({
+      storeId: 'store-round', orderId: 'order-1', requesterId: 'user-1', idempotencyKey: 'second-retry',
+    });
+
+    expect(writes.filter((write) => write.path.startsWith('orderCharges/'))).toHaveLength(1);
+    expect(writes.filter((write) => write.path.startsWith('operationIssues/'))).toHaveLength(1);
+    expect(issue).toMatchObject({ type: 'REDELIVERY_FAILED', status: 'OPEN' });
+    expect(retried).toMatchObject({ id: issue.id });
+    expect(records.get('orders/order-1')).toMatchObject({
+      requiresOperationalReview: true,
+      redeliveryFailureIssueId: issue.id,
+    });
+  });
+
+  it.each([
+    ['판매자 사유', false, 5000],
+    ['시스템 사유', false, null],
+  ])('%s 배송 실패에는 고객 재배송비를 만들지 않는다', async (_name, customerResponsible, redeliveryFee) => {
+    const { OrderChargesService } = require('./order-charges.service');
+    const { firestore, writes } = makeFirestore(seedRoundRecords({
+      'orders/order-1': {
+        id: 'order-1', storeId: 'store-round', userId: 'user-1', status: 'DELIVERY_HELD',
+        schemaVersion: 2,
+        deliveryHold: { customerResponsible, redeliveryFee, heldAt: '2026-07-21T01:00:00.000Z' },
+      },
+    }));
+    const service = new OrderChargesService(firestore);
+
+    await expect(service.createRedeliveryFeeCharge({
+      storeId: 'store-round', orderId: 'order-1', requesterId: 'user-1', idempotencyKey: 'first',
+    })).rejects.toThrow('고객 사유 배송 보류 주문만 재배송비를 만들 수 있습니다.');
+    expect(writes.filter((write) => write.path.startsWith('orderCharges/'))).toHaveLength(0);
+  });
+
+  it('legacy 주문에는 재배송비 결제 흐름을 적용하지 않는다', async () => {
+    const { OrderChargesService } = require('./order-charges.service');
+    const { firestore, writes } = makeFirestore(seedRoundRecords({
+      'orders/order-legacy': {
+        id: 'order-legacy', storeId: 'store-round', userId: 'user-1', status: 'DELIVERY_HELD',
+        deliveryHold: {
+          customerResponsible: true, redeliveryFee: 5000, heldAt: '2026-07-21T01:00:00.000Z',
+        },
+      },
+    }));
+    const service = new OrderChargesService(firestore);
+
+    await expect(service.createRedeliveryFeeCharge({
+      storeId: 'store-round', orderId: 'order-legacy', requesterId: 'user-1',
+      idempotencyKey: 'first',
+    })).rejects.toThrow('고객 사유 배송 보류 주문만 재배송비를 만들 수 있습니다.');
+    expect(writes.filter((write) => write.path.startsWith('orderCharges/'))).toHaveLength(0);
+  });
+
   it('기존 lineAmount와 신규 주문 상품 금액을 subtotalAmount로 통일한다', async () => {
     const { firestore } = makeFirestore(seedRoundRecords({
       'orders/order-legacy': {

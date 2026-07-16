@@ -3,13 +3,13 @@
 > **SSOT**: 세션 종료 시 최신 상태만 유지한다. 200라인 초과 시 아카이브하고 50라인 이내 요약으로 갱신한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260715_before_round_direct_task2.md`
 
-최종 수정: 2026-07-17 (Task 2.10 PortOne staging 실제 결제 게이트 완료)
+최종 수정: 2026-07-17 (Task 2.11 재배송비 멱등 결제와 운영 예외 전환 완료)
 
 ## 현재 진행
 
-- 브랜치 `codex/mvp-sales-round-direct`, 최신 구현 커밋 `d9edf6e`.
+- 브랜치 `codex/mvp-sales-round-direct`, Task 2.11 로컬 변경 검증 완료.
 - Task 2.10은 실제 100원 결제·웹훅·늦은 결제·전액 환불까지 완료해 `done`이다.
-- Task 2.11은 `todo`이며 아직 시작하지 않았다.
+- Task 2.11은 재배송비 1회 생성과 재실패 운영 예외 전환까지 완료해 `done`이다.
 - 로컬 커밋은 push하지 않았다.
 
 ## 환경
@@ -45,4 +45,12 @@
 
 ## 다음 진입
 
-- Task 2.11 재배송비 결제를 계획대로 시작할 수 있다.
+- Task 3.1 법정 기록 계약 테스트부터 시작할 수 있다. Task 3.6 운영 예외 수명주기는 아직 시작하지 않았다.
+
+## Task 2.11 결과
+
+- 첫 고객 사유 배송 보류에만 `orderCharges` 재배송비 1건을 주문 문서와 같은 트랜잭션으로 생성한다.
+- 같은 보류의 중복·다른 멱등 키 요청은 주문의 `redeliveryChargeId`를 통해 기존 결제를 반환한다.
+- 새 고객 사유 보류는 추가 재배송비 없이 멱등 `REDELIVERY_FAILED` 운영 예외 1건과 `requiresOperationalReview`로 전환한다.
+- 비고객 사유, 권한 없는 요청, legacy 주문은 재배송비 생성을 차단한다.
+- 주문 흐름 14개, 결제 회귀 16개 테스트와 API 빌드, Biome 오류 수준 검사, `git diff --check`가 통과했다.
