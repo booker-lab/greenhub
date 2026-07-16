@@ -47,6 +47,10 @@ describe('회차 직배송 알림 전달 계약', () => {
 
     await expect(client.sendAlimtalk(phone, templateCode, variables)).resolves.toMatchObject({
       success: true,
+      channel: 'alimtalk',
+      alimtalkAttempts: 1,
+      smsAttempts: 0,
+      message: expect.stringContaining('배송이 보류되었습니다'),
     });
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -63,6 +67,9 @@ describe('회차 직배송 알림 전달 계약', () => {
 
     await expect(client.sendAlimtalk(phone, templateCode, variables)).resolves.toMatchObject({
       success: true,
+      channel: 'alimtalk',
+      alimtalkAttempts: 3,
+      smsAttempts: 0,
     });
 
     expect(global.fetch).toHaveBeenCalledTimes(3);
@@ -82,6 +89,9 @@ describe('회차 직배송 알림 전달 계약', () => {
 
     await expect(client.sendAlimtalk(phone, templateCode, variables)).resolves.toMatchObject({
       success: true,
+      channel: 'sms',
+      alimtalkAttempts: 3,
+      smsAttempts: 1,
     });
 
     expect(global.fetch).toHaveBeenCalledTimes(4);
@@ -101,13 +111,23 @@ describe('회차 직배송 알림 전달 계약', () => {
   });
 
   describe('최종 실패 운영 예외', () => {
-    function makeService(finalResult: { success: boolean; errorMessage?: string }) {
+    function makeService(
+      finalResult: {
+        success: boolean;
+        channel?: 'alimtalk' | 'sms' | null;
+        message?: string;
+        alimtalkAttempts?: number;
+        smsAttempts?: number;
+        errorMessage?: string;
+      },
+      overrides: Data = {},
+    ) {
       const records = new Map<string, Data>([
         [
           'users/user-1',
           {
             id: 'user-1',
-            phone,
+            phone: '01011112222',
           },
         ],
         [
@@ -117,6 +137,8 @@ describe('회차 직배송 알림 전달 계약', () => {
             storeId: 'store-1',
             userId: 'user-1',
             status: 'DELIVERY_HELD',
+            deliveryPhone: phone,
+            ...overrides,
           },
         ],
       ]);
@@ -143,6 +165,13 @@ describe('회차 직배송 알림 전달 계약', () => {
       };
       const aligo = {
         sendAlimtalk: jest.fn().mockResolvedValue(finalResult),
+        sendSms: jest.fn().mockResolvedValue({
+          success: true,
+          channel: 'sms',
+          message: '재발송 본문',
+          alimtalkAttempts: 0,
+          smsAttempts: 1,
+        }),
       };
       const payments = {};
       const operations = {
@@ -160,18 +189,70 @@ describe('회차 직배송 알림 전달 계약', () => {
         }),
       };
       const service = new (NotificationsService as any)(firestore, aligo, payments, operations);
-      return { service: service as NotificationsService, records, writes, aligo };
+      return { service: service as NotificationsService, records, writes, aligo, operations };
     }
 
-    it('문자 대체가 성공하면 운영 예외를 만들지 않고 기존 일반 알림 기록을 유지한다', async () => {
-      const { service, writes, aligo, records } = makeService({ success: true });
+    it('문자 대체가 성공하면 실제 채널과 시도 횟수로 배송 연락처 발송을 기록한다', async () => {
+      const { service, writes, aligo, records } = makeService({
+        success: true,
+        channel: 'sms',
+        message: '승인된 배송 보류 본문',
+        alimtalkAttempts: 3,
+        smsAttempts: 1,
+      });
 
       await service.sendToUser('user-1', templateCode, variables, 'order-1');
 
       expect(aligo.sendAlimtalk).toHaveBeenCalledWith(phone, templateCode, variables);
-      expect(writes.filter(({ path }) => path.startsWith('notifications/'))).toHaveLength(1);
+      const notifications = writes.filter(({ path }) => path.startsWith('notifications/'));
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].data).toMatchObject({
+        channel: 'sms',
+        phone,
+        message: '승인된 배송 보류 본문',
+        attemptCount: 4,
+        status: 'sent',
+      });
       expect(writes.filter(({ path }) => path.startsWith('operationIssues/'))).toHaveLength(0);
       expect(records.get('orders/order-1')).toMatchObject({ status: 'DELIVERY_HELD' });
+    });
+
+    it('주문 배송 연락처가 없을 때만 사용자 프로필 연락처를 사용한다', async () => {
+      const { service, aligo } = makeService(
+        {
+          success: true,
+          channel: 'alimtalk',
+          message: '승인된 배송 보류 본문',
+          alimtalkAttempts: 1,
+          smsAttempts: 0,
+        },
+        { deliveryPhone: null },
+      );
+
+      await service.sendToUser('user-1', templateCode, variables, 'order-1');
+
+      expect(aligo.sendAlimtalk).toHaveBeenCalledWith('01011112222', templateCode, variables);
+    });
+
+    it('배송 연락처와 허용된 대체 연락처가 모두 없으면 성공 기록 없이 운영 예외를 만든다', async () => {
+      const { service, writes, aligo } = makeService(
+        {
+          success: true,
+          channel: 'alimtalk',
+          message: '호출되면 안 됨',
+          alimtalkAttempts: 1,
+          smsAttempts: 0,
+        },
+        { deliveryPhone: null },
+      );
+      const user = (await (service as any).firestore.doc('users/user-1').get()).data();
+      user.phone = null;
+
+      await service.sendToUser('user-1', templateCode, variables, 'order-1');
+
+      expect(aligo.sendAlimtalk).not.toHaveBeenCalled();
+      expect(writes.filter(({ path }) => path.startsWith('notifications/'))).toHaveLength(0);
+      expect(writes.filter(({ path }) => path.startsWith('operationIssues/'))).toHaveLength(1);
     });
 
     it('문자 대체까지 실패하면 CUSTOMER_NOTICE_FAILED 운영 예외를 만든다', async () => {
@@ -203,6 +284,32 @@ describe('회차 직배송 알림 전달 계약', () => {
       await service.sendToUser('user-1', templateCode, variables, 'order-1');
 
       expect(writes.filter(({ path }) => path.startsWith('operationIssues/'))).toHaveLength(1);
+    });
+
+    it('운영 문자 재발송은 실제 SMS 결과와 단일 시도를 별도 알림 기록으로 남긴다', async () => {
+      const { service, writes, aligo } = makeService({
+        success: false,
+        channel: null,
+        message: '승인된 배송 보류 본문',
+        alimtalkAttempts: 3,
+        smsAttempts: 1,
+        errorMessage: '문자 대체 실패',
+      });
+
+      await service.sendToUser('user-1', templateCode, variables, 'order-1');
+      const issue = writes.find(({ path }) => path.startsWith('operationIssues/'))?.data;
+
+      await expect(service.resendSms(issue as never)).resolves.toMatchObject({
+        success: true,
+        channel: 'sms',
+        smsAttempts: 1,
+      });
+      expect(aligo.sendSms).toHaveBeenCalledWith(phone, templateCode, variables);
+      expect(
+        writes.filter(
+          ({ path, data }) => path.startsWith('notifications/') && data.channel === 'sms',
+        ),
+      ).toHaveLength(1);
     });
   });
 });

@@ -270,14 +270,14 @@
 
 | Task | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 7.1 | `packages/shared/src/notification.types.ts` | API와 소비자가 공유할 거래 알림 코드 정본을 확정한다. | `pnpm --filter @greenhub/shared typecheck` | [판정 대기 — 알림 공통 계약. 검증 결과] | todo |
-| 7.2 | `apps/api/src/notifications/notification-templates.ts` | 승인 본문과 변수 치환 규칙을 템플릿 카탈로그로 정의한다. | `pnpm --filter api build` | [판정 대기 — 알림 템플릿 카탈로그. 검증 결과] | todo |
-| 7.3 | `apps/api/src/notifications/notifications-delivery.spec.ts` | 실제 채널·배송 연락처·문자 재발송의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- notifications-delivery.spec.ts --runInBand` | [판정 대기 — 알림 전달 실패 계약. 검증 결과] | todo |
-| 7.4 | `apps/api/src/notifications/notifications-preferences.spec.ts` | 두 채널 동시 잘못된 타입과 빈 입력의 실패 테스트를 고정한다. | `pnpm --filter api test -- notifications-preferences.spec.ts --runInBand` | [판정 대기 — 알림 설정 실패 계약. 검증 결과] | todo |
-| 7.5 | `apps/api/src/notifications/aligo.client.ts` | 템플릿 본문과 실제 성공 채널을 반환하도록 발송기를 구현한다. | `pnpm --filter api test -- notifications-delivery.spec.ts --runInBand` | [판정 대기 — 알리고 발송기 보정. 검증 결과] | todo |
-| 7.6 | `apps/api/src/notifications/notifications.service.ts` | 주문 배송 연락처·실제 채널·문자 재발송을 거래 알림에 적용한다. | `pnpm --filter api test -- notifications-delivery.spec.ts --runInBand` | [판정 대기 — 거래 알림 서비스 보정. 검증 결과] | todo |
-| 7.7 | `apps/api/src/notifications/notifications.controller.ts` | 알림 설정의 최소 한 필드와 boolean 검증을 동시에 강제한다. | `pnpm --filter api test -- notifications-preferences.spec.ts --runInBand` | [판정 대기 — 알림 설정 DTO 보정. 검증 결과] | todo |
-| 7.8 | `apps/api/src/orders/orders.helpers.ts` | 배송 보류·재배송 요청·재배송 예정 알림 전환을 상태표에 연결한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 주문 알림 전환 연결. 검증 결과] | todo |
+| 7.1 | `packages/shared/src/notification.types.ts` | API와 소비자가 공유할 거래 알림 코드 정본을 확정한다. | `pnpm --filter @greenhub/shared typecheck` | 기존 공용 거래 알림 코드 정본을 유지하고 API 카탈로그가 이를 확장해 사용하도록 연결했으며 shared 타입검사가 통과했다. | done |
+| 7.2 | `apps/api/src/notifications/notification-templates.ts` | 승인 본문과 변수 치환 규칙을 템플릿 카탈로그로 정의한다. | `pnpm --filter api build` | 거래·공동구매·판매자 알림 본문과 `#{변수}` 치환 규칙을 단일 카탈로그로 정의했고 API와 전체 빌드가 통과했다. | done |
+| 7.3 | `apps/api/src/notifications/notifications-delivery.spec.ts` | 실제 채널·배송 연락처·문자 재발송의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- notifications-delivery.spec.ts --runInBand` | 실제 성공 채널·시도 횟수·배송 연락처 우선·연락처 누락·문자 재발송 기록의 실패를 먼저 확인한 뒤 전달 계약 10개가 통과했다. | done |
+| 7.4 | `apps/api/src/notifications/notifications-preferences.spec.ts` | 두 채널 동시 잘못된 타입과 빈 입력의 실패 테스트를 고정한다. | `pnpm --filter api test -- notifications-preferences.spec.ts --runInBand` | 두 채널 동시 잘못된 타입과 빈 입력 계약을 추가해 실패를 확인한 뒤 설정 계약 14개가 통과했다. | done |
+| 7.5 | `apps/api/src/notifications/aligo.client.ts` | 템플릿 본문과 실제 성공 채널을 반환하도록 발송기를 구현한다. | `pnpm --filter api test -- notifications-delivery.spec.ts --runInBand` | 승인 본문을 렌더링하고 알림톡·문자 실제 성공 채널과 각 시도 횟수를 반환하며 문자 단독 재발송을 제공해 전달 계약 10개가 통과했다. | done |
+| 7.6 | `apps/api/src/notifications/notifications.service.ts` | 주문 배송 연락처·실제 채널·문자 재발송을 거래 알림에 적용한다. | `pnpm --filter api test -- notifications-delivery.spec.ts --runInBand` | 주문자 거래 알림은 `deliveryPhone`을 우선하고 실제 채널·본문·총 시도를 기록하며 최종 실패와 문자 재발송 결과를 분리해 전달 계약 10개가 통과했다. | done |
+| 7.7 | `apps/api/src/notifications/notifications.controller.ts` | 알림 설정의 최소 한 필드와 boolean 검증을 동시에 강제한다. | `pnpm --filter api test -- notifications-preferences.spec.ts --runInBand` | 두 필드를 독립 검증하면서 최소 한 필드를 요구하도록 조건을 보정해 설정 계약 14개가 통과했다. | done |
+| 7.8 | `apps/api/src/orders/orders.helpers.ts` | 배송 보류·재배송 요청·재배송 예정 알림 전환을 상태표에 연결한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | `PREPARING|DELIVERING → DELIVERY_HELD`와 보류 해소의 재배송 요청·예정 알림 코드를 상태표에 연결해 회차 흐름 27개가 통과했다. | done |
 
 - **Unit Verify**: `pnpm --filter api test -- notifications-delivery.spec.ts notifications-preferences.spec.ts mvp-order-flow.spec.ts --runInBand`
 - **Exit**: 알림 로그 채널과 실제 발송 채널이 일치하고 거래 연락처 누락이 운영 예외로 남는다.

@@ -5,33 +5,35 @@
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-17 (전수 리뷰 보정 Unit 6 완료)
+최종 수정: 2026-07-17 (전수 리뷰 보정 Unit 7 완료)
 
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
-- Unit 6 시작 SHA: `e27de9c2bb6b5c13f5d4b8dd1f735f0306d4d1e5`
+- Unit 7 시작 SHA: `7f44ca3dda73fabc7269bd36e43d2c36b58a5f8a`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_pre_4_2_full_review_remediation.md`
 - 설계 결정: `docs/CRITICAL_LOGIC.md`의 `CL-167`
-- 완료: Unit 1~6
-- 다음: Unit 7 알림 본문·채널·연락처 정합성
+- 완료: Unit 1~7
+- 다음: Unit 8 운영 예외 작성·조치 분리
 - 원 계획 `PLAN_mvp_sales_round_direct_delivery.md` Task 4.2는 Unit 10 완료까지 보류한다.
 
-## Unit 6 확정 계약
+## Unit 7 확정 계약
 
-- 재배송비 청구는 안정적인 `order-charge-{chargeId}` paymentId와 PortOne 요청 파라미터를 반환한다.
-- 같은 배송 보류의 중복 요청은 같은 청구와 paymentId를 반환한다.
-- 전용 서비스가 청구·주문·사용자·스토어·금액 관계를 서버에서 검증한다.
-- 상태는 `PENDING → PAID|FAILED → REFUNDED`로 전이한다.
-- 같은 웹훅과 환불 요청은 트랜잭션과 환불 claim으로 멱등 처리한다.
-- 주문 취소는 본 결제와 PAID 재배송비를 환불하며 실패 시 재시도 상태를 보존한다.
+- 알림 본문과 `#{변수}` 치환은 API 템플릿 카탈로그를 정본으로 사용한다.
+- 발송 결과는 실제 성공 채널과 알림톡·문자 시도 횟수를 반환한다.
+- 주문자 거래 알림은 주문 `deliveryPhone`을 프로필 연락처보다 우선한다.
+- 실제 성공 채널·본문·총 시도를 알림 기록에 저장한다.
+- 연락처 누락과 최종 발송 실패는 성공으로 기록하지 않고 운영 예외로 남긴다.
+- 운영 문자 재발송은 SMS를 직접 호출하고 별도 시도 결과를 기록한다.
+- 알림 설정은 최소 한 필드와 각 필드 boolean 조건을 동시에 강제한다.
+- 배송 보류·재배송 요청·재배송 예정 전환은 주문 알림 상태표에 연결된다.
 
 ## 검증 상태
 
 - shared typecheck 통과
-- 회차 주문 흐름 26개 통과
+- 알림 전달 10개, 설정 14개, 회차 주문 흐름 27개 통과
 - 결제 서비스 10개 통과
-- Unit 1~6 지정 회귀 60개 통과
+- Unit 1~7 지정 회귀 85개 통과
 - consumer `tsc --noEmit` 통과
 - 전체 `pnpm build` 통과
 - 변경 파일 Biome 오류 0건
@@ -39,7 +41,7 @@
 
 ## 핸드오프 규칙
 
-- 새 대화에서는 Unit 7만 구현하고 실패 테스트를 먼저 확인한다.
-- 기존 사용자 변경, 배포·push 금지, Unit 1~6 회귀 계약을 보존한다.
-- 완료 후 계획의 Unit 7 상태와 결론을 갱신하고 Unit 7 파일만 커밋한다.
-- 15개 항목 보고 마지막에 Unit 8 전체 실행 프롬프트를 작성한다.
+- 새 대화에서는 Unit 8만 구현하고 실패 테스트를 먼저 확인한다.
+- 기존 사용자 변경, 배포·push 금지, Unit 1~7 회귀 계약을 보존한다.
+- 완료 후 계획의 Unit 8 상태와 결론을 갱신하고 Unit 8 파일만 커밋한다.
+- 15개 항목 보고 마지막에 Unit 9 전체 실행 프롬프트를 작성한다.

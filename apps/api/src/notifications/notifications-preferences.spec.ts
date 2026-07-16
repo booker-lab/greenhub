@@ -31,6 +31,8 @@ describe('알림 마케팅 동의 설정 계약', () => {
       [{ email: true }],
       [{ alimtalk: 'true' }],
       [{ sms: 1 }],
+      [{ alimtalk: 'true', sms: 1 }],
+      [{ alimtalk: undefined, sms: undefined }],
       [{ alimtalk: true, userId: 'other-user' }],
     ])('빈 입력, 알 수 없는 키, 잘못된 타입을 거부한다: %p', async (input) => {
       const dto = plainToInstance(UpdateNotificationPreferencesDto, input);

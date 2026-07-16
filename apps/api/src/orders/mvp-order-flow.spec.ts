@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
-import { getAllowedTransitions } from './orders.helpers';
+import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
 import { OrdersCreateService } from './orders-create.service';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { OrdersQueryService } from './orders-query.service';
@@ -296,6 +296,13 @@ describe('MVP 회차 주문 흐름 계약', () => {
       'CANCELLED',
       'DELIVERING',
     ]);
+  });
+
+  it('배송 보류와 재배송 단계의 거래 알림 전환을 상태표에 연결한다', () => {
+    expect(NOTIFICATION_MAP.PREPARING?.DELIVERY_HELD).toBe('ORDER_DELIVERY_HELD');
+    expect(NOTIFICATION_MAP.DELIVERING?.DELIVERY_HELD).toBe('ORDER_DELIVERY_HELD');
+    expect(NOTIFICATION_MAP.DELIVERY_HELD?.PREPARING).toBe('ORDER_REDELIVERY_PAYMENT_REQUESTED');
+    expect(NOTIFICATION_MAP.DELIVERY_HELD?.DELIVERING).toBe('ORDER_REDELIVERY_SCHEDULED');
   });
 
   function makeLifecycle(firestore: Record<string, unknown>) {
