@@ -4,12 +4,12 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 3.8 완료, Task 3.9 착수 대기
+- **상태**: Task 3.9 완료, Task 3.10 착수 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
-- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. Task 3.7은 셀러·관리자 인증, 스토어 소유권 검증, 안전한 목록·상세·재조회 응답과 환불·문자 조치 API를 구현했다. Task 3.8은 운영 모듈과 런타임 라우트를 연결하고 알림·재배송 최종 실패 생성 경로를 공통 운영 서비스로 전환했다. 다음 진입점은 Task 3.9이다.
+- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. Task 3.7은 셀러·관리자 인증, 스토어 소유권 검증, 안전한 목록·상세·재조회 응답과 환불·문자 조치 API를 구현했다. Task 3.8은 운영 모듈과 런타임 라우트를 연결하고 알림·재배송 최종 실패 생성 경로를 공통 운영 서비스로 전환했다. Task 3.9는 배송 사진 90일, 마케팅 동의와 분쟁 기록 3년, 계약·결제·공급 기록 5년, 분쟁·법적 보존 연장과 멱등 파기 계약을 실패 테스트 8개로 고정했다. 다음 진입점은 Task 3.10이다.
 
 ## 업무 요약 (협업용)
 
@@ -200,7 +200,7 @@ flowchart TD
 | 3.6 | 3.5 | `apps/api/src/operations/operations.service.ts` | 결제·환불·알림·재배송 최종 실패를 멱등 `확인 필요` 항목으로 관리한다. | `pnpm --filter api test -- operations.service.spec.ts --runInBand` | 통과 — `idempotencyKey`를 해시한 결정적 문서 ID로 같은 실패 원인과 업무 대상을 하나의 열린 항목으로 통합하고 다른 주문·결제·실패 유형은 분리했다. 조치 직전에 운영 예외와 최신 주문·결제 상태를 다시 읽어 이미 환불되었거나 해결된 항목의 외부 호출을 반복하지 않으며, 환불 재시도와 문자 재발송의 성공·실패를 기존 `actions`에 누적한다. 실패 사유는 안전한 오류 메시지만 제한적으로 저장하고 민감 키가 포함되면 일반화한다. 운영 계약 6개, 알림 7개, 결제 16개, 회차 주문·재배송 14개, API 빌드, Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.7 | 3.6 | `apps/api/src/operations/operations.controller.ts` | 셀러의 재조회·환불 재시도·문자 재발송·조치 기록 API를 노출한다. | `pnpm --filter api build` | 통과 — `GET /stores/:storeId/operation-issues`, 상세 조회, `POST .../:issueId/refresh`, `POST .../:issueId/actions`를 추가했다. JWT와 seller·admin 역할을 요구하고 seller는 서버가 조회한 `stores/{storeId}.ownerId`로 권한을 판정한다. 목록은 `storeId` Firestore 쿼리로 제한하고 상세·재조회·조치는 같은 스토어 경계를 재검증한다. 조치의 `actorId`는 인증 사용자 ID로 고정하며 허용 유형은 `RETRY_REFUND`, `RESEND_SMS`뿐이고 실행은 `OperationsService.executeAction`을 통과한다. 응답은 상태·식별자·안전한 스냅샷·감사 필드만 허용한다. 신규 컨트롤러 계약 9개, 운영 6개, 알림 7개, 결제 16개, 회차 주문·재배송 14개, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.8 | 3.7 | `apps/api/src/operations/operations.module.ts` | 운영 예외 서비스를 결제·알림·주문에서 재사용할 수 있게 내보낸다. | `pnpm --filter api build` | 통과 — `OperationsModule`이 결제·알림 의존성과 컨트롤러·서비스를 연결하고 서비스를 export했으며, `AppModule` 런타임 라우트 등록과 알림·재배송 최종 실패의 공통 `createOrMergeIssue` 전환을 완료했다. 신규 모듈 3개를 포함한 관련 67개 테스트, API 빌드, Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
-| 3.9 | 3.8 | `apps/api/src/retention/retention.service.spec.ts` | 90일·3년·5년 만료와 분쟁 연장 파기 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | [판정 대기 — 보관 테스트 수집] | todo |
+| 3.9 | 3.8 | `apps/api/src/retention/retention.service.spec.ts` | 90일·3년·5년 만료와 분쟁 연장 파기 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | 통과 — Jest가 신규 보관 계약 파일을 포함한 17개 테스트 파일을 수집했다. 신규 8개 테스트는 배송 사진 90일, 마케팅 동의·분쟁 기록 3년, 계약·결제·공급 기록 5년의 목적별 `expiresAt`, 진행 중 분쟁과 법적 보존 사유의 파기 제외, 미만료 제외, 목적별 쿼리 분리, 모의 Firestore 배치·Storage 삭제와 재실행 멱등성, 개인정보·비밀값 배제를 고정했다. 8개 모두 `apps/api/src/retention/retention.service.ts` 부재를 명시하는 예상 실패로 확인했다. 기존 운영 예외·알림·결제·주문 6개 스위트 55개 테스트, API 빌드, Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.10 | 3.9 | `apps/api/src/retention/retention.service.ts` | 법정 기록 분리 저장과 Firestore·Storage 정기 파기를 구현한다. | `pnpm --filter api test -- retention.service.spec.ts --runInBand` | [판정 대기 — 보관·파기] | todo |
 | 3.11 | 3.10 | `apps/api/src/retention/retention.module.ts` | 보관 서비스를 주문·결제·알림에서 재사용할 수 있게 내보낸다. | `pnpm --filter api build` | [판정 대기 — 보관 모듈] | todo |
 | 3.12 | 3.11 | `apps/api/src/firestore/storage.service.ts` | 배송 사진을 비공개 업로드하고 권한 확인 후 단기 서명 URL을 발급한다. | `pnpm --filter api build` | [판정 대기 — 사진 저장소] | todo |
@@ -280,6 +280,6 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 3.8 완료, Task 3.9 `todo`
-- **검증 결과**: `OperationsModule`에 `OperationsController`와 `OperationsService`를 등록하고 서비스를 export했으며, 결제·알림 모듈과의 실제 순환 의존성만 `forwardRef`로 연결했다. `AppModule`에 모듈을 등록해 운영 예외 API를 런타임 라우트에 포함했다. 알림의 `CUSTOMER_NOTICE_FAILED`와 재배송의 `REDELIVERY_FAILED` 생성은 공통 `createOrMergeIssue`를 사용하며, 재배송은 기존 Firestore 트랜잭션을 전달해 주문 갱신과 운영 예외 생성의 원자성을 유지한다. 신규 모듈 3개·컨트롤러 9개·운영 6개·알림·설정 19개·결제 16개·회차 주문 14개 테스트, 총 67개와 API 빌드, Biome 오류 수준 검사, `git diff --check`가 통과했다.
-- **잔여 위험**: 보관 기간 파기 계약과 분쟁 연장 정책은 아직 구현하지 않았다. 다음 Task 3.9에서 `retention.service.spec.ts`의 실패 테스트 계약만 고정해야 한다.
+- **Status**: Task 3.9 완료, Task 3.10 `todo`
+- **검증 결과**: `retention.service.spec.ts`에 목적별 `saveRecord`와 `purgeExpiredRecords` 계약 8개를 고정했다. 배송 사진은 배송 완료 후 90일, 마케팅 동의는 철회 후 3년, 계약·결제·공급 기록은 발생 후 5년, 환불·분쟁·고객응대 기록은 발생 후 3년의 `expiresAt`을 사용한다. 진행 중 분쟁과 `legalHold`는 만료 후에도 제외하고, 미만료 기록과 서로 다른 보관 목적을 분리하며, 만료 기록과 연결 사진은 모의 배치·Storage 삭제로만 검증하고 재실행 부작용을 막는다. Jest 수집 17개 파일, 신규 8개 예상 실패, 기존 6개 스위트 55개 통과, API 빌드, Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+- **잔여 위험**: `RetentionService`와 실제 법정 기록 분리 저장·정기 파기는 아직 구현하지 않았다. 다음 Task 3.10에서 고정된 계약만 만족하도록 `retention.service.ts`를 구현해야 한다.
