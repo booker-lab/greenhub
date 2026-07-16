@@ -1,8 +1,9 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { getAllowedTransitions } from './orders.helpers';
 import { OrdersCreateService } from './orders-create.service';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { OrdersQueryService } from './orders-query.service';
+import { RoundOrderCreateService } from './round-order-create.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 
 type RecordData = Record<string, unknown>;
@@ -18,6 +19,7 @@ function makeFirestore(initial: Record<string, RecordData>) {
   const writes: Array<{ op: string; path: string; data: RecordData }> = [];
 
   const doc = (path: string) => ({
+    path,
     get: jest.fn(async () => makeSnap(records.get(path) ?? null)),
     set: jest.fn(async (data: RecordData) => {
       writes.push({ op: 'set', path, data });
@@ -48,21 +50,36 @@ function makeFirestore(initial: Record<string, RecordData>) {
     };
     return query;
   };
-  const tx = {
-    get: jest.fn(async (ref: { get: () => Promise<unknown> }) => ref.get()),
-    set: jest.fn((ref: { set: (data: RecordData) => Promise<void> }, data: RecordData) =>
-      ref.set(data),
-    ),
-    update: jest.fn((ref: { update: (data: RecordData) => Promise<void> }, data: RecordData) =>
-      ref.update(data),
-    ),
-  };
   let transactionQueue = Promise.resolve();
   const firestore = {
     doc,
     collection,
-    runTransaction: jest.fn((callback: (transaction: typeof tx) => Promise<void>) => {
-      const result = transactionQueue.then(() => callback(tx));
+    runTransaction: jest.fn((callback: (transaction: any) => Promise<unknown>) => {
+      const result = transactionQueue.then(async () => {
+        const pending = new Map<string, RecordData>();
+        const tx = {
+          get: jest.fn(async (ref: { path: string }) =>
+            makeSnap(pending.get(ref.path) ?? records.get(ref.path) ?? null),
+          ),
+          set: jest.fn((ref: { path: string }, data: RecordData, options?: { merge?: boolean }) => {
+            if ((ref as { failOrderWrite?: boolean }).failOrderWrite) {
+              throw new Error('주문 저장 중단');
+            }
+            const current = pending.get(ref.path) ?? records.get(ref.path) ?? {};
+            pending.set(ref.path, options?.merge ? { ...current, ...data } : data);
+          }),
+          update: jest.fn((ref: { path: string }, data: RecordData) => {
+            const current = pending.get(ref.path) ?? records.get(ref.path) ?? {};
+            pending.set(ref.path, { ...current, ...data });
+          }),
+        };
+        const value = await callback(tx);
+        for (const [path, data] of pending) {
+          writes.push({ op: records.has(path) ? 'update' : 'set', path, data });
+          records.set(path, data);
+        }
+        return value;
+      });
       transactionQueue = result.then(
         () => undefined,
         () => undefined,
@@ -187,6 +204,86 @@ describe('MVP 회차 주문 흐름 계약', () => {
     jest.clearAllMocks();
   });
 
+  function roundOrderRequest(overrides: RecordData = {}) {
+    return {
+      clientOrderRequestId: 'payment-attempt-1',
+      productId: 'product-1',
+      quantity: 1,
+      saleType: 'normal',
+      deliveryMethod: 'direct',
+      requestedDeliveryDate: '2026-07-21',
+      roundId: 'round-1',
+      roundItems: [{ roundItemId: 'round-item-1', quantity: 1 }],
+      deliveryPhone: '010-9999-0000',
+      deliveryAddress: {
+        address: '경기도 이천시 중리천로 1',
+        addressDetail: '201호',
+        zipCode: '17373',
+      },
+      ...overrides,
+    };
+  }
+
+  it('같은 결제 시도 ID와 같은 payload는 주문과 예약 한 건을 반환한다', async () => {
+    const { firestore, records } = makeFirestore(seedRoundRecords());
+    const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
+    const service = new RoundOrderCreateService(firestore as never, capacity);
+
+    const first = await service.create('store-round', 'user-1', roundOrderRequest() as never);
+    const second = await service.create('store-round', 'user-1', roundOrderRequest() as never);
+
+    expect(second).toEqual(first);
+    expect(Array.from(records.keys()).filter((path) => path.startsWith('orders/'))).toHaveLength(1);
+    expect(
+      Array.from(records.keys()).filter((path) => path.startsWith('checkoutReservations/')),
+    ).toHaveLength(1);
+  });
+
+  it('같은 결제 시도 ID에 다른 payload가 들어오면 충돌로 거부한다', async () => {
+    const { firestore } = makeFirestore(seedRoundRecords());
+    const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
+    const service = new RoundOrderCreateService(firestore as never, capacity);
+
+    await service.create('store-round', 'user-1', roundOrderRequest() as never);
+    let error: unknown;
+    try {
+      await service.create(
+        'store-round',
+        'user-1',
+        roundOrderRequest({
+          roundItems: [{ roundItemId: 'round-item-1', quantity: 2 }],
+        }) as never,
+      );
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ConflictException);
+  });
+
+  it('주문 저장 직전 실패해도 예약과 카운터 부분 데이터가 남지 않는다', async () => {
+    const { firestore, records } = makeFirestore(seedRoundRecords());
+    const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
+    const service = new RoundOrderCreateService(firestore as never, capacity);
+    const originalDoc = firestore.doc;
+    firestore.doc = jest.fn((path: string) => {
+      const ref = originalDoc(path);
+      if (path.startsWith('orders/')) return { ...ref, failOrderWrite: true };
+      return ref;
+    }) as never;
+
+    await expect(
+      service.create('store-round', 'user-1', roundOrderRequest() as never),
+    ).rejects.toThrow('주문 저장 중단');
+    expect(Array.from(records.keys()).some((path) => path.startsWith('orders/'))).toBe(false);
+    expect(
+      Array.from(records.keys()).some((path) => path.startsWith('checkoutReservations/')),
+    ).toBe(false);
+    expect(records.get('saleRounds/round-1')?.['counters']).toMatchObject({
+      reservedDeliveryAddresses: 0,
+      reservedItemQuantity: 0,
+    });
+  });
+
   it('역할별 기존 전환과 배송 보류 해소 상태를 보존한다', () => {
     expect(getAllowedTransitions('consumer', 'DELIVERED')).toEqual(['REVIEWED']);
     expect(getAllowedTransitions('seller', 'DELIVERY_HELD')).toEqual(['PREPARING', 'CANCELLED']);
@@ -215,17 +312,25 @@ describe('MVP 회차 주문 흐름 계약', () => {
     );
   }
 
-  it('round_direct 주문은 이천시 밖 배송 주소를 결제 예약 전에 차단한다', async () => {
-    const { firestore } = makeFirestore(seedRoundRecords());
-    const capacity = { reserveCheckout: jest.fn() };
-    const service = new OrdersCreateService(
+  function makeCreateService(firestore: Record<string, unknown>) {
+    const { OrderCapacityService } = require('./order-capacity.service');
+    const orderCapacity = new OrderCapacityService(firestore);
+    const roundCreate = new RoundOrderCreateService(firestore as never, orderCapacity);
+    return new OrdersCreateService(
       firestore as never,
       notifications as never,
-      capacity as never,
+      orderCapacity,
+      roundCreate,
     );
+  }
+
+  it('round_direct 주문은 이천시 밖 배송 주소를 결제 예약 전에 차단한다', async () => {
+    const { firestore } = makeFirestore(seedRoundRecords());
+    const service = makeCreateService(firestore);
 
     await expect(
       service.createOrder('store-round', 'user-1', {
+        clientOrderRequestId: 'payment-outside-city',
         productId: 'product-1',
         quantity: 1,
         saleType: 'normal',
@@ -241,19 +346,13 @@ describe('MVP 회차 주문 흐름 계약', () => {
         },
       } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
-
-    expect(capacity.reserveCheckout).not.toHaveBeenCalled();
   });
 
   it('round_direct는 회차 필수값 누락과 중복 roundItemId를 legacy 경로로 우회시키지 않는다', async () => {
     const { firestore } = makeFirestore(seedRoundRecords());
-    const capacity = { reserveCheckout: jest.fn() };
-    const service = new OrdersCreateService(
-      firestore as never,
-      notifications as never,
-      capacity as never,
-    );
+    const service = makeCreateService(firestore);
     const base = {
+      clientOrderRequestId: 'payment-invalid-round',
       productId: 'product-1',
       quantity: 1,
       saleType: 'normal',
@@ -276,20 +375,14 @@ describe('MVP 회차 주문 흐름 계약', () => {
         ],
       } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(capacity.reserveCheckout).not.toHaveBeenCalled();
   });
 
   it('같은 회차의 여러 상품을 한 주문 스냅샷과 한 번의 결제 금액으로 묶는다', async () => {
-    const reservation = { id: 'reservation-1', expiresAt: '2026-07-15T03:15:00.000+09:00' };
-    const capacity = { reserveCheckout: jest.fn().mockResolvedValue(reservation) };
     const { firestore, writes } = makeFirestore(seedRoundRecords());
-    const service = new OrdersCreateService(
-      firestore as never,
-      notifications as never,
-      capacity as never,
-    );
+    const service = makeCreateService(firestore);
 
     const result = await service.createOrder('store-round', 'user-1', {
+      clientOrderRequestId: 'payment-multi-item',
       productId: 'product-1',
       quantity: 1,
       saleType: 'normal',
@@ -327,47 +420,6 @@ describe('MVP 회차 주문 흐름 계약', () => {
     expect(orderWrite?.['orderItems']).toHaveLength(2);
     expect((orderWrite?.['orderItems'] as RecordData[])[0]).toHaveProperty('subtotalAmount', 50000);
     expect((orderWrite?.['orderItems'] as RecordData[])[0]).not.toHaveProperty('lineAmount');
-  });
-
-  it('주문 저장 실패 시 이미 확보한 예약을 즉시 반환한다', async () => {
-    const reservation = {
-      id: 'reservation-1',
-      expiresAt: '2026-07-15T03:15:00.000+09:00',
-      itemQuantityTotal: 1,
-      items: [
-        { roundItemId: 'round-item-1', productId: 'product-1', quantity: 1, unitPrice: 50000 },
-      ],
-    };
-    const capacity = {
-      reserveCheckout: jest.fn().mockResolvedValue(reservation),
-      releaseReservation: jest.fn().mockResolvedValue(undefined),
-    };
-    const { firestore } = makeFirestore(seedRoundRecords());
-    firestore.runTransaction = jest.fn().mockRejectedValue(new Error('저장 실패')) as never;
-    const service = new OrdersCreateService(
-      firestore as never,
-      notifications as never,
-      capacity as never,
-    );
-
-    await expect(
-      service.createOrder('store-round', 'user-1', {
-        productId: 'product-1',
-        quantity: 1,
-        saleType: 'normal',
-        deliveryMethod: 'direct',
-        requestedDeliveryDate: '2026-07-21',
-        roundId: 'round-1',
-        roundItems: [{ roundItemId: 'round-item-1', quantity: 1 }],
-        deliveryPhone: '010-9999-0000',
-        deliveryAddress: {
-          address: '경기도 이천시 중리천로 1',
-          addressDetail: '',
-          zipCode: '17373',
-        },
-      } as never),
-    ).rejects.toThrow('저장 실패');
-    expect(capacity.releaseReservation).toHaveBeenCalledWith('reservation-1');
   });
 
   it('결제 예약은 배송지 1건과 주문 상품 수량 합계를 15분간 확보한다', async () => {

@@ -10,6 +10,7 @@ import { OrdersService } from './orders.service';
 import { OrdersCreateService } from './orders-create.service';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { OrdersQueryService } from './orders-query.service';
+import { RoundOrderCreateService } from './round-order-create.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 
 @Module({
@@ -24,6 +25,7 @@ import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
   providers: [
     OrdersService,
     OrdersCreateService,
+    RoundOrderCreateService,
     OrdersQueryService,
     OrdersLifecycleService,
     RoundOrderLifecycleService,

@@ -42,6 +42,8 @@ type ReservationRecord = {
   items: Array<{
     roundItemId: string;
     productId: string;
+    productName: string;
+    productImageUrl: string | null;
     quantity: number;
     unitPrice: number;
   }>;
@@ -70,89 +72,104 @@ export class OrderCapacityService {
     let result: ReservationRecord | null = null;
 
     await this.firestore.runTransaction(async (tx: any) => {
-      const reservationSnap = await tx.get(reservationRef);
-      if (reservationSnap.exists) {
-        result = reservationSnap.data() as ReservationRecord;
-        return;
-      }
-
-      const roundRef = this.firestore.doc(`saleRounds/${input.roundId}`);
-      const roundSnap = await tx.get(roundRef);
-      if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
-        throw new NotFoundException('회차를 찾을 수 없습니다.');
-      }
-
-      const round = roundSnap.data() as Record<string, any>;
-      this.assertRoundReservable(round);
-
-      const normalizedItems = this.normalizeItems(input.items);
-      const itemSnaps = await Promise.all(
-        normalizedItems.map((item) =>
-          tx.get(this.firestore.doc(`saleRoundItems/${item.roundItemId}`)),
-        ),
-      );
-      const itemRecords = itemSnaps.map((snap, index) => {
-        if (!snap.exists) throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
-        const item = snap.data() as Record<string, any>;
-        if (item['roundId'] !== input.roundId || item['storeId'] !== input.storeId) {
-          throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
-        }
-        if (item['status'] !== 'ACTIVE') {
-          throw new ConflictException('구매할 수 없는 회차 상품입니다.');
-        }
-        return { input: normalizedItems[index], data: item };
-      });
-
-      const totalQuantity = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
-      this.assertRoundCapacity(round, totalQuantity);
-      for (const item of itemRecords) {
-        this.assertItemCapacity(item.data, item.input.quantity);
-      }
-
-      const now = this.nowIso();
-      const reservation: ReservationRecord = {
-        id: reservationId,
-        roundId: input.roundId,
-        storeId: input.storeId,
-        userId: input.userId,
-        orderId: null,
-        paymentId: null,
-        status: 'HELD',
-        addressKey: this.addressKey(input.deliveryAddress),
-        deliveryAddressCount: 1,
-        itemQuantityTotal: totalQuantity,
-        items: itemRecords.map((item) => ({
-          roundItemId: item.input.roundItemId,
-          productId: item.data['productId'],
-          quantity: item.input.quantity,
-          unitPrice: item.data['roundPrice'],
-        })),
-        idempotencyKey: input.idempotencyKey,
-        expiresAt: this.plusMinutesIso(15),
-        consumedAt: null,
-        releasedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      tx.set(reservationRef, reservation);
-      tx.update(roundRef, {
-        counters: this.nextCounters(round['counters'], {
-          reservedDeliveryAddresses: 1,
-          reservedItemQuantity: totalQuantity,
-        }),
-        updatedAt: now,
-      });
-      for (const item of itemRecords) {
-        tx.update(this.firestore.doc(`saleRoundItems/${item.input.roundItemId}`), {
-          reservedQuantity: (item.data['reservedQuantity'] ?? 0) + item.input.quantity,
-          updatedAt: now,
-        });
-      }
-      result = reservation;
+      result = await this.reserveCheckoutInTransaction(tx, input);
     });
 
     return result!;
+  }
+
+  async reserveCheckoutInTransaction(
+    tx: any,
+    input: {
+      storeId: string;
+      roundId: string;
+      userId: string;
+      idempotencyKey: string;
+      deliveryAddress: DeliveryAddressInput;
+      items: RoundItemInput[];
+    },
+  ): Promise<ReservationRecord> {
+    const reservationId = this.reservationId(input.storeId, input.roundId, input.idempotencyKey);
+    const reservationRef = this.firestore.doc(`checkoutReservations/${reservationId}`);
+    const reservationSnap = await tx.get(reservationRef);
+    if (reservationSnap.exists) return reservationSnap.data() as ReservationRecord;
+
+    const roundRef = this.firestore.doc(`saleRounds/${input.roundId}`);
+    const roundSnap = await tx.get(roundRef);
+    if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
+      throw new NotFoundException('회차를 찾을 수 없습니다.');
+    }
+    const round = roundSnap.data() as Record<string, any>;
+    this.assertRoundReservable(round);
+    this.assertDeliveryCity(input.deliveryAddress.address, round['deliveryRegion']?.['city']);
+
+    const normalizedItems = this.normalizeItems(input.items);
+    const itemSnaps = await Promise.all(
+      normalizedItems.map((item) =>
+        tx.get(this.firestore.doc(`saleRoundItems/${item.roundItemId}`)),
+      ),
+    );
+    const itemRecords = itemSnaps.map((snap, index) => {
+      if (!snap.exists) throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
+      const item = snap.data() as Record<string, any>;
+      if (item['roundId'] !== input.roundId || item['storeId'] !== input.storeId) {
+        throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
+      }
+      if (item['status'] !== 'ACTIVE') {
+        throw new ConflictException('구매할 수 없는 회차 상품입니다.');
+      }
+      return { input: normalizedItems[index], data: item };
+    });
+
+    const totalQuantity = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
+    this.assertRoundCapacity(round, totalQuantity);
+    itemRecords.forEach((item) => {
+      this.assertItemCapacity(item.data, item.input.quantity);
+    });
+
+    const now = this.nowIso();
+    const reservation: ReservationRecord = {
+      id: reservationId,
+      roundId: input.roundId,
+      storeId: input.storeId,
+      userId: input.userId,
+      orderId: null,
+      paymentId: null,
+      status: 'HELD',
+      addressKey: this.addressKey(input.deliveryAddress),
+      deliveryAddressCount: 1,
+      itemQuantityTotal: totalQuantity,
+      items: itemRecords.map((item) => ({
+        roundItemId: item.input.roundItemId,
+        productId: item.data['productId'],
+        productName: item.data['productNameSnapshot'],
+        productImageUrl: item.data['productImageUrlSnapshot'] ?? null,
+        quantity: item.input.quantity,
+        unitPrice: item.data['roundPrice'],
+      })),
+      idempotencyKey: input.idempotencyKey,
+      expiresAt: this.plusMinutesIso(15),
+      consumedAt: null,
+      releasedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    tx.set(reservationRef, reservation);
+    tx.update(roundRef, {
+      counters: this.nextCounters(round['counters'], {
+        reservedDeliveryAddresses: 1,
+        reservedItemQuantity: totalQuantity,
+      }),
+      updatedAt: now,
+    });
+    itemRecords.forEach((item) => {
+      tx.update(this.firestore.doc(`saleRoundItems/${item.input.roundItemId}`), {
+        reservedQuantity: (item.data['reservedQuantity'] ?? 0) + item.input.quantity,
+        updatedAt: now,
+      });
+    });
+    return reservation;
   }
 
   async consumeReservation(input: {
@@ -303,6 +320,9 @@ export class OrderCapacityService {
     if (round['status'] !== 'OPEN') {
       throw new ConflictException('현재 주문 가능한 회차가 아닙니다.');
     }
+    if (round['cancellation'] != null) {
+      throw new ConflictException('취소 처리 중인 회차에는 주문할 수 없습니다.');
+    }
     const closeAt = new Date(round['schedule']?.['orderCloseAt'] ?? 0).getTime();
     if (!Number.isFinite(closeAt) || closeAt <= Date.now()) {
       throw new ConflictException('주문 마감된 회차입니다.');
@@ -320,6 +340,15 @@ export class OrderCapacityService {
     }
     if (itemTotal > (limits['maxItemQuantity'] ?? 0)) {
       throw new ConflictException('이번 회차 상품 수량 한도가 마감되었습니다.');
+    }
+  }
+
+  private assertDeliveryCity(address: string, city?: string) {
+    if (!city) throw new BadRequestException('배송 가능 지역이 설정되지 않았습니다.');
+    const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const boundary = new RegExp(`^(?:(?:경기도|경기)\\s+)?${escapedCity}(?:\\s|$)`);
+    if (!boundary.test(address.trim())) {
+      throw new BadRequestException('배송 가능 지역의 주소만 주문할 수 있습니다.');
     }
   }
 

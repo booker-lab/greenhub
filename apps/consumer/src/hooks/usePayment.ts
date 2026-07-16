@@ -1,7 +1,7 @@
 'use client';
 
 import type { CreateOrderRequest } from '@greenhub/shared';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 export type PaymentMethod = 'kakaopay' | 'naverpay';
 export type PaymentState = 'idle' | 'creating' | 'paying' | 'done' | 'error';
@@ -29,11 +29,13 @@ export function usePayment({
   const [state, setState] = useState<PaymentState>('idle');
   const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const paymentAttemptId = useRef<string | null>(null);
 
   async function requestPayment() {
     if (state !== 'idle' && state !== 'error') return;
     setState('creating');
     setError(null);
+    paymentAttemptId.current ??= crypto.randomUUID();
 
     try {
       // 1. 주문 생성 → portonePaymentParams 수신
@@ -43,7 +45,10 @@ export function usePayment({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(orderRequest),
+        body: JSON.stringify({
+          ...orderRequest,
+          clientOrderRequestId: paymentAttemptId.current,
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

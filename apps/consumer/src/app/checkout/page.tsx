@@ -11,7 +11,7 @@ import { Container, Text } from '@mantine/core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { useSession } from 'next-auth/react';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import type { CartItem } from '@/hooks/useCart';
 import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
 import CheckoutForm from './_components/CheckoutForm';
@@ -129,6 +129,7 @@ function CartCheckoutContent() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
   const [state, setState] = useState<'idle' | 'creating' | 'paying' | 'done' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const paymentAttemptIds = useRef(new Map<string, string>());
 
   useEffect(() => {
     try {
@@ -162,11 +163,22 @@ function CartCheckoutContent() {
     let lastOrderId: string | null = null;
 
     for (const item of cartItems) {
+      const itemKey = [
+        item.storeId,
+        item.productId,
+        item.saleType,
+        item.deliveryMethod,
+        item.requestedDeliveryDate ?? '',
+      ].join(':');
+      const clientOrderRequestId =
+        paymentAttemptIds.current.get(itemKey) ?? crypto.randomUUID();
+      paymentAttemptIds.current.set(itemKey, clientOrderRequestId);
       setState('creating');
       const res = await fetch(`${API_URL}/stores/${item.storeId}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
+          clientOrderRequestId,
           productId: item.productId,
           quantity: item.quantity,
           saleType: item.saleType,
@@ -179,7 +191,7 @@ function CartCheckoutContent() {
           ...(item.saleType === 'group' && {
             groupBuyConsent: { agreed: true, agreedAt: new Date().toISOString() },
           }),
-        } satisfies CreateOrderRequest),
+        } satisfies CreateOrderRequest & { clientOrderRequestId: string }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

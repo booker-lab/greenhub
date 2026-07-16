@@ -1,19 +1,19 @@
+import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
-  IsString,
-  IsNumber,
+  IsBoolean,
   IsEnum,
   IsISO8601,
+  IsNumber,
   IsOptional,
+  IsString,
   IsUrl,
-  ValidateNested,
-  ValidateIf,
-  IsBoolean,
   Matches,
   Min,
+  ValidateIf,
+  ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 
 class DeliveryAddressDto {
   @IsString()
@@ -80,6 +80,13 @@ class AcquisitionDto {
 }
 
 export class CreateOrderDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9:_-]{8,128}$/, {
+    message: 'clientOrderRequestId는 8~128자의 안전한 식별자여야 합니다.',
+  })
+  clientOrderRequestId?: string;
+
   @IsString()
   productId: string;
 

@@ -29,6 +29,8 @@ export type CheckoutReservationStatus =
   | 'RELEASED'
   | 'EXPIRED'
 
+export type ClientOrderRequestId = string
+
 export type OrderChargeType = 'REDELIVERY_FEE'
 
 export type OrderChargeStatus =

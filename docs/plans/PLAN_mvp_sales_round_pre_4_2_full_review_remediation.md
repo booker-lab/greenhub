@@ -231,14 +231,14 @@
 
 | Task | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 5.1 | `packages/shared/src/order.types.ts` | 회차 결제 시도 식별자 계약을 주문 요청 타입에 추가한다. | `pnpm --filter @greenhub/shared typecheck` | [판정 대기 — 주문 요청 멱등 계약. 검증 결과] | todo |
-| 5.2 | `apps/api/src/orders/dto/create-order.dto.ts` | 배송일 검증을 서비스 모드 판정과 충돌하지 않게 정리한다. | `pnpm --filter api build` | [판정 대기 — 주문 DTO 보정. 검증 결과] | todo |
-| 5.3 | `apps/api/src/orders/mvp-order-flow.spec.ts` | 중복 요청·원자 저장·legacy 배송일의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 주문 생성 실패 계약. 검증 결과] | todo |
-| 5.4 | `apps/api/src/orders/round-order-create.service.ts` | 주문·예약·카운터를 한 트랜잭션에 기록하는 회차 생성 서비스를 구현한다. | `pnpm --filter api build` | [판정 대기 — 회차 주문 생성 분리. 검증 결과] | todo |
-| 5.5 | `apps/api/src/orders/orders-create.service.ts` | 회차 생성을 위임하고 legacy 전화번호·배송일 계약을 보존한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 주문 생성 facade 축소. 검증 결과] | todo |
-| 5.6 | `apps/api/src/orders/orders.module.ts` | 회차 주문 생성 서비스를 provider로 등록한다. | `pnpm --filter api build` | [판정 대기 — 주문 생성 모듈 연결. 검증 결과] | todo |
-| 5.7 | `apps/consumer/src/hooks/usePayment.ts` | 오류 재시도에서 같은 결제 시도 ID를 재사용한다. | `pnpm --filter consumer exec tsc --noEmit` | [판정 대기 — 단일 결제 훅 멱등화. 검증 결과] | todo |
-| 5.8 | `apps/consumer/src/app/checkout/page.tsx` | 장바구니 반복 요청에 상품별 안정적인 결제 시도 ID를 전달한다. | `pnpm --filter consumer exec tsc --noEmit` | [판정 대기 — 기존 장바구니 재시도 보호. 검증 결과] | todo |
+| 5.1 | `packages/shared/src/sale-round.types.ts`, `packages/shared/src/order.types.ts`, `apps/api/src/orders/dto/create-order.dto.ts` | 클라이언트 주문 생성 요청 ID 계약을 공유 타입과 API 입력에 추가한다. | `pnpm --filter @greenhub/shared typecheck` | `ClientOrderRequestId`와 `clientOrderRequestId` 요청 필드를 추가하고 shared typecheck 통과. | done |
+| 5.2 | `apps/api/src/orders/mvp-order-flow.spec.ts` | 동일 요청 중복·다른 payload 충돌·중간 실패 원자성의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 전용 서비스 부재 실패를 확인한 뒤 동일 요청 재사용, payload 충돌, 부분 데이터 부재 계약을 포함한 24개 테스트 통과. | done |
+| 5.3 | `apps/api/src/orders/order-capacity.service.ts` | 주문 생성 트랜잭션에서 사용할 예약·카운터 변경 primitive를 제공한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | `reserveCheckoutInTransaction`으로 예약·회차·상품 카운터 변경을 외부 트랜잭션에 결합하고 OPEN·취소·지역·용량 검증 유지. | done |
+| 5.4 | `apps/api/src/orders/round-order-create.service.ts` | 회차 주문 생성과 예약·주문·카운터 원자성을 구현한다. | `pnpm --filter api build` | 안정 ID와 payload hash를 사용해 주문번호·예약·주문·회차·상품 카운터를 한 Firestore 트랜잭션으로 기록하고 API 빌드 통과. | done |
+| 5.5 | `apps/api/src/orders/orders-create.service.ts` | 회차 주문 생성을 전용 서비스에 위임하고 legacy 전화번호·배송일 계약을 보존한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | `round_direct`만 전용 서비스로 위임하고 legacy 생성·전화번호·배송일 분기를 유지한 채 24개 테스트 통과. | done |
+| 5.6 | `apps/api/src/orders/orders.module.ts` | 회차 주문 생성 서비스를 provider로 등록한다. | `pnpm --filter api build` | `RoundOrderCreateService` provider 등록 후 API 빌드 통과. | done |
+| 5.7 | `apps/consumer/src/hooks/usePayment.ts` | 오류 재시도에서 같은 결제 시도 ID를 재사용한다. | `pnpm --filter consumer exec tsc --noEmit` | 훅 수명 동안 결제 시도 ID를 보존해 오류 재시도 요청에 재사용하고 consumer typecheck 통과. | done |
+| 5.8 | `apps/consumer/src/app/checkout/page.tsx` | 장바구니 반복 요청에 상품별 안정적인 결제 시도 ID를 전달한다. | `pnpm --filter consumer exec tsc --noEmit` | 장바구니 항목 키별 결제 시도 ID map을 유지해 반복 요청을 보호하고 consumer typecheck 통과. | done |
 
 - **Unit Verify**: `pnpm build`
 - **Exit**: 같은 결제 시도 ID는 주문·예약 한 건만 반환한다.
