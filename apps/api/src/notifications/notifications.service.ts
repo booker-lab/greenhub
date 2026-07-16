@@ -1,9 +1,10 @@
-import { Injectable, Inject, forwardRef } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { createHash } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
-import { AligoClient } from './aligo.client';
 import { PaymentsService } from '../payments/payments.service';
+import { AligoClient } from './aligo.client';
 
 export type NotificationTemplateCode =
   // 소비자 수신
@@ -84,6 +85,10 @@ export class NotificationsService {
       status: result.success ? 'sent' : 'failed',
       errorMessage: result.errorMessage ?? null,
     });
+
+    if (!result.success && orderId) {
+      await this.createCustomerNoticeFailedIssue(orderId, templateCode);
+    }
   }
 
   async sendToGroupParticipants(
@@ -203,7 +208,9 @@ export class NotificationsService {
 
     const now = this.firestore.Timestamp.now();
     const batch = this.firestore.db.batch();
-    ordersSnap.docs.forEach((d) => batch.update(d.ref, { status: 'CONFIRMED', updatedAt: now }));
+    ordersSnap.docs.forEach((d) => {
+      batch.update(d.ref, { status: 'CONFIRMED', updatedAt: now });
+    });
     await batch.commit();
 
     const productSnap = await this.firestore.doc(`products/${productId}`).get();
@@ -243,9 +250,9 @@ export class NotificationsService {
     );
 
     const batch = this.firestore.db.batch();
-    ordersSnap.docs.forEach((d) =>
-      batch.update(d.ref, { status: 'CANCELLED', cancelReason: reason, updatedAt: now }),
-    );
+    ordersSnap.docs.forEach((d) => {
+      batch.update(d.ref, { status: 'CANCELLED', cancelReason: reason, updatedAt: now });
+    });
     await batch.commit();
 
     const productSnap = await this.firestore.doc(`products/${productId}`).get();
@@ -285,6 +292,42 @@ export class NotificationsService {
       fcmToken: null,
       sentAt: data.status === 'sent' ? this.firestore.Timestamp.now() : null,
       createdAt: this.firestore.Timestamp.now(),
+    });
+  }
+
+  private async createCustomerNoticeFailedIssue(
+    orderId: string,
+    templateCode: NotificationTemplateCode,
+  ) {
+    const idempotencyKey = `customer-notice-failed:${orderId}:${templateCode}`;
+    const issueId = createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 32);
+    const issueRef = this.firestore.doc(`operationIssues/${issueId}`);
+    const existingIssue = await issueRef.get();
+    if (existingIssue.exists) return;
+
+    const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
+    const order = orderSnap.exists ? orderSnap.data()! : {};
+    const now = this.firestore.Timestamp.now();
+    await issueRef.set({
+      id: issueId,
+      storeId: (order['storeId'] as string | undefined) ?? '',
+      orderId,
+      paymentId: null,
+      type: 'CUSTOMER_NOTICE_FAILED',
+      status: 'OPEN',
+      severity: 'warning',
+      title: '고객 안내 최종 실패',
+      message: '알림톡 재시도와 문자 대체가 모두 실패하여 운영 확인이 필요합니다.',
+      idempotencyKey,
+      latestSnapshot: {
+        orderStatus: order['status'] ?? null,
+        templateCode,
+        failureStage: 'sms_fallback',
+      },
+      actions: [],
+      resolvedAt: null,
+      createdAt: now,
+      updatedAt: now,
     });
   }
 }
