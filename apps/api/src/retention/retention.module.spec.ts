@@ -1,5 +1,6 @@
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { FirestoreModule } from '../firestore/firestore.module';
+import { StorageService } from '../firestore/storage.service';
 import { RetentionModule } from './retention.module';
 import { RetentionService } from './retention.service';
 
@@ -15,5 +16,11 @@ describe('보관 모듈 계약', () => {
   it('RetentionService를 provider로 등록하고 다른 모듈에서 재사용할 수 있게 내보낸다', () => {
     expect(metadata(RetentionModule, MODULE_METADATA.PROVIDERS)).toContain(RetentionService);
     expect(metadata(RetentionModule, MODULE_METADATA.EXPORTS)).toContain(RetentionService);
+  });
+
+  it('RetentionService의 삭제 어댑터 주입 토큰을 StorageService로 고정한다', () => {
+    expect(Reflect.getMetadata('self:paramtypes', RetentionService)).toEqual([
+      { index: 1, param: StorageService },
+    ]);
   });
 });

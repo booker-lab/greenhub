@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
+import { StorageService } from '../firestore/storage.service';
 
 type RetentionPurpose = 'DELIVERY_PHOTO' | 'MARKETING_CONSENT' | 'LEGAL_ORDER' | 'LEGAL_DISPUTE';
 
@@ -66,6 +67,7 @@ function addUtcYears(value: Date, years: number): Date {
 export class RetentionService {
   constructor(
     private readonly firestore: FirestoreService,
+    @Inject(StorageService)
     private readonly storage: StorageDeletionAdapter,
   ) {}
 

@@ -3,11 +3,11 @@
 > **SSOT**: 세션 종료 시 최신 상태만 유지한다. 200라인 초과 시 아카이브하고 50라인 이내 요약으로 갱신한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260715_before_round_direct_task2.md`
 
-최종 수정: 2026-07-17 (Task 3.11 보관 모듈 등록·내보내기 완료)
+최종 수정: 2026-07-17 (Task 3.13 Firebase Storage 모듈 연결 완료)
 
 ## 현재 진행
 
-- 브랜치 `codex/mvp-sales-round-direct`, Task 3.11 로컬 변경 검증 완료.
+- 브랜치 `codex/mvp-sales-round-direct`, Task 3.13 로컬 변경 검증 완료.
 - Task 2.10은 실제 100원 결제·웹훅·늦은 결제·전액 환불까지 완료해 `done`이다.
 - Task 2.11은 재배송비 1회 생성과 재실패 운영 예외 전환까지 완료해 `done`이다.
 - Task 3.1은 알림톡 재시도·문자 대체·최종 실패 운영 예외의 실패 테스트 계약을 고정해 `done`이다.
@@ -21,6 +21,8 @@
 - Task 3.9는 90일·3년·5년 만료, 분쟁·법적 보존 연장, 미만료 제외와 멱등 파기 실패 테스트 계약을 고정해 `done`이다.
 - Task 3.10은 목적별 법정 기록 분리 저장과 Firestore·Storage 만료 파기를 구현해 `done`이다.
 - Task 3.11은 `RetentionModule`에 보관 서비스를 등록하고 export해 `done`이다.
+- Task 3.12는 비공개 배송 사진 Storage 서비스를 구현해 `done`이다.
+- Task 3.13은 `StorageService` provider/export와 보관 삭제 어댑터 주입을 연결해 `done`이다.
 - 로컬 커밋은 push하지 않았다.
 
 ## 환경
@@ -56,7 +58,7 @@
 
 ## 다음 진입
 
-- Task 3.13에서 `FirestoreModule`에 서버 Storage 어댑터 provider/export를 연결하고 `RetentionService`의 삭제 의존성을 명시적으로 주입한다.
+- Task 3.14에서 회차·운영 예외·보관 모듈을 `AppModule`에 최종 연결한다.
 
 ## 세션 완료 인계 규칙
 
@@ -169,3 +171,12 @@
 - 읽기 URL은 V4 읽기 전용 15분 만료로 발급하고, 삭제 어댑터는 배송 사진 경로만 허용하며 미존재 객체 삭제를 멱등 처리한다.
 - `FirestoreModule` provider/export, `RetentionService` 주입 연결, `AppModule`, 주문·드라이버 실제 호출 경로는 후속 Task 범위로 남겼다.
 - 신규 Storage 5개를 포함한 관련 13개 스위트 89개 테스트, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+
+## Task 3.13 결과
+
+- `FirestoreModule`은 `StorageService`를 provider로 등록하고 export해 다른 모듈에서 재사용할 수 있게 했다.
+- Storage는 중복 Firebase Admin 앱을 만들지 않고 기존 `FIREBASE_APP`과 `FirestoreService`를 재사용한다.
+- Firebase Admin 초기화는 `FIREBASE_STORAGE_BUCKET`을 우선 사용하고, 미설정 시 `FIREBASE_PROJECT_ID` 기반 Appspot bucket을 기본값으로 사용한다.
+- `RetentionService`의 삭제 어댑터는 `@Inject(StorageService)`로 명시해 인터페이스 타입의 런타임 주입 토큰을 고정했다.
+- 신규 모듈 계약 3개를 포함한 관련 15개 스위트 98개 테스트, API 빌드, 변경 TypeScript 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+- `AppModule`, 주문·드라이버 실제 호출 경로, 공개 URL·클라이언트 직접 업로드·공개 Storage 권한은 변경하지 않았다.
