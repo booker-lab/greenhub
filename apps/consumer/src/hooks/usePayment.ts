@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import type { CreateOrderRequest } from '@greenhub/shared';
+import { useState } from 'react';
 
 export type PaymentMethod = 'kakaopay' | 'naverpay';
 export type PaymentState = 'idle' | 'creating' | 'paying' | 'done' | 'error';
@@ -31,7 +31,7 @@ export function usePayment({
   const [error, setError] = useState<string | null>(null);
 
   async function requestPayment() {
-    if (state !== 'idle') return;
+    if (state !== 'idle' && state !== 'error') return;
     setState('creating');
     setError(null);
 

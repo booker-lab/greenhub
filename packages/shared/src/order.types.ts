@@ -134,7 +134,7 @@ export interface CreateOrderRequest {
     roundItemId: string
     quantity: number
   }>
-  deliveryPhone?: string
+  deliveryPhone: string
   marketingConsent?: MarketingConsentInput
   acquisition?: OrderAcquisitionSnapshot
 }

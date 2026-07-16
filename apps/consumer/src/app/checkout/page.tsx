@@ -1,19 +1,19 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
-import Script from 'next/script';
-import { useSession } from 'next-auth/react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { Container, Text } from '@mantine/core';
-import { usePayment, type PaymentMethod } from '@/hooks/usePayment';
 import type {
   CreateOrderRequest,
   DeliveryAddress,
   DeliveryMethod,
-  SaleType,
   Product,
+  SaleType,
 } from '@greenhub/shared';
+import { Container, Text } from '@mantine/core';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Script from 'next/script';
+import { useSession } from 'next-auth/react';
+import { Suspense, useEffect, useState } from 'react';
 import type { CartItem } from '@/hooks/useCart';
+import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
 import CheckoutForm from './_components/CheckoutForm';
 
 declare global {
@@ -27,7 +27,7 @@ declare global {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-const NAVERPAY_ENABLED = !!process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY;
+const PHONE_PATTERN = /^[0-9+\-\s()]{8,20}$/;
 
 // ── 단일 상품 결제 (상품 상세 → 바로 결제) ──────────────────────────────
 function SingleCheckoutContent() {
@@ -59,6 +59,7 @@ function SingleCheckoutContent() {
     addressDetail: '',
     zipCode: '',
   });
+  const [deliveryPhone, setDeliveryPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
 
   const orderRequest: CreateOrderRequest = {
@@ -67,6 +68,7 @@ function SingleCheckoutContent() {
     saleType,
     deliveryMethod,
     deliveryAddress: address,
+    deliveryPhone: deliveryPhone.trim(),
     ...(requestedDeliveryDate ? { requestedDeliveryDate } : {}),
     ...(saleType === 'group' && {
       groupBuyConsent: { agreed: true, agreedAt: new Date().toISOString() },
@@ -86,7 +88,12 @@ function SingleCheckoutContent() {
   }
 
   const isLoading = state === 'creating' || state === 'paying';
-  const canPay = !isLoading && !!address.address && !!address.zipCode && !!session;
+  const canPay =
+    !isLoading &&
+    !!address.address &&
+    !!address.zipCode &&
+    PHONE_PATTERN.test(deliveryPhone.trim()) &&
+    !!session;
 
   return (
     <CheckoutForm
@@ -94,6 +101,8 @@ function SingleCheckoutContent() {
       totalAmount={totalAmount}
       address={address}
       onAddressChange={setAddress}
+      deliveryPhone={deliveryPhone}
+      onDeliveryPhoneChange={setDeliveryPhone}
       paymentMethod={paymentMethod}
       onPaymentMethodChange={setPaymentMethod}
       isLoading={isLoading}
@@ -116,6 +125,7 @@ function CartCheckoutContent() {
     addressDetail: '',
     zipCode: '',
   });
+  const [deliveryPhone, setDeliveryPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
   const [state, setState] = useState<'idle' | 'creating' | 'paying' | 'done' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -130,10 +140,15 @@ function CartCheckoutContent() {
   const totalAmount = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const isLoading = state === 'creating' || state === 'paying';
   const canPay =
-    !isLoading && !!address.address && !!address.zipCode && !!session && cartItems.length > 0;
+    !isLoading &&
+    !!address.address &&
+    !!address.zipCode &&
+    PHONE_PATTERN.test(deliveryPhone.trim()) &&
+    !!session &&
+    cartItems.length > 0;
 
   async function handlePay() {
-    if (state !== 'idle') return;
+    if (state !== 'idle' && state !== 'error') return;
     setError(null);
 
     const accessToken = session?.user?.accessToken ?? '';
@@ -157,6 +172,7 @@ function CartCheckoutContent() {
           saleType: item.saleType,
           deliveryMethod: item.deliveryMethod,
           deliveryAddress: address,
+          deliveryPhone: deliveryPhone.trim(),
           ...(item.requestedDeliveryDate
             ? { requestedDeliveryDate: item.requestedDeliveryDate }
             : {}),
@@ -204,6 +220,8 @@ function CartCheckoutContent() {
       totalAmount={totalAmount}
       address={address}
       onAddressChange={setAddress}
+      deliveryPhone={deliveryPhone}
+      onDeliveryPhoneChange={setDeliveryPhone}
       paymentMethod={paymentMethod}
       onPaymentMethodChange={setPaymentMethod}
       isLoading={isLoading}

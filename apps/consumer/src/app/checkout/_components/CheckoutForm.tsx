@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import type { DeliveryAddress, DeliveryMethod } from '@greenhub/shared';
 import {
   Alert,
   Button,
@@ -12,7 +12,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import type { DeliveryAddress, DeliveryMethod } from '@greenhub/shared';
+import { useEffect } from 'react';
 import type { CartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
 
@@ -36,6 +36,8 @@ export interface CheckoutFormProps {
   totalAmount: number;
   address: DeliveryAddress;
   onAddressChange: (a: DeliveryAddress) => void;
+  deliveryPhone: string;
+  onDeliveryPhoneChange: (phone: string) => void;
   paymentMethod: PaymentMethod;
   onPaymentMethodChange: (m: PaymentMethod) => void;
   isLoading: boolean;
@@ -62,6 +64,8 @@ export default function CheckoutForm({
   totalAmount,
   address,
   onAddressChange,
+  deliveryPhone,
+  onDeliveryPhoneChange,
   paymentMethod,
   onPaymentMethodChange,
   isLoading,
@@ -220,6 +224,16 @@ export default function CheckoutForm({
           value={address.zipCode}
           readOnly
           radius="md"
+        />
+        <TextInput
+          label="연락처"
+          placeholder="010-1234-5678"
+          type="tel"
+          value={deliveryPhone}
+          onChange={(e) => onDeliveryPhoneChange(e.target.value)}
+          autoComplete="tel"
+          radius="md"
+          required
         />
       </Stack>
 
