@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
@@ -48,7 +49,15 @@ export class PaymentsController {
     );
 
     try {
-      this.portone.verifyWebhookSignature(webhookId, webhookTimestamp, rawBody!, webhookSignature);
+      if (
+        !Buffer.isBuffer(rawBody) ||
+        !webhookId?.trim() ||
+        !webhookTimestamp?.trim() ||
+        !webhookSignature?.trim()
+      ) {
+        throw new UnauthorizedException('웹훅 인증 정보가 누락되었습니다.');
+      }
+      this.portone.verifyWebhookSignature(webhookId, webhookTimestamp, rawBody, webhookSignature);
     } catch (e) {
       this.logger.error(`webhook sig verify failed: ${(e as Error).message}`);
       await this.audit.log('payment.webhook.invalid_sig', {

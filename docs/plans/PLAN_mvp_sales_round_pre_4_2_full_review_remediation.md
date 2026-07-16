@@ -178,12 +178,12 @@
 
 | Task | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 2.1 | `apps/api/src/orders/orders-query.service.spec.ts` | 역할별 목록·상세 조회 권한의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- orders-query.service.spec.ts --runInBand` | [판정 대기 — 주문 조회 권한 계약. 검증 결과] | todo |
-| 2.2 | `apps/api/src/orders/orders-query.service.ts` | 소비자 본인·판매자 소유 스토어·배정 기사만 주문을 읽게 한다. | `pnpm --filter api test -- orders-query.service.spec.ts --runInBand` | [판정 대기 — 주문 조회 권한 구현. 검증 결과] | todo |
-| 2.3 | `apps/api/src/orders/orders.controller.ts` | JWT 역할을 조회 서비스에 전달한다. | `pnpm --filter api build` | [판정 대기 — 주문 컨트롤러 역할 전달. 검증 결과] | todo |
-| 2.4 | `apps/api/src/payments/portone.client.spec.ts` | 누락 서명·누락 Secret·오래된 timestamp의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- portone.client.spec.ts --runInBand` | [판정 대기 — 웹훅 보안 실패 계약. 검증 결과] | todo |
-| 2.5 | `apps/api/src/payments/portone.client.ts` | 서명 검증을 fail closed와 상수 시간 비교로 강화한다. | `pnpm --filter api test -- portone.client.spec.ts --runInBand` | [판정 대기 — 웹훅 서명 보정. 검증 결과] | todo |
-| 2.6 | `apps/api/src/payments/payments.controller.ts` | raw body와 필수 웹훅 헤더 누락을 인증 실패로 처리한다. | `pnpm --filter api build` | [판정 대기 — 웹훅 컨트롤러 경계. 검증 결과] | todo |
+| 2.1 | `apps/api/src/orders/orders-query.service.spec.ts` | 역할별 목록·상세 조회 권한의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- orders-query.service.spec.ts --runInBand` | 소비자·판매자·기사 권한 실패와 admin 보존을 포함한 6개 계약이 통과했다. | done |
+| 2.2 | `apps/api/src/orders/orders-query.service.ts` | 소비자 본인·판매자 소유 스토어·배정 기사만 주문을 읽게 한다. | `pnpm --filter api test -- orders-query.service.spec.ts --runInBand` | 소비자 `userId`, 기사 `driverId`, 판매자 스토어 `ownerId`를 서버에서 강제해 6개 테스트가 통과했다. | done |
+| 2.3 | `apps/api/src/orders/orders.controller.ts` | JWT 역할을 조회 서비스에 전달한다. | `pnpm --filter api build` | 목록·상세 조회에 JWT 주체와 역할을 전달하고 API 빌드가 통과했다. | done |
+| 2.4 | `apps/api/src/payments/portone.client.spec.ts` | 누락 서명·누락 Secret·오래된 timestamp의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- portone.client.spec.ts --runInBand` | 누락 서명·Secret과 5분 초과 timestamp 실패를 포함한 7개 테스트가 통과했다. | done |
+| 2.5 | `apps/api/src/payments/portone.client.ts` | 서명 검증을 fail closed와 상수 시간 비교로 강화한다. | `pnpm --filter api test -- portone.client.spec.ts --runInBand` | 필수 입력·Secret·timestamp를 닫힌 방식으로 검증하고 `timingSafeEqual` 비교를 적용해 7개 테스트가 통과했다. | done |
+| 2.6 | `apps/api/src/payments/payments.controller.ts` | raw body와 필수 웹훅 헤더 누락을 인증 실패로 처리한다. | `pnpm --filter api build` | raw body와 3개 필수 헤더를 선검증해 누락 요청을 인증 실패로 처리하고 API 빌드가 통과했다. | done |
 
 - **Unit Verify**: `pnpm --filter api test -- orders-query.service.spec.ts portone.client.spec.ts --runInBand`
 - **Exit**: 타인 주문 개인정보와 미서명 웹훅이 모두 차단된다.
