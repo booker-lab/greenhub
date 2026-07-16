@@ -4,12 +4,12 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 3.6 완료, Task 3.7 착수 대기
+- **상태**: Task 3.7 완료, Task 3.8 착수 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
-- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. 다음 진입점은 Task 3.7이다.
+- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. Task 3.7은 셀러·관리자 인증, 스토어 소유권 검증, 안전한 목록·상세·재조회 응답과 환불·문자 조치 API를 구현했다. 다음 진입점은 Task 3.8이다.
 
 ## 업무 요약 (협업용)
 
@@ -198,7 +198,7 @@ flowchart TD
 | 3.4 | 3.3 | `apps/api/src/notifications/notifications.controller.ts` | 마케팅 동의·철회를 검증된 채널 값으로 저장하게 한다. | `pnpm --filter api build` | 통과 — 기존 `PATCH /notifications/me/preferences`와 JWT 인증 흐름을 유지하고 `alimtalk`, `sms` 중 최소 한 채널의 엄격한 boolean만 허용했다. 알 수 없는 키와 잘못된 타입을 거부하고 인증 사용자 문서의 기존 설정과 병합해 요청하지 않은 채널을 보존하며 저장 완료 상태를 반환한다. 신규 설정 계약 12개와 기존 알림 전달 계약 7개, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.5 | 3.4 | `apps/api/src/operations/operations.service.spec.ts` | 중복 예외 통합·최신 상태 재검증·조치 감사 기록 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | 통과 — Jest가 신규 운영 계약 파일을 포함한 14개 테스트 파일을 수집했다. 신규 6개 테스트는 같은 `idempotencyKey`의 열린 항목 통합과 다른 주문·결제·실패 유형 분리, 환불·문자 조치 직전 최신 주문·결제·운영 예외 재조회, 성공·실패 `actions` 감사 기록과 민감정보 배제를 고정했다. 현재 `apps/api/src/operations/operations.service.ts`가 없어 6개 모두 Task 3.6 구현 부재로 예상 실패했다. 알림 7개, 결제 16개, 회차 주문·재배송 14개 회귀와 API 빌드, Biome 오류 수준 검사, `git diff --check`는 통과했다. | done |
 | 3.6 | 3.5 | `apps/api/src/operations/operations.service.ts` | 결제·환불·알림·재배송 최종 실패를 멱등 `확인 필요` 항목으로 관리한다. | `pnpm --filter api test -- operations.service.spec.ts --runInBand` | 통과 — `idempotencyKey`를 해시한 결정적 문서 ID로 같은 실패 원인과 업무 대상을 하나의 열린 항목으로 통합하고 다른 주문·결제·실패 유형은 분리했다. 조치 직전에 운영 예외와 최신 주문·결제 상태를 다시 읽어 이미 환불되었거나 해결된 항목의 외부 호출을 반복하지 않으며, 환불 재시도와 문자 재발송의 성공·실패를 기존 `actions`에 누적한다. 실패 사유는 안전한 오류 메시지만 제한적으로 저장하고 민감 키가 포함되면 일반화한다. 운영 계약 6개, 알림 7개, 결제 16개, 회차 주문·재배송 14개, API 빌드, Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
-| 3.7 | 3.6 | `apps/api/src/operations/operations.controller.ts` | 셀러의 재조회·환불 재시도·문자 재발송·조치 기록 API를 노출한다. | `pnpm --filter api build` | [판정 대기 — 조치 API] | todo |
+| 3.7 | 3.6 | `apps/api/src/operations/operations.controller.ts` | 셀러의 재조회·환불 재시도·문자 재발송·조치 기록 API를 노출한다. | `pnpm --filter api build` | 통과 — `GET /stores/:storeId/operation-issues`, 상세 조회, `POST .../:issueId/refresh`, `POST .../:issueId/actions`를 추가했다. JWT와 seller·admin 역할을 요구하고 seller는 서버가 조회한 `stores/{storeId}.ownerId`로 권한을 판정한다. 목록은 `storeId` Firestore 쿼리로 제한하고 상세·재조회·조치는 같은 스토어 경계를 재검증한다. 조치의 `actorId`는 인증 사용자 ID로 고정하며 허용 유형은 `RETRY_REFUND`, `RESEND_SMS`뿐이고 실행은 `OperationsService.executeAction`을 통과한다. 응답은 상태·식별자·안전한 스냅샷·감사 필드만 허용한다. 신규 컨트롤러 계약 9개, 운영 6개, 알림 7개, 결제 16개, 회차 주문·재배송 14개, API 빌드, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
 | 3.8 | 3.7 | `apps/api/src/operations/operations.module.ts` | 운영 예외 서비스를 결제·알림·주문에서 재사용할 수 있게 내보낸다. | `pnpm --filter api build` | [판정 대기 — 운영 모듈] | todo |
 | 3.9 | 3.8 | `apps/api/src/retention/retention.service.spec.ts` | 90일·3년·5년 만료와 분쟁 연장 파기 테스트를 먼저 고정한다. | `pnpm --filter api test -- --listTests` | [판정 대기 — 보관 테스트 수집] | todo |
 | 3.10 | 3.9 | `apps/api/src/retention/retention.service.ts` | 법정 기록 분리 저장과 Firestore·Storage 정기 파기를 구현한다. | `pnpm --filter api test -- retention.service.spec.ts --runInBand` | [판정 대기 — 보관·파기] | todo |
@@ -280,6 +280,6 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 3.6 완료, Task 3.7 `todo`
-- **검증 결과**: `OperationsService.createOrMergeIssue`와 `executeAction`을 구현했다. 같은 `idempotencyKey`는 결정적 문서 ID로 통합하고, 조치 직전에 운영 예외·주문·결제를 다시 읽어 자동 복구된 환불과 해결된 알림에 중복 외부 호출을 하지 않는다. 성공·실패 결과는 수행자·유형·시각과 함께 기존 `actions`에 누적하며 실패 사유에는 개인정보와 비밀값을 남기지 않는다. 운영 6개·알림 7개·결제 16개·회차 주문 14개 테스트와 API 빌드, Biome 오류 수준 검사, `git diff --check`가 통과했다.
-- **잔여 위험**: Task 3.7의 권한 검증된 운영 조치 API와 Task 3.8의 모듈 연결은 아직 구현하지 않았다. 기존 결제·알림·재배송 생성 경로의 공통 서비스 사용 전환은 모듈 연결 시 순환 의존성과 기존 계약을 함께 검증해야 한다.
+- **Status**: Task 3.7 완료, Task 3.8 `todo`
+- **검증 결과**: 스토어별 운영 예외 목록·상세·최신 상태 재조회와 환불 재시도·문자 재발송 API를 구현했다. seller·admin 인증을 요구하고 seller는 스토어 문서의 `ownerId`로 권한을 판정하며, 목록은 `storeId` 조건 Firestore 쿼리를 사용한다. 요청의 사용자 식별자는 받지 않고 인증 사용자 ID를 조치 `actorId`로 사용하며 모든 외부 조치는 기존 `executeAction`을 통과한다. 응답은 허용 필드만 구성해 전화번호·주소·메시지 본문·토큰·비밀값을 제외한다. 신규 컨트롤러 9개·운영 6개·알림 7개·결제 16개·회차 주문 14개 테스트와 API 빌드, Biome 오류 수준 검사, `git diff --check`가 통과했다.
+- **잔여 위험**: Task 3.8의 `operations.module.ts`와 `AppModule` 연결은 아직 구현하지 않아 이번 컨트롤러는 런타임 라우트에 등록되지 않았다. 기존 결제·알림·재배송 생성 경로의 공통 서비스 사용 전환은 모듈 연결 시 순환 의존성과 기존 계약을 함께 검증해야 한다.

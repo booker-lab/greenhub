@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
+import type { OperationActionType } from './dto/operation-action.dto';
 
 type OperationIssue = Record<string, unknown> & {
   id: string;
@@ -28,7 +29,7 @@ type CreateIssueInput = Record<string, unknown> & {
 type ExecuteActionInput = {
   issueId: string;
   actorId: string;
-  actionType: 'RETRY_REFUND' | 'RESEND_SMS';
+  actionType: OperationActionType;
 };
 
 @Injectable()
@@ -66,6 +67,63 @@ export class OperationsService {
     });
 
     return result!;
+  }
+
+  async listIssuesForStore(
+    storeId: string,
+    requesterId: string,
+    role: string,
+  ): Promise<{ items: Record<string, unknown>[] }> {
+    await this.assertStoreAccess(storeId, requesterId, role);
+    const snap = await this.firestore
+      .collection('operationIssues')
+      .where('storeId', '==', storeId)
+      .get();
+    return { items: snap.docs.map((doc) => this.toSafeResponse(doc.data() as OperationIssue)) };
+  }
+
+  async getIssueForStore(
+    storeId: string,
+    issueId: string,
+    requesterId: string,
+    role: string,
+  ): Promise<Record<string, unknown>> {
+    const issue = await this.readAuthorizedIssue(storeId, issueId, requesterId, role);
+    return this.toSafeResponse(issue);
+  }
+
+  async refreshIssueForStore(
+    storeId: string,
+    issueId: string,
+    requesterId: string,
+    role: string,
+  ): Promise<Record<string, unknown>> {
+    const issue = await this.readAuthorizedIssue(storeId, issueId, requesterId, role);
+    const order = await this.readRelatedDocument('orders', issue.orderId);
+    const payment = await this.readRelatedDocument('payments', issue.paymentId);
+    return {
+      ...this.toSafeResponse(issue),
+      currentState: {
+        orderStatus: this.safeStatus(order?.['status']),
+        paymentStatus: this.safeStatus(payment?.['status']),
+      },
+    };
+  }
+
+  async executeActionForStore(
+    storeId: string,
+    issueId: string,
+    requesterId: string,
+    role: string,
+    actionType: OperationActionType,
+  ): Promise<Record<string, unknown>> {
+    await this.readAuthorizedIssue(storeId, issueId, requesterId, role);
+    const result = await this.executeAction({
+      issueId,
+      actorId: requesterId,
+      actionType,
+    });
+    return this.toSafeResponse(result);
   }
 
   async executeAction(input: ExecuteActionInput): Promise<OperationIssue> {
@@ -153,6 +211,68 @@ export class OperationsService {
     if (!id) return null;
     const snap = await this.firestore.doc(`${collection}/${id}`).get();
     return snap.exists ? (snap.data() as Record<string, unknown>) : null;
+  }
+
+  private async readAuthorizedIssue(
+    storeId: string,
+    issueId: string,
+    requesterId: string,
+    role: string,
+  ): Promise<OperationIssue> {
+    await this.assertStoreAccess(storeId, requesterId, role);
+    const snap = await this.firestore.doc(`operationIssues/${issueId}`).get();
+    const issue = snap.exists ? (snap.data() as OperationIssue) : null;
+    if (!issue || issue['storeId'] !== storeId) {
+      throw new NotFoundException('운영 예외를 찾을 수 없습니다.');
+    }
+    return issue;
+  }
+
+  private async assertStoreAccess(storeId: string, requesterId: string, role: string) {
+    if (role === 'admin') return;
+    const snap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!snap.exists || snap.data()?.['ownerId'] !== requesterId) {
+      throw new ForbiddenException('권한이 없습니다.');
+    }
+  }
+
+  private toSafeResponse(issue: OperationIssue): Record<string, unknown> {
+    return {
+      id: issue.id,
+      storeId: issue['storeId'],
+      orderId: issue.orderId ?? null,
+      paymentId: issue.paymentId ?? null,
+      type: issue['type'],
+      severity: issue['severity'],
+      status: issue.status,
+      createdAt: issue['createdAt'],
+      updatedAt: issue['updatedAt'],
+      resolvedAt: issue['resolvedAt'] ?? null,
+      latestSnapshot: this.safeSnapshot(issue['latestSnapshot']),
+      actions: (issue.actions ?? []).map((action) => ({
+        actorId: action.actorId,
+        actionType: action.actionType,
+        performedAt: action.performedAt,
+        status: action.status,
+        ...(action.failureReason ? { failureReason: action.failureReason } : {}),
+      })),
+    };
+  }
+
+  private safeSnapshot(value: unknown) {
+    const snapshot =
+      value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+    if (!snapshot) return {};
+    return {
+      orderStatus: this.safeStatus(snapshot['orderStatus']),
+      paymentStatus: this.safeStatus(snapshot['paymentStatus']),
+      failureStage: this.safeStatus(snapshot['failureStage']),
+      templateCode: this.safeStatus(snapshot['templateCode']),
+    };
+  }
+
+  private safeStatus(value: unknown) {
+    return typeof value === 'string' ? value.slice(0, 80) : null;
   }
 
   private isRefunded(payment: Record<string, unknown> | null) {
