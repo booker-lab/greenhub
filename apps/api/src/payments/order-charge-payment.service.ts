@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { FirestoreService } from '../firestore/firestore.service';
-import type { PortoneClient } from './portone.client';
+import { FirestoreService } from '../firestore/firestore.service';
+import { PortoneClient } from './portone.client';
 
 type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
 

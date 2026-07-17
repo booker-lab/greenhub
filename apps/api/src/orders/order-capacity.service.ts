@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
-import type { FirestoreService } from '../firestore/firestore.service';
+import { FirestoreService } from '../firestore/firestore.service';
 
 type RoundItemInput = {
   roundItemId: string;

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import type { FirestoreService } from '../firestore/firestore.service';
+import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { RetentionService } from '../retention/retention.service';
-import type { PortoneClient } from './portone.client';
+import { PortoneClient } from './portone.client';
 
 const REFUND_CLAIM_MS = 5 * 60 * 1000;
 

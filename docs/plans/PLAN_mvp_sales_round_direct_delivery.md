@@ -280,6 +280,8 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 4.1 완료, Task 4.2 `todo`
-- **검증 결과**: 소비자 홈·상품 상세·장바구니·결제·주문 상세의 회차 직배송 논리 계약 10개를 공개 4개·인증 6개 `test.fixme`로 수집했다. 기존 인증 상태 파일을 재사용했고 별도 fixture나 실제 결제·Firebase·Storage·외부 서비스 호출을 추가하지 않았다. chromium·mobile 20개 신규 테스트와 관련 기존 소비자 5개 파일 68개 테스트 목록 수집, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
-- **잔여 위험**: 수집한 계약은 Task 4.2~4.18 구현 전이므로 의도적으로 `fixme` 상태이며 실제 화면 동작은 아직 충족하지 않는다. 다음 Task 4.2는 현재·지난 회차 공개 API 상태를 제공하는 `useSaleRounds` 훅만 구현하고, 홈·상세·장바구니·결제·주문 상세 화면이나 legacy 주문·택배·거점픽업·공동구매 동작을 선행 변경하지 않아야 한다. 주문·드라이버 배송 사진 호출 경로와 Storage 공개 경계도 그대로 유지한다.
+- **Status**: Task 4.1 완료, 4.2 진입 전 전수 리뷰 보정 Unit 1~10 완료, Task 4.2 `todo`
+- **Task 4.2 복귀 조건**: 충족. 결제·예약·환불, 주문·웹훅 권한, 주문·회차 취소, 주문 생성 멱등, 재배송비, 알림, 운영 예외, 보관·Storage 입력 계약을 Unit 1~9에서 보정했고 Unit 10에서 실제 도메인 서비스 통합 E2E와 전체 회귀 검증으로 확정했다.
+- **검증 결과**: API 단위 22개 스위트 169개, API E2E 3개 스위트 7개, 전체 typecheck와 build가 통과했다. 소비자 Task 4.1 계약은 상호 배타 주문 상태를 분리해 chromium·mobile 24개 목록으로 수집했고 변경 코드 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+- **다음 진입점**: Task 4.2 `apps/consumer/src/hooks/useSaleRounds.ts`만 시작할 수 있다. 현재·지난 회차 공개 API 상태를 한 훅에서 제공하고 Task 4.3 이후 화면·유입·장바구니·결제 구현을 선행하지 않는다.
+- **명시적 후속 위험**: 소비자 Task 4.1 계약은 Task 4.2~4.18 구현 전이라 계속 `test.fixme`다. 배송 사진 record의 실제 서버 업로드 API·드라이버 호출 연결은 Task 5.12, Firestore 인덱스와 보안 규칙·Storage 규칙은 Task 6.1~6.3, 서버 전체 흐름과 사용자 화면 실행 검증은 Task 6.4·6.7에 남아 있다. `salesMode` 전환과 운영 배포도 Task 6.5 이후 별도 승인 전에는 수행하지 않는다.

@@ -5,7 +5,7 @@
 ## 문서 메타
 
 - **작성일**: 2026-07-17
-- **상태**: 실행 대기
+- **상태**: 완료
 - **Priority**: 0
 - **Labels**: `bugfix`, `security`, `payment`, `order`, `notification`, `retention`, `handoff`
 - **SSOT Check**: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`, `docs/specs/mvp-sales-round-direct-delivery.md`, `docs/CRITICAL_LOGIC.md` #CL-166~167
@@ -333,14 +333,14 @@
 
 | Task | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 10.1 | `apps/e2e/tests/consumer-round-direct.spec.ts` | 상호 배타 주문 상태를 분리하고 회차·장바구니 단언을 강화한다. | `pnpm --filter e2e exec playwright test consumer-round-direct.spec.ts --list` | [판정 대기 — 소비자 계약 보정. 검증 결과] | todo |
-| 10.2 | `apps/api/test/helpers/in-memory-firestore.ts` | 실제 도메인 서비스용 트랜잭션 테스트 어댑터를 제공한다. | `pnpm --filter api test:e2e -- mvp-sales-round-consistency.e2e-spec.ts --runInBand` | [판정 대기 — 통합 테스트 어댑터. 검증 결과] | todo |
-| 10.3 | `apps/api/test/mvp-sales-round-consistency.e2e-spec.ts` | 실제 서비스로 결제·취소·권한·회차 정합성을 검증한다. | `pnpm --filter api test:e2e -- mvp-sales-round-consistency.e2e-spec.ts --runInBand` | [판정 대기 — 서버 통합 계약. 검증 결과] | todo |
-| 10.4 | `apps/api/test/app.e2e-spec.ts` | Nest 애플리케이션을 테스트 종료 시 정상적으로 닫는다. | `pnpm --filter api test:e2e -- app.e2e-spec.ts --runInBand` | [판정 대기 — E2E 열린 handle 해소. 검증 결과] | todo |
-| 10.5 | `docs/specs/mvp-sales-round-direct-delivery.md` | 보정된 권한·상태·멱등·알림·보관 계약을 명세에 반영한다. | `git diff --check -- docs/specs/mvp-sales-round-direct-delivery.md` | [판정 대기 — 구현 명세 갱신. 검증 결과] | todo |
-| 10.6 | `docs/plans/PLAN_mvp_sales_round_direct_delivery.md` | Task 4.2 진입 조건과 명시적 후속 위험을 Closeout에 기록한다. | `git diff --check -- docs/plans/PLAN_mvp_sales_round_direct_delivery.md` | [판정 대기 — 원 계획 복귀 지점. 검증 결과] | todo |
-| 10.7 | `docs/plans/PLAN_mvp_sales_round_pre_4_2_full_review_remediation.md` | 전체 검증 결과와 잔여 위험을 Closeout에 기록한다. | `git diff --check -- docs/plans/PLAN_mvp_sales_round_pre_4_2_full_review_remediation.md` | [판정 대기 — 보정 계획 종결. 검증 결과] | todo |
-| 10.8 | `docs/memory.md` | 완료 결과와 원 계획 Task 4.2 진입점을 50줄 이내로 기록한다. | `git diff --check -- docs/memory.md` | [판정 대기 — 프로젝트 memory 갱신. 검증 결과] | todo |
+| 10.1 | `apps/e2e/tests/consumer-round-direct.spec.ts` | 상호 배타 주문 상태를 분리하고 회차·장바구니 단언을 강화한다. | `pnpm --filter e2e exec playwright test consumer-round-direct.spec.ts --list` | 보류·완료·활성 주문 상세을 분리하고 같은 회차 장바구니 단언을 강화해 chromium·mobile 24개 목록 수집 통과. | done |
+| 10.2 | `apps/api/test/helpers/in-memory-firestore.ts` | 실제 도메인 서비스용 트랜잭션 테스트 어댑터를 제공한다. | `pnpm --filter api test:e2e -- mvp-sales-round-consistency.e2e-spec.ts --runInBand` | 문서·쿼리·중첩 갱신·증분·배치·직렬 트랜잭션과 실패 롤백을 제공하는 224줄 인메모리 어댑터로 실제 서비스 E2E 4개 통과. | done |
+| 10.3 | `apps/api/test/mvp-sales-round-consistency.e2e-spec.ts` | 실제 서비스로 결제·취소·권한·회차 정합성을 검증한다. | `pnpm --filter api test:e2e -- mvp-sales-round-consistency.e2e-spec.ts --runInBand` | 실제 결제 확정·예약 용량·주문 취소·회차 상태·주문 조회 서비스로 결제 멱등, 취소 정리, 역할 권한, 용량 재개 4개 통과. | done |
+| 10.4 | `apps/api/test/app.e2e-spec.ts` | Nest 애플리케이션을 테스트 종료 시 정상적으로 닫는다. | `pnpm --filter api test:e2e -- app.e2e-spec.ts --runInBand` | `afterEach`에서 초기화된 Nest 앱을 정상 종료하고 전체 provider 런타임 DI 조립 결함을 보정해 앱 E2E 통과. | done |
+| 10.5 | `docs/specs/mvp-sales-round-direct-delivery.md` | 보정된 권한·상태·멱등·알림·보관 계약을 명세에 반영한다. | `git diff --check -- docs/specs/mvp-sales-round-direct-delivery.md` | 소유권·상태·취소 saga·웹훅·알림 실제 채널·운영 claim·목적별 보관과 450건 파기 계약 반영, diff 검사 통과. | done |
+| 10.6 | `docs/plans/PLAN_mvp_sales_round_direct_delivery.md` | Task 4.2 진입 조건과 명시적 후속 위험을 Closeout에 기록한다. | `git diff --check -- docs/plans/PLAN_mvp_sales_round_direct_delivery.md` | 전수 보정과 전체 검증으로 Task 4.2 복귀 조건 충족을 기록하고 Task 5.12·6.1~6.7 후속 위험을 명시함. | done |
+| 10.7 | `docs/plans/PLAN_mvp_sales_round_pre_4_2_full_review_remediation.md` | 전체 검증 결과와 잔여 위험을 Closeout에 기록한다. | `git diff --check -- docs/plans/PLAN_mvp_sales_round_pre_4_2_full_review_remediation.md` | Unit 1~10 전체 완료, API 단위 169개·E2E 7개·typecheck·build·Biome 오류 수준·diff 검사 통과로 Closeout 종결. | done |
+| 10.8 | `docs/memory.md` | 완료 결과와 원 계획 Task 4.2 진입점을 50줄 이내로 기록한다. | `git diff --check -- docs/memory.md` | 전수 보정 완료와 Task 4.2 단일 진입점, 후속 위험을 50줄 이하 최신 상태로 기록함. | done |
 
 - **Unit Verify**:
   - `pnpm --filter api test -- --runInBand`
@@ -368,7 +368,8 @@
 
 ## Closeout Roll-up
 
-- **Status**: 실행 대기
-- **현재 진입점**: Unit 1 결제·예약 최종 정합성
-- **원 계획 상태**: Task 4.2 보류
-- **잔여 위험**: 각 Unit 실행 전 최신 HEAD와 워킹트리 변경을 다시 확인해야 한다.
+- **Status**: 완료
+- **완료 범위**: Unit 1~10 전체. 결제·예약·환불, 조회·웹훅 권한, 주문·회차 상태와 취소, 주문 생성 멱등, 재배송비, 알림, 운영 예외, 보관·Storage 입력 계약을 보정하고 실제 서비스 통합 E2E로 연결했다.
+- **전체 검증**: API 단위 22개 스위트 169개, API E2E 3개 스위트 7개, 전체 typecheck와 build, Playwright chromium·mobile 24개 목록 수집, 변경 코드 Biome 오류 수준 검사, `git diff --check`가 통과했다.
+- **원 계획 상태**: Task 4.2 복귀 조건 충족. 다음 작업은 `apps/consumer/src/hooks/useSaleRounds.ts`만 구현하는 원 계획 Task 4.2다.
+- **잔여 위험**: 소비자 화면 계약 24개는 후속 구현 전 `test.fixme`다. 배송 사진 실제 업로드 API·드라이버 연결은 Task 5.12, Firestore 인덱스·보안 규칙과 Storage 규칙은 Task 6.1~6.3, 서버·사용자 전체 실행 검증은 Task 6.4·6.7에 남는다. `salesMode` 전환, 배포, push는 수행하지 않았다.

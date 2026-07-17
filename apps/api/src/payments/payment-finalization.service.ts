@@ -1,11 +1,11 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
-import type { AuditService } from '../common/audit/audit.service';
-import type { FirestoreService } from '../firestore/firestore.service';
+import { AuditService } from '../common/audit/audit.service';
+import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
-import type { OrderCapacityService } from '../orders/order-capacity.service';
+import { OrderCapacityService } from '../orders/order-capacity.service';
 import { RetentionService } from '../retention/retention.service';
-import type { PortoneClient } from './portone.client';
+import { PortoneClient } from './portone.client';
 
 type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
 const LATE_PAYMENT_REFUND_REASON = '결제 만료 후 회차 한도 마감';

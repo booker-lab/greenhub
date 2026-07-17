@@ -63,12 +63,7 @@ describe('회차 직배송 리뷰 보정 API 통합 계약', () => {
       return { orderId: 'order-1', status: 'CANCELLED' };
     }),
     updateStatus: jest.fn(
-      async (
-        _storeId: string,
-        _orderId: string,
-        _userId: string,
-        dto: { status: string },
-      ) => {
+      async (_storeId: string, _orderId: string, _userId: string, dto: { status: string }) => {
         if (dto.status === 'DELIVERY_HELD' && state.orderStatus !== 'DELIVERY_HELD') {
           state.heldOrderCount += 1;
         } else if (state.orderStatus === 'DELIVERY_HELD') {
@@ -108,7 +103,7 @@ describe('회차 직배송 리뷰 보정 API 통합 계약', () => {
       .useClass(TestAuthGuard)
       .compile();
 
-    app = module.createNestApplication();
+    app = module.createNestApplication({ rawBody: true });
     app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
     await app.init();
   });
@@ -157,6 +152,9 @@ describe('회차 직배송 리뷰 보정 API 통합 계약', () => {
 
     await request(app.getHttpServer())
       .post('/payments/webhook/portone')
+      .set('webhook-id', 'webhook-test-1')
+      .set('webhook-timestamp', String(Math.floor(Date.now() / 1000)))
+      .set('webhook-signature', 'v1,test-signature')
       .send({
         type: 'Transaction.Paid',
         data: { paymentId: 'order-1', storeId: 'store-1' },

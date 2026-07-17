@@ -50,14 +50,16 @@ test.describe('Consumer 회차 직배송 공개 화면 계약', () => {
 test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
   test.use({ storageState: AUTH_STATE_PATH });
 
-  test.fixme('장바구니는 같은 회차 상품을 한 주문으로 묶고 회차 가격을 표시한다', async ({
+  test.fixme('장바구니는 같은 회차 식별자의 상품만 한 주문으로 묶고 회차 가격을 표시한다', async ({
     page,
   }) => {
     await page.goto(`${BASE}/cart`);
 
     await expect(page.getByText(/이번 주 판매/)).toBeVisible();
+    await expect(page.getByText(/같은 회차 상품/)).toBeVisible();
     await expect(page.getByText(/회차 가격/)).toBeVisible();
     await expect(page.getByText(/한 번에 결제/)).toBeVisible();
+    await expect(page.getByText(/다른 회차 상품/)).toHaveCount(0);
   });
 
   test.fixme('장바구니는 변경·마감 상품을 남겨 알리고 결제 대상에서 제외한다', async ({ page }) => {
@@ -97,16 +99,31 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
     await expect(page.getByRole('button', { name: /결제하기/ })).toBeDisabled();
   });
 
-  test.fixme('주문 상세은 다중 상품·배송 보류·재배송비·완료 사진·마감 전 취소를 표시한다', async ({
-    page,
-  }) => {
-    await page.goto(`${BASE}/mypage/orders/${ROUND_ORDER_ID}`);
+  test.fixme('배송 보류 주문 상세은 다중 상품과 재배송비 결제를 표시한다', async ({ page }) => {
+    await page.goto(`${BASE}/mypage/orders/${ROUND_ORDER_ID}-held`);
 
     await expect(page.getByRole('heading', { name: /주문 상세/ })).toBeVisible();
     await expect(page.getByText(/외 .*개/)).toBeVisible();
     await expect(page.getByText(/배송 보류/)).toBeVisible();
     await expect(page.getByRole('button', { name: /재배송비 결제/ })).toBeVisible();
+    await expect(page.getByRole('img', { name: /배송 완료 사진/ })).toHaveCount(0);
+  });
+
+  test.fixme('배송 완료 주문 상세은 완료 상태와 배송 사진을 표시한다', async ({ page }) => {
+    await page.goto(`${BASE}/mypage/orders/${ROUND_ORDER_ID}-delivered`);
+
+    await expect(page.getByText(/배송 완료/)).toBeVisible();
     await expect(page.getByRole('img', { name: /배송 완료 사진/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /재배송비 결제/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /주문 취소/ })).toHaveCount(0);
+  });
+
+  test.fixme('주문 마감 전 활성 주문 상세만 주문 취소를 제공한다', async ({ page }) => {
+    await page.goto(`${BASE}/mypage/orders/${ROUND_ORDER_ID}-accepted`);
+
+    await expect(page.getByText(/주문 접수/)).toBeVisible();
     await expect(page.getByRole('button', { name: /주문 취소/ })).toBeVisible();
+    await expect(page.getByText(/배송 보류/)).toHaveCount(0);
+    await expect(page.getByRole('img', { name: /배송 완료 사진/ })).toHaveCount(0);
   });
 });
