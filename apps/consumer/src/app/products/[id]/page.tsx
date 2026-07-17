@@ -12,6 +12,7 @@ import { db } from '@/lib/firebase';
 import ProductActions from './_components/ProductActions';
 import ProductImages from './_components/ProductImages';
 import ProductInfo from './_components/ProductInfo';
+import RoundPurchasePanel from './_components/RoundPurchasePanel';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const MAX_ROUND_ID_LENGTH = 128;
@@ -241,6 +242,14 @@ function ProductDetailContent({ product, variety, roundProduct }: ProductDetailC
       >
         <ProductImages images={product.images ?? []} name={product.name} />
         <ProductInfo product={product} variety={variety} />
+        {roundProduct && (
+          <RoundPurchasePanel
+            round={roundProduct.round}
+            item={roundProduct.item}
+            state={roundProduct.state}
+            isPurchasable={roundProduct.isPurchasable}
+          />
+        )}
         <ProductActions product={product} />
       </Box>
     </Container>
