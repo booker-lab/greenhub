@@ -111,6 +111,7 @@ function makeFinalization(overrides: Data = {}) {
     releaseReservationInTransaction: jest.fn(async () => ({ status: 'EXPIRED' })),
   };
   const issueWriter = { createOrMergeIssue: jest.fn().mockResolvedValue({ id: 'issue-1' }) };
+  const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
   const service = new PaymentFinalizationService(
     firestore as never,
     portone as never,
@@ -118,8 +119,18 @@ function makeFinalization(overrides: Data = {}) {
     audit as never,
     capacity as never,
     issueWriter as never,
+    retention as never,
   );
-  return { service, firestore, records, portone, notifications, capacity, issueWriter };
+  return {
+    service,
+    firestore,
+    records,
+    portone,
+    notifications,
+    capacity,
+    issueWriter,
+    retention,
+  };
 }
 
 describe('결제 최종화 경쟁 조건', () => {
@@ -164,6 +175,34 @@ describe('결제 최종화 경쟁 조건', () => {
     expect(fixture.records.get('orders/order-1')?.status).toBe('ACCEPTED');
     expect(fixture.records.get('payments/order-1')?.status).toBe('PAID');
     expect(fixture.notifications.sendToUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('결제 확정 트랜잭션에 원문 제공자 응답 없는 법정 결제 기록을 남긴다', async () => {
+    const fixture = makeFinalization();
+
+    await fixture.service.finalizePaidOrder('order-1', paymentData);
+
+    expect(fixture.retention.saveRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'order-1:payment',
+        purpose: 'LEGAL_ORDER',
+        metadata: {
+          amount: 100000,
+          orderId: 'order-1',
+          orderStatus: 'ACCEPTED',
+          payMethod: 'CARD',
+          paymentId: 'order-1',
+          paymentStatus: 'PAID',
+          recordTypes: ['PAYMENT'],
+          storeId: 'store-1',
+          userId: 'user-1',
+        },
+        transaction: expect.anything(),
+      }),
+    );
+    expect(JSON.stringify(fixture.retention.saveRecord.mock.calls)).not.toMatch(
+      /transactionId|authorization|token|secret/i,
+    );
   });
 
   it('scheduler timeout과 결제 확정 경쟁은 최신 주문 상태 하나로 수렴한다', async () => {
@@ -228,6 +267,7 @@ describe('환불 멱등 claim', () => {
       firestore as never,
       portone as never,
       issueWriter as never,
+      { saveRecord: jest.fn().mockResolvedValue({}) } as never,
     );
 
     await Promise.all([
@@ -261,6 +301,7 @@ describe('환불 멱등 claim', () => {
       firestore as never,
       portone as never,
       issueWriter as never,
+      { saveRecord: jest.fn().mockResolvedValue({}) } as never,
     );
 
     await expect(service.refundByOrderId('order-1', '자동 취소')).rejects.toThrow();
@@ -273,6 +314,50 @@ describe('환불 멱등 claim', () => {
     );
     expect(JSON.stringify(issueWriter.createOrMergeIssue.mock.calls[0][0])).not.toMatch(
       /token|secret|provider-payment-1/i,
+    );
+  });
+
+  it('환불 완료 트랜잭션에 분쟁·고객응대 법정 기록을 남긴다', async () => {
+    const { firestore } = makeFirestore({
+      'payments/payment-1': {
+        id: 'payment-1',
+        orderId: 'order-1',
+        storeId: 'store-1',
+        userId: 'user-1',
+        status: 'PAID',
+        amount: 100000,
+        portonePaymentId: 'provider-payment-1',
+      },
+    });
+    const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
+    const service = new PaymentRefundService(
+      firestore as never,
+      { refund: jest.fn().mockResolvedValue(undefined) } as never,
+      { createOrMergeIssue: jest.fn() } as never,
+      retention as never,
+    );
+
+    await service.refundByOrderId('order-1', '고객 요청 원문은 보관하지 않음');
+
+    expect(retention.saveRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'payment-1:refund',
+        purpose: 'LEGAL_DISPUTE',
+        metadata: {
+          amount: 100000,
+          orderId: 'order-1',
+          orderStatus: 'CANCELLED',
+          paymentId: 'payment-1',
+          paymentStatus: 'CANCELLED',
+          recordTypes: ['REFUND', 'DISPUTE', 'SUPPORT'],
+          storeId: 'store-1',
+          userId: 'user-1',
+        },
+        transaction: expect.anything(),
+      }),
+    );
+    expect(JSON.stringify(retention.saveRecord.mock.calls)).not.toMatch(
+      /고객 요청 원문|provider-payment-1/i,
     );
   });
 });

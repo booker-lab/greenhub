@@ -46,6 +46,7 @@ function makeService(initial: Record<string, Data> = {}) {
   const records = new Map<string, Data>(Object.entries(initial));
   const writes: Array<{ path: string; data: Data }> = [];
   const deletes: string[] = [];
+  const commits: string[][] = [];
   const queries: Array<{ collection: string; field: string; op: string; value: unknown }> = [];
 
   const doc = (path: string) => ({
@@ -89,29 +90,52 @@ function makeService(initial: Record<string, Data> = {}) {
     };
     return query;
   };
-  const batch = {
-    delete: jest.fn((ref: { path: string }) => {
-      deletes.push(ref.path);
-      return batch;
-    }),
-    commit: jest.fn(async () => {
-      for (const path of deletes) records.delete(path);
-    }),
+  const batches: Data[] = [];
+  const createBatch = () => {
+    const pendingDeletes: string[] = [];
+    const batch = {
+      delete: jest.fn((ref: { path: string }) => {
+        pendingDeletes.push(ref.path);
+        deletes.push(ref.path);
+        return batch;
+      }),
+      commit: jest.fn(async () => {
+        commits.push([...pendingDeletes]);
+        for (const path of pendingDeletes) records.delete(path);
+      }),
+    };
+    batches.push(batch);
+    return batch;
   };
   const firestore = {
     doc,
     collection,
-    batch: jest.fn(() => batch),
+    batch: jest.fn(createBatch),
     Timestamp: {
+      now: jest.fn(() => timestamp('2026-07-17T01:00:00.000Z')),
       fromDate: jest.fn((date: Date) => timestamp(date.toISOString())),
     },
   };
   const storage = {
     deleteObject: jest.fn().mockResolvedValue(undefined),
   };
-  const service = new RetentionService(firestore, storage);
+  const issueWriter = {
+    createOrMergeIssue: jest.fn().mockResolvedValue({ id: 'issue-safe' }),
+  };
+  const service = new RetentionService(firestore, storage, issueWriter);
 
-  return { batch, deletes, firestore, queries, records, service, storage, writes };
+  return {
+    batches,
+    commits,
+    deletes,
+    firestore,
+    issueWriter,
+    queries,
+    records,
+    service,
+    storage,
+    writes,
+  };
 }
 
 describe('보관 기간과 파기 계약', () => {
@@ -158,6 +182,43 @@ describe('보관 기간과 파기 계약', () => {
     expect((writes[0].data['expiresAt'] as { toDate: () => Date }).toDate().toISOString()).toBe(
       '2026-07-17T01:00:00.000Z',
     );
+  });
+
+  it('목적별 허용 metadata만 저장하고 개인정보·비밀값 필드는 거부한다', async () => {
+    const { service, writes } = makeService();
+
+    await expect(
+      service.saveRecord({
+        id: 'consent-unsafe',
+        purpose: 'MARKETING_CONSENT',
+        basisAt: now,
+        metadata: {
+          orderId: 'order-safe',
+          policyVersion: 'marketing-v1',
+          channels: ['sms'],
+          phone: '010-0000-0000',
+          authorization: 'Bearer secret',
+        },
+      }),
+    ).rejects.toThrow('허용되지 않은 보관 metadata');
+    expect(writes).toHaveLength(0);
+  });
+
+  it('허용 metadata도 목적이 다르면 저장하지 않는다', async () => {
+    const { service, writes } = makeService();
+
+    await expect(
+      service.saveRecord({
+        id: 'legal-order-wrong-field',
+        purpose: 'LEGAL_ORDER',
+        basisAt: now,
+        metadata: {
+          orderId: 'order-safe',
+          channels: ['sms'],
+        },
+      }),
+    ).rejects.toThrow('허용되지 않은 보관 metadata');
+    expect(writes).toHaveLength(0);
   });
 
   it('계약·결제·공급 기록은 발생 기준 5년 뒤 파기 예정으로 별도 저장한다', async () => {
@@ -246,7 +307,7 @@ describe('보관 기간과 파기 계약', () => {
   });
 
   it('만료 기록과 연결 사진을 모의 삭제하고 같은 작업 재실행은 부작용을 반복하지 않는다', async () => {
-    const { batch, deletes, service, storage } = makeService({
+    const { batches, deletes, service, storage } = makeService({
       'deliveryPhotoRecords/photo-expired': {
         expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
         disputeStatus: 'RESOLVED',
@@ -281,7 +342,75 @@ describe('보관 기간과 파기 계약', () => {
     expect(storage.deleteObject).toHaveBeenCalledWith(
       'deliveryPhotos/order-safe/photo-expired.jpg',
     );
-    expect(batch.commit).toHaveBeenCalledTimes(1);
+    expect(batches).toHaveLength(1);
+    expect(batches[0].commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('만료 기록이 500건을 초과하면 Firestore 제한 이하의 여러 배치로 파기한다', async () => {
+    const initial = Object.fromEntries(
+      Array.from({ length: 1001 }, (_, index) => [
+        `legalOrderRecords/order-${index}`,
+        {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+          legalHold: false,
+        },
+      ]),
+    );
+    const { commits, records, service } = makeService(initial);
+
+    await expect(service.purgeExpiredRecords({ now })).resolves.toMatchObject({
+      deletedCount: 1001,
+    });
+
+    expect(commits.length).toBeGreaterThan(2);
+    expect(commits.every((paths) => paths.length <= 450)).toBe(true);
+    expect(records.size).toBe(0);
+  });
+
+  it('정기 파기는 현재 시각 기준 만료 항목만 처리하고 재실행할 수 있다', async () => {
+    const { records, service } = makeService({
+      'legalOrderRecords/order-expired': {
+        expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+      },
+      'legalOrderRecords/order-future': {
+        expiresAt: timestamp('2026-07-18T01:00:00.000Z'),
+      },
+    });
+
+    await service.runScheduledPurge();
+    await service.runScheduledPurge();
+
+    expect(records.has('legalOrderRecords/order-expired')).toBe(false);
+    expect(records.has('legalOrderRecords/order-future')).toBe(true);
+  });
+
+  it('Storage 삭제 최종 실패는 안전한 운영 예외로 남기고 보관 문서는 유지한다', async () => {
+    const { issueWriter, records, service, storage } = makeService({
+      'deliveryPhotoRecords/photo-failed': {
+        expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+        storagePath: 'deliveryPhotos/order-safe/photo-safe.jpg',
+        orderId: 'order-safe',
+      },
+    });
+    storage.deleteObject.mockRejectedValue(new Error('authorization=Bearer secret'));
+
+    await expect(service.purgeExpiredRecords({ now })).resolves.toMatchObject({
+      deletedCount: 0,
+      failedCount: 1,
+    });
+
+    expect(storage.deleteObject).toHaveBeenCalledTimes(3);
+    expect(records.has('deliveryPhotoRecords/photo-failed')).toBe(true);
+    expect(issueWriter.createOrMergeIssue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'RETENTION_DELETE_FAILED',
+        idempotencyKey:
+          'retention-delete-failed:deliveryPhotoRecords:deliveryPhotos/order-safe/photo-safe.jpg',
+      }),
+    );
+    expect(JSON.stringify(issueWriter.createOrMergeIssue.mock.calls[0][0])).not.toMatch(
+      /authorization|bearer|secret/i,
+    );
   });
 
   it('저장 fixture와 파기 결과에 개인정보 본문이나 비밀값을 포함하지 않는다', async () => {

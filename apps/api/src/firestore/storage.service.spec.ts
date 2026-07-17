@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { StorageService } from './storage.service';
 
 type OrderData = Record<string, unknown>;
@@ -38,7 +38,7 @@ describe('배송 사진 Storage 계약', () => {
       userId: 'consumer-safe',
       driverId: 'driver-safe',
     });
-    const content = Buffer.from('fixture-image');
+    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0xff, 0xd9]);
 
     const result = await service.uploadDeliveryPhoto({
       storeId: 'store-safe',
@@ -66,6 +66,67 @@ describe('배송 사진 Storage 계약', () => {
     });
   });
 
+  it('배송 사진 크기 제한을 초과하면 주문 조회와 객체 저장 전에 거부한다', async () => {
+    const { firestore, save, service } = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+    });
+
+    await expect(
+      service.uploadDeliveryPhoto({
+        storeId: 'store-safe',
+        orderId: 'order-safe',
+        photoId: 'photo-safe',
+        requesterId: 'driver-safe',
+        requesterRole: 'driver',
+        content: Buffer.alloc(5 * 1024 * 1024 + 1),
+        contentType: 'image/jpeg',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(firestore.doc).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('JPEG 시그니처가 없으면 image/jpeg 선언이어도 저장하지 않는다', async () => {
+    const { save, service } = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+    });
+
+    await expect(
+      service.uploadDeliveryPhoto({
+        storeId: 'store-safe',
+        orderId: 'order-safe',
+        photoId: 'photo-safe',
+        requesterId: 'driver-safe',
+        requesterRole: 'driver',
+        content: Buffer.from('실제 형식은 JPEG가 아님'),
+        contentType: 'image/jpeg',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('JPEG 시작 시그니처만 위장하고 종료 시그니처가 없으면 저장하지 않는다', async () => {
+    const { save, service } = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+    });
+
+    await expect(
+      service.uploadDeliveryPhoto({
+        storeId: 'store-safe',
+        orderId: 'order-safe',
+        photoId: 'photo-safe',
+        requesterId: 'driver-safe',
+        requesterRole: 'driver',
+        content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x00, 0x00]),
+        contentType: 'image/jpeg',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('주문 권한이 없는 요청은 업로드와 서명 URL 발급 전에 거부한다', async () => {
     const { file, service } = makeService({
       storeId: 'store-safe',
@@ -80,7 +141,7 @@ describe('배송 사진 Storage 계약', () => {
         photoId: 'photo-safe',
         requesterId: 'other-driver',
         requesterRole: 'driver',
-        content: Buffer.from('fixture-image'),
+        content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]),
         contentType: 'image/jpeg',
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);

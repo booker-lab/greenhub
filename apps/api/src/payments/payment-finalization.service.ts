@@ -4,6 +4,7 @@ import type { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import type { OrderCapacityService } from '../orders/order-capacity.service';
+import { RetentionService } from '../retention/retention.service';
 import type { PortoneClient } from './portone.client';
 
 type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
@@ -19,6 +20,7 @@ export class PaymentFinalizationService {
     private readonly audit: AuditService,
     private readonly capacity: OrderCapacityService,
     private readonly issueWriter: OperationIssueWriterService,
+    private readonly retention: RetentionService,
   ) {}
 
   async recordPaymentLookupFailure(orderId: string, error: unknown) {
@@ -122,6 +124,23 @@ export class PaymentFinalizationService {
         createdAt: now,
         updatedAt: now,
       });
+      await this.retention.saveRecord({
+        id: `${orderId}:payment`,
+        purpose: 'LEGAL_ORDER',
+        basisAt: this.toDate(now),
+        metadata: {
+          orderId,
+          paymentId: orderId,
+          storeId: freshOrder['storeId'],
+          userId: freshOrder['userId'],
+          recordTypes: ['PAYMENT'],
+          amount: paymentData.amount.total,
+          payMethod: paymentData.method?.type ?? null,
+          orderStatus: newStatus,
+          paymentStatus: 'PAID',
+        },
+        transaction: tx,
+      });
       applied = true;
     });
     if (!applied) return { ok: true, reason: 'already_processed' };
@@ -215,5 +234,9 @@ export class PaymentFinalizationService {
           ? candidate.type.replace(/[^A-Z0-9_]/g, '').slice(0, 80)
           : null,
     };
+  }
+
+  private toDate(value: { toDate?: () => Date } | Date): Date {
+    return value instanceof Date ? value : value.toDate!();
   }
 }

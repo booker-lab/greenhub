@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import type { FirestoreService } from '../firestore/firestore.service';
+import { RetentionService } from '../retention/retention.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
 
@@ -14,6 +15,7 @@ export class RoundOrderCreateService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly capacity: OrderCapacityService,
+    private readonly retention: RetentionService,
   ) {}
 
   async create(storeId: string, userId: string, dto: CreateOrderDto) {
@@ -69,9 +71,7 @@ export class RoundOrderCreateService {
       const buyerEmail = user?.['email'] ?? '';
       const rawBuyerName = user?.['name'] ?? '';
       const buyerName =
-        rawBuyerName && rawBuyerName !== '???'
-          ? rawBuyerName
-          : buyerEmail.split('@')[0] || userId;
+        rawBuyerName && rawBuyerName !== '???' ? rawBuyerName : buyerEmail.split('@')[0] || userId;
       const totalAmount = roundItems.reduce((sum, item) => sum + item.subtotalAmount, 0);
       const order = {
         id: orderId,
@@ -108,6 +108,37 @@ export class RoundOrderCreateService {
       };
       tx.set(orderCounter.ref, { seq: orderCounter.seq, updatedAt: now }, { merge: true });
       tx.set(orderRef, order);
+      await this.retention.saveRecord({
+        id: `${orderId}:contract`,
+        purpose: 'LEGAL_ORDER',
+        basisAt: this.toDate(now),
+        metadata: {
+          orderId,
+          storeId,
+          userId,
+          recordTypes: ['CONTRACT', 'SUPPLY'],
+          amount: totalAmount,
+          orderStatus: 'PENDING',
+        },
+        transaction: tx,
+      });
+      if (dto.marketingConsent) {
+        const consent = dto.marketingConsent;
+        await this.retention.saveRecord({
+          id: `${orderId}:marketing-consent`,
+          purpose: 'MARKETING_CONSENT',
+          basisAt: consent.agreedAt ? new Date(consent.agreedAt) : this.toDate(now),
+          metadata: {
+            orderId,
+            userId,
+            agreed: consent.agreed,
+            channels: consent.channels,
+            policyVersion: consent.copyVersion,
+            recordType: 'CONSENT',
+          },
+          transaction: tx,
+        });
+      }
       result = this.response(order);
     });
 
@@ -176,5 +207,9 @@ export class RoundOrderCreateService {
         }),
       )
       .digest('hex');
+  }
+
+  private toDate(value: { toDate?: () => Date } | Date): Date {
+    return value instanceof Date ? value : value.toDate!();
   }
 }

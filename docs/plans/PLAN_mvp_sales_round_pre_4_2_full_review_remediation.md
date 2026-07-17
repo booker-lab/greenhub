@@ -312,14 +312,14 @@
 
 | Task | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 9.1 | `apps/api/src/retention/retention.service.spec.ts` | 허용 metadata·500건 초과·정기 파기의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- retention.service.spec.ts --runInBand` | [판정 대기 — 보관 실패 계약. 검증 결과] | todo |
-| 9.2 | `apps/api/src/retention/retention.service.ts` | 목적별 허용 필드·분할 배치·정기 파기를 구현한다. | `pnpm --filter api test -- retention.service.spec.ts --runInBand` | [판정 대기 — 보관 서비스 보정. 검증 결과] | todo |
-| 9.3 | `apps/api/src/retention/retention.module.ts` | 운영 예외 writer 의존성을 보관 모듈에 연결한다. | `pnpm --filter api build` | [판정 대기 — 보관 모듈 연결. 검증 결과] | todo |
-| 9.4 | `apps/api/src/orders/round-order-create.service.ts` | 주문 생성 트랜잭션에 계약 기록과 마케팅 동의 기록을 추가한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 주문 보관 기록 연결. 검증 결과] | todo |
-| 9.5 | `apps/api/src/payments/payment-finalization.service.ts` | 결제 확정 트랜잭션에 법정 결제 기록을 추가한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | [판정 대기 — 결제 보관 기록 연결. 검증 결과] | todo |
-| 9.6 | `apps/api/src/payments/payment-refund.service.ts` | 환불 완료에 분쟁·고객응대 기록을 추가한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | [판정 대기 — 환불 보관 기록 연결. 검증 결과] | todo |
-| 9.7 | `apps/api/src/firestore/storage.service.spec.ts` | 파일 크기·JPEG 시그니처·content type 위장의 실패 테스트를 고정한다. | `pnpm --filter api test -- storage.service.spec.ts --runInBand` | [판정 대기 — Storage 입력 실패 계약. 검증 결과] | todo |
-| 9.8 | `apps/api/src/firestore/storage.service.ts` | 배송 사진 업로드 크기와 실제 JPEG 형식을 검증한다. | `pnpm --filter api test -- storage.service.spec.ts --runInBand` | [판정 대기 — Storage 업로드 보정. 검증 결과] | todo |
+| 9.1 | `apps/api/src/retention/retention.service.spec.ts` | 허용 metadata·500건 초과·정기 파기의 실패 테스트를 먼저 고정한다. | `pnpm --filter api test -- retention.service.spec.ts --runInBand` | 허용 필드 거부, 1001건 분할, 정기 재실행, 삭제 최종 실패 계약을 먼저 실패로 확인했고 보관 13개가 통과했다. | done |
+| 9.2 | `apps/api/src/retention/retention.service.ts` | 목적별 허용 필드·분할 배치·정기 파기를 구현한다. | `pnpm --filter api test -- retention.service.spec.ts --runInBand` | 목적별 allowlist, 450건 배치, 매일 정기 파기, Storage 3회 삭제와 안전한 실패 이관을 구현해 13개가 통과했다. | done |
+| 9.3 | `apps/api/src/retention/retention.module.ts` | 운영 예외 writer 의존성을 보관 모듈에 연결한다. | `pnpm --filter api build` | 독립 `OperationIssuesModule`을 보관 모듈에 연결했고 API 및 전체 빌드가 통과했다. | done |
+| 9.4 | `apps/api/src/orders/round-order-create.service.ts` | 주문 생성 트랜잭션에 계약 기록과 마케팅 동의 기록을 추가한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 주문과 같은 트랜잭션에 계약·공급 및 선택적 마케팅 동의 기록을 연결했고 회차 주문 흐름 28개가 통과했다. | done |
+| 9.5 | `apps/api/src/payments/payment-finalization.service.ts` | 결제 확정 트랜잭션에 법정 결제 기록을 추가한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | 결제 확정과 같은 트랜잭션에 원문 제공자 응답 없는 결제 기록을 연결했고 결제 15개가 통과했다. | done |
+| 9.6 | `apps/api/src/payments/payment-refund.service.ts` | 환불 완료에 분쟁·고객응대 기록을 추가한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | 환불 완료와 같은 트랜잭션에 사유 원문 없는 환불·분쟁·고객응대 기록을 연결했고 결제 15개가 통과했다. | done |
+| 9.7 | `apps/api/src/firestore/storage.service.spec.ts` | 파일 크기·JPEG 시그니처·content type 위장의 실패 테스트를 고정한다. | `pnpm --filter api test -- storage.service.spec.ts --runInBand` | 5MB 초과, JPEG 선언 위장, 불완전 종료 시그니처를 먼저 실패로 확인했고 Storage 8개가 통과했다. | done |
+| 9.8 | `apps/api/src/firestore/storage.service.ts` | 배송 사진 업로드 크기와 실제 JPEG 형식을 검증한다. | `pnpm --filter api test -- storage.service.spec.ts --runInBand` | 권한 조회 전 5MB 제한과 JPEG 시작·종료 시그니처 검증을 적용해 Storage 8개가 통과했다. | done |
 
 - **Unit Verify**: `pnpm --filter api test -- retention.service.spec.ts storage.service.spec.ts mvp-order-flow.spec.ts payments.service.spec.ts --runInBand`
 - **Exit**: 주문·결제·환불 기록은 실제 흐름에서 생성되고 파기는 500건을 넘어도 완료된다.

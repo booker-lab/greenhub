@@ -230,7 +230,8 @@ describe('MVP 회차 주문 흐름 계약', () => {
   it('같은 결제 시도 ID와 같은 payload는 주문과 예약 한 건을 반환한다', async () => {
     const { firestore, records } = makeFirestore(seedRoundRecords());
     const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
-    const service = new RoundOrderCreateService(firestore as never, capacity);
+    const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
+    const service = new RoundOrderCreateService(firestore as never, capacity, retention as never);
 
     const first = await service.create('store-round', 'user-1', roundOrderRequest() as never);
     const second = await service.create('store-round', 'user-1', roundOrderRequest() as never);
@@ -245,7 +246,9 @@ describe('MVP 회차 주문 흐름 계약', () => {
   it('같은 결제 시도 ID에 다른 payload가 들어오면 충돌로 거부한다', async () => {
     const { firestore } = makeFirestore(seedRoundRecords());
     const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
-    const service = new RoundOrderCreateService(firestore as never, capacity);
+    const service = new RoundOrderCreateService(firestore as never, capacity, {
+      saveRecord: jest.fn(),
+    } as never);
 
     await service.create('store-round', 'user-1', roundOrderRequest() as never);
     let error: unknown;
@@ -266,7 +269,9 @@ describe('MVP 회차 주문 흐름 계약', () => {
   it('주문 저장 직전 실패해도 예약과 카운터 부분 데이터가 남지 않는다', async () => {
     const { firestore, records } = makeFirestore(seedRoundRecords());
     const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
-    const service = new RoundOrderCreateService(firestore as never, capacity);
+    const service = new RoundOrderCreateService(firestore as never, capacity, {
+      saveRecord: jest.fn(),
+    } as never);
     const originalDoc = firestore.doc;
     firestore.doc = jest.fn((path: string) => {
       const ref = originalDoc(path);
@@ -325,7 +330,9 @@ describe('MVP 회차 주문 흐름 계약', () => {
   function makeCreateService(firestore: Record<string, unknown>) {
     const { OrderCapacityService } = require('./order-capacity.service');
     const orderCapacity = new OrderCapacityService(firestore);
-    const roundCreate = new RoundOrderCreateService(firestore as never, orderCapacity);
+    const roundCreate = new RoundOrderCreateService(firestore as never, orderCapacity, {
+      saveRecord: jest.fn(),
+    } as never);
     return new OrdersCreateService(
       firestore as never,
       notifications as never,
@@ -430,6 +437,56 @@ describe('MVP 회차 주문 흐름 계약', () => {
     expect(orderWrite?.['orderItems']).toHaveLength(2);
     expect((orderWrite?.['orderItems'] as RecordData[])[0]).toHaveProperty('subtotalAmount', 50000);
     expect((orderWrite?.['orderItems'] as RecordData[])[0]).not.toHaveProperty('lineAmount');
+  });
+
+  it('주문 생성 트랜잭션에 계약 기록과 마케팅 동의 기록을 함께 남긴다', async () => {
+    const { firestore } = makeFirestore(seedRoundRecords());
+    const { OrderCapacityService } = require('./order-capacity.service');
+    const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
+    const service = new RoundOrderCreateService(
+      firestore as never,
+      new OrderCapacityService(firestore),
+      retention as never,
+    );
+
+    await service.create(
+      'store-round',
+      'user-1',
+      roundOrderRequest({
+        marketingConsent: {
+          agreed: true,
+          channels: ['sms'],
+          copyVersion: 'marketing-v1',
+          agreedAt: '2026-07-15T03:00:00.000+09:00',
+        },
+      }) as never,
+    );
+
+    expect(retention.saveRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        purpose: 'LEGAL_ORDER',
+        metadata: expect.objectContaining({
+          orderId: expect.any(String),
+          recordTypes: ['CONTRACT', 'SUPPLY'],
+        }),
+        transaction: expect.anything(),
+      }),
+    );
+    expect(retention.saveRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        purpose: 'MARKETING_CONSENT',
+        metadata: {
+          agreed: true,
+          channels: ['sms'],
+          orderId: expect.any(String),
+          policyVersion: 'marketing-v1',
+          recordType: 'CONSENT',
+          userId: 'user-1',
+        },
+        transaction: expect.anything(),
+      }),
+    );
+    expect(JSON.stringify(retention.saveRecord.mock.calls)).not.toMatch(/phone|address/i);
   });
 
   it('결제 예약은 배송지 1건과 주문 상품 수량 합계를 15분간 확보한다', async () => {

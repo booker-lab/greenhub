@@ -9,6 +9,7 @@ import type * as admin from 'firebase-admin';
 import { FirestoreService } from './firestore.service';
 
 const DELIVERY_PHOTO_URL_TTL_MS = 15 * 60 * 1000;
+const DELIVERY_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 type RequesterRole = 'admin' | 'seller' | 'driver' | 'consumer';
@@ -38,6 +39,7 @@ export class StorageService {
       contentType: 'image/jpeg';
     },
   ): Promise<{ orderId: string; photoId: string; path: string }> {
+    this.assertJpegContent(input.content);
     const order = await this.getOrder(input);
     await this.assertAccess(input, order, 'upload');
     const path = this.deliveryPhotoPath(input.orderId, input.photoId);
@@ -122,6 +124,22 @@ export class StorageService {
   private assertSafeId(value: string, field: string): void {
     if (!SAFE_ID_PATTERN.test(value)) {
       throw new BadRequestException(`${field} 형식이 올바르지 않습니다.`);
+    }
+  }
+
+  private assertJpegContent(content: Buffer): void {
+    if (content.length === 0 || content.length > DELIVERY_PHOTO_MAX_BYTES) {
+      throw new BadRequestException('배송 사진 크기는 5MB 이하여야 합니다.');
+    }
+    const hasJpegSignature =
+      content.length >= 4 &&
+      content[0] === 0xff &&
+      content[1] === 0xd8 &&
+      content[2] === 0xff &&
+      content[content.length - 2] === 0xff &&
+      content[content.length - 1] === 0xd9;
+    if (!hasJpegSignature) {
+      throw new BadRequestException('실제 JPEG 형식의 배송 사진만 업로드할 수 있습니다.');
     }
   }
 }

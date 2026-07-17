@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
+import { RetentionService } from '../retention/retention.service';
 import type { PortoneClient } from './portone.client';
 
 const REFUND_CLAIM_MS = 5 * 60 * 1000;
@@ -12,6 +13,7 @@ export class PaymentRefundService {
     private readonly firestore: FirestoreService,
     private readonly portone: PortoneClient,
     private readonly issueWriter: OperationIssueWriterService,
+    private readonly retention: RetentionService,
   ) {}
 
   async refundByOrderId(orderId: string, reason: string): Promise<void> {
@@ -58,6 +60,22 @@ export class PaymentRefundService {
           refundClaim: null,
           updatedAt: now,
         });
+        await this.retention.saveRecord({
+          id: `${String(payment['id'] ?? orderId)}:refund`,
+          purpose: 'LEGAL_DISPUTE',
+          basisAt: this.toDate(now),
+          metadata: {
+            orderId,
+            paymentId: String(payment['id'] ?? orderId),
+            storeId: String(payment['storeId'] ?? ''),
+            userId: String(payment['userId'] ?? ''),
+            recordTypes: ['REFUND', 'DISPUTE', 'SUPPORT'],
+            amount: payment['amount'],
+            orderStatus: 'CANCELLED',
+            paymentStatus: 'CANCELLED',
+          },
+          transaction: tx,
+        });
       });
     } catch (error) {
       await this.firestore.runTransaction(async (tx) => {
@@ -85,5 +103,9 @@ export class PaymentRefundService {
       });
       throw error;
     }
+  }
+
+  private toDate(value: { toDate?: () => Date } | Date): Date {
+    return value instanceof Date ? value : value.toDate!();
   }
 }
