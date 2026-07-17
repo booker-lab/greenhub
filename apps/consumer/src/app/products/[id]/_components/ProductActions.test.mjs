@@ -50,9 +50,12 @@ test('round_direct는 isPurchasable이 거짓이면 두 구매 동작을 모두 
   assert.match(ctaSource, /disabled=\{!canBuy\}/);
 });
 
-test('round_direct는 회차 상태를 장바구니와 결제 화면의 신규 모델로 선행 저장하지 않는다', () => {
-  assert.doesNotMatch(roundSource, /roundId\s*:/);
-  assert.doesNotMatch(roundSource, /roundItemId\s*:/);
+test('round_direct는 검증된 회차 장바구니 계약만 저장하고 후속 결제 계약은 선행하지 않는다', () => {
+  assert.match(roundSource, /roundId:\s*roundProduct\.item\.roundId/);
+  assert.match(roundSource, /roundItemId:\s*roundProduct\.item\.id/);
+  assert.match(roundSource, /roundPrice:\s*roundProduct\.item\.roundPrice/);
+  assert.match(roundSource, /if \(!result\.ok\)/);
+  assert.match(roundSource, /result\.reason === 'different_round'/);
   assert.doesNotMatch(roundSource, /schemaVersion\s*:/);
   assert.doesNotMatch(roundSource, /acquisition\s*:/);
 });

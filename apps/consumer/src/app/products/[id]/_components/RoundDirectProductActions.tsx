@@ -22,12 +22,13 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
   const { addItem } = useCart();
   const { store } = useStore(product.storeId ?? null);
   const [quantity, setQuantity] = useState(1);
+  const [cartError, setCartError] = useState<string | null>(null);
   const totalAmount = roundProduct.item.roundPrice * quantity;
 
   function handleAddToCart() {
     if (!roundProduct.isPurchasable) return;
 
-    addItem({
+    const result = addItem({
       productId: product.id,
       name: product.name,
       price: roundProduct.item.roundPrice,
@@ -36,7 +37,21 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
       deliveryMethod: 'direct',
       storeId: product.storeId,
       quantity,
+      roundId: roundProduct.item.roundId,
+      roundItemId: roundProduct.item.id,
+      roundPrice: roundProduct.item.roundPrice,
     });
+    if (!result.ok) {
+      setCartError(
+        result.reason === 'different_round'
+          ? '장바구니에는 같은 회차 상품만 담을 수 있습니다. 기존 장바구니를 비운 뒤 다시 시도해 주세요.'
+          : result.reason === 'incompatible_cart'
+            ? '기존 판매 상품과 회차 상품은 함께 담을 수 없습니다. 기존 장바구니를 비운 뒤 다시 시도해 주세요.'
+            : '회차 상품 정보를 확인할 수 없어 장바구니에 담지 못했습니다.',
+      );
+      return;
+    }
+    setCartError(null);
     router.push('/cart');
   }
 
@@ -135,6 +150,12 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
             </Text>
           </Stack>
         </Box>
+      )}
+
+      {cartError && (
+        <Text role="alert" mt="md" c="red" size="sm">
+          {cartError}
+        </Text>
       )}
 
       <ProductCTABar
