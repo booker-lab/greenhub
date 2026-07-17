@@ -158,8 +158,6 @@ function resolveRoundCheckoutSchedule(
   );
   return matchesRoundItems ? { round, requestedDeliveryDate } : null;
 }
-
-// ── 단일 상품 결제 (상품 상세 → 바로 결제) ──────────────────────────────
 function SingleCheckoutContent() {
   const { data: session } = useSession();
   const params = useSearchParams();
@@ -243,8 +241,6 @@ function SingleCheckoutContent() {
     />
   );
 }
-
-// ── 기존 장바구니 다중 결제 ───────────────────────────────────────────────
 function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
   const { data: session } = useSession();
   const router = useRouter();
@@ -364,8 +360,6 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
     />
   );
 }
-
-// ── 회차 장바구니 단일 결제 ───────────────────────────────────────────────
 function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] }) {
   const { data: session } = useSession();
   const router = useRouter();
@@ -376,6 +370,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   });
   const [deliveryPhone, setDeliveryPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
+  const [marketingAgreedAt, setMarketingAgreedAt] = useState<string | null>(null);
   const storeId = cartItems[0]?.storeId ?? '';
   const saleRounds = useSaleRounds(storeId || null);
   const schedule = resolveRoundCheckoutSchedule(cartItems, saleRounds.rounds);
@@ -386,6 +381,16 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       deliveryAddress: address,
       deliveryPhone: deliveryPhone.trim(),
       ...(schedule ? { requestedDeliveryDate: schedule.requestedDeliveryDate } : {}),
+      ...(marketingAgreedAt
+        ? {
+            marketingConsent: {
+              agreed: true,
+              channels: ['alimtalk', 'sms'],
+              copyVersion: 'round-direct-checkout-v1',
+              agreedAt: marketingAgreedAt,
+            },
+          }
+        : {}),
     },
     roundItems: cartItems,
     accessToken: session?.user?.accessToken ?? '',
@@ -404,7 +409,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     saleRounds.status === 'error'
       ? saleRounds.error
       : (saleRounds.status === 'success' || saleRounds.status === 'empty') && !schedule
-        ? '검증된 회차 배송 일정을 확인할 수 없습니다.'
+        ? '상품·가격·회차 정보가 변경되어 결제할 수 없습니다. 장바구니에서 변경 내용을 다시 확인해 주세요.'
         : null;
   const canPay =
     !isLoading &&
@@ -428,6 +433,10 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       canPay={canPay}
       error={scheduleError ?? error}
       onPay={requestPayment}
+      marketingConsent={marketingAgreedAt !== null}
+      onMarketingConsentChange={(agreed) =>
+        setMarketingAgreedAt(agreed ? new Date().toISOString() : null)
+      }
     />
   );
 }
@@ -463,8 +472,6 @@ function CartCheckoutContent() {
     <LegacyCartCheckoutContent cartItems={cart.items} />
   );
 }
-
-// ── 진입점 ───────────────────────────────────────────────────────────────
 function CheckoutContent() {
   const params = useSearchParams();
   const fromCart = params.get('from') === 'cart';
