@@ -5,32 +5,31 @@
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-18 (원 계획 Task 4.18 Closeout)
+최종 수정: 2026-07-18 (원 계획 Task 4.19 Closeout)
 
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
-- Task 4.18 시작 SHA: `a485e26f6961f6a79a4aa3b544951665b30b75e4`
+- Task 4.19 시작 SHA: `bf1cbb31bdcd7ca9039e874b8db05fec1066b2e4`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
-- 완료: Task 4.18 `apps/consumer/src/app/mypage/orders/[id]/_client.tsx`
-- 다음: Task 4.19 `apps/consumer/src/app/mypage/notifications/settings/page.tsx`
-- Task 4.19 이후 화면, 당근 유입 연결, 셀러·드라이버·인덱스 작업은 선행하지 않는다.
+- 완료: Task 4.19 `apps/consumer/src/app/mypage/notifications/settings/page.tsx`
+- 다음: Task 5.1 `apps/e2e/tests/seller-sale-rounds.spec.ts`
+- Task 5.1 이후 셀러·드라이버 화면, 당근 유입 연결, 인덱스 작업은 선행하지 않는다.
 
-## Task 4.18 확정
+## Task 4.19 확정
 
-- 회차 주문 상세은 인증된 `/orders/:orderId` 응답의 식별자·상태·회차 주문번호·다중 `orderItems`·금액 정합성을 모두 검증한다.
-- 손상된 회차 상품, 보류 스냅샷, 사진 URL은 임의 상품·상태·동작으로 승격하지 않는다.
-- 상품명·수량·소계·합계는 서버가 정규화한 `orderItems`만 사용한다.
-- `DELIVERY_HELD`에서만 서버 `deliveryHold`의 사유·고객 책임·재배송비·다음 연락·다음 배송을 표시한다.
-- 고객 책임의 양수 재배송비만 기존 서버 API 응답의 청구·주문·스토어·금액·PortOne 식별자를 검증한 뒤 카카오페이로 요청한다.
-- 배송 완료 사진은 인증 주문 응답의 HTTPS `deliveryPhotoUrl`만 표시하고 Firebase Storage 직접 접근·업로드를 추가하지 않았다.
-- 회차 취소는 서버가 마감 여부를 최종 재검증하는 기존 취소 API만 사용한다.
-- 단일 legacy·공동구매·거점픽업·구매 확정 상세 계약은 유지한다.
-- 순수 판독기를 `_detail.ts`로 분리해 운영 파일 447줄·296줄로 500줄 제한을 지켰다.
+- 현재 동의 상태는 소비자 세션·임의 기본값·브라우저 저장값이 아니라 인증된 `GET /auth/me` 응답만 사용한다.
+- `notificationPreferences.alimtalk`와 `sms`가 모두 boolean일 때만 카카오톡·문자 상태를 표시한다.
+- 동의된 채널의 철회는 기존 `PATCH /notifications/me/preferences`에 해당 채널의 `false`만 전송한다.
+- PATCH 응답의 두 채널 boolean과 요청 채널 `false`를 검증한 뒤에만 화면 상태를 갱신한다.
+- 실패·손상 응답에서는 기존 상태를 유지하고 다른 채널 값을 클라이언트가 임의로 전송하지 않는다.
+- 주문·결제·배송 정보성 연락을 선택 마케팅과 분리해 안내한다.
+- 동의·철회 증거와 보관 기록은 서버 정책에 맡기고 클라이언트에서 모방·직접 접근하지 않는다.
+- 운영 파일 313줄, 테스트 144줄로 500줄 제한을 지켰다.
 
 ## 검증 상태
 
-- Task 4.18 전용 5개와 Task 4.8~4.17 회귀 59개, 총 Node 테스트 64개 통과
+- Task 4.19 전용 5개와 Task 4.8~4.18 회귀 64개, 총 Node 테스트 69개 통과
 - consumer `tsc --noEmit`, 전체 `pnpm typecheck`, `pnpm build` 통과
 - Playwright chromium·mobile 24개 목록 수집 통과
 - 변경 파일 Biome 오류 수준 검사와 `git diff --check` 통과
