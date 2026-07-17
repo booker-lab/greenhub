@@ -4,7 +4,7 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 3.14 완료, Task 4.1 착수 대기
+- **상태**: Task 4.2 완료, Task 4.3 착수 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
@@ -211,7 +211,7 @@ flowchart TD
 | Task | Dependency | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | 4.1 | 3.14 | `apps/e2e/tests/consumer-round-direct.spec.ts` | 홈·상세·장바구니·결제·주문상세 계약을 먼저 수집한다. | `pnpm --filter e2e exec playwright test consumer-round-direct --list` | 통과 — 현재·지난 회차 홈, 회차 가격·마감·직배송 상세, 같은 회차 장바구니와 변경·마감 제외, 다중 상품 단일 결제와 필수·선택 동의·변경 재확인, 다중 상품·배송 보류·재배송비·완료 사진·마감 전 취소 주문 상세를 논리 계약 10개로 수집했다. 공개 4개와 기존 `AUTH_STATE_PATH`를 재사용한 인증 6개를 `test.fixme`로 고정해 Task 4.2~4.18 구현 전 외부 서비스나 실제 데이터 호출 없이 보존했다. chromium·mobile 20개 테스트와 기존 소비자 5개 파일 68개 테스트 목록 수집, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. | done |
-| 4.2 | 4.1 | `apps/consumer/src/hooks/useSaleRounds.ts` | 현재·지난 회차 공개 API 상태를 한 훅에서 제공한다. | `pnpm --filter consumer exec tsc --noEmit` | [판정 대기 — 회차 조회 훅] | todo |
+| 4.2 | 4.1 | `apps/consumer/src/hooks/useSaleRounds.ts` | 현재·지난 회차 공개 API 상태를 한 훅에서 제공한다. | `pnpm --filter consumer exec tsc --noEmit` | 통과 — 공개 회차 목록과 상세 API를 결합해 `loading`, `error`, `empty`, `success` 상태와 현재·지난 회차, 전체 회차, 재조회 기능을 제공했다. 늦은 응답의 상태 덮어쓰기를 차단했고 신규 Node 테스트 4개와 consumer 타입검사가 통과했다. | done |
 | 4.3 | 4.2 | `apps/consumer/src/lib/acquisition.ts` | 당근 유입 값을 보관해 주문 요청에 스냅샷으로 전달한다. | `pnpm --filter consumer exec tsc --noEmit` | [판정 대기 — 유입 추적] | todo |
 | 4.4 | 4.3 | `apps/consumer/src/components/HomeProductList.tsx` | 현재 회차·마감·직배송 조건·지난 회차 순서로 홈을 재구성한다. | `pnpm --filter consumer exec tsc --noEmit` | [판정 대기 — 홈 단순화] | todo |
 | 4.5 | 4.4 | `apps/consumer/src/app/category/page.tsx` | 현재·지난 회차의 호접란만 상품 목록으로 제공한다. | `pnpm --filter consumer exec tsc --noEmit` | [판정 대기 — 상품 목록] | todo |
@@ -280,8 +280,9 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 4.1 완료, 4.2 진입 전 전수 리뷰 보정 Unit 1~10 완료, Task 4.2 `todo`
+- **Status**: Task 4.2 완료, Task 4.3 `todo`
 - **Task 4.2 복귀 조건**: 충족. 결제·예약·환불, 주문·웹훅 권한, 주문·회차 취소, 주문 생성 멱등, 재배송비, 알림, 운영 예외, 보관·Storage 입력 계약을 Unit 1~9에서 보정했고 Unit 10에서 실제 도메인 서비스 통합 E2E와 전체 회귀 검증으로 확정했다.
-- **검증 결과**: API 단위 22개 스위트 169개, API E2E 3개 스위트 7개, 전체 typecheck와 build가 통과했다. 소비자 Task 4.1 계약은 상호 배타 주문 상태를 분리해 chromium·mobile 24개 목록으로 수집했고 변경 코드 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
-- **다음 진입점**: Task 4.2 `apps/consumer/src/hooks/useSaleRounds.ts`만 시작할 수 있다. 현재·지난 회차 공개 API 상태를 한 훅에서 제공하고 Task 4.3 이후 화면·유입·장바구니·결제 구현을 선행하지 않는다.
-- **명시적 후속 위험**: 소비자 Task 4.1 계약은 Task 4.2~4.18 구현 전이라 계속 `test.fixme`다. 배송 사진 record의 실제 서버 업로드 API·드라이버 호출 연결은 Task 5.12, Firestore 인덱스와 보안 규칙·Storage 규칙은 Task 6.1~6.3, 서버 전체 흐름과 사용자 화면 실행 검증은 Task 6.4·6.7에 남아 있다. `salesMode` 전환과 운영 배포도 Task 6.5 이후 별도 승인 전에는 수행하지 않는다.
+- **Task 4.2 결과**: 공개 목록과 회차별 상세를 병렬 조회해 회차 상품을 포함한 전체 회차, 현재 회차 하나, 최신순 지난 회차를 제공한다. 기존 소비자 데이터 접근 방식의 문자열 오류와 `loading` 불리언을 유지하면서 명시적 `error`, `empty`, `success` 상태와 재조회를 추가했고 요청 식별자로 스토어 전환·재조회 경쟁의 늦은 응답을 폐기한다.
+- **검증 결과**: Task 4.2 Node 테스트 4개, consumer 타입검사, 전체 typecheck와 build, Playwright chromium·mobile 24개 목록 수집, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다.
+- **다음 진입점**: Task 4.3 `apps/consumer/src/lib/acquisition.ts`만 시작할 수 있다. 당근 유입 값 보관과 주문 요청 스냅샷 전달 계약만 구현하고 Task 4.4 이후 홈·상세·장바구니·결제 화면을 선행하지 않는다.
+- **명시적 후속 위험**: 소비자 화면 계약 24개는 Task 4.4~4.18 화면 구현 전이라 계속 `test.fixme`다. 배송 사진 record의 실제 서버 업로드 API·드라이버 호출 연결은 Task 5.12, Firestore 인덱스와 보안 규칙·Storage 규칙은 Task 6.1~6.3, 서버 전체 흐름과 사용자 화면 실행 검증은 Task 6.4·6.7에 남아 있다. `salesMode` 전환과 운영 배포도 Task 6.5 이후 별도 승인 전에는 수행하지 않는다.
