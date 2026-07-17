@@ -250,7 +250,11 @@ function ProductDetailContent({ product, variety, roundProduct }: ProductDetailC
             isPurchasable={roundProduct.isPurchasable}
           />
         )}
-        <ProductActions product={product} />
+        {roundProduct ? (
+          <ProductActions product={product} roundProduct={roundProduct} />
+        ) : (
+          <ProductActions product={product} />
+        )}
       </Box>
     </Container>
   );

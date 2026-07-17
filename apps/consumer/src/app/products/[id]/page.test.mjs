@@ -43,7 +43,9 @@ test('판매 모드와 회차 확인 전에는 상세 본문을 노출하지 않
   const storeGuardPosition = source.indexOf("storeMode.status !== 'ready'");
   const roundGuardPosition = source.indexOf("saleRounds.status === 'loading'");
   const legacyContentPosition = source.indexOf('roundProduct={null}');
-  const roundDetailContentPosition = source.indexOf('roundProduct={roundProduct}');
+  const roundDetailContentPosition = source.indexOf(
+    '<ProductDetailContent product={product} variety={variety} roundProduct={roundProduct} />',
+  );
 
   assert.ok(loadingGuardPosition >= 0);
   assert.ok(storeGuardPosition >= 0);
