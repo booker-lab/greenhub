@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { OperationsModule } from '../operations/operations.module';
+import { OperationIssuesModule } from '../operations/operation-issues.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { SettlementsModule } from '../settlements/settlements.module';
 import { OrderCapacityModule } from './order-capacity.module';
@@ -19,7 +19,7 @@ import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
     PaymentsModule,
     SettlementsModule,
     OrderCapacityModule,
-    OperationsModule,
+    OperationIssuesModule,
   ],
   controllers: [OrdersPublicController, OrdersController],
   providers: [

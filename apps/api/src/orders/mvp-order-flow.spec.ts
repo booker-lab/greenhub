@@ -978,7 +978,13 @@ describe('MVP 회차 주문 흐름 계약', () => {
     });
 
     expect(writes.filter((write) => write.path.startsWith('orderCharges/'))).toHaveLength(1);
-    expect(writes.filter((write) => write.path.startsWith('operationIssues/'))).toHaveLength(1);
+    expect(
+      new Set(
+        writes
+          .filter((write) => write.path.startsWith('operationIssues/'))
+          .map((write) => write.path),
+      ).size,
+    ).toBe(1);
     expect(issue).toMatchObject({ type: 'REDELIVERY_FAILED', status: 'OPEN' });
     expect(retried).toMatchObject({ id: issue.id });
     expect(records.get('orders/order-1')).toMatchObject({

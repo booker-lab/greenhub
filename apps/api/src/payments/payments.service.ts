@@ -129,6 +129,7 @@ export class PaymentsService {
             await this.finalization.cancelPendingOrder(doc.id, 'timeout');
             return;
           }
+          await this.finalization.recordPaymentLookupFailure(doc.id, error);
           this.logCleanupError(doc.id, error);
         }
       }),

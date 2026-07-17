@@ -2,7 +2,7 @@ import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
-import { OperationsService } from '../operations/operations.service';
+import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { PaymentsService } from '../payments/payments.service';
 import { AligoClient } from './aligo.client';
 import type { ApiNotificationTemplateCode } from './notification-templates';
@@ -18,8 +18,8 @@ export class NotificationsService {
     private readonly aligo: AligoClient,
     @Inject(forwardRef(() => PaymentsService))
     private readonly payments: PaymentsService,
-    @Inject(forwardRef(() => OperationsService))
-    private readonly operations: OperationsService,
+    @Inject(OperationIssueWriterService)
+    private readonly issueWriter: OperationIssueWriterService,
   ) {}
 
   async getUserNotifications(userId: string) {
@@ -353,7 +353,7 @@ export class NotificationsService {
   ) {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     const order = orderSnap.exists ? orderSnap.data()! : {};
-    await this.operations.createOrMergeIssue({
+    await this.issueWriter.createOrMergeIssue({
       storeId: (order['storeId'] as string | undefined) ?? '',
       orderId,
       paymentId: null,

@@ -1,15 +1,21 @@
-import { createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   ForbiddenException,
   forwardRef,
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import type { OperationActionType } from './dto/operation-action.dto';
+import {
+  type CreateOperationIssueInput,
+  type OperationIssueTransaction,
+  OperationIssueWriterService,
+} from './operation-issue-writer.service';
 
 type OperationIssue = Record<string, unknown> & {
   id: string;
@@ -27,16 +33,6 @@ type OperationAction = {
   failureReason?: string;
 };
 
-type CreateIssueInput = Record<string, unknown> & {
-  idempotencyKey: string;
-  latestSnapshot?: Record<string, unknown>;
-};
-
-type FirestoreTransaction = {
-  get: (ref: ReturnType<FirestoreService['doc']>) => Promise<{ exists: boolean; data(): unknown }>;
-  set: (ref: ReturnType<FirestoreService['doc']>, data: Record<string, unknown>) => void;
-};
-
 type ExecuteActionInput = {
   issueId: string;
   actorId: string;
@@ -52,44 +48,16 @@ export class OperationsService {
     private readonly payments: PaymentsService,
     @Inject(forwardRef(() => NotificationsService))
     private readonly notifications: NotificationsService,
+    @Optional()
+    private readonly issueWriter?: OperationIssueWriterService,
   ) {}
 
   async createOrMergeIssue(
-    input: CreateIssueInput,
-    transaction?: FirestoreTransaction,
+    input: CreateOperationIssueInput,
+    transaction?: OperationIssueTransaction,
   ): Promise<OperationIssue> {
-    const issueId = this.issueId(input.idempotencyKey);
-    const issueRef = this.firestore.doc(`operationIssues/${issueId}`);
-    let result: OperationIssue | null = null;
-
-    const createOrRead = async (tx: FirestoreTransaction) => {
-      const existing = await tx.get(issueRef);
-      if (existing.exists) {
-        result = existing.data() as OperationIssue;
-        return;
-      }
-
-      const now = this.firestore.Timestamp.now();
-      const issue = {
-        ...input,
-        id: issueId,
-        status: 'OPEN',
-        actions: [],
-        resolvedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      } as OperationIssue;
-      tx.set(issueRef, issue);
-      result = issue;
-    };
-
-    if (transaction) {
-      await createOrRead(transaction);
-    } else {
-      await this.firestore.runTransaction(createOrRead);
-    }
-
-    return result!;
+    const writer = this.issueWriter ?? new OperationIssueWriterService(this.firestore);
+    return (await writer.createOrMergeIssue(input, transaction)) as OperationIssue;
   }
 
   async listIssuesForStore(
@@ -157,26 +125,47 @@ export class OperationsService {
     }
 
     const issue = issueSnap.data() as OperationIssue;
+    this.assertActionAllowed(issue, input.actionType);
     const order = await this.readRelatedDocument('orders', issue.orderId);
+
+    if (issue.status !== 'OPEN') return issue;
 
     if (input.actionType === 'RETRY_REFUND') {
       const payment = await this.readRelatedDocument('payments', issue.paymentId);
-      if (issue.status !== 'OPEN') return issue;
       if (this.isRefunded(payment)) {
         return this.recordSuccess(issueRef, issue, input, true);
       }
-      return this.runAction(issueRef, issue, input, async () => {
-        await this.payments.processRefundByOrderId(String(issue.orderId), '운영 예외 환불 재시도');
-      });
+      const claim = await this.claimAction(input);
+      if (!claim) return issue;
+      return this.runAction(
+        issueRef,
+        issue,
+        input,
+        async () => {
+          await this.payments.processRefundByOrderId(
+            String(issue.orderId),
+            '운영 예외 환불 재시도',
+          );
+        },
+        claim,
+      );
     }
 
-    if (issue.status !== 'OPEN' || this.noLongerNeedsNotice(order)) return issue;
-    return this.runAction(issueRef, issue, input, async () => {
-      const notifications = this.notifications as unknown as {
-        resendSms: (issue: OperationIssue) => Promise<unknown>;
-      };
-      await notifications.resendSms(issue);
-    });
+    if (this.noLongerNeedsNotice(order)) return issue;
+    const claim = await this.claimAction(input);
+    if (!claim) return issue;
+    return this.runAction(
+      issueRef,
+      issue,
+      input,
+      async () => {
+        const notifications = this.notifications as unknown as {
+          resendSms: (issue: OperationIssue) => Promise<unknown>;
+        };
+        await notifications.resendSms(issue);
+      },
+      claim,
+    );
   }
 
   private async runAction(
@@ -184,10 +173,11 @@ export class OperationsService {
     issue: OperationIssue,
     input: ExecuteActionInput,
     action: () => Promise<void>,
+    claimToken: string,
   ) {
     try {
       await action();
-      return await this.recordSuccess(issueRef, issue, input, true);
+      return await this.recordSuccess(issueRef, issue, input, true, claimToken);
     } catch (error) {
       const failedAction: OperationAction = {
         actorId: input.actorId,
@@ -199,6 +189,7 @@ export class OperationsService {
       const saved = {
         ...issue,
         actions: [...(issue.actions ?? []), failedAction],
+        actionClaim: null,
         updatedAt: failedAction.performedAt,
       };
       await issueRef.update(saved);
@@ -211,6 +202,7 @@ export class OperationsService {
     issue: OperationIssue,
     input: ExecuteActionInput,
     resolve: boolean,
+    claimToken?: string,
   ) {
     const performedAt = this.firestore.Timestamp.now();
     const action: OperationAction = {
@@ -224,6 +216,7 @@ export class OperationsService {
       actions: [...(issue.actions ?? []), action],
       status: resolve ? 'RESOLVED' : issue.status,
       resolvedAt: resolve ? performedAt : null,
+      ...(claimToken ? { actionClaim: null } : {}),
       updatedAt: performedAt,
     };
     await issueRef.update(saved);
@@ -314,7 +307,32 @@ export class OperationsService {
     return message.replace(/[\r\n\t]/g, ' ').slice(0, 300);
   }
 
-  private issueId(idempotencyKey: string) {
-    return createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 32);
+  private assertActionAllowed(issue: OperationIssue, actionType: OperationActionType) {
+    const allowed: Record<string, OperationActionType | undefined> = {
+      AUTO_REFUND_FAILED: 'RETRY_REFUND',
+      CUSTOMER_NOTICE_FAILED: 'RESEND_SMS',
+    };
+    if (allowed[String(issue['type'])] !== actionType) {
+      throw new ForbiddenException('허용되지 않은 운영 조치입니다.');
+    }
+  }
+
+  private async claimAction(input: ExecuteActionInput): Promise<string | null> {
+    const issueRef = this.firestore.doc(`operationIssues/${input.issueId}`);
+    const token = randomUUID();
+    let claimed = false;
+    await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(issueRef);
+      if (!snap.exists) return;
+      const fresh = snap.data() as OperationIssue;
+      const current = fresh['actionClaim'] as { expiresAt?: number } | null | undefined;
+      if (fresh.status !== 'OPEN' || (current?.expiresAt ?? 0) > Date.now()) return;
+      tx.update(issueRef, {
+        actionClaim: { token, actionType: input.actionType, expiresAt: Date.now() + 300_000 },
+        updatedAt: this.firestore.Timestamp.now(),
+      });
+      claimed = true;
+    });
+    return claimed ? token : null;
   }
 }

@@ -20,6 +20,12 @@ function makeFirestore(initial: Record<string, Data>) {
   });
   const firestore = {
     doc,
+    runTransaction: jest.fn(async (callback: (tx: Data) => Promise<unknown>) =>
+      callback({
+        get: (ref: Data) => ref.get(),
+        update: (ref: Data, data: Data) => ref.update(data),
+      }),
+    ),
     collection: jest.fn((name: string) => {
       const filters: Array<[string, unknown]> = [];
       return {
@@ -72,7 +78,7 @@ const safeIssue = {
   storeId: 'store-1',
   orderId: 'order-1',
   paymentId: 'payment-1',
-  type: 'REFUND_FAILED',
+  type: 'AUTO_REFUND_FAILED',
   severity: 'warning',
   status: 'OPEN',
   latestSnapshot: {
@@ -135,7 +141,10 @@ describe('운영 예외 컨트롤러 계약', () => {
   ] as const)('%s 조치는 인증 사용자 식별자를 actorId로 전달한다', async (actionType) => {
     const { controller, executeAction } = makeController({
       'stores/store-1': { ownerId: 'seller-1' },
-      'operationIssues/issue-1': safeIssue,
+      'operationIssues/issue-1': {
+        ...safeIssue,
+        type: actionType === 'RETRY_REFUND' ? 'AUTO_REFUND_FAILED' : 'CUSTOMER_NOTICE_FAILED',
+      },
       'orders/order-1': { status: 'CANCELLED' },
       'payments/payment-1': { status: actionType === 'RETRY_REFUND' ? 'PAID' : 'CANCELLED' },
     });
@@ -173,7 +182,6 @@ describe('운영 예외 컨트롤러 계약', () => {
     });
 
     await controller.execute('store-1', 'issue-1', seller, { actionType: 'RETRY_REFUND' });
-    await controller.execute('store-1', 'issue-1', seller, { actionType: 'RESEND_SMS' });
 
     expect(payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(notifications.resendSms).not.toHaveBeenCalled();

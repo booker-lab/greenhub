@@ -8,15 +8,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
-import { OperationsService } from '../operations/operations.service';
+import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 
 @Injectable()
 export class OrderChargesService {
   constructor(
     @Inject(FirestoreService)
     private readonly firestore: FirestoreService,
-    @Inject(OperationsService)
-    private readonly operations: OperationsService,
+    @Inject(OperationIssueWriterService)
+    private readonly issueWriter: OperationIssueWriterService,
   ) {}
 
   async createRedeliveryFeeCharge(input: {
@@ -122,7 +122,7 @@ export class OrderChargesService {
     heldAt: string,
   ) {
     const now = this.firestore.Timestamp.now();
-    const issue = await this.operations.createOrMergeIssue(
+    const issue = await this.issueWriter.createOrMergeIssue(
       {
         storeId: input.storeId,
         orderId: input.orderId,
@@ -135,8 +135,8 @@ export class OrderChargesService {
         idempotencyKey: `redelivery-failed:${input.orderId}`,
         latestSnapshot: {
           orderStatus: order['status'],
-          deliveryHold: order['deliveryHold'],
           redeliveryChargeId: order['redeliveryChargeId'],
+          failureStage: 'paid_redelivery_failed',
         },
       },
       tx,

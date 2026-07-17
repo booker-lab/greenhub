@@ -1,12 +1,12 @@
 import { forwardRef, Module } from '@nestjs/common';
-import { OperationsModule } from '../operations/operations.module';
+import { OperationIssuesModule } from '../operations/operation-issues.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { AligoClient } from './aligo.client';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 
 @Module({
-  imports: [forwardRef(() => PaymentsModule), forwardRef(() => OperationsModule)],
+  imports: [forwardRef(() => PaymentsModule), OperationIssuesModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, AligoClient],
   exports: [NotificationsService],

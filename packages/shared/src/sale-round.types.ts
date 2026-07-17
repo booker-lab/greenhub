@@ -168,9 +168,9 @@ export interface OrderCharge {
 export interface OperationIssueAction {
   actorId: string
   actionType: OperationIssueActionType
-  result: 'SUCCESS' | 'FAILED'
-  message: string | null
-  createdAt: string // ISO8601
+  performedAt: string // ISO8601
+  status: 'SUCCEEDED' | 'FAILED'
+  failureReason?: string
 }
 
 export interface OperationIssue {

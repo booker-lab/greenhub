@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { FirestoreService } from '../firestore/firestore.service';
+import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import type { PortoneClient } from './portone.client';
 
 const REFUND_CLAIM_MS = 5 * 60 * 1000;
@@ -10,6 +11,7 @@ export class PaymentRefundService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly portone: PortoneClient,
+    private readonly issueWriter: OperationIssueWriterService,
   ) {}
 
   async refundByOrderId(orderId: string, reason: string): Promise<void> {
@@ -65,6 +67,21 @@ export class PaymentRefundService {
           refundClaim: null,
           updatedAt: this.firestore.Timestamp.now(),
         });
+      });
+      await this.issueWriter.createOrMergeIssue({
+        storeId: String(payment['storeId'] ?? ''),
+        orderId,
+        paymentId: String(payment['id'] ?? payment['portonePaymentId'] ?? ''),
+        type: 'AUTO_REFUND_FAILED',
+        severity: 'critical',
+        title: '자동 환불 최종 실패',
+        message: '자동 환불에 실패하여 운영 확인이 필요합니다.',
+        idempotencyKey: `auto-refund-failed:${orderId}:${String(payment['id'] ?? '')}`,
+        latestSnapshot: {
+          orderStatus: 'CANCELLED',
+          paymentStatus: payment['status'] ?? null,
+          failureStage: 'provider_refund',
+        },
       });
       throw error;
     }

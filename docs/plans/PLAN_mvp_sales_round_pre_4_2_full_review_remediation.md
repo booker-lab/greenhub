@@ -290,16 +290,16 @@
 
 | Task | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 8.1 | `packages/shared/src/sale-round.types.ts` | 운영 예외 유형과 action 응답 구조를 런타임 정본에 맞춘다. | `pnpm --filter @greenhub/shared typecheck` | [판정 대기 — 운영 예외 공통 계약. 검증 결과] | todo |
-| 8.2 | `apps/api/src/operations/operations.service.spec.ts` | 재개방·최신 병합·action 매트릭스·동시 조치의 실패 테스트를 고정한다. | `pnpm --filter api test -- operations.service.spec.ts --runInBand` | [판정 대기 — 운영 예외 실패 계약. 검증 결과] | todo |
-| 8.3 | `apps/api/src/operations/operation-issue-writer.service.ts` | 예외 생성·병합·재개방을 외부 의존성 없는 서비스로 구현한다. | `pnpm --filter api build` | [판정 대기 — 운영 예외 writer. 검증 결과] | todo |
-| 8.4 | `apps/api/src/operations/operation-issues.module.ts` | 예외 writer를 독립 모듈로 제공한다. | `pnpm --filter api build` | [판정 대기 — 운영 예외 writer 모듈. 검증 결과] | todo |
-| 8.5 | `apps/api/src/operations/operations.service.ts` | 유형별 action 허용과 조치 claim을 적용한다. | `pnpm --filter api test -- operations.service.spec.ts --runInBand` | [판정 대기 — 운영 조치 서비스 보정. 검증 결과] | todo |
-| 8.6 | `apps/api/src/operations/operations.module.ts` | 조치 서비스가 독립 writer 모듈을 사용하게 연결한다. | `pnpm --filter api build` | [판정 대기 — 운영 모듈 의존성 보정. 검증 결과] | todo |
-| 8.7 | `apps/api/src/notifications/notifications.service.ts` | 알림 실패 생성을 writer 서비스로 전환한다. | `pnpm --filter api test -- notifications-delivery.spec.ts --runInBand` | [판정 대기 — 알림 예외 writer 전환. 검증 결과] | todo |
-| 8.8 | `apps/api/src/orders/order-charges.service.ts` | 재배송 실패 생성을 writer 서비스로 전환한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | [판정 대기 — 재배송 예외 writer 전환. 검증 결과] | todo |
-| 8.9 | `apps/api/src/payments/payment-finalization.service.ts` | 결제 조회 최종 실패를 운영 예외로 기록한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | [판정 대기 — 결제 조회 예외 연결. 검증 결과] | todo |
-| 8.10 | `apps/api/src/payments/payment-refund.service.ts` | 자동 환불 최종 실패를 운영 예외로 기록한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | [판정 대기 — 자동 환불 예외 연결. 검증 결과] | todo |
+| 8.1 | `packages/shared/src/sale-round.types.ts` | 운영 예외 유형과 action 응답 구조를 런타임 정본에 맞춘다. | `pnpm --filter @greenhub/shared typecheck` | 런타임의 `performedAt`·`SUCCEEDED/FAILED`·선택적 실패 사유와 공통 타입을 일치시켰고 typecheck가 통과했다. | done |
+| 8.2 | `apps/api/src/operations/operations.service.spec.ts` | 재개방·최신 병합·action 매트릭스·동시 조치의 실패 테스트를 고정한다. | `pnpm --filter api test -- operations.service.spec.ts --runInBand` | 재개방·최신 병합·동시 생성 수렴·유형별 거부·동시 claim 계약 13개가 통과했다. | done |
+| 8.3 | `apps/api/src/operations/operation-issue-writer.service.ts` | 예외 생성·병합·재개방을 외부 의존성 없는 서비스로 구현한다. | `pnpm --filter api build` | SHA-256 결정 식별자와 트랜잭션으로 단일 문서 생성·병합·재개방을 구현했고 빌드가 통과했다. | done |
+| 8.4 | `apps/api/src/operations/operation-issues.module.ts` | 예외 writer를 독립 모듈로 제공한다. | `pnpm --filter api build` | 결제·알림 의존성이 없는 writer 전용 모듈을 제공·내보냈고 빌드가 통과했다. | done |
+| 8.5 | `apps/api/src/operations/operations.service.ts` | 유형별 action 허용과 조치 claim을 적용한다. | `pnpm --filter api test -- operations.service.spec.ts --runInBand` | 자동 환불에는 환불 재시도, 고객 안내에는 문자 재발송만 허용하고 5분 claim으로 외부 호출을 단일화했다. | done |
+| 8.6 | `apps/api/src/operations/operations.module.ts` | 조치 서비스가 독립 writer 모듈을 사용하게 연결한다. | `pnpm --filter api build` | 조치 모듈이 writer 모듈을 가져오도록 연결했고 빌드가 통과했다. | done |
+| 8.7 | `apps/api/src/notifications/notifications.service.ts` | 알림 실패 생성을 writer 서비스로 전환한다. | `pnpm --filter api test -- notifications-delivery.spec.ts --runInBand` | 알림 최종 실패 생성 경로를 writer로 전환했고 알림 전달 10개가 통과했다. | done |
+| 8.8 | `apps/api/src/orders/order-charges.service.ts` | 재배송 실패 생성을 writer 서비스로 전환한다. | `pnpm --filter api test -- mvp-order-flow.spec.ts --runInBand` | 재배송 실패를 안전한 상태 스냅샷으로 writer에 기록했고 회차 주문 흐름 27개가 통과했다. | done |
+| 8.9 | `apps/api/src/payments/payment-finalization.service.ts` | 결제 조회 최종 실패를 운영 예외로 기록한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | 404 외 최종 조회 실패를 허용된 제공자 상태·유형만 담아 기록했고 결제 13개가 통과했다. | done |
+| 8.10 | `apps/api/src/payments/payment-refund.service.ts` | 자동 환불 최종 실패를 운영 예외로 기록한다. | `pnpm --filter api test -- payments.service.spec.ts --runInBand` | 환불 claim 해제 후 실패를 민감정보 없는 최신 상태로 기록하고 원 오류를 유지했으며 결제 13개가 통과했다. | done |
 
 - **Unit Verify**: `pnpm --filter api test -- operations.service.spec.ts notifications-delivery.spec.ts payments.service.spec.ts mvp-order-flow.spec.ts --runInBand`
 - **Exit**: 같은 실패는 최신 상태로 한 항목에 모이고 잘못된 조치는 외부 호출 전에 거부된다.

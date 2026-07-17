@@ -2,6 +2,7 @@ import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import type { AuditService } from '../common/audit/audit.service';
 import type { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import type { OrderCapacityService } from '../orders/order-capacity.service';
 import type { PortoneClient } from './portone.client';
 
@@ -17,7 +18,31 @@ export class PaymentFinalizationService {
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
     private readonly capacity: OrderCapacityService,
+    private readonly issueWriter: OperationIssueWriterService,
   ) {}
+
+  async recordPaymentLookupFailure(orderId: string, error: unknown) {
+    const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
+    if (!orderSnap.exists) return;
+    const order = orderSnap.data() as Record<string, unknown>;
+    const failure = this.safeLookupFailure(error);
+    await this.issueWriter.createOrMergeIssue({
+      storeId: String(order['storeId'] ?? ''),
+      orderId,
+      paymentId: orderId,
+      type: 'PAYMENT_LOOKUP_FAILED',
+      severity: 'critical',
+      title: '결제 조회 최종 실패',
+      message: '결제 상태를 확인하지 못해 운영 확인이 필요합니다.',
+      idempotencyKey: `payment-lookup-failed:${orderId}`,
+      latestSnapshot: {
+        orderStatus: order['status'] ?? null,
+        failureStage: 'payment_lookup',
+        providerStatus: failure.status,
+        providerType: failure.type,
+      },
+    });
+  }
 
   async finalizePaidOrder(orderId: string, paymentData: PaymentData) {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
@@ -179,5 +204,16 @@ export class PaymentFinalizationService {
         updatedAt: now,
       });
     });
+  }
+
+  private safeLookupFailure(error: unknown) {
+    const candidate = error as { status?: unknown; type?: unknown };
+    return {
+      status: typeof candidate?.status === 'number' ? candidate.status : null,
+      type:
+        typeof candidate?.type === 'string'
+          ? candidate.type.replace(/[^A-Z0-9_]/g, '').slice(0, 80)
+          : null,
+    };
   }
 }

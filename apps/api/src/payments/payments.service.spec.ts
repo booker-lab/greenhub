@@ -110,17 +110,43 @@ function makeFinalization(overrides: Data = {}) {
     consumeReservationInTransaction: jest.fn(async () => ({ status: 'CONSUMED' })),
     releaseReservationInTransaction: jest.fn(async () => ({ status: 'EXPIRED' })),
   };
+  const issueWriter = { createOrMergeIssue: jest.fn().mockResolvedValue({ id: 'issue-1' }) };
   const service = new PaymentFinalizationService(
     firestore as never,
     portone as never,
     notifications as never,
     audit as never,
     capacity as never,
+    issueWriter as never,
   );
-  return { service, firestore, records, portone, notifications, capacity };
+  return { service, firestore, records, portone, notifications, capacity, issueWriter };
 }
 
 describe('결제 최종화 경쟁 조건', () => {
+  it('결제 조회 최종 실패를 허용된 상태 정보만 담아 운영 예외로 기록한다', async () => {
+    const fixture = makeFinalization();
+
+    await fixture.service.recordPaymentLookupFailure(
+      'order-1',
+      new PortoneError(503, 'TEMPORARY_ERROR', 'authorization=민감값'),
+    );
+
+    expect(fixture.issueWriter.createOrMergeIssue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'PAYMENT_LOOKUP_FAILED',
+        idempotencyKey: 'payment-lookup-failed:order-1',
+        latestSnapshot: expect.objectContaining({
+          orderStatus: 'PENDING',
+          providerStatus: 503,
+          providerType: 'TEMPORARY_ERROR',
+        }),
+      }),
+    );
+    expect(JSON.stringify(fixture.issueWriter.createOrMergeIssue.mock.calls[0][0])).not.toMatch(
+      /authorization|민감값/i,
+    );
+  });
+
   it('중복 웹훅은 예약과 주문을 정확히 한 번만 확정한다', async () => {
     const fixture = makeFinalization();
     const results = await Promise.all([
@@ -197,7 +223,12 @@ describe('환불 멱등 claim', () => {
       },
     });
     const portone = { refund: jest.fn().mockResolvedValue(undefined) };
-    const service = new PaymentRefundService(firestore as never, portone as never);
+    const issueWriter = { createOrMergeIssue: jest.fn() };
+    const service = new PaymentRefundService(
+      firestore as never,
+      portone as never,
+      issueWriter as never,
+    );
 
     await Promise.all([
       service.refundByOrderId('order-1', '고객 요청'),
@@ -211,6 +242,38 @@ describe('환불 멱등 claim', () => {
       refundAmount: 100000,
       refundClaim: null,
     });
+  });
+
+  it('자동 환불 최종 실패를 민감정보 없이 운영 예외로 기록한다', async () => {
+    const { firestore } = makeFirestore({
+      'payments/payment-1': {
+        id: 'payment-1',
+        orderId: 'order-1',
+        storeId: 'store-1',
+        status: 'PAID',
+        amount: 100000,
+        portonePaymentId: 'provider-payment-1',
+      },
+    });
+    const portone = { refund: jest.fn().mockRejectedValue(new Error('provider token=secret')) };
+    const issueWriter = { createOrMergeIssue: jest.fn().mockResolvedValue({ id: 'issue-1' }) };
+    const service = new PaymentRefundService(
+      firestore as never,
+      portone as never,
+      issueWriter as never,
+    );
+
+    await expect(service.refundByOrderId('order-1', '자동 취소')).rejects.toThrow();
+
+    expect(issueWriter.createOrMergeIssue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'AUTO_REFUND_FAILED',
+        idempotencyKey: 'auto-refund-failed:order-1:payment-1',
+      }),
+    );
+    expect(JSON.stringify(issueWriter.createOrMergeIssue.mock.calls[0][0])).not.toMatch(
+      /token|secret|provider-payment-1/i,
+    );
   });
 });
 
@@ -227,6 +290,7 @@ describe('결제 facade 위임', () => {
     const finalization = {
       finalizePaidOrder: jest.fn().mockResolvedValue({ ok: true, status: 'ACCEPTED' }),
       cancelPendingOrder: jest.fn().mockResolvedValue(true),
+      recordPaymentLookupFailure: jest.fn(),
     };
     const service = new PaymentsService(
       firestore as never,
@@ -246,6 +310,29 @@ describe('결제 facade 위임', () => {
 
     expect(finalization.finalizePaidOrder).toHaveBeenCalledTimes(1);
     expect(finalization.cancelPendingOrder).toHaveBeenCalledWith('order-1', 'timeout');
+    expect(finalization.recordPaymentLookupFailure).not.toHaveBeenCalled();
+  });
+
+  it('scheduler의 결제 조회 최종 실패를 운영 예외 기록에 위임한다', async () => {
+    const { firestore } = makeFirestore({ 'orders/order-1': { id: 'order-1', status: 'PENDING' } });
+    const error = new PortoneError(503, 'TEMPORARY_ERROR', '민감값 없는 일시 오류');
+    const finalization = {
+      finalizePaidOrder: jest.fn(),
+      cancelPendingOrder: jest.fn(),
+      recordPaymentLookupFailure: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new PaymentsService(
+      firestore as never,
+      { getPayment: jest.fn().mockRejectedValue(error) } as never,
+      finalization as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.cleanupPendingOrders();
+
+    expect(finalization.recordPaymentLookupFailure).toHaveBeenCalledWith('order-1', error);
+    expect(finalization.cancelPendingOrder).not.toHaveBeenCalled();
   });
 });
 
