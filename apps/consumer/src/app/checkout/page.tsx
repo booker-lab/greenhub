@@ -12,8 +12,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { useSession } from 'next-auth/react';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import type { CartItem } from '@/hooks/useCart';
+import {
+  type CartItem,
+  isRoundCartItem,
+  parseCartSnapshot,
+  type RoundCartItem,
+} from '@/hooks/useCart';
 import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
+import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import CheckoutForm from './_components/CheckoutForm';
 
 declare global {
@@ -28,6 +34,130 @@ declare global {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const PHONE_PATTERN = /^[0-9+\-\s()]{8,20}$/;
+
+type CheckoutCart =
+  | { kind: 'invalid'; items: [] }
+  | { kind: 'legacy'; items: CartItem[] }
+  | { kind: 'round'; items: RoundCartItem[] };
+
+type LoadedCheckoutCart = CheckoutCart | { kind: 'loading'; items: [] };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasRoundMetadata(value: unknown) {
+  return isRecord(value) && ('roundId' in value || 'roundItemId' in value || 'roundPrice' in value);
+}
+
+function parseCheckoutCart(raw: string | null): CheckoutCart {
+  if (!raw) return { kind: 'invalid', items: [] };
+
+  let stored: unknown;
+  try {
+    stored = JSON.parse(raw);
+  } catch {
+    return { kind: 'invalid', items: [] };
+  }
+  if (!Array.isArray(stored) || stored.length === 0) {
+    return { kind: 'invalid', items: [] };
+  }
+
+  const items = parseCartSnapshot(raw);
+  if (items.length !== stored.length) {
+    return { kind: 'invalid', items: [] };
+  }
+
+  if (items.every(isRoundCartItem)) {
+    const firstItem = items[0];
+    if (
+      !firstItem ||
+      items.some(
+        (item) =>
+          item.roundId !== firstItem.roundId ||
+          item.storeId !== firstItem.storeId ||
+          item.saleType !== 'normal' ||
+          item.deliveryMethod !== 'direct',
+      ) ||
+      new Set(items.map((item) => item.roundItemId)).size !== items.length
+    ) {
+      return { kind: 'invalid', items: [] };
+    }
+    return { kind: 'round', items };
+  }
+
+  if (items.some(isRoundCartItem) || stored.some(hasRoundMetadata)) {
+    return { kind: 'invalid', items: [] };
+  }
+  return { kind: 'legacy', items };
+}
+
+function dateInSeoul(value: string): string | null {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value;
+  const year = part('year');
+  const month = part('month');
+  const day = part('day');
+  return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
+function resolveRoundCheckoutSchedule(
+  items: RoundCartItem[],
+  rounds: PublicSaleRound[],
+): { round: PublicSaleRound; requestedDeliveryDate: string } | null {
+  const firstItem = items[0];
+  if (
+    !firstItem ||
+    items.some(
+      (item) =>
+        item.roundId !== firstItem.roundId ||
+        item.storeId !== firstItem.storeId ||
+        item.saleType !== 'normal' ||
+        item.deliveryMethod !== 'direct',
+    )
+  ) {
+    return null;
+  }
+
+  const round = rounds.find(
+    (candidate) => candidate.id === firstItem.roundId && candidate.storeId === firstItem.storeId,
+  );
+  if (!round || round.schedule.timezone !== 'Asia/Seoul') return null;
+
+  const deliveryStart = new Date(round.schedule.deliveryStartAt);
+  const deliveryEnd = new Date(round.schedule.deliveryEndAt);
+  const requestedDeliveryDate = dateInSeoul(round.schedule.deliveryStartAt);
+  if (
+    !Number.isFinite(deliveryStart.getTime()) ||
+    !Number.isFinite(deliveryEnd.getTime()) ||
+    deliveryStart.getTime() >= deliveryEnd.getTime() ||
+    !requestedDeliveryDate ||
+    dateInSeoul(round.schedule.deliveryEndAt) !== requestedDeliveryDate
+  ) {
+    return null;
+  }
+
+  const matchesRoundItems = items.every((item) =>
+    round.items.some(
+      (roundItem) =>
+        roundItem.id === item.roundItemId &&
+        roundItem.roundId === item.roundId &&
+        roundItem.storeId === item.storeId &&
+        roundItem.productId === item.productId &&
+        roundItem.roundPrice === item.roundPrice,
+    ),
+  );
+  return matchesRoundItems ? { round, requestedDeliveryDate } : null;
+}
 
 // ── 단일 상품 결제 (상품 상세 → 바로 결제) ──────────────────────────────
 function SingleCheckoutContent() {
@@ -114,12 +244,11 @@ function SingleCheckoutContent() {
   );
 }
 
-// ── 장바구니 다중 결제 ────────────────────────────────────────────────────
-function CartCheckoutContent() {
+// ── 기존 장바구니 다중 결제 ───────────────────────────────────────────────
+function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
   const { data: session } = useSession();
   const router = useRouter();
 
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [address, setAddress] = useState<DeliveryAddress>({
     address: '',
     addressDetail: '',
@@ -130,13 +259,6 @@ function CartCheckoutContent() {
   const [state, setState] = useState<'idle' | 'creating' | 'paying' | 'done' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const paymentAttemptIds = useRef(new Map<string, string>());
-
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem('checkout_cart');
-      if (raw) setCartItems(JSON.parse(raw) as CartItem[]);
-    } catch {}
-  }, []);
 
   const totalAmount = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const isLoading = state === 'creating' || state === 'paying';
@@ -170,8 +292,7 @@ function CartCheckoutContent() {
         item.deliveryMethod,
         item.requestedDeliveryDate ?? '',
       ].join(':');
-      const clientOrderRequestId =
-        paymentAttemptIds.current.get(itemKey) ?? crypto.randomUUID();
+      const clientOrderRequestId = paymentAttemptIds.current.get(itemKey) ?? crypto.randomUUID();
       paymentAttemptIds.current.set(itemKey, clientOrderRequestId);
       setState('creating');
       const res = await fetch(`${API_URL}/stores/${item.storeId}/orders`, {
@@ -241,6 +362,105 @@ function CartCheckoutContent() {
       error={error}
       onPay={handlePay}
     />
+  );
+}
+
+// ── 회차 장바구니 단일 결제 ───────────────────────────────────────────────
+function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] }) {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const [address, setAddress] = useState<DeliveryAddress>({
+    address: '',
+    addressDetail: '',
+    zipCode: '',
+  });
+  const [deliveryPhone, setDeliveryPhone] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
+  const storeId = cartItems[0]?.storeId ?? '';
+  const saleRounds = useSaleRounds(storeId || null);
+  const schedule = resolveRoundCheckoutSchedule(cartItems, saleRounds.rounds);
+
+  const { state, orderId, error, requestPayment } = usePayment({
+    storeId,
+    orderRequest: {
+      deliveryAddress: address,
+      deliveryPhone: deliveryPhone.trim(),
+      ...(schedule ? { requestedDeliveryDate: schedule.requestedDeliveryDate } : {}),
+    },
+    roundItems: cartItems,
+    accessToken: session?.user?.accessToken ?? '',
+    paymentMethod,
+  });
+
+  useEffect(() => {
+    if (state !== 'done' || !orderId) return;
+    sessionStorage.removeItem('checkout_cart');
+    router.replace(`/order/success?orderId=${orderId}`);
+  }, [orderId, router, state]);
+
+  const totalAmount = cartItems.reduce((sum, item) => sum + item.roundPrice * item.quantity, 0);
+  const isLoading = state === 'creating' || state === 'paying';
+  const scheduleError =
+    saleRounds.status === 'error'
+      ? saleRounds.error
+      : (saleRounds.status === 'success' || saleRounds.status === 'empty') && !schedule
+        ? '검증된 회차 배송 일정을 확인할 수 없습니다.'
+        : null;
+  const canPay =
+    !isLoading &&
+    !!schedule &&
+    !!address.address &&
+    !!address.zipCode &&
+    PHONE_PATTERN.test(deliveryPhone.trim()) &&
+    !!session;
+
+  return (
+    <CheckoutForm
+      items={cartItems}
+      totalAmount={totalAmount}
+      address={address}
+      onAddressChange={setAddress}
+      deliveryPhone={deliveryPhone}
+      onDeliveryPhoneChange={setDeliveryPhone}
+      paymentMethod={paymentMethod}
+      onPaymentMethodChange={setPaymentMethod}
+      isLoading={isLoading}
+      canPay={canPay}
+      error={scheduleError ?? error}
+      onPay={requestPayment}
+    />
+  );
+}
+
+function CartCheckoutContent() {
+  const [cart, setCart] = useState<LoadedCheckoutCart>({ kind: 'loading', items: [] });
+
+  useEffect(() => {
+    try {
+      setCart(parseCheckoutCart(sessionStorage.getItem('checkout_cart')));
+    } catch {
+      setCart({ kind: 'invalid', items: [] });
+    }
+  }, []);
+
+  if (cart.kind === 'loading') {
+    return (
+      <Container size="sm" px="md" py="lg">
+        <Text>결제 상품을 확인하는 중...</Text>
+      </Container>
+    );
+  }
+  if (cart.kind === 'invalid') {
+    return (
+      <Container size="sm" px="md" py="lg">
+        <Text c="red">결제할 장바구니 정보를 확인할 수 없습니다.</Text>
+      </Container>
+    );
+  }
+  return cart.kind === 'round' ? (
+    <RoundCartCheckoutContent cartItems={cart.items} />
+  ) : (
+    <LegacyCartCheckoutContent cartItems={cart.items} />
   );
 }
 
