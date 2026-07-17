@@ -5,30 +5,29 @@
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-17 (원 계획 Task 4.6 Closeout)
+최종 수정: 2026-07-17 (원 계획 Task 4.7 Closeout)
 
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
-- Task 4.6 시작 SHA: `0463a16e09c6a3548e109277743d7d93c146e42e`
+- Task 4.7 시작 SHA: `83ed9505025a0ece2559595fdb210e82113da346`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
-- 완료: Task 4.6 `apps/consumer/src/components/BottomNav.tsx`
-- 다음: Task 4.7 `apps/consumer/src/app/groupbuy/page.tsx`
-- Task 4.8 이후 상세·장바구니·결제 화면은 선행하지 않는다.
+- 완료: Task 4.7 `apps/consumer/src/app/groupbuy/page.tsx`
+- 다음: Task 4.8 `apps/consumer/src/app/products/[id]/page.tsx`
+- Task 4.9 이후 회차 구매 패널·장바구니·결제 화면은 선행하지 않는다.
 
-## Task 4.6 확정
+## Task 4.7 확정
 
-- 공개 상품의 단일 `Product.storeId`와 공개 스토어 `salesMode`로 하단 내비게이션을 분기한다.
-- `round_direct`에는 홈·상품·장바구니·MY 네 항목만 표시한다.
-- 상품 항목은 Task 4.5의 `/category` 화면으로 연결한다.
-- 확인된 legacy에는 기존 홈·카테고리·공구·장바구니·MY를 보존한다.
-- legacy 장바구니 배지와 결제·주문 성공·상품 상세의 기존 숨김 경로를 보존한다.
-- 상품·판매 모드 판정 중이거나 공개 조회 오류이면 내비게이션을 숨긴다.
-- Task 4.7 공동구매 직접 진입 리다이렉트는 구현하지 않았다.
+- 전체 공개 상품의 단일 `Product.storeId`와 공개 스토어 `salesMode`로 공동구매 진입을 분기한다.
+- `round_direct`의 `/groupbuy` 직접 진입은 내부 홈 `/`로 대체 이동한다.
+- 판매 모드 판정 전·공개 조회 오류·홈 이동 중에는 legacy 공동구매 화면을 노출하지 않는다.
+- 확인된 legacy에는 기존 공동구매 상품 조회와 모집 중·완료·빈·오류 화면을 보존한다.
+- 외부 경로, 임의 store ID, Secret은 추가하지 않았다.
+- Task 4.8 상품 상세 회차 분기는 구현하지 않았다.
 
 ## 검증 상태
 
-- Task 4.6 Node 테스트 4개 통과
+- Task 4.7 Node 테스트 4개 통과
 - consumer `tsc --noEmit`, 전체 `pnpm typecheck`, `pnpm build` 통과
 - 소비자 Playwright chromium·mobile 24개 목록 수집 통과
 - 변경 파일 Biome 오류 0건, `git diff --check` 통과
