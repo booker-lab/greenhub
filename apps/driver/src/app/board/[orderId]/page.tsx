@@ -1,29 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { apiFetch } from '@/lib/api';
-import { use } from 'react';
-import { notifications } from '@mantine/notifications';
 import {
-  Box,
-  Stack,
-  Group,
-  Text,
-  Badge,
-  Card,
-  Button,
-  Loader,
-  UnstyledButton,
   Anchor,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Group,
+  Loader,
+  Stack,
+  Text,
+  UnstyledButton,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { use, useEffect, useState } from 'react';
+import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
+import { apiFetch } from '@/lib/api';
+import { db } from '@/lib/firebase';
+import {
+  type DeliveryHold,
+  DeliveryHoldModal,
+  HOLD_REASON_LABEL,
+} from './_components/DeliveryHoldModal';
 
 type Order = {
   id?: string;
+  schemaVersion?: number;
+  roundId?: string | null;
   storeId: string;
   status: string;
   deliveryMethod: string;
@@ -37,6 +43,7 @@ type Order = {
   preparedAt?: { seconds: number } | null;
   sellerPhone?: string;
   buyerPhone?: string;
+  deliveryHold?: DeliveryHold | null;
 };
 
 const METHOD_LABEL: Record<string, string> = {
@@ -52,6 +59,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const { firebaseReady } = useFirebaseAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
+  const [holdOpened, setHoldOpened] = useState(false);
 
   useEffect(() => {
     if (!firebaseReady) return;
@@ -72,6 +80,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         { method: 'PATCH', body: JSON.stringify({ status }) },
       );
       if (!res.ok) throw new Error('상태 전환 실패');
+      const result = (await res.json()) as { orderId?: unknown; status?: unknown };
+      if (result.orderId !== orderId || result.status !== status) {
+        throw new Error('상태 전환 응답 불일치');
+      }
       if (status === 'DELIVERED' || status === 'HUB_ARRIVED') {
         router.replace('/board?tab=preparing');
       }
@@ -99,7 +111,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
 
   const isDelivering = order.status === 'DELIVERING';
   const isPreparing = order.status === 'PREPARING';
+  const isHeld = order.status === 'DELIVERY_HELD';
   const isHub = order.deliveryMethod === 'hub';
+  const isRoundDirect =
+    order.schemaVersion === 2 && Boolean(order.roundId) && order.deliveryMethod === 'direct';
   const preparedAtStr = order.preparedAt
     ? new Date(order.preparedAt.seconds * 1000).toLocaleTimeString('ko-KR', {
         hour: '2-digit',
@@ -129,7 +144,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           style={{ color: 'var(--color-text-secondary)', padding: 4 }}
           aria-label="뒤로가기"
         >
-          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <svg
+            width="24"
+            height="24"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            focusable="false"
+          >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -151,6 +174,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               }}
             >
               배송 중
+            </Text>
+          )}
+          {isHeld && (
+            <Text
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 'var(--fw-bold)',
+                color: 'var(--color-danger)',
+              }}
+            >
+              배송 보류
             </Text>
           )}
         </Group>
@@ -214,12 +248,41 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               )}
             </Stack>
           </Card>
+
+          {isHeld && order.deliveryHold && <DeliveryHoldCard hold={order.deliveryHold} />}
         </Stack>
       </Box>
 
       {/* 하단 CTA */}
       <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
-        {isPreparing && (
+        {(isPreparing || isDelivering) && isRoundDirect && (
+          <Stack gap="xs">
+            {isPreparing && (
+              <Button
+                fullWidth
+                size="lg"
+                radius="xl"
+                color="brand"
+                loading={loading}
+                onClick={() => updateStatus('DELIVERING')}
+              >
+                수거 완료 / 배송 시작
+              </Button>
+            )}
+            <Button
+              fullWidth
+              size="lg"
+              radius="xl"
+              color="red"
+              variant="outline"
+              disabled={loading}
+              onClick={() => setHoldOpened(true)}
+            >
+              배송 보류
+            </Button>
+          </Stack>
+        )}
+        {isPreparing && !isRoundDirect && (
           <Button
             fullWidth
             size="lg"
@@ -231,7 +294,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             수거 완료 / 배송 시작
           </Button>
         )}
-        {isDelivering && !isHub && (
+        {isDelivering && !isHub && !isRoundDirect && (
           <Button
             fullWidth
             size="lg"
@@ -256,8 +319,63 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           </Button>
         )}
       </Box>
+
+      {isRoundDirect && (
+        <DeliveryHoldModal
+          opened={holdOpened}
+          loading={loading}
+          orderId={orderId}
+          storeId={order.storeId}
+          onClose={() => setHoldOpened(false)}
+          onLoading={setLoading}
+        />
+      )}
     </Box>
   );
+}
+
+function DeliveryHoldCard({ hold }: { hold: DeliveryHold }) {
+  const fee =
+    typeof hold.redeliveryFee === 'number' && hold.redeliveryFee > 0
+      ? `${hold.redeliveryFee.toLocaleString('ko-KR')}원`
+      : '없음';
+  return (
+    <Card radius="xl" withBorder p="md">
+      <Stack gap="sm">
+        <Text
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-bold)',
+            color: 'var(--color-danger)',
+          }}
+        >
+          배송 보류
+        </Text>
+        <InfoRow label="보류 유형" value={HOLD_REASON_LABEL[hold.reasonCode]} />
+        <InfoRow label="보류 사유" value={hold.reasonMessage} />
+        <InfoRow label="책임" value={hold.customerResponsible ? '고객 책임' : '판매자 책임'} />
+        <InfoRow label="재배송비" value={fee} />
+        {hold.nextContactAt && (
+          <InfoRow label="다음 연락" value={formatSchedule(hold.nextContactAt)} />
+        )}
+        {hold.nextDeliveryAt && (
+          <InfoRow label="새 배송 예정" value={formatSchedule(hold.nextDeliveryAt)} />
+        )}
+      </Stack>
+    </Card>
+  );
+}
+
+function formatSchedule(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -265,7 +383,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     <Group justify="space-between" align="flex-start">
       <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
         {label}
-      </Text>
+      </Text>{' '}
       <Text
         style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', maxWidth: '60%' }}
         ta="right"
@@ -303,7 +421,15 @@ function ContactRow({ label, phone }: { label: string; phone: string }) {
           textDecoration: 'none',
         }}
       >
-        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <svg
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          focusable="false"
+        >
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -311,7 +437,7 @@ function ContactRow({ label, phone }: { label: string; phone: string }) {
             d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
           />
         </svg>
-        전화
+        {label}에게 전화
       </Anchor>
     </Group>
   );
