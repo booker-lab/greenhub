@@ -4,14 +4,14 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 5.12 완료, Task 6.1 착수 대기
+- **상태**: Task 6.1 완료, Task 6.2 착수 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
 - **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. Task 3.7은 셀러·관리자 인증, 스토어 소유권 검증, 안전한 목록·상세·재조회 응답과 환불·문자 조치 API를 구현했다. Task 3.8은 운영 모듈과 런타임 라우트를 연결하고 알림·재배송 최종 실패 생성 경로를 공통 운영 서비스로 전환했다. Task 3.9는 배송 사진 90일, 마케팅 동의와 분쟁 기록 3년, 계약·결제·공급 기록 5년, 분쟁·법적 보존 연장과 멱등 파기 계약을 실패 테스트 8개로 고정했다. Task 3.10은 목적별 법정 기록 저장과 만료 쿼리, 분쟁·법적 보존 제외, 연결 사진과 Firestore 문서의 멱등 파기를 구현했다. Task 3.11은 `FirestoreModule`을 가져오는 `RetentionModule`에 보관 서비스를 provider로 등록하고 export했다. Task 3.12는 배송 사진의 서버 비공개 업로드, 주문 권한 확인 뒤 15분 V4 읽기 서명 URL, 보관 서비스용 삭제 어댑터를 구현했다. Task 3.13은 `StorageService`를 Firebase 인프라 모듈 provider/export에 등록하고 `RetentionService` 삭제 어댑터로 명시적으로 주입했다. Task 3.14는 이미 연결된 회차·운영 예외 모듈을 중복 등록하지 않고 누락된 `RetentionModule`만 `AppModule`에 추가했다. 현재 진입점은 Task 6.1이다.
 
-- **현재 진입점**: Task 5.12 비공개 배송 사진 업로드·연결을 완료했으며 다음 작업은 Task 6.1이다.
+- **현재 진입점**: 실제 Firestore 쿼리와 복합 인덱스 계약을 확정했으며 다음 작업은 Task 6.2 Firestore 보안 규칙이다.
 
 ## 업무 요약 (협업용)
 
@@ -251,7 +251,7 @@ flowchart TD
 ### Phase 6. 보안 규칙·통합 검증·출시
 | Task | Dependency | Target | Goal | Verify | Conclusion | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 6.1 | 5.12 | `firestore.indexes.json` | 회차 공개 조회·만료 예약·보관 파기·운영 예외 쿼리 인덱스를 추가한다. | `pnpm --filter api build` | [판정 대기 — 인덱스 계약] | todo |
+| 6.1 | 5.12 | `firestore.indexes.json` | 회차 공개 조회·만료 예약·보관 파기·운영 예외 쿼리 인덱스를 추가한다. | `pnpm --filter api build` | 통과 — 앱 런타임의 실제 Firestore 쿼리를 전수 대조해 단일 필드·동등 조건 인덱스 병합으로 충족되는 회차·예약 직접 조회·보관 만료·운영 예외·주문 목록에는 새 복합 인덱스를 만들지 않았다. 실제 범위·정렬 쿼리에서 빠진 `users(role, createdAt DESC)`, `orders(status, createdAt DESC)`, `orders(status, deliveryMethod, preparedAt ASC)`, `varieties(subCategory, name ASC)` 4개만 추가했다. 호출부와 JSON을 함께 검사하고 누락·필드·방향·범위·중복을 검출하는 계약 23개, 관련 API 회귀 128개, API·전체 빌드, 타입 검사, JSON 파싱과 Biome 검사가 통과했다. Firebase CLI 15.18.0은 확인했지만 JDK 21 이상 요구에 비해 현재 JDK 17이라 에뮬레이터는 실행되지 않았다. | done |
 | 6.2 | 6.1 | `firestore.rules` | 회차 쓰기·예약·법정 기록·운영 예외의 클라이언트 직접 접근을 차단한다. | `pnpm --filter api build` | [판정 대기 — Firestore 경계] | todo |
 | 6.3 | 6.2 | `storage.rules` | 배송 사진 직접 접근 차단과 기존 공개 상품 이미지 규칙을 함께 검증한다. | `pnpm --filter api build` | [판정 대기 — Storage 경계] | todo |
 | 6.4 | 6.3 | `apps/api/test/mvp-sales-round.e2e-spec.ts` | 회차 개설부터 결제·보류·재배송·파기까지 서버 통합 계약을 검증한다. | `pnpm --filter api test:e2e -- mvp-sales-round.e2e-spec.ts --runInBand` | [판정 대기 — API 통합] | todo |
@@ -282,7 +282,7 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 5.12 `done`, Task 6.1 `todo`
+- **Status**: Task 6.1 `done`, Task 6.2 `todo`
 - **Task 4.2 복귀 조건**: 충족. 결제·예약·환불, 주문·웹훅 권한, 주문·회차 취소, 주문 생성 멱등, 재배송비, 알림, 운영 예외, 보관·Storage 입력 계약을 Unit 1~9에서 보정했고 Unit 10에서 실제 도메인 서비스 통합 E2E와 전체 회귀 검증으로 확정했다.
 - **Task 4.2 결과**: 공개 목록과 회차별 상세를 병렬 조회해 회차 상품을 포함한 전체 회차, 현재 회차 하나, 최신순 지난 회차를 제공한다. 기존 소비자 데이터 접근 방식의 문자열 오류와 `loading` 불리언을 유지하면서 명시적 `error`, `empty`, `success` 상태와 재조회를 추가했고 요청 식별자로 스토어 전환·재조회 경쟁의 늦은 응답을 폐기한다.
 - **Task 4.3 결과**: `utm_source=carrot|daangn|당근` 유입만 탭 세션에 보관하고 새 당근 유입 전까지 유지한다. 캠페인·콘텐츠는 길이와 안전 문자 집합을 제한하며 도착 URL은 `http(s)`와 `round` 쿼리만 허용한다. 주문용 조회는 저장값을 다시 검증해 `source`, `campaign`, `content`, `landingUrl`, `capturedAt`만 새 객체로 반환하고 잘못된 값은 폐기한다. 화면·주문 호출부 연결은 후속 Task로 남겼다.
@@ -315,5 +315,6 @@ flowchart TD
 - **Task 5.10 결과**: 드라이버 보드의 직접배송 주문 한정 노출, 준비 주문의 배송 시작, 기상·출입·주소·연락 실패별 보류 입력과 책임·비용·후속 일정 표시, 사진 없는 직접 완료 차단을 독립 fixture 9개와 `test.fixme` 논리 계약 7개로 고정했다. 아직 없는 사진 업로드 성공은 추정하지 않고 촬영 전 완료 비활성화까지만 수집했으며 chromium·mobile 14개와 기존 셀러 12개·소비자 24개 목록 및 필수 전체 검증이 통과했다.
 - **Task 5.11 결과**: `schemaVersion: 2` 회차 직배송 주문에만 배송 시작·보류 입력을 제공하고 기상·출입·주소·연락 실패를 서버 DTO 정본으로 저장한다. 기상은 판매자 책임·재배송비 없음·새 배송 일정 계약을 강제하고, 서버 응답 검증과 Firestore 스냅샷 반영 전에는 상태를 성공으로 추정하지 않는다. 사진 없는 직접 완료와 아직 안전하지 않은 기존 사진 화면 진입을 모두 제공하지 않았으며 Task 5.12 업로드는 시작하지 않았다. 필수 타입검사·전체 빌드·Playwright 50개 목록·Biome 오류 수준·diff 검사가 통과했다.
 - **Task 5.12 결과**: `POST /stores/:storeId/orders/:orderId/delivery-photos`는 JWT 인증과 multipart 5MB 제한을 적용하고 실제 JPEG, `schemaVersion: 2`, 회차·직배송, 스토어, 담당 기사, `DELIVERING` 상태를 서버에서 재검증한다. 요청 키를 해시한 단일 사진 ID를 `deliveryPhotos/{orderId}/{photoId}.jpg`에 비공개 저장하고, 성공 뒤 같은 트랜잭션으로 `deliveryPhotoIds`와 90일 보관 기록을 연결한 다음 기존 주문 수명주기로만 `DELIVERED`를 확정한다. 사진 없는 직접 완료와 공개 URL 연결은 서버에서 거부하며 동일 요청 재시도는 중복 사진·중복 완료를 만들지 않는다. 연결 사진 조회는 주문자 본인·스토어 소유자·담당 기사·관리자에게만 15분 V4 서명 URL을 반환한다. 드라이버 회차 직배송 화면은 `FormData` 서버 업로드 응답의 주문 ID·사진 ID·완료 상태를 검증하고, 기존 거점 흐름은 별도 legacy helper로 의미를 유지했다. API 사진 계약 21개와 필수 전체 검증이 통과했고 build 생성물 5개는 시작 상태로 되돌려 제외했다.
-- **다음 진입점**: Task 6.1 `firestore.indexes.json`의 실제 서비스 쿼리 기반 복합 인덱스 보정만 시작할 수 있다.
-- **명시적 후속 위험**: 드라이버 화면 계약 14개, 소비자 화면 계약 24개와 셀러 화면 계약 12개는 실행 데이터와 화면 준비 전이라 계속 `test.fixme`다. 기존 거점 사진은 legacy 경로를 유지하므로 Task 5.12의 회차 비공개 사진 계약으로 승격하지 않았다. Firestore 인덱스는 Task 6.1, Firestore·Storage 보안 규칙은 Task 6.2~6.3, 서버 전체 흐름과 사용자 화면 실행 검증은 Task 6.4·6.7에 남아 있다. `salesMode` 전환과 운영 배포는 Task 6.5 이후 별도 승인 전에는 수행하지 않는다.
+- **Task 6.1 결과**: 실제 앱 쿼리와 공식 Firestore 자동 인덱스·인덱스 병합 규칙을 대조해 범위·정렬 조합에 필요한 복합 인덱스 4개만 추가했다. `saleRounds(storeId + status in)`, 예약 문서 직접 조회, 보관 컬렉션별 `expiresAt` 단일 범위, `operationIssues(storeId)`, 주문 목록 동등 조건, 결제 `orderId` 단일 조건은 자동 인덱스로 충분하다고 판정했다. 실제 호출부와 JSON 정의를 함께 검사하고 누락·필드 누락·방향·queryScope·중복을 검출하는 계약 23개와 관련 회귀 128개, 타입 검사와 전체 build가 통과했다. Firebase 에뮬레이터는 JDK 21 미충족으로 실행하지 못했다.
+- **다음 진입점**: Task 6.2 `firestore.rules`의 서버 전용 컬렉션 클라이언트 직접 접근 차단만 시작할 수 있다.
+- **명시적 후속 위험**: 드라이버 화면 계약 14개, 소비자 화면 계약 24개와 셀러 화면 계약 12개는 실행 데이터와 화면 준비 전이라 계속 `test.fixme`다. 기존 거점 사진은 legacy 경로를 유지하므로 Task 5.12의 회차 비공개 사진 계약으로 승격하지 않았다. Firestore 보안 규칙은 Task 6.2, Storage 보안 규칙은 Task 6.3, 서버 전체 흐름과 사용자 화면 실행 검증은 Task 6.4·6.7에 남아 있다. Task 6.2 에뮬레이터 실패 테스트에는 JDK 21 이상이 선행돼야 하며 `salesMode` 전환과 운영 배포는 Task 6.5 이후 별도 승인 전에는 수행하지 않는다.

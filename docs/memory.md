@@ -5,15 +5,15 @@
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-18 (원 계획 Task 5.12 비공개 배송 사진 업로드·연결 완료)
+최종 수정: 2026-07-18 (원 계획 Task 6.1 실제 쿼리 복합 인덱스 보정 완료)
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
 - Task 5.12 시작 SHA: `d4d47d577bd861278dd986d7edfb06e9746d2b7b`
 - 완료 계획: `docs/plans/PLAN_mvp_sales_round_consumer_review_remediation.md`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
-- 완료: Task 5.12 인증된 서버 비공개 배송 사진 업로드·주문 연결·완료
-- 다음: Task 6.1 실제 서비스 쿼리 기반 복합 인덱스 보정
+- 완료: Task 6.1 실제 서비스 쿼리 기반 복합 인덱스와 누락 검출 계약
+- 다음: Task 6.2 Firestore 서버 전용 컬렉션 클라이언트 직접 접근 차단
 
 ## 선행 계약 확정
 
@@ -36,7 +36,11 @@
 
 ## 후속 Task 실행 원칙
 
-- 다음 작업은 Task 6.1이며 실제 서비스 쿼리와 누락 인덱스 실패 검증을 먼저 고정한다.
+- Task 6.1은 `users(role, createdAt DESC)`, `orders(status, createdAt DESC)`, `orders(status, deliveryMethod, preparedAt ASC)`, `varieties(subCategory, name ASC)`만 새 복합 인덱스로 확정했다.
+- 회차 공개 조회, 예약 직접 조회, 보관 만료 단일 범위, 운영 예외 스토어 조회, 주문 목록 동등 조건, 결제 주문 조회는 자동 인덱스 또는 인덱스 병합으로 충분하다.
+- 실제 호출부·JSON 계약 23개와 관련 API 128개, API·전체 build, 타입 검사, JSON 파싱, Biome 검사가 통과했다.
+- Firebase CLI 15.18.0은 설치돼 있지만 현재 JDK 17로는 JDK 21 이상을 요구하는 에뮬레이터를 실행할 수 없다.
+- 다음 작업은 Task 6.2이며 JDK 21 이상에서 Firestore 규칙 에뮬레이터 실패 테스트를 먼저 고정한다.
 - 드라이버 E2E 14개, 소비자 E2E 24개와 셀러 E2E 12개는 실행 데이터·화면 준비 전까지 `test.fixme`다.
 - 인덱스는 Task 6.1, Firestore·Storage 보안 규칙은 Task 6.2~6.3이다.
 - `salesMode` 전환·배포·push는 수행하지 않는다.
