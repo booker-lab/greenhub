@@ -4,13 +4,17 @@ import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const tabs = [
+export const SELLER_BOTTOM_NAV_ITEMS = [
   { href: '/orders', label: '주문', icon: OrderIcon },
+  { href: '/sale-rounds', label: '회차', icon: SaleRoundIcon },
   { href: '/products', label: '상품', icon: ProductIcon },
-  { href: '/settlements', label: '정산', icon: SettlementIcon },
   { href: '/prep', label: '준비', icon: PrepIcon },
   { href: '/settings', label: '설정', icon: SettingsIcon },
 ] as const;
+
+export function isBottomNavItemActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -36,12 +40,18 @@ export default function BottomNav() {
       }}
     >
       <Box style={{ maxWidth: 480, width: '100%', display: 'flex' }}>
-        {tabs.map((tab) => {
-          const isActive = pathname.startsWith(tab.href);
+        {SELLER_BOTTOM_NAV_ITEMS.map((tab) => {
+          const isActive = isBottomNavItemActive(pathname, tab.href);
           const Icon = tab.icon;
 
           return (
-            <UnstyledButton key={tab.href} component={Link} href={tab.href} style={{ flex: 1 }}>
+            <UnstyledButton
+              key={tab.href}
+              component={Link}
+              href={tab.href}
+              aria-current={isActive ? 'page' : undefined}
+              style={{ flex: 1 }}
+            >
               <Stack align="center" justify="center" gap={2} h="100%">
                 <Icon active={isActive} />
                 <Text
@@ -108,7 +118,7 @@ function ProductIcon({ active }: { active: boolean }) {
   );
 }
 
-function SettlementIcon({ active }: { active: boolean }) {
+function SaleRoundIcon({ active }: { active: boolean }) {
   const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)';
   const sw = active ? 2.2 : 2;
   return (
@@ -124,8 +134,9 @@ function SettlementIcon({ active }: { active: boolean }) {
       aria-hidden="true"
       focusable="false"
     >
-      <line x1="12" y1="1" x2="12" y2="23" />
-      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+      <rect x="3" y="4" width="18" height="17" rx="2" />
+      <path d="M8 2v4M16 2v4M3 9h18" />
+      <path d="M8 13h3M13 13h3M8 17h3" />
     </svg>
   );
 }
