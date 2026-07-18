@@ -5,16 +5,16 @@
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-18 (원 계획 Task 5.1 셀러 회차 운영 계약 수집 완료)
+최종 수정: 2026-07-18 (원 계획 Task 5.2 셀러 회차 API 훅 완료)
 
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
-- Task 5.1 시작 SHA: `fd62556c57ea70f589d617f6f786c0664f62180c`
+- Task 5.2 시작 SHA: `9e6d8867f355805524007b82ad39a4ce76ac38ee`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
-- 완료: Task 5.1 `apps/e2e/tests/seller-sale-rounds.spec.ts`
-- 다음: Task 5.2 `apps/seller/src/hooks/useSaleRounds.ts`
-- Task 5.3 이후 셀러 화면·드라이버 화면·인덱스 작업은 선행하지 않는다.
+- 완료: Task 5.2 `apps/seller/src/hooks/useSaleRounds.ts`
+- 다음: Task 5.3 `apps/seller/src/app/sale-rounds/page.tsx`
+- Task 5.4 이후 편집 화면·드라이버 화면·인덱스 작업은 선행하지 않는다.
 
 ## Task 4.19 확정
 
@@ -33,6 +33,13 @@
 - 기존 셀러 인증 상태와 환경 변수 계약을 재사용하고, 아직 없는 화면·seed 계약은 모두 `test.fixme`로 유지했다.
 - 셀러 chromium·mobile 12개와 기존 소비자 24개 목록, 전체 typecheck·build, Biome 오류 수준 검사와 diff 검사가 통과했다.
 - build가 새로 갱신한 tracked 생성물 5개는 시작 상태와 비교해 범위에서 제외했다.
+
+## Task 5.2 확정
+
+- 셀러 세션의 `storeId`·`accessToken`과 `apiJson`으로 목록·상세·생성·저장·복사·상태 변경·완료 API를 한 훅에 캡슐화했다.
+- 조회와 작업 로딩·오류를 분리하고, 늦은 목록 응답을 폐기하며 mutation 성공 응답을 검증·반영한 뒤 서버 목록을 재조회한다.
+- 인증 누락·손상 응답은 빈 회차나 성공으로 승격하지 않는다. 별도 테스트와 Task 5.3 화면은 추가하지 않았다.
+- seller 타입검사, 전체 typecheck·build, Biome, 셀러 12개·소비자 24개 목록 수집과 diff 검사가 통과했다.
 
 ## 명시적 후속 위험
 
