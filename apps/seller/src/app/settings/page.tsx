@@ -7,6 +7,7 @@ import { signOut, useSession } from 'next-auth/react';
 import type { ReactNode } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
+import { SELLER_OPERATION_SETTINGS } from './settings-links';
 
 /** 설정 섹션 카드 — 대문자 라벨 헤더 + 행 목록. */
 function SectionCard({ label, children }: { label: string; children: ReactNode }) {
@@ -86,14 +87,13 @@ export default function SettingsPage() {
             </SectionCard>
           )}
 
-          <SectionCard label="배송">
-            <LinkRow href="/settings/delivery" label="배송비 설정 / 기상 제한" />
-            <LinkRow href="/settings/daily-caps" label="배송 슬롯 (Daily Cap)" borderTop />
-          </SectionCard>
-
-          <SectionCard label="거점">
-            <LinkRow href="/hubs" label="거점 관리" />
-          </SectionCard>
+          {SELLER_OPERATION_SETTINGS.map((section) => (
+            <SectionCard key={section.label} label={section.label}>
+              {section.links.map((link, index) => (
+                <LinkRow key={link.href} {...link} borderTop={index > 0} />
+              ))}
+            </SectionCard>
+          ))}
 
           <SectionCard label="정보">
             <Group justify="space-between" px="md" py="md">
