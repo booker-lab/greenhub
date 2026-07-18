@@ -49,6 +49,20 @@ export class RoundOrderLifecycleService {
       if (order['status'] !== input.expectedStatus) {
         throw new ConflictException('주문 상태가 변경되었습니다.');
       }
+      if (
+        input.dto.status === 'DELIVERED' &&
+        order['deliveryMethod'] === 'direct' &&
+        (!Array.isArray(order['deliveryPhotoIds']) || order['deliveryPhotoIds'].length === 0)
+      ) {
+        throw new ForbiddenException('배송 사진 연결 후에만 배송을 완료할 수 있습니다.');
+      }
+      if (
+        input.dto.status === 'DELIVERED' &&
+        order['deliveryMethod'] === 'direct' &&
+        input.dto.photoUrl
+      ) {
+        throw new BadRequestException('회차 직배송 사진은 공개 URL로 연결할 수 없습니다.');
+      }
 
       const update = this.buildStatusUpdate(order, input.dto, input.requesterId, now);
       const heldOrderDelta =

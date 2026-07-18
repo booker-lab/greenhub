@@ -37,6 +37,11 @@ describe('배송 사진 Storage 계약', () => {
       storeId: 'store-safe',
       userId: 'consumer-safe',
       driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: [],
     });
     const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0xff, 0xd9]);
 
@@ -132,6 +137,11 @@ describe('배송 사진 Storage 계약', () => {
       storeId: 'store-safe',
       userId: 'consumer-safe',
       driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: ['photo-safe'],
     });
 
     await expect(
@@ -163,6 +173,7 @@ describe('배송 사진 Storage 계약', () => {
       storeId: 'store-safe',
       userId: 'consumer-safe',
       driverId: 'driver-safe',
+      deliveryPhotoIds: ['photo-safe'],
     });
     const now = new Date('2026-07-17T03:00:00.000Z');
 
@@ -219,5 +230,67 @@ describe('배송 사진 Storage 계약', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(missing.file).not.toHaveBeenCalled();
     expect(otherStore.file).not.toHaveBeenCalled();
+  });
+
+  it('회차 직배송·담당 기사·배송 중 상태가 아니면 업로드하지 않는다', async () => {
+    const cases = [
+      {
+        storeId: 'store-safe',
+        driverId: 'driver-safe',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+      },
+      {
+        storeId: 'store-safe',
+        driverId: 'driver-safe',
+        schemaVersion: 2,
+        roundId: 'round-safe',
+        deliveryMethod: 'hub',
+        status: 'DELIVERING',
+      },
+      {
+        storeId: 'store-safe',
+        driverId: 'driver-safe',
+        schemaVersion: 2,
+        roundId: 'round-safe',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+      },
+    ];
+
+    for (const order of cases) {
+      const { save, service } = makeService(order);
+      await expect(
+        service.uploadDeliveryPhoto({
+          storeId: 'store-safe',
+          orderId: 'order-safe',
+          photoId: 'photo-safe',
+          requesterId: 'driver-safe',
+          requesterRole: 'driver',
+          content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]),
+          contentType: 'image/jpeg',
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(save).not.toHaveBeenCalled();
+    }
+  });
+
+  it('주문에 연결되지 않은 사진 ID는 권한이 있어도 서명 URL을 발급하지 않는다', async () => {
+    const { file, service } = makeService({
+      storeId: 'store-safe',
+      userId: 'consumer-safe',
+      deliveryPhotoIds: ['photo-other'],
+    });
+
+    await expect(
+      service.createDeliveryPhotoReadUrl({
+        storeId: 'store-safe',
+        orderId: 'order-safe',
+        photoId: 'photo-safe',
+        requesterId: 'consumer-safe',
+        requesterRole: 'consumer',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(file).not.toHaveBeenCalled();
   });
 });

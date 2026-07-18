@@ -4,6 +4,8 @@ import { OperationIssuesModule } from '../operations/operation-issues.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { RetentionModule } from '../retention/retention.module';
 import { SettlementsModule } from '../settlements/settlements.module';
+import { DeliveryPhotosController } from './delivery-photos.controller';
+import { DeliveryPhotosService } from './delivery-photos.service';
 import { OrderCapacityModule } from './order-capacity.module';
 import { OrderChargesService } from './order-charges.service';
 import { OrdersController, OrdersPublicController } from './orders.controller';
@@ -23,7 +25,7 @@ import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
     OperationIssuesModule,
     RetentionModule,
   ],
-  controllers: [OrdersPublicController, OrdersController],
+  controllers: [OrdersPublicController, OrdersController, DeliveryPhotosController],
   providers: [
     OrdersService,
     OrdersCreateService,
@@ -32,6 +34,7 @@ import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
     OrdersLifecycleService,
     RoundOrderLifecycleService,
     OrderChargesService,
+    DeliveryPhotosService,
   ],
   exports: [OrdersService, RoundOrderLifecycleService],
 })

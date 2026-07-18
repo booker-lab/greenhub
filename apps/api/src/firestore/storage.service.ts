@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -60,6 +61,10 @@ export class StorageService {
     input: DeliveryPhotoAccessInput & { now?: Date },
   ): Promise<{ url: string; expiresAt: string }> {
     const order = await this.getOrder(input);
+    const photoIds = this.readPhotoIds(order['deliveryPhotoIds']);
+    if (!photoIds.includes(input.photoId)) {
+      throw new NotFoundException('연결된 배송 사진을 찾을 수 없습니다.');
+    }
     await this.assertAccess(input, order, 'read');
     const expiresAt = new Date((input.now ?? new Date()).getTime() + DELIVERY_PHOTO_URL_TTL_MS);
     const [url] = await this.bucket
@@ -93,6 +98,10 @@ export class StorageService {
     order: Record<string, unknown>,
     action: 'upload' | 'read',
   ): Promise<void> {
+    if (action === 'upload') {
+      this.assertRoundDirectUpload(input, order);
+      return;
+    }
     if (input.requesterRole === 'admin') return;
     if (input.requesterRole === 'seller') {
       const store = await this.firestore.doc(`stores/${input.storeId}`).get();
@@ -122,7 +131,7 @@ export class StorageService {
   }
 
   private assertSafeId(value: string, field: string): void {
-    if (!SAFE_ID_PATTERN.test(value)) {
+    if (value.length > 128 || !SAFE_ID_PATTERN.test(value)) {
       throw new BadRequestException(`${field} 형식이 올바르지 않습니다.`);
     }
   }
@@ -141,5 +150,36 @@ export class StorageService {
     if (!hasJpegSignature) {
       throw new BadRequestException('실제 JPEG 형식의 배송 사진만 업로드할 수 있습니다.');
     }
+  }
+
+  private assertRoundDirectUpload(
+    input: DeliveryPhotoAccessInput,
+    order: Record<string, unknown>,
+  ): void {
+    if (
+      order['schemaVersion'] !== 2 ||
+      typeof order['roundId'] !== 'string' ||
+      order['roundId'].length === 0 ||
+      order['deliveryMethod'] !== 'direct'
+    ) {
+      throw new ForbiddenException('회차 직배송 주문만 배송 사진을 업로드할 수 있습니다.');
+    }
+    if (input.requesterRole !== 'driver' || order['driverId'] !== input.requesterId) {
+      throw new ForbiddenException('담당 기사만 배송 사진을 업로드할 수 있습니다.');
+    }
+    const photoIds = this.readPhotoIds(order['deliveryPhotoIds']);
+    if (photoIds.length > 0 && !photoIds.includes(input.photoId)) {
+      throw new ConflictException('배송 사진이 이미 연결되어 있습니다.');
+    }
+    const isRetry = order['status'] === 'DELIVERED' && photoIds.includes(input.photoId);
+    if (order['status'] !== 'DELIVERING' && !isRetry) {
+      throw new ForbiddenException('배송 중인 주문에만 사진을 업로드할 수 있습니다.');
+    }
+  }
+
+  private readPhotoIds(value: unknown): string[] {
+    return Array.isArray(value)
+      ? value.filter((photoId): photoId is string => typeof photoId === 'string')
+      : [];
   }
 }

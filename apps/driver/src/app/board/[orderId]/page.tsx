@@ -269,6 +269,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                 수거 완료 / 배송 시작
               </Button>
             )}
+            {isDelivering && (
+              <Button
+                fullWidth
+                size="lg"
+                radius="xl"
+                color="brand"
+                loading={loading}
+                onClick={() =>
+                  router.push(`/board/${orderId}/photo?storeId=${order.storeId}&flow=round-direct`)
+                }
+              >
+                배송 완료 사진 촬영
+              </Button>
+            )}
             <Button
               fullWidth
               size="lg"
