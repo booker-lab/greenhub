@@ -4,14 +4,14 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 5.2 완료, Task 5.3 착수 대기
+- **상태**: Task 5.3 완료, Task 5.4 착수 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
-- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. Task 3.7은 셀러·관리자 인증, 스토어 소유권 검증, 안전한 목록·상세·재조회 응답과 환불·문자 조치 API를 구현했다. Task 3.8은 운영 모듈과 런타임 라우트를 연결하고 알림·재배송 최종 실패 생성 경로를 공통 운영 서비스로 전환했다. Task 3.9는 배송 사진 90일, 마케팅 동의와 분쟁 기록 3년, 계약·결제·공급 기록 5년, 분쟁·법적 보존 연장과 멱등 파기 계약을 실패 테스트 8개로 고정했다. Task 3.10은 목적별 법정 기록 저장과 만료 쿼리, 분쟁·법적 보존 제외, 연결 사진과 Firestore 문서의 멱등 파기를 구현했다. Task 3.11은 `FirestoreModule`을 가져오는 `RetentionModule`에 보관 서비스를 provider로 등록하고 export했다. Task 3.12는 배송 사진의 서버 비공개 업로드, 주문 권한 확인 뒤 15분 V4 읽기 서명 URL, 보관 서비스용 삭제 어댑터를 구현했다. Task 3.13은 `StorageService`를 Firebase 인프라 모듈 provider/export에 등록하고 `RetentionService` 삭제 어댑터로 명시적으로 주입했다. Task 3.14는 이미 연결된 회차·운영 예외 모듈을 중복 등록하지 않고 누락된 `RetentionModule`만 `AppModule`에 추가했다. 현재 진입점은 Task 5.3이다.
+- **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. Task 3.7은 셀러·관리자 인증, 스토어 소유권 검증, 안전한 목록·상세·재조회 응답과 환불·문자 조치 API를 구현했다. Task 3.8은 운영 모듈과 런타임 라우트를 연결하고 알림·재배송 최종 실패 생성 경로를 공통 운영 서비스로 전환했다. Task 3.9는 배송 사진 90일, 마케팅 동의와 분쟁 기록 3년, 계약·결제·공급 기록 5년, 분쟁·법적 보존 연장과 멱등 파기 계약을 실패 테스트 8개로 고정했다. Task 3.10은 목적별 법정 기록 저장과 만료 쿼리, 분쟁·법적 보존 제외, 연결 사진과 Firestore 문서의 멱등 파기를 구현했다. Task 3.11은 `FirestoreModule`을 가져오는 `RetentionModule`에 보관 서비스를 provider로 등록하고 export했다. Task 3.12는 배송 사진의 서버 비공개 업로드, 주문 권한 확인 뒤 15분 V4 읽기 서명 URL, 보관 서비스용 삭제 어댑터를 구현했다. Task 3.13은 `StorageService`를 Firebase 인프라 모듈 provider/export에 등록하고 `RetentionService` 삭제 어댑터로 명시적으로 주입했다. Task 3.14는 이미 연결된 회차·운영 예외 모듈을 중복 등록하지 않고 누락된 `RetentionModule`만 `AppModule`에 추가했다. 현재 진입점은 Task 5.4다.
 
-- **현재 진입점**: Task 5.2 셀러 회차 API 훅을 완료했으며 다음 작업은 Task 5.3이다.
+- **현재 진입점**: Task 5.3 셀러 회차 목록 화면을 완료했으며 다음 작업은 Task 5.4다.
 
 ## 업무 요약 (협업용)
 
@@ -237,7 +237,7 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | 5.1 | 4.19 | `apps/e2e/tests/seller-sale-rounds.spec.ts` | 회차 복사·예약·마감·완료·확인 필요 계약을 먼저 수집한다. | `pnpm --filter e2e exec playwright test seller-sale-rounds --list` | 통과 — 완료 회차 복사, 작성 중 회차 예약, 판매 중 회차 수동 마감, 보류 주문이 있는 완료 거부, 정상 완료, 확인 필요 주문 진입을 서로 다른 6개 fixture 식별자로 분리했다. 기존 셀러 인증 상태와 환경 변수 계약을 재사용하고 아직 없는 화면·seed를 통과한 것으로 기록하지 않도록 전부 `test.fixme`로 고정했으며 chromium·mobile 12개 목록 수집, 소비자 24개 회귀 목록, 전체 typecheck·build, Biome 오류 수준 검사와 diff 검사가 통과했다. | done |
 | 5.2 | 5.1 | `apps/seller/src/hooks/useSaleRounds.ts` | 셀러 회차 목록·저장·복사·상태 변경 API를 캡슐화한다. | `pnpm --filter seller exec tsc --noEmit` | 통과 — `useSession`의 `storeId`·`accessToken`과 기존 `apiJson`을 재사용해 셀러 회차 목록·상세·생성·저장·복사·상태 변경·완료 API를 하나의 훅 경계로 캡슐화했다. 조회와 작업의 로딩·오류를 분리하고 늦은 목록 응답을 폐기하며, mutation 성공 응답을 검증해 즉시 반영한 뒤 서버 목록을 재조회한다. 인증 누락·손상 응답은 빈 회차나 성공으로 승격하지 않았고 seller 타입검사, 전체 typecheck·build, Biome 오류 수준 검사, 셀러 12개·소비자 24개 Playwright 목록 수집과 diff 검사가 통과했다. 별도 테스트 파일이나 Task 5.3 화면은 추가하지 않았다. | done |
-| 5.3 | 5.2 | `apps/seller/src/app/sale-rounds/page.tsx` | 회차 상태·주문·수량·한도와 이전 회차 복사를 제공한다. | `pnpm --filter seller exec tsc --noEmit` | [판정 대기 — 회차 목록] | todo |
+| 5.3 | 5.2 | `apps/seller/src/app/sale-rounds/page.tsx` | 회차 상태·주문·수량·한도와 이전 회차 복사를 제공한다. | `pnpm --filter seller exec tsc --noEmit` | 통과 — Task 5.2 `useSaleRounds`만 API 경계로 사용해 작성 중·판매 예정·판매 중·주문 마감·배송 완료와 취소 상태, 주문 배송지·판매 수량·각 한도, 결제 진행 중 확보량, 배송 보류와 회차 취소 확인 필요를 서버 응답 범위에서 표시했다. 로딩·오류·빈 상태와 명시적 재조회, KST 주문 기간을 제공하고, 이전 회차 복사는 이름·주문 시작·마감만 받아 기존 경매·배송 간격과 상품·가격·한도를 보존하도록 훅에 위임했다. Task 5.1의 6개 fixture·12개 `test.fixme`는 변경하지 않았고 Task 5.4 편집 폼과 별도 인접 테스트는 추가하지 않았다. seller 타입검사, 전체 typecheck·build, 대상 Biome 오류 수준 검사, 셀러 12개·소비자 24개 Playwright 목록 수집과 diff 검사가 통과했으며 build 생성물 5개는 시작 상태로 되돌려 제외했다. | done |
 | 5.4 | 5.3 | `apps/seller/src/app/sale-rounds/[id]/RoundForm.tsx` | 한 화면에서 일정·지역·한도·상품·가격·당근 링크를 편집한다. | `pnpm --filter seller exec tsc --noEmit` | [판정 대기 — 회차 편집] | todo |
 | 5.5 | 5.4 | `apps/seller/src/app/sale-rounds/[id]/page.tsx` | 회차 조회·저장·상태 변경을 RoundForm에 연결하는 라우트를 제공한다. | `pnpm --filter seller exec tsc --noEmit` | [판정 대기 — 회차 편집 라우트] | todo |
 | 5.6 | 5.5 | `apps/seller/src/components/BottomNav.tsx` | 주문·회차·상품·준비·설정을 주요 메뉴로 둔다. | `pnpm --filter seller exec tsc --noEmit` | [판정 대기 — 셀러 내비게이션] | todo |
@@ -282,7 +282,7 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 5.2 `done`, Task 5.3 `todo`
+- **Status**: Task 5.3 `done`, Task 5.4 `todo`
 - **Task 4.2 복귀 조건**: 충족. 결제·예약·환불, 주문·웹훅 권한, 주문·회차 취소, 주문 생성 멱등, 재배송비, 알림, 운영 예외, 보관·Storage 입력 계약을 Unit 1~9에서 보정했고 Unit 10에서 실제 도메인 서비스 통합 E2E와 전체 회귀 검증으로 확정했다.
 - **Task 4.2 결과**: 공개 목록과 회차별 상세를 병렬 조회해 회차 상품을 포함한 전체 회차, 현재 회차 하나, 최신순 지난 회차를 제공한다. 기존 소비자 데이터 접근 방식의 문자열 오류와 `loading` 불리언을 유지하면서 명시적 `error`, `empty`, `success` 상태와 재조회를 추가했고 요청 식별자로 스토어 전환·재조회 경쟁의 늦은 응답을 폐기한다.
 - **Task 4.3 결과**: `utm_source=carrot|daangn|당근` 유입만 탭 세션에 보관하고 새 당근 유입 전까지 유지한다. 캠페인·콘텐츠는 길이와 안전 문자 집합을 제한하며 도착 URL은 `http(s)`와 `round` 쿼리만 허용한다. 주문용 조회는 저장값을 다시 검증해 `source`, `campaign`, `content`, `landingUrl`, `capturedAt`만 새 객체로 반환하고 잘못된 값은 폐기한다. 화면·주문 호출부 연결은 후속 Task로 남겼다.
@@ -305,5 +305,6 @@ flowchart TD
 - **검증 결과**: Task 4.19 전용 Node 테스트 5개와 Task 4.8 상세 5개, Task 4.9 패널 6개, Task 4.10 구매 동작 5개, Task 4.11 장바구니 9개, Task 4.12 서버 재검증 8개, Task 4.13 결제 훅 6개, Task 4.14 checkout 5개, Task 4.15 CheckoutForm 6개, Task 4.16 주문 완료 5개, Task 4.17 MY 목록 4개, Task 4.18 MY 상세 5개 등 Node 테스트 69개, consumer 타입검사, 전체 typecheck와 build, Playwright chromium·mobile 24개 목록 수집, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. 전체 build가 갱신한 tracked 생성물 5개는 시작 HEAD 상태로 복원해 범위에서 제외했다.
 - **Task 5.1 결과**: 셀러 회차 복사·예약·마감·완료 거부·정상 완료·확인 필요 진입을 상호 배타적인 6개 fixture로 분리하고, 실제 `/sale-rounds` 화면과 seed가 아직 없으므로 모두 `test.fixme`로 수집했다. chromium·mobile 12개 셀러 목록과 기존 소비자 24개 목록, 전체 typecheck·build, 대상 Biome 오류 수준 검사와 `git diff --check`가 통과했으며 build 생성물 5개는 시작 상태와 비교해 범위에서 제외했다.
 - **Task 5.2 결과**: 셀러 세션의 스토어·토큰과 `apiJson`을 사용해 목록·상세·생성·저장·복사·상태 변경·완료를 한 훅에 모았다. 목록과 작업 상태를 분리하고 요청 경쟁을 막으며 mutation 응답의 스토어·회차·일정·한도·항목 계약을 확인한 뒤 즉시 반영하고 재조회한다. seller 타입검사, 전체 typecheck·build, 대상 Biome 검사, 셀러 12개·소비자 24개 Playwright 목록 수집과 diff 검사가 통과했고 build 생성물 5개는 시작 상태로 되돌려 제외했다.
-- **다음 진입점**: Task 5.3 `apps/seller/src/app/sale-rounds/page.tsx`만 시작할 수 있다. Task 5.4 이후 셀러 편집 화면, 드라이버 화면, 인덱스·보안 규칙은 앞서 구현하지 않는다.
+- **Task 5.3 결과**: 셀러 회차 목록은 Task 5.2 훅이 검증한 회차만 사용해 상태·KST 주문 기간·배송 지역·주문 배송지·판매 수량·한도·임시 확보·배송 보류를 표시한다. 서버가 제공한 보류·취소 실패에만 확인 필요 진입을 노출하고, 로딩·오류·빈 상태·재조회를 분리했다. 이전 회차 복사는 이름과 주문 시작·마감만 입력받고 기존 마감 이후 경매·배송 간격을 유지해 `copyRound`에 전달하며 Task 5.4 전체 편집은 시작하지 않았다. 별도 인접 테스트는 Task 5.1의 기존 12개 `test.fixme` 화면 계약과 중복돼 추가하지 않았다.
+- **다음 진입점**: Task 5.4 `apps/seller/src/app/sale-rounds/[id]/RoundForm.tsx`만 시작할 수 있다. Task 5.5 이후 셀러 편집 라우트, 드라이버 화면, 인덱스·보안 규칙은 앞서 구현하지 않는다.
 - **명시적 후속 위험**: 소비자 화면 계약 24개와 셀러 화면 계약 12개는 실행 데이터 준비 전이라 계속 `test.fixme`다. 주문 상세는 인증 주문 응답에 이미 포함된 HTTPS 사진 URL만 표시하므로 배송 사진 record의 실제 서버 업로드 API·서명 URL 라우트·드라이버 호출 연결은 Task 5.12, Firestore 인덱스와 보안 규칙·Storage 규칙은 Task 6.1~6.3, 서버 전체 흐름과 사용자 화면 실행 검증은 Task 6.4·6.7에 남아 있다. 주문 요청 유입 스냅샷 연결도 후속 결제 Task에 남아 있으며, `salesMode` 전환과 운영 배포는 Task 6.5 이후 별도 승인 전에는 수행하지 않는다.
