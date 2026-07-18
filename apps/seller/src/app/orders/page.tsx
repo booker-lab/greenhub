@@ -1,7 +1,16 @@
 'use client';
 
 import type { SaleType } from '@greenhub/shared';
-import { Box, Container, Group, Stack, Text, UnstyledButton } from '@mantine/core';
+import {
+  Box,
+  Container,
+  Group,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Text,
+  UnstyledButton,
+} from '@mantine/core';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
@@ -26,6 +35,7 @@ import {
   type OrderGroup,
   STATUS_GROUP_MAP,
 } from './_constants';
+import { getOrderPriorityCounts } from './order-priority';
 
 const VALID_TABS = new Set<OrderGroup>([
   'ACTION_REQUIRED',
@@ -34,6 +44,62 @@ const VALID_TABS = new Set<OrderGroup>([
   'DONE',
   'CANCELLED',
 ]);
+
+function PriorityItem({
+  label,
+  count,
+  description,
+  urgent,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  description: string;
+  urgent: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <UnstyledButton
+      onClick={onClick}
+      aria-label={`${label} ${count.toLocaleString()}건 확인`}
+      style={{
+        width: '100%',
+        padding: 14,
+        borderRadius: 12,
+        border: `1px solid ${urgent ? 'var(--color-danger)' : 'var(--color-border)'}`,
+        backgroundColor: urgent ? 'var(--color-danger-surface)' : 'var(--color-bg)',
+        textAlign: 'left',
+      }}
+    >
+      <Group justify="space-between" gap="xs" wrap="nowrap">
+        <Text
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-bold)',
+            color: urgent ? 'var(--color-danger)' : 'var(--color-text)',
+          }}
+        >
+          {label}
+        </Text>
+        <Text
+          style={{
+            fontSize: 'var(--font-size-xl)',
+            fontWeight: 'var(--fw-bold)',
+            color: urgent ? 'var(--color-danger)' : 'var(--color-text)',
+          }}
+        >
+          {count.toLocaleString()}건
+        </Text>
+      </Group>
+      <Text
+        mt={4}
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+      >
+        {description}
+      </Text>
+    </UnstyledButton>
+  );
+}
 
 export default function OrdersPage() {
   const { data: session } = useSession();
@@ -45,6 +111,11 @@ export default function OrdersPage() {
   const [datePreset, setDatePreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+
+  const saleTypeOrders = orders.filter((order) =>
+    saleType === 'group' ? order.saleType === 'group' : order.saleType !== 'group',
+  );
+  const priorityCounts = getOrderPriorityCounts(saleTypeOrders);
 
   const handleSaleTypeChange = (next: SaleType) => {
     setSaleType(next);
@@ -68,14 +139,13 @@ export default function OrdersPage() {
   // 공구 토글일 때만 표시 후보 productId를 모아 groupProductConfig 일괄 fetch
   const groupProductIds =
     saleType === 'group'
-      ? orders
-          .filter((o) => o.saleType === 'group' && STATUS_GROUP_MAP[o.status] === activeTab)
+      ? saleTypeOrders
+          .filter((o) => STATUS_GROUP_MAP[o.status] === activeTab)
           .map((o) => o.productId)
       : [];
   const groupConfigMap = useGroupConfigs(groupProductIds, saleType === 'group');
 
-  const filteredOrders = orders.filter((o) => {
-    if (saleType === 'group' ? o.saleType !== 'group' : o.saleType === 'group') return false;
+  const filteredOrders = saleTypeOrders.filter((o) => {
     if (STATUS_GROUP_MAP[o.status] !== activeTab) return false;
     if (activeTab === 'IN_DELIVERY' && subFilter !== 'ALL' && o.status !== subFilter) {
       return false;
@@ -94,6 +164,59 @@ export default function OrdersPage() {
         title="주문 관리"
         right={<ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />}
       />
+
+      {!loading && firebaseReady && (
+        <Container size="sm" px="md" pt="md">
+          <Paper radius="lg" shadow="xs" p="md">
+            <Group justify="space-between" align="flex-end" mb="sm">
+              <Box>
+                <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
+                  업무 우선순위
+                </Text>
+                <Text
+                  mt={2}
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  선택한 판매 유형의 확인할 주문입니다.
+                </Text>
+              </Box>
+              <Text
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-disabled)',
+                }}
+              >
+                항목을 누르면 확인 필요 목록으로 이동
+              </Text>
+            </Group>
+            <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="xs">
+              <PriorityItem
+                label="배송 보류"
+                count={priorityCounts.deliveryHeld}
+                description="배송 일정과 고객 안내를 먼저 확인하세요."
+                urgent={priorityCounts.deliveryHeld > 0}
+                onClick={() => {
+                  setActiveTab('ACTION_REQUIRED');
+                  setSubFilter('ALL');
+                }}
+              />
+              <PriorityItem
+                label="확인 필요"
+                count={priorityCounts.actionRequired}
+                description="기존 처리 필요 주문 상태를 모아 봅니다."
+                urgent={priorityCounts.actionRequired > 0}
+                onClick={() => {
+                  setActiveTab('ACTION_REQUIRED');
+                  setSubFilter('ALL');
+                }}
+              />
+            </SimpleGrid>
+          </Paper>
+        </Container>
+      )}
 
       {/* 판매 유형 토글 — 일반/공구 1차 분기 */}
       <SaleTypeToggle value={saleType} onChange={handleSaleTypeChange} />
