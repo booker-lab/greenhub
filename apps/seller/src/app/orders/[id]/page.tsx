@@ -8,9 +8,11 @@ import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { CancelOrderModal } from './_components/CancelOrderModal';
 import { OrderInfoSection } from './_components/OrderInfoSection';
+import { OrderOperationsSection } from './_components/OrderOperationsSection';
 import { PrepareForm } from './_components/PrepareForm';
 import { useOrderDetail } from './_hooks/useOrderDetail';
 import { useOrderDetailActions } from './_hooks/useOrderDetailActions';
+import { useOrderOperations } from './_hooks/useOrderOperations';
 import { CANCELLABLE_STATUSES, READONLY_STATUSES } from './_lib';
 
 export default function OrderDetailPage() {
@@ -37,6 +39,14 @@ export default function OrderDetailPage() {
     handleCancel,
     handleShipParcel,
   } = useOrderDetailActions(storeId, orderId);
+  const {
+    issues,
+    loading: operationsLoading,
+    actionIssueId,
+    error: operationsError,
+    reload: reloadOperations,
+    executeAction,
+  } = useOrderOperations(storeId, orderId);
 
   if (loading) {
     return <LoadingState fullPage />;
@@ -105,6 +115,15 @@ export default function OrderDetailPage() {
       <Container size="sm" px="md" py="md">
         <Stack gap="sm">
           <OrderInfoSection order={order} productName={productName} groupConfig={groupConfig} />
+          <OrderOperationsSection
+            order={order}
+            issues={issues}
+            loading={operationsLoading}
+            actionIssueId={actionIssueId}
+            error={operationsError}
+            onReload={reloadOperations}
+            onAction={executeAction}
+          />
 
           {actionError && (
             <Text
