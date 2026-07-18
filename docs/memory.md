@@ -5,16 +5,16 @@
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-18 (원 계획 Task 4.19 Closeout)
+최종 수정: 2026-07-18 (원 계획 Task 5.1 셀러 회차 운영 계약 수집 완료)
 
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
-- Task 4.19 시작 SHA: `bf1cbb31bdcd7ca9039e874b8db05fec1066b2e4`
+- Task 5.1 시작 SHA: `fd62556c57ea70f589d617f6f786c0664f62180c`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
-- 완료: Task 4.19 `apps/consumer/src/app/mypage/notifications/settings/page.tsx`
-- 다음: Task 5.1 `apps/e2e/tests/seller-sale-rounds.spec.ts`
-- Task 5.1 이후 셀러·드라이버 화면, 당근 유입 연결, 인덱스 작업은 선행하지 않는다.
+- 완료: Task 5.1 `apps/e2e/tests/seller-sale-rounds.spec.ts`
+- 다음: Task 5.2 `apps/seller/src/hooks/useSaleRounds.ts`
+- Task 5.3 이후 셀러 화면·드라이버 화면·인덱스 작업은 선행하지 않는다.
 
 ## Task 4.19 확정
 
@@ -27,17 +27,16 @@
 - 동의·철회 증거와 보관 기록은 서버 정책에 맡기고 클라이언트에서 모방·직접 접근하지 않는다.
 - 운영 파일 313줄, 테스트 144줄로 500줄 제한을 지켰다.
 
-## 검증 상태
+## Task 5.1 확정
 
-- Task 4.19 전용 5개와 Task 4.8~4.18 회귀 64개, 총 Node 테스트 69개 통과
-- consumer `tsc --noEmit`, 전체 `pnpm typecheck`, `pnpm build` 통과
-- Playwright chromium·mobile 24개 목록 수집 통과
-- 변경 파일 Biome 오류 수준 검사와 `git diff --check` 통과
-- build가 갱신한 tracked 생성물 5개는 시작 SHA 상태로 복원해 범위에서 제외했다.
+- 회차 복사·예약·마감·완료 거부·정상 완료·확인 필요 진입을 상호 배타적인 6개 fixture로 분리했다.
+- 기존 셀러 인증 상태와 환경 변수 계약을 재사용하고, 아직 없는 화면·seed 계약은 모두 `test.fixme`로 유지했다.
+- 셀러 chromium·mobile 12개와 기존 소비자 24개 목록, 전체 typecheck·build, Biome 오류 수준 검사와 diff 검사가 통과했다.
+- build가 새로 갱신한 tracked 생성물 5개는 시작 상태와 비교해 범위에서 제외했다.
 
 ## 명시적 후속 위험
 
-- 소비자 E2E 24개는 실행 데이터 준비 전이라 `test.fixme`다.
+- 소비자 E2E 24개와 셀러 E2E 12개는 실행 데이터 준비 전이라 `test.fixme`다.
 - 사진 record의 실제 업로드 API·서명 URL 라우트·드라이버 연결은 Task 5.12다.
 - Firestore 인덱스·보안 규칙과 Storage 규칙은 Task 6.1~6.3이다.
 - `salesMode` 전환·배포·push는 수행하지 않았다.
