@@ -10,6 +10,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test:firestore-rules": "node --test tests/firestore/firestore-rules.test.mjs",
+    "test:storage-rules": "node --test tests/storage/storage-rules.test.mjs",
     "load:smoke": "k6 run tests/load/scenarios/smoke.js",
     "load:consumer": "k6 run tests/load/scenarios/consumer-read.js",
     "load:checkout": "k6 run tests/load/scenarios/checkout.js",
