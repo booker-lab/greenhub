@@ -5,15 +5,15 @@
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-20 (원 계획 Task 6.3 Storage 보안 규칙 완료)
+최종 수정: 2026-07-20 (원 계획 Task 6.4 서버 전체 흐름 통합 계약 완료)
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
 - Task 5.12 시작 SHA: `d4d47d577bd861278dd986d7edfb06e9746d2b7b`
 - 완료 계획: `docs/plans/PLAN_mvp_sales_round_consumer_review_remediation.md`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
-- 완료: Task 6.3 비공개 회차 배송 사진 차단과 공개·legacy Storage 경계
-- 다음: Task 6.4 서버 전체 흐름 통합 계약
+- 완료: Task 6.4 실제 Nest 애플리케이션 기반 서버 전체 흐름 통합 계약
+- 다음: Task 6.5 판매 모드 전환 dry-run 준비
 
 ## 선행 계약 확정
 

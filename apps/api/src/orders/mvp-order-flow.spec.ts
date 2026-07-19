@@ -134,7 +134,7 @@ function seedRoundRecords(overrides: Record<string, RecordData> = {}) {
       name: '7월 3주차',
       status: 'OPEN',
       schedule: {
-        orderCloseAt: '2026-07-20T00:00:00.000+09:00',
+        orderCloseAt: '2099-07-20T00:00:00.000+09:00',
         timezone: 'Asia/Seoul',
       },
       deliveryRegion: { city: '이천시', enabled: true },
