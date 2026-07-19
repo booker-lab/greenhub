@@ -5,15 +5,15 @@
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-20 (원 계획 Task 6.5 판매 모드 전환 dry-run 계약 완료)
+최종 수정: 2026-07-20 (원 계획 Task 6.6 운영 런북 완료)
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
 - Task 5.12 시작 SHA: `d4d47d577bd861278dd986d7edfb06e9746d2b7b`
 - 완료 계획: `docs/plans/PLAN_mvp_sales_round_consumer_review_remediation.md`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
-- 완료: Task 6.5 디어 오키드 판매 모드 전환 dry-run 계약
-- 다음: 별도 요청 후 Task 6.6 운영 런북
+- 완료: Task 6.6 주간 운영·장애 대응·롤백·수동 환불 런북
+- 다음: 별도 요청 후 Task 6.7 사용자 흐름 준비조건 확인
 
 ## 선행 계약 확정
 
@@ -45,9 +45,11 @@
 - `salesMode` 전환·배포·push는 수행하지 않는다.
 - 현재 작업 트리의 기존 미커밋 API·소비자·문서·스크립트·인덱스 변경은 사용자 작업으로 보존한다.
 
-## Task 6.5 확정
+## Task 6.6 확정
 
-- 운영 프로젝트 `green-e4fe3`의 디어 오키드 대상은 `80189070-2c3d-45f2-bc11-68a870b13951` 단일 문서다.
-- `salesMode`는 미설정이며 호환 현재값 `legacy`, 변경 예정값 `round_direct`, 롤백 대상 `legacy`다.
-- dry-run과 안전 거부 계약 11개가 통과했고 전후 `updateTime`과 모드가 동일했다.
-- 실제 Firestore 변경·운영 전환·배포·push는 수행하지 않았다.
+- `docs/specs/ops/mvp-sales-round-runbook.md`가 일요일 마감, 월요일 매입, 화요일 00:00~09:00 배송과 회차 상태별 운영 증거·중단·에스컬레이션을 고정한다.
+- 실제 전환은 Task 6.7 통과와 별도 승인 뒤에만 가능하며, 소비자 장애 롤백 뒤에도 기존 회차 주문을 삭제·변환하지 않고 처리한다.
+- 수동 환불은 PortOne 원격 재조회, 로컬 결제 대조, 열린 `AUTO_REFUND_FAILED`의 claim 기반 재시도를 우선해 중복을 막는다.
+- 결제 조회·재배송·보관 파기 예외에는 현재 자동 조치가 없고, 늦은 결제 직접 환불 실패도 항상 전용 예외로 수렴하지 않으므로 기술 담당자에게 에스컬레이션한다.
+- 비밀키·토큰·전체 개인정보·사진 원본·서명 URL을 로그와 증거에 남기지 않는다.
+- 실제 운영 명령·Firestore 쓰기·환불·문자·상태 변경·배포·push는 수행하지 않았다.
