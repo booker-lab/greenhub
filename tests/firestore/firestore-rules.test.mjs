@@ -63,6 +63,11 @@ async function seedFixtures() {
       'stores/store-1': { name: '공개 매장', salesMode: 'round_direct' },
       'dailyCaps/store-1_2026-07-18': { storeId: 'store-1', date: '2026-07-18' },
       'groupProductConfig/product-1': { storeId: 'store-1', productId: 'product-1' },
+      'varieties/variety-1': {
+        name: '호접란',
+        category: 'orchid',
+        bloomDuration: '60~90일',
+      },
       'orders/order-store-1': { storeId: 'store-1', userId: 'user-1' },
       'orders/order-store-2': { storeId: 'store-2', userId: 'user-2' },
       'saleRounds/round-1': { storeId: 'store-1', status: 'OPEN' },
@@ -155,11 +160,17 @@ test('saleRoundItems는 공개 회차에 속한 단건 및 제한된 목록 조�
   const publicQuery = query(
     collection(database, 'saleRoundItems'),
     where('roundId', '==', 'round-1'),
+    where('storeId', '==', 'store-1'),
+  );
+  const roundOnlyQuery = query(
+    collection(database, 'saleRoundItems'),
+    where('roundId', '==', 'round-1'),
   );
 
   await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-1')));
   await assertSucceeds(getDocs(publicQuery));
   await assertFails(getDoc(doc(database, 'saleRoundItems', 'item-draft')));
+  await assertFails(getDocs(roundOnlyQuery));
   await assertFails(getDocs(collection(database, 'saleRoundItems')));
 });
 
@@ -179,6 +190,22 @@ test('기존 공개 상품과 매장 및 재고 조회를 보존한다', async (
   await assertSucceeds(getDocs(collection(database, 'dailyCaps')));
   await assertSucceeds(getDoc(doc(database, 'groupProductConfig', 'product-1')));
   await assertSucceeds(getDocs(collection(database, 'groupProductConfig')));
+});
+
+test('품종은 공개 단건 조회만 허용하고 목록과 모든 직접 쓰기를 거부한다', async () => {
+  const publicDatabase = testEnvironment.unauthenticatedContext().firestore();
+
+  await assertSucceeds(getDoc(doc(publicDatabase, 'varieties', 'variety-1')));
+  await assertFails(getDocs(collection(publicDatabase, 'varieties')));
+
+  for (const [actor, database] of clientContexts()) {
+    const existing = doc(database, 'varieties', 'variety-1');
+    const created = doc(database, 'varieties', `created-${actor}`);
+
+    await assertFails(setDoc(created, { actor }));
+    await assertFails(updateDoc(existing, { actor }));
+    await assertFails(deleteDoc(existing));
+  }
 });
 
 test('기존 주문의 판매자 매장과 기사 및 관리자 읽기 권한을 보존한다', async () => {

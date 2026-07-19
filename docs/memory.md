@@ -5,7 +5,7 @@
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-18 (원 계획 Task 6.2 Firestore 보안 규칙 보강 완료)
+최종 수정: 2026-07-20 (원 계획 Task 6.2 Firestore Emulator 검증 완료)
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
@@ -13,7 +13,7 @@
 - 완료 계획: `docs/plans/PLAN_mvp_sales_round_consumer_review_remediation.md`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
 - 완료: Task 6.2 서버 전용 Firestore 컬렉션 직접 접근 차단과 공개 회차 읽기 계약
-- 다음: Task 6.3 Storage Rules 보강. 에뮬레이터 동적 검증에는 JDK 21 이상 필요
+- 다음: Task 6.3 Storage Rules 보강. 사용자 전용 Temurin 21로 Emulator 실행
 
 ## 선행 계약 확정
 
@@ -37,9 +37,9 @@
 ## 후속 Task 실행 원칙
 
 - Task 6.1은 실제 범위·정렬 쿼리에 필요한 복합 인덱스 4개만 추가했고 관련 계약 23개와 API 128개, 타입 검사와 build가 통과했다.
-- Task 6.2는 예약·운영 예외·법정 및 보관 기록·알림 전달 7개 컬렉션의 직접 접근을 차단하고 공개 회차 2개 컬렉션은 읽기만 허용했다.
-- 실제 규칙을 로드하는 계약 테스트 13개와 관련 API 90개, 타입 검사, build, 정적 검사가 준비됐지만 Firebase CLI 15.18.0은 현재 JDK 17에서 JDK 21 이상을 요구해 동적 실행은 차단됐다.
-- 다음 작업은 Task 6.3 Storage Rules이며 Firestore·Storage 에뮬레이터 계약은 JDK 21 이상에서 재실행한다.
+- Task 6.2는 서버 전용 7개 컬렉션을 차단하고 공개 회차·제한 회차 상품과 품종 단건 조회만 허용했다.
+- 사용자 전용 Temurin 21.0.11로 실제 Firestore Emulator 계약 14개가 모두 통과했으며 시스템 기본 JDK 17은 유지했다.
+- 다음 작업은 Task 6.3 Storage Rules이며 같은 사용자 전용 JDK를 명령 단위로 사용한다.
 - 드라이버 E2E 14개, 소비자 E2E 24개와 셀러 E2E 12개는 실행 데이터·화면 준비 전까지 `test.fixme`다.
 - 인덱스는 Task 6.1, Firestore·Storage 보안 규칙은 Task 6.2~6.3이다.
 - `salesMode` 전환·배포·push는 수행하지 않는다.

@@ -44,6 +44,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // varieties: 소비자 상품 상세에 필요한 공개 품종 단건 조회만 허용
+    match /varieties/{varietyId} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
     // 공개 판매 회차: 소비자 조회만 허용하고 모든 클라이언트 직접 쓰기 차단
     match /saleRounds/{roundId} {
       allow read: if isPublicSaleRoundStatus(resource.data.status);
