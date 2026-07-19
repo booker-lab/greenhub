@@ -4,14 +4,14 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 6.4 완료, Task 6.5 착수 대기
+- **상태**: Task 6.5 완료, Task 6.6 착수 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
 - **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. Task 3.7은 셀러·관리자 인증, 스토어 소유권 검증, 안전한 목록·상세·재조회 응답과 환불·문자 조치 API를 구현했다. Task 3.8은 운영 모듈과 런타임 라우트를 연결하고 알림·재배송 최종 실패 생성 경로를 공통 운영 서비스로 전환했다. Task 3.9는 배송 사진 90일, 마케팅 동의와 분쟁 기록 3년, 계약·결제·공급 기록 5년, 분쟁·법적 보존 연장과 멱등 파기 계약을 실패 테스트 8개로 고정했다. Task 3.10은 목적별 법정 기록 저장과 만료 쿼리, 분쟁·법적 보존 제외, 연결 사진과 Firestore 문서의 멱등 파기를 구현했다. Task 3.11은 `FirestoreModule`을 가져오는 `RetentionModule`에 보관 서비스를 provider로 등록하고 export했다. Task 3.12는 배송 사진의 서버 비공개 업로드, 주문 권한 확인 뒤 15분 V4 읽기 서명 URL, 보관 서비스용 삭제 어댑터를 구현했다. Task 3.13은 `StorageService`를 Firebase 인프라 모듈 provider/export에 등록하고 `RetentionService` 삭제 어댑터로 명시적으로 주입했다. Task 3.14는 이미 연결된 회차·운영 예외 모듈을 중복 등록하지 않고 누락된 `RetentionModule`만 `AppModule`에 추가했다. 현재 진입점은 Task 6.1이다.
 
-- **현재 진입점**: 실제 Nest 애플리케이션과 도메인 서비스로 회차 개설부터 결제·보류·재배송·사진·완료·보관 파기까지 검증했으며 다음 작업은 Task 6.5 판매 모드 전환 준비다.
+- **현재 진입점**: 디어 오키드 운영 문서를 읽기 전용으로 조회해 판매 모드 전환 dry-run과 안전한 거부 계약을 검증했으며 다음 작업은 Task 6.6 운영 런북이다.
 
 ## 업무 요약 (협업용)
 
@@ -255,7 +255,7 @@ flowchart TD
 | 6.2 | 6.1 | `firestore.rules` | 회차 쓰기·예약·법정 기록·운영 예외의 클라이언트 직접 접근을 차단한다. | `pnpm --filter api build` | 통과 — API와 클라이언트 호출부 감사 결과 `checkoutReservations`, `operationIssues`, 법정·마케팅·배송 사진 보관 기록 4종, `notificationDeliveries`는 Admin SDK 서버 경로만 사용하므로 직접 읽기·쓰기를 명시적으로 차단했다. `saleRounds`는 공개 상태로 제한하고 `saleRoundItems` 목록은 `roundId + storeId` 조건과 공개 부모 회차를 모두 요구하며 모든 클라이언트 쓰기를 차단했다. 소비자 상품 상세가 직접 조회하는 공개 `varieties`는 단건 `get`만 허용하고 목록과 쓰기를 거부했다. Temurin 21.0.11을 사용자 전용으로 적용한 실제 Firestore Emulator 계약 14개, 관련 API 90개, 전체 타입 검사와 build, Biome 및 공백 검사가 통과했다. | done |
 | 6.3 | 6.2 | `storage.rules` | 배송 사진 직접 접근 차단과 기존 공개 상품 이미지 규칙을 함께 검증한다. | `pnpm --filter api build` | 통과 — 실제 호출부 감사로 공개 상품·메인 배너·상점 로고, 기사 전용 legacy 평면 사진, Admin SDK 전용 회차 중첩 사진 경로를 확정했다. 회차 사진은 모든 클라이언트의 직접 읽기·쓰기를 차단하고 상품은 소유 판매자·관리자, 배너는 관리자, 로고는 파일명 UID와 일치하는 판매자, legacy 거점 사진은 기사에게 필요한 동작만 허용했다. 각 공개 이미지 조회와 허용 업로드를 보존하면서 경로별 2MiB·5MiB 제한과 실제 허용 `contentType`을 적용했다. Temurin 21.0.11을 명령 단위로 사용한 실제 Storage Emulator 계약 11개, 관련 API 37개, 전체 타입 검사와 build, Biome 및 공백 검사가 통과했다. | done |
 | 6.4 | 6.3 | `apps/api/test/mvp-sales-round.e2e-spec.ts` | 회차 개설부터 결제·보류·재배송·파기까지 서버 통합 계약을 검증한다. | `pnpm --filter api test:e2e -- mvp-sales-round.e2e-spec.ts --runInBand` | 통과 — 실제 Nest 컨트롤러와 회차·예약·주문·결제·보류·재배송비·사진·보관 서비스를 메모리 Firestore에 연결하고 PortOne·알림·Storage 외부 경계만 계약 대역으로 사용했다. 인증 없음·역할별 권한, 중복 주문·웹훅·사진 재시도, 회차 한도, 늦은 결제 자동 환불, 보류 주문 완료 거부, 재배송 실패 운영 예외, 비공개 사진 권한, 완료와 멱등 파기를 E2E 3개로 검증했다. 관련 API 81개와 Firestore Emulator 14개, Storage Emulator 11개가 통과했으며 제품 서비스의 추가 보정은 필요하지 않았다. | done |
-| 6.5 | 6.4 | `scripts/enable-dear-orchid-round-direct.mjs` | 대상 storeId·현재 모드·확인 플래그를 검사한 뒤 판매 모드를 전환한다. | `node scripts/enable-dear-orchid-round-direct.mjs --dry-run` | [판정 대기 — 전환 준비] | todo |
+| 6.5 | 6.4 | `scripts/enable-dear-orchid-round-direct.mjs` | 대상 storeId·현재 모드·확인 플래그를 검사한 뒤 판매 모드를 전환한다. | `node scripts/enable-dear-orchid-round-direct.mjs --dry-run` | 통과 — `green-e4fe3`에서 이름이 정확히 `디어 오키드`인 단일 대상 `80189070-2c3d-45f2-bc11-68a870b13951`을 확인했다. 미설정 `salesMode`는 호환값 `legacy`로만 판독하고 `round_direct` 변경 예정값, 현재·예정 모드를 포함한 확인 플래그, `legacy` 롤백 명령을 출력한다. 대상 없음·다중 대상·이미 목표 모드·손상 상태·인증 누락·확인 플래그 누락 또는 불일치를 거부하는 계약 11개가 통과했으며 dry-run 전후 문서 `updateTime`과 모드는 동일했다. 실제 전환·배포·push는 수행하지 않았다. | done |
 | 6.6 | 6.5 | `docs/specs/ops/mvp-sales-round-runbook.md` | 주간 운영·장애 대응·롤백·수동 환불 절차를 운영 문서로 고정한다. | `git diff --check -- docs/specs/ops/mvp-sales-round-runbook.md` | [판정 대기 — 운영 런북] | todo |
 | 6.7 | 6.6 | `apps/e2e/tests/consumer-round-direct.spec.ts` | 소비자·셀러·드라이버 핵심 흐름을 실행해 화면 계약을 닫는다. | `pnpm --filter e2e exec playwright test consumer-round-direct seller-sale-rounds driver-direct-delivery --reporter=list` | [판정 대기 — 전체 사용자 흐름] | todo |
 | 6.8 | 6.7 | `docs/plans/PLAN_mvp_sales_round_direct_delivery.md` | 전체 빌드·테스트 결과와 잔여 위험을 Closeout에 기록한다. | `pnpm build` | [판정 대기 — 최종 빌드] | todo |
@@ -319,5 +319,5 @@ flowchart TD
 - **Task 6.2 결과**: 서버 Admin SDK만 사용하는 예약·운영 예외·법정 및 보관 기록·알림 전달 컬렉션 7개의 클라이언트 직접 접근을 명시적으로 차단했다. 공개 상태 회차와 `roundId + storeId`로 제한한 공개 부모 회차 상품만 읽도록 허용하고, 공개 품종은 소비자 상품 상세에 필요한 단건 조회만 허용했다. 인증 없음·일반 사용자·판매자·기사·관리자의 서버 전용 읽기 및 생성·수정·삭제 거부, 공개·비공개 회차 경계, 제한 목록, 품종 단건·목록·쓰기 경계, 기존 공개 데이터와 역할별 주문 읽기를 실제 Firestore Emulator 계약 14개로 검증했다. Temurin 21.0.11을 사용자 전용 경로에서 명령 단위로 적용해 14개가 모두 통과했으며 시스템 기본 JDK 17은 변경하지 않았다.
 - **Task 6.3 결과**: 회차 직배송 `deliveryPhotos/{orderId}/{photoId}.jpg`는 Admin SDK 업로드와 15분 V4 서명 URL만 사용하도록 모든 클라이언트 직접 접근을 차단했다. 공개 상품·메인 배너·상점 로고와 기사 전용 `deliveryPhotos/{orderId}_{timestamp}.jpg` legacy 흐름은 실제 호출 경로에 맞춰 역할·소유권·크기·`contentType`을 제한해 보존했다. 현재 규칙에서 11개 중 6개가 실패하는 것을 먼저 확인한 뒤 실제 Storage Emulator 11개와 관련 API 37개, 전체 타입 검사와 build를 통과시켰다.
 - **Task 6.4 결과**: 실제 Nest 애플리케이션과 도메인 서비스를 메모리 Firestore fixture에 연결하고 외부 결제·알림·Storage만 계약 대역으로 사용했다. 회차 개설, 예약 주문, 결제 웹훅, 배송 보류, 재배송비 결제, 재배송 실패 운영 예외, 비공개 완료 사진, 회차 완료, 용도별 보관 파기를 순서대로 검증했으며 중복 주문·웹훅·사진·파기와 늦은 결제 한도 재확보 실패 환불도 멱등 처리됐다. E2E 3개, 관련 API 81개, Firestore Emulator 14개와 Storage Emulator 11개가 통과했고 서비스 연결 보정은 필요하지 않았다.
-- **다음 진입점**: Task 6.5 `scripts/enable-dear-orchid-round-direct.mjs`의 dry-run 계약만 시작할 수 있다.
+- **다음 진입점**: 별도 요청이 있을 때 Task 6.6 운영 런북만 시작할 수 있다.
 - **명시적 후속 위험**: 드라이버 화면 계약 14개, 소비자 화면 계약 24개와 셀러 화면 계약 12개는 실행 데이터와 화면 준비 전이라 계속 `test.fixme`다. legacy 거점 사진은 기존 공개 다운로드 URL 계약 때문에 기사 직접 생성·읽기를 유지한다. `salesMode` 실제 전환·운영 배포·push는 별도 승인 전에는 수행하지 않는다.
