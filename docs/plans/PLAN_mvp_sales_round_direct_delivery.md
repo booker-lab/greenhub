@@ -257,8 +257,21 @@ flowchart TD
 | 6.4 | 6.3 | `apps/api/test/mvp-sales-round.e2e-spec.ts` | 회차 개설부터 결제·보류·재배송·파기까지 서버 통합 계약을 검증한다. | `pnpm --filter api test:e2e -- mvp-sales-round.e2e-spec.ts --runInBand` | 통과 — 실제 Nest 컨트롤러와 회차·예약·주문·결제·보류·재배송비·사진·보관 서비스를 메모리 Firestore에 연결하고 PortOne·알림·Storage 외부 경계만 계약 대역으로 사용했다. 인증 없음·역할별 권한, 중복 주문·웹훅·사진 재시도, 회차 한도, 늦은 결제 자동 환불, 보류 주문 완료 거부, 재배송 실패 운영 예외, 비공개 사진 권한, 완료와 멱등 파기를 E2E 3개로 검증했다. 관련 API 81개와 Firestore Emulator 14개, Storage Emulator 11개가 통과했으며 제품 서비스의 추가 보정은 필요하지 않았다. | done |
 | 6.5 | 6.4 | `scripts/enable-dear-orchid-round-direct.mjs` | 대상 storeId·현재 모드·확인 플래그를 검사한 뒤 판매 모드를 전환한다. | `node scripts/enable-dear-orchid-round-direct.mjs --dry-run` | 통과 — `green-e4fe3`에서 이름이 정확히 `디어 오키드`인 단일 대상 `80189070-2c3d-45f2-bc11-68a870b13951`을 확인했다. 미설정 `salesMode`는 호환값 `legacy`로만 판독하고 `round_direct` 변경 예정값, 현재·예정 모드를 포함한 확인 플래그, `legacy` 롤백 명령을 출력한다. 대상 없음·다중 대상·이미 목표 모드·손상 상태·인증 누락·확인 플래그 누락 또는 불일치를 거부하는 계약 11개가 통과했으며 dry-run 전후 문서 `updateTime`과 모드는 동일했다. 실제 전환·배포·push는 수행하지 않았다. | done |
 | 6.6 | 6.5 | `docs/specs/ops/mvp-sales-round-runbook.md` | 주간 운영·장애 대응·롤백·수동 환불 절차를 운영 문서로 고정한다. | `git diff --check -- docs/specs/ops/mvp-sales-round-runbook.md` | 통과 — 일요일 마감, 월요일 경매·매입, 화요일 직접배송과 회차 상태별 증거·중단·에스컬레이션을 역할별로 고정했다. 출시 전 dry-run과 별도 승인 전환, 소비자 장애 시 `legacy` 롤백 뒤 기존 결제 주문 계속 처리, PortOne 원격 재조회와 환불 claim 기반 중복 방지, 결제·알림·배송·사진·보관 예외 및 비밀정보 배제 계약을 실제 구현 경계와 대조했다. 실제 운영 명령·외부 쓰기·배포·push는 수행하지 않았다. | done |
-| 6.7 | 6.6 | `apps/e2e/tests/consumer-round-direct.spec.ts` | 소비자·셀러·드라이버 핵심 흐름을 실행해 화면 계약을 닫는다. | `pnpm --filter e2e exec playwright test consumer-round-direct seller-sale-rounds driver-direct-delivery --reporter=list` | [판정 대기 — 전체 사용자 흐름] | todo |
+| 6.7 | 6.6 | `apps/e2e/tests/consumer-round-direct.spec.ts` | 소비자·셀러·드라이버 핵심 흐름을 실행해 화면 계약을 닫는다. | `pnpm --filter e2e exec playwright test consumer-round-direct seller-sale-rounds driver-direct-delivery --reporter=list` | 중단 — 준비조건 감사에서 세 앱 배포 SHA 불일치, 드라이버 인증 부재, 전용 fixture·격리 seed·정리 절차·외부 결제 대역·비운영 사진 Storage 경계 부재를 확인했다. 52개 계약 목록만 수집하고 `test.fixme`와 운영 상태를 유지했다. | blocked |
 | 6.8 | 6.7 | `docs/plans/PLAN_mvp_sales_round_direct_delivery.md` | 전체 빌드·테스트 결과와 잔여 위험을 Closeout에 기록한다. | `pnpm build` | [판정 대기 — 최종 빌드] | todo |
+
+### Task 6.7 준비조건 판정 (2026-07-20)
+
+| 준비조건 | 판정 | 근거와 재진입 조건 |
+| :--- | :--- | :--- |
+| 세 앱 URL·같은 검증 배포 | 실패 | 소비자·드라이버 Preview는 `b52c4567416b372bf94758096aada0923acf1096`, 셀러 URL은 `14426f8ca7eb0377e6af8a71e48b01c4252b16e1` 배포로 조회됐다. 세 별칭을 같은 검증 SHA로 맞춰야 한다. |
+| 역할별 인증 | 실패 | 소비자·셀러 자격과 공용 인증 상태 생성 절차는 있으나 드라이버 `DRIVER_SESSION_COOKIE` 또는 동등한 승인 절차가 없다. 세 역할 모두 대상 배포에서 재발급·검증돼야 한다. |
+| 재현 가능한 전용 fixture | 실패 | 대상 spec의 `round-direct-*`, `seller-round-*`, `driver-round-*` 식별자를 만드는 seed가 없다. 회차·상품·스토어·주문·보류·완료 사진 fixture가 모두 필요하다. |
+| 격리·반복·정리 안전성 | 실패 | 기존 `seed-e2e-orders.mjs`는 활성 상품의 실제 스토어를 동적으로 선택하고 `e2e-` 시드를 정리 대상에서 제외한다. 전용 비운영 프로젝트 가드와 결정적 정리 절차가 필요하다. |
+| 외부 결제·환불·알림 대역 | 실패 | 세 대상 spec에는 API·PortOne·알림 route 대역이 없고 회차 결제 성공 fixture도 없다. 실제 외부 호출 없이 한 주문·한 결제를 닫는 승인된 대체 경계가 필요하다. |
+| 운영 `salesMode` 비의존 | 실패 | 별도 `round_direct` 테스트 스토어와 회차 seed가 없어 운영 디어 오키드 전환 없이 소비자 회차 화면을 보장할 수 없다. |
+| 테스트 JPEG·비운영 Storage | 실패 | 드라이버 계약은 촬영 전 비활성화까지만 다루며 업로드용 JPEG fixture와 비운영 Storage 대상·정리 계약이 없다. |
+| 전체 실행 허용 | 실패 | 위 조건 중 하나라도 부족하면 해제 금지라는 게이트에 따라 52개 `test.fixme`를 유지했다. `--list`는 3개 파일에서 chromium·mobile 52개를 수집했고 실제 사용자 흐름 명령은 실행하지 않았다. |
 
 ## 출시 순서
 1. `salesMode` 기본값을 `legacy`로 둔 채 회차 API와 셀러 화면을 배포한다.
@@ -320,5 +333,6 @@ flowchart TD
 - **Task 6.3 결과**: 회차 직배송 `deliveryPhotos/{orderId}/{photoId}.jpg`는 Admin SDK 업로드와 15분 V4 서명 URL만 사용하도록 모든 클라이언트 직접 접근을 차단했다. 공개 상품·메인 배너·상점 로고와 기사 전용 `deliveryPhotos/{orderId}_{timestamp}.jpg` legacy 흐름은 실제 호출 경로에 맞춰 역할·소유권·크기·`contentType`을 제한해 보존했다. 현재 규칙에서 11개 중 6개가 실패하는 것을 먼저 확인한 뒤 실제 Storage Emulator 11개와 관련 API 37개, 전체 타입 검사와 build를 통과시켰다.
 - **Task 6.4 결과**: 실제 Nest 애플리케이션과 도메인 서비스를 메모리 Firestore fixture에 연결하고 외부 결제·알림·Storage만 계약 대역으로 사용했다. 회차 개설, 예약 주문, 결제 웹훅, 배송 보류, 재배송비 결제, 재배송 실패 운영 예외, 비공개 완료 사진, 회차 완료, 용도별 보관 파기를 순서대로 검증했으며 중복 주문·웹훅·사진·파기와 늦은 결제 한도 재확보 실패 환불도 멱등 처리됐다. E2E 3개, 관련 API 81개, Firestore Emulator 14개와 Storage Emulator 11개가 통과했고 서비스 연결 보정은 필요하지 않았다.
 - **Task 6.6 결과**: 주간 회차 운영의 담당 역할·사전 조건·확인 증거·중단 조건·에스컬레이션을 상태별로 고정했다. 실제 전환은 Task 6.7 통과와 별도 승인 뒤에만 허용하고, 소비자 장애 시 `legacy` 롤백 뒤에도 기존 회차 주문을 삭제·변환하지 않고 계속 처리한다. 결제 상태 불명확·늦은 결제·자동 환불 실패, 고객 안내 최종 실패, 배송 보류·재배송 실패, 비공개 사진·서명 URL, 완료 거부, 보관 파기 실패를 구현의 실제 조치 가능 범위와 대조했으며 수동 환불 전 PortOne 원격 재조회와 중복 방지 절차를 명시했다.
+- **Task 6.7 준비조건 결과**: 세 앱 배포 SHA, 드라이버 인증, 전용 fixture, 격리 seed·정리, 외부 결제 대역, 운영 모드 비의존, 테스트 JPEG·비운영 Storage 경계가 모두 준비되지 않아 실행을 중단했다. `test.fixme` 52개는 그대로 두고 목록 수집만 통과했으며 실제 결제·환불·알림·Firestore·Storage 쓰기, 판매 모드 전환, 배포·push는 수행하지 않았다.
 - **다음 진입점**: 별도 요청이 있을 때 Task 6.7 준비조건을 먼저 확인하고, 하나라도 부족하면 `test.fixme`를 해제하지 않는다.
 - **명시적 후속 위험**: 드라이버 화면 계약 14개, 소비자 화면 계약 24개와 셀러 화면 계약 12개는 실행 데이터와 화면 준비 전이라 계속 `test.fixme`다. legacy 거점 사진은 기존 공개 다운로드 URL 계약 때문에 기사 직접 생성·읽기를 유지한다. `salesMode` 실제 전환·운영 배포·push는 별도 승인 전에는 수행하지 않는다.
