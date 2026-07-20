@@ -10,6 +10,8 @@ interface PortonePaymentData {
   method?: { type: string };
 }
 
+const WEBHOOK_TOLERANCE_SECONDS = 5 * 60;
+
 export class PortoneError extends Error {
   constructor(
     public readonly status: number,
@@ -57,51 +59,54 @@ export class PortoneClient {
     return new PortoneError(res.status, type, message);
   }
 
-  /**
-   * Portone V2 Webhook 서명 검증 (Svix 기반)
-   * - webhook-signature 헤더가 없으면 서명 미설정 환경으로 간주하고 통과 (경고 로그)
-   * - 헤더가 있으면 반드시 유효해야 함
-   */
+  /** Portone V2 Webhook 서명 검증 (Svix 기반) */
   verifyWebhookSignature(
     webhookId: string,
     webhookTimestamp: string,
     rawBody: Buffer,
     signatureHeader: string,
   ): void {
-    // 서명 헤더가 없으면 포트원 콘솔에서 서명 미설정 — 검증 스킵
-    if (!signatureHeader) {
-      this.logger.warn(
-        'webhook-signature header absent — skipping verification (configure signing key in Portone console)',
-      );
-      return;
-    }
-
     const webhookSecret = this.config.get<string>('PORTONE_WEBHOOK_SECRET', '');
-    if (!webhookSecret) {
-      this.logger.warn('PORTONE_WEBHOOK_SECRET not set — skipping verification');
-      return;
+    if (
+      !webhookId?.trim() ||
+      !webhookTimestamp?.trim() ||
+      !signatureHeader?.trim() ||
+      !Buffer.isBuffer(rawBody) ||
+      !webhookSecret
+    ) {
+      throw new UnauthorizedException('웹훅 인증 정보가 올바르지 않습니다.');
     }
 
-    // Svix: secret은 "whsec_" 접두사 제거 후 base64 디코딩
+    const timestamp = Number(webhookTimestamp);
+    const now = Math.floor(Date.now() / 1000);
+    if (!Number.isSafeInteger(timestamp) || Math.abs(now - timestamp) > WEBHOOK_TOLERANCE_SECONDS) {
+      throw new UnauthorizedException('웹훅 timestamp가 올바르지 않습니다.');
+    }
+
     const secretBytes = Buffer.from(
       webhookSecret.startsWith('whsec_') ? webhookSecret.slice(6) : webhookSecret,
       'base64',
     );
+    if (secretBytes.length === 0) {
+      throw new UnauthorizedException('웹훅 인증 정보가 올바르지 않습니다.');
+    }
 
-    // 서명 대상: "{webhookId}.{webhookTimestamp}.{rawBody}"
     const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody.toString()}`;
 
-    const expectedSig = crypto
-      .createHmac('sha256', secretBytes)
-      .update(signedContent)
-      .digest('base64');
+    const expectedSig = crypto.createHmac('sha256', secretBytes).update(signedContent).digest();
 
-    // 헤더 형식: "v1,<sig1> v1,<sig2>" (복수 서명 지원)
-    const signatures = signatureHeader.split(' ').map((s) => s.replace(/^v[0-9]+,/, ''));
+    const signatures = signatureHeader
+      .trim()
+      .split(/\s+/)
+      .filter((signature) => /^v[0-9]+,/.test(signature))
+      .map((signature) => Buffer.from(signature.replace(/^v[0-9]+,/, ''), 'base64'));
 
-    const isValid = signatures.some((sig) => sig === expectedSig);
+    const isValid = signatures.some(
+      (signature) =>
+        signature.length === expectedSig.length && crypto.timingSafeEqual(signature, expectedSig),
+    );
     if (!isValid) {
-      throw new UnauthorizedException('Invalid webhook signature');
+      throw new UnauthorizedException('웹훅 서명이 올바르지 않습니다.');
     }
   }
 

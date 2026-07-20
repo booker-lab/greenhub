@@ -630,3 +630,11 @@
 - **복구 계약**: 결제 타임아웃은 포트원 상태를 재조회하고 늦은 결제는 한도 재확보 또는 자동 전액 환불로 처리한다. 알림톡은 3회 재시도 후 문자로 대체하며 최종 실패만 `operationIssues`로 이관한다.
 - **보안 계약**: 배송 사진과 법정 보관 컬렉션은 클라이언트 직접 접근을 차단한다. 사진은 서버 업로드·서명 URL로 제공하고 주문·분쟁·마케팅 동의 기록은 용도별 만료 시각에 따라 자동 파기한다.
 - **실행 정본**: [PLAN_mvp_sales_round_direct_delivery.md](plans/PLAN_mvp_sales_round_direct_delivery.md)
+
+## [결정 #CL-167] Task 4.2 전에 전수 리뷰 보정을 별도 Unit 핸드오프로 완료한다 (2026-07-17)
+
+- **결정**: Task 1.1~4.1 전수 리뷰에서 확인된 결함은 기존 `PLAN_mvp_sales_round_direct_delivery.md` 구조에 삽입하지 않고 별도 [4.2 진입 전 전수 리뷰 보정 계획](plans/PLAN_mvp_sales_round_pre_4_2_full_review_remediation.md)에서 처리한다.
+- **실행 순서**: 결제·예약 정합성, 주문·웹훅 보안, 주문 수명주기, 회차 상태, 주문 생성, 재배송비, 알림, 운영 예외, 보관·Storage, 통합 검증의 10개 Unit를 순서대로 실행한다.
+- **핸드오프 계약**: Unit 하나는 테스트·구현·검증·커밋까지 완료한 뒤 15개 항목 보고와 다음 Unit 전체 프롬프트를 생성하고 종료한다.
+- **모듈화 계약**: `payments.service.ts`, `orders-create.service.ts`, `orders-lifecycle.service.ts`, `sale-rounds.service.ts`는 500줄 한계에 근접했으므로 각 결함 Unit에서 전용 서비스로 먼저 분리한다.
+- **출시 게이트**: Unit 10 완료 전 소비자 Task 4.2, `salesMode` 전환, 운영 배포를 시작하지 않는다. 배송 사진 실제 호출 경로와 Firestore 인덱스·보안 규칙은 원 계획 Task 5.12와 6.1~6.3에 유지한다.

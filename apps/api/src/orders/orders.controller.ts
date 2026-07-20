@@ -35,7 +35,7 @@ export class OrdersPublicController {
 
   @Get(':orderId')
   getOrderById(@Param('orderId') orderId: string, @CurrentUser() user: JwtPayload) {
-    return this.ordersService.getOrderById(orderId, user.sub);
+    return this.ordersService.getOrderById(orderId, user);
   }
 }
 
@@ -72,7 +72,7 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Query() query: { userId?: string; status?: string; saleType?: string },
   ) {
-    return this.ordersService.getOrders(storeId, user.sub, query);
+    return this.ordersService.getOrders(storeId, user, query);
   }
 
   @Get(':orderId')
@@ -81,7 +81,7 @@ export class OrdersController {
     @Param('orderId') orderId: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.ordersService.getOrder(storeId, orderId, user.sub);
+    return this.ordersService.getOrder(storeId, orderId, user);
   }
 
   @Patch(':orderId/status')

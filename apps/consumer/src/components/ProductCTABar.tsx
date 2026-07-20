@@ -7,6 +7,9 @@ interface Props {
   isGroup: boolean;
   isFull: boolean;
   canBuy: boolean;
+  canAddToCart?: boolean;
+  addToCartLabel?: string;
+  buyNowLabel?: string;
   onAddToCart: () => void;
   onBuyNow: () => void;
 }
@@ -16,10 +19,13 @@ export default function ProductCTABar({
   isGroup,
   isFull,
   canBuy,
+  canAddToCart = true,
+  addToCartLabel = '장바구니',
+  buyNowLabel,
   onAddToCart,
   onBuyNow,
 }: Props) {
-  const ctaLabel = isFull ? '모집 완료' : isGroup ? '공구 참여하기' : '바로 결제';
+  const ctaLabel = buyNowLabel ?? (isFull ? '모집 완료' : isGroup ? '공구 참여하기' : '바로 결제');
 
   return (
     <Box
@@ -61,8 +67,15 @@ export default function ProductCTABar({
 
         {/* 버튼 */}
         <Group gap={8} style={{ flexWrap: 'nowrap' }}>
-          <Button flex={1} variant="default" radius="md" size="lg" onClick={onAddToCart}>
-            장바구니
+          <Button
+            flex={1}
+            variant="default"
+            radius="md"
+            size="lg"
+            disabled={!canAddToCart}
+            onClick={onAddToCart}
+          >
+            {addToCartLabel}
           </Button>
           <Button
             flex={2}

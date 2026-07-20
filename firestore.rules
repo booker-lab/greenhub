@@ -2,6 +2,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isPublicSaleRoundStatus(status) {
+      return status in ['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED'];
+    }
+
+    function isPublicSaleRoundItem(roundId, storeId) {
+      let round = get(/databases/$(database)/documents/saleRounds/$(roundId));
+      return round.data.storeId == storeId &&
+        isPublicSaleRoundStatus(round.data.status);
+    }
+
     // orders: Firebase Auth 필수 + 본인 storeId, admin, driver 허용
     match /orders/{orderId} {
       allow read: if request.auth != null &&
@@ -32,6 +42,52 @@ service cloud.firestore {
     match /groupProductConfig/{docId} {
       allow read: if true;
       allow write: if false;
+    }
+
+    // varieties: 소비자 상품 상세에 필요한 공개 품종 단건 조회만 허용
+    match /varieties/{varietyId} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // 공개 판매 회차: 소비자 조회만 허용하고 모든 클라이언트 직접 쓰기 차단
+    match /saleRounds/{roundId} {
+      allow read: if isPublicSaleRoundStatus(resource.data.status);
+      allow write: if false;
+    }
+
+    match /saleRoundItems/{roundItemId} {
+      allow read: if isPublicSaleRoundItem(resource.data.roundId, resource.data.storeId);
+      allow write: if false;
+    }
+
+    // 결제 예약·운영·법정 보관·알림 전달 기록: Admin SDK를 사용하는 서버 전용
+    match /checkoutReservations/{reservationId} {
+      allow read, write: if false;
+    }
+
+    match /operationIssues/{issueId} {
+      allow read, write: if false;
+    }
+
+    match /legalOrderRecords/{recordId} {
+      allow read, write: if false;
+    }
+
+    match /legalDisputeRecords/{recordId} {
+      allow read, write: if false;
+    }
+
+    match /marketingConsentLogs/{recordId} {
+      allow read, write: if false;
+    }
+
+    match /deliveryPhotoRecords/{recordId} {
+      allow read, write: if false;
+    }
+
+    match /notificationDeliveries/{deliveryId} {
+      allow read, write: if false;
     }
 
     // 나머지 모든 컬렉션: 클라이언트 직접 접근 차단 (서버만)

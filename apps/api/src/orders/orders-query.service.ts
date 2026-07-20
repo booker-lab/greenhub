@@ -4,47 +4,34 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { FirestoreService } from '../firestore/firestore.service';
+
+type OrderRequester = Pick<JwtPayload, 'sub' | 'role'>;
+type OrderRequesterInput = OrderRequester | string;
 
 @Injectable()
 export class OrdersQueryService {
   constructor(private readonly firestore: FirestoreService) {}
 
-  async getOrder(storeId: string, orderId: string, requesterId: string) {
+  async getOrder(storeId: string, orderId: string, requesterInput: OrderRequesterInput) {
+    const requester = this.normalizeRequester(requesterInput);
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException('주문을 찾을 수 없습니다.');
     }
     const order = snap.data()!;
-    if (order['userId'] !== requesterId) {
-      const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
-      const userData = userSnap.data();
-      const role = userData?.['role'];
-      // admin·seller·driver는 타인 주문 조회 허용
-      if (role !== 'seller' && role !== 'driver' && role !== 'admin') {
-        throw new ForbiddenException();
-      }
-      // 판매자는 자신의 storeId 주문만 조회 가능 (admin·driver는 제한 없음)
-      if (role === 'seller' && userData?.['storeId'] !== storeId) {
-        throw new ForbiddenException();
-      }
-    }
+    await this.assertOrderReadAccess(storeId, order, requester);
     return this.normalizeOrder(order);
   }
 
   async getOrders(
     storeId: string,
-    requesterId: string,
+    requesterInput: OrderRequesterInput,
     query: { userId?: string; status?: string; saleType?: string },
   ) {
-    const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
-    const userData = userSnap.data();
-    const role = userData?.['role'];
-
-    // 판매자는 자신의 storeId 주문만 조회 가능 (admin·driver는 storeId 제한 없음)
-    if (role === 'seller' && userData?.['storeId'] !== storeId) {
-      throw new ForbiddenException();
-    }
+    const requester = this.normalizeRequester(requesterInput);
+    await this.assertStoreListAccess(storeId, requester);
 
     const VALID_STATUSES = [
       'PENDING',
@@ -71,7 +58,12 @@ export class OrdersQueryService {
 
     let ref = this.firestore.collection('orders').where('storeId', '==', storeId) as any;
 
-    if (query.userId) ref = ref.where('userId', '==', query.userId);
+    if (requester.role === 'consumer') {
+      ref = ref.where('userId', '==', requester.sub);
+    } else if (query.userId) {
+      ref = ref.where('userId', '==', query.userId);
+    }
+    if (requester.role === 'driver') ref = ref.where('driverId', '==', requester.sub);
     if (query.status) ref = ref.where('status', '==', query.status);
     if (query.saleType) ref = ref.where('saleType', '==', query.saleType);
 
@@ -81,24 +73,46 @@ export class OrdersQueryService {
 
   // ── Public (storeId-free) ─────────────────────────────────────────────────
 
-  async getOrderById(orderId: string, requesterId: string) {
+  async getOrderById(orderId: string, requesterInput: OrderRequesterInput) {
+    const requester = this.normalizeRequester(requesterInput);
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!snap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
     const order = snap.data()!;
 
-    if (order['userId'] !== requesterId) {
-      const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
-      const role = userSnap.data()?.['role'];
-      if (role !== 'seller' && role !== 'driver' && role !== 'admin') {
-        throw new ForbiddenException();
-      }
-    }
+    await this.assertOrderReadAccess(order['storeId'], order, requester);
     return this.normalizeOrder(order);
   }
 
   async getMyOrders(requesterId: string) {
     const snap = await this.firestore.collection('orders').where('userId', '==', requesterId).get();
     return snap.docs.map((d: any) => this.normalizeOrder({ id: d.id, ...d.data() }));
+  }
+
+  private async assertStoreListAccess(storeId: string, requester: OrderRequester) {
+    if (requester.role !== 'seller') return;
+    const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!storeSnap.exists || storeSnap.data()?.['ownerId'] !== requester.sub) {
+      throw new ForbiddenException('해당 스토어 주문을 조회할 권한이 없습니다.');
+    }
+  }
+
+  private normalizeRequester(requester: OrderRequesterInput): OrderRequester {
+    return typeof requester === 'string' ? { sub: requester, role: 'consumer' } : requester;
+  }
+
+  private async assertOrderReadAccess(
+    storeId: string,
+    order: Record<string, any>,
+    requester: OrderRequester,
+  ) {
+    if (requester.role === 'admin') return;
+    if (requester.role === 'consumer' && order['userId'] === requester.sub) return;
+    if (requester.role === 'driver' && order['driverId'] === requester.sub) return;
+    if (requester.role === 'seller') {
+      const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
+      if (storeSnap.exists && storeSnap.data()?.['ownerId'] === requester.sub) return;
+    }
+    throw new ForbiddenException('해당 주문을 조회할 권한이 없습니다.');
   }
 
   private normalizeOrder(order: Record<string, any>) {
@@ -132,7 +146,9 @@ export class OrdersQueryService {
               : null,
           quantity: order['quantity'] ?? 1,
           subtotalAmount:
-            typeof order['totalAmount'] === 'number' ? order['totalAmount'] - (order['deliveryFee'] ?? 0) : null,
+            typeof order['totalAmount'] === 'number'
+              ? order['totalAmount'] - (order['deliveryFee'] ?? 0)
+              : null,
         },
       ],
     };

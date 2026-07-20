@@ -1,16 +1,17 @@
 import {
+  BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
-  ForbiddenException,
-  BadRequestException,
 } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
-import { UpdateStatusDto, OrderStatus } from './dto/update-status.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
-import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
+import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
+import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
+import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 
 @Injectable()
 export class OrdersLifecycleService {
@@ -20,6 +21,7 @@ export class OrdersLifecycleService {
     private readonly payments: PaymentsService,
     private readonly settlements: SettlementsService,
     private readonly capacity: OrderCapacityService,
+    private readonly roundLifecycle: RoundOrderLifecycleService,
   ) {}
 
   async updateStatus(
@@ -43,13 +45,7 @@ export class OrdersLifecycleService {
       const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
       role = userSnap.data()?.['role'] ?? 'consumer';
     }
-    await this.assertOrderActionAccess(
-      storeId,
-      requesterId,
-      role ?? 'consumer',
-      order,
-      nextStatus,
-    );
+    await this.assertOrderActionAccess(storeId, requesterId, role ?? 'consumer', order, nextStatus);
 
     const allowed = getAllowedTransitions(role ?? 'consumer', currentStatus);
     if (!allowed.includes(dto.status)) {
@@ -65,6 +61,26 @@ export class OrdersLifecycleService {
       order['deliveryMethod'] !== 'parcel'
     ) {
       throw new ForbiddenException('택배 발송 완료는 택배 주문에서만 가능합니다.');
+    }
+
+    if (order['schemaVersion'] === 2 && order['roundId']) {
+      const result = await this.roundLifecycle.updateStatus({
+        storeId,
+        orderId,
+        expectedStatus: currentStatus,
+        dto,
+        requesterId,
+      });
+      if (nextStatus === 'DELIVERED') {
+        await this.settlements.createSettlement(order, 'DELIVERED');
+      }
+      await this.sendTransitionNotification(
+        order,
+        currentStatus,
+        nextStatus as OrderStatus,
+        orderId,
+      );
+      return result;
     }
 
     if (nextStatus === 'CANCELLED') {
@@ -170,7 +186,7 @@ export class OrdersLifecycleService {
 
     if (order['userId'] !== userId) throw new ForbiddenException();
     if (order['schemaVersion'] === 2 && order['roundId']) {
-      return this.cancelRoundOrder(storeId, orderId, order, reason);
+      return this.roundLifecycle.cancelByConsumer({ storeId, orderId, userId, reason });
     }
 
     if (order['status'] !== 'RECRUITING') {
@@ -380,48 +396,6 @@ export class OrdersLifecycleService {
         orderId,
       );
     }
-  }
-
-  private async cancelRoundOrder(
-    storeId: string,
-    orderId: string,
-    order: Record<string, unknown>,
-    reason?: string,
-  ) {
-    if (order['status'] === 'CANCELLED') return { orderId, status: 'CANCELLED' };
-    if (!['PENDING', 'ACCEPTED'].includes(order['status'] as string)) {
-      throw new ForbiddenException('마감 전 회차 주문만 취소할 수 있습니다.');
-    }
-
-    const roundRef = this.firestore.doc(`saleRounds/${order['roundId']}`);
-    const roundSnap = await this.firestore.doc(`saleRounds/${order['roundId']}`).get();
-    if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
-      throw new NotFoundException('회차를 찾을 수 없습니다.');
-    }
-    const round = roundSnap.data()!;
-    const closeAt = new Date(round['schedule']?.['orderCloseAt'] ?? 0).getTime();
-    if (!Number.isFinite(closeAt) || closeAt <= Date.now()) {
-      throw new ForbiddenException('주문 마감 후에는 직접 취소할 수 없습니다.');
-    }
-
-    const cancelReason = reason ?? '소비자 취소';
-    await this.payments.processRefundByOrderId(orderId, cancelReason);
-    if (order['reservationId']) {
-      await this.capacity.releaseReservation(order['reservationId'] as string);
-    }
-    const now = this.firestore.Timestamp.now();
-
-    await this.firestore.runTransaction(async (t) => {
-      await t.get(roundRef);
-      t.update(this.firestore.doc(`orders/${orderId}`), {
-        status: 'CANCELLED',
-        cancelReason,
-        updatedAt: now,
-      });
-    });
-
-    await this.settlements.cancelSettlement(orderId);
-    return { orderId, status: 'CANCELLED' };
   }
 
   private nextRoundCounters(

@@ -6,6 +6,21 @@ export type SaleRoundStatus =
   | 'COMPLETED'
   | 'CANCELLED'
 
+export type SaleRoundCloseReason = 'SCHEDULE_ENDED' | 'CAPACITY' | 'MANUAL'
+
+export type SaleRoundCancellationStatus =
+  | 'CANCELLING'
+  | 'LOCAL_FAILED'
+  | 'COMPLETED'
+
+export interface SaleRoundCancellation {
+  status: SaleRoundCancellationStatus
+  reason: string
+  failedOrderId: string | null
+  updatedAt: string // ISO8601
+  completedAt: string | null // ISO8601
+}
+
 export type SaleRoundItemStatus = 'ACTIVE' | 'HIDDEN' | 'SOLD_OUT' | 'CLOSED'
 
 export type CheckoutReservationStatus =
@@ -13,6 +28,8 @@ export type CheckoutReservationStatus =
   | 'CONSUMED'
   | 'RELEASED'
   | 'EXPIRED'
+
+export type ClientOrderRequestId = string
 
 export type OrderChargeType = 'REDELIVERY_FEE'
 
@@ -33,6 +50,8 @@ export type OperationIssueType =
 export type OperationIssueStatus = 'OPEN' | 'RESOLVED' | 'DISMISSED'
 
 export type OperationIssueSeverity = 'info' | 'warning' | 'critical'
+
+export type OperationIssueActionType = 'RETRY_REFUND' | 'RESEND_SMS'
 
 export interface SaleRoundDeliveryRegion {
   id: string
@@ -69,6 +88,8 @@ export interface SaleRound {
   storeId: string
   name: string
   status: SaleRoundStatus
+  closeReason: SaleRoundCloseReason | null
+  cancellation: SaleRoundCancellation | null
   schedule: SaleRoundSchedule
   deliveryRegion: SaleRoundDeliveryRegion
   limits: SaleRoundLimits
@@ -146,10 +167,10 @@ export interface OrderCharge {
 
 export interface OperationIssueAction {
   actorId: string
-  actionType: string
-  result: 'SUCCESS' | 'FAILED'
-  message: string | null
-  createdAt: string // ISO8601
+  actionType: OperationIssueActionType
+  performedAt: string // ISO8601
+  status: 'SUCCEEDED' | 'FAILED'
+  failureReason?: string
 }
 
 export interface OperationIssue {

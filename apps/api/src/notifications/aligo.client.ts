@@ -1,5 +1,19 @@
+import type { NotificationChannel } from '@greenhub/shared';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  type ApiNotificationTemplateCode,
+  renderNotificationMessage,
+} from './notification-templates';
+
+export type NotificationDeliveryResult = {
+  success: boolean;
+  channel: Extract<NotificationChannel, 'alimtalk' | 'sms'> | null;
+  message: string;
+  alimtalkAttempts: number;
+  smsAttempts: number;
+  errorMessage?: string;
+};
 
 @Injectable()
 export class AligoClient {
@@ -17,14 +31,90 @@ export class AligoClient {
 
   async sendAlimtalk(
     phone: string,
-    templateCode: string,
+    templateCode: ApiNotificationTemplateCode,
     variables: Record<string, string>,
-  ): Promise<{ success: boolean; errorMessage?: string }> {
-    if (!this.apiKey || !this.userId) {
-      console.warn(`[AligoClient] API 키 미설정 — 알림톡 스킵 [${templateCode}] → ${phone}`);
-      return { success: true };
+  ): Promise<NotificationDeliveryResult> {
+    const message = renderNotificationMessage(templateCode, variables);
+    if (!this.apiKey || !this.userId || !this.senderKey || !this.senderPhone) {
+      return {
+        success: false,
+        channel: null,
+        message,
+        alimtalkAttempts: 0,
+        smsAttempts: 0,
+        errorMessage: '알림 발송 필수 설정이 누락되었습니다.',
+      };
     }
 
+    let errorMessage = '알림톡 발송에 실패했습니다.';
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const result = await this.sendAlimtalkOnce(phone, templateCode, message);
+      if (result.success) {
+        return {
+          success: true,
+          channel: 'alimtalk',
+          message,
+          alimtalkAttempts: attempt + 1,
+          smsAttempts: 0,
+        };
+      }
+      errorMessage = result.errorMessage ?? errorMessage;
+    }
+
+    const smsResult = await this.sendSmsMessage(phone, message);
+    if (smsResult.success) {
+      return {
+        success: true,
+        channel: 'sms',
+        message,
+        alimtalkAttempts: 3,
+        smsAttempts: 1,
+      };
+    }
+
+    return {
+      success: false,
+      channel: null,
+      message,
+      alimtalkAttempts: 3,
+      smsAttempts: 1,
+      errorMessage: smsResult.errorMessage ?? errorMessage,
+    };
+  }
+
+  async sendSms(
+    phone: string,
+    templateCode: ApiNotificationTemplateCode,
+    variables: Record<string, string>,
+  ): Promise<NotificationDeliveryResult> {
+    const message = renderNotificationMessage(templateCode, variables);
+    if (!this.apiKey || !this.userId || !this.senderPhone) {
+      return {
+        success: false,
+        channel: null,
+        message,
+        alimtalkAttempts: 0,
+        smsAttempts: 0,
+        errorMessage: '문자 발송 필수 설정이 누락되었습니다.',
+      };
+    }
+    const result = await this.sendSmsMessage(phone, message);
+    return {
+      success: result.success,
+      channel: result.success ? 'sms' : null,
+      message,
+      alimtalkAttempts: 0,
+      smsAttempts: 1,
+      errorMessage: result.errorMessage,
+    };
+  }
+
+  private async sendAlimtalkOnce(
+    phone: string,
+    templateCode: string,
+    message: string,
+  ): Promise<{ success: boolean; errorMessage?: string }> {
     try {
       const params = new URLSearchParams({
         apikey: this.apiKey,
@@ -34,7 +124,7 @@ export class AligoClient {
         sender: this.senderPhone,
         receiver_1: phone,
         subject_1: '알림',
-        message_1: this.buildMessage(templateCode, variables),
+        message_1: message,
       });
 
       const res = await fetch('https://kakaoapi.aligo.in/akv10/alimtalk/send/', {
@@ -51,8 +141,35 @@ export class AligoClient {
     }
   }
 
-  private buildMessage(templateCode: string, variables: Record<string, string>): string {
-    // 실제 배포 시 알리고 등록 템플릿 본문 사용
-    return `[${templateCode}] ${JSON.stringify(variables)}`;
+  private async sendSmsMessage(
+    phone: string,
+    message: string,
+  ): Promise<{ success: boolean; errorMessage?: string }> {
+    try {
+      const params = new URLSearchParams({
+        key: this.apiKey,
+        user_id: this.userId,
+        sender: this.senderPhone,
+        receiver: phone,
+        msg: message,
+      });
+
+      const res = await fetch('https://apis.aligo.in/send/', {
+        method: 'POST',
+        body: params,
+      });
+      const json = (await res.json()) as {
+        code?: number;
+        result_code?: number | string;
+        message?: string;
+      };
+      const resultCode = Number(json.result_code ?? json.code);
+      if (resultCode !== 0 && resultCode !== 1) {
+        return { success: false, errorMessage: json.message ?? '문자 대체 발송에 실패했습니다.' };
+      }
+      return { success: true };
+    } catch (e) {
+      return { success: false, errorMessage: String(e) };
+    }
   }
 }

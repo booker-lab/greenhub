@@ -9,6 +9,8 @@
     "build": "pnpm --filter @greenhub/shared build && pnpm --filter api --filter consumer --filter seller --filter driver build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
+    "test:firestore-rules": "node --test tests/firestore/firestore-rules.test.mjs",
+    "test:storage-rules": "node --test tests/storage/storage-rules.test.mjs",
     "load:smoke": "k6 run tests/load/scenarios/smoke.js",
     "load:consumer": "k6 run tests/load/scenarios/consumer-read.js",
     "load:checkout": "k6 run tests/load/scenarios/checkout.js",
@@ -25,7 +27,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
+    "@firebase/rules-unit-testing": "^5.0.1",
     "dotenv": "^17.4.2",
+    "firebase": "^12.11.0",
     "typescript": "^5.5.0"
   },
   "packageManager": "pnpm@10.32.1",

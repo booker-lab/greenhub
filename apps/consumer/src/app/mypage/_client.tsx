@@ -1,22 +1,22 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useSession, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import type { Order, OrderStatus } from '@greenhub/shared';
 import {
-  Container,
   Box,
-  Title,
-  Text,
+  Button,
+  Container,
+  Divider,
   Group,
   Stack,
-  Button,
+  Text,
+  Title,
   UnstyledButton,
-  Divider,
 } from '@mantine/core';
-import { useOrders } from '@/hooks/useOrders';
+import { useRouter } from 'next/navigation';
+import { signOut, useSession } from 'next-auth/react';
+import { useEffect } from 'react';
 import A2HSButton from '@/components/A2HSButton';
-import type { Order, OrderStatus } from '@greenhub/shared';
+import { useOrders } from '@/hooks/useOrders';
 
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   PENDING: '결제 확인 중',
@@ -25,6 +25,7 @@ const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   ACCEPTED: '결제 완료',
   PREPARING: '상품 준비 중',
   DELIVERING: '배송 중',
+  DELIVERY_HELD: '배송 보류',
   HUB_ARRIVED: '거점 도착',
   PICKED_UP: '픽업 완료',
   DELIVERED: '배송 완료',
@@ -40,6 +41,7 @@ const STATUS_COLORS: Partial<Record<OrderStatus, StatusColorKey>> = {
   ACCEPTED: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary)' },
   PREPARING: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary)' },
   DELIVERING: { bg: 'var(--color-status-warning-bg)', text: 'var(--color-status-warning-text)' },
+  DELIVERY_HELD: { bg: 'var(--color-danger-surface)', text: 'var(--color-danger)' },
   HUB_ARRIVED: { bg: 'var(--color-status-warning-bg)', text: 'var(--color-status-warning-text)' },
   PICKED_UP: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary)' },
   DELIVERED: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary)' },
@@ -54,6 +56,7 @@ const ACCENT_COLORS: Partial<Record<OrderStatus, string>> = {
   ACCEPTED: 'var(--color-primary)',
   PREPARING: 'var(--color-primary)',
   DELIVERING: 'var(--color-status-warning-text)',
+  DELIVERY_HELD: 'var(--color-danger)',
   HUB_ARRIVED: 'var(--color-status-warning-text)',
   PICKED_UP: 'var(--color-primary)',
   DELIVERED: 'var(--color-primary)',
@@ -67,6 +70,71 @@ function formatDate(iso: string) {
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
+interface OrderListSummary {
+  representativeName: string;
+  additionalProductCount: number;
+  productCount: number;
+  totalQuantity: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isPositiveQuantity(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function readOrderListSummary(value: unknown): OrderListSummary | null {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.id) ||
+    !isNonEmptyString(value.status) ||
+    !Object.hasOwn(STATUS_LABELS, value.status) ||
+    !Array.isArray(value.orderItems) ||
+    value.orderItems.length === 0
+  ) {
+    return null;
+  }
+
+  const identities = new Set<string>();
+  let representativeName = '';
+  let totalQuantity = 0;
+
+  for (const item of value.orderItems) {
+    if (
+      !isRecord(item) ||
+      !isNonEmptyString(item.productId) ||
+      !isNonEmptyString(item.productName) ||
+      !isPositiveQuantity(item.quantity) ||
+      (item.roundItemId !== undefined &&
+        item.roundItemId !== null &&
+        !isNonEmptyString(item.roundItemId))
+    ) {
+      return null;
+    }
+
+    const identity = isNonEmptyString(item.roundItemId) ? item.roundItemId : item.productId;
+    if (identities.has(identity)) return null;
+    identities.add(identity);
+
+    if (!representativeName) representativeName = item.productName.trim();
+    totalQuantity += item.quantity;
+    if (!Number.isSafeInteger(totalQuantity)) return null;
+  }
+
+  return {
+    representativeName,
+    additionalProductCount: value.orderItems.length - 1,
+    productCount: value.orderItems.length,
+    totalQuantity,
+  };
+}
+
 function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
   const colorScheme = STATUS_COLORS[order.status] ?? {
     bg: 'var(--color-surface-muted)',
@@ -74,6 +142,7 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
   };
   const accentColor = ACCENT_COLORS[order.status] ?? 'var(--color-text-disabled)';
   const label = STATUS_LABELS[order.status] ?? order.status;
+  const summary = readOrderListSummary(order);
 
   return (
     <UnstyledButton
@@ -121,9 +190,24 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
             ? '택배'
             : '직배송'}
       </Text>
+      {summary && (
+        <Text
+          style={{
+            fontSize: 'var(--font-size-md)',
+            fontWeight: 'var(--fw-bold)',
+            color: 'var(--color-text)',
+          }}
+          mb={4}
+        >
+          {summary.representativeName}
+          {summary.additionalProductCount > 0 ? ` 외 ${summary.additionalProductCount}개` : ''}
+        </Text>
+      )}
       <Group justify="space-between">
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-          수량 {order.quantity}개
+          {summary
+            ? `상품 ${summary.productCount}종 · 총 수량 ${summary.totalQuantity}개`
+            : `수량 ${order.quantity}개`}
         </Text>
         <Text
           style={{

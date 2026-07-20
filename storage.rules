@@ -1,16 +1,98 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // 상품 이미지: 인증된 사용자만 업로드, 누구나 읽기
-    match /products/{storeId}/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
+    function signedIn() {
+      return request.auth != null;
     }
 
-    // 배너 이미지: 인증된 사용자만 업로드, 누구나 읽기
-    match /banners/{allPaths=**} {
+    function isAdmin() {
+      return signedIn() && request.auth.token.role == 'admin';
+    }
+
+    function isSellerFor(storeId) {
+      return signedIn() &&
+        request.auth.token.role == 'seller' &&
+        request.auth.token.storeId == storeId;
+    }
+
+    function isDriver() {
+      return signedIn() && request.auth.token.role == 'driver';
+    }
+
+    function isOwnedSellerLogo(fileName) {
+      return signedIn() &&
+        request.auth.token.role == 'seller' &&
+        fileName.split('_').size() == 2 &&
+        fileName.split('_')[0] == request.auth.uid &&
+        fileName.split('_')[1].matches('[0-9]+');
+    }
+
+    function isProductImage() {
+      return request.resource != null &&
+        request.resource.size <= 5 * 1024 * 1024 &&
+        request.resource.contentType in [
+          'image/jpeg',
+          'image/png',
+          'image/webp',
+          'image/gif'
+        ];
+    }
+
+    function isLogoImage() {
+      return request.resource != null &&
+        request.resource.size <= 2 * 1024 * 1024 &&
+        request.resource.contentType in [
+          'image/jpeg',
+          'image/png',
+          'image/webp'
+        ];
+    }
+
+    function isLegacyDeliveryPhoto(fileName) {
+      return request.resource != null &&
+        fileName.matches('[A-Za-z0-9_-]{1,128}_[0-9]+\\.jpg') &&
+        request.resource.size <= 5 * 1024 * 1024 &&
+        request.resource.contentType == 'image/jpeg';
+    }
+
+    // 공개 상품 이미지: 소유 판매자와 관리자만 변경
+    match /products/{storeId}/{fileName} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow create, update: if isProductImage() &&
+        (isSellerFor(storeId) || isAdmin());
+      allow delete: if isSellerFor(storeId) || isAdmin();
+    }
+
+    // 공개 메인 배너: 관리자만 변경
+    match /banners/main_hero/{fileName} {
+      allow read: if true;
+      allow create, update: if isProductImage() && isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 공개 상점 로고: 판매자 본인 이름의 객체만 변경
+    match /logos/{fileName} {
+      allow read: if true;
+      allow create, update: if isLogoImage() && isOwnedSellerLogo(fileName);
+      allow delete: if isOwnedSellerLogo(fileName);
+    }
+
+    // 기존 거점 사진: 기사 직접 생성과 다운로드 URL 발급 동작만 보존
+    match /deliveryPhotos/{fileName} {
+      allow read: if isDriver();
+      allow create: if resource == null &&
+        isDriver() &&
+        isLegacyDeliveryPhoto(fileName);
+      allow update, delete: if false;
+    }
+
+    // 회차 직배송 사진: Admin SDK 서버 업로드와 서명 URL만 사용
+    match /deliveryPhotos/{orderId}/{fileName} {
+      allow read, write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

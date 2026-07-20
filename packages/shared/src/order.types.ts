@@ -1,3 +1,5 @@
+import type { ClientOrderRequestId } from './sale-round.types.js'
+
 export type OrderStatus =
   | 'PENDING'
   | 'RECRUITING'
@@ -118,6 +120,7 @@ export interface DailyCap {
 }
 
 export interface CreateOrderRequest {
+  clientOrderRequestId?: ClientOrderRequestId
   productId: string
   quantity: number          // 공동구매: 1 이상 maxPerPerson 이하 — 서비스 레이어에서 검증
   saleType: SaleType

@@ -3,6 +3,8 @@
 
 import type { OrderStatus } from './dto/update-status.dto';
 
+const SELLER_CANCELLABLE: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
+
 // 판매자 허용 상태 전환 — DELIVERING 이후 취소 불가 (소비자 반품 신청 루트)
 export const SELLER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   ACCEPTED: ['PREPARING'],
@@ -31,10 +33,19 @@ export const NOTIFICATION_MAP: Partial<Record<OrderStatus, Partial<Record<OrderS
   {
     ACCEPTED: { PREPARING: 'ORDER_PREPARING' },
     CONFIRMED: { PREPARING: 'GROUP_PREPARING' },
-    PREPARING: { DELIVERING: 'ORDER_DELIVERING', DELIVERED: 'ORDER_DELIVERED' },
+    PREPARING: {
+      DELIVERING: 'ORDER_DELIVERING',
+      DELIVERED: 'ORDER_DELIVERED',
+      DELIVERY_HELD: 'ORDER_DELIVERY_HELD',
+    },
     DELIVERING: {
       HUB_ARRIVED: 'ORDER_HUB_ARRIVED',
       DELIVERED: 'ORDER_DELIVERED',
+      DELIVERY_HELD: 'ORDER_DELIVERY_HELD',
+    },
+    DELIVERY_HELD: {
+      PREPARING: 'ORDER_REDELIVERY_PAYMENT_REQUESTED',
+      DELIVERING: 'ORDER_REDELIVERY_SCHEDULED',
     },
   };
 
@@ -81,15 +92,13 @@ export function getAllowedTransitions(role: string, current: OrderStatus): Order
     // admin은 seller + driver 전환 모두 허용
     const sellerBase = SELLER_TRANSITIONS[current] ?? [];
     const driverBase = DRIVER_TRANSITIONS[current] ?? [];
-    const sellerCancellable: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
-    const cancelList: OrderStatus[] = sellerCancellable.includes(current) ? ['CANCELLED'] : [];
+    const cancelList: OrderStatus[] = SELLER_CANCELLABLE.includes(current) ? ['CANCELLED'] : [];
     return [...new Set([...sellerBase, ...driverBase, ...cancelList])];
   }
   if (role === 'seller') {
     const base = SELLER_TRANSITIONS[current] ?? [];
     // 판매자 강제 취소는 ACCEPTED·CONFIRMED·PREPARING 상태에서만 허용
-    const sellerCancellable: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
-    if (sellerCancellable.includes(current)) {
+    if (SELLER_CANCELLABLE.includes(current)) {
       return [...base, 'CANCELLED'];
     }
     return base;

@@ -1,12 +1,25 @@
 'use client';
 
+import type { Product, SalesMode } from '@greenhub/shared';
+import { normalizeSalesMode } from '@greenhub/shared';
+import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
+import { doc, getDoc } from 'firebase/firestore';
+import { Home, LayoutGrid, ShoppingCart, User, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Box, UnstyledButton, Stack, Text } from '@mantine/core';
-import { Home, LayoutGrid, Users, ShoppingCart, User } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '@/hooks/useCart';
+import { useProducts } from '@/hooks/useProducts';
+import { db } from '@/lib/firebase';
 
-const tabs = [
+const ROUND_DIRECT_TABS = [
+  { href: '/', label: '홈', Icon: Home, showBadge: false },
+  { href: '/category', label: '상품', Icon: LayoutGrid, showBadge: false },
+  { href: '/cart', label: '장바구니', Icon: ShoppingCart, showBadge: true },
+  { href: '/mypage', label: 'MY', Icon: User, showBadge: false },
+] as const;
+
+const LEGACY_TABS = [
   { href: '/', label: '홈', Icon: Home, showBadge: false },
   { href: '/category', label: '카테고리', Icon: LayoutGrid, showBadge: false },
   { href: '/groupbuy', label: '공구', Icon: Users, showBadge: false },
@@ -14,12 +27,75 @@ const tabs = [
   { href: '/mypage', label: 'MY', Icon: User, showBadge: false },
 ] as const;
 
+const HIDDEN_PATHS = ['/checkout', '/order/success', '/products/'];
+
+type StoreModeStatus = 'loading' | 'ready' | 'error';
+
+interface StoreModeState {
+  salesMode: SalesMode;
+  status: StoreModeStatus;
+}
+
+function findSingleStoreId(products: Product[]) {
+  const storeIds = new Set(
+    products.map((product) => product.storeId).filter((storeId) => storeId.length > 0),
+  );
+  return storeIds.size === 1 ? [...storeIds][0] : null;
+}
+
+function useStoreMode(storeId: string | null, productsLoading: boolean): StoreModeState {
+  const [state, setState] = useState<StoreModeState>({
+    salesMode: 'legacy',
+    status: 'loading',
+  });
+
+  useEffect(() => {
+    if (productsLoading) {
+      setState({ salesMode: 'legacy', status: 'loading' });
+      return;
+    }
+    if (!storeId) {
+      setState({ salesMode: 'legacy', status: 'ready' });
+      return;
+    }
+
+    let active = true;
+    setState({ salesMode: 'legacy', status: 'loading' });
+
+    void getDoc(doc(db, 'stores', storeId))
+      .then((snapshot) => {
+        if (!active) return;
+        if (!snapshot.exists()) throw new Error('스토어를 찾을 수 없습니다.');
+
+        const value = snapshot.data()?.salesMode;
+        if (value !== undefined && value !== 'legacy' && value !== 'round_direct') {
+          throw new Error('판매 방식 정보가 올바르지 않습니다.');
+        }
+        setState({ salesMode: normalizeSalesMode(value), status: 'ready' });
+      })
+      .catch(() => {
+        if (active) setState({ salesMode: 'legacy', status: 'error' });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [productsLoading, storeId]);
+
+  return state;
+}
+
 export default function BottomNav() {
   const pathname = usePathname();
   const { itemCount } = useCart();
+  const { products, loading: productsLoading, error: productsError } = useProducts();
+  const storeId = useMemo(() => findSingleStoreId(products), [products]);
+  const storeMode = useStoreMode(storeId, productsLoading);
 
-  const hiddenPaths = ['/checkout', '/order/success', '/products/'];
-  if (hiddenPaths.some((p) => pathname.startsWith(p))) return null;
+  if (HIDDEN_PATHS.some((path) => pathname.startsWith(path))) return null;
+  if (productsError || storeMode.status !== 'ready') return null;
+
+  const tabs = storeMode.salesMode === 'round_direct' ? ROUND_DIRECT_TABS : LEGACY_TABS;
 
   return (
     <Box

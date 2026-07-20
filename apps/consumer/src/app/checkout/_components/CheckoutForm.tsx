@@ -4,6 +4,7 @@ import type { DeliveryAddress, DeliveryMethod } from '@greenhub/shared';
 import {
   Alert,
   Button,
+  Checkbox,
   Container,
   Group,
   Paper,
@@ -12,8 +13,8 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { useEffect } from 'react';
-import type { CartItem } from '@/hooks/useCart';
+import { useEffect, useState } from 'react';
+import { type CartItem, isRoundCartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
 
 const NAVERPAY_ENABLED = !!process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY;
@@ -44,11 +45,17 @@ export interface CheckoutFormProps {
   canPay: boolean;
   error: string | null;
   onPay: () => void;
+  marketingConsent?: boolean;
+  onMarketingConsentChange?: (agreed: boolean) => void;
   singleSummary?: {
     quantity: number;
     deliveryMethod: DeliveryMethod;
     requestedDeliveryDate?: string;
   };
+}
+
+export function isIcheonDeliveryAddress(value: string): boolean {
+  return /^(?:(?:경기도|경기)\s+)?이천시(?:\s|$)/.test(value.trim());
 }
 
 function formatDeliveryDate(iso: string): string {
@@ -72,8 +79,28 @@ export default function CheckoutForm({
   canPay,
   error,
   onPay,
+  marketingConsent = false,
+  onMarketingConsentChange,
   singleSummary,
 }: CheckoutFormProps) {
+  const [roundDetailsConfirmed, setRoundDetailsConfirmed] = useState(false);
+  const isRoundCheckout = items.length > 0 && items.every(isRoundCartItem);
+  const isIcheonAddress = isIcheonDeliveryAddress(address.address);
+  const confirmationKey = isRoundCheckout
+    ? items
+        .map(
+          (item) =>
+            `${item.roundId}:${item.roundItemId}:${item.productId}:${item.price}:${item.quantity}`,
+        )
+        .join('|')
+    : '';
+  const effectiveCanPay =
+    canPay && (!isRoundCheckout || (isIcheonAddress && roundDetailsConfirmed));
+
+  useEffect(() => {
+    if (confirmationKey) setRoundDetailsConfirmed(false);
+  }, [confirmationKey]);
+
   useEffect(() => {
     if (!isLoading) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -204,10 +231,16 @@ export default function CheckoutForm({
         <Group gap="xs" align="flex-end">
           <TextInput
             style={{ flex: 1 }}
+            label={isRoundCheckout ? '이천시 배송 가능 주소' : undefined}
             placeholder="주소 검색 후 자동 입력 *"
             value={address.address}
             readOnly
             radius="md"
+            error={
+              isRoundCheckout && address.address && !isIcheonAddress
+                ? '경기도 이천시 주소만 주문할 수 있습니다.'
+                : undefined
+            }
           />
           <Button variant="outline" color="gray" radius="md" onClick={openAddressSearch}>
             주소 검색
@@ -226,7 +259,12 @@ export default function CheckoutForm({
           radius="md"
         />
         <TextInput
-          label="연락처"
+          label={isRoundCheckout ? '배송 연락처 (필수)' : '연락처'}
+          description={
+            isRoundCheckout
+              ? '주문·결제·배송 안내를 위한 정보성 연락에 사용하며 마케팅 동의와 별개입니다.'
+              : undefined
+          }
           placeholder="010-1234-5678"
           type="tel"
           value={deliveryPhone}
@@ -236,6 +274,51 @@ export default function CheckoutForm({
           required
         />
       </Stack>
+
+      {isRoundCheckout && (
+        <Stack gap="md" mb="lg">
+          <Paper p="md" radius="md" withBorder>
+            <Text fw="var(--fw-bold)" size="sm" mb="xs">
+              필수 고지
+            </Text>
+            <Stack gap="xs">
+              <Text size="sm">
+                경기도 이천시 직접배송만 제공하며 화요일 오전 9시까지 문 앞 배송합니다.
+              </Text>
+              <Text size="sm" c="var(--color-text-secondary)">
+                안전한 배송이 어려운 기상 상황에는 배송이 연기될 수 있으며, 판매자 책임으로 재배송비
+                없이 새 배송 일정을 안내합니다.
+              </Text>
+              <Text size="sm" c="var(--color-text-secondary)">
+                주문 마감 후 경매 매입·배송 준비가 시작되었거나 고객의 취급·시간 경과로 상품 가치가
+                현저히 감소한 경우 단순 변심 청약철회가 제한될 수 있습니다. 표시·광고 또는 계약
+                내용과 다르게 이행된 경우는 제외됩니다.
+              </Text>
+            </Stack>
+          </Paper>
+
+          <Checkbox
+            label="신상품·할인정보 카카오톡/문자 마케팅 정보 수신 동의(선택)"
+            description="배송 연락처 수집과 별도이며, 동의하지 않아도 주문·배송 안내를 받습니다."
+            checked={marketingConsent}
+            onChange={(event) => onMarketingConsentChange?.(event.currentTarget.checked)}
+          />
+
+          <Paper p="md" radius="md" bg="var(--color-surface-muted)">
+            <Text size="sm" fw="var(--fw-bold)" mb={4}>
+              결제 직전 확인
+            </Text>
+            <Text size="sm" c="var(--color-text-secondary)" mb="sm">
+              상품 정보가 변경되면 상품·수량·회차 가격과 총 결제 금액을 다시 확인해야 합니다.
+            </Text>
+            <Checkbox
+              label="상품·가격·회차 변경 내용을 확인했습니다."
+              checked={roundDetailsConfirmed}
+              onChange={(event) => setRoundDetailsConfirmed(event.currentTarget.checked)}
+            />
+          </Paper>
+        </Stack>
+      )}
 
       {/* 결제 수단 */}
       <Stack gap="xs" mb="lg">
@@ -283,9 +366,11 @@ export default function CheckoutForm({
         size="lg"
         color="brand"
         radius="md"
-        disabled={!canPay}
+        disabled={!effectiveCanPay}
         loading={isLoading}
-        onClick={onPay}
+        onClick={() => {
+          if (effectiveCanPay) onPay();
+        }}
       >
         {buttonLabel}
       </Button>

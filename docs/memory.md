@@ -1,48 +1,63 @@
+<!-- Language: ko -->
+
 # Green Love 프로젝트 메모
 
-> **SSOT**: 세션 종료 시 최신 상태만 유지한다. 200라인 초과 시 아카이브하고 50라인 이내 요약으로 갱신한다.
-> 최신 아카이브: `docs/archive/memory_archive_20260715_before_round_direct_task2.md`
+> SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
+> 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-17 (Task 2.10 PortOne staging 실제 결제 게이트 완료)
-
+최종 수정: 2026-07-20 (원 계획 Task 6.6 운영 런북 완료)
 ## 현재 진행
 
-- 브랜치 `codex/mvp-sales-round-direct`, 최신 구현 커밋 `d9edf6e`.
-- Task 2.10은 실제 100원 결제·웹훅·늦은 결제·전액 환불까지 완료해 `done`이다.
-- Task 2.11은 `todo`이며 아직 시작하지 않았다.
-- 로컬 커밋은 push하지 않았다.
+- 브랜치: `codex/mvp-sales-round-direct`
+- Task 5.12 시작 SHA: `d4d47d577bd861278dd986d7edfb06e9746d2b7b`
+- 완료 계획: `docs/plans/PLAN_mvp_sales_round_consumer_review_remediation.md`
+- 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
+- 완료: Task 6.6 주간 운영·장애 대응·롤백·수동 환불 런북
+- 다음: 별도 요청 후 Task 6.7 사용자 흐름 준비조건 확인
 
-## 환경
+## 선행 계약 확정
 
-- Railway staging API: `https://api-staging-94af.up.railway.app`
-- 최종 staging deployment: `187e2ba9-e589-4dff-bee9-21fff9e17f7c`, `SUCCESS`, health 200
-- Firebase staging: `green-staging-74557`
-- Vercel consumer branch Preview: `dpl_8cyvKwafAaUbytqndvtJL2vKP2Tm`
-- Preview callback은 staging 전용 Kakao 앱으로 로그인·세션 생성을 확인했다.
-- Vercel Preview CORS 사전 요청은 branch alias origin에 204와 정확한 allow-origin을 반환한다.
-- PortOne V2 테스트 채널과 staging webhook만 사용했다.
-- 운영 Railway, Vercel Production, Firebase, PortOne, Kakao 설정은 변경하지 않았다.
+- 소비자 리뷰 보정은 예정 회차 선택, 단일 회차 바로 구매, 당근 유입 재검증, 마케팅 설정 진입까지 완료했다.
+- Task 5.1의 상호 배타적 6개 fixture와 chromium·mobile 12개 `test.fixme` 화면 계약은 그대로 유지한다.
+- Task 5.2 훅은 셀러 인증과 `apiJson`으로 목록·상세·생성·저장·복사·상태 변경·완료를 캡슐화한다.
+- Task 5.3 목록은 상태·KST 일정·지역·한도·예약·주문·배송 보류를 표시하고 복사를 훅에만 위임한다.
 
-## Task 2.10 결과
+## Task 5.12 확정
 
-- `1aa56c3`: `PAYMENT_NOT_FOUND` timeout 복구와 scheduler 주문별 오류 격리.
-- `eb73250`: 결제 주문 배송 연락처 전달.
-- `d9edf6e`: 늦은 결제 환불 문서 기록과 취소 웹훅 `cancellationId` 허용.
-- 정상 결제 `6e9a1e92-5f1f-49fa-8469-df3af7fb6a36`: PortOne·Firestore 100원, `PAID`, 주문 `ACCEPTED`.
-- 동일 `PAID` 웹훅 재발송 후 결제 문서 1건·수량 불변·환불 없음.
-- 늦은 결제 성공 `c1e7e41f-dad5-42e7-ba66-ac4a390f2f27`: 기존 예약 `EXPIRED`, 새 예약 `CONSUMED`, 주문 `ACCEPTED`.
-- 늦은 결제 환불 `37e66aba-c702-49aa-80bf-6c688ac031bc`: PortOne `CANCELLED`, 100원 전액 환불 1건.
-- 환불 주문의 로컬 결제 문서는 `CANCELLED`, 결제액·환불액 100원, 거래 ID 존재.
-- `PAID`·`CANCELLED` 웹훅 재발송 후 환불 1건·결제 문서 1건·확정 수량 1을 유지했다.
-- 테스트 fixture 한도는 `maxDeliveryAddresses=10`, `maxItemQuantity=10`, `saleLimitQuantity=10`으로 복원했다.
-- 상세 증거: `docs/plans/REPORT_task_2_10_portone_staging_e2e.md`.
+- JWT multipart API가 실제 JPEG·5MB·스토어·회차 직배송·담당 기사·`DELIVERING`을 서버에서 검증한다.
+- 요청 키 해시를 단일 사진 ID로 사용해 비공개 `deliveryPhotos/{orderId}/{photoId}.jpg` 경로를 유지한다.
+- 업로드 성공 뒤 사진 ID와 90일 보관 기록을 트랜잭션으로 연결하고 기존 주문 수명주기로만 완료한다.
+- 사진 없는 직접 완료와 회차 주문의 공개 URL 저장을 거부하며 같은 요청 재시도는 사진·완료를 중복 생성하지 않는다.
+- 주문자 본인·스토어 소유자·담당 기사·관리자만 연결 사진의 15분 V4 서명 URL을 받을 수 있다.
+- 드라이버는 `FormData` 서버 응답을 검증하고 회차 직배송만 완료하며 기존 거점 사진 의미는 legacy helper로 보존한다.
+- 사진 API 계약 21개, 드라이버 타입검사, API·전체 build, 전체 typecheck, Playwright 목록 50개가 통과했다.
+- build가 갱신한 tracked 생성물 5개는 시작 상태로 되돌려 범위에서 제외했다.
+- 인덱스·Firestore 규칙·Storage 규칙은 변경하지 않았다.
 
-## 검증
+## 후속 Task 실행 원칙
 
-- PortOne client·payment service·회차 주문·웹훅 DTO 4개 스위트 31개 테스트 통과.
-- API 빌드, Biome 오류 수준 검사, `git diff --check` 통과.
-- Secret, 토큰, Authorization 헤더, 서비스 계정 JSON을 출력·문서화·커밋하지 않았다.
+- Task 6.1은 실제 범위·정렬 쿼리에 필요한 복합 인덱스 4개만 추가했고 관련 계약 23개와 API 128개, 타입 검사와 build가 통과했다.
+- Task 6.3은 중첩 회차 배송 사진의 모든 클라이언트 접근을 차단하고 공개 상품·배너·로고와 기사 전용 legacy 평면 사진을 보존했다.
+- 사용자 전용 Temurin 21.0.11로 실제 Storage Emulator 계약 11개와 관련 API 37개가 통과했으며 시스템 기본 JDK 17은 유지했다.
+- 다음 작업은 Task 6.4 서버 통합 계약이며 Storage 규칙·`salesMode`·애플리케이션 로직을 더 변경하지 않는다.
+- 드라이버 E2E 14개, 소비자 E2E 24개와 셀러 E2E 12개는 실행 데이터·화면 준비 전까지 `test.fixme`다.
+- 인덱스는 Task 6.1, Firestore·Storage 보안 규칙은 Task 6.2~6.3이다.
+- `salesMode` 전환·배포·push는 수행하지 않는다.
+- 현재 작업 트리의 기존 미커밋 API·소비자·문서·스크립트·인덱스 변경은 사용자 작업으로 보존한다.
 
-## 다음 진입
+## Task 6.6 확정
 
-- Task 2.11 재배송비 결제를 계획대로 시작할 수 있다.
+- `docs/specs/ops/mvp-sales-round-runbook.md`가 일요일 마감, 월요일 매입, 화요일 00:00~09:00 배송과 회차 상태별 운영 증거·중단·에스컬레이션을 고정한다.
+- 실제 전환은 Task 6.7 통과와 별도 승인 뒤에만 가능하며, 소비자 장애 롤백 뒤에도 기존 회차 주문을 삭제·변환하지 않고 처리한다.
+- 수동 환불은 PortOne 원격 재조회, 로컬 결제 대조, 열린 `AUTO_REFUND_FAILED`의 claim 기반 재시도를 우선해 중복을 막는다.
+- 결제 조회·재배송·보관 파기 예외에는 현재 자동 조치가 없고, 늦은 결제 직접 환불 실패도 항상 전용 예외로 수렴하지 않으므로 기술 담당자에게 에스컬레이션한다.
+- 비밀키·토큰·전체 개인정보·사진 원본·서명 URL을 로그와 증거에 남기지 않는다.
+- 실제 운영 명령·Firestore 쓰기·환불·문자·상태 변경·배포·push는 수행하지 않았다.
+
+## Task 6.7 준비조건 감사
+
+- 소비자·드라이버 Preview는 SHA `b52c4567416b372bf94758096aada0923acf1096`, 셀러 URL은 `14426f8ca7eb0377e6af8a71e48b01c4252b16e1`로 서로 달랐다.
+- 소비자·셀러 인증 설정은 있으나 드라이버 세션이 없고, 대상 식별자를 만드는 전용 fixture·격리 seed·정리 절차도 없다.
+- 외부 결제 대역, 운영 `salesMode` 비의존 테스트 스토어, 테스트 JPEG와 비운영 Storage 경계가 없어 준비 게이트를 통과하지 못했다.
+- chromium·mobile 52개 계약 목록만 수집했고 `test.fixme`는 유지했다. 실제 사용자 흐름·운영 쓰기·배포·push와 Task 6.8은 실행하지 않았다.
+- 다음: 세 앱을 같은 SHA로 맞추고 드라이버 인증과 안전한 비운영 seed·대역을 제공한 뒤 Task 6.7부터 재검증한다.
