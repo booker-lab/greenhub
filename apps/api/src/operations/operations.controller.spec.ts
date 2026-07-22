@@ -22,8 +22,8 @@ function makeFirestore(initial: Record<string, Data>) {
     doc,
     runTransaction: jest.fn(async (callback: (tx: Data) => Promise<unknown>) =>
       callback({
-        get: (ref: Data) => ref.get(),
-        update: (ref: Data, data: Data) => ref.update(data),
+        get: (ref: ReturnType<typeof doc>) => ref.get(),
+        update: (ref: ReturnType<typeof doc>, data: Data) => ref.update(data),
       }),
     ),
     collection: jest.fn((name: string) => {

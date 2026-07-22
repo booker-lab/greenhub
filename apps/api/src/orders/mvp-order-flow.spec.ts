@@ -426,7 +426,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     } as never);
 
     const orderWrite = writes.find((write) => write.path.startsWith('orders/'))?.data;
-    expect(result.portonePaymentParams.amount).toBe(130000);
+    expect(result.portonePaymentParams).toMatchObject({ amount: 130000 });
     expect(orderWrite).toMatchObject({
       schemaVersion: 2,
       roundId: 'round-1',

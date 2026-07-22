@@ -11,9 +11,14 @@ interface RetentionServiceContract {
     metadata?: Data;
   }): Promise<Data>;
   purgeExpiredRecords(input: { now: Date }): Promise<Data>;
+  runScheduledPurge(): Promise<Data>;
 }
 
-type RetentionServiceConstructor = new (firestore: Data, storage: Data) => RetentionServiceContract;
+type RetentionServiceConstructor = new (
+  firestore: Data,
+  storage: Data,
+  issueWriter: Data,
+) => RetentionServiceContract;
 
 function loadRetentionService(): RetentionServiceConstructor | null {
   try {
