@@ -203,7 +203,7 @@ test('마감·품절·구매 불가 서버 사유를 항목별 제외 사유로 
   });
   assert.deepEqual(resolveRoundCartValidation(roundItem, null, '구매할 수 없는 회차 상품입니다.'), {
     status: 'unavailable',
-    reason: '현재 구매할 수 없는 상품입니다.',
+    reason: '판매가 마감되었습니다.',
   });
 });
 

@@ -124,7 +124,7 @@ const QUERY_CONTRACTS: QueryContract[] = [
     sourceFile: 'apps/driver/src/app/board/_client.tsx',
     sourcePatterns: [
       "where('status', '==', 'PREPARING')",
-      "where('deliveryMethod', 'in', ['direct', 'hub'])",
+      "where('deliveryMethod', '==', 'direct')",
       "orderBy('preparedAt', 'asc')",
     ],
     collectionGroup: 'orders',

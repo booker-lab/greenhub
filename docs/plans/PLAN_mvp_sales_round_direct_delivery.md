@@ -258,7 +258,7 @@ flowchart TD
 | 6.5 | 6.4 | `scripts/enable-dear-orchid-round-direct.mjs` | 대상 storeId·현재 모드·확인 플래그를 검사한 뒤 판매 모드를 전환한다. | `node scripts/enable-dear-orchid-round-direct.mjs --dry-run` | 통과 — `green-e4fe3`에서 이름이 정확히 `디어 오키드`인 단일 대상 `80189070-2c3d-45f2-bc11-68a870b13951`을 확인했다. 미설정 `salesMode`는 호환값 `legacy`로만 판독하고 `round_direct` 변경 예정값, 현재·예정 모드를 포함한 확인 플래그, `legacy` 롤백 명령을 출력한다. 대상 없음·다중 대상·이미 목표 모드·손상 상태·인증 누락·확인 플래그 누락 또는 불일치를 거부하는 계약 11개가 통과했으며 dry-run 전후 문서 `updateTime`과 모드는 동일했다. 실제 전환·배포·push는 수행하지 않았다. | done |
 | 6.6 | 6.5 | `docs/specs/ops/mvp-sales-round-runbook.md` | 주간 운영·장애 대응·롤백·수동 환불 절차를 운영 문서로 고정한다. | `git diff --check -- docs/specs/ops/mvp-sales-round-runbook.md` | 통과 — 일요일 마감, 월요일 경매·매입, 화요일 직접배송과 회차 상태별 증거·중단·에스컬레이션을 역할별로 고정했다. 출시 전 dry-run과 별도 승인 전환, 소비자 장애 시 `legacy` 롤백 뒤 기존 결제 주문 계속 처리, PortOne 원격 재조회와 환불 claim 기반 중복 방지, 결제·알림·배송·사진·보관 예외 및 비밀정보 배제 계약을 실제 구현 경계와 대조했다. 실제 운영 명령·외부 쓰기·배포·push는 수행하지 않았다. | done |
 | 6.7 | 6.6 | `apps/e2e/tests/consumer-round-direct.spec.ts` | 소비자·셀러·드라이버 핵심 흐름을 실행해 화면 계약을 닫는다. | `pnpm --filter e2e exec playwright test consumer-round-direct seller-sale-rounds driver-direct-delivery --reporter=list` | 통과 — 실행 ID `task-6-7-20260722-q4f9d6`에서 readiness와 chromium·mobile seed·verify가 모두 exit 0으로 통과했고 provider 외부 egress는 0이었다. `workers=1`, `retries=0`으로 실제 52건을 실행해 52 passed, 0 failed, 0 skipped/fixme, 0 flaky를 확인했다. 양쪽 manifest 제한 cleanup과 부재 검증도 exit 0, 잔여 Firestore 문서·Storage 객체 각각 0으로 완료했다. | done |
-| 6.8 | 6.7 | `docs/plans/PLAN_mvp_sales_round_direct_delivery.md` | 전체 빌드·테스트 결과와 잔여 위험을 Closeout에 기록한다. | `pnpm build` | [판정 대기 — 최종 빌드] | todo |
+| 6.8 | 6.7 | `docs/plans/PLAN_mvp_sales_round_direct_delivery.md` | 전체 빌드·테스트 결과와 잔여 위험을 Closeout에 기록한다. | `pnpm build` | 통과 — production build와 필수 회귀를 완료하고 `HEAD`의 두 계약 불일치를 테스트 기대값으로 최소 보정했다. 알려진 API 전체 `tsc --noEmit` 6개 오류와 비차단 경고는 기존 사용자 변경과 분리해 Closeout에 남겼다. | done |
 
 ### Task 6.7 준비조건 판정 (2026-07-20)
 
@@ -295,7 +295,7 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 6.3 `done`, Task 6.4 `todo`
+- **Status**: Task 6.8 `done` — 원 계획 전체 완료
 - **Task 4.2 복귀 조건**: 충족. 결제·예약·환불, 주문·웹훅 권한, 주문·회차 취소, 주문 생성 멱등, 재배송비, 알림, 운영 예외, 보관·Storage 입력 계약을 Unit 1~9에서 보정했고 Unit 10에서 실제 도메인 서비스 통합 E2E와 전체 회귀 검증으로 확정했다.
 - **Task 4.2 결과**: 공개 목록과 회차별 상세를 병렬 조회해 회차 상품을 포함한 전체 회차, 현재 회차 하나, 최신순 지난 회차를 제공한다. 기존 소비자 데이터 접근 방식의 문자열 오류와 `loading` 불리언을 유지하면서 명시적 `error`, `empty`, `success` 상태와 재조회를 추가했고 요청 식별자로 스토어 전환·재조회 경쟁의 늦은 응답을 폐기한다.
 - **Task 4.3 결과**: `utm_source=carrot|daangn|당근` 유입만 탭 세션에 보관하고 새 당근 유입 전까지 유지한다. 캠페인·콘텐츠는 길이와 안전 문자 집합을 제한하며 도착 URL은 `http(s)`와 `round` 쿼리만 허용한다. 주문용 조회는 저장값을 다시 검증해 `source`, `campaign`, `content`, `landingUrl`, `capturedAt`만 새 객체로 반환하고 잘못된 값은 폐기한다. 화면·주문 호출부 연결은 후속 Task로 남겼다.
@@ -334,5 +334,8 @@ flowchart TD
 - **Task 6.4 결과**: 실제 Nest 애플리케이션과 도메인 서비스를 메모리 Firestore fixture에 연결하고 외부 결제·알림·Storage만 계약 대역으로 사용했다. 회차 개설, 예약 주문, 결제 웹훅, 배송 보류, 재배송비 결제, 재배송 실패 운영 예외, 비공개 완료 사진, 회차 완료, 용도별 보관 파기를 순서대로 검증했으며 중복 주문·웹훅·사진·파기와 늦은 결제 한도 재확보 실패 환불도 멱등 처리됐다. E2E 3개, 관련 API 81개, Firestore Emulator 14개와 Storage Emulator 11개가 통과했고 서비스 연결 보정은 필요하지 않았다.
 - **Task 6.6 결과**: 주간 회차 운영의 담당 역할·사전 조건·확인 증거·중단 조건·에스컬레이션을 상태별로 고정했다. 실제 전환은 Task 6.7 통과와 별도 승인 뒤에만 허용하고, 소비자 장애 시 `legacy` 롤백 뒤에도 기존 회차 주문을 삭제·변환하지 않고 계속 처리한다. 결제 상태 불명확·늦은 결제·자동 환불 실패, 고객 안내 최종 실패, 배송 보류·재배송 실패, 비공개 사진·서명 URL, 완료 거부, 보관 파기 실패를 구현의 실제 조치 가능 범위와 대조했으며 수동 환불 전 PortOne 원격 재조회와 중복 방지 절차를 명시했다.
 - **Task 6.7 최종 결과**: 실행 `task-6-7-20260722-q4f9d6`에서 readiness와 chromium·mobile seed·verify가 모두 통과했고 provider 외부 egress는 0이었다. `workers=1`, `retries=0`으로 52 passed, 0 failed, 0 skipped/fixme, 0 flaky를 확인했으며 양쪽 manifest 제한 cleanup·부재 검증 뒤 잔여 Firestore 문서·Storage 객체는 각각 0이었다.
-- **다음 진입점**: Task 5.4 통과 커밋 SHA를 인계받은 뒤 별도 요청에서만 Task 6.8을 시작한다.
-- **명시적 후속 위험**: legacy 거점 사진은 기존 공개 다운로드 URL 계약 때문에 기사 직접 생성·읽기를 유지한다. `salesMode` 실제 전환·운영 배포·push는 별도 승인 전에는 수행하지 않는다.
+- **Task 6.8 최종 결과**: `pnpm build`가 shared·API·consumer·seller·driver에서 종료 코드 0으로 통과했다. API 단위 32개 스위트 249개, API E2E 4개 스위트 10개, 소비자 Node 78개, 셀러 Vitest 43개, 드라이버 Node 10개, fixture 계약 7개가 통과했고 소비자·셀러·드라이버 Playwright chromium·mobile 52개 목록을 다시 수집했다. shared와 소비자·셀러·드라이버·E2E 타입 검사는 통과했다.
+- **Task 6.8 최소 보정**: Task 6.7이 드라이버 준비 목록을 `direct`로 좁힌 동작에 맞춰 Firestore 쿼리 호출부 계약을 갱신하고, 실제 E2E 마감 응답에 맞춰 소비자 장바구니의 “구매할 수 없는 회차 상품” 기대 문구를 “판매가 마감되었습니다.”로 맞췄다. 런타임 구현·인덱스·보안 규칙은 변경하지 않았다.
+- **알려진 실패**: `pnpm --filter api exec tsc --noEmit`은 시작 상태와 같은 6개 오류로 실패한다. `operations.controller.spec.ts:25~26`의 `ref.get`·`ref.update` unknown, `mvp-order-flow.spec.ts:429`의 `portonePaymentParams` unknown, `retention.service.spec.ts:125`의 인자 수 불일치, `retention.service.spec.ts:382~383`의 `runScheduledPurge` 계약 누락이며 기존 사용자 변경을 Task 6.8에 흡수하지 않았다.
+- **잔여 경고**: legacy checkout 비 null 단언 경고는 build·test에서 재현되지 않았다. 소비자 Node 테스트의 `MODULE_TYPELESS_PACKAGE_JSON`, 기존 Firestore 인덱스 테스트의 비 null 단언 1건, Next.js webpack cache 큰 문자열 직렬화 성능 경고는 종료를 방해하지 않아 설정·구현을 바꾸지 않았다. legacy 거점 사진의 기존 공개 다운로드 URL 계약도 유지한다.
+- **증거와 운영 상태**: 비민감 요약은 `.artifacts/round-direct/task-6-8-20260722-k2m7p4/evidence/closeout-summary.json`에 선별했다. 서비스 계정·인증정보·세션·개인정보·사진 원본·manifest는 포함하지 않았고 production, 운영 Firebase·Storage, 운영 `salesMode`, 실제 결제·환불·알림, 배포·마이그레이션·push를 변경하거나 실행하지 않았다.

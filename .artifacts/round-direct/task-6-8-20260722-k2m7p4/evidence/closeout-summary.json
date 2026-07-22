@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "task": "6.8",
+  "runId": "task-6-8-20260722-k2m7p4",
+  "startedFromSha": "99b9bc0b852c75327ce5bec0b3dfea603ab5ed11",
+  "status": "passed_with_known_preexisting_typecheck_errors",
+  "verification": {
+    "productionBuild": { "passed": true },
+    "apiUnit": { "suitesPassed": 32, "testsPassed": 249, "failed": 0 },
+    "apiE2e": { "suitesPassed": 4, "testsPassed": 10, "failed": 0 },
+    "consumerNode": { "testsPassed": 78, "failed": 0 },
+    "sellerVitest": { "filesPassed": 7, "testsPassed": 43, "failed": 0 },
+    "driverNode": { "testsPassed": 10, "failed": 0 },
+    "fixtureContract": { "testsPassed": 7, "failed": 0 },
+    "playwrightList": { "testsListed": 52, "files": 3, "projects": 2 },
+    "typecheckPassed": ["shared", "consumer", "seller", "driver", "e2e"],
+    "apiFullTsc": { "passed": false, "knownPreexistingErrors": 6 }
+  },
+  "knownApiTscErrors": [
+    "src/operations/operations.controller.spec.ts:25 ref.get 타입이 unknown",
+    "src/operations/operations.controller.spec.ts:26 ref.update 타입이 unknown",
+    "src/orders/mvp-order-flow.spec.ts:429 portonePaymentParams 타입이 unknown",
+    "src/retention/retention.service.spec.ts:125 두 인자가 필요하지만 세 인자를 받음",
+    "src/retention/retention.service.spec.ts:382 계약에 runScheduledPurge 없음",
+    "src/retention/retention.service.spec.ts:383 계약에 runScheduledPurge 없음"
+  ],
+  "minimalCorrections": [
+    "Firestore 드라이버 준비 쿼리 호출부 계약을 deliveryMethod direct/hub in에서 direct 동등 조건으로 갱신",
+    "소비자 구매 불가 회차 상품 기대값을 검증된 판매 마감 문구에 맞춤"
+  ],
+  "warnings": {
+    "legacyCheckoutNonNullReproduced": false,
+    "nodeModuleTypelessReproduced": true,
+    "existingFirestoreIndexNonNullAssertion": 1,
+    "webpackLargeStringCacheWarningReproduced": true
+  },
+  "task67Evidence": {
+    "runId": "task-6-7-20260722-q4f9d6",
+    "ready": true,
+    "providerExternalEgress": 0,
+    "playwrightPassed": 52,
+    "cleanupResidualFirestoreDocuments": 0,
+    "cleanupResidualStorageObjects": 0
+  },
+  "excludedSensitiveEvidence": [
+    "서비스 계정 내용",
+    "인증정보와 인증 상태",
+    "세션 파일",
+    "개인정보",
+    "사진 원본",
+    "fixture manifest"
+  ],
+  "operations": {
+    "productionChanged": false,
+    "productionFirebaseOrStorageChanged": false,
+    "productionSalesModeChanged": false,
+    "realPaymentRefundOrNotificationSent": false,
+    "deploymentPerformed": false,
+    "migrationPerformed": false,
+    "pushPerformed": false
+  }
+}
