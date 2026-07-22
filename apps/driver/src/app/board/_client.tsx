@@ -36,11 +36,11 @@ export default function BoardClient() {
   useEffect(() => {
     if (!firebaseReady) return;
 
-    // 회차 직배송 보드는 direct 주문만 기사 수거 대상으로 노출한다.
+    // 기사 수거 대상인 direct·hub 주문만 노출하고 택배 주문은 제외한다.
     const qPreparing = query(
       collection(db, 'orders'),
       where('status', '==', 'PREPARING'),
-      where('deliveryMethod', '==', 'direct'),
+      where('deliveryMethod', 'in', ['direct', 'hub']),
       orderBy('preparedAt', 'asc'),
     );
     const unsubPreparing = onSnapshot(qPreparing, (snap) => {

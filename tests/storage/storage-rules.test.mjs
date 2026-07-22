@@ -24,6 +24,15 @@ function emulatorConfig(rules) {
   };
 }
 
+function firestoreEmulatorConfig(rules) {
+  const [host, rawPort] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080').split(':');
+  return {
+    rules,
+    host,
+    port: Number(rawPort),
+  };
+}
+
 function storageFor(uid, claims) {
   const context = uid
     ? testEnvironment.authenticatedContext(uid, claims)
@@ -38,6 +47,7 @@ function actorStorages() {
     ['판매자', storageFor('seller-1', { role: 'seller', storeId: 'store-1' })],
     ['다른 판매자', storageFor('seller-2', { role: 'seller', storeId: 'store-2' })],
     ['기사', storageFor('driver-1', { role: 'driver' })],
+    ['다른 기사', storageFor('driver-2', { role: 'driver' })],
     ['관리자', storageFor('admin-1', { role: 'admin' })],
   ];
 }
@@ -57,9 +67,21 @@ function upload(storage, path, contentType, size = 16) {
 async function seedFixtures() {
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     const storage = context.storage(BUCKET_URL);
+    const firestore = context.firestore();
     await Promise.all([
+      firestore.collection('orders').doc('order-legacy').set({
+        driverId: 'driver-1',
+        deliveryMethod: 'hub',
+        status: 'DELIVERING',
+      }),
+      firestore.collection('orders').doc('order_legacy').set({
+        driverId: 'driver-1',
+        deliveryMethod: 'hub',
+        status: 'DELIVERING',
+      }),
       upload(storage, 'deliveryPhotos/order-1/private-photo.jpg', 'image/jpeg'),
       upload(storage, 'deliveryPhotos/order-legacy_1721433600000.jpg', 'image/jpeg'),
+      upload(storage, 'deliveryPhotos/order_legacy_1721433600000.jpg', 'image/jpeg'),
       upload(storage, 'products/store-1/public-product.jpg', 'image/jpeg'),
       upload(storage, 'products/store-1/product-update.jpg', 'image/jpeg'),
       upload(storage, 'products/store-1/product-delete.jpg', 'image/jpeg'),
@@ -74,11 +96,16 @@ async function seedFixtures() {
 }
 
 before(async () => {
-  const rules = await readFile(new URL('../../storage.rules', import.meta.url), 'utf8');
+  const [storageRules, firestoreRules] = await Promise.all([
+    readFile(new URL('../../storage.rules', import.meta.url), 'utf8'),
+    readFile(new URL('../../firestore.rules', import.meta.url), 'utf8'),
+  ]);
   testEnvironment = await initializeTestEnvironment({
     projectId: PROJECT_ID,
-    storage: emulatorConfig(rules),
+    firestore: firestoreEmulatorConfig(firestoreRules),
+    storage: emulatorConfig(storageRules),
   });
+  await testEnvironment.clearFirestore();
   await testEnvironment.clearStorage();
   await seedFixtures();
 });
@@ -198,19 +225,26 @@ test('상점 로고는 잘못된 소유자·역할·크기·contentType·경로�
   await assertFails(upload(seller, 'logos/seller-1/not-flat.png', 'image/png'));
 });
 
-test('legacy 거점 사진은 기사에게만 평면 JPEG 생성과 읽기를 허용한다', async () => {
-  const driver = storageFor('driver-1', { role: 'driver' });
-  const existing = objectRef(driver, 'deliveryPhotos/order-legacy_1721433600000.jpg');
+test('legacy 거점 사진은 담당 기사에게만 단건 읽기와 평면 JPEG 생성을 허용한다', async () => {
+  const assignedDriver = storageFor('driver-1', { role: 'driver' });
+  const existing = objectRef(assignedDriver, 'deliveryPhotos/order-legacy_1721433600000.jpg');
 
   await assertSucceeds(existing.getMetadata());
   await assertSucceeds(
-    upload(driver, 'deliveryPhotos/order-legacy_1721433600010.jpg', 'image/jpeg'),
+    upload(assignedDriver, 'deliveryPhotos/order-legacy_1721433600010.jpg', 'image/jpeg'),
+  );
+  await assertSucceeds(
+    objectRef(assignedDriver, 'deliveryPhotos/order_legacy_1721433600000.jpg').getMetadata(),
+  );
+  await assertSucceeds(
+    upload(assignedDriver, 'deliveryPhotos/order_legacy_1721433600010.jpg', 'image/jpeg'),
   );
 
   for (const storage of [
     storageFor(),
     storageFor('user-1', { role: 'consumer' }),
     storageFor('seller-1', { role: 'seller', storeId: 'store-1' }),
+    storageFor('driver-2', { role: 'driver' }),
     storageFor('admin-1', { role: 'admin' }),
   ]) {
     await assertFails(
@@ -219,6 +253,18 @@ test('legacy 거점 사진은 기사에게만 평면 JPEG 생성과 읽기를 �
     await assertFails(
       upload(storage, 'deliveryPhotos/order-legacy_1721433600011.jpg', 'image/jpeg'),
     );
+    await assertFails(
+      objectRef(storage, 'deliveryPhotos/order_legacy_1721433600000.jpg').getMetadata(),
+    );
+  }
+});
+
+test('legacy 평면 경로 목록 조회는 담당 기사를 포함한 모든 클라이언트에서 거부한다', async () => {
+  for (const storage of [
+    storageFor('driver-1', { role: 'driver' }),
+    storageFor('driver-2', { role: 'driver' }),
+  ]) {
+    await assertFails(objectRef(storage, 'deliveryPhotos').listAll());
   }
 });
 

@@ -8,6 +8,7 @@ import { notFound } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 import ProductTopBar from '@/components/ProductTopBar';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
+import { captureAcquisition } from '@/lib/acquisition';
 import { db } from '@/lib/firebase';
 import ProductActions from './_components/ProductActions';
 import ProductImages from './_components/ProductImages';
@@ -319,6 +320,10 @@ export default function ProductDetailPage({ params, searchParams }: ProductDetai
   const detail = useProductDetail(id);
   const readyProduct = detail.status === 'ready' ? detail.product : null;
   const storeMode = useStoreMode(readyProduct?.storeId ?? null);
+
+  useEffect(() => {
+    captureAcquisition();
+  }, []);
 
   if (detail.status === 'not_found') notFound();
   if (detail.status === 'error') {

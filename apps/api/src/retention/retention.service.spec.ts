@@ -373,6 +373,7 @@ describe('보관 기간과 파기 계약', () => {
   });
 
   it('정기 파기는 현재 시각 기준 만료 항목만 처리하고 재실행할 수 있다', async () => {
+    jest.useFakeTimers().setSystemTime(now);
     const { records, service } = makeService({
       'legalOrderRecords/order-expired': {
         expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
@@ -382,11 +383,15 @@ describe('보관 기간과 파기 계약', () => {
       },
     });
 
-    await service.runScheduledPurge();
-    await service.runScheduledPurge();
+    try {
+      await service.runScheduledPurge();
+      await service.runScheduledPurge();
 
-    expect(records.has('legalOrderRecords/order-expired')).toBe(false);
-    expect(records.has('legalOrderRecords/order-future')).toBe(true);
+      expect(records.has('legalOrderRecords/order-expired')).toBe(false);
+      expect(records.has('legalOrderRecords/order-future')).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('Storage 삭제 최종 실패는 안전한 운영 예외로 남기고 보관 문서는 유지한다', async () => {

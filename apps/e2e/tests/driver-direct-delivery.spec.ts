@@ -76,7 +76,7 @@ async function installDeliveryPhotoCamera(page: Page, idempotencyKey: string): P
  */
 const ORDER_FIXTURE_SUFFIXES = {
   BOARD_DIRECT: 'driver-round-direct-board',
-  BOARD_HUB_EXCLUDED: 'driver-round-hub-excluded',
+  BOARD_HUB: 'driver-round-hub-excluded',
   BOARD_PARCEL_EXCLUDED: 'driver-round-parcel-excluded',
   START_PREPARING: 'driver-round-direct-start-preparing',
   HOLD_WEATHER: 'driver-round-direct-hold-weather',
@@ -88,7 +88,7 @@ const ORDER_FIXTURE_SUFFIXES = {
 } as const;
 
 test.describe('드라이버 회차 직배송 화면 계약', () => {
-  test('배송 보드는 직접배송 주문만 노출한다', async ({ page, roundDirect }) => {
+  test('배송 보드는 직접배송과 거점배송 주문을 노출하고 택배 주문은 제외한다', async ({ page, roundDirect }) => {
     await page.goto(`${BASE}/board?tab=preparing`);
 
     await expect(
@@ -98,9 +98,9 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     ).toBeVisible();
     await expect(
       page.getByTestId(
-        `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_HUB_EXCLUDED)}`,
+        `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_HUB)}`,
       ),
-    ).toHaveCount(0);
+    ).toBeVisible();
     await expect(
       page.getByTestId(
         `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_PARCEL_EXCLUDED)}`,

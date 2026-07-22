@@ -31,6 +31,7 @@ function makeService(initialOrder: Data) {
       orderId: input.orderId,
       photoId: input.photoId,
       path: `deliveryPhotos/${input.orderId}/${input.photoId}.jpg`,
+      created: true,
     })),
     createDeliveryPhotoReadUrl: jest.fn(async () => ({
       url: 'https://signed.example.invalid/photo',
@@ -49,6 +50,10 @@ function makeService(initialOrder: Data) {
         status: 'DELIVERED',
       };
     }),
+    reconcileDeliveryCompletion: jest.fn(async () => ({
+      orderId: initialOrder.id,
+      status: 'DELIVERED',
+    })),
   };
   const service = new DeliveryPhotosService(
     firestore as never,
@@ -153,6 +158,33 @@ describe('회차 직배송 사진 API 서비스 계약', () => {
     expect(context.lifecycle.updateStatus).not.toHaveBeenCalled();
   });
 
+  it('다른 동시 요청이 먼저 만든 객체는 이 요청의 연결 실패로 삭제하지 않는다', async () => {
+    const context = makeService({
+      id: 'order-safe',
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: [],
+    });
+    context.storage.uploadDeliveryPhoto.mockImplementationOnce(async (input: Data) => ({
+      orderId: input.orderId,
+      photoId: input.photoId,
+      path: `deliveryPhotos/${input.orderId}/${input.photoId}.jpg`,
+      created: false,
+    }));
+    context.firestore.runTransaction.mockRejectedValueOnce(new Error('동시 연결 충돌'));
+
+    await expect(context.service.uploadAndComplete(uploadInput())).rejects.toThrow(
+      '동시 연결 충돌',
+    );
+
+    expect(context.storage.deleteObject).not.toHaveBeenCalled();
+    expect(context.lifecycle.updateStatus).not.toHaveBeenCalled();
+  });
+
   it('사진 연결 뒤 완료 전환이 실패하면 사진을 유지하고 성공 상태를 추정하지 않는다', async () => {
     const context = makeService({
       id: 'order-safe',
@@ -194,6 +226,10 @@ describe('회차 직배송 사진 API 서비스 계약', () => {
     expect(second.photoId).toBe(first.photoId);
     expect(context.getOrder().deliveryPhotoIds).toEqual([first.photoId]);
     expect(context.lifecycle.updateStatus).toHaveBeenCalledTimes(1);
+    expect(context.lifecycle.reconcileDeliveryCompletion).toHaveBeenCalledWith(
+      'store-safe',
+      'order-safe',
+    );
   });
 
   it('다른 사진이 이미 연결된 주문에는 중복 사진을 연결하지 않는다', async () => {

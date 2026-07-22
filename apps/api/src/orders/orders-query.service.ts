@@ -6,13 +6,17 @@ import {
 } from '@nestjs/common';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { FirestoreService } from '../firestore/firestore.service';
+import { StorageService } from '../firestore/storage.service';
 
 type OrderRequester = Pick<JwtPayload, 'sub' | 'role'>;
 type OrderRequesterInput = OrderRequester | string;
 
 @Injectable()
 export class OrdersQueryService {
-  constructor(private readonly firestore: FirestoreService) {}
+  constructor(
+    private readonly firestore: FirestoreService,
+    private readonly storage?: StorageService,
+  ) {}
 
   async getOrder(storeId: string, orderId: string, requesterInput: OrderRequesterInput) {
     const requester = this.normalizeRequester(requesterInput);
@@ -22,7 +26,7 @@ export class OrdersQueryService {
     }
     const order = snap.data()!;
     await this.assertOrderReadAccess(storeId, order, requester);
-    return this.normalizeOrder(order);
+    return this.withDeliveryPhotoUrl(orderId, order, requester);
   }
 
   async getOrders(
@@ -80,7 +84,7 @@ export class OrdersQueryService {
     const order = snap.data()!;
 
     await this.assertOrderReadAccess(order['storeId'], order, requester);
-    return this.normalizeOrder(order);
+    return this.withDeliveryPhotoUrl(orderId, order, requester);
   }
 
   async getMyOrders(requesterId: string) {
@@ -115,7 +119,7 @@ export class OrdersQueryService {
     throw new ForbiddenException('해당 주문을 조회할 권한이 없습니다.');
   }
 
-  private normalizeOrder(order: Record<string, any>) {
+  private normalizeOrder(order: Record<string, any>): Record<string, any> {
     if (Array.isArray(order['orderItems']) && order['orderItems'].length > 0) {
       return {
         ...order,
@@ -152,5 +156,38 @@ export class OrdersQueryService {
         },
       ],
     };
+  }
+
+  private async withDeliveryPhotoUrl(
+    orderId: string,
+    order: Record<string, any>,
+    requester: OrderRequester,
+  ) {
+    const normalized = this.normalizeOrder(order);
+    const isRoundDirect =
+      order['schemaVersion'] === 2 &&
+      typeof order['roundId'] === 'string' &&
+      order['deliveryMethod'] === 'direct';
+    if (!isRoundDirect) return normalized;
+
+    const { deliveryPhotoUrl: _storedUrl, ...privatePhotoOrder } = normalized;
+    if (!['DELIVERED', 'REVIEWED'].includes(order['status'])) {
+      return privatePhotoOrder;
+    }
+    const photoId = Array.isArray(order['deliveryPhotoIds'])
+      ? order['deliveryPhotoIds'].find(
+          (value: unknown): value is string => typeof value === 'string' && value.length > 0,
+        )
+      : null;
+    if (!photoId || !this.storage) return privatePhotoOrder;
+
+    const signed = await this.storage.createDeliveryPhotoReadUrl({
+      storeId: order['storeId'],
+      orderId,
+      photoId,
+      requesterId: requester.sub,
+      requesterRole: requester.role,
+    });
+    return { ...privatePhotoOrder, deliveryPhotoUrl: signed.url };
   }
 }

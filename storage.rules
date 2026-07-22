@@ -48,9 +48,34 @@ service firebase.storage {
         ];
     }
 
+    function legacyOrderId(fileName) {
+      let parts = fileName.split('_');
+      return parts[0:parts.size() - 1].join('_');
+    }
+
+    function isLegacyDeliveryPhotoName(fileName) {
+      let parts = fileName.split('_');
+      return parts.size() >= 2 &&
+        legacyOrderId(fileName).matches('[A-Za-z0-9_-]{1,128}') &&
+        parts[parts.size() - 1].matches('[0-9]+\\.jpg');
+    }
+
+    function legacyOrder(fileName) {
+      return firestore.get(
+        /databases/(default)/documents/orders/$(legacyOrderId(fileName))
+      );
+    }
+
+    function isAssignedLegacyHubDriver(fileName) {
+      let order = legacyOrder(fileName);
+      return isDriver() &&
+        order.data.driverId == request.auth.uid &&
+        order.data.deliveryMethod == 'hub';
+    }
+
     function isLegacyDeliveryPhoto(fileName) {
-      return request.resource != null &&
-        fileName.matches('[A-Za-z0-9_-]{1,128}_[0-9]+\\.jpg') &&
+      return isLegacyDeliveryPhotoName(fileName) &&
+        request.resource != null &&
         request.resource.size <= 5 * 1024 * 1024 &&
         request.resource.contentType == 'image/jpeg';
     }
@@ -77,12 +102,15 @@ service firebase.storage {
       allow delete: if isOwnedSellerLogo(fileName);
     }
 
-    // 기존 거점 사진: 기사 직접 생성과 다운로드 URL 발급 동작만 보존
+    // 기존 거점 사진: 담당 기사의 단건 읽기와 배송 중 JPEG 생성만 허용
     match /deliveryPhotos/{fileName} {
-      allow read: if isDriver();
+      allow get: if isLegacyDeliveryPhotoName(fileName) &&
+        isAssignedLegacyHubDriver(fileName);
+      allow list: if false;
       allow create: if resource == null &&
-        isDriver() &&
-        isLegacyDeliveryPhoto(fileName);
+        isLegacyDeliveryPhoto(fileName) &&
+        isAssignedLegacyHubDriver(fileName) &&
+        legacyOrder(fileName).data.status == 'DELIVERING';
       allow update, delete: if false;
     }
 

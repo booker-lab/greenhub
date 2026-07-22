@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -39,22 +40,37 @@ export class StorageService {
       content: Buffer;
       contentType: 'image/jpeg';
     },
-  ): Promise<{ orderId: string; photoId: string; path: string }> {
+  ): Promise<{ orderId: string; photoId: string; path: string; created: boolean }> {
     this.assertJpegContent(input.content);
     const order = await this.getOrder(input);
     await this.assertAccess(input, order, 'upload');
     const path = this.deliveryPhotoPath(input.orderId, input.photoId);
+    const contentSha256 = createHash('sha256').update(input.content).digest('hex');
+    const file = this.bucket.file(path);
 
-    await this.bucket.file(path).save(input.content, {
-      resumable: false,
-      validation: 'crc32c',
-      metadata: {
-        contentType: input.contentType,
-        cacheControl: 'private, max-age=0, no-store',
-      },
-    });
+    try {
+      await file.save(input.content, {
+        resumable: false,
+        validation: 'crc32c',
+        preconditionOpts: { ifGenerationMatch: 0 },
+        metadata: {
+          contentType: input.contentType,
+          cacheControl: 'private, max-age=0, no-store',
+          metadata: { contentSha256 },
+        },
+      });
+    } catch (error) {
+      if (!this.isPreconditionFailed(error)) throw error;
+      const [metadata] = await file.getMetadata();
+      if (metadata.metadata?.['contentSha256'] !== contentSha256) {
+        throw new ConflictException(
+          '같은 업로드 요청 식별자에 다른 배송 사진을 사용할 수 없습니다.',
+        );
+      }
+      return { orderId: input.orderId, photoId: input.photoId, path, created: false };
+    }
 
-    return { orderId: input.orderId, photoId: input.photoId, path };
+    return { orderId: input.orderId, photoId: input.photoId, path, created: true };
   }
 
   async createDeliveryPhotoReadUrl(
@@ -181,5 +197,10 @@ export class StorageService {
     return Array.isArray(value)
       ? value.filter((photoId): photoId is string => typeof photoId === 'string')
       : [];
+  }
+
+  private isPreconditionFailed(error: unknown): boolean {
+    const code = (error as { code?: unknown } | null)?.code;
+    return code === 412 || code === '412';
   }
 }

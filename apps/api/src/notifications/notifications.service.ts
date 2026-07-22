@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { v4 as uuidv4 } from 'uuid';
@@ -61,36 +62,56 @@ export class NotificationsService {
     templateCode: NotificationTemplateCode,
     variables: Record<string, string>,
     orderId?: string,
+    idempotencyKey?: string,
   ) {
-    const orderSnap = orderId ? await this.firestore.doc(`orders/${orderId}`).get() : null;
-    const userSnap = await this.firestore.doc(`users/${userId}`).get();
-    const order = orderSnap?.exists ? orderSnap.data()! : null;
-    const user = userSnap.exists ? userSnap.data()! : null;
-    const phone = this.resolveRecipientPhone(userId, order, user);
-
-    if (!phone) {
-      if (orderId) {
-        await this.createCustomerNoticeFailedIssue(orderId, templateCode, null);
-      }
+    if (
+      idempotencyKey &&
+      !(await this.claimNotificationDelivery({
+        idempotencyKey,
+        orderId: orderId ?? null,
+        templateCode,
+        userId,
+      }))
+    ) {
       return;
     }
 
-    const result = await this.aligo.sendAlimtalk(phone, templateCode, variables);
-    const notificationId = await this.logNotification({
-      userId,
-      orderId: orderId ?? null,
-      channel: result.channel ?? 'alimtalk',
-      templateCode,
-      variables,
-      message: result.message,
-      phone,
-      status: result.success ? 'sent' : 'failed',
-      attemptCount: result.alimtalkAttempts + result.smsAttempts,
-      errorMessage: result.errorMessage ?? null,
-    });
+    try {
+      const orderSnap = orderId ? await this.firestore.doc(`orders/${orderId}`).get() : null;
+      const userSnap = await this.firestore.doc(`users/${userId}`).get();
+      const order = orderSnap?.exists ? orderSnap.data()! : null;
+      const user = userSnap.exists ? userSnap.data()! : null;
+      const phone = this.resolveRecipientPhone(userId, order, user);
 
-    if (!result.success && orderId) {
-      await this.createCustomerNoticeFailedIssue(orderId, templateCode, notificationId);
+      if (!phone) {
+        if (orderId) {
+          await this.createCustomerNoticeFailedIssue(orderId, templateCode, null);
+        }
+        await this.finishNotificationDelivery(idempotencyKey, 'FAILED');
+        return;
+      }
+
+      const result = await this.aligo.sendAlimtalk(phone, templateCode, variables);
+      const notificationId = await this.logNotification({
+        userId,
+        orderId: orderId ?? null,
+        channel: result.channel ?? 'alimtalk',
+        templateCode,
+        variables,
+        message: result.message,
+        phone,
+        status: result.success ? 'sent' : 'failed',
+        attemptCount: result.alimtalkAttempts + result.smsAttempts,
+        errorMessage: result.errorMessage ?? null,
+      });
+
+      if (!result.success && orderId) {
+        await this.createCustomerNoticeFailedIssue(orderId, templateCode, notificationId);
+      }
+      await this.finishNotificationDelivery(idempotencyKey, result.success ? 'SENT' : 'FAILED');
+    } catch (error) {
+      await this.finishNotificationDelivery(idempotencyKey, 'FAILED').catch(() => undefined);
+      throw error;
     }
   }
 
@@ -344,6 +365,60 @@ export class NotificationsService {
       createdAt: this.firestore.Timestamp.now(),
     });
     return id;
+  }
+
+  private async claimNotificationDelivery(input: {
+    idempotencyKey: string;
+    orderId: string | null;
+    templateCode: NotificationTemplateCode;
+    userId: string;
+  }): Promise<boolean> {
+    const ref = this.firestore.doc(
+      `notificationDeliveries/${this.notificationDeliveryId(input.idempotencyKey)}`,
+    );
+    let acquired = false;
+    await this.firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const status = snapshot.exists ? snapshot.data()?.['status'] : null;
+      if (status === 'SENT' || status === 'PROCESSING') return;
+      const now = this.firestore.Timestamp.now();
+      transaction.set(
+        ref,
+        {
+          idempotencyKey: input.idempotencyKey,
+          orderId: input.orderId,
+          templateCode: input.templateCode,
+          userId: input.userId,
+          status: 'PROCESSING',
+          updatedAt: now,
+          createdAt: snapshot.exists ? (snapshot.data()?.['createdAt'] ?? now) : now,
+        },
+        { merge: true },
+      );
+      acquired = true;
+    });
+    return acquired;
+  }
+
+  private async finishNotificationDelivery(
+    idempotencyKey: string | undefined,
+    status: 'SENT' | 'FAILED',
+  ): Promise<void> {
+    if (!idempotencyKey) return;
+    await this.firestore
+      .doc(`notificationDeliveries/${this.notificationDeliveryId(idempotencyKey)}`)
+      .set(
+        {
+          status,
+          updatedAt: this.firestore.Timestamp.now(),
+          completedAt: status === 'SENT' ? this.firestore.Timestamp.now() : null,
+        },
+        { merge: true },
+      );
+  }
+
+  private notificationDeliveryId(idempotencyKey: string): string {
+    return createHash('sha256').update(idempotencyKey).digest('hex');
   }
 
   private async createCustomerNoticeFailedIssue(

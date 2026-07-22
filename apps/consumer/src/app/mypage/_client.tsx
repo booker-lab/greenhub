@@ -356,6 +356,32 @@ export default function MyPageClient() {
             </Text>
           </UnstyledButton>
           <UnstyledButton
+            onClick={() => router.push('/mypage/notifications/settings')}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              width: '100%',
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '14px 16px',
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 'var(--fw-medium)',
+                color: 'var(--color-text)',
+              }}
+            >
+              마케팅 알림 설정
+            </Text>
+            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-md)' }}>
+              ›
+            </Text>
+          </UnstyledButton>
+          <UnstyledButton
             onClick={() => router.push('/mypage/addresses')}
             style={{
               display: 'flex',

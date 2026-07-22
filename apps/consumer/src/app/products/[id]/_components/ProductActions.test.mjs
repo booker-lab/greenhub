@@ -59,3 +59,22 @@ test('round_direct는 검증된 회차 장바구니 계약만 저장하고 후�
   assert.doesNotMatch(roundSource, /schemaVersion\s*:/);
   assert.doesNotMatch(roundSource, /acquisition\s*:/);
 });
+
+test('round_direct 바로 구매는 단일 회차 스냅샷을 저장하고 회차 checkout을 사용한다', () => {
+  const start = roundSource.indexOf('function handleBuyNow');
+  const end = roundSource.indexOf('\n  return (', start);
+  const buyNowSource = roundSource.slice(start, end);
+
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  assert.match(buyNowSource, /sessionStorage\.setItem\('checkout_cart'/);
+  assert.match(buyNowSource, /JSON\.stringify\(\[checkoutItem\]\)/);
+  assert.match(buyNowSource, /roundId:\s*roundProduct\.item\.roundId/);
+  assert.match(buyNowSource, /roundItemId:\s*roundProduct\.item\.id/);
+  assert.match(buyNowSource, /roundPrice:\s*roundProduct\.item\.roundPrice/);
+  assert.match(buyNowSource, /const checkoutUrl = '\/checkout\?from=cart'/);
+  assert.match(buyNowSource, /catch/);
+  assert.match(buyNowSource, /setCartError/);
+  assert.doesNotMatch(buyNowSource, /addItem\(/);
+  assert.doesNotMatch(buyNowSource, /\/checkout\?\$\{parameters/);
+});

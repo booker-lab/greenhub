@@ -159,6 +159,49 @@ test('활성·보류·완료·취소 회차 주문 fixture는 상호 배타 상�
   ]);
 });
 
+test('완료·리뷰 상태에서만 HTTPS 서명 사진 URL을 표시한다', () => {
+  const signedUrl = 'https://storage.example.com/signed-photo.jpg?expires=900';
+
+  for (const status of ['DELIVERED', 'REVIEWED']) {
+    const detail = readOrderDetail(
+      {
+        ...activeOrder,
+        status,
+        deliveryPhotoUrl: signedUrl,
+      },
+      activeOrder.id,
+    );
+    assert.equal(detail?.deliveryPhotoUrl, signedUrl);
+  }
+
+  const active = readOrderDetail(
+    {
+      ...activeOrder,
+      deliveryPhotoUrl: signedUrl,
+    },
+    activeOrder.id,
+  );
+  assert.equal(active?.deliveryPhotoUrl, null);
+
+  for (const deliveryPhotoUrl of [
+    'http://storage.example.com/public-photo.jpg',
+    'gs://bucket/deliveryPhotos/order/photo.jpg',
+    '/deliveryPhotos/order/photo.jpg',
+  ]) {
+    assert.equal(
+      readOrderDetail(
+        {
+          ...activeOrder,
+          status: 'DELIVERED',
+          deliveryPhotoUrl,
+        },
+        activeOrder.id,
+      ),
+      null,
+    );
+  }
+});
+
 test('손상된 회차 orderItems와 상태별 스냅샷을 임의 상세 동작으로 승격하지 않는다', () => {
   const invalidOrders = [
     { ...activeOrder, id: '다른-주문' },

@@ -55,6 +55,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/hooks/useCart') return cartModule.exports;
   if (specifier === '@/hooks/usePayment') return { usePayment: () => ({}) };
   if (specifier === '@/hooks/useSaleRounds') return { useSaleRounds: () => ({}) };
+  if (specifier === '@/lib/acquisition') return { getAcquisitionSnapshot: () => null };
   if (
     specifier === '@mantine/core' ||
     specifier === 'next/navigation' ||
@@ -226,4 +227,21 @@ test('회차 장바구니는 usePayment 회차 계약과 단일 주문 ID 완료
     roundCheckoutSource.indexOf("state !== 'done' || !orderId") <
       roundCheckoutSource.indexOf("removeItem('checkout_cart')"),
   );
+});
+
+test('회차 checkout은 mount 뒤 재검증한 유입 스냅샷만 주문 요청에 포함한다', () => {
+  const start = source.indexOf('function RoundCartCheckoutContent');
+  const end = source.indexOf('function CartCheckoutContent', start);
+  const roundCheckoutSource = source.slice(start, end);
+
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  assert.match(source, /import \{ getAcquisitionSnapshot \} from '@\/lib\/acquisition'/);
+  assert.match(roundCheckoutSource, /useState<OrderAcquisitionSnapshot \| null>\(null\)/);
+  assert.match(
+    roundCheckoutSource,
+    /useEffect\(\(\) => \{\s*setAcquisition\(getAcquisitionSnapshot\(\)\);\s*\}, \[\]\);/s,
+  );
+  assert.match(roundCheckoutSource, /\.\.\.\(acquisition \? \{ acquisition \} : \{\}\)/);
+  assert.doesNotMatch(roundCheckoutSource, /JSON\.parse\(.*acquisition/s);
 });

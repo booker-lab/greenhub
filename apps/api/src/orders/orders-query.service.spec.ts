@@ -123,4 +123,114 @@ describe('OrdersQueryService 조회 권한', () => {
       service.getOrderById('order-2', requester('driver-1', 'driver')),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it.each(['DELIVERED', 'REVIEWED'])(
+    '%s 단건 상세은 권한 확인 뒤 첫 연결 사진의 15분 서명 URL을 반환한다',
+    async (status) => {
+      const completedRecords: RecordMap = {
+        ...records,
+        'orders/order-completed': {
+          id: 'order-completed',
+          storeId: 'store-1',
+          userId: 'consumer-1',
+          driverId: 'driver-1',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          deliveryMethod: 'direct',
+          status,
+          deliveryPhotoIds: ['photo-first', 'photo-second'],
+          totalAmount: 10000,
+          quantity: 1,
+        },
+      };
+      const storage = {
+        createDeliveryPhotoReadUrl: jest.fn().mockResolvedValue({
+          url: 'https://signed.example.invalid/photo-first',
+          expiresAt: '2026-07-18T03:15:00.000Z',
+        }),
+      };
+      const service = new OrdersQueryService(
+        makeFirestore(completedRecords) as never,
+        storage as never,
+      );
+
+      await expect(
+        service.getOrder('store-1', 'order-completed', requester('consumer-1', 'consumer')),
+      ).resolves.toMatchObject({
+        id: 'order-completed',
+        deliveryPhotoUrl: 'https://signed.example.invalid/photo-first',
+      });
+      expect(storage.createDeliveryPhotoReadUrl).toHaveBeenCalledWith({
+        storeId: 'store-1',
+        orderId: 'order-completed',
+        photoId: 'photo-first',
+        requesterId: 'consumer-1',
+        requesterRole: 'consumer',
+      });
+    },
+  );
+
+  it('목록과 미완료 상세은 사진 ID가 있어도 서명 URL을 생성하지 않는다', async () => {
+    const photoRecords: RecordMap = {
+      ...records,
+      'orders/order-1': {
+        ...records['orders/order-1'],
+        schemaVersion: 2,
+        roundId: 'round-1',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+        deliveryPhotoIds: ['photo-first'],
+      },
+    };
+    const storage = {
+      createDeliveryPhotoReadUrl: jest.fn().mockResolvedValue({
+        url: 'https://signed.example.invalid/photo-first',
+        expiresAt: '2026-07-18T03:15:00.000Z',
+      }),
+    };
+    const service = new OrdersQueryService(
+      makeFirestore(photoRecords) as never,
+      storage as never,
+    );
+
+    const list = await service.getOrders('store-1', requester('consumer-1', 'consumer'), {});
+    const detail = await service.getOrder(
+      'store-1',
+      'order-1',
+      requester('consumer-1', 'consumer'),
+    );
+
+    expect(list[0]).not.toHaveProperty('deliveryPhotoUrl');
+    expect(detail).not.toHaveProperty('deliveryPhotoUrl');
+    expect(storage.createDeliveryPhotoReadUrl).not.toHaveBeenCalled();
+  });
+
+  it('서명 URL 생성 실패를 공개 URL이나 원본 경로로 우회하지 않는다', async () => {
+    const completedRecords: RecordMap = {
+      ...records,
+      'orders/order-completed': {
+        id: 'order-completed',
+        storeId: 'store-1',
+        userId: 'consumer-1',
+        schemaVersion: 2,
+        roundId: 'round-1',
+        deliveryMethod: 'direct',
+        status: 'DELIVERED',
+        deliveryPhotoIds: ['photo-first'],
+        totalAmount: 10000,
+        quantity: 1,
+      },
+    };
+    const storage = {
+      createDeliveryPhotoReadUrl: jest.fn().mockRejectedValue(new Error('서명 실패')),
+    };
+    const service = new OrdersQueryService(
+      makeFirestore(completedRecords) as never,
+      storage as never,
+    );
+
+    await expect(
+      service.getOrder('store-1', 'order-completed', requester('consumer-1', 'consumer')),
+    ).rejects.toThrow('서명 실패');
+  });
 });

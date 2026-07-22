@@ -1,14 +1,36 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { StorageService } from './storage.service';
 
 type OrderData = Record<string, unknown>;
 
 function makeService(order: OrderData | null = null) {
-  const save = jest.fn().mockResolvedValue(undefined);
+  let storedMetadata: Record<string, unknown> | null = null;
+  const save = jest.fn(async (_content: Buffer, options: { metadata: Record<string, unknown> }) => {
+    if (storedMetadata) {
+      const error = new Error('생성 조건 불일치') as Error & { code: number };
+      error.code = 412;
+      throw error;
+    }
+    storedMetadata = options.metadata;
+  });
+  const getMetadata = jest.fn(async () => {
+    if (!storedMetadata) {
+      const error = new Error('객체 없음') as Error & { code: number };
+      error.code = 404;
+      throw error;
+    }
+    return [storedMetadata];
+  });
   const getSignedUrl = jest.fn().mockResolvedValue(['https://signed.example.invalid/redacted']);
   const deleteFile = jest.fn().mockResolvedValue(undefined);
   const file = jest.fn(() => ({
     save,
+    getMetadata,
     getSignedUrl,
     delete: deleteFile,
   }));
@@ -28,7 +50,16 @@ function makeService(order: OrderData | null = null) {
   };
   const service = new StorageService(app as never, firestore as never);
 
-  return { deleteFile, file, firestore, getSignedUrl, save, service };
+  return {
+    deleteFile,
+    file,
+    firestore,
+    getMetadata,
+    getSignedUrl,
+    getStoredMetadata: () => storedMetadata,
+    save,
+    service,
+  };
 }
 
 describe('배송 사진 Storage 계약', () => {
@@ -58,9 +89,13 @@ describe('배송 사진 Storage 계약', () => {
     expect(file).toHaveBeenCalledWith('deliveryPhotos/order-safe/photo-safe.jpg');
     expect(save).toHaveBeenCalledWith(content, {
       resumable: false,
+      preconditionOpts: { ifGenerationMatch: 0 },
       metadata: {
         contentType: 'image/jpeg',
         cacheControl: 'private, max-age=0, no-store',
+        metadata: {
+          contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
       },
       validation: 'crc32c',
     });
@@ -68,7 +103,73 @@ describe('배송 사진 Storage 계약', () => {
       orderId: 'order-safe',
       photoId: 'photo-safe',
       path: 'deliveryPhotos/order-safe/photo-safe.jpg',
+      created: true,
     });
+  });
+
+  it('같은 사진 ID와 같은 JPEG 재시도는 기존 객체를 바꾸지 않고 멱등 성공한다', async () => {
+    const context = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: [],
+    });
+    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0xff, 0xd9]);
+    const input = {
+      storeId: 'store-safe',
+      orderId: 'order-safe',
+      photoId: 'photo-safe',
+      requesterId: 'driver-safe',
+      requesterRole: 'driver' as const,
+      content,
+      contentType: 'image/jpeg' as const,
+    };
+
+    const first = await context.service.uploadDeliveryPhoto(input);
+    const metadataAfterFirst = context.getStoredMetadata();
+    const retried = await context.service.uploadDeliveryPhoto(input);
+
+    expect(first.created).toBe(true);
+    expect(retried.created).toBe(false);
+    expect(context.getStoredMetadata()).toBe(metadataAfterFirst);
+    expect(context.getMetadata).toHaveBeenCalledTimes(1);
+  });
+
+  it('같은 사진 ID와 다른 JPEG 재시도는 원본을 유지하고 충돌한다', async () => {
+    const context = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: [],
+    });
+    const base = {
+      storeId: 'store-safe',
+      orderId: 'order-safe',
+      photoId: 'photo-safe',
+      requesterId: 'driver-safe',
+      requesterRole: 'driver' as const,
+      contentType: 'image/jpeg' as const,
+    };
+
+    await context.service.uploadDeliveryPhoto({
+      ...base,
+      content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0xff, 0xd9]),
+    });
+    const metadataAfterFirst = context.getStoredMetadata();
+
+    await expect(
+      context.service.uploadDeliveryPhoto({
+        ...base,
+        content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x02, 0xff, 0xd9]),
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(context.getStoredMetadata()).toBe(metadataAfterFirst);
   });
 
   it('배송 사진 크기 제한을 초과하면 주문 조회와 객체 저장 전에 거부한다', async () => {

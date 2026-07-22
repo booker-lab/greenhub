@@ -41,7 +41,8 @@ export class OrderChargesService {
       if (
         order['schemaVersion'] !== 2 ||
         order['status'] !== 'DELIVERY_HELD' ||
-        !hold?.['customerResponsible']
+        !hold?.['customerResponsible'] ||
+        hold['reasonCode'] === 'WEATHER'
       ) {
         throw new ConflictException('고객 사유 배송 보류 주문만 재배송비를 만들 수 있습니다.');
       }

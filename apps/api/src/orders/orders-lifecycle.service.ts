@@ -8,6 +8,7 @@ import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
+import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
 import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
@@ -72,14 +73,15 @@ export class OrdersLifecycleService {
         requesterId,
       });
       if (nextStatus === 'DELIVERED') {
-        await this.settlements.createSettlement(order, 'DELIVERED');
+        await this.reconcileDeliveryCompletion(storeId, orderId);
+      } else {
+        await this.sendTransitionNotification(
+          order,
+          currentStatus,
+          nextStatus as OrderStatus,
+          orderId,
+        );
       }
-      await this.sendTransitionNotification(
-        order,
-        currentStatus,
-        nextStatus as OrderStatus,
-        orderId,
-      );
       return result;
     }
 
@@ -125,6 +127,7 @@ export class OrdersLifecycleService {
       if (!hold?.['reasonCode'] || !hold?.['reasonMessage']) {
         throw new BadRequestException('배송 보류 사유가 필요합니다.');
       }
+      assertDeliveryHoldPolicy(hold);
       update['deliveryHold'] = {
         ...hold,
         heldAt: this.toIso(now),
@@ -175,6 +178,27 @@ export class OrdersLifecycleService {
     await this.sendTransitionNotification(order, currentStatus, nextStatus as OrderStatus, orderId);
 
     return { orderId, status: nextStatus };
+  }
+
+  async reconcileDeliveryCompletion(storeId: string, orderId: string) {
+    const snapshot = await this.firestore.doc(`orders/${orderId}`).get();
+    if (!snapshot.exists || snapshot.data()?.['storeId'] !== storeId) {
+      throw new NotFoundException();
+    }
+    const order = { ...snapshot.data()!, id: snapshot.data()?.['id'] ?? orderId };
+    if (order['status'] !== 'DELIVERED') {
+      throw new BadRequestException('배송 완료 주문만 후속효과를 재조정할 수 있습니다.');
+    }
+
+    await this.settlements.createSettlement(order, 'DELIVERED');
+    await this.sendTransitionNotification(
+      order,
+      'DELIVERING',
+      'DELIVERED',
+      orderId,
+      `order-transition:${orderId}:DELIVERING:DELIVERED`,
+    );
+    return { orderId, status: 'DELIVERED' as const };
   }
 
   async cancelOrder(storeId: string, orderId: string, userId: string, reason?: string) {
@@ -356,6 +380,7 @@ export class OrdersLifecycleService {
     from: OrderStatus,
     to: OrderStatus,
     orderId: string,
+    idempotencyKey?: string,
   ) {
     const isGroup = order['saleType'] === 'group';
 
@@ -394,6 +419,7 @@ export class OrdersLifecycleService {
         templateCode as any,
         variables,
         orderId,
+        idempotencyKey,
       );
     }
   }

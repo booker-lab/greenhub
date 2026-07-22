@@ -255,6 +255,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
 
       {/* 하단 CTA */}
       <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
+        {isHeld && isRoundDirect && (
+          <Button
+            fullWidth
+            size="lg"
+            radius="xl"
+            color="brand"
+            loading={loading}
+            onClick={() => updateStatus('DELIVERING')}
+          >
+            배송 재개
+          </Button>
+        )}
         {(isPreparing || isDelivering) && isRoundDirect && (
           <Stack gap="xs">
             {isPreparing && (

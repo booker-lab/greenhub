@@ -1,10 +1,9 @@
 'use client';
 
-import type { SaleRound, SaleRoundItem, SaleRoundStatus } from '@greenhub/shared';
+import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-const CURRENT_STATUS_PRIORITY: SaleRoundStatus[] = ['OPEN', 'SCHEDULED', 'CLOSED'];
 
 export type PublicSaleRound = SaleRound & { items: SaleRoundItem[] };
 export type SaleRoundsRequestStatus = 'loading' | 'error' | 'empty' | 'success';
@@ -72,17 +71,22 @@ function sortLatestFirst(rounds: PublicSaleRound[]) {
   return [...rounds].sort((a, b) => dateMillis(b) - dateMillis(a));
 }
 
-function selectCurrentRound(rounds: PublicSaleRound[]) {
-  for (const status of CURRENT_STATUS_PRIORITY) {
-    const current = rounds.find((round) => round.status === status);
-    if (current) return current;
-  }
-  return null;
+function selectCurrentRound(rounds: PublicSaleRound[], now: Date) {
+  const openRound = rounds.find((round) => round.status === 'OPEN');
+  if (openRound) return openRound;
+
+  const nowMillis = now.getTime();
+  const scheduledRound = rounds
+    .filter((round) => round.status === 'SCHEDULED' && dateMillis(round) > nowMillis)
+    .sort((a, b) => dateMillis(a) - dateMillis(b))[0];
+  if (scheduledRound) return scheduledRound;
+
+  return rounds.find((round) => round.status === 'CLOSED') ?? null;
 }
 
-function createSuccessSaleRoundsState(rounds: PublicSaleRound[]): SaleRoundsState {
+function createSuccessSaleRoundsState(rounds: PublicSaleRound[], now: Date): SaleRoundsState {
   const sortedRounds = sortLatestFirst(rounds);
-  const currentRound = selectCurrentRound(sortedRounds);
+  const currentRound = selectCurrentRound(sortedRounds, now);
   const pastRounds = sortedRounds.filter(
     (round) =>
       round.id !== currentRound?.id && (round.status === 'CLOSED' || round.status === 'COMPLETED'),
@@ -127,6 +131,7 @@ function readRoundDetail(payload: unknown): PublicSaleRound {
 export async function fetchPublicSaleRoundsState(
   storeId: string,
   fetcher: FetchPublicSaleRounds = fetch,
+  now: Date = new Date(),
 ): Promise<SaleRoundsState> {
   const publicRoundsUrl = `${API_URL}/stores/${encodeURIComponent(storeId)}/sale-rounds/public`;
 
@@ -149,7 +154,7 @@ export async function fetchPublicSaleRoundsState(
       }),
     );
 
-    return createSuccessSaleRoundsState(rounds);
+    return createSuccessSaleRoundsState(rounds, now);
   } catch (error: unknown) {
     return createErrorSaleRoundsState(error);
   }

@@ -4,14 +4,14 @@
 
 ## 문서 메타
 - **작성일**: 2026-07-15
-- **상태**: Task 6.6 완료, Task 6.7 준비조건 확인 대기
+- **상태**: Task 6.8 보정 구현 완료, 동일 SHA 비운영 E2E 재검증 대기
 - **Priority**: 1
 - **Labels**: feature, refactor, payment, delivery, privacy
 - **SSOT Check**: `docs/discussions/DISCUSS_mvp_sales_focus.md`, `docs/CRITICAL_LOGIC.md` #CL-57
 - **Architectural Goal**: 기존 판매 방식을 보존하면서 디어오키드에만 회차 기반 직배송 주문 경로를 추가한다.
 - **보정 결과**: `PLAN_mvp_sales_round_review_remediation.md` Task 0.1~4.6과 `PLAN_mvp_sales_round_build_gate_remediation.md` Task 0.1~3.3을 선행 완료했다. Task 2.10은 PortOne 테스트 채널의 실제 100원 결제, 중복 웹훅, timeout 후 예약 재확보, 한도 실패 전액 환불, 원격·로컬 상태 일치까지 staging에서 통과했다. Task 2.11은 고객 사유 첫 배송 실패의 재배송비 1회 생성, 같은 보류 재처리 멱등성, 재배송 실패 운영 예외 전환을 통과했다. Task 3.1은 알림톡 3회 재시도, 문자 대체, 키 누락 실패, 최종 실패 운영 예외의 테스트 계약을 고정했다. Task 3.2는 알림톡 최대 3회 시도, 동일 내용 문자 대체, 설정 누락 실패 처리를 구현했다. Task 3.3은 최종 실패 거래 알림의 멱등 `CUSTOMER_NOTICE_FAILED` 운영 예외를 구현했다. Task 3.4는 인증 사용자의 `alimtalk`, `sms` 마케팅 동의·철회만 엄격한 boolean으로 검증하고 기존 설정과 병합 저장하도록 구현했다. Task 3.5는 같은 `idempotencyKey`의 열린 예외 통합, 조치 직전 최신 상태 재검증, 성공·실패 조치의 안전한 `actions` 감사 기록 계약 6개를 테스트로 고정했다. Task 3.6은 결정적 문서 ID 기반 운영 예외 통합, 최신 상태 기반 환불·문자 조치, 성공·실패 감사 기록과 민감정보 배제를 구현했다. Task 3.7은 셀러·관리자 인증, 스토어 소유권 검증, 안전한 목록·상세·재조회 응답과 환불·문자 조치 API를 구현했다. Task 3.8은 운영 모듈과 런타임 라우트를 연결하고 알림·재배송 최종 실패 생성 경로를 공통 운영 서비스로 전환했다. Task 3.9는 배송 사진 90일, 마케팅 동의와 분쟁 기록 3년, 계약·결제·공급 기록 5년, 분쟁·법적 보존 연장과 멱등 파기 계약을 실패 테스트 8개로 고정했다. Task 3.10은 목적별 법정 기록 저장과 만료 쿼리, 분쟁·법적 보존 제외, 연결 사진과 Firestore 문서의 멱등 파기를 구현했다. Task 3.11은 `FirestoreModule`을 가져오는 `RetentionModule`에 보관 서비스를 provider로 등록하고 export했다. Task 3.12는 배송 사진의 서버 비공개 업로드, 주문 권한 확인 뒤 15분 V4 읽기 서명 URL, 보관 서비스용 삭제 어댑터를 구현했다. Task 3.13은 `StorageService`를 Firebase 인프라 모듈 provider/export에 등록하고 `RetentionService` 삭제 어댑터로 명시적으로 주입했다. Task 3.14는 이미 연결된 회차·운영 예외 모듈을 중복 등록하지 않고 누락된 `RetentionModule`만 `AppModule`에 추가했다. 현재 진입점은 Task 6.1이다.
 
-- **현재 진입점**: 주간 운영·장애 대응·`legacy` 롤백·수동 환불 런북을 고정했으며 다음 작업은 Task 6.7 사용자 흐름 준비조건 확인이다.
+- **현재 진입점**: Task 6.1~6.8 리뷰 보정의 로컬 검증을 완료했으며, 보정이 포함된 정확한 SHA의 비운영 Preview 52건 재검증과 cleanup 확인을 기다린다.
 
 ## 업무 요약 (협업용)
 
@@ -149,11 +149,31 @@ flowchart TD
 ## Agent Completion Contract
 - 각 Task는 선행 Task 완료 후 한 번에 하나씩 실행한다.
 - 핵심 도메인 로직은 테스트 계약을 먼저 추가하고 구현 Task에서 통과시킨다.
+- 각 Task 시작 시 해당 Dependency의 `done` 여부와 아래 후속 위험 처리 게이트를 다시 확인한다.
+- 연결된 위험은 구현 전에 실패 테스트·실패 검증·계약 수집 중 해당 Task에 맞는 근거를 먼저 고정하고 같은 Task 안에서 해결한다.
+- 계약 수집 Task 5.1·5.10은 구현을 선행하지 않고 `test.fixme` 계약과 Playwright 목록 수집 자체를 테스트 우선 근거로 삼는다.
+- 미래 Task에 연결된 위험은 앞당겨 해결하지 않으며 현재 Task와 연결된 위험만 다룬다.
+- 표의 Target이 위험 해결에 부족하면 인접 테스트와 필요한 연결 파일만 최소 확장하고 실제 범위와 이유를 Conclusion에 기록한다.
 - 각 Verify가 종료 코드 0인 경우에만 Conclusion을 실측 문장으로 바꾸고 다음 Task로 이동한다.
 - 전체 구현 요청 후에는 Blueprint 구조를 고정하며 상태·Conclusion·Closeout만 갱신한다.
 - 수정 코드 파일은 500줄 미만을 유지하고 `docs/memory.md`는 200줄 상한을 넘기지 않는다.
 
-> **에이전트 스코프**: 사용자가 PLAN 전체 실행을 요청하면 아래 Dependency 순으로 진행한다. 각 Task는 표의 단일 Target만 수정하고 Verify 후 Conclusion과 Status를 닫는다.
+> **에이전트 스코프**: 사용자가 PLAN 전체 실행을 요청하면 아래 Dependency 순으로 진행한다. 각 Task는 표의 Target을 중심으로 수정하고, 위 계약에 따른 인접 실패 테스트와 위험 해결에 꼭 필요한 연결 파일만 최소 확장한 뒤 Verify 후 Conclusion과 Status를 닫는다.
+
+### 후속 위험 처리 게이트
+
+| 연결 위험 | 담당 Task | Task 시작 시 선행 확인 | 테스트 우선 해결 계약 |
+| :--- | :--- | :--- | :--- |
+| 셀러 회차 화면 계약이 아직 없음 | 5.1 | Task 4.19와 소비자 리뷰 보정 Task 3.3 완료, 대상 spec 부재, 기존 셀러 인증 상태 경로 | `seller-sale-rounds.spec.ts`에 복사·예약·마감·완료·확인 필요 계약을 `test.fixme`로 먼저 수집하고 목록 0건이 아님을 확인한다. Task 5.2 구현은 시작하지 않는다. |
+| 배송 사진의 실제 업로드 API·서명 URL·드라이버 연결이 없음 | 5.12 | Task 5.11 완료, Task 3.12~3.14의 비공개 Storage·권한·주입 계약, 주문·드라이버 API 라우트의 실제 존재 여부 | 클라이언트 직접 Storage 접근 금지, 인증된 서버 업로드, 권한 확인 후 단기 서명 URL, 성공 뒤 주문 연결에 대한 실패 테스트를 먼저 추가한다. 필요한 API 라우트가 빠졌다면 Task 5.12 범위에서 최소 연결하고 함께 통과시킨다. |
+| 회차·만료·보관·운영 예외 쿼리 인덱스가 미확정 | 6.1 | Task 5.12 완료, 실제 서비스 쿼리 목록, 기존 미커밋 `firestore.indexes.json` 변경 | 실제 쿼리와 인덱스 누락을 검출하는 실패 검증을 먼저 고정한 뒤 필요한 복합 인덱스만 추가하고 API build와 JSON·에뮬레이터 검증을 통과시킨다. |
+| Firestore 서버 전용 컬렉션의 클라이언트 차단이 미확정 | 6.2 | Task 6.1 완료와 인덱스 확정, 기존 공개 읽기·사용자 소유 데이터 규칙 | 회차 쓰기·예약·법정 기록·운영 예외 직접 접근 거부와 허용된 기존 경로 보존을 에뮬레이터 실패 테스트로 먼저 고정한 뒤 규칙을 보정한다. |
+| 배송 사진 직접 접근 차단과 공개 상품 이미지 호환이 미확정 | 6.3 | Task 6.2 완료, Task 5.12의 최종 사진 경로·서명 URL 계약 | 배송 사진 직접 읽기·쓰기는 거부하고 기존 공개 상품 이미지는 허용하는 Storage 에뮬레이터 실패 테스트를 먼저 고정한 뒤 규칙을 보정한다. |
+| 서버 전체 흐름이 실제 도메인 서비스로 닫히지 않음 | 6.4 | Task 6.3 완료, 에뮬레이터·테스트 환경과 회차 seed 준비 | 회차 개설부터 결제·보류·재배송·파기까지 실제 서비스 연결 E2E를 먼저 작성해 실패를 확인하고, 누락 연결만 같은 Task에서 보정한다. |
+| `salesMode` 전환이 운영 상태를 바꿀 수 있음 | 6.5 | Task 6.4 통과, 대상 `storeId`, 현재 모드, 확인 플래그, 롤백 경로 | dry-run의 대상·현재 상태·변경 예정값·거부 조건 테스트를 먼저 통과시킨다. 사용자 승인 없이 실제 전환·배포·push를 수행하지 않는다. |
+| 소비자·셀러·드라이버 Playwright 계약이 `test.fixme`이거나 실행 데이터가 없음 | 6.7 | Task 6.6 완료, 세 앱 URL·인증 상태·seed·외부 결제 대체 조건이 모두 준비됨 | 준비 조건 검증이 실패하면 `test.fixme`를 해제하지 않는다. 준비 완료 뒤 fixme를 해제하고 세 사용자 흐름을 실행해 실패 원인을 같은 Task에서 해결한다. |
+| legacy checkout 비 null 단언과 Node 모듈 형식 경고 | 6.8 | Task 6.7 통과 후 전체 build·test에서 경고가 재현되는지 확인 | 경고를 실패로 승격하는 설정 변경을 임의로 만들지 않는다. 최종 회귀를 방해하거나 새 오류를 숨기는 경우에만 전용 실패 테스트 후 최소 보정하고, 그렇지 않으면 Closeout 잔여 위험으로 기록한다. |
+| 기존 미커밋 API·스크립트·인덱스 변경 덮어쓰기 위험 | 모든 후속 Task | 시작·종료 `git status --short`와 대상별 diff 비교 | 기존 변경을 복원·정리·커밋하지 않고 현재 Task가 소유한 변경만 검증한다. 겹치는 파일은 기존 diff를 먼저 읽고 필요한 최소 hunk만 추가한다. |
 
 ## Execution Plan
 
@@ -258,7 +278,7 @@ flowchart TD
 | 6.5 | 6.4 | `scripts/enable-dear-orchid-round-direct.mjs` | 대상 storeId·현재 모드·확인 플래그를 검사한 뒤 판매 모드를 전환한다. | `node scripts/enable-dear-orchid-round-direct.mjs --dry-run` | 통과 — `green-e4fe3`에서 이름이 정확히 `디어 오키드`인 단일 대상 `80189070-2c3d-45f2-bc11-68a870b13951`을 확인했다. 미설정 `salesMode`는 호환값 `legacy`로만 판독하고 `round_direct` 변경 예정값, 현재·예정 모드를 포함한 확인 플래그, `legacy` 롤백 명령을 출력한다. 대상 없음·다중 대상·이미 목표 모드·손상 상태·인증 누락·확인 플래그 누락 또는 불일치를 거부하는 계약 11개가 통과했으며 dry-run 전후 문서 `updateTime`과 모드는 동일했다. 실제 전환·배포·push는 수행하지 않았다. | done |
 | 6.6 | 6.5 | `docs/specs/ops/mvp-sales-round-runbook.md` | 주간 운영·장애 대응·롤백·수동 환불 절차를 운영 문서로 고정한다. | `git diff --check -- docs/specs/ops/mvp-sales-round-runbook.md` | 통과 — 일요일 마감, 월요일 경매·매입, 화요일 직접배송과 회차 상태별 증거·중단·에스컬레이션을 역할별로 고정했다. 출시 전 dry-run과 별도 승인 전환, 소비자 장애 시 `legacy` 롤백 뒤 기존 결제 주문 계속 처리, PortOne 원격 재조회와 환불 claim 기반 중복 방지, 결제·알림·배송·사진·보관 예외 및 비밀정보 배제 계약을 실제 구현 경계와 대조했다. 실제 운영 명령·외부 쓰기·배포·push는 수행하지 않았다. | done |
 | 6.7 | 6.6 | `apps/e2e/tests/consumer-round-direct.spec.ts` | 소비자·셀러·드라이버 핵심 흐름을 실행해 화면 계약을 닫는다. | `pnpm --filter e2e exec playwright test consumer-round-direct seller-sale-rounds driver-direct-delivery --reporter=list` | 통과 — 실행 ID `task-6-7-20260722-q4f9d6`에서 readiness와 chromium·mobile seed·verify가 모두 exit 0으로 통과했고 provider 외부 egress는 0이었다. `workers=1`, `retries=0`으로 실제 52건을 실행해 52 passed, 0 failed, 0 skipped/fixme, 0 flaky를 확인했다. 양쪽 manifest 제한 cleanup과 부재 검증도 exit 0, 잔여 Firestore 문서·Storage 객체 각각 0으로 완료했다. | done |
-| 6.8 | 6.7 | `docs/plans/PLAN_mvp_sales_round_direct_delivery.md` | 전체 빌드·테스트 결과와 잔여 위험을 Closeout에 기록한다. | `pnpm build` | 통과 — production build와 필수 회귀를 완료하고 `HEAD`의 두 계약 불일치를 테스트 기대값으로 최소 보정했다. 알려진 API 전체 `tsc --noEmit` 6개 오류와 비차단 경고는 기존 사용자 변경과 분리해 Closeout에 남겼다. | done |
+| 6.8 | 6.7 | `docs/plans/PLAN_mvp_sales_round_direct_delivery.md` | 전체 빌드·테스트 결과와 잔여 위험을 Closeout에 기록한다. | `pnpm build` | 보정 구현 완료, 동일 SHA 비운영 E2E 재검증 대기 — 로컬 전체 회귀·타입 검사·build·공백 검사는 통과했다. 보정 포함 SHA의 원격 52건과 cleanup 무잔여를 다시 확인하기 전에는 닫지 않는다. | waiting |
 
 ### Task 6.7 준비조건 판정 (2026-07-20)
 
@@ -295,7 +315,7 @@ flowchart TD
 - `docs/memory.md`, `docs/CRITICAL_LOGIC.md`, 구현 파일의 라인 제한을 준수한다.
 
 ## Closeout Roll-up
-- **Status**: Task 6.8 `done` — 원 계획 전체 완료
+- **Status**: Task 6.8 `waiting` — 보정 구현 완료, 동일 SHA 비운영 E2E 재검증 대기
 - **Task 4.2 복귀 조건**: 충족. 결제·예약·환불, 주문·웹훅 권한, 주문·회차 취소, 주문 생성 멱등, 재배송비, 알림, 운영 예외, 보관·Storage 입력 계약을 Unit 1~9에서 보정했고 Unit 10에서 실제 도메인 서비스 통합 E2E와 전체 회귀 검증으로 확정했다.
 - **Task 4.2 결과**: 공개 목록과 회차별 상세를 병렬 조회해 회차 상품을 포함한 전체 회차, 현재 회차 하나, 최신순 지난 회차를 제공한다. 기존 소비자 데이터 접근 방식의 문자열 오류와 `loading` 불리언을 유지하면서 명시적 `error`, `empty`, `success` 상태와 재조회를 추가했고 요청 식별자로 스토어 전환·재조회 경쟁의 늦은 응답을 폐기한다.
 - **Task 4.3 결과**: `utm_source=carrot|daangn|당근` 유입만 탭 세션에 보관하고 새 당근 유입 전까지 유지한다. 캠페인·콘텐츠는 길이와 안전 문자 집합을 제한하며 도착 URL은 `http(s)`와 `round` 쿼리만 허용한다. 주문용 조회는 저장값을 다시 검증해 `source`, `campaign`, `content`, `landingUrl`, `capturedAt`만 새 객체로 반환하고 잘못된 값은 폐기한다. 화면·주문 호출부 연결은 후속 Task로 남겼다.
@@ -316,6 +336,7 @@ flowchart TD
 - **Task 4.18 결과**: `mypage/orders/[id]/_client.tsx`는 안전한 주문 ID와 인증된 주문 상세 응답을 페이지 전용 판독기로 검증한다. 회차 주문은 `schemaVersion: 2`·회차 주문번호·직배송·다중 `orderItems`의 식별자·수량·항목 소계·주문 합계가 모두 일치해야 하며, 손상 응답은 임의 상품·상태·동작으로 승격하지 않는다. 배송 보류는 `DELIVERY_HELD`일 때의 서버 `deliveryHold`만 표시하고 고객 책임의 양수 재배송비만 서버 청구 응답 검증 뒤 PortOne 카카오페이로 요청한다. 배송 완료 사진은 인증·소유권 검증을 거친 주문 응답의 HTTPS `deliveryPhotoUrl`만 사용하며 Firebase Storage 직접 접근과 업로드를 추가하지 않았다. 마감 전 취소는 서버가 회차 마감을 최종 재검증하는 기존 취소 API만 호출하고, legacy 단일 상품·공동구매·거점픽업·구매 확정 흐름은 유지했다.
 - **Task 4.19 결과**: `mypage/notifications/settings/page.tsx`는 소비자 세션 값을 동의 상태로 사용하지 않고 인증된 `GET /auth/me`의 `notificationPreferences`를 새로 조회한다. `alimtalk`와 `sms`가 모두 엄격한 boolean일 때만 서버 현재 상태를 표시하며, 동의된 채널의 즉시 철회는 확인된 `PATCH /notifications/me/preferences`에 해당 채널의 `false`만 전송한다. 성공 응답의 두 채널 boolean과 요청 채널의 `false`를 모두 검증한 뒤에만 화면을 서버 상태로 바꾸고, 실패·손상 응답에서는 기존 상태를 유지한다. 주문·결제·배송 정보성 연락은 선택 마케팅과 분리해 안내하며 클라이언트가 동의 증거·보관 기록이나 저장소에 직접 접근하지 않는다.
 - **검증 결과**: Task 4.19 전용 Node 테스트 5개와 Task 4.8 상세 5개, Task 4.9 패널 6개, Task 4.10 구매 동작 5개, Task 4.11 장바구니 9개, Task 4.12 서버 재검증 8개, Task 4.13 결제 훅 6개, Task 4.14 checkout 5개, Task 4.15 CheckoutForm 6개, Task 4.16 주문 완료 5개, Task 4.17 MY 목록 4개, Task 4.18 MY 상세 5개 등 Node 테스트 69개, consumer 타입검사, 전체 typecheck와 build, Playwright chromium·mobile 24개 목록 수집, 변경 파일 Biome 오류 수준 검사와 `git diff --check`가 통과했다. 전체 build가 갱신한 tracked 생성물 5개는 시작 HEAD 상태로 복원해 범위에서 제외했다.
+- **소비자 리뷰 보정 결과**: 회차 바로 구매는 단일 `RoundCartItem`과 `checkout_cart`를 사용하고, 상품 상세 당근 유입은 기존 캡처 함수로 저장되며, mount 뒤 재검증한 스냅샷만 회차 주문에 전달된다. 판매 중 회차가 없으면 가장 가까운 미래 `SCHEDULED`를 선택하고 MY에서 마케팅 알림 설정으로 진입한다. 소비자 Node 78개, 타입 검사, production build, Playwright 24개 목록 수집이 통과했다.
 - **Task 5.1 결과**: 셀러 회차 복사·예약·마감·완료 거부·정상 완료·확인 필요 진입을 상호 배타적인 6개 fixture로 분리하고, 실제 `/sale-rounds` 화면과 seed가 아직 없으므로 모두 `test.fixme`로 수집했다. chromium·mobile 12개 셀러 목록과 기존 소비자 24개 목록, 전체 typecheck·build, 대상 Biome 오류 수준 검사와 `git diff --check`가 통과했으며 build 생성물 5개는 시작 상태와 비교해 범위에서 제외했다.
 - **Task 5.2 결과**: 셀러 세션의 스토어·토큰과 `apiJson`을 사용해 목록·상세·생성·저장·복사·상태 변경·완료를 한 훅에 모았다. 목록과 작업 상태를 분리하고 요청 경쟁을 막으며 mutation 응답의 스토어·회차·일정·한도·항목 계약을 확인한 뒤 즉시 반영하고 재조회한다. seller 타입검사, 전체 typecheck·build, 대상 Biome 검사, 셀러 12개·소비자 24개 Playwright 목록 수집과 diff 검사가 통과했고 build 생성물 5개는 시작 상태로 되돌려 제외했다.
 - **Task 5.3 결과**: 셀러 회차 목록은 Task 5.2 훅이 검증한 회차만 사용해 상태·KST 주문 기간·배송 지역·주문 배송지·판매 수량·한도·임시 확보·배송 보류를 표시한다. 서버가 제공한 보류·취소 실패에만 확인 필요 진입을 노출하고, 로딩·오류·빈 상태·재조회를 분리했다. 이전 회차 복사는 이름과 주문 시작·마감만 입력받고 기존 마감 이후 경매·배송 간격을 유지해 `copyRound`에 전달하며 Task 5.4 전체 편집은 시작하지 않았다. 별도 인접 테스트는 Task 5.1의 기존 12개 `test.fixme` 화면 계약과 중복돼 추가하지 않았다.
@@ -328,6 +349,7 @@ flowchart TD
 - **Task 5.10 결과**: 드라이버 보드의 직접배송 주문 한정 노출, 준비 주문의 배송 시작, 기상·출입·주소·연락 실패별 보류 입력과 책임·비용·후속 일정 표시, 사진 없는 직접 완료 차단을 독립 fixture 9개와 `test.fixme` 논리 계약 7개로 고정했다. 아직 없는 사진 업로드 성공은 추정하지 않고 촬영 전 완료 비활성화까지만 수집했으며 chromium·mobile 14개와 기존 셀러 12개·소비자 24개 목록 및 필수 전체 검증이 통과했다.
 - **Task 5.11 결과**: `schemaVersion: 2` 회차 직배송 주문에만 배송 시작·보류 입력을 제공하고 기상·출입·주소·연락 실패를 서버 DTO 정본으로 저장한다. 기상은 판매자 책임·재배송비 없음·새 배송 일정 계약을 강제하고, 서버 응답 검증과 Firestore 스냅샷 반영 전에는 상태를 성공으로 추정하지 않는다. 사진 없는 직접 완료와 아직 안전하지 않은 기존 사진 화면 진입을 모두 제공하지 않았으며 Task 5.12 업로드는 시작하지 않았다. 필수 타입검사·전체 빌드·Playwright 50개 목록·Biome 오류 수준·diff 검사가 통과했다.
 - **Task 5.12 결과**: `POST /stores/:storeId/orders/:orderId/delivery-photos`는 JWT 인증과 multipart 5MB 제한을 적용하고 실제 JPEG, `schemaVersion: 2`, 회차·직배송, 스토어, 담당 기사, `DELIVERING` 상태를 서버에서 재검증한다. 요청 키를 해시한 단일 사진 ID를 `deliveryPhotos/{orderId}/{photoId}.jpg`에 비공개 저장하고, 성공 뒤 같은 트랜잭션으로 `deliveryPhotoIds`와 90일 보관 기록을 연결한 다음 기존 주문 수명주기로만 `DELIVERED`를 확정한다. 사진 없는 직접 완료와 공개 URL 연결은 서버에서 거부하며 동일 요청 재시도는 중복 사진·중복 완료를 만들지 않는다. 연결 사진 조회는 주문자 본인·스토어 소유자·담당 기사·관리자에게만 15분 V4 서명 URL을 반환한다. 드라이버 회차 직배송 화면은 `FormData` 서버 업로드 응답의 주문 ID·사진 ID·완료 상태를 검증하고, 기존 거점 흐름은 별도 legacy helper로 의미를 유지했다. API 사진 계약 21개와 필수 전체 검증이 통과했고 build 생성물 5개는 시작 상태로 되돌려 제외했다.
+- **Task 5 리뷰 보정 결과**: 기상 보류 조합을 회차·legacy 서버 정책으로 강제하고 손상 문서 청구를 차단했다. 배송 사진은 생성 전용 precondition과 SHA-256 metadata로 동일 JPEG만 멱등 재사용하며, 신규 미연결 객체만 정리한다. 이미 `DELIVERED`인 주문도 주문 ID 멱등 정산과 내구성 있는 전환 키 알림을 재조정하고, 권한 있는 완료·리뷰 단건 상세만 첫 사진의 15분 URL을 반환한다. 담당 기사는 보드에서 자신의 배송 중·보류 주문을 찾아 재개하고 접근 가능한 사진 완료 흐름으로 복귀한다. 집중 API 78개, API 전체 199개, 타입 검사, production build, 드라이버 chromium·mobile 16개 목록 수집과 전체 공백 검사를 종결 게이트로 사용했다.
 - **Task 6.1 결과**: 실제 앱 쿼리와 공식 Firestore 자동 인덱스·인덱스 병합 규칙을 대조해 범위·정렬 조합에 필요한 복합 인덱스 4개만 추가했다. `saleRounds(storeId + status in)`, 예약 문서 직접 조회, 보관 컬렉션별 `expiresAt` 단일 범위, `operationIssues(storeId)`, 주문 목록 동등 조건, 결제 `orderId` 단일 조건은 자동 인덱스로 충분하다고 판정했다. 실제 호출부와 JSON 정의를 함께 검사하고 누락·필드 누락·방향·queryScope·중복을 검출하는 계약 23개와 관련 회귀 128개, 타입 검사와 전체 build가 통과했다. Firebase 에뮬레이터는 JDK 21 미충족으로 실행하지 못했다.
 - **Task 6.2 결과**: 서버 Admin SDK만 사용하는 예약·운영 예외·법정 및 보관 기록·알림 전달 컬렉션 7개의 클라이언트 직접 접근을 명시적으로 차단했다. 공개 상태 회차와 `roundId + storeId`로 제한한 공개 부모 회차 상품만 읽도록 허용하고, 공개 품종은 소비자 상품 상세에 필요한 단건 조회만 허용했다. 인증 없음·일반 사용자·판매자·기사·관리자의 서버 전용 읽기 및 생성·수정·삭제 거부, 공개·비공개 회차 경계, 제한 목록, 품종 단건·목록·쓰기 경계, 기존 공개 데이터와 역할별 주문 읽기를 실제 Firestore Emulator 계약 14개로 검증했다. Temurin 21.0.11을 사용자 전용 경로에서 명령 단위로 적용해 14개가 모두 통과했으며 시스템 기본 JDK 17은 변경하지 않았다.
 - **Task 6.3 결과**: 회차 직배송 `deliveryPhotos/{orderId}/{photoId}.jpg`는 Admin SDK 업로드와 15분 V4 서명 URL만 사용하도록 모든 클라이언트 직접 접근을 차단했다. 공개 상품·메인 배너·상점 로고와 기사 전용 `deliveryPhotos/{orderId}_{timestamp}.jpg` legacy 흐름은 실제 호출 경로에 맞춰 역할·소유권·크기·`contentType`을 제한해 보존했다. 현재 규칙에서 11개 중 6개가 실패하는 것을 먼저 확인한 뒤 실제 Storage Emulator 11개와 관련 API 37개, 전체 타입 검사와 build를 통과시켰다.
@@ -335,7 +357,9 @@ flowchart TD
 - **Task 6.6 결과**: 주간 회차 운영의 담당 역할·사전 조건·확인 증거·중단 조건·에스컬레이션을 상태별로 고정했다. 실제 전환은 Task 6.7 통과와 별도 승인 뒤에만 허용하고, 소비자 장애 시 `legacy` 롤백 뒤에도 기존 회차 주문을 삭제·변환하지 않고 계속 처리한다. 결제 상태 불명확·늦은 결제·자동 환불 실패, 고객 안내 최종 실패, 배송 보류·재배송 실패, 비공개 사진·서명 URL, 완료 거부, 보관 파기 실패를 구현의 실제 조치 가능 범위와 대조했으며 수동 환불 전 PortOne 원격 재조회와 중복 방지 절차를 명시했다.
 - **Task 6.7 최종 결과**: 실행 `task-6-7-20260722-q4f9d6`에서 readiness와 chromium·mobile seed·verify가 모두 통과했고 provider 외부 egress는 0이었다. `workers=1`, `retries=0`으로 52 passed, 0 failed, 0 skipped/fixme, 0 flaky를 확인했으며 양쪽 manifest 제한 cleanup·부재 검증 뒤 잔여 Firestore 문서·Storage 객체는 각각 0이었다.
 - **Task 6.8 최종 결과**: `pnpm build`가 shared·API·consumer·seller·driver에서 종료 코드 0으로 통과했다. API 단위 32개 스위트 249개, API E2E 4개 스위트 10개, 소비자 Node 78개, 셀러 Vitest 43개, 드라이버 Node 10개, fixture 계약 7개가 통과했고 소비자·셀러·드라이버 Playwright chromium·mobile 52개 목록을 다시 수집했다. shared와 소비자·셀러·드라이버·E2E 타입 검사는 통과했다.
-- **Task 6.8 최소 보정**: Task 6.7이 드라이버 준비 목록을 `direct`로 좁힌 동작에 맞춰 Firestore 쿼리 호출부 계약을 갱신하고, 실제 E2E 마감 응답에 맞춰 소비자 장바구니의 “구매할 수 없는 회차 상품” 기대 문구를 “판매가 마감되었습니다.”로 맞췄다. 런타임 구현·인덱스·보안 규칙은 변경하지 않았다.
-- **알려진 실패**: `pnpm --filter api exec tsc --noEmit`은 시작 상태와 같은 6개 오류로 실패한다. `operations.controller.spec.ts:25~26`의 `ref.get`·`ref.update` unknown, `mvp-order-flow.spec.ts:429`의 `portonePaymentParams` unknown, `retention.service.spec.ts:125`의 인자 수 불일치, `retention.service.spec.ts:382~383`의 `runScheduledPurge` 계약 누락이며 기존 사용자 변경을 Task 6.8에 흡수하지 않았다.
-- **잔여 경고**: legacy checkout 비 null 단언 경고는 build·test에서 재현되지 않았다. 소비자 Node 테스트의 `MODULE_TYPELESS_PACKAGE_JSON`, 기존 Firestore 인덱스 테스트의 비 null 단언 1건, Next.js webpack cache 큰 문자열 직렬화 성능 경고는 종료를 방해하지 않아 설정·구현을 바꾸지 않았다. legacy 거점 사진의 기존 공개 다운로드 URL 계약도 유지한다.
+- **Task 6.8 1차 최소 보정**: Task 6.7이 드라이버 준비 목록을 `direct`로 좁힌 동작에 맞춰 Firestore 쿼리 호출부 계약을 갱신하고, 실제 E2E 마감 응답에 맞춰 소비자 장바구니의 “구매할 수 없는 회차 상품” 기대 문구를 “판매가 마감되었습니다.”로 맞췄다. 이후 완료판정 리뷰에서 hub 누락과 legacy 사진 권한 및 E2E 민감 산출물 ignore 누락을 발견해 아래 보정을 추가했다.
+- **Task 6.8 완료판정 리뷰 보정**: `PREPARING` 보드는 `deliveryMethod in ['direct', 'hub']`로 direct와 hub를 노출하고 parcel만 제외하도록 런타임·인덱스 호출부 계약·드라이버 E2E 기대값을 정렬했다. legacy 평면 사진은 마지막 `_timestamp.jpg`를 제외한 전체 주문 ID를 복원해 Firestore 주문의 `driverId`와 `deliveryMethod: hub`를 검사하며, 담당 기사에게 단건 읽기와 `DELIVERING` 상태의 JPEG 생성만 허용하고 목록·수정·삭제 및 다른 기사 접근은 거부한다. 회차 직배송 중첩 사진은 계속 모든 클라이언트 직접 접근을 차단한다. 회차 E2E 세션 상태, fixture manifest와 원본 결과는 ignore하고 기존 추적 증거는 유지했다.
+- **Task 6.8 보정 로컬 검증**: 보드 5개, Firestore 인덱스 23개, Storage Emulator 12개, Firestore Emulator 14개, API 단위 32개 스위트 249개, API E2E 4개 스위트 10개, 소비자 Node 78개, 셀러 Vitest 43개, 드라이버 Node 11개, fixture 7개, readiness 9개가 모두 통과했다. shared·API·consumer·seller·driver·E2E 타입 검사, `pnpm build`, Playwright chromium·mobile 52개 목록 수집과 `git diff --check`도 통과했다. 이전 Closeout의 API 전체 타입 오류 6개는 현재 사용자 작업 트리에서 재현되지 않았다.
+- **Task 6.8 원격 게이트**: 시작 HEAD는 `06cf0343ca9af0a30fca64d0da77f5aec1779405`이지만 보정은 미커밋 작업 트리에 있으므로 배포 가능한 정확한 대상 SHA는 아직 없다. 별도 승인으로 보정 포함 SHA를 만든 뒤 그 동일 SHA의 비운영 Preview에서 `52 passed, 0 failed, 0 skipped/fixme, 0 flaky, retries 0`, provider 외부 egress 0과 cleanup 잔여 Firestore 문서·Storage 객체 각각 0을 확인하기 전에는 Task 6.8을 `done`으로 닫지 않는다.
+- **잔여 경고**: legacy checkout 비 null 단언 경고는 build·test에서 재현되지 않았다. 소비자 Node 테스트의 `MODULE_TYPELESS_PACKAGE_JSON`, 기존 Firestore 인덱스 테스트의 비 null 단언 1건, Next.js webpack cache 큰 문자열 직렬화 성능 경고는 종료를 방해하지 않아 설정·구현을 바꾸지 않았다. legacy 거점 사진의 기존 토큰형 다운로드 URL 계약도 유지하므로 URL 자체가 유출되면 토큰 보유자가 bearer 방식으로 접근할 수 있는 잔여 위험이 있으며, 기존 URL 삭제·변환·토큰 폐기는 이번 보정 범위에서 수행하지 않는다.
 - **증거와 운영 상태**: 비민감 요약은 `.artifacts/round-direct/task-6-8-20260722-k2m7p4/evidence/closeout-summary.json`에 선별했다. 서비스 계정·인증정보·세션·개인정보·사진 원본·manifest는 포함하지 않았고 production, 운영 Firebase·Storage, 운영 `salesMode`, 실제 결제·환불·알림, 배포·마이그레이션·push를 변경하거나 실행하지 않았다.

@@ -8,6 +8,7 @@ import {
 import { FirestoreService } from '../firestore/firestore.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
+import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
 import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
 
@@ -287,6 +288,7 @@ export class RoundOrderLifecycleService {
       if (!hold?.['reasonCode'] || !hold?.['reasonMessage']) {
         throw new BadRequestException('배송 보류 사유가 필요합니다.');
       }
+      assertDeliveryHoldPolicy(hold);
       update['deliveryHold'] = {
         ...hold,
         heldAt: this.toIso(now),

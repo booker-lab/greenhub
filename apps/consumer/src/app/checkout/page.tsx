@@ -4,6 +4,7 @@ import type {
   CreateOrderRequest,
   DeliveryAddress,
   DeliveryMethod,
+  OrderAcquisitionSnapshot,
   Product,
   SaleType,
 } from '@greenhub/shared';
@@ -20,6 +21,7 @@ import {
 } from '@/hooks/useCart';
 import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
+import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import CheckoutForm from './_components/CheckoutForm';
 
 declare global {
@@ -371,9 +373,14 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   const [deliveryPhone, setDeliveryPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
   const [marketingAgreedAt, setMarketingAgreedAt] = useState<string | null>(null);
+  const [acquisition, setAcquisition] = useState<OrderAcquisitionSnapshot | null>(null);
   const storeId = cartItems[0]?.storeId ?? '';
   const saleRounds = useSaleRounds(storeId || null);
   const schedule = resolveRoundCheckoutSchedule(cartItems, saleRounds.rounds);
+
+  useEffect(() => {
+    setAcquisition(getAcquisitionSnapshot());
+  }, []);
 
   const { state, orderId, error, requestPayment } = usePayment({
     storeId,
@@ -391,6 +398,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
             },
           }
         : {}),
+      ...(acquisition ? { acquisition } : {}),
     },
     roundItems: cartItems,
     accessToken: session?.user?.accessToken ?? '',

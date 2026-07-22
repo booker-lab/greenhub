@@ -312,4 +312,109 @@ describe('회차 직배송 알림 전달 계약', () => {
       ).toHaveLength(1);
     });
   });
+
+  describe('완료 알림 멱등 기록', () => {
+    it('같은 주문 완료 전환을 재처리해도 정상 알림은 한 번만 발송한다', async () => {
+      const records = new Map<string, Data>([
+        [
+          'users/user-1',
+          {
+            id: 'user-1',
+            phone: '01011112222',
+          },
+        ],
+        [
+          'orders/order-1',
+          {
+            id: 'order-1',
+            storeId: 'store-1',
+            userId: 'user-1',
+            status: 'DELIVERED',
+            deliveryPhone: phone,
+          },
+        ],
+      ]);
+      const writes: Array<{ path: string; data: Data }> = [];
+      const ref = (path: string) => ({
+        path,
+        get: jest.fn(async () => ({
+          exists: records.has(path),
+          data: () => records.get(path),
+        })),
+        set: jest.fn(async (data: Data, options?: { merge?: boolean }) => {
+          const next = options?.merge ? { ...(records.get(path) ?? {}), ...data } : data;
+          records.set(path, next);
+          writes.push({ path, data: next });
+        }),
+      });
+      const firestore = {
+        doc: jest.fn(ref),
+        runTransaction: jest.fn(async (callback: (tx: Data) => Promise<unknown>) =>
+          callback({
+            get: jest.fn(async (document: { path: string }) => ({
+              exists: records.has(document.path),
+              data: () => records.get(document.path),
+            })),
+            set: jest.fn(
+              (
+                document: { path: string },
+                data: Data,
+                options?: { merge?: boolean },
+              ) => {
+                const next = options?.merge
+                  ? { ...(records.get(document.path) ?? {}), ...data }
+                  : data;
+                records.set(document.path, next);
+                writes.push({ path: document.path, data: next });
+              },
+            ),
+          }),
+        ),
+        Timestamp: {
+          now: jest.fn(() => new Date('2026-07-18T03:00:00.000Z')),
+        },
+      };
+      const aligo = {
+        sendAlimtalk: jest.fn().mockResolvedValue({
+          success: true,
+          channel: 'alimtalk',
+          message: '배송 완료',
+          alimtalkAttempts: 1,
+          smsAttempts: 0,
+        }),
+      };
+      const service = new (NotificationsService as any)(firestore, aligo, {}, {
+        createOrMergeIssue: jest.fn(),
+      }) as NotificationsService;
+      const idempotencyKey = 'order-transition:order-1:DELIVERING:DELIVERED';
+
+      await (service.sendToUser as any)(
+        'user-1',
+        'ORDER_DELIVERED',
+        { orderId: 'order-1' },
+        'order-1',
+        idempotencyKey,
+      );
+      await (service.sendToUser as any)(
+        'user-1',
+        'ORDER_DELIVERED',
+        { orderId: 'order-1' },
+        'order-1',
+        idempotencyKey,
+      );
+
+      expect(aligo.sendAlimtalk).toHaveBeenCalledTimes(1);
+      expect(writes.filter(({ path }) => path.startsWith('notifications/'))).toHaveLength(1);
+      expect(
+        Array.from(records.entries()).find(([path]) =>
+          path.startsWith('notificationDeliveries/'),
+        )?.[1],
+      ).toMatchObject({
+        idempotencyKey,
+        status: 'SENT',
+        orderId: 'order-1',
+        templateCode: 'ORDER_DELIVERED',
+      });
+    });
+  });
 });

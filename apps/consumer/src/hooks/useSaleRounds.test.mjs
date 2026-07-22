@@ -122,3 +122,28 @@ test('목록과 상세를 조회해 현재 회차 하나와 최신순 지난 회
   assert.equal(state.currentRound?.items[0]?.id, 'round-open-item');
   assert.equal(requests.length, 4);
 });
+
+test('판매 중 회차가 없으면 현재 시각 이후 가장 가까운 예정 회차를 선택한다', async () => {
+  const now = new Date('2026-07-18T03:00:00.000Z');
+  const stale = round('round-stale', 'SCHEDULED', '2026-07-17T15:00:00.000Z');
+  const nearest = round('round-nearest', 'SCHEDULED', '2026-07-19T15:00:00.000Z');
+  const later = round('round-later', 'SCHEDULED', '2026-07-26T15:00:00.000Z');
+  const rounds = [later, stale, nearest];
+
+  const state = await fetchPublicSaleRoundsState(
+    'store-1',
+    async (input) => {
+      const url = String(input);
+      if (url.endsWith('/public')) {
+        return jsonResponse({ items: rounds });
+      }
+      const id = url.split('/').at(-1);
+      const selected = rounds.find((item) => item.id === id);
+      return jsonResponse({ ...selected, items: [{ id: `${id}-item`, roundId: id }] });
+    },
+    now,
+  );
+
+  assert.equal(state.status, 'success');
+  assert.equal(state.currentRound?.id, 'round-nearest');
+});

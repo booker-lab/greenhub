@@ -703,6 +703,112 @@ describe('MVP 회차 주문 흐름 계약', () => {
     });
   });
 
+  it.each([
+    [
+      '고객 책임',
+      {
+        reasonCode: 'WEATHER',
+        reasonMessage: '폭우로 배송 연기',
+        customerResponsible: true,
+        redeliveryFee: null,
+        nextDeliveryAt: '2026-07-22T09:00:00.000+09:00',
+      },
+    ],
+    [
+      '재배송비',
+      {
+        reasonCode: 'WEATHER',
+        reasonMessage: '폭우로 배송 연기',
+        customerResponsible: false,
+        redeliveryFee: 5000,
+        nextDeliveryAt: '2026-07-22T09:00:00.000+09:00',
+      },
+    ],
+    [
+      '새 배송 일정 누락',
+      {
+        reasonCode: 'WEATHER',
+        reasonMessage: '폭우로 배송 연기',
+        customerResponsible: false,
+        redeliveryFee: null,
+      },
+    ],
+    [
+      '잘못된 새 배송 일정',
+      {
+        reasonCode: 'WEATHER',
+        reasonMessage: '폭우로 배송 연기',
+        customerResponsible: false,
+        redeliveryFee: null,
+        nextDeliveryAt: '잘못된-날짜',
+      },
+    ],
+  ])('회차 주문의 기상 보류에 %s 조합을 저장하지 않는다', async (_name, deliveryHold) => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-weather': {
+          id: 'order-weather',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'PREPARING',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          deliveryMethod: 'direct',
+        },
+      }),
+    );
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.updateStatus(
+        'store-round',
+        'order-weather',
+        'seller-1',
+        { status: 'DELIVERY_HELD', deliveryHold } as never,
+        'seller',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(records.get('orders/order-weather')).not.toHaveProperty('deliveryHold');
+    expect(records.get('saleRounds/round-1')).toMatchObject({
+      counters: expect.objectContaining({ heldOrderCount: 0 }),
+    });
+  });
+
+  it('legacy 주문도 회차 주문과 같은 기상 보류 정책을 적용한다', async () => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-legacy-weather': {
+          id: 'order-legacy-weather',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'PREPARING',
+          deliveryMethod: 'parcel',
+        },
+      }),
+    );
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.updateStatus(
+        'store-round',
+        'order-legacy-weather',
+        'seller-1',
+        {
+          status: 'DELIVERY_HELD',
+          deliveryHold: {
+            reasonCode: 'WEATHER',
+            reasonMessage: '폭우로 배송 연기',
+            customerResponsible: true,
+            redeliveryFee: 5000,
+            nextDeliveryAt: '2026-07-22T09:00:00.000+09:00',
+          },
+        } as never,
+        'seller',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(records.get('orders/order-legacy-weather')).not.toHaveProperty('deliveryHold');
+  });
+
   it('같은 배송 보류 요청이 중복 실행돼도 회차 보류 주문 수는 한 번만 증가한다', async () => {
     const { firestore, records } = makeFirestore(
       seedRoundRecords({
@@ -918,6 +1024,44 @@ describe('MVP 회차 주문 흐름 계약', () => {
         idempotencyKey: 'first',
       } as never),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('손상된 기상 보류 문서가 고객 책임과 재배송비를 가져도 청구를 만들지 않는다', async () => {
+    const { OrderChargesService } = require('./order-charges.service');
+    const { firestore, writes } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-weather-charge': {
+          id: 'order-weather-charge',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'DELIVERY_HELD',
+          schemaVersion: 2,
+          deliveryHold: {
+            reasonCode: 'WEATHER',
+            reasonMessage: '손상된 과거 문서',
+            customerResponsible: true,
+            redeliveryFee: 5000,
+            heldAt: '2026-07-21T01:00:00.000Z',
+            nextDeliveryAt: '2026-07-22T09:00:00.000+09:00',
+          },
+        },
+      }),
+    );
+    const { OperationsService } = require('../operations/operations.service');
+    const service = new OrderChargesService(
+      firestore,
+      new OperationsService(firestore, {}, {}),
+    );
+
+    await expect(
+      service.createRedeliveryFeeCharge({
+        storeId: 'store-round',
+        orderId: 'order-weather-charge',
+        requesterId: 'user-1',
+        idempotencyKey: 'weather-charge',
+      }),
+    ).rejects.toThrow('고객 사유 배송 보류 주문만 재배송비를 만들 수 있습니다.');
+    expect(writes.filter((write) => write.path.startsWith('orderCharges/'))).toHaveLength(0);
   });
 
   it('결제된 재배송비가 있는 주문 취소는 본 결제와 재배송비를 각각 한 번만 환불한다', async () => {

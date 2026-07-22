@@ -9,8 +9,8 @@
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
-- 준비 구현 기준 SHA: `389a2113d6f39e5bc72e8f13d2b6e78984078db4`
-- 완료 계획: `docs/plans/PLAN_mvp_sales_round_task_6_7_readiness_remediation.md`
+- 리뷰 보정 기준 SHA: `b4ba7ff0719dd760ab56b1d78bcd656afd5ee10c`
+- 완료 계획: `docs/plans/PLAN_mvp_sales_round_task5_review_remediation.md`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
 - 완료: 보완 계획 Task 5.4와 원 계획 Task 6.8
 - 다음: 운영 전환은 별도 승인 뒤에만 진행
@@ -19,20 +19,20 @@
 
 - 소비자 리뷰 보정은 예정 회차 선택, 단일 회차 바로 구매, 당근 유입 재검증, 마케팅 설정 진입까지 완료했다.
 - Task 5.1의 상호 배타적 6개 fixture와 chromium·mobile 12개 `test.fixme` 화면 계약은 그대로 유지한다.
-- Task 5.2 훅은 셀러 인증과 `apiJson`으로 목록·상세·생성·저장·복사·상태 변경·완료를 캡슐화한다.
-- Task 5.3 목록은 상태·KST 일정·지역·한도·예약·주문·배송 보류를 표시하고 복사를 훅에만 위임한다.
+- Task 5.12의 JWT multipart 비공개 사진 업로드와 legacy 거점 사진 경로 분리는 유지한다.
+- 리뷰 보정은 원 계획 Task 6.1의 기존 미커밋 인덱스 변경을 수정하지 않았다.
 
-## Task 5.12 확정
+## Task 5 리뷰 보정 확정
 
-- JWT multipart API가 실제 JPEG·5MB·스토어·회차 직배송·담당 기사·`DELIVERING`을 서버에서 검증한다.
-- 요청 키 해시를 단일 사진 ID로 사용해 비공개 `deliveryPhotos/{orderId}/{photoId}.jpg` 경로를 유지한다.
-- 업로드 성공 뒤 사진 ID와 90일 보관 기록을 트랜잭션으로 연결하고 기존 주문 수명주기로만 완료한다.
-- 사진 없는 직접 완료와 회차 주문의 공개 URL 저장을 거부하며 같은 요청 재시도는 사진·완료를 중복 생성하지 않는다.
-- 주문자 본인·스토어 소유자·담당 기사·관리자만 연결 사진의 15분 V4 서명 URL을 받을 수 있다.
-- 드라이버는 `FormData` 서버 응답을 검증하고 회차 직배송만 완료하며 기존 거점 사진 의미는 legacy helper로 보존한다.
-- 사진 API 계약 21개, 드라이버 타입검사, API·전체 build, 전체 typecheck, Playwright 목록 50개가 통과했다.
-- build가 갱신한 tracked 생성물 5개는 시작 상태로 되돌려 범위에서 제외했다.
-- 인덱스·Firestore 규칙·Storage 규칙은 변경하지 않았다.
+- `WEATHER`는 서버에서 판매자 책임·재배송비 없음·유효한 새 일정을 강제하고 손상 문서 청구도 차단한다.
+- 배송 사진은 생성 전용 precondition과 SHA-256 metadata로 같은 요청의 다른 JPEG 덮어쓰기를 막는다.
+- 업로드 연결 실패는 현재 요청이 만든 신규 미연결 객체만 정리한다.
+- 최초 완료와 이미 `DELIVERED`인 재시도는 주문 ID 멱등 정산과 내구성 있는 완료 알림을 재조정한다.
+- 권한 있는 완료·리뷰 단건 상세만 첫 연결 사진의 15분 URL을 반환하고 목록은 URL을 만들지 않는다.
+- 담당 기사는 자신의 배송 중·보류 주문을 함께 보고 `DELIVERY_HELD → DELIVERING`으로 재개한다.
+- 집중 API 78개, API 전체 199개, 타입 검사, production build, 드라이버 E2E 16개 목록 수집이 통과했다.
+- build가 갱신한 기존 추적 생성물 5개는 임의 복원하지 않고 작업 트리에 보존했다.
+- 인덱스·Firestore 규칙·Storage 규칙, `salesMode`, 배포 상태는 변경하지 않았다.
 
 ## 후속 Task 실행 원칙
 

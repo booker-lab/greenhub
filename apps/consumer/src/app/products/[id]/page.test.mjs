@@ -64,3 +64,12 @@ test('판매 모드와 회차 확인 전에는 상세 본문을 노출하지 않
   assert.match(source, /<ProductActions product=\{product\} \/>/);
   assert.doesNotMatch(source, /router\.(?:push|replace)/);
 });
+
+test('상품 상세 mount는 기존 당근 유입 캡처 함수를 호출한다', () => {
+  const start = source.indexOf('export default function ProductDetailPage');
+  const pageSource = source.slice(start);
+
+  assert.notEqual(start, -1);
+  assert.match(source, /import \{ captureAcquisition \} from '@\/lib\/acquisition'/);
+  assert.match(pageSource, /useEffect\(\(\) => \{\s*captureAcquisition\(\);\s*\}, \[\]\);/s);
+});

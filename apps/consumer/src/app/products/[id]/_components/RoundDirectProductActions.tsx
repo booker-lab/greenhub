@@ -7,7 +7,7 @@ import { signIn, useSession } from 'next-auth/react';
 import { useState } from 'react';
 import GreenLoveBrandSection from '@/components/GreenLoveBrandSection';
 import ProductCTABar from '@/components/ProductCTABar';
-import { useCart } from '@/hooks/useCart';
+import { type RoundCartItem, useCart } from '@/hooks/useCart';
 import { useStore } from '@/hooks/useProducts';
 import type { RoundProductActionContext } from './ProductActions';
 
@@ -58,14 +58,28 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
   function handleBuyNow() {
     if (!roundProduct.isPurchasable) return;
 
-    const parameters = new URLSearchParams({
+    const checkoutItem: RoundCartItem = {
       productId: product.id,
-      quantity: String(quantity),
+      name: product.name,
+      price: roundProduct.item.roundPrice,
+      image: product.images?.[0] ?? '',
+      quantity,
       saleType: 'normal',
       deliveryMethod: 'direct',
-      totalAmount: String(totalAmount),
-    });
-    const checkoutUrl = `/checkout?${parameters.toString()}`;
+      storeId: product.storeId,
+      roundId: roundProduct.item.roundId,
+      roundItemId: roundProduct.item.id,
+      roundPrice: roundProduct.item.roundPrice,
+    };
+    try {
+      sessionStorage.setItem('checkout_cart', JSON.stringify([checkoutItem]));
+    } catch {
+      setCartError('결제 정보를 저장하지 못했습니다. 브라우저 저장소 설정을 확인해 주세요.');
+      return;
+    }
+
+    setCartError(null);
+    const checkoutUrl = '/checkout?from=cart';
     if (!session) {
       signIn(undefined, { callbackUrl: checkoutUrl });
       return;

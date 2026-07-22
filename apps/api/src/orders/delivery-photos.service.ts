@@ -71,7 +71,9 @@ export class DeliveryPhotosService {
         storagePath: uploaded.path,
       });
     } catch (error) {
-      await this.storage.deleteObject(uploaded.path).catch(() => undefined);
+      if (uploaded.created) {
+        await this.storage.deleteObject(uploaded.path).catch(() => undefined);
+      }
       throw error;
     }
 
@@ -83,6 +85,8 @@ export class DeliveryPhotosService {
         { status: 'DELIVERED' },
         input.requesterRole,
       );
+    } else {
+      await this.lifecycle.reconcileDeliveryCompletion(input.storeId, input.orderId);
     }
 
     return { orderId: input.orderId, photoId, status: 'DELIVERED' as const };

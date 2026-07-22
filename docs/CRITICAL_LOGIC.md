@@ -638,3 +638,20 @@
 - **핸드오프 계약**: Unit 하나는 테스트·구현·검증·커밋까지 완료한 뒤 15개 항목 보고와 다음 Unit 전체 프롬프트를 생성하고 종료한다.
 - **모듈화 계약**: `payments.service.ts`, `orders-create.service.ts`, `orders-lifecycle.service.ts`, `sale-rounds.service.ts`는 500줄 한계에 근접했으므로 각 결함 Unit에서 전용 서비스로 먼저 분리한다.
 - **출시 게이트**: Unit 10 완료 전 소비자 Task 4.2, `salesMode` 전환, 운영 배포를 시작하지 않는다. 배송 사진 실제 호출 경로와 Firestore 인덱스·보안 규칙은 원 계획 Task 5.12와 6.1~6.3에 유지한다.
+
+## [결정 #CL-168] 소비자 Task 4.1~4.19 리뷰 결함을 Task 5.1 전에 별도 보정한다 (2026-07-18)
+
+- **결정**: 회차 바로 구매, 당근 직접 유입 캡처, 주문 유입 스냅샷, 다중 예정 회차 선택, 마케팅 설정 진입 결함은 [소비자 리뷰 보정 계획](plans/PLAN_mvp_sales_round_consumer_review_remediation.md)에서 먼저 처리한다.
+- **구매 계약**: 회차 바로 구매는 legacy 단일상품 주문으로 우회하지 않고 검증된 단일 `RoundCartItem`을 `checkout_cart`에 저장해 기존 회차 checkout을 재사용한다.
+- **유입 계약**: 상품 상세에서 기존 당근 캡처 함수를 실행하고 회차 checkout mount 뒤 재검증한 스냅샷만 주문 요청에 전달한다.
+- **회차 계약**: 판매 중 회차가 없으면 현재 시각 이후 가장 가까운 `SCHEDULED`를 선택하며 완료 회차를 구매 가능 상태로 승격하지 않는다.
+- **출시 게이트**: 이 보정 계획의 전체 소비자 Node 테스트·타입 검사·production build 완료 전 원 계획 Task 5.1을 시작하지 않는다.
+
+## [결정 #CL-169] 회차 직배송 완료 증거와 후속효과는 불변·재조정 계약으로 운영한다 (2026-07-18)
+
+- **기상 보류 계약**: `WEATHER`는 서버에서 `customerResponsible === false`, `redeliveryFee === null`, 유효한 `nextDeliveryAt`을 강제한다. 회차·legacy 저장 경계가 같은 정책을 사용하며 손상된 과거 기상 보류 문서도 재배송비 청구를 만들지 않는다.
+- **사진 불변성 계약**: 주문 ID와 요청 키로 정한 객체는 `ifGenerationMatch: 0`과 콘텐츠 SHA-256 metadata로 최초 한 번만 생성한다. 같은 키·같은 JPEG만 멱등 재사용하고 다른 JPEG는 원본을 유지한 채 충돌하며, 실패 정리는 현재 요청이 신규 생성한 미연결 객체에만 허용한다.
+- **완료 복구 계약**: `DELIVERED` 상태 저장과 정산·알림을 하나의 원자 작업으로 가장하지 않는다. 최초 완료와 사진 재시도는 같은 재조정 진입점을 사용하고, 정산은 주문 ID 문서 멱등성, 완료 알림은 내구성 있는 주문 전환 키를 사용한다.
+- **사진 조회 계약**: 주문 관계 권한 검사가 끝난 `DELIVERED|REVIEWED` 단건 상세만 첫 연결 사진의 15분 서명 URL을 반환한다. 목록·미완료 주문·권한 없는 요청에는 URL을 만들지 않고 서명 실패를 공개 URL이나 Storage 경로로 우회하지 않는다.
+- **기사 복구 계약**: 기사 ID가 확인된 뒤에만 해당 기사의 `DELIVERING|DELIVERY_HELD` 주문을 구독한다. 보류 주문은 기존 상태 API의 `DELIVERY_HELD → DELIVERING`으로 재개하며 기존 담당 기사와 legacy 거점 사진 경로를 보존한다.
+- **실행 정본**: [PLAN_mvp_sales_round_task5_review_remediation.md](plans/PLAN_mvp_sales_round_task5_review_remediation.md)
