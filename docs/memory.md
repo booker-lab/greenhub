@@ -5,15 +5,15 @@
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
 > 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
 
-최종 수정: 2026-07-20 (원 계획 Task 6.6 운영 런북 완료)
+최종 수정: 2026-07-22 (보완 계획 Task 5.4 통과 커밋)
 ## 현재 진행
 
 - 브랜치: `codex/mvp-sales-round-direct`
-- Task 5.12 시작 SHA: `d4d47d577bd861278dd986d7edfb06e9746d2b7b`
-- 완료 계획: `docs/plans/PLAN_mvp_sales_round_consumer_review_remediation.md`
+- 준비 구현 기준 SHA: `389a2113d6f39e5bc72e8f13d2b6e78984078db4`
+- 완료 계획: `docs/plans/PLAN_mvp_sales_round_task_6_7_readiness_remediation.md`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
-- 완료: Task 6.6 주간 운영·장애 대응·롤백·수동 환불 런북
-- 다음: 별도 요청 후 Task 6.7 사용자 흐름 준비조건 확인
+- 완료: 보완 계획 Task 5.4와 원 계획 Task 6.7
+- 다음: 통과 커밋 SHA 인계 후 별도 요청에서만 원 계획 Task 6.8
 
 ## 선행 계약 확정
 
@@ -39,8 +39,8 @@
 - Task 6.1은 실제 범위·정렬 쿼리에 필요한 복합 인덱스 4개만 추가했고 관련 계약 23개와 API 128개, 타입 검사와 build가 통과했다.
 - Task 6.3은 중첩 회차 배송 사진의 모든 클라이언트 접근을 차단하고 공개 상품·배너·로고와 기사 전용 legacy 평면 사진을 보존했다.
 - 사용자 전용 Temurin 21.0.11로 실제 Storage Emulator 계약 11개와 관련 API 37개가 통과했으며 시스템 기본 JDK 17은 유지했다.
-- 다음 작업은 Task 6.4 서버 통합 계약이며 Storage 규칙·`salesMode`·애플리케이션 로직을 더 변경하지 않는다.
-- 드라이버 E2E 14개, 소비자 E2E 24개와 셀러 E2E 12개는 실행 데이터·화면 준비 전까지 `test.fixme`다.
+- Task 6.7은 실제 52건 통과로 닫혔고 Task 6.8은 통과 커밋 SHA 인계 뒤 별도 요청에서만 시작한다.
+- 드라이버 E2E 16개, 소비자 E2E 24개와 셀러 E2E 12개는 `test.fixme` 없이 모두 통과했다.
 - 인덱스는 Task 6.1, Firestore·Storage 보안 규칙은 Task 6.2~6.3이다.
 - `salesMode` 전환·배포·push는 수행하지 않는다.
 - 현재 작업 트리의 기존 미커밋 API·소비자·문서·스크립트·인덱스 변경은 사용자 작업으로 보존한다.
@@ -54,10 +54,10 @@
 - 비밀키·토큰·전체 개인정보·사진 원본·서명 URL을 로그와 증거에 남기지 않는다.
 - 실제 운영 명령·Firestore 쓰기·환불·문자·상태 변경·배포·push는 수행하지 않았다.
 
-## Task 6.7 준비조건 감사
+## Task 6.7 최종 통과
 
-- 소비자·드라이버 Preview는 SHA `b52c4567416b372bf94758096aada0923acf1096`, 셀러 URL은 `14426f8ca7eb0377e6af8a71e48b01c4252b16e1`로 서로 달랐다.
-- 소비자·셀러 인증 설정은 있으나 드라이버 세션이 없고, 대상 식별자를 만드는 전용 fixture·격리 seed·정리 절차도 없다.
-- 외부 결제 대역, 운영 `salesMode` 비의존 테스트 스토어, 테스트 JPEG와 비운영 Storage 경계가 없어 준비 게이트를 통과하지 못했다.
-- chromium·mobile 52개 계약 목록만 수집했고 `test.fixme`는 유지했다. 실제 사용자 흐름·운영 쓰기·배포·push와 Task 6.8은 실행하지 않았다.
-- 다음: 세 앱을 같은 SHA로 맞추고 드라이버 인증과 안전한 비운영 seed·대역을 제공한 뒤 Task 6.7부터 재검증한다.
+- 실행 ID `task-6-7-20260722-q4f9d6`에서 readiness `ready: true`, failureCodes 0, provider 외부 egress 0을 확인했다.
+- chromium·mobile seed·verify가 성공했고 `workers=1`, `retries=0`으로 Playwright 52 passed, 0 failed, 0 skipped/fixme, 0 flaky를 확인했다.
+- 양쪽 manifest 제한 cleanup과 부재 검증이 성공했으며 잔여 Firestore 문서·Storage 객체는 각각 0이었다.
+- 계정 이메일·전화번호가 포함된 manifest, 인증 상태 파일, 로그, 사진 원본은 통과 커밋에서 제외한다.
+- Task 6.8은 Task 5.4 통과 커밋 SHA를 인계받은 뒤 별도 요청에서만 시작하며, 운영 `salesMode`·Firestore·Storage와 push는 변경하지 않는다.

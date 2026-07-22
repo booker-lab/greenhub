@@ -1,12 +1,13 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
+import { runFixtureCli } from './round-direct-e2e-fixtures-cli.mjs';
 const PRODUCTION_PROJECT = 'green-e4fe3';
 const PRODUCTION_STORE = '80189070-2c3d-45f2-bc11-68a870b13951';
 const PROJECTS = new Set(['chromium', 'mobile']);
 const RUN_ID_PATTERN = /^[a-z0-9][a-z0-9-]{6,46}[a-z0-9]$/;
-
+const ROUND_DIRECT_DELIVERY_JPEG = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../apps/e2e/fixtures/round-direct-delivery.jpg'));
 function list(value) {
   return String(value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
 }
@@ -96,31 +97,53 @@ function roundDocument(id, storeId, status, overrides = {}) {
 
 function orderDocument(id, storeId, roundId, consumerId, driverId, status, overrides = {}) {
   const now = new Date().toISOString();
+  const compactTimestamp = now.replace(/\D/g, '').slice(0, 14);
+  const namespace = storeId.replace(/-store$/, '');
   return {
     id,
-    orderNumber: `E2E-${id.slice(-12)}`,
+    orderNumber: `${compactTimestamp.slice(0, 8)}-${compactTimestamp.slice(8)}`,
     schemaVersion: 2,
     storeId,
     roundId,
     userId: consumerId,
     driverId,
     status,
-    deliveryMethod: 'DIRECT',
+    saleType: 'normal',
+    deliveryMethod: 'direct',
     deliveryType: 'DIRECT',
     address: '경기도 이천시 테스트로 1',
-    phone: '01000000000',
+    deliveryAddress: { address: '경기도 이천시 테스트로 1', addressDetail: '' },
+    deliveryPhone: '01000000000',
+    requestedDeliveryDate: null,
+    buyerName: 'E2E 소비자',
+    buyerPhone: '01000000000',
+    sellerPhone: '01000000001',
+    productName: 'E2E 호접란',
+    quantity: 2,
     orderItems: [
       {
         roundItemId: `${roundId}-item-1`,
-        productId: `${storeId}-product-1`,
+        productId: `${namespace}-product-1`,
         productName: 'E2E 호접란',
         quantity: 1,
-        unitPrice: 12000,
-        subtotalAmount: 12000,
+        unitPrice: 6000,
+        subtotalAmount: 6000,
+      },
+      {
+        roundItemId: `${roundId}-item-2`,
+        productId: `${namespace}-product-2`,
+        productName: 'E2E 미니 호접란',
+        quantity: 1,
+        unitPrice: 6000,
+        subtotalAmount: 6000,
       },
     ],
+    deliveryFee: 0,
     totalAmount: 12000,
     deliveryPhotoIds: status === 'DELIVERED' ? [`${id}-photo`] : [],
+    ...(status === 'PREPARING'
+      ? { preparedAt: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 } }
+      : {}),
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -143,6 +166,8 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     seller: `${namespace}-seller`,
     driver: `${namespace}-driver`,
     product: `${namespace}-product-1`,
+    secondProduct: `${namespace}-product-2`,
+    closedProduct: `${namespace}-product-closed`,
     openRound: `${namespace}-round-open`,
   };
   const tag = { runId, project, namespace };
@@ -172,6 +197,16 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     price: 12000, status: 'ACTIVE', isActive: true, stock: 300,
     images: ['https://placehold.co/600x600.jpg'], thumbnailUrl: 'https://placehold.co/600x600.jpg',
   });
+  add('products', ids.secondProduct, {
+    id: ids.secondProduct, storeId, sellerId: ids.seller, name: 'E2E 미니 호접란',
+    price: 6000, status: 'ACTIVE', isActive: true, stock: 300,
+    images: ['https://placehold.co/600x600.jpg'], thumbnailUrl: 'https://placehold.co/600x600.jpg',
+  });
+  add('products', ids.closedProduct, {
+    id: ids.closedProduct, storeId, sellerId: ids.seller, name: 'E2E 마감 호접란',
+    price: 9000, status: 'ACTIVE', isActive: false, stock: 300,
+    images: ['https://placehold.co/600x600.jpg'], thumbnailUrl: 'https://placehold.co/600x600.jpg',
+  });
 
   const roundDefinitions = [
     ['round-open', 'OPEN', {}],
@@ -185,24 +220,52 @@ export function buildFixtureManifest({ runId, project, accounts }) {
       },
     }],
     ['seller-round-complete-ready', 'CLOSED', {}],
-    ['seller-round-confirmation-required', 'CLOSED', {}],
+    ['seller-round-confirmation-required', 'CLOSED', {
+      counters: {
+        reservedDeliveryAddresses: 0, reservedItemQuantity: 0,
+        orderedDeliveryAddresses: 1, orderedItemQuantity: 1, heldOrderCount: 1,
+      },
+      cancellation: {
+        status: 'LOCAL_FAILED', reason: 'E2E 확인 필요', failedOrderId: null,
+        updatedAt: new Date().toISOString(), completedAt: null,
+      },
+    }],
   ];
   for (const [suffix, status, overrides] of roundDefinitions) {
     const roundId = `${namespace}-${suffix}`;
     add('saleRounds', roundId, roundDocument(roundId, storeId, status, overrides));
     add('saleRoundItems', `${roundId}-item-1`, {
       id: `${roundId}-item-1`, roundId, storeId, productId: ids.product,
-      productNameSnapshot: 'E2E 호접란', imageUrlSnapshot: 'https://placehold.co/600x600.jpg',
+      productNameSnapshot: 'E2E 호접란',
+      productImageUrlSnapshot: 'https://placehold.co/600x600.jpg',
       roundPrice: 12000, saleLimitQuantity: 300, displayOrder: 1,
       reservedQuantity: 0, orderedQuantity: 0, status: 'ACTIVE',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     });
+    if (suffix === 'round-open') {
+      add('saleRoundItems', `${roundId}-item-2`, {
+        id: `${roundId}-item-2`, roundId, storeId, productId: ids.secondProduct,
+        productNameSnapshot: 'E2E 미니 호접란',
+        productImageUrlSnapshot: 'https://placehold.co/600x600.jpg',
+        roundPrice: 6000, saleLimitQuantity: 300, displayOrder: 2,
+        reservedQuantity: 0, orderedQuantity: 0, status: 'ACTIVE',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+      add('saleRoundItems', `${roundId}-item-closed`, {
+        id: `${roundId}-item-closed`, roundId, storeId, productId: ids.closedProduct,
+        productNameSnapshot: 'E2E 마감 호접란',
+        productImageUrlSnapshot: 'https://placehold.co/600x600.jpg',
+        roundPrice: 9000, saleLimitQuantity: 300, displayOrder: 3,
+        reservedQuantity: 0, orderedQuantity: 0, status: 'HIDDEN',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+    }
   }
 
   const driverOrders = [
     ['driver-round-direct-board', 'PREPARING', {}],
-    ['driver-round-hub-excluded', 'PREPARING', { deliveryMethod: 'HUB' }],
-    ['driver-round-parcel-excluded', 'PREPARING', { deliveryMethod: 'PARCEL' }],
+    ['driver-round-hub-excluded', 'PREPARING', { deliveryMethod: 'hub' }],
+    ['driver-round-parcel-excluded', 'PREPARING', { deliveryMethod: 'parcel' }],
     ['driver-round-direct-start-preparing', 'PREPARING', {}],
     ['driver-round-direct-hold-weather', 'DELIVERING', {}],
     ['driver-round-direct-hold-access', 'DELIVERING', {}],
@@ -210,8 +273,9 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     ['driver-round-direct-hold-unreachable', 'DELIVERING', {}],
     ['driver-round-direct-resume-held', 'DELIVERY_HELD', {
       deliveryHold: {
-        reasonCode: 'ACCESS_UNAVAILABLE', reason: '출입 정보 확인 필요',
-        customerFault: true, redeliveryFee: 3000,
+        heldAt: new Date().toISOString(),
+        reasonCode: 'ACCESS_UNAVAILABLE', reasonMessage: '출입 정보 확인 필요',
+        customerResponsible: true, redeliveryFee: 3000,
         nextContactAt: new Date(Date.now() + 3600000).toISOString(),
         nextDeliveryAt: new Date(Date.now() + 7200000).toISOString(),
       },
@@ -225,11 +289,25 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     ));
   }
 
+  const blockedRoundId = `${namespace}-seller-round-complete-blocked-held`;
+  const blockedOrderId = `${namespace}-seller-round-complete-blocked-order`;
+  add('orders', blockedOrderId, orderDocument(
+    blockedOrderId, storeId, blockedRoundId, ids.consumer, ids.driver, 'DELIVERY_HELD', {
+      deliveryHold: {
+        heldAt: new Date().toISOString(), reasonCode: 'ACCESS_UNAVAILABLE',
+        reasonMessage: '출입 정보 확인 필요', customerResponsible: true,
+        redeliveryFee: 3000, nextContactAt: null, nextDeliveryAt: null,
+      },
+    },
+  ));
+
   const consumerOrders = [
     ['round-direct-order-held', 'DELIVERY_HELD', {
       deliveryHold: {
-        reasonCode: 'ACCESS_UNAVAILABLE', reason: '출입 정보 확인 필요',
-        customerFault: true, redeliveryFee: 3000,
+        heldAt: new Date().toISOString(),
+        reasonCode: 'ACCESS_UNAVAILABLE', reasonMessage: '출입 정보 확인 필요',
+        customerResponsible: true, redeliveryFee: 3000,
+        nextContactAt: null, nextDeliveryAt: null,
       },
     }],
     ['round-direct-order-delivered', 'DELIVERED', {}],
@@ -256,13 +334,23 @@ export function buildFixtureManifest({ runId, project, accounts }) {
   add('legalOrderRecords', `${namespace}-delivery-photo`, {
     id: `${namespace}-delivery-photo`, storeId,
     orderId: `${namespace}-round-direct-order-delivered`,
-    purpose: 'DELIVERY_PHOTO', storagePath: `${namespace}/delivery-photo-placeholder.jpg`,
+    purpose: 'DELIVERY_PHOTO',
+    storagePath: `deliveryPhotos/${namespace}-round-direct-order-delivered/${namespace}-round-direct-order-delivered-photo.jpg`,
     expiresAt: new Date(Date.now() + 90 * 86400000).toISOString(),
   });
   add('e2eFixtureRuns', `${namespace}-complete`, {
     id: `${namespace}-complete`, runId, project, status: 'SEEDED',
     documentCount: documents.length + 1, completedAt: new Date().toISOString(),
   });
+
+  const deliveredOrderId = `${namespace}-round-direct-order-delivered`;
+  const deliveredPhotoId = `${deliveredOrderId}-photo`;
+  const uploadOrderId = `${namespace}-driver-round-direct-photo-required`;
+  const uploadIdempotencyKey = `${namespace}-photo-upload`;
+  const uploadPhotoId = createHash('sha256')
+    .update(`${uploadOrderId}:${uploadIdempotencyKey}`)
+    .digest('hex')
+    .slice(0, 32);
 
   return {
     version: 1,
@@ -274,7 +362,12 @@ export function buildFixtureManifest({ runId, project, accounts }) {
       Object.entries(accounts).map(([role, account]) => [role, account.email]),
     ),
     documents,
-    storageObjects: [`e2e/round-direct/${runId}/${project}/round-direct-delivery.jpg`],
+    storageObjects: [`deliveryPhotos/${deliveredOrderId}/${deliveredPhotoId}.jpg`],
+    generatedStorageObjects: [`deliveryPhotos/${uploadOrderId}/${uploadPhotoId}.jpg`],
+    generatedDocuments: [{
+      path: `deliveryPhotoRecords/${uploadOrderId}:${uploadPhotoId}`,
+      identity: { orderId: uploadOrderId, photoId: uploadPhotoId },
+    }],
   };
 }
 
@@ -294,9 +387,19 @@ function assertManifest(manifest) {
       throw new Error('manifest 문서 소유 표식이 올바르지 않습니다.');
     }
   }
-  const prefix = `e2e/round-direct/${manifest.runId}/${manifest.project}/`;
-  if (!(manifest.storageObjects ?? []).every((name) => name.startsWith(prefix))) {
-    throw new Error('manifest Storage 객체가 실행 접두사 밖입니다.');
+  const storagePrefix = `deliveryPhotos/${namespace}-`;
+  const allObjects = [...(manifest.storageObjects ?? []), ...(manifest.generatedStorageObjects ?? [])];
+  if (!allObjects.every((name) => name.startsWith(storagePrefix))) {
+    throw new Error('manifest Storage 객체가 실행 namespace 밖입니다.');
+  }
+  for (const entry of manifest.generatedDocuments ?? []) {
+    if (
+      !entry.path.startsWith(`deliveryPhotoRecords/${namespace}-`) ||
+      entry.identity?.orderId !== entry.path.split('/')[1]?.split(':')[0] ||
+      !entry.identity?.photoId
+    ) {
+      throw new Error('manifest 생성 문서가 실행 namespace 밖입니다.');
+    }
   }
 }
 
@@ -312,6 +415,9 @@ export async function seedFixture(adapter, manifest) {
         throw new Error(`다른 소유자의 fixture 문서가 존재합니다: ${entry.path}`);
       }
       await adapter.setDoc(entry.path, entry.data);
+    }
+    for (const objectName of manifest.storageObjects ?? []) {
+      await adapter.setObject(objectName, ROUND_DIRECT_DELIVERY_JPEG);
     }
   } catch (error) {
     await cleanupFixture(adapter, manifest);
@@ -329,9 +435,21 @@ export async function verifyFixture(adapter, manifest, { expectAbsent = false } 
       (expectAbsent ? remainingDocuments : missingDocuments).push(entry.path);
     }
   }
-  const remainingObjects = [];
   if (expectAbsent) {
-    for (const objectName of manifest.storageObjects) {
+    for (const entry of manifest.generatedDocuments ?? []) {
+      if (await adapter.getDoc(entry.path)) remainingDocuments.push(entry.path);
+    }
+  }
+  const missingObjects = [];
+  const remainingObjects = [];
+  for (const objectName of manifest.storageObjects ?? []) {
+    const object = await adapter.getObject(objectName);
+    if (expectAbsent ? object : !object) {
+      (expectAbsent ? remainingObjects : missingObjects).push(objectName);
+    }
+  }
+  if (expectAbsent) {
+    for (const objectName of manifest.generatedStorageObjects ?? []) {
       if (await adapter.getObject(objectName)) remainingObjects.push(objectName);
     }
   }
@@ -339,8 +457,9 @@ export async function verifyFixture(adapter, manifest, { expectAbsent = false } 
     ready:
       expectAbsent
         ? remainingDocuments.length === 0 && remainingObjects.length === 0
-        : missingDocuments.length === 0,
+        : missingDocuments.length === 0 && missingObjects.length === 0,
     missingDocuments,
+    missingObjects,
     remainingDocuments,
     remainingObjects,
   };
@@ -348,7 +467,19 @@ export async function verifyFixture(adapter, manifest, { expectAbsent = false } 
 
 export async function cleanupFixture(adapter, manifest) {
   assertManifest(manifest);
-  for (const objectName of manifest.storageObjects) await adapter.deleteObject(objectName);
+  for (const objectName of [
+    ...(manifest.storageObjects ?? []),
+    ...(manifest.generatedStorageObjects ?? []),
+  ]) await adapter.deleteObject(objectName);
+  for (const entry of manifest.generatedDocuments ?? []) {
+    const existing = await adapter.getDoc(entry.path);
+    if (
+      existing?.orderId === entry.identity.orderId &&
+      existing?.photoId === entry.identity.photoId
+    ) {
+      await adapter.deleteDoc(entry.path);
+    }
+  }
   for (const entry of [...manifest.documents].reverse()) {
     const existing = await adapter.getDoc(entry.path);
     if (
@@ -360,90 +491,8 @@ export async function cleanupFixture(adapter, manifest) {
   }
 }
 
-async function firebaseAdapter(environment) {
-  const rawCredential = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
-  if (!rawCredential) throw new Error('비운영 FIREBASE_SERVICE_ACCOUNT_JSON이 필요합니다.');
-  const serviceAccount = JSON.parse(rawCredential);
-  if (serviceAccount.project_id !== environment.projectId) {
-    throw new Error('서비스 계정 project와 비운영 대상 project가 다릅니다.');
-  }
-  const { cert, initializeApp } = await import('firebase-admin/app');
-  const { getFirestore } = await import('firebase-admin/firestore');
-  const { getStorage } = await import('firebase-admin/storage');
-  const app = initializeApp({
-    credential: cert(serviceAccount),
-    projectId: environment.projectId,
-    storageBucket: environment.storageBucket,
-  }, `round-direct-${environment.runId}-${Date.now()}`);
-  const db = getFirestore(app);
-  const bucket = getStorage(app).bucket(environment.storageBucket);
-  return {
-    async getDoc(docPath) {
-      const snapshot = await db.doc(docPath).get();
-      return snapshot.exists ? snapshot.data() : null;
-    },
-    async setDoc(docPath, data) {
-      await db.doc(docPath).set(data);
-    },
-    async deleteDoc(docPath) {
-      await db.doc(docPath).delete();
-    },
-    async getObject(objectName) {
-      const [exists] = await bucket.file(objectName).exists();
-      return exists ? { exists: true } : null;
-    },
-    async deleteObject(objectName) {
-      await bucket.file(objectName).delete({ ignoreNotFound: true });
-    },
-  };
-}
-
-function argument(name) {
-  return process.argv.slice(2).find((value) => value.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
-}
-
-async function main() {
-  const action = process.argv[2];
-  if (!['seed', 'verify', 'cleanup'].includes(action)) {
-    throw new Error('사용법: node scripts/round-direct-e2e-fixtures.mjs seed|verify|cleanup --project=chromium|mobile --manifest=<경로>');
-  }
-  const environment = validateFixtureEnvironment(process.env);
-  const project = argument('project');
-  const manifestPath = path.resolve(argument('manifest') ?? '');
-  if (!PROJECTS.has(project) || !manifestPath.replaceAll('\\', '/').includes(`/${environment.runId}/`)) {
-    throw new Error('project 또는 manifest 경로가 실행 범위와 다릅니다.');
-  }
-  let manifest;
-  if (action === 'seed') {
-    const suffix = project.toUpperCase();
-    const bcrypt = await import('bcrypt');
-    const accounts = {};
-    for (const role of ['CONSUMER', 'SELLER', 'DRIVER']) {
-      const email = process.env[`TEST_${role}_EMAIL_${suffix}`];
-      const password = process.env[`TEST_${role}_PASSWORD_${suffix}`];
-      if (!email || !password) throw new Error(`${project} ${role} 계정 자격이 필요합니다.`);
-      accounts[role.toLowerCase()] = { email, passwordHash: await bcrypt.hash(password, 12) };
-    }
-    manifest = buildFixtureManifest({ runId: environment.runId, project, accounts });
-    fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });
-  } else {
-    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  }
-  const adapter = await firebaseAdapter(environment);
-  if (action === 'seed') await seedFixture(adapter, manifest);
-  const result =
-    action === 'cleanup'
-      ? (await cleanupFixture(adapter, manifest), await verifyFixture(adapter, manifest, { expectAbsent: true }))
-      : await verifyFixture(adapter, manifest);
-  process.stdout.write(`${JSON.stringify({ action, runId: manifest.runId, project, ...result }, null, 2)}\n`);
-  if (!result.ready) process.exitCode = 1;
-}
-
-const isDirectRun =
-  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isDirectRun) {
-  main().catch((error) => {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  runFixtureCli({ validateFixtureEnvironment, buildFixtureManifest, seedFixture, verifyFixture, cleanupFixture }).catch((error) => {
     console.error(`회차 E2E fixture 실패: ${error.message}`);
     process.exitCode = 1;
   });

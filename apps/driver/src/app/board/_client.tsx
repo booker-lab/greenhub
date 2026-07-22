@@ -36,11 +36,11 @@ export default function BoardClient() {
   useEffect(() => {
     if (!firebaseReady) return;
 
-    // BUG-16 T4: parcel 주문은 셀러가 직접 발송하므로 드라이버 수거 대기 목록에서 제외.
+    // 회차 직배송 보드는 direct 주문만 기사 수거 대상으로 노출한다.
     const qPreparing = query(
       collection(db, 'orders'),
       where('status', '==', 'PREPARING'),
-      where('deliveryMethod', 'in', ['direct', 'hub']),
+      where('deliveryMethod', '==', 'direct'),
       orderBy('preparedAt', 'asc'),
     );
     const unsubPreparing = onSnapshot(qPreparing, (snap) => {
@@ -48,14 +48,17 @@ export default function BoardClient() {
     });
 
     const driverId = session?.user?.id;
-    const deliveringConditions = driverId
-      ? [
-          where('status', '==', 'DELIVERING'),
-          where('driverId', '==', driverId),
-          orderBy('updatedAt', 'asc'),
-        ]
-      : [where('status', '==', 'DELIVERING'), orderBy('updatedAt', 'asc')];
-    const qDelivering = query(collection(db, 'orders'), ...deliveringConditions);
+    if (!driverId) {
+      return () => {
+        unsubPreparing();
+      };
+    }
+    const qDelivering = query(
+      collection(db, 'orders'),
+      where('status', 'in', ['DELIVERING', 'DELIVERY_HELD']),
+      where('driverId', '==', driverId),
+      orderBy('updatedAt', 'asc'),
+    );
     const unsubDelivering = onSnapshot(qDelivering, (snap) => {
       setDelivering(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order));
     });

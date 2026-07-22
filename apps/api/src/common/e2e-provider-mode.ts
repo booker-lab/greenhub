@@ -42,10 +42,11 @@ export function resolveE2EProviderMode(config: ConfigService): E2EProviderMode {
   const nodeEnvironment = config.get<string>('NODE_ENV', '');
   const railwayEnvironment = config.get<string>('RAILWAY_ENVIRONMENT_NAME', '');
   const vercelEnvironment = config.get<string>('VERCEL_ENV', '');
+  // 배포 플랫폼 표식이 있으면 실제 환경 경계를 우선하고, 일반 실행은 NODE_ENV로 차단한다.
   if (
-    nodeEnvironment === 'production' ||
     railwayEnvironment === 'production' ||
-    vercelEnvironment === 'production'
+    vercelEnvironment === 'production' ||
+    (nodeEnvironment === 'production' && !railwayEnvironment && !vercelEnvironment)
   ) {
     throw new E2EProviderModeError('운영 환경에서는 회차 E2E provider 대역을 사용할 수 없습니다.');
   }

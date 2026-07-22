@@ -1,0 +1,39 @@
+{
+  "runId": "task-6-7-20260722-q4f9d6",
+  "readiness": {
+    "ready": true,
+    "failureCodeCount": 0,
+    "providerExternalEgressCount": 0
+  },
+  "fixture": {
+    "chromium": {
+      "seedReady": true,
+      "verifyReady": true
+    },
+    "mobile": {
+      "seedReady": true,
+      "verifyReady": true
+    }
+  },
+  "playwright": {
+    "passed": 52,
+    "failed": 0,
+    "skippedOrFixme": 0,
+    "flaky": 0,
+    "workers": 1,
+    "retries": 0
+  },
+  "cleanup": {
+    "manifestLimited": true,
+    "chromiumReady": true,
+    "mobileReady": true,
+    "remainingFirestoreDocuments": 0,
+    "remainingStorageObjects": 0
+  },
+  "excludedSensitiveArtifacts": [
+    "fixture-manifests",
+    "authentication-state",
+    "logs",
+    "source-photo"
+  ]
+}

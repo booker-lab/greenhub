@@ -32,13 +32,25 @@ describe('회차 E2E provider mode 보안 계약', () => {
   });
 
   it.each([
-    ['NODE_ENV 운영', { NODE_ENV: 'production' }],
+    [
+      '플랫폼 표식 없는 NODE_ENV 운영',
+      { NODE_ENV: 'production', RAILWAY_ENVIRONMENT_NAME: '' },
+    ],
     ['Railway 운영', { RAILWAY_ENVIRONMENT_NAME: 'production' }],
     ['운영 Firebase', { FIREBASE_PROJECT_ID: 'green-e4fe3' }],
   ])('%s 환경의 대역 활성화를 거부한다', (_name, override) => {
     expect(() => resolveE2EProviderMode(config({ ...valid, ...override }))).toThrow(
       E2EProviderModeError,
     );
+  });
+
+  it('Railway staging은 빌드용 NODE_ENV가 production이어도 대역을 허용한다', () => {
+    expect(resolveE2EProviderMode(config({ ...valid, NODE_ENV: 'production' }))).toEqual({
+      enabled: true,
+      mode: 'stub',
+      runId: 'task-6-7-run-001',
+      firebaseProjectId: 'green-staging-74557',
+    });
   });
 
   it('비운영 회차 E2E의 실제 provider 연결을 거부한다', () => {

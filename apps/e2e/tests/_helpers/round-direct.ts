@@ -16,8 +16,12 @@ export type RoundDirectFixture = {
   namespace: string
   storeId: string
   productId: string
+  secondProductId: string
+  closedProductId: string
   openRoundId: string
   openRoundItemId: string
+  secondOpenRoundItemId: string
+  closedOpenRoundItemId: string
   statePath: string
   sellerRoundId: (suffix: string) => string
   orderId: (suffix: string) => string
@@ -50,16 +54,24 @@ export function roundDirectFixture(testInfo: TestInfo): RoundDirectFixture {
   const namespace = `round-direct-e2e-${runId}-${project}`
   const storeId = `${namespace}-store`
   const productId = `${namespace}-product-1`
+  const secondProductId = `${namespace}-product-2`
+  const closedProductId = `${namespace}-product-closed`
   const openRoundId = `${namespace}-round-open`
   const openRoundItemId = `${openRoundId}-item-1`
+  const secondOpenRoundItemId = `${openRoundId}-item-2`
+  const closedOpenRoundItemId = `${openRoundId}-item-closed`
   return {
     runId,
     project,
     namespace,
     storeId,
     productId,
+    secondProductId,
+    closedProductId,
     openRoundId,
     openRoundItemId,
+    secondOpenRoundItemId,
+    closedOpenRoundItemId,
     statePath: ROUND_DIRECT_STATE_PATHS[project],
     sellerRoundId: (suffix) => `${namespace}-${suffix}`,
     orderId: (suffix) => `${namespace}-${suffix}`,
@@ -77,6 +89,19 @@ export function roundDirectFixture(testInfo: TestInfo): RoundDirectFixture {
         roundItemId: openRoundItemId,
         roundPrice: 12000,
       },
+      {
+        productId: secondProductId,
+        name: 'E2E 미니 호접란',
+        price: 6000,
+        image: 'https://placehold.co/600x600.jpg',
+        quantity: 1,
+        saleType: 'normal',
+        deliveryMethod: 'direct',
+        storeId,
+        roundId: openRoundId,
+        roundItemId: secondOpenRoundItemId,
+        roundPrice: 6000,
+      },
     ],
   }
 }
@@ -84,11 +109,30 @@ export function roundDirectFixture(testInfo: TestInfo): RoundDirectFixture {
 export async function installRoundDirectCart(
   page: Page,
   fixture: RoundDirectFixture,
+  scenario: 'valid' | 'changed-and-closed' = 'valid',
 ): Promise<void> {
+  const cartItems =
+    scenario === 'valid'
+      ? fixture.cartItems
+      : [
+          {
+            ...fixture.cartItems[0],
+            price: fixture.cartItems[0].price + 1000,
+            roundPrice: fixture.cartItems[0].roundPrice + 1000,
+          },
+          {
+            ...fixture.cartItems[0],
+            productId: fixture.closedProductId,
+            name: 'E2E 마감 호접란',
+            price: 9000,
+            roundPrice: 9000,
+            roundItemId: fixture.closedOpenRoundItemId,
+          },
+        ]
   await page.addInitScript((cartItems) => {
     localStorage.setItem('greenhub_cart', JSON.stringify(cartItems))
     sessionStorage.setItem('checkout_cart', JSON.stringify(cartItems))
-  }, fixture.cartItems)
+  }, cartItems)
 }
 
 export async function installPortOneBrowserStub(

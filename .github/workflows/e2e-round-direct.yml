@@ -1,0 +1,325 @@
+name: Round direct E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: '세 Preview 앱이 가리켜야 하는 40자리 commit SHA'
+        required: true
+        type: string
+      approval:
+        description: '비운영 회차 E2E 실행을 승인합니다.'
+        required: true
+        type: choice
+        options:
+          - NON_PRODUCTION_E2E_APPROVED
+
+concurrency:
+  group: round-direct-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: 지정 SHA 회차 직배송 E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment:
+      # 이 Environment에 required reviewer를 설정해 승인 전 실행을 차단한다.
+      name: round-direct-e2e
+    permissions:
+      contents: read
+      deployments: read
+    env:
+      ROUND_DIRECT_E2E_ENABLED: 'true'
+      ROUND_DIRECT_E2E_ENV: preview
+      ROUND_DIRECT_E2E_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      ROUND_DIRECT_E2E_RUN_ID: task-6-7-${{ github.run_id }}-${{ github.run_attempt }}
+      ROUND_DIRECT_E2E_PROVIDER_MODE: stub
+      ROUND_DIRECT_E2E_FIXTURE_PROJECTS: chromium,mobile
+      ROUND_DIRECT_E2E_CLEANUP_CONFIGURED: 'true'
+      ROUND_DIRECT_E2E_API_ORIGIN: ${{ vars.ROUND_DIRECT_E2E_API_ORIGIN }}
+      ROUND_DIRECT_E2E_ALLOWED_API_ORIGINS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_API_ORIGINS }}
+      FIREBASE_PROJECT_ID: ${{ vars.ROUND_DIRECT_E2E_FIREBASE_PROJECT_ID }}
+      ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS }}
+      FIREBASE_STORAGE_BUCKET: ${{ vars.ROUND_DIRECT_E2E_STORAGE_BUCKET }}
+      ROUND_DIRECT_E2E_ALLOWED_STORAGE_BUCKETS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_STORAGE_BUCKETS }}
+      ROUND_DIRECT_E2E_STORAGE_PREFIX: e2e/round-direct/task-6-7-${{ github.run_id }}-${{ github.run_attempt }}/
+      ROUND_DIRECT_E2E_STORE_ID: round-direct-e2e-task-6-7-${{ github.run_id }}-${{ github.run_attempt }}-chromium-store
+      ROUND_DIRECT_E2E_FIXTURE_MANIFEST: .artifacts/round-direct/task-6-7-${{ github.run_id }}-${{ github.run_attempt }}/chromium/manifest.json
+      ROUND_DIRECT_E2E_PROVIDER_EGRESS_HOSTS: ''
+      PLAYWRIGHT_JSON_OUTPUT_FILE: .artifacts/round-direct/task-6-7-${{ github.run_id }}-${{ github.run_attempt }}/playwright-raw.json
+
+    steps:
+      - name: 지정 SHA checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+
+      - name: 수동 승인과 checkout SHA 확인
+        shell: bash
+        env:
+          APPROVAL: ${{ inputs.approval }}
+        run: |
+          set -euo pipefail
+          if [[ "$APPROVAL" != 'NON_PRODUCTION_E2E_APPROVED' ]]; then
+            echo '비운영 E2E 수동 승인이 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ ! "$ROUND_DIRECT_E2E_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '지정 SHA는 40자리 소문자 16진수여야 합니다.' >&2
+            exit 1
+          fi
+          actual_sha="$(git rev-parse HEAD)"
+          if [[ "$actual_sha" != "$ROUND_DIRECT_E2E_EXPECTED_SHA" ]]; then
+            echo 'checkout SHA가 지정 SHA와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile
+
+      - name: 세 Preview 앱의 지정 SHA 확인
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          mkdir -p "$evidence_root/evidence"
+          node scripts/wait-preview-deploy.mjs \
+            --once \
+            --json \
+            --sha="$ROUND_DIRECT_E2E_EXPECTED_SHA" \
+            > "$evidence_root/deployment-raw.json"
+          jq -c '.deploymentShas' "$evidence_root/deployment-raw.json" \
+            | sed 's/^/ROUND_DIRECT_E2E_DEPLOYMENT_SHAS_JSON=/' >> "$GITHUB_ENV"
+          jq '{ready, checkedAt, expectedSha, deploymentShas}' \
+            "$evidence_root/deployment-raw.json" \
+            > "$evidence_root/evidence/deployment.json"
+
+      - name: 비운영 readiness 확인
+        shell: bash
+        env:
+          ROUND_DIRECT_E2E_SHARED_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SHARED_SECRET }}
+          ROUND_DIRECT_E2E_AUTH_EVIDENCE_JSON: ${{ secrets.ROUND_DIRECT_E2E_AUTH_EVIDENCE_JSON }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          node scripts/check-round-direct-e2e-readiness.mjs \
+            > "$evidence_root/evidence/readiness.json"
+
+      - name: Playwright chromium 설치
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+
+      - name: chromium fixture seed
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+          TEST_CONSUMER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM }}
+          TEST_CONSUMER_PASSWORD_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_PASSWORD_CHROMIUM }}
+          TEST_SELLER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_SELLER_EMAIL_CHROMIUM }}
+          TEST_SELLER_PASSWORD_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_SELLER_PASSWORD_CHROMIUM }}
+          TEST_DRIVER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM }}
+          TEST_DRIVER_PASSWORD_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_PASSWORD_CHROMIUM }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          node scripts/round-direct-e2e-fixtures.mjs seed \
+            --project=chromium \
+            --manifest="$evidence_root/chromium/manifest.json" \
+            > "$evidence_root/seed-chromium-raw.json"
+          jq '{action, runId, project, ready, missingCount: (.missingDocuments | length)}' \
+            "$evidence_root/seed-chromium-raw.json" \
+            > "$evidence_root/evidence/seed-chromium.json"
+
+      - name: chromium fixture verify
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          node scripts/round-direct-e2e-fixtures.mjs verify \
+            --project=chromium \
+            --manifest="$evidence_root/chromium/manifest.json" \
+            > "$evidence_root/verify-chromium-raw.json"
+          jq '{action, runId, project, ready, missingCount: (.missingDocuments | length)}' \
+            "$evidence_root/verify-chromium-raw.json" \
+            > "$evidence_root/evidence/verify-chromium.json"
+
+      - name: mobile fixture seed
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+          TEST_CONSUMER_EMAIL_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_MOBILE }}
+          TEST_CONSUMER_PASSWORD_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_PASSWORD_MOBILE }}
+          TEST_SELLER_EMAIL_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_SELLER_EMAIL_MOBILE }}
+          TEST_SELLER_PASSWORD_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_SELLER_PASSWORD_MOBILE }}
+          TEST_DRIVER_EMAIL_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_MOBILE }}
+          TEST_DRIVER_PASSWORD_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_PASSWORD_MOBILE }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          node scripts/round-direct-e2e-fixtures.mjs seed \
+            --project=mobile \
+            --manifest="$evidence_root/mobile/manifest.json" \
+            > "$evidence_root/seed-mobile-raw.json"
+          jq '{action, runId, project, ready, missingCount: (.missingDocuments | length)}' \
+            "$evidence_root/seed-mobile-raw.json" \
+            > "$evidence_root/evidence/seed-mobile.json"
+
+      - name: mobile fixture verify
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          node scripts/round-direct-e2e-fixtures.mjs verify \
+            --project=mobile \
+            --manifest="$evidence_root/mobile/manifest.json" \
+            > "$evidence_root/verify-mobile-raw.json"
+          jq '{action, runId, project, ready, missingCount: (.missingDocuments | length)}' \
+            "$evidence_root/verify-mobile-raw.json" \
+            > "$evidence_root/evidence/verify-mobile.json"
+
+      - name: 소비자·셀러·드라이버 52건 실행
+        id: e2e
+        env:
+          SELLER_BASE: ${{ secrets.ROUND_DIRECT_E2E_SELLER_BASE }}
+          CONSUMER_BASE: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_BASE }}
+          DRIVER_BASE: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_BASE }}
+          SELLER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SELLER_BYPASS_SECRET }}
+          CONSUMER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET }}
+          DRIVER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_BYPASS_SECRET }}
+          E2E_TEST_SECRET: ${{ secrets.ROUND_DIRECT_E2E_TEST_SECRET }}
+          ROUND_DIRECT_E2E_SHARED_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SHARED_SECRET }}
+          TEST_CONSUMER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM }}
+          TEST_CONSUMER_PASSWORD_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_PASSWORD_CHROMIUM }}
+          TEST_SELLER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_SELLER_EMAIL_CHROMIUM }}
+          TEST_SELLER_PASSWORD_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_SELLER_PASSWORD_CHROMIUM }}
+          TEST_DRIVER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM }}
+          TEST_DRIVER_PASSWORD_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_PASSWORD_CHROMIUM }}
+          TEST_CONSUMER_EMAIL_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_MOBILE }}
+          TEST_CONSUMER_PASSWORD_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_PASSWORD_MOBILE }}
+          TEST_SELLER_EMAIL_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_SELLER_EMAIL_MOBILE }}
+          TEST_SELLER_PASSWORD_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_SELLER_PASSWORD_MOBILE }}
+          TEST_DRIVER_EMAIL_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_MOBILE }}
+          TEST_DRIVER_PASSWORD_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_PASSWORD_MOBILE }}
+        run: >-
+          pnpm --filter e2e exec playwright test
+          consumer-round-direct
+          seller-sale-rounds
+          driver-direct-delivery
+          --project=chromium
+          --project=mobile
+          --workers=1
+          --retries=0
+          --reporter=list,json
+
+      - name: 52건 무건너뜀 판정
+        id: e2e_gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '
+            .stats.expected == 52 and
+            .stats.skipped == 0 and
+            .stats.unexpected == 0 and
+            .stats.flaky == 0
+          ' "$PLAYWRIGHT_JSON_OUTPUT_FILE" > /dev/null
+
+      - name: chromium fixture cleanup
+        id: cleanup_chromium
+        if: ${{ always() }}
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          manifest="$evidence_root/chromium/manifest.json"
+          mkdir -p "$evidence_root/evidence"
+          if [[ ! -f "$manifest" ]]; then
+            printf '{"action":"cleanup","project":"chromium","status":"not-seeded"}\n' \
+              > "$evidence_root/evidence/cleanup-chromium.json"
+            exit 0
+          fi
+          node scripts/round-direct-e2e-fixtures.mjs cleanup \
+            --project=chromium \
+            --manifest="$manifest" \
+            > "$evidence_root/cleanup-chromium-raw.json"
+          jq '{action, runId, project, ready, remainingDocumentCount: (.remainingDocuments | length), remainingObjectCount: (.remainingObjects | length)}' \
+            "$evidence_root/cleanup-chromium-raw.json" \
+            > "$evidence_root/evidence/cleanup-chromium.json"
+
+      - name: mobile fixture cleanup
+        id: cleanup_mobile
+        if: ${{ always() }}
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          manifest="$evidence_root/mobile/manifest.json"
+          mkdir -p "$evidence_root/evidence"
+          if [[ ! -f "$manifest" ]]; then
+            printf '{"action":"cleanup","project":"mobile","status":"not-seeded"}\n' \
+              > "$evidence_root/evidence/cleanup-mobile.json"
+            exit 0
+          fi
+          node scripts/round-direct-e2e-fixtures.mjs cleanup \
+            --project=mobile \
+            --manifest="$manifest" \
+            > "$evidence_root/cleanup-mobile-raw.json"
+          jq '{action, runId, project, ready, remainingDocumentCount: (.remainingDocuments | length), remainingObjectCount: (.remainingObjects | length)}' \
+            "$evidence_root/cleanup-mobile-raw.json" \
+            > "$evidence_root/evidence/cleanup-mobile.json"
+
+      - name: 비민감 실행 요약 생성
+        if: ${{ always() }}
+        shell: bash
+        env:
+          E2E_OUTCOME: ${{ steps.e2e.outcome }}
+          E2E_GATE_OUTCOME: ${{ steps.e2e_gate.outcome }}
+          CLEANUP_CHROMIUM_OUTCOME: ${{ steps.cleanup_chromium.outcome }}
+          CLEANUP_MOBILE_OUTCOME: ${{ steps.cleanup_mobile.outcome }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          mkdir -p "$evidence_root/evidence"
+          if [[ -f "$PLAYWRIGHT_JSON_OUTPUT_FILE" ]]; then
+            jq '{expected: .stats.expected, skipped: .stats.skipped, unexpected: .stats.unexpected, flaky: .stats.flaky, durationMs: .stats.duration}' \
+              "$PLAYWRIGHT_JSON_OUTPUT_FILE" \
+              > "$evidence_root/evidence/playwright-summary.json"
+          else
+            printf '{"status":"not-run"}\n' \
+              > "$evidence_root/evidence/playwright-summary.json"
+          fi
+          jq -n \
+            --arg expectedSha "$ROUND_DIRECT_E2E_EXPECTED_SHA" \
+            --arg runId "$ROUND_DIRECT_E2E_RUN_ID" \
+            --arg e2eOutcome "$E2E_OUTCOME" \
+            --arg e2eGateOutcome "$E2E_GATE_OUTCOME" \
+            --arg chromiumCleanup "$CLEANUP_CHROMIUM_OUTCOME" \
+            --arg mobileCleanup "$CLEANUP_MOBILE_OUTCOME" \
+            '{expectedSha: $expectedSha, runId: $runId, e2eOutcome: $e2eOutcome, e2eGateOutcome: $e2eGateOutcome, cleanup: {chromium: $chromiumCleanup, mobile: $mobileCleanup}}' \
+            > "$evidence_root/evidence/workflow-summary.json"
+
+      - name: 비민감 증거 artifact 업로드
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: round-direct-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/round-direct/${{ env.ROUND_DIRECT_E2E_RUN_ID }}/evidence/
+          if-no-files-found: error
+          retention-days: 7

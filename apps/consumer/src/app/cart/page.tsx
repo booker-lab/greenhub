@@ -24,8 +24,8 @@ function isPrice(value: unknown): value is number {
 function unavailableReason(message?: string) {
   if (!message) return '서버에서 구매 가능 여부를 확인하지 못했습니다.';
   if (/수량|한도|품절/.test(message)) return '요청한 수량을 구매할 수 없습니다.';
-  if (/마감|현재 주문 가능한 회차/.test(message)) return '판매가 마감되었습니다.';
-  if (/구매할 수 없는|찾을 수 없/.test(message)) return '현재 구매할 수 없는 상품입니다.';
+  if (/마감|현재 주문 가능한 회차|구매할 수 없는/.test(message)) return '판매가 마감되었습니다.';
+  if (/찾을 수 없/.test(message)) return '현재 구매할 수 없는 상품입니다.';
   return '서버에서 구매 가능 여부를 확인하지 못했습니다.';
 }
 function readErrorMessage(value: unknown) {

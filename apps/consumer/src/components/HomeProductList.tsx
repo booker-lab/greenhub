@@ -17,12 +17,14 @@ import { doc, getDoc } from 'firebase/firestore';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import DeadlineSection from '@/components/DeadlineSection';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
 import { db } from '@/lib/firebase';
+import { resolveHomeStoreId } from './home-store-selection';
 
 type StoreModeStatus = 'loading' | 'ready' | 'error';
 
@@ -38,13 +40,6 @@ interface LegacyHomeProductListProps {
   error: string | null;
   groupProducts: Product[];
   groupLoading: boolean;
-}
-
-function findSingleStoreId(products: Product[]) {
-  const storeIds = new Set(
-    products.map((product) => product.storeId).filter((storeId) => storeId.length > 0),
-  );
-  return storeIds.size === 1 ? [...storeIds][0] : null;
 }
 
 function useStoreMode(storeId: string | null, productsLoading: boolean): StoreModeState {
@@ -440,6 +435,7 @@ function LegacyHomeProductList({
 }
 
 export default function HomeProductList() {
+  const requestedStoreId = useSearchParams().get('storeId');
   const { products, loading, error } = useProducts();
   const { products: groupProducts, loading: groupLoading } = useProducts(
     undefined,
@@ -452,8 +448,8 @@ export default function HomeProductList() {
   }, []);
 
   const storeId = useMemo(
-    () => findSingleStoreId([...products, ...groupProducts]),
-    [groupProducts, products],
+    () => resolveHomeStoreId([...products, ...groupProducts], requestedStoreId),
+    [groupProducts, products, requestedStoreId],
   );
   const storeMode = useStoreMode(storeId, loading || groupLoading);
   const saleRounds = useSaleRounds(

@@ -47,6 +47,9 @@ function memoryAdapter({ failAfter = Number.POSITIVE_INFINITY } = {}) {
       if (writes > failAfter) throw new Error('부분 seed 실패');
       docs.set(docPath, structuredClone(data));
     },
+    async setObject(objectName, content) {
+      objects.set(objectName, Buffer.from(content));
+    },
     async deleteDoc(docPath) {
       deletedDocs.push(docPath);
       docs.delete(docPath);
@@ -134,6 +137,25 @@ describe('회차 E2E fixture manifest 계약', () => {
     const store = manifest.documents.find(({ path: docPath }) => docPath === `stores/${manifest.storeId}`);
     assert.equal(store.data.salesMode, 'round_direct');
     assert.notEqual(manifest.storeId, '80189070-2c3d-45f2-bc11-68a870b13951');
+
+    const roundItem = manifest.documents.find(({ path: docPath }) =>
+      docPath.endsWith('-round-open-item-1'),
+    );
+    assert.equal(roundItem.data.productImageUrlSnapshot, 'https://placehold.co/600x600.jpg');
+    assert.equal('imageUrlSnapshot' in roundItem.data, false);
+
+    const heldOrder = manifest.documents.find(({ path: docPath }) =>
+      docPath.endsWith('-round-direct-order-held'),
+    );
+    assert.equal(heldOrder.data.deliveryMethod, 'direct');
+    assert.equal(heldOrder.data.saleType, 'normal');
+    assert.equal(heldOrder.data.deliveryFee, 0);
+    assert.equal(heldOrder.data.orderItems.length, 2);
+    assert.equal(heldOrder.data.deliveryHold.customerResponsible, true);
+    assert.equal(typeof heldOrder.data.deliveryHold.reasonMessage, 'string');
+    assert.match(heldOrder.data.orderNumber, /^\d{8}-\d{6}$/);
+    assert.equal(manifest.generatedDocuments.length, 1);
+    assert.equal(manifest.generatedStorageObjects.length, 1);
   });
 });
 
@@ -146,6 +168,7 @@ describe('회차 E2E fixture seed·verify·cleanup 계약', () => {
     const result = await verifyFixture(adapter, manifest);
     assert.equal(result.ready, true);
     assert.equal(result.missingDocuments.length, 0);
+    assert.equal(result.missingObjects.length, 0);
   });
 
   it('부분 seed 실패 시 이미 생성한 manifest 범위만 cleanup한다', async () => {
@@ -163,12 +186,18 @@ describe('회차 E2E fixture seed·verify·cleanup 계약', () => {
     const manifest = buildFixtureManifest({ runId, project: 'chromium', accounts });
     const adapter = memoryAdapter();
     await seedFixture(adapter, manifest);
-    adapter.objects.set(manifest.storageObjects[0], Buffer.from('jpeg'));
+    const generatedDocument = manifest.generatedDocuments[0];
+    adapter.docs.set(generatedDocument.path, { ...generatedDocument.identity });
+    adapter.objects.set(manifest.generatedStorageObjects[0], Buffer.from('generated-jpeg'));
     adapter.objects.set('e2e/round-direct/other-run/keep.jpg', Buffer.from('keep'));
     await cleanupFixture(adapter, manifest);
     const result = await verifyFixture(adapter, manifest, { expectAbsent: true });
     assert.equal(result.ready, true);
     assert.equal(adapter.objects.has('e2e/round-direct/other-run/keep.jpg'), true);
-    assert.deepEqual(adapter.deletedObjects, manifest.storageObjects);
+    assert.deepEqual(
+      adapter.deletedObjects,
+      [...manifest.storageObjects, ...manifest.generatedStorageObjects],
+    );
+    assert.equal(adapter.docs.has(generatedDocument.path), false);
   });
 });

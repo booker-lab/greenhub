@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Loader, Text } from '@mantine/core';
+import { Button, Loader, Text, Title } from '@mantine/core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { use, useRef, useState } from 'react';
@@ -118,6 +118,7 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
       style={{
         position: 'fixed',
         inset: 0,
+        zIndex: 200,
         backgroundColor: '#000',
         display: 'flex',
         flexDirection: 'column',
@@ -172,9 +173,16 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
             />
           </svg>
         </button>
-        <Text style={{ color: 'var(--color-bg)', fontWeight: 'var(--fw-bold)' }}>
+        <Title
+          order={1}
+          style={{
+            color: 'var(--color-bg)',
+            fontSize: 'var(--font-size-base)',
+            fontWeight: 'var(--fw-bold)',
+          }}
+        >
           {isRoundDirect ? '배송 완료 사진' : '거점 하차 인증 사진'}
-        </Text>
+        </Title>
       </header>
 
       {/* 카메라 / 미리보기 */}
@@ -200,7 +208,7 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
               style={{ color: 'var(--color-text)' }}
               radius="md"
             >
-              카메라 시작
+              사진 촬영
             </Button>
             {error && (
               <Text
@@ -232,7 +240,7 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
             <div
               style={{
                 position: 'absolute',
-                bottom: 32,
+                bottom: 120,
                 left: 0,
                 right: 0,
                 display: 'flex',
@@ -241,6 +249,7 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
             >
               <button
                 type="button"
+                aria-label="사진 촬영"
                 onClick={capture}
                 style={{
                   width: 64,
@@ -275,7 +284,7 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
       </div>
 
       {/* 하단 버튼 */}
-      {captured && (
+      {(captured || isRoundDirect) && (
         <div
           style={{
             position: 'absolute',
@@ -288,27 +297,33 @@ export default function PhotoPage({ params }: { params: Promise<{ orderId: strin
             background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
           }}
         >
-          <Button
-            flex={1}
-            onClick={retake}
-            disabled={uploading}
-            variant="outline"
-            color="white"
-            radius="xl"
-            size="lg"
-          >
-            재촬영
-          </Button>
+          {captured && (
+            <Button
+              flex={1}
+              onClick={retake}
+              disabled={uploading}
+              variant="outline"
+              color="white"
+              radius="xl"
+              size="lg"
+            >
+              재촬영
+            </Button>
+          )}
           <Button
             flex={1}
             onClick={upload}
-            disabled={uploading}
+            disabled={!captured || uploading}
             color="brand"
             radius="xl"
             size="lg"
             leftSection={uploading ? <Loader size="xs" color="white" /> : null}
           >
-            {uploading ? '업로드 중...' : '업로드'}
+            {uploading
+              ? '업로드 중...'
+              : isRoundDirect
+                ? '사진을 등록하고 배송 완료'
+                : '업로드'}
           </Button>
         </div>
       )}

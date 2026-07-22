@@ -141,6 +141,11 @@ export default function CheckoutForm({
         <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }} mb="xs">
           주문 정보
         </Text>
+        {items.length > 0 && (
+          <Text size="sm" c="var(--color-text-secondary)" mb="xs">
+            총 {items.reduce((sum, item) => sum + item.quantity, 0)}개 상품
+          </Text>
+        )}
         <Stack gap={4}>
           {items.length > 0
             ? items.map((item) => (
