@@ -47,7 +47,7 @@ jobs:
       ROUND_DIRECT_E2E_STORE_ID: round-direct-e2e-task-6-7-${{ github.run_id }}-${{ github.run_attempt }}-chromium-store
       ROUND_DIRECT_E2E_FIXTURE_MANIFEST: .artifacts/round-direct/task-6-7-${{ github.run_id }}-${{ github.run_attempt }}/chromium/manifest.json
       ROUND_DIRECT_E2E_PROVIDER_EGRESS_HOSTS: ''
-      PLAYWRIGHT_JSON_OUTPUT_FILE: .artifacts/round-direct/task-6-7-${{ github.run_id }}-${{ github.run_attempt }}/playwright-raw.json
+      PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/.artifacts/round-direct/task-6-7-${{ github.run_id }}-${{ github.run_attempt }}/playwright-raw.json
 
     steps:
       - name: 지정 SHA checkout
