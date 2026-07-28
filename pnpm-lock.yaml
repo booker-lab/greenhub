@@ -393,7 +393,7 @@ importers:
   scripts:
     dependencies:
       bcrypt:
-        specifier: ^6.0.0
+        specifier: '*'
         version: 6.0.0
       firebase-admin:
         specifier: '*'
