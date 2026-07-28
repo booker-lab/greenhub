@@ -10,6 +10,7 @@ export interface SaleRoundCancellation {
 }
 export type SaleRoundItemStatus = 'ACTIVE' | 'HIDDEN' | 'SOLD_OUT' | 'CLOSED';
 export type CheckoutReservationStatus = 'HELD' | 'CONSUMED' | 'RELEASED' | 'EXPIRED';
+export type ClientOrderRequestId = string;
 export type OrderChargeType = 'REDELIVERY_FEE';
 export type OrderChargeStatus = 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUNDED';
 export type OperationIssueType = 'PAYMENT_LOOKUP_FAILED' | 'AUTO_REFUND_FAILED' | 'CUSTOMER_NOTICE_FAILED' | 'REDELIVERY_FAILED' | 'RETENTION_DELETE_FAILED';
@@ -122,9 +123,9 @@ export interface OrderCharge {
 export interface OperationIssueAction {
     actorId: string;
     actionType: OperationIssueActionType;
-    result: 'SUCCESS' | 'FAILED';
-    message: string | null;
-    createdAt: string;
+    performedAt: string;
+    status: 'SUCCEEDED' | 'FAILED';
+    failureReason?: string;
 }
 export interface OperationIssue {
     id: string;

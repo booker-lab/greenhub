@@ -1,3 +1,4 @@
+import type { ClientOrderRequestId } from './sale-round.types.js';
 export type OrderStatus = 'PENDING' | 'RECRUITING' | 'CONFIRMED' | 'ACCEPTED' | 'PREPARING' | 'DELIVERING' | 'DELIVERY_HELD' | 'HUB_ARRIVED' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED' | 'REVIEWED';
 export type DeliveryMethod = 'direct' | 'hub' | 'parcel';
 export type SaleType = 'normal' | 'group';
@@ -89,6 +90,7 @@ export interface DailyCap {
     usedSlots: number;
 }
 export interface CreateOrderRequest {
+    clientOrderRequestId?: ClientOrderRequestId;
     productId: string;
     quantity: number;
     saleType: SaleType;
