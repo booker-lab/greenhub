@@ -12,8 +12,8 @@
 ### 포트원 (준비 완료)
 ```env
 # apps/api/.env
-PORTONE_API_KEY=imp56354122
-PORTONE_API_SECRET=qF2Y80J76TPZaj1SmKQdpdp2bmQT0hdzm3kKimwtwdVRYkxhffJuSQ7eqhufRqDTleV1G4uVru5qVpeb
+PORTONE_V2_SECRET=<Railway 환경변수 사용>
+PORTONE_WEBHOOK_SECRET=<Railway 환경변수 사용>
 
 # apps/consumer/.env.local
 NEXT_PUBLIC_PORTONE_STORE_ID=store-0ab5cf00-f559-43af-a914-cc14bcdf3897

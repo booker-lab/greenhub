@@ -4,6 +4,7 @@
 
 > **Created**: 2026-07-20
 > **Status**: done — Task 5.4 통과 커밋 생성
+> **후속 상태**: 원 계획 Task 6.8도 최종 검증을 통과해 `done`이며, 현재 정본은 `docs/plans/REPORT_task_6_8_final_closeout.md`다.
 > **Priority**: P0
 > **Labels**: `e2e`, `playwright`, `round-direct`, `preview`, `fixture`, `release-gate`
 > **SSOT Check**: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`, `docs/specs/mvp-sales-round-direct-delivery.md`, `docs/specs/ops/mvp-sales-round-runbook.md`, `docs/memory.md`
@@ -68,7 +69,7 @@
 
 ## 🔎 Diagnosis & Findings
 
-1. 원 계획 Task 6.7은 `blocked`, Task 6.8은 Task 6.7 의존의 `todo`다.
+1. 당시 진단에서 원 계획 Task 6.7의 준비조건이 충족되지 않아 Task 6.8은 시작 전 상태였다.
 2. `consumer-round-direct.spec.ts` 12건, `seller-sale-rounds.spec.ts` 6건, `driver-direct-delivery.spec.ts` 8건이 두 프로젝트에서 수집돼 총 52건이다.
 3. 세 파일의 모든 대상 테스트가 `test.fixme`이므로 현재 실제 실행 수는 0건이다.
 4. 셀러·소비자 인증은 `global-setup.ts`에서 Credentials 세션을 만들지만 드라이버는 Kakao 전용이라 정적 `DRIVER_SESSION_COOKIE`만 기대한다.
@@ -401,10 +402,10 @@
 
 ## 🧾 Handoff Gate
 
-- **현재 진입점**: 통과 커밋 SHA를 인계한 뒤 별도 요청에서만 Task 6.8 시작
-- **현재 원 계획 상태**: Task 6.7 `done`, Task 6.8 `todo`
+- **현재 진입점**: 이 계획의 인계는 완료됐다. Task 6.8 최종 판정은 `docs/plans/REPORT_task_6_8_final_closeout.md`를 따른다.
+- **현재 원 계획 상태**: Task 6.7 `done`, Task 6.8 `done`
 - **Task 6.7 완료 근거**: 실행 `task-6-7-20260722-q4f9d6`의 52건 실제 통과와 manifest 제한 cleanup·부재 검증
-- **Task 6.8 재진입 조건**: 이 문서를 포함하는 Task 5.4 통과 커밋의 SHA
+- **Task 6.8 최종 근거**: SHA `39fdb2c28c45b5c7658519181e41845bb24be2fd`의 GitHub Actions 실행 `30031472177` 성공
 - **금지**: 운영 상태 변경, 운영 Firestore·Storage 쓰기, 운영 `salesMode` 전환, push, 이번 계획에서 Task 6.8 실행
 
 ### 2026-07-20 실행 차단 실측
