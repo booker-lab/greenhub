@@ -1,63 +1,40 @@
 <!-- Language: ko -->
 
-# Green Love 프로젝트 메모
+# 프로젝트 메모
 
-> SSOT: 세션 종료 시 최신 상태만 유지한다. 200줄 초과 시 아카이브하고 50줄 이내로 요약한다.
-> 최신 아카이브: `docs/archive/memory_archive_20260717_before_full_review_remediation_plan.md`
+> SSOT: 세션 종료 시 최신 상태만 유지한다. 상세 이력은 계획·보고서·아카이브에서 확인한다.
 
-최종 수정: 2026-07-22 (원 계획 Task 6.8 Closeout 완료)
-## 현재 진행
+최종 수정: 2026-07-28 (Task 6.8 보존 정책 반영·Git 역사 게이트 미실행·불필요 종결)
+
+## 현재 상태
 
 - 브랜치: `codex/mvp-sales-round-direct`
-- 리뷰 보정 기준 SHA: `b4ba7ff0719dd760ab56b1d78bcd656afd5ee10c`
-- 완료 계획: `docs/plans/PLAN_mvp_sales_round_task5_review_remediation.md`
 - 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
-- 완료: 보완 계획 Task 5.4와 원 계획 Task 6.8
-- 다음: 운영 전환은 별도 승인 뒤에만 진행
+- 최종 Closeout 정본: `docs/plans/REPORT_task_6_8_final_closeout.md`
+- A+ 보안 정리 보고서: `docs/plans/REPORT_task_6_8_a_plus_secure_cleanup.md`
+- Git 역사 게이트 결정 정본은 `C:\Develop\greenhub-verified-39fdb2c\docs\discussions\DISCUSS_task_6_8_git_history_rewrite_gate.md`이고, 종결 증거는 `C:\Develop\greenhub-verified-39fdb2c\.artifacts\history-rewrite-gate\closeout.md`다.
+- 원 계획 Task 0.1~6.8과 Task 6.7 준비조건 보완 계획은 모두 `done`이다.
+- 최종 검증 SHA: `39fdb2c28c45b5c7658519181e41845bb24be2fd`
+- 최종 원격 실행: GitHub Actions `30031472177`, 결론 `success`
+- 현재 로컬 HEAD `8bcfb76b8efeac71c5e84a4743bedc2d6838d2c3`은 최종 검증 SHA보다 2개 커밋 이전이며, 금지 조건에 따라 pull·checkout으로 맞추지 않았다.
+- 후속 작업 기준점은 `C:\Develop\greenhub-verified-39fdb2c`의 `codex/task-6-8-a-plus-cleanup` branch이며 HEAD는 최종 검증 SHA `39fdb2c28c45b5c7658519181e41845bb24be2fd`와 일치한다. 다만 후속 Git 역사 게이트 문서와 종결 산출물이 추가되어 현재 작업 트리는 clean 상태가 아니다.
 
-## 선행 계약 확정
+## Task 6.8 최종 증거
 
-- 소비자 리뷰 보정은 예정 회차 선택, 단일 회차 바로 구매, 당근 유입 재검증, 마케팅 설정 진입까지 완료했다.
-- Task 5.1의 상호 배타적 6개 fixture와 chromium·mobile 12개 `test.fixme` 화면 계약은 그대로 유지한다.
-- Task 5.12의 JWT multipart 비공개 사진 업로드와 legacy 거점 사진 경로 분리는 유지한다.
-- 리뷰 보정은 원 계획 Task 6.1의 기존 미커밋 인덱스 변경을 수정하지 않았다.
+- 로컬 보정 검증은 보드 5개, Firestore 인덱스 23개, Storage Emulator 12개, Firestore Emulator 14개, API 단위 249개, API E2E 10개, 소비자 78개, 셀러 43개, 드라이버 11개, fixture 7개, readiness 9개가 통과했다.
+- shared·API·consumer·seller·driver·E2E 타입 검사, `pnpm build`, Playwright 52개 목록 수집과 `git diff --check`가 통과했다.
+- 원격 실행은 세 Preview 배포 SHA 일치, readiness 통과, provider 외부 egress 0을 확인했다.
+- Playwright는 `workers=1`, `retries=0`으로 52건 통과, skipped 0, unexpected 0, flaky 0이었다.
+- chromium·mobile cleanup 뒤 잔여 Firestore 문서·Storage 객체는 각 프로젝트에서 모두 0이었다.
+- 기존 `.artifacts/round-direct/task-6-8-20260722-k2m7p4/evidence/closeout-summary.json`은 이전 로컬 검증 상태를 담은 역사적 증거이며 수정하지 않는다.
 
-## Task 5 리뷰 보정 확정
+## 유지 계약과 남은 위험
 
-- `WEATHER`는 서버에서 판매자 책임·재배송비 없음·유효한 새 일정을 강제하고 손상 문서 청구도 차단한다.
-- 배송 사진은 생성 전용 precondition과 SHA-256 metadata로 같은 요청의 다른 JPEG 덮어쓰기를 막는다.
-- 업로드 연결 실패는 현재 요청이 만든 신규 미연결 객체만 정리한다.
-- 최초 완료와 이미 `DELIVERED`인 재시도는 주문 ID 멱등 정산과 내구성 있는 완료 알림을 재조정한다.
-- 권한 있는 완료·리뷰 단건 상세만 첫 연결 사진의 15분 URL을 반환하고 목록은 URL을 만들지 않는다.
-- 담당 기사는 자신의 배송 중·보류 주문을 함께 보고 `DELIVERY_HELD → DELIVERING`으로 재개한다.
-- 집중 API 78개, API 전체 199개, 타입 검사, production build, 드라이버 E2E 16개 목록 수집이 통과했다.
-- build가 갱신한 기존 추적 생성물 5개는 임의 복원하지 않고 작업 트리에 보존했다.
-- 인덱스·Firestore 규칙·Storage 규칙, `salesMode`, 배포 상태는 변경하지 않았다.
-
-## 후속 Task 실행 원칙
-
-- Task 6.1은 실제 범위·정렬 쿼리에 필요한 복합 인덱스 4개만 추가했고 관련 계약 23개와 API 128개, 타입 검사와 build가 통과했다.
-- Task 6.3은 중첩 회차 배송 사진의 모든 클라이언트 접근을 차단하고 공개 상품·배너·로고와 기사 전용 legacy 평면 사진을 보존했다.
-- 사용자 전용 Temurin 21.0.11로 실제 Storage Emulator 계약 11개와 관련 API 37개가 통과했으며 시스템 기본 JDK 17은 유지했다.
-- Task 6.8은 전체 build와 필수 회귀 통과 및 잔여 위험 기록으로 닫혔다.
-- 드라이버 E2E 16개, 소비자 E2E 24개와 셀러 E2E 12개는 `test.fixme` 없이 모두 통과했다.
-- 인덱스는 Task 6.1, Firestore·Storage 보안 규칙은 Task 6.2~6.3이다.
-- `salesMode` 전환·배포·push는 수행하지 않는다.
-- 현재 작업 트리의 기존 미커밋 API·소비자·문서·스크립트·인덱스 변경은 사용자 작업으로 보존한다.
-
-## Task 6.6 확정
-
-- `docs/specs/ops/mvp-sales-round-runbook.md`가 일요일 마감, 월요일 매입, 화요일 00:00~09:00 배송과 회차 상태별 운영 증거·중단·에스컬레이션을 고정한다.
-- 실제 전환은 Task 6.7 통과와 별도 승인 뒤에만 가능하며, 소비자 장애 롤백 뒤에도 기존 회차 주문을 삭제·변환하지 않고 처리한다.
-- 수동 환불은 PortOne 원격 재조회, 로컬 결제 대조, 열린 `AUTO_REFUND_FAILED`의 claim 기반 재시도를 우선해 중복을 막는다.
-- 결제 조회·재배송·보관 파기 예외에는 현재 자동 조치가 없고, 늦은 결제 직접 환불 실패도 항상 전용 예외로 수렴하지 않으므로 기술 담당자에게 에스컬레이션한다.
-- 비밀키·토큰·전체 개인정보·사진 원본·서명 URL을 로그와 증거에 남기지 않는다.
-- 실제 운영 명령·Firestore 쓰기·환불·문자·상태 변경·배포·push는 수행하지 않았다.
-
-## Task 6.8 Closeout
-
-- `pnpm build`, API 단위 249개·E2E 10개, 소비자 78개, 셀러 43개, 드라이버 10개, fixture 7개와 Playwright 52개 목록 수집이 통과했다.
-- shared·소비자·셀러·드라이버·E2E 타입 검사는 통과했고 API 전체 `tsc --noEmit`의 알려진 6개 오류는 기존 사용자 변경으로 남겼다.
-- Task 6.7에서 생긴 드라이버 쿼리·인덱스 계약과 소비자 마감 문구·테스트 계약 불일치만 최소 보정했다.
-- Node 모듈 형식, 기존 비 null 단언, webpack cache 경고는 비차단 잔여 위험으로 기록했고 legacy checkout 비 null 경고는 재현되지 않았다.
-- 운영 `salesMode`·Firebase·Storage, 실제 결제·환불·알림, 배포·마이그레이션·push는 변경하거나 실행하지 않았다.
+- Git 역사 노출 후보는 provider 경계에서 거부되고 Railway `staging`·`production`의 현재 PortOne 자격 증명은 인증 경계를 통과한다. 값 자체는 기록하지 않는다.
+- Task 6.7 중간 실행 생성물 22개와 시스템 TEMP 증거 사본 10개를 승인 목록대로 제거했다. 최종 성공 readiness, credential 점검 JSON 2개, Task 6.8 역사적 Closeout은 보존한다.
+- Git 역사 게이트는 비어 있지 않은 비밀값 후보 `0건`으로 확정됐으며, Git 역사 재작성은 미실행·불필요 종결됐다. 향후 비어 있지 않은 실제 비밀값 후보가 새로 확인되면 기존 게이트를 재개하지 않고 별도 보안 사건과 새 승인 게이트로 조사한다.
+- 기상 보류, 배송 사진 생성 전용 해시, 완료 후속효과 재조정, 권한별 단건 서명 URL, 기사 보류 복구 계약을 유지한다.
+- 회차 중첩 배송 사진은 클라이언트 직접 접근을 차단하고 legacy 거점 사진 경로는 제한된 기사 계약으로 보존한다.
+- legacy 거점 사진의 기존 토큰형 URL 유출 위험, Node 모듈 형식 경고, 인덱스 테스트 비 null 단언 1건, webpack cache 성능 경고는 비차단 잔여 위험이다.
+- 현재 작업 트리의 기존 사용자 변경은 그대로 보존한다.
+- 운영 `salesMode`, Firebase·Storage, 실제 결제·환불·알림, 일반 배포·마이그레이션·commit·push는 A+ 정리에서 변경하거나 실행하지 않았다.
