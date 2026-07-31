@@ -4,37 +4,36 @@
 
 > SSOT: 세션 종료 시 최신 상태만 유지한다. 상세 이력은 계획·보고서·아카이브에서 확인한다.
 
-최종 수정: 2026-07-28 (Task 6.8 보존 정책 반영·Git 역사 게이트 미실행·불필요 종결)
+최종 수정: 2026-07-31 (회차 직배송 MVP ALIGO 심사 대기 중단)
 
 ## 현재 상태
 
 - 브랜치: `codex/mvp-sales-round-direct`
-- 실행 SSOT: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`
-- 최종 Closeout 정본: `docs/plans/REPORT_task_6_8_final_closeout.md`
-- A+ 보안 정리 보고서: `docs/plans/REPORT_task_6_8_a_plus_secure_cleanup.md`
-- Git 역사 게이트 결정 정본은 `C:\Develop\greenhub-verified-39fdb2c\docs\discussions\DISCUSS_task_6_8_git_history_rewrite_gate.md`이고, 종결 증거는 `C:\Develop\greenhub-verified-39fdb2c\.artifacts\history-rewrite-gate\closeout.md`다.
-- 원 계획 Task 0.1~6.8과 Task 6.7 준비조건 보완 계획은 모두 `done`이다.
-- 최종 검증 SHA: `39fdb2c28c45b5c7658519181e41845bb24be2fd`
-- 최종 원격 실행: GitHub Actions `30031472177`, 결론 `success`
-- 현재 로컬 HEAD `8bcfb76b8efeac71c5e84a4743bedc2d6838d2c3`은 최종 검증 SHA보다 2개 커밋 이전이며, 금지 조건에 따라 pull·checkout으로 맞추지 않았다.
-- 후속 작업 기준점은 `C:\Develop\greenhub-verified-39fdb2c`의 `codex/task-6-8-a-plus-cleanup` branch이며 HEAD는 최종 검증 SHA `39fdb2c28c45b5c7658519181e41845bb24be2fd`와 일치한다. 다만 후속 Git 역사 게이트 문서와 종결 산출물이 추가되어 현재 작업 트리는 clean 상태가 아니다.
+- 현재 계획 상태: 카카오 비즈니스 채널 심사 완료 전까지 `paused_external_review`
+- 현재 실행 SSOT: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
+- 원계획: `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`
+- 상세 실행 보고서: `docs/plans/REPORT_mvp_round_direct_launch.md`
+- 중단 정리 전 기준 HEAD: `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`
+- 운영 Firestore 인덱스 정의 보존 commit: `34d32d5`
+- PR #11은 심사 대기 동안 초안 상태로 유지하고 병합하지 않는다.
+- 운영 Firebase 인덱스 41개와 Firestore·Storage 규칙 반영 및 재조회는 완료했다.
+- 운영 애플리케이션은 출시 후보 SHA를 배포하지 않았고, 판매 모드는 마지막 확인 기준 `legacy`다.
+- 심사 승인 후 Task 1.2의 ALIGO 발신 프로필 등록부터 재개한다.
 
-## Task 6.8 최종 증거
+## 중단 시점 완료 증거
 
-- 로컬 보정 검증은 보드 5개, Firestore 인덱스 23개, Storage Emulator 12개, Firestore Emulator 14개, API 단위 249개, API E2E 10개, 소비자 78개, 셀러 43개, 드라이버 11개, fixture 7개, readiness 9개가 통과했다.
-- shared·API·consumer·seller·driver·E2E 타입 검사, `pnpm build`, Playwright 52개 목록 수집과 `git diff --check`가 통과했다.
-- 원격 실행은 세 Preview 배포 SHA 일치, readiness 통과, provider 외부 egress 0을 확인했다.
-- Playwright는 `workers=1`, `retries=0`으로 52건 통과, skipped 0, unexpected 0, flaky 0이었다.
-- chromium·mobile cleanup 뒤 잔여 Firestore 문서·Storage 객체는 각 프로젝트에서 모두 0이었다.
-- 기존 `.artifacts/round-direct/task-6-8-20260722-k2m7p4/evidence/closeout-summary.json`은 이전 로컬 검증 상태를 담은 역사적 증거이며 수정하지 않는다.
+- 출시 후보 SHA `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`의 원격 E2E 52건과 양쪽 fixture cleanup이 성공했다.
+- ALIGO 계정·API Key 발급과 SMS 기본 발신번호 승인은 완료했지만, 카카오 비즈니스 채널은 심사 중이다.
+- ALIGO 발신 프로필과 `senderkey`, 회차 템플릿 8종 승인은 아직 없다.
+- 운영 Firestore 인덱스 41개는 모두 `READY`이며 로컬 합집합과 일치한다.
+- 운영 Firestore·Storage 활성 ruleset 소스 SHA는 로컬 규칙 SHA와 일치한다.
+- Task 3.1은 ALIGO 의존성 미충족으로 Railway 배포 없이 차단 종료했다.
 
-## 유지 계약과 남은 위험
+## 중단 중 유지 계약과 재개 조건
 
-- Git 역사 노출 후보는 provider 경계에서 거부되고 Railway `staging`·`production`의 현재 PortOne 자격 증명은 인증 경계를 통과한다. 값 자체는 기록하지 않는다.
-- Task 6.7 중간 실행 생성물 22개와 시스템 TEMP 증거 사본 10개를 승인 목록대로 제거했다. 최종 성공 readiness, credential 점검 JSON 2개, Task 6.8 역사적 Closeout은 보존한다.
-- Git 역사 게이트는 비어 있지 않은 비밀값 후보 `0건`으로 확정됐으며, Git 역사 재작성은 미실행·불필요 종결됐다. 향후 비어 있지 않은 실제 비밀값 후보가 새로 확인되면 기존 게이트를 재개하지 않고 별도 보안 사건과 새 승인 게이트로 조사한다.
-- 기상 보류, 배송 사진 생성 전용 해시, 완료 후속효과 재조정, 권한별 단건 서명 URL, 기사 보류 복구 계약을 유지한다.
-- 회차 중첩 배송 사진은 클라이언트 직접 접근을 차단하고 legacy 거점 사진 경로는 제한된 기사 계약으로 보존한다.
-- legacy 거점 사진의 기존 토큰형 URL 유출 위험, Node 모듈 형식 경고, 인덱스 테스트 비 null 단언 1건, webpack cache 성능 경고는 비차단 잔여 위험이다.
-- 현재 작업 트리의 기존 사용자 변경은 그대로 보존한다.
-- 운영 `salesMode`, Firebase·Storage, 실제 결제·환불·알림, 일반 배포·마이그레이션·commit·push는 A+ 정리에서 변경하거나 실행하지 않았다.
+- 심사 전에는 ALIGO 후속 작업, 실제 발송, 운영 자격 증명 등록, Railway·Vercel 배포를 진행하지 않는다.
+- 첫 회차 생성, 운영 결제·환불·주문 변경, `salesMode` 전환과 당근 링크 공개를 진행하지 않는다.
+- 완료된 Firebase 인프라를 추가 변경하거나 재배포하지 않는다.
+- 비밀값과 개인정보 원문은 문서·명령 출력·Git에 기록하지 않는다.
+- 심사 승인 후 발신 프로필, 템플릿 코드 매핑과 누락 변수, 템플릿 8종 승인, 격리 실제 발송, 운영 변수 4개를 차례로 확인한다.
+- 위 ALIGO 게이트와 최신 HEAD 원격 검증을 통과한 뒤 별도의 `Task 3.1 승인`을 받아 운영 API 배포를 재개한다.

@@ -5,11 +5,29 @@
 ## 문서 메타
 
 - **작성일**: 2026-07-28
-- **상태**: `todo`
+- **상태**: `paused_external_review`
+- **중단 결정일**: 2026-07-31 KST
+- **재개 조건**: 카카오 비즈니스 채널 심사 승인 확인 후 ALIGO Task 1.2부터 재개
 - **Priority**: P0
 - **Labels**: `release`, `production`, `firebase`, `payments`, `notifications`, `operations`
 - **SSOT Check**: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`, `docs/plans/REPORT_task_6_8_final_closeout.md`, `docs/specs/ops/mvp-sales-round-runbook.md`, `docs/memory.md`
 - **Architectural Goal**: 검증된 회차 직배송 기능을 동일 SHA의 운영 인프라와 애플리케이션에 반영한 뒤 첫 회차와 운영 대응 체계를 준비하고 마지막 단계에서 디어 오키드의 판매 모드만 전환한다.
+
+## 실행 중단 결정
+
+이 계획은 2026-07-31 사용자 결정에 따라 카카오 비즈니스 채널 심사 완료 전까지 중단한다. 심사 대기 중에는 ALIGO 발신 프로필·템플릿 등록, 실제 발송, 운영 자격 증명 반영, 애플리케이션 운영 배포, 첫 회차 생성, `salesMode` 전환과 이후 출시 작업을 진행하지 않는다.
+
+현재 상태의 정본은 `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`이며, 상세 수행 증거는 `docs/plans/REPORT_mvp_round_direct_launch.md`에서 확인한다. 아래 개별 Task 블록은 원래 범위와 검증 계약을 보존하기 위한 계획 원문이고, 재개 순서와 최신 상태 판정에는 인계 문서를 우선한다.
+
+| 범위 | 중단 시점 상태 |
+| :--- | :--- |
+| Task 0.1~0.4 | 완료 |
+| Task 1.1 | 완료 |
+| Task 1.2 | 부분 완료, 카카오 비즈니스 채널 심사 중 |
+| Task 1.3~1.4 | 미착수, Task 1.2 의존성으로 차단 |
+| Task 2.1~2.8 | 완료, 운영 Firebase 인덱스·Firestore 규칙·Storage 규칙 반영 및 재조회 완료 |
+| Task 3.1 | 배포 없이 차단 종료 |
+| Task 3.2~7.2 | 미착수, 계획 전체 중단에 따라 보류 |
 
 ## 📋 업무 요약 (협업용)
 
@@ -444,13 +462,14 @@
 
 ## Closeout Roll-up
 
-- **Status**: `todo`
-- **출시 기준 SHA**: Task 0.2에서 확정
-- **원격 검증**: Task 0.4에서 확정
-- **ALIGO 준비**: Task 1.4에서 확정
-- **Firebase 운영 반영**: Task 2.8에서 확정
-- **동일 SHA 운영 배포**: Task 3.2에서 확정
-- **첫 회차 준비**: Task 4.3에서 확정
-- **최종 출시 판정**: Task 5.3에서 확정
-- **판매 모드 전환**: Task 6.1에서 확정
-- **초기 안정화**: Task 7.1에서 확정
+- **Status**: `paused_external_review`
+- **출시 기준 SHA**: `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 기존 원격 게이트 통과, 중단 정리 후 최신 HEAD 재검증 필요
+- **원격 검증**: 기존 출시 기준 SHA의 Task 0.4 통과
+- **ALIGO 준비**: Task 1.2 카카오 비즈니스 채널 심사 중, Task 1.3~1.4 미착수
+- **Firebase 운영 반영**: Task 2.8 완료
+- **동일 SHA 운영 배포**: 미실행
+- **첫 회차 준비**: 미실행
+- **최종 출시 판정**: 미실행
+- **판매 모드 전환**: 미실행, `legacy` 유지
+- **초기 안정화**: 미실행
+- **재개 문서**: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
