@@ -98,13 +98,23 @@
 - **Status**: done
 - Task 2.2까지의 변경을 이 REPORT와 함께 하나의 한국어 메시지 로컬 checkpoint commit으로 마감했다.
 - Task 2.3 사전 병렬 검토에서 공개 미동의 주거지 주소와 비공개 Gmail 작성자 메타데이터를 발견했다.
-- 주소 값과 footer 노출을 제거하고 공개 `noreply` 작성자 메타데이터로 동일 checkpoint를 로컬 재작성한다.
+- 주소 값과 footer 노출을 제거하고 공개 `noreply` 작성자 메타데이터로 동일 checkpoint를 로컬 재작성했다.
 - 재작성 전 checkpoint는 원격에 push되지 않았다.
-- push·PR·배포는 수행하지 않는다.
+- 안전한 checkpoint만 Task 2.3에서 원격에 push했다.
+
+### Task 2.3 — main 대상 PR 준비
+
+- **Status**: done
+- branch `codex/kakao-business-channel-proof`를 push하고 `main` 대상 PR #12를 생성했다.
+- **PR**: `https://github.com/booker-lab/greenhub/pull/12`
+- PR 생성 시 head는 `64fc033b1e17c2dc5384126d04c930fa58209c3f`, base는 `main`, 상태는 `OPEN`, draft는 `false`였다.
+- 공개 미동의 주소와 비공개 이메일 메타데이터는 원격 commit에 포함되지 않는다.
+- PR 병합·production 배포·카카오 재신청은 수행하지 않았다.
+- **Verify**: `gh pr view 12 --json headRefOid,baseRefName,state,mergeStateStatus`
 
 ## 외부 상태와 금지 범위 준수
 
-- push·PR 생성·변경·병합 없음
+- 안전한 작업 branch push와 PR #12 생성 완료, PR 변경·병합 없음
 - Vercel production 배포 없음
 - 카카오 재신청 없음
 - API·seller·driver·Firebase·Railway·ALIGO 변경 없음
@@ -114,4 +124,4 @@
 
 ## 재개 지점
 
-다음 Task는 승인 게이트인 Task 2.3이다. 별도 승인 전에는 push나 PR을 생성하지 않는다.
+다음 Task는 승인 게이트인 Task 3.1이다. 별도 승인 전에는 PR을 병합하거나 consumer production을 배포하지 않는다.

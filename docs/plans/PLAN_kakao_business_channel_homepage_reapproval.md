@@ -187,8 +187,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 홈페이지 증빙 변경만 포함한 branch를 push해 `main` 대상 PR의 검토 경계를 만든다.
 - **Verify**: `gh pr view --json headRefOid,baseRefName,state,mergeStateStatus`
-- **Conclusion**: [판정 — consumer 홈페이지 증빙 변경만 포함한 PR과 검사 상태. 검증 결과]
-- **Status**: todo
+- **Conclusion**: 통과 — `codex/kakao-business-channel-proof`를 push하고 `main` 대상 PR #12를 생성했다. PR 생성 시 head는 개인정보를 제거하고 공개 `noreply` 메타데이터로 재작성한 checkpoint `64fc033b1e17c2dc5384126d04c930fa58209c3f`, base는 `main`, 상태는 `OPEN`, 병합은 수행하지 않았다. production 배포와 카카오 재신청도 수행하지 않았다.
+- **Status**: done
 
 ### Phase 3 — 공개 배포와 카카오 재신청
 
