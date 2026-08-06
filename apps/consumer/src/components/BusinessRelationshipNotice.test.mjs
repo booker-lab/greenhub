@@ -11,12 +11,12 @@ const businessInfoSource = readFileSync(
   'utf8',
 );
 
-test('카카오톡 채널과 운영 사업자의 관계를 상단에 명시한다', () => {
+test('쇼핑몰과 운영 사업자의 관계를 자연스러운 핵심 문장으로 명시한다', () => {
   assert.match(componentSource, /카카오톡 채널/);
   assert.match(componentSource, /PUBLIC_BUSINESS_INFO\.relationship/);
   assert.match(
     businessInfoSource,
-    /relationship: '카카오톡 채널 ‘그린러브’와 본 화훼 쇼핑몰은 사업자 ‘디어 오키드’가 운영합니다\.'/,
+    /relationship: '그린러브는 디어 오키드가 운영하는 화훼 쇼핑몰입니다\.'/,
   );
 });
 
@@ -29,7 +29,7 @@ test('공식 카카오톡 채널명과 안전한 새 창 링크를 제공한다'
   assert.match(componentSource, /rel="noopener noreferrer"/);
 });
 
-test('첫 화면 정적 증빙으로 대표 판매상품 이름과 상세 링크를 제공한다', () => {
+test('첫 화면 정적 증빙으로 대표 판매상품 타일 3개와 상세 링크를 제공한다', () => {
   const products = [
     ['오렌지 글로우', '49b0a370-e0ab-4f19-b8e6-2de0e9b2e867'],
     ['빅립', '19009e23-33e4-463f-9953-5be860fe56b6'],
@@ -43,7 +43,19 @@ test('첫 화면 정적 증빙으로 대표 판매상품 이름과 상세 링크
 
   assert.match(componentSource, /PUBLIC_BUSINESS_INFO\.featuredProducts\.map/);
   assert.match(componentSource, /그린러브 대표 판매상품/);
+  assert.match(componentSource, /listStyle: 'none'/);
+  assert.match(componentSource, /gridTemplateColumns: 'repeat\(auto-fit, minmax\(140px, 1fr\)\)'/);
+  assert.match(componentSource, /상품 보기/);
+  assert.doesNotMatch(componentSource, /<img/);
+  assert.doesNotMatch(componentSource, /price/);
   assert.doesNotMatch(businessInfoSource, /price:/);
+});
+
+test('상단에서는 상세 사업자정보를 반복하지 않고 footer 역할로 남긴다', () => {
+  assert.doesNotMatch(componentSource, /<dl/);
+  assert.doesNotMatch(componentSource, /PUBLIC_BUSINESS_INFO\.businessName/);
+  assert.doesNotMatch(componentSource, /PUBLIC_BUSINESS_INFO\.representative/);
+  assert.doesNotMatch(componentSource, /PUBLIC_BUSINESS_INFO\.registrationNumber/);
 });
 
 test('공개 승인된 최소 사업자 정본만 제공한다', () => {
