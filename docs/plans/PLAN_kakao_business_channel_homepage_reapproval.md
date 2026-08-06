@@ -219,8 +219,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 공개 홈페이지와 일치하는 최소 증거만 첨부해 `그린러브` 비즈니스 채널 심사를 재신청한다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: [판정 — 재신청 접수 상태와 제출 자료의 사업자 일치와 개인정보 최소화. 검증 결과]
-- **Status**: todo
+- **Conclusion**: 통과 — 2026년 8월 6일 `그린러브` 채널의 비즈니스 재심사를 신청했고 카카오 관리자에서 `비즈니스 심사가 진행 중이에요` 상태를 확인했다. 공개 사업자등록번호, 기존 완료된 대표자 전자증명, 승인된 운영 관계 문장과 `https://greenlove.co.kr/`만 제출했으며 매장 없음·인허가 비대상으로 선택하고 파일은 첨부하지 않았다. 비공개 주소·Gmail·로그인 정보·생년월일은 입력하거나 제출하지 않았다. 카카오 내부 업체명 표기에 홈페이지 정본과 띄어쓰기 차이가 남아 있으나 사업자등록번호와 대표자는 일치한다.
+- **Status**: done
 
 #### Task 3.4 — 카카오 심사 결과 반영
 
