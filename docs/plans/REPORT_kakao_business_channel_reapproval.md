@@ -112,16 +112,37 @@
 - PR 병합·production 배포·카카오 재신청은 수행하지 않았다.
 - **Verify**: `gh pr view 12 --json headRefOid,baseRefName,state,mergeStateStatus`
 
+### Task 3.1 — main 병합과 consumer production 배포
+
+- **Status**: done
+- PR #12의 최종 head `b14c55db7be50c035248eda4a350b0c57226c1f8`을 merge commit `3345c27f949abcd1107b8030be346b58198e6b64`로 `main`에 반영했다.
+- consumer production 배포 `dpl_GTh9LYV6BUa128DefU9E1qsuez2p`가 merge SHA `3345c27f949abcd1107b8030be346b58198e6b64`로 `READY`이고 공개 별칭도 해당 배포를 가리킨다.
+- seller·driver의 Ignored Build Step과 Railway API Watch Paths를 승인된 경계로 설정한 뒤 병합 전 production 배포 식별자를 고정했다.
+- seller와 driver는 merge SHA에 대한 `CANCELED` 기록이 각각 1건 생성됐지만 빌드와 production 별칭 전환은 차단됐고, 기존 `READY` production 배포를 유지했다.
+- Railway API는 merge commit을 `No changes to watched files`로 건너뛰었고 기존 활성 배포 `c59bfad1-52e8-4ca7-aaab-4dd4b60e0fc1`을 유지했다.
+- **Verify**: PR 상태 `MERGED`, `origin/main` SHA와 merge commit 일치, consumer production SHA와 상태 일치, seller·driver·API 기존 서비스 배포 유지
+
+### Task 3.2 — 공개 증거 재조회
+
+- **Status**: done
+- `https://greenlove.co.kr/`은 깨끗한 비로그인 환경에서 HTTP 200으로 열리고 로그인 화면 없이 홈과 footer를 표시한다.
+- 브랜드-사업자 운영 관계, 공개 사업자 정본, 전화 링크와 `mailto:support@greenlove.co.kr` 링크를 확인했다.
+- 공개 미동의 주소 문자열은 배포본에 없었다.
+- 390×844 모바일 최하단에서 footer 증빙과 고정 하단 navigation 사이 약 120px 간격을 확인해 마지막 증빙 링크까지 가려지지 않았다.
+- 기존 방문 이력이 있는 브라우저에서는 구버전 로그인 화면이 일시 관찰됐으나, 원시 HTTP 응답과 깨끗한 비로그인 환경은 최신 production을 정상 표시했다.
+- **Verify**: 비로그인 HTTP 200, 공개 정본 노출, 연락 링크, 비공개 주소 부재, 모바일 footer 접근성 확인
+
 ## 외부 상태와 금지 범위 준수
 
-- 안전한 작업 branch push와 PR #12 생성 완료, PR 변경·병합 없음
-- Vercel production 배포 없음
+- PR #12를 merge commit 방식으로 `main`에 병합하고 consumer production만 새 `READY` 배포로 전환했다.
+- seller·driver는 배포 경로 필터가 빌드와 production 전환을 차단해 기존 서비스 배포를 유지했다.
+- Railway API는 Watch Paths가 변경 없는 병합을 건너뛰어 새 배포와 restart가 없었다.
 - 카카오 재신청 없음
-- API·seller·driver·Firebase·Railway·ALIGO 변경 없음
+- Firebase·ALIGO 변경 없음
 - 회차 출시 branch 변경 없음
 - `salesMode`, 회차, 실제 알림 변경 없음
 - 공개 미동의 주거지 주소·비공개 전달 Gmail 주소·계정 로그인 이메일·등록증 원본 이미지·생년월일을 기록하지 않음
 
 ## 재개 지점
 
-다음 Task는 승인 게이트인 Task 3.1이다. 별도 승인 전에는 PR을 병합하거나 consumer production을 배포하지 않는다.
+다음 Task는 승인 게이트인 Task 3.3이다. 별도 승인 전에는 카카오 비즈니스 채널 재신청을 수행하지 않는다.

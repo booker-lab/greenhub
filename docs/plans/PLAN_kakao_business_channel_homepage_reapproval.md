@@ -199,8 +199,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 승인된 홈페이지 증빙 PR을 main에 반영해 consumer production에 공개한다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: [판정 — main 반영과 consumer production READY와 배포 SHA 일치 여부. 검증 결과]
-- **Status**: todo
+- **Conclusion**: 통과 — PR #12의 최종 head `b14c55db7be50c035248eda4a350b0c57226c1f8`을 merge commit `3345c27f949abcd1107b8030be346b58198e6b64`로 `main`에 반영했다. consumer production 배포 `dpl_GTh9LYV6BUa128DefU9E1qsuez2p`가 동일 merge SHA로 `READY`이고 공개 별칭도 해당 배포를 가리킨다. 승인된 배포 경로 필터에 따라 seller·driver는 각각 `CANCELED` 기록만 생성되고 기존 production `READY` 배포와 별칭을 유지했으며, Railway API는 `No changes to watched files`로 건너뛰어 기존 활성 배포를 유지했다.
+- **Status**: done
 
 #### Task 3.2 — 공개 증거 재조회
 
@@ -209,8 +209,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 비로그인 production 홈페이지에서 브랜드 관계와 사업자 필드와 보조 링크의 공개 노출을 확인한다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: [판정 — 심사자가 접근할 공개 URL의 필수 증거와 모바일 가시성. 검증 결과]
-- **Status**: todo
+- **Conclusion**: 통과 — `https://greenlove.co.kr/`이 비로그인 환경에서 HTTP 200으로 열리고 브랜드-사업자 운영 관계, 공개 사업자 정본, 전화와 `support@greenlove.co.kr` 이메일 링크를 노출한다. 공개 미동의 주소 문자열은 없고, 390×844 모바일 최하단에서 footer와 고정 하단 navigation 사이 약 120px 간격을 확인해 증빙 내용이 가려지지 않았다.
+- **Status**: done
 
 #### Task 3.3 — 카카오 비즈니스 채널 재신청 [승인 게이트]
 
