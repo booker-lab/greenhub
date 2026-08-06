@@ -91,7 +91,9 @@ export function useNotifications(): UseNotificationsResult {
   const markAllRead = useCallback(() => {
     setReadIds((prev) => {
       const next = new Set(prev);
-      notifications.forEach((n) => next.add(n.id));
+      notifications.forEach((notification) => {
+        next.add(notification.id);
+      });
       saveReadIds(next);
       return next;
     });

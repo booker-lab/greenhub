@@ -29,7 +29,7 @@ export function useProducts(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const _colorKey = colors?.join(',') ?? '';
+  const colorKey = colors?.join(',') ?? '';
 
   useEffect(() => {
     setLoading(true);
@@ -38,8 +38,10 @@ export function useProducts(
       try {
         const params = new URLSearchParams({ isActive: 'true' });
         if (category) params.set('category', category);
-        if (colors && colors.length > 0) {
-          colors.forEach((c) => params.append('colors', c));
+        if (colorKey) {
+          colorKey.split(',').forEach((color) => {
+            params.append('colors', color);
+          });
         }
         if (saleType) params.set('saleType', saleType);
         const res = await fetch(`${API_URL}/products?${params}`);
@@ -56,8 +58,7 @@ export function useProducts(
       }
     }
     fetchProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, saleType, _colorKey]);
+  }, [category, saleType, colorKey]);
 
   return { products, loading, error };
 }
