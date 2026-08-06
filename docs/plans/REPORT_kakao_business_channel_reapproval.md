@@ -7,8 +7,8 @@
 - **worktree**: `C:\Users\tazan\.codex\worktrees\7573\greenhub`
 - **branch**: `codex/kakao-business-channel-proof`
 - **기준 commit**: `164f65b77e317c41b7e0825377684f0a4db981d4`
-- **수행 범위**: Task 0.1부터 Task 2.2까지
-- **현재 결과**: Task 2.2까지 로컬 검증과 단일 checkpoint commit 완료
+- **수행 범위**: Task 0.1부터 Task 3.4 결과 반영 및 후속 홈페이지 보완까지
+- **현재 결과**: 1차 재심사 반려 사유를 확인하고 상단 운영 관계 안내를 로컬에서 구현·검증함
 
 ## Task 결과
 
@@ -25,15 +25,15 @@
 ### Task 1.1 — 사업자·브랜드 증거 정본 확정
 
 - **Status**: done
-- 사용자가 제시한 사업자등록증과 확인 내용에 따라 사업자명 `디어오키드`, 대표자 `조정연`, 브랜드 `그린러브`를 확정했다.
-- `그린러브는 디어오키드가 운영하는 화훼 판매 브랜드입니다.` 문구의 공개 승인을 확인했다.
+- 사용자 확인에 따라 공식 사업자명 `디어 오키드`, 대표자 `조정연`, 브랜드 `그린러브`를 확정했다.
+- `카카오톡 채널 ‘그린러브’와 본 화훼 쇼핑몰은 사업자 ‘디어 오키드’가 운영합니다.` 문구의 공개 승인을 확인했다.
 - 네이버 플레이스와 통신판매업 신고번호는 현재 없으므로 홈페이지 노출 대상에서 제외한다.
-- 변경된 사업자등록증을 제시받아 사업장 소재지 정정 처리 완료를 확인했다.
-- 공개 정본은 `그린러브`, `디어오키드`, `조정연`, `505-28-01702`, `010-4452-2104`, `support@greenlove.co.kr`과 승인된 운영 관계 문구로 확정했다.
-- 공개 미동의인 주거지 주소는 값 자체를 기록하지 않고 footer·문서·PR에서 제외했다.
+- 주소는 최신 공식 원문을 이 작업에서 확인하지 못했으므로 공개 정본에서 계속 제외했다.
+- 공개 정본은 `그린러브`, `디어 오키드`, `조정연`, `505-28-01702`, `010-4452-2104`, `support@greenlove.co.kr`과 승인된 운영 관계 문구로 확정했다.
+- 최신 공식 값이 확인되지 않은 주소는 기록하지 않고 footer·문서·PR에서 제외했다.
 - 네이버 플레이스와 통신판매업 신고번호는 현재 없으므로 홈페이지 노출 대상에서 제외한다.
 - ImprovMX 도메인·별칭 Active, 공개 MX/SPF, 테스트 메일 `DELIVERED`, 기존 홈페이지 A/CNAME과 서비스 응답 유지를 확인했다.
-- 공개 미동의 주거지 주소, 비공개 전달 Gmail 주소, 계정 로그인 이메일, 사업자등록증 원본 이미지와 생년월일은 저장소·REPORT·PR에 첨부하거나 복사하지 않았다.
+- 미확인 주소, 비공개 전달 Gmail 주소, 계정 로그인 이메일, 사업자등록증 원본 이미지와 생년월일은 저장소·REPORT·PR에 첨부하거나 복사하지 않았다.
 - 확정 정본과 이메일 검증 증거는 `docs/specs/ops/kakao-business-channel-proof.md`에 기록했다.
 - **Verify**: `git diff --check -- docs/specs/ops/kakao-business-channel-proof.md`
 - **종료 코드**: 0
@@ -112,16 +112,68 @@
 - PR 병합·production 배포·카카오 재신청은 수행하지 않았다.
 - **Verify**: `gh pr view 12 --json headRefOid,baseRefName,state,mergeStateStatus`
 
+### Task 3.1 — main 병합과 consumer production 배포
+
+- **Status**: done
+- PR #12의 최종 head `b14c55db7be50c035248eda4a350b0c57226c1f8`을 merge commit `3345c27f949abcd1107b8030be346b58198e6b64`로 `main`에 반영했다.
+- consumer production 배포 `dpl_GTh9LYV6BUa128DefU9E1qsuez2p`가 merge SHA `3345c27f949abcd1107b8030be346b58198e6b64`로 `READY`이고 공개 별칭도 해당 배포를 가리킨다.
+- seller·driver의 Ignored Build Step과 Railway API Watch Paths를 승인된 경계로 설정한 뒤 병합 전 production 배포 식별자를 고정했다.
+- seller와 driver는 merge SHA에 대한 `CANCELED` 기록이 각각 1건 생성됐지만 빌드와 production 별칭 전환은 차단됐고, 기존 `READY` production 배포를 유지했다.
+- Railway API는 merge commit을 `No changes to watched files`로 건너뛰었고 기존 활성 배포 `c59bfad1-52e8-4ca7-aaab-4dd4b60e0fc1`을 유지했다.
+- **Verify**: PR 상태 `MERGED`, `origin/main` SHA와 merge commit 일치, consumer production SHA와 상태 일치, seller·driver·API 기존 서비스 배포 유지
+
+### Task 3.2 — 공개 증거 재조회
+
+- **Status**: done
+- `https://greenlove.co.kr/`은 깨끗한 비로그인 환경에서 HTTP 200으로 열리고 로그인 화면 없이 홈과 footer를 표시한다.
+- 브랜드-사업자 운영 관계, 공개 사업자 정본, 전화 링크와 `mailto:support@greenlove.co.kr` 링크를 확인했다.
+- 공개 미동의 주소 문자열은 배포본에 없었다.
+- 390×844 모바일 최하단에서 footer 증빙과 고정 하단 navigation 사이 약 120px 간격을 확인해 마지막 증빙 링크까지 가려지지 않았다.
+- 기존 방문 이력이 있는 브라우저에서는 구버전 로그인 화면이 일시 관찰됐으나, 원시 HTTP 응답과 깨끗한 비로그인 환경은 최신 production을 정상 표시했다.
+- **Verify**: 비로그인 HTTP 200, 공개 정본 노출, 연락 링크, 비공개 주소 부재, 모바일 footer 접근성 확인
+
+### Task 3.3 — 카카오 비즈니스 채널 재신청
+
+- **Status**: done
+- 2026년 8월 6일 대상 채널 `그린러브`의 비즈니스 재심사를 신청했다.
+- 카카오 관리자에서 접수 성공과 `비즈니스 심사가 진행 중이에요` 상태를 재확인했다.
+- 안내된 심사 기간은 영업일 기준 3~5일이다.
+- 제출 범위는 매장 없음, 공개 사업자등록번호, 기존 완료된 대표자 전자증명, 승인된 운영 관계 문장, `https://greenlove.co.kr/`, 인허가 비대상이다.
+- 파일 첨부는 0건이며 고객센터 번호와 이메일은 별도 입력 없이 공개 홈페이지에서 확인할 수 있게 유지했다.
+- 비공개 주소·Gmail·로그인 정보·생년월일은 입력하거나 제출하지 않았다.
+- 카카오 내부 업체명 표기에 홈페이지 정본과 띄어쓰기 차이가 남아 있으나 사업자등록번호와 대표자는 일치한다. 심사 결과에서 관련 보완 요청이 오는지 Task 3.4에서 확인한다.
+- **Verify**: 대상 채널, 요청일, 심사 진행 상태, 제출 링크와 최소 개인정보 범위를 제출 후 재조회
+
+### Task 3.4 — 카카오 심사 결과 반영
+
+- **Status**: done — 반려
+- 2026년 8월 6일 카카오 관리자에서 심사 결과가 `반려`로 전환된 사실을 확인했다.
+- 반려 사유는 사업자 정보와 채널 운영의 연관성을 확인·검증할 수 없다는 내용이며, 사업자 정보·채널명·판매 콘텐츠를 함께 확인할 수 있는 홈페이지 URL 등의 자료를 요구했다.
+- 카카오 사업자정보 화면의 주소는 사업자등록번호 확인 과정에서 자동 표시된 값으로 보이며, 현재 공식 주소인지 검증되지 않아 홈페이지나 저장소에 복사하지 않았다.
+- 승인된 후속 조치는 상세 사업자정보 footer를 유지하면서 홈 상단과 상품 목록 사이에 채널·쇼핑몰·사업자의 관계를 직접 표시하는 것이다.
+- **Verify**: 카카오 반려 화면의 비민감 사유와 재신청 안내 확인
+
+### 후속 홈페이지 연관성 증거 보완
+
+- **Status**: 로컬 구현·검증 완료, 원격 반영 대기
+- 공식 상호 띄어쓰기를 `디어 오키드`로 통일했다.
+- `PUBLIC_BUSINESS_INFO`를 단일 공개 정본으로 추가해 상단 안내와 footer의 사업자명·대표자·등록번호·연락처·운영 관계 문구가 일치하도록 했다.
+- `HeroBanner` 다음, `HomeProductList` 전에 `BusinessRelationshipNotice`를 배치해 심사자가 첫 화면에서 운영 관계를 확인할 수 있게 했다.
+- 최신 공식 주소는 확인되지 않았고 공개하지 않았으며, 비공개 Gmail·로그인 정보·사업자등록증 이미지·생년월일도 추가하지 않았다.
+- 관련 테스트 10/10, scoped lint, TypeScript, consumer lint(error 0·기존 warning 25), production build, 모바일·데스크톱 브라우저 검증이 모두 통과했다.
+- push·PR·production 배포·카카오 재신청은 수행하지 않았다.
+
 ## 외부 상태와 금지 범위 준수
 
-- 안전한 작업 branch push와 PR #12 생성 완료, PR 변경·병합 없음
-- Vercel production 배포 없음
-- 카카오 재신청 없음
-- API·seller·driver·Firebase·Railway·ALIGO 변경 없음
+- PR #12를 merge commit 방식으로 `main`에 병합하고 consumer production만 새 `READY` 배포로 전환했다.
+- seller·driver는 배포 경로 필터가 빌드와 production 전환을 차단해 기존 서비스 배포를 유지했다.
+- Railway API는 Watch Paths가 변경 없는 병합을 건너뛰어 새 배포와 restart가 없었다.
+- 카카오 비즈니스 1차 재심사는 연관성 확인 불가 사유로 반려됐고, 후속 홈페이지 보완은 로컬 검증 완료
+- Firebase·ALIGO 변경 없음
 - 회차 출시 branch 변경 없음
 - `salesMode`, 회차, 실제 알림 변경 없음
-- 공개 미동의 주거지 주소·비공개 전달 Gmail 주소·계정 로그인 이메일·등록증 원본 이미지·생년월일을 기록하지 않음
+- 최신 공식 값이 확인되지 않은 주소·비공개 전달 Gmail 주소·계정 로그인 이메일·등록증 원본 이미지·생년월일을 기록하지 않음
 
 ## 재개 지점
 
-다음 Task는 승인 게이트인 Task 3.1이다. 별도 승인 전에는 PR을 병합하거나 consumer production을 배포하지 않는다.
+다음 게이트는 후속 홈페이지 보완분의 push·PR·consumer production 배포 승인이다. 공개 배포 후 비로그인 화면에서 상단 운영 관계를 재검증하고, 카카오 사업자정보의 최신 주소와 공식 상호 표기를 확인한 뒤 재신청한다. ALIGO와 회차 출시 계획은 카카오 승인 전까지 계속 보류한다.

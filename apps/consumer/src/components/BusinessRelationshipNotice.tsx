@@ -2,85 +2,76 @@ import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 
 const termStyle = {
   color: 'var(--color-text-secondary)',
-  fontSize: 'var(--font-size-sm)',
+  fontSize: 'var(--font-size-xs)',
   fontWeight: 'var(--fw-medium)',
 } as const;
 
 const detailStyle = {
   color: 'var(--color-text)',
   fontSize: 'var(--font-size-sm)',
-  lineHeight: 1.6,
+  fontWeight: 'var(--fw-medium)',
   margin: 0,
-  minWidth: 0,
 } as const;
 
-const linkStyle = {
-  alignItems: 'center',
-  color: 'var(--color-primary)',
-  display: 'inline-flex',
-  minHeight: 'var(--touch-target)',
-  textDecoration: 'underline',
-  textUnderlineOffset: 3,
-} as const;
-
-export default function BusinessInfoFooter() {
+export default function BusinessRelationshipNotice() {
   return (
-    <footer
+    <section
+      aria-labelledby="business-relationship-title"
       style={{
-        background: 'var(--color-surface-muted)',
-        borderTop: 'var(--border)',
-        marginTop: 40,
-        padding: '24px 16px',
+        background: 'var(--color-primary-surface)',
+        border: 'var(--border)',
+        borderRadius: 'var(--radius)',
+        marginBottom: 24,
+        padding: '20px 16px',
       }}
     >
+      <p
+        style={{
+          color: 'var(--color-primary)',
+          fontSize: 'var(--font-size-xs)',
+          fontWeight: 'var(--fw-bold)',
+          margin: '0 0 6px',
+        }}
+      >
+        카카오톡 채널·쇼핑몰 운영 정보
+      </p>
       <h2
+        id="business-relationship-title"
         style={{
           color: 'var(--color-text)',
           fontSize: 'var(--font-size-lg)',
           fontWeight: 'var(--fw-bold)',
+          lineHeight: 1.4,
           margin: 0,
         }}
       >
-        {PUBLIC_BUSINESS_INFO.brand} 사업자 정보
+        그린러브 운영 안내
       </h2>
       <p
         style={{
-          color: 'var(--color-text-secondary)',
+          color: 'var(--color-text)',
           fontSize: 'var(--font-size-sm)',
-          lineHeight: 1.6,
-          margin: '8px 0 20px',
+          lineHeight: 1.7,
+          margin: '8px 0 16px',
         }}
       >
         {PUBLIC_BUSINESS_INFO.relationship}
       </p>
-
       <dl
         style={{
           display: 'grid',
-          gap: '8px 16px',
+          gap: '6px 12px',
           gridTemplateColumns: 'max-content minmax(0, 1fr)',
           margin: 0,
         }}
       >
-        <dt style={termStyle}>상호</dt>
+        <dt style={termStyle}>운영 사업자</dt>
         <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.businessName}</dd>
         <dt style={termStyle}>대표자</dt>
         <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.representative}</dd>
         <dt style={termStyle}>사업자등록번호</dt>
         <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.registrationNumber}</dd>
-        <dt style={termStyle}>고객센터</dt>
-        <dd style={detailStyle}>
-          <a href={PUBLIC_BUSINESS_INFO.phoneHref} style={linkStyle}>
-            {PUBLIC_BUSINESS_INFO.phone}
-          </a>
-        </dd>
-        <dt style={termStyle}>이메일</dt>
-        <dd style={detailStyle}>
-          <a href={PUBLIC_BUSINESS_INFO.emailHref} style={linkStyle}>
-            {PUBLIC_BUSINESS_INFO.email}
-          </a>
-        </dd>
       </dl>
-    </footer>
+    </section>
   );
 }

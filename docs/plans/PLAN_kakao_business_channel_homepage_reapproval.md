@@ -17,7 +17,7 @@
 
 ### 끝났을 때 확인할 것
 
-- 홈페이지 하단에서 `그린러브`와 운영 사업자의 관계를 즉시 확인할 수 있다.
+- 홈페이지 상단의 상품 목록 전 안내와 하단 footer에서 `그린러브`와 운영 사업자의 관계를 즉시 확인할 수 있다.
 - 공개 동의된 사업자명·대표자·사업자등록번호·고객센터가 사업자 증빙과 일치한다.
 - 네이버 플레이스가 준비된 경우 동일 매장명·주소·연락처를 확인할 수 있는 링크가 있다.
 - 모바일 하단 navigation이 사업자 정보를 가리지 않는다.
@@ -115,7 +115,7 @@
 - **Target**: `docs/specs/ops/kakao-business-channel-proof.md`
 - **Goal**: 사업자 증빙과 공개 장소 정보를 대조해 홈페이지에 노출할 `그린러브` 운영 관계와 사업자 필드를 값 단위로 확정한다.
 - **Verify**: `git diff --check -- docs/specs/ops/kakao-business-channel-proof.md`
-- **Conclusion**: 통과 — 브랜드 `그린러브`, 상호 `디어오키드`, 대표자 `조정연`, 사업자등록번호 `505-28-01702`, 고객센터 `010-4452-2104`, 이메일 `support@greenlove.co.kr`, 운영 관계 문구를 공개 정본으로 확정했다. 공개 미동의인 주거지 주소는 값 자체를 기록하지 않고 footer·문서·PR에서 제외했다. ImprovMX 도메인·별칭 Active, 공개 MX/SPF, 테스트 메일 `DELIVERED`, 기존 홈페이지 A/CNAME과 서비스 응답 유지를 확인했다. 비공개 전달 Gmail 주소·계정 로그인 이메일·등록증 원본 이미지·생년월일도 기록하지 않았고 `git diff --check -- docs/specs/ops/kakao-business-channel-proof.md`가 종료 코드 0을 반환했다.
+- **Conclusion**: 통과 — 브랜드 `그린러브`, 공식 띄어쓰기를 반영한 상호 `디어 오키드`, 대표자 `조정연`, 사업자등록번호 `505-28-01702`, 고객센터 `010-4452-2104`, 이메일 `support@greenlove.co.kr`, 운영 관계 문구를 공개 정본으로 확정했다. 최신 공식 주소는 확인되지 않아 값 자체를 기록하지 않고 footer·문서·PR에서 제외했다. ImprovMX 도메인·별칭 Active, 공개 MX/SPF, 테스트 메일 `DELIVERED`, 기존 홈페이지 A/CNAME과 서비스 응답 유지를 확인했다. 비공개 전달 Gmail 주소·계정 로그인 이메일·등록증 원본 이미지·생년월일도 기록하지 않았고 `git diff --check -- docs/specs/ops/kakao-business-channel-proof.md`가 종료 코드 0을 반환했다.
 - **Status**: done
 
 #### Task 1.2 — 사업자 footer 계약 테스트
@@ -199,8 +199,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 승인된 홈페이지 증빙 PR을 main에 반영해 consumer production에 공개한다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: [판정 — main 반영과 consumer production READY와 배포 SHA 일치 여부. 검증 결과]
-- **Status**: todo
+- **Conclusion**: 통과 — PR #12의 최종 head `b14c55db7be50c035248eda4a350b0c57226c1f8`을 merge commit `3345c27f949abcd1107b8030be346b58198e6b64`로 `main`에 반영했다. consumer production 배포 `dpl_GTh9LYV6BUa128DefU9E1qsuez2p`가 동일 merge SHA로 `READY`이고 공개 별칭도 해당 배포를 가리킨다. 승인된 배포 경로 필터에 따라 seller·driver는 각각 `CANCELED` 기록만 생성되고 기존 production `READY` 배포와 별칭을 유지했으며, Railway API는 `No changes to watched files`로 건너뛰어 기존 활성 배포를 유지했다.
+- **Status**: done
 
 #### Task 3.2 — 공개 증거 재조회
 
@@ -209,8 +209,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 비로그인 production 홈페이지에서 브랜드 관계와 사업자 필드와 보조 링크의 공개 노출을 확인한다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: [판정 — 심사자가 접근할 공개 URL의 필수 증거와 모바일 가시성. 검증 결과]
-- **Status**: todo
+- **Conclusion**: 통과 — `https://greenlove.co.kr/`이 비로그인 환경에서 HTTP 200으로 열리고 브랜드-사업자 운영 관계, 공개 사업자 정본, 전화와 `support@greenlove.co.kr` 이메일 링크를 노출한다. 공개 미동의 주소 문자열은 없고, 390×844 모바일 최하단에서 footer와 고정 하단 navigation 사이 약 120px 간격을 확인해 증빙 내용이 가려지지 않았다.
+- **Status**: done
 
 #### Task 3.3 — 카카오 비즈니스 채널 재신청 [승인 게이트]
 
@@ -219,8 +219,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 공개 홈페이지와 일치하는 최소 증거만 첨부해 `그린러브` 비즈니스 채널 심사를 재신청한다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: [판정 — 재신청 접수 상태와 제출 자료의 사업자 일치와 개인정보 최소화. 검증 결과]
-- **Status**: todo
+- **Conclusion**: 통과 — 2026년 8월 6일 `그린러브` 채널의 비즈니스 재심사를 신청했고 카카오 관리자에서 `비즈니스 심사가 진행 중이에요` 상태를 확인했다. 공개 사업자등록번호, 기존 완료된 대표자 전자증명, 승인된 운영 관계 문장과 `https://greenlove.co.kr/`만 제출했으며 매장 없음·인허가 비대상으로 선택하고 파일은 첨부하지 않았다. 비공개 주소·Gmail·로그인 정보·생년월일은 입력하거나 제출하지 않았다. 카카오 내부 업체명 표기에 홈페이지 정본과 띄어쓰기 차이가 남아 있으나 사업자등록번호와 대표자는 일치한다.
+- **Status**: done
 
 #### Task 3.4 — 카카오 심사 결과 반영
 
@@ -229,7 +229,33 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 카카오 심사 결과와 추가 보완 요청을 비민감 상태 증거로 기록한다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: [판정 — 승인 완료 또는 다음 보완 사유와 후속 담당. 검증 결과]
+- **Conclusion**: 반려 — 2026년 8월 6일 사업자 정보와 채널 운영의 연관성을 확인·검증할 수 없다는 사유를 확인했다. 카카오는 사업자 정보·채널명·판매 콘텐츠를 함께 확인할 수 있는 홈페이지 URL 등의 자료를 요구했다. 카카오 화면에 자동 표시된 주소는 최신 공식 주소인지 검증되지 않아 저장소나 홈페이지에 복사하지 않았다.
+- **Status**: done
+
+### Phase 4 — 연관성 증거 강화와 재신청
+
+#### Task 4.1 — 홈 상단 운영 관계 안내 보완
+
+- **Task-ID**: 4.1
+- **Dependency**: Task 3.4
+- **Target**: `apps/consumer/src/components/BusinessRelationshipNotice.tsx`
+- **Goal**: 심사자가 첫 화면에서 카카오톡 채널·쇼핑몰·사업자의 관계와 최소 사업자 정본을 확인할 수 있게 한다.
+- **Verify**: 관련 테스트, `pnpm --filter consumer lint`, `pnpm --filter consumer build`, 모바일·데스크톱 브라우저 검증
+- **Conclusion**: 통과 — `PUBLIC_BUSINESS_INFO` 단일 공개 계약과 정적 Server Component인 `BusinessRelationshipNotice`를 추가했다. `HeroBanner` 다음과 상품 목록 전에 운영 관계, 사업자명 `디어 오키드`, 대표자와 등록번호를 노출하고 상세 연락처는 footer에 유지했다. 주소·비공개 Gmail·로그인 정보·등록증 이미지·생년월일은 포함하지 않았다. 관련 테스트 10/10, scoped lint, TypeScript, consumer lint(error 0·기존 warning 25), production build, 모바일·데스크톱 브라우저 검증이 통과했다.
+- **Status**: done
+
+#### Task 4.2 — 보완분 원격 반영과 consumer production 배포 [승인 게이트]
+
+- **Task-ID**: 4.2
+- **Dependency**: Task 4.1
+- **Goal**: 검토된 보완분만 push·PR·main 병합하고 consumer production에 공개한 뒤 비로그인 화면을 재검증한다.
+- **Status**: todo
+
+#### Task 4.3 — 카카오 사업자정보 정합성 확인과 재신청 [승인 게이트]
+
+- **Task-ID**: 4.3
+- **Dependency**: Task 4.2
+- **Goal**: 최신 공식 주소와 상호 표기를 확인한 뒤 공개 URL을 근거로 카카오 비즈니스 채널 심사를 다시 신청한다.
 - **Status**: todo
 
 ## Refactor Branch Strategy
@@ -255,11 +281,11 @@
 
 ## Closeout Roll-up
 
-- **Status**: checkpoint_committed — Task 2.2 로컬 범위와 단일 checkpoint commit 완료, Task 2.3 승인 게이트 대기
-- **사업자 증거 정본**: Task 1.1 공개 필드와 이메일 수신 검증 확정
-- **홈페이지 구현**: Task 1.5 footer 연결과 하단 접근 여백 확정
-- **로컬 검증**: Task 2.1 lint와 Task 2.2 production build 종료 코드 0
+- **Status**: remediation_checkpoint_pending — Task 3.4 반려 사유 반영과 Task 4.1 로컬 보완 검증 완료, Task 4.2 승인 게이트 대기
+- **사업자 증거 정본**: 공식 상호 `디어 오키드`와 최소 공개 필드 확정, 최신 공식 주소는 미확인으로 제외
+- **홈페이지 구현**: Task 4.1 상단 운영 관계 안내와 기존 footer의 단일 공개 정본 연결 확정
+- **로컬 검증**: 관련 테스트 10/10, lint error 0, TypeScript와 production build, 모바일·데스크톱 브라우저 검증 통과
 - **main 반영**: Task 3.1에서 확정
 - **공개 증거**: Task 3.2에서 확정
 - **카카오 재신청**: Task 3.3에서 확정
-- **심사 결과**: Task 3.4에서 확정
+- **심사 결과**: Task 3.4 연관성 확인 불가로 반려, Task 4.2 공개 반영과 Task 4.3 재신청 대기
