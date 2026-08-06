@@ -1,27 +1,34 @@
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 
-const termStyle = {
-  color: 'var(--color-text-secondary)',
-  fontSize: 'var(--font-size-xs)',
-  fontWeight: 'var(--fw-medium)',
-} as const;
-
-const detailStyle = {
-  color: 'var(--color-text)',
-  fontSize: 'var(--font-size-sm)',
-  fontWeight: 'var(--fw-medium)',
-  margin: 0,
-} as const;
-
-const linkStyle = {
+const channelLinkStyle = {
   alignItems: 'center',
+  border: 'var(--border)',
+  borderRadius: 'var(--radius-full)',
   color: 'var(--color-primary)',
   display: 'inline-flex',
   fontSize: 'var(--font-size-sm)',
   fontWeight: 'var(--fw-bold)',
   minHeight: 'var(--touch-target)',
-  textDecoration: 'underline',
-  textUnderlineOffset: 3,
+  padding: '0 16px',
+  textDecoration: 'none',
+} as const;
+
+const productLinkStyle = {
+  background: 'var(--color-surface-muted)',
+  border: 'var(--border)',
+  borderRadius: 'var(--radius)',
+  color: 'var(--color-text)',
+  display: 'flex',
+  flexDirection: 'column',
+  fontSize: 'var(--font-size-sm)',
+  fontWeight: 'var(--fw-bold)',
+  gap: 8,
+  height: '100%',
+  justifyContent: 'space-between',
+  minHeight: 84,
+  minWidth: 0,
+  padding: 14,
+  textDecoration: 'none',
 } as const;
 
 export default function BusinessRelationshipNotice() {
@@ -29,11 +36,9 @@ export default function BusinessRelationshipNotice() {
     <section
       aria-labelledby="business-relationship-title"
       style={{
-        background: 'var(--color-primary-surface)',
-        border: 'var(--border)',
-        borderRadius: 'var(--radius)',
+        borderBottom: 'var(--border)',
         marginBottom: 24,
-        padding: '20px 16px',
+        padding: '4px 0 24px',
       }}
     >
       <p
@@ -41,83 +46,61 @@ export default function BusinessRelationshipNotice() {
           color: 'var(--color-primary)',
           fontSize: 'var(--font-size-xs)',
           fontWeight: 'var(--fw-bold)',
-          margin: '0 0 6px',
+          margin: '0 0 8px',
         }}
       >
-        카카오톡 채널·쇼핑몰 운영 정보
+        그린러브 운영 안내
       </p>
       <h2
         id="business-relationship-title"
         style={{
           color: 'var(--color-text)',
-          fontSize: 'var(--font-size-lg)',
+          fontSize: 'var(--font-size-xl)',
           fontWeight: 'var(--fw-bold)',
-          lineHeight: 1.4,
+          lineHeight: 1.35,
           margin: 0,
         }}
       >
-        그린러브 운영 안내
-      </h2>
-      <p
-        style={{
-          color: 'var(--color-text)',
-          fontSize: 'var(--font-size-sm)',
-          lineHeight: 1.7,
-          margin: '8px 0 16px',
-        }}
-      >
         {PUBLIC_BUSINESS_INFO.relationship}
-      </p>
+      </h2>
       <a
         href={PUBLIC_BUSINESS_INFO.kakaoChannel.url}
         target="_blank"
         rel="noopener noreferrer"
-        style={{ ...linkStyle, marginBottom: 16 }}
+        style={{ ...channelLinkStyle, marginTop: 16 }}
         aria-label={`카카오톡 채널 ${PUBLIC_BUSINESS_INFO.kakaoChannel.name} 새 창에서 열기`}
       >
-        카카오톡 채널 ‘{PUBLIC_BUSINESS_INFO.kakaoChannel.name}’ 바로가기
+        공식 카카오톡 채널 ‘{PUBLIC_BUSINESS_INFO.kakaoChannel.name}’ →
       </a>
-      <dl
-        style={{
-          display: 'grid',
-          gap: '6px 12px',
-          gridTemplateColumns: 'max-content minmax(0, 1fr)',
-          margin: 0,
-        }}
-      >
-        <dt style={termStyle}>운영 사업자</dt>
-        <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.businessName}</dd>
-        <dt style={termStyle}>대표자</dt>
-        <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.representative}</dd>
-        <dt style={termStyle}>사업자등록번호</dt>
-        <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.registrationNumber}</dd>
-      </dl>
       <h3
         id="featured-products-title"
         style={{
           color: 'var(--color-text)',
           fontSize: 'var(--font-size-md)',
           fontWeight: 'var(--fw-bold)',
-          margin: '20px 0 4px',
+          margin: '24px 0 10px',
         }}
       >
         그린러브 대표 판매상품
       </h3>
-      <p
+      <ul
+        aria-labelledby="featured-products-title"
         style={{
-          color: 'var(--color-text-secondary)',
-          fontSize: 'var(--font-size-xs)',
-          lineHeight: 1.6,
-          margin: '0 0 4px',
+          display: 'grid',
+          gap: 8,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          listStyle: 'none',
+          margin: 0,
+          padding: 0,
         }}
       >
-        현재 판매 중인 화훼 상품을 확인할 수 있습니다.
-      </p>
-      <ul aria-labelledby="featured-products-title" style={{ margin: 0, paddingLeft: 20 }}>
         {PUBLIC_BUSINESS_INFO.featuredProducts.map((product) => (
-          <li key={product.url}>
-            <a href={product.url} style={linkStyle}>
-              {product.name} 상품 상세 보기
+          <li key={product.url} style={{ minWidth: 0 }}>
+            <a href={product.url} style={productLinkStyle}>
+              <span>{product.name}</span>
+              <span style={{ color: 'var(--color-primary)', fontSize: 'var(--font-size-xs)' }}>
+                상품 보기 →
+              </span>
             </a>
           </li>
         ))}
