@@ -6,16 +6,21 @@ import { fileURLToPath } from 'node:url';
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const componentPath = join(testDirectory, 'BusinessInfoFooter.tsx');
+const businessInfoPath = join(testDirectory, '..', 'lib', 'publicBusinessInfo.ts');
 
 function loadComponentSource() {
   return readFileSync(componentPath, 'utf8');
 }
 
+function loadBusinessInfoSource() {
+  return readFileSync(businessInfoPath, 'utf8');
+}
+
 test('공개 사업자 정본을 빠짐없이 렌더링한다', () => {
-  const source = loadComponentSource();
+  const source = `${loadComponentSource()}\n${loadBusinessInfoSource()}`;
   const requiredValues = [
     '그린러브',
-    '디어오키드',
+    '디어 오키드',
     '조정연',
     '505-28-01702',
     '010-4452-2104',
@@ -27,25 +32,29 @@ test('공개 사업자 정본을 빠짐없이 렌더링한다', () => {
   }
 });
 
-test('그린러브와 디어오키드의 운영 관계를 명시한다', () => {
-  const source = loadComponentSource();
+test('그린러브와 디어 오키드의 운영 관계를 명시한다', () => {
+  const source = `${loadComponentSource()}\n${loadBusinessInfoSource()}`;
 
-  assert.match(source, /그린러브는 디어오키드가 운영하는 화훼 판매 브랜드입니다\./);
+  assert.match(
+    source,
+    /카카오톡 채널 ‘그린러브’와 본 화훼 쇼핑몰은 사업자 ‘디어 오키드’가 운영합니다\./,
+  );
 });
 
 test('접근 가능한 footer와 고객센터 링크를 제공한다', () => {
-  const source = loadComponentSource();
+  const componentSource = loadComponentSource();
+  const businessInfoSource = loadBusinessInfoSource();
 
-  assert.match(source, /<footer/);
-  assert.match(source, /사업자 정보/);
-  assert.match(source, /phoneHref: 'tel:01044522104'/);
-  assert.match(source, /emailHref: 'mailto:support@greenlove\.co\.kr'/);
-  assert.match(source, /href=\{BUSINESS_INFO\.phoneHref\}/);
-  assert.match(source, /href=\{BUSINESS_INFO\.emailHref\}/);
+  assert.match(componentSource, /<footer/);
+  assert.match(componentSource, /사업자 정보/);
+  assert.match(businessInfoSource, /phoneHref: 'tel:01044522104'/);
+  assert.match(businessInfoSource, /emailHref: 'mailto:support@greenlove\.co\.kr'/);
+  assert.match(componentSource, /href=\{PUBLIC_BUSINESS_INFO\.phoneHref\}/);
+  assert.match(componentSource, /href=\{PUBLIC_BUSINESS_INFO\.emailHref\}/);
 });
 
 test('확정되지 않은 외부 증거는 노출하지 않는다', () => {
-  const source = loadComponentSource();
+  const source = `${loadComponentSource()}\n${loadBusinessInfoSource()}`;
 
   assert.doesNotMatch(source, /사업장 주소/);
   assert.doesNotMatch(source, /address:/);
