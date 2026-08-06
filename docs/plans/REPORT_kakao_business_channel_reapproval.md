@@ -155,20 +155,41 @@
 
 ### 후속 홈페이지 연관성 증거 보완
 
-- **Status**: 로컬 구현·검증 완료, 원격 반영 대기
+- **Status**: production 반영 및 재심사 접수 완료
 - 공식 상호 띄어쓰기를 `디어 오키드`로 통일했다.
 - `PUBLIC_BUSINESS_INFO`를 단일 공개 정본으로 추가해 상단 안내와 footer의 사업자명·대표자·등록번호·연락처·운영 관계 문구가 일치하도록 했다.
 - `HeroBanner` 다음, `HomeProductList` 전에 `BusinessRelationshipNotice`를 배치해 심사자가 첫 화면에서 운영 관계를 확인할 수 있게 했다.
 - 최신 공식 주소는 확인되지 않았고 공개하지 않았으며, 비공개 Gmail·로그인 정보·사업자등록증 이미지·생년월일도 추가하지 않았다.
 - 관련 테스트 10/10, scoped lint, TypeScript, consumer lint(error 0·기존 warning 25), production build, 모바일·데스크톱 브라우저 검증이 모두 통과했다.
-- push·PR·production 배포·카카오 재신청은 수행하지 않았다.
+- 비공개 Gmail 작성자 메타데이터가 있던 로컬 문서 커밋 2개를 포함해 원격 미반영 3개 커밋의 작성자·커미터를 공개 GitHub `noreply`로 재작성했다. 재작성 전후 파일 트리가 동일함을 확인했다.
+
+### Task 4.2 — 보완분 원격 반영과 consumer production 배포
+
+- **Status**: done
+- 안전한 branch head `91b2153fc52ce880c50e0f562349baefa50824f5`를 push하고 `main` 대상 PR #13을 생성했다.
+- PR #13의 consumer 미리보기 배포는 성공했고 seller·driver는 Ignored Build Step으로 취소됐다. 모든 검사가 통과한 뒤 merge commit `ff757e6bf9ceea33dc5eda99d7e49342f9724019`로 병합했다.
+- GitHub production deployment `5775093449`의 환경은 `Production – greenhubconsumer`, 상태는 성공이며 merge SHA와 일치한다.
+- seller·driver production 배포는 생성되지 않았고 Railway API는 `No deployment needed - watched paths not modified`로 기존 활성 배포를 유지했다.
+- `https://greenlove.co.kr/`의 원시 HTTP와 실제 브라우저에서 운영 관계 문구, `디어 오키드`, 사업자등록번호, 상품 목록, footer를 확인했다. 과거 붙여쓰기 표기는 production 응답에 없었다.
+- **Verify**: PR #13 `MERGED`, merge SHA·production deployment SHA 일치, consumer 배포 성공, 비대상 서비스 미변경, 공개 증거 노출
+
+### Task 4.3 — 카카오 비즈니스 채널 재심사
+
+- **Status**: done — 심사 결과 대기
+- 2026년 8월 6일 `그린러브` 채널의 비즈니스 재심사를 다시 신청했다.
+- 카카오 양식의 사업자등록증 업체명은 `디어 오키드`로 홈페이지 정본과 정확히 일치했다. 주소는 재심사 양식에서 요구되지 않았고 입력하거나 제출하지 않았다.
+- 매장 없음, 사업자등록번호, 대표자 전자증명 완료, 인허가 비대상을 유지했다.
+- 연관성 사유에는 카카오톡 채널·화훼 쇼핑몰을 사업자 `디어 오키드`가 직접 운영하며 홈페이지 첫 화면의 운영 안내, 상품 목록, 하단 사업자정보에서 관계를 확인할 수 있다고 명시했다.
+- 링크는 `https://greenlove.co.kr/`만 제출했고 파일 첨부는 0건이다. 비공개 주소·계정 정보·등록증 이미지·생년월일은 추가 제출하지 않았다.
+- 최종 화면에서 요청 내용 `비즈니스 재심사 신청`, 요청일 `2026. 8. 6.`, 영업일 기준 평균 3~7일 안내를 확인했다.
+- **Verify**: 카카오 재심사 접수 성공 화면과 요청일 확인
 
 ## 외부 상태와 금지 범위 준수
 
-- PR #12를 merge commit 방식으로 `main`에 병합하고 consumer production만 새 `READY` 배포로 전환했다.
+- PR #13을 merge commit 방식으로 `main`에 병합하고 consumer production만 새 성공 배포로 전환했다.
 - seller·driver는 배포 경로 필터가 빌드와 production 전환을 차단해 기존 서비스 배포를 유지했다.
 - Railway API는 Watch Paths가 변경 없는 병합을 건너뛰어 새 배포와 restart가 없었다.
-- 카카오 비즈니스 1차 재심사는 연관성 확인 불가 사유로 반려됐고, 후속 홈페이지 보완은 로컬 검증 완료
+- 카카오 비즈니스 2차 재심사 접수 완료, 현재 결과 대기
 - Firebase·ALIGO 변경 없음
 - 회차 출시 branch 변경 없음
 - `salesMode`, 회차, 실제 알림 변경 없음
@@ -176,4 +197,4 @@
 
 ## 재개 지점
 
-다음 게이트는 후속 홈페이지 보완분의 push·PR·consumer production 배포 승인이다. 공개 배포 후 비로그인 화면에서 상단 운영 관계를 재검증하고, 카카오 사업자정보의 최신 주소와 공식 상호 표기를 확인한 뒤 재신청한다. ALIGO와 회차 출시 계획은 카카오 승인 전까지 계속 보류한다.
+다음 Task는 Task 4.4다. 카카오 재심사 결과가 도착하면 승인 또는 추가 보완 사유를 비민감 상태 증거로 기록한다. ALIGO와 회차 출시 계획은 카카오 승인 전까지 계속 보류한다.
