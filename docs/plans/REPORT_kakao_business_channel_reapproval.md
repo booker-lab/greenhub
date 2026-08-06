@@ -8,7 +8,7 @@
 - **branch**: `codex/kakao-business-channel-proof`
 - **기준 commit**: `164f65b77e317c41b7e0825377684f0a4db981d4`
 - **수행 범위**: Task 0.1부터 Task 3.4 결과 반영 및 후속 홈페이지 보완까지
-- **현재 결과**: 반복 반려 원인을 보완해 홈페이지와 채널의 공개 증빙을 강화하고 3차 재심사를 접수했으며, 후속 consumer 홈 증빙 화면 정돈을 로컬에서 완료함
+- **현재 결과**: 반복 반려 원인을 보완해 홈페이지와 채널의 공개 증빙을 강화하고 3차 재심사를 접수했으며, 후속 consumer 홈 증빙 화면 정돈을 production에 반영함
 
 ## Task 결과
 
@@ -210,7 +210,7 @@
 
 ### 후속 consumer 홈 증빙 화면 정돈
 
-- **Status**: 로컬 검증 완료, checkpoint 포함
+- **Status**: done — production 반영 및 운영 화면 검증 완료
 - **작업 기준**: branch `codex/kakao-business-channel-proof`, 기준 HEAD `5646a734238ca5ccd57c81825f7f9282e04e4f7b`
 - 상단 핵심 문구를 `그린러브는 디어 오키드가 운영하는 화훼 쇼핑몰입니다.`로 정돈하고 공개 정보 정본과 정적 코드 계약을 일치시켰다.
 - `BusinessRelationshipNotice`에서 대표자명·사업자등록번호를 포함한 상세 사업자정보 `<dl>`을 제거하고, 공식 카카오톡 채널 동작과 가격·이미지 없는 대표상품 타일 `오렌지 글로우`, `빅립`, `만천홍`만 유지했다.
@@ -221,13 +221,17 @@
 - `pnpm --filter consumer build`는 compile·TypeScript·정적 페이지 13/13 생성을 포함해 종료 코드 0으로 통과했다.
 - 로컬 production 화면을 데스크톱과 375×812 모바일로 확인했다. 핵심 문구, 대표상품 타일 3개, footer 상세정보, 상품 목록 접근성이 유지됐고 가로 넘침이 없었다.
 - 공식 채널 링크는 새 탭에서 `https://pf.kakao.com/_vGfjX`의 `카카오톡채널 - 그린러브`로 열림을 확인했다.
-- push, PR 생성·병합, production 배포, 카카오 재신청을 수행하지 않았다. 이메일·DNS·카카오 채널·공개 소식·ALIGO를 변경하지 않았다.
+- checkpoint 생성 당시에는 push, PR 생성·병합, production 배포, 카카오 재신청을 수행하지 않았다.
 - 비공개 주소·Gmail·로그인 정보·등록증 이미지·생년월일을 새로 기록하지 않았다.
+- 후속 요청에 따라 checkpoint `1fb055be49af0ebdab58a2e8e651ad7e51f5eabe`를 push하고 `main` 대상 PR #15를 생성했다. consumer 미리보기 배포가 성공했고 seller·driver는 Ignored Build Step으로 취소됐다.
+- PR #15의 검사가 모두 통과한 뒤 merge commit `8c1707aebbd877d44c6b0568a77c8eb7482011f5`로 병합했다. GitHub production deployment `5781274942`와 Vercel 배포 `dpl_Czsh6iubchy5hkzPQr5RJ3wQ4UMj`가 성공했고 `https://greenlove.co.kr/` 별칭이 해당 배포를 가리킨다.
+- 운영 도메인을 데스크톱과 375×812 모바일로 확인했다. 새 핵심 문구, 공식 카카오톡 채널, 대표상품 타일 3개, 상품 목록, footer 상세정보가 순서대로 노출됐고 가로 넘침이 없었다.
+- 배포 후 최근 1시간 Vercel error 로그는 0건이었다. 카카오 재신청과 이메일·DNS·카카오 채널·공개 소식·ALIGO 변경은 수행하지 않았다.
 
 ## 외부 상태와 금지 범위 준수
 
-- PR #13과 후속 증빙 PR #14를 merge commit 방식으로 `main`에 병합하고 consumer production만 새 성공 배포로 전환했다.
-- PR #14 병합 SHA의 GitHub deployment는 `Production – greenhubconsumer` 1건뿐이며 seller·driver는 배포 경로 필터에 따라 기존 서비스 배포를 유지했다.
+- PR #13, 후속 증빙 PR #14와 화면 정돈 PR #15를 merge commit 방식으로 `main`에 병합하고 consumer production만 새 성공 배포로 전환했다.
+- PR #15 병합 SHA의 GitHub deployment는 `Production – greenhubconsumer` 1건뿐이며 seller·driver는 배포 경로 필터에 따라 기존 서비스 배포를 유지했다.
 - Railway API 경로는 변경하지 않아 새 배포와 restart를 유발하지 않았다.
 - 카카오 비즈니스 2차 재심사 반려 뒤 공개 증빙을 보완하고 3차 재심사 접수 완료
 - Firebase·ALIGO 변경 없음
