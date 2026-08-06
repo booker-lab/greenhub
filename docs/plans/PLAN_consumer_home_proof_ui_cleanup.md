@@ -195,4 +195,12 @@
 - **완료 범위**: 공개 문구 정본, 실패 계약, 정적 Server Component, footer·홈 회귀 계약, REPORT를 함께 갱신했다.
 - **검증**: 관련 테스트 13/13, consumer lint error 0·기존 warning 25, consumer production build, 데스크톱·375×812 모바일 화면, 공식 카카오톡 채널 새 탭 연결, 전체 `git diff --check`를 통과했다.
 - **변경 경계**: 상품 API, Firestore 운영 데이터, 시험용 상품, 이미지 데이터, 주문·판매 로직은 변경하지 않았다.
-- **외부 상태**: push, PR, production 배포, 카카오 재신청, 이메일·DNS·카카오 채널·공개 소식·ALIGO 변경을 수행하지 않았다.
+- **초기 외부 상태**: checkpoint 생성 시점에는 push, PR, production 배포, 카카오 재신청, 이메일·DNS·카카오 채널·공개 소식·ALIGO 변경을 수행하지 않았다.
+
+## 후속 배포 기록
+
+- **Status**: done
+- **원격 반영**: checkpoint `1fb055be49af0ebdab58a2e8e651ad7e51f5eabe`를 push하고 PR #15의 검사를 통과한 뒤 merge commit `8c1707aebbd877d44c6b0568a77c8eb7482011f5`로 `main`에 병합했다.
+- **배포**: consumer production 배포 `dpl_Czsh6iubchy5hkzPQr5RJ3wQ4UMj`가 `Ready`이며 `https://greenlove.co.kr/` 별칭이 연결됐다. seller·driver는 Ignored Build Step으로 취소됐고 Railway API는 변경하지 않았다.
+- **운영 검증**: 데스크톱과 375×812 모바일에서 핵심 문구, 공식 카카오톡 채널, 대표상품 타일 3개, 상품 목록, footer 상세정보와 가로 넘침 부재를 확인했다. 배포 후 최근 1시간 Vercel error 로그는 0건이었다.
+- **변경하지 않은 외부 상태**: 카카오 재신청, 이메일·DNS·카카오 채널·공개 소식·ALIGO 변경을 수행하지 않았다.
