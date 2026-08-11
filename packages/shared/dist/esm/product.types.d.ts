@@ -41,6 +41,7 @@ export interface Product {
     saleType: SaleType;
     deliverySize: DeliverySize;
     isActive: boolean;
+    testOnly?: boolean;
     createdAt: string;
     updatedAt: string;
     groupSummary?: {

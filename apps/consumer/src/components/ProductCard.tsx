@@ -4,7 +4,7 @@ import type React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Card, Box, Progress } from '@mantine/core';
-import type { Product } from '@greenhub/shared';
+import { getGroupBuyStatus, type Product } from '@greenhub/shared';
 
 interface ProductCardProps {
   product: Product;
@@ -126,7 +126,16 @@ export default function ProductCard({ product }: ProductCardProps) {
           (() => {
             const { currentQuantity, targetQuantity } = product.groupSummary;
             const pct = Math.min((currentQuantity / targetQuantity) * 100, 100);
-            const done = currentQuantity >= targetQuantity;
+            const status = getGroupBuyStatus(product.groupSummary);
+            const done = status !== 'open';
+            const statusLabel =
+              status === 'full'
+                ? '모집 완료'
+                : status === 'expired'
+                  ? '모집 마감'
+                  : status === 'unavailable'
+                    ? '판매 준비 중'
+                    : `${currentQuantity}/${targetQuantity}개 모집 중`;
             return (
               <>
                 <Progress
@@ -151,7 +160,7 @@ export default function ProductCard({ product }: ProductCardProps) {
                     fontWeight: 'var(--fw-medium)',
                   }}
                 >
-                  {done ? '모집 완료' : `${currentQuantity}/${targetQuantity}개 모집 중`}
+                  {statusLabel}
                 </p>
               </>
             );
