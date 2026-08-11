@@ -5,6 +5,7 @@ import { Box, Title, SimpleGrid, Skeleton, Stack, Divider } from '@mantine/core'
 import ProductCard from '@/components/ProductCard';
 import DeadlineSection from '@/components/DeadlineSection';
 import { useProducts } from '@/hooks/useProducts';
+import { getGroupBuyStatus } from '@greenhub/shared';
 
 export default function HomeProductList() {
   const { products, loading, error } = useProducts();
@@ -15,7 +16,7 @@ export default function HomeProductList() {
   );
 
   const activeGroupProducts = groupProducts.filter(
-    (p) => !p.groupSummary || p.groupSummary.currentQuantity < p.groupSummary.targetQuantity,
+    (product) => getGroupBuyStatus(product.groupSummary) === 'open',
   );
 
   return (

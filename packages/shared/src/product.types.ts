@@ -69,6 +69,7 @@ export interface Product {
   saleType: SaleType
   deliverySize: DeliverySize
   isActive: boolean
+  testOnly?: boolean
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
   groupSummary?: {

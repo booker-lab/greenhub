@@ -5,7 +5,8 @@ import { Box, Button, Group, Text } from '@mantine/core';
 interface Props {
   totalAmount: number;
   isGroup: boolean;
-  isFull: boolean;
+  isUnavailable: boolean;
+  unavailableLabel?: string;
   canBuy: boolean;
   onAddToCart: () => void;
   onBuyNow: () => void;
@@ -14,12 +15,17 @@ interface Props {
 export default function ProductCTABar({
   totalAmount,
   isGroup,
-  isFull,
+  isUnavailable,
+  unavailableLabel,
   canBuy,
   onAddToCart,
   onBuyNow,
 }: Props) {
-  const ctaLabel = isFull ? '모집 완료' : isGroup ? '공구 참여하기' : '바로 결제';
+  const ctaLabel = isUnavailable
+    ? (unavailableLabel ?? '판매 준비 중')
+    : isGroup
+      ? '공구 참여하기'
+      : '바로 결제';
 
   return (
     <Box
@@ -61,7 +67,14 @@ export default function ProductCTABar({
 
         {/* 버튼 */}
         <Group gap={8} style={{ flexWrap: 'nowrap' }}>
-          <Button flex={1} variant="default" radius="md" size="lg" onClick={onAddToCart}>
+          <Button
+            flex={1}
+            variant="default"
+            radius="md"
+            size="lg"
+            disabled={isGroup && isUnavailable}
+            onClick={onAddToCart}
+          >
             장바구니
           </Button>
           <Button
@@ -71,7 +84,9 @@ export default function ProductCTABar({
             disabled={!canBuy}
             onClick={onBuyNow}
             style={{
-              backgroundColor: isFull ? 'var(--color-text-disabled)' : 'var(--color-primary)',
+              backgroundColor: isUnavailable
+                ? 'var(--color-text-disabled)'
+                : 'var(--color-primary)',
               color: 'var(--color-bg)',
             }}
           >

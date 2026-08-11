@@ -5,18 +5,20 @@ import Link from 'next/link';
 import { Container, Box, Text, SimpleGrid, Skeleton, Stack } from '@mantine/core';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
+import { getGroupBuyStatus } from '@greenhub/shared';
 
 export default function GroupBuyPage() {
   const { products, loading, error } = useProducts(undefined, undefined, 'group');
 
-  const { active, full } = useMemo(() => {
-    const active = products.filter(
-      (p) => !p.groupSummary || p.groupSummary.currentQuantity < p.groupSummary.targetQuantity,
-    );
-    const full = products.filter(
-      (p) => p.groupSummary && p.groupSummary.currentQuantity >= p.groupSummary.targetQuantity,
-    );
-    return { active, full };
+  const { active, closed } = useMemo(() => {
+    const active = [];
+    const closed = [];
+    const now = Date.now();
+    for (const product of products) {
+      if (getGroupBuyStatus(product.groupSummary, now) === 'open') active.push(product);
+      else closed.push(product);
+    }
+    return { active, closed };
   }, [products]);
 
   return (
@@ -72,7 +74,7 @@ export default function GroupBuyPage() {
             fontWeight: 'var(--fw-medium)',
           }}
         >
-          현재 {loading ? '...' : `${products.length}개`} 공구 진행 중
+          현재 {loading ? '...' : `${active.length}개`} 공구 진행 중
         </p>
       </Box>
 
@@ -92,7 +94,7 @@ export default function GroupBuyPage() {
         </Stack>
       )}
 
-      {!loading && !error && products.length === 0 && (
+      {!loading && !error && active.length === 0 && closed.length === 0 && (
         <Stack align="center" py={64}>
           <Text size="xl">🌱</Text>
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
@@ -139,7 +141,7 @@ export default function GroupBuyPage() {
         </Box>
       )}
 
-      {!loading && full.length > 0 && (
+      {!loading && closed.length > 0 && (
         <Box>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <span
@@ -149,7 +151,7 @@ export default function GroupBuyPage() {
                 color: 'var(--color-text-disabled)',
               }}
             >
-              모집 완료
+              모집 종료
             </span>
             <span
               style={{
@@ -161,11 +163,11 @@ export default function GroupBuyPage() {
                 padding: '1px 8px',
               }}
             >
-              {full.length}
+              {closed.length}
             </span>
           </div>
           <SimpleGrid cols={2} spacing="sm" style={{ opacity: 0.6 }}>
-            {full.map((product) => (
+            {closed.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </SimpleGrid>

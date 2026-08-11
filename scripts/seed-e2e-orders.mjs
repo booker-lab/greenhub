@@ -66,11 +66,12 @@ async function seedConsumerDailyCaps() {
   console.log(`\n[1] 소비자 dailyCaps 시드 (storeId=${CONSUMER_STORE_ID.slice(0, 8)})`);
 
   // 실 storeId 풀확인 — 활성 상품을 가진 store를 동적으로 조회 (하드코딩 안전망)
-  const products = await db.collection('products').where('isActive', '==', true).limit(1).get();
-  if (products.empty) {
+  const products = await db.collection('products').where('isActive', '==', true).limit(20).get();
+  const publicProduct = products.docs.find((product) => product.data().testOnly !== true);
+  if (!publicProduct) {
     console.warn('  활성 상품이 없습니다. dailyCaps 시드만 진행합니다.');
   }
-  const resolvedStoreId = products.empty ? CONSUMER_STORE_ID : products.docs[0].data().storeId;
+  const resolvedStoreId = publicProduct ? publicProduct.data().storeId : CONSUMER_STORE_ID;
   console.log(`  resolvedStoreId=${resolvedStoreId.slice(0, 8)}`);
 
   // 오늘부터 14일치 슬롯 — 충분한 totalCap (10) 으로 잔여 확보
@@ -115,6 +116,7 @@ async function seedSellerOrders() {
     saleType: 'normal',
     deliverySize: 'small',
     isActive: true,
+    testOnly: true,
     createdAt: now,
     updatedAt: now,
   });
@@ -131,6 +133,7 @@ async function seedSellerOrders() {
     saleType: 'group',
     deliverySize: 'small',
     isActive: true,
+    testOnly: true,
     createdAt: now,
     updatedAt: now,
   });

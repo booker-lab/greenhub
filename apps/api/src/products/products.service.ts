@@ -268,13 +268,14 @@ export class ProductsService {
   // ── Public (storeId-free) ─────────────────────────────────────────────────
 
   async getPublicProducts(query: ProductQueryDto) {
-    const isActive = query.isActive !== false;
-    let ref = this.firestore.collection('products').where('isActive', '==', isActive) as any;
+    let ref = this.firestore.collection('products').where('isActive', '==', true) as any;
     if (query.category) ref = ref.where('category', '==', query.category);
     if (query.saleType) ref = ref.where('saleType', '==', query.saleType);
 
     const snap = await ref.get();
-    let products = snap.docs.map((d: any) => d.data());
+    let products = snap.docs
+      .map((d: any) => d.data())
+      .filter((product: Record<string, unknown>) => product['testOnly'] !== true);
 
     if (query.colors) {
       const colorFilter = Array.isArray(query.colors)
@@ -338,6 +339,9 @@ export class ProductsService {
     const snap = await this.firestore.doc(`products/${productId}`).get();
     if (!snap.exists) throw new NotFoundException('상품을 찾을 수 없습니다.');
     const product = snap.data()!;
+    if (product['isActive'] !== true || product['testOnly'] === true) {
+      throw new NotFoundException('상품을 찾을 수 없습니다.');
+    }
     if (product['saleType'] === 'group') {
       const gc = await this.firestore.doc(`groupProductConfig/${productId}`).get();
       if (gc.exists) return { ...product, groupConfig: gc.data() };
