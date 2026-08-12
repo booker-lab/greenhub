@@ -138,10 +138,10 @@
 - **Task-ID**: 0.4
 - **Dependency**: Task 0.3
 - **Pre-read**: 운영 배너와 공개 상품 API 응답 구조
-- **Target**: `scripts/verify-public-images.mjs`
+- **Target**: `apps/consumer/scripts/verify-public-images.mjs`
 - **Goal**: 전체 주소를 노출하지 않고 배너와 공개 상품 이미지의 호스트·상태·콘텐츠 형식을 검사하는 읽기 전용 검증기를 만든다.
-- **Verify**: `node scripts/verify-public-images.mjs`
-- **Conclusion**: 주소와 토큰을 출력하지 않는 `scripts/verify-public-images.mjs`를 추가했다. 운영 배너와 활성 상품 5개는 모두 `firebasestorage.googleapis.com`, HTTP 200, `image/png`으로 복구됐고 누락·실패는 0건이었다. 기존 상품·배너·스토어 DB 주소와 객체는 변경하지 않았다.
+- **Verify**: `node apps/consumer/scripts/verify-public-images.mjs`
+- **Conclusion**: 주소와 토큰을 출력하지 않는 `apps/consumer/scripts/verify-public-images.mjs`를 추가했다. 운영 배너와 활성 상품 5개는 모두 `firebasestorage.googleapis.com`, HTTP 200, `image/png`으로 복구됐고 누락·실패는 0건이었다. 기존 상품·배너·스토어 DB 주소와 객체는 변경하지 않았다.
 - **Status**: done
 
 ### Phase 1 — consumer 이미지 실패 대체 처리
@@ -321,9 +321,9 @@
 - **Task-ID**: 3.3
 - **Dependency**: Task 3.2
 - **Pre-read**: 운영 도메인, 운영 API, 배포 식별자
-- **Target**: `scripts/verify-public-images.mjs`
+- **Target**: `apps/consumer/scripts/verify-public-images.mjs`
 - **Goal**: 운영 원본과 Next 이미지 프록시와 실제 브라우저에서 이미지 복구와 대체 동작을 재확인한다.
-- **Verify**: `node scripts/verify-public-images.mjs`
+- **Verify**: `node apps/consumer/scripts/verify-public-images.mjs`
 - **Visual Verify**: 운영 홈과 공개 상품 5개 상세를 데스크톱·375×812 모바일로 확인하고 개인정보 영역은 캡처·기록하지 않는다.
 - **Conclusion**: [판정 대기 — 원본·프록시·브라우저 상태, 콘솔과 Vercel 오류 로그 결과를 기록.]
 - **Status**: todo

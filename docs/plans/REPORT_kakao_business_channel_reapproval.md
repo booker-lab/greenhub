@@ -299,10 +299,10 @@
 ### 이미지 복구 Task 0.4 — 기존 원본 재검증
 
 - **Status**: done
-- 주소와 다운로드 토큰을 출력하지 않는 읽기 전용 검증기 `scripts/verify-public-images.mjs`를 추가했다.
+- 주소와 다운로드 토큰을 출력하지 않는 읽기 전용 검증기 `apps/consumer/scripts/verify-public-images.mjs`를 추가했다.
 - 운영 배너와 활성 상품 5개는 모두 호스트 `firebasestorage.googleapis.com`, HTTP 200, 콘텐츠 형식 `image/png`으로 복구됐다.
 - 검사 6건 중 정상 6건, 실패·누락 0건이었다. 기존 상품·배너·스토어 DB 주소와 Storage 객체는 변경하지 않았다.
-- **Verify**: `node --check scripts/verify-public-images.mjs`, `node scripts/verify-public-images.mjs`
+- **Verify**: `node --check apps/consumer/scripts/verify-public-images.mjs`, `node apps/consumer/scripts/verify-public-images.mjs`
 - **종료 코드**: 모두 0
 
 ### 이미지 복구 Task 1.1~1.9 — consumer 실패 대체 처리
