@@ -345,7 +345,33 @@
 - 최초 검증기는 루트 `scripts/**`에 있어 seller·driver Ignore 명령의 공통 영향 경로로 판정됐다. 그 결과 비대상 미리보기가 실제 생성됐으며 상태만 기록하고 rollback하지 않았다.
 - production의 비대상 배포를 막기 위해 검증기를 내용 변경 없이 `apps/consumer/scripts/verify-public-images.mjs`로 옮기고 한국어 commit `d7afe55`로 push했다.
 - 경로 이동 commit도 루트 파일 삭제 자체 때문에 비대상 미리보기가 한 번 더 생성됐지만, PR의 main 대비 최종 diff에는 루트 `scripts/**`가 없고 `apps/consumer/**`와 문서만 남았다.
-- 다음 문서 전용 commit에서 seller·driver 검사가 Ignored Build Step으로 종료되는지 확인한 뒤에만 병합한다.
+- 문서 전용 최신 commit `9be3473`에서 consumer 미리보기는 성공했고 seller·driver는 모두 `Canceled by Ignored Build Step`으로 종료됐다.
+
+### 이미지 복구 Task 3.2 — main 병합과 consumer production 배포
+
+- **Status**: done
+- PR #18의 모든 검사가 통과한 뒤 merge commit `e6c2138e3c969616e19f2ba8882c1842a3cf0dfb`로 main에 병합했다.
+- consumer production 배포 `dpl_9LQkxbkSpuHQwYnPTSYdg5L2g14g`와 GitHub deployment `5863377298`은 merge SHA와 일치하고 READY·성공 상태다. `greenlove.co.kr`을 포함한 운영 별칭이 연결되고 원시 HTTP 200을 확인했다.
+- seller production 후보 `dpl_3D2gAGP2d6Evez3fQmgsiLnN1wKE`와 driver 후보 `dpl_DSTjpvqChdJKTdrA5nNPsmVUc7td`는 Ignored Build Step으로 취소됐다.
+- seller·driver 최신 production은 이전 SHA `098ad98c`의 deployment를 유지했다. Railway API 최신 production deployment도 2026년 8월 11일의 같은 이전 SHA를 유지해 새 배포나 restart가 없었다.
+
+### 이미지 복구 Task 3.3 — 운영 이미지와 로그 재검증
+
+- **Status**: done
+- 운영 배너와 활성 상품 5개 원본은 6/6 HTTP 200, `image/png`이었다. 전체 주소와 토큰은 기록하지 않았다.
+- 운영 Next 이미지 프록시는 배너 기준 HTTP 200, `image/png`을 반환했다.
+- 데스크톱과 375×812 모바일 홈에서 배너와 상품 5개가 모두 양수 실제 크기로 표시됐고 깨진 이미지 0건, 가로 넘침 없음이었다.
+- 공개 상품 상세 5개 모두 대표·상세 이미지와 공통 스토어 로고가 양수 실제 크기로 표시됐고 깨진 이미지 0건, 가로 넘침 없음이었다.
+- 브라우저 애플리케이션 콘솔·페이지 오류는 0건이었다. consumer Vercel 최근 1시간 런타임 오류와 production 배포 5xx 집계도 0건이었다.
+- 운영 DB의 상품·배너·스토어 주소와 문서, Storage 객체는 변경하지 않았다.
+
+### 이미지 복구 Task 3.4 — closeout과 외부 상태
+
+- **Status**: done
+- Firebase 운영 프로젝트는 승인된 활성 Billing 계정에 연결된 Blaze 상태이며 프로젝트 한정 월 10,000원 예산과 실제 비용 10·50·90·100% 알림이 설정됐다.
+- 다른 Firebase 프로젝트·결제 계정과 결제수단은 변경하거나 닫지 않았다.
+- 카카오 재신청, 카카오 채널·이메일·DNS·ALIGO·공개 소식은 변경하지 않았다.
+- 기능·배포 작업은 완료됐고 남은 운영 위험은 예산 알림이 비용을 차단하지 않으며 지연될 수 있다는 점, Firebase 무료 사용량 초과 시 사용량 기반 비용이 발생할 수 있다는 점이다.
 
 - PR #13, 후속 증빙 PR #14와 화면 정돈 PR #15를 merge commit 방식으로 `main`에 병합하고 consumer production만 새 성공 배포로 전환했다.
 - PR #15 병합 SHA의 GitHub deployment는 `Production – greenhubconsumer` 1건뿐이며 seller·driver는 배포 경로 필터에 따라 기존 서비스 배포를 유지했다.
