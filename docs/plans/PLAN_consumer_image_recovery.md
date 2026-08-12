@@ -302,8 +302,8 @@
 - **Target**: `docs/plans/PLAN_consumer_image_recovery.md`
 - **Goal**: 예상 consumer·테스트·문서 변경만 한국어 checkpoint로 커밋하고 main 대상 PR을 만든다.
 - **Verify**: `gh pr view --json headRefOid,baseRefName,state,mergeStateStatus,statusCheckRollup`
-- **Conclusion**: [판정 대기 — commit·push·PR과 검사 상태를 기록.]
-- **Status**: todo
+- **Conclusion**: 공개 GitHub noreply 메타데이터로 한국어 checkpoint `936a5c9`, consumer 전용 검증기 경로 보정 `d7afe55`를 만들고 push해 main 대상 PR #18을 생성했다. consumer·seller·driver Vercel 검사는 모두 성공했다. 첫 두 미리보기에서 루트 `scripts/**` 추가·삭제가 seller·driver 공통 영향으로 판정돼 비대상 미리보기가 생성됐고 지침대로 상태만 확인하고 rollback하지 않았다. 최종 PR diff에서는 검증기를 `apps/consumer/scripts`로 옮겨 루트 `scripts/**` 변경이 사라졌으며 consumer와 문서 범위만 남았다.
+- **Status**: done
 
 #### Task 3.2 — consumer production 배포 [Unit: Atomic]
 

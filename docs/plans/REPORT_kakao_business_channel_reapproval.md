@@ -337,6 +337,16 @@
 - 모바일 강제 실패에서도 같은 결과와 가로 넘침 없음, 브라우저 애플리케이션 오류 0건을 확인했다.
 - Vercel 보호 화면의 Google 로그인 위젯에서 발생한 FedCM 경고·오류는 보호 우회 쿠키 설정 전 로그인 화면에 한정됐고 consumer 애플리케이션 오류가 아니다. 실제 검증 세션에서는 이를 분리해 판단했다.
 
+### 이미지 복구 Task 3.1 — checkpoint와 PR 생성
+
+- **Status**: done
+- 공개 GitHub noreply 메타데이터와 한국어 메시지로 checkpoint `936a5c9`를 만들고 작업 branch에 push했다.
+- main 대상 PR #18을 생성했고, consumer·seller·driver Vercel 검사와 Preview Comments가 모두 성공했다.
+- 최초 검증기는 루트 `scripts/**`에 있어 seller·driver Ignore 명령의 공통 영향 경로로 판정됐다. 그 결과 비대상 미리보기가 실제 생성됐으며 상태만 기록하고 rollback하지 않았다.
+- production의 비대상 배포를 막기 위해 검증기를 내용 변경 없이 `apps/consumer/scripts/verify-public-images.mjs`로 옮기고 한국어 commit `d7afe55`로 push했다.
+- 경로 이동 commit도 루트 파일 삭제 자체 때문에 비대상 미리보기가 한 번 더 생성됐지만, PR의 main 대비 최종 diff에는 루트 `scripts/**`가 없고 `apps/consumer/**`와 문서만 남았다.
+- 다음 문서 전용 commit에서 seller·driver 검사가 Ignored Build Step으로 종료되는지 확인한 뒤에만 병합한다.
+
 - PR #13, 후속 증빙 PR #14와 화면 정돈 PR #15를 merge commit 방식으로 `main`에 병합하고 consumer production만 새 성공 배포로 전환했다.
 - PR #15 병합 SHA의 GitHub deployment는 `Production – greenhubconsumer` 1건뿐이며 seller·driver는 배포 경로 필터에 따라 기존 서비스 배포를 유지했다.
 - Railway API 경로는 변경하지 않아 새 배포와 restart를 유발하지 않았다.
