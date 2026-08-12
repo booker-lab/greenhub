@@ -58,14 +58,19 @@ test('상단에서는 상세 사업자정보를 반복하지 않고 footer 역�
   assert.doesNotMatch(componentSource, /PUBLIC_BUSINESS_INFO\.registrationNumber/);
 });
 
-test('공개 승인된 최소 사업자 정본만 제공한다', () => {
-  const requiredValues = ['그린러브', '디어 오키드', '조정연', '505-28-01702'];
+test('공개 승인된 사업자 정본만 제공한다', () => {
+  const requiredValues = [
+    '그린러브',
+    '디어 오키드',
+    '조정연',
+    '505-28-01702',
+    '경기도 이천시 백사면 도지리 543-2',
+  ];
 
   for (const value of requiredValues) {
     assert.match(businessInfoSource, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
 
-  assert.doesNotMatch(businessInfoSource, /address:/);
   assert.doesNotMatch(businessInfoSource, /gmail\.com/i);
 });
 

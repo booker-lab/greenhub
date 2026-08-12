@@ -3,6 +3,7 @@ export const PUBLIC_BUSINESS_INFO = {
   businessName: '디어 오키드',
   representative: '조정연',
   registrationNumber: '505-28-01702',
+  address: '경기도 이천시 백사면 도지리 543-2',
   phone: '010-4452-2104',
   phoneHref: 'tel:01044522104',
   email: 'support@greenlove.co.kr',

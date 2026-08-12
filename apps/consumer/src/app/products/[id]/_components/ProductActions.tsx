@@ -19,6 +19,7 @@ import {
 import { useGroupProduct } from '@/hooks/useGroupProduct';
 import { useStore } from '@/hooks/useProducts';
 import { useCart } from '@/hooks/useCart';
+import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 import GreenLoveBrandSection from '@/components/GreenLoveBrandSection';
 import ProductCTABar from '@/components/ProductCTABar';
 import ResilientImage from '@/components/ResilientImage';
@@ -434,10 +435,10 @@ export default function ProductActions({ product }: Props) {
           </Group>
           <Stack gap={4}>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-              📍 {store.address}
+              📍 {PUBLIC_BUSINESS_INFO.address}
             </Text>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-              📞 {store.phone}
+              📞 {PUBLIC_BUSINESS_INFO.phone}
             </Text>
           </Stack>
         </Box>
