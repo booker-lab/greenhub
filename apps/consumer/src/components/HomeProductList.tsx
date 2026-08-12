@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Box, Title, SimpleGrid, Skeleton, Stack, Divider } from '@mantine/core';
 import ProductCard from '@/components/ProductCard';
 import DeadlineSection from '@/components/DeadlineSection';
+import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { useProducts } from '@/hooks/useProducts';
 import { getGroupBuyStatus } from '@greenhub/shared';
 
@@ -90,12 +91,16 @@ export default function HomeProductList() {
                       overflow: 'hidden',
                       background: 'var(--color-border)',
                       marginBottom: 6,
+                      position: 'relative',
                     }}
                   >
-                    <img
-                      src={product.images?.[0] ?? '/icons/icon-192x192.png'}
+                    <ResilientImage
+                      fill
+                      src={product.images?.[0] ?? PRODUCT_IMAGE_FALLBACK}
+                      fallbackSrc={PRODUCT_IMAGE_FALLBACK}
                       alt={product.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      sizes="(max-width: 600px) 33vw, 200px"
+                      style={{ objectFit: 'cover' }}
                     />
                   </Box>
                   <p

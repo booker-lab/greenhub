@@ -1,6 +1,6 @@
-import Image from 'next/image';
 import Link from 'next/link';
 import { Box } from '@mantine/core';
+import ResilientImage from '@/components/ResilientImage';
 
 interface BannerCta {
   label: string;
@@ -50,12 +50,12 @@ export default async function HeroBanner() {
     >
       {banner.imageUrl && (
         <div style={{ position: 'absolute', right: 0, top: 0, width: '50%', height: '100%' }}>
-          <Image
+          <ResilientImage
             fill
             src={banner.imageUrl}
             alt="배너"
             sizes="50vw"
-            priority
+            preload
             style={{ objectFit: 'cover', objectPosition: 'center' }}
           />
         </div>

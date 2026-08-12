@@ -1,10 +1,10 @@
 'use client';
 
 import type React from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { Card, Box, Progress } from '@mantine/core';
 import { getGroupBuyStatus, type Product } from '@greenhub/shared';
+import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 
 interface ProductCardProps {
   product: Product;
@@ -17,7 +17,7 @@ const categoryLabels: Record<string, string> = {
 };
 
 export default function ProductCard({ product }: ProductCardProps) {
-  const imgSrc = product.images?.[0] ?? '/icons/icon-192x192.png';
+  const imgSrc = product.images?.[0] ?? PRODUCT_IMAGE_FALLBACK;
 
   return (
     <Card
@@ -39,9 +39,10 @@ export default function ProductCard({ product }: ProductCardProps) {
           overflow: 'hidden',
         }}
       >
-        <Image
+        <ResilientImage
           fill
           src={imgSrc}
+          fallbackSrc={PRODUCT_IMAGE_FALLBACK}
           alt={product.name}
           sizes="(max-width: 600px) 50vw, 33vw"
           style={{ objectFit: 'cover' }}

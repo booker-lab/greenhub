@@ -258,6 +258,85 @@
 
 ## 외부 상태와 금지 범위 준수
 
+## 후속 consumer 운영 이미지 복구
+
+### 이미지 복구 Task 0.1 — 작업공간 기준선 확인
+
+- **Status**: done
+- 지정 worktree의 branch는 `codex/kakao-business-channel-proof`, HEAD는 `0a02b31806812e85104a409f4284302f64e38c17`로 기준과 일치했다.
+- 작업 트리에는 예상된 미추적 문서 `docs/plans/PLAN_consumer_image_recovery.md`, `docs/plans/PROMPT_consumer_image_recovery.md`만 있었다.
+- 작업 트리 diff와 staging diff는 모두 비어 있었고 branch는 원격 작업 branch보다 2개 commit 앞선 상태였다.
+- **Verify**: `git status --short --branch`, `git diff`, `git diff --cached`
+- **종료 코드**: 모두 0
+
+### 이미지 복구 Task 0.2 — Storage 오류와 결제 상태 확정
+
+- **Status**: done
+- 운영 배너와 공개 상품 5개 대표 이미지 원본을 전체 주소와 토큰을 출력하지 않는 방식으로 재조회했다.
+- 6개 원본은 모두 호스트 `firebasestorage.googleapis.com`, HTTP 402, 콘텐츠 형식 `application/json`을 반환했다.
+- 한 원본의 오류 본문을 구조화해 확인한 결과 오류 코드는 402이고, 소유 프로젝트에 연결된 결제 계정이 `closed` 상태라 비활성이라는 내용이었다.
+- Firebase 콘솔에 표시된 현재 요금제는 `Spark`였다.
+- Firebase 프로젝트 자체는 활성 상태지만 Cloud Billing 계정은 연결된 채 닫혀 있었고 `billingEnabled=false`였다. 결제 계정 식별자와 결제수단 정보는 조회 결과에 기록하지 않았다.
+- Firebase 공식 문서에 따르면 2026년 2월 3일부터 기존 기본 버킷을 포함한 Cloud Storage for Firebase 접근에는 Blaze 요금제가 필요하고, Spark 프로젝트의 요청은 402 또는 403으로 실패한다.
+- 기존 사진 접근 복구에는 닫힌 Cloud Billing 계정을 다시 열거나 다른 활성 계정을 연결해 Blaze로 전환해야 한다. 이 변경은 비용 발생 가능성이 있어 사용자 승인 전에는 수행하지 않는다.
+- 기존 `*.appspot.com` 기본 버킷은 Blaze에서도 저장 5GB, 다운로드 1GB/일, 업로드 20,000회/일, 다운로드 50,000회/일의 무료 사용량을 유지하며 초과분은 사용량 기준으로 청구된다.
+- 예산과 예산 알림은 사용량이나 비용을 자동 차단하지 않으며 알림 도착이 지연될 수 있다. 승인 시 프로젝트 한정 월 예산과 낮은 초기 임계값을 함께 설정하는 방안을 적용한다.
+- **공식 근거**: `https://firebase.google.com/docs/storage/faqs-storage-changes-announced-sept-2024`, `https://firebase.google.com/docs/projects/billing/firebase-pricing-plans`, `https://firebase.google.com/docs/projects/billing/avoid-surprise-bills`, `https://cloud.google.com/billing/docs/how-to/verify-billing-enabled`
+- **외부 변경**: 없음. Firebase 플랜·Billing·결제수단·예산은 변경하지 않았다.
+- **Verify**: 원본 6건 읽기 전용 HTTP 조회, Firebase 콘솔 플랜 조회, Firebase CLI 프로젝트 조회, Cloud Billing CLI 상태 조회
+- **종료 코드**: 모두 0
+
+### 이미지 복구 Task 0.3 — 승인된 Firebase Storage 접근 복구
+
+- **Status**: done
+- 사용자의 명시적 승인 뒤 운영 프로젝트 `green-e4fe3`를 기존 활성 Cloud Billing 계정에 연결했다.
+- Cloud Billing은 `billingEnabled=true`, 연결 계정은 `open=true`, Firebase 콘솔은 `Blaze / 사용한 만큼만 지불`로 전환된 것을 확인했다.
+- 운영 프로젝트만 범위로 한정한 월 10,000원 예산 `그린러브 운영 월 예산`을 만들고 실제 비용 10·50·90·100%에서 결제 관리자·사용자에게 알리도록 설정했다.
+- 예산 알림은 비용을 자동으로 차단하지 않고 도착이 지연될 수 있다. 결제수단과 다른 프로젝트·결제 계정은 변경하지 않았다.
+- **외부 변경**: 운영 프로젝트의 Billing 연결과 Blaze 활성화, 프로젝트 한정 예산 알림 1건
+- **Verify**: Cloud Billing CLI 읽기, Firebase 콘솔 플랜 확인, 예산 생성 성공 화면
+
+### 이미지 복구 Task 0.4 — 기존 원본 재검증
+
+- **Status**: done
+- 주소와 다운로드 토큰을 출력하지 않는 읽기 전용 검증기 `scripts/verify-public-images.mjs`를 추가했다.
+- 운영 배너와 활성 상품 5개는 모두 호스트 `firebasestorage.googleapis.com`, HTTP 200, 콘텐츠 형식 `image/png`으로 복구됐다.
+- 검사 6건 중 정상 6건, 실패·누락 0건이었다. 기존 상품·배너·스토어 DB 주소와 Storage 객체는 변경하지 않았다.
+- **Verify**: `node --check scripts/verify-public-images.mjs`, `node scripts/verify-public-images.mjs`
+- **종료 코드**: 모두 0
+
+### 이미지 복구 Task 1.1~1.9 — consumer 실패 대체 처리
+
+- **Status**: done
+- 구현 전에 배너 숨김, 상품 로컬 대체 이미지, 자유 비율 상세 이미지 숨김, 스토어 첫 글자 아바타 계약을 추가했다. 문법 검사는 통과했고 공통 컴포넌트 부재로 의도한 RED를 확인했다.
+- 좁은 `'use client'` 경계의 `ResilientImage`를 추가해 원본 실패를 화면별 대체 상태로 한 번만 전환하고, 대체 이미지도 실패하면 최종 숨김으로 종료하도록 했다.
+- `HeroBanner`, `ProductCard`, `HomeProductList`, `DeadlineSection`, `ProductImages`, `ProductInfo`, `ProductActions`에 적용했다.
+- 배너는 사진 실패 시 문구와 버튼을 유지하고, 상품은 기존 로컬 아이콘을 사용하며, 자유 비율 상세 이미지는 실패 요소만 숨긴다. 스토어 로고 미등록과 실패는 동일한 상호 첫 글자 아바타를 사용한다.
+- `packages/shared`, API, seller, driver와 운영 DB는 변경하지 않았다.
+- **Verify**: `node --test apps/consumer/src/components/ResilientImage.test.mjs`
+- **결과**: 5/5 통과
+
+### 이미지 복구 Task 2.1~2.3 — 자동 검증
+
+- **Status**: done
+- 이미지 계약과 기존 상품 상태·운영 관계·홈 계약은 17/17 통과, 실패 0건이었다.
+- `pnpm --filter consumer exec tsc --noEmit`은 종료 코드 0으로 통과했다.
+- `pnpm --filter consumer lint`는 오류 0건, 경고 23건으로 통과했다. 기준 25건보다 2건 줄었고 새 경고는 없다.
+- Next.js 16.2.5 production build는 compile·TypeScript·정적 페이지 13/13 생성을 포함해 종료 코드 0으로 통과했다.
+- `git diff --check`도 종료 코드 0으로 통과했다.
+- React 검토에서는 Client Component 경계, 함수형 상태 전환, 대체 텍스트, `sizes`와 `preload` 유지에 새 접근성·상태·성능 회귀가 없음을 확인했다.
+
+### 이미지 복구 Task 2.4 — 배포 후보 화면 검증
+
+- **Status**: done
+- Vercel 미리보기 `dpl_EbiC6jebymZswZCcvVcCADNgZMuc`를 만들고 API CORS가 허용하는 팀 범위의 임시 미리보기 별칭에서 확인했다. 검증 뒤 임시 별칭은 제거했다.
+- 데스크톱과 375×812 모바일 홈에서 배너와 활성 상품 5개 이미지의 실제 크기가 모두 0보다 컸고, 가로 넘침과 애플리케이션 오류가 없었다.
+- 공개 상품 상세 5개 모두 대표·상세 이미지가 양수 크기로 표시됐고, 스토어 로고는 뷰포트 진입 뒤 48×48로 로드됐다. 처음 관찰한 `0×0`은 화면 아래 lazy-load 대기 상태였으며 프록시 응답 200 `image/png`, 자체 디코딩 96×96, 스크롤 뒤 실제 크기 48×48로 확인했다.
+- 강제 실패 시 배너 사진만 제거되고 문구와 두 버튼은 유지됐다. 상품 5개는 로컬 대체 이미지로 전환됐고 상세 대표는 대체 이미지, 자유 비율 상세 이미지는 숨김, 스토어 로고는 `디` 첫 글자 아바타로 전환됐다.
+- 대체 이미지 자체 실패를 다시 발생시켜 이미지 영역이 최종 숨김으로 종료되고 깨진 이미지 0건인 것을 확인했다.
+- 모바일 강제 실패에서도 같은 결과와 가로 넘침 없음, 브라우저 애플리케이션 오류 0건을 확인했다.
+- Vercel 보호 화면의 Google 로그인 위젯에서 발생한 FedCM 경고·오류는 보호 우회 쿠키 설정 전 로그인 화면에 한정됐고 consumer 애플리케이션 오류가 아니다. 실제 검증 세션에서는 이를 분리해 판단했다.
+
 - PR #13, 후속 증빙 PR #14와 화면 정돈 PR #15를 merge commit 방식으로 `main`에 병합하고 consumer production만 새 성공 배포로 전환했다.
 - PR #15 병합 SHA의 GitHub deployment는 `Production – greenhubconsumer` 1건뿐이며 seller·driver는 배포 경로 필터에 따라 기존 서비스 배포를 유지했다.
 - Railway API 경로는 변경하지 않아 새 배포와 restart를 유발하지 않았다.
