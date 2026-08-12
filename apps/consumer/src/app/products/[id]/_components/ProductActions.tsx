@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import {
@@ -22,6 +21,7 @@ import { useStore } from '@/hooks/useProducts';
 import { useCart } from '@/hooks/useCart';
 import GreenLoveBrandSection from '@/components/GreenLoveBrandSection';
 import ProductCTABar from '@/components/ProductCTABar';
+import ResilientImage from '@/components/ResilientImage';
 import DeliveryDatePicker from './DeliveryDatePicker';
 import { getGroupBuyStatus, type Product, type DeliveryMethod } from '@greenhub/shared';
 
@@ -33,6 +33,27 @@ const deliveryLabels: Record<DeliveryMethod, string> = {
 
 interface Props {
   product: Product;
+}
+
+function StoreInitialAvatar({ name }: { name: string }) {
+  return (
+    <Box
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: '50%',
+        background: 'var(--color-primary-surface)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'var(--color-primary)',
+        fontWeight: 'var(--fw-bold)',
+        fontSize: 'var(--font-size-md)',
+      }}
+    >
+      {name.trim().charAt(0) || '그'}
+    </Box>
+  );
 }
 
 export default function ProductActions({ product }: Props) {
@@ -383,30 +404,16 @@ export default function ProductActions({ product }: Props) {
           </Text>
           <Group gap="sm" mb="sm">
             {store.logoUrl ? (
-              <Image
+              <ResilientImage
                 src={store.logoUrl}
                 alt={store.name}
                 width={44}
                 height={44}
+                fallback={<StoreInitialAvatar name={store.name} />}
                 style={{ borderRadius: '50%', objectFit: 'cover' }}
               />
             ) : (
-              <Box
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: '50%',
-                  background: 'var(--color-primary-surface)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--color-primary)',
-                  fontWeight: 'var(--fw-bold)',
-                  fontSize: 'var(--font-size-md)',
-                }}
-              >
-                {store.name[0]}
-              </Box>
+              <StoreInitialAvatar name={store.name} />
             )}
             <Box>
               <Text

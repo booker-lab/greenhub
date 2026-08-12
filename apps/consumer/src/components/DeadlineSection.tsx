@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { Box } from '@mantine/core';
 import type { Product } from '@greenhub/shared';
+import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 
 const DEADLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -56,9 +56,10 @@ function DeadlineCard({ product }: { product: Product }) {
           marginBottom: 6,
         }}
       >
-        <Image
+        <ResilientImage
           fill
-          src={product.images?.[0] ?? '/icons/icon-192x192.png'}
+          src={product.images?.[0] ?? PRODUCT_IMAGE_FALLBACK}
+          fallbackSrc={PRODUCT_IMAGE_FALLBACK}
           alt={product.name}
           sizes="140px"
           style={{ objectFit: 'cover' }}
