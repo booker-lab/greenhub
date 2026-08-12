@@ -207,7 +207,7 @@
 
 ## 2026-08-11 후속 공개 상품 정상화
 
-- **Status**: 배포 전 검증 완료
+- **Status**: production 반영 및 운영 검증 완료
 - 2026년 8월 10일 카카오 비즈니스 채널 심사가 `사업자-채널의 연관성 확인/검증 불가` 사유로 다시 반려됐다.
 - 운영 화면의 공개 상품 목록에 E2E 상품과 모집기한이 지난 공동구매가 노출되고, 만료 공동구매 상세의 장바구니 동선이 활성인 상태를 확인했다.
 - 공개 API가 활성 공개 상품만 반환하고 시험용 상품은 목록과 상세에서 차단하도록 서버 방어를 추가했다.
@@ -215,4 +215,11 @@
 - 공동구매 상태 판정을 shared 계약으로 통합해 홈·공구 목록·상품 카드·상세 구매 동선이 목표 수량과 모집기한을 함께 사용하도록 했다.
 - 운영 Firestore의 고정 `e2e-` 상품 두 건은 삭제하지 않고 `isActive=false`, `testOnly=true`로 변경했으며 적용 후 같은 값을 재조회했다.
 - shared 테스트 9/9, API 테스트 6/6, consumer·시드 계약 테스트 18/18, consumer lint 오류 0·기존 경고 25건, API와 consumer production build가 통과했다.
-- 배포 식별자와 운영 확인 결과는 배포 완료 뒤 REPORT와 새 인계 문서에 확정한다.
+- 코드 commit `f04a3458747d83a41c693efab13b7e48704fbc6f`를 PR #17로 병합했으며 merge commit은 `098ad98c72a8bdcb5e3c1a95ed2c6b3287cf0ab2`다.
+- consumer production 배포 `dpl_H9YdEa8HWd5PkM1PKZTw6g7EF3Fo`와 Railway API production 배포 `d054f564-5fc7-4656-816b-7c05578e260e`가 같은 merge SHA로 성공했다.
+- 운영 API는 공개 상품 5건을 반환하고 E2E 상품 0건, 비활성 조회 우회 결과 동일, E2E 상세 2건 모두 404임을 확인했다.
+- 운영 데스크톱과 375×812 모바일에서 E2E 문구 미노출, 만료 공동구매의 진행 중 구획 제외, `모집 마감` 표시, 구매 버튼 차단, 실제 일반상품 3종, 운영 관계, 공식 채널, 가로 넘침 부재를 확인했다.
+- 최근 1시간 consumer Vercel 오류 로그와 Railway 오류·5xx 로그는 0건이다.
+- `packages/shared` 변경이 Vercel의 공통 빌드 경로로 인식되어 seller 배포 `dpl_5CdhRd1XAW7LFxUTiEe2HHY7qTqP`와 driver 배포 `dpl_FZbbKMh362QGayFyeTNLTBSU5cKi`도 자동 생성됐다. 두 배포는 Ready, 공개 도메인은 HTTP 200, 최근 1시간 오류 로그는 0건이다.
+- 카카오 재신청과 카카오 채널·이메일·DNS·ALIGO·공개 소식 변경은 수행하지 않았다.
+- **남은 위험**: 운영 배너의 Firebase Storage 이미지 원본이 HTTP 402를 반환해 브라우저에서 이미지가 깨져 보인다. 이번 승인 범위 밖의 운영 콘텐츠이므로 변경하지 않았으며, 다음 작업에서 사용자가 승인한 새 이미지로 교체하거나 배너 이미지 설정을 제거해야 한다.

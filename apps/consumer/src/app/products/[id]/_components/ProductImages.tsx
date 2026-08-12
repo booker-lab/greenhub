@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import Image from 'next/image';
 import { Box } from '@mantine/core';
+import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 
 interface Props {
   images: string[];
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function ProductImages({ images, name }: Props) {
-  const displayImages = images.length ? images : ['/icons/icon-192x192.png'];
+  const displayImages = images.length ? images : [PRODUCT_IMAGE_FALLBACK];
   const [activeIdx, setActiveIdx] = useState(0);
   const carouselRef = useRef<HTMLDivElement>(null);
 
@@ -45,12 +45,13 @@ export default function ProductImages({ images, name }: Props) {
               position: 'relative',
             }}
           >
-            <Image
+            <ResilientImage
               fill
               src={src}
+              fallbackSrc={PRODUCT_IMAGE_FALLBACK}
               alt={`${name} ${i + 1}`}
               sizes="100vw"
-              priority={i === 0}
+              preload={i === 0}
               style={{ objectFit: 'cover' }}
             />
           </Box>
@@ -92,9 +93,10 @@ export default function ProductImages({ images, name }: Props) {
                 position: 'relative',
               }}
             >
-              <Image
+              <ResilientImage
                 fill
                 src={src}
+                fallbackSrc={PRODUCT_IMAGE_FALLBACK}
                 alt={`${name} 썸네일 ${i + 1}`}
                 sizes="56px"
                 style={{ objectFit: 'cover' }}
