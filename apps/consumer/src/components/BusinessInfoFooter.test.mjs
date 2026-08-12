@@ -24,6 +24,7 @@ test('공개 사업자 정본을 빠짐없이 렌더링한다', () => {
     '조정연',
     '505-28-01702',
     '010-4452-2104',
+    '경기도 이천시 백사면 도지리 543-2',
     'support@greenlove.co.kr',
   ];
 
@@ -56,8 +57,6 @@ test('접근 가능한 footer와 고객센터 링크를 제공한다', () => {
 test('확정되지 않은 외부 증거는 노출하지 않는다', () => {
   const source = `${loadComponentSource()}\n${loadBusinessInfoSource()}`;
 
-  assert.doesNotMatch(source, /사업장 주소/);
-  assert.doesNotMatch(source, /address:/);
   assert.doesNotMatch(source, /naver\.(?:me|com)/i);
   assert.doesNotMatch(source, /통신판매업 신고번호/);
 });
