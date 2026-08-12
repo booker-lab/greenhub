@@ -313,8 +313,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 검증된 변경을 main에 병합해 consumer production에 배포한다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: [판정 대기 — merge SHA, consumer 배포 식별자·상태, 비대상 서비스 배포 여부를 기록.]
-- **Status**: todo
+- **Conclusion**: PR #18을 merge commit `e6c2138e3c969616e19f2ba8882c1842a3cf0dfb`로 main에 병합했다. consumer production 배포 `dpl_9LQkxbkSpuHQwYnPTSYdg5L2g14g`와 GitHub deployment `5863377298`은 같은 SHA로 성공했고 운영 도메인 별칭이 연결됐다. seller production 후보 `dpl_3D2gAGP2d6Evez3fQmgsiLnN1wKE`와 driver 후보 `dpl_DSTjpvqChdJKTdrA5nNPsmVUc7td`는 Ignored Build Step으로 취소됐다. seller·driver 최신 production은 이전 SHA `098ad98c`를 유지했고 Railway API의 최신 production deployment도 같은 이전 SHA로 유지됐다.
+- **Status**: done
 
 #### Task 3.3 — 운영 이미지와 로그 재검증 [Unit: Atomic]
 
@@ -325,8 +325,8 @@
 - **Goal**: 운영 원본과 Next 이미지 프록시와 실제 브라우저에서 이미지 복구와 대체 동작을 재확인한다.
 - **Verify**: `node apps/consumer/scripts/verify-public-images.mjs`
 - **Visual Verify**: 운영 홈과 공개 상품 5개 상세를 데스크톱·375×812 모바일로 확인하고 개인정보 영역은 캡처·기록하지 않는다.
-- **Conclusion**: [판정 대기 — 원본·프록시·브라우저 상태, 콘솔과 Vercel 오류 로그 결과를 기록.]
-- **Status**: todo
+- **Conclusion**: 운영 배너와 활성 상품 5개 원본은 6/6 HTTP 200 `image/png`, 운영 Next 이미지 프록시도 HTTP 200 `image/png`이었다. 데스크톱과 375×812 모바일 홈·공개 상품 상세 5개에서 배너·대표·상세·스토어 로고 실제 크기가 모두 양수였고 깨진 이미지 0건, 가로 넘침 없음, 브라우저 애플리케이션 오류 0건이었다. consumer Vercel 최근 1시간 런타임 오류와 배포별 5xx는 모두 0건이었다.
+- **Status**: done
 
 #### Task 3.4 — 문서와 다음 인계 프롬프트 마감 [Unit: Atomic]
 
@@ -336,12 +336,13 @@
 - **Target**: `docs/plans/PROMPT_consumer_image_recovery.md`
 - **Goal**: 최종 branch·HEAD·diff·검증·PR·배포·외부 변경·남은 위험을 다음 인계 프롬프트에 기록한다.
 - **Verify**: `git diff --check -- docs/plans/PROMPT_consumer_image_recovery.md`
-- **Conclusion**: [판정 대기 — 최종 인계 정보와 미완료 게이트를 기록.]
-- **Status**: todo
+- **Conclusion**: branch·기능 HEAD·main merge SHA·diff·검증·PR·배포·Firebase 변경·운영 DB와 외부 서비스 상태·남은 위험을 `PROMPT_consumer_image_recovery.md`에 최종 인계로 갱신했다. 인계 문서 자체의 closeout commit과 main 반영 결과는 최종 응답에 별도로 기록한다.
+- **Status**: done
 
 ## Closeout
 
-- **Status**: todo
+- **Status**: done
 - **완료 조건**: 실제 운영 사진 복구, 강제 실패 대체, consumer 검증, PR·production 배포, 운영 재검증이 모두 통과해야 한다.
-- **차단 조건**: Blaze 전환이 승인되지 않고 대체 저장소도 합의되지 않으면 실제 사진 복구는 완료로 선언하지 않는다.
+- **완료 결과**: 승인된 Blaze 전환으로 기존 원본 접근을 복구했고 실패 대체 처리, 자동·화면 검증, PR·production 배포, 운영 재검증을 모두 통과했다.
+- **차단 조건**: 없음.
 - **별도 계획 조건**: 기존 객체가 유실됐거나 Blaze 전환을 선택하지 않으면 승인된 원본 자산과 저장소 제공자를 정한 새 마이그레이션 Blueprint를 만든다.
