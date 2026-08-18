@@ -9,7 +9,7 @@
 - **Labels**: consumer, compliance, kakao-review
 - **Architectural Goal**: consumer 홈 푸터를 검증된 사업자 정본 기반의 반응형 정보 블록으로 재구성한다.
 - **작성일**: 2026-08-18
-- **상태**: 계획 확정, 구현 미착수
+- **상태**: 구현·배포·운영 검증 완료
 
 ## 📋 업무 요약 (협업용)
 
@@ -206,7 +206,7 @@
 - push·PR·main 병합·consumer production 배포는 전체 diff와 화면 검증이 통과한 뒤 진행한다.
 - production에서는 데스크톱과 375×812 모바일에서 푸터 전체가 보이는지 다시 확인한다.
 - seller·driver·Railway API의 예상 밖 배포 여부는 상태만 확인하고 임의 변경이나 rollback을 하지 않는다.
-- 카카오 문의 답변을 받기 전에는 이 푸터 변경만으로 재심사를 다시 제출하지 않는다.
+- 카카오 재심사는 이 계획과 분리하며, 사용자의 별도 명시적 요청을 받은 경우에만 진행한다.
 
 ### Release Gate 결과
 

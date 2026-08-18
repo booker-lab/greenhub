@@ -6,9 +6,9 @@
 
 - worktree: `C:\Users\tazan\.codex\worktrees\7573\greenhub`
 - branch: `codex/kakao-business-channel-proof`
-- 최종 기능·검증 HEAD: `8898102bd451870255e22cbf263e683f33a83668`
-- main 병합 SHA: `0a73f9360e287e3ae95c5cc7af59f18af0c4c35c`
-- PR: #22, `MERGED`
+- 최신 기능·검증 HEAD: `bc51e4dd729b6c5d731a6f79baab0ea91418422a`
+- 최신 main 병합 SHA: `c96db6f3dd0ed5c7f6bd97fca9ab5763b9aed74c`
+- PR: #22·#23·#24, 모두 `MERGED`
 - 기능 branch는 원격 작업 branch와 동기화됐고 기능·배포 작업 종료 시 작업 트리와 staging은 비어 있었다.
 - 이 인계와 PLAN·REPORT closeout을 담는 문서 commit은 문서 자체가 자신의 SHA를 포함할 수 없으므로 최종 응답과 `git log -1`에서 확인한다.
 
@@ -55,12 +55,15 @@
 - checkpoint를 `origin/codex/kakao-business-channel-proof`에 push했다.
 - PR #22의 consumer 미리보기와 Preview Comments가 성공했고 seller·driver는 Ignored Build Step으로 취소됐다.
 - 모든 검사가 통과한 뒤 PR #22를 merge commit `0a73f9360e287e3ae95c5cc7af59f18af0c4c35c`로 main에 병합했다.
+- closeout 문서 PR #23과 상품 상세 판매자 보조 문구 제거 PR #24도 검사 통과 뒤 main에 병합했다.
 
 ## 배포 식별자와 운영 확인 결과
 
 - consumer preview GitHub deployment: `5958625941`, 성공.
 - consumer production GitHub deployment: `5958653908`, 성공.
 - consumer production Vercel: `dpl_Bnn4DCf77F1rLE9sVRwojrXHF3bR`, `Ready`.
+- 최신 consumer production Vercel: `dpl_4TPxLkDExMDqxBUVRg8nSV6R86kv`, `Ready`.
+- 최신 consumer production GitHub deployment: `5959074365`, 성공.
 - `greenlove.co.kr`, `www.greenlove.co.kr`, 기본 Vercel 별칭이 새 production에 연결됐다.
 - merge SHA의 GitHub deployment는 consumer production 1건뿐이며 seller·driver production은 생성되지 않았다.
 - Railway API 후보 `ea1f214a-9ae2-4165-ae27-0929a3e56094`는 `No changes to watched files`로 건너뛰었다.
@@ -71,13 +74,14 @@
 - 이번 footer 작업에서 Firebase 플랜·Billing·결제수단·예산·Storage를 변경하지 않았다.
 - 기존 상태는 운영 프로젝트가 활성 Billing에 연결된 Blaze이며 프로젝트 한정 월 10,000원 예산과 실제 비용 10·50·90·100% 알림이 설정된 상태다.
 - 상품·배너·스토어 문서와 이미지 주소를 포함한 운영 DB는 변경하지 않았다.
-- 카카오 재신청과 카카오 채널 전화번호·소개·소식, 이메일·DNS·ALIGO는 변경하지 않았다.
-- 반복 반려 문의 답변은 아직 확인되지 않았고, 답변 전에는 채널 정보 변경이나 추가 재신청을 수행하지 않는다.
+- 사용자 요청으로 2026년 8월 18일 카카오 비즈니스 4차 재심사를 접수했다.
+- 재심사 외에 카카오 채널 전화번호·소개·소식, 이메일·DNS·ALIGO는 변경하지 않았다.
+- 제출한 홈페이지 주소는 `https://greenlove.co.kr`이며 파일 첨부는 0건이다.
 
 ## 남은 위험과 다음 권장 작업
 
 - footer 보강은 홈페이지의 사업자 정보 확인성을 높이지만 카카오 승인 자체를 보장하지 않는다.
-- 카카오 문의 답변에서 채널 전화번호 불일치가 실제 반려 사유인지 먼저 확인한다. 확인 전에는 사업자 번호로 새 채널을 만들거나 기존 채널 정보를 바꾸지 않는다.
+- 카카오 문의 답변과 4차 재심사 결과를 확인해 전화번호 불일치가 실제 심사 사유인지 추정과 확정으로 구분한다. 확인 전에는 사업자 번호로 새 채널을 만들거나 기존 채널 정보를 바꾸지 않는다.
 - 통신판매업 신고번호는 현재 공개 정본에 없으므로 임의 생성하지 않는다. 실제 발급 뒤 공개 승인을 받은 경우에만 정본과 footer를 갱신한다.
 - 기존 404 홍보 링크 문제는 이번 footer 범위와 분리돼 있다. 카카오 추가 제출 전 공개 링크 전체를 다시 점검한다.
 - consumer lint의 기존 경고 23건은 이번 변경에서 늘지 않았으며 별도 유지보수 범위다.
@@ -87,5 +91,5 @@
 
 1. `git status --short --branch`, `git diff`, `git diff --cached`를 확인한다.
 2. `git log -1 --oneline`, `origin/codex/kakao-business-channel-proof`, `origin/main`에서 closeout 문서 commit과 병합 상태를 확인한다.
-3. 카카오 문의 답변을 읽기 전용으로 확인하고 반려 사유를 추정과 확정으로 구분한다.
-4. 추가 재신청 권한을 별도로 확인한 뒤 홈페이지 URL은 정확히 `https://greenlove.co.kr/`로 사용한다.
+3. 카카오 문의 답변과 4차 재심사 결과를 읽기 전용으로 확인하고 반려 사유를 추정과 확정으로 구분한다.
+4. 추가 제출이 필요하면 별도 사용자 승인을 확인하고 홈페이지 URL은 정확히 `https://greenlove.co.kr`로 사용한다.
