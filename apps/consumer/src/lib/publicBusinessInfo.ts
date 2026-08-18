@@ -8,6 +8,8 @@ export const PUBLIC_BUSINESS_INFO = {
   phoneHref: 'tel:01044522104',
   email: 'support@greenlove.co.kr',
   emailHref: 'mailto:support@greenlove.co.kr',
+  hostingProvider: 'Vercel Inc.',
+  supportHours: '09:00~18:00 (점심시간 12:00~13:00)',
   relationship: '그린러브는 디어 오키드가 운영하는 화훼 쇼핑몰입니다.',
   kakaoChannel: {
     name: '그린러브',
