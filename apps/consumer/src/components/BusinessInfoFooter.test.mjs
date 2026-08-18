@@ -26,6 +26,8 @@ test('공개 사업자 정본을 빠짐없이 렌더링한다', () => {
     '010-4452-2104',
     '경기도 이천시 백사면 도지리 543-2',
     'support@greenlove.co.kr',
+    'Vercel Inc.',
+    '09:00~18:00 (점심시간 12:00~13:00)',
   ];
 
   for (const value of requiredValues) {
@@ -33,25 +35,42 @@ test('공개 사업자 정본을 빠짐없이 렌더링한다', () => {
   }
 });
 
-test('그린러브와 디어 오키드의 운영 관계를 명시한다', () => {
-  const source = `${loadComponentSource()}\n${loadBusinessInfoSource()}`;
+test('운영 관계 문장은 상단 정본에만 유지하고 footer에서 반복하지 않는다', () => {
+  const componentSource = loadComponentSource();
+  const businessInfoSource = loadBusinessInfoSource();
 
   assert.match(
-    source,
+    businessInfoSource,
     /그린러브는 디어 오키드가 운영하는 화훼 쇼핑몰입니다\./,
+  );
+  assert.doesNotMatch(
+    componentSource,
+    /PUBLIC_BUSINESS_INFO\.relationship/,
   );
 });
 
-test('접근 가능한 footer와 고객센터 링크를 제공한다', () => {
+test('접근 가능한 footer와 공개 사업자 정보 및 고객센터 링크를 제공한다', () => {
   const componentSource = loadComponentSource();
   const businessInfoSource = loadBusinessInfoSource();
 
   assert.match(componentSource, /<footer/);
   assert.match(componentSource, /사업자 정보/);
+  assert.match(componentSource, /PUBLIC_BUSINESS_INFO\.address/);
+  assert.match(componentSource, /PUBLIC_BUSINESS_INFO\.hostingProvider/);
+  assert.match(componentSource, /PUBLIC_BUSINESS_INFO\.supportHours/);
   assert.match(businessInfoSource, /phoneHref: 'tel:01044522104'/);
   assert.match(businessInfoSource, /emailHref: 'mailto:support@greenlove\.co\.kr'/);
   assert.match(componentSource, /href=\{PUBLIC_BUSINESS_INFO\.phoneHref\}/);
   assert.match(componentSource, /href=\{PUBLIC_BUSINESS_INFO\.emailHref\}/);
+});
+
+test('좁은 화면에서 긴 사업자 정보가 안전하게 줄바꿈된다', () => {
+  const componentSource = loadComponentSource();
+
+  assert.match(componentSource, /flexWrap: 'wrap'/);
+  assert.match(componentSource, /overflowWrap: 'anywhere'/);
+  assert.match(componentSource, /aria-labelledby="business-info-title"/);
+  assert.doesNotMatch(componentSource, /['"]use client['"]/);
 });
 
 test('확정되지 않은 외부 증거는 노출하지 않는다', () => {
