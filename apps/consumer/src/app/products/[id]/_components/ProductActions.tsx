@@ -426,11 +426,6 @@ export default function ProductActions({ product }: Props) {
               >
                 {store.name}
               </Text>
-              <Text
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-              >
-                {store.ceoName}
-              </Text>
             </Box>
           </Group>
           <Stack gap={4}>
