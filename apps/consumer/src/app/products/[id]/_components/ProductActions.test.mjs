@@ -18,4 +18,5 @@ test('판매자 연락처는 공개 사업자 정보의 주소와 전화번호�
   assert.match(source, /PUBLIC_BUSINESS_INFO\.phone/);
   assert.doesNotMatch(source, /store\.address/);
   assert.doesNotMatch(source, /store\.phone/);
+  assert.doesNotMatch(source, /store\.ceoName/);
 });
