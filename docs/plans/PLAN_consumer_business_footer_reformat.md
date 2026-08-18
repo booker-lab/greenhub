@@ -195,7 +195,7 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 푸터 변경·자동 검증·화면 검증·배포 결과를 카카오 재심사 보고서에 기록한다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: 공개 정본·구현·자동 검증·데스크톱·375×812 화면 검증 결과와 원격 반영 대기 상태를 보고서에 기록했고 대상 문서와 전체 `git diff --check`가 통과했다.
+- **Conclusion**: 공개 정본·구현·자동 검증·배포 후보 화면 검증, checkpoint·PR·병합·production 배포와 운영 재검증 결과를 보고서에 기록했고 대상 문서와 전체 `git diff --check`가 통과했다.
 - **Status**: done
 
 ## Release Gate
@@ -208,10 +208,18 @@
 - seller·driver·Railway API의 예상 밖 배포 여부는 상태만 확인하고 임의 변경이나 rollback을 하지 않는다.
 - 카카오 문의 답변을 받기 전에는 이 푸터 변경만으로 재심사를 다시 제출하지 않는다.
 
+### Release Gate 결과
+
+- checkpoint `8898102bd451870255e22cbf263e683f33a83668`을 원격 작업 branch에 push했다.
+- PR #22의 검사가 모두 통과했고 merge commit `0a73f9360e287e3ae95c5cc7af59f18af0c4c35c`로 main에 병합했다.
+- consumer production `dpl_Bnn4DCf77F1rLE9sVRwojrXHF3bR`가 `Ready`이고 운영 도메인 별칭과 HTTP 200 응답을 확인했다.
+- 운영 데스크톱·375×812에서 푸터 전체, 상단 관계 문장 1회, 가로 넘침 없음, 깨진 이미지 0건, 콘솔 오류·경고 0건을 확인했다.
+- seller·driver는 Ignored Build Step으로 취소됐고 Railway API는 watched path 변경 없음으로 건너뛰어 기존 production을 유지했다.
+
 ## Conclusion
 
 - 계획의 구현 Task 10개를 모두 완료했고 계약 테스트 14/14, lint 오류 0건, production build, 데스크톱·375×812 화면 검증과 전체 `git diff --check`를 통과했다.
 - 공식 주소·호스팅서비스 제공자·고객센터·상담시간을 footer에 공개하고 운영 관계 문장은 상단에만 유지했다.
 - 운영 DB·Firebase·카카오 채널·이메일·DNS·ALIGO·공개 소식은 변경하지 않았다.
-- checkpoint·push·PR·main 병합·consumer production 배포와 운영 재검증은 Release Gate의 다음 단계로 진행한다.
+- checkpoint·push·PR #22·main 병합·consumer production 배포와 운영 재검증까지 완료했다.
 - 통신판매업 신고번호와 404 홍보 링크는 이번 푸터 작업에서 분리된 잔여 위험이다.

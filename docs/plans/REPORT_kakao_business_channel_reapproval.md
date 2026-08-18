@@ -395,6 +395,18 @@
 - 로컬 기본 실행은 환경 파일이 없어 Auth.js 설정 오류와 로컬 API 404가 발생했다. 저장소나 운영 설정을 바꾸지 않고 검증 프로세스에만 더미 인증값과 공개 운영 API 주소를 주입해 다시 확인한 결과 브라우저 콘솔 오류·경고는 0건이었다.
 - 이 시점에는 checkpoint·push·PR·main 병합·production 배포를 수행하지 않았다. 카카오 재신청과 카카오 채널·이메일·DNS·ALIGO·공개 소식도 변경하지 않았다.
 
+### 사업자 푸터 Task 3.2~3.3 — 원격 반영과 운영 재검증
+
+- **Status**: production 반영 및 운영 검증 완료
+- 공개 GitHub `noreply` 메타데이터와 한국어 메시지로 checkpoint `8898102bd451870255e22cbf263e683f33a83668`을 만들고 작업 branch에 push했다.
+- main 대상 PR #22의 consumer 미리보기와 Preview Comments가 성공했다. seller·driver 미리보기는 모두 Ignored Build Step으로 취소됐고 실제 배포되지 않았다.
+- PR #22의 모든 검사가 통과한 뒤 merge commit `0a73f9360e287e3ae95c5cc7af59f18af0c4c35c`로 main에 병합했다.
+- consumer production GitHub deployment `5958653908`이 성공했고 Vercel 배포 `dpl_Bnn4DCf77F1rLE9sVRwojrXHF3bR`가 `Ready` 상태다. `greenlove.co.kr`, `www.greenlove.co.kr`과 기본 Vercel 별칭이 연결됐고 운영 응답은 HTTP 200, `text/html`이었다.
+- 운영 데스크톱과 375×812 모바일에서 공개 필드 8개, 상단 운영 관계 문장 1회, footer 안 관계 문장 0회를 확인했다. 가로 넘침과 깨진 이미지가 없고 전화·이메일 링크는 올바른 `tel:`·`mailto:` 주소와 44px 높이를 유지했다.
+- 운영 브라우저 콘솔 오류·경고는 0건이고 consumer Vercel 최근 1시간 error 로그도 0건이었다.
+- merge SHA의 GitHub deployment는 consumer production 1건뿐이다. Railway API 후보 `ea1f214a-9ae2-4165-ae27-0929a3e56094`는 `No changes to watched files`로 건너뛰었고, 활성 production은 이전 SHA `098ad98c`의 `d054f564-5fc7-4656-816b-7c05578e260e`를 유지했다.
+- 운영 DB와 Firebase 플랜·Billing·Storage, 카카오 재신청·채널, 이메일·DNS·ALIGO·공개 소식은 변경하지 않았다.
+
 - PR #13, 후속 증빙 PR #14와 화면 정돈 PR #15를 merge commit 방식으로 `main`에 병합하고 consumer production만 새 성공 배포로 전환했다.
 - PR #15 병합 SHA의 GitHub deployment는 `Production – greenhubconsumer` 1건뿐이며 seller·driver는 배포 경로 필터에 따라 기존 서비스 배포를 유지했다.
 - Railway API 경로는 변경하지 않아 새 배포와 restart를 유발하지 않았다.
