@@ -509,7 +509,10 @@
 - 최초 운영 자동 실행은 링크 클릭 뒤 같은 경로를 다시 `goto`해 아직 진행 중인 Auth.js 세션 요청을 취소하면서 `Failed to fetch` 2건을 만들었다. 독립 `/api/auth/session`은 HTTP 200 `application/json`이고, 단일 문서를 `networkidle`까지 기다린 세션의 console·page 오류는 0건이었다.
 - 검증기를 중복 `goto` 없이 실제 링크 이동 후 URL·`networkidle`·독립 HTTP 상태를 확인하도록 고쳤다. 수정된 실행기로 데스크톱·모바일 전체 동선을 다시 실행해 console/page 오류 0건으로 통과했다.
 - agent-browser에서도 `/privacy`와 `/terms`의 내용, Next.js 오류 오버레이 없음, 상호 이동, 모바일 폭과 console·page 오류 0건을 재확인했다.
-- 운영 배포는 계속 Vercel `dpl_GJ3UaymM2gMbMGC3nKLfg2hzxBJy`, main merge `f21ab3b7a6467c1ab182af796e7dc42471e95714`, 상태 `READY`로 일치한다.
+- 검증기 수정과 이 보고서는 후속 checkpoint `3277a035fdddedb353836806a1e5923b0efaf6ae`, PR #27로 보존했다. PR의 consumer 미리보기와 Preview Comments는 성공했고 seller·driver는 `Canceled by Ignored Build Step`으로 종료됐다.
+- PR #27은 main merge `84b6c774601b84f2f756066a2f29bbfd0d055fda`로 병합됐다. GitHub consumer production deployment `5978845520`은 `success`, Vercel consumer production `dpl_8WbLZmtPdacQwSNS4jzXXMAAxaYC`는 target `production`·상태 `READY`이며 `greenlove.co.kr`·`www.greenlove.co.kr` 별칭이 연결됐다.
+- Railway API 후보 `52b890e4-9c90-481e-9916-75dcd7fec3c0`는 같은 병합 SHA에서 `No changes to watched files`로 `SKIPPED`됐고, 활성 production은 이전 SHA `098ad98c72a8bdcb5e3c1a95ed2c6b3287cf0ab2`의 `d054f564-5fc7-4656-816b-7c05578e260e`를 유지한다.
+- 최종 별칭 전환 뒤 `pnpm --filter e2e exec node scripts/verify-consumer-legal-documents.mjs https://greenlove.co.kr`를 다시 실행해 전체 운영 동선이 종료 코드 0으로 통과했다.
 - 이 검증은 카카오 재심사를 제출하지 않았다. 카카오 화면 입력·접수와 채널·이메일·DNS·ALIGO·Firebase·운영 DB 변경은 0건이다.
 
 ## 재개 지점
