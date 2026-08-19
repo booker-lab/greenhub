@@ -400,8 +400,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 사용자 승인에 따른 카카오 재심사 접수 증적을 보고서에 남긴다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: _(별도 승인 후 제출 주소·연관성 설명·첨부 0건 원칙·접수 시각·접수 성공 화면을 기록)_
-- **Status**: pending
+- **Conclusion**: 2026년 8월 19일 사용자의 별도 명시적 승인을 확인하고 대상 채널 `그린러브`의 재심사를 접수했다. 홈페이지 `https://greenlove.co.kr`, 디어 오키드의 채널·쇼핑몰 직접 운영 관계와 홈페이지 첫 화면·공식 채널·대표상품·하단 사업자정보·개인정보처리방침·이용약관의 동일 운영 주체를 소명했다. 인허가 비대상, 첨부 0건으로 제출했고 성공 화면의 요청 내용 `비즈니스 재심사 신청`, 요청일 `2026. 8. 19.`, 영업일 기준 평균 3~7일을 확인했다. 카카오 채널 정보·소식과 이메일·DNS·ALIGO·Firebase·운영 DB는 변경하지 않았다. Verify 종료 코드 0.
+- **Status**: done
 
 ### Phase 5 — 중단된 회차 직배송 인계 연결
 
@@ -440,8 +440,8 @@
 
 - **consumer 프로덕션 배포**: `PLAN 전체 실행` 승인 범위에 포함한다.
 - **카카오 재심사 접수**: `PLAN 전체 실행` 승인 범위에 포함하지 않는다.
-- **필요한 추가 승인**: 운영 `/privacy`·`/terms` 검증 결과를 사용자에게 보고한 뒤, 사용자가 카카오 재심사 접수를 명시적으로 승인해야 Task 4.3을 실행한다.
-- **승인 대기 중 상태**: 코드·배포는 유지하고 카카오·이메일·DNS·채널·ALIGO를 변경하지 않는다.
+- **추가 승인 결과**: 운영 `/privacy`·`/terms` 검증 결과를 보고한 뒤 사용자가 카카오 재심사 접수를 명시적으로 승인해 Task 4.3을 완료했다.
+- **심사 대기 중 상태**: 코드·배포는 유지하고 카카오 채널 정보·소식, 이메일·DNS·ALIGO를 변경하지 않는다.
 - **회차 직배송 상태**: Task 5.1은 인계 문서만 갱신하며 회차 생성, `salesMode` 변경, 결제·배송 활성화, 기존 Task 재개를 허용하지 않는다.
 
 ## Closeout Roll-up
@@ -450,11 +450,11 @@
 - **자동 검증**: 계약 12/12, TypeScript 오류 0, lint 오류 0·기존 경고 23, Next.js 16.2.5 production build·정적 페이지 15/15 완료
 - **화면 검증**: 로컬과 운영의 데스크톱·375×812에서 HTTP 200·비로그인 접근·상호 이동·가로 넘침과 하단 가림 없음·console/page 오류 0건 확인
 - **프로덕션 배포**: feature `2ad1b96` → PR #26 → main `f21ab3b` → Vercel `dpl_GJ3UaymM2gMbMGC3nKLfg2hzxBJy` READY; 검증기 `3277a03` → PR #27 → main `84b6c77` → Vercel `dpl_8WbLZmtPdacQwSNS4jzXXMAAxaYC` READY. 두 차례 모두 consumer production만 전환
-- **카카오 재심사**: 별도 사용자 승인 대기. 입력·제출 0건
-- **회차 직배송 인계**: 카카오 접수 결과 전이므로 Task 5.1 미실행, ALIGO와 회차 출시 계속 보류
-- **최종 인계**: branch `codex/kakao-business-channel-proof`; 기능과 검증기 checkpoint·push·PR·merge·consumer production, 최종 별칭 재검증과 비대상 서비스 경계 확인 완료. 배포 증적은 마감 문서 commit으로 보존하며 카카오 승인 게이트에서 중단
+- **카카오 재심사**: 2026년 8월 19일 별도 사용자 승인 후 접수 완료. 홈페이지 `https://greenlove.co.kr`, 법적 고지를 포함한 동일 운영 주체 소명, 첨부 0건. 영업일 기준 평균 3~7일 심사 결과 대기
+- **회차 직배송 인계**: 카카오 승인·반려 결과 전이므로 Task 5.1 미실행, ALIGO와 회차 출시 계속 보류
+- **최종 인계**: branch `codex/kakao-business-channel-proof`; 기능과 검증기 checkpoint·push·PR·merge·consumer production, 최종 별칭 재검증, 비대상 서비스 경계와 카카오 재심사 접수 완료. 카카오 결과 확인 게이트에서 중단
 - **후속 위험**: 회원 탈퇴·카카오 연결 해제 웹훅·자동 파기·상거래 거래조건·결제 활성화·배송 운영 기준
 
 ## Conclusion
 
-Task 1.1부터 4.2까지 완료했다. 실제 처리 흐름에 맞춘 법적 고지를 main과 consumer production에 공개했고 운영 검증까지 통과했다. Task 4.3은 `PLAN 전체 실행`에 포함되지 않는 별도 외부 제출 승인 게이트이므로 카카오 화면을 열거나 입력·제출하지 않았다. Task 5.1은 카카오 접수 결과와 최신 main 통합을 전제로 하므로 아직 실행할 수 없다. 잔여 위험은 회원 탈퇴·카카오 연결 해제·자동 파기 미구현, Vercel Hobby 계약 범위, Railway 미국 처리, 판매 개시 전 결제·배송·반품 조건 확정이다.
+Task 1.1부터 4.3까지 완료했다. 실제 처리 흐름에 맞춘 법적 고지를 main과 consumer production에 공개하고 운영 검증을 통과한 뒤, 사용자의 별도 승인에 따라 카카오 재심사를 접수했다. Task 5.1은 카카오 승인·반려 결과와 최신 main 통합을 전제로 하므로 아직 실행할 수 없다. 잔여 위험은 회원 탈퇴·카카오 연결 해제·자동 파기 미구현, Vercel Hobby 계약 범위, Railway 미국 처리, 판매 개시 전 결제·배송·반품 조건 확정이다.
