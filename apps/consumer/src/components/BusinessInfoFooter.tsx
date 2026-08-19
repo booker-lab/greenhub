@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 
 const termStyle = {
@@ -113,6 +114,25 @@ export default function BusinessInfoFooter() {
           <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.supportHours}</dd>
         </div>
       </dl>
+
+      <nav
+        aria-label="법적 고지"
+        style={{
+          borderTop: 'var(--border)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0 20px',
+          marginTop: 18,
+          paddingTop: 10,
+        }}
+      >
+        <Link href="/privacy" style={linkStyle}>
+          개인정보처리방침
+        </Link>
+        <Link href="/terms" style={linkStyle}>
+          이용약관
+        </Link>
+      </nav>
     </footer>
   );
 }
