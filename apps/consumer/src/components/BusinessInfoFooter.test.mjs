@@ -79,3 +79,14 @@ test('확정되지 않은 외부 증거는 노출하지 않는다', () => {
   assert.doesNotMatch(source, /naver\.(?:me|com)/i);
   assert.doesNotMatch(source, /통신판매업 신고번호/);
 });
+
+test('사업자 정보 다음에 공개 법적 고지 링크를 충분한 터치 영역으로 제공한다', () => {
+  const source = loadComponentSource();
+
+  assert.match(source, /href="\/privacy"/);
+  assert.match(source, />\s*개인정보처리방침\s*</);
+  assert.match(source, /href="\/terms"/);
+  assert.match(source, />\s*이용약관\s*</);
+  assert.match(source, /aria-label="법적 고지"/);
+  assert.match(source, /minHeight: 'var\(--touch-target\)'/);
+});
