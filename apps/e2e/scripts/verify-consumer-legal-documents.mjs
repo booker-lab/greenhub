@@ -3,11 +3,7 @@ import { chromium } from '@playwright/test';
 
 const baseUrl = (process.argv[2] ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 
-async function openPublicPage(page, path, expectedHeading) {
-  const response = await page.goto(`${baseUrl}${path}`, {
-    waitUntil: 'domcontentloaded',
-  });
-
+async function assertPublicPage(page, path, expectedHeading, response) {
   assert.ok(response, `${path} 응답이 없습니다.`);
   assert.equal(response.status(), 200, `${path}가 HTTP 200이 아닙니다.`);
   assert.equal(
@@ -18,6 +14,15 @@ async function openPublicPage(page, path, expectedHeading) {
   await page.getByRole('heading', { level: 1, name: expectedHeading }).waitFor();
   await page.getByText('디어 오키드', { exact: true }).first().waitFor();
   await page.getByText('2026년 8월 19일', { exact: true }).first().waitFor();
+}
+
+async function followPublicLink(page, link, path, expectedHeading) {
+  await link.click();
+  await page.waitForURL(`${baseUrl}${path}`);
+  await page.waitForLoadState('networkidle');
+
+  const response = await page.request.get(`${baseUrl}${path}`);
+  await assertPublicPage(page, path, expectedHeading, response);
 }
 
 async function assertNoHorizontalOverflow(page, label) {
@@ -63,25 +68,32 @@ async function verifyViewport(browser, viewport, label) {
   });
 
   try {
-    const homeResponse = await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+    const homeResponse = await page.goto(baseUrl, { waitUntil: 'networkidle' });
     assert.ok(homeResponse, '홈 응답이 없습니다.');
     assert.equal(homeResponse.status(), 200, '홈이 HTTP 200이 아닙니다.');
     const privacyFooterLink = await assertLinkIsReachable(
       page,
       '개인정보처리방침',
     );
-    await privacyFooterLink.click();
-    await openPublicPage(page, '/privacy', '개인정보처리방침');
+    await followPublicLink(
+      page,
+      privacyFooterLink,
+      '/privacy',
+      '개인정보처리방침',
+    );
     await assertNoHorizontalOverflow(page, `${label} 개인정보처리방침`);
 
     const termsLink = await assertLinkIsReachable(page, '이용약관');
-    await termsLink.click();
-    await openPublicPage(page, '/terms', '이용약관');
+    await followPublicLink(page, termsLink, '/terms', '이용약관');
     await assertNoHorizontalOverflow(page, `${label} 이용약관`);
 
     const privacyLink = await assertLinkIsReachable(page, '개인정보처리방침');
-    await privacyLink.click();
-    await openPublicPage(page, '/privacy', '개인정보처리방침');
+    await followPublicLink(
+      page,
+      privacyLink,
+      '/privacy',
+      '개인정보처리방침',
+    );
 
     assert.deepEqual(browserErrors, [], `${label} 브라우저 오류가 발생했습니다.`);
   } finally {
