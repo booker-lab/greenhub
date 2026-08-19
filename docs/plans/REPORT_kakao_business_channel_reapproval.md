@@ -8,7 +8,7 @@
 - **branch**: `codex/kakao-business-channel-proof`
 - **기준 commit**: `164f65b77e317c41b7e0825377684f0a4db981d4`
 - **수행 범위**: Task 0.1부터 Task 4.9 결과 반영 및 후속 홈페이지·상품 상세·법적 고지 보완 준비까지
-- **현재 결과**: 4차 반려 사유에 맞춰 consumer 개인정보처리방침·이용약관·footer 링크 구현과 배포 전 자동·브라우저 검증을 완료했으며, checkpoint·main 병합·consumer production 배포를 진행할 준비가 됨
+- **현재 결과**: consumer 개인정보처리방침·이용약관·footer 링크를 main과 production에 반영하고 운영 비로그인·데스크톱·375×812 브라우저 검증까지 완료함. 카카오 재심사 제출은 별도 사용자 승인 대기
 
 ## Task 결과
 
@@ -488,6 +488,30 @@
 - React 품질 검토에서 네 TSX는 상태·effect·브라우저 API가 필요 없는 Server Component 경계를 유지하고 의미 구조·링크 접근성·포맷 검사를 통과했다.
 - 이 단계에서는 checkpoint·push·PR·main 병합·production 배포를 아직 수행하지 않았고 카카오 재심사, 채널·이메일·DNS·ALIGO·Firebase·운영 DB도 변경하지 않았다.
 
+### 법적 고지 Task 4.1 — main 병합과 consumer production 배포
+
+- **Status**: done — production 반영 완료
+- 공개 GitHub `noreply` 작성자·커미터와 한국어 메시지로 checkpoint `2ad1b964dd511ede58e3af133226a5723e9bcabc`을 만들고 작업 branch에 push했다.
+- main 대상 PR #26은 13개 계획 대상·기존 인계 파일만 포함했다. consumer 미리보기와 Preview Comments가 성공했고 seller·driver는 모두 `Canceled by Ignored Build Step`으로 종료됐다.
+- PR #26을 기존 방식대로 merge commit `f21ab3b7a6467c1ab182af796e7dc42471e95714`로 main에 병합했으며 `origin/main`과 병합 SHA가 일치한다.
+- GitHub production deployment `5978696299`의 환경은 `Production – greenhubconsumer`, 상태는 `success`이고 병합 SHA와 일치한다. 이 SHA의 GitHub production deployment는 consumer 1건뿐이다.
+- Vercel consumer production 배포 `dpl_GJ3UaymM2gMbMGC3nKLfg2hzxBJy`는 프로젝트 `greenhubconsumer`, main 병합 SHA, target `production`, 상태 `READY`다. `greenlove.co.kr`, `www.greenlove.co.kr`과 consumer 기본 별칭이 연결됐다.
+- Railway API 후보 `66cc95d9-5862-4351-af1a-2609440e46c4`는 같은 병합 SHA에서 `No changes to watched files`로 `SKIPPED`됐다. 활성 production은 이전 SHA `098ad98c72a8bdcb5e3c1a95ed2c6b3287cf0ab2`의 `d054f564-5fc7-4656-816b-7c05578e260e`를 유지한다.
+- 배포 상태 조회 중 링크가 없는 worktree 루트에서 Vercel CLI 확인 플래그가 빈 `greenhub` 프로젝트를 잘못 생성했다. 배포 0건과 생성 직후임을 확인한 다음 해당 프로젝트 ID를 삭제했고 생성된 로컬 링크·설정만 제거했다. consumer 실제 프로젝트와 배포에는 영향을 주지 않았으며 worktree는 다시 깨끗해졌다.
+- 카카오 재심사, 카카오 채널·이메일·DNS·ALIGO·Firebase·운영 DB는 변경하지 않았다.
+
+### 법적 고지 Task 4.2 — 운영 법적 고지 재검증
+
+- **Status**: done — 카카오 제출 승인 대기
+- `https://greenlove.co.kr/privacy`와 `https://greenlove.co.kr/terms`는 깨끗한 비로그인 브라우저에서 각각 HTTP 200으로 열리고 로그인 화면이나 다른 경로로 이동하지 않았다.
+- 데스크톱과 375×812 모바일에서 홈 footer→개인정보처리방침→이용약관→개인정보처리방침 이동, 제목·운영자 `디어 오키드`·시행일 `2026년 8월 19일`, 상호 문서 링크를 확인했다.
+- 두 모바일 문서의 `scrollWidth`와 `clientWidth`는 각각 375로 같았고 마지막 법적 링크는 고정 하단 navigation에 가려지지 않았다. 개인정보처리방침 전체 화면을 육안 검토했다.
+- 최초 운영 자동 실행은 링크 클릭 뒤 같은 경로를 다시 `goto`해 아직 진행 중인 Auth.js 세션 요청을 취소하면서 `Failed to fetch` 2건을 만들었다. 독립 `/api/auth/session`은 HTTP 200 `application/json`이고, 단일 문서를 `networkidle`까지 기다린 세션의 console·page 오류는 0건이었다.
+- 검증기를 중복 `goto` 없이 실제 링크 이동 후 URL·`networkidle`·독립 HTTP 상태를 확인하도록 고쳤다. 수정된 실행기로 데스크톱·모바일 전체 동선을 다시 실행해 console/page 오류 0건으로 통과했다.
+- agent-browser에서도 `/privacy`와 `/terms`의 내용, Next.js 오류 오버레이 없음, 상호 이동, 모바일 폭과 console·page 오류 0건을 재확인했다.
+- 운영 배포는 계속 Vercel `dpl_GJ3UaymM2gMbMGC3nKLfg2hzxBJy`, main merge `f21ab3b7a6467c1ab182af796e7dc42471e95714`, 상태 `READY`로 일치한다.
+- 이 검증은 카카오 재심사를 제출하지 않았다. 카카오 화면 입력·접수와 채널·이메일·DNS·ALIGO·Firebase·운영 DB 변경은 0건이다.
+
 ## 재개 지점
 
-consumer 법적 고지 구현과 배포 전 검증을 완료했다. 다음 작업은 변경 범위를 다시 감사하고 공개 GitHub `noreply` 메타데이터로 checkpoint를 만든 뒤 branch push, main 대상 PR, merge commit 방식 병합과 consumer production 배포를 수행하는 것이다. 운영 `/privacy`·`/terms` 검증 뒤에도 카카오 재심사 제출은 별도 사용자 승인을 받을 때까지 보류한다. ALIGO와 회차 직배송 출시도 계속 보류한다.
+consumer 법적 고지를 main과 production에 반영하고 운영 검증을 완료했다. 다음 외부 작업은 카카오 비즈니스 재심사 제출이며, 사용자가 이를 별도로 명시적으로 승인하기 전에는 수행하지 않는다. 승인 시 홈페이지 주소 `https://greenlove.co.kr`, 디어 오키드가 그린러브를 직접 운영하고 두 법적 문서에서 동일 운영 주체를 확인할 수 있다는 설명, 첨부 0건 원칙을 사용한다. ALIGO와 회차 직배송 출시는 카카오 결과 확인과 최신 main 통합 전까지 계속 보류한다.

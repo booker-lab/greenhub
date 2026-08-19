@@ -380,8 +380,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 검증된 변경의 consumer 프로덕션 배포 계보를 보고서에 남긴다.
 - **Verify**: `git diff --check -- docs/plans/REPORT_kakao_business_channel_reapproval.md`
-- **Conclusion**: _(실행 후 checkpoint·push·PR·병합 SHA·Vercel 배포·비대상 서비스 상태를 기록)_
-- **Status**: pending
+- **Conclusion**: checkpoint `2ad1b96`, PR #26, main merge `f21ab3b`, GitHub consumer production deployment `5978696299`, Vercel `dpl_GJ3UaymM2gMbMGC3nKLfg2hzxBJy` READY와 운영 별칭을 기록했다. seller·driver 미리보기는 Ignored Build Step으로 취소됐고 이 SHA의 production deployment는 consumer 1건뿐이다. Railway 후보는 watched path 미변경으로 SKIPPED, 기존 활성 배포를 유지했다. 조회 중 잘못 생성된 빈 Vercel 프로젝트는 배포 0건 확인 후 삭제하고 로컬 설정을 원복한 사실도 남겼다. Verify 종료 코드 0.
+- **Status**: done
 
 #### Task 4.2 — 프로덕션 법적 고지 검증 기록 [Unit: Atomic]
 
@@ -390,8 +390,8 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 운영 도메인의 법적 고지 공개 증적을 보고서에 남긴다.
 - **Verify**: `pnpm --filter e2e exec node scripts/verify-consumer-legal-documents.mjs https://greenlove.co.kr`
-- **Conclusion**: _(실행 후 HTTP 상태, 비로그인 접근, 데스크톱·모바일, 링크, 콘솔, 배포 SHA 결과를 기록)_
-- **Status**: pending
+- **Conclusion**: 운영 홈·`/privacy`·`/terms` HTTP 200과 비로그인 경로 유지, 데스크톱·375×812 상호 이동·필수 제목/운영자/시행일, 가로 넘침·하단 가림 없음, console/page 오류 0건을 확인했다. 최초 검증기의 중복 이동이 Auth 세션 요청을 취소한 레이스를 독립 API 200과 단일 networkidle 세션으로 분리 진단하고 검증기를 고친 뒤 전체 Verify가 통과했다. agent-browser 육안 검토와 Vercel merge SHA 일치도 기록했다. Verify 종료 코드 0.
+- **Status**: done
 
 #### Task 4.3 — 사용자 승인 카카오 재심사 기록 [Unit: Atomic]
 
@@ -446,15 +446,15 @@
 
 ## Closeout Roll-up
 
-- **구현**: _(미완료)_
-- **자동 검증**: _(미완료)_
-- **화면 검증**: _(미완료)_
-- **프로덕션 배포**: _(미완료)_
-- **카카오 재심사**: _(별도 사용자 승인 대기)_
-- **회차 직배송 인계**: _(미완료)_
-- **최종 인계**: _(branch·HEAD·status·전체 diff·staging·공식 근거·수정 파일·테스트·타입·lint·build·화면 검증·commit·push·PR·병합·Vercel 배포·외부 서비스 변경·회차 직배송 통합 여부를 실행 후 기록)_
+- **구현**: 개인정보처리방침·이용약관·공통 Server Component·홈 footer 링크·브라우저 검증기 완료
+- **자동 검증**: 계약 12/12, TypeScript 오류 0, lint 오류 0·기존 경고 23, Next.js 16.2.5 production build·정적 페이지 15/15 완료
+- **화면 검증**: 로컬과 운영의 데스크톱·375×812에서 HTTP 200·비로그인 접근·상호 이동·가로 넘침과 하단 가림 없음·console/page 오류 0건 확인
+- **프로덕션 배포**: feature `2ad1b96` → PR #26 → main `f21ab3b` → Vercel `dpl_GJ3UaymM2gMbMGC3nKLfg2hzxBJy` READY, consumer production만 전환
+- **카카오 재심사**: 별도 사용자 승인 대기. 입력·제출 0건
+- **회차 직배송 인계**: 카카오 접수 결과 전이므로 Task 5.1 미실행, ALIGO와 회차 출시 계속 보류
+- **최종 인계**: branch `codex/kakao-business-channel-proof`; 기능 checkpoint·push·PR·merge·consumer production과 비대상 서비스 경계 확인 완료. 운영 검증기 레이스 수정과 배포 증적은 후속 문서 commit으로 보존하며 카카오 승인 게이트에서 중단
 - **후속 위험**: 회원 탈퇴·카카오 연결 해제 웹훅·자동 파기·상거래 거래조건·결제 활성화·배송 운영 기준
 
 ## Conclusion
 
-_(계획 실행 완료 후 전체 Task 결과, 배포 계보, 운영 검증, 카카오 접수 상태, 잔여 위험을 기록)_
+Task 1.1부터 4.2까지 완료했다. 실제 처리 흐름에 맞춘 법적 고지를 main과 consumer production에 공개했고 운영 검증까지 통과했다. Task 4.3은 `PLAN 전체 실행`에 포함되지 않는 별도 외부 제출 승인 게이트이므로 카카오 화면을 열거나 입력·제출하지 않았다. Task 5.1은 카카오 접수 결과와 최신 main 통합을 전제로 하므로 아직 실행할 수 없다. 잔여 위험은 회원 탈퇴·카카오 연결 해제·자동 파기 미구현, Vercel Hobby 계약 범위, Railway 미국 처리, 판매 개시 전 결제·배송·반품 조건 확정이다.
