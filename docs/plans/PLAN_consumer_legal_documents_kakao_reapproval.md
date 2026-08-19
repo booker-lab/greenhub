@@ -390,7 +390,7 @@
 - **Target**: `docs/plans/REPORT_kakao_business_channel_reapproval.md`
 - **Goal**: 운영 도메인의 법적 고지 공개 증적을 보고서에 남긴다.
 - **Verify**: `pnpm --filter e2e exec node scripts/verify-consumer-legal-documents.mjs https://greenlove.co.kr`
-- **Conclusion**: 운영 홈·`/privacy`·`/terms` HTTP 200과 비로그인 경로 유지, 데스크톱·375×812 상호 이동·필수 제목/운영자/시행일, 가로 넘침·하단 가림 없음, console/page 오류 0건을 확인했다. 최초 검증기의 중복 이동이 Auth 세션 요청을 취소한 레이스를 독립 API 200과 단일 networkidle 세션으로 분리 진단하고 검증기를 고친 뒤 전체 Verify가 통과했다. agent-browser 육안 검토와 Vercel merge SHA 일치도 기록했다. Verify 종료 코드 0.
+- **Conclusion**: 운영 홈·`/privacy`·`/terms` HTTP 200과 비로그인 경로 유지, 데스크톱·375×812 상호 이동·필수 제목/운영자/시행일, 가로 넘침·하단 가림 없음, console/page 오류 0건을 확인했다. 최초 검증기의 중복 이동이 Auth 세션 요청을 취소한 레이스를 독립 API 200과 단일 networkidle 세션으로 분리 진단하고 검증기를 고친 뒤 전체 Verify가 통과했다. 후속 checkpoint `3277a03`, PR #27, main merge `84b6c77`, GitHub consumer production `5978845520`, Vercel `dpl_8WbLZmtPdacQwSNS4jzXXMAAxaYC` READY와 운영 별칭을 기록하고 최종 별칭에서 Verify를 다시 통과했다. seller·driver는 Ignored Build Step으로 취소됐고 Railway 후보 `52b890e4`는 watched path 미변경으로 SKIPPED됐다. Verify 종료 코드 0.
 - **Status**: done
 
 #### Task 4.3 — 사용자 승인 카카오 재심사 기록 [Unit: Atomic]
@@ -449,10 +449,10 @@
 - **구현**: 개인정보처리방침·이용약관·공통 Server Component·홈 footer 링크·브라우저 검증기 완료
 - **자동 검증**: 계약 12/12, TypeScript 오류 0, lint 오류 0·기존 경고 23, Next.js 16.2.5 production build·정적 페이지 15/15 완료
 - **화면 검증**: 로컬과 운영의 데스크톱·375×812에서 HTTP 200·비로그인 접근·상호 이동·가로 넘침과 하단 가림 없음·console/page 오류 0건 확인
-- **프로덕션 배포**: feature `2ad1b96` → PR #26 → main `f21ab3b` → Vercel `dpl_GJ3UaymM2gMbMGC3nKLfg2hzxBJy` READY, consumer production만 전환
+- **프로덕션 배포**: feature `2ad1b96` → PR #26 → main `f21ab3b` → Vercel `dpl_GJ3UaymM2gMbMGC3nKLfg2hzxBJy` READY; 검증기 `3277a03` → PR #27 → main `84b6c77` → Vercel `dpl_8WbLZmtPdacQwSNS4jzXXMAAxaYC` READY. 두 차례 모두 consumer production만 전환
 - **카카오 재심사**: 별도 사용자 승인 대기. 입력·제출 0건
 - **회차 직배송 인계**: 카카오 접수 결과 전이므로 Task 5.1 미실행, ALIGO와 회차 출시 계속 보류
-- **최종 인계**: branch `codex/kakao-business-channel-proof`; 기능 checkpoint·push·PR·merge·consumer production과 비대상 서비스 경계 확인 완료. 운영 검증기 레이스 수정과 배포 증적은 후속 문서 commit으로 보존하며 카카오 승인 게이트에서 중단
+- **최종 인계**: branch `codex/kakao-business-channel-proof`; 기능과 검증기 checkpoint·push·PR·merge·consumer production, 최종 별칭 재검증과 비대상 서비스 경계 확인 완료. 배포 증적은 마감 문서 commit으로 보존하며 카카오 승인 게이트에서 중단
 - **후속 위험**: 회원 탈퇴·카카오 연결 해제 웹훅·자동 파기·상거래 거래조건·결제 활성화·배송 운영 기준
 
 ## Conclusion
