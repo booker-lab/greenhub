@@ -78,3 +78,13 @@ test('round_direct 바로 구매는 단일 회차 스냅샷을 저장하고 회�
   assert.doesNotMatch(buyNowSource, /addItem\(/);
   assert.doesNotMatch(buyNowSource, /\/checkout\?\$\{parameters/);
 });
+
+test('legacy와 round_direct 판매자 연락처는 공개 사업자 주소와 전화번호를 사용한다', () => {
+  for (const source of [legacySource, roundSource]) {
+    assert.match(source, /PUBLIC_BUSINESS_INFO\.address/);
+    assert.match(source, /PUBLIC_BUSINESS_INFO\.phone/);
+    assert.doesNotMatch(source, /store\.address/);
+    assert.doesNotMatch(source, /store\.phone/);
+    assert.doesNotMatch(source, /store\.ceoName/);
+  }
+});

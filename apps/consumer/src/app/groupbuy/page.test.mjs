@@ -32,8 +32,9 @@ test('판매 모드 확인 전과 round_direct 이동 중에는 legacy 공동구
 
 test('legacy 공동구매 화면의 기존 상품 상태와 안내를 보존한다', () => {
   assert.match(source, /useProducts\(undefined, undefined, 'group'\)/);
-  assert.match(source, /groupSummary\.currentQuantity/);
+  assert.match(source, /getGroupBuyStatus\(product\.groupSummary, now\) === 'open'/);
+  assert.match(source, /else closed\.push\(product\)/);
   assert.match(source, /모집 중/);
-  assert.match(source, /모집 완료/);
+  assert.match(source, /모집 종료/);
   assert.match(source, /진행 중인 공동구매가 없습니다/);
 });

@@ -1,5 +1,6 @@
 import { Box, Text, Title, Stack, Group, Badge, Divider, Paper, SimpleGrid } from '@mantine/core';
 import type { Product, Variety } from '@greenhub/shared';
+import { HideOnErrorImage } from '@/components/ResilientImage';
 
 const FRAGRANCE_LABEL: Record<string, string> = {
   none: '없음',
@@ -204,7 +205,7 @@ export default function ProductInfo({ product, variety }: Props) {
       {(product.images?.length ?? 0) > 0 && (
         <Box mx={-16} mb="lg">
           {product.images?.map((src, i) => (
-            <img
+            <HideOnErrorImage
               key={i}
               src={src}
               alt={`${product.name} 상세 ${i + 1}`}

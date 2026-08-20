@@ -5,7 +5,8 @@ import { Box, Button, Group, Text } from '@mantine/core';
 interface Props {
   totalAmount: number;
   isGroup: boolean;
-  isFull: boolean;
+  isUnavailable: boolean;
+  unavailableLabel?: string;
   canBuy: boolean;
   canAddToCart?: boolean;
   addToCartLabel?: string;
@@ -17,15 +18,22 @@ interface Props {
 export default function ProductCTABar({
   totalAmount,
   isGroup,
-  isFull,
+  isUnavailable,
+  unavailableLabel,
   canBuy,
-  canAddToCart = true,
+  canAddToCart = !(isGroup && isUnavailable),
   addToCartLabel = '장바구니',
   buyNowLabel,
   onAddToCart,
   onBuyNow,
 }: Props) {
-  const ctaLabel = buyNowLabel ?? (isFull ? '모집 완료' : isGroup ? '공구 참여하기' : '바로 결제');
+  const ctaLabel =
+    buyNowLabel ??
+    (isUnavailable
+      ? (unavailableLabel ?? '판매 준비 중')
+      : isGroup
+        ? '공구 참여하기'
+        : '바로 결제');
 
   return (
     <Box
@@ -84,7 +92,9 @@ export default function ProductCTABar({
             disabled={!canBuy}
             onClick={onBuyNow}
             style={{
-              backgroundColor: isFull ? 'var(--color-text-disabled)' : 'var(--color-primary)',
+              backgroundColor: isUnavailable
+                ? 'var(--color-text-disabled)'
+                : 'var(--color-primary)',
               color: 'var(--color-bg)',
             }}
           >

@@ -203,7 +203,9 @@ export function addCartItem(currentValue: CartItem[], input: CartItemInput): Car
 // SSR에서도 안전한 localStorage 외부 저장소
 let listeners: Array<() => void> = [];
 function emitChange() {
-  for (const listener of listeners) listener();
+  listeners.forEach((listener) => {
+    listener();
+  });
 }
 function subscribe(listener: () => void) {
   listeners = [...listeners, listener];

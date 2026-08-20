@@ -1,6 +1,6 @@
 'use client';
 
-import type { DeliveryMethod, Product } from '@greenhub/shared';
+import { type DeliveryMethod, getGroupBuyStatus, type Product } from '@greenhub/shared';
 import {
   ActionIcon,
   Badge,
@@ -14,15 +14,16 @@ import {
   Stack,
   Text,
 } from '@mantine/core';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import GreenLoveBrandSection from '@/components/GreenLoveBrandSection';
 import ProductCTABar from '@/components/ProductCTABar';
+import ResilientImage from '@/components/ResilientImage';
 import { useCart } from '@/hooks/useCart';
 import { useGroupProduct } from '@/hooks/useGroupProduct';
 import { useStore } from '@/hooks/useProducts';
+import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 import DeliveryDatePicker from './DeliveryDatePicker';
 
 const deliveryLabels: Record<DeliveryMethod, string> = {
@@ -35,10 +36,33 @@ interface Props {
   product: Product;
 }
 
+function StoreInitialAvatar({ name }: { name: string }) {
+  return (
+    <Box
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: '50%',
+        background: 'var(--color-primary-surface)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'var(--color-primary)',
+        fontWeight: 'var(--fw-bold)',
+        fontSize: 'var(--font-size-md)',
+      }}
+    >
+      {name.trim().charAt(0) || '그'}
+    </Box>
+  );
+}
+
 export default function LegacyProductActions({ product }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
-  const { config: groupConfig } = useGroupProduct(product.saleType === 'group' ? product.id : null);
+  const { config: groupConfig, loading: groupLoading } = useGroupProduct(
+    product.saleType === 'group' ? product.id : null,
+  );
   const { store } = useStore(product.storeId ?? null);
   const { addItem } = useCart();
 
@@ -70,15 +94,27 @@ export default function LegacyProductActions({ product }: Props) {
   }, [groupConfig?.recruitDeadline]);
 
   const isGroup = product.saleType === 'group';
-  const isFull =
-    isGroup && !!groupConfig && groupConfig.currentQuantity >= groupConfig.targetQuantity;
+  const groupStatus = isGroup ? getGroupBuyStatus(groupConfig) : 'open';
+  const isFull = groupStatus === 'full';
+  const isExpired = groupStatus === 'expired';
+  const isGroupUnavailable = isGroup && groupStatus !== 'open';
+  const unavailableLabel = groupLoading
+    ? '상품 확인 중'
+    : isExpired
+      ? '모집 마감'
+      : isFull
+        ? '모집 완료'
+        : '판매 준비 중';
   const totalAmount = product.price * quantity;
   // 일반 상품의 배송일 선택은 슬롯 검증 대상(택배 제외)일 때만 필수.
   // 택배는 slot 미검증 분기이므로 배송일도 불필요 (플랜 D3 분기 조건 일치).
   const needsDeliveryDate = !isGroup && deliveryMethod !== 'parcel';
-  const canBuy = isGroup ? groupConsent && !isFull : !needsDeliveryDate || deliveryDate !== null;
+  const canBuy = isGroup
+    ? groupConsent && !isGroupUnavailable
+    : !needsDeliveryDate || deliveryDate !== null;
 
   function handleAddToCart() {
+    if (isGroupUnavailable) return;
     addItem({
       productId: product.id,
       name: product.name,
@@ -94,6 +130,7 @@ export default function LegacyProductActions({ product }: Props) {
   }
 
   function handleBuyNow() {
+    if (isGroupUnavailable) return;
     const p = new URLSearchParams({
       productId: product.id,
       quantity: String(quantity),
@@ -121,22 +158,24 @@ export default function LegacyProductActions({ product }: Props) {
           p="lg"
           mb="lg"
           style={{
-            border: `2px solid ${isFull ? 'var(--color-border)' : 'var(--color-primary)'}`,
-            background: isFull ? 'var(--color-surface-muted)' : 'var(--color-primary-surface)',
+            border: `2px solid ${isGroupUnavailable ? 'var(--color-border)' : 'var(--color-primary)'}`,
+            background: isGroupUnavailable
+              ? 'var(--color-surface-muted)'
+              : 'var(--color-primary-surface)',
           }}
         >
           <Group justify="space-between" mb="md">
             <Text
               style={{
                 fontWeight: 'var(--fw-bold)',
-                color: isFull ? 'var(--color-text-secondary)' : 'var(--color-primary)',
+                color: isGroupUnavailable ? 'var(--color-text-secondary)' : 'var(--color-primary)',
               }}
             >
               ⚡ 공동구매 현황
             </Text>
-            {isFull ? (
+            {isGroupUnavailable ? (
               <Badge color="gray" variant="filled" radius="xl">
-                모집 완료
+                {unavailableLabel}
               </Badge>
             ) : (
               countdown && (
@@ -158,7 +197,7 @@ export default function LegacyProductActions({ product }: Props) {
                 fontSize: 36,
                 fontWeight: 'var(--fw-bold)',
                 lineHeight: 1,
-                color: isFull ? 'var(--color-text-disabled)' : 'var(--color-primary)',
+                color: isGroupUnavailable ? 'var(--color-text-disabled)' : 'var(--color-primary)',
               }}
             >
               {groupConfig.currentQuantity}
@@ -184,7 +223,7 @@ export default function LegacyProductActions({ product }: Props) {
 
           <Progress
             value={Math.min((groupConfig.currentQuantity / groupConfig.minQuantity) * 100, 100)}
-            color={isFull ? 'gray' : 'brand'}
+            color={isGroupUnavailable ? 'gray' : 'brand'}
             size="xl"
             radius="xl"
             mb="md"
@@ -197,7 +236,9 @@ export default function LegacyProductActions({ product }: Props) {
                 span
                 style={{
                   fontWeight: 'var(--fw-bold)',
-                  color: isFull ? 'var(--color-text-secondary)' : 'var(--color-primary)',
+                  color: isGroupUnavailable
+                    ? 'var(--color-text-secondary)'
+                    : 'var(--color-primary)',
                 }}
               >
                 {new Date(groupConfig.recruitDeadline).toLocaleString('ko-KR', {
@@ -360,30 +401,16 @@ export default function LegacyProductActions({ product }: Props) {
           </Text>
           <Group gap="sm" mb="sm">
             {store.logoUrl ? (
-              <Image
+              <ResilientImage
                 src={store.logoUrl}
                 alt={store.name}
                 width={44}
                 height={44}
+                fallback={<StoreInitialAvatar name={store.name} />}
                 style={{ borderRadius: '50%', objectFit: 'cover' }}
               />
             ) : (
-              <Box
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: '50%',
-                  background: 'var(--color-primary-surface)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--color-primary)',
-                  fontWeight: 'var(--fw-bold)',
-                  fontSize: 'var(--font-size-md)',
-                }}
-              >
-                {store.name[0]}
-              </Box>
+              <StoreInitialAvatar name={store.name} />
             )}
             <Box>
               <Text
@@ -395,19 +422,14 @@ export default function LegacyProductActions({ product }: Props) {
               >
                 {store.name}
               </Text>
-              <Text
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-              >
-                {store.ceoName}
-              </Text>
             </Box>
           </Group>
           <Stack gap={4}>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-              📍 {store.address}
+              📍 {PUBLIC_BUSINESS_INFO.address}
             </Text>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-              📞 {store.phone}
+              📞 {PUBLIC_BUSINESS_INFO.phone}
             </Text>
           </Stack>
         </Box>
@@ -416,7 +438,8 @@ export default function LegacyProductActions({ product }: Props) {
       <ProductCTABar
         totalAmount={totalAmount}
         isGroup={isGroup}
-        isFull={isFull}
+        isUnavailable={isGroupUnavailable}
+        unavailableLabel={unavailableLabel}
         canBuy={canBuy}
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}

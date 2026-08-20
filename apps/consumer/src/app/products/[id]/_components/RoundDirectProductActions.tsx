@@ -9,6 +9,7 @@ import GreenLoveBrandSection from '@/components/GreenLoveBrandSection';
 import ProductCTABar from '@/components/ProductCTABar';
 import { type RoundCartItem, useCart } from '@/hooks/useCart';
 import { useStore } from '@/hooks/useProducts';
+import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 import type { RoundProductActionContext } from './ProductActions';
 
 interface Props {
@@ -152,15 +153,12 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
           <Text size="sm" fw="var(--fw-bold)">
             {store.name}
           </Text>
-          <Text size="sm" c="var(--color-text-secondary)">
-            {store.ceoName}
-          </Text>
           <Stack gap={4} mt="sm">
             <Text size="sm" c="var(--color-text-secondary)">
-              📍 {store.address}
+              📍 {PUBLIC_BUSINESS_INFO.address}
             </Text>
             <Text size="sm" c="var(--color-text-secondary)">
-              📞 {store.phone}
+              📞 {PUBLIC_BUSINESS_INFO.phone}
             </Text>
           </Stack>
         </Box>
@@ -175,7 +173,8 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
       <ProductCTABar
         totalAmount={totalAmount}
         isGroup={false}
-        isFull={roundProduct.state === 'closed'}
+        isUnavailable={!roundProduct.isPurchasable}
+        unavailableLabel="주문 마감"
         canBuy={roundProduct.isPurchasable}
         canAddToCart={roundProduct.isPurchasable}
         addToCartLabel="장바구니 담기"

@@ -5,8 +5,8 @@ import BottomNav from '@/components/BottomNav';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Green Love',
-  description: '신선한 화훼·농산물 직거래 플랫폼',
+  title: '그린러브 | 디어 오키드가 운영하는 화훼 쇼핑몰',
+  description: '그린러브는 사업자 디어 오키드가 운영하는 화훼 쇼핑몰입니다.',
   manifest: '/manifest.json',
   icons: { icon: '/icons/icon-192x192.png' },
   appleWebApp: {

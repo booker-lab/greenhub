@@ -1,10 +1,10 @@
 'use client';
 
 import type React from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { Card, Box, Progress } from '@mantine/core';
-import type { Product } from '@greenhub/shared';
+import { getGroupBuyStatus, type Product } from '@greenhub/shared';
+import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 
 interface ProductCardProps {
   product: Product;
@@ -17,7 +17,7 @@ const categoryLabels: Record<string, string> = {
 };
 
 export default function ProductCard({ product }: ProductCardProps) {
-  const imgSrc = product.images?.[0] ?? '/icons/icon-192x192.png';
+  const imgSrc = product.images?.[0] ?? PRODUCT_IMAGE_FALLBACK;
 
   return (
     <Card
@@ -39,9 +39,10 @@ export default function ProductCard({ product }: ProductCardProps) {
           overflow: 'hidden',
         }}
       >
-        <Image
+        <ResilientImage
           fill
           src={imgSrc}
+          fallbackSrc={PRODUCT_IMAGE_FALLBACK}
           alt={product.name}
           sizes="(max-width: 600px) 50vw, 33vw"
           style={{ objectFit: 'cover' }}
@@ -126,7 +127,16 @@ export default function ProductCard({ product }: ProductCardProps) {
           (() => {
             const { currentQuantity, targetQuantity } = product.groupSummary;
             const pct = Math.min((currentQuantity / targetQuantity) * 100, 100);
-            const done = currentQuantity >= targetQuantity;
+            const status = getGroupBuyStatus(product.groupSummary);
+            const done = status !== 'open';
+            const statusLabel =
+              status === 'full'
+                ? '모집 완료'
+                : status === 'expired'
+                  ? '모집 마감'
+                  : status === 'unavailable'
+                    ? '판매 준비 중'
+                    : `${currentQuantity}/${targetQuantity}개 모집 중`;
             return (
               <>
                 <Progress
@@ -151,7 +161,7 @@ export default function ProductCard({ product }: ProductCardProps) {
                     fontWeight: 'var(--fw-medium)',
                   }}
                 >
-                  {done ? '모집 완료' : `${currentQuantity}/${targetQuantity}개 모집 중`}
+                  {statusLabel}
                 </p>
               </>
             );

@@ -1,7 +1,7 @@
 'use client';
 
 import type { Product, SaleRoundItem, SalesMode } from '@greenhub/shared';
-import { normalizeSalesMode } from '@greenhub/shared';
+import { getGroupBuyStatus, normalizeSalesMode } from '@greenhub/shared';
 import {
   Box,
   Button,
@@ -14,12 +14,12 @@ import {
   Title,
 } from '@mantine/core';
 import { doc, getDoc } from 'firebase/firestore';
-import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import DeadlineSection from '@/components/DeadlineSection';
 import ProductCard from '@/components/ProductCard';
+import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
@@ -141,9 +141,10 @@ function RoundProductCard({
           background: 'var(--color-border)',
         }}
       >
-        <Image
+        <ResilientImage
           fill
-          src={item.productImageUrlSnapshot ?? '/icons/icon-192x192.png'}
+          src={item.productImageUrlSnapshot ?? PRODUCT_IMAGE_FALLBACK}
+          fallbackSrc={PRODUCT_IMAGE_FALLBACK}
           alt={item.productNameSnapshot}
           sizes="(max-width: 600px) 50vw, 33vw"
           style={{ objectFit: 'cover' }}
@@ -311,9 +312,7 @@ function LegacyHomeProductList({
   groupLoading,
 }: LegacyHomeProductListProps) {
   const activeGroupProducts = groupProducts.filter(
-    (product) =>
-      !product.groupSummary ||
-      product.groupSummary.currentQuantity < product.groupSummary.targetQuantity,
+    (product) => getGroupBuyStatus(product.groupSummary) === 'open',
   );
   return (
     <>
@@ -369,13 +368,16 @@ function LegacyHomeProductList({
                       background: 'var(--color-border)',
                       borderRadius: 'var(--radius)',
                       marginBottom: 6,
+                      position: 'relative',
                     }}
                   >
-                    {/* biome-ignore lint/performance/noImgElement: 기존 legacy 카드 동작을 보존한다. */}
-                    <img
-                      src={product.images?.[0] ?? '/icons/icon-192x192.png'}
+                    <ResilientImage
+                      fill
+                      src={product.images?.[0] ?? PRODUCT_IMAGE_FALLBACK}
+                      fallbackSrc={PRODUCT_IMAGE_FALLBACK}
                       alt={product.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      sizes="(max-width: 600px) 33vw, 200px"
+                      style={{ objectFit: 'cover' }}
                     />
                   </Box>
                   <Text size="sm" fw={700} c="var(--color-text)" lineClamp={2} mb={2}>
