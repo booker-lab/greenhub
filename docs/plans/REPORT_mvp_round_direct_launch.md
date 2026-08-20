@@ -1387,7 +1387,7 @@ Task 0.4는 출시 SHA `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 원격 E
 
 원계획은 실패로 종료한 것이 아니라 외부 승인 의존성을 명시한 채 일시 중단한다. 재개 전까지의 안전 상태는 기존 운영 애플리케이션과 `legacy` 판매 모드를 유지하는 것이며, 완료된 Firebase 인프라 반영은 재조회 증거가 확보되어 있다. 이 절과 인계 문서, 정리 커밋을 중단 시점의 기준으로 사용한다.
 
-## 2026-08-20 재개 — consumer 법적 고지·카카오 승인과 최신 main 로컬 통합
+## 2026-08-20 재개 — consumer 법적 고지·카카오 승인과 최신 main 통합·원격 동기화 종결
 
 ### 판정
 
@@ -1395,7 +1395,7 @@ Task 0.4는 출시 SHA `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 원격 E
 - **카카오 비즈니스 채널**: 최종 승인 완료
 - **최신 main 로컬 통합**: 완료
 - **로컬 통합 회귀**: 통과
-- **원격 push·PR 재검증**: 미실행
+- **원격 push·PR 재검증**: 비강제 push와 자동 검사 종결 재확인 완료
 - **ALIGO·운영 배포·첫 회차·판매 모드 전환**: 계속 미실행
 - 기존 PLAN의 완료 Task 상태는 소급 변경하지 않고, 이번 작업은 2026-08-20의 별도 재개 이력으로 기록한다.
 
@@ -1458,16 +1458,35 @@ Task 0.4는 출시 SHA `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 원격 E
 - consumer 전체 lint는 종료 코드 0이었으며 기존 코드의 경고·정보만 보고했고 파일을 수정하지 않았다.
 - 통합 대상 TSX 파일의 Biome check는 오류 없이 통과했고, 기존 정적 skeleton의 index key 경고만 남았다.
 - production build가 재생성한 seller 서비스 워커의 비본질적 작업 트리 변경은 검증 전 상태로 복원했다.
-- Firebase 규칙 emulator와 원격 회차 E2E 52건은 로컬 통합 commit의 push·원격 SHA 고정 이후 게이트에서 다시 실행한다.
+- Firebase 규칙 emulator와 원격 회차 E2E 52건은 별도 승인 범위의 다음 게이트에서 다시 실행한다.
+
+### 원격 동기화와 PR #11 재검증
+
+| 항목 | 확인 결과 |
+| :--- | :--- |
+| 통합 전 원격 head | `674b59cda5212ff37cbf283b1a9871ff0da2c1c2` |
+| 최초 원격 동기화 head | `856ed492c0291260c464990fa2b398efd71305f0` |
+| 최종 원격 head | 이 절을 기록한 문서 종결 commit 포함 최신 원격 head |
+| push 방식 | force 없이 fast-forward 비강제 push |
+| PR #11 | `OPEN`·초안·`MERGEABLE`, `mergeStateStatus: CLEAN` |
+| 최초 동기화 head 자동 검사 | 5개 terminal `SUCCESS`, 실패·대기 0개 |
+| 문서 종결 commit 포함 최신 원격 head 자동 검사 | 5개 terminal `SUCCESS`, 실패·대기 0개 |
+| PR 변경 | Ready 전환·병합·제목·본문·라벨 변경 없음 |
+| workflow 실행 | 자동 검사만 관찰, 수동 dispatch 없음 |
+
+- 최종 문서 commit SHA를 문서 본문에 직접 쓰면 문서 수정으로 SHA가 다시 바뀌므로, 최종 원격 head는 `이 절을 기록한 문서 종결 commit 포함 최신 원격 head`로 고정해 순환 참조를 피한다.
+- 자동 검사는 Vercel Preview Comments, Vercel driver·seller·consumer, Railway API다. 최초 원격 동기화 head와 문서 종결 commit 포함 최신 원격 head 모두 실패 없이 terminal 상태를 확인했다.
+- 원격 회차 E2E 52건은 자동 PR 검사에 포함되지 않았고 수동 workflow dispatch 금지 범위이므로 실행하거나 완료로 판정하지 않았다.
+- 기존 PLAN의 Task 상태는 소급 변경하지 않았다.
 
 ### 외부 변경 게이트와 현재 차단 상태
 
 | 항목 | 상태 |
 | :--- | :--- |
-| PR #11 | `OPEN`·초안·`CONFLICTING`, `mergeStateStatus: DIRTY` |
-| PR #11 원격 head | 통합 전 SHA `674b59cda5212ff37cbf283b1a9871ff0da2c1c2` |
-| 로컬 통합 commit push | 미실행 |
-| 원격 동일 SHA 검증 | 미실행 |
+| PR #11 | `OPEN`·초안·`MERGEABLE`, `mergeStateStatus: CLEAN` |
+| PR #11 원격 head | 이 절을 기록한 문서 종결 commit 포함 최신 원격 head |
+| 로컬 통합 commit push | 비강제 push 완료 |
+| 원격 회차 E2E 52건 | 미실행 |
 | ALIGO 발신 프로필 | 미등록 |
 | `senderkey` | 미발급 |
 | 회차 알림 템플릿 8종 | 미등록·미승인 |
@@ -1477,14 +1496,13 @@ Task 0.4는 출시 SHA `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 원격 E
 | 첫 회차 | 미생성 |
 | `salesMode` | `legacy` 유지 |
 
-이번 작업에서 push, PR 변경·병합·Ready 전환, workflow dispatch, ALIGO 로그인·등록·실제 발송, 환경변수 등록, Railway·Vercel·Firebase 변경, 운영 회차·주문·결제·배송 변경을 수행하지 않았다.
+이번 작업에서는 검증된 통합 결과와 문서 종결 commit만 비강제 push했다. PR 변경·병합·Ready 전환, 수동 workflow dispatch, ALIGO 로그인·등록·실제 발송, 환경변수 등록, Railway·Vercel·Firebase 변경, 운영 회차·주문·결제·배송 변경은 수행하지 않았다.
 
 ### 다음 재개 게이트
 
-1. 사용자 승인 후 로컬 통합 commit과 문서 종결 commit을 원격 branch에 push한다.
-2. PR #11의 충돌·검사 상태를 다시 확인하고 동일 원격 SHA에서 회차 E2E 52건과 양쪽 cleanup을 검증한다.
-3. 별도 외부 변경 승인 후 ALIGO 발신 프로필을 등록하고 `senderkey` 발급 여부만 비밀값 없이 기록한다.
-4. 템플릿 매핑과 누락 변수 차단점을 확정한 뒤 회차 템플릿 8종 승인, 격리 실제 알림톡·SMS fallback, 운영 ALIGO 변수 4개 존재 검사를 순서대로 완료한다.
-5. 모든 선행 조건이 충족된 뒤 새 `Task 3.1 승인`을 받아야만 운영 배포를 재개한다.
+1. 동일 원격 head에서 회차 E2E 52건과 양쪽 cleanup을 검증한다. 이번 작업에서는 수동 workflow dispatch 금지에 따라 실행하지 않았다.
+2. 별도 외부 변경 승인 후 ALIGO 발신 프로필을 등록하고 `senderkey` 발급 여부만 비밀값 없이 기록한다.
+3. 템플릿 매핑과 누락 변수 차단점을 확정한 뒤 회차 템플릿 8종 승인, 격리 실제 알림톡·SMS fallback, 운영 ALIGO 변수 4개 존재 검사를 순서대로 완료한다.
+4. 모든 선행 조건이 충족된 뒤 새 `Task 3.1 승인`을 받아야만 운영 배포를 재개한다.
 
-현재 승인 요청 대상은 첫 번째 외부 변경 게이트인 원격 branch push와 PR #11 재검증이다. 승인 전에는 ALIGO와 회차 직배송 출시 작업을 진행하지 않는다.
+원격 branch 동기화와 PR #11 재검증 범위는 여기서 종결한다. 다음 외부 단계는 진행하지 않았으며, 별도 승인 전에는 원격 E2E·ALIGO와 회차 직배송 출시 작업을 진행하지 않는다.

@@ -4,7 +4,7 @@
 
 ## 한 줄 상태 — 2026-08-20 KST
 
-consumer 개인정보처리방침·이용약관의 main·production 반영과 카카오 비즈니스 채널 최종 승인은 완료됐고, 최신 main도 회차 직배송 branch에 로컬 통합해 회귀 검증을 통과했다. 다만 통합 commit은 아직 원격에 push하지 않았고 ALIGO 준비·운영 배포·첫 회차 생성·판매 모드 전환도 재개하지 않았으므로 회차 직배송 출시는 계속 중단한다.
+consumer 개인정보처리방침·이용약관의 main·production 반영과 카카오 비즈니스 채널 최종 승인은 완료됐다. 최신 main을 회차 직배송 branch에 통합한 결과도 원격에 비강제 push했고 PR #11의 병합 가능 상태와 자동 검사 성공을 재검증했다. 다만 원격 E2E 52건, ALIGO 준비·운영 배포·첫 회차 생성·판매 모드 전환은 재개하지 않았으므로 회차 직배송 출시는 계속 중단한다.
 
 ## 2026-08-20 최신 확인
 
@@ -12,10 +12,14 @@ consumer 개인정보처리방침·이용약관의 main·production 반영과 �
 - 통합 전 회차 branch HEAD: `674b59cda5212ff37cbf283b1a9871ff0da2c1c2`
 - 통합한 `origin/main`: `26d7f49bf1a2618f792641cb95b93802a062ebe4`
 - 로컬 merge commit: `e855d6cb1a787ff89c57abf3c352edda1beeca29`
+- 최초 원격 동기화 head: `856ed492c0291260c464990fa2b398efd71305f0`
+- 최종 원격 head: 이 절을 기록한 문서 종결 commit 포함 최신 원격 head. 문서가 자기 SHA를 순환 참조하지 않도록 정확한 SHA 대신 이 기준을 사용한다.
 - merge 부모: 첫 번째 `674b59cda5212ff37cbf283b1a9871ff0da2c1c2`, 두 번째 `26d7f49bf1a2618f792641cb95b93802a062ebe4`
 - 조상 검사: `origin/main`이 로컬 HEAD의 조상임을 종료 코드 0으로 확인
-- merge commit 기준 분기: `origin/main`에만 0개, 로컬 회차 branch에만 107개 commit; 이후 이 문서 종결 commit만 추가
-- PR #11: 원격 head가 아직 통합 전 SHA이므로 `OPEN`·초안·`CONFLICTING`, `mergeStateStatus: DIRTY`; 이번 작업에서 push·PR 변경은 하지 않음
+- merge commit 기준 분기: `origin/main`에만 0개, 로컬 회차 branch에만 107개 commit; 이후 기존 문서 정리 commit과 이 절을 기록한 문서 종결 commit만 추가
+- PR #11: `OPEN`·초안·`MERGEABLE`, `mergeStateStatus: CLEAN`; Ready 전환·병합·제목·본문·라벨을 변경하지 않음
+- 최초 원격 동기화 head 자동 검사: Vercel Preview Comments, Vercel driver·seller·consumer, Railway API까지 5개 모두 terminal `SUCCESS`, 실패·대기 0개
+- 문서 종결 commit 포함 최신 원격 head 자동 검사: 5개 모두 terminal `SUCCESS`, 실패·대기 0개로 최종 재확인
 - 카카오 비즈니스 채널: 2026년 8월 20일 오전 9시 55분 카카오비즈니스 파트너센터 알림의 `그린러브가 비즈니스 채널로 전환되었습니다. 매장이 있다면 매장정보 관리를 위한 기능도 사용할 수 있습니다.` 문구를 확인해 최종 승인 완료로 판정
 - consumer 법적 고지: `https://greenlove.co.kr/privacy`, `https://greenlove.co.kr/terms`를 main과 production에 반영하고 비로그인 HTTP 200, 데스크톱·375×812 모바일 접근성, 문서 상호 이동, 가로 넘침·하단 가림 없음, console/page 오류 0건을 검증
 - 법적 고지와 카카오 재심사 접수 기록: PR #29 `MERGED`, main 병합 SHA `26d7f49bf1a2618f792641cb95b93802a062ebe4`, GitHub consumer production deployment `5979132065` 성공
@@ -29,8 +33,10 @@ consumer 개인정보처리방침·이용약관의 main·production 반영과 �
 | 카카오 비즈니스 채널 | 최종 승인 완료 |
 | consumer 법적 고지 | main·consumer production 반영 및 운영 검증 완료 |
 | 최신 `origin/main` | `26d7f49bf1a2618f792641cb95b93802a062ebe4` |
-| 회차 branch에 최신 main 통합 | 로컬 완료·회귀 통과, 원격 미게시 |
+| 회차 branch에 최신 main 통합 | 로컬 완료·회귀 통과, 원격 비강제 push 완료 |
 | 로컬 통합 commit | `e855d6cb1a787ff89c57abf3c352edda1beeca29` |
+| 최초 원격 동기화 head | `856ed492c0291260c464990fa2b398efd71305f0` |
+| 최종 원격 head | 이 절을 기록한 문서 종결 commit 포함 최신 원격 head |
 | ALIGO 발신 프로필 | 미등록 |
 | `senderkey` | 미발급 |
 | 회차 알림 템플릿 8종 | 미등록·미승인 |
@@ -39,9 +45,9 @@ consumer 개인정보처리방침·이용약관의 main·production 반영과 �
 | 회차 출시 후보 운영 배포 | 미실행 |
 | 첫 회차 | 미생성 |
 | `salesMode` | `legacy` 유지 |
-| PR #11 | `OPEN`·초안·`CONFLICTING`, 원격 head는 통합 전 SHA |
+| PR #11 | `OPEN`·초안·`MERGEABLE`, `mergeStateStatus: CLEAN`, 자동 검사 5개 성공 |
 
-카카오 승인으로 2026년 7월 31일의 외부 차단 조건 하나가 해소됐고, 최신 main 로컬 통합 선행 조건도 충족됐다. 그러나 이 두 완료가 ALIGO 준비나 회차 직배송 출시를 자동으로 재개하지 않는다. 다음 외부 작업 후보는 통합 commit의 원격 push와 PR #11 재검증이며, 그 다음 ALIGO 발신 프로필 등록은 별도 승인 범위에서만 수행한다.
+카카오 승인으로 2026년 7월 31일의 외부 차단 조건 하나가 해소됐고, 최신 main 통합·원격 동기화·PR #11 재검증 선행 조건도 충족됐다. 그러나 이 완료가 원격 E2E 52건이나 ALIGO 준비와 회차 직배송 출시를 자동으로 재개하지 않는다. 다음 외부 작업은 별도 승인 범위에서만 수행한다.
 
 ## 2026-08-20 로컬 통합 검증
 
@@ -49,7 +55,7 @@ consumer 개인정보처리방침·이용약관의 main·production 반영과 �
 - shared 테스트 9건과 typecheck, API 단위 테스트 253건과 E2E 10건, consumer Node 테스트 106건과 TypeScript 검사, seller 테스트 43건, driver 테스트 11건, 회차 안전 스크립트 테스트 29건을 통과했다.
 - workspace 빌드 선택 검사와 API·consumer·seller·driver 전체 production build를 통과했다.
 - 통합 대상 diff와 문서에 대해 `git diff --check`를 통과했다.
-- 원격 workflow 52건과 preview 검증은 push 후 동일 SHA에서 실행해야 하므로 이번 로컬 통합 범위에서는 실행하지 않았다.
+- 최초 원격 동기화 head에서 자동 실행된 PR 검사 5개는 모두 성공했다. 원격 workflow 52건은 수동 dispatch 금지 범위라 실행하지 않았고 완료로 판정하지 않았다.
 
 ## 2026-07-31 중단 결정 (역사 기록)
 
@@ -117,7 +123,7 @@ API Key, 발신번호, 사용자 정보와 그 밖의 비밀값 원문은 저장
 
 1. consumer 개인정보처리방침·이용약관 main·production 반영과 운영 검증을 확인한다. 완료됐다.
 2. 최신 main을 회차 branch에 비파괴 통합하고 로컬 충돌·회귀를 검증한다. merge commit `e855d6cb1a787ff89c57abf3c352edda1beeca29`에서 완료됐다.
-3. 사용자 승인 후 로컬 통합 commit을 원격 branch에 push하고 PR #11의 충돌·검사 상태를 다시 확인한다.
+3. 사용자 승인 후 로컬 통합 commit을 원격 branch에 push하고 PR #11의 충돌·검사 상태를 다시 확인한다. 비강제 push와 재검증을 완료했다.
 4. 동일 원격 SHA에서 회차 E2E 52건, 무건너뜀 판정과 양쪽 fixture cleanup을 포함한 원격 검증을 통과시킨다.
 5. 별도 외부 변경 승인 후 ALIGO 발신 프로필을 등록하고 `senderkey` 발급 여부만 비밀값 없이 기록한다.
 6. 내부 논리 템플릿 코드와 ALIGO `tpl_code`의 매핑 계층, `ORDER_ACCEPTED.name`, `ORDER_DELIVERY_HELD.reason`, `ORDER_CANCELLED.reason` 차단점을 확정한다.
@@ -131,7 +137,7 @@ API Key, 발신번호, 사용자 정보와 그 밖의 비밀값 원문은 저장
 - [x] consumer 개인정보처리방침·이용약관 main·production 반영 및 운영 검증
 - [x] 카카오 비즈니스 채널 최종 승인
 - [x] 최신 main의 회차 branch 로컬 통합과 충돌·회귀 검증
-- [ ] 통합 SHA의 원격 push와 PR #11 재검증
+- [x] 통합 SHA의 원격 push와 PR #11 재검증
 - [ ] 동일 원격 SHA의 전체 원격 검증 성공
 - [ ] ALIGO 발신 프로필과 `senderkey` 준비
 - [ ] 회차 알림 템플릿 8종 승인
