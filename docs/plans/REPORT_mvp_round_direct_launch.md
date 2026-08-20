@@ -5,9 +5,9 @@
 ## 보고서 메타
 
 - **기준 계획**: `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`
-- **기준선 재조회일**: 2026-07-31 KST
-- **현재 실행 상태**: 카카오 비즈니스 채널 심사 완료 전까지 계획 중단
-- **운영 변경**: Firebase 인덱스·Firestore 규칙·Storage 규칙 반영 완료, 애플리케이션 배포·판매 모드 전환 미실행
+- **기준선 재조회일**: 2026-08-20 KST
+- **현재 실행 상태**: consumer 법적 고지와 카카오 비즈니스 채널 승인 완료, 최신 main 로컬 통합·회귀 완료, 외부 변경 게이트 앞 중단
+- **운영 변경**: 기존 Firebase 인덱스·Firestore 규칙·Storage 규칙 반영과 consumer 법적 고지 production 반영을 유지, 회차 출시 후보 배포·ALIGO 후속 설정·판매 모드 전환 미실행
 - **비밀값·개인정보 기록**: 없음
 
 ## Task 0.1 — 출시 기준선
@@ -1386,3 +1386,105 @@ Task 0.4는 출시 SHA `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 원격 E
 ### 중단 결론
 
 원계획은 실패로 종료한 것이 아니라 외부 승인 의존성을 명시한 채 일시 중단한다. 재개 전까지의 안전 상태는 기존 운영 애플리케이션과 `legacy` 판매 모드를 유지하는 것이며, 완료된 Firebase 인프라 반영은 재조회 증거가 확보되어 있다. 이 절과 인계 문서, 정리 커밋을 중단 시점의 기준으로 사용한다.
+
+## 2026-08-20 재개 — consumer 법적 고지·카카오 승인과 최신 main 로컬 통합
+
+### 판정
+
+- **consumer 개인정보처리방침·이용약관**: main·production 반영과 운영 검증 완료
+- **카카오 비즈니스 채널**: 최종 승인 완료
+- **최신 main 로컬 통합**: 완료
+- **로컬 통합 회귀**: 통과
+- **원격 push·PR 재검증**: 미실행
+- **ALIGO·운영 배포·첫 회차·판매 모드 전환**: 계속 미실행
+- 기존 PLAN의 완료 Task 상태는 소급 변경하지 않고, 이번 작업은 2026-08-20의 별도 재개 이력으로 기록한다.
+
+### 완료된 외부 선행 사실
+
+- `https://greenlove.co.kr/privacy`와 `https://greenlove.co.kr/terms`는 비로그인 HTTP 200, 데스크톱·375×812 모바일 접근성, 문서 상호 이동, 가로 넘침·하단 가림 없음, console/page 오류 0건 검증을 통과했다.
+- 법적 고지와 카카오 재심사 접수 기록의 main 병합 SHA는 `26d7f49bf1a2618f792641cb95b93802a062ebe4`다.
+- PR #29는 `MERGED`이고 GitHub consumer production deployment `5979132065`는 성공했다.
+- consumer 운영 도메인은 `greenlove.co.kr`이며 seller·driver는 법적 고지 변경 대상이 아니었다. Railway API는 기존 활성 배포를 유지했다.
+- 2026년 8월 20일 오전 9시 55분 카카오비즈니스 파트너센터 알림에서 `그린러브가 비즈니스 채널로 전환되었습니다. 매장이 있다면 매장정보 관리를 위한 기능도 사용할 수 있습니다.` 문구를 확인해 카카오 비즈니스 채널 최종 승인으로 판정했다.
+
+카카오 승인으로 2026년 7월 31일의 외부 차단 조건 하나가 해소됐지만 ALIGO 발신 프로필·템플릿 준비와 회차 직배송 출시는 자동 재개되지 않는다.
+
+### 최신 main 통합 기준선
+
+| 항목 | 확인 결과 |
+| :--- | :--- |
+| branch | `codex/mvp-sales-round-direct` |
+| 통합 전 HEAD | `674b59cda5212ff37cbf283b1a9871ff0da2c1c2` |
+| 통합 대상 `origin/main` | `26d7f49bf1a2618f792641cb95b93802a062ebe4` |
+| 통합 전 공통 조상 | `164f65b77e317c41b7e0825377684f0a4db981d4` |
+| 통합 전 분기 | `origin/main` 전용 46개, branch 전용 106개 commit |
+| 로컬 merge commit | `e855d6cb1a787ff89c57abf3c352edda1beeca29` |
+| 첫 번째 부모 | `674b59cda5212ff37cbf283b1a9871ff0da2c1c2` |
+| 두 번째 부모 | `26d7f49bf1a2618f792641cb95b93802a062ebe4` |
+| `origin/main` 조상 포함 검사 | 종료 코드 0 |
+| 통합 후 분기 | `origin/main` 전용 0개, 로컬 branch 전용 107개 commit |
+
+- 시작 전 사용자 소유 변경인 이 인계 문서 수정과 기존 미추적 카카오 계획 파일은 이름 있는 stash에 원문을 보존했다.
+- 미추적 계획 파일보다 main의 추적 버전이 더 최신 실행 이력을 포함하므로 통합 결과에는 main 버전을 유지했고, 기존 미추적 원문은 stash에서 삭제하지 않았다.
+- `git merge --no-ff --no-commit origin/main`으로 통합했으며 최신 main을 덮어쓰거나 회차 branch의 기존 이력을 재작성하지 않았다.
+
+### 충돌 해결
+
+총 9개 충돌을 다음 원칙으로 해소했다.
+
+- consumer 홈과 공동구매 목록은 회차 `salesMode` 분기·`Suspense` 경계를 유지하면서 최신 main의 운영 관계 안내·사업자 footer·`getGroupBuyStatus`·이미지 복구를 함께 보존했다.
+- 상품 상세은 `round_direct`와 legacy 구매 구성요소 분리를 유지하면서 최신 main의 만료·모집 완료 차단, 공개 사업자 주소·전화번호, 스토어 로고 복구와 CTA 비활성 계약을 양쪽 경로에 반영했다.
+- 회차 장바구니의 식별자·혼합 차단·저장 데이터 정규화 계약을 유지했다.
+- shared export에는 회차 `sale-round.types`와 최신 main `group-buy`를 모두 보존했고, 충돌한 source map은 shared build로 재생성했다.
+- 정적 테스트는 분리된 실제 구현 파일을 검사하도록 갱신하고, 과거 직접 수량 비교 기대는 공통 `getGroupBuyStatus` 판정 계약으로 교체했다.
+
+### 로컬 검증
+
+| 검증 | 결과 |
+| :--- | :--- |
+| `git diff --check` | 통과 |
+| workspace 빌드 선택 검사 | 통과 |
+| shared 테스트 | 2개 파일, 9건 통과 |
+| shared typecheck·build | 통과 |
+| API 단위 테스트 | 33개 suite, 253건 통과 |
+| API E2E | 4개 suite, 10건 통과 |
+| consumer Node 테스트 | 106건 통과 |
+| consumer TypeScript 검사 | 통과 |
+| seller 테스트 | 7개 파일, 43건 통과 |
+| driver Node 테스트 | 11건 통과 |
+| 회차 안전·fixture·seed 스크립트 테스트 | 29건 통과 |
+| API·consumer·seller·driver 전체 production build | 통과 |
+
+- consumer 전체 lint는 종료 코드 0이었으며 기존 코드의 경고·정보만 보고했고 파일을 수정하지 않았다.
+- 통합 대상 TSX 파일의 Biome check는 오류 없이 통과했고, 기존 정적 skeleton의 index key 경고만 남았다.
+- production build가 재생성한 seller 서비스 워커의 비본질적 작업 트리 변경은 검증 전 상태로 복원했다.
+- Firebase 규칙 emulator와 원격 회차 E2E 52건은 로컬 통합 commit의 push·원격 SHA 고정 이후 게이트에서 다시 실행한다.
+
+### 외부 변경 게이트와 현재 차단 상태
+
+| 항목 | 상태 |
+| :--- | :--- |
+| PR #11 | `OPEN`·초안·`CONFLICTING`, `mergeStateStatus: DIRTY` |
+| PR #11 원격 head | 통합 전 SHA `674b59cda5212ff37cbf283b1a9871ff0da2c1c2` |
+| 로컬 통합 commit push | 미실행 |
+| 원격 동일 SHA 검증 | 미실행 |
+| ALIGO 발신 프로필 | 미등록 |
+| `senderkey` | 미발급 |
+| 회차 알림 템플릿 8종 | 미등록·미승인 |
+| 실제 알림톡·SMS fallback 검증 | 미실행 |
+| 운영 ALIGO 변수 4개 | 미등록 |
+| 회차 출시 후보 운영 배포 | 미실행 |
+| 첫 회차 | 미생성 |
+| `salesMode` | `legacy` 유지 |
+
+이번 작업에서 push, PR 변경·병합·Ready 전환, workflow dispatch, ALIGO 로그인·등록·실제 발송, 환경변수 등록, Railway·Vercel·Firebase 변경, 운영 회차·주문·결제·배송 변경을 수행하지 않았다.
+
+### 다음 재개 게이트
+
+1. 사용자 승인 후 로컬 통합 commit과 문서 종결 commit을 원격 branch에 push한다.
+2. PR #11의 충돌·검사 상태를 다시 확인하고 동일 원격 SHA에서 회차 E2E 52건과 양쪽 cleanup을 검증한다.
+3. 별도 외부 변경 승인 후 ALIGO 발신 프로필을 등록하고 `senderkey` 발급 여부만 비밀값 없이 기록한다.
+4. 템플릿 매핑과 누락 변수 차단점을 확정한 뒤 회차 템플릿 8종 승인, 격리 실제 알림톡·SMS fallback, 운영 ALIGO 변수 4개 존재 검사를 순서대로 완료한다.
+5. 모든 선행 조건이 충족된 뒤 새 `Task 3.1 승인`을 받아야만 운영 배포를 재개한다.
+
+현재 승인 요청 대상은 첫 번째 외부 변경 게이트인 원격 branch push와 PR #11 재검증이다. 승인 전에는 ALIGO와 회차 직배송 출시 작업을 진행하지 않는다.
