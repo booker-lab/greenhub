@@ -7,7 +7,7 @@
 - **작성일**: 2026-07-28
 - **상태**: `paused_external_review`
 - **중단 결정일**: 2026-07-31 KST
-- **재개 조건**: 카카오 비즈니스 채널 심사 승인 확인 후 ALIGO Task 1.2부터 재개
+- **재개 조건**: 별도 외부 변경 승인 후 ALIGO Task 1.2의 발신 프로필 등록·`senderkey` 발급 여부 확인부터 재개
 - **Priority**: P0
 - **Labels**: `release`, `production`, `firebase`, `payments`, `notifications`, `operations`
 - **SSOT Check**: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`, `docs/plans/REPORT_task_6_8_final_closeout.md`, `docs/specs/ops/mvp-sales-round-runbook.md`, `docs/memory.md`
@@ -15,7 +15,7 @@
 
 ## 실행 중단 결정
 
-이 계획은 2026-07-31 사용자 결정에 따라 카카오 비즈니스 채널 심사 완료 전까지 중단한다. 심사 대기 중에는 ALIGO 발신 프로필·템플릿 등록, 실제 발송, 운영 자격 증명 반영, 애플리케이션 운영 배포, 첫 회차 생성, `salesMode` 전환과 이후 출시 작업을 진행하지 않는다.
+이 계획은 2026-07-31 사용자 결정에 따라 카카오 비즈니스 채널 심사 완료 전까지 중단했다. 해당 심사는 2026-08-20 승인 완료됐지만 별도 외부 변경 승인 전까지 ALIGO Task 1.2의 발신 프로필 등록·`senderkey` 확인과 이후 템플릿 등록, 실제 발송, 운영 자격 증명 반영, 애플리케이션 운영 배포, 첫 회차 생성, `salesMode` 전환 및 후속 출시 작업을 진행하지 않는다.
 
 현재 상태의 정본은 `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`이며, 상세 수행 증거는 `docs/plans/REPORT_mvp_round_direct_launch.md`에서 확인한다. 아래 개별 Task 블록은 원래 범위와 검증 계약을 보존하기 위한 계획 원문이고, 재개 순서와 최신 상태 판정에는 인계 문서를 우선한다.
 
@@ -463,9 +463,10 @@
 ## Closeout Roll-up
 
 - **Status**: `paused_external_review`
-- **출시 기준 SHA**: `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 기존 원격 게이트 통과, 중단 정리 후 최신 HEAD 재검증 필요
-- **원격 검증**: 기존 출시 기준 SHA의 Task 0.4 통과
-- **ALIGO 준비**: Task 1.2 카카오 비즈니스 채널 심사 중, Task 1.3~1.4 미착수
+- **출시 기준 SHA**: `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`
+- **원격 검증**: 기존 `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`의 Task 0.4 통과 기록을 보존한다. 현재 출시 기준 SHA에서는 [`e2e-round-direct.yml` run `32351887404`](https://github.com/booker-lab/greenhub/actions/runs/32351887404)가 `completed` / `success`로 종결됐고 chromium 26건·mobile 26건, 총 52건이 `skipped 0`·`unexpected 0`·`flaky 0`으로 통과했으며 양쪽 fixture cleanup도 `completed` / `success`였다. 동일 SHA `workflow_dispatch`는 1회, `run_attempt`는 1이고 이전 attempt·rerun·cancel은 없다.
+- **PR 재검증**: PR #11은 `OPEN`·초안·`MERGEABLE`·`CLEAN`이고 자동 검사 5개가 모두 `SUCCESS`였다.
+- **ALIGO 준비**: Task 1.2의 카카오 비즈니스 채널 승인은 완료됐으나 발신 프로필 등록·`senderkey` 확인부터 미실행이며, Task 1.3~1.4도 미착수
 - **Firebase 운영 반영**: Task 2.8 완료
 - **동일 SHA 운영 배포**: 미실행
 - **첫 회차 준비**: 미실행

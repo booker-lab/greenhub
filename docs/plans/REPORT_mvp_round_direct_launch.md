@@ -6,7 +6,7 @@
 
 - **기준 계획**: `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`
 - **기준선 재조회일**: 2026-08-20 KST
-- **현재 실행 상태**: consumer 법적 고지와 카카오 비즈니스 채널 승인 완료, 최신 main 로컬 통합·회귀 완료, 외부 변경 게이트 앞 중단
+- **현재 실행 상태**: consumer 법적 고지와 카카오 비즈니스 채널 승인 완료, 최신 main 로컬 통합·회귀와 동일 원격 head E2E 재검증 완료, ALIGO 외부 변경 게이트 앞 중단
 - **운영 변경**: 기존 Firebase 인덱스·Firestore 규칙·Storage 규칙 반영과 consumer 법적 고지 production 반영을 유지, 회차 출시 후보 배포·ALIGO 후속 설정·판매 모드 전환 미실행
 - **비밀값·개인정보 기록**: 없음
 
@@ -1396,6 +1396,7 @@ Task 0.4는 출시 SHA `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 원격 E
 - **최신 main 로컬 통합**: 완료
 - **로컬 통합 회귀**: 통과
 - **원격 push·PR 재검증**: 비강제 push와 자동 검사 종결 재확인 완료
+- **동일 원격 head E2E 재검증**: 52건과 양쪽 fixture cleanup 성공
 - **ALIGO·운영 배포·첫 회차·판매 모드 전환**: 계속 미실행
 - 기존 PLAN의 완료 Task 상태는 소급 변경하지 않고, 이번 작업은 2026-08-20의 별도 재개 이력으로 기록한다.
 
@@ -1479,14 +1480,31 @@ Task 0.4는 출시 SHA `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 원격 E
 - 원격 회차 E2E 52건은 자동 PR 검사에 포함되지 않았고 수동 workflow dispatch 금지 범위이므로 실행하거나 완료로 판정하지 않았다.
 - 기존 PLAN의 Task 상태는 소급 변경하지 않았다.
 
+### 동일 원격 head E2E 재검증
+
+앞선 원격 동기화 작업의 수동 dispatch 미실행 기록은 당시 범위의 역사 증거로 유지한다. 이후 별도 승인 범위에서 다음 1회 실행을 완료했다.
+
+| 항목 | 확인 결과 |
+| :--- | :--- |
+| workflow | `e2e-round-direct.yml` |
+| run | [`32351887404`](https://github.com/booker-lab/greenhub/actions/runs/32351887404) |
+| head SHA | `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d` |
+| 상태·결론 | `completed` / `success` |
+| Playwright | 총 52건 성공: chromium 26건, mobile 26건 |
+| 예외 판정 | `skipped 0`, `unexpected 0`, `flaky 0` |
+| fixture cleanup | chromium·mobile 모두 `completed` / `success` |
+| 실행 횟수 | 동일 SHA `workflow_dispatch` 1회 |
+| 시도 이력 | `run_attempt 1`, 이전 attempt·rerun·cancel 없음 |
+| PR #11 Task 07 재검증 | `OPEN`·초안·`MERGEABLE`·`CLEAN`, 자동 검사 5개 `SUCCESS` |
+
 ### 외부 변경 게이트와 현재 차단 상태
 
 | 항목 | 상태 |
 | :--- | :--- |
-| PR #11 | `OPEN`·초안·`MERGEABLE`, `mergeStateStatus: CLEAN` |
+| PR #11 | `OPEN`·초안·`MERGEABLE`, `mergeStateStatus: CLEAN`, 자동 검사 5개 `SUCCESS` |
 | PR #11 원격 head | 이 절을 기록한 문서 종결 commit 포함 최신 원격 head |
 | 로컬 통합 commit push | 비강제 push 완료 |
-| 원격 회차 E2E 52건 | 미실행 |
+| 원격 회차 E2E 52건 | head SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`, `completed` / `success`; chromium 26건·mobile 26건과 양쪽 cleanup 성공 |
 | ALIGO 발신 프로필 | 미등록 |
 | `senderkey` | 미발급 |
 | 회차 알림 템플릿 8종 | 미등록·미승인 |
@@ -1500,9 +1518,9 @@ Task 0.4는 출시 SHA `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 원격 E
 
 ### 다음 재개 게이트
 
-1. 동일 원격 head에서 회차 E2E 52건과 양쪽 cleanup을 검증한다. 이번 작업에서는 수동 workflow dispatch 금지에 따라 실행하지 않았다.
-2. 별도 외부 변경 승인 후 ALIGO 발신 프로필을 등록하고 `senderkey` 발급 여부만 비밀값 없이 기록한다.
-3. 템플릿 매핑과 누락 변수 차단점을 확정한 뒤 회차 템플릿 8종 승인, 격리 실제 알림톡·SMS fallback, 운영 ALIGO 변수 4개 존재 검사를 순서대로 완료한다.
-4. 모든 선행 조건이 충족된 뒤 새 `Task 3.1 승인`을 받아야만 운영 배포를 재개한다.
+1. [완료] 동일 원격 head의 회차 E2E 52건과 양쪽 cleanup 검증: head SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404` 성공.
+2. [다음 미완료 외부 게이트] 별도 외부 변경 승인 후 ALIGO 발신 프로필을 등록하고 `senderkey` 발급 여부만 비밀값 없이 확인한다.
+3. [미완료] 템플릿 매핑과 누락 변수 차단점을 확정한 뒤 회차 템플릿 8종 승인, 격리 실제 알림톡·SMS fallback, 운영 ALIGO 변수 4개 존재 검사를 순서대로 완료한다.
+4. [미완료] 모든 선행 조건이 충족된 뒤 새 `Task 3.1 승인`을 받아야만 운영 배포를 재개한다.
 
-원격 branch 동기화와 PR #11 재검증 범위는 여기서 종결한다. 다음 외부 단계는 진행하지 않았으며, 별도 승인 전에는 원격 E2E·ALIGO와 회차 직배송 출시 작업을 진행하지 않는다.
+원격 branch 동기화·PR #11 재검증·동일 원격 head E2E 재검증 범위는 여기서 종결한다. 다음 외부 단계는 진행하지 않았으며, 별도 승인 전에는 ALIGO와 회차 직배송 출시 작업을 진행하지 않는다.
