@@ -7,6 +7,8 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -83,6 +85,10 @@ export class UpdateStatusDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
+  @Matches(/^[^\r\n]*$/, {
+    message: '취소 사유에는 줄바꿈이나 제어문자를 사용할 수 없습니다.',
+  })
   reason?: string;
 
   @IsOptional()

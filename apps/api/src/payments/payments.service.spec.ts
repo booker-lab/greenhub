@@ -177,6 +177,23 @@ describe('결제 최종화 경쟁 조건', () => {
     expect(fixture.notifications.sendToUser).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['주문 snapshot 이름', '  홍길동  ', 'user-1', '홍길동'],
+    ['빈 이름 기본값', '   ', 'user-1', '고객'],
+    ['사용자 식별자와 같은 이름 기본값', 'user-1', 'user-1', '고객'],
+  ])('ORDER_ACCEPTED에는 %s을 전달한다', async (_name, buyerName, userId, expectedName) => {
+    const fixture = makeFinalization({ buyerName, userId });
+
+    await fixture.service.finalizePaidOrder('order-1', paymentData);
+
+    expect(fixture.notifications.sendToUser).toHaveBeenCalledWith(
+      userId,
+      'ORDER_ACCEPTED',
+      { orderId: 'order-1', name: expectedName },
+      'order-1',
+    );
+  });
+
   it('결제 확정 트랜잭션에 원문 제공자 응답 없는 법정 결제 기록을 남긴다', async () => {
     const fixture = makeFinalization();
 

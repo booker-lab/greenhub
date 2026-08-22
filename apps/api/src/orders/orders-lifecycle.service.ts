@@ -14,6 +14,14 @@ import { OrderCapacityService } from './order-capacity.service';
 import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 
+const DELIVERY_HOLD_CUSTOMER_REASONS: Record<string, string> = {
+  WEATHER: '기상 상황으로 배송이 지연되었습니다.',
+  ACCESS_UNAVAILABLE: '배송지 출입이 어려워 배송이 보류되었습니다.',
+  ADDRESS_ISSUE: '배송지 주소를 확인할 수 없어 배송이 보류되었습니다.',
+  CUSTOMER_UNREACHABLE: '수령인과 연락이 닿지 않아 배송이 보류되었습니다.',
+  OTHER: '배송 진행이 어려워 배송이 보류되었습니다.',
+};
+
 @Injectable()
 export class OrdersLifecycleService {
   constructor(
@@ -53,6 +61,18 @@ export class OrdersLifecycleService {
       throw new ForbiddenException(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
     }
 
+    const notificationVariables: Record<string, string> = {};
+    let confirmedCancelReason: string | null = null;
+    if (nextStatus === 'CANCELLED') {
+      confirmedCancelReason = this.normalizeSellerCancelReason(dto.reason);
+      notificationVariables['reason'] = confirmedCancelReason;
+    }
+    if (nextStatus === 'DELIVERY_HELD') {
+      notificationVariables['reason'] = this.resolveDeliveryHoldCustomerReason(
+        dto.deliveryHold?.reasonCode,
+      );
+    }
+
     // BUG-16 T2: 셀러의 PREPARING → DELIVERED는 택배(parcel) 주문에서만 허용.
     // direct/hub 주문은 드라이버 수거(DELIVERING)를 거쳐야 하므로 셀러 임의 발송 완료 차단.
     if (
@@ -69,7 +89,7 @@ export class OrdersLifecycleService {
         storeId,
         orderId,
         expectedStatus: currentStatus,
-        dto,
+        dto: confirmedCancelReason ? { ...dto, reason: confirmedCancelReason } : dto,
         requesterId,
       });
       if (nextStatus === 'DELIVERED') {
@@ -80,6 +100,8 @@ export class OrdersLifecycleService {
           currentStatus,
           nextStatus as OrderStatus,
           orderId,
+          undefined,
+          notificationVariables,
         );
       }
       return result;
@@ -94,7 +116,10 @@ export class OrdersLifecycleService {
         'DELIVERY_HELD',
       ];
       if (refundableStatuses.includes(currentStatus)) {
-        await this.payments.processRefundByOrderId(orderId, dto.reason ?? '판매자 취소');
+        await this.payments.processRefundByOrderId(
+          orderId,
+          confirmedCancelReason ?? '판매자 취소',
+        );
       }
       if (order['schemaVersion'] === 2 && order['reservationId']) {
         await this.capacity.releaseReservation(order['reservationId'] as string);
@@ -106,7 +131,7 @@ export class OrdersLifecycleService {
       status: nextStatus,
       updatedAt: now,
     };
-    if (dto.reason) update['cancelReason'] = dto.reason;
+    if (confirmedCancelReason) update['cancelReason'] = confirmedCancelReason;
     if (nextStatus === 'PREPARING' && dto.preparedAt) {
       const date = new Date(dto.preparedAt);
       if (isNaN(date.getTime())) {
@@ -175,7 +200,14 @@ export class OrdersLifecycleService {
     }
 
     // 알림 발송
-    await this.sendTransitionNotification(order, currentStatus, nextStatus as OrderStatus, orderId);
+    await this.sendTransitionNotification(
+      order,
+      currentStatus,
+      nextStatus as OrderStatus,
+      orderId,
+      undefined,
+      notificationVariables,
+    );
 
     return { orderId, status: nextStatus };
   }
@@ -381,6 +413,7 @@ export class OrdersLifecycleService {
     to: OrderStatus,
     orderId: string,
     idempotencyKey?: string,
+    extraVariables: Record<string, string> = {},
   ) {
     const isGroup = order['saleType'] === 'group';
 
@@ -399,7 +432,12 @@ export class OrdersLifecycleService {
 
     if (!templateCode) return;
 
-    const variables: Record<string, string> = { orderId };
+    const variables: Record<string, string> = { orderId, ...extraVariables };
+    if (templateCode === 'ORDER_HUB_ARRIVED') {
+      variables['productName'] = String(order['productName'] ?? '');
+      variables['pickupCode'] = String(order['pickupCode'] ?? '');
+      variables['hubAddress'] = String(order['hubAddress'] ?? '');
+    }
     const GROUP_TEMPLATES = [
       'GROUP_PREPARING',
       'GROUP_DELIVERING',
@@ -408,6 +446,7 @@ export class OrdersLifecycleService {
     ];
 
     if (isGroup && GROUP_TEMPLATES.includes(templateCode)) {
+      variables['productName'] = String(order['productName'] ?? '');
       await this.notifications.sendToGroupParticipants(
         order['productId'] as string,
         templateCode as any,
@@ -422,6 +461,44 @@ export class OrdersLifecycleService {
         idempotencyKey,
       );
     }
+  }
+
+  private resolveDeliveryHoldCustomerReason(reasonCode: unknown): string {
+    if (
+      typeof reasonCode !== 'string' ||
+      !DELIVERY_HOLD_CUSTOMER_REASONS[reasonCode]
+    ) {
+      throw new BadRequestException('올바른 배송 보류 사유 코드가 필요합니다.');
+    }
+    return DELIVERY_HOLD_CUSTOMER_REASONS[reasonCode];
+  }
+
+  private normalizeSellerCancelReason(reason: unknown): string {
+    if (reason === undefined || reason === null || String(reason).trim().length === 0) {
+      return '판매자 취소';
+    }
+    if (typeof reason !== 'string') {
+      throw new BadRequestException('취소 사유는 문자열이어야 합니다.');
+    }
+    const normalized = reason.trim();
+    if (normalized.length > 100) {
+      throw new BadRequestException('취소 사유는 100자 이하여야 합니다.');
+    }
+    if (
+      Array.from(normalized).some((character) => {
+        const code = character.charCodeAt(0);
+        return code <= 31 || code === 127;
+      })
+    ) {
+      throw new BadRequestException('취소 사유에는 줄바꿈이나 제어문자를 사용할 수 없습니다.');
+    }
+    if (
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(normalized) ||
+      /(?:01[016789])[\s-]?\d{3,4}[\s-]?\d{4}/.test(normalized)
+    ) {
+      throw new BadRequestException('취소 사유에는 이메일이나 전화번호를 포함할 수 없습니다.');
+    }
+    return normalized;
   }
 
   private nextRoundCounters(

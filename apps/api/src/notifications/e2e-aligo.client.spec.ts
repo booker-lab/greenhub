@@ -68,6 +68,7 @@ describe('알림 E2E 대역 계약', () => {
     });
     const evidence = aligo.getCallEvidence();
     expect(evidence).toHaveLength(1);
+    expect(evidence[0].templateCode).toBe(templateCode);
     expect(JSON.stringify(evidence)).not.toContain('01012345678');
   });
 });

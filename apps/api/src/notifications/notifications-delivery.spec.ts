@@ -35,6 +35,9 @@ describe('회차 직배송 알림 전달 계약', () => {
     ALIGO_USER_ID: 'test-user',
     ALIGO_SENDER_KEY: 'test-sender-key',
     ALIGO_SENDER_PHONE: '0212345678',
+    ALIGO_TEMPLATE_CODES_JSON: JSON.stringify({
+      [templateCode]: 'provider-delivery-held',
+    }),
   };
 
   beforeEach(() => {
@@ -55,6 +58,8 @@ describe('회차 직배송 알림 전달 계약', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(String((global.fetch as jest.Mock).mock.calls[0][0])).toContain('/alimtalk/');
+    expect(requestBody(0).get('tpl_code')).toBe('provider-delivery-held');
+    expect(requestBody(0).get('tpl_code')).not.toBe(templateCode);
   });
 
   it('일시 오류가 나면 알림톡을 최대 3회까지 재시도하고 성공 시 중단한다', async () => {
@@ -108,6 +113,60 @@ describe('회차 직배송 알림 전달 계약', () => {
       success: false,
     });
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['잘못된 JSON', '{'],
+    ['허용되지 않은 키', JSON.stringify({ UNKNOWN: 'provider-code' })],
+    ['누락 매핑', '{}'],
+    ['빈 매핑', JSON.stringify({ [templateCode]: '   ' })],
+  ])('%s 템플릿 코드 설정은 외부 요청과 문자 대체 없이 실패한다', async (_name, raw) => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(0));
+    const client = makeClient({ ...configured, ALIGO_TEMPLATE_CODES_JSON: raw });
+
+    await expect(client.sendAlimtalk(phone, templateCode, variables)).resolves.toMatchObject({
+      success: false,
+      alimtalkAttempts: 0,
+      smsAttempts: 0,
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('필수 본문 변수가 누락되면 알림톡과 직접 SMS를 모두 외부 요청 없이 거부한다', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(0));
+    const client = makeClient(configured);
+
+    await expect(
+      client.sendAlimtalk(phone, templateCode, { orderId: 'order-1' }),
+    ).resolves.toMatchObject({
+      success: false,
+      alimtalkAttempts: 0,
+      smsAttempts: 0,
+      errorMessage: expect.stringContaining('reason'),
+    });
+    await expect(
+      client.sendSms(phone, templateCode, { orderId: 'order-1' }),
+    ).resolves.toMatchObject({
+      success: false,
+      smsAttempts: 0,
+      errorMessage: expect.stringContaining('reason'),
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('직접 SMS는 외부 tpl_code 매핑에 의존하거나 코드를 요청에 섞지 않는다', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(0));
+    const client = makeClient({ ...configured, ALIGO_TEMPLATE_CODES_JSON: '{' });
+
+    await expect(client.sendSms(phone, templateCode, variables)).resolves.toMatchObject({
+      success: true,
+      channel: 'sms',
+      alimtalkAttempts: 0,
+      smsAttempts: 1,
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(requestBody(0).get('tpl_code')).toBeNull();
+    expect(requestBody(0).get('msg')).toContain('배송이 보류되었습니다');
   });
 
   describe('최종 실패 운영 예외', () => {
@@ -208,6 +267,7 @@ describe('회차 직배송 알림 전달 계약', () => {
       expect(notifications).toHaveLength(1);
       expect(notifications[0].data).toMatchObject({
         channel: 'sms',
+        templateCode,
         phone,
         message: '승인된 배송 보류 본문',
         attemptCount: 4,
@@ -356,11 +416,7 @@ describe('회차 직배송 알림 전달 계약', () => {
               data: () => records.get(document.path),
             })),
             set: jest.fn(
-              (
-                document: { path: string },
-                data: Data,
-                options?: { merge?: boolean },
-              ) => {
+              (document: { path: string }, data: Data, options?: { merge?: boolean }) => {
                 const next = options?.merge
                   ? { ...(records.get(document.path) ?? {}), ...data }
                   : data;
@@ -383,9 +439,14 @@ describe('회차 직배송 알림 전달 계약', () => {
           smsAttempts: 0,
         }),
       };
-      const service = new (NotificationsService as any)(firestore, aligo, {}, {
-        createOrMergeIssue: jest.fn(),
-      }) as NotificationsService;
+      const service = new (NotificationsService as any)(
+        firestore,
+        aligo,
+        {},
+        {
+          createOrMergeIssue: jest.fn(),
+        },
+      ) as NotificationsService;
       const idempotencyKey = 'order-transition:order-1:DELIVERING:DELIVERED';
 
       await (service.sendToUser as any)(

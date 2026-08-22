@@ -148,7 +148,9 @@ export class PaymentFinalizationService {
     await this.notifications.sendToUser(
       order['userId'],
       newStatus === 'ACCEPTED' ? 'ORDER_ACCEPTED' : 'GROUP_JOINED',
-      { orderId },
+      newStatus === 'ACCEPTED'
+        ? { orderId, name: this.resolveBuyerDisplayName(order) }
+        : { orderId },
       orderId,
     );
     return { ok: true, status: newStatus };
@@ -192,6 +194,12 @@ export class PaymentFinalizationService {
         order['cancelReason'] === 'timeout' &&
         !order['latePaymentRefundedAt'])
     );
+  }
+
+  private resolveBuyerDisplayName(order: Record<string, any>): string {
+    const userId = String(order['userId'] ?? '');
+    const buyerName = typeof order['buyerName'] === 'string' ? order['buyerName'].trim() : '';
+    return buyerName && buyerName !== userId ? buyerName : '고객';
   }
 
   private async recordLateRefund(

@@ -1524,3 +1524,45 @@ Task 0.4는 출시 SHA `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`에서 원격 E
 4. [미완료] 모든 선행 조건이 충족된 뒤 새 `Task 3.1 승인`을 받아야만 운영 배포를 재개한다.
 
 원격 branch 동기화·PR #11 재검증·동일 원격 head E2E 재검증 범위는 여기서 종결한다. 다음 외부 단계는 진행하지 않았으며, 별도 승인 전에는 ALIGO와 회차 직배송 출시 작업을 진행하지 않는다.
+
+## 2026-08-22 Task 12 — ALIGO 템플릿 코드 분리와 본문 변수 계약 구현
+
+### 판정
+
+- **로컬 구현**: 완료
+- **시작 기준선**: branch `codex/mvp-sales-round-direct`, `HEAD`·원격 head `fe572a6b5ea63a69e4677f62b03e40f47090b2cd`, clean 작업 트리
+- **ALIGO 발신 프로필**: 정상 등록 1건과 `senderkey` 발급 완료 사실만 반영, 원문 미조회·미기록
+- **회차 알림 템플릿 8종**: 미등록·미승인
+- **외부 변경**: 없음
+- **다음 외부 게이트**: 회차 알림 템플릿 8종 등록·승인
+
+### 구현 계약
+
+- 신규 `aligo-template-codes.ts`가 `ALIGO_TEMPLATE_CODES_JSON`을 JSON 객체로 파싱하고 허용 논리 키, 문자열 타입, trim 후 비어 있지 않음을 검증한다.
+- 회차 직배송에서 도달 가능한 8종 논리 코드의 매핑 존재를 한 번에 검사할 수 있다.
+- `AligoClient`의 알림톡 HTTP 요청만 외부 `tpl_code`를 사용한다. 알림 기록·멱등 키·운영 예외와 E2E 대역·SMS fallback은 내부 논리 코드를 유지한다.
+- 잘못된 JSON·객체가 아닌 값·허용되지 않은 키·문자열이 아닌 값·빈 값·요청 코드 누락은 설정 오류로 처리하며 외부 요청과 SMS 대체를 0회로 유지한다.
+- 모든 알림 본문 registry에 `requiredVariables`를 선언했고 누락·공백 필수 변수를 빈 문자열로 치환하지 않는다.
+- `ORDER_ACCEPTED.name`은 주문 snapshot `buyerName`을 trim해 사용하며 비어 있거나 `userId`와 같으면 `고객`을 사용한다. 이메일 local-part와 `userId` fallback은 사용하지 않는다.
+- `ORDER_DELIVERY_HELD.reason`은 자유 입력 `reasonMessage`가 아니라 서버 정본의 `reasonCode`별 비개인 고정 문구를 사용한다. 알 수 없거나 빈 코드는 상태 전환 전에 거부한다.
+- `ORDER_CANCELLED.reason`은 판매자·관리자 전환에서 trim한 뒤 빈 값을 `판매자 취소`로 확정하고, 100자 초과·줄바꿈·제어문자·이메일·전화번호 형식을 거부한다. 환불·저장·알림은 동일한 확정 사유를 사용한다.
+- 상태 저장 뒤 알림 실패는 주문 상태를 롤백하지 않고 기존 `CUSTOMER_NOTICE_FAILED` 운영 예외 계약을 유지한다.
+
+### 로컬 검증
+
+| 검증 | 결과 |
+| :--- | :--- |
+| 관련 단위 테스트 | 7개 suite, 97건 통과 |
+| API 전체 단위 테스트 | 35개 suite, 284건 통과 |
+| API TypeScript 검사 | `pnpm --filter api exec tsc --noEmit` 종료 코드 0 |
+| `git diff --check` | 종료 코드 0 |
+| 최종 staging | staged 변경 0개, 구현·테스트·정본 범위의 unstaged·untracked 변경만 존재 |
+| 외부 요청 차단 테스트 | 잘못된 매핑과 필수 변수 누락에서 알림톡·SMS 요청 0회 확인 |
+| 상태·사유 회귀 | 결제 확정 이름, 배송 보류 고정 사유, 취소 확정 사유와 알림 실패 시 상태 유지 확인 |
+
+### 변경 및 금지 범위 확인
+
+- 로컬 코드·테스트·환경 변수 예시·정본 문서만 변경했다.
+- 실제 `senderkey`, `tpl_code`, API Key, 전화번호, 환경 변수 값과 개인정보를 읽거나 기록하지 않았다.
+- ALIGO 템플릿 등록·승인 요청·실제 발송, 환경 변수 설정, Railway·Vercel·Firebase·운영 데이터·`salesMode` 변경을 수행하지 않았다.
+- stage·commit·push, PR·workflow 변경을 수행하지 않았다.

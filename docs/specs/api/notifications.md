@@ -249,6 +249,10 @@ PATCH /notifications/me/preferences
 
 ### 알리고 API 호출 구조
 
+내부 `NotificationTemplateCode`는 알림 기록·멱등 키·운영 예외에 사용하는 논리 식별자다. ALIGO 요청의 `tpl_code`는 `ALIGO_TEMPLATE_CODES_JSON`에서 논리 코드로 조회한 별도 provider 식별자만 사용한다. 이 환경 변수는 JSON 객체여야 하며 registry에 없는 키, 문자열이 아닌 값, trim 후 빈 값은 설정 오류다. 매핑 누락이나 파싱 오류는 외부 요청과 SMS 대체를 모두 수행하지 않고 실패로 기록한다. E2E 대역과 직접 SMS 재발송은 이 매핑에 의존하지 않는다.
+
+회차 출시 준비 검사는 `ORDER_ACCEPTED`, `ORDER_PREPARING`, `ORDER_DELIVERING`, `ORDER_DELIVERY_HELD`, `ORDER_REDELIVERY_PAYMENT_REQUESTED`, `ORDER_REDELIVERY_SCHEDULED`, `ORDER_DELIVERED`, `ORDER_CANCELLED` 8종의 매핑 존재를 모두 요구한다. 실제 `tpl_code` 원문은 저장소와 운영 증거에 기록하지 않는다.
+
 ```ts
 // NestJS NotificationsService 내부
 POST https://kakaoapi.aligo.in/akv10/alimtalk/send/
@@ -257,7 +261,7 @@ POST https://kakaoapi.aligo.in/akv10/alimtalk/send/
   apikey: process.env.ALIGO_API_KEY,
   userid: process.env.ALIGO_USER_ID,
   senderkey: process.env.ALIGO_SENDER_KEY,
-  tpl_code: templateCode,       // 카카오 심사 완료 템플릿 코드
+  tpl_code: providerTemplateCode, // ALIGO_TEMPLATE_CODES_JSON에서 해석한 외부 코드
   sender: '010-XXXX-XXXX',      // 발신 번호
   receiver_1: phone,
   recvname_1: userName,
@@ -270,6 +274,12 @@ POST https://kakaoapi.aligo.in/akv10/alimtalk/send/
   fmessage_1: renderedMessage,
 }
 ```
+
+각 본문 registry 항목은 `requiredVariables`를 명시한다. 누락되거나 trim 후 빈 필수 변수는 빈 문자열로 치환하지 않고 외부 요청 전에 실패한다. 회차 직배송의 추가 계약은 다음과 같다.
+
+- `ORDER_ACCEPTED.name`: 결제 확정 시 주문 snapshot `buyerName`을 trim해 사용하며, 비어 있거나 `userId`와 같으면 `고객`을 사용한다. 이메일 local-part와 `userId`는 표시명 대체값으로 사용하지 않는다.
+- `ORDER_DELIVERY_HELD.reason`: 자유 입력 `reasonMessage`를 발송하지 않고 서버 정본의 `reasonCode`별 비개인 고정 문구를 사용한다. 알 수 없거나 빈 코드는 상태 전환 전에 거부한다.
+- `ORDER_CANCELLED.reason`: 판매자·관리자 전환의 사유를 trim하고 빈 값은 `판매자 취소`로 확정한다. 100자 초과, 줄바꿈·제어문자, 이메일·전화번호 형식은 거부하며 환불·저장·알림에 같은 확정값을 사용한다.
 
 ---
 
@@ -367,4 +377,5 @@ export interface NotificationSummary {
 
 | 날짜 | 내용 |
 |------|------|
+| 2026-08-22 | 내부 논리 코드와 ALIGO `tpl_code` 매핑 분리, 필수 본문 변수와 회차 알림 변수 3종 계약 확정 |
 | 2026-03-26 | 초안 작성 — 1·2단계 설계 + orders.md 알림 시점 기반 통합 |

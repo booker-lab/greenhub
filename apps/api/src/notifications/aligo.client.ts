@@ -1,8 +1,10 @@
 import type { NotificationChannel } from '@greenhub/shared';
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import type { ConfigService } from '@nestjs/config';
+import { resolveAligoTemplateCode } from './aligo-template-codes';
 import {
   type ApiNotificationTemplateCode,
+  NOTIFICATION_TEMPLATES,
   renderNotificationMessage,
 } from './notification-templates';
 
@@ -21,12 +23,14 @@ export class AligoClient {
   private readonly userId: string;
   private readonly senderKey: string;
   private readonly senderPhone: string;
+  private readonly templateCodesJson: string;
 
   constructor(config: ConfigService) {
     this.apiKey = config.get<string>('ALIGO_API_KEY', '');
     this.userId = config.get<string>('ALIGO_USER_ID', '');
     this.senderKey = config.get<string>('ALIGO_SENDER_KEY', '');
     this.senderPhone = config.get<string>('ALIGO_SENDER_PHONE', '');
+    this.templateCodesJson = config.get<string>('ALIGO_TEMPLATE_CODES_JSON', '');
   }
 
   async sendAlimtalk(
@@ -34,7 +38,9 @@ export class AligoClient {
     templateCode: ApiNotificationTemplateCode,
     variables: Record<string, string>,
   ): Promise<NotificationDeliveryResult> {
-    const message = renderNotificationMessage(templateCode, variables);
+    const rendered = this.renderMessage(templateCode, variables);
+    if ('errorMessage' in rendered) return rendered;
+    const message = rendered.message;
     if (!this.apiKey || !this.userId || !this.senderKey || !this.senderPhone) {
       return {
         success: false,
@@ -46,10 +52,24 @@ export class AligoClient {
       };
     }
 
+    let providerTemplateCode: string;
+    try {
+      providerTemplateCode = resolveAligoTemplateCode(this.templateCodesJson, templateCode);
+    } catch (error) {
+      return {
+        success: false,
+        channel: null,
+        message,
+        alimtalkAttempts: 0,
+        smsAttempts: 0,
+        errorMessage: error instanceof Error ? error.message : 'ALIGO 템플릿 코드 설정 오류입니다.',
+      };
+    }
+
     let errorMessage = '알림톡 발송에 실패했습니다.';
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const result = await this.sendAlimtalkOnce(phone, templateCode, message);
+      const result = await this.sendAlimtalkOnce(phone, providerTemplateCode, message);
       if (result.success) {
         return {
           success: true,
@@ -88,7 +108,9 @@ export class AligoClient {
     templateCode: ApiNotificationTemplateCode,
     variables: Record<string, string>,
   ): Promise<NotificationDeliveryResult> {
-    const message = renderNotificationMessage(templateCode, variables);
+    const rendered = this.renderMessage(templateCode, variables);
+    if ('errorMessage' in rendered) return rendered;
+    const message = rendered.message;
     if (!this.apiKey || !this.userId || !this.senderPhone) {
       return {
         success: false,
@@ -108,6 +130,24 @@ export class AligoClient {
       smsAttempts: 1,
       errorMessage: result.errorMessage,
     };
+  }
+
+  private renderMessage(
+    templateCode: ApiNotificationTemplateCode,
+    variables: Record<string, string>,
+  ): { message: string } | NotificationDeliveryResult {
+    try {
+      return { message: renderNotificationMessage(templateCode, variables) };
+    } catch (error) {
+      return {
+        success: false,
+        channel: null,
+        message: NOTIFICATION_TEMPLATES[templateCode].body,
+        alimtalkAttempts: 0,
+        smsAttempts: 0,
+        errorMessage: error instanceof Error ? error.message : '알림 본문 변수 오류입니다.',
+      };
+    }
   }
 
   private async sendAlimtalkOnce(

@@ -7,7 +7,7 @@
 - **작성일**: 2026-07-28
 - **상태**: `paused_external_review`
 - **중단 결정일**: 2026-07-31 KST
-- **재개 조건**: 별도 외부 변경 승인 후 ALIGO Task 1.2의 발신 프로필 등록·`senderkey` 발급 여부 확인부터 재개
+- **재개 조건**: 회차 알림 템플릿 8종의 provider 등록·승인부터 재개
 - **Priority**: P0
 - **Labels**: `release`, `production`, `firebase`, `payments`, `notifications`, `operations`
 - **SSOT Check**: `docs/plans/PLAN_mvp_sales_round_direct_delivery.md`, `docs/plans/REPORT_task_6_8_final_closeout.md`, `docs/specs/ops/mvp-sales-round-runbook.md`, `docs/memory.md`
@@ -15,7 +15,7 @@
 
 ## 실행 중단 결정
 
-이 계획은 2026-07-31 사용자 결정에 따라 카카오 비즈니스 채널 심사 완료 전까지 중단했다. 해당 심사는 2026-08-20 승인 완료됐지만 별도 외부 변경 승인 전까지 ALIGO Task 1.2의 발신 프로필 등록·`senderkey` 확인과 이후 템플릿 등록, 실제 발송, 운영 자격 증명 반영, 애플리케이션 운영 배포, 첫 회차 생성, `salesMode` 전환 및 후속 출시 작업을 진행하지 않는다.
+이 계획은 2026-07-31 사용자 결정에 따라 카카오 비즈니스 채널 심사 완료 전까지 중단했다. 해당 심사는 2026-08-20 승인됐고 ALIGO 발신 프로필 1건과 `senderkey` 발급도 완료됐다. 2026-08-22 로컬 Task 12에서 템플릿 코드 매핑과 누락 본문 변수 3종을 구현했지만, 별도 외부 변경 승인 전까지 회차 템플릿 등록·승인, 실제 발송, 운영 자격 증명 반영, 애플리케이션 운영 배포, 첫 회차 생성, `salesMode` 전환 및 후속 출시 작업을 진행하지 않는다.
 
 현재 상태의 정본은 `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`이며, 상세 수행 증거는 `docs/plans/REPORT_mvp_round_direct_launch.md`에서 확인한다. 아래 개별 Task 블록은 원래 범위와 검증 계약을 보존하기 위한 계획 원문이고, 재개 순서와 최신 상태 판정에는 인계 문서를 우선한다.
 
@@ -23,11 +23,21 @@
 | :--- | :--- |
 | Task 0.1~0.4 | 완료 |
 | Task 1.1 | 완료 |
-| Task 1.2 | 부분 완료, 카카오 비즈니스 채널 심사 중 |
+| Task 1.2 | 부분 완료, 발신 프로필·`senderkey` 준비 완료, 회차 템플릿 8종 미등록·미승인 |
 | Task 1.3~1.4 | 미착수, Task 1.2 의존성으로 차단 |
 | Task 2.1~2.8 | 완료, 운영 Firebase 인덱스·Firestore 규칙·Storage 규칙 반영 및 재조회 완료 |
 | Task 3.1 | 배포 없이 차단 종료 |
 | Task 3.2~7.2 | 미착수, 계획 전체 중단에 따라 보류 |
+
+### 2026-08-22 Task 12 로컬 구현 게이트
+
+- 내부 `NotificationTemplateCode`와 ALIGO `tpl_code`를 `ALIGO_TEMPLATE_CODES_JSON` parser/resolver로 분리했다.
+- JSON 객체·허용 논리 키·문자열·trim 후 비어 있지 않음을 검증하며 회차 8종 매핑의 준비상태 검사 함수를 제공한다.
+- 외부 `tpl_code`는 `AligoClient`의 알림톡 HTTP 요청에만 사용하고, 알림 기록·멱등 키·운영 예외·E2E 대역·SMS에는 내부 논리 코드를 유지한다.
+- 모든 본문 registry에 `requiredVariables`를 선언하고 누락·공백 필수 변수를 외부 요청 전에 거부한다.
+- `ORDER_ACCEPTED.name`, `ORDER_DELIVERY_HELD.reason`, `ORDER_CANCELLED.reason`의 서버 확정 규칙을 코드와 테스트로 고정했다.
+- 로컬 구현·테스트·정본만 변경했으며 stage·commit·push와 provider·운영 변경은 수행하지 않았다.
+- 다음 외부 게이트는 회차 알림 템플릿 8종의 등록·승인이다.
 
 ## 📋 업무 요약 (협업용)
 
@@ -195,14 +205,14 @@
 - **Conclusion**: [판정 — 알림톡·문자 대체의 실제 provider 결과와 개인정보 배제 확인. 검증 결과]
 - **Status**: todo
 
-#### Task 1.4 — 운영 ALIGO 변수 반영 [승인 게이트]
+#### Task 1.4 — 운영 ALIGO 변수와 템플릿 코드 매핑 반영 [승인 게이트]
 
 - **Task-ID**: 1.4
 - **Dependency**: Task 1.3
 - **Target**: `docs/plans/REPORT_mvp_round_direct_launch.md`
-- **Goal**: 검증된 ALIGO 자격 증명을 운영 API 환경에 값 비공개·배포 보류 방식으로 반영한다.
-- **Verify**: `powershell -NoProfile -Command "$v = railway variable --environment production --service api --json | ConvertFrom-Json; $required = @('ALIGO_API_KEY','ALIGO_USER_ID','ALIGO_SENDER_KEY','ALIGO_SENDER_PHONE'); if (@($required | Where-Object { [string]::IsNullOrWhiteSpace([string]$v.PSObject.Properties[$_].Value) }).Count -gt 0) { exit 1 }"`
-- **Conclusion**: [판정 — 필수 변수 4개가 비어 있지 않고 원문 미노출. 검증 결과]
+- **Goal**: 검증된 ALIGO 자격 증명 4개와 승인된 논리 코드↔`tpl_code` JSON 매핑을 운영 API 환경에 값 비공개·배포 보류 방식으로 반영한다.
+- **Verify**: `powershell -NoProfile -Command "$v = railway variable --environment production --service api --json | ConvertFrom-Json; $required = @('ALIGO_API_KEY','ALIGO_USER_ID','ALIGO_SENDER_KEY','ALIGO_SENDER_PHONE','ALIGO_TEMPLATE_CODES_JSON'); if (@($required | Where-Object { [string]::IsNullOrWhiteSpace([string]$v.PSObject.Properties[$_].Value) }).Count -gt 0) { exit 1 }"`
+- **Conclusion**: [판정 — 자격 증명 4개와 템플릿 코드 매핑이 비어 있지 않고 원문 미노출. 검증 결과]
 - **Status**: todo
 
 ### Phase 2 — Firebase 운영 인프라 반영

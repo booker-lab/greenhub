@@ -688,6 +688,20 @@ describe('MVP 회차 주문 흐름 계약', () => {
     expect(records.get('saleRounds/round-1')).toMatchObject({
       counters: expect.objectContaining({ heldOrderCount: 1 }),
     });
+    expect(notifications.sendToUser).toHaveBeenCalledWith(
+      'user-1',
+      'ORDER_DELIVERY_HELD',
+      {
+        orderId: 'order-1',
+        reason: '배송지 출입이 어려워 배송이 보류되었습니다.',
+      },
+      'order-1',
+      undefined,
+    );
+    expect(notifications.sendToUser.mock.calls[0][2]).not.toHaveProperty(
+      'reason',
+      '공동현관 출입 불가',
+    );
     await service.updateStatus(
       'store-round',
       'order-1',
@@ -700,6 +714,153 @@ describe('MVP 회차 주문 흐름 계약', () => {
     });
     expect(records.get('orders/order-1')?.['deliveryHold']).toMatchObject({
       resolvedAt: expect.any(String),
+    });
+  });
+
+  it('알 수 없는 배송 보류 사유 코드는 상태 저장 전에 거부한다', async () => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-unknown-hold': {
+          id: 'order-unknown-hold',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'PREPARING',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          deliveryMethod: 'direct',
+        },
+      }),
+    );
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.updateStatus(
+        'store-round',
+        'order-unknown-hold',
+        'seller-1',
+        {
+          status: 'DELIVERY_HELD',
+          deliveryHold: {
+            reasonCode: 'UNKNOWN',
+            reasonMessage: '외부에 보내면 안 되는 자유 입력',
+            customerResponsible: false,
+          },
+        } as never,
+        'seller',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(records.get('orders/order-unknown-hold')?.['status']).toBe('PREPARING');
+    expect(notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['판매자 공백 기본값', '   ', '판매자 취소', 'seller-1', 'seller'],
+    ['판매자 trim한 확정값', '  재고 부족  ', '재고 부족', 'seller-1', 'seller'],
+    ['관리자 trim한 확정값', '  운영 정책 취소  ', '운영 정책 취소', 'admin-1', 'admin'],
+  ])(
+    '%s을 환불·저장·알림에 동일하게 사용한다',
+    async (_name, reason, expected, requesterId, role) => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-cancel': {
+          id: 'order-cancel',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'ACCEPTED',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          reservationId: 'reservation-1',
+          orderItems: [{ roundItemId: 'round-item-1', quantity: 1 }],
+        },
+      }),
+    );
+    const service = makeLifecycle(firestore);
+
+    await service.updateStatus(
+      'store-round',
+      'order-cancel',
+      requesterId,
+      { status: 'CANCELLED', reason } as never,
+      role,
+    );
+
+    expect(payments.processRefundByOrderId).toHaveBeenCalledWith('order-cancel', expected);
+    expect(records.get('orders/order-cancel')).toMatchObject({
+      status: 'CANCELLED',
+      cancelReason: expected,
+    });
+    expect(notifications.sendToUser).toHaveBeenCalledWith(
+      'user-1',
+      'ORDER_CANCELLED',
+      { orderId: 'order-cancel', reason: expected },
+      'order-cancel',
+      undefined,
+    );
+    },
+  );
+
+  it.each([
+    ['너무 긴 사유', '가'.repeat(101)],
+    ['줄바꿈 사유', '재고 부족\n연락처 확인'],
+    ['제어문자 사유', '재고\t부족'],
+    ['이메일 포함', 'buyer@example.com 요청'],
+    ['전화번호 포함', '010-1234-5678 요청'],
+  ])('%s는 환불과 상태 저장 전에 거부한다', async (_name, reason) => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-invalid-cancel': {
+          id: 'order-invalid-cancel',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'ACCEPTED',
+          schemaVersion: 2,
+          roundId: 'round-1',
+        },
+      }),
+    );
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.updateStatus(
+        'store-round',
+        'order-invalid-cancel',
+        'seller-1',
+        { status: 'CANCELLED', reason } as never,
+        'seller',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(payments.processRefundByOrderId).not.toHaveBeenCalled();
+    expect(records.get('orders/order-invalid-cancel')?.['status']).toBe('ACCEPTED');
+  });
+
+  it('취소 저장 뒤 알림 실패가 나도 확정 상태와 사유를 유지한다', async () => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-notice-failure': {
+          id: 'order-notice-failure',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'ACCEPTED',
+          schemaVersion: 2,
+          roundId: 'round-1',
+        },
+      }),
+    );
+    notifications.sendToUser.mockRejectedValueOnce(new Error('알림 운영 예외'));
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.updateStatus(
+        'store-round',
+        'order-notice-failure',
+        'seller-1',
+        { status: 'CANCELLED', reason: '재고 부족' } as never,
+        'seller',
+      ),
+    ).rejects.toThrow('알림 운영 예외');
+    expect(records.get('orders/order-notice-failure')).toMatchObject({
+      status: 'CANCELLED',
+      cancelReason: '재고 부족',
     });
   });
 
