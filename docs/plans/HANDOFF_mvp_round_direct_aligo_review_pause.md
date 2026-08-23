@@ -17,7 +17,35 @@
 
 현재 외부 차단점은 **ALIGO 8종 provider 심사 완료**다.
 
-동시에 해결 가능한 관리자 P0는 **Issue #32 `main` branch protection/ruleset 활성화**다.
+동시에 해결 가능한 P0는 두 가지다.
+
+1. **결제 finalization `PAID` 최종 방어** — 현재 `main`의 `finalizePaidOrder()`는 전달받은 provider status를 자체 강제하지 않음.
+2. **Issue #32 `main` branch protection/ruleset 활성화**.
+
+현재 상태 정본은 `docs/memory.md`, 미완료 목록은 `docs/BACKLOG.md`를 우선한다.
+
+## 결제 finalization P0
+
+현재 `apps/api/src/payments/payment-finalization.service.ts`의 `finalizePaidOrder()`는 주문 상태·금액·reservation을 검사하지만 전달받은 `paymentData.status === 'PAID'`를 메서드 내부에서 직접 강제하지 않는다.
+
+현재 일반 호출 경로는 일부 방어한다.
+
+- scheduler는 원격 상태가 `PAID`일 때만 finalization 호출.
+- webhook은 `Transaction.Paid` 이벤트에서 원격 결제를 재조회.
+
+하지만 finalization service 자체가 비`PAID` 입력을 최종 차단하는 구조는 아니다.
+
+따라서 actual release SHA를 확정하기 전에:
+
+- 비`PAID` 차단 구현,
+- `PENDING`/`FAILED`/`CANCELLED` 회귀,
+- `PAID` 일반·공동구매·회차 정상 경로,
+- 금액 불일치,
+- 기존 reservation/race 회귀
+
+를 통과하고 수정이 `main`에 포함됐음을 확인한다.
+
+정본: `docs/specs/api/payments.md`.
 
 ## 배포 안전성 변경
 
@@ -76,6 +104,7 @@ production `/privacy`, `/terms`는 현재 비판매 상태를 전제로 한다.
 - 마지막 전체 원격 회차 E2E 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`.
 - chromium 26 + mobile 26 = 52, 양쪽 cleanup 성공.
 - 현재 release SHA 증거로 확장 적용하지 않는다.
+- 결제 finalization P0와 법적 변경까지 포함한 actual release SHA에서 다시 검증한다.
 
 ## 지금 하지 말아야 할 작업
 
@@ -86,29 +115,32 @@ production `/privacy`, `/terms`는 현재 비판매 상태를 전제로 한다.
 - `main` merge를 production 배포 승인으로 해석.
 - 별도 Task 승인 없이 production 배포·Firebase 운영 변경·운영 회차 생성·`salesMode` 변경.
 - 비판매 법적 문구를 판매 공개 전에 임의로 미리 전환.
+- 결제 finalization P0가 `main`에 반영되기 전에 release SHA를 확정.
 
 ## 지금 병렬로 할 수 있는 작업
 
-1. Issue #32 `main` protection/ruleset 관리자 설정.
-2. read-only 문서/코드 정합성 감사.
-3. ALIGO provider 심사 상태 조회.
+1. 결제 finalization `PAID` guard 구현·회귀 검증·통합.
+2. Issue #32 `main` protection/ruleset 관리자 설정.
+3. read-only 문서/코드 정합성 감사.
+4. ALIGO provider 심사 상태 조회.
 
 ## ALIGO 승인 뒤 재개 순서
 
-1. 8종 모두 승인/수정요청/반려 여부 확인.
-2. 승인 `tpl_code` 8종 ↔ 내부 논리 템플릿 1:1 매핑 검사.
-3. 별도 승인 후 격리 실제 알림톡 정상 발송.
-4. 별도 승인 후 SMS fallback 실제 검증.
-5. 판매 활성화 법적 문서·테스트 재정합화.
-6. Issue #32 완료 확인.
-7. 법적 변경까지 포함한 actual release SHA 확정.
-8. exact SHA 원격 회차 E2E 52건 + fixture cleanup.
-9. 운영 Firebase read-only 재조회.
-10. 별도 승인 후 production ALIGO 설정 반영·검증.
-11. exact-SHA production deploy/promotion 절차 확정.
-12. 사용자의 별도 `Task 3.1 승인` 뒤에만 production 배포.
-13. deployment metadata SHA 대조 → 운영 smoke.
-14. 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
+1. 결제 finalization P0가 `main`에 통합됐는지 확인.
+2. 8종 모두 승인/수정요청/반려 여부 확인.
+3. 승인 `tpl_code` 8종 ↔ 내부 논리 템플릿 1:1 매핑 검사.
+4. 별도 승인 후 격리 실제 알림톡 정상 발송.
+5. 별도 승인 후 SMS fallback 실제 검증.
+6. 판매 활성화 법적 문서·테스트 재정합화.
+7. Issue #32 완료 확인.
+8. 법적 변경과 모든 P0 코드 보정까지 포함한 actual release SHA 확정.
+9. exact SHA 원격 회차 E2E 52건 + fixture cleanup.
+10. 운영 Firebase read-only 재조회.
+11. 별도 승인 후 production ALIGO 설정 반영·검증.
+12. exact-SHA production deploy/promotion 절차 확정.
+13. 사용자의 별도 `Task 3.1 승인` 뒤에만 production 배포.
+14. deployment metadata SHA 대조 → 운영 smoke.
+15. 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
 
 ## 재개 완료 조건
 
@@ -118,6 +150,7 @@ production `/privacy`, `/terms`는 현재 비판매 상태를 전제로 한다.
 - [x] ALIGO 템플릿 8종 등록·심사 요청
 - [x] repo-side `main` 자동 production deploy 차단
 - [x] deployment safety CI와 docs-only ignore 적용
+- [ ] 결제 finalization `PAID` guard + 회귀 검증 + `main` 통합
 - [ ] Issue #32 branch protection/ruleset
 - [ ] ALIGO 템플릿 8종 최종 승인
 - [ ] 실제 알림톡 정상 발송
