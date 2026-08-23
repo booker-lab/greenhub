@@ -86,6 +86,10 @@ const paymentData = {
   transactionId: 'tx-1',
 } as never;
 
+function paymentDataWithStatus(status: string, overrides: Data = {}) {
+  return { ...paymentData, status, ...overrides } as never;
+}
+
 function makeFinalization(overrides: Data = {}) {
   const order = {
     id: 'order-1',
@@ -137,6 +141,57 @@ function makeFinalization(overrides: Data = {}) {
 }
 
 describe('결제 최종화 경쟁 조건', () => {
+  it.each(['PENDING', 'FAILED', 'CANCELLED'])(
+    'PortOne 상태가 %s이면 정상 주문 finalization을 수행하지 않는다',
+    async (status) => {
+      const fixture = makeFinalization(
+        status === 'CANCELLED' ? { status: 'CANCELLED', cancelReason: '소비자 취소' } : {},
+      );
+
+      await expect(
+        fixture.service.finalizePaidOrder('order-1', paymentDataWithStatus(status)),
+      ).resolves.toEqual({ ok: true, reason: 'payment_not_paid' });
+
+      expect(fixture.records.get('orders/order-1')?.status).toBe(
+        status === 'CANCELLED' ? 'CANCELLED' : 'PENDING',
+      );
+      expect(fixture.records.has('payments/order-1')).toBe(false);
+      expect(fixture.capacity.consumeReservationInTransaction).not.toHaveBeenCalled();
+      expect(fixture.portone.refund).not.toHaveBeenCalled();
+    },
+  );
+
+  it('PAID group 결제는 기존 RECRUITING finalization을 유지한다', async () => {
+    const fixture = makeFinalization({ saleType: 'group' });
+
+    await expect(fixture.service.finalizePaidOrder('order-1', paymentData)).resolves.toEqual({
+      ok: true,
+      status: 'RECRUITING',
+    });
+
+    expect(fixture.records.get('orders/order-1')?.status).toBe('RECRUITING');
+    expect(fixture.records.get('payments/order-1')?.status).toBe('PAID');
+  });
+
+  it('PAID 금액이 주문 금액과 다르면 기존 환불 방어를 유지한다', async () => {
+    const fixture = makeFinalization();
+
+    await expect(
+      fixture.service.finalizePaidOrder(
+        'order-1',
+        paymentDataWithStatus('PAID', { amount: { total: 99999 } }),
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'amount_mismatch' });
+
+    expect(fixture.portone.refund).toHaveBeenCalledWith(
+      'order-1',
+      99999,
+      '금액 위변조 감지',
+    );
+    expect(fixture.records.get('orders/order-1')?.status).toBe('CANCELLED');
+    expect(fixture.records.has('payments/order-1')).toBe(false);
+  });
+
   it('결제 조회 최종 실패를 허용된 상태 정보만 담아 운영 예외로 기록한다', async () => {
     const fixture = makeFinalization();
 

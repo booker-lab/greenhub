@@ -52,6 +52,9 @@ export class PaymentFinalizationService {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!orderSnap.exists) return { ok: false, reason: 'order_not_found' };
     const order = orderSnap.data() as Record<string, any>;
+    if (paymentData.status !== 'PAID') {
+      return { ok: true, reason: 'payment_not_paid' };
+    }
     if (!this.canFinalize(order) && !this.isCancellationSettlementCandidate(order)) {
       return { ok: true, reason: 'already_processed' };
     }

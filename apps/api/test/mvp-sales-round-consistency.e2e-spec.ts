@@ -132,6 +132,7 @@ describe('회차 직배송 실제 서비스 정합성', () => {
     const fixture = makeFixture();
     const payment = {
       amount: { total: 40_000 },
+      status: 'PAID',
       method: { type: 'CARD' },
       transactionId: 'transaction-1',
     };
@@ -166,6 +167,7 @@ describe('회차 직배송 실제 서비스 정합성', () => {
     const fixture = makeFixture();
     await fixture.finalization.finalizePaidOrder('order-1', {
       amount: { total: 40_000 },
+      status: 'PAID',
       method: { type: 'CARD' },
       transactionId: 'transaction-1',
     } as never);
