@@ -97,14 +97,14 @@ scripts ───> Firebase Admin·배포 서비스·운영 환경
 | shared | 대상 타입·유틸·test | 대응 domain spec | 실제 import 사용처만 검색 |
 | UI | theme/style/component | 직접 관련 frontend 문서 | 실제 소비 앱만 확인 |
 | scripts | 대상 script + 호출 workflow/package script | 직접 관련 ops/gate 문서 | 데이터면 domain/shared, 배포면 infrastructure |
-| infrastructure | `.github/workflows`, Firebase/Vercel/Railway 설정 | 직접 관련 ops/security 문서 | 증거가 있을 때만 앱 소스로 확장 |
+| infrastructure | `.github/workflows`, Firebase/Vercel/Railway 설정 | 직접 관련 ops/security 문서 + 배포 작업이면 활성 deployment safety PLAN | 증거가 있을 때만 앱 소스로 확장 |
 
 ## 6. 도메인 빠른 라우팅
 
 | 도메인 | 1차 코드 | 1차 명세 |
 |---|---|---|
 | 인증 | `apps/api/src/auth`, 각 앱 `src/auth.ts` | `docs/specs/api/auth.md` |
-| 상품 | `apps/api/src/products`, `src/varieties` | `docs/specs/api/products.md`, `docs/specs/ai_product_content.md` |
+| 상품 | `apps/api/src/products`, `apps/api/src/varieties`, AI 사용 시 `apps/api/src/ai` | `docs/specs/api/products.md`; AI 상세 생성은 실제 AI 코드 우선 + `docs/specs/ai_product_content.md`는 설계 참고 |
 | 주문 | `apps/api/src/orders` | `docs/specs/api/orders.md` |
 | 결제 | `apps/api/src/payments`, consumer payment flow | `docs/specs/api/payments.md` + 판매 공개 시 `docs/specs/legal/README.md` |
 | 알림 | `apps/api/src/notifications` | `docs/specs/api/notifications.md` + 실제 고객 발송 시 legal 검토 |
