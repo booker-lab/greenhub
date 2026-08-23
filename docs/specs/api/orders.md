@@ -9,6 +9,17 @@
 > **회차 직배송 제품 계약**: `docs/specs/mvp-sales-round-direct-delivery.md`
 > **운영 계약**: `docs/specs/ops/mvp-sales-round-runbook.md`
 
+## Task 2C candidate overlay
+
+이 spec의 P0 finding은 현재 `origin/main` 기준이며, 아래 candidate 상태와 분리한다.
+
+- `F-001`: current candidate `c9d60f6`에서 driver approval/current-user/stale-session Rules 경계를 직접 검증했다. Firestore Rules 23/23 PASS.
+- `P0-002`: cancellation과 late provider payment의 부활 방지·refund convergence를 candidate에서 직접 검증했다. focused candidate 3 suites/16 tests 및 full API 319 tests PASS.
+- candidate는 아직 `origin/main` `256abc7`에 통합되지 않았다.
+ - 최신 main의 `ORDER-REDELIVERY-PAID-RESUME-GATE`는 이 candidate가 해결한 항목이 아니며 아래 P0 finding으로 유지한다.
+
+ 통합 증거: [Task 2D integration closeout report](../../plans/REPORT_task_2d_integration_closeout.md).
+
 ## 1. 소유권
 
 `orders`는 consumer·seller·driver가 공유하는 핵심 도메인이다.

@@ -9,6 +9,17 @@
 > **앱 인증 정본**: `apps/consumer/src/auth.ts`, `apps/seller/src/auth.ts`, `apps/driver/src/auth.ts`
 > **Preview OAuth 정책**: `docs/specs/ops/preview-auth-url-policy.md`
 
+## Task 2C candidate overlay
+
+현재 branch candidate `c9d60f6`에서는 `F-001` driver 보안 경계를 검증했다.
+
+- 신규/기존 driver의 승인 대기 상태를 로그인 side effect로 true로 만들지 않는 회귀가 PASS했다.
+- API `JwtStrategy`가 driver 요청마다 현재 Firestore user의 role, `driverApproved`, `suspended`를 확인한다.
+- Firebase custom token 발급도 현재 user 상태를 확인하며, Firestore Rules는 승인 claim과 현재 user 문서를 함께 검증한다.
+- stale/suspended/role-mismatch/missing-user/cross-driver 경계가 Rules runtime 23/23 PASS와 API focused/full regression으로 확인됐다.
+
+이 overlay는 현재 candidate에 한정된다. 아래 `origin/main` baseline finding과 일반 refresh-token revocation policy는 candidate가 main에 통합되기 전까지 main 출시 상태로 `VERIFIED` 처리하지 않는다.
+
 ## 1. 인증 계층
 
 Greenhub 인증은 두 계층으로 나뉜다.

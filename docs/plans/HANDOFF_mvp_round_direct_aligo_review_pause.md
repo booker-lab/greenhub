@@ -27,6 +27,19 @@
 8. `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
 9. Issue #32
 
+## Task 2D integration closeout
+
+현재 workspace에서 P0/security integration candidate의 문서 정합화까지 완료했다.
+
+- candidate: `codex/task-2c-r1-reg001` / `c9d60f6`
+- 상태: `TASK_2C_REGRESSION_VERIFIED`
+- candidate에서 종료: `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001`
+- evidence: [Task 2D integration closeout report](REPORT_task_2d_integration_closeout.md)
+- 현재 `origin/main`: `256abc7`; candidate는 아직 main/production에 반영되지 않았다.
+- main 이후 문서-only redelivery P0 변경은 read-only로 확인해 이 문서 기준에 반영했으며, candidate를 rebase/merge하지 않았다.
+
+다음 재개 지점은 candidate를 현재 main에 branch+PR로 통합하는 절차다. 이후 최신 main의 redelivery 상태머신, admin refund, legal, ALIGO, exact-SHA E2E와 production 승인 게이트를 순서대로 진행한다.
+
 ## 최우선 재개 — Driver 승인 + direct read 결합 위험
 
 운영 불변식은 **관리자 승인 전 driver 권한을 얻을 수 없고, driver가 필요한 최소 주문만 접근한다**는 것이다.

@@ -16,6 +16,17 @@
 
 ---
 
+## INTEGRATION CANDIDATE CLOSEOUT
+
+현재 branch `codex/task-2c-r1-reg001`의 `c9d60f6` candidate는 `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001` 검증을 완료했다. API/consumer/seller/driver/shared, Firestore Rules, build, deployment safety evidence는 [Task 2D closeout report](plans/REPORT_task_2d_integration_closeout.md)에 고정한다.
+
+- candidate 상태: `TASK_2C_REGRESSION_VERIFIED`
+- 현재 `origin/main` `256abc7`에는 candidate code가 아직 없다.
+- [ ] candidate를 현재 `main`에 branch+PR로 통합하고 승인된 SHA를 확정
+- 최신 main의 `ORDER-REDELIVERY-PAID-RESUME-GATE` 및 기타 미완료 P0는 candidate closeout과 별도의 ACTIVE 작업이다.
+
+---
+
 ## ACTIVE
 
 ### P0 — PAYMENT-FINALIZATION-PAID-GUARD

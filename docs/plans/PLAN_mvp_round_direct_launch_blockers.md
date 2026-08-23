@@ -13,17 +13,27 @@
 - 재개: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
 - 미완료: `docs/BACKLOG.md`
 
+## Task 2C candidate closeout
+
+- 검증 candidate: `codex/task-2c-r1-reg001` / `c9d60f6`
+- 상태: `TASK_2C_REGRESSION_VERIFIED`
+- 완료 범위: `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001`
+- 검증 증거: [Task 2D integration closeout report](REPORT_task_2d_integration_closeout.md)
+- 현재 `origin/main`: `256abc7`; candidate code는 아직 main에 통합되지 않았다.
+- 다음 Git 단계는 branch+PR 검토이며, Task 2D에서 rebase/merge/push하지 않았다.
+- 최신 main의 redelivery P0 상태머신(`ORDER-REDELIVERY-PAID-RESUME-GATE`)은 candidate 범위 밖의 미완료 작업이다.
+
 ## 출시 게이트
 
 | ID | 게이트 | 상태 |
 |---|---|---|
 | 0A | GitHub `main` protection/ruleset | 미완료 — Issue #32 |
-| 0B | payment finalization 비`PAID` 차단 | 미완료 — P0 FINDING |
-| 0C | order mutation authorization 직접 거부 회귀 | 미완료 — P0 GAP |
-| 0D | order direct Firestore read·최소화 | 미완료 — P0 FINDING |
-| 0E | driver 승인 + session/claims revocation | 미완료 — P0 FINDING/DECISION |
+| 0B | payment finalization 비`PAID` 차단 | candidate 검증 완료 — main 통합 대기 |
+| 0C | order mutation authorization 직접 거부 회귀 | candidate 관련 회귀 완료 — main 통합 대기 |
+| 0D | order direct Firestore read·최소화 | candidate Rules 경계 검증 완료 — field minimization/main 통합 대기 |
+| 0E | driver 승인 + session/claims revocation | candidate driver gate 검증 완료 — 일반 refresh policy/main 통합 대기 |
 | 0F | admin force-refund lifecycle | 미완료 — P0 FINDING |
-| 0G | 유료 재배송 payment-request/hold-resolution/resume 상태머신 | 미완료 — P0 FINDING |
+| 0G | 유료 재배송 payment-request/hold-resolution/resume 상태머신 | 미완료 — P0 FINDING, candidate 범위 밖 |
 | 0H | payment webhook real-signature coverage | 미완료 — P0 COVERAGE GAP |
 | 0I | admin privileged mutation authorization + settlement pay coverage | 미완료 — P0 COVERAGE GAP |
 | 1 | ALIGO 8종 최종 승인 | 검수중 |

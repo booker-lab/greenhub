@@ -23,6 +23,21 @@
 
 `main` merge는 production 배포 승인이 아니다. production은 검증된 exact release SHA + 별도 승인 절차를 사용한다.
 
+## Task 2C integration candidate closeout
+
+현재 workspace 기준 검증 상태와 `origin/main` 상태를 분리한다.
+
+- 현재 branch: `codex/task-2c-r1-reg001`
+- 현재 candidate HEAD: `c9d60f63af63a841f92ac56666fbafc6b49ec029`
+- candidate 기준: `TASK_2C_REGRESSION_VERIFIED`
+- `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001`: candidate에서 검증·종료
+- candidate 변경은 최신 main 기준으로 재구성됐지만 아직 main에 반영되지 않았다.
+- 현재 `origin/main`: `256abc705c6895a0d43936207382238be15bd976`
+- candidate와 현재 main의 merge-base: `97674e97a4f2f763f83a51a79c65012425c4a50c`
+- `origin/main`의 이후 변경은 문서-only redelivery P0 정합화이며 candidate 코드 영역과 overlap이 없다. 이 branch에서 rebase/merge하지 않았다.
+
+검증 상세는 [Task 2D integration closeout report](plans/REPORT_task_2d_integration_closeout.md)를 따른다. 아래 출시 P0 서술은 현재 main의 미통합 상태를 설명하며, candidate에서 검증된 remediation을 main 완료로 해석하지 않는다.
+
 ## 제품 현재 상태
 
 - 회차 직배송 MVP는 `main` 통합 완료.
