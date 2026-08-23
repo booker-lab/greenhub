@@ -9,8 +9,11 @@
 3. `docs/BACKLOG.md` — 현재 미완료·향후 작업
 4. `docs/memory.md`가 지정한 활성 HANDOFF·PLAN — 현재 실행 순서와 승인 게이트
 5. 직접 관련 current spec — 동작 계약
-6. `docs/CRITICAL_LOGIC.md` — 설계 결정 이력
-7. `docs/TROUBLESHOOTING.md` — 장애 해결 이력
+6. `docs/DOCUMENT_CONSISTENCY.md` — 문서 정합성 감사·판정 기준
+7. `docs/CRITICAL_LOGIC.md` — 설계 결정 이력
+8. `docs/TROUBLESHOOTING.md` — 장애 해결 이력
+
+문서 정합성 감사에서는 `docs/DOCUMENT_CONSISTENCY.md`를 적용한다. 핵심은 문서끼리 문구를 같게 만드는 것이 아니라 **현재 사실·의도된 계약·검증된 보장**을 분리해 대조하는 것이다.
 
 ## Spec 하위 라우터
 
@@ -50,9 +53,15 @@
 
 ## 충돌 판정
 
-- 코드 동작 계약: 현재 `main` 코드·설정·테스트 → current spec → 역사 문서
+세부 판정은 `docs/DOCUMENT_CONSISTENCY.md`를 따른다.
+
+- 실제 동작: 현재 `main` 코드·설정
+- 검증된 보장: 직접 관련 테스트
+- 의도된 계약: current spec
 - 진행 상태: 직접 재검증 → `docs/memory.md` → 활성 HANDOFF·PLAN → Backlog → 역사 문서
 - 외부 환경: provider/배포 플랫폼 현재 상태를 다시 확인하고 과거 snapshot을 현재값으로 사용하지 않는다.
+
+코드와 current spec이 다를 때 문서를 무조건 코드에 맞추지 않는다. 결제·환불·권한·개인정보·배포·운영 데이터 같은 중요 계약의 불일치는 implementation finding으로 승격할 수 있다.
 
 ## 승인 경계
 
@@ -78,3 +87,4 @@
 - 공개 사업자 정보·URL·환경값은 가능한 한 코드/전용 정본을 참조하고 여러 문서에 원문 복제하지 않는다.
 - 완료 이력은 역사 문서로 보존하되 현재 지시와 분리한다.
 - 큰 과거 계획을 억지로 현재화하기보다 짧은 current contract/router를 유지한다.
+- Current 문서는 최소 계약을 유지하고 긴 조사·실패·검증 증거는 REPORT/archive/Git history로 분리한다.
