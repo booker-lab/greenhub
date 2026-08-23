@@ -6,14 +6,15 @@
 
 현재 활성 여부는 파일명이나 체크박스가 아니라 `docs/memory.md`가 결정한다.
 
-2026-08-23 기준 현재 재개·출시 계약은:
+2026-08-23 기준 현재 활성 계약은 다음 3개다.
 
-- `HANDOFF_mvp_round_direct_aligo_review_pause.md`
-- `PLAN_mvp_round_direct_launch_blockers.md`
-
-이다.
+- `HANDOFF_mvp_round_direct_aligo_review_pause.md` — ALIGO 외부 심사 대기와 재개 순서
+- `PLAN_mvp_round_direct_launch_blockers.md` — 실제 출시 dependency와 승인 게이트
+- `PLAN_deployment_safety_guards_20260823.md` — `main` 통합과 production 배포 분리, exact-SHA 배포 원칙, Issue #32 관리자 게이트
 
 현재 상태 자체는 `docs/memory.md`, 미완료 작업은 `docs/BACKLOG.md`가 정본이다.
+
+특히 `PLAN_deployment_safety_guards_20260823.md`는 파일명 패턴상 `PLAN_*`이지만 `docs/memory.md`가 명시적으로 활성화한 현재 계약이다. Issue #32가 닫히거나 `docs/memory.md`에서 비활성화되기 전까지 역사 자료로 분류하지 않는다.
 
 ## 기본적으로 역사 자료인 문서
 
@@ -40,3 +41,5 @@
 ## 승인 경계
 
 과거 PLAN·REPORT에 실행 명령이나 승인 문구가 남아 있어도 현재 승인으로 간주하지 않는다. production 배포·환경변수·실결제/환불·실제 알림 발송·운영 데이터 변경은 현재 Task의 별도 승인을 요구한다.
+
+`main` merge 자체는 production 배포 승인이 아니며, 배포 안전 계약이 요구하는 exact release SHA 검증과 별도 `Task 3.1 승인`을 거친다.
