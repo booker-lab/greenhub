@@ -17,14 +17,46 @@
 
 현재 외부 차단점은 **ALIGO 8종 provider 심사 완료**다. provider 상태는 새 작업 시작 시 다시 조회한다.
 
-동시에 해결 가능한 P0는 네 가지다.
+동시에 해결 가능한 P0는 다섯 가지다.
 
-1. **주문 direct Firestore read authorization·데이터 최소화** — API보다 넓은 driver direct read와 raw order 필드 노출을 안전한 discovery/assigned 경계로 축소해야 함.
-2. **결제 finalization `PAID` 최종 방어** — 현재 `main`의 `finalizePaidOrder()`는 전달받은 provider status를 자체 강제하지 않음.
-3. **주문 mutation authorization 직접 회귀** — 권한 guard는 구현돼 있으나 타-store seller·비담당 driver·미배정 first-claim 경계를 직접 고정하는 회귀가 부족함.
-4. **Issue #32 `main` branch protection/ruleset 활성화**.
+1. **Driver 승인 게이트·세션/claims revocation** — 신규/legacy driver 자동 승인 경로 제거와 정지·role/store 변경 권한 수렴 정책 필요.
+2. **주문 direct Firestore read authorization·데이터 최소화** — API보다 넓은 driver direct read와 raw order 필드 노출을 안전한 discovery/assigned 경계로 축소해야 함.
+3. **결제 finalization `PAID` 최종 방어** — 현재 `main`의 `finalizePaidOrder()`는 전달받은 provider status를 자체 강제하지 않음.
+4. **주문 mutation authorization 직접 회귀** — 권한 guard는 구현돼 있으나 타-store seller·비담당 driver·미배정 first-claim 경계를 직접 고정하는 회귀가 부족함.
+5. **Issue #32 `main` branch protection/ruleset 활성화**.
 
 현재 상태 정본은 `docs/memory.md`, 미완료 목록은 `docs/BACKLOG.md`를 우선한다. 문서 정합성 판정은 `docs/DOCUMENT_CONSISTENCY.md`를 따른다.
+
+## Driver 승인 게이트·세션 revocation P0
+
+2026-08-24 인증 감사에서 admin driver 승인 계약과 실제 Kakao 가입·refresh 경로가 충돌함을 확인했다.
+
+현재 사실:
+
+- admin에는 `driverApproved` 승인 API가 있고 driver 앱 callback도 승인 flag를 요구한다.
+- `AuthService.kakaoLogin()`은 신규 Kakao identity가 `targetRole: driver`를 요청하면 `role: driver`, `driverApproved: true`로 즉시 생성한다.
+- 기존 driver에서 `driverApproved`가 누락된 경우도 로그인 중 자동 `true`로 보정한다.
+- 신규 로그인은 `suspended` 사용자를 차단한다.
+- 그러나 `AuthService.refresh()`는 사용자 문서를 재조회하지 않고 refresh JWT의 기존 `role/storeId`를 새 token에 재사용한다.
+- `GET /auth/firebase-token`도 현재 JWT claims로 Firebase custom claims를 발급한다.
+
+판정:
+
+- 관리자 승인 전 driver 권한 획득 차단: **`IMPLEMENTATION FINDING` P0**.
+- 정지·role/store/승인 변경 후 기존 세션의 revocation window와 refresh/Firebase claim 수렴: **`DECISION REQUIRED` + P0 remediation**.
+
+이 finding은 broad driver Firestore read P0와 결합될 수 있으므로 한쪽만 해결해 driver authorization 전체를 완료 처리하지 않는다.
+
+actual release SHA 확정 전에:
+
+- 신규 `targetRole: driver` 자동 승인과 승인 필드 누락 계정 로그인 자동 승인을 제거하고,
+- 필요한 legacy migration을 로그인 side effect가 아닌 명시적 절차로 분리하고,
+- 승인 전 driver 앱/API/Firebase 접근을 직접 거부 테스트로 고정하고,
+- 계정 정지 시 refresh가 새 권한 token을 발급하지 않도록 하며,
+- role/storeId/driverApproved 변경 시 authoritative user 상태로 claims를 수렴시키고,
+- 이미 발급된 access token의 revocation SLA를 명시적으로 결정·검증한다.
+
+정본: `docs/specs/api/auth.md`, `docs/specs/api/admin.md`.
 
 ## 주문 direct Firestore read P0
 
@@ -157,7 +189,7 @@ production `/privacy`, `/terms`는 현재 비판매 상태를 전제로 한다.
 - 마지막 전체 원격 회차 E2E 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`.
 - chromium 26 + mobile 26 = 52, 양쪽 cleanup 성공.
 - 현재 release SHA 증거로 확장 적용하지 않는다.
-- 주문 direct read P0, 결제 finalization P0, 주문 mutation authorization P0와 법적 변경까지 포함한 actual release SHA에서 다시 검증한다.
+- auth approval/revocation P0, 주문 direct read P0, 결제 finalization P0, 주문 mutation authorization P0와 법적 변경까지 포함한 actual release SHA에서 다시 검증한다.
 
 ## 지금 하지 말아야 할 작업
 
@@ -169,20 +201,23 @@ production `/privacy`, `/terms`는 현재 비판매 상태를 전제로 한다.
 - 별도 Task 승인 없이 production 배포·Firebase 운영 변경·운영 회차 생성·`salesMode` 변경.
 - 비판매 법적 문구를 판매 공개 전에 임의로 미리 전환.
 - broad seller/driver 주문 read를 개인정보 문구 확대만으로 정당화.
+- driver 자동 승인 경로를 현재 운영 승인 정책으로 정당화.
+- suspended/권한 변경 계정의 stale refresh/Firebase claims를 검증 없이 정상 동작으로 간주.
 - 현재 P0 코드·검증 게이트가 `main`에 반영되기 전에 release SHA를 확정.
 
 ## 지금 병렬로 할 수 있는 작업
 
-1. 주문 direct Firestore read authorization·데이터 최소화 구현·Rules/frontend 회귀·통합.
-2. 결제 finalization `PAID` guard 구현·회귀 검증·통합.
-3. 주문 mutation authorization 직접 거부 회귀 테스트·통합.
-4. Issue #32 `main` protection/ruleset 관리자 설정.
-5. read-only 문서/코드 정합성 감사.
-6. ALIGO provider 심사 상태 조회.
+1. driver 승인 게이트·세션/claims revocation 구현·직접 회귀·통합.
+2. 주문 direct Firestore read authorization·데이터 최소화 구현·Rules/frontend 회귀·통합.
+3. 결제 finalization `PAID` guard 구현·회귀 검증·통합.
+4. 주문 mutation authorization 직접 거부 회귀 테스트·통합.
+5. Issue #32 `main` protection/ruleset 관리자 설정.
+6. read-only 문서/코드 정합성 감사.
+7. ALIGO provider 심사 상태 조회.
 
 ## ALIGO 승인 뒤 재개 순서
 
-1. 주문 direct read P0, 결제 finalization P0, 주문 mutation authorization P0가 `main`에 통합됐는지 확인.
+1. auth approval/revocation P0, 주문 direct read P0, 결제 finalization P0, 주문 mutation authorization P0가 `main`에 통합됐는지 확인.
 2. 8종 모두 승인/수정요청/반려 여부 확인.
 3. 승인 `tpl_code` 8종 ↔ 내부 논리 템플릿 1:1 매핑 검사.
 4. 별도 승인 후 격리 실제 알림톡 정상 발송.
@@ -206,6 +241,7 @@ production `/privacy`, `/terms`는 현재 비판매 상태를 전제로 한다.
 - [x] ALIGO 템플릿 8종 등록·심사 요청
 - [x] repo-side `main` 자동 production deploy 차단
 - [x] deployment safety CI와 docs-only ignore 적용
+- [ ] driver 승인 게이트·세션/claims revocation + 직접 회귀 + `main` 통합
 - [ ] 주문 direct Firestore read authorization·데이터 최소화 + Rules/frontend 회귀 + `main` 통합
 - [ ] 결제 finalization `PAID` guard + 회귀 검증 + `main` 통합
 - [ ] 주문 mutation authorization 직접 거부 회귀 + `main` 통합
