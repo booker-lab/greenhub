@@ -127,6 +127,42 @@ admin refund가 정상 cancellation의 추가 charge·capacity·held counter·se
 
 정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`.
 
+### P0 — ADMIN-PRIVILEGED-MUTATION-COVERAGE
+
+`AdminController` class-level `JwtAuthGuard + RolesGuard + @Roles('admin')`와 고위험 mutation 구현은 존재하지만 서버 authorization 및 admin settlement 지급 상태 전이의 직접 회귀가 충분하지 않다.
+
+현재 직접 근거:
+
+- [x] admin controller 전체에 JWT + admin role guard 구현
+- [x] `RolesGuard`는 request JWT role과 required metadata를 비교
+- [x] `AdminService.markAsPaid()`는 transaction에서 fresh settlement status를 재확인하고 `confirmed → paid`를 구현
+- [x] Playwright admin 테스트는 비로그인 UI redirect와 admin read smoke를 확인
+- [x] 현재 `apps/api/src/admin`에 전용 controller/service `*.spec.ts` 없음
+- [x] 확인한 API E2E에서 admin high-impact mutation의 direct role-denial coverage 없음
+
+판정:
+
+- admin guard 및 mutation 구현은 `IMPLEMENTED`.
+- privileged mutation authorization + settlement pay transition은 `UNVERIFIED`.
+- 권한·금전 상태 경계이므로 P0 `COVERAGE GAP`으로 둔다.
+
+남음:
+
+- [ ] 실제 HTTP admin mutation의 unauthenticated 401
+- [ ] consumer/seller/driver의 admin mutation 403
+- [ ] invalid role에서 service 호출·Firestore/payment side effect 0
+- [ ] admin 정상 요청은 service validation/허용 경계까지 도달
+- [ ] `markAsPaid`: missing settlement 거부
+- [ ] `markAsPaid`: `pending|cancelled|paid` 거부
+- [ ] `markAsPaid`: `confirmed → paid` 정상 성공 + timestamps
+- [ ] 동시 지급/race에서 transaction fresh-read 기준 한 번만 수렴
+- [ ] 실제 guard를 mock으로 우회하지 않는 controller/API integration 증거
+- [ ] 회귀 SHA `main` 통합
+
+`ADMIN-FORCE-REFUND-CONSISTENCY`의 lifecycle 구현 결함과는 별도다. force-refund 구현을 고쳤더라도 admin role boundary와 다른 privileged mutation coverage가 없으면 이 항목은 닫히지 않는다.
+
+정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
+
 ### P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
 
 API authorization보다 seller/driver raw Firestore read 경계가 넓다.
@@ -142,18 +178,33 @@ API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 
 ### P0 — AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION
 
-신규/legacy driver 자동 승인 경로와 stale session/claims 수렴 문제가 있다.
+관리자 승인 전 driver 권한을 얻을 수 있는 복수 경로와 stale session/claims 수렴 문제가 있다.
 
-- [ ] 신규/legacy 로그인 side-effect 자동 승인 제거
+현재 확인된 approval bypass:
+
+- [x] 신규 Kakao `targetRole: driver`가 `driverApproved: true`로 즉시 생성됨
+- [x] 기존 `driverApproved === undefined` driver가 Kakao 로그인 중 자동 승인됨
+- [x] 공개 `POST /auth/register`가 `role: driver`를 허용하고 seller와 달리 invite/approval gate 없이 driver user 생성 가능
+- [x] 공개 `POST /auth/login`이 `driverApproved` 확인 없이 저장된 `role: driver`로 JWT 발급
+- [x] Firebase custom token은 현재 JWT role/storeId claim을 사용
+
+이 P0는 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`과 결합해서 완료 판단한다. broad driver Firestore read가 남아 있는 동안 self-issued/stale driver claim의 영향이 커질 수 있다.
+
+남음:
+
+- [ ] 공개 registration이 관리자 승인 전 usable driver authorization을 만들지 못함
+- [ ] email login이 미승인 driver에게 driver JWT를 발급하지 않음
+- [ ] 미승인 driver의 Firebase driver claim 발급 거부
+- [ ] 신규/legacy Kakao 로그인 side-effect 자동 승인 제거
 - [ ] 과거 계정 migration 별도 감사 절차
-- [ ] 승인 전/후 앱·API·Firebase 회귀
+- [ ] admin 승인 전/후 email/Kakao 앱·API·Firebase 직접 회귀
 - [ ] suspension/role/store/approval revocation SLA 결정
 - [ ] refresh/current claims authoritative state 검증
 - [ ] Firebase stale claims 재발급 차단
 - [ ] logout/rotation 포함 회귀
 - [ ] `main` 통합
 
-정본: `docs/specs/api/auth.md`.
+정본: `docs/specs/api/auth.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
 ### P0 — ORDER-MUTATION-AUTHORIZATION-COVERAGE
 
@@ -216,6 +267,7 @@ repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보�
 - [ ] `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
 - [ ] `ORDER-REDELIVERY-PAID-RESUME-GATE`
 - [ ] `ADMIN-FORCE-REFUND-CONSISTENCY`
+- [ ] `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
 - [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
 - [ ] `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
 - [ ] `ORDER-MUTATION-AUTHORIZATION-COVERAGE`

@@ -56,7 +56,7 @@ driver credentials는 더 좁게 제한한다.
 - API 응답 role이 `driver`
 - `driverApproved === true`
 
-따라서 이메일/비밀번호 endpoint가 존재한다고 해서 production 일반 로그인 경로로 노출하지 않는다.
+따라서 이메일/비밀번호 endpoint가 존재한다고 해서 production 일반 로그인 경로로 노출하지 않는다. **다만 frontend가 일반 credentials UI를 노출하지 않는다는 사실은 공개 NestJS `register/login` endpoint 자체의 권한 안전성을 대신하지 않는다.**
 
 ## 4. 역할
 
@@ -78,7 +78,7 @@ NestJS JWT payload의 현재 계약:
 
 `storeId`는 seller/admin에서 존재할 수 있고 consumer/driver는 일반적으로 `null` 또는 미설정이다. 단순 역할만으로 모든 store 데이터 접근을 허용하지 않으며 endpoint/service와 Firebase Rules의 소유권·배정 검사를 추가로 적용해야 한다.
 
-## 5. Kakao 역할 진입과 Driver 승인
+## 5. 역할 진입과 Driver 승인
 
 `KakaoLoginDto.targetRole` 허용값:
 
@@ -92,6 +92,12 @@ consumer | seller | driver
 - seller: `seller|admin`
 - driver: `driver|admin`
 
+공개 `RegisterDto.role`도 현재 다음을 허용한다.
+
+```text
+consumer | seller | driver
+```
+
 ### 의도된 Driver 계약
 
 현재 admin/API/UI 구조에는 별도의 driver 승인 상태가 존재한다.
@@ -100,28 +106,36 @@ consumer | seller | driver
 - `PATCH /admin/drivers/:userId/approve`
 - driver 앱 callback은 실제 role이 `driver`일 때 `driverApproved === true`를 요구한다.
 
-따라서 **관리자 승인 전 driver 권한을 획득할 수 없다는 계약**을 current 안전 계약으로 사용한다. role 승격·driver 승인·스토어 소유권을 단순 OAuth targetRole 요청만으로 자동 부여하지 않는다.
+따라서 **관리자 승인 전 driver 권한을 획득할 수 없다는 계약**을 current 안전 계약으로 사용한다. role 승격·driver 승인·스토어 소유권을 OAuth targetRole, 공개 가입 role, 또는 stale token payload만으로 자동 부여하지 않는다.
 
-### 현재 구현 불일치 — `IMPLEMENTATION FINDING` P0
+### 현재 구현 불일치 — Driver approval P0 `IMPLEMENTATION FINDING`
 
-2026-08-24 `AuthService.kakaoLogin()`을 직접 대조한 결과 위 계약과 충돌하는 두 경로가 존재한다.
+2026-08-24 직접 대조에서 위 계약과 충돌하는 세 경로가 확인됐다.
 
-1. 기존 사용자 role이 `driver`이고 `driverApproved` 필드가 `undefined`이면 로그인 중 `driverApproved: true`를 자동 기록한다.
+1. 기존 Kakao 사용자 role이 `driver`이고 `driverApproved` 필드가 `undefined`이면 로그인 중 `driverApproved: true`를 자동 기록한다.
 2. Kakao 사용자 매핑이 없는 신규 사용자가 `targetRole: driver`를 요청하면 신규 user를 `role: driver`, `driverApproved: true`로 즉시 생성한다.
+3. 공개 `POST /auth/register`는 `role: driver`를 허용하고 seller와 달리 invite/approval gate 없이 driver user를 만들 수 있다. 이어지는 공개 `POST /auth/login`은 `driverApproved`를 확인하지 않고 저장된 `role: driver`로 API JWT를 발급한다.
 
-즉 driver 앱 callback이 승인 flag를 확인하더라도 **API가 그 flag를 로그인 과정에서 스스로 true로 만들 수 있어 관리자 승인 게이트의 독립성이 보장되지 않는다.** `auth.service.spec.ts`는 Kakao identity·role mismatch·suspended login은 검증하지만 신규 driver가 승인 없이 생성되지 않는다는 회귀를 현재 직접 고정하지 않는다.
+즉 driver 앱 callback이 승인 flag를 확인하더라도 **API authorization boundary 자체에서 관리자 승인 게이트의 독립성이 보장되지 않는다.** 특히 email register→login 경로는 frontend Credentials provider 노출 여부와 무관하게 API에 직접 호출 가능하다.
 
-이 항목은 `DRIVER-APPROVAL-GATE-BYPASS` P0로 추적한다. 실제 구현을 정당화하기 위해 “driver는 Kakao 가입 즉시 승인”으로 문서를 바꾸지 않는다.
+`GET /auth/firebase-token`은 현재 JWT의 `role/storeId`로 Firebase custom claims를 생성하므로, 승인 없이 발급된 driver JWT가 Firebase role claim으로 이어질 수 있다. 이 문제는 broad driver order read가 남아 있는 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`과 결합 위험이 있다.
+
+현재 `auth.service.spec.ts`는 Kakao identity·role mismatch·suspended login 일부는 검증하지만 `register(role=driver) → login` 승인 전 거부와 신규 driver 승인 게이트를 직접 고정하지 않는다.
+
+추적 umbrella: `docs/BACKLOG.md`의 `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`. 기술 finding 이름으로 `DRIVER-APPROVAL-GATE-BYPASS`를 사용할 수 있으나 별도 완료 항목으로 중복 추적하지 않는다.
 
 최소 완료 조건:
 
+- 공개 registration이 관리자 승인 전 usable driver authorization을 만들지 못함
+- email login이 미승인 driver에게 driver JWT를 발급하지 않음
+- 미승인 driver JWT/세션에서 Firebase driver custom claim을 발급하지 않음
 - 신규 Kakao identity의 `targetRole: driver`가 관리자 승인 없이 `driverApproved: true` 권한을 만들지 못함
 - 기존 `driverApproved` 누락 계정을 로그인 시 자동 승인하지 않음
 - 과거 계정 migration이 필요하면 로그인 side effect가 아닌 명시적·감사 가능한 migration/관리 절차로 분리
-- admin 승인 전 driver 앱 정상 진입·driver API/Firestore 권한 획득 거부
-- admin 승인 후 정상 driver 로그인 유지
+- admin 승인 전 driver 앱·driver API·Firestore 권한 획득 거부
+- admin 승인 후 email/Kakao의 허용된 정상 driver 로그인 유지
 - consumer/seller/admin role 진입 회귀 없음
-- 직접 unit/API/E2E 회귀로 승인 전/후 경계를 고정
+- register/login/Kakao + API/Firebase claim의 승인 전/후 직접 unit/integration/E2E 회귀
 
 ## 6. Access / Refresh token과 권한 변경 수렴
 
@@ -174,7 +188,9 @@ POST /auth/refresh
 주의:
 
 - `/auth/login`과 `/auth/register`는 API 기능으로 존재하지만 현재 세 앱의 production 일반 이메일 로그인 provider라는 뜻은 아니다.
-- 일반 사용자에게 credentials 인증을 노출하려면 별도 제품·보안 결정이 필요하다.
+- **이 두 endpoint가 공개라는 사실 자체는 현재 보안 경계다. UI 미노출을 authorization control로 취급하지 않는다.**
+- 현재 `role: driver` register→login 승인 우회는 P0 implementation finding이다.
+- 일반 사용자에게 credentials 인증을 제품 기능으로 노출하려면 별도 제품·보안 결정이 필요하다.
 
 ### 인증 사용자
 
@@ -235,7 +251,7 @@ interface SavedAddress {
 
 `GET /auth/firebase-token`은 현재 API JWT 사용자에게 Firebase client용 custom token을 발급하는 경로다. 현재 controller는 `CurrentUser()`의 `sub/role/storeId`를 그대로 `AuthService.getFirebaseToken()`에 전달하고, service는 그 값으로 Firebase custom claims를 만든다.
 
-따라서 이 경로의 안전성은 API JWT claims의 현재성에 의존한다. `AUTH-SESSION-CLAIM-REVOCATION`이 해결되기 전에는 **정지·role/store 변경 이후 Firebase claims가 즉시 현재 상태와 일치한다고 가정하지 않는다.**
+따라서 이 경로의 안전성은 API JWT claims의 현재성에 의존한다. `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`이 해결되기 전에는 **미승인 driver·정지·role/store 변경 이후 Firebase claims가 authoritative user 상태와 일치한다고 가정하지 않는다.**
 
 특히 Firestore Rules가 `role`/`storeId` claims를 데이터 접근의 근거로 사용하므로 auth claim lifecycle과 Rules authorization을 별개의 문제로 분리하지 않는다.
 
@@ -261,8 +277,9 @@ interface SavedAddress {
 - Kakao identity는 서버에서 access token으로 재검증한다.
 - password hash, refresh token, JWT, OAuth token, E2E shared secret을 문서·로그에 기록하지 않는다.
 - Credentials provider는 E2E gate를 제거한 채 production 로그인으로 열지 않는다.
-- role/storeId/driver approval은 client targetRole 또는 stale token payload만으로 최종 결정하지 않는다.
-- driver 관리자 승인 게이트를 로그인 side effect로 자동 충족시키지 않는다.
+- **공개 register/login endpoint는 frontend UI 미노출을 보안 통제로 간주하지 않는다.**
+- role/storeId/driver approval은 client targetRole, registration role 또는 stale token payload만으로 최종 결정하지 않는다.
+- driver 관리자 승인 게이트를 가입·로그인 side effect로 자동 충족시키지 않는다.
 - 계정 정지·role/store 변경이 refresh/custom-token 경로에서 무기한 과거 권한으로 유지되지 않도록 한다.
 - 타인 주문·스토어 접근은 endpoint/service와 Firebase Rules의 소유권 검사를 통과해야 한다.
 - driver E2E allowlist와 secret을 실제 운영 driver 인증 모델로 사용하지 않는다.
@@ -274,6 +291,7 @@ interface SavedAddress {
 
 - `apps/api/src/auth/auth.controller.ts`
 - `apps/api/src/auth/auth.service.ts`
+- `apps/api/src/auth/dto/register.dto.ts`
 - `apps/api/src/auth/strategies/jwt.strategy.ts`
 - `apps/api/src/auth/types/jwt-payload.type.ts`
 - `apps/api/src/common/guards/*`
@@ -284,12 +302,13 @@ interface SavedAddress {
 - 관련 auth unit/E2E tests
 - OAuth URL 변경이면 `docs/URLS.md`, `docs/specs/ops/preview-auth-url-policy.md`
 
-권한·정지·승인 계약은 `docs/DOCUMENT_CONSISTENCY.md`에 따라 로그인 성공 테스트만으로 `VERIFIED` 처리하지 않는다. 신규 가입, 승인 전/후, suspension, refresh, Firebase custom claims까지 수명주기를 직접 검증한다.
+권한·정지·승인 계약은 `docs/DOCUMENT_CONSISTENCY.md`에 따라 로그인 성공 테스트만으로 `VERIFIED` 처리하지 않는다. 공개 가입, 승인 전/후, suspension, refresh, Firebase custom claims까지 수명주기를 직접 검증한다.
 
 ## 변경 이력
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-08-24 | 공개 email `register(role=driver) → login`이 승인 없이 driver JWT를 발급할 수 있는 추가 P0 우회를 반영하고 Kakao/refresh/Firebase claim과 하나의 driver authorization lifecycle로 정합화 |
 | 2026-08-24 | 신규/legacy driver 자동 승인 경로를 P0 IMPLEMENTATION FINDING으로 분리하고, 정지·role/store 변경의 refresh/custom-token stale claims를 P0 revocation 결정·remediation으로 명시 |
 | 2026-08-23 | Kakao 운영 OAuth, E2E 전용 Credentials, driver approval, refresh/custom-token 현행 계약에 맞춰 전면 정합화 |
 | 2026-07-01 | Kakao access token 서버 검증 계약 보강 |
