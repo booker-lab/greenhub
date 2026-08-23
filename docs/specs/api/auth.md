@@ -1,370 +1,151 @@
-# Auth Domain Spec
+<!-- Language: ko -->
 
-> **작성일**: 2026-03-26
-> **상태**: Draft (4단계 개발 선행 문서)
-> **연관 문서**: `orders.md`, `payments.md`, `docs/design/소비자-1단계-요구사항.md`
+# Auth API / Domain Spec
 
----
+> **최종 정합화**: 2026-08-23
+> **상태**: Current
+> **공통 타입 정본**: `packages/shared/src/auth.types.ts`
+> **API 정본**: `apps/api/src/auth/**`
+> **앱 인증 정본**: `apps/consumer/src/auth.ts`, `apps/seller/src/auth.ts`, `apps/driver/src/auth.ts`
+> **Preview OAuth 정책**: `docs/specs/ops/preview-auth-url-policy.md`
 
-## 1. 도메인 개요
+## 1. 인증 계층
 
-인증은 **NextAuth.js (Next.js 앱 레이어)** 와 **NestJS JWT Guard (API 레이어)** 두 계층으로 구성된다.
+Greenhub 인증은 두 계층으로 나뉜다.
 
-| 레이어 | 담당 | 기술 |
-|--------|------|------|
-| Next.js 앱 | 세션 관리, 로그인 UI, 소셜 OAuth 흐름 | NextAuth.js v5 |
-| NestJS API | API 요청 인증·권한 검증 | JWT Bearer Guard |
+| 계층 | 역할 |
+|---|---|
+| NextAuth.js v5 | 각 Next.js 앱의 Kakao OAuth, 세션, access/refresh token 보관·갱신 |
+| NestJS Auth/JWT | Kakao access token 서버 검증, Greenhub JWT 발급·갱신, API 권한·사용자 데이터 |
 
-**비회원 구매 미지원** — 모든 주문은 로그인 필수.
+주문·마이페이지 등 보호 기능은 로그인 사용자만 사용한다.
 
----
+## 2. 운영 로그인 provider
 
-## 2. 로그인 Provider
+현재 consumer·seller·driver의 NextAuth 설정은 **Kakao**를 운영 OAuth provider로 사용한다.
 
-| Provider | 타입 | 비고 |
-|----------|------|------|
-| 카카오 | OAuth 2.0 | Kakao Developers 앱 등록 필요 |
-| 네이버 | OAuth 2.0 | Naver Developers 앱 등록 필요 |
-| 이메일 | Credentials | 이메일 + 비밀번호, bcrypt 해시 저장 |
+```text
+consumer → targetRole: consumer
+seller   → targetRole: seller
+driver   → targetRole: driver
+```
 
----
+NextAuth callback은 Kakao에서 받은 access token을 `POST /auth/kakao-login`으로 넘기고, NestJS API가 Kakao 사용자 정보 API를 통해 실제 계정을 검증한다. 클라이언트가 임의로 전달한 Kakao ID·email·name을 신뢰하지 않는다.
 
-## 3. 역할(Role) 시스템
+`packages/shared`의 `AuthProvider`에는 과거 호환을 위해 `'naver' | 'email'`이 남아 있지만, **현재 세 앱의 NextAuth 운영 provider 목록에는 Naver가 없다.** Naver 로그인을 현재 지원 기능으로 문서화하지 않는다.
+
+## 3. Credentials의 현재 용도
+
+세 앱의 `Credentials` provider는 일반 사용자용 이메일 로그인 UI를 의미하지 않는다. 현재 자동화/E2E 전용 게이트다.
+
+### Consumer / Seller
+
+- `E2E_TEST_SECRET`이 없으면 credentials 요청을 모두 거부한다.
+- request header `x-e2e-test-token`이 secret과 정확히 일치해야 한다.
+- 이후 NestJS `POST /auth/login`을 호출한다.
+- consumer는 `consumer|admin`, seller는 `seller|admin` 역할만 허용한다.
+
+### Driver
+
+driver credentials는 더 좁게 제한한다.
+
+- `VERCEL_ENV === 'preview'`
+- `ROUND_DIRECT_E2E_ENABLED === 'true'`
+- `x-round-direct-e2e-secret`이 공유 secret과 timing-safe 비교에서 일치
+- email이 `ROUND_DIRECT_E2E_DRIVER_EMAILS` allowlist에 포함
+- API 응답 role이 `driver`
+- `driverApproved === true`
+
+따라서 이메일/비밀번호 endpoint가 존재한다고 해서 production 일반 로그인 경로로 노출하지 않는다.
+
+## 4. 역할
 
 ```ts
 type UserRole = 'consumer' | 'seller' | 'driver' | 'admin'
 ```
 
-| 역할 | 대상 | 추가 클레임 | 지원 Provider |
-|------|------|------------|--------------|
-| `consumer` | 소비자 앱 사용자 | - | 카카오, 네이버, 이메일 |
-| `seller` | 판매자 (디어 오키드) | `storeId` | **카카오, 이메일** (MVP: 네이버 미지원 — 단일 판매자이므로 불필요) |
-| `driver` | 배송기사 | - | 이메일 (운영자 수동 발급 예정) |
-| `admin` | 플랫폼 운영자(개발자 본인) | - | 이메일 (Firestore 직접 수동 설정, 1회) |
-
-JWT 페이로드 구조:
-```ts
-{
-  sub: string      // userId
-  role: UserRole
-  storeId?: string // seller 전용
-  iat: number
-  exp: number
-}
-```
-
----
-
-## 4. Firestore 컬렉션 스키마
-
-### `users/{userId}`
+NestJS JWT payload의 현재 계약:
 
 ```ts
 {
-  id: string
-  email: string
-  name: string
-  phone: string | null
-  role: UserRole
-
-  // 판매자 전용
-  storeId: string | null
-
-  // 소셜 로그인 연결 정보
-  providers: ('kakao' | 'naver' | 'email')[]
-
-  // 소비자 전용
-  savedAddresses: {
-    id: string
-    label: string          // '집', '회사' 등
-    address: string
-    addressDetail: string
-    zipCode: string
-    isDefault: boolean
-  }[]
-
-  // PWA
-  fcmToken: string | null  // FCM 푸시 토큰 (브라우저 푸시)
-
-  createdAt: Timestamp
-  updatedAt: Timestamp
+  sub: string
+  role: 'consumer' | 'seller' | 'driver' | 'admin'
+  storeId?: string | null
+  iat?: number
+  exp?: number
 }
 ```
 
----
+`storeId`는 seller/admin에서 존재할 수 있고 consumer/driver는 일반적으로 `null` 또는 미설정이다. 단순 역할만으로 모든 store 데이터 접근을 허용하지 않으며 endpoint/service의 소유권 검사를 추가로 적용한다.
 
-## 5. 인증 플로우
+## 5. Kakao 역할 진입
 
-### 5-1. 소셜 로그인 (카카오·네이버)
+`KakaoLoginDto.targetRole` 허용값:
 
-```
-1. 소비자 앱 로그인 버튼 클릭
-2. NextAuth.js → OAuth Provider 리다이렉트
-3. Provider 인증 완료 → NextAuth.js callback
-4. NextAuth.js callback이 Provider access token을 NestJS API에 전달
-5. NestJS API가 Provider 사용자 정보 API를 호출해 사용자 id를 서버 측 검증
-6. users/{userId} 조회
-   - 없으면 신규 생성 (role: 'consumer' 기본값)
-   - 있으면 providers 배열 업데이트
-7. NextAuth.js 세션 생성 + JWT 발급
-8. 원래 진입하려던 화면으로 복귀 (callbackUrl)
+```text
+consumer | seller | driver
 ```
 
-카카오 로그인은 클라이언트가 전달한 `kakaoId`, `email`, `name`을 신뢰하지 않는다. `/auth/kakao-login`은 `kakaoAccessToken`을 필수로 받고, API 서버가 카카오 사용자 정보 API로 검증한 `id`, `email`, `name`만 사용한다. k6 부하테스트는 카카오 OAuth를 반복 호출하지 않고 seed된 email/password 계정 또는 사전 발급 JWT만 사용한다.
+각 앱은 자신이 의도한 targetRole을 API에 전달하고 callback 응답의 실제 role을 다시 제한한다.
 
-### 5-2. 판매자 초대 토큰 가입 (A안 — MVP)
+- consumer: `consumer|admin`
+- seller: `seller|admin`
+- driver: `driver|admin`
 
-```
-1. 운영자(admin)가 /admin/invite 에서 초대 토큰 생성
-   → invite_tokens/{tokenId} 문서 생성 (24시간 유효, 1회용)
-   → 판매자에게 링크 전달: seller.greenhub.kr/register?token=xxx
+Driver는 실제 role이 `driver`이면 `driverApproved`가 필요하며, 승인 전에는 정상 driver 앱 진입을 허용하지 않는다.
 
-2. 판매자가 링크 클릭
-   → NestJS GET /auth/invite/:token 토큰 유효성 검증
+역할 승격·스토어 소유권을 단순 OAuth 로그인만으로 자동 부여한다고 가정하지 않는다.
 
-3. 판매자가 이메일 + 비밀번호 입력 → POST /auth/register
-   { email, password, name, role: 'seller', inviteToken: token }
+## 6. Access / Refresh token
 
-4. NestJS:
-   - inviteToken 재검증 (만료·사용 여부)
-   - users 문서 생성 (role: 'seller')
-   - stores 문서 생성 (status: 'invited' → 'active' 자동 전환)
-   - invite_tokens 문서 usedAt 기록 (재사용 불가)
+현재 NextAuth 앱은 API가 발급한 `accessToken`과 `refreshToken`을 NextAuth JWT/session에 저장한다.
 
-5. 판매자 → 온보딩 화면(/onboarding)으로 이동
-```
+- 일반 access token refresh 기준: 앱에서 발급 후 약 55분 시점에 갱신 시도
+- refresh endpoint: `POST /auth/refresh`
+- 갱신 실패 시 session에 token error를 표시하고 유효 access token을 비운다.
+- driver E2E credentials session은 앱 레이어에서 더 짧은 access-token refresh 기준을 사용한다.
 
-> **B안 전환 시**: 공개 신청 폼 추가 + `stores.status = 'pending_approval'` 저장.
-> admin 승인 화면은 이미 존재하므로 추가 개발 없음.
+실제 서버 JWT 만료값은 환경 설정에 의해 달라질 수 있으므로 오래된 문서의 “항상 1시간/30일”을 외부 환경 현재값으로 단정하지 않는다.
 
----
+## 7. 현재 Auth API
 
-### `invite_tokens/{tokenId}` 스키마
+### 공개/인증 진입
 
-```ts
-{
-  id: string              // uuid
-  token: string           // 랜덤 32자 hex (URL에 노출되는 값)
-  createdBy: string       // admin userId
-  expiresAt: Timestamp    // 발급 후 24시간
-  usedAt: Timestamp | null
-  usedBy: string | null   // 가입한 판매자 userId
-}
-```
-
----
-
-### 5-3. 이메일 로그인 (구 5-2)
-
-```
-1. 이메일 + 비밀번호 입력
-2. NestJS POST /auth/login → bcrypt.compare 검증
-3. 검증 성공 → JWT 반환
-4. NextAuth.js Credentials Provider가 JWT를 세션에 저장
-```
-
-### 5-4. NestJS API 요청 인증 (구 5-3)
-
-```
-1. Next.js 앱: NextAuth.js 세션에서 accessToken 추출
-2. NestJS API 요청 헤더: Authorization: Bearer <accessToken>
-3. NestJS JwtAuthGuard: JWT 검증 + 페이로드 추출
-4. RolesGuard: 요청 역할 검증
-5. 통과 → 컨트롤러 실행 / 실패 → 401 or 403
-```
-
-### 5-5. 로그인 진입 시점 (소비자 앱) (구 5-4)
-
-```
-진입 시점 A: 미로그인 상태에서 '결제하기' 클릭
-진입 시점 B: 미로그인 상태에서 '마이페이지' 탭 클릭
-
-처리:
-  → 로그인 화면 이동
-  → 로그인 완료 후 원래 화면으로 복귀 (callbackUrl 유지)
-```
-
----
-
-## 6. API 엔드포인트
-
-### 회원가입 (이메일)
-
-```
+```text
 POST /auth/register
-```
-
-```ts
-// Request
-{
-  email: string
-  password: string    // 8자 이상, 클라이언트 검증
-  name: string
-  role: 'consumer' | 'seller' | 'driver'  // 멀티앱 구조상 명시 필수
-  phone?: string
-}
-
-// Response 201
-{ userId: string }
-```
-
-> **role 설계 의도**: consumer / seller / driver 앱이 동일한 `/auth/register` 엔드포인트를 공유하므로 role을 명시적으로 전달. OAuth(Kakao/Naver) 가입은 consumer 기본값 적용 (앱 구분 불필요).
-
-
----
-
-### 로그인 (이메일 — Credentials Provider 내부 호출)
-
-```
 POST /auth/login
-```
-
-```ts
-// Request
-{ email: string, password: string }
-
-// Response 200
-{ accessToken: string, user: UserProfile }
-
-// Response 401
-{ message: '이메일 또는 비밀번호가 올바르지 않습니다.' }
-```
-
----
-
-### 토큰 갱신
-
-```
+POST /auth/kakao-login
 POST /auth/refresh
 ```
 
-> NextAuth.js가 내부적으로 처리. 클라이언트에서 직접 호출 불필요.
+`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다.
 
----
+주의:
 
-### 내 프로필 조회
+- `/auth/login`과 `/auth/register`는 API 기능으로 존재하지만 현재 세 앱의 production 일반 이메일 로그인 provider라는 뜻은 아니다.
+- 일반 사용자에게 credentials 인증을 노출하려면 별도 제품·보안 결정이 필요하다.
 
+### 인증 사용자
+
+```text
+GET    /auth/me
+PATCH  /auth/me
+POST   /auth/me/addresses
+PATCH  /auth/me/addresses/:addressId
+DELETE /auth/me/addresses/:addressId
+PATCH  /auth/me/addresses/:addressId/default
+PATCH  /auth/me/fcm-token
+GET    /auth/firebase-token
+POST   /auth/logout
 ```
-GET /auth/me
-```
 
-**Guard**: `JwtAuthGuard`
+모두 `JwtAuthGuard`가 적용된다. `firebase-token`은 throttle 예외지만 JWT 인증은 필요하다.
+
+## 8. 사용자 프로필 공통 타입
+
+현재 shared 타입:
 
 ```ts
-// Response 200
-{
-  id: string
-  email: string
-  name: string
-  phone: string | null
-  role: UserRole
-  storeId: string | null
-  providers: string[]
-  savedAddresses: SavedAddress[]
-}
-```
-
----
-
-### 프로필 수정
-
-```
-PATCH /auth/me
-```
-
-```ts
-// Request (Partial)
-{
-  name?: string
-  phone?: string
-}
-```
-
----
-
-### 배송지 관리
-
-```
-POST   /auth/me/addresses           // 배송지 추가
-PATCH  /auth/me/addresses/:id       // 수정
-DELETE /auth/me/addresses/:id       // 삭제
-PATCH  /auth/me/addresses/:id/default  // 기본 배송지 설정
-```
-
----
-
-### FCM 토큰 등록
-
-```
-PATCH /auth/me/fcm-token
-```
-
-```ts
-{ fcmToken: string }
-```
-
-> PWA 푸시 알림 수신을 위해 브라우저 푸시 권한 획득 후 호출.
-
----
-
-## 7. 역할별 API 접근 제어
-
-| 엔드포인트 | consumer | seller | driver | admin | 비고 |
-|------------|----------|--------|--------|-------|------|
-| `GET /stores/:storeId/products` | ✅ | ✅ | ✅ | ✅ | 공개 |
-| `POST /stores/:storeId/products` | ❌ | ✅ | ❌ | ✅ | 본인 storeId만 (admin은 전체) |
-| `POST /stores/:storeId/orders` | ✅ | ❌ | ❌ | ❌ | - |
-| `GET /stores/:storeId/orders/:orderId` | ✅ | ✅ | ✅ | ✅ | 본인 주문 or 본인 storeId (admin은 전체) |
-| `PATCH /stores/:storeId/orders/:orderId/cancel` | ✅ | ❌ | ❌ | ✅ | 본인 주문만 (admin은 강제 처리 가능) |
-| `PATCH /stores/:storeId/orders/:orderId/status` | 일부 | ✅ | ✅ | ✅ | 역할별 허용 전환 다름 (`orders.md` 섹션 4 참조) |
-| `GET /stores/:storeId/daily-caps` | ❌ | ✅ | ❌ | ✅ | - |
-| `PATCH /stores/:storeId/delivery-config` | ❌ | ✅ | ❌ | ✅ | - |
-| `GET /admin/*` | ❌ | ❌ | ❌ | ✅ | admin 전용 경로 전체 |
-
-> **admin 접근 원칙**: admin은 storeId 소유권 검증 없이 모든 storeId 데이터에 접근 가능. NestJS Guard에서 `role === 'admin'` 시 storeId 검증 우회.
-
----
-
-## 8. 보안 체크리스트
-
-| 항목 | 처리 방식 |
-|------|----------|
-| 비밀번호 저장 | bcrypt (saltRounds: 12) |
-| JWT 만료 | accessToken 1시간 / refreshToken 30일 |
-| storeId 위조 | JWT 클레임 `storeId`와 경로 `:storeId` 일치 검증 (Guard) |
-| 타인 주문 접근 | `userId` 클레임과 `orders.userId` 일치 검증 |
-| 소셜 계정 연결 | 동일 이메일로 이미 존재하는 계정에 provider 추가 병합 |
-
----
-
-## 9. packages/shared 공통 타입
-
-> **Timestamp 직렬화 규칙**: Firestore 스키마의 `Timestamp` 필드는 shared 타입에서 `string (ISO8601)`으로 표현합니다.
-
-```ts
-// packages/shared/src/auth.types.ts
-
-export type UserRole = 'consumer' | 'seller' | 'driver' | 'admin'
-
-export type AuthProvider = 'kakao' | 'naver' | 'email'
-
-export interface JwtPayload {
-  sub: string
-  role: UserRole
-  storeId?: string
-  iat: number
-  exp: number
-}
-
-export interface SavedAddress {
-  id: string
-  label: string
-  address: string
-  addressDetail: string
-  zipCode: string
-  isDefault: boolean
-}
-
 export interface UserProfile {
   id: string
   email: string
@@ -374,17 +155,79 @@ export interface UserProfile {
   storeId: string | null
   providers: AuthProvider[]
   savedAddresses: SavedAddress[]
-  fcmToken: string | null   // PWA 푸시 토큰
-  createdAt: string   // ISO8601
-  updatedAt: string   // ISO8601
+  fcmToken: string | null
+  createdAt: string
+  updatedAt: string
 }
 ```
 
----
+`providers`에 legacy 값이 존재할 수 있으므로 저장 데이터와 현재 UI provider 지원 범위를 구분한다.
+
+## 9. 배송지
+
+인증 사용자는 API를 통해 저장 배송지를 관리한다.
+
+```ts
+interface SavedAddress {
+  id: string
+  label: string
+  address: string
+  addressDetail: string
+  zipCode: string
+  isDefault: boolean
+}
+```
+
+배송지 추가·수정·삭제·기본값 변경은 자신의 `userId` 범위에서만 처리한다. 운영 Firestore에서 다른 사용자의 주소 배열을 troubleshooting 목적으로 직접 수정하지 않는다.
+
+## 10. Firebase Custom Token
+
+`GET /auth/firebase-token`은 현재 API JWT 사용자에게 Firebase client용 custom token을 발급하는 경로다. 이 token은 Firestore/Storage Rules에서 서버가 부여한 identity/claims와 함께 사용될 수 있다.
+
+이 endpoint의 존재 때문에 Firebase Rules를 공개 read/write로 완화하지 않는다. Firebase 접근 계약은 현재 Rules와 해당 frontend 사용처를 함께 확인한다.
+
+## 11. FCM 필드 상태
+
+`PATCH /auth/me/fcm-token`과 shared `fcmToken` 필드는 현재 남아 있다. 그러나 현재 notifications API의 실제 외부 발송 구현은 ALIGO/SMS이며 FCM send 구현은 없다.
+
+따라서 FCM token endpoint를 “현재 운영 push 알림이 활성화돼 있다”는 증거로 사용하지 않는다. 실제 FCM 재도입은 별도 Task에서 정의한다.
+
+## 12. OAuth URL 정책
+
+- Production Kakao callback의 canonical URL은 `docs/URLS.md`를 따른다.
+- Preview에서는 Kakao 로그인 완료 smoke를 acceptance criterion으로 두지 않는다.
+- commit별 Vercel Preview URL을 Kakao Redirect URI에 누적하지 않는다.
+- 상세 정책은 `docs/specs/ops/preview-auth-url-policy.md`를 따른다.
+
+실제 Vercel/Kakao 설정 현재값은 변경 작업 직전에 provider에서 재조회한다.
+
+## 13. 보안 원칙
+
+- Kakao identity는 서버에서 access token으로 재검증한다.
+- password hash, refresh token, JWT, OAuth token, E2E shared secret을 문서·로그에 기록하지 않는다.
+- Credentials provider는 E2E gate를 제거한 채 production 로그인으로 열지 않는다.
+- role/storeId는 client 입력만으로 신뢰하지 않는다.
+- 타인 주문·스토어 접근은 endpoint별 service ownership 검사를 통과해야 한다.
+- driver E2E allowlist와 secret을 실제 운영 driver 인증 모델로 사용하지 않는다.
+- 실계정 email, 사용자 UUID, 테스트 비밀번호를 troubleshooting 문서에 정본으로 저장하지 않는다.
+
+## 14. 검증 진입점
+
+인증 변경 시 최소 확인:
+
+- `apps/api/src/auth/auth.controller.ts`
+- `apps/api/src/auth/auth.service.ts`
+- `apps/api/src/auth/types/jwt-payload.type.ts`
+- `apps/api/src/common/guards/*`
+- 세 앱 `src/auth.ts`
+- `packages/shared/src/auth.types.ts`
+- 관련 auth unit/E2E tests
+- OAuth URL 변경이면 `docs/URLS.md`, `docs/specs/ops/preview-auth-url-policy.md`
 
 ## 변경 이력
 
 | 날짜 | 내용 |
-|------|------|
-| 2026-03-26 | 초안 작성 — PWA 설계 문서 + 1단계 요구사항 기반 통합 |
-| 2026-07-01 | 카카오 로그인은 API 서버가 `kakaoAccessToken`으로 사용자 정보를 직접 검증하는 계약으로 보강. k6는 외부 OAuth를 부하테스트하지 않음 |
+|---|---|
+| 2026-08-23 | Kakao 운영 OAuth, E2E 전용 Credentials, driver approval, refresh/custom-token 현행 계약에 맞춰 전면 정합화 |
+| 2026-07-01 | Kakao access token 서버 검증 계약 보강 |
+| 2026-03-26 | 초기 auth 설계 초안 |
