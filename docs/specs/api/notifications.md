@@ -1,381 +1,274 @@
-# Notifications Domain Spec
+<!-- Language: ko -->
 
-> **작성일**: 2026-03-26
-> **상태**: Draft (4단계 개발 선행 문서)
-> **연관 문서**: `orders.md`, `auth.md`, `docs/design/소비자-1단계-요구사항.md`
+# Notifications API / Domain Spec
 
----
+> **최종 정합화**: 2026-08-23
+> **상태**: Current
+> **코드 정본**: `packages/shared/src/notification.types.ts`, `apps/api/src/notifications/**`
+> **운영 승인 상태**: 이 문서에 복제하지 않고 `docs/memory.md`와 활성 HANDOFF를 따른다.
 
-## 1. 도메인 개요
+## 1. 소유권과 범위
 
-알림은 **두 채널**로 운영된다.
+- 알림 발송과 알림 기록은 NestJS API가 소유한다.
+- 현재 외부 메시지 provider는 **ALIGO**다.
+- 현재 실제 발송 경로는 카카오 알림톡과 SMS다.
+- `fcm`은 shared `NotificationChannel`에 호환 타입으로 남아 있지만 현재 API의 실제 발송 구현 경로가 아니다.
+- 사용자 알림 목록과 알림톡/SMS 수신 설정 API는 consumer에 노출된다.
+- 회차 직배송의 현재 provider 승인·심사 상태는 운영 상태이므로 이 spec이 아니라 `docs/memory.md`에서 관리한다.
 
-| 채널 | 기술 | 용도 | 비고 |
-|------|------|------|------|
-| 카카오 알림톡 | 알리고 또는 솔라피 API | 주문 상태 변경 공식 알림 | 건당 약 8~9원 |
-| FCM 브라우저 푸시 | FCM + Service Worker | PWA 실시간 푸시 | Should Have |
+## 2. 공통 타입
 
-**알림톡이 주 채널** — 카카오톡 공식 채널로 발송되어 앱 미설치 사용자에게도 도달.
-FCM 푸시는 PWA 설치 사용자 대상 보조 채널.
+`packages/shared/src/notification.types.ts`가 공개 공통 타입을 소유한다.
 
-모든 알림 발송은 **NestJS API 서버가 전담** (클라이언트에서 직접 발송 불가).
+```ts
+type NotificationChannel = 'alimtalk' | 'sms' | 'fcm'
+type NotificationStatus = 'pending' | 'sent' | 'failed'
+```
 
----
+공통 `NotificationTemplateCode`에는 legacy 일반 판매·공동구매와 회차 직배송·운영 알림 코드가 함께 존재한다.
 
-## 2. Firestore 컬렉션 스키마
+현재 shared 코드:
 
-### `notifications/{notificationId}`
+- `ORDER_ACCEPTED`
+- `ORDER_PREPARING`
+- `ORDER_DELIVERING`
+- `ORDER_DELIVERY_HELD`
+- `ORDER_REDELIVERY_PAYMENT_REQUESTED`
+- `ORDER_REDELIVERY_SCHEDULED`
+- `ORDER_HUB_ARRIVED`
+- `ORDER_DELIVERED`
+- `ORDER_CANCELLED`
+- `ROUND_ORDER_CONFIRMED`
+- `OPERATION_ISSUE_CREATED`
+- `CUSTOMER_NOTICE_FAILED`
+- `GROUP_JOINED`
+- `GROUP_DEADLINE_SOON`
+- `GROUP_CONFIRMED`
+- `GROUP_CANCELLED_LACK`
+- `GROUP_CANCELLED_SELF`
+- `GROUP_PREPARING`
+- `GROUP_DELIVERING`
+- `GROUP_DELIVERED`
+
+API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
+
+- `SELLER_GROUP_CONFIRMED`
+- `SELLER_GROUP_CANCELLED_LACK`
+- `SELLER_ORDER_BATCH`
+
+## 3. 알림 기록
+
+`notifications/{notificationId}`의 현재 기록 계약은 다음 필드를 중심으로 한다.
 
 ```ts
 {
   id: string
   userId: string
   orderId: string | null
-  channel: 'alimtalk' | 'fcm'
-
-  // 알림 내용
-  templateCode: NotificationTemplateCode  // 하단 참조
-  variables: Record<string, string>       // 템플릿 변수값
-  message: string                         // 최종 발송 문자열 (로깅용)
-
-  // 수신자
-  phone: string | null      // 알림톡 발송 전화번호
-  fcmToken: string | null   // FCM 푸시 토큰
-
-  // 발송 결과
-  status: 'pending' | 'sent' | 'failed'
-  sentAt: Timestamp | null
-  errorMessage: string | null
-
-  createdAt: Timestamp
-}
-```
-
----
-
-## 3. 알림톡 템플릿 목록
-
-> 실제 발송 전 카카오 비즈메시지 채널 등록 + 템플릿 심사 필요 (약 1~3 영업일).
-
-### 일반 판매
-
-| 코드 | 트리거 | 수신자 | 내용 요약 |
-|------|--------|--------|----------|
-| `ORDER_ACCEPTED` | `PENDING → ACCEPTED` | 본인 | 결제 완료, 주문번호 안내 |
-| `ORDER_PREPARING` | `ACCEPTED → PREPARING` | 본인 | 판매자가 상품 준비 시작 |
-| `ORDER_DELIVERING` | `PREPARING → DELIVERING` | 본인 | 배송 시작 |
-| `ORDER_HUB_ARRIVED` | `DELIVERING → HUB_ARRIVED` | 본인 | 거점 도착, 픽업 코드 안내 |
-| `ORDER_DELIVERED` | `DELIVERING → DELIVERED` | 본인 | 배송 완료 |
-| `ORDER_CANCELLED` | `* → CANCELLED` (판매자 강제) | 본인 | 취소 사유 + 환불 일정 |
-
-### 공동구매
-
-| 코드 | 트리거 | 수신자 | 내용 요약 |
-|------|--------|--------|----------|
-| `GROUP_JOINED` | `PENDING → RECRUITING` | 참여자 본인 | 참여 완료, 현재 N/M명 |
-| `GROUP_DEADLINE_SOON` | 마감 2시간 전 (스케줄러) | 전체 참여자 | "N명만 더! 주변에 공유해보세요" |
-| `GROUP_CONFIRMED` | `RECRUITING → CONFIRMED` | **전체 참여자** | 목표 달성, 주문 확정 |
-| `GROUP_CANCELLED_LACK` | `RECRUITING → CANCELLED` (미달) | **전체 참여자** | 미달 취소 + 환불 일정 |
-| `GROUP_CANCELLED_SELF` | `RECRUITING → CANCELLED` (개인 취소) | 취소자 본인만 | 취소·환불 완료 |
-| `GROUP_PREPARING` | `CONFIRMED → PREPARING` | **전체 참여자** | 판매자 준비 시작 |
-| `GROUP_DELIVERING` | `PREPARING → DELIVERING` | **전체 참여자** | 배송 시작 |
-| `GROUP_DELIVERED` | `DELIVERING → DELIVERED` | **전체 참여자** | 배송 완료 |
-
-### 판매자 알림 (SELLER_*)
-
-> **2026-03-28 결정**: 매 주문·참여마다 알림은 과잉. 공동구매 결과(목표달성/미달취소)만 즉시 발송.
-> 일반 판매는 배치 집계 알림(`SELLER_ORDER_BATCH`)으로 대체.
-> `SELLER_NEW_ORDER`, `SELLER_ORDER_CANCELLED` 제거 — seller 앱 스캐폴딩 시 코드에서도 제거 필요.
-
-| 코드 | 트리거 | 수신자 | 내용 요약 |
-|------|--------|--------|----------|
-| `SELLER_GROUP_CONFIRMED` | `RECRUITING → CONFIRMED` | 판매자 | "OO 공동구매 목표 달성! 준비를 시작하세요." |
-| `SELLER_GROUP_CANCELLED_LACK` | `RECRUITING → CANCELLED` (미달 자동) | 판매자 | "OO 공동구매 미달 자동 취소 및 환불이 완료되었습니다." |
-| `SELLER_ORDER_BATCH` | NestJS @Cron 스케줄러 (시각 미결) | 판매자 | "오늘 N건 주문, 총 OOO원" (0건이면 미발송) |
-
-**`SELLER_ORDER_BATCH` 발송 시각**: **1일 1회 확정** (오후 8시 유력, seller 앱 착수 시 최종 확정). 0건 시 미발송.
-
----
-
-## 4. 알림톡 템플릿 본문 (초안)
-
-```
-[ORDER_ACCEPTED]
-안녕하세요, #{name}님.
-Green Hub에서 주문이 접수되었습니다.
-
-■ 주문번호: #{orderId}
-■ 상품명: #{productName}
-■ 결제금액: #{totalAmount}원
-■ 배송 예정일: #{deliveryDate}
-
-주문 현황은 앱에서 실시간으로 확인하실 수 있습니다.
-```
-
-```
-[GROUP_JOINED]
-#{name}님, #{productName} 공동구매에 참여하셨습니다!
-
-현재 #{currentParticipants}/#{minParticipants}명 참여 중
-■ 모집 마감: #{recruitDeadline}
-■ 배송 예정일: #{groupDeliveryDate}
-
-목표 인원 미달 시 결제 금액이 자동 환불됩니다.
-```
-
-```
-[GROUP_DEADLINE_SOON]
-#{productName} 공동구매 마감이 2시간 후입니다!
-
-현재 #{currentParticipants}/#{minParticipants}명
-#{remaining}명만 더 모이면 확정됩니다.
-주변에 공유해보세요!
-```
-
-```
-[GROUP_CONFIRMED]
-🎉 #{productName} 공동구매가 확정되었습니다!
-
-목표 인원 #{minParticipants}명이 모였습니다.
-■ 배송 예정일: #{groupDeliveryDate}
-
-확정 이후에는 취소 및 환불이 불가합니다.
-```
-
-```
-[GROUP_CANCELLED_LACK]
-[목표 수량 미달성으로 취소] #{productName} 공동구매
-
-모집 기한 내 목표 인원이 모이지 않아 주문이 취소되었습니다.
-결제 금액은 아래 일정으로 환불됩니다.
-■ 카카오페이·네이버페이: 1~3 영업일
-■ 신용·체크카드: 3~5 영업일
-```
-
-```
-[ORDER_HUB_ARRIVED]
-#{productName}이(가) 거점에 도착했습니다.
-
-■ 픽업 코드: #{pickupCode}
-■ 수령 장소: #{hubAddress}
-
-코드를 제시하고 상품을 수령하세요.
-```
-
----
-
-## 5. 알림 발송 API (NestJS 내부 서비스)
-
-> 아래 메서드들은 NestJS `NotificationsService` 내부에서 호출되며 외부에 직접 노출하지 않는다.
-> 주문 상태 전환 시 `OrdersService`가 `NotificationsService`를 의존성 주입으로 호출.
-
-```ts
-// 단건 발송
-sendAlimtalk(userId: string, templateCode: NotificationTemplateCode, variables: Record<string, string>): Promise<void>
-
-// 다건 일괄 발송 (공동구매 전체 참여자)
-sendAlimtalkBulk(userIds: string[], templateCode: NotificationTemplateCode, variables: Record<string, string>): Promise<void>
-
-// FCM 푸시 단건
-sendFcmPush(userId: string, title: string, body: string, data?: Record<string, string>): Promise<void>
-```
-
----
-
-## 6. 외부 노출 API 엔드포인트
-
-### 알림 목록 조회 (소비자 앱 — 마이페이지 알림 내역)
-
-```
-GET /notifications/me?limit=20&cursor=:notificationId
-```
-
-**Guard**: `JwtAuthGuard` (consumer)
-
-```ts
-// Response 200
-{
-  items: NotificationSummary[]
-  nextCursor: string | null
-}
-```
-
-**NotificationSummary**
-```ts
-{
-  id: string
-  templateCode: NotificationTemplateCode
-  message: string
-  orderId: string | null
-  sentAt: string   // ISO8601
-}
-```
-
----
-
-### FCM 토큰 등록
-
-> `auth.md` 섹션 6 참조 — `PATCH /auth/me/fcm-token` 으로 통합.
-
----
-
-### 알림 수신 동의 설정 (Should Have)
-
-```
-PATCH /notifications/me/preferences
-```
-
-```ts
-{
-  alimtalk: boolean   // 알림톡 수신 동의
-  fcm: boolean        // FCM 푸시 수신 동의
-}
-```
-
----
-
-## 7. 알리고 / 솔라피 연동
-
-### 선택 기준
-
-| 항목 | 알리고 | 솔라피 |
-|------|--------|--------|
-| 가격 | 건당 약 8원 | 건당 약 8.5~9원 |
-| API 문서 | 단순 | 상세 |
-| 카카오 알림톡 | 지원 | 지원 |
-| SMS 폴백 | 지원 | 지원 |
-
-**MVP에서는 알리고 채택 검토** (가격 우위). 이후 발송량 기준으로 재검토.
-
-### 알리고 API 호출 구조
-
-내부 `NotificationTemplateCode`는 알림 기록·멱등 키·운영 예외에 사용하는 논리 식별자다. ALIGO 요청의 `tpl_code`는 `ALIGO_TEMPLATE_CODES_JSON`에서 논리 코드로 조회한 별도 provider 식별자만 사용한다. 이 환경 변수는 JSON 객체여야 하며 registry에 없는 키, 문자열이 아닌 값, trim 후 빈 값은 설정 오류다. 매핑 누락이나 파싱 오류는 외부 요청과 SMS 대체를 모두 수행하지 않고 실패로 기록한다. E2E 대역과 직접 SMS 재발송은 이 매핑에 의존하지 않는다.
-
-회차 출시 준비 검사는 `ORDER_ACCEPTED`, `ORDER_PREPARING`, `ORDER_DELIVERING`, `ORDER_DELIVERY_HELD`, `ORDER_REDELIVERY_PAYMENT_REQUESTED`, `ORDER_REDELIVERY_SCHEDULED`, `ORDER_DELIVERED`, `ORDER_CANCELLED` 8종의 매핑 존재를 모두 요구한다. 실제 `tpl_code` 원문은 저장소와 운영 증거에 기록하지 않는다.
-
-```ts
-// NestJS NotificationsService 내부
-POST https://kakaoapi.aligo.in/akv10/alimtalk/send/
-
-{
-  apikey: process.env.ALIGO_API_KEY,
-  userid: process.env.ALIGO_USER_ID,
-  senderkey: process.env.ALIGO_SENDER_KEY,
-  tpl_code: providerTemplateCode, // ALIGO_TEMPLATE_CODES_JSON에서 해석한 외부 코드
-  sender: '010-XXXX-XXXX',      // 발신 번호
-  receiver_1: phone,
-  recvname_1: userName,
-  // 템플릿 변수
-  subject_1: '주문 알림',
-  message_1: renderedMessage,
-  // SMS 폴백 (알림톡 수신 불가 시 문자 대체 발송)
-  failover: 'Y',
-  fsubject_1: '주문 알림',
-  fmessage_1: renderedMessage,
-}
-```
-
-각 본문 registry 항목은 `requiredVariables`를 명시한다. 누락되거나 trim 후 빈 필수 변수는 빈 문자열로 치환하지 않고 외부 요청 전에 실패한다. 회차 직배송의 추가 계약은 다음과 같다.
-
-- `ORDER_ACCEPTED.name`: 결제 확정 시 주문 snapshot `buyerName`을 trim해 사용하며, 비어 있거나 `userId`와 같으면 `고객`을 사용한다. 이메일 local-part와 `userId`는 표시명 대체값으로 사용하지 않는다.
-- `ORDER_DELIVERY_HELD.reason`: 자유 입력 `reasonMessage`를 발송하지 않고 서버 정본의 `reasonCode`별 비개인 고정 문구를 사용한다. 알 수 없거나 빈 코드는 상태 전환 전에 거부한다.
-- `ORDER_CANCELLED.reason`: 판매자·관리자 전환의 사유를 trim하고 빈 값은 `판매자 취소`로 확정한다. 100자 초과, 줄바꿈·제어문자, 이메일·전화번호 형식은 거부하며 환불·저장·알림에 같은 확정값을 사용한다.
-
----
-
-## 8. FCM 브라우저 푸시 (Should Have)
-
-```
-구현 순서:
-  1. Firebase 프로젝트 설정 + FCM VAPID 키 발급
-  2. Service Worker (firebase-messaging-sw.js) 등록
-  3. 소비자 앱: 브라우저 푸시 권한 요청 → FCM 토큰 발급 → PATCH /auth/me/fcm-token
-  4. NestJS: firebase-admin SDK로 FCM 푸시 발송
-
-오프라인 수신:
-  Service Worker가 백그라운드 메시지를 수신해 시스템 알림으로 표시.
-  알림 클릭 시 해당 주문 현황 페이지로 딥링크.
-```
-
----
-
-## 9. 마감 임박 알림 스케줄러
-
-```
-NestJS @Cron (매 10분)
-
-처리:
-  1. recruitDeadline이 현재 시각 기준 2시간 이내인 RECRUITING 상태 groupProductConfig 조회
-  2. 이미 GROUP_DEADLINE_SOON 알림 발송된 건 제외 (notifications 컬렉션 조회)
-  3. 대상 공동구매의 전체 참여자에게 GROUP_DEADLINE_SOON 알림톡 일괄 발송
-  4. 발송 완료 기록 저장 (중복 발송 방지)
-```
-
----
-
-## 10. packages/shared 공통 타입
-
-> **Timestamp 직렬화 규칙**: Firestore 스키마의 `Timestamp` 필드는 shared 타입에서 `string (ISO8601)`으로 표현합니다.
-
-```ts
-// packages/shared/src/notification.types.ts
-
-export type NotificationChannel = 'alimtalk' | 'fcm'
-
-export type NotificationStatus = 'pending' | 'sent' | 'failed'
-
-export type NotificationTemplateCode =
-  // 일반 판매 (소비자)
-  | 'ORDER_ACCEPTED'
-  | 'ORDER_PREPARING'
-  | 'ORDER_DELIVERING'
-  | 'ORDER_HUB_ARRIVED'
-  | 'ORDER_DELIVERED'
-  | 'ORDER_CANCELLED'
-  // 공동구매 (소비자)
-  | 'GROUP_JOINED'
-  | 'GROUP_DEADLINE_SOON'
-  | 'GROUP_CONFIRMED'
-  | 'GROUP_CANCELLED_LACK'
-  | 'GROUP_CANCELLED_SELF'
-  | 'GROUP_PREPARING'
-  | 'GROUP_DELIVERING'
-  | 'GROUP_DELIVERED'
-  // 판매자 알림 (2026-03-28 확정 — 매 건 알림 제거, 배치+공동구매 결과만)
-  | 'SELLER_GROUP_CONFIRMED'
-  | 'SELLER_GROUP_CANCELLED_LACK'
-  | 'SELLER_ORDER_BATCH'         // 일반 판매 배치 집계 (발송 시각 미결)
-
-export interface Notification {
-  id: string
-  userId: string
-  orderId: string | null
-  channel: NotificationChannel
-  templateCode: NotificationTemplateCode
+  channel: 'alimtalk' | 'sms' | 'fcm'
+  templateCode: string
   variables: Record<string, string>
   message: string
   phone: string | null
   fcmToken: string | null
-  status: NotificationStatus
-  sentAt: string | null   // ISO8601
+  status: 'pending' | 'sent' | 'failed'
+  attemptCount?: number
+  sentAt: Timestamp | null
   errorMessage: string | null
-  createdAt: string       // ISO8601
-}
-
-export interface NotificationSummary {
-  id: string
-  templateCode: NotificationTemplateCode
-  message: string
-  orderId: string | null
-  sentAt: string   // ISO8601
+  createdAt: Timestamp
 }
 ```
 
----
+외부 API 응답에서는 `TimestampInterceptor`에 의해 timestamp가 ISO 문자열로 변환될 수 있다. 클라이언트는 Firestore 내부 객체 형태를 공개 API 계약으로 가정하지 않는다.
+
+## 4. 본문 registry와 변수 검증
+
+본문 정본은 `apps/api/src/notifications/notification-templates.ts`의 `NOTIFICATION_TEMPLATES`다.
+
+각 템플릿은 다음을 가진다.
+
+```ts
+{
+  body: string
+  requiredVariables: readonly string[]
+}
+```
+
+`renderNotificationMessage()`는 `requiredVariables` 중 값이 없거나 문자열이 아니거나 trim 후 빈 값이면 외부 요청 전에 실패한다. 필수 변수를 빈 문자열로 조용히 대체하지 않는다.
+
+현재 회차 직배송의 핵심 변수 계약:
+
+- `ORDER_ACCEPTED.name`: 결제 확정 시 주문 snapshot의 표시명을 사용하고 유효한 표시명이 없으면 서버 규칙에 따라 비개인 fallback을 사용한다.
+- `ORDER_DELIVERY_HELD.reason`: 자유 입력 원문이 아니라 서버가 허용한 reason code의 비개인 고정 문구를 사용한다.
+- `ORDER_CANCELLED.reason`: 서버가 정규화한 취소 사유를 사용한다.
+
+세부 생성 규칙은 실제 호출부와 회차 직배송 spec을 함께 확인한다.
+
+## 5. 내부 논리 코드와 ALIGO `tpl_code`
+
+내부 `NotificationTemplateCode`와 provider의 `tpl_code`는 같은 값으로 취급하지 않는다.
+
+운영 환경 변수:
+
+- `ALIGO_API_KEY`
+- `ALIGO_USER_ID`
+- `ALIGO_SENDER_KEY`
+- `ALIGO_SENDER_PHONE`
+- `ALIGO_TEMPLATE_CODES_JSON`
+
+`ALIGO_TEMPLATE_CODES_JSON`은 논리 코드 → 실제 ALIGO `tpl_code` 문자열의 JSON 객체다.
+
+`apps/api/src/notifications/aligo-template-codes.ts`의 계약:
+
+- JSON 객체만 허용
+- `NOTIFICATION_TEMPLATES`에 없는 논리 키 거부
+- 문자열이 아닌 provider code 거부
+- trim 후 빈 문자열 거부
+- 요청한 논리 코드의 매핑 누락 시 외부 요청 전에 실패
+- 실제 `tpl_code` 원문은 문서·로그·Git 증거에 기록하지 않음
+
+## 6. 회차 직배송 출시 필수 템플릿
+
+회차 직배송 출시 준비 검사는 아래 8종의 실제 provider 매핑을 모두 요구한다.
+
+1. `ORDER_ACCEPTED`
+2. `ORDER_PREPARING`
+3. `ORDER_DELIVERING`
+4. `ORDER_DELIVERY_HELD`
+5. `ORDER_REDELIVERY_PAYMENT_REQUESTED`
+6. `ORDER_REDELIVERY_SCHEDULED`
+7. `ORDER_DELIVERED`
+8. `ORDER_CANCELLED`
+
+이 목록은 `ROUND_DIRECT_NOTIFICATION_TEMPLATE_CODES`가 코드 정본이다.
+
+`ORDER_HUB_ARRIVED`, 공동구매, 판매자 배치 등의 legacy 템플릿은 registry에 존재하지만 위 8종 회차 직배송 출시 readiness 목록에는 포함되지 않는다.
+
+## 7. ALIGO 전달 계약
+
+`AligoClient.sendAlimtalk()`의 현재 최소 계약:
+
+1. 먼저 본문을 render하고 필수 변수를 검증한다.
+2. ALIGO 필수 자격 증명 4개가 없으면 외부 요청 없이 실패한다.
+3. `ALIGO_TEMPLATE_CODES_JSON`에서 실제 provider `tpl_code`를 해석한다.
+4. 알림톡을 최대 **3회** 시도한다.
+5. 3회 모두 실패하면 SMS를 **1회** 시도한다.
+6. 성공 채널과 시도 횟수를 결과로 반환한다.
+7. 알림톡과 SMS가 모두 실패하면 최종 실패를 반환한다.
+
+현재 코드에는 retry 간격/backoff, provider 오류 분류, rate-limit별 지연 정책이 없다. 해당 고도화는 `docs/BACKLOG.md`의 `NOTIFICATION-RETRY-POLICY` 후속 범위다.
+
+### 설정 오류의 fail-closed
+
+다음은 SMS fallback까지 실행하지 않고 요청 전 실패한다.
+
+- 필수 본문 변수 누락
+- ALIGO 필수 자격 증명 누락
+- `ALIGO_TEMPLATE_CODES_JSON` 파싱 오류
+- 허용되지 않은 논리 코드
+- 현재 템플릿의 provider 매핑 누락
+
+## 8. 수신자와 최종 실패 처리
+
+`NotificationsService.sendToUser()`는 주문 snapshot과 사용자 정보를 기준으로 수신 전화번호를 해석한다.
+
+- 유효한 전화번호가 없고 주문 연계 알림이면 고객 안내 실패 운영 이슈를 만든다.
+- 외부 발송 결과는 `notifications`에 기록한다.
+- 최종 실패이고 주문이 있으면 `CUSTOMER_NOTICE_FAILED` 계열 운영 이슈를 생성한다.
+- idempotency key가 주어진 알림은 `notificationDeliveries`를 사용해 `PROCESSING`/`SENT` 중복 전달을 차단한다.
+- 실패한 전달은 `FAILED`로 닫히며 후속 운영 처리 대상이 될 수 있다.
+
+운영 이슈에서 명시적으로 SMS 재발송하는 경로는 기존 실패 알림 기록의 전화번호·template code·variables를 사용해 `AligoClient.sendSms()`를 호출한다.
+
+## 9. 사용자 API
+
+모든 endpoint는 `JwtAuthGuard`를 사용한다.
+
+### `GET /notifications/me`
+
+현재 사용자 알림을 조회한다.
+
+현재 service는 사용자 문서를 조회해 생성일 내림차순으로 정렬한 뒤 최대 50건을 반환한다.
+
+```ts
+{
+  items: Notification[]
+  total: number
+}
+```
+
+과거 cursor 기반 응답 형식은 현재 구현 계약이 아니다.
+
+### `PATCH /notifications/me/preferences`
+
+허용 body:
+
+```ts
+{
+  alimtalk?: boolean
+  sms?: boolean
+}
+```
+
+규칙:
+
+- 빈 object 거부
+- `alimtalk`, `sms` 외 키 거부
+- boolean 외 타입 거부
+- 한 채널만 전달하면 기존 다른 채널 값을 보존
+- 저장 위치: `users/{userId}.notificationPreferences`
+
+주의: 현재 preference endpoint와 저장 계약이 존재한다는 것과 모든 시스템성 주문 알림 발송 경로가 이 설정을 실제 차단 조건으로 사용한다는 것은 별개다. 발송 정책을 바꾸려면 실제 `sendToUser()` 호출 계약과 법적·운영 요구를 별도 검토한다.
+
+## 10. Legacy 공동구매 알림
+
+현재 코드에는 다음 legacy 공동구매 흐름이 유지된다.
+
+- 마감 임박 스케줄러
+- 목표 달성 시 참여 주문 `CONFIRMED` 전환 및 참여자 알림
+- 목표 미달 시 환불 후 `CANCELLED` 전환 및 참여자 알림
+- 판매자 그룹 확정/취소 알림
+
+이 계약은 회차 직배송 출시 템플릿 8종과 별개의 legacy 경로다. 회차 출시를 위해 legacy 코드를 임의 삭제하거나 provider 매핑 전체를 8종으로 축소하지 않는다.
+
+## 11. FCM 상태
+
+`fcm` 타입과 `fcmToken` 필드는 호환 구조로 남아 있으나 현재 notifications API 코드에는 `sendFcmPush()` 구현이 없다. 따라서 FCM을 현재 운영 발송 채널로 문서화하지 않는다.
+
+FCM을 다시 도입할 경우 별도 Task에서 다음을 함께 정의한다.
+
+- 토큰 등록·회전·삭제
+- Service Worker
+- 수신 동의
+- 실패·만료 토큰 처리
+- 알림톡/SMS와의 우선순위
+
+## 12. 보안·증거 원칙
+
+- 실제 API key, sender key, 전화번호, `tpl_code` 원문을 저장소 문서에 기록하지 않는다.
+- 테스트에서 실제 고객에게 알림톡·SMS를 발송하지 않는다.
+- provider 실제 발송은 승인된 격리 수신자와 명시적 승인 게이트에서만 수행한다.
+- provider 등록·승인 상태는 빠르게 바뀌므로 이 spec에 복제하지 않는다.
+
+## 13. 검증 진입점
+
+알림 변경 시 최소 확인 대상:
+
+- `apps/api/src/notifications/notification-templates.ts`
+- `apps/api/src/notifications/aligo-template-codes.ts`
+- `apps/api/src/notifications/aligo.client.ts`
+- `apps/api/src/notifications/notifications.service.ts`
+- `apps/api/src/notifications/notifications.controller.ts`
+- 관련 `*.spec.ts`
+- `packages/shared/src/notification.types.ts`
+- 회차 알림이면 `docs/specs/mvp-sales-round-direct-delivery.md`와 활성 출시 HANDOFF/PLAN
+
+외부 실제 발송은 단위·통합 테스트의 대체물이 아니며 별도 승인된 운영 readiness 검증이다.
 
 ## 변경 이력
 
 | 날짜 | 내용 |
-|------|------|
-| 2026-08-22 | 내부 논리 코드와 ALIGO `tpl_code` 매핑 분리, 필수 본문 변수와 회차 알림 변수 3종 계약 확정 |
-| 2026-03-26 | 초안 작성 — 1·2단계 설계 + orders.md 알림 시점 기반 통합 |
+|---|---|
+| 2026-08-23 | 현행 ALIGO/SMS 구현, 3회 retry+1회 fallback, 실제 API 응답, FCM 미구현 상태, 회차 8종 매핑 계약에 맞춰 전면 정합화 |
+| 2026-08-22 | 내부 논리 코드와 ALIGO `tpl_code` 매핑 분리, 필수 본문 변수와 회차 알림 변수 계약 반영 |
+| 2026-03-26 | 초기 알림 도메인 초안 작성 |
