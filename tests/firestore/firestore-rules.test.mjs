@@ -50,7 +50,18 @@ function clientContexts() {
         .authenticatedContext('seller-1', { role: 'seller', storeId: 'store-1' })
         .firestore(),
     ],
-    ['기사', testEnvironment.authenticatedContext('driver-1', { role: 'driver' }).firestore()],
+    [
+      '승인 기사',
+      testEnvironment
+        .authenticatedContext('driver-1', { role: 'driver', driverApproved: true })
+        .firestore(),
+    ],
+    [
+      '미승인 기사',
+      testEnvironment
+        .authenticatedContext('pending-driver', { role: 'driver', driverApproved: false })
+        .firestore(),
+    ],
     ['관리자', testEnvironment.authenticatedContext('admin-1', { role: 'admin' }).firestore()],
   ];
 }
@@ -68,8 +79,34 @@ async function seedFixtures() {
         category: 'orchid',
         bloomDuration: '60~90일',
       },
-      'orders/order-store-1': { storeId: 'store-1', userId: 'user-1' },
-      'orders/order-store-2': { storeId: 'store-2', userId: 'user-2' },
+      'orders/order-store-1': {
+        storeId: 'store-1',
+        userId: 'user-1',
+        status: 'PREPARING',
+        driverId: null,
+        deliveryMethod: 'direct',
+      },
+      'orders/order-store-2': {
+        storeId: 'store-2',
+        userId: 'user-2',
+        status: 'DELIVERING',
+        driverId: 'driver-1',
+        deliveryMethod: 'direct',
+      },
+      'orders/order-driver-other': {
+        storeId: 'store-1',
+        userId: 'user-3',
+        status: 'DELIVERING',
+        driverId: 'driver-2',
+        deliveryMethod: 'direct',
+      },
+      'orders/order-pickup-parcel': {
+        storeId: 'store-1',
+        userId: 'user-4',
+        status: 'PREPARING',
+        driverId: null,
+        deliveryMethod: 'parcel',
+      },
       'saleRounds/round-1': { storeId: 'store-1', status: 'OPEN' },
       'saleRounds/round-draft': { storeId: 'store-1', status: 'DRAFT' },
       'saleRoundItems/item-1': {
@@ -221,4 +258,38 @@ test('기존 주문의 판매자 매장과 기사 및 관리자 읽기 권한을
   await assertSucceeds(getDoc(doc(driver, 'orders', 'order-store-2')));
   await assertSucceeds(getDoc(doc(admin, 'orders', 'order-store-2')));
   await assertFails(getDoc(doc(user, 'orders', 'order-store-1')));
+});
+
+test('승인된 기사는 배정 주문과 미배정 수거 주문만 읽고 다른 기사 주문은 읽지 못한다', async () => {
+  const approvedDriver = testEnvironment
+    .authenticatedContext('driver-1', { role: 'driver', driverApproved: true })
+    .firestore();
+  const pendingDriver = testEnvironment
+    .authenticatedContext('pending-driver', { role: 'driver', driverApproved: false })
+    .firestore();
+
+  await assertSucceeds(getDoc(doc(approvedDriver, 'orders', 'order-store-2')));
+  await assertSucceeds(getDoc(doc(approvedDriver, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-driver-other')));
+  await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-pickup-parcel')));
+  await assertFails(getDoc(doc(pendingDriver, 'orders', 'order-store-2')));
+
+  const assignedQuery = query(
+    collection(approvedDriver, 'orders'),
+    where('driverId', '==', 'driver-1'),
+  );
+  const pickupQuery = query(
+    collection(approvedDriver, 'orders'),
+    where('status', '==', 'PREPARING'),
+    where('deliveryMethod', 'in', ['direct', 'hub']),
+    where('driverId', '==', null),
+  );
+  const unboundedDriverQuery = query(
+    collection(approvedDriver, 'orders'),
+    where('status', 'in', ['PREPARING', 'DELIVERING']),
+  );
+
+  await assertSucceeds(getDocs(assignedQuery));
+  await assertSucceeds(getDocs(pickupQuery));
+  await assertFails(getDocs(unboundedDriverQuery));
 });

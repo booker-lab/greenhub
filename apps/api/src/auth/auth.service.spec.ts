@@ -147,5 +147,48 @@ describe('AuthService', () => {
       expect(audit.log).toHaveBeenCalledWith('auth.login.suspended', { userId: 'user-1' });
       expect(jwt.sign).not.toHaveBeenCalled();
     });
+
+    it('공개 driver 가입은 승인 대기 상태로 저장한다', async () => {
+      const { service, userRef } = makeKakaoLoginService({});
+
+      await service.register({
+        email: 'driver@example.com',
+        password: 'password-123',
+        name: '신청 기사',
+        role: 'driver',
+      } as never);
+
+      expect(userRef.set).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'driver', driverApproved: false }),
+      );
+    });
+
+    it('기존 미승인 driver를 카카오 로그인 때 자동 승인하지 않는다', async () => {
+      const { service, userRef } = makeKakaoLoginService({
+        user: { id: 'driver-1', role: 'driver', storeId: null, suspended: false },
+      });
+
+      const result = await service.kakaoLogin({
+        kakaoAccessToken: 'token',
+        targetRole: 'driver',
+      });
+
+      expect(result.user).not.toHaveProperty('driverApproved', true);
+      expect(userRef.update).not.toHaveBeenCalled();
+    });
+
+    it('신규 driver의 카카오 가입도 승인 대기로 저장한다', async () => {
+      const { service, userRef } = makeKakaoLoginService({});
+
+      const result = await service.kakaoLogin({
+        kakaoAccessToken: 'token',
+        targetRole: 'driver',
+      });
+
+      expect(result.user).toMatchObject({ role: 'driver', driverApproved: false });
+      expect(userRef.set).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'driver', driverApproved: false }),
+      );
+    });
   });
 });

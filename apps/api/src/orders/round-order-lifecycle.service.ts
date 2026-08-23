@@ -51,6 +51,14 @@ export class RoundOrderLifecycleService {
         throw new ConflictException('주문 상태가 변경되었습니다.');
       }
       if (
+        input.dto.status === 'DELIVERING' &&
+        input.expectedStatus === 'PREPARING' &&
+        order['driverId'] != null &&
+        order['driverId'] !== input.requesterId
+      ) {
+        throw new ConflictException('이미 다른 기사에게 배정된 주문입니다.');
+      }
+      if (
         input.dto.status === 'DELIVERED' &&
         order['deliveryMethod'] === 'direct' &&
         (!Array.isArray(order['deliveryPhotoIds']) || order['deliveryPhotoIds'].length === 0)

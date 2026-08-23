@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -50,18 +51,51 @@ function nearestNeighbor(orders: Order[]): Order[] {
 }
 
 export default function MapPage() {
+  const { data: session } = useSession();
   const { firebaseReady } = useFirebaseAuth();
   const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
-    if (!firebaseReady) return;
+    const driverId = session?.user?.id;
+    if (!firebaseReady || !driverId) {
+      setOrders([]);
+      return;
+    }
 
-    const q = query(collection(db, 'orders'), where('status', 'in', ['PREPARING', 'DELIVERING']));
-    const unsub = onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order));
+    let availableOrders: Order[] = [];
+    let assignedOrders: Order[] = [];
+    const publish = () => {
+      const byId = new Map<string, Order>();
+      [...availableOrders, ...assignedOrders].forEach((order) => {
+        byId.set(order.id, order);
+      });
+      setOrders([...byId.values()]);
+    };
+
+    const availableQuery = query(
+      collection(db, 'orders'),
+      where('status', '==', 'PREPARING'),
+      where('deliveryMethod', 'in', ['direct', 'hub']),
+      where('driverId', '==', null),
+    );
+    const assignedQuery = query(
+      collection(db, 'orders'),
+      where('status', '==', 'DELIVERING'),
+      where('driverId', '==', driverId),
+    );
+    const unsubscribeAvailable = onSnapshot(availableQuery, (snap) => {
+      availableOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order);
+      publish();
     });
-    return unsub;
-  }, [firebaseReady]);
+    const unsubscribeAssigned = onSnapshot(assignedQuery, (snap) => {
+      assignedOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order);
+      publish();
+    });
+    return () => {
+      unsubscribeAvailable();
+      unsubscribeAssigned();
+    };
+  }, [firebaseReady, session?.user?.id]);
 
   const sorted = nearestNeighbor(orders);
 
