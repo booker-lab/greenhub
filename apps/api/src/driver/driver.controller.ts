@@ -8,7 +8,7 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 
 @Controller('driver')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('driver', 'seller')
+@Roles('driver')
 export class DriverController {
   constructor(private readonly driver: DriverService) {}
 

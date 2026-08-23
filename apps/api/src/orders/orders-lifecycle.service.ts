@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -186,7 +187,27 @@ export class OrdersLifecycleService {
         t.update(this.firestore.doc(`orders/${orderId}`), update);
       });
     } else {
-      await this.firestore.doc(`orders/${orderId}`).update(update);
+      const isDriverAssignment =
+        role === 'driver' && currentStatus === 'PREPARING' && nextStatus === 'DELIVERING';
+      if (isDriverAssignment) {
+        await this.firestore.runTransaction(async (transaction) => {
+          const orderRef = this.firestore.doc(`orders/${orderId}`);
+          const latestSnap = await transaction.get(orderRef);
+          if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+            throw new NotFoundException();
+          }
+          const latestOrder = latestSnap.data()!;
+          if (latestOrder['status'] !== 'PREPARING') {
+            throw new ConflictException('주문 상태가 변경되었습니다.');
+          }
+          if (latestOrder['driverId'] != null && latestOrder['driverId'] !== requesterId) {
+            throw new ConflictException('이미 다른 기사에게 배정된 주문입니다.');
+          }
+          transaction.update(orderRef, update);
+        });
+      } else {
+        await this.firestore.doc(`orders/${orderId}`).update(update);
+      }
     }
 
     // 판매자 강제 취소 → settlement 취소 반영
@@ -390,7 +411,12 @@ export class OrdersLifecycleService {
     }
     if (role === 'driver') {
       if (order['driverId'] === requesterId) return;
-      if (!order['driverId'] && order['status'] === 'PREPARING' && nextStatus === 'DELIVERING') {
+      if (
+        order['driverId'] == null &&
+        order['status'] === 'PREPARING' &&
+        nextStatus === 'DELIVERING' &&
+        ['direct', 'hub'].includes(String(order['deliveryMethod']))
+      ) {
         return;
       }
       throw new ForbiddenException('담당 기사만 배송 상태를 변경할 수 있습니다.');

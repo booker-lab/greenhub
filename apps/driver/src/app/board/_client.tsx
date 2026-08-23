@@ -41,6 +41,7 @@ export default function BoardClient() {
       collection(db, 'orders'),
       where('status', '==', 'PREPARING'),
       where('deliveryMethod', 'in', ['direct', 'hub']),
+      where('driverId', '==', null),
       orderBy('preparedAt', 'asc'),
     );
     const unsubPreparing = onSnapshot(qPreparing, (snap) => {

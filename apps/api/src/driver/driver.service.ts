@@ -21,6 +21,15 @@ export class DriverService {
       .orderBy('preparedAt', 'asc')
       .get();
 
-    return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    return snap.docs
+      .map((d: any) => ({ id: d.id, ...d.data() }))
+      .filter((order: Record<string, unknown>) => {
+        const isAssignedToRequester = order['driverId'] === driverId;
+        const isAvailablePickup =
+          order['status'] === 'PREPARING' &&
+          order['driverId'] == null &&
+          ['direct', 'hub'].includes(String(order['deliveryMethod']));
+        return isAssignedToRequester || isAvailablePickup;
+      });
   }
 }
