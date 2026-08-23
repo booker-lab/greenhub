@@ -17,6 +17,14 @@
 
 기준선이 다르면 임의로 전환하거나 덮어쓰지 말고 차이를 먼저 보고한다. 사용자의 기존 dirty 변경은 보존하며, 해당 변경을 되돌리거나 덮어쓰거나 함께 커밋하지 않는다.
 
+### `main` 변경 규칙
+
+- `main`에는 문서-only 변경을 포함해 직접 commit/push하지 않는다.
+- 모든 변경은 목적별 branch에서 만들고 PR을 통해 `main`으로 통합한다.
+- `main` 통합 자체를 production 배포 승인으로 해석하지 않는다.
+- production 배포는 현재 출시 PLAN의 별도 승인 게이트와 실제 release SHA 확인 뒤에만 수행한다.
+- exact-SHA 배포 또는 promotion 절차가 불명확하면 임의 production 배포보다 중단을 우선한다.
+
 ## 3. 최소 Context 로딩
 
 다음 순서로 필요한 범위만 읽는다.
