@@ -1,6 +1,7 @@
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
 import * as admin from 'firebase-admin';
+import * as bcrypt from 'bcrypt';
 import type { AuditService } from '../common/audit/audit.service';
 import type { FirestoreService } from '../firestore/firestore.service';
 import { AuthService } from './auth.service';
@@ -83,7 +84,7 @@ describe('AuthService', () => {
       kakaoClient as unknown as KakaoClient,
       audit as unknown as AuditService,
     );
-    return { audit, firestore, jwt, kakaoClient, service, userRef, usersQuery };
+    return { audit, firestore, jwt, kakaoClient, refreshTokenRef, service, userRef, usersQuery };
   }
 
   describe('kakaoLogin', () => {
@@ -198,6 +199,72 @@ describe('AuthService', () => {
       expect(userRef.set).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'driver', driverApproved: false }),
       );
+    });
+  });
+
+  describe('email login driver approval', () => {
+    const password = 'password-123';
+
+    async function makeEmailLoginService(overrides: Record<string, unknown> = {}) {
+      return makeKakaoLoginService({
+        user: {
+          id: 'driver-1',
+          email: 'driver@example.com',
+          name: '신청 기사',
+          role: 'driver',
+          storeId: null,
+          suspended: false,
+          passwordHash: await bcrypt.hash(password, 4),
+          ...overrides,
+        },
+      });
+    }
+
+    it.each([
+      ['false', { driverApproved: false }],
+      ['missing', {}],
+    ])('%s approval driver는 token 발급 전에 email login이 거부된다', async (_label, approval) => {
+      const { jwt, refreshTokenRef, service } = await makeEmailLoginService(approval);
+
+      await expect(service.login({ email: 'driver@example.com', password })).rejects.toMatchObject({
+        status: 403,
+      });
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it('승인된 driver는 정상적으로 email login하고 access/refresh token을 발급한다', async () => {
+      const { jwt, refreshTokenRef, service } = await makeEmailLoginService({
+        driverApproved: true,
+      });
+
+      const result = await service.login({ email: 'driver@example.com', password });
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toBe('refresh-token');
+      expect(result.user).toMatchObject({ role: 'driver', driverApproved: true });
+      expect(jwt.sign).toHaveBeenCalledTimes(2);
+      expect(refreshTokenRef.set).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['consumer', 'seller', 'admin'])('%s email login 정상 경로를 유지한다', async (role) => {
+      const { service } = await makeEmailLoginService({ role, driverApproved: undefined });
+
+      const result = await service.login({ email: 'driver@example.com', password });
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toBe('refresh-token');
+      expect(result.user).toMatchObject({ role });
+    });
+
+    it('정지된 사용자의 기존 email login 거부를 유지한다', async () => {
+      const { jwt, service } = await makeEmailLoginService({
+        role: 'consumer',
+        suspended: true,
+      });
+
+      await expect(service.login({ email: 'driver@example.com', password })).rejects.toMatchObject({
+        status: 401,
+      });
+      expect(jwt.sign).not.toHaveBeenCalled();
     });
   });
 

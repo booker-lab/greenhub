@@ -140,6 +140,10 @@ export class AuthService {
       throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
     }
 
+    if (userData['role'] === 'driver' && userData['driverApproved'] !== true) {
+      throw new ForbiddenException('승인된 드라이버만 로그인할 수 있습니다.');
+    }
+
     const { accessToken, refreshToken } = await this.issueTokens({
       sub: userData['id'],
       role: userData['role'],
