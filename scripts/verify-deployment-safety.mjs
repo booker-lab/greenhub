@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const apps = ['consumer', 'seller', 'driver'];
+const docsOnlyIgnoreCommand =
+  "git diff --name-only HEAD^ HEAD | grep -qvE '(^docs/|[.]md$)' && exit 1 || exit 0";
 
 for (const app of apps) {
   const path = `apps/${app}/vercel.json`;
@@ -11,6 +13,11 @@ for (const app of apps) {
     config.git?.deploymentEnabled?.main,
     false,
     `${path}: git.deploymentEnabled.main must remain false`,
+  );
+  assert.equal(
+    config.ignoreCommand,
+    docsOnlyIgnoreCommand,
+    `${path}: docs-only Vercel ignoreCommand must remain enabled`,
   );
 }
 
