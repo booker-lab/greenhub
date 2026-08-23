@@ -2,7 +2,7 @@
 
 # Payments API / Domain Spec
 
-> **최종 정합화**: 2026-08-23
+> **최종 정합화**: 2026-08-24
 > **상태**: Current
 > **공통 타입 정본**: `packages/shared/src/payment.types.ts`
 > **서버 구현 정본**: `apps/api/src/payments/**`
@@ -246,6 +246,38 @@ REDELIVERY_FEE
 
 본 주문 취소 시 paid 재배송비도 별도 refund 경로로 환불할 수 있다. 본 결제와 재배송비 결제를 같은 payment record라고 가정하지 않는다.
 
+## 10A. 결제 하위 계약 검증 상태
+
+판정 기준은 `docs/DOCUMENT_CONSISTENCY.md`를 따른다.
+
+### 본 결제 finalization provider 상태 — `IMPLEMENTATION FINDING`
+
+현재 `finalizePaidOrder()` 내부의 비`PAID` 최종 차단이 없으므로 P0 미해결 상태다. caller 방어와 기존 race/멱등 테스트가 존재하더라도 이 불변식 전체를 `VERIFIED`로 승격하지 않는다.
+
+추적: `docs/BACKLOG.md`의 `PAYMENT-FINALIZATION-PAID-GUARD`.
+
+### 본 결제 환불 멱등성 — `VERIFIED`
+
+`PaymentRefundService` 구현과 `payments.service.spec.ts`의 직접 회귀가 다음을 함께 보장한다.
+
+- `PAID`이며 미환불인 결제만 refund claim 획득
+- 동시 환불 호출과 완료 뒤 재시도에서 PortOne 외부 환불 1회
+- 성공 뒤 `CANCELLED`/환불 금액·시각 기록
+- provider 실패 시 claim 해제와 `AUTO_REFUND_FAILED` 운영 이슈
+- 법정 분쟁·고객지원 retention 기록에 provider 원문·민감정보를 복제하지 않음
+
+### 재배송비 결제·환불 — `VERIFIED`
+
+`OrderChargePaymentService` 구현과 직접 회귀가 다음을 확인한다.
+
+- `Transaction.Paid`에서 원격 결제를 재조회하고 `PAID` 상태·금액·charge/order 연결 관계 검증
+- 불일치 시 `PENDING` charge를 확정하지 않음
+- 실패 webhook 중복 시 `FAILED`로 한 번 수렴
+- paid 재배송비 환불의 동시 호출·완료 후 재시도에서 PortOne 환불 1회
+- 주문 생성 측에서는 고객 책임 배송 보류, WEATHER 제외, 양수 재배송비, 주문자 소유권을 확인
+
+이 `VERIFIED` 판정은 위 계약 범위에 한정한다. 주문 취소 전체의 상태 허용 범위와 side effect는 orders lifecycle 계약을 별도로 확인한다.
+
 ## 11. 현재 조회 API
 
 ### Webhook
@@ -352,6 +384,7 @@ export interface Payment {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-08-24 | 문서 정합성 기준에 따라 finalization P0, 본 결제 환불, 재배송비 결제·환불의 검증 상태를 분리 |
 | 2026-08-23 | 현재 `main`의 `finalizePaidOrder()`가 provider `PAID` 상태를 자체 차단하지 않는 구현 한계를 명시하고 호출 경로 의존성을 정합화 |
 | 2026-08-23 | webhook 서명, PortOne 재조회, PENDING reconciliation, 늦은 결제 재확보/환불, refund claim, 재배송비 결제에 맞춰 전면 정합화 |
 | 2026-03-27 | PortOne V2 초기 전환 |
