@@ -156,6 +156,8 @@ FSM 표만 보고 상태를 직접 Firestore에서 수정하지 않는다.
 
 이 문서에 Firestore 내부 필드를 별도 복제하지 않는다. 새 공개 필드를 추가하면 shared 타입을 먼저 확인한다.
 
+**주의:** 실제 `orders` Firestore 문서에는 shared `Order` 공개 타입 외에 `clientOrderPayloadHash`, `reservationId`, `marketingConsent` 등 내부 처리 필드가 함께 존재할 수 있다. raw Firestore document read를 공개 DTO와 동일한 것으로 취급하지 않는다.
+
 ## 6. 주문 생성 입력
 
 현재 `CreateOrderDto`는 legacy와 회차 주문을 함께 수용한다.
@@ -238,18 +240,53 @@ PATCH /stores/:storeId/orders/:orderId/hub-confirm
 
 ## 7A. 역할·소유권 검증 상태
 
-문서 정합성 기준은 `docs/DOCUMENT_CONSISTENCY.md`를 따른다. 역할별 FSM이 존재한다는 사실과 실제 소유권·배정 권한이 회귀 테스트로 보장된다는 사실을 구분한다.
+문서 정합성 기준은 `docs/DOCUMENT_CONSISTENCY.md`를 따른다. API service의 권한과 실제 frontend가 사용하는 direct Firestore read를 별개의 신뢰 경계로 검증한다.
 
-### 조회 권한 — `VERIFIED`
+### API 조회 권한 — `VERIFIED`
 
 `OrdersQueryService`와 `orders-query.service.spec.ts`가 직접 대조된다.
 
 - consumer: 요청 query의 `userId`와 무관하게 자신의 주문만 목록 조회하며 타인 상세는 거부한다.
 - seller: `stores/{storeId}.ownerId === requesterId`인 스토어의 목록·상세만 허용한다.
-- driver: `order.driverId === requesterId`로 배정된 주문의 목록·상세만 허용한다.
+- driver: API 경로에서는 `order.driverId === requesterId`로 배정된 주문의 목록·상세만 허용한다.
 - admin: 스토어 주문 전체 조회를 허용한다.
 - storeId 없는 단건 조회도 seller 소유권과 driver 배정을 다시 검증한다.
 - 회차 직배송 완료 사진 URL도 주문 조회 권한을 통과한 뒤에만 생성한다.
+
+이 판정은 **API 계층에 한정**된다. 현재 seller/driver 앱의 실제 주문 read 전체를 `VERIFIED`라는 뜻이 아니다.
+
+### Direct Firestore 주문 read — `IMPLEMENTATION FINDING` P0
+
+2026-08-24 현재 `firestore.rules`와 seller/driver frontend를 대조한 결과 API 권한보다 넓은 client read 경로가 존재한다.
+
+현재 구현:
+
+- `firestore.rules`의 `orders/{orderId}`는 seller에게 `resource.data.storeId == request.auth.token.storeId`, admin에게 role 기반 read를 허용한다.
+- 같은 rule은 **`request.auth.token.role == 'driver'`이면 주문의 `driverId`, 상태, store와 무관하게 read를 허용**한다.
+- driver `board/_client.tsx`는 `PREPARING` + `direct|hub` 주문을 raw Firestore query로 discovery한다. 미배정 수거 후보 discovery 자체는 현재 제품 흐름에 사용된다.
+- driver 주문 상세 `board/[orderId]/page.tsx`는 `orders/{orderId}`를 raw Firestore `onSnapshot()`으로 직접 읽는다.
+- seller `useOrders.ts`도 자신의 store 주문을 raw Firestore document 형태로 직접 구독한다.
+- 회차 order 원문은 배송 수행 필드 외에 `acquisition`, `marketingConsent`, `clientOrderPayloadHash`, `reservationId` 등 역할별 업무에 반드시 필요한 것으로 입증되지 않은 필드를 포함할 수 있다.
+- `tests/firestore/firestore-rules.test.mjs`는 현재 driver가 다른 store 주문을 직접 읽는 동작을 성공 케이스로 고정하고 있다.
+
+따라서 다음 두 계약은 현재 `VERIFIED`가 아니다.
+
+1. **driver read authorization** — 임의 driver가 배정되지 않은 일반/완료/타-driver 주문 원문을 읽지 못한다는 보장.
+2. **seller/driver data minimization** — 역할 수행에 필요한 고객·배송 필드만 제공된다는 보장.
+
+미배정 `PREPARING` direct/hub 주문을 모든 driver에게 보여주는 discovery 의도와, 모든 주문 원문을 role 하나로 읽게 하는 현재 rule을 동일시하지 않는다.
+
+actual release SHA 확정 전 최소 완료 조건:
+
+- driver의 미배정 수거 후보 discovery 목적·대상 상태·deliveryMethod·허용 필드를 명시한다.
+- 임의 driver가 다른 기사 배정 주문, 완료 주문, 기타 임의 order ID 원문을 직접 읽지 못하게 한다.
+- 배정 이후 driver 상세는 배송 수행에 필요한 최소 필드만 제공한다.
+- seller도 업무에 불필요한 `marketingConsent`, `acquisition` 등 고객 행동·동의 메타데이터와 내부 처리 필드를 raw order read로 받지 않도록 한다.
+- Firestore Rules는 위 read 경계를 직접 강제한다. Rules만으로 field minimization이 불가능하면 API DTO, 별도 safe projection, 민감/내부 필드 분리 등 동등한 구조를 사용한다.
+- `tests/firestore/firestore-rules.test.mjs`의 broad driver 성공 기대를 제거하고 discovery 허용, assigned detail 허용, 비담당/임의 read 거부를 직접 테스트한다.
+- seller/driver frontend 정상 보드·상세 흐름과 회차 first-claim을 회귀 검증한다.
+
+추적: `docs/BACKLOG.md`의 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`.
 
 ### 상태 변경 권한 — `IMPLEMENTED / UNVERIFIED`
 
@@ -341,11 +378,14 @@ legacy 공동구매에는 `RECRUITING`, `CONFIRMED`, `GROUP_*` 알림, `groupPro
 - `apps/api/src/orders/orders.helpers.ts`
 - `apps/api/src/orders/*lifecycle*`
 - `apps/api/src/orders/orders-query.service.spec.ts`
+- `firestore.rules`
+- `tests/firestore/firestore-rules.test.mjs`
+- seller/driver의 raw Firestore order read 사용처
 - 관련 unit/spec tests
 - `apps/e2e`의 영향 시나리오
 - 회차 변경이면 `docs/specs/mvp-sales-round-direct-delivery.md`
 
-권한 계약은 `docs/DOCUMENT_CONSISTENCY.md`에 따라 직접 거부 회귀가 없으면 구현 존재만으로 `VERIFIED` 처리하지 않는다.
+권한·개인정보 계약은 `docs/DOCUMENT_CONSISTENCY.md`에 따라 API 테스트만 통과했다고 시스템 전체를 `VERIFIED` 처리하지 않는다. client SDK + Rules 우회 경로와 역할별 필드 최소화까지 함께 확인한다.
 
 상태 전이·권한·결제·환불을 문서 예시만 보고 운영 데이터에 직접 적용하지 않는다.
 
@@ -353,7 +393,8 @@ legacy 공동구매에는 `RECRUITING`, `CONFIRMED`, `GROUP_*` 알림, `groupPro
 
 | 날짜 | 내용 |
 |---|---|
-| 2026-08-24 | 조회 authorization은 VERIFIED, mutation authorization은 직접 거부 회귀 부족으로 IMPLEMENTED / UNVERIFIED 분리 |
+| 2026-08-24 | API 조회 authorization과 direct Firestore read를 분리하고 broad driver read·raw order 최소화 부재를 P0 IMPLEMENTATION FINDING으로 명시 |
+| 2026-08-24 | API 조회 authorization은 VERIFIED, mutation authorization은 직접 거부 회귀 부족으로 IMPLEMENTED / UNVERIFIED 분리 |
 | 2026-08-23 | `DELIVERY_HELD`, 회차 snapshot, 현재 endpoint/FSM, 재배송·배송사진·알림 계약에 맞춰 전면 정합화 |
 | 2026-04-23 | legacy 공동구매 수량 용어 반영 |
 | 2026-03-26 | 초기 orders 설계 초안 |

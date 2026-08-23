@@ -64,6 +64,22 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 
 ## 현재 확인된 P0
 
+### 주문 direct Firestore read authorization·개인정보 최소화
+
+2026-08-24 감사에서 API read guard와 실제 seller/driver client read 경계가 다름을 확인했다.
+
+- API `OrdersQueryService`는 driver 주문 조회를 배정된 `driverId`로 제한하고 직접 테스트가 존재한다.
+- 그러나 `firestore.rules`는 `role == 'driver'`이면 `orders` 문서를 store/status/배정과 무관하게 read 허용한다.
+- driver 보드·상세와 seller 주문 목록은 Firestore `orders` 원문을 직접 구독한다.
+- 회차 order 원문에는 배송 수행 정보 외에도 `acquisition`, `marketingConsent`, `clientOrderPayloadHash`, reservation 관련 내부 필드가 함께 저장될 수 있다.
+- 현재 Firestore Rules 테스트도 driver의 다른 store 주문 직접 read를 성공 케이스로 고정한다.
+
+따라서 API 조회 authorization만 `VERIFIED`이며, **시스템 전체 driver read authorization과 seller/driver 데이터 최소화는 `IMPLEMENTATION FINDING` P0**다.
+
+미배정 `PREPARING` direct/hub 주문 discovery가 현재 제품 흐름에 필요한 점은 보존하되, 임의 driver의 arbitrary order 원문 접근과 역할에 불필요한 필드 노출은 actual release SHA 확정 전에 제거·직접 검증한다.
+
+정본: `docs/specs/api/orders.md`, `docs/BACKLOG.md`, 법적 선행 게이트 `docs/specs/legal/README.md`.
+
 ### 결제 최종화 provider 상태 방어
 
 현재 `main`의 `apps/api/src/payments/payment-finalization.service.ts`는 `finalizePaidOrder()` 내부에서 전달받은 `paymentData.status === 'PAID'`를 독립적으로 강제하지 않는다.
@@ -81,7 +97,7 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 
 ### 주문 mutation authorization 회귀 검증
 
-주문 조회 권한은 consumer/seller/driver/admin별 직접 테스트가 존재해 `VERIFIED`다.
+주문 API 조회 권한은 consumer/seller/driver/admin별 직접 테스트가 존재해 **API 계층에서는** `VERIFIED`다.
 
 주문 상태 변경은 `OrdersLifecycleService.assertOrderActionAccess()`에서 seller store 소유권, driver 배정, consumer 주문 소유권을 검사하고 정상 회차 E2E도 존재한다. 그러나 2026-08-24 감사에서는 다음 직접 거부 회귀를 확인하지 못했다.
 
@@ -122,6 +138,8 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 - 현재 공개 문서는 상용 주문·결제·배송을 운영하지 않는 **비판매 상태**를 명시한다.
 - 개인정보 정본은 PortOne·결제사업자를 현재 상용 처리 수탁자로 운영하지 않는다고 적고 있다.
 - 실제 고객 ALIGO 알림 처리도 판매 활성화 기준으로 재검수해야 한다.
+- seller/driver 고객정보 접근 문구는 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION` P0 해결 전 최종 확정하지 않는다.
+- broad direct read를 법적 문구로 정당화하지 않고 실제 접근 경계를 먼저 최소화한다.
 - 기존 법적 고지 production 반영 완료는 **판매 활성화 법적 준비 완료를 뜻하지 않는다.**
 - ALIGO 실제 발송 검증 뒤 release SHA 고정 전에 `docs/specs/legal/README.md`의 P0 재정합화 게이트를 완료한다.
 - 판매 공개 전에는 비판매 문구를 임의로 `판매 중`으로 미리 바꾸지 않는다.
@@ -161,14 +179,15 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 
 ## 다음 작업
 
-1. **P0 병렬 코드 게이트**: 결제 finalization이 비`PAID` provider 상태를 자체 차단하도록 구현·회귀 검증 후 `main` 통합.
-2. **P0 병렬 검증 게이트**: 주문 mutation authorization의 타-store seller·비담당 driver·미배정 first-claim 경계를 직접 회귀 테스트하고 `main` 통합.
-3. **P0 병렬 관리자 게이트**: Issue #32의 `main` branch protection/ruleset 활성화.
-4. **외부 차단**: ALIGO 8종 심사 결과 대기. 승인 전 실제 발송·운영 ALIGO 설정은 진행하지 않는다.
-5. 8종 승인 후 격리 알림톡 정상 발송 → SMS fallback 검증.
-6. 판매 활성화 법적 문서·테스트 재정합화.
-7. 법적 변경과 모든 P0 코드·검증 보정까지 포함한 actual release SHA 확정 → 원격 회차 E2E 52건+cleanup.
-8. 운영 Firebase 재조회 → ALIGO 운영 설정 → 별도 `Task 3.1 승인` → exact-SHA production 배포.
-9. 이후 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
+1. **P0 병렬 코드 게이트**: 주문 direct Firestore read를 안전한 discovery/assigned 경계와 역할별 최소 데이터로 축소하고 Rules·frontend 회귀를 `main`에 통합.
+2. **P0 병렬 코드 게이트**: 결제 finalization이 비`PAID` provider 상태를 자체 차단하도록 구현·회귀 검증 후 `main` 통합.
+3. **P0 병렬 검증 게이트**: 주문 mutation authorization의 타-store seller·비담당 driver·미배정 first-claim 경계를 직접 회귀 테스트하고 `main` 통합.
+4. **P0 병렬 관리자 게이트**: Issue #32의 `main` branch protection/ruleset 활성화.
+5. **외부 차단**: ALIGO 8종 심사 결과 대기. 승인 전 실제 발송·운영 ALIGO 설정은 진행하지 않는다.
+6. 8종 승인 후 격리 알림톡 정상 발송 → SMS fallback 검증.
+7. 주문 read 최소화 P0 해결을 전제로 판매 활성화 법적 문서·테스트 재정합화.
+8. 법적 변경과 모든 P0 코드·검증 보정까지 포함한 actual release SHA 확정 → 원격 회차 E2E 52건+cleanup.
+9. 운영 Firebase 재조회 → ALIGO 운영 설정 → 별도 `Task 3.1 승인` → exact-SHA production 배포.
+10. 이후 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
 
 문서 정합성 감사는 `docs/DOCUMENT_CONSISTENCY.md`를 따르고, repository 변경은 **branch + PR**로 수행한다.

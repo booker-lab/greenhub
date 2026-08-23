@@ -11,6 +11,7 @@
 - 상태: `paused_external_review`
 - Priority: P0
 - 현재 외부 차단점: ALIGO 회차 알림 템플릿 8종 provider 심사 완료
+- 병렬 보안 P0: 주문 direct Firestore read authorization·역할별 데이터 최소화
 - 병렬 코드 P0: 결제 finalization `PAID` 최종 방어
 - 병렬 검증 P0: 주문 mutation authorization 직접 거부 회귀
 - 병렬 관리자 P0: GitHub Issue #32 `main` branch protection/ruleset
@@ -35,7 +36,8 @@
 - `salesMode=legacy` 유지.
 - 현재 `/terms`, `/privacy`는 비판매 상태를 전제로 하므로 실제 판매 활성화 전 재정합화가 필요하다.
 - 현재 `main`의 `PaymentFinalizationService.finalizePaidOrder()`는 전달받은 provider `status === 'PAID'`를 메서드 내부에서 독립적으로 강제하지 않는다. actual release SHA 확정 전 해결·회귀 검증해야 한다.
-- 주문 조회 authorization은 직접 테스트가 존재해 `VERIFIED`지만, order mutation authorization은 seller 타-store·비담당 driver·미배정 driver first-claim 경계의 직접 거부 회귀가 부족해 `IMPLEMENTED / UNVERIFIED` 상태다.
+- 주문 API 조회 authorization은 직접 테스트가 존재해 API 계층에서는 `VERIFIED`다. 그러나 driver/seller 앱은 raw Firestore `orders` read를 사용하고, current Rules는 `role == 'driver'`이면 배정·store·상태와 무관하게 주문 read를 허용하므로 시스템 전체 read authorization·데이터 최소화는 P0 `IMPLEMENTATION FINDING`이다.
+- order mutation authorization은 seller 타-store·비담당 driver·미배정 driver first-claim 경계의 직접 거부 회귀가 부족해 `IMPLEMENTED / UNVERIFIED` 상태다.
 
 ## 배포 안전 기준선
 
@@ -60,6 +62,7 @@
 | 0A | GitHub `main` branch protection/ruleset | **미완료 — Issue #32** |
 | 0B | 결제 finalization 비`PAID` 최종 차단 + 회귀 | **미완료 — P0** |
 | 0C | 주문 mutation authorization 직접 거부 회귀 | **미완료 — P0 COVERAGE GAP** |
+| 0D | 주문 direct Firestore read authorization·데이터 최소화 | **미완료 — P0 IMPLEMENTATION FINDING** |
 | 1 | ALIGO 8종 provider 최종 승인 | **검수중** |
 | 2 | 실제 알림톡 정상 발송 | 미실행 |
 | 3 | SMS fallback 실제 검증 | 미실행 |
@@ -77,19 +80,20 @@
 
 1. 모든 repository 변경은 최신 `main`에서 목적별 branch를 만들고 PR로 통합한다.
 2. direct `main` commit/push를 하지 않는다.
-3. dependency 순서대로 Task를 실행하되 결제 finalization P0, 주문 mutation authorization P0와 Issue #32는 ALIGO 심사와 병렬로 해결할 수 있다.
+3. dependency 순서대로 Task를 실행하되 주문 direct read P0, 결제 finalization P0, 주문 mutation authorization P0와 Issue #32는 ALIGO 심사와 병렬로 해결할 수 있다.
 4. 외부 서비스 변경·실제 발송·운영 변수·Firebase 운영 변경·production 배포·운영 데이터·`salesMode` 변경은 해당 승인 게이트를 따른다.
 5. 한 Task의 승인을 이후 운영 변경 승인으로 확대 해석하지 않는다.
 6. 비밀값·고객 개인정보·사진 원본·서명 URL을 Git/문서/증거에 남기지 않는다.
-7. 현재 P0 코드·검증 보정과 법적 페이지 변경까지 포함한 actual release SHA를 확정하기 전 release 검증을 완료로 기록하지 않는다.
+7. 주문 direct read 최소화, 결제/권한 P0 보정과 법적 페이지 변경까지 포함한 actual release SHA를 확정하기 전 release 검증을 완료로 기록하지 않는다.
 8. actual release SHA의 원격 회차 E2E 52건과 cleanup 통과 전 production 배포 금지.
 9. Issue #32의 `main` 보호 완료 전 production release 금지.
 10. `main` merge·빈 commit·재-push를 production 배포 트리거로 사용하지 않는다.
 11. production 배포 직전·직후 provider metadata Git SHA가 승인 release SHA와 동일한지 확인한다.
 12. ALIGO 실제 발송 검증 실패 시 알림 없는 출시를 임의 승인하지 않는다.
 13. 첫 회차가 검수된 `SCHEDULED`가 아니면 `salesMode`를 전환하지 않는다.
-14. `docs/DOCUMENT_CONSISTENCY.md` 기준에서 `IMPLEMENTED / UNVERIFIED`인 P0를 완료로 간주하지 않는다.
-15. 미검증 항목을 완료로 기록하지 않는다.
+14. `docs/DOCUMENT_CONSISTENCY.md` 기준에서 `IMPLEMENTED / UNVERIFIED`, `COVERAGE GAP`, `IMPLEMENTATION FINDING`인 P0를 완료로 간주하지 않는다.
+15. broad 주문 read를 개인정보처리방침 문구를 넓혀 정당화하지 않고 실제 접근 경계를 먼저 최소화한다.
+16. 미검증 항목을 완료로 기록하지 않는다.
 
 ## Execution Plan
 
@@ -140,6 +144,23 @@
 - Contract: `docs/specs/api/orders.md`
 - Status: todo_test
 
+#### Task 0.6 — 주문 direct Firestore read authorization·데이터 최소화
+- Dependency: 없음. ALIGO 심사·Task 0.3~0.5와 병렬 가능.
+- Goal: 미배정 수거 후보 discovery는 보존하되 seller/driver가 raw `orders` 원문을 필요 이상으로 읽는 구조를 제거한다.
+- Required:
+  - driver discovery 계약: 미배정 `PREPARING` + `direct|hub` 등 실제 필요한 대상과 최소 노출 필드 확정
+  - 임의 driver의 타-driver/완료/기타 arbitrary order raw read 차단
+  - assigned driver 상세의 최소 배송 필드만 제공
+  - seller 주문 read의 업무상 불필요 `marketingConsent`, `acquisition`, 내부 hash/reservation 메타데이터 노출 제거
+  - `firestore.rules` broad `role == 'driver'` 허용 제거 또는 안전 조건으로 대체
+  - Rules만으로 필드 최소화가 불가능하면 API DTO/safe projection/민감 필드 분리 중 동등한 구조 적용
+  - `tests/firestore/firestore-rules.test.mjs`의 다른 store driver read 성공 기대 제거
+  - 허용 discovery, assigned detail, 비담당/임의 read 거부, seller cross-store 거부 직접 테스트
+  - seller/driver 정상 보드·상세·first-claim 회귀 유지
+- Contract: `docs/specs/api/orders.md`
+- Legal dependency: `docs/specs/legal/README.md`
+- Status: todo_code_security
+
 ### Phase 1 — ALIGO 알림 게이트
 
 #### Task 1.1 — 발신 프로필·코드 매핑 기반
@@ -165,19 +186,19 @@
 ### Phase 2 — 판매 공개 계약·release SHA
 
 #### Task 2.1 — 판매 활성화 법적 문서 재정합화
-- Dependency: Task 1.5
+- Dependency: Task 1.5, Task 0.6
 - Contract: `docs/specs/legal/README.md`
 - Required:
   - 주문 성립·취소·환불·배송·재배송비·배송 보류
   - PortOne/결제사업자 개인정보 처리
   - ALIGO 고객 알림 처리
-  - seller/driver 배송정보 접근
+  - seller/driver 배송정보 접근은 Task 0.6에서 검증된 최소 접근 구조를 기준으로 설명
   - 시행일·이전 버전
   - `legal-documents.test.mjs` 갱신
 - Status: todo
 
 #### Task 2.2 — actual release SHA 확정
-- Dependency: Task 0.3, Task 0.4, Task 0.5, Task 2.1
+- Dependency: Task 0.3, Task 0.4, Task 0.5, Task 0.6, Task 2.1
 - Goal: 운영에 올릴 단 하나의 exact `main` SHA 고정.
 - 과거 `6e0fc9d...` run은 역사 증거일 뿐 현재 release 증거가 아니다.
 - Status: todo
@@ -258,7 +279,7 @@
 
 #### Task 5.3 — 최종 출시 판정
 - Dependency: Task 5.2
-- 대조: exact SHA, payment P0, order authorization P0, branch protection, Firebase, ALIGO, legal, 첫 회차, 예외, 담당자, rollback.
+- 대조: exact SHA, payment P0, order direct-read P0, order mutation P0, branch protection, Firebase, ALIGO, legal, 첫 회차, 예외, 담당자, rollback.
 - Status: todo
 
 ### Phase 6 — 판매 모드 전환
@@ -287,8 +308,9 @@
 
 ## Completion Criteria
 
+- 주문 direct Firestore read가 안전한 discovery/assigned 경계와 역할별 최소 데이터 계약으로 축소되고 Rules·frontend 회귀가 `main`에 포함됨.
 - 결제 finalization 비`PAID` 차단과 회귀 검증이 `main`에 포함됨.
-- 주문 mutation authorization 핵심 거부 회귀가 `main`에 포함되고 P0 권한 계약이 `VERIFIED`로 승격됨.
+- 주문 mutation authorization 핵심 거부 회귀가 `main`에 포함되고 P0 mutation 권한 계약이 `VERIFIED`로 승격됨.
 - Issue #32 branch protection/ruleset 완료.
 - ALIGO 8종 최종 승인.
 - 실제 알림톡·SMS fallback 검증.
@@ -304,6 +326,7 @@
 ## 현재 Closeout Roll-up
 
 - 코드 통합: 완료
+- 주문 direct Firestore read authorization·데이터 최소화: **미완료 — P0 IMPLEMENTATION FINDING**
 - 결제 finalization `PAID` 최종 방어: **미완료 — P0**
 - 주문 mutation authorization 직접 회귀: **미완료 — P0 COVERAGE GAP**
 - repo-side production auto-deploy 분리: 완료
