@@ -6,7 +6,8 @@
 
 ## 검증 기준
 
-- Git·GitHub·Vercel 직접 재검증: `2026-08-23 KST`
+- Git·GitHub 직접 재검증: `2026-08-24 KST`
+- Vercel 배포 안전 증거: `2026-08-23 KST`
 - ALIGO 상태: 2026-08-23 provider 등록 결과
 - 운영 상태 변경은 별도 승인 없이 수행하지 않는다.
 
@@ -41,7 +42,7 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 
 남은 관리자 P0:
 
-- GitHub `main`은 마지막 재조회에서 `protected=false`.
+- GitHub `main`은 2026-08-24 재조회에서도 `protected=false`.
 - Issue #32 `P0: main branch protection / ruleset 활성화`가 남아 있다.
 - 목표: PR required, `Deployment safety guard / verify` required check, force push·branch delete 차단.
 - 연결된 GitHub 도구와 실행 환경에는 branch protection mutation·인증된 관리자 UI·GitHub token이 없어 Issue #32 완료 전까지 정책+CI 방어 상태다.
@@ -61,7 +62,7 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 - 회차 출시 후보 production 배포, 첫 운영 회차 생성, `salesMode` 전환은 미실행.
 - 판매 모드는 최신 운영 확인 기준 `legacy`.
 
-## 현재 확인된 코드 P0
+## 현재 확인된 P0
 
 ### 결제 최종화 provider 상태 방어
 
@@ -77,6 +78,20 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 이 항목은 **actual release SHA 확정 전 해결·회귀 검증이 필요한 P0**다. 최소 회귀 범위는 `PENDING`, `FAILED`, `CANCELLED`, `PAID`, 금액 불일치, legacy/group 및 회차 경로다.
 
 정본: `docs/specs/api/payments.md`, `docs/BACKLOG.md`
+
+### 주문 mutation authorization 회귀 검증
+
+주문 조회 권한은 consumer/seller/driver/admin별 직접 테스트가 존재해 `VERIFIED`다.
+
+주문 상태 변경은 `OrdersLifecycleService.assertOrderActionAccess()`에서 seller store 소유권, driver 배정, consumer 주문 소유권을 검사하고 정상 회차 E2E도 존재한다. 그러나 2026-08-24 감사에서는 다음 직접 거부 회귀를 확인하지 못했다.
+
+- 다른 store seller의 order status/delivery-hold mutation 거부
+- 이미 다른 기사에게 배정된 주문의 비담당 driver mutation 거부
+- 미배정 주문의 최초 `PREPARING → DELIVERING` 외 driver mutation 거부와 side-effect 0 보장
+
+권한은 P0 계약이므로 이 범위는 현재 **`IMPLEMENTED / UNVERIFIED` + `COVERAGE GAP`**로 취급하고 actual release SHA 확정 전 직접 회귀를 추가한다.
+
+정본: `docs/specs/api/orders.md`, `docs/BACKLOG.md`
 
 ## ALIGO 템플릿 상태
 
@@ -116,11 +131,12 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 - 마지막 전체 원격 회차 E2E 성공 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`.
 - chromium 26 + mobile 26 = 총 52건 및 양쪽 fixture cleanup 성공.
 - 이 과거 run을 현재 release SHA 검증으로 확장하지 않는다.
-- 법적 페이지와 현재 P0 코드 보정까지 포함한 실제 출시 대상 SHA를 고정한 뒤 52건+cleanup을 다시 통과해야 한다.
+- 법적 페이지와 현재 P0 코드·검증 보정까지 포함한 실제 출시 대상 SHA를 고정한 뒤 52건+cleanup을 다시 통과해야 한다.
 
 ## 활성 문서
 
 - 전체 문서 라우팅: `docs/README.md`
+- 문서 정합성 감사 기준: `docs/DOCUMENT_CONSISTENCY.md`
 - 작업 규칙: `AGENTS.md`
 - Context 라우터: `docs/PROJECT_MAP.md`
 - 현재 상태 SSOT: 이 문서
@@ -146,12 +162,13 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 ## 다음 작업
 
 1. **P0 병렬 코드 게이트**: 결제 finalization이 비`PAID` provider 상태를 자체 차단하도록 구현·회귀 검증 후 `main` 통합.
-2. **P0 병렬 관리자 게이트**: Issue #32의 `main` branch protection/ruleset 활성화.
-3. **외부 차단**: ALIGO 8종 심사 결과 대기. 승인 전 실제 발송·운영 ALIGO 설정은 진행하지 않는다.
-4. 8종 승인 후 격리 알림톡 정상 발송 → SMS fallback 검증.
-5. 판매 활성화 법적 문서·테스트 재정합화.
-6. 법적 변경과 모든 P0 코드 보정까지 포함한 actual release SHA 확정 → 원격 회차 E2E 52건+cleanup.
-7. 운영 Firebase 재조회 → ALIGO 운영 설정 → 별도 `Task 3.1 승인` → exact-SHA production 배포.
-8. 이후 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
+2. **P0 병렬 검증 게이트**: 주문 mutation authorization의 타-store seller·비담당 driver·미배정 first-claim 경계를 직접 회귀 테스트하고 `main` 통합.
+3. **P0 병렬 관리자 게이트**: Issue #32의 `main` branch protection/ruleset 활성화.
+4. **외부 차단**: ALIGO 8종 심사 결과 대기. 승인 전 실제 발송·운영 ALIGO 설정은 진행하지 않는다.
+5. 8종 승인 후 격리 알림톡 정상 발송 → SMS fallback 검증.
+6. 판매 활성화 법적 문서·테스트 재정합화.
+7. 법적 변경과 모든 P0 코드·검증 보정까지 포함한 actual release SHA 확정 → 원격 회차 E2E 52건+cleanup.
+8. 운영 Firebase 재조회 → ALIGO 운영 설정 → 별도 `Task 3.1 승인` → exact-SHA production 배포.
+9. 이후 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
 
-문서 정합성 감사 자체는 앞으로도 **branch + PR**로 수행하고, current 계약과 직접 충돌하는 문서만 수정한다.
+문서 정합성 감사는 `docs/DOCUMENT_CONSISTENCY.md`를 따르고, repository 변경은 **branch + PR**로 수행한다.
