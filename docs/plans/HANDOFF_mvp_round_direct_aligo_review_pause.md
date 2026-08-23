@@ -2,45 +2,60 @@
 
 # 회차 직배송 MVP — ALIGO 심사 대기 인계
 
-> 현재 재개 순서만 유지한다. 과거 출시 준비 상세 증거는 `docs/plans/REPORT_mvp_round_direct_launch.md`와 Git 이력에서 확인한다.
+> 현재 재개 순서만 유지한다. 상세 과거 증거는 `docs/plans/REPORT_mvp_round_direct_launch.md`와 Git 이력에서 확인한다.
 
 ## 현재 상태 — 2026-08-23 KST
 
-회차 직배송 MVP 코드는 PR #11을 통해 `main`에 통합됐다. 기능 통합 기준 SHA는 `e55f25914cc7d01576fbd4639583daaf0fe6385e`다. 기존 `codex/mvp-sales-round-direct`는 통합 완료 branch로 취급한다.
+- 회차 직배송 MVP는 PR #11을 통해 `main` 통합 완료.
+- 기능 통합 기준 SHA: `e55f25914cc7d01576fbd4639583daaf0fe6385e`.
+- 카카오 비즈니스 채널 최종 승인 완료.
+- ALIGO 발신 프로필·`senderkey` 준비 완료.
+- 회차 알림 템플릿 8종 provider 등록·심사 요청 완료, 전부 `검수중`.
+- 실제 알림톡·SMS 발송 0건.
+- production ALIGO 자격 증명·8종 매핑 미반영.
+- 첫 운영 회차 미생성, `salesMode=legacy`.
 
-카카오 비즈니스 채널 승인, ALIGO 발신 프로필, `senderkey`, 내부 논리 템플릿↔provider `tpl_code` 분리와 필수 변수 검증까지 완료됐다. 회차 알림 템플릿 8종은 2026-08-23 provider에 등록·심사 요청됐고 현재 모두 `검수중`이다.
+현재 외부 차단점은 **ALIGO 8종 provider 심사 완료**다.
 
-따라서 **현재 즉시 차단점은 ALIGO 8종 provider 심사 완료**다. 다만 심사가 끝난 뒤 곧바로 release SHA를 고정하면 안 된다. 현재 공개 `/terms`, `/privacy`는 2026-08-19의 비판매 상태를 전제로 하므로 실제 판매 공개 전에 법적 문서·공개 페이지 재정합화가 필요하다.
+동시에 해결 가능한 관리자 P0는 **Issue #32 `main` branch protection/ruleset 활성화**다.
 
-## 현재 운영 상태
+## 배포 안전성 변경
 
-| 항목 | 상태 |
-|---|---|
-| 회차 직배송 코드 | `main` 통합 완료 |
-| 카카오 비즈니스 채널 | 최종 승인 완료 |
-| consumer 법적 고지 | **비판매 상태 버전 production 반영 완료; 판매 활성화 전 개정 필요** |
-| ALIGO 발신 프로필 | 정상 1건 |
-| `senderkey` | 발급 완료 |
-| 회차 알림 템플릿 8종 | 등록 완료·전부 `검수중` |
-| 실제 알림톡 정상 발송 | 미실행 |
-| SMS fallback 검증 | 미실행 |
-| 운영 ALIGO 자격 증명·매핑 | 미반영 |
-| 운영 Firebase Rules·indexes | 이전 준비에서 반영 완료 상태 |
-| 회차 출시 후보 production 배포 | 미실행 |
-| 첫 운영 회차 | 미생성 |
-| `salesMode` | `legacy` 유지 |
+2026-08-23 배포 감사에서 `main` push가 문서 변경만으로 Vercel production deployment를 만들던 구조를 확인했고 repo-side remediation을 적용했다.
 
-## 법적 공개 문서 주의
+- PR #30: consumer·seller·driver `main` Vercel Git auto-deploy 차단.
+- PR #30 merge 후 세 프로젝트 신규 deployment 0건 확인.
+- docs-only `main` push는 Preview sync/E2E 제외.
+- deployment safety CI 추가.
+- `AGENTS.md`: direct `main` commit/push 금지.
+- PR #31: 순수 docs/Markdown Vercel build skip.
+- pure-docs branch 검증에서도 세 프로젝트 신규 deployment 0건 확인.
 
-현재 이용약관과 개인정보처리방침은 다음 전제를 명시한다.
+남음:
 
-- 현재 상용 주문·결제·배송을 운영하지 않음
-- PortOne·결제사업자를 현재 상용 처리 수탁자로 운영하지 않음
-- 실제 고객 ALIGO 알림 공급자 처리는 별도 현재 공개 고지에 반영되지 않음
+- GitHub `main`은 마지막 재조회에서 `protected=false`.
+- Issue #32에서 PR required + safety required check + force-push/delete 차단 필요.
 
-따라서 판매 활성화 전 `docs/specs/legal/README.md`의 P0 게이트를 수행한다. 이 변경은 consumer 법적 페이지 코드와 테스트를 바꾸므로 **실제 출시 대상 SHA를 확정하기 전에** 끝내야 한다.
+**중요:** `main` merge는 더 이상 production 배포 경로가 아니다. production은 actual release SHA를 고정·검증한 뒤 별도 승인으로 exact-SHA deploy/promotion을 수행한다.
 
-## ALIGO 템플릿 심사 현황
+상세: `docs/plans/PLAN_deployment_safety_guards_20260823.md`.
+
+## 판매 활성화 법적 상태
+
+production `/privacy`, `/terms`는 현재 비판매 상태를 전제로 한다.
+
+따라서 ALIGO 실제 발송 검증 뒤 release SHA를 고정하기 전에:
+
+- 실제 주문·결제·취소·환불·배송·재배송비·보류 정책,
+- PortOne/결제사업자 개인정보 처리,
+- ALIGO 고객 알림 처리,
+- seller/driver 배송정보 접근,
+- 시행일·이전 버전,
+- `legal-documents.test.mjs`
+
+을 `docs/specs/legal/README.md` 계약에 맞게 갱신한다.
+
+## ALIGO 템플릿 현황
 
 | 논리 템플릿 | 상태 |
 |---|---|
@@ -53,55 +68,63 @@
 | `ORDER_DELIVERED` | 검수중 |
 | `ORDER_CANCELLED` | 검수중 |
 
-- 중복·오류·반려: 없음
-- 실제 알림톡·SMS 발송: 0건
-- 비밀값 원문은 기록하지 않는다.
+- 중복·오류·반려 없음.
+- 비밀값 원문 기록 금지.
 
 ## 검증 기준
 
-- 마지막 전체 원격 회차 E2E 성공 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`
-- chromium 26 + mobile 26 = 52건, fixture cleanup 성공
-- 과거 run은 현재 release SHA 검증을 대신하지 않는다.
+- 마지막 전체 원격 회차 E2E 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`.
+- chromium 26 + mobile 26 = 52, 양쪽 cleanup 성공.
+- 현재 release SHA 증거로 확장 적용하지 않는다.
 
 ## 지금 하지 말아야 할 작업
 
-- 심사 중 템플릿을 중복 등록하거나 임의 수정하지 않는다.
-- 승인 전 실제 알림톡·SMS를 발송하지 않는다.
-- ALIGO 자격 증명·`tpl_code` 원문을 문서·Git에 기록하지 않는다.
-- 별도 승인 없이 production 배포·환경 변수·Firebase·운영 데이터를 변경하지 않는다.
-- 운영 회차를 만들거나 `salesMode`를 변경하지 않는다.
-- 현재 비판매 약관을 그대로 둔 채 판매기능을 공개하지 않는다.
-- 반대로 판매가 아직 공개되지 않았는데 약관을 임의로 `현재 판매 중` 상태로 선반영하지 않는다.
+- 심사 중 템플릿 중복 등록·임의 수정.
+- 승인 전 실제 알림톡·SMS 발송.
+- ALIGO secret/`tpl_code` 원문 Git 기록.
+- direct `main` commit/push.
+- `main` merge를 production 배포 승인으로 해석.
+- 별도 Task 승인 없이 production 배포·Firebase 운영 변경·운영 회차 생성·`salesMode` 변경.
+- 비판매 법적 문구를 판매 공개 전에 임의로 미리 전환.
 
-## 재개 순서
+## 지금 병렬로 할 수 있는 작업
 
-1. ALIGO 템플릿 8종의 심사 결과를 확인한다.
-2. 8종 모두 승인됐는지, 수정 요청·반려가 없는지 기록한다.
-3. 승인된 실제 `tpl_code`와 논리 템플릿 8종의 매핑 준비상태를 값 비공개 방식으로 검증한다.
-4. 별도 승인 후 격리 수신자 실제 알림톡 정상 발송을 검증한다.
-5. 별도 승인 후 SMS fallback을 검증한다.
-6. **판매 활성화 법적 문서 재정합화**를 수행한다: `/terms`, `/privacy`, PortOne/결제사업자, ALIGO 고객 알림, 배송정보 접근, 취소·환불·배송 정책, 시행일·이전 버전, 법적 문서 테스트를 실제 MVP와 일치시킨다.
-7. 법적 페이지 변경까지 포함된 실제 출시 대상 `main` SHA를 확정한다.
-8. 해당 SHA에서 전체 원격 회차 E2E 52건과 fixture cleanup을 통과시킨다.
-9. 운영 Firebase 상태를 읽기 전용 재확인한다.
-10. 별도 승인 후 운영 ALIGO 자격 증명·매핑을 반영한다.
-11. `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`의 Task 3.1 승인 게이트를 확인한다.
-12. 사용자의 별도 `Task 3.1 승인`이 있을 때만 production 배포로 진행한다.
-13. 배포 후 새 `/privacy`, `/terms`를 포함한 무변경 smoke → 첫 회차 검수 → 최종 출시 판정 → `salesMode` 전환 순으로 진행한다.
+1. Issue #32 `main` protection/ruleset 관리자 설정.
+2. read-only 문서/코드 정합성 감사.
+3. ALIGO provider 심사 상태 조회.
+
+## ALIGO 승인 뒤 재개 순서
+
+1. 8종 모두 승인/수정요청/반려 여부 확인.
+2. 승인 `tpl_code` 8종 ↔ 내부 논리 템플릿 1:1 매핑 검사.
+3. 별도 승인 후 격리 실제 알림톡 정상 발송.
+4. 별도 승인 후 SMS fallback 실제 검증.
+5. 판매 활성화 법적 문서·테스트 재정합화.
+6. Issue #32 완료 확인.
+7. 법적 변경까지 포함한 actual release SHA 확정.
+8. exact SHA 원격 회차 E2E 52건 + fixture cleanup.
+9. 운영 Firebase read-only 재조회.
+10. 별도 승인 후 production ALIGO 설정 반영·검증.
+11. exact-SHA production deploy/promotion 절차 확정.
+12. 사용자의 별도 `Task 3.1 승인` 뒤에만 production 배포.
+13. deployment metadata SHA 대조 → 운영 smoke.
+14. 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
 
 ## 재개 완료 조건
 
-- [x] 카카오 비즈니스 채널 최종 승인
 - [x] 회차 직배송 코드 `main` 통합
-- [x] ALIGO 발신 프로필·`senderkey` 준비
-- [x] 회차 알림 템플릿 8종 provider 등록·심사 요청
-- [ ] 회차 알림 템플릿 8종 최종 승인
-- [ ] 실제 알림톡 정상 발송 검증
-- [ ] SMS fallback 검증
-- [ ] **판매 활성화용 개인정보처리방침·이용약관 재정합화**
-- [ ] 법적 페이지를 포함한 실제 출시 대상 SHA 확정
-- [ ] 해당 SHA 전체 원격 회차 E2E·cleanup 통과
-- [ ] 운영 ALIGO 설정·템플릿 매핑 검사 통과
+- [x] 카카오 비즈니스 채널 승인
+- [x] ALIGO 발신 프로필·senderkey 준비
+- [x] ALIGO 템플릿 8종 등록·심사 요청
+- [x] repo-side `main` 자동 production deploy 차단
+- [x] deployment safety CI와 docs-only ignore 적용
+- [ ] Issue #32 branch protection/ruleset
+- [ ] ALIGO 템플릿 8종 최종 승인
+- [ ] 실제 알림톡 정상 발송
+- [ ] SMS fallback
+- [ ] 판매 활성화 법적 문서 정합화
+- [ ] actual release SHA 원격 E2E 52건+cleanup
+- [ ] production ALIGO 설정
 - [ ] Task 3.1 별도 승인
 
-미완료 조건을 충족하기 전에는 회차 출시 후보를 production에 공개하거나 `salesMode`를 전환하지 않는다.
+미완료 게이트를 건너뛰어 production 배포 또는 `salesMode` 전환을 진행하지 않는다.
