@@ -1,6 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
-import type { FirestoreService } from '../../firestore/firestore.service';
 import { JwtStrategy } from './jwt.strategy';
 
 function makeStrategy(user: Record<string, unknown> | null) {

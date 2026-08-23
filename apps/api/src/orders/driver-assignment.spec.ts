@@ -14,15 +14,16 @@ function makeFirestore(order: Data) {
   });
   const doc = (path: string) => ({
     path,
-    get: jest.fn(async () => {
+    get: jest.fn(() => {
       if (path === 'orders/order-1' && initialReads < 2) {
         initialReads += 1;
-        return snapshot({ ...order });
+        return Promise.resolve(snapshot({ ...order }));
       }
-      return snapshot(records.get(path) ?? null);
+      return Promise.resolve(snapshot(records.get(path) ?? null));
     }),
-    update: jest.fn(async (data: Data) => {
+    update: jest.fn((data: Data) => {
       records.set(path, { ...(records.get(path) ?? {}), ...data });
+      return Promise.resolve();
     }),
   });
 
@@ -32,8 +33,8 @@ function makeFirestore(order: Data) {
       const result = transactionQueue.then(async () => {
         const pending = new Map<string, Data>();
         const transaction = {
-          get: jest.fn(async (ref: { path: string }) =>
-            snapshot(pending.get(ref.path) ?? records.get(ref.path) ?? null),
+          get: jest.fn((ref: { path: string }) =>
+            Promise.resolve(snapshot(pending.get(ref.path) ?? records.get(ref.path) ?? null)),
           ),
           update: jest.fn((ref: { path: string }, data: Data) => {
             pending.set(ref.path, { ...(records.get(ref.path) ?? {}), ...data });

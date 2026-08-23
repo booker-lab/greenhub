@@ -2,31 +2,88 @@ import { PaymentFinalizationService } from './payment-finalization.service';
 import { PaymentRefundService } from './payment-refund.service';
 import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
 
-type Data = Record<string, any>;
+type Data = Record<string, unknown>;
 
-function makeSnap(data: Data | null, ref?: Data) {
+type MockDocumentRef = {
+  path: string;
+  get: () => Promise<MockSnapshot>;
+  set: (data: Data) => Promise<void>;
+  update: (data: Data) => Promise<void>;
+};
+
+type MockSnapshot = {
+  exists: boolean;
+  data(): Data | null;
+  ref?: MockDocumentRef;
+};
+
+type MockQueryDocument = {
+  id: string;
+  data(): Data;
+  ref: MockDocumentRef;
+};
+
+type MockQuery = {
+  where(field: string, op: string, value: unknown): MockQuery;
+  limit(value?: number): MockQuery;
+  get(): Promise<{ empty: boolean; docs: MockQueryDocument[] }>;
+};
+
+type MockTransaction = {
+  get(ref: MockDocumentRef): Promise<MockSnapshot>;
+  set(ref: MockDocumentRef, data: Data): void;
+  update(ref: MockDocumentRef, data: Data): void;
+};
+
+type CancellationInput = {
+  storeId: string;
+  orderId: string;
+  reason: string;
+};
+
+type CancellationLifecycleHook = {
+  applyLocalCancellation: (input: CancellationInput) => Promise<{
+    completed: boolean;
+    needsRefund: boolean;
+  }>;
+};
+
+type MockFirestore = {
+  doc(path: string): MockDocumentRef;
+  collection(name: string): MockQuery;
+  runTransaction<T>(callback: (tx: MockTransaction) => Promise<T>): Promise<T>;
+  Timestamp: { now(): Date };
+  FieldValue: { increment(value: number): { __increment: number } };
+};
+
+function makeSnap(data: Data | null, ref?: MockDocumentRef): MockSnapshot {
   return { exists: data !== null, data: () => data, ref };
 }
 
 function makeFirestore(initial: Record<string, Data>) {
-  const records = new Map(Object.entries(initial));
-  const refs = new Map<string, Data>();
-  const doc = (path: string) => {
+  const records = new Map<string, Data>(Object.entries(initial));
+  const refs = new Map<string, MockDocumentRef>();
+  const doc = (path: string): MockDocumentRef => {
     if (!refs.has(path)) {
-      refs.set(path, {
+      const ref: MockDocumentRef = {
         path,
-        get: jest.fn(async () => makeSnap(records.get(path) ?? null, refs.get(path))),
-        set: jest.fn(async (data: Data) => records.set(path, data)),
-        update: jest.fn(async (data: Data) =>
-          records.set(path, { ...(records.get(path) ?? {}), ...data }),
-        ),
-      });
+        get: jest.fn(() => Promise.resolve(makeSnap(records.get(path) ?? null, ref))),
+        set: jest.fn((data: Data) => {
+          records.set(path, data);
+          return Promise.resolve();
+        }),
+        update: jest.fn((data: Data) => {
+          records.set(path, { ...(records.get(path) ?? {}), ...data });
+          return Promise.resolve();
+        }),
+      };
+      refs.set(path, ref);
     }
-    return refs.get(path);
+    return refs.get(path)!;
   };
-  const collection = (name: string) => {
+  const collection = (name: string): MockQuery => {
     const filters: Array<[string, string, unknown]> = [];
-    const query: Data = {
+    const query: MockQuery = {
       where(field: string, op: string, value: unknown) {
         filters.push([field, op, value]);
         return query;
@@ -34,7 +91,7 @@ function makeFirestore(initial: Record<string, Data>) {
       limit() {
         return query;
       },
-      async get() {
+      get() {
         const docs = Array.from(records.entries())
           .filter(([path, data]) => {
             if (!path.startsWith(`${name}/`)) return false;
@@ -42,26 +99,30 @@ function makeFirestore(initial: Record<string, Data>) {
               op === '<' ? true : data[field] === value,
             );
           })
-          .map(([path, data]) => ({ id: path.split('/')[1], data: () => data, ref: doc(path) }));
-        return { empty: docs.length === 0, docs };
+          .map(([path, data]) => ({
+            id: path.split('/').at(-1) ?? '',
+            data: () => data,
+            ref: doc(path),
+          }));
+        return Promise.resolve({ empty: docs.length === 0, docs });
       },
     };
     return query;
   };
 
   let transactionQueue = Promise.resolve();
-  const firestore = {
+  const firestore: MockFirestore = {
     doc,
     collection,
-    runTransaction: jest.fn((callback: (tx: Data) => Promise<unknown>) => {
+    runTransaction: jest.fn(<T>(callback: (tx: MockTransaction) => Promise<T>) => {
       const result = transactionQueue.then(async () => {
         const pending = new Map<string, Data>();
-        const tx = {
-          get: jest.fn(async (ref: Data) =>
-            makeSnap(pending.get(ref.path) ?? records.get(ref.path) ?? null, ref),
+        const tx: MockTransaction = {
+          get: jest.fn((ref: MockDocumentRef) =>
+            Promise.resolve(makeSnap(pending.get(ref.path) ?? records.get(ref.path) ?? null, ref)),
           ),
-          set: jest.fn((ref: Data, data: Data) => pending.set(ref.path, data)),
-          update: jest.fn((ref: Data, data: Data) => {
+          set: jest.fn((ref: MockDocumentRef, data: Data) => pending.set(ref.path, data)),
+          update: jest.fn((ref: MockDocumentRef, data: Data) => {
             const current = pending.get(ref.path) ?? records.get(ref.path) ?? {};
             pending.set(ref.path, { ...current, ...data });
           }),
@@ -79,9 +140,7 @@ function makeFirestore(initial: Record<string, Data>) {
     Timestamp: {
       now: jest.fn(() => new Date('2026-08-23T00:00:00.000Z')),
     },
-    FieldValue: {
-      increment: jest.fn((value: number) => ({ __increment: value })),
-    },
+    FieldValue: { increment: jest.fn((value: number) => ({ __increment: value })) },
   };
   return { firestore, records };
 }
@@ -193,7 +252,7 @@ describe('P0-002 회차 취소와 결제 finalization 경합', () => {
     const readStarted = new Promise<void>((resolve) => {
       reached = resolve;
     });
-    const orderRef = (fixture.firestore as any).doc('orders/order-1');
+    const orderRef = fixture.firestore.doc('orders/order-1');
     const originalGet = orderRef.get;
     let firstRead = true;
     orderRef.get = jest.fn(async () => {
@@ -241,11 +300,14 @@ describe('P0-002 회차 취소와 결제 finalization 경합', () => {
     const applyStarted = new Promise<void>((resolve) => {
       reached = resolve;
     });
-    const originalApply = (fixture.lifecycle as any).applyLocalCancellation.bind(fixture.lifecycle);
-    (fixture.lifecycle as any).applyLocalCancellation = async (input: Data) => {
+    const lifecycleHook = fixture.lifecycle as unknown as CancellationLifecycleHook;
+    const unboundOriginalApply = lifecycleHook.applyLocalCancellation;
+    const originalApply = unboundOriginalApply.bind(
+      fixture.lifecycle,
+    ) as CancellationLifecycleHook['applyLocalCancellation'];
+    lifecycleHook.applyLocalCancellation = (input) => {
       reached();
-      await gate;
-      return originalApply(input);
+      return gate.then(() => originalApply(input));
     };
 
     const cancellation = fixture.lifecycle.cancelByConsumer({
