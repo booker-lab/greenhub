@@ -17,53 +17,56 @@
 
 병렬 출시 P0:
 
-1. `ORDER-REDELIVERY-PAID-RESUME-GATE`
-2. `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
-3. `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
-4. `PAYMENT-FINALIZATION-PAID-GUARD`
-5. `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
-6. `ADMIN-FORCE-REFUND-CONSISTENCY`
-7. Issue #32
+1. `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
+2. `PAYMENT-FINALIZATION-PAID-GUARD`
+3. `ORDER-REDELIVERY-PAID-RESUME-GATE`
+4. `ADMIN-FORCE-REFUND-CONSISTENCY`
+5. `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
+6. `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
+7. `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
+8. Issue #32
 
-## 최우선 재개 — 재배송비 상태머신
+## 최우선 재개 포인터
 
-운영 불변식은 **고객 책임 유료 재배송비를 결제하기 전에 실제 배송을 다시 시작하지 않는다**는 것이다.
+### 1. PortOne webhook signature coverage
 
-현재는 두 문제가 결합돼 있다.
+구현은 raw body + webhook headers + timestamp ±5분 + HMAC SHA-256 timing-safe 검증을 사용한다. production bootstrap도 `rawBody: true`다.
 
-### A. direct resume 우회
+현재는 missing signature/secret/stale timestamp 단위 거부와 unsigned HTTP 401 증거가 있지만, **real verifier의 valid HMAC 성공과 non-empty invalid HMAC 거부가 직접 고정되지 않았다.** 회차 E2E의 signature verifier는 mock이다.
 
-`DELIVERY_HELD → DELIVERING`이 charge `PAID` 확인 없이 가능하며 driver UI도 결제 상태와 무관하게 `배송 재개`를 노출한다.
+완료:
 
-### B. seller PREPARING 경유 dead-end/우회
+- valid HMAC real verifier 성공
+- invalid non-empty HMAC 거부
+- body/id/timestamp mutation 거부
+- actual controller + real verifier에서 invalid request가 service에 도달하지 않음
+- side effect 0
 
-- 고객 책임+양수 재배송비 hold도 seller가 `DELIVERY_HELD → PREPARING` 가능.
-- 이 전환은 hold를 해소하고 `heldOrderCount`를 줄이며 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 발생시키는 현재 경로다.
-- 그러나 charge 생성 API와 consumer 결제 CTA는 현재 status `DELIVERY_HELD`를 요구한다.
-- 따라서 payment-request 알림 뒤 실제 결제가 불가능할 수 있다.
-- 이후 `PREPARING → DELIVERING`에도 과거 미결제 hold를 확인하는 durable gate가 없다.
+정본: `docs/specs/api/payments.md`, `docs/BACKLOG.md`.
 
-완료 시 반드시:
+### 2. Payment finalization PAID boundary
 
-- payment-required 정보가 결제 전 사라지지 않고,
-- payment-request 알림 뒤 consumer가 실제 결제할 수 있으며,
-- current hold↔charge가 durable하게 연결되고,
-- `PAID` 전 모든 delivery-start 경로가 side-effect 0으로 거부되고,
-- PAID 뒤 정상 한 번만 재개되며,
-- hold resolve/held counter/알림이 race에서도 한 번만 수렴해야 한다.
+`finalizePaidOrder()`가 비`PAID` provider 입력을 boundary 자체에서 차단하도록 보정하고 `PENDING|FAILED|CANCELLED|PAID`를 직접 고정한다.
 
-단순 driver 버튼 숨김 또는 `HELD→DELIVERING` 한 경로 guard만으로 닫지 않는다.
+### 3. 유료 재배송 상태머신
 
-정본: `docs/specs/api/orders.md`, `docs/BACKLOG.md`.
+`결제 전 재배송 금지`와 payment-request 후 실제 consumer 결제 가능성을 동시에 만족해야 한다. direct resume와 seller PREPARING 경유 우회를 모두 닫는다.
 
-## 나머지 P0 포인터
+### 4. Admin force-refund
 
-- Driver 승인·session revocation: `docs/specs/api/auth.md`
-- Order direct read·minimization: `docs/specs/api/orders.md`, legal gate
-- Payment finalization: `docs/specs/api/payments.md`
-- Order mutation authorization: `docs/specs/api/orders.md`
-- Admin force-refund: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`
-- GitHub main protection: Issue #32 / deployment safety plan
+정상 cancellation의 본 결제·추가 charge·capacity·held counter·settlement 불변식과 수렴하고 paid settlement 별도 회계 정책을 정의한다.
+
+### 5~7. 권한 P0
+
+- driver 승인/session revocation
+- order direct read/minimization
+- order mutation authorization coverage
+
+세부는 Backlog/current spec을 따른다.
+
+### 8. GitHub main protection
+
+Issue #32: PR required + deployment safety required check + force-push/delete 차단.
 
 ## 지금 하지 말 것
 
@@ -78,24 +81,25 @@
 
 ## 병렬 가능 작업
 
-1. 재배송 payment-request/hold-resolution/resume 상태머신 구현·회귀
-2. driver 승인/session revocation
-3. order direct read 최소화
-4. payment finalization PAID boundary
-5. order mutation 거부 회귀
-6. admin force-refund lifecycle
-7. Issue #32
-8. read-only 문서/코드 감사
-9. ALIGO 상태 조회
+1. webhook signature real-verifier 회귀
+2. payment finalization PAID boundary
+3. 재배송 상태머신
+4. admin force-refund lifecycle
+5. driver approval/session revocation
+6. order direct read 최소화
+7. order mutation 거부 회귀
+8. Issue #32
+9. read-only 문서/코드 감사
+10. ALIGO 상태 조회
 
 ## ALIGO 승인 뒤
 
-1. P0 6개 + Issue #32 완료 확인
+1. P0 7개 + Issue #32 완료 확인
 2. ALIGO 8종 상태 재확인
 3. provider code 1:1 검사
 4. 승인 후 격리 알림톡
 5. 승인 후 SMS fallback
-6. 실제 재배송/환불/read-minimization 기준 legal 재정합화
+6. 실제 P0 해결 결과 기준 legal 재정합화
 7. actual release SHA
 8. exact SHA E2E 52+cleanup
 9. 운영 Firebase read-only
@@ -112,12 +116,13 @@
 - [x] ALIGO sender profile/senderkey
 - [x] 8종 등록·심사 요청
 - [x] repo-side main auto-production 차단
-- [ ] 재배송 payment-required 상태머신 + 직접 회귀 + main
-- [ ] driver 승인/session revocation
-- [ ] order direct read 최소화
-- [ ] payment finalization PAID
-- [ ] order mutation coverage
-- [ ] admin force-refund
+- [ ] webhook real-signature coverage + main
+- [ ] payment finalization PAID + main
+- [ ] 재배송 payment-required 상태머신 + main
+- [ ] admin force-refund lifecycle + main
+- [ ] driver approval/session revocation + main
+- [ ] order direct read 최소화 + main
+- [ ] order mutation coverage + main
 - [ ] Issue #32
 - [ ] ALIGO 8종 승인
 - [ ] 실제 알림톡/SMS fallback
