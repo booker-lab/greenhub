@@ -151,6 +151,7 @@ export async function createMvpSalesRoundFixture() {
     capacity,
     issueWriter,
     retention,
+    refunds,
   );
   const payments = new PaymentsService(
     firestore,

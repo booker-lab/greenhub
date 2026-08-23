@@ -92,7 +92,17 @@ function makeFixture(overrides: Record<string, Data> = {}) {
   const firestore = memory.firestore as never;
   const capacity = new OrderCapacityService(firestore);
   const payments = {
-    processRefundByOrderId: jest.fn().mockResolvedValue(undefined),
+    processRefundByOrderId: jest.fn(async (orderId: string) => {
+      const paymentRef = (firestore as any).doc(`payments/${orderId}`);
+      const paymentSnap = await paymentRef.get();
+      if (paymentSnap.exists) {
+        await paymentRef.update({
+          status: 'CANCELLED',
+          refundAmount: paymentSnap.data()?.amount,
+          refundedAt: new Date(),
+        });
+      }
+    }),
     refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
   };
   const settlements = { cancelSettlement: jest.fn().mockResolvedValue(undefined) };
@@ -112,6 +122,7 @@ function makeFixture(overrides: Record<string, Data> = {}) {
     capacity,
     {} as never,
     { saveRecord: jest.fn().mockResolvedValue(undefined) } as never,
+    { refundByOrderId: jest.fn().mockResolvedValue(undefined) } as never,
   );
   return { ...memory, capacity, payments, lifecycle, roundState, queries, finalization };
 }
