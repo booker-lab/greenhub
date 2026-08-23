@@ -1,184 +1,261 @@
-# Settlements Domain Spec
+<!-- Language: ko -->
 
-> **작성일**: 2026-03-28
-> **상태**: Draft
-> **연관 문서**: `orders.md`, `CRITICAL_LOGIC.md`
+# Settlements API / Domain Spec
 
----
+> **최종 정합화**: 2026-08-23
+> **상태**: Current
+> **타입·라벨 SSOT**: `packages/shared/src/settlement.types.ts`
+> **Seller API 정본**: `apps/api/src/settlements/**`
+> **Admin 지급 처리 정본**: `apps/api/src/admin/**`
 
-## 1. 도메인 개요
+## 1. 범위
 
-`settlements` 도메인은 주문이 완료 상태(`REVIEWED` / `DELIVERED` / `PICKED_UP`)에 도달할 때
-**자동 생성**되는 정산 레코드를 관리한다. 판매자는 기간별 정산 내역과 요약을 조회할 수 있다.
+`settlements`는 완료 주문으로부터 판매자 정산 레코드를 생성하고, `pending → confirmed → paid` 수명주기와 취소 반영을 관리한다.
 
----
+판매자 API는 조회와 요약을 제공하고, `confirmed → paid` 지급 처리는 admin API가 소유한다.
 
-## 2. Firestore 스키마
+## 2. 상태 SSOT
 
-### `settlements/{settlementId}` 문서
+현재 공통 상태:
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `id` | `string` | 문서 ID (= `orderId`) |
-| `storeId` | `string` | 판매자 스토어 ID |
-| `orderId` | `string` | 연결된 주문 ID |
-| `totalAmount` | `number` | 주문 총액 (배송비 포함) |
-| `platformFeeRate` | `number` | 수수료율 (예: 0.05 = 5%) |
-| `platformFee` | `number` | 플랫폼 수수료 = totalAmount × platformFeeRate (원 단위 버림) |
-| `netAmount` | `number` | 판매자 실수령액 = totalAmount - platformFee |
-| `status` | `SettlementStatus` | 정산 상태 |
-| `completedStatus` | `string` | 트리거된 주문 완료 상태 (REVIEWED/DELIVERED/PICKED_UP) |
-| `settledAt` | `Timestamp` | 주문 완료 시각 |
-| `confirmedAt` | `Timestamp \| null` | confirm 마감 배치가 `confirmed` 전이한 시각 (§4-1) |
-| `paidAt` | `Timestamp \| null` | 판매자 지급 시각 |
-| `createdAt` | `Timestamp` | 문서 생성 시각 |
-| `updatedAt` | `Timestamp` | 문서 최종 수정 시각 |
-
-### SettlementStatus
-
-```
-pending → confirmed → paid
-              ↓
-          cancelled
+```ts
+type SettlementStatus = 'pending' | 'confirmed' | 'paid' | 'cancelled'
 ```
 
-| 값 | 의미 |
-|----|------|
-| `pending` | 정산 대기 (주문 완료 직후 자동 생성) |
-| `confirmed` | 정산 확정 (운영자 확인) |
-| `paid` | 지급 완료 |
-| `cancelled` | 정산 취소 (주문 환불 등) |
+공통 표시값도 `packages/shared/src/settlement.types.ts`가 소유한다.
 
-> **타입 SSOT(F-1/S4)**: `SettlementStatus`·`STATUS_LABEL`("정산 대기"/"확정"/"지급 완료"/"취소")·`STATUS_COLOR`(yellow/blue/green/red)는 `packages/shared/src/settlement.types.ts`가 단일 정의처. 백엔드는 타입만, 셀러·어드민 화면은 라벨/색 상수까지 import한다(이전 백엔드·셀러·어드민·useAdmin 4중 정의·값 불일치 해소).
+| 상태 | 라벨 | 기본 색 |
+|---|---|---|
+| `pending` | 정산 대기 | yellow |
+| `confirmed` | 확정 | blue |
+| `paid` | 지급 완료 | green |
+| `cancelled` | 취소 | red |
 
----
+backend는 타입을, seller/admin UI는 공통 라벨·색 상수를 사용한다.
 
-## 3. API 명세
+## 3. Settlement 문서
 
-### 3-1. 기간별 정산 목록 조회
+현재 `settlements/{orderId}`의 핵심 내부 필드:
 
-```
-GET /stores/:storeId/settlements?from=YYYY-MM-DD&to=YYYY-MM-DD&status=pending
-Authorization: Bearer <seller JWT>
-```
-
-**쿼리 파라미터**
-
-| 파라미터 | 타입 | 필수 | 설명 |
-|---------|------|------|------|
-| `from` | `YYYY-MM-DD` | 선택 | `settledAt` 하한 (포함) |
-| `to` | `YYYY-MM-DD` | 선택 | `settledAt` 상한 (해당일 23:59:59까지 포함) |
-| `status` | `SettlementStatus` | 선택 | 정산 상태 필터 (`pending`/`confirmed`/`paid`/`cancelled`). `status` 단독 사용 시 `status + settledAt` 인덱스(§5) 필요 |
-
-**응답**
-
-```json
+```ts
 {
-  "settlements": [
-    {
-      "id": "...",
-      "orderId": "...",
-      "totalAmount": 30000,
-      "platformFee": 1500,
-      "netAmount": 28500,
-      "status": "pending",
-      "settledAt": "2026-03-28T10:00:00Z"
-    }
-  ],
-  "total": 1
+  id: string
+  storeId: string
+  orderId: string
+  totalAmount: number
+  platformFeeRate: number
+  platformFee: number
+  netAmount: number
+  status: SettlementStatus
+  completedStatus: string
+  settledAt: Timestamp
+  confirmedAt: Timestamp | null
+  paidAt: Timestamp | null
+  createdAt: Timestamp
+  updatedAt: Timestamp
 }
 ```
 
-> **정렬 일관성(F-2/S5)**: 셀러·어드민 정산 목록 모두 `settledAt DESC`(최신순) 통일.
-> 이전엔 셀러 `asc`·어드민 `desc`로 방향이 달라 화면 간 UX가 불일치했다(N10).
+문서 ID는 주문 ID와 동일하게 사용한다.
 
-### 3-2. 날짜별 요약 조회
+공개 shared `Settlement`는 화면 공통에 필요한 필드 합집합이며 timestamp 직렬화 형태가 호출 경로마다 달라질 수 있어 `unknown`을 허용한다. Firestore 내부 schema와 frontend shared interface를 1:1이라고 가정하지 않는다.
 
+## 4. 생성
+
+`SettlementsService.createSettlement(order, completedStatus)`는 주문 완료 흐름에서 호출된다.
+
+현재 핵심 계약:
+
+- 같은 `orderId`의 settlement가 이미 있으면 다시 만들지 않는다.
+- 존재 확인과 생성은 Firestore transaction 안에서 수행해 동시 완료 전이 경합을 차단한다.
+- `totalAmount`에서 수수료와 순정산액을 계산한다.
+- 초기 상태는 `pending`.
+- `completedStatus`를 함께 저장한다.
+
+현재 기본 수수료율:
+
+```text
+PLATFORM_FEE_RATE env
+미설정 fallback = 0.05
 ```
-GET /stores/:storeId/settlements/summary?date=YYYY-MM-DD
-Authorization: Bearer <seller JWT>
+
+fallback 5%는 코드 기본값이지 특정 운영 store에 실제 적용 중인 수수료를 문서만으로 보장하는 값은 아니다. admin의 store commission 설정과 settlement 생성 시 사용되는 전역 env를 혼동하지 않는다.
+
+## 5. 수수료 계산
+
+수수료 계산 정본은 `apps/api/src/settlements/_lib/fee-calculator`다.
+
+정산 레코드에는 생성 시점의 다음 값이 snapshot으로 저장된다.
+
+- `platformFeeRate`
+- `platformFee`
+- `netAmount`
+
+나중에 수수료 설정이 바뀌어도 기존 settlement를 문서 추정으로 재계산하지 않는다.
+
+## 6. `pending → confirmed` 자동 확정
+
+`confirmDueSettlements()`는 매일 04:00 KST에 실행된다.
+
+```text
+@Cron('0 4 * * *', { timeZone: 'Asia/Seoul' })
 ```
 
-**응답**
+마감 지연:
 
-```json
+```text
+SETTLEMENT_CONFIRM_DELAY_DAYS env
+미설정 fallback = 1일
+```
+
+처리:
+
+1. `status == pending`
+2. `settledAt < now - confirmDelayDays`
+3. 각 문서를 transaction에서 다시 읽음
+4. 여전히 `pending`일 때만 `confirmed`
+5. `confirmedAt`, `updatedAt` 기록
+
+배치 도중 다른 경로가 `cancelled`로 바꾸면 transaction 재확인에서 skip해 취소 상태를 덮어쓰지 않는다.
+
+## 7. 취소 반영
+
+`cancelSettlement(orderId)`는 연결 settlement가 있으면 취소를 반영한다.
+
+현재 규칙:
+
+- settlement 없음 → no-op
+- `cancelled` → 멱등 no-op
+- `pending|confirmed` → `cancelled`
+- `paid` → **`cancelled`로 역전하지 않음**
+
+지급 완료 후 주문 취소·환불의 회계 처리는 단순 status 역전으로 해결하지 않는다. 현재 service는 warning을 남기고 paid settlement를 보존한다. 후속 회계 조정이 필요하면 별도 설계가 필요하다.
+
+## 8. Seller 정산 API
+
+모든 seller settlement endpoint는 `JwtAuthGuard`가 적용된다.
+
+권한:
+
+- `admin` → store ownership 검사 예외
+- 그 외 → `stores/{storeId}.ownerId === requesterId`
+
+### 목록
+
+```text
+GET /stores/:storeId/settlements?from=<date>&to=<date>&status=<status>
+```
+
+query:
+
+```text
+from?: ISO date string
+ to?: ISO date string
+status?: pending | confirmed | paid | cancelled
+```
+
+- `to`는 해당 날짜 23:59:59.999까지 포함한다.
+- 결과는 `settledAt DESC` 최신순이다.
+- 응답: `{ settlements, total }`.
+
+### 일별 요약
+
+```text
+GET /stores/:storeId/settlements/summary?date=<date>
+```
+
+미지정 시 현재 service의 `new Date().toISOString()` 기준 날짜를 사용한다.
+
+응답:
+
+```ts
 {
-  "date": "2026-03-28",
-  "count": 5,
-  "totalAmount": 150000,
-  "totalPlatformFee": 7500,
-  "totalNetAmount": 142500,
-  "byStatus": {
-    "pending": 3,
-    "confirmed": 2,
-    "paid": 0,
-    "cancelled": 0
-  }
+  date: string
+  count: number
+  totalAmount: number
+  totalPlatformFee: number
+  totalNetAmount: number
+  byStatus: Record<SettlementStatus, number>
 }
 ```
 
----
+날짜 경계는 JavaScript `Date`와 서버 실행 환경 영향을 받을 수 있으므로 KST 일별 정산 의미를 변경할 때는 timezone test를 함께 추가한다.
 
-## 4. 자동 생성 트리거
+## 9. Admin 정산 API
 
-`orders.service.ts`의 `updateStatus()` 및 `reviewOrder()` / `confirmPickup()` 내에서
-주문 상태가 아래 값에 도달하면 `SettlementsService.createSettlement(order)` 호출.
+admin controller 전체는 `JwtAuthGuard + RolesGuard + @Roles('admin')`으로 보호된다.
 
-| 트리거 상태 | 발생 경로 |
-|------------|---------|
-| `REVIEWED` | `reviewOrder()` |
-| `DELIVERED` | `updateStatus()` — 드라이버 전환 |
-| `PICKED_UP` | `confirmPickup()` |
+### 목록
 
-**플랫폼 수수료율**: `PLATFORM_FEE_RATE` 환경변수 (기본값 `0.05`)
-
-### 4-1. confirm 마감 배치 (`pending → confirmed` 자동 확정)
-
-`SettlementsService.confirmDueSettlements()`가 `@Cron('0 4 * * *', { timeZone: 'Asia/Seoul' })`로
-**매일 04:00 KST** 실행된다. `settledAt`이 마감 경계를 지난 `pending` 정산을 `confirmed`로 전이한다.
-
-- **마감 경계(cutoff)** = `지금 - SETTLEMENT_CONFIRM_DELAY_DAYS일` (env, 기본 `1`).
-- **쿼리**: `status == 'pending' AND settledAt < cutoff` → `status + settledAt` 복합 인덱스 필요(§5).
-- **멱등·경합 차단**: 문서별 트랜잭션 내 `status === 'pending'` 재확인 후에만 `confirmed` + `confirmedAt` set.
-  배치 도중 `cancelSettlement`가 `cancelled`로 바꿨다면 skip → **`cancelled` 미덮어씀**.
-- **TZ**: 서버 TZ 미설정이라 `@Cron` `timeZone` 옵션으로 KST 보정.
-
-> **배경**: 스펙(§2)은 `pending → confirmed → paid`를 명시하나 confirm 전이 코드가 부재해
-> 전 정산이 `pending` 고착 → 어드민 "지급처리" 버튼(`confirmed`에서만 노출)이 영구 미표시였다.
-> 이 배치가 누락 고리를 복구한다. (결정 로그 #CL-44)
-
----
-
-## 5. 인덱스 요구사항
-
-```
-settlements: storeId ASC + settledAt ASC (기간 조회)
-settlements: storeId ASC + status ASC + settledAt ASC (스토어별 상태 필터)
-settlements: status ASC + settledAt ASC (confirm 마감 배치 §4-1 — storeId 없는 전역 쿼리)
+```text
+GET /admin/settlements
 ```
 
----
+store/date filter를 지원하며 `settledAt DESC`, 최대 500건을 조회한다.
 
-## 6. 어드민 정산 화면 (F-2/S5)
+### 지급 처리
 
-어드민 정산 화면(`apps/seller/src/app/admin/settlements/`)은 셀러 정산 화면과 동일한
-`_components/` 분리 패턴을 따른다.
+```text
+PATCH /admin/settlements/:settlementId/pay
+```
 
-### 6-1. 컴포넌트 구조
+`markAsPaid()`의 현재 계약:
 
-| 컴포넌트 | 책임 |
-|---------|------|
-| `_client.tsx` | 상태·핸들러 오케스트레이션 (필터값·지급 처리·모달) |
-| `_components/SettlementFilters.tsx` | 스토어 ID·기간(from/to) 필터 입력 |
-| `_components/SummaryCards.tsx` | 수수료 합계·지급 합계 카드 |
-| `_components/SettlementTable.tsx` | 정산 목록 표 (정산일시 컬럼 포함) + 지급처리 버튼 |
+- settlement 없음 → not found
+- 이미 `paid` → 거부
+- `confirmed`가 아니면 거부
+- transaction에서 status 재확인 후 `paid`
+- `paidAt`, `updatedAt` 기록
 
-### 6-2. 합계 산정 기준 (N11)
+즉, `pending → paid` 직접 전환은 허용하지 않는다.
 
-요약 카드의 `totalFee`/`totalNet`은 **`confirmed` + `paid` 정산만** 합산한다.
-`pending`(미확정)·`cancelled`(취소)는 실제 지급 대상이 아니므로 제외 — 이전엔 status 무관
-전건 합산이라 지급액이 과대 표시됐다.
+## 10. 인덱스
 
-### 6-3. 정산일시 컬럼 (N10)
+현재 주요 query shape:
 
-어드민 표에 `settledAt` 컬럼을 추가(셀러 화면과 동형). 정렬은 §3-1 노트대로 양 화면 `desc` 통일.
+```text
+storeId + settledAt
+storeId + status + settledAt
+status + settledAt        // confirm batch
+```
+
+정확한 배포 인덱스 정본은 `firestore.indexes.json`과 대상 Firebase 환경이다. 이 spec의 query 설명만 보고 production 인덱스를 임의 변경하지 않는다.
+
+## 11. UI 집계와 표시
+
+seller/admin UI는 공통 `SettlementStatus`, `STATUS_LABEL`, `STATUS_COLOR`를 사용한다.
+
+관리자 요약에서 실제 지급 대상 성격의 합계를 계산할 때 `pending`·`cancelled` 포함 여부는 현재 frontend aggregator/UI 구현을 확인한다. 과거 UI 계획 문서를 API domain contract로 사용하지 않는다.
+
+## 12. 회차 직배송과 정산
+
+회차 주문도 orders lifecycle에서 완료 상태에 도달하면 기존 settlement 생성 경로와 연결될 수 있다. 다만 첫 운영 회차 출시 전에 실제 회차 주문의 다음 흐름을 E2E로 다시 확인한다.
+
+- 배송사진 완료 → `DELIVERED`
+- settlement 1건만 생성
+- 후속 `REVIEWED`가 동일 settlement를 중복 생성하지 않음
+- 취소/환불 경합에서 `paid` 역전 방지
+
+출시 상태 자체는 `docs/memory.md`와 활성 출시 PLAN을 따른다.
+
+## 13. 검증 원칙
+
+정산 변경 시 최소 확인:
+
+- `packages/shared/src/settlement.types.ts`
+- `apps/api/src/settlements/settlements.service.ts`
+- `apps/api/src/settlements/settlements.controller.ts`
+- `apps/api/src/settlements/dto/query-settlements.dto.ts`
+- `apps/api/src/admin/admin.controller.ts`
+- `apps/api/src/admin/admin.service.ts`
+- fee calculator / aggregator tests
+- seller/admin settlement UI
+- 관련 E2E
+- `firestore.indexes.json`
+
+## 변경 이력
+
+| 날짜 | 내용 |
+|---|---|
+| 2026-08-23 | 자동 confirm, transaction 멱등성, paid 역전 방지, admin 지급 API, 현재 조회/권한 계약으로 정합화 |
+| 2026-03-28 | 초기 settlements 설계 초안 |
