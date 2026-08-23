@@ -18,6 +18,35 @@
 
 ## ACTIVE
 
+### P0 — F-001-DRIVER-APPROVAL-ACCESS
+
+2026-08-23 최신 `main` 재검증에서 driver 승인·주문 접근 보안 계약이 아직 코드에 강제되지 않는 것을 확인했다.
+
+현재 `main` 사실:
+
+- 신규 Kakao driver가 `driverApproved: true`로 생성됨
+- 기존 driver에 승인 필드가 없으면 로그인 시 자동 승인됨
+- `/driver/orders`가 `driver`와 `seller` 모두 허용
+- `DriverService.getOrders(driverId, ...)`가 `driverId`로 서버 필터하지 않고 요청 상태의 전체 주문을 반환
+- Firestore Rules가 `role == driver`이면 전체 `orders` read 허용
+
+추적: Issue #37 `P0: F-001 driver 승인·주문 접근 보안 remediation을 main에 통합`
+
+완료 조건:
+
+- [ ] 신규 driver 기본 `driverApproved: false`
+- [ ] 승인/정지 상태를 API 요청에서 최신 사용자 문서 기준으로 재검증
+- [ ] Firebase custom token/Rules도 현재 승인·정지 상태를 재확인해 stale token 차단
+- [ ] `/driver/orders` driver 전용화
+- [ ] 미배정 선점 가능 주문 + 본인 배정 주문만 서버 필터
+- [ ] 주문 선점 transaction 경쟁 조건 방지
+- [ ] driver suspend 시 refresh/session 무효화 범위 검증
+- [ ] API unit/integration/E2E + Firestore Rules emulator 통과
+- [ ] 최신 `main` 기준 branch에서 PR 통합
+- [ ] 병합 후 current auth/admin/orders/security 문서 재검증
+
+**Issue #37 완료 전 actual release SHA 고정, release-SHA 52 E2E, production 배포로 진행하지 않는다.**
+
 ### P0 — DEPLOY-SAFETY-MAIN-PROTECTION
 
 repo-side 자동배포 차단은 완료됐지만 GitHub `main` 자체 보호는 아직 비활성이다.
@@ -94,6 +123,7 @@ Issue #32 완료 전에도 repo-side Vercel guard는 동작하지만, direct pus
 
 ### P0 — 출시 후보 검증·운영 준비
 
+- [ ] Issue #37 F-001 remediation main 통합·검증 완료
 - [ ] Issue #32 branch protection 완료
 - [ ] 법적 페이지 포함 actual release SHA 확정
 - [ ] exact SHA 원격 회차 E2E chromium 26 + mobile 26 = 52건 통과
