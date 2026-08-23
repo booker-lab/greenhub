@@ -2,7 +2,7 @@
 
 # Settlements API / Domain Spec
 
-> **최종 정합화**: 2026-08-23
+> **최종 정합화**: 2026-08-24
 > **상태**: Current
 > **타입·라벨 SSOT**: `packages/shared/src/settlement.types.ts`
 > **Seller API 정본**: `apps/api/src/settlements/**`
@@ -131,6 +131,22 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 
 지급 완료 후 주문 취소·환불의 회계 처리는 단순 status 역전으로 해결하지 않는다. 현재 service는 warning을 남기고 paid settlement를 보존한다. 후속 회계 조정이 필요하면 별도 설계가 필요하다.
 
+### Admin 강제 환불과의 현재 불일치 — P0
+
+`cancelSettlement()` 자체의 위 규칙과 별개로, 현재 `AdminService.forceRefund()`는 이 메서드를 호출하지 않는다.
+
+따라서 `POST /admin/orders/:orderId/refund`를 통해 주문을 `CANCELLED`로 직접 바꿔도 기존 settlement가 `pending|confirmed|paid` 상태로 그대로 남을 수 있다.
+
+특히:
+
+- `pending|confirmed` settlement는 정상 order cancellation이면 `cancelSettlement()`로 `cancelled`되어야 하지만 admin force refund 경로는 이를 우회한다.
+- `paid` settlement는 원래도 단순 상태 역전 대상이 아니므로, 환불이 필요하다면 별도 회계 조정/운영 이슈/승인 흐름이 필요하다.
+- 현재 admin force refund는 `CANCELLED` 외 주문 상태를 제한하지 않으므로 완료/정산 생성 후 주문에도 진입할 수 있다.
+
+이 불일치는 `ADMIN-FORCE-REFUND-CONSISTENCY` P0로 추적한다. `cancelSettlement()`의 내부 멱등성만으로 admin 환불 전체 정산 일관성이 보장된다고 기록하지 않는다.
+
+정본: `docs/specs/api/admin.md`, `docs/BACKLOG.md`.
+
 ## 8. Seller 정산 API
 
 모든 seller settlement endpoint는 `JwtAuthGuard`가 적용된다.
@@ -234,7 +250,9 @@ seller/admin UI는 공통 `SettlementStatus`, `STATUS_LABEL`, `STATUS_COLOR`를 
 - 배송사진 완료 → `DELIVERED`
 - settlement 1건만 생성
 - 후속 `REVIEWED`가 동일 settlement를 중복 생성하지 않음
-- 취소/환불 경합에서 `paid` 역전 방지
+- 정상 취소/환불 경합에서 pending/confirmed settlement가 `cancelled`로 수렴
+- `paid` settlement 이후 환불은 별도 회계 정책을 따름
+- admin 강제 환불도 `ADMIN-FORCE-REFUND-CONSISTENCY` 해결 후 같은 회계 불변식에 수렴
 
 출시 상태 자체는 `docs/memory.md`와 활성 출시 PLAN을 따른다.
 
@@ -248,14 +266,19 @@ seller/admin UI는 공통 `SettlementStatus`, `STATUS_LABEL`, `STATUS_COLOR`를 
 - `apps/api/src/settlements/dto/query-settlements.dto.ts`
 - `apps/api/src/admin/admin.controller.ts`
 - `apps/api/src/admin/admin.service.ts`
+- `apps/api/src/orders/round-order-lifecycle.service.ts`
+- payment/redelivery refund paths
 - fee calculator / aggregator tests
 - seller/admin settlement UI
 - 관련 E2E
 - `firestore.indexes.json`
 
+금전 환불과 정산이 연결되는 변경은 payment provider 성공뿐 아니라 주문 상태, reservation/capacity, 재배송비, settlement 상태, 실패 재시도와 race를 함께 검증한다.
+
 ## 변경 이력
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-08-24 | admin force refund가 `cancelSettlement()` 및 정상 취소 lifecycle을 우회하는 P0 정산 불일치를 명시 |
 | 2026-08-23 | 자동 confirm, transaction 멱등성, paid 역전 방지, admin 지급 API, 현재 조회/권한 계약으로 정합화 |
 | 2026-03-28 | 초기 settlements 설계 초안 |
