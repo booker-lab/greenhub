@@ -476,7 +476,7 @@
 - **출시 기준 SHA**: `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`
 - **원격 검증**: 기존 `9fcee7e9eb2fa99c139da003e90bc7ad9fe39fff`의 Task 0.4 통과 기록을 보존한다. 현재 출시 기준 SHA에서는 [`e2e-round-direct.yml` run `32351887404`](https://github.com/booker-lab/greenhub/actions/runs/32351887404)가 `completed` / `success`로 종결됐고 chromium 26건·mobile 26건, 총 52건이 `skipped 0`·`unexpected 0`·`flaky 0`으로 통과했으며 양쪽 fixture cleanup도 `completed` / `success`였다. 동일 SHA `workflow_dispatch`는 1회, `run_attempt`는 1이고 이전 attempt·rerun·cancel은 없다.
 - **PR 재검증**: PR #11은 `OPEN`·초안·`MERGEABLE`·`CLEAN`이고 자동 검사 5개가 모두 `SUCCESS`였다.
-- **ALIGO 준비**: Task 1.2의 카카오 비즈니스 채널 승인은 완료됐으나 발신 프로필 등록·`senderkey` 확인부터 미실행이며, Task 1.3~1.4도 미착수
+- **ALIGO 준비**: 카카오 비즈니스 채널 승인, ALIGO 발신 프로필 1건 등록, `senderkey` 발급, 내부 논리 코드와 외부 `tpl_code` 매핑 분리 및 필수 본문 변수 검증 구현은 완료됐다. 회차 알림 템플릿 8종은 미등록·미승인이고, Task 1.3~1.4는 미착수다.
 - **Firebase 운영 반영**: Task 2.8 완료
 - **동일 SHA 운영 배포**: 미실행
 - **첫 회차 준비**: 미실행

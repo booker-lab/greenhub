@@ -73,8 +73,8 @@
 - `README.md`는 실제 workspace 구조와 현재 코드 스택에 맞게 정합화했다. `packages/shared`, `packages/ui`, `apps/e2e`, Mantine 9, 회차 직배송·operations·retention 실제 구조를 반영한다.
 - 이 `memory.md`는 현재 Git/GitHub·제품 상태와 문서 역할에 맞춰 정리했다.
 - `docs/PROJECT_MAP.md`는 Context router 역할만 유지하며 제품 진행 상태를 복제하지 않는다.
-- `docs/BACKLOG.md`는 오래된 완료 이력과 현재 우선순위가 섞여 있어 별도 로컬 정합화가 필요하다. 기존 내용을 손실하지 않도록 전체 파일을 검색·분류한 뒤 `ACTIVE / BLOCKED_EXTERNAL / NEXT / LATER / DONE_HISTORY / STALE_OR_SUPERSEDED` 기준으로 재구성한다.
-- 활성 PLAN/HANDOFF의 역사 기록은 보존한다. 현재 상태와 직접 충돌하는 부분이 발견될 때만 최소 범위에서 정합화한다.
+- `docs/BACKLOG.md`는 전체 파일을 검색·분류해 `ACTIVE / BLOCKED_EXTERNAL / NEXT / LATER / DONE_HISTORY / STALE_OR_SUPERSEDED` 기준으로 재구성했다. 기존 상세 기록은 보존 영역에 남겼다.
+- 활성 PLAN/HANDOFF의 역사 기록은 보존했고, 현재 상태와 충돌한 PLAN의 ALIGO 요약만 최신 HANDOFF와 정합화했다.
 
 ## 외부 승인 경계
 
@@ -90,7 +90,7 @@
 
 ## 다음 작업
 
-1. 로컬에서 `docs/BACKLOG.md` 전체를 실제 코드·현재 HANDOFF와 대조해 현재 미완료 우선순위 중심으로 정합화한다.
-2. 같은 작업에서 활성 PLAN/HANDOFF의 현재 상태 섹션만 점검하고 `memory.md`와 실제 충돌이 있을 때만 최소 수정한다.
-3. SSOT 문서 정합화가 끝난 뒤, 별도 외부 변경 승인을 받아 회차 알림 템플릿 8종 provider 등록·승인 → 격리 실제 알림톡/SMS fallback 검증 → 운영 변수 반영 → 최신 출시 SHA 원격 검증 순서로 재개한다.
-4. 모든 선행 게이트를 통과해도 운영 배포에는 별도의 `Task 3.1 승인`이 필요하다.
+1. 별도 외부 변경 승인을 받아 회차 알림 템플릿 8종을 provider에 등록·승인한다.
+2. 승인된 격리 수신자에게 실제 알림톡과 SMS fallback을 검증하고 운영 ALIGO 변수·템플릿 매핑을 반영한다.
+3. 현재 출시 대상 SHA에서 원격 round-direct 전체 E2E와 fixture cleanup을 다시 통과시킨다.
+4. 모든 선행 게이트를 통과해도 운영 배포에는 별도의 `Task 3.1 승인`이 필요하며, 이후 동일 SHA 배포·첫 회차 검수·`salesMode` 전환을 순서대로 수행한다.

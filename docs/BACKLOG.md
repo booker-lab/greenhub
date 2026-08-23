@@ -1,38 +1,68 @@
-# Green Hub — 앞으로 할 작업 백로그
+# Greenhub Backlog
 
-> 기준일: 2026-04-10 (Seller 주문 상태 변경 E2E 완료 — 준비 시작 + 강제 취소)
-> 완료 작업 전체 이력은 `CRITICAL_LOGIC.md`, `memory.md` 참조
+> 기준일: 2026-08-23 KST / 기준 브랜치: `codex/mvp-sales-round-direct`
+> 현재 상태의 정본은 `docs/memory.md`와 최신 HANDOFF다. 이 문서는 현재 출시 판단과 후속 작업을 분리해 기록한다.
 
----
+## 1. ACTIVE — 회차 직배송 MVP 출시 트랙
 
-## 우선순위 요약
+- 회차 직배송 구현은 현재 개발 브랜치의 API·consumer·seller·driver·shared에 존재한다.
+- 운영 출시는 `paused_external_review` 상태이며, 아래 출시 게이트를 모두 통과하기 전에는 `salesMode`를 `legacy`에서 바꾸지 않는다.
+- 마지막 원격 회차 전체 E2E 성공은 현재 HEAD의 성공으로 확장하지 않는다. 증거는 SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`, chromium 26건 + mobile 26건이다.
 
-| 순위 | 항목 | 범주 |
-|------|------|------|
-| ✅ | 소비자 앱 E2E 테스트 (카카오페이 결제 → seller 앱 처리) | 테스트 |
-| ✅ | 소비자 앱 Phase B — `/mypage` 주문 목록 + 타임라인 | consumer 앱 |
-| ✅ | Consumer 앱 카카오 로그인 E2E 검증 (greenlove.co.kr) | 인증 |
-| ✅ | Seller 앱 카카오 로그인 E2E 검증 (seller.greenlove.co.kr) | 인증 |
-| ✅ | Driver proxy admin 차단 버그 수정 (`proxy.ts` role 조건 수정) | 보안 |
-| ✅ | Driver 앱 카카오 로그인 E2E (admin 계정, /board 정상 진입) (2026-04-10) | 인증 |
-| ✅ | 네이버페이 파트너 가입 신청 완료 (심사 중 3~5 영업일) | 외부 연동 |
-| ✅ | Seller 주문 상태 변경 E2E — 준비 시작 + 강제 취소 (2026-04-10) | 테스트 |
-| ⭐ 1 | 네이버페이 채널키 발급 후 Vercel 환경변수 연결 | 외부 연동 |
-| ✅ | Seller 앱 admin 로그인 시 `/admin/stores` 리다이렉트 (루트 page.tsx role 분기) | 인증 |
-| ✅ | 프론트엔드 보안 취약점 Critical/High 수정 (SEC-01~07) | 보안 |
-| ✅ | 프론트엔드 보안 취약점 Medium 수정 (SEC-09~11) | 보안 |
-| ✅ | 프론트엔드 버그 수정 — BUG-01·02·04·08·09·10·12·15 수정 완료 | 버그 |
-| ✅ | 프론트엔드 UX 개선 — UX-01·02·06 수정 완료 | UX |
-| ✅ | 백엔드+인프라 보안 취약점 11건 수정 (2026-04-09) | 보안 |
-| ✅ | 보안 수정 후 E2E 검증 (결제·로그인·admin 3앱 접근) (2026-04-10) | 테스트 |
-| 💡 | 카드 결제 PG사 계약 | 외부 연동 |
-| 🔵 | 다중 판매자 상점 페이지 (소비자 앱) | Phase 2 |
-| 🟢 검증 | SETTLE-REFACTOR — 정산 confirm 배치 + 정합 갭(아래 §13). 구현 6태스크+S6 자동검증 종결(세션82), 런타임 전이 입증만 사용자 위임 | 정산/치명 |
-| 💡 향후 | API-LINT-BASELINE — API 전체 ESLint 기존 any/unsafe 부채 분리 정리 | DX/품질 |
-| 💡 향후 | LOAD-TEST-FORMAL — MVP 이후 정식 부하테스트 재개 조건 정리 | 성능/운영 |
-| 💡 향후 | NOTIFICATION-RETRY-POLICY — 회차 직배송 계획 종료 후 알림 재시도 정책 운영 강화 | 알림/운영 |
+## 2. BLOCKED_EXTERNAL — 현재 출시 차단
 
----
+1. ALIGO에서 실제 도달 가능한 회차 알림 템플릿 8종을 provider에 등록하고 모두 승인한다.
+2. 별도 승인된 격리 수신자를 대상으로 알림톡 정상 발송과 SMS fallback을 실제 검증한다.
+3. 검증된 운영 ALIGO 자격 증명 4개와 `ALIGO_TEMPLATE_CODES_JSON` 매핑을 값 원문 없이 운영 환경에 반영한다.
+4. 현재 출시 대상 SHA를 확정하고 같은 SHA의 원격 round-direct 전체 E2E와 fixture cleanup을 다시 통과한다.
+5. 별도 `Task 3.1 승인` 뒤 API·consumer·seller·driver를 같은 SHA로 운영 배포하고 읽기 전용 smoke를 통과한다.
+6. 운영 첫 회차를 생성·검수하고 `SCHEDULED`로 전환한다.
+7. 모든 선행 게이트와 최종 승인 뒤에만 `salesMode`를 `round_direct`로 전환한다.
+
+## 3. NEXT — 외부 게이트 이후 다음 작업
+
+- provider 승인 증거와 실제 발송 결과를 확인한 뒤 운영 변수 존재·매핑 검사를 수행한다.
+- 출시 SHA, 원격 자동 검사, Firebase 상태를 재조회한 뒤 동일 SHA 원격 E2E를 실행한다.
+- `Task 3.1 승인` 이후 운영 API·세 프런트 배포, 무변경 smoke, 첫 회차 검수, 역할·롤백 확인을 계획 순서대로 수행한다.
+- 최종 출시 판정과 초기 운영 관찰을 완료한 뒤에만 공개 링크와 `salesMode` 전환을 검토한다.
+
+## 4. LATER — Engineering Hardening
+
+현재 MVP 출시 차단과 분리한 후속 품질·운영 정비다.
+
+- `API-LINT-BASELINE`: 기존 API `any`/unsafe lint 부채 정리와 검증용 lint 스크립트 분리.
+- `LOAD-TEST-FORMAL`: 격리된 환경과 재개 조건을 갖춘 뒤 정식 부하테스트 수행.
+- `NOTIFICATION-RETRY-POLICY`: 현재 최소 알림 계약 종료 후 재시도·backoff·멱등성·관측 정책 고도화.
+- 남은 E2E 안정성·성능 경고 항목은 출시 차단으로 승격하지 않고 별도 검토한다.
+
+## 5. Phase 2 / Later
+
+현재 단일 판매자 MVP 출시와 직접 관계없는 항목이다.
+
+- 다중 판매자 상점·동적 `storeId` 구조.
+- 거점 계약 이후의 hub 노출·QR 픽업·지도 기반 위치 기능.
+- 외부 드라이버 고용 이후 드라이버 정산과 플랫폼 노동 모델 전환.
+- 카드 결제 PG 계약, 관리자 판매자 상세·기본 수수료율, 기타 후속 UX·운영 기능.
+
+## 6. DONE_HISTORY
+
+- 회차 직배송 코드·API·앱 흐름, 운영·보관 모듈, 알림 코드 매핑 분리와 필수 본문 변수 검증 구현 완료.
+- 카카오 비즈니스 채널 승인, ALIGO 발신 프로필 1건 등록, `senderkey` 발급 완료.
+- 최신 main 통합, Firebase 인덱스·규칙 반영, PR 자동 검사와 기존 원격 E2E 증거는 활성 HANDOFF에 기록되어 있다.
+- 기존 완료 상세와 변경 이력은 아래 보존 영역 및 `docs/CRITICAL_LOGIC.md`·archive 문서를 유지한다.
+
+## 7. STALE_OR_SUPERSEDED
+
+- `2026-04-10` 기준일과 당시 우선순위 요약은 현재 기준이 아니다.
+- 네이버페이 파트너 신청·채널키·Vercel 환경변수 항목은 회차 직배송 MVP 출시 게이트가 아니며 현재 1순위가 아니다. 결제 확장으로 다시 선택될 때 별도 상태 확인 후 재활성화한다.
+- 과거의 “카카오 비즈니스 채널 심사 중”과 ALIGO 발신 프로필 미등록 표현은 당시 상태를 보존한 역사 기록이며 현재 상태 주장이 아니다.
+- 기존 `SETTLE-REFACTOR`의 “미구현” 표기는 구현·자동검증 완료 이후의 stale 표기다. 남은 육안 확인은 출시 blocker가 아니다.
+- 검증용 시드 정리와 과거 일반 알림톡 등록 항목은 현재 활성 출시 게이트로 재사용하지 않는다. 최신 HANDOFF·PLAN의 8종 템플릿 게이트를 따른다.
+
+## 8. 기존 상세 항목 보존
+
+아래 항목은 과거 백로그의 상세 구현 기록과 후속 후보를 손실 없이 보존한 영역이다. 체크박스와 당시 날짜는 역사·참고용이며, 현재 상태·우선순위·출시 차단 여부는 위 1~7절만 정본으로 사용한다.
+
 
 ## NOTIFICATION-RETRY-POLICY — 회차 직배송 계획 종료 후 알림 재시도 정책 운영 강화
 
