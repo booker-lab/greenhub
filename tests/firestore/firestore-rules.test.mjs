@@ -117,10 +117,73 @@ async function seedFixtures() {
         preparedAt: '2026-08-23T11:00:00.000Z',
         updatedAt: '2026-08-23T11:00:00.000Z',
       },
-      'users/driver-lifecycle': {
-        id: 'driver-lifecycle',
+      'orders/order-pickup-hub': {
+        storeId: 'store-1',
+        userId: 'user-5',
+        status: 'PREPARING',
+        driverId: null,
+        deliveryMethod: 'hub',
+        preparedAt: '2026-08-23T09:00:00.000Z',
+        updatedAt: '2026-08-23T09:00:00.000Z',
+      },
+      'users/driver-1': {
+        id: 'driver-1',
+        role: 'driver',
+        driverApproved: true,
+        suspended: false,
+      },
+      'users/driver-2': {
+        id: 'driver-2',
+        role: 'driver',
+        driverApproved: true,
+        suspended: false,
+      },
+      'users/pending-driver': {
+        id: 'pending-driver',
         role: 'driver',
         driverApproved: false,
+        suspended: false,
+      },
+      'users/pending-driver-2': {
+        id: 'pending-driver-2',
+        role: 'driver',
+        driverApproved: false,
+        suspended: false,
+      },
+      'users/missing-claim-driver': {
+        id: 'missing-claim-driver',
+        role: 'driver',
+        driverApproved: true,
+        suspended: false,
+      },
+      'users/driver-token-false-db-true': {
+        id: 'driver-token-false-db-true',
+        role: 'driver',
+        driverApproved: true,
+        suspended: false,
+      },
+      'users/driver-stale-approval': {
+        id: 'driver-stale-approval',
+        role: 'driver',
+        driverApproved: true,
+        suspended: false,
+      },
+      'users/driver-lifecycle-approval': {
+        id: 'driver-lifecycle-approval',
+        role: 'driver',
+        driverApproved: false,
+        suspended: false,
+      },
+      'users/driver-lifecycle-suspended': {
+        id: 'driver-lifecycle-suspended',
+        role: 'driver',
+        driverApproved: true,
+        suspended: false,
+      },
+      'users/driver-lifecycle-role': {
+        id: 'driver-lifecycle-role',
+        role: 'driver',
+        driverApproved: true,
         suspended: false,
       },
       'saleRounds/round-1': { storeId: 'store-1', status: 'OPEN' },
@@ -386,6 +449,18 @@ test('driver 화면의 실제 pickup·assigned query는 허용 범위를 벗어�
     where('status', '==', 'DELIVERING'),
     where('driverId', '==', 'driver-1'),
   );
+  const directPickupQuery = query(
+    collection(approvedDriver, 'orders'),
+    where('status', '==', 'PREPARING'),
+    where('deliveryMethod', '==', 'direct'),
+    where('driverId', '==', null),
+  );
+  const hubPickupQuery = query(
+    collection(approvedDriver, 'orders'),
+    where('status', '==', 'PREPARING'),
+    where('deliveryMethod', '==', 'hub'),
+    where('driverId', '==', null),
+  );
   const unboundedQuery = query(
     collection(approvedDriver, 'orders'),
     where('status', 'in', ['PREPARING', 'DELIVERING']),
@@ -394,10 +469,12 @@ test('driver 화면의 실제 pickup·assigned query는 허용 범위를 벗어�
   const pickupSnapshot = await assertSucceeds(getDocs(pickupQuery));
   const boardAssignedSnapshot = await assertSucceeds(getDocs(boardAssignedQuery));
   const mapAssignedSnapshot = await assertSucceeds(getDocs(mapAssignedQuery));
+  const directPickupSnapshot = await assertSucceeds(getDocs(directPickupQuery));
+  const hubPickupSnapshot = await assertSucceeds(getDocs(hubPickupQuery));
 
   assert.deepEqual(
     pickupSnapshot.docs.map((snapshot) => snapshot.id),
-    ['order-store-1'],
+    ['order-store-1', 'order-pickup-hub'],
   );
   assert.deepEqual(
     boardAssignedSnapshot.docs.map((snapshot) => snapshot.id),
@@ -407,37 +484,106 @@ test('driver 화면의 실제 pickup·assigned query는 허용 범위를 벗어�
     mapAssignedSnapshot.docs.map((snapshot) => snapshot.id),
     ['order-store-2'],
   );
+  assert.deepEqual(
+    directPickupSnapshot.docs.map((snapshot) => snapshot.id),
+    ['order-store-1'],
+  );
+  assert.deepEqual(
+    hubPickupSnapshot.docs.map((snapshot) => snapshot.id),
+    ['order-pickup-hub'],
+  );
   await assertFails(getDocs(unboundedQuery));
 });
 
-test('승인 상태 변경 뒤 기존 claim은 stale 상태로 남고 새 claim만 Rules 결과를 바꾼다', async () => {
-  const oldPendingToken = testEnvironment
-    .authenticatedContext('driver-lifecycle', { role: 'driver', driverApproved: false })
+test('이미 승인된 token도 users.driverApproved가 false가 되면 주문 read가 즉시 거부된다', async () => {
+  const driverToken = testEnvironment
+    .authenticatedContext('driver-stale-approval', { role: 'driver', driverApproved: true })
     .firestore();
 
-  await assertFails(getDoc(doc(oldPendingToken, 'orders', 'order-store-1')));
+  await assertSucceeds(getDoc(doc(driverToken, 'orders', 'order-store-1')));
 
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
-    await updateDoc(doc(context.firestore(), 'users', 'driver-lifecycle'), {
-      driverApproved: true,
+    await updateDoc(doc(context.firestore(), 'users', 'driver-stale-approval'), {
+      driverApproved: false,
     });
   });
 
-  // 기존 token은 users 문서의 변경을 재조회하지 않으므로 계속 거부된다.
-  await assertFails(getDoc(doc(oldPendingToken, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(driverToken, 'orders', 'order-store-1')));
 
-  const newApprovedToken = testEnvironment
-    .authenticatedContext('driver-lifecycle', { role: 'driver', driverApproved: true })
+  const staleQuery = query(
+    collection(driverToken, 'orders'),
+    where('status', '==', 'PREPARING'),
+    where('deliveryMethod', '==', 'direct'),
+    where('driverId', '==', null),
+  );
+  await assertFails(getDocs(staleQuery));
+});
+
+test('이미 승인된 token도 users.suspended가 true가 되면 주문 read가 즉시 거부된다', async () => {
+  const driverToken = testEnvironment
+    .authenticatedContext('driver-lifecycle-suspended', {
+      role: 'driver',
+      driverApproved: true,
+    })
     .firestore();
-  await assertSucceeds(getDoc(doc(newApprovedToken, 'orders', 'order-store-1')));
+
+  await assertSucceeds(getDoc(doc(driverToken, 'orders', 'order-store-1')));
 
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
-    await updateDoc(doc(context.firestore(), 'users', 'driver-lifecycle'), {
-      driverApproved: false,
+    await updateDoc(doc(context.firestore(), 'users', 'driver-lifecycle-suspended'), {
       suspended: true,
     });
   });
 
-  // 승인 철회·정지 뒤에도 이미 발급된 true claim은 Rules에서 계속 유효하다.
-  await assertSucceeds(getDoc(doc(newApprovedToken, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(driverToken, 'orders', 'order-store-1')));
+});
+
+test('이미 승인된 token도 users.role이 driver가 아니게 되면 주문 read가 즉시 거부된다', async () => {
+  const driverToken = testEnvironment
+    .authenticatedContext('driver-lifecycle-role', { role: 'driver', driverApproved: true })
+    .firestore();
+
+  await assertSucceeds(getDoc(doc(driverToken, 'orders', 'order-store-1')));
+
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users', 'driver-lifecycle-role'), {
+      role: 'consumer',
+    });
+  });
+
+  await assertFails(getDoc(doc(driverToken, 'orders', 'order-store-1')));
+});
+
+test('users 문서가 없거나 token claim이 false이면 현재 DB가 승인 상태여도 거부된다', async () => {
+  const missingUserToken = testEnvironment
+    .authenticatedContext('driver-no-user', { role: 'driver', driverApproved: true })
+    .firestore();
+  const falseClaimToken = testEnvironment
+    .authenticatedContext('driver-token-false-db-true', {
+      role: 'driver',
+      driverApproved: false,
+    })
+    .firestore();
+
+  await assertFails(getDoc(doc(missingUserToken, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(falseClaimToken, 'orders', 'order-store-1')));
+});
+
+test('미승인 users가 승인된 뒤 새 승인 token만 주문 read를 허용한다', async () => {
+  const oldToken = testEnvironment
+    .authenticatedContext('driver-lifecycle-approval', { role: 'driver', driverApproved: false })
+    .firestore();
+
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users', 'driver-lifecycle-approval'), {
+      driverApproved: true,
+      suspended: false,
+    });
+  });
+
+  await assertFails(getDoc(doc(oldToken, 'orders', 'order-store-1')));
+  const newToken = testEnvironment
+    .authenticatedContext('driver-lifecycle-approval', { role: 'driver', driverApproved: true })
+    .firestore();
+  await assertSucceeds(getDoc(doc(newToken, 'orders', 'order-store-1')));
 });
