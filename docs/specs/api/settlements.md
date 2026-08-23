@@ -199,7 +199,9 @@ GET /stores/:storeId/settlements/summary?date=<date>
 
 ## 9. Admin 정산 API
 
-admin controller 전체는 `JwtAuthGuard + RolesGuard + @Roles('admin')`으로 보호된다.
+admin controller 전체에는 `JwtAuthGuard + RolesGuard + @Roles('admin')` 구현이 적용된다.
+
+2026-08-24 감사 기준 이 privileged mutation server boundary의 직접 거부 회귀는 충분하지 않아 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` P0 `COVERAGE GAP`으로 추적한다. UI redirect를 서버 authorization 전체의 직접 증거로 사용하지 않는다.
 
 ### 목록
 
@@ -215,7 +217,7 @@ store/date filter를 지원하며 `settledAt DESC`, 최대 500건을 조회한�
 PATCH /admin/settlements/:settlementId/pay
 ```
 
-`markAsPaid()`의 현재 계약:
+`markAsPaid()`의 현재 구현:
 
 - settlement 없음 → not found
 - 이미 `paid` → 거부
@@ -223,7 +225,23 @@ PATCH /admin/settlements/:settlementId/pay
 - transaction에서 status 재확인 후 `paid`
 - `paidAt`, `updatedAt` 기록
 
-즉, `pending → paid` 직접 전환은 허용하지 않는다.
+즉 코드상 `pending → paid` 직접 전환은 허용하지 않는다.
+
+### 검증 상태 — `IMPLEMENTED / UNVERIFIED` + P0 `COVERAGE GAP`
+
+이번 감사에서 `apps/api/src/admin`에 전용 service/controller spec을 확인하지 못했고, seller settlements Playwright는 UI 날짜·탭 smoke 중심이다. 따라서 위 금전 상태 전이 구현을 `VERIFIED`로 승격하지 않는다.
+
+`ADMIN-PRIVILEGED-MUTATION-COVERAGE` 완료 시 최소 다음을 직접 고정한다.
+
+- missing settlement 거부
+- `pending|cancelled|paid` 거부
+- `confirmed → paid` 정상 성공
+- transaction에서 fresh status 재확인
+- 동시 지급 요청이 한 번만 안정적으로 수렴
+- invalid state/invalid role side effect 0
+- 실제 controller guard + service 조합에서 admin만 mutation에 도달
+
+증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
 ## 10. 인덱스
 
@@ -253,6 +271,7 @@ seller/admin UI는 공통 `SettlementStatus`, `STATUS_LABEL`, `STATUS_COLOR`를 
 - 정상 취소/환불 경합에서 pending/confirmed settlement가 `cancelled`로 수렴
 - `paid` settlement 이후 환불은 별도 회계 정책을 따름
 - admin 강제 환불도 `ADMIN-FORCE-REFUND-CONSISTENCY` 해결 후 같은 회계 불변식에 수렴
+- admin 지급은 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` 해결 후 direct status/race 증거를 포함
 
 출시 상태 자체는 `docs/memory.md`와 활성 출시 PLAN을 따른다.
 
@@ -266,19 +285,23 @@ seller/admin UI는 공통 `SettlementStatus`, `STATUS_LABEL`, `STATUS_COLOR`를 
 - `apps/api/src/settlements/dto/query-settlements.dto.ts`
 - `apps/api/src/admin/admin.controller.ts`
 - `apps/api/src/admin/admin.service.ts`
+- `apps/api/src/common/guards/roles.guard.ts`
 - `apps/api/src/orders/round-order-lifecycle.service.ts`
 - payment/redelivery refund paths
 - fee calculator / aggregator tests
 - seller/admin settlement UI
-- 관련 E2E
+- 관련 unit/API E2E/Playwright
 - `firestore.indexes.json`
 
 금전 환불과 정산이 연결되는 변경은 payment provider 성공뿐 아니라 주문 상태, reservation/capacity, 재배송비, settlement 상태, 실패 재시도와 race를 함께 검증한다.
+
+admin 지급 상태 전이는 코드의 transaction 존재만으로 `VERIFIED` 처리하지 않고 정상·거부·동시성·authorization 경계를 직접 검증한다.
 
 ## 변경 이력
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-08-24 | admin `confirmed → paid` 구현과 직접 검증 증거를 분리해 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` P0 COVERAGE GAP에 연결 |
 | 2026-08-24 | admin force refund가 `cancelSettlement()` 및 정상 취소 lifecycle을 우회하는 P0 정산 불일치를 명시 |
 | 2026-08-23 | 자동 confirm, transaction 멱등성, paid 역전 방지, admin 지급 API, 현재 조회/권한 계약으로 정합화 |
 | 2026-03-28 | 초기 settlements 설계 초안 |

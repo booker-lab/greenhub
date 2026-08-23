@@ -34,46 +34,64 @@
 
 ## 현재 확인된 출시 P0
 
-### 1. 재배송비 결제·재개 상태머신
+### 1. Driver 승인·세션 권한 — 최우선 security coupling
+
+관리자 승인 전 driver 권한을 얻을 수 없어야 하지만 현재 세 경로가 확인됐다.
+
+- 공개 email `POST /auth/register`가 `role: driver`를 허용하고 승인 gate 없이 driver user 생성 가능.
+- 공개 `POST /auth/login`은 `driverApproved`를 확인하지 않고 `role=driver` JWT 발급.
+- Kakao는 신규 driver를 `driverApproved: true`로 만들고 legacy 승인 필드 누락 driver도 로그인 중 자동 승인.
+
+refresh/Firebase custom claims는 authoritative user 상태를 재검증하지 않는 stale authorization 문제도 있다.
+
+**관리자 승인 gate = P0 IMPLEMENTATION FINDING**, suspension/role/store/approval revocation = **P0 DECISION REQUIRED + remediation**.
+
+이 P0는 broad driver Firestore read가 남아 있는 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`과 결합 위험이 크므로 우선 함께 닫는다.
+
+정본: `docs/specs/api/auth.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
+
+### 2. 주문 direct Firestore read·개인정보 최소화
+
+API driver read는 배정 경계가 있고 직접 테스트로 `VERIFIED`지만 current Rules는 driver role에 broad order read를 허용하며 seller/driver frontend는 raw document를 사용한다.
+
+**시스템 전체 driver read authorization + seller/driver data minimization = P0 IMPLEMENTATION FINDING**.
+
+API query authorization 자체는 `VERIFIED`를 유지하며 direct Firestore 경계와 혼동하지 않는다.
+
+### 3. 재배송비 결제·재개 상태머신
 
 운영 계약은 고객 책임 유료 재배송에서 `결제 전 재배송 금지`를 요구한다.
 
-2026-08-24 추가 감사에서 다음 두 우회/불일치가 확인됐다.
+2026-08-24 감사에서 다음 두 우회/불일치가 확인됐다.
 
 - driver `DELIVERY_HELD → DELIVERING`: charge `PAID` 확인 없음 + UI `배송 재개` 항상 노출.
-- seller `DELIVERY_HELD → PREPARING`: 고객 책임+양수 재배송비에서도 현재 테스트가 정상 성공으로 고정하며 hold를 해소하고 held counter를 줄임. 이 전환이 `ORDER_REDELIVERY_PAYMENT_REQUESTED` 알림을 만들지만 charge 생성 API와 consumer 결제 UI는 `status === DELIVERY_HELD`를 요구하므로 전환 뒤 결제가 불가능해진다. 이후 `PREPARING → DELIVERING`도 과거 미결제 hold를 확인하지 않는다.
+- seller `DELIVERY_HELD → PREPARING`: 고객 책임+양수 재배송비에서도 성공하며 hold를 해소하지만, charge 생성 API와 consumer 결제 UI는 `status === DELIVERY_HELD`를 요구해 payment-request 뒤 결제 dead-end가 가능하다. 이후 `PREPARING → DELIVERING`도 과거 미결제 hold를 확인하지 않는다.
 
-따라서 **`ORDER-REDELIVERY-PAID-RESUME-GATE`는 단순 PAID guard가 아니라 P0 재배송 상태머신 `IMPLEMENTATION FINDING`**이다.
-
-완료 시 payment-required 상태는 결제 전 사라지지 않아야 하며, payment-request 알림 뒤 consumer 결제가 실제 가능해야 하고, `HELD→DELIVERING` 및 `HELD→PREPARING→DELIVERING` 등 모든 배송 시작 경로가 동일 PAID gate를 통과해야 한다.
+따라서 **`ORDER-REDELIVERY-PAID-RESUME-GATE` = P0 재배송 상태머신 `IMPLEMENTATION FINDING`**이다.
 
 정본: `docs/specs/api/orders.md`, `docs/BACKLOG.md`, 운영 근거 `docs/specs/ops/mvp-sales-round-runbook.md`.
 
-### 2. 관리자 강제 환불 lifecycle
+### 4. 관리자 강제 환불 lifecycle
 
 admin refund는 본 결제 환불 뒤 주문을 직접 `CANCELLED` write하며 정상 cancellation의 추가 charge·reservation/capacity·held counter·settlement 후속효과를 재사용하지 않는다.
 
 **`ADMIN-FORCE-REFUND-CONSISTENCY` = P0 IMPLEMENTATION FINDING**.
 
-### 3. Driver 승인·세션 권한
+### 5. Admin privileged mutation coverage
 
-신규/legacy driver 자동 승인 경로와 refresh/Firebase stale claims 수렴 문제가 있다.
+`AdminController`의 JWT + admin role guard와 `markAsPaid()` transaction 구현은 존재한다. 그러나 admin 전용 server unit/API E2E가 없고 현재 Playwright admin 테스트는 UI redirect/read smoke 중심이라 high-impact mutation의 non-admin 직접 거부·side-effect 0 및 settlement 지급 상태/race를 직접 고정하지 않는다.
 
-**관리자 승인 gate = P0 IMPLEMENTATION FINDING**, suspension/role/store/approval revocation = **P0 DECISION REQUIRED + remediation**.
+**`ADMIN-PRIVILEGED-MUTATION-COVERAGE` = IMPLEMENTED / UNVERIFIED + P0 COVERAGE GAP**.
 
-### 4. 주문 direct Firestore read·개인정보 최소화
+정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
-API driver read는 배정 경계가 있으나 current Rules는 driver role에 broad order read를 허용하며 seller/driver frontend는 raw document를 사용한다.
-
-**시스템 전체 driver read authorization + seller/driver data minimization = P0 IMPLEMENTATION FINDING**.
-
-### 5. 결제 finalization provider 상태 방어
+### 6. 결제 finalization provider 상태 방어
 
 `finalizePaidOrder()` boundary가 비`PAID` provider 입력을 자체 차단하지 않는다.
 
-**`PAYMENT-FINALIZATION-PAID-GUARD` = P0**.
+**`PAYMENT-FINALIZATION-PAID-GUARD` = P0 IMPLEMENTATION FINDING**.
 
-### 6. PortOne webhook signature 검증 coverage
+### 7. PortOne webhook signature 검증 coverage
 
 webhook signature 구현은 raw body + id/timestamp/signature, timestamp ±5분, HMAC SHA-256 timing-safe 검증을 사용한다. 그러나 현재 회차 E2E의 signature verifier는 mock이며 real verifier의 valid HMAC 성공·non-empty invalid HMAC 거부·body/id/timestamp 변조 거부를 직접 고정한 증거가 부족하다.
 
@@ -81,13 +99,13 @@ webhook signature 구현은 raw body + id/timestamp/signature, timestamp ±5분,
 
 정본: `docs/specs/api/payments.md`; 증거: `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`.
 
-### 7. 주문 mutation authorization 회귀
+### 8. 주문 mutation authorization 회귀
 
 ownership guard는 구현돼 있으나 타-store seller·비담당 driver·first-claim 외 action과 거부 side-effect 0 직접 회귀가 부족하다.
 
 **`ORDER-MUTATION-AUTHORIZATION-COVERAGE` = IMPLEMENTED / UNVERIFIED + P0 COVERAGE GAP**.
 
-### 8. GitHub main protection
+### 9. GitHub main protection
 
 repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required check/force-push·delete 차단은 Issue #32가 남아 있다.
 
@@ -136,10 +154,11 @@ repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required 
 
 ## 다음 작업
 
-1. `ORDER-REDELIVERY-PAID-RESUME-GATE`를 **상태머신 전체** 기준으로 구현·직접 회귀·`main` 통합.
-2. `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`를 포함한 나머지 P0를 ALIGO 심사와 병렬 해결.
-3. Issue #32.
-4. ALIGO 상태 재조회 → 승인 뒤 실제 알림톡/SMS fallback.
-5. P0 결과 기준 legal 재정합화.
-6. actual release SHA → E2E 52+cleanup → Firebase 재조회 → 승인된 production 설정/배포.
-7. 첫 회차 검수 → 최종 승인 → `salesMode: round_direct`.
+1. `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION` + `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION` 결합 위험을 최우선으로 해결·직접 회귀·`main` 통합.
+2. `ORDER-REDELIVERY-PAID-RESUME-GATE` 상태머신 전체 구현·직접 회귀.
+3. `ADMIN-PRIVILEGED-MUTATION-COVERAGE`, webhook coverage, payment finalization, admin refund, order mutation 등 나머지 P0를 ALIGO 심사와 병렬 해결.
+4. Issue #32.
+5. ALIGO 상태 재조회 → 승인 뒤 실제 알림톡/SMS fallback.
+6. P0 결과 기준 legal 재정합화.
+7. actual release SHA → E2E 52+cleanup → Firebase 재조회 → 승인된 production 설정/배포.
+8. 첫 회차 검수 → 최종 승인 → `salesMode: round_direct`.

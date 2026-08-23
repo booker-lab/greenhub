@@ -18,13 +18,14 @@
 | ID | 게이트 | 상태 |
 |---|---|---|
 | 0A | GitHub `main` protection/ruleset | 미완료 — Issue #32 |
-| 0B | payment finalization 비`PAID` 차단 | 미완료 — P0 |
+| 0B | payment finalization 비`PAID` 차단 | 미완료 — P0 FINDING |
 | 0C | order mutation authorization 직접 거부 회귀 | 미완료 — P0 GAP |
 | 0D | order direct Firestore read·최소화 | 미완료 — P0 FINDING |
 | 0E | driver 승인 + session/claims revocation | 미완료 — P0 FINDING/DECISION |
 | 0F | admin force-refund lifecycle | 미완료 — P0 FINDING |
 | 0G | 유료 재배송 payment-request/hold-resolution/resume 상태머신 | 미완료 — P0 FINDING |
 | 0H | payment webhook real-signature coverage | 미완료 — P0 COVERAGE GAP |
+| 0I | admin privileged mutation authorization + settlement pay coverage | 미완료 — P0 COVERAGE GAP |
 | 1 | ALIGO 8종 최종 승인 | 검수중 |
 | 2 | 실제 알림톡 | 미실행 |
 | 3 | SMS fallback | 미실행 |
@@ -40,15 +41,17 @@
 
 1. repository 변경은 최신 `main` 기반 branch+PR.
 2. direct `main` 금지.
-3. 0A~0H는 ALIGO 심사와 병렬 가능.
+3. 0A~0I는 ALIGO 심사와 병렬 가능.
 4. P0를 문서/UI 변경만으로 완료 처리하지 않는다.
-5. 금전·권한 불변식은 server boundary + 직접 거부/정상 회귀가 필요하다.
-6. webhook auth는 mock E2E만으로 `VERIFIED` 처리하지 않고 real verifier의 valid/invalid 양방향 증거가 필요하다.
-7. actual release SHA는 0A~0H + legal 해결 뒤 고정한다.
-8. exact SHA E2E 52+cleanup 전 production 금지.
-9. production은 exact SHA/artifact + 별도 승인.
-10. provider metadata SHA 불일치 시 traffic 전환 금지.
-11. 첫 회차 `SCHEDULED` 전 `salesMode` 전환 금지.
+5. 금전·권한 불변식은 server boundary + 직접 거부/정상/동시성 회귀가 필요하다.
+6. driver 관리자 승인 계약은 public register/login, Kakao, refresh, Firebase claims까지 하나의 authorization lifecycle로 검증한다.
+7. admin role boundary는 UI redirect만으로 `VERIFIED` 처리하지 않는다.
+8. webhook auth는 mock E2E만으로 `VERIFIED` 처리하지 않고 real verifier의 valid/invalid 양방향 증거가 필요하다.
+9. actual release SHA는 0A~0I + legal 해결 뒤 고정한다.
+10. exact SHA E2E 52+cleanup 전 production 금지.
+11. production은 exact SHA/artifact + 별도 승인.
+12. provider metadata SHA 불일치 시 traffic 전환 금지.
+13. 첫 회차 `SCHEDULED` 전 `salesMode` 전환 금지.
 
 ## Phase 0 — 코드·권한·금전 안전성
 
@@ -77,7 +80,17 @@
 
 ### Task 0.7 — Driver approval·session revocation
 - Backlog: `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
-- Coupling: Task 0.6
+- Priority: highest security coupling with Task 0.6
+- Current bypasses:
+  - public email `register(role=driver) → login` can issue driver JWT without approval
+  - new Kakao driver auto-approved
+  - legacy missing approval flag auto-approved during login
+  - refresh/custom-token can preserve stale authorization claims
+- Required:
+  - public registration cannot create usable driver authorization pre-approval
+  - unapproved email/Kakao driver cannot receive driver JWT/Firebase claim
+  - login-side automatic approval removed
+  - authoritative refresh/claim revocation policy + direct pre/post approval tests
 - Status: todo_code_security
 
 ### Task 0.8 — Admin force-refund lifecycle
@@ -122,6 +135,20 @@
   - duplicate webhook 멱등 회귀 유지
 - Status: todo_test_security
 
+### Task 0.11 — Admin privileged mutation coverage
+- Backlog: `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
+- Contract: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`
+- Evidence: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`
+- Goal: admin role server boundary와 settlement 지급 금전 상태 전이를 직접 검증
+- Required:
+  - unauthenticated admin mutation 401
+  - consumer/seller/driver admin mutation 403 + side effect 0
+  - admin happy path/service validation 도달
+  - settlement missing/invalid states 거부, `confirmed → paid` 성공
+  - transaction fresh-read + concurrent pay 한 번만 수렴
+  - 실제 guard를 mock으로 우회하지 않는 integration 증거
+- Status: todo_test_security_financial
+
 ## Phase 1 — ALIGO
 
 1. 8종 승인 (`blocked_external_review`)
@@ -132,11 +159,11 @@
 ## Phase 2 — legal·release SHA
 
 ### Task 2.1 — 판매 활성화 legal
-- Dependency: ALIGO 실제 검증 + Task 0.6 + 0.8 + 0.9
+- Dependency: ALIGO 실제 검증 + Task 0.6 + 0.7 + 0.8 + 0.9
 - Required: 주문/환불/재배송비/보류 실제 상태머신, 개인정보 처리, ALIGO, seller/driver 최소 접근, legal tests
 
 ### Task 2.2 — actual release SHA
-- Dependency: Task 0.3~0.10 + 2.1
+- Dependency: Task 0.3~0.11 + 2.1
 
 ### Task 2.3 — exact SHA E2E
 - Goal: chromium 26 + mobile 26 = 52, cleanup success
@@ -166,9 +193,12 @@
 
 ## 최종 완료 기준
 
-- Task 0A~0H 직접 증거와 함께 `main` 포함.
+- Task 0A~0I 직접 증거와 함께 `main` 포함.
+- 승인 전 public email/Kakao driver authorization과 stale Firebase claims 우회 해결.
+- driver 권한과 order direct-read 최소화가 결합 위험 없이 fail-closed.
 - 유료 재배송 payment request가 실제 결제 가능한 상태를 유지하고, 결제 전 모든 배송 시작 경로가 fail-closed.
 - webhook signature valid/invalid real-verifier evidence 포함.
+- admin privileged mutation role boundary + settlement pay 직접 증거 포함.
 - admin refund·payment finalization·권한/개인정보 P0 해결.
 - Issue #32 완료.
 - ALIGO 승인+실발송/fallback.
