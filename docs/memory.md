@@ -6,7 +6,7 @@
 
 ## 검증 기준
 
-- Git·GitHub·Vercel 직접 재검증: `2026-08-23 KST`
+- Git·GitHub·Vercel·current 코드 직접 재검증: `2026-08-23 KST`
 - ALIGO 상태: 2026-08-23 provider 등록 결과
 - 운영 상태 변경은 별도 승인 없이 수행하지 않는다.
 
@@ -21,6 +21,34 @@
 - 기존 `codex/mvp-sales-round-direct`는 통합 완료 branch이며 새 작업 기준 branch로 재사용하지 않는다.
 - 새 작업은 최신 `main`에서 목적별 branch를 만들고 PR로 통합한다.
 
+## 현재 P0 보안 갭 — F-001
+
+2026-08-23 current `main` 직접 재검증에서 driver 승인·주문 접근 계약이 아직 안전한 목표 상태로 통합되지 않은 것을 확인했다.
+
+현재 `main` 사실:
+
+- 신규 Kakao driver를 `driverApproved: true`로 생성한다.
+- 기존 driver에 `driverApproved`가 없으면 로그인 시 `true`로 자동 보정한다.
+- `/driver/orders`는 `@Roles('driver', 'seller')`다.
+- `DriverService.getOrders(driverId, ...)`는 `driverId`를 실제 쿼리/필터에 사용하지 않고 요청 상태의 전체 주문을 반환한다.
+- Firestore Rules는 `request.auth.token.role == 'driver'`이면 모든 주문 read를 허용한다.
+
+따라서 과거 문서에 적힌 “미승인 driver 차단·본인 주문만 접근”을 현재 구현 완료 상태로 간주하지 않는다.
+
+추적: Issue #37 `P0: F-001 driver 승인·주문 접근 보안 remediation을 main에 통합`.
+
+Issue #37 완료 전에는 actual release SHA 고정, release-SHA 원격 E2E 52건, production 배포로 진행하지 않는다.
+
+목표 계약:
+
+- 신규 driver 기본 `driverApproved: false`
+- API 요청에서 승인·정지 상태 최신 재검증
+- Firebase token/Rules에서도 최신 승인·정지 상태 재검증
+- `/driver/orders` driver 전용 + 서버-side 허용 주문 필터
+- 주문 선점 transaction 경쟁 조건 방지
+- suspend/refresh/session 무효화 범위 검증
+- 관련 API/Rules tests 통과 후 최신 `main`에 PR 통합
+
 ## 배포 안전성 상태
 
 2026-08-23 감사에서 `main` push가 문서 변경만으로도 Vercel production-target deployment와 Preview/E2E 연쇄 실행을 만들 수 있음을 확인했다.
@@ -33,9 +61,7 @@ repo-side remediation은 완료됐다.
 - `AGENTS.md`: 문서-only 포함 direct `main` commit/push 금지, branch+PR 통합 요구
 - `deployment-safety.yml` + `verify-deployment-safety.mjs`: 안전 invariant 검증
 - PR #31: 세 앱 순수 docs/Markdown 변경의 Vercel build skip `ignoreCommand` 추가
-- pure-docs branch commit `ebf44c104b2e8758733fd14501fd0e820d575ae4` 이후 세 Vercel 프로젝트 신규 deployment 0건 확인
-- docs-only PR #33 merge 이후에도 세 Vercel 프로젝트 신규 deployment 0건 확인
-- PR #33 생성 시각은 2026-08-23 13:57 UTC이고, 당시 최신 `preview` sync commit `b1c92cedf01f3c2ce596251bcc86066314ebc40f`의 시각은 13:55:32 UTC다. PR #33 이후 더 새로운 preview sync가 없어 docs-only main merge가 `sync-preview`를 발화하지 않았음을 확인했다.
+- 반복된 docs-only PR merge에서 세 Vercel 프로젝트 신규 deployment 0건과 `preview` 미동기화를 확인했다.
 
 Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 생길 수 있지만, 실제 deployment가 0건이면 배포 회귀로 판정하지 않는다. `Deployment safety guard` 자체 성공 여부와 Vercel deployment 목록을 분리해 본다.
 
@@ -82,7 +108,7 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 - 실제 알림톡 정상 발송·SMS fallback 검증: 미실행
 - 운영 ALIGO 자격 증명 4개·`ALIGO_TEMPLATE_CODES_JSON`: 미반영
 
-현재 출시 흐름의 외부 차단점은 ALIGO 8종 심사 완료다.
+현재 출시 흐름의 외부 차단점은 ALIGO 8종 심사 완료다. 다만 내부적으로는 Issue #37 F-001과 Issue #32 branch protection도 출시 전 필수 P0다.
 
 ## 판매 활성화 법적 문서 상태
 
@@ -99,7 +125,7 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 - 마지막 전체 원격 회차 E2E 성공 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`.
 - chromium 26 + mobile 26 = 총 52건 및 양쪽 fixture cleanup 성공.
 - 이 과거 run을 현재 release SHA 검증으로 확장하지 않는다.
-- 법적 페이지까지 포함한 실제 출시 대상 SHA를 고정한 뒤 52건+cleanup을 다시 통과해야 한다.
+- Issue #37, legal 페이지, Issue #32까지 포함한 실제 출시 대상 SHA를 고정한 뒤 52건+cleanup을 다시 통과해야 한다.
 
 ## 활성 문서
 
@@ -128,12 +154,13 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 
 ## 다음 작업
 
-1. **P0 병렬 관리자 게이트**: Issue #32의 `main` branch protection/ruleset 활성화.
-2. **외부 차단**: ALIGO 8종 심사 결과 대기. 승인 전 실제 발송·운영 ALIGO 설정은 진행하지 않는다.
-3. 8종 승인 후 격리 알림톡 정상 발송 → SMS fallback 검증.
-4. 판매 활성화 법적 문서·테스트 재정합화.
-5. 법적 변경까지 포함한 actual release SHA 확정 → 원격 회차 E2E 52건+cleanup.
-6. 운영 Firebase 재조회 → ALIGO 운영 설정 → 별도 `Task 3.1 승인` → exact-SHA production 배포.
-7. 이후 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
+1. **P0 즉시 실행 가능**: Issue #37 F-001 remediation을 최신 `main` 기준으로 통합·검증.
+2. **P0 병렬 관리자 게이트**: Issue #32의 `main` branch protection/ruleset 활성화.
+3. **외부 차단**: ALIGO 8종 심사 결과 대기. 승인 전 실제 발송·운영 ALIGO 설정은 진행하지 않는다.
+4. 8종 승인 후 격리 알림톡 정상 발송 → SMS fallback 검증.
+5. 판매 활성화 법적 문서·테스트 재정합화.
+6. Issue #37·Issue #32·법적 변경까지 포함한 actual release SHA 확정 → 원격 회차 E2E 52건+cleanup.
+7. 운영 Firebase 재조회 → ALIGO 운영 설정 → 별도 `Task 3.1 승인` → exact-SHA production 배포.
+8. 이후 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
 
 문서 정합성 감사 자체는 앞으로도 **branch + PR**로 수행하고, current 계약과 직접 충돌하는 문서만 수정한다.
