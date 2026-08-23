@@ -16,16 +16,16 @@
 - 저장소: `booker-lab/greenhub`
 - 기본 브랜치: `main`; HEAD는 작업 시작 시 직접 재조회한다.
 - 회차 직배송 기능 통합 기준 SHA: `e55f25914cc7d01576fbd4639583daaf0fe6385e`
-- PR #30/#31로 세 프런트의 `main` Vercel Git auto-production과 pure-doc build를 repo-side 차단했다.
+- PR #30/#31로 세 프런트 `main`의 Vercel Git auto-production과 pure-doc build를 repo-side 차단했다.
 - docs-only main 변경은 Preview sync/일반 E2E 제외.
 - `AGENTS.md` + deployment safety CI가 branch+PR 원칙을 소유한다.
-- GitHub `main` 자체 보호는 Issue #32가 남아 있다.
+- GitHub `main` 관리자 보호는 Issue #32가 남아 있다.
 
 `main` merge는 production 배포 승인이 아니다. production은 검증된 exact release SHA + 별도 승인 절차를 사용한다.
 
 ## 제품 현재 상태
 
-- 회차 직배송 MVP는 `main` 통합 완료.
+- 회차 직배송 MVP `main` 통합 완료.
 - consumer 구매, seller 회차·주문, driver 직배송, 결제·환불·재배송비·보류·사진·운영 예외 흐름 존재.
 - 카카오 비즈니스 채널 승인 완료.
 - 운영 Firebase rules/indexes는 출시 전 read-only 재조회 필요.
@@ -34,52 +34,65 @@
 
 ## 현재 확인된 출시 P0
 
-### 1. 재배송비 결제·재개 상태머신
+### 1. PortOne webhook signature 검증 coverage
 
-운영 계약은 고객 책임 유료 재배송에서 `결제 전 재배송 금지`를 요구한다.
+webhook은 raw body + id/timestamp/signature를 요구하고 HMAC SHA-256 timing-safe 검증, ±5분 timestamp 제한이 구현돼 있다. production bootstrap도 `rawBody: true`다.
 
-2026-08-24 추가 감사에서 다음 두 우회/불일치가 확인됐다.
+현재 증거:
 
-- driver `DELIVERY_HELD → DELIVERING`: charge `PAID` 확인 없음 + UI `배송 재개` 항상 노출.
-- seller `DELIVERY_HELD → PREPARING`: 고객 책임+양수 재배송비에서도 현재 테스트가 정상 성공으로 고정하며 hold를 해소하고 held counter를 줄임. 이 전환이 `ORDER_REDELIVERY_PAYMENT_REQUESTED` 알림을 만들지만 charge 생성 API와 consumer 결제 UI는 `status === DELIVERY_HELD`를 요구하므로 전환 뒤 결제가 불가능해진다. 이후 `PREPARING → DELIVERING`도 과거 미결제 hold를 확인하지 않는다.
+- missing signature/secret, stale timestamp 단위 거부 테스트
+- HTTP E2E의 header 없는 webhook 401
+- controller 경로 E2E
 
-따라서 **`ORDER-REDELIVERY-PAID-RESUME-GATE`는 단순 PAID guard가 아니라 P0 재배송 상태머신 `IMPLEMENTATION FINDING`**이다.
+그러나 회차 E2E의 `verifyWebhookSignature`는 mock이며 **real verifier의 valid HMAC 성공과 non-empty invalid HMAC 거부를 직접 고정한 회귀가 없다.**
 
-완료 시 payment-required 상태는 결제 전 사라지지 않아야 하며, payment-request 알림 뒤 consumer 결제가 실제 가능해야 하고, `HELD→DELIVERING` 및 `HELD→PREPARING→DELIVERING` 등 모든 배송 시작 경로가 동일 PAID gate를 통과해야 한다.
+따라서 구현 결함으로 단정하지 않고 **`PAYMENT-WEBHOOK-SIGNATURE-COVERAGE` = `IMPLEMENTED / PARTIALLY VERIFIED` + P0 `COVERAGE GAP`**으로 둔다.
 
-정본: `docs/specs/api/orders.md`, `docs/BACKLOG.md`, 운영 근거 `docs/specs/ops/mvp-sales-round-runbook.md`.
+정본: `docs/specs/api/payments.md`, `docs/BACKLOG.md`.
 
-### 2. 관리자 강제 환불 lifecycle
+### 2. 재배송비 결제·재개 상태머신
+
+운영 계약은 고객 책임 유료 재배송에 `결제 전 재배송 금지`를 요구한다.
+
+현재:
+
+- direct `DELIVERY_HELD → DELIVERING`에 charge PAID gate 없음.
+- seller `DELIVERY_HELD → PREPARING`은 유료 hold에서도 성공하며 hold를 해소하지만, charge 생성 API·consumer 결제 CTA는 current `DELIVERY_HELD`를 요구해 payment-request 뒤 결제 dead-end 가능.
+- 이후 `PREPARING → DELIVERING`에도 durable paid-required guard 없음.
+
+따라서 **`ORDER-REDELIVERY-PAID-RESUME-GATE` = P0 상태머신 `IMPLEMENTATION FINDING`**.
+
+### 3. 관리자 강제 환불 lifecycle
 
 admin refund는 본 결제 환불 뒤 주문을 직접 `CANCELLED` write하며 정상 cancellation의 추가 charge·reservation/capacity·held counter·settlement 후속효과를 재사용하지 않는다.
 
 **`ADMIN-FORCE-REFUND-CONSISTENCY` = P0 IMPLEMENTATION FINDING**.
 
-### 3. Driver 승인·세션 권한
+### 4. Driver 승인·세션 권한
 
 신규/legacy driver 자동 승인 경로와 refresh/Firebase stale claims 수렴 문제가 있다.
 
 **관리자 승인 gate = P0 IMPLEMENTATION FINDING**, suspension/role/store/approval revocation = **P0 DECISION REQUIRED + remediation**.
 
-### 4. 주문 direct Firestore read·개인정보 최소화
+### 5. 주문 direct Firestore read·개인정보 최소화
 
 API driver read는 배정 경계가 있으나 current Rules는 driver role에 broad order read를 허용하며 seller/driver frontend는 raw document를 사용한다.
 
 **시스템 전체 driver read authorization + seller/driver data minimization = P0 IMPLEMENTATION FINDING**.
 
-### 5. 결제 finalization provider 상태 방어
+### 6. 결제 finalization provider 상태 방어
 
 `finalizePaidOrder()` boundary가 비`PAID` provider 입력을 자체 차단하지 않는다.
 
-**`PAYMENT-FINALIZATION-PAID-GUARD` = P0**.
+**`PAYMENT-FINALIZATION-PAID-GUARD` = P0 IMPLEMENTATION FINDING**.
 
-### 6. 주문 mutation authorization 회귀
+### 7. 주문 mutation authorization 회귀
 
 ownership guard는 구현돼 있으나 타-store seller·비담당 driver·first-claim 외 action과 거부 side-effect 0 직접 회귀가 부족하다.
 
 **`ORDER-MUTATION-AUTHORIZATION-COVERAGE` = IMPLEMENTED / UNVERIFIED + P0 COVERAGE GAP**.
 
-### 7. GitHub main protection
+### 8. GitHub main protection
 
 repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required check/force-push·delete 차단은 Issue #32가 남아 있다.
 
@@ -100,7 +113,7 @@ repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required 
 - production `/privacy`, `/terms`는 2026-08-19 비판매 상태 기준.
 - 실제 판매 전 주문·취소·환불·재배송비·보류, PortOne/PG, ALIGO, seller/driver 개인정보 접근을 재정합화해야 한다.
 - broad read를 legal 문구로 정당화하지 않는다.
-- 재배송 payment-required 상태머신과 admin refund 실제 정책을 legal의 재배송비·환불 설명에 반영한다.
+- 재배송 상태머신·admin refund 실제 정책을 legal의 재배송비·환불 설명에 반영한다.
 
 ## 검증 상태
 
@@ -128,10 +141,11 @@ repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required 
 
 ## 다음 작업
 
-1. `ORDER-REDELIVERY-PAID-RESUME-GATE`를 **상태머신 전체** 기준으로 구현·직접 회귀·`main` 통합.
-2. 나머지 P0를 ALIGO 심사와 병렬 해결.
-3. Issue #32.
-4. ALIGO 상태 재조회 → 승인 뒤 실제 알림톡/SMS fallback.
-5. P0 결과 기준 legal 재정합화.
-6. actual release SHA → E2E 52+cleanup → Firebase 재조회 → 승인된 production 설정/배포.
-7. 첫 회차 검수 → 최종 승인 → `salesMode: round_direct`.
+1. P0 금융/권한 코드·coverage 게이트를 ALIGO 심사와 병렬 해결.
+2. 우선 금융 경계: webhook signature real-verifier coverage, finalization PAID boundary, 재배송 상태머신, admin refund lifecycle.
+3. 권한 경계: driver approval/revocation, order direct read 최소화, mutation coverage.
+4. Issue #32.
+5. ALIGO 상태 재조회 → 승인 뒤 실제 알림톡/SMS fallback.
+6. P0 결과 기준 legal 재정합화.
+7. actual release SHA → E2E 52+cleanup → Firebase 재조회 → 승인된 production 설정/배포.
+8. 첫 회차 검수 → 최종 승인 → `salesMode: round_direct`.
