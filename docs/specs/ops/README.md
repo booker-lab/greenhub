@@ -8,6 +8,8 @@
 
 현재 외부 상태와 출시 순서는 `docs/memory.md`와 활성 HANDOFF·PLAN이 우선한다.
 
+배포 방식·`main` 통합·exact-SHA production 배포 판단은 `docs/plans/PLAN_deployment_safety_guards_20260823.md`를 함께 확인한다.
+
 ## 출시 순서 주의
 
 운영 런북은 일상 운영·장애·롤백 절차를 설명하지만 **출시 dependency의 정본은 아니다.**
@@ -15,6 +17,8 @@
 특히 현재 production `/privacy`, `/terms`는 비판매 상태를 전제로 하므로, 실제 release SHA를 확정하기 전에 `docs/specs/legal/README.md`의 판매 활성화 법적 문서 재정합화 게이트를 수행한다.
 
 런북의 판매 모드 전환 조건을 읽을 때도 활성 `PLAN_mvp_round_direct_launch_blockers.md`의 최신 dependency가 우선한다.
+
+또한 `main` merge는 production 배포 승인이 아니다. production 배포는 활성 deployment safety PLAN이 요구하는 exact release SHA 검증과 별도 승인 경계를 따른다.
 
 ## 조건부 후속 계획
 
