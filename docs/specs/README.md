@@ -7,10 +7,10 @@
 - 회차 직배송: `mvp-sales-round-direct-delivery.md`
 - API: `api/README.md`에서 현행 domain spec 선택
 - 운영: `ops/README.md`
-- 법적 문서: `legal/consumer-legal-documents.md`
+- 법적 문서: `legal/README.md`를 먼저 열고, 현재 공개 문안 정본은 `legal/consumer-legal-documents.md`를 사용
 - frontend: `frontend/README.md`의 라우팅 규칙을 먼저 확인
 
-AI 상품 콘텐츠는 실제 대상 코드와 `ai_product_content.md`를 함께 확인한다.
+AI 상품 콘텐츠는 현재 전용 domain router가 없다. 실제 계약을 확인할 때는 `apps/api/src/ai/**`, 관련 seller/consumer 코드와 `api/products.md`를 우선하고, `ai_product_content.md`는 구현 배경·필드 설계 참고자료로 함께 본다. 문서 상단의 과거 상태 문구나 단계 체크리스트를 현재 진행 상태로 사용하지 않는다.
 
 ## 역사 계획
 
