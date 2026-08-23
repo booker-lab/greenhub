@@ -8,13 +8,17 @@ import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { generatePickupCode, detectMetropolitan, calcDeliveryFee } from './orders.helpers';
+import { OrderCapacityService } from './order-capacity.service';
+import { calcDeliveryFee, detectMetropolitan, generatePickupCode } from './orders.helpers';
+import { RoundOrderCreateService } from './round-order-create.service';
 
 @Injectable()
 export class OrdersCreateService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly notifications: NotificationsService,
+    private readonly capacity: OrderCapacityService,
+    private readonly roundCreate: RoundOrderCreateService,
   ) {}
 
   async createOrder(storeId: string, userId: string, dto: CreateOrderDto) {
@@ -48,6 +52,10 @@ export class OrdersCreateService {
       this.firestore.doc(`stores/${storeId}`).get(),
       dto.hubId ? this.firestore.doc(`hubs/${dto.hubId}`).get() : Promise.resolve(null),
     ]);
+    if (!storeSnap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+    if (storeSnap.data()?.['salesMode'] === 'round_direct') {
+      return this.roundCreate.create(storeId, userId, dto);
+    }
     if (!product.exists || product.data()!['storeId'] !== storeId) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
@@ -203,6 +211,85 @@ export class OrdersCreateService {
     };
   }
 
+  async validateCart(storeId: string, userId: string, dto: CreateOrderDto) {
+    const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!storeSnap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+    if (storeSnap.data()?.['salesMode'] !== 'round_direct') {
+      return { ok: true, salesMode: storeSnap.data()?.['salesMode'] ?? 'legacy' };
+    }
+    if (dto.deliveryMethod !== 'direct') {
+      throw new BadRequestException('회차 주문은 직접배송만 가능합니다.');
+    }
+    if (!dto.roundId || !dto.roundItems?.length) {
+      throw new BadRequestException('회차 주문 상품이 필요합니다.');
+    }
+    this.assertUniqueRoundItems(dto.roundItems);
+
+    const roundSnap = await this.firestore.doc(`saleRounds/${dto.roundId}`).get();
+    if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
+      throw new NotFoundException('회차를 찾을 수 없습니다.');
+    }
+    const round = roundSnap.data()!;
+    if (round['status'] !== 'OPEN') {
+      throw new ConflictException('현재 주문 가능한 회차가 아닙니다.');
+    }
+    const closeAt = new Date(round['schedule']?.['orderCloseAt'] ?? 0).getTime();
+    if (!Number.isFinite(closeAt) || closeAt <= Date.now()) {
+      throw new ConflictException('주문 마감된 회차입니다.');
+    }
+    const deliveryCity = round['deliveryRegion']?.['city'] as string | undefined;
+    this.assertDeliveryCity(dto.deliveryAddress.address, deliveryCity);
+
+    const items = await Promise.all(
+      dto.roundItems.map(async (input) => {
+        if (!Number.isInteger(input.quantity) || input.quantity < 1) {
+          throw new BadRequestException('회차 상품 수량이 올바르지 않습니다.');
+        }
+        const snap = await this.firestore.doc(`saleRoundItems/${input.roundItemId}`).get();
+        if (!snap.exists || snap.data()?.['roundId'] !== dto.roundId) {
+          throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
+        }
+        const item = snap.data()!;
+        if (item['storeId'] !== storeId || item['status'] !== 'ACTIVE') {
+          throw new ConflictException('구매할 수 없는 회차 상품입니다.');
+        }
+        const nextQuantity =
+          (item['reservedQuantity'] ?? 0) + (item['orderedQuantity'] ?? 0) + input.quantity;
+        if (nextQuantity > (item['saleLimitQuantity'] ?? 0)) {
+          throw new ConflictException('회차 상품 수량이 마감되었습니다.');
+        }
+        return {
+          roundItemId: input.roundItemId,
+          productId: item['productId'],
+          productName: item['productNameSnapshot'],
+          unitPrice: item['roundPrice'],
+          quantity: input.quantity,
+          subtotalAmount: item['roundPrice'] * input.quantity,
+        };
+      }),
+    );
+
+    const quantityTotal = items.reduce((sum, item) => sum + item.quantity, 0);
+    const counters = round['counters'] ?? {};
+    const limits = round['limits'] ?? {};
+    if ((counters['reservedDeliveryAddresses'] ?? 0) + (counters['orderedDeliveryAddresses'] ?? 0) + 1 > (limits['maxDeliveryAddresses'] ?? 0)) {
+      throw new ConflictException('이번 회차 배송지 한도가 마감되었습니다.');
+    }
+    if ((counters['reservedItemQuantity'] ?? 0) + (counters['orderedItemQuantity'] ?? 0) + quantityTotal > (limits['maxItemQuantity'] ?? 0)) {
+      throw new ConflictException('이번 회차 상품 수량 한도가 마감되었습니다.');
+    }
+
+    return {
+      ok: true,
+      salesMode: 'round_direct',
+      roundId: dto.roundId,
+      itemQuantityTotal: quantityTotal,
+      totalAmount: items.reduce((sum, item) => sum + item.subtotalAmount, 0),
+      items,
+      userId,
+    };
+  }
+
   private async getDeliveryConfig(storeId: string): Promise<Record<string, number>> {
     const snap = await this.firestore.doc(`deliveryFeeConfig/${storeId}`).get();
     if (snap.exists) return snap.data() as Record<string, number>;
@@ -215,5 +302,21 @@ export class OrdersCreateService {
       freeThresholdHub: 30000,
       freeThresholdParcel: 50000,
     };
+  }
+
+  private assertUniqueRoundItems(items: Array<{ roundItemId: string }>) {
+    const ids = items.map((item) => item.roundItemId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException('같은 회차 상품을 중복으로 주문할 수 없습니다.');
+    }
+  }
+
+  private assertDeliveryCity(address: string, city?: string) {
+    if (!city) throw new BadRequestException('배송 가능 지역이 설정되지 않았습니다.');
+    const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const administrativeBoundary = new RegExp(`^(?:(?:경기도|경기)\\s+)?${escapedCity}(?:\\s|$)`);
+    if (!administrativeBoundary.test(address.trim())) {
+      throw new BadRequestException('배송 가능 지역의 주소만 주문할 수 있습니다.');
+    }
   }
 }

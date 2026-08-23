@@ -1,39 +1,26 @@
-import { Injectable, Inject, forwardRef } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
-import { AligoClient } from './aligo.client';
+import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { PaymentsService } from '../payments/payments.service';
+import { AligoClient } from './aligo.client';
+import type { ApiNotificationTemplateCode } from './notification-templates';
 
-export type NotificationTemplateCode =
-  // 소비자 수신
-  | 'ORDER_ACCEPTED'
-  | 'ORDER_PREPARING'
-  | 'ORDER_DELIVERING'
-  | 'ORDER_HUB_ARRIVED'
-  | 'ORDER_DELIVERED'
-  | 'ORDER_CANCELLED'
-  | 'GROUP_JOINED'
-  | 'GROUP_DEADLINE_SOON'
-  | 'GROUP_CONFIRMED'
-  | 'GROUP_CANCELLED_LACK'
-  | 'GROUP_CANCELLED_SELF'
-  | 'GROUP_PREPARING'
-  | 'GROUP_DELIVERING'
-  | 'GROUP_DELIVERED'
-  // 판매자 수신
-  | 'SELLER_NEW_ORDER'
-  | 'SELLER_GROUP_CONFIRMED'
-  | 'SELLER_ORDER_CANCELLED'
-  | 'SELLER_GROUP_CANCELLED_LACK';
+export type NotificationTemplateCode = ApiNotificationTemplateCode;
 
 @Injectable()
 export class NotificationsService {
   constructor(
+    @Inject(FirestoreService)
     private readonly firestore: FirestoreService,
+    @Inject(AligoClient)
     private readonly aligo: AligoClient,
     @Inject(forwardRef(() => PaymentsService))
     private readonly payments: PaymentsService,
+    @Inject(OperationIssueWriterService)
+    private readonly issueWriter: OperationIssueWriterService,
   ) {}
 
   async getUserNotifications(userId: string) {
@@ -50,10 +37,20 @@ export class NotificationsService {
     return { items, total: items.length };
   }
 
-  async updatePreferences(userId: string, preferences: Record<string, boolean>) {
+  async updatePreferences(
+    userId: string,
+    preferences: Partial<Record<'alimtalk' | 'sms', boolean>>,
+  ) {
     const ref = this.firestore.doc(`users/${userId}`);
+    const current = await ref.get();
+    const currentPreferences =
+      (current.data()?.['notificationPreferences'] as Record<string, boolean> | undefined) ?? {};
+    const nextPreferences = {
+      ...currentPreferences,
+      ...preferences,
+    };
     await ref.update({
-      notificationPreferences: preferences,
+      notificationPreferences: nextPreferences,
       updatedAt: this.firestore.Timestamp.now(),
     });
     const snap = await ref.get();
@@ -65,25 +62,103 @@ export class NotificationsService {
     templateCode: NotificationTemplateCode,
     variables: Record<string, string>,
     orderId?: string,
+    idempotencyKey?: string,
   ) {
-    const userSnap = await this.firestore.doc(`users/${userId}`).get();
-    if (!userSnap.exists) return;
+    if (
+      idempotencyKey &&
+      !(await this.claimNotificationDelivery({
+        idempotencyKey,
+        orderId: orderId ?? null,
+        templateCode,
+        userId,
+      }))
+    ) {
+      return;
+    }
 
-    const user = userSnap.data()!;
-    const phone = user['phone'] as string | null;
-    if (!phone) return;
+    try {
+      const orderSnap = orderId ? await this.firestore.doc(`orders/${orderId}`).get() : null;
+      const userSnap = await this.firestore.doc(`users/${userId}`).get();
+      const order = orderSnap?.exists ? orderSnap.data()! : null;
+      const user = userSnap.exists ? userSnap.data()! : null;
+      const phone = this.resolveRecipientPhone(userId, order, user);
 
-    const result = await this.aligo.sendAlimtalk(phone, templateCode, variables);
+      if (!phone) {
+        if (orderId) {
+          await this.createCustomerNoticeFailedIssue(orderId, templateCode, null);
+        }
+        await this.finishNotificationDelivery(idempotencyKey, 'FAILED');
+        return;
+      }
+
+      const result = await this.aligo.sendAlimtalk(phone, templateCode, variables);
+      const notificationId = await this.logNotification({
+        userId,
+        orderId: orderId ?? null,
+        channel: result.channel ?? 'alimtalk',
+        templateCode,
+        variables,
+        message: result.message,
+        phone,
+        status: result.success ? 'sent' : 'failed',
+        attemptCount: result.alimtalkAttempts + result.smsAttempts,
+        errorMessage: result.errorMessage ?? null,
+      });
+
+      if (!result.success && orderId) {
+        await this.createCustomerNoticeFailedIssue(orderId, templateCode, notificationId);
+      }
+      await this.finishNotificationDelivery(idempotencyKey, result.success ? 'SENT' : 'FAILED');
+    } catch (error) {
+      await this.finishNotificationDelivery(idempotencyKey, 'FAILED').catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async resendSms(issue: Record<string, unknown>) {
+    const snapshot = (issue['latestSnapshot'] as Record<string, unknown> | undefined) ?? {};
+    const notificationId = snapshot['notificationId'];
+    if (typeof notificationId !== 'string') {
+      throw new Error('재발송할 알림 기록을 찾을 수 없습니다.');
+    }
+    const notificationSnap = await this.firestore.doc(`notifications/${notificationId}`).get();
+    if (!notificationSnap.exists) {
+      throw new Error('재발송할 알림 기록을 찾을 수 없습니다.');
+    }
+    const notification = notificationSnap.data()!;
+    const phone = notification['phone'];
+    const templateCode = notification['templateCode'];
+    const variables = notification['variables'];
+    if (
+      typeof phone !== 'string' ||
+      typeof templateCode !== 'string' ||
+      !variables ||
+      typeof variables !== 'object'
+    ) {
+      throw new Error('재발송할 알림 정보가 올바르지 않습니다.');
+    }
+
+    const result = await this.aligo.sendSms(
+      phone,
+      templateCode as NotificationTemplateCode,
+      variables as Record<string, string>,
+    );
     await this.logNotification({
-      userId,
-      orderId: orderId ?? null,
-      channel: 'alimtalk',
+      userId: String(notification['userId']),
+      orderId: (notification['orderId'] as string | null) ?? null,
+      channel: 'sms',
       templateCode,
-      variables,
+      variables: variables as Record<string, string>,
+      message: result.message,
       phone,
       status: result.success ? 'sent' : 'failed',
+      attemptCount: result.smsAttempts,
       errorMessage: result.errorMessage ?? null,
     });
+    if (!result.success) {
+      throw new Error(result.errorMessage ?? '문자 재발송에 실패했습니다.');
+    }
+    return result;
   }
 
   async sendToGroupParticipants(
@@ -203,7 +278,9 @@ export class NotificationsService {
 
     const now = this.firestore.Timestamp.now();
     const batch = this.firestore.db.batch();
-    ordersSnap.docs.forEach((d) => batch.update(d.ref, { status: 'CONFIRMED', updatedAt: now }));
+    ordersSnap.docs.forEach((d) => {
+      batch.update(d.ref, { status: 'CONFIRMED', updatedAt: now });
+    });
     await batch.commit();
 
     const productSnap = await this.firestore.doc(`products/${productId}`).get();
@@ -243,9 +320,9 @@ export class NotificationsService {
     );
 
     const batch = this.firestore.db.batch();
-    ordersSnap.docs.forEach((d) =>
-      batch.update(d.ref, { status: 'CANCELLED', cancelReason: reason, updatedAt: now }),
-    );
+    ordersSnap.docs.forEach((d) => {
+      batch.update(d.ref, { status: 'CANCELLED', cancelReason: reason, updatedAt: now });
+    });
     await batch.commit();
 
     const productSnap = await this.firestore.doc(`products/${productId}`).get();
@@ -273,18 +350,116 @@ export class NotificationsService {
     channel: string;
     templateCode: string;
     variables: Record<string, string>;
+    message: string;
     phone: string;
     status: string;
+    attemptCount: number;
     errorMessage: string | null;
   }) {
     const id = uuidv4();
     await this.firestore.doc(`notifications/${id}`).set({
       id,
       ...data,
-      message: JSON.stringify(data.variables),
       fcmToken: null,
       sentAt: data.status === 'sent' ? this.firestore.Timestamp.now() : null,
       createdAt: this.firestore.Timestamp.now(),
     });
+    return id;
+  }
+
+  private async claimNotificationDelivery(input: {
+    idempotencyKey: string;
+    orderId: string | null;
+    templateCode: NotificationTemplateCode;
+    userId: string;
+  }): Promise<boolean> {
+    const ref = this.firestore.doc(
+      `notificationDeliveries/${this.notificationDeliveryId(input.idempotencyKey)}`,
+    );
+    let acquired = false;
+    await this.firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const status = snapshot.exists ? snapshot.data()?.['status'] : null;
+      if (status === 'SENT' || status === 'PROCESSING') return;
+      const now = this.firestore.Timestamp.now();
+      transaction.set(
+        ref,
+        {
+          idempotencyKey: input.idempotencyKey,
+          orderId: input.orderId,
+          templateCode: input.templateCode,
+          userId: input.userId,
+          status: 'PROCESSING',
+          updatedAt: now,
+          createdAt: snapshot.exists ? (snapshot.data()?.['createdAt'] ?? now) : now,
+        },
+        { merge: true },
+      );
+      acquired = true;
+    });
+    return acquired;
+  }
+
+  private async finishNotificationDelivery(
+    idempotencyKey: string | undefined,
+    status: 'SENT' | 'FAILED',
+  ): Promise<void> {
+    if (!idempotencyKey) return;
+    await this.firestore
+      .doc(`notificationDeliveries/${this.notificationDeliveryId(idempotencyKey)}`)
+      .set(
+        {
+          status,
+          updatedAt: this.firestore.Timestamp.now(),
+          completedAt: status === 'SENT' ? this.firestore.Timestamp.now() : null,
+        },
+        { merge: true },
+      );
+  }
+
+  private notificationDeliveryId(idempotencyKey: string): string {
+    return createHash('sha256').update(idempotencyKey).digest('hex');
+  }
+
+  private async createCustomerNoticeFailedIssue(
+    orderId: string,
+    templateCode: NotificationTemplateCode,
+    notificationId: string | null,
+  ) {
+    const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
+    const order = orderSnap.exists ? orderSnap.data()! : {};
+    await this.issueWriter.createOrMergeIssue({
+      storeId: (order['storeId'] as string | undefined) ?? '',
+      orderId,
+      paymentId: null,
+      type: 'CUSTOMER_NOTICE_FAILED',
+      status: 'OPEN',
+      severity: 'warning',
+      title: '고객 안내 최종 실패',
+      message: '알림톡 재시도와 문자 대체가 모두 실패하여 운영 확인이 필요합니다.',
+      idempotencyKey: `customer-notice-failed:${orderId}:${templateCode}`,
+      latestSnapshot: {
+        orderStatus: order['status'] ?? null,
+        templateCode,
+        notificationId,
+        failureStage: 'sms_fallback',
+      },
+    });
+  }
+
+  private resolveRecipientPhone(
+    userId: string,
+    order: Record<string, unknown> | null,
+    user: Record<string, unknown> | null,
+  ): string | null {
+    if (order?.['userId'] === userId && typeof order['deliveryPhone'] === 'string') {
+      const deliveryPhone = order['deliveryPhone'].trim();
+      if (deliveryPhone) return deliveryPhone;
+    }
+    if (typeof user?.['phone'] === 'string') {
+      const profilePhone = user['phone'].trim();
+      if (profilePhone) return profilePhone;
+    }
+    return null;
   }
 }

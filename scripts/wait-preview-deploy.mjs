@@ -18,14 +18,16 @@
  *   0  3앱 모두 sha-매칭 deployment success
  *   1  timeout 초과(fail-fast) 또는 gh api 오류 — e2e dispatch 안 됨, 배포 지연 노출
  */
-import { execSync } from 'child_process';
+import { execSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPO = 'booker-lab/greenhub';
+export const REPO = 'booker-lab/greenhub';
 
 // Preview deployment environment 이름 3종.
 // 주의: 구분자는 en-dash(U+2013 '–'), 일반 hyphen 아님. consumer 는 앱명에
 // 하이픈이 없어 seller/driver 와 표기가 다름(GAP-3 실측).
-const ENVIRONMENTS = [
+export const ENVIRONMENTS = [
   { app: 'seller', env: 'Preview – greenhub-seller' },
   { app: 'consumer', env: 'Preview – greenhubconsumer' },
   { app: 'driver', env: 'Preview – greenhub-driver' },
@@ -37,7 +39,7 @@ const INTERVAL_MS = Number(process.env.WAIT_INTERVAL_MS) || 15 * 1000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function gh(path) {
+export function gh(path) {
   // gh api 는 URL 인코딩된 query 를 그대로 받는다. en-dash·공백은 호출부에서 인코딩.
   const out = execSync(`gh api "${path}"`, {
     encoding: 'utf-8',
@@ -51,58 +53,141 @@ function gh(path) {
  *  - sha-매칭 deployment id 를 찾고(없으면 아직 생성 전 → 미완)
  *  - 그 deployment 의 최신 status state 가 'success' 인지 판정.
  */
-function isAppDeployed(env, headSha) {
+export function inspectAppDeployment(app, env, headSha, request = gh) {
   const encEnv = encodeURIComponent(env); // 공백→%20, en-dash→%E2%80%93
-  const deployments = gh(`repos/${REPO}/deployments?environment=${encEnv}&per_page=10`);
+  const deployments = request(`repos/${REPO}/deployments?environment=${encEnv}&per_page=10`);
   const match = deployments.find((d) => d.sha === headSha);
-  if (!match) return false; // 해당 커밋 deployment 아직 미생성
-  const statuses = gh(`repos/${REPO}/deployments/${match.id}/statuses?per_page=5`);
+  if (!match) {
+    return {
+      app,
+      environment: env,
+      expectedSha: headSha,
+      deploymentSha: null,
+      deploymentId: null,
+      state: 'missing',
+      targetUrl: null,
+      ready: false,
+    };
+  }
+  const statuses = request(`repos/${REPO}/deployments/${match.id}/statuses?per_page=5`);
   const latest = statuses[0]; // GitHub 는 최신순 반환
-  return latest?.state === 'success';
+  return {
+    app,
+    environment: env,
+    expectedSha: headSha,
+    deploymentSha: match.sha,
+    deploymentId: match.id,
+    state: latest?.state ?? 'missing',
+    targetUrl: latest?.target_url ?? null,
+    ready: latest?.state === 'success' && match.sha === headSha,
+  };
+}
+
+export function collectDeploymentEvidence(headSha, request = gh) {
+  if (!/^[0-9a-f]{40}$/.test(headSha)) {
+    throw new Error('대상 SHA는 40자리 소문자 16진수여야 합니다.');
+  }
+  const apps = ENVIRONMENTS.map(({ app, env }) =>
+    inspectAppDeployment(app, env, headSha, request),
+  );
+  return {
+    ready: apps.every(({ ready }) => ready),
+    checkedAt: new Date().toISOString(),
+    repository: REPO,
+    expectedSha: headSha,
+    deploymentShas: Object.fromEntries(apps.map(({ app, deploymentSha }) => [app, deploymentSha])),
+    apps,
+  };
+}
+
+function resolveHeadSha(args) {
+  const shaArgument = args.find((arg) => arg.startsWith('--sha='));
+  return (
+    shaArgument?.slice('--sha='.length).trim().toLowerCase() ||
+    process.env.PREVIEW_HEAD_SHA?.trim().toLowerCase() ||
+    execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim().toLowerCase()
+  );
 }
 
 async function main() {
+  const args = process.argv.slice(2);
+  const jsonOnly = args.includes('--json');
+  const once = args.includes('--once');
   // 대상 SHA = preview HEAD. 기본은 git rev-parse(워크플로는 preview 체크아웃 상태).
   // PREVIEW_HEAD_SHA env 로 오버라이드 가능 — 로컬 검증 시 임의 커밋 지정용.
-  const headSha =
-    process.env.PREVIEW_HEAD_SHA?.trim() ||
-    execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
-  console.log(`[wait-preview-deploy] target preview HEAD = ${headSha}`);
-  console.log(`[wait-preview-deploy] polling ${ENVIRONMENTS.length} apps, timeout ${TIMEOUT_MS / 1000}s, interval ${INTERVAL_MS / 1000}s`);
+  const headSha = resolveHeadSha(args);
+
+  if (once) {
+    const evidence = collectDeploymentEvidence(headSha);
+    process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
+    process.exitCode = evidence.ready ? 0 : 1;
+    return;
+  }
+
+  if (!jsonOnly) {
+    console.log(`[wait-preview-deploy] 대상 Preview HEAD = ${headSha}`);
+    console.log(
+      `[wait-preview-deploy] 앱 ${ENVIRONMENTS.length}개 확인, 제한 ${TIMEOUT_MS / 1000}초, 간격 ${INTERVAL_MS / 1000}초`,
+    );
+  }
 
   const deadline = Date.now() + TIMEOUT_MS;
   const done = new Set();
+  let latestEvidence = null;
 
   while (Date.now() < deadline) {
-    for (const { app, env } of ENVIRONMENTS) {
-      if (done.has(app)) continue;
-      let ok = false;
-      try {
-        ok = isAppDeployed(env, headSha);
-      } catch (e) {
-        // gh api 오류(권한·네트워크)는 폴링 중 일시적일 수 있어 다음 주기에 재시도.
-        console.warn(`[wait-preview-deploy] ${app}: gh api error — ${e.message.split('\n')[0]}`);
+    try {
+      latestEvidence = collectDeploymentEvidence(headSha);
+    } catch (error) {
+      if (!jsonOnly) {
+        console.warn(
+          `[wait-preview-deploy] GitHub API 일시 오류 — ${error.message.split('\n')[0]}`,
+        );
       }
-      if (ok) {
+      await sleep(INTERVAL_MS);
+      continue;
+    }
+    for (const evidence of latestEvidence.apps) {
+      const { app } = evidence;
+      if (done.has(app)) continue;
+      if (evidence.ready) {
         done.add(app);
-        console.log(`[wait-preview-deploy] ✅ ${app} deployed (${done.size}/${ENVIRONMENTS.length}) @ ${new Date().toISOString()}`);
+        if (!jsonOnly) {
+          console.log(
+            `[wait-preview-deploy] ${app} 배포 확인 (${done.size}/${ENVIRONMENTS.length}) @ ${new Date().toISOString()}`,
+          );
+        }
       }
     }
     if (done.size === ENVIRONMENTS.length) {
-      console.log('[wait-preview-deploy] 🎉 all 3 apps deployed — proceeding to e2e dispatch.');
-      process.exit(0);
+      if (jsonOnly) {
+        process.stdout.write(`${JSON.stringify(latestEvidence, null, 2)}\n`);
+      } else {
+        console.log('[wait-preview-deploy] 세 앱 배포가 모두 확인되어 E2E 실행을 허용합니다.');
+      }
+      return;
     }
     await sleep(INTERVAL_MS);
   }
 
   // fail-fast: timeout 시 미완 앱 노출(배포 지연 원인 식별). e2e dispatch 안 됨.
   const pending = ENVIRONMENTS.filter(({ app }) => !done.has(app)).map(({ app }) => app);
-  console.error(`[wait-preview-deploy] ⛔ timeout ${TIMEOUT_MS / 1000}s — pending apps: ${pending.join(', ')}`);
-  console.error('[wait-preview-deploy] e2e dispatch 차단(fail-fast) — Vercel preview 배포 지연 가능성을 확인하세요.');
-  process.exit(1);
+  if (jsonOnly && latestEvidence) {
+    process.stdout.write(`${JSON.stringify(latestEvidence, null, 2)}\n`);
+  } else {
+    console.error(
+      `[wait-preview-deploy] ${TIMEOUT_MS / 1000}초 초과 — 미완료 앱: ${pending.join(', ')}`,
+    );
+    console.error('[wait-preview-deploy] E2E 실행을 차단했습니다. Preview 배포 상태를 확인하세요.');
+  }
+  process.exitCode = 1;
 }
 
-main().catch((e) => {
-  console.error(`[wait-preview-deploy] fatal: ${e.message}`);
-  process.exit(1);
-});
+const isDirectRun =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error(`[wait-preview-deploy] 치명적 오류: ${error.message}`);
+    process.exitCode = 1;
+  });
+}

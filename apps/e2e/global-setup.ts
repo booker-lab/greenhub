@@ -34,6 +34,7 @@ import {
   AUTH_STATE_PATH,
   BYPASS_STATE_PATH,
   loginViaCredentials,
+  ROUND_DIRECT_STATE_PATHS,
 } from './tests/_helpers/auth'
 
 loadEnv({ path: resolve(__dirname, '.env') })
@@ -47,6 +48,7 @@ const BYPASS_TARGETS = [
 // globalSetup 로그인 race 흡수용 재시도 횟수·간격
 const LOGIN_MAX_ATTEMPTS = 3
 const LOGIN_RETRY_DELAY_MS = 2_000
+type CredentialHeader = { name: string; value: string }
 
 // driver 제외 — Credentials provider 부재(Kakao 전용, #CL-25)
 const CREDENTIAL_TARGETS = [
@@ -86,10 +88,11 @@ async function loginWithRetry(
   email: string,
   password: string,
   name: string,
+  credentialHeader?: CredentialHeader,
 ): Promise<void> {
   for (let attempt = 1; attempt <= LOGIN_MAX_ATTEMPTS; attempt++) {
     try {
-      await loginViaCredentials(page, base, email, password)
+      await loginViaCredentials(page, base, email, password, credentialHeader)
       if (attempt > 1) {
         console.warn(`globalSetup: ${name} 로그인 ${attempt}회차 성공`)
       }
@@ -104,7 +107,98 @@ async function loginWithRetry(
   }
 }
 
+async function verifyRoleSession(page: Page, base: string, expectedRole: string): Promise<void> {
+  const response = await page.request.get(`${base}/api/auth/session`)
+  if (!response.ok()) {
+    throw new Error(`${expectedRole} 세션 확인 응답 실패: ${response.status()}`)
+  }
+  const session = (await response.json()) as {
+    expires?: string
+    user?: { role?: string; accessToken?: string }
+  }
+  if (session.user?.role !== expectedRole || !session.user.accessToken) {
+    throw new Error(`${expectedRole} 세션 역할 또는 accessToken 검증 실패`)
+  }
+  const expiresAt = Date.parse(session.expires ?? '')
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    throw new Error(`${expectedRole} 세션 만료 시각 검증 실패`)
+  }
+  const cookies = await page.context().cookies(base)
+  if (!cookies.some(({ name }) => /authjs\.session-token/.test(name))) {
+    throw new Error(`${expectedRole} 대상 도메인의 세션 쿠키 검증 실패`)
+  }
+}
+
+async function createRoundDirectProjectState(
+  browser: Awaited<ReturnType<typeof chromium.launch>>,
+  project: keyof typeof ROUND_DIRECT_STATE_PATHS,
+): Promise<void> {
+  const suffix = project.toUpperCase()
+  const accounts = [
+    {
+      name: `${project} 소비자`,
+      role: 'consumer',
+      base: process.env['CONSUMER_BASE'],
+      email: process.env[`TEST_CONSUMER_EMAIL_${suffix}`],
+      password: process.env[`TEST_CONSUMER_PASSWORD_${suffix}`],
+      credentialHeader: undefined,
+    },
+    {
+      name: `${project} 셀러`,
+      role: 'seller',
+      base: process.env['SELLER_BASE'],
+      email: process.env[`TEST_SELLER_EMAIL_${suffix}`],
+      password: process.env[`TEST_SELLER_PASSWORD_${suffix}`],
+      credentialHeader: undefined,
+    },
+    {
+      name: `${project} 드라이버`,
+      role: 'driver',
+      base: process.env['DRIVER_BASE'],
+      email: process.env[`TEST_DRIVER_EMAIL_${suffix}`],
+      password: process.env[`TEST_DRIVER_PASSWORD_${suffix}`],
+      credentialHeader: {
+        name: 'x-round-direct-e2e-secret',
+        value: process.env['ROUND_DIRECT_E2E_SHARED_SECRET'] ?? '',
+      },
+    },
+  ]
+  const missing = accounts.flatMap(({ name, base, email, password }) => {
+    const fields = []
+    if (!base) fields.push(`${name} base`)
+    if (!email) fields.push(`${name} email`)
+    if (!password) fields.push(`${name} password`)
+    return fields
+  })
+  if (!process.env['ROUND_DIRECT_E2E_SHARED_SECRET']) {
+    missing.push('회차 E2E 공유 secret')
+  }
+  if (missing.length > 0) {
+    throw new Error(`회차 E2E ${project} 인증 입력 누락: ${missing.join(', ')}`)
+  }
+
+  const context = await browser.newContext({ storageState: BYPASS_STATE_PATH })
+  const page = await context.newPage()
+  try {
+    for (const { name, base, email, password, role, credentialHeader } of accounts) {
+      await loginWithRetry(
+        page,
+        base as string,
+        email as string,
+        password as string,
+        name,
+        credentialHeader,
+      )
+      await verifyRoleSession(page, base as string, role)
+    }
+    await context.storageState({ path: ROUND_DIRECT_STATE_PATHS[project] })
+  } finally {
+    await context.close()
+  }
+}
+
 export default async function globalSetup(): Promise<void> {
+  const roundDirectEnabled = process.env['ROUND_DIRECT_E2E_ENABLED'] === 'true'
   const browser = await chromium.launch()
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -137,54 +231,69 @@ export default async function globalSetup(): Promise<void> {
   // 우회 쿠키만 담긴 상태 저장 — 미인증/SSO 우회 spec의 기본 storageState
   await context.storageState({ path: BYPASS_STATE_PATH })
 
-  // 2. seller·consumer 세션 쿠키 발급 — 같은 컨텍스트에 누적.
-  //    쿠키는 도메인 스코프이므로 우회 쿠키·앱별 세션이 충돌 없이 공존한다.
-  for (const { name, base, email, password } of CREDENTIAL_TARGETS) {
-    if (!base) throw new Error(`globalSetup: ${name}_BASE 미설정`)
-    if (!email || !password) {
-      // 시크릿 미설정 환경 — 세션 쿠키만 생략한다. 해당 인증 spec은 자체
-      // test.skip(skipAuth) 로 건너뛰므로 .auth-state.json 자체는 발급한다.
-      console.warn(
-        `globalSetup: ${name} 인증 시크릿(TEST_${name}_EMAIL/PASSWORD) 미설정 — ` +
-          `세션 쿠키 생략 (해당 인증 spec은 test.skip 처리됨)`,
-      )
-      continue
+  // 2. 일반 E2E에서만 seller·consumer 세션 쿠키를 같은 컨텍스트에 누적한다.
+  //    회차 전용 실행은 아래에서 프로젝트별 consumer·seller·driver 계정을 실제로
+  //    인증하고 별도 state를 발급하므로 범위 밖 누적 AUTH_STATE를 만들지 않는다.
+  if (!roundDirectEnabled) {
+    for (const { name, base, email, password } of CREDENTIAL_TARGETS) {
+      if (!base) throw new Error(`globalSetup: ${name}_BASE 미설정`)
+      if (!email || !password) {
+        // 시크릿 미설정 환경 — 세션 쿠키만 생략한다. 해당 인증 spec은 자체
+        // test.skip(skipAuth) 로 건너뛰므로 .auth-state.json 자체는 발급한다.
+        console.warn(
+          `globalSetup: ${name} 인증 시크릿(TEST_${name}_EMAIL/PASSWORD) 미설정 — ` +
+            `세션 쿠키 생략 (해당 인증 spec은 test.skip 처리됨)`,
+        )
+        continue
+      }
+      await loginWithRetry(page, base, email, password, name)
     }
-    await loginWithRetry(page, base, email, password, name)
-  }
 
-  // 우회 + seller·consumer 세션 쿠키 누적 상태 저장 — 인증 spec의 storageState
-  await context.storageState({ path: AUTH_STATE_PATH })
-
-  // 3. admin 세션 — seller와 같은 도메인이라 별도 컨텍스트에서 격리 발급.
-  //    seller 세션 쿠키가 없는 깨끗한 컨텍스트에 우회 쿠키 + admin 세션만 담는다.
-  //    시크릿 미설정 시 빈(.bypass만) 상태로 발급 — 어드민 인증 spec은 test.skip 처리됨.
-  const adminCtx = await browser.newContext()
-  const adminPage = await adminCtx.newPage()
-  if (ADMIN_TARGET.base?.includes('.vercel.app')) {
-    if (!ADMIN_TARGET.bypassSecret) {
-      throw new Error('globalSetup: SELLER_BYPASS_SECRET 미설정 — admin Preview SSO 우회 불가')
-    }
-    const url = `${ADMIN_TARGET.base}/?x-vercel-protection-bypass=${ADMIN_TARGET.bypassSecret}&x-vercel-set-bypass-cookie=true`
-    await adminPage.goto(url, { waitUntil: 'domcontentloaded' })
-    await adminPage.goto('about:blank')
-  }
-  if (ADMIN_TARGET.base && ADMIN_TARGET.email && ADMIN_TARGET.password) {
-    await loginWithRetry(
-      adminPage,
-      ADMIN_TARGET.base,
-      ADMIN_TARGET.email,
-      ADMIN_TARGET.password,
-      ADMIN_TARGET.name,
-    )
+    // Credentials callback 뒤 Preview 루트의 지연 client navigation이 남을 수 있다.
+    // 세션 쿠키는 context에 이미 저장되어 있으므로 페이지를 닫아 늦은 navigation을
+    // 확실히 취소한 뒤 context 자체의 storageState를 저장한다.
+    await page.close()
+    await context.storageState({ path: AUTH_STATE_PATH })
   } else {
-    console.warn(
-      'globalSetup: ADMIN 인증 시크릿(TEST_ADMIN_EMAIL/PASSWORD) 미설정 — ' +
-        '세션 쿠키 생략 (어드민 인증 spec은 test.skip 처리됨)',
-    )
+    await page.close()
   }
-  await adminCtx.storageState({ path: ADMIN_STATE_PATH })
-  await adminCtx.close()
+
+  // 3. admin 세션 — 회차 전용 실행은 admin spec을 포함하지 않고 프로젝트별 세 역할
+  //    세션을 아래에서 별도로 검증하므로, 범위 밖 admin 계정에 실행을 의존시키지 않는다.
+  //    일반 E2E에서는 기존 admin 전용 상태 발급 계약을 그대로 유지한다.
+  if (!roundDirectEnabled) {
+    const adminCtx = await browser.newContext()
+    const adminPage = await adminCtx.newPage()
+    if (ADMIN_TARGET.base?.includes('.vercel.app')) {
+      if (!ADMIN_TARGET.bypassSecret) {
+        throw new Error('globalSetup: SELLER_BYPASS_SECRET 미설정 — admin Preview SSO 우회 불가')
+      }
+      const url = `${ADMIN_TARGET.base}/?x-vercel-protection-bypass=${ADMIN_TARGET.bypassSecret}&x-vercel-set-bypass-cookie=true`
+      await adminPage.goto(url, { waitUntil: 'domcontentloaded' })
+      await adminPage.goto('about:blank')
+    }
+    if (ADMIN_TARGET.base && ADMIN_TARGET.email && ADMIN_TARGET.password) {
+      await loginWithRetry(
+        adminPage,
+        ADMIN_TARGET.base,
+        ADMIN_TARGET.email,
+        ADMIN_TARGET.password,
+        ADMIN_TARGET.name,
+      )
+    } else {
+      console.warn(
+        'globalSetup: ADMIN 인증 시크릿(TEST_ADMIN_EMAIL/PASSWORD) 미설정 — ' +
+          '세션 쿠키 생략 (어드민 인증 spec은 test.skip 처리됨)',
+      )
+    }
+    await adminCtx.storageState({ path: ADMIN_STATE_PATH })
+    await adminCtx.close()
+  }
+
+  if (roundDirectEnabled) {
+    await createRoundDirectProjectState(browser, 'chromium')
+    await createRoundDirectProjectState(browser, 'mobile')
+  }
 
   await browser.close()
 }

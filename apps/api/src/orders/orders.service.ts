@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { OrdersCreateService } from './orders-create.service';
@@ -17,16 +18,20 @@ export class OrdersService {
     return this.create.createOrder(storeId, userId, dto);
   }
 
-  getOrder(storeId: string, orderId: string, requesterId: string) {
-    return this.query.getOrder(storeId, orderId, requesterId);
+  validateCart(storeId: string, userId: string, dto: CreateOrderDto) {
+    return this.create.validateCart(storeId, userId, dto);
+  }
+
+  getOrder(storeId: string, orderId: string, requester: JwtPayload) {
+    return this.query.getOrder(storeId, orderId, requester);
   }
 
   getOrders(
     storeId: string,
-    requesterId: string,
+    requester: JwtPayload,
     query: { userId?: string; status?: string; saleType?: string },
   ) {
-    return this.query.getOrders(storeId, requesterId, query);
+    return this.query.getOrders(storeId, requester, query);
   }
 
   updateStatus(
@@ -55,8 +60,8 @@ export class OrdersService {
     return this.lifecycle.hubConfirmPickup(storeId, orderId, requesterId, pickupCode);
   }
 
-  getOrderById(orderId: string, requesterId: string) {
-    return this.query.getOrderById(orderId, requesterId);
+  getOrderById(orderId: string, requester: JwtPayload) {
+    return this.query.getOrderById(orderId, requester);
   }
 
   getMyOrders(requesterId: string) {

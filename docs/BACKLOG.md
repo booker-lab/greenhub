@@ -28,6 +28,44 @@
 | 💡 | 카드 결제 PG사 계약 | 외부 연동 |
 | 🔵 | 다중 판매자 상점 페이지 (소비자 앱) | Phase 2 |
 | 🟢 검증 | SETTLE-REFACTOR — 정산 confirm 배치 + 정합 갭(아래 §13). 구현 6태스크+S6 자동검증 종결(세션82), 런타임 전이 입증만 사용자 위임 | 정산/치명 |
+| 💡 향후 | API-LINT-BASELINE — API 전체 ESLint 기존 any/unsafe 부채 분리 정리 | DX/품질 |
+| 💡 향후 | LOAD-TEST-FORMAL — MVP 이후 정식 부하테스트 재개 조건 정리 | 성능/운영 |
+| 💡 향후 | NOTIFICATION-RETRY-POLICY — 회차 직배송 계획 종료 후 알림 재시도 정책 운영 강화 | 알림/운영 |
+
+---
+
+## NOTIFICATION-RETRY-POLICY — 회차 직배송 계획 종료 후 알림 재시도 정책 운영 강화
+
+> `PLAN_mvp_sales_round_direct_delivery.md`의 Task 3.2·3.3은 고정된 최소 계약인 알림톡 최대 3회 시도, 문자 대체, 설정 누락 실패 처리, 최종 실패 운영 예외까지만 구현한다. 아래 정책 고도화는 현재 계획의 모든 Task가 종료된 뒤 별도 SDD를 작성하고 구현한다.
+
+- [ ] 재시도 간격과 backoff 방식을 정하고 테스트 가능한 지연 주입 구조를 설계한다.
+- [ ] 재시도 가능한 일시 오류와 즉시 중단할 영구 오류를 알리고 응답 코드·HTTP 상태·timeout 기준으로 분류한다.
+- [ ] 요청 timeout, 네트워크 예외, 응답 파싱 실패, rate limit의 채널별 처리 기준을 정한다.
+- [ ] 시도 횟수·최종 채널·실패 분류를 구조화 로그와 관측 지표로 남기되 전화번호와 메시지 개인정보를 노출하지 않는다.
+- [ ] 문자 대체 중복 발송 방지와 프로세스 재시작 이후 멱등성 범위를 결정한다.
+- [ ] 모의 응답 기반 단위 테스트와 격리된 staging 검증 절차를 마련하며 운영 고객에게 실제 알림을 발송하지 않는다.
+
+---
+
+## LOAD-TEST-FORMAL — MVP 이후 정식 부하테스트 재개 조건
+
+> 2026-07-09 기준 MVP 단계에서는 staging URL이 production DB를 바라보는 상태이므로, 정식 baseline 대신 낮은 강도의 production 읽기 전용 probe만 수행하고 부하테스트 항목을 일단 종결한다.
+
+- [ ] 실제 유입 증가, 광고/런칭 일정, 운영 장애 징후, 429/5xx 재발, 응답 지연 민원 등 부하 가능성이 보이면 정식 부하테스트를 재개한다.
+- [ ] 정식 baseline 이상 실행 전 production과 분리된 staging DB 또는 동등한 격리 환경을 준비한다.
+- [ ] `K6_STORE_ID`, `K6_PRODUCT_ID`, `K6_ORDER_ID`와 consumer/seller/admin/driver seed 계정을 환경별로 확정한다.
+- [ ] baseline에서 429가 나오면 성능 실패가 아니라 rate limit 정책 미정합으로 중단하고 정책을 먼저 확정한다.
+- [ ] 재개 시 순서는 `baseline` → `launch` → `growth` → `spike` → `soak`이며, 기준과 명령은 `docs/specs/ops/k6-load-test-plan.md`를 따른다.
+
+---
+
+## API-LINT-BASELINE — API 전체 ESLint 기존 any/unsafe 부채
+
+> 2026-07-01 카카오 인증 보강 검증 중 API 전체 lint가 기존 `any`/unsafe 계열 오류로 실패했다. 이번 보안 보강 범위에서는 새 카카오 클라이언트/DTO 파일 직접 ESLint를 통과시켰고, 전체 API lint 기준선 정리는 별도 작업으로 분리한다.
+
+- [ ] `apps/api/src/auth/auth.service.ts`: Firestore `data()` 반환값과 주소 배열 처리의 `any` 흐름을 명시 타입/파서로 정리한다.
+- [ ] `apps/api/src/auth/auth.service.spec.ts`: Firestore mock helper와 카카오 회귀 테스트 mock의 `any` 반환/할당을 타입 있는 테스트 더블로 교체한다.
+- [ ] API lint 스크립트를 자동 수정용 `lint:fix`와 검증용 `lint:check`로 분리할지 결정한다.
 
 ---
 

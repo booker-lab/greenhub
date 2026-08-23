@@ -1,4 +1,17 @@
-import { IsEnum, IsISO8601, IsOptional, IsString, IsUrl } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsEnum,
+  IsISO8601,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Matches,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 const ORDER_STATUSES = [
   'PENDING',
@@ -7,6 +20,7 @@ const ORDER_STATUSES = [
   'ACCEPTED',
   'PREPARING',
   'DELIVERING',
+  'DELIVERY_HELD',
   'HUB_ARRIVED',
   'PICKED_UP',
   'DELIVERED',
@@ -16,12 +30,65 @@ const ORDER_STATUSES = [
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+const DELIVERY_HOLD_REASONS = [
+  'WEATHER',
+  'ACCESS_UNAVAILABLE',
+  'ADDRESS_ISSUE',
+  'CUSTOMER_UNREACHABLE',
+  'OTHER',
+] as const;
+
+export class DeliveryHoldDto {
+  @IsEnum(DELIVERY_HOLD_REASONS)
+  reasonCode: (typeof DELIVERY_HOLD_REASONS)[number];
+
+  @IsString()
+  reasonMessage: string;
+
+  @IsBoolean()
+  customerResponsible: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  redeliveryFee?: number | null;
+
+  @IsOptional()
+  @IsISO8601()
+  nextContactAt?: string | null;
+
+  @IsOptional()
+  @IsISO8601()
+  nextDeliveryAt?: string | null;
+}
+
+export class HoldDeliveryDto {
+  @ValidateNested()
+  @Type(() => DeliveryHoldDto)
+  deliveryHold: DeliveryHoldDto;
+}
+
+export class CreateRedeliveryFeeDto {
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+}
+
+export class AttachDeliveryPhotoDto {
+  @IsUrl({ require_protocol: true })
+  photoUrl: string;
+}
+
 export class UpdateStatusDto {
   @IsEnum(ORDER_STATUSES)
   status: OrderStatus;
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
+  @Matches(/^[^\r\n]*$/, {
+    message: '취소 사유에는 줄바꿈이나 제어문자를 사용할 수 없습니다.',
+  })
   reason?: string;
 
   @IsOptional()
@@ -31,4 +98,9 @@ export class UpdateStatusDto {
   @IsOptional()
   @IsUrl()
   photoUrl?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DeliveryHoldDto)
+  deliveryHold?: DeliveryHoldDto;
 }

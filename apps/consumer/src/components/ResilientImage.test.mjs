@@ -14,7 +14,7 @@ const homeSource = source('HomeProductList.tsx');
 const deadlineSource = source('DeadlineSection.tsx');
 const productImagesSource = source('../app/products/[id]/_components/ProductImages.tsx');
 const productInfoSource = source('../app/products/[id]/_components/ProductInfo.tsx');
-const productActionsSource = source('../app/products/[id]/_components/ProductActions.tsx');
+const productActionsSource = source('../app/products/[id]/_components/LegacyProductActions.tsx');
 
 test('공통 이미지 경계는 원본과 대체 이미지 실패를 각각 한 번만 처리한다', () => {
   assert.match(resilientSource, /^'use client';/);

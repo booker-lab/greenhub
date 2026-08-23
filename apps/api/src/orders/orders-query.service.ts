@@ -4,47 +4,38 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { FirestoreService } from '../firestore/firestore.service';
+import { StorageService } from '../firestore/storage.service';
+
+type OrderRequester = Pick<JwtPayload, 'sub' | 'role'>;
+type OrderRequesterInput = OrderRequester | string;
 
 @Injectable()
 export class OrdersQueryService {
-  constructor(private readonly firestore: FirestoreService) {}
+  constructor(
+    private readonly firestore: FirestoreService,
+    private readonly storage?: StorageService,
+  ) {}
 
-  async getOrder(storeId: string, orderId: string, requesterId: string) {
+  async getOrder(storeId: string, orderId: string, requesterInput: OrderRequesterInput) {
+    const requester = this.normalizeRequester(requesterInput);
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException('주문을 찾을 수 없습니다.');
     }
     const order = snap.data()!;
-    if (order['userId'] !== requesterId) {
-      const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
-      const userData = userSnap.data();
-      const role = userData?.['role'];
-      // admin·seller·driver는 타인 주문 조회 허용
-      if (role !== 'seller' && role !== 'driver' && role !== 'admin') {
-        throw new ForbiddenException();
-      }
-      // 판매자는 자신의 storeId 주문만 조회 가능 (admin·driver는 제한 없음)
-      if (role === 'seller' && userData?.['storeId'] !== storeId) {
-        throw new ForbiddenException();
-      }
-    }
-    return order;
+    await this.assertOrderReadAccess(storeId, order, requester);
+    return this.withDeliveryPhotoUrl(orderId, order, requester);
   }
 
   async getOrders(
     storeId: string,
-    requesterId: string,
+    requesterInput: OrderRequesterInput,
     query: { userId?: string; status?: string; saleType?: string },
   ) {
-    const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
-    const userData = userSnap.data();
-    const role = userData?.['role'];
-
-    // 판매자는 자신의 storeId 주문만 조회 가능 (admin·driver는 storeId 제한 없음)
-    if (role === 'seller' && userData?.['storeId'] !== storeId) {
-      throw new ForbiddenException();
-    }
+    const requester = this.normalizeRequester(requesterInput);
+    await this.assertStoreListAccess(storeId, requester);
 
     const VALID_STATUSES = [
       'PENDING',
@@ -56,6 +47,7 @@ export class OrdersQueryService {
       'HUB_ARRIVED',
       'PICKED_UP',
       'DELIVERED',
+      'DELIVERY_HELD',
       'CANCELLED',
       'REVIEWED',
     ];
@@ -70,33 +62,132 @@ export class OrdersQueryService {
 
     let ref = this.firestore.collection('orders').where('storeId', '==', storeId) as any;
 
-    if (query.userId) ref = ref.where('userId', '==', query.userId);
+    if (requester.role === 'consumer') {
+      ref = ref.where('userId', '==', requester.sub);
+    } else if (query.userId) {
+      ref = ref.where('userId', '==', query.userId);
+    }
+    if (requester.role === 'driver') ref = ref.where('driverId', '==', requester.sub);
     if (query.status) ref = ref.where('status', '==', query.status);
     if (query.saleType) ref = ref.where('saleType', '==', query.saleType);
 
     const snap = await ref.get();
-    return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    return snap.docs.map((d: any) => this.normalizeOrder({ id: d.id, ...d.data() }));
   }
 
   // ── Public (storeId-free) ─────────────────────────────────────────────────
 
-  async getOrderById(orderId: string, requesterId: string) {
+  async getOrderById(orderId: string, requesterInput: OrderRequesterInput) {
+    const requester = this.normalizeRequester(requesterInput);
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!snap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
     const order = snap.data()!;
 
-    if (order['userId'] !== requesterId) {
-      const userSnap = await this.firestore.doc(`users/${requesterId}`).get();
-      const role = userSnap.data()?.['role'];
-      if (role !== 'seller' && role !== 'driver' && role !== 'admin') {
-        throw new ForbiddenException();
-      }
-    }
-    return order;
+    await this.assertOrderReadAccess(order['storeId'], order, requester);
+    return this.withDeliveryPhotoUrl(orderId, order, requester);
   }
 
   async getMyOrders(requesterId: string) {
     const snap = await this.firestore.collection('orders').where('userId', '==', requesterId).get();
-    return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    return snap.docs.map((d: any) => this.normalizeOrder({ id: d.id, ...d.data() }));
+  }
+
+  private async assertStoreListAccess(storeId: string, requester: OrderRequester) {
+    if (requester.role !== 'seller') return;
+    const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!storeSnap.exists || storeSnap.data()?.['ownerId'] !== requester.sub) {
+      throw new ForbiddenException('해당 스토어 주문을 조회할 권한이 없습니다.');
+    }
+  }
+
+  private normalizeRequester(requester: OrderRequesterInput): OrderRequester {
+    return typeof requester === 'string' ? { sub: requester, role: 'consumer' } : requester;
+  }
+
+  private async assertOrderReadAccess(
+    storeId: string,
+    order: Record<string, any>,
+    requester: OrderRequester,
+  ) {
+    if (requester.role === 'admin') return;
+    if (requester.role === 'consumer' && order['userId'] === requester.sub) return;
+    if (requester.role === 'driver' && order['driverId'] === requester.sub) return;
+    if (requester.role === 'seller') {
+      const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
+      if (storeSnap.exists && storeSnap.data()?.['ownerId'] === requester.sub) return;
+    }
+    throw new ForbiddenException('해당 주문을 조회할 권한이 없습니다.');
+  }
+
+  private normalizeOrder(order: Record<string, any>): Record<string, any> {
+    if (Array.isArray(order['orderItems']) && order['orderItems'].length > 0) {
+      return {
+        ...order,
+        orderItems: order['orderItems'].map((item: Record<string, any>) => {
+          const { lineAmount, ...normalized } = item;
+          return {
+            ...normalized,
+            subtotalAmount:
+              item['subtotalAmount'] ??
+              lineAmount ??
+              (typeof item['unitPrice'] === 'number' && typeof item['quantity'] === 'number'
+                ? item['unitPrice'] * item['quantity']
+                : null),
+          };
+        }),
+      };
+    }
+    return {
+      ...order,
+      orderItems: [
+        {
+          productId: order['productId'],
+          productName: order['productName'],
+          productImageUrl: order['productImageUrl'] ?? null,
+          unitPrice:
+            typeof order['totalAmount'] === 'number' && typeof order['quantity'] === 'number'
+              ? Math.max(0, order['totalAmount'] - (order['deliveryFee'] ?? 0)) / order['quantity']
+              : null,
+          quantity: order['quantity'] ?? 1,
+          subtotalAmount:
+            typeof order['totalAmount'] === 'number'
+              ? order['totalAmount'] - (order['deliveryFee'] ?? 0)
+              : null,
+        },
+      ],
+    };
+  }
+
+  private async withDeliveryPhotoUrl(
+    orderId: string,
+    order: Record<string, any>,
+    requester: OrderRequester,
+  ) {
+    const normalized = this.normalizeOrder(order);
+    const isRoundDirect =
+      order['schemaVersion'] === 2 &&
+      typeof order['roundId'] === 'string' &&
+      order['deliveryMethod'] === 'direct';
+    if (!isRoundDirect) return normalized;
+
+    const { deliveryPhotoUrl: _storedUrl, ...privatePhotoOrder } = normalized;
+    if (!['DELIVERED', 'REVIEWED'].includes(order['status'])) {
+      return privatePhotoOrder;
+    }
+    const photoId = Array.isArray(order['deliveryPhotoIds'])
+      ? order['deliveryPhotoIds'].find(
+          (value: unknown): value is string => typeof value === 'string' && value.length > 0,
+        )
+      : null;
+    if (!photoId || !this.storage) return privatePhotoOrder;
+
+    const signed = await this.storage.createDeliveryPhotoReadUrl({
+      storeId: order['storeId'],
+      orderId,
+      photoId,
+      requesterId: requester.sub,
+      requesterRole: requester.role,
+    });
+    return { ...privatePhotoOrder, deliveryPhotoUrl: signed.url };
   }
 }

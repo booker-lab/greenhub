@@ -24,6 +24,14 @@ apps/e2e/.bypass-state.json
 apps/e2e/.auth-state.json
 # e2e 어드민 세션 쿠키 저장소 (admin 세션 토큰 포함, 커밋 금지) #CL-53
 apps/e2e/.admin-state.json
+# 회차 직배송 E2E 브라우저 세션 상태(쿠키·계정 정보 포함, 커밋 금지)
+apps/e2e/.round-direct-*-state.json
+
+# 회차 직배송 E2E의 민감 fixture manifest와 원본 실행 결과
+apps/e2e/.artifacts/
+.artifacts/round-direct/**/manifest.json
+.artifacts/round-direct/**/*-raw.json
+.artifacts/round-direct/**/playwright-results.json
 
 # Firestore 로컬 백업
 backups/

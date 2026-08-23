@@ -8,6 +8,9 @@ interface Props {
   isUnavailable: boolean;
   unavailableLabel?: string;
   canBuy: boolean;
+  canAddToCart?: boolean;
+  addToCartLabel?: string;
+  buyNowLabel?: string;
   onAddToCart: () => void;
   onBuyNow: () => void;
 }
@@ -18,14 +21,19 @@ export default function ProductCTABar({
   isUnavailable,
   unavailableLabel,
   canBuy,
+  canAddToCart = !(isGroup && isUnavailable),
+  addToCartLabel = '장바구니',
+  buyNowLabel,
   onAddToCart,
   onBuyNow,
 }: Props) {
-  const ctaLabel = isUnavailable
-    ? (unavailableLabel ?? '판매 준비 중')
-    : isGroup
-      ? '공구 참여하기'
-      : '바로 결제';
+  const ctaLabel =
+    buyNowLabel ??
+    (isUnavailable
+      ? (unavailableLabel ?? '판매 준비 중')
+      : isGroup
+        ? '공구 참여하기'
+        : '바로 결제');
 
   return (
     <Box
@@ -72,10 +80,10 @@ export default function ProductCTABar({
             variant="default"
             radius="md"
             size="lg"
-            disabled={isGroup && isUnavailable}
+            disabled={!canAddToCart}
             onClick={onAddToCart}
           >
-            장바구니
+            {addToCartLabel}
           </Button>
           <Button
             flex={2}

@@ -27,18 +27,30 @@ export const AUTH_STATE_PATH = resolve(__dirname, '../../.auth-state.json')
 // authjs.session-token 쿠키가 1슬롯뿐이라 마지막 로그인만 남고 충돌한다.
 // admin 전용 컨텍스트에서 별도 발급해 seller 세션과 격리한다.
 export const ADMIN_STATE_PATH = resolve(__dirname, '../../.admin-state.json')
+export const ROUND_DIRECT_STATE_PATHS = {
+  chromium: resolve(__dirname, '../../.round-direct-chromium-state.json'),
+  mobile: resolve(__dirname, '../../.round-direct-mobile-state.json'),
+} as const
+
+type CredentialHeader = {
+  name: string
+  value: string
+}
 
 export async function loginViaCredentials(
   page: Page,
   base: string,
   email: string,
   password: string,
+  credentialHeader?: CredentialHeader,
 ): Promise<void> {
-  const secret = process.env['E2E_TEST_SECRET']
-  if (!secret) {
-    throw new Error('E2E_TEST_SECRET env not set — required for 옵션 B 헤더 게이팅')
+  const defaultSecret = process.env['E2E_TEST_SECRET']
+  if (!credentialHeader && !defaultSecret) {
+    throw new Error('옵션 B 헤더 게이팅에 필요한 E2E_TEST_SECRET이 설정되지 않았습니다.')
   }
-  const headers = { 'x-e2e-test-token': secret }
+  const headers = credentialHeader
+    ? { [credentialHeader.name]: credentialHeader.value }
+    : { 'x-e2e-test-token': defaultSecret as string }
 
   const csrfRes = await page.request.get(`${base}/api/auth/csrf`, { headers })
   if (!csrfRes.ok()) {

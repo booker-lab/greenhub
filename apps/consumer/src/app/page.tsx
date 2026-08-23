@@ -1,4 +1,5 @@
 import { Container } from '@mantine/core';
+import { Suspense } from 'react';
 import BrandHeader from '@/components/BrandHeader';
 import BusinessInfoFooter from '@/components/BusinessInfoFooter';
 import BusinessRelationshipNotice from '@/components/BusinessRelationshipNotice';
@@ -11,7 +12,9 @@ export default function HomePage() {
       <BrandHeader />
       <HeroBanner />
       <BusinessRelationshipNotice />
-      <HomeProductList />
+      <Suspense fallback={null}>
+        <HomeProductList />
+      </Suspense>
       <BusinessInfoFooter />
     </Container>
   );

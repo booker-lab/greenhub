@@ -101,12 +101,16 @@ JWT 페이로드 구조:
 1. 소비자 앱 로그인 버튼 클릭
 2. NextAuth.js → OAuth Provider 리다이렉트
 3. Provider 인증 완료 → NextAuth.js callback
-4. users/{userId} 조회
+4. NextAuth.js callback이 Provider access token을 NestJS API에 전달
+5. NestJS API가 Provider 사용자 정보 API를 호출해 사용자 id를 서버 측 검증
+6. users/{userId} 조회
    - 없으면 신규 생성 (role: 'consumer' 기본값)
    - 있으면 providers 배열 업데이트
-5. NextAuth.js 세션 생성 + JWT 발급
-6. 원래 진입하려던 화면으로 복귀 (callbackUrl)
+7. NextAuth.js 세션 생성 + JWT 발급
+8. 원래 진입하려던 화면으로 복귀 (callbackUrl)
 ```
+
+카카오 로그인은 클라이언트가 전달한 `kakaoId`, `email`, `name`을 신뢰하지 않는다. `/auth/kakao-login`은 `kakaoAccessToken`을 필수로 받고, API 서버가 카카오 사용자 정보 API로 검증한 `id`, `email`, `name`만 사용한다. k6 부하테스트는 카카오 OAuth를 반복 호출하지 않고 seed된 email/password 계정 또는 사전 발급 JWT만 사용한다.
 
 ### 5-2. 판매자 초대 토큰 가입 (A안 — MVP)
 
@@ -383,3 +387,4 @@ export interface UserProfile {
 | 날짜 | 내용 |
 |------|------|
 | 2026-03-26 | 초안 작성 — PWA 설계 문서 + 1단계 요구사항 기반 통합 |
+| 2026-07-01 | 카카오 로그인은 API 서버가 `kakaoAccessToken`으로 사용자 정보를 직접 검증하는 계약으로 보강. k6는 외부 OAuth를 부하테스트하지 않음 |

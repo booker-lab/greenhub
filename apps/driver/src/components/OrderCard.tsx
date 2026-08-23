@@ -45,13 +45,21 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
       radius="xl"
       withBorder
       p="md"
+      data-testid={`driver-order-${order.id}`}
       style={{ textDecoration: 'none' }}
     >
       <Stack gap="xs">
         <Group justify="space-between" align="center">
-          <Badge color={badge.color} variant="light" size="md">
-            {badge.label}
-          </Badge>
+          <Group gap="xs">
+            <Badge color={badge.color} variant="light" size="md">
+              {badge.label}
+            </Badge>
+            {order.status === 'DELIVERY_HELD' && (
+              <Badge color="red" variant="light" size="md">
+                배송 보류
+              </Badge>
+            )}
+          </Group>
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             {tab === 'preparing'
               ? `수거 ${formatTime(order.preparedAt)}`
