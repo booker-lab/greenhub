@@ -1,404 +1,309 @@
-# Admin Domain Spec
+<!-- Language: ko -->
 
-> **작성일**: 2026-04-01 (소급 작성 — 구현 완료 후 정합성 검토 시 문서화)
-> **상태**: Implemented & Verified
-> **연관 문서**: `CRITICAL_LOGIC.md`, `auth.md`, `orders.md`, `settlements.md`
+# Admin API / Domain Spec
 
----
+> **최종 정합화**: 2026-08-23
+> **상태**: Current
+> **API 정본**: `apps/api/src/admin/**`
+> **인증 계약**: `docs/specs/api/auth.md`
+> **정산 계약**: `docs/specs/api/settlements.md`
+> **canonical URL**: `docs/URLS.md`
 
-## 1. 도메인 개요
+## 1. 범위와 권한
 
-`admin` 도메인은 **Green Hub 운영자 전용** 관리 기능을 제공한다.
-모든 엔드포인트는 `role === 'admin'` 인증이 이중으로 적용된다.
+`admin`은 Greenhub 운영자 전용 관리 API다.
 
-- **NestJS 레이어**: `@Roles('admin')` 데코레이터 → `RolesGuard` JWT 검증
-- **Next.js 레이어**: `apps/seller/src/app/admin/layout.tsx` Server Component에서 세션 role 재검증
+`AdminController` 전체에 다음 보호가 적용된다.
 
-admin 계정은 별도 회원가입 경로가 없으며, **Firestore 콘솔에서 `users/{id}.role = 'admin'` 수동 설정**으로만 부여한다.
-(초대 토큰 발행 시 역할은 'seller'로 고정 — admin은 시스템 운영자 한정)
-
----
-
-## 2. 접근 경로
-
-| 항목 | 값 |
-|------|-----|
-| UI 진입점 | `{seller_domain}/admin` (BottomNav 노출 없음 — URL 직접 입력) |
-| 인증 방식 | NextAuth 세션 → NestJS JWT 순으로 이중 검증 |
-| 개발 URL | `http://localhost:3002/admin` |
-| 프로덕션 URL | `https://greenhub-seller.vercel.app/admin` |
-
----
-
-## 3. Firestore 컬렉션 스키마
-
-### `invites/{token}`
-
-```ts
-{
-  token: string          // 16자리 대문자 영숫자 (UUID 파생)
-  createdBy: string      // admin userId
-  usedAt: Timestamp | null
-  usedBy: string | null  // 초대 수락한 seller userId
-  expiresAt: Timestamp   // 생성 시점 +7일
-  createdAt: Timestamp
-}
+```text
+JwtAuthGuard
+RolesGuard
+@Roles('admin')
 ```
 
----
+seller 앱의 admin UI도 세션 role을 추가로 확인하지만 API 권한의 정본은 서버 guard다.
 
-## 4. API 엔드포인트
+admin role을 어떤 운영 절차로 부여하는지는 계정 보안 정책이다. 과거 문서의 “Firestore 콘솔에서 직접 role을 바꾸는 것이 유일한 정식 방법”을 현행 운영 지침으로 사용하지 않는다. 실제 관리자 권한 부여는 별도 승인된 관리 절차로 수행한다.
 
-> **기본 경로**: `/admin`
-> 모든 엔드포인트: `Authorization: Bearer {adminJwt}` 필수 + `@Roles('admin')` 검증
+## 2. 접근 URL
 
----
+UI 진입점:
 
-### 4-1. 스토어 관리
-
-#### 전체 스토어 목록
-
+```text
+{seller_domain}/admin
 ```
+
+Production canonical seller domain:
+
+```text
+https://seller.greenlove.co.kr
+```
+
+따라서 production admin 기준 URL은:
+
+```text
+https://seller.greenlove.co.kr/admin
+```
+
+과거 `greenhub-seller.vercel.app` 같은 deployment alias를 canonical production URL로 사용하지 않는다.
+
+로컬 seller 포트는 실행 방식에 따라 달라질 수 있으므로 `docs/URLS.md`를 확인한다.
+
+## 3. Store 관리
+
+### 목록
+
+```text
 GET /admin/stores
 ```
 
-**Response** `200`
-```ts
-{
-  stores: Store[],   // 전체 스토어 (createdAt desc)
-  total: number
-}
-```
+- `createdAt DESC`
+- `{ stores, total }`
 
----
+### Store 수수료율
 
-#### 수수료 설정
-
-```
+```text
 PATCH /admin/stores/:storeId/commission
 ```
 
-**Request Body**
-```ts
-{ rate: number }   // 0~100 (%)
+body의 정확한 검증 범위는 `SetCommissionDto`를 따른다. 이 값과 settlement service의 전역 `PLATFORM_FEE_RATE` 사용 범위를 동일한 것으로 가정하지 않는다. 실제 수수료 모델 변경은 두 경로를 함께 점검한다.
+
+### Store archive / restore
+
+```text
+PATCH /admin/stores/:storeId/archive
+PATCH /admin/stores/:storeId/restore
 ```
 
-**Response** `200`
-```ts
-{ storeId: string, commissionRate: number }
-```
+현재 archive는 물리 삭제가 아니다.
 
----
+- 주문 또는 settlement가 하나라도 존재하면 archive 거부
+- 허용되면 `status: archived`, `archivedAt` 기록
+- restore는 `status: active`로 복구하고 `archivedAt` 제거
 
-### 4-2. 사용자 관리
+기록이 있는 판매자를 강제로 삭제하는 도구로 사용하지 않는다.
 
-#### 소비자 목록 조회
+## 4. Consumer 사용자 관리
 
-```
+### 목록
+
+```text
 GET /admin/users
 ```
 
-> `role === 'consumer'` 사용자만 반환. `passwordHash` 필드 제외.
+현재 `role == consumer`만 조회한다. 반환 전에 `passwordHash`를 제거한다.
 
-**Response** `200`
-```ts
-{
-  users: Omit<UserProfile, 'passwordHash'>[],
-  total: number
-}
-```
+### 정지/복구 flag
 
----
-
-#### 사용자 정지/복구
-
-```
+```text
 PATCH /admin/users/:userId/status
 ```
 
-**Request Body**
 ```ts
 { suspended: boolean }
 ```
 
-**Response** `200`
-```ts
-{ userId: string, suspended: boolean }
+이 endpoint는 Firestore `suspended` 값을 갱신한다.
+
+중요: `suspended` flag가 존재한다는 것과 모든 인증/refresh/API 경로가 정지 사용자를 동일하게 차단한다는 것은 별개다. 계정 정지 정책 변경 시 `AuthService`, JWT refresh, 각 guard의 실제 enforcement를 함께 검증한다.
+
+## 5. 주문 관리
+
+### 목록
+
+```text
+GET /admin/orders?storeId=<storeId>&status=<OrderStatus>
 ```
 
-> Firestore `users/{userId}.suspended` 필드를 토글한다.
-> 정지된 사용자는 로그인 시 `401` 반환 (auth.service.ts 검증 필요 — 현재 미구현, 추후 추가).
+- 선택적 store/status filter
+- `createdAt DESC`
+- 최대 200건
+- pagination 없음
 
----
+### 관리자 환불
 
-### 4-3. 주문 관리
-
-#### 주문 목록 조회 (전체)
-
-```
-GET /admin/orders?storeId=:storeId&status=:status
-```
-
-| 파라미터 | 필수 | 설명 |
-|----------|------|------|
-| `storeId` | - | 특정 스토어 필터 |
-| `status` | - | 주문 상태 필터 (`OrderStatus`) |
-
-> 최대 200건 반환 (createdAt desc). 페이지네이션 미지원 — MVP 운영 규모 한정.
-
-**Response** `200`
-```ts
-{
-  orders: Order[],
-  total: number
-}
-```
-
----
-
-#### 강제 환불
-
-```
+```text
 POST /admin/orders/:orderId/refund
 ```
 
-**Request Body**
-```ts
-{ reason?: string }   // 생략 시 '관리자 강제 환불'
+현재 흐름:
+
+1. 주문 존재 확인
+2. 이미 `CANCELLED`면 거부
+3. `PaymentsService.processRefundByOrderId()` 호출
+4. 주문을 `CANCELLED`로 갱신하고 사유 기록
+
+환불의 provider 멱등성·claim·운영 이슈 계약은 `docs/specs/api/payments.md`를 따른다. 이 admin endpoint를 반복 호출해 provider 상태를 추측하지 않는다.
+
+## 6. 정산 관리
+
+### 목록
+
+```text
+GET /admin/settlements?storeId=<storeId>&from=<date>&to=<date>
 ```
 
-**처리 흐름**
-1. 이미 `CANCELLED` 상태이면 `400`
-2. Portone 환불 API 호출
-3. 주문 상태 → `CANCELLED`, `cancelReason` 기록
+- `settledAt DESC`
+- 최대 500건
+- `{ settlements, total }`
 
-**Response** `200`
-```ts
-{ ok: true, orderId: string }
-```
+### 지급 처리
 
----
-
-### 4-4. 정산 관리
-
-#### 정산 목록 조회
-
-```
-GET /admin/settlements?storeId=:storeId&from=YYYY-MM-DD&to=YYYY-MM-DD
-```
-
-| 파라미터 | 필수 | 설명 |
-|----------|------|------|
-| `storeId` | - | 특정 스토어 필터 |
-| `from` | - | 정산 시작일 (settledAt >=) |
-| `to` | - | 정산 종료일 (settledAt <=, 23:59:59) |
-
-> 최대 500건 반환 (settledAt desc).
-
-**Response** `200`
-```ts
-{
-  settlements: Settlement[],
-  total: number
-}
-```
-
----
-
-#### 정산 지급 처리
-
-```
+```text
 PATCH /admin/settlements/:settlementId/pay
 ```
 
-**처리 규칙**
-- `confirmed` 상태만 `paid`로 전환 가능
-- 이미 `paid`이면 `400`
+- `confirmed`만 `paid`로 전환
+- 이미 `paid`면 거부
+- transaction 안에서 status 재확인
+- `paidAt`, `updatedAt` 기록
 
-**Response** `200`
-```ts
-{ settlementId: string, status: 'paid' }
-```
+상세 정산 상태 계약은 `docs/specs/api/settlements.md`가 정본이다.
 
----
+## 7. Driver 관리
 
-### 4-5. 초대 관리
+### 목록
 
-#### 초대 토큰 생성
-
-```
-POST /admin/invite
-```
-
-**처리 흐름**
-1. 16자리 대문자 토큰 생성 (UUID 파생, 중복 가능성 무시 — MVP)
-2. Firestore `invites/{token}` 문서 저장 (만료: +7일)
-3. 토큰과 만료 시각 반환
-
-**Response** `201`
-```ts
-{
-  token: string,       // 16자리 대문자 영숫자
-  expiresAt: string    // ISO8601
-}
-```
-
-> 생성된 토큰을 seller 온보딩 URL에 포함: `{seller_domain}/onboarding?token={token}`
-
----
-
-#### 초대 목록 조회
-
-```
-GET /admin/invite
-```
-
-**Response** `200`
-```ts
-Array<{
-  token: string
-  createdBy: string
-  usedAt: string | null     // ISO8601
-  usedBy: string | null
-  expiresAt: string         // ISO8601
-  createdAt: string         // ISO8601
-}>
-```
-
-> 최대 50건 (createdAt desc).
-
----
-
-### 4-6. 드라이버 관리
-
-#### 드라이버 목록 조회
-
-```
+```text
 GET /admin/drivers?status=pending|approved|suspended
 ```
 
-| 파라미터 | 필수 | 설명 |
-|----------|------|------|
-| `status` | - | `pending`(승인 대기) / `approved`(승인 완료) / `suspended`(정지) / 생략 시 전체 |
+현재 구현은 Firestore에서 `role == driver` 최대 100건을 읽은 뒤 status를 service 메모리에서 필터·정렬한다.
 
-**Response** `200`
-```ts
-{ drivers: UserProfile[], total: number }
-```
+status 판정:
 
----
+- `pending`: `!driverApproved && !suspended`
+- `approved`: `driverApproved && !suspended`
+- `suspended`: `suspended`
 
-#### 드라이버 승인
+### 승인
 
-```
+```text
 PATCH /admin/drivers/:userId/approve
 ```
 
-- `role !== 'driver'`이면 `400`
-- `driverApproved: true` 업데이트
+- 사용자 존재 확인
+- `role === driver` 확인
+- `driverApproved: true`
 
-**Response** `200`
-```ts
-{ userId: string, driverApproved: true }
-```
+### 정지/복구
 
----
-
-#### 드라이버 정지/복구
-
-```
+```text
 PATCH /admin/drivers/:userId/suspend
 ```
 
-**Request Body**
 ```ts
 { suspended: boolean }
 ```
 
-**Response** `200`
-```ts
-{ userId: string, suspended: boolean }
+Driver Kakao 로그인은 `driverApproved`를 별도 확인한다. Preview E2E credentials는 더 좁은 allowlist/secret gate를 사용하므로 admin 승인과 E2E gate를 혼동하지 않는다.
+
+## 8. Seller 초대
+
+### 생성
+
+```text
+POST /admin/invite
 ```
 
----
+현재 구현:
 
-#### 드라이버 사전 승인 플로우
+- UUID에서 하이픈 제거 후 앞 16자를 대문자로 사용
+- `invites/{token}` 저장
+- 생성자 admin user ID 기록
+- `usedAt`, `usedBy` 초기 null
+- 만료: 생성 시점 + 7일
 
-1. 카카오 최초 로그인 → `POST /auth/kakao-login` → 신규 사용자 생성 (`driverApproved: false`)
-2. driver 앱 `auth.ts` signIn 콜백 → `driverApproved === false`이면 `/login?pending=true`로 리다이렉트
-3. admin이 `/admin/drivers` 승인 대기 탭에서 승인 버튼 클릭 → `driverApproved: true`
-4. 드라이버가 다시 카카오 로그인 → 정상 진입
-
----
-
-## 5. 보안 설계
-
-| 레이어 | 구현 |
-|--------|------|
-| JWT 검증 | `JwtAuthGuard` → `RolesGuard(@Roles('admin'))` |
-| UI 접근 차단 | `admin/layout.tsx` (Server Component) — `session.user.role !== 'admin'` 시 `/` 리다이렉트 |
-| admin 계정 발급 | Firestore 콘솔 수동 설정만 허용 — 프로그래매틱 부여 경로 없음 |
-| 초대 경로 | seller 초대는 role='seller'로 고정 — admin 권한 위임 불가 |
-
----
-
-## 6. 알려진 한계 및 미구현 사항
-
-| 항목 | 상태 | 비고 |
-|------|------|------|
-| `suspended` 사용자 로그인 차단 | 🔲 미구현 | `auth.service.ts` 로그인 시 suspended 검증 추가 필요 |
-| 주문 목록 페이지네이션 | 🔲 MVP 제외 | 현재 200건 하드 리밋 |
-| admin 활동 로그 | 🔲 미구현 | 강제 환불·정지 등 감사 로그 |
-| 다중 admin 지원 | ✅ 지원 | role='admin' 사용자 수 제한 없음 |
-
----
-
-## 7. 배너 관리
-
-### Firestore 스키마 — `banners/main_hero`
+응답:
 
 ```ts
 {
-  imageUrl?: string        // Firebase Storage URL
-  tagText?: string         // 배지 텍스트 (예: "🌿 신상품 출시")
-  headline?: string        // 메인 헤드라인
-  subText?: string         // 서브 텍스트
-  cta1?: { label: string; href: string }
-  cta2?: { label: string; href: string }
-  isActive: boolean        // false면 consumer 앱에 미표시
-  updatedAt: Timestamp     // 서버 자동 관리
+  token: string
+  expiresAt: string
 }
 ```
 
-**구조 결정**: 단일 고정 문서(`banners/main_hero`). 복수 배너 시 `banners/{bannerType}` 패턴으로 확장.
+초대 token 원문은 권한 있는 온보딩 흐름에서만 취급하며 문서·이슈에 실제 token을 남기지 않는다.
 
-### API 엔드포인트
+### 목록
 
-| 메서드 | 경로 | 인증 | 설명 |
-|--------|------|------|------|
-| `GET` | `/admin/banner` | admin | 현재 배너 조회 |
-| `PUT` | `/admin/banner` | admin | 배너 업서트 (merge) |
-| `GET` | `/banner` | 없음 | consumer 앱용 공개 조회 |
+```text
+GET /admin/invite
+```
 
-**공개 엔드포인트 위치**: `app.controller.ts` (AdminModule 아님) — NestJS 최상위 컨트롤러에서 직접 Firestore 조회.
+- `createdAt DESC`
+- 최대 50건
 
-### 이미지 업로드
+## 9. Banner 관리
 
-Firebase Storage 경로: `banners/main_hero/{uuid}`. Storage rules: 인증된 사용자 쓰기, 누구나 읽기.
+Admin:
 
-### updatedAt 처리 규칙
+```text
+GET /admin/banner
+PUT /admin/banner
+```
 
-클라이언트가 GET 후 form에 `updatedAt`을 포함해 PUT할 때 400을 방지하기 위한 **양방향 방어 패턴**:
-1. `UpsertBannerDto`에 `updatedAt?: unknown` 허용 필드 포함
-2. `upsertBanner()` 서비스에서 spread 전 반드시 제거: `const { updatedAt: _u, createdAt: _c, ...fields } = dto`
-3. `useAdmin.ts` save() 에서도 제거 후 전송
+Consumer public read:
 
----
+```text
+GET /banner
+```
+
+현재 고정 문서:
+
+```text
+banners/main_hero
+```
+
+주요 필드:
+
+```ts
+{
+  imageUrl?: string
+  tagText?: string
+  headline?: string
+  subText?: string
+  cta1?: { label: string; href: string }
+  cta2?: { label: string; href: string }
+  isActive: boolean
+  updatedAt: Timestamp
+}
+```
+
+admin upsert는 client가 되돌려 보낸 `updatedAt/createdAt`을 제거하고 서버 `updatedAt`을 기록한다.
+
+Storage write/read 권한은 현재 `storage.rules`를 정본으로 확인한다. 과거 문서의 “인증 사용자 누구나 banner 경로 write” 설명을 현재 보안 계약으로 자동 적용하지 않는다.
+
+## 10. 현재 알려진 구조적 제한
+
+- admin 주문 목록: 최대 200건, pagination 없음
+- admin 정산 목록: 최대 500건, pagination 없음
+- driver 목록: 최대 100건 read 후 메모리 필터
+- store 수수료 설정과 settlement 생성의 `PLATFORM_FEE_RATE` 관계는 단일 정책으로 완전히 통합돼 있지 않을 수 있으므로 변경 전 코드 재검증 필요
+- 사용자 `suspended` flag의 enforcement는 endpoint별 인증 경로를 실제 검증해야 함
+- admin actions의 통합 감사 로그 범위는 operation/audit 구현을 확인해야 하며 단순 endpoint 존재만으로 완전한 감사 추적을 보장하지 않는다.
+
+이 제한을 해소할 필요가 생기면 `docs/BACKLOG.md`에 현재 작업으로 승격한 뒤 별도 설계를 수행한다.
+
+## 11. 검증 원칙
+
+admin 변경 시 최소 확인:
+
+- `apps/api/src/admin/admin.controller.ts`
+- `apps/api/src/admin/admin.service.ts`
+- `apps/api/src/admin/dto/admin.dto.ts`
+- `apps/seller/src/app/admin/**`
+- `apps/seller/src/hooks/useAdmin.ts`
+- auth/orders/payments/settlements 관련 spec
+- 관련 unit/E2E
+
+실제 환불·계정 권한 변경·운영 데이터 변경은 문서 정합성 검토 범위에서 실행하지 않는다.
 
 ## 변경 이력
 
 | 날짜 | 내용 |
-|------|------|
-| 2026-04-01 | 초안 작성 — 구현 완료 후 소급 문서화 (정합성 검토 세션) |
-| 2026-04-03 | §4-6 드라이버 관리 API 추가 + 사전 승인 플로우 문서화 — E2E 검증 완료 |
-| 2026-04-23 | §7 배너 관리 API 추가 — 히어로 배너 admin 편집 기능 구현 |
+|---|---|
+| 2026-08-23 | canonical URL, archive/restore, 현재 정산·드라이버·초대 계약, 위험한 수동 권한 부여 지침을 현행화 |
+| 2026-04-23 | banner 관리 추가 |
+| 2026-04-03 | driver 관리 추가 |
+| 2026-04-01 | 초기 admin 구현 문서화 |
