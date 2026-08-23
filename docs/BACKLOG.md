@@ -77,6 +77,44 @@
 
 이 finding을 법적 문구를 넓혀 정당화하지 않는다. 먼저 실제 read 경계를 최소화·검증한 뒤 `docs/specs/legal/README.md`의 seller/driver 개인정보 처리 문구를 확정한다. 기술 정본: `docs/specs/api/orders.md`.
 
+### P0 — AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION
+
+2026-08-24 인증 감사에서 driver 관리자 승인 계약과 실제 Kakao 가입 경로가 충돌하고, 정지·role/store 변경 뒤 기존 세션 권한 수렴도 불완전함을 확인했다.
+
+현재 구현·증거:
+
+- [x] admin에는 `PATCH /admin/drivers/:userId/approve`와 `driverApproved` 상태가 존재
+- [x] driver NextAuth callback은 driver role에 `driverApproved === true`를 요구
+- [x] 신규 로그인은 `suspended === true` 사용자를 거부하고 해당 unit test 존재
+- [x] `AuthService.kakaoLogin()`은 기존 driver의 `driverApproved === undefined`를 로그인 중 `true`로 자동 갱신
+- [x] 신규 Kakao identity가 `targetRole: driver`를 요청하면 `role: driver`, `driverApproved: true`로 즉시 생성
+- [x] `AuthService.refresh()`는 user 문서를 재조회하지 않고 refresh JWT의 기존 `role/storeId`를 새 토큰에 재사용
+- [x] `GET /auth/firebase-token`은 현재 API JWT의 `role/storeId`로 Firebase custom claims를 생성
+- [x] `JwtStrategy`/`RolesGuard`는 token claims를 사용하며 매 요청마다 `suspended`·승인 상태를 재조회하지 않음
+
+판정:
+
+- 관리자 승인 전 driver 권한 획득 차단 계약과 신규/legacy 자동 승인 경로는 **`IMPLEMENTATION FINDING` P0**다.
+- 정지·role/store/승인 변경 이후 기존 access/refresh/Firebase claims의 허용 수명은 **`DECISION REQUIRED` + P0 authorization remediation**다.
+- 특히 suspended 계정이 refresh를 통해 stale 권한 token을 계속 재발급받는 상태를 정상 계약으로 간주하지 않는다.
+- `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`의 broad driver Firestore read와 결합될 수 있으므로 두 P0를 독립적으로 닫지 않는다.
+
+남음:
+
+- [ ] 신규 Kakao `targetRole: driver`가 관리자 승인 없이 `driverApproved: true` 권한을 만들지 못하도록 수정
+- [ ] 기존 `driverApproved` 누락 계정을 로그인 side effect로 자동 승인하지 않음
+- [ ] 과거 계정 migration이 필요하면 명시적·감사 가능한 별도 migration/관리 절차로 분리
+- [ ] 승인 전 driver 앱/API/Firebase 권한 거부, 승인 후 정상 진입 직접 회귀
+- [ ] 계정 정지 시 refresh token의 후속 갱신 거부 정책 확정·구현
+- [ ] refresh가 authoritative user 문서의 현재 `suspended/role/storeId/driverApproved`를 검증하고 stale claims를 재발급하지 않음
+- [ ] 이미 발급된 access token의 허용 revocation window/SLA 결정
+- [ ] 즉시 revocation이 필요하면 token version/session revocation 또는 동등 서버 경계 적용
+- [ ] Firebase custom token이 stale API claims만으로 과거 role/store 권한을 재발급하지 않도록 현재 상태 검증
+- [ ] suspended/role-changed/store-changed/driver-approval-changed/logout/rotation 회귀
+- [ ] 수정이 포함된 SHA를 `main`에 통합한 뒤 actual release SHA 후보에 포함
+
+정본: `docs/specs/api/auth.md`, admin 영향: `docs/specs/api/admin.md`.
+
 ### P0 — ORDER-MUTATION-AUTHORIZATION-COVERAGE
 
 주문 API 조회 authorization은 `OrdersQueryService`와 직접 테스트가 일치해 해당 API 계층에서는 `VERIFIED`다. 반면 `OrdersLifecycleService.assertOrderActionAccess()`의 mutation authorization은 구현돼 있으나 권한 우회 방지 핵심 거부 시나리오를 직접 고정하는 회귀 테스트가 충분하지 않다.
@@ -182,6 +220,7 @@ Issue #32 완료 전에도 repo-side Vercel guard는 동작하지만, direct pus
 
 - [ ] PAYMENT-FINALIZATION-PAID-GUARD 완료 및 `main` 통합
 - [ ] ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION 완료 및 `main` 통합
+- [ ] AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION 완료 및 `main` 통합
 - [ ] ORDER-MUTATION-AUTHORIZATION-COVERAGE 완료 및 `main` 통합
 - [ ] Issue #32 branch protection 완료
 - [ ] 법적 페이지 포함 actual release SHA 확정
