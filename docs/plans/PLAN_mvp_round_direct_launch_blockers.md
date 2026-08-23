@@ -11,12 +11,14 @@
 - 상태: `paused_external_review`
 - Priority: P0
 - 현재 외부 차단점: ALIGO 회차 알림 템플릿 8종 provider 심사 완료
+- 병렬 인증 P0: driver 관리자 승인 게이트 + 세션/claims revocation
 - 병렬 보안 P0: 주문 direct Firestore read authorization·역할별 데이터 최소화
 - 병렬 코드 P0: 결제 finalization `PAID` 최종 방어
 - 병렬 검증 P0: 주문 mutation authorization 직접 거부 회귀
 - 병렬 관리자 P0: GitHub Issue #32 `main` branch protection/ruleset
 - 현재 상태 SSOT: `docs/memory.md`
 - 재개 순서: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
+- 인증 계약: `docs/specs/api/auth.md`
 - 결제 계약: `docs/specs/api/payments.md`
 - 주문 계약: `docs/specs/api/orders.md`
 - 배포 안전 계약: `docs/plans/PLAN_deployment_safety_guards_20260823.md`
@@ -38,6 +40,8 @@
 - 현재 `main`의 `PaymentFinalizationService.finalizePaidOrder()`는 전달받은 provider `status === 'PAID'`를 메서드 내부에서 독립적으로 강제하지 않는다. actual release SHA 확정 전 해결·회귀 검증해야 한다.
 - 주문 API 조회 authorization은 직접 테스트가 존재해 API 계층에서는 `VERIFIED`다. 그러나 driver/seller 앱은 raw Firestore `orders` read를 사용하고, current Rules는 `role == 'driver'`이면 배정·store·상태와 무관하게 주문 read를 허용하므로 시스템 전체 read authorization·데이터 최소화는 P0 `IMPLEMENTATION FINDING`이다.
 - order mutation authorization은 seller 타-store·비담당 driver·미배정 driver first-claim 경계의 직접 거부 회귀가 부족해 `IMPLEMENTED / UNVERIFIED` 상태다.
+- driver admin 승인 계약과 달리 신규 Kakao `targetRole: driver` 및 승인 필드 누락 기존 driver가 `driverApproved: true`로 자동 수렴하는 경로가 있어 P0 `IMPLEMENTATION FINDING`이다.
+- 정지·role/store/driverApproved 변경 뒤 refresh/custom-token 권한 수렴은 stale JWT payload를 재사용하므로 revocation SLA 결정과 구현 보정이 필요하다.
 
 ## 배포 안전 기준선
 
@@ -63,6 +67,7 @@
 | 0B | 결제 finalization 비`PAID` 최종 차단 + 회귀 | **미완료 — P0** |
 | 0C | 주문 mutation authorization 직접 거부 회귀 | **미완료 — P0 COVERAGE GAP** |
 | 0D | 주문 direct Firestore read authorization·데이터 최소화 | **미완료 — P0 IMPLEMENTATION FINDING** |
+| 0E | driver 승인 게이트 + 세션/claims revocation | **미완료 — P0 IMPLEMENTATION FINDING / DECISION REQUIRED** |
 | 1 | ALIGO 8종 provider 최종 승인 | **검수중** |
 | 2 | 실제 알림톡 정상 발송 | 미실행 |
 | 3 | SMS fallback 실제 검증 | 미실행 |
@@ -80,20 +85,22 @@
 
 1. 모든 repository 변경은 최신 `main`에서 목적별 branch를 만들고 PR로 통합한다.
 2. direct `main` commit/push를 하지 않는다.
-3. dependency 순서대로 Task를 실행하되 주문 direct read P0, 결제 finalization P0, 주문 mutation authorization P0와 Issue #32는 ALIGO 심사와 병렬로 해결할 수 있다.
+3. dependency 순서대로 Task를 실행하되 auth P0, 주문 direct read P0, 결제 finalization P0, 주문 mutation authorization P0와 Issue #32는 ALIGO 심사와 병렬로 해결할 수 있다.
 4. 외부 서비스 변경·실제 발송·운영 변수·Firebase 운영 변경·production 배포·운영 데이터·`salesMode` 변경은 해당 승인 게이트를 따른다.
 5. 한 Task의 승인을 이후 운영 변경 승인으로 확대 해석하지 않는다.
 6. 비밀값·고객 개인정보·사진 원본·서명 URL을 Git/문서/증거에 남기지 않는다.
-7. 주문 direct read 최소화, 결제/권한 P0 보정과 법적 페이지 변경까지 포함한 actual release SHA를 확정하기 전 release 검증을 완료로 기록하지 않는다.
+7. auth 승인/revocation, 주문 direct read 최소화, 결제/권한 P0 보정과 법적 페이지 변경까지 포함한 actual release SHA를 확정하기 전 release 검증을 완료로 기록하지 않는다.
 8. actual release SHA의 원격 회차 E2E 52건과 cleanup 통과 전 production 배포 금지.
 9. Issue #32의 `main` 보호 완료 전 production release 금지.
 10. `main` merge·빈 commit·재-push를 production 배포 트리거로 사용하지 않는다.
 11. production 배포 직전·직후 provider metadata Git SHA가 승인 release SHA와 동일한지 확인한다.
 12. ALIGO 실제 발송 검증 실패 시 알림 없는 출시를 임의 승인하지 않는다.
 13. 첫 회차가 검수된 `SCHEDULED`가 아니면 `salesMode`를 전환하지 않는다.
-14. `docs/DOCUMENT_CONSISTENCY.md` 기준에서 `IMPLEMENTED / UNVERIFIED`, `COVERAGE GAP`, `IMPLEMENTATION FINDING`인 P0를 완료로 간주하지 않는다.
+14. `docs/DOCUMENT_CONSISTENCY.md` 기준에서 `IMPLEMENTED / UNVERIFIED`, `COVERAGE GAP`, `IMPLEMENTATION FINDING`, P0 `DECISION REQUIRED`인 항목을 완료로 간주하지 않는다.
 15. broad 주문 read를 개인정보처리방침 문구를 넓혀 정당화하지 않고 실제 접근 경계를 먼저 최소화한다.
-16. 미검증 항목을 완료로 기록하지 않는다.
+16. driver role/approval은 client `targetRole` 또는 로그인 side effect만으로 부여하지 않는다.
+17. suspended 또는 권한 변경 계정이 refresh/Firebase custom token을 통해 stale 권한을 무기한 연장하지 않도록 revocation 계약을 확정한다.
+18. 미검증 항목을 완료로 기록하지 않는다.
 
 ## Execution Plan
 
@@ -161,6 +168,24 @@
 - Legal dependency: `docs/specs/legal/README.md`
 - Status: todo_code_security
 
+#### Task 0.7 — Driver 승인 게이트·세션/claims revocation
+- Dependency: 없음. ALIGO 심사·Task 0.3~0.6과 병렬 가능.
+- Goal: 관리자 승인 전 driver 권한 획득을 차단하고 정지·role/store/승인 변경이 기존 세션과 Firebase claims에 정의된 시간 안에 수렴하도록 한다.
+- Required:
+  - 신규 Kakao `targetRole: driver`가 `driverApproved: true`를 자동 획득하지 않음
+  - 기존 승인 필드 누락 driver를 로그인 side effect로 자동 승인하지 않음
+  - 필요한 legacy migration은 명시적·감사 가능한 별도 절차
+  - 승인 전 driver 앱/API/Firebase 접근 거부, 승인 후 정상 진입
+  - refresh가 authoritative user 상태를 확인하고 suspended 계정 또는 stale role/store/approval claims를 재발급하지 않음
+  - 이미 발급된 access token의 revocation window/SLA 결정·검증
+  - 필요 시 token version/session revocation 또는 동등 서버 경계
+  - Firebase custom token 발급도 현재 authoritative 권한과 일치
+  - logout/rotation 및 consumer/seller/admin 로그인 회귀 유지
+  - `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`과 결합 회귀: 승인되지 않은 driver identity가 order discovery/read 권한을 얻지 못함
+- Contract: `docs/specs/api/auth.md`
+- Admin impact: `docs/specs/api/admin.md`
+- Status: todo_code_security
+
 ### Phase 1 — ALIGO 알림 게이트
 
 #### Task 1.1 — 발신 프로필·코드 매핑 기반
@@ -198,7 +223,7 @@
 - Status: todo
 
 #### Task 2.2 — actual release SHA 확정
-- Dependency: Task 0.3, Task 0.4, Task 0.5, Task 0.6, Task 2.1
+- Dependency: Task 0.3, Task 0.4, Task 0.5, Task 0.6, Task 0.7, Task 2.1
 - Goal: 운영에 올릴 단 하나의 exact `main` SHA 고정.
 - 과거 `6e0fc9d...` run은 역사 증거일 뿐 현재 release 증거가 아니다.
 - Status: todo
@@ -279,7 +304,7 @@
 
 #### Task 5.3 — 최종 출시 판정
 - Dependency: Task 5.2
-- 대조: exact SHA, payment P0, order direct-read P0, order mutation P0, branch protection, Firebase, ALIGO, legal, 첫 회차, 예외, 담당자, rollback.
+- 대조: exact SHA, auth approval/revocation P0, payment P0, order direct-read P0, order mutation P0, branch protection, Firebase, ALIGO, legal, 첫 회차, 예외, 담당자, rollback.
 - Status: todo
 
 ### Phase 6 — 판매 모드 전환
@@ -308,6 +333,7 @@
 
 ## Completion Criteria
 
+- driver 관리자 승인 전 권한 획득이 차단되고 정지·role/store/승인 변경의 refresh/Firebase claims 수렴 계약이 구현·직접 검증돼 `main`에 포함됨.
 - 주문 direct Firestore read가 안전한 discovery/assigned 경계와 역할별 최소 데이터 계약으로 축소되고 Rules·frontend 회귀가 `main`에 포함됨.
 - 결제 finalization 비`PAID` 차단과 회귀 검증이 `main`에 포함됨.
 - 주문 mutation authorization 핵심 거부 회귀가 `main`에 포함되고 P0 mutation 권한 계약이 `VERIFIED`로 승격됨.
@@ -326,6 +352,7 @@
 ## 현재 Closeout Roll-up
 
 - 코드 통합: 완료
+- driver 승인 게이트·세션/claims revocation: **미완료 — P0 IMPLEMENTATION FINDING / DECISION REQUIRED**
 - 주문 direct Firestore read authorization·데이터 최소화: **미완료 — P0 IMPLEMENTATION FINDING**
 - 결제 finalization `PAID` 최종 방어: **미완료 — P0**
 - 주문 mutation authorization 직접 회귀: **미완료 — P0 COVERAGE GAP**
