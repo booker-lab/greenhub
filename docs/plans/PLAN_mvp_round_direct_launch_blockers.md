@@ -6,56 +6,80 @@
 
 ## 문서 메타
 
-- 작성일: 2026-07-28
 - 최종 정합화: 2026-08-23 KST
-- 상태: `paused_external_review`
+- 상태: `paused_external_review_and_internal_p0`
 - Priority: P0
-- 현재 외부 차단점: ALIGO 회차 알림 템플릿 8종 provider 심사 완료
-- 병렬 관리자 P0: GitHub Issue #32 `main` branch protection/ruleset
+- 현재 내부 P0: Issue #37 F-001 driver 승인·주문 접근 보안, Issue #32 `main` protection
+- 현재 외부 차단: ALIGO 회차 알림 템플릿 8종 provider 심사
 - 현재 상태 SSOT: `docs/memory.md`
 - 재개 순서: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
 - 배포 안전 계약: `docs/plans/PLAN_deployment_safety_guards_20260823.md`
 - 판매 활성화 법적 게이트: `docs/specs/legal/README.md`
-- 운영 런북: `docs/specs/ops/mvp-sales-round-runbook.md`
 
 ## 현재 기준선
 
-- 회차 직배송 MVP는 PR #11을 통해 `main`에 통합됐다.
-- 기능 통합 기준 SHA: `e55f25914cc7d01576fbd4639583daaf0fe6385e`.
-- 카카오 비즈니스 채널 승인, ALIGO 발신 프로필·`senderkey`, 내부↔외부 템플릿 코드 분리 구현 완료.
-- 회차 알림 템플릿 8종 provider 등록·심사 요청 완료, 모두 `검수중`.
-- 실제 알림톡 정상 발송·SMS fallback 검증 미실행.
-- production ALIGO 자격 증명 4개와 `ALIGO_TEMPLATE_CODES_JSON` 미반영.
-- 운영 Firebase rules/indexes는 기존 준비에서 반영 완료 상태이며 출시 전 재조회 필요.
-- production 회차 앱 배포·첫 회차 생성·`salesMode` 전환 미실행.
-- `salesMode=legacy` 유지.
-- 현재 `/terms`, `/privacy`는 비판매 상태를 전제로 하므로 실제 판매 활성화 전 재정합화가 필요하다.
+완료:
+
+- 회차 직배송 MVP PR #11 `main` 통합
+- 기능 통합 기준 SHA `e55f25914cc7d01576fbd4639583daaf0fe6385e`
+- 카카오 비즈니스 채널 승인
+- ALIGO 발신 프로필·senderkey 준비
+- ALIGO 템플릿 8종 provider 등록·심사 요청
+- repo-side `main → Vercel production` 자동배포 차단: PR #30/#31
+
+미완료:
+
+- Issue #37 F-001 remediation의 `main` 통합
+- Issue #32 GitHub `main` branch protection/ruleset
+- ALIGO 8종 최종 승인 및 실제 알림 검증
+- 판매 활성화 legal docs/test
+- actual release SHA 52 E2E+cleanup
+- production ALIGO 설정
+- exact-SHA production deploy
+- 첫 운영 회차와 `salesMode` 전환
+
+`salesMode`는 최신 운영 확인 기준 `legacy`다.
+
+## F-001 현재 main 판정
+
+2026-08-23 current `main` 직접 재검증:
+
+- 신규 Kakao driver → `driverApproved: true`
+- 승인 필드 없는 기존 driver → 로그인 시 자동 `true`
+- `/driver/orders` → `@Roles('driver', 'seller')`
+- `DriverService.getOrders(driverId, ...)` → driverId 미필터, 상태 조건 전체 주문 반환
+- Firestore `orders` read → role이 driver이면 전체 허용
+- custom token/Rules에서 최신 `driverApproved`/`suspended` enforcement 불충분
+
+따라서 관리자가 승인한 driver만 제한된 주문에 접근한다는 목표 보안 계약은 현재 `main`에서 완료되지 않았다.
+
+추적: Issue #37.
+
+**Issue #37 완료 전 actual release SHA를 고정하지 않는다.**
 
 ## 배포 안전 기준선
 
-2026-08-23 발견된 `main push → Vercel production` 자동 연결은 repo-side에서 차단했다.
+- 세 프런트 `git.deploymentEnabled.main=false`
+- docs-only `main` push의 Preview sync/E2E 제외
+- docs-only Vercel build skip
+- deployment safety CI
+- direct `main` 작업 금지
 
-- PR #30: 세 프런트 `git.deploymentEnabled.main=false`.
-- PR #30 merge 뒤 3앱 신규 Vercel deployment 0건 확인.
-- docs-only `main` push는 Preview sync/E2E 제외.
-- PR #31: 순수 docs/Markdown의 Vercel build skip.
-- deployment safety CI 추가.
-- direct `main` 작업은 `AGENTS.md`에서 금지.
+GitHub 관리자 enforcement는 Issue #32가 남아 있다.
 
-그러나 GitHub `main` 자체는 마지막 재조회 기준 `protected=false`이므로 Issue #32 완료가 출시 전 필수다.
-
-**이제 `main` merge는 production 배포 수단이 아니다.** 운영 배포는 아래 Task 3 단계에서 검증된 exact release SHA를 명시적으로 deploy/promote한다.
+`main` merge는 production 배포 수단이 아니다. production은 검증된 exact release SHA/artifact를 명시적으로 deploy/promote한다.
 
 ## 출시 게이트 요약
 
 | 순서 | 게이트 | 상태 |
 |---|---|---|
 | 0 | repo-side 자동배포 차단 | 완료 |
-| 0A | GitHub `main` branch protection/ruleset | **미완료 — Issue #32** |
+| 0A | F-001 driver 보안 remediation `main` 통합 | **미완료 — Issue #37** |
+| 0B | GitHub `main` protection/ruleset | **미완료 — Issue #32** |
 | 1 | ALIGO 8종 provider 최종 승인 | **검수중** |
 | 2 | 실제 알림톡 정상 발송 | 미실행 |
 | 3 | SMS fallback 실제 검증 | 미실행 |
-| 4 | 판매 활성화 법적 문서 재정합화 | 미실행 |
+| 4 | 판매 활성화 legal docs/test | 미실행 |
 | 5 | actual release SHA 확정 | 미실행 |
 | 6 | exact SHA 원격 회차 E2E 52건+cleanup | 미실행 |
 | 7 | 운영 Firebase 재조회 | 미실행 |
@@ -67,215 +91,142 @@
 
 ## Agent Completion Contract
 
-1. 모든 repository 변경은 최신 `main`에서 목적별 branch를 만들고 PR로 통합한다.
-2. direct `main` commit/push를 하지 않는다.
-3. dependency 순서대로 Task를 실행하되 Issue #32는 ALIGO 심사와 병렬로 해결할 수 있다.
-4. 외부 서비스 변경·실제 발송·운영 변수·Firebase 운영 변경·production 배포·운영 데이터·`salesMode` 변경은 해당 승인 게이트를 따른다.
-5. 한 Task의 승인을 이후 운영 변경 승인으로 확대 해석하지 않는다.
-6. 비밀값·고객 개인정보·사진 원본·서명 URL을 Git/문서/증거에 남기지 않는다.
-7. 법적 페이지 변경까지 포함한 actual release SHA를 확정하기 전 release 검증을 완료로 기록하지 않는다.
-8. actual release SHA의 원격 회차 E2E 52건과 cleanup 통과 전 production 배포 금지.
-9. Issue #32의 `main` 보호 완료 전 production release 금지.
-10. `main` merge·빈 commit·재-push를 production 배포 트리거로 사용하지 않는다.
-11. production 배포 직전·직후 provider metadata Git SHA가 승인 release SHA와 동일한지 확인한다.
-12. ALIGO 실제 발송 검증 실패 시 알림 없는 출시를 임의 승인하지 않는다.
-13. 첫 회차가 검수된 `SCHEDULED`가 아니면 `salesMode`를 전환하지 않는다.
-14. 미검증 항목을 완료로 기록하지 않는다.
+1. repository 변경은 최신 `main`에서 목적별 branch를 만들고 PR로 통합한다.
+2. direct `main` commit/push 금지.
+3. Issue #37과 Issue #32는 ALIGO 심사와 병렬로 해결 가능하다.
+4. Issue #37 완료 전 release SHA 고정 금지.
+5. 외부 서비스·실제 발송·운영 변수·Firebase 운영 변경·production deploy·운영 데이터·`salesMode` 변경은 별도 승인 게이트를 따른다.
+6. 비밀값·고객 개인정보·사진 원본·서명 URL을 Git/문서에 남기지 않는다.
+7. actual release SHA E2E 52건+cleanup 전 production deploy 금지.
+8. Issue #32 완료 전 production release 금지.
+9. `main` merge·빈 commit·재-push를 production deploy trigger로 사용하지 않는다.
+10. production 배포 전후 provider metadata Git SHA가 승인 release SHA와 일치해야 한다.
+11. ALIGO 실제 발송 검증 실패 시 알림 없는 출시를 임의 승인하지 않는다.
+12. 첫 회차가 검수된 `SCHEDULED`가 아니면 `salesMode` 전환 금지.
 
 ## Execution Plan
 
-### Phase 0 — 통합·배포 안전성
+### Phase 0 — 내부 P0와 통합 안전성
 
-#### Task 0.1 — 회차 직배송 코드 `main` 통합
+#### Task 0.1 — 회차 직배송 코드 통합
 - Status: done
-- Evidence: PR #11, 기능 통합 SHA `e55f259...`.
+- Evidence: PR #11, 기능 통합 SHA `e55f259...`
 
 #### Task 0.2 — `main` 자동 production deploy 분리
 - Status: done
-- Evidence: PR #30, PR #31.
-- Verify: 세 Vercel 프로젝트에서 PR #30 merge 이후 `main` deployment 0건.
+- Evidence: PR #30/#31, 반복 docs-only merge 신규 Vercel deployment 0건
 
-#### Task 0.3 — GitHub `main` protection/ruleset
-- Dependency: 없음. ALIGO 심사와 병렬 가능.
-- Goal: direct push/force push/delete를 GitHub 관리자 레벨에서 차단한다.
+#### Task 0.3 — F-001 driver 승인·주문 접근 remediation
+- Dependency: 없음
+- Tracking: Issue #37
 - Required:
-  - PR required
-  - `Deployment safety guard / verify` required status check
-  - force push 차단
-  - branch deletion 차단
+  - 신규 driver `driverApproved: false`
+  - API 요청에서 승인·정지 최신 재검증
+  - Firebase token/Rules 최신 상태 재검증
+  - `/driver/orders` driver 전용
+  - 미배정 선점 가능 + 본인 배정 주문만 서버 필터
+  - 주문 선점 transaction
+  - suspend/refresh/session 무효화 검증
+  - API/Rules tests
+  - 최신 `main` 기준 PR 통합
+- Status: todo_p0
+
+#### Task 0.4 — GitHub `main` protection/ruleset
+- Dependency: 없음
 - Tracking: Issue #32
+- Required: PR required, safety verify required check, force push/delete 차단
 - Status: todo_admin
 
 ### Phase 1 — ALIGO 알림 게이트
 
-#### Task 1.1 — 발신 프로필·코드 매핑 기반
-- Status: done
-
-#### Task 1.2 — 템플릿 8종 최종 승인
-- Current: 8종 전부 `검수중`.
+#### Task 1.1 — 템플릿 8종 최종 승인
+- Current: 8종 전부 `검수중`
 - Status: blocked_external_review
 
-#### Task 1.3 — 승인 `tpl_code` 1:1 매핑 검사
+#### Task 1.2 — 승인 tpl_code 매핑 검사
+- Dependency: 8종 승인
+- Status: todo
+
+#### Task 1.3 — 격리 실제 알림톡 정상 발송 [승인 게이트]
 - Dependency: Task 1.2
 - Status: todo
 
-#### Task 1.4 — 격리 실제 알림톡 정상 발송 [승인 게이트]
+#### Task 1.4 — SMS fallback 실제 검증 [승인 게이트]
 - Dependency: Task 1.3
-- 실제 고객 발송 금지.
 - Status: todo
 
-#### Task 1.5 — SMS fallback 실제 검증 [승인 게이트]
-- Dependency: Task 1.4
-- Status: todo
+### Phase 2 — 판매 공개 계약과 release SHA
 
-### Phase 2 — 판매 공개 계약·release SHA
-
-#### Task 2.1 — 판매 활성화 법적 문서 재정합화
-- Dependency: Task 1.5
+#### Task 2.1 — legal docs/test 재정합화
+- Dependency: 실제 알림 검증
 - Contract: `docs/specs/legal/README.md`
-- Required:
-  - 주문 성립·취소·환불·배송·재배송비·배송 보류
-  - PortOne/결제사업자 개인정보 처리
-  - ALIGO 고객 알림 처리
-  - seller/driver 배송정보 접근
-  - 시행일·이전 버전
-  - `legal-documents.test.mjs` 갱신
 - Status: todo
 
 #### Task 2.2 — actual release SHA 확정
-- Dependency: Task 0.3, Task 2.1
-- Goal: 운영에 올릴 단 하나의 exact `main` SHA 고정.
-- 과거 `6e0fc9d...` run은 역사 증거일 뿐 현재 release 증거가 아니다.
+- Dependency: Task 0.3, Task 0.4, Task 2.1
+- Goal: 운영에 올릴 단 하나의 exact `main` SHA 고정
 - Status: todo
 
-#### Task 2.3 — exact SHA 전체 원격 회차 E2E
+#### Task 2.3 — exact SHA 원격 회차 E2E
 - Dependency: Task 2.2
-- Goal: chromium 26 + mobile 26 = 52, unexpected/skipped/flaky 0, 양쪽 cleanup 성공.
+- Goal: chromium 26 + mobile 26 = 52, cleanup 성공
 - Status: todo
 
 #### Task 2.4 — 운영 Firebase 읽기 전용 재조회
 - Dependency: Task 2.3
+- 확인: indexes, Firestore Rules, Storage Rules 및 F-001 보안 rules 실제 반영 상태
 - Status: todo
 
 #### Task 2.5 — 운영 ALIGO 변수·매핑 반영 [승인 게이트]
-- Dependency: Task 1.5, Task 2.3
-- Goal: 필수 자격 증명 4개 + `ALIGO_TEMPLATE_CODES_JSON`을 비밀값 비공개 방식으로 반영·검증.
+- Dependency: 실제 알림 검증, Task 2.3
 - Status: todo
 
 ### Phase 3 — exact-SHA production 배포
 
-#### Task 3.0 — production deploy/promotion 절차 확정
+#### Task 3.0 — deploy/promotion 절차 확정
 - Dependency: Task 2.3
-- Goal: 자동 Git main deploy가 아닌 exact SHA/artifact 기반 명시적 배포 절차를 확정한다.
-- Required:
-  - 입력 release SHA 고정
-  - 배포 전 SHA 출력/검사
-  - 배포 또는 이미 검증된 artifact promotion
-  - 배포 뒤 provider metadata SHA 재검사
-  - mismatch 시 domain/traffic 전환 금지
-- Note: 현재 저장소에는 production 전용 자동 workflow가 없다.
+- Goal: exact SHA/artifact 기반 명시적 배포 및 metadata SHA 검사
 - Status: todo
 
 #### Task 3.1 — API production 배포 [별도 승인 게이트]
-- Dependency: Task 0.3, Task 2.3, Task 2.4, Task 2.5, Task 3.0
-- Important: 사용자의 별도 `Task 3.1 승인` 없이는 실행하지 않는다.
-- Verify: 배포된 API release identity/SHA를 승인값과 대조.
+- Dependency: Task 0.3, Task 0.4, Task 2.3, Task 2.4, Task 2.5, Task 3.0
+- 별도 `Task 3.1 승인` 필수
 - Status: todo
 
-#### Task 3.2 — consumer·seller·driver production 배포 [승인 게이트]
+#### Task 3.2 — 세 프런트 production 배포 [승인 게이트]
 - Dependency: Task 3.1
-- Goal: 세 프런트를 승인된 동일 release SHA/artifact에서 배포.
-- Verify: 각 Vercel deployment metadata의 Git SHA 일치.
+- 동일 승인 release SHA 사용
 - Status: todo
 
 #### Task 3.3 — 운영 무변경 smoke
 - Dependency: Task 3.2
-- 확인: health, Kakao auth, legacy 경로, 회차 read, `/privacy`, `/terms`.
+- health, auth, legacy, round-direct read, legal pages
 - Status: todo
 
-#### Task 3.4 — 배포 후 오류 관찰
-- Dependency: Task 3.3
-- Status: todo
+### Phase 4 — 첫 회차와 출시
 
-### Phase 4 — 첫 회차
-
-#### Task 4.1 — 첫 회차 `DRAFT` 생성 [승인 게이트]
-- Dependency: Task 3.4
-- Status: todo
-
-#### Task 4.2 — 일정·지역·상품·가격·한도 검수
-- Dependency: Task 4.1
-- Status: todo
-
-#### Task 4.3 — `SCHEDULED` 전환 [승인 게이트]
-- Dependency: Task 4.2
-- Status: todo
-
-### Phase 5 — 최종 출시 판정
-
-#### Task 5.1 — 운영 역할·비상 연락·승인자 확인
-- Dependency: Task 4.3
-- Status: todo
-
-#### Task 5.2 — 전환·롤백 dry-run
-- Dependency: Task 5.1
-- 현재 `legacy`, 예정 `round_direct`, 롤백 경로 확인.
-- Status: todo
-
-#### Task 5.3 — 최종 출시 판정
-- Dependency: Task 5.2
-- 대조: exact SHA, branch protection, Firebase, ALIGO, legal, 첫 회차, 예외, 담당자, rollback.
-- Status: todo
-
-### Phase 6 — 판매 모드 전환
-
-#### Task 6.1 — `round_direct` 전환 [최종 승인 게이트]
-- Dependency: Task 5.3 승인
-- Status: todo
-
-#### Task 6.2 — 전환 직후 smoke·rollback 판정
-- Dependency: Task 6.1
-- Status: todo
-
-#### Task 6.3 — 외부 유입 링크 공개 [승인 게이트]
-- Dependency: Task 6.2 통과
-- Status: todo
-
-### Phase 7 — 초기 안정화
-
-#### Task 7.1 — 첫 두 회차 집중 모니터링
-- Dependency: Task 6.3
-- Status: todo
-
-#### Task 7.2 — 출시 Closeout
-- Dependency: Task 7.1
-- Status: todo
+1. 첫 회차 `DRAFT` 생성 [승인]
+2. 일정·지역·상품·가격·한도 검수
+3. `SCHEDULED` 전환 [승인]
+4. 운영 역할·비상 연락·rollback dry-run
+5. 최종 출시 판정
+6. `salesMode: round_direct` 전환 [최종 승인]
+7. 전환 직후 smoke
+8. 외부 유입 링크 공개 [승인]
+9. 첫 두 회차 집중 모니터링·Closeout
 
 ## Completion Criteria
 
-- Issue #32 branch protection/ruleset 완료.
-- ALIGO 8종 최종 승인.
-- 실제 알림톡·SMS fallback 검증.
-- 판매 활성화 legal docs/test 정합화.
-- actual release SHA 원격 E2E 52건+cleanup 성공.
-- 운영 Firebase 상태 확인.
-- production ALIGO 설정 검증.
-- production deploy/promotion이 exact SHA를 사용하고 provider metadata가 일치.
-- 첫 회차 `SCHEDULED`.
-- 최종 출시 승인 뒤 `round_direct` 전환·smoke 또는 rollback 성공.
-- 비밀값·개인정보·사진·서명 URL이 증거에 포함되지 않음.
+- Issue #37 F-001 remediation `main` 통합 및 검증 완료
+- Issue #32 branch protection/ruleset 완료
+- ALIGO 8종 최종 승인
+- 실제 알림톡·SMS fallback 검증
+- 판매 활성화 legal docs/test 정합화
+- actual release SHA E2E 52건+cleanup 성공
+- 운영 Firebase와 F-001 Rules 상태 확인
+- production ALIGO 설정 검증
+- exact-SHA production deploy 및 metadata SHA 일치
+- 첫 회차 검수 완료
+- 최종 출시 승인과 rollback 준비 완료
 
-## 현재 Closeout Roll-up
-
-- 코드 통합: 완료
-- repo-side production auto-deploy 분리: 완료
-- docs-only Preview/E2E 억제: 완료
-- GitHub `main` protection: **미완료 — Issue #32**
-- ALIGO 8종 등록: 완료
-- ALIGO 8종 승인: **검수중**
-- 실제 알림 발송: 미실행
-- 판매 활성화 법적 문서: 미실행
-- actual release SHA/E2E: 미실행
-- production 설정/배포: 미실행
-- 첫 회차: 미생성
-- `salesMode`: `legacy`
+이 조건 중 하나라도 미충족이면 `salesMode`를 전환하지 않는다.
