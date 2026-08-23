@@ -1,121 +1,189 @@
-# Hubs Domain Spec
+<!-- Language: ko -->
 
-> **작성일**: 2026-03-28
-> **상태**: Draft
-> **연관 문서**: `orders.md`, `CRITICAL_LOGIC.md`
+# Hubs API / Domain Spec
 
----
+> **최종 정합화**: 2026-08-23
+> **상태**: Current (legacy hub/pickup domain)
+> **API 정본**: `apps/api/src/hubs/**`
+> **주문 연계**: `docs/specs/api/orders.md`
 
-## 1. 도메인 개요
+## 1. 범위
 
-`hubs` 도메인은 판매자가 운영하는 **거점(픽업 포인트)**을 관리한다.
-소비자가 주문 시 `deliveryMethod: 'hub'`를 선택하면 이 거점 중 하나를 픽업 장소로 지정한다.
+`hubs`는 legacy `deliveryMethod: 'hub'` 주문의 픽업 거점을 관리한다.
 
----
+회차 직배송 MVP의 기본 경로는 직접배송이며, 이 hub domain은 기존 거점픽업 기능 호환을 위해 유지한다. 회차 직배송 출시 로직에 hub를 자동 포함하지 않는다.
 
-## 2. Firestore 스키마
+## 2. Hub 문서
 
-### `hubs/{hubId}` 문서
+`hubs/{hubId}`의 현재 핵심 필드:
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `id` | `string` | 문서 ID (uuid) |
-| `storeId` | `string` | 판매자 스토어 ID |
-| `name` | `string` | 거점 이름 (예: "강남 거점") |
-| `address` | `string` | 거점 주소 |
-| `addressDetail` | `string \| null` | 상세 주소 (동/호수 등) |
-| `lat` | `number \| null` | 위도 |
-| `lng` | `number \| null` | 경도 |
-| `operatingHours` | `string \| null` | 운영 시간 (예: "09:00~18:00") |
-| `isActive` | `boolean` | 활성화 여부 |
-| `createdAt` | `Timestamp` | 생성 시각 |
-| `updatedAt` | `Timestamp` | 최종 수정 시각 |
-
----
-
-## 3. API 명세
-
-### 3-1. 거점 목록 조회
-
+```ts
+{
+  id: string
+  storeId: string
+  name: string
+  address: string
+  addressDetail: string | null
+  lat: number | null
+  lng: number | null
+  operatingHours: string | null
+  isActive: boolean
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
 ```
+
+새 hub 생성 시 `isActive: true`로 시작한다.
+
+## 3. 인증·소유권
+
+모든 hub endpoint에는 `JwtAuthGuard`가 적용된다.
+
+service의 실제 권한 기준은 role 문자열 자체가 아니라 다음 소유권 검사다.
+
+```text
+stores/{storeId}.ownerId === requesterId
+```
+
+현재 `HubsService.verifyOwnership()`에는 admin role 예외가 없다. 따라서 과거 다른 domain의 “admin은 모든 store ownership 우회” 규칙을 hub API에 자동 적용하지 않는다.
+
+관리자 전역 거점 관리가 필요하면 별도 권한 설계와 테스트를 추가한다.
+
+## 4. API
+
+### 목록
+
+```text
 GET /stores/:storeId/hubs
-Authorization: Bearer <seller JWT>
 ```
 
-**응답**
+응답:
 
-```json
-{
-  "hubs": [
-    {
-      "id": "...",
-      "name": "강남 거점",
-      "address": "서울시 강남구 ...",
-      "isActive": true
-    }
-  ]
-}
+```ts
+{ hubs: Hub[] }
 ```
 
-### 3-2. 거점 단건 조회
+현재 service는 storeId로 조회하고 `createdAt ASC` 순으로 반환한다. `isActive`로 자동 필터링하지 않는다.
 
-```
+### 단건
+
+```text
 GET /stores/:storeId/hubs/:hubId
-Authorization: Bearer <seller JWT>
 ```
 
-### 3-3. 거점 생성
+hub가 요청 store에 속하지 않으면 not found로 처리한다.
 
+### Hub 주문
+
+```text
+GET /stores/:storeId/hubs/:hubId/orders?status=<OrderStatus>
 ```
+
+- hub 소유권을 먼저 확인한다.
+- Firestore에서는 `hubId`로 주문을 조회한다.
+- `status`가 있으면 조회 후 service 메모리에서 필터한다.
+- 따라서 현재 구현에는 `hubId + status` 복합 인덱스가 필요하지 않다.
+
+### 생성
+
+```text
 POST /stores/:storeId/hubs
-Authorization: Bearer <seller JWT>
-Content-Type: application/json
 ```
 
-**Body**
+입력:
 
-```json
+```ts
 {
-  "name": "강남 거점",
-  "address": "서울시 강남구 테헤란로 1",
-  "addressDetail": "1층 로비",
-  "lat": 37.4979,
-  "lng": 127.0276,
-  "operatingHours": "09:00~18:00"
+  name: string
+  address: string
+  addressDetail?: string
+  lat?: number
+  lng?: number
+  operatingHours?: string
 }
 ```
 
-### 3-4. 거점 수정
+응답:
 
+```ts
+{ id: string }
 ```
+
+### 수정
+
+```text
 PATCH /stores/:storeId/hubs/:hubId
-Authorization: Bearer <seller JWT>
 ```
 
-**Body**: 3-3과 동일 필드 (모두 Optional) + `isActive?: boolean`
+허용 필드:
 
-### 3-5. 거점 삭제
-
+```text
+name
+address
+addressDetail
+lat
+lng
+operatingHours
+isActive
 ```
+
+응답:
+
+```ts
+{ id: string }
+```
+
+### 삭제
+
+```text
 DELETE /stores/:storeId/hubs/:hubId
-Authorization: Bearer <seller JWT>
 ```
 
-응답: `204 No Content`
+`204 No Content`.
 
----
+현재 구현은 물리 삭제다. 진행 중 주문 참조를 차단하는 별도 service guard가 없으므로 운영에서 단순 정리 목적으로 사용하지 않는다. 실제 거점 폐쇄는 가능하면 먼저 `isActive: false`로 신규 사용을 막고 연결 주문을 확인한 뒤 삭제 여부를 판단한다.
 
-## 4. 비즈니스 규칙
+## 5. 소비자 노출과 `isActive`
 
-- 거점은 **해당 스토어 소유자만** 생성·수정·삭제 가능 (JWT `sub === stores/{storeId}.ownerId`)
-- 삭제는 **Soft Delete 없음** — 즉시 물리 삭제 (진행 중인 주문 연결 거점은 추후 제한 로직 추가 예정)
-- `isActive: false`인 거점은 소비자 앱 주문 화면에 노출되지 않음
+이 service의 seller 목록은 `isActive`를 필터링하지 않는다. 소비자 주문 UI에서 활성 거점만 노출하는 계약은 해당 consumer 조회 경로/Firestore Rules/클라이언트 코드를 별도로 확인한다.
 
----
+따라서 `GET /stores/:storeId/hubs` 자체가 “consumer용 활성 거점 목록”이라고 가정하지 않는다.
 
-## 5. 인덱스 요구사항
+## 6. 주문 연계
 
-```
-hubs: storeId ASC + isActive ASC (활성 거점 필터)
-hubs: storeId ASC + createdAt ASC (목록 정렬)
-```
+hub 주문의 주요 주문 필드:
+
+- `deliveryMethod: 'hub'`
+- `hubId`
+- `pickupCode`
+- `hubName?`
+- `hubAddress?`
+
+관련 상태는 legacy 흐름에서 `HUB_ARRIVED`, `PICKED_UP`을 사용한다. 정확한 FSM은 `docs/specs/api/orders.md`와 현재 orders lifecycle을 따른다.
+
+## 7. 인덱스
+
+현재 service query 기준:
+
+- hubs: `storeId == ...`, `orderBy(createdAt, asc)`
+- orders: `hubId == ...`
+
+실제 필요한 인덱스는 `firestore.indexes.json`과 배포 환경을 정본으로 사용한다. 과거 spec의 예상 인덱스 표만 보고 production 인덱스를 추가·삭제하지 않는다.
+
+## 8. 검증 원칙
+
+hub 변경 시 최소 확인:
+
+- `apps/api/src/hubs/hubs.controller.ts`
+- `apps/api/src/hubs/hubs.service.ts`
+- `apps/api/src/hubs/dto/create-hub.dto.ts`
+- `apps/api/src/orders/**`
+- 관련 seller/consumer UI와 E2E
+- `firestore.indexes.json`, `firestore.rules`
+
+## 변경 이력
+
+| 날짜 | 내용 |
+|---|---|
+| 2026-08-23 | 실제 ownerId 권한, hub 주문 조회, 물리 삭제, 현재 인덱스 사용과 legacy 경계에 맞춰 정합화 |
+| 2026-03-28 | 초기 hubs 설계 초안 |
