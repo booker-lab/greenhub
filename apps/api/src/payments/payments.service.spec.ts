@@ -112,6 +112,7 @@ function makeFinalization(overrides: Data = {}) {
   };
   const issueWriter = { createOrMergeIssue: jest.fn().mockResolvedValue({ id: 'issue-1' }) };
   const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
+  const refunds = { refundByOrderId: jest.fn().mockResolvedValue(undefined) };
   const service = new PaymentFinalizationService(
     firestore as never,
     portone as never,
@@ -120,6 +121,7 @@ function makeFinalization(overrides: Data = {}) {
     capacity as never,
     issueWriter as never,
     retention as never,
+    refunds as never,
   );
   return {
     service,
@@ -130,6 +132,7 @@ function makeFinalization(overrides: Data = {}) {
     capacity,
     issueWriter,
     retention,
+    refunds,
   };
 }
 
