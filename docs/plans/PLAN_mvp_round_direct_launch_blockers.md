@@ -11,9 +11,11 @@
 - 상태: `paused_external_review`
 - Priority: P0
 - 현재 외부 차단점: ALIGO 회차 알림 템플릿 8종 provider 심사 완료
+- 병렬 코드 P0: 결제 finalization `PAID` 최종 방어
 - 병렬 관리자 P0: GitHub Issue #32 `main` branch protection/ruleset
 - 현재 상태 SSOT: `docs/memory.md`
 - 재개 순서: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
+- 결제 계약: `docs/specs/api/payments.md`
 - 배포 안전 계약: `docs/plans/PLAN_deployment_safety_guards_20260823.md`
 - 판매 활성화 법적 게이트: `docs/specs/legal/README.md`
 - 운영 런북: `docs/specs/ops/mvp-sales-round-runbook.md`
@@ -30,6 +32,7 @@
 - production 회차 앱 배포·첫 회차 생성·`salesMode` 전환 미실행.
 - `salesMode=legacy` 유지.
 - 현재 `/terms`, `/privacy`는 비판매 상태를 전제로 하므로 실제 판매 활성화 전 재정합화가 필요하다.
+- 현재 `main`의 `PaymentFinalizationService.finalizePaidOrder()`는 전달받은 provider `status === 'PAID'`를 메서드 내부에서 독립적으로 강제하지 않는다. 이 항목은 actual release SHA 확정 전 해결·회귀 검증해야 한다.
 
 ## 배포 안전 기준선
 
@@ -52,6 +55,7 @@
 |---|---|---|
 | 0 | repo-side 자동배포 차단 | 완료 |
 | 0A | GitHub `main` branch protection/ruleset | **미완료 — Issue #32** |
+| 0B | 결제 finalization 비`PAID` 최종 차단 + 회귀 | **미완료 — P0** |
 | 1 | ALIGO 8종 provider 최종 승인 | **검수중** |
 | 2 | 실제 알림톡 정상 발송 | 미실행 |
 | 3 | SMS fallback 실제 검증 | 미실행 |
@@ -69,11 +73,11 @@
 
 1. 모든 repository 변경은 최신 `main`에서 목적별 branch를 만들고 PR로 통합한다.
 2. direct `main` commit/push를 하지 않는다.
-3. dependency 순서대로 Task를 실행하되 Issue #32는 ALIGO 심사와 병렬로 해결할 수 있다.
+3. dependency 순서대로 Task를 실행하되 결제 finalization P0와 Issue #32는 ALIGO 심사와 병렬로 해결할 수 있다.
 4. 외부 서비스 변경·실제 발송·운영 변수·Firebase 운영 변경·production 배포·운영 데이터·`salesMode` 변경은 해당 승인 게이트를 따른다.
 5. 한 Task의 승인을 이후 운영 변경 승인으로 확대 해석하지 않는다.
 6. 비밀값·고객 개인정보·사진 원본·서명 URL을 Git/문서/증거에 남기지 않는다.
-7. 법적 페이지 변경까지 포함한 actual release SHA를 확정하기 전 release 검증을 완료로 기록하지 않는다.
+7. 결제 finalization P0와 법적 페이지 변경까지 포함한 actual release SHA를 확정하기 전 release 검증을 완료로 기록하지 않는다.
 8. actual release SHA의 원격 회차 E2E 52건과 cleanup 통과 전 production 배포 금지.
 9. Issue #32의 `main` 보호 완료 전 production release 금지.
 10. `main` merge·빈 commit·재-push를 production 배포 트리거로 사용하지 않는다.
@@ -84,7 +88,7 @@
 
 ## Execution Plan
 
-### Phase 0 — 통합·배포 안전성
+### Phase 0 — 통합·배포·코드 안전성
 
 #### Task 0.1 — 회차 직배송 코드 `main` 통합
 - Status: done
@@ -105,6 +109,17 @@
   - branch deletion 차단
 - Tracking: Issue #32
 - Status: todo_admin
+
+#### Task 0.4 — 결제 finalization `PAID` 최종 방어
+- Dependency: 없음. ALIGO 심사·Task 0.3과 병렬 가능.
+- Goal: `finalizePaidOrder()`가 호출 경로에 의존하지 않고 비`PAID` provider 상태를 자체 차단한다.
+- Required:
+  - `PENDING`, `FAILED`, `CANCELLED` 차단
+  - `PAID` 일반·공동구매·회차 정상 경로 유지
+  - 금액 불일치 처리 유지
+  - 회차 reservation/race 회귀 유지
+- Contract: `docs/specs/api/payments.md`
+- Status: todo_code
 
 ### Phase 1 — ALIGO 알림 게이트
 
@@ -143,7 +158,7 @@
 - Status: todo
 
 #### Task 2.2 — actual release SHA 확정
-- Dependency: Task 0.3, Task 2.1
+- Dependency: Task 0.3, Task 0.4, Task 2.1
 - Goal: 운영에 올릴 단 하나의 exact `main` SHA 고정.
 - 과거 `6e0fc9d...` run은 역사 증거일 뿐 현재 release 증거가 아니다.
 - Status: todo
@@ -224,7 +239,7 @@
 
 #### Task 5.3 — 최종 출시 판정
 - Dependency: Task 5.2
-- 대조: exact SHA, branch protection, Firebase, ALIGO, legal, 첫 회차, 예외, 담당자, rollback.
+- 대조: exact SHA, payment P0, branch protection, Firebase, ALIGO, legal, 첫 회차, 예외, 담당자, rollback.
 - Status: todo
 
 ### Phase 6 — 판매 모드 전환
@@ -253,6 +268,7 @@
 
 ## Completion Criteria
 
+- 결제 finalization 비`PAID` 차단과 회귀 검증이 `main`에 포함됨.
 - Issue #32 branch protection/ruleset 완료.
 - ALIGO 8종 최종 승인.
 - 실제 알림톡·SMS fallback 검증.
@@ -268,6 +284,7 @@
 ## 현재 Closeout Roll-up
 
 - 코드 통합: 완료
+- 결제 finalization `PAID` 최종 방어: **미완료 — P0**
 - repo-side production auto-deploy 분리: 완료
 - docs-only Preview/E2E 억제: 완료
 - GitHub `main` protection: **미완료 — Issue #32**
