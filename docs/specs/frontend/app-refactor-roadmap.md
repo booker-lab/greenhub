@@ -1,76 +1,59 @@
-# 멀티앱 프론트 리팩토링 로드맵
+<!-- Language: ko -->
 
-> 작성: 2026-05-24 (세션83) · 목적: **셀러앱 리팩토링 완료**를 기준선으로 삼아, 소비자·어드민·드라이버 앱을 차례대로 같은 패턴으로 리팩토링하기 위한 진행 현황·진입점 한눈 보기.
-> 성격: 앱별 상세 아토믹 플랜은 각 앱 리팩토링 착수 세션에서 별도 작성. 이 문서는 **순서·현황·레퍼런스**만 관리한다.
+# 멀티앱 프론트 리팩토링 로드맵 — 역사 요약
 
----
+> 상태: Historical roadmap
+> 원 작성: 2026-05
+> 최종 정합화: 2026-08-23 KST
 
-## 진행 현황 한눈 보기
+## 문서 성격
 
-| 앱 | 위치 | 리팩토링 상태 | 육안 검증 | 비고 |
-|----|------|--------------|----------|------|
-| **셀러** | `apps/seller` | ✅ **완료** (A~F, 세션39~59) | ✅ 완료 (M-PATH, 세션83) | 기준선·레퍼런스 패턴 |
-| **소비자** | `apps/consumer` | ⚠️ 부분 (DS 감사만, 2026-05-02) | ⏳ C 섹션 미진행 | 디자인시스템 위반 18건 목록 존재 |
-| **어드민** | `apps/seller/src/app/admin` | ✅ **완료** (반응형 세션88 + SDD 분리 세션91) | ⏳ 상태변경 육안만 | 7개 탭 전부 _lib/_components 분리 |
-| **드라이버** | `apps/driver` | 🔴 미착수 | 🔴 미진행 | board·map·login·profile |
+이 파일은 2026-05 당시 seller를 기준 패턴으로 삼아 consumer·admin·driver 프론트를 순차 리팩토링하려던 로드맵이다. 현재 앱별 진행 상태, 현재 테스트 환경, 현재 출시 우선순위의 정본이 아니다.
 
----
+현재 작업에서는 `docs/specs/frontend/README.md`를 먼저 읽고 실제 `main` 코드와 관련 API/domain current spec을 확인한다.
 
-## 리팩토링 순서 (사용자 결정)
+## 당시 로드맵의 핵심 방향
 
-**셀러 → 소비자 → 어드민 → 드라이버** 차례로 진행.
+과거 리팩토링에서 사용한 방향은 다음과 같았다.
 
-### 1. 셀러앱 — ✅ 완료 (기준선)
+- 큰 페이지를 `_lib`, `_hooks`, `_components`로 분리
+- `@greenhub/shared`에서 공통 타입·상수 재사용
+- `packages/ui`의 공통 시각 토큰 사용
+- seller 주문·정산·admin 화면의 구조 정리
+- consumer 디자인 시스템 정리
+- driver UI는 이후 별도 단계로 검토
 
-- 범위 A~F: 홈 대시보드·주문 탭·소비자 배송일 풀스택·셀러 IA·정산 탭(SETTLE-REFACTOR)·UX 잔여(폰트 토큰화·ConfirmModal·SegmentedTabs).
-- 육안 검증: `seller-refactor-visual-verify.md` M-PATH(M0~M6) 완주(세션83).
-- **레퍼런스로 삼을 패턴**: `_lib/`·`_hooks/`·`_components/` SDD 분리 / `@greenhub/shared` 타입·상수 SSOT / `packages/ui/src/style.css` 토큰(인라인 fontSize 0·hex 0) / 공통 `ConfirmModal`·`SegmentedTabs` / 500라인 모듈화 한도.
+이 방향 자체가 현재 코드의 완료 여부를 보장하지 않는다. 현재 구현을 수정할 때는 대상 파일을 직접 확인한다.
 
-### 2. 소비자앱 — ⚠️ 부분 (다음 차례)
+## 현재 사용하면 안 되는 과거 상태 문구
 
-- **기존 산출물**: `design-system-refactor-plan.md`(2026-05-02) — CSS 토큰 위반 18건 목록(BottomNav·ProductTopBar `fontSize:10` 설계 논의 2건 포함). 이 플랜이 착수 진입점.
-- **남은 육안**: M-PATH C 섹션(소비자 배송일 선택 #58~73) — 소비자 계정·소비자 앱 진입. 상품 상세→장바구니→체크아웃 흐름. 시드 베이스라인 = `seed-e2e-orders.mjs` dailyCaps 14일치.
-- 라우트: cart·category·checkout·groupbuy·login·mypage·products·search·order.
+원문에는 당시 환경을 기준으로 다음과 같은 표현이 있었다.
 
-### 3. 어드민 — ✅ 완료
+- consumer는 다음 리팩토링 대상
+- driver 리팩토링 미착수
+- 특정 admin visual 검증이 잔여
+- staging이 없고 production Firebase가 단일 검증 환경이라는 전제
+- production store를 visual fixture로 재시드하는 권고
 
-- **반응형(세션88, #CL-51)**: 5개 테이블(settlements·orders·stores·invite·users) 모바일 카드형 전환 — 세션83 발견 "정산 테이블 7컬럼 잘림" 결함 해소. `hiddenFrom`/`visibleFrom` 분기.
-- **SDD 분리(세션91, #CL-54)**: settlements 모범 패턴(`_lib`·`_components` 분리, `_client`는 조립만)을 나머지 6개 탭(stores·orders·invite·users·drivers·banner)에 적용. 각 탭 모놀리식 `_client`(223~335라인)를 순수함수(`_lib.ts`)·표현 컴포넌트(`_components/`)로 분해.
-  - 원칙: 로직·hook·API 불변, DOM 동일(시각 회귀 0). 라벨/색·필터·상태판정 등 중복 로직을 `_lib`로 SSOT화. 순수함수 없는 탭(users·banner)은 `_lib` 미생성(과분할 회피).
-  - 정합성: 탭마다 tsc0·biome0·build0·500라인 한도(최대 212라인) 통과 후 개별 커밋.
-- 탭: 판매자(stores)·소비자(users)·드라이버(drivers)·주문(orders)·정산(settlements)·초대(invite)·배너(banner).
-- **잔여**: 상태변경(치우기·복구·차단·환불·승인) 육안 검증 — `pending-visual-verify.md` §4. 순수 표현 레이어 리팩토링이라 e2e 회귀 위험은 낮음.
+위 내용은 현재 상태가 아니다. 특히 **운영 Firebase를 visual/E2E fixture 저장소로 사용하거나 과거 reset/seed script를 검증 목적으로 실행하지 않는다.**
 
-### 4. 드라이버앱 — 🔴 미착수
+현재 회차 E2E는 `docs/specs/ops/mvp-sales-round-e2e-environment.md`의 비운영 격리 계약을 따른다. 실제 production 데이터 변경은 별도 승인 없이는 수행하지 않는다.
 
-- 라우트: board(수거 보드)·map·login·profile.
-- 착수 시 별도 감사·아토믹 플랜 작성.
+## 현재 리팩토링 작업 규칙
 
----
+새 frontend 리팩토링이 필요하면:
 
-## 공통 리팩토링 원칙 (셀러에서 확립)
+1. `docs/memory.md`, `docs/BACKLOG.md`에서 실제 우선순위를 확인한다.
+2. 해당 앱 코드와 현재 테스트를 직접 감사한다.
+3. 과거 이 문서의 상태표를 재사용하지 않는다.
+4. UI-only 작업이라도 API·shared 계약 변경 여부를 확인한다.
+5. visual 검증은 최신 비운영 또는 안전한 환경에서 새 Task로 정의한다.
+6. 테스트 계정 비밀번호·session·운영 고객 데이터를 문서에 기록하지 않는다.
 
-1. **로직 불변** — 훅/API/비즈니스 로직 수정 금지, UI 스타일 레이어만.
-2. **토큰 SSOT** — 인라인 `fontSize`/hex 색상 0, `packages/ui/src/style.css` 토큰(`var(--font-size-*)`·`var(--color-*)`). 시각 회귀 시 **한 단계 위/아래 토큰으로만 조정, 토큰 값 자체 변경 금지**.
-3. **타입/상수 SSOT** — 앱별 중복 정의 제거, `@greenhub/shared`로 통합(정산 `settlement.types.ts` 선례).
-4. **SDD 분리** — `_lib/`(순수함수)·`_hooks/`·`_components/` 분리, 페이지는 조립만. 단일 파일 500라인 초과 시 분리.
-5. **공통 컴포넌트 재사용** — `ConfirmModal`(native confirm 금지)·`SegmentedTabs`.
-6. **육안 검증** — 각 앱 리팩토링 후 `seller-refactor-visual-verify.md` 패턴으로 검증 동선 추가.
+## 관련 현재 문서
 
----
-
-## 검증 환경 주의 (세션83 실측)
-
-- **로그인은 카카오만** — 이메일 폼은 `E2E_TEST=true`+`x-e2e-test-token` 헤더 필요(Playwright 전용, 사람 브라우저 불가).
-- **운영 = 단일 Firebase `green-e4fe3`** — 스테이징 없음. 시드/삭제는 실데이터 직접 작용.
-- **육안용 시드는 로그인 store의 storeId로** — 리팩토링 이전 더미는 신스키마 필드 누락이라 `scripts/reset-store-data.mjs`로 재시드 권장.
-- 검증/시드 스크립트: `reset-store-data`·`seed-settlements-visual`·`seed-prep-today`·`seed-orderdate-spread`·`test-settlement-query`·`peek-store`·`list-stores`·`find-store-by-order`.
-
----
-
-## 관련 문서
-
-- `seller-refactor-visual-verify.md` — 셀러 육안 검증 체크리스트(M-PATH) + 소비자 C 섹션
-- `design-system-refactor-plan.md` — 소비자 디자인시스템 감사(위반 18건)
-- `docs/BACKLOG.md` §1(seller)·§1-8(admin) — 후속 결함 목록
-- `docs/CRITICAL_LOGIC.md` #CL-46·47 — 정산 라이브 결함 결정 기록
+- frontend 라우터: `docs/specs/frontend/README.md`
+- 현재 상태: `docs/memory.md`
+- 현재 backlog: `docs/BACKLOG.md`
+- seller 과거 visual 검증 요약: `docs/specs/frontend/seller-refactor-visual-verify.md`
+- 회차 직배송 current contract: `docs/specs/mvp-sales-round-direct-delivery.md`
