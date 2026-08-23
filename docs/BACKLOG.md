@@ -42,6 +42,42 @@
 
 문서만으로 이 불변식을 완료 처리하지 않는다. 정본: `docs/specs/api/payments.md`.
 
+### P0 — ADMIN-FORCE-REFUND-CONSISTENCY
+
+2026-08-24 감사에서 `AdminService.forceRefund()`가 정상 주문 취소 lifecycle의 금전·capacity·정산 후속효과를 우회함을 확인했다.
+
+현재 구현·증거:
+
+- [x] admin refund는 주문 존재 후 `CANCELLED`만 거부
+- [x] `PaymentsService.processRefundByOrderId()`로 본 결제만 환불 시도
+- [x] 이후 주문을 직접 `CANCELLED`로 write
+- [x] `PaymentRefundService`의 본 결제 refund claim/idempotency는 별도 검증됨
+- [x] 정상 회차 취소는 본 결제 + paid 재배송비 환불, cancellation retry state, reservation/counter 반환, held counter 감소, settlement 취소를 수행
+- [x] admin force refund는 `refundOrderChargesByOrderId`, reservation/capacity release, held counter 조정, `cancelSettlement()`을 호출하지 않음
+- [x] admin 경로는 `PENDING`, `DELIVERY_HELD`, `DELIVERED`, `PICKED_UP`, `REVIEWED` 등도 `CANCELLED` 외면 별도 상태 제한 없이 진입 가능
+- [x] payment 없음/비`PAID`가 refund service에서 no-op여도 admin 경로는 이후 주문을 `CANCELLED`로 직접 변경 가능
+
+판정:
+
+- provider 본 결제 환불 멱등성은 `VERIFIED`지만 **admin 주문 환불 전체 일관성은 `IMPLEMENTATION FINDING` P0**다.
+- 특히 회차 reservation/counters, paid redelivery charge, pending/confirmed settlement, paid settlement 회계가 admin 경로에서 정상 취소 계약과 수렴한다고 보장할 수 없다.
+
+남음:
+
+- [ ] admin 환불 허용 주문 상태를 명시적으로 정의
+- [ ] 회차 주문 admin 환불이 `RoundOrderLifecycleService` 취소 불변식을 재사용하거나 동등한 단일 orchestration으로 수렴
+- [ ] 본 결제 + 연결 paid 재배송비를 중복 없이 함께 환불
+- [ ] HELD/CONSUMED reservation 및 round/item counters 정확히 반환
+- [ ] `DELIVERY_HELD` 취소 시 `heldOrderCount` 정확히 감소
+- [ ] pending/confirmed settlement를 `cancelled`로 수렴
+- [ ] 이미 `paid` settlement가 있는 주문의 환불은 단순 status 역전이 아닌 명시적 회계 조정/operation issue/승인 정책 결정
+- [ ] provider refund 성공 후 local side-effect 실패 시 재시도 상태 보존, 외부 환불 중복 방지
+- [ ] 정상 취소와 admin 환불 동시 실행이 하나의 결과로 수렴
+- [ ] `PENDING`, `ACCEPTED`, `DELIVERY_HELD`, `DELIVERED/REVIEWED`, paid settlement, paid redelivery charge 조합 직접 회귀
+- [ ] 수정이 포함된 SHA를 `main`에 통합한 뒤 actual release SHA 후보에 포함
+
+정본: `docs/specs/api/admin.md`, 정산 영향: `docs/specs/api/settlements.md`.
+
 ### P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
 
 2026-08-24 감사에서 API 주문 조회 authorization과 실제 seller/driver 클라이언트 read 경계가 다름을 확인했다.
@@ -219,6 +255,7 @@ Issue #32 완료 전에도 repo-side Vercel guard는 동작하지만, direct pus
 ### P0 — 출시 후보 검증·운영 준비
 
 - [ ] PAYMENT-FINALIZATION-PAID-GUARD 완료 및 `main` 통합
+- [ ] ADMIN-FORCE-REFUND-CONSISTENCY 완료 및 `main` 통합
 - [ ] ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION 완료 및 `main` 통합
 - [ ] AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION 완료 및 `main` 통합
 - [ ] ORDER-MUTATION-AUTHORIZATION-COVERAGE 완료 및 `main` 통합
