@@ -2,7 +2,7 @@
 
 # Orders API / Domain Spec
 
-> **최종 정합화**: 2026-08-23
+> **최종 정합화**: 2026-08-24
 > **상태**: Current
 > **공통 타입 정본**: `packages/shared/src/order.types.ts`
 > **FSM 정본**: `apps/api/src/orders/orders.helpers.ts` 및 lifecycle service
@@ -236,6 +236,42 @@ PATCH /stores/:storeId/orders/:orderId/hub-confirm
 
 `GET /stores/:storeId/orders`의 현재 controller query는 `userId?`, `status?`, `saleType?`다. 과거 문서의 `driverId` query를 현재 공개 controller 계약으로 사용하지 않는다.
 
+## 7A. 역할·소유권 검증 상태
+
+문서 정합성 기준은 `docs/DOCUMENT_CONSISTENCY.md`를 따른다. 역할별 FSM이 존재한다는 사실과 실제 소유권·배정 권한이 회귀 테스트로 보장된다는 사실을 구분한다.
+
+### 조회 권한 — `VERIFIED`
+
+`OrdersQueryService`와 `orders-query.service.spec.ts`가 직접 대조된다.
+
+- consumer: 요청 query의 `userId`와 무관하게 자신의 주문만 목록 조회하며 타인 상세는 거부한다.
+- seller: `stores/{storeId}.ownerId === requesterId`인 스토어의 목록·상세만 허용한다.
+- driver: `order.driverId === requesterId`로 배정된 주문의 목록·상세만 허용한다.
+- admin: 스토어 주문 전체 조회를 허용한다.
+- storeId 없는 단건 조회도 seller 소유권과 driver 배정을 다시 검증한다.
+- 회차 직배송 완료 사진 URL도 주문 조회 권한을 통과한 뒤에만 생성한다.
+
+### 상태 변경 권한 — `IMPLEMENTED / UNVERIFIED`
+
+`OrdersLifecycleService.assertOrderActionAccess()`의 현재 구현은 다음과 같다.
+
+- admin: 일반 action ownership guard 통과.
+- seller: 해당 `storeId`의 실제 `ownerId`와 requester가 일치해야 변경 가능.
+- driver: 이미 `driverId`가 있으면 해당 기사만 변경 가능.
+- driver 첫 수거: `driverId`가 없고 주문이 `PREPARING`이며 요청 전이가 `DELIVERING`일 때만 최초 claim을 허용하고 이후 `driverId`를 기록한다.
+- consumer: 자신의 주문에 대해서만 action access를 통과하며 실제 허용 전이는 consumer FSM이 추가 제한한다.
+
+현재 직접 검증된 근거에는 consumer의 위장 `DELIVERY_HELD` 요청 거부, 정상 seller/driver 회차 흐름, 배송사진 타인 접근 거부가 포함된다.
+
+그러나 2026-08-24 문서 감사 기준으로 다음 mutation authorization 거부 시나리오를 직접 고정하는 회귀 테스트는 확인되지 않았다.
+
+- 다른 스토어의 seller가 `PATCH .../status` 또는 `delivery-hold`를 시도하는 경우
+- 이미 다른 기사에게 배정된 주문을 비담당 driver가 변경하는 경우
+- 미배정 주문에서 허용된 최초 `PREPARING → DELIVERING` 이외의 driver action이 거부되는 경우
+- 위 거부 요청에서 주문·알림·환불·정산 side effect가 발생하지 않는지 확인
+
+권한은 P0 계약이므로 위 직접 회귀가 추가되기 전 상태 변경 authorization 전체를 `VERIFIED`로 표현하지 않는다. 추적: `docs/BACKLOG.md`의 `ORDER-MUTATION-AUTHORIZATION-COVERAGE`.
+
 ## 8. 배송 사진
 
 회차 직배송의 현재 정본 사진 경로는 단순 `photoUrl` 첨부가 아니라 서버가 파일을 수신·보관하고 완료 처리하는 전용 API다.
@@ -304,9 +340,12 @@ legacy 공동구매에는 `RECRUITING`, `CONFIRMED`, `GROUP_*` 알림, `groupPro
 - `apps/api/src/orders/orders.controller.ts`
 - `apps/api/src/orders/orders.helpers.ts`
 - `apps/api/src/orders/*lifecycle*`
+- `apps/api/src/orders/orders-query.service.spec.ts`
 - 관련 unit/spec tests
 - `apps/e2e`의 영향 시나리오
 - 회차 변경이면 `docs/specs/mvp-sales-round-direct-delivery.md`
+
+권한 계약은 `docs/DOCUMENT_CONSISTENCY.md`에 따라 직접 거부 회귀가 없으면 구현 존재만으로 `VERIFIED` 처리하지 않는다.
 
 상태 전이·권한·결제·환불을 문서 예시만 보고 운영 데이터에 직접 적용하지 않는다.
 
@@ -314,6 +353,7 @@ legacy 공동구매에는 `RECRUITING`, `CONFIRMED`, `GROUP_*` 알림, `groupPro
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-08-24 | 조회 authorization은 VERIFIED, mutation authorization은 직접 거부 회귀 부족으로 IMPLEMENTED / UNVERIFIED 분리 |
 | 2026-08-23 | `DELIVERY_HELD`, 회차 snapshot, 현재 endpoint/FSM, 재배송·배송사진·알림 계약에 맞춰 전면 정합화 |
 | 2026-04-23 | legacy 공동구매 수량 용어 반영 |
 | 2026-03-26 | 초기 orders 설계 초안 |
