@@ -14,8 +14,9 @@
 
 - 저장소: `booker-lab/greenhub`
 - 기본 브랜치: `main`
-- 현재 확인된 `main` HEAD: `01c0bb534c780c56d483030c87f058740599f88a`
+- `main` HEAD는 문서 PR만으로도 이동하므로 이 문서에 “현재 HEAD”를 고정하지 않는다. 새 작업 시작 시 GitHub에서 직접 재조회한다.
 - 회차 직배송 기능 통합 기준 SHA: `e55f25914cc7d01576fbd4639583daaf0fe6385e`
+- 배포 안전 repo-side 통합 기준: PR #30, PR #31
 - PR #11: `MERGED`·`CLOSED`
 - 기존 `codex/mvp-sales-round-direct`는 통합 완료 branch이며 새 작업 기준 branch로 재사용하지 않는다.
 - 새 작업은 최신 `main`에서 목적별 branch를 만들고 PR로 통합한다.
@@ -27,19 +28,23 @@
 repo-side remediation은 완료됐다.
 
 - PR #30: consumer·seller·driver `git.deploymentEnabled.main=false`
-- PR #30 merge SHA `a83fa20516ed6209a4705020cc92154f39e383ca` 이후 세 Vercel 프로젝트의 신규 deployment 0건 확인
+- PR #30 merge SHA `a83fa20516ed6209a4705020cc92154f39e383ca` 이후 세 Vercel 프로젝트 신규 deployment 0건 확인
 - `sync-preview.yml`: `docs/**`, `**/*.md`만 바뀐 `main` push 제외
 - `AGENTS.md`: 문서-only 포함 direct `main` commit/push 금지, branch+PR 통합 요구
 - `deployment-safety.yml` + `verify-deployment-safety.mjs`: 안전 invariant 검증
 - PR #31: 세 앱 순수 docs/Markdown 변경의 Vercel build skip `ignoreCommand` 추가
-- pure-docs 검증 commit `ebf44c104b2e8758733fd14501fd0e820d575ae4` 이후 세 Vercel 프로젝트 신규 deployment 0건 확인
+- pure-docs branch commit `ebf44c104b2e8758733fd14501fd0e820d575ae4` 이후 세 Vercel 프로젝트 신규 deployment 0건 확인
+- docs-only PR #33 merge 이후에도 세 Vercel 프로젝트 신규 deployment 0건 확인
+- PR #33 생성 시각은 2026-08-23 13:57 UTC이고, 당시 최신 `preview` sync commit `b1c92cedf01f3c2ce596251bcc86066314ebc40f`의 시각은 13:55:32 UTC다. PR #33 이후 더 새로운 preview sync가 없어 docs-only main merge가 `sync-preview`를 발화하지 않았음을 확인했다.
+
+Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 생길 수 있지만, 실제 deployment가 0건이면 배포 회귀로 판정하지 않는다. `Deployment safety guard` 자체 성공 여부와 Vercel deployment 목록을 분리해 본다.
 
 남은 관리자 P0:
 
 - GitHub `main`은 마지막 재조회에서 `protected=false`.
 - Issue #32 `P0: main branch protection / ruleset 활성화`가 남아 있다.
-- 목표: PR required, Deployment safety guard required check, force push·branch delete 차단.
-- 연결된 GitHub 도구에는 해당 관리자 mutation이 없어 Issue #32 완료 전까지 정책+CI 방어 상태다.
+- 목표: PR required, `Deployment safety guard / verify` required check, force push·branch delete 차단.
+- 연결된 GitHub 도구와 실행 환경에는 branch protection mutation·인증된 관리자 UI·GitHub token이 없어 Issue #32 완료 전까지 정책+CI 방어 상태다.
 
 **중요:** `main` merge는 production 배포 승인이 아니다. production은 검증된 exact release SHA와 별도 `Task 3.1 승인`을 사용해야 하며, 빈 commit·재-push로 배포를 유도하지 않는다.
 

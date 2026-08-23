@@ -6,7 +6,7 @@
 
 ## 현재 판정
 
-### 완료
+### repo-side remediation 완료
 
 - PR #30으로 consumer·seller·driver의 `main` Git 자동 Vercel deployment를 차단했다.
 - PR #30 merge SHA `a83fa20516ed6209a4705020cc92154f39e383ca` 이후 세 Vercel 프로젝트에서 새 deployment가 0건임을 직접 확인했다.
@@ -15,12 +15,32 @@
 - `.github/workflows/deployment-safety.yml`과 `scripts/verify-deployment-safety.mjs`가 배포 안전 invariant를 검증한다.
 - PR #31로 세 앱에 docs-only `ignoreCommand`를 추가해 순수 문서/Markdown 변경의 Vercel Preview build를 skip하도록 구성했다.
 - PR #30·#31의 deployment safety CI는 모두 성공했다.
-- pure-docs branch `docs/deployment-safety-closeout`의 commit `ebf44c104b2e8758733fd14501fd0e820d575ae4` 이후 consumer·seller·driver 세 Vercel 프로젝트 신규 deployment가 0건임을 확인해 feature-branch docs-only skip을 실증했다.
 
-### 남은 P0 관리자 게이트
+### docs-only 실증 완료
+
+Feature branch:
+
+- `docs/deployment-safety-closeout`의 pure-docs commit `ebf44c104b2e8758733fd14501fd0e820d575ae4` 이후 consumer·seller·driver 신규 Vercel deployment 0건.
+
+Main merge:
+
+- docs-only PR #33을 `main`에 merge했다.
+- PR #33 merge 이후 consumer·seller·driver 신규 Vercel deployment 0건.
+- PR #33 생성 시각: 2026-08-23 13:57 UTC.
+- 당시 `preview`의 최신 sync commit `b1c92cedf01f3c2ce596251bcc86066314ebc40f` 시각: 13:55:32 UTC.
+- PR #33 이후 더 새로운 `preview` sync commit이 없어 docs-only `main` merge가 `sync-preview`/일반 E2E 경로를 발화하지 않았음을 확인했다.
+
+Vercel Hobby build-rate-limit은 별도 신호다.
+
+- PR #33에서 세 Vercel GitHub check가 `build-rate-limit` failure를 표시했지만 실제 deployment는 0건이었다.
+- 따라서 이 상태는 app build failure나 deployment 회귀로 간주하지 않는다.
+- 실제 배포 여부는 Vercel deployment 목록과 metadata로 확인하고, repository invariant는 `Deployment safety guard` CI로 확인한다.
+
+## 남은 P0 관리자 게이트
 
 - GitHub `main`은 2026-08-23 재조회 기준 여전히 `protected=false`다.
 - 연결된 GitHub 도구에는 branch protection/ruleset mutation이 노출되지 않는다.
+- 실행 환경에도 인증된 GitHub 관리자 UI 세션·GitHub CLI/token이 없어 자동 적용하지 못했다.
 - 관리자 설정 작업은 Issue #32 `P0: main branch protection / ruleset 활성화`로 추적한다.
 
 Issue #32 완료 조건:
@@ -32,28 +52,28 @@ Issue #32 완료 조건:
 5. 현재 1인 저장소에서는 self-deadlock을 피하도록 required approval 0으로 시작하고, 협업자가 생기면 1 이상으로 상향.
 6. 재조회에서 `protected=true` 또는 동등한 ruleset enforcement 확인.
 
-## 현재 배포 계약
+## 현재 production 배포 계약
 
 `main` merge 자체는 production 배포 승인이 아니다.
 
 production은 다음 조건을 모두 충족한 뒤에만 실행한다.
 
-1. 판매 활성화 법적 문서까지 포함한 release SHA 확정.
+1. 판매 활성화 법적 문서까지 포함한 actual release SHA 확정.
 2. 해당 exact SHA의 회차 원격 E2E 52건 + fixture cleanup 성공.
 3. 운영 Firebase·ALIGO 선행 게이트 통과.
 4. Issue #32의 `main` 보호 완료.
 5. 사용자의 별도 `Task 3.1 승인`.
-6. 배포 직전/직후 deployment metadata의 Git SHA가 승인된 release SHA와 정확히 일치함을 확인.
+6. exact SHA/artifact를 명시적으로 deploy 또는 promote.
+7. 배포 직전·직후 provider metadata의 Git SHA가 승인 release SHA와 정확히 일치함을 확인.
 
-현재 저장소에는 production 전용 자동 workflow가 없다. 따라서 향후 Task 3.1에서는 **이미 검증된 exact SHA/artifact를 명시적으로 production에 deploy 또는 promote하는 절차**를 먼저 확정하고, 단순히 `main`을 다시 push하거나 빈 commit으로 배포를 유도하지 않는다.
+현재 저장소에는 production 전용 자동 workflow가 없다. 향후 Task 3.1에서 정확한 deploy/promotion 절차를 먼저 확정한다. 단순 `main` 재-push나 빈 commit으로 production 배포를 유도하지 않는다.
 
 ## docs-only 변경 계약
 
-- feature branch의 변경 파일이 모두 `docs/**` 또는 `*.md`이면 세 Vercel 프로젝트의 `ignoreCommand`가 build를 skip한다.
-- feature-branch pure-docs 검증은 완료됐다: `ebf44c1...` 이후 세 프로젝트 신규 deployment 0건.
-- `main`에 docs-only PR이 merge돼도 Vercel production Git deploy는 `git.deploymentEnabled.main=false` 때문에 생성되면 안 된다.
-- 같은 docs-only merge는 `sync-preview.yml`의 `paths-ignore` 때문에 `preview` branch 동기화와 일반 E2E dispatch를 만들면 안 된다.
-- 이 closeout PR merge 뒤 세 Vercel 프로젝트 deployment 0건과 `preview` branch SHA 불변을 다시 확인해 main-side 검증을 마무리한다.
+- feature branch 변경이 모두 `docs/**` 또는 `*.md`이면 세 Vercel 프로젝트는 실제 build/deployment를 만들지 않아야 한다.
+- docs-only `main` merge는 Vercel production Git deployment를 만들지 않아야 한다.
+- docs-only `main` merge는 `preview` 동기화·일반 E2E dispatch를 만들지 않아야 한다.
+- 위 세 항목은 PR #33까지 실증 완료했다.
 
 ## 회귀 방지
 
@@ -66,9 +86,10 @@ production은 다음 조건을 모두 충족한 뒤에만 실행한다.
 - safety CI 제거 또는 실패를 무시하고 merge
 - exact release SHA 검증 없이 production 배포
 
-## 승인 기록
+## 승인·증거
 
 - 사용자 승인: `배포 안전장치 변경 승인`
 - repo-side guard: PR #30, PR #31
-- pure-docs branch skip 검증: `ebf44c104b2e8758733fd14501fd0e820d575ae4`
+- feature-branch docs-only 검증: `ebf44c104b2e8758733fd14501fd0e820d575ae4`
+- main docs-only 검증: PR #33
 - 관리자 잔여 작업: Issue #32
