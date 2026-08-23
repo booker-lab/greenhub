@@ -2,5 +2,10 @@
   "framework": "nextjs",
   "buildCommand": "cd ../.. && pnpm --filter @greenhub/shared build && pnpm --filter seller build",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  }
 }
