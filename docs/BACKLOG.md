@@ -30,53 +30,75 @@
 
 정본: `docs/specs/api/payments.md`.
 
-### P0 — ORDER-REDELIVERY-PAID-RESUME-GATE
+### P0 — PAYMENT-WEBHOOK-SIGNATURE-COVERAGE
 
-운영 계약은 고객 책임 첫 배송 실패의 유료 재배송에 **`결제 전 재배송 금지`**를 요구한다. 2026-08-24 추가 감사에서 이 문제는 단순 driver resume guard 누락이 아니라 **결제 요청·hold 해소·배송 재개 상태머신 전체 불일치**임을 확인했다.
+PortOne webhook 인증 구현은 존재하지만 금융 상태 변경 경계에 필요한 cryptographic 양방향 회귀가 충분하지 않다.
 
-현재 직접 근거:
+현재 구현·증거:
 
-- [x] `OrderChargePaymentService`의 charge `PAID` 검증·금액/연결 검증·환불 멱등성은 직접 테스트됨
-- [x] driver `DELIVERY_HELD → DELIVERING` 전환은 charge `PAID`를 확인하지 않음
-- [x] driver UI는 `DELIVERY_HELD` 회차 주문에 charge 상태와 무관하게 `배송 재개` CTA 노출
-- [x] seller `DELIVERY_HELD → PREPARING`은 고객 책임+양수 재배송비 주문에서도 현재 테스트가 정상 성공으로 고정
-- [x] 위 seller 전환은 hold `resolvedAt` 기록 + `heldOrderCount` 감소
-- [x] 현재 notification map은 이 전환을 `ORDER_REDELIVERY_PAYMENT_REQUESTED` 발송 시점으로 사용
-- [x] 그러나 `OrderChargesService.createRedeliveryFeeCharge()`는 현재 order status가 `DELIVERY_HELD`여야 charge 생성 가능
-- [x] consumer `canPayRedeliveryFee`도 현재 status가 `DELIVERY_HELD`일 때만 true
-- [x] 따라서 `PREPARING`으로 옮긴 뒤 결제 요청 알림이 가면 소비자 charge 생성/UI가 사라짐
-- [x] 이후 `PREPARING → DELIVERING`에는 과거 paid-required hold의 미결제를 확인하는 durable guard가 없음
+- [x] production bootstrap은 `rawBody: true`
+- [x] controller는 raw body + `webhook-id` + `webhook-timestamp` + `webhook-signature` 요구
+- [x] `PORTONE_WEBHOOK_SECRET` 필수
+- [x] timestamp ±5분
+- [x] HMAC SHA-256 + timing-safe compare 구현
+- [x] missing signature/secret, stale timestamp 단위 거부 테스트
+- [x] HTTP E2E에서 webhook header 없는 요청 401
+- [x] signed-flow fixture에서 controller webhook 경로 실행
+
+현재 공백:
+
+- 회차 E2E fixture의 `verifyWebhookSignature`는 mock이므로 실제 HMAC 검증 성공 증거가 아님
+- 실제 verifier의 valid signature 성공 테스트가 없음
+- 필수 header를 모두 채운 non-empty invalid signature 직접 거부 테스트가 없음
+- body/id/timestamp 변조에 동일 signature가 거부되는 직접 테스트가 없음
+- actual controller + real verifier 조합에서 invalid signature가 `PaymentsService.handleWebhook()`에 도달하지 않는 통합 증거가 없음
 
 판정:
 
-- charge 결제·환불 **하위 계약은 `VERIFIED`**.
-- 유료 재배송 **주문 상태머신 전체는 P0 `IMPLEMENTATION FINDING`**.
-- `DELIVERY_HELD → DELIVERING` 한 경로만 막아서는 `PREPARING` 우회가 남으므로 완료가 아니다.
+- 구현을 결함으로 단정하지 않는다.
+- 금융 인증 경계이므로 **`IMPLEMENTED / PARTIALLY VERIFIED` + P0 `COVERAGE GAP`**으로 둔다.
 
-남음 — 불변식:
+남음:
 
-- [ ] 고객 책임+양수 재배송비 hold의 `payment required`가 결제 완료 전 사라지지 않음
-- [ ] payment-request 알림 시점에도 consumer charge 생성/결제 UI·endpoint가 actionable
-- [ ] current hold↔charge를 `heldAt` 또는 동등 durable key로 연결
-- [ ] charge type/order/store/user 일치 + `PAID`일 때만 모든 실제 delivery-start 경로 허용
-- [ ] `PENDING|FAILED|REFUNDED|missing|mismatched`는 side effect 0 거부
-- [ ] `DELIVERY_HELD → DELIVERING`과 `DELIVERY_HELD → PREPARING → DELIVERING` 모두 동일 paid gate 적용
-- [ ] seller가 `PREPARING` 결제요청 구조를 유지한다면 durable payment-required marker와 consumer 결제 가능성을 상태 변경 뒤에도 보존; 아니면 결제 완료 전 hold를 해소하지 않는 구조로 변경
-- [ ] hold 해소·`heldOrderCount` 감소 시점을 payment completion/재개 정책과 명시적으로 일치
-- [ ] 판매자/시스템 책임·무료 재배송 정상 흐름 유지
-- [ ] seller/driver 동시 요청에서 hold 해소·counter 감소·scheduled 알림이 한 번만 수렴
+- [ ] 고정 secret/id/timestamp/raw body의 valid HMAC이 실제 `PortoneClient.verifyWebhookSignature()` 통과
+- [ ] non-empty invalid HMAC 거부
+- [ ] raw body 1 byte 변조 거부
+- [ ] webhook-id 변조 거부
+- [ ] signed timestamp 변조/허용창 경계 거부·허용 고정
+- [ ] real verifier를 사용하는 controller integration에서 valid request만 `PaymentsService.handleWebhook()` 도달
+- [ ] invalid request에서 주문/payment/orderCharge/capacity side effect 0
+- [ ] 기존 duplicate webhook 멱등 회귀 유지
+- [ ] 회귀 SHA `main` 통합
 
-필수 회귀:
+정본: `docs/specs/api/payments.md`.
 
-- [ ] payment-request 알림 뒤 consumer payment CTA/endpoint 유지
-- [ ] charge 없음/PENDING/FAILED/REFUNDED direct resume 거부
-- [ ] 결제 전 seller `PREPARING` 전환을 정책대로 허용/거부 직접 고정
-- [ ] `PREPARING` 경유 미결제 `DELIVERING` 거부
-- [ ] `PAID` 뒤 한 번 정상 재개
-- [ ] 무료/판매자책임 재배송 정상 회귀
-- [ ] 변경 SHA `main` 통합
+### P0 — ORDER-REDELIVERY-PAID-RESUME-GATE
 
-정본: `docs/specs/api/orders.md`; 운영 근거: `docs/specs/ops/mvp-sales-round-runbook.md`.
+운영 계약은 고객 책임 유료 재배송에서 `결제 전 재배송 금지`를 요구하지만 payment-request/hold-resolution/resume 상태머신이 이 불변식과 충돌한다.
+
+현재 확인:
+
+- [x] charge 결제·환불 하위 계약은 직접 테스트됨
+- [x] `DELIVERY_HELD → DELIVERING`에 charge `PAID` server gate 없음
+- [x] driver UI도 charge 상태와 무관하게 `배송 재개` 노출
+- [x] 고객 책임+양수 재배송비 hold도 seller `DELIVERY_HELD → PREPARING` 성공이 테스트로 고정
+- [x] 이 전환은 hold resolve + held counter 감소 + payment-request 알림을 발생시킴
+- [x] charge 생성 API와 consumer payment CTA는 현재 `DELIVERY_HELD`를 요구해 PREPARING 전환 뒤 결제 dead-end 가능
+- [x] 이후 `PREPARING → DELIVERING`에도 과거 paid-required hold의 durable gate 없음
+
+남음:
+
+- [ ] payment-required 정보가 PAID 전 사라지지 않음
+- [ ] payment-request 알림 뒤 consumer 결제 UI/endpoint actionable
+- [ ] current hold↔charge durable linkage
+- [ ] `REDELIVERY_FEE` + order/store/user + `PAID` 검증
+- [ ] 모든 delivery-start 경로 동일 paid gate
+- [ ] invalid charge state side effect 0
+- [ ] hold resolve/held counter 감소 시점 명시·race 수렴
+- [ ] 무료/판매자책임 흐름 유지
+- [ ] 직접 unit/integration/E2E + `main`
+
+정본: `docs/specs/api/orders.md`.
 
 ### P0 — ADMIN-FORCE-REFUND-CONSISTENCY
 
@@ -89,7 +111,7 @@ admin refund가 정상 cancellation의 추가 charge·capacity·held counter·se
 - [ ] pending/confirmed settlement 취소
 - [ ] paid settlement 별도 회계 조정/operation issue 정책
 - [ ] provider 성공/local 실패 재시도·동시 실행 수렴
-- [ ] 직접 회귀 후 `main` 통합
+- [ ] 직접 회귀 + `main`
 
 정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`.
 
@@ -97,27 +119,27 @@ admin refund가 정상 cancellation의 추가 charge·capacity·held counter·se
 
 API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 
-- [ ] 미배정 `PREPARING` direct/hub discovery 최소 대상·필드 정의
+- [ ] 미배정 `PREPARING` direct/hub discovery 최소 대상·필드
 - [ ] arbitrary/타-driver/완료 주문 raw read 차단
 - [ ] assigned driver·seller 최소 projection/DTO 또는 동등 분리
 - [ ] broad driver rule 제거
 - [ ] Rules + 앱 정상/거부 회귀
-- [ ] `main` 통합
+- [ ] `main`
 
 정본: `docs/specs/api/orders.md`.
 
 ### P0 — AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION
 
-신규/legacy driver 자동 승인 경로와 stale session/claims 수렴 문제가 있다.
+신규/legacy driver 자동 승인과 stale session/claims 수렴 문제가 있다.
 
-- [ ] 신규/legacy 로그인 side-effect 자동 승인 제거
+- [ ] 로그인 side-effect 자동 승인 제거
 - [ ] 과거 계정 migration 별도 감사 절차
 - [ ] 승인 전/후 앱·API·Firebase 회귀
-- [ ] suspension/role/store/approval revocation SLA 결정
-- [ ] refresh/current claims authoritative state 검증
+- [ ] suspension/role/store/approval revocation SLA
+- [ ] refresh authoritative state 검증
 - [ ] Firebase stale claims 재발급 차단
-- [ ] logout/rotation 포함 회귀
-- [ ] `main` 통합
+- [ ] logout/rotation 회귀
+- [ ] `main`
 
 정본: `docs/specs/api/auth.md`.
 
@@ -131,13 +153,13 @@ API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 - [ ] first claim 정확한 `driverId`
 - [ ] 거부 side effect 0
 - [ ] 필요한 admin 허용 범위 고정
-- [ ] `main` 통합
+- [ ] `main`
 
 정본: `docs/specs/api/orders.md`.
 
 ### P0 — DEPLOY-SAFETY-MAIN-PROTECTION
 
-repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보호는 남음.
+repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보호는 남아 있다.
 
 - [ ] Issue #32
 - [ ] PR required
@@ -168,7 +190,7 @@ repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보�
 ### P0 — 판매 활성화 legal 재정합화
 
 - [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책
-- [ ] 재배송 payment-required 상태머신과 결제 전 재개 금지 계약 반영
+- [ ] 재배송 payment-required 상태머신
 - [ ] PortOne/PG 개인정보 처리
 - [ ] ALIGO 전화번호·메시지 처리
 - [ ] order direct-read 최소화 뒤 seller/driver 접근 설명
@@ -179,6 +201,7 @@ repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보�
 ### P0 — 출시 후보 검증·운영 준비
 
 - [ ] `PAYMENT-FINALIZATION-PAID-GUARD`
+- [ ] `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
 - [ ] `ORDER-REDELIVERY-PAID-RESUME-GATE`
 - [ ] `ADMIN-FORCE-REFUND-CONSISTENCY`
 - [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
