@@ -1,83 +1,155 @@
-# Green Hub — 로컬 통합 테스트 체크리스트
+<!-- Language: ko -->
 
-> **목적**: Railway/Vercel 배포 전, 로컬에서 API ↔ Consumer 전 흐름을 검증한다.
->
-> **실행 순서**: API 서버 → Consumer 앱 → 시나리오별 검증
+# Greenhub — 통합 검증 진입점
 
----
+> 이 문서는 오래된 수동 시나리오 기록이 아니라 **현재 저장소에서 통합 검증을 시작할 안전한 진입점**만 제공한다. 실제 검증 범위와 환경은 대상 Task의 spec·PLAN·HANDOFF를 우선한다.
 
-## 0. 사전 준비
+## 원칙
 
-- [x] `apps/api/.env` 파일에 실제 값 등록 확인 (Firebase, JWT — 포트원은 미입력 상태, 결제 테스트 시 필요)
-- [x] `apps/consumer/.env.local` 파일에 실제 값 등록 확인 (포트 오류 수정 완료)
-- [ ] Firebase Firestore 규칙에서 테스트 계정 읽기/쓰기 허용 확인
+- 테스트용 비밀번호·토큰·서비스 계정 원문을 문서에 기록하지 않는다.
+- 운영 Firestore 문서를 콘솔에서 수동으로 바꿔 통합 테스트하지 않는다.
+- 운영 결제·환불·알림 발송·주문 상태 변경을 단순 검증 목적으로 실행하지 않는다.
+- seed·cleanup·deploy·migration·실제 발송은 대상 환경과 승인 경계를 먼저 확인한다.
+- 과거에 체크된 배포 완료 상태를 현재 상태 증거로 재사용하지 않는다.
+- 현재 전체 회귀 기준은 `apps/e2e`와 관련 GitHub Actions workflow를 사용한다.
 
----
+## 1. 기준선 확인
 
-## 1. 서버 기동
+작업 시작 전 확인:
 
 ```bash
-# 터미널 A — API (port 3000)
-cd C:\Develop\greenhub
-pnpm --filter api start:dev
-
-# 터미널 B — Consumer (port 3001)
-# 더블클릭: C:\Develop\greenhub\dev-consumer.bat
-# 또는:
-pnpm --filter consumer dev
+git status --short
+git branch --show-current
+git rev-parse HEAD
+git fetch origin
 ```
 
----
+추가로 읽을 문서:
 
-## 2. API 서버 단독 테스트
+1. `AGENTS.md`
+2. `docs/memory.md`
+3. `docs/PROJECT_MAP.md`의 대상 영역
+4. 현재 Task의 PLAN/HANDOFF/spec
 
-| # | 항목 | 방법 | 기대 결과 |
-|---|------|------|-----------|
-| 2-1 | Health check | `GET http://localhost:3000/health` | `{"status":"ok","timestamp":"..."}` |
-| 2-2 | 회원가입 | `POST /auth/register` `{"email":"test@test.com","password":"Test1234!","name":"테스터","role":"customer"}` | `{"userId":"..."}` 201 |
-| 2-3 | 로그인 | `POST /auth/login` `{"email":"test@test.com","password":"Test1234!"}` | `{"accessToken":"...","user":{...}}` 200 |
-| 2-4 | 내 정보 조회 | `GET /auth/me` (Bearer 토큰) | UserProfile 200 |
-| 2-5 | 상품 목록 | `GET /stores/:storeId/products` (Bearer 토큰) | `{"items":[],"total":0}` 200 |
+## 2. 설치와 기본 정적 검증
 
----
+루트 `package.json` 기준:
 
-## 3. Consumer UI 시나리오
+```bash
+pnpm install
 
-| # | 시나리오 | 경로 | 검증 항목 |
-|---|----------|------|-----------|
-| 3-1 | 로그인 | `http://localhost:3001/login` | 이메일/비밀번호 입력 후 홈 리디렉션 |
-| 3-2 | 보호 라우트 | `http://localhost:3001/checkout` (미로그인) | `/login`으로 리디렉션 |
-| 3-3 | A2HS 버튼 | `http://localhost:3001/mypage` | "홈화면에 추가" 버튼 노출 (mobile or devtools device) |
-| 3-4 | 결제 화면 | `http://localhost:3001/checkout?storeId=<id>&productId=<id>` | 주소 입력 폼 노출 + "카카오페이로 결제" 버튼 |
-| 3-5 | 결제 플로우 | 결제 버튼 클릭 | 카카오페이 결제창 오픈 |
-| 3-6 | 결제 완료 | 결제 승인 후 | `/order/success?orderId=<id>` 리디렉션 + Firestore 실시간 상태 표시 |
+# production build 대상
+pnpm build
 
----
+# workspace typecheck
+pnpm typecheck
 
-## 4. Firestore 실시간 리스너 검증
-
-```
-Firestore 콘솔에서 orders/{orderId}.status 를 수동으로
-"pending" → "confirmed" → "delivered" 순서로 변경하며
-/order/success 화면이 실시간으로 업데이트되는지 확인
+# Firebase Rules
+pnpm test:firestore-rules
+pnpm test:storage-rules
 ```
 
----
+주의:
 
-## 5. PWA 설치 검증 (Chrome)
+- 루트 `pnpm lint`는 workspace별 lint를 재귀 실행하고 API lint가 수정형일 수 있으므로 읽기 전용 검증으로 사용하기 전에 실제 package script를 확인한다.
+- build·test가 생성하는 산출물은 의도한 변경과 구분한다.
 
-1. Chrome DevTools → Application → Manifest 탭에서 에러 없음 확인
-2. Service Worker 등록 확인 (`sw.js`)
-3. Lighthouse → PWA 감사 실행 (설치 가능성 통과 확인)
+## 3. 로컬 API + Consumer
 
----
+현재 API 기본 포트는 3000이고 consumer package의 Next 개발 서버도 포트를 따로 주지 않으면 3000을 사용하려 한다. 둘을 동시에 실행할 때는 consumer 포트를 명시한다.
 
-## 6. 배포 전 최종 체크
+```bash
+# 터미널 A — API :3000
+pnpm dev:api
 
-- [x] `pnpm --filter api build` 오류 없음
-- [x] `pnpm --filter consumer build --webpack` 오류 없음
-- [x] Railway 환경변수 10개 등록 완료 (`FIREBASE_SERVICE_ACCOUNT_JSON` 포함)
-- [x] Railway 배포 완료 — Healthcheck 통과, Online 상태 (2026-03-27)
-- [x] Firestore 복합 인덱스 7개 배포 완료 (firebase-tools CLI)
-- [ ] `CORS_ORIGIN`에 Vercel 프로덕션 도메인 업데이트 예정
-- [ ] Vercel 배포 (`apps/consumer`) — 다음 세션
+# 터미널 B — Consumer :3001
+pnpm --filter consumer dev --port 3001
+```
+
+`apps/consumer/.env.example`의 `NEXTAUTH_URL=http://localhost:3001`, `NEXT_PUBLIC_API_URL=http://localhost:3000`과 `apps/api/.env.example`의 `PORT=3000`, `CORS_ORIGIN=http://localhost:3001`이 이 조합을 전제로 한다.
+
+Seller·Driver까지 동시에 띄우는 경우 `docs/URLS.md`의 로컬 포트 설명과 각 package script를 확인하고, API `CORS_ORIGIN`에 필요한 local origin들이 포함되어 있는지 먼저 확인한다. 현재 루트 `dev.bat`는 API를 시작하지 않는 프런트 launcher이므로 전체 스택 launcher로 가정하지 않는다.
+
+## 4. API 기본 smoke
+
+로컬 API가 실행 중일 때 상태 변경 없는 health 확인부터 시작한다.
+
+```text
+GET http://localhost:3000/health
+```
+
+인증·주문·결제·알림 같은 상태 변경 시나리오는 현재 API spec과 전용 테스트를 사용한다. 임시 계정을 문서에 하드코딩하거나 운영 데이터를 수동 생성하지 않는다.
+
+## 5. Firebase Rules 검증
+
+Firestore·Storage 접근 계약을 변경한 경우 루트 테스트를 사용한다.
+
+```bash
+pnpm test:firestore-rules
+pnpm test:storage-rules
+```
+
+운영 Firebase Console에서 문서를 직접 수정해 Rules 동작을 시험하지 않는다.
+
+## 6. Playwright E2E
+
+현재 멀티앱 통합 검증 진입점:
+
+```bash
+pnpm test:e2e
+```
+
+UI 모드가 필요할 때:
+
+```bash
+pnpm test:e2e:ui
+```
+
+실행 전 확인:
+
+- `apps/e2e/playwright.config.ts`
+- `apps/e2e/global-setup.ts`
+- 대상 spec
+- 현재 E2E 환경·seed·cleanup 계약
+- 배포 대상 SHA와 Preview 준비상태
+
+회차 직배송 출시 검증에서는 활성 출시 PLAN/HANDOFF가 요구하는 동일 SHA 원격 workflow, chromium/mobile 결과, fixture cleanup을 최종 증거로 사용한다.
+
+## 7. 부하·운영 probe
+
+현재 루트 scripts에는 다음 진입점이 있다.
+
+```bash
+pnpm load:check-baseline
+pnpm load:check-probe
+pnpm load:readiness
+pnpm load:smoke
+```
+
+단, k6 실행은 대상 URL·데이터·부하 강도에 따라 외부 상태에 영향을 줄 수 있다. `docs/specs/ops/k6-load-test-plan.md`와 현재 Backlog의 재개 조건을 확인하고 승인 범위 밖의 production 부하를 실행하지 않는다.
+
+## 8. 배포 전 통합 검증 체크
+
+- [ ] 현재 branch와 HEAD가 Task가 전제한 기준과 일치한다.
+- [ ] 작업 트리의 기존 사용자 변경을 보존했다.
+- [ ] 변경 영역의 build/typecheck/unit test가 통과했다.
+- [ ] 공개 API·DTO·상태 변경이면 관련 spec과 shared 계약을 정합화했다.
+- [ ] Firebase 계약 변경이면 Rules 테스트를 통과했다.
+- [ ] 다역할 사용자 흐름 변경이면 관련 Playwright E2E를 통과했다.
+- [ ] 출시 Task라면 실제 출시 대상 SHA의 원격 검증을 따로 확인했다.
+- [ ] 실행하지 않은 검증을 완료로 기록하지 않았다.
+- [ ] 비밀값·개인정보·운영 데이터 원문을 로그·문서·Git에 남기지 않았다.
+
+## 9. 운영 변경 경계
+
+다음은 통합 테스트라는 이유만으로 실행하지 않는다.
+
+- production 환경 변수 변경
+- Railway/Vercel/Firebase production 배포
+- 운영 Firestore 데이터 생성·수정·삭제
+- 실제 결제·환불
+- 실제 알림톡·SMS 발송
+- 운영 회차 상태 변경
+- `salesMode` 전환
+
+필요한 경우 해당 활성 PLAN의 승인 게이트를 먼저 따른다.

@@ -1,271 +1,265 @@
-# Green Hub — 트러블슈팅 이력
+<!-- Language: ko -->
 
-> 프로덕션에서 실제로 발생한 문제와 해결책을 기록합니다.
-> 다음 작업 시 같은 문제가 반복되지 않도록 패턴과 체크포인트를 함께 기록합니다.
+# Greenhub — 트러블슈팅 이력
+
+> 과거에 실제로 발생한 문제에서 **재사용 가능한 진단 패턴**만 남긴다. 아래 해결 당시의 환경·URL·계정·Rules 상태를 현재값으로 간주하지 않는다.
+>
+> 현재 상태가 필요한 경우 `docs/memory.md`, 현재 코드·설정·테스트, provider 직접 재조회 순으로 확인한다. 비밀값·사용자 ID·전체 전화번호·실계정 이메일 등 식별자는 이 문서에 기록하지 않는다.
+
+## 공통 원칙
+
+1. 과거 incident의 해결 명령을 현재 production에 그대로 재실행하지 않는다.
+2. URL·환경 변수·DNS·OAuth 설정은 `docs/URLS.md`의 canonical 기준과 provider 현재 상태를 함께 확인한다.
+3. Firestore 운영 문서를 troubleshooting 목적으로 임의 수정하지 않는다.
+4. 401/403/404/CORS 오류는 UI 증상만 보고 추측하지 말고 request origin, JWT role/sub, API route, 데이터 소유권, provider 상태를 각각 분리한다.
+5. 오래된 테스트 계정이나 seed 식별자를 운영 정본처럼 사용하지 않는다.
 
 ---
 
 ## [2026-04-04] Firestore `get` vs `list` 권한 구분
 
-### 증상
-소비자 앱 홈 화면에 상품이 표시되지 않음. 콘솔에 `Missing or insufficient permissions`.
+### 당시 증상
 
-### 원인
-Firestore 보안 규칙에서 `allow get: if true` 만 허용된 경우, **단일 문서 조회(`getDoc`)는 통과**하지만
-**컬렉션 쿼리(`getDocs(query(...))`)는 `list` 권한**이 필요하여 차단됨.
+단일 문서 조회는 되지만 컬렉션 query/onSnapshot에서 `Missing or insufficient permissions`가 발생했다.
 
-```
-// 차단됨
-getDocs(query(collection(db, 'products'), where('storeId', '==', ...)))
+### 재사용 가능한 원인 패턴
 
-// 통과됨
-getDoc(doc(db, 'products', productId))
-```
+Firestore Rules에서 `get`과 `list`는 별도 권한이다.
 
-### 해결
-- **소비자 앱**: Firestore 직접 쿼리 → **`GET /stores/:storeId/products` API 호출**로 전환 (설계 의도 복원)
-- **셀러 앱**: `onSnapshot` 실시간 리스너도 `list` 권한 필요 → `firestore.rules`에서 products를 `allow read: if true`로 수정 후 `firebase deploy --only firestore:rules` 재배포
+- `getDoc(doc(...))` → 단일 `get`
+- `getDocs(query(...))`, query 기반 `onSnapshot` → `list`
 
-### 다음 작업 시 체크포인트
-- 새 컬렉션 추가 시 `get`/`list`를 의도적으로 구분하여 규칙 작성
-- 소비자 앱에서 Firestore 직접 쿼리를 쓰면 안 됨 — **항상 NestJS API를 통해 조회**
+### 현재 체크포인트
+
+- 새 collection의 client 직접 접근 여부를 먼저 확인한다.
+- consumer/seller/driver가 직접 Firestore를 쓰는 영역과 API를 통하는 영역을 혼동하지 않는다.
+- Rules 변경은 해당 collection의 현재 spec·코드·Rules test를 함께 확인한다.
+- 과거의 `allow read: if true` 해결책을 현재 Rules에 복사하지 않는다.
 
 ---
 
-## [2026-04-04] API 페이지네이션 응답 형식 — 배열이 아닌 객체 반환
+## [2026-04-04] 목록 API 응답 shape 오해
 
+### 당시 증상
+
+HTTP 200인데 목록 UI가 비어 있었다.
+
+### 원인 패턴
+
+클라이언트가 API 응답을 배열로 가정했지만 endpoint는 `{ items, total }` 형태를 반환했다.
+
+### 현재 체크포인트
+
+- endpoint별 현재 DTO와 service/controller 구현을 확인한다.
+- “모든 목록 API가 같은 shape”라고 가정하지 않는다.
+- frontend에서 임의의 `Array.isArray()` fallback을 늘리기보다 공개 API 계약을 타입으로 고정한다.
+
+---
+
+## [2026-04-04] `NEXTAUTH_URL` / OAuth callback URL 불일치
+
+### 당시 증상
+
+로그인 404, callback 실패, redirect loop가 발생했다.
+
+### 원인 패턴
+
+배포 도메인과 인증 callback 기준 URL이 달랐다.
+
+### 현재 체크포인트
+
+- production canonical URL은 `docs/URLS.md`를 확인한다.
+- 실제 Vercel `NEXTAUTH_URL`/`AUTH_URL`은 변경 직전에 provider에서 재조회한다.
+- 둘을 서로 다른 값으로 두지 않는다.
+- URL 변경 시 Vercel domain, Railway CORS, Kakao Redirect URI를 함께 점검한다.
+- 문서의 과거 snapshot만 보고 production 환경 변수를 덮어쓰지 않는다.
+
+---
+
+## [2026-04-04] Railway `CORS_ORIGIN` 누락
+
+### 당시 증상
+
+특정 frontend에서만 API 호출이 CORS로 차단됐다.
+
+### 원인 패턴
+
+요청 origin이 API 허용 목록에 없었다.
+
+### 현재 체크포인트
+
+- production canonical origins와 제한된 Preview origin 정책을 구분한다.
+- `apps/api/src/main.ts`와 `apps/api/src/common/cors-origin*`의 현재 로직을 확인한다.
+- 실제 Railway 변수는 provider에서 재조회한다.
+- 오래된 `*.vercel.app` alias 목록을 현재 production CORS 값으로 복사하지 않는다.
+
+---
+
+## [2026-04-04] `@Roles`와 서비스 내부 role 정책 불일치
+
+### 당시 증상
+
+인증은 성공했지만 seller/admin 기능에서 403이 발생했다.
+
+### 원인 패턴
+
+Controller의 `@Roles`와 서비스/FSM의 실제 role 허용 규칙이 서로 달랐다.
+
+### 현재 체크포인트
+
+- 403이면 controller guard만 보지 말고 service의 소유권/FSM 검사까지 추적한다.
+- `admin`이 모든 seller 기능을 자동 상속한다고 가정하지 않는다. endpoint별 현재 정책을 확인한다.
+- 공개 역할 계약을 바꾸는 경우 관련 API spec·shared type·E2E를 함께 갱신한다.
+
+---
+
+## [2026-04-04] Store `ownerId`와 로그인 subject 불일치
+
+### 당시 증상
+
+유효한 seller 로그인인데 store 소유권 검사에서 403이 발생했다.
+
+### 원인 패턴
+
+seed/store 문서의 `ownerId`와 현재 인증 사용자의 JWT `sub`가 달랐다.
+
+### 현재 체크포인트
+
+- store ownership 오류는 JWT `sub`, store `ownerId`, seed namespace를 값 비공개 방식으로 비교한다.
+- 특정 실사용자 UUID나 이메일을 문서 정본으로 기록하지 않는다.
+- 운영 데이터 수정은 승인된 migration/관리 절차로 수행한다.
+- troubleshooting 목적으로 Admin SDK에서 운영 `ownerId`를 직접 덮어쓰지 않는다.
+
+---
+
+## [2026-04-04] JWT/NextAuth 세션 구조 변경 후 구 세션 잔존
+
+### 당시 증상
+
+refresh token 필드를 추가한 새 코드 배포 뒤에도 기존 세션에서 갱신 로직이 동작하지 않았다.
+
+### 원인 패턴
+
+이미 발급된 session cookie/token에는 새 필드가 없었다.
+
+### 현재 체크포인트
+
+- JWT/session payload 구조 변경 시 backward compatibility를 검토한다.
+- 필요하면 명시적 재로그인, session versioning, 만료 전략 중 하나를 설계한다.
+- `JWT_REFRESH_SECRET` 등 실제 자격 증명 존재 여부는 문서가 아니라 대상 환경에서 확인한다.
+
+---
+
+## [2026-04-04] NextAuth v5 / Kakao Preview callback 문제
+
+### 당시 증상
+
+Preview에서 Kakao 로그인 완료 단계가 실패하거나 PKCE/session cookie가 일치하지 않았다.
+
+### 원인 패턴
+
+로그인 시작 origin과 설정된 callback 기준이 일관되지 않아 OAuth/PKCE cookie 흐름이 깨졌다.
+
+### 현재 체크포인트
+
+- 현재 Preview 인증 정책은 `docs/specs/ops/preview-auth-url-policy.md`를 따른다.
+- 커밋별 Preview URL을 Kakao Redirect URI에 무제한 추가하지 않는다.
+- production OAuth 완료 smoke와 Preview authorize 진입 smoke를 구분한다.
+- “Preview는 절대 로그인 불가” 같은 과거 결론을 일반화하지 않고 현재 정책을 확인한다.
+
+---
+
+## [2026-04-04] pnpm lockfile/specifier 불일치
+
+### 당시 증상
+
+`pnpm install`에서 frozen lockfile/specifier 관련 오류가 발생했다.
+
+### 원인 패턴
+
+`package.json`과 `pnpm-lock.yaml`의 dependency specifier가 맞지 않았다.
+
+### 현재 체크포인트
+
+- 저장소 `packageManager` 버전과 CI의 pnpm 버전을 먼저 확인한다.
+- 임의로 `--no-frozen-lockfile`을 production CI 해결책으로 사용하지 않는다.
+- dependency 변경 Task에서만 lockfile을 의도적으로 재생성하고 diff를 검토한다.
+
+---
+
+## [2026-04-04] 주문 FSM role fallback 오류
+
+### 당시 증상
+
+정상 seller/admin 동작이 consumer 전이 규칙으로 판정되어 403이 발생했다.
+
+### 원인 패턴
+
+Controller에서 알고 있는 인증 role과 service/FSM에 전달되는 role source가 달랐다.
+
+### 현재 체크포인트
+
+- 상태 전이 오류는 현재 `orders` spec과 FSM helper를 함께 확인한다.
+- JWT role, Firestore role, default fallback 중 어떤 값이 실제 판정에 쓰이는지 추적한다.
+- 과거 상태 집합을 현재 회차 직배송 상태 전이에 그대로 적용하지 않는다.
+
+---
+
+## [2026-04-04] Order denormalized snapshot 필드 누락
+
+### 당시 증상
+
+Driver 주문 화면에서 상품명·배송지·구매자 정보가 비어 보였다.
+
+### 원인 패턴
+
+Driver가 읽는 order snapshot 필드를 주문 생성 시 저장하지 않았다.
+
+### 현재 체크포인트
+
+- 주문 생성/최종화 시 소비자·seller·driver가 필요로 하는 snapshot 필드를 현재 `orders` spec으로 확인한다.
+- 원본 product/user 문서를 나중에 재조회하면 과거 주문 의미가 바뀔 수 있는 값은 denormalization 필요성을 검토한다.
+- 개인정보 필드를 추가할 때 retention·노출 범위를 함께 검토한다.
+
+---
+
+## [2026-04-04] 사용자 표시명 placeholder 노출
+
+### 당시 증상
+
+마이페이지에 placeholder 이름이 그대로 보였다.
+
+### 원인 패턴
+
+테스트/seed placeholder를 인증 session이 실제 display name으로 신뢰했다.
+
+### 현재 체크포인트
+
+- 실제 사용자 표시명, email local-part, user ID의 fallback 우선순위를 명시한다.
+- 내부 ID를 사용자 표시명 fallback으로 노출하지 않는다.
+- seed 데이터의 placeholder가 production UI로 새어나오지 않도록 E2E fixture와 실제 onboarding을 분리한다.
+
+---
+
+## 새 troubleshooting 항목 작성 규칙
+
+새 incident를 추가할 때는 다음 형식을 사용한다.
+
+```text
+## [YYYY-MM-DD] 짧은 제목
 ### 증상
-상품 API 호출 성공(200)이지만 화면에 상품 0개. 에러 없음.
-
-### 원인
-NestJS API가 `{ items: Product[], total: number }` 형식으로 반환하는데, 클라이언트에서 응답 전체를 배열로 가정하여 처리함.
-
-```ts
-// 잘못된 처리
-const items = await res.json() // → { items: [...], total: 1 }
-setProducts(items)             // → setProducts(object) → length 없음
-
-// 올바른 처리
-const data = await res.json()
-const items = Array.isArray(data) ? data : (data.items ?? [])
+### 확인한 원인
+### 해결 당시 조치
+### 현재 재사용 가능한 체크포인트
 ```
 
-### 다음 작업 시 체크포인트
-- `GET /stores/:storeId/products`, `GET /stores/:storeId/orders`, `GET /stores/:storeId/hubs` 등
-  **목록 API는 모두 `{ items, total }` 페이지네이션 형식**으로 반환됨
-- 새로운 API 연동 시 응답 타입을 반드시 확인 후 언래핑 처리할 것
+기록하지 않는 것:
 
----
+- 비밀값
+- 전체 전화번호·주소
+- 실사용자 이메일
+- 사용자/스토어 UUID 원문
+- 일회성 provider token
+- “현재 production 값”이라고 보장할 수 없는 과거 환경 변수 값
 
-## [2026-04-04] Vercel 환경변수 `NEXTAUTH_URL` URL 오타
-
-### 증상
-셀러 앱 로그인 시 404 또는 리다이렉트 무한루프.
-
-### 원인
-Vercel 환경변수에 `NEXTAUTH_URL=https://greenhubseller.vercel.app`으로 입력되어 있었으나
-실제 배포 도메인은 `https://greenhub-seller.vercel.app` (하이픈 포함).
-
-### 해결
-```bash
-npx vercel env rm NEXTAUTH_URL production
-npx vercel env add NEXTAUTH_URL   # https://greenhub-seller.vercel.app 입력
-npx vercel --prod                 # 재배포
-```
-
-### 다음 작업 시 체크포인트
-- URL 변경 시 반드시 `URLS.md` 먼저 업데이트 → Vercel 환경변수 → Railway CORS_ORIGIN → 카카오 리다이렉트 URI 순서로 동기화
-- **`URLS.md`가 SSOT**: 문서와 실제 환경변수가 다를 경우 문서 기준으로 수정
-
----
-
-## [2026-04-04] Railway `CORS_ORIGIN` 복수 도메인 설정
-
-### 증상
-특정 프론트엔드 앱에서만 API 호출 시 CORS 오류.
-
-### 원인
-Railway 환경변수 `CORS_ORIGIN`에 허용할 도메인을 하나만 입력하거나, 신규 앱 추가 후 갱신하지 않음.
-
-### 해결
-Railway 대시보드 → 해당 서비스 → Variables → `CORS_ORIGIN` 값을 **쉼표 구분 문자열**로 설정:
-```
-https://greenhubconsumer.vercel.app,https://greenhub-seller.vercel.app,https://greenhub-driver.vercel.app
-```
-변경 후 자동 재배포됨.
-
-### 다음 작업 시 체크포인트
-- 새 앱(Vercel 배포)을 추가할 때마다 Railway `CORS_ORIGIN`에 URL 추가 필수
-- `URLS.md` 체크리스트 항목으로 관리 중
-
----
-
-## [2026-04-04] `@Roles` 데코레이터 — admin이 seller 기능에 접근 불가
-
-### 증상
-`admin` 역할 계정으로 상품 등록 시 `403 Forbidden resource`.
-
-### 원인
-NestJS `ProductsController`의 모든 엔드포인트에 `@Roles('seller')`만 지정되어 있어
-`role: 'admin'`인 계정은 접근 불가.
-
-### 해결
-```ts
-// 변경 전
-@Roles('seller')
-// 변경 후
-@Roles('seller', 'admin')
-```
-`ProductsController`, `DailyCapsController`, `DeliveryConfigController` 전체 7개 데코레이터 수정.
-
-### 다음 작업 시 체크포인트
-- **admin은 seller 기능을 포함한 모든 기능에 접근 가능**해야 함
-- 새로운 seller 전용 엔드포인트를 추가할 때 `@Roles('seller', 'admin')`으로 작성
-
----
-
-## [2026-04-04] Firestore 문서 `ownerId` 불일치 — seed 데이터와 실제 계정 sub 다름
-
-### 증상
-셀러 앱에서 상품 등록 시 `403 권한이 없습니다` (API에서 store.ownerId !== user.sub 체크).
-
-### 원인
-`stores/dear-orchid` 문서의 `ownerId`가 시드 데이터 값(`test-seller-001`)으로 고정되어 있어,
-실제 로그인한 계정의 JWT sub와 불일치.
-
-### 해결 (Firebase Admin SDK 로컬 스크립트)
-```ts
-import * as admin from 'firebase-admin'
-const db = admin.firestore()
-await db.doc('stores/dear-orchid').update({
-  ownerId: 'eaa96b06-60f6-4a03-a1af-bea3ad6604c6' // seller2@test.com의 sub
-})
-```
-
-### 다음 작업 시 체크포인트
-- 시드 데이터와 실제 계정의 ID가 다를 수 있음 — API에서 403이 나오면 Firestore 문서의 ownerId를 먼저 확인
-- 현재 `dear-orchid.ownerId = eaa96b06-60f6-4a03-a1af-bea3ad6604c6` (seller2@test.com)
-
----
-
-## [2026-04-04] Refresh Token — 기존 세션 재로그인 필수
-
-### 증상
-Refresh token 구현 배포 후에도 1시간 뒤 API 401이 발생할 수 있음.
-
-### 원인
-기존 세션 쿠키(`authjs.session-token`)에는 `refreshToken`과 `accessTokenExpires` 필드가 없음.
-NextAuth jwt 콜백에서 `token.accessTokenExpires`가 `undefined`이면 갱신 로직이 동작하지 않음.
-
-### 해결
-배포 후 **모든 앱에서 1회 로그아웃 → 재로그인** 필요.
-재로그인 이후 새 세션 쿠키에 `refreshToken`·`accessTokenExpires`가 포함되어 자동 갱신 동작.
-
-### 다음 작업 시 체크포인트
-- NextAuth jwt 콜백 필드 구조를 변경하는 경우 (필드 추가·삭제) 기존 세션이 구 구조를 가지므로
-  **배포 후 강제 재로그인을 안내하거나 세션 버전 필드(`sessionVersion`)로 무효화 처리**
-- `JWT_REFRESH_SECRET` Railway 환경변수가 설정되어 있어야 refresh endpoint가 동작함
-
----
-
-## [2026-04-04] NextAuth v5 — Kakao PKCE 콜백 도메인 불일치
-
-### 증상
-카카오 로그인 후 `PKCE 검증 실패` 또는 세션이 생성되지 않음.
-
-### 원인
-NextAuth v5의 Kakao Provider는 PKCE를 사용함. 로그인 시작 도메인과 콜백 도메인이 달라야 PKCE 코드가 유효.
-Vercel **프리뷰 URL**(`*.vercel.app/...`) 에서 로그인을 시작하면 프로덕션 콜백 URL과 도메인이 달라서 실패.
-
-### 해결
-- 반드시 **프로덕션 도메인**(`greenhub-driver.vercel.app`)에서 로그인 시작
-- 카카오 개발자 콘솔 → 플랫폼 → 사이트 도메인에 프로덕션 URL만 등록
-- `NEXTAUTH_URL`이 프로덕션 도메인을 정확히 가리키는지 확인
-
-### 다음 작업 시 체크포인트
-- 카카오 OAuth가 있는 앱(consumer, driver)은 Vercel 프리뷰 배포로 로그인 테스트 불가
-- 반드시 프로덕션 배포 후 `URLS.md` 기재 URL에서 테스트
-
----
-
-## [2026-04-04] pnpm lockfile specifier 불일치
-
-### 증상
-`pnpm install` 실패: `ERR_PNPM_LOCKFILE_BREAKING_CHANGE` 또는 specifier 불일치 오류.
-
-### 원인
-`package.json`에 `"@mantine/core": "^9"` 로 작성했으나 lockfile에는 `"^9.0.0"` 으로 기록된 경우
-(또는 반대). pnpm은 specifier 문자열이 완전히 일치해야 lockfile을 재사용함.
-
-### 해결
-```bash
-pnpm install --no-frozen-lockfile
-```
-또는 `package.json`의 specifier를 lockfile과 정확히 일치시킨 후 `pnpm install`.
-
-### 다음 작업 시 체크포인트
-- Mantine 패키지 specifier는 `"^9.0.0"` 형식으로 통일 (`"^9"` 사용 금지)
-- 새 패키지 추가 후 lockfile 충돌 시 `--no-frozen-lockfile` 로 재생성
-
----
-
-## [2026-04-04] orders FSM 403 — admin role이 consumer로 fallback
-
-### 증상
-seller 앱에서 "준비 시작" 클릭 시 `403: ACCEPTED → PREPARING 전환은 허용되지 않습니다`.
-
-### 원인
-`getAllowedTransitions(role, status)` 함수가 `role === 'seller'` 또는 `'driver'`만 처리하고, `'admin'`은 `CONSUMER_TRANSITIONS`로 fallback됨. 동시에 `updateStatus` 서비스가 JWT의 role 대신 Firestore를 재조회해서 role을 가져오는 구조라 조회 실패 시 `'consumer'`가 기본값.
-
-### 해결
-1. `orders.helpers.ts` — `if (role === 'seller' || role === 'admin')` 로 변경
-2. `orders.service.ts` — `updateStatus`에 `requesterRole?: string` 파라미터 추가, JWT role 우선 사용
-3. `orders.controller.ts` — `user.role`을 `updateStatus`에 전달
-
-### 다음 작업 시 체크포인트
-- **새 엔드포인트 추가 시**: `@Roles('seller', 'admin')`과 `getAllowedTransitions` admin 분기를 짝으로 맞출 것
-- FSM 역할 분기: seller/admin → SELLER_TRANSITIONS, driver → DRIVER_TRANSITIONS, 나머지 → CONSUMER_TRANSITIONS
-
----
-
-## [2026-04-04] orders 생성 시 driver 앱 필요 필드 누락
-
-### 증상
-driver 앱 주문 상세에서 상품명·배송지·구매자명이 모두 "-" 표시.
-
-### 원인
-`createOrder`에서 Firestore orders 문서에 `productName`, `buyerName`, `address` 필드를 저장하지 않음. driver 앱은 Firestore 실시간 리스너로 이 필드를 직접 읽음.
-
-### 해결
-`orders.service.ts` `t.set(...)` 블록에 아래 필드 추가:
-```ts
-productName: productData['name'] as string,
-buyerName,
-address: dto.deliveryAddress.address,
-```
-driver `board/[orderId]/page.tsx` — `address` 없을 시 `deliveryAddress.address` fallback 추가.
-
-### 다음 작업 시 체크포인트
-- 기존 주문(수정 전 생성)은 소급 적용 안 됨 — 신규 주문부터 표시
-- driver 앱에서 새 필드 추가 시 항상 orders 문서에 denormalize 저장 패턴 유지
-
----
-
-## [2026-04-04] Consumer 프로필 이름 "???" 표시
-
-### 증상
-Consumer 마이페이지 프로필에 이름이 "???"로 표시됨.
-
-### 원인
-Firestore 테스트 유저 문서의 `name` 필드가 `'???'` placeholder로 저장되어 있고, auth.ts session 콜백이 이 값을 그대로 `session.user.name`에 저장.
-
-### 해결
-`consumer/src/auth.ts` session 콜백에 fallback 로직 추가:
-```ts
-const rawName = token.name as string | undefined;
-session.user.name = rawName && rawName !== '???' ? rawName : (session.user.email?.split('@')[0] ?? '사용자');
-```
-
-### 다음 작업 시 체크포인트
-- 신규 유저 등록 시 name 필드 필수화 또는 UI에서 email 앞부분 기본값 제공 검토
-- seller·driver 앱도 동일 패턴 적용 필요 시 각 auth.ts session 콜백에 추가
+현재 상태가 변하면 `docs/memory.md`를 갱신하고, 이 문서는 과거 incident의 재사용 가능한 진단 패턴만 유지한다.

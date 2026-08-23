@@ -78,9 +78,11 @@ workspace 범위는 `pnpm-workspace.yaml`의 `apps/*`, `packages/*`, `scripts`�
 ```bash
 pnpm install
 
-# 개발 서버
-pnpm dev:consumer
+# API :3000
 pnpm dev:api
+
+# Consumer :3001 — API와 동시에 실행할 때 포트를 명시
+pnpm --filter consumer dev --port 3001
 
 # 전체 production build 대상
 pnpm build
@@ -95,6 +97,8 @@ pnpm test:storage-rules
 # Playwright E2E
 pnpm test:e2e
 ```
+
+API와 consumer는 포트를 따로 지정하지 않으면 둘 다 3000을 사용할 수 있습니다. 로컬 전체 포트·`dev.bat` 동작은 `docs/URLS.md`, 안전한 통합 검증 순서는 `docs/INTEGRATION_TEST.md`를 확인합니다.
 
 `pnpm lint`는 workspace별 lint를 재귀 실행하며 API lint는 수정형(`--fix`)이므로 읽기 전용 검증 용도로 사용하기 전에 실제 스크립트를 확인해야 합니다.
 
@@ -113,6 +117,6 @@ pnpm test:e2e
 | `docs/specs/` | API·도메인·운영 계약 |
 | `docs/CRITICAL_LOGIC.md` | 되돌리기 어려운 설계 결정과 이유 |
 | `docs/TROUBLESHOOTING.md` | 알려진 문제와 해결 기록 |
-| `docs/URLS.md` | 환경별 URL |
+| `docs/URLS.md` | canonical URL, 인증 URL 정책 연결, 로컬 포트 |
 
 현재 출시 상태, 활성 PR, 외부 서비스 승인 상태처럼 자주 변하는 정보는 README에 복제하지 않고 `docs/memory.md`와 그 문서가 지정한 활성 PLAN·HANDOFF를 따릅니다.
