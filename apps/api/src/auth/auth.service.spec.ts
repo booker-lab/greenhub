@@ -1,9 +1,14 @@
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
+import * as admin from 'firebase-admin';
 import type { AuditService } from '../common/audit/audit.service';
 import type { FirestoreService } from '../firestore/firestore.service';
 import { AuthService } from './auth.service';
 import type { KakaoClient } from './kakao.client';
+
+jest.mock('firebase-admin', () => ({
+  auth: jest.fn(),
+}));
 
 describe('AuthService', () => {
   function makeKakaoLoginService(options: {
@@ -19,6 +24,10 @@ describe('AuthService', () => {
       }),
     };
     const userRef = {
+      get: jest.fn().mockResolvedValue({
+        exists: options.user !== undefined,
+        data: () => options.user,
+      }),
       set: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
     };
@@ -189,6 +198,99 @@ describe('AuthService', () => {
       expect(userRef.set).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'driver', driverApproved: false }),
       );
+    });
+  });
+
+  describe('getFirebaseToken', () => {
+    const firebaseAuth = { createCustomToken: jest.fn() };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      firebaseAuth.createCustomToken.mockResolvedValue('firebase-custom-token');
+      (admin.auth as jest.Mock).mockReturnValue(firebaseAuth);
+    });
+
+    it('승인된 driver token에는 Rules가 기대하는 true claim을 넣는다', async () => {
+      const { service } = makeKakaoLoginService({
+        user: {
+          id: 'driver-1',
+          role: 'driver',
+          driverApproved: true,
+          suspended: false,
+        },
+      });
+
+      await expect(service.getFirebaseToken('driver-1', 'driver')).resolves.toBe(
+        'firebase-custom-token',
+      );
+      expect(firebaseAuth.createCustomToken).toHaveBeenCalledWith('driver-1', {
+        role: 'driver',
+        storeId: null,
+        driverApproved: true,
+      });
+    });
+
+    it.each([
+      ['미승인', { id: 'driver-1', role: 'driver', driverApproved: false, suspended: false }],
+      ['승인 claim 누락', { id: 'driver-1', role: 'driver', suspended: false }],
+      ['역할 불일치', { id: 'driver-1', role: 'consumer', driverApproved: true, suspended: false }],
+    ])('%s driver token 발급을 거부한다', async (_label, user) => {
+      const { service } = makeKakaoLoginService({ user });
+
+      await expect(service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+        status: 403,
+      });
+      expect(firebaseAuth.createCustomToken).not.toHaveBeenCalled();
+    });
+
+    it('정지되거나 존재하지 않는 driver token 발급을 거부한다', async () => {
+      const suspended = makeKakaoLoginService({
+        user: { id: 'driver-1', role: 'driver', driverApproved: true, suspended: true },
+      });
+      await expect(suspended.service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+        status: 401,
+      });
+
+      const missing = makeKakaoLoginService({});
+      await expect(missing.service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+        status: 401,
+      });
+      expect(firebaseAuth.createCustomToken).not.toHaveBeenCalled();
+    });
+
+    it('driver가 아닌 token에는 driverApproved claim을 넣지 않는다', async () => {
+      const { service } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer', suspended: false },
+      });
+
+      await service.getFirebaseToken('consumer-1', 'consumer');
+
+      expect(firebaseAuth.createCustomToken).toHaveBeenCalledWith('consumer-1', {
+        role: 'consumer',
+        storeId: null,
+      });
+    });
+
+    it('승인 상태 변경은 다음 token 발급에만 반영된다', async () => {
+      const user = {
+        id: 'driver-1',
+        role: 'driver',
+        driverApproved: false,
+        suspended: false,
+      };
+      const { service } = makeKakaoLoginService({ user });
+
+      await expect(service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+        status: 403,
+      });
+      user.driverApproved = true;
+      await expect(service.getFirebaseToken('driver-1', 'driver')).resolves.toBe(
+        'firebase-custom-token',
+      );
+      user.driverApproved = false;
+      await expect(service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+        status: 403,
+      });
     });
   });
 });
