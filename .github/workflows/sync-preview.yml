@@ -1,11 +1,14 @@
 name: Sync preview branch
 
-# main 에 푸시되면 preview 브랜치를 자동으로 최신화한다.
-# preview 는 영구 e2e 환경 브랜치이므로 항상 main 과 동기 상태여야 한다.
+# main 에 코드/구성 변경이 푸시되면 preview 브랜치를 자동으로 최신화한다.
+# docs-only 변경은 Preview 배포와 일반 E2E를 불필요하게 만들지 않도록 제외한다.
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
 
 # 동시 실행 방지 — preview push 충돌 회피
@@ -45,7 +48,6 @@ jobs:
       # dispatch 가 stale(이전 커밋) preview 를 검사한다(세션39·60·61 race).
       # 3앱 Preview deployment 가 현재 preview HEAD 로 success 할 때까지 폴링하고,
       # timeout 시 fail-fast(exit 1)로 e2e dispatch 를 차단해 배포 지연을 노출한다.
-      # node 는 ubuntu-latest 기본 설치본(v20+) 사용 — 의존성 없음(gh CLI + 빌트인만).
       - name: Wait for preview deploy (SHA-matched deployments poll)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
