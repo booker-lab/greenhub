@@ -1,103 +1,48 @@
-# Consumer DS e2e 검증 확인리스트
+<!-- Language: ko -->
 
-> 대상: `apps/e2e/tests/consumer-design-system.spec.ts` (28 tests)  
-> 환경: `https://greenlove.co.kr` (production)
+# Consumer 디자인 시스템 E2E — 역사 검증 요약
 
----
+> 상태: Historical test record
+> 원 기준: 2026-05
+> 최종 정합화: 2026-08-23 KST
 
-## 실행 명령
+## 문서 성격
 
-```bash
-# 전체 실행 (chromium + mobile, 권장)
-pnpm --filter e2e exec playwright test consumer-design-system --reporter=list
+이 파일은 과거 `consumer-design-system.spec.ts`를 기준으로 CSS token과 화면 렌더링을 확인하던 체크리스트다. 당시 28개 chromium/mobile 조합을 기준으로 작성됐으며 **현재 E2E 전체 수, 현재 production 검증 절차, 현재 출시 게이트가 아니다.**
 
-# 실패한 케이스만 재실행
-pnpm --filter e2e exec playwright test consumer-design-system --reporter=list --last-failed
+현재 테스트 목록과 실제 case 수는 `apps/e2e/tests/**`와 Playwright 설정을 직접 확인한다.
 
-# 특정 케이스만
-pnpm --filter e2e exec playwright test consumer-design-system --reporter=list --grep "products"
-```
+## 당시 검증 범위
 
----
+- mypage, cart, category, product detail의 JS critical error
+- 주요 CSS variable/token 해석
+- 홈·BottomNav·ProductTopBar의 compact visual rule
+- chromium/mobile viewport 조합
 
-## 검증 케이스 목록
+이 항목은 디자인 시스템 회귀의 과거 의도를 이해하는 참고 자료로만 사용한다.
 
-### T1 — mypage 페이지군 (JS 에러 + 토큰)
+## 현재 사용하면 안 되는 과거 절차
 
-| # | 케이스 | 통과 기준 |
-|---|--------|-----------|
-| 1 | `/mypage` — JS 에러 없음 | critical 에러 0건 (hydration·ChunkLoad 제외) |
-| 2 | `/mypage/addresses` — JS 에러 없음 | critical 에러 0건 |
-| 3 | `/mypage/notifications` — JS 에러 없음 | critical 에러 0건 |
-| 4 | `--color-text-disabled` 토큰 해석 | CSS 변수 값이 비어있지 않음 |
+원문은 production `greenlove.co.kr`에서 직접 E2E를 실행하고, 상품이 없으면 실제 DB 상품 상태를 확인하는 절차를 포함했다. 현재는 다음 원칙을 따른다.
 
-### T2 — cart 페이지
+- production을 일반 E2E fixture 환경으로 사용하지 않는다.
+- 테스트 통과를 위해 production 상품·사용자·주문 데이터를 생성하거나 수정하지 않는다.
+- 회차 직배송 다역할 E2E는 `docs/specs/ops/mvp-sales-round-e2e-environment.md`의 비운영 격리 계약을 따른다.
+- production smoke가 필요한 경우 상태 변경 없는 범위와 별도 승인 경계를 먼저 확인한다.
 
-| # | 케이스 | 통과 기준 |
-|---|--------|-----------|
-| 5 | `/cart` — JS 에러 없음 | critical 에러 0건 |
-| 6 | `--radius-sm` 토큰 해석 | CSS 변수 값이 비어있지 않음 |
+## 현재 검증 시 확인할 것
 
-### T3 — category 페이지
+새 디자인 시스템 회귀 검증이 필요하면:
 
-| # | 케이스 | 통과 기준 |
-|---|--------|-----------|
-| 7 | `/category` — JS 에러 없음 | critical 에러 0건 |
-| 8 | 탭 버튼 렌더링 | 첫 번째 `<button>` 가시성 확인 |
-| 9 | `--font-size-sm` 토큰 해석 | 값이 존재하고 ≥ 15px |
+1. 현재 `consumer-design-system.spec.ts` 존재 여부와 실제 assertion을 확인한다.
+2. `packages/ui`와 consumer CSS/theme의 current token을 확인한다.
+3. 테스트 환경이 production data write를 요구하지 않는지 확인한다.
+4. 과거 `28/28` 숫자를 현재 통과 기준으로 재사용하지 않는다.
+5. 현재 release gate와 관계가 있으면 활성 PLAN/HANDOFF에 명시적으로 추가한다.
 
-### T4~T6 — mypage 클라이언트 컴포넌트
+## 관련 문서
 
-| # | 케이스 | 통과 기준 |
-|---|--------|-----------|
-| 10 | mypage 오더 목록 영역 렌더링 | critical 에러 0건 |
-| 11 | `/mypage/addresses` — JS 에러 없음 | critical 에러 0건 |
-
-### T7~T8 — 상품 상세 페이지
-
-| # | 케이스 | 통과 기준 |
-|---|--------|-----------|
-| 12 | `products/[id]` — JS 에러 없음 | 홈에서 첫 상품 링크 클릭 후 critical 에러 0건 (hydration·ChunkLoad·404 제외) |
-| 13 | `--radius-sm` / `--fw-bold` / `--font-size-md` 토큰 해석 | 세 변수 모두 비어있지 않음 |
-
-### 예외 — 공식 compact 컴포넌트
-
-| # | 케이스 | 통과 기준 |
-|---|--------|-----------|
-| 14 | 홈 — JS 에러 없음 (BottomNav·ProductTopBar 10px 예외 포함) | critical 에러 0건 |
-
-> 각 케이스는 chromium + mobile 2개 워커로 실행 → 총 **28 tests**
-
----
-
-## 통과 기준 요약
-
-| 항목 | 기준 |
-|------|------|
-| 전체 통과 수 | **28/28** |
-| JS critical 에러 | 0건 (hydration·ChunkLoad·404는 허용 예외) |
-| CSS 토큰 해석 | `--color-text-disabled`, `--radius-sm`, `--font-size-sm` (≥15px), `--font-size-md`, `--fw-bold` 모두 비어있지 않음 |
-| 상품 상세 진입 | 홈 첫 상품 링크 → `load` 이벤트 완료 (30초 이내) |
-
----
-
-## 실패 시 대응
-
-| 증상 | 원인 후보 | 조치 |
-|------|-----------|------|
-| `networkidle` 타임아웃 | 백그라운드 폴링·스트림 요청 | `waitForLoadState('load')` 로 변경 |
-| CSS 토큰 값 빈 값 | `globals.css` / `theme.ts` 변수 누락 | 해당 파일에서 변수 선언 확인 |
-| JS critical 에러 | 클라이언트 컴포넌트 런타임 오류 | 스크린샷(`test-results/`) + 콘솔 메시지 확인 |
-| `products/[id]` 404 | 홈에 상품 없음 (테스트 데이터 부재) | 실 DB 상품 등록 여부 확인 |
-
----
-
-## 허용 예외 (공식 등록)
-
-| 컴포넌트 | 예외 내용 | 등록 위치 |
-|----------|-----------|-----------|
-| BottomNav | 라벨 10px (compact) | `apps/consumer/CLAUDE.md` |
-| ProductTopBar | 라벨 10px (compact) | `apps/consumer/CLAUDE.md` |
-| 주문상태 뱃지 | 12px | `apps/consumer/CLAUDE.md` |
-| 카운트다운 | 13px | `apps/consumer/CLAUDE.md` |
-| Stepper 설명 | 12px | `apps/consumer/CLAUDE.md` |
+- frontend 라우터: `docs/specs/frontend/README.md`
+- 현재 상태: `docs/memory.md`
+- E2E 환경 계약: `docs/specs/ops/mvp-sales-round-e2e-environment.md`
+- 디자인 토큰 current source: `packages/ui`
