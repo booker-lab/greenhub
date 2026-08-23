@@ -73,13 +73,21 @@ API driver read는 배정 경계가 있으나 current Rules는 driver role에 br
 
 **`PAYMENT-FINALIZATION-PAID-GUARD` = P0**.
 
-### 6. 주문 mutation authorization 회귀
+### 6. PortOne webhook signature 검증 coverage
+
+webhook signature 구현은 raw body + id/timestamp/signature, timestamp ±5분, HMAC SHA-256 timing-safe 검증을 사용한다. 그러나 현재 회차 E2E의 signature verifier는 mock이며 real verifier의 valid HMAC 성공·non-empty invalid HMAC 거부·body/id/timestamp 변조 거부를 직접 고정한 증거가 부족하다.
+
+**`PAYMENT-WEBHOOK-SIGNATURE-COVERAGE` = IMPLEMENTED / PARTIALLY VERIFIED + P0 COVERAGE GAP**. 구현 결함으로 단정하지 않는다.
+
+정본: `docs/specs/api/payments.md`; 증거: `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`.
+
+### 7. 주문 mutation authorization 회귀
 
 ownership guard는 구현돼 있으나 타-store seller·비담당 driver·first-claim 외 action과 거부 side-effect 0 직접 회귀가 부족하다.
 
 **`ORDER-MUTATION-AUTHORIZATION-COVERAGE` = IMPLEMENTED / UNVERIFIED + P0 COVERAGE GAP**.
 
-### 7. GitHub main protection
+### 8. GitHub main protection
 
 repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required check/force-push·delete 차단은 Issue #32가 남아 있다.
 
@@ -129,7 +137,7 @@ repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required 
 ## 다음 작업
 
 1. `ORDER-REDELIVERY-PAID-RESUME-GATE`를 **상태머신 전체** 기준으로 구현·직접 회귀·`main` 통합.
-2. 나머지 P0를 ALIGO 심사와 병렬 해결.
+2. `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`를 포함한 나머지 P0를 ALIGO 심사와 병렬 해결.
 3. Issue #32.
 4. ALIGO 상태 재조회 → 승인 뒤 실제 알림톡/SMS fallback.
 5. P0 결과 기준 legal 재정합화.

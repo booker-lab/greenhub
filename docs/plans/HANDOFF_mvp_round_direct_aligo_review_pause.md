@@ -13,7 +13,7 @@
 - 첫 운영 회차 미생성, `salesMode=legacy`.
 - production은 exact release SHA + 별도 승인 절차를 사용한다.
 
-현재 외부 차단점은 ALIGO 8종 심사 완료다. 재개 시 provider 상태를 다시 확인한다.
+현재 외부 차단점은 ALIGO 8종 심사 완료다. 재개 시 provider 상태를 다시 확인한다. 단, 출시 P0는 심사와 병렬 진행 가능하다.
 
 병렬 출시 P0:
 
@@ -23,7 +23,8 @@
 4. `PAYMENT-FINALIZATION-PAID-GUARD`
 5. `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
 6. `ADMIN-FORCE-REFUND-CONSISTENCY`
-7. Issue #32
+7. `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
+8. Issue #32
 
 ## 최우선 재개 — 재배송비 상태머신
 
@@ -61,6 +62,7 @@
 - Driver 승인·session revocation: `docs/specs/api/auth.md`
 - Order direct read·minimization: `docs/specs/api/orders.md`, legal gate
 - Payment finalization: `docs/specs/api/payments.md`
+- Payment webhook signature coverage: `docs/specs/api/payments.md`, `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`
 - Order mutation authorization: `docs/specs/api/orders.md`
 - Admin force-refund: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`
 - GitHub main protection: Issue #32 / deployment safety plan
@@ -84,13 +86,14 @@
 4. payment finalization PAID boundary
 5. order mutation 거부 회귀
 6. admin force-refund lifecycle
-7. Issue #32
-8. read-only 문서/코드 감사
-9. ALIGO 상태 조회
+7. webhook signature real-verifier 회귀
+8. Issue #32
+9. read-only 문서/코드 감사
+10. ALIGO 상태 조회
 
 ## ALIGO 승인 뒤
 
-1. P0 6개 + Issue #32 완료 확인
+1. P0 7개 + Issue #32 완료 확인
 2. ALIGO 8종 상태 재확인
 3. provider code 1:1 검사
 4. 승인 후 격리 알림톡
@@ -118,6 +121,7 @@
 - [ ] payment finalization PAID
 - [ ] order mutation coverage
 - [ ] admin force-refund
+- [ ] webhook signature real-verifier coverage
 - [ ] Issue #32
 - [ ] ALIGO 8종 승인
 - [ ] 실제 알림톡/SMS fallback

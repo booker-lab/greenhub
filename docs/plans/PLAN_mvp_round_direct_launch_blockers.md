@@ -7,7 +7,7 @@
 ## 메타
 
 - 최종 정합화: 2026-08-24 KST
-- 상태: `paused_external_review`
+- 상태: `active_p0_parallel / aligo_external_review_pending`
 - 외부 차단점: ALIGO 8종 provider 심사 완료
 - 상태 SSOT: `docs/memory.md`
 - 재개: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
@@ -24,6 +24,7 @@
 | 0E | driver 승인 + session/claims revocation | 미완료 — P0 FINDING/DECISION |
 | 0F | admin force-refund lifecycle | 미완료 — P0 FINDING |
 | 0G | 유료 재배송 payment-request/hold-resolution/resume 상태머신 | 미완료 — P0 FINDING |
+| 0H | payment webhook real-signature coverage | 미완료 — P0 COVERAGE GAP |
 | 1 | ALIGO 8종 최종 승인 | 검수중 |
 | 2 | 실제 알림톡 | 미실행 |
 | 3 | SMS fallback | 미실행 |
@@ -39,14 +40,15 @@
 
 1. repository 변경은 최신 `main` 기반 branch+PR.
 2. direct `main` 금지.
-3. 0A~0G는 ALIGO 심사와 병렬 가능.
+3. 0A~0H는 ALIGO 심사와 병렬 가능.
 4. P0를 문서/UI 변경만으로 완료 처리하지 않는다.
 5. 금전·권한 불변식은 server boundary + 직접 거부/정상 회귀가 필요하다.
-6. actual release SHA는 0A~0G + legal 해결 뒤 고정한다.
-7. exact SHA E2E 52+cleanup 전 production 금지.
-8. production은 exact SHA/artifact + 별도 승인.
-9. provider metadata SHA 불일치 시 traffic 전환 금지.
-10. 첫 회차 `SCHEDULED` 전 `salesMode` 전환 금지.
+6. webhook auth는 mock E2E만으로 `VERIFIED` 처리하지 않고 real verifier의 valid/invalid 양방향 증거가 필요하다.
+7. actual release SHA는 0A~0H + legal 해결 뒤 고정한다.
+8. exact SHA E2E 52+cleanup 전 production 금지.
+9. production은 exact SHA/artifact + 별도 승인.
+10. provider metadata SHA 불일치 시 traffic 전환 금지.
+11. 첫 회차 `SCHEDULED` 전 `salesMode` 전환 금지.
 
 ## Phase 0 — 코드·권한·금전 안전성
 
@@ -106,6 +108,20 @@
   - PAID 뒤 정상 1회 재개
 - Status: todo_code_financial
 
+### Task 0.10 — Payment webhook real-signature coverage
+- Backlog: `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
+- Contract: `docs/specs/api/payments.md`
+- Evidence: `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`
+- Goal: 구현된 signature verifier를 실제 cryptographic positive/negative path와 controller raw-body 경계에서 직접 고정
+- Required:
+  - known valid HMAC real-verifier 성공
+  - non-empty invalid HMAC 거부
+  - body/id/timestamp mutation 거부
+  - controller + real verifier에서 invalid request가 service에 도달하지 않음
+  - invalid request side effect 0
+  - duplicate webhook 멱등 회귀 유지
+- Status: todo_test_security
+
 ## Phase 1 — ALIGO
 
 1. 8종 승인 (`blocked_external_review`)
@@ -120,7 +136,7 @@
 - Required: 주문/환불/재배송비/보류 실제 상태머신, 개인정보 처리, ALIGO, seller/driver 최소 접근, legal tests
 
 ### Task 2.2 — actual release SHA
-- Dependency: Task 0.3~0.9 + 2.1
+- Dependency: Task 0.3~0.10 + 2.1
 
 ### Task 2.3 — exact SHA E2E
 - Goal: chromium 26 + mobile 26 = 52, cleanup success
@@ -150,8 +166,9 @@
 
 ## 최종 완료 기준
 
-- Task 0A~0G 직접 증거와 함께 `main` 포함.
+- Task 0A~0H 직접 증거와 함께 `main` 포함.
 - 유료 재배송 payment request가 실제 결제 가능한 상태를 유지하고, 결제 전 모든 배송 시작 경로가 fail-closed.
+- webhook signature valid/invalid real-verifier evidence 포함.
 - admin refund·payment finalization·권한/개인정보 P0 해결.
 - Issue #32 완료.
 - ALIGO 승인+실발송/fallback.

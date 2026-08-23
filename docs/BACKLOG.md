@@ -30,6 +30,40 @@
 
 정본: `docs/specs/api/payments.md`.
 
+### P0 — PAYMENT-WEBHOOK-SIGNATURE-COVERAGE
+
+PortOne webhook signature 구현은 존재하지만 금융 상태 변경 경계에 필요한 real-verifier cryptographic 양방향 회귀가 충분하지 않다.
+
+현재 직접 근거:
+
+- [x] production bootstrap은 `rawBody: true`
+- [x] controller는 raw body + `webhook-id` + `webhook-timestamp` + `webhook-signature`를 요구
+- [x] verifier는 `PORTONE_WEBHOOK_SECRET`, timestamp ±5분, HMAC SHA-256, timing-safe compare 사용
+- [x] missing signature/secret, stale timestamp 거부 테스트 존재
+- [x] HTTP E2E에서 webhook header 없는 요청 401
+- [x] 회차 E2E fixture는 controller webhook 경로를 실행하지만 `verifyWebhookSignature`는 mock
+
+판정:
+
+- webhook signature 구현은 `IMPLEMENTED`.
+- 현재 직접 증거는 `PARTIALLY VERIFIED`.
+- 금융 인증 경계이므로 P0 `COVERAGE GAP`으로 추적한다.
+- 구현 결함으로 단정하지 않는다.
+
+남음:
+
+- [ ] known secret/id/timestamp/raw body의 valid HMAC이 실제 `PortoneClient.verifyWebhookSignature()` 통과
+- [ ] 필수 header를 모두 채운 non-empty invalid HMAC 거부
+- [ ] 동일 signature에서 raw body 1 byte 변조 거부
+- [ ] webhook-id 변조 거부
+- [ ] signed timestamp 변조 및 허용창 경계 거부·허용 고정
+- [ ] actual controller + real verifier에서 invalid request가 `PaymentsService.handleWebhook()`에 도달하지 않음
+- [ ] invalid request의 주문/payment/orderCharge/capacity side effect 0
+- [ ] 기존 duplicate webhook 멱등 회귀 유지
+- [ ] 회귀 SHA `main` 통합
+
+정본: `docs/specs/api/payments.md`; 증거: `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`.
+
 ### P0 — ORDER-REDELIVERY-PAID-RESUME-GATE
 
 운영 계약은 고객 책임 첫 배송 실패의 유료 재배송에 **`결제 전 재배송 금지`**를 요구한다. 2026-08-24 추가 감사에서 이 문제는 단순 driver resume guard 누락이 아니라 **결제 요청·hold 해소·배송 재개 상태머신 전체 불일치**임을 확인했다.
@@ -179,6 +213,7 @@ repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보�
 ### P0 — 출시 후보 검증·운영 준비
 
 - [ ] `PAYMENT-FINALIZATION-PAID-GUARD`
+- [ ] `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
 - [ ] `ORDER-REDELIVERY-PAID-RESUME-GATE`
 - [ ] `ADMIN-FORCE-REFUND-CONSISTENCY`
 - [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
