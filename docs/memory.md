@@ -61,6 +61,23 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 - 회차 출시 후보 production 배포, 첫 운영 회차 생성, `salesMode` 전환은 미실행.
 - 판매 모드는 최신 운영 확인 기준 `legacy`.
 
+## 현재 확인된 코드 P0
+
+### 결제 최종화 provider 상태 방어
+
+현재 `main`의 `apps/api/src/payments/payment-finalization.service.ts`는 `finalizePaidOrder()` 내부에서 전달받은 `paymentData.status === 'PAID'`를 독립적으로 강제하지 않는다.
+
+현재 일반 호출 경로는 일부 방어를 갖는다.
+
+- `cleanupPendingOrders()`는 원격 상태가 `PAID`일 때만 finalization을 호출한다.
+- webhook은 `Transaction.Paid` 이벤트에서 원격 결제를 다시 조회한다.
+
+그러나 finalization service 자체가 비`PAID` 입력을 최종 차단하는 구조는 아니다. 따라서 문서·테스트에서 “최종화 계층이 모든 비`PAID`를 차단한다”고 간주하지 않는다.
+
+이 항목은 **actual release SHA 확정 전 해결·회귀 검증이 필요한 P0**다. 최소 회귀 범위는 `PENDING`, `FAILED`, `CANCELLED`, `PAID`, 금액 불일치, legacy/group 및 회차 경로다.
+
+정본: `docs/specs/api/payments.md`, `docs/BACKLOG.md`
+
 ## ALIGO 템플릿 상태
 
 - 발신 프로필 1건 정상, `senderkey` 발급 완료.
@@ -99,7 +116,7 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 - 마지막 전체 원격 회차 E2E 성공 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`.
 - chromium 26 + mobile 26 = 총 52건 및 양쪽 fixture cleanup 성공.
 - 이 과거 run을 현재 release SHA 검증으로 확장하지 않는다.
-- 법적 페이지까지 포함한 실제 출시 대상 SHA를 고정한 뒤 52건+cleanup을 다시 통과해야 한다.
+- 법적 페이지와 현재 P0 코드 보정까지 포함한 실제 출시 대상 SHA를 고정한 뒤 52건+cleanup을 다시 통과해야 한다.
 
 ## 활성 문서
 
@@ -128,12 +145,13 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 
 ## 다음 작업
 
-1. **P0 병렬 관리자 게이트**: Issue #32의 `main` branch protection/ruleset 활성화.
-2. **외부 차단**: ALIGO 8종 심사 결과 대기. 승인 전 실제 발송·운영 ALIGO 설정은 진행하지 않는다.
-3. 8종 승인 후 격리 알림톡 정상 발송 → SMS fallback 검증.
-4. 판매 활성화 법적 문서·테스트 재정합화.
-5. 법적 변경까지 포함한 actual release SHA 확정 → 원격 회차 E2E 52건+cleanup.
-6. 운영 Firebase 재조회 → ALIGO 운영 설정 → 별도 `Task 3.1 승인` → exact-SHA production 배포.
-7. 이후 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
+1. **P0 병렬 코드 게이트**: 결제 finalization이 비`PAID` provider 상태를 자체 차단하도록 구현·회귀 검증 후 `main` 통합.
+2. **P0 병렬 관리자 게이트**: Issue #32의 `main` branch protection/ruleset 활성화.
+3. **외부 차단**: ALIGO 8종 심사 결과 대기. 승인 전 실제 발송·운영 ALIGO 설정은 진행하지 않는다.
+4. 8종 승인 후 격리 알림톡 정상 발송 → SMS fallback 검증.
+5. 판매 활성화 법적 문서·테스트 재정합화.
+6. 법적 변경과 모든 P0 코드 보정까지 포함한 actual release SHA 확정 → 원격 회차 E2E 52건+cleanup.
+7. 운영 Firebase 재조회 → ALIGO 운영 설정 → 별도 `Task 3.1 승인` → exact-SHA production 배포.
+8. 이후 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
 
 문서 정합성 감사 자체는 앞으로도 **branch + PR**로 수행하고, current 계약과 직접 충돌하는 문서만 수정한다.
