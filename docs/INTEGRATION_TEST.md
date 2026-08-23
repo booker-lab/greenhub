@@ -54,17 +54,21 @@ pnpm test:storage-rules
 - 루트 `pnpm lint`는 workspace별 lint를 재귀 실행하고 API lint가 수정형일 수 있으므로 읽기 전용 검증으로 사용하기 전에 실제 package script를 확인한다.
 - build·test가 생성하는 산출물은 의도한 변경과 구분한다.
 
-## 3. 로컬 개발 서버
+## 3. 로컬 API + Consumer
+
+현재 API 기본 포트는 3000이고 consumer package의 Next 개발 서버도 포트를 따로 주지 않으면 3000을 사용하려 한다. 둘을 동시에 실행할 때는 consumer 포트를 명시한다.
 
 ```bash
-# API
+# 터미널 A — API :3000
 pnpm dev:api
 
-# Consumer
-pnpm dev:consumer
+# 터미널 B — Consumer :3001
+pnpm --filter consumer dev --port 3001
 ```
 
-Seller·Driver는 각 package의 현재 `scripts`를 확인하고 실행한다. 문서에 과거 로컬 배치 파일이나 고정 사용자 환경 경로를 SSOT로 두지 않는다.
+`apps/consumer/.env.example`의 `NEXTAUTH_URL=http://localhost:3001`, `NEXT_PUBLIC_API_URL=http://localhost:3000`과 `apps/api/.env.example`의 `PORT=3000`, `CORS_ORIGIN=http://localhost:3001`이 이 조합을 전제로 한다.
+
+Seller·Driver까지 동시에 띄우는 경우 `docs/URLS.md`의 로컬 포트 설명과 각 package script를 확인하고, API `CORS_ORIGIN`에 필요한 local origin들이 포함되어 있는지 먼저 확인한다. 현재 루트 `dev.bat`는 API를 시작하지 않는 프런트 launcher이므로 전체 스택 launcher로 가정하지 않는다.
 
 ## 4. API 기본 smoke
 
