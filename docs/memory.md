@@ -7,9 +7,10 @@
 ## 검증 기준
 
 - Git·GitHub 직접 재검증: `2026-08-23 KST`
-- 외부 환경 상태 기준: `2026-08-22 KST`
+- 외부 환경 상태 기준: `2026-08-23 KST`
 - Git·GitHub 상태는 이번 SSOT 정합화에서 직접 재조회했다.
-- ALIGO·Firebase·Railway·Vercel 운영 상태와 `salesMode`는 `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`의 최신 확인 결과를 사용한다. 별도 승인 없이 외부 운영 상태를 변경하지 않는다.
+- ALIGO 템플릿 상태는 2026-08-23 사용자가 직접 수행한 provider 등록 결과를 기준으로 한다.
+- Firebase·Railway·Vercel 운영 상태와 `salesMode`는 `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`의 최신 확인 결과를 사용한다. 별도 승인 없이 외부 운영 상태를 변경하지 않는다.
 
 ## 개발 기준선
 
@@ -18,9 +19,10 @@
 - 개발 브랜치: `codex/mvp-sales-round-direct`
 - `main`: `26d7f49bf1a2618f792641cb95b93802a062ebe4`
 - 2026-08-23 Context/SSOT 정비 시작 기준 SHA: `0086f1302f0939a95457a6df5aff25dd09af5e55`
-- 사용자 최신 로컬 push 확인 SHA: `2bda4be3b6bd2ff346dbe9a61ccc6370b9deb59e`
-- 개발 브랜치는 `main`을 조상으로 포함하며 정비 시작 시 `main` 대비 ahead 112 / behind 0이었다.
-- 이후 README·memory 같은 문서 정합화 commit이 개발 브랜치에 추가될 수 있으므로 현재 HEAD와 ahead/behind는 Task 시작 시 Git/GitHub에서 직접 확인한다.
+- 사용자 로컬 작업 보고 시점 HEAD: `0086f1302f0939a95457a6df5aff25dd09af5e55`
+- 사용자 로컬 작업 트리는 clean이었고 기존 stash 2건은 조작하지 않았다.
+- 원격 개발 브랜치에는 이후 README·memory 등 문서 정합화 commit이 추가되어 있으므로 로컬 작업을 재개하기 전에 `origin/codex/mvp-sales-round-direct`를 fetch하고 fast-forward 여부를 확인한다.
+- 현재 HEAD와 `main` 대비 ahead/behind는 Task 시작 시 Git/GitHub에서 직접 확인한다.
 
 ## 활성 통합
 
@@ -28,7 +30,7 @@
 - 최신 직접 확인 상태: `OPEN` · `Draft` · `mergeable=true`
 - PR 본문은 과거 ALIGO 대기 시점의 상세 상태를 포함하므로 제품 현재 상태 SSOT로 사용하지 않는다.
 - 사용자 승인 없이 PR을 Ready로 전환하거나 제목·본문·라벨·base를 수정하거나 병합·종료하지 않는다.
-- 최신 문서 commit도 Vercel/Railway 자동 검사를 새로 트리거할 수 있다. 자동 검사는 현재 HEAD에서 직접 확인하고, 전체 회차 E2E 성공과 동일한 증거로 취급하지 않는다.
+- 문서 commit도 Vercel/Railway 자동 검사를 새로 트리거할 수 있다. 자동 검사는 현재 HEAD에서 직접 확인하고, 전체 회차 E2E 성공과 동일한 증거로 취급하지 않는다.
 
 ## 제품 현재 상태
 
@@ -38,13 +40,34 @@
 - 공통 회차 계약은 `packages/shared/src/sale-round.types.ts`가 소유한다.
 - 카카오 비즈니스 채널 승인, ALIGO 발신 프로필 1건 등록, `senderkey` 발급은 완료됐다.
 - 내부 논리 템플릿 코드와 ALIGO `tpl_code` 분리 및 필수 본문 변수 검증은 구현됐다.
-- 실제 도달 가능한 회차 알림 템플릿 8종은 provider에 아직 등록·승인되지 않았다.
-- 실제 알림톡 정상 발송과 SMS 대체 발송은 검증되지 않았다.
-- 운영 ALIGO 자격 증명 4개와 `ALIGO_TEMPLATE_CODES_JSON`은 반영되지 않았다.
+- 실제 도달 가능한 회차 알림 템플릿 8종은 2026-08-23 provider에 신규 등록·심사 요청을 완료했다.
+- 현재 8종 모두 `검수중`이며 중복·오류·반려는 확인되지 않았다.
+- 등록 과정에서 대체 SMS는 모두 사용하지 않았고 실제 알림톡·SMS 발송은 0건이다.
+- 실제 알림톡 정상 발송과 SMS fallback 검증은 아직 수행하지 않았다.
+- 운영 ALIGO 자격 증명 4개와 `ALIGO_TEMPLATE_CODES_JSON`은 아직 반영하지 않았다.
 - 회차 출시 후보의 운영 애플리케이션 배포, 첫 운영 회차 생성, `salesMode` 전환은 실행되지 않았다.
 - 판매 모드는 최신 HANDOFF 확인 기준 `legacy`다.
 - 운영 Firebase 인덱스·Firestore 규칙·Storage 규칙은 최신 HANDOFF 확인 기준 반영 완료 상태다.
-- 따라서 회차 직배송 MVP 출시는 `paused_external_review` 상태를 유지한다.
+- 따라서 회차 직배송 MVP는 템플릿 심사 결과를 기다리는 `paused_external_review` 상태를 유지한다.
+
+## ALIGO 템플릿 심사 현황
+
+| 논리 템플릿 | 상태 |
+|---|---|
+| `ORDER_ACCEPTED` | 검수중 |
+| `ORDER_PREPARING` | 검수중 |
+| `ORDER_DELIVERING` | 검수중 |
+| `ORDER_DELIVERY_HELD` | 검수중 |
+| `ORDER_REDELIVERY_PAYMENT_REQUESTED` | 검수중 |
+| `ORDER_REDELIVERY_SCHEDULED` | 검수중 |
+| `ORDER_DELIVERED` | 검수중 |
+| `ORDER_CANCELLED` | 검수중 |
+
+- 발신 프로필: 정상 1건
+- 신규 등록·심사 요청: 8종
+- 중복·오류·반려: 없음
+- 실제 알림톡·SMS 발송: 0건
+- 비밀값 원문은 기록하지 않는다.
 
 ## 검증 상태
 
@@ -71,16 +94,16 @@
 
 - 루트 `AGENTS.md`와 `docs/PROJECT_MAP.md`를 기준 Context 체계로 정리했다.
 - `README.md`는 실제 workspace 구조와 현재 코드 스택에 맞게 정합화했다. `packages/shared`, `packages/ui`, `apps/e2e`, Mantine 9, 회차 직배송·operations·retention 실제 구조를 반영한다.
-- 이 `memory.md`는 현재 Git/GitHub·제품 상태와 문서 역할에 맞춰 정리했다.
+- 이 `memory.md`는 현재 Git/GitHub·제품 상태와 2026-08-23 ALIGO 템플릿 심사 요청 결과에 맞춰 갱신했다.
 - `docs/PROJECT_MAP.md`는 Context router 역할만 유지하며 제품 진행 상태를 복제하지 않는다.
 - `docs/BACKLOG.md`는 오래된 완료 이력과 현재 우선순위가 섞여 있어 별도 로컬 정합화가 필요하다. 기존 내용을 손실하지 않도록 전체 파일을 검색·분류한 뒤 `ACTIVE / BLOCKED_EXTERNAL / NEXT / LATER / DONE_HISTORY / STALE_OR_SUPERSEDED` 기준으로 재구성한다.
-- 활성 PLAN/HANDOFF의 역사 기록은 보존한다. 현재 상태와 직접 충돌하는 부분이 발견될 때만 최소 범위에서 정합화한다.
+- 활성 PLAN/HANDOFF의 역사 기록은 보존한다. 현재 상태 섹션에서 `회차 알림 템플릿 8종 미등록·미승인`으로 남은 표현은 로컬 정합화 시 `8종 등록·심사중`으로 최소 수정한다.
 
 ## 외부 승인 경계
 
 사용자의 명시적 승인 없이 다음 작업을 수행하지 않는다.
 
-- ALIGO 템플릿 등록·변경 또는 실제 알림톡·SMS 발송
+- ALIGO 템플릿 추가 등록·변경 또는 실제 알림톡·SMS 발송
 - 운영 자격 증명·환경 변수·데이터 변경
 - Railway·Vercel·Firebase 운영 변경 또는 배포
 - 운영 회차 생성·상태 변경 또는 `salesMode` 전환
@@ -90,7 +113,8 @@
 
 ## 다음 작업
 
-1. 로컬에서 `docs/BACKLOG.md` 전체를 실제 코드·현재 HANDOFF와 대조해 현재 미완료 우선순위 중심으로 정합화한다.
-2. 같은 작업에서 활성 PLAN/HANDOFF의 현재 상태 섹션만 점검하고 `memory.md`와 실제 충돌이 있을 때만 최소 수정한다.
-3. SSOT 문서 정합화가 끝난 뒤, 별도 외부 변경 승인을 받아 회차 알림 템플릿 8종 provider 등록·승인 → 격리 실제 알림톡/SMS fallback 검증 → 운영 변수 반영 → 최신 출시 SHA 원격 검증 순서로 재개한다.
-4. 모든 선행 게이트를 통과해도 운영 배포에는 별도의 `Task 3.1 승인`이 필요하다.
+1. ALIGO 회차 알림 템플릿 8종의 심사 결과를 기다린다. 심사 결과가 바뀌기 전에는 실제 발송·운영 변수·배포 단계로 진행하지 않는다.
+2. 로컬 작업을 재개하기 전에 원격 문서 commit을 fetch하고 현재 branch를 안전하게 fast-forward한다. 기존 stash 2건은 건드리지 않는다.
+3. 로컬에서 `docs/BACKLOG.md` 전체를 실제 코드·현재 상태와 대조해 현재 미완료 우선순위 중심으로 정합화하고, 활성 HANDOFF/PLAN의 현재 상태 섹션을 `8종 등록·심사중`으로 최소 갱신한다.
+4. 템플릿 8종이 모두 승인된 뒤 별도 승인 범위에서 격리 실제 알림톡 정상 발송 → SMS fallback 검증 → 운영 변수 반영 → 최신 출시 SHA 원격 검증 순서로 재개한다.
+5. 모든 선행 게이트를 통과해도 운영 배포에는 별도의 `Task 3.1 승인`이 필요하다.
