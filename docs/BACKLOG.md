@@ -42,9 +42,44 @@
 
 문서만으로 이 불변식을 완료 처리하지 않는다. 정본: `docs/specs/api/payments.md`.
 
+### P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
+
+2026-08-24 감사에서 API 주문 조회 authorization과 실제 seller/driver 클라이언트 read 경계가 다름을 확인했다.
+
+현재 구현·증거:
+
+- [x] `OrdersQueryService`는 driver 상세를 `order.driverId === requesterId`로 제한하고 해당 API 권한 테스트가 존재
+- [x] `firestore.rules`는 `role == 'driver'`이면 `orders/{orderId}`를 store/status/배정과 무관하게 read 허용
+- [x] driver 보드는 미배정 `PREPARING` direct/hub 주문 discovery를 위해 Firestore `orders`를 직접 query
+- [x] driver 상세는 Firestore `orders/{orderId}`를 직접 `onSnapshot()`
+- [x] seller 주문 목록도 같은-store `orders` 원문을 직접 구독
+- [x] 회차 주문 원문에는 배송 수행 필드 외에 `acquisition`, `marketingConsent`, `clientOrderPayloadHash`, reservation 관련 내부 필드가 함께 저장될 수 있음
+- [x] 현재 Firestore Rules 테스트가 driver의 다른 store 주문 직접 read를 성공 케이스로 고정
+
+판정:
+
+- API layer read authorization만 보면 배정 기사 경계가 `VERIFIED`다.
+- end-to-end 주문 read authorization은 direct Firestore 경로가 API보다 넓으므로 **`IMPLEMENTATION FINDING` P0**다.
+- seller/driver의 역할별 최소 필드 제공도 raw document read 때문에 현재 `VERIFIED`가 아니다.
+
+남음:
+
+- [ ] 미배정 `PREPARING` direct/hub 주문을 driver가 discovery해야 하는 제품 의도를 명시하고 discovery에 필요한 최소 필드 정의
+- [ ] 임의 driver가 다른 기사 배정 주문·완료 주문·일반 임의 주문 원문을 직접 read하지 못하도록 경계 축소
+- [ ] assigned driver 상세에 필요한 배송지·연락처·상품·보류 정보만 제공하는 역할별 DTO/projection 또는 동등한 데이터 분리
+- [ ] seller 주문 read도 판매 업무에 필요한 필드만 제공하고 `marketingConsent`, `acquisition` 등 불필요한 고객/행동 메타데이터 노출 제거
+- [ ] raw `orders` 직접 구독을 유지할 경우 Rules만으로 field minimization이 가능한지 검증하고, 불가능하면 API/projection 구조로 전환
+- [ ] `firestore.rules`의 broad `role == 'driver'` read 제거 또는 안전한 discovery/assigned 조건으로 대체
+- [ ] `tests/firestore/firestore-rules.test.mjs`의 broad driver 성공 기대를 제거하고 허용/거부 경계를 직접 검증
+- [ ] driver가 임의 order ID로 다른 주문 상세을 읽을 수 없는 직접 Rules/앱 회귀
+- [ ] seller 타-store read 거부와 seller/driver 정상 보드·상세 기능 회귀 유지
+- [ ] 변경이 포함된 SHA를 `main`에 통합한 뒤 actual release SHA 후보에 포함
+
+이 finding을 법적 문구를 넓혀 정당화하지 않는다. 먼저 실제 read 경계를 최소화·검증한 뒤 `docs/specs/legal/README.md`의 seller/driver 개인정보 처리 문구를 확정한다. 기술 정본: `docs/specs/api/orders.md`.
+
 ### P0 — ORDER-MUTATION-AUTHORIZATION-COVERAGE
 
-주문 조회 authorization은 `OrdersQueryService`와 직접 테스트가 일치해 `VERIFIED`다. 반면 `OrdersLifecycleService.assertOrderActionAccess()`의 mutation authorization은 구현돼 있으나 권한 우회 방지 핵심 거부 시나리오를 직접 고정하는 회귀 테스트가 충분하지 않다.
+주문 API 조회 authorization은 `OrdersQueryService`와 직접 테스트가 일치해 해당 API 계층에서는 `VERIFIED`다. 반면 `OrdersLifecycleService.assertOrderActionAccess()`의 mutation authorization은 구현돼 있으나 권한 우회 방지 핵심 거부 시나리오를 직접 고정하는 회귀 테스트가 충분하지 않다.
 
 현재 구현·검증:
 
@@ -54,7 +89,7 @@
 - [x] consumer는 자신의 주문만 action access 통과
 - [x] consumer가 `DELIVERY_HELD`를 위장 요청하는 직접 거부 테스트
 - [x] 정상 seller/driver 회차 E2E 흐름
-- [x] 조회 권한의 consumer/seller/driver/admin 직접 거부·허용 테스트
+- [x] API 조회 권한의 consumer/seller/driver/admin 직접 거부·허용 테스트
 
 남음:
 
@@ -136,7 +171,7 @@ Issue #32 완료 전에도 repo-side Vercel guard는 동작하지만, direct pus
 - [ ] 주문 성립·취소·환불·배송·재배송비·배송 보류 정책 검수
 - [ ] PortOne·실제 결제사업자 개인정보 처리 역할 검수
 - [ ] ALIGO 고객 알림 전화번호·메시지 처리 고지 검수
-- [ ] seller·driver 고객 배송정보 접근 설명 검수
+- [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION` 해결 후 seller·driver 고객 배송정보 접근 설명 검수
 - [ ] 시행일·이전 버전 관리
 - [ ] `apps/consumer/src/app/legal-documents.test.mjs` 갱신
 - [ ] 변경된 `/privacy`, `/terms`를 release SHA에 포함
@@ -146,6 +181,7 @@ Issue #32 완료 전에도 repo-side Vercel guard는 동작하지만, direct pus
 ### P0 — 출시 후보 검증·운영 준비
 
 - [ ] PAYMENT-FINALIZATION-PAID-GUARD 완료 및 `main` 통합
+- [ ] ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION 완료 및 `main` 통합
 - [ ] ORDER-MUTATION-AUTHORIZATION-COVERAGE 완료 및 `main` 통합
 - [ ] Issue #32 branch protection 완료
 - [ ] 법적 페이지 포함 actual release SHA 확정
