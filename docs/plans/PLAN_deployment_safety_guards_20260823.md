@@ -15,6 +15,7 @@
 - `.github/workflows/deployment-safety.yml`과 `scripts/verify-deployment-safety.mjs`가 배포 안전 invariant를 검증한다.
 - PR #31로 세 앱에 docs-only `ignoreCommand`를 추가해 순수 문서/Markdown 변경의 Vercel Preview build를 skip하도록 구성했다.
 - PR #30·#31의 deployment safety CI는 모두 성공했다.
+- pure-docs branch `docs/deployment-safety-closeout`의 commit `ebf44c104b2e8758733fd14501fd0e820d575ae4` 이후 consumer·seller·driver 세 Vercel 프로젝트 신규 deployment가 0건임을 확인해 feature-branch docs-only skip을 실증했다.
 
 ### 남은 P0 관리자 게이트
 
@@ -49,9 +50,10 @@ production은 다음 조건을 모두 충족한 뒤에만 실행한다.
 ## docs-only 변경 계약
 
 - feature branch의 변경 파일이 모두 `docs/**` 또는 `*.md`이면 세 Vercel 프로젝트의 `ignoreCommand`가 build를 skip한다.
+- feature-branch pure-docs 검증은 완료됐다: `ebf44c1...` 이후 세 프로젝트 신규 deployment 0건.
 - `main`에 docs-only PR이 merge돼도 Vercel production Git deploy는 `git.deploymentEnabled.main=false` 때문에 생성되면 안 된다.
 - 같은 docs-only merge는 `sync-preview.yml`의 `paths-ignore` 때문에 `preview` branch 동기화와 일반 E2E dispatch를 만들면 안 된다.
-- 이 규칙은 이 closeout 문서 PR 자체로 실증하고 결과를 Git/Vercel 상태에서 재확인한다.
+- 이 closeout PR merge 뒤 세 Vercel 프로젝트 deployment 0건과 `preview` branch SHA 불변을 다시 확인해 main-side 검증을 마무리한다.
 
 ## 회귀 방지
 
@@ -68,4 +70,5 @@ production은 다음 조건을 모두 충족한 뒤에만 실행한다.
 
 - 사용자 승인: `배포 안전장치 변경 승인`
 - repo-side guard: PR #30, PR #31
+- pure-docs branch skip 검증: `ebf44c104b2e8758733fd14501fd0e820d575ae4`
 - 관리자 잔여 작업: Issue #32
