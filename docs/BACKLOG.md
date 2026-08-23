@@ -18,10 +18,11 @@
 
 ## INTEGRATION CANDIDATE CLOSEOUT
 
-현재 branch `codex/task-2c-r1-reg001`의 `c9d60f6` candidate는 `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001` 검증을 완료했다. API/consumer/seller/driver/shared, Firestore Rules, build, deployment safety evidence는 [Task 2D closeout report](plans/REPORT_task_2d_integration_closeout.md)에 고정한다.
+현재 branch `codex/task-2c-r1-reg001`의 Task 2F-B candidate는 Task 2F-A auth change `1da3dee`와 기존 `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001` 검증 범위를 포함한다. API/consumer/seller/driver/shared, Firestore Rules, build, deployment safety evidence는 [Task 2D closeout report](plans/REPORT_task_2d_integration_closeout.md)에 고정하고, 이번 문서는 public driver approval 하위 범위의 현재 상태만 갱신한다.
 
-- candidate 상태: `TASK_2C_REGRESSION_VERIFIED`
-- 현재 `origin/main` `256abc7`에는 candidate code가 아직 없다.
+- candidate 상태: `TASK_2F_B_PUBLICATION_CANDIDATE`
+- 현재 `origin/main` `d6185bd`에는 candidate code가 아직 없다.
+- candidate에서 public register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계를 검증했지만 `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이다.
 - [ ] candidate를 현재 `main`에 branch+PR로 통합하고 승인된 SHA를 확정
 - 최신 main의 `ORDER-REDELIVERY-PAID-RESUME-GATE` 및 기타 미완료 P0는 candidate closeout과 별도의 ACTIVE 작업이다.
 
@@ -189,31 +190,24 @@ API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 
 ### P0 — AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION
 
-관리자 승인 전 driver 권한을 얻을 수 있는 복수 경로와 stale session/claims 수렴 문제가 있다.
+관리자 승인 전 driver 권한을 얻을 수 없는지와 stale session/claims 수렴을 하나의 umbrella로 추적한다. Task 2F-B candidate는 approval-gate/current-user 하위 범위만 검증했으며, 전체 P0를 닫지 않는다.
 
-현재 확인된 approval bypass:
+Candidate에서 검증됨 (아직 `main` 미통합):
 
-- [x] 신규 Kakao `targetRole: driver`가 `driverApproved: true`로 즉시 생성됨
-- [x] 기존 `driverApproved === undefined` driver가 Kakao 로그인 중 자동 승인됨
-- [x] 공개 `POST /auth/register`가 `role: driver`를 허용하고 seller와 달리 invite/approval gate 없이 driver user 생성 가능
-- [x] 공개 `POST /auth/login`이 `driverApproved` 확인 없이 저장된 `role: driver`로 JWT 발급
-- [x] Firebase custom token은 현재 JWT role/storeId claim을 사용
+- [x] 신규 Kakao `targetRole: driver`가 `driverApproved: false`로 생성되고 자동 승인되지 않음
+- [x] 기존 `driverApproved === undefined` driver가 Kakao 로그인 중 자동 승인되지 않음
+- [x] 공개 `POST /auth/register` driver가 `driverApproved: false`로 생성되고 client approval 주입이 거부됨
+- [x] 공개 `POST /auth/login`이 false/missing approval driver에게 JWT/refresh token을 발급하지 않음
+- [x] 현재 user 기반 JWT strategy/Firebase custom-token approval·suspension 경계와 직접 register→login 회귀
 
-이 P0는 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`과 결합해서 완료 판단한다. broad driver Firestore read가 남아 있는 동안 self-issued/stale driver claim의 영향이 커질 수 있다.
+남음 — `AUTH-SESSION-CLAIM-REVOCATION` OPEN 및 통합 대기:
 
-남음:
-
-- [ ] 공개 registration이 관리자 승인 전 usable driver authorization을 만들지 못함
-- [ ] email login이 미승인 driver에게 driver JWT를 발급하지 않음
-- [ ] 미승인 driver의 Firebase driver claim 발급 거부
-- [ ] 신규/legacy Kakao 로그인 side-effect 자동 승인 제거
-- [ ] 과거 계정 migration 별도 감사 절차
-- [ ] admin 승인 전/후 email/Kakao 앱·API·Firebase 직접 회귀
-- [ ] suspension/role/store/approval revocation SLA 결정
-- [ ] refresh/current claims authoritative state 검증
-- [ ] Firebase stale claims 재발급 차단
-- [ ] logout/rotation 포함 회귀
-- [ ] `main` 통합
+- [ ] candidate를 `main`에 통합
+- [ ] 과거 계정 migration을 로그인 side effect가 아닌 별도 감사 절차로 분리
+- [ ] refresh 시 authoritative user 상태 확인 및 stale role/store/approval claim 재발급 차단
+- [ ] suspension/role/store/approval revocation SLA와 access-token window 결정·구현
+- [ ] logout/rotation을 포함한 session lifecycle 회귀
+- [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`과 결합된 broad driver read/minimization 해결
 
 정본: `docs/specs/api/auth.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 

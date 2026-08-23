@@ -13,14 +13,16 @@
 - 재개: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
 - 미완료: `docs/BACKLOG.md`
 
-## Task 2C candidate closeout
+## Task 2F-B candidate publication reconciliation
 
-- 검증 candidate: `codex/task-2c-r1-reg001` / `c9d60f6`
-- 상태: `TASK_2C_REGRESSION_VERIFIED`
+- 검증 candidate: `codex/task-2c-r1-reg001` / Task 2F-A auth change `1da3dee`
+- 상태: `TASK_2F_B_PUBLICATION_CANDIDATE`
 - 완료 범위: `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001`
 - 검증 증거: [Task 2D integration closeout report](REPORT_task_2d_integration_closeout.md)
-- 현재 `origin/main`: `256abc7`; candidate code는 아직 main에 통합되지 않았다.
-- 다음 Git 단계는 branch+PR 검토이며, Task 2D에서 rebase/merge/push하지 않았다.
+- candidate의 추가 auth 범위: public driver register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계.
+- 현재 `origin/main`: `d6185bd`; candidate code는 아직 main에 통합되지 않았다.
+- `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이며, refresh/session lifecycle 완료로 해석하지 않는다.
+- 다음 Git 단계는 branch+PR 검토다.
 - 최신 main의 redelivery P0 상태머신(`ORDER-REDELIVERY-PAID-RESUME-GATE`)은 candidate 범위 밖의 미완료 작업이다.
 
 ## 출시 게이트
@@ -31,7 +33,7 @@
 | 0B | payment finalization 비`PAID` 차단 | candidate 검증 완료 — main 통합 대기 |
 | 0C | order mutation authorization 직접 거부 회귀 | candidate 관련 회귀 완료 — main 통합 대기 |
 | 0D | order direct Firestore read·최소화 | candidate Rules 경계 검증 완료 — field minimization/main 통합 대기 |
-| 0E | driver 승인 + session/claims revocation | candidate driver gate 검증 완료 — 일반 refresh policy/main 통합 대기 |
+| 0E | driver 승인 + session/claims revocation | candidate public/Kakao/JWT gate 검증 완료 — `AUTH-SESSION-CLAIM-REVOCATION` OPEN, main 통합 대기 |
 | 0F | admin force-refund lifecycle | 미완료 — P0 FINDING |
 | 0G | 유료 재배송 payment-request/hold-resolution/resume 상태머신 | 미완료 — P0 FINDING, candidate 범위 밖 |
 | 0H | payment webhook real-signature coverage | 미완료 — P0 COVERAGE GAP |
@@ -91,17 +93,9 @@
 ### Task 0.7 — Driver approval·session revocation
 - Backlog: `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
 - Priority: highest security coupling with Task 0.6
-- Current bypasses:
-  - public email `register(role=driver) → login` can issue driver JWT without approval
-  - new Kakao driver auto-approved
-  - legacy missing approval flag auto-approved during login
-  - refresh/custom-token can preserve stale authorization claims
-- Required:
-  - public registration cannot create usable driver authorization pre-approval
-  - unapproved email/Kakao driver cannot receive driver JWT/Firebase claim
-  - login-side automatic approval removed
-  - authoritative refresh/claim revocation policy + direct pre/post approval tests
-- Status: todo_code_security
+- Candidate verified (not yet main): public register/login approval gate, Kakao new/legacy no-auto-approval, JWT strategy/current-user/Firebase approval boundary.
+- Remaining: `AUTH-SESSION-CLAIM-REVOCATION` — authoritative refresh state, stale claims, suspension/role/store/approval revocation SLA, access-token window, logout/rotation regression.
+- Status: candidate_gate_verified / todo_session_revocation
 
 ### Task 0.8 — Admin force-refund lifecycle
 - Backlog: `ADMIN-FORCE-REFUND-CONSISTENCY`
