@@ -12,10 +12,18 @@ service cloud.firestore {
         isPublicSaleRoundStatus(round.data.status);
     }
 
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function isApprovedDriver() {
       return request.auth != null &&
         request.auth.token.role == 'driver' &&
-        request.auth.token.get('driverApproved', false) == true;
+        request.auth.token.get('driverApproved', false) == true &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        currentUser().data.get('role', null) == 'driver' &&
+        currentUser().data.get('driverApproved', false) == true &&
+        currentUser().data.get('suspended', false) != true;
     }
 
     function isAssignedDriver() {
