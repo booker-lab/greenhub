@@ -18,6 +18,30 @@
 
 ## ACTIVE
 
+### P0 — PAYMENT-FINALIZATION-PAID-GUARD
+
+현재 `main`의 `apps/api/src/payments/payment-finalization.service.ts`는 `finalizePaidOrder()` 내부에서 전달받은 PortOne 결제의 `status === 'PAID'`를 자체 강제하지 않는다.
+
+현재 방어:
+
+- [x] scheduler 경로는 `paymentData.status === 'PAID'`일 때만 finalization 호출
+- [x] webhook 경로는 `Transaction.Paid` 이벤트에서 PortOne 원격 결제 재조회
+- [x] 금액 불일치 환불·취소 처리 존재
+
+남음:
+
+- [ ] finalization service 자체에서 비`PAID` 입력 차단
+- [ ] `PENDING` 회귀 테스트
+- [ ] `FAILED` 회귀 테스트
+- [ ] `CANCELLED` 회귀 테스트
+- [ ] `PAID` 일반/공동구매 정상 경로 테스트
+- [ ] `PAID` 회차 주문 정상 경로 테스트
+- [ ] 금액 불일치 회귀 유지
+- [ ] 기존 회차 reservation/race 회귀 유지
+- [ ] 수정이 포함된 SHA를 `main`에 통합한 뒤 actual release SHA 후보에 포함
+
+문서만으로 이 불변식을 완료 처리하지 않는다. 정본: `docs/specs/api/payments.md`.
+
 ### P0 — DEPLOY-SAFETY-MAIN-PROTECTION
 
 repo-side 자동배포 차단은 완료됐지만 GitHub `main` 자체 보호는 아직 비활성이다.
@@ -94,6 +118,7 @@ Issue #32 완료 전에도 repo-side Vercel guard는 동작하지만, direct pus
 
 ### P0 — 출시 후보 검증·운영 준비
 
+- [ ] PAYMENT-FINALIZATION-PAID-GUARD 완료 및 `main` 통합
 - [ ] Issue #32 branch protection 완료
 - [ ] 법적 페이지 포함 actual release SHA 확정
 - [ ] exact SHA 원격 회차 E2E chromium 26 + mobile 26 = 52건 통과
