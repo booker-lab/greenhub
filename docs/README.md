@@ -20,9 +20,10 @@
 - Frontend: `docs/specs/frontend/README.md`
 - Ops: `docs/specs/ops/README.md`
 - Legal: `docs/specs/legal/README.md`
+- Performance optimization history: `docs/specs/perf/README.md`
 - Security: `docs/security/README.md`
 - Design history: `docs/design/README.md`
-- Performance evidence: `docs/performance/README.md`
+- Performance measurement evidence: `docs/performance/README.md`
 - Plans: `docs/plans/README.md`
 
 회차 직배송의 통합 동작 계약은 `docs/specs/mvp-sales-round-direct-delivery.md`를 사용한다.
@@ -41,6 +42,7 @@
 - `docs/archive/**`
 - `docs/discussions/**`
 - 구현 전에 작성된 `*-plan.md`, `*-roadmap.md`, `*-sdd.md`
+- `docs/specs/perf/README.md`가 historical로 분류한 과거 최적화 문서
 - 특정 과거 SHA·PR·workflow run·세션 기준 체크리스트와 검증 기록
 - 과거 외부 심사·배포·장애 snapshot
 
