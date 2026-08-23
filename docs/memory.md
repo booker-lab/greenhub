@@ -64,6 +64,21 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 
 ## 현재 확인된 P0
 
+### Driver 승인 게이트·세션 권한 수명주기
+
+2026-08-24 인증 감사에서 관리자 driver 승인 계약과 실제 Kakao 가입 경로가 충돌함을 확인했다.
+
+- admin에는 `driverApproved` 승인 API가 있고 driver 앱 callback도 승인 flag를 요구한다.
+- 그러나 `AuthService.kakaoLogin()`은 신규 Kakao identity가 `targetRole: driver`를 요청하면 `role: driver`, `driverApproved: true`로 즉시 생성한다.
+- 기존 driver에서 `driverApproved`가 누락된 경우도 로그인 중 `true`로 자동 보정한다.
+- 따라서 **관리자 승인 전 driver 권한 획득 차단은 현재 `IMPLEMENTATION FINDING` P0**다.
+- `AuthService.refresh()`는 user 문서를 재조회하지 않고 기존 refresh JWT의 `role/storeId`를 새 token에 재사용한다.
+- 신규 로그인은 suspended 사용자를 거부하지만 정지·role/store/승인 변경 후 기존 세션의 revocation SLA와 refresh/Firebase claim 수렴은 현재 `DECISION REQUIRED` + P0 remediation 상태다.
+
+특히 이 finding은 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`의 broad driver Firestore read와 결합될 수 있으므로 두 P0를 모두 해결·직접 검증하기 전 driver 권한 경계를 `VERIFIED`로 처리하지 않는다.
+
+정본: `docs/specs/api/auth.md`, `docs/specs/api/admin.md`, `docs/BACKLOG.md`.
+
 ### 주문 direct Firestore read authorization·개인정보 최소화
 
 2026-08-24 감사에서 API read guard와 실제 seller/driver client read 경계가 다름을 확인했다.
@@ -179,15 +194,16 @@ Vercel Hobby build-rate-limit 때문에 docs-only PR에 Vercel check failure가 
 
 ## 다음 작업
 
-1. **P0 병렬 코드 게이트**: 주문 direct Firestore read를 안전한 discovery/assigned 경계와 역할별 최소 데이터로 축소하고 Rules·frontend 회귀를 `main`에 통합.
-2. **P0 병렬 코드 게이트**: 결제 finalization이 비`PAID` provider 상태를 자체 차단하도록 구현·회귀 검증 후 `main` 통합.
-3. **P0 병렬 검증 게이트**: 주문 mutation authorization의 타-store seller·비담당 driver·미배정 first-claim 경계를 직접 회귀 테스트하고 `main` 통합.
-4. **P0 병렬 관리자 게이트**: Issue #32의 `main` branch protection/ruleset 활성화.
-5. **외부 차단**: ALIGO 8종 심사 결과 대기. 승인 전 실제 발송·운영 ALIGO 설정은 진행하지 않는다.
-6. 8종 승인 후 격리 알림톡 정상 발송 → SMS fallback 검증.
-7. 주문 read 최소화 P0 해결을 전제로 판매 활성화 법적 문서·테스트 재정합화.
-8. 법적 변경과 모든 P0 코드·검증 보정까지 포함한 actual release SHA 확정 → 원격 회차 E2E 52건+cleanup.
-9. 운영 Firebase 재조회 → ALIGO 운영 설정 → 별도 `Task 3.1 승인` → exact-SHA production 배포.
-10. 이후 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
+1. **P0 병렬 인증 게이트**: driver 관리자 승인 우회 제거 + 정지/role/store 변경의 refresh/Firebase claims 수렴 정책 확정·구현·직접 회귀 후 `main` 통합.
+2. **P0 병렬 코드 게이트**: 주문 direct Firestore read를 안전한 discovery/assigned 경계와 역할별 최소 데이터로 축소하고 Rules·frontend 회귀를 `main`에 통합.
+3. **P0 병렬 코드 게이트**: 결제 finalization이 비`PAID` provider 상태를 자체 차단하도록 구현·회귀 검증 후 `main` 통합.
+4. **P0 병렬 검증 게이트**: 주문 mutation authorization의 타-store seller·비담당 driver·미배정 first-claim 경계를 직접 회귀 테스트하고 `main` 통합.
+5. **P0 병렬 관리자 게이트**: Issue #32의 `main` branch protection/ruleset 활성화.
+6. **외부 차단**: ALIGO 8종 심사 결과 대기. 승인 전 실제 발송·운영 ALIGO 설정은 진행하지 않는다.
+7. 8종 승인 후 격리 알림톡 정상 발송 → SMS fallback 검증.
+8. 주문 read 최소화 P0 해결을 전제로 판매 활성화 법적 문서·테스트 재정합화.
+9. 법적 변경과 모든 P0 코드·검증 보정까지 포함한 actual release SHA 확정 → 원격 회차 E2E 52건+cleanup.
+10. 운영 Firebase 재조회 → ALIGO 운영 설정 → 별도 `Task 3.1 승인` → exact-SHA production 배포.
+11. 이후 첫 회차 검수 → 최종 출시 판정 → `salesMode: round_direct` 전환.
 
 문서 정합성 감사는 `docs/DOCUMENT_CONSISTENCY.md`를 따르고, repository 변경은 **branch + PR**로 수행한다.
