@@ -1,434 +1,203 @@
-# Products Domain Spec
+<!-- Language: ko -->
 
-> **작성일**: 2026-03-26
-> **상태**: Draft (4단계 개발 선행 문서)
-> **연관 문서**: `orders.md`, `docs/design/소비자-1단계-요구사항.md`, `docs/design/소비자-2단계-IA.md`, `docs/design/배송-추가검토사항.md`
+# Products API / Domain Spec
 
----
+> **최종 정합화**: 2026-08-23
+> **상태**: Current
+> **공통 타입 정본**: `packages/shared/src/product.types.ts`
+> **API 정본**: `apps/api/src/products/**`
+> **회차 상품 계약**: `docs/specs/mvp-sales-round-direct-delivery.md`
 
-## 1. 도메인 개요
+## 1. 범위
 
-`products` 도메인은 상품 카탈로그·공동구매 설정·배송비 설정·판매자 정보를 포함한다.
-**판매자 앱**에서 등록·수정하고, **소비자 앱**에서 탐색·필터링한다.
+`products` 도메인은 legacy 상품 카탈로그, legacy 공동구매 설정, 배송비 설정, 날짜별 legacy 배송 한도를 관리한다.
 
-MVP는 단일 판매자(`storeId: 'dear-orchid'`) 고정.
-**처음부터 `storeId` 구조를 설계해두어** 다중 판매자 전환 시 스키마 수정 불필요.
+회차 직배송에서는 원본 `products`를 그대로 주문 계약으로 사용하지 않고 `saleRoundItems`의 회차 가격·수량·상품 snapshot을 추가로 사용한다. 회차 상품 의미는 회차 직배송 spec을 우선한다.
 
----
+`storeId`는 실제 Firestore 문서 식별자다. 과거 설계 예시의 `'dear-orchid'` 같은 사람이 읽기 쉬운 문자열을 현재 운영 store ID로 가정하지 않는다.
 
-## 2. Firestore 컬렉션 스키마
-
-### `stores/{storeId}`
+## 2. 현재 Product 공통 타입
 
 ```ts
-{
-  id: string               // MVP: 'dear-orchid'
-  name: string             // '디어 오키드'
-  ownerId: string          // 판매자 계정 ID (NextAuth userId)
-
-  // 판매자 앱 온보딩 시 추가 입력 (판매자 설계 1단계 §3 참조)
-  businessNumber: string | null  // 사업자 등록번호
-  ceoName: string | null         // 대표자명
-  phone: string | null           // 대표 연락처
-  address: string | null         // 소재지
-  logoUrl: string | null         // Firebase Storage URL
-
-  // 판매자 계정 상태 (오늘 결정: 2026-03-28 CRITICAL_LOGIC.md 참조)
-  status: 'invited'             // 초대 토큰 발급됨, 가입 전 (A안)
-        | 'pending_approval'    // 판매자 자체 신청, 승인 대기 (B안 전환 시)
-        | 'active'              // 정상 운영 중
-        | 'rejected'            // 거절됨
-        | 'suspended'           // 운영 정지
-
-  // 정산 설정 (MVP: 0 — 수수료 없음, Phase2에서 판매자별 요율 설정)
-  commissionRate: number         // 0.0 ~ 1.0
-
-  createdAt: Timestamp
-  updatedAt: Timestamp
-}
-```
-
----
-
-### `products/{productId}`
-
-```ts
-{
-  id: string
-  storeId: string          // stores 참조
-
-  // 기본 정보
-  name: string
-  description: string
-  images: string[]         // Cloud Storage URL 배열
-
-  // 가격 (실시간 시세 반영 — 판매자가 수동 갱신)
-  price: number
-
-  // 분류
-  category: 'cut_flower' | 'orchid' | 'foliage'
-                           // 절화 | 난 | 관엽
-  colors: ColorOption[]    // 멀티 선택, 하단 참조
-
-  // 판매 방식
-  saleType: 'normal' | 'group'
-
-  // 배송비 계산용 사이즈
-  deliverySize: 'small' | 'medium' | 'large'
-
-  // 활성 여부
-  isActive: boolean
-
-  createdAt: Timestamp
-  updatedAt: Timestamp
-}
-```
-
-**ColorOption 허용값**
-```
-'레드' | '핑크' | '화이트' | '옐로우' | '오렌지' | '퍼플'
-| '블루' | '그린' | '무늬' | '브라운' | '베이지' | '블랙' | '그레이'
-```
-
----
-
-### `groupProductConfig/{productId}` (공동구매 전용, `saleType: 'group'` 1:1)
-
-```ts
-{
-  productId: string            // products 참조
-
-  // 모집 설정 (수량 기반)
-  minQuantity: number          // 최소 수량 (미달 시 자동 취소)
-  targetQuantity: number       // 목표 수량 (선착순 확정 기준)
-  maxPerPerson: number         // 1인 최대 구매 수량
-  recruitDeadline: Timestamp   // 모집 마감일 (판매자 설정)
-  currentQuantity: number      // Firestore 실시간 누적 수량
-  isProcessed: boolean         // 마감 기한 자동 취소 처리 완료 여부 (중복 스케줄러 방지)
-
-  // 배송 설정 (소비자 변경 불가)
-  groupDeliveryDate: Timestamp // 배송 예정일 (판매자 지정)
-  groupDeliveryMethod: 'direct' | 'parcel'
-                               // 서울/경기: direct 또는 parcel / 기타: parcel 고정
-
-  // 배송비
-  deliveryFeeDiscount: number  // 할인 배송비 (0이면 무료 배송)
-}
-```
-
----
-
-### `deliveryFeeConfig/{storeId}` (판매자 앱에서 전역 관리)
-
-```ts
-{
-  storeId: string
-
-  // 기본 배송비 (MVP 임시 단가)
-  directFee: number            // 꽃차 직배송: 3,000원
-  hubFee: number               // 거점 픽업: 1,000원
-  parcelFee: number            // 택배: 4,000원
-
-  // 무료 배송 임계치
-  freeThresholdDirect: number  // 50,000원
-  freeThresholdHub: number     // 30,000원
-  freeThresholdParcel: number  // 50,000원
-
-  // 기상 제한 (판매자 수동 제어)
-  weatherRestrictionActive: boolean
-                               // true 시 소비자 결제 화면 택배 옵션 자동 비활성
-
-  updatedAt: Timestamp
-}
-```
-
----
-
-### `dailyCaps/{storeId_date}` (orders 도메인과 공유)
-
-> 정의는 `orders.md` 섹션 3 참조. 상품 등록 시 판매자 앱에서 날짜별 설정.
-
----
-
-## 3. 배송비 계산 규칙
-
-배송비는 **배송 수단 × 품목 사이즈** 조합으로 결제 화면에서 자동 계산된다.
-
-### 배송 수단별 기본 배송비
-
-| 수단 | 코드 | 기본 배송비 | 무료 기준 |
-|------|------|------------|----------|
-| 꽃차 직배송 | `direct` | 3,000원 | 50,000원↑ |
-| 거점 픽업 | `hub` | 1,000원 | 30,000원↑ |
-| 택배 | `parcel` | 4,000원 | 50,000원↑ |
-
-### 품목 사이즈 추가 배송비
-
-| 사이즈 | 코드 | 추가 배송비 | 예시 품목 |
-|--------|------|-----------|---------|
-| 소형 | `small` | +0원 | 꽃다발, 소형 화분 |
-| 중형 | `medium` | +1,000원 | 꽃바구니, 중형 화분 |
-| 대형 | `large` | +3,000원↑ | 화환, 대형 식물 |
-
-**계산식**
-```
-최종 배송비 = max(0, 기본 배송비 + 사이즈 추가 배송비 - 무료 기준 적용)
-공동구매 배송비 = deliveryFeeDiscount (판매자 설정값 그대로 사용)
-```
-
----
-
-## 4. 배송 수단 분기 규칙
-
-```
-isMetropolitan = true (서울/경기):
-  일반 판매 → direct | hub | parcel 모두 선택 가능
-  공동구매  → groupDeliveryMethod (판매자 지정, 소비자 선택 불가)
-
-isMetropolitan = false (기타 지역):
-  일반 판매 → parcel 만 표시
-  공동구매  → parcel 고정
-
-기상 제한 (weatherRestrictionActive = true):
-  parcel 자동 비활성화
-  안내 문구: "현재 기온 조건으로 인해 택배 배송이 일시 중단되었습니다"
-  direct 는 항온 설비로 기상 무관 정상 운영
-```
-
----
-
-## 5. API 엔드포인트
-
-> **기본 경로**: `/stores/:storeId/products`
-
-### 상품 목록 조회
-
-```
-GET /stores/:storeId/products
-```
-
-| 쿼리 파라미터 | 타입 | 설명 |
-|------------|------|------|
-| `category` | `cut_flower \| orchid \| foliage` | 카테고리 필터 |
-| `colors` | `string[]` | 색상 멀티 필터 (AND → 해당 색상 포함 상품) |
-| `saleType` | `normal \| group` | 판매 방식 필터 |
-| `sort` | `latest \| popular \| price_asc \| price_desc` | 정렬 (기본: `latest`) |
-| `isActive` | `boolean` | 기본 `true` |
-
-**Response** `200`
-```ts
-{
-  items: ProductSummary[]  // 카드 표시용 (상세 필드 제외)
-  total: number
-}
-```
-
-**ProductSummary** (목록 카드용 경량 타입)
-```ts
-{
-  id: string
-  name: string
-  price: number
-  images: string[]         // 첫 번째 이미지만
-  category: Category
-  colors: ColorOption[]
-  saleType: SaleType
-  isActive: boolean
-  // 공동구매 전용 (saleType: 'group')
-  groupSummary?: {
-    currentQuantity: number
-    minQuantity: number
-    targetQuantity: number
-    recruitDeadline: string  // ISO8601
-  }
-}
-```
-
----
-
-### 상품 상세 조회
-
-```
-GET /stores/:storeId/products/:productId
-```
-
-**Response** `200` — `products` 전체 필드
-공동구매 상품인 경우 `groupProductConfig` 병합하여 반환.
-
-```ts
-{
-  ...Product,
-  groupConfig?: GroupProductConfig  // saleType: 'group' 일 때만
-}
-```
-
----
-
-### 상품 등록 (판매자 전용)
-
-```
-POST /stores/:storeId/products
-```
-
-**Request Body**
-```ts
-{
-  name: string
-  description: string
-  images: string[]
-  price: number
-  category: Category
-  colors: ColorOption[]
-  saleType: SaleType
-  deliverySize: DeliverySize
-
-  // 공동구매 전용
-  groupConfig?: {
-    minQuantity: number          // 최소 수량
-    targetQuantity: number       // 목표 수량
-    maxPerPerson: number         // 1인 최대 구매 수량
-    recruitDeadline: string      // ISO8601
-    groupDeliveryDate: string    // ISO8601
-    groupDeliveryMethod: 'direct' | 'parcel'
-    deliveryFeeDiscount: number
-  }
-}
-```
-
-**Response** `201` `{ productId: string }`
-
----
-
-### 상품 수정 (판매자 전용)
-
-```
-PATCH /stores/:storeId/products/:productId
-```
-
-Request Body — 위 등록 필드 중 변경할 항목만 포함 (Partial).
-
----
-
-### 상품 활성/비활성 (판매자 전용)
-
-```
-PATCH /stores/:storeId/products/:productId/active
-```
-
-```ts
-{ isActive: boolean }
-```
-
----
-
-### 배송비 설정 조회·수정 (판매자 전용)
-
-```
-GET  /stores/:storeId/delivery-config
-PATCH /stores/:storeId/delivery-config
-```
-
-PATCH Body — `deliveryFeeConfig` 전체 필드 중 변경할 항목만.
-
----
-
-### Daily Cap 조회·설정 (판매자 전용)
-
-```
-GET   /stores/:storeId/daily-caps?from=YYYY-MM-DD&to=YYYY-MM-DD
-PATCH /stores/:storeId/daily-caps/:date
-```
-
-PATCH Body
-```ts
-{ totalCap: number }
-```
-
----
-
-## 6. 카테고리·색상 필터 로직
-
-소비자 앱 카테고리 화면에서 **탭 필터(단일) × 색상 필터(멀티) AND 조합**으로 동작.
-
-```
-예시: 카테고리 = '절화', 색상 = ['레드', '핑크']
-
-쿼리 조건:
-  category == 'cut_flower'
-  AND colors array-contains-any ['레드', '핑크']
-
-→ 레드 또는 핑크 색상을 하나라도 포함한 절화 상품 반환
-```
-
-> Firestore `array-contains-any`는 최대 10개 값 지원 — 13개 색상 중 한 번에 최대 10개 조합 가능.
-> 10개 초과 선택이 필요한 경우 클라이언트에서 두 번 쿼리 후 합산. (MVP에서는 실질적으로 발생 안 함)
-
----
-
-## 7. packages/shared 공통 타입
-
-> **Timestamp 직렬화 규칙**: Firestore 스키마의 `Timestamp` 필드는 shared 타입에서 `string (ISO8601)`으로 표현합니다.
-
-```ts
-// packages/shared/src/product.types.ts
-
 export type Category = 'cut_flower' | 'orchid' | 'foliage'
-
-export type ColorOption =
-  | '레드' | '핑크' | '화이트' | '옐로우' | '오렌지' | '퍼플'
-  | '블루' | '그린' | '무늬' | '브라운' | '베이지' | '블랙' | '그레이'
-
 export type DeliverySize = 'small' | 'medium' | 'large'
-
-// SaleType, DeliveryMethod 는 order.types.ts 에서 단일 정의 → 여기서 re-export
-export type { SaleType, DeliveryMethod } from './order.types.js'
-
-export interface GroupProductConfig {
-  productId: string
-  minQuantity: number          // 최소 수량 (미달 시 자동 취소)
-  targetQuantity: number       // 목표 수량 (선착순 확정 기준)
-  maxPerPerson: number         // 1인 최대 구매 수량
-  recruitDeadline: string      // ISO8601
-  currentQuantity: number      // Firestore 실시간 누적 수량
-  groupDeliveryDate: string    // ISO8601
-  groupDeliveryMethod: 'direct' | 'parcel'
-  deliveryFeeDiscount: number
-}
+export type SaleType = 'normal' | 'group'
 
 export interface Product {
   id: string
   storeId: string
   name: string
-  description: string
   images: string[]
   price: number
   category: Category
-  colors: ColorOption[]
   saleType: SaleType
   deliverySize: DeliverySize
   isActive: boolean
-  createdAt: string   // ISO8601
-  updatedAt: string   // ISO8601
-}
+  testOnly?: boolean
+  createdAt: string
+  updatedAt: string
 
-export interface ProductSummary {
-  id: string
-  name: string
-  price: number
-  images: string[]
-  category: Category
-  colors: ColorOption[]
-  saleType: SaleType
-  isActive: boolean
+  varietyId?: string
+  selection?: Selection
+  sellerNote?: string
+  content?: GeneratedContent
+  sellerOverride?: boolean
+
+  // migration compatibility
+  description?: string
+  colors?: ColorOption[]
+
   groupSummary?: {
     currentQuantity: number
     minQuantity: number
     targetQuantity: number
-    recruitDeadline: string   // ISO8601
+    recruitDeadline: string
   }
 }
+```
 
-export interface DeliveryFeeConfig {
+신규 상품은 `selection`/`content` 계열 필드를 지원하며, `description`/`colors`는 구 데이터 호환 필드다. 새 UI나 API를 설계할 때 과거 `description + colors`만 있는 schema를 정본으로 삼지 않는다.
+
+## 3. 선택 정보와 색상
+
+현재 `Selection`:
+
+```ts
+interface Selection {
+  colors: ColorOption[]
+  stemType: '외대' | '쌍대' | '가지' | '3대'
+  fragrance: 'none' | 'light' | 'strong'
+  bloomCondition: 'bud' | 'half' | 'full'
+  bundleUnit: string
+  careLevel?: 'easy' | 'normal' | 'hard'
+}
+```
+
+색상 필터는 신규 `selection.colors`를 우선하고 구버전 `colors`를 fallback으로 읽는다.
+
+현재 `ColorOption`은 초기 13색보다 확장돼 있으며 정확한 union은 `packages/shared/src/product.types.ts`를 사용한다.
+
+## 4. Legacy 공동구매 설정
+
+`groupProductConfig/{productId}`는 `saleType: 'group'` legacy 상품의 추가 설정이다.
+
+공통 공개 계약:
+
+```ts
+interface GroupProductConfig {
+  productId: string
+  minQuantity: number
+  targetQuantity: number
+  maxPerPerson: number
+  recruitDeadline: string
+  currentQuantity: number
+  groupDeliveryDate: string
+  groupDeliveryMethod: 'direct' | 'parcel'
+  deliveryFeeDiscount: number
+}
+```
+
+서버 내부 문서에는 `isProcessed` 같은 scheduler용 필드가 추가로 존재할 수 있다. 공개 타입과 Firestore 내부 문서를 동일시하지 않는다.
+
+상품 생성에서 `saleType === 'group'`이고 `groupConfig`가 제공되면 별도 `groupProductConfig/{productId}`가 생성된다.
+
+## 5. 상품 생성 입력
+
+현재 `CreateProductDto`의 핵심 필드:
+
+```ts
+{
+  name: string
+  images: string[]
+  price: number
+  category: 'cut_flower' | 'orchid' | 'foliage'
+  saleType: 'normal' | 'group'
+  deliverySize: 'small' | 'medium' | 'large'
+  isActive?: boolean
+
+  varietyId?: string
+  selection?: Selection
+  sellerNote?: string
+  content?: {
+    headline: string
+    description: string
+    isEditedByUser: boolean
+  }
+  sellerOverride?: boolean
+  groupConfig?: GroupConfig
+}
+```
+
+과거 spec의 필수 `description`·`colors` 입력은 현재 `CreateProductDto` 계약이 아니다.
+
+## 6. 상품 API
+
+### Store-scoped 조회
+
+```text
+GET /stores/:storeId/products
+GET /stores/:storeId/products/:productId
+```
+
+현재 store-scoped GET에는 controller-level JWT guard가 없다. 기본 목록은 `isActive !== false`이면 활성 상품만 조회한다.
+
+query:
+
+```text
+category?: cut_flower | orchid | foliage
+colors?: string | string[]
+saleType?: normal | group
+sort?: latest | popular | price_asc | price_desc
+isActive?: boolean
+```
+
+주의:
+
+- `popular`은 DTO 허용값이지만 현재 service에는 별도 인기 정렬 구현이 없고 기본 최신순 분기로 수렴한다.
+- 색상은 Firestore `array-contains-any`가 아니라 조회 결과에서 `selection.colors ?? colors`를 기준으로 서버 메모리 필터링한다.
+- 목록 응답은 `{ items, total }`이다.
+- 목록 이미지 배열은 현재 첫 이미지만 담아 경량화한다.
+
+### Public storeId-free 조회
+
+```text
+GET /products
+GET /products/:productId
+```
+
+public 목록/상세는 `isActive === true` 상품만 노출하며 `testOnly === true` 상품을 제외한다.
+
+이 경로는 다중 store 상품을 함께 반환할 수 있으므로 public summary에 `storeId`가 포함될 수 있다.
+
+### Seller/Admin 쓰기
+
+```text
+POST   /stores/:storeId/products
+PATCH  /stores/:storeId/products/:productId
+PATCH  /stores/:storeId/products/:productId/active
+DELETE /stores/:storeId/products/:productId
+```
+
+- `JwtAuthGuard + RolesGuard`
+- role: `seller | admin`
+- seller는 `stores/{storeId}.ownerId === user.sub` 검사를 통과해야 한다.
+- admin은 이 seller ownership 검사에서 예외다.
+
+현재 `DELETE`는 product 문서를 물리 삭제한다. 연결된 주문·회차·공동구매 참조의 장기 보존 의미를 바꾸려면 별도 설계가 필요하며, 운영에서 단순 정리 용도로 임의 삭제하지 않는다.
+
+## 7. Delivery fee config
+
+경로:
+
+```text
+GET   /stores/:storeId/delivery-config
+PATCH /stores/:storeId/delivery-config
+```
+
+현재 공개 타입:
+
+```ts
+interface DeliveryFeeConfig {
   storeId: string
   directFee: number
   hubFee: number
@@ -437,15 +206,75 @@ export interface DeliveryFeeConfig {
   freeThresholdHub: number
   freeThresholdParcel: number
   weatherRestrictionActive: boolean
-  updatedAt: string   // ISO8601
+  updatedAt: string
 }
 ```
 
----
+문서가 없으면 service가 현재 다음 fallback 값을 반환한다.
+
+```text
+directFee              3000
+hubFee                 1000
+parcelFee              4000
+freeThresholdDirect   50000
+freeThresholdHub      30000
+freeThresholdParcel   50000
+weatherRestrictionActive false
+```
+
+이 fallback은 코드 기본값이지 특정 운영 store의 현재 설정값이라는 뜻은 아니다.
+
+PATCH는 seller/admin 보호 경로이며 seller ownership을 검증한다.
+
+## 8. Legacy Daily Cap
+
+경로:
+
+```text
+GET   /stores/:storeId/daily-caps?from=YYYY-MM-DD&to=YYYY-MM-DD
+PATCH /stores/:storeId/daily-caps/:date
+```
+
+seller/admin만 사용하며 seller ownership을 검증한다.
+
+현재 GET의 날짜 미지정 기본값은 서버 UTC 기준 오늘 날짜 문자열이다. 회차 직배송의 배송지/상품 한도는 `saleRounds`/`saleRoundItems`/`checkoutReservations` 계약을 사용하므로 legacy `dailyCaps`와 혼동하지 않는다.
+
+## 9. 배송비 계산
+
+legacy 주문의 기본 계산 helper는 현재 orders domain에 있다.
+
+- size extra: `small 0`, `medium 1000`, `large 3000`
+- method base fee와 무료 threshold는 `deliveryFeeConfig` 사용
+- 주문 금액이 해당 method 무료 threshold 이상이면 배송비 0
+- 아니면 base + size extra
+
+공동구매/회차 주문은 각 해당 domain의 추가 규칙이 있으므로 위 helper만으로 모든 결제 배송비를 재계산하지 않는다.
+
+## 10. 회차 직배송과의 경계
+
+회차 직배송에서는 다음 원칙이 중요하다.
+
+- 원본 product 가격 변경이 이미 생성된 회차 가격·주문 snapshot을 소급 변경하지 않는다.
+- 공개 회차 상품은 `saleRoundItems`의 회차 가격과 상품 snapshot을 사용한다.
+- `Store.salesMode === 'round_direct'`의 consumer 진입 규칙은 회차 직배송 spec이 소유한다.
+- legacy `saleType: group`, `dailyCaps`, `deliveryFeeConfig`를 회차 한도/가격 계약으로 대체 사용하지 않는다.
+
+## 11. 검증 원칙
+
+상품 계약 변경 시 최소 확인:
+
+- `packages/shared/src/product.types.ts`
+- `apps/api/src/products/dto/create-product.dto.ts`
+- `apps/api/src/products/dto/product-query.dto.ts`
+- `apps/api/src/products/products.controller.ts`
+- `apps/api/src/products/products.service.ts`
+- 관련 unit/E2E
+- 회차 노출이면 `docs/specs/mvp-sales-round-direct-delivery.md`
 
 ## 변경 이력
 
 | 날짜 | 내용 |
-|------|------|
-| 2026-03-26 | 초안 작성 — 1·2단계 설계 + 배송 검토사항 기반 통합 |
-| 2026-04-23 | GroupProductConfig 수량 기반 전환 — participants → quantity, maxPerPerson 추가 |
+|---|---|
+| 2026-08-23 | AI selection/content 필드, public API, 실제 색상 필터·정렬, ownership, legacy/회차 경계에 맞춰 전면 정합화 |
+| 2026-04-23 | legacy 공동구매 수량 기반 계약 반영 |
+| 2026-03-26 | 초기 products 설계 초안 |
