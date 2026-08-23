@@ -16,6 +16,8 @@
 - 경매·매입: 월요일
 - 직접배송: 화요일 00:00~09:00
 
+현재 **출시 전 게이트와 작업 순서**의 정본은 `docs/memory.md`, `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`, `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`다. 이 런북에 남은 운영 절차가 활성 출시 PLAN의 승인·검증 게이트를 대체하지 않는다.
+
 이 문서는 명령 실행 권한을 부여하지 않는다. 아래 명령은 절차를 설명하는 예시이며, 승인 기록 없이 실행하지 않는다. 특히 `--apply`, 환불, 문자 발송, 회차·주문 상태 변경, 파기 재실행은 별도 승인과 담당자 확인이 필요하다.
 
 ## 2. 역할과 공통 증거
@@ -81,7 +83,7 @@ Invoke-RestMethod -Method Get -Uri "$base/stores/$storeId/orders/<orderId>/payme
 | 항목 | 계약 |
 | --- | --- |
 | 담당 | 출시 책임자와 기술 담당자 2인 |
-| 사전 조건 | Task 6.7 사용자 흐름 통과, 배포 SHA 확정, 운영 프로젝트·대상 스토어 재확인 |
+| 사전 조건 | 활성 출시 PLAN의 선행 게이트 통과, 실제 출시 대상 SHA 확정·원격 회차 E2E 통과, 운영 프로젝트·대상 스토어 재확인 |
 | 예시 명령 | `node scripts/enable-dear-orchid-round-direct.mjs --dry-run` |
 | 확인 증거 | 프로젝트 `green-e4fe3`, 단일 대상, 대상 `storeId`, 현재 모드, 변경 예정값, 필수 확인 플래그, 롤백 명령, 거부 조건, `외부 상태 변경: 없음 (조회만 수행)` |
 | 중단 조건 | 대상 0건·다중 대상, ID·이름·소유자·활성 상태 손상, 프로젝트 불일치, 현재 모드 불명확, 배포 SHA 불일치 |
@@ -95,7 +97,7 @@ dry-run 증거로 추정해 기록하지 않는다.
 
 다음 조건을 모두 충족하고 별도 사용자 승인을 받은 경우에만 가능하다.
 
-- Task 6.7의 소비자·셀러·드라이버 핵심 흐름이 실제 실행 데이터로 통과했다.
+- 활성 출시 PLAN이 요구하는 ALIGO 승인·실제 발송 검증, 실제 출시 대상 SHA 원격 E2E, 운영 설정·배포·smoke가 모두 통과했다.
 - 같은 배포 SHA에서 dry-run이 `legacy → round_direct` 단일 대상을 출력했다.
 - 첫 회차가 `SCHEDULED`이며 상품·가격·한도·KST 일정·이천시 지역이 검수됐다.
 - 셀러·기사 계정과 고객 응대·결제 담당자가 근무 가능하다.
@@ -289,7 +291,7 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 - 셀러는 회차 주문을 계속 매입·준비하고, 담당 기사는 기존 회차 직배송 주문을 배송·보류·사진 완료한다.
 - 결제·환불·알림·재배송·보관 예외는 본 런북의 동일 절차로 처리한다.
 - 장애가 기존 주문 처리 화면에도 영향을 주면 주문별 수기 상태 변경 대신 기술 담당자가 API 복구를 우선한다.
-- 원인 수정 뒤 Task 6.7 핵심 흐름과 새 dry-run을 다시 통과하기 전 `round_direct`를 재활성화하지 않는다.
+- 원인 수정 뒤 활성 출시 PLAN이 요구하는 실제 출시 대상 SHA의 핵심 E2E와 새 dry-run을 다시 통과하기 전 `round_direct`를 재활성화하지 않는다.
 
 ## 8. 수동 환불과 중복 방지
 
@@ -346,8 +348,11 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 
 ### 출시 전
 
-- [ ] Task 6.7 세 앱 핵심 흐름 통과
-- [ ] 배포 SHA와 운영 프로젝트 확인
+- [ ] `docs/memory.md`와 활성 HANDOFF/PLAN의 현재 차단 요소가 모두 해소됨
+- [ ] ALIGO 회차 템플릿 승인·격리 실제 발송 검증 완료
+- [ ] 실제 출시 대상 SHA의 전체 원격 회차 E2E와 fixture cleanup 통과
+- [ ] 운영 Firebase 상태와 ALIGO 운영 설정 재검증
+- [ ] 동일 출시 SHA의 운영 배포와 무변경 smoke 통과
 - [ ] dry-run 단일 대상·`legacy → round_direct` 확인
 - [ ] 회차 `SCHEDULED`, 일정·지역·상품·가격·한도 확인
 - [ ] 운영 역할과 비상 연락 경로 확인
@@ -369,4 +374,10 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 - [ ] 이미 결제된 회차 주문 목록 고정
 - [ ] 셀러·기사 기존 주문 처리 가능 확인
 - [ ] 결제·환불·알림·보관 예외 담당자 지정
-- [ ] 원인 수정과 Task 6.7 재검증 전 재활성화 금지
+- [ ] 원인 수정 후 활성 출시 PLAN의 재검증과 새 dry-run 통과 전 재활성화 금지
+
+## 변경 이력
+
+| 날짜 | 내용 |
+|---|---|
+| 2026-08-23 | 과거 `Task 6.7` 출시 전제 표현을 현재 `memory`/HANDOFF/launch PLAN 게이트와 실제 출시 SHA 원격 E2E 기준으로 정합화 |

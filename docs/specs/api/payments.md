@@ -1,305 +1,328 @@
-# Payments Domain Spec
+<!-- Language: ko -->
 
-> **작성일**: 2026-03-26
-> **최종 수정**: 2026-03-27 (Portone V2 마이그레이션 반영)
-> **상태**: 현행화 완료
-> **연관 문서**: `orders.md`, `CRITICAL_LOGIC.md`, `docs/design/소비자-1단계-요구사항.md`
+# Payments API / Domain Spec
 
----
+> **최종 정합화**: 2026-08-23
+> **상태**: Current
+> **공통 타입 정본**: `packages/shared/src/payment.types.ts`
+> **서버 구현 정본**: `apps/api/src/payments/**`
+> **주문 연계 계약**: `docs/specs/api/orders.md`, `docs/specs/mvp-sales-round-direct-delivery.md`
 
-## 1. 도메인 개요
+## 1. 소유권과 범위
 
-결제 검증·환불은 **NestJS API 서버가 단독 처리**한다.
-클라이언트(소비자 앱)는 **Portone V2 SDK**로 결제창을 열고, 서버는 Portone webhook을 수신해 금액을 검증한 뒤 주문 상태를 전환한다.
+- 결제 검증·최종화·환불·재배송비 결제 처리는 NestJS API가 소유한다.
+- consumer는 PortOne V2 SDK로 결제 UI를 시작하지만 결제 성공 여부를 클라이언트 반환값만으로 확정하지 않는다.
+- 서버는 PortOne V2 API를 재조회해 금액·상태를 검증한 뒤 주문/결제 상태를 확정한다.
+- webhook은 중요한 수렴 경로지만 유일한 수렴 경로가 아니다. 15분 이상 `PENDING` 주문도 scheduler가 PortOne을 재조회해 paid/cancel/확인필요 상태로 수렴시킨다.
+- legacy 본 결제와 회차 직배송 본 결제는 같은 payment finalization 기반을 공유하지만, 회차 주문은 `checkoutReservations`와 용량 반환·재확보 규칙을 추가로 사용한다.
+- 재배송비는 본 결제와 별개의 `orderCharges` 결제로 관리한다.
 
-**핵심 결정 사항**
+## 2. PortOne V2 서버 설정
 
-| 항목 | 결정 | 이유 |
-|------|------|------|
-| Portone SDK 버전 | **V2** (`@portone/browser-sdk/v2`) | V1 deprecated |
-| 결제 방식 | 즉시 결제 (pre-auth 미적용) | 카카오페이·네이버페이가 pre-auth 미지원 |
-| 무통장 입금 | 미지원 | 즉시 결제만 지원 |
-| 환불 처리 | Portone V2 환불 API | 자동 처리, 카드 3~5 영업일 / 간편결제 1~3일 |
-| 결제 PG | Portone (이니시스 or NHN KCP) | 카드 결제 활성화를 위해 PG사 계약 필요 |
+현재 서버가 사용하는 비밀 설정:
 
-> ⚠️ **MVP 완료 후 액션 필요**
-> 카드 결제 활성화를 위해 Portone 가입 + PG사 심사 신청 (KG이니시스 또는 NHN KCP).
-> 심사 기간 약 2~5 영업일. 코드 변경 없이 채널키 추가만으로 활성화 가능.
+- `PORTONE_V2_SECRET`
+- `PORTONE_WEBHOOK_SECRET`
 
----
+client channel/store 설정은 각 frontend 환경의 현재 코드를 따른다. 실제 결제 수단의 계약·심사·활성화 상태는 외부 상태이므로 이 spec에 “현재 승인됨/대기 중”으로 고정하지 않는다. 결제 수단을 변경하는 작업은 PortOne 콘솔과 대상 환경을 직접 재조회한다.
 
-## 2. 지원 결제 수단
+비밀값 원문은 문서·로그·Git에 기록하지 않는다.
 
-| 수단 | easyPayProvider | 상태 |
-|------|----------------|------|
-| 카카오페이 | `KAKAOPAY` | ✅ 테스트 완료 |
-| 네이버페이 | `NAVERPAY` | ⏸ 파트너 가입 필요 |
-| 신용/체크카드 | — | ⏸ PG사 계약 완료 후 활성화 |
+## 3. 본 결제 식별자와 기록
 
----
+현재 일반 본 결제는 주문 ID를 PortOne `paymentId`로 사용한다.
 
-## 3. Firestore 컬렉션 스키마
+```text
+orderId == paymentId == payments/{paymentId}.id
+```
 
-### `payments/{paymentId}`
+결제 성공 후 `payments/{orderId}`에는 다음 핵심 필드가 기록된다.
 
 ```ts
 {
-  id: string                    // orderId와 동일 (Portone V2 paymentId)
-  orderId: string               // orders 참조
+  id: string
+  orderId: string
   userId: string
   storeId: string
-
-  // 결제 정보
-  amount: number                // 실제 결제 금액 (검증 기준)
-  payMethod: 'kakaopay' | 'naverpay' | 'card' | null
-  status: PaymentStatus
-  portonePaymentId: string      // Portone V2 paymentId (구 imp_uid)
-  portoneTransactionId: string  // Portone V2 transactionId (구 merchant_uid)
-
-  // 환불 정보
+  amount: number
+  payMethod: string | null
+  status: 'PAID' | 'CANCELLED' | 'FAILED' | 'PENDING'
+  portonePaymentId: string
+  portoneTransactionId: string
   refundAmount: number | null
   refundedAt: Timestamp | null
   refundReason: string | null
-
+  refundClaim?: {
+    token: string
+    expiresAt: number
+  } | null
   createdAt: Timestamp
   updatedAt: Timestamp
 }
 ```
 
-**PaymentStatus**
-```
-'PENDING'    — 결제창 열림, webhook 수신 전 (payments 문서 미생성)
-'PAID'       — 결제 완료 (금액 검증 성공)
-'FAILED'     — 결제 실패 또는 금액 위변조 감지 (환불 완료 포함)
-'CANCELLED'  — 환불 완료
-```
+공개 shared `Payment`에는 `refundClaim` 같은 내부 동시성 필드가 포함되지 않는다. Firestore 내부 필드와 공개 DTO를 동일시하지 않는다.
 
-> 💡 PENDING 상태일 때는 payments 문서가 생성되지 않음.
-> Portone webhook 수신 + 금액 검증 성공 시 PAID로 최초 생성됨.
+`PENDING` 주문 단계에서는 본 결제 문서가 아직 없을 수 있다. 결제 성공 시 transaction 안에서 `PAID` 문서를 생성한다.
 
----
+## 4. Webhook 보안 계약
 
-## 4. 결제 플로우
+Endpoint:
 
-### 4-1. 일반 결제 흐름 (Portone V2)
-
-```
-[소비자 앱]                     [NestJS]                    [Portone]
-
-1. POST /stores/:id/orders
-                               2. PENDING 주문 생성
-                               3. { orderId, portonePaymentParams } 반환
-4. Portone V2 SDK 결제창 오픈
-   storeId, paymentId=orderId,
-   channelKey (카카오페이)
-                                                        5. 결제 처리
-                                                        6. webhook POST → NestJS
-                                                           { type: 'Transaction.Paid',
-                                                             data: { paymentId, storeId } }
-                               7. GET /payments/{paymentId} 로 Portone V2 API 조회
-                               8. amount.total 검증
-                               [성공] 주문 ACCEPTED / RECRUITING 전환
-                                      payments 문서 생성 (status: PAID)
-                                      알림톡 발송
-                               [실패] 주문 CANCELLED + 즉시 환불 처리
-9. Firestore REST API 폴링으로
-   주문 상태 확인 → 완료 화면 표시
-```
-
-### 4-2. 금액 검증 규칙 (위변조 방지)
-
-```
-검증 조건:
-  portone.getPayment(paymentId).amount.total === orders.totalAmount
-
-실패 처리:
-  1. Portone V2 환불 API 즉시 호출
-  2. orders.status → 'CANCELLED', cancelReason: 'amount_mismatch'
-  3. dailyCaps.usedSlots 복구
-  (payments 문서 생성 없음 — 검증 실패 시 PAID 기록 불필요)
-```
-
-### 4-3. PENDING 타임아웃 처리
-
-```
-조건: 결제창 열린 후 15분 내 Portone webhook 미수신
-
-NestJS PaymentsService 스케줄러 (@Cron EVERY_MINUTE):
-  1. orders.status === 'PENDING' AND createdAt < (now - 15분) 조회
-  2. orders.status → 'CANCELLED', cancelReason: 'timeout'
-  3. dailyCaps.usedSlots 복구
-  (payments 문서 없으므로 환불 불필요)
-```
-
----
-
-## 5. 환불 플로우
-
-### 5-1. 개인 취소 (RECRUITING 구간)
-
-```
-소비자 앱: PATCH /stores/:storeId/orders/:orderId/cancel
-NestJS:
-  1. 상태 검증 — RECRUITING 이외 → 403 거부
-  2. processRefundByOrderId() 호출
-     - payments에서 PAID 기록 조회
-     - Portone V2 환불 API: POST /payments/{paymentId}/cancel
-     - payments.status → 'CANCELLED', refundedAt 기록
-  3. orders.status → 'CANCELLED', cancelReason 기록
-  4. groupProductConfig.currentParticipants -1 (Firestore 트랜잭션)
-  5. 본인에게 알림톡 발송
-```
-
-### 5-2. 공동구매 마감 미달 자동 환불
-
-```
-트리거: NestJS 스케줄러 (recruitDeadline 경과 + currentParticipants < minParticipants)
-
-처리:
-  1. 해당 groupProductId의 모든 RECRUITING 주문 조회
-  2. 각 주문에 processRefundByOrderId() 병렬 호출
-  3. 전체 orders.status → 'CANCELLED'
-     cancelReason: '목표 수량 미달성으로 취소'
-  4. 전체 참여자에게 알림톡 일괄 발송
-```
-
-### 5-3. 판매자 강제 취소
-
-```
-판매자 앱: PATCH /stores/:storeId/orders/:orderId/status { status: 'CANCELLED', reason }
-
-처리:
-  1. 환불 가능 상태 (ACCEPTED, RECRUITING, CONFIRMED, PREPARING) 검증
-  2. processRefundByOrderId() 호출 (내부 공통 환불 메서드)
-  3. orders.status → 'CANCELLED', cancelReason 기록
-  4. 소비자에게 알림톡 발송
-```
-
-### 환불 소요 시간 안내 문구 (소비자 노출)
-
-| 결제 수단 | 환불 소요 |
-|----------|----------|
-| 카카오페이 | 1~3 영업일 |
-| 네이버페이 | 1~3 영업일 |
-| 신용/체크카드 | 3~5 영업일 |
-
----
-
-## 6. API 엔드포인트
-
-### 결제 파라미터 생성 (주문 생성과 통합)
-
-> `POST /stores/:storeId/orders` 응답에 Portone V2 결제 파라미터를 포함해 반환.
-> 별도 결제 엔드포인트 없음.
-
-**Response** `201`
-```ts
-{
-  orderId: string
-  portonePaymentParams: {
-    name: string      // 상품명
-    amount: number    // 검증 기준 금액 (KRW)
-    buyerName: string
-  }
-}
-```
-
----
-
-### Portone Webhook 수신
-
-```
+```text
 POST /payments/webhook/portone
 ```
 
-Portone이 서버로 직접 호출. 클라이언트 미사용. 인증 불필요.
+이 endpoint는 JWT를 사용하지 않지만 인증이 없는 endpoint가 아니다. 서버는 raw body와 다음 PortOne webhook header를 검증한다.
 
-**Request Body** (Portone V2 전송)
+```text
+webhook-id
+webhook-timestamp
+webhook-signature
+```
+
+현재 `PortoneClient.verifyWebhookSignature()` 계약:
+
+- `PORTONE_WEBHOOK_SECRET` 필요
+- raw body 필요
+- header 세 개 모두 필요
+- timestamp 허용 오차: ±5분
+- HMAC SHA-256 signature를 timing-safe 비교
+- 검증 실패 시 `401` 계열 실패
+- invalid signature는 audit에 기록
+
+과거 문서의 “웹훅 인증 미적용, IP allowlist 권장만” 설명은 현행 계약이 아니다.
+
+## 5. Webhook 이벤트 처리
+
+`PaymentsService.handleWebhook()`의 현재 흐름:
+
+1. `paymentId`가 `order-charge-` prefix이면 재배송비 결제 경로로 분기한다.
+2. 본 결제라면 `orders/{paymentId}`를 조회한다.
+3. `Transaction.Ready`는 상태 변경 없이 무시한다.
+4. `Transaction.Paid`가 아닌 이벤트는 아직 처리 가능한 `PENDING` 주문을 `payment_failed`로 취소·release하는 경로로 보낸다.
+5. `Transaction.Paid`이면 webhook body의 금액을 신뢰하지 않고 `GET /payments/{paymentId}`로 PortOne 원격 결제를 다시 조회한다.
+6. 원격 결제 정보를 `PaymentFinalizationService.finalizePaidOrder()`에 전달한다.
+
+중복 webhook은 최종화 service의 상태 검사와 transaction으로 멱등 처리한다. “PENDING 아니면 무조건 skip”보다 실제 구현의 `canFinalize()` 조건을 따른다.
+
+## 6. 결제 성공 최종화
+
+`PaymentFinalizationService.finalizePaidOrder()`의 핵심 계약:
+
+### 금액 검증
+
+```text
+PortOne payment.amount.total === orders.totalAmount
+```
+
+불일치 시:
+
+1. `payment.amount_tampered` audit 기록
+2. PortOne 전액 환불 시도
+3. 주문을 `amount_mismatch` 사유로 `CANCELLED`
+4. 연결된 capacity/reservation 반환
+
+클라이언트가 보낸 금액을 최종 검증값으로 사용하지 않는다.
+
+### 정상 결제
+
+- `saleType === 'group'` → `RECRUITING`
+- 그 외 → `ACCEPTED`
+- `payments/{orderId}`를 `PAID`로 기록
+- 법정 보관용 retention record 생성
+- `ORDER_ACCEPTED` 또는 `GROUP_JOINED` 알림 요청
+
+### 회차 주문(`schemaVersion: 2`)
+
+- 정상 `PENDING` 결제는 기존 `checkoutReservation`을 transaction에서 consume한다.
+- reservation이 없으면 정상 결제 최종화를 완료하지 않는다.
+- 주문/결제/capacity가 한 transaction 경계에서 중복 적용되지 않도록 처리한다.
+
+## 7. 15분 `PENDING` 수렴
+
+`PaymentsService.cleanupPendingOrders()`는 매분 실행하며 15분보다 오래된 `PENDING` 주문을 찾는다.
+
+중요: 현재 동작은 **바로 삭제하거나 무조건 취소하지 않는다.**
+
+각 주문마다 PortOne 원격 결제를 먼저 조회한다.
+
+| 원격 결과 | 처리 |
+|---|---|
+| `PAID` | 정상 finalization 시도 |
+| 명확한 비결제 상태 | `timeout` 취소 |
+| `404 + PAYMENT_NOT_FOUND` | `timeout` 취소 |
+| 인증/네트워크/기타 조회 오류 | 주문 상태를 추측해 취소하지 않고 `PAYMENT_LOOKUP_FAILED` 운영 이슈 기록 |
+
+legacy 비택배 주문은 취소 시 daily cap을 반환하고, `schemaVersion: 2` 회차 주문은 reservation을 `EXPIRED` 처리해 확보량을 반환한다.
+
+## 8. 늦은 결제
+
+회차 주문에서는 timeout 취소 뒤 실제 PortOne 결제가 늦게 `PAID`로 확인될 수 있다.
+
+현재 `canFinalize()`은 다음 주문을 다시 수렴 대상으로 허용한다.
+
+- `PENDING`
+- `CANCELLED`이면서 `cancelReason === 'timeout'`이고 아직 late-payment refund가 확정되지 않은 주문
+
+회차(`schemaVersion: 2`) timeout 취소 주문의 늦은 결제 처리:
+
+1. 같은 회차/상품/배송지 한도를 다시 확보하려 시도한다.
+2. 재확보 성공 → 새 reservation을 consume하며 정상 주문으로 최종화한다.
+3. 재확보 실패 → PortOne 전액 환불 후 `latePaymentRefundedAt`과 `CANCELLED` payment 기록으로 수렴한다.
+
+따라서 “timeout 뒤 webhook은 무조건 무시” 또는 “timeout 주문은 무조건 삭제”는 잘못된 구현 가정이다.
+
+## 9. 환불
+
+외부에 범용 환불 endpoint를 노출하지 않는다. 주문 취소·운영 예외 등 승인된 서버 흐름이 내부 환불 service를 호출한다.
+
+`PaymentRefundService.refundByOrderId()`의 현재 계약:
+
+1. 주문에 연결된 payment를 찾는다.
+2. `PAID`이면서 아직 환불되지 않은 경우에만 refund claim을 획득한다.
+3. claim TTL은 5분이다.
+4. PortOne `/payments/{paymentId}/cancel`을 호출한다.
+5. 성공 시 payment를 `CANCELLED`, `refundAmount/refundedAt/refundReason` 기록으로 갱신한다.
+6. 법정 분쟁·고객지원 보존 record를 생성한다.
+7. 실패 시 claim을 해제하고 `AUTO_REFUND_FAILED` 운영 이슈를 생성한다.
+
+이미 `CANCELLED`, `refundedAt` 존재, 다른 유효 claim이 존재하는 경우 외부 환불을 중복 호출하지 않는다.
+
+실제 사용자 취소·판매자 취소·공동구매 취소의 상태 허용 범위는 orders lifecycle이 소유한다.
+
+## 10. 재배송비 결제
+
+재배송비는 `payments/{orderId}` 본 결제와 섞지 않고 `orderCharges`로 관리한다.
+
+PortOne payment ID 형식:
+
+```text
+order-charge-{chargeId}
+```
+
+현재 지원 type:
+
+```text
+REDELIVERY_FEE
+```
+
+`OrderChargePaymentService`는 webhook에서 다음을 검증한다.
+
+- charge 존재
+- 상태가 `PENDING`
+- type이 `REDELIVERY_FEE`
+- 저장된 `portonePaymentId`와 webhook payment ID 일치
+- PortOne 원격 상태 `PAID`
+- 원격 금액과 charge 금액 일치
+- 연결 주문의 `redeliveryChargeId`, `storeId`, `userId` 일치
+
+본 주문 취소 시 paid 재배송비도 별도 refund 경로로 환불할 수 있다. 본 결제와 재배송비 결제를 같은 payment record라고 가정하지 않는다.
+
+## 11. 현재 조회 API
+
+### Webhook
+
+```text
+POST /payments/webhook/portone
+```
+
+PortOne provider용. JWT 없음, provider signature 검증 필수.
+
+### Payment ID 조회
+
+```text
+GET /payments/:paymentId
+```
+
+`JwtAuthGuard` 적용.
+
+현재 허용:
+
+- payment 소유 사용자
+- admin
+- 같은 store 소속 seller
+
+### Store 주문 결제 조회
+
+```text
+GET /stores/:storeId/orders/:orderId/payment
+```
+
+`JwtAuthGuard` 적용. 현재 service는 admin 또는 해당 store 소속 사용자 역할/소유권을 확인한다.
+
+범용 `POST /refund` 같은 public endpoint는 없다.
+
+## 12. PortOne client 오류 처리
+
+`PortoneClient`는 provider 실패를 `PortoneError(status, type, message)`로 보존한다.
+
+중요한 구분:
+
+- `404 + PAYMENT_NOT_FOUND`: PENDING reconciliation에서 “결제가 존재하지 않음”으로 취급 가능
+- `401`: 인증 실패이며 결제 없음으로 취급하면 안 됨
+- 네트워크/파싱/기타 provider 오류: 결제 상태를 추측하지 않고 확인 필요로 남김
+
+오류 메시지는 진단용으로 정제하며 비밀 인증 header를 로그에 출력하지 않는다.
+
+## 13. 공개 공통 타입
+
+현재 `packages/shared/src/payment.types.ts`:
+
 ```ts
-{
-  type: string   // 'Transaction.Paid' | 'Transaction.Failed' | 'Transaction.Cancelled' 등
-  data: {
-    paymentId: string  // orderId와 동일
-    storeId: string    // Portone 스토어 ID
-  }
-}
-```
-
-**처리 흐름** — 섹션 4-1, 4-2 참조
-
----
-
-### 결제 내역 조회
-
-```
-GET /payments/:paymentId          (JwtAuthGuard — 본인 또는 해당 판매자)
-GET /stores/:storeId/orders/:orderId/payment  (JwtAuthGuard)
-```
-
-**Response** `200` — `payments` 전체 필드 (Timestamp → ISO8601 직렬화)
-
----
-
-### 환불 처리 (내부 서비스 메서드)
-
-> `PaymentsService.processRefundByOrderId(orderId, reason)` — NestJS 서비스 레이어 내부 호출.
-> 외부 엔드포인트로 직접 노출하지 않음.
-> OrdersService.cancelOrder(), NotificationsService.cancelGroupBuyLack()에서 호출.
-
----
-
-## 7. 보안 체크리스트
-
-| 항목 | 처리 방식 |
-|------|----------|
-| 금액 위변조 | 서버에서 Portone V2 API로 재조회 후 `orders.totalAmount`와 비교 |
-| Webhook 위조 | Portone IP 화이트리스트 설정 권장 (MVP는 미적용, 금액 검증으로 대체) |
-| 중복 webhook | `orders.status !== 'PENDING'` 멱등성 처리 (이미 처리된 경우 스킵) |
-| 환불 권한 | 소비자: 본인 RECRUITING 주문만 / 판매자: 본인 storeId 주문만 |
-| 결제 금액 | `totalAmount`는 서버에서 계산, 클라이언트 전달값 사용 안 함 |
-
----
-
-## 8. packages/shared 공통 타입
-
-> **Timestamp 직렬화 규칙**: Firestore `Timestamp` 필드는 shared 타입에서 `string (ISO8601)`으로 표현.
-
-```ts
-// packages/shared/src/payment.types.ts
-
 export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED'
 export type PayMethod = 'kakaopay' | 'naverpay' | 'card'
 
 export interface Payment {
-  id: string                    // orderId와 동일 (Portone V2 paymentId)
+  id: string
   orderId: string
   userId: string
   storeId: string
   amount: number
   payMethod: PayMethod | null
   status: PaymentStatus
-  portonePaymentId: string      // Portone V2 paymentId (구 imp_uid)
-  portoneTransactionId: string  // Portone V2 transactionId (구 merchant_uid)
+  portonePaymentId: string
+  portoneTransactionId: string
   refundAmount: number | null
-  refundedAt: string | null     // ISO8601
+  refundedAt: string | null
   refundReason: string | null
-  createdAt: string             // ISO8601
-  updatedAt: string             // ISO8601
-}
-
-// POST /stores/:storeId/orders 응답 내 포함
-export interface PortonePaymentParams {
-  name: string      // 상품명
-  amount: number    // 결제금액 (KRW)
-  buyerName: string
+  createdAt: string
+  updatedAt: string
 }
 ```
 
----
+주의: provider의 `method.type` 문자열과 shared `PayMethod`의 좁은 union 사이 정규화 범위를 변경할 때는 실제 service와 consumer 사용처를 함께 검토한다. 문서만 보고 provider 문자열을 가정하지 않는다.
+
+## 14. 운영 이슈 연계
+
+결제 계열 주요 운영 이슈:
+
+- `PAYMENT_LOOKUP_FAILED`: timeout reconciliation 중 원격 결제 상태를 신뢰성 있게 조회하지 못함
+- `AUTO_REFUND_FAILED`: 자동 환불 provider 호출 실패
+
+이 이슈가 열려 있으면 상태를 추측하거나 PortOne 콘솔에서 반복 환불하지 않는다. 운영 조치는 `docs/specs/ops/mvp-sales-round-runbook.md`를 따른다.
+
+## 15. 검증 원칙
+
+결제 계약 변경 시 최소 확인:
+
+- `apps/api/src/payments/payments.controller.ts`
+- `apps/api/src/payments/payments.service.ts`
+- `apps/api/src/payments/payment-finalization.service.ts`
+- `apps/api/src/payments/payment-refund.service.ts`
+- `apps/api/src/payments/order-charge-payment.service.ts`
+- `apps/api/src/payments/portone.client.ts`
+- 관련 unit/e2e tests
+- `packages/shared/src/payment.types.ts`
+- 회차 결제면 `docs/specs/mvp-sales-round-direct-delivery.md`
+- 운영 예외면 runbook
+
+실제 결제·환불은 테스트 문서에 적힌 예시만으로 실행하지 않는다. 대상 환경과 승인 범위를 확인한다.
 
 ## 변경 이력
 
 | 날짜 | 내용 |
-|------|------|
-| 2026-03-26 | 초안 작성 |
-| 2026-03-27 | Portone V1 → V2 전면 업데이트 (SDK, webhook 포맷, 필드명, 플로우 다이어그램) |
+|---|---|
+| 2026-08-23 | webhook 서명, PortOne 재조회, PENDING reconciliation, 늦은 결제 재확보/환불, refund claim, 재배송비 결제에 맞춰 전면 정합화 |
+| 2026-03-27 | PortOne V2 초기 전환 |
+| 2026-03-26 | 초기 payments 설계 초안 |

@@ -1,469 +1,319 @@
-# Orders Domain Spec
+<!-- Language: ko -->
 
-> **작성일**: 2026-03-26
-> **상태**: Draft (4단계 개발 선행 문서)
-> **연관 문서**: `CRITICAL_LOGIC.md`, `docs/design/소비자-1단계-요구사항.md`, `docs/design/소비자-2단계-IA.md`
+# Orders API / Domain Spec
 
----
+> **최종 정합화**: 2026-08-23
+> **상태**: Current
+> **공통 타입 정본**: `packages/shared/src/order.types.ts`
+> **FSM 정본**: `apps/api/src/orders/orders.helpers.ts` 및 lifecycle service
+> **회차 직배송 추가 계약**: `docs/specs/mvp-sales-round-direct-delivery.md`
 
-## 1. 도메인 개요
+## 1. 소유권
 
-`orders` 도메인은 소비자·판매자·드라이버 세 앱이 공유하는 **핵심 도메인**이다.
-모든 비즈니스 로직(상태 전환·결제 검증·공동구매 자동 환불·Daily Cap 동시성 처리)은
-**NestJS API 서버 단독으로 처리**하며, 클라이언트는 Firestore 실시간 리스너로 결과를 수신한다.
+`orders`는 consumer·seller·driver가 공유하는 핵심 도메인이다.
 
----
+- 주문 생성·검증·상태 전이·취소·재배송비·배송 보류·배송 사진 완료 같은 쓰기는 NestJS API가 소유한다.
+- frontend는 현재 API와 허용된 Firebase read 경로를 사용한다.
+- 공개 상태·주문 DTO의 공통 정본은 `packages/shared/src/order.types.ts`다.
+- legacy 일반 판매·공동구매와 `schemaVersion: 2` 회차 주문이 같은 도메인에 공존하므로 한 흐름의 규칙을 다른 흐름에 임의 적용하지 않는다.
 
-## 2. 주문 상태 FSM
+## 2. 주문 상태
 
-### 상태 코드 전체
-
-| 상태 코드 | 소비자 노출 명칭 | 적용 판매 방식 | 알림톡 |
-|-----------|----------------|--------------|--------|
-| `PENDING` | (미노출) | 공통 (내부) | - |
-| `RECRUITING` | 모집 중 | 공동구매 | ✅ |
-| `CONFIRMED` | 주문 확정 | 공동구매 | ✅ |
-| `ACCEPTED` | 결제 완료 | 일반 판매 | ✅ |
-| `PREPARING` | 상품 준비 중 | 공통 | ✅ |
-| `DELIVERING` | 배송 중 | 공통 | ✅ |
-| `HUB_ARRIVED` | 거점 도착 | 거점 픽업 전용 | ✅ |
-| `PICKED_UP` | 픽업 완료 | 거점 픽업 전용 | - |
-| `DELIVERED` | 배송 완료 | 직배송·택배 | ✅ |
-| `CANCELLED` | 주문 취소 | 공통 | ✅ (사유 포함) |
-| `REVIEWED` | 구매 확정 | 공통 | - |
-
-### 상태 전환 흐름
-
-```
-[일반 판매]
-  PENDING → ACCEPTED → PREPARING → DELIVERING → DELIVERED → REVIEWED
-                                             ↘ HUB_ARRIVED → PICKED_UP → REVIEWED
-
-[공동구매]
-  PENDING → RECRUITING → CONFIRMED → PREPARING → DELIVERING → DELIVERED → REVIEWED
-                       ↘ CANCELLED (마감 기한 내 minQuantity 미달 → 자동 환불)
-
-[공통 취소]
-  RECRUITING → CANCELLED (소비자 개인 취소, RECRUITING 구간 한정)
-  모든 상태 → CANCELLED (판매자 강제 취소, 사유 필수)
-```
-
-### PENDING 처리 규칙
-
-- Portone 결제창이 열리는 순간 `PENDING` 상태 주문 생성 (소비자 미노출)
-- Portone webhook 수신 성공 → `ACCEPTED` 또는 `RECRUITING` 으로 전환
-- **15분 내 webhook 미수신** → NestJS 스케줄러가 주문 자동 삭제 + 슬롯 복구
-
----
-
-## 3. Firestore 컬렉션 스키마
-
-### `orders/{orderId}`
+현재 `OrderStatus`:
 
 ```ts
-{
-  id: string
-  storeId: string              // MVP: 'dear-orchid' 고정
-  userId: string
-  productId: string
-  quantity: number
-  saleType: 'normal' | 'group'
-
-  status: OrderStatus          // 위 FSM 참조
-
-  // 배송 정보
-  deliveryMethod: 'direct' | 'hub' | 'parcel'
-  deliveryFee: number
-  deliveryAddress: {
-    address: string
-    addressDetail: string
-    zipCode: string
-  }
-  isMetropolitan: boolean      // 서울/경기 여부 (주소 판별)
-  hubId: string | null         // hub 배송 선택 시 거점 ID (직배송·택배는 null)
-  pickupCode: string | null    // hub 배송 시에만 생성 (6자리)
-
-  // 금액
-  totalAmount: number          // 상품가 + 배송비
-
-  // 일반 판매 전용
-  requestedDeliveryDate: Timestamp | null
-
-  // 판매자 입력 (PREPARING 전환 시 선택 입력)
-  preparedAt: Timestamp | null  // 드라이버 수거 예정 시간 (null이면 미설정)
-
-  // 드라이버 앱 (DELIVERING 전환 시 자동 기록)
-  driverId: string | null          // 드라이버 userId → Seller 앱 주문 상세에서 이름·연락처 조회
-  deliveryPhotoUrl: string | null  // 거점 하차 인증 사진 (Firebase Storage URL)
-                                   // HUB_ARRIVED 전환 시 저장. 직배송·택배는 null
-
-  // 취소 정보
-  cancelReason: string | null
-
-  // 공동구매 전용 — 법적 동의 기록 (전자상거래법 제17조)
-  groupBuyConsent: {
-    agreed: true               // 미동의 시 결제 진입 불가이므로 항상 true
-    agreedAt: Timestamp
-    userId: string
-  } | null                     // 일반 판매는 null
-
-  createdAt: Timestamp
-  updatedAt: Timestamp
-}
-```
-
-### `dailyCaps/{storeId_date}`
-
-```ts
-{
-  id: string                   // '{storeId}_{YYYY-MM-DD}'
-  storeId: string
-  date: string                 // 'YYYY-MM-DD'
-  totalCap: number             // 날짜별 최대 수용량 (직배송 + 거점 픽업 합산)
-  usedSlots: number            // 실시간 갱신 (Firestore 트랜잭션)
-}
-```
-
-> `groupProductConfig` 스키마는 `products.md` 에서 정의
-
----
-
-## 4. API 엔드포인트
-
-> **기본 경로**: `/stores/:storeId/orders`
-> MVP에서는 `storeId = 'dear-orchid'` 고정. 다중 판매자 확장 시 변경 없음.
-
-### 주문 생성
-
-```
-POST /stores/:storeId/orders
-```
-
-**Request Body**
-```ts
-{
-  productId: string
-  quantity: number
-  saleType: 'normal' | 'group'
-  deliveryMethod: 'direct' | 'hub' | 'parcel'
-  deliveryAddress: { address, addressDetail, zipCode }
-  requestedDeliveryDate?: string   // 일반 판매 전용 'YYYY-MM-DD'
-  groupBuyConsent?: {              // 공동구매 전용
-    agreed: true
-    agreedAt: string               // ISO8601
-  }
-}
-```
-
-**처리 흐름**
-1. Daily Cap 잔여 슬롯 검증 (Firestore 트랜잭션)
-2. 공동구매: `groupBuyConsent` 필드 존재 여부 검증
-3. `PENDING` 상태 주문 생성 + `usedSlots` +1
-4. Portone 결제 요청 파라미터 반환
-
-**Response** `201`
-```ts
-{ orderId: string, portonePaymentParams: object }
-```
-
----
-
-### Portone Webhook 수신
-
-```
-POST /payments/webhook/portone
-```
-
-**처리 흐름**
-1. Portone 결제 금액 검증 (위변조 방지)
-2. 검증 성공 → `PENDING` 제거 후 상태 전환
-   - `saleType: 'normal'` → `ACCEPTED`
-   - `saleType: 'group'` → `RECRUITING`
-3. 카카오 알림톡 발송 (알리고/솔라피)
-4. 검증 실패 → 주문 `CANCELLED` + 슬롯 복구 + 환불 처리
-
----
-
-### 주문 상태 조회
-
-```
-GET /stores/:storeId/orders/:orderId
-```
-
-> 소비자 앱은 **Firestore 실시간 리스너**로 상태를 수신.
-> 이 엔드포인트는 초기 로드 및 서버사이드 렌더링(SSR) 용도로만 사용.
-
-**Response** `200` — 주문 전체 필드
-
----
-
-### 주문 목록 조회
-
-```
-GET /stores/:storeId/orders?userId=:userId&status=:status&saleType=:saleType
-```
-
-| 파라미터 | 필수 | 설명 |
-|----------|------|------|
-| `userId` | consumer·seller·driver: ✅ / **admin: 선택** | 본인 주문만 조회. admin은 생략 시 storeId 전체 주문 조회 |
-| `status` | - | 특정 상태 필터 |
-| `saleType` | - | `normal` \| `group` |
-| `driverId` | - | 드라이버 앱 전용 — 자신에게 배정된 주문 필터 (Phase 2, 현재 단일 드라이버이므로 미사용) |
-
-> **admin 전용**: `userId` 생략 가능. NestJS Guard에서 `role === 'admin'` 시 userId 검증 우회.
-
----
-
-### 주문 취소
-
-```
-PATCH /stores/:storeId/orders/:orderId/cancel
-```
-
-**Request Body**
-```ts
-{ reason?: string }
-```
-
-**처리 규칙**
-- `RECRUITING` 상태: 취소 허용 → Portone 환불 API → `CANCELLED` + `currentQuantity -= order.quantity`
-- `CONFIRMED` 이후: **소비자 직접 취소 거부** `403` (계약 성립 시점, 판매자 생산 시작)
-- 환불 소요: 카드 3~5 영업일, 간편결제 1~3일
-
----
-
-### 상태 전환 (판매자·드라이버 전용)
-
-```
-PATCH /stores/:storeId/orders/:orderId/status
-```
-
-**Request Body**
-```ts
-{
-  status: OrderStatus
-  reason?: string
-  photoUrl?: string   // 거점 하차 인증 사진 URL (HUB_ARRIVED 전환 시에만 사용)
-}
-```
-
-**허용 전환 목록** (NestJS Guard에서 역할별 제한)
-
-| 호출 주체 | 허용 전환 |
-|-----------|----------|
-| 판매자 | `ACCEPTED → PREPARING`, `CONFIRMED → PREPARING`, `ACCEPTED → CANCELLED`, `CONFIRMED → CANCELLED`, `PREPARING → CANCELLED` |
-| 드라이버 | `PREPARING → DELIVERING`, `DELIVERING → HUB_ARRIVED`, `DELIVERING → DELIVERED` |
-| 시스템 (스케줄러) | `RECRUITING → CONFIRMED`, `RECRUITING → CANCELLED` (마감 기한) |
-| 소비자 | `DELIVERED → REVIEWED`, `PICKED_UP → REVIEWED` |
-
-> **설계 결정 (2026-03-28)**: 판매자 강제 취소는 `DELIVERING` 이전(`ACCEPTED` · `CONFIRMED` · `PREPARING`)까지만 허용.
-> 발송(`DELIVERING`) 이후에는 소비자가 반품 신청 → 판매자 수락 루트로만 처리.
-> 발송 후 판매자 일방 취소는 표준 e-커머스에 없는 개념이며, 드라이버가 이미 상품을 픽업한 상태에서 취소 시 상품 회수 처리가 모호해지는 운영 문제가 있음. (`CRITICAL_LOGIC.md` archive §판매자 취소 권한 참조)
-
----
-
-### 구매 확정 (REVIEWED 전환)
-
-```
-PATCH /stores/:storeId/orders/:orderId/review
-```
-
-- `DELIVERED` 또는 `PICKED_UP` 상태에서만 허용
-- 리뷰 작성 또는 구매 확정 버튼 클릭 시 호출
-
----
-
-### 거점 픽업 확인 (HUB_ARRIVED → PICKED_UP)
-
-```
-PATCH /stores/:storeId/orders/:orderId/pickup-confirm
-Body: { pickupCode: string }
-```
-
-- `hub` 배송 방식 주문에서 소비자가 거점에서 수령 시 호출
-- 주문 생성 시 서버가 6자리 `pickupCode` 발급 → 거점 담당자가 확인
-- `pickupCode` 불일치 시 `400 Bad Request`
-- `HUB_ARRIVED` 상태에서만 허용
-
----
-
-## 5. 공동구매 자동 처리 로직
-
-### CONFIRMED 자동 전환
-
-```
-트리거: NestJS 스케줄러 (1분 주기 폴링 or Firestore onWrite 트리거)
-
-조건: groupProductConfig.currentQuantity >= groupProductConfig.targetQuantity
-
-처리:
-  1. 해당 groupProductId의 모든 RECRUITING 주문 → CONFIRMED 일괄 전환
-  2. 전체 참여자에게 알림톡 발송: "목표 수량이 모였습니다! 주문이 확정되었습니다."
-```
-
-### 마감 기한 미달 자동 취소
-
-```
-트리거: NestJS 스케줄러 (groupProductConfig.recruitDeadline 경과 시)
-
-조건: currentQuantity < minQuantity
-
-처리:
-  1. 모든 RECRUITING 주문 → CANCELLED (cancelReason: '목표 수량 미달성으로 취소')
-  2. Portone 환불 API 일괄 호출
-  3. 전체 참여자에게 알림톡 발송: "[목표 수량 미달성으로 취소] 결제 금액은 3~5일 내 환불됩니다."
-  4. usedSlots 복구
-```
-
----
-
-## 6. Daily Cap 동시성 처리
-
-```
-문제: 두 소비자가 동시에 마지막 슬롯을 결제하는 레이스 컨디션
-
-해결: Firestore 트랜잭션 (낙관적 잠금)
-
-흐름:
-  1. 트랜잭션 시작
-  2. dailyCaps 문서 읽기
-  3. usedSlots < totalCap 확인
-  4. usedSlots + quantity 원자적 업데이트
-  5. 트랜잭션 커밋 실패(충돌) → 재시도 최대 3회 → 실패 시 409 응답
-```
-
----
-
-## 7. 알림톡 발송 시점
-
-| 트리거 | 수신자 | 내용 요약 |
-|--------|--------|----------|
-| `PENDING → ACCEPTED` | 본인 | 일반 판매 결제 완료 |
-| `PENDING → RECRUITING` | 본인 | 공동구매 참여 완료, 현재 N/M개 |
-| `RECRUITING → CONFIRMED` | **전체 참여자** | 목표 달성, 주문 확정 |
-| `RECRUITING → CANCELLED` (마감 미달) | **전체 참여자** | 미달 취소 + 환불 일정 안내 |
-| `RECRUITING → CANCELLED` (개인 취소) | 취소자 본인만 | 취소 및 환불 완료 |
-| 마감 2시간 전 | 전체 참여자 | 마감 임박 + 공유 유도 |
-| `CONFIRMED → PREPARING` | 전체 참여자 | 판매자 준비 시작 |
-| `ACCEPTED → PREPARING` | 본인 | 판매자 준비 시작 |
-| `PREPARING → DELIVERING` (일반 판매) | 본인 | 배송 시작 |
-| `PREPARING → DELIVERING` (공동구매) | **전체 참여자** | 배송 시작 |
-| `DELIVERING → HUB_ARRIVED` | 본인 | 거점 도착, 픽업 코드 안내 |
-| `DELIVERING → DELIVERED` (일반 판매) | 본인 | 배송 완료 |
-| `DELIVERING → DELIVERED` (공동구매) | **전체 참여자** | 배송 완료 |
-| `* → CANCELLED` (판매자 강제) | 본인 | 취소 사유 + 환불 안내 |
-
----
-
-## 8. 취소 사유 워딩 표준
-
-```
-"[목표 수량 미달성으로 취소]"   — 공동구매 마감 미달
-"[산지 재고 소진으로 취소]"     — 물량 확보 실패
-"[배송 불가 지역으로 취소]"     — 배송 범위 외 주소
-"[결제 오류로 취소]"            — 결제 처리 실패
-```
-
-> 취소 사유는 주문 현황 보드 UI와 알림톡 모두에 동일하게 노출.
-
----
-
-## 9. packages/shared 공통 타입
-
-> **Timestamp 직렬화 규칙**: Firestore 스키마의 `Timestamp` 필드는 shared 타입에서 `string (ISO8601)`으로 표현합니다. 클라이언트·서버 경계에서 JSON 직렬화가 필요하기 때문입니다.
-
-```ts
-// packages/shared/src/order.types.ts
-
-export type OrderStatus =
+type OrderStatus =
   | 'PENDING'
   | 'RECRUITING'
   | 'CONFIRMED'
   | 'ACCEPTED'
   | 'PREPARING'
   | 'DELIVERING'
+  | 'DELIVERY_HELD'
   | 'HUB_ARRIVED'
   | 'PICKED_UP'
   | 'DELIVERED'
   | 'CANCELLED'
   | 'REVIEWED'
+```
 
-export type DeliveryMethod = 'direct' | 'hub' | 'parcel'
-export type SaleType = 'normal' | 'group'
+과거 spec에 없던 `DELIVERY_HELD`는 현재 공통 상태다. 회차 직배송의 배송 실패·재배송 흐름에서 사용한다.
 
-export interface DeliveryAddress {
-  address: string
-  addressDetail: string
-  zipCode: string
+## 3. 현재 역할별 FSM
+
+`apps/api/src/orders/orders.helpers.ts` 기준 일반 상태 전이 허용 목록:
+
+### Seller
+
+- `ACCEPTED → PREPARING`
+- `CONFIRMED → PREPARING`
+- `PREPARING → DELIVERED` — parcel 등 실제 lifecycle guard를 추가로 통과해야 함
+- `PREPARING → DELIVERY_HELD`
+- `DELIVERING → DELIVERY_HELD`
+- `DELIVERY_HELD → PREPARING`
+- `DELIVERY_HELD → CANCELLED`
+- seller 취소 허용 상태: `ACCEPTED`, `CONFIRMED`, `PREPARING`
+
+### Driver
+
+- `PREPARING → DELIVERING`
+- `PREPARING → DELIVERY_HELD`
+- `DELIVERING → HUB_ARRIVED`
+- `DELIVERING → DELIVERED`
+- `DELIVERING → DELIVERY_HELD`
+- `DELIVERY_HELD → DELIVERING`
+
+### Consumer
+
+- `DELIVERED → REVIEWED`
+- `PICKED_UP → REVIEWED`
+
+### Admin
+
+현재 helper는 seller와 driver 전환을 합친 범위 및 seller 취소 가능 상태를 허용한다. 단, endpoint 소유권·delivery method·회차 상태 등 service/lifecycle의 추가 guard는 그대로 적용된다.
+
+FSM 표만 보고 상태를 직접 Firestore에서 수정하지 않는다.
+
+## 4. 배송 보류와 재배송
+
+`DELIVERY_HELD` snapshot은 shared 타입에서 다음 핵심 필드를 가진다.
+
+```ts
+{
+  heldAt: string
+  reasonCode:
+    | 'WEATHER'
+    | 'ACCESS_UNAVAILABLE'
+    | 'ADDRESS_ISSUE'
+    | 'CUSTOMER_UNREACHABLE'
+    | 'OTHER'
+  reasonMessage: string
+  customerResponsible: boolean
+  redeliveryFee: number | null
+  nextContactAt: string | null
+  nextDeliveryAt: string | null
+  resolvedAt: string | null
 }
+```
 
-export interface GroupBuyConsent {
-  agreed: true
-  agreedAt: string   // ISO8601
-  userId: string
-}
+`HoldDeliveryDto`는 reason code, reason message, 책임 여부, 선택적 재배송비·다음 연락/배송 시각을 검증한다. 실제 책임 판정과 허용 전이는 lifecycle service를 따른다.
 
-export interface Order {
+재배송 알림 연결:
+
+- `PREPARING|DELIVERING → DELIVERY_HELD` → `ORDER_DELIVERY_HELD`
+- `DELIVERY_HELD → PREPARING` → `ORDER_REDELIVERY_PAYMENT_REQUESTED`
+- `DELIVERY_HELD → DELIVERING` → `ORDER_REDELIVERY_SCHEDULED`
+
+알림 본문과 ALIGO provider 계약은 `docs/specs/api/notifications.md`가 소유한다.
+
+## 5. 공통 주문 데이터
+
+현재 `Order` 공통 타입의 주요 필드:
+
+```ts
+{
   id: string
+  orderNumber?: string
+  schemaVersion?: 1 | 2
   storeId: string
   userId: string
   productId: string
   quantity: number
-  saleType: SaleType
+  saleType: 'normal' | 'group'
   status: OrderStatus
-  deliveryMethod: DeliveryMethod
+  deliveryMethod: 'direct' | 'hub' | 'parcel'
   deliveryFee: number
   deliveryAddress: DeliveryAddress
   isMetropolitan: boolean
-  hubId: string | null               // hub 배송 선택 시 거점 ID
+  hubId: string | null
   pickupCode: string | null
   totalAmount: number
-  requestedDeliveryDate: string | null   // ISO8601
-  preparedAt: string | null              // ISO8601 — 드라이버 수거 예정 시간 (판매자 설정)
-  driverId: string | null                // DELIVERING 전환 시 자동 기록
-  deliveryPhotoUrl: string | null        // 거점 하차 인증 사진 URL (HUB_ARRIVED 전환 시)
+  requestedDeliveryDate: string | null
+  preparedAt: string | null
   cancelReason: string | null
   groupBuyConsent: GroupBuyConsent | null
-  createdAt: string   // ISO8601
-  updatedAt: string   // ISO8601
-}
 
-export interface DailyCap {
-  id: string   // '{storeId}_{YYYY-MM-DD}'
-  storeId: string
-  date: string   // 'YYYY-MM-DD'
-  totalCap: number
-  usedSlots: number
-}
+  roundId?: string | null
+  roundName?: string | null
+  orderItems?: OrderItemSnapshot[]
+  acquisition?: OrderAcquisitionSnapshot | null
+  deliveryHold?: DeliveryHoldSnapshot | null
+  deliveryPhone?: string | null
+  deliveryPhotoIds?: string[]
 
-export interface CreateOrderRequest {
+  createdAt: string
+  updatedAt: string
+
+  productName?: string
+  buyerName?: string
+  address?: string
+  buyerPhone?: string | null
+  sellerPhone?: string | null
+  hubName?: string | null
+  hubAddress?: string | null
+}
+```
+
+이 문서에 Firestore 내부 필드를 별도 복제하지 않는다. 새 공개 필드를 추가하면 shared 타입을 먼저 확인한다.
+
+## 6. 주문 생성 입력
+
+현재 `CreateOrderDto`는 legacy와 회차 주문을 함께 수용한다.
+
+주요 필드:
+
+```ts
+{
+  clientOrderRequestId?: string
   productId: string
   quantity: number
-  saleType: SaleType
-  deliveryMethod: DeliveryMethod
-  hubId?: string                 // hub 배송 시 필수 (서비스 레이어 검증)
-  deliveryAddress: DeliveryAddress
-  requestedDeliveryDate?: string   // 일반 판매 전용 'YYYY-MM-DD'
+  saleType: 'normal' | 'group'
+  deliveryMethod: 'direct' | 'hub' | 'parcel'
+  hubId?: string
+  deliveryAddress: {
+    address: string
+    addressDetail: string
+    zipCode: string
+  }
+  deliveryPhone: string
+  requestedDeliveryDate?: string
   groupBuyConsent?: {
-    agreed: true
-    agreedAt: string   // ISO8601
+    agreed: boolean
+    agreedAt: string
+  }
+  roundId?: string
+  roundItems?: Array<{
+    roundItemId: string
+    quantity: number
+  }>
+  marketingConsent?: {
+    agreed: boolean
+    channels: Array<'alimtalk' | 'sms'>
+    copyVersion: string
+    agreedAt?: string
+  }
+  acquisition?: {
+    source: 'carrot' | 'direct' | 'unknown'
+    campaign?: string | null
+    content?: string | null
+    landingUrl?: string | null
+    capturedAt: string
   }
 }
 ```
 
-> 세 앱과 NestJS 모두 이 파일을 import. 타입 불일치 원천 차단.
+DTO 형식 통과가 실제 주문 가능성을 의미하지 않는다. 상품·회차·배송지역·한도·소유권·판매모드·가격·멱등성 등 service 검증을 추가로 통과해야 한다.
 
----
+## 7. 현재 API endpoint
+
+모든 endpoint는 현재 `JwtAuthGuard` 아래에서 동작하며 세부 권한은 service에서 추가 검증한다.
+
+### Consumer 자기 주문
+
+```text
+GET /orders
+GET /orders/:orderId
+```
+
+현재 인증 사용자의 주문만 조회하는 진입점이다.
+
+### Store 주문
+
+```text
+POST  /stores/:storeId/orders/validate-cart
+POST  /stores/:storeId/orders
+GET   /stores/:storeId/orders
+GET   /stores/:storeId/orders/:orderId
+PATCH /stores/:storeId/orders/:orderId/status
+PATCH /stores/:storeId/orders/:orderId/cancel
+PATCH /stores/:storeId/orders/:orderId/delivery-hold
+POST  /stores/:storeId/orders/:orderId/redelivery-fee
+PATCH /stores/:storeId/orders/:orderId/delivery-photo
+PATCH /stores/:storeId/orders/:orderId/review
+PATCH /stores/:storeId/orders/:orderId/pickup-confirm
+PATCH /stores/:storeId/orders/:orderId/hub-confirm
+```
+
+`GET /stores/:storeId/orders`의 현재 controller query는 `userId?`, `status?`, `saleType?`다. 과거 문서의 `driverId` query를 현재 공개 controller 계약으로 사용하지 않는다.
+
+## 8. 배송 사진
+
+회차 직배송의 현재 정본 사진 경로는 단순 `photoUrl` 첨부가 아니라 서버가 파일을 수신·보관하고 완료 처리하는 전용 API다.
+
+```text
+POST /stores/:storeId/orders/:orderId/delivery-photos
+GET  /stores/:storeId/orders/:orderId/delivery-photos/:photoId/url
+```
+
+업로드 계약:
+
+- multipart field: `photo`
+- `idempotencyKey` 필요
+- 파일 1개
+- 최대 5 MiB
+- 세부 content type·권한·상태 전이는 `DeliveryPhotosService`와 회차 직배송 spec을 따른다.
+
+`PATCH .../delivery-photo`의 `photoUrl` 경로가 controller에 남아 있다는 이유로 회차 직배송에서 공개 Firebase URL 업로드를 정본으로 사용하지 않는다.
+
+## 9. 알림 연결
+
+현재 FSM helper의 주요 알림 매핑:
+
+| 전이 | 템플릿 |
+|---|---|
+| `ACCEPTED → PREPARING` | `ORDER_PREPARING` |
+| `CONFIRMED → PREPARING` | `GROUP_PREPARING` |
+| `PREPARING → DELIVERING` | `ORDER_DELIVERING` |
+| `PREPARING → DELIVERED` | `ORDER_DELIVERED` |
+| `PREPARING → DELIVERY_HELD` | `ORDER_DELIVERY_HELD` |
+| `DELIVERING → HUB_ARRIVED` | `ORDER_HUB_ARRIVED` |
+| `DELIVERING → DELIVERED` | `ORDER_DELIVERED` |
+| `DELIVERING → DELIVERY_HELD` | `ORDER_DELIVERY_HELD` |
+| `DELIVERY_HELD → PREPARING` | `ORDER_REDELIVERY_PAYMENT_REQUESTED` |
+| `DELIVERY_HELD → DELIVERING` | `ORDER_REDELIVERY_SCHEDULED` |
+
+주문 생성/결제 확정/취소 시 발생하는 추가 알림은 해당 service와 notifications spec을 따른다.
+
+## 10. Legacy 공동구매
+
+legacy 공동구매에는 `RECRUITING`, `CONFIRMED`, `GROUP_*` 알림, `groupProductConfig` 기반 자동 확정·미달 환불 흐름이 남아 있다.
+
+이 흐름은 회차 직배송과 별개다.
+
+- 회차 출시를 위해 legacy 공동구매 상태를 제거하지 않는다.
+- `targetQuantity`, `minQuantity`, deadline 동작의 현재 정본은 실제 product/group service를 확인한다.
+- 과거 설계의 “스케줄러 또는 Firestore trigger” 같은 미확정 표현을 현행 계약으로 사용하지 않는다.
+
+## 11. 결제와 `PENDING`
+
+과거 spec의 “PortOne webhook 미수신 15분이면 주문 자동 삭제” 설명을 모든 주문 유형의 현행 계약으로 사용하지 않는다.
+
+회차 주문에는 예약·결제 최종화·늦은 결제 수렴·한도 반환/재확보가 별도 구현돼 있다. 결제 상태 전환과 timeout 정본은 다음을 함께 확인한다.
+
+- `docs/specs/api/payments.md`
+- `docs/specs/mvp-sales-round-direct-delivery.md`
+- `apps/api/src/payments/**`
+- `apps/api/src/orders/round-order-lifecycle.service.ts`
+
+## 12. 검증 원칙
+
+주문 계약 변경 시 최소 확인:
+
+- `packages/shared/src/order.types.ts`
+- `apps/api/src/orders/dto/*`
+- `apps/api/src/orders/orders.controller.ts`
+- `apps/api/src/orders/orders.helpers.ts`
+- `apps/api/src/orders/*lifecycle*`
+- 관련 unit/spec tests
+- `apps/e2e`의 영향 시나리오
+- 회차 변경이면 `docs/specs/mvp-sales-round-direct-delivery.md`
+
+상태 전이·권한·결제·환불을 문서 예시만 보고 운영 데이터에 직접 적용하지 않는다.
 
 ## 변경 이력
 
 | 날짜 | 내용 |
-|------|------|
-| 2026-03-26 | 초안 작성 — 1·2·3단계 설계 + CRITICAL_LOGIC.md 기반 통합 |
-| 2026-03-28 | `CreateOrderRequest.hubId?: string` 추가 (C-3 작업 반영) |
-| 2026-03-28 | `Order.hubId: string \| null` 추가 (hub 배송 선택 시 거점 ID) |
-| 2026-03-29 | Section 3·9 `hubId` 필드 스펙 반영 (코드와 문서 정합성 수정) |
-| 2026-04-02 | `driverId`, `deliveryPhotoUrl` 필드 추가 (드라이버 IA 2단계 확정 반영) |
-| 2026-04-02 | `PATCH /status` body에 `photoUrl` 파라미터 추가 (거점 하차 인증) |
-| 2026-04-02 | `GET /orders` 쿼리에 `driverId` 파라미터 추가 (Phase 2 예고) |
-| 2026-04-23 | 공동구매 수량 기반 전환 — participants → quantity 용어 통일 전체 반영 |
+|---|---|
+| 2026-08-23 | `DELIVERY_HELD`, 회차 snapshot, 현재 endpoint/FSM, 재배송·배송사진·알림 계약에 맞춰 전면 정합화 |
+| 2026-04-23 | legacy 공동구매 수량 용어 반영 |
+| 2026-03-26 | 초기 orders 설계 초안 |
