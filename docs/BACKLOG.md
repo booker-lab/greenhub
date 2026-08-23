@@ -2,7 +2,7 @@
 
 # Greenhub Backlog
 
-> 기준일: 2026-08-23 KST
+> 기준일: 2026-08-24 KST
 >
 > 현재 미완료·향후 작업만 관리한다. 완료 상세는 Git history, `docs/CRITICAL_LOGIC.md`, `docs/archive/`, 완료 PLAN·REPORT를 사용한다.
 
@@ -41,6 +41,33 @@
 - [ ] 수정이 포함된 SHA를 `main`에 통합한 뒤 actual release SHA 후보에 포함
 
 문서만으로 이 불변식을 완료 처리하지 않는다. 정본: `docs/specs/api/payments.md`.
+
+### P0 — ORDER-MUTATION-AUTHORIZATION-COVERAGE
+
+주문 조회 authorization은 `OrdersQueryService`와 직접 테스트가 일치해 `VERIFIED`다. 반면 `OrdersLifecycleService.assertOrderActionAccess()`의 mutation authorization은 구현돼 있으나 권한 우회 방지 핵심 거부 시나리오를 직접 고정하는 회귀 테스트가 충분하지 않다.
+
+현재 구현·검증:
+
+- [x] seller mutation은 해당 store `ownerId`와 requester 일치 요구
+- [x] driver mutation은 배정된 `driverId` 일치 요구
+- [x] 미배정 `PREPARING → DELIVERING`은 최초 driver claim으로 허용하고 `driverId` 기록
+- [x] consumer는 자신의 주문만 action access 통과
+- [x] consumer가 `DELIVERY_HELD`를 위장 요청하는 직접 거부 테스트
+- [x] 정상 seller/driver 회차 E2E 흐름
+- [x] 조회 권한의 consumer/seller/driver/admin 직접 거부·허용 테스트
+
+남음:
+
+- [ ] 다른 store의 seller가 `PATCH .../status`를 시도하면 403
+- [ ] 다른 store의 seller가 `PATCH .../delivery-hold`를 시도하면 403
+- [ ] `driverId`가 다른 주문을 비담당 driver가 상태 변경하면 403
+- [ ] 미배정 주문은 `PREPARING → DELIVERING` 최초 claim 외 driver mutation 거부
+- [ ] 최초 claim 성공 시 정확한 `driverId` 기록 직접 검증
+- [ ] 거부된 mutation에서 주문 write·알림·환불·정산 side effect 0 확인
+- [ ] 필요한 경우 admin 의도된 허용 범위 직접 검증
+- [ ] 회귀가 포함된 SHA를 `main`에 통합한 뒤 actual release SHA 후보에 포함
+
+권한은 P0 계약이므로 위 핵심 거부 회귀가 추가되기 전 mutation authorization 전체를 `VERIFIED`로 처리하지 않는다. 정본: `docs/specs/api/orders.md`.
 
 ### P0 — DEPLOY-SAFETY-MAIN-PROTECTION
 
@@ -119,6 +146,7 @@ Issue #32 완료 전에도 repo-side Vercel guard는 동작하지만, direct pus
 ### P0 — 출시 후보 검증·운영 준비
 
 - [ ] PAYMENT-FINALIZATION-PAID-GUARD 완료 및 `main` 통합
+- [ ] ORDER-MUTATION-AUTHORIZATION-COVERAGE 완료 및 `main` 통합
 - [ ] Issue #32 branch protection 완료
 - [ ] 법적 페이지 포함 actual release SHA 확정
 - [ ] exact SHA 원격 회차 E2E chromium 26 + mobile 26 = 52건 통과
@@ -222,3 +250,4 @@ Issue #32 완료 전에도 repo-side Vercel guard는 동작하지만, direct pus
 4. Backlog 체크박스는 production 변경 승인으로 간주하지 않는다.
 5. 현재 출시 우선순위 충돌 시 `docs/memory.md`와 활성 HANDOFF·PLAN을 우선한다.
 6. 모든 repository 변경은 direct `main`이 아니라 branch+PR로 수행한다.
+7. 문서 정합성 판정과 `VERIFIED` 승격은 `docs/DOCUMENT_CONSISTENCY.md`를 따른다.
