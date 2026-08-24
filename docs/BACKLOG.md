@@ -165,7 +165,7 @@ admin refund가 정상 cancellation의 추가 charge·capacity·held counter·se
 
 ### P0 — SETTLEMENT-LIFECYCLE-COVERAGE
 
-settlement 생성·자동 확정·취소 transaction 구현은 존재하지만 core financial lifecycle의 직접 상태·race 회귀가 부족하다.
+settlement 생성·자동 확정·취소 transaction 구현은 존재하지만 core financial lifecycle의 직접 상태·race 회귀가 없다.
 
 현재 직접 근거:
 
@@ -180,7 +180,8 @@ settlement 생성·자동 확정·취소 transaction 구현은 존재하지만 c
 판정:
 
 - core implementation = `IMPLEMENTED`.
-- 간접 통합 실행 가능성은 있으나 핵심 금전 불변식 직접 증거가 부족해 `PARTIALLY VERIFIED`.
+- 실제 service의 간접 통합 실행은 core 상태의 직접 검증으로 세지 않는다.
+- 핵심 금전 불변식 직접 증거가 없으므로 `UNVERIFIED`.
 - P0 `COVERAGE GAP`으로 추적한다.
 
 남음:
