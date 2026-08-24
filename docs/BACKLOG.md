@@ -175,6 +175,87 @@ admin refund가 정상 cancellation의 추가 charge·capacity·held counter·se
 
 정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
+### P0 — SETTLEMENT-LIFECYCLE-COVERAGE
+
+settlement 생성·자동 확정·취소 transaction 구현은 존재하지만 core financial lifecycle의 직접 상태·race 회귀가 없다.
+
+현재 직접 근거:
+
+- [x] `createSettlement()`는 transaction에서 기존 문서를 재확인하고 pending settlement를 생성
+- [x] fee/net/completedStatus snapshot 구현
+- [x] `confirmDueSettlements()`는 due pending을 transaction fresh-read 후 confirmed로 전환
+- [x] `cancelSettlement()`는 pending/confirmed를 cancelled로 전환하고 cancelled 멱등·paid 역전 방지를 구현
+- [x] 회차 E2E fixture는 실제 `SettlementsService`를 주입
+- [x] 현재 `apps/api/src/settlements`에 core lifecycle 전용 `*.spec.ts` 없음
+- [x] 회차 전체 흐름 E2E는 settlement 생성·중복·confirm·cancel·paid 보존을 직접 assertion하지 않음
+
+판정:
+
+- core implementation = `IMPLEMENTED`.
+- 실제 service의 간접 통합 실행은 core 상태의 직접 검증으로 세지 않는다.
+- 핵심 금전 불변식 직접 증거가 없으므로 `UNVERIFIED`.
+- P0 `COVERAGE GAP`으로 추적한다.
+
+남음:
+
+- [ ] `createSettlement()` 1건 생성 + fee/net/status/completedStatus snapshot
+- [ ] `DELIVERED → REVIEWED`/동시 완료 호출에서 중복 생성·settledAt 덮어쓰기 없음
+- [ ] confirm cutoff 이전 pending 유지, due pending만 confirmed
+- [ ] confirm/cancel race에서 cancelled 미덮어쓰기
+- [ ] cancel missing no-op
+- [ ] pending/confirmed → cancelled
+- [ ] cancelled 멱등
+- [ ] paid → cancelled 역전 금지
+- [ ] 실제 회차 E2E에서 DELIVERED settlement 1건 + REVIEWED 중복 없음
+- [ ] 정상 cancellation에서 pending/confirmed settlement 수렴
+- [ ] 회귀 SHA `main` 통합
+
+admin `confirmed → paid` authorization/status 전이는 별도 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`가 소유한다.
+
+정본: `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+
+### P0 — MARKETING-CONSENT-LIFECYCLE-CONSISTENCY
+
+round checkout 선택 마케팅 consent, user preference, 철회, retention evidence가 하나의 authoritative lifecycle로 수렴하지 않는다.
+
+현재 직접 근거:
+
+- [x] round checkout은 기본 해제 선택 마케팅 checkbox 제공
+- [x] 동의 시 order request에 `marketingConsent` 포함
+- [x] round order 생성은 order snapshot + `marketingConsentLogs` `CONSENT` record 저장
+- [x] MY 마케팅 설정은 `users.notificationPreferences`만 읽음
+- [x] checkout consent는 user preference를 동기화하지 않음
+- [x] Auth 신규 user는 `notificationPreferences` pair를 기본 초기화하지 않음
+- [x] MY “즉시 철회”는 user preference만 false로 갱신
+- [x] 철회 시 `MARKETING_CONSENT` withdrawal retention record 생성 경로 없음
+- [x] 정보성 ORDER_* 연락은 마케팅 동의와 별개라는 UI/notification 계약 존재
+- [x] 현재 실제 선택 마케팅 sender는 이번 감사에서 확인되지 않음
+
+판정:
+
+- consent 수집/설정 UI와 저장 구성은 존재한다.
+- 동의→현재 상태→철회→retention evidence가 불일치하므로 P0 `IMPLEMENTATION FINDING`.
+- 실제 마케팅 발송이 미운영이라는 이유로 consent lifecycle의 모순을 정상 계약으로 두지 않는다.
+
+완료 정책 — 둘 중 하나를 명시적으로 선택:
+
+- [ ] **미사용 정책**: MVP에서 실제 마케팅을 하지 않으면 consent 수집/설정 노출을 비활성화·제거하고 불필요한 저장을 중단
+- [ ] **유지 정책**: user-level authoritative SSOT + checkout 동기화 + 철회 evidence + sender gating을 구현
+
+공통 완료 조건:
+
+- [ ] 신규 user의 marketing 상태가 정의되고 MY 설정이 오류 없이 해석
+- [ ] checkout consent와 authoritative user 상태가 정책대로 일치
+- [ ] 채널별 철회가 다른 채널 상태를 보존
+- [ ] 철회 timestamp/policy/channel retention evidence 생성
+- [ ] 중복 철회 멱등
+- [ ] 실제 marketing sender가 존재한다면 opt-out 채널 발송 차단
+- [ ] ORDER_* 주문·결제·배송 정보성 연락은 marketing opt-out 때문에 차단되지 않음
+- [ ] legal current fact와 공개 출시 문구를 최종 정책에 맞춰 정합화
+- [ ] 회귀 SHA `main` 통합
+
+정본: `docs/specs/api/notifications.md`, `docs/specs/legal/README.md`, `docs/specs/mvp-sales-round-direct-delivery.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+
 ### P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
 
 API authorization보다 seller/driver raw Firestore read 경계가 넓다.
@@ -259,8 +340,10 @@ repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보�
 
 - [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책
 - [ ] 재배송 payment-required 상태머신과 결제 전 재개 금지 계약 반영
+- [ ] settlement 생성·확정·취소·지급 실제 정책/검증 결과 반영
 - [ ] PortOne/PG 개인정보 처리
 - [ ] ALIGO 전화번호·메시지 처리
+- [ ] marketing consent 유지/미사용 최종 정책 + 동의·철회·보관 실제 lifecycle 반영
 - [ ] order direct-read 최소화 뒤 seller/driver 접근 설명
 - [ ] 시행일·이전 버전
 - [ ] legal tests
@@ -273,6 +356,8 @@ repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보�
 - [ ] `ORDER-REDELIVERY-PAID-RESUME-GATE`
 - [ ] `ADMIN-FORCE-REFUND-CONSISTENCY`
 - [ ] `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
+- [ ] `SETTLEMENT-LIFECYCLE-COVERAGE`
+- [ ] `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
 - [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
 - [ ] `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
 - [ ] `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
@@ -293,6 +378,19 @@ repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보�
 ---
 
 ## LATER
+
+### LEGACY-GROUP-CANCEL-NOTIFICATION
+
+legacy 목표 미달 공동구매에서 consumer `GROUP_CANCELLED_LACK` 알림이 누락될 수 있다.
+
+현재 `cancelGroupBuyLack()`가 주문을 먼저 `CANCELLED`로 바꾼 뒤 `sendToGroupParticipants()`를 호출하고, sender는 `CANCELLED`를 대상에서 제외한다.
+
+- [ ] 취소 대상 participant snapshot 또는 동등 명시적 recipient 집합 사용
+- [ ] consumer 목표미달 취소 알림 1회 직접 회귀
+- [ ] 판매자 취소 알림 정상 유지
+- [ ] 다른 template의 terminal filtering 의미 유지
+
+정본: `docs/specs/api/notifications.md`.
 
 ### NOTIFICATION-RETRY-POLICY
 - [ ] backoff·오류 분류·rate limit·중복 SMS·관측 지표

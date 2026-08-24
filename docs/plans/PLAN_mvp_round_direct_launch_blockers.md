@@ -38,6 +38,8 @@
 | 0G | 유료 재배송 payment-request/hold-resolution/resume 상태머신 | 미완료 — P0 FINDING, candidate 범위 밖 |
 | 0H | payment webhook real-signature coverage | 미완료 — P0 COVERAGE GAP |
 | 0I | admin privileged mutation authorization + settlement pay coverage | 미완료 — P0 COVERAGE GAP |
+| 0J | settlement 생성·confirm·cancel core lifecycle coverage | 미완료 — P0 COVERAGE GAP |
+| 0K | marketing consent→preference→withdrawal→retention lifecycle | 미완료 — P0 FINDING |
 | 1 | ALIGO 8종 최종 승인 | 검수중 |
 | 2 | 실제 알림톡 | 미실행 |
 | 3 | SMS fallback | 미실행 |
@@ -53,17 +55,20 @@
 
 1. repository 변경은 최신 `main` 기반 branch+PR.
 2. direct `main` 금지.
-3. 0A~0I는 ALIGO 심사와 병렬 가능.
+3. 0A~0K는 ALIGO 심사와 병렬 가능.
 4. P0를 문서/UI 변경만으로 완료 처리하지 않는다.
 5. 금전·권한 불변식은 server boundary + 직접 거부/정상/동시성 회귀가 필요하다.
 6. driver 관리자 승인 계약은 public register/login, Kakao, refresh, Firebase claims까지 하나의 authorization lifecycle로 검증한다.
 7. admin role boundary는 UI redirect만으로 `VERIFIED` 처리하지 않는다.
-8. webhook auth는 mock E2E만으로 `VERIFIED` 처리하지 않고 real verifier의 valid/invalid 양방향 증거가 필요하다.
-9. actual release SHA는 0A~0I + legal 해결 뒤 고정한다.
-10. exact SHA E2E 52+cleanup 전 production 금지.
-11. production은 exact SHA/artifact + 별도 승인.
-12. provider metadata SHA 불일치 시 traffic 전환 금지.
-13. 첫 회차 `SCHEDULED` 전 `salesMode` 전환 금지.
+8. settlement core는 transaction 구현만으로 `VERIFIED` 처리하지 않고 생성·중복·confirm·cancel·paid 역전 방지를 직접 고정한다.
+9. 선택 marketing consent는 checkout checkbox 성공만으로 완료하지 않고 authoritative state → withdrawal → retention evidence → sender gating까지 검증한다.
+10. 주문·결제·배송 정보성 연락은 선택 marketing opt-out과 별개의 계약으로 유지한다.
+11. webhook auth는 mock E2E만으로 `VERIFIED` 처리하지 않고 real verifier의 valid/invalid 양방향 증거가 필요하다.
+12. actual release SHA는 0A~0K + legal 해결 뒤 고정한다.
+13. exact SHA E2E 52+cleanup 전 production 금지.
+14. production은 exact SHA/artifact + 별도 승인.
+15. provider metadata SHA 불일치 시 traffic 전환 금지.
+16. 첫 회차 `SCHEDULED` 전 `salesMode` 전환 금지.
 
 ## Phase 0 — 코드·권한·금전 안전성
 
@@ -153,6 +158,37 @@
   - 실제 guard를 mock으로 우회하지 않는 integration 증거
 - Status: todo_test_security_financial
 
+### Task 0.12 — Settlement core lifecycle coverage
+- Backlog: `SETTLEMENT-LIFECYCLE-COVERAGE`
+- Contract: `docs/specs/api/settlements.md`
+- Evidence: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`
+- Goal: settlement 생성·중복·자동 confirm·cancel의 core financial lifecycle을 직접 고정
+- Required:
+  - create 1건 + fee/net/status/completedStatus snapshot
+  - DELIVERED→REVIEWED/동시 완료 중복 생성·snapshot overwrite 없음
+  - cutoff 전 pending 유지 / due pending confirmed
+  - confirm/cancel race에서 cancelled 미덮어쓰기
+  - missing no-op, pending/confirmed cancelled, cancelled 멱등, paid 역전 금지
+  - 실제 회차 integration에서 DELIVERED settlement 1건 + REVIEWED 중복 없음
+- Status: todo_test_financial
+
+### Task 0.13 — Marketing consent lifecycle consistency
+- Backlog: `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
+- Contract: `docs/specs/api/notifications.md`, `docs/specs/legal/README.md`
+- Evidence: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`
+- Goal: checkout consent, user preference, withdrawal, retention evidence를 한 정책으로 수렴
+- Decision:
+  - MVP에서 marketing 미사용 → consent 수집/설정 노출 비활성화·제거
+  - 유지 → user-level SSOT + checkout sync + withdrawal evidence + sender gating
+- Required regardless of decision:
+  - 신규 user marketing state 정의
+  - 설정 화면이 authoritative state만 표시
+  - 철회 channel/state/evidence 멱등성
+  - 실제 marketing sender가 있다면 opt-out 준수
+  - ORDER_* 정보성 연락은 marketing opt-out과 분리
+  - final legal wording과 실제 구현 일치
+- Status: todo_code_legal
+
 ## Phase 1 — ALIGO
 
 1. 8종 승인 (`blocked_external_review`)
@@ -163,11 +199,11 @@
 ## Phase 2 — legal·release SHA
 
 ### Task 2.1 — 판매 활성화 legal
-- Dependency: ALIGO 실제 검증 + Task 0.6 + 0.7 + 0.8 + 0.9
-- Required: 주문/환불/재배송비/보류 실제 상태머신, 개인정보 처리, ALIGO, seller/driver 최소 접근, legal tests
+- Dependency: ALIGO 실제 검증 + Task 0.6 + 0.7 + 0.8 + 0.9 + 0.12 + 0.13
+- Required: 주문/환불/정산/재배송비/보류 실제 상태머신, marketing consent 실제 정책, 개인정보 처리, ALIGO, seller/driver 최소 접근, legal tests
 
 ### Task 2.2 — actual release SHA
-- Dependency: Task 0.3~0.11 + 2.1
+- Dependency: Task 0.3~0.13 + 2.1
 
 ### Task 2.3 — exact SHA E2E
 - Goal: chromium 26 + mobile 26 = 52, cleanup success
@@ -197,12 +233,14 @@
 
 ## 최종 완료 기준
 
-- Task 0A~0I 직접 증거와 함께 `main` 포함.
+- Task 0A~0K 직접 증거와 함께 `main` 포함.
 - 승인 전 public email/Kakao driver authorization과 stale Firebase claims 우회 해결.
 - driver 권한과 order direct-read 최소화가 결합 위험 없이 fail-closed.
 - 유료 재배송 payment request가 실제 결제 가능한 상태를 유지하고, 결제 전 모든 배송 시작 경로가 fail-closed.
-- webhook signature valid/invalid real-verifier evidence 포함.
+- settlement 생성·confirm·cancel core lifecycle 직접 상태/race 증거 포함.
 - admin privileged mutation role boundary + settlement pay 직접 증거 포함.
+- marketing consent 유지/미사용 정책이 checkout·preference·withdrawal·retention·legal에 일관되게 반영.
+- webhook signature valid/invalid real-verifier evidence 포함.
 - admin refund·payment finalization·권한/개인정보 P0 해결.
 - Issue #32 완료.
 - ALIGO 승인+실발송/fallback.

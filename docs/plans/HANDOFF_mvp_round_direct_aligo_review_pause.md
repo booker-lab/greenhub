@@ -24,8 +24,10 @@
 5. `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
 6. `ADMIN-FORCE-REFUND-CONSISTENCY`
 7. `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
-8. `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
-9. Issue #32
+8. `SETTLEMENT-LIFECYCLE-COVERAGE`
+9. `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
+10. `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
+11. Issue #32
 
 ## Task 2F-B publication reconciliation
 
@@ -101,6 +103,27 @@ Remaining:
 
 정본: `docs/specs/api/orders.md`, `docs/BACKLOG.md`.
 
+## 새 감사 P0 포인터
+
+### Settlement core lifecycle
+
+transaction 구현은 있으나 생성 1건·중복 방지·confirm cutoff/race·cancel·paid 보존 직접 assertion이 부족하다.
+
+- Backlog: `SETTLEMENT-LIFECYCLE-COVERAGE`
+- Contract: `docs/specs/api/settlements.md`
+- Evidence: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`
+- Admin `confirmed → paid`는 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`와 분리한다.
+
+### Marketing consent lifecycle
+
+checkout consent는 order+retention에 저장되지만 MY 설정은 별도 user preference를 읽고, checkout이 이를 동기화하지 않으며 철회 retention evidence가 없다.
+
+- Backlog: `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
+- Contract: `docs/specs/api/notifications.md`, `docs/specs/legal/README.md`
+- Evidence: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`
+- 제품 선택: MVP marketing 미사용이면 consent 수집/설정 노출 제거; 유지면 user-level SSOT + withdrawal evidence + sender gating.
+- ORDER_* 정보성 연락은 marketing opt-out과 분리한다.
+
 ## 나머지 P0 포인터
 
 - Payment finalization: `docs/specs/api/payments.md`
@@ -119,6 +142,9 @@ Remaining:
 - main merge를 production 승인으로 해석
 - 승인 없는 production/Firebase/운영 회차/`salesMode`
 - P0를 frontend 버튼 숨김·UI redirect·legal 문구만으로 정상화
+- settlement transaction 코드만 보고 financial lifecycle을 `VERIFIED` 처리
+- marketing checkbox/UI만 보고 consent lifecycle 완료 처리
+- 현재 정보성 ORDER_* 알림을 marketing opt-out으로 막아 consent 문제를 해결
 - P0 전 actual release SHA 확정
 
 ## 병렬 가능 작업
@@ -130,19 +156,21 @@ Remaining:
 5. order mutation 거부 회귀
 6. admin force-refund lifecycle
 7. admin privileged mutation + settlement pay 직접 회귀
-8. webhook signature real-verifier 회귀
-9. Issue #32
-10. read-only 문서/코드 감사
-11. ALIGO 상태 조회
+8. settlement create/confirm/cancel core lifecycle 회귀
+9. marketing consent lifecycle 정책 결정·구현·회귀
+10. webhook signature real-verifier 회귀
+11. Issue #32
+12. read-only 문서/코드 감사
+13. ALIGO 상태 조회
 
 ## ALIGO 승인 뒤
 
-1. P0 8개 + Issue #32 완료 확인
+1. P0 10개 + Issue #32 완료 확인
 2. ALIGO 8종 상태 재확인
 3. provider code 1:1 검사
 4. 승인 후 격리 알림톡
 5. 승인 후 SMS fallback
-6. 실제 재배송/환불/read-minimization/auth 결과 기준 legal 재정합화
+6. 실제 재배송/환불/정산/read-minimization/auth/marketing 결과 기준 legal 재정합화
 7. actual release SHA
 8. exact SHA E2E 52+cleanup
 9. 운영 Firebase read-only
@@ -166,6 +194,8 @@ Remaining:
 - [ ] order mutation coverage
 - [ ] admin force-refund
 - [ ] admin privileged mutation + settlement pay coverage
+- [ ] settlement core lifecycle coverage
+- [ ] marketing consent lifecycle consistency
 - [ ] webhook signature real-verifier coverage
 - [ ] Issue #32
 - [ ] ALIGO 8종 승인
