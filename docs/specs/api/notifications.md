@@ -2,7 +2,7 @@
 
 # Notifications API / Domain Spec
 
-> **최종 정합화**: 2026-08-23
+> **최종 정합화**: 2026-08-24
 > **상태**: Current
 > **코드 정본**: `packages/shared/src/notification.types.ts`, `apps/api/src/notifications/**`
 > **운영 승인 상태**: 이 문서에 복제하지 않고 `docs/memory.md`와 활성 HANDOFF를 따른다.
@@ -168,6 +168,20 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 - 허용되지 않은 논리 코드
 - 현재 템플릿의 provider 매핑 누락
 
+### 직접 검증 상태
+
+2026-08-24 기준 `notifications-delivery.spec.ts`, template/mapping 관련 spec은 다음을 직접 검증한다.
+
+- 알림톡 성공 시 추가 재시도·SMS 없음
+- 실패 시 최대 3회 알림톡 재시도
+- 3회 실패 뒤 동일 본문 SMS 1회 fallback
+- 설정·mapping·필수 변수 오류의 외부 요청 0 fail-closed
+- 성공 channel과 attempt count 기록
+- 최종 실패 운영 예외
+- 동일 delivery idempotency key의 단일 발송
+
+따라서 위 **격리된 client/service 전달 계약은 직접 테스트 근거가 있다.** 다만 이 증거를 ALIGO provider 실제 승인 상태나 실제 외부 발송 성공으로 확장하지 않는다. 실제 provider 검증은 활성 출시 PLAN의 별도 승인 게이트다.
+
 ## 8. 수신자와 최종 실패 처리
 
 `NotificationsService.sendToUser()`는 주문 snapshot과 사용자 정보를 기준으로 수신 전화번호를 해석한다.
@@ -180,7 +194,7 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 
 운영 이슈에서 명시적으로 SMS 재발송하는 경로는 기존 실패 알림 기록의 전화번호·template code·variables를 사용해 `AligoClient.sendSms()`를 호출한다.
 
-## 9. 사용자 API
+## 9. 사용자 API와 선택 마케팅 동의
 
 모든 endpoint는 `JwtAuthGuard`를 사용한다.
 
@@ -218,7 +232,48 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 - 한 채널만 전달하면 기존 다른 채널 값을 보존
 - 저장 위치: `users/{userId}.notificationPreferences`
 
-주의: 현재 preference endpoint와 저장 계약이 존재한다는 것과 모든 시스템성 주문 알림 발송 경로가 이 설정을 실제 차단 조건으로 사용한다는 것은 별개다. 발송 정책을 바꾸려면 실제 `sendToUser()` 호출 계약과 법적·운영 요구를 별도 검토한다.
+### 마케팅과 정보성 연락의 경계
+
+consumer UI는 이 값을 **선택 마케팅 수신 상태**로 표시하고, 주문·결제·배송 정보성 연락은 마케팅 동의와 별개라고 안내한다.
+
+따라서 주문 상태 알림을 단순히 `notificationPreferences`가 false라는 이유로 막는 것은 현재 안전 계약이 아니다. 거래 수행에 필요한 정보성 연락과 선택 마케팅 sender를 구분한다.
+
+### 현재 구현 불일치 — `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY` P0
+
+2026-08-24 checkout·orders·notifications·retention을 함께 대조한 결과 선택 마케팅 consent lifecycle이 하나의 authoritative 상태로 수렴하지 않는다.
+
+현재 경로:
+
+1. round checkout의 선택 checkbox가 동의되면 order request에 `marketingConsent`를 넣는다.
+2. `RoundOrderCreateService`는 order snapshot에 consent를 저장하고 `marketingConsentLogs`에 `recordType: CONSENT` retention record를 만든다.
+3. MY 마케팅 설정은 order consent가 아니라 `users.notificationPreferences`의 `alimtalk/sms` pair만 읽는다.
+4. checkout consent는 user preference를 갱신하지 않는다.
+5. Auth 신규 사용자 생성은 이 preference pair를 기본 초기화하지 않는다.
+6. MY의 “즉시 철회”는 `users.notificationPreferences`만 false로 바꾸고 `MARKETING_CONSENT` withdrawal retention record를 만들지 않는다.
+7. current round-direct spec은 마케팅 동의·철회 증거를 `marketingConsentLogs`에 보관한다고 규정한다.
+
+따라서 **checkout 동의 상태, MY 표시 상태, 철회 상태, 장기 retention evidence가 서로 다른 source로 분리돼 있다.** 현재 실제 marketing sender는 이번 감사에서 확인되지 않았으므로 마케팅 발송이 활성화됐다고 문서화하지 않는다.
+
+이 항목은 출시 전 P0 `IMPLEMENTATION FINDING`으로 추적한다.
+
+완료 정책은 둘 중 하나를 명시적으로 선택할 수 있다.
+
+- 실제 마케팅 발송을 MVP에서 하지 않을 경우: 불필요한 consent 수집/설정 노출을 출시 전 비활성화·제거하고 저장 계약을 단순화한다.
+- consent 기능을 유지할 경우: user-level SSOT, checkout 동기화, 철회 evidence, idempotency, 실제 marketing sender gating을 하나의 lifecycle로 구현한다.
+
+어느 경우에도 주문·결제·배송 정보성 연락은 marketing opt-out과 분리한다.
+
+최소 회귀:
+
+- 신규 사용자 preference 상태가 정의돼 있고 설정 화면이 오류 없이 해석
+- checkout 동의 후 authoritative user marketing 상태가 의도대로 반영
+- 한 채널 철회가 다른 채널 상태를 보존
+- 철회 시 timestamp/policy/channel을 포함한 감사 가능한 retention evidence 생성
+- 중복 철회가 중복 evidence·상태 손상을 만들지 않음
+- 실제 marketing sender가 존재한다면 철회 채널에 발송하지 않음
+- ORDER_* 정보성 알림은 마케팅 opt-out 때문에 사라지지 않음
+
+정본: `docs/BACKLOG.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
 
 ## 10. Legacy 공동구매 알림
 
@@ -226,10 +281,18 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 
 - 마감 임박 스케줄러
 - 목표 달성 시 참여 주문 `CONFIRMED` 전환 및 참여자 알림
-- 목표 미달 시 환불 후 `CANCELLED` 전환 및 참여자 알림
+- 목표 미달 시 환불 후 `CANCELLED` 전환 및 참여자 알림 의도
 - 판매자 그룹 확정/취소 알림
 
-이 계약은 회차 직배송 출시 템플릿 8종과 별개의 legacy 경로다. 회차 출시를 위해 legacy 코드를 임의 삭제하거나 provider 매핑 전체를 8종으로 축소하지 않는다.
+### 현재 legacy 구현 finding — 목표 미달 consumer 취소 알림
+
+`cancelGroupBuyLack()`는 RECRUITING 주문을 환불한 뒤 먼저 `CANCELLED`로 batch update하고 이후 `sendToGroupParticipants(..., 'GROUP_CANCELLED_LACK')`를 호출한다.
+
+그러나 `sendToGroupParticipants()`는 `PENDING`, `CANCELLED`, `REVIEWED`를 terminal status로 제외한다. 따라서 방금 `CANCELLED`된 참여자는 consumer 취소 알림 대상에서 빠질 수 있다.
+
+이 경로는 회차 직배송 출시 8종과 별개의 legacy 경로이므로 `LEGACY-GROUP-CANCEL-NOTIFICATION` LATER `IMPLEMENTATION FINDING`으로 추적한다. 현재 코드를 정당화하기 위해 “목표 미달 consumer 알림은 보내지 않는다”로 계약을 바꾸지 않는다.
+
+회귀 시에는 취소 대상 snapshot 또는 명시적 recipient 집합을 기준으로 consumer 취소 알림이 한 번만 전달되고, 다른 template의 terminal filtering 의미는 유지되는지 직접 확인한다.
 
 ## 11. FCM 상태
 
@@ -249,6 +312,8 @@ FCM을 다시 도입할 경우 별도 Task에서 다음을 함께 정의한다.
 - 테스트에서 실제 고객에게 알림톡·SMS를 발송하지 않는다.
 - provider 실제 발송은 승인된 격리 수신자와 명시적 승인 게이트에서만 수행한다.
 - provider 등록·승인 상태는 빠르게 바뀌므로 이 spec에 복제하지 않는다.
+- 마케팅 consent의 존재를 실제 마케팅 발송 활성화 증거로 사용하지 않는다.
+- 거래 정보성 연락과 선택 마케팅 수신 거부를 혼동하지 않는다.
 
 ## 13. 검증 진입점
 
@@ -259,16 +324,26 @@ FCM을 다시 도입할 경우 별도 Task에서 다음을 함께 정의한다.
 - `apps/api/src/notifications/aligo.client.ts`
 - `apps/api/src/notifications/notifications.service.ts`
 - `apps/api/src/notifications/notifications.controller.ts`
-- 관련 `*.spec.ts`
+- `apps/api/src/notifications/notifications-delivery.spec.ts`
+- `apps/api/src/notifications/notifications-preferences.spec.ts`
+- `apps/consumer/src/app/mypage/notifications/settings/**`
+- `apps/consumer/src/app/checkout/**`
+- `apps/api/src/orders/round-order-create.service.ts`
+- `apps/api/src/retention/retention.service.ts`
 - `packages/shared/src/notification.types.ts`
 - 회차 알림이면 `docs/specs/mvp-sales-round-direct-delivery.md`와 활성 출시 HANDOFF/PLAN
+- consent/ALIGO 공개 고지 변경이면 `docs/specs/legal/README.md`
 
 외부 실제 발송은 단위·통합 테스트의 대체물이 아니며 별도 승인된 운영 readiness 검증이다.
+
+선택 마케팅 변경은 단일 화면의 checkbox 동작만 확인하지 않고 consent → authoritative state → withdrawal → retention evidence → sender gating의 lifecycle을 직접 검증한다.
 
 ## 변경 이력
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-08-24 | checkout consent·user preference·철회·retention evidence 분리를 `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY` P0로 분리하고 legacy 목표미달 consumer 취소 알림 누락 가능성을 LATER finding으로 기록 |
+| 2026-08-24 | ALIGO 3회 retry+SMS fallback·fail-closed·delivery idempotency의 직접 테스트 근거와 실제 provider 검증을 분리 |
 | 2026-08-23 | 현행 ALIGO/SMS 구현, 3회 retry+1회 fallback, 실제 API 응답, FCM 미구현 상태, 회차 8종 매핑 계약에 맞춰 전면 정합화 |
 | 2026-08-22 | 내부 논리 코드와 ALIGO `tpl_code` 매핑 분리, 필수 본문 변수와 회차 알림 변수 계약 반영 |
 | 2026-03-26 | 초기 알림 도메인 초안 작성 |
