@@ -131,7 +131,7 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 
 지급 완료 후 주문 취소·환불의 회계 처리는 단순 status 역전으로 해결하지 않는다. 현재 service는 warning을 남기고 paid settlement를 보존한다. 후속 회계 조정이 필요하면 별도 설계가 필요하다.
 
-### Core lifecycle 검증 상태 — `IMPLEMENTED / PARTIALLY VERIFIED` + P0 `COVERAGE GAP`
+### Core lifecycle 검증 상태 — `IMPLEMENTED / UNVERIFIED` + P0 `COVERAGE GAP`
 
 2026-08-24 감사에서 위 생성·자동 확정·취소 구현은 직접 확인했다. 또한 회차 API E2E fixture는 실제 `SettlementsService`를 주입한다.
 
@@ -145,7 +145,7 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 - pending/confirmed 취소는 cancelled로 수렴하고 cancelled는 멱등
 - paid settlement가 cancellation으로 역전되지 않음
 
-따라서 transaction 코드의 존재를 settlement core financial lifecycle 전체의 `VERIFIED`로 확장하지 않는다.
+실제 service가 E2E에 주입돼 호출될 수 있다는 사실은 위 상태를 직접 검사한 증거가 아니므로 core lifecycle을 `PARTIALLY VERIFIED`로도 승격하지 않는다.
 
 이 공백은 `SETTLEMENT-LIFECYCLE-COVERAGE` P0가 소유한다. 최소 완료 조건:
 
@@ -333,7 +333,7 @@ admin 지급 상태 전이는 코드의 transaction 존재만으로 `VERIFIED` �
 
 | 날짜 | 내용 |
 |---|---|
-| 2026-08-24 | settlement 생성·confirm·cancel core lifecycle의 직접 상태/race assertion 부족을 `SETTLEMENT-LIFECYCLE-COVERAGE` P0로 분리 |
+| 2026-08-24 | settlement 생성·confirm·cancel core lifecycle의 직접 상태/race assertion 부재를 `SETTLEMENT-LIFECYCLE-COVERAGE` P0 `IMPLEMENTED / UNVERIFIED`로 분리 |
 | 2026-08-24 | admin `confirmed → paid` 구현과 직접 검증 증거를 분리해 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` P0 COVERAGE GAP에 연결 |
 | 2026-08-24 | admin force refund가 `cancelSettlement()` 및 정상 취소 lifecycle을 우회하는 P0 정산 불일치를 명시 |
 | 2026-08-23 | 자동 confirm, transaction 멱등성, paid 역전 방지, admin 지급 API, 현재 조회/권한 계약으로 정합화 |
