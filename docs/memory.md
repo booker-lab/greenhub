@@ -85,13 +85,37 @@ admin refund는 본 결제 환불 뒤 주문을 직접 `CANCELLED` write하며 �
 
 정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
-### 6. 결제 finalization provider 상태 방어
+### 6. Settlement core lifecycle coverage
+
+`SettlementsService`는 transaction 기반 생성·`pending → confirmed`·취소·paid 역전 방지를 구현한다. 회차 E2E fixture도 실제 service를 주입한다.
+
+그러나 전용 settlement lifecycle test가 없고 회차 통합 E2E도 settlement 생성 1건, 중복 방지, confirm cutoff/race, cancel/paid 보존을 직접 assertion하지 않는다. 실제 service의 간접 실행은 core 금전 상태의 직접 증거로 세지 않는다.
+
+**`SETTLEMENT-LIFECYCLE-COVERAGE` = IMPLEMENTED / UNVERIFIED + P0 COVERAGE GAP**.
+
+Admin `confirmed → paid`는 기존 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`가 별도로 소유한다.
+
+정본: `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+
+### 7. Marketing consent lifecycle
+
+round checkout에는 선택 마케팅 consent가 있고 consent retention record도 생성한다. 반면 MY 설정은 별도 `users.notificationPreferences`만 사용하고, checkout consent는 이를 동기화하지 않으며 신규 user 기본 preference도 없다. “즉시 철회”는 preference만 false로 바꾸고 withdrawal retention evidence를 남기지 않는다.
+
+현재 실제 선택 마케팅 sender는 확인되지 않았고, 주문·결제·배송 정보성 연락은 선택 마케팅과 별개의 계약이다.
+
+**`MARKETING-CONSENT-LIFECYCLE-CONSISTENCY` = P0 IMPLEMENTATION FINDING**.
+
+MVP에서 마케팅을 사용하지 않으면 consent 수집/설정 노출을 비활성화·제거하는 선택도 가능하고, 유지한다면 user-level SSOT + checkout sync + withdrawal evidence + sender gating을 구현한다.
+
+정본: `docs/specs/api/notifications.md`, `docs/specs/legal/README.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+
+### 8. 결제 finalization provider 상태 방어
 
 `finalizePaidOrder()` boundary가 비`PAID` provider 입력을 자체 차단하지 않는다.
 
 **`PAYMENT-FINALIZATION-PAID-GUARD` = P0 IMPLEMENTATION FINDING**.
 
-### 7. PortOne webhook signature 검증 coverage
+### 9. PortOne webhook signature 검증 coverage
 
 webhook signature 구현은 raw body + id/timestamp/signature, timestamp ±5분, HMAC SHA-256 timing-safe 검증을 사용한다. 그러나 현재 회차 E2E의 signature verifier는 mock이며 real verifier의 valid HMAC 성공·non-empty invalid HMAC 거부·body/id/timestamp 변조 거부를 직접 고정한 증거가 부족하다.
 
@@ -99,13 +123,13 @@ webhook signature 구현은 raw body + id/timestamp/signature, timestamp ±5분,
 
 정본: `docs/specs/api/payments.md`; 증거: `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`.
 
-### 8. 주문 mutation authorization 회귀
+### 10. 주문 mutation authorization 회귀
 
 ownership guard는 구현돼 있으나 타-store seller·비담당 driver·first-claim 외 action과 거부 side-effect 0 직접 회귀가 부족하다.
 
 **`ORDER-MUTATION-AUTHORIZATION-COVERAGE` = IMPLEMENTED / UNVERIFIED + P0 COVERAGE GAP**.
 
-### 9. GitHub main protection
+### 11. GitHub main protection
 
 repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required check/force-push·delete 차단은 Issue #32가 남아 있다.
 
@@ -119,14 +143,19 @@ repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required 
 - 실제 알림톡·SMS 발송 0건.
 - production ALIGO 자격 증명·매핑 미반영.
 
+코드 레벨 알림톡 3회 retry→SMS fallback, 설정 fail-closed, notification delivery idempotency는 직접 테스트가 있다. 이를 실제 provider 승인·발송 증거로 확장하지 않는다.
+
 현재성이 필요하면 provider에서 다시 조회한다.
 
 ## 판매 활성화 legal 상태
 
 - production `/privacy`, `/terms`는 2026-08-19 비판매 상태 기준.
 - 실제 판매 전 주문·취소·환불·재배송비·보류, PortOne/PG, ALIGO, seller/driver 개인정보 접근을 재정합화해야 한다.
+- 2026-08-19 consumer legal baseline의 “마케팅 수신 동의 기능 없음” 사실은 현재 코드와 달라 `docs/specs/legal/README.md`의 2026-08-24 errata가 해당 구현 사실을 우선한다.
+- 현재는 선택 marketing consent UI/storage가 존재하지만 실제 marketing sender는 확인되지 않았으며 `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`가 남아 있다.
 - broad read를 legal 문구로 정당화하지 않는다.
 - 재배송 payment-required 상태머신과 admin refund 실제 정책을 legal의 재배송비·환불 설명에 반영한다.
+- settlement 생성·확정·취소·지급 검증 결과와 marketing consent 유지/미사용 최종 정책을 legal 확정 전에 반영한다.
 
 ## 검증 상태
 
@@ -156,9 +185,9 @@ repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required 
 
 1. `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION` + `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION` 결합 위험을 최우선으로 해결·직접 회귀·`main` 통합.
 2. `ORDER-REDELIVERY-PAID-RESUME-GATE` 상태머신 전체 구현·직접 회귀.
-3. `ADMIN-PRIVILEGED-MUTATION-COVERAGE`, webhook coverage, payment finalization, admin refund, order mutation 등 나머지 P0를 ALIGO 심사와 병렬 해결.
+3. `SETTLEMENT-LIFECYCLE-COVERAGE`, `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`, admin privileged, webhook, payment finalization, admin refund, order mutation 등 나머지 P0를 ALIGO 심사와 병렬 해결.
 4. Issue #32.
 5. ALIGO 상태 재조회 → 승인 뒤 실제 알림톡/SMS fallback.
-6. P0 결과 기준 legal 재정합화.
+6. 모든 P0 결과 기준 legal 재정합화.
 7. actual release SHA → E2E 52+cleanup → Firebase 재조회 → 승인된 production 설정/배포.
 8. 첫 회차 검수 → 최종 승인 → `salesMode: round_direct`.
