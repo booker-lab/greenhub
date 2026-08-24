@@ -11,7 +11,7 @@
 
 | 영역 | 판정 | 결과 |
 |---|---|---|
-| Settlement core lifecycle | `IMPLEMENTED / PARTIALLY VERIFIED` + P0 `COVERAGE GAP` | transaction 구현은 있으나 핵심 상태·동시성 직접 assertion 부족 |
+| Settlement core lifecycle | `IMPLEMENTED / UNVERIFIED` + P0 `COVERAGE GAP` | transaction 구현·간접 실행은 있으나 핵심 상태·동시성 직접 assertion 없음 |
 | Admin settlement pay | 기존 P0 유지 | `ADMIN-PRIVILEGED-MUTATION-COVERAGE`가 소유 |
 | ALIGO retry/fallback | direct unit/service evidence 존재 | 3회 알림톡 + 1회 SMS, fail-closed, idempotency를 직접 검증 |
 | ALIGO actual provider | 외부/운영 미검증 | 8종 심사와 실제 격리 발송은 별도 출시 게이트 |
@@ -35,16 +35,16 @@
 
 그러나 현재 `apps/api/src/settlements`에는 전용 `*.spec.ts`가 없다. 회차 API E2E fixture는 실제 `SettlementsService`를 주입하지만 현재 전체 흐름 테스트에서 settlement 생성·중복·confirm·cancel·paid 보존을 직접 assertion하지 않는다.
 
-따라서 코드 존재를 전체 financial lifecycle의 `VERIFIED`로 확장하지 않는다.
+따라서 실제 service가 통합 경로에서 실행된다는 사실을 core financial invariant의 검증으로 세지 않는다.
 
 ### 판정
 
 새 P0 `SETTLEMENT-LIFECYCLE-COVERAGE`:
 
 - 구현: `IMPLEMENTED`
-- 일부 간접 통합 경로: 존재
-- 핵심 금전 상태·race 직접 증거: 부족
-- 최종: `PARTIALLY VERIFIED + P0 COVERAGE GAP`
+- 실제 service의 간접 통합 실행: 존재
+- 핵심 금전 상태·race 직접 증거: 없음
+- 최종: `UNVERIFIED + P0 COVERAGE GAP`
 
 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`는 admin `confirmed → paid` authorization/status 경계를 계속 소유하고, 이 P0는 settlement 생성·confirm·cancel의 core lifecycle을 소유한다.
 
