@@ -253,6 +253,7 @@
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "deliveryMethod", "order": "ASCENDING" },
+        { "fieldPath": "driverId", "order": "ASCENDING" },
         { "fieldPath": "preparedAt", "order": "ASCENDING" }
       ]
     },

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import * as admin from 'firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -265,6 +266,9 @@ export class AdminService {
       suspended: dto.suspended,
       updatedAt: this.firestore.Timestamp.now(),
     });
+    if (dto.suspended) {
+      await admin.auth().revokeRefreshTokens(userId);
+    }
     return { userId, suspended: dto.suspended };
   }
 

@@ -8,6 +8,16 @@
 > **서버 구현 정본**: `apps/api/src/payments/**`
 > **주문 연계 계약**: `docs/specs/api/orders.md`, `docs/specs/mvp-sales-round-direct-delivery.md`
 
+## Task 2C candidate overlay
+
+현재 branch candidate `c9d60f6`에서 다음을 검증했다.
+
+- `P0-001`: `finalizePaidOrder()`가 provider `status !== 'PAID'` 입력을 side effect 없이 차단하고, `PAID` 정상 경로와 amount mismatch guard를 유지한다.
+- `P0-002`: 취소 주문에 뒤늦게 도착한 provider payment가 주문을 부활시키지 않고 refund/finalization convergence와 idempotency를 유지한다.
+- focused candidate 3 suites/16 tests 및 full API 41 suites/319 tests PASS.
+
+이 overlay는 아직 `origin/main` `256abc7`에 통합되지 않은 candidate의 검증 상태다. 아래 main baseline finding은 main 통합 전 출시 상태로 유지한다.
+
 ## 1. 소유권과 범위
 
 - 결제 검증·최종화·환불·재배송비 결제 처리는 NestJS API가 소유한다.

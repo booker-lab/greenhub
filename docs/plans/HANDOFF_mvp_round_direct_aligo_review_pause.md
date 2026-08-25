@@ -29,29 +29,46 @@
 10. `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
 11. Issue #32
 
+## Task 2F-B publication reconciliation
+
+현재 workspace에서 P0/security integration candidate의 문서 정합화까지 완료했다.
+
+- candidate: `codex/task-2c-r1-reg001` / Task 2F-A auth change `1da3dee`
+- 상태: `TASK_2F_B_PUBLICATION_CANDIDATE`
+- candidate에서 종료: `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001`
+- evidence: [Task 2D integration closeout report](REPORT_task_2d_integration_closeout.md)
+- candidate auth 추가 검증: public register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계.
+- 현재 `origin/main`: `d6185bd`; candidate는 아직 main/production에 반영되지 않았다.
+- `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이며 refresh/session lifecycle 완료를 주장하지 않는다.
+
+다음 재개 지점은 candidate를 현재 main에 branch+PR로 통합하고 PR CI를 확인하는 절차다. 이후 `AUTH-SESSION-CLAIM-REVOCATION`, 최신 main의 redelivery 상태머신, admin refund, legal, ALIGO, exact-SHA E2E와 production 승인 게이트를 순서대로 진행한다.
+
 ## 최우선 재개 — Driver 승인 + direct read 결합 위험
 
 운영 불변식은 **관리자 승인 전 driver 권한을 얻을 수 없고, driver가 필요한 최소 주문만 접근한다**는 것이다.
 
-2026-08-24 감사에서 Kakao 자동승인 외에 공개 email 경로를 추가 확인했다.
+2026-08-24 감사에서 확인된 public/Kakao approval bypass는 Task 2F-B candidate에서 다음과 같이 검증됐다.
 
-- `POST /auth/register`는 `role: driver`를 허용한다.
-- seller와 달리 driver registration에는 invite/approval gate가 없다.
-- `POST /auth/login`은 `driverApproved`를 확인하지 않고 저장된 `role=driver`로 JWT를 발급한다.
-- 신규 Kakao driver도 `driverApproved: true`로 생성되고 legacy 승인 필드 누락 driver도 로그인 중 자동 승인된다.
-- Firebase custom token은 현재 JWT role/storeId를 claims로 사용한다.
-- 동시에 current Firestore Rules에는 broad driver order read P0가 남아 있다.
+- `POST /auth/register` driver는 `driverApproved: false`로 저장되고 client approval 주입이 거부된다.
+- `POST /auth/login`은 false/missing approval driver를 JWT/refresh token 발급 전에 거부한다.
+- 신규 Kakao driver와 legacy approval 필드 누락 driver는 로그인 side effect로 자동 승인되지 않는다.
+- JWT strategy와 Firebase custom token은 current user의 role/approval/suspension 경계를 확인한다.
+- `AUTH-SESSION-CLAIM-REVOCATION`의 refresh/stale claims lifecycle과 broad driver order read P0는 남아 있다.
 
 따라서 frontend에서 일반 driver credentials UI를 숨기는 것만으로 해결되지 않는다. **API authorization boundary + Firebase claim + Rules read 경계를 함께 fail-closed**해야 한다.
 
-완료 시 반드시:
+Candidate에서 확인된 범위:
 
-- public registration이 승인 전 usable driver authorization을 만들지 않고,
-- 미승인 email/Kakao driver가 driver JWT/Firebase claim을 얻지 못하며,
-- login side-effect 자동 승인이 제거되고,
-- refresh/custom-token이 authoritative approval/role/store 상태로 수렴하며,
-- driver direct Firestore read가 필요한 최소 대상·필드로 제한되고,
-- 승인 전/후 API/Firebase/Rules 직접 회귀가 존재해야 한다.
+- public registration이 승인 전 usable driver authorization을 만들지 않음
+- 미승인 email/Kakao driver가 driver JWT/Firebase claim을 얻지 못함
+- login side-effect 자동승인 방지
+- JWT/Firebase/Rules current-user 경계 직접 회귀
+
+Remaining:
+
+- refresh/custom-token session lifecycle이 authoritative approval/role/store 상태로 수렴
+- driver direct Firestore read가 필요한 최소 대상·필드로 제한
+- candidate의 main 통합 및 PR CI/merge readiness
 
 정본: `docs/specs/api/auth.md`, `docs/specs/api/orders.md`, `docs/BACKLOG.md`.
 

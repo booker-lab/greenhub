@@ -13,6 +13,7 @@ test('수거 대기 보드는 PREPARING의 direct와 hub만 조회하고 parcel�
     boardSource,
     /where\(\s*['"]deliveryMethod['"]\s*,\s*['"]in['"]\s*,\s*\[\s*['"]direct['"]\s*,\s*['"]hub['"]\s*\]\s*\)/,
   );
+  assert.match(boardSource, /where\(\s*['"]driverId['"]\s*,\s*['"]==['"]\s*,\s*null\s*\)/);
   assert.doesNotMatch(
     boardSource,
     /where\(\s*['"]deliveryMethod['"]\s*,\s*['"]==['"]\s*,\s*['"]direct['"]\s*\)/,

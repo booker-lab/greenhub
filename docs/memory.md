@@ -23,6 +23,20 @@
 
 `main` merge는 production 배포 승인이 아니다. production은 검증된 exact release SHA + 별도 승인 절차를 사용한다.
 
+## Task 2F-B integration candidate closeout
+
+현재 workspace 기준 검증 상태와 `origin/main` 상태를 분리한다.
+
+- 현재 branch: `codex/task-2c-r1-reg001`
+- Task 2F-A auth change: `1da3dee261fec6b8da8f17c1afc86e13c8cd8eaf`
+- candidate 기준: `TASK_2F_B_PUBLICATION_CANDIDATE`
+- `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001`: candidate에서 검증·종료
+- candidate는 `origin/main` `d6185bd676d79214ccd4949209162900e4a69bc0` 기준이며 아직 main에 반영되지 않았다.
+- merge-base도 `d6185bd676d79214ccd4949209162900e4a69bc0`이다.
+- candidate는 public register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계를 검증한다. `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이다.
+
+검증 상세는 [Task 2D integration closeout report](plans/REPORT_task_2d_integration_closeout.md)를 따른다. 아래 출시 P0 서술은 현재 main의 미통합 상태를 설명하며, candidate에서 검증된 remediation을 main 완료로 해석하지 않는다.
+
 ## 제품 현재 상태
 
 - 회차 직배송 MVP는 `main` 통합 완료.
@@ -36,15 +50,13 @@
 
 ### 1. Driver 승인·세션 권한 — 최우선 security coupling
 
-관리자 승인 전 driver 권한을 얻을 수 없어야 하지만 현재 세 경로가 확인됐다.
+관리자 승인 전 driver 권한을 얻을 수 없어야 한다. Task 2F-B candidate에서 다음 approval-gate 하위 범위가 검증됐다.
 
-- 공개 email `POST /auth/register`가 `role: driver`를 허용하고 승인 gate 없이 driver user 생성 가능.
-- 공개 `POST /auth/login`은 `driverApproved`를 확인하지 않고 `role=driver` JWT 발급.
-- Kakao는 신규 driver를 `driverApproved: true`로 만들고 legacy 승인 필드 누락 driver도 로그인 중 자동 승인.
+- public `register(role=driver)`는 `driverApproved: false`를 저장하고 client approval 주입을 거부한다.
+- public `register → login`의 false/missing approval driver는 token side effect 전에 거부된다.
+- 신규/legacy Kakao driver 자동승인이 제거됐고, JWT strategy/Firebase custom-token 경계가 current user 상태를 확인한다.
 
-refresh/Firebase custom claims는 authoritative user 상태를 재검증하지 않는 stale authorization 문제도 있다.
-
-**관리자 승인 gate = P0 IMPLEMENTATION FINDING**, suspension/role/store/approval revocation = **P0 DECISION REQUIRED + remediation**.
+**candidate approval gate/current-user boundary = VERIFIED (main 통합 대기)**. `AUTH-SESSION-CLAIM-REVOCATION`의 refresh/stale-claim/session lifecycle은 **OPEN**이며, broad driver Firestore read와 결합 위험도 남는다.
 
 이 P0는 broad driver Firestore read가 남아 있는 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`과 결합 위험이 크므로 우선 함께 닫는다.
 
@@ -183,7 +195,7 @@ repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required 
 
 ## 다음 작업
 
-1. `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION` + `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION` 결합 위험을 최우선으로 해결·직접 회귀·`main` 통합.
+1. Task 2F-B candidate PR CI/merge를 진행하고, 이후 `AUTH-SESSION-CLAIM-REVOCATION` + `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION` 결합 위험을 해결·직접 회귀한다.
 2. `ORDER-REDELIVERY-PAID-RESUME-GATE` 상태머신 전체 구현·직접 회귀.
 3. `SETTLEMENT-LIFECYCLE-COVERAGE`, `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`, admin privileged, webhook, payment finalization, admin refund, order mutation 등 나머지 P0를 ALIGO 심사와 병렬 해결.
 4. Issue #32.

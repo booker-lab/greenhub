@@ -12,12 +12,40 @@ service cloud.firestore {
         isPublicSaleRoundStatus(round.data.status);
     }
 
-    // orders: Firebase Auth 필수 + 본인 storeId, admin, driver 허용
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isApprovedDriver() {
+      return request.auth != null &&
+        request.auth.token.role == 'driver' &&
+        request.auth.token.get('driverApproved', false) == true &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        currentUser().data.get('role', null) == 'driver' &&
+        currentUser().data.get('driverApproved', false) == true &&
+        currentUser().data.get('suspended', false) != true;
+    }
+
+    function isAssignedDriver() {
+      return isApprovedDriver() &&
+        resource.data.get('driverId', null) == request.auth.uid;
+    }
+
+    function isAvailablePickup() {
+      return isApprovedDriver() &&
+        resource.data.get('status', null) == 'PREPARING' &&
+        resource.data.get('driverId', null) == null &&
+        resource.data.get('deliveryMethod', null) in ['direct', 'hub'];
+    }
+
+    // orders: 매장 소유자·관리자·승인된 기사의 계약된 주문만 허용
     match /orders/{orderId} {
       allow read: if request.auth != null &&
-        (resource.data.storeId == request.auth.token.storeId ||
+        ((request.auth.token.role == 'seller' &&
+          resource.data.storeId == request.auth.token.storeId) ||
          request.auth.token.role == 'admin' ||
-         request.auth.token.role == 'driver');
+         isAssignedDriver() ||
+         isAvailablePickup());
       allow write: if false;
     }
 
