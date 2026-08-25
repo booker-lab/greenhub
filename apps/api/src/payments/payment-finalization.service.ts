@@ -7,9 +7,16 @@ import { OrderCapacityService } from '../orders/order-capacity.service';
 import { RetentionService } from '../retention/retention.service';
 import { PortoneClient } from './portone.client';
 import { PaymentRefundService } from './payment-refund.service';
+import {
+  isLegacyDailyCapacityEligible,
+  LegacyDailyCapacityError,
+  reacquireLegacyDailyCapacityInTransaction,
+  releaseLegacyDailyCapacityInTransaction,
+} from './_lib/legacy-daily-capacity';
 
 type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
 const LATE_PAYMENT_REFUND_REASON = '결제 만료 후 회차 한도 마감';
+const LEGACY_LATE_PAYMENT_REFUND_REASON = '결제 만료 후 일일 배송 용량 재확보 실패';
 
 @Injectable()
 export class PaymentFinalizationService {
@@ -99,56 +106,77 @@ export class PaymentFinalizationService {
     const now = this.firestore.Timestamp.now();
     let applied = false;
     let cancellationOutcome: 'REFUND' | null = null;
-    await this.firestore.runTransaction(async (tx) => {
-      const orderRef = this.firestore.doc(`orders/${orderId}`);
-      const paymentRef = this.firestore.doc(`payments/${orderId}`);
-      const freshSnap = await tx.get(orderRef);
-      if (!freshSnap.exists) return;
-      const freshOrder = freshSnap.data() as Record<string, any>;
-      if (this.isCancellationSettlementCandidate(freshOrder)) {
-        const paymentSnap = await tx.get(paymentRef);
-        const payment = paymentSnap.exists ? (paymentSnap.data() as Record<string, any>) : null;
-        if (payment?.['status'] !== 'CANCELLED' && !payment?.['refundedAt']) {
-          if (payment?.['status'] !== 'PAID') {
-            await this.writePaidPaymentInTransaction(
-              tx,
-              orderId,
-              freshOrder,
-              paymentData,
-              now,
-              freshOrder['status'],
-            );
+    try {
+      await this.firestore.runTransaction(async (tx) => {
+        const orderRef = this.firestore.doc(`orders/${orderId}`);
+        const paymentRef = this.firestore.doc(`payments/${orderId}`);
+        const freshSnap = await tx.get(orderRef);
+        if (!freshSnap.exists) return;
+        const freshOrder = freshSnap.data() as Record<string, any>;
+        if (this.isCancellationSettlementCandidate(freshOrder)) {
+          const paymentSnap = await tx.get(paymentRef);
+          const payment = paymentSnap.exists ? (paymentSnap.data() as Record<string, any>) : null;
+          if (payment?.['status'] !== 'CANCELLED' && !payment?.['refundedAt']) {
+            if (payment?.['status'] !== 'PAID') {
+              await this.writePaidPaymentInTransaction(
+                tx,
+                orderId,
+                freshOrder,
+                paymentData,
+                now,
+                freshOrder['status'],
+              );
+            }
+            cancellationOutcome = 'REFUND';
           }
-          cancellationOutcome = 'REFUND';
+          return;
         }
-        return;
-      }
-      if (!this.canFinalize(freshOrder)) return;
+        if (!this.canFinalize(freshOrder)) return;
 
-      if (freshOrder['schemaVersion'] === 2) {
-        if (!reservationId) throw new Error('결제 예약 식별자가 없습니다.');
-        await this.capacity.consumeReservationInTransaction(tx, {
-          reservationId,
-          orderId,
-          paymentId: orderId,
+        if (this.isLegacyTimeoutPaymentCandidate(freshOrder)) {
+          await reacquireLegacyDailyCapacityInTransaction(this.firestore, tx, orderId, freshOrder);
+        }
+        if (freshOrder['schemaVersion'] === 2) {
+          if (!reservationId) throw new Error('결제 예약 식별자가 없습니다.');
+          await this.capacity.consumeReservationInTransaction(tx, {
+            reservationId,
+            orderId,
+            paymentId: orderId,
+          });
+        }
+        tx.update(orderRef, {
+          status: freshOrder['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED',
+          ...(reservationId ? { reservationId } : {}),
+          updatedAt: now,
         });
-      }
-      tx.update(orderRef, {
-        status: freshOrder['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED',
-        ...(reservationId ? { reservationId } : {}),
-        updatedAt: now,
+        const finalStatus = freshOrder['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED';
+        await this.writePaidPaymentInTransaction(
+          tx,
+          orderId,
+          freshOrder,
+          paymentData,
+          now,
+          finalStatus,
+        );
+        applied = true;
       });
-      const finalStatus = freshOrder['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED';
-      await this.writePaidPaymentInTransaction(
-        tx,
-        orderId,
-        freshOrder,
-        paymentData,
-        now,
-        finalStatus,
-      );
-      applied = true;
-    });
+    } catch (error) {
+      if (error instanceof LegacyDailyCapacityError) {
+        await this.portone.refund(
+          orderId,
+          paymentData.amount.total,
+          LEGACY_LATE_PAYMENT_REFUND_REASON,
+        );
+        await this.recordLateRefund(
+          orderId,
+          order,
+          paymentData,
+          LEGACY_LATE_PAYMENT_REFUND_REASON,
+        );
+        return { ok: false, reason: 'late_payment_refunded' };
+      }
+      throw error;
+    }
     if (cancellationOutcome === 'REFUND') {
       try {
         await this.refunds.refundByOrderId(
@@ -189,22 +217,16 @@ export class PaymentFinalizationService {
       const orderSnap = await tx.get(orderRef);
       if (!orderSnap.exists || orderSnap.data()?.['status'] !== 'PENDING') return;
       const order = orderSnap.data() as Record<string, any>;
-      if (order['schemaVersion'] === 2 && order['reservationId']) {
-        await this.capacity.releaseReservationInTransaction(
-          tx,
-          order['reservationId'],
-          reason === 'timeout' ? 'EXPIRED' : 'RELEASED',
-        );
-      } else if (order['deliveryMethod'] !== 'parcel') {
-        const createdAt = order['createdAt'];
-        const date =
-          order['requestedDeliveryDate'] ??
-          (typeof createdAt?.toDate === 'function'
-            ? createdAt.toDate().toISOString().split('T')[0]
-            : new Date(createdAt).toISOString().split('T')[0]);
-        tx.update(this.firestore.doc(`dailyCaps/${order['storeId']}_${date}`), {
-          usedSlots: this.firestore.FieldValue.increment(-(order['quantity'] ?? 0)),
-        });
+      if (order['schemaVersion'] === 2) {
+        if (order['reservationId']) {
+          await this.capacity.releaseReservationInTransaction(
+            tx,
+            order['reservationId'],
+            reason === 'timeout' ? 'EXPIRED' : 'RELEASED',
+          );
+        }
+      } else {
+        await releaseLegacyDailyCapacityInTransaction(this.firestore, tx, orderId, reason);
       }
       tx.update(orderRef, { status: 'CANCELLED', cancelReason: reason, updatedAt: now });
       applied = true;
@@ -225,6 +247,14 @@ export class PaymentFinalizationService {
     return (
       (order['status'] === 'CANCELLED' && order['cancelReason'] !== 'timeout') ||
       ['LOCAL_PENDING', 'LOCAL_FAILED', 'REFUNDING'].includes(order['cancellation']?.['status'])
+    );
+  }
+
+  private isLegacyTimeoutPaymentCandidate(order: Record<string, any>) {
+    return (
+      order['status'] === 'CANCELLED' &&
+      order['cancelReason'] === 'timeout' &&
+      isLegacyDailyCapacityEligible(order)
     );
   }
 
@@ -283,6 +313,7 @@ export class PaymentFinalizationService {
     orderId: string,
     order: Record<string, any>,
     paymentData: PaymentData,
+    refundReason = LATE_PAYMENT_REFUND_REASON,
   ) {
     const now = this.firestore.Timestamp.now();
     await this.firestore.runTransaction(async (tx) => {
@@ -302,7 +333,7 @@ export class PaymentFinalizationService {
         portoneTransactionId: paymentData.transactionId,
         refundAmount: paymentData.amount.total,
         refundedAt: now,
-        refundReason: LATE_PAYMENT_REFUND_REASON,
+        refundReason,
         refundClaim: null,
         createdAt: now,
         updatedAt: now,

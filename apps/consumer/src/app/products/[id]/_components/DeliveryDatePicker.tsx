@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import { todayKST } from '@greenhub/shared';
 import { ActionIcon, Box, Group, Paper, SimpleGrid, Text } from '@mantine/core';
 import { useDeliverySlots } from '@/hooks/useDailyCap';
 
@@ -20,8 +21,8 @@ function toDateStr(year: number, month: number, day: number): string {
 
 /** 해당 월의 주 단위 날짜 그리드 (앞쪽 빈칸은 null) */
 function buildCalendar(year: number, month: number): (string | null)[][] {
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(Date.UTC(year, month, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const weeks: (string | null)[][] = [];
   let week: (string | null)[] = Array(firstDay).fill(null);
 
@@ -46,23 +47,28 @@ function buildCalendar(year: number, month: number): (string | null)[][] {
  * 월 이동은 당월 + 익월 2개월로 제한.
  */
 export default function DeliveryDatePicker({ storeId, value, onChange }: Props) {
-  const now = useMemo(() => new Date(), []);
+  const todayStr = todayKST();
+  const [todayYear, todayMonth] = todayStr.split('-').map(Number);
   // 0 = 당월, 1 = 익월
   const [monthOffset, setMonthOffset] = useState(0);
 
-  const viewYear = now.getFullYear() + Math.floor((now.getMonth() + monthOffset) / 12);
-  const viewMonth = (now.getMonth() + monthOffset) % 12;
+  const viewYear = todayYear + Math.floor((todayMonth - 1 + monthOffset) / 12);
+  const viewMonth = (todayMonth - 1 + monthOffset) % 12;
 
   // 당월 1일 ~ 익월 말일 범위를 한 번에 구독 (월 이동 시 재쿼리 불필요)
-  const from = toDateStr(now.getFullYear(), now.getMonth(), 1);
-  const toMonthDate = new Date(now.getFullYear(), now.getMonth() + 2, 0);
-  const to = toDateStr(toMonthDate.getFullYear(), toMonthDate.getMonth(), toMonthDate.getDate());
+  const from = toDateStr(todayYear, todayMonth - 1, 1);
+  const toMonthDate = new Date(Date.UTC(todayYear, todayMonth + 1, 0));
+  const to = toDateStr(
+    toMonthDate.getUTCFullYear(),
+    toMonthDate.getUTCMonth(),
+    toMonthDate.getUTCDate(),
+  );
 
   const { slots, loading } = useDeliverySlots(storeId, from, to);
 
   const calendar = buildCalendar(viewYear, viewMonth);
-  const todayStr = now.toISOString().split('T')[0];
-  const monthLabel = new Date(viewYear, viewMonth).toLocaleDateString('ko-KR', {
+  const monthLabel = new Date(Date.UTC(viewYear, viewMonth, 1)).toLocaleDateString('ko-KR', {
+    timeZone: 'Asia/Seoul',
     year: 'numeric',
     month: 'long',
   });
@@ -212,7 +218,8 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
         mt="xs"
       >
         {value
-          ? `선택: ${new Date(value).toLocaleDateString('ko-KR', {
+          ? `선택: ${new Date(`${value}T00:00:00+09:00`).toLocaleDateString('ko-KR', {
+              timeZone: 'Asia/Seoul',
               month: 'long',
               day: 'numeric',
               weekday: 'short',

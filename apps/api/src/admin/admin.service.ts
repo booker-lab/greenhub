@@ -1,8 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { dateRangeKST } from '@greenhub/shared';
 import * as admin from 'firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
+import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
 import { PaymentsService } from '../payments/payments.service';
+import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
+import { SettlementsService } from '../settlements/settlements.service';
 import {
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
@@ -18,6 +22,8 @@ export class AdminService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly payments: PaymentsService,
+    private readonly settlements: SettlementsService,
+    private readonly roundLifecycle: RoundOrderLifecycleService,
   ) {}
 
   // ── Stores ──────────────────────────────────────────────────────
@@ -135,22 +141,38 @@ export class AdminService {
   }
 
   async forceRefund(orderId: string, dto: ForceRefundDto) {
-    const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
+    const orderRef = this.firestore.doc(`orders/${orderId}`);
+    const orderSnap = await orderRef.get();
     if (!orderSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
 
     const order = orderSnap.data()!;
-    if (order['status'] === 'CANCELLED') {
-      throw new BadRequestException('이미 취소된 주문입니다.');
+    const reason = dto.reason ?? '관리자 강제 환불';
+
+    if (order['schemaVersion'] === 2 && order['roundId']) {
+      const result = await this.roundLifecycle.cancelForRound({
+        storeId: order['storeId'],
+        orderId,
+        expectedStatus: order['status'],
+        reason,
+      });
+      await this.settlements.cancelSettlement(orderId);
+      return result;
     }
 
-    const reason = dto.reason ?? '관리자 강제 환불';
     await this.payments.processRefundByOrderId(orderId, reason);
 
-    await this.firestore.doc(`orders/${orderId}`).update({
-      status: 'CANCELLED',
-      cancelReason: reason,
-      updatedAt: this.firestore.Timestamp.now(),
+    await this.firestore.runTransaction(async (tx) => {
+      const freshSnap = await tx.get(orderRef);
+      if (!freshSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
+
+      await releaseLegacyDailyCapacityInTransaction(this.firestore, tx, orderId, reason);
+      tx.update(orderRef, {
+        status: 'CANCELLED',
+        cancelReason: reason,
+        updatedAt: this.firestore.Timestamp.now(),
+      });
     });
+    await this.settlements.cancelSettlement(orderId);
 
     return { ok: true, orderId };
   }
@@ -164,12 +186,12 @@ export class AdminService {
       query = query.where('storeId', '==', dto.storeId);
     }
     if (dto.from) {
-      query = query.where('settledAt', '>=', this.firestore.Timestamp.fromDate(new Date(dto.from)));
+      const { start } = dateRangeKST(dto.from);
+      query = query.where('settledAt', '>=', this.firestore.Timestamp.fromDate(start));
     }
     if (dto.to) {
-      const toDate = new Date(dto.to);
-      toDate.setHours(23, 59, 59, 999);
-      query = query.where('settledAt', '<=', this.firestore.Timestamp.fromDate(toDate));
+      const { endExclusive } = dateRangeKST(dto.to);
+      query = query.where('settledAt', '<', this.firestore.Timestamp.fromDate(endExclusive));
     }
 
     query = query.orderBy('settledAt', 'desc').limit(500);
