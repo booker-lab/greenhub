@@ -2,17 +2,28 @@
 
 # Payments API / Domain Spec
 
-> **최종 정합화**: 2026-08-23
+> **최종 정합화**: 2026-08-24
 > **상태**: Current
 > **공통 타입 정본**: `packages/shared/src/payment.types.ts`
 > **서버 구현 정본**: `apps/api/src/payments/**`
 > **주문 연계 계약**: `docs/specs/api/orders.md`, `docs/specs/mvp-sales-round-direct-delivery.md`
 
+## Task 2C candidate overlay
+
+현재 branch candidate `c9d60f6`에서 다음을 검증했다.
+
+- `P0-001`: `finalizePaidOrder()`가 provider `status !== 'PAID'` 입력을 side effect 없이 차단하고, `PAID` 정상 경로와 amount mismatch guard를 유지한다.
+- `P0-002`: 취소 주문에 뒤늦게 도착한 provider payment가 주문을 부활시키지 않고 refund/finalization convergence와 idempotency를 유지한다.
+- focused candidate 3 suites/16 tests 및 full API 41 suites/319 tests PASS.
+
+이 overlay는 아직 `origin/main` `256abc7`에 통합되지 않은 candidate의 검증 상태다. 아래 main baseline finding은 main 통합 전 출시 상태로 유지한다.
+
 ## 1. 소유권과 범위
 
 - 결제 검증·최종화·환불·재배송비 결제 처리는 NestJS API가 소유한다.
 - consumer는 PortOne V2 SDK로 결제 UI를 시작하지만 결제 성공 여부를 클라이언트 반환값만으로 확정하지 않는다.
-- 서버는 PortOne V2 API를 재조회해 금액·상태를 검증한 뒤 주문/결제 상태를 확정한다.
+- 현재 일반 진입 경로는 PortOne V2 API를 재조회한 뒤 상태·금액에 따라 주문/결제를 수렴시킨다.
+- **주의:** 현재 `main`의 `PaymentFinalizationService.finalizePaidOrder()` 자체는 전달받은 `paymentData.status === 'PAID'`를 독립적으로 재검증하지 않는다. 따라서 이 메서드를 “어떤 호출 경로에서도 비`PAID`를 차단하는 최종 보안 경계”로 문서화하면 안 된다.
 - webhook은 중요한 수렴 경로지만 유일한 수렴 경로가 아니다. 15분 이상 `PENDING` 주문도 scheduler가 PortOne을 재조회해 paid/cancel/확인필요 상태로 수렴시킨다.
 - legacy 본 결제와 회차 직배송 본 결제는 같은 payment finalization 기반을 공유하지만, 회차 주문은 `checkoutReservations`와 용량 반환·재확보 규칙을 추가로 사용한다.
 - 재배송비는 본 결제와 별개의 `orderCharges` 결제로 관리한다.
@@ -102,13 +113,37 @@ webhook-signature
 3. `Transaction.Ready`는 상태 변경 없이 무시한다.
 4. `Transaction.Paid`가 아닌 이벤트는 아직 처리 가능한 `PENDING` 주문을 `payment_failed`로 취소·release하는 경로로 보낸다.
 5. `Transaction.Paid`이면 webhook body의 금액을 신뢰하지 않고 `GET /payments/{paymentId}`로 PortOne 원격 결제를 다시 조회한다.
-6. 원격 결제 정보를 `PaymentFinalizationService.finalizePaidOrder()`에 전달한다.
+6. 현재 코드에서는 취소된 주문에 대해서만 원격 `paymentData.status !== 'PAID'`를 명시적으로 차단한 뒤 `PaymentFinalizationService.finalizePaidOrder()`에 전달한다.
 
-중복 webhook은 최종화 service의 상태 검사와 transaction으로 멱등 처리한다. “PENDING 아니면 무조건 skip”보다 실제 구현의 `canFinalize()` 조건을 따른다.
+중복 webhook은 최종화 service의 주문 상태 검사와 transaction으로 멱등 처리한다. “PENDING 아니면 무조건 skip”보다 실제 구현의 `canFinalize()` 조건을 따른다.
 
 ## 6. 결제 성공 최종화
 
-`PaymentFinalizationService.finalizePaidOrder()`의 핵심 계약:
+`PaymentFinalizationService.finalizePaidOrder()`의 현재 구현을 설명한다.
+
+### 현재 구현 한계 — provider 상태 최종 방어
+
+현재 `main`에서 이 메서드는 다음을 자체 검사한다.
+
+- 주문 존재 여부
+- 주문이 `canFinalize()` 가능한 상태인지
+- PortOne 금액과 주문 금액 일치 여부
+- 회차 reservation/capacity 조건
+
+그러나 **전달된 `paymentData.status`가 실제 `PAID`인지 메서드 내부에서 직접 차단하지 않는다.**
+
+현재 일반 호출 경로의 방어는 다음과 같다.
+
+- `cleanupPendingOrders()`는 `paymentData.status === 'PAID'`일 때만 finalization을 호출한다.
+- webhook은 `Transaction.Paid` 이벤트에서 원격 결제를 재조회하지만, `PENDING` 주문에 대해 재조회 결과의 status를 finalization 직전에 다시 강제하지 않는다.
+
+따라서 원하는 불변식은 다음과 같지만, **현재 `main` 구현 완료 사실로 읽으면 안 된다.**
+
+```text
+finalizePaidOrder(paymentData) accepts only paymentData.status === 'PAID'
+```
+
+이 방어가 코드와 회귀 테스트로 통합되기 전까지는 `finalizePaidOrder()`를 독립적인 `PAID` 최종 보안 경계로 취급하지 않는다.
 
 ### 금액 검증
 
@@ -126,6 +161,8 @@ PortOne payment.amount.total === orders.totalAmount
 클라이언트가 보낸 금액을 최종 검증값으로 사용하지 않는다.
 
 ### 정상 결제
+
+호출자가 실제 `PAID` 결제만 전달했다는 전제 아래 현재 finalization은:
 
 - `saleType === 'group'` → `RECRUITING`
 - 그 외 → `ACCEPTED`
@@ -218,6 +255,38 @@ REDELIVERY_FEE
 - 연결 주문의 `redeliveryChargeId`, `storeId`, `userId` 일치
 
 본 주문 취소 시 paid 재배송비도 별도 refund 경로로 환불할 수 있다. 본 결제와 재배송비 결제를 같은 payment record라고 가정하지 않는다.
+
+## 10A. 결제 하위 계약 검증 상태
+
+판정 기준은 `docs/DOCUMENT_CONSISTENCY.md`를 따른다.
+
+### 본 결제 finalization provider 상태 — `IMPLEMENTATION FINDING`
+
+현재 `finalizePaidOrder()` 내부의 비`PAID` 최종 차단이 없으므로 P0 미해결 상태다. caller 방어와 기존 race/멱등 테스트가 존재하더라도 이 불변식 전체를 `VERIFIED`로 승격하지 않는다.
+
+추적: `docs/BACKLOG.md`의 `PAYMENT-FINALIZATION-PAID-GUARD`.
+
+### 본 결제 환불 멱등성 — `VERIFIED`
+
+`PaymentRefundService` 구현과 `payments.service.spec.ts`의 직접 회귀가 다음을 함께 보장한다.
+
+- `PAID`이며 미환불인 결제만 refund claim 획득
+- 동시 환불 호출과 완료 뒤 재시도에서 PortOne 외부 환불 1회
+- 성공 뒤 `CANCELLED`/환불 금액·시각 기록
+- provider 실패 시 claim 해제와 `AUTO_REFUND_FAILED` 운영 이슈
+- 법정 분쟁·고객지원 retention 기록에 provider 원문·민감정보를 복제하지 않음
+
+### 재배송비 결제·환불 — `VERIFIED`
+
+`OrderChargePaymentService` 구현과 직접 회귀가 다음을 확인한다.
+
+- `Transaction.Paid`에서 원격 결제를 재조회하고 `PAID` 상태·금액·charge/order 연결 관계 검증
+- 불일치 시 `PENDING` charge를 확정하지 않음
+- 실패 webhook 중복 시 `FAILED`로 한 번 수렴
+- paid 재배송비 환불의 동시 호출·완료 후 재시도에서 PortOne 환불 1회
+- 주문 생성 측에서는 고객 책임 배송 보류, WEATHER 제외, 양수 재배송비, 주문자 소유권을 확인
+
+이 `VERIFIED` 판정은 위 계약 범위에 한정한다. 주문 취소 전체의 상태 허용 범위와 side effect는 orders lifecycle 계약을 별도로 확인한다.
 
 ## 11. 현재 조회 API
 
@@ -317,12 +386,16 @@ export interface Payment {
 - 회차 결제면 `docs/specs/mvp-sales-round-direct-delivery.md`
 - 운영 예외면 runbook
 
+특히 finalization 안전성 변경 시 `PENDING`, `FAILED`, `CANCELLED`, `PAID`, 금액 불일치와 회차/legacy 경로를 각각 회귀 테스트로 확인한다. 문서에 적힌 원하는 불변식을 구현 완료 증거로 대신하지 않는다.
+
 실제 결제·환불은 테스트 문서에 적힌 예시만으로 실행하지 않는다. 대상 환경과 승인 범위를 확인한다.
 
 ## 변경 이력
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-08-24 | 문서 정합성 기준에 따라 finalization P0, 본 결제 환불, 재배송비 결제·환불의 검증 상태를 분리 |
+| 2026-08-23 | 현재 `main`의 `finalizePaidOrder()`가 provider `PAID` 상태를 자체 차단하지 않는 구현 한계를 명시하고 호출 경로 의존성을 정합화 |
 | 2026-08-23 | webhook 서명, PortOne 재조회, PENDING reconciliation, 늦은 결제 재확보/환불, refund claim, 재배송비 결제에 맞춰 전면 정합화 |
 | 2026-03-27 | PortOne V2 초기 전환 |
 | 2026-03-26 | 초기 payments 설계 초안 |

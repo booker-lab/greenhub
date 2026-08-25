@@ -82,8 +82,8 @@ function seedRecords(): Record<string, Data> {
       name: '다른 구매자',
       phone: '010-2222-2222',
     },
-    'users/driver-1': { id: 'driver-1', role: 'driver' },
-    'users/driver-2': { id: 'driver-2', role: 'driver' },
+    'users/driver-1': { id: 'driver-1', role: 'driver', driverApproved: true },
+    'users/driver-2': { id: 'driver-2', role: 'driver', driverApproved: true },
     'users/admin-1': { id: 'admin-1', role: 'admin' },
   };
 }
@@ -151,6 +151,7 @@ export async function createMvpSalesRoundFixture() {
     capacity,
     issueWriter,
     retention,
+    refunds,
   );
   const payments = new PaymentsService(
     firestore,

@@ -1,9 +1,15 @@
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
+import * as admin from 'firebase-admin';
+import * as bcrypt from 'bcrypt';
 import type { AuditService } from '../common/audit/audit.service';
 import type { FirestoreService } from '../firestore/firestore.service';
 import { AuthService } from './auth.service';
 import type { KakaoClient } from './kakao.client';
+
+jest.mock('firebase-admin', () => ({
+  auth: jest.fn(),
+}));
 
 describe('AuthService', () => {
   function makeKakaoLoginService(options: {
@@ -19,6 +25,10 @@ describe('AuthService', () => {
       }),
     };
     const userRef = {
+      get: jest.fn().mockResolvedValue({
+        exists: options.user !== undefined,
+        data: () => options.user,
+      }),
       set: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
     };
@@ -74,7 +84,7 @@ describe('AuthService', () => {
       kakaoClient as unknown as KakaoClient,
       audit as unknown as AuditService,
     );
-    return { audit, firestore, jwt, kakaoClient, service, userRef, usersQuery };
+    return { audit, firestore, jwt, kakaoClient, refreshTokenRef, service, userRef, usersQuery };
   }
 
   describe('kakaoLogin', () => {
@@ -146,6 +156,208 @@ describe('AuthService', () => {
       ).rejects.toMatchObject({ status: 401 });
       expect(audit.log).toHaveBeenCalledWith('auth.login.suspended', { userId: 'user-1' });
       expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('공개 driver 가입은 승인 대기 상태로 저장한다', async () => {
+      const { service, userRef } = makeKakaoLoginService({});
+
+      await service.register({
+        email: 'driver@example.com',
+        password: 'password-123',
+        name: '신청 기사',
+        role: 'driver',
+      } as never);
+
+      expect(userRef.set).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'driver', driverApproved: false }),
+      );
+    });
+
+    it('기존 미승인 driver를 카카오 로그인 때 자동 승인하지 않는다', async () => {
+      const { service, userRef } = makeKakaoLoginService({
+        user: { id: 'driver-1', role: 'driver', storeId: null, suspended: false },
+      });
+
+      const result = await service.kakaoLogin({
+        kakaoAccessToken: 'token',
+        targetRole: 'driver',
+      });
+
+      expect(result.user).not.toHaveProperty('driverApproved', true);
+      expect(userRef.update).not.toHaveBeenCalled();
+    });
+
+    it('신규 driver의 카카오 가입도 승인 대기로 저장한다', async () => {
+      const { service, userRef } = makeKakaoLoginService({});
+
+      const result = await service.kakaoLogin({
+        kakaoAccessToken: 'token',
+        targetRole: 'driver',
+      });
+
+      expect(result.user).toMatchObject({ role: 'driver', driverApproved: false });
+      expect(userRef.set).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'driver', driverApproved: false }),
+      );
+    });
+  });
+
+  describe('email login driver approval', () => {
+    const password = 'password-123';
+
+    async function makeEmailLoginService(overrides: Record<string, unknown> = {}) {
+      return makeKakaoLoginService({
+        user: {
+          id: 'driver-1',
+          email: 'driver@example.com',
+          name: '신청 기사',
+          role: 'driver',
+          storeId: null,
+          suspended: false,
+          passwordHash: await bcrypt.hash(password, 4),
+          ...overrides,
+        },
+      });
+    }
+
+    it.each([
+      ['false', { driverApproved: false }],
+      ['missing', {}],
+    ])('%s approval driver는 token 발급 전에 email login이 거부된다', async (_label, approval) => {
+      const { jwt, refreshTokenRef, service } = await makeEmailLoginService(approval);
+
+      await expect(service.login({ email: 'driver@example.com', password })).rejects.toMatchObject({
+        status: 403,
+      });
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it('승인된 driver는 정상적으로 email login하고 access/refresh token을 발급한다', async () => {
+      const { jwt, refreshTokenRef, service } = await makeEmailLoginService({
+        driverApproved: true,
+      });
+
+      const result = await service.login({ email: 'driver@example.com', password });
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toBe('refresh-token');
+      expect(result.user).toMatchObject({ role: 'driver', driverApproved: true });
+      expect(jwt.sign).toHaveBeenCalledTimes(2);
+      expect(refreshTokenRef.set).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['consumer', 'seller', 'admin'])('%s email login 정상 경로를 유지한다', async (role) => {
+      const { service } = await makeEmailLoginService({ role, driverApproved: undefined });
+
+      const result = await service.login({ email: 'driver@example.com', password });
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toBe('refresh-token');
+      expect(result.user).toMatchObject({ role });
+    });
+
+    it('정지된 사용자의 기존 email login 거부를 유지한다', async () => {
+      const { jwt, service } = await makeEmailLoginService({
+        role: 'consumer',
+        suspended: true,
+      });
+
+      await expect(service.login({ email: 'driver@example.com', password })).rejects.toMatchObject({
+        status: 401,
+      });
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getFirebaseToken', () => {
+    const firebaseAuth = { createCustomToken: jest.fn() };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      firebaseAuth.createCustomToken.mockResolvedValue('firebase-custom-token');
+      (admin.auth as jest.Mock).mockReturnValue(firebaseAuth);
+    });
+
+    it('승인된 driver token에는 Rules가 기대하는 true claim을 넣는다', async () => {
+      const { service } = makeKakaoLoginService({
+        user: {
+          id: 'driver-1',
+          role: 'driver',
+          driverApproved: true,
+          suspended: false,
+        },
+      });
+
+      await expect(service.getFirebaseToken('driver-1', 'driver')).resolves.toBe(
+        'firebase-custom-token',
+      );
+      expect(firebaseAuth.createCustomToken).toHaveBeenCalledWith('driver-1', {
+        role: 'driver',
+        storeId: null,
+        driverApproved: true,
+      });
+    });
+
+    it.each([
+      ['미승인', { id: 'driver-1', role: 'driver', driverApproved: false, suspended: false }],
+      ['승인 claim 누락', { id: 'driver-1', role: 'driver', suspended: false }],
+      ['역할 불일치', { id: 'driver-1', role: 'consumer', driverApproved: true, suspended: false }],
+    ])('%s driver token 발급을 거부한다', async (_label, user) => {
+      const { service } = makeKakaoLoginService({ user });
+
+      await expect(service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+        status: 403,
+      });
+      expect(firebaseAuth.createCustomToken).not.toHaveBeenCalled();
+    });
+
+    it('정지되거나 존재하지 않는 driver token 발급을 거부한다', async () => {
+      const suspended = makeKakaoLoginService({
+        user: { id: 'driver-1', role: 'driver', driverApproved: true, suspended: true },
+      });
+      await expect(suspended.service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+        status: 401,
+      });
+
+      const missing = makeKakaoLoginService({});
+      await expect(missing.service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+        status: 401,
+      });
+      expect(firebaseAuth.createCustomToken).not.toHaveBeenCalled();
+    });
+
+    it('driver가 아닌 token에는 driverApproved claim을 넣지 않는다', async () => {
+      const { service } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer', suspended: false },
+      });
+
+      await service.getFirebaseToken('consumer-1', 'consumer');
+
+      expect(firebaseAuth.createCustomToken).toHaveBeenCalledWith('consumer-1', {
+        role: 'consumer',
+        storeId: null,
+      });
+    });
+
+    it('승인 상태 변경은 다음 token 발급에만 반영된다', async () => {
+      const user = {
+        id: 'driver-1',
+        role: 'driver',
+        driverApproved: false,
+        suspended: false,
+      };
+      const { service } = makeKakaoLoginService({ user });
+
+      await expect(service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+        status: 403,
+      });
+      user.driverApproved = true;
+      await expect(service.getFirebaseToken('driver-1', 'driver')).resolves.toBe(
+        'firebase-custom-token',
+      );
+      user.driverApproved = false;
+      await expect(service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+        status: 403,
+      });
     });
   });
 });

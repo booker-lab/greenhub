@@ -125,6 +125,7 @@ const QUERY_CONTRACTS: QueryContract[] = [
     sourcePatterns: [
       "where('status', '==', 'PREPARING')",
       "where('deliveryMethod', 'in', ['direct', 'hub'])",
+      "where('driverId', '==', null)",
       "orderBy('preparedAt', 'asc')",
     ],
     collectionGroup: 'orders',
@@ -132,6 +133,7 @@ const QUERY_CONTRACTS: QueryContract[] = [
     fields: [
       { fieldPath: 'status', order: 'ASCENDING' },
       { fieldPath: 'deliveryMethod', order: 'ASCENDING' },
+      { fieldPath: 'driverId', order: 'ASCENDING' },
       { fieldPath: 'preparedAt', order: 'ASCENDING' },
     ],
   },

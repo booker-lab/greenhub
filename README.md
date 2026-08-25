@@ -70,6 +70,7 @@ workspace 범위는 `pnpm-workspace.yaml`의 `apps/*`, `packages/*`, `scripts`�
 - Firebase 권한은 `firestore.rules`, `storage.rules`, 인덱스는 `firestore.indexes.json`에서 관리합니다.
 - 다역할 사용자 흐름의 최종 회귀 검증은 `apps/e2e`가 담당합니다.
 - 신규 기능 또는 공개 계약 변경은 관련 `docs/specs/`를 확인하고 구현과 함께 정합화합니다.
+- `main` 통합은 production 배포 승인이 아닙니다. production은 활성 배포 안전 계약의 exact-SHA 검증과 별도 승인 경계를 따릅니다.
 
 ## 로컬 개발과 검증
 
@@ -87,7 +88,7 @@ pnpm --filter consumer dev --port 3001
 # 전체 production build 대상
 pnpm build
 
-# workspace typecheck
+# typecheck script가 정의된 workspace만 재귀 실행
 pnpm typecheck
 
 # Firebase Rules
@@ -100,6 +101,8 @@ pnpm test:e2e
 
 API와 consumer는 포트를 따로 지정하지 않으면 둘 다 3000을 사용할 수 있습니다. 로컬 전체 포트·`dev.bat` 동작은 `docs/URLS.md`, 안전한 통합 검증 순서는 `docs/INTEGRATION_TEST.md`를 확인합니다.
 
+`pnpm typecheck`는 root에서 `pnpm -r typecheck`를 실행하므로 **각 package에 `typecheck` script가 있는 범위만** 검사합니다. 모든 앱의 TypeScript 검증을 자동 보장한다고 가정하지 말고, 필요한 package의 실제 script를 확인합니다.
+
 `pnpm lint`는 workspace별 lint를 재귀 실행하며 API lint는 수정형(`--fix`)이므로 읽기 전용 검증 용도로 사용하기 전에 실제 스크립트를 확인해야 합니다.
 
 환경 변수는 저장소에 비밀값을 기록하지 않고 각 실행 환경에서 관리합니다.
@@ -111,10 +114,11 @@ API와 consumer는 포트를 따로 지정하지 않으면 둘 다 3000을 사�
 | 문서 | 역할 |
 |---|---|
 | `AGENTS.md` | 저장소 작업 규칙과 승인 경계 |
+| `docs/README.md` | current 계약과 역사 자료를 구분하는 전체 문서 라우터 |
 | `docs/memory.md` | 현재 브랜치, 활성 작업, 차단 요인, 다음 작업의 현재 상태 SSOT |
 | `docs/PROJECT_MAP.md` | 저장소 영역과 필요한 Context를 찾는 라우터 |
 | `docs/BACKLOG.md` | 미완료·향후 작업 목록 |
-| `docs/specs/` | API·도메인·운영 계약 |
+| `docs/specs/` | API·도메인·운영 계약과 하위 라우터 |
 | `docs/CRITICAL_LOGIC.md` | 되돌리기 어려운 설계 결정과 이유 |
 | `docs/TROUBLESHOOTING.md` | 알려진 문제와 해결 기록 |
 | `docs/URLS.md` | canonical URL, 인증 URL 정책 연결, 로컬 포트 |

@@ -2,106 +2,205 @@
 
 # 회차 직배송 MVP — ALIGO 심사 대기 인계
 
-> 현재 재개 순서만 유지한다. 과거 출시 준비 상세 증거는 `docs/plans/REPORT_mvp_round_direct_launch.md`와 Git 이력에서 확인한다.
+> 현재 재개 지점만 관리한다. 상세 상태는 `docs/memory.md`, Acceptance Criteria는 `docs/BACKLOG.md`, 의존성은 `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`를 따른다.
 
-## 현재 상태 — 2026-08-23 KST
+## 현재 상태 — 2026-08-24 KST
 
-회차 직배송 MVP 코드는 PR #11을 통해 `main`에 통합됐다. 기능 통합 기준 SHA는 `e55f25914cc7d01576fbd4639583daaf0fe6385e`다. 기존 `codex/mvp-sales-round-direct`는 통합 완료 branch로 취급한다.
+- 회차 직배송 MVP `main` 통합 완료.
+- 카카오 비즈니스 채널, ALIGO 발신 프로필·senderkey, 회차 알림 템플릿 8종 등록·심사 요청 완료.
+- 마지막 provider 확인: 8종 모두 `검수중`, 실제 발송 0건.
+- production ALIGO 설정 미반영.
+- 첫 운영 회차 미생성, `salesMode=legacy`.
+- production은 exact release SHA + 별도 승인 절차를 사용한다.
 
-카카오 비즈니스 채널 승인, ALIGO 발신 프로필, `senderkey`, 내부 논리 템플릿↔provider `tpl_code` 분리와 필수 변수 검증까지 완료됐다. 회차 알림 템플릿 8종은 2026-08-23 provider에 등록·심사 요청됐고 현재 모두 `검수중`이다.
+현재 외부 차단점은 ALIGO 8종 심사 완료다. 재개 시 provider 상태를 다시 확인한다. 단, 출시 P0는 심사와 병렬 진행 가능하다.
 
-따라서 **현재 즉시 차단점은 ALIGO 8종 provider 심사 완료**다. 다만 심사가 끝난 뒤 곧바로 release SHA를 고정하면 안 된다. 현재 공개 `/terms`, `/privacy`는 2026-08-19의 비판매 상태를 전제로 하므로 실제 판매 공개 전에 법적 문서·공개 페이지 재정합화가 필요하다.
+병렬 출시 P0:
 
-## 현재 운영 상태
+1. `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
+2. `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
+3. `ORDER-REDELIVERY-PAID-RESUME-GATE`
+4. `PAYMENT-FINALIZATION-PAID-GUARD`
+5. `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
+6. `ADMIN-FORCE-REFUND-CONSISTENCY`
+7. `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
+8. `SETTLEMENT-LIFECYCLE-COVERAGE`
+9. `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
+10. `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
+11. Issue #32
 
-| 항목 | 상태 |
-|---|---|
-| 회차 직배송 코드 | `main` 통합 완료 |
-| 카카오 비즈니스 채널 | 최종 승인 완료 |
-| consumer 법적 고지 | **비판매 상태 버전 production 반영 완료; 판매 활성화 전 개정 필요** |
-| ALIGO 발신 프로필 | 정상 1건 |
-| `senderkey` | 발급 완료 |
-| 회차 알림 템플릿 8종 | 등록 완료·전부 `검수중` |
-| 실제 알림톡 정상 발송 | 미실행 |
-| SMS fallback 검증 | 미실행 |
-| 운영 ALIGO 자격 증명·매핑 | 미반영 |
-| 운영 Firebase Rules·indexes | 이전 준비에서 반영 완료 상태 |
-| 회차 출시 후보 production 배포 | 미실행 |
-| 첫 운영 회차 | 미생성 |
-| `salesMode` | `legacy` 유지 |
+## Task 2F-B publication reconciliation
 
-## 법적 공개 문서 주의
+현재 workspace에서 P0/security integration candidate의 문서 정합화까지 완료했다.
 
-현재 이용약관과 개인정보처리방침은 다음 전제를 명시한다.
+- candidate: `codex/task-2c-r1-reg001` / Task 2F-A auth change `1da3dee`
+- 상태: `TASK_2F_B_PUBLICATION_CANDIDATE`
+- candidate에서 종료: `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001`
+- evidence: [Task 2D integration closeout report](REPORT_task_2d_integration_closeout.md)
+- candidate auth 추가 검증: public register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계.
+- 현재 `origin/main`: `d6185bd`; candidate는 아직 main/production에 반영되지 않았다.
+- `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이며 refresh/session lifecycle 완료를 주장하지 않는다.
 
-- 현재 상용 주문·결제·배송을 운영하지 않음
-- PortOne·결제사업자를 현재 상용 처리 수탁자로 운영하지 않음
-- 실제 고객 ALIGO 알림 공급자 처리는 별도 현재 공개 고지에 반영되지 않음
+다음 재개 지점은 candidate를 현재 main에 branch+PR로 통합하고 PR CI를 확인하는 절차다. 이후 `AUTH-SESSION-CLAIM-REVOCATION`, 최신 main의 redelivery 상태머신, admin refund, legal, ALIGO, exact-SHA E2E와 production 승인 게이트를 순서대로 진행한다.
 
-따라서 판매 활성화 전 `docs/specs/legal/README.md`의 P0 게이트를 수행한다. 이 변경은 consumer 법적 페이지 코드와 테스트를 바꾸므로 **실제 출시 대상 SHA를 확정하기 전에** 끝내야 한다.
+## 최우선 재개 — Driver 승인 + direct read 결합 위험
 
-## ALIGO 템플릿 심사 현황
+운영 불변식은 **관리자 승인 전 driver 권한을 얻을 수 없고, driver가 필요한 최소 주문만 접근한다**는 것이다.
 
-| 논리 템플릿 | 상태 |
-|---|---|
-| `ORDER_ACCEPTED` | 검수중 |
-| `ORDER_PREPARING` | 검수중 |
-| `ORDER_DELIVERING` | 검수중 |
-| `ORDER_DELIVERY_HELD` | 검수중 |
-| `ORDER_REDELIVERY_PAYMENT_REQUESTED` | 검수중 |
-| `ORDER_REDELIVERY_SCHEDULED` | 검수중 |
-| `ORDER_DELIVERED` | 검수중 |
-| `ORDER_CANCELLED` | 검수중 |
+2026-08-24 감사에서 확인된 public/Kakao approval bypass는 Task 2F-B candidate에서 다음과 같이 검증됐다.
 
-- 중복·오류·반려: 없음
-- 실제 알림톡·SMS 발송: 0건
-- 비밀값 원문은 기록하지 않는다.
+- `POST /auth/register` driver는 `driverApproved: false`로 저장되고 client approval 주입이 거부된다.
+- `POST /auth/login`은 false/missing approval driver를 JWT/refresh token 발급 전에 거부한다.
+- 신규 Kakao driver와 legacy approval 필드 누락 driver는 로그인 side effect로 자동 승인되지 않는다.
+- JWT strategy와 Firebase custom token은 current user의 role/approval/suspension 경계를 확인한다.
+- `AUTH-SESSION-CLAIM-REVOCATION`의 refresh/stale claims lifecycle과 broad driver order read P0는 남아 있다.
 
-## 검증 기준
+따라서 frontend에서 일반 driver credentials UI를 숨기는 것만으로 해결되지 않는다. **API authorization boundary + Firebase claim + Rules read 경계를 함께 fail-closed**해야 한다.
 
-- 마지막 전체 원격 회차 E2E 성공 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`
-- chromium 26 + mobile 26 = 52건, fixture cleanup 성공
-- 과거 run은 현재 release SHA 검증을 대신하지 않는다.
+Candidate에서 확인된 범위:
 
-## 지금 하지 말아야 할 작업
+- public registration이 승인 전 usable driver authorization을 만들지 않음
+- 미승인 email/Kakao driver가 driver JWT/Firebase claim을 얻지 못함
+- login side-effect 자동승인 방지
+- JWT/Firebase/Rules current-user 경계 직접 회귀
 
-- 심사 중 템플릿을 중복 등록하거나 임의 수정하지 않는다.
-- 승인 전 실제 알림톡·SMS를 발송하지 않는다.
-- ALIGO 자격 증명·`tpl_code` 원문을 문서·Git에 기록하지 않는다.
-- 별도 승인 없이 production 배포·환경 변수·Firebase·운영 데이터를 변경하지 않는다.
-- 운영 회차를 만들거나 `salesMode`를 변경하지 않는다.
-- 현재 비판매 약관을 그대로 둔 채 판매기능을 공개하지 않는다.
-- 반대로 판매가 아직 공개되지 않았는데 약관을 임의로 `현재 판매 중` 상태로 선반영하지 않는다.
+Remaining:
 
-## 재개 순서
+- refresh/custom-token session lifecycle이 authoritative approval/role/store 상태로 수렴
+- driver direct Firestore read가 필요한 최소 대상·필드로 제한
+- candidate의 main 통합 및 PR CI/merge readiness
 
-1. ALIGO 템플릿 8종의 심사 결과를 확인한다.
-2. 8종 모두 승인됐는지, 수정 요청·반려가 없는지 기록한다.
-3. 승인된 실제 `tpl_code`와 논리 템플릿 8종의 매핑 준비상태를 값 비공개 방식으로 검증한다.
-4. 별도 승인 후 격리 수신자 실제 알림톡 정상 발송을 검증한다.
-5. 별도 승인 후 SMS fallback을 검증한다.
-6. **판매 활성화 법적 문서 재정합화**를 수행한다: `/terms`, `/privacy`, PortOne/결제사업자, ALIGO 고객 알림, 배송정보 접근, 취소·환불·배송 정책, 시행일·이전 버전, 법적 문서 테스트를 실제 MVP와 일치시킨다.
-7. 법적 페이지 변경까지 포함된 실제 출시 대상 `main` SHA를 확정한다.
-8. 해당 SHA에서 전체 원격 회차 E2E 52건과 fixture cleanup을 통과시킨다.
-9. 운영 Firebase 상태를 읽기 전용 재확인한다.
-10. 별도 승인 후 운영 ALIGO 자격 증명·매핑을 반영한다.
-11. `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`의 Task 3.1 승인 게이트를 확인한다.
-12. 사용자의 별도 `Task 3.1 승인`이 있을 때만 production 배포로 진행한다.
-13. 배포 후 새 `/privacy`, `/terms`를 포함한 무변경 smoke → 첫 회차 검수 → 최종 출시 판정 → `salesMode` 전환 순으로 진행한다.
+정본: `docs/specs/api/auth.md`, `docs/specs/api/orders.md`, `docs/BACKLOG.md`.
 
-## 재개 완료 조건
+## 다음 핵심 재개 — 재배송비 상태머신
 
-- [x] 카카오 비즈니스 채널 최종 승인
-- [x] 회차 직배송 코드 `main` 통합
-- [x] ALIGO 발신 프로필·`senderkey` 준비
-- [x] 회차 알림 템플릿 8종 provider 등록·심사 요청
-- [ ] 회차 알림 템플릿 8종 최종 승인
-- [ ] 실제 알림톡 정상 발송 검증
-- [ ] SMS fallback 검증
-- [ ] **판매 활성화용 개인정보처리방침·이용약관 재정합화**
-- [ ] 법적 페이지를 포함한 실제 출시 대상 SHA 확정
-- [ ] 해당 SHA 전체 원격 회차 E2E·cleanup 통과
-- [ ] 운영 ALIGO 설정·템플릿 매핑 검사 통과
-- [ ] Task 3.1 별도 승인
+운영 불변식은 **고객 책임 유료 재배송비를 결제하기 전에 실제 배송을 다시 시작하지 않는다**는 것이다.
 
-미완료 조건을 충족하기 전에는 회차 출시 후보를 production에 공개하거나 `salesMode`를 전환하지 않는다.
+현재는 두 문제가 결합돼 있다.
+
+### A. direct resume 우회
+
+`DELIVERY_HELD → DELIVERING`이 charge `PAID` 확인 없이 가능하며 driver UI도 결제 상태와 무관하게 `배송 재개`를 노출한다.
+
+### B. seller PREPARING 경유 dead-end/우회
+
+- 고객 책임+양수 재배송비 hold도 seller가 `DELIVERY_HELD → PREPARING` 가능.
+- 이 전환은 hold를 해소하고 `heldOrderCount`를 줄이며 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 발생시키는 현재 경로다.
+- 그러나 charge 생성 API와 consumer 결제 CTA는 현재 status `DELIVERY_HELD`를 요구한다.
+- 따라서 payment-request 알림 뒤 실제 결제가 불가능할 수 있다.
+- 이후 `PREPARING → DELIVERING`에도 과거 미결제 hold를 확인하는 durable gate가 없다.
+
+완료 시 반드시:
+
+- payment-required 정보가 결제 전 사라지지 않고,
+- payment-request 알림 뒤 consumer가 실제 결제할 수 있으며,
+- current hold↔charge가 durable하게 연결되고,
+- `PAID` 전 모든 delivery-start 경로가 side-effect 0으로 거부되고,
+- PAID 뒤 정상 한 번만 재개되며,
+- hold resolve/held counter/알림이 race에서도 한 번만 수렴해야 한다.
+
+단순 driver 버튼 숨김 또는 `HELD→DELIVERING` 한 경로 guard만으로 닫지 않는다.
+
+정본: `docs/specs/api/orders.md`, `docs/BACKLOG.md`.
+
+## 새 감사 P0 포인터
+
+### Settlement core lifecycle
+
+transaction 구현은 있으나 생성 1건·중복 방지·confirm cutoff/race·cancel·paid 보존 직접 assertion이 부족하다.
+
+- Backlog: `SETTLEMENT-LIFECYCLE-COVERAGE`
+- Contract: `docs/specs/api/settlements.md`
+- Evidence: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`
+- Admin `confirmed → paid`는 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`와 분리한다.
+
+### Marketing consent lifecycle
+
+checkout consent는 order+retention에 저장되지만 MY 설정은 별도 user preference를 읽고, checkout이 이를 동기화하지 않으며 철회 retention evidence가 없다.
+
+- Backlog: `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
+- Contract: `docs/specs/api/notifications.md`, `docs/specs/legal/README.md`
+- Evidence: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`
+- 제품 선택: MVP marketing 미사용이면 consent 수집/설정 노출 제거; 유지면 user-level SSOT + withdrawal evidence + sender gating.
+- ORDER_* 정보성 연락은 marketing opt-out과 분리한다.
+
+## 나머지 P0 포인터
+
+- Payment finalization: `docs/specs/api/payments.md`
+- Payment webhook signature coverage: `docs/specs/api/payments.md`, `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`
+- Order mutation authorization: `docs/specs/api/orders.md`
+- Admin force-refund: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`
+- Admin privileged mutation coverage: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`, `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`
+- GitHub main protection: Issue #32 / deployment safety plan
+
+## 지금 하지 말 것
+
+- 심사 중 ALIGO 템플릿 중복 등록·임의 수정
+- 승인 전 실제 알림톡/SMS
+- secret/실제 tpl_code/개인정보 Git 기록
+- direct `main`
+- main merge를 production 승인으로 해석
+- 승인 없는 production/Firebase/운영 회차/`salesMode`
+- P0를 frontend 버튼 숨김·UI redirect·legal 문구만으로 정상화
+- settlement transaction 코드만 보고 financial lifecycle을 `VERIFIED` 처리
+- marketing checkbox/UI만 보고 consent lifecycle 완료 처리
+- 현재 정보성 ORDER_* 알림을 marketing opt-out으로 막아 consent 문제를 해결
+- P0 전 actual release SHA 확정
+
+## 병렬 가능 작업
+
+1. driver public register/login + Kakao approval gate + refresh/custom claims
+2. order direct read 최소화/Rules 회귀
+3. 재배송 payment-request/hold-resolution/resume 상태머신 구현·회귀
+4. payment finalization PAID boundary
+5. order mutation 거부 회귀
+6. admin force-refund lifecycle
+7. admin privileged mutation + settlement pay 직접 회귀
+8. settlement create/confirm/cancel core lifecycle 회귀
+9. marketing consent lifecycle 정책 결정·구현·회귀
+10. webhook signature real-verifier 회귀
+11. Issue #32
+12. read-only 문서/코드 감사
+13. ALIGO 상태 조회
+
+## ALIGO 승인 뒤
+
+1. P0 10개 + Issue #32 완료 확인
+2. ALIGO 8종 상태 재확인
+3. provider code 1:1 검사
+4. 승인 후 격리 알림톡
+5. 승인 후 SMS fallback
+6. 실제 재배송/환불/정산/read-minimization/auth/marketing 결과 기준 legal 재정합화
+7. actual release SHA
+8. exact SHA E2E 52+cleanup
+9. 운영 Firebase read-only
+10. 승인 후 production ALIGO 설정
+11. exact-SHA deployment 절차
+12. 별도 Task 3.1 승인 뒤 production
+13. metadata SHA + smoke
+14. 첫 회차 → 최종 판정 → `round_direct`
+
+## 완료 체크
+
+- [x] MVP main 통합
+- [x] 카카오 채널 승인
+- [x] ALIGO sender profile/senderkey
+- [x] 8종 등록·심사 요청
+- [x] repo-side main auto-production 차단
+- [ ] driver approval/session revocation + public register/login gate
+- [ ] order direct read 최소화
+- [ ] 재배송 payment-required 상태머신 + 직접 회귀 + main
+- [ ] payment finalization PAID
+- [ ] order mutation coverage
+- [ ] admin force-refund
+- [ ] admin privileged mutation + settlement pay coverage
+- [ ] settlement core lifecycle coverage
+- [ ] marketing consent lifecycle consistency
+- [ ] webhook signature real-verifier coverage
+- [ ] Issue #32
+- [ ] ALIGO 8종 승인
+- [ ] 실제 알림톡/SMS fallback
+- [ ] legal
+- [ ] release SHA E2E 52+cleanup
+- [ ] production ALIGO
+- [ ] Task 3.1 승인

@@ -2,25 +2,319 @@
 
 # Greenhub Backlog
 
-> 기준일: 2026-08-23 KST
+> 기준일: 2026-08-24 KST
 >
-> 이 문서는 **현재 미완료·향후 작업만** 관리한다. 완료된 상세 이력은 Git history, `docs/CRITICAL_LOGIC.md`, `docs/archive/`, 완료 PLAN·REPORT에서 확인한다. 현재 출시 상태는 `docs/memory.md`, 실행 순서는 활성 HANDOFF·PLAN을 우선한다.
+> 현재 미완료·향후 작업만 관리한다. 완료 상세는 Git history, `docs/CRITICAL_LOGIC.md`, `docs/archive/`, 완료 PLAN·REPORT를 사용한다.
 
 ## 우선순위 규칙
 
 - **ACTIVE**: 지금 진행 가능한 최우선 작업
-- **BLOCKED_EXTERNAL**: 외부 심사·승인·계약 때문에 기다리는 작업
-- **NEXT**: 현재 게이트가 풀리면 바로 이어서 할 작업
-- **LATER**: MVP 출시를 막지 않는 후속 개선
-- **STALE_OR_SUPERSEDED**: 과거에는 미완료였지만 현재 상태를 다시 확인하기 전 실행하면 안 되는 항목
+- **BLOCKED_EXTERNAL**: 외부 심사·승인 대기
+- **NEXT**: 현재 게이트 해소 뒤 바로 진행
+- **LATER**: MVP 출시 비차단 후속
+- **STALE_OR_SUPERSEDED**: 현재 상태 재검증 전 실행 금지
+
+---
+
+## INTEGRATION CANDIDATE CLOSEOUT
+
+현재 branch `codex/task-2c-r1-reg001`의 Task 2F-B candidate는 Task 2F-A auth change `1da3dee`와 기존 `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001` 검증 범위를 포함한다. API/consumer/seller/driver/shared, Firestore Rules, build, deployment safety evidence는 [Task 2D closeout report](plans/REPORT_task_2d_integration_closeout.md)에 고정하고, 이번 문서는 public driver approval 하위 범위의 현재 상태만 갱신한다.
+
+- candidate 상태: `TASK_2F_B_PUBLICATION_CANDIDATE`
+- 현재 `origin/main` `d6185bd`에는 candidate code가 아직 없다.
+- candidate에서 public register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계를 검증했지만 `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이다.
+- [ ] candidate를 현재 `main`에 branch+PR로 통합하고 승인된 SHA를 확정
+- 최신 main의 `ORDER-REDELIVERY-PAID-RESUME-GATE` 및 기타 미완료 P0는 candidate closeout과 별도의 ACTIVE 작업이다.
 
 ---
 
 ## ACTIVE
 
-현재 즉시 실행할 P0 개발 작업은 없다. 회차 직배송 MVP 코드는 `main`에 통합됐고, 출시 흐름은 외부 ALIGO 심사 결과를 기다리는 상태다.
+### P0 — PAYMENT-FINALIZATION-PAID-GUARD
 
-문서·코드 정합성 점검처럼 비파괴 작업은 별도 Task로 계속 수행할 수 있지만, 외부 게이트를 우회해 운영 변경을 진행하지 않는다.
+`PaymentFinalizationService.finalizePaidOrder()`가 provider `status === 'PAID'`를 boundary 자체에서 강제하지 않는다.
+
+- [ ] finalization boundary 비`PAID` 차단
+- [ ] `PENDING|FAILED|CANCELLED` 직접 거부
+- [ ] `PAID` legacy/group/round 정상 회귀
+- [ ] 금액 불일치·reservation/race 회귀
+- [ ] 수정 SHA `main` 통합
+
+정본: `docs/specs/api/payments.md`.
+
+### P0 — PAYMENT-WEBHOOK-SIGNATURE-COVERAGE
+
+PortOne webhook signature 구현은 존재하지만 금융 상태 변경 경계에 필요한 real-verifier cryptographic 양방향 회귀가 충분하지 않다.
+
+현재 직접 근거:
+
+- [x] production bootstrap은 `rawBody: true`
+- [x] controller는 raw body + `webhook-id` + `webhook-timestamp` + `webhook-signature`를 요구
+- [x] verifier는 `PORTONE_WEBHOOK_SECRET`, timestamp ±5분, HMAC SHA-256, timing-safe compare 사용
+- [x] missing signature/secret, stale timestamp 거부 테스트 존재
+- [x] HTTP E2E에서 webhook header 없는 요청 401
+- [x] 회차 E2E fixture는 controller webhook 경로를 실행하지만 `verifyWebhookSignature`는 mock
+
+판정:
+
+- webhook signature 구현은 `IMPLEMENTED`.
+- 현재 직접 증거는 `PARTIALLY VERIFIED`.
+- 금융 인증 경계이므로 P0 `COVERAGE GAP`으로 추적한다.
+- 구현 결함으로 단정하지 않는다.
+
+남음:
+
+- [ ] known secret/id/timestamp/raw body의 valid HMAC이 실제 `PortoneClient.verifyWebhookSignature()` 통과
+- [ ] 필수 header를 모두 채운 non-empty invalid HMAC 거부
+- [ ] 동일 signature에서 raw body 1 byte 변조 거부
+- [ ] webhook-id 변조 거부
+- [ ] signed timestamp 변조 및 허용창 경계 거부·허용 고정
+- [ ] actual controller + real verifier에서 invalid request가 `PaymentsService.handleWebhook()`에 도달하지 않음
+- [ ] invalid request의 주문/payment/orderCharge/capacity side effect 0
+- [ ] 기존 duplicate webhook 멱등 회귀 유지
+- [ ] 회귀 SHA `main` 통합
+
+정본: `docs/specs/api/payments.md`; 증거: `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`.
+
+### P0 — ORDER-REDELIVERY-PAID-RESUME-GATE
+
+운영 계약은 고객 책임 첫 배송 실패의 유료 재배송에 **`결제 전 재배송 금지`**를 요구한다. 2026-08-24 추가 감사에서 이 문제는 단순 driver resume guard 누락이 아니라 **결제 요청·hold 해소·배송 재개 상태머신 전체 불일치**임을 확인했다.
+
+현재 직접 근거:
+
+- [x] `OrderChargePaymentService`의 charge `PAID` 검증·금액/연결 검증·환불 멱등성은 직접 테스트됨
+- [x] driver `DELIVERY_HELD → DELIVERING` 전환은 charge `PAID`를 확인하지 않음
+- [x] driver UI는 `DELIVERY_HELD` 회차 주문에 charge 상태와 무관하게 `배송 재개` CTA 노출
+- [x] seller `DELIVERY_HELD → PREPARING`은 고객 책임+양수 재배송비 주문에서도 현재 테스트가 정상 성공으로 고정
+- [x] 위 seller 전환은 hold `resolvedAt` 기록 + `heldOrderCount` 감소
+- [x] 현재 notification map은 이 전환을 `ORDER_REDELIVERY_PAYMENT_REQUESTED` 발송 시점으로 사용
+- [x] 그러나 `OrderChargesService.createRedeliveryFeeCharge()`는 현재 order status가 `DELIVERY_HELD`여야 charge 생성 가능
+- [x] consumer `canPayRedeliveryFee`도 현재 status가 `DELIVERY_HELD`일 때만 true
+- [x] 따라서 `PREPARING`으로 옮긴 뒤 결제 요청 알림이 가면 소비자 charge 생성/UI가 사라짐
+- [x] 이후 `PREPARING → DELIVERING`에는 과거 paid-required hold의 미결제를 확인하는 durable guard가 없음
+
+판정:
+
+- charge 결제·환불 **하위 계약은 `VERIFIED`**.
+- 유료 재배송 **주문 상태머신 전체는 P0 `IMPLEMENTATION FINDING`**.
+- `DELIVERY_HELD → DELIVERING` 한 경로만 막아서는 `PREPARING` 우회가 남으므로 완료가 아니다.
+
+남음 — 불변식:
+
+- [ ] 고객 책임+양수 재배송비 hold의 `payment required`가 결제 완료 전 사라지지 않음
+- [ ] payment-request 알림 시점에도 consumer charge 생성/결제 UI·endpoint가 actionable
+- [ ] current hold↔charge를 `heldAt` 또는 동등 durable key로 연결
+- [ ] charge type/order/store/user 일치 + `PAID`일 때만 모든 실제 delivery-start 경로 허용
+- [ ] `PENDING|FAILED|REFUNDED|missing|mismatched`는 side effect 0 거부
+- [ ] `DELIVERY_HELD → DELIVERING`과 `DELIVERY_HELD → PREPARING → DELIVERING` 모두 동일 paid gate 적용
+- [ ] seller가 `PREPARING` 결제요청 구조를 유지한다면 durable payment-required marker와 consumer 결제 가능성을 상태 변경 뒤에도 보존; 아니면 결제 완료 전 hold를 해소하지 않는 구조로 변경
+- [ ] hold 해소·`heldOrderCount` 감소 시점을 payment completion/재개 정책과 명시적으로 일치
+- [ ] 판매자/시스템 책임·무료 재배송 정상 흐름 유지
+- [ ] seller/driver 동시 요청에서 hold 해소·counter 감소·scheduled 알림이 한 번만 수렴
+
+필수 회귀:
+
+- [ ] payment-request 알림 뒤 consumer payment CTA/endpoint 유지
+- [ ] charge 없음/PENDING/FAILED/REFUNDED direct resume 거부
+- [ ] 결제 전 seller `PREPARING` 전환을 정책대로 허용/거부 직접 고정
+- [ ] `PREPARING` 경유 미결제 `DELIVERING` 거부
+- [ ] `PAID` 뒤 한 번 정상 재개
+- [ ] 무료/판매자책임 재배송 정상 회귀
+- [ ] 변경 SHA `main` 통합
+
+정본: `docs/specs/api/orders.md`; 운영 근거: `docs/specs/ops/mvp-sales-round-runbook.md`.
+
+### P0 — ADMIN-FORCE-REFUND-CONSISTENCY
+
+admin refund가 정상 cancellation의 추가 charge·capacity·held counter·settlement 후속효과를 우회한다.
+
+- [ ] admin 환불 허용 상태 fail-closed
+- [ ] 정상 cancellation orchestration 재사용 또는 동등 단일 orchestration
+- [ ] 본 결제+paid 추가 charge 중복 없는 환불
+- [ ] reservation/round/item/held counter 반환
+- [ ] pending/confirmed settlement 취소
+- [ ] paid settlement 별도 회계 조정/operation issue 정책
+- [ ] provider 성공/local 실패 재시도·동시 실행 수렴
+- [ ] 직접 회귀 후 `main` 통합
+
+정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`.
+
+### P0 — ADMIN-PRIVILEGED-MUTATION-COVERAGE
+
+`AdminController` class-level `JwtAuthGuard + RolesGuard + @Roles('admin')`와 고위험 mutation 구현은 존재하지만 서버 authorization 및 admin settlement 지급 상태 전이의 직접 회귀가 충분하지 않다.
+
+현재 직접 근거:
+
+- [x] admin controller 전체에 JWT + admin role guard 구현
+- [x] `RolesGuard`는 request JWT role과 required metadata를 비교
+- [x] `AdminService.markAsPaid()`는 transaction에서 fresh settlement status를 재확인하고 `confirmed → paid`를 구현
+- [x] Playwright admin 테스트는 비로그인 UI redirect와 admin read smoke를 확인
+- [x] 현재 `apps/api/src/admin`에 전용 controller/service `*.spec.ts` 없음
+- [x] 확인한 API E2E에서 admin high-impact mutation의 direct role-denial coverage 없음
+
+판정:
+
+- admin guard 및 mutation 구현은 `IMPLEMENTED`.
+- privileged mutation authorization + settlement pay transition은 `UNVERIFIED`.
+- 권한·금전 상태 경계이므로 P0 `COVERAGE GAP`으로 둔다.
+
+남음:
+
+- [ ] 실제 HTTP admin mutation의 unauthenticated 401
+- [ ] consumer/seller/driver의 admin mutation 403
+- [ ] invalid role에서 service 호출·Firestore/payment side effect 0
+- [ ] admin 정상 요청은 service validation/허용 경계까지 도달
+- [ ] `markAsPaid`: missing settlement 거부
+- [ ] `markAsPaid`: `pending|cancelled|paid` 거부
+- [ ] `markAsPaid`: `confirmed → paid` 정상 성공 + timestamps
+- [ ] 동시 지급/race에서 transaction fresh-read 기준 한 번만 수렴
+- [ ] 실제 guard를 mock으로 우회하지 않는 controller/API integration 증거
+- [ ] 회귀 SHA `main` 통합
+
+`ADMIN-FORCE-REFUND-CONSISTENCY`의 lifecycle 구현 결함과는 별도다. force-refund 구현을 고쳤더라도 admin role boundary와 다른 privileged mutation coverage가 없으면 이 항목은 닫히지 않는다.
+
+정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
+
+### P0 — SETTLEMENT-LIFECYCLE-COVERAGE
+
+settlement 생성·자동 확정·취소 transaction 구현은 존재하지만 core financial lifecycle의 직접 상태·race 회귀가 없다.
+
+현재 직접 근거:
+
+- [x] `createSettlement()`는 transaction에서 기존 문서를 재확인하고 pending settlement를 생성
+- [x] fee/net/completedStatus snapshot 구현
+- [x] `confirmDueSettlements()`는 due pending을 transaction fresh-read 후 confirmed로 전환
+- [x] `cancelSettlement()`는 pending/confirmed를 cancelled로 전환하고 cancelled 멱등·paid 역전 방지를 구현
+- [x] 회차 E2E fixture는 실제 `SettlementsService`를 주입
+- [x] 현재 `apps/api/src/settlements`에 core lifecycle 전용 `*.spec.ts` 없음
+- [x] 회차 전체 흐름 E2E는 settlement 생성·중복·confirm·cancel·paid 보존을 직접 assertion하지 않음
+
+판정:
+
+- core implementation = `IMPLEMENTED`.
+- 실제 service의 간접 통합 실행은 core 상태의 직접 검증으로 세지 않는다.
+- 핵심 금전 불변식 직접 증거가 없으므로 `UNVERIFIED`.
+- P0 `COVERAGE GAP`으로 추적한다.
+
+남음:
+
+- [ ] `createSettlement()` 1건 생성 + fee/net/status/completedStatus snapshot
+- [ ] `DELIVERED → REVIEWED`/동시 완료 호출에서 중복 생성·settledAt 덮어쓰기 없음
+- [ ] confirm cutoff 이전 pending 유지, due pending만 confirmed
+- [ ] confirm/cancel race에서 cancelled 미덮어쓰기
+- [ ] cancel missing no-op
+- [ ] pending/confirmed → cancelled
+- [ ] cancelled 멱등
+- [ ] paid → cancelled 역전 금지
+- [ ] 실제 회차 E2E에서 DELIVERED settlement 1건 + REVIEWED 중복 없음
+- [ ] 정상 cancellation에서 pending/confirmed settlement 수렴
+- [ ] 회귀 SHA `main` 통합
+
+admin `confirmed → paid` authorization/status 전이는 별도 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`가 소유한다.
+
+정본: `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+
+### P0 — MARKETING-CONSENT-LIFECYCLE-CONSISTENCY
+
+round checkout 선택 마케팅 consent, user preference, 철회, retention evidence가 하나의 authoritative lifecycle로 수렴하지 않는다.
+
+현재 직접 근거:
+
+- [x] round checkout은 기본 해제 선택 마케팅 checkbox 제공
+- [x] 동의 시 order request에 `marketingConsent` 포함
+- [x] round order 생성은 order snapshot + `marketingConsentLogs` `CONSENT` record 저장
+- [x] MY 마케팅 설정은 `users.notificationPreferences`만 읽음
+- [x] checkout consent는 user preference를 동기화하지 않음
+- [x] Auth 신규 user는 `notificationPreferences` pair를 기본 초기화하지 않음
+- [x] MY “즉시 철회”는 user preference만 false로 갱신
+- [x] 철회 시 `MARKETING_CONSENT` withdrawal retention record 생성 경로 없음
+- [x] 정보성 ORDER_* 연락은 마케팅 동의와 별개라는 UI/notification 계약 존재
+- [x] 현재 실제 선택 마케팅 sender는 이번 감사에서 확인되지 않음
+
+판정:
+
+- consent 수집/설정 UI와 저장 구성은 존재한다.
+- 동의→현재 상태→철회→retention evidence가 불일치하므로 P0 `IMPLEMENTATION FINDING`.
+- 실제 마케팅 발송이 미운영이라는 이유로 consent lifecycle의 모순을 정상 계약으로 두지 않는다.
+
+완료 정책 — 둘 중 하나를 명시적으로 선택:
+
+- [ ] **미사용 정책**: MVP에서 실제 마케팅을 하지 않으면 consent 수집/설정 노출을 비활성화·제거하고 불필요한 저장을 중단
+- [ ] **유지 정책**: user-level authoritative SSOT + checkout 동기화 + 철회 evidence + sender gating을 구현
+
+공통 완료 조건:
+
+- [ ] 신규 user의 marketing 상태가 정의되고 MY 설정이 오류 없이 해석
+- [ ] checkout consent와 authoritative user 상태가 정책대로 일치
+- [ ] 채널별 철회가 다른 채널 상태를 보존
+- [ ] 철회 timestamp/policy/channel retention evidence 생성
+- [ ] 중복 철회 멱등
+- [ ] 실제 marketing sender가 존재한다면 opt-out 채널 발송 차단
+- [ ] ORDER_* 주문·결제·배송 정보성 연락은 marketing opt-out 때문에 차단되지 않음
+- [ ] legal current fact와 공개 출시 문구를 최종 정책에 맞춰 정합화
+- [ ] 회귀 SHA `main` 통합
+
+정본: `docs/specs/api/notifications.md`, `docs/specs/legal/README.md`, `docs/specs/mvp-sales-round-direct-delivery.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+
+### P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
+
+API authorization보다 seller/driver raw Firestore read 경계가 넓다.
+
+- [ ] 미배정 `PREPARING` direct/hub discovery 최소 대상·필드 정의
+- [ ] arbitrary/타-driver/완료 주문 raw read 차단
+- [ ] assigned driver·seller 최소 projection/DTO 또는 동등 분리
+- [ ] broad driver rule 제거
+- [ ] Rules + 앱 정상/거부 회귀
+- [ ] `main` 통합
+
+정본: `docs/specs/api/orders.md`.
+
+### P0 — AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION
+
+관리자 승인 전 driver 권한을 얻을 수 없는지와 stale session/claims 수렴을 하나의 umbrella로 추적한다. Task 2F-B candidate는 approval-gate/current-user 하위 범위만 검증했으며, 전체 P0를 닫지 않는다.
+
+Candidate에서 검증됨 (아직 `main` 미통합):
+
+- [x] 신규 Kakao `targetRole: driver`가 `driverApproved: false`로 생성되고 자동 승인되지 않음
+- [x] 기존 `driverApproved === undefined` driver가 Kakao 로그인 중 자동 승인되지 않음
+- [x] 공개 `POST /auth/register` driver가 `driverApproved: false`로 생성되고 client approval 주입이 거부됨
+- [x] 공개 `POST /auth/login`이 false/missing approval driver에게 JWT/refresh token을 발급하지 않음
+- [x] 현재 user 기반 JWT strategy/Firebase custom-token approval·suspension 경계와 직접 register→login 회귀
+
+남음 — `AUTH-SESSION-CLAIM-REVOCATION` OPEN 및 통합 대기:
+
+- [ ] candidate를 `main`에 통합
+- [ ] 과거 계정 migration을 로그인 side effect가 아닌 별도 감사 절차로 분리
+- [ ] refresh 시 authoritative user 상태 확인 및 stale role/store/approval claim 재발급 차단
+- [ ] suspension/role/store/approval revocation SLA와 access-token window 결정·구현
+- [ ] logout/rotation을 포함한 session lifecycle 회귀
+- [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`과 결합된 broad driver read/minimization 해결
+
+정본: `docs/specs/api/auth.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
+
+### P0 — ORDER-MUTATION-AUTHORIZATION-COVERAGE
+
+상태 변경 ownership guard는 구현돼 있으나 핵심 거부 회귀가 부족하다.
+
+- [ ] 타-store seller status/delivery-hold 403
+- [ ] 비담당 driver assigned-order mutation 403
+- [ ] first-claim 외 미배정 driver mutation 거부
+- [ ] first claim 정확한 `driverId`
+- [ ] 거부 side effect 0
+- [ ] 필요한 admin 허용 범위 고정
+- [ ] `main` 통합
+
+정본: `docs/specs/api/orders.md`.
+
+### P0 — DEPLOY-SAFETY-MAIN-PROTECTION
+
+repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보호는 남음.
+
+- [ ] Issue #32
+- [ ] PR required
+- [ ] `Deployment safety guard / verify` required
+- [ ] force push·branch delete 차단
+- [ ] 재조회에서 enforcement 확인
 
 ---
 
@@ -28,23 +322,9 @@
 
 ### P0 — ALIGO 회차 알림 템플릿 8종 최종 승인
 
-- [ ] `ORDER_ACCEPTED`
-- [ ] `ORDER_PREPARING`
-- [ ] `ORDER_DELIVERING`
-- [ ] `ORDER_DELIVERY_HELD`
-- [ ] `ORDER_REDELIVERY_PAYMENT_REQUESTED`
-- [ ] `ORDER_REDELIVERY_SCHEDULED`
-- [ ] `ORDER_DELIVERED`
-- [ ] `ORDER_CANCELLED`
+`ORDER_ACCEPTED`, `ORDER_PREPARING`, `ORDER_DELIVERING`, `ORDER_DELIVERY_HELD`, `ORDER_REDELIVERY_PAYMENT_REQUESTED`, `ORDER_REDELIVERY_SCHEDULED`, `ORDER_DELIVERED`, `ORDER_CANCELLED`.
 
-현재 상태:
-
-- 8종 provider 등록·심사 요청 완료
-- 8종 모두 `검수중`
-- 중복·오류·반려 없음
-- 실제 알림톡·SMS 발송 0건
-
-재개 기준: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
+마지막 provider 확인: 8종 등록·심사 요청 완료, 전부 `검수중`, 실제 발송 0건. 재개 시 직접 재조회한다.
 
 ---
 
@@ -52,221 +332,105 @@
 
 ### P0 — 실제 알림 검증
 
-- [ ] 승인된 실제 `tpl_code` 8종과 내부 논리 템플릿의 1:1 매핑 준비상태 검사
-- [ ] 사용자 승인 후 격리 수신자 실제 알림톡 정상 발송 검증
-- [ ] 사용자 승인 후 SMS fallback 실제 검증
+- [ ] 승인 `tpl_code` 8종 ↔ 내부 논리 코드 1:1
+- [ ] 별도 승인 후 격리 실제 알림톡
+- [ ] 별도 승인 후 SMS fallback
 
-### P0 — 판매 활성화 법적 문서 재정합화
+### P0 — 판매 활성화 legal 재정합화
 
-현재 production의 `/terms`, `/privacy`는 2026-08-19의 **비판매 상태**를 전제로 한다. 실제 release SHA를 고정하기 전에 다음을 완료한다.
-
-- [ ] 이용약관의 `현재 상용 주문·결제·배송을 운영하지 않음` 문구를 실제 판매 상태와 일치시키기
-- [ ] 주문 성립·취소·환불·배송·재배송비·배송 보류 공개 정책 검수
-- [ ] PortOne·실제 결제사업자의 개인정보 처리 역할·데이터 흐름 검수
-- [ ] ALIGO 실제 고객 알림의 전화번호·메시지 처리 흐름과 공개 고지 검수
-- [ ] seller·driver의 고객 배송정보 접근 설명 검수
-- [ ] 시행일 갱신과 필요한 이전 버전 보존
-- [ ] `apps/consumer/src/app/legal-documents.test.mjs`의 비판매 assertion을 새 계약에 맞게 갱신
-- [ ] 변경된 `/privacy`, `/terms`를 release SHA에 포함하고 production smoke 항목에 추가
-
-정본: `docs/specs/legal/README.md`, `docs/specs/legal/consumer-legal-documents.md`
+- [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책
+- [ ] 재배송 payment-required 상태머신과 결제 전 재개 금지 계약 반영
+- [ ] settlement 생성·확정·취소·지급 실제 정책/검증 결과 반영
+- [ ] PortOne/PG 개인정보 처리
+- [ ] ALIGO 전화번호·메시지 처리
+- [ ] marketing consent 유지/미사용 최종 정책 + 동의·철회·보관 실제 lifecycle 반영
+- [ ] order direct-read 최소화 뒤 seller/driver 접근 설명
+- [ ] 시행일·이전 버전
+- [ ] legal tests
+- [ ] release SHA 포함
 
 ### P0 — 출시 후보 검증·운영 준비
 
-- [ ] 법적 페이지 변경까지 포함한 실제 출시 대상 `main` SHA 확정
-- [ ] 해당 SHA에서 원격 회차 E2E chromium 26 + mobile 26 = 52건 통과
-- [ ] 동일 run에서 chromium·mobile fixture cleanup 성공
-- [ ] 운영 Firebase indexes·Firestore Rules·Storage Rules 읽기 전용 재조회
-- [ ] 사용자 승인 후 운영 ALIGO 자격 증명 4개 반영
-- [ ] 사용자 승인 후 `ALIGO_TEMPLATE_CODES_JSON` 반영 및 8종 매핑 검사
-- [ ] 별도 `Task 3.1 승인` 후 Railway production API 배포
-- [ ] consumer·seller·driver production을 동일 출시 SHA로 배포
-- [ ] 운영 무변경 smoke에서 `/privacy`, `/terms` 새 버전 포함 확인
-- [ ] 배포 후 오류 확인
-- [ ] 첫 운영 회차 `DRAFT` 생성·검수
-- [ ] 첫 회차 `SCHEDULED` 전환
-- [ ] 최종 출시 판정·롤백 dry-run
-- [ ] 최종 승인 후 `salesMode: round_direct` 전환
-- [ ] 전환 직후 smoke 통과 뒤 외부 유입 링크 공개
-- [ ] 첫 두 회차 집중 모니터링 및 Closeout
+- [ ] `PAYMENT-FINALIZATION-PAID-GUARD`
+- [ ] `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
+- [ ] `ORDER-REDELIVERY-PAID-RESUME-GATE`
+- [ ] `ADMIN-FORCE-REFUND-CONSISTENCY`
+- [ ] `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
+- [ ] `SETTLEMENT-LIFECYCLE-COVERAGE`
+- [ ] `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
+- [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
+- [ ] `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
+- [ ] `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
+- [ ] Issue #32
+- [ ] legal 포함 actual release SHA
+- [ ] exact SHA E2E 52 + cleanup
+- [ ] 운영 Firebase read-only 재조회
+- [ ] 승인 후 production ALIGO 설정
+- [ ] exact-SHA deployment 절차 + Task 3.1 별도 승인
+- [ ] 동일 SHA production + metadata 검증 + smoke
+- [ ] 첫 회차 SCHEDULED
+- [ ] 최종 출시 판정·rollback dry-run
+- [ ] 최종 승인 후 `salesMode: round_direct`
+- [ ] 초기 두 회차 모니터링·Closeout
 
-상세 dependency와 승인 게이트는 `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`를 따른다.
-
----
-
-## LATER — 출시 후 품질·운영 개선
-
-### NOTIFICATION-RETRY-POLICY — 알림 재시도 정책 고도화
-
-- [ ] 재시도 간격과 backoff 정책 정의
-- [ ] 일시 오류/영구 오류 분류 기준 정의
-- [ ] timeout·네트워크 예외·응답 파싱·rate limit 처리 기준 정의
-- [ ] 시도 횟수·최종 채널·실패 분류 구조화 관측 지표 정의
-- [ ] SMS 중복 발송 방지와 재시작 이후 멱등성 범위 결정
-- [ ] mock 기반 단위 테스트와 격리 staging 검증 절차 마련
-
-### API-LINT-BASELINE — API lint 부채 분리 정리
-
-- [ ] `apps/api/src/auth/auth.service.ts` Firestore `data()` 반환과 주소 흐름의 `any` 제거
-- [ ] `apps/api/src/auth/auth.service.spec.ts` mock의 `any`를 타입 있는 테스트 더블로 전환
-- [ ] 수정형 lint와 읽기 전용 lint를 `lint:fix` / `lint:check`로 분리할지 결정
-
-### LOCAL-DEV-FULLSTACK — 로컬 포트·CORS 진입점 정리
-
-현재 root `dev.bat`는 consumer 3000, seller 3001, driver 3003을 실행하고 API를 시작하지 않는다. API 기본 포트 3000과 동시에 쓰면 consumer와 충돌할 수 있다.
-
-- [ ] API 3000 / consumer 3001 / seller 3002 / driver 3003 같은 명시적 full-stack launcher 설계
-- [ ] 로컬 seller·driver API 호출에 필요한 CORS origin 계약 확인
-- [ ] 기존 `dev.bat`의 용도를 frontend-only로 유지할지 full-stack으로 교체할지 결정
-
-### LOAD-TEST-FORMAL — 정식 부하테스트 재개 조건
-
-- [ ] 실제 유입 증가·광고 확대·429/5xx·응답 지연 등 재개 트리거 정의 유지
-- [ ] production과 분리된 staging DB 또는 동등 격리 환경 확보
-- [ ] 환경별 k6 seed 대상과 테스트 계정 확정
-- [ ] `baseline → launch → growth → spike → soak` 단계별 실행
-- [ ] `docs/specs/ops/k6-load-test-plan.md` 재검증 후 실행
-
-### Seller/Admin 후속
-
-- [ ] **ADMIN-STORES-T7** — 판매자 상세 드릴다운
-  - store별 주문·정산 집계
-  - 상세 라우트
-  - 관리자 권한 경계
-  - 목록 URL 복원
-  - 별도 SDD 선행
-- [ ] **ADMIN-STORES-T8** — 플랫폼 기본 수수료율 설정
-  - 전역 config 모델
-  - store override 우선순위
-  - 소급 적용 여부
-  - 검증 범위 확장
-  - 별도 SDD 선행
-- [ ] 준비 물량 탭에 공동구매 주문 포함 여부 재설계
-- [ ] 정산 화면 잔여 육안 검증이 필요하면 별도 UX 검증 Task로 재개
-
-### Seller 성능/DX
-
-- [ ] **PERF-01** — seller `<img>` → `next/image` 마이그레이션 재검토
-  - onboarding 로고/이미지
-  - 상품 이미지 업로드 썸네일
-  - Firebase Storage remotePatterns·sizes·LCP 영향 확인
-
-### Driver/배송 고도화
-
-- [ ] Driver Kakao Maps SDK 연동 필요성 재평가 후 구현
-- [ ] 밀크런 경로 프리뷰가 실제 운영에 필요해질 때 지도 경로 시각화
-- [ ] 실시간 GPS 추적은 플랫폼형 드라이버 운영 전까지 보류
-
-### 인프라 복원력
-
-- [ ] Railway 단일 장애점 리스크 재평가
-- [ ] 필요 시 Fly.io/Render 등 대체 backend contingency 비교
-- [ ] 운영 규모가 커질 때 hot-standby 필요성 결정
+상세 dependency: `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`.
 
 ---
 
-## LATER — 비즈니스 확장 트리거가 있을 때
+## LATER
 
-### 다중 판매자 Phase 2
+### LEGACY-GROUP-CANCEL-NOTIFICATION
 
-- [ ] active 상점 목록 API
-- [ ] 상점 상세 API
-- [ ] consumer 상점 목록·상세 화면
-- [ ] 단일 상점 가정 제거 및 동적 `storeId` 전환
-- [ ] 판매자 자체 가입 → 플랫폼 승인 플로우 설계
+legacy 목표 미달 공동구매에서 consumer `GROUP_CANCELLED_LACK` 알림이 누락될 수 있다.
 
-### 거점 배송 오픈
+현재 `cancelGroupBuyLack()`가 주문을 먼저 `CANCELLED`로 바꾼 뒤 `sendToGroupParticipants()`를 호출하고, sender는 `CANCELLED`를 대상에서 제외한다.
 
-트리거: 실제 협력 업체 거점 계약 확정.
+- [ ] 취소 대상 participant snapshot 또는 동등 명시적 recipient 집합 사용
+- [ ] consumer 목표미달 취소 알림 1회 직접 회귀
+- [ ] 판매자 취소 알림 정상 유지
+- [ ] 다른 template의 terminal filtering 의미 유지
 
-- [ ] 운영 거점 등록
-- [ ] consumer 배송 수단에서 `hub` 노출 조건 활성화
-- [ ] 운영 권한·픽업 절차 최종 검수
-- [ ] 필요 시 QR 픽업 인증 고도화
+정본: `docs/specs/api/notifications.md`.
 
-### 거점 스태프 권한
+### NOTIFICATION-RETRY-POLICY
+- [ ] backoff·오류 분류·rate limit·중복 SMS·관측 지표
 
-트리거: 협력 업체 직원이 직접 픽업 처리해야 할 때.
+### API-LINT-BASELINE
+- [ ] auth `any`, spec mock 타입, lint command 분리
 
-- [ ] `hub_staff` 역할 설계
-- [ ] hub↔staff 관계 모델
-- [ ] 초대·온보딩 UI
-- [ ] API 권한·hub 스코핑
-- [ ] 전용 접근 경로와 감사 로그
+### LOCAL-DEV-FULLSTACK
+- [ ] API/consumer/seller/driver launcher·CORS·`dev.bat` 정책
 
-### 외부 드라이버 정산
+### LOAD-TEST-FORMAL
+- [ ] staging/equivalent, 재개 트리거, baseline→soak, k6 plan
 
-트리거: 판매자 본인이 아닌 외부 드라이버를 고용할 때.
+### Seller/Admin
+- [ ] ADMIN-STORES-T7/T8, 준비 물량 공동구매 재설계, 필요 시 정산 UX
 
-- [ ] `driverSettlements` 모델 설계
-- [ ] 건당/거리 기반 배송료 정책 결정
-- [ ] 드라이버별 정산 API
-- [ ] driver 앱 수익 요약
-- [ ] admin 지급 처리
-- [ ] 판매자 정산과 driver fee 관계 확정
+### Driver/배송
+- [ ] Kakao Maps·밀크런 preview 재평가, 플랫폼형 전 GPS 보류
 
-### 플랫폼형 드라이버 모델
-
-트리거: 불특정 다수 드라이버를 모집할 때.
-
-- [ ] 신원·면허·보험 검증 체계
-- [ ] 실시간 위치 수집
-- [ ] 자동 배정 알고리즘
-- [ ] 소비자 실시간 위치 노출
-- [ ] 자동 정산·인센티브 정책
-
-### 결제 수단 확장
-
-- [ ] 카드 PG 추가 계약 필요성을 실제 사업 운영 기준으로 재평가
-- [ ] 네이버페이 신규 출시 필요성을 현재 PortOne·사업 전략과 다시 비교한 뒤 별도 Task로 결정
+### 인프라/확장
+- [ ] Railway contingency, 다중 판매자, hub_staff, 외부 driver 정산, 결제수단 확장
 
 ---
 
-## STALE_OR_SUPERSEDED — 실행 전 재검증 필수
+## STALE_OR_SUPERSEDED
 
-### 네이버페이 “승인 메일 대기 / 채널키만 넣으면 즉시 활성화”
+- 네이버페이 과거 승인 대기 전제
+- 과거 BUG-03 공개 read/Custom Token 가정
+- 운영 DB reset/visual cleanup 지시
+- 2026-05 Railway outage 상태
+- PR #11 OPEN/Draft 표현
+- ALIGO 8종 “미등록” 표현
+- `main` merge가 auto-production이어야 한다는 전제
 
-2026-04 상태 문구다. 현재 파트너 승인·계약·PortOne 채널 설정·제품 전략을 다시 확인하지 않고 환경 변수부터 추가하지 않는다.
+## 관리 원칙
 
-### BUG-03 — Firestore 공개 read와 Firebase Custom Token
-
-과거 Rules·인증 구조를 전제로 한 항목이다. 현재 코드와 Rules를 직접 감사한 뒤 살아 있는 결함일 때만 새 보안 Task로 등재한다.
-
-### 운영 DB의 `reset-*` / `visual-settle-*` 시드 잔존
-
-이후 출시 진단에서 기존 reset·visual 검증 시드가 운영 상품·주문·정산 컬렉션에 남아 있지 않은 것으로 확인됐다. 새 증거 없이 삭제 스크립트를 실행하지 않는다.
-
-### Railway 2026-05 Major Outage 당시 상태
-
-당시 장애 원인·복구 기록은 역사 자료다. 현재 Railway 장애로 간주하지 않는다. 단일 공급자 복원력 검토는 LATER로 유지한다.
-
-### 과거 PR #11 OPEN/Draft·병합 금지
-
-PR #11은 2026-08-23 `MERGED`·`CLOSED` 됐다. 과거 문서의 해당 표현은 현재 작업 지시가 아니다.
-
-### 회차 알림 템플릿 8종 “미등록”
-
-2026-08-23 provider 등록·심사 요청이 완료됐다. 현재 상태는 8종 모두 `검수중`이다.
-
----
-
-## DONE_HISTORY — 현재 판단에 필요한 마일스톤만
-
-- 회차 직배송 MVP 구현 완료 및 PR #11을 통해 `main` 통합
-- 기능 통합 기준 SHA `e55f25914cc7d01576fbd4639583daaf0fe6385e`
-- 카카오 비즈니스 채널 최종 승인
-- **비판매 상태 기준** consumer 법적 고지 production 반영 및 운영 검증
-- ALIGO 발신 프로필·`senderkey` 준비
-- 내부 논리 템플릿↔ALIGO `tpl_code` 분리와 필수 변수 검증 구현
-- 회차 알림 템플릿 8종 provider 등록·심사 요청
-- 운영 Firebase Rules·indexes 출시 준비 반영
-- 과거 전체 원격 회차 E2E 52건 + 양쪽 cleanup 성공 증거 확보
-
-## 백로그 관리 원칙
-
-1. 완료 항목을 장문 세션 로그로 계속 누적하지 않는다.
-2. 현재 행동 가능한 미완료만 `ACTIVE/BLOCKED_EXTERNAL/NEXT/LATER`에 둔다.
-3. 오래된 외부 상태는 실제 재조회 후 상태를 바꾼다.
-4. 외부 운영 변경은 Backlog 체크박스만으로 승인된 것으로 보지 않는다.
-5. 현재 출시 우선순위와 충돌하면 `docs/memory.md`와 활성 HANDOFF·PLAN을 우선한다.
-6. 완료 이력은 Git history 또는 `docs/archive/`를 사용한다.
+1. 완료 이력을 장문 누적하지 않는다.
+2. 현재 행동 가능한 미완료만 유지한다.
+3. 외부 상태는 직접 재조회 뒤 갱신한다.
+4. 체크박스는 production 승인 아님.
+5. 우선순위 충돌 시 memory + 활성 HANDOFF/PLAN 우선.
+6. repository 변경은 branch+PR.
+7. `VERIFIED` 승격은 `docs/DOCUMENT_CONSISTENCY.md` 기준.

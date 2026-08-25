@@ -77,6 +77,7 @@ export class AuthService {
       name: dto.name,
       phone: dto.phone ?? null,
       role: dto.role,
+      ...(dto.role === 'driver' ? { driverApproved: false } : {}),
       storeId: null,
       providers: ['email'],
       passwordHash,
@@ -137,6 +138,10 @@ export class AuthService {
         detail: { email: dto.email },
       });
       throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
+    }
+
+    if (userData['role'] === 'driver' && userData['driverApproved'] !== true) {
+      throw new ForbiddenException('승인된 드라이버만 로그인할 수 있습니다.');
     }
 
     const { accessToken, refreshToken } = await this.issueTokens({
@@ -262,13 +267,6 @@ export class AuthService {
 
     if (!snap.empty) {
       userData = snap.docs[0].data();
-      if (userData['role'] === 'driver' && userData['driverApproved'] === undefined) {
-        await this.firestore.doc(`users/${String(userData['id'])}`).update({
-          driverApproved: true,
-          updatedAt: this.firestore.Timestamp.now(),
-        });
-        userData = { ...userData, driverApproved: true };
-      }
     } else {
       if (dto.targetRole === 'seller') {
         throw new ForbiddenException('판매자 계정은 관리자 초대로만 가입할 수 있습니다.');
@@ -283,7 +281,7 @@ export class AuthService {
         name: kakaoProfile.name,
         phone: null,
         role: newRole,
-        ...(newRole === 'driver' ? { driverApproved: true } : {}),
+        ...(newRole === 'driver' ? { driverApproved: false } : {}),
         storeId: null,
         providers: ['kakao'],
         savedAddresses: [],
@@ -368,7 +366,24 @@ export class AuthService {
   }
 
   async getFirebaseToken(userId: string, role: string, storeId?: string): Promise<string> {
-    return admin.auth().createCustomToken(userId, { role, storeId: storeId ?? null });
+    const userSnap = await this.firestore.doc(`users/${userId}`).get();
+    if (!userSnap.exists) {
+      throw new UnauthorizedException('사용자를 찾을 수 없습니다.');
+    }
+
+    const user = userSnap.data()!;
+    if (user['suspended'] === true) {
+      throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
+    }
+    if (role === 'driver' && (user['role'] !== 'driver' || user['driverApproved'] !== true)) {
+      throw new ForbiddenException('승인된 드라이버만 배송 정보를 조회할 수 있습니다.');
+    }
+
+    return admin.auth().createCustomToken(userId, {
+      role,
+      storeId: storeId ?? null,
+      ...(role === 'driver' ? { driverApproved: true } : {}),
+    });
   }
 
   private async issueTokens(payload: JwtPayload) {
