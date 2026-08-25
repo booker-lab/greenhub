@@ -1,4 +1,5 @@
 import { IsString, IsEnum, IsBoolean, IsArray, IsOptional } from 'class-validator';
+import { COLOR_OPTIONS, type ColorOption, type StemType } from '@greenhub/shared';
 
 export class CreateVarietyDto {
   @IsString()
@@ -18,7 +19,7 @@ export class CreateVarietyDto {
 
   @IsArray()
   @IsEnum(['외대', '쌍대', '가지', '3대'], { each: true })
-  availableStemTypes: string[];
+  availableStemTypes: StemType[];
 
   @IsBoolean()
   hasFragrance: boolean;
@@ -33,8 +34,8 @@ export class CreateVarietyDto {
   careLevel: string;
 
   @IsArray()
-  @IsString({ each: true })
-  typicalColors: string[];
+  @IsEnum(COLOR_OPTIONS, { each: true })
+  typicalColors: ColorOption[];
 
   @IsOptional()
   @IsString()
