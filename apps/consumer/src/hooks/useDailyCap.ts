@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { todayKST } from '@greenhub/shared';
 import { db } from '@/lib/firebase';
 import type { DailyCap } from '@greenhub/shared';
 
@@ -21,7 +22,7 @@ export function useDailyCap(storeId: string | null, date?: string): UseDailyCapR
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const resolvedDate = date ?? new Date().toISOString().split('T')[0];
+  const resolvedDate = date ?? todayKST();
   const docId = storeId ? `${storeId}_${resolvedDate}` : null;
 
   useEffect(() => {

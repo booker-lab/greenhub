@@ -203,7 +203,7 @@ const QUERY_CONTRACTS: QueryContract[] = [
       'async getSummary(',
       ".where('storeId', '==', storeId)",
       ".where('settledAt', '>=',",
-      ".where('settledAt', '<=',",
+      ".where('settledAt', '<',",
     ],
     collectionGroup: 'settlements',
     queryScope: 'COLLECTION',

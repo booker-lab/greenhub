@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { Product, Category, ColorOption, Variety } from '@greenhub/shared';
+import type { Product, Category, ColorOption, SaleType, Variety } from '@greenhub/shared';
 
 export interface StoreInfo {
   id: string;
@@ -23,7 +23,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 export function useProducts(
   category?: Category,
   colors?: ColorOption[],
-  saleType?: 'group' | 'direct',
+  saleType?: SaleType,
 ) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);

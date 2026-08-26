@@ -1,10 +1,11 @@
 import { IsString, IsEnum, IsArray, IsOptional, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { COLOR_OPTIONS, type ColorOption } from '@greenhub/shared';
 
 export class SelectionDto {
   @IsArray()
-  @IsString({ each: true })
-  colors: string[];
+  @IsEnum(COLOR_OPTIONS, { each: true })
+  colors: ColorOption[];
 
   @IsEnum(['외대', '쌍대', '가지', '3대'])
   stemType: string;

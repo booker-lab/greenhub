@@ -1,8 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { dateRangeKST } from '@greenhub/shared';
 import * as admin from 'firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
+import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
+import type { OrderStatus } from '../orders/dto/update-status.dto';
+import { getAllowedTransitions } from '../orders/orders.helpers';
 import { PaymentsService } from '../payments/payments.service';
+import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
+import { SettlementsService } from '../settlements/settlements.service';
 import {
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
@@ -13,11 +25,20 @@ import {
   UpsertBannerDto,
 } from './dto/admin.dto';
 
+const LEGACY_REFUND_CLAIM_MS = 5 * 60 * 1000;
+
+type LegacyRefundClaimResult =
+  | { kind: 'done' }
+  | { kind: 'in_progress' }
+  | { kind: 'claimed'; token: string };
+
 @Injectable()
 export class AdminService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly payments: PaymentsService,
+    private readonly settlements: SettlementsService,
+    private readonly roundLifecycle: RoundOrderLifecycleService,
   ) {}
 
   // ── Stores ──────────────────────────────────────────────────────
@@ -135,24 +156,202 @@ export class AdminService {
   }
 
   async forceRefund(orderId: string, dto: ForceRefundDto) {
-    const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
+    const orderRef = this.firestore.doc(`orders/${orderId}`);
+    const orderSnap = await orderRef.get();
     if (!orderSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
 
     const order = orderSnap.data()!;
-    if (order['status'] === 'CANCELLED') {
-      throw new BadRequestException('이미 취소된 주문입니다.');
+    const reason = dto.reason ?? '관리자 강제 환불';
+
+    if (order['schemaVersion'] === 2 && order['roundId']) {
+      const result = await this.roundLifecycle.cancelForRound({
+        storeId: order['storeId'],
+        orderId,
+        expectedStatus: order['status'],
+        reason,
+      });
+      await this.settlements.cancelSettlement(orderId);
+      return result;
     }
 
-    const reason = dto.reason ?? '관리자 강제 환불';
-    await this.payments.processRefundByOrderId(orderId, reason);
+    return this.forceLegacyRefund(orderId, reason);
+  }
 
-    await this.firestore.doc(`orders/${orderId}`).update({
-      status: 'CANCELLED',
-      cancelReason: reason,
-      updatedAt: this.firestore.Timestamp.now(),
-    });
+  private async forceLegacyRefund(orderId: string, reason: string) {
+    const claim = await this.claimLegacyRefund(orderId, reason);
+    if (claim.kind === 'done') {
+      await this.settlements.cancelSettlement(orderId);
+      return { ok: true, orderId };
+    }
+    if (claim.kind === 'in_progress') {
+      throw new ConflictException('주문 환불이 이미 처리 중입니다.');
+    }
+
+    try {
+      // 주문 claim을 획득한 뒤에만 provider를 호출한다.
+      await this.payments.processRefundByOrderId(orderId, reason);
+    } catch (error) {
+      await this.recordLegacyRefundState(orderId, claim.token, 'REFUND_FAILED', reason);
+      throw error;
+    }
+
+    try {
+      await this.applyLegacyLocalCancellation(orderId, claim.token, reason);
+      await this.settlements.cancelSettlement(orderId);
+    } catch (error) {
+      await this.recordLegacyRefundState(orderId, claim.token, 'LOCAL_FAILED', reason);
+      throw error;
+    }
 
     return { ok: true, orderId };
+  }
+
+  private async claimLegacyRefund(
+    orderId: string,
+    reason: string,
+  ): Promise<LegacyRefundClaimResult> {
+    const token = randomUUID();
+    let result: LegacyRefundClaimResult = { kind: 'claimed', token };
+
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
+
+      const order = orderSnap.data() as Record<string, any>;
+      const cancellation = (order['cancellation'] ?? null) as Record<string, any> | null;
+      const cancellationStatus = cancellation?.['status'] as string | undefined;
+
+      // 이미 cancellation까지 완료된 취소는 외부 provider와 capacity를 다시 건드리지 않는다.
+      if (order['status'] === 'CANCELLED' && cancellationStatus === 'COMPLETED') {
+        result = { kind: 'done' };
+        return;
+      }
+
+      let expiredClaim = false;
+      if (cancellationStatus === 'REFUNDING') {
+        const refundClaim = cancellation?.['refundClaim'] as
+          | { token?: string; expiresAt?: number }
+          | undefined;
+        if (
+          !refundClaim ||
+          typeof refundClaim.token !== 'string' ||
+          refundClaim.token.length === 0 ||
+          typeof refundClaim.expiresAt !== 'number'
+        ) {
+          result = { kind: 'in_progress' };
+          return;
+        }
+        if (refundClaim.expiresAt > Date.now()) {
+          result = { kind: 'in_progress' };
+          return;
+        }
+        expiredClaim = true;
+      }
+
+      const retryable = ['LOCAL_PENDING', 'LOCAL_FAILED', 'REFUND_FAILED'].includes(
+        cancellationStatus ?? '',
+      );
+      const statusAllowsRefund = this.isLegacyRefundableStatus(order['status']);
+      const cancelledRetryAllowsRefund =
+        order['status'] === 'CANCELLED' && (retryable || expiredClaim);
+      const cancelledWithoutState = order['status'] === 'CANCELLED' && !cancellation;
+      if (!statusAllowsRefund && !cancelledRetryAllowsRefund && !cancelledWithoutState) {
+        throw new BadRequestException('현재 주문 상태에서는 관리자 환불을 처리할 수 없습니다.');
+      }
+
+      const now = this.firestore.Timestamp.now();
+      tx.update(orderRef, {
+        cancellation: {
+          status: 'REFUNDING',
+          reason,
+          refundClaim: {
+            token,
+            expiresAt: Date.now() + LEGACY_REFUND_CLAIM_MS,
+          },
+          updatedAt: this.toIso(now),
+        },
+        updatedAt: now,
+      });
+    });
+
+    return result;
+  }
+
+  private async applyLegacyLocalCancellation(orderId: string, token: string, reason: string) {
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
+
+      const order = orderSnap.data() as Record<string, any>;
+      const cancellation = (order['cancellation'] ?? null) as Record<string, any> | null;
+      if (
+        cancellation?.['status'] !== 'REFUNDING' ||
+        cancellation?.['refundClaim']?.['token'] !== token
+      ) {
+        throw new ConflictException('주문 환불 claim이 더 이상 유효하지 않습니다.');
+      }
+
+      await releaseLegacyDailyCapacityInTransaction(this.firestore, tx, orderId, reason);
+      const now = this.firestore.Timestamp.now();
+      tx.update(orderRef, {
+        status: 'CANCELLED',
+        cancelReason: reason,
+        cancellation: {
+          status: 'COMPLETED',
+          reason,
+          completedAt: this.toIso(now),
+          updatedAt: this.toIso(now),
+        },
+        updatedAt: now,
+      });
+    });
+  }
+
+  private async recordLegacyRefundState(
+    orderId: string,
+    token: string,
+    status: 'REFUND_FAILED' | 'LOCAL_FAILED',
+    reason: string,
+  ) {
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists) return;
+
+      const cancellation = (orderSnap.data()?.['cancellation'] ?? null) as Record<
+        string,
+        any
+      > | null;
+      const ownsClaim = cancellation?.['refundClaim']?.['token'] === token;
+      const localCompletionFailed =
+        status === 'LOCAL_FAILED' && cancellation?.['status'] === 'COMPLETED';
+      if (!ownsClaim && !localCompletionFailed) return;
+
+      const now = this.firestore.Timestamp.now();
+      tx.update(orderRef, {
+        cancellation: {
+          status,
+          reason,
+          updatedAt: this.toIso(now),
+        },
+        updatedAt: now,
+      });
+    });
+  }
+
+  private isLegacyRefundableStatus(status: unknown): status is OrderStatus {
+    return (
+      typeof status === 'string' &&
+      getAllowedTransitions('admin', status as OrderStatus).includes('CANCELLED')
+    );
+  }
+
+  private toIso(value: any) {
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value?.toDate === 'function') return value.toDate().toISOString();
+    return new Date(value).toISOString();
   }
 
   // ── Settlements ──────────────────────────────────────────────────
@@ -164,12 +363,12 @@ export class AdminService {
       query = query.where('storeId', '==', dto.storeId);
     }
     if (dto.from) {
-      query = query.where('settledAt', '>=', this.firestore.Timestamp.fromDate(new Date(dto.from)));
+      const { start } = dateRangeKST(dto.from);
+      query = query.where('settledAt', '>=', this.firestore.Timestamp.fromDate(start));
     }
     if (dto.to) {
-      const toDate = new Date(dto.to);
-      toDate.setHours(23, 59, 59, 999);
-      query = query.where('settledAt', '<=', this.firestore.Timestamp.fromDate(toDate));
+      const { endExclusive } = dateRangeKST(dto.to);
+      query = query.where('settledAt', '<', this.firestore.Timestamp.fromDate(endExclusive));
     }
 
     query = query.orderBy('settledAt', 'desc').limit(500);

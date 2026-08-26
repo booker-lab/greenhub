@@ -1,28 +1,7 @@
 'use client';
 
 import { Badge, Button, Group, Paper, Stack, Text, TextInput } from '@mantine/core';
-
-const COLOR_OPTIONS = [
-  '레드',
-  '핑크',
-  '연핑크',
-  '로즈',
-  '화이트',
-  '크림',
-  '옐로우',
-  '골드',
-  '오렌지',
-  '퍼플',
-  '바이올렛',
-  '연보라',
-  '블루',
-  '그린',
-  '무늬',
-  '브라운',
-  '베이지',
-  '블랙',
-  '그레이',
-] as const;
+import { COLOR_OPTIONS } from '@greenhub/shared';
 
 const STEM_OPTIONS = [
   { value: '외대', label: '외대', desc: '1줄기' },

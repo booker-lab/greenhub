@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
+import { todayKST } from '@greenhub/shared';
 import { FirestoreService } from '../firestore/firestore.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
@@ -205,7 +206,7 @@ export class ProductsService {
   async getDailyCaps(storeId: string, sellerId: string, from?: string, to?: string, role?: string) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayKST();
     const fromDate = from ?? today;
     const toDate = to ?? today;
 

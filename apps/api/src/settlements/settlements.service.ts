@@ -1,6 +1,7 @@
 import { Injectable, ForbiddenException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
+import { dateRangeKST, todayKST } from '@greenhub/shared';
 import { FirestoreService } from '../firestore/firestore.service';
 import { QuerySettlementsDto, QuerySummaryDto } from './dto/query-settlements.dto';
 import { calcFee } from './_lib/fee-calculator';
@@ -77,13 +78,12 @@ export class SettlementsService {
       ref = ref.where('status', '==', dto.status);
     }
     if (dto.from) {
-      ref = ref.where('settledAt', '>=', this.firestore.Timestamp.fromDate(new Date(dto.from)));
+      const { start } = dateRangeKST(dto.from);
+      ref = ref.where('settledAt', '>=', this.firestore.Timestamp.fromDate(start));
     }
     if (dto.to) {
-      // to 날짜 23:59:59까지 포함
-      const toDate = new Date(dto.to);
-      toDate.setHours(23, 59, 59, 999);
-      ref = ref.where('settledAt', '<=', this.firestore.Timestamp.fromDate(toDate));
+      const { endExclusive } = dateRangeKST(dto.to);
+      ref = ref.where('settledAt', '<', this.firestore.Timestamp.fromDate(endExclusive));
     }
 
     // N10(F-2): 어드민(desc)과 정렬 방향 통일 — 양 화면 settledAt 최신순.
@@ -98,17 +98,15 @@ export class SettlementsService {
   async getSummary(storeId: string, requesterId: string, role: string, dto: QuerySummaryDto) {
     await this.verifyOwnership(storeId, requesterId, role);
 
-    const targetDate = dto.date ?? new Date().toISOString().split('T')[0];
-    const start = new Date(targetDate);
-    const end = new Date(targetDate);
-    end.setHours(23, 59, 59, 999);
+    const targetDate = dto.date ?? todayKST();
+    const { start, endExclusive } = dateRangeKST(targetDate);
 
     const snap = await (
       this.firestore
         .collection('settlements')
         .where('storeId', '==', storeId)
         .where('settledAt', '>=', this.firestore.Timestamp.fromDate(start))
-        .where('settledAt', '<=', this.firestore.Timestamp.fromDate(end)) as any
+        .where('settledAt', '<', this.firestore.Timestamp.fromDate(endExclusive)) as any
     ).get();
 
     const settlements: Record<string, unknown>[] = snap.docs.map((d: any) => d.data());
