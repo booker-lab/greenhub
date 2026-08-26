@@ -133,6 +133,22 @@ function makeLegacyForceRefundFixture(orderOverrides: Data = {}) {
 }
 
 describe('AdminService 강제 환불 수렴', () => {
+  it.each(['PENDING', 'DELIVERING', 'HUB_ARRIVED', 'PICKED_UP', 'DELIVERED', 'REVIEWED'])(
+    '%s 상태는 legacy 관리자 환불을 거부하고 모든 부수효과를 차단한다',
+    async (status) => {
+      const fixture = makeLegacyForceRefundFixture({ status });
+
+      await expect(fixture.service.forceRefund('order-1', {})).rejects.toThrow(
+        '현재 주문 상태에서는 관리자 환불을 처리할 수 없습니다.',
+      );
+
+      expect(fixture.payments.processRefundByOrderId).not.toHaveBeenCalled();
+      expect(fixture.settlements.cancelSettlement).not.toHaveBeenCalled();
+      expect(fixture.records.get('orders/order-1')?.status).toBe(status);
+      expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(1);
+    },
+  );
+
   it.each([
     ['direct', { deliveryMethod: 'direct' }],
     ['hub', { deliveryMethod: 'hub' }],
@@ -187,8 +203,80 @@ describe('AdminService 강제 환불 수렴', () => {
     await expect(fixture.service.forceRefund('order-1', {})).rejects.toThrow('환불 실패');
 
     expect(fixture.records.get('orders/order-1')?.status).toBe('ACCEPTED');
+    expect(fixture.records.get('orders/order-1')?.cancellation).toMatchObject({
+      status: 'REFUND_FAILED',
+    });
     expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(1);
     expect(fixture.settlements.cancelSettlement).not.toHaveBeenCalled();
+  });
+
+  it('활성 refund claim을 만난 두 번째 요청은 local 취소를 선행하지 않는다', async () => {
+    const fixture = makeLegacyForceRefundFixture();
+    let releaseProvider!: () => void;
+    let providerStarted!: () => void;
+    const providerStartedPromise = new Promise<void>((resolve) => {
+      providerStarted = resolve;
+    });
+    const providerReleasePromise = new Promise<void>((resolve) => {
+      releaseProvider = resolve;
+    });
+    fixture.payments.processRefundByOrderId.mockImplementationOnce(async () => {
+      providerStarted();
+      await providerReleasePromise;
+    });
+
+    const first = fixture.service.forceRefund('order-1', {});
+    await providerStartedPromise;
+
+    await expect(fixture.service.forceRefund('order-1', {})).rejects.toThrow(
+      '주문 환불이 이미 처리 중입니다.',
+    );
+    expect(fixture.payments.processRefundByOrderId).toHaveBeenCalledTimes(1);
+    expect(fixture.settlements.cancelSettlement).not.toHaveBeenCalled();
+    expect(fixture.records.get('orders/order-1')?.status).toBe('ACCEPTED');
+    expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(1);
+
+    releaseProvider();
+    await expect(first).resolves.toEqual({ ok: true, orderId: 'order-1' });
+    expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(0);
+    expect(fixture.settlements.cancelSettlement).toHaveBeenCalledTimes(1);
+  });
+
+  it('provider 성공 뒤 local 실패는 LOCAL_FAILED로 남고 재시도에서 provider를 반복하지 않는다', async () => {
+    const fixture = makeLegacyForceRefundFixture();
+    const providerRefund = jest.fn();
+    let providerAlreadyRefunded = false;
+    fixture.payments.processRefundByOrderId.mockImplementation(async () => {
+      if (providerAlreadyRefunded) return;
+      providerAlreadyRefunded = true;
+      providerRefund();
+    });
+    fixture.records.delete('dailyCaps/store-1_2026-08-25');
+
+    await expect(fixture.service.forceRefund('order-1', {})).rejects.toThrow(
+      'legacy daily capacity 문서가 없습니다',
+    );
+    expect(providerRefund).toHaveBeenCalledTimes(1);
+    expect(fixture.records.get('orders/order-1')).toMatchObject({
+      status: 'ACCEPTED',
+      cancellation: { status: 'LOCAL_FAILED' },
+    });
+    expect(fixture.settlements.cancelSettlement).not.toHaveBeenCalled();
+
+    fixture.records.set('dailyCaps/store-1_2026-08-25', { totalCap: 10, usedSlots: 1 });
+    await expect(fixture.service.forceRefund('order-1', {})).resolves.toEqual({
+      ok: true,
+      orderId: 'order-1',
+    });
+
+    expect(providerRefund).toHaveBeenCalledTimes(1);
+    expect(fixture.payments.processRefundByOrderId).toHaveBeenCalledTimes(2);
+    expect(fixture.records.get('orders/order-1')).toMatchObject({
+      status: 'CANCELLED',
+      cancellation: { status: 'COMPLETED' },
+    });
+    expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(0);
+    expect(fixture.settlements.cancelSettlement).toHaveBeenCalledTimes(1);
   });
 
   it('schemaVersion 2 회차는 기존 round cancellation lifecycle에 위임한다', async () => {
