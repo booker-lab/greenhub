@@ -151,21 +151,23 @@ describe('legacy daily capacity 정책', () => {
     ).toBe('2026-08-26');
   });
 
-  it.each(['payment_failed', 'timeout'])(
-    '%s cancellation은 eligible legacy capacity를 한 번만 반환한다',
-    async (reason) => {
-      const fixture = makeFinalization();
+  it.each([
+    ['direct', 'payment_failed'],
+    ['hub', 'payment_failed'],
+    ['direct', 'timeout'],
+    ['hub', 'timeout'],
+  ])('normal %s의 %s cancellation은 eligible legacy capacity를 한 번만 반환한다', async (deliveryMethod, reason) => {
+    const fixture = makeFinalization({ deliveryMethod });
 
-      await fixture.service.cancelPendingOrder('order-1', reason);
-      await fixture.service.cancelPendingOrder('order-1', reason);
+    await fixture.service.cancelPendingOrder('order-1', reason);
+    await fixture.service.cancelPendingOrder('order-1', reason);
 
-      expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.['usedSlots']).toBe(0);
-      expect(fixture.records.get('orders/order-1')).toMatchObject({
-        status: 'CANCELLED',
-        legacyDailyCapacity: { status: 'RELEASED', quantity: 2 },
-      });
-    },
-  );
+    expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.['usedSlots']).toBe(0);
+    expect(fixture.records.get('orders/order-1')).toMatchObject({
+      status: 'CANCELLED',
+      legacyDailyCapacity: { status: 'RELEASED', quantity: 2 },
+    });
+  });
 
   it('payment failure webhook은 실제 finalization recovery를 호출한다', async () => {
     const fixture = makeFinalization();
