@@ -1,6 +1,6 @@
 'use client';
 
-import type { Category, ColorOption, Product, SaleRoundItem, SalesMode } from '@greenhub/shared';
+import type { Category, ColorOption, Product, SaleRoundItem, SaleType, SalesMode } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
 import {
   Box,
@@ -24,7 +24,7 @@ import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { db } from '@/lib/firebase';
 
-const TABS: { label: string; value: Category | undefined; saleType?: 'group' | 'direct' }[] = [
+const TABS: { label: string; value: Category | undefined; saleType?: SaleType }[] = [
   { label: '전체', value: undefined },
   { label: '공동구매', value: undefined, saleType: 'group' },
   { label: '절화', value: 'cut_flower' },

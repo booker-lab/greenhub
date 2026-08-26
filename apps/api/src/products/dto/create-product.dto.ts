@@ -9,6 +9,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { COLOR_OPTIONS, type ColorOption } from '@greenhub/shared';
 
 import { Type } from 'class-transformer';
 
@@ -41,8 +42,8 @@ export class GroupConfigDto {
 
 export class SelectionDto {
   @IsArray()
-  @IsString({ each: true })
-  colors: string[];
+  @IsEnum(COLOR_OPTIONS, { each: true })
+  colors: ColorOption[];
 
   @IsEnum(['외대', '쌍대', '가지', '3대'])
   stemType: string;

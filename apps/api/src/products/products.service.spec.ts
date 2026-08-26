@@ -58,3 +58,36 @@ describe('공개 상품 API', () => {
     await expect(service.getPublicProduct(product.id)).resolves.toEqual(product);
   });
 });
+
+describe('legacy daily cap 날짜 기본값', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('KST 자정 직후에도 오늘 날짜를 KST 기준으로 조회한다', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-24T15:30:00.000Z'));
+
+    const calls: unknown[][] = [];
+    const query = {} as {
+      where: jest.Mock;
+      get: jest.Mock;
+    };
+    query.where = jest.fn((...args: unknown[]) => {
+      calls.push(args);
+      return query;
+    });
+    query.get = jest.fn().mockResolvedValue({ docs: [] });
+
+    const firestore = {
+      doc: jest.fn(),
+      collection: jest.fn().mockReturnValue(query),
+    };
+    const service = new ProductsService(firestore as never);
+
+    await service.getDailyCaps('store-1', 'seller-1', undefined, undefined, 'admin');
+
+    expect(calls).toContainEqual(['date', '>=', '2026-08-25']);
+    expect(calls).toContainEqual(['date', '<=', '2026-08-25']);
+  });
+});

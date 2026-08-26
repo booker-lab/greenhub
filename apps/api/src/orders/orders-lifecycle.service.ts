@@ -14,6 +14,7 @@ import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
+import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 
 const DELIVERY_HOLD_CUSTOMER_REASONS: Record<string, string> = {
   WEATHER: '기상 상황으로 배송이 지연되었습니다.',
@@ -174,6 +175,14 @@ export class OrdersLifecycleService {
       nextStatus === 'DELIVERY_HELD' ? 1 : currentStatus === 'DELIVERY_HELD' ? -1 : 0;
     if (heldOrderDelta !== 0 && order['roundId']) {
       await this.firestore.runTransaction(async (t) => {
+        const orderRef = this.firestore.doc(`orders/${orderId}`);
+        const latestOrderSnap = await t.get(orderRef);
+        if (!latestOrderSnap.exists || latestOrderSnap.data()?.['storeId'] !== storeId) {
+          throw new NotFoundException();
+        }
+        if (latestOrderSnap.data()?.['status'] !== currentStatus) {
+          throw new ConflictException('주문 상태가 변경되었습니다.');
+        }
         const roundRef = this.firestore.doc(`saleRounds/${order['roundId']}`);
         const roundSnap = await t.get(roundRef);
         if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
@@ -184,7 +193,15 @@ export class OrdersLifecycleService {
           heldOrderCount: heldOrderDelta,
         });
         t.update(roundRef, { counters, updatedAt: update['updatedAt'] });
-        t.update(this.firestore.doc(`orders/${orderId}`), update);
+        if (nextStatus === 'CANCELLED') {
+          await releaseLegacyDailyCapacityInTransaction(
+            this.firestore,
+            t,
+            orderId,
+            confirmedCancelReason ?? '판매자 취소',
+          );
+        }
+        t.update(orderRef, update);
       });
     } else {
       const isDriverAssignment =
@@ -206,7 +223,27 @@ export class OrdersLifecycleService {
           transaction.update(orderRef, update);
         });
       } else {
-        await this.firestore.doc(`orders/${orderId}`).update(update);
+        if (nextStatus === 'CANCELLED') {
+          await this.firestore.runTransaction(async (transaction) => {
+            const orderRef = this.firestore.doc(`orders/${orderId}`);
+            const latestSnap = await transaction.get(orderRef);
+            if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+              throw new NotFoundException();
+            }
+            if (latestSnap.data()?.['status'] !== currentStatus) {
+              throw new ConflictException('주문 상태가 변경되었습니다.');
+            }
+            await releaseLegacyDailyCapacityInTransaction(
+              this.firestore,
+              transaction,
+              orderId,
+              confirmedCancelReason ?? '판매자 취소',
+            );
+            transaction.update(orderRef, update);
+          });
+        } else {
+          await this.firestore.doc(`orders/${orderId}`).update(update);
+        }
       }
     }
 
