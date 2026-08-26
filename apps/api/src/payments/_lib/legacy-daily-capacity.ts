@@ -88,6 +88,10 @@ export async function releaseLegacyDailyCapacityInTransaction(
 
   const cap = capSnap.data() ?? {};
   const usedSlots = finiteNumber(cap['usedSlots']);
+  const totalCap = finiteNumber(cap['totalCap']);
+  if (usedSlots > totalCap) {
+    throw new LegacyDailyCapacityError('legacy daily capacity 점유 상태가 한도를 초과해 손상되었습니다.');
+  }
   if (usedSlots < quantity) {
     throw new LegacyDailyCapacityError('legacy daily capacity 점유 상태가 이미 반환되었거나 손상되었습니다.');
   }
@@ -152,6 +156,24 @@ export async function reacquireLegacyDailyCapacityInTransaction(
   return 'REACQUIRED';
 }
 
+export function reserveLegacyDailyCapacity(cap: LegacyOrder, quantity: unknown): number | null {
+  const usedSlots = finiteNumber(cap['usedSlots']);
+  const totalCap = finiteNumber(cap['totalCap']);
+  const requestedQuantity = finiteNumber(quantity);
+  if (requestedQuantity <= 0) {
+    throw new LegacyDailyCapacityError('legacy daily capacity 수량이 올바르지 않습니다.');
+  }
+  if (usedSlots > totalCap) {
+    throw new LegacyDailyCapacityError('legacy daily capacity 점유 상태가 한도를 초과해 손상되었습니다.');
+  }
+
+  const nextUsedSlots = usedSlots + requestedQuantity;
+  if (!Number.isFinite(nextUsedSlots)) {
+    throw new LegacyDailyCapacityError('legacy daily capacity 계산 결과가 올바르지 않습니다.');
+  }
+  return nextUsedSlots > totalCap ? null : nextUsedSlots;
+}
+
 function readCapacityState(order: LegacyOrder): CapacityState | null {
   const value = order['legacyDailyCapacity'];
   if (!value || typeof value !== 'object') return null;
@@ -176,11 +198,10 @@ function legacyQuantity(order: LegacyOrder): number {
 }
 
 function finiteNumber(value: unknown): number {
-  const number = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(number) || number < 0) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
     throw new LegacyDailyCapacityError('legacy daily capacity 숫자 상태가 올바르지 않습니다.');
   }
-  return number;
+  return value;
 }
 
 function toDate(value: unknown): Date | null {

@@ -1,9 +1,10 @@
 import 'reflect-metadata';
+import { COLOR_OPTIONS } from '@greenhub/shared';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { COLOR_OPTIONS } from '@greenhub/shared';
 import { CreateProductDto } from './create-product.dto';
 import { ProductQueryDto } from './product-query.dto';
+import { UpdateProductDto } from './update-product.dto';
 
 const validProduct = {
   name: '테스트 상품',
@@ -67,5 +68,41 @@ describe('상품 색상 조회 필터 계약', () => {
     const errors = await validate(plainToInstance(ProductQueryDto, { colors: '레드,오류' }));
 
     expect(errors).not.toHaveLength(0);
+  });
+});
+
+describe('상품 PATCH 계약', () => {
+  const validSelection = {
+    colors: ['레드'],
+    stemType: '외대',
+    fragrance: 'none',
+    bloomCondition: 'half',
+    bundleUnit: '1단',
+  };
+
+  it.each(COLOR_OPTIONS)('현재 canonical 색상 %s를 허용한다', async (color) => {
+    const errors = await validate(
+      plainToInstance(UpdateProductDto, {
+        selection: { ...validSelection, colors: [color] },
+      }),
+    );
+
+    expect(errors).toHaveLength(0);
+  });
+
+  it.each([
+    ['잘못된 색상', { selection: { ...validSelection, colors: ['알 수 없는 색상'] } }],
+    ['direct 판매 방식', { saleType: 'direct' }],
+    ['임의 판매 방식', { saleType: 'legacy' }],
+  ])('%s을 거부한다', async (_label, update) => {
+    const errors = await validate(plainToInstance(UpdateProductDto, update));
+
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it.each(['normal', 'group'])('%s 판매 방식을 허용한다', async (saleType) => {
+    const errors = await validate(plainToInstance(UpdateProductDto, { saleType }));
+
+    expect(errors).toHaveLength(0);
   });
 });
