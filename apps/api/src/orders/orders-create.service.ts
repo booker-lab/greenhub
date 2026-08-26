@@ -11,6 +11,10 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { calcDeliveryFee, detectMetropolitan, generatePickupCode } from './orders.helpers';
 import { RoundOrderCreateService } from './round-order-create.service';
+import {
+  LegacyDailyCapacityError,
+  reserveLegacyDailyCapacity,
+} from '../payments/_lib/legacy-daily-capacity';
 
 @Injectable()
 export class OrdersCreateService {
@@ -112,12 +116,19 @@ export class OrdersCreateService {
           );
         }
         const cap = capSnap.data()!;
-        if (cap['usedSlots'] + dto.quantity > cap['totalCap']) {
+        let nextUsedSlots: number | null;
+        try {
+          nextUsedSlots = reserveLegacyDailyCapacity(cap, dto.quantity);
+        } catch (error) {
+          if (error instanceof LegacyDailyCapacityError) {
+            throw new ConflictException('당일 배송 슬롯 상태가 올바르지 않아 주문할 수 없습니다.');
+          }
+          throw error;
+        }
+        if (nextUsedSlots === null) {
           throw new ConflictException('당일 배송 슬롯이 마감되었습니다.');
         }
-        t.update(capRef, {
-          usedSlots: cap['usedSlots'] + dto.quantity,
-        });
+        t.update(capRef, { usedSlots: nextUsedSlots });
       }
 
       // 공동구매: 수량 누적 + 목표 수량·maxPerPerson 검증

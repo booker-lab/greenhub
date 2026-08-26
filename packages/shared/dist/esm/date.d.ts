@@ -8,8 +8,14 @@
  * 주의: 이 파일은 shared 패키지 최초의 '런타임 함수'다(기존은 타입/상수 전용).
  * dual ESM/CJS 빌드(tsc + tsc -p tsconfig.cjs.json) 양쪽에 정상 산출되어야 한다.
  */
+export interface KSTDateRange {
+    start: Date;
+    endExclusive: Date;
+}
 /** KST 기준 오늘 날짜를 YYYY-MM-DD로 반환 (UTC 자정~오전9시 하루 밀림 방지) */
 export declare function todayKST(): string;
 /** 주어진 시각의 KST 기준 날짜를 YYYY-MM-DD로 반환 */
 export declare function toDateStrKST(date: Date): string;
+/** KST 달력 날짜의 시작 시각과 다음 날 시작 시각을 UTC instant로 반환 */
+export declare function dateRangeKST(date: string): KSTDateRange;
 //# sourceMappingURL=date.d.ts.map

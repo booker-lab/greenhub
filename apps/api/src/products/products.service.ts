@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
 import { todayKST } from '@greenhub/shared';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { UpdateDeliveryConfigDto } from './dto/update-delivery-config.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
 
 @Injectable()
 export class ProductsService {
@@ -149,7 +150,7 @@ export class ProductsService {
     storeId: string,
     productId: string,
     sellerId: string,
-    dto: Partial<CreateProductDto>,
+    dto: UpdateProductDto,
     role?: string,
   ) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
@@ -229,10 +230,22 @@ export class ProductsService {
   ) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
     const docId = `${storeId}_${date}`;
-    await this.firestore
-      .doc(`dailyCaps/${docId}`)
-      .set({ id: docId, storeId, date, totalCap }, { merge: true });
-    const snap = await this.firestore.doc(`dailyCaps/${docId}`).get();
+    const capRef = this.firestore.doc(`dailyCaps/${docId}`);
+    await this.firestore.runTransaction(async (tx) => {
+      const capSnap = await tx.get(capRef);
+      tx.set(
+        capRef,
+        {
+          id: docId,
+          storeId,
+          date,
+          totalCap,
+          ...(capSnap.exists ? {} : { usedSlots: 0 }),
+        },
+        { merge: true },
+      );
+    });
+    const snap = await capRef.get();
     return snap.data();
   }
 

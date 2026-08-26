@@ -91,3 +91,75 @@ describe('legacy daily cap 날짜 기본값', () => {
     expect(calls).toContainEqual(['date', '<=', '2026-08-25']);
   });
 });
+
+describe('legacy daily cap 초기화', () => {
+  type Data = Record<string, any>;
+
+  function makeFirestore(initial: Record<string, Data>) {
+    const records = new Map(Object.entries(initial));
+    const refs = new Map<string, Data>();
+    const doc = jest.fn((path: string) => {
+      if (!refs.has(path)) {
+        refs.set(path, {
+          path,
+          get: jest.fn(async () => ({
+            exists: records.has(path),
+            data: () => records.get(path),
+          })),
+        });
+      }
+      return refs.get(path);
+    });
+    const firestore = {
+      doc,
+      runTransaction: jest.fn(async (callback: (tx: Data) => Promise<unknown>) => {
+        const pending = new Map<string, Data>();
+        const tx = {
+          get: jest.fn(async (ref: Data) => ({
+            exists: pending.has(ref.path) || records.has(ref.path),
+            data: () => pending.get(ref.path) ?? records.get(ref.path),
+          })),
+          set: jest.fn((ref: Data, data: Data, options?: { merge?: boolean }) => {
+            const current = pending.get(ref.path) ?? records.get(ref.path) ?? {};
+            pending.set(ref.path, options?.merge ? { ...current, ...data } : data);
+          }),
+        };
+        const result = await callback(tx);
+        for (const [path, data] of pending) records.set(path, data);
+        return result;
+      }),
+    };
+    return { firestore, records };
+  }
+
+  it('새 daily cap 문서는 usedSlots 0으로 생성한다', async () => {
+    const { firestore, records } = makeFirestore({});
+    const service = new ProductsService(firestore as never);
+
+    await expect(
+      service.updateDailyCap('store-1', '2026-08-25', 'admin-1', 10, 'admin'),
+    ).resolves.toMatchObject({
+      id: 'store-1_2026-08-25',
+      totalCap: 10,
+      usedSlots: 0,
+    });
+    expect(records.get('dailyCaps/store-1_2026-08-25')).toMatchObject({ usedSlots: 0 });
+  });
+
+  it('기존 daily cap의 usedSlots와 누락 상태를 totalCap 수정으로 초기화하지 않는다', async () => {
+    const { firestore, records } = makeFirestore({
+      'dailyCaps/store-1_2026-08-25': { totalCap: 10, usedSlots: 3 },
+      'dailyCaps/store-1_2026-08-26': { totalCap: 10 },
+    });
+    const service = new ProductsService(firestore as never);
+
+    await service.updateDailyCap('store-1', '2026-08-25', 'admin-1', 12, 'admin');
+    await service.updateDailyCap('store-1', '2026-08-26', 'admin-1', 12, 'admin');
+
+    expect(records.get('dailyCaps/store-1_2026-08-25')).toMatchObject({
+      totalCap: 12,
+      usedSlots: 3,
+    });
+    expect(records.get('dailyCaps/store-1_2026-08-26')).not.toHaveProperty('usedSlots');
+  });
+});
