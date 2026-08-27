@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
+import {
+  isCurrentRedeliveryChargeLinked,
+  isCurrentRedeliveryPaymentRequired,
+} from '../orders/redelivery-resume-gate';
 import { PortoneClient } from './portone.client';
 
 type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
@@ -66,9 +70,12 @@ export class OrderChargePaymentService {
       const order = orderSnap.data() as Record<string, any> | undefined;
       if (
         !orderSnap.exists ||
-        order?.['redeliveryChargeId'] !== chargeId ||
-        order?.['storeId'] !== charge['storeId'] ||
-        order?.['userId'] !== charge['userId']
+        !isCurrentRedeliveryPaymentRequired({ ...order, id: charge['orderId'] }) ||
+        !isCurrentRedeliveryChargeLinked(
+          { ...order, id: charge['orderId'] },
+          charge,
+          chargeId,
+        )
       ) {
         throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
       }

@@ -646,7 +646,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     });
   });
 
-  it('배송 보류 전환은 보류 스냅샷과 회차 보류 주문 수를 기록한다', async () => {
+  it('유료 배송 보류를 PREPARING으로 옮겨도 결제 obligation과 회차 보류 수를 유지한다', async () => {
     const { firestore, records } = makeFirestore(
       seedRoundRecords({
         'orders/order-1': {
@@ -710,11 +710,19 @@ describe('MVP 회차 주문 흐름 계약', () => {
       'seller',
     );
     expect(records.get('saleRounds/round-1')).toMatchObject({
-      counters: expect.objectContaining({ heldOrderCount: 0 }),
+      counters: expect.objectContaining({ heldOrderCount: 1 }),
     });
     expect(records.get('orders/order-1')?.['deliveryHold']).toMatchObject({
-      resolvedAt: expect.any(String),
+      heldAt: expect.any(String),
+      resolvedAt: null,
     });
+    expect(notifications.sendToUser).toHaveBeenLastCalledWith(
+      'user-1',
+      'ORDER_REDELIVERY_PAYMENT_REQUESTED',
+      { orderId: 'order-1' },
+      'order-1',
+      undefined,
+    );
   });
 
   it('알 수 없는 배송 보류 사유 코드는 상태 저장 전에 거부한다', async () => {

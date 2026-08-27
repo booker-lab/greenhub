@@ -144,7 +144,7 @@ describe('회차 직배송 서버 전체 흐름 통합 계약', () => {
       .expect(403);
   });
 
-  it('회차 개설부터 결제·보류·재배송·사진·완료·보관 파기까지 멱등 연결한다', async () => {
+  it('회차 개설부터 유료 재배송 결제와 미결제 재개 차단까지 멱등 연결한다', async () => {
     const { roundId, roundItemId } = await createOpenRound();
     const body = orderInput(roundId, roundItemId, 'checkout-main-001');
 
@@ -288,79 +288,13 @@ describe('회차 직배송 서버 전체 흐름 통합 계약', () => {
       'driver',
     )
       .send({ status: 'DELIVERING' })
-      .expect(200);
-    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
-    await asUser(
-      request(app.getHttpServer())
-        .post(`/stores/store-1/orders/${orderId}/delivery-photos`)
-        .field('idempotencyKey', 'delivery-photo-main-001')
-        .attach('photo', jpeg, { filename: 'delivery.jpg', contentType: 'image/jpeg' }),
-      'consumer-1',
-      'consumer',
-    ).expect(403);
-    const photo = await asUser(
-      request(app.getHttpServer())
-        .post(`/stores/store-1/orders/${orderId}/delivery-photos`)
-        .field('idempotencyKey', 'delivery-photo-main-001')
-        .attach('photo', jpeg, { filename: 'delivery.jpg', contentType: 'image/jpeg' }),
-      'driver-1',
-      'driver',
-    ).expect(200);
-    await asUser(
-      request(app.getHttpServer())
-        .post(`/stores/store-1/orders/${orderId}/delivery-photos`)
-        .field('idempotencyKey', 'delivery-photo-main-001')
-        .attach('photo', jpeg, { filename: 'delivery.jpg', contentType: 'image/jpeg' }),
-      'driver-1',
-      'driver',
-    ).expect(200);
+      .expect(409);
     expect(fixture.read(`orders/${orderId}`)).toMatchObject({
-      status: 'DELIVERED',
-      deliveryPhotoIds: [photo.body.photoId],
+      status: 'DELIVERY_HELD',
+      requiresOperationalReview: true,
+      deliveryHold: expect.objectContaining({ resolvedAt: null }),
     });
-    expect(fixture.deliveredNotificationKeys.size).toBe(1);
-
-    await asUser(
-      request(app.getHttpServer()).get(
-        `/stores/store-1/orders/${orderId}/delivery-photos/${photo.body.photoId}/url`,
-      ),
-      'consumer-2',
-      'consumer',
-    ).expect(403);
-    for (const [userId, role] of [
-      ['consumer-1', 'consumer'],
-      ['seller-1', 'seller'],
-      ['driver-1', 'driver'],
-      ['admin-1', 'admin'],
-    ]) {
-      await asUser(
-        request(app.getHttpServer()).get(
-          `/stores/store-1/orders/${orderId}/delivery-photos/${photo.body.photoId}/url`,
-        ),
-        userId,
-        role,
-      ).expect(200);
-    }
-
-    await asUser(
-      request(app.getHttpServer()).patch(`/stores/store-1/sale-rounds/${roundId}/complete`),
-      'seller-1',
-      'seller',
-    )
-      .expect(200)
-      .expect(({ body: response }) => expect(response.status).toBe('COMPLETED'));
-
-    const storagePath = `deliveryPhotos/${orderId}/${photo.body.photoId}.jpg`;
-    expect(fixture.storedObjects.has(storagePath)).toBe(true);
-    const firstPurge = await fixture.retention.purgeExpiredRecords({
-      now: new Date(Date.now() + 6 * 366 * 24 * 3_600_000),
-    });
-    const secondPurge = await fixture.retention.purgeExpiredRecords({
-      now: new Date(Date.now() + 6 * 366 * 24 * 3_600_000),
-    });
-    expect(firstPurge.deletedCount).toBeGreaterThanOrEqual(4);
-    expect(secondPurge).toMatchObject({ deletedCount: 0 });
-    expect(fixture.storedObjects.has(storagePath)).toBe(false);
+    expect(fixture.read(`saleRounds/${roundId}`)?.counters.heldOrderCount).toBe(1);
   });
 
   it('회차 한도 초과와 늦은 결제를 실제 예약 재확보 실패 후 한 번만 환불한다', async () => {
