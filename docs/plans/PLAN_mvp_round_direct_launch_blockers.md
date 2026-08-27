@@ -6,9 +6,11 @@
 
 ## 메타
 
-- 최종 정합화: 2026-08-24 KST
-- 상태: `active_p0_parallel / aligo_external_review_pending`
-- 외부 차단점: ALIGO 8종 provider 심사 완료
+- 최종 정합화: 2026-08-27 KST
+- 상태: `active_p0_parallel / aligo_provider_approved`
+- 외부 ALIGO 심사 차단점: 해소 — 회차 템플릿 8종 `승인완료`
+- 다음 ALIGO gate: provider code 1:1 확인 → 격리 알림톡 → SMS fallback
+- 승인 증거: `docs/reports/REPORT_aligo_template_approval_20260827.md`
 - 상태 SSOT: `docs/memory.md`
 - 재개: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
 - 미완료: `docs/BACKLOG.md`
@@ -40,8 +42,8 @@
 | 0I | admin privileged mutation authorization + settlement pay coverage | 미완료 — P0 COVERAGE GAP |
 | 0J | settlement 생성·confirm·cancel core lifecycle coverage | 미완료 — P0 COVERAGE GAP |
 | 0K | marketing consent→preference→withdrawal→retention lifecycle | 미완료 — P0 FINDING |
-| 1 | ALIGO 8종 최종 승인 | 검수중 |
-| 2 | 실제 알림톡 | 미실행 |
+| 1 | ALIGO 8종 최종 승인 | 완료 — 2026-08-27 provider UI 8종 `승인완료` |
+| 2 | provider code 1:1 검사 + 실제 알림톡 | 미실행 |
 | 3 | SMS fallback | 미실행 |
 | 4 | 판매 활성화 legal | 미실행 |
 | 5 | actual release SHA | 미실행 |
@@ -55,7 +57,7 @@
 
 1. repository 변경은 최신 `main` 기반 branch+PR.
 2. direct `main` 금지.
-3. 0A~0K는 ALIGO 심사와 병렬 가능.
+3. 0A~0K는 ALIGO provider 실제 검증과 병렬 가능.
 4. P0를 문서/UI 변경만으로 완료 처리하지 않는다.
 5. 금전·권한 불변식은 server boundary + 직접 거부/정상/동시성 회귀가 필요하다.
 6. driver 관리자 승인 계약은 public register/login, Kakao, refresh, Firebase claims까지 하나의 authorization lifecycle로 검증한다.
@@ -69,6 +71,7 @@
 14. production은 exact SHA/artifact + 별도 승인.
 15. provider metadata SHA 불일치 시 traffic 전환 금지.
 16. 첫 회차 `SCHEDULED` 전 `salesMode` 전환 금지.
+17. ALIGO provider 템플릿 승인과 실제 발송 검증을 구분하며, 승인만으로 production 알림 경로를 `VERIFIED` 처리하지 않는다.
 
 ## Phase 0 — 코드·권한·금전 안전성
 
@@ -191,10 +194,12 @@
 
 ## Phase 1 — ALIGO
 
-1. 8종 승인 (`blocked_external_review`)
-2. provider code 1:1 검사
-3. 승인 후 격리 실제 알림톡
-4. 승인 후 SMS fallback
+1. [x] 8종 provider 승인 — 2026-08-27 15:06 KST 경 모두 `승인완료`
+2. [ ] provider code 1:1 검사
+3. [ ] 승인된 템플릿 격리 실제 알림톡
+4. [ ] SMS fallback
+
+증거: `docs/reports/REPORT_aligo_template_approval_20260827.md`.
 
 ## Phase 2 — legal·release SHA
 
