@@ -2,6 +2,7 @@
 
 import { Select, Text } from '@mantine/core';
 import { useEffect, useState } from 'react';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
 interface Variety {
   id: string;
@@ -34,7 +35,7 @@ export default function VarietySelector({
   const [varieties, setVarieties] = useState<Variety[]>([]);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/varieties?category=${category}`, {
+    fetch(`${getApiBaseUrl()}/varieties?category=${category}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())

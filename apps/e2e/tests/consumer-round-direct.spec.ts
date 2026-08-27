@@ -5,8 +5,9 @@ import {
   roundDirectFixture,
   type RoundDirectFixture,
 } from './_helpers/round-direct';
+import { resolveE2ETargetUrl } from './_helpers/target-url';
 
-const BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr';
+const BASE = resolveE2ETargetUrl('consumer');
 
 type RoundDirectConsumerFixtures = {
   roundDirect: RoundDirectFixture;

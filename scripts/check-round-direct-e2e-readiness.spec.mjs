@@ -29,6 +29,11 @@ function validInput(overrides = {}) {
       seller: SHA,
       driver: SHA,
     },
+    targetUrls: {
+      consumer: 'https://consumer-preview.example.test',
+      seller: 'https://seller-preview.example.test',
+      driver: 'https://driver-preview.example.test',
+    },
     auth: {
       consumer: { configured: true, role: 'consumer', verified: true },
       seller: { configured: true, role: 'seller', verified: true },
@@ -81,6 +86,16 @@ describe('회차 직배송 E2E 준비조건 실패 계약', () => {
     );
     assert.equal(result.ready, false);
     assert.ok(result.failureCodes.includes('DEPLOYMENT_SHA_MISMATCH'));
+  });
+
+  it('세 앱 deployment target_url이 하나라도 없으면 거부한다', () => {
+    const result = evaluateReadiness(
+      validInput({
+        targetUrls: { consumer: 'https://consumer-preview.example.test' },
+      }),
+    );
+    assert.equal(result.ready, false);
+    assert.ok(result.failureCodes.includes('DEPLOYMENT_TARGET_URL_MISSING'));
   });
 
   it('세 역할 인증과 승인 드라이버 중 하나라도 빠지면 거부한다', () => {
@@ -154,9 +169,15 @@ describe('환경 입력과 JPEG 판독', () => {
         seller: SHA,
         driver: SHA,
       }),
+      ROUND_DIRECT_E2E_TARGET_URLS_JSON: JSON.stringify({
+        consumer: 'https://consumer-preview.example.test/',
+        seller: 'https://seller-preview.example.test/',
+        driver: 'https://driver-preview.example.test/',
+      }),
     });
     assert.deepEqual(input.allowedApiOrigins, ['https://one.test', 'https://two.test']);
     assert.equal(input.deploymentShas.driver, SHA);
+    assert.equal(input.targetUrls.consumer, 'https://consumer-preview.example.test');
     assert.equal(input.sharedSecretConfigured, true);
   });
 

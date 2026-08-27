@@ -8,6 +8,7 @@ export const PROVIDER_HOSTS = ['api.portone.io', 'kakaoapi.aligo.in', 'apis.alig
 const MAX_JPEG_BYTES = 5 * 1024 * 1024;
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const RUN_ID_PATTERN = /^[a-z0-9][a-z0-9-]{6,46}[a-z0-9]$/;
+const DEPLOYMENT_APPS = ['consumer', 'seller', 'driver'];
 
 function splitList(value) {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -38,6 +39,26 @@ function safeUrlOrigin(value) {
   } catch {
     return '';
   }
+}
+
+function safePreviewTargetUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+      return null;
+    }
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
+function normalizeTargetUrls(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    DEPLOYMENT_APPS.map((app) => [app, safePreviewTargetUrl(value[app])]),
+  );
 }
 
 function isProductionOrigin(origin) {
@@ -112,6 +133,7 @@ export function normalizeReadinessInput(env = process.env, options = {}) {
       (runId ? `e2e/round-direct/${runId}/` : ''),
     fixtureStoreId: env.ROUND_DIRECT_E2E_STORE_ID?.trim() ?? '',
     deploymentShas: parseJsonObject(env.ROUND_DIRECT_E2E_DEPLOYMENT_SHAS_JSON),
+    targetUrls: normalizeTargetUrls(parseJsonObject(env.ROUND_DIRECT_E2E_TARGET_URLS_JSON)),
     auth: {
       consumer: authEvidence.consumer ?? {
         configured: Boolean(env.TEST_CONSUMER_EMAIL && env.TEST_CONSUMER_PASSWORD),
@@ -211,7 +233,7 @@ export function evaluateReadiness(input) {
 
   const expectedSha = String(input.expectedSha ?? '');
   const deploymentShas = input.deploymentShas ?? {};
-  const deploymentMatches = ['consumer', 'seller', 'driver'].every(
+  const deploymentMatches = DEPLOYMENT_APPS.every(
     (app) => deploymentShas[app] === expectedSha,
   );
   if (!deploymentMatches) {
@@ -219,6 +241,17 @@ export function evaluateReadiness(input) {
       failures,
       'DEPLOYMENT_SHA_MISMATCH',
       '세 앱 배포 SHA가 지정 SHA와 모두 일치하지 않습니다.',
+    );
+  }
+  const targetUrls = input.targetUrls ?? {};
+  const targetUrlsConfigured = DEPLOYMENT_APPS.every(
+    (app) => typeof targetUrls[app] === 'string' && targetUrls[app].length > 0,
+  );
+  if (!targetUrlsConfigured) {
+    addFailure(
+      failures,
+      'DEPLOYMENT_TARGET_URL_MISSING',
+      '세 앱 배포 target_url이 Playwright 전달값으로 모두 연결되지 않았습니다.',
     );
   }
 
@@ -295,6 +328,7 @@ export function evaluateReadiness(input) {
     storagePrefix: input.storagePrefix || null,
     fixtureStoreId: input.fixtureStoreId || null,
     deploymentShas,
+    targetUrls,
     auth: {
       consumer: {
         configured: Boolean(input.auth?.consumer?.configured),

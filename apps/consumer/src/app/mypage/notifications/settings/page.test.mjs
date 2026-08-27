@@ -35,6 +35,9 @@ const requireForTest = (specifier) => {
   ) {
     return {};
   }
+  if (specifier === '@/lib/api-base-url') {
+    return { getApiBaseUrl: () => 'http://localhost:3000' };
+  }
   throw new Error(`예상하지 못한 마케팅 알림 설정 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(

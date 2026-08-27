@@ -20,6 +20,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { use, useState } from 'react';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 import {
   formatDateTime,
   isNonEmptyString,
@@ -30,7 +31,7 @@ import {
   readRedeliveryPaymentResponse,
 } from './_detail';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = getApiBaseUrl();
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   PENDING: '결제 확인 중',
   RECRUITING: '모집 중',

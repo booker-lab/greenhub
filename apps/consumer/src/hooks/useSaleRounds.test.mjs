@@ -1,6 +1,40 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { createLoadingSaleRoundsState, fetchPublicSaleRoundsState } from './useSaleRounds.ts';
+import ts from 'typescript';
+
+const source = await readFile(new URL('./useSaleRounds.ts', import.meta.url), 'utf8');
+const testableSource = `${source.replace(
+  "import { getApiBaseUrl } from '@/lib/api-base-url';",
+  "const getApiBaseUrl = () => 'http://localhost:3000';",
+)}
+export { createLoadingSaleRoundsState, fetchPublicSaleRoundsState };`;
+const compiled = ts.transpileModule(testableSource, {
+  compilerOptions: {
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+  },
+  fileName: 'useSaleRounds.ts',
+}).outputText;
+const saleRoundsModule = { exports: {} };
+const saleRoundsRequire = (specifier) => {
+  if (specifier === 'react') {
+    return {
+      useCallback: (callback) => callback,
+      useEffect: () => {},
+      useRef: (initial) => ({ current: initial }),
+      useState: (initial) => [initial, () => {}],
+    };
+  }
+  throw new Error(`예상하지 못한 회차 모듈 요청: ${specifier}`);
+};
+new Function('require', 'module', 'exports', compiled)(
+  saleRoundsRequire,
+  saleRoundsModule,
+  saleRoundsModule.exports,
+);
+
+const { createLoadingSaleRoundsState, fetchPublicSaleRoundsState } = saleRoundsModule.exports;
 
 function round(id, status, orderOpenAt) {
   return {

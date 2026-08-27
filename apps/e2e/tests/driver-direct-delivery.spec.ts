@@ -6,8 +6,9 @@ import {
   roundDirectFixture,
   type RoundDirectFixture,
 } from './_helpers/round-direct';
+import { resolveE2ETargetUrl } from './_helpers/target-url';
 
-const BASE = process.env.DRIVER_BASE ?? 'https://driver.greenlove.co.kr';
+const BASE = resolveE2ETargetUrl('driver');
 const DELIVERY_PHOTO_PATH = resolve(__dirname, '../fixtures/round-direct-delivery.jpg');
 
 type RoundDirectDriverFixtures = {

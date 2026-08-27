@@ -8,8 +8,7 @@ import {
   onAuthStateChanged,
 } from 'firebase/auth';
 import { firebaseAuth } from '@/lib/firebase';
-
-const API = process.env.NEXT_PUBLIC_API_URL!;
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
 export function useFirebaseAuth() {
   const { data: session, status } = useSession();
@@ -25,7 +24,7 @@ export function useFirebaseAuth() {
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user.accessToken) {
-      fetch(`${API}/auth/firebase-token`, {
+      fetch(`${getApiBaseUrl()}/auth/firebase-token`, {
         headers: { Authorization: `Bearer ${session.user.accessToken}` },
       })
         .then((res) => {

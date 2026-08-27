@@ -101,7 +101,9 @@ jobs:
             > "$evidence_root/deployment-raw.json"
           jq -c '.deploymentShas' "$evidence_root/deployment-raw.json" \
             | sed 's/^/ROUND_DIRECT_E2E_DEPLOYMENT_SHAS_JSON=/' >> "$GITHUB_ENV"
-          jq '{ready, checkedAt, expectedSha, deploymentShas}' \
+          jq -c '.deploymentTargetUrls' "$evidence_root/deployment-raw.json" \
+            | sed 's/^/ROUND_DIRECT_E2E_TARGET_URLS_JSON=/' >> "$GITHUB_ENV"
+          jq '{ready, checkedAt, expectedSha, deploymentShas, deploymentTargetUrls}' \
             "$evidence_root/deployment-raw.json" \
             > "$evidence_root/evidence/deployment.json"
 
@@ -194,9 +196,6 @@ jobs:
       - name: 소비자·셀러·드라이버 52건 실행
         id: e2e
         env:
-          SELLER_BASE: ${{ secrets.ROUND_DIRECT_E2E_SELLER_BASE }}
-          CONSUMER_BASE: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_BASE }}
-          DRIVER_BASE: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_BASE }}
           SELLER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SELLER_BYPASS_SECRET }}
           CONSUMER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET }}
           DRIVER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_BYPASS_SECRET }}

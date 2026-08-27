@@ -2,8 +2,9 @@
 
 import type { Order } from '@greenhub/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API = getApiBaseUrl();
 const TERMINAL_STATUSES = new Set(['CANCELLED', 'DELIVERED', 'REVIEWED']);
 // NOTE: Firebase SDK의 onSnapshot은 PWA Service Worker와 충돌하여 동작 불가.
 // Firestore REST API 대신 Railway API 폴링 방식으로 대체. 설계 결정: docs/CRITICAL_LOGIC.md [2026-03-27] 참조

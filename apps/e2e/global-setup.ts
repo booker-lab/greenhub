@@ -36,13 +36,14 @@ import {
   loginViaCredentials,
   ROUND_DIRECT_STATE_PATHS,
 } from './tests/_helpers/auth'
+import { resolveE2ETargetUrl } from './tests/_helpers/target-url'
 
 loadEnv({ path: resolve(__dirname, '.env') })
 
 const BYPASS_TARGETS = [
-  { name: 'SELLER', base: process.env['SELLER_BASE'], secret: process.env['SELLER_BYPASS_SECRET'] },
-  { name: 'CONSUMER', base: process.env['CONSUMER_BASE'], secret: process.env['CONSUMER_BYPASS_SECRET'] },
-  { name: 'DRIVER', base: process.env['DRIVER_BASE'], secret: process.env['DRIVER_BYPASS_SECRET'] },
+  { name: 'SELLER', base: resolveE2ETargetUrl('seller'), secret: process.env['SELLER_BYPASS_SECRET'] },
+  { name: 'CONSUMER', base: resolveE2ETargetUrl('consumer'), secret: process.env['CONSUMER_BYPASS_SECRET'] },
+  { name: 'DRIVER', base: resolveE2ETargetUrl('driver'), secret: process.env['DRIVER_BYPASS_SECRET'] },
 ]
 
 // globalSetup 로그인 race 흡수용 재시도 횟수·간격
@@ -54,13 +55,13 @@ type CredentialHeader = { name: string; value: string }
 const CREDENTIAL_TARGETS = [
   {
     name: 'SELLER',
-    base: process.env['SELLER_BASE'],
+    base: resolveE2ETargetUrl('seller'),
     email: process.env['TEST_SELLER_EMAIL'],
     password: process.env['TEST_SELLER_PASSWORD'],
   },
   {
     name: 'CONSUMER',
-    base: process.env['CONSUMER_BASE'],
+    base: resolveE2ETargetUrl('consumer'),
     email: process.env['TEST_CONSUMER_EMAIL'],
     password: process.env['TEST_CONSUMER_PASSWORD'],
   },
@@ -72,7 +73,7 @@ const CREDENTIAL_TARGETS = [
 // 세션만 담아 .admin-state.json으로 격리 발급한다(어드민 spec이 재사용).
 const ADMIN_TARGET = {
   name: 'ADMIN',
-  base: process.env['SELLER_BASE'],
+  base: resolveE2ETargetUrl('seller'),
   bypassSecret: process.env['SELLER_BYPASS_SECRET'],
   email: process.env['TEST_ADMIN_EMAIL'],
   password: process.env['TEST_ADMIN_PASSWORD'],
@@ -138,7 +139,7 @@ async function createRoundDirectProjectState(
     {
       name: `${project} 소비자`,
       role: 'consumer',
-      base: process.env['CONSUMER_BASE'],
+      base: resolveE2ETargetUrl('consumer'),
       email: process.env[`TEST_CONSUMER_EMAIL_${suffix}`],
       password: process.env[`TEST_CONSUMER_PASSWORD_${suffix}`],
       credentialHeader: undefined,
@@ -146,7 +147,7 @@ async function createRoundDirectProjectState(
     {
       name: `${project} 셀러`,
       role: 'seller',
-      base: process.env['SELLER_BASE'],
+      base: resolveE2ETargetUrl('seller'),
       email: process.env[`TEST_SELLER_EMAIL_${suffix}`],
       password: process.env[`TEST_SELLER_PASSWORD_${suffix}`],
       credentialHeader: undefined,
@@ -154,7 +155,7 @@ async function createRoundDirectProjectState(
     {
       name: `${project} 드라이버`,
       role: 'driver',
-      base: process.env['DRIVER_BASE'],
+      base: resolveE2ETargetUrl('driver'),
       email: process.env[`TEST_DRIVER_EMAIL_${suffix}`],
       password: process.env[`TEST_DRIVER_PASSWORD_${suffix}`],
       credentialHeader: {

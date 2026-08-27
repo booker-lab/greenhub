@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
 export async function apiFetch(
   path: string,
@@ -6,7 +6,7 @@ export async function apiFetch(
   options: RequestInit = {},
 ): Promise<Response> {
   const isFormData = options.body instanceof FormData;
-  return fetch(`${BASE_URL}${path}`, {
+  return fetch(`${getApiBaseUrl()}${path}`, {
     ...options,
     headers: {
       ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),

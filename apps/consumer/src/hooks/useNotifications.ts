@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import type { Notification } from '@greenhub/shared';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = getApiBaseUrl();
 const READ_KEY = 'gh_read_notifications';
 
 function getReadIds(): Set<string> {

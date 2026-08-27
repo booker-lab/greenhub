@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Box } from '@mantine/core';
 import ResilientImage from '@/components/ResilientImage';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
 interface BannerCta {
   label: string;
@@ -17,7 +18,7 @@ interface Banner {
   isActive?: boolean;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = getApiBaseUrl();
 
 export default async function HeroBanner() {
   let banner: Banner | null = null;
