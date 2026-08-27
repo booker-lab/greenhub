@@ -1,4 +1,8 @@
-import type { OrderStatus } from '@greenhub/shared';
+import type {
+  OrderStatus,
+  RedeliveryPaymentActionability,
+  RedeliveryPaymentState,
+} from '@greenhub/shared';
 
 const MAX_IDENTIFIER_LENGTH = 128;
 const UNSAFE_IDENTIFIER_CHARACTERS = '/?#\\';
@@ -31,6 +35,21 @@ const DELIVERY_HOLD_REASONS = new Set([
   'ADDRESS_ISSUE',
   'CUSTOMER_UNREACHABLE',
   'OTHER',
+]);
+const REDELIVERY_PAYMENT_STATES = new Set<RedeliveryPaymentState>([
+  'NOT_REQUIRED',
+  'MISSING',
+  'PENDING',
+  'PAID',
+  'FAILED',
+  'REFUNDED',
+  'MISMATCHED',
+]);
+const REDELIVERY_PAYMENT_RESPONSE_STATES = new Set<RedeliveryPaymentState>([
+  'PENDING',
+  'PAID',
+  'FAILED',
+  'REFUNDED',
 ]);
 
 export interface DetailItem {
@@ -66,7 +85,7 @@ export interface OrderDetailView {
   items: DetailItem[];
   deliveryHold: DeliveryHoldView | null;
   deliveryPhotoUrl: string | null;
-  canPayRedeliveryFee: boolean;
+  redeliveryPayment: RedeliveryPaymentActionability;
   canRequestCancellation: boolean;
 }
 
@@ -74,6 +93,7 @@ export interface RedeliveryPayment {
   paymentId: string;
   amount: number;
   name: string;
+  status: Exclude<RedeliveryPaymentState, 'NOT_REQUIRED' | 'MISMATCHED'>;
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -172,6 +192,83 @@ function readDeliveryHold(value: unknown): DeliveryHoldView | null {
   };
 }
 
+function readRedeliveryPaymentActionability(
+  value: unknown,
+  deliveryHold: DeliveryHoldView | null,
+): RedeliveryPaymentActionability | null {
+  if (value === undefined) {
+    return {
+      required: false,
+      holdAt: null,
+      chargeId: null,
+      status: 'NOT_REQUIRED',
+      canPay: false,
+      paid: false,
+      requiresRecovery: false,
+    };
+  }
+  if (!isRecord(value) || !REDELIVERY_PAYMENT_STATES.has(value.status as RedeliveryPaymentState)) {
+    return null;
+  }
+
+  const status = value.status as RedeliveryPaymentState;
+  if (
+    typeof value.required !== 'boolean' ||
+    (value.holdAt !== null && !isNonEmptyString(value.holdAt)) ||
+    (value.chargeId !== null && !isSafeIdentifier(value.chargeId)) ||
+    typeof value.canPay !== 'boolean' ||
+    typeof value.paid !== 'boolean' ||
+    typeof value.requiresRecovery !== 'boolean'
+  ) {
+    return null;
+  }
+
+  if (status === 'NOT_REQUIRED') {
+    return value.required === false &&
+      value.holdAt === null &&
+      value.chargeId === null &&
+      value.canPay === false &&
+      value.paid === false &&
+      value.requiresRecovery === false
+      ? {
+          required: false,
+          holdAt: null,
+          chargeId: null,
+          status,
+          canPay: false,
+          paid: false,
+          requiresRecovery: false,
+        }
+      : null;
+  }
+
+  if (
+    value.required !== true ||
+    value.paid !== (status === 'PAID') ||
+    (['PAID', 'FAILED', 'REFUNDED', 'MISMATCHED'].includes(status) && value.canPay) ||
+    (['PENDING', 'PAID'].includes(status) && value.requiresRecovery) ||
+    (['FAILED', 'REFUNDED', 'MISMATCHED'].includes(status) && !value.requiresRecovery) ||
+    (status === 'MISSING' && value.canPay && value.requiresRecovery) ||
+    (value.required &&
+      (!deliveryHold ||
+        value.holdAt !== deliveryHold.heldAt ||
+        deliveryHold.redeliveryFee === null ||
+        deliveryHold.redeliveryFee <= 0))
+  ) {
+    return null;
+  }
+
+  return {
+    required: true,
+    holdAt: value.holdAt as string | null,
+    chargeId: value.chargeId as string | null,
+    status,
+    canPay: value.canPay,
+    paid: value.paid,
+    requiresRecovery: value.requiresRecovery,
+  };
+}
+
 function readAddress(value: unknown) {
   if (!isRecord(value) || !isNonEmptyString(value.address)) return null;
   if (value.addressDetail !== undefined && typeof value.addressDetail !== 'string') return null;
@@ -220,18 +317,16 @@ export function readOrderDetail(value: unknown, requestedOrderId: string): Order
     if (!Number.isSafeInteger(itemTotal) || itemTotal !== value.totalAmount) return null;
   }
 
-  const deliveryHold = status === 'DELIVERY_HELD' ? readDeliveryHold(value.deliveryHold) : null;
+  const deliveryHold = value.deliveryHold == null ? null : readDeliveryHold(value.deliveryHold);
   if (status === 'DELIVERY_HELD' && !deliveryHold) return null;
+  const redeliveryPayment = readRedeliveryPaymentActionability(
+    value.redeliveryPayment,
+    deliveryHold,
+  );
+  if (!redeliveryPayment) return null;
   const rawPhotoUrl =
     status === 'DELIVERED' || status === 'REVIEWED' ? readHttpsUrl(value.deliveryPhotoUrl) : null;
   if (rawPhotoUrl === undefined) return null;
-  const canPayRedeliveryFee =
-    isRoundOrder &&
-    status === 'DELIVERY_HELD' &&
-    deliveryHold?.customerResponsible === true &&
-    typeof deliveryHold.redeliveryFee === 'number' &&
-    deliveryHold.redeliveryFee > 0;
-
   return {
     id: requestedOrderId,
     orderNumber:
@@ -252,7 +347,7 @@ export function readOrderDetail(value: unknown, requestedOrderId: string): Order
     items: items ?? [],
     deliveryHold,
     deliveryPhotoUrl: rawPhotoUrl,
-    canPayRedeliveryFee,
+    redeliveryPayment,
     canRequestCancellation: isRoundOrder
       ? ROUND_CANCELLABLE_STATUSES.has(status)
       : status === 'RECRUITING',
@@ -269,22 +364,30 @@ export function readRedeliveryPaymentResponse(
     value.orderId !== expected.orderId ||
     value.storeId !== expected.storeId ||
     value.type !== 'REDELIVERY_FEE' ||
-    value.status !== 'PENDING' ||
+    !REDELIVERY_PAYMENT_RESPONSE_STATES.has(value.status as RedeliveryPaymentState) ||
     value.customerResponsible !== true ||
+    !isMoney(value.amount) ||
     value.amount !== expected.amount ||
+    !isNonEmptyString(value.portonePaymentId) ||
+    value.portonePaymentId !== `order-charge-${value.id}` ||
     !isRecord(value.portonePaymentParams)
   ) {
     throw new Error('재배송비 결제 응답을 확인할 수 없습니다.');
   }
   const params = value.portonePaymentParams;
   if (
-    params.paymentId !== `order-charge-${value.id}` ||
+    params.paymentId !== value.portonePaymentId ||
     params.amount !== expected.amount ||
     !isNonEmptyString(params.name)
   ) {
     throw new Error('재배송비 결제 정보가 주문과 일치하지 않습니다.');
   }
-  return { paymentId: params.paymentId, amount: expected.amount, name: params.name.trim() };
+  return {
+    paymentId: params.paymentId,
+    amount: expected.amount,
+    name: params.name.trim(),
+    status: value.status as Exclude<RedeliveryPaymentState, 'NOT_REQUIRED' | 'MISMATCHED'>,
+  };
 }
 
 export function formatDateTime(value: string) {

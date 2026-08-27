@@ -233,4 +233,62 @@ describe('OrdersQueryService 조회 권한', () => {
       service.getOrder('store-1', 'order-completed', requester('consumer-1', 'consumer')),
     ).rejects.toThrow('서명 실패');
   });
+
+  it.each([
+    ['PENDING', { canPay: true, paid: false, requiresRecovery: false }],
+    ['PAID', { canPay: false, paid: true, requiresRecovery: false }],
+    ['FAILED', { canPay: false, paid: false, requiresRecovery: true }],
+  ] as const)('%s current charge의 semantic을 그대로 제공한다', async (chargeStatus, expected) => {
+    const holdAt = '2026-08-26T00:00:00.000Z';
+    const paymentRecords: RecordMap = {
+      'orders/payment-order': {
+        id: 'payment-order',
+        storeId: 'store-1',
+        userId: 'consumer-1',
+        driverId: 'driver-1',
+        status: 'PREPARING',
+        totalAmount: 10000,
+        quantity: 1,
+        deliveryHold: {
+          heldAt: holdAt,
+          customerResponsible: true,
+          redeliveryFee: 5000,
+          resolvedAt: null,
+        },
+        redeliveryChargeId: 'charge-1',
+        redeliveryChargeHoldAt: holdAt,
+      },
+      'orderCharges/charge-1': {
+        id: 'charge-1',
+        orderId: 'payment-order',
+        storeId: 'store-1',
+        userId: 'consumer-1',
+        type: 'REDELIVERY_FEE',
+        customerResponsible: true,
+        holdAt,
+        amount: 5000,
+        portonePaymentId: 'payment-charge-1',
+        status: chargeStatus,
+      },
+    };
+    const service = new OrdersQueryService(makeFirestore(paymentRecords) as never);
+
+    const result = await service.getOrderById(
+      'payment-order',
+      requester('consumer-1', 'consumer'),
+    );
+
+    expect(result.redeliveryPayment).toEqual(
+      expect.objectContaining({
+        required: true,
+        holdAt,
+        chargeId: 'charge-1',
+        status: chargeStatus,
+        ...expected,
+      }),
+    );
+    expect(Object.keys(result.redeliveryPayment!).sort()).toEqual(
+      ['required', 'holdAt', 'chargeId', 'status', 'canPay', 'paid', 'requiresRecovery'].sort(),
+    );
+  });
 });

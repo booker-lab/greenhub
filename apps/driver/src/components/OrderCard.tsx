@@ -1,19 +1,7 @@
+import type { Order } from '@greenhub/shared';
+import { Badge, Card, Group, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
-import { Card, Badge, Text, Stack, Group } from '@mantine/core';
-
-type Order = {
-  id: string;
-  status: string;
-  deliveryMethod: string;
-  buyerName?: string;
-  address?: string;
-  hubName?: string;
-  hubAddress?: string;
-  productName?: string;
-  quantity?: number;
-  preparedAt?: { seconds: number } | null;
-  updatedAt?: { seconds: number } | null;
-};
+import { getRedeliveryPaymentPresentation } from '@/app/board/_lib/redelivery-payment';
 
 const METHOD_BADGE: Record<string, { label: string; color: string }> = {
   direct: { label: '직배송', color: 'green' },
@@ -21,9 +9,11 @@ const METHOD_BADGE: Record<string, { label: string; color: string }> = {
   parcel: { label: '택배', color: 'gray' },
 };
 
-function formatTime(ts?: { seconds: number } | null) {
-  if (!ts) return '시간 미정';
-  return new Date(ts.seconds * 1000).toLocaleTimeString('ko-KR', {
+function formatTime(value?: string | null) {
+  if (!value) return '시간 미정';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '시간 미정';
+  return date.toLocaleTimeString('ko-KR', {
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -31,6 +21,7 @@ function formatTime(ts?: { seconds: number } | null) {
 
 export default function OrderCard({ order, tab }: { order: Order; tab: string }) {
   const badge = METHOD_BADGE[order.deliveryMethod] ?? METHOD_BADGE.direct;
+  const payment = getRedeliveryPaymentPresentation(order.redeliveryPayment);
   const displayAddress =
     order.deliveryMethod === 'hub' ? (order.hubAddress ?? '-') : (order.address ?? '-');
   const displayLocation =
@@ -59,6 +50,11 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
                 배송 보류
               </Badge>
             )}
+            {payment && (
+              <Badge color={payment.color} variant="light" size="md">
+                {payment.label}
+              </Badge>
+            )}
           </Group>
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             {tab === 'preparing'
@@ -79,6 +75,22 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             {order.productName}
             {order.quantity && order.quantity > 1 ? ` 외 ${order.quantity - 1}건` : ''}
+          </Text>
+        )}
+        {payment && (
+          <Text
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color:
+                payment.color === 'green'
+                  ? 'var(--color-primary)'
+                  : payment.color === 'red'
+                    ? 'var(--color-danger)'
+                    : '#d97706',
+              fontWeight: 'var(--fw-medium)',
+            }}
+          >
+            {payment.description}
           </Text>
         )}
       </Stack>

@@ -9,6 +9,10 @@ import {
 } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
+import {
+  isChargeForCurrentHold,
+  isCurrentRedeliveryPaymentRequired,
+} from './redelivery-resume-gate';
 
 @Injectable()
 export class OrderChargesService {
@@ -39,15 +43,22 @@ export class OrderChargesService {
       }
       const hold = order['deliveryHold'] as Record<string, unknown> | null | undefined;
       if (
+        !hold ||
         order['schemaVersion'] !== 2 ||
-        order['status'] !== 'DELIVERY_HELD' ||
-        !hold?.['customerResponsible'] ||
-        hold['reasonCode'] === 'WEATHER'
+        !['DELIVERY_HELD', 'PREPARING'].includes(String(order['status'])) ||
+        hold['reasonCode'] === 'WEATHER' ||
+        !isCurrentRedeliveryPaymentRequired({ ...order, id: input.orderId })
       ) {
         throw new ConflictException('고객 사유 배송 보류 주문만 재배송비를 만들 수 있습니다.');
       }
       const heldAt = String(hold['heldAt'] ?? '');
+      if (heldAt.trim().length === 0) {
+        throw new ConflictException('현재 배송 보류의 식별자를 확인할 수 없습니다.');
+      }
       const previousChargeId = order['redeliveryChargeId'] as string | undefined;
+      if (!previousChargeId && order['redeliveryChargeHoldAt'] != null) {
+        throw new ConflictException('재배송비 결제 연결이 손상되었습니다.');
+      }
       if (previousChargeId) {
         const previousChargeSnap = await tx.get(
           this.firestore.doc(`orderCharges/${previousChargeId}`),
@@ -56,7 +67,17 @@ export class OrderChargesService {
           throw new ConflictException('기존 재배송비 결제 기록을 확인할 수 없습니다.');
         }
         if (order['redeliveryChargeHoldAt'] === heldAt) {
-          result = this.withPaymentParams(previousChargeSnap.data()!);
+          const previousCharge = previousChargeSnap.data()!;
+          if (
+            !isChargeForCurrentHold(
+              { ...order, id: input.orderId },
+              previousCharge,
+              previousChargeId,
+            )
+          ) {
+            throw new ConflictException('현재 배송 보류와 기존 결제 기록이 일치하지 않습니다.');
+          }
+          result = this.withPaymentParams(previousCharge);
           return;
         }
         result = await this.escalateRepeatedFailure(tx, orderRef, order, input, heldAt);
@@ -66,7 +87,11 @@ export class OrderChargesService {
       const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
       const existing = await tx.get(chargeRef);
       if (existing.exists) {
-        result = this.withPaymentParams(existing.data()!);
+        const existingCharge = existing.data()!;
+        if (!isChargeForCurrentHold({ ...order, id: input.orderId }, existingCharge, chargeId)) {
+          throw new ConflictException('기존 결제 기록이 현재 배송 보류와 일치하지 않습니다.');
+        }
+        result = this.withPaymentParams(existingCharge);
         tx.update(orderRef, {
           redeliveryChargeId: chargeId,
           redeliveryChargeHoldAt: heldAt,
@@ -91,6 +116,7 @@ export class OrderChargesService {
         reason: '고객 사유 재배송비',
         attemptNumber: 1,
         customerResponsible: true,
+        holdAt: heldAt,
         portonePaymentId,
         idempotencyKey: input.idempotencyKey,
         paidAt: null,

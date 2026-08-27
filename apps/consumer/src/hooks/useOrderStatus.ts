@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import type { Order } from '@greenhub/shared';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const TERMINAL_STATUSES = new Set(['CANCELLED', 'DELIVERED', 'REVIEWED']);
@@ -12,59 +12,87 @@ interface UseOrderStatusResult {
   order: Order | null;
   loading: boolean;
   error: string | null;
+  refetch: () => Promise<Order | null | undefined>;
 }
 
 export function useOrderStatus(orderId: string | null, accessToken?: string): UseOrderStatusResult {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetchOrderRef = useRef<(() => Promise<Order | null | undefined>) | null>(null);
+  const refetch = useCallback(() => fetchOrderRef.current?.() ?? Promise.resolve(undefined), []);
 
   useEffect(() => {
     // accessToken이 undefined면 세션 아직 로딩 중 — 대기
-    if (!orderId || accessToken === undefined) return;
     if (!orderId) {
       setLoading(false);
+      setOrder(null);
       return;
     }
+    if (accessToken === undefined) return;
 
     let cancelled = false;
+    let requestSequence = 0;
+    let activeController: AbortController | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-    async function fetchOrder() {
+    async function fetchOrder(): Promise<Order | null | undefined> {
+      const sequence = ++requestSequence;
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
       try {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
-        const res = await fetch(`${API}/orders/${orderId}`, { headers });
-        if (cancelled) return;
+        const res = await fetch(`${API}/orders/${orderId}`, {
+          headers,
+          signal: controller.signal,
+        });
+        if (cancelled || sequence !== requestSequence) return undefined;
 
         if (res.status === 404) {
           setOrder(null);
           setLoading(false);
-          return;
+          setError(null);
+          return null;
         }
         if (!res.ok) throw new Error('주문 정보를 불러올 수 없습니다.');
 
         const data = await res.json();
-        setOrder(data as Order);
+        if (cancelled || sequence !== requestSequence) return undefined;
+        const latestOrder = data as Order;
+        setOrder(latestOrder);
         setLoading(false);
         setError(null);
         // 종료 상태 도달 시 폴링 중단
-        if (TERMINAL_STATUSES.has(data.status)) clearInterval(interval);
+        if (TERMINAL_STATUSES.has(latestOrder.status) && interval) clearInterval(interval);
+        return latestOrder;
       } catch (e: unknown) {
-        if (cancelled) return;
+        if (
+          cancelled ||
+          sequence !== requestSequence ||
+          (e instanceof DOMException && e.name === 'AbortError')
+        ) {
+          return undefined;
+        }
         setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
         setLoading(false);
+        return undefined;
       }
     }
 
-    let interval: ReturnType<typeof setInterval>;
-    fetchOrder();
-    interval = setInterval(fetchOrder, 3000);
+    fetchOrderRef.current = fetchOrder;
+    interval = setInterval(() => void fetchOrder(), 3000);
+    void fetchOrder();
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      requestSequence += 1;
+      activeController?.abort();
+      if (fetchOrderRef.current === fetchOrder) fetchOrderRef.current = null;
+      if (interval) clearInterval(interval);
     };
   }, [orderId, accessToken]);
 
-  return { order, loading, error };
+  return { order, loading, error, refetch };
 }

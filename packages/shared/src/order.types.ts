@@ -64,6 +64,25 @@ export interface DeliveryHoldSnapshot {
   resolvedAt: string | null // ISO8601
 }
 
+export type RedeliveryPaymentState =
+  | 'NOT_REQUIRED'
+  | 'MISSING'
+  | 'PENDING'
+  | 'PAID'
+  | 'FAILED'
+  | 'REFUNDED'
+  | 'MISMATCHED'
+
+export interface RedeliveryPaymentActionability {
+  required: boolean
+  holdAt: string | null
+  chargeId: string | null
+  status: RedeliveryPaymentState
+  canPay: boolean
+  paid: boolean
+  requiresRecovery: boolean
+}
+
 export interface MarketingConsentInput {
   agreed: boolean
   channels: Array<'alimtalk' | 'sms'>
@@ -97,6 +116,7 @@ export interface Order {
   orderItems?: OrderItemSnapshot[]
   acquisition?: OrderAcquisitionSnapshot | null
   deliveryHold?: DeliveryHoldSnapshot | null
+  redeliveryPayment?: RedeliveryPaymentActionability
   deliveryPhone?: string | null
   deliveryPhotoIds?: string[]
   createdAt: string // ISO8601

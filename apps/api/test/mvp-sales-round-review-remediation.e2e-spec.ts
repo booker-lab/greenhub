@@ -1,5 +1,6 @@
 import {
   CanActivate,
+  ConflictException,
   ForbiddenException,
   INestApplication,
   Injectable,
@@ -34,10 +35,21 @@ class TestAuthGuard implements CanActivate {
 
 describe('회차 직배송 리뷰 보정 API 통합 계약', () => {
   let app: INestApplication;
-  const state = {
+  const currentHoldAt = '2026-08-26T00:00:00.000Z';
+  const state: Record<string, any> = {
     orderStatus: 'NONE',
     reservationStatus: 'NONE',
     heldOrderCount: 0,
+    driverId: 'driver-1',
+    deliveryHold: null,
+    redeliveryChargeId: null,
+    redeliveryChargeHoldAt: null,
+    orderCharge: null,
+    paymentsDocument: null,
+    notifications: [],
+    operationIssues: [],
+    requiresOperationalReview: false,
+    providerInvocationCount: 0,
   };
 
   const saleRounds = {
@@ -63,12 +75,61 @@ describe('회차 직배송 리뷰 보정 API 통합 계약', () => {
       return { orderId: 'order-1', status: 'CANCELLED' };
     }),
     updateStatus: jest.fn(
-      async (_storeId: string, _orderId: string, _userId: string, dto: { status: string }) => {
+      async (
+        _storeId: string,
+        _orderId: string,
+        _userId: string,
+        dto: { status: string; deliveryHold?: Record<string, unknown> },
+      ) => {
         if (dto.status === 'DELIVERY_HELD' && state.orderStatus !== 'DELIVERY_HELD') {
           state.heldOrderCount += 1;
-        } else if (state.orderStatus === 'DELIVERY_HELD') {
-          state.heldOrderCount -= 1;
+          state.deliveryHold = {
+            ...dto.deliveryHold,
+            heldAt: currentHoldAt,
+            resolvedAt: null,
+          };
+          state.orderStatus = dto.status;
+          return { orderId: 'order-1', status: dto.status };
         }
+
+        if (dto.status === 'PREPARING' && state.orderStatus === 'DELIVERY_HELD') {
+          state.orderStatus = dto.status;
+          if (
+            state.deliveryHold?.customerResponsible === true &&
+            state.deliveryHold.redeliveryFee > 0
+          ) {
+            state.deliveryHold.resolvedAt = null;
+            state.notifications.push('ORDER_REDELIVERY_PAYMENT_REQUESTED');
+          }
+          return { orderId: 'order-1', status: dto.status };
+        }
+
+        if (dto.status === 'DELIVERING') {
+          const paymentRequired =
+            state.deliveryHold?.customerResponsible === true &&
+            state.deliveryHold.redeliveryFee > 0 &&
+            state.deliveryHold.resolvedAt === null;
+          const currentCharge =
+            state.orderCharge?.id === state.redeliveryChargeId &&
+            state.orderCharge?.orderId === 'order-1' &&
+            state.orderCharge?.storeId === 'store-1' &&
+            state.orderCharge?.userId === 'user-1' &&
+            state.orderCharge?.type === 'REDELIVERY_FEE' &&
+            state.orderCharge?.holdAt === currentHoldAt &&
+            state.redeliveryChargeHoldAt === currentHoldAt;
+          if (paymentRequired && (!currentCharge || state.orderCharge.status !== 'PAID')) {
+            throw new ConflictException('유료 재배송 결제가 완료되지 않았습니다.');
+          }
+          if (state.orderStatus !== 'PREPARING') {
+            throw new ForbiddenException('현재 주문 상태에서는 배송을 재개할 수 없습니다.');
+          }
+          state.orderStatus = dto.status;
+          state.deliveryHold = { ...state.deliveryHold, resolvedAt: currentHoldAt };
+          if (state.heldOrderCount > 0) state.heldOrderCount -= 1;
+          state.notifications.push('ORDER_REDELIVERY_SCHEDULED');
+          return { orderId: 'order-1', status: dto.status };
+        }
+
         state.orderStatus = dto.status;
         return { orderId: 'order-1', status: dto.status };
       },
@@ -80,9 +141,43 @@ describe('회차 직배송 리뷰 보정 API 통합 계약', () => {
       if (state.orderStatus === 'PENDING') {
         state.orderStatus = 'ACCEPTED';
         state.reservationStatus = 'CONSUMED';
+        state.paymentsDocument = { id: 'payment-1', orderId: 'order-1', status: 'PAID' };
       }
       return { ok: true, status: state.orderStatus };
     }),
+  };
+
+  const orderCharges = {
+    createRedeliveryFeeCharge: jest.fn(
+      async ({
+        storeId,
+        orderId,
+        requesterId,
+      }: {
+        storeId: string;
+        orderId: string;
+        requesterId: string;
+        idempotencyKey: string;
+      }) => {
+        if (!state.orderCharge) {
+          state.redeliveryChargeId = 'charge-1';
+          state.redeliveryChargeHoldAt = currentHoldAt;
+          state.orderCharge = {
+            id: 'charge-1',
+            orderId,
+            storeId,
+            userId: requesterId,
+            type: 'REDELIVERY_FEE',
+            status: 'PENDING',
+            amount: 5_000,
+            customerResponsible: true,
+            holdAt: currentHoldAt,
+            portonePaymentId: 'order-charge-charge-1',
+          };
+        }
+        return state.orderCharge;
+      },
+    ),
   };
 
   beforeAll(async () => {
@@ -92,7 +187,7 @@ describe('회차 직배송 리뷰 보정 API 통합 계약', () => {
         { provide: SaleRoundsService, useValue: saleRounds },
         { provide: OrdersService, useValue: orders },
         { provide: PaymentsService, useValue: payments },
-        { provide: OrderChargesService, useValue: { createRedeliveryFeeCharge: jest.fn() } },
+        { provide: OrderChargesService, useValue: orderCharges },
         { provide: PortoneClient, useValue: { verifyWebhookSignature: jest.fn() } },
         { provide: AuditService, useValue: { log: jest.fn() } },
       ],
@@ -112,6 +207,16 @@ describe('회차 직배송 리뷰 보정 API 통합 계약', () => {
     state.orderStatus = 'NONE';
     state.reservationStatus = 'NONE';
     state.heldOrderCount = 0;
+    state.driverId = 'driver-1';
+    state.deliveryHold = null;
+    state.redeliveryChargeId = null;
+    state.redeliveryChargeHoldAt = null;
+    state.orderCharge = null;
+    state.paymentsDocument = null;
+    state.notifications = [];
+    state.operationIssues = [];
+    state.requiresOperationalReview = false;
+    state.providerInvocationCount = 0;
     jest.clearAllMocks();
   });
 
@@ -179,13 +284,84 @@ describe('회차 직배송 리뷰 보정 API 통합 계약', () => {
       .expect(200);
     expect(state.heldOrderCount).toBe(1);
 
+    const charge = await request(app.getHttpServer())
+      .post('/stores/store-1/orders/order-1/redelivery-fee')
+      .set('x-test-user', 'user-1')
+      .set('x-test-role', 'consumer')
+      .send({ idempotencyKey: 'redelivery-review-001' })
+      .expect(200);
+    expect(charge.body).toMatchObject({
+      id: 'charge-1',
+      orderId: 'order-1',
+      storeId: 'store-1',
+      userId: 'user-1',
+      type: 'REDELIVERY_FEE',
+      status: 'PENDING',
+      holdAt: currentHoldAt,
+    });
+
     await request(app.getHttpServer())
       .patch('/stores/store-1/orders/order-1/status')
       .set('x-test-user', 'seller-1')
       .set('x-test-role', 'seller')
       .send({ status: 'PREPARING' })
       .expect(200);
-    expect(state.heldOrderCount).toBe(0);
+    expect(state).toMatchObject({
+      orderStatus: 'PREPARING',
+      heldOrderCount: 1,
+      deliveryHold: { heldAt: currentHoldAt, resolvedAt: null },
+      redeliveryChargeId: 'charge-1',
+      redeliveryChargeHoldAt: currentHoldAt,
+      orderCharge: {
+        id: 'charge-1',
+        orderId: 'order-1',
+        storeId: 'store-1',
+        userId: 'user-1',
+        type: 'REDELIVERY_FEE',
+        status: 'PENDING',
+        holdAt: currentHoldAt,
+      },
+    });
+
+    const beforeUnpaidResume = structuredClone(state);
+    await request(app.getHttpServer())
+      .patch('/stores/store-1/orders/order-1/status')
+      .set('x-test-user', 'driver-1')
+      .set('x-test-role', 'driver')
+      .send({ status: 'DELIVERING' })
+      .expect(409);
+    expect(state).toEqual(beforeUnpaidResume);
+    expect(state.notifications).toEqual(['ORDER_REDELIVERY_PAYMENT_REQUESTED']);
+    expect(state.operationIssues).toEqual([]);
+    expect(state.providerInvocationCount).toBe(0);
+
+    state.orderCharge.status = 'PAID';
+    await request(app.getHttpServer())
+      .patch('/stores/store-1/orders/order-1/status')
+      .set('x-test-user', 'driver-1')
+      .set('x-test-role', 'driver')
+      .send({ status: 'DELIVERING' })
+      .expect(200);
+    expect(state).toMatchObject({
+      orderStatus: 'DELIVERING',
+      heldOrderCount: 0,
+      deliveryHold: { heldAt: currentHoldAt, resolvedAt: currentHoldAt },
+      redeliveryChargeId: 'charge-1',
+      redeliveryChargeHoldAt: currentHoldAt,
+    });
+    expect(state.notifications).toEqual([
+      'ORDER_REDELIVERY_PAYMENT_REQUESTED',
+      'ORDER_REDELIVERY_SCHEDULED',
+    ]);
+
+    const afterResume = structuredClone(state);
+    await request(app.getHttpServer())
+      .patch('/stores/store-1/orders/order-1/status')
+      .set('x-test-user', 'driver-1')
+      .set('x-test-role', 'driver')
+      .send({ status: 'DELIVERING' })
+      .expect(403);
+    expect(state).toEqual(afterResume);
 
     state.orderStatus = 'ACCEPTED';
     await request(app.getHttpServer())
