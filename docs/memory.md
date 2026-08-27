@@ -8,7 +8,7 @@
 
 - Git·GitHub: `2026-08-24 KST`
 - Vercel 배포 안전 증거: `2026-08-23 KST`
-- ALIGO 마지막 provider 상태: `2026-08-23`
+- ALIGO 마지막 provider 상태: `2026-08-27 KST`
 - 운영 상태 변경은 별도 승인 없이 수행하지 않는다.
 
 ## Git·배포 기준선
@@ -42,6 +42,7 @@
 - 회차 직배송 MVP는 `main` 통합 완료.
 - consumer 구매, seller 회차·주문, driver 직배송, 결제·환불·재배송비·보류·사진·운영 예외 흐름 존재.
 - 카카오 비즈니스 채널 승인 완료.
+- ALIGO 회차 알림 템플릿 8종 provider 승인 완료 — 2026-08-27 15:06 KST 경 provider UI에서 모두 `승인완료` 확인.
 - 운영 Firebase rules/indexes는 출시 전 read-only 재조회 필요.
 - production 회차 배포·첫 운영 회차·`salesMode` 전환 미실행.
 - 판매 모드: `legacy`.
@@ -147,17 +148,31 @@ repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required 
 
 ## ALIGO 상태
 
-마지막 provider snapshot:
+마지막 provider snapshot — 2026-08-27 15:06 KST 경:
 
 - 발신 프로필·senderkey 준비 완료.
 - 회차 알림 템플릿 8종 등록·심사 요청 완료.
-- 8종 모두 `검수중`.
+- 8종 모두 `승인완료`.
+- provider 심사 외부 blocker 해소.
 - 실제 알림톡·SMS 발송 0건.
 - production ALIGO 자격 증명·매핑 미반영.
 
-코드 레벨 알림톡 3회 retry→SMS fallback, 설정 fail-closed, notification delivery idempotency는 직접 테스트가 있다. 이를 실제 provider 승인·발송 증거로 확장하지 않는다.
+승인 템플릿:
 
-현재성이 필요하면 provider에서 다시 조회한다.
+- `UK_5691` 주문 접수
+- `UK_5692` 상품 준비 시작
+- `UK_5693` 배송 시작
+- `UK_5694` 배송 보류
+- `UK_5695` 재배송비 결제 요청
+- `UK_5696` 재배송 예정
+- `UK_5697` 배송 완료
+- `UK_5698` 주문 취소
+
+코드 레벨 알림톡 3회 retry→SMS fallback, 설정 fail-closed, notification delivery idempotency는 직접 테스트가 있다. 이를 실제 provider 발송 증거로 확장하지 않는다.
+
+승인 증거: `docs/reports/REPORT_aligo_template_approval_20260827.md`.
+
+다음 ALIGO gate는 provider code 1:1 매핑 확인 → 승인된 템플릿 격리 알림톡 → SMS fallback 실제 검증이다. 실제 발송과 production 설정은 별도 승인 없이는 수행하지 않는다.
 
 ## 판매 활성화 legal 상태
 
@@ -197,9 +212,9 @@ repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required 
 
 1. Task 2F-B candidate PR CI/merge를 진행하고, 이후 `AUTH-SESSION-CLAIM-REVOCATION` + `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION` 결합 위험을 해결·직접 회귀한다.
 2. `ORDER-REDELIVERY-PAID-RESUME-GATE` 상태머신 전체 구현·직접 회귀.
-3. `SETTLEMENT-LIFECYCLE-COVERAGE`, `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`, admin privileged, webhook, payment finalization, admin refund, order mutation 등 나머지 P0를 ALIGO 심사와 병렬 해결.
+3. `SETTLEMENT-LIFECYCLE-COVERAGE`, `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`, admin privileged, webhook, payment finalization, admin refund, order mutation 등 나머지 P0를 병렬 해결.
 4. Issue #32.
-5. ALIGO 상태 재조회 → 승인 뒤 실제 알림톡/SMS fallback.
+5. ALIGO provider code 1:1 매핑 확인 → 승인된 템플릿 격리 알림톡 → SMS fallback 실제 검증.
 6. 모든 P0 결과 기준 legal 재정합화.
 7. actual release SHA → E2E 52+cleanup → Firebase 재조회 → 승인된 production 설정/배포.
 8. 첫 회차 검수 → 최종 승인 → `salesMode: round_direct`.
