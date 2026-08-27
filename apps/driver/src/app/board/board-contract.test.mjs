@@ -8,6 +8,7 @@ const cardSource = await readFile(
   'utf8',
 );
 const detailSource = await readFile(new URL('./[orderId]/page.tsx', import.meta.url), 'utf8');
+const mapSource = await readFile(new URL('../map/page.tsx', import.meta.url), 'utf8');
 const paymentSource = await readFile(
   new URL('./_lib/redelivery-payment.ts', import.meta.url),
   'utf8',
@@ -37,6 +38,11 @@ test('주문 카드는 안정적인 test id와 배송 보류 상태 배지를 �
 test('Driver 상세는 Driver detail API를 사용하고 raw Firestore 주문을 읽지 않는다', () => {
   assert.match(detailSource, /apiFetch\([\s\S]*driver\/orders/);
   assert.doesNotMatch(detailSource, /onSnapshot|doc\(db|from ['"]firebase\/firestore['"]/);
+});
+
+test('Driver Map은 Driver 목록 API를 사용하고 raw Firestore 주문을 읽지 않는다', () => {
+  assert.match(mapSource, /apiFetch\(\s*['"]\/driver\/orders['"]/);
+  assert.doesNotMatch(mapSource, /onSnapshot|collection\(db|from ['"]firebase\/firestore['"]/);
 });
 
 test('보류·준비 주문 상세는 결제 의미에 따라 배송 시작·재개를 차단하거나 허용한다', () => {

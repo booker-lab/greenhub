@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
-import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { apiFetch } from '@/lib/api';
 import { Box, Stack, Text, Title, Badge, Button } from '@mantine/core';
 
 type Order = {
@@ -52,50 +50,45 @@ function nearestNeighbor(orders: Order[]): Order[] {
 
 export default function MapPage() {
   const { data: session } = useSession();
-  const { firebaseReady } = useFirebaseAuth();
   const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
-    const driverId = session?.user?.id;
-    if (!firebaseReady || !driverId) {
+    const token = session?.user.accessToken;
+    if (!token) {
       setOrders([]);
       return;
     }
 
-    let availableOrders: Order[] = [];
-    let assignedOrders: Order[] = [];
-    const publish = () => {
-      const byId = new Map<string, Order>();
-      [...availableOrders, ...assignedOrders].forEach((order) => {
-        byId.set(order.id, order);
-      });
-      setOrders([...byId.values()]);
-    };
+    const controller = new AbortController();
+    let active = true;
 
-    const availableQuery = query(
-      collection(db, 'orders'),
-      where('status', '==', 'PREPARING'),
-      where('deliveryMethod', 'in', ['direct', 'hub']),
-      where('driverId', '==', null),
-    );
-    const assignedQuery = query(
-      collection(db, 'orders'),
-      where('status', '==', 'DELIVERING'),
-      where('driverId', '==', driverId),
-    );
-    const unsubscribeAvailable = onSnapshot(availableQuery, (snap) => {
-      availableOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order);
-      publish();
-    });
-    const unsubscribeAssigned = onSnapshot(assignedQuery, (snap) => {
-      assignedOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order);
-      publish();
-    });
+    apiFetch('/driver/orders', token, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('driver map orders request failed: ' + response.status);
+        }
+        const payload: unknown = await response.json();
+        if (!Array.isArray(payload)) throw new Error('driver map orders response is not a list');
+        return payload as Order[];
+      })
+      .then((driverOrders) => {
+        if (!active) return;
+        setOrders(
+          driverOrders.filter(
+            (order) => order.status === 'PREPARING' || order.status === 'DELIVERING',
+          ),
+        );
+      })
+      .catch((cause: unknown) => {
+        if (!active || (cause instanceof DOMException && cause.name === 'AbortError')) return;
+        setOrders([]);
+      });
+
     return () => {
-      unsubscribeAvailable();
-      unsubscribeAssigned();
+      active = false;
+      controller.abort();
     };
-  }, [firebaseReady, session?.user?.id]);
+  }, [session?.user.accessToken]);
 
   const sorted = nearestNeighbor(orders);
 

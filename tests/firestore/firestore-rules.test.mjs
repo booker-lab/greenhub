@@ -1,4 +1,3 @@
-import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import {
@@ -324,7 +323,7 @@ test('품종은 공개 단건 조회만 허용하고 목록과 모든 직접 쓰
   }
 });
 
-test('기존 주문의 판매자 매장과 기사 및 관리자 읽기 권한을 보존한다', async () => {
+test('기존 주문의 판매자·관리자 읽기와 기사의 API 전용 경계를 보존한다', async () => {
   const seller = testEnvironment
     .authenticatedContext('seller-1', { role: 'seller', storeId: 'store-1' })
     .firestore();
@@ -336,24 +335,31 @@ test('기존 주문의 판매자 매장과 기사 및 관리자 읽기 권한을
 
   await assertSucceeds(getDoc(doc(seller, 'orders', 'order-store-1')));
   await assertFails(getDoc(doc(seller, 'orders', 'order-store-2')));
-  await assertSucceeds(getDoc(doc(driver, 'orders', 'order-store-2')));
+  await assertFails(getDoc(doc(driver, 'orders', 'order-store-2')));
   await assertSucceeds(getDoc(doc(admin, 'orders', 'order-store-2')));
   await assertFails(getDoc(doc(user, 'orders', 'order-store-1')));
 });
 
-test('승인된 기사는 배정 주문과 미배정 수거 주문만 읽고 다른 기사 주문은 읽지 못한다', async () => {
+test('기사는 배정·미배정·무관 주문을 포함한 모든 orders raw read를 거부당한다', async () => {
   const approvedDriver = testEnvironment
     .authenticatedContext('driver-1', { role: 'driver', driverApproved: true })
     .firestore();
   const pendingDriver = testEnvironment
     .authenticatedContext('pending-driver', { role: 'driver', driverApproved: false })
     .firestore();
+  const suspendedDriver = testEnvironment
+    .authenticatedContext('driver-lifecycle-suspended', {
+      role: 'driver',
+      driverApproved: true,
+    })
+    .firestore();
 
-  await assertSucceeds(getDoc(doc(approvedDriver, 'orders', 'order-store-2')));
-  await assertSucceeds(getDoc(doc(approvedDriver, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-store-2')));
+  await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-pickup-hub')));
   await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-driver-other')));
-  await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-pickup-parcel')));
   await assertFails(getDoc(doc(pendingDriver, 'orders', 'order-store-2')));
+  await assertFails(getDoc(doc(suspendedDriver, 'orders', 'order-store-2')));
 
   const assignedQuery = query(
     collection(approvedDriver, 'orders'),
@@ -370,8 +376,8 @@ test('승인된 기사는 배정 주문과 미배정 수거 주문만 읽고 다
     where('status', 'in', ['PREPARING', 'DELIVERING']),
   );
 
-  await assertSucceeds(getDocs(assignedQuery));
-  await assertSucceeds(getDocs(pickupQuery));
+  await assertFails(getDocs(assignedQuery));
+  await assertFails(getDocs(pickupQuery));
   await assertFails(getDocs(unboundedDriverQuery));
 });
 
@@ -398,7 +404,7 @@ test('주문은 미인증·consumer·seller·미승인 driver·승인 claim 누�
   await assertFails(getDoc(doc(missingClaimDriver, 'orders', 'order-store-1')));
 });
 
-test('승인된 driver는 허용된 주문만 읽고 주문 write는 할 수 없다', async () => {
+test('승인된 driver도 orders raw read와 주문 write를 할 수 없다', async () => {
   const approvedDriver = testEnvironment
     .authenticatedContext('driver-1', { role: 'driver', driverApproved: true })
     .firestore();
@@ -406,8 +412,8 @@ test('승인된 driver는 허용된 주문만 읽고 주문 write는 할 수 없
     .authenticatedContext('driver-2', { role: 'driver', driverApproved: true })
     .firestore();
 
-  await assertSucceeds(getDoc(doc(approvedDriver, 'orders', 'order-store-1')));
-  await assertSucceeds(getDoc(doc(approvedDriver, 'orders', 'order-store-2')));
+  await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-store-2')));
   await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-driver-other')));
   await assertFails(getDoc(doc(approvedDriver, 'orders', 'order-pickup-parcel')));
   await assertFails(getDoc(doc(otherApprovedDriver, 'orders', 'order-store-2')));
@@ -424,7 +430,7 @@ test('승인된 driver는 허용된 주문만 읽고 주문 write는 할 수 없
   await assertFails(deleteDoc(doc(approvedDriver, 'orders', 'order-store-1')));
 });
 
-test('driver 화면의 실제 pickup·assigned query는 허용 범위를 벗어나지 않는다', async () => {
+test('driver 화면에서 사용하던 모든 orders query는 직접 읽기를 거부당한다', async () => {
   const approvedDriver = testEnvironment
     .authenticatedContext('driver-1', { role: 'driver', driverApproved: true })
     .firestore();
@@ -466,32 +472,11 @@ test('driver 화면의 실제 pickup·assigned query는 허용 범위를 벗어�
     where('status', 'in', ['PREPARING', 'DELIVERING']),
   );
 
-  const pickupSnapshot = await assertSucceeds(getDocs(pickupQuery));
-  const boardAssignedSnapshot = await assertSucceeds(getDocs(boardAssignedQuery));
-  const mapAssignedSnapshot = await assertSucceeds(getDocs(mapAssignedQuery));
-  const directPickupSnapshot = await assertSucceeds(getDocs(directPickupQuery));
-  const hubPickupSnapshot = await assertSucceeds(getDocs(hubPickupQuery));
-
-  assert.deepEqual(
-    pickupSnapshot.docs.map((snapshot) => snapshot.id),
-    ['order-store-1', 'order-pickup-hub'],
-  );
-  assert.deepEqual(
-    boardAssignedSnapshot.docs.map((snapshot) => snapshot.id),
-    ['order-store-2'],
-  );
-  assert.deepEqual(
-    mapAssignedSnapshot.docs.map((snapshot) => snapshot.id),
-    ['order-store-2'],
-  );
-  assert.deepEqual(
-    directPickupSnapshot.docs.map((snapshot) => snapshot.id),
-    ['order-store-1'],
-  );
-  assert.deepEqual(
-    hubPickupSnapshot.docs.map((snapshot) => snapshot.id),
-    ['order-pickup-hub'],
-  );
+  await assertFails(getDocs(pickupQuery));
+  await assertFails(getDocs(boardAssignedQuery));
+  await assertFails(getDocs(mapAssignedQuery));
+  await assertFails(getDocs(directPickupQuery));
+  await assertFails(getDocs(hubPickupQuery));
   await assertFails(getDocs(unboundedQuery));
 });
 
@@ -500,7 +485,7 @@ test('이미 승인된 token도 users.driverApproved가 false가 되면 주문 r
     .authenticatedContext('driver-stale-approval', { role: 'driver', driverApproved: true })
     .firestore();
 
-  await assertSucceeds(getDoc(doc(driverToken, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(driverToken, 'orders', 'order-store-1')));
 
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), 'users', 'driver-stale-approval'), {
@@ -527,7 +512,7 @@ test('이미 승인된 token도 users.suspended가 true가 되면 주문 read가
     })
     .firestore();
 
-  await assertSucceeds(getDoc(doc(driverToken, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(driverToken, 'orders', 'order-store-1')));
 
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), 'users', 'driver-lifecycle-suspended'), {
@@ -543,7 +528,7 @@ test('이미 승인된 token도 users.role이 driver가 아니게 되면 주문 
     .authenticatedContext('driver-lifecycle-role', { role: 'driver', driverApproved: true })
     .firestore();
 
-  await assertSucceeds(getDoc(doc(driverToken, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(driverToken, 'orders', 'order-store-1')));
 
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), 'users', 'driver-lifecycle-role'), {
@@ -585,5 +570,5 @@ test('미승인 users가 승인된 뒤 새 승인 token만 주문 read를 허용
   const newToken = testEnvironment
     .authenticatedContext('driver-lifecycle-approval', { role: 'driver', driverApproved: true })
     .firestore();
-  await assertSucceeds(getDoc(doc(newToken, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(newToken, 'orders', 'order-store-1')));
 });
