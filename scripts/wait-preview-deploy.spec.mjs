@@ -42,6 +42,28 @@ describe('Preview 배포 target_url 증거 계약', () => {
     assert.equal(result.targetUrl, null);
   });
 
+  it('지정 SHA deployment가 없으면 배포 미확인으로 닫는다', () => {
+    const result = inspectAppDeployment('driver', 'Preview – greenhub-driver', SHA, (path) => {
+      if (path.includes('/deployments?')) return [{ id: 19, sha: 'b'.repeat(40) }];
+      throw new Error('SHA가 다른 deployment는 status를 조회하면 안 된다');
+    });
+
+    assert.equal(result.ready, false);
+    assert.equal(result.deploymentId, null);
+    assert.equal(result.deploymentSha, null);
+    assert.equal(result.state, 'missing');
+  });
+
+  it('deployment SHA가 다르면 지정 SHA 배포로 인정하지 않는다', () => {
+    const result = inspectAppDeployment('consumer', 'Preview – greenhubconsumer', SHA, (path) => {
+      if (path.includes('/deployments?')) return [{ id: 20, sha: 'c'.repeat(40) }];
+      throw new Error('SHA가 다른 deployment는 status를 조회하면 안 된다');
+    });
+
+    assert.equal(result.ready, false);
+    assert.equal(result.deploymentId, null);
+  });
+
   it('세 앱의 SHA와 target_url을 후속 단계가 사용할 맵으로 내보낸다', () => {
     const targets = {
       seller: 'https://seller-preview.example.test',
