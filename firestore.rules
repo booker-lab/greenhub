@@ -12,12 +12,38 @@ service cloud.firestore {
         isPublicSaleRoundStatus(round.data.status);
     }
 
+    function currentUserPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function currentUserExists() {
+      return request.auth != null && exists(currentUserPath());
+    }
+
+    function activeCurrentUser() {
+      return currentUserExists() &&
+        get(currentUserPath()).data.get('suspended', false) != true;
+    }
+
+    function currentRole(role) {
+      return activeCurrentUser() &&
+        request.auth.token.get('role', null) == role &&
+        get(currentUserPath()).data.get('role', null) == role;
+    }
+
+    function currentSellerFor(storeId) {
+      return currentRole('seller') &&
+        request.auth.token.get('storeId', null) == storeId &&
+        get(currentUserPath()).data.get('storeId', null) == storeId;
+    }
+
+    function currentAdmin() {
+      return currentRole('admin');
+    }
+
     // orders: 매장 소유자·관리자만 직접 읽고 기사는 API를 사용한다
     match /orders/{orderId} {
-      allow read: if request.auth != null &&
-        ((request.auth.token.role == 'seller' &&
-          resource.data.storeId == request.auth.token.storeId) ||
-         request.auth.token.role == 'admin');
+      allow read: if currentSellerFor(resource.data.storeId) || currentAdmin();
       allow write: if false;
     }
 

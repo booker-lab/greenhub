@@ -131,6 +131,51 @@ async function seedFixtures() {
         driverApproved: true,
         suspended: false,
       },
+      'users/seller-1': {
+        id: 'seller-1',
+        role: 'seller',
+        storeId: 'store-1',
+        suspended: false,
+      },
+      'users/seller-2': {
+        id: 'seller-2',
+        role: 'seller',
+        storeId: 'store-2',
+        suspended: false,
+      },
+      'users/admin-1': {
+        id: 'admin-1',
+        role: 'admin',
+        suspended: false,
+      },
+      'users/seller-role-lifecycle': {
+        id: 'seller-role-lifecycle',
+        role: 'seller',
+        storeId: 'store-1',
+        suspended: false,
+      },
+      'users/seller-store-lifecycle': {
+        id: 'seller-store-lifecycle',
+        role: 'seller',
+        storeId: 'store-1',
+        suspended: false,
+      },
+      'users/seller-suspended-lifecycle': {
+        id: 'seller-suspended-lifecycle',
+        role: 'seller',
+        storeId: 'store-1',
+        suspended: false,
+      },
+      'users/admin-role-lifecycle': {
+        id: 'admin-role-lifecycle',
+        role: 'admin',
+        suspended: false,
+      },
+      'users/admin-suspended-lifecycle': {
+        id: 'admin-suspended-lifecycle',
+        role: 'admin',
+        suspended: false,
+      },
       'users/driver-2': {
         id: 'driver-2',
         role: 'driver',
@@ -571,4 +616,52 @@ test('미승인 users가 승인된 뒤 새 승인 token만 주문 read를 허용
     .authenticatedContext('driver-lifecycle-approval', { role: 'driver', driverApproved: true })
     .firestore();
   await assertFails(getDoc(doc(newToken, 'orders', 'order-store-1')));
+});
+
+test('seller 주문 read는 token과 현재 user의 role/storeId/suspension을 함께 검증한다', async () => {
+  const roleChanged = testEnvironment
+    .authenticatedContext('seller-role-lifecycle', { role: 'seller', storeId: 'store-1' })
+    .firestore();
+  const storeChanged = testEnvironment
+    .authenticatedContext('seller-store-lifecycle', { role: 'seller', storeId: 'store-1' })
+    .firestore();
+  const suspended = testEnvironment
+    .authenticatedContext('seller-suspended-lifecycle', { role: 'seller', storeId: 'store-1' })
+    .firestore();
+
+  await assertSucceeds(getDoc(doc(roleChanged, 'orders', 'order-store-1')));
+  await assertSucceeds(getDoc(doc(storeChanged, 'orders', 'order-store-1')));
+  await assertSucceeds(getDoc(doc(suspended, 'orders', 'order-store-1')));
+
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const database = context.firestore();
+    await updateDoc(doc(database, 'users', 'seller-role-lifecycle'), { role: 'consumer' });
+    await updateDoc(doc(database, 'users', 'seller-store-lifecycle'), { storeId: 'store-2' });
+    await updateDoc(doc(database, 'users', 'seller-suspended-lifecycle'), { suspended: true });
+  });
+
+  await assertFails(getDoc(doc(roleChanged, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(storeChanged, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(suspended, 'orders', 'order-store-1')));
+});
+
+test('admin 주문 read는 token과 현재 user의 role/suspension을 함께 검증한다', async () => {
+  const roleChanged = testEnvironment
+    .authenticatedContext('admin-role-lifecycle', { role: 'admin' })
+    .firestore();
+  const suspended = testEnvironment
+    .authenticatedContext('admin-suspended-lifecycle', { role: 'admin' })
+    .firestore();
+
+  await assertSucceeds(getDoc(doc(roleChanged, 'orders', 'order-store-2')));
+  await assertSucceeds(getDoc(doc(suspended, 'orders', 'order-store-2')));
+
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const database = context.firestore();
+    await updateDoc(doc(database, 'users', 'admin-role-lifecycle'), { role: 'consumer' });
+    await updateDoc(doc(database, 'users', 'admin-suspended-lifecycle'), { suspended: true });
+  });
+
+  await assertFails(getDoc(doc(roleChanged, 'orders', 'order-store-2')));
+  await assertFails(getDoc(doc(suspended, 'orders', 'order-store-2')));
 });

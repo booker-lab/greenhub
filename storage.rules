@@ -5,23 +5,43 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function currentUserPath() {
+      return /databases/(default)/documents/users/$(request.auth.uid);
+    }
+
+    function currentUserExists() {
+      return signedIn() && firestore.exists(currentUserPath());
+    }
+
+    function activeCurrentUser() {
+      return currentUserExists() &&
+        firestore.get(currentUserPath()).data.get('suspended', false) != true;
+    }
+
+    function currentRole(role) {
+      return activeCurrentUser() &&
+        request.auth.token.get('role', null) == role &&
+        firestore.get(currentUserPath()).data.get('role', null) == role;
+    }
+
     function isAdmin() {
-      return signedIn() && request.auth.token.role == 'admin';
+      return currentRole('admin');
     }
 
     function isSellerFor(storeId) {
-      return signedIn() &&
-        request.auth.token.role == 'seller' &&
-        request.auth.token.storeId == storeId;
+      return currentRole('seller') &&
+        request.auth.token.get('storeId', null) == storeId &&
+        firestore.get(currentUserPath()).data.get('storeId', null) == storeId;
     }
 
     function isDriver() {
-      return signedIn() && request.auth.token.role == 'driver';
+      return currentRole('driver') &&
+        request.auth.token.get('driverApproved', false) == true &&
+        firestore.get(currentUserPath()).data.get('driverApproved', false) == true;
     }
 
     function isOwnedSellerLogo(fileName) {
-      return signedIn() &&
-        request.auth.token.role == 'seller' &&
+      return currentRole('seller') &&
         fileName.split('_').size() == 2 &&
         fileName.split('_')[0] == request.auth.uid &&
         fileName.split('_')[1].matches('[0-9]+');

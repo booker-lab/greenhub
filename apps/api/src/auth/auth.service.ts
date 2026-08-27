@@ -21,6 +21,31 @@ import type { RegisterDto } from './dto/register.dto';
 import type { UpdateMeDto } from './dto/update-me.dto';
 import { KakaoClient } from './kakao.client';
 import type { JwtPayload } from './types/jwt-payload.type';
+
+const USER_ROLES = ['consumer', 'seller', 'driver', 'admin'] as const;
+
+type AuthoritativeUser = {
+  role: JwtPayload['role'];
+  storeId: string | null;
+};
+
+function isUserRole(value: unknown): value is JwtPayload['role'] {
+  return typeof value === 'string' && USER_ROLES.includes(value as JwtPayload['role']);
+}
+
+function isStoreIdValue(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === 'string';
+}
+
+function normalizeStoreId(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  return typeof value === 'string' ? value : null;
+}
+
+function toTokenStoreId(storeId: string | null): string | undefined {
+  return storeId ?? undefined;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -338,18 +363,30 @@ export class AuthService {
 
     // Rotation: Firestore에 저장된 토큰과 일치하는지 검증
     const tokenSnap = await this.firestore.doc(`refreshTokens/${payload.sub}`).get();
-    if (tokenSnap.exists && tokenSnap.data()!['token'] !== refreshToken) {
+    if (!tokenSnap.exists) {
+      throw new UnauthorizedException('만료된 리프레시 토큰입니다.');
+    }
+
+    if (tokenSnap.data()?.['token'] !== refreshToken) {
       // Firestore에 다른 토큰이 존재 = 탈취 후 재사용 시도 — 모든 세션 무효화
       await this.firestore.doc(`refreshTokens/${payload.sub}`).delete();
       await this.audit.log('auth.token.stolen', { userId: payload.sub });
       throw new UnauthorizedException('만료된 리프레시 토큰입니다.');
     }
-    // tokenSnap.exists === false: rotation 도입 이전 발급 토큰 (정상 허용, 이후 DB에 기록됨)
+
+    const currentUser = await this.getAuthoritativeUser(payload.sub);
+    if (
+      !isStoreIdValue(payload.storeId) ||
+      payload.role !== currentUser.role ||
+      normalizeStoreId(payload.storeId) !== currentUser.storeId
+    ) {
+      throw new UnauthorizedException('현재 사용자 권한과 일치하지 않는 리프레시 토큰입니다.');
+    }
 
     return this.issueTokens({
       sub: payload.sub,
-      role: payload.role,
-      storeId: payload.storeId,
+      role: currentUser.role,
+      storeId: toTokenStoreId(currentUser.storeId),
     });
   }
 
@@ -365,7 +402,17 @@ export class AuthService {
     });
   }
 
-  async getFirebaseToken(userId: string, role: string, storeId?: string): Promise<string> {
+  async getFirebaseToken(userId: string): Promise<string> {
+    const currentUser = await this.getAuthoritativeUser(userId);
+
+    return admin.auth().createCustomToken(userId, {
+      role: currentUser.role,
+      storeId: currentUser.storeId,
+      ...(currentUser.role === 'driver' ? { driverApproved: true } : {}),
+    });
+  }
+
+  private async getAuthoritativeUser(userId: string): Promise<AuthoritativeUser> {
     const userSnap = await this.firestore.doc(`users/${userId}`).get();
     if (!userSnap.exists) {
       throw new UnauthorizedException('사용자를 찾을 수 없습니다.');
@@ -375,15 +422,23 @@ export class AuthService {
     if (user['suspended'] === true) {
       throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
     }
-    if (role === 'driver' && (user['role'] !== 'driver' || user['driverApproved'] !== true)) {
-      throw new ForbiddenException('승인된 드라이버만 배송 정보를 조회할 수 있습니다.');
+
+    if (!isUserRole(user['role'])) {
+      throw new UnauthorizedException('현재 사용자 권한을 확인할 수 없습니다.');
     }
 
-    return admin.auth().createCustomToken(userId, {
-      role,
-      storeId: storeId ?? null,
-      ...(role === 'driver' ? { driverApproved: true } : {}),
-    });
+    if (!isStoreIdValue(user['storeId'])) {
+      throw new UnauthorizedException('현재 사용자 매장 권한을 확인할 수 없습니다.');
+    }
+
+    if (user['role'] === 'driver' && user['driverApproved'] !== true) {
+      throw new ForbiddenException('승인된 드라이버만 배송 기능을 사용할 수 있습니다.');
+    }
+
+    return {
+      role: user['role'],
+      storeId: normalizeStoreId(user['storeId']),
+    };
   }
 
   private async issueTokens(payload: JwtPayload) {

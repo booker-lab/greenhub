@@ -5,11 +5,13 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
+import { doc, updateDoc } from 'firebase/firestore';
 
 const PROJECT_ID = 'demo-greenhub';
 const BUCKET_URL = `gs://${PROJECT_ID}.appspot.com`;
 const FIVE_MIB = 5 * 1024 * 1024;
 const TWO_MIB = 2 * 1024 * 1024;
+const CREATED_LEGACY_PHOTO_SUFFIX = String(Date.now());
 
 let testEnvironment;
 
@@ -46,8 +48,8 @@ function actorStorages() {
     ['일반 사용자', storageFor('user-1', { role: 'consumer' })],
     ['판매자', storageFor('seller-1', { role: 'seller', storeId: 'store-1' })],
     ['다른 판매자', storageFor('seller-2', { role: 'seller', storeId: 'store-2' })],
-    ['기사', storageFor('driver-1', { role: 'driver' })],
-    ['다른 기사', storageFor('driver-2', { role: 'driver' })],
+    ['기사', storageFor('driver-1', { role: 'driver', driverApproved: true })],
+    ['다른 기사', storageFor('driver-2', { role: 'driver', driverApproved: true })],
     ['관리자', storageFor('admin-1', { role: 'admin' })],
   ];
 }
@@ -79,9 +81,67 @@ async function seedFixtures() {
         deliveryMethod: 'hub',
         status: 'DELIVERING',
       }),
+      firestore.collection('users').doc('seller-1').set({
+        role: 'seller',
+        storeId: 'store-1',
+        suspended: false,
+      }),
+      firestore.collection('users').doc('seller-2').set({
+        role: 'seller',
+        storeId: 'store-2',
+        suspended: false,
+      }),
+      firestore.collection('users').doc('seller-role-lifecycle').set({
+        role: 'seller',
+        storeId: 'store-1',
+        suspended: false,
+      }),
+      firestore.collection('users').doc('seller-store-lifecycle').set({
+        role: 'seller',
+        storeId: 'store-1',
+        suspended: false,
+      }),
+      firestore.collection('users').doc('seller-suspended-lifecycle').set({
+        role: 'seller',
+        storeId: 'store-1',
+        suspended: false,
+      }),
+      firestore.collection('users').doc('admin-1').set({
+        role: 'admin',
+        suspended: false,
+      }),
+      firestore.collection('users').doc('admin-role-lifecycle').set({
+        role: 'admin',
+        suspended: false,
+      }),
+      firestore.collection('users').doc('admin-suspended-lifecycle').set({
+        role: 'admin',
+        suspended: false,
+      }),
+      firestore.collection('users').doc('driver-1').set({
+        role: 'driver',
+        driverApproved: true,
+        suspended: false,
+      }),
+      firestore.collection('users').doc('driver-2').set({
+        role: 'driver',
+        driverApproved: true,
+        suspended: false,
+      }),
+      firestore.collection('users').doc('driver-lifecycle').set({
+        role: 'driver',
+        driverApproved: true,
+        suspended: false,
+      }),
+      firestore.collection('orders').doc('order-driver-lifecycle').set({
+        driverId: 'driver-lifecycle',
+        deliveryMethod: 'hub',
+        status: 'DELIVERING',
+      }),
       upload(storage, 'deliveryPhotos/order-1/private-photo.jpg', 'image/jpeg'),
       upload(storage, 'deliveryPhotos/order-legacy_1721433600000.jpg', 'image/jpeg'),
       upload(storage, 'deliveryPhotos/order_legacy_1721433600000.jpg', 'image/jpeg'),
+      upload(storage, 'deliveryPhotos/order-driver-lifecycle_1721433600000.jpg', 'image/jpeg'),
       upload(storage, 'products/store-1/public-product.jpg', 'image/jpeg'),
       upload(storage, 'products/store-1/product-update.jpg', 'image/jpeg'),
       upload(storage, 'products/store-1/product-delete.jpg', 'image/jpeg'),
@@ -226,25 +286,33 @@ test('상점 로고는 잘못된 소유자·역할·크기·contentType·경로�
 });
 
 test('legacy 거점 사진은 담당 기사에게만 단건 읽기와 평면 JPEG 생성을 허용한다', async () => {
-  const assignedDriver = storageFor('driver-1', { role: 'driver' });
+  const assignedDriver = storageFor('driver-1', { role: 'driver', driverApproved: true });
   const existing = objectRef(assignedDriver, 'deliveryPhotos/order-legacy_1721433600000.jpg');
 
   await assertSucceeds(existing.getMetadata());
   await assertSucceeds(
-    upload(assignedDriver, 'deliveryPhotos/order-legacy_1721433600010.jpg', 'image/jpeg'),
+    upload(
+      assignedDriver,
+      `deliveryPhotos/order-legacy_${CREATED_LEGACY_PHOTO_SUFFIX}.jpg`,
+      'image/jpeg',
+    ),
   );
   await assertSucceeds(
     objectRef(assignedDriver, 'deliveryPhotos/order_legacy_1721433600000.jpg').getMetadata(),
   );
   await assertSucceeds(
-    upload(assignedDriver, 'deliveryPhotos/order_legacy_1721433600010.jpg', 'image/jpeg'),
+    upload(
+      assignedDriver,
+      `deliveryPhotos/order_legacy_${CREATED_LEGACY_PHOTO_SUFFIX}.jpg`,
+      'image/jpeg',
+    ),
   );
 
   for (const storage of [
     storageFor(),
     storageFor('user-1', { role: 'consumer' }),
     storageFor('seller-1', { role: 'seller', storeId: 'store-1' }),
-    storageFor('driver-2', { role: 'driver' }),
+    storageFor('driver-2', { role: 'driver', driverApproved: true }),
     storageFor('admin-1', { role: 'admin' }),
   ]) {
     await assertFails(
@@ -261,15 +329,15 @@ test('legacy 거점 사진은 담당 기사에게만 단건 읽기와 평면 JPE
 
 test('legacy 평면 경로 목록 조회는 담당 기사를 포함한 모든 클라이언트에서 거부한다', async () => {
   for (const storage of [
-    storageFor('driver-1', { role: 'driver' }),
-    storageFor('driver-2', { role: 'driver' }),
+    storageFor('driver-1', { role: 'driver', driverApproved: true }),
+    storageFor('driver-2', { role: 'driver', driverApproved: true }),
   ]) {
     await assertFails(objectRef(storage, 'deliveryPhotos').listAll());
   }
 });
 
 test('legacy 거점 사진은 수정·삭제와 잘못된 경로·크기·contentType을 거부한다', async () => {
-  const driver = storageFor('driver-1', { role: 'driver' });
+  const driver = storageFor('driver-1', { role: 'driver', driverApproved: true });
   const existing = objectRef(driver, 'deliveryPhotos/order-legacy_1721433600000.jpg');
 
   await assertFails(existing.put(content(), { contentType: 'image/jpeg' }));
@@ -285,4 +353,93 @@ test('정의되지 않은 경로는 모든 역할의 직접 접근을 거부한�
   for (const [, storage] of actorStorages()) {
     await assertFails(upload(storage, 'unknown/file.jpg', 'image/jpeg'));
   }
+});
+
+test('Storage seller 권한은 현재 role, storeId, suspension을 함께 검증한다', async () => {
+  const roleChanged = storageFor('seller-role-lifecycle', {
+    role: 'seller',
+    storeId: 'store-1',
+  });
+  const storeChanged = storageFor('seller-store-lifecycle', {
+    role: 'seller',
+    storeId: 'store-1',
+  });
+  const suspended = storageFor('seller-suspended-lifecycle', {
+    role: 'seller',
+    storeId: 'store-1',
+  });
+
+  await assertSucceeds(upload(roleChanged, 'products/store-1/lifecycle-role.jpg', 'image/jpeg'));
+  await assertSucceeds(upload(storeChanged, 'products/store-1/lifecycle-store.jpg', 'image/jpeg'));
+  await assertSucceeds(upload(suspended, 'products/store-1/lifecycle-suspended.jpg', 'image/jpeg'));
+
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const database = context.firestore();
+    await updateDoc(doc(database, 'users', 'seller-role-lifecycle'), { role: 'consumer' });
+    await updateDoc(doc(database, 'users', 'seller-store-lifecycle'), { storeId: 'store-2' });
+    await updateDoc(doc(database, 'users', 'seller-suspended-lifecycle'), { suspended: true });
+  });
+
+  await assertFails(upload(roleChanged, 'products/store-1/lifecycle-role-denied.jpg', 'image/jpeg'));
+  await assertFails(upload(storeChanged, 'products/store-1/lifecycle-store-denied.jpg', 'image/jpeg'));
+  await assertFails(
+    upload(suspended, 'products/store-1/lifecycle-suspended-denied.jpg', 'image/jpeg'),
+  );
+});
+
+test('Storage admin 권한은 현재 role과 suspension을 함께 검증한다', async () => {
+  const roleChanged = storageFor('admin-role-lifecycle', { role: 'admin' });
+  const suspended = storageFor('admin-suspended-lifecycle', { role: 'admin' });
+
+  await assertSucceeds(upload(roleChanged, 'banners/main_hero/lifecycle-role.png', 'image/png'));
+  await assertSucceeds(upload(suspended, 'banners/main_hero/lifecycle-suspended.png', 'image/png'));
+
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const database = context.firestore();
+    await updateDoc(doc(database, 'users', 'admin-role-lifecycle'), { role: 'consumer' });
+    await updateDoc(doc(database, 'users', 'admin-suspended-lifecycle'), { suspended: true });
+  });
+
+  await assertFails(upload(roleChanged, 'banners/main_hero/lifecycle-role-denied.png', 'image/png'));
+  await assertFails(
+    upload(suspended, 'banners/main_hero/lifecycle-suspended-denied.png', 'image/png'),
+  );
+});
+
+test('Storage driver legacy 사진은 현재 승인·정지·role을 함께 검증한다', async () => {
+  const driver = storageFor('driver-lifecycle', { role: 'driver', driverApproved: true });
+
+  await assertSucceeds(
+    objectRef(driver, 'deliveryPhotos/order-driver-lifecycle_1721433600000.jpg').getMetadata(),
+  );
+
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const database = context.firestore();
+    await updateDoc(doc(database, 'users', 'driver-lifecycle'), { driverApproved: false });
+  });
+  await assertFails(
+    objectRef(driver, 'deliveryPhotos/order-driver-lifecycle_1721433600000.jpg').getMetadata(),
+  );
+
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const database = context.firestore();
+    await updateDoc(doc(database, 'users', 'driver-lifecycle'), {
+      driverApproved: true,
+      suspended: true,
+    });
+  });
+  await assertFails(
+    objectRef(driver, 'deliveryPhotos/order-driver-lifecycle_1721433600000.jpg').getMetadata(),
+  );
+
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const database = context.firestore();
+    await updateDoc(doc(database, 'users', 'driver-lifecycle'), {
+      suspended: false,
+      role: 'consumer',
+    });
+  });
+  await assertFails(
+    objectRef(driver, 'deliveryPhotos/order-driver-lifecycle_1721433600000.jpg').getMetadata(),
+  );
 });

@@ -15,6 +15,7 @@ describe('AuthService', () => {
   function makeKakaoLoginService(options: {
     user?: Record<string, unknown>;
     kakaoError?: Error;
+    refreshToken?: string;
   }) {
     const usersQuery = {
       where: jest.fn().mockReturnThis(),
@@ -32,7 +33,14 @@ describe('AuthService', () => {
       set: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
     };
-    const refreshTokenRef = { set: jest.fn().mockResolvedValue(undefined) };
+    const refreshTokenRef = {
+      delete: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue({
+        exists: options.refreshToken !== undefined,
+        data: () => (options.refreshToken ? { token: options.refreshToken } : undefined),
+      }),
+      set: jest.fn().mockResolvedValue(undefined),
+    };
     const firestore = {
       collection: jest.fn((path: string) => {
         if (path === 'users') return usersQuery;
@@ -287,7 +295,7 @@ describe('AuthService', () => {
         },
       });
 
-      await expect(service.getFirebaseToken('driver-1', 'driver')).resolves.toBe(
+      await expect(service.getFirebaseToken('driver-1')).resolves.toBe(
         'firebase-custom-token',
       );
       expect(firebaseAuth.createCustomToken).toHaveBeenCalledWith('driver-1', {
@@ -300,11 +308,10 @@ describe('AuthService', () => {
     it.each([
       ['미승인', { id: 'driver-1', role: 'driver', driverApproved: false, suspended: false }],
       ['승인 claim 누락', { id: 'driver-1', role: 'driver', suspended: false }],
-      ['역할 불일치', { id: 'driver-1', role: 'consumer', driverApproved: true, suspended: false }],
     ])('%s driver token 발급을 거부한다', async (_label, user) => {
       const { service } = makeKakaoLoginService({ user });
 
-      await expect(service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+      await expect(service.getFirebaseToken('driver-1')).rejects.toMatchObject({
         status: 403,
       });
       expect(firebaseAuth.createCustomToken).not.toHaveBeenCalled();
@@ -314,12 +321,12 @@ describe('AuthService', () => {
       const suspended = makeKakaoLoginService({
         user: { id: 'driver-1', role: 'driver', driverApproved: true, suspended: true },
       });
-      await expect(suspended.service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+      await expect(suspended.service.getFirebaseToken('driver-1')).rejects.toMatchObject({
         status: 401,
       });
 
       const missing = makeKakaoLoginService({});
-      await expect(missing.service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+      await expect(missing.service.getFirebaseToken('driver-1')).rejects.toMatchObject({
         status: 401,
       });
       expect(firebaseAuth.createCustomToken).not.toHaveBeenCalled();
@@ -330,7 +337,7 @@ describe('AuthService', () => {
         user: { id: 'consumer-1', role: 'consumer', suspended: false },
       });
 
-      await service.getFirebaseToken('consumer-1', 'consumer');
+      await service.getFirebaseToken('consumer-1');
 
       expect(firebaseAuth.createCustomToken).toHaveBeenCalledWith('consumer-1', {
         role: 'consumer',
@@ -347,17 +354,157 @@ describe('AuthService', () => {
       };
       const { service } = makeKakaoLoginService({ user });
 
-      await expect(service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+      await expect(service.getFirebaseToken('driver-1')).rejects.toMatchObject({
         status: 403,
       });
       user.driverApproved = true;
-      await expect(service.getFirebaseToken('driver-1', 'driver')).resolves.toBe(
+      await expect(service.getFirebaseToken('driver-1')).resolves.toBe(
         'firebase-custom-token',
       );
       user.driverApproved = false;
-      await expect(service.getFirebaseToken('driver-1', 'driver')).rejects.toMatchObject({
+      await expect(service.getFirebaseToken('driver-1')).rejects.toMatchObject({
         status: 403,
       });
+    });
+
+    it('현재 seller role/storeId만 custom claim으로 생성한다', async () => {
+      const { service } = makeKakaoLoginService({
+        user: {
+          id: 'seller-1',
+          role: 'seller',
+          storeId: 'store-current',
+          suspended: false,
+        },
+      });
+
+      await Reflect.apply(service.getFirebaseToken, service, [
+        'seller-1',
+        'admin',
+        'store-stale',
+      ]);
+
+      expect(firebaseAuth.createCustomToken).toHaveBeenCalledWith('seller-1', {
+        role: 'seller',
+        storeId: 'store-current',
+      });
+    });
+
+    it('stale admin 입력이 있어도 현재 consumer claim만 생성한다', async () => {
+      const { service } = makeKakaoLoginService({
+        user: {
+          id: 'consumer-1',
+          role: 'consumer',
+          storeId: null,
+          suspended: false,
+        },
+      });
+
+      await Reflect.apply(service.getFirebaseToken, service, [
+        'consumer-1',
+        'admin',
+        'store-old',
+      ]);
+
+      expect(firebaseAuth.createCustomToken).toHaveBeenCalledWith('consumer-1', {
+        role: 'consumer',
+        storeId: null,
+      });
+    });
+
+    it.each([
+      ['admin', { id: 'admin-1', role: 'admin', suspended: true }],
+      ['seller', { id: 'seller-1', role: 'seller', storeId: 'store-1', suspended: true }],
+      ['consumer', { id: 'consumer-1', role: 'consumer', suspended: true }],
+    ])('%s 정지 사용자의 custom token 발급을 거부한다', async (_label, user) => {
+      const { service } = makeKakaoLoginService({ user });
+
+      await expect(service.getFirebaseToken(user.id as string)).rejects.toMatchObject({
+        status: 401,
+      });
+      expect(firebaseAuth.createCustomToken).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('refresh current authority', () => {
+    it('현재 사용자 권한으로 refresh token을 회전한다', async () => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user: { id: 'seller-1', role: 'seller', storeId: 'store-1', suspended: false },
+        refreshToken: 'presented-refresh',
+      });
+      jwt.verify.mockReturnValue({ sub: 'seller-1', role: 'seller', storeId: 'store-1' });
+
+      await expect(service.refresh('presented-refresh')).resolves.toEqual({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      });
+      expect(jwt.sign).toHaveBeenNthCalledWith(
+        1,
+        { sub: 'seller-1', role: 'seller', storeId: 'store-1' },
+        expect.objectContaining({ secret: 'access-secret' }),
+      );
+      expect(refreshTokenRef.set).toHaveBeenCalledTimes(1);
+    });
+
+    it('저장된 refresh token 기록이 없으면 재발급하지 않는다', async () => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
+      });
+      jwt.verify.mockReturnValue({ sub: 'consumer-1', role: 'consumer' });
+
+      await expect(service.refresh('presented-refresh')).rejects.toMatchObject({ status: 401 });
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it('저장된 refresh token과 다르면 세션을 무효화하고 재발급하지 않는다', async () => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
+        refreshToken: 'stored-refresh',
+      });
+      jwt.verify.mockReturnValue({ sub: 'consumer-1', role: 'consumer' });
+
+      await expect(service.refresh('presented-refresh')).rejects.toMatchObject({ status: 401 });
+      expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['사용자 없음', {}, { sub: 'consumer-1', role: 'consumer' }, 401],
+      [
+        '정지됨',
+        { id: 'consumer-1', role: 'consumer', storeId: null, suspended: true },
+        { sub: 'consumer-1', role: 'consumer' },
+        401,
+      ],
+      [
+        '역할 변경',
+        { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
+        { sub: 'consumer-1', role: 'admin' },
+        401,
+      ],
+      [
+        '매장 변경',
+        { id: 'seller-1', role: 'seller', storeId: 'store-current', suspended: false },
+        { sub: 'seller-1', role: 'seller', storeId: 'store-old' },
+        401,
+      ],
+      [
+        'driver 승인 철회',
+        { id: 'driver-1', role: 'driver', driverApproved: false, suspended: false },
+        { sub: 'driver-1', role: 'driver' },
+        403,
+      ],
+    ])('%s refresh는 token/session write 없이 거부한다', async (_label, user, payload, status) => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user,
+        refreshToken: 'presented-refresh',
+      });
+      jwt.verify.mockReturnValue(payload);
+
+      await expect(service.refresh('presented-refresh')).rejects.toMatchObject({ status });
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
     });
   });
 });
