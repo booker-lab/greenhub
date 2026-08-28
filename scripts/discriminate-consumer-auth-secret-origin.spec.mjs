@@ -2,16 +2,19 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   API_MARKERS,
+  API_ORIGIN_ENV_KEY,
   APPLICATION_SHA,
   CONSUMER_DEPLOYMENT_ID,
   DEPLOYMENT_FILE_RESULTS,
   DEPLOYMENT_RELATIVE_CLASSES,
   EXPECTED_API_ORIGIN,
   ORIGIN_CLASSIFICATIONS,
+  PREVIEW_BRANCH,
   READ_STAGES,
   ROOT_CAUSES,
   SECRET_EQUALITIES,
   STATUSES,
+  VALUE_READ_RESULTS,
   classifyCurrentApiOrigin,
   classifyDiscrimination,
   classifyEnvBindingRelativeToDeployment,
@@ -39,11 +42,11 @@ function response(body, status = 200) {
   };
 }
 
-function envPayload({ secret = VERCEL_SECRET, secretCreatedAt = '2026-08-27T00:00:00.000Z', secretUpdatedAt = '2026-08-28T00:00:00.000Z', api = EXPECTED_API_ORIGIN, apiCreatedAt = '2026-08-27T00:00:00.000Z', apiUpdatedAt = '2026-08-28T00:00:00.000Z', extra = [] } = {}) {
+function envPayload({ secret = VERCEL_SECRET, secretCreatedAt = '2026-08-27T00:00:00.000Z', secretUpdatedAt = '2026-08-28T00:00:00.000Z', secretId = 'env-secret-1', secretType = 'plain', secretDecrypted = true, secretSharedEnvId, api = EXPECTED_API_ORIGIN, apiCreatedAt = '2026-08-27T00:00:00.000Z', apiUpdatedAt = '2026-08-28T00:00:00.000Z', apiId = 'env-origin-1', apiType = 'plain', apiDecrypted = true, apiSharedEnvId, extra = [] } = {}) {
   return {
     envs: [
-      { key: 'E2E_TEST_SECRET', target: ['preview'], gitBranch: 'codex/p2-security-after-pay01', value: secret, createdAt: secretCreatedAt, updatedAt: secretUpdatedAt },
-      { key: 'NEXT_PUBLIC_API_URL', target: ['preview'], gitBranch: 'codex/p2-security-after-pay01', value: api, createdAt: apiCreatedAt, updatedAt: apiUpdatedAt },
+      { id: secretId, key: 'E2E_TEST_SECRET', target: ['preview'], gitBranch: PREVIEW_BRANCH, value: secret, type: secretType, decrypted: secretDecrypted, sharedEnvId: secretSharedEnvId, createdAt: secretCreatedAt, updatedAt: secretUpdatedAt },
+      { id: apiId, key: API_ORIGIN_ENV_KEY, target: ['preview'], gitBranch: PREVIEW_BRANCH, value: api, type: apiType, decrypted: apiDecrypted, sharedEnvId: apiSharedEnvId, createdAt: apiCreatedAt, updatedAt: apiUpdatedAt },
       ...extra,
     ],
   };
@@ -51,6 +54,11 @@ function envPayload({ secret = VERCEL_SECRET, secretCreatedAt = '2026-08-27T00:0
 
 function mockVercel({
   env = envPayload(),
+  metadata = envPayload({ secret: '', api: '' }),
+  selectedSecret,
+  selectedApiOrigin,
+  sharedSecret,
+  sharedApiOrigin,
   bundle = `const endpoint = '${EXPECTED_API_ORIGIN}${API_MARKERS[0]}';`,
   deploymentStatus = 200,
   projectStatus = 200,
@@ -59,8 +67,10 @@ function mockVercel({
   decryptStatus = 200,
   filesStatus = 200,
   fileContentStatus = 200,
+  reverifyMetadata,
 } = {}) {
   const calls = [];
+  let metadataReadCount = 0;
   const fetchImpl = async (url, init) => {
     calls.push({ url, init });
     const parsed = new URL(url);
@@ -71,11 +81,20 @@ function mockVercel({
       return response({ id: 'prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w', name: 'greenhubconsumer' }, projectStatus);
     }
     if (parsed.pathname === '/v10/projects/prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w/env') {
-      return response(parsed.searchParams.get('decrypt') === 'true' ? env : { envs: [] }, parsed.searchParams.get('decrypt') === 'true' ? decryptStatus : envV10Status);
+      if (parsed.searchParams.get('decrypt') !== 'true') metadataReadCount += 1;
+      return response(parsed.searchParams.get('decrypt') === 'true' ? env : (metadataReadCount > 1 ? reverifyMetadata ?? metadata : metadata), parsed.searchParams.get('decrypt') === 'true' ? decryptStatus : envV10Status);
     }
     if (parsed.pathname === '/v9/projects/prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w/env') {
-      return response(parsed.searchParams.get('decrypt') === 'true' ? env : { envs: [] }, parsed.searchParams.get('decrypt') === 'true' ? decryptStatus : envV9Status);
+      return response(parsed.searchParams.get('decrypt') === 'true' ? env : metadata, parsed.searchParams.get('decrypt') === 'true' ? decryptStatus : envV9Status);
     }
+    if (parsed.pathname.startsWith('/v1/projects/prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w/env/')) {
+      const id = decodeURIComponent(parsed.pathname.split('/').at(-1));
+      if (id === 'env-secret-1') return response(selectedSecret ?? env.envs.find((entry) => entry.key === 'E2E_TEST_SECRET') ?? {}, selectedSecret?.status ?? 200);
+      if (id === 'env-origin-1') return response(selectedApiOrigin ?? env.envs.find((entry) => entry.key === API_ORIGIN_ENV_KEY) ?? {}, selectedApiOrigin?.status ?? 200);
+      return response({}, 404);
+    }
+    if (parsed.pathname === '/v1/env/env_sharedsecret1') return response(sharedSecret ?? {}, sharedSecret?.status ?? 200);
+    if (parsed.pathname === '/v1/env/env_sharedorigin1') return response(sharedApiOrigin ?? {}, sharedApiOrigin?.status ?? 200);
     if (parsed.pathname === `/v6/deployments/${CONSUMER_DEPLOYMENT_ID}/files`) {
       return response({ files: [{ name: FILE_NAME, uid: 'server-file-1' }] }, filesStatus);
     }
@@ -94,6 +113,13 @@ function collect(overrides = {}) {
       githubSecret: GITHUB_SECRET,
       vercelToken: 'vercel-token-must-not-print',
       fetchImpl: mock.fetchImpl,
+      branch: overrides.branch ?? PREVIEW_BRANCH,
+      envRunImpl: overrides.envRunImpl ?? (async () => ({
+        secretAvailable: false,
+        originAvailable: false,
+        secretEquality: SECRET_EQUALITIES.NOT_PROVEN,
+        originEquality: SECRET_EQUALITIES.NOT_PROVEN,
+      })),
     }),
   };
 }
@@ -102,7 +128,7 @@ describe('secret/origin 판별 핵심 분류', () => {
   it('secret exact match와 서버 origin match를 함께 증명한다', async () => {
     const { promise } = collect({ env: envPayload({ secret: GITHUB_SECRET }) });
     const result = await promise;
-    assert.equal(result.status, STATUSES.BOTH_MATCH);
+    assert.equal(result.status, 'CONFIGURATION_MATCHED_AUTHORIZE_RUNTIME_BOUNDARY_REQUIRED');
     assert.equal(result.secretBindingEvidence.equality, SECRET_EQUALITIES.MATCH);
     assert.equal(result.apiOriginEvidence.exactDeploymentClassification, ORIGIN_CLASSIFICATIONS.MATCH);
   });
@@ -110,7 +136,7 @@ describe('secret/origin 판별 핵심 분류', () => {
   it('secret mismatch가 배포 시점 이전이면 secret root를 확정한다', async () => {
     const { promise } = collect({ env: envPayload({ secret: VERCEL_SECRET }) });
     const result = await promise;
-    assert.equal(result.status, 'SECRET_ORIGIN_DISCRIMINATION_COMPLETED');
+    assert.equal(result.status, 'ROOT_CAUSE_CONFIRMED_AUTH_HEADER_SECRET_MISMATCH');
     assert.equal(result.discriminationStatus, STATUSES.SECRET_MISMATCH_CONFIRMED);
     assert.equal(result.rootCauseClass, ROOT_CAUSES.AUTH_HEADER_SECRET_MISMATCH);
     assert.equal(result.nextGate, 'P2_AUTH_HEADER_SECRET_MINIMUM_REMEDIATION_GATE');
@@ -122,7 +148,7 @@ describe('secret/origin 판별 핵심 분류', () => {
       env: envPayload({ secret: GITHUB_SECRET, api: 'https://wrong.example' }),
     });
     const result = await promise;
-    assert.equal(result.status, 'SECRET_ORIGIN_DISCRIMINATION_COMPLETED');
+    assert.equal(result.status, 'ROOT_CAUSE_CONFIRMED_CONSUMER_API_ORIGIN_MISMATCH');
     assert.equal(result.discriminationStatus, STATUSES.API_ORIGIN_MISMATCH_CONFIRMED);
     assert.equal(result.rootCauseClass, ROOT_CAUSES.CONSUMER_API_ORIGIN_MISMATCH);
     assert.equal(result.nextGate, 'P2_CONSUMER_API_ORIGIN_MINIMUM_REMEDIATION_GATE');
@@ -215,7 +241,7 @@ describe('exact deployment server bundle origin 증거', () => {
   it('현재 branch env origin은 안전한 origin만 비교한다', () => {
     assert.equal(classifyCurrentApiOrigin({ entry: { value: EXPECTED_API_ORIGIN } }), 'CURRENT_API_ORIGIN_MATCH');
     assert.equal(classifyCurrentApiOrigin({ entry: { value: 'https://wrong.example' } }), 'CURRENT_API_ORIGIN_MISMATCH');
-    assert.equal(classifyCurrentApiOrigin({ entry: { value: 'https://wrong.example/path?token=private' } }), 'CURRENT_API_ORIGIN_NOT_PROVEN');
+    assert.equal(classifyCurrentApiOrigin({ entry: { value: 'https://wrong.example/path?token=private' } }), 'CURRENT_API_ORIGIN_MISMATCH');
   });
 
   it('updatedAt 비교는 before, after, unknown을 구분한다', () => {
@@ -277,7 +303,7 @@ describe('Vercel 읽기 경로 복구와 단계별 실패 귀속', () => {
   it('deployment 404를 DEPLOYMENT_METADATA 단계로 귀속한다', async () => {
     const { promise } = collect({ deploymentStatus: 404 });
     const result = await promise;
-    assert.equal(result.status, 'VERCEL_READ_CREDENTIAL_SCOPE_INVALID_OR_CHANGED');
+    assert.equal(result.status, 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE');
     assert.equal(result.failureCode, 'VERCEL_READ_CREDENTIAL_SCOPE_INVALID_OR_CHANGED');
     assert.deepEqual(result.failure, { stage: READ_STAGES.DEPLOYMENT_METADATA, httpStatus: 404 });
     assert.equal(result.endpointMatrix.deploymentMetadata.httpStatus, 404);
@@ -288,7 +314,7 @@ describe('Vercel 읽기 경로 복구와 단계별 실패 귀속', () => {
   it('project 404를 PROJECT_METADATA scope mismatch로 귀속한다', async () => {
     const { promise } = collect({ projectStatus: 404 });
     const result = await promise;
-    assert.equal(result.status, 'VERCEL_PROJECT_SCOPE_READ_MISMATCH');
+    assert.equal(result.status, 'DIAGNOSTIC_AUTHORITY_MISMATCH');
     assert.equal(result.failureCode, 'VERCEL_PROJECT_SCOPE_READ_MISMATCH');
     assert.deepEqual(result.failure, { stage: READ_STAGES.PROJECT_METADATA, httpStatus: 404 });
     assert.equal(result.endpointMatrix.projectMetadata.httpStatus, 404);
@@ -330,9 +356,9 @@ describe('Vercel 읽기 경로 복구와 단계별 실패 귀속', () => {
   it('V10·V9 metadata가 모두 404이면 환경변수 읽기 capability 부족으로 닫는다', async () => {
     const { promise, calls } = collect({ envV10Status: 404, envV9Status: 404 });
     const result = await promise;
-    assert.equal(result.status, 'VERCEL_ENV_READ_CAPABILITY_REQUIRED');
+    assert.equal(result.status, 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE');
     assert.equal(result.failureCode, 'VERCEL_ENV_READ_CAPABILITY_MISSING');
-    assert.equal(result.nextGate, 'P2_VERCEL_READ_CREDENTIAL_SCOPE_RECOVERY_GATE');
+    assert.equal(result.nextGate, 'P2_RUNTIME_EFFECTIVE_ENV_COMPARISON_CONTROL_TOWER_REVIEW');
     assert.equal(result.endpointMatrix.envV10Metadata.httpStatus, 404);
     assert.equal(result.endpointMatrix.envV9Metadata.httpStatus, 404);
     assert.equal(result.endpointMatrix.selectedEnvDecrypt.result, 'NOT_PROBED');
@@ -380,6 +406,245 @@ describe('Vercel 읽기 경로 복구와 단계별 실패 귀속', () => {
     assert.equal(result.rootCauseClass, ROOT_CAUSES.NOT_CLASSIFIED);
     assert.equal(result.finalClassification, 'PARTIAL_CONFIGURATION_DISCRIMINATION');
     assert.deepEqual(result.remainingCandidates, [ROOT_CAUSES.CONSUMER_API_ORIGIN_MISMATCH]);
-    assert.equal(result.nextGate, 'NONE_EVIDENCE_INSUFFICIENT');
+    assert.equal(result.nextGate, 'P2_REMAINING_CONFIGURATION_EVIDENCE_GATE');
+  });
+});
+
+describe('선택된 환경 변수 값 읽기 capability', () => {
+  const unavailableEnv = () => envPayload({ secret: '', api: '' });
+
+  it('V10 HTTP 200이어도 값이 없으면 value-read 성공으로 분류하지 않는다', async () => {
+    const { promise } = collect({
+      env: unavailableEnv(),
+      metadata: unavailableEnv(),
+      envRunImpl: async () => ({
+        secretAvailable: false,
+        originAvailable: false,
+        secretEquality: SECRET_EQUALITIES.NOT_PROVEN,
+        originEquality: SECRET_EQUALITIES.NOT_PROVEN,
+      }),
+    });
+    const result = await promise;
+    assert.equal(result.endpointMatrix.envV10DecryptedCliSource.httpStatus, 200);
+    assert.equal(result.endpointMatrix.envV10DecryptedCliSource.result, VALUE_READ_RESULTS.HTTP_200_VALUE_UNAVAILABLE);
+    assert.equal(result.endpointMatrix.envV10DecryptedCliSource.keys.E2E_TEST_SECRET.valueAvailable, 'NO');
+    assert.equal(result.endpointMatrix.envV10DecryptedCliSource.keys[API_ORIGIN_ENV_KEY].valueAvailable, 'NO');
+    assert.equal(result.status, 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE');
+  });
+
+  it('V10 CLI source decrypt 요청에 정확한 source와 branch 필터를 포함한다', async () => {
+    const { promise, calls } = collect();
+    await promise;
+    const metadataCall = calls.find(({ url }) => {
+      const parsed = new URL(url);
+      return parsed.pathname === '/v10/projects/prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w/env'
+        && parsed.searchParams.get('decrypt') !== 'true';
+    });
+    const decryptCall = calls.find(({ url }) => {
+      const parsed = new URL(url);
+      return parsed.pathname === '/v10/projects/prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w/env'
+        && parsed.searchParams.get('decrypt') === 'true';
+    });
+    assert.equal(new URL(metadataCall.url).searchParams.get('gitBranch'), PREVIEW_BRANCH);
+    assert.equal(new URL(decryptCall.url).searchParams.get('gitBranch'), PREVIEW_BRANCH);
+    assert.equal(new URL(decryptCall.url).searchParams.get('source'), 'vercel-cli:pull');
+  });
+
+  it('Stage A 값이 없으면 선택된 ID별 project-env endpoint를 각각 조회한다', async () => {
+    const { promise, calls } = collect({
+      env: unavailableEnv(),
+      metadata: unavailableEnv(),
+      selectedSecret: { key: 'E2E_TEST_SECRET', value: GITHUB_SECRET, type: 'plain', decrypted: true },
+      selectedApiOrigin: { key: API_ORIGIN_ENV_KEY, value: `${EXPECTED_API_ORIGIN}/`, type: 'plain', decrypted: true },
+    });
+    const result = await promise;
+    assert.equal(result.endpointMatrix.selectedSecretProjectEnv.result, VALUE_READ_RESULTS.HTTP_200_VALUE_AVAILABLE);
+    assert.equal(result.endpointMatrix.selectedApiOriginProjectEnv.result, VALUE_READ_RESULTS.HTTP_200_VALUE_AVAILABLE);
+    assert.equal(result.endpointMatrix.vercelEnvRun.result, VALUE_READ_RESULTS.NOT_PROBED);
+    assert.equal(calls.filter(({ url }) => new URL(url).pathname.startsWith('/v1/projects/')).length, 2);
+    assert.equal(result.status, 'CONFIGURATION_MATCHED_AUTHORIZE_RUNTIME_BOUNDARY_REQUIRED');
+  });
+
+  it('project-env HTTP 200에 value가 없으면 다음 fallback으로 진행한다', async () => {
+    let envRunCalled = false;
+    const { promise } = collect({
+      env: unavailableEnv(),
+      metadata: unavailableEnv(),
+      selectedSecret: { key: 'E2E_TEST_SECRET', type: 'encrypted', decrypted: true },
+      selectedApiOrigin: { key: API_ORIGIN_ENV_KEY, type: 'encrypted', decrypted: true },
+      envRunImpl: async () => {
+        envRunCalled = true;
+        return {
+          secretAvailable: true,
+          originAvailable: true,
+          secretEquality: SECRET_EQUALITIES.MATCH,
+          originEquality: SECRET_EQUALITIES.MATCH,
+        };
+      },
+    });
+    const result = await promise;
+    assert.equal(envRunCalled, true);
+    assert.equal(result.endpointMatrix.selectedSecretProjectEnv.result, VALUE_READ_RESULTS.HTTP_200_VALUE_UNAVAILABLE);
+    assert.equal(result.endpointMatrix.selectedApiOriginProjectEnv.result, VALUE_READ_RESULTS.HTTP_200_VALUE_UNAVAILABLE);
+    assert.equal(result.endpointMatrix.vercelEnvRun.result, VALUE_READ_RESULTS.HTTP_200_VALUE_AVAILABLE);
+    assert.equal(result.status, 'CONFIGURATION_MATCHED_AUTHORIZE_RUNTIME_BOUNDARY_REQUIRED');
+  });
+
+  it('selected project-env 401과 403은 selected env permission recovery로 분류한다', async () => {
+    const { promise } = collect({
+      env: unavailableEnv(),
+      metadata: unavailableEnv(),
+      selectedSecret: { status: 401, key: 'E2E_TEST_SECRET' },
+      selectedApiOrigin: { status: 403, key: API_ORIGIN_ENV_KEY },
+      envRunImpl: async () => ({
+        secretAvailable: false,
+        originAvailable: false,
+        secretEquality: SECRET_EQUALITIES.NOT_PROVEN,
+        originEquality: SECRET_EQUALITIES.NOT_PROVEN,
+      }),
+    });
+    const result = await promise;
+    assert.equal(result.endpointMatrix.selectedSecretProjectEnv.result, VALUE_READ_RESULTS.HTTP_401);
+    assert.equal(result.endpointMatrix.selectedApiOriginProjectEnv.result, VALUE_READ_RESULTS.HTTP_403);
+    assert.equal(result.status, 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE');
+    assert.equal(result.nextGate, 'P2_VERCEL_SELECTED_ENV_VALUE_PERMISSION_RECOVERY_GATE');
+  });
+
+  it('shared-env ID가 metadata에 명시된 경우에만 shared endpoint를 조회한다', async () => {
+    const env = envPayload({
+      secret: '',
+      api: '',
+      secretSharedEnvId: 'env_sharedsecret1',
+      apiSharedEnvId: 'env_sharedorigin1',
+    });
+    const { promise, calls } = collect({
+      env,
+      metadata: env,
+      selectedSecret: { key: 'E2E_TEST_SECRET', type: 'encrypted', decrypted: true },
+      selectedApiOrigin: { key: API_ORIGIN_ENV_KEY, type: 'encrypted', decrypted: true },
+      sharedSecret: { key: 'E2E_TEST_SECRET', value: GITHUB_SECRET, type: 'plain', decrypted: true },
+      sharedApiOrigin: { key: API_ORIGIN_ENV_KEY, value: EXPECTED_API_ORIGIN, type: 'plain', decrypted: true },
+    });
+    const result = await promise;
+    assert.equal(result.endpointMatrix.sharedSecretEnv.result, VALUE_READ_RESULTS.HTTP_200_VALUE_AVAILABLE);
+    assert.equal(result.endpointMatrix.sharedApiOriginEnv.result, VALUE_READ_RESULTS.HTTP_200_VALUE_AVAILABLE);
+    assert.equal(calls.some(({ url }) => new URL(url).pathname === '/v1/env/env_sharedsecret1'), true);
+    assert.equal(calls.some(({ url }) => new URL(url).pathname === '/v1/env/env_sharedorigin1'), true);
+    assert.equal(result.status, 'CONFIGURATION_MATCHED_AUTHORIZE_RUNTIME_BOUNDARY_REQUIRED');
+  });
+
+  it('shared-env identity가 명시되지 않으면 ID를 추측하지 않는다', async () => {
+    const { promise, calls } = collect({
+      env: unavailableEnv(),
+      metadata: unavailableEnv(),
+      envRunImpl: async () => ({
+        secretAvailable: false,
+        originAvailable: false,
+        secretEquality: SECRET_EQUALITIES.NOT_PROVEN,
+        originEquality: SECRET_EQUALITIES.NOT_PROVEN,
+      }),
+    });
+    const result = await promise;
+    assert.equal(calls.some(({ url }) => new URL(url).pathname.startsWith('/v1/env/')), false);
+    assert.equal(result.endpointMatrix.sharedSecretEnv.result, VALUE_READ_RESULTS.NOT_APPLICABLE);
+    assert.equal(result.endpointMatrix.sharedApiOriginEnv.result, VALUE_READ_RESULTS.NOT_APPLICABLE);
+  });
+
+  it('env-run secret MATCH를 in-memory binding 증거로 반영한다', async () => {
+    const { promise } = collect({
+      env: unavailableEnv(),
+      metadata: unavailableEnv(),
+      envRunImpl: async () => ({
+        secretAvailable: true,
+        originAvailable: true,
+        secretEquality: SECRET_EQUALITIES.MATCH,
+        originEquality: SECRET_EQUALITIES.MATCH,
+      }),
+    });
+    const result = await promise;
+    assert.equal(result.secretBindingEvidence.equality, SECRET_EQUALITIES.MATCH);
+    assert.equal(result.secretBindingEvidence.selectedRowUnchanged, 'YES');
+    assert.equal(result.status, 'CONFIGURATION_MATCHED_AUTHORIZE_RUNTIME_BOUNDARY_REQUIRED');
+  });
+
+  it('env-run secret MISMATCH를 auth header secret root로 분류한다', async () => {
+    const { promise } = collect({
+      env: unavailableEnv(),
+      metadata: unavailableEnv(),
+      envRunImpl: async () => ({
+        secretAvailable: true,
+        originAvailable: true,
+        secretEquality: SECRET_EQUALITIES.MISMATCH,
+        originEquality: SECRET_EQUALITIES.MATCH,
+      }),
+    });
+    const result = await promise;
+    assert.equal(result.status, 'ROOT_CAUSE_CONFIRMED_AUTH_HEADER_SECRET_MISMATCH');
+    assert.equal(result.rootCauseClass, ROOT_CAUSES.AUTH_HEADER_SECRET_MISMATCH);
+  });
+
+  it('env-run origin MATCH와 MISMATCH를 각각 분류한다', async () => {
+    const matching = await collect({
+      env: unavailableEnv(),
+      metadata: unavailableEnv(),
+      envRunImpl: async () => ({
+        secretAvailable: true,
+        originAvailable: true,
+        secretEquality: SECRET_EQUALITIES.MATCH,
+        originEquality: SECRET_EQUALITIES.MATCH,
+      }),
+    });
+    const mismatching = await collect({
+      env: unavailableEnv(),
+      metadata: unavailableEnv(),
+      envRunImpl: async () => ({
+        secretAvailable: true,
+        originAvailable: true,
+        secretEquality: SECRET_EQUALITIES.MATCH,
+        originEquality: SECRET_EQUALITIES.MISMATCH,
+      }),
+    });
+    const matchingResult = await matching.promise;
+    const mismatchingResult = await mismatching.promise;
+    assert.equal(matchingResult.apiOriginEvidence.exactDeploymentClassification, ORIGIN_CLASSIFICATIONS.MATCH);
+    assert.equal(mismatchingResult.apiOriginEvidence.exactDeploymentClassification, ORIGIN_CLASSIFICATIONS.MISMATCH);
+    assert.equal(mismatchingResult.status, 'ROOT_CAUSE_CONFIRMED_CONSUMER_API_ORIGIN_MISMATCH');
+  });
+
+  it('env-run 결과와 collector 결과는 비밀값·Authorization header를 직렬화하지 않는다', async () => {
+    const { promise } = collect({
+      env: envPayload({ secret: VERCEL_SECRET, api: EXPECTED_API_ORIGIN }),
+      envRunImpl: async () => ({
+        secretAvailable: true,
+        originAvailable: true,
+        secretEquality: SECRET_EQUALITIES.MATCH,
+        originEquality: SECRET_EQUALITIES.MATCH,
+      }),
+    });
+    const result = await promise;
+    const output = JSON.stringify(result);
+    assert.doesNotMatch(output, new RegExp(GITHUB_SECRET));
+    assert.doesNotMatch(output, new RegExp(VERCEL_SECRET));
+    assert.doesNotMatch(output, /Authorization: Bearer/);
+    assert.doesNotMatch(output, /secretValue|originValue/);
+  });
+
+  it('env-run 직전 selected row identity가 바뀌면 exact deployment 증거로 사용하지 않는다', async () => {
+    const { promise } = collect({
+      env: unavailableEnv(),
+      metadata: unavailableEnv(),
+      reverifyMetadata: envPayload({ secret: '', api: '', secretId: 'env-secret-changed', apiId: 'env-origin-changed' }),
+      envRunImpl: async () => ({
+        secretAvailable: true,
+        originAvailable: true,
+        secretEquality: SECRET_EQUALITIES.MATCH,
+        originEquality: SECRET_EQUALITIES.MATCH,
+      }),
+    });
+    const result = await promise;
+    assert.equal(result.secretBindingEvidence.selectedRowUnchanged, 'NO');
+    assert.equal(result.apiOriginEvidence.selectedRowUnchanged, 'NO');
+    assert.equal(result.status, 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE');
+    assert.equal(result.nextGate, 'P2_RUNTIME_EFFECTIVE_ENV_COMPARISON_CONTROL_TOWER_REVIEW');
   });
 });
