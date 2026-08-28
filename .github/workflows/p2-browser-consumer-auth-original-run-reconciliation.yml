@@ -1,0 +1,80 @@
+name: P2 Browser Consumer Auth Original Run Reconciliation
+
+on:
+  push:
+    branches:
+      - codex/p2-browser-consumer-auth-probe
+    paths:
+      - .github/workflows/p2-browser-consumer-auth-original-run-reconciliation.yml
+      - scripts/reconcile-round-direct-consumer-auth-original-run.mjs
+      - scripts/reconcile-round-direct-consumer-auth-original-run.spec.mjs
+
+concurrency:
+  group: p2-browser-consumer-auth-original-run-reconciliation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    name: 원본 Browser 인증 증거 reconciliation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: round-direct-e2e
+    permissions:
+      contents: read
+    env:
+      ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM }}
+      ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS }}
+      RESULT_FILE: .artifacts/p2-browser-consumer-auth-original-run-reconciliation/result.json
+
+    steps:
+      - name: 진단 브랜치 checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Node.js 준비
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: 읽기 전용 collector 정적 안전 확인
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eni '(/auth/login|/auth/callback|setDoc|updateDoc|deleteDoc|runTransaction|firebase\\.auth|playwright|workflow_dispatch)' \
+            scripts/reconcile-round-direct-consumer-auth-original-run.mjs; then
+            echo 'ORIGINAL_RECONCILIATION_UNSAFE_OPERATION_MARKER' >&2
+            exit 1
+          fi
+
+      - name: 원본 시점 Firestore 증거 read-only 조회
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$RESULT_FILE")"
+          set +e
+          node scripts/reconcile-round-direct-consumer-auth-original-run.mjs > "$RESULT_FILE"
+          collector_status=$?
+          set -e
+          if [[ ! -s "$RESULT_FILE" ]]; then
+            echo '원본 reconciliation 결과가 없어 실행을 실패 처리합니다.' >&2
+            exit 1
+          fi
+          exit "$collector_status"
+
+      - name: collector 단위 테스트
+        run: node --test scripts/reconcile-round-direct-consumer-auth-original-run.spec.mjs
+
+      - name: 비민감 reconciliation 결과 artifact 업로드
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: p2-browser-consumer-auth-original-run-reconciliation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/p2-browser-consumer-auth-original-run-reconciliation/
+          if-no-files-found: error
+          retention-days: 7
