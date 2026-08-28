@@ -1,0 +1,90 @@
+name: P2 Browser Consumer Auth Existing Evidence
+
+on:
+  push:
+    branches:
+      - codex/p2-browser-consumer-auth-probe
+    paths:
+      - .github/workflows/p2-browser-consumer-auth-existing-evidence.yml
+      - scripts/read-round-direct-consumer-auth-existing-evidence.mjs
+
+concurrency:
+  group: p2-browser-consumer-auth-existing-evidence
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  existing_evidence:
+    name: 기존 증거 전용 Consumer Auth 분류
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: round-direct-e2e
+    permissions:
+      contents: read
+    env:
+      ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM }}
+      ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS }}
+      RESULT_FILE: .artifacts/p2-browser-consumer-auth-existing-evidence/result.json
+    steps:
+      - name: 진단 workflow checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Node.js 준비
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: 기존 Consumer Auth probe 재실행 정적 안전 확인
+        shell: bash
+        run: |
+          set -euo pipefail
+          old_probe_workflow=".github/workflows/p2-browser-consumer-auth-"'probe.yml'
+          old_probe_script="scripts/"'probe-round-direct-consumer-auth.mjs'
+          verifier_script="scripts/verify-"'vercel-preview-evidence.mjs'
+          changed_files="$(git diff --name-only HEAD^ HEAD)"
+          if grep -Fxq "$old_probe_workflow" <<< "$changed_files" || \
+             grep -Fxq "$old_probe_script" <<< "$changed_files" || \
+             grep -Fxq "$verifier_script" <<< "$changed_files"; then
+            echo 'EXISTING_EVIDENCE_GATE_WOULD_RERUN_AUTH_PROBE' >&2
+            exit 1
+          fi
+          if grep -Fq 'scripts/read-round-direct-consumer-auth-existing-evidence.mjs' "$old_probe_workflow" || \
+             grep -Fq '.github/workflows/p2-browser-consumer-auth-existing-evidence.yml' "$old_probe_workflow"; then
+            echo 'EXISTING_EVIDENCE_GATE_WOULD_RERUN_AUTH_PROBE' >&2
+            exit 1
+          fi
+          if ! grep -Fq '.github/workflows/p2-browser-consumer-auth-existing-evidence.yml' .github/workflows/p2-browser-consumer-auth-existing-evidence.yml || \
+             ! grep -Fq 'scripts/read-round-direct-consumer-auth-existing-evidence.mjs' .github/workflows/p2-browser-consumer-auth-existing-evidence.yml; then
+            echo 'EXISTING_EVIDENCE_GATE_WOULD_RERUN_AUTH_PROBE' >&2
+            exit 1
+          fi
+
+      - name: 기존 증거 read-only collector 실행
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$RESULT_FILE")"
+          set +e
+          node scripts/read-round-direct-consumer-auth-existing-evidence.mjs > "$RESULT_FILE"
+          collector_status=$?
+          set -e
+          if [[ ! -s "$RESULT_FILE" ]]; then
+            echo '기존 증거 collector 결과가 없어 실행을 실패 처리합니다.' >&2
+            exit 1
+          fi
+          exit "$collector_status"
+
+      - name: 비민감 분류 결과 artifact 업로드
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: p2-browser-consumer-auth-existing-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/p2-browser-consumer-auth-existing-evidence/
+          if-no-files-found: error
+          retention-days: 7
