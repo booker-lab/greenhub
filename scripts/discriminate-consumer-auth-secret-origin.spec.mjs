@@ -4,6 +4,7 @@ import {
   API_MARKERS,
   APPLICATION_SHA,
   CONSUMER_DEPLOYMENT_ID,
+  DEPLOYMENT_FILE_RESULTS,
   DEPLOYMENT_RELATIVE_CLASSES,
   EXPECTED_API_ORIGIN,
   ORIGIN_CLASSIFICATIONS,
@@ -13,6 +14,7 @@ import {
   STATUSES,
   classifyCurrentApiOrigin,
   classifyDiscrimination,
+  classifyEnvBindingRelativeToDeployment,
   classifySecretBinding,
   classifyUpdatedRelativeToDeployment,
   collectDiscriminationEvidence,
@@ -37,11 +39,11 @@ function response(body, status = 200) {
   };
 }
 
-function envPayload({ secret = VERCEL_SECRET, secretUpdatedAt = '2026-08-28T00:00:00.000Z', api = EXPECTED_API_ORIGIN, apiUpdatedAt = '2026-08-28T00:00:00.000Z', extra = [] } = {}) {
+function envPayload({ secret = VERCEL_SECRET, secretCreatedAt = '2026-08-27T00:00:00.000Z', secretUpdatedAt = '2026-08-28T00:00:00.000Z', api = EXPECTED_API_ORIGIN, apiCreatedAt = '2026-08-27T00:00:00.000Z', apiUpdatedAt = '2026-08-28T00:00:00.000Z', extra = [] } = {}) {
   return {
     envs: [
-      { key: 'E2E_TEST_SECRET', target: ['preview'], gitBranch: 'codex/p2-security-after-pay01', value: secret, updatedAt: secretUpdatedAt },
-      { key: 'NEXT_PUBLIC_API_URL', target: ['preview'], gitBranch: 'codex/p2-security-after-pay01', value: api, updatedAt: apiUpdatedAt },
+      { key: 'E2E_TEST_SECRET', target: ['preview'], gitBranch: 'codex/p2-security-after-pay01', value: secret, createdAt: secretCreatedAt, updatedAt: secretUpdatedAt },
+      { key: 'NEXT_PUBLIC_API_URL', target: ['preview'], gitBranch: 'codex/p2-security-after-pay01', value: api, createdAt: apiCreatedAt, updatedAt: apiUpdatedAt },
       ...extra,
     ],
   };
@@ -111,7 +113,7 @@ describe('secret/origin 판별 핵심 분류', () => {
     assert.equal(result.status, 'SECRET_ORIGIN_DISCRIMINATION_COMPLETED');
     assert.equal(result.discriminationStatus, STATUSES.SECRET_MISMATCH_CONFIRMED);
     assert.equal(result.rootCauseClass, ROOT_CAUSES.AUTH_HEADER_SECRET_MISMATCH);
-    assert.equal(result.nextGate, 'P2_AUTH_SECRET_CANONICAL_SIDE_RECONCILIATION_GATE');
+    assert.equal(result.nextGate, 'P2_AUTH_HEADER_SECRET_MINIMUM_REMEDIATION_GATE');
     assert.deepEqual(result.eliminatedCandidates, [ROOT_CAUSES.CONSUMER_API_ORIGIN_MISMATCH]);
   });
 
@@ -123,7 +125,7 @@ describe('secret/origin 판별 핵심 분류', () => {
     assert.equal(result.status, 'SECRET_ORIGIN_DISCRIMINATION_COMPLETED');
     assert.equal(result.discriminationStatus, STATUSES.API_ORIGIN_MISMATCH_CONFIRMED);
     assert.equal(result.rootCauseClass, ROOT_CAUSES.CONSUMER_API_ORIGIN_MISMATCH);
-    assert.equal(result.nextGate, 'CONSUMER_API_ORIGIN_REBIND_AND_EXACT_REDEPLOY_GATE');
+    assert.equal(result.nextGate, 'P2_CONSUMER_API_ORIGIN_MINIMUM_REMEDIATION_GATE');
     assert.deepEqual(result.eliminatedCandidates, [ROOT_CAUSES.AUTH_HEADER_SECRET_MISMATCH]);
   });
 
@@ -174,7 +176,7 @@ describe('secret/origin 판별 핵심 분류', () => {
       secretUpdatedRelative: DEPLOYMENT_RELATIVE_CLASSES.AFTER,
       apiOriginClassification: ORIGIN_CLASSIFICATIONS.MATCH,
     });
-    assert.equal(result.status, STATUSES.SECRET_BINDING_NOT_PROVEN);
+    assert.equal(result.status, STATUSES.PARTIAL_CONFIGURATION);
     assert.equal(result.rootCauseClass, ROOT_CAUSES.NOT_CLASSIFIED);
   });
 });
@@ -220,6 +222,21 @@ describe('exact deployment server bundle origin 증거', () => {
     assert.equal(classifyUpdatedRelativeToDeployment('2026-08-28T00:00:00Z', '2026-08-28T00:00:01Z'), DEPLOYMENT_RELATIVE_CLASSES.BEFORE_OR_AT);
     assert.equal(classifyUpdatedRelativeToDeployment('2026-08-28T00:00:02Z', '2026-08-28T00:00:01Z'), DEPLOYMENT_RELATIVE_CLASSES.AFTER);
     assert.equal(classifyUpdatedRelativeToDeployment('not-a-date', '2026-08-28T00:00:01Z'), DEPLOYMENT_RELATIVE_CLASSES.UNKNOWN);
+  });
+
+  it('createdAt과 updatedAt이 모두 배포 이전이어야 exact deployment binding으로 분류한다', () => {
+    assert.equal(classifyEnvBindingRelativeToDeployment({
+      createdAt: '2026-08-27T00:00:00Z',
+      updatedAt: '2026-08-28T00:00:00Z',
+    }, '2026-08-28T00:00:01Z'), DEPLOYMENT_RELATIVE_CLASSES.BEFORE_OR_AT);
+    assert.equal(classifyEnvBindingRelativeToDeployment({
+      createdAt: '2026-08-28T00:00:02Z',
+      updatedAt: '2026-08-28T00:00:02Z',
+    }, '2026-08-28T00:00:01Z'), DEPLOYMENT_RELATIVE_CLASSES.AFTER);
+    assert.equal(classifyEnvBindingRelativeToDeployment({
+      createdAt: '2026-08-27T00:00:00Z',
+      updatedAt: 'not-a-date',
+    }, '2026-08-28T00:00:01Z'), DEPLOYMENT_RELATIVE_CLASSES.UNKNOWN);
   });
 });
 
@@ -336,7 +353,7 @@ describe('Vercel 읽기 경로 복구와 단계별 실패 귀속', () => {
     assert.equal(calls.some(({ url }) => new URL(url).searchParams.get('decrypt') === 'true'), false);
   });
 
-  it('deployment files 404가 이미 확보한 환경변수 증거를 삭제하지 않는다', async () => {
+  it('Git source deployment에서는 deployment files를 요청하지 않고 not applicable로 남긴다', async () => {
     const { promise } = collect({
       env: envPayload({ secret: GITHUB_SECRET, apiUpdatedAt: '2026-08-28T00:00:02.000Z' }),
       filesStatus: 404,
@@ -345,19 +362,24 @@ describe('Vercel 읽기 경로 복구와 단계별 실패 귀속', () => {
     assert.equal(result.ready, true);
     assert.equal(result.secretBindingEvidence.equality, SECRET_EQUALITIES.MATCH);
     assert.equal(result.secretBindingEvidence.envUpdatedRelativeToDeployment, DEPLOYMENT_RELATIVE_CLASSES.BEFORE_OR_AT);
-    assert.equal(result.endpointMatrix.deploymentFiles.httpStatus, 404);
-    assert.equal(result.endpointMatrix.deploymentFiles.result, 'NOT_AVAILABLE');
+    assert.equal(result.endpointMatrix.deploymentFiles.httpStatus, null);
+    assert.equal(result.endpointMatrix.deploymentFiles.result, DEPLOYMENT_FILE_RESULTS.NOT_APPLICABLE_GIT_SOURCE);
+    assert.equal(result.endpointMatrix.deploymentFileContent.result, DEPLOYMENT_FILE_RESULTS.NOT_APPLICABLE_GIT_SOURCE);
+    assert.equal(result.deploymentFilesRequired, false);
+    assert.equal(result.deploymentFilesAvailable, false);
+    assert.equal(result.apiOriginEvidence.serverBundleEvidence, DEPLOYMENT_FILE_RESULTS.NOT_APPLICABLE_GIT_SOURCE);
     assert.equal(result.apiOriginEvidence.exactDeploymentClassification, ORIGIN_CLASSIFICATIONS.NOT_PROVEN);
   });
 
-  it('파일 read 실패 뒤에도 secret mismatch 부분 증거와 남은 후보를 보존한다', async () => {
+  it('origin binding이 배포 이후면 server bundle fallback 없이 partial로 닫는다', async () => {
     const { promise } = collect({
       env: envPayload({ apiUpdatedAt: '2026-08-28T00:00:02.000Z' }),
       filesStatus: 404,
     });
     const result = await promise;
-    assert.equal(result.rootCauseClass, ROOT_CAUSES.AUTH_HEADER_SECRET_MISMATCH);
+    assert.equal(result.rootCauseClass, ROOT_CAUSES.NOT_CLASSIFIED);
+    assert.equal(result.finalClassification, 'PARTIAL_CONFIGURATION_DISCRIMINATION');
     assert.deepEqual(result.remainingCandidates, [ROOT_CAUSES.CONSUMER_API_ORIGIN_MISMATCH]);
-    assert.equal(result.nextGate, 'P2_AUTH_SECRET_CANONICAL_SIDE_RECONCILIATION_GATE');
+    assert.equal(result.nextGate, 'NONE_EVIDENCE_INSUFFICIENT');
   });
 });

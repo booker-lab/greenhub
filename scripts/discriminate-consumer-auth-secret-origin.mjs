@@ -3,7 +3,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const APPLICATION_SHA = '9fda1a0909644cb77a223941f28266f7af69cdf9';
 export const EVIDENCE_V2_SHA = 'ff351b79ae2e00ce8b111a906ea0cf1ee8b3d114';
-export const DIAGNOSTIC_PARENT_SHA = '1c171e76d99e79e810ee5944e0831f5befcf4c10';
+export const DIAGNOSTIC_PARENT_SHA = '819f8976088f810575449cf8a923eca052f3a547';
 export const DIAGNOSTIC_BRANCH = 'codex/p2-browser-consumer-auth-probe';
 export const CONSUMER_DEPLOYMENT_ID = 'dpl_HxPNRSfPztdLxCKp9Tr5d271C4kn';
 export const VERCEL_PROJECT_ID = 'prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w';
@@ -28,9 +28,13 @@ export const ORIGIN_CLASSIFICATIONS = Object.freeze({
 });
 
 export const DEPLOYMENT_RELATIVE_CLASSES = Object.freeze({
-  BEFORE_OR_AT: 'BEFORE_OR_AT_DEPLOYMENT',
-  AFTER: 'AFTER_DEPLOYMENT',
-  UNKNOWN: 'UNKNOWN',
+  BEFORE_OR_AT: 'BOUND_BEFORE_OR_AT_DEPLOYMENT',
+  AFTER: 'CURRENT_VALUE_NOT_EXACT_DEPLOYMENT_PROOF',
+  UNKNOWN: 'NOT_PROVEN',
+});
+
+export const DEPLOYMENT_FILE_RESULTS = Object.freeze({
+  NOT_APPLICABLE_GIT_SOURCE: 'NOT_APPLICABLE_GIT_SOURCE',
 });
 
 export const ROOT_CAUSES = Object.freeze({
@@ -42,7 +46,10 @@ export const ROOT_CAUSES = Object.freeze({
 export const STATUSES = Object.freeze({
   SECRET_MISMATCH_CONFIRMED: 'AUTH_HEADER_SECRET_MISMATCH_CONFIRMED',
   API_ORIGIN_MISMATCH_CONFIRMED: 'CONSUMER_API_ORIGIN_MISMATCH_CONFIRMED',
+  MULTIPLE_CONFIGURATION_MISMATCH: 'MULTIPLE_CONFIGURATION_MISMATCH',
   BOTH_MATCH: 'SECRET_AND_ORIGIN_BOTH_PROVEN_MATCH',
+  PARTIAL_CONFIGURATION: 'PARTIAL_CONFIGURATION_DISCRIMINATION',
+  ENV_VALUE_READ_INSUFFICIENT: 'EFFECTIVE_ENV_VALUE_READ_INSUFFICIENT',
   ENV_READ_CAPABILITY_REQUIRED: 'VERCEL_ENV_READ_CAPABILITY_REQUIRED',
   PROJECT_SCOPE_READ_MISMATCH: 'VERCEL_PROJECT_SCOPE_READ_MISMATCH',
   READ_CREDENTIAL_SCOPE_INVALID_OR_CHANGED: 'VERCEL_READ_CREDENTIAL_SCOPE_INVALID_OR_CHANGED',
@@ -54,7 +61,13 @@ export const STATUSES = Object.freeze({
 
 export const FINAL_STATUSES = Object.freeze({
   COMPLETED: 'SECRET_ORIGIN_DISCRIMINATION_COMPLETED',
+  SECRET_MISMATCH_CONFIRMED: 'ROOT_CAUSE_CONFIRMED_AUTH_HEADER_SECRET_MISMATCH',
+  API_ORIGIN_MISMATCH_CONFIRMED: 'ROOT_CAUSE_CONFIRMED_CONSUMER_API_ORIGIN_MISMATCH',
+  MULTIPLE_CONFIGURATION_MISMATCH: 'MULTIPLE_CONFIGURATION_MISMATCH',
   BOTH_MATCH: 'SECRET_AND_ORIGIN_BOTH_PROVEN_MATCH',
+  CONFIGURATION_MATCHED: 'CONFIGURATION_MATCHED_AUTHORIZE_RUNTIME_BOUNDARY_REQUIRED',
+  PARTIAL_CONFIGURATION: 'PARTIAL_CONFIGURATION_DISCRIMINATION',
+  ENV_VALUE_READ_INSUFFICIENT: 'EFFECTIVE_ENV_VALUE_READ_INSUFFICIENT',
   ENV_READ_CAPABILITY_REQUIRED: 'VERCEL_ENV_READ_CAPABILITY_REQUIRED',
   PROJECT_SCOPE_READ_MISMATCH: 'VERCEL_PROJECT_SCOPE_READ_MISMATCH',
   READ_CREDENTIAL_SCOPE_INVALID_OR_CHANGED: 'VERCEL_READ_CREDENTIAL_SCOPE_INVALID_OR_CHANGED',
@@ -65,9 +78,10 @@ export const FINAL_STATUSES = Object.freeze({
 export const NEXT_GATES = Object.freeze({
   GITHUB_SECRET_REBIND: 'GITHUB_SECRET_REBIND_GATE',
   VERCEL_PREVIEW_REBIND: 'VERCEL_PREVIEW_ENV_REBIND_AND_EXACT_REDEPLOY_GATE',
-  AUTH_SECRET_CANONICAL_RECONCILIATION: 'P2_AUTH_SECRET_CANONICAL_SIDE_RECONCILIATION_GATE',
-  API_ORIGIN_REBIND: 'CONSUMER_API_ORIGIN_REBIND_AND_EXACT_REDEPLOY_GATE',
-  AUTHORIZE_BOUNDARY_REOPEN: 'P2_BROWSER_CONSUMER_AUTHORIZE_BOUNDARY_REOPEN_GATE',
+  AUTH_SECRET_CANONICAL_RECONCILIATION: 'P2_AUTH_HEADER_SECRET_MINIMUM_REMEDIATION_GATE',
+  API_ORIGIN_REBIND: 'P2_CONSUMER_API_ORIGIN_MINIMUM_REMEDIATION_GATE',
+  MULTIPLE_CONFIGURATION_REVIEW: 'P2_MULTIPLE_CONFIG_MISMATCH_CONTROL_TOWER_REVIEW',
+  AUTHORIZE_BOUNDARY_REOPEN: 'P2_AUTHORIZE_RUNTIME_BOUNDARY_REOPEN_GATE',
   VERCEL_READ_CREDENTIAL_SCOPE_RECOVERY: 'P2_VERCEL_READ_CREDENTIAL_SCOPE_RECOVERY_GATE',
   NONE_EVIDENCE: 'NONE_EVIDENCE_INSUFFICIENT',
 });
@@ -311,6 +325,7 @@ export function classifySecretBinding({ githubSecret, resolution }) {
     vercelEnvKeyConfigured: Boolean(resolution?.entry),
     effectiveScope: resolution?.scope ?? 'MISSING',
     equality,
+    envCreatedAt: resolution?.entry?.createdAt ?? null,
     envUpdatedAt: resolution?.entry?.updatedAt ?? null,
   };
 }
@@ -329,6 +344,17 @@ export function classifyUpdatedRelativeToDeployment(value, deploymentCreatedAt) 
   const created = asDate(deploymentCreatedAt);
   if (!updated || !created) return DEPLOYMENT_RELATIVE_CLASSES.UNKNOWN;
   return updated.getTime() <= created.getTime()
+    ? DEPLOYMENT_RELATIVE_CLASSES.BEFORE_OR_AT
+    : DEPLOYMENT_RELATIVE_CLASSES.AFTER;
+}
+
+export function classifyEnvBindingRelativeToDeployment({ createdAt, updatedAt }, deploymentCreatedAt) {
+  const envCreated = asDate(createdAt);
+  const envUpdated = asDate(updatedAt);
+  const deploymentCreated = asDate(deploymentCreatedAt);
+  if (!envCreated || !envUpdated || !deploymentCreated) return DEPLOYMENT_RELATIVE_CLASSES.UNKNOWN;
+  return envCreated.getTime() <= deploymentCreated.getTime()
+    && envUpdated.getTime() <= deploymentCreated.getTime()
     ? DEPLOYMENT_RELATIVE_CLASSES.BEFORE_OR_AT
     : DEPLOYMENT_RELATIVE_CLASSES.AFTER;
 }
@@ -453,8 +479,14 @@ function exactSecretProof(secretBinding, secretRelative) {
     && secretRelative === DEPLOYMENT_RELATIVE_CLASSES.BEFORE_OR_AT;
 }
 
-export function classifyDiscrimination({ secretBinding, secretUpdatedRelative, apiOriginClassification }) {
-  const secretProof = exactSecretProof(secretBinding, secretUpdatedRelative);
+export function classifyDiscrimination({
+  secretBinding,
+  secretUpdatedRelative,
+  secretBindingRelative,
+  apiOriginClassification,
+}) {
+  const resolvedSecretRelative = secretBindingRelative ?? secretUpdatedRelative;
+  const secretProof = exactSecretProof(secretBinding, resolvedSecretRelative);
   const secretMismatchProven = secretProof && secretBinding.equality === SECRET_EQUALITIES.MISMATCH;
   const secretMatchProven = secretProof && secretBinding.equality === SECRET_EQUALITIES.MATCH;
   const apiOriginMatch = apiOriginClassification === ORIGIN_CLASSIFICATIONS.MATCH;
@@ -464,28 +496,46 @@ export function classifyDiscrimination({ secretBinding, secretUpdatedRelative, a
 
   if (secretMismatchProven && apiOriginMismatch) {
     return {
-      status: STATUSES.INCONCLUSIVE,
+      status: STATUSES.MULTIPLE_CONFIGURATION_MISMATCH,
       rootCauseClass: ROOT_CAUSES.NOT_CLASSIFIED,
       eliminatedCandidates: [],
       remainingCandidates: [secretCandidate, originCandidate],
-      nextGate: NEXT_GATES.NONE_EVIDENCE,
+      nextGate: NEXT_GATES.MULTIPLE_CONFIGURATION_REVIEW,
     };
   }
   if (secretMismatchProven) {
+    if (!apiOriginMatch) {
+      return {
+        status: STATUSES.PARTIAL_CONFIGURATION,
+        rootCauseClass: ROOT_CAUSES.NOT_CLASSIFIED,
+        eliminatedCandidates: [],
+        remainingCandidates: [originCandidate],
+        nextGate: NEXT_GATES.NONE_EVIDENCE,
+      };
+    }
     return {
       status: STATUSES.SECRET_MISMATCH_CONFIRMED,
       rootCauseClass: ROOT_CAUSES.AUTH_HEADER_SECRET_MISMATCH,
-      eliminatedCandidates: apiOriginMatch ? [originCandidate] : [],
-      remainingCandidates: apiOriginMatch ? [] : [originCandidate],
+      eliminatedCandidates: [originCandidate],
+      remainingCandidates: [],
       nextGate: NEXT_GATES.AUTH_SECRET_CANONICAL_RECONCILIATION,
     };
   }
   if (apiOriginMismatch) {
+    if (!secretMatchProven) {
+      return {
+        status: STATUSES.PARTIAL_CONFIGURATION,
+        rootCauseClass: ROOT_CAUSES.NOT_CLASSIFIED,
+        eliminatedCandidates: [],
+        remainingCandidates: [secretCandidate],
+        nextGate: NEXT_GATES.NONE_EVIDENCE,
+      };
+    }
     return {
       status: STATUSES.API_ORIGIN_MISMATCH_CONFIRMED,
       rootCauseClass: ROOT_CAUSES.CONSUMER_API_ORIGIN_MISMATCH,
-      eliminatedCandidates: secretMatchProven ? [secretCandidate] : [],
-      remainingCandidates: secretMatchProven ? [] : [secretCandidate],
+      eliminatedCandidates: [secretCandidate],
+      remainingCandidates: [],
       nextGate: NEXT_GATES.API_ORIGIN_REBIND,
     };
   }
@@ -500,26 +550,34 @@ export function classifyDiscrimination({ secretBinding, secretUpdatedRelative, a
   }
   if (secretMatchProven) {
     return {
-      status: STATUSES.API_ORIGIN_NOT_PROVEN,
+      status: STATUSES.PARTIAL_CONFIGURATION,
       rootCauseClass: ROOT_CAUSES.NOT_CLASSIFIED,
       eliminatedCandidates: [secretCandidate],
       remainingCandidates: [originCandidate],
       nextGate: NEXT_GATES.NONE_EVIDENCE,
     };
   }
-  if ((secretBinding?.equality === SECRET_EQUALITIES.MATCH
-    || secretBinding?.equality === SECRET_EQUALITIES.MISMATCH)
-    && secretUpdatedRelative !== DEPLOYMENT_RELATIVE_CLASSES.BEFORE_OR_AT) {
+  if (apiOriginMatch) {
     return {
-      status: STATUSES.SECRET_BINDING_NOT_PROVEN,
+      status: STATUSES.PARTIAL_CONFIGURATION,
       rootCauseClass: ROOT_CAUSES.NOT_CLASSIFIED,
-      eliminatedCandidates: apiOriginMatch ? [originCandidate] : [],
-      remainingCandidates: apiOriginMatch ? [secretCandidate] : [secretCandidate, originCandidate],
+      eliminatedCandidates: [originCandidate],
+      remainingCandidates: [secretCandidate],
+      nextGate: NEXT_GATES.NONE_EVIDENCE,
+    };
+  }
+  if (secretBinding?.equality === SECRET_EQUALITIES.MATCH
+    || secretBinding?.equality === SECRET_EQUALITIES.MISMATCH) {
+    return {
+      status: STATUSES.PARTIAL_CONFIGURATION,
+      rootCauseClass: ROOT_CAUSES.NOT_CLASSIFIED,
+      eliminatedCandidates: [],
+      remainingCandidates: [secretCandidate, originCandidate],
       nextGate: NEXT_GATES.NONE_EVIDENCE,
     };
   }
   return {
-    status: STATUSES.INCONCLUSIVE,
+    status: STATUSES.ENV_VALUE_READ_INSUFFICIENT,
     rootCauseClass: ROOT_CAUSES.NOT_CLASSIFIED,
     eliminatedCandidates: [],
     remainingCandidates: [secretCandidate, originCandidate],
@@ -623,13 +681,13 @@ function createEndpointMatrix() {
       stage: READ_STAGES.DEPLOYMENT_FILES,
       endpointFamily: 'v6 files',
       httpStatus: null,
-      result: 'NOT_PROBED',
+      result: DEPLOYMENT_FILE_RESULTS.NOT_APPLICABLE_GIT_SOURCE,
     },
     deploymentFileContent: {
       stage: READ_STAGES.DEPLOYMENT_FILE_CONTENT,
       endpointFamily: 'v8 file content',
       httpStatus: null,
-      result: 'NOT_PROBED',
+      result: DEPLOYMENT_FILE_RESULTS.NOT_APPLICABLE_GIT_SOURCE,
     },
   };
 }
@@ -657,6 +715,7 @@ function emptySecretBindingEvidence() {
     effectiveScope: 'MISSING',
     equality: SECRET_EQUALITIES.NOT_PROVEN,
     envUpdatedRelativeToDeployment: DEPLOYMENT_RELATIVE_CLASSES.UNKNOWN,
+    envDeploymentBinding: DEPLOYMENT_RELATIVE_CLASSES.UNKNOWN,
     rawSecretExposed: 'NO',
   };
 }
@@ -669,6 +728,7 @@ function emptyApiOriginEvidence() {
     exactDeploymentClassification: ORIGIN_CLASSIFICATIONS.NOT_PROVEN,
     currentBranchEnvClassification: 'CURRENT_API_ORIGIN_NOT_PROVEN',
     envUpdatedRelativeToDeployment: DEPLOYMENT_RELATIVE_CLASSES.UNKNOWN,
+    envDeploymentBinding: DEPLOYMENT_RELATIVE_CLASSES.UNKNOWN,
     serverBundleEvidence: 'NOT_AVAILABLE',
   };
 }
@@ -682,6 +742,7 @@ function projectEnvPayload(payload) {
         target: entry.target,
         gitBranch: entry.gitBranch,
         value: entry.value,
+        createdAt: entry.createdAt,
         updatedAt: entry.updatedAt,
       })),
   };
@@ -698,6 +759,23 @@ function finalStatusForClassification(classification) {
   if (classification.status === STATUSES.BOTH_MATCH) return FINAL_STATUSES.BOTH_MATCH;
   if (classification.rootCauseClass !== ROOT_CAUSES.NOT_CLASSIFIED) return FINAL_STATUSES.COMPLETED;
   return FINAL_STATUSES.INCONCLUSIVE;
+}
+
+function finalClassificationForClassification(classification) {
+  if (classification.status === STATUSES.SECRET_MISMATCH_CONFIRMED) {
+    return FINAL_STATUSES.SECRET_MISMATCH_CONFIRMED;
+  }
+  if (classification.status === STATUSES.API_ORIGIN_MISMATCH_CONFIRMED) {
+    return FINAL_STATUSES.API_ORIGIN_MISMATCH_CONFIRMED;
+  }
+  if (classification.status === STATUSES.MULTIPLE_CONFIGURATION_MISMATCH) {
+    return FINAL_STATUSES.MULTIPLE_CONFIGURATION_MISMATCH;
+  }
+  if (classification.status === STATUSES.BOTH_MATCH) return FINAL_STATUSES.CONFIGURATION_MATCHED;
+  if (classification.status === STATUSES.PARTIAL_CONFIGURATION) {
+    return FINAL_STATUSES.PARTIAL_CONFIGURATION;
+  }
+  return FINAL_STATUSES.ENV_VALUE_READ_INSUFFICIENT;
 }
 
 function failureStatusForProbe(probe, fallback = STATUSES.SAFETY_FAILED) {
@@ -921,71 +999,29 @@ export async function collectDiscriminationEvidence({
   const secretResolution = resolvePreviewEnvEntry(filteredEnvPayload, VERCEL_SECRET_KEY, branch);
   const apiResolution = resolvePreviewEnvEntry(filteredEnvPayload, 'NEXT_PUBLIC_API_URL', branch);
   const secretBinding = classifySecretBinding({ githubSecret, resolution: secretResolution });
-  const secretUpdatedRelative = classifyUpdatedRelativeToDeployment(
-    secretBinding.envUpdatedAt,
-    deploymentCreatedAt,
-  );
+  const secretBindingRelative = classifyEnvBindingRelativeToDeployment({
+    createdAt: secretBinding.envCreatedAt,
+    updatedAt: secretBinding.envUpdatedAt,
+  }, deploymentCreatedAt);
   const currentApiOriginClassification = classifyCurrentApiOrigin(apiResolution);
-  const apiUpdatedRelative = classifyUpdatedRelativeToDeployment(
-    apiResolution.entry?.updatedAt,
-    deploymentCreatedAt,
-  );
+  const apiBindingRelative = classifyEnvBindingRelativeToDeployment({
+    createdAt: apiResolution.entry?.createdAt,
+    updatedAt: apiResolution.entry?.updatedAt,
+  }, deploymentCreatedAt);
   const envExactOriginClassification = exactOriginFromEnv(
     currentApiOriginClassification,
-    apiUpdatedRelative,
+    apiBindingRelative,
   );
-  let apiOriginEvidence = {
+  const apiOriginEvidence = {
     serverBundleInspected: false,
     markerFound: false,
     classification: envExactOriginClassification ?? ORIGIN_CLASSIFICATIONS.NOT_PROVEN,
-    serverBundleEvidence: envExactOriginClassification ? 'NOT_REQUIRED' : 'NOT_AVAILABLE',
+    serverBundleEvidence: envExactOriginClassification
+      ? 'NOT_REQUIRED'
+      : DEPLOYMENT_FILE_RESULTS.NOT_APPLICABLE_GIT_SOURCE,
   };
-  let deploymentFilesRequired = !envExactOriginClassification;
-  let deploymentFilesAvailable = false;
-
-  if (deploymentFilesRequired) {
-    const filesProbe = await probeJsonEndpoint({
-      fetchImpl,
-      token: vercelToken,
-      pathname: `/v6/deployments/${encodeURIComponent(CONSUMER_DEPLOYMENT_ID)}/files`,
-      stage: READ_STAGES.DEPLOYMENT_FILES,
-    });
-    deploymentFilesAvailable = filesProbe.ok;
-    recordEndpoint(
-      endpointMatrix,
-      'deploymentFiles',
-      filesProbe,
-      filesProbe.httpStatus === 404 ? 'NOT_AVAILABLE' : endpointResult(filesProbe),
-    );
-    if (filesProbe.ok) {
-      try {
-        const bundleEvidence = await inspectExactDeploymentApiOrigin({
-          filesPayload: filesProbe.payload,
-          fetchImpl,
-          token: vercelToken,
-        });
-        apiOriginEvidence = bundleEvidence;
-        recordEndpoint(
-          endpointMatrix,
-          'deploymentFileContent',
-          {
-            ok: bundleEvidence.serverBundleInspected,
-            httpStatus: 200,
-          },
-          bundleEvidence.serverBundleInspected ? 'PASS' : 'NOT_AVAILABLE',
-        );
-      } catch (error) {
-        recordEndpoint(
-          endpointMatrix,
-          'deploymentFileContent',
-          { ok: false, httpStatus: Number.isInteger(error?.httpStatus) ? error.httpStatus : null },
-          'NOT_AVAILABLE',
-        );
-      } finally {
-        filesProbe.payload = null;
-      }
-    }
-  }
+  const deploymentFilesRequired = false;
+  const deploymentFilesAvailable = false;
 
   secretResolution.entry = null;
   apiResolution.entry = null;
@@ -995,7 +1031,7 @@ export async function collectDiscriminationEvidence({
     ?? apiOriginEvidence.classification;
   const classification = classifyDiscrimination({
     secretBinding,
-    secretUpdatedRelative,
+    secretBindingRelative,
     apiOriginClassification: exactApiOriginClassification,
   });
 
@@ -1009,12 +1045,14 @@ export async function collectDiscriminationEvidence({
     readPath: envReadPath,
     deploymentFilesRequired,
     deploymentFilesAvailable,
+    finalClassification: finalClassificationForClassification(classification),
     secretBindingEvidence: {
       githubSecretConfigured: secretBinding.githubSecretConfigured,
       vercelEnvKeyConfigured: secretBinding.vercelEnvKeyConfigured,
       effectiveScope: secretBinding.effectiveScope,
       equality: secretBinding.equality,
-      envUpdatedRelativeToDeployment: secretUpdatedRelative,
+      envUpdatedRelativeToDeployment: secretBindingRelative,
+      envDeploymentBinding: secretBindingRelative,
       rawSecretExposed: 'NO',
     },
     apiOriginEvidence: {
@@ -1023,7 +1061,8 @@ export async function collectDiscriminationEvidence({
       markerFound: apiOriginEvidence.markerFound,
       exactDeploymentClassification: apiOriginEvidence.classification,
       currentBranchEnvClassification: currentApiOriginClassification,
-      envUpdatedRelativeToDeployment: apiUpdatedRelative,
+      envUpdatedRelativeToDeployment: apiBindingRelative,
+      envDeploymentBinding: apiBindingRelative,
       serverBundleEvidence: apiOriginEvidence.serverBundleEvidence,
     },
     rootCauseClass: classification.rootCauseClass,
