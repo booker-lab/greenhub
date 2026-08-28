@@ -720,13 +720,15 @@ async function runVercelEnvRun({ vercelToken, branch, runCommand = VERCEL_ENV_RU
   let tempDirectory;
   try {
     tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'greenhub-p2-selected-env-'));
-    const envRunEnvironment = {
+    const inheritedEnvironment = {
       ...process.env,
       VERCEL_ORG_ID: VERCEL_TEAM_ID,
       VERCEL_PROJECT_ID,
     };
-    delete envRunEnvironment.E2E_TEST_SECRET;
-    delete envRunEnvironment.NEXT_PUBLIC_API_URL;
+    const envRunEnvironment = Object.fromEntries(
+      Object.entries(inheritedEnvironment)
+        .filter(([key]) => key !== 'E2E_TEST_SECRET' && key !== 'NEXT_PUBLIC_API_URL'),
+    );
     const { stdout } = await execFileAsync(runCommand, [
       '--token', vercelToken,
       '--non-interactive',
