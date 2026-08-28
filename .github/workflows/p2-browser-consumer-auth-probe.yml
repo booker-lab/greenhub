@@ -1,0 +1,149 @@
+name: P2 Browser Consumer Auth Probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: '검증할 애플리케이션 exact SHA'
+        required: true
+        type: string
+      approval:
+        description: '비운영 Consumer 인증 probe를 승인합니다.'
+        required: true
+        type: choice
+        options:
+          - NON_PRODUCTION_AUTH_PROBE_APPROVED
+
+concurrency:
+  group: p2-browser-consumer-auth-probe
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  statuses: read
+
+jobs:
+  approval_gate:
+    name: 비운영 인증 probe 승인 사전 검증
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: 수동 실행자·승인·애플리케이션 SHA 검증
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          APPROVAL: ${{ inputs.approval }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch 이외의 이벤트에서는 probe를 실행할 수 없습니다.' >&2
+            exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow 실행자가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow triggering actor가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$APPROVAL" != 'NON_PRODUCTION_AUTH_PROBE_APPROVED' ]]; then
+            echo '비운영 인증 probe 수동 승인이 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$EXPECTED_SHA" != '9fda1a0909644cb77a223941f28266f7af69cdf9' ]]; then
+            echo '애플리케이션 authority SHA가 아니므로 실행을 차단합니다.' >&2
+            exit 1
+          fi
+
+  controlled_probe:
+    name: Consumer 인증 controlled runtime probe
+    needs: approval_gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: round-direct-e2e
+    permissions:
+      contents: read
+      statuses: read
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      EVIDENCE_FILE: .artifacts/p2-browser-consumer-auth-probe/exact-v2-evidence.json
+      PROBE_RESULT_FILE: .artifacts/p2-browser-consumer-auth-probe/probe-result.json
+      GITHUB_TOKEN: ${{ github.token }}
+      ROUND_DIRECT_E2E_VERCEL_READ_TOKEN: ${{ secrets.ROUND_DIRECT_E2E_VERCEL_READ_TOKEN }}
+      ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET }}
+      ROUND_DIRECT_E2E_TEST_SECRET: ${{ secrets.ROUND_DIRECT_E2E_TEST_SECRET }}
+      ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM }}
+      ROUND_DIRECT_E2E_CONSUMER_PASSWORD_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_PASSWORD_CHROMIUM }}
+    steps:
+      - name: 진단 workflow checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Node.js 준비
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Evidence V2 exact deployment readiness 검증
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$EVIDENCE_FILE")"
+          set +e
+          node scripts/verify-vercel-preview-evidence.mjs \
+            --sha="$EXPECTED_SHA" \
+            --json \
+            > "$EVIDENCE_FILE"
+          verifier_status=$?
+          set -e
+          if [[ "$verifier_status" -ne 0 ]]; then
+            echo 'Evidence V2가 ready가 아니므로 Consumer 인증 probe를 실행하지 않습니다.' >&2
+            exit "$verifier_status"
+          fi
+          node --input-type=module - "$EVIDENCE_FILE" "$EXPECTED_SHA" <<'NODE'
+          import fs from 'node:fs';
+          import { validateExactV2Evidence } from './scripts/probe-round-direct-consumer-auth.mjs';
+
+          const [file, expectedSha] = process.argv.slice(2);
+          try {
+            validateExactV2Evidence(JSON.parse(fs.readFileSync(file, 'utf8')), expectedSha);
+          } catch {
+            console.error('Consumer exact V2 evidence 계약이 충족되지 않았습니다.');
+            process.exit(1);
+          }
+          NODE
+
+      - name: no-follow Consumer authentication probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$PROBE_RESULT_FILE")"
+          set +e
+          node scripts/probe-round-direct-consumer-auth.mjs \
+            --expected-sha="$EXPECTED_SHA" \
+            --evidence-file="$EVIDENCE_FILE" \
+            > "$PROBE_RESULT_FILE"
+          probe_status=$?
+          set -e
+          if [[ ! -s "$PROBE_RESULT_FILE" ]]; then
+            echo 'Consumer 인증 probe 결과가 없어 실행을 실패 처리합니다.' >&2
+            exit 1
+          fi
+          exit "$probe_status"
+
+      - name: 비민감 진단 결과 artifact 업로드
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: p2-browser-consumer-auth-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/p2-browser-consumer-auth-probe/
+          if-no-files-found: warn
+          retention-days: 7
