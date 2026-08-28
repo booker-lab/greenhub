@@ -72,7 +72,7 @@ export const FINAL_STATUSES = Object.freeze({
   BOTH_MATCH: 'CONFIGURATION_MATCHED_AUTHORIZE_RUNTIME_BOUNDARY_REQUIRED',
   CONFIGURATION_MATCHED: 'CONFIGURATION_MATCHED_AUTHORIZE_RUNTIME_BOUNDARY_REQUIRED',
   PARTIAL_CONFIGURATION: 'PARTIAL_CONFIGURATION_DISCRIMINATION',
-  ENV_VALUE_READ_INSUFFICIENT: 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE',
+  EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY: 'EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY',
   ENV_READ_CAPABILITY_REQUIRED: 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE',
   PROJECT_SCOPE_READ_MISMATCH: 'DIAGNOSTIC_AUTHORITY_MISMATCH',
   READ_CREDENTIAL_SCOPE_INVALID_OR_CHANGED: 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE',
@@ -1090,7 +1090,7 @@ function finalStatusForClassification(classification) {
   if (classification.status === STATUSES.API_ORIGIN_MISMATCH_CONFIRMED) return FINAL_STATUSES.API_ORIGIN_MISMATCH_CONFIRMED;
   if (classification.status === STATUSES.MULTIPLE_CONFIGURATION_MISMATCH) return FINAL_STATUSES.MULTIPLE_CONFIGURATION_MISMATCH;
   if (classification.status === STATUSES.PARTIAL_CONFIGURATION) return FINAL_STATUSES.PARTIAL_CONFIGURATION;
-  return FINAL_STATUSES.ENV_VALUE_READ_INSUFFICIENT;
+  return FINAL_STATUSES.EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY;
 }
 
 function finalClassificationForClassification(classification) {
@@ -1107,7 +1107,7 @@ function finalClassificationForClassification(classification) {
   if (classification.status === STATUSES.PARTIAL_CONFIGURATION) {
     return FINAL_STATUSES.PARTIAL_CONFIGURATION;
   }
-  return FINAL_STATUSES.ENV_VALUE_READ_INSUFFICIENT;
+  return FINAL_STATUSES.EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY;
 }
 
 function failureStatusForProbe(probe, fallback = STATUSES.SAFETY_FAILED) {
@@ -1128,7 +1128,7 @@ function safeFailureResult(error = {}, context = {}) {
     : status === STATUSES.ENV_READ_CAPABILITY_REQUIRED
       || status === STATUSES.READ_CREDENTIAL_SCOPE_INVALID_OR_CHANGED
       || status === STATUSES.SAFETY_FAILED
-      ? FINAL_STATUSES.ENV_VALUE_READ_INSUFFICIENT
+      ? FINAL_STATUSES.EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY
       : status;
   const endpointMatrix = context.endpointMatrix ?? createEndpointMatrix();
   const recoveryRequired = status === STATUSES.ENV_READ_CAPABILITY_REQUIRED
@@ -1640,7 +1640,7 @@ export async function collectDiscriminationEvidence({
   const permissionFailure = Object.values(endpointMatrix).some((entry) => entry?.result === VALUE_READ_RESULTS.HTTP_401
     || entry?.result === VALUE_READ_RESULTS.HTTP_403);
   const finalStatus = capabilityUnavailable
-    ? FINAL_STATUSES.ENV_VALUE_READ_INSUFFICIENT
+    ? FINAL_STATUSES.EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY
     : finalStatusForClassification(classification);
   const nextGate = capabilityUnavailable
     ? (permissionFailure
@@ -1722,11 +1722,10 @@ export async function collectDiscriminationEvidence({
       browserE2eNewRuns: 0,
     },
     mutationCheck: mutationCheck(),
-    finalControlTowerSignal: finalStatus === FINAL_STATUSES.BOTH_MATCH
-      ? 'CONSUMER_AUTHORIZE_BOUNDARY_REOPEN_REQUIRED'
-      : classification.rootCauseClass === ROOT_CAUSES.NOT_CLASSIFIED
-        ? 'CONTROL_TOWER_STOP_REQUIRED'
-        : 'CONSUMER_AUTH_ROOT_CAUSE_CONFIRMED',
+    finalControlTowerSignal: finalStatus === FINAL_STATUSES.EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY
+      || classification.rootCauseClass === ROOT_CAUSES.NOT_CLASSIFIED
+      ? 'EXTERNAL DECISION REQUIRED'
+      : 'CLOSED',
   };
 }
 

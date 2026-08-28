@@ -303,7 +303,7 @@ describe('Vercel 읽기 경로 복구와 단계별 실패 귀속', () => {
   it('deployment 404를 DEPLOYMENT_METADATA 단계로 귀속한다', async () => {
     const { promise } = collect({ deploymentStatus: 404 });
     const result = await promise;
-    assert.equal(result.status, 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE');
+    assert.equal(result.status, 'EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY');
     assert.equal(result.failureCode, 'VERCEL_READ_CREDENTIAL_SCOPE_INVALID_OR_CHANGED');
     assert.deepEqual(result.failure, { stage: READ_STAGES.DEPLOYMENT_METADATA, httpStatus: 404 });
     assert.equal(result.endpointMatrix.deploymentMetadata.httpStatus, 404);
@@ -356,7 +356,7 @@ describe('Vercel 읽기 경로 복구와 단계별 실패 귀속', () => {
   it('V10·V9 metadata가 모두 404이면 환경변수 읽기 capability 부족으로 닫는다', async () => {
     const { promise, calls } = collect({ envV10Status: 404, envV9Status: 404 });
     const result = await promise;
-    assert.equal(result.status, 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE');
+    assert.equal(result.status, 'EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY');
     assert.equal(result.failureCode, 'VERCEL_ENV_READ_CAPABILITY_MISSING');
     assert.equal(result.nextGate, 'P2_RUNTIME_EFFECTIVE_ENV_COMPARISON_CONTROL_TOWER_REVIEW');
     assert.equal(result.endpointMatrix.envV10Metadata.httpStatus, 404);
@@ -429,7 +429,8 @@ describe('선택된 환경 변수 값 읽기 capability', () => {
     assert.equal(result.endpointMatrix.envV10DecryptedCliSource.result, VALUE_READ_RESULTS.HTTP_200_VALUE_UNAVAILABLE);
     assert.equal(result.endpointMatrix.envV10DecryptedCliSource.keys.E2E_TEST_SECRET.valueAvailable, 'NO');
     assert.equal(result.endpointMatrix.envV10DecryptedCliSource.keys[API_ORIGIN_ENV_KEY].valueAvailable, 'NO');
-    assert.equal(result.status, 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE');
+    assert.equal(result.status, 'EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY');
+    assert.equal(result.finalControlTowerSignal, 'EXTERNAL DECISION REQUIRED');
   });
 
   it('V10 CLI source decrypt 요청에 정확한 source와 branch 필터를 포함한다', async () => {
@@ -506,7 +507,7 @@ describe('선택된 환경 변수 값 읽기 capability', () => {
     const result = await promise;
     assert.equal(result.endpointMatrix.selectedSecretProjectEnv.result, VALUE_READ_RESULTS.HTTP_401);
     assert.equal(result.endpointMatrix.selectedApiOriginProjectEnv.result, VALUE_READ_RESULTS.HTTP_403);
-    assert.equal(result.status, 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE');
+    assert.equal(result.status, 'EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY');
     assert.equal(result.nextGate, 'P2_VERCEL_SELECTED_ENV_VALUE_PERMISSION_RECOVERY_GATE');
   });
 
@@ -644,7 +645,7 @@ describe('선택된 환경 변수 값 읽기 capability', () => {
     const result = await promise;
     assert.equal(result.secretBindingEvidence.selectedRowUnchanged, 'NO');
     assert.equal(result.apiOriginEvidence.selectedRowUnchanged, 'NO');
-    assert.equal(result.status, 'SELECTED_ENV_VALUE_READ_CAPABILITY_UNAVAILABLE');
+    assert.equal(result.status, 'EXTERNAL_VALUE_READ_CAPABILITY_BOUNDARY');
     assert.equal(result.nextGate, 'P2_RUNTIME_EFFECTIVE_ENV_COMPARISON_CONTROL_TOWER_REVIEW');
   });
 });
