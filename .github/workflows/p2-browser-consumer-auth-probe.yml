@@ -13,6 +13,11 @@ on:
         type: choice
         options:
           - NON_PRODUCTION_AUTH_PROBE_APPROVED
+  push:
+    branches:
+      - codex/p2-browser-consumer-auth-probe
+    paths:
+      - .github/workflows/p2-browser-consumer-auth-probe.yml
 
 concurrency:
   group: p2-browser-consumer-auth-probe
@@ -36,24 +41,31 @@ jobs:
           ACTOR: ${{ github.actor }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
           APPROVAL: ${{ inputs.approval }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXPECTED_SHA: ${{ inputs.expected_sha || '9fda1a0909644cb77a223941f28266f7af69cdf9' }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
-            echo 'workflow_dispatch 이외의 이벤트에서는 probe를 실행할 수 없습니다.' >&2
-            exit 1
-          fi
-          if [[ "$ACTOR" != "$REPOSITORY_OWNER" ]]; then
-            echo 'workflow 실행자가 repository owner와 달라 실행을 차단합니다.' >&2
-            exit 1
-          fi
-          if [[ "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
-            echo 'workflow triggering actor가 repository owner와 달라 실행을 차단합니다.' >&2
-            exit 1
-          fi
-          if [[ "$APPROVAL" != 'NON_PRODUCTION_AUTH_PROBE_APPROVED' ]]; then
-            echo '비운영 인증 probe 수동 승인이 없어 실행을 차단합니다.' >&2
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            if [[ "$ACTOR" != "$REPOSITORY_OWNER" ]]; then
+              echo 'workflow 실행자가 repository owner와 달라 실행을 차단합니다.' >&2
+              exit 1
+            fi
+            if [[ "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+              echo 'workflow triggering actor가 repository owner와 달라 실행을 차단합니다.' >&2
+              exit 1
+            fi
+            if [[ "$APPROVAL" != 'NON_PRODUCTION_AUTH_PROBE_APPROVED' ]]; then
+              echo '비운영 인증 probe 수동 승인이 없어 실행을 차단합니다.' >&2
+              exit 1
+            fi
+          elif [[ "$EVENT_NAME" == 'push' ]]; then
+            if [[ "$REF" != 'refs/heads/codex/p2-browser-consumer-auth-probe' ]]; then
+              echo '진단 브랜치 push가 아니므로 실행을 차단합니다.' >&2
+              exit 1
+            fi
+          else
+            echo '허용되지 않은 이벤트에서는 probe를 실행할 수 없습니다.' >&2
             exit 1
           fi
           if [[ "$EXPECTED_SHA" != '9fda1a0909644cb77a223941f28266f7af69cdf9' ]]; then
@@ -72,7 +84,7 @@ jobs:
       contents: read
       statuses: read
     env:
-      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      EXPECTED_SHA: ${{ inputs.expected_sha || '9fda1a0909644cb77a223941f28266f7af69cdf9' }}
       EVIDENCE_FILE: .artifacts/p2-browser-consumer-auth-probe/exact-v2-evidence.json
       PROBE_RESULT_FILE: .artifacts/p2-browser-consumer-auth-probe/probe-result.json
       GITHUB_TOKEN: ${{ github.token }}
