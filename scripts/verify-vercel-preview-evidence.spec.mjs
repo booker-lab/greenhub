@@ -397,6 +397,64 @@ describe('Vercel API HTTP와 metadata fail-closed 계약', () => {
     );
   });
 
+  it('nested team.id만 있어도 direct Git Team identity를 검증한다', async () => {
+    const { promise } = runVerification({
+      deploymentOverrides: {
+        consumer: { teamId: null, team: { id: VERCEL_TEAM_ID } },
+      },
+    });
+    const evidence = await promise;
+    assert.equal(evidence.apps.find((app) => app.app === 'consumer').deploymentProvenance, 'DIRECT_GIT');
+  });
+
+  it('top-level teamId와 nested team.id가 모두 expected면 통과시킨다', async () => {
+    const { promise } = runVerification({
+      deploymentOverrides: {
+        consumer: { team: { id: VERCEL_TEAM_ID } },
+      },
+    });
+    await promise;
+  });
+
+  it('direct Git의 optional Team identity 누락은 기존 의미대로 허용한다', async () => {
+    const { promise } = runVerification({
+      deploymentOverrides: {
+        consumer: { teamId: null },
+      },
+    });
+    await promise;
+  });
+
+  it('nested team.id가 틀리거나 형식이 잘못되면 닫는다', async () => {
+    await assertFailure(
+      runVerification({
+        deploymentOverrides: {
+          consumer: { teamId: null, team: { id: 'team_wrong' } },
+        },
+      }).promise,
+      'VERCEL_TEAM_ID_MISMATCH',
+    );
+    await assertFailure(
+      runVerification({
+        deploymentOverrides: {
+          consumer: { teamId: null, team: { id: 123 } },
+        },
+      }).promise,
+      'VERCEL_TEAM_ID_MISMATCH',
+    );
+  });
+
+  it('top-level과 nested Team identity가 충돌하면 모호한 증거로 닫는다', async () => {
+    await assertFailure(
+      runVerification({
+        deploymentOverrides: {
+          consumer: { team: { id: 'team_wrong' } },
+        },
+      }).promise,
+      'VERCEL_TEAM_ID_AMBIGUOUS',
+    );
+  });
+
   it('direct Git source·target·READY state 계약을 확인한다', async () => {
     await assertFailure(
       runVerification({ deploymentOverrides: { consumer: { source: 'cli' } } }).promise,
@@ -491,6 +549,60 @@ describe('Vercel redeploy provenance lineage fail-closed 계약', () => {
     assert.equal(calls.length, 5);
     assert.match(calls[1].url, /dpl_ConsumerRedeploy123/);
     assert.match(calls[2].url, /dpl_HxPNRSfPztdLxCKp9Tr5d271C4kn/);
+  });
+
+  it('current redeploy가 nested team.id만 제공해도 통과시킨다', async () => {
+    const { promise } = runRedeployVerification({
+      currentOverrides: { teamId: null, team: { id: VERCEL_TEAM_ID } },
+    });
+    const evidence = await promise;
+    assert.equal(evidence.apps[0].deploymentProvenance, 'VERIFIED_GIT_REDEPLOY_LINEAGE');
+  });
+
+  it('original direct-Git deployment이 nested team.id만 제공해도 통과시킨다', async () => {
+    const { promise } = runRedeployVerification({
+      originalOverrides: { teamId: null, team: { id: VERCEL_TEAM_ID } },
+    });
+    const evidence = await promise;
+    assert.equal(evidence.apps[0].deploymentProvenance, 'VERIFIED_GIT_REDEPLOY_LINEAGE');
+  });
+
+  it('current와 original이 모두 nested team.id를 제공하면 lineage를 검증한다', async () => {
+    const { promise } = runRedeployVerification({
+      currentOverrides: { teamId: null, team: { id: VERCEL_TEAM_ID } },
+      originalOverrides: { teamId: null, team: { id: VERCEL_TEAM_ID } },
+    });
+    const evidence = await promise;
+    assert.equal(evidence.apps[0].deploymentProvenance, 'VERIFIED_GIT_REDEPLOY_LINEAGE');
+  });
+
+  it('required current Team identity가 없으면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ currentOverrides: { teamId: null } }).promise,
+      'VERCEL_TEAM_ID_MISSING',
+    );
+  });
+
+  it('required original Team identity가 없으면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ originalOverrides: { teamId: null } }).promise,
+      'VERCEL_TEAM_ID_MISSING',
+    );
+  });
+
+  it('current 또는 original Team identity mismatch를 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({
+        currentOverrides: { teamId: null, team: { id: 'team_wrong' } },
+      }).promise,
+      'VERCEL_TEAM_ID_MISMATCH',
+    );
+    await assertFailure(
+      runRedeployVerification({
+        originalOverrides: { teamId: null, team: { id: 'team_wrong' } },
+      }).promise,
+      'VERCEL_TEAM_ID_MISMATCH',
+    );
   });
 
   it('originalDeploymentId가 없으면 non-git deployment를 허용하지 않는다', async () => {

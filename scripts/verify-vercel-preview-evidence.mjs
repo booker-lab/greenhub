@@ -243,6 +243,47 @@ function validateReadyState(deployment, application) {
   }
 }
 
+function validateTeamIdentity(application, deployment, { requireTeamId = false } = {}) {
+  const topLevelTeamId = deployment?.teamId;
+  const nestedTeam = deployment?.team;
+  if (
+    nestedTeam !== undefined &&
+    nestedTeam !== null &&
+    (typeof nestedTeam !== 'object' || Array.isArray(nestedTeam))
+  ) {
+    fail(
+      'VERCEL_TEAM_ID_MISMATCH',
+      `${application.app} Vercel team identity 구조가 잘못되었습니다.`,
+    );
+  }
+
+  const hasTopLevelTeamId = topLevelTeamId !== undefined && topLevelTeamId !== null;
+  const hasNestedTeamId =
+    nestedTeam !== undefined &&
+    nestedTeam !== null &&
+    Object.prototype.hasOwnProperty.call(nestedTeam, 'id');
+  const nestedTeamId = hasNestedTeamId ? nestedTeam.id : undefined;
+
+  for (const teamId of [topLevelTeamId, nestedTeamId]) {
+    if (teamId !== undefined && teamId !== null && (typeof teamId !== 'string' || !teamId.trim())) {
+      fail('VERCEL_TEAM_ID_MISMATCH', `${application.app} Vercel team ID 형식이 잘못되었습니다.`);
+    }
+  }
+
+  if (hasTopLevelTeamId && hasNestedTeamId && topLevelTeamId !== nestedTeamId) {
+    fail('VERCEL_TEAM_ID_AMBIGUOUS', `${application.app} Vercel team ID 표현이 서로 다릅니다.`);
+  }
+
+  const resolvedTeamId = hasTopLevelTeamId ? topLevelTeamId : nestedTeamId;
+  if (requireTeamId && resolvedTeamId === undefined) {
+    fail('VERCEL_TEAM_ID_MISSING', `${application.app} Vercel team ID 증거가 없습니다.`);
+  }
+  if (resolvedTeamId !== undefined && resolvedTeamId !== VERCEL_TEAM_ID) {
+    fail('VERCEL_TEAM_ID_MISMATCH', `${application.app} Vercel team ID가 예상값과 다릅니다.`);
+  }
+  return resolvedTeamId;
+}
+
 function validateDeploymentIdentity(
   application,
   deployment,
@@ -256,12 +297,7 @@ function validateDeploymentIdentity(
       `${application.app} Vercel deployment ID가 status evidence와 다릅니다.`,
     );
   }
-  if (requireTeamId && deployment?.teamId !== VERCEL_TEAM_ID) {
-    fail('VERCEL_TEAM_ID_MISMATCH', `${application.app} Vercel team ID가 예상값과 다릅니다.`);
-  }
-  if (!requireTeamId && deployment?.teamId !== undefined && deployment.teamId !== VERCEL_TEAM_ID) {
-    fail('VERCEL_TEAM_ID_MISMATCH', `${application.app} Vercel team ID가 예상값과 다릅니다.`);
-  }
+  validateTeamIdentity(application, deployment, { requireTeamId });
   if (deployment?.projectId !== application.projectId) {
     fail('VERCEL_PROJECT_ID_MISMATCH', `${application.app} Vercel project ID가 예상값과 다릅니다.`);
   }
