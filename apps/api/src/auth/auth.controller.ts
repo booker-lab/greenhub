@@ -107,7 +107,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @SkipThrottle()
   getFirebaseToken(@CurrentUser() user: JwtPayload) {
-    return this.authService.getFirebaseToken(user.sub, user.role, user.storeId ?? undefined);
+    return this.authService.getFirebaseToken(user.sub);
   }
 
   @Post('logout')

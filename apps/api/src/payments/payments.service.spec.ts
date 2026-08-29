@@ -504,7 +504,14 @@ describe('재배송비 결제 수명주기', () => {
         storeId: 'store-1',
         userId: 'user-1',
         status: 'DELIVERY_HELD',
+        deliveryHold: {
+          heldAt: '2026-08-26T00:00:00.000Z',
+          customerResponsible: true,
+          redeliveryFee: 5000,
+          resolvedAt: null,
+        },
         redeliveryChargeId: 'charge-1',
+        redeliveryChargeHoldAt: '2026-08-26T00:00:00.000Z',
       },
       'orderCharges/charge-1': {
         id: 'charge-1',
@@ -514,6 +521,8 @@ describe('재배송비 결제 수명주기', () => {
         type: 'REDELIVERY_FEE',
         status: 'PENDING',
         amount: 5000,
+        customerResponsible: true,
+        holdAt: '2026-08-26T00:00:00.000Z',
         portonePaymentId: 'order-charge-charge-1',
         paidAt: null,
         failedAt: null,

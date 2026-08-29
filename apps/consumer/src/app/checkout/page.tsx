@@ -22,6 +22,7 @@ import {
 import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { getAcquisitionSnapshot } from '@/lib/acquisition';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 import CheckoutForm from './_components/CheckoutForm';
 
 declare global {
@@ -34,7 +35,7 @@ declare global {
   }
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = getApiBaseUrl();
 const PHONE_PATTERN = /^[0-9+\-\s()]{8,20}$/;
 
 type CheckoutCart =

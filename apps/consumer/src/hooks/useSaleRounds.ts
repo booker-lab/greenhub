@@ -2,8 +2,9 @@
 
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = getApiBaseUrl();
 
 export type PublicSaleRound = SaleRound & { items: SaleRoundItem[] };
 export type SaleRoundsRequestStatus = 'loading' | 'error' | 'empty' | 'success';

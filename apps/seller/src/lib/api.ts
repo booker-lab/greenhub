@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
 /** API 응답이 2xx가 아닐 때 던지는 에러. `.message`는 서버 본문 메시지 또는 상태코드 폴백. */
 export class ApiError extends Error {
@@ -17,7 +17,7 @@ export async function apiFetch(
   token: string,
   options: RequestInit = {},
 ): Promise<Response> {
-  return fetch(`${BASE_URL}${path}`, {
+  return fetch(`${getApiBaseUrl()}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

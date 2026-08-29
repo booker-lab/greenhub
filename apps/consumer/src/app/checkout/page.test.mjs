@@ -56,6 +56,9 @@ const requireForTest = (specifier) => {
   if (specifier === '@/hooks/usePayment') return { usePayment: () => ({}) };
   if (specifier === '@/hooks/useSaleRounds') return { useSaleRounds: () => ({}) };
   if (specifier === '@/lib/acquisition') return { getAcquisitionSnapshot: () => null };
+  if (specifier === '@/lib/api-base-url') {
+    return { getApiBaseUrl: () => 'http://localhost:3000' };
+  }
   if (
     specifier === '@mantine/core' ||
     specifier === 'next/navigation' ||

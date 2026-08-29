@@ -13,6 +13,10 @@ import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
 import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
+import {
+  assertPaidRedeliveryResume,
+  isCurrentRedeliveryPaymentRequired,
+} from './redelivery-resume-gate';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 
@@ -164,15 +168,20 @@ export class OrdersLifecycleService {
         nextDeliveryAt: hold['nextDeliveryAt'] ?? null,
         resolvedAt: null,
       };
-    } else if (currentStatus === 'DELIVERY_HELD') {
+    } else if (
+      (nextStatus === 'DELIVERING' && isCurrentRedeliveryPaymentRequired(order)) ||
+      (currentStatus === 'DELIVERY_HELD' && !isCurrentRedeliveryPaymentRequired(order))
+    ) {
       update['deliveryHold'] = {
         ...(order['deliveryHold'] as Record<string, unknown>),
         resolvedAt: this.toIso(now),
       };
     }
 
-    const heldOrderDelta =
-      nextStatus === 'DELIVERY_HELD' ? 1 : currentStatus === 'DELIVERY_HELD' ? -1 : 0;
+    const resolvesCurrentHold =
+      currentStatus === 'DELIVERY_HELD' &&
+      (!isCurrentRedeliveryPaymentRequired(order) || nextStatus === 'DELIVERING');
+    const heldOrderDelta = nextStatus === 'DELIVERY_HELD' ? 1 : resolvesCurrentHold ? -1 : 0;
     if (heldOrderDelta !== 0 && order['roundId']) {
       await this.firestore.runTransaction(async (t) => {
         const orderRef = this.firestore.doc(`orders/${orderId}`);
@@ -182,6 +191,14 @@ export class OrdersLifecycleService {
         }
         if (latestOrderSnap.data()?.['status'] !== currentStatus) {
           throw new ConflictException('주문 상태가 변경되었습니다.');
+        }
+        if (nextStatus === 'DELIVERING') {
+          await assertPaidRedeliveryResume({
+            tx: t,
+            firestore: this.firestore,
+            order: { ...latestOrderSnap.data(), id: orderId },
+            orderId,
+          });
         }
         const roundRef = this.firestore.doc(`saleRounds/${order['roundId']}`);
         const roundSnap = await t.get(roundRef);
@@ -220,6 +237,31 @@ export class OrdersLifecycleService {
           if (latestOrder['driverId'] != null && latestOrder['driverId'] !== requesterId) {
             throw new ConflictException('이미 다른 기사에게 배정된 주문입니다.');
           }
+          await assertPaidRedeliveryResume({
+            tx: transaction,
+            firestore: this.firestore,
+            order: { ...latestOrder, id: orderId },
+            orderId,
+          });
+          transaction.update(orderRef, update);
+        });
+      } else if (nextStatus === 'DELIVERING') {
+        await this.firestore.runTransaction(async (transaction) => {
+          const orderRef = this.firestore.doc(`orders/${orderId}`);
+          const latestSnap = await transaction.get(orderRef);
+          if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+            throw new NotFoundException();
+          }
+          const latestOrder = latestSnap.data()!;
+          if (latestOrder['status'] !== currentStatus) {
+            throw new ConflictException('주문 상태가 변경되었습니다.');
+          }
+          await assertPaidRedeliveryResume({
+            tx: transaction,
+            firestore: this.firestore,
+            order: { ...latestOrder, id: orderId },
+            orderId,
+          });
           transaction.update(orderRef, update);
         });
       } else {
@@ -488,10 +530,24 @@ export class OrdersLifecycleService {
       DELIVERING: { DELIVERED: 'GROUP_DELIVERED' },
     };
 
+    if (
+      from === 'DELIVERY_HELD' &&
+      to === 'PREPARING' &&
+      !isCurrentRedeliveryPaymentRequired(order)
+    ) {
+      return;
+    }
+
+    const isRedeliveryResume =
+      to === 'DELIVERING' &&
+      (from === 'DELIVERY_HELD' ||
+        (from === 'PREPARING' && isCurrentRedeliveryPaymentRequired(order)));
     const templateCode: string | null =
-      (isGroup ? GROUP_TEMPLATE_OVERRIDES[from]?.[to] : null) ??
-      NOTIFICATION_MAP[from]?.[to] ??
-      (to === 'CANCELLED' ? 'ORDER_CANCELLED' : null);
+      isRedeliveryResume
+        ? 'ORDER_REDELIVERY_SCHEDULED'
+        : (isGroup ? GROUP_TEMPLATE_OVERRIDES[from]?.[to] : null) ??
+          NOTIFICATION_MAP[from]?.[to] ??
+          (to === 'CANCELLED' ? 'ORDER_CANCELLED' : null);
 
     if (!templateCode) return;
 
@@ -575,6 +631,10 @@ export class OrdersLifecycleService {
       orderedItemQuantity: raw?.['orderedItemQuantity'] ?? 0,
       heldOrderCount: raw?.['heldOrderCount'] ?? 0,
     };
+    const heldOrderCount = current['heldOrderCount'];
+    if ((delta['heldOrderCount'] ?? 0) < 0 && heldOrderCount < 1) {
+      throw new ConflictException('회차 보류 주문 수가 이미 정리되었습니다.');
+    }
     return Object.fromEntries(
       Object.entries(current).map(([key, value]) => [key, Math.max(0, value + (delta[key] ?? 0))]),
     );

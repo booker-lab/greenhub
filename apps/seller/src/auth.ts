@@ -1,9 +1,9 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
-// biome-ignore lint/style/noNonNullAssertion: NEXT_PUBLIC_API_URL은 Next 빌드 시점에 인라인 보장
-const API = process.env.NEXT_PUBLIC_API_URL!;
+const API = getApiBaseUrl();
 const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
 
 async function refreshAccessToken(token: Record<string, unknown>) {

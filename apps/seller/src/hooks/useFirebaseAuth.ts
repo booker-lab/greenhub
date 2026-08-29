@@ -8,9 +8,7 @@ import {
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { getFirebaseAuth } from '@/lib/firebase';
-
-// biome-ignore lint/style/noNonNullAssertion: NEXT_PUBLIC_API_URL은 Next 빌드 시점에 인라인 보장
-const API = process.env.NEXT_PUBLIC_API_URL!;
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
 /**
  * NextAuth 세션과 Firebase Auth를 동기화.
@@ -31,7 +29,7 @@ export function useFirebaseAuth() {
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user.accessToken) {
-      fetch(`${API}/auth/firebase-token`, {
+      fetch(`${getApiBaseUrl()}/auth/firebase-token`, {
         headers: { Authorization: `Bearer ${session.user.accessToken}` },
       })
         .then((res) => {

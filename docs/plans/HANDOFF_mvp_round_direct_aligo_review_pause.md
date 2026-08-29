@@ -1,19 +1,21 @@
 <!-- Language: ko -->
 
-# 회차 직배송 MVP — ALIGO 심사 대기 인계
+# 회차 직배송 MVP — ALIGO 승인 후 재개 인계
 
 > 현재 재개 지점만 관리한다. 상세 상태는 `docs/memory.md`, Acceptance Criteria는 `docs/BACKLOG.md`, 의존성은 `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`를 따른다.
 
-## 현재 상태 — 2026-08-24 KST
+## 현재 상태 — 2026-08-27 KST
 
 - 회차 직배송 MVP `main` 통합 완료.
-- 카카오 비즈니스 채널, ALIGO 발신 프로필·senderkey, 회차 알림 템플릿 8종 등록·심사 요청 완료.
-- 마지막 provider 확인: 8종 모두 `검수중`, 실제 발송 0건.
+- 카카오 비즈니스 채널, ALIGO 발신 프로필·senderkey 준비 완료.
+- 회차 알림 템플릿 8종 provider 승인 완료.
+- 2026-08-27 15:06 KST 경 ALIGO SmartSMS 템플릿 관리 화면에서 8종 모두 `승인완료` 확인.
+- 실제 알림톡·SMS 발송 0건.
 - production ALIGO 설정 미반영.
 - 첫 운영 회차 미생성, `salesMode=legacy`.
 - production은 exact release SHA + 별도 승인 절차를 사용한다.
 
-현재 외부 차단점은 ALIGO 8종 심사 완료다. 재개 시 provider 상태를 다시 확인한다. 단, 출시 P0는 심사와 병렬 진행 가능하다.
+ALIGO 8종 provider 심사 차단점은 해소됐다. 승인 증거는 `docs/reports/REPORT_aligo_template_approval_20260827.md`를 따른다. 다음 ALIGO 단계는 provider code 1:1 매핑 확인 → 승인된 템플릿 격리 알림톡 → SMS fallback 검증이며, 실제 발송과 production 설정은 별도 승인 경계를 유지한다.
 
 병렬 출시 P0:
 
@@ -41,7 +43,7 @@
 - 현재 `origin/main`: `d6185bd`; candidate는 아직 main/production에 반영되지 않았다.
 - `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이며 refresh/session lifecycle 완료를 주장하지 않는다.
 
-다음 재개 지점은 candidate를 현재 main에 branch+PR로 통합하고 PR CI를 확인하는 절차다. 이후 `AUTH-SESSION-CLAIM-REVOCATION`, 최신 main의 redelivery 상태머신, admin refund, legal, ALIGO, exact-SHA E2E와 production 승인 게이트를 순서대로 진행한다.
+다음 재개 지점은 candidate를 현재 main에 branch+PR로 통합하고 PR CI를 확인하는 절차다. 이후 `AUTH-SESSION-CLAIM-REVOCATION`, 최신 main의 redelivery 상태머신, admin refund, legal, ALIGO provider 실제 검증, exact-SHA E2E와 production 승인 게이트를 순서대로 진행한다.
 
 ## 최우선 재개 — Driver 승인 + direct read 결합 위험
 
@@ -135,9 +137,9 @@ checkout consent는 order+retention에 저장되지만 MY 설정은 별도 user 
 
 ## 지금 하지 말 것
 
-- 심사 중 ALIGO 템플릿 중복 등록·임의 수정
-- 승인 전 실제 알림톡/SMS
-- secret/실제 tpl_code/개인정보 Git 기록
+- 승인된 ALIGO 템플릿 임의 수정·중복 등록
+- 별도 승인 없는 실제 알림톡/SMS
+- secret/실제 senderkey 원문/개인정보 Git 기록
 - direct `main`
 - main merge를 production 승인으로 해석
 - 승인 없는 production/Firebase/운영 회차/`salesMode`
@@ -161,24 +163,23 @@ checkout consent는 order+retention에 저장되지만 MY 설정은 별도 user 
 10. webhook signature real-verifier 회귀
 11. Issue #32
 12. read-only 문서/코드 감사
-13. ALIGO 상태 조회
+13. ALIGO provider code 1:1 매핑 read-only 확인
 
-## ALIGO 승인 뒤
+## ALIGO 승인 완료 후
 
 1. P0 10개 + Issue #32 완료 확인
-2. ALIGO 8종 상태 재확인
-3. provider code 1:1 검사
-4. 승인 후 격리 알림톡
-5. 승인 후 SMS fallback
-6. 실제 재배송/환불/정산/read-minimization/auth/marketing 결과 기준 legal 재정합화
-7. actual release SHA
-8. exact SHA E2E 52+cleanup
-9. 운영 Firebase read-only
-10. 승인 후 production ALIGO 설정
-11. exact-SHA deployment 절차
-12. 별도 Task 3.1 승인 뒤 production
-13. metadata SHA + smoke
-14. 첫 회차 → 최종 판정 → `round_direct`
+2. provider code 1:1 검사
+3. 승인된 8종 기준 격리 알림톡
+4. SMS fallback
+5. 실제 재배송/환불/정산/read-minimization/auth/marketing 결과 기준 legal 재정합화
+6. actual release SHA
+7. exact SHA E2E 52+cleanup
+8. 운영 Firebase read-only
+9. 승인 후 production ALIGO 설정
+10. exact-SHA deployment 절차
+11. 별도 Task 3.1 승인 뒤 production
+12. metadata SHA + smoke
+13. 첫 회차 → 최종 판정 → `round_direct`
 
 ## 완료 체크
 
@@ -186,6 +187,7 @@ checkout consent는 order+retention에 저장되지만 MY 설정은 별도 user 
 - [x] 카카오 채널 승인
 - [x] ALIGO sender profile/senderkey
 - [x] 8종 등록·심사 요청
+- [x] ALIGO 8종 승인 — 2026-08-27 provider UI 확인
 - [x] repo-side main auto-production 차단
 - [ ] driver approval/session revocation + public register/login gate
 - [ ] order direct read 최소화
@@ -198,7 +200,7 @@ checkout consent는 order+retention에 저장되지만 MY 설정은 별도 user 
 - [ ] marketing consent lifecycle consistency
 - [ ] webhook signature real-verifier coverage
 - [ ] Issue #32
-- [ ] ALIGO 8종 승인
+- [ ] provider code 1:1 매핑 검증
 - [ ] 실제 알림톡/SMS fallback
 - [ ] legal
 - [ ] release SHA E2E 52+cleanup

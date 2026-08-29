@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { DriverService } from './driver.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -17,5 +17,10 @@ export class DriverController {
   @Get('orders')
   getOrders(@CurrentUser() user: JwtPayload, @Query('status') status?: string) {
     return this.driver.getOrders(user.sub, status);
+  }
+
+  @Get('orders/:orderId')
+  getOrder(@Param('orderId') orderId: string, @CurrentUser() user: JwtPayload) {
+    return this.driver.getOrder(user.sub, orderId);
   }
 }

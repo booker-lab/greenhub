@@ -7,6 +7,10 @@ import {
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { FirestoreService } from '../firestore/firestore.service';
 import { StorageService } from '../firestore/storage.service';
+import {
+  isCurrentRedeliveryPaymentRequired,
+  resolveRedeliveryPaymentActionability,
+} from './redelivery-resume-gate';
 
 type OrderRequester = Pick<JwtPayload, 'sub' | 'role'>;
 type OrderRequesterInput = OrderRequester | string;
@@ -26,7 +30,7 @@ export class OrdersQueryService {
     }
     const order = snap.data()!;
     await this.assertOrderReadAccess(storeId, order, requester);
-    return this.withDeliveryPhotoUrl(orderId, order, requester);
+    return this.withReadModel(orderId, order, requester);
   }
 
   async getOrders(
@@ -72,7 +76,9 @@ export class OrdersQueryService {
     if (query.saleType) ref = ref.where('saleType', '==', query.saleType);
 
     const snap = await ref.get();
-    return snap.docs.map((d: any) => this.normalizeOrder({ id: d.id, ...d.data() }));
+    return Promise.all(
+      snap.docs.map((d: any) => this.withRedeliveryPayment({ id: d.id, ...d.data() })),
+    );
   }
 
   // ── Public (storeId-free) ─────────────────────────────────────────────────
@@ -84,12 +90,57 @@ export class OrdersQueryService {
     const order = snap.data()!;
 
     await this.assertOrderReadAccess(order['storeId'], order, requester);
-    return this.withDeliveryPhotoUrl(orderId, order, requester);
+    return this.withReadModel(orderId, order, requester);
   }
 
   async getMyOrders(requesterId: string) {
     const snap = await this.firestore.collection('orders').where('userId', '==', requesterId).get();
-    return snap.docs.map((d: any) => this.normalizeOrder({ id: d.id, ...d.data() }));
+    return Promise.all(
+      snap.docs.map((d: any) => this.withRedeliveryPayment({ id: d.id, ...d.data() })),
+    );
+  }
+
+  private async withReadModel(
+    orderId: string,
+    order: Record<string, any>,
+    requester: OrderRequester,
+  ) {
+    const withPayment = await this.withRedeliveryPayment({ id: orderId, ...order });
+    return this.withDeliveryPhotoUrl(orderId, withPayment, requester);
+  }
+
+  async withRedeliveryPayment(order: Record<string, any>) {
+    const normalized = this.normalizeOrder(order);
+    if (!isCurrentRedeliveryPaymentRequired(order)) {
+      return {
+        ...normalized,
+        redeliveryPayment: resolveRedeliveryPaymentActionability({
+          order,
+          chargeExists: false,
+        }),
+      };
+    }
+
+    const chargeId = order['redeliveryChargeId'];
+    if (typeof chargeId !== 'string' || chargeId.length === 0) {
+      return {
+        ...normalized,
+        redeliveryPayment: resolveRedeliveryPaymentActionability({
+          order,
+          chargeExists: false,
+        }),
+      };
+    }
+
+    const chargeSnap = await this.firestore.doc(`orderCharges/${chargeId}`).get();
+    return {
+      ...normalized,
+      redeliveryPayment: resolveRedeliveryPaymentActionability({
+        order,
+        chargeExists: chargeSnap.exists,
+        charge: chargeSnap.exists ? chargeSnap.data() : undefined,
+      }),
+    };
   }
 
   private async assertStoreListAccess(storeId: string, requester: OrderRequester) {

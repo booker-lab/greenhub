@@ -1,6 +1,5 @@
 import { auth } from '@/auth';
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const session = await auth();
@@ -13,5 +12,5 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     headers.Authorization = `Bearer ${session.user.accessToken}`;
   }
 
-  return fetch(`${BASE_URL}${path}`, { ...init, headers });
+  return fetch(`${getApiBaseUrl()}${path}`, { ...init, headers });
 }

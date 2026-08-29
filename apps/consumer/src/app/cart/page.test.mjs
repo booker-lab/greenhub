@@ -43,6 +43,9 @@ const requireForTest = (specifier) => {
       useCart: () => ({ items: [] }),
     };
   }
+  if (specifier === '@/lib/api-base-url') {
+    return { getApiBaseUrl: () => 'http://localhost:3000' };
+  }
   if (
     specifier === 'next/link' ||
     specifier === 'next/navigation' ||

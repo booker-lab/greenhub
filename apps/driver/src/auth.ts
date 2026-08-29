@@ -2,8 +2,9 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
-const API = process.env.NEXT_PUBLIC_API_URL!;
+const API = getApiBaseUrl();
 const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
 const E2E_ACCESS_TOKEN_TTL = 15 * 60 * 1000;
 

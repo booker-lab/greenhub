@@ -12,40 +12,38 @@ service cloud.firestore {
         isPublicSaleRoundStatus(round.data.status);
     }
 
-    function currentUser() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    function currentUserPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
     }
 
-    function isApprovedDriver() {
-      return request.auth != null &&
-        request.auth.token.role == 'driver' &&
-        request.auth.token.get('driverApproved', false) == true &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        currentUser().data.get('role', null) == 'driver' &&
-        currentUser().data.get('driverApproved', false) == true &&
-        currentUser().data.get('suspended', false) != true;
+    function currentUserExists() {
+      return request.auth != null && exists(currentUserPath());
     }
 
-    function isAssignedDriver() {
-      return isApprovedDriver() &&
-        resource.data.get('driverId', null) == request.auth.uid;
+    function activeCurrentUser() {
+      return currentUserExists() &&
+        get(currentUserPath()).data.get('suspended', false) != true;
     }
 
-    function isAvailablePickup() {
-      return isApprovedDriver() &&
-        resource.data.get('status', null) == 'PREPARING' &&
-        resource.data.get('driverId', null) == null &&
-        resource.data.get('deliveryMethod', null) in ['direct', 'hub'];
+    function currentRole(role) {
+      return activeCurrentUser() &&
+        request.auth.token.get('role', null) == role &&
+        get(currentUserPath()).data.get('role', null) == role;
     }
 
-    // orders: 매장 소유자·관리자·승인된 기사의 계약된 주문만 허용
+    function currentSellerFor(storeId) {
+      return currentRole('seller') &&
+        request.auth.token.get('storeId', null) == storeId &&
+        get(currentUserPath()).data.get('storeId', null) == storeId;
+    }
+
+    function currentAdmin() {
+      return currentRole('admin');
+    }
+
+    // orders: 매장 소유자·관리자만 직접 읽고 기사는 API를 사용한다
     match /orders/{orderId} {
-      allow read: if request.auth != null &&
-        ((request.auth.token.role == 'seller' &&
-          resource.data.storeId == request.auth.token.storeId) ||
-         request.auth.token.role == 'admin' ||
-         isAssignedDriver() ||
-         isAvailablePickup());
+      allow read: if currentSellerFor(resource.data.storeId) || currentAdmin();
       allow write: if false;
     }
 

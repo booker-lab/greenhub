@@ -42,6 +42,59 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function getRedeliveryPaymentPresentation(payment: Order['redeliveryPayment']) {
+  if (!payment?.required) return null;
+
+  if (payment.requiresRecovery || ['FAILED', 'REFUNDED', 'MISMATCHED'].includes(payment.status)) {
+    return {
+      label: '운영 확인 필요',
+      description: '재배송비 결제 상태를 운영팀에서 확인해야 합니다.',
+      color: 'red',
+    };
+  }
+
+  if (payment.status === 'PAID' && payment.paid) {
+    return {
+      label: '재배송비 결제 완료',
+      description: '서버에서 재배송비 결제 완료 상태를 확인했습니다.',
+      color: 'green',
+    };
+  }
+
+  if (payment.status === 'PENDING') {
+    return {
+      label: '재배송비 결제 대기',
+      description: '주문자의 재배송비 결제를 기다리는 중입니다.',
+      color: 'orange',
+    };
+  }
+
+  return {
+    label: '운영 확인 필요',
+    description: '재배송비 결제 정보를 확인해야 합니다.',
+    color: 'red',
+  };
+}
+
+function RedeliveryPaymentPanel({ payment }: { payment: Order['redeliveryPayment'] }) {
+  const presentation = getRedeliveryPaymentPresentation(payment);
+  if (!presentation) return null;
+
+  return (
+    <Paper radius="lg" shadow="xs" p="md" data-testid="seller-redelivery-payment">
+      <Group justify="space-between" mb="xs">
+        <Text style={{ fontWeight: 'var(--fw-medium)' }}>재배송비 결제</Text>
+        <Badge color={presentation.color} variant="light">
+          {presentation.label}
+        </Badge>
+      </Group>
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+        {presentation.description}
+      </Text>
+    </Paper>
+  );
+}
+
 function issueColor(issue: OrderOperationIssue) {
   if (issue.status !== 'OPEN') return 'gray';
   if (issue.severity === 'critical') return 'red';
@@ -172,6 +225,8 @@ export function OrderOperationsSection({
 }) {
   return (
     <>
+      <RedeliveryPaymentPanel payment={order.redeliveryPayment} />
+
       {order.deliveryHold && (
         <Paper radius="lg" shadow="xs" p="md">
           <Group justify="space-between" mb="xs">

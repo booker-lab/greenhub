@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { getApiBaseUrl } from '@/lib/api-base-url';
+
+const API_URL = getApiBaseUrl();
 type RoundCartValidation =
   | { status: 'eligible'; currentUnitPrice: number }
   | { status: 'price_changed'; currentUnitPrice: number; reason: string }
