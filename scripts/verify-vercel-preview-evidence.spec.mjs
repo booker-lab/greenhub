@@ -19,6 +19,12 @@ const DEPLOYMENT_IDS = {
   driver: 'dpl_FycJKhuLYW5AmftzMFYbbXKxqwaj',
 };
 
+const REDEPLOY_DEPLOYMENT_IDS = {
+  consumer: 'dpl_ConsumerRedeploy123',
+  seller: 'dpl_SellerRedeploy456',
+  driver: 'dpl_DriverRedeploy789',
+};
+
 const DIRECT_URLS = {
   consumer: 'greenhubconsumer-abc123.vercel.app',
   seller: 'greenhub-seller-def456.vercel.app',
@@ -45,6 +51,21 @@ function response(body, status = 200) {
 }
 
 function validDeployment(application, overrides = {}) {
+  const meta =
+    overrides.meta && typeof overrides.meta === 'object'
+      ? {
+          githubCommitSha: SHA,
+          githubCommitRef: CANDIDATE_REF,
+          githubCommitOrg: 'booker-lab',
+          githubCommitRepo: 'greenhub',
+          ...overrides.meta,
+        }
+      : overrides.meta ?? {
+          githubCommitSha: SHA,
+          githubCommitRef: CANDIDATE_REF,
+          githubCommitOrg: 'booker-lab',
+          githubCommitRepo: 'greenhub',
+        };
   return {
     id: DEPLOYMENT_IDS[application.app],
     teamId: VERCEL_TEAM_ID,
@@ -54,15 +75,14 @@ function validDeployment(application, overrides = {}) {
     target: null,
     readyState: 'READY',
     state: 'READY',
-    meta: {
-      githubCommitSha: SHA,
-      githubCommitRef: CANDIDATE_REF,
-      githubCommitOrg: 'booker-lab',
-      githubCommitRepo: 'greenhub',
-    },
     url: DIRECT_URLS[application.app],
     ...overrides,
+    meta,
   };
+}
+
+function dashboardUrl(application, deploymentId) {
+  return `https://vercel.com/jos-projects-d1cecc0c/${application.projectName}/${deploymentId.slice(4)}`;
 }
 
 function validStatus(application, overrides = {}) {
@@ -121,6 +141,10 @@ function mockFetch({ statusPayload, payload, deployments, vercelStatus, vercelBo
 function runVerification(overrides = {}) {
   const data = fixture(overrides);
   const mock = mockFetch({ ...data, statusPayload: data.payload, ...overrides });
+  return runVerificationWithMock(mock);
+}
+
+function runVerificationWithMock(mock) {
   return {
     ...mock,
     promise: verifyEvidence({
@@ -131,6 +155,36 @@ function runVerification(overrides = {}) {
       checkedAt: () => '2026-08-27T00:00:00.000Z',
     }),
   };
+}
+
+function runRedeployVerification({ currentOverrides = {}, originalOverrides = {} } = {}) {
+  const application = APPLICATIONS[0];
+  const currentDeploymentId = REDEPLOY_DEPLOYMENT_IDS[application.app];
+  const originalDeploymentId = DEPLOYMENT_IDS[application.app];
+  const data = fixture({
+    statusOverrides: {
+      [application.app]: {
+        target_url: dashboardUrl(application, currentDeploymentId),
+      },
+    },
+  });
+  data.deployments[currentDeploymentId] = validDeployment(application, {
+    id: currentDeploymentId,
+    source: 'cli',
+    ...currentOverrides,
+    meta: {
+      action: 'redeploy',
+      originalDeploymentId,
+      ...(currentOverrides.meta && typeof currentOverrides.meta === 'object'
+        ? currentOverrides.meta
+        : {}),
+    },
+  });
+  data.deployments[originalDeploymentId] = validDeployment(application, {
+    id: originalDeploymentId,
+    ...originalOverrides,
+  });
+  return runVerificationWithMock(mockFetch({ ...data, statusPayload: data.payload }));
 }
 
 async function assertFailure(promise, code) {
@@ -146,6 +200,10 @@ describe('Vercel exact-SHA evidence verifier 성공 fixture', () => {
     assert.equal(evidence.source, 'github-status+vercel-api');
     assert.equal(evidence.expectedSha, SHA);
     assert.equal(evidence.candidateRef, CANDIDATE_REF);
+    assert.deepEqual(
+      evidence.apps.map(({ app, deploymentProvenance }) => ({ app, deploymentProvenance })),
+      APPLICATIONS.map((application) => ({ app: application.app, deploymentProvenance: 'DIRECT_GIT' })),
+    );
     assert.deepEqual(
       evidence.apps.map(({ app, deploymentId, targetUrl, state }) => ({
         app,
@@ -339,10 +397,10 @@ describe('Vercel API HTTP와 metadata fail-closed 계약', () => {
     );
   });
 
-  it('source·target·READY state 계약을 모두 확인한다', async () => {
+  it('direct Git source·target·READY state 계약을 확인한다', async () => {
     await assertFailure(
       runVerification({ deploymentOverrides: { consumer: { source: 'cli' } } }).promise,
-      'VERCEL_SOURCE_MISMATCH',
+      'VERCEL_REDEPLOY_ACTION_MISMATCH',
     );
     await assertFailure(
       runVerification({ deploymentOverrides: { consumer: { target: 'preview' } } }).promise,
@@ -417,6 +475,118 @@ describe('Vercel API HTTP와 metadata fail-closed 계약', () => {
     await assertFailure(
       runVerification({ deploymentOverrides: { consumer: { url: 'https://example.com' } } }).promise,
       'VERCEL_DIRECT_URL_HOST_MISMATCH',
+    );
+  });
+});
+
+describe('Vercel redeploy provenance lineage fail-closed 계약', () => {
+  it('direct Git original을 가리키는 exact redeploy lineage를 통과시킨다', async () => {
+    const { promise, calls } = runRedeployVerification();
+    const evidence = await promise;
+    const consumer = evidence.apps.find((app) => app.app === 'consumer');
+
+    assert.equal(consumer.deploymentProvenance, 'VERIFIED_GIT_REDEPLOY_LINEAGE');
+    assert.equal(consumer.originalDeploymentId, DEPLOYMENT_IDS.consumer);
+    assert.equal(consumer.originalDeploymentSha, SHA);
+    assert.equal(calls.length, 5);
+    assert.match(calls[1].url, /dpl_ConsumerRedeploy123/);
+    assert.match(calls[2].url, /dpl_HxPNRSfPztdLxCKp9Tr5d271C4kn/);
+  });
+
+  it('originalDeploymentId가 없으면 non-git deployment를 허용하지 않는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ currentOverrides: { meta: { originalDeploymentId: undefined } } }).promise,
+      'VERCEL_ORIGINAL_DEPLOYMENT_ID_MISSING',
+    );
+  });
+
+  it('action이 redeploy가 아니면 non-git deployment를 허용하지 않는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ currentOverrides: { meta: { action: 'manual' } } }).promise,
+      'VERCEL_REDEPLOY_ACTION_MISMATCH',
+    );
+  });
+
+  it('original source가 git이 아니면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ originalOverrides: { source: 'cli' } }).promise,
+      'VERCEL_ORIGINAL_SOURCE_MISMATCH',
+    );
+  });
+
+  it('original SHA가 다르면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ originalOverrides: { meta: { githubCommitSha: OTHER_SHA } } }).promise,
+      'VERCEL_GITHUB_COMMIT_SHA_MISMATCH',
+    );
+  });
+
+  it('original branch가 다르면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ originalOverrides: { meta: { githubCommitRef: 'main' } } }).promise,
+      'VERCEL_GITHUB_COMMIT_REF_MISMATCH',
+    );
+  });
+
+  it('original project가 다르면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ originalOverrides: { projectId: 'prj_wrong' } }).promise,
+      'VERCEL_PROJECT_ID_MISMATCH',
+    );
+  });
+
+  it('original GitHub org·repo가 다르면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({
+        originalOverrides: { meta: { githubCommitOrg: 'other-org', githubCommitRepo: 'other-repo' } },
+      }).promise,
+      'VERCEL_GITHUB_REPOSITORY_MISMATCH',
+    );
+  });
+
+  it('current SHA가 다르면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ currentOverrides: { meta: { githubCommitSha: OTHER_SHA } } }).promise,
+      'VERCEL_GITHUB_COMMIT_SHA_MISMATCH',
+    );
+  });
+
+  it('current project가 다르면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ currentOverrides: { projectId: 'prj_wrong' } }).promise,
+      'VERCEL_PROJECT_ID_MISMATCH',
+    );
+  });
+
+  it('original target이 production이면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ originalOverrides: { target: 'production' } }).promise,
+      'VERCEL_TARGET_MISMATCH',
+    );
+  });
+
+  it('current target이 production이면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ currentOverrides: { target: 'production' } }).promise,
+      'VERCEL_TARGET_MISMATCH',
+    );
+  });
+
+  it('original이 또 redeploy이면 닫는다', async () => {
+    await assertFailure(
+      runRedeployVerification({ originalOverrides: { meta: { action: 'redeploy' } } }).promise,
+      'VERCEL_NESTED_REDEPLOY',
+    );
+  });
+
+  it('검증되지 않은 original을 가리키는 forged CLI metadata를 허용하지 않는다', async () => {
+    await assertFailure(
+      runRedeployVerification({
+        currentOverrides: {
+          meta: { originalDeploymentId: 'dpl_ForgedLineage123' },
+        },
+      }).promise,
+      'VERCEL_DEPLOYMENT_ID_MISMATCH',
     );
   });
 });

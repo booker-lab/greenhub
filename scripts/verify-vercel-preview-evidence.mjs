@@ -36,6 +36,7 @@ export const RAILWAY = Object.freeze({
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const VERCEL_DEPLOYMENT_SUFFIX_PATTERN = /^[A-Za-z0-9]+$/;
+const VERCEL_DEPLOYMENT_ID_PATTERN = /^dpl_[A-Za-z0-9]+$/;
 
 export class EvidenceContractError extends Error {
   constructor(code, message) {
@@ -242,7 +243,12 @@ function validateReadyState(deployment, application) {
   }
 }
 
-export function validateVercelDeployment(application, deployment, expectedSha, expectedDeploymentId) {
+function validateDeploymentIdentity(
+  application,
+  deployment,
+  expectedDeploymentId,
+  { requireTeamId = false } = {},
+) {
   const returnedId = deploymentIdentifier(deployment);
   if (returnedId !== expectedDeploymentId) {
     fail(
@@ -250,7 +256,10 @@ export function validateVercelDeployment(application, deployment, expectedSha, e
       `${application.app} Vercel deployment ID가 status evidence와 다릅니다.`,
     );
   }
-  if (deployment?.teamId !== undefined && deployment.teamId !== VERCEL_TEAM_ID) {
+  if (requireTeamId && deployment?.teamId !== VERCEL_TEAM_ID) {
+    fail('VERCEL_TEAM_ID_MISMATCH', `${application.app} Vercel team ID가 예상값과 다릅니다.`);
+  }
+  if (!requireTeamId && deployment?.teamId !== undefined && deployment.teamId !== VERCEL_TEAM_ID) {
     fail('VERCEL_TEAM_ID_MISMATCH', `${application.app} Vercel team ID가 예상값과 다릅니다.`);
   }
   if (deployment?.projectId !== application.projectId) {
@@ -259,14 +268,13 @@ export function validateVercelDeployment(application, deployment, expectedSha, e
   if (deployment?.name !== application.projectName) {
     fail('VERCEL_PROJECT_NAME_MISMATCH', `${application.app} Vercel project name이 예상값과 다릅니다.`);
   }
-  if (deployment?.source !== 'git') {
-    fail('VERCEL_SOURCE_MISMATCH', `${application.app} Vercel deployment source가 git이 아닙니다.`);
-  }
   if (deployment?.target !== null) {
     fail('VERCEL_TARGET_MISMATCH', `${application.app} Vercel deployment target이 null이 아닙니다.`);
   }
   validateReadyState(deployment, application);
+}
 
+function validateGitMetadata(application, deployment, expectedSha) {
   const meta = deployment?.meta;
   if (!meta || meta.githubCommitSha !== expectedSha) {
     fail('VERCEL_GITHUB_COMMIT_SHA_MISMATCH', `${application.app} Vercel githubCommitSha가 다릅니다.`);
@@ -277,7 +285,10 @@ export function validateVercelDeployment(application, deployment, expectedSha, e
   if (meta.githubCommitOrg !== 'booker-lab' || meta.githubCommitRepo !== 'greenhub') {
     fail('VERCEL_GITHUB_REPOSITORY_MISMATCH', `${application.app} Vercel GitHub 저장소 metadata가 다릅니다.`);
   }
+  return meta;
+}
 
+function validateDeploymentUrl(application, deployment) {
   const targetUrl = normalizeHttpsUrl(deployment?.url, {
     provider: 'Vercel direct deployment',
     codePrefix: 'VERCEL_DIRECT_URL',
@@ -287,7 +298,10 @@ export function validateVercelDeployment(application, deployment, expectedSha, e
   if (directUrl.pathname !== '/') {
     fail('VERCEL_DIRECT_URL_MALFORMED', `${application.app} Vercel direct deployment URL path가 잘못되었습니다.`);
   }
+  return targetUrl;
+}
 
+function buildDeploymentEvidence(application, expectedDeploymentId, meta, targetUrl) {
   return {
     app: application.app,
     context: application.context,
@@ -299,6 +313,87 @@ export function validateVercelDeployment(application, deployment, expectedSha, e
     state: 'READY',
     targetUrl,
     ready: true,
+  };
+}
+
+export function validateVercelDeployment(application, deployment, expectedSha, expectedDeploymentId) {
+  validateDeploymentIdentity(application, deployment, expectedDeploymentId);
+  if (deployment?.source !== 'git') {
+    fail('VERCEL_SOURCE_MISMATCH', `${application.app} Vercel deployment source가 git이 아닙니다.`);
+  }
+  const meta = validateGitMetadata(application, deployment, expectedSha);
+  const targetUrl = validateDeploymentUrl(application, deployment);
+
+  return {
+    ...buildDeploymentEvidence(application, expectedDeploymentId, meta, targetUrl),
+    deploymentProvenance: 'DIRECT_GIT',
+  };
+}
+
+function validateRedeployMetadata(application, deployment) {
+  const meta = deployment?.meta;
+  if (!meta || meta.action !== 'redeploy') {
+    fail(
+      'VERCEL_REDEPLOY_ACTION_MISMATCH',
+      `${application.app} Vercel deployment meta.action이 redeploy가 아닙니다.`,
+    );
+  }
+  if (meta.originalDeploymentId === undefined || meta.originalDeploymentId === null) {
+    fail(
+      'VERCEL_ORIGINAL_DEPLOYMENT_ID_MISSING',
+      `${application.app} Vercel redeploy originalDeploymentId가 없습니다.`,
+    );
+  }
+  if (
+    typeof meta.originalDeploymentId !== 'string' ||
+    !VERCEL_DEPLOYMENT_ID_PATTERN.test(meta.originalDeploymentId)
+  ) {
+    fail(
+      'VERCEL_ORIGINAL_DEPLOYMENT_ID_MALFORMED',
+      `${application.app} Vercel redeploy originalDeploymentId가 잘못되었습니다.`,
+    );
+  }
+  return meta.originalDeploymentId;
+}
+
+async function validateVercelRedeployDeployment(
+  application,
+  deployment,
+  expectedSha,
+  expectedDeploymentId,
+  vercelToken,
+  fetchImpl,
+) {
+  validateDeploymentIdentity(application, deployment, expectedDeploymentId, { requireTeamId: true });
+  const originalDeploymentId = validateRedeployMetadata(application, deployment);
+  const originalDeployment = await requestJson(
+    fetchImpl,
+    buildDeploymentUrl(originalDeploymentId),
+    vercelToken,
+    'vercel',
+  );
+
+  validateDeploymentIdentity(application, originalDeployment, originalDeploymentId, {
+    requireTeamId: true,
+  });
+  if (originalDeployment?.source !== 'git') {
+    fail(
+      'VERCEL_ORIGINAL_SOURCE_MISMATCH',
+      `${application.app} Vercel original deployment source가 git이 아닙니다.`,
+    );
+  }
+  if (originalDeployment?.meta?.action === 'redeploy') {
+    fail('VERCEL_NESTED_REDEPLOY', `${application.app} Vercel original deployment가 redeploy입니다.`);
+  }
+  const originalMeta = validateGitMetadata(application, originalDeployment, expectedSha);
+  const currentMeta = validateGitMetadata(application, deployment, expectedSha);
+  const targetUrl = validateDeploymentUrl(application, deployment);
+
+  return {
+    ...buildDeploymentEvidence(application, expectedDeploymentId, currentMeta, targetUrl),
+    deploymentProvenance: 'VERIFIED_GIT_REDEPLOY_LINEAGE',
+    originalDeploymentId,
+    originalDeploymentSha: originalMeta.githubCommitSha,
   };
 }
 
@@ -368,12 +463,17 @@ export async function verifyEvidence({
       vercelToken,
       'vercel',
     );
-    const appEvidence = validateVercelDeployment(
-      application,
-      deployment,
-      expectedSha,
-      parsedTarget.deploymentId,
-    );
+    const appEvidence =
+      deployment?.source === 'git'
+        ? validateVercelDeployment(application, deployment, expectedSha, parsedTarget.deploymentId)
+        : await validateVercelRedeployDeployment(
+            application,
+            deployment,
+            expectedSha,
+            parsedTarget.deploymentId,
+            vercelToken,
+            fetchImpl,
+          );
     apps.push({
       ...appEvidence,
       githubStatusTargetUrl: parsedTarget.statusTargetUrl,
