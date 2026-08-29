@@ -120,40 +120,6 @@ const QUERY_CONTRACTS: QueryContract[] = [
     ],
   },
   {
-    id: 'driver-board-preparing-orders',
-    sourceFile: 'apps/driver/src/app/board/_client.tsx',
-    sourcePatterns: [
-      "where('status', '==', 'PREPARING')",
-      "where('deliveryMethod', 'in', ['direct', 'hub'])",
-      "where('driverId', '==', null)",
-      "orderBy('preparedAt', 'asc')",
-    ],
-    collectionGroup: 'orders',
-    queryScope: 'COLLECTION',
-    fields: [
-      { fieldPath: 'status', order: 'ASCENDING' },
-      { fieldPath: 'deliveryMethod', order: 'ASCENDING' },
-      { fieldPath: 'driverId', order: 'ASCENDING' },
-      { fieldPath: 'preparedAt', order: 'ASCENDING' },
-    ],
-  },
-  {
-    id: 'driver-board-active-orders',
-    sourceFile: 'apps/driver/src/app/board/_client.tsx',
-    sourcePatterns: [
-      "where('status', 'in', ['DELIVERING', 'DELIVERY_HELD'])",
-      "where('driverId', '==', driverId)",
-      "orderBy('updatedAt', 'asc')",
-    ],
-    collectionGroup: 'orders',
-    queryScope: 'COLLECTION',
-    fields: [
-      { fieldPath: 'status', order: 'ASCENDING' },
-      { fieldPath: 'driverId', order: 'ASCENDING' },
-      { fieldPath: 'updatedAt', order: 'ASCENDING' },
-    ],
-  },
-  {
     id: 'daily-caps-by-store-date',
     sourceFile: 'apps/api/src/products/products.service.ts',
     sourcePatterns: [
@@ -367,14 +333,14 @@ describe('Firestore 실제 쿼리 복합 인덱스 계약', () => {
   });
 
   it('필드 하나가 빠진 인덱스를 검출한다', () => {
-    const contract = QUERY_CONTRACTS.find(({ id }) => id === 'driver-board-preparing-orders')!;
+    const contract = QUERY_CONTRACTS.find(({ id }) => id === 'driver-api-orders-by-prepared-at')!;
     const incomplete: FirestoreIndex = {
       collectionGroup: 'orders',
       queryScope: 'COLLECTION',
       fields: contract.fields.slice(0, -1),
     };
     expect(validateIndexes([incomplete], [contract])).toContain(
-      'driver-board-preparing-orders: 필드 누락 (preparedAt)',
+      'driver-api-orders-by-prepared-at: 필드 누락 (preparedAt)',
     );
   });
 

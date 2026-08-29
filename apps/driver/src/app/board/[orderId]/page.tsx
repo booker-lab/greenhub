@@ -1,5 +1,6 @@
 'use client';
 
+import type { RedeliveryPaymentActionability } from '@greenhub/shared';
 import {
   Anchor,
   Badge,
@@ -13,13 +14,14 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { doc, onSnapshot } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { use, useEffect, useState } from 'react';
-import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { apiFetch } from '@/lib/api';
-import { db } from '@/lib/firebase';
+import {
+  getRedeliveryPaymentPresentation,
+  isDeliveryStartAllowed,
+} from '../_lib/redelivery-payment';
 import {
   type DeliveryHold,
   DeliveryHoldModal,
@@ -40,10 +42,12 @@ type Order = {
   hubAddress?: string;
   productName?: string;
   quantity?: number;
-  preparedAt?: { seconds: number } | null;
+  preparedAt?: string | null;
+  updatedAt?: string | null;
   sellerPhone?: string;
   buyerPhone?: string;
   deliveryHold?: DeliveryHold | null;
+  redeliveryPayment?: RedeliveryPaymentActionability;
 };
 
 const METHOD_LABEL: Record<string, string> = {
@@ -56,19 +60,46 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const { orderId } = use(params);
   const { data: session } = useSession();
   const router = useRouter();
-  const { firebaseReady } = useFirebaseAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
   const [holdOpened, setHoldOpened] = useState(false);
+  const [readLoading, setReadLoading] = useState(true);
 
   useEffect(() => {
-    if (!firebaseReady) return;
+    const token = session?.user.accessToken;
+    if (!token) {
+      setReadLoading(false);
+      return;
+    }
 
-    const unsub = onSnapshot(doc(db, 'orders', orderId), (snap) => {
-      if (snap.exists()) setOrder({ id: snap.id, ...snap.data() } as Order);
-    });
-    return unsub;
-  }, [orderId, firebaseReady]);
+    const controller = new AbortController();
+    let active = true;
+    setReadLoading(true);
+
+    apiFetch(`/driver/orders/${encodeURIComponent(orderId)}`, token, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`driver order request failed: ${response.status}`);
+        return (await response.json()) as Order;
+      })
+      .then((payload) => {
+        if (active) setOrder(payload);
+      })
+      .catch((cause: unknown) => {
+        if (active && !(cause instanceof DOMException && cause.name === 'AbortError')) {
+          setOrder(null);
+        }
+      })
+      .finally(() => {
+        if (active) setReadLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [orderId, session?.user.accessToken]);
 
   async function updateStatus(status: string) {
     if (!order || !session) return;
@@ -94,7 +125,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
     }
   }
 
-  if (!order) {
+  if (readLoading) {
     return (
       <Box
         style={{
@@ -109,14 +140,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
     );
   }
 
+  if (!order) {
+    return (
+      <Box
+        style={{
+          minHeight: '100dvh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Text style={{ color: 'var(--color-text-disabled)' }}>주문을 찾을 수 없습니다</Text>
+      </Box>
+    );
+  }
+
   const isDelivering = order.status === 'DELIVERING';
   const isPreparing = order.status === 'PREPARING';
   const isHeld = order.status === 'DELIVERY_HELD';
   const isHub = order.deliveryMethod === 'hub';
   const isRoundDirect =
     order.schemaVersion === 2 && Boolean(order.roundId) && order.deliveryMethod === 'direct';
+  const paymentPresentation = getRedeliveryPaymentPresentation(order.redeliveryPayment);
+  const deliveryStartAllowed = isDeliveryStartAllowed(order.redeliveryPayment);
   const preparedAtStr = order.preparedAt
-    ? new Date(order.preparedAt.seconds * 1000).toLocaleTimeString('ko-KR', {
+    ? new Date(order.preparedAt).toLocaleTimeString('ko-KR', {
         hour: '2-digit',
         minute: '2-digit',
       })
@@ -250,37 +298,66 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           </Card>
 
           {isHeld && order.deliveryHold && <DeliveryHoldCard hold={order.deliveryHold} />}
+
+          {paymentPresentation && (
+            <Card radius="xl" withBorder p="md">
+              <Stack gap="xs">
+                <Group justify="space-between" align="center">
+                  <Text style={{ fontWeight: 'var(--fw-bold)' }}>재배송비 결제</Text>
+                  <Badge color={paymentPresentation.color} variant="light">
+                    {paymentPresentation.label}
+                  </Badge>
+                </Group>
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  {paymentPresentation.description}
+                </Text>
+              </Stack>
+            </Card>
+          )}
         </Stack>
       </Box>
 
       {/* 하단 CTA */}
       <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
-        {isHeld && isRoundDirect && (
-          <Button
-            fullWidth
-            size="lg"
-            radius="xl"
-            color="brand"
-            loading={loading}
-            onClick={() => updateStatus('DELIVERING')}
-          >
-            배송 재개
-          </Button>
-        )}
+        {isHeld &&
+          isRoundDirect &&
+          (deliveryStartAllowed ? (
+            <Button
+              fullWidth
+              size="lg"
+              radius="xl"
+              color="brand"
+              loading={loading}
+              onClick={() => updateStatus('DELIVERING')}
+            >
+              배송 재개
+            </Button>
+          ) : (
+            <Button fullWidth size="lg" radius="xl" color="gray" disabled>
+              {paymentPresentation?.label ?? '배송 재개 불가'}
+            </Button>
+          ))}
         {(isPreparing || isDelivering) && isRoundDirect && (
           <Stack gap="xs">
-            {isPreparing && (
-              <Button
-                fullWidth
-                size="lg"
-                radius="xl"
-                color="brand"
-                loading={loading}
-                onClick={() => updateStatus('DELIVERING')}
-              >
-                수거 완료 / 배송 시작
-              </Button>
-            )}
+            {isPreparing &&
+              (deliveryStartAllowed ? (
+                <Button
+                  fullWidth
+                  size="lg"
+                  radius="xl"
+                  color="brand"
+                  loading={loading}
+                  onClick={() => updateStatus('DELIVERING')}
+                >
+                  수거 완료 / 배송 시작
+                </Button>
+              ) : (
+                <Button fullWidth size="lg" radius="xl" color="gray" disabled>
+                  {paymentPresentation?.label ?? '배송 시작 불가'}
+                </Button>
+              ))}
             {isDelivering && (
               <Button
                 fullWidth
@@ -308,18 +385,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             </Button>
           </Stack>
         )}
-        {isPreparing && !isRoundDirect && (
-          <Button
-            fullWidth
-            size="lg"
-            radius="xl"
-            color="brand"
-            loading={loading}
-            onClick={() => updateStatus('DELIVERING')}
-          >
-            수거 완료 / 배송 시작
-          </Button>
-        )}
+        {isPreparing &&
+          !isRoundDirect &&
+          (deliveryStartAllowed ? (
+            <Button
+              fullWidth
+              size="lg"
+              radius="xl"
+              color="brand"
+              loading={loading}
+              onClick={() => updateStatus('DELIVERING')}
+            >
+              수거 완료 / 배송 시작
+            </Button>
+          ) : (
+            <Button fullWidth size="lg" radius="xl" color="gray" disabled>
+              {paymentPresentation?.label ?? '배송 시작 불가'}
+            </Button>
+          ))}
         {isDelivering && !isHub && !isRoundDirect && (
           <Button
             fullWidth

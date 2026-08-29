@@ -6,8 +6,9 @@ import {
   roundDirectFixture,
   type RoundDirectFixture,
 } from './_helpers/round-direct';
+import { resolveE2ETargetUrl } from './_helpers/target-url';
 
-const BASE = process.env.DRIVER_BASE ?? 'https://driver.greenlove.co.kr';
+const BASE = resolveE2ETargetUrl('driver');
 const DELIVERY_PHOTO_PATH = resolve(__dirname, '../fixtures/round-direct-delivery.jpg');
 
 type RoundDirectDriverFixtures = {
@@ -229,6 +230,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
 
     await expect(page).toHaveURL(new RegExp(`/board/${orderId}$`));
     await expect(page.getByRole('button', { name: '배송 재개' })).toBeVisible();
+    await expect(page.getByText('재배송비 결제 완료')).toBeVisible();
     await page.getByRole('button', { name: '배송 재개' }).click();
 
     await expect(page.getByRole('banner').getByText('배송 중', { exact: true })).toBeVisible();

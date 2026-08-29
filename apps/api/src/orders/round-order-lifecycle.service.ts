@@ -11,6 +11,10 @@ import { SettlementsService } from '../settlements/settlements.service';
 import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
 import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
+import {
+  assertPaidRedeliveryResume,
+  isCurrentRedeliveryPaymentRequired,
+} from './redelivery-resume-gate';
 
 type OrderRecord = Record<string, any>;
 
@@ -49,6 +53,14 @@ export class RoundOrderLifecycleService {
       if (order['status'] !== input.expectedStatus) {
         throw new ConflictException('주문 상태가 변경되었습니다.');
       }
+      if (input.dto.status === 'DELIVERING') {
+        await assertPaidRedeliveryResume({
+          tx,
+          firestore: this.firestore,
+          order: { ...order, id: input.orderId },
+          orderId: input.orderId,
+        });
+      }
       if (
         input.dto.status === 'DELIVERING' &&
         input.expectedStatus === 'PREPARING' &&
@@ -73,10 +85,12 @@ export class RoundOrderLifecycleService {
       }
 
       const update = this.buildStatusUpdate(order, input.dto, input.requesterId, now);
+      const currentPaymentRequired = isCurrentRedeliveryPaymentRequired(order);
       const heldOrderDelta =
         input.dto.status === 'DELIVERY_HELD'
           ? 1
-          : input.expectedStatus === 'DELIVERY_HELD'
+          : (input.dto.status === 'DELIVERING' && currentPaymentRequired) ||
+              (input.expectedStatus === 'DELIVERY_HELD' && !currentPaymentRequired)
             ? -1
             : 0;
       if (heldOrderDelta !== 0) {
@@ -382,7 +396,10 @@ export class RoundOrderLifecycleService {
         nextDeliveryAt: hold['nextDeliveryAt'] ?? null,
         resolvedAt: null,
       };
-    } else if (order['status'] === 'DELIVERY_HELD') {
+    } else if (
+      (dto.status === 'DELIVERING' && isCurrentRedeliveryPaymentRequired(order)) ||
+      (order['status'] === 'DELIVERY_HELD' && !isCurrentRedeliveryPaymentRequired(order))
+    ) {
       update['deliveryHold'] = {
         ...(order['deliveryHold'] as Record<string, unknown>),
         resolvedAt: this.toIso(now),
@@ -392,12 +409,16 @@ export class RoundOrderLifecycleService {
   }
 
   private nextRoundCounters(raw: Record<string, number> | undefined, heldOrderDelta: number) {
+    const heldOrderCount = raw?.['heldOrderCount'] ?? 0;
+    if (heldOrderDelta < 0 && heldOrderCount < 1) {
+      throw new ConflictException('회차 보류 주문 수가 이미 정리되었습니다.');
+    }
     return {
       reservedDeliveryAddresses: raw?.['reservedDeliveryAddresses'] ?? 0,
       reservedItemQuantity: raw?.['reservedItemQuantity'] ?? 0,
       orderedDeliveryAddresses: raw?.['orderedDeliveryAddresses'] ?? 0,
       orderedItemQuantity: raw?.['orderedItemQuantity'] ?? 0,
-      heldOrderCount: Math.max(0, (raw?.['heldOrderCount'] ?? 0) + heldOrderDelta),
+      heldOrderCount: heldOrderCount + heldOrderDelta,
     };
   }
 

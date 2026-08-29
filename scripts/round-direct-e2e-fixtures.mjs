@@ -171,6 +171,9 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     openRound: `${namespace}-round-open`,
   };
   const tag = { runId, project, namespace };
+  const linkedRedeliveryHoldAt = '2026-08-26T00:00:00.000Z';
+  const driverResumeChargeId = `${namespace}-driver-round-direct-resume-held-charge`;
+  const consumerHeldChargeId = `${namespace}-round-direct-order-held-charge`;
   const documents = [];
   const add = (collection, id, data) => {
     documents.push({ path: `${collection}/${id}`, data: { ...data, _e2e: tag } });
@@ -273,12 +276,15 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     ['driver-round-direct-hold-unreachable', 'DELIVERING', {}],
     ['driver-round-direct-resume-held', 'DELIVERY_HELD', {
       deliveryHold: {
-        heldAt: new Date().toISOString(),
+        heldAt: linkedRedeliveryHoldAt,
         reasonCode: 'ACCESS_UNAVAILABLE', reasonMessage: '출입 정보 확인 필요',
         customerResponsible: true, redeliveryFee: 3000,
         nextContactAt: new Date(Date.now() + 3600000).toISOString(),
         nextDeliveryAt: new Date(Date.now() + 7200000).toISOString(),
+        resolvedAt: null,
       },
+      redeliveryChargeId: driverResumeChargeId,
+      redeliveryChargeHoldAt: linkedRedeliveryHoldAt,
     }],
     ['driver-round-direct-photo-required', 'DELIVERING', {}],
   ];
@@ -287,6 +293,21 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     add('orders', orderId, orderDocument(
       orderId, storeId, ids.openRound, ids.consumer, ids.driver, status, overrides,
     ));
+    if (suffix === 'driver-round-direct-resume-held') {
+      add('orderCharges', driverResumeChargeId, {
+        id: driverResumeChargeId,
+        orderId,
+        storeId,
+        userId: ids.consumer,
+        type: 'REDELIVERY_FEE',
+        status: 'PAID',
+        amount: 3000,
+        customerResponsible: true,
+        holdAt: linkedRedeliveryHoldAt,
+        portonePaymentId: `${namespace}-driver-round-direct-resume-held-payment`,
+        paidAt: new Date().toISOString(),
+      });
+    }
   }
 
   const blockedRoundId = `${namespace}-seller-round-complete-blocked-held`;
@@ -304,11 +325,14 @@ export function buildFixtureManifest({ runId, project, accounts }) {
   const consumerOrders = [
     ['round-direct-order-held', 'DELIVERY_HELD', {
       deliveryHold: {
-        heldAt: new Date().toISOString(),
+        heldAt: linkedRedeliveryHoldAt,
         reasonCode: 'ACCESS_UNAVAILABLE', reasonMessage: '출입 정보 확인 필요',
         customerResponsible: true, redeliveryFee: 3000,
         nextContactAt: null, nextDeliveryAt: null,
+        resolvedAt: null,
       },
+      redeliveryChargeId: consumerHeldChargeId,
+      redeliveryChargeHoldAt: linkedRedeliveryHoldAt,
     }],
     ['round-direct-order-delivered', 'DELIVERED', {}],
     ['round-direct-order-accepted', 'ACCEPTED', {}],
@@ -318,6 +342,21 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     add('orders', orderId, orderDocument(
       orderId, storeId, ids.openRound, ids.consumer, ids.driver, status, overrides,
     ));
+    if (suffix === 'round-direct-order-held') {
+      add('orderCharges', consumerHeldChargeId, {
+        id: consumerHeldChargeId,
+        orderId,
+        storeId,
+        userId: ids.consumer,
+        type: 'REDELIVERY_FEE',
+        status: 'PENDING',
+        amount: 3000,
+        customerResponsible: true,
+        holdAt: linkedRedeliveryHoldAt,
+        portonePaymentId: `${namespace}-round-direct-order-held-payment`,
+        paidAt: null,
+      });
+    }
     add('payments', orderId, {
       id: orderId, orderId, userId: ids.consumer, amount: 12000,
       portonePaymentId: orderId, status: 'PAID', createdAt: new Date().toISOString(),

@@ -36,6 +36,6 @@ import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
     OrderChargesService,
     DeliveryPhotosService,
   ],
-  exports: [OrdersService, RoundOrderLifecycleService],
+  exports: [OrdersService, OrdersQueryService, RoundOrderLifecycleService],
 })
 export class OrdersModule {}

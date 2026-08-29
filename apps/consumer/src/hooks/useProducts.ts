@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Product, Category, ColorOption, SaleType, Variety } from '@greenhub/shared';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
 export interface StoreInfo {
   id: string;
@@ -14,7 +15,7 @@ export interface StoreInfo {
   logoUrl: string | null;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+const API_URL = getApiBaseUrl();
 
 /**
  * API를 통해 활성 상품 목록 조회

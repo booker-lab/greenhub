@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { LoadingState } from '@/components/StateViews';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 import type { ProductFormData } from '../../_components/ProductForm';
 import ProductForm from '../../_components/ProductForm';
 
@@ -47,7 +48,7 @@ export default function EditProductPage() {
   useEffect(() => {
     if (!storeId || !token || !productId) return;
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/stores/${storeId}/products/${productId}`, {
+    fetch(`${getApiBaseUrl()}/stores/${storeId}/products/${productId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (res) => {

@@ -1,74 +1,71 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import type { Order } from '@greenhub/shared';
+import { Anchor, Badge, Box, Stack, Text, Title, UnstyledButton } from '@mantine/core';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
-import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
 import OrderCard from '@/components/OrderCard';
-import { Box, Stack, Title, Text, UnstyledButton, Badge, Anchor } from '@mantine/core';
-
-type Order = {
-  id: string;
-  status: string;
-  deliveryMethod: string;
-  buyerName?: string;
-  address?: string;
-  hubName?: string;
-  hubAddress?: string;
-  productName?: string;
-  quantity?: number;
-  preparedAt?: { seconds: number } | null;
-  deliveredAt?: { seconds: number } | null;
-};
+import { apiFetch } from '@/lib/api';
 
 export default function BoardClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { data: session } = useSession();
-  const { firebaseReady } = useFirebaseAuth();
+  const { data: session, status: sessionStatus } = useSession();
   const tab = searchParams.get('tab') ?? 'preparing';
 
   const [preparing, setPreparing] = useState<Order[]>([]);
   const [delivering, setDelivering] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!firebaseReady) return;
+    if (sessionStatus === 'loading') return;
 
-    // 기사 수거 대상인 direct·hub 주문만 노출하고 택배 주문은 제외한다.
-    const qPreparing = query(
-      collection(db, 'orders'),
-      where('status', '==', 'PREPARING'),
-      where('deliveryMethod', 'in', ['direct', 'hub']),
-      where('driverId', '==', null),
-      orderBy('preparedAt', 'asc'),
-    );
-    const unsubPreparing = onSnapshot(qPreparing, (snap) => {
-      setPreparing(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order));
-    });
-
-    const driverId = session?.user?.id;
-    if (!driverId) {
-      return () => {
-        unsubPreparing();
-      };
+    const token = session?.user.accessToken;
+    if (!token) {
+      setPreparing([]);
+      setDelivering([]);
+      setLoading(false);
+      return;
     }
-    const qDelivering = query(
-      collection(db, 'orders'),
-      where('status', 'in', ['DELIVERING', 'DELIVERY_HELD']),
-      where('driverId', '==', driverId),
-      orderBy('updatedAt', 'asc'),
-    );
-    const unsubDelivering = onSnapshot(qDelivering, (snap) => {
-      setDelivering(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order));
-    });
+
+    const controller = new AbortController();
+    let active = true;
+    setLoading(true);
+    setError(null);
+
+    apiFetch('/driver/orders', token, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`driver orders request failed: ${response.status}`);
+        const payload: unknown = await response.json();
+        if (!Array.isArray(payload)) throw new Error('driver orders response is not a list');
+        return payload as Order[];
+      })
+      .then((orders) => {
+        if (!active) return;
+        setPreparing(orders.filter((order) => order.status === 'PREPARING'));
+        setDelivering(
+          orders.filter(
+            (order) => order.status === 'DELIVERING' || order.status === 'DELIVERY_HELD',
+          ),
+        );
+      })
+      .catch((cause: unknown) => {
+        if (!active || (cause instanceof DOMException && cause.name === 'AbortError')) return;
+        setPreparing([]);
+        setDelivering([]);
+        setError('주문을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
     return () => {
-      unsubPreparing();
-      unsubDelivering();
+      active = false;
+      controller.abort();
     };
-  }, [session?.user?.id, firebaseReady]);
+  }, [session?.user.accessToken, sessionStatus]);
 
   const orders = tab === 'preparing' ? preparing : delivering;
   const today = new Date().toLocaleDateString('ko-KR', {
@@ -134,7 +131,19 @@ export default function BoardClient() {
 
       {/* 주문 목록 */}
       <Box component="main" style={{ flex: 1, padding: '16px' }}>
-        {orders.length === 0 ? (
+        {loading ? (
+          <Stack align="center" justify="center" h={192} gap="xs">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+              주문을 불러오는 중입니다
+            </Text>
+          </Stack>
+        ) : error ? (
+          <Stack align="center" justify="center" h={192} gap="xs">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+              {error}
+            </Text>
+          </Stack>
+        ) : orders.length === 0 ? (
           <Stack align="center" justify="center" h={192} gap="xs">
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
               {tab === 'preparing'

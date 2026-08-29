@@ -9,13 +9,14 @@ import { use, useEffect, useState } from 'react';
 import ProductTopBar from '@/components/ProductTopBar';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 import { db } from '@/lib/firebase';
 import ProductActions from './_components/ProductActions';
 import ProductImages from './_components/ProductImages';
 import ProductInfo from './_components/ProductInfo';
 import RoundPurchasePanel from './_components/RoundPurchasePanel';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = getApiBaseUrl();
 const MAX_ROUND_ID_LENGTH = 128;
 const UNSAFE_ROUND_ID_CHARACTERS = '/?#\\';
 

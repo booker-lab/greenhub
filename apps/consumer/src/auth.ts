@@ -1,8 +1,9 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
-const API = process.env.NEXT_PUBLIC_API_URL!;
+const API = getApiBaseUrl();
 // accessToken 만료 55분 후 갱신 (Railway 기본값 1h 기준)
 const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
 

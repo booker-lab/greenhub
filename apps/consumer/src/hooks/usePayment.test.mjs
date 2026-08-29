@@ -63,6 +63,9 @@ function loadHook() {
           item.roundPrice === item.price,
       };
     }
+    if (specifier === '@/lib/api-base-url') {
+      return { getApiBaseUrl: () => process.env.NEXT_PUBLIC_API_URL };
+    }
     if (specifier === '@portone/browser-sdk/v2') {
       return {
         requestPayment: async (parameters) => {

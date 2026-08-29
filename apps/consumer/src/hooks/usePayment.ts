@@ -3,6 +3,7 @@
 import type { CreateOrderRequest } from '@greenhub/shared';
 import { useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem } from '@/hooks/useCart';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
 export type PaymentMethod = 'kakaopay' | 'naverpay';
 export type PaymentState = 'idle' | 'creating' | 'paying' | 'done' | 'error';
@@ -239,7 +240,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
     try {
       const prepared = prepareOrderRequest(options, paymentAttemptId.current);
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/stores/${encodeURIComponent(options.storeId)}/orders`,
+        `${getApiBaseUrl()}/stores/${encodeURIComponent(options.storeId)}/orders`,
         {
           method: 'POST',
           headers: {

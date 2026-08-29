@@ -5,6 +5,10 @@ import ts from 'typescript';
 
 const source = await readFile(new URL('./_client.tsx', import.meta.url), 'utf8');
 const helperSource = await readFile(new URL('./_detail.ts', import.meta.url), 'utf8');
+const hookSource = await readFile(
+  new URL('../../../../hooks/useOrderStatus.ts', import.meta.url),
+  'utf8',
+);
 const compiled = ts.transpileModule(helperSource, {
   compilerOptions: {
     esModuleInterop: true,
@@ -81,6 +85,15 @@ test('활성·보류·완료·취소 회차 주문 fixture는 상호 배타 상�
         nextDeliveryAt: '2026-07-22T00:00:00.000Z',
         resolvedAt: null,
       },
+      redeliveryPayment: {
+        required: true,
+        holdAt: '2026-07-21T01:00:00.000Z',
+        chargeId: null,
+        status: 'MISSING',
+        canPay: true,
+        paid: false,
+        requiresRecovery: false,
+      },
     },
     'round-order-held',
   );
@@ -109,7 +122,9 @@ test('활성·보류·완료·취소 회차 주문 fixture는 상호 배타 상�
       status: detail?.status,
       hasHold: detail?.deliveryHold !== null,
       hasPhoto: detail?.deliveryPhotoUrl !== null,
-      canPay: detail?.canPayRedeliveryFee,
+      canPay: detail?.redeliveryPayment.canPay,
+      paymentStatus: detail?.redeliveryPayment.status,
+      paymentRequired: detail?.redeliveryPayment.required,
       canCancel: detail?.canRequestCancellation,
     })),
     [
@@ -118,6 +133,8 @@ test('활성·보류·완료·취소 회차 주문 fixture는 상호 배타 상�
         hasHold: true,
         hasPhoto: false,
         canPay: true,
+        paymentStatus: 'MISSING',
+        paymentRequired: true,
         canCancel: true,
       },
       {
@@ -125,6 +142,8 @@ test('활성·보류·완료·취소 회차 주문 fixture는 상호 배타 상�
         hasHold: false,
         hasPhoto: true,
         canPay: false,
+        paymentStatus: 'NOT_REQUIRED',
+        paymentRequired: false,
         canCancel: false,
       },
       {
@@ -132,6 +151,8 @@ test('활성·보류·완료·취소 회차 주문 fixture는 상호 배타 상�
         hasHold: false,
         hasPhoto: false,
         canPay: false,
+        paymentStatus: 'NOT_REQUIRED',
+        paymentRequired: false,
         canCancel: true,
       },
       {
@@ -139,6 +160,8 @@ test('활성·보류·완료·취소 회차 주문 fixture는 상호 배타 상�
         hasHold: false,
         hasPhoto: false,
         canPay: false,
+        paymentStatus: 'NOT_REQUIRED',
+        paymentRequired: false,
         canCancel: false,
       },
     ],
@@ -157,6 +180,201 @@ test('활성·보류·완료·취소 회차 주문 fixture는 상호 배타 상�
       subtotalAmount: 80000,
     },
   ]);
+});
+
+test('서버 redeliveryPayment 상태가 주문 상태와 독립적으로 결제 상태를 결정한다', () => {
+  const hold = {
+    heldAt: '2026-07-21T01:00:00.000Z',
+    reasonCode: 'ACCESS_UNAVAILABLE',
+    reasonMessage: '공동현관 출입이 불가능합니다.',
+    customerResponsible: true,
+    redeliveryFee: 5000,
+    nextContactAt: '2026-07-21T03:00:00.000Z',
+    nextDeliveryAt: '2026-07-22T00:00:00.000Z',
+    resolvedAt: null,
+  };
+  const cases = [
+    {
+      name: 'DELIVERY_HELD + MISSING',
+      status: 'DELIVERY_HELD',
+      payment: {
+        required: true,
+        holdAt: hold.heldAt,
+        chargeId: null,
+        status: 'MISSING',
+        canPay: true,
+        paid: false,
+        requiresRecovery: false,
+      },
+      expected: { status: 'MISSING', canPay: true, paid: false, requiresRecovery: false },
+    },
+    {
+      name: 'PREPARING + MISSING',
+      status: 'PREPARING',
+      payment: {
+        required: true,
+        holdAt: hold.heldAt,
+        chargeId: null,
+        status: 'MISSING',
+        canPay: true,
+        paid: false,
+        requiresRecovery: false,
+      },
+      expected: { status: 'MISSING', canPay: true, paid: false, requiresRecovery: false },
+    },
+    {
+      name: 'PREPARING + PENDING',
+      status: 'PREPARING',
+      payment: {
+        required: true,
+        holdAt: hold.heldAt,
+        chargeId: 'charge-pending',
+        status: 'PENDING',
+        canPay: true,
+        paid: false,
+        requiresRecovery: false,
+      },
+      expected: { status: 'PENDING', canPay: true, paid: false, requiresRecovery: false },
+    },
+    {
+      name: 'PAID',
+      status: 'PREPARING',
+      payment: {
+        required: true,
+        holdAt: hold.heldAt,
+        chargeId: 'charge-paid',
+        status: 'PAID',
+        canPay: false,
+        paid: true,
+        requiresRecovery: false,
+      },
+      expected: { status: 'PAID', canPay: false, paid: true, requiresRecovery: false },
+    },
+    {
+      name: 'FAILED',
+      status: 'PREPARING',
+      payment: {
+        required: true,
+        holdAt: hold.heldAt,
+        chargeId: 'charge-failed',
+        status: 'FAILED',
+        canPay: false,
+        paid: false,
+        requiresRecovery: true,
+      },
+      expected: { status: 'FAILED', canPay: false, paid: false, requiresRecovery: true },
+    },
+    {
+      name: 'REFUNDED',
+      status: 'PREPARING',
+      payment: {
+        required: true,
+        holdAt: hold.heldAt,
+        chargeId: 'charge-refunded',
+        status: 'REFUNDED',
+        canPay: false,
+        paid: false,
+        requiresRecovery: true,
+      },
+      expected: { status: 'REFUNDED', canPay: false, paid: false, requiresRecovery: true },
+    },
+    {
+      name: 'MISMATCHED',
+      status: 'PREPARING',
+      payment: {
+        required: true,
+        holdAt: hold.heldAt,
+        chargeId: 'charge-mismatched',
+        status: 'MISMATCHED',
+        canPay: false,
+        paid: false,
+        requiresRecovery: true,
+      },
+      expected: { status: 'MISMATCHED', canPay: false, paid: false, requiresRecovery: true },
+    },
+  ];
+
+  for (const entry of cases) {
+    const detail = readOrderDetail(
+      {
+        ...activeOrder,
+        id: `round-order-${entry.name}`,
+        status: entry.status,
+        deliveryHold: hold,
+        redeliveryPayment: entry.payment,
+      },
+      `round-order-${entry.name}`,
+    );
+    assert.ok(detail, entry.name);
+    assert.equal(detail.redeliveryPayment.required, true, entry.name);
+    assert.deepEqual(
+      {
+        status: detail.redeliveryPayment.status,
+        canPay: detail.redeliveryPayment.canPay,
+        paid: detail.redeliveryPayment.paid,
+        requiresRecovery: detail.redeliveryPayment.requiresRecovery,
+      },
+      entry.expected,
+      entry.name,
+    );
+  }
+});
+
+test('redeliveryPayment이 없거나 손상된 경우 기존 주문은 보존하고 결제 가능 상태로 승격하지 않는다', () => {
+  const malformed = [
+    {
+      ...activeOrder,
+      status: 'PREPARING',
+      deliveryHold: {
+        heldAt: '2026-07-21T01:00:00.000Z',
+        reasonCode: 'ACCESS_UNAVAILABLE',
+        reasonMessage: '공동현관 출입이 불가능합니다.',
+        customerResponsible: true,
+        redeliveryFee: 5000,
+        nextContactAt: null,
+        nextDeliveryAt: null,
+        resolvedAt: null,
+      },
+      redeliveryPayment: {
+        required: true,
+        holdAt: '2026-07-21T01:00:00.000Z',
+        chargeId: null,
+        status: 'UNKNOWN',
+        canPay: true,
+        paid: false,
+        requiresRecovery: false,
+      },
+    },
+    {
+      ...activeOrder,
+      redeliveryPayment: null,
+    },
+  ];
+
+  assert.equal(readOrderDetail(malformed[0], activeOrder.id), null);
+  assert.equal(readOrderDetail(malformed[1], activeOrder.id), null);
+
+  const legacy = readOrderDetail(activeOrder, activeOrder.id);
+  assert.equal(legacy?.redeliveryPayment.status, 'NOT_REQUIRED');
+  assert.equal(legacy?.redeliveryPayment.canPay, false);
+
+  const notRequired = readOrderDetail(
+    {
+      ...activeOrder,
+      redeliveryPayment: {
+        required: false,
+        holdAt: null,
+        chargeId: null,
+        status: 'NOT_REQUIRED',
+        canPay: false,
+        paid: false,
+        requiresRecovery: false,
+      },
+    },
+    activeOrder.id,
+  );
+  assert.equal(notRequired?.redeliveryPayment.status, 'NOT_REQUIRED');
+  assert.equal(notRequired?.redeliveryPayment.canPay, false);
 });
 
 test('완료·리뷰 상태에서만 HTTPS 서명 사진 URL을 표시한다', () => {
@@ -291,6 +509,7 @@ test('재배송비 결제 응답은 서버 스냅샷 금액과 PortOne 식별자
         status: 'PENDING',
         amount: 5000,
         customerResponsible: true,
+        portonePaymentId: 'order-charge-charge-1',
         portonePaymentParams: {
           paymentId: 'order-charge-charge-1',
           amount: 5000,
@@ -307,8 +526,29 @@ test('재배송비 결제 응답은 서버 스냅샷 금액과 PortOne 식별자
       paymentId: 'order-charge-charge-1',
       amount: 5000,
       name: '고객 사유 재배송비',
+      status: 'PENDING',
     },
   );
+
+  const paid = readRedeliveryPaymentResponse(
+    {
+      id: 'charge-1',
+      orderId: 'round-order-held',
+      storeId: 'store-1',
+      type: 'REDELIVERY_FEE',
+      status: 'PAID',
+      amount: 5000,
+      customerResponsible: true,
+      portonePaymentId: 'order-charge-charge-1',
+      portonePaymentParams: {
+        paymentId: 'order-charge-charge-1',
+        amount: 5000,
+        name: '고객 사유 재배송비',
+      },
+    },
+    { orderId: 'round-order-held', storeId: 'store-1', amount: 5000 },
+  );
+  assert.equal(paid.status, 'PAID');
 
   const invalidResponses = [
     { portonePaymentParams: null },
@@ -356,5 +596,19 @@ test('기존 서버 취소·재배송비·주문 사진 조회 계약만 사용�
   assert.match(source, /\/orders\/\$\{detail\.id\}\/redelivery-fee/);
   assert.match(source, /@portone\/browser-sdk\/v2/);
   assert.match(source, /deliveryPhotoUrl/);
+  assert.match(source, /redeliveryPayment\.canPay/);
+  assert.match(source, /redeliveryPayment\.paid/);
+  assert.match(source, /redeliveryPayment\.required/);
+  assert.match(source, /!detail\.redeliveryPayment\.requiresRecovery/);
+  assert.match(source, /await refetch\(\)/);
+  assert.doesNotMatch(source, /canPayRedeliveryFee/);
+  assert.doesNotMatch(source, /setPaymentDone/);
   assert.doesNotMatch(source, /firebase\/storage|uploadBytes|getDownloadURL/);
+
+  const portoneSuccessGate = source.indexOf('const latestOrder = await refetch()');
+  assert.ok(portoneSuccessGate > source.indexOf('PortOne.requestPayment'));
+  assert.ok(source.indexOf('latestDetail?.redeliveryPayment.paid') > portoneSuccessGate);
+  assert.match(hookSource, /refetch/);
+  assert.match(hookSource, /requestSequence/);
+  assert.match(hookSource, /AbortController/);
 });

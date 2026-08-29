@@ -20,6 +20,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { use, useState } from 'react';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 import {
   formatDateTime,
   isNonEmptyString,
@@ -30,7 +31,7 @@ import {
   readRedeliveryPaymentResponse,
 } from './_detail';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = getApiBaseUrl();
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   PENDING: '결제 확인 중',
   RECRUITING: '모집 중',
@@ -70,13 +71,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const orderId = isSafeIdentifier(rawOrderId) ? rawOrderId : null;
   const router = useRouter();
   const { data: session } = useSession();
-  const { order, loading, error } = useOrderStatus(orderId, session?.user?.accessToken);
+  const { order, loading, error, refetch } = useOrderStatus(orderId, session?.user?.accessToken);
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelDone, setCancelDone] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [paymentDone, setPaymentDone] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const detail = !loading && !error && orderId ? readOrderDetail(order, orderId) : null;
 
@@ -123,7 +123,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   async function handleRedeliveryPayment() {
     const fee = detail?.deliveryHold?.redeliveryFee;
-    if (!session?.user?.accessToken || !detail?.canPayRedeliveryFee || typeof fee !== 'number') {
+    if (
+      !session?.user?.accessToken ||
+      !detail?.redeliveryPayment.canPay ||
+      detail.redeliveryPayment.requiresRecovery ||
+      typeof fee !== 'number' ||
+      fee <= 0
+    ) {
       return;
     }
     setPaying(true);
@@ -153,22 +159,32 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         storeId: detail.storeId,
         amount: fee,
       });
-      const configuration = readPaymentConfiguration();
-      const PortOne = await import('@portone/browser-sdk/v2');
-      const result = await PortOne.requestPayment({
-        storeId: configuration.storeId,
-        paymentId: payment.paymentId,
-        orderName: payment.name,
-        totalAmount: payment.amount,
-        currency: 'KRW',
-        channelKey: configuration.channelKey,
-        payMethod: 'EASY_PAY',
-        easyPay: { easyPayProvider: 'KAKAOPAY' },
-      });
-      if (result && 'code' in result) {
-        throw new Error(result.message ?? '재배송비 결제가 취소되었습니다.');
+      if (payment.status === 'FAILED' || payment.status === 'REFUNDED') {
+        throw new Error('재배송비 결제 상태를 확인할 수 없습니다. 운영 확인이 필요합니다.');
       }
-      setPaymentDone(true);
+      if (payment.status === 'PENDING') {
+        const configuration = readPaymentConfiguration();
+        const PortOne = await import('@portone/browser-sdk/v2');
+        const result = await PortOne.requestPayment({
+          storeId: configuration.storeId,
+          paymentId: payment.paymentId,
+          orderName: payment.name,
+          totalAmount: payment.amount,
+          currency: 'KRW',
+          channelKey: configuration.channelKey,
+          payMethod: 'EASY_PAY',
+          easyPay: { easyPayProvider: 'KAKAOPAY' },
+        });
+        if (result && 'code' in result) {
+          throw new Error(result.message ?? '재배송비 결제가 취소되었습니다.');
+        }
+      }
+
+      const latestOrder = await refetch();
+      const latestDetail = latestOrder ? readOrderDetail(latestOrder, detail.id) : null;
+      if (!latestDetail?.redeliveryPayment.paid) {
+        throw new Error('결제 요청은 접수되었지만 서버 확인 전입니다. 잠시 후 다시 확인해 주세요.');
+      }
     } catch (caught) {
       setActionError(
         caught instanceof Error ? caught.message : '재배송비 결제 중 오류가 발생했습니다.',
@@ -231,6 +247,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const steps = getTimelineSteps(detail);
   const currentStep =
     detail.status === 'REVIEWED' ? steps.length : Math.max(0, steps.indexOf(detail.status));
+  const paymentIsDone = detail.redeliveryPayment.paid;
 
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
@@ -338,16 +355,34 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {detail.deliveryHold.nextDeliveryAt && (
               <Text size="sm">다음 배송: {formatDateTime(detail.deliveryHold.nextDeliveryAt)}</Text>
             )}
-            {detail.canPayRedeliveryFee && (
-              <Button
-                mt="xs"
-                color="red"
-                loading={paying}
-                disabled={paying || paymentDone}
-                onClick={handleRedeliveryPayment}
-              >
-                {paymentDone ? '재배송비 결제 반영 중' : '재배송비 결제'}
-              </Button>
+            {detail.redeliveryPayment.required && (
+              <Stack gap={6} mt="xs">
+                {paymentIsDone && (
+                  <Text size="sm" fw="var(--fw-bold)">
+                    재배송비 결제가 완료되었습니다. 배송 재개를 기다리고 있습니다.
+                  </Text>
+                )}
+                {!paymentIsDone && detail.redeliveryPayment.requiresRecovery && (
+                  <Text size="sm" c="var(--color-danger)">
+                    재배송비 결제 상태를 확인할 수 없습니다. 운영 확인이 필요합니다.
+                  </Text>
+                )}
+                {!paymentIsDone &&
+                  !detail.redeliveryPayment.requiresRecovery &&
+                  detail.redeliveryPayment.canPay && (
+                    <Button
+                      mt="xs"
+                      color="red"
+                      loading={paying}
+                      disabled={paying}
+                      onClick={handleRedeliveryPayment}
+                    >
+                      {detail.redeliveryPayment.status === 'PENDING'
+                        ? '재배송비 결제 계속하기'
+                        : '재배송비 결제'}
+                    </Button>
+                  )}
+              </Stack>
             )}
           </Stack>
         </Alert>

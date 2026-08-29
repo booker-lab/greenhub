@@ -5,8 +5,9 @@ import {
   roundDirectFixture,
   type RoundDirectFixture,
 } from './_helpers/round-direct';
+import { resolveE2ETargetUrl } from './_helpers/target-url';
 
-const BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr';
+const BASE = resolveE2ETargetUrl('consumer');
 
 type RoundDirectConsumerFixtures = {
   roundDirect: RoundDirectFixture;
@@ -146,7 +147,8 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
     await expect(page.getByRole('heading', { name: /주문 상세/ })).toBeVisible();
     await expect(page.getByText(/총 2개 상품/)).toBeVisible();
     await expect(page.getByRole('paragraph').filter({ hasText: /^배송 보류$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /재배송비 결제/ })).toBeVisible();
+    await expect(page.getByText('재배송비 결제 대기')).toBeVisible();
+    await expect(page.getByRole('button', { name: '재배송비 결제 계속하기' })).toBeEnabled();
     await expect(page.getByRole('img', { name: /배송 완료 사진/ })).toHaveCount(0);
   });
 

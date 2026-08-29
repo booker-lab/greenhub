@@ -39,6 +39,19 @@ const INTERVAL_MS = Number(process.env.WAIT_INTERVAL_MS) || 15 * 1000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+export function normalizeTargetUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+      return null;
+    }
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
 export function gh(path) {
   // gh api 는 URL 인코딩된 query 를 그대로 받는다. en-dash·공백은 호출부에서 인코딩.
   const out = execSync(`gh api "${path}"`, {
@@ -71,6 +84,7 @@ export function inspectAppDeployment(app, env, headSha, request = gh) {
   }
   const statuses = request(`repos/${REPO}/deployments/${match.id}/statuses?per_page=5`);
   const latest = statuses[0]; // GitHub 는 최신순 반환
+  const targetUrl = normalizeTargetUrl(latest?.target_url);
   return {
     app,
     environment: env,
@@ -78,8 +92,8 @@ export function inspectAppDeployment(app, env, headSha, request = gh) {
     deploymentSha: match.sha,
     deploymentId: match.id,
     state: latest?.state ?? 'missing',
-    targetUrl: latest?.target_url ?? null,
-    ready: latest?.state === 'success' && match.sha === headSha,
+    targetUrl,
+    ready: latest?.state === 'success' && match.sha === headSha && Boolean(targetUrl),
   };
 }
 
@@ -96,6 +110,7 @@ export function collectDeploymentEvidence(headSha, request = gh) {
     repository: REPO,
     expectedSha: headSha,
     deploymentShas: Object.fromEntries(apps.map(({ app, deploymentSha }) => [app, deploymentSha])),
+    deploymentTargetUrls: Object.fromEntries(apps.map(({ app, targetUrl }) => [app, targetUrl])),
     apps,
   };
 }
