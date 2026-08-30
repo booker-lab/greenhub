@@ -1,74 +1,59 @@
 'use client';
 
 import type { Order } from '@greenhub/shared';
-import { onAuthStateChanged } from 'firebase/auth';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { useSession } from 'next-auth/react';
 import { useEffect, useMemo, useState } from 'react';
 import { type OrderGroup, STATUS_GROUP_MAP } from '@/app/orders/_constants';
-import { db, getFirebaseAuth } from '@/lib/firebase';
+import { apiJson } from '@/lib/api';
 
 interface UseOrdersResult {
   orders: Order[];
   loading: boolean;
   error: string | null;
   groupCounts: Record<OrderGroup, number>;
-  firebaseReady: boolean;
 }
 
-/**
- * storeId의 전체 주문을 실시간 구독.
- * 탭 필터링은 클라이언트에서 수행 (Firestore 복합 인덱스 절약).
- */
 export function useOrders(storeId: string | null): UseOrdersResult {
+  const { data: session, status: sessionStatus } = useSession();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [firebaseReady, setFirebaseReady] = useState(false);
-
-  // Firebase Auth 완료 대기 (signInWithCustomToken race condition 방지)
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), (user) => {
-      setFirebaseReady(!!user);
-    });
-    return unsubscribe;
-  }, []);
 
   useEffect(() => {
-    if (!storeId || !firebaseReady) {
+    const token = session?.user.accessToken;
+    if (sessionStatus === 'loading') {
+      setLoading(true);
+      return;
+    }
+    if (!storeId || !token) {
+      setOrders([]);
+      setError(null);
       setLoading(false);
       return;
     }
 
-    const q = query(
-      collection(db, 'orders'),
-      where('storeId', '==', storeId),
-      orderBy('createdAt', 'desc'),
-    );
+    let active = true;
+    setLoading(true);
+    setError(null);
+    apiJson<Order[]>(`/stores/${encodeURIComponent(storeId)}/orders`, token)
+      .then((payload) => {
+        if (!active) return;
+        if (!Array.isArray(payload)) throw new Error('주문 목록 응답 형식이 올바르지 않습니다.');
+        setOrders(payload);
+      })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setOrders([]);
+        setError(err instanceof Error ? err.message : '주문 목록을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => {
-        const items = snap.docs.map((d) => {
-          const data = d.data();
-          // Firestore Timestamp → ISO8601 문자열 정규화 (Order 타입은 string).
-          // 미변환 시 localeCompare/new Date()가 깨짐 (useStoreProducts와 동일 패턴).
-          for (const key of ['createdAt', 'updatedAt', 'requestedDeliveryDate', 'preparedAt']) {
-            if (data[key]?.toDate) data[key] = data[key].toDate().toISOString();
-          }
-          return { id: d.id, ...data } as Order;
-        });
-        setOrders(items);
-        setLoading(false);
-        setError(null);
-      },
-      (err) => {
-        setError(err.message);
-        setLoading(false);
-      },
-    );
-
-    return unsubscribe;
-  }, [storeId, firebaseReady]);
+    return () => {
+      active = false;
+    };
+  }, [session?.user.accessToken, sessionStatus, storeId]);
 
   const groupCounts = useMemo(() => {
     const result = {
@@ -84,5 +69,5 @@ export function useOrders(storeId: string | null): UseOrdersResult {
     return result;
   }, [orders]);
 
-  return { orders, loading, error, groupCounts, firebaseReady };
+  return { orders, loading, error, groupCounts };
 }

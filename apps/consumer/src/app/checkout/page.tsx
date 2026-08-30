@@ -23,6 +23,7 @@ import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { readPortonePaymentConfiguration } from '@/lib/portone-config';
 import CheckoutForm from './_components/CheckoutForm';
 
 declare global {
@@ -274,11 +275,14 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
     setError(null);
 
     const accessToken = session?.user?.accessToken ?? '';
-    const channelKey =
-      paymentMethod === 'naverpay'
-        ? process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY!
-        : process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY!;
-    const easyPayProvider = paymentMethod === 'naverpay' ? 'NAVERPAY' : 'KAKAOPAY';
+    let configuration: ReturnType<typeof readPortonePaymentConfiguration>;
+    try {
+      configuration = readPortonePaymentConfiguration(paymentMethod);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '결제 설정을 확인할 수 없습니다.');
+      setState('error');
+      return;
+    }
     const PortOne = await import('@portone/browser-sdk/v2');
 
     let lastOrderId: string | null = null;
@@ -324,14 +328,14 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
 
       setState('paying');
       const response = await PortOne.requestPayment({
-        storeId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID!,
+        storeId: configuration.portoneStoreId,
         paymentId: orderId,
         orderName: portonePaymentParams.name,
         totalAmount: portonePaymentParams.amount,
         currency: 'KRW' as const,
-        channelKey,
+        channelKey: configuration.channelKey,
         payMethod: 'EASY_PAY',
-        easyPay: { easyPayProvider },
+        easyPay: { easyPayProvider: configuration.easyPayProvider },
       });
       if (response && 'code' in response) {
         setError(response.message ?? '결제가 취소되었습니다.');
@@ -373,7 +377,6 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   });
   const [deliveryPhone, setDeliveryPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
-  const [marketingAgreedAt, setMarketingAgreedAt] = useState<string | null>(null);
   const [acquisition, setAcquisition] = useState<OrderAcquisitionSnapshot | null>(null);
   const storeId = cartItems[0]?.storeId ?? '';
   const saleRounds = useSaleRounds(storeId || null);
@@ -389,16 +392,6 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       deliveryAddress: address,
       deliveryPhone: deliveryPhone.trim(),
       ...(schedule ? { requestedDeliveryDate: schedule.requestedDeliveryDate } : {}),
-      ...(marketingAgreedAt
-        ? {
-            marketingConsent: {
-              agreed: true,
-              channels: ['alimtalk', 'sms'],
-              copyVersion: 'round-direct-checkout-v1',
-              agreedAt: marketingAgreedAt,
-            },
-          }
-        : {}),
       ...(acquisition ? { acquisition } : {}),
     },
     roundItems: cartItems,
@@ -442,10 +435,6 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       canPay={canPay}
       error={scheduleError ?? error}
       onPay={requestPayment}
-      marketingConsent={marketingAgreedAt !== null}
-      onMarketingConsentChange={(agreed) =>
-        setMarketingAgreedAt(agreed ? new Date().toISOString() : null)
-      }
     />
   );
 }

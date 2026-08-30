@@ -2,7 +2,7 @@
 
 # Notifications API / Domain Spec
 
-> **최종 정합화**: 2026-08-24
+> **최종 정합화**: 2026-08-30
 > **상태**: Current
 > **코드 정본**: `packages/shared/src/notification.types.ts`, `apps/api/src/notifications/**`
 > **운영 승인 상태**: 이 문서에 복제하지 않고 `docs/memory.md`와 활성 HANDOFF를 따른다.
@@ -11,7 +11,7 @@
 
 - 알림 발송과 알림 기록은 NestJS API가 소유한다.
 - 현재 외부 메시지 provider는 **ALIGO**다.
-- 현재 실제 발송 경로는 카카오 알림톡과 SMS다.
+- 현재 코드상 외부 발송 경로는 카카오 알림톡과 SMS다. 실제 production 발송 여부는 운영 승인·설정의 별도 상태다.
 - `fcm`은 shared `NotificationChannel`에 호환 타입으로 남아 있지만 현재 API의 실제 발송 구현 경로가 아니다.
 - 사용자 알림 목록과 알림톡/SMS 수신 설정 API는 consumer에 노출된다.
 - 회차 직배송의 현재 provider 승인·심사 상태는 운영 상태이므로 이 spec이 아니라 `docs/memory.md`에서 관리한다.
@@ -238,42 +238,28 @@ consumer UI는 이 값을 **선택 마케팅 수신 상태**로 표시하고, �
 
 따라서 주문 상태 알림을 단순히 `notificationPreferences`가 false라는 이유로 막는 것은 현재 안전 계약이 아니다. 거래 수행에 필요한 정보성 연락과 선택 마케팅 sender를 구분한다.
 
-### 현재 구현 불일치 — `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY` P0
+### 현재 파일럿 정책 — `MARKETING_NOT_USED_IN_PILOT`
 
-2026-08-24 checkout·orders·notifications·retention을 함께 대조한 결과 선택 마케팅 consent lifecycle이 하나의 authoritative 상태로 수렴하지 않는다.
+현재 통제된 공개 파일럿에서는 선택 마케팅을 사용하지 않는다.
 
-현재 경로:
+1. round checkout에 선택 마케팅 checkbox를 노출하지 않는다.
+2. 신규 round 주문 request에 `marketingConsent`를 보내지 않는다.
+3. `RoundOrderCreateService`는 방어적으로 `marketingConsent` 요청을 거부하고 신규 마케팅 consent
+   retention record를 생성하지 않는다.
+4. MY 마케팅 설정 진입은 파일럿에서 비활성화한다.
+5. 과거에 이미 저장된 `notificationPreferences` 또는 consent 기록은 이 정책 전환만을 이유로
+   삭제하지 않는다.
 
-1. round checkout의 선택 checkbox가 동의되면 order request에 `marketingConsent`를 넣는다.
-2. `RoundOrderCreateService`는 order snapshot에 consent를 저장하고 `marketingConsentLogs`에 `recordType: CONSENT` retention record를 만든다.
-3. MY 마케팅 설정은 order consent가 아니라 `users.notificationPreferences`의 `alimtalk/sms` pair만 읽는다.
-4. checkout consent는 user preference를 갱신하지 않는다.
-5. Auth 신규 사용자 생성은 이 preference pair를 기본 초기화하지 않는다.
-6. MY의 “즉시 철회”는 `users.notificationPreferences`만 false로 바꾸고 `MARKETING_CONSENT` withdrawal retention record를 만들지 않는다.
-7. current round-direct spec은 마케팅 동의·철회 증거를 `marketingConsentLogs`에 보관한다고 규정한다.
+이는 미래 marketing 기능 전체를 삭제했다는 뜻이 아니다. legacy preference API·코드는 향후 별도
+정책과 lifecycle 정합화 뒤 재사용할 수 있으나, 현재 파일럿의 선택 마케팅 sender로 사용하지 않는다.
 
-따라서 **checkout 동의 상태, MY 표시 상태, 철회 상태, 장기 retention evidence가 서로 다른 source로 분리돼 있다.** 현재 실제 marketing sender는 이번 감사에서 확인되지 않았으므로 마케팅 발송이 활성화됐다고 문서화하지 않는다.
+`ORDER_ACCEPTED`, `ORDER_PREPARING`, `ORDER_DELIVERING`, `ORDER_DELIVERY_HELD`,
+`ORDER_REDELIVERY_PAYMENT_REQUESTED`, `ORDER_REDELIVERY_SCHEDULED`, `ORDER_DELIVERED`,
+`ORDER_CANCELLED`는 주문·결제·배송 수행을 위한 거래성 알림이며 선택 마케팅과 별개다. 마케팅
+선호 상태를 이유로 거래성 알림을 막지 않는다.
 
-이 항목은 출시 전 P0 `IMPLEMENTATION FINDING`으로 추적한다.
-
-완료 정책은 둘 중 하나를 명시적으로 선택할 수 있다.
-
-- 실제 마케팅 발송을 MVP에서 하지 않을 경우: 불필요한 consent 수집/설정 노출을 출시 전 비활성화·제거하고 저장 계약을 단순화한다.
-- consent 기능을 유지할 경우: user-level SSOT, checkout 동기화, 철회 evidence, idempotency, 실제 marketing sender gating을 하나의 lifecycle로 구현한다.
-
-어느 경우에도 주문·결제·배송 정보성 연락은 marketing opt-out과 분리한다.
-
-최소 회귀:
-
-- 신규 사용자 preference 상태가 정의돼 있고 설정 화면이 오류 없이 해석
-- checkout 동의 후 authoritative user marketing 상태가 의도대로 반영
-- 한 채널 철회가 다른 채널 상태를 보존
-- 철회 시 timestamp/policy/channel을 포함한 감사 가능한 retention evidence 생성
-- 중복 철회가 중복 evidence·상태 손상을 만들지 않음
-- 실제 marketing sender가 존재한다면 철회 채널에 발송하지 않음
-- ORDER_* 정보성 알림은 마케팅 opt-out 때문에 사라지지 않음
-
-정본: `docs/BACKLOG.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+현재 외부 provider의 실제 승인·운영 발송 여부는 이 source contract만으로 확정하지 않으며,
+ALIGO 실제 발송은 별도 승인된 운영 readiness 검증의 대상이다.
 
 ## 10. Legacy 공동구매 알림
 
@@ -336,14 +322,17 @@ FCM을 다시 도입할 경우 별도 Task에서 다음을 함께 정의한다.
 
 외부 실제 발송은 단위·통합 테스트의 대체물이 아니며 별도 승인된 운영 readiness 검증이다.
 
-선택 마케팅 변경은 단일 화면의 checkbox 동작만 확인하지 않고 consent → authoritative state → withdrawal → retention evidence → sender gating의 lifecycle을 직접 검증한다.
+향후 선택 마케팅을 재개하는 변경은 단일 화면의 checkbox 동작만 확인하지 않고 consent → authoritative
+state → withdrawal → retention evidence → sender gating의 lifecycle을 직접 검증한다. 현재 파일럿은
+그 lifecycle을 사용하지 않는다.
 
 ## 변경 이력
 
 | 날짜 | 내용 |
 |---|---|
-| 2026-08-24 | checkout consent·user preference·철회·retention evidence 분리를 `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY` P0로 분리하고 legacy 목표미달 consumer 취소 알림 누락 가능성을 LATER finding으로 기록 |
+| 2026-08-30 | 파일럿 선택 마케팅 미사용, 거래성 `ORDER_*` 8종 유지, 과거 preference·consent 보존 정책을 반영 |
+| 2026-08-24 | checkout consent·user preference·철회·retention evidence 분리와 legacy 목표미달 consumer 취소 알림 누락 가능성을 기록 |
 | 2026-08-24 | ALIGO 3회 retry+SMS fallback·fail-closed·delivery idempotency의 직접 테스트 근거와 실제 provider 검증을 분리 |
-| 2026-08-23 | 현행 ALIGO/SMS 구현, 3회 retry+1회 fallback, 실제 API 응답, FCM 미구현 상태, 회차 8종 매핑 계약에 맞춰 전면 정합화 |
+| 2026-08-23 | 현행 ALIGO/SMS 구현, 3회 retry+1회 fallback, FCM 미구현 상태, 회차 8종 매핑 계약에 맞춰 전면 정합화 |
 | 2026-08-22 | 내부 논리 코드와 ALIGO `tpl_code` 매핑 분리, 필수 본문 변수와 회차 알림 변수 계약 반영 |
 | 2026-03-26 | 초기 알림 도메인 초안 작성 |

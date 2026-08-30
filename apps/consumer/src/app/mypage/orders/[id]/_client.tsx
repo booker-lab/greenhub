@@ -21,6 +21,7 @@ import { useSession } from 'next-auth/react';
 import { use, useState } from 'react';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { readPortonePaymentConfiguration } from '@/lib/portone-config';
 import {
   formatDateTime,
   isNonEmptyString,
@@ -46,15 +47,6 @@ const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   CANCELLED: '주문 취소',
   REVIEWED: '구매 확정',
 };
-
-function readPaymentConfiguration() {
-  const storeId = process.env.NEXT_PUBLIC_PORTONE_STORE_ID;
-  const channelKey = process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY;
-  if (!isNonEmptyString(storeId) || !isNonEmptyString(channelKey)) {
-    throw new Error('결제 설정을 확인할 수 없습니다.');
-  }
-  return { storeId, channelKey };
-}
 
 function getTimelineSteps(order: OrderDetailView): OrderStatus[] {
   if (order.saleType === 'group') {
@@ -163,17 +155,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         throw new Error('재배송비 결제 상태를 확인할 수 없습니다. 운영 확인이 필요합니다.');
       }
       if (payment.status === 'PENDING') {
-        const configuration = readPaymentConfiguration();
+        const configuration = readPortonePaymentConfiguration('kakaopay');
         const PortOne = await import('@portone/browser-sdk/v2');
         const result = await PortOne.requestPayment({
-          storeId: configuration.storeId,
+          storeId: configuration.portoneStoreId,
           paymentId: payment.paymentId,
           orderName: payment.name,
           totalAmount: payment.amount,
           currency: 'KRW',
           channelKey: configuration.channelKey,
           payMethod: 'EASY_PAY',
-          easyPay: { easyPayProvider: 'KAKAOPAY' },
+          easyPay: { easyPayProvider: configuration.easyPayProvider },
         });
         if (result && 'code' in result) {
           throw new Error(result.message ?? '재배송비 결제가 취소되었습니다.');

@@ -66,6 +66,18 @@ function loadHook() {
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => process.env.NEXT_PUBLIC_API_URL };
     }
+    if (specifier === '@/lib/portone-config') {
+      return {
+        readPortonePaymentConfiguration: (paymentMethod) => ({
+          portoneStoreId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID,
+          channelKey:
+            paymentMethod === 'naverpay'
+              ? process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY
+              : process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY,
+          easyPayProvider: paymentMethod === 'naverpay' ? 'NAVERPAY' : 'KAKAOPAY',
+        }),
+      };
+    }
     if (specifier === '@portone/browser-sdk/v2') {
       return {
         requestPayment: async (parameters) => {
@@ -179,6 +191,7 @@ test('검증된 같은 회차 상품 전체를 주문 한 번과 PortOne 결제 
   assert.equal(body.quantity, 2);
   assert.equal(body.saleType, 'normal');
   assert.equal(body.deliveryMethod, 'direct');
+  assert.equal(Object.hasOwn(body, 'marketingConsent'), false);
   assert.match(body.clientOrderRequestId, /^[A-Za-z0-9:_-]{8,128}$/);
   assert.equal(paymentCalls.length, 1);
   assert.equal(paymentCalls[0].paymentId, 'order-1');

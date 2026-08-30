@@ -40,7 +40,14 @@ export default function Home() {
     <PageShell>
       <PageHeader
         title="홈"
-        right={<ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />}
+        right={
+          <ConnectionStatus
+            loading={loading}
+            error={error}
+            firebaseReady={firebaseReady}
+            source="api"
+          />
+        }
       />
 
       <Container size="sm" py="md">

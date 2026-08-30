@@ -115,7 +115,7 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
     await expect(page.getByRole('button', { name: /결제하기/ })).toHaveCount(1);
   });
 
-  test('결제는 전화번호·이천 주소·필수 고지와 선택 마케팅 동의를 구분한다', async ({
+  test('결제는 배송 연락처와 이천 주소·필수 고지만 노출하고 마케팅 동의는 노출하지 않는다', async ({
     page,
   }) => {
     await page.goto(`${BASE}/checkout?from=cart`);
@@ -123,7 +123,7 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
     await expect(page.getByLabel(/배송 연락처/)).toBeVisible();
     await expect(page.getByText(/이천시 배송 가능 주소/)).toBeVisible();
     await expect(page.getByText(/필수 고지/)).toBeVisible();
-    await expect(page.getByRole('checkbox', { name: /마케팅 정보 수신/ })).not.toBeChecked();
+    await expect(page.getByRole('checkbox', { name: /마케팅 정보 수신/ })).toHaveCount(0);
   });
 
   test('결제 직전 재검증 변경은 사용자 재확인 없이는 결제를 진행하지 않는다', async ({

@@ -4,8 +4,12 @@ import type { CreateOrderRequest } from '@greenhub/shared';
 import { useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem } from '@/hooks/useCart';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import {
+  type PortonePaymentMethod,
+  readPortonePaymentConfiguration,
+} from '@/lib/portone-config';
 
-export type PaymentMethod = 'kakaopay' | 'naverpay';
+export type PaymentMethod = PortonePaymentMethod;
 export type PaymentState = 'idle' | 'creating' | 'paying' | 'done' | 'error';
 
 interface BasePaymentOptions {
@@ -18,7 +22,7 @@ export type RoundPaymentOrderRequest = Pick<
   CreateOrderRequest,
   'deliveryAddress' | 'deliveryPhone'
 > &
-  Partial<Pick<CreateOrderRequest, 'requestedDeliveryDate' | 'marketingConsent' | 'acquisition'>>;
+  Partial<Pick<CreateOrderRequest, 'requestedDeliveryDate' | 'acquisition'>>;
 
 export type UsePaymentOptions = BasePaymentOptions &
   (
@@ -140,7 +144,6 @@ function prepareRoundOrderRequest(
       ...(orderRequest.requestedDeliveryDate
         ? { requestedDeliveryDate: orderRequest.requestedDeliveryDate }
         : {}),
-      ...(orderRequest.marketingConsent ? { marketingConsent: orderRequest.marketingConsent } : {}),
       ...(orderRequest.acquisition ? { acquisition: orderRequest.acquisition } : {}),
       roundId: firstItem.roundId,
       roundItems: roundItems.map((item) => ({
@@ -203,22 +206,6 @@ function readOrderPaymentResponse(value: unknown, expectedAmount?: number): Orde
   };
 }
 
-function readPaymentConfiguration(paymentMethod: PaymentMethod) {
-  const portoneStoreId = process.env.NEXT_PUBLIC_PORTONE_STORE_ID;
-  const channelKey =
-    paymentMethod === 'naverpay'
-      ? process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY
-      : process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY;
-  if (!isNonEmptyString(portoneStoreId) || !isNonEmptyString(channelKey)) {
-    throw new Error('결제 설정을 확인할 수 없습니다.');
-  }
-  return {
-    portoneStoreId,
-    channelKey,
-    easyPayProvider: paymentMethod === 'naverpay' ? ('NAVERPAY' as const) : ('KAKAOPAY' as const),
-  };
-}
-
 export function usePayment(options: UsePaymentOptions): UsePaymentResult {
   const [state, setState] = useState<PaymentState>('idle');
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -238,6 +225,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
     paymentAttemptId.current ??= crypto.randomUUID();
 
     try {
+      const configuration = readPortonePaymentConfiguration(options.paymentMethod);
       const prepared = prepareOrderRequest(options, paymentAttemptId.current);
       const res = await fetch(
         `${getApiBaseUrl()}/stores/${encodeURIComponent(options.storeId)}/orders`,
@@ -255,7 +243,6 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
         throw new Error(body.message ?? '주문 생성 실패');
       }
       const payment = readOrderPaymentResponse(await res.json(), prepared.expectedAmount);
-      const configuration = readPaymentConfiguration(options.paymentMethod);
       setOrderId(payment.orderId);
 
       transition('paying');

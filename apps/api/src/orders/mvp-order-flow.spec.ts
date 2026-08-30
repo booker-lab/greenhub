@@ -439,7 +439,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     expect((orderWrite?.['orderItems'] as RecordData[])[0]).not.toHaveProperty('lineAmount');
   });
 
-  it('주문 생성 트랜잭션에 계약 기록과 마케팅 동의 기록을 함께 남긴다', async () => {
+  it('파일럿 회차 주문은 계약 기록만 남기고 마케팅 동의를 저장하지 않는다', async () => {
     const { firestore } = makeFirestore(seedRoundRecords());
     const { OrderCapacityService } = require('./order-capacity.service');
     const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
@@ -449,18 +449,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       retention as never,
     );
 
-    await service.create(
-      'store-round',
-      'user-1',
-      roundOrderRequest({
-        marketingConsent: {
-          agreed: true,
-          channels: ['sms'],
-          copyVersion: 'marketing-v1',
-          agreedAt: '2026-07-15T03:00:00.000+09:00',
-        },
-      }) as never,
-    );
+    const result = await service.create('store-round', 'user-1', roundOrderRequest() as never);
 
     expect(retention.saveRecord).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -472,21 +461,41 @@ describe('MVP 회차 주문 흐름 계약', () => {
         transaction: expect.anything(),
       }),
     );
-    expect(retention.saveRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        purpose: 'MARKETING_CONSENT',
-        metadata: {
-          agreed: true,
-          channels: ['sms'],
-          orderId: expect.any(String),
-          policyVersion: 'marketing-v1',
-          recordType: 'CONSENT',
-          userId: 'user-1',
-        },
-        transaction: expect.anything(),
-      }),
+    expect(retention.saveRecord).not.toHaveBeenCalledWith(
+      expect.objectContaining({ purpose: 'MARKETING_CONSENT' }),
     );
     expect(JSON.stringify(retention.saveRecord.mock.calls)).not.toMatch(/phone|address/i);
+    expect(result).toEqual(expect.objectContaining({ orderId: expect.any(String) }));
+  });
+
+  it('파일럿 회차 요청에 마케팅 동의가 들어오면 주문·예약·보관 기록 전에 거부한다', async () => {
+    const { firestore, records } = makeFirestore(seedRoundRecords());
+    const { OrderCapacityService } = require('./order-capacity.service');
+    const retention = { saveRecord: jest.fn() };
+    const service = new RoundOrderCreateService(
+      firestore as never,
+      new OrderCapacityService(firestore),
+      retention as never,
+    );
+
+    await expect(
+      service.create(
+        'store-round',
+        'user-1',
+        roundOrderRequest({
+          marketingConsent: {
+            agreed: true,
+            channels: ['sms'],
+            copyVersion: 'marketing-v1',
+          },
+        }) as never,
+      ),
+    ).rejects.toThrow('파일럿에서는 마케팅 동의를 수집하지 않습니다.');
+    expect(retention.saveRecord).not.toHaveBeenCalled();
+    expect(Array.from(records.keys()).some((path) => path.startsWith('orders/'))).toBe(false);
+    expect(
+      Array.from(records.keys()).some((path) => path.startsWith('checkoutReservations/')),
+    ).toBe(false);
   });
 
   it('결제 예약은 배송지 1건과 주문 상품 수량 합계를 15분간 확보한다', async () => {
@@ -765,9 +774,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     ['판매자 공백 기본값', '   ', '판매자 취소', 'seller-1', 'seller'],
     ['판매자 trim한 확정값', '  재고 부족  ', '재고 부족', 'seller-1', 'seller'],
     ['관리자 trim한 확정값', '  운영 정책 취소  ', '운영 정책 취소', 'admin-1', 'admin'],
-  ])(
-    '%s을 환불·저장·알림에 동일하게 사용한다',
-    async (_name, reason, expected, requesterId, role) => {
+  ])('%s을 환불·저장·알림에 동일하게 사용한다', async (_name, reason, expected, requesterId, role) => {
     const { firestore, records } = makeFirestore(
       seedRoundRecords({
         'orders/order-cancel': {
@@ -804,8 +811,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       'order-cancel',
       undefined,
     );
-    },
-  );
+  });
 
   it.each([
     ['너무 긴 사유', '가'.repeat(101)],
@@ -1217,10 +1223,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       }),
     );
     const { OperationsService } = require('../operations/operations.service');
-    const service = new OrderChargesService(
-      firestore,
-      new OperationsService(firestore, {}, {}),
-    );
+    const service = new OrderChargesService(firestore, new OperationsService(firestore, {}, {}));
 
     await expect(
       service.createRedeliveryFeeCharge({
@@ -1450,7 +1453,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     const result = await new OrdersQueryService(firestore as never).getOrder(
       'store-round',
       'order-legacy',
-      'user-1',
+      { sub: 'seller-1', role: 'seller' },
     );
     expect(result.orderItems[0]).toMatchObject({ subtotalAmount: 100000 });
     expect(result.orderItems[0]).not.toHaveProperty('lineAmount');
