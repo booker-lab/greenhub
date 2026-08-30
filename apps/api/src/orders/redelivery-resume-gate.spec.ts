@@ -208,7 +208,7 @@ describe('유료 재배송 서버 불변식', () => {
     expect(context.memory.read('saleRounds/round-1')?.counters.heldOrderCount).toBe(1);
     expect(context.notifications.sendToUser).toHaveBeenCalledTimes(1);
 
-    await context.firestore.doc('orderCharges/charge-1').update({ status: 'PAID' });
+    await context.memory.firestore.doc('orderCharges/charge-1').update({ status: 'PAID' });
     await expect(resume(context)).resolves.toMatchObject({ status: 'DELIVERING' });
     expect(context.memory.read('orders/order-1')?.deliveryHold).toMatchObject({
       heldAt: holdAt,

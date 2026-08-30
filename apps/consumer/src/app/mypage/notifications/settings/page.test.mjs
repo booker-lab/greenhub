@@ -134,14 +134,16 @@ test('철회 성공 응답의 두 채널 boolean과 요청 채널 false를 모�
   }
 });
 
-test('화면은 선택 마케팅과 주문·결제·배송 정보성 연락을 분리하고 서버 상태만 표시한다', () => {
-  assert.match(source, /카카오톡 마케팅/);
-  assert.match(source, /문자 마케팅/);
-  assert.match(source, /동의함/);
-  assert.match(source, /동의하지 않음/);
-  assert.match(source, /즉시 철회/);
-  assert.match(source, /주문·결제·배송을 위한 정보성 연락/);
-  assert.match(source, /마케팅 동의 여부와\s*관계없이/);
-  assert.doesNotMatch(source, /localStorage|sessionStorage/);
-  assert.doesNotMatch(source, /marketingConsentLogs/);
+test('파일럿 MY 설정 경로는 마케팅 편집 없이 비활성 안내만 표시한다', () => {
+  const start = source.indexOf('export default function NotificationSettingsPage');
+  const end = source.indexOf('function LegacyNotificationSettingsPage', start);
+  const pilotSource = source.slice(start, end);
+
+  assert.match(source, /const MARKETING_NOT_USED_IN_PILOT = true/);
+  assert.match(pilotSource, /파일럿에서는 마케팅 수신 동의와 설정을 운영하지 않습니다/);
+  assert.doesNotMatch(pilotSource, /fetchMarketingPreferences|withdrawMarketingPreference|PATCH/);
+  assert.doesNotMatch(pilotSource, /즉시 철회|동의함|동의하지 않음/);
+  assert.match(pilotSource, /주문·결제·배송에 필요한 정보성 연락/);
+  assert.match(source, /function LegacyNotificationSettingsPage/);
+  assert.doesNotMatch(source, /localStorage|sessionStorage|marketingConsentLogs/);
 });

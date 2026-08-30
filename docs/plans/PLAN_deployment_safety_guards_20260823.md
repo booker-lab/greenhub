@@ -56,6 +56,27 @@ Issue #32 완료 조건:
 
 `main` merge 자체는 production 배포 승인이 아니다.
 
+### RC-A 구성 및 exact-SHA 순서
+
+API production bootstrap은 `JWT_SECRET`, `JWT_REFRESH_SECRET`,
+`PORTONE_V2_SECRET`, `PORTONE_WEBHOOK_SECRET`, `FIREBASE_PROJECT_ID`,
+`FIREBASE_STORAGE_BUCKET`이 모두 존재할 때만 진행한다. Firebase 서비스 계정 JSON을
+사용하면 JSON의 project와 설정 project가 일치해야 하며, JSON 원문·private key·secret은
+오류·로그·증거에 남기지 않는다. JSON이 없으면 현재 배포 계약과 호환되는 ADC 경로를
+사용하되, 자격 증명 초기화 실패 시에도 서버를 계속 실행하지 않는다.
+
+production 승격 순서는 다음과 같이 고정한다.
+
+1. 판매 활성화 법적 문서를 포함한 후보의 exact release SHA를 확정한다.
+2. 사람이 production 승인을 남긴다.
+3. provider·외부 배포 상태를 읽기 전용으로 재조회하고, 비밀값 없이 대상과 설정을 확인한다.
+4. 배포할 artifact와 provider metadata의 Git SHA가 승인 release SHA와 일치하는지 확인한다.
+5. 승인된 exact SHA 또는 그 artifact만 production으로 promote/deploy한다.
+6. 배포 직후 같은 SHA의 health·smoke·최종 gate를 통과시키고 provider metadata를 다시 확인한다.
+7. 모든 최종 gate 뒤에만 별도 승인으로 `salesMode`를 활성화한다.
+
+위 순서 중 하나라도 증거가 없거나 SHA가 다르면 배포·승격·`salesMode` 활성화를 중단한다.
+
 production은 다음 조건을 모두 충족한 뒤에만 실행한다.
 
 1. 판매 활성화 법적 문서까지 포함한 actual release SHA 확정.

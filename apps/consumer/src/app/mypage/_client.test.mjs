@@ -136,9 +136,9 @@ test('배송 보류 상태와 서버 상품 요약을 주문 카드에 명확히
   assert.match(source, /summary\.totalQuantity/);
 });
 
-test('MY 내 정보는 알림 내역과 별도로 마케팅 알림 설정 진입을 제공한다', () => {
+test('MY 내 정보는 알림 내역은 제공하지만 파일럿 마케팅 설정 진입은 제공하지 않는다', () => {
   assert.match(source, /router\.push\('\/mypage\/notifications'\)/);
   assert.match(source, />\s*알림 내역\s*<\/Text>/s);
-  assert.match(source, /router\.push\('\/mypage\/notifications\/settings'\)/);
-  assert.match(source, />\s*마케팅 알림 설정\s*<\/Text>/s);
+  assert.doesNotMatch(source, /router\.push\('\/mypage\/notifications\/settings'\)/);
+  assert.doesNotMatch(source, /마케팅 알림 설정/);
 });

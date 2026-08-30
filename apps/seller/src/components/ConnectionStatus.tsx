@@ -7,17 +7,24 @@ interface ConnectionStatusProps {
   error?: string | null;
   /** Firebase Auth 준비 여부 (미지정 시 준비 완료로 간주). */
   firebaseReady?: boolean;
+  source?: 'api' | 'realtime';
 }
 
-/** Firestore 실시간 구독 상태 dot + 텍스트. PageHeader right slot 공용. */
-export function ConnectionStatus({ loading, error, firebaseReady = true }: ConnectionStatusProps) {
+/** API 또는 실시간 데이터 원본의 연결 상태를 표시한다. */
+export function ConnectionStatus({
+  loading,
+  error,
+  firebaseReady = true,
+  source = 'realtime',
+}: ConnectionStatusProps) {
   const connecting = loading || !firebaseReady;
   const color = connecting
     ? 'var(--color-caution-border)'
     : error
       ? 'var(--color-danger)'
       : 'var(--color-primary)';
-  const label = connecting ? '연결 중' : error ? '연결 오류' : '실시간 연결';
+  const label =
+    connecting ? '연결 중' : error ? '연결 오류' : source === 'api' ? '서버 연결' : '실시간 연결';
 
   return (
     <Group gap={6}>

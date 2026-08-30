@@ -70,7 +70,14 @@ export default function PrepPage() {
     <PageShell>
       <PageHeader
         title="준비 물량"
-        right={<ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />}
+        right={
+          <ConnectionStatus
+            loading={loading}
+            error={error}
+            firebaseReady={firebaseReady}
+            source="api"
+          />
+        }
       />
 
       <Container size="sm" px="md" py="md">

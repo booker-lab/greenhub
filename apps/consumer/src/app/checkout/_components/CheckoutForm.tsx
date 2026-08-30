@@ -45,8 +45,6 @@ export interface CheckoutFormProps {
   canPay: boolean;
   error: string | null;
   onPay: () => void;
-  marketingConsent?: boolean;
-  onMarketingConsentChange?: (agreed: boolean) => void;
   singleSummary?: {
     quantity: number;
     deliveryMethod: DeliveryMethod;
@@ -79,8 +77,6 @@ export default function CheckoutForm({
   canPay,
   error,
   onPay,
-  marketingConsent = false,
-  onMarketingConsentChange,
   singleSummary,
 }: CheckoutFormProps) {
   const [roundDetailsConfirmed, setRoundDetailsConfirmed] = useState(false);
@@ -301,13 +297,6 @@ export default function CheckoutForm({
               </Text>
             </Stack>
           </Paper>
-
-          <Checkbox
-            label="신상품·할인정보 카카오톡/문자 마케팅 정보 수신 동의(선택)"
-            description="배송 연락처 수집과 별도이며, 동의하지 않아도 주문·배송 안내를 받습니다."
-            checked={marketingConsent}
-            onChange={(event) => onMarketingConsentChange?.(event.currentTarget.checked)}
-          />
 
           <Paper p="md" radius="md" bg="var(--color-surface-muted)">
             <Text size="sm" fw="var(--fw-bold)" mb={4}>

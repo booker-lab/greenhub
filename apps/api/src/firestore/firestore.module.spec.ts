@@ -1,11 +1,12 @@
 import { MODULE_METADATA } from '@nestjs/common/constants';
 
 const applicationDefault = jest.fn(() => 'credential');
+const cert = jest.fn((serviceAccount) => ({ kind: 'cert', serviceAccount }));
 const initializeApp = jest.fn((options) => options);
 
 jest.mock('firebase-admin', () => ({
   apps: [],
-  credential: { applicationDefault },
+  credential: { applicationDefault, cert },
   initializeApp,
 }));
 
@@ -32,7 +33,7 @@ describe('Firestore 모듈 계약', () => {
     const firebaseProvider = metadata<Record<string, unknown>>(
       FirestoreModule,
       MODULE_METADATA.PROVIDERS,
-    ).find((provider) => provider['provide'] === 'FIREBASE_APP') as {
+    ).find((provider) => provider.provide === 'FIREBASE_APP') as {
       useFactory: (config: { get: (key: string) => string | undefined }) => Promise<unknown>;
     };
 
@@ -52,5 +53,96 @@ describe('Firestore 모듈 계약', () => {
     expect(result).toEqual(
       expect.objectContaining({ storageBucket: 'green-test.firebasestorage.app' }),
     );
+  });
+
+  it('서비스 계정 JSON을 정규화해 명시 project와 bucket으로 초기화한다', async () => {
+    const firebaseProvider = metadata<Record<string, unknown>>(
+      FirestoreModule,
+      MODULE_METADATA.PROVIDERS,
+    ).find((provider) => provider.provide === 'FIREBASE_APP') as {
+      useFactory: (config: { get: (key: string) => string | undefined }) => Promise<unknown>;
+    };
+    const serviceAccount = JSON.stringify({
+      type: 'service_account',
+      project_id: 'green-test',
+      client_email: 'firebase@example.test',
+      private_key: 'private-key',
+    });
+
+    const result = await firebaseProvider.useFactory({
+      get: (key) =>
+        ({
+          NODE_ENV: 'test',
+          FIREBASE_PROJECT_ID: 'green-test',
+          FIREBASE_STORAGE_BUCKET: 'green-test.firebasestorage.app',
+          FIREBASE_SERVICE_ACCOUNT_JSON: serviceAccount,
+        })[key],
+    });
+
+    expect(cert).toHaveBeenCalledWith({
+      projectId: 'green-test',
+      clientEmail: 'firebase@example.test',
+      privateKey: 'private-key',
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        projectId: 'green-test',
+        storageBucket: 'green-test.firebasestorage.app',
+      }),
+    );
+  });
+
+  it('서비스 계정 JSON 파싱 실패는 원문 없이 안전하게 거부한다', async () => {
+    const firebaseProvider = metadata<Record<string, unknown>>(
+      FirestoreModule,
+      MODULE_METADATA.PROVIDERS,
+    ).find((provider) => provider.provide === 'FIREBASE_APP') as {
+      useFactory: (config: { get: (key: string) => string | undefined }) => Promise<unknown>;
+    };
+
+    let error: unknown;
+    try {
+      firebaseProvider.useFactory({
+        get: (key) =>
+          ({
+            FIREBASE_PROJECT_ID: 'green-test',
+            FIREBASE_STORAGE_BUCKET: 'green-test.firebasestorage.app',
+            FIREBASE_SERVICE_ACCOUNT_JSON: '{malformed-private-key}',
+          })[key],
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toHaveProperty(
+      'message',
+      'FIREBASE_SERVICE_ACCOUNT_JSON이 올바른 JSON이 아닙니다.',
+    );
+    expect(String(error)).not.toContain('malformed-private-key');
+  });
+
+  it('설정 project와 서비스 계정 project가 다르면 초기화 전에 거부한다', async () => {
+    const firebaseProvider = metadata<Record<string, unknown>>(
+      FirestoreModule,
+      MODULE_METADATA.PROVIDERS,
+    ).find((provider) => provider.provide === 'FIREBASE_APP') as {
+      useFactory: (config: { get: (key: string) => string | undefined }) => Promise<unknown>;
+    };
+    const serviceAccount = JSON.stringify({
+      project_id: 'other-project',
+      client_email: 'firebase@example.test',
+      private_key: 'private-key',
+    });
+
+    expect(() =>
+      firebaseProvider.useFactory({
+        get: (key) =>
+          ({
+            FIREBASE_PROJECT_ID: 'green-test',
+            FIREBASE_STORAGE_BUCKET: 'green-test.firebasestorage.app',
+            FIREBASE_SERVICE_ACCOUNT_JSON: serviceAccount,
+          })[key],
+      }),
+    ).toThrow('FIREBASE_PROJECT_ID와 Firebase 자격 증명 project가 일치하지 않습니다.');
   });
 });

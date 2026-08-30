@@ -13,6 +13,7 @@ import {
 } from '@mantine/core';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { useFirebaseReady } from '@/app/providers';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
@@ -104,7 +105,8 @@ function PriorityItem({
 export default function OrdersPage() {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
-  const { orders, loading, error, groupCounts, firebaseReady } = useOrders(storeId);
+  const firebaseReady = useFirebaseReady();
+  const { orders, loading, error, groupCounts } = useOrders(storeId);
   const [saleType, setSaleType] = useState<SaleType>('normal');
   const [activeTab, setActiveTab] = useState<OrderGroup>('ACTION_REQUIRED');
   const [subFilter, setSubFilter] = useState<'ALL' | 'DELIVERING' | 'HUB_ARRIVED'>('ALL');
@@ -162,7 +164,14 @@ export default function OrdersPage() {
     <PageShell>
       <PageHeader
         title="주문 관리"
-        right={<ConnectionStatus loading={loading} error={error} firebaseReady={firebaseReady} />}
+        right={
+          <ConnectionStatus
+            loading={loading}
+            error={error}
+            firebaseReady={firebaseReady}
+            source="api"
+          />
+        }
       />
 
       {!loading && firebaseReady && (

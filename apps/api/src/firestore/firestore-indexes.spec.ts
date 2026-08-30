@@ -75,11 +75,11 @@ const QUERY_CONTRACTS: QueryContract[] = [
   },
   {
     id: 'seller-orders-by-store-created-at',
-    sourceFile: 'apps/seller/src/hooks/useOrders.ts',
+    sourceFile: 'apps/api/src/orders/orders-query.service.ts',
     sourcePatterns: [
-      "collection(db, 'orders')",
-      "where('storeId', '==', storeId)",
-      "orderBy('createdAt', 'desc')",
+      'async getOrders(',
+      ".collection('orders').where('storeId', '==', storeId)",
+      "ref.orderBy('createdAt', 'desc')",
     ],
     collectionGroup: 'orders',
     queryScope: 'COLLECTION',

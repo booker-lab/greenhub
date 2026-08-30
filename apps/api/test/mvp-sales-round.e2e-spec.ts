@@ -101,12 +101,6 @@ describe('회차 직배송 서버 전체 흐름 통합 계약', () => {
         addressDetail: '101호',
         zipCode: '17373',
       },
-      marketingConsent: {
-        agreed: true,
-        channels: ['alimtalk'],
-        copyVersion: '2026-07',
-        agreedAt: new Date().toISOString(),
-      },
     };
   }
 

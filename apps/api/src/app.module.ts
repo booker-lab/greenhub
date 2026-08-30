@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AuditModule } from './common/audit/audit.module';
+import { validateRuntimeConfig } from './config/runtime-config';
 import { DriverModule } from './driver/driver.module';
 import { FirestoreModule } from './firestore/firestore.module';
 import { HubsModule } from './hubs/hubs.module';
@@ -28,7 +29,7 @@ import { VarietiesModule } from './varieties/varieties.module';
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateRuntimeConfig }),
     ScheduleModule.forRoot(),
     // 'default' 단일 throttler만 전역 등록 — 일반 라우트 1분 100회.
     // 인증 라우트(register/login/kakao-login/refresh)는 auth.controller에서

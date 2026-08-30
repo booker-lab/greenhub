@@ -99,7 +99,7 @@ function legacyRecords(cap: Data, deliveryMethod = 'direct') {
 
 function makeService(firestore: Data) {
   return new OrdersCreateService(
-    firestore,
+    firestore as never,
     { processGroupBuyEarlyConfirm: jest.fn() } as never,
     {} as never,
     {} as never,

@@ -101,7 +101,6 @@ export class RoundOrderCreateService {
         reservationId: reservation.id,
         orderItems: roundItems,
         acquisition: dto.acquisition ?? null,
-        marketingConsent: dto.marketingConsent ?? null,
         totalAmount,
         createdAt: now,
         updatedAt: now,
@@ -122,23 +121,6 @@ export class RoundOrderCreateService {
         },
         transaction: tx,
       });
-      if (dto.marketingConsent) {
-        const consent = dto.marketingConsent;
-        await this.retention.saveRecord({
-          id: `${orderId}:marketing-consent`,
-          purpose: 'MARKETING_CONSENT',
-          basisAt: consent.agreedAt ? new Date(consent.agreedAt) : this.toDate(now),
-          metadata: {
-            orderId,
-            userId,
-            agreed: consent.agreed,
-            channels: consent.channels,
-            policyVersion: consent.copyVersion,
-            recordType: 'CONSENT',
-          },
-          transaction: tx,
-        });
-      }
       result = this.response(order);
     });
 
@@ -154,6 +136,9 @@ export class RoundOrderCreateService {
     }
     if (!dto.roundId || !dto.roundItems?.length) {
       throw new BadRequestException('회차 주문 상품이 필요합니다.');
+    }
+    if (dto.marketingConsent) {
+      throw new BadRequestException('파일럿에서는 마케팅 동의를 수집하지 않습니다.');
     }
     const itemIds = dto.roundItems.map((item) => item.roundItemId);
     if (new Set(itemIds).size !== itemIds.length) {
@@ -203,7 +188,6 @@ export class RoundOrderCreateService {
           deliveryPhone: dto.deliveryPhone,
           requestedDeliveryDate: dto.requestedDeliveryDate ?? null,
           acquisition: dto.acquisition ?? null,
-          marketingConsent: dto.marketingConsent ?? null,
         }),
       )
       .digest('hex');
