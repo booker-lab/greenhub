@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 
 const API_URL = getApiBaseUrl();
+const MARKETING_NOT_USED_IN_PILOT = true;
 
 type MarketingChannel = 'alimtalk' | 'sms';
 
@@ -153,6 +154,59 @@ function MarketingChannelCard({
 }
 
 export default function NotificationSettingsPage() {
+  const router = useRouter();
+
+  if (MARKETING_NOT_USED_IN_PILOT) {
+    return (
+      <Box style={{ maxWidth: 480, margin: '0 auto', paddingBottom: 80 }}>
+        <Group
+          px="md"
+          pt="lg"
+          pb="sm"
+          gap="xs"
+          style={{
+            position: 'sticky',
+            top: 0,
+            background: 'var(--color-bg)',
+            zIndex: 10,
+            borderBottom: '1px solid var(--color-border)',
+          }}
+        >
+          <Button
+            aria-label="뒤로 가기"
+            variant="transparent"
+            style={{ color: 'var(--color-text)' }}
+            px={0}
+            onClick={() => router.back()}
+          >
+            <ChevronLeft size={20} />
+          </Button>
+          <Title
+            order={2}
+            style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}
+          >
+            마케팅 알림 설정
+          </Title>
+        </Group>
+
+        <Stack px="md" py="lg" gap="md">
+          <Alert color="gray" variant="light">
+            <Text size="sm" fw="var(--fw-bold)" mb={4}>
+              파일럿에서는 마케팅 수신 동의와 설정을 운영하지 않습니다.
+            </Text>
+            <Text size="sm">
+              주문·결제·배송에 필요한 정보성 연락은 마케팅 동의와 별개로 계속 제공됩니다.
+            </Text>
+          </Alert>
+        </Stack>
+      </Box>
+    );
+  }
+
+  return <LegacyNotificationSettingsPage />;
+}
+
+function LegacyNotificationSettingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [preferences, setPreferences] = useState<MarketingPreferences | null>(null);

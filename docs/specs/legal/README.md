@@ -1,112 +1,117 @@
 <!-- Language: ko -->
 
-# Legal 문서 라우터와 판매 활성화 게이트
+# Legal 문서 라우터와 실제 사용 정합성 게이트
 
-> 최종 정합화: 2026-08-24 KST
+> 최종 정합화: 2026-08-30 KST
 > 상태: Current
 
 ## 현재 정본
 
-- consumer 개인정보처리방침·이용약관 공개 baseline: `docs/specs/legal/consumer-legal-documents.md`
+- consumer 개인정보처리방침·이용약관 정본: `docs/specs/legal/consumer-legal-documents.md`
 - 실제 공개 구현:
   - `apps/consumer/src/app/privacy/page.tsx`
   - `apps/consumer/src/app/terms/page.tsx`
 - 공개 사업자 정보 정본: `apps/consumer/src/lib/publicBusinessInfo.ts`
+- 공개 경로: `/privacy`, `/terms`
 
-### 2026-08-24 current-fact errata — 선택 마케팅 동의
+이 문서는 RC-D 실제 사용 정합성의 현재 사실을 관리한다. 공개 페이지의 시행일과 이전 버전은
+실제 계약·처리 흐름이 바뀔 때 함께 갱신한다. 이 문서와 공개 페이지의 일치는 production 배포,
+provider 승인, 실제 결제·환불·알림 발송을 승인했다는 뜻이 아니다.
 
-`docs/specs/legal/consumer-legal-documents.md`는 2026-08-19 공개 페이지 baseline이며, 그 문서의 **“consumer에 마케팅 수신 동의 기능이 없다”는 구현 사실은 더 이상 현재가 아니다.** 마케팅 동의 존재 여부에 한해서는 이 errata가 해당 2026-08-19 snapshot보다 우선한다.
+## 현재 파일럿 사실
 
-현재 코드에는 다음이 존재한다.
+### 거래와 주문
 
-- round checkout의 선택 카카오톡/문자 마케팅 동의 checkbox
-- order `marketingConsent` snapshot
-- `marketingConsentLogs`의 consent retention record
-- MY `마케팅 알림 설정` 화면
-- `users/{userId}.notificationPreferences`
-- `PATCH /notifications/me/preferences` 철회 경로
+- 그린러브는 디어 오키드의 통제된 공개 파일럿에서 화면에 표시된 회차 주문·결제와 경기도 이천시
+  회차 직배송을 제공한다. 모든 상품·지역·배송방법이 항상 판매되는 것은 아니다.
+- 회차 주문 요청은 결제 확인 전 `PENDING`으로 생성될 수 있다. 서버가 PortOne을 통해 결제사업자의
+  원격 상태와 금액을 확인하고 정상 결제를 확인하면 `ACCEPTED`로 접수하며 `ORDER_ACCEPTED` 거래성
+  알림을 요청한다. 별도의 수동 판매자 승인 버튼을 계약 성립 조건으로 만들지 않는다.
+- 소비자 취소는 주문자 본인이 회차 주문 마감 전이고 시스템이 허용하는 주문 상태일 때 가능하다.
+  결제 전에는 예약·용량을 반환하고, 결제가 확인된 주문은 외부 환불 확인과 로컬 주문·결제·정산
+  정리를 거쳐 완료한다. 마감 후 직접 취소가 제한되며, 외부 환불 오류는 확인·재처리 상태로 남을
+  수 있다.
+- 권한 있는 판매자 또는 관리자는 재고·품질·배송·결제 오류 등 운영상 사유로 허용된 주문 상태를
+  취소할 수 있다. 정상 취소 경로에서는 사유, 환불·예약/회차 용량·정산 처리를 현재 상태에 맞춰
+  수렴시키며, 관리자 강제 환불 등 예외 경로는 별도 확인한다.
 
-반면 **실제 선택 마케팅 메시지를 발송하는 sender는 이번 감사에서 확인되지 않았고**, 주문·결제·배송 정보성 연락은 마케팅 동의와 별개의 현재 계약이다. 따라서 공개 문서에서 “마케팅 발송이 운영 중”이라고 확대해석하지 않는다.
+### 배송 보류와 재배송
 
-또한 checkout consent, user preference, 철회, retention evidence가 현재 하나의 lifecycle로 수렴하지 않는 `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY` P0가 남아 있다. 최종 공개 legal 문구는 이 P0의 제품·구현 결정을 반영해 다시 확정한다.
+- 배송은 회차 화면의 일정과 배송지 범위에 따라 준비 후 진행한다. 기상, 출입 불가, 주소 문제,
+  수령인 연락 불가 등으로 완료할 수 없으면 `DELIVERY_HELD`로 보류하고 사유와 다음 연락·배송
+  예정 시각을 기록한다.
+- 기상 등 회사 또는 운영상 사유에는 고객 책임 재배송비를 부과하지 않는다. 고객 책임으로 첫
+  배송이 실패하고 양수의 비용이 정해지면 주문자 본인에게 본 주문과 별도의 `REDELIVERY_FEE`
+  결제를 요청할 수 있다.
+- 현재 보류와 charge의 주문·스토어·주문자·`heldAt` 연결을 확인하고 결제사업자의 상태가 `PAID`일
+  때만 유료 재배송의 배송 시작을 허용한다. `PENDING`, `FAILED`, `REFUNDED`, 누락 또는 연결
+  불일치이면 배송을 자동 재개하지 않는다.
 
-증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+### 거래성 알림과 마케팅
 
-## 현재 공개 상태
+현재 파일럿의 정책은 `MARKETING_NOT_USED_IN_PILOT`이다.
 
-현재 공개 법적 문서는 **판매기능 활성화 전 상태**를 전제로 한다.
+- 선택 마케팅 동의를 checkout에서 수집하지 않는다.
+- 신규 round marketing consent payload·log를 만들지 않는다.
+- MY 마케팅 설정 진입은 파일럿에서 비활성화한다.
+- 과거에 이미 저장된 마케팅 선호·동의 데이터는 이 정책 전환만을 이유로 삭제하지 않는다.
+- 거래성 주문 알림은 선택 마케팅과 별개로 유지한다. 회차 직배송의 현재 8종은 다음과 같다.
+  - `ORDER_ACCEPTED`
+  - `ORDER_PREPARING`
+  - `ORDER_DELIVERING`
+  - `ORDER_DELIVERY_HELD`
+  - `ORDER_REDELIVERY_PAYMENT_REQUESTED`
+  - `ORDER_REDELIVERY_SCHEDULED`
+  - `ORDER_DELIVERED`
+  - `ORDER_CANCELLED`
 
-- 시행일: 2026-08-19
-- 이용약관은 `2026년 8월 19일 현재 상용 주문·결제·배송 서비스를 운영하지 않습니다.`라고 명시한다.
-- 개인정보처리방침도 현재 상용 주문·결제·배송은 운영하지 않는다고 명시한다.
-- PortOne·결제사업자는 현재 상용 처리 수탁자로 운영하지 않는다고 고지한다.
-- ALIGO를 통한 실제 고객 알림 발송은 현재 공개 처리위탁 목록에 별도 공급자로 명시돼 있지 않다.
-- 선택 마케팅 consent UI/storage는 코드에 존재하지만 실제 마케팅 발송 활성화와 동의 lifecycle 정합화는 완료되지 않았다.
+## 개인정보 접근과 외부 처리
 
-따라서 이 문서들이 production에 반영돼 있다는 사실만으로 **회차 직배송 판매 활성화 법적 준비가 완료됐다고 판단하면 안 된다.**
+- 파일럿 판매 담당자 1명은 현재 디어 오키드 내부 운영 인력이며, 인증된 자기 매장 서버 조회와
+  최소화된 seller order projection으로 주문을 처리한다. 소비자·기사·다른 스토어 주문은 거부한다.
+- 파일럿 배송 담당자 1명은 현재 디어 오키드 내부 운영 인력이고, 기존 CLOSED `SEC-02` 경계를
+  소비한다. 배정되었거나 배송을 위해 허용된 회차 주문에서 배송에 필요한 이름·주소·상품·상태와
+  단계별 연락정보를 처리하며 raw order 전체를 직접 구독하지 않는다. RC-D는 이 권한 계약을
+  재설계하지 않는다.
+- 관리자는 환불·주문·배송·정산 등 운영에 필요한 privileged access 범위에서 처리한다. 모든
+  내부 담당자가 모든 주문 필드를 본다고 표현하지 않는다.
+- PortOne은 결제 요청, 결제 상태·금액 원격 확인과 환불 요청의 기술 경로이며, 실제 결제사업자
+  (PG·간편결제 사업자)는 결제 화면과 provider 계약에 따른다. 주문·결제 식별자, 금액, 결제수단,
+  거래·환불 상태 등 결제 처리에 필요한 정보가 해당 경로에서 처리될 수 있다.
+- ALIGO는 거래성 카카오 알림톡·SMS 전달 경로다. 발송 시 수신 전화번호, 주문·이용자 식별자,
+  본문·템플릿 변수, 발송 채널·결과와 오류를 처리할 수 있다. 선택 마케팅 sender로 설명하지
+  않는다.
+- 현재 존재하지 않는 외부 배송업체 이름·위탁관계·국외 이전을 현재 사실로 추가하지 않는다.
+  향후 적법하게 외부 배송 수행자를 지정하거나 provider의 처리 지역·계약 범위가 바뀌면 실제
+  도입 전에 제공·위탁·국외 처리·보유기간을 다시 고지한다.
 
-## P0 — 판매 활성화 전 재정합화
+## 변경 범위와 검증 게이트
 
-`round_direct` 실제 판매를 공개하기 전에 다음을 하나의 출시 게이트로 검토한다.
+RC-D에서 허용한 변경은 현재 실제 사용을 설명하는 법률 문서·공개 페이지·직접 충돌하는 current
+API 문서와 그 focused test다. application source의 A/B/C 동작, Driver `SEC-02`, seller 구조,
+결제·알림 provider의 실제 운영 상태를 이 문서를 맞추기 위해 다시 구현하지 않는다.
 
-1. 이용약관의 비판매 문구를 실제 판매 계약과 일치하도록 개정한다.
-2. 주문 성립 시점, 취소·환불, 배송, 재배송비, 배송 보류 등 실제 MVP 정책과 공개 문구가 일치하는지 확인한다.
-3. PortOne 및 실제 결제사업자의 개인정보 처리 역할·데이터 흐름을 확인해 개인정보처리방침에 필요한 내용을 반영한다.
-4. 실제 고객 알림에 ALIGO를 사용한다면 전화번호·메시지 처리 흐름과 처리위탁/외부 서비스 고지 필요 범위를 확인한다.
-5. 선택 마케팅 consent를 유지한다면 `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`를 먼저 해결하고 수집 목적·항목·동의/철회·보관기간·실제 marketing sender 여부를 공개 문구와 일치시킨다. 실제 마케팅을 MVP에서 하지 않을 경우 불필요한 consent 수집/설정 노출을 중단하는 선택도 포함한다.
-6. seller·driver에게 고객 배송정보가 노출되는 실제 처리 구조와 제3자 제공/내부 업무처리 설명이 일치하는지 확인한다. 특히 `docs/specs/api/orders.md`의 direct Firestore read P0가 해결되어 **업무 수행에 필요한 범위로 실제 접근 경계가 먼저 축소·검증**된 뒤 공개 문구를 확정한다.
-7. 시행일을 갱신하고 필요하면 이전 버전을 보존한다.
-8. `apps/consumer/src/app/legal-documents.test.mjs`의 **비판매 상태 고정 assertion**을 새 공개 계약에 맞게 수정한다.
-9. 변경된 법적 페이지가 release SHA에 포함된 뒤 production 배포 전에 비로그인 `/privacy`, `/terms`를 재검증한다.
+법률 문구는 다음을 보장하지 않는다.
 
-이 게이트는 법률 자문을 대체하려는 것이 아니라, **현재 공개 문서와 실제 출시 동작이 서로 모순되는 것을 방지하기 위한 저장소 정합성 게이트**다. 법적 판단이 필요한 항목은 별도 확인을 거친다.
+- 실제 PortOne 결제·환불, ALIGO 발송 또는 SMS fallback이 이미 성공했다는 사실
+- production `salesMode` 전환이나 deployment 완료
+- 외부 배송 수행자 도입 또는 새로운 국외 이전
+- provider 장애 시 즉시 환불·즉시 배송 재개
 
-### 현재 확인된 선행 P0 — 주문 직접 읽기와 최소 접근
+다음 항목은 별도 최종 회귀·운영 승인 게이트에서 확인한다.
 
-2026-08-24 코드·Rules 감사에서 다음을 확인했다.
+- 결제·환불·예약/용량·정산의 전체 lifecycle 직접 회귀
+- seller API 전환 뒤 mutation 이후 재조회와 stale 화면 위험
+- ALIGO 실제 승인·발송과 운영 credential/mapping
+- release SHA, production 설정, 비로그인 `/privacy`·`/terms` 노출
 
-- API `OrdersQueryService`는 driver 상세 조회를 `order.driverId === requesterId`로 제한한다.
-- 반면 `firestore.rules`의 `orders` read는 `role == 'driver'`이면 주문의 `driverId`, 상태, store와 무관하게 허용한다.
-- driver 보드와 상세 화면은 API가 아니라 Firestore `orders` 문서를 직접 구독한다.
-- seller 주문 목록도 Firestore `orders` 원문을 직접 구독한다.
-- 회차 주문 원문에는 배송 수행 정보 외에도 `acquisition`, `marketingConsent`, `clientOrderPayloadHash`, reservation 관련 필드 등 역할별 업무에 반드시 필요한 것으로 입증되지 않은 데이터가 함께 저장될 수 있다.
-- 현재 Firestore Rules 테스트는 driver가 다른 store 주문을 직접 읽는 동작을 성공 케이스로 고정하고 있다.
+회원 탈퇴 API, 카카오 연결 해제 webhook, 일반 컬렉션 자동 만료 삭제와 법률 자문 판단은 이
+문서 변경으로 완료된 것으로 보지 않는다.
 
-따라서 **API 조회 권한이 안전하다는 사실만으로 seller/driver의 실제 고객정보 접근 계약이 `VERIFIED`라고 판단하지 않는다.** 이 상태에서 법적 문구를 넓혀 현재 구현을 정당화해서는 안 된다.
+## 변경 이력
 
-판매 활성화 법적 문구를 확정하기 전에 최소한 다음이 먼저 충족되어야 한다.
-
-- 미배정 `PREPARING` direct/hub 주문을 기사에게 discovery할 필요가 있다면 그 목적과 허용 필드를 별도 계약으로 명시한다.
-- 임의 driver가 배정되지 않은 일반 주문·완료 주문·다른 기사 주문 원문을 직접 읽을 수 없어야 한다.
-- seller/driver에 제공하는 주문 데이터는 역할 수행에 필요한 필드만 반환하는 DTO·projection 또는 동등한 데이터 분리를 사용한다.
-- `marketingConsent`, `acquisition` 등 배송·판매 수행에 불필요한 정보가 raw order read를 통해 전달되지 않도록 한다.
-- Firestore Rules와 직접 Rules 테스트가 위 경계를 거부/허용 케이스로 고정한다.
-- frontend가 raw `orders` 직접 읽기를 계속 사용한다면 Rules만으로 필드 최소화가 가능한지 검증하고, 불가능하면 API/projection 등 구조를 변경한다.
-
-정본과 remediation Acceptance Criteria는 `docs/specs/api/orders.md`, `docs/BACKLOG.md`를 따른다.
-
-### 현재 확인된 선행 P0 — 선택 마케팅 동의 lifecycle
-
-현재 checkout consent, user-level preference, withdrawal, retention evidence가 서로 다른 저장/갱신 경계를 사용한다.
-
-판매 활성화 legal을 확정하기 전 다음 중 하나로 수렴한다.
-
-- 마케팅을 MVP에서 사용하지 않음: consent 수집/설정 노출을 비활성화·제거하고 공개 문서에도 실제 미운영 상태를 반영.
-- consent 기능 유지: authoritative user-level 상태, checkout 동기화, 철회 evidence, 실제 marketing sender gating을 구현·직접 검증하고 공개 문구를 일치시킴.
-
-정보성 주문·결제·배송 연락은 선택 마케팅 동의와 별개로 유지한다.
-
-정본: `docs/specs/api/notifications.md`, `docs/specs/mvp-sales-round-direct-delivery.md`, `docs/BACKLOG.md`.
-
-## 실행 순서 관계
-
-- ALIGO provider 심사 대기 중에는 현재 공개 문구를 미리 `판매 중` 상태로 바꾸지 않는다.
-- ALIGO 실제 격리 발송 검증과 같은 테스트는 별도 승인·격리 데이터로 수행할 수 있다.
-- seller/driver 주문 read authorization·데이터 최소화 P0가 해결되기 전에는 판매 활성화 개인정보 문구를 최종 확정하지 않는다.
-- `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY` 결과가 확정되기 전에는 마케팅 consent/철회 공개 문구를 최종 확정하지 않는다.
-- 실제 출시 대상 SHA를 고정하기 **전에** 법적 문서와 공개 페이지 변경을 완료해야 한다. 법적 페이지 코드 변경도 release SHA의 일부이기 때문이다.
-- 최종 `salesMode: round_direct` 전환 전에 production에서 새 법적 문서가 노출되는지 확인한다.
-
-## 역사 자료
-
-카카오 비즈니스 채널 재심사를 위해 작성된 PLAN·REPORT·PROMPT의 비판매 문구는 당시 증빙 이력이다. 현재 출시 지시로 사용하지 않는다.
+| 날짜 | 내용 |
+|---|---|
+| 2026-08-30 | RC-D 실제 사용 정합화: 회차 거래·취소·환불·배송 보류·유료 재배송, PortOne/PG·ALIGO, 내부 판매·배송 접근, 파일럿 마케팅 미사용 반영 |
+| 2026-08-24 | 이전 비판매 baseline과 선택 마케팅·직접 주문 read의 구현 finding 기록 |
+| 2026-08-19 | 최초 공개 개인정보처리방침·이용약관 baseline |

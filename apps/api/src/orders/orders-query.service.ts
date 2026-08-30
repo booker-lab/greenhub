@@ -1,8 +1,8 @@
 import {
+  BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
-  ForbiddenException,
-  BadRequestException,
 } from '@nestjs/common';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { FirestoreService } from '../firestore/firestore.service';
@@ -11,6 +11,7 @@ import {
   isCurrentRedeliveryPaymentRequired,
   resolveRedeliveryPaymentActionability,
 } from './redelivery-resume-gate';
+import { projectSellerOrder } from './seller-order-read-model';
 
 type OrderRequester = Pick<JwtPayload, 'sub' | 'role'>;
 type OrderRequesterInput = OrderRequester | string;
@@ -24,12 +25,16 @@ export class OrdersQueryService {
 
   async getOrder(storeId: string, orderId: string, requesterInput: OrderRequesterInput) {
     const requester = this.normalizeRequester(requesterInput);
+    await this.assertStoreOrderReadAccess(storeId, requester);
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException('주문을 찾을 수 없습니다.');
     }
     const order = snap.data()!;
-    await this.assertOrderReadAccess(storeId, order, requester);
+    if (requester.role === 'seller') {
+      const withPayment = await this.withRedeliveryPayment({ id: orderId, ...order });
+      return projectSellerOrder(withPayment, 'detail');
+    }
     return this.withReadModel(orderId, order, requester);
   }
 
@@ -39,7 +44,7 @@ export class OrdersQueryService {
     query: { userId?: string; status?: string; saleType?: string },
   ) {
     const requester = this.normalizeRequester(requesterInput);
-    await this.assertStoreListAccess(storeId, requester);
+    await this.assertStoreOrderReadAccess(storeId, requester);
 
     const VALID_STATUSES = [
       'PENDING',
@@ -66,19 +71,24 @@ export class OrdersQueryService {
 
     let ref = this.firestore.collection('orders').where('storeId', '==', storeId) as any;
 
-    if (requester.role === 'consumer') {
-      ref = ref.where('userId', '==', requester.sub);
-    } else if (query.userId) {
+    if (query.userId) {
       ref = ref.where('userId', '==', query.userId);
     }
-    if (requester.role === 'driver') ref = ref.where('driverId', '==', requester.sub);
     if (query.status) ref = ref.where('status', '==', query.status);
     if (query.saleType) ref = ref.where('saleType', '==', query.saleType);
+    if (requester.role === 'seller' && !query.userId && !query.status && !query.saleType) {
+      ref = ref.orderBy('createdAt', 'desc');
+    }
 
     const snap = await ref.get();
-    return Promise.all(
+    if (requester.role === 'seller') {
+      return snap.docs.map((d: any) => projectSellerOrder({ id: d.id, ...d.data() }, 'list'));
+    }
+
+    const orders = await Promise.all(
       snap.docs.map((d: any) => this.withRedeliveryPayment({ id: d.id, ...d.data() })),
     );
+    return orders;
   }
 
   // ── Public (storeId-free) ─────────────────────────────────────────────────
@@ -90,6 +100,10 @@ export class OrdersQueryService {
     const order = snap.data()!;
 
     await this.assertOrderReadAccess(order['storeId'], order, requester);
+    if (requester.role === 'seller') {
+      const withPayment = await this.withRedeliveryPayment({ id: orderId, ...order });
+      return projectSellerOrder(withPayment, 'detail');
+    }
     return this.withReadModel(orderId, order, requester);
   }
 
@@ -143,8 +157,11 @@ export class OrdersQueryService {
     };
   }
 
-  private async assertStoreListAccess(storeId: string, requester: OrderRequester) {
-    if (requester.role !== 'seller') return;
+  private async assertStoreOrderReadAccess(storeId: string, requester: OrderRequester) {
+    if (requester.role === 'admin') return;
+    if (requester.role !== 'seller') {
+      throw new ForbiddenException('판매자 주문 조회 권한이 없습니다.');
+    }
     const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
     if (!storeSnap.exists || storeSnap.data()?.['ownerId'] !== requester.sub) {
       throw new ForbiddenException('해당 스토어 주문을 조회할 권한이 없습니다.');

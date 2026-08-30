@@ -1,16 +1,20 @@
 import {
-  Controller,
-  Post,
-  Get,
-  Patch,
   Body,
-  Param,
-  Query,
-  UseGuards,
+  Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
-import { OrdersService } from './orders.service';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateOrderDto } from './dto/create-order.dto';
 import {
   AttachDeliveryPhotoDto,
@@ -19,9 +23,7 @@ import {
   UpdateStatusDto,
 } from './dto/update-status.dto';
 import { OrderChargesService } from './order-charges.service';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { JwtPayload } from '../auth/types/jwt-payload.type';
+import { OrdersService } from './orders.service';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
@@ -67,6 +69,8 @@ export class OrdersController {
   }
 
   @Get()
+  @UseGuards(RolesGuard)
+  @Roles('seller', 'admin')
   getOrders(
     @Param('storeId') storeId: string,
     @CurrentUser() user: JwtPayload,
@@ -76,6 +80,8 @@ export class OrdersController {
   }
 
   @Get(':orderId')
+  @UseGuards(RolesGuard)
+  @Roles('seller', 'admin')
   getOrder(
     @Param('storeId') storeId: string,
     @Param('orderId') orderId: string,

@@ -59,6 +59,15 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
   }
+  if (specifier === '@/lib/portone-config') {
+    return {
+      readPortonePaymentConfiguration: () => ({
+        portoneStoreId: 'portone-store',
+        channelKey: 'kakao-channel',
+        easyPayProvider: 'KAKAOPAY',
+      }),
+    };
+  }
   if (
     specifier === '@mantine/core' ||
     specifier === 'next/navigation' ||
@@ -226,6 +235,7 @@ test('회차 장바구니는 usePayment 회차 계약과 단일 주문 ID 완료
   assert.match(roundCheckoutSource, /state !== 'done' \|\| !orderId/);
   assert.match(roundCheckoutSource, /removeItem\('checkout_cart'\)/);
   assert.match(roundCheckoutSource, /\/order\/success\?orderId=\$\{orderId\}/);
+  assert.doesNotMatch(roundCheckoutSource, /marketingConsent|marketingAgreedAt/);
   assert.ok(
     roundCheckoutSource.indexOf("state !== 'done' || !orderId") <
       roundCheckoutSource.indexOf("removeItem('checkout_cart')"),
@@ -247,4 +257,18 @@ test('회차 checkout은 mount 뒤 재검증한 유입 스냅샷만 주문 요�
   );
   assert.match(roundCheckoutSource, /\.\.\.\(acquisition \? \{ acquisition \} : \{\}\)/);
   assert.doesNotMatch(roundCheckoutSource, /JSON\.parse\(.*acquisition/s);
+});
+
+test('legacy checkout은 기존 PortOne 공개 설정 검증 뒤에만 SDK를 호출한다', () => {
+  const start = source.indexOf('function LegacyCartCheckoutContent');
+  const end = source.indexOf('function RoundCartCheckoutContent', start);
+  const legacyCheckoutSource = source.slice(start, end);
+  const guard = legacyCheckoutSource.indexOf('readPortonePaymentConfiguration(paymentMethod)');
+  const sdkImport = legacyCheckoutSource.indexOf("await import('@portone/browser-sdk/v2')");
+
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  assert.ok(guard >= 0 && guard < sdkImport);
+  assert.match(legacyCheckoutSource, /storeId: configuration\.portoneStoreId/);
+  assert.match(legacyCheckoutSource, /channelKey: configuration\.channelKey/);
 });

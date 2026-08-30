@@ -9,6 +9,7 @@ function makeFirestore(records: RecordMap) {
     where: jest.fn((field: string, _operator: string, value: unknown) =>
       makeQuery([...filters, [field, value]]),
     ),
+    orderBy: jest.fn().mockReturnThis(),
     get: jest.fn(async () => {
       const docs = Object.entries(records)
         .filter(([path]) => path.startsWith('orders/'))
@@ -64,14 +65,14 @@ describe('OrdersQueryService 조회 권한', () => {
     },
   };
 
-  it('소비자 목록은 요청한 필터와 무관하게 본인 주문만 반환한다', async () => {
+  it('소비자는 매장 주문 목록 API를 사용할 수 없다', async () => {
     const service = new OrdersQueryService(makeFirestore(records) as never);
 
-    const result = await service.getOrders('store-1', requester('consumer-1', 'consumer'), {
-      userId: 'consumer-2',
-    });
-
-    expect(result.map((order) => order.id)).toEqual(['order-1']);
+    await expect(
+      service.getOrders('store-1', requester('consumer-1', 'consumer'), {
+        userId: 'consumer-2',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('소비자는 다른 소비자의 주문 상세를 조회할 수 없다', async () => {
@@ -94,15 +95,156 @@ describe('OrdersQueryService 조회 권한', () => {
     );
   });
 
-  it('기사는 실제 배정된 주문만 목록과 상세에서 조회할 수 있다', async () => {
+  it('기사는 매장 주문 목록·상세 API를 사용할 수 없다', async () => {
     const service = new OrdersQueryService(makeFirestore(records) as never);
     const driver = requester('driver-1', 'driver');
 
-    const result = await service.getOrders('store-1', driver, {});
-    expect(result.map((order) => order.id)).toEqual(['order-1']);
+    await expect(service.getOrders('store-1', driver, {})).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
     await expect(service.getOrder('store-1', 'order-2', driver)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it('판매자 자기 매장 주문만 목록·상세에서 운영 필드 투영으로 조회한다', async () => {
+    const sellerOrder = {
+      id: 'seller-order',
+      storeId: 'store-1',
+      userId: 'consumer-1',
+      driverId: 'driver-1',
+      orderNumber: '20260830-000001',
+      productId: 'product-1',
+      productName: '호접란',
+      quantity: 2,
+      saleType: 'normal',
+      status: 'PREPARING',
+      deliveryMethod: 'direct',
+      deliveryFee: 3000,
+      totalAmount: 23000,
+      requestedDeliveryDate: '2026-08-31',
+      preparedAt: '2026-08-30T05:00:00.000Z',
+      pickupCode: null,
+      createdAt: '2026-08-30T00:00:00.000Z',
+      updatedAt: '2026-08-30T01:00:00.000Z',
+      deliveryAddress: {
+        address: '서울시 중구 세종대로 1',
+        addressDetail: '101호',
+        zipCode: '04524',
+        internalAddressToken: 'hidden-address-token',
+      },
+      isMetropolitan: true,
+      hubId: null,
+      cancelReason: null,
+      buyerName: '구매자',
+      deliveryPhone: '010-1111-1111',
+      buyerPhone: '010-2222-2222',
+      deliveryHold: {
+        heldAt: '2026-08-29T00:00:00.000Z',
+        reasonCode: 'ACCESS_UNAVAILABLE',
+        reasonMessage: '출입 불가',
+        customerResponsible: false,
+        redeliveryFee: null,
+        nextContactAt: '2026-08-30T02:00:00.000Z',
+        nextDeliveryAt: '2026-08-31T02:00:00.000Z',
+        resolvedAt: null,
+        internalHoldToken: 'hidden-hold-token',
+      },
+      orderItems: [
+        {
+          roundItemId: null,
+          productId: 'product-1',
+          productName: '호접란',
+          productImageUrl: null,
+          unitPrice: 10000,
+          quantity: 2,
+          subtotalAmount: 20000,
+          lineAmount: 20000,
+          internalItemCost: 4000,
+        },
+      ],
+      reservationId: 'reservation-1',
+      clientOrderPayloadHash: 'payload-hash',
+      marketingConsent: { agreed: true },
+      acquisition: { source: 'direct' },
+      deliveryPhotoIds: ['photo-1'],
+      redeliveryChargeId: 'charge-1',
+    };
+    const service = new OrdersQueryService(
+      makeFirestore({
+        'stores/store-1': { ownerId: 'seller-1' },
+        'orders/seller-order': sellerOrder,
+      }) as never,
+    );
+    const seller = requester('seller-1', 'seller');
+
+    const list = await service.getOrders('store-1', seller, {});
+    const detail = await service.getOrder('store-1', 'seller-order', seller);
+
+    expect(list[0]).toMatchObject({
+      id: 'seller-order',
+      storeId: 'store-1',
+      orderNumber: '20260830-000001',
+      productName: '호접란',
+      status: 'PREPARING',
+      totalAmount: 23000,
+    });
+    expect(list[0]).not.toHaveProperty('userId');
+    expect(list[0]).not.toHaveProperty('driverId');
+    expect(list[0]).not.toHaveProperty('orderItems');
+    expect(list[0]).not.toHaveProperty('marketingConsent');
+    expect(list[0]).not.toHaveProperty('acquisition');
+    expect(list[0]).not.toHaveProperty('redeliveryChargeId');
+
+    expect(detail).toMatchObject({
+      id: 'seller-order',
+      deliveryAddress: {
+        address: '서울시 중구 세종대로 1',
+        addressDetail: '101호',
+        zipCode: '04524',
+      },
+      buyerName: '구매자',
+      deliveryPhone: '010-1111-1111',
+      orderItems: [
+        {
+          productId: 'product-1',
+          productName: '호접란',
+          unitPrice: 10000,
+          quantity: 2,
+          subtotalAmount: 20000,
+        },
+      ],
+      deliveryHold: {
+        reasonCode: 'ACCESS_UNAVAILABLE',
+        reasonMessage: '출입 불가',
+        customerResponsible: false,
+        redeliveryFee: null,
+        nextContactAt: '2026-08-30T02:00:00.000Z',
+        nextDeliveryAt: '2026-08-31T02:00:00.000Z',
+        resolvedAt: null,
+      },
+    });
+    expect(detail.redeliveryPayment).toEqual(
+      expect.objectContaining({ required: false, status: 'NOT_REQUIRED' }),
+    );
+    for (const field of [
+      'userId',
+      'driverId',
+      'reservationId',
+      'clientOrderPayloadHash',
+      'marketingConsent',
+      'acquisition',
+      'deliveryPhotoIds',
+      'redeliveryChargeId',
+      'buyerPhone',
+    ]) {
+      expect(detail).not.toHaveProperty(field);
+    }
+    expect(detail.deliveryAddress).not.toHaveProperty('internalAddressToken');
+    expect(detail.deliveryHold).not.toHaveProperty('internalHoldToken');
+    expect(detail.orderItems[0]).not.toHaveProperty('lineAmount');
+    expect(detail.orderItems[0]).not.toHaveProperty('internalItemCost');
+    expect(detail.redeliveryPayment).not.toHaveProperty('chargeId');
   });
 
   it('admin은 기존처럼 스토어 주문 전체를 조회할 수 있다', async () => {
@@ -124,51 +266,51 @@ describe('OrdersQueryService 조회 권한', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it.each(['DELIVERED', 'REVIEWED'])(
-    '%s 단건 상세은 권한 확인 뒤 첫 연결 사진의 15분 서명 URL을 반환한다',
-    async (status) => {
-      const completedRecords: RecordMap = {
-        ...records,
-        'orders/order-completed': {
-          id: 'order-completed',
-          storeId: 'store-1',
-          userId: 'consumer-1',
-          driverId: 'driver-1',
-          schemaVersion: 2,
-          roundId: 'round-1',
-          deliveryMethod: 'direct',
-          status,
-          deliveryPhotoIds: ['photo-first', 'photo-second'],
-          totalAmount: 10000,
-          quantity: 1,
-        },
-      };
-      const storage = {
-        createDeliveryPhotoReadUrl: jest.fn().mockResolvedValue({
-          url: 'https://signed.example.invalid/photo-first',
-          expiresAt: '2026-07-18T03:15:00.000Z',
-        }),
-      };
-      const service = new OrdersQueryService(
-        makeFirestore(completedRecords) as never,
-        storage as never,
-      );
-
-      await expect(
-        service.getOrder('store-1', 'order-completed', requester('consumer-1', 'consumer')),
-      ).resolves.toMatchObject({
+  it.each([
+    'DELIVERED',
+    'REVIEWED',
+  ])('%s 단건 상세은 권한 확인 뒤 첫 연결 사진의 15분 서명 URL을 반환한다', async (status) => {
+    const completedRecords: RecordMap = {
+      ...records,
+      'orders/order-completed': {
         id: 'order-completed',
-        deliveryPhotoUrl: 'https://signed.example.invalid/photo-first',
-      });
-      expect(storage.createDeliveryPhotoReadUrl).toHaveBeenCalledWith({
         storeId: 'store-1',
-        orderId: 'order-completed',
-        photoId: 'photo-first',
-        requesterId: 'consumer-1',
-        requesterRole: 'consumer',
-      });
-    },
-  );
+        userId: 'consumer-1',
+        driverId: 'driver-1',
+        schemaVersion: 2,
+        roundId: 'round-1',
+        deliveryMethod: 'direct',
+        status,
+        deliveryPhotoIds: ['photo-first', 'photo-second'],
+        totalAmount: 10000,
+        quantity: 1,
+      },
+    };
+    const storage = {
+      createDeliveryPhotoReadUrl: jest.fn().mockResolvedValue({
+        url: 'https://signed.example.invalid/photo-first',
+        expiresAt: '2026-07-18T03:15:00.000Z',
+      }),
+    };
+    const service = new OrdersQueryService(
+      makeFirestore(completedRecords) as never,
+      storage as never,
+    );
+
+    await expect(
+      service.getOrderById('order-completed', requester('consumer-1', 'consumer')),
+    ).resolves.toMatchObject({
+      id: 'order-completed',
+      deliveryPhotoUrl: 'https://signed.example.invalid/photo-first',
+    });
+    expect(storage.createDeliveryPhotoReadUrl).toHaveBeenCalledWith({
+      storeId: 'store-1',
+      orderId: 'order-completed',
+      photoId: 'photo-first',
+      requesterId: 'consumer-1',
+      requesterRole: 'consumer',
+    });
+  });
 
   it('목록과 미완료 상세은 사진 ID가 있어도 서명 URL을 생성하지 않는다', async () => {
     const photoRecords: RecordMap = {
@@ -188,17 +330,10 @@ describe('OrdersQueryService 조회 권한', () => {
         expiresAt: '2026-07-18T03:15:00.000Z',
       }),
     };
-    const service = new OrdersQueryService(
-      makeFirestore(photoRecords) as never,
-      storage as never,
-    );
+    const service = new OrdersQueryService(makeFirestore(photoRecords) as never, storage as never);
 
-    const list = await service.getOrders('store-1', requester('consumer-1', 'consumer'), {});
-    const detail = await service.getOrder(
-      'store-1',
-      'order-1',
-      requester('consumer-1', 'consumer'),
-    );
+    const list = await service.getMyOrders('consumer-1');
+    const detail = await service.getOrderById('order-1', requester('consumer-1', 'consumer'));
 
     expect(list[0]).not.toHaveProperty('deliveryPhotoUrl');
     expect(detail).not.toHaveProperty('deliveryPhotoUrl');
@@ -230,7 +365,7 @@ describe('OrdersQueryService 조회 권한', () => {
     );
 
     await expect(
-      service.getOrder('store-1', 'order-completed', requester('consumer-1', 'consumer')),
+      service.getOrderById('order-completed', requester('consumer-1', 'consumer')),
     ).rejects.toThrow('서명 실패');
   });
 
@@ -273,10 +408,7 @@ describe('OrdersQueryService 조회 권한', () => {
     };
     const service = new OrdersQueryService(makeFirestore(paymentRecords) as never);
 
-    const result = await service.getOrderById(
-      'payment-order',
-      requester('consumer-1', 'consumer'),
-    );
+    const result = await service.getOrderById('payment-order', requester('consumer-1', 'consumer'));
 
     expect(result.redeliveryPayment).toEqual(
       expect.objectContaining({

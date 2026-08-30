@@ -69,14 +69,12 @@ test('회차 폼은 기상 연기와 청약철회 제한 및 계약 불이행 �
   assert.match(formSource, /표시·광고 또는 계약\s+내용과 다르게 이행된 경우/);
 });
 
-test('선택 마케팅 동의는 기본 해제 상태이며 배송 연락처와 별도 주문 값으로 전달한다', () => {
-  assert.match(formSource, /마케팅 정보 수신 동의\(선택\)/);
-  assert.match(formSource, /checked=\{marketingConsent\}/);
-  assert.match(formSource, /onMarketingConsentChange/);
-  assert.match(pageSource, /useState<string \| null>\(null\)/);
-  assert.match(pageSource, /marketingConsent:\s*\{/);
-  assert.match(pageSource, /channels: \['alimtalk', 'sms'\]/);
-  assert.match(pageSource, /agreedAt: marketingAgreedAt/);
+test('파일럿 회차 결제는 선택 마케팅 동의 UI와 주문 값을 사용하지 않는다', () => {
+  assert.doesNotMatch(formSource, /마케팅 정보 수신 동의/);
+  assert.doesNotMatch(formSource, /marketingConsent|onMarketingConsentChange/);
+  assert.doesNotMatch(pageSource, /marketingConsent|marketingAgreedAt/);
+  assert.match(formSource, /배송 연락처/);
+  assert.match(formSource, /주문·결제·배송 안내를 위한 정보성 연락/);
 });
 
 test('회차 결제는 상품·가격·회차 변경 확인 전 차단하고 요약 변경 시 확인을 초기화한다', () => {
