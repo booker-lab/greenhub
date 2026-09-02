@@ -23,6 +23,7 @@ import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { getCartValidationError } from '@/lib/cartValidation';
 import { readPortonePaymentConfiguration } from '@/lib/portone-config';
 import CheckoutForm from './_components/CheckoutForm';
 
@@ -261,8 +262,10 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
   const paymentAttemptIds = useRef(new Map<string, string>());
 
   const totalAmount = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const cartValidationError = getCartValidationError(cartItems);
   const isLoading = state === 'creating' || state === 'paying';
   const canPay =
+    !cartValidationError &&
     !isLoading &&
     !!address.address &&
     !!address.zipCode &&
@@ -272,6 +275,11 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
 
   async function handlePay() {
     if (state !== 'idle' && state !== 'error') return;
+    if (cartValidationError) {
+      setError(cartValidationError);
+      setState('error');
+      return;
+    }
     setError(null);
 
     const accessToken = session?.user?.accessToken ?? '';
@@ -362,7 +370,7 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       onPaymentMethodChange={setPaymentMethod}
       isLoading={isLoading}
       canPay={canPay}
-      error={error}
+      error={cartValidationError ?? error}
       onPay={handlePay}
     />
   );
