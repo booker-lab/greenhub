@@ -6,10 +6,27 @@ service cloud.firestore {
       return status in ['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED'];
     }
 
+    function isRoundDirectStore(storeId) {
+      let storePath = /databases/$(database)/documents/stores/$(storeId);
+      return storeId is string &&
+        exists(storePath) &&
+        get(storePath).data.get('salesMode', null) == 'round_direct';
+    }
+
+    function isPublicSaleRound(round) {
+      let storeId = round.data.get('storeId', null);
+      return storeId is string &&
+        isRoundDirectStore(storeId) &&
+        isPublicSaleRoundStatus(round.data.get('status', null));
+    }
+
     function isPublicSaleRoundItem(roundId, storeId) {
-      let round = get(/databases/$(database)/documents/saleRounds/$(roundId));
-      return round.data.storeId == storeId &&
-        isPublicSaleRoundStatus(round.data.status);
+      let roundPath = /databases/$(database)/documents/saleRounds/$(roundId);
+      return storeId is string &&
+        exists(roundPath) &&
+        isRoundDirectStore(storeId) &&
+        get(roundPath).data.get('storeId', null) == storeId &&
+        isPublicSaleRoundStatus(get(roundPath).data.get('status', null));
     }
 
     function currentUserPath() {
@@ -78,7 +95,7 @@ service cloud.firestore {
 
     // 공개 판매 회차: 소비자 조회만 허용하고 모든 클라이언트 직접 쓰기 차단
     match /saleRounds/{roundId} {
-      allow read: if isPublicSaleRoundStatus(resource.data.status);
+      allow read: if isPublicSaleRound(resource);
       allow write: if false;
     }
 

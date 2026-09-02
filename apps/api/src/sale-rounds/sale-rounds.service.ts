@@ -17,6 +17,12 @@ import { SaleRoundStateService } from './sale-round-state.service';
 
 type RoundWithItems = SaleRound & { items: SaleRoundItem[] };
 
+const PUBLIC_SALE_ROUND_STATUSES = ['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED'] as const;
+
+function isPublicSaleRoundStatus(status: unknown): status is (typeof PUBLIC_SALE_ROUND_STATUSES)[number] {
+  return (PUBLIC_SALE_ROUND_STATUSES as readonly unknown[]).includes(status);
+}
+
 @Injectable()
 export class SaleRoundsService {
   constructor(
@@ -35,15 +41,21 @@ export class SaleRoundsService {
     };
   }
   async listPublicRounds(storeId: string) {
+    await this.assertPublicRoundStore(storeId);
     const snap = await this.firestore
       .collection('saleRounds')
       .where('storeId', '==', storeId)
-      .where('status', 'in', ['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED'])
+      .where('status', 'in', PUBLIC_SALE_ROUND_STATUSES)
       .get();
     const rounds = await Promise.all(
-      snap.docs.map(async (doc: any) => this.refreshRoundStatus(storeId, doc.data()['id'])),
+      snap.docs.map(async (doc: any) => {
+        const storedRound = doc.data() as Record<string, any>;
+        this.assertPublicRoundBoundary(storeId, storedRound);
+        const round = await this.refreshRoundStatus(storeId, doc.id);
+        return round.storeId === storeId && isPublicSaleRoundStatus(round.status) ? round : null;
+      }),
     );
-    return { items: rounds.filter((round) => round.status !== 'DRAFT') };
+    return { items: rounds.filter((round): round is SaleRound => round !== null) };
   }
   async getRound(
     storeId: string,
@@ -56,14 +68,15 @@ export class SaleRoundsService {
   }
   private async getRoundWithItems(storeId: string, roundId: string): Promise<RoundWithItems> {
     const round = await this.refreshRoundStatus(storeId, roundId);
-    const items = await this.getRoundItems(roundId);
+    const items = await this.getRoundItems(roundId, storeId);
     return { ...round, items };
   }
   async getPublicRound(storeId: string, roundId: string): Promise<RoundWithItems> {
+    await this.assertPublicRoundStore(storeId);
+    const storedRound = await this.getStoredRound(storeId, roundId);
+    this.assertPublicRoundBoundary(storeId, storedRound);
     const round = await this.getRoundWithItems(storeId, roundId);
-    if (round.status === 'DRAFT' || round.status === 'CANCELLED') {
-      throw new NotFoundException('공개 회차를 찾을 수 없습니다.');
-    }
+    this.assertPublicRoundBoundary(storeId, round);
     return round;
   }
   async createRound(
@@ -133,7 +146,7 @@ export class SaleRoundsService {
     await this.writeTransaction(async (tx) => {
       tx.update(this.firestore.doc(`saleRounds/${roundId}`), update);
       if (nextItems) {
-        const currentItems = await this.getRoundItems(roundId);
+        const currentItems = await this.getRoundItems(roundId, storeId);
         for (const item of currentItems) {
           tx.delete(this.firestore.doc(`saleRoundItems/${item.id}`));
         }
@@ -146,7 +159,7 @@ export class SaleRoundsService {
     return this.normalizeRoundWithItems({
       ...round,
       ...update,
-      items: nextItems ?? (await this.getRoundItems(roundId)),
+      items: nextItems ?? (await this.getRoundItems(roundId, storeId)),
     } as RoundWithItems);
   }
   async copyRound(
@@ -231,6 +244,17 @@ export class SaleRoundsService {
       throw new ForbiddenException('해당 스토어의 회차를 관리할 권한이 없습니다.');
     }
   }
+  private async assertPublicRoundStore(storeId: string) {
+    const snap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!snap.exists || snap.data()?.['salesMode'] !== 'round_direct') {
+      throw new NotFoundException('공개 회차를 찾을 수 없습니다.');
+    }
+  }
+  private assertPublicRoundBoundary(storeId: string, round: Record<string, any>) {
+    if (round['storeId'] !== storeId || !isPublicSaleRoundStatus(round['status'])) {
+      throw new NotFoundException('공개 회차를 찾을 수 없습니다.');
+    }
+  }
   private async getStoredRound(storeId: string, roundId: string): Promise<SaleRound> {
     const snap = await this.firestore.doc(`saleRounds/${roundId}`).get();
     if (!snap.exists || snap.data()?.['storeId'] !== storeId) {
@@ -238,13 +262,14 @@ export class SaleRoundsService {
     }
     return snap.data() as SaleRound;
   }
-  private async getRoundItems(roundId: string): Promise<SaleRoundItem[]> {
+  private async getRoundItems(roundId: string, storeId: string): Promise<SaleRoundItem[]> {
     const snap = await this.firestore
       .collection('saleRoundItems')
       .where('roundId', '==', roundId)
       .get();
     return snap.docs
       .map((doc: any) => this.normalizeItem(doc.data() as SaleRoundItem))
+      .filter((item) => item.storeId === storeId)
       .sort((a, b) => a.displayOrder - b.displayOrder);
   }
   private normalizeRound(round: SaleRound): SaleRound {
