@@ -1,22 +1,21 @@
 /**
  * Preview 배포 완료 대기 게이트 — sync-preview.yml 의 E2E 트리거 직전에 호출.
  *
- * 왜 필요한가: sync-preview 가 success 로 떨어져도 Vercel 의 실제 preview 재배포는
- * 2~4분 더 걸린다. 그 사이 e2e 를 dispatch 하면 stale(이전 커밋) 배포본을 검사한다
- * (세션39·60·61 재현). 이 스크립트는 3앱 Preview deployment 가 현재 preview HEAD
- * 커밋으로 success 할 때까지 폴링해 그 race 를 트리거 단계에서 차단한다.
+ * sync-preview 가 success 로 떨어져도 Vercel 의 실제 Preview 재배포는 더 늦게
+ * 끝날 수 있다. 그 사이 E2E 를 dispatch 하면 stale(이전 커밋) 배포본을 검사한다.
+ * 이 스크립트는 GitHub 에 기록된 Vercel commit status가 현재 Preview HEAD를
+ * 가리키며 성공할 때까지 폴링해 그 race 를 트리거 단계에서 차단한다.
  *
- * 매칭 기준 = SHA (시각 비교 아님). deployment.sha 는 preview HEAD commit SHA 와
- * 정확히 일치하며(실측 #CL-43), Vercel 은 커밋 빌드 success 시 고정 브랜치 별칭
- * (-git-preview-, e2e BASE)을 그 커밋으로 재포인팅한다(T0 실측 확정). 따라서
- * sha-매칭 deployment 의 success = e2e BASE 가 새 커밋을 서빙하게 된 정확한 신호.
+ * 매칭 기준 = SHA와 정확한 status context. GitHub commit status API 요청 자체가
+ * expected SHA에 고정되며, 각 status의 context와 state, 안전한 target_url을
+ * 함께 검증한다. 시각만으로 이전 증거를 현재 배포로 승격하지 않는다.
  *
  * 사용법: GH_TOKEN=... node scripts/wait-preview-deploy.mjs
  *   (preview 브랜치 체크아웃 상태에서 실행 — git rev-parse HEAD 로 대상 SHA 결정)
  *
  * 종료 코드:
- *   0  3앱 모두 sha-매칭 deployment success
- *   1  timeout 초과(fail-fast) 또는 gh api 오류 — e2e dispatch 안 됨, 배포 지연 노출
+ *   0  3앱 모두 SHA-매칭 Vercel commit status success
+ *   1  timeout 초과(fail-fast) 또는 gh api 오류 — E2E dispatch 안 됨
  */
 import { execSync } from 'node:child_process';
 import path from 'node:path';
@@ -24,20 +23,38 @@ import { fileURLToPath } from 'node:url';
 
 export const REPO = 'booker-lab/greenhub';
 
-// Preview deployment environment 이름 3종.
-// 주의: 구분자는 en-dash(U+2013 '–'), 일반 hyphen 아님. consumer 는 앱명에
-// 하이픈이 없어 seller/driver 와 표기가 다름(GAP-3 실측).
-export const ENVIRONMENTS = [
-  { app: 'seller', env: 'Preview – greenhub-seller' },
-  { app: 'consumer', env: 'Preview – greenhubconsumer' },
-  { app: 'driver', env: 'Preview – greenhub-driver' },
+// Vercel GitHub integration이 생성하는 exact status context 3종.
+export const PREVIEW_APPS = [
+  {
+    app: 'seller',
+    project: 'greenhub-seller',
+    context: 'Vercel – greenhub-seller',
+    env: 'Preview – greenhub-seller',
+  },
+  {
+    app: 'consumer',
+    project: 'greenhubconsumer',
+    context: 'Vercel – greenhubconsumer',
+    env: 'Preview – greenhubconsumer',
+  },
+  {
+    app: 'driver',
+    project: 'greenhub-driver',
+    context: 'Vercel – greenhub-driver',
+    env: 'Preview – greenhub-driver',
+  },
 ];
+
+// 기존 import 소비자와 로그 계약을 위한 호환 export. 새 판정은 env가 아니라 context를 사용한다.
+export const ENVIRONMENTS = PREVIEW_APPS;
+
+const APP_BY_NAME = new Map(PREVIEW_APPS.map((config) => [config.app, config]));
 
 // 기본 timeout 10분 / 간격 15초. env 로 오버라이드 가능(로컬 검증·튜닝용).
 const TIMEOUT_MS = Number(process.env.WAIT_TIMEOUT_MS) || 10 * 60 * 1000;
 const INTERVAL_MS = Number(process.env.WAIT_INTERVAL_MS) || 15 * 1000;
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function normalizeTargetUrl(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -52,68 +69,180 @@ export function normalizeTargetUrl(value) {
   }
 }
 
-export function gh(path) {
-  // gh api 는 URL 인코딩된 query 를 그대로 받는다. en-dash·공백은 호출부에서 인코딩.
-  const out = execSync(`gh api "${path}"`, {
+export function gh(apiPath) {
+  // gh api 는 URL 인코딩된 query 를 그대로 받는다.
+  const out = execSync('gh api "' + apiPath + '"', {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return JSON.parse(out);
 }
 
-/**
- * 한 앱의 현재 HEAD 커밋 deployment 가 success 인지 1회 확인.
- *  - sha-매칭 deployment id 를 찾고(없으면 아직 생성 전 → 미완)
- *  - 그 deployment 의 최신 status state 가 'success' 인지 판정.
- */
-export function inspectAppDeployment(app, env, headSha, request = gh) {
-  const encEnv = encodeURIComponent(env); // 공백→%20, en-dash→%E2%80%93
-  const deployments = request(`repos/${REPO}/deployments?environment=${encEnv}&per_page=10`);
-  const match = deployments.find((d) => d.sha === headSha);
-  if (!match) {
+function commitStatusesPath(headSha) {
+  return 'repos/' + REPO + '/commits/' + headSha + '/statuses?per_page=100';
+}
+
+function assertHeadSha(headSha) {
+  if (typeof headSha !== 'string' || !/^[0-9a-f]{40}$/.test(headSha)) {
+    throw new Error('대상 SHA는 40자리 소문자 16진수여야 합니다.');
+  }
+}
+
+function statusBelongsToExpectedSha(status, headSha) {
+  // 실제 GitHub commit status 응답은 요청 경로가 SHA 권위를 소유하며 sha 필드가 없을 수 있다.
+  // 응답에 sha가 있으면 추가 방어로 exact match를 요구한다.
+  return typeof status?.sha !== 'string' || status.sha === headSha;
+}
+
+function statusTimestamp(status) {
+  for (const field of ['updated_at', 'created_at']) {
+    if (typeof status?.[field] !== 'string') continue;
+    const timestamp = Date.parse(status[field]);
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  return null;
+}
+
+function comparableStatusId(value) {
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return BigInt(value);
+  if (typeof value === 'string' && /^\d+$/.test(value)) return BigInt(value);
+  return null;
+}
+
+function latestStatus(statuses) {
+  let latest = null;
+  for (const candidate of Array.isArray(statuses) ? statuses : []) {
+    if (!latest) {
+      latest = candidate;
+      continue;
+    }
+
+    const candidateTime = statusTimestamp(candidate);
+    const latestTime = statusTimestamp(latest);
+    if (
+      candidateTime !== null &&
+      (latestTime === null || candidateTime > latestTime)
+    ) {
+      latest = candidate;
+      continue;
+    }
+
+    if (candidateTime !== null && latestTime !== null && candidateTime === latestTime) {
+      const candidateId = comparableStatusId(candidate?.id);
+      const latestId = comparableStatusId(latest?.id);
+      if (candidateId !== null && (latestId === null || candidateId > latestId)) {
+        latest = candidate;
+      }
+    }
+    // timestamp가 없거나 같고 id도 없으면 GitHub API의 최신순 배열 순서를 유지한다.
+  }
+  return latest;
+}
+
+function inspectStatus(config, headSha, statuses) {
+  const contextStatuses = (Array.isArray(statuses) ? statuses : []).filter(
+    (status) => status && status.context === config.context,
+  );
+  const exactStatuses = contextStatuses.filter((status) =>
+    statusBelongsToExpectedSha(status, headSha),
+  );
+  const latestExactStatus = latestStatus(exactStatuses);
+  const latestContextStatus = latestStatus(contextStatuses);
+
+  // API 응답에 다른 SHA가 섞인 경우에도 성공으로 추정하지 않는다.
+  if (
+    !latestExactStatus &&
+    latestContextStatus &&
+    typeof latestContextStatus.sha === 'string' &&
+    latestContextStatus.sha !== headSha
+  ) {
     return {
-      app,
-      environment: env,
+      app: config.app,
+      project: config.project,
+      context: config.context,
+      environment: null,
       expectedSha: headSha,
-      deploymentSha: null,
+      statusId: latestContextStatus.id ?? null,
+      statusSha: latestContextStatus.sha,
       deploymentId: null,
-      state: 'missing',
+      deploymentSha: latestContextStatus.sha,
+      state: 'stale',
       targetUrl: null,
       ready: false,
     };
   }
-  const statuses = request(`repos/${REPO}/deployments/${match.id}/statuses?per_page=5`);
-  const latest = statuses[0]; // GitHub 는 최신순 반환
-  const targetUrl = normalizeTargetUrl(latest?.target_url);
+
+  const statusSha = latestExactStatus
+    ? typeof latestExactStatus.sha === 'string'
+      ? latestExactStatus.sha
+      : headSha
+    : null;
+  const targetUrl = normalizeTargetUrl(latestExactStatus?.target_url);
+
   return {
-    app,
-    environment: env,
+    app: config.app,
+    project: config.project,
+    context: config.context,
+    environment: null,
     expectedSha: headSha,
-    deploymentSha: match.sha,
-    deploymentId: match.id,
-    state: latest?.state ?? 'missing',
+    statusId: latestExactStatus?.id ?? null,
+    statusSha,
+    // round-direct의 기존 readiness 입력 이름과 호환하되 값의 source는 commit status다.
+    deploymentId: null,
+    deploymentSha: statusSha,
+    state: latestExactStatus?.state ?? 'missing',
     targetUrl,
-    ready: latest?.state === 'success' && match.sha === headSha && Boolean(targetUrl),
+    ready:
+      latestExactStatus?.state === 'success' &&
+      statusSha === headSha &&
+      Boolean(targetUrl),
   };
 }
 
-export function collectDeploymentEvidence(headSha, request = gh) {
-  if (!/^[0-9a-f]{40}$/.test(headSha)) {
-    throw new Error('대상 SHA는 40자리 소문자 16진수여야 합니다.');
-  }
-  const apps = ENVIRONMENTS.map(({ app, env }) =>
-    inspectAppDeployment(app, env, headSha, request),
+export function inspectAppCommitStatus(app, headSha, statuses) {
+  assertHeadSha(headSha);
+  const config = APP_BY_NAME.get(app);
+  if (!config) throw new Error('알 수 없는 Preview 앱입니다: ' + app);
+  return inspectStatus(config, headSha, statuses);
+}
+
+// 기존 함수 이름을 사용하는 로컬 소비자를 위해 유지한다. 조회 source는 commit status로 바뀌었다.
+export function inspectAppDeployment(app, _environment, headSha, request = gh) {
+  assertHeadSha(headSha);
+  return inspectAppCommitStatus(app, headSha, request(commitStatusesPath(headSha)));
+}
+
+export function collectCommitStatusEvidence(headSha, request = gh) {
+  assertHeadSha(headSha);
+  const response = request(commitStatusesPath(headSha));
+  const statuses = Array.isArray(response) ? response : [];
+  const apps = PREVIEW_APPS.map(({ app }) => inspectAppCommitStatus(app, headSha, statuses));
+  const statusShas = Object.fromEntries(apps.map(({ app, statusSha }) => [app, statusSha]));
+  const targetUrls = Object.fromEntries(apps.map(({ app, targetUrl }) => [app, targetUrl]));
+  const statusStates = Object.fromEntries(apps.map(({ app, state }) => [app, state]));
+  const statusContexts = Object.fromEntries(
+    PREVIEW_APPS.map(({ app, context }) => [app, context]),
   );
+
   return {
-    ready: apps.every(({ ready }) => ready),
+    ready: apps.length === PREVIEW_APPS.length && apps.every(({ ready }) => ready),
     checkedAt: new Date().toISOString(),
     repository: REPO,
     expectedSha: headSha,
-    deploymentShas: Object.fromEntries(apps.map(({ app, deploymentSha }) => [app, deploymentSha])),
-    deploymentTargetUrls: Object.fromEntries(apps.map(({ app, targetUrl }) => [app, targetUrl])),
+    evidenceSource: 'github-commit-status',
+    statusContexts,
+    statusShas,
+    statusStates,
+    statusTargetUrls: targetUrls,
+    // 기존 round-direct readiness 계약을 보존하는 source-agnostic alias.
+    deploymentShas: statusShas,
+    deploymentTargetUrls: targetUrls,
     apps,
   };
 }
+
+// 현재 직접 호출자와 기존 artifact 소비자 이름을 함께 보존한다.
+export const collectDeploymentEvidence = collectCommitStatusEvidence;
 
 function resolveHeadSha(args) {
   const shaArgument = args.find((arg) => arg.startsWith('--sha='));
@@ -124,76 +253,133 @@ function resolveHeadSha(args) {
   );
 }
 
+function unavailableEvidence(headSha) {
+  return PREVIEW_APPS.map(({ app, project, context }) => ({
+    app,
+    project,
+    context,
+    environment: null,
+    expectedSha: headSha,
+    statusId: null,
+    statusSha: null,
+    deploymentId: null,
+    deploymentSha: null,
+    state: 'unavailable',
+    targetUrl: null,
+    ready: false,
+  }));
+}
+
+function timeoutDetails(evidence, headSha) {
+  const apps = evidence?.apps ?? unavailableEvidence(headSha);
+  return apps
+    .filter(({ ready }) => !ready)
+    .map(
+      ({ app, state, statusSha, expectedSha, targetUrl }) =>
+        app +
+        ': state=' +
+        (state ?? 'missing') +
+        ', observed_sha=' +
+        (statusSha ?? '없음') +
+        ', expected_sha=' +
+        (expectedSha ?? headSha) +
+        ', target_url=' +
+        (targetUrl ? 'safe' : 'missing-or-unsafe'),
+    )
+    .join('; ');
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const jsonOnly = args.includes('--json');
   const once = args.includes('--once');
-  // 대상 SHA = preview HEAD. 기본은 git rev-parse(워크플로는 preview 체크아웃 상태).
-  // PREVIEW_HEAD_SHA env 로 오버라이드 가능 — 로컬 검증 시 임의 커밋 지정용.
   const headSha = resolveHeadSha(args);
 
   if (once) {
-    const evidence = collectDeploymentEvidence(headSha);
-    process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
+    const evidence = collectCommitStatusEvidence(headSha);
+    process.stdout.write(JSON.stringify(evidence, null, 2) + '\n');
     process.exitCode = evidence.ready ? 0 : 1;
     return;
   }
 
   if (!jsonOnly) {
-    console.log(`[wait-preview-deploy] 대상 Preview HEAD = ${headSha}`);
+    console.log('[wait-preview-deploy] 대상 Preview HEAD = ' + headSha);
     console.log(
-      `[wait-preview-deploy] 앱 ${ENVIRONMENTS.length}개 확인, 제한 ${TIMEOUT_MS / 1000}초, 간격 ${INTERVAL_MS / 1000}초`,
+      '[wait-preview-deploy] 앱 ' +
+        PREVIEW_APPS.length +
+        '개 확인, 제한 ' +
+        TIMEOUT_MS / 1000 +
+        '초, 간격 ' +
+        INTERVAL_MS / 1000 +
+        '초',
     );
   }
 
   const deadline = Date.now() + TIMEOUT_MS;
-  const done = new Set();
+  const announcedReadyApps = new Set();
   let latestEvidence = null;
 
   while (Date.now() < deadline) {
     try {
-      latestEvidence = collectDeploymentEvidence(headSha);
+      latestEvidence = collectCommitStatusEvidence(headSha);
     } catch (error) {
       if (!jsonOnly) {
+        const message = error instanceof Error ? error.message : String(error);
         console.warn(
-          `[wait-preview-deploy] GitHub API 일시 오류 — ${error.message.split('\n')[0]}`,
+          '[wait-preview-deploy] GitHub API 일시 오류 — ' + message.split('\n')[0],
         );
       }
       await sleep(INTERVAL_MS);
       continue;
     }
-    for (const evidence of latestEvidence.apps) {
-      const { app } = evidence;
-      if (done.has(app)) continue;
-      if (evidence.ready) {
-        done.add(app);
-        if (!jsonOnly) {
+
+    for (const appEvidence of latestEvidence.apps) {
+      const { app } = appEvidence;
+      if (appEvidence.ready) {
+        if (!announcedReadyApps.has(app) && !jsonOnly) {
           console.log(
-            `[wait-preview-deploy] ${app} 배포 확인 (${done.size}/${ENVIRONMENTS.length}) @ ${new Date().toISOString()}`,
+            '[wait-preview-deploy] ' +
+              app +
+              ' commit status 확인 (' +
+              (announcedReadyApps.size + 1) +
+              '/' +
+              PREVIEW_APPS.length +
+              ') @ ' +
+              new Date().toISOString(),
           );
         }
+        announcedReadyApps.add(app);
+      } else {
+        announcedReadyApps.delete(app);
       }
     }
-    if (done.size === ENVIRONMENTS.length) {
+
+    if (latestEvidence.ready) {
       if (jsonOnly) {
-        process.stdout.write(`${JSON.stringify(latestEvidence, null, 2)}\n`);
+        process.stdout.write(JSON.stringify(latestEvidence, null, 2) + '\n');
       } else {
-        console.log('[wait-preview-deploy] 세 앱 배포가 모두 확인되어 E2E 실행을 허용합니다.');
+        console.log(
+          '[wait-preview-deploy] 세 앱의 Vercel commit status가 모두 확인되어 E2E 실행을 허용합니다.',
+        );
       }
       return;
     }
     await sleep(INTERVAL_MS);
   }
 
-  // fail-fast: timeout 시 미완 앱 노출(배포 지연 원인 식별). e2e dispatch 안 됨.
-  const pending = ENVIRONMENTS.filter(({ app }) => !done.has(app)).map(({ app }) => app);
+  // fail-fast: timeout 시 앱별 상태와 SHA를 노출해 배포 지연 원인을 식별한다.
   if (jsonOnly && latestEvidence) {
-    process.stdout.write(`${JSON.stringify(latestEvidence, null, 2)}\n`);
+    process.stdout.write(JSON.stringify(latestEvidence, null, 2) + '\n');
   } else {
     console.error(
-      `[wait-preview-deploy] ${TIMEOUT_MS / 1000}초 초과 — 미완료 앱: ${pending.join(', ')}`,
+      '[wait-preview-deploy] ' +
+        TIMEOUT_MS / 1000 +
+        '초 초과 — 미완료 앱: ' +
+        timeoutDetails(latestEvidence, headSha),
     );
-    console.error('[wait-preview-deploy] E2E 실행을 차단했습니다. Preview 배포 상태를 확인하세요.');
+    console.error(
+      '[wait-preview-deploy] E2E 실행을 차단했습니다. Preview commit status를 확인하세요.',
+    );
   }
   process.exitCode = 1;
 }
@@ -202,7 +388,8 @@ const isDirectRun =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isDirectRun) {
   main().catch((error) => {
-    console.error(`[wait-preview-deploy] 치명적 오류: ${error.message}`);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[wait-preview-deploy] 치명적 오류: ' + message);
     process.exitCode = 1;
   });
 }

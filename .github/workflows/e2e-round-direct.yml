@@ -79,7 +79,7 @@ jobs:
       name: round-direct-e2e
     permissions:
       contents: read
-      deployments: read
+      statuses: read
     env:
       ROUND_DIRECT_E2E_ENABLED: 'true'
       ROUND_DIRECT_E2E_ENV: preview
