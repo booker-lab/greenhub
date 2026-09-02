@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: write
       actions: write
-      deployments: read
+      statuses: read
 
     steps:
       - uses: actions/checkout@v6
@@ -46,9 +46,9 @@ jobs:
 
       # sync-preview success ≠ Vercel 실배포 완료. 여기서 막지 않으면 아래 e2e
       # dispatch 가 stale(이전 커밋) preview 를 검사한다(세션39·60·61 race).
-      # 3앱 Preview deployment 가 현재 preview HEAD 로 success 할 때까지 폴링하고,
+      # 3앱 Vercel commit status가 현재 preview HEAD에서 success 할 때까지 폴링하고,
       # timeout 시 fail-fast(exit 1)로 e2e dispatch 를 차단해 배포 지연을 노출한다.
-      - name: Wait for preview deploy (SHA-matched deployments poll)
+      - name: Wait for preview deploy (SHA-matched Vercel commit statuses poll)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/wait-preview-deploy.mjs
