@@ -76,7 +76,6 @@ function readBaseCartItem(value: unknown): CartItem | null {
     (value.deliveryMethod !== 'direct' &&
       value.deliveryMethod !== 'hub' &&
       value.deliveryMethod !== 'parcel') ||
-    !isNonEmptyString(value.storeId) ||
     (value.requestedDeliveryDate !== undefined && typeof value.requestedDeliveryDate !== 'string')
   ) {
     return null;
@@ -90,7 +89,8 @@ function readBaseCartItem(value: unknown): CartItem | null {
     quantity: value.quantity,
     saleType: value.saleType,
     deliveryMethod: value.deliveryMethod,
-    storeId: value.storeId,
+    // 과거 장바구니의 누락된 스토어 참조는 결제 전 가드가 수정 경로를 보여주도록 보존한다.
+    storeId: typeof value.storeId === 'string' ? value.storeId : '',
     ...(value.requestedDeliveryDate ? { requestedDeliveryDate: value.requestedDeliveryDate } : {}),
   };
 }
@@ -123,6 +123,7 @@ function normalizeStoredCartItem(value: unknown): CartItem | null {
 export function isRoundCartItem(item: CartItem | undefined): item is RoundCartItem {
   return (
     !!item &&
+    isNonEmptyString(item.storeId) &&
     isCartIdentifier(item.roundId) &&
     isCartIdentifier(item.roundItemId) &&
     isPrice(item.roundPrice) &&

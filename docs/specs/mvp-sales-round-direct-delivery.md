@@ -22,12 +22,22 @@
 - 필수 필드는 `storeId`, `status`, `name`, 주문 시작·마감 시각, 경매일, 배송 시작·종료 시각, 활성 배송 지역, 배송지 한도, 상품 수량 한도, 주문·예약 집계다.
 - 주문 마감 시각 또는 배송지·상품 한도 중 먼저 도달한 조건에 따라 `CLOSED`로 전환한다.
 - 상태 전환은 `DRAFT → SCHEDULED → OPEN → CLOSED → COMPLETED` 순서만 허용하며 역전이나 단계 건너뛰기를 거부한다.
+- 수동 `SCHEDULED → OPEN`과 주문 예약은 `orderOpenAt <= now < orderCloseAt`인 authoritative
+  schedule window를 함께 확인한다. 저장된 `OPEN` 상태만으로 시작 전 주문을 허용하지 않는다.
+- `DRAFT|SCHEDULED` 회차 편집은 실제 write transaction에서 fresh status를 재확인하고, live
+  reservation·ordered item을 삭제하거나 가격·상품·한도 snapshot을 혼합하지 않는다.
 - `DELIVERY_HELD` 또는 그 밖의 미완료 주문이 남아 있으면 `COMPLETED` 전환을 거부한다.
 - 판매자는 자신이 소유한 스토어 회차만 변경할 수 있고 관리자는 이 소유권 검사에서 예외다.
 - 판매자 회차 목록·상세 조회도 스토어 `ownerId`를 서버에서 확인하며, 역할만으로 다른 스토어 회차를 읽을 수 없다.
 - 결제 주문이 있는 회차 취소는 결제별 환불을 성공시킨 뒤 `CANCELLED`로 확정하며 중복 취소는 환불을 다시 적용하지 않는다.
+- 회차 취소의 `CANCELLING` 작업은 owner·lease·expiry와 stale worker fencing을 가져야 하며,
+  process interruption 뒤 안전하게 인수·재개하거나 deterministic recovery로 닫혀야 한다.
 - 용량 때문에 자동 마감된 회차는 주문 마감 전 한도가 반환되면 `OPEN`으로 복귀한다. 일정 종료·수동 마감 회차는 자동 재개하지 않는다.
 - Firestore `Timestamp`는 API에서 ISO8601 문자열로 반환하고 회차 목록은 정규화된 시각 기준 최신순으로 정렬한다.
+
+위 회차 atomicity·recovery 항목은 current intended contract다. 현재 구현에서 fresh edit gate,
+pre-open reservation gate, cancellation recovery/fencing이 직접 충족되는지는
+`docs/BACKLOG.md`의 `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`에서 별도로 판정한다.
 
 ### `saleRoundItems`
 
@@ -70,6 +80,11 @@
 - 해결된 같은 원인이 재발하면 최신 안전 스냅샷을 병합하고 항목을 다시 연다.
 - 예외 유형별 허용 action만 실행하며, 동시 조치는 claim을 획득한 한 요청만 외부 동작을 수행한다.
 - 조치 실행 전 최신 결제·주문 상태를 다시 검증하고, 담당자·시각·결과·실패 사유를 감사 기록으로 남긴다.
+- lease 만료 뒤 새 claimant가 생길 수 있는 action은 성공·실패 기록에서 fresh owner token 또는
+  generation을 확인해 stale worker가 최신 claim·status·audit를 덮지 못하게 한다.
+
+현재 `claimAction()`의 만료 takeover fencing은 직접 검증되지 않았고
+`OPERATION-ACTION-CLAIM-FENCING`에서 별도 implementation finding으로 추적한다.
 
 ## API 계약
 
@@ -134,6 +149,9 @@
 - 법정 보관 컬렉션과 배송 사진 원본은 소비자앱·드라이버앱·일반 셀러 권한에서 직접 접근할 수 없다.
 - 각 보관 기록은 파기 예정 시각을 가지며 정기 작업이 만료 기록과 연결 Storage 파일을 영구 삭제한다.
 - 정기 파기는 Firestore 쓰기 한도보다 작은 450건 배치로 500건 초과 대상도 반복 처리하며, Storage 삭제가 최종 실패하면 안전한 운영 예외만 남기고 보관 문서는 유지한다.
+- `RETENTION_DELETE_FAILED`는 store-scoped route 또는 admin/technical global queue에서 확인할 수
+  있어야 한다. 현재 배송 사진 failure route의 store identity·global visibility 공백은
+  `RETENTION-DELETE-ISSUE-ROUTING`에서 별도 추적한다.
 
 ## 검증 기준
 

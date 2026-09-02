@@ -49,3 +49,17 @@ test('판매 모드 확인 전에는 기존 내비게이션을 노출하지 않�
     /storeMode\.salesMode === 'round_direct' \? ROUND_DIRECT_TABS : LEGACY_TABS/,
   );
 });
+
+test('인증되지 않았거나 세션을 확인하는 동안에는 장바구니 배지를 숨긴다', () => {
+  assert.match(source, /useSession/);
+  assert.match(source, /const \{ status: sessionStatus \} = useSession\(\);/);
+  assert.match(
+    source,
+    /const visibleItemCount = sessionStatus === 'authenticated' \? itemCount : 0;/,
+  );
+  assert.match(source, /tab\.showBadge && visibleItemCount > 0/);
+});
+
+test('인증된 사용자의 장바구니 수량은 배지에 표시한다', () => {
+  assert.match(source, /visibleItemCount > 99 \? '99\+' : visibleItemCount/);
+});

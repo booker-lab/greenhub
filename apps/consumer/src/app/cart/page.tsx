@@ -1,11 +1,25 @@
 'use client';
-import { ActionIcon, Badge, Box, Button, Container, Divider, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Container,
+  Divider,
+  Group,
+  Paper,
+  Stack,
+  Text,
+  Title,
+} from '@mantine/core';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { getCartItemValidationIssues, getCartValidationError } from '@/lib/cartValidation';
 
 const API_URL = getApiBaseUrl();
 type RoundCartValidation =
@@ -296,9 +310,12 @@ export default function CartPage() {
   const checkoutAmount = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const checkoutCount = checkoutItems.reduce((sum, item) => sum + item.quantity, 0);
   const excludedCount = isRoundCart ? items.length - checkoutItems.length : 0;
+  const legacyItems = items.filter((item) => !isRoundCartItem(item));
+  const legacyValidationError = getCartValidationError(legacyItems);
+  const hasLegacyValidationIssues = legacyValidationError !== null;
   const isChecking = isRoundCart && validation.status !== 'ready';
   function handleCheckout() {
-    if (checkoutItems.length === 0 || isChecking) return;
+    if (checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues) return;
     sessionStorage.setItem('checkout_cart', JSON.stringify(checkoutItems));
     router.push('/checkout?from=cart');
   }
@@ -345,6 +362,7 @@ export default function CartPage() {
       <Stack gap="sm" mb="lg">
         {items.map((item) => {
           const roundItem = isRoundCartItem(item) ? item : null;
+          const itemIssues = roundItem ? [] : getCartItemValidationIssues(item);
           const productHref = roundItem
             ? `/products/${item.productId}?round=${encodeURIComponent(roundItem.roundId)}`
             : `/products/${item.productId}`;
@@ -411,6 +429,28 @@ export default function CartPage() {
                             weekday: 'short',
                           })}
                         </Text>
+                      )}
+                      {itemIssues.length > 0 && (
+                        <Alert color="orange" variant="light" mt="sm" p="xs">
+                          <Stack gap={4}>
+                            {itemIssues.map((issue) => (
+                              <Text key={issue.code} size="sm">
+                                {issue.itemMessage}
+                              </Text>
+                            ))}
+                            <Button
+                              component={Link}
+                              href={productHref}
+                              size="xs"
+                              variant="light"
+                              color="orange"
+                              radius="md"
+                              mt={4}
+                            >
+                              다시 선택하기
+                            </Button>
+                          </Stack>
+                        </Alert>
                       )}
                     </>
                   )}
@@ -482,12 +522,17 @@ export default function CartPage() {
           </Text>
         </Group>
       </Paper>
+      {hasLegacyValidationIssues && (
+        <Text mb="xs" ta="center" size="sm" c="var(--color-text-disabled)">
+          문제 있는 상품을 다시 선택하면 결제할 수 있어요.
+        </Text>
+      )}
       <Button
         fullWidth
         size="lg"
         color="brand"
         radius="md"
-        disabled={checkoutItems.length === 0 || isChecking}
+        disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
         onClick={handleCheckout}
       >
         {isChecking

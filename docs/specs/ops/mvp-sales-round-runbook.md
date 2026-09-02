@@ -120,11 +120,17 @@ node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=round_dir
 | --- | --- | --- | --- |
 | 생성 `DRAFT` | 대표자·셀러 운영자. 이전 회차와 이번 주 상품 정본 준비 | 새 `roundId`, 상품 중복 없음, 회차 가격·상품별 한도, 이천시 활성 지역, 일정 순서 | 상품·가격·시간대 불명확 시 저장·예약 중단 후 대표자 확인 |
 | 예약 `SCHEDULED` | 대표자. 주문 시작 < 주문 마감 <= 경매 < 배송 시작 < 배송 종료 | `schedule.timezone=Asia/Seoul`, 일요일 24:00 마감, 월요일 경매, 화요일 00:00~09:00 배송 | 과거 시각, 일정 역전, 잘못된 지역·한도, 링크 오노출 시 예약 중단 후 기술 담당자 확인 |
-| 판매 `OPEN` | 셀러 운영자. 공개 링크와 결제 준비 확인 | 공개 회차·상품 조회, 가격, `closeReason=null`, 예약·주문 집계, 당근 링크 | 가격·상품·지역 불일치, 결제 오류 증가, 비회차 판매 방식 노출 시 신규 유입 중단과 롤백 판단 |
+| 판매 `OPEN` | 셀러 운영자. 공개 링크와 결제 준비 확인. 서버가 `orderOpenAt <= now < orderCloseAt`을 확인 | 공개 회차·상품 조회, 가격, `closeReason=null`, 예약·주문 집계, 당근 링크, authoritative 시작 window | 시작 전 수동 `OPEN`, 가격·상품·지역 불일치, 결제 오류 증가, 비회차 판매 방식 노출 시 신규 유입 중단과 롤백 판단 |
 | 마감 `CLOSED` | 대표자. 일요일 24:00 또는 수동·한도 마감 | `closeReason=SCHEDULE_ENDED|CAPACITY|MANUAL`, 신규 주문 차단, `PENDING`·결제 조회 예외 목록 | 마감 뒤 신규 예약, 결제 상태 불명확, 카운터 불일치 시 매입 확정 중단 후 기술·결제 담당자 확인 |
 | 완료 `COMPLETED` | 대표자. 모든 주문 종결과 확인 필요 점검 완료 | 모든 회차 주문이 `DELIVERED|REVIEWED|CANCELLED`, `heldOrderCount=0`, 관련 `OPEN` 예외 검토 | 미완료·보류 주문은 서버가 거부. 관련 `OPEN` 예외나 사진·환불·연락 증거 누락 시 운영 정책상 완료 시도 중단 |
 
-`CAPACITY`로 닫힌 회차는 주문 마감 전 확보량이 반환되면 자동으로 `OPEN` 복귀할 수 있다. `SCHEDULE_ENDED` 또는 `MANUAL` 마감은 자동 재개되지 않는다. 상태 변경 직전에는 항상 재조회한다.
+`CAPACITY`로 닫힌 회차는 주문 마감 전 확보량이 반환되면 자동으로 `OPEN` 복귀할 수 있다. `SCHEDULE_ENDED` 또는 `MANUAL` 마감은 자동 재개되지 않는다. 수동 `SCHEDULED → OPEN`은 서버가 authoritative `orderOpenAt <= now < orderCloseAt`을 확인한 경우에만 허용한다. 상태 변경 직전에는 항상 재조회한다.
+
+회차 편집은 `DRAFT|SCHEDULED`의 fresh 상태와 item snapshot을 같은 write transaction에서 재확인해야
+한다. `OPEN` 전환·예약·배송 주문과 경합해 어느 상태인지 확정할 수 없거나 item 사용량이 이미
+존재하면 저장을 중단하고 기술 담당자에게 전달한다. `CANCELLING` 저장 뒤 process interruption은
+현재 owner·lease·expiry 기반 deterministic recovery가 직접 검증된 상태가 아니므로,
+Firestore를 직접 `CANCELLED`로 고치거나 주문을 임의 정리하지 않는다.
 
 ### 5.2 일요일 주문 마감
 
@@ -248,7 +254,10 @@ node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=round_dir
 - `disputeStatus=OPEN` 또는 `legalHold=true`는 파기하지 않는다.
 - Storage 삭제는 최대 3회 시도하며 최종 실패 시 보관 문서를 유지하고 `RETENTION_DELETE_FAILED`를 연다.
 - 실패한 원본을 수동 삭제하거나 보관 문서만 먼저 삭제하지 않는다.
-- 현재 `RETENTION_DELETE_FAILED`에는 자동 운영 조치가 없고, 일부 사진 보관 기록은 스토어 범위 목록에 나타나지 않을 수 있다. 관리자·기술 담당자가 서비스 로그와 관리자 범위에서 확인한다.
+- 현재 `RETENTION_DELETE_FAILED`에는 자동 운영 조치가 없고, 배송 사진 failure는 store identity가
+  없어 일부 기록이 스토어 범위 목록에 나타나지 않을 수 있으며 current API에서 global retention
+  queue도 확인되지 않았다. 이를 확인 완료로 간주하거나 원본·보관 문서를 임의 삭제하지 말고,
+  `RETENTION-DELETE-ISSUE-ROUTING`에 따라 기술 담당자에게 전달한다.
 - 같은 원인의 재시도는 다음 승인된 정기 작업 또는 기술 담당자의 복구 절차로만 수행한다.
 
 ## 7. 소비자 장애 시 `legacy` 롤백
@@ -313,7 +322,7 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 1. 운영 예외 `refresh`로 주문·로컬 결제 상태를 재확인한다.
 2. 허용 조치가 `RETRY_REFUND`인지 확인한다.
 3. 별도 승인 뒤 한 번만 실행한다.
-4. 서버는 5분 claim으로 동시 실행을 막고, 로컬 결제가 이미 `REFUNDED|CANCELLED`면 외부 환불을 반복하지 않는다.
+4. 서버는 5분 claim으로 정상 동시 실행을 막고, 로컬 결제가 이미 `REFUNDED|CANCELLED`면 외부 환불을 반복하지 않는다. lease 만료 뒤 takeover와 stale worker fencing은 현재 직접 검증되지 않았으므로, 호출 결과나 소유권이 불명확하면 자동 재시도하지 않고 기술 담당자에게 전달한다.
 5. `SUCCEEDED` 감사 기록, 예외 `RESOLVED`, PortOne 취소 상태, 로컬 `CANCELLED`를 모두 확인한다.
 
 실패하면 같은 버튼을 연속 클릭하지 않는다. `FAILED` 감사 기록과 실패 시각을 남기고 결제 운영자·기술 담당자에게 전달한다.
@@ -380,4 +389,5 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-02 | 회차 edit/open/reservation race와 취소 recovery, 보관 failure routing의 현재 미해결 범위를 `docs/BACKLOG.md`와 정합화 |
 | 2026-08-23 | 과거 `Task 6.7` 출시 전제 표현을 현재 `memory`/HANDOFF/launch PLAN 게이트와 실제 출시 SHA 원격 E2E 기준으로 정합화 |
