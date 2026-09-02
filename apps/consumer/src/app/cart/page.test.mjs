@@ -43,6 +43,12 @@ const requireForTest = (specifier) => {
       useCart: () => ({ items: [] }),
     };
   }
+  if (specifier === '@/lib/cartValidation') {
+    return {
+      getCartItemValidationIssues: () => [],
+      getCartValidationError: () => null,
+    };
+  }
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
   }
@@ -243,4 +249,19 @@ test('화면은 기존 검증 API와 인증을 사용하고 제외 항목을 장
   assert.match(source, /결제 대상에서 제외/);
   assert.match(source, /JSON\.stringify\(checkoutItems\)/);
   assert.doesNotMatch(source, /clearCart\(\).*validate/s);
+});
+
+test('legacy 필수 정보가 없으면 현재 장바구니 화면에서 수정 후 결제로만 진행한다', () => {
+  assert.match(source, /getCartItemValidationIssues/);
+  assert.match(source, /getCartValidationError/);
+  assert.match(source, /hasLegacyValidationIssues/);
+  assert.match(source, /다시 선택하기/);
+  assert.match(
+    source,
+    /disabled=\{checkoutItems\.length === 0 \|\| isChecking \|\| hasLegacyValidationIssues\}/,
+  );
+  assert.match(
+    source,
+    /if \(checkoutItems\.length === 0 \|\| isChecking \|\| hasLegacyValidationIssues\) return;/,
+  );
 });

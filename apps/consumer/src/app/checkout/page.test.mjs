@@ -56,6 +56,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/hooks/usePayment') return { usePayment: () => ({}) };
   if (specifier === '@/hooks/useSaleRounds') return { useSaleRounds: () => ({}) };
   if (specifier === '@/lib/acquisition') return { getAcquisitionSnapshot: () => null };
+  if (specifier === '@/lib/cartValidation') return { getCartValidationError: () => null };
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
   }
@@ -271,4 +272,15 @@ test('legacy checkout은 기존 PortOne 공개 설정 검증 뒤에만 SDK를 �
   assert.ok(guard >= 0 && guard < sdkImport);
   assert.match(legacyCheckoutSource, /storeId: configuration\.portoneStoreId/);
   assert.match(legacyCheckoutSource, /channelKey: configuration\.channelKey/);
+});
+
+test('legacy checkout은 장바구니 필수 정보가 없으면 결제 호출 전에 차단한다', () => {
+  const start = source.indexOf('function LegacyCartCheckoutContent');
+  const end = source.indexOf('function RoundCartCheckoutContent', start);
+  const legacyCheckoutSource = source.slice(start, end);
+
+  assert.match(legacyCheckoutSource, /getCartValidationError\(cartItems\)/);
+  assert.match(legacyCheckoutSource, /!cartValidationError/);
+  assert.match(legacyCheckoutSource, /if \(cartValidationError\)/);
+  assert.match(legacyCheckoutSource, /setError\(cartValidationError\)/);
 });

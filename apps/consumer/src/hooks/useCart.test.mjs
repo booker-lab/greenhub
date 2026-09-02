@@ -54,6 +54,13 @@ test('기존 CartItem과 기존 localStorage 배열을 계속 읽는다', () => 
   assert.deepEqual(parseCartSnapshot(JSON.stringify([legacyItem])), [legacyItem]);
 });
 
+test('스토어 참조가 없는 legacy 항목은 결제 전 가드를 위해 보존한다', () => {
+  const [restored] = parseCartSnapshot(JSON.stringify([{ ...legacyItem, storeId: undefined }]));
+
+  assert.equal(restored.storeId, '');
+  assert.equal(isRoundCartItem(restored), false);
+});
+
 test('완전한 회차 계약만 회차 장바구니 항목으로 복원한다', () => {
   const [restored] = parseCartSnapshot(JSON.stringify([roundItem]));
 

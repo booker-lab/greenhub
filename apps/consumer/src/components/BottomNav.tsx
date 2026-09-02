@@ -7,6 +7,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { Home, LayoutGrid, ShoppingCart, User, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
@@ -87,7 +88,9 @@ function useStoreMode(storeId: string | null, productsLoading: boolean): StoreMo
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const { status: sessionStatus } = useSession();
   const { itemCount } = useCart();
+  const visibleItemCount = sessionStatus === 'authenticated' ? itemCount : 0;
   const { products, loading: productsLoading, error: productsError } = useProducts();
   const storeId = useMemo(() => findSingleStoreId(products), [products]);
   const storeMode = useStoreMode(storeId, productsLoading);
@@ -132,7 +135,7 @@ export default function BottomNav() {
                     strokeWidth={isActive ? 2.2 : 1.8}
                     color={isActive ? 'var(--color-primary)' : 'var(--color-text-disabled)'}
                   />
-                  {tab.showBadge && itemCount > 0 && (
+                  {tab.showBadge && visibleItemCount > 0 && (
                     <Box
                       style={{
                         position: 'absolute',
@@ -151,7 +154,7 @@ export default function BottomNav() {
                         padding: '0 4px',
                       }}
                     >
-                      {itemCount > 99 ? '99+' : itemCount}
+                      {visibleItemCount > 99 ? '99+' : visibleItemCount}
                     </Box>
                   )}
                 </Box>

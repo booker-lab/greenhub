@@ -18,21 +18,17 @@ export interface GenerateContentResult {
 
 @Injectable()
 export class AiService {
-  private readonly model: GenerativeModel;
+  private model?: GenerativeModel;
 
-  constructor(private readonly config: ConfigService) {
-    const apiKey = this.config.get<string>('GEMINI_API_KEY');
-    if (!apiKey) throw new InternalServerErrorException('GEMINI_API_KEY가 설정되지 않았습니다.');
-    const genAI = new GoogleGenerativeAI(apiKey);
-    this.model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
-  }
+  constructor(private readonly config: ConfigService) {}
 
   async generateProductContent(params: GenerateContentParams): Promise<GenerateContentResult> {
     const prompt = buildProductContentPrompt(params);
+    const model = this.getModel();
 
     let text: string;
     try {
-      const result = await this.model.generateContent(prompt);
+      const result = await model.generateContent(prompt);
       text = result.response.text().trim();
     } catch (e: any) {
       throw new InternalServerErrorException(`Gemini 호출 실패: ${e?.message ?? e}`);
@@ -68,5 +64,16 @@ export class AiService {
       headline: typeof parsed.headline === 'string' ? parsed.headline : '',
       description: typeof parsed.description === 'string' ? parsed.description : '',
     };
+  }
+
+  private getModel(): GenerativeModel {
+    if (this.model) return this.model;
+
+    const apiKey = this.config.get<string>('GEMINI_API_KEY');
+    if (!apiKey) throw new InternalServerErrorException('GEMINI_API_KEY가 설정되지 않았습니다.');
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    this.model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    return this.model;
   }
 }

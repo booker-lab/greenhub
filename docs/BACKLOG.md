@@ -316,6 +316,94 @@ repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보�
 - [ ] force push·branch delete 차단
 - [ ] 재조회에서 enforcement 확인
 
+### P0_CANDIDATE_PENDING_CONTROL_TOWER — SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY
+
+현재 source 재검증 결과 `CURRENT_UNRESOLVED`다. 회차 수정·수동 개방·주문 예약·취소 복구가 하나의
+신선한 상태·시간·소유권 경계로 수렴하지 않아 조기 주문, 상품 snapshot 혼합, `CANCELLING`
+고착 가능성이 남아 있다. runtime 증거는 확보했지만 최종 P0 및 release gate 승격은 product/release
+authority가 결정하므로 `P0_CANDIDATE_PENDING_CONTROL_TOWER`로 표시한다.
+
+현재 직접 근거:
+
+- [x] `SaleRoundsService.updateRound()`는 transaction 밖에서 `DRAFT|SCHEDULED`를 확인한 뒤,
+  `writeTransaction()` 안에서 fresh round status를 다시 확인하지 않는다.
+- [x] item 교체 시 `getRoundItems()`가 transaction snapshot이 아닌 별도 query로 실행된 뒤 기존
+  item 삭제와 새 item 생성을 같은 write callback에서 수행한다.
+- [x] `SaleRoundStateService.updateStatus()`의 수동 `SCHEDULED → OPEN` 경로는
+  `orderOpenAt`·`orderCloseAt` window를 확인하지 않는다.
+- [x] `OrderCapacityService.assertRoundReservable()`는 `OPEN`, 취소 없음, `orderCloseAt`만 확인하고
+  `orderOpenAt`을 방어적으로 확인하지 않는다.
+- [x] 회차 취소는 `CANCELLING`을 먼저 기록하지만 `owner|lease|expiry` 없이 주문 정리를 수행하고,
+  두 번째 `CANCELLING` 요청은 이미 진행 중이라는 이유로 거부한다.
+- [x] 현재 직접 테스트는 stale `updateStatus`, 자동 상태 전이, caught `LOCAL_FAILED` 재시도를
+  고정하지만 `updateRound` race, 조기 수동 `OPEN`, pre-open reservation, process-crash recovery,
+  cancellation stale-worker fencing은 직접 고정하지 않는다.
+
+Sale-round subfinding matrix:
+
+| Subfinding | Current state | Evidence | Canonical action |
+|---|---|---|---|
+| updateRound race | `OPEN` | precheck와 write 사이 fresh status 재검증 없음 | round read와 edit eligibility를 같은 transaction에서 재검증하고 충돌 시 side effect 0 |
+| item replacement | `OPEN` | 현재 item query가 transaction 밖이며 삭제·재생성이 live reservation과 원자적으로 묶이지 않음 | active/reserved/ordered item을 보호하고 한 coherent snapshot만 교체 |
+| manual OPEN gate | `OPEN` | 수동 상태 전이가 `orderOpenAt <= now < orderCloseAt`를 확인하지 않음 | authoritative schedule window를 만족할 때만 `SCHEDULED → OPEN` 허용 |
+| reservation/openAt | `OPEN` | reservation path가 `OPEN`과 close만 확인하고 openAt을 확인하지 않음 | reservation에서도 동일한 open/close window를 defense-in-depth로 확인 |
+| CANCELLING crash recovery | `OPEN` | `CANCELLING` 저장 뒤 별도 주문 정리 중단 시 deterministic resume/reaper 없음 | owner·lease·expiry 기반 인수 또는 명시적 deterministic recovery 추가 |
+| claim ownership | `OPEN` | cancellation record에 owner·lease·expiry가 없고 claim 상태만 저장 | claim 획득·갱신·만료·재인수를 원자적으로 정의 |
+| stale worker overwrite | `PARTIAL` | 현재 API는 두 번째 `CANCELLING` claimant을 거부해 takeover가 일어나지 않지만, failure/finalize write에 owner token fence가 없음 | recovery worker 도입 시 old worker의 상태·counter·환불 결과 덮어쓰기를 fresh claim 검증으로 차단 |
+
+영향:
+
+- 판매 시작 전 주문·예약과 잘못된 가격·상품·한도 snapshot이 발생할 수 있다.
+- live edit와 reservation이 경합하면 현재 상품 삭제 또는 item 수량·주문 집계의 혼합 상태가 될 수 있다.
+- process crash 뒤 회차가 `CANCELLING`에 고착되어 주문·환불·capacity 정리가 끝났는지 판정할 수 없다.
+
+완료 acceptance:
+
+- [ ] edit eligibility와 round/item snapshot을 실제 write transaction에서 fresh-read하고
+  `OPEN|CLOSED|COMPLETED|CANCELLED` 또는 사용 중 item의 edit side effect를 거부
+- [ ] 동시 edit/open/reservation에서 한 요청만 정책에 맞게 성공하고 가격·상품·한도 snapshot이
+  혼합되지 않음
+- [ ] `SCHEDULED → OPEN`과 reservation 모두 `orderOpenAt <= now < orderCloseAt`을 확인
+- [ ] orphaned `CANCELLING`을 owner·lease·expiry로 안전하게 인수하거나 deterministic recovery
+  절차로 재개
+- [ ] recovery 재실행에서 이미 환불·취소된 주문과 round/item/held counter를 중복 변경하지 않음
+- [ ] A~G 각 race·crash·stale-worker 시나리오의 직접 회귀와 기존 자동 OPEN/CLOSE·capacity reopen·
+  정상 취소 재시도 회귀 유지
+
+owner 제안: `apps/api/src/sale-rounds/**`를 주 owner로 하고 `apps/api/src/orders/order-capacity.service.ts`
+및 `apps/api/src/orders/round-order-lifecycle.service.ts`와 함께 구현한다. 최종 release 영향은
+product/release control tower가 판정한다.
+
+정본 routing: active summary와 acceptance는 이 항목, 기술 계약은
+`docs/specs/mvp-sales-round-direct-delivery.md`, 운영 중단·재개 규칙은
+`docs/specs/ops/mvp-sales-round-runbook.md`에 둔다.
+
+### BR-R3 — 증거 분류와 역사 승격 경계
+
+이번 정본화는 선택지 B를 적용한다. 역사 보고서 전체를 current branch에 복구하지 않고, 역사
+commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 판정과 acceptance의 정본은
+아래 `CURRENT_IMPLEMENTATION_EVIDENCE`와 이 Backlog의 세 finding이다.
+
+- `HISTORICAL_EVIDENCE`: `54af6edf44008848e586b1707d0f1fd13470a5f6`의
+  `docs/reports/REPORT_retention_operations_sale_round_audit_20260824.md`는 2026-08-24 당시의
+  감사 보고서다. 현재 branch에는 보고서 파일을 복구하지 않으며, 과거 결론을 현재 `VERIFIED`로
+  승격하지 않는다.
+- `CURRENT_IMPLEMENTATION_EVIDENCE`: 현재 source·직접 테스트·current spec·runbook을 다시
+  대조한 결과다. 일반 retention purge, operation issue 기본 동작·정상 claim, sale-round 자동
+  상태 전이·capacity reopen·정상 취소 재시도는 기존 계약 범위에서 유지되며, 세 finding의
+  현재 공백은 별도 항목과 subfinding matrix로 분리했다.
+- 위에서 유지된 직접 검증 항목은 `RESOLVED_NOT_PROMOTED`다. 이는 해당 base contract가 현재
+  증거로 유지된다는 뜻일 뿐, 이번 세 finding이 해결되었거나 release gate·production 승인이
+  되었다는 뜻이 아니다.
+- `CURRENT_UNRESOLVED_FINDING`: `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`,
+  `RETENTION-DELETE-ISSUE-ROUTING`, `OPERATION-ACTION-CLAIM-FENCING`만 이번 BR-R3의
+  current unresolved finding으로 canonicalize한다. 발견 사실만으로 구현·release gate·production
+  승인을 의미하지 않는다.
+- `FUTURE_REENABLE_REQUIREMENT`: 역사 보고서의 marketing consent lifecycle 논점은 현재
+  `MARKETING_NOT_USED_IN_PILOT` controlled-pilot 정책을 변경하거나 새 finding으로 승격하지 않는다. 향후 marketing을 다시
+  활성화할 때에만 당시의 동의·철회·보관·법무·provider·release 증거를 현재 권위로 재검증하고,
+  별도 승인된 Task에서 범위를 확정한다.
+
 ---
 
 ## BLOCKED_EXTERNAL
@@ -378,6 +466,81 @@ repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보�
 ---
 
 ## LATER
+
+### RETENTION-DELETE-ISSUE-ROUTING
+
+현재 source 재검증 결과 `CURRENT_UNRESOLVED`다. 배송 사진 Storage 삭제가 3회 모두 실패하면
+`RETENTION_DELETE_FAILED`는 생성되지만, 배송 사진 보관 record에 `storeId`가 없어 현재 store-scoped
+운영 예외 목록으로 안정적으로 route되지 않는다.
+
+현재 직접 근거:
+
+- [x] `DeliveryPhotosService.attachPhoto()`가 배송 사진 retention metadata로 `{ orderId, photoId }`만
+  저장하고 `storeId`를 저장하지 않는다.
+- [x] `RetentionService.deleteStorageObject()`는 누락된 `storeId`를 `String(... ?? '')`로 바꾸어
+  issue를 생성한다.
+- [x] `OperationsController`와 `OperationsService.listIssuesForStore()`는 `/stores/:storeId`와
+  issue `storeId` 일치를 요구한다.
+- [x] seller parser도 비어 있거나 손상된 `storeId`를 읽지 않는다.
+- [x] retention purge의 3회 retry, record 보존, 멱등 issue 생성 자체는 직접 테스트되지만, 누락·알 수
+  없는 store의 운영자 visibility와 global queue는 직접 테스트·구현 근거가 없다.
+
+영향: 삭제 실패한 비공개 배송 사진과 보관 record가 남을 수 있고, 담당 셀러의 store-scoped
+운영 화면에서 확인·재처리 대상이 유실될 수 있다. 일반 배송 사진 만료가 완료 후 90일이므로
+현재 출시 직전 gate로 확정하지 않고 `P2_CANDIDATE` / `LATER`로 routing한다.
+
+완료 acceptance:
+
+- [ ] non-PII `storeId` 보존으로 store issue route를 보장하거나 admin/technical global retention
+  queue 중 하나를 current contract로 확정
+- [ ] missing/unknown store가 false success가 되지 않고 지정된 운영 queue에 항상 보인다.
+- [ ] retry·resolve·record 보존 관계와 동일 실패 멱등성을 직접 회귀하고 원본 삭제·record 선삭제를 금지
+- [ ] issue와 보관 metadata에 주소·전화번호·Storage 서명 URL·비밀값을 기록하지 않음
+
+owner 제안: `apps/api/src/orders/delivery-photos.service.ts`, `apps/api/src/retention/**`,
+`apps/api/src/operations/**`; seller 표시가 필요하면 최소 parser/UI 변경은 별도 구현 Task로 분리한다.
+
+정본 routing: LATER summary는 이 항목, 보관 계약은
+`docs/specs/mvp-sales-round-direct-delivery.md`, 현재 운영 중단·전달 규칙은
+`docs/specs/ops/mvp-sales-round-runbook.md`에 둔다.
+
+### OPERATION-ACTION-CLAIM-FENCING
+
+현재 source 재검증 결과 `CURRENT_UNRESOLVED`다. `claimAction()`은 5분 `actionClaim` token을
+발급하지만 action 실행 후 성공·실패 write가 현재 claim의 fresh token을 확인하지 않아, 만료된
+worker가 새 claimant의 최신 상태를 지우거나 덮을 수 있다.
+
+현재 직접 근거:
+
+- [x] `claimAction()`은 transaction에서 lease token과 expiry를 저장한다.
+- [x] `runAction()`은 최초에 읽은 issue snapshot을 spread해 성공·실패를 일반 update하고,
+  `claimToken`을 새 문서의 token과 비교하지 않는다.
+- [x] `RESEND_SMS`는 outer operation claim과 별도로 직접 외부 문자 발송을 호출한다.
+- [x] 정상 lease 안의 동시 요청은 한 번만 외부 호출하는 테스트가 있지만, lease 만료 후 takeover와
+  stale completion/failure race를 검증하는 직접 테스트는 없다.
+
+영향: worker A가 지연된 사이 worker B가 takeover하면 A의 늦은 completion/failure가 B의 claim·action
+감사·issue status를 덮을 수 있다. 특히 문자 재발송은 operation-level 외부 중복 방어가 직접 입증되지
+않았고, 환불 내부 claim이 있더라도 operation claim fencing의 대체 증거가 아니다.
+
+우선순위 후보: `P1_CANDIDATE` / 현재 Backlog routing은 수동 운영 경로인 `LATER`로 둔다.
+
+완료 acceptance:
+
+- [ ] 외부 action 직전과 completion/failure write에서 owner token 또는 generation을 fresh-read해
+  현재 claim이 아니면 side effect·상태 write·claim clear를 수행하지 않음
+- [ ] lease가 외부 호출 중 만료될 수 있는 action은 provider idempotency 또는 authoritative
+  reconciliation 없이는 자동 재시도하지 않음
+- [ ] A 지연 → B takeover → A 늦은 성공/실패 race에서 B의 최신 claim·status·audit가 보존되고
+  문자·환불 외부 side effect가 중복되지 않음
+- [ ] 기존 action mapping, 최신 주문·결제 재조회, 민감정보 없는 감사 기록, 정상 동시 claim 회귀 유지
+
+owner 제안: `apps/api/src/operations/**`; refund·SMS provider 경계의 idempotency/reconciliation은
+각 `payments`·`notifications` owner와 함께 별도 구현 Task로 정의한다.
+
+정본 routing: LATER summary는 이 항목, operation issue 기술 계약은
+`docs/specs/mvp-sales-round-direct-delivery.md`, 수동 조치 중단 규칙은
+`docs/specs/ops/mvp-sales-round-runbook.md`에 둔다.
 
 ### LEGACY-GROUP-CANCEL-NOTIFICATION
 
