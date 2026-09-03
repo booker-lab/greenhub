@@ -266,6 +266,61 @@ describe('OrdersQueryService 조회 권한', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('공유 GET의 Driver 읽기도 assigned-self만으로 Pilot structural contract를 우회할 수 없다', async () => {
+    const pilotRecords: RecordMap = {
+      'users/driver-1': { id: 'driver-1', role: 'driver', driverApproved: true },
+      'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+      'saleRounds/round-valid': { id: 'round-valid', storeId: 'pilot' },
+      'saleRounds/round-foreign': { id: 'round-foreign', storeId: 'other-store' },
+      'orders/pilot-assigned': {
+        id: 'pilot-assigned',
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-valid',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+        driverId: 'driver-1',
+        totalAmount: 10000,
+        quantity: 1,
+      },
+      'orders/pilot-missing-round': {
+        id: 'pilot-missing-round',
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-missing',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+        driverId: 'driver-1',
+        totalAmount: 10000,
+        quantity: 1,
+      },
+      'orders/pilot-foreign-round': {
+        id: 'pilot-foreign-round',
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-foreign',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+        driverId: 'driver-1',
+        totalAmount: 10000,
+        quantity: 1,
+      },
+    };
+    const service = new OrdersQueryService(makeFirestore(pilotRecords) as never);
+    const driver = requester('driver-1', 'driver');
+
+    await expect(service.getOrderById('pilot-assigned', driver)).resolves.toMatchObject({
+      id: 'pilot-assigned',
+      status: 'DELIVERING',
+    });
+    await expect(service.getOrderById('pilot-missing-round', driver)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    await expect(service.getOrderById('pilot-foreign-round', driver)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
   it.each([
     'DELIVERED',
     'REVIEWED',

@@ -11,6 +11,7 @@ import { SettlementsService } from '../settlements/settlements.service';
 import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
 import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
+import { DriverOrderScopeService } from './driver-order-scope.service';
 import {
   assertPaidRedeliveryResume,
   isCurrentRedeliveryPaymentRequired,
@@ -20,12 +21,17 @@ type OrderRecord = Record<string, any>;
 
 @Injectable()
 export class RoundOrderLifecycleService {
+  private readonly driverScope: DriverOrderScopeService;
+
   constructor(
     private readonly firestore: FirestoreService,
     private readonly payments: PaymentsService,
     private readonly settlements: SettlementsService,
     private readonly capacity: OrderCapacityService,
-  ) {}
+    driverScope?: DriverOrderScopeService,
+  ) {
+    this.driverScope = driverScope ?? new DriverOrderScopeService(firestore);
+  }
 
   async updateStatus(input: {
     storeId: string;
@@ -33,6 +39,7 @@ export class RoundOrderLifecycleService {
     expectedStatus: OrderStatus;
     dto: UpdateStatusDto;
     requesterId: string;
+    requesterRole?: string;
   }) {
     if (input.dto.status === 'CANCELLED') {
       return this.cancel({
@@ -53,6 +60,21 @@ export class RoundOrderLifecycleService {
       if (order['status'] !== input.expectedStatus) {
         throw new ConflictException('주문 상태가 변경되었습니다.');
       }
+      if (input.requesterRole === 'driver') {
+        const mutationInput = {
+          requesterId: input.requesterId,
+          requesterRole: input.requesterRole,
+          storeId: input.storeId,
+          order: { ...order, id: input.orderId },
+          expectedStatus: input.expectedStatus,
+          nextStatus: input.dto.status,
+        };
+        if (order['driverId'] == null && input.dto.status === 'DELIVERING') {
+          await this.driverScope.assertFirstClaimEligibilityInTransaction(tx, mutationInput);
+        } else {
+          await this.driverScope.assertMutationEligibilityInTransaction(tx, mutationInput);
+        }
+      }
       if (input.dto.status === 'DELIVERING') {
         await assertPaidRedeliveryResume({
           tx,
@@ -60,14 +82,6 @@ export class RoundOrderLifecycleService {
           order: { ...order, id: input.orderId },
           orderId: input.orderId,
         });
-      }
-      if (
-        input.dto.status === 'DELIVERING' &&
-        input.expectedStatus === 'PREPARING' &&
-        order['driverId'] != null &&
-        order['driverId'] !== input.requesterId
-      ) {
-        throw new ConflictException('이미 다른 기사에게 배정된 주문입니다.');
       }
       if (
         input.dto.status === 'DELIVERED' &&

@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import { DriverOrderScopeService } from '../orders/driver-order-scope.service';
 import { OrdersQueryService } from '../orders/orders-query.service';
 import { DriverService } from './driver.service';
 
@@ -41,10 +42,18 @@ function makeFirestore(records: Record<string, Data>) {
   return { firestore, query };
 }
 
-function makeService(records: Record<string, Data>) {
+function makeService(
+  records: Record<string, Data>,
+  driver: Data = { role: 'driver', driverApproved: true },
+) {
   const { firestore, query } = makeFirestore(records);
+  records['users/driver-1'] = { id: 'driver-1', ...driver };
   const ordersQuery = new OrdersQueryService(firestore as never);
-  return { service: new DriverService(firestore as never, ordersQuery), query };
+  const driverScope = new DriverOrderScopeService(firestore as never);
+  return {
+    service: new DriverService(firestore as never, ordersQuery, driverScope),
+    query,
+  };
 }
 
 const paymentFields = [
@@ -352,5 +361,127 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
       NotFoundException,
     );
     await expect(service.getOrder('driver-1', 'missing')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('round_direct 목록은 Pilot base와 direct discovery만 허용하고 legacy direct·hub는 보존한다', async () => {
+    const { service } = makeService({
+      'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+      'stores/legacy': { id: 'legacy', salesMode: 'legacy' },
+      'stores/missing-mode': { id: 'missing-mode' },
+      'stores/foreign': { id: 'foreign', salesMode: 'round_direct' },
+      'saleRounds/round-valid': { id: 'round-valid', storeId: 'pilot' },
+      'saleRounds/round-foreign': { id: 'round-foreign', storeId: 'foreign' },
+      'orders/pilot-valid': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-valid',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
+      'orders/pilot-assigned': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-valid',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+        driverId: 'driver-1',
+      },
+      'orders/pilot-other-driver': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-valid',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+        driverId: 'driver-2',
+      },
+      'orders/missing-schema': {
+        storeId: 'pilot',
+        roundId: 'round-valid',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
+      'orders/missing-round-id': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
+      'orders/invalid-round-id': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-missing',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
+      'orders/foreign-round': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-foreign',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
+      'orders/pilot-hub': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-valid',
+        deliveryMethod: 'hub',
+        status: 'PREPARING',
+        driverId: null,
+      },
+      'orders/pilot-parcel': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-valid',
+        deliveryMethod: 'parcel',
+        status: 'PREPARING',
+        driverId: null,
+      },
+      'orders/legacy-direct': {
+        storeId: 'legacy',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
+      'orders/legacy-hub': {
+        storeId: 'missing-mode',
+        deliveryMethod: 'hub',
+        status: 'PREPARING',
+        driverId: null,
+      },
+    });
+
+    const result = await service.getOrders('driver-1');
+
+    expect(result.map((order) => order.id)).toEqual([
+      'pilot-valid',
+      'pilot-assigned',
+      'legacy-direct',
+      'legacy-hub',
+    ]);
+  });
+
+  it.each([
+    ['승인 필드가 정확한 true가 아님', { role: 'driver', driverApproved: false }],
+    ['정지됨', { role: 'driver', driverApproved: true, suspended: true }],
+    ['driver 역할이 아님', { role: 'consumer', driverApproved: true }],
+  ])('%s이면 Driver 목록과 상세를 거부한다', async (_label, driver) => {
+    const { service } = makeService(
+      {
+        'orders/order-1': {
+          status: 'PREPARING',
+          deliveryMethod: 'direct',
+          driverId: null,
+        },
+      },
+      driver,
+    );
+
+    await expect(service.getOrders('driver-1')).rejects.toThrow();
+    await expect(service.getOrder('driver-1', 'order-1')).rejects.toThrow();
   });
 });

@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
 
@@ -35,7 +35,10 @@ function applyPatch(current: Data, patch: Data): Data {
   return next;
 }
 
-function makeFirestore(initial: Record<string, Data>) {
+function makeFirestore(
+  initial: Record<string, Data>,
+  beforeTransaction?: (records: Map<string, Data>) => void,
+) {
   const records = new Map<string, Data>(
     Object.entries(initial).map(([path, data]) => [path, clone(data)]),
   );
@@ -71,6 +74,7 @@ function makeFirestore(initial: Record<string, Data>) {
   const firestore = {
     doc,
     runTransaction: jest.fn(async (callback: (transaction: any) => Promise<unknown>) => {
+      beforeTransaction?.(records);
       const staged = new Map<string, Data>(
         Array.from(records.entries()).map(([path, data]) => [path, clone(data)]),
       );
@@ -110,7 +114,13 @@ function makeFirestore(initial: Record<string, Data>) {
   };
 }
 
-function makeContext(options: { order?: Data; store?: Data } = {}) {
+function makeContext(options: {
+  order?: Data;
+  store?: Data;
+  round?: Data | null;
+  driver?: Data;
+  beforeTransaction?: (records: Map<string, Data>) => void;
+} = {}) {
   const order = {
     id: 'order-1',
     storeId: 'store-1',
@@ -121,14 +131,37 @@ function makeContext(options: { order?: Data; store?: Data } = {}) {
     ...options.order,
   };
   const storeId = order.storeId as string;
+  const roundRecords =
+    typeof order['roundId'] === 'string' && options.round !== null
+      ? {
+          [`saleRounds/${order['roundId']}`]: {
+            id: order['roundId'],
+            storeId,
+            counters: { heldOrderCount: 0 },
+            ...options.round,
+          },
+        }
+      : {};
   const memory = makeFirestore({
     [`stores/${storeId}`]: {
       id: storeId,
       ownerId: 'seller-1',
       ...options.store,
     },
+    'users/driver-a': {
+      id: 'driver-a',
+      role: 'driver',
+      driverApproved: true,
+      ...options.driver,
+    },
+    'users/driver-b': {
+      id: 'driver-b',
+      role: 'driver',
+      driverApproved: true,
+    },
     'orders/order-1': order,
-  });
+    ...roundRecords,
+  }, options.beforeTransaction);
   const notifications = {
     sendToUser: jest.fn().mockResolvedValue(undefined),
     sendToGroupParticipants: jest.fn().mockResolvedValue(undefined),
@@ -361,6 +394,155 @@ describe('ORD-01 주문 mutation authorization 회귀', () => {
       'order-1',
       'order-transition:order-1:DELIVERING:DELIVERED',
     );
+  });
+
+  it('round_direct의 valid first claim은 최신 authority transaction에서 driver를 원자적으로 배정한다', async () => {
+    const context = makeContext({
+      store: { salesMode: 'round_direct' },
+      order: {
+        schemaVersion: 2,
+        roundId: 'round-1',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
+    });
+
+    await expect(
+      context.lifecycle.updateStatus(
+        'store-1',
+        'order-1',
+        'driver-a',
+        { status: 'DELIVERING' } as never,
+        'driver',
+      ),
+    ).resolves.toEqual({ orderId: 'order-1', status: 'DELIVERING' });
+
+    expect(context.memory.read('orders/order-1')).toMatchObject({
+      status: 'DELIVERING',
+      driverId: 'driver-a',
+    });
+    expect(context.memory.writes.filter((write) => write.path === 'orders/order-1')).toHaveLength(1);
+  });
+
+  it.each([
+    ['schemaVersion 누락', { roundId: 'round-1' }, undefined],
+    ['roundId 누락', { schemaVersion: 2, roundId: undefined }, undefined],
+    ['round 미존재', { schemaVersion: 2, roundId: 'round-missing' }, null],
+    ['foreign-store round', { schemaVersion: 2, roundId: 'round-1' }, { storeId: 'store-2' }],
+    ['hub 주문', { schemaVersion: 2, roundId: 'round-1', deliveryMethod: 'hub' }, undefined],
+    ['parcel 주문', { schemaVersion: 2, roundId: 'round-1', deliveryMethod: 'parcel' }, undefined],
+  ])('$name은 round_direct first claim을 거부하고 side effect를 만들지 않는다', async (_name, order, round) => {
+    const context = makeContext({
+      store: { salesMode: 'round_direct' },
+      order,
+      round,
+    });
+
+    await expect(
+      context.lifecycle.updateStatus(
+        'store-1',
+        'order-1',
+        'driver-a',
+        { status: 'DELIVERING' } as never,
+        'driver',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expectNoSideEffects(context);
+  });
+
+  it.each([
+    ['다른 기사 배정', { driverId: 'driver-b' }, { role: 'driver', driverApproved: true }],
+    ['미승인 기사', {}, { role: 'driver', driverApproved: false }],
+    ['정지 기사', {}, { role: 'driver', driverApproved: true, suspended: true }],
+    ['비기사 계정', {}, { role: 'consumer', driverApproved: true }],
+  ])('$name은 round_direct mutation을 거부하고 side effect를 만들지 않는다', async (_name, order, driver) => {
+    const context = makeContext({
+      store: { salesMode: 'round_direct' },
+      order: {
+        schemaVersion: 2,
+        roundId: 'round-1',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+        ...order,
+      },
+      driver,
+    });
+
+    await expect(
+      context.lifecycle.updateStatus(
+        'store-1',
+        'order-1',
+        'driver-a',
+        { status: 'DELIVERING' } as never,
+        'driver',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expectNoSideEffects(context);
+  });
+
+  it('round_direct assigned Driver의 generic mutation도 동일 authority와 최신 FSM을 통과해야 한다', async () => {
+    const context = makeContext({
+      store: { salesMode: 'round_direct' },
+      order: {
+        schemaVersion: 2,
+        roundId: 'round-1',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+        driverId: 'driver-a',
+        deliveryPhotoIds: ['photo-1'],
+      },
+    });
+
+    await expect(
+      context.lifecycle.updateStatus(
+        'store-1',
+        'order-1',
+        'driver-a',
+        { status: 'DELIVERED' } as never,
+        'driver',
+      ),
+    ).resolves.toEqual({ orderId: 'order-1', status: 'DELIVERED' });
+    expect(context.memory.read('orders/order-1')).toMatchObject({ status: 'DELIVERED' });
+  });
+
+  it('first claim transaction에서 stale assignment를 다시 읽으면 승인을 취소하고 side effect를 만들지 않는다', async () => {
+    const context = makeContext({
+      store: { salesMode: 'round_direct' },
+      order: {
+        schemaVersion: 2,
+        roundId: 'round-1',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
+      beforeTransaction: (records) => {
+        records.set('orders/order-1', {
+          ...records.get('orders/order-1'),
+          driverId: 'driver-b',
+        });
+      },
+    });
+
+    await expect(
+      context.lifecycle.updateStatus(
+        'store-1',
+        'order-1',
+        'driver-a',
+        { status: 'DELIVERING' } as never,
+        'driver',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(context.memory.read('orders/order-1')).toMatchObject({
+      status: 'PREPARING',
+      driverId: 'driver-b',
+    });
+    expect(context.memory.writes.filter((write) => write.path === 'orders/order-1')).toHaveLength(0);
+    expect(context.notifications.sendToUser).not.toHaveBeenCalled();
   });
 
   it('정상 consumer-owned review action을 허용한다', async () => {
