@@ -4,7 +4,7 @@ import { Button, Loader, Text, Title } from '@mantine/core';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { type ChangeEvent, useRef, useState } from 'react';
+import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
 
@@ -15,6 +15,12 @@ type PhotoCaptureProps = {
   mode: PhotoMode;
 };
 
+function stopMediaStream(mediaStream: MediaStream | null) {
+  mediaStream?.getTracks().forEach((track) => {
+    track.stop();
+  });
+}
+
 export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
   const storeId = useSearchParams().get('storeId') ?? '';
   const isRoundDirect = mode === 'round-direct';
@@ -23,12 +29,67 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const cameraRequestRef = useRef(0);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [frameReady, setFrameReady] = useState(false);
   const [captured, setCaptured] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const requestIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!stream) {
+      setFrameReady(false);
+      return;
+    }
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    let active = true;
+    const updateFrameReadiness = () => {
+      if (!active) return;
+      const ready =
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        video.videoWidth > 0 &&
+        video.videoHeight > 0;
+      setFrameReady(ready);
+      if (ready) setError('');
+    };
+
+    video.addEventListener('loadedmetadata', updateFrameReadiness);
+    video.addEventListener('loadeddata', updateFrameReadiness);
+    video.addEventListener('canplay', updateFrameReadiness);
+    video.srcObject = stream;
+    updateFrameReadiness();
+    void video.play().catch(() => {
+      if (!active) return;
+      setFrameReady(false);
+      setError('카메라 미리보기를 재생할 수 없습니다. 다시 시도해주세요.');
+    });
+
+    return () => {
+      active = false;
+      video.removeEventListener('loadedmetadata', updateFrameReadiness);
+      video.removeEventListener('loadeddata', updateFrameReadiness);
+      video.removeEventListener('canplay', updateFrameReadiness);
+      if (video.srcObject === stream) {
+        video.pause();
+        video.srcObject = null;
+      }
+    };
+  }, [stream]);
+
+  useEffect(() => {
+    return () => {
+      cameraRequestRef.current += 1;
+      const currentStream = streamRef.current;
+      streamRef.current = null;
+      stopMediaStream(currentStream);
+    };
+  }, []);
 
   async function startCamera() {
     setError('');
@@ -41,17 +102,22 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
       return;
     }
 
+    stopStream();
+    const requestId = cameraRequestRef.current;
+
     try {
       const nextStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
         audio: false,
       });
-      setStream(nextStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = nextStream;
-        void videoRef.current.play();
+      if (cameraRequestRef.current !== requestId) {
+        stopMediaStream(nextStream);
+        return;
       }
+      streamRef.current = nextStream;
+      setStream(nextStream);
     } catch {
+      if (cameraRequestRef.current !== requestId) return;
       setError(
         isRoundDirect
           ? '카메라 접근 권한이 필요합니다. 사진 파일 선택으로 계속해주세요.'
@@ -61,21 +127,42 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
   }
 
   function stopStream() {
-    stream?.getTracks().forEach((track) => {
-      track.stop();
-    });
+    cameraRequestRef.current += 1;
+    const currentStream = streamRef.current;
+    streamRef.current = null;
+    stopMediaStream(currentStream);
     setStream(null);
+    setFrameReady(false);
   }
 
   function capture() {
-    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
+    if (!video || !canvas) return;
+    if (
+      !frameReady ||
+      video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      video.videoWidth <= 0 ||
+      video.videoHeight <= 0
+    ) {
+      setError('카메라 화면이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setError('사진 캔버스를 준비할 수 없습니다. 다시 시도해주세요.');
+      return;
+    }
+    context.drawImage(video, 0, 0);
     canvas.toBlob(
       (nextBlob) => {
-        if (!nextBlob) return;
+        if (!nextBlob || nextBlob.type !== 'image/jpeg' || nextBlob.size <= 0) {
+          setError('JPEG 사진을 만들 수 없습니다. 다시 시도해주세요.');
+          return;
+        }
         setBlob(nextBlob);
         setCaptured(canvas.toDataURL('image/jpeg', 0.85));
         stopStream();
@@ -332,6 +419,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
                   border: '4px solid var(--color-primary)',
                   cursor: 'pointer',
                 }}
+                disabled={!frameReady}
               />
             </div>
           </>

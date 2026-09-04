@@ -160,6 +160,18 @@ test('Pilot 사진 화면은 JPEG 파일 대체 경로와 기존 업로드 계�
   assert.doesNotMatch(photoCaptureSource, /get\(['"]flow['"]\)/);
 });
 
+test('카메라 스트림은 video 마운트 뒤 연결되고 프레임 준비 전 촬영을 막는다', () => {
+  assert.match(photoCaptureSource, /useEffect/);
+  assert.match(photoCaptureSource, /video\.srcObject\s*=\s*stream/);
+  assert.match(photoCaptureSource, /HTMLMediaElement\.HAVE_CURRENT_DATA/);
+  assert.match(photoCaptureSource, /video\.videoWidth\s*>\s*0/);
+  assert.match(photoCaptureSource, /video\.videoHeight\s*>\s*0/);
+  assert.match(photoCaptureSource, /disabled=\{!frameReady\}/);
+  assert.match(photoCaptureSource, /nextBlob\.type\s*!==\s*['"]image\/jpeg['"]/);
+  assert.match(photoCaptureSource, /nextBlob\.size\s*<=\s*0/);
+  assert.match(photoCaptureSource, /track\.stop\(\)/);
+});
+
 test('legacy 사진 흐름과 Storage 계약은 공통 UI 추출 뒤에도 유지된다', () => {
   assert.match(photoCaptureSource, /uploadLegacyHubPhoto/);
   assert.match(photoCaptureSource, /status:\s*['"]HUB_ARRIVED['"]/);
