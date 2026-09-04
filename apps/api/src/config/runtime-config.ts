@@ -19,6 +19,10 @@ const PRODUCTION_SECRET_KEYS = [
   'PORTONE_WEBHOOK_SECRET',
 ] as const;
 
+const PRODUCTION_FIREBASE_PROJECT = 'green-e4fe3';
+const LOCAL_FIRESTORE_EMULATOR_HOST_PATTERN = /^(?:localhost|127\.0\.0\.1):8080$/;
+const LOCAL_AUTH_EMULATOR_HOST_PATTERN = /^(?:localhost|127\.0\.0\.1):9099$/;
+
 const PLACEHOLDER_SECRET_VALUES = new Set([
   'replace-with-strong-secret',
   'replace-with-strong-refresh-secret',
@@ -47,6 +51,14 @@ export function isProductionRuntime(values: RuntimeConfigValues): boolean {
   if (vercelEnvironment) return vercelEnvironment === 'production';
 
   return readString(values, 'NODE_ENV') === 'production';
+}
+
+export function isLocalRuntime(values: RuntimeConfigValues): boolean {
+  return readString(values, 'GREENHUB_LOCAL_RUNTIME') === 'true';
+}
+
+export function shouldEnableScheduledJobs(values: RuntimeConfigValues = process.env): boolean {
+  return readString(values, 'GREENHUB_SCHEDULES_ENABLED') !== 'false';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -107,17 +119,71 @@ export type FirebaseAdminSettings = {
   serviceAccount?: ServiceAccount;
 };
 
+function assertLocalRuntimeSafety(values: RuntimeConfigValues): void {
+  if (!isLocalRuntime(values)) return;
+
+  if (isProductionRuntime(values)) {
+    throw new RuntimeConfigurationError('운영 환경에서는 local runtime을 사용할 수 없습니다.');
+  }
+
+  if (readString(values, 'GREENHUB_SCHEDULES_ENABLED') !== 'false') {
+    throw new RuntimeConfigurationError('local runtime은 scheduler를 비활성화해야 합니다.');
+  }
+
+  if (!LOCAL_FIRESTORE_EMULATOR_HOST_PATTERN.test(readString(values, 'FIRESTORE_EMULATOR_HOST'))) {
+    throw new RuntimeConfigurationError(
+      'local runtime은 localhost Firestore emulator에 연결되어야 합니다.',
+    );
+  }
+
+  if (!LOCAL_AUTH_EMULATOR_HOST_PATTERN.test(readString(values, 'FIREBASE_AUTH_EMULATOR_HOST'))) {
+    throw new RuntimeConfigurationError(
+      'local runtime은 localhost Firebase Auth emulator에 연결되어야 합니다.',
+    );
+  }
+
+  const projectId = readString(values, 'FIREBASE_PROJECT_ID');
+  if (!projectId || projectId === PRODUCTION_FIREBASE_PROJECT) {
+    throw new RuntimeConfigurationError('local runtime은 비운영 Firebase project가 필요합니다.');
+  }
+
+  const storageBucket = readString(values, 'FIREBASE_STORAGE_BUCKET');
+  if (
+    storageBucket &&
+    !new Set([`${projectId}.appspot.com`, `${projectId}.firebasestorage.app`]).has(storageBucket)
+  ) {
+    throw new RuntimeConfigurationError(
+      'local runtime의 Firebase storage bucket이 project와 일치하지 않습니다.',
+    );
+  }
+
+  if (
+    readString(values, 'GOOGLE_APPLICATION_CREDENTIALS') ||
+    readString(values, 'FIREBASE_SERVICE_ACCOUNT_JSON')
+  ) {
+    throw new RuntimeConfigurationError(
+      'local runtime은 Firebase service account credential을 사용할 수 없습니다.',
+    );
+  }
+}
+
 export function resolveFirebaseAdminSettings(values: RuntimeConfigValues): FirebaseAdminSettings {
+  assertLocalRuntimeSafety(values);
+
   const configuredProjectId = readString(values, 'FIREBASE_PROJECT_ID');
   const configuredBucket = readString(values, 'FIREBASE_STORAGE_BUCKET');
   const rawServiceAccount = readString(values, 'FIREBASE_SERVICE_ACCOUNT_JSON');
   const serviceAccount = rawServiceAccount
     ? parseFirebaseServiceAccount(rawServiceAccount, configuredProjectId || undefined)
     : undefined;
-  const projectId = configuredProjectId || serviceAccount?.projectId;
-  const storageBucket = configuredBucket || (projectId ? `${projectId}.appspot.com` : undefined);
-
   const production = isProductionRuntime(values);
+  const projectId = configuredProjectId || serviceAccount?.projectId;
+  if (!production && projectId === PRODUCTION_FIREBASE_PROJECT) {
+    throw new RuntimeConfigurationError(
+      '비운영 환경에서 운영 Firebase project를 사용할 수 없습니다.',
+    );
+  }
+  const storageBucket = configuredBucket || (projectId ? `${projectId}.appspot.com` : undefined);
   if (production && !configuredProjectId) {
     throw new RuntimeConfigurationError('운영 Firebase project 구성이 없습니다.');
   }
@@ -160,5 +226,10 @@ export function getConfigValues(config: ConfigService): RuntimeConfigValues {
     FIREBASE_PROJECT_ID: config.get<string>('FIREBASE_PROJECT_ID'),
     FIREBASE_STORAGE_BUCKET: config.get<string>('FIREBASE_STORAGE_BUCKET'),
     FIREBASE_SERVICE_ACCOUNT_JSON: config.get<string>('FIREBASE_SERVICE_ACCOUNT_JSON'),
+    GOOGLE_APPLICATION_CREDENTIALS: config.get<string>('GOOGLE_APPLICATION_CREDENTIALS'),
+    FIRESTORE_EMULATOR_HOST: config.get<string>('FIRESTORE_EMULATOR_HOST'),
+    FIREBASE_AUTH_EMULATOR_HOST: config.get<string>('FIREBASE_AUTH_EMULATOR_HOST'),
+    GREENHUB_LOCAL_RUNTIME: config.get<string>('GREENHUB_LOCAL_RUNTIME'),
+    GREENHUB_SCHEDULES_ENABLED: config.get<string>('GREENHUB_SCHEDULES_ENABLED'),
   };
 }
