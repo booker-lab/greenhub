@@ -366,7 +366,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                 color="brand"
                 loading={loading}
                 onClick={() =>
-                  router.push(`/board/${orderId}/photo?storeId=${order.storeId}&flow=round-direct`)
+                  router.push(`/board/${orderId}/photo/round-direct?storeId=${order.storeId}`)
                 }
               >
                 배송 완료 사진 촬영
