@@ -35,9 +35,12 @@
 - 용량 때문에 자동 마감된 회차는 주문 마감 전 한도가 반환되면 `OPEN`으로 복귀한다. 일정 종료·수동 마감 회차는 자동 재개하지 않는다.
 - Firestore `Timestamp`는 API에서 ISO8601 문자열로 반환하고 회차 목록은 정규화된 시각 기준 최신순으로 정렬한다.
 
-위 회차 atomicity·recovery 항목은 current intended contract다. 현재 구현에서 fresh edit gate,
-pre-open reservation gate, cancellation recovery/fencing이 직접 충족되는지는
-`docs/BACKLOG.md`의 `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`에서 별도로 판정한다.
+위 회차 atomicity·recovery 항목은 current contract이며, #66에서 fresh edit gate,
+pre-open reservation gate, cancellation recovery/fencing의 구현과 직접 proof가
+`IMPLEMENTATION_PROVEN`으로 accepted되었다. PR #70 publication 후 현재 live `main`은
+`fe5e680fa58c8b3af5e508d07115bb8ab9df272a`이다. 이 상태는 exact-release Preview/browser/runtime
+proof나 production deployment·activation·first live round를 의미하지 않으며, 해당 gate는
+`docs/BACKLOG.md`에서 별도로 판정한다.
 
 ### `saleRoundItems`
 

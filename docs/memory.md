@@ -6,7 +6,7 @@
 
 ## 검증 기준
 
-- Git·GitHub와 #63 accepted release state: `2026-09-05 KST` 직접 재조회
+- Git·GitHub와 #63/#70/#71 release state: `2026-09-06 KST` 직접 재조회
 - Vercel 배포 안전·exact-source Preview: 역사적 증거 snapshot; 현재 release proof로 재사용하지 않는다.
 - ALIGO provider current metadata: `UNVERIFIED` — #65에서 authenticated provider read-back이 없음을 확인했다.
 - 운영 상태 변경은 별도 승인 없이 수행하지 않는다.
@@ -16,7 +16,8 @@
 - 저장소: `booker-lab/greenhub`
 - 기본 브랜치: `main`; HEAD는 작업 시작 시 직접 재조회한다.
 - 회차 직배송 기능 통합 기준 SHA(역사적 기능 기준선): `e55f25914cc7d01576fbd4639583daaf0fe6385e`
-- #63이 accepted한 현재 main 기준 SHA: `ffd999423f8a98b0c1f34d020d832d7929feab72`
+- #63이 accepted한 pre-publication main 기준 SHA: `ffd999423f8a98b0c1f34d020d832d7929feab72` — historical baseline
+- #70/#71이 publication 후 재확인한 현재 live `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`
 - `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`는 historical exact-source Preview 기준선이며 현재 main이나 production source가 아니다.
 - PR #30/#31로 세 프런트의 `main` Vercel Git auto-production과 pure-doc build를 repo-side 차단했다.
 - docs-only main 변경은 Preview sync/일반 E2E 제외.
@@ -43,26 +44,30 @@
 - S2 → R1 campaign: `TERMINAL_SUCCESS`
 - historical exact-source Preview source: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
 - historical Driver Preview: deployment `dpl_4UVQ2BuTNfrBc1zm68X5Kjbvu9PE`, target `preview`, state `READY`. 당시 metadata가 해당 historical source와 일치했다는 뜻이며 현재 main·candidate·production proof가 아니다.
-- current main accepted by #63: `ffd999423f8a98b0c1f34d020d832d7929feab72`; PR #60/#61/#62가 merge된 repository publication state다.
+- pre-publication main accepted by #63: `ffd999423f8a98b0c1f34d020d832d7929feab72`; PR #60/#61/#62가 merge된 historical publication baseline이다.
+- current live main after #70/#71: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`; PR #70이 merge된 Sale Round publication state다.
 
 ## Readiness·publication·production 구분
 
-- `IMPLEMENTATION`: #63이 닫은 semantic work는 다시 열지 않으며, `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`는 현재 `IMPLEMENTATION_BLOCKER`다.
-- `VERIFICATION`: exact-SHA Preview/browser/fixture와 Auth.js session/logout/rotation/stale-claim lifecycle은 별도 `VERIFICATION_PENDING`/`EXTERNAL_RUNTIME_BLOCKED` gate다.
-- `REMOTE_ADDRESSABLE`: #63 기준 current main `ffd999423f8a98b0c1f34d020d832d7929feab72` object와 `origin/main`은 remote-addressable이다. 이는 새 #68 candidate나 PR을 뜻하지 않는다.
-- `PR`: #60/#61/#62는 merged이며, #68 문서 candidate의 PR은 별도 상태다.
-- `PREVIEW_PROOF`: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` Preview deployment는 historical evidence다.
-- production publication/deployment/activation, live round, actual payment, actual notification, first-round completion: `NOT DONE` / `NOT CLAIMED`.
+- `IMPLEMENTATION`: #66이 `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`의 구현과 race/recovery proof를 accepted하여 `IMPLEMENTATION_PROVEN`이다.
+- `VERIFICATION`: Sale Round focused/integration/regression proof는 `PROVEN`; exact-release Preview/browser/runtime과 Auth.js session/logout/rotation/stale-claim lifecycle은 별도 `PENDING`/`EXTERNAL_RUNTIME_BLOCKED` gate다.
+- `CANDIDATE`: 기존 documentation candidate는 `9c921684a26597cb57887b6049288f1143b017c8`; 후속 candidate는 PR #69 head로 갱신한다.
+- `REMOTE_ADDRESSABLE`: #70 semantic candidate와 현재 live main `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`는 remote-addressable이며, 문서 후속 candidate도 PR #69 원격 head로 read-back한다.
+- `PR`: PR #70은 `MERGED`; 기존 documentation PR #69는 `OPEN`이며 이번 Goal은 merge하지 않는다.
+- `PUBLISHED/MERGED`: Sale Round publication은 `PUBLISHED`; live main read-back은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`다.
+- `PREVIEW_PROOF`: exact-release runtime/browser proof는 `PENDING`; `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` Preview deployment는 historical evidence다.
+- production deployment/activation, live round, actual payment, actual notification, first-round completion: `PRODUCTION_AUTHORITY_PENDING` / `NOT CLAIMED`.
 
 ## 현재 source·publication 기준
 
-#63과 #68 작업 시작 시 live authority를 read-only로 확인한 결과를 기록한다. 문서 변경 후 생기는 commit은 이 source baseline과 별도의 publication candidate다.
+#63/#68 작업의 pre-publication 기준과 #71 publication 후 live authority를 read-only로 확인한 결과를 기록한다. 문서 변경 후 생기는 commit은 이 source baseline과 별도의 documentation publication candidate다.
 
 - 작업 시작 branch: `main`
 - 작업 시작 source HEAD/local `main`: `ffd999423f8a98b0c1f34d020d832d7929feab72`
 - 작업 시작 local `origin/main`: `ffd999423f8a98b0c1f34d020d832d7929feab72`
-- 작업 시작 live remote `main`: `ffd999423f8a98b0c1f34d020d832d7929feab72`
-- #63은 이 current main에서 publication topology가 converged되었다고 accepted했다. #68 문서 candidate는 별도 branch·PR이며 main merge가 아니다.
+- 작업 시작 live remote `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` — #71 publication read-back
+- pre-publication live baseline `ffd999423f8a98b0c1f34d020d832d7929feab72`는 #63/#68의 historical baseline이다.
+- #70 semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는 `PUBLISHED`; documentation candidate는 PR #69에서 후속 갱신하며 main merge가 아니다.
 - historical `7cc4d9862dd49b68fb1542e49c53bf953bfdf59c`와 이전 provider snapshot은 current SHA·current provider metadata·production proof로 사용하지 않는다.
 - GitHub main 보호 때문에 direct main commit/push는 금지되며, 문서 변경은 purpose branch + PR 경계를 따른다.
 
@@ -85,9 +90,16 @@
 
 ### 1. Sale-round state atomicity and recovery
 
-상태: `IMPLEMENTATION_BLOCKER` — `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`.
+상태: `IMPLEMENTATION_PROVEN` + `PUBLISHED` — `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`.
 
-회차 수정·수동 개방·주문 예약·취소 복구의 fresh state/time/ownership 경계가 아직 하나의 구현으로 수렴하지 않았다. 이 항목만 현재 release의 구현 blocker로 남기며, #63이 닫은 semantic work를 다시 열지 않는다.
+#66이 회차 수정·수동 개방·주문 예약·취소 복구의 fresh state/time/ownership 경계를 직접 검증하고
+구현 proof를 accepted했다. semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는
+PR #70으로 merge되었고, #71 publication read-back의 현재 live `main`은
+`fe5e680fa58c8b3af5e508d07115bb8ab9df272a`다.
+
+이 상태는 implementation과 repository publication에 대한 proof다. exact-release Preview/browser/runtime
+proof는 `PENDING`, production authority는 `PENDING`이며 production deployment·activation·`salesMode`·
+live round·actual payment/notification·first-round completion을 주장하지 않는다.
 
 ### 2. Preview·exact-SHA proof
 
@@ -301,9 +313,8 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 다음 작업
 
-1. `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY` 구현 blocker를 별도 implementation owner가 해결한다.
-2. exact-SHA Preview/browser/fixture와 Auth.js session lifecycle을 필요한 runtime/browser authority에서 검증한다.
-3. authenticated ALIGO provider metadata read-back → repository 8-code mapping 대조 → 별도 authority 후 actual send 검증.
-4. production deployment·activation·live round·actual payment·actual notification·first-round completion은 각각 별도 authority와 read-back으로 판정한다.
-5. consumer self-cancel `ORDER_CANCELLED` notification은 `PRODUCT_POLICY_DECISION_REQUIRED`로 유지한다.
-6. Pilot `MARKETING_NOT_USED_IN_PILOT`와 legal/source wording을 문서 범위에서 정합화한다.
+1. exact-SHA Preview/browser/fixture와 Auth.js session lifecycle을 필요한 runtime/browser authority에서 검증한다.
+2. authenticated ALIGO provider metadata read-back → repository 8-code mapping 대조 → 별도 authority 후 actual send 검증.
+3. production deployment·activation·live round·actual payment·actual notification·first-round completion은 각각 별도 authority와 read-back으로 판정한다.
+4. consumer self-cancel `ORDER_CANCELLED` notification은 `PRODUCT_POLICY_DECISION_REQUIRED`로 유지한다.
+5. Pilot `MARKETING_NOT_USED_IN_PILOT`와 legal/source wording을 문서 범위에서 정합화한다.

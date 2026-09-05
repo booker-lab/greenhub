@@ -2,7 +2,7 @@
 
 # Greenhub Backlog
 
-> 기준일: 2026-09-05 KST
+> 기준일: 2026-09-06 KST
 >
 > 현재 미완료·향후 작업만 관리한다. 완료 상세는 Git history, `docs/CRITICAL_LOGIC.md`, `docs/archive/`, 완료 PLAN·REPORT를 사용한다.
 
@@ -25,10 +25,12 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 - physical-device disposition: `PHYSICAL_DEVICE_NOT_REQUIRED`
 - R1 Combined Public Readiness: `PUBLIC_READINESS_CLOSED`
 - S2 → R1 campaign: `TERMINAL_SUCCESS`
-- #63이 확인한 현재 main publication state: `ffd999423f8a98b0c1f34d020d832d7929feab72`
+- #63이 확인한 pre-publication main 기준선: `ffd999423f8a98b0c1f34d020d832d7929feab72` — historical baseline
+- #71이 재확인한 현재 live `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`
+- #70 `SALE-ROUND-STATE-01`은 `MERGED`; 회차 atomicity/recovery implementation과 직접 proof가 publication되었다.
 - 역사적 exact-source Preview 기준선: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` — 현재 main, PR, merge, production 증거로 승격하지 않는다.
 - #63의 accepted closure는 닫힌 semantic work를 다시 열지 않는다는 뜻이며, Preview·Auth.js runtime 검증 잔여와 production/activation은 별도 상태다.
-- 이번 #68 문서 후보는 목적 branch와 PR로만 게시하며, `main` merge는 Control Tower가 별도로 직렬화한다.
+- 기존 문서 candidate는 PR #69에서 후속 갱신하며, 이 Goal은 PR #69를 merge하지 않고 Control Tower publication queue로 반환한다.
 
 ---
 
@@ -36,12 +38,16 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 
 | 주장 | 현재 판정 |
 |---|---|
-| implementation | `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`는 `IMPLEMENTATION_BLOCKER`; #63이 닫은 semantic work는 재수용하지 않음 |
-| verification | Preview·exact-SHA·Auth.js runtime은 각각 검증 또는 external/runtime gate |
-| remote-addressable candidate | #63 기준 `main`의 `ffd999423f8a98b0c1f34d020d832d7929feab72`는 remote-addressable; #68 후보는 별도 object |
-| PR / merged | #60/#61/#62는 merged; #68 PR과 `main` merge는 별도 상태이며 이 Goal은 merge하지 않음 |
-| Preview proof | `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`는 historical Preview evidence |
-| production | deployment·activation·live round·actual payment·actual notification·first-round completion은 `NOT DONE` / `NOT CLAIMED` |
+| implementation | `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`는 `IMPLEMENTATION_PROVEN`; #66이 race/recovery proof를 accepted함 |
+| verification | Sale Round implementation/race/recovery proof는 `PROVEN`; exact-release Preview/runtime/browser proof는 `PENDING` |
+| prior candidate | PR #69의 기존 accepted candidate는 `9c921684a26597cb57887b6049288f1143b017c8` |
+| updated candidate | PR #69의 후속 candidate는 remote-addressable 상태로 갱신하며, 정확한 head SHA는 Issue #75 TASK_RECORD에 기록 |
+| PR | 기존 documentation PR #69는 `OPEN`; 이번 Goal은 merge하지 않음 |
+| published / merged | PR #70은 `MERGED`; live `main`은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` |
+| Preview runtime proof | exact-release runtime/browser proof는 `PENDING`; historical Preview evidence를 승격하지 않음 |
+| production deployment | `PRODUCTION_AUTHORITY_PENDING` |
+| production activation | `PRODUCTION_AUTHORITY_PENDING` |
+| first live round | `PRODUCTION_AUTHORITY_PENDING` |
 
 ---
 
@@ -339,93 +345,58 @@ repo-side production auto-deploy 차단과 GitHub main 보호를 완료했다. 2
 
 ---
 
-## ACTIVE
+## IMPLEMENTED / PUBLISHED
 
-### P0 — SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY
+### SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY
 
-상태: `IMPLEMENTATION_BLOCKER`.
+상태: `IMPLEMENTATION_PROVEN` + `PUBLISHED`.
 
-현재 source 재검증 결과 `CURRENT_UNRESOLVED`다. 회차 수정·수동 개방·주문 예약·취소 복구가 하나의
-신선한 상태·시간·소유권 경계로 수렴하지 않아 조기 주문, 상품 snapshot 혼합, `CANCELLING`
-고착 가능성이 남아 있다. 현재 문서에서는 이 항목을 구현 blocker로 유지하며, 최종 release gate 승격은 product/release
-authority가 별도로 판정한다.
+Issue #66이 회차 수정·수동 개방·주문 예약·취소 복구의 race/recovery 구현과 직접 proof를
+accepted했다. semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는 PR #70으로
+게시되었고, PR #70은 merge되어 현재 live `main` `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`로
+read-back되었다.
 
-현재 직접 근거:
+직접 proof 범위:
 
-- [x] `SaleRoundsService.updateRound()`는 transaction 밖에서 `DRAFT|SCHEDULED`를 확인한 뒤,
-  `writeTransaction()` 안에서 fresh round status를 다시 확인하지 않는다.
-- [x] item 교체 시 `getRoundItems()`가 transaction snapshot이 아닌 별도 query로 실행된 뒤 기존
-  item 삭제와 새 item 생성을 같은 write callback에서 수행한다.
-- [x] `SaleRoundStateService.updateStatus()`의 수동 `SCHEDULED → OPEN` 경로는
-  `orderOpenAt`·`orderCloseAt` window를 확인하지 않는다.
-- [x] `OrderCapacityService.assertRoundReservable()`는 `OPEN`, 취소 없음, `orderCloseAt`만 확인하고
-  `orderOpenAt`을 방어적으로 확인하지 않는다.
-- [x] 회차 취소는 `CANCELLING`을 먼저 기록하지만 `owner|lease|expiry` 없이 주문 정리를 수행하고,
-  두 번째 `CANCELLING` 요청은 이미 진행 중이라는 이유로 거부한다.
-- [x] 현재 직접 테스트는 stale `updateStatus`, 자동 상태 전이, caught `LOCAL_FAILED` 재시도를
-  고정하지만 `updateRound` race, 조기 수동 `OPEN`, pre-open reservation, process-crash recovery,
-  cancellation stale-worker fencing은 직접 고정하지 않는다.
+| proof scope | 현재 판정 |
+|---|---|
+| fresh round/item edit gate와 snapshot 보호 | `PROVEN` |
+| `SCHEDULED → OPEN` 및 reservation의 authoritative open/close window | `PROVEN` |
+| cancellation owner/lease/expiry, takeover와 stale-worker fencing | `PROVEN` |
+| crash recovery, partial cancellation/retry와 duplicate convergence | `PROVEN` |
+| focused/integration/regression proof와 exact candidate publication | `PROVEN` / `PUBLISHED` |
 
-Sale-round subfinding matrix:
+이 상태는 implementation과 repository publication에 대한 proof다. exact-release Preview/browser/runtime
+proof는 `PENDING`이며, production deployment·production activation·`salesMode` 전환·live round·actual
+payment/notification·first live round는 `PRODUCTION_AUTHORITY_PENDING`이다. 이 문서 후보와 PR #69는
+이를 production-ready로 표현하지 않는다.
 
-| Subfinding | Current state | Evidence | Canonical action |
-|---|---|---|---|
-| updateRound race | `OPEN` | precheck와 write 사이 fresh status 재검증 없음 | round read와 edit eligibility를 같은 transaction에서 재검증하고 충돌 시 side effect 0 |
-| item replacement | `OPEN` | 현재 item query가 transaction 밖이며 삭제·재생성이 live reservation과 원자적으로 묶이지 않음 | active/reserved/ordered item을 보호하고 한 coherent snapshot만 교체 |
-| manual OPEN gate | `OPEN` | 수동 상태 전이가 `orderOpenAt <= now < orderCloseAt`를 확인하지 않음 | authoritative schedule window를 만족할 때만 `SCHEDULED → OPEN` 허용 |
-| reservation/openAt | `OPEN` | reservation path가 `OPEN`과 close만 확인하고 openAt을 확인하지 않음 | reservation에서도 동일한 open/close window를 defense-in-depth로 확인 |
-| CANCELLING crash recovery | `OPEN` | `CANCELLING` 저장 뒤 별도 주문 정리 중단 시 deterministic resume/reaper 없음 | owner·lease·expiry 기반 인수 또는 명시적 deterministic recovery 추가 |
-| claim ownership | `OPEN` | cancellation record에 owner·lease·expiry가 없고 claim 상태만 저장 | claim 획득·갱신·만료·재인수를 원자적으로 정의 |
-| stale worker overwrite | `PARTIAL` | 현재 API는 두 번째 `CANCELLING` claimant을 거부해 takeover가 일어나지 않지만, failure/finalize write에 owner token fence가 없음 | recovery worker 도입 시 old worker의 상태·counter·환불 결과 덮어쓰기를 fresh claim 검증으로 차단 |
-
-영향:
-
-- 판매 시작 전 주문·예약과 잘못된 가격·상품·한도 snapshot이 발생할 수 있다.
-- live edit와 reservation이 경합하면 현재 상품 삭제 또는 item 수량·주문 집계의 혼합 상태가 될 수 있다.
-- process crash 뒤 회차가 `CANCELLING`에 고착되어 주문·환불·capacity 정리가 끝났는지 판정할 수 없다.
-
-완료 acceptance:
-
-- [ ] edit eligibility와 round/item snapshot을 실제 write transaction에서 fresh-read하고
-  `OPEN|CLOSED|COMPLETED|CANCELLED` 또는 사용 중 item의 edit side effect를 거부
-- [ ] 동시 edit/open/reservation에서 한 요청만 정책에 맞게 성공하고 가격·상품·한도 snapshot이
-  혼합되지 않음
-- [ ] `SCHEDULED → OPEN`과 reservation 모두 `orderOpenAt <= now < orderCloseAt`을 확인
-- [ ] orphaned `CANCELLING`을 owner·lease·expiry로 안전하게 인수하거나 deterministic recovery
-  절차로 재개
-- [ ] recovery 재실행에서 이미 환불·취소된 주문과 round/item/held counter를 중복 변경하지 않음
-- [ ] A~G 각 race·crash·stale-worker 시나리오의 직접 회귀와 기존 자동 OPEN/CLOSE·capacity reopen·
-  정상 취소 재시도 회귀 유지
-
-owner 제안: `apps/api/src/sale-rounds/**`를 주 owner로 하고 `apps/api/src/orders/order-capacity.service.ts`
-및 `apps/api/src/orders/round-order-lifecycle.service.ts`와 함께 구현한다. 최종 release 영향은
-product/release control tower가 판정한다.
-
-정본 routing: active summary와 acceptance는 이 항목, 기술 계약은
-`docs/specs/mvp-sales-round-direct-delivery.md`, 운영 중단·재개 규칙은
+기술 계약은 `docs/specs/mvp-sales-round-direct-delivery.md`, 운영 중단·재개 규칙은
 `docs/specs/ops/mvp-sales-round-runbook.md`에 둔다.
+
+## ACTIVE
 
 ### BR-R3 — 증거 분류와 역사 승격 경계
 
 이번 정본화는 선택지 B를 적용한다. 역사 보고서 전체를 current branch에 복구하지 않고, 역사
 commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 판정과 acceptance의 정본은
-아래 `CURRENT_IMPLEMENTATION_EVIDENCE`와 이 Backlog의 세 finding이다.
+아래 `CURRENT_IMPLEMENTATION_EVIDENCE`와 이 Backlog의 두 finding이다.
 
 - `HISTORICAL_EVIDENCE`: `54af6edf44008848e586b1707d0f1fd13470a5f6`의
   `docs/reports/REPORT_retention_operations_sale_round_audit_20260824.md`는 2026-08-24 당시의
   감사 보고서다. 현재 branch에는 보고서 파일을 복구하지 않으며, 과거 결론을 현재 `VERIFIED`로
   승격하지 않는다.
 - `CURRENT_IMPLEMENTATION_EVIDENCE`: 현재 source·직접 테스트·current spec·runbook을 다시
-  대조한 결과다. 일반 retention purge, operation issue 기본 동작·정상 claim, sale-round 자동
-  상태 전이·capacity reopen·정상 취소 재시도는 기존 계약 범위에서 유지되며, 세 finding의
-  현재 공백은 별도 항목과 subfinding matrix로 분리했다.
+  대조한 결과다. Sale Round atomicity/recovery는 #66의 직접 proof와 #70/#71 publication으로
+  `IMPLEMENTATION_PROVEN` / `PUBLISHED`가 되었으며, 남은 현재 공백은 retention과 operation
+  claim fencing의 두 finding으로 분리했다.
 - 위에서 유지된 직접 검증 항목은 `RESOLVED_NOT_PROMOTED`다. 이는 해당 base contract가 현재
-  증거로 유지된다는 뜻일 뿐, 이번 세 finding이 해결되었거나 release gate·production 승인이
+  증거로 유지된다는 뜻일 뿐, 이번 두 finding이 해결되었거나 release gate·production 승인이
   되었다는 뜻이 아니다.
-- `CURRENT_UNRESOLVED_FINDING`: `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`,
-  `RETENTION-DELETE-ISSUE-ROUTING`, `OPERATION-ACTION-CLAIM-FENCING`만 이번 BR-R3의
-  current unresolved finding으로 canonicalize한다. 발견 사실만으로 구현·release gate·production
-  승인을 의미하지 않는다.
+- `CURRENT_UNRESOLVED_FINDING`: `RETENTION-DELETE-ISSUE-ROUTING`,
+  `OPERATION-ACTION-CLAIM-FENCING`만 이번 BR-R3의 current unresolved finding으로
+  canonicalize한다. Sale Round finding은 #66/#70/#71로 implementation proof와 publication이
+  완료되었지만, 이 사실이 exact-release runtime proof나 production 승인을 의미하지는 않는다.
 - `FUTURE_REENABLE_REQUIREMENT`: 역사 보고서의 marketing consent lifecycle 논점은 현재
   `MARKETING_NOT_USED_IN_PILOT` controlled-pilot 정책을 변경하거나 새 finding으로 승격하지 않는다. 향후 marketing을 다시
   활성화할 때에만 당시의 동의·철회·보관·법무·provider·release 증거를 현재 권위로 재검증하고,
