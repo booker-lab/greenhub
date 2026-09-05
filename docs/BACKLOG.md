@@ -2,7 +2,7 @@
 
 # Greenhub Backlog
 
-> 기준일: 2026-08-24 KST
+> 기준일: 2026-09-05 KST
 >
 > 현재 미완료·향후 작업만 관리한다. 완료 상세는 Git history, `docs/CRITICAL_LOGIC.md`, `docs/archive/`, 완료 PLAN·REPORT를 사용한다.
 
@@ -16,15 +16,18 @@
 
 ---
 
-## INTEGRATION CANDIDATE CLOSEOUT
+## PUBLIC READINESS DOCUMENTATION CONVERGENCE
 
-현재 branch `codex/task-2c-r1-reg001`의 Task 2F-B candidate는 Task 2F-A auth change `1da3dee`와 기존 `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001` 검증 범위를 포함한다. API/consumer/seller/driver/shared, Firestore Rules, build, deployment safety evidence는 [Task 2D closeout report](plans/REPORT_task_2d_integration_closeout.md)에 고정하고, 이번 문서는 public driver approval 하위 범위의 현재 상태만 갱신한다.
+S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증거는 [현재 상태 SSOT](memory.md)에 기록한다. 이 Backlog는 그 종료 상태를 다시 열지 않으며, production release·activation과 혼동하지 않는다.
 
-- candidate 상태: `TASK_2F_B_PUBLICATION_CANDIDATE`
-- 현재 `origin/main` `d6185bd`에는 candidate code가 아직 없다.
-- candidate에서 public register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계를 검증했지만 `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이다.
-- [ ] candidate를 현재 `main`에 branch+PR로 통합하고 승인된 SHA를 확정
-- 최신 main의 `ORDER-REDELIVERY-PAID-RESUME-GATE` 및 기타 미완료 P0는 candidate closeout과 별도의 ACTIVE 작업이다.
+- S2 Browser Readiness: `CLOSED`
+- exact-source Browser R3: `PASS`
+- physical-device disposition: `PHYSICAL_DEVICE_NOT_REQUIRED`
+- R1 Combined Public Readiness: `PUBLIC_READINESS_CLOSED`
+- S2 → R1 campaign: `TERMINAL_SUCCESS`
+- accepted source: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
+- 작업 시작 시 local source는 live `origin/main`보다 7개 commit 앞서 있었고, GitHub `main`은 PR required·`verify` required check 보호 상태였다.
+- 이번 문서화의 다음 의존성은 `PUBLICATION_TOPOLOGY_CONVERGENCE`이며, 아래 ACTIVE P0와는 별도다.
 
 ---
 
@@ -271,9 +274,9 @@ API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 
 ### P0 — AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION
 
-관리자 승인 전 driver 권한을 얻을 수 없는지와 stale session/claims 수렴을 하나의 umbrella로 추적한다. Task 2F-B candidate는 approval-gate/current-user 하위 범위만 검증했으며, 전체 P0를 닫지 않는다.
+관리자 승인 전 driver 권한을 얻을 수 없는지와 stale session/claims 수렴을 하나의 umbrella로 추적한다. 현재 accepted source에는 approval-gate/current-user 하위 범위가 반영됐지만, 전체 P0를 닫지는 않는다.
 
-Candidate에서 검증됨 (아직 `main` 미통합):
+Accepted source에서 검증됨 (remote `main` publication pending):
 
 - [x] 신규 Kakao `targetRole: driver`가 `driverApproved: false`로 생성되고 자동 승인되지 않음
 - [x] 기존 `driverApproved === undefined` driver가 Kakao 로그인 중 자동 승인되지 않음
@@ -283,7 +286,7 @@ Candidate에서 검증됨 (아직 `main` 미통합):
 
 남음 — `AUTH-SESSION-CLAIM-REVOCATION` OPEN 및 통합 대기:
 
-- [ ] candidate를 `main`에 통합
+- [ ] accepted source를 policy-compliant PR로 remote `main`에 통합
 - [ ] 과거 계정 migration을 로그인 side effect가 아닌 별도 감사 절차로 분리
 - [ ] refresh 시 authoritative user 상태 확인 및 stale role/store/approval claim 재발급 차단
 - [ ] suspension/role/store/approval revocation SLA와 access-token window 결정·구현
@@ -308,13 +311,13 @@ Candidate에서 검증됨 (아직 `main` 미통합):
 
 ### P0 — DEPLOY-SAFETY-MAIN-PROTECTION
 
-repo-side production auto-deploy 차단은 완료. GitHub 관리자 레벨 보호는 남음.
+repo-side production auto-deploy 차단과 GitHub main 보호를 완료했다. 2026-09-05 직접 재조회에서 `protected=true`, PR required, `Deployment safety guard / verify` strict required check, force push·branch delete 차단을 확인했다. Issue #32는 `CLOSED`다.
 
-- [ ] Issue #32
-- [ ] PR required
-- [ ] `Deployment safety guard / verify` required
-- [ ] force push·branch delete 차단
-- [ ] 재조회에서 enforcement 확인
+- [x] Issue #32
+- [x] PR required
+- [x] `Deployment safety guard / verify` required
+- [x] force push·branch delete 차단
+- [x] 재조회에서 enforcement 확인
 
 ### P0_CANDIDATE_PENDING_CONTROL_TOWER — SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY
 
@@ -449,7 +452,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
 - [ ] `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
 - [ ] `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
-- [ ] Issue #32
+- [x] Issue #32 — 2026-09-05 GitHub 보호 상태 직접 재확인
 - [ ] legal 포함 actual release SHA
 - [ ] exact SHA E2E 52 + cleanup
 - [ ] 운영 Firebase read-only 재조회

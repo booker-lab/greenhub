@@ -2,16 +2,16 @@
 
 # Auth API / Domain Spec
 
-> **최종 정합화**: 2026-08-24
+> **최종 정합화**: 2026-09-05
 > **상태**: Current
 > **공통 타입 정본**: `packages/shared/src/auth.types.ts`
 > **API 정본**: `apps/api/src/auth/**`
 > **앱 인증 정본**: `apps/consumer/src/auth.ts`, `apps/seller/src/auth.ts`, `apps/driver/src/auth.ts`
 > **Preview OAuth 정책**: `docs/specs/ops/preview-auth-url-policy.md`
 
-## Task 2F-B candidate overlay
+## Driver approval gate overlay — S4 initial gate
 
-현재 `codex/task-2c-r1-reg001` candidate에는 Task 2F-A auth change `1da3dee`가 포함되어 있다. 아래 항목은 candidate에서 검증된 하위 범위이며, PR/main 통합 전에는 `main` 출시 상태로 해석하지 않는다.
+현재 accepted source `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`에 아래 approval-gate 하위 범위가 반영돼 있다. 이 source는 local publication candidate이며, policy-compliant PR로 remote `main`에 게시되기 전에는 remote `main` 또는 production 출시 상태로 해석하지 않는다.
 
 - 공개 `POST /auth/register`의 driver user는 `driverApproved: false`로 생성되고, client가 `driverApproved: true`를 주입할 수 없다.
 - 공개 `POST /auth/register` → `POST /auth/login`에서 승인값이 `false`이거나 누락된 driver는 JWT/refresh side effect 전에 거부된다. 승인된 driver는 정상 로그인하고 consumer/seller/admin 경로는 유지된다.
@@ -132,7 +132,7 @@ consumer | seller | driver
 
 추적 umbrella: `docs/BACKLOG.md`의 `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`. 기술 finding 이름으로 `DRIVER-APPROVAL-GATE-BYPASS`를 사용할 수 있으나 별도 완료 항목으로 중복 추적하지 않는다.
 
-Candidate에서 확인된 조건:
+Accepted source에서 확인된 조건:
 
 - [x] 공개 registration이 관리자 승인 전 usable driver authorization을 만들지 않음
 - [x] email login이 미승인 driver에게 driver JWT/refresh token을 발급하지 않음
@@ -148,7 +148,7 @@ Candidate에서 확인된 조건:
 - [ ] `AUTH-SESSION-CLAIM-REVOCATION`: refresh 시 authoritative 상태 재조회와 stale claim 재발급 차단
 - [ ] suspended/role/store/driver approval 변경의 session revocation SLA와 access-token window 결정
 - [ ] logout/refresh-token rotation을 포함한 session lifecycle 직접 회귀
-- [ ] candidate를 `main`에 통합
+- [ ] accepted source를 policy-compliant PR로 remote `main`에 통합
 
 ## 6. Access / Refresh token과 권한 변경 수렴
 
