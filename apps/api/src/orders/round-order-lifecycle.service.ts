@@ -5,6 +5,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  assertCancellationClaim,
+  timestampMillis,
+  type SaleRoundCancellationClaim,
+  type SaleRoundRecord,
+} from '../sale-rounds/sale-round-state.contract';
 import { FirestoreService } from '../firestore/firestore.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
@@ -149,11 +155,13 @@ export class RoundOrderLifecycleService {
     orderId: string;
     expectedStatus: OrderStatus;
     reason: string;
+    cancellationClaim?: SaleRoundCancellationClaim;
   }) {
     return this.cancel({
       storeId: input.storeId,
       orderId: input.orderId,
       reason: input.reason,
+      cancellationClaim: input.cancellationClaim,
     });
   }
 
@@ -162,6 +170,7 @@ export class RoundOrderLifecycleService {
     orderId: string;
     reason: string;
     requireOpenRound?: boolean;
+    cancellationClaim?: SaleRoundCancellationClaim;
   }) {
     const claimed = await this.claimCancellation(input);
     if (claimed.done) return { orderId: input.orderId, status: 'CANCELLED' };
@@ -174,7 +183,7 @@ export class RoundOrderLifecycleService {
     try {
       localCancellation = await this.applyLocalCancellation(input);
     } catch (error) {
-      await this.recordCancellationState(input.orderId, 'LOCAL_FAILED', input.reason);
+      await this.recordCancellationState(input, 'LOCAL_FAILED');
       throw error;
     }
     if (localCancellation.needsRefund) {
@@ -182,7 +191,7 @@ export class RoundOrderLifecycleService {
       try {
         localCancellation = await this.applyLocalCancellation(input);
       } catch (error) {
-        await this.recordCancellationState(input.orderId, 'LOCAL_FAILED', input.reason);
+        await this.recordCancellationState(input, 'LOCAL_FAILED');
         throw error;
       }
     }
@@ -191,9 +200,12 @@ export class RoundOrderLifecycleService {
     }
 
     try {
+      if (input.cancellationClaim) {
+        await this.assertRoundCancellationClaim(input.orderId, input.cancellationClaim);
+      }
       await this.settlements.cancelSettlement(input.orderId);
     } catch (error) {
-      await this.recordCancellationState(input.orderId, 'LOCAL_FAILED', input.reason);
+      await this.recordCancellationState(input, 'LOCAL_FAILED');
       throw error;
     }
     return { orderId: input.orderId, status: 'CANCELLED' };
@@ -204,6 +216,7 @@ export class RoundOrderLifecycleService {
     orderId: string;
     reason: string;
     requireOpenRound?: boolean;
+    cancellationClaim?: SaleRoundCancellationClaim;
   }) {
     let result = { done: false, needsRefund: false };
     await this.firestore.runTransaction(async (tx) => {
@@ -217,8 +230,14 @@ export class RoundOrderLifecycleService {
       const paymentSnap = await tx.get(paymentRef);
       const payment = paymentSnap.exists ? (paymentSnap.data() as OrderRecord) : null;
       const paymentIsPaid = payment?.['status'] === 'PAID' && !payment['refundedAt'];
+      if (input.cancellationClaim) {
+        await this.assertRoundCancellationClaimInTransaction(tx, order, input.cancellationClaim);
+      }
       if (order['status'] === 'CANCELLED') {
-        result = { done: !paymentIsPaid, needsRefund: paymentIsPaid };
+        result = {
+          done: order['cancellation']?.['status'] === 'COMPLETED' && !paymentIsPaid,
+          needsRefund: paymentIsPaid,
+        };
         return;
       }
       const cancellationStatus = order['cancellation']?.['status'] as string | undefined;
@@ -262,6 +281,7 @@ export class RoundOrderLifecycleService {
     storeId: string;
     orderId: string;
     reason: string;
+    cancellationClaim?: SaleRoundCancellationClaim;
   }) {
     const now = this.firestore.Timestamp.now();
     let result = { completed: false, needsRefund: false };
@@ -276,6 +296,9 @@ export class RoundOrderLifecycleService {
       const paymentSnap = await tx.get(paymentRef);
       const payment = paymentSnap.exists ? (paymentSnap.data() as OrderRecord) : null;
       const paymentIsPaid = payment?.['status'] === 'PAID' && !payment['refundedAt'];
+      if (input.cancellationClaim) {
+        await this.assertRoundCancellationClaimInTransaction(tx, order, input.cancellationClaim);
+      }
       if (order['status'] === 'CANCELLED') {
         if (paymentIsPaid) {
           tx.update(orderRef, {
@@ -345,25 +368,81 @@ export class RoundOrderLifecycleService {
   }
 
   private async processCancellationRefund(input: {
+    storeId: string;
     orderId: string;
     reason: string;
+    cancellationClaim?: SaleRoundCancellationClaim;
   }) {
     try {
       await this.payments.processRefundByOrderId(input.orderId, input.reason);
       await this.payments.refundOrderChargesByOrderId(input.orderId, input.reason);
     } catch (error) {
-      await this.recordCancellationState(input.orderId, 'REFUND_FAILED', input.reason);
+      await this.recordCancellationState(input, 'REFUND_FAILED');
       throw error;
     }
-    await this.recordCancellationState(input.orderId, 'LOCAL_PENDING', input.reason);
+    await this.recordCancellationState(input, 'LOCAL_PENDING');
   }
 
-  private async recordCancellationState(orderId: string, status: string, reason: string) {
-    const now = this.firestore.Timestamp.now();
-    await this.firestore.doc(`orders/${orderId}`).update({
-      cancellation: { status, reason, updatedAt: this.toIso(now) },
-      updatedAt: now,
+  private async recordCancellationState(
+    input: {
+      storeId: string;
+      orderId: string;
+      reason: string;
+      cancellationClaim?: SaleRoundCancellationClaim;
+    },
+    status: string,
+  ) {
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${input.orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== input.storeId) {
+        throw new NotFoundException();
+      }
+      const order = orderSnap.data() as OrderRecord;
+      if (input.cancellationClaim) {
+        await this.assertRoundCancellationClaimInTransaction(tx, order, input.cancellationClaim);
+      }
+      const now = this.firestore.Timestamp.now();
+      tx.update(orderRef, {
+        cancellation: { status, reason: input.reason, updatedAt: this.toIso(now) },
+        updatedAt: now,
+      });
     });
+  }
+
+  private async assertRoundCancellationClaim(
+    orderId: string,
+    claim: SaleRoundCancellationClaim,
+  ) {
+    await this.firestore.runTransaction(async (tx) => {
+      const orderSnap = await tx.get(this.firestore.doc(`orders/${orderId}`));
+      if (!orderSnap.exists) throw new NotFoundException();
+      await this.assertRoundCancellationClaimInTransaction(
+        tx,
+        orderSnap.data() as OrderRecord,
+        claim,
+      );
+    });
+  }
+
+  private async assertRoundCancellationClaimInTransaction(
+    tx: any,
+    order: OrderRecord,
+    claim: SaleRoundCancellationClaim,
+  ) {
+    const roundId = order['roundId'];
+    if (!roundId) {
+      throw new ConflictException('회차 주문의 취소 소유권을 확인할 수 없습니다.');
+    }
+    const roundSnap = await tx.get(this.firestore.doc(`saleRounds/${roundId}`));
+    if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== order['storeId']) {
+      throw new NotFoundException('회차를 찾을 수 없습니다.');
+    }
+    assertCancellationClaim(
+      roundSnap.data() as SaleRoundRecord,
+      claim,
+      timestampMillis(this.firestore.Timestamp.now()),
+    );
   }
 
   private async assertRoundOpen(tx: any, order: OrderRecord, storeId: string) {

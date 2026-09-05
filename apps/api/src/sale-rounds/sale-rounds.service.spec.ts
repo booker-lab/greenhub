@@ -315,6 +315,48 @@ describe('SaleRoundsService', () => {
     expect(records.has('saleRoundItems/item-foreign')).toBe(true);
   });
 
+  it('회차 상품 사용량이 transaction 안에서 확인되면 상품과 한도 변경을 함께 거부한다', async () => {
+    const { service, records } = makeService({
+      'products/product-1': { storeId: 'store-1', name: '공개 상품', images: [] },
+      'saleRoundItems/item-1': makeItem({ reservedQuantity: 1 }),
+    });
+
+    await expect(
+      (service as any).updateRound('store-1', 'round-1', 'seller-1', 'seller', {
+        limits: { maxDeliveryAddresses: 10, maxItemQuantity: 10 },
+        items: [
+          { productId: 'product-1', roundPrice: 12000, saleLimitQuantity: 2, displayOrder: 0 },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(records.get('saleRoundItems/item-1')).toMatchObject({ reservedQuantity: 1 });
+    expect(records.get('saleRounds/round-1')).toMatchObject({
+      limits: { maxDeliveryAddresses: 15, maxItemQuantity: 30 },
+    });
+  });
+
+  it('회차 수정은 transaction 진입 시점의 최신 상태가 편집 가능하지 않으면 거부한다', async () => {
+    const { service, records, firestore } = makeService();
+    const originalRunTransaction = firestore.runTransaction;
+    firestore.runTransaction = jest.fn(async (callback) => {
+      records.set('saleRounds/round-1', {
+        ...records.get('saleRounds/round-1'),
+        status: 'OPEN',
+      });
+      return originalRunTransaction(callback);
+    });
+
+    await expect(
+      (service as any).updateRound('store-1', 'round-1', 'seller-1', 'seller', {
+        name: '최신 상태에서 수정 시도',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(records.get('saleRounds/round-1')).toMatchObject({
+      status: 'OPEN',
+      name: '7월 3주차 호접란',
+    });
+  });
+
   it('seller copy는 source round의 foreign-store item을 제외한다', async () => {
     const { service } = makeService(
       {
@@ -390,14 +432,14 @@ describe('SaleRoundsService', () => {
     expect(writes).toHaveLength(0);
   });
 
-  it('조회 뒤 회차 상태가 바뀐 오래된 상태 변경을 거부한다', async () => {
+  it('상태 변경 transaction의 현재 상태가 목표 전이와 다르면 거부한다', async () => {
     const { service, records, firestore, writes } = makeService({}, makeRound({ status: 'OPEN' }));
     const originalRunTransaction = firestore.runTransaction;
     firestore.runTransaction = jest.fn(async (callback) => {
       records.set('saleRounds/round-1', {
         ...records.get('saleRounds/round-1'),
-        status: 'CLOSED',
-        closeReason: 'MANUAL',
+        status: 'SCHEDULED',
+        closeReason: null,
       });
       return originalRunTransaction(callback);
     });
@@ -408,6 +450,38 @@ describe('SaleRoundsService', () => {
       }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(writes.filter((write) => write.path === 'saleRounds/round-1')).toHaveLength(0);
+  });
+
+  it('주문 시작 전 수동 OPEN을 거부하고 시작 시각 이후에는 허용한다', async () => {
+    const beforeOpen = makeService(
+      {},
+      makeRound({
+        schedule: {
+          ...makeRound().schedule,
+          orderOpenAt: '2026-07-15T00:31:00.000+09:00',
+        },
+      }),
+    );
+    await expect(
+      (beforeOpen.service as any).updateStatus('store-1', 'round-1', 'seller-1', 'seller', {
+        status: 'OPEN',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    const atOpen = makeService(
+      {},
+      makeRound({
+        schedule: {
+          ...makeRound().schedule,
+          orderOpenAt: '2026-07-14T00:30:00.000+09:00',
+        },
+      }),
+    );
+    await expect(
+      (atOpen.service as any).updateStatus('store-1', 'round-1', 'seller-1', 'seller', {
+        status: 'OPEN',
+      }),
+    ).resolves.toMatchObject({ status: 'OPEN' });
   });
 
   it('용량 자동 마감은 원인을 기록하고 예약 반환 뒤 마감 전이면 다시 연다', async () => {
@@ -507,6 +581,7 @@ describe('SaleRoundsService', () => {
         records.set(`orders/${orderId}`, {
           ...records.get(`orders/${orderId}`),
           status: 'CANCELLED',
+          cancellation: { status: 'COMPLETED' },
         });
       });
     await expect(
@@ -528,6 +603,118 @@ describe('SaleRoundsService', () => {
       }),
     ).resolves.toMatchObject({ status: 'CANCELLED' });
     expect(roundLifecycle.cancelForRound).toHaveBeenCalledTimes(2);
+  });
+
+  it('활성 취소 lease는 두 번째 owner를 막고 만료 뒤에는 takeover를 허용한다', async () => {
+    const { service, records } = makeService({}, makeRound({ status: 'OPEN' }));
+    const state = (service as any).roundState as SaleRoundStateService;
+    const firstClaim = { ownerId: 'worker-a', leaseId: 'lease-a' };
+    const secondClaim = { ownerId: 'worker-b', leaseId: 'lease-b' };
+    const input = {
+      storeId: 'store-1',
+      roundId: 'round-1',
+      expectedStatus: 'OPEN',
+      reason: '취소 복구',
+    };
+
+    await (state as any).claimCancellation(input, firstClaim);
+    await expect((state as any).claimCancellation(input, secondClaim)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(records.get('saleRounds/round-1')?.['cancellation']).toMatchObject({
+      status: 'CANCELLING',
+      ownerId: 'worker-a',
+      leaseId: 'lease-a',
+    });
+
+    records.set('saleRounds/round-1', {
+      ...records.get('saleRounds/round-1'),
+      cancellation: {
+        ...records.get('saleRounds/round-1')?.['cancellation'],
+        leaseExpiresAt: '2026-07-14T00:29:00.000+09:00',
+      },
+    });
+    await expect((state as any).claimCancellation(input, secondClaim)).resolves.toMatchObject({
+      done: false,
+      claim: expect.objectContaining(secondClaim),
+    });
+    expect(records.get('saleRounds/round-1')?.['cancellation']).toMatchObject({
+      ownerId: 'worker-b',
+      leaseId: 'lease-b',
+    });
+  });
+
+  it('소유권을 잃은 worker의 실패 기록은 새 owner의 lease를 덮어쓰지 않는다', async () => {
+    const { service, records } = makeService({}, makeRound({ status: 'OPEN' }));
+    const state = (service as any).roundState as SaleRoundStateService;
+    const firstClaim = { ownerId: 'worker-a', leaseId: 'lease-a' };
+    const secondClaim = { ownerId: 'worker-b', leaseId: 'lease-b' };
+    const input = {
+      storeId: 'store-1',
+      roundId: 'round-1',
+      expectedStatus: 'OPEN',
+      reason: '취소 복구',
+    };
+
+    await (state as any).claimCancellation(input, firstClaim);
+    records.set('saleRounds/round-1', {
+      ...records.get('saleRounds/round-1'),
+      cancellation: {
+        ...records.get('saleRounds/round-1')?.['cancellation'],
+        leaseExpiresAt: '2026-07-14T00:29:00.000+09:00',
+      },
+    });
+    await (state as any).claimCancellation(input, secondClaim);
+
+    await expect(
+      (state as any).recordCancellationFailure(
+        'store-1',
+        'round-1',
+        '오래된 worker 실패',
+        'order-1',
+        firstClaim,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(records.get('saleRounds/round-1')?.['cancellation']).toMatchObject({
+      status: 'CANCELLING',
+      ownerId: 'worker-b',
+      leaseId: 'lease-b',
+    });
+  });
+
+  it('worker가 중단된 CANCELLING 회차는 lease 만료 뒤 재시도로 CANCELLED에 수렴한다', async () => {
+    const { service, records, roundLifecycle } = makeService({}, makeRound({ status: 'OPEN' }));
+    const state = (service as any).roundState as SaleRoundStateService;
+    await (state as any).claimCancellation(
+      {
+        storeId: 'store-1',
+        roundId: 'round-1',
+        expectedStatus: 'OPEN',
+        reason: '중단 복구',
+      },
+      { ownerId: 'crashed-worker', leaseId: 'crashed-lease' },
+    );
+    records.set('saleRounds/round-1', {
+      ...records.get('saleRounds/round-1'),
+      cancellation: {
+        ...records.get('saleRounds/round-1')?.['cancellation'],
+        leaseExpiresAt: '2026-07-14T00:29:00.000+09:00',
+      },
+    });
+
+    await expect(
+      state.cancel({
+        storeId: 'store-1',
+        roundId: 'round-1',
+        reason: '중단 복구',
+      }),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+    expect(roundLifecycle.cancelForRound).not.toHaveBeenCalled();
+    expect(records.get('saleRounds/round-1')?.['cancellation']).toMatchObject({
+      status: 'COMPLETED',
+      ownerId: null,
+      leaseId: null,
+    });
   });
 
   it('Firestore Timestamp를 ISO8601로 정규화한 뒤 최신순으로 정렬한다', async () => {
