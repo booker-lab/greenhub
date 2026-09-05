@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   buildFixtureManifest,
+  buildGenericPreviewFixtureManifest,
   cleanupFixture,
   seedFixture,
   validateFixtureEnvironment,
   verifyFixture,
 } from './round-direct-e2e-fixtures.mjs';
+import { redactPersistedManifest } from './round-direct-e2e-fixtures-cli.mjs';
 
 const runId = 'task-6-7-run-001';
 const accounts = {
@@ -154,8 +156,29 @@ describe('회차 E2E fixture manifest 계약', () => {
     assert.equal(heldOrder.data.deliveryHold.customerResponsible, true);
     assert.equal(typeof heldOrder.data.deliveryHold.reasonMessage, 'string');
     assert.match(heldOrder.data.orderNumber, /^\d{8}-\d{6}$/);
-    assert.equal(manifest.generatedDocuments.length, 1);
+    assert.equal(
+      manifest.generatedDocuments.filter((entry) => entry.kind === 'refreshToken').length,
+      3,
+    );
+    assert.equal(
+      manifest.generatedDocuments.filter((entry) => entry.kind === 'deliveryPhoto').length,
+      1,
+    );
     assert.equal(manifest.generatedStorageObjects.length, 1);
+    assert.deepEqual(manifest.ownership.IMMUTABLE_BASELINE.storageObjects, []);
+    assert.equal(
+      manifest.ownership.RUN_OWNED_MUTABLE.documents.length,
+      manifest.documents.length,
+    );
+    assert.deepEqual(manifest.ownership.RUN_OWNED_MUTABLE.storageObjects, manifest.storageObjects);
+    assert.deepEqual(
+      manifest.ownership.SPEC_OWNED_TEMPORARY.documents,
+      manifest.generatedDocuments.map(({ path }) => path),
+    );
+    assert.deepEqual(
+      manifest.ownership.SPEC_OWNED_TEMPORARY.storageObjects,
+      manifest.generatedStorageObjects,
+    );
   });
 });
 
@@ -188,16 +211,106 @@ describe('회차 E2E fixture seed·verify·cleanup 계약', () => {
     await seedFixture(adapter, manifest);
     const generatedDocument = manifest.generatedDocuments[0];
     adapter.docs.set(generatedDocument.path, { ...generatedDocument.identity });
+    const refreshTokenDocument = manifest.generatedDocuments.find(
+      (entry) => entry.kind === 'refreshToken',
+    );
+    adapter.docs.set(refreshTokenDocument.path, { token: 'runtime-token-placeholder' });
+    adapter.docs.set('stores/unrelated', { keep: true });
     adapter.objects.set(manifest.generatedStorageObjects[0], Buffer.from('generated-jpeg'));
     adapter.objects.set('e2e/round-direct/other-run/keep.jpg', Buffer.from('keep'));
     await cleanupFixture(adapter, manifest);
     const result = await verifyFixture(adapter, manifest, { expectAbsent: true });
     assert.equal(result.ready, true);
+    assert.deepEqual(adapter.docs.get('stores/unrelated'), { keep: true });
     assert.equal(adapter.objects.has('e2e/round-direct/other-run/keep.jpg'), true);
     assert.deepEqual(
       adapter.deletedObjects,
       [...manifest.storageObjects, ...manifest.generatedStorageObjects],
     );
     assert.equal(adapter.docs.has(generatedDocument.path), false);
+    assert.equal(adapter.docs.has(refreshTokenDocument.path), false);
+  });
+});
+
+describe('generic Preview fixture manifest 계약', () => {
+  const genericAccounts = {
+    consumer: { email: 'consumer-generic@example.test', passwordHash: 'hash-consumer' },
+    seller: { email: 'seller-generic@example.test', passwordHash: 'hash-seller' },
+  };
+
+  it('products·groupProductConfig·orders·dailyCaps·users를 run namespace로 묶는다', () => {
+    const manifest = buildGenericPreviewFixtureManifest({
+      runId: 'generic-run-001',
+      accounts: genericAccounts,
+    });
+    const collections = new Set(manifest.documents.map(({ path }) => path.split('/')[0]));
+    for (const required of [
+      'products',
+      'groupProductConfig',
+      'orders',
+      'dailyCaps',
+      'users',
+    ]) {
+      assert.ok(collections.has(required), `${required} fixture가 필요합니다.`);
+    }
+    assert.equal(manifest.fixtureKind, 'generic-preview');
+    assert.equal(manifest.storageObjects.length, 0);
+    assert.equal(manifest.generatedStorageObjects.length, 0);
+    assert.equal(manifest.generatedDocuments.length, 2);
+    assert.ok(manifest.documents.every(({ data }) => data._e2e.runId === 'generic-run-001'));
+    assert.equal(manifest.ownership.IMMUTABLE_BASELINE.documents.length, 0);
+    assert.equal(manifest.ownership.IMMUTABLE_BASELINE.storageObjects.length, 0);
+    assert.equal(
+      manifest.ownership.RUN_OWNED_MUTABLE.documents.length,
+      manifest.documents.length,
+    );
+    assert.deepEqual(
+      manifest.ownership.SPEC_OWNED_TEMPORARY.documents,
+      manifest.generatedDocuments.map(({ path }) => path),
+    );
+  });
+
+  it('persisted manifest에는 password hash 같은 credential material을 저장하지 않는다', () => {
+    const manifest = buildGenericPreviewFixtureManifest({
+      runId: 'generic-run-001',
+      accounts: genericAccounts,
+    });
+    const persisted = redactPersistedManifest(manifest);
+    assert.ok(manifest.documents.some(({ data }) => typeof data.passwordHash === 'string'));
+    assert.equal(
+      persisted.documents.some(({ data }) => Object.hasOwn(data, 'passwordHash')),
+      false,
+    );
+  });
+
+  it('generic Preview도 명시적 비운영 활성화와 서비스 계정 target 대조를 요구한다', () => {
+    assert.deepEqual(
+      validateFixtureEnvironment(
+        validEnvironment({
+          ROUND_DIRECT_E2E_ENABLED: undefined,
+          PREVIEW_E2E_HARNESS_ENABLED: 'true',
+          FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: 'green-staging-74557' }),
+        }),
+        { requireServiceAccount: true },
+      ),
+      {
+        runId,
+        projectId: 'green-staging-74557',
+        storageBucket: 'green-staging-74557-e2e.appspot.com',
+        storagePrefix: `e2e/round-direct/${runId}/`,
+      },
+    );
+    assert.throws(
+      () =>
+        validateFixtureEnvironment(
+          validEnvironment({
+            ROUND_DIRECT_E2E_ENABLED: undefined,
+            PREVIEW_E2E_HARNESS_ENABLED: 'true',
+            FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: 'green-e4fe3' }),
+          }),
+          { requireServiceAccount: true },
+        ),
+      /운영 Firebase/,
+    );
   });
 });

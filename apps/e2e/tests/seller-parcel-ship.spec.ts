@@ -1,13 +1,15 @@
 import { test, expect } from '@playwright/test'
 import { AUTH_STATE_PATH } from './_helpers/auth'
+import { genericPreviewFixture } from './_helpers/generic-preview'
 
 // BUG-16 T5 — 셀러 택배 발송 완료 동선.
-// 시드: scripts/seed-e2e-orders.mjs 의 e2e-parcel-order-001
+// 시드: canonical Preview fixture manifest의 run-owned parcel order
 //   (deliveryMethod=parcel, status=PREPARING) 가 선행되어야 한다.
 // 동선: seller 로그인(storageState) → 주문 상세 → "택배 발송 완료" 클릭 → DELIVERED 전환.
 
 const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
-const PARCEL_ORDER_ID = 'e2e-parcel-order-001'
+const fixture = genericPreviewFixture()
+const PARCEL_ORDER_ID = fixture.parcelOrderId
 
 const sellerEmail = process.env['TEST_SELLER_EMAIL']
 const sellerPassword = process.env['TEST_SELLER_PASSWORD']
@@ -48,7 +50,7 @@ test.describe('셀러 택배 발송 완료 — 인증', () => {
 
   test('일반(direct) 주문 상세에는 "택배 발송 완료" 버튼이 없음', async ({ page }) => {
     // 회귀 가드: parcel 가드가 UI에서도 일관 — direct 주문은 발송 완료 미노출.
-    await page.goto(`${BASE}/orders/e2e-normal-order-001`)
+    await page.goto(`${BASE}/orders/${fixture.normalOrderId}`)
     await expect(page.locator('text=주문 상세')).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('text=택배 발송 완료')).not.toBeVisible()
   })

@@ -5,56 +5,173 @@ on:
     branches: [preview]
   workflow_dispatch:
 
+concurrency:
+  group: preview-e2e
+  cancel-in-progress: false
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      PREVIEW_E2E_HARNESS_ENABLED: 'true'
+      ROUND_DIRECT_E2E_ENABLED: 'false'
+      ROUND_DIRECT_E2E_ENV: preview
+      ROUND_DIRECT_E2E_RUN_ID: generic-${{ github.run_id }}-${{ github.run_attempt }}
+      ROUND_DIRECT_E2E_PROVIDER_MODE: stub
+      ROUND_DIRECT_E2E_FIXTURE_PROJECTS: generic
+      ROUND_DIRECT_E2E_CLEANUP_CONFIGURED: 'true'
+      ROUND_DIRECT_E2E_API_ORIGIN: ${{ vars.ROUND_DIRECT_E2E_API_ORIGIN }}
+      ROUND_DIRECT_E2E_ALLOWED_API_ORIGINS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_API_ORIGINS }}
+      ROUND_DIRECT_E2E_ALLOWED_PREVIEW_APP_ORIGINS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_PREVIEW_APP_ORIGINS }}
+      FIREBASE_PROJECT_ID: ${{ vars.ROUND_DIRECT_E2E_FIREBASE_PROJECT_ID }}
+      ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS }}
+      FIREBASE_STORAGE_BUCKET: ${{ vars.ROUND_DIRECT_E2E_STORAGE_BUCKET }}
+      ROUND_DIRECT_E2E_ALLOWED_STORAGE_BUCKETS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_STORAGE_BUCKETS }}
+      ROUND_DIRECT_E2E_STORAGE_PREFIX: e2e/round-direct/generic-${{ github.run_id }}-${{ github.run_attempt }}/
+      ROUND_DIRECT_E2E_STORE_ID: preview-e2e-generic-${{ github.run_id }}-${{ github.run_attempt }}-generic-store
+      ROUND_DIRECT_E2E_FIXTURE_MANIFEST: .artifacts/round-direct/generic-${{ github.run_id }}-${{ github.run_attempt }}/generic/manifest.json
+      API_BASE: ${{ vars.ROUND_DIRECT_E2E_API_ORIGIN }}
+      SELLER_BASE: ${{ secrets.SELLER_BASE }}
+      CONSUMER_BASE: ${{ secrets.CONSUMER_BASE }}
+      DRIVER_BASE: ${{ secrets.DRIVER_BASE }}
+      SELLER_BYPASS_SECRET: ${{ secrets.SELLER_BYPASS_SECRET }}
+      CONSUMER_BYPASS_SECRET: ${{ secrets.CONSUMER_BYPASS_SECRET }}
+      DRIVER_BYPASS_SECRET: ${{ secrets.DRIVER_BYPASS_SECRET }}
+      E2E_TEST_SECRET: ${{ secrets.E2E_TEST_SECRET }}
+      TEST_SELLER_EMAIL: ${{ secrets.TEST_SELLER_EMAIL }}
+      TEST_SELLER_PASSWORD: ${{ secrets.TEST_SELLER_PASSWORD }}
+      TEST_CONSUMER_EMAIL: ${{ secrets.TEST_CONSUMER_EMAIL }}
+      TEST_CONSUMER_PASSWORD: ${{ secrets.TEST_CONSUMER_PASSWORD }}
+      PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/.artifacts/round-direct/generic-${{ github.run_id }}-${{ github.run_attempt }}/playwright-raw.json
 
     steps:
       - uses: actions/checkout@v6
 
-      # version 미지정 — package.json 의 packageManager(pnpm@10.x) 를 따른다
       - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: 'pnpm'
+          cache: pnpm
 
-      - name: Install dependencies
+      - name: 의존성 설치
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright browsers
+      - name: Playwright chromium 설치
         run: pnpm --filter e2e exec playwright install --with-deps chromium
 
-      # 시드 의존 spec(주문 카드·parcel·orderNumber) 1차 통과 보장 — 세션61·67·69 3회 재발 종결(#CL-42).
-      # seed 실패 시 process.exit(1)로 step fail → 후속 test 미실행(silent pass 방지).
-      - name: Seed E2E fixtures (Firestore)
+      - name: generic Preview 필수 입력 확인
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            CONSUMER_BASE
+            SELLER_BASE
+            DRIVER_BASE
+            CONSUMER_BYPASS_SECRET
+            SELLER_BYPASS_SECRET
+            DRIVER_BYPASS_SECRET
+            E2E_TEST_SECRET
+            TEST_CONSUMER_EMAIL
+            TEST_CONSUMER_PASSWORD
+            TEST_SELLER_EMAIL
+            TEST_SELLER_PASSWORD
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "필수 generic Preview 입력이 없습니다: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Firebase와 API 비운영 target 확인
+        shell: bash
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-        run: node scripts/seed-e2e-orders.mjs
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID/evidence"
+          mkdir -p "$evidence_root"
+          node scripts/check-round-direct-e2e-readiness.mjs --target-only > "$evidence_root/firebase-target.json"
 
-      - name: Run E2E tests (Preview)
+      - name: generic Preview fixture seed
+        shell: bash
         env:
-          SELLER_BASE: ${{ secrets.SELLER_BASE }}
-          CONSUMER_BASE: ${{ secrets.CONSUMER_BASE }}
-          DRIVER_BASE: ${{ secrets.DRIVER_BASE }}
-          SELLER_BYPASS_SECRET: ${{ secrets.SELLER_BYPASS_SECRET }}
-          CONSUMER_BYPASS_SECRET: ${{ secrets.CONSUMER_BYPASS_SECRET }}
-          DRIVER_BYPASS_SECRET: ${{ secrets.DRIVER_BYPASS_SECRET }}
-          E2E_TEST_SECRET: ${{ secrets.E2E_TEST_SECRET }}
-          TEST_SELLER_EMAIL: ${{ secrets.TEST_SELLER_EMAIL }}
-          TEST_SELLER_PASSWORD: ${{ secrets.TEST_SELLER_PASSWORD }}
-          TEST_CONSUMER_EMAIL: ${{ secrets.TEST_CONSUMER_EMAIL }}
-          TEST_CONSUMER_PASSWORD: ${{ secrets.TEST_CONSUMER_PASSWORD }}
-          # cleanup-spec-residue.mjs — seller-auth-invite afterAll 잔여물 정리용 firebase-admin 인증
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-        run: pnpm --filter e2e exec playwright test --project=chromium
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          mkdir -p "$evidence_root/evidence"
+          node scripts/round-direct-e2e-fixtures.mjs seed --project=generic --manifest="$evidence_root/generic/manifest.json" > "$evidence_root/seed-generic-raw.json"
+          jq '{action, runId, project, ready, missingDocumentCount: (.missingDocuments | length), missingObjectCount: (.missingObjects | length)}' "$evidence_root/seed-generic-raw.json" > "$evidence_root/evidence/seed-generic.json"
 
-      - name: Upload test report
-        if: always()
+      - name: generic Preview fixture verify
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          node scripts/round-direct-e2e-fixtures.mjs verify --project=generic --manifest="$evidence_root/generic/manifest.json" > "$evidence_root/verify-generic-raw.json"
+          jq '{action, runId, project, ready, missingDocumentCount: (.missingDocuments | length), missingObjectCount: (.missingObjects | length)}' "$evidence_root/verify-generic-raw.json" > "$evidence_root/evidence/verify-generic.json"
+
+      - name: generic Preview E2E 실행
+        id: e2e
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: >-
+          pnpm --filter e2e exec playwright test
+          --project=chromium
+          --grep-invert '회차 직배송|회차 운영'
+          --reporter=list,json
+
+      - name: generic Preview fixture cleanup
+        id: cleanup_generic
+        if: ${{ always() }}
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          manifest="$evidence_root/generic/manifest.json"
+          mkdir -p "$evidence_root/evidence"
+          if [[ ! -f "$manifest" ]]; then
+            printf '{"action":"cleanup","project":"generic","status":"not-seeded","remainingDocumentCount":0,"remainingObjectCount":0}\n' > "$evidence_root/evidence/cleanup-generic.json"
+            exit 0
+          fi
+          node scripts/round-direct-e2e-fixtures.mjs cleanup --project=generic --manifest="$manifest" > "$evidence_root/cleanup-generic-raw.json"
+          jq '{action, runId, project, ready, remainingDocumentCount: (.remainingDocuments | length), remainingObjectCount: (.remainingObjects | length)}' "$evidence_root/cleanup-generic-raw.json" > "$evidence_root/evidence/cleanup-generic.json"
+
+      - name: 비민감 실행 요약 생성
+        if: ${{ always() }}
+        shell: bash
+        env:
+          E2E_OUTCOME: ${{ steps.e2e.outcome }}
+          CLEANUP_OUTCOME: ${{ steps.cleanup_generic.outcome }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          mkdir -p "$evidence_root/evidence"
+          if [[ -f "$PLAYWRIGHT_JSON_OUTPUT_FILE" ]]; then
+            jq '{expected: .stats.expected, skipped: .stats.skipped, unexpected: .stats.unexpected, flaky: .stats.flaky, durationMs: .stats.duration}' "$PLAYWRIGHT_JSON_OUTPUT_FILE" > "$evidence_root/evidence/playwright-summary.json"
+          else
+            printf '{"status":"not-run"}\n' > "$evidence_root/evidence/playwright-summary.json"
+          fi
+          jq -n --arg runId "$ROUND_DIRECT_E2E_RUN_ID" --arg e2eOutcome "$E2E_OUTCOME" --arg cleanupOutcome "$CLEANUP_OUTCOME" '{
+              runId: $runId,
+              testResult: {e2e: $e2eOutcome},
+              cleanupResult: {generic: $cleanupOutcome}
+            }' > "$evidence_root/evidence/workflow-summary.json"
+
+      - name: 비민감 증거 artifact 업로드
+        if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report
-          path: apps/e2e/playwright-report/
+          name: preview-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/round-direct/generic-${{ github.run_id }}-${{ github.run_attempt }}/evidence/
+          if-no-files-found: error
           retention-days: 7

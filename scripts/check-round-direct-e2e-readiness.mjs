@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 export const PRODUCTION_FIREBASE_PROJECT = 'green-e4fe3';
 export const PRODUCTION_STORE_ID = '80189070-2c3d-45f2-bc11-68a870b13951';
+export const PRODUCTION_API_HOSTS = ['api-production-13e7.up.railway.app'];
 export const PROVIDER_HOSTS = ['api.portone.io', 'kakaoapi.aligo.in', 'apis.aligo.in'];
 const MAX_JPEG_BYTES = 5 * 1024 * 1024;
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
@@ -29,6 +30,25 @@ function parseJsonObject(value) {
 
 function parseBoolean(value) {
   return value === true || value === 'true';
+}
+
+export function inspectFirebaseServiceAccount(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return { configured: false, parseable: false, projectId: null };
+  }
+
+  try {
+    const raw = value.trim();
+    const withoutBom = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+    const parsed = JSON.parse(withoutBom);
+    const projectId =
+      typeof parsed?.project_id === 'string' && parsed.project_id.trim()
+        ? parsed.project_id.trim()
+        : null;
+    return { configured: true, parseable: true, projectId };
+  } catch {
+    return { configured: true, parseable: false, projectId: null };
+  }
 }
 
 function safeUrlOrigin(value) {
@@ -71,6 +91,16 @@ function isProductionOrigin(origin) {
   }
 }
 
+function isProductionApiOrigin(origin) {
+  if (isProductionOrigin(origin)) return true;
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+    return PRODUCTION_API_HOSTS.includes(hostname) || hostname.startsWith('api-production-');
+  } catch {
+    return true;
+  }
+}
+
 function isProductionBucket(bucket) {
   const normalized = String(bucket ?? '').toLowerCase();
   return normalized.includes(PRODUCTION_FIREBASE_PROJECT);
@@ -78,6 +108,178 @@ function isProductionBucket(bucket) {
 
 function addFailure(failures, code, message) {
   failures.push({ code, message });
+}
+
+function evaluateApiTarget(input) {
+  const hasApiContract =
+    Object.hasOwn(input ?? {}, 'apiOrigin') || Object.hasOwn(input ?? {}, 'allowedApiOrigins');
+  if (!hasApiContract) {
+    return { apiOrigin: null, failures: [] };
+  }
+
+  const failures = [];
+  const apiOrigin = String(input?.apiOrigin ?? '').trim();
+  const allowedApiOrigins = Array.isArray(input?.allowedApiOrigins)
+    ? input.allowedApiOrigins.map(String).map((item) => item.trim()).filter(Boolean)
+    : [];
+  if (!apiOrigin || !allowedApiOrigins.includes(apiOrigin)) {
+    addFailure(failures, 'API_ORIGIN_NOT_ALLOWED', 'API origin이 비운영 허용 목록과 다릅니다.');
+  }
+  if (isProductionApiOrigin(apiOrigin)) {
+    addFailure(failures, 'PRODUCTION_API_ORIGIN', '운영 API origin은 사용할 수 없습니다.');
+  }
+  return { apiOrigin: apiOrigin || null, failures };
+}
+
+function evaluatePreviewAppTargets(input) {
+  const hasAppContract =
+    Object.hasOwn(input ?? {}, 'previewAppOrigins') ||
+    Object.hasOwn(input ?? {}, 'allowedPreviewAppOrigins');
+  if (!hasAppContract) {
+    return { previewAppOrigins: {}, failures: [] };
+  }
+
+  const failures = [];
+  const previewAppOrigins = input?.previewAppOrigins ?? {};
+  const allowedPreviewAppOrigins = Array.isArray(input?.allowedPreviewAppOrigins)
+    ? input.allowedPreviewAppOrigins.map(String).map((item) => item.trim()).filter(Boolean)
+    : [];
+  if (allowedPreviewAppOrigins.length === 0) {
+    addFailure(
+      failures,
+      'PREVIEW_APP_ALLOWED_ORIGINS_MISSING',
+      'Preview 앱 비운영 origin 허용 목록이 없습니다.',
+    );
+  }
+  for (const app of DEPLOYMENT_APPS) {
+    const origin = String(previewAppOrigins[app] ?? '').trim();
+    if (!origin) {
+      addFailure(
+        failures,
+        'PREVIEW_APP_ORIGIN_MISSING',
+        `${app} Preview 앱 origin이 없습니다.`,
+      );
+      continue;
+    }
+    if (isProductionOrigin(origin)) {
+      addFailure(
+        failures,
+        'PRODUCTION_PREVIEW_APP_ORIGIN',
+        `${app} Preview target이 운영 origin입니다.`,
+      );
+    }
+    if (allowedPreviewAppOrigins.length > 0 && !allowedPreviewAppOrigins.includes(origin)) {
+      addFailure(
+        failures,
+        'PREVIEW_APP_ORIGIN_NOT_ALLOWED',
+        `${app} Preview origin이 비운영 허용 목록과 다릅니다.`,
+      );
+    }
+  }
+  return { previewAppOrigins, failures };
+}
+
+export function evaluateFirebaseTarget(input, { requireServiceAccount = false } = {}) {
+  const failures = [];
+  const firebaseProjectId = String(input?.firebaseProjectId ?? '').trim();
+  const allowedFirebaseProjects = Array.isArray(input?.allowedFirebaseProjects)
+    ? input.allowedFirebaseProjects.map(String).map((item) => item.trim()).filter(Boolean)
+    : [];
+  const storageBucket = String(input?.storageBucket ?? '').trim();
+  const allowedStorageBuckets = Array.isArray(input?.allowedStorageBuckets)
+    ? input.allowedStorageBuckets.map(String).map((item) => item.trim()).filter(Boolean)
+    : [];
+  const serviceAccount = input?.serviceAccount ?? {
+    configured: false,
+    parseable: false,
+    projectId: null,
+  };
+
+  if (!firebaseProjectId) {
+    addFailure(failures, 'FIREBASE_TARGET_MISSING', 'Firebase 비운영 대상 project ID가 없습니다.');
+  }
+  if (firebaseProjectId === PRODUCTION_FIREBASE_PROJECT) {
+    addFailure(failures, 'PRODUCTION_FIREBASE_PROJECT', '운영 Firebase project는 사용할 수 없습니다.');
+  }
+  if (allowedFirebaseProjects.length === 0) {
+    addFailure(
+      failures,
+      'FIREBASE_ALLOWED_PROJECTS_MISSING',
+      'Firebase 비운영 허용 project 목록이 없습니다.',
+    );
+  } else if (!allowedFirebaseProjects.includes(firebaseProjectId)) {
+    addFailure(
+      failures,
+      'FIREBASE_PROJECT_NOT_ALLOWED',
+      'Firebase project가 비운영 허용 목록과 다릅니다.',
+    );
+  }
+
+  if (requireServiceAccount && !serviceAccount.configured) {
+    addFailure(
+      failures,
+      'FIREBASE_SERVICE_ACCOUNT_MISSING',
+      'Firebase 서비스 계정 자격이 없어 target identity를 확인할 수 없습니다.',
+    );
+  } else if (serviceAccount.configured && !serviceAccount.parseable) {
+    addFailure(
+      failures,
+      'FIREBASE_SERVICE_ACCOUNT_INVALID',
+      'Firebase 서비스 계정 자격 JSON을 해석할 수 없습니다.',
+    );
+  } else if (requireServiceAccount && !serviceAccount.projectId) {
+    addFailure(
+      failures,
+      'FIREBASE_SERVICE_ACCOUNT_PROJECT_MISSING',
+      'Firebase 서비스 계정 project identity가 없습니다.',
+    );
+  }
+  if (serviceAccount.projectId === PRODUCTION_FIREBASE_PROJECT) {
+    addFailure(
+      failures,
+      'PRODUCTION_FIREBASE_SERVICE_ACCOUNT',
+      '운영 Firebase 서비스 계정은 사용할 수 없습니다.',
+    );
+  }
+  if (
+    serviceAccount.projectId &&
+    firebaseProjectId &&
+    serviceAccount.projectId !== firebaseProjectId
+  ) {
+    addFailure(
+      failures,
+      'FIREBASE_SERVICE_ACCOUNT_PROJECT_MISMATCH',
+      '서비스 계정 project identity와 명시된 비운영 target이 다릅니다.',
+    );
+  }
+
+  if (!storageBucket) {
+    addFailure(failures, 'STORAGE_BUCKET_MISSING', 'Firebase 비운영 Storage bucket이 없습니다.');
+  }
+  if (isProductionBucket(storageBucket)) {
+    addFailure(failures, 'PRODUCTION_STORAGE_BUCKET', '운영 Storage bucket은 사용할 수 없습니다.');
+  } else if (allowedStorageBuckets.length === 0) {
+    addFailure(
+      failures,
+      'STORAGE_ALLOWED_BUCKETS_MISSING',
+      'Storage 비운영 허용 bucket 목록이 없습니다.',
+    );
+  } else if (!allowedStorageBuckets.includes(storageBucket)) {
+    addFailure(
+      failures,
+      'STORAGE_BUCKET_NOT_ALLOWED',
+      'Storage bucket이 비운영 허용 목록과 다릅니다.',
+    );
+  }
+
+  return {
+    ready: failures.length === 0,
+    firebaseProjectId: firebaseProjectId || null,
+    serviceAccountProjectId: serviceAccount.projectId ?? null,
+    storageBucket: storageBucket || null,
+    failureCodes: failures.map(({ code }) => code),
+    failures,
+  };
 }
 
 export function inspectJpegBuffer(buffer) {
@@ -124,8 +326,18 @@ export function normalizeReadinessInput(env = process.env, options = {}) {
     sharedSecretConfigured: Boolean(env.ROUND_DIRECT_E2E_SHARED_SECRET?.trim()),
     apiOrigin: safeUrlOrigin(env.ROUND_DIRECT_E2E_API_ORIGIN),
     allowedApiOrigins: splitList(env.ROUND_DIRECT_E2E_ALLOWED_API_ORIGINS).map(safeUrlOrigin),
+    previewAppOrigins: Object.fromEntries(
+      DEPLOYMENT_APPS.map((app) => [
+        app,
+        safeUrlOrigin(env[`${app.toUpperCase()}_BASE`]),
+      ]),
+    ),
+    allowedPreviewAppOrigins: splitList(env.ROUND_DIRECT_E2E_ALLOWED_PREVIEW_APP_ORIGINS).map(
+      safeUrlOrigin,
+    ),
     firebaseProjectId: env.FIREBASE_PROJECT_ID?.trim() ?? '',
     allowedFirebaseProjects: splitList(env.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS),
+    serviceAccount: inspectFirebaseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_JSON),
     storageBucket: env.FIREBASE_STORAGE_BUCKET?.trim() ?? '',
     allowedStorageBuckets: splitList(env.ROUND_DIRECT_E2E_ALLOWED_STORAGE_BUCKETS),
     storagePrefix:
@@ -191,31 +403,11 @@ export function evaluateReadiness(input) {
   if (!input.apiOrigin || !input.allowedApiOrigins?.includes(input.apiOrigin)) {
     addFailure(failures, 'API_ORIGIN_NOT_ALLOWED', 'API origin이 비운영 허용 목록과 다릅니다.');
   }
-  if (isProductionOrigin(input.apiOrigin)) {
+  if (isProductionApiOrigin(input.apiOrigin)) {
     addFailure(failures, 'PRODUCTION_API_ORIGIN', '운영 API origin은 사용할 수 없습니다.');
   }
-  if (input.firebaseProjectId === PRODUCTION_FIREBASE_PROJECT) {
-    addFailure(
-      failures,
-      'PRODUCTION_FIREBASE_PROJECT',
-      '운영 Firebase project는 사용할 수 없습니다.',
-    );
-  } else if (!input.allowedFirebaseProjects?.includes(input.firebaseProjectId)) {
-    addFailure(
-      failures,
-      'FIREBASE_PROJECT_NOT_ALLOWED',
-      'Firebase project가 비운영 허용 목록과 다릅니다.',
-    );
-  }
-  if (isProductionBucket(input.storageBucket)) {
-    addFailure(failures, 'PRODUCTION_STORAGE_BUCKET', '운영 Storage bucket은 사용할 수 없습니다.');
-  } else if (!input.allowedStorageBuckets?.includes(input.storageBucket)) {
-    addFailure(
-      failures,
-      'STORAGE_BUCKET_NOT_ALLOWED',
-      'Storage bucket이 비운영 허용 목록과 다릅니다.',
-    );
-  }
+  const firebaseTarget = evaluateFirebaseTarget(input, { requireServiceAccount: true });
+  failures.push(...firebaseTarget.failures);
   const expectedPrefix = runId ? `e2e/round-direct/${runId}/` : '';
   if (!expectedPrefix || input.storagePrefix !== expectedPrefix) {
     addFailure(
@@ -324,6 +516,7 @@ export function evaluateReadiness(input) {
     environment: input.environment ?? null,
     apiOrigin: input.apiOrigin || null,
     firebaseProjectId: input.firebaseProjectId || null,
+    serviceAccountProjectId: input.serviceAccount?.projectId ?? null,
     storageBucket: input.storageBucket || null,
     storagePrefix: input.storagePrefix || null,
     fixtureStoreId: input.fixtureStoreId || null,
@@ -357,6 +550,28 @@ export function evaluateReadiness(input) {
   };
 }
 
+export function evaluateTargetReadiness(input) {
+  const previewAppTargets = evaluatePreviewAppTargets(input);
+  const apiTarget = evaluateApiTarget(input);
+  const firebaseTarget = evaluateFirebaseTarget(input, { requireServiceAccount: true });
+  const failures = [
+    ...previewAppTargets.failures,
+    ...apiTarget.failures,
+    ...firebaseTarget.failures,
+  ];
+  return {
+    ready: failures.length === 0,
+    checkedAt: new Date().toISOString(),
+    previewAppOrigins: previewAppTargets.previewAppOrigins,
+    apiOrigin: apiTarget.apiOrigin,
+    firebaseProjectId: firebaseTarget.firebaseProjectId,
+    serviceAccountProjectId: firebaseTarget.serviceAccountProjectId,
+    storageBucket: firebaseTarget.storageBucket,
+    failureCodes: failures.map(({ code }) => code),
+    failures,
+  };
+}
+
 function readDotEnv(filePath) {
   if (!fs.existsSync(filePath)) return {};
   const result = {};
@@ -379,6 +594,13 @@ function main() {
     ...process.env,
   };
   const input = normalizeReadinessInput(mergedEnv);
+
+  if (args.has('--target-only')) {
+    const targetResult = evaluateTargetReadiness(input);
+    process.stdout.write(`${JSON.stringify(targetResult, null, 2)}\n`);
+    process.exitCode = targetResult.ready ? 0 : 1;
+    return;
+  }
 
   if (args.has('--check-jpeg')) {
     const jpegResult = {
