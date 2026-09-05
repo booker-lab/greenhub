@@ -13,42 +13,45 @@
  */
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import {
+  evaluateFirebaseTarget,
+  inspectFirebaseServiceAccount,
+} from './check-round-direct-e2e-readiness.mjs';
 
 /**
- * 인증 자격 해석 — cleanup-spec-residue.mjs:24-46 과 동일 규약(검증된 패턴 이식, #CL-42).
- *  1. FIREBASE_SERVICE_ACCOUNT_JSON env (CI 러너 — 서비스 계정 키 JSON 문자열)
- *  2. apps/api/firebase-adminsdk.json 로컬 키 (개발자 머신 폴백, gitignore 대상)
+ * generic Preview에서는 명시된 비운영 서비스 계정만 사용한다.
+ * 로컬 파일 자격 증명 폴백은 target identity를 입증하지 못하므로 허용하지 않는다.
  */
 function resolveCredential() {
-  const envJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (envJson) {
-    try {
-      // BOM(U+FEFF)/주변 공백 제거 — Windows gh CLI 파이프 업로드 시 BOM 혼입 방어
-      const raw = envJson.trim();
-      const json = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
-      return cert(JSON.parse(json));
-    } catch (e) {
-      console.error(`[seed-e2e-orders] FIREBASE_SERVICE_ACCOUNT_JSON 파싱 실패: ${e.message}`);
-      process.exit(1);
-    }
-  }
-  try {
-    const require = createRequire(import.meta.url);
-    return cert(require(join(__dirname, '../apps/api/firebase-adminsdk.json')));
-  } catch {
-    console.error(
-      '[seed-e2e-orders] no credential — set FIREBASE_SERVICE_ACCOUNT_JSON env or place apps/api/firebase-adminsdk.json',
-    );
-    process.exit(1);
-  }
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  if (!raw) throw new Error('비운영 FIREBASE_SERVICE_ACCOUNT_JSON이 필요합니다.');
+  const withoutBom = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+  return cert(JSON.parse(withoutBom));
 }
 
-initializeApp({ credential: resolveCredential() });
+const firebaseTarget = evaluateFirebaseTarget(
+  {
+    firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
+    allowedFirebaseProjects: String(
+      process.env.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS ?? '',
+    ).split(','),
+    serviceAccount: inspectFirebaseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT_JSON),
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+    allowedStorageBuckets: String(
+      process.env.ROUND_DIRECT_E2E_ALLOWED_STORAGE_BUCKETS ?? '',
+    ).split(','),
+  },
+  { requireServiceAccount: true },
+);
+if (!firebaseTarget.ready) {
+  throw new Error(`Firebase fixture target가 준비되지 않았습니다: ${firebaseTarget.failureCodes.join(', ')}`);
+}
+
+initializeApp({
+  credential: resolveCredential(),
+  projectId: firebaseTarget.firebaseProjectId,
+  storageBucket: firebaseTarget.storageBucket,
+});
 const db = getFirestore();
 
 // ─── 컨텍스트 ─────────────────────────────────────────────────────────────

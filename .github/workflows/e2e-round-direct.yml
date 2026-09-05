@@ -210,6 +210,7 @@ jobs:
         env:
           ROUND_DIRECT_E2E_SHARED_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SHARED_SECRET }}
           ROUND_DIRECT_E2E_AUTH_EVIDENCE_JSON: ${{ secrets.ROUND_DIRECT_E2E_AUTH_EVIDENCE_JSON }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
           evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"

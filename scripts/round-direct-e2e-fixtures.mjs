@@ -3,37 +3,48 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runFixtureCli } from './round-direct-e2e-fixtures-cli.mjs';
-const PRODUCTION_PROJECT = 'green-e4fe3';
+import {
+  evaluateFirebaseTarget,
+  inspectFirebaseServiceAccount,
+} from './check-round-direct-e2e-readiness.mjs';
 const PRODUCTION_STORE = '80189070-2c3d-45f2-bc11-68a870b13951';
-const PROJECTS = new Set(['chromium', 'mobile']);
+const PROJECTS = new Set(['chromium', 'mobile', 'generic']);
+const ROUND_DIRECT_PROJECTS = new Set(['chromium', 'mobile']);
 const RUN_ID_PATTERN = /^[a-z0-9][a-z0-9-]{6,46}[a-z0-9]$/;
 const ROUND_DIRECT_DELIVERY_JPEG = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../apps/e2e/fixtures/round-direct-delivery.jpg'));
 function list(value) {
   return String(value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-export function validateFixtureEnvironment(env) {
-  if (env.ROUND_DIRECT_E2E_ENABLED !== 'true' || env.ROUND_DIRECT_E2E_ENV !== 'preview') {
-    throw new Error('회차 E2E Preview가 명시적으로 활성화되지 않았습니다.');
+export function validateFixtureEnvironment(env, { requireServiceAccount = false } = {}) {
+  const previewHarnessEnabled =
+    env.ROUND_DIRECT_E2E_ENABLED === 'true' || env.PREVIEW_E2E_HARNESS_ENABLED === 'true';
+  if (!previewHarnessEnabled || env.ROUND_DIRECT_E2E_ENV !== 'preview') {
+    throw new Error('비운영 Preview E2E harness가 명시적으로 활성화되지 않았습니다.');
   }
   const runId = String(env.ROUND_DIRECT_E2E_RUN_ID ?? '').trim();
   if (!RUN_ID_PATTERN.test(runId)) throw new Error('회차 E2E 실행 ID가 올바르지 않습니다.');
-  const projectId = String(env.FIREBASE_PROJECT_ID ?? '').trim();
-  if (projectId === PRODUCTION_PROJECT) throw new Error('운영 Firebase project는 사용할 수 없습니다.');
-  if (!projectId || !list(env.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS).includes(projectId)) {
-    throw new Error('Firebase project가 비운영 허용 목록과 다릅니다.');
-  }
-  const storageBucket = String(env.FIREBASE_STORAGE_BUCKET ?? '').trim();
-  if (storageBucket.toLowerCase().includes(PRODUCTION_PROJECT)) {
-    throw new Error('운영 Storage bucket은 사용할 수 없습니다.');
-  }
-  if (!storageBucket || !list(env.ROUND_DIRECT_E2E_ALLOWED_STORAGE_BUCKETS).includes(storageBucket)) {
-    throw new Error('Storage bucket이 비운영 허용 목록과 다릅니다.');
+  const target = evaluateFirebaseTarget(
+    {
+      firebaseProjectId: env.FIREBASE_PROJECT_ID,
+      allowedFirebaseProjects: list(env.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS),
+      serviceAccount: inspectFirebaseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT_JSON),
+      storageBucket: env.FIREBASE_STORAGE_BUCKET,
+      allowedStorageBuckets: list(env.ROUND_DIRECT_E2E_ALLOWED_STORAGE_BUCKETS),
+    },
+    { requireServiceAccount },
+  );
+  if (!target.ready) {
+    throw new Error(
+      `Firebase fixture target가 준비되지 않았습니다: ${target.failures
+        .map(({ code, message }) => `${code}(${message})`)
+        .join(', ')}`,
+    );
   }
   return {
     runId,
-    projectId,
-    storageBucket,
+    projectId: target.firebaseProjectId,
+    storageBucket: target.storageBucket,
     storagePrefix: `e2e/round-direct/${runId}/`,
   };
 }
@@ -150,9 +161,33 @@ function orderDocument(id, storeId, roundId, consumerId, driverId, status, overr
   };
 }
 
+function buildOwnershipManifest({
+  documents,
+  storageObjects,
+  generatedDocuments,
+  generatedStorageObjects,
+}) {
+  return {
+    IMMUTABLE_BASELINE: {
+      documents: [],
+      storageObjects: [],
+    },
+    RUN_OWNED_MUTABLE: {
+      documents: documents.map(({ path: documentPath }) => documentPath),
+      storageObjects: [...storageObjects],
+    },
+    SPEC_OWNED_TEMPORARY: {
+      documents: generatedDocuments.map(({ path: documentPath }) => documentPath),
+      storageObjects: [...generatedStorageObjects],
+    },
+  };
+}
+
 export function buildFixtureManifest({ runId, project, accounts }) {
   if (!RUN_ID_PATTERN.test(runId)) throw new Error('fixture 실행 ID가 올바르지 않습니다.');
-  if (!PROJECTS.has(project)) throw new Error('fixture project는 chromium 또는 mobile이어야 합니다.');
+  if (!ROUND_DIRECT_PROJECTS.has(project)) {
+    throw new Error('round-direct fixture project는 chromium 또는 mobile이어야 합니다.');
+  }
   for (const role of ['consumer', 'seller', 'driver']) {
     if (!accounts?.[role]?.email || !accounts?.[role]?.passwordHash) {
       throw new Error(`${project} ${role} 계정 입력이 누락되었습니다.`);
@@ -391,6 +426,23 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     .digest('hex')
     .slice(0, 32);
 
+  const storageObjects = [`deliveryPhotos/${deliveredOrderId}/${deliveredPhotoId}.jpg`];
+  const generatedStorageObjects = [`deliveryPhotos/${uploadOrderId}/${uploadPhotoId}.jpg`];
+  const generatedDocuments = [
+    ...Object.values(ids)
+      .filter((id) => id.endsWith('-consumer') || id.endsWith('-seller') || id.endsWith('-driver'))
+      .map((userId) => ({
+        path: `refreshTokens/${userId}`,
+        kind: 'refreshToken',
+        identity: { userId },
+      })),
+    {
+      path: `deliveryPhotoRecords/${uploadOrderId}:${uploadPhotoId}`,
+      kind: 'deliveryPhoto',
+      identity: { orderId: uploadOrderId, photoId: uploadPhotoId },
+    },
+  ];
+
   return {
     version: 1,
     runId,
@@ -401,12 +453,223 @@ export function buildFixtureManifest({ runId, project, accounts }) {
       Object.entries(accounts).map(([role, account]) => [role, account.email]),
     ),
     documents,
-    storageObjects: [`deliveryPhotos/${deliveredOrderId}/${deliveredPhotoId}.jpg`],
-    generatedStorageObjects: [`deliveryPhotos/${uploadOrderId}/${uploadPhotoId}.jpg`],
-    generatedDocuments: [{
-      path: `deliveryPhotoRecords/${uploadOrderId}:${uploadPhotoId}`,
-      identity: { orderId: uploadOrderId, photoId: uploadPhotoId },
-    }],
+    storageObjects,
+    generatedStorageObjects,
+    generatedDocuments,
+    ownership: buildOwnershipManifest({
+      documents,
+      storageObjects,
+      generatedDocuments,
+      generatedStorageObjects,
+    }),
+  };
+}
+
+function genericDateOffset(offsetDays) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+}
+
+export function buildGenericPreviewFixtureManifest({ runId, accounts }) {
+  if (!RUN_ID_PATTERN.test(runId)) throw new Error('fixture 실행 ID가 올바르지 않습니다.');
+  for (const role of ['consumer', 'seller']) {
+    if (!accounts?.[role]?.email || !accounts?.[role]?.passwordHash) {
+      throw new Error(`generic Preview ${role} 계정 입력이 누락되었습니다.`);
+    }
+  }
+
+  const project = 'generic';
+  const namespace = `preview-e2e-${runId}-${project}`;
+  const storeId = `${namespace}-store`;
+  const ids = {
+    consumer: `${namespace}-consumer`,
+    seller: `${namespace}-seller`,
+    normalProduct: `${namespace}-normal-product`,
+    groupProduct: `${namespace}-group-product`,
+    normalOrder: `${namespace}-normal-order`,
+    groupOrder: `${namespace}-group-order`,
+    parcelOrder: `${namespace}-parcel-order`,
+  };
+  const now = new Date().toISOString();
+  const normalDeliveryDate = genericDateOffset(2);
+  const groupDeliveryDate = genericDateOffset(7);
+  const documents = [];
+  const tag = { runId, project };
+  const add = (collection, id, data) => {
+    documents.push({ path: `${collection}/${id}`, data: { ...data, _e2e: tag } });
+  };
+
+  add('users', ids.consumer, {
+    id: ids.consumer,
+    email: accounts.consumer.email,
+    name: 'E2E 소비자',
+    role: 'consumer',
+    passwordHash: accounts.consumer.passwordHash,
+    providers: ['email'],
+    savedAddresses: [],
+  });
+  add('users', ids.seller, {
+    id: ids.seller,
+    email: accounts.seller.email,
+    name: 'E2E 셀러',
+    role: 'seller',
+    storeId,
+    passwordHash: accounts.seller.passwordHash,
+    providers: ['email'],
+  });
+  add('stores', storeId, {
+    id: storeId,
+    ownerId: ids.seller,
+    name: 'E2E Preview 테스트 꽃농장',
+    ceoName: 'E2E 셀러',
+    phone: '01000000001',
+    address: '서울 테스트로 1',
+    status: 'ACTIVE',
+    isActive: true,
+    salesMode: 'legacy',
+  });
+  add('products', ids.normalProduct, {
+    id: ids.normalProduct,
+    storeId,
+    sellerId: ids.seller,
+    name: 'E2E 일반 상품',
+    description: 'generic Preview 주문 탭 검증용 일반 상품',
+    images: [],
+    price: 10000,
+    category: 'cut_flower',
+    colors: ['레드'],
+    saleType: 'normal',
+    deliverySize: 'small',
+    isActive: true,
+    stock: 300,
+    createdAt: now,
+    updatedAt: now,
+  });
+  add('products', ids.groupProduct, {
+    id: ids.groupProduct,
+    storeId,
+    sellerId: ids.seller,
+    name: 'E2E 공구 상품',
+    description: 'generic Preview 주문 탭 검증용 공동구매 상품',
+    images: [],
+    price: 15000,
+    category: 'cut_flower',
+    colors: ['핑크'],
+    saleType: 'group',
+    deliverySize: 'small',
+    isActive: true,
+    stock: 300,
+    createdAt: now,
+    updatedAt: now,
+  });
+  add('groupProductConfig', ids.groupProduct, {
+    productId: ids.groupProduct,
+    minQuantity: 5,
+    targetQuantity: 20,
+    maxPerPerson: 3,
+    currentQuantity: 1,
+    recruitDeadline: new Date(`${normalDeliveryDate}T00:00:00.000Z`).toISOString(),
+    groupDeliveryDate: new Date(`${groupDeliveryDate}T00:00:00.000Z`).toISOString(),
+    createdAt: now,
+    updatedAt: now,
+  });
+  for (let offset = 0; offset < 14; offset += 1) {
+    const date = genericDateOffset(offset);
+    add('dailyCaps', `${storeId}_${date}`, {
+      id: `${storeId}_${date}`,
+      storeId,
+      date,
+      totalCap: 10,
+      usedSlots: 0,
+    });
+  }
+
+  const baseOrder = {
+    storeId,
+    userId: ids.consumer,
+    buyerName: 'E2E 소비자',
+    address: '서울 테스트로 1',
+    buyerPhone: '01000000001',
+    sellerPhone: '01000000001',
+    hubName: null,
+    hubAddress: null,
+    quantity: 1,
+    status: 'ACCEPTED',
+    deliveryFee: 3000,
+    deliveryAddress: { address: '서울 테스트로 1', addressDetail: '101호', zipCode: '12345' },
+    isMetropolitan: true,
+    hubId: null,
+    pickupCode: null,
+    totalAmount: 13000,
+    preparedAt: null,
+    cancelReason: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  add('orders', ids.normalOrder, {
+    ...baseOrder,
+    id: ids.normalOrder,
+    orderNumber: '20260101-000001',
+    productId: ids.normalProduct,
+    productName: 'E2E 일반 상품',
+    saleType: 'normal',
+    deliveryMethod: 'direct',
+    requestedDeliveryDate: normalDeliveryDate,
+  });
+  add('orders', ids.groupOrder, {
+    ...baseOrder,
+    id: ids.groupOrder,
+    orderNumber: '20260101-000002',
+    productId: ids.groupProduct,
+    productName: 'E2E 공구 상품',
+    saleType: 'group',
+    deliveryMethod: 'direct',
+    totalAmount: 18000,
+    requestedDeliveryDate: null,
+    groupBuyConsent: { agreed: true, agreedAt: now, userId: ids.consumer },
+  });
+  add('orders', ids.parcelOrder, {
+    ...baseOrder,
+    id: ids.parcelOrder,
+    orderNumber: '20260101-000003',
+    productId: ids.normalProduct,
+    productName: 'E2E 일반 상품',
+    saleType: 'normal',
+    deliveryMethod: 'parcel',
+    deliveryFee: 4000,
+    totalAmount: 14000,
+    requestedDeliveryDate: normalDeliveryDate,
+    status: 'PREPARING',
+    preparedAt: now,
+  });
+
+  const generatedDocuments = ['consumer', 'seller'].map((role) => ({
+    path: `refreshTokens/${ids[role]}`,
+    kind: 'refreshToken',
+    identity: { userId: ids[role] },
+  }));
+
+  return {
+    version: 1,
+    fixtureKind: 'generic-preview',
+    runId,
+    project,
+    namespace,
+    storeId,
+    accountEmails: Object.fromEntries(
+      Object.entries(accounts).map(([role, account]) => [role, account.email]),
+    ),
+    documents,
+    storageObjects: [],
+    generatedStorageObjects: [],
+    generatedDocuments,
+    ownership: buildOwnershipManifest({
+      documents,
+      storageObjects: [],
+      generatedDocuments,
+      generatedStorageObjects: [],
+    }),
   };
 }
 
@@ -414,7 +677,16 @@ function assertManifest(manifest) {
   if (!RUN_ID_PATTERN.test(manifest?.runId) || !PROJECTS.has(manifest?.project)) {
     throw new Error('fixture manifest 식별자가 올바르지 않습니다.');
   }
-  const namespace = `round-direct-e2e-${manifest.runId}-${manifest.project}`;
+  const namespace =
+    manifest.fixtureKind === 'generic-preview'
+      ? `preview-e2e-${manifest.runId}-generic`
+      : `round-direct-e2e-${manifest.runId}-${manifest.project}`;
+  if (
+    (manifest.project === 'generic' && manifest.fixtureKind !== 'generic-preview') ||
+    (manifest.project !== 'generic' && manifest.fixtureKind === 'generic-preview')
+  ) {
+    throw new Error('fixture manifest 종류와 project가 일치하지 않습니다.');
+  }
   if (manifest.namespace !== namespace || !manifest.storeId.startsWith(`${namespace}-`)) {
     throw new Error('fixture manifest namespace가 올바르지 않습니다.');
   }
@@ -428,11 +700,24 @@ function assertManifest(manifest) {
   }
   const storagePrefix = `deliveryPhotos/${namespace}-`;
   const allObjects = [...(manifest.storageObjects ?? []), ...(manifest.generatedStorageObjects ?? [])];
+  if (manifest.fixtureKind === 'generic-preview' && allObjects.length > 0) {
+    throw new Error('generic Preview fixture는 Storage 객체를 소유할 수 없습니다.');
+  }
   if (!allObjects.every((name) => name.startsWith(storagePrefix))) {
     throw new Error('manifest Storage 객체가 실행 namespace 밖입니다.');
   }
   for (const entry of manifest.generatedDocuments ?? []) {
+    if (entry.kind === 'refreshToken') {
+      if (
+        !entry.path.startsWith(`refreshTokens/${namespace}-`) ||
+        entry.identity?.userId !== entry.path.split('/')[1]
+      ) {
+        throw new Error('manifest refresh token 문서가 실행 namespace 밖입니다.');
+      }
+      continue;
+    }
     if (
+      entry.kind !== 'deliveryPhoto' ||
       !entry.path.startsWith(`deliveryPhotoRecords/${namespace}-`) ||
       entry.identity?.orderId !== entry.path.split('/')[1]?.split(':')[0] ||
       !entry.identity?.photoId
@@ -440,12 +725,38 @@ function assertManifest(manifest) {
       throw new Error('manifest 생성 문서가 실행 namespace 밖입니다.');
     }
   }
+  const ownership = manifest.ownership;
+  const ownershipResources = ['IMMUTABLE_BASELINE', 'RUN_OWNED_MUTABLE', 'SPEC_OWNED_TEMPORARY']
+    .flatMap((category) => {
+      const bucket = ownership?.[category];
+      return [
+        ...(bucket?.documents ?? []).map((documentPath) => `document:${documentPath}`),
+        ...(bucket?.storageObjects ?? []).map((objectName) => `storage:${objectName}`),
+      ];
+    });
+  const expectedResources = [
+    ...(manifest.documents ?? []).map(({ path: documentPath }) => `document:${documentPath}`),
+    ...(manifest.generatedDocuments ?? []).map(({ path: documentPath }) => `document:${documentPath}`),
+    ...(manifest.storageObjects ?? []).map((objectName) => `storage:${objectName}`),
+    ...(manifest.generatedStorageObjects ?? []).map((objectName) => `storage:${objectName}`),
+  ];
+  if (
+    ownershipResources.length !== new Set(ownershipResources).size ||
+    ownershipResources.length !== expectedResources.length ||
+    ownershipResources.some((resource) => !expectedResources.includes(resource)) ||
+    expectedResources.some((resource) => !ownershipResources.includes(resource))
+  ) {
+    throw new Error('fixture ownership manifest가 모든 정확한 자원을 단일 category로 분류하지 않았습니다.');
+  }
 }
 
 export async function seedFixture(adapter, manifest) {
   assertManifest(manifest);
+  const runOwnedDocuments = new Set(manifest.ownership.RUN_OWNED_MUTABLE.documents);
+  const runOwnedStorageObjects = new Set(manifest.ownership.RUN_OWNED_MUTABLE.storageObjects);
   try {
     for (const entry of manifest.documents) {
+      if (!runOwnedDocuments.has(entry.path)) continue;
       const existing = await adapter.getDoc(entry.path);
       if (
         existing &&
@@ -456,6 +767,7 @@ export async function seedFixture(adapter, manifest) {
       await adapter.setDoc(entry.path, entry.data);
     }
     for (const objectName of manifest.storageObjects ?? []) {
+      if (!runOwnedStorageObjects.has(objectName)) continue;
       await adapter.setObject(objectName, ROUND_DIRECT_DELIVERY_JPEG);
     }
   } catch (error) {
@@ -466,29 +778,41 @@ export async function seedFixture(adapter, manifest) {
 
 export async function verifyFixture(adapter, manifest, { expectAbsent = false } = {}) {
   assertManifest(manifest);
+  const immutableDocuments = new Set(manifest.ownership.IMMUTABLE_BASELINE.documents);
+  const immutableStorageObjects = new Set(manifest.ownership.IMMUTABLE_BASELINE.storageObjects);
+  const specOwnedDocuments = new Set(manifest.ownership.SPEC_OWNED_TEMPORARY.documents);
+  const specOwnedStorageObjects = new Set(manifest.ownership.SPEC_OWNED_TEMPORARY.storageObjects);
+  const documentEntries = expectAbsent
+    ? manifest.documents.filter(({ path: documentPath }) => !immutableDocuments.has(documentPath))
+    : manifest.documents;
+  const storageObjects = expectAbsent
+    ? (manifest.storageObjects ?? []).filter((objectName) => !immutableStorageObjects.has(objectName))
+    : manifest.storageObjects ?? [];
   const missingDocuments = [];
   const remainingDocuments = [];
-  for (const entry of manifest.documents) {
+  for (const entry of documentEntries) {
     const data = await adapter.getDoc(entry.path);
     if (expectAbsent ? data : !data) {
       (expectAbsent ? remainingDocuments : missingDocuments).push(entry.path);
     }
   }
   if (expectAbsent) {
-    for (const entry of manifest.generatedDocuments ?? []) {
+    for (const entry of (manifest.generatedDocuments ?? []).filter(({ path: documentPath }) =>
+      specOwnedDocuments.has(documentPath))) {
       if (await adapter.getDoc(entry.path)) remainingDocuments.push(entry.path);
     }
   }
   const missingObjects = [];
   const remainingObjects = [];
-  for (const objectName of manifest.storageObjects ?? []) {
+  for (const objectName of storageObjects) {
     const object = await adapter.getObject(objectName);
     if (expectAbsent ? object : !object) {
       (expectAbsent ? remainingObjects : missingObjects).push(objectName);
     }
   }
   if (expectAbsent) {
-    for (const objectName of manifest.generatedStorageObjects ?? []) {
+    for (const objectName of (manifest.generatedStorageObjects ?? []).filter((name) =>
+      specOwnedStorageObjects.has(name))) {
       if (await adapter.getObject(objectName)) remainingObjects.push(objectName);
     }
   }
@@ -506,20 +830,43 @@ export async function verifyFixture(adapter, manifest, { expectAbsent = false } 
 
 export async function cleanupFixture(adapter, manifest) {
   assertManifest(manifest);
+  const runOwnedDocuments = new Set(manifest.ownership.RUN_OWNED_MUTABLE.documents);
+  const runOwnedStorageObjects = new Set(manifest.ownership.RUN_OWNED_MUTABLE.storageObjects);
+  const specOwnedDocuments = new Set(manifest.ownership.SPEC_OWNED_TEMPORARY.documents);
+  const specOwnedStorageObjects = new Set(manifest.ownership.SPEC_OWNED_TEMPORARY.storageObjects);
   for (const objectName of [
     ...(manifest.storageObjects ?? []),
     ...(manifest.generatedStorageObjects ?? []),
-  ]) await adapter.deleteObject(objectName);
-  for (const entry of manifest.generatedDocuments ?? []) {
+  ].filter((objectName) => runOwnedStorageObjects.has(objectName) || specOwnedStorageObjects.has(objectName))) {
+    await adapter.deleteObject(objectName);
+  }
+  for (const entry of (manifest.generatedDocuments ?? []).filter(({ path: documentPath }) =>
+    specOwnedDocuments.has(documentPath))) {
     const existing = await adapter.getDoc(entry.path);
-    if (
-      existing?.orderId === entry.identity.orderId &&
-      existing?.photoId === entry.identity.photoId
-    ) {
+    let owned = false;
+    if (entry.kind === 'refreshToken') {
+      const owner = await adapter.getDoc(`users/${entry.identity.userId}`);
+      owned = Boolean(
+        existing &&
+          owner?._e2e?.runId === manifest.runId &&
+          owner?._e2e?.project === manifest.project,
+      );
+    } else {
+      const owner = await adapter.getDoc(`orders/${entry.identity.orderId}`);
+      owned = Boolean(
+        existing &&
+          owner?._e2e?.runId === manifest.runId &&
+          owner?._e2e?.project === manifest.project &&
+          existing.orderId === entry.identity.orderId &&
+          existing.photoId === entry.identity.photoId,
+      );
+    }
+    if (owned) {
       await adapter.deleteDoc(entry.path);
     }
   }
-  for (const entry of [...manifest.documents].reverse()) {
+  for (const entry of [...manifest.documents].filter(({ path: documentPath }) =>
+    runOwnedDocuments.has(documentPath)).reverse()) {
     const existing = await adapter.getDoc(entry.path);
     if (
       existing?._e2e?.runId === manifest.runId &&
@@ -531,7 +878,14 @@ export async function cleanupFixture(adapter, manifest) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  runFixtureCli({ validateFixtureEnvironment, buildFixtureManifest, seedFixture, verifyFixture, cleanupFixture }).catch((error) => {
+  runFixtureCli({
+    validateFixtureEnvironment,
+    buildFixtureManifest,
+    buildGenericPreviewFixtureManifest,
+    seedFixture,
+    verifyFixture,
+    cleanupFixture,
+  }).catch((error) => {
     console.error(`회차 E2E fixture 실패: ${error.message}`);
     process.exitCode = 1;
   });

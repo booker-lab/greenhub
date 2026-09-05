@@ -13,7 +13,171 @@
  *   await page.goto(`${BASE}/orders`)
  */
 import { resolve } from 'path'
-import type { Page } from '@playwright/test'
+import type { APIResponse, Page } from '@playwright/test'
+
+export const AUTH_FAILURE_CATEGORIES = [
+  'UPSTREAM_CREDENTIAL_REJECTED',
+  'AUTHJS_AUTHORIZE_REJECTED',
+  'AUTHJS_SESSION_COOKIE_NOT_EMITTED',
+  'COOKIE_EMITTED_BUT_CONTEXT_NOT_PERSISTED',
+  'SESSION_COOKIE_PRESENT_BUT_SESSION_INVALID',
+  'API_BINDING_FAILURE',
+  'UNKNOWN_AFTER_OBSERVABILITY',
+] as const
+
+export type AuthFailureCategory = (typeof AUTH_FAILURE_CATEGORIES)[number]
+
+type SafeLocationEvidence = {
+  path: string | null
+  origin: 'same-origin' | 'cross-origin' | 'invalid' | 'none'
+  authjsErrorCode: string | null
+  authjsErrorCategory: string | null
+}
+
+export type AuthDiagnosticEvidence = {
+  callback: {
+    status: number | null
+    redirected: boolean
+    location: SafeLocationEvidence
+    setCookie: boolean
+    setCookieNames: string[]
+  }
+  cookieNames: string[]
+  sessionCookieEmitted: boolean
+  sessionCookiePersisted: boolean
+  sessionReadback: {
+    status: number | null
+    outcome: 'VALID' | 'INVALID' | 'UNAVAILABLE'
+    redirected: boolean
+  }
+  category: AuthFailureCategory | null
+}
+
+const SAFE_AUTH_CODES = new Set([
+  'CredentialsSignin',
+  'CallbackRouteError',
+  'AccessDenied',
+  'MissingCSRF',
+  'authorize-rejected',
+  'upstream-rejected',
+  'api-binding-failure',
+])
+
+function safeAuthCode(value: unknown): string | null {
+  if (typeof value !== 'string' || !value) return null
+  return SAFE_AUTH_CODES.has(value) ? value : 'unknown'
+}
+
+export function sanitizeAuthLocation(location: unknown, base: string): SafeLocationEvidence {
+  if (typeof location !== 'string' || !location.trim()) {
+    return {
+      path: null,
+      origin: 'none',
+      authjsErrorCode: null,
+      authjsErrorCategory: null,
+    }
+  }
+
+  try {
+    const baseUrl = new URL(base)
+    const url = new URL(location, baseUrl)
+    return {
+      path: url.pathname || '/',
+      origin: url.origin === baseUrl.origin ? 'same-origin' : 'cross-origin',
+      authjsErrorCode: safeAuthCode(url.searchParams.get('error')),
+      authjsErrorCategory: safeAuthCode(url.searchParams.get('code')),
+    }
+  } catch {
+    return {
+      path: null,
+      origin: 'invalid',
+      authjsErrorCode: null,
+      authjsErrorCategory: null,
+    }
+  }
+}
+
+export function cookieNamesFromHeaders(
+  headers: Array<{ name: string; value: string }>,
+): string[] {
+  return [...new Set(
+    headers
+      .filter(({ name }) => name.toLowerCase() === 'set-cookie')
+      .map(({ value }) => value.split(';', 1)[0]?.split('=', 1)[0]?.trim())
+      .filter((name): name is string => Boolean(name)),
+  )].sort()
+}
+
+function hasSessionCookie(names: string[]): boolean {
+  return names.some((name) => /(?:^|\.)authjs\.session-token(?:\.|$)/.test(name))
+}
+
+export function classifyAuthFailure(evidence: AuthDiagnosticEvidence): AuthFailureCategory | null {
+  const { callback, sessionCookieEmitted, sessionCookiePersisted, sessionReadback } = evidence
+  const errorCode = callback.location.authjsErrorCode
+  const errorCategory = callback.location.authjsErrorCategory
+
+  if (errorCategory === 'upstream-rejected') return 'UPSTREAM_CREDENTIAL_REJECTED'
+  if (errorCategory === 'authorize-rejected') return 'AUTHJS_AUTHORIZE_REJECTED'
+  if (errorCategory === 'api-binding-failure') return 'API_BINDING_FAILURE'
+  if (callback.status !== null && callback.status >= 500) return 'API_BINDING_FAILURE'
+  if (sessionCookieEmitted && !sessionCookiePersisted) {
+    return 'COOKIE_EMITTED_BUT_CONTEXT_NOT_PERSISTED'
+  }
+  if (sessionCookiePersisted && sessionReadback.outcome === 'INVALID') {
+    return 'SESSION_COOKIE_PRESENT_BUT_SESSION_INVALID'
+  }
+  if (!sessionCookieEmitted) {
+    if (errorCode === 'CredentialsSignin' || errorCode === 'CallbackRouteError') {
+      return 'AUTHJS_AUTHORIZE_REJECTED'
+    }
+    if (callback.status !== null && callback.status >= 200 && callback.status < 400) {
+      return 'AUTHJS_SESSION_COOKIE_NOT_EMITTED'
+    }
+  }
+  if (sessionReadback.outcome === 'UNAVAILABLE' && !sessionCookiePersisted) {
+    return 'UNKNOWN_AFTER_OBSERVABILITY'
+  }
+  return null
+}
+
+function parseJsonBody(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+async function readSameContextSession(page: Page, base: string): Promise<AuthDiagnosticEvidence['sessionReadback']> {
+  try {
+    const response = await page.request.get(`${base}/api/auth/session`, { maxRedirects: 0 })
+    const redirected = response.status() >= 300 && response.status() < 400
+    if (redirected || !response.ok()) {
+      return { status: response.status(), outcome: 'UNAVAILABLE', redirected }
+    }
+    const body = parseJsonBody(await response.text())
+    const user = body.user
+    const userRecord =
+      user && typeof user === 'object' && !Array.isArray(user)
+        ? (user as { accessToken?: unknown })
+        : null
+    const valid =
+      typeof userRecord?.accessToken === 'string' && userRecord.accessToken.length > 0
+    return {
+      status: response.status(),
+      outcome: valid ? 'VALID' : 'INVALID',
+      redirected: false,
+    }
+  } catch {
+    return { status: null, outcome: 'UNAVAILABLE', redirected: false }
+  }
+}
+
+function diagnosticError(evidence: AuthDiagnosticEvidence): Error {
+  return new Error(`인증 진단 실패: ${JSON.stringify(evidence)}`)
+}
 
 /**
  * globalSetup이 발급하는 storageState 파일 경로 (SSOT).
@@ -43,55 +207,73 @@ export async function loginViaCredentials(
   email: string,
   password: string,
   credentialHeader?: CredentialHeader,
-): Promise<void> {
+): Promise<AuthDiagnosticEvidence> {
   const defaultSecret = process.env['E2E_TEST_SECRET']
   if (!credentialHeader && !defaultSecret) {
-    throw new Error('옵션 B 헤더 게이팅에 필요한 E2E_TEST_SECRET이 설정되지 않았습니다.')
+    throw new Error('인증 진단 실패: category=AUTHJS_AUTHORIZE_REJECTED')
   }
   const headers = credentialHeader
     ? { [credentialHeader.name]: credentialHeader.value }
     : { 'x-e2e-test-token': defaultSecret as string }
 
-  const csrfRes = await page.request.get(`${base}/api/auth/csrf`, { headers })
-  if (!csrfRes.ok()) {
-    throw new Error(`csrf fetch failed: ${csrfRes.status()} ${await csrfRes.text()}`)
-  }
-  const { csrfToken } = await csrfRes.json()
-
-  const res = await page.request.post(`${base}/api/auth/callback/credentials`, {
+  const csrfRes = await page.request.get(`${base}/api/auth/csrf`, {
     headers,
-    form: {
-      email,
-      password,
-      csrfToken,
-      callbackUrl: base,
-      json: 'true',
-    },
+    maxRedirects: 0,
   })
-  if (!res.ok()) {
-    throw new Error(`signIn failed: ${res.status()} ${await res.text()}`)
+  if (!csrfRes.ok()) {
+    throw new Error(`인증 진단 실패: category=API_BINDING_FAILURE csrfStatus=${csrfRes.status()}`)
   }
-  const body = (await res.json().catch(() => ({}))) as { url?: string }
-  if (body?.url && /[?&]error=/.test(body.url)) {
-    throw new Error(`signIn rejected: ${body.url}`)
+  const csrfBody = parseJsonBody(await csrfRes.text())
+  const csrfToken = csrfBody.csrfToken
+  if (typeof csrfToken !== 'string' || !csrfToken) {
+    throw new Error('인증 진단 실패: category=API_BINDING_FAILURE csrfTokenMissing=true')
   }
 
-  // 세션 쿠키 발급 검증 — credentials POST 응답의 set-cookie가 BrowserContext의
-  // cookie jar에 들어갔는지 직접 확인. Vercel/Railway 일시 부하 상황에서 set-cookie
-  // 없는 200 응답이 관측되며(세션24 진단), 그대로 page.goto()가 진행되면 카카오
-  // 로그인 페이지로 리다이렉트되어 텍스트 셀렉터 매칭이 실패한다. 명시적 throw로
-  // playwright test-level retry(retries: 1)가 정상 동작하도록 가시화한다.
-  const cookies = await page.context().cookies(base)
-  const sessionCookie = cookies.find((c) => /authjs\.session-token/.test(c.name))
-  if (!sessionCookie) {
-    const setCookieCount = res
-      .headersArray()
-      .filter((h) => h.name.toLowerCase() === 'set-cookie').length
-    throw new Error(
-      `session cookie not in context after signIn — ` +
-        `set-cookie count=${setCookieCount}, ` +
-        `body.url=${body?.url ?? 'null'}, ` +
-        `cookie names=[${cookies.map((c) => c.name).join(', ')}]`,
-    )
+  let response: APIResponse
+  try {
+    response = await page.request.post(`${base}/api/auth/callback/credentials`, {
+      headers,
+      maxRedirects: 0,
+      form: {
+        email,
+        password,
+        csrfToken,
+        callbackUrl: base,
+        json: 'true',
+      },
+    })
+  } catch {
+    throw new Error('인증 진단 실패: category=API_BINDING_FAILURE callbackTransport=failed')
   }
+
+  const callbackHeaders = response.headersArray()
+  const callbackBody = parseJsonBody(await response.text())
+  const locationHeader = callbackHeaders.find(
+    ({ name }) => name.toLowerCase() === 'location',
+  )?.value
+  const location = sanitizeAuthLocation(
+    locationHeader ?? (typeof callbackBody.url === 'string' ? callbackBody.url : null),
+    base,
+  )
+  const setCookieNames = cookieNamesFromHeaders(callbackHeaders)
+  const cookies = await page.context().cookies(base)
+  const cookieNames = cookies.map(({ name }) => name).sort()
+  const evidence: AuthDiagnosticEvidence = {
+    callback: {
+      status: response.status(),
+      redirected: response.status() >= 300 && response.status() < 400,
+      location,
+      setCookie: setCookieNames.length > 0,
+      setCookieNames,
+    },
+    cookieNames,
+    sessionCookieEmitted: hasSessionCookie(setCookieNames),
+    sessionCookiePersisted: hasSessionCookie(cookieNames),
+    sessionReadback: await readSameContextSession(page, base),
+    category: null,
+  }
+  evidence.category = classifyAuthFailure(evidence)
+
+  if (evidence.category) throw diagnosticError(evidence)
+  return evidence
 }
