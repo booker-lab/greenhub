@@ -1,4 +1,4 @@
-import NextAuth from 'next-auth';
+import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
 import { getApiBaseUrl } from '@/lib/api-base-url';
@@ -6,6 +6,18 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 const API = getApiBaseUrl();
 // accessToken 만료 55분 후 갱신 (Railway 기본값 1h 기준)
 const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
+
+type CredentialsFailureCode =
+  | 'authorize-rejected'
+  | 'upstream-rejected'
+  | 'api-binding-failure';
+
+class DiagnosticCredentialsSignin extends CredentialsSignin {
+  constructor(code: CredentialsFailureCode) {
+    super();
+    this.code = code;
+  }
+}
 
 async function refreshAccessToken(token: Record<string, unknown>) {
   try {
@@ -45,25 +57,49 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials, request) {
         const expected = process.env.E2E_TEST_SECRET;
-        if (!expected) return null;
+        if (!expected) throw new DiagnosticCredentialsSignin('authorize-rejected');
         const got = request?.headers?.get('x-e2e-test-token');
-        if (got !== expected) return null;
-        const res = await fetch(`${API}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: credentials.email,
-            password: credentials.password,
-          }),
-        });
-        if (!res.ok) return null;
-        const data = await res.json();
-        if (!['consumer', 'admin'].includes(data.user.role)) return null;
+        if (got !== expected) throw new DiagnosticCredentialsSignin('authorize-rejected');
+
+        let res: Response;
+        try {
+          res = await fetch(`${API}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: credentials.email,
+              password: credentials.password,
+            }),
+          });
+        } catch {
+          throw new DiagnosticCredentialsSignin('api-binding-failure');
+        }
+        if (!res.ok) throw new DiagnosticCredentialsSignin('upstream-rejected');
+
+        let data: {
+          accessToken?: unknown;
+          refreshToken?: unknown;
+          user?: { id?: unknown; email?: unknown; name?: unknown; role?: unknown };
+        };
+        try {
+          data = await res.json();
+        } catch {
+          throw new DiagnosticCredentialsSignin('api-binding-failure');
+        }
+        if (
+          !data.user ||
+          !['consumer', 'admin'].includes(String(data.user.role)) ||
+          typeof data.user.id !== 'string' ||
+          typeof data.accessToken !== 'string' ||
+          typeof data.refreshToken !== 'string'
+        ) {
+          throw new DiagnosticCredentialsSignin('api-binding-failure');
+        }
         return {
           id: data.user.id,
-          email: data.user.email,
-          name: data.user.name,
-          role: data.user.role,
+          email: typeof data.user.email === 'string' ? data.user.email : undefined,
+          name: typeof data.user.name === 'string' ? data.user.name : undefined,
+          role: String(data.user.role),
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
         };

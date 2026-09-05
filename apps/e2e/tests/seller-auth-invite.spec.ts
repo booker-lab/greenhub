@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 
-const API = 'https://api-production-13e7.up.railway.app'
+const API = process.env['API_BASE'] ?? 'https://api-production-13e7.up.railway.app'
 const CLEANUP_SCRIPT = resolve(__dirname, '../../../scripts/cleanup-spec-residue.mjs')
 
 /**
@@ -20,8 +20,11 @@ test.describe('POST /auth/register — 초대 토큰 검증', () => {
   test.afterAll(() => {
     if (registeredEmails.length === 0) return
     const r = spawnSync('node', [CLEANUP_SCRIPT, ...registeredEmails], { stdio: 'inherit' })
-    if (r.status !== 0) {
-      console.warn(`[seller-auth-invite] cleanup exit=${r.status}; ${registeredEmails.length} emails may remain`)
+    if (r.error || r.status !== 0) {
+      throw new Error(
+        `[seller-auth-invite] SPEC_OWNED_TEMPORARY cleanup failed: exit=${r.status ?? 'unknown'}; ` +
+          `count=${registeredEmails.length}`,
+      )
     }
   })
   // ── seller: 차단 케이스 ──────────────────────────────────────────
@@ -59,25 +62,25 @@ test.describe('POST /auth/register — 초대 토큰 검증', () => {
 
   test('consumer + inviteToken 없음 → 201', async ({ request }) => {
     const email = `consumer-sec-${Date.now()}@example.com`
+    registeredEmails.push(email)
     const res = await request.post(`${API}/auth/register`, {
       data: { email, password: 'password123', name: '테스트소비자', role: 'consumer' },
     })
     expect(res.status()).toBe(201)
     const body = await res.json()
     expect(body).toHaveProperty('userId')
-    registeredEmails.push(email)
   })
 
   // ── driver: 기존 동작 유지 ───────────────────────────────────────
 
   test('driver + inviteToken 없음 → 201', async ({ request }) => {
     const email = `driver-sec-${Date.now()}@example.com`
+    registeredEmails.push(email)
     const res = await request.post(`${API}/auth/register`, {
       data: { email, password: 'password123', name: '테스트드라이버', role: 'driver' },
     })
     expect(res.status()).toBe(201)
     const body = await res.json()
     expect(body).toHaveProperty('userId')
-    registeredEmails.push(email)
   })
 })

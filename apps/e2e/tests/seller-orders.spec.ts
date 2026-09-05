@@ -170,7 +170,7 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
   })
 
   // ── 세션51 T6-B: SaleTypeToggle (#CL-35) ─────────────────────────────────
-  // 선행: scripts/seed-e2e-orders.mjs 실행 — 일반/공구 주문 + groupProductConfig 시드.
+  // 선행: canonical Preview fixture manifest 실행 — 일반/공구 주문 + groupProductConfig 시드.
 
   test('판매 유형 토글 — 일반/공구 testid 노출 + 기본값 normal', async ({ page }) => {
     await page.goto(`${BASE}/orders`)

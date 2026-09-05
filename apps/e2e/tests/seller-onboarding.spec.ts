@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test'
 import { AUTH_STATE_PATH } from './_helpers/auth'
+import { genericPreviewFixture } from './_helpers/generic-preview'
 
 const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
-const API = 'https://api-production-13e7.up.railway.app'
+const API = process.env['API_BASE'] ?? 'https://api-production-13e7.up.railway.app'
+const fixture = genericPreviewFixture()
 
 // ── 비인증 ────────────────────────────────────────────────────────────────────
 
@@ -91,7 +93,7 @@ test.describe('B1 — GET /stores/:storeId API', () => {
   test.skip(skipAuth, '환경변수 TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD 필요')
 
   let accessToken: string
-  const TEST_STORE_ID = '9b2cb652-ff77-46b9-a773-e1efa78fb763'
+  const TEST_STORE_ID = fixture.storeId
 
   test.beforeAll(async ({ request }) => {
     const res = await request.post(`${API}/auth/login`, {
