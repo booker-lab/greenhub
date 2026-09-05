@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { OrderCapacityService } from '../src/orders/order-capacity.service';
 import { OrdersQueryService } from '../src/orders/orders-query.service';
 import { RoundOrderLifecycleService } from '../src/orders/round-order-lifecycle.service';
@@ -27,6 +27,10 @@ function baseRecords(): Record<string, Data> {
       schedule: {
         orderOpenAt: '2026-07-01T00:00:00.000Z',
         orderCloseAt: '2099-07-20T00:00:00.000Z',
+        auctionAt: '2099-07-20T09:00:00.000Z',
+        deliveryStartAt: '2099-07-21T00:00:00.000Z',
+        deliveryEndAt: '2099-07-21T09:00:00.000Z',
+        timezone: 'Asia/Seoul',
       },
       limits: { maxDeliveryAddresses: 15, maxItemQuantity: 30 },
       counters,
@@ -124,7 +128,16 @@ function makeFixture(overrides: Record<string, Data> = {}) {
     { saveRecord: jest.fn().mockResolvedValue(undefined) } as never,
     { refundByOrderId: jest.fn().mockResolvedValue(undefined) } as never,
   );
-  return { ...memory, capacity, payments, lifecycle, roundState, queries, finalization };
+  return {
+    ...memory,
+    capacity,
+    payments,
+    settlements,
+    lifecycle,
+    roundState,
+    queries,
+    finalization,
+  };
 }
 
 describe('회차 직배송 실제 서비스 정합성', () => {
@@ -253,5 +266,69 @@ describe('회차 직배송 실제 서비스 정합성', () => {
       status: 'OPEN',
       closeReason: null,
     });
+  });
+
+  it('동시에 들어온 상태 전이는 transaction의 현재 상태를 기준으로 하나만 수렴시킨다', async () => {
+    const fixture = makeFixture({
+      'saleRounds/round-1': {
+        ...baseRecords()['saleRounds/round-1'],
+        status: 'SCHEDULED',
+        closeReason: null,
+      },
+    });
+
+    const results = await Promise.allSettled([
+      fixture.roundState.updateStatus({
+        storeId: 'store-1',
+        roundId: 'round-1',
+        expectedStatus: 'SCHEDULED',
+        nextStatus: 'OPEN',
+      }),
+      fixture.roundState.updateStatus({
+        storeId: 'store-1',
+        roundId: 'round-1',
+        expectedStatus: 'SCHEDULED',
+        nextStatus: 'CLOSED',
+      }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')[0]).toMatchObject({
+      reason: expect.any(ConflictException),
+    });
+    expect(fixture.read('saleRounds/round-1')).toMatchObject({ status: 'OPEN' });
+  });
+
+  it('로컬 취소 후 정산 단계에서 중단된 주문도 재시도에서 회차와 함께 수렴한다', async () => {
+    const fixture = makeFixture();
+    fixture.settlements.cancelSettlement
+      .mockRejectedValueOnce(new Error('정산 취소 일시 실패'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      fixture.roundState.cancel({
+        storeId: 'store-1',
+        roundId: 'round-1',
+        expectedStatus: 'OPEN',
+        reason: '회차 취소',
+      }),
+    ).rejects.toThrow('정산 취소 일시 실패');
+    expect(fixture.read('orders/order-1')).toMatchObject({
+      status: 'CANCELLED',
+      cancellation: { status: 'LOCAL_FAILED' },
+    });
+
+    await expect(
+      fixture.roundState.cancel({
+        storeId: 'store-1',
+        roundId: 'round-1',
+        reason: '회차 취소 재시도',
+      }),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+    expect(fixture.read('orders/order-1')).toMatchObject({
+      status: 'CANCELLED',
+      cancellation: { status: 'COMPLETED' },
+    });
+    expect(fixture.settlements.cancelSettlement).toHaveBeenCalledTimes(2);
   });
 });

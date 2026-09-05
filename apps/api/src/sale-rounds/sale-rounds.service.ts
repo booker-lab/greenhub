@@ -13,6 +13,7 @@ import type {
   UpdateSaleRoundDto,
   UpdateSaleRoundStatusDto,
 } from './dto/sale-round.dto';
+import { assertScheduleOrder as assertCanonicalScheduleOrder } from './sale-round-state.contract';
 import { SaleRoundStateService } from './sale-round-state.service';
 
 type RoundWithItems = SaleRound & { items: SaleRoundItem[] };
@@ -129,24 +130,33 @@ export class SaleRoundsService {
   ): Promise<RoundWithItems> {
     await this.assertSellerOwnsStore(storeId, requesterId, role);
     if (dto.schedule) this.assertScheduleOrder(dto.schedule);
-    const round = await this.getStoredRound(storeId, roundId);
-    if (!['DRAFT', 'SCHEDULED'].includes(round.status)) {
-      throw new ConflictException('작성 중 또는 판매 예정 회차만 수정할 수 있습니다.');
-    }
+    const roundRef = this.firestore.doc(`saleRounds/${roundId}`);
+    let result: RoundWithItems | null = null;
+    await this.firestore.runTransaction(async (tx: any) => {
+      const roundSnap = await tx.get(roundRef);
+      if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
+        throw new NotFoundException('회차를 찾을 수 없습니다.');
+      }
+      const round = roundSnap.data() as SaleRound;
+      this.assertRoundEditable(round);
+      const currentItems = await this.getRoundItemsInTransaction(tx, roundId, storeId);
+      const now = this.firestore.Timestamp.now();
+      const nextItems = dto.items
+        ? await this.buildItemDocsInTransaction(tx, storeId, roundId, dto.items, now)
+        : null;
+      if ((nextItems || dto.limits !== undefined) && this.hasRoundUsage(round, currentItems)) {
+        throw new ConflictException('예약 또는 주문이 사용 중인 회차 상품과 한도는 수정할 수 없습니다.');
+      }
 
-    const now = this.firestore.Timestamp.now();
-    const update: Record<string, unknown> = { updatedAt: now };
-    if (dto.name !== undefined) update['name'] = dto.name;
-    if (dto.schedule !== undefined) update['schedule'] = dto.schedule;
-    if (dto.deliveryRegion !== undefined) update['deliveryRegion'] = dto.deliveryRegion;
-    if (dto.limits !== undefined) update['limits'] = dto.limits;
-    if (dto.carrotLandingUrl !== undefined) update['carrotLandingUrl'] = dto.carrotLandingUrl;
+      const update: Record<string, unknown> = { updatedAt: now };
+      if (dto.name !== undefined) update['name'] = dto.name;
+      if (dto.schedule !== undefined) update['schedule'] = dto.schedule;
+      if (dto.deliveryRegion !== undefined) update['deliveryRegion'] = dto.deliveryRegion;
+      if (dto.limits !== undefined) update['limits'] = dto.limits;
+      if (dto.carrotLandingUrl !== undefined) update['carrotLandingUrl'] = dto.carrotLandingUrl;
 
-    const nextItems = dto.items ? await this.buildItemDocs(storeId, roundId, dto.items, now) : null;
-    await this.writeTransaction(async (tx) => {
-      tx.update(this.firestore.doc(`saleRounds/${roundId}`), update);
+      tx.update(roundRef, update);
       if (nextItems) {
-        const currentItems = await this.getRoundItems(roundId, storeId);
         for (const item of currentItems) {
           tx.delete(this.firestore.doc(`saleRoundItems/${item.id}`));
         }
@@ -154,13 +164,14 @@ export class SaleRoundsService {
           tx.set(this.firestore.doc(`saleRoundItems/${item.id}`), item);
         }
       }
+      result = this.normalizeRoundWithItems({
+        ...round,
+        ...update,
+        items: nextItems ?? currentItems,
+      } as RoundWithItems);
     });
 
-    return this.normalizeRoundWithItems({
-      ...round,
-      ...update,
-      items: nextItems ?? (await this.getRoundItems(roundId, storeId)),
-    } as RoundWithItems);
+    return result!;
   }
   async copyRound(
     storeId: string,
@@ -194,13 +205,11 @@ export class SaleRoundsService {
     dto: UpdateSaleRoundStatusDto,
   ) {
     await this.assertSellerOwnsStore(storeId, requesterId, role);
-    const round = await this.getStoredRound(storeId, roundId);
     if (dto.status === 'COMPLETED') {
       return this.roundState
         .complete({
           storeId,
           roundId,
-          expectedStatus: round.status,
         })
         .then((value) => this.normalizeRound(value));
     }
@@ -209,7 +218,6 @@ export class SaleRoundsService {
         .cancel({
           storeId,
           roundId,
-          expectedStatus: round.status,
           reason: '판매 회차 취소',
         })
         .then((value) => this.normalizeRound(value));
@@ -217,7 +225,6 @@ export class SaleRoundsService {
     const result = await this.roundState.updateStatus({
       storeId,
       roundId,
-      expectedStatus: round.status,
       nextStatus: dto.status,
     });
     return this.normalizeRound(result);
@@ -232,9 +239,8 @@ export class SaleRoundsService {
     role: string,
   ): Promise<SaleRound> {
     await this.assertSellerOwnsStore(storeId, requesterId, role);
-    const round = await this.getStoredRound(storeId, roundId);
     return this.normalizeRound(
-      await this.roundState.complete({ storeId, roundId, expectedStatus: round.status }),
+      await this.roundState.complete({ storeId, roundId }),
     );
   }
   private async assertSellerOwnsStore(storeId: string, requesterId: string, role: string) {
@@ -269,6 +275,23 @@ export class SaleRoundsService {
       .get();
     return snap.docs
       .map((doc: any) => this.normalizeItem(doc.data() as SaleRoundItem))
+      .filter((item) => item.storeId === storeId)
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+  }
+
+  private async getRoundItemsInTransaction(
+    tx: any,
+    roundId: string,
+    storeId: string,
+  ): Promise<SaleRoundItem[]> {
+    const snap = await tx.get(
+      this.firestore.collection('saleRoundItems').where('roundId', '==', roundId),
+    );
+    return snap.docs
+      .map((doc: any) => {
+        const data = doc.data() as SaleRoundItem;
+        return this.normalizeItem({ ...data, id: data.id ?? doc.id });
+      })
       .filter((item) => item.storeId === storeId)
       .sort((a, b) => a.displayOrder - b.displayOrder);
   }
@@ -358,6 +381,63 @@ export class SaleRoundsService {
     return docs;
   }
 
+  private async buildItemDocsInTransaction(
+    tx: any,
+    storeId: string,
+    roundId: string,
+    items: Array<{
+      productId: string;
+      roundPrice: number;
+      saleLimitQuantity: number;
+      displayOrder: number;
+    }>,
+    now: unknown,
+  ): Promise<SaleRoundItem[]> {
+    const productSnaps = await Promise.all(
+      items.map((item) => tx.get(this.firestore.doc(`products/${item.productId}`))),
+    );
+    return items.map((item, index) => {
+      const snap = productSnaps[index];
+      if (!snap.exists || snap.data()?.['storeId'] !== storeId) {
+        throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
+      }
+      const product = snap.data()!;
+      return {
+        id: uuidv4(),
+        roundId,
+        storeId,
+        productId: item.productId,
+        productNameSnapshot: product['name'],
+        productImageUrlSnapshot: Array.isArray(product['images']) ? product['images'][0] : null,
+        roundPrice: item.roundPrice,
+        saleLimitQuantity: item.saleLimitQuantity,
+        reservedQuantity: 0,
+        orderedQuantity: 0,
+        displayOrder: item.displayOrder,
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+      } as unknown as SaleRoundItem;
+    });
+  }
+
+  private assertRoundEditable(round: SaleRound) {
+    if (!['DRAFT', 'SCHEDULED'].includes(round.status) || round.cancellation != null) {
+      throw new ConflictException('작성 중 또는 판매 예정인 미사용 회차만 수정할 수 있습니다.');
+    }
+  }
+
+  private hasRoundUsage(round: SaleRound, items: SaleRoundItem[]) {
+    const counters = round.counters ?? ({} as SaleRound['counters']);
+    return (
+      (counters.reservedDeliveryAddresses ?? 0) > 0 ||
+      (counters.reservedItemQuantity ?? 0) > 0 ||
+      (counters.orderedDeliveryAddresses ?? 0) > 0 ||
+      (counters.orderedItemQuantity ?? 0) > 0 ||
+      items.some((item) => item.reservedQuantity > 0 || item.orderedQuantity > 0)
+    );
+  }
+
   private async updateRoundDoc(round: SaleRound, update: Record<string, unknown>) {
     await this.writeTransaction(async (tx) => {
       tx.update(this.firestore.doc(`saleRounds/${round.id}`), update);
@@ -400,17 +480,7 @@ export class SaleRoundsService {
     deliveryStartAt: string;
     deliveryEndAt: string;
   }) {
-    const orderOpenAt = new Date(schedule.orderOpenAt).getTime();
-    const orderCloseAt = new Date(schedule.orderCloseAt).getTime();
-    const auctionAt = new Date(schedule.auctionAt).getTime();
-    const deliveryStartAt = new Date(schedule.deliveryStartAt).getTime();
-    const deliveryEndAt = new Date(schedule.deliveryEndAt).getTime();
-    if (
-      !(orderOpenAt < orderCloseAt && orderCloseAt <= auctionAt && auctionAt <= deliveryStartAt) ||
-      !(deliveryStartAt < deliveryEndAt)
-    ) {
-      throw new ConflictException('회차 일정 순서가 올바르지 않습니다.');
-    }
+    assertCanonicalScheduleOrder(schedule);
   }
 
   private emptyCounters() {

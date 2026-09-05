@@ -5,6 +5,9 @@ export interface SaleRoundCancellation {
     status: SaleRoundCancellationStatus;
     reason: string;
     failedOrderId: string | null;
+    ownerId?: string | null;
+    leaseId?: string | null;
+    leaseExpiresAt?: string | null;
     updatedAt: string;
     completedAt: string | null;
 }
