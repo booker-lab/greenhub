@@ -1,6 +1,8 @@
 # Deployment Safety Guards — 2026-08-23
 
-> 상태: `partially_resolved_admin_gate`
+> 상태: `resolved_repo_and_github_gate`
+>
+> 마지막 직접 재조회: `2026-09-05 KST`
 >
 > 목적: `main` 통합과 production 배포를 분리하고, 문서 변경이 production/Preview/E2E를 불필요하게 움직이지 않도록 한다.
 
@@ -36,12 +38,11 @@ Vercel Hobby build-rate-limit은 별도 신호다.
 - 따라서 이 상태는 app build failure나 deployment 회귀로 간주하지 않는다.
 - 실제 배포 여부는 Vercel deployment 목록과 metadata로 확인하고, repository invariant는 `Deployment safety guard` CI로 확인한다.
 
-## 남은 P0 관리자 게이트
+## GitHub main 관리자 게이트 — 완료
 
-- GitHub `main`은 2026-08-23 재조회 기준 여전히 `protected=false`다.
-- 연결된 GitHub 도구에는 branch protection/ruleset mutation이 노출되지 않는다.
-- 실행 환경에도 인증된 GitHub 관리자 UI 세션·GitHub CLI/token이 없어 자동 적용하지 못했다.
-- 관리자 설정 작업은 Issue #32 `P0: main branch protection / ruleset 활성화`로 추적한다.
+- GitHub `main`은 2026-09-05 직접 재조회에서 `protected=true`다.
+- PR required, strict `Deployment safety guard / verify` required check, force push 차단, branch deletion 차단을 확인했다.
+- Issue #32 `P0: main branch protection / ruleset 활성화`는 `CLOSED`다.
 
 Issue #32 완료 조건:
 
@@ -113,4 +114,4 @@ production은 다음 조건을 모두 충족한 뒤에만 실행한다.
 - repo-side guard: PR #30, PR #31
 - feature-branch docs-only 검증: `ebf44c104b2e8758733fd14501fd0e820d575ae4`
 - main docs-only 검증: PR #33
-- 관리자 잔여 작업: Issue #32
+- 관리자 게이트: Issue #32 `CLOSED`; 위 exact-SHA·production 별도 승인 계약은 계속 유지

@@ -339,6 +339,10 @@ export class AuthService {
       throw new ForbiddenException('접근 권한이 없습니다.');
     }
 
+    if (role === 'driver' && userData['driverApproved'] !== true) {
+      throw new ForbiddenException('승인된 드라이버만 로그인할 수 있습니다.');
+    }
+
     const { accessToken, refreshToken } = await this.issueTokens({
       sub: userData['id'] as string,
       role: role as JwtPayload['role'],

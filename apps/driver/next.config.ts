@@ -15,9 +15,20 @@ const securityHeaders = [
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
 ];
 
+const pilotPhotoPermissionsPolicy = {
+  key: 'Permissions-Policy',
+  value: 'camera=(self), microphone=(), geolocation=()',
+};
+
 const nextConfig: NextConfig = {
   async headers() {
-    return [{ source: '/(.*)', headers: securityHeaders }];
+    return [
+      { source: '/(.*)', headers: securityHeaders },
+      {
+        source: '/board/:orderId/photo/round-direct',
+        headers: [pilotPhotoPermissionsPolicy],
+      },
+    ];
   },
   images: {
     remotePatterns: [

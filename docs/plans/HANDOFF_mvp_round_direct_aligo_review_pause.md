@@ -4,7 +4,7 @@
 
 > 현재 재개 지점만 관리한다. 상세 상태는 `docs/memory.md`, Acceptance Criteria는 `docs/BACKLOG.md`, 의존성은 `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`를 따른다.
 
-## 현재 상태 — 2026-08-27 KST
+## 현재 상태 — 2026-09-05 KST
 
 - 회차 직배송 MVP `main` 통합 완료.
 - 카카오 비즈니스 채널, ALIGO 발신 프로필·senderkey 준비 완료.
@@ -14,6 +14,10 @@
 - production ALIGO 설정 미반영.
 - 첫 운영 회차 미생성, `salesMode=legacy`.
 - production은 exact release SHA + 별도 승인 절차를 사용한다.
+- S2 Browser Readiness와 R1 Combined Public Readiness는 각각 `CLOSED`·`PUBLIC_READINESS_CLOSED`이며 S2 → R1 campaign은 `TERMINAL_SUCCESS`다. 세부 상태는 `docs/memory.md`가 소유한다.
+- exact-source Browser R3는 `PASS`, physical-device disposition은 `PHYSICAL_DEVICE_NOT_REQUIRED`다. physical-device proof나 production activation을 완료했다고 해석하지 않는다.
+- accepted source authority는 `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`이며, exact-source Driver Preview는 `preview / READY`다.
+- 다음 재개 의존성은 `PUBLICATION_TOPOLOGY_CONVERGENCE`다.
 
 ALIGO 8종 provider 심사 차단점은 해소됐다. 승인 증거는 `docs/reports/REPORT_aligo_template_approval_20260827.md`를 따른다. 다음 ALIGO 단계는 provider code 1:1 매핑 확인 → 승인된 템플릿 격리 알림톡 → SMS fallback 검증이며, 실제 발송과 production 설정은 별도 승인 경계를 유지한다.
 
@@ -29,21 +33,18 @@ ALIGO 8종 provider 심사 차단점은 해소됐다. 승인 증거는 `docs/rep
 8. `SETTLEMENT-LIFECYCLE-COVERAGE`
 9. `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
 10. `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
-11. Issue #32
 
-## Task 2F-B publication reconciliation
+## 현재 source·publication reconciliation
 
-현재 workspace에서 P0/security integration candidate의 문서 정합화까지 완료했다.
+- 작업 시작 branch: `main`
+- 작업 시작 source HEAD/local `main`: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
+- 작업 시작 local `origin/main` 및 live remote `main`: `aba3013f6dd352316fbf542cda4e1fd33117a534`
+- remote `main`은 source HEAD의 조상이며 local source는 7개 commit 앞서 있었다.
+- GitHub `main`은 `protected=true`, PR required, strict `verify` required check, force-push·branch 삭제 차단 상태다. Issue #32는 `CLOSED`다.
+- 문서 변경은 repository 규칙에 따라 purpose branch + PR로 수렴해야 하며 direct main commit/push는 하지 않는다.
+- `AUTH-SESSION-CLAIM-REVOCATION`과 나머지 broader release P0는 여전히 별도 재개 대상이다. S2 → R1 closure를 이유로 이를 닫거나 다시 열지 않는다.
 
-- candidate: `codex/task-2c-r1-reg001` / Task 2F-A auth change `1da3dee`
-- 상태: `TASK_2F_B_PUBLICATION_CANDIDATE`
-- candidate에서 종료: `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001`
-- evidence: [Task 2D integration closeout report](REPORT_task_2d_integration_closeout.md)
-- candidate auth 추가 검증: public register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계.
-- 현재 `origin/main`: `d6185bd`; candidate는 아직 main/production에 반영되지 않았다.
-- `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이며 refresh/session lifecycle 완료를 주장하지 않는다.
-
-다음 재개 지점은 candidate를 현재 main에 branch+PR로 통합하고 PR CI를 확인하는 절차다. 이후 `AUTH-SESSION-CLAIM-REVOCATION`, 최신 main의 redelivery 상태머신, admin refund, legal, ALIGO provider 실제 검증, exact-SHA E2E와 production 승인 게이트를 순서대로 진행한다.
+다음 재개 지점은 `PUBLICATION_TOPOLOGY_CONVERGENCE`다. 이후 `AUTH-SESSION-CLAIM-REVOCATION`, 최신 main의 redelivery 상태머신, admin refund, legal, ALIGO provider 실제 검증, exact-SHA E2E와 production 승인 게이트를 별도 순서로 진행한다.
 
 ## 최우선 재개 — Driver 승인 + direct read 결합 위험
 
@@ -133,7 +134,7 @@ checkout consent는 order+retention에 저장되지만 MY 설정은 별도 user 
 - Order mutation authorization: `docs/specs/api/orders.md`
 - Admin force-refund: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`
 - Admin privileged mutation coverage: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`, `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`
-- GitHub main protection: Issue #32 / deployment safety plan
+- GitHub main protection: `protected=true`, Issue #32 `CLOSED` / deployment safety plan
 
 ## 지금 하지 말 것
 
@@ -161,13 +162,12 @@ checkout consent는 order+retention에 저장되지만 MY 설정은 별도 user 
 8. settlement create/confirm/cancel core lifecycle 회귀
 9. marketing consent lifecycle 정책 결정·구현·회귀
 10. webhook signature real-verifier 회귀
-11. Issue #32
-12. read-only 문서/코드 감사
-13. ALIGO provider code 1:1 매핑 read-only 확인
+11. read-only 문서/코드 감사
+12. ALIGO provider code 1:1 매핑 read-only 확인
 
 ## ALIGO 승인 완료 후
 
-1. P0 10개 + Issue #32 완료 확인
+1. P0 10개 완료 확인 — Issue #32 main protection은 이미 `CLOSED`
 2. provider code 1:1 검사
 3. 승인된 8종 기준 격리 알림톡
 4. SMS fallback
@@ -189,6 +189,7 @@ checkout consent는 order+retention에 저장되지만 MY 설정은 별도 user 
 - [x] 8종 등록·심사 요청
 - [x] ALIGO 8종 승인 — 2026-08-27 provider UI 확인
 - [x] repo-side main auto-production 차단
+- [x] S2 → R1 Public Readiness closure 기록 — 상세는 `docs/memory.md`
 - [ ] driver approval/session revocation + public register/login gate
 - [ ] order direct read 최소화
 - [ ] 재배송 payment-required 상태머신 + 직접 회귀 + main
@@ -199,7 +200,7 @@ checkout consent는 order+retention에 저장되지만 MY 설정은 별도 user 
 - [ ] settlement core lifecycle coverage
 - [ ] marketing consent lifecycle consistency
 - [ ] webhook signature real-verifier coverage
-- [ ] Issue #32
+- [x] Issue #32 — GitHub main protection 직접 재확인
 - [ ] provider code 1:1 매핑 검증
 - [ ] 실제 알림톡/SMS fallback
 - [ ] legal

@@ -1,6 +1,8 @@
 import {
   isProductionRuntime,
   RuntimeConfigurationError,
+  resolveFirebaseAdminSettings,
+  shouldEnableScheduledJobs,
   validateRuntimeConfig,
 } from './runtime-config';
 
@@ -17,6 +19,18 @@ const validProductionConfig = {
   JWT_REFRESH_SECRET: 'refresh-secret',
   PORTONE_V2_SECRET: 'portone-secret',
   PORTONE_WEBHOOK_SECRET: 'webhook-secret',
+};
+
+const validLocalRuntimeConfig = {
+  NODE_ENV: 'development',
+  GREENHUB_LOCAL_RUNTIME: 'true',
+  GREENHUB_SCHEDULES_ENABLED: 'false',
+  FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080',
+  FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099',
+  FIREBASE_PROJECT_ID: 'greenhub-local',
+  FIREBASE_STORAGE_BUCKET: 'greenhub-local.appspot.com',
+  GOOGLE_APPLICATION_CREDENTIALS: '',
+  FIREBASE_SERVICE_ACCOUNT_JSON: '',
 };
 
 describe('API 런타임 구성 fail-closed 계약', () => {
@@ -86,5 +100,52 @@ describe('API 런타임 구성 fail-closed 계약', () => {
     expect(() =>
       validateRuntimeConfig({ NODE_ENV: 'production', RAILWAY_ENVIRONMENT_NAME: 'staging' }),
     ).not.toThrow();
+  });
+
+  it('local runtime은 loopback emulator와 scheduler 비활성화가 모두 있어야 통과한다', () => {
+    expect(validateRuntimeConfig(validLocalRuntimeConfig)).toBe(validLocalRuntimeConfig);
+    expect(resolveFirebaseAdminSettings(validLocalRuntimeConfig)).toEqual({
+      projectId: 'greenhub-local',
+      storageBucket: 'greenhub-local.appspot.com',
+      serviceAccount: undefined,
+    });
+    expect(shouldEnableScheduledJobs(validLocalRuntimeConfig)).toBe(false);
+  });
+
+  it.each([
+    ['운영 Firebase project', { FIREBASE_PROJECT_ID: 'green-e4fe3' }],
+    ['Firestore emulator 누락', { FIRESTORE_EMULATOR_HOST: '' }],
+    ['Auth emulator 누락', { FIREBASE_AUTH_EMULATOR_HOST: '' }],
+    ['scheduler 활성화', { GREENHUB_SCHEDULES_ENABLED: 'true' }],
+    ['credential 경로 설정', { GOOGLE_APPLICATION_CREDENTIALS: 'local-credential.json' }],
+    ['storage bucket 불일치', { FIREBASE_STORAGE_BUCKET: 'green-e4fe3.appspot.com' }],
+  ])('local runtime의 %s를 거부한다', (_name, override) => {
+    expect(() => validateRuntimeConfig({ ...validLocalRuntimeConfig, ...override })).toThrow(
+      RuntimeConfigurationError,
+    );
+  });
+
+  it('비운영 실행에서 알려진 운영 Firebase project를 거부한다', () => {
+    expect(() =>
+      validateRuntimeConfig({ NODE_ENV: 'development', FIREBASE_PROJECT_ID: 'green-e4fe3' }),
+    ).toThrow(RuntimeConfigurationError);
+  });
+
+  it('비운영 실행에서 운영 project의 service account만 설정된 경우도 거부한다', () => {
+    expect(() =>
+      validateRuntimeConfig({
+        NODE_ENV: 'development',
+        FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+          project_id: 'green-e4fe3',
+          client_email: 'firebase@example.test',
+          private_key: 'private-key',
+        }),
+      }),
+    ).toThrow(RuntimeConfigurationError);
+  });
+
+  it('scheduler는 명시적으로 끈 경우에만 끄고 기본은 기존 활성 동작을 유지한다', () => {
+    expect(shouldEnableScheduledJobs({ NODE_ENV: 'production' })).toBe(true);
+    expect(shouldEnableScheduledJobs({ GREENHUB_SCHEDULES_ENABLED: 'false' })).toBe(false);
   });
 });

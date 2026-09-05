@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import {
+  configuredCorsOrigins,
   configuredVercelPreviewProjects,
   isAllowedVercelPreviewOrigin,
 } from './common/cors-origin';
@@ -16,11 +17,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
   app.useGlobalInterceptors(new TimestampInterceptor());
 
-  const allowedOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',')
-        .map((o) => o.trim())
-        .filter(Boolean)
-    : [];
+  const allowedOrigins = configuredCorsOrigins();
 
   // Vercel preview 배포는 브랜치마다 URL이 달라 CORS_ORIGIN 정적 목록으로
   // 관리 불가 — jos-projects-d1cecc0c 팀 스코프로 한정한 패턴으로만 허용.

@@ -15,6 +15,7 @@ import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { OrdersQueryService } from './orders-query.service';
 import { RoundOrderCreateService } from './round-order-create.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
+import { DriverOrderScopeService } from './driver-order-scope.service';
 
 @Module({
   imports: [
@@ -33,9 +34,15 @@ import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
     OrdersQueryService,
     OrdersLifecycleService,
     RoundOrderLifecycleService,
+    DriverOrderScopeService,
     OrderChargesService,
     DeliveryPhotosService,
   ],
-  exports: [OrdersService, OrdersQueryService, RoundOrderLifecycleService],
+  exports: [
+    OrdersService,
+    OrdersQueryService,
+    RoundOrderLifecycleService,
+    DriverOrderScopeService,
+  ],
 })
 export class OrdersModule {}

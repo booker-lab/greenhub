@@ -6,8 +6,8 @@
 
 ## 검증 기준
 
-- Git·GitHub: `2026-08-24 KST`
-- Vercel 배포 안전 증거: `2026-08-23 KST`
+- Git·GitHub: `2026-09-05 KST` 직접 재조회
+- Vercel 배포 안전·exact-source Preview: `2026-09-05 KST` 직접 재조회
 - ALIGO 마지막 provider 상태: `2026-08-27 KST`
 - 운영 상태 변경은 별도 승인 없이 수행하지 않는다.
 
@@ -15,27 +15,55 @@
 
 - 저장소: `booker-lab/greenhub`
 - 기본 브랜치: `main`; HEAD는 작업 시작 시 직접 재조회한다.
-- 회차 직배송 기능 통합 기준 SHA: `e55f25914cc7d01576fbd4639583daaf0fe6385e`
+- 회차 직배송 기능 통합 기준 SHA(이전 기능 기준선): `e55f25914cc7d01576fbd4639583daaf0fe6385e`
+- 이번 S2 → R1 문서화의 accepted source authority: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
 - PR #30/#31로 세 프런트의 `main` Vercel Git auto-production과 pure-doc build를 repo-side 차단했다.
 - docs-only main 변경은 Preview sync/일반 E2E 제외.
 - `AGENTS.md` + deployment safety CI가 branch+PR 원칙을 소유한다.
-- GitHub `main` 자체 보호는 Issue #32가 남아 있다.
+- GitHub `main`은 직접 재조회에서 `protected=true`이며 PR required, strict `verify` check, force-push·branch 삭제 차단이 적용됐다. Issue #32는 `CLOSED`다.
 
 `main` merge는 production 배포 승인이 아니다. production은 검증된 exact release SHA + 별도 승인 절차를 사용한다.
 
-## Task 2F-B integration candidate closeout
+## S2 → R1 Public Readiness 종료 상태
 
-현재 workspace 기준 검증 상태와 `origin/main` 상태를 분리한다.
+> 아래 `CLOSED`·`PASS` 상태는 이번 Goal에 포함된 Control Tower accepted closure snapshot으로 기록한다. 이 docs-only 작업에서는 Browser R3, physical device, fixture provisioning/cleanup을 재실행하지 않았으며, source·Git·Vercel publication provenance만 직접 재조회했다.
 
-- 현재 branch: `codex/task-2c-r1-reg001`
-- Task 2F-A auth change: `1da3dee261fec6b8da8f17c1afc86e13c8cd8eaf`
-- candidate 기준: `TASK_2F_B_PUBLICATION_CANDIDATE`
-- `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001`: candidate에서 검증·종료
-- candidate는 `origin/main` `d6185bd676d79214ccd4949209162900e4a69bc0` 기준이며 아직 main에 반영되지 않았다.
-- merge-base도 `d6185bd676d79214ccd4949209162900e4a69bc0`이다.
-- candidate는 public register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계를 검증한다. `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이다.
+- S2 Browser Readiness: `CLOSED`
+- exact-source Browser R3: `PASS`
+- physical-device disposition: `PHYSICAL_DEVICE_NOT_REQUIRED` — physical-device proof를 수행했다고 주장하지 않는다.
+- canonical R3 fixture cleanup: `CLOSED`
+  - project: `greenhub-round-direct-e2e`
+  - runId: `s2-authbound-20260904-r3`
+  - manifest ownership: `4/4`
+  - exact Firestore documents: `4 deleted`
+  - Storage targets: `0`
+  - independent readback: `4/4 HTTP 404`
+- R1 Combined Public Readiness: `PUBLIC_READINESS_CLOSED`
+- S2 → R1 campaign: `TERMINAL_SUCCESS`
+- canonical accepted source: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
+- accepted Driver Preview: deployment `dpl_4UVQ2BuTNfrBc1zm68X5Kjbvu9PE`, target `preview`, state `READY`. Vercel metadata의 `gitCommitSha`·`githubCommitSha`가 accepted source와 일치했다.
 
-검증 상세는 [Task 2D integration closeout report](plans/REPORT_task_2d_integration_closeout.md)를 따른다. 아래 출시 P0 서술은 현재 main의 미통합 상태를 설명하며, candidate에서 검증된 remediation을 main 완료로 해석하지 않는다.
+## Readiness·publication·production 구분
+
+- `SEMANTIC_READY`: `YES` — 위 S2 → R1 accepted semantic state가 정확한 source authority에 연결돼 있다.
+- `PUBLISHABLE`: `NO` — 현재 `main`은 PR required 보호 상태이고, 작업 시작 시 local source가 live remote보다 7개 commit 앞서 있었으므로 policy-compliant branch+PR 수렴이 필요하다.
+- `PUBLISHED`: `PREVIEW ONLY` — 위 Vercel Preview만 exact source로 `READY`였고, live remote `main`에는 아직 local source와 이번 문서 commit이 게시되지 않았다.
+- production publication/deployment/activation 및 first live round: `NOT DONE` / `NOT CLAIMED`.
+- 다음 단일 의존성: `PUBLICATION_TOPOLOGY_CONVERGENCE`. 이는 production release나 activation이 아니다.
+
+## 현재 source·publication 기준
+
+작업 시작 시 live authority를 read-only로 확인한 결과를 기록한다. 문서 변경 후 생기는 commit은 이 source baseline과 별도의 publication candidate다.
+
+- 작업 시작 branch: `main`
+- 작업 시작 source HEAD/local `main`: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
+- 작업 시작 local `origin/main`: `aba3013f6dd352316fbf542cda4e1fd33117a534`
+- 작업 시작 live remote `main`: `aba3013f6dd352316fbf542cda4e1fd33117a534`
+- remote `main`은 local source HEAD의 조상이며 local source는 7개 commit 앞서 있었다.
+- 잘못된 transcription `7cc4d9862dd49b68fb1542e49c53bf953bfdf59c`는 Git object가 아니며 target ref로 사용하지 않는다.
+- GitHub main 보호 때문에 direct main commit/push는 금지되며, 문서 변경은 purpose branch + PR 경계를 따른다.
+
+기존 Task 2F-B candidate의 상세는 [Task 2D integration closeout report](plans/REPORT_task_2d_integration_closeout.md)와 해당 historical handoff를 따른다. 아래 출시 P0 서술은 S2 → R1 campaign 종료와 별개의 broader release dependency이며, 이번 문서화로 자동 종료하거나 다시 열지 않는다.
 
 ## 제품 현재 상태
 
@@ -49,15 +77,17 @@
 
 ## 현재 확인된 출시 P0
 
+> S2 → R1 campaign의 종료는 아래 broader release P0를 production-ready로 만들지 않으며, 닫힌 S2·S3A·S3B·S4 작업을 새로 재수용하지 않는다.
+
 ### 1. Driver 승인·세션 권한 — 최우선 security coupling
 
-관리자 승인 전 driver 권한을 얻을 수 없어야 한다. Task 2F-B candidate에서 다음 approval-gate 하위 범위가 검증됐다.
+관리자 승인 전 driver 권한을 얻을 수 없어야 한다. 현재 accepted source에서 다음 approval-gate 하위 범위가 검증됐다.
 
 - public `register(role=driver)`는 `driverApproved: false`를 저장하고 client approval 주입을 거부한다.
 - public `register → login`의 false/missing approval driver는 token side effect 전에 거부된다.
 - 신규/legacy Kakao driver 자동승인이 제거됐고, JWT strategy/Firebase custom-token 경계가 current user 상태를 확인한다.
 
-**candidate approval gate/current-user boundary = VERIFIED (main 통합 대기)**. `AUTH-SESSION-CLAIM-REVOCATION`의 refresh/stale-claim/session lifecycle은 **OPEN**이며, broad driver Firestore read와 결합 위험도 남는다.
+**S4 Driver/Auth Initial Gate = CLOSED**. `AUTH-SESSION-CLAIM-REVOCATION`의 refresh/stale-claim/session lifecycle은 **OPEN**이며, broad driver Firestore read와 결합 위험도 남는다.
 
 이 P0는 broad driver Firestore read가 남아 있는 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`과 결합 위험이 크므로 우선 함께 닫는다.
 
@@ -144,7 +174,7 @@ ownership guard는 구현돼 있으나 타-store seller·비담당 driver·first
 
 ### 11. GitHub main protection
 
-repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required check/force-push·delete 차단은 Issue #32가 남아 있다.
+repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protected=true`, PR required, strict `verify` required check, force-push·delete 차단이며 Issue #32는 `CLOSED`다.
 
 ## ALIGO 상태
 
@@ -210,11 +240,10 @@ repo-side 배포 방어는 완료. GitHub 관리자 레벨 PR required/required 
 
 ## 다음 작업
 
-1. Task 2F-B candidate PR CI/merge를 진행하고, 이후 `AUTH-SESSION-CLAIM-REVOCATION` + `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION` 결합 위험을 해결·직접 회귀한다.
+1. `PUBLICATION_TOPOLOGY_CONVERGENCE`: local source와 문서 candidate를 branch+PR, required `verify` check, remote read-back으로 수렴한다. 이것을 production release로 해석하지 않는다.
 2. `ORDER-REDELIVERY-PAID-RESUME-GATE` 상태머신 전체 구현·직접 회귀.
 3. `SETTLEMENT-LIFECYCLE-COVERAGE`, `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`, admin privileged, webhook, payment finalization, admin refund, order mutation 등 나머지 P0를 병렬 해결.
-4. Issue #32.
-5. ALIGO provider code 1:1 매핑 확인 → 승인된 템플릿 격리 알림톡 → SMS fallback 실제 검증.
-6. 모든 P0 결과 기준 legal 재정합화.
-7. actual release SHA → E2E 52+cleanup → Firebase 재조회 → 승인된 production 설정/배포.
-8. 첫 회차 검수 → 최종 승인 → `salesMode: round_direct`.
+4. ALIGO provider code 1:1 매핑 확인 → 승인된 템플릿 격리 알림톡 → SMS fallback 실제 검증.
+5. 모든 P0 결과 기준 legal 재정합화.
+6. actual release SHA → E2E 52+cleanup → Firebase 재조회 → 승인된 production 설정/배포.
+7. 첫 회차 검수 → 최종 승인 → `salesMode: round_direct`.

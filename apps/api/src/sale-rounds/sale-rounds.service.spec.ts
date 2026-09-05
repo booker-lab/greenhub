@@ -1,5 +1,5 @@
 import type { SaleRound } from '@greenhub/shared';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { SaleRoundStateService } from './sale-round-state.service';
 import { SaleRoundsService } from './sale-rounds.service';
 
@@ -62,13 +62,34 @@ describe('SaleRoundsService', () => {
     return { _seconds: new Date(iso).getTime() / 1000, toDate: () => new Date(iso) };
   }
 
+  function makeItem(overrides: Data = {}) {
+    return {
+      id: 'item-1',
+      roundId: 'round-1',
+      storeId: 'store-1',
+      productId: 'product-1',
+      productNameSnapshot: '공개 상품',
+      productImageUrlSnapshot: null,
+      roundPrice: 10000,
+      saleLimitQuantity: 3,
+      reservedQuantity: 0,
+      orderedQuantity: 0,
+      displayOrder: 0,
+      status: 'ACTIVE',
+      createdAt: '2026-07-10T00:00:00.000Z',
+      updatedAt: '2026-07-10T00:00:00.000Z',
+      ...overrides,
+    };
+  }
+
   function makeService(extra: Record<string, Data> = {}, round = makeRound()) {
     const records = new Map<string, Data>([
-      ['stores/store-1', { id: 'store-1', ownerId: 'seller-1' }],
+      ['stores/store-1', { id: 'store-1', ownerId: 'seller-1', salesMode: 'round_direct' }],
       ['saleRounds/round-1', round as unknown as Data],
       ...Object.entries(extra),
     ]);
     const writes: Array<{ path: string; data: Data }> = [];
+    const collectionCalls: Array<{ name: string; filters: Array<[string, string, unknown]> }> = [];
     const doc = (path: string) => ({
       get: jest.fn(async () => ({
         exists: records.has(path),
@@ -84,6 +105,7 @@ describe('SaleRoundsService', () => {
     });
     const collection = (name: string) => {
       const filters: Array<[string, string, unknown]> = [];
+      collectionCalls.push({ name, filters });
       const query = {
         where(field: string, op: string, value: unknown) {
           filters.push([field, op, value]);
@@ -130,7 +152,7 @@ describe('SaleRoundsService', () => {
     };
     const roundState = new SaleRoundStateService(firestore as never, roundLifecycle as never);
     const service = new (SaleRoundsService as any)(firestore, roundState) as SaleRoundsService;
-    return { service, roundLifecycle, records, writes, firestore };
+    return { service, roundLifecycle, records, writes, firestore, collectionCalls };
   }
 
   it('판매자 목록·상세 조회는 실제 소유 스토어에만 허용하고 관리자는 허용한다', async () => {
@@ -145,6 +167,172 @@ describe('SaleRoundsService', () => {
     await expect(
       (service as any).listSellerRounds('store-1', 'admin-1', 'admin'),
     ).resolves.toMatchObject({ items: [{ id: 'round-1' }] });
+  });
+
+  it.each([
+    ['legacy', { salesMode: 'legacy' }],
+    ['missing', {}],
+    ['null', { salesMode: null }],
+    ['invalid', { salesMode: 'unsupported' }],
+  ])('public detail은 %s salesMode를 refresh 전에 거부한다', async (_label, storeFields) => {
+    const { service, firestore, collectionCalls } = makeService({
+      'stores/store-1': { id: 'store-1', ownerId: 'seller-1', ...storeFields },
+    });
+    const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+    await expect(service.getPublicRound('store-1', 'round-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+    expect(collectionCalls).toHaveLength(0);
+  });
+
+  it.each([
+    ['legacy', { salesMode: 'legacy' }],
+    ['missing', {}],
+    ['null', { salesMode: null }],
+    ['invalid', { salesMode: 'unsupported' }],
+  ])('public list은 %s salesMode를 round query 전에 거부한다', async (_label, storeFields) => {
+    const { service, firestore, collectionCalls } = makeService({
+      'stores/store-1': { id: 'store-1', ownerId: 'seller-1', ...storeFields },
+    });
+    const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+    await expect(service.listPublicRounds('store-1')).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+    expect(collectionCalls).toHaveLength(0);
+  });
+
+  it('public 목록·상세는 존재하지 않는 store를 round query와 refresh 전에 거부한다', async () => {
+    const { service, firestore, collectionCalls } = makeService();
+    const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+    await expect(service.listPublicRounds('store-missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(service.getPublicRound('store-missing', 'round-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+    expect(collectionCalls).toHaveLength(0);
+  });
+
+  it.each(['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED'])(
+    'public detail은 %s 상태를 허용하고 matching item query를 수행한다', async (status) => {
+      const { service, collectionCalls } = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        makeRound({ status: status as SaleRound['status'] }),
+      );
+
+      await expect(service.getPublicRound('store-1', 'round-1')).resolves.toMatchObject({
+        storeId: 'store-1',
+        items: [{ id: 'item-1', storeId: 'store-1' }],
+      });
+      expect(collectionCalls.filter(({ name }) => name === 'saleRoundItems')).toHaveLength(1);
+    },
+  );
+
+  it.each(['DRAFT', 'CANCELLED', 'UNKNOWN'])(
+    'public detail은 %s 상태를 item query 전에 fail closed한다', async (status) => {
+      const { service, firestore, collectionCalls } = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        makeRound({ status: status as SaleRound['status'] }),
+      );
+      const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+      await expect(service.getPublicRound('store-1', 'round-1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+
+      expect(refresh).not.toHaveBeenCalled();
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+      expect(collectionCalls.filter(({ name }) => name === 'saleRoundItems')).toHaveLength(0);
+    },
+  );
+
+  it('public detail은 parent round와 matching하는 store item만 반환한다', async () => {
+    const { service } = makeService(
+      {
+        'saleRoundItems/item-1': makeItem(),
+        'saleRoundItems/item-foreign': makeItem({ id: 'item-foreign', storeId: 'store-2' }),
+      },
+      makeRound({ status: 'OPEN' }),
+    );
+
+    await expect(service.getPublicRound('store-1', 'round-1')).resolves.toMatchObject({
+      items: [{ id: 'item-1', storeId: 'store-1' }],
+    });
+  });
+
+  it('public detail은 requested store와 parent round store가 다르면 refresh 전에 거부한다', async () => {
+    const { service, firestore, collectionCalls } = makeService(
+      { 'saleRoundItems/item-1': makeItem() },
+      makeRound({ status: 'OPEN', storeId: 'store-2' }),
+    );
+    const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+    await expect(service.getPublicRound('store-1', 'round-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+    expect(collectionCalls.filter(({ name }) => name === 'saleRoundItems')).toHaveLength(0);
+  });
+
+  it('public detail은 존재하지 않는 parent round를 refresh 전에 거부한다', async () => {
+    const { service, records, firestore, collectionCalls } = makeService();
+    records.delete('saleRounds/round-1');
+    const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+    await expect(service.getPublicRound('store-1', 'round-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+    expect(collectionCalls).toHaveLength(0);
+  });
+
+  it('seller update는 foreign-store item을 보존하고 matching item만 교체한다', async () => {
+    const { service, records } = makeService({
+      'products/product-1': { storeId: 'store-1', name: '공개 상품', images: [] },
+      'saleRoundItems/item-1': makeItem(),
+      'saleRoundItems/item-foreign': makeItem({ id: 'item-foreign', storeId: 'store-2' }),
+    });
+
+    await (service as any).updateRound('store-1', 'round-1', 'seller-1', 'seller', {
+      items: [{ productId: 'product-1', roundPrice: 12000, saleLimitQuantity: 2, displayOrder: 0 }],
+    });
+
+    expect(records.has('saleRoundItems/item-1')).toBe(false);
+    expect(records.has('saleRoundItems/item-foreign')).toBe(true);
+  });
+
+  it('seller copy는 source round의 foreign-store item을 제외한다', async () => {
+    const { service } = makeService(
+      {
+        'products/product-1': { storeId: 'store-1', name: '공개 상품', images: [] },
+        'saleRoundItems/item-1': makeItem(),
+        'saleRoundItems/item-foreign': makeItem({ id: 'item-foreign', storeId: 'store-2' }),
+      },
+      makeRound({ status: 'OPEN' }),
+    );
+
+    const copied = await (service as any).copyRound('store-1', 'seller-1', 'seller', {
+      name: '복사 회차',
+      sourceRoundId: 'round-1',
+      schedule: makeRound().schedule,
+    });
+
+    expect(copied.items).toHaveLength(1);
+    expect(copied.items[0]).toMatchObject({ storeId: 'store-1', productId: 'product-1' });
   });
 
   it('주문 시작·마감·한도 도달 상태를 순서대로 자동 전환한다', async () => {
