@@ -21,19 +21,37 @@
 S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증거는 [현재 상태 SSOT](memory.md)에 기록한다. 이 Backlog는 그 종료 상태를 다시 열지 않으며, production release·activation과 혼동하지 않는다.
 
 - S2 Browser Readiness: `CLOSED`
-- exact-source Browser R3: `PASS`
+- exact-source Browser R3: `PASS` — 아래 source와 deployment는 역사적 Preview 증거다.
 - physical-device disposition: `PHYSICAL_DEVICE_NOT_REQUIRED`
 - R1 Combined Public Readiness: `PUBLIC_READINESS_CLOSED`
 - S2 → R1 campaign: `TERMINAL_SUCCESS`
-- accepted source: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
-- 작업 시작 시 local source는 live `origin/main`보다 7개 commit 앞서 있었고, GitHub `main`은 PR required·`verify` required check 보호 상태였다.
-- 이번 문서화의 다음 의존성은 `PUBLICATION_TOPOLOGY_CONVERGENCE`이며, 아래 ACTIVE P0와는 별도다.
+- #63이 확인한 현재 main publication state: `ffd999423f8a98b0c1f34d020d832d7929feab72`
+- 역사적 exact-source Preview 기준선: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` — 현재 main, PR, merge, production 증거로 승격하지 않는다.
+- #63의 accepted closure는 닫힌 semantic work를 다시 열지 않는다는 뜻이며, Preview·Auth.js runtime 검증 잔여와 production/activation은 별도 상태다.
+- 이번 #68 문서 후보는 목적 branch와 PR로만 게시하며, `main` merge는 Control Tower가 별도로 직렬화한다.
 
 ---
 
-## ACTIVE
+## 상태 구분
 
-### P0 — PAYMENT-FINALIZATION-PAID-GUARD
+| 주장 | 현재 판정 |
+|---|---|
+| implementation | `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`는 `IMPLEMENTATION_BLOCKER`; #63이 닫은 semantic work는 재수용하지 않음 |
+| verification | Preview·exact-SHA·Auth.js runtime은 각각 검증 또는 external/runtime gate |
+| remote-addressable candidate | #63 기준 `main`의 `ffd999423f8a98b0c1f34d020d832d7929feab72`는 remote-addressable; #68 후보는 별도 object |
+| PR / merged | #60/#61/#62는 merged; #68 PR과 `main` merge는 별도 상태이며 이 Goal은 merge하지 않음 |
+| Preview proof | `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`는 historical Preview evidence |
+| production | deployment·activation·live round·actual payment·actual notification·first-round completion은 `NOT DONE` / `NOT CLAIMED` |
+
+---
+
+## HISTORICAL / CLOSED BY REL-STATE-01
+
+> 아래의 과거 P0/ACTIVE semantic scope와 상세 acceptance는 #63의 `A-N closed semantic work` 분류에 따라 현재 release blocker나 실행 가능한 ACTIVE task로 사용하지 않는다. 이 표시는 구현 완료, 검증 완료, remote publication, Preview proof, production deployment를 서로 추론하는 표기가 아니다. 역사적 finding과 보고서 경로는 Git history 및 관련 report에 보존한다.
+
+> 특히 과거의 `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`는 Pilot의 현재 정책인 `MARKETING_NOT_USED_IN_PILOT`을 다시 결정하는 근거가 아니다. `ORDER_CANCELLED` consumer self-cancel 알림도 이 Goal에서 정책을 결정하지 않는다.
+
+### 역사적 P0 — PAYMENT-FINALIZATION-PAID-GUARD
 
 `PaymentFinalizationService.finalizePaidOrder()`가 provider `status === 'PAID'`를 boundary 자체에서 강제하지 않는다.
 
@@ -45,7 +63,7 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 
 정본: `docs/specs/api/payments.md`.
 
-### P0 — PAYMENT-WEBHOOK-SIGNATURE-COVERAGE
+### 역사적 P0 — PAYMENT-WEBHOOK-SIGNATURE-COVERAGE
 
 PortOne webhook signature 구현은 존재하지만 금융 상태 변경 경계에 필요한 real-verifier cryptographic 양방향 회귀가 충분하지 않다.
 
@@ -79,7 +97,7 @@ PortOne webhook signature 구현은 존재하지만 금융 상태 변경 경계�
 
 정본: `docs/specs/api/payments.md`; 증거: `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`.
 
-### P0 — ORDER-REDELIVERY-PAID-RESUME-GATE
+### 역사적 P0 — ORDER-REDELIVERY-PAID-RESUME-GATE
 
 운영 계약은 고객 책임 첫 배송 실패의 유료 재배송에 **`결제 전 재배송 금지`**를 요구한다. 2026-08-24 추가 감사에서 이 문제는 단순 driver resume guard 누락이 아니라 **결제 요청·hold 해소·배송 재개 상태머신 전체 불일치**임을 확인했다.
 
@@ -127,7 +145,7 @@ PortOne webhook signature 구현은 존재하지만 금융 상태 변경 경계�
 
 정본: `docs/specs/api/orders.md`; 운영 근거: `docs/specs/ops/mvp-sales-round-runbook.md`.
 
-### P0 — ADMIN-FORCE-REFUND-CONSISTENCY
+### 역사적 P0 — ADMIN-FORCE-REFUND-CONSISTENCY
 
 admin refund가 정상 cancellation의 추가 charge·capacity·held counter·settlement 후속효과를 우회한다.
 
@@ -142,7 +160,7 @@ admin refund가 정상 cancellation의 추가 charge·capacity·held counter·se
 
 정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`.
 
-### P0 — ADMIN-PRIVILEGED-MUTATION-COVERAGE
+### 역사적 P0 — ADMIN-PRIVILEGED-MUTATION-COVERAGE
 
 `AdminController` class-level `JwtAuthGuard + RolesGuard + @Roles('admin')`와 고위험 mutation 구현은 존재하지만 서버 authorization 및 admin settlement 지급 상태 전이의 직접 회귀가 충분하지 않다.
 
@@ -178,7 +196,7 @@ admin refund가 정상 cancellation의 추가 charge·capacity·held counter·se
 
 정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
-### P0 — SETTLEMENT-LIFECYCLE-COVERAGE
+### 역사적 P0 — SETTLEMENT-LIFECYCLE-COVERAGE
 
 settlement 생성·자동 확정·취소 transaction 구현은 존재하지만 core financial lifecycle의 직접 상태·race 회귀가 없다.
 
@@ -217,7 +235,7 @@ admin `confirmed → paid` authorization/status 전이는 별도 `ADMIN-PRIVILEG
 
 정본: `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
 
-### P0 — MARKETING-CONSENT-LIFECYCLE-CONSISTENCY
+### 역사적 P0 — MARKETING-CONSENT-LIFECYCLE-CONSISTENCY
 
 round checkout 선택 마케팅 consent, user preference, 철회, retention evidence가 하나의 authoritative lifecycle로 수렴하지 않는다.
 
@@ -259,7 +277,7 @@ round checkout 선택 마케팅 consent, user preference, 철회, retention evid
 
 정본: `docs/specs/api/notifications.md`, `docs/specs/legal/README.md`, `docs/specs/mvp-sales-round-direct-delivery.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
 
-### P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
+### 역사적 P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
 
 API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 
@@ -272,7 +290,7 @@ API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 
 정본: `docs/specs/api/orders.md`.
 
-### P0 — AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION
+### 역사적 P0 — AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION
 
 관리자 승인 전 driver 권한을 얻을 수 없는지와 stale session/claims 수렴을 하나의 umbrella로 추적한다. 현재 accepted source에는 approval-gate/current-user 하위 범위가 반영됐지만, 전체 P0를 닫지는 않는다.
 
@@ -295,7 +313,7 @@ Accepted source에서 검증됨 (remote `main` publication pending):
 
 정본: `docs/specs/api/auth.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
-### P0 — ORDER-MUTATION-AUTHORIZATION-COVERAGE
+### 역사적 P0 — ORDER-MUTATION-AUTHORIZATION-COVERAGE
 
 상태 변경 ownership guard는 구현돼 있으나 핵심 거부 회귀가 부족하다.
 
@@ -309,7 +327,7 @@ Accepted source에서 검증됨 (remote `main` publication pending):
 
 정본: `docs/specs/api/orders.md`.
 
-### P0 — DEPLOY-SAFETY-MAIN-PROTECTION
+### 역사적 P0 — DEPLOY-SAFETY-MAIN-PROTECTION
 
 repo-side production auto-deploy 차단과 GitHub main 보호를 완료했다. 2026-09-05 직접 재조회에서 `protected=true`, PR required, `Deployment safety guard / verify` strict required check, force push·branch delete 차단을 확인했다. Issue #32는 `CLOSED`다.
 
@@ -319,12 +337,18 @@ repo-side production auto-deploy 차단과 GitHub main 보호를 완료했다. 2
 - [x] force push·branch delete 차단
 - [x] 재조회에서 enforcement 확인
 
-### P0_CANDIDATE_PENDING_CONTROL_TOWER — SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY
+---
+
+## ACTIVE
+
+### P0 — SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY
+
+상태: `IMPLEMENTATION_BLOCKER`.
 
 현재 source 재검증 결과 `CURRENT_UNRESOLVED`다. 회차 수정·수동 개방·주문 예약·취소 복구가 하나의
 신선한 상태·시간·소유권 경계로 수렴하지 않아 조기 주문, 상품 snapshot 혼합, `CANCELLING`
-고착 가능성이 남아 있다. runtime 증거는 확보했지만 최종 P0 및 release gate 승격은 product/release
-authority가 결정하므로 `P0_CANDIDATE_PENDING_CONTROL_TOWER`로 표시한다.
+고착 가능성이 남아 있다. 현재 문서에서는 이 항목을 구현 blocker로 유지하며, 최종 release gate 승격은 product/release
+authority가 별도로 판정한다.
 
 현재 직접 근거:
 
@@ -409,9 +433,88 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ---
 
+## VERIFICATION
+
+### Preview·exact-SHA proof
+
+상태: `VERIFICATION_PENDING`.
+
+- #63이 인정한 Preview/browser/fixture 결과는 해당 exact source에 대한 재사용 가능한 역사적 증거다.
+- `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`와 그 Preview deployment를 현재 main, 현재 candidate, production deployment로 표현하지 않는다.
+- 현재 release candidate에서 필요한 exact-SHA Preview/browser/fixture proof와 Auth.js session/logout/rotation/stale-claim lifecycle proof는 별도 검증 gate다.
+- 구현 완료, 검증 완료, Preview proof, production deployment·activation은 서로 대체하지 않는다.
+
 ## BLOCKED_EXTERNAL
 
-### P0 — ALIGO 회차 알림 템플릿 8종 최종 승인
+### Auth.js session runtime
+
+상태: `EXTERNAL_RUNTIME_BLOCKED`.
+
+- Auth.js session cookie 발급·동일 브라우저 context persistence·logout/rotation·stale claim lifecycle은 runtime/browser proof가 필요하다.
+- static source, fixture, callback 응답만으로 session runtime 성공을 주장하지 않는다.
+- 필요한 runtime/browser authority가 없으면 `UNVERIFIED`로 유지하며 source/runtime mutation을 이 Goal에서 수행하지 않는다.
+
+### ALIGO provider current metadata
+
+상태: `EXTERNAL_GATE_PENDING`.
+
+- repository logical 8-code contract: `VERIFIED` — #65에서 8개 logical code/body/required-variable 계약을 확인했다.
+- provider current metadata: `UNVERIFIED` — authenticated provider read-back이 없다.
+- production mapping: provider metadata와 별도의 `UNVERIFIED` gate다.
+- actual Alimtalk/SMS send: `NOT RUN`이며 별도 authority가 필요하다.
+- 과거의 provider 승인·심사 상태를 현재 metadata read-back으로 승격하지 않는다.
+
+## AUTHORITY_PENDING
+
+### Production deployment·activation
+
+상태: `PRODUCTION_AUTHORITY_PENDING`.
+
+- production deployment, `salesMode` 전환, 운영 회차/live round, actual payment, actual notification, first-round completion은 이 문서 후보나 PR로 완료되지 않는다.
+- production deployment와 production activation은 각각 별도 gate이며, exact release SHA와 별도 authority 없이는 주장하지 않는다.
+
+## PRODUCT_POLICY_DECISION_REQUIRED
+
+### Consumer self-cancel `ORDER_CANCELLED` notification
+
+상태: `PRODUCT_POLICY_DECISION_REQUIRED`.
+
+- consumer self-cancel 경로에서 `ORDER_CANCELLED` 알림을 어떻게 처리할지는 정책 결정이 필요하다.
+- 이 Goal에서는 정책을 선택하거나 runtime/callsite를 변경하지 않는다.
+
+## DOC_DELTA
+
+### Pilot marketing contract
+
+상태: `DOC_DELTA_CANDIDATE`.
+
+- Pilot 정책은 `MARKETING_NOT_USED_IN_PILOT`이다.
+- 선택 마케팅 consent/retention wording을 현재 Pilot 계약보다 넓게 유지하지 않는다.
+- 향후 marketing 활성화는 별도의 product·legal·provider·release authority와 현재 증거가 필요한 후속 판단이다.
+
+## NEXT — 현재 residual 해소 후
+
+### 외부·권한 gate
+
+- [ ] authenticated ALIGO metadata read-back
+- [ ] provider metadata와 repository logical 8-code mapping 직접 대조
+- [ ] 별도 authority 후 격리 actual Alimtalk/SMS 및 fallback 검증
+- [ ] exact release SHA 기준 Preview/browser/fixture와 Auth.js session lifecycle 검증
+- [ ] production deployment·activation·첫 회차 전용 승인 및 read-back
+
+### 법무·출시 후보 정합성
+
+- [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책 반영
+- [ ] settlement 및 payment 검증 결과 반영
+- [ ] PortOne/PG·ALIGO 전화번호·메시지 처리 경계 반영
+- [ ] Pilot `MARKETING_NOT_USED_IN_PILOT` 정책과 공개 legal/source wording 정합화
+- [ ] exact release SHA와 필요한 release verification
+
+---
+
+## HISTORICAL / PREVIOUS EXTERNAL SNAPSHOT
+
+### 역사적 P0 — ALIGO 회차 알림 템플릿 8종 최종 승인
 
 `ORDER_ACCEPTED`, `ORDER_PREPARING`, `ORDER_DELIVERING`, `ORDER_DELIVERY_HELD`, `ORDER_REDELIVERY_PAYMENT_REQUESTED`, `ORDER_REDELIVERY_SCHEDULED`, `ORDER_DELIVERED`, `ORDER_CANCELLED`.
 
@@ -419,15 +522,17 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ---
 
-## NEXT — ALIGO 승인 직후
+## HISTORICAL / PREVIOUS NEXT CHECKLIST
 
-### P0 — 실제 알림 검증
+> 이 체크리스트는 이전 provider snapshot을 전제로 한 역사적 기록이다. 현재 provider metadata, production mapping, actual send authority를 입증하지 않으며 현재 NEXT 상태로 사용하지 않는다.
+
+### 역사적 P0 — 실제 알림 검증
 
 - [ ] 승인 `tpl_code` 8종 ↔ 내부 논리 코드 1:1
 - [ ] 별도 승인 후 격리 실제 알림톡
 - [ ] 별도 승인 후 SMS fallback
 
-### P0 — 판매 활성화 legal 재정합화
+### 역사적 P0 — 판매 활성화 legal 재정합화
 
 - [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책
 - [ ] 재배송 payment-required 상태머신과 결제 전 재개 금지 계약 반영
@@ -440,7 +545,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [ ] legal tests
 - [ ] release SHA 포함
 
-### P0 — 출시 후보 검증·운영 준비
+### 역사적 P0 — 출시 후보 검증·운영 준비
 
 - [ ] `PAYMENT-FINALIZATION-PAID-GUARD`
 - [ ] `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`

@@ -93,7 +93,8 @@ pre-open reservation gate, cancellation recovery/fencing이 직접 충족되는�
 - 현재·지난 회차 조회는 `OPEN`, `SCHEDULED`, `CLOSED`, `COMPLETED` 중 소비자 노출 가능한 회차와 회차 상품을 반환한다.
 - 상품 상세는 `round` 파라미터가 있으면 해당 회차 상품과 구매 가능 상태를 함께 반환한다.
 - 장바구니 검증 API는 회차 상태, 가격, 판매 가능 수량, 이천시 배송 가능 여부를 서버 기준으로 재검증한다.
-- 주문 생성 API는 같은 회차의 주문 상품 배열, 배송 주소, 배송 연락용 전화번호, 선택 마케팅 동의, 당근 유입 값을 받는다.
+- 주문 생성 API는 같은 회차의 주문 상품 배열, 배송 주소, 배송 연락용 전화번호, 당근 유입 값을 받는다. Pilot은
+  `MARKETING_NOT_USED_IN_PILOT`이므로 마케팅 동의 field를 이 계약의 사용 범위로 정의하지 않는다.
 - `round_direct` 스토어는 회차 필드 누락 시 legacy 주문 생성으로 우회하지 않는다. 배송 주소는 문자열 포함 여부가 아니라 주소 선두의 이천시 행정구역 경계로 판정한다.
 - 고객 취소 API는 주문 마감 전 주문만 허용하고 결제 환불과 한도 반환을 함께 수행한다.
 - 주문 상품 응답 금액 필드는 `subtotalAmount`가 정본이다. 기존 `lineAmount` 저장 데이터는 조회 시 `subtotalAmount`로 변환하고 `lineAmount`는 응답에서 제거한다.
@@ -128,7 +129,8 @@ pre-open reservation gate, cancellation recovery/fencing이 직접 충족되는�
 - 하단 내비게이션은 홈, 상품, 장바구니, MY 네 항목만 둔다.
 - 공동구매 직접 진입은 `round_direct`에서 홈으로 돌린다.
 - 상품 상세와 결제 직전 화면에는 `경기도 이천시 직접배송`, 마감 시각, 회차 가격, 기상 연기 원칙, 청약철회 제한 조건을 명확히 표시한다.
-- 결제 화면의 마케팅 수신 동의는 기본 해제 상태이며 배송 연락용 전화번호와 분리한다.
+- Pilot 계약은 결제 화면의 마케팅 수신 동의 UI를 사용하지 않는 것으로 정규화한다(`MARKETING_NOT_USED_IN_PILOT`).
+  배송 연락용 전화번호와 마케팅 설정은 별도 의미로 취급한다.
 - 주문 목록과 상세는 다중 상품 대표명, 배송 보류, 재배송비 결제, 배송 완료 사진, 마감 전 취소 상태를 표시한다.
 
 ## 셀러·드라이버 화면 계약
@@ -143,7 +145,9 @@ pre-open reservation gate, cancellation recovery/fencing이 직접 충족되는�
 
 - 주문 당시 주소·전화번호는 주문 접근 권한으로 보호하고, 법정 보관 metadata에는 원문 주소·전화번호를 복제하지 않는다. 계약·결제·공급 상태의 목적별 허용 metadata는 `legalOrderRecords`에 5년 보관한다.
 - 환불, 분쟁, 고객응대 기록은 `legalDisputeRecords`에 3년 보관한다.
-- 마케팅 동의·철회 증거는 `marketingConsentLogs`에 철회 후 3년 보관하며 광고 대상 선정에는 사용하지 않는다.
+- Pilot 정책은 `MARKETING_NOT_USED_IN_PILOT`이다. 이 명세는 Pilot에서 선택 마케팅 동의의 수집·철회·보관·광고 대상
+  선정을 계약하지 않는다. 향후 marketing 활성화는 별도의 product·legal·provider·release authority와 현재 증거로
+  다시 판정한다.
 - 배송 완료 사진은 비공개 `deliveryPhotos/{orderId}/{photoId}.jpg` 경로에 서버 업로드하고 기본 90일 후 삭제한다.
 - 분쟁 중인 기록과 사진은 해결 시까지 보관 연장할 수 있다.
 - 법정 보관 컬렉션과 배송 사진 원본은 소비자앱·드라이버앱·일반 셀러 권한에서 직접 접근할 수 없다.
