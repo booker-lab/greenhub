@@ -6,13 +6,17 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { AdminController } from '../../src/admin/admin.controller';
+import { AdminService } from '../../src/admin/admin.service';
 import { AuditService } from '../../src/common/audit/audit.service';
 import { JwtAuthGuard } from '../../src/common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../src/common/guards/roles.guard';
+import { FirestoreService } from '../../src/firestore/firestore.service';
 import { StorageService } from '../../src/firestore/storage.service';
 import { OperationIssueWriterService } from '../../src/operations/operation-issue-writer.service';
 import { DeliveryPhotosController } from '../../src/orders/delivery-photos.controller';
 import { DeliveryPhotosService } from '../../src/orders/delivery-photos.service';
+import { DriverOrderScopeService } from '../../src/orders/driver-order-scope.service';
 import { OrderCapacityService } from '../../src/orders/order-capacity.service';
 import { OrderChargesService } from '../../src/orders/order-charges.service';
 import { OrdersController, OrdersPublicController } from '../../src/orders/orders.controller';
@@ -169,6 +173,7 @@ export async function createMvpSalesRoundFixture() {
     capacity,
     roundLifecycle,
   );
+  const driverScope = new DriverOrderScopeService(firestore);
   const roundState = new SaleRoundStateService(firestore, roundLifecycle);
   const saleRounds = new SaleRoundsService(firestore, roundState);
   const roundCreate = new RoundOrderCreateService(firestore, capacity, retention);
@@ -176,12 +181,20 @@ export async function createMvpSalesRoundFixture() {
   const query = new OrdersQueryService(firestore, storage);
   const orders = new OrdersService(create, query, lifecycle);
   const charges = new OrderChargesService(firestore, issueWriter);
-  const deliveryPhotos = new DeliveryPhotosService(firestore, storage, retention, lifecycle);
+  const deliveryPhotos = new DeliveryPhotosService(
+    firestore,
+    storage,
+    retention,
+    lifecycle,
+    driverScope,
+    issueWriter,
+  );
 
   const module = await Test.createTestingModule({
     controllers: [
       PublicSaleRoundsController,
       SaleRoundsController,
+      AdminController,
       OrdersPublicController,
       OrdersController,
       PaymentsController,
@@ -190,10 +203,14 @@ export async function createMvpSalesRoundFixture() {
     ],
     providers: [
       RolesGuard,
+      { provide: FirestoreService, useValue: firestore },
+      AdminService,
       { provide: SaleRoundsService, useValue: saleRounds },
       { provide: OrdersService, useValue: orders },
       { provide: OrderChargesService, useValue: charges },
       { provide: PaymentsService, useValue: payments },
+      { provide: SettlementsService, useValue: settlements },
+      { provide: RoundOrderLifecycleService, useValue: roundLifecycle },
       { provide: PortoneClient, useValue: portone },
       { provide: AuditService, useValue: audit },
       { provide: DeliveryPhotosService, useValue: deliveryPhotos },
@@ -213,6 +230,11 @@ export async function createMvpSalesRoundFixture() {
     read: memory.read,
     storedObjects,
     retention,
+    admin: module.get(AdminService),
+    capacity,
+    payments,
+    settlements,
+    roundLifecycle,
     finalization,
     portone,
     notifications,
