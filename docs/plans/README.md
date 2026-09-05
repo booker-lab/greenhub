@@ -10,11 +10,11 @@
 
 - `HANDOFF_mvp_round_direct_aligo_review_pause.md` — ALIGO 외부 심사 대기와 재개 순서
 - `PLAN_mvp_round_direct_launch_blockers.md` — 실제 출시 dependency와 승인 게이트
-- `PLAN_deployment_safety_guards_20260823.md` — `main` 통합과 production 배포 분리, exact-SHA 배포 원칙, Issue #32 관리자 게이트
+- `PLAN_deployment_safety_guards_20260823.md` — `main` 통합과 production 배포 분리, exact-SHA 배포 원칙, 완료된 Issue #32 보호 상태의 유지 계약
 
 현재 상태 자체는 `docs/memory.md`, 미완료 작업은 `docs/BACKLOG.md`가 정본이다.
 
-특히 `PLAN_deployment_safety_guards_20260823.md`는 파일명 패턴상 `PLAN_*`이지만 `docs/memory.md`가 명시적으로 활성화한 현재 계약이다. Issue #32가 닫히거나 `docs/memory.md`에서 비활성화되기 전까지 역사 자료로 분류하지 않는다.
+특히 `PLAN_deployment_safety_guards_20260823.md`는 파일명 패턴상 `PLAN_*`이지만 `docs/memory.md`가 명시적으로 활성화한 현재 계약이다. Issue #32가 `CLOSED`가 된 뒤에도 exact-SHA·production 분리·docs-only 안전 계약을 위해 현재 계약으로 유지한다.
 
 ## 기본적으로 역사 자료인 문서
 

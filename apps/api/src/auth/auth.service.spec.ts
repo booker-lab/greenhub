@@ -181,32 +181,144 @@ describe('AuthService', () => {
       );
     });
 
-    it('기존 미승인 driver를 카카오 로그인 때 자동 승인하지 않는다', async () => {
-      const { service, userRef } = makeKakaoLoginService({
-        user: { id: 'driver-1', role: 'driver', storeId: null, suspended: false },
+    it.each([
+      ['false', { driverApproved: false }],
+      ['missing', {}],
+      ['undefined', { driverApproved: undefined }],
+      ['null', { driverApproved: null }],
+      ['invalid', { driverApproved: 'true' }],
+    ])('기존 %s driver는 토큰 발급 전에 카카오 로그인이 거부된다', async (_label, approval) => {
+      const { jwt, refreshTokenRef, service, userRef } = makeKakaoLoginService({
+        user: {
+          id: 'driver-1',
+          role: 'driver',
+          storeId: null,
+          suspended: false,
+          ...approval,
+        },
       });
 
-      const result = await service.kakaoLogin({
-        kakaoAccessToken: 'token',
-        targetRole: 'driver',
-      });
+      await expect(
+        service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' }),
+      ).rejects.toMatchObject({ status: 403 });
 
-      expect(result.user).not.toHaveProperty('driverApproved', true);
-      expect(userRef.update).not.toHaveBeenCalled();
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+      expect(userRef.set).not.toHaveBeenCalled();
     });
 
-    it('신규 driver의 카카오 가입도 승인 대기로 저장한다', async () => {
-      const { service, userRef } = makeKakaoLoginService({});
-
-      const result = await service.kakaoLogin({
-        kakaoAccessToken: 'token',
-        targetRole: 'driver',
+    it('역할 불일치가 driver 승인보다 먼저 적용된다', async () => {
+      const { audit, jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user: {
+          id: 'driver-1',
+          role: 'driver',
+          driverApproved: false,
+          storeId: null,
+          suspended: false,
+        },
       });
 
-      expect(result.user).toMatchObject({ role: 'driver', driverApproved: false });
+      await expect(
+        service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'consumer' }),
+      ).rejects.toMatchObject({ status: 403 });
+
+      expect(audit.log).toHaveBeenCalledWith(
+        'auth.kakao.forbidden',
+        expect.objectContaining({
+          userId: 'driver-1',
+          detail: { actualRole: 'driver', targetRole: 'consumer' },
+        }),
+      );
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it('신규 driver는 승인 대기 document만 생성하고 authenticated session은 만들지 않는다', async () => {
+      const { jwt, refreshTokenRef, service, userRef } = makeKakaoLoginService({});
+
+      await expect(
+        service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' }),
+      ).rejects.toMatchObject({ status: 403 });
+
       expect(userRef.set).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'driver', driverApproved: false }),
       );
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it('승인된 비정지 driver는 기존 카카오 로그인 토큰 발행을 유지한다', async () => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user: {
+          id: 'driver-1',
+          role: 'driver',
+          driverApproved: true,
+          storeId: null,
+          suspended: false,
+        },
+      });
+
+      await expect(
+        service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' }),
+      ).resolves.toMatchObject({ accessToken: 'access-token', refreshToken: 'refresh-token' });
+
+      expect(jwt.sign).toHaveBeenCalledTimes(2);
+      expect(jwt.sign).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ sub: 'driver-1', role: 'driver' }),
+        expect.objectContaining({ secret: 'access-secret' }),
+      );
+      expect(jwt.sign).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ sub: 'driver-1', role: 'driver' }),
+        expect.objectContaining({ secret: 'refresh-secret' }),
+      );
+      expect(refreshTokenRef.set).toHaveBeenCalledTimes(1);
+      expect(jwt.sign.mock.invocationCallOrder[0]).toBeLessThan(
+        jwt.sign.mock.invocationCallOrder[1],
+      );
+      expect(jwt.sign.mock.invocationCallOrder[1]).toBeLessThan(
+        refreshTokenRef.set.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('정지된 승인 driver는 카카오 로그인과 모든 토큰 side effect가 거부된다', async () => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user: {
+          id: 'driver-1',
+          role: 'driver',
+          driverApproved: true,
+          storeId: null,
+          suspended: true,
+        },
+      });
+
+      await expect(
+        service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' }),
+      ).rejects.toMatchObject({ status: 401 });
+
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['consumer', 'consumer', null],
+      ['seller', 'seller', 'store-1'],
+      ['admin', 'consumer', null],
+    ])('%s 카카오 로그인에는 driver approval gate 회귀가 없다', async (role, targetRole, storeId) => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user: { id: `${role}-1`, role, storeId, suspended: false },
+      });
+
+      await expect(
+        service.kakaoLogin({
+          kakaoAccessToken: 'token',
+          targetRole: targetRole as 'consumer' | 'seller' | 'driver',
+        }),
+      ).resolves.toMatchObject({ accessToken: 'access-token', refreshToken: 'refresh-token' });
+
+      expect(jwt.sign).toHaveBeenCalledTimes(2);
+      expect(refreshTokenRef.set).toHaveBeenCalledTimes(1);
     });
   });
 

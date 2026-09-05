@@ -13,7 +13,26 @@ const paymentSource = await readFile(
   new URL('./_lib/redelivery-payment.ts', import.meta.url),
   'utf8',
 );
-const photoSource = await readFile(new URL('./[orderId]/photo/page.tsx', import.meta.url), 'utf8');
+const photoCaptureSource = await readFile(
+  new URL('./[orderId]/photo/photo-capture.tsx', import.meta.url),
+  'utf8',
+);
+const pilotPhotoRouteSource = await readFile(
+  new URL('./[orderId]/photo/round-direct/page.tsx', import.meta.url),
+  'utf8',
+);
+const legacyPhotoRouteSource = await readFile(
+  new URL('./[orderId]/photo/page.tsx', import.meta.url),
+  'utf8',
+);
+const legacyStorageSource = await readFile(
+  new URL('./[orderId]/photo/legacy-hub-photo.ts', import.meta.url),
+  'utf8',
+);
+const driverConfigSource = await readFile(
+  new URL('../../../next.config.ts', import.meta.url),
+  'utf8',
+);
 
 test('Driver Board는 Driver role API에서 세 상태를 조회한다', () => {
   assert.match(boardSource, /apiFetch\(\s*['"]\/driver\/orders['"]/);
@@ -92,10 +111,71 @@ test('Driver Board·상세는 orderCharges와 raw payment 필드를 직접 조�
 });
 
 test('사진 화면은 heading과 촬영·최종 완료 버튼의 접근 가능한 이름을 제공한다', () => {
-  assert.match(photoSource, /<Title[^>]*order=\{1\}[^>]*>/);
-  assert.match(photoSource, /배송 완료 사진/);
-  assert.match(photoSource, /aria-label=['"]사진 촬영['"]/);
-  assert.match(photoSource, />\s*사진 촬영\s*</);
-  assert.match(photoSource, /['"]사진을 등록하고 배송 완료['"]/);
-  assert.match(photoSource, /disabled=\{[^}]*!captured/);
+  assert.match(photoCaptureSource, /<Title[^>]*order=\{1\}[^>]*>/);
+  assert.match(photoCaptureSource, /배송 완료 사진/);
+  assert.match(photoCaptureSource, /aria-label=['"]사진 촬영['"]/);
+  assert.match(photoCaptureSource, /['"]사진 촬영['"]/);
+  assert.match(photoCaptureSource, /['"]사진을 등록하고 배송 완료['"]/);
+  assert.match(photoCaptureSource, /disabled=\{[^}]*!captured/);
+});
+
+test('직배송 사진 링크는 정확한 Pilot 경로로 분리하고 legacy 링크를 보존한다', () => {
+  assert.match(detailSource, /\/photo\/round-direct\?storeId=/);
+  assert.doesNotMatch(detailSource, /flow=round-direct/);
+  assert.match(detailSource, /\/photo\?storeId=/);
+  assert.match(pilotPhotoRouteSource, /mode="round-direct"/);
+  assert.match(legacyPhotoRouteSource, /mode="legacy"/);
+  assert.doesNotMatch(legacyPhotoRouteSource, /flow/);
+});
+
+test('Driver Permissions-Policy는 전역 deny와 정확한 Pilot route 허용을 분리한다', () => {
+  assert.match(driverConfigSource, /camera=\(\), microphone=\(\), geolocation=\(\)/);
+  assert.match(driverConfigSource, /source:\s*['"]\/\(\.\*\)['"]/);
+  assert.match(driverConfigSource, /source:\s*['"]\/board\/:orderId\/photo\/round-direct['"]/);
+  assert.match(driverConfigSource, /camera=\(self\), microphone=\(\), geolocation=\(\)/);
+  assert.doesNotMatch(driverConfigSource, /camera=\*/);
+  assert.doesNotMatch(driverConfigSource, /microphone=\(self\)|geolocation=\(self\)/);
+});
+
+test('Pilot 사진 화면은 JPEG 파일 대체 경로와 기존 업로드 계약을 유지한다', () => {
+  assert.match(photoCaptureSource, /navigator\.mediaDevices\.getUserMedia/);
+  assert.match(photoCaptureSource, /카메라 촬영/);
+  assert.match(photoCaptureSource, /facingMode:\s*['"]environment['"]/);
+  assert.match(photoCaptureSource, /audio:\s*false/);
+  assert.match(photoCaptureSource, /canvas\.toBlob/);
+  assert.match(photoCaptureSource, /type="file"/);
+  assert.match(photoCaptureSource, /isRoundDirect\s*&&\s*\(\s*<input/);
+  assert.match(photoCaptureSource, /accept="image\/jpeg"/);
+  assert.match(photoCaptureSource, /capture="environment"/);
+  assert.match(photoCaptureSource, /file\.type\s*!==\s*['"]image\/jpeg['"]/);
+  assert.match(photoCaptureSource, /new FileReader\(\)/);
+  assert.match(photoCaptureSource, /reader\.readAsDataURL\(file\)/);
+  assert.match(photoCaptureSource, /form\.append\(['"]photo['"],\s*blob/);
+  assert.match(photoCaptureSource, /form\.append\(['"]idempotencyKey['"]/);
+  assert.match(photoCaptureSource, /result\.photoId/);
+  assert.match(photoCaptureSource, /result\.orderId\s*!==\s*orderId/);
+  assert.match(photoCaptureSource, /result\.status\s*!==\s*['"]DELIVERED['"]/);
+  assert.doesNotMatch(photoCaptureSource, /uploadBytes|getDownloadURL|firebase\/storage/);
+  assert.doesNotMatch(photoCaptureSource, /multiple/);
+  assert.doesNotMatch(photoCaptureSource, /get\(['"]flow['"]\)/);
+});
+
+test('카메라 스트림은 video 마운트 뒤 연결되고 프레임 준비 전 촬영을 막는다', () => {
+  assert.match(photoCaptureSource, /useEffect/);
+  assert.match(photoCaptureSource, /video\.srcObject\s*=\s*stream/);
+  assert.match(photoCaptureSource, /HTMLMediaElement\.HAVE_CURRENT_DATA/);
+  assert.match(photoCaptureSource, /video\.videoWidth\s*>\s*0/);
+  assert.match(photoCaptureSource, /video\.videoHeight\s*>\s*0/);
+  assert.match(photoCaptureSource, /disabled=\{!frameReady\}/);
+  assert.match(photoCaptureSource, /nextBlob\.type\s*!==\s*['"]image\/jpeg['"]/);
+  assert.match(photoCaptureSource, /nextBlob\.size\s*<=\s*0/);
+  assert.match(photoCaptureSource, /track\.stop\(\)/);
+});
+
+test('legacy 사진 흐름과 Storage 계약은 공통 UI 추출 뒤에도 유지된다', () => {
+  assert.match(photoCaptureSource, /uploadLegacyHubPhoto/);
+  assert.match(photoCaptureSource, /status:\s*['"]HUB_ARRIVED['"]/);
+  assert.match(legacyStorageSource, /uploadBytes/);
+  assert.match(legacyStorageSource, /getDownloadURL/);
+  assert.match(legacyStorageSource, /contentType:\s*['"]image\/jpeg['"]/);
 });

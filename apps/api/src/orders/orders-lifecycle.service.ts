@@ -12,6 +12,7 @@ import { SettlementsService } from '../settlements/settlements.service';
 import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
 import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
+import { DriverOrderScopeService } from './driver-order-scope.service';
 import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
 import {
   assertPaidRedeliveryResume,
@@ -30,6 +31,8 @@ const DELIVERY_HOLD_CUSTOMER_REASONS: Record<string, string> = {
 
 @Injectable()
 export class OrdersLifecycleService {
+  private readonly driverScope: DriverOrderScopeService;
+
   constructor(
     private readonly firestore: FirestoreService,
     private readonly notifications: NotificationsService,
@@ -37,7 +40,10 @@ export class OrdersLifecycleService {
     private readonly settlements: SettlementsService,
     private readonly capacity: OrderCapacityService,
     private readonly roundLifecycle: RoundOrderLifecycleService,
-  ) {}
+    driverScope?: DriverOrderScopeService,
+  ) {
+    this.driverScope = driverScope ?? new DriverOrderScopeService(firestore);
+  }
 
   async updateStatus(
     storeId: string,
@@ -97,6 +103,7 @@ export class OrdersLifecycleService {
         expectedStatus: currentStatus,
         dto: confirmedCancelReason ? { ...dto, reason: confirmedCancelReason } : dto,
         requesterId,
+        requesterRole: role,
       });
       if (nextStatus === 'DELIVERED') {
         await this.reconcileDeliveryCompletion(storeId, orderId);
@@ -133,56 +140,29 @@ export class OrdersLifecycleService {
     }
 
     const now = this.firestore.Timestamp.now();
-    const update: Record<string, unknown> = {
-      status: nextStatus,
-      updatedAt: now,
-    };
-    if (confirmedCancelReason) update['cancelReason'] = confirmedCancelReason;
-    if (nextStatus === 'PREPARING' && dto.preparedAt) {
-      const date = new Date(dto.preparedAt);
-      if (isNaN(date.getTime())) {
-        throw new BadRequestException('preparedAt must be a valid ISO8601 date');
-      }
-      update['preparedAt'] = this.firestore.Timestamp.fromDate(date);
-    }
-    // DELIVERING 전환 시 driverId 자동 기록
-    if (nextStatus === 'DELIVERING') {
-      update['driverId'] = requesterId;
-    }
-    // HUB_ARRIVED 전환 시 photoUrl 저장
-    if ((nextStatus === 'HUB_ARRIVED' || nextStatus === 'DELIVERED') && dto.photoUrl) {
-      update['deliveryPhotoUrl'] = dto.photoUrl;
-    }
-    if (nextStatus === 'DELIVERY_HELD') {
-      const hold = (dto as any).deliveryHold as Record<string, unknown> | undefined;
-      if (!hold?.['reasonCode'] || !hold?.['reasonMessage']) {
-        throw new BadRequestException('배송 보류 사유가 필요합니다.');
-      }
-      assertDeliveryHoldPolicy(hold);
-      update['deliveryHold'] = {
-        ...hold,
-        heldAt: this.toIso(now),
-        customerResponsible: hold['customerResponsible'] ?? false,
-        redeliveryFee: hold['redeliveryFee'] ?? null,
-        nextContactAt: hold['nextContactAt'] ?? null,
-        nextDeliveryAt: hold['nextDeliveryAt'] ?? null,
-        resolvedAt: null,
-      };
-    } else if (
-      (nextStatus === 'DELIVERING' && isCurrentRedeliveryPaymentRequired(order)) ||
-      (currentStatus === 'DELIVERY_HELD' && !isCurrentRedeliveryPaymentRequired(order))
-    ) {
-      update['deliveryHold'] = {
-        ...(order['deliveryHold'] as Record<string, unknown>),
-        resolvedAt: this.toIso(now),
-      };
-    }
+    const update = this.buildStatusUpdate(
+      order,
+      dto,
+      requesterId,
+      now,
+      confirmedCancelReason,
+    );
 
     const resolvesCurrentHold =
       currentStatus === 'DELIVERY_HELD' &&
       (!isCurrentRedeliveryPaymentRequired(order) || nextStatus === 'DELIVERING');
     const heldOrderDelta = nextStatus === 'DELIVERY_HELD' ? 1 : resolvesCurrentHold ? -1 : 0;
-    if (heldOrderDelta !== 0 && order['roundId']) {
+    if (role === 'driver') {
+      await this.updateDriverStatusInTransaction({
+        storeId,
+        orderId,
+        requesterId,
+        requesterRole: role,
+        expectedStatus: currentStatus,
+        dto,
+        now,
+      });
+    } else if (heldOrderDelta !== 0 && order['roundId']) {
       await this.firestore.runTransaction(async (t) => {
         const orderRef = this.firestore.doc(`orders/${orderId}`);
         const latestOrderSnap = await t.get(orderRef);
@@ -221,31 +201,7 @@ export class OrdersLifecycleService {
         t.update(orderRef, update);
       });
     } else {
-      const isDriverAssignment =
-        role === 'driver' && currentStatus === 'PREPARING' && nextStatus === 'DELIVERING';
-      if (isDriverAssignment) {
-        await this.firestore.runTransaction(async (transaction) => {
-          const orderRef = this.firestore.doc(`orders/${orderId}`);
-          const latestSnap = await transaction.get(orderRef);
-          if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
-            throw new NotFoundException();
-          }
-          const latestOrder = latestSnap.data()!;
-          if (latestOrder['status'] !== 'PREPARING') {
-            throw new ConflictException('주문 상태가 변경되었습니다.');
-          }
-          if (latestOrder['driverId'] != null && latestOrder['driverId'] !== requesterId) {
-            throw new ConflictException('이미 다른 기사에게 배정된 주문입니다.');
-          }
-          await assertPaidRedeliveryResume({
-            tx: transaction,
-            firestore: this.firestore,
-            order: { ...latestOrder, id: orderId },
-            orderId,
-          });
-          transaction.update(orderRef, update);
-        });
-      } else if (nextStatus === 'DELIVERING') {
+      if (nextStatus === 'DELIVERING') {
         await this.firestore.runTransaction(async (transaction) => {
           const orderRef = this.firestore.doc(`orders/${orderId}`);
           const latestSnap = await transaction.get(orderRef);
@@ -489,19 +445,134 @@ export class OrdersLifecycleService {
       throw new ForbiddenException('해당 스토어 주문을 변경할 권한이 없습니다.');
     }
     if (role === 'driver') {
-      if (order['driverId'] === requesterId) return;
-      if (
-        order['driverId'] == null &&
-        order['status'] === 'PREPARING' &&
-        nextStatus === 'DELIVERING' &&
-        ['direct', 'hub'].includes(String(order['deliveryMethod']))
-      ) {
-        return;
-      }
-      throw new ForbiddenException('담당 기사만 배송 상태를 변경할 수 있습니다.');
+      await this.driverScope.assertMutationEligibility({
+        requesterId,
+        requesterRole: role,
+        storeId,
+        order,
+        expectedStatus: String(order['status']),
+        nextStatus,
+      });
+      return;
     }
     if (role === 'consumer' && order['userId'] === requesterId) return;
     throw new ForbiddenException('해당 주문을 변경할 권한이 없습니다.');
+  }
+
+  private async updateDriverStatusInTransaction(input: {
+    storeId: string;
+    orderId: string;
+    requesterId: string;
+    requesterRole: string;
+    expectedStatus: OrderStatus;
+    dto: UpdateStatusDto;
+    now: unknown;
+  }) {
+    await this.firestore.runTransaction(async (transaction) => {
+      const orderRef = this.firestore.doc(`orders/${input.orderId}`);
+      const latestSnap = await transaction.get(orderRef);
+      if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== input.storeId) {
+        throw new NotFoundException();
+      }
+      const latestOrder = latestSnap.data()!;
+      const mutationInput = {
+        requesterId: input.requesterId,
+        requesterRole: input.requesterRole,
+        storeId: input.storeId,
+        order: { ...latestOrder, id: input.orderId },
+        expectedStatus: input.expectedStatus,
+        nextStatus: input.dto.status,
+      };
+      if (latestOrder['driverId'] == null && input.dto.status === 'DELIVERING') {
+        await this.driverScope.assertFirstClaimEligibilityInTransaction(transaction, mutationInput);
+      } else {
+        await this.driverScope.assertMutationEligibilityInTransaction(transaction, mutationInput);
+      }
+      if (input.dto.status === 'DELIVERING') {
+        await assertPaidRedeliveryResume({
+          tx: transaction,
+          firestore: this.firestore,
+          order: { ...latestOrder, id: input.orderId },
+          orderId: input.orderId,
+        });
+      }
+      const currentPaymentRequired = isCurrentRedeliveryPaymentRequired(latestOrder);
+      const heldOrderDelta =
+        input.dto.status === 'DELIVERY_HELD'
+          ? 1
+          : (input.dto.status === 'DELIVERING' && currentPaymentRequired) ||
+              (input.expectedStatus === 'DELIVERY_HELD' && !currentPaymentRequired)
+            ? -1
+            : 0;
+      if (heldOrderDelta !== 0 && latestOrder['roundId']) {
+        const roundRef = this.firestore.doc(`saleRounds/${latestOrder['roundId']}`);
+        const roundSnap = await transaction.get(roundRef);
+        if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
+          throw new NotFoundException('회차를 찾을 수 없습니다.');
+        }
+        const round = roundSnap.data()!;
+        transaction.update(roundRef, {
+          counters: this.nextRoundCounters(round['counters'], {
+            heldOrderCount: heldOrderDelta,
+          }),
+          updatedAt: input.now,
+        });
+      }
+      transaction.update(
+        orderRef,
+        this.buildStatusUpdate(latestOrder, input.dto, input.requesterId, input.now),
+      );
+    });
+  }
+
+  private buildStatusUpdate(
+    order: Record<string, any>,
+    dto: UpdateStatusDto,
+    requesterId: string,
+    now: unknown,
+    confirmedCancelReason: string | null = null,
+  ): Record<string, unknown> {
+    const update: Record<string, unknown> = {
+      status: dto.status,
+      updatedAt: now,
+    };
+    if (confirmedCancelReason) update['cancelReason'] = confirmedCancelReason;
+    if (dto.status === 'PREPARING' && dto.preparedAt) {
+      const date = new Date(dto.preparedAt);
+      if (isNaN(date.getTime())) {
+        throw new BadRequestException('preparedAt must be a valid ISO8601 date');
+      }
+      update['preparedAt'] = this.firestore.Timestamp.fromDate(date);
+    }
+    if (dto.status === 'DELIVERING') update['driverId'] = requesterId;
+    if ((dto.status === 'HUB_ARRIVED' || dto.status === 'DELIVERED') && dto.photoUrl) {
+      update['deliveryPhotoUrl'] = dto.photoUrl;
+    }
+    if (dto.status === 'DELIVERY_HELD') {
+      const hold = dto.deliveryHold as Record<string, unknown> | undefined;
+      if (!hold?.['reasonCode'] || !hold?.['reasonMessage']) {
+        throw new BadRequestException('배송 보류 사유가 필요합니다.');
+      }
+      assertDeliveryHoldPolicy(hold);
+      update['deliveryHold'] = {
+        ...hold,
+        heldAt: this.toIso(now),
+        customerResponsible: hold['customerResponsible'] ?? false,
+        redeliveryFee: hold['redeliveryFee'] ?? null,
+        nextContactAt: hold['nextContactAt'] ?? null,
+        nextDeliveryAt: hold['nextDeliveryAt'] ?? null,
+        resolvedAt: null,
+      };
+    } else if (
+      (dto.status === 'DELIVERING' && isCurrentRedeliveryPaymentRequired(order)) ||
+      (order['status'] === 'DELIVERY_HELD' && !isCurrentRedeliveryPaymentRequired(order))
+    ) {
+      update['deliveryHold'] = {
+        ...(order['deliveryHold'] as Record<string, unknown>),
+        resolvedAt: this.toIso(now),
+      };
+    }
+    return update;
   }
 
   private toIso(value: unknown) {

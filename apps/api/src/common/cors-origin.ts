@@ -1,8 +1,34 @@
 const DEFAULT_VERCEL_TEAM = 'jos-projects-d1cecc0c';
 const DEFAULT_VERCEL_PROJECTS = ['greenhubconsumer', 'greenhub-seller', 'greenhub-driver'];
+export const LOCAL_DRIVER_ORIGIN = 'http://localhost:3003';
+
+export class CorsConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CorsConfigurationError';
+  }
+}
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function configuredCorsOrigins(values: Record<string, unknown> = process.env): string[] {
+  const raw = typeof values.CORS_ORIGIN === 'string' ? values.CORS_ORIGIN : '';
+  const origins = raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (origins.includes('*')) {
+    throw new CorsConfigurationError('CORS wildcard origin은 허용되지 않습니다.');
+  }
+
+  if (values.GREENHUB_LOCAL_RUNTIME === 'true' && !origins.includes(LOCAL_DRIVER_ORIGIN)) {
+    origins.push(LOCAL_DRIVER_ORIGIN);
+  }
+
+  return origins;
 }
 
 export function isAllowedVercelPreviewOrigin(

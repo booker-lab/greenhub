@@ -24,6 +24,24 @@ interface DeliveryPhotoAccessInput {
   requesterRole: RequesterRole;
 }
 
+export type DeliveryPhotoReconciliationState =
+  | 'CLEAN'
+  | 'ATTACHED'
+  | 'CLEANUP_PENDING'
+  | 'OUTCOME_UNKNOWN'
+  | 'CONFLICT';
+
+export interface DeliveryPhotoReconciliation {
+  state: DeliveryPhotoReconciliationState;
+  orderId: string;
+  photoId: string;
+  path: string;
+  objectExists: boolean | null;
+  attached: boolean | null;
+  observedContentSha256?: string;
+  orderStatus?: string;
+}
+
 @Injectable()
 export class StorageService {
   private readonly bucket: ReturnType<admin.storage.Storage['bucket']>;
@@ -94,6 +112,122 @@ export class StorageService {
     return { url, expiresAt: expiresAt.toISOString() };
   }
 
+  async reconcileDeliveryPhoto(input: {
+    storeId: string;
+    orderId: string;
+    photoId: string;
+    contentSha256: string;
+  }): Promise<DeliveryPhotoReconciliation> {
+    const path = this.deliveryPhotoPath(input.orderId, input.photoId);
+    const file = this.bucket.file(path);
+    let metadata: { metadata?: Record<string, string> } | undefined;
+
+    try {
+      const metadataResponse = await file.getMetadata();
+      metadata = metadataResponse[0] as { metadata?: Record<string, string> };
+    } catch (error) {
+      const order = await this.tryGetOrder(input);
+      if (order === undefined) {
+        return {
+          state: 'OUTCOME_UNKNOWN',
+          orderId: input.orderId,
+          photoId: input.photoId,
+          path,
+          objectExists: null,
+          attached: null,
+        };
+      }
+      const attached = order
+        ? this.readPhotoIds(order['deliveryPhotoIds']).includes(input.photoId)
+        : null;
+      const orderStatus = this.readOrderStatus(order);
+      if (!this.isNotFound(error)) {
+        return {
+          state: 'OUTCOME_UNKNOWN',
+          orderId: input.orderId,
+          photoId: input.photoId,
+          path,
+          objectExists: null,
+          attached,
+          orderStatus,
+        };
+      }
+      return {
+        state: attached ? 'CONFLICT' : 'CLEAN',
+        orderId: input.orderId,
+        photoId: input.photoId,
+        path,
+        objectExists: false,
+        attached,
+        orderStatus,
+      };
+    }
+
+    const observedContentSha256 = metadata?.metadata?.['contentSha256'];
+    const order = await this.tryGetOrder(input);
+    if (!order) {
+      return {
+        state: 'OUTCOME_UNKNOWN',
+        orderId: input.orderId,
+        photoId: input.photoId,
+        path,
+        objectExists: true,
+        attached: null,
+        observedContentSha256,
+      };
+    }
+
+    const photoIds = this.readPhotoIds(order['deliveryPhotoIds']);
+    const attached = photoIds.includes(input.photoId);
+    const orderStatus = this.readOrderStatus(order);
+    if (observedContentSha256 !== input.contentSha256) {
+      return {
+        state: 'CONFLICT',
+        orderId: input.orderId,
+        photoId: input.photoId,
+        path,
+        objectExists: true,
+        attached,
+        observedContentSha256,
+        orderStatus,
+      };
+    }
+    if (attached) {
+      return {
+        state: 'ATTACHED',
+        orderId: input.orderId,
+        photoId: input.photoId,
+        path,
+        objectExists: true,
+        attached: true,
+        observedContentSha256,
+        orderStatus,
+      };
+    }
+    if (photoIds.length > 0) {
+      return {
+        state: 'CONFLICT',
+        orderId: input.orderId,
+        photoId: input.photoId,
+        path,
+        objectExists: true,
+        attached: false,
+        observedContentSha256,
+        orderStatus,
+      };
+    }
+    return {
+      state: 'CLEANUP_PENDING',
+      orderId: input.orderId,
+      photoId: input.photoId,
+      path,
+      objectExists: true,
+      attached: false,
+      observedContentSha256,
+      orderStatus,
+    };
+  }
+
   async deleteObject(path: string): Promise<void> {
     this.assertDeliveryPhotoPath(path);
     await this.bucket.file(path).delete({ ignoreNotFound: true });
@@ -107,6 +241,18 @@ export class StorageService {
       throw new NotFoundException('주문을 찾을 수 없습니다.');
     }
     return snapshot.data() as Record<string, unknown>;
+  }
+
+  private async tryGetOrder(input: Pick<DeliveryPhotoAccessInput, 'storeId' | 'orderId'>) {
+    this.assertSafeId(input.storeId, 'storeId');
+    this.assertSafeId(input.orderId, 'orderId');
+    try {
+      const snapshot = await this.firestore.doc(`orders/${input.orderId}`).get();
+      if (!snapshot.exists || snapshot.data()?.['storeId'] !== input.storeId) return null;
+      return snapshot.data() as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
   }
 
   private async assertAccess(
@@ -202,5 +348,14 @@ export class StorageService {
   private isPreconditionFailed(error: unknown): boolean {
     const code = (error as { code?: unknown } | null)?.code;
     return code === 412 || code === '412';
+  }
+
+  private isNotFound(error: unknown): boolean {
+    const code = (error as { code?: unknown } | null)?.code;
+    return code === 404 || code === '404' || code === 'storage/object-not-found';
+  }
+
+  private readOrderStatus(order: Record<string, unknown> | null | undefined): string | undefined {
+    return typeof order?.['status'] === 'string' ? order['status'] : undefined;
   }
 }

@@ -7,6 +7,7 @@ import {
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { FirestoreService } from '../firestore/firestore.service';
 import { StorageService } from '../firestore/storage.service';
+import { DriverOrderScopeService } from './driver-order-scope.service';
 import {
   isCurrentRedeliveryPaymentRequired,
   resolveRedeliveryPaymentActionability,
@@ -21,6 +22,7 @@ export class OrdersQueryService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly storage?: StorageService,
+    private readonly driverScope: DriverOrderScopeService = new DriverOrderScopeService(firestore),
   ) {}
 
   async getOrder(storeId: string, orderId: string, requesterInput: OrderRequesterInput) {
@@ -179,7 +181,10 @@ export class OrdersQueryService {
   ) {
     if (requester.role === 'admin') return;
     if (requester.role === 'consumer' && order['userId'] === requester.sub) return;
-    if (requester.role === 'driver' && order['driverId'] === requester.sub) return;
+    if (requester.role === 'driver') {
+      await this.driverScope.assertAssignedReadAccess(order, requester.sub, storeId);
+      return;
+    }
     if (requester.role === 'seller') {
       const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
       if (storeSnap.exists && storeSnap.data()?.['ownerId'] === requester.sub) return;

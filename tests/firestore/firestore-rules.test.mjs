@@ -73,6 +73,11 @@ async function seedFixtures() {
     const fixtures = {
       'products/product-1': { storeId: 'store-1', name: '공개 상품' },
       'stores/store-1': { name: '공개 매장', salesMode: 'round_direct' },
+      'stores/store-2': { name: '다른 매장', salesMode: 'round_direct' },
+      'stores/store-legacy': { name: '기존 매장', salesMode: 'legacy' },
+      'stores/store-missing-mode': { name: '모드 누락 매장' },
+      'stores/store-null-mode': { name: 'null 모드 매장', salesMode: null },
+      'stores/store-invalid-mode': { name: '잘못된 모드 매장', salesMode: 'unsupported' },
       'dailyCaps/store-1_2026-07-18': { storeId: 'store-1', date: '2026-07-18' },
       'groupProductConfig/product-1': { storeId: 'store-1', productId: 'product-1' },
       'varieties/variety-1': {
@@ -231,15 +236,71 @@ async function seedFixtures() {
         suspended: false,
       },
       'saleRounds/round-1': { storeId: 'store-1', status: 'OPEN' },
+      'saleRounds/round-scheduled': { storeId: 'store-1', status: 'SCHEDULED' },
+      'saleRounds/round-closed': { storeId: 'store-1', status: 'CLOSED' },
+      'saleRounds/round-completed': { storeId: 'store-1', status: 'COMPLETED' },
       'saleRounds/round-draft': { storeId: 'store-1', status: 'DRAFT' },
+      'saleRounds/round-cancelled': { storeId: 'store-1', status: 'CANCELLED' },
+      'saleRounds/round-unknown': { storeId: 'store-1', status: 'UNKNOWN' },
+      'saleRounds/round-store-2': { storeId: 'store-2', status: 'OPEN' },
+      'saleRounds/round-missing-store': { storeId: 'store-missing', status: 'OPEN' },
+      'saleRounds/round-legacy': { storeId: 'store-legacy', status: 'OPEN' },
+      'saleRounds/round-missing-mode': { storeId: 'store-missing-mode', status: 'OPEN' },
+      'saleRounds/round-null-mode': { storeId: 'store-null-mode', status: 'OPEN' },
+      'saleRounds/round-invalid-mode': { storeId: 'store-invalid-mode', status: 'OPEN' },
       'saleRoundItems/item-1': {
         storeId: 'store-1',
         roundId: 'round-1',
         productId: 'product-1',
       },
+      'saleRoundItems/item-foreign-store': {
+        storeId: 'store-2',
+        roundId: 'round-1',
+        productId: 'product-1',
+      },
+      'saleRoundItems/item-parent-mismatch': {
+        storeId: 'store-1',
+        roundId: 'round-store-2',
+        productId: 'product-1',
+      },
+      'saleRoundItems/item-missing-parent': {
+        storeId: 'store-1',
+        roundId: 'round-missing-parent',
+        productId: 'product-1',
+      },
       'saleRoundItems/item-draft': {
         storeId: 'store-1',
         roundId: 'round-draft',
+        productId: 'product-1',
+      },
+      'saleRoundItems/item-cancelled': {
+        storeId: 'store-1',
+        roundId: 'round-cancelled',
+        productId: 'product-1',
+      },
+      'saleRoundItems/item-unknown': {
+        storeId: 'store-1',
+        roundId: 'round-unknown',
+        productId: 'product-1',
+      },
+      'saleRoundItems/item-legacy': {
+        storeId: 'store-legacy',
+        roundId: 'round-legacy',
+        productId: 'product-1',
+      },
+      'saleRoundItems/item-missing-mode': {
+        storeId: 'store-missing-mode',
+        roundId: 'round-missing-mode',
+        productId: 'product-1',
+      },
+      'saleRoundItems/item-null-mode': {
+        storeId: 'store-null-mode',
+        roundId: 'round-null-mode',
+        productId: 'product-1',
+      },
+      'saleRoundItems/item-invalid-mode': {
+        storeId: 'store-invalid-mode',
+        roundId: 'round-invalid-mode',
         productId: 'product-1',
       },
     };
@@ -306,12 +367,27 @@ test('saleRounds는 공개 상태의 단건 및 제한된 목록 조회만 허�
   const database = testEnvironment.unauthenticatedContext().firestore();
   const publicQuery = query(
     collection(database, 'saleRounds'),
+    where('storeId', '==', 'store-1'),
     where('status', 'in', ['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED']),
   );
 
   await assertSucceeds(getDoc(doc(database, 'saleRounds', 'round-1')));
+  for (const roundId of ['round-scheduled', 'round-closed', 'round-completed']) {
+    await assertSucceeds(getDoc(doc(database, 'saleRounds', roundId)));
+  }
   await assertSucceeds(getDocs(publicQuery));
-  await assertFails(getDoc(doc(database, 'saleRounds', 'round-draft')));
+  for (const roundId of ['round-draft', 'round-cancelled', 'round-unknown']) {
+    await assertFails(getDoc(doc(database, 'saleRounds', roundId)));
+  }
+  for (const roundId of [
+    'round-legacy',
+    'round-missing-store',
+    'round-missing-mode',
+    'round-null-mode',
+    'round-invalid-mode',
+  ]) {
+    await assertFails(getDoc(doc(database, 'saleRounds', roundId)));
+  }
   await assertFails(getDocs(collection(database, 'saleRounds')));
 });
 
@@ -329,7 +405,20 @@ test('saleRoundItems는 공개 회차에 속한 단건 및 제한된 목록 조�
 
   await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-1')));
   await assertSucceeds(getDocs(publicQuery));
-  await assertFails(getDoc(doc(database, 'saleRoundItems', 'item-draft')));
+  for (const itemId of [
+    'item-foreign-store',
+    'item-parent-mismatch',
+    'item-missing-parent',
+    'item-draft',
+    'item-cancelled',
+    'item-unknown',
+    'item-legacy',
+    'item-missing-mode',
+    'item-null-mode',
+    'item-invalid-mode',
+  ]) {
+    await assertFails(getDoc(doc(database, 'saleRoundItems', itemId)));
+  }
   await assertFails(getDocs(roundOnlyQuery));
   await assertFails(getDocs(collection(database, 'saleRoundItems')));
 });

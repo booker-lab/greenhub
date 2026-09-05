@@ -6,32 +6,36 @@
 
 ## 메타
 
-- 최종 정합화: 2026-08-27 KST
-- 상태: `active_p0_parallel / aligo_provider_approved`
+- 최종 정합화: 2026-09-05 KST
+- 상태: `active_p0_parallel / public_readiness_closed / publication_pending`
 - 외부 ALIGO 심사 차단점: 해소 — 회차 템플릿 8종 `승인완료`
 - 다음 ALIGO gate: provider code 1:1 확인 → 격리 알림톡 → SMS fallback
 - 승인 증거: `docs/reports/REPORT_aligo_template_approval_20260827.md`
 - 상태 SSOT: `docs/memory.md`
 - 재개: `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
 - 미완료: `docs/BACKLOG.md`
+- S2 Browser Readiness: `CLOSED`; exact-source Browser R3: `PASS`; physical-device disposition: `PHYSICAL_DEVICE_NOT_REQUIRED`
+- R1 Combined Public Readiness: `PUBLIC_READINESS_CLOSED`; S2 → R1 campaign: `TERMINAL_SUCCESS`
+- accepted source authority: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`; exact-source Driver Preview: `preview / READY`
+- 다음 문서·Git 의존성: `PUBLICATION_TOPOLOGY_CONVERGENCE`; production release/activation은 별도 게이트다.
 
-## Task 2F-B candidate publication reconciliation
+## 현재 source·publication reconciliation
 
-- 검증 candidate: `codex/task-2c-r1-reg001` / Task 2F-A auth change `1da3dee`
-- 상태: `TASK_2F_B_PUBLICATION_CANDIDATE`
-- 완료 범위: `F-001`, `P0-001`, `P0-002`, `REG-001`, `ENV-001`
-- 검증 증거: [Task 2D integration closeout report](REPORT_task_2d_integration_closeout.md)
-- candidate의 추가 auth 범위: public driver register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계.
-- 현재 `origin/main`: `d6185bd`; candidate code는 아직 main에 통합되지 않았다.
+- 작업 시작 source HEAD/local `main`: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
+- 작업 시작 local `origin/main` 및 live remote `main`: `aba3013f6dd352316fbf542cda4e1fd33117a534`
+- remote `main`은 source HEAD의 조상이며 local source는 7개 commit 앞서 있었다.
+- 잘못된 transcription `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`는 Git object가 아니며 target으로 사용하지 않는다.
+- GitHub `main`: `protected=true`, PR required, strict `verify` required check, force-push·branch 삭제 차단; Issue #32 `CLOSED`.
+- S2 → R1 closure는 semantic/browser work의 종료 상태이며, 아래 release gate와 production readiness를 대체하지 않는다.
 - `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN이며, refresh/session lifecycle 완료로 해석하지 않는다.
-- 다음 Git 단계는 branch+PR 검토다.
+- 문서 publication의 다음 Git 단계는 branch+PR 검토이며, direct main commit/push는 금지한다.
 - 최신 main의 redelivery P0 상태머신(`ORDER-REDELIVERY-PAID-RESUME-GATE`)은 candidate 범위 밖의 미완료 작업이다.
 
 ## 출시 게이트
 
 | ID | 게이트 | 상태 |
 |---|---|---|
-| 0A | GitHub `main` protection/ruleset | 미완료 — Issue #32 |
+| 0A | GitHub `main` protection/ruleset | 완료 — `protected=true`, PR required, `verify` strict required, force-push·delete 차단; Issue #32 `CLOSED` |
 | 0B | payment finalization 비`PAID` 차단 | candidate 검증 완료 — main 통합 대기 |
 | 0C | order mutation authorization 직접 거부 회귀 | candidate 관련 회귀 완료 — main 통합 대기 |
 | 0D | order direct Firestore read·최소화 | candidate Rules 경계 검증 완료 — field minimization/main 통합 대기 |
@@ -84,7 +88,7 @@
 ### Task 0.3 — GitHub main protection
 - Required: PR required, deployment safety required check, force-push/delete 차단
 - Tracking: Issue #32
-- Status: todo_admin
+- Status: done — 2026-09-05 직접 재조회에서 `protected=true`, strict `verify` required check, force-push/delete 차단 확인
 
 ### Task 0.4 — Payment finalization PAID boundary
 - Backlog: `PAYMENT-FINALIZATION-PAID-GUARD`

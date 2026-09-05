@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -7,6 +8,10 @@ import {
 import { StorageService } from './storage.service';
 
 type OrderData = Record<string, unknown>;
+
+function contentSha256(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex');
+}
 
 function makeService(order: OrderData | null = null) {
   let storedMetadata: Record<string, unknown> | null = null;
@@ -393,5 +398,164 @@ describe('배송 사진 Storage 계약', () => {
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(file).not.toHaveBeenCalled();
+  });
+
+  it('Storage 객체가 없고 주문에도 연결되지 않았으면 재조정 결과를 CLEAN으로 판정한다', async () => {
+    const context = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      deliveryPhotoIds: [],
+      status: 'DELIVERING',
+    });
+
+    await expect(
+      context.service.reconcileDeliveryPhoto({
+        storeId: 'store-safe',
+        orderId: 'order-safe',
+        photoId: 'photo-safe',
+        contentSha256: contentSha256(Buffer.from('photo-safe')),
+      }),
+    ).resolves.toMatchObject({
+      state: 'CLEAN',
+      objectExists: false,
+      attached: false,
+      orderStatus: 'DELIVERING',
+    });
+  });
+
+  it('객체 읽기가 불확실하면 주문 상태를 함께 보존하고 OUTCOME_UNKNOWN으로 남긴다', async () => {
+    const context = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      deliveryPhotoIds: [],
+      status: 'DELIVERING',
+    });
+    const error = new Error('Storage 메타데이터 응답 유실') as Error & { code: number };
+    error.code = 503;
+    context.getMetadata.mockRejectedValueOnce(error);
+
+    await expect(
+      context.service.reconcileDeliveryPhoto({
+        storeId: 'store-safe',
+        orderId: 'order-safe',
+        photoId: 'photo-safe',
+        contentSha256: contentSha256(Buffer.from('photo-safe')),
+      }),
+    ).resolves.toMatchObject({
+      state: 'OUTCOME_UNKNOWN',
+      objectExists: null,
+      attached: false,
+      orderStatus: 'DELIVERING',
+    });
+  });
+
+  it('동일 콘텐츠의 미연결 객체는 무조건 삭제하지 않고 CLEANUP_PENDING으로 보존한다', async () => {
+    const context = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: [],
+    });
+    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0xff, 0xd9]);
+    await context.service.uploadDeliveryPhoto({
+      storeId: 'store-safe',
+      orderId: 'order-safe',
+      photoId: 'photo-safe',
+      requesterId: 'driver-safe',
+      requesterRole: 'driver',
+      content,
+      contentType: 'image/jpeg',
+    });
+
+    await expect(
+      context.service.reconcileDeliveryPhoto({
+        storeId: 'store-safe',
+        orderId: 'order-safe',
+        photoId: 'photo-safe',
+        contentSha256: contentSha256(content),
+      }),
+    ).resolves.toMatchObject({
+      state: 'CLEANUP_PENDING',
+      objectExists: true,
+      attached: false,
+      observedContentSha256: contentSha256(content),
+    });
+    expect(context.deleteFile).not.toHaveBeenCalled();
+  });
+
+  it('동일 콘텐츠 객체와 사진 연결이 모두 있으면 ATTACHED로 판정한다', async () => {
+    const context = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: ['photo-safe'],
+    });
+    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x02, 0xff, 0xd9]);
+    await context.service.uploadDeliveryPhoto({
+      storeId: 'store-safe',
+      orderId: 'order-safe',
+      photoId: 'photo-safe',
+      requesterId: 'driver-safe',
+      requesterRole: 'driver',
+      content,
+      contentType: 'image/jpeg',
+    });
+
+    await expect(
+      context.service.reconcileDeliveryPhoto({
+        storeId: 'store-safe',
+        orderId: 'order-safe',
+        photoId: 'photo-safe',
+        contentSha256: contentSha256(content),
+      }),
+    ).resolves.toMatchObject({
+      state: 'ATTACHED',
+      objectExists: true,
+      attached: true,
+    });
+  });
+
+  it('동일 경로의 다른 콘텐츠는 CONFLICT로 보존하고 삭제하지 않는다', async () => {
+    const context = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: [],
+    });
+    const stored = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x03, 0xff, 0xd9]);
+    const requested = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x04, 0xff, 0xd9]);
+    await context.service.uploadDeliveryPhoto({
+      storeId: 'store-safe',
+      orderId: 'order-safe',
+      photoId: 'photo-safe',
+      requesterId: 'driver-safe',
+      requesterRole: 'driver',
+      content: stored,
+      contentType: 'image/jpeg',
+    });
+
+    await expect(
+      context.service.reconcileDeliveryPhoto({
+        storeId: 'store-safe',
+        orderId: 'order-safe',
+        photoId: 'photo-safe',
+        contentSha256: contentSha256(requested),
+      }),
+    ).resolves.toMatchObject({
+      state: 'CONFLICT',
+      objectExists: true,
+      attached: false,
+      observedContentSha256: contentSha256(stored),
+    });
+    expect(context.deleteFile).not.toHaveBeenCalled();
   });
 });
