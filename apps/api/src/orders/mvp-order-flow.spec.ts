@@ -134,6 +134,7 @@ function seedRoundRecords(overrides: Record<string, RecordData> = {}) {
       name: '7월 3주차',
       status: 'OPEN',
       schedule: {
+        orderOpenAt: '2026-07-14T00:00:00.000+09:00',
         orderCloseAt: '2099-07-20T00:00:00.000+09:00',
         timezone: 'Asia/Seoul',
       },
@@ -540,6 +541,56 @@ describe('MVP 회차 주문 흐름 계약', () => {
         orderedItemQuantity: 0,
       }),
     });
+  });
+
+  it('주문 시작 전이거나 OPEN이 아닌 회차에서는 예약을 만들지 않는다', async () => {
+    const { OrderCapacityService } = require('./order-capacity.service');
+    const beforeOpen = makeFirestore(
+      seedRoundRecords({
+        'saleRounds/round-1': {
+          ...seedRoundRecords()['saleRounds/round-1'],
+          schedule: {
+            ...seedRoundRecords()['saleRounds/round-1']['schedule'],
+            orderOpenAt: '2099-07-14T00:00:00.000+09:00',
+          },
+        },
+      }),
+    );
+    const beforeOpenService = new OrderCapacityService(beforeOpen.firestore);
+    const request = {
+      storeId: 'store-round',
+      roundId: 'round-1',
+      userId: 'user-1',
+      idempotencyKey: 'before-open',
+      deliveryAddress: {
+        address: '경기도 이천시 중리천로 1',
+        addressDetail: '201호',
+        zipCode: '17373',
+      },
+      items: [{ roundItemId: 'round-item-1', quantity: 1 }],
+    };
+    await expect(beforeOpenService.reserveCheckout(request)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(
+      [...beforeOpen.records.keys()].some((path) => path.startsWith('checkoutReservations/')),
+    ).toBe(false);
+
+    const notOpen = makeFirestore(
+      seedRoundRecords({
+        'saleRounds/round-1': {
+          ...seedRoundRecords()['saleRounds/round-1'],
+          status: 'SCHEDULED',
+        },
+      }),
+    );
+    const notOpenService = new OrderCapacityService(notOpen.firestore);
+    await expect(
+      notOpenService.reserveCheckout({ ...request, idempotencyKey: 'not-open' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(
+      [...notOpen.records.keys()].some((path) => path.startsWith('checkoutReservations/')),
+    ).toBe(false);
   });
 
   it.each([

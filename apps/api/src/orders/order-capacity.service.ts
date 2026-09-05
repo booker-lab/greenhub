@@ -6,6 +6,11 @@ import {
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { FirestoreService } from '../firestore/firestore.service';
+import {
+  assertOrderWindowOpen,
+  type SaleRoundRecord,
+  timestampMillis,
+} from '../sale-rounds/sale-round-state.contract';
 
 type RoundItemInput = {
   roundItemId: string;
@@ -100,7 +105,8 @@ export class OrderCapacityService {
       throw new NotFoundException('회차를 찾을 수 없습니다.');
     }
     const round = roundSnap.data() as Record<string, any>;
-    this.assertRoundReservable(round);
+    const now = this.firestore.Timestamp.now();
+    this.assertRoundReservable(round, timestampMillis(now));
     this.assertDeliveryCity(input.deliveryAddress.address, round['deliveryRegion']?.['city']);
 
     const normalizedItems = this.normalizeItems(input.items);
@@ -127,7 +133,11 @@ export class OrderCapacityService {
       this.assertItemCapacity(item.data, item.input.quantity);
     });
 
-    const now = this.nowIso();
+    const nowMillis = timestampMillis(now);
+    if (!Number.isFinite(nowMillis)) {
+      throw new ConflictException('예약 시각을 확인할 수 없습니다.');
+    }
+    const nowIso = this.toDate(now).toISOString();
     const reservation: ReservationRecord = {
       id: reservationId,
       roundId: input.roundId,
@@ -148,11 +158,11 @@ export class OrderCapacityService {
         unitPrice: item.data['roundPrice'],
       })),
       idempotencyKey: input.idempotencyKey,
-      expiresAt: this.plusMinutesIso(15),
+      expiresAt: new Date(nowMillis + 15 * 60_000).toISOString(),
       consumedAt: null,
       releasedAt: null,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: nowIso,
+      updatedAt: nowIso,
     };
 
     tx.set(reservationRef, reservation);
@@ -161,12 +171,12 @@ export class OrderCapacityService {
         reservedDeliveryAddresses: 1,
         reservedItemQuantity: totalQuantity,
       }),
-      updatedAt: now,
+      updatedAt: nowIso,
     });
     itemRecords.forEach((item) => {
       tx.update(this.firestore.doc(`saleRoundItems/${item.input.roundItemId}`), {
         reservedQuantity: (item.data['reservedQuantity'] ?? 0) + item.input.quantity,
-        updatedAt: now,
+        updatedAt: nowIso,
       });
     });
     return reservation;
@@ -247,7 +257,12 @@ export class OrderCapacityService {
       if (reservation.status !== 'HELD') {
         throw new ConflictException('이미 닫힌 결제 예약입니다.');
       }
-      if (new Date(reservation.expiresAt).getTime() <= Date.now()) {
+      const clock = this.firestore.Timestamp.now();
+      const clockMillis = timestampMillis(clock);
+      if (!Number.isFinite(clockMillis)) {
+        throw new ConflictException('예약 만료 시각을 확인할 수 없습니다.');
+      }
+      if (new Date(reservation.expiresAt).getTime() <= clockMillis) {
         throw new ConflictException('만료된 결제 예약입니다.');
       }
     }
@@ -271,7 +286,7 @@ export class OrderCapacityService {
         tx.get(this.firestore.doc(`saleRoundItems/${item.roundItemId}`)),
       ),
     );
-    const now = this.nowIso();
+    const now = this.toDate(this.firestore.Timestamp.now()).toISOString();
     const consumed = nextStatus === 'CONSUMED';
     const wasConsumed = reservation.status === 'CONSUMED';
     const update: Partial<ReservationRecord> = {
@@ -316,17 +331,8 @@ export class OrderCapacityService {
     return { ...reservation, ...update } as ReservationRecord;
   }
 
-  private assertRoundReservable(round: Record<string, any>) {
-    if (round['status'] !== 'OPEN') {
-      throw new ConflictException('현재 주문 가능한 회차가 아닙니다.');
-    }
-    if (round['cancellation'] != null) {
-      throw new ConflictException('취소 처리 중인 회차에는 주문할 수 없습니다.');
-    }
-    const closeAt = new Date(round['schedule']?.['orderCloseAt'] ?? 0).getTime();
-    if (!Number.isFinite(closeAt) || closeAt <= Date.now()) {
-      throw new ConflictException('주문 마감된 회차입니다.');
-    }
+  private assertRoundReservable(round: Record<string, any>, nowMillis: number) {
+    assertOrderWindowOpen(round as SaleRoundRecord, nowMillis);
   }
 
   private assertRoundCapacity(round: Record<string, any>, itemQuantityTotal: number) {
@@ -426,15 +432,6 @@ export class OrderCapacityService {
           .replace(/\s+/g, ' '),
       )
       .join('|');
-  }
-
-  private nowIso() {
-    const now = this.firestore.Timestamp.now();
-    return this.toDate(now).toISOString();
-  }
-
-  private plusMinutesIso(minutes: number) {
-    return new Date(Date.now() + minutes * 60_000).toISOString();
   }
 
   private toDate(value: any): Date {

@@ -17,6 +17,9 @@ export interface SaleRoundCancellation {
   status: SaleRoundCancellationStatus
   reason: string
   failedOrderId: string | null
+  ownerId?: string | null
+  leaseId?: string | null
+  leaseExpiresAt?: string | null // ISO8601
   updatedAt: string // ISO8601
   completedAt: string | null // ISO8601
 }
