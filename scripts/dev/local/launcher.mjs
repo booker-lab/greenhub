@@ -1,6 +1,10 @@
-import { execFile as nativeExecFile, spawn as nativeSpawn } from 'node:child_process';
+import {
+  execFile as nativeExecFile,
+  spawn as nativeSpawn,
+  spawnSync as nativeSpawnSync,
+} from 'node:child_process';
 import { createConnection, createServer } from 'node:net';
-import { dirname, resolve } from 'node:path';
+import { dirname, posix as posixPath, resolve, win32 as windowsPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const MODULE_DIRECTORY = dirname(fileURLToPath(import.meta.url));
@@ -25,6 +29,12 @@ export const LOCAL_RUNTIME_CONTRACT = Object.freeze({
     NODE_ENV: 'development',
     GREENHUB_SCHEDULES_ENABLED: 'false',
   }),
+});
+
+export const JAVA_RUNTIME_CONTRACT = Object.freeze({
+  minimumMajorVersion: 21,
+  explicitOverrideKey: 'GREENHUB_JAVA_HOME',
+  currentJavaHomeKey: 'JAVA_HOME',
 });
 
 export const FIXED_PORTS = Object.freeze([
@@ -99,6 +109,7 @@ const LOCAL_ENVIRONMENT_KEYS_TO_REMOVE = new Set([
   'GOOGLE_APPLICATION_CREDENTIALS_JSON',
   'GOOGLE_API_KEY',
   'GOOGLE_CLOUD_PROJECT',
+  'GREENHUB_JAVA_HOME',
   'JWT_REFRESH_SECRET',
   'JWT_SECRET',
   'NEXTAUTH_SECRET',
@@ -181,6 +192,13 @@ export class LocalRuntimeConfigurationError extends LocalRuntimeError {
   }
 }
 
+export class JavaRuntimeConfigurationError extends LocalRuntimeConfigurationError {
+  constructor(message) {
+    super(message);
+    this.name = 'JavaRuntimeConfigurationError';
+  }
+}
+
 export class PortCollisionError extends LocalRuntimeError {
   constructor(ports) {
     super(`로컬 runtime 포트가 이미 사용 중입니다: ${ports.join(', ')}`);
@@ -222,6 +240,239 @@ export class ShutdownRequestedError extends LocalRuntimeError {
 function readEnvironmentValue(environment, key) {
   const value = environment?.[key];
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function hasEnvironmentKey(environment, key) {
+  return Object.keys(environment ?? {}).some(
+    (candidate) => candidate.toLowerCase() === key.toLowerCase(),
+  );
+}
+
+function pathApiForPlatform(platform) {
+  return platform === 'win32' ? windowsPath : posixPath;
+}
+
+function javaExecutableName(platform) {
+  return platform === 'win32' ? 'java.exe' : 'java';
+}
+
+function javaHomeFromEnvironment(environment, key) {
+  return readEnvironmentValue(environment, key).replace(/^"|"$/g, '');
+}
+
+function javaExecutableFromHome(javaHome, platform) {
+  return pathApiForPlatform(platform).join(javaHome, 'bin', javaExecutableName(platform));
+}
+
+function parseJavaMajorVersion(output) {
+  const text = String(output ?? '');
+  const propertyMatch = text.match(/(?:^|\r?\n)\s*java\.version\s*=\s*([0-9]+)(?:\.([0-9]+))?/m);
+  const versionMatch = text.match(/\bversion\s+"([0-9]+)(?:\.([0-9]+))?/i);
+  const openJdkMatch = text.match(/\b(?:openjdk|java)\s+([0-9]+)(?:\.([0-9]+))?/i);
+  const match = propertyMatch ?? versionMatch ?? openJdkMatch;
+  if (!match) return undefined;
+
+  const first = Number(match[1]);
+  const second = match[2] === undefined ? undefined : Number(match[2]);
+  if (!Number.isInteger(first)) return undefined;
+  return first === 1 && Number.isInteger(second) ? second : first;
+}
+
+function parseJavaHome(output) {
+  const match = String(output ?? '').match(/^\s*java\.home\s*=\s*(.+?)\s*$/m);
+  return match?.[1]?.trim() || undefined;
+}
+
+function javaRuntimeErrorMessage() {
+  return `Firebase Emulator를 실행하려면 Java ${JAVA_RUNTIME_CONTRACT.minimumMajorVersion}+가 필요합니다. ${JAVA_RUNTIME_CONTRACT.explicitOverrideKey}, ${JAVA_RUNTIME_CONTRACT.currentJavaHomeKey} 또는 PATH에 Java ${JAVA_RUNTIME_CONTRACT.minimumMajorVersion}+를 설정하세요.`;
+}
+
+function explicitJavaRuntimeError(javaHome, reason) {
+  return `${javaRuntimeErrorMessage()} ${JAVA_RUNTIME_CONTRACT.explicitOverrideKey}=${javaHome} ${reason}`;
+}
+
+export function discoverWindowsJavaFallbackHomes(environment = process.env) {
+  const pathApi = pathApiForPlatform('win32');
+  const roots = [
+    readEnvironmentValue(environment, 'ProgramW6432'),
+    readEnvironmentValue(environment, 'ProgramFiles'),
+    readEnvironmentValue(environment, 'ProgramFiles(x86)'),
+  ].filter(Boolean);
+  const candidates = roots.flatMap((root) => [
+    pathApi.join(root, 'Android', 'Android Studio', 'jbr'),
+    pathApi.join(root, 'Android Studio', 'jbr'),
+  ]);
+  const localAppData = readEnvironmentValue(environment, 'LOCALAPPDATA');
+  if (localAppData) {
+    candidates.push(pathApi.join(localAppData, 'Programs', 'Android Studio', 'jbr'));
+  }
+  return [...new Set(candidates)];
+}
+
+export function probeJavaExecutable({
+  executable,
+  environment,
+  javaHome,
+  source,
+  platform = process.platform,
+  spawnSyncImpl = nativeSpawnSync,
+} = {}) {
+  let result;
+  try {
+    result = spawnSyncImpl(executable, ['-XshowSettings:properties', '-version'], {
+      env: environment,
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: platform === 'win32',
+    });
+  } catch {
+    return undefined;
+  }
+
+  if (result?.error || result?.status !== 0) return undefined;
+  const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+  const majorVersion = parseJavaMajorVersion(output);
+  if (!Number.isInteger(majorVersion)) return undefined;
+
+  return {
+    executable,
+    javaHome: javaHome || parseJavaHome(output),
+    majorVersion,
+    source,
+  };
+}
+
+function probeJavaCandidate(candidate, options) {
+  try {
+    return options.probeJavaRuntime({
+      ...candidate,
+      environment: options.baseEnvironment,
+      platform: options.platform,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+export function resolveJavaRuntime({
+  baseEnvironment = process.env,
+  platform = process.platform,
+  probeJavaRuntime = probeJavaExecutable,
+  windowsFallbackHomes,
+} = {}) {
+  const explicitJavaHome = javaHomeFromEnvironment(
+    baseEnvironment,
+    JAVA_RUNTIME_CONTRACT.explicitOverrideKey,
+  );
+  const hasExplicitOverride = hasEnvironmentKey(
+    baseEnvironment,
+    JAVA_RUNTIME_CONTRACT.explicitOverrideKey,
+  );
+  if (hasExplicitOverride) {
+    if (!explicitJavaHome) {
+      throw new JavaRuntimeConfigurationError(
+        `${javaRuntimeErrorMessage()} ${JAVA_RUNTIME_CONTRACT.explicitOverrideKey}가 비어 있습니다.`,
+      );
+    }
+    const candidate = {
+      executable: javaExecutableFromHome(explicitJavaHome, platform),
+      javaHome: explicitJavaHome,
+      source: 'explicit-override',
+    };
+    const result = probeJavaCandidate(candidate, {
+      baseEnvironment,
+      platform,
+      probeJavaRuntime,
+    });
+    if (!result) {
+      throw new JavaRuntimeConfigurationError(
+        explicitJavaRuntimeError(explicitJavaHome, '경로가 없거나 실행할 수 없습니다.'),
+      );
+    }
+    if (
+      !Number.isInteger(result.majorVersion) ||
+      result.majorVersion < JAVA_RUNTIME_CONTRACT.minimumMajorVersion
+    ) {
+      throw new JavaRuntimeConfigurationError(
+        explicitJavaRuntimeError(
+          explicitJavaHome,
+          `Java ${JAVA_RUNTIME_CONTRACT.minimumMajorVersion}+가 아닌 ${result.majorVersion}입니다.`,
+        ),
+      );
+    }
+    return { ...candidate, ...result, source: candidate.source };
+  }
+
+  const candidates = [];
+  const currentJavaHome = javaHomeFromEnvironment(
+    baseEnvironment,
+    JAVA_RUNTIME_CONTRACT.currentJavaHomeKey,
+  );
+  if (currentJavaHome) {
+    candidates.push({
+      executable: javaExecutableFromHome(currentJavaHome, platform),
+      javaHome: currentJavaHome,
+      source: 'java-home',
+    });
+  }
+  candidates.push({
+    executable: javaExecutableName(platform),
+    source: 'path',
+  });
+
+  if (platform === 'win32') {
+    const fallbackHomes = windowsFallbackHomes ?? discoverWindowsJavaFallbackHomes(baseEnvironment);
+    candidates.push(
+      ...fallbackHomes.map((javaHome) => ({
+        executable: javaExecutableFromHome(javaHome, platform),
+        javaHome,
+        source: 'windows-jbr-fallback',
+      })),
+    );
+  }
+
+  for (const candidate of candidates) {
+    const result = probeJavaCandidate(candidate, {
+      baseEnvironment,
+      platform,
+      probeJavaRuntime,
+    });
+    if (result?.majorVersion >= JAVA_RUNTIME_CONTRACT.minimumMajorVersion) {
+      return { ...candidate, ...result, source: candidate.source };
+    }
+  }
+
+  throw new JavaRuntimeConfigurationError(javaRuntimeErrorMessage());
+}
+
+export function projectJavaRuntime(environment, javaRuntime, platform = process.platform) {
+  if (
+    !javaRuntime ||
+    !Number.isInteger(javaRuntime.majorVersion) ||
+    javaRuntime.majorVersion < JAVA_RUNTIME_CONTRACT.minimumMajorVersion
+  ) {
+    throw new JavaRuntimeConfigurationError(javaRuntimeErrorMessage());
+  }
+
+  const projected = {
+    ...environment,
+    JAVA_HOME: javaRuntime.javaHome || '',
+  };
+  const javaBin = javaRuntime.javaHome
+    ? pathApiForPlatform(platform).join(javaRuntime.javaHome, 'bin')
+    : '';
+  if (javaBin) {
+    const pathKey = Object.hasOwn(projected, 'PATH')
+      ? 'PATH'
+      : Object.hasOwn(projected, 'Path')
+        ? 'Path'
+        : 'PATH';
+    const inheritedPath = readEnvironmentValue(projected, pathKey);
+    projected[pathKey] = [javaBin, inheritedPath]
+      .filter(Boolean)
+      .join(platform === 'win32' ? ';' : ':');
+  }
+  return projected;
 }
 
 function isProductionMarker(key, environment) {
@@ -307,6 +558,8 @@ export function buildChildSpecs({
   repositoryRoot = REPOSITORY_ROOT,
   pnpmCommand,
   firebaseCommand,
+  javaRuntime,
+  javaRuntimeResolver = resolveJavaRuntime,
 } = {}) {
   const resolvedPnpmCommand = pnpmCommand ?? executableName('pnpm', platform);
   const configuredFirebaseCommand = readEnvironmentValue(
@@ -315,6 +568,7 @@ export function buildChildSpecs({
   );
   const resolvedFirebaseCommand =
     firebaseCommand ?? (configuredFirebaseCommand || executableName('firebase', platform));
+  const selectedJavaRuntime = javaRuntime ?? javaRuntimeResolver({ baseEnvironment, platform });
 
   const appEnvironment = (port, nextAuthUrl) =>
     buildRuntimeEnvironment(baseEnvironment, {
@@ -330,9 +584,13 @@ export function buildChildSpecs({
     HOSTNAME: '127.0.0.1',
   });
 
-  const firebaseEnvironment = buildRuntimeEnvironment(baseEnvironment, {
-    HOSTNAME: '127.0.0.1',
-  });
+  const firebaseEnvironment = projectJavaRuntime(
+    buildRuntimeEnvironment(baseEnvironment, {
+      HOSTNAME: '127.0.0.1',
+    }),
+    selectedJavaRuntime,
+    platform,
+  );
 
   return [
     {
@@ -692,6 +950,8 @@ export function createLocalRuntime({
   logger = console,
   pnpmCommand,
   firebaseCommand,
+  javaRuntime,
+  javaRuntimeResolver = resolveJavaRuntime,
 } = {}) {
   const children = new Map();
   let cleanupPromise;
@@ -731,6 +991,8 @@ export function createLocalRuntime({
       repositoryRoot,
       pnpmCommand,
       firebaseCommand,
+      javaRuntime,
+      javaRuntimeResolver,
     });
 
     for (const spec of specs) {

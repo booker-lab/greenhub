@@ -11,16 +11,26 @@ import {
   checkReadinessOnce,
   createLocalRuntime,
   FIXED_PORTS,
+  JAVA_RUNTIME_CONTRACT,
+  JavaRuntimeConfigurationError,
   LOCAL_BROWSER_URLS,
   LocalRuntimeConfigurationError,
   LocalRuntimeError,
   PortCollisionError,
   parseLauncherOptions,
   ReadinessTimeoutError,
+  resolveJavaRuntime,
   runLocalRuntime,
   terminateOwnedProcessTree,
   waitForReadiness,
 } from './launcher.mjs';
+
+const TEST_JAVA_RUNTIME = Object.freeze({
+  executable: 'C:\\Java\\21\\bin\\java.exe',
+  javaHome: 'C:\\Java\\21',
+  majorVersion: JAVA_RUNTIME_CONTRACT.minimumMajorVersion,
+  source: 'test',
+});
 
 function fakeChild(pid) {
   const child = new EventEmitter();
@@ -29,6 +39,10 @@ function fakeChild(pid) {
   child.signalCode = null;
   child.kill = () => true;
   return child;
+}
+
+function runTestRuntime(options = {}) {
+  return runLocalRuntime({ javaRuntime: TEST_JAVA_RUNTIME, ...options });
 }
 
 function waitForServerListening(server, port) {
@@ -78,6 +92,8 @@ test('동결된 포트·marker·Firebase identity를 모든 child spec에 투영
   const specs = buildChildSpecs({
     baseEnvironment: {
       PATH: 'test-path',
+      JAVA_HOME: 'C:\\Java\\17',
+      GREENHUB_JAVA_HOME: 'C:\\Local\\Java\\21',
       NODE_ENV: 'development',
       PORTONE_V2_SECRET: '외부 비밀값',
       ALIGO_API_KEY: '외부 비밀값',
@@ -99,6 +115,7 @@ test('동결된 포트·marker·Firebase identity를 모든 child spec에 투영
     pnpmCommand: 'pnpm.cmd',
     firebaseCommand: 'firebase.cmd',
     repositoryRoot: 'C:\\repo',
+    javaRuntime: TEST_JAVA_RUNTIME,
   });
 
   assert.equal(specs.length, 5);
@@ -126,6 +143,7 @@ test('동결된 포트·marker·Firebase identity를 모든 child spec에 투영
   ]);
 
   for (const spec of specs) {
+    assert.equal('GREENHUB_JAVA_HOME' in spec.env, false);
     assert.equal(spec.env.GREENHUB_LOCAL_RUNTIME, 'true');
     assert.equal(spec.env.NEXT_PUBLIC_GREENHUB_LOCAL_RUNTIME, 'true');
     assert.equal(spec.env.NODE_ENV, 'development');
@@ -167,7 +185,112 @@ test('동결된 포트·marker·Firebase identity를 모든 child spec에 투영
   for (const spec of specs.filter((candidate) => appUrls.has(candidate.name))) {
     assert.equal(spec.env.NEXTAUTH_URL, appUrls.get(spec.name));
     assert.equal(spec.env.AUTH_URL, appUrls.get(spec.name));
+    assert.equal(spec.env.JAVA_HOME, 'C:\\Java\\17');
+    assert.equal(spec.env.PATH, 'test-path');
   }
+
+  const firebaseSpec = specs.find((spec) => spec.name === 'firebase-emulator-suite');
+  assert.equal(firebaseSpec.env.JAVA_HOME, 'C:\\Java\\21');
+  assert.equal(firebaseSpec.env.PATH, 'C:\\Java\\21\\bin;test-path');
+});
+
+test('Java 21 선택 순서는 JAVA_HOME, PATH, Windows JBR fallback을 구분한다', () => {
+  const javaHomeResult = resolveJavaRuntime({
+    baseEnvironment: { JAVA_HOME: 'C:\\Java\\21' },
+    platform: 'win32',
+    windowsFallbackHomes: [],
+    probeJavaRuntime: ({ source }) =>
+      source === 'java-home' ? { majorVersion: 21 } : { majorVersion: 17 },
+  });
+  assert.equal(javaHomeResult.source, 'java-home');
+  assert.equal(javaHomeResult.javaHome, 'C:\\Java\\21');
+
+  const fallbackResult = resolveJavaRuntime({
+    baseEnvironment: {
+      JAVA_HOME: 'C:\\Java\\17',
+      ProgramFiles: 'C:\\Program Files',
+    },
+    platform: 'win32',
+    windowsFallbackHomes: ['C:\\Program Files\\Android\\Android Studio\\jbr'],
+    probeJavaRuntime: ({ source }) =>
+      source === 'windows-jbr-fallback' ? { majorVersion: 21 } : { majorVersion: 17 },
+  });
+  assert.equal(fallbackResult.source, 'windows-jbr-fallback');
+  assert.equal(fallbackResult.javaHome, 'C:\\Program Files\\Android\\Android Studio\\jbr');
+});
+
+test('Java 17만 있으면 Java 21 미충족으로 fail-closed한다', () => {
+  assert.throws(
+    () =>
+      resolveJavaRuntime({
+        baseEnvironment: { JAVA_HOME: 'C:\\Java\\17' },
+        platform: 'win32',
+        windowsFallbackHomes: [],
+        probeJavaRuntime: () => ({ majorVersion: 17 }),
+      }),
+    (error) => error instanceof JavaRuntimeConfigurationError && /Java 21\+/.test(error.message),
+  );
+});
+
+test('잘못된 GREENHUB_JAVA_HOME은 fallback보다 먼저 fail-closed한다', () => {
+  const sources = [];
+  assert.throws(
+    () =>
+      resolveJavaRuntime({
+        baseEnvironment: {
+          GREENHUB_JAVA_HOME: 'C:\\missing-java',
+          JAVA_HOME: 'C:\\Java\\17',
+        },
+        platform: 'win32',
+        windowsFallbackHomes: ['C:\\Program Files\\Android\\Android Studio\\jbr'],
+        probeJavaRuntime: ({ source }) => {
+          sources.push(source);
+          return source === 'explicit-override' ? undefined : { majorVersion: 21 };
+        },
+      }),
+    (error) => error instanceof JavaRuntimeConfigurationError,
+  );
+  assert.deepEqual(sources, ['explicit-override']);
+});
+
+test('빈 GREENHUB_JAVA_HOME도 명시 override 오류로 fail-closed한다', () => {
+  assert.throws(
+    () =>
+      resolveJavaRuntime({
+        baseEnvironment: { GREENHUB_JAVA_HOME: '  ' },
+        platform: 'win32',
+        windowsFallbackHomes: ['C:\\Program Files\\Android\\Android Studio\\jbr'],
+        probeJavaRuntime: () => ({ majorVersion: 21 }),
+      }),
+    (error) => error instanceof JavaRuntimeConfigurationError,
+  );
+});
+
+test('Java 런타임을 결정하지 못하면 child spawn을 0회로 유지한다', async () => {
+  let spawnCount = 0;
+  await assert.rejects(
+    runLocalRuntime({
+      baseEnvironment: {
+        NODE_ENV: 'development',
+        GREENHUB_JAVA_HOME: 'C:\\missing-java',
+      },
+      javaRuntimeResolver: ({ baseEnvironment, platform }) =>
+        resolveJavaRuntime({
+          baseEnvironment,
+          platform,
+          windowsFallbackHomes: [],
+          probeJavaRuntime: () => undefined,
+        }),
+      portAvailabilityProbe: async () => true,
+      spawnImpl: () => {
+        spawnCount += 1;
+        return fakeChild(2750 + spawnCount);
+      },
+      signalSource: new EventEmitter(),
+    }),
+    (error) => error instanceof JavaRuntimeConfigurationError,
+  );
+  assert.equal(spawnCount, 0);
 });
 
 test('production marker가 있으면 local child 환경을 만들지 않고 fail-closed한다', () => {
@@ -190,7 +313,7 @@ test('production marker가 있으면 local child 환경을 만들지 않고 fail
 test('production marker가 있으면 launcher도 child spawn 전에 fail-closed한다', async () => {
   let spawnCount = 0;
   await assert.rejects(
-    runLocalRuntime({
+    runTestRuntime({
       baseEnvironment: { NODE_ENV: 'production' },
       spawnImpl: () => {
         spawnCount += 1;
@@ -206,7 +329,7 @@ test('production marker가 있으면 launcher도 child spawn 전에 fail-closed�
 test('포트 충돌은 child spawn보다 먼저 실패하고 spawn을 0회로 유지한다', async () => {
   let spawnCount = 0;
   await assert.rejects(
-    runLocalRuntime({
+    runTestRuntime({
       baseEnvironment: { NODE_ENV: 'development' },
       portAvailabilityProbe: async (port) => port !== 3000,
       spawnImpl: () => {
@@ -228,7 +351,7 @@ test('실제 점유 listener가 있으면 launcher는 child를 하나도 시작�
 
   try {
     await assert.rejects(
-      runLocalRuntime({
+      runTestRuntime({
         ports: [port],
         baseEnvironment: { NODE_ENV: 'development' },
         spawnImpl: () => {
@@ -294,7 +417,7 @@ test('readiness failure 뒤 owned child cleanup이 실행되고 브라우저는 
   let browserOpenCount = 0;
 
   await assert.rejects(
-    runLocalRuntime({
+    runTestRuntime({
       baseEnvironment: { NODE_ENV: 'development' },
       portAvailabilityProbe: async () => true,
       spawnImpl: () => fakeChild(nextPid++),
@@ -329,7 +452,7 @@ test('브라우저 열기는 READY 로그 뒤에만 실행되고 API URL은 포�
   const signalSource = new EventEmitter();
   let nextPid = 4700;
 
-  const exitCode = await runLocalRuntime({
+  const exitCode = await runTestRuntime({
     baseEnvironment: { NODE_ENV: 'development' },
     portAvailabilityProbe: async () => true,
     spawnImpl: () => fakeChild(nextPid++),
@@ -423,7 +546,7 @@ test('startup failure 뒤 launcher가 시작한 child 전부를 정리하고 unr
   let spawnCount = 0;
 
   await assert.rejects(
-    runLocalRuntime({
+    runTestRuntime({
       baseEnvironment: { NODE_ENV: 'development' },
       portAvailabilityProbe: async () => true,
       spawnImpl: () => {
@@ -458,7 +581,7 @@ test('owned child의 정상 코드 조기 종료도 premature termination failur
   let firstChild;
 
   await assert.rejects(
-    runLocalRuntime({
+    runTestRuntime({
       baseEnvironment: { NODE_ENV: 'development' },
       portAvailabilityProbe: async () => true,
       spawnImpl: () => {
@@ -492,6 +615,7 @@ test('interrupt 요청은 idempotent cleanup으로 수렴한다', async () => {
   const runtime = createLocalRuntime({
     baseEnvironment: { NODE_ENV: 'development' },
     platform: 'win32',
+    javaRuntime: TEST_JAVA_RUNTIME,
     spawnImpl: () => fakeChild(nextPid++),
     terminateProcessTree: async (child) => {
       cleanedPids.push(child.pid);
