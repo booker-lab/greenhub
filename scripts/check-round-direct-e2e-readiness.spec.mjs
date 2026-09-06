@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   evaluateReadiness,
   evaluateTargetReadiness,
@@ -9,6 +11,10 @@ import {
 } from './check-round-direct-e2e-readiness.mjs';
 
 const SHA = 'a'.repeat(40);
+const ROUND_DIRECT_WORKFLOW = fs.readFileSync(
+  fileURLToPath(new URL('../.github/workflows/e2e-round-direct.yml', import.meta.url)),
+  'utf8',
+);
 
 function validInput(overrides = {}) {
   return {
@@ -125,9 +131,7 @@ describe('회차 직배송 E2E 준비조건 실패 계약', () => {
     assert.equal(live.ready, false);
     assert.ok(live.failureCodes.includes('PROVIDER_MODE_NOT_STUB'));
 
-    const egress = evaluateReadiness(
-      validInput({ providerEgressHosts: ['api.portone.io'] }),
-    );
+    const egress = evaluateReadiness(validInput({ providerEgressHosts: ['api.portone.io'] }));
     assert.equal(egress.ready, false);
     assert.ok(egress.failureCodes.includes('PROVIDER_EGRESS_DETECTED'));
   });
@@ -158,6 +162,16 @@ describe('회차 직배송 E2E 준비조건 실패 계약', () => {
     const result = evaluateReadiness(validInput({ fixtureProjects: ['chromium'] }));
     assert.equal(result.ready, false);
     assert.ok(result.failureCodes.includes('FIXTURE_PROJECTS_NOT_ISOLATED'));
+  });
+});
+
+describe('회차 직배송 workflow candidate source binding', () => {
+  it('application SHA를 검증하면서 candidate SHA의 gate 구현을 실행한다', () => {
+    assert.match(ROUND_DIRECT_WORKFLOW, /ref:\s+\$\{\{\s*github\.sha\s*\}\}/);
+    assert.doesNotMatch(ROUND_DIRECT_WORKFLOW, /ref:\s+\$\{\{\s*inputs\.expected_sha\s*\}\}/);
+    assert.match(ROUND_DIRECT_WORKFLOW, /git merge-base --is-ancestor/);
+    assert.match(ROUND_DIRECT_WORKFLOW, /git diff --name-only/);
+    assert.match(ROUND_DIRECT_WORKFLOW, /candidate workflow SHA checkout/);
   });
 });
 
@@ -327,9 +341,7 @@ describe('환경 입력과 JPEG 판독', () => {
   });
 
   it('JPEG magic bytes와 크기를 판독한다', () => {
-    const result = inspectJpegBuffer(
-      Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0xff, 0xd9]),
-    );
+    const result = inspectJpegBuffer(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0xff, 0xd9]));
     assert.deepEqual(result, {
       exists: true,
       mime: 'image/jpeg',

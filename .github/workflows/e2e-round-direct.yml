@@ -132,13 +132,13 @@ jobs:
       PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/.artifacts/round-direct/task-6-7-${{ github.run_id }}-${{ github.run_attempt }}/playwright-raw.json
 
     steps:
-      - name: 지정 SHA checkout
+      - name: candidate workflow SHA checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.expected_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: 수동 승인과 checkout SHA 확인
+      - name: 수동 승인과 application/candidate SHA 확인
         shell: bash
         env:
           APPROVAL: ${{ inputs.approval }}
@@ -169,10 +169,42 @@ jobs:
             exit 1
           fi
           actual_sha="$(git rev-parse HEAD)"
-          if [[ "$actual_sha" != "$ROUND_DIRECT_E2E_EXPECTED_SHA" ]]; then
-            echo 'checkout SHA가 지정 SHA와 달라 실행을 차단합니다.' >&2
+          if [[ "$actual_sha" != "$WORKFLOW_SHA" ]]; then
+            echo 'checkout SHA가 workflow candidate SHA와 달라 실행을 차단합니다.' >&2
             exit 1
           fi
+          if ! git merge-base --is-ancestor "$ROUND_DIRECT_E2E_EXPECTED_SHA" "$WORKFLOW_SHA"; then
+            echo 'application SHA가 candidate workflow의 조상이 아니어서 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          required_candidate_paths=(
+            '.github/workflows/e2e-round-direct.yml'
+            '.github/workflows/sync-preview.yml'
+            'scripts/wait-preview-deploy.mjs'
+            'scripts/wait-preview-deploy.spec.mjs'
+          )
+          mapfile -t candidate_paths < <(
+            git diff --name-only "$ROUND_DIRECT_E2E_EXPECTED_SHA" "$WORKFLOW_SHA"
+          )
+          for required_path in "${required_candidate_paths[@]}"; do
+            if [[ ! " ${candidate_paths[*]} " == *" $required_path "* ]]; then
+              echo "candidate에 필요한 CI gate 파일이 없어 실행을 차단합니다: $required_path" >&2
+              exit 1
+            fi
+          done
+          for candidate_path in "${candidate_paths[@]}"; do
+            case "$candidate_path" in
+              .github/workflows/e2e-round-direct.yml|\
+              .github/workflows/sync-preview.yml|\
+              scripts/wait-preview-deploy.mjs|\
+              scripts/wait-preview-deploy.spec.mjs)
+                ;;
+              *)
+                echo "application SHA와 candidate 사이에 허용되지 않은 변경이 있어 실행을 차단합니다: $candidate_path" >&2
+                exit 1
+                ;;
+            esac
+          done
 
       - uses: pnpm/action-setup@v6
 
