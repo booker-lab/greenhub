@@ -1,6 +1,9 @@
 set shell := ["bash", "-c"]
 
 # ── 개발 ──────────────────────────────────────────────────────
+dev:
+    pnpm dev:local
+
 dev-consumer:
     pnpm --filter consumer dev
 
