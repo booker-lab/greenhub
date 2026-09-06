@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 import {
   getConfigValues,
+  isLocalRuntime,
   RuntimeConfigurationError,
   resolveFirebaseAdminSettings,
 } from '../config/runtime-config';
@@ -29,7 +30,8 @@ export class FirestoreModule implements OnApplicationShutdown {
 }
 
 export function createFirebaseAdminApp(config: ConfigService): admin.app.App {
-  const settings = resolveFirebaseAdminSettings(getConfigValues(config));
+  const values = getConfigValues(config);
+  const settings = resolveFirebaseAdminSettings(values);
   const existingApp = admin.apps[0];
 
   if (existingApp) {
@@ -46,22 +48,26 @@ export function createFirebaseAdminApp(config: ConfigService): admin.app.App {
     return existingApp;
   }
 
-  const credential = (() => {
-    try {
-      return settings.serviceAccount
-        ? admin.credential.cert(settings.serviceAccount)
-        : admin.credential.applicationDefault();
-    } catch {
-      throw new RuntimeConfigurationError('Firebase 자격 증명을 초기화할 수 없습니다.');
-    }
-  })();
+  const appOptions = {
+    ...(isLocalRuntime(values)
+      ? {}
+      : {
+          credential: (() => {
+            try {
+              return settings.serviceAccount
+                ? admin.credential.cert(settings.serviceAccount)
+                : admin.credential.applicationDefault();
+            } catch {
+              throw new RuntimeConfigurationError('Firebase 자격 증명을 초기화할 수 없습니다.');
+            }
+          })(),
+        }),
+    projectId: settings.projectId,
+    storageBucket: settings.storageBucket,
+  };
 
   try {
-    return admin.initializeApp({
-      credential,
-      projectId: settings.projectId,
-      storageBucket: settings.storageBucket,
-    });
+    return admin.initializeApp(appOptions);
   } catch {
     throw new RuntimeConfigurationError('Firebase Admin을 초기화할 수 없습니다.');
   }

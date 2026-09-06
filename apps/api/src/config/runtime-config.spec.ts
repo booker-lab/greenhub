@@ -1,4 +1,5 @@
 import {
+  isLocalRuntime,
   isProductionRuntime,
   RuntimeConfigurationError,
   resolveFirebaseAdminSettings,
@@ -27,6 +28,7 @@ const validLocalRuntimeConfig = {
   GREENHUB_SCHEDULES_ENABLED: 'false',
   FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080',
   FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099',
+  FIREBASE_STORAGE_EMULATOR_HOST: '127.0.0.1:9199',
   FIREBASE_PROJECT_ID: 'greenhub-local',
   FIREBASE_STORAGE_BUCKET: 'greenhub-local.appspot.com',
   GOOGLE_APPLICATION_CREDENTIALS: '',
@@ -103,6 +105,7 @@ describe('API 런타임 구성 fail-closed 계약', () => {
   });
 
   it('local runtime은 loopback emulator와 scheduler 비활성화가 모두 있어야 통과한다', () => {
+    expect(isLocalRuntime(validLocalRuntimeConfig)).toBe(true);
     expect(validateRuntimeConfig(validLocalRuntimeConfig)).toBe(validLocalRuntimeConfig);
     expect(resolveFirebaseAdminSettings(validLocalRuntimeConfig)).toEqual({
       projectId: 'greenhub-local',
@@ -113,16 +116,52 @@ describe('API 런타임 구성 fail-closed 계약', () => {
   });
 
   it.each([
+    ['NODE_ENV 비개발', { NODE_ENV: 'test' }],
+    ['local marker 누락', { GREENHUB_LOCAL_RUNTIME: '' }],
+    ['production marker', { VERCEL_ENV: 'production' }],
     ['운영 Firebase project', { FIREBASE_PROJECT_ID: 'green-e4fe3' }],
+    ['project 불일치', { FIREBASE_PROJECT_ID: 'greenhub-local-preview' }],
     ['Firestore emulator 누락', { FIRESTORE_EMULATOR_HOST: '' }],
     ['Auth emulator 누락', { FIREBASE_AUTH_EMULATOR_HOST: '' }],
+    ['Storage emulator 누락', { FIREBASE_STORAGE_EMULATOR_HOST: '' }],
+    ['비 loopback Storage emulator', { FIREBASE_STORAGE_EMULATOR_HOST: '192.168.0.10:9199' }],
     ['scheduler 활성화', { GREENHUB_SCHEDULES_ENABLED: 'true' }],
     ['credential 경로 설정', { GOOGLE_APPLICATION_CREDENTIALS: 'local-credential.json' }],
+    ['service account 경로 설정', { FIREBASE_SERVICE_ACCOUNT_PATH: 'local-credential.json' }],
+    [
+      'service account JSON 설정',
+      {
+        FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+          project_id: 'greenhub-local',
+          client_email: 'firebase@example.test',
+          private_key: 'private-key',
+        }),
+      },
+    ],
     ['storage bucket 불일치', { FIREBASE_STORAGE_BUCKET: 'green-e4fe3.appspot.com' }],
   ])('local runtime의 %s를 거부한다', (_name, override) => {
     expect(() => validateRuntimeConfig({ ...validLocalRuntimeConfig, ...override })).toThrow(
       RuntimeConfigurationError,
     );
+  });
+
+  it('local marker 없이 emulator host가 남아 있으면 원격 fallback을 허용하지 않는다', () => {
+    expect(() =>
+      validateRuntimeConfig({
+        NODE_ENV: 'development',
+        FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080',
+      }),
+    ).toThrow('non-local runtime은 Firebase emulator host를 설정할 수 없습니다.');
+  });
+
+  it('local runtime predicate는 marker만으로 활성화되지 않는다', () => {
+    expect(isLocalRuntime({ GREENHUB_LOCAL_RUNTIME: 'true' })).toBe(false);
+    expect(
+      isLocalRuntime({
+        ...validLocalRuntimeConfig,
+        NODE_ENV: 'production',
+      }),
+    ).toBe(false);
   });
 
   it('비운영 실행에서 알려진 운영 Firebase project를 거부한다', () => {
