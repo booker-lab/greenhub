@@ -121,6 +121,47 @@ describe('Firestore 모듈 계약', () => {
     expect(String(error)).not.toContain('malformed-private-key');
   });
 
+  it('local runtime은 명시적 credential 없이 exact emulator binding으로 초기화한다', () => {
+    applicationDefault.mockClear();
+    initializeApp.mockClear();
+
+    const firebaseProvider = metadata<Record<string, unknown>>(
+      FirestoreModule,
+      MODULE_METADATA.PROVIDERS,
+    ).find((provider) => provider.provide === 'FIREBASE_APP') as {
+      useFactory: (config: { get: (key: string) => string | undefined }) => Promise<unknown>;
+    };
+
+    const result = firebaseProvider.useFactory({
+      get: (key) =>
+        ({
+          NODE_ENV: 'development',
+          GREENHUB_LOCAL_RUNTIME: 'true',
+          GREENHUB_SCHEDULES_ENABLED: 'false',
+          FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080',
+          FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099',
+          FIREBASE_STORAGE_EMULATOR_HOST: '127.0.0.1:9199',
+          FIREBASE_PROJECT_ID: 'greenhub-local',
+          FIREBASE_STORAGE_BUCKET: 'greenhub-local.appspot.com',
+          GOOGLE_APPLICATION_CREDENTIALS: '',
+          FIREBASE_SERVICE_ACCOUNT_JSON: '',
+          FIREBASE_SERVICE_ACCOUNT_PATH: '',
+        })[key],
+    });
+
+    expect(applicationDefault).not.toHaveBeenCalled();
+    expect(initializeApp).toHaveBeenCalledWith({
+      projectId: 'greenhub-local',
+      storageBucket: 'greenhub-local.appspot.com',
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        projectId: 'greenhub-local',
+        storageBucket: 'greenhub-local.appspot.com',
+      }),
+    );
+  });
+
   it('설정 project와 서비스 계정 project가 다르면 초기화 전에 거부한다', async () => {
     const firebaseProvider = metadata<Record<string, unknown>>(
       FirestoreModule,
