@@ -7,6 +7,18 @@ on:
         description: '세 Preview 앱이 가리켜야 하는 40자리 commit SHA'
         required: true
         type: string
+      consumer_deployment_id:
+        description: 'consumer의 직접 검증 대상 Vercel deployment ID'
+        required: true
+        type: string
+      seller_deployment_id:
+        description: 'seller의 직접 검증 대상 Vercel deployment ID'
+        required: true
+        type: string
+      driver_deployment_id:
+        description: 'driver의 직접 검증 대상 Vercel deployment ID'
+        required: true
+        type: string
       approval:
         description: '비운영 회차 E2E 실행을 승인합니다.'
         required: true
@@ -34,6 +46,9 @@ jobs:
           REPOSITORY_OWNER: ${{ github.repository_owner }}
           APPROVAL: ${{ inputs.approval }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONSUMER_DEPLOYMENT_ID: ${{ inputs.consumer_deployment_id }}
+          SELLER_DEPLOYMENT_ID: ${{ inputs.seller_deployment_id }}
+          DRIVER_DEPLOYMENT_ID: ${{ inputs.driver_deployment_id }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           WORKFLOW_SHA: ${{ github.sha }}
@@ -67,6 +82,15 @@ jobs:
             echo '지정 SHA는 40자리 소문자 16진수여야 합니다.' >&2
             exit 1
           fi
+          for deployment_id in \
+            "$CONSUMER_DEPLOYMENT_ID" \
+            "$SELLER_DEPLOYMENT_ID" \
+            "$DRIVER_DEPLOYMENT_ID"; do
+            if [[ ! "$deployment_id" =~ ^dpl_[A-Za-z0-9]+$ ]]; then
+              echo 'pinned Vercel deployment ID 형식이 올바르지 않습니다.' >&2
+              exit 1
+            fi
+          done
 
   e2e:
     name: 지정 SHA 회차 직배송 E2E
@@ -79,11 +103,13 @@ jobs:
       name: round-direct-e2e
     permissions:
       contents: read
-      statuses: read
     env:
       ROUND_DIRECT_E2E_ENABLED: 'true'
       ROUND_DIRECT_E2E_ENV: preview
       ROUND_DIRECT_E2E_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      ROUND_DIRECT_E2E_CONSUMER_DEPLOYMENT_ID: ${{ inputs.consumer_deployment_id }}
+      ROUND_DIRECT_E2E_SELLER_DEPLOYMENT_ID: ${{ inputs.seller_deployment_id }}
+      ROUND_DIRECT_E2E_DRIVER_DEPLOYMENT_ID: ${{ inputs.driver_deployment_id }}
       ROUND_DIRECT_E2E_RUN_ID: task-6-7-${{ github.run_id }}-${{ github.run_attempt }}
       ROUND_DIRECT_E2E_RUN_ATTEMPT: ${{ github.run_attempt }}
       ROUND_DIRECT_E2E_EVENT_NAME: ${{ github.event_name }}
@@ -158,19 +184,21 @@ jobs:
       - name: 의존성 설치
         run: pnpm install --frozen-lockfile
 
-      - name: 세 Preview 앱의 지정 SHA 확인
+      - name: 세 pinned Vercel deployment metadata 직접 확인
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROUND_DIRECT_E2E_VERCEL_READ_TOKEN: ${{ secrets.ROUND_DIRECT_E2E_VERCEL_READ_TOKEN }}
         run: |
           set -euo pipefail
           evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
           mkdir -p "$evidence_root/evidence"
           set +e
           node scripts/wait-preview-deploy.mjs \
-            --once \
             --json \
             --sha="$ROUND_DIRECT_E2E_EXPECTED_SHA" \
+            --consumer-deployment-id="$ROUND_DIRECT_E2E_CONSUMER_DEPLOYMENT_ID" \
+            --seller-deployment-id="$ROUND_DIRECT_E2E_SELLER_DEPLOYMENT_ID" \
+            --driver-deployment-id="$ROUND_DIRECT_E2E_DRIVER_DEPLOYMENT_ID" \
             > "$evidence_root/deployment-raw.json"
           wait_status=$?
           set -e
@@ -182,22 +210,38 @@ jobs:
             | sed 's/^/ROUND_DIRECT_E2E_DEPLOYMENT_SHAS_JSON=/' >> "$GITHUB_ENV"
           jq -c '.deploymentTargetUrls' "$evidence_root/deployment-raw.json" \
             | sed 's/^/ROUND_DIRECT_E2E_TARGET_URLS_JSON=/' >> "$GITHUB_ENV"
+          if [[ "$wait_status" -eq 0 ]]; then
+            jq -er '.deploymentTargetUrls.consumer' "$evidence_root/deployment-raw.json" \
+              | sed 's/^/CONSUMER_BASE=/' >> "$GITHUB_ENV"
+            jq -er '.deploymentTargetUrls.seller' "$evidence_root/deployment-raw.json" \
+              | sed 's/^/SELLER_BASE=/' >> "$GITHUB_ENV"
+            jq -er '.deploymentTargetUrls.driver' "$evidence_root/deployment-raw.json" \
+              | sed 's/^/DRIVER_BASE=/' >> "$GITHUB_ENV"
+          fi
           jq '{
             ready,
+            evidenceSource,
             checkedAt,
             repository,
             expectedSha,
-            deploymentIds: (.apps | map({key: .app, value: .deploymentId}) | from_entries),
+            pinnedDeploymentIds,
+            deploymentIds,
             deploymentShas,
             deploymentTargetUrls,
-            deploymentStates: (.apps | map({key: .app, value: .state}) | from_entries),
+            deploymentStates,
+            failureCodes,
             apps: [.apps[] | {
               app,
+              project,
+              projectId,
               environment,
               deploymentId,
               deploymentSha,
               state,
+              readyState,
+              target,
               target_url: .targetUrl,
+              failureCode,
               ready
             }]
             }' \
