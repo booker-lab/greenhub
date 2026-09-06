@@ -146,6 +146,7 @@ jobs:
           ACTOR: ${{ github.actor }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
@@ -182,6 +183,7 @@ jobs:
             '.github/workflows/sync-preview.yml'
             'scripts/wait-preview-deploy.mjs'
             'scripts/wait-preview-deploy.spec.mjs'
+            'scripts/check-round-direct-e2e-readiness.spec.mjs'
           )
           mapfile -t candidate_paths < <(
             git diff --name-only "$ROUND_DIRECT_E2E_EXPECTED_SHA" "$WORKFLOW_SHA"
@@ -197,7 +199,8 @@ jobs:
               .github/workflows/e2e-round-direct.yml|\
               .github/workflows/sync-preview.yml|\
               scripts/wait-preview-deploy.mjs|\
-              scripts/wait-preview-deploy.spec.mjs)
+              scripts/wait-preview-deploy.spec.mjs|\
+              scripts/check-round-direct-e2e-readiness.spec.mjs)
                 ;;
               *)
                 echo "application SHA와 candidate 사이에 허용되지 않은 변경이 있어 실행을 차단합니다: $candidate_path" >&2

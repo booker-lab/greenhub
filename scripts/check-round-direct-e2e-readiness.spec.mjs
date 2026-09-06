@@ -171,6 +171,7 @@ describe('회차 직배송 workflow candidate source binding', () => {
     assert.doesNotMatch(ROUND_DIRECT_WORKFLOW, /ref:\s+\$\{\{\s*inputs\.expected_sha\s*\}\}/);
     assert.match(ROUND_DIRECT_WORKFLOW, /git merge-base --is-ancestor/);
     assert.match(ROUND_DIRECT_WORKFLOW, /git diff --name-only/);
+    assert.match(ROUND_DIRECT_WORKFLOW, /WORKFLOW_SHA:\s+\$\{\{\s*github\.sha\s*\}\}/);
     assert.match(ROUND_DIRECT_WORKFLOW, /candidate workflow SHA checkout/);
   });
 });
