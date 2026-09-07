@@ -6,7 +6,7 @@
 
 ## 검증 기준
 
-- Git·GitHub와 #63/#70/#71 release state: `2026-09-06 KST` 직접 재조회
+- Git·GitHub와 #76/#88/#90 release state: `2026-09-07 KST` 직접 재조회
 - Vercel 배포 안전·exact-source Preview: 역사적 증거 snapshot; 현재 release proof로 재사용하지 않는다.
 - ALIGO provider current metadata: `UNVERIFIED` — #65에서 authenticated provider read-back이 없음을 확인했다.
 - 운영 상태 변경은 별도 승인 없이 수행하지 않는다.
@@ -17,7 +17,7 @@
 - 기본 브랜치: `main`; HEAD는 작업 시작 시 직접 재조회한다.
 - 회차 직배송 기능 통합 기준 SHA(역사적 기능 기준선): `e55f25914cc7d01576fbd4639583daaf0fe6385e`
 - #63이 accepted한 pre-publication main 기준 SHA: `ffd999423f8a98b0c1f34d020d832d7929feab72` — historical baseline
-- #70/#71이 publication 후 재확인한 현재 live `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`
+- 현재 live remote `main`: `0358c8d956fb22064ab93685d46714d2023ef505` — PR #69 merge 후 보호된 기준선
 - `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`는 historical exact-source Preview 기준선이며 현재 main이나 production source가 아니다.
 - PR #30/#31로 세 프런트의 `main` Vercel Git auto-production과 pure-doc build를 repo-side 차단했다.
 - docs-only main 변경은 Preview sync/일반 E2E 제외.
@@ -45,29 +45,39 @@
 - historical exact-source Preview source: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
 - historical Driver Preview: deployment `dpl_4UVQ2BuTNfrBc1zm68X5Kjbvu9PE`, target `preview`, state `READY`. 당시 metadata가 해당 historical source와 일치했다는 뜻이며 현재 main·candidate·production proof가 아니다.
 - pre-publication main accepted by #63: `ffd999423f8a98b0c1f34d020d832d7929feab72`; PR #60/#61/#62가 merge된 historical publication baseline이다.
-- current live main after #70/#71: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`; PR #70이 merge된 Sale Round publication state다.
+- current live main: `0358c8d956fb22064ab93685d46714d2023ef505`; PR #69 merge 후의 보호된 publication 기준선이다.
+
+## PREVIEW-EVIDENCE-GATE-02
+
+- implementation candidate: `433a1182a377f152d140e9609bd6e15ae0eb6f1c` — remote-addressable
+- semantic status: `IMPLEMENTATION_COMPLETE` + `PROOF_COMPLETE`
+- publication status: `PUBLICATION_HOLD`
+- PR #90: `OPEN / UNMERGED`; required `verify`와 세 Vercel Preview check는 `PASS`
+- gate 범위: 고정 Vercel Preview deployment metadata의 project/source SHA/`READY` 대조와 focused proof
+- 이 branch에서 추가 기능 구현이나 successor Preview Evidence Gate task를 만들지 않는다.
 
 ## Readiness·publication·production 구분
 
 - `IMPLEMENTATION`: #66이 `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`의 구현과 race/recovery proof를 accepted하여 `IMPLEMENTATION_PROVEN`이다.
-- `VERIFICATION`: Sale Round focused/integration/regression proof는 `PROVEN`; exact-release Preview/browser/runtime과 Auth.js session/logout/rotation/stale-claim lifecycle은 별도 `PENDING`/`EXTERNAL_RUNTIME_BLOCKED` gate다.
-- `CANDIDATE`: 기존 documentation candidate는 `9c921684a26597cb57887b6049288f1143b017c8`; 후속 candidate는 PR #69 head로 갱신한다.
-- `REMOTE_ADDRESSABLE`: #70 semantic candidate와 현재 live main `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`는 remote-addressable이며, 문서 후속 candidate도 PR #69 원격 head로 read-back한다.
-- `PR`: PR #70은 `MERGED`; 기존 documentation PR #69는 `OPEN`이며 이번 Goal은 merge하지 않는다.
-- `PUBLISHED/MERGED`: Sale Round publication은 `PUBLISHED`; live main read-back은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`다.
-- `PREVIEW_PROOF`: exact-release runtime/browser proof는 `PENDING`; `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` Preview deployment는 historical evidence다.
+- `VERIFICATION`: Sale Round focused/integration/regression proof는 `PROVEN`; Preview Evidence Gate 02 metadata/focused proof는 `PROOF_COMPLETE`; #76 exact-release browser/runtime proof는 `RUNTIME_DEFECT_FOUND` / `NOT_PROVEN`이다.
+- `AUTH_PREVIEW_BINDING`: #88 최신 runtime evidence는 `AUTH_PREVIEW_BINDING_PROVEN`; 동일 배포의 stateless Auth.js JWT revocation은 `NOT_CLOSED`로 남는다.
+- `CANDIDATE`: Preview Evidence Gate 02 implementation candidate는 `433a1182a377f152d140e9609bd6e15ae0eb6f1c`이며 PR #90 head다.
+- `REMOTE_ADDRESSABLE`: candidate branch ref와 exact candidate object를 원격에서 조회할 수 있고, 현재 live main은 `0358c8d956fb22064ab93685d46714d2023ef505`다.
+- `PR`: PR #90은 `OPEN / UNMERGED`; release SHA freeze 때문에 이번 Goal에서 merge하지 않는다.
+- `PUBLISHED/MERGED`: 현재 protected `main` read-back은 `0358c8d956fb22064ab93685d46714d2023ef505`; Preview Evidence Gate candidate는 아직 main에 merge되지 않았다.
+- `PREVIEW_PROOF`: candidate의 pinned Vercel metadata/focused gate는 `PROOF_COMPLETE`; #76은 exact deployment/fixture binding 이후 Auth.js browser boundary에서 `RUNTIME_DEFECT_FOUND`다.
 - production deployment/activation, live round, actual payment, actual notification, first-round completion: `PRODUCTION_AUTHORITY_PENDING` / `NOT CLAIMED`.
 
 ## 현재 source·publication 기준
 
-#63/#68 작업의 pre-publication 기준과 #71 publication 후 live authority를 read-only로 확인한 결과를 기록한다. 문서 변경 후 생기는 commit은 이 source baseline과 별도의 documentation publication candidate다.
+#90 작업의 implementation candidate와 현재 protected main/live authority를 read-only로 확인한 결과를 기록한다. 문서 변경 후 생기는 commit은 같은 PR branch의 docs-only publication candidate다.
 
-- 작업 시작 branch: `main`
-- 작업 시작 source HEAD/local `main`: `ffd999423f8a98b0c1f34d020d832d7929feab72`
-- 작업 시작 local `origin/main`: `ffd999423f8a98b0c1f34d020d832d7929feab72`
-- 작업 시작 live remote `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` — #71 publication read-back
+- 작업 시작 branch: `codex/preview-evidence-gate-02`
+- 작업 시작 source HEAD: `433a1182a377f152d140e9609bd6e15ae0eb6f1c`
+- 작업 시작 local `main`: `ffd999423f8a98b0c1f34d020d832d7929feab72`
+- 작업 시작 local `origin/main` 및 live remote `main`: `0358c8d956fb22064ab93685d46714d2023ef505`
 - pre-publication live baseline `ffd999423f8a98b0c1f34d020d832d7929feab72`는 #63/#68의 historical baseline이다.
-- #70 semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는 `PUBLISHED`; documentation candidate는 PR #69에서 후속 갱신하며 main merge가 아니다.
+- Preview Evidence Gate 02 candidate `433a1182a377f152d140e9609bd6e15ae0eb6f1c`는 PR #90에서 `OPEN / UNMERGED` 상태이며 main merge가 아니다.
 - historical `7cc4d9862dd49b68fb1542e49c53bf953bfdf59c`와 이전 provider snapshot은 current SHA·current provider metadata·production proof로 사용하지 않는다.
 - GitHub main 보호 때문에 direct main commit/push는 금지되며, 문서 변경은 purpose branch + PR 경계를 따른다.
 
@@ -94,24 +104,25 @@
 
 #66이 회차 수정·수동 개방·주문 예약·취소 복구의 fresh state/time/ownership 경계를 직접 검증하고
 구현 proof를 accepted했다. semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는
-PR #70으로 merge되었고, #71 publication read-back의 현재 live `main`은
-`fe5e680fa58c8b3af5e508d07115bb8ab9df272a`다.
+PR #70으로 merge되었고, 후속 PR #69 publication read-back의 현재 live `main`은
+`0358c8d956fb22064ab93685d46714d2023ef505`다.
 
-이 상태는 implementation과 repository publication에 대한 proof다. exact-release Preview/browser/runtime
-proof는 `PENDING`, production authority는 `PENDING`이며 production deployment·activation·`salesMode`·
-live round·actual payment/notification·first-round completion을 주장하지 않는다.
+이 상태는 implementation과 repository publication에 대한 proof다. #76 최신 exact-release
+Preview/browser 결과는 `RUNTIME_DEFECT_FOUND`이며 Sale Round runtime은 `NOT_PROVEN`이다.
+production authority는 `PENDING`이며 production deployment·activation·`salesMode`·live round·
+actual payment/notification·first-round completion을 주장하지 않는다.
 
-### 2. Preview·exact-SHA proof
+### 2. Preview Evidence Gate·exact-SHA proof
 
-상태: `VERIFICATION_PENDING`.
+상태: Preview Evidence Gate 02는 `IMPLEMENTATION_COMPLETE / PROOF_COMPLETE / PUBLICATION_HOLD`이며, exact-release runtime은 `FINAL_BROWSER_RESIDUAL`이다.
 
-historical exact-source Preview/browser/fixture evidence는 현재 release candidate의 exact-SHA proof를 대체하지 않는다. 필요한 Preview/browser/fixture 검증은 Auth.js session lifecycle과 별도 gate다.
+candidate `433a1182a377f152d140e9609bd6e15ae0eb6f1c`의 pinned Vercel metadata project/source SHA/`READY` 대조와 focused proof는 완료됐다. 이는 #76의 exact-release browser/runtime proof를 대체하지 않는다. #76 최신 기록은 exact deployment/fixture binding 이후 Auth.js Credentials callback/session 경계에서 `RUNTIME_DEFECT_FOUND`이며 Sale Round runtime은 아직 `NOT_PROVEN`이다.
 
-### 3. Auth.js session runtime
+### 3. Auth.js Preview binding·session revocation
 
-상태: `EXTERNAL_RUNTIME_BLOCKED`.
+상태: `AUTH_PREVIEW_BINDING_PROVEN` + `PILOT_POLICY_ACCEPTS_CURRENT_BOUNDED_REVOCATION` + `REVOCATION_POLICY_DEFERRED_POST_PILOT`.
 
-cookie 발급·동일 browser context persistence·logout/rotation·stale-claim lifecycle은 runtime/browser proof가 없으므로 `UNVERIFIED`다. static source나 callback 응답으로 승격하지 않는다.
+#88 최신 runtime evidence에서 Consumer/Seller/Driver의 Credentials session 발급·동일 browser context persistence·logout·refresh lineage·stale token/revocation 및 cleanup이 bounded scope에서 검증됐다. 동일 배포의 stateless Auth.js JWT stale-session revocation은 `NOT_CLOSED`이며 `AUTH-SESSION-CLAIM-REVOCATION` post-pilot high-priority policy/security residual로 보존한다. 이 결과를 #76의 browser runtime defect 해결로 승격하지 않는다.
 
 ### 4. ALIGO provider metadata
 
@@ -313,7 +324,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 다음 작업
 
-1. exact-SHA Preview/browser/fixture와 Auth.js session lifecycle을 필요한 runtime/browser authority에서 검증한다.
+1. #76 `EXACT-RELEASE-PROOF-01`의 최신 `RUNTIME_DEFECT_FOUND`를 기준으로 final browser residual을 재입장한다. Preview binding 대기 상태로 되돌리지 않으며, 이 docs-only Goal에서는 browser proof를 실행하지 않는다.
 2. authenticated ALIGO provider metadata read-back → repository 8-code mapping 대조 → 별도 authority 후 actual send 검증.
 3. production deployment·activation·live round·actual payment·actual notification·first-round completion은 각각 별도 authority와 read-back으로 판정한다.
 4. consumer self-cancel `ORDER_CANCELLED` notification은 `PRODUCT_POLICY_DECISION_REQUIRED`로 유지한다.

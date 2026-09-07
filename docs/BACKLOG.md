@@ -2,7 +2,7 @@
 
 # Greenhub Backlog
 
-> 기준일: 2026-09-06 KST
+> 기준일: 2026-09-07 KST
 >
 > 현재 미완료·향후 작업만 관리한다. 완료 상세는 Git history, `docs/CRITICAL_LOGIC.md`, `docs/archive/`, 완료 PLAN·REPORT를 사용한다.
 
@@ -26,11 +26,22 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 - R1 Combined Public Readiness: `PUBLIC_READINESS_CLOSED`
 - S2 → R1 campaign: `TERMINAL_SUCCESS`
 - #63이 확인한 pre-publication main 기준선: `ffd999423f8a98b0c1f34d020d832d7929feab72` — historical baseline
-- #71이 재확인한 현재 live `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`
+- 현재 live remote `main`: `0358c8d956fb22064ab93685d46714d2023ef505` — PR #69 merge 후 보호된 기준선
 - #70 `SALE-ROUND-STATE-01`은 `MERGED`; 회차 atomicity/recovery implementation과 직접 proof가 publication되었다.
 - 역사적 exact-source Preview 기준선: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` — 현재 main, PR, merge, production 증거로 승격하지 않는다.
 - #63의 accepted closure는 닫힌 semantic work를 다시 열지 않는다는 뜻이며, Preview·Auth.js runtime 검증 잔여와 production/activation은 별도 상태다.
-- 기존 문서 candidate는 PR #69에서 후속 갱신하며, 이 Goal은 PR #69를 merge하지 않고 Control Tower publication queue로 반환한다.
+- Preview Evidence Gate 02 implementation candidate는 `433a1182a377f152d140e9609bd6e15ae0eb6f1c`이며 PR #90은 `OPEN / UNMERGED / PUBLICATION_HOLD`다.
+- PR #90의 pinned Vercel metadata gate와 focused proof는 완료되었고, 이 Goal은 PR #90을 merge하지 않고 Control Tower publication queue로 반환한다.
+
+## PREVIEW-EVIDENCE-GATE-02
+
+- implementation: `IMPLEMENTATION_COMPLETE`
+- proof: `PROOF_COMPLETE` — exact project/source SHA/`READY` metadata와 focused `verify` gate
+- publication: `PUBLICATION_HOLD` — PR #90 `OPEN / UNMERGED`
+- candidate: `433a1182a377f152d140e9609bd6e15ae0eb6f1c`, remote-addressable
+- successor: 생성하지 않음; 이 branch에서 추가 기능 구현을 진행하지 않음
+- exact release distinction: #76 최신 TASK_RECORD는 `RUNTIME_DEFECT_FOUND`; exact Preview binding 이후 Auth.js browser boundary에서 세션 발급이 실패했고 Sale Round runtime은 `NOT_PROVEN`이다.
+- Auth Preview distinction: #88 최신 기록은 `AUTH_PREVIEW_BINDING_PROVEN`; 동일 배포의 stateless JWT revocation은 `NOT_CLOSED`로 post-pilot residual이다.
 
 ---
 
@@ -39,12 +50,12 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 | 주장 | 현재 판정 |
 |---|---|
 | implementation | `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`는 `IMPLEMENTATION_PROVEN`; #66이 race/recovery proof를 accepted함 |
-| verification | Sale Round implementation/race/recovery proof는 `PROVEN`; exact-release Preview/runtime/browser proof는 `PENDING` |
-| prior candidate | PR #69의 기존 accepted candidate는 `9c921684a26597cb57887b6049288f1143b017c8` |
-| updated candidate | PR #69의 후속 candidate는 remote-addressable 상태로 갱신하며, 정확한 head SHA는 Issue #75 TASK_RECORD에 기록 |
-| PR | 기존 documentation PR #69는 `OPEN`; 이번 Goal은 merge하지 않음 |
-| published / merged | PR #70은 `MERGED`; live `main`은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` |
-| Preview runtime proof | exact-release runtime/browser proof는 `PENDING`; historical Preview evidence를 승격하지 않음 |
+| verification | Sale Round implementation/race/recovery proof는 `PROVEN`; Preview Evidence Gate 02 metadata/focused proof는 `PROOF_COMPLETE`; #76 exact-release browser/runtime은 `RUNTIME_DEFECT_FOUND` |
+| candidate | `433a1182a377f152d140e9609bd6e15ae0eb6f1c`, remote-addressable, PR #90 head |
+| PR | PR #90 `OPEN / UNMERGED`; 이번 Goal은 merge하지 않음 |
+| published / merged | 현재 protected `main`은 `0358c8d956fb22064ab93685d46714d2023ef505`; PR #90 candidate는 아직 merge되지 않음 |
+| Auth Preview Binding | #88 `AUTH_PREVIEW_BINDING_PROVEN`; same-deployment stateless JWT revocation은 `NOT_CLOSED` |
+| Preview runtime proof | candidate metadata/focused gate는 `PROOF_COMPLETE`; #76 Sale Round browser/runtime은 `NOT_PROVEN` / `FINAL_BROWSER_RESIDUAL` |
 | production deployment | `PRODUCTION_AUTHORITY_PENDING` |
 | production activation | `PRODUCTION_AUTHORITY_PENDING` |
 | first live round | `PRODUCTION_AUTHORITY_PENDING` |
@@ -353,8 +364,8 @@ repo-side production auto-deploy 차단과 GitHub main 보호를 완료했다. 2
 
 Issue #66이 회차 수정·수동 개방·주문 예약·취소 복구의 race/recovery 구현과 직접 proof를
 accepted했다. semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는 PR #70으로
-게시되었고, PR #70은 merge되어 현재 live `main` `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`로
-read-back되었다.
+게시되었고, PR #70과 후속 PR #69가 merge되어 현재 live `main`
+`0358c8d956fb22064ab93685d46714d2023ef505`로 read-back되었다.
 
 직접 proof 범위:
 
@@ -366,10 +377,11 @@ read-back되었다.
 | crash recovery, partial cancellation/retry와 duplicate convergence | `PROVEN` |
 | focused/integration/regression proof와 exact candidate publication | `PROVEN` / `PUBLISHED` |
 
-이 상태는 implementation과 repository publication에 대한 proof다. exact-release Preview/browser/runtime
-proof는 `PENDING`이며, production deployment·production activation·`salesMode` 전환·live round·actual
-payment/notification·first live round는 `PRODUCTION_AUTHORITY_PENDING`이다. 이 문서 후보와 PR #69는
-이를 production-ready로 표현하지 않는다.
+이 상태는 implementation과 repository publication에 대한 proof다. Preview Evidence Gate 02의
+metadata/focused proof는 `PROOF_COMPLETE`이지만, #76 exact-release Preview/browser/runtime은
+최신 `RUNTIME_DEFECT_FOUND` / `NOT_PROVEN`이다. production deployment·production activation·
+`salesMode` 전환·live round·actual payment/notification·first live round는
+`PRODUCTION_AUTHORITY_PENDING`이다. PR #90을 production-ready로 표현하지 않는다.
 
 기술 계약은 `docs/specs/mvp-sales-round-direct-delivery.md`, 운영 중단·재개 규칙은
 `docs/specs/ops/mvp-sales-round-runbook.md`에 둔다.
@@ -387,7 +399,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
   감사 보고서다. 현재 branch에는 보고서 파일을 복구하지 않으며, 과거 결론을 현재 `VERIFIED`로
   승격하지 않는다.
 - `CURRENT_IMPLEMENTATION_EVIDENCE`: 현재 source·직접 테스트·current spec·runbook을 다시
-  대조한 결과다. Sale Round atomicity/recovery는 #66의 직접 proof와 #70/#71 publication으로
+  대조한 결과다. Sale Round atomicity/recovery는 #66의 직접 proof와 #70/#69 publication으로
   `IMPLEMENTATION_PROVEN` / `PUBLISHED`가 되었으며, 남은 현재 공백은 retention과 operation
   claim fencing의 두 finding으로 분리했다.
 - 위에서 유지된 직접 검증 항목은 `RESOLVED_NOT_PROMOTED`다. 이는 해당 base contract가 현재
@@ -395,7 +407,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
   되었다는 뜻이 아니다.
 - `CURRENT_UNRESOLVED_FINDING`: `RETENTION-DELETE-ISSUE-ROUTING`,
   `OPERATION-ACTION-CLAIM-FENCING`만 이번 BR-R3의 current unresolved finding으로
-  canonicalize한다. Sale Round finding은 #66/#70/#71로 implementation proof와 publication이
+  canonicalize한다. Sale Round finding은 #66/#70/#69로 implementation proof와 publication이
   완료되었지만, 이 사실이 exact-release runtime proof나 production 승인을 의미하지는 않는다.
 - `FUTURE_REENABLE_REQUIREMENT`: 역사 보고서의 marketing consent lifecycle 논점은 현재
   `MARKETING_NOT_USED_IN_PILOT` controlled-pilot 정책을 변경하거나 새 finding으로 승격하지 않는다. 향후 marketing을 다시
@@ -406,24 +418,26 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ## VERIFICATION
 
-### Preview·exact-SHA proof
+### Preview Evidence Gate·exact-SHA proof
 
-상태: `VERIFICATION_PENDING`.
+상태: Preview Evidence Gate 02는 `PROOF_COMPLETE`; #76 exact-release browser/runtime은 `RUNTIME_DEFECT_FOUND` / `NOT_PROVEN`이다.
 
-- #63이 인정한 Preview/browser/fixture 결과는 해당 exact source에 대한 재사용 가능한 역사적 증거다.
+- candidate `433a1182a377f152d140e9609bd6e15ae0eb6f1c`의 pinned Vercel metadata project/source SHA/`READY` 대조와 focused `verify` proof는 완료됐다.
+- #63이 인정한 Preview/browser/fixture 결과는 해당 historical exact source에 대한 재사용 가능한 증거다.
 - `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`와 그 Preview deployment를 현재 main, 현재 candidate, production deployment로 표현하지 않는다.
-- 현재 release candidate에서 필요한 exact-SHA Preview/browser/fixture proof와 Auth.js session/logout/rotation/stale-claim lifecycle proof는 별도 검증 gate다.
+- #76 최신 TASK_RECORD는 exact deployment/fixture binding 이후 Auth.js Credentials callback/session 경계에서 `RUNTIME_DEFECT_FOUND`를 기록했고, Sale Round runtime은 `NOT_PROVEN`이다.
+- 다음 authorized runtime 진입은 `RUN_NOW / FINAL_BROWSER_RESIDUAL`로 분류하며, 이 docs-only Goal에서는 browser proof를 실행하지 않는다.
 - 구현 완료, 검증 완료, Preview proof, production deployment·activation은 서로 대체하지 않는다.
 
-## BLOCKED_EXTERNAL
+## EXTERNAL_RESIDUALS
 
-### Auth.js session runtime
+### Auth.js Preview binding·session revocation
 
-상태: `EXTERNAL_RUNTIME_BLOCKED`.
+상태: `AUTH_PREVIEW_BINDING_PROVEN` + `PILOT_POLICY_ACCEPTS_CURRENT_BOUNDED_REVOCATION` + `REVOCATION_POLICY_DEFERRED_POST_PILOT`.
 
-- Auth.js session cookie 발급·동일 브라우저 context persistence·logout/rotation·stale claim lifecycle은 runtime/browser proof가 필요하다.
-- static source, fixture, callback 응답만으로 session runtime 성공을 주장하지 않는다.
-- 필요한 runtime/browser authority가 없으면 `UNVERIFIED`로 유지하며 source/runtime mutation을 이 Goal에서 수행하지 않는다.
+- Issue #88 최신 runtime evidence에서 Consumer/Seller/Driver의 Credentials session 발급·동일 브라우저 context persistence·logout·refresh lineage·stale token/revocation·cleanup이 bounded scope에서 `PASS`다.
+- 동일 배포의 stateless Auth.js JWT stale-session revocation은 `NOT_CLOSED`이며 `AUTH-SESSION-CLAIM-REVOCATION` post-pilot high-priority policy/security residual로 유지한다.
+- 이 상태는 #76의 별도 browser runtime defect를 해결한 것으로 보지 않는다.
 
 ### ALIGO provider current metadata
 
@@ -470,7 +484,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [ ] authenticated ALIGO metadata read-back
 - [ ] provider metadata와 repository logical 8-code mapping 직접 대조
 - [ ] 별도 authority 후 격리 actual Alimtalk/SMS 및 fallback 검증
-- [ ] exact release SHA 기준 Preview/browser/fixture와 Auth.js session lifecycle 검증
+- [ ] #76 `EXACT-RELEASE-PROOF-01` final browser/runtime residual 해소 — 최신 `RUNTIME_DEFECT_FOUND`; Preview Evidence Gate 02 metadata/focused proof는 완료
 - [ ] production deployment·activation·첫 회차 전용 승인 및 read-back
 
 ### 법무·출시 후보 정합성

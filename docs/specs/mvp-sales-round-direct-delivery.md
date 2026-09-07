@@ -38,7 +38,7 @@
 위 회차 atomicity·recovery 항목은 current contract이며, #66에서 fresh edit gate,
 pre-open reservation gate, cancellation recovery/fencing의 구현과 직접 proof가
 `IMPLEMENTATION_PROVEN`으로 accepted되었다. PR #70 publication 후 현재 live `main`은
-`fe5e680fa58c8b3af5e508d07115bb8ab9df272a`이다. 이 상태는 exact-release Preview/browser/runtime
+`0358c8d956fb22064ab93685d46714d2023ef505`이다. 이 상태는 exact-release Preview/browser/runtime
 proof나 production deployment·activation·first live round를 의미하지 않으며, 해당 gate는
 `docs/BACKLOG.md`에서 별도로 판정한다.
 
