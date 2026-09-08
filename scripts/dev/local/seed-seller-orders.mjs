@@ -229,6 +229,7 @@ export function freshnessMutationDoc(existing) {
 
 export function toFirestoreValue(value) {
   if (value === null || value === undefined) return { nullValue: null };
+  if (value instanceof Date) return { timestampValue: value.toISOString() };
   if (typeof value === 'string') return { stringValue: value };
   if (typeof value === 'boolean') return { booleanValue: value };
   if (Number.isInteger(value)) return { integerValue: String(value) };
@@ -254,7 +255,12 @@ export function toFirestoreFields(doc) {
 async function restJson(url, { method = 'GET', body, fetchImpl = fetch } = {}) {
   const res = await fetchImpl(url, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    // Firestore emulator 전용 owner 토큰으로 rules를 우회한다.
+    // env 검사가 127.0.0.1:8080/greenhub-local로 고정하므로 운영 전달 불가.
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      Authorization: 'Bearer owner',
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -322,9 +328,10 @@ export async function applyScenario(scenario, { reset = true, fetchImpl = fetch,
   if (!SCENARIOS.includes(scenario)) {
     throw new LocalSeedError(`알 수 없는 시나리오: ${scenario}`);
   }
-  // 1. invite upsert (seller register 실경로 재사용)
+  // 1. invite upsert (seller register 실경로 재사용).
+  // expiresAt은 Firestore timestamp로 쓴다 (API가 Timestamp.toMillis로 읽기 때문).
   const invite = {
-    expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+    expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
     usedAt: null,
     maxUses: 50,
     note: 'FE-PILOT-L02-S local harness',

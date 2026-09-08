@@ -236,4 +236,7 @@ test('seed는 seller-store 연결과 driver 승인을 deterministic하게 복원
   assert.match(driverSeed, /seller seed를 먼저 실행/);
   assert.match(driverSeed, /local-order-driver-/);
   assert.match(driverSeed, /assertLocalSeedEnvironment/);
+  // emulator REST는 rules 우회용 owner 토큰을 사용한다 (host 고정과 함께 fail-closed)
+  assert.match(sellerSeed, /Bearer owner/);
+  assert.match(driverSeed, /Bearer owner/);
 });

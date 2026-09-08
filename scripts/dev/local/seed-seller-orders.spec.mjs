@@ -109,6 +109,9 @@ test('Firestore REST 인코딩은 emulator 문서 형식을 따른다', () => {
   assert.equal(fields.fields.quantity.integerValue, '2');
   assert.equal(fields.fields.flag.booleanValue, true);
   assert.ok('nullValue' in fields.fields.nothing);
+  // invite expiresAt은 API Timestamp 가정과 맞추기 위해 timestamp로 쓴다
+  const stamped = toFirestoreFields({ expiresAt: new Date('2026-09-09T00:00:00.000Z') });
+  assert.equal(stamped.fields.expiresAt.timestampValue, '2026-09-09T00:00:00.000Z');
 });
 
 test('applyScenario: reset 시 기존 local 주문을 지우고 시나리오를 적용한다', async () => {
@@ -188,7 +191,7 @@ test('applyScenario: register 409면 login 실경로로 seller를 확정한다',
 test('applyScenario: 기존 문서는 PATCH upsert로 복원하고 seller-store를 연결한다', async () => {
   const calls = [];
   const fetchImpl = async (url, init) => {
-    calls.push({ url, method: init?.method ?? 'GET', body: init?.body });
+    calls.push({ url, method: init?.method ?? 'GET', body: init?.body, headers: init?.headers });
     if (url.endsWith(':runQuery')) {
       return {
         ok: true,
@@ -220,4 +223,6 @@ test('applyScenario: 기존 문서는 PATCH upsert로 복원하고 seller-store�
   const link = patches.find((c) => c.url.includes('/users/local-seller-01'));
   assert.ok(link);
   assert.match(link.url, /updateMask\.fieldPaths=storeId/);
+  // emulator REST는 rules 우회용 owner 토큰을 사용한다
+  assert.equal(link.headers?.Authorization, 'Bearer owner');
 });

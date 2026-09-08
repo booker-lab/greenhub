@@ -100,7 +100,12 @@ export function buildDriverBoardDocs(driverId) {
 async function restJson(url, { method = 'GET', body, fetchImpl = fetch } = {}) {
   const res = await fetchImpl(url, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    // Firestore emulator 전용 owner 토큰으로 rules를 우회한다.
+    // env 검사가 127.0.0.1:8080/greenhub-local로 고정하므로 운영 전달 불가.
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      Authorization: 'Bearer owner',
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -115,7 +120,7 @@ async function restJson(url, { method = 'GET', body, fetchImpl = fetch } = {}) {
 
 export async function assertDriverStoreExists({ fetchImpl = fetch } = {}) {
   const url = `${firestoreBaseUrl()}/stores/${encodeURIComponent(LOCAL_SELLER.storeId)}`;
-  const res = await fetchImpl(url, { method: 'GET' });
+  const res = await fetchImpl(url, { method: 'GET', headers: { Authorization: 'Bearer owner' } });
   if (res.status === 404) {
     throw new LocalSeedError(
       `store가 없습니다: ${LOCAL_SELLER.storeId}. seller seed를 먼저 실행하세요.`,
