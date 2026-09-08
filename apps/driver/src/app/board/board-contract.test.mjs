@@ -33,6 +33,14 @@ const driverConfigSource = await readFile(
   new URL('../../../next.config.ts', import.meta.url),
   'utf8',
 );
+const detailHelperSource = await readFile(
+  new URL('./_lib/driver-order-detail.ts', import.meta.url),
+  'utf8',
+);
+const holdModalSource = await readFile(
+  new URL('./[orderId]/_components/DeliveryHoldModal.tsx', import.meta.url),
+  'utf8',
+);
 
 test('Driver Board는 Driver role API에서 세 상태를 조회한다', () => {
   assert.match(boardSource, /apiFetch\(\s*['"]\/driver\/orders['"]/);
@@ -72,7 +80,7 @@ test('보류·준비 주문 상세는 결제 의미에 따라 배송 시작·재
   assert.match(detailSource, />\s*배송 재개\s*</);
   assert.match(
     detailSource,
-    /result\.orderId\s*!==\s*orderId\s*\|\|\s*result\.status\s*!==\s*status/,
+    /isDriverOrderStatusAck\(result,\s*orderId,\s*status\)/,
   );
   assert.match(detailSource, /배송 완료 사진 촬영/);
 });
@@ -110,6 +118,89 @@ test('Board 조회 실패는 빈 목록이 아닌 재시도 계약을 제공한�
 
 test('Board 재시도는 목록 fetch를 다시 실행한다', () => {
   assert.match(boardSource, /sessionStatus,\s*reloadKey\]/);
+});
+
+test('Board는 initial loading과 background refreshing을 분리한다', () => {
+  assert.match(boardSource, /refreshing/);
+  assert.match(boardSource, /setRefreshing\(true\)/);
+  assert.match(boardSource, /최신 정보를 확인하는 중입니다/);
+});
+
+test('Board는 성공한 조회를 기억하고 refresh 실패에 이전 목록을 유지한다', () => {
+  assert.match(boardSource, /hasSuccessfulReadRef/);
+  assert.match(boardSource, /hasSuccessfulRead/);
+  assert.match(boardSource, /기존 목록을 보여줍니다/);
+});
+
+test('Board는 request sequence로 stale 응답 덮어쓰기를 막는다', () => {
+  assert.match(boardSource, /requestIdRef/);
+  assert.match(boardSource, /requestId === requestIdRef\.current/);
+});
+
+test('Board는 focus 복귀와 visible 복귀에 재조회하고 listener를 정리한다', () => {
+  assert.match(boardSource, /addEventListener\(['"]focus['"]/);
+  assert.match(boardSource, /addEventListener\(['"]visibilitychange['"]/);
+  assert.match(boardSource, /visibilityState\s*===\s*['"]visible['"]/);
+  assert.match(boardSource, /removeEventListener\(['"]focus['"]/);
+  assert.match(boardSource, /removeEventListener\(['"]visibilitychange['"]/);
+});
+
+test('Board는 usable token 없음을 auth-required로 표시하고 empty와 분리한다', () => {
+  assert.match(boardSource, /authRequired/);
+  assert.match(boardSource, /로그인이 필요합니다/);
+});
+
+test('Board의 error-only와 empty 렌더는 성공 기록으로 분리된다', () => {
+  assert.match(boardSource, /error && !hasSuccessfulRead/);
+  assert.match(boardSource, /오늘 수거할 주문이 없습니다/);
+});
+
+test('Detail read 실패는 NOT_FOUND·AUTH_ERROR·FETCH_ERROR로 분리된다', () => {
+  assert.match(detailHelperSource, /NOT_FOUND/);
+  assert.match(detailHelperSource, /AUTH_ERROR/);
+  assert.match(detailHelperSource, /FETCH_ERROR/);
+  assert.match(detailSource, /toDriverOrderReadError/);
+  assert.match(detailSource, /readError/);
+  assert.match(detailSource, /주문을 찾을 수 없습니다/);
+  assert.match(detailSource, /주문 정보를 불러오지 못했습니다/);
+});
+
+test('Detail read는 sequence guard와 manual retry를 제공한다', () => {
+  assert.match(detailSource, /readSeqRef/);
+  assert.match(detailSource, /seq === readSeqRef\.current/);
+  assert.match(detailSource, /setReadKey\(\(key\)\s*=>\s*key\s*\+\s*1\)/);
+  assert.match(detailSource, /다시 확인/);
+});
+
+test('Detail은 성공 ACK 후 authoritative GET으로 수렴한다', () => {
+  assert.match(detailSource, /isDriverOrderStatusAck/);
+  assert.match(detailSource, /\/driver\/orders\/\$\{encodeURIComponent\(orderId\)\}/);
+  assert.match(detailSource, /setOrder\(fresh\)/);
+});
+
+test('Detail은 readback 실패를 command 실패와 분리하고 자동 resend하지 않는다', () => {
+  assert.match(detailSource, /readbackWarning/);
+  assert.match(detailSource, /처리는 완료되었지만 최신 상태를 확인하지 못했습니다/);
+  assert.doesNotMatch(detailSource, /setTimeout\(updateStatus/);
+  assert.doesNotMatch(detailSource, /setInterval/);
+});
+
+test('Detail은 시작·재개 후 서버 상태로 CTA를 다시 계산한다', () => {
+  assert.match(detailSource, /상태 다시 확인/);
+  assert.match(detailSource, /readDetail\(token\)/);
+});
+
+test('DeliveryHoldModal 저장 성공은 parent readback으로 수렴한다', () => {
+  assert.match(holdModalSource, /onSaved/);
+  assert.match(holdModalSource, /onSaved\?\.\(\)/);
+  assert.match(detailSource, /onSaved=\{/);
+});
+
+test('Detail에 새로운 payment 권한 계산이 생기지 않는다', () => {
+  assert.doesNotMatch(detailSource, /canPay/);
+  assert.doesNotMatch(detailSource, /orderCharges/);
+  assert.doesNotMatch(detailSource, /deliveryHold\.(redeliveryFee|chargeId)/);
+  assert.match(detailSource, /isDeliveryStartAllowed\(order\.redeliveryPayment\)/);
 });
 
 test('Driver Board·상세는 orderCharges와 raw payment 필드를 직접 조회·조합하지 않는다', () => {

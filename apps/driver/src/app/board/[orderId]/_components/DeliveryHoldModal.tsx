@@ -45,6 +45,7 @@ interface DeliveryHoldModalProps {
   storeId: string;
   onClose: () => void;
   onLoading: (loading: boolean) => void;
+  onSaved?: () => void;
 }
 
 export function DeliveryHoldModal({
@@ -54,6 +55,7 @@ export function DeliveryHoldModal({
   storeId,
   onClose,
   onLoading,
+  onSaved,
 }: DeliveryHoldModalProps) {
   const { data: session } = useSession();
   const [reasonCode, setReasonCode] = useState<HoldReason>('WEATHER');
@@ -112,6 +114,8 @@ export function DeliveryHoldModal({
         throw new Error('배송 보류 응답 불일치');
       }
       onClose();
+      // Order 합성 없이 parent가 authoritative GET으로 수렴한다.
+      onSaved?.();
     } catch {
       setError('배송 보류를 저장하지 못했습니다. 주문 상태를 확인하고 다시 시도해주세요.');
     } finally {

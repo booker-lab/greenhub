@@ -16,8 +16,14 @@ import {
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { use, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
+import {
+  type DriverOrderReadErrorKind,
+  isDriverOrderStatusAck,
+  toDriverOrderNetworkError,
+  toDriverOrderReadError,
+} from '../_lib/driver-order-detail';
 import {
   getRedeliveryPaymentPresentation,
   isDeliveryStartAllowed,
@@ -64,58 +70,115 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const [loading, setLoading] = useState(false);
   const [holdOpened, setHoldOpened] = useState(false);
   const [readLoading, setReadLoading] = useState(true);
+  const [readRefreshing, setReadRefreshing] = useState(false);
+  const [readError, setReadError] = useState<{
+    kind: DriverOrderReadErrorKind;
+    message: string;
+  } | null>(null);
+  // readback 실패는 command 실패와 분리한다: ACK된 명령은 재전송하지 않고 상태 재확인만 안내한다.
+  const [readbackWarning, setReadbackWarning] = useState<string | null>(null);
+  const [readKey, setReadKey] = useState(0);
+  const readSeqRef = useRef(0);
+  const hasOrderRef = useRef(false);
 
+  const readDetail = useCallback(
+    async (token: string) => {
+      readSeqRef.current += 1;
+      const seq = readSeqRef.current;
+      const isCurrent = () => seq === readSeqRef.current;
+      const background = hasOrderRef.current;
+      if (background) {
+        setReadRefreshing(true);
+      } else {
+        setReadLoading(true);
+      }
+      setReadError(null);
+      try {
+        const response = await apiFetch(`/driver/orders/${encodeURIComponent(orderId)}`, token);
+        if (!isCurrent()) return;
+        if (!response.ok) {
+          const failure = toDriverOrderReadError(response.status);
+          // 후속 refresh 실패는 기존 order를 지우지 않고 stale로 유지한다.
+          if (hasOrderRef.current) {
+            setReadError({ kind: failure.kind, message: failure.message });
+          } else {
+            setOrder(null);
+            setReadError({ kind: failure.kind, message: failure.message });
+          }
+        } else {
+          const payload = (await response.json()) as Order;
+          if (!isCurrent()) return;
+          hasOrderRef.current = true;
+          setOrder(payload);
+          setReadError(null);
+        }
+      } catch (cause: unknown) {
+        if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) return;
+        const failure = toDriverOrderNetworkError();
+        if (!hasOrderRef.current) setOrder(null);
+        setReadError({ kind: failure.kind, message: failure.message });
+      }
+      if (!isCurrent()) return;
+      setReadLoading(false);
+      setReadRefreshing(false);
+    },
+    [orderId],
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: readKey is an intentional manual-refresh trigger, orderId/readDetail stay explicit for readability
   useEffect(() => {
     const token = session?.user.accessToken;
     if (!token) {
+      // usable token 없음을 not-found/empty로 표시하지 않는다.
+      readSeqRef.current += 1;
+      setOrder(null);
+      hasOrderRef.current = false;
+      setReadError({ kind: 'AUTH_ERROR', message: '로그인 정보를 다시 확인해 주세요.' });
       setReadLoading(false);
+      setReadRefreshing(false);
       return;
     }
-
-    const controller = new AbortController();
-    let active = true;
-    setReadLoading(true);
-
-    apiFetch(`/driver/orders/${encodeURIComponent(orderId)}`, token, {
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`driver order request failed: ${response.status}`);
-        return (await response.json()) as Order;
-      })
-      .then((payload) => {
-        if (active) setOrder(payload);
-      })
-      .catch((cause: unknown) => {
-        if (active && !(cause instanceof DOMException && cause.name === 'AbortError')) {
-          setOrder(null);
-        }
-      })
-      .finally(() => {
-        if (active) setReadLoading(false);
-      });
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [orderId, session?.user.accessToken]);
+    void readDetail(token);
+  }, [orderId, session?.user.accessToken, readKey, readDetail]);
 
   async function updateStatus(status: string) {
     if (!order || !session) return;
+    const token = session.user.accessToken;
     setLoading(true);
+    setReadbackWarning(null);
     try {
       const res = await apiFetch(
         `/stores/${order.storeId}/orders/${orderId}/status`,
-        session.user.accessToken,
+        token,
         { method: 'PATCH', body: JSON.stringify({ status }) },
       );
       if (!res.ok) throw new Error('상태 전환 실패');
       const result = (await res.json()) as { orderId?: unknown; status?: unknown };
-      if (result.orderId !== orderId || result.status !== status) {
+      if (!isDriverOrderStatusAck(result, orderId, status)) {
         throw new Error('상태 전환 응답 불일치');
       }
-      if (status === 'DELIVERED' || status === 'HUB_ARRIVED') {
+      const isTerminal = status === 'DELIVERED' || status === 'HUB_ARRIVED';
+      // ACK 성공 직후 local 합성 없이 authoritative GET으로 수렴한다. 자동 resend는 하지 않는다.
+      try {
+        const reread = await apiFetch(`/driver/orders/${encodeURIComponent(orderId)}`, token);
+        if (!reread.ok) throw toDriverOrderReadError(reread.status);
+        const fresh = (await reread.json()) as Order;
+        hasOrderRef.current = true;
+        setOrder(fresh);
+        setReadError(null);
+      } catch (readbackCause: unknown) {
+        if (isTerminal) {
+          // terminal은 board가 fresh fetch하므로 navigation 계약을 유지한다.
+        } else {
+          const message =
+            readbackCause instanceof Error
+              ? '처리는 완료되었지만 최신 상태를 확인하지 못했습니다. 다시 확인해 주세요.'
+              : '처리는 완료되었지만 최신 상태를 확인하지 못했습니다. 다시 확인해 주세요.';
+          setReadbackWarning(message);
+          return;
+        }
+      }
+      if (isTerminal) {
         router.replace('/board?tab=preparing');
       }
     } catch {
@@ -141,6 +204,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   }
 
   if (!order) {
+    const message =
+      readError?.kind === 'AUTH_ERROR'
+        ? '로그인 정보를 다시 확인해 주세요.'
+        : readError?.kind === 'FETCH_ERROR'
+          ? '주문 정보를 불러오지 못했습니다'
+          : '주문을 찾을 수 없습니다';
     return (
       <Box
         style={{
@@ -150,7 +219,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           justifyContent: 'center',
         }}
       >
-        <Text style={{ color: 'var(--color-text-disabled)' }}>주문을 찾을 수 없습니다</Text>
+        <Stack align="center" gap="sm">
+          <Text style={{ color: 'var(--color-text-disabled)' }}>{message}</Text>
+          {readError?.kind === 'FETCH_ERROR' && (
+            <Button
+              variant="outline"
+              color="brand"
+              radius="xl"
+              onClick={() => setReadKey((key) => key + 1)}
+            >
+              다시 시도
+            </Button>
+          )}
+        </Stack>
       </Box>
     );
   }
@@ -241,6 +322,62 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       {/* 본문 */}
       <Box component="main" style={{ flex: 1, padding: '24px 16px' }}>
         <Stack gap="md">
+          {readRefreshing && (
+            <Text
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
+              최신 정보를 확인하는 중입니다…
+            </Text>
+          )}
+          {readError && (
+            <Card radius="xl" withBorder p="md">
+              <Stack gap="xs">
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-danger)',
+                  }}
+                >
+                  {readError.message} (이전 정보 표시 중)
+                </Text>
+                {readError.kind === 'FETCH_ERROR' && (
+                  <Button
+                    variant="outline"
+                    color="brand"
+                    radius="xl"
+                    onClick={() => setReadKey((key) => key + 1)}
+                  >
+                    다시 확인
+                  </Button>
+                )}
+              </Stack>
+            </Card>
+          )}
+          {readbackWarning && (
+            <Card radius="xl" withBorder p="md">
+              <Stack gap="xs">
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-danger)',
+                  }}
+                >
+                  {readbackWarning}
+                </Text>
+                <Button
+                  variant="outline"
+                  color="brand"
+                  radius="xl"
+                  onClick={() => {
+                    const token = session?.user.accessToken;
+                    if (token) void readDetail(token);
+                  }}
+                >
+                  상태 다시 확인
+                </Button>
+              </Stack>
+            </Card>
+          )}
           {/* 주문 정보 */}
           <Card radius="xl" withBorder p="md">
             <Stack gap="sm">
@@ -437,6 +574,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           storeId={order.storeId}
           onClose={() => setHoldOpened(false)}
           onLoading={setLoading}
+          onSaved={() => {
+            const token = session?.user.accessToken;
+            if (token) void readDetail(token);
+          }}
         />
       )}
     </Box>

@@ -4,7 +4,7 @@ import type { Order } from '@greenhub/shared';
 import { Anchor, Badge, Box, Button, Stack, Text, Title, UnstyledButton } from '@mantine/core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import OrderCard from '@/components/OrderCard';
 import { apiFetch } from '@/lib/api';
 
@@ -17,8 +17,27 @@ export default function BoardClient() {
   const [preparing, setPreparing] = useState<Order[]>([]);
   const [delivering, setDelivering] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [hasSuccessfulRead, setHasSuccessfulRead] = useState(false);
+  const requestIdRef = useRef(0);
+  const hasSuccessfulReadRef = useRef(false);
+
+  // focus 복귀·visibility 복귀 시 새 read를 수행한다. listener 누적 방지를 위해 cleanup한다.
+  useEffect(() => {
+    const revalidate = () => setReloadKey((key) => key + 1);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') revalidate();
+    };
+    window.addEventListener('focus', revalidate);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', revalidate);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reloadKey is an intentional manual-refresh trigger for the error-state retry button
   useEffect(() => {
@@ -26,15 +45,31 @@ export default function BoardClient() {
 
     const token = session?.user.accessToken;
     if (!token) {
+      // usable token 없음을 0건 성공으로 표시하지 않는다. 보호된 stale도 유지하지 않는다.
+      requestIdRef.current += 1;
       setPreparing([]);
       setDelivering([]);
+      setAuthRequired(true);
+      setError(null);
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
     const controller = new AbortController();
     let active = true;
-    setLoading(true);
+    // Abort에만 의존하지 않는 stale-wins 방어: 오래된 응답이 최신 요청을 덮지 못한다.
+    requestIdRef.current += 1;
+    const requestId = requestIdRef.current;
+    const isCurrent = () => active && requestId === requestIdRef.current;
+    // 성공한 0건도 성공한 조회다. 이전 성공이 있으면 기존 list를 유지하고 background로 갱신한다.
+    const background = hasSuccessfulReadRef.current;
+    if (background) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    setAuthRequired(false);
     setError(null);
 
     apiFetch('/driver/orders', token, { signal: controller.signal })
@@ -45,22 +80,32 @@ export default function BoardClient() {
         return payload as Order[];
       })
       .then((orders) => {
-        if (!active) return;
+        if (!isCurrent()) return;
         setPreparing(orders.filter((order) => order.status === 'PREPARING'));
         setDelivering(
           orders.filter(
             (order) => order.status === 'DELIVERING' || order.status === 'DELIVERY_HELD',
           ),
         );
+        hasSuccessfulReadRef.current = true;
+        setHasSuccessfulRead(true);
+        setError(null);
       })
       .catch((cause: unknown) => {
-        if (!active || (cause instanceof DOMException && cause.name === 'AbortError')) return;
-        setPreparing([]);
-        setDelivering([]);
-        setError('주문을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+        if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) return;
+        if (hasSuccessfulReadRef.current) {
+          // refresh 실패는 마지막 정상 데이터를 지우지 않고 stale로 유지한다.
+          setError('최신 주문을 불러오지 못했습니다. 기존 목록을 보여줍니다.');
+        } else {
+          setPreparing([]);
+          setDelivering([]);
+          setError('주문을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+        }
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (!isCurrent()) return;
+        setLoading(false);
+        setRefreshing(false);
       });
 
     return () => {
@@ -139,7 +184,21 @@ export default function BoardClient() {
               주문을 불러오는 중입니다
             </Text>
           </Stack>
-        ) : error ? (
+        ) : authRequired ? (
+          <Stack align="center" justify="center" h={192} gap="xs">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+              로그인이 필요합니다. 세션을 다시 확인해 주세요.
+            </Text>
+            <Button
+              variant="outline"
+              color="brand"
+              radius="xl"
+              onClick={() => setReloadKey((key) => key + 1)}
+            >
+              다시 시도
+            </Button>
+          </Stack>
+        ) : error && !hasSuccessfulRead ? (
           <Stack align="center" justify="center" h={192} gap="xs">
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
               {error}
@@ -171,6 +230,28 @@ export default function BoardClient() {
           </Stack>
         ) : (
           <Stack gap="sm">
+            {refreshing && (
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              >
+                최신 정보를 확인하는 중입니다…
+              </Text>
+            )}
+            {error && (
+              <Stack align="center" justify="center" gap="xs">
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+                  {error} (이전 목록 표시 중)
+                </Text>
+                <Button
+                  variant="outline"
+                  color="brand"
+                  radius="xl"
+                  onClick={() => setReloadKey((key) => key + 1)}
+                >
+                  다시 시도
+                </Button>
+              </Stack>
+            )}
             {orders.map((order) => (
               <OrderCard key={order.id} order={order} tab={tab} />
             ))}
