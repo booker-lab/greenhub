@@ -2,58 +2,101 @@
 
 import type { Order } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type OrderGroup, STATUS_GROUP_MAP } from '@/app/orders/_constants';
 import { apiJson } from '@/lib/api';
 
 interface UseOrdersResult {
   orders: Order[];
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   groupCounts: Record<OrderGroup, number>;
+  refresh: () => void;
 }
 
 export function useOrders(storeId: string | null): UseOrdersResult {
   const { data: session, status: sessionStatus } = useSession();
+  const token = session?.user.accessToken;
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  const requestIdRef = useRef(0);
+  const hasDataRef = useRef(false);
+
+  const refresh = useCallback(() => {
+    setTick((t) => t + 1);
+  }, []);
 
   useEffect(() => {
-    const token = session?.user.accessToken;
+    void tick;
     if (sessionStatus === 'loading') {
       setLoading(true);
       return;
     }
     if (!storeId || !token) {
+      requestIdRef.current += 1;
+      hasDataRef.current = false;
       setOrders([]);
       setError(null);
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
-    let active = true;
-    setLoading(true);
+    const isBackground = hasDataRef.current;
+    if (isBackground) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
+    const myId = requestIdRef.current + 1;
+    requestIdRef.current = myId;
+    let active = true;
     apiJson<Order[]>(`/stores/${encodeURIComponent(storeId)}/orders`, token)
       .then((payload) => {
-        if (!active) return;
+        if (!active || requestIdRef.current !== myId) return;
         if (!Array.isArray(payload)) throw new Error('주문 목록 응답 형식이 올바르지 않습니다.');
+        hasDataRef.current = true;
         setOrders(payload);
       })
       .catch((err: unknown) => {
-        if (!active) return;
-        setOrders([]);
+        if (!active || requestIdRef.current !== myId) return;
+        // 이전 정상 목록이 있으면 유지하고 오류만 기록한다 (EMPTY collapse 방지).
         setError(err instanceof Error ? err.message : '주문 목록을 불러오지 못했습니다.');
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (!active || requestIdRef.current !== myId) return;
+        setLoading(false);
+        setRefreshing(false);
       });
 
     return () => {
       active = false;
     };
-  }, [session?.user.accessToken, sessionStatus, storeId]);
+  }, [token, sessionStatus, storeId, tick]);
+
+  useEffect(() => {
+    const revalidate = () => {
+      if (document.visibilityState === 'hidden') return;
+      refresh();
+    };
+    const onFocus = () => {
+      revalidate();
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden) revalidate();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [refresh]);
 
   const groupCounts = useMemo(() => {
     const result = {
@@ -69,5 +112,5 @@ export function useOrders(storeId: string | null): UseOrdersResult {
     return result;
   }, [orders]);
 
-  return { orders, loading, error, groupCounts };
+  return { orders, loading, refreshing, error, groupCounts, refresh };
 }

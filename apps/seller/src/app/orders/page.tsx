@@ -12,7 +12,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFirebaseReady } from '@/app/providers';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { PageHeader } from '@/components/PageHeader';
@@ -106,7 +106,7 @@ export default function OrdersPage() {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
   const firebaseReady = useFirebaseReady();
-  const { orders, loading, error, groupCounts } = useOrders(storeId);
+  const { orders, loading, refreshing, error, refresh } = useOrders(storeId);
   const [saleType, setSaleType] = useState<SaleType>('normal');
   const [activeTab, setActiveTab] = useState<OrderGroup>('ACTION_REQUIRED');
   const [subFilter, setSubFilter] = useState<'ALL' | 'DELIVERING' | 'HUB_ARRIVED'>('ALL');
@@ -118,10 +118,33 @@ export default function OrdersPage() {
     saleType === 'group' ? order.saleType === 'group' : order.saleType !== 'group',
   );
   const priorityCounts = getOrderPriorityCounts(saleTypeOrders);
+  // 탭 뱃지는 표시 목록과 동일한 판매 유형 scope로 집계한다.
+  const scopedGroupCounts = useMemo(() => {
+    const result: Record<OrderGroup, number> = {
+      ACTION_REQUIRED: 0,
+      WAITING: 0,
+      IN_DELIVERY: 0,
+      DONE: 0,
+      CANCELLED: 0,
+    };
+    for (const order of saleTypeOrders) {
+      result[STATUS_GROUP_MAP[order.status]] += 1;
+    }
+    return result;
+  }, [saleTypeOrders]);
 
   const handleSaleTypeChange = (next: SaleType) => {
     setSaleType(next);
     setDatePreset('week');
+    setCustomFrom('');
+    setCustomTo('');
+  };
+
+  // 우선순위 진입이 날짜 필터에 가려 대상을 숨기지 않도록 필터를 해제한다.
+  const handlePriorityEntry = () => {
+    setActiveTab('ACTION_REQUIRED');
+    setSubFilter('ALL');
+    setDatePreset('custom');
     setCustomFrom('');
     setCustomTo('');
   };
@@ -166,7 +189,7 @@ export default function OrdersPage() {
         title="주문 관리"
         right={
           <ConnectionStatus
-            loading={loading}
+            loading={loading || refreshing}
             error={error}
             firebaseReady={firebaseReady}
             source="api"
@@ -207,20 +230,14 @@ export default function OrdersPage() {
                 count={priorityCounts.deliveryHeld}
                 description="배송 일정과 고객 안내를 먼저 확인하세요."
                 urgent={priorityCounts.deliveryHeld > 0}
-                onClick={() => {
-                  setActiveTab('ACTION_REQUIRED');
-                  setSubFilter('ALL');
-                }}
+                onClick={handlePriorityEntry}
               />
               <PriorityItem
                 label="확인 필요"
                 count={priorityCounts.actionRequired}
                 description="기존 처리 필요 주문 상태를 모아 봅니다."
                 urgent={priorityCounts.actionRequired > 0}
-                onClick={() => {
-                  setActiveTab('ACTION_REQUIRED');
-                  setSubFilter('ALL');
-                }}
+                onClick={handlePriorityEntry}
               />
             </SimpleGrid>
           </Paper>
@@ -306,7 +323,7 @@ export default function OrdersPage() {
         tabs={GROUP_TABS.map((tab) => ({
           key: tab.key,
           label: tab.label,
-          count: groupCounts[tab.key],
+          count: scopedGroupCounts[tab.key],
           badgeColor: tab.key === 'ACTION_REQUIRED' ? 'red' : 'gray',
         }))}
         value={activeTab}
@@ -355,29 +372,78 @@ export default function OrdersPage() {
         <Stack gap="lg">
           {(loading || !firebaseReady) && <LoadingState />}
 
-          {!loading && firebaseReady && filteredOrders.length === 0 && (
+          {!loading && firebaseReady && error && orders.length === 0 && (
             <EmptyState
-              icon={
-                <svg
-                  width="48"
-                  height="48"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  aria-hidden="true"
-                  focusable="false"
+              text={error}
+              action={
+                <UnstyledButton
+                  onClick={refresh}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 'var(--font-size-sm)',
+                    borderRadius: 99,
+                    backgroundColor: 'var(--color-text)',
+                    color: 'var(--color-bg)',
+                  }}
                 >
-                  <path d="M9 11l3 3L22 4" />
-                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                </svg>
+                  다시 시도
+                </UnstyledButton>
               }
-              text="현재 해당 주문이 없습니다"
             />
+          )}
+
+          {!loading && firebaseReady && error && orders.length > 0 && (
+            <Paper radius="lg" shadow="xs" p="md">
+              <Group justify="space-between" gap="xs" wrap="nowrap">
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  최신 주문을 불러오지 못했습니다. 이전 목록을 표시합니다.
+                </Text>
+                <UnstyledButton
+                  onClick={refresh}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 'var(--font-size-sm)',
+                    borderRadius: 99,
+                    backgroundColor: 'var(--color-text)',
+                    color: 'var(--color-bg)',
+                    flexShrink: 0,
+                  }}
+                >
+                  다시 시도
+                </UnstyledButton>
+              </Group>
+            </Paper>
           )}
 
           {!loading &&
             firebaseReady &&
+            !(error && orders.length === 0) &&
+            filteredOrders.length === 0 && (
+              <EmptyState
+                icon={
+                  <svg
+                    width="48"
+                    height="48"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                }
+                text="현재 해당 주문이 없습니다"
+              />
+            )}
+
+          {!loading &&
+            firebaseReady &&
+            !(error && orders.length === 0) &&
             groupOrdersByDate(filteredOrders, activeTab, groupConfigMap).map((group) => (
               <DateSection
                 key={group.dateKey}
