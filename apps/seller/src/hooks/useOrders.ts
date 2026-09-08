@@ -5,6 +5,23 @@ import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type OrderGroup, STATUS_GROUP_MAP } from '@/app/orders/_constants';
 import { apiJson } from '@/lib/api';
+import {
+  buildSellerOrdersPath,
+  isSellerOrdersBackgroundRefresh,
+  resolveSellerOrdersAuthState,
+  SELLER_ORDERS_AUTH_ERROR,
+  shouldIgnoreSellerOrdersResponse,
+} from './useOrders.recovery';
+
+export {
+  buildSellerOrdersPath,
+  isSellerOrdersBackgroundRefresh,
+  resolveSellerOrdersAuthState,
+  SELLER_ORDERS_AUTH_ERROR,
+  shouldIgnoreSellerOrdersResponse,
+} from './useOrders.recovery';
+export type { SellerOrdersAuthState } from './useOrders.recovery';
+export { resolveSellerOrdersInitialView } from './useOrders.recovery';
 
 interface UseOrdersResult {
   orders: Order[];
@@ -32,21 +49,26 @@ export function useOrders(storeId: string | null): UseOrdersResult {
 
   useEffect(() => {
     void tick;
-    if (sessionStatus === 'loading') {
-      setLoading(true);
+    const authState = resolveSellerOrdersAuthState(sessionStatus, storeId, token);
+    if (authState === 'loading') {
+      if (isSellerOrdersBackgroundRefresh(hasDataRef.current)) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       return;
     }
-    if (!storeId || !token) {
+    if (authState === 'missing') {
       requestIdRef.current += 1;
       hasDataRef.current = false;
       setOrders([]);
-      setError(null);
+      setError(SELLER_ORDERS_AUTH_ERROR);
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
-    const isBackground = hasDataRef.current;
+    const isBackground = isSellerOrdersBackgroundRefresh(hasDataRef.current);
     if (isBackground) {
       setRefreshing(true);
     } else {
@@ -56,20 +78,20 @@ export function useOrders(storeId: string | null): UseOrdersResult {
     const myId = requestIdRef.current + 1;
     requestIdRef.current = myId;
     let active = true;
-    apiJson<Order[]>(`/stores/${encodeURIComponent(storeId)}/orders`, token)
+    apiJson<Order[]>(buildSellerOrdersPath(storeId as string), token as string)
       .then((payload) => {
-        if (!active || requestIdRef.current !== myId) return;
+        if (shouldIgnoreSellerOrdersResponse(active, requestIdRef.current, myId)) return;
         if (!Array.isArray(payload)) throw new Error('주문 목록 응답 형식이 올바르지 않습니다.');
         hasDataRef.current = true;
         setOrders(payload);
       })
       .catch((err: unknown) => {
-        if (!active || requestIdRef.current !== myId) return;
+        if (shouldIgnoreSellerOrdersResponse(active, requestIdRef.current, myId)) return;
         // 이전 정상 목록이 있으면 유지하고 오류만 기록한다 (EMPTY collapse 방지).
         setError(err instanceof Error ? err.message : '주문 목록을 불러오지 못했습니다.');
       })
       .finally(() => {
-        if (!active || requestIdRef.current !== myId) return;
+        if (shouldIgnoreSellerOrdersResponse(active, requestIdRef.current, myId)) return;
         setLoading(false);
         setRefreshing(false);
       });

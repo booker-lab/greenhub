@@ -36,7 +36,7 @@ import {
   type OrderGroup,
   STATUS_GROUP_MAP,
 } from './_constants';
-import { getOrderPriorityCounts } from './order-priority';
+import { getOrderPriorityCounts, shouldShowActionRequiredOrder } from './order-priority';
 
 const VALID_TABS = new Set<OrderGroup>([
   'ACTION_REQUIRED',
@@ -110,6 +110,7 @@ export default function OrdersPage() {
   const [saleType, setSaleType] = useState<SaleType>('normal');
   const [activeTab, setActiveTab] = useState<OrderGroup>('ACTION_REQUIRED');
   const [subFilter, setSubFilter] = useState<'ALL' | 'DELIVERING' | 'HUB_ARRIVED'>('ALL');
+  const [heldOnly, setHeldOnly] = useState(false);
   const [datePreset, setDatePreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -135,15 +136,28 @@ export default function OrdersPage() {
 
   const handleSaleTypeChange = (next: SaleType) => {
     setSaleType(next);
+    setHeldOnly(false);
     setDatePreset('week');
     setCustomFrom('');
     setCustomTo('');
   };
 
   // 우선순위 진입이 날짜 필터에 가려 대상을 숨기지 않도록 필터를 해제한다.
-  const handlePriorityEntry = () => {
+  // 배송 보류 진입은 DELIVERY_HELD만 격리해 count와 목록을 1:1로 일치시키고,
+  // 확인 필요 진입은 기존 ACTION_REQUIRED 전체를 유지한다.
+  const handleDeliveryHeldEntry = () => {
     setActiveTab('ACTION_REQUIRED');
     setSubFilter('ALL');
+    setHeldOnly(true);
+    setDatePreset('custom');
+    setCustomFrom('');
+    setCustomTo('');
+  };
+
+  const handleActionRequiredEntry = () => {
+    setActiveTab('ACTION_REQUIRED');
+    setSubFilter('ALL');
+    setHeldOnly(false);
     setDatePreset('custom');
     setCustomFrom('');
     setCustomTo('');
@@ -172,6 +186,9 @@ export default function OrdersPage() {
 
   const filteredOrders = saleTypeOrders.filter((o) => {
     if (STATUS_GROUP_MAP[o.status] !== activeTab) return false;
+    if (activeTab === 'ACTION_REQUIRED' && !shouldShowActionRequiredOrder(o.status, heldOnly)) {
+      return false;
+    }
     if (activeTab === 'IN_DELIVERY' && subFilter !== 'ALL' && o.status !== subFilter) {
       return false;
     }
@@ -188,12 +205,34 @@ export default function OrdersPage() {
       <PageHeader
         title="주문 관리"
         right={
-          <ConnectionStatus
-            loading={loading || refreshing}
-            error={error}
-            firebaseReady={firebaseReady}
-            source="api"
-          />
+          <Group gap="xs" align="center">
+            <ConnectionStatus
+              loading={loading || refreshing}
+              error={error}
+              firebaseReady={firebaseReady}
+              source="api"
+            />
+            <UnstyledButton
+              onClick={refresh}
+              disabled={loading || refreshing}
+              aria-label="주문 목록 새로고침"
+              aria-busy={loading || refreshing}
+              style={{
+                padding: '6px 14px',
+                fontSize: 'var(--font-size-sm)',
+                borderRadius: 99,
+                backgroundColor:
+                  loading || refreshing ? 'var(--color-surface-muted)' : 'var(--color-text)',
+                color:
+                  loading || refreshing ? 'var(--color-text-disabled)' : 'var(--color-bg)',
+                opacity: loading || refreshing ? 0.7 : 1,
+                cursor: loading || refreshing ? 'default' : 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              {loading || refreshing ? '새로고침 중...' : '새로고침'}
+            </UnstyledButton>
+          </Group>
         }
       />
 
@@ -230,14 +269,14 @@ export default function OrdersPage() {
                 count={priorityCounts.deliveryHeld}
                 description="배송 일정과 고객 안내를 먼저 확인하세요."
                 urgent={priorityCounts.deliveryHeld > 0}
-                onClick={handlePriorityEntry}
+                onClick={handleDeliveryHeldEntry}
               />
               <PriorityItem
                 label="확인 필요"
                 count={priorityCounts.actionRequired}
                 description="기존 처리 필요 주문 상태를 모아 봅니다."
                 urgent={priorityCounts.actionRequired > 0}
-                onClick={handlePriorityEntry}
+                onClick={handleActionRequiredEntry}
               />
             </SimpleGrid>
           </Paper>
@@ -330,12 +369,55 @@ export default function OrdersPage() {
         onChange={(key) => {
           setActiveTab(key);
           setSubFilter('ALL');
+          setHeldOnly(false);
         }}
         sticky
         layout="scroll"
       />
 
-      {/* SubFilter — IN_DELIVERY 탭 선택 시에만 렌더링 */}
+      {/* SubFilter — ACTION_REQUIRED 탭의 배송 보류 격리 / IN_DELIVERY 탭 선택 시에만 렌더링 */}
+      {activeTab === 'ACTION_REQUIRED' && (
+        <Box
+          style={{
+            backgroundColor: 'var(--color-surface-muted)',
+            borderBottom: '1px solid var(--color-border)',
+            padding: '6px 0',
+          }}
+        >
+          <Container size="sm">
+            <Group gap={0}>
+              <UnstyledButton
+                onClick={() => setHeldOnly(false)}
+                aria-pressed={!heldOnly}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 'var(--font-size-sm)',
+                  borderRadius: 99,
+                  backgroundColor: !heldOnly ? 'var(--color-text)' : 'transparent',
+                  color: !heldOnly ? 'var(--color-bg)' : 'var(--color-text-disabled)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                전체
+              </UnstyledButton>
+              <UnstyledButton
+                onClick={() => setHeldOnly(true)}
+                aria-pressed={heldOnly}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 'var(--font-size-sm)',
+                  borderRadius: 99,
+                  backgroundColor: heldOnly ? 'var(--color-text)' : 'transparent',
+                  color: heldOnly ? 'var(--color-bg)' : 'var(--color-text-disabled)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                배송 보류
+              </UnstyledButton>
+            </Group>
+          </Container>
+        </Box>
+      )}
       {activeTab === 'IN_DELIVERY' && (
         <Box
           style={{
