@@ -184,3 +184,40 @@ test('applyScenario: register 409면 login 실경로로 seller를 확정한다',
     'http://localhost:3000/auth/login',
   ]);
 });
+
+test('applyScenario: 기존 문서는 PATCH upsert로 복원하고 seller-store를 연결한다', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, method: init?.method ?? 'GET', body: init?.body });
+    if (url.endsWith(':runQuery')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => [],
+      };
+    }
+    if (url.includes('/documents/invites') && (init?.method ?? 'GET') === 'POST') {
+      return { ok: false, status: 409, text: async () => 'ALREADY_EXISTS' };
+    }
+    return { ok: true, status: 200, headers: new Headers(), text: async () => '' };
+  };
+  const apiFetchImpl = async (url) => {
+    if (url.endsWith('/auth/register')) {
+      return { ok: true, status: 200, json: async () => ({ userId: 'local-seller-01' }) };
+    }
+    throw new Error(`unexpected api call: ${url}`);
+  };
+  const result = await applyScenario('S-EMPTY', {
+    reset: true,
+    fetchImpl,
+    apiFetchImpl,
+    env: { ...LOCAL_ENV },
+  });
+  assert.equal(result.applied, 0);
+  const patches = calls.filter((c) => c.method === 'PATCH');
+  assert.ok(patches.some((c) => c.url.includes('/invites/')));
+  const link = patches.find((c) => c.url.includes('/users/local-seller-01'));
+  assert.ok(link);
+  assert.match(link.url, /updateMask\.fieldPaths=storeId/);
+});

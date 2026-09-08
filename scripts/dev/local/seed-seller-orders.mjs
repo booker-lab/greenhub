@@ -22,6 +22,9 @@
  * 시나리오: S-EMPTY | S-ACTION | S-HELD | S-MIXED | S-FRESHNESS
  *   --reset  시나리오 문서 적용 전 해당 store의 기존 local 주문을 삭제한다.
  *   --list   시나리오 목록만 출력한다 (emulator 불필요).
+ * 문서 쓰기는 upsert(POST 후 409면 전 필드 PATCH)이므로 반복 실행해도 같은 상태로 수렴한다.
+ * seed는 seller와 store를 연결한다 (`users/{seller}.storeId = local-store-01`).
+ * 연결이 없으면 Seller proxy가 `/orders` 대신 `/onboarding`으로 보낸다.
  */
 
 import { fileURLToPath } from 'node:url';
@@ -286,9 +289,29 @@ export async function deleteDocs(collection, ids, { fetchImpl = fetch } = {}) {
 }
 
 export async function writeDoc(collection, id, doc, { fetchImpl = fetch } = {}) {
-  await restJson(`${firestoreBaseUrl()}/${collection}?documentId=${encodeURIComponent(id)}`, {
-    method: 'POST',
-    body: toFirestoreFields(doc),
+  try {
+    await restJson(`${firestoreBaseUrl()}/${collection}?documentId=${encodeURIComponent(id)}`, {
+      method: 'POST',
+      body: toFirestoreFields(doc),
+      fetchImpl,
+    });
+  } catch (error) {
+    // 재실행 결정성: 이미 있으면 전 필드 PATCH로 같은 상태로 복원한다.
+    if (error instanceof LocalSeedError && /(^|\s)409\b|ALREADY_EXISTS/i.test(error.message)) {
+      await patchDoc(collection, id, doc, { fetchImpl });
+      return id;
+    }
+    throw error;
+  }
+  return id;
+}
+
+export async function patchDoc(collection, id, fields, { fetchImpl = fetch } = {}) {
+  const params = new URLSearchParams();
+  for (const key of Object.keys(fields)) params.append('updateMask.fieldPaths', key);
+  await restJson(`${firestoreBaseUrl()}/${collection}/${id}?${params}`, {
+    method: 'PATCH',
+    body: toFirestoreFields(fields),
     fetchImpl,
   });
   return id;
@@ -345,6 +368,10 @@ export async function applyScenario(scenario, { reset = true, fetchImpl = fetch,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }, { fetchImpl });
+
+  // 3b. seller ↔ store 연결 (proxy /orders 진입 + API owner 검사에 필요).
+  // register는 storeId=null로 생성하므로 seed에서 명시적으로 연결한다.
+  await patchDoc('users', sellerId, { storeId: LOCAL_SELLER.storeId }, { fetchImpl });
 
   // 4. reset: 기존 local store 주문 삭제 → deterministic 복원
   let removed = 0;
