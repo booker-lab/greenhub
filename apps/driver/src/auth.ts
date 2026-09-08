@@ -26,6 +26,44 @@ function isAllowedE2EDriverEmail(value: unknown): value is string {
   return allowed.has(value.trim().toLowerCase());
 }
 
+// Local pilot runtime 전용 Credentials 진입.
+// launcher가 고정하는 marker + localhost API에서만 허용하며,
+// API 실경로 + driver role + 승인 검사를 그대로 적용한다 (fail-closed).
+function isLocalCredentialRuntime(): boolean {
+  if (process.env.GREENHUB_LOCAL_RUNTIME !== 'true') return false;
+  if (process.env.NODE_ENV === 'production') return false;
+  if (process.env.VERCEL_ENV === 'production') return false;
+  if (process.env.RAILWAY_ENVIRONMENT_NAME === 'production') return false;
+  return true;
+}
+
+async function authorizeLocalDriver(credentials: Record<string, unknown>) {
+  if (typeof credentials.email !== 'string' || typeof credentials.password !== 'string') {
+    return null;
+  }
+  const res = await fetch(`${API}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: credentials.email,
+      password: credentials.password,
+    }),
+  });
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  if (data.user.role !== 'driver') return null;
+  if (data.user.driverApproved !== true) return null;
+  return {
+    id: data.user.id,
+    email: data.user.email,
+    name: data.user.name,
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    role: data.user.role,
+  };
+}
+
 async function refreshAccessToken(token: Record<string, unknown>) {
   try {
     const res = await fetch(`${API}/auth/refresh`, {
@@ -61,6 +99,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: '비밀번호', type: 'password' },
       },
       async authorize(credentials, request) {
+        if (isLocalCredentialRuntime()) {
+          return authorizeLocalDriver(credentials as Record<string, unknown>);
+        }
         if (
           process.env.VERCEL_ENV !== 'preview' ||
           process.env.ROUND_DIRECT_E2E_ENABLED !== 'true'
