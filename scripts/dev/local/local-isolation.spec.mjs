@@ -136,13 +136,104 @@ test('Seller local auth는 fail-closed다 (E2E secret 없이 거부 + 실 Kakao 
 
 test('Seller /orders는 보호된 store 경유 + Bearer 호출이다 (UX 수정 없이 계약 확인)', () => {
   const hook = readRepo('apps/seller/src/hooks/useOrders.ts');
-  assert.match(hook, /\/stores\/.*\/orders/);
+  const recovery = readRepo('apps/seller/src/hooks/useOrders.recovery.ts');
+  // path authority: store-scoped endpoint는 recovery helper가 소유한다.
+  assert.match(recovery, /\/stores\/.*\/orders/);
+  assert.match(recovery, /buildSellerOrdersPath/);
+  assert.match(recovery, /encodeURIComponent\(storeId\)/);
+  assert.match(hook, /buildSellerOrdersPath\(storeId/);
+  assert.match(hook, /from '\.\/useOrders\.recovery'/);
+  // auth gating: helper가 missing을 판정하고 hook은 보호 요청 전에 fail-closed한다.
+  assert.match(recovery, /resolveSellerOrdersAuthState/);
+  assert.match(recovery, /if \(!storeId \|\| !token\)/);
+  assert.match(hook, /resolveSellerOrdersAuthState\(sessionStatus, storeId, token\)/);
+  assert.match(hook, /if \(authState === 'missing'\)/);
+  // Bearer: hook이 token을 전달하고 api layer가 Bearer로 전송한다.
   assert.match(hook, /accessToken/);
-  assert.match(hook, /if \(!storeId \|\| !token\)/);
+  assert.match(hook, /token as string/);
+  const api = readRepo('apps/seller/src/lib/api.ts');
+  assert.match(api, /Authorization.*Bearer/);
   const controller = readRepo('apps/api/src/orders/orders.controller.ts');
   assert.match(controller, /stores\/:storeId\/orders/);
   assert.match(controller, /Roles\('seller', 'admin'\)/);
   const apiBase = readRepo('apps/seller/src/lib/api-base-url.ts');
   assert.match(apiBase, /http:\/\/localhost:3000/);
   assert.match(apiBase, /Production API URL은 localhost를 사용할 수 없습니다/);
+});
+
+test('Driver Firebase binding은 Seller와 같은 local/emulator 계약이다 (UX 수정 없음)', () => {
+  const binding = readRepo('apps/driver/src/lib/firebase.ts');
+  assert.match(binding, /greenhub-local/);
+  assert.match(binding, /8080/);
+  assert.match(binding, /9099/);
+  assert.match(binding, /9199/);
+  assert.match(binding, /green-e4fe3/);
+  assert.match(binding, /FirebaseRuntimeConfigurationError/);
+  assert.match(binding, /connectFirestoreEmulator/);
+  assert.match(binding, /connectAuthEmulator/);
+  assert.match(binding, /connectStorageEmulator/);
+  assert.match(binding, /non-local 브라우저 설정에는 Firebase emulator host를 둘 수 없습니다/);
+  // 기존 import 경로 유지 (호출자 수정 없음)
+  assert.match(binding, /export const firebaseAuth/);
+  assert.match(binding, /export const storage/);
+  assert.match(binding, /export const db/);
+});
+
+test('Seller local auth는 launcher marker에서 E2E 헤더 없이 진입한다 (fail-closed)', () => {
+  const sellerAuth = readRepo('apps/seller/src/auth.ts');
+  // 기존 E2E 게이트 보존
+  assert.match(sellerAuth, /E2E_TEST_SECRET/);
+  assert.match(sellerAuth, /x-e2e-test-token/);
+  // local 전용 진입 + 운영 표식 차단
+  assert.match(sellerAuth, /GREENHUB_LOCAL_RUNTIME/);
+  assert.match(sellerAuth, /isLocalCredentialRuntime/);
+  assert.match(sellerAuth, /NODE_ENV.*production/);
+  assert.match(sellerAuth, /VERCEL_ENV.*production/);
+  assert.match(sellerAuth, /RAILWAY_ENVIRONMENT_NAME.*production/);
+  const loginPage = readRepo('apps/seller/src/app/login/page.tsx');
+  assert.match(loginPage, /E2E_TEST/);
+  assert.match(loginPage, /GREENHUB_LOCAL_RUNTIME/);
+});
+
+test('Driver local auth는 승인된 driver만 localhost 실경로로 진입한다 (Kakao 유지)', () => {
+  const driverAuth = readRepo('apps/driver/src/auth.ts');
+  // 기존 preview-E2E 경로 보존
+  assert.match(driverAuth, /ROUND_DIRECT_E2E_ENABLED/);
+  assert.match(driverAuth, /VERCEL_ENV.*preview/);
+  // local 전용 진입 + 승인 검사
+  assert.match(driverAuth, /GREENHUB_LOCAL_RUNTIME/);
+  assert.match(driverAuth, /isLocalCredentialRuntime/);
+  assert.match(driverAuth, /driverApproved/);
+  assert.match(driverAuth, /\/auth\/login/);
+  const loginPage = readRepo('apps/driver/src/app/login/page.tsx');
+  assert.match(loginPage, /카카오로 시작하기/);
+  assert.match(loginPage, /GREENHUB_LOCAL_RUNTIME/);
+  assert.match(loginPage, /redirectTo.*\/board/);
+  const proxy = readRepo('apps/driver/src/proxy.ts');
+  assert.match(proxy, /\/board\/:path\*/);
+  assert.match(proxy, /driver.*admin|admin.*driver/);
+});
+
+test('외부 provider DENY 정책은 API client에서 강제된다', () => {
+  const portone = readRepo('apps/api/src/payments/portone.client.ts');
+  assert.match(portone, /GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY/);
+  assert.match(portone, /DENY_ALL_EXTERNAL_PROVIDER_DISPATCH/);
+  assert.match(portone, /LOCAL_OUTBOUND_DENIED/);
+  const aligo = readRepo('apps/api/src/notifications/aligo.client.ts');
+  assert.match(aligo, /GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY/);
+  assert.match(aligo, /DENY_ALL_EXTERNAL_PROVIDER_DISPATCH/);
+  assert.match(aligo, /외부 발송을 거부/);
+});
+
+test('seed는 seller-store 연결과 driver 승인을 deterministic하게 복원한다', () => {
+  const sellerSeed = readRepo('scripts/dev/local/seed-seller-orders.mjs');
+  assert.match(sellerSeed, /patchDoc\('users', sellerId/);
+  assert.match(sellerSeed, /storeId: LOCAL_SELLER.storeId/);
+  assert.match(sellerSeed, /ALREADY_EXISTS/);
+  const driverSeed = readRepo('scripts/dev/local/seed-driver-board.mjs');
+  assert.match(driverSeed, /local-driver@greenhub\.local/);
+  assert.match(driverSeed, /driverApproved: true/);
+  assert.match(driverSeed, /seller seed를 먼저 실행/);
+  assert.match(driverSeed, /local-order-driver-/);
+  assert.match(driverSeed, /assertLocalSeedEnvironment/);
 });
