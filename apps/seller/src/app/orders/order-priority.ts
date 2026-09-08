@@ -23,3 +23,28 @@ export function getOrderPriorityCounts(
 
   return { deliveryHeld, actionRequired };
 }
+
+/**
+ * ACTION_REQUIRED 목록의 배송 보류 진입 predicate.
+ * OrdersPage의 목록 필터와 동일한 조건을 공유해 count·진입 불일치를 방지한다.
+ */
+export function shouldShowActionRequiredOrder(
+  status: Order['status'],
+  heldOnly: boolean,
+): boolean {
+  if (!heldOnly) return STATUS_GROUP_MAP[status] === 'ACTION_REQUIRED';
+  return status === 'DELIVERY_HELD';
+}
+
+/**
+ * ACTION_REQUIRED 목록의 배송 보류 진입 필터.
+ * - `heldOnly=false`: 기존 처리 필요 전체 (DELIVERY_HELD 포함, vocabulary 유지).
+ * - `heldOnly=true`: DELIVERY_HELD만 격리 — 우선순위 "배송 보류 N건"과 목록 진입을 1:1로 일치시킨다.
+ * OrderStatus 재정의·API lifecycle 변경 없이 Seller task vocabulary를 보존한다.
+ */
+export function filterActionRequiredOrders<T extends Pick<Order, 'status'>>(
+  orders: ReadonlyArray<T>,
+  heldOnly: boolean,
+): T[] {
+  return orders.filter((order) => shouldShowActionRequiredOrder(order.status, heldOnly));
+}
