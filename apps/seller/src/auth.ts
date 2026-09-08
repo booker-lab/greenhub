@@ -18,6 +18,17 @@ class DiagnosticCredentialsSignin extends CredentialsSignin {
   }
 }
 
+// Local pilot runtime 전용 Credentials 진입.
+// launcher가 고정하는 marker + localhost API에서만 E2E 헤더 게이트를 생략한다.
+// 그 외 환경에서는 기존 E2E 헤더 게이트를 그대로 적용한다 (fail-closed).
+function isLocalCredentialRuntime(): boolean {
+  if (process.env.GREENHUB_LOCAL_RUNTIME !== 'true') return false;
+  if (process.env.NODE_ENV === 'production') return false;
+  if (process.env.VERCEL_ENV === 'production') return false;
+  if (process.env.RAILWAY_ENVIRONMENT_NAME === 'production') return false;
+  return true;
+}
+
 async function refreshAccessToken(token: Record<string, unknown>) {
   try {
     const res = await fetch(`${API}/auth/refresh`, {
@@ -57,10 +68,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: '비밀번호', type: 'password' },
       },
       async authorize(credentials, request) {
-        const expected = process.env.E2E_TEST_SECRET;
-        if (!expected) throw new DiagnosticCredentialsSignin('authorize-rejected');
-        const got = request?.headers?.get('x-e2e-test-token');
-        if (got !== expected) throw new DiagnosticCredentialsSignin('authorize-rejected');
+        // E2E 헤더 게이팅 — 일치하는 x-e2e-test-token 없으면 즉시 거부.
+        // SECRET 미설정 시 모든 credentials 요청 차단(안전 기본값).
+        // 단, local pilot runtime에서는 launcher가 E2E secret을 제거하므로
+        // local marker가 있을 때만 헤더 게이트를 생략하고 API 실경로로 검증한다.
+        if (!isLocalCredentialRuntime()) {
+          const expected = process.env.E2E_TEST_SECRET;
+          if (!expected) throw new DiagnosticCredentialsSignin('authorize-rejected');
+          const got = request?.headers?.get('x-e2e-test-token');
+          if (got !== expected) throw new DiagnosticCredentialsSignin('authorize-rejected');
+        }
 
         let res: Response;
         try {

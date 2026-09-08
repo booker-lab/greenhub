@@ -4,7 +4,11 @@ import { LoginForm } from './_form';
 export const dynamic = 'force-dynamic';
 
 export default function LoginPage() {
-  const showCredentials = process.env.E2E_TEST === 'true';
+  // E2E 헤더 게이트 환경 또는 local pilot runtime에서만 Credentials form을 노출한다.
+  // launcher는 local child에서 E2E_TEST를 제거하므로 local marker도 함께 확인한다.
+  const showCredentials =
+    process.env.E2E_TEST === 'true' ||
+    (process.env.GREENHUB_LOCAL_RUNTIME === 'true' && process.env.NODE_ENV !== 'production');
 
   return (
     <Box

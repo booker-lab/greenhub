@@ -1,5 +1,14 @@
 import { signIn } from '@/auth';
-import { Box, Stack, Button, Text, Title, Alert, Paper } from '@mantine/core';
+import { Box, Divider, PasswordInput, Stack, Button, Text, TextInput, Title, Alert, Paper } from '@mantine/core';
+
+async function localCredentialSignIn(formData: FormData) {
+  'use server';
+  await signIn('credentials', {
+    email: formData.get('email'),
+    password: formData.get('password'),
+    redirectTo: '/board',
+  });
+}
 
 export default async function LoginPage({
   searchParams,
@@ -7,6 +16,10 @@ export default async function LoginPage({
   searchParams: Promise<{ pending?: string }>;
 }) {
   const { pending } = await searchParams;
+  // Local pilot runtime에서만 승인된 드라이버의 Credentials 진입을 노출한다.
+  // 운영/Preview에서는 카카오 로그인만 사용한다.
+  const showLocalCredentials =
+    process.env.GREENHUB_LOCAL_RUNTIME === 'true' && process.env.NODE_ENV !== 'production';
 
   return (
     <Box
@@ -99,6 +112,39 @@ export default async function LoginPage({
               카카오로 시작하기
             </Button>
           </form>
+
+          {/* 로컬 파일럿 전용: 승인된 드라이버 Credentials 진입 */}
+          {showLocalCredentials && (
+            <form action={localCredentialSignIn}>
+              <Stack gap="sm" mt="md">
+                <Divider label="또는 로컬 계정" labelPosition="center" />
+                <TextInput
+                  type="email"
+                  name="email"
+                  placeholder="이메일"
+                  required
+                  radius="xl"
+                  size="md"
+                />
+                <PasswordInput
+                  name="password"
+                  placeholder="비밀번호"
+                  required
+                  radius="xl"
+                  size="md"
+                />
+                <Button
+                  type="submit"
+                  fullWidth
+                  size="md"
+                  radius="xl"
+                  style={{ backgroundColor: 'var(--color-primary)' }}
+                >
+                  로그인
+                </Button>
+              </Stack>
+            </form>
+          )}
         </Paper>
       </Box>
     </Box>

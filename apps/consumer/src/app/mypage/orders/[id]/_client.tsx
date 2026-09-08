@@ -62,15 +62,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const { id: rawOrderId } = use(params);
   const orderId = isSafeIdentifier(rawOrderId) ? rawOrderId : null;
   const router = useRouter();
-  const { data: session } = useSession();
-  const { order, loading, error, refetch } = useOrderStatus(orderId, session?.user?.accessToken);
+  const { data: session, status: sessionStatus } = useSession();
+  const accessToken =
+    sessionStatus === 'authenticated'
+      ? session?.user?.accessToken
+      : sessionStatus === 'unauthenticated'
+        ? null
+        : undefined;
+  const { order, loading, error, status, refetch } = useOrderStatus(orderId, accessToken);
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelDone, setCancelDone] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const detail = !loading && !error && orderId ? readOrderDetail(order, orderId) : null;
+  const detail = orderId ? readOrderDetail(order, orderId) : null;
+
+  async function handleRetry() {
+    setRetrying(true);
+    try {
+      await refetch();
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   async function handleCancel() {
     if (!session?.user?.accessToken || !detail?.canRequestCancellation) return;
@@ -210,7 +226,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     }
   }
 
-  if (loading) {
+  if (sessionStatus === 'loading' || (loading && !detail && status === 'loading')) {
     return (
       <Box py={60} ta="center">
         <Text c="var(--color-text-disabled)">로딩 중...</Text>
@@ -218,15 +234,96 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  if (error || !detail || !orderId) {
+  if (sessionStatus === 'unauthenticated' || status === 'auth') {
     return (
       <Container size="sm" px="md" py="lg">
         <Button variant="transparent" onClick={() => router.push('/mypage')} pl={0} mb="md">
           <ChevronLeft size={16} /> 뒤로
         </Button>
-        <Text ta="center" c="var(--color-danger)" size="sm" py={40}>
-          주문 정보를 확인할 수 없습니다.
-        </Text>
+        <Stack align="center" gap="sm" py={40}>
+          <Text ta="center" c="var(--color-danger)" size="sm">
+            로그인이 필요하거나 이 주문을 볼 권한이 없습니다.
+          </Text>
+          <Group justify="center" gap="sm">
+            <Button onClick={() => router.push('/login')} loading={retrying}>
+              로그인
+            </Button>
+            <Button variant="outline" onClick={() => router.push('/mypage')}>
+              주문 목록으로 돌아가기
+            </Button>
+          </Group>
+        </Stack>
+      </Container>
+    );
+  }
+
+  if (!orderId || status === 'not-found') {
+    return (
+      <Container size="sm" px="md" py="lg">
+        <Button variant="transparent" onClick={() => router.push('/mypage')} pl={0} mb="md">
+          <ChevronLeft size={16} /> 뒤로
+        </Button>
+        <Stack align="center" gap="sm" py={40}>
+          <Text ta="center" c="var(--color-text-secondary)" size="sm">
+            존재하지 않는 주문입니다. 주문 번호를 확인하거나 주문 목록으로 돌아가 주세요.
+          </Text>
+          <Button variant="outline" onClick={() => router.push('/mypage')}>
+            주문 목록으로 돌아가기
+          </Button>
+        </Stack>
+      </Container>
+    );
+  }
+
+  if (!detail && (status === 'network' || status === 'server')) {
+    return (
+      <Container size="sm" px="md" py="lg">
+        <Button variant="transparent" onClick={() => router.push('/mypage')} pl={0} mb="md">
+          <ChevronLeft size={16} /> 뒤로
+        </Button>
+        <Stack align="center" gap="sm" py={40}>
+          <Text ta="center" c="var(--color-danger)" size="sm">
+            {error ?? '주문 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'}
+          </Text>
+          <Group justify="center" gap="sm">
+            <Button onClick={handleRetry} loading={retrying} disabled={retrying}>
+              다시 시도
+            </Button>
+            <Button variant="outline" onClick={() => router.push('/mypage')}>
+              주문 목록으로 돌아가기
+            </Button>
+          </Group>
+        </Stack>
+      </Container>
+    );
+  }
+
+  if (!detail) {
+    if (loading) {
+      return (
+        <Box py={60} ta="center">
+          <Text c="var(--color-text-disabled)">로딩 중...</Text>
+        </Box>
+      );
+    }
+    return (
+      <Container size="sm" px="md" py="lg">
+        <Button variant="transparent" onClick={() => router.push('/mypage')} pl={0} mb="md">
+          <ChevronLeft size={16} /> 뒤로
+        </Button>
+        <Stack align="center" gap="sm" py={40}>
+          <Text ta="center" c="var(--color-danger)" size="sm">
+            주문 정보를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.
+          </Text>
+          <Group justify="center" gap="sm">
+            <Button onClick={handleRetry} loading={retrying} disabled={retrying}>
+              다시 시도
+            </Button>
+            <Button variant="outline" onClick={() => router.push('/mypage')}>
+              주문 목록으로 돌아가기
+            </Button>
+          </Group>
+        </Stack>
       </Container>
     );
   }
@@ -246,6 +343,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       <Button variant="transparent" onClick={() => router.push('/mypage')} pl={0} mb="sm">
         <ChevronLeft size={16} /> 뒤로
       </Button>
+      {(status === 'network' || status === 'server') && (
+        <Alert color="yellow" variant="light" radius="md" mb="lg" title="최신 정보를 불러오지 못했습니다">
+          <Stack gap={6}>
+            <Text size="sm">{error ?? '최신 주문 정보를 확인하지 못했습니다.'}</Text>
+            <Text size="sm">표시된 정보가 최신이 아닐 수 있습니다.</Text>
+            <Button
+              mt="xs"
+              variant="outline"
+              loading={retrying}
+              disabled={retrying}
+              onClick={handleRetry}
+            >
+              다시 시도
+            </Button>
+          </Stack>
+        </Alert>
+      )}
       <Group justify="space-between" align="flex-start" mb="lg">
         <Box>
           <Title order={3}>주문 상세</Title>

@@ -612,3 +612,110 @@ test('기존 서버 취소·재배송비·주문 사진 조회 계약만 사용�
   assert.match(hookSource, /requestSequence/);
   assert.match(hookSource, /AbortController/);
 });
+
+const hookCompiled = ts.transpileModule(hookSource, {
+  compilerOptions: {
+    esModuleInterop: true,
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+  },
+  fileName: 'useOrderStatus.ts',
+}).outputText;
+
+const hookModule = { exports: {} };
+new Function(
+  'require',
+  'module',
+  'exports',
+  hookCompiled,
+)(
+  (specifier) => {
+    if (specifier === 'react') {
+      return {
+        useCallback: (fn) => fn,
+        useEffect: () => {},
+        useRef: () => ({ current: null }),
+        useState: (initial) => [initial, () => {}],
+      };
+    }
+    if (specifier === '@/lib/api-base-url') {
+      return { getApiBaseUrl: () => 'http://test.invalid' };
+    }
+    return {};
+  },
+  hookModule,
+  hookModule.exports,
+);
+
+const { classifyOrderDetailFetchFailure, getOrderDetailReadErrorMessage } = hookModule.exports;
+
+test('주문 상세 읽기 실패는 auth/network/server로 결정적으로 구분된다', () => {
+  assert.equal(classifyOrderDetailFetchFailure({ httpStatus: 401, hasResponse: true }), 'auth');
+  assert.equal(classifyOrderDetailFetchFailure({ httpStatus: 403, hasResponse: true }), 'auth');
+  assert.equal(
+    classifyOrderDetailFetchFailure({ httpStatus: null, hasResponse: false }),
+    'network',
+  );
+  assert.equal(
+    classifyOrderDetailFetchFailure({ httpStatus: undefined, hasResponse: false }),
+    'network',
+  );
+  assert.equal(classifyOrderDetailFetchFailure({ httpStatus: 500, hasResponse: true }), 'server');
+  assert.equal(classifyOrderDetailFetchFailure({ httpStatus: 502, hasResponse: true }), 'server');
+  assert.equal(classifyOrderDetailFetchFailure({ httpStatus: 400, hasResponse: true }), 'server');
+  assert.equal(
+    classifyOrderDetailFetchFailure({ httpStatus: null, hasResponse: true }),
+    'server',
+  );
+
+  const authMessage = getOrderDetailReadErrorMessage('auth');
+  const networkMessage = getOrderDetailReadErrorMessage('network');
+  const serverMessage = getOrderDetailReadErrorMessage('server');
+  assert.match(authMessage, /로그인|권한/);
+  assert.match(networkMessage, /네트워크/);
+  assert.match(serverMessage, /잠시 후 다시 시도/);
+  assert.ok(new Set([authMessage, networkMessage, serverMessage]).size === 3);
+});
+
+test('주문 상세 hook은 404/auth와 일시 실패의 보관 정책을 구분한다', () => {
+  assert.match(hookSource, /setStatus\('not-found'\)/);
+  assert.match(hookSource, /setStatus\('found'\)/);
+  assert.match(hookSource, /setStatus\(failure\)/);
+  assert.match(hookSource, /classifyOrderDetailFetchFailure/);
+  assert.match(hookSource, /getOrderDetailReadErrorMessage/);
+  assert.match(hookSource, /res\.status === 404/);
+  assert.match(hookSource, /httpStatus: res\.status/);
+  assert.match(hookSource, /hasResponse: !\(e instanceof TypeError\)/);
+  assert.match(hookSource, /if \(failure === 'auth'\)/);
+  assert.match(hookSource, /if \(!accessToken\)/);
+  assert.match(hookSource, /accessToken\?: string \| null/);
+  // authoritative 404/auth는 이전 데이터를 비우고, 일시 실패는 stale을 유지한다.
+  const authClearIndex = hookSource.indexOf("if (failure === 'auth')");
+  assert.ok(authClearIndex > 0);
+  assert.ok(hookSource.indexOf('setOrder(null)', authClearIndex) > authClearIndex);
+  assert.ok(hookSource.indexOf('setOrder(null)', authClearIndex) < authClearIndex + 300);
+});
+
+test('주문 상세 화면은 not-found와 일시 실패를 같은 의미로 수렴시키지 않는다', () => {
+  assert.match(source, /존재하지 않는 주문입니다/);
+  assert.match(source, /로그인이 필요하거나 이 주문을 볼 권한이 없습니다/);
+  assert.match(source, /주문 목록으로 돌아가기/);
+  assert.match(source, /다시 시도/);
+  assert.match(source, /status: sessionStatus/);
+  assert.match(source, /handleRetry/);
+  assert.match(source, /await refetch\(\)/);
+  assert.match(source, /router\.push\('\/login'\)/);
+  assert.match(source, /주문 정보를 확인할 수 없습니다\. 잠시 후 다시 시도/);
+  assert.match(source, /\{error \?\?/);
+  assert.match(hookSource, /네트워크 연결을 확인하고 다시 시도/);
+  assert.match(hookSource, /주문 정보를 불러오지 못했습니다\. 잠시 후 다시 시도/);
+});
+
+test('이전 데이터가 있는 refresh 실패는 stale을 유지하고 재시도를 노출한다', () => {
+  assert.match(source, /const detail = orderId \? readOrderDetail\(order, orderId\) : null/);
+  assert.match(source, /최신 정보를 불러오지 못했습니다/);
+  assert.match(source, /표시된 정보가 최신이 아닐 수 있습니다/);
+  assert.match(source, /\(status === 'network' \|\| status === 'server'\)/);
+  assert.match(source, /loading={retrying}/);
+  assert.match(hookSource, /setInterval\(\(\) => void fetchOrder\(\), 3000\)/);
+});

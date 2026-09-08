@@ -2,7 +2,7 @@
 
 # Greenhub Backlog
 
-> 기준일: 2026-09-05 KST
+> 기준일: 2026-09-06 KST
 >
 > 현재 미완료·향후 작업만 관리한다. 완료 상세는 Git history, `docs/CRITICAL_LOGIC.md`, `docs/archive/`, 완료 PLAN·REPORT를 사용한다.
 
@@ -21,19 +21,43 @@
 S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증거는 [현재 상태 SSOT](memory.md)에 기록한다. 이 Backlog는 그 종료 상태를 다시 열지 않으며, production release·activation과 혼동하지 않는다.
 
 - S2 Browser Readiness: `CLOSED`
-- exact-source Browser R3: `PASS`
+- exact-source Browser R3: `PASS` — 아래 source와 deployment는 역사적 Preview 증거다.
 - physical-device disposition: `PHYSICAL_DEVICE_NOT_REQUIRED`
 - R1 Combined Public Readiness: `PUBLIC_READINESS_CLOSED`
 - S2 → R1 campaign: `TERMINAL_SUCCESS`
-- accepted source: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
-- 작업 시작 시 local source는 live `origin/main`보다 7개 commit 앞서 있었고, GitHub `main`은 PR required·`verify` required check 보호 상태였다.
-- 이번 문서화의 다음 의존성은 `PUBLICATION_TOPOLOGY_CONVERGENCE`이며, 아래 ACTIVE P0와는 별도다.
+- #63이 확인한 pre-publication main 기준선: `ffd999423f8a98b0c1f34d020d832d7929feab72` — historical baseline
+- #71이 재확인한 현재 live `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`
+- #70 `SALE-ROUND-STATE-01`은 `MERGED`; 회차 atomicity/recovery implementation과 직접 proof가 publication되었다.
+- 역사적 exact-source Preview 기준선: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` — 현재 main, PR, merge, production 증거로 승격하지 않는다.
+- #63의 accepted closure는 닫힌 semantic work를 다시 열지 않는다는 뜻이며, Preview·Auth.js runtime 검증 잔여와 production/activation은 별도 상태다.
+- 기존 문서 candidate는 PR #69에서 후속 갱신하며, 이 Goal은 PR #69를 merge하지 않고 Control Tower publication queue로 반환한다.
 
 ---
 
-## ACTIVE
+## 상태 구분
 
-### P0 — PAYMENT-FINALIZATION-PAID-GUARD
+| 주장 | 현재 판정 |
+|---|---|
+| implementation | `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`는 `IMPLEMENTATION_PROVEN`; #66이 race/recovery proof를 accepted함 |
+| verification | Sale Round implementation/race/recovery proof는 `PROVEN`; exact-release Preview/runtime/browser proof는 `PENDING` |
+| prior candidate | PR #69의 기존 accepted candidate는 `9c921684a26597cb57887b6049288f1143b017c8` |
+| updated candidate | PR #69의 후속 candidate는 remote-addressable 상태로 갱신하며, 정확한 head SHA는 Issue #75 TASK_RECORD에 기록 |
+| PR | 기존 documentation PR #69는 `OPEN`; 이번 Goal은 merge하지 않음 |
+| published / merged | PR #70은 `MERGED`; live `main`은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` |
+| Preview runtime proof | exact-release runtime/browser proof는 `PENDING`; historical Preview evidence를 승격하지 않음 |
+| production deployment | `PRODUCTION_AUTHORITY_PENDING` |
+| production activation | `PRODUCTION_AUTHORITY_PENDING` |
+| first live round | `PRODUCTION_AUTHORITY_PENDING` |
+
+---
+
+## HISTORICAL / CLOSED BY REL-STATE-01
+
+> 아래의 과거 P0/ACTIVE semantic scope와 상세 acceptance는 #63의 `A-N closed semantic work` 분류에 따라 현재 release blocker나 실행 가능한 ACTIVE task로 사용하지 않는다. 이 표시는 구현 완료, 검증 완료, remote publication, Preview proof, production deployment를 서로 추론하는 표기가 아니다. 역사적 finding과 보고서 경로는 Git history 및 관련 report에 보존한다.
+
+> 특히 과거의 `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`는 Pilot의 현재 정책인 `MARKETING_NOT_USED_IN_PILOT`을 다시 결정하는 근거가 아니다. `ORDER_CANCELLED` consumer self-cancel 알림도 이 Goal에서 정책을 결정하지 않는다.
+
+### 역사적 P0 — PAYMENT-FINALIZATION-PAID-GUARD
 
 `PaymentFinalizationService.finalizePaidOrder()`가 provider `status === 'PAID'`를 boundary 자체에서 강제하지 않는다.
 
@@ -45,7 +69,7 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 
 정본: `docs/specs/api/payments.md`.
 
-### P0 — PAYMENT-WEBHOOK-SIGNATURE-COVERAGE
+### 역사적 P0 — PAYMENT-WEBHOOK-SIGNATURE-COVERAGE
 
 PortOne webhook signature 구현은 존재하지만 금융 상태 변경 경계에 필요한 real-verifier cryptographic 양방향 회귀가 충분하지 않다.
 
@@ -79,7 +103,7 @@ PortOne webhook signature 구현은 존재하지만 금융 상태 변경 경계�
 
 정본: `docs/specs/api/payments.md`; 증거: `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`.
 
-### P0 — ORDER-REDELIVERY-PAID-RESUME-GATE
+### 역사적 P0 — ORDER-REDELIVERY-PAID-RESUME-GATE
 
 운영 계약은 고객 책임 첫 배송 실패의 유료 재배송에 **`결제 전 재배송 금지`**를 요구한다. 2026-08-24 추가 감사에서 이 문제는 단순 driver resume guard 누락이 아니라 **결제 요청·hold 해소·배송 재개 상태머신 전체 불일치**임을 확인했다.
 
@@ -127,7 +151,7 @@ PortOne webhook signature 구현은 존재하지만 금융 상태 변경 경계�
 
 정본: `docs/specs/api/orders.md`; 운영 근거: `docs/specs/ops/mvp-sales-round-runbook.md`.
 
-### P0 — ADMIN-FORCE-REFUND-CONSISTENCY
+### 역사적 P0 — ADMIN-FORCE-REFUND-CONSISTENCY
 
 admin refund가 정상 cancellation의 추가 charge·capacity·held counter·settlement 후속효과를 우회한다.
 
@@ -142,7 +166,7 @@ admin refund가 정상 cancellation의 추가 charge·capacity·held counter·se
 
 정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`.
 
-### P0 — ADMIN-PRIVILEGED-MUTATION-COVERAGE
+### 역사적 P0 — ADMIN-PRIVILEGED-MUTATION-COVERAGE
 
 `AdminController` class-level `JwtAuthGuard + RolesGuard + @Roles('admin')`와 고위험 mutation 구현은 존재하지만 서버 authorization 및 admin settlement 지급 상태 전이의 직접 회귀가 충분하지 않다.
 
@@ -178,7 +202,7 @@ admin refund가 정상 cancellation의 추가 charge·capacity·held counter·se
 
 정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
-### P0 — SETTLEMENT-LIFECYCLE-COVERAGE
+### 역사적 P0 — SETTLEMENT-LIFECYCLE-COVERAGE
 
 settlement 생성·자동 확정·취소 transaction 구현은 존재하지만 core financial lifecycle의 직접 상태·race 회귀가 없다.
 
@@ -217,7 +241,7 @@ admin `confirmed → paid` authorization/status 전이는 별도 `ADMIN-PRIVILEG
 
 정본: `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
 
-### P0 — MARKETING-CONSENT-LIFECYCLE-CONSISTENCY
+### 역사적 P0 — MARKETING-CONSENT-LIFECYCLE-CONSISTENCY
 
 round checkout 선택 마케팅 consent, user preference, 철회, retention evidence가 하나의 authoritative lifecycle로 수렴하지 않는다.
 
@@ -259,7 +283,7 @@ round checkout 선택 마케팅 consent, user preference, 철회, retention evid
 
 정본: `docs/specs/api/notifications.md`, `docs/specs/legal/README.md`, `docs/specs/mvp-sales-round-direct-delivery.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
 
-### P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
+### 역사적 P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
 
 API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 
@@ -272,7 +296,7 @@ API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 
 정본: `docs/specs/api/orders.md`.
 
-### P0 — AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION
+### 역사적 P0 — AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION
 
 관리자 승인 전 driver 권한을 얻을 수 없는지와 stale session/claims 수렴을 하나의 umbrella로 추적한다. 현재 accepted source에는 approval-gate/current-user 하위 범위가 반영됐지만, 전체 P0를 닫지는 않는다.
 
@@ -295,7 +319,7 @@ Accepted source에서 검증됨 (remote `main` publication pending):
 
 정본: `docs/specs/api/auth.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
-### P0 — ORDER-MUTATION-AUTHORIZATION-COVERAGE
+### 역사적 P0 — ORDER-MUTATION-AUTHORIZATION-COVERAGE
 
 상태 변경 ownership guard는 구현돼 있으나 핵심 거부 회귀가 부족하다.
 
@@ -309,7 +333,7 @@ Accepted source에서 검증됨 (remote `main` publication pending):
 
 정본: `docs/specs/api/orders.md`.
 
-### P0 — DEPLOY-SAFETY-MAIN-PROTECTION
+### 역사적 P0 — DEPLOY-SAFETY-MAIN-PROTECTION
 
 repo-side production auto-deploy 차단과 GitHub main 보호를 완료했다. 2026-09-05 직접 재조회에서 `protected=true`, PR required, `Deployment safety guard / verify` strict required check, force push·branch delete 차단을 확인했다. Issue #32는 `CLOSED`다.
 
@@ -319,89 +343,60 @@ repo-side production auto-deploy 차단과 GitHub main 보호를 완료했다. 2
 - [x] force push·branch delete 차단
 - [x] 재조회에서 enforcement 확인
 
-### P0_CANDIDATE_PENDING_CONTROL_TOWER — SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY
+---
 
-현재 source 재검증 결과 `CURRENT_UNRESOLVED`다. 회차 수정·수동 개방·주문 예약·취소 복구가 하나의
-신선한 상태·시간·소유권 경계로 수렴하지 않아 조기 주문, 상품 snapshot 혼합, `CANCELLING`
-고착 가능성이 남아 있다. runtime 증거는 확보했지만 최종 P0 및 release gate 승격은 product/release
-authority가 결정하므로 `P0_CANDIDATE_PENDING_CONTROL_TOWER`로 표시한다.
+## IMPLEMENTED / PUBLISHED
 
-현재 직접 근거:
+### SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY
 
-- [x] `SaleRoundsService.updateRound()`는 transaction 밖에서 `DRAFT|SCHEDULED`를 확인한 뒤,
-  `writeTransaction()` 안에서 fresh round status를 다시 확인하지 않는다.
-- [x] item 교체 시 `getRoundItems()`가 transaction snapshot이 아닌 별도 query로 실행된 뒤 기존
-  item 삭제와 새 item 생성을 같은 write callback에서 수행한다.
-- [x] `SaleRoundStateService.updateStatus()`의 수동 `SCHEDULED → OPEN` 경로는
-  `orderOpenAt`·`orderCloseAt` window를 확인하지 않는다.
-- [x] `OrderCapacityService.assertRoundReservable()`는 `OPEN`, 취소 없음, `orderCloseAt`만 확인하고
-  `orderOpenAt`을 방어적으로 확인하지 않는다.
-- [x] 회차 취소는 `CANCELLING`을 먼저 기록하지만 `owner|lease|expiry` 없이 주문 정리를 수행하고,
-  두 번째 `CANCELLING` 요청은 이미 진행 중이라는 이유로 거부한다.
-- [x] 현재 직접 테스트는 stale `updateStatus`, 자동 상태 전이, caught `LOCAL_FAILED` 재시도를
-  고정하지만 `updateRound` race, 조기 수동 `OPEN`, pre-open reservation, process-crash recovery,
-  cancellation stale-worker fencing은 직접 고정하지 않는다.
+상태: `IMPLEMENTATION_PROVEN` + `PUBLISHED`.
 
-Sale-round subfinding matrix:
+Issue #66이 회차 수정·수동 개방·주문 예약·취소 복구의 race/recovery 구현과 직접 proof를
+accepted했다. semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는 PR #70으로
+게시되었고, PR #70은 merge되어 현재 live `main` `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`로
+read-back되었다.
 
-| Subfinding | Current state | Evidence | Canonical action |
-|---|---|---|---|
-| updateRound race | `OPEN` | precheck와 write 사이 fresh status 재검증 없음 | round read와 edit eligibility를 같은 transaction에서 재검증하고 충돌 시 side effect 0 |
-| item replacement | `OPEN` | 현재 item query가 transaction 밖이며 삭제·재생성이 live reservation과 원자적으로 묶이지 않음 | active/reserved/ordered item을 보호하고 한 coherent snapshot만 교체 |
-| manual OPEN gate | `OPEN` | 수동 상태 전이가 `orderOpenAt <= now < orderCloseAt`를 확인하지 않음 | authoritative schedule window를 만족할 때만 `SCHEDULED → OPEN` 허용 |
-| reservation/openAt | `OPEN` | reservation path가 `OPEN`과 close만 확인하고 openAt을 확인하지 않음 | reservation에서도 동일한 open/close window를 defense-in-depth로 확인 |
-| CANCELLING crash recovery | `OPEN` | `CANCELLING` 저장 뒤 별도 주문 정리 중단 시 deterministic resume/reaper 없음 | owner·lease·expiry 기반 인수 또는 명시적 deterministic recovery 추가 |
-| claim ownership | `OPEN` | cancellation record에 owner·lease·expiry가 없고 claim 상태만 저장 | claim 획득·갱신·만료·재인수를 원자적으로 정의 |
-| stale worker overwrite | `PARTIAL` | 현재 API는 두 번째 `CANCELLING` claimant을 거부해 takeover가 일어나지 않지만, failure/finalize write에 owner token fence가 없음 | recovery worker 도입 시 old worker의 상태·counter·환불 결과 덮어쓰기를 fresh claim 검증으로 차단 |
+직접 proof 범위:
 
-영향:
+| proof scope | 현재 판정 |
+|---|---|
+| fresh round/item edit gate와 snapshot 보호 | `PROVEN` |
+| `SCHEDULED → OPEN` 및 reservation의 authoritative open/close window | `PROVEN` |
+| cancellation owner/lease/expiry, takeover와 stale-worker fencing | `PROVEN` |
+| crash recovery, partial cancellation/retry와 duplicate convergence | `PROVEN` |
+| focused/integration/regression proof와 exact candidate publication | `PROVEN` / `PUBLISHED` |
 
-- 판매 시작 전 주문·예약과 잘못된 가격·상품·한도 snapshot이 발생할 수 있다.
-- live edit와 reservation이 경합하면 현재 상품 삭제 또는 item 수량·주문 집계의 혼합 상태가 될 수 있다.
-- process crash 뒤 회차가 `CANCELLING`에 고착되어 주문·환불·capacity 정리가 끝났는지 판정할 수 없다.
+이 상태는 implementation과 repository publication에 대한 proof다. exact-release Preview/browser/runtime
+proof는 `PENDING`이며, production deployment·production activation·`salesMode` 전환·live round·actual
+payment/notification·first live round는 `PRODUCTION_AUTHORITY_PENDING`이다. 이 문서 후보와 PR #69는
+이를 production-ready로 표현하지 않는다.
 
-완료 acceptance:
-
-- [ ] edit eligibility와 round/item snapshot을 실제 write transaction에서 fresh-read하고
-  `OPEN|CLOSED|COMPLETED|CANCELLED` 또는 사용 중 item의 edit side effect를 거부
-- [ ] 동시 edit/open/reservation에서 한 요청만 정책에 맞게 성공하고 가격·상품·한도 snapshot이
-  혼합되지 않음
-- [ ] `SCHEDULED → OPEN`과 reservation 모두 `orderOpenAt <= now < orderCloseAt`을 확인
-- [ ] orphaned `CANCELLING`을 owner·lease·expiry로 안전하게 인수하거나 deterministic recovery
-  절차로 재개
-- [ ] recovery 재실행에서 이미 환불·취소된 주문과 round/item/held counter를 중복 변경하지 않음
-- [ ] A~G 각 race·crash·stale-worker 시나리오의 직접 회귀와 기존 자동 OPEN/CLOSE·capacity reopen·
-  정상 취소 재시도 회귀 유지
-
-owner 제안: `apps/api/src/sale-rounds/**`를 주 owner로 하고 `apps/api/src/orders/order-capacity.service.ts`
-및 `apps/api/src/orders/round-order-lifecycle.service.ts`와 함께 구현한다. 최종 release 영향은
-product/release control tower가 판정한다.
-
-정본 routing: active summary와 acceptance는 이 항목, 기술 계약은
-`docs/specs/mvp-sales-round-direct-delivery.md`, 운영 중단·재개 규칙은
+기술 계약은 `docs/specs/mvp-sales-round-direct-delivery.md`, 운영 중단·재개 규칙은
 `docs/specs/ops/mvp-sales-round-runbook.md`에 둔다.
+
+## ACTIVE
 
 ### BR-R3 — 증거 분류와 역사 승격 경계
 
 이번 정본화는 선택지 B를 적용한다. 역사 보고서 전체를 current branch에 복구하지 않고, 역사
 commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 판정과 acceptance의 정본은
-아래 `CURRENT_IMPLEMENTATION_EVIDENCE`와 이 Backlog의 세 finding이다.
+아래 `CURRENT_IMPLEMENTATION_EVIDENCE`와 이 Backlog의 두 finding이다.
 
 - `HISTORICAL_EVIDENCE`: `54af6edf44008848e586b1707d0f1fd13470a5f6`의
   `docs/reports/REPORT_retention_operations_sale_round_audit_20260824.md`는 2026-08-24 당시의
   감사 보고서다. 현재 branch에는 보고서 파일을 복구하지 않으며, 과거 결론을 현재 `VERIFIED`로
   승격하지 않는다.
 - `CURRENT_IMPLEMENTATION_EVIDENCE`: 현재 source·직접 테스트·current spec·runbook을 다시
-  대조한 결과다. 일반 retention purge, operation issue 기본 동작·정상 claim, sale-round 자동
-  상태 전이·capacity reopen·정상 취소 재시도는 기존 계약 범위에서 유지되며, 세 finding의
-  현재 공백은 별도 항목과 subfinding matrix로 분리했다.
+  대조한 결과다. Sale Round atomicity/recovery는 #66의 직접 proof와 #70/#71 publication으로
+  `IMPLEMENTATION_PROVEN` / `PUBLISHED`가 되었으며, 남은 현재 공백은 retention과 operation
+  claim fencing의 두 finding으로 분리했다.
 - 위에서 유지된 직접 검증 항목은 `RESOLVED_NOT_PROMOTED`다. 이는 해당 base contract가 현재
-  증거로 유지된다는 뜻일 뿐, 이번 세 finding이 해결되었거나 release gate·production 승인이
+  증거로 유지된다는 뜻일 뿐, 이번 두 finding이 해결되었거나 release gate·production 승인이
   되었다는 뜻이 아니다.
-- `CURRENT_UNRESOLVED_FINDING`: `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`,
-  `RETENTION-DELETE-ISSUE-ROUTING`, `OPERATION-ACTION-CLAIM-FENCING`만 이번 BR-R3의
-  current unresolved finding으로 canonicalize한다. 발견 사실만으로 구현·release gate·production
-  승인을 의미하지 않는다.
+- `CURRENT_UNRESOLVED_FINDING`: `RETENTION-DELETE-ISSUE-ROUTING`,
+  `OPERATION-ACTION-CLAIM-FENCING`만 이번 BR-R3의 current unresolved finding으로
+  canonicalize한다. Sale Round finding은 #66/#70/#71로 implementation proof와 publication이
+  완료되었지만, 이 사실이 exact-release runtime proof나 production 승인을 의미하지는 않는다.
 - `FUTURE_REENABLE_REQUIREMENT`: 역사 보고서의 marketing consent lifecycle 논점은 현재
   `MARKETING_NOT_USED_IN_PILOT` controlled-pilot 정책을 변경하거나 새 finding으로 승격하지 않는다. 향후 marketing을 다시
   활성화할 때에만 당시의 동의·철회·보관·법무·provider·release 증거를 현재 권위로 재검증하고,
@@ -409,9 +404,88 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ---
 
+## VERIFICATION
+
+### Preview·exact-SHA proof
+
+상태: `VERIFICATION_PENDING`.
+
+- #63이 인정한 Preview/browser/fixture 결과는 해당 exact source에 대한 재사용 가능한 역사적 증거다.
+- `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`와 그 Preview deployment를 현재 main, 현재 candidate, production deployment로 표현하지 않는다.
+- 현재 release candidate에서 필요한 exact-SHA Preview/browser/fixture proof와 Auth.js session/logout/rotation/stale-claim lifecycle proof는 별도 검증 gate다.
+- 구현 완료, 검증 완료, Preview proof, production deployment·activation은 서로 대체하지 않는다.
+
 ## BLOCKED_EXTERNAL
 
-### P0 — ALIGO 회차 알림 템플릿 8종 최종 승인
+### Auth.js session runtime
+
+상태: `EXTERNAL_RUNTIME_BLOCKED`.
+
+- Auth.js session cookie 발급·동일 브라우저 context persistence·logout/rotation·stale claim lifecycle은 runtime/browser proof가 필요하다.
+- static source, fixture, callback 응답만으로 session runtime 성공을 주장하지 않는다.
+- 필요한 runtime/browser authority가 없으면 `UNVERIFIED`로 유지하며 source/runtime mutation을 이 Goal에서 수행하지 않는다.
+
+### ALIGO provider current metadata
+
+상태: `EXTERNAL_GATE_PENDING`.
+
+- repository logical 8-code contract: `VERIFIED` — #65에서 8개 logical code/body/required-variable 계약을 확인했다.
+- provider current metadata: `UNVERIFIED` — authenticated provider read-back이 없다.
+- production mapping: provider metadata와 별도의 `UNVERIFIED` gate다.
+- actual Alimtalk/SMS send: `NOT RUN`이며 별도 authority가 필요하다.
+- 과거의 provider 승인·심사 상태를 현재 metadata read-back으로 승격하지 않는다.
+
+## AUTHORITY_PENDING
+
+### Production deployment·activation
+
+상태: `PRODUCTION_AUTHORITY_PENDING`.
+
+- production deployment, `salesMode` 전환, 운영 회차/live round, actual payment, actual notification, first-round completion은 이 문서 후보나 PR로 완료되지 않는다.
+- production deployment와 production activation은 각각 별도 gate이며, exact release SHA와 별도 authority 없이는 주장하지 않는다.
+
+## PRODUCT_POLICY_DECISION_REQUIRED
+
+### Consumer self-cancel `ORDER_CANCELLED` notification
+
+상태: `PRODUCT_POLICY_DECISION_REQUIRED`.
+
+- consumer self-cancel 경로에서 `ORDER_CANCELLED` 알림을 어떻게 처리할지는 정책 결정이 필요하다.
+- 이 Goal에서는 정책을 선택하거나 runtime/callsite를 변경하지 않는다.
+
+## DOC_DELTA
+
+### Pilot marketing contract
+
+상태: `DOC_DELTA_CANDIDATE`.
+
+- Pilot 정책은 `MARKETING_NOT_USED_IN_PILOT`이다.
+- 선택 마케팅 consent/retention wording을 현재 Pilot 계약보다 넓게 유지하지 않는다.
+- 향후 marketing 활성화는 별도의 product·legal·provider·release authority와 현재 증거가 필요한 후속 판단이다.
+
+## NEXT — 현재 residual 해소 후
+
+### 외부·권한 gate
+
+- [ ] authenticated ALIGO metadata read-back
+- [ ] provider metadata와 repository logical 8-code mapping 직접 대조
+- [ ] 별도 authority 후 격리 actual Alimtalk/SMS 및 fallback 검증
+- [ ] exact release SHA 기준 Preview/browser/fixture와 Auth.js session lifecycle 검증
+- [ ] production deployment·activation·첫 회차 전용 승인 및 read-back
+
+### 법무·출시 후보 정합성
+
+- [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책 반영
+- [ ] settlement 및 payment 검증 결과 반영
+- [ ] PortOne/PG·ALIGO 전화번호·메시지 처리 경계 반영
+- [ ] Pilot `MARKETING_NOT_USED_IN_PILOT` 정책과 공개 legal/source wording 정합화
+- [ ] exact release SHA와 필요한 release verification
+
+---
+
+## HISTORICAL / PREVIOUS EXTERNAL SNAPSHOT
+
+### 역사적 P0 — ALIGO 회차 알림 템플릿 8종 최종 승인
 
 `ORDER_ACCEPTED`, `ORDER_PREPARING`, `ORDER_DELIVERING`, `ORDER_DELIVERY_HELD`, `ORDER_REDELIVERY_PAYMENT_REQUESTED`, `ORDER_REDELIVERY_SCHEDULED`, `ORDER_DELIVERED`, `ORDER_CANCELLED`.
 
@@ -419,15 +493,17 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ---
 
-## NEXT — ALIGO 승인 직후
+## HISTORICAL / PREVIOUS NEXT CHECKLIST
 
-### P0 — 실제 알림 검증
+> 이 체크리스트는 이전 provider snapshot을 전제로 한 역사적 기록이다. 현재 provider metadata, production mapping, actual send authority를 입증하지 않으며 현재 NEXT 상태로 사용하지 않는다.
+
+### 역사적 P0 — 실제 알림 검증
 
 - [ ] 승인 `tpl_code` 8종 ↔ 내부 논리 코드 1:1
 - [ ] 별도 승인 후 격리 실제 알림톡
 - [ ] 별도 승인 후 SMS fallback
 
-### P0 — 판매 활성화 legal 재정합화
+### 역사적 P0 — 판매 활성화 legal 재정합화
 
 - [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책
 - [ ] 재배송 payment-required 상태머신과 결제 전 재개 금지 계약 반영
@@ -440,7 +516,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [ ] legal tests
 - [ ] release SHA 포함
 
-### P0 — 출시 후보 검증·운영 준비
+### 역사적 P0 — 출시 후보 검증·운영 준비
 
 - [ ] `PAYMENT-FINALIZATION-PAID-GUARD`
 - [ ] `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
