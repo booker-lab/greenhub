@@ -1,0 +1,27 @@
+name: Auth runtime probe (deterministic)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/probe-auth-runtime.mjs
+      - scripts/probe-auth-runtime.spec.mjs
+      - .github/workflows/probe-auth-runtime.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe-spec:
+    name: probe runner deterministic spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: run probe deterministic spec (mock/local only, no external calls)
+        run: node --test scripts/probe-auth-runtime.spec.mjs
