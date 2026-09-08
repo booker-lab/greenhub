@@ -1,7 +1,7 @@
 'use client';
 
 import type { Order } from '@greenhub/shared';
-import { Anchor, Badge, Box, Stack, Text, Title, UnstyledButton } from '@mantine/core';
+import { Anchor, Badge, Box, Button, Stack, Text, Title, UnstyledButton } from '@mantine/core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -18,7 +18,9 @@ export default function BoardClient() {
   const [delivering, setDelivering] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reloadKey is an intentional manual-refresh trigger for the error-state retry button
   useEffect(() => {
     if (sessionStatus === 'loading') return;
 
@@ -65,7 +67,7 @@ export default function BoardClient() {
       active = false;
       controller.abort();
     };
-  }, [session?.user.accessToken, sessionStatus]);
+  }, [session?.user.accessToken, sessionStatus, reloadKey]);
 
   const orders = tab === 'preparing' ? preparing : delivering;
   const today = new Date().toLocaleDateString('ko-KR', {
@@ -142,6 +144,14 @@ export default function BoardClient() {
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
               {error}
             </Text>
+            <Button
+              variant="outline"
+              color="brand"
+              radius="xl"
+              onClick={() => setReloadKey((key) => key + 1)}
+            >
+              다시 시도
+            </Button>
           </Stack>
         ) : orders.length === 0 ? (
           <Stack align="center" justify="center" h={192} gap="xs">

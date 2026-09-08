@@ -103,6 +103,15 @@ test('MISSING·PENDING·실패 계열 결제 상태는 Driver 배송을 차단�
   assert.match(paymentSource, /['"]MISMATCHED['"]/);
 });
 
+test('Board 조회 실패는 빈 목록이 아닌 재시도 계약을 제공한다', () => {
+  assert.match(boardSource, /다시 시도/);
+  assert.match(boardSource, /setReloadKey\(\(key\)\s*=>\s*key\s*\+\s*1\)/);
+});
+
+test('Board 재시도는 목록 fetch를 다시 실행한다', () => {
+  assert.match(boardSource, /sessionStatus,\s*reloadKey\]/);
+});
+
 test('Driver Board·상세는 orderCharges와 raw payment 필드를 직접 조회·조합하지 않는다', () => {
   for (const source of [boardSource, cardSource, detailSource, paymentSource]) {
     assert.doesNotMatch(source, /orderCharges/);
