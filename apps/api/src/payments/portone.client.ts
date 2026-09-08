@@ -33,6 +33,21 @@ export class PortoneClient {
     this.secret = config.get<string>('PORTONE_V2_SECRET', '');
   }
 
+  // Local pilot runtime에서는 외부 provider dispatch를 차단한다 (fail-closed).
+  // launcher가 local child에 DENY 정책을 고정하므로 운영 동작은 바뀌지 않는다.
+  private assertOutboundAllowed(action: string): void {
+    if (
+      this.config.get<string>('GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY', '') ===
+      'DENY_ALL_EXTERNAL_PROVIDER_DISPATCH'
+    ) {
+      throw new PortoneError(
+        503,
+        'LOCAL_OUTBOUND_DENIED',
+        `local runtime에서는 외부 provider dispatch를 거부합니다: ${action}`,
+      );
+    }
+  }
+
   private sanitizeDiagnosticField(value: unknown): string {
     if (typeof value !== 'string') return 'unknown';
     return value.replace(/[\r\n\t]/g, ' ').slice(0, 500);
@@ -111,6 +126,7 @@ export class PortoneClient {
   }
 
   async getPayment(paymentId: string): Promise<PortonePaymentData> {
+    this.assertOutboundAllowed('getPayment');
     const res = await fetch(`${this.baseUrl}/payments/${encodeURIComponent(paymentId)}`, {
       headers: { Authorization: `PortOne ${this.secret}` },
     });
@@ -121,6 +137,7 @@ export class PortoneClient {
   }
 
   async refund(paymentId: string, amount: number, reason: string): Promise<void> {
+    this.assertOutboundAllowed('refund');
     const res = await fetch(`${this.baseUrl}/payments/${encodeURIComponent(paymentId)}/cancel`, {
       method: 'POST',
       headers: {

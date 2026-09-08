@@ -168,4 +168,35 @@ describe('PortoneClient V2 진단', () => {
     });
     expect(error.type).not.toBe('PAYMENT_NOT_FOUND');
   });
+
+  describe('local DENY_ALL_EXTERNAL_PROVIDER_DISPATCH', () => {
+    const makeDenyClient = () =>
+      new PortoneClient({
+        get: jest.fn((key: string, fallback: string) =>
+          key === 'GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY'
+            ? 'DENY_ALL_EXTERNAL_PROVIDER_DISPATCH'
+            : fallback,
+        ),
+      } as unknown as ConfigService);
+
+    it('조회 dispatch를 차단하고 외부 fetch를 하지 않는다', async () => {
+      global.fetch = jest.fn();
+      const error = await makeDenyClient().getPayment('payment-1').catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(PortoneError);
+      expect(error).toMatchObject({ status: 503, type: 'LOCAL_OUTBOUND_DENIED' });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('환불 dispatch를 차단하고 외부 fetch를 하지 않는다', async () => {
+      global.fetch = jest.fn();
+      const error = await makeDenyClient()
+        .refund('payment-1', 100, '사유')
+        .catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(PortoneError);
+      expect(error).toMatchObject({ status: 503, type: 'LOCAL_OUTBOUND_DENIED' });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -24,6 +24,7 @@ export class AligoClient {
   private readonly senderKey: string;
   private readonly senderPhone: string;
   private readonly templateCodesJson: string;
+  private readonly outboundDenied: boolean;
 
   constructor(config: ConfigService) {
     this.apiKey = config.get<string>('ALIGO_API_KEY', '');
@@ -31,6 +32,11 @@ export class AligoClient {
     this.senderKey = config.get<string>('ALIGO_SENDER_KEY', '');
     this.senderPhone = config.get<string>('ALIGO_SENDER_PHONE', '');
     this.templateCodesJson = config.get<string>('ALIGO_TEMPLATE_CODES_JSON', '');
+    // Local pilot runtime에서는 외부 provider dispatch를 차단한다 (fail-closed).
+    // launcher가 local child에 DENY 정책을 고정하므로 운영 동작은 바뀌지 않는다.
+    this.outboundDenied =
+      config.get<string>('GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY', '') ===
+      'DENY_ALL_EXTERNAL_PROVIDER_DISPATCH';
   }
 
   async sendAlimtalk(
@@ -41,6 +47,16 @@ export class AligoClient {
     const rendered = this.renderMessage(templateCode, variables);
     if ('errorMessage' in rendered) return rendered;
     const message = rendered.message;
+    if (this.outboundDenied) {
+      return {
+        success: false,
+        channel: null,
+        message,
+        alimtalkAttempts: 0,
+        smsAttempts: 0,
+        errorMessage: 'local runtime에서는 외부 발송을 거부합니다.',
+      };
+    }
     if (!this.apiKey || !this.userId || !this.senderKey || !this.senderPhone) {
       return {
         success: false,
@@ -111,6 +127,16 @@ export class AligoClient {
     const rendered = this.renderMessage(templateCode, variables);
     if ('errorMessage' in rendered) return rendered;
     const message = rendered.message;
+    if (this.outboundDenied) {
+      return {
+        success: false,
+        channel: null,
+        message,
+        alimtalkAttempts: 0,
+        smsAttempts: 0,
+        errorMessage: 'local runtime에서는 외부 발송을 거부합니다.',
+      };
+    }
     if (!this.apiKey || !this.userId || !this.senderPhone) {
       return {
         success: false,
