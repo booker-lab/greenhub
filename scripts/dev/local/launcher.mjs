@@ -6,6 +6,14 @@ import {
 import { createConnection, createServer } from 'node:net';
 import { dirname, posix as posixPath, resolve, win32 as windowsPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  acquireRuntimeLease as defaultAcquireRuntimeLease,
+  LOCAL_RUNTIME_STACK_PORTS as RUNTIME_LEASE_PORTS,
+  LOCAL_RUNTIME_STACK_RESOURCE_KEY as RUNTIME_LEASE_RESOURCE_KEY,
+  releaseRuntimeLease as defaultReleaseRuntimeLease,
+} from './runtime-lease.mjs';
+
+export { LocalRuntimeLeaseError } from './runtime-lease.mjs';
 
 const MODULE_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 
@@ -46,6 +54,10 @@ export const FIXED_PORTS = Object.freeze([
   LOCAL_RUNTIME_CONTRACT.ports.auth,
   LOCAL_RUNTIME_CONTRACT.ports.storage,
 ]);
+
+export const LOCAL_RUNTIME_STACK_RESOURCE_KEY = RUNTIME_LEASE_RESOURCE_KEY;
+
+export const LOCAL_RUNTIME_STACK_PORTS = RUNTIME_LEASE_PORTS;
 
 export const READINESS_HTTP_TARGETS = Object.freeze([
   Object.freeze({
@@ -1096,6 +1108,10 @@ export async function runLocalRuntime({
   signalSource = process,
   logger = console,
   portAvailabilityProbe = isPortAvailable,
+  leaseDirectory,
+  leaseOptions = {},
+  acquireRuntimeLeaseImpl = defaultAcquireRuntimeLease,
+  releaseRuntimeLeaseImpl = defaultReleaseRuntimeLease,
   ...runtimeOptions
 } = {}) {
   const runtime = createLocalRuntime({ ...runtimeOptions, baseEnvironment, logger });
@@ -1108,13 +1124,41 @@ export async function runLocalRuntime({
     signalSource.on(signal, handler);
   }
 
+  let runtimeLease = null;
+  const releaseOwnLease = async () => {
+    if (!runtimeLease) return { released: false, reason: 'no-lease' };
+    const handle = runtimeLease;
+    runtimeLease = null;
+    try {
+      return await releaseRuntimeLeaseImpl(handle);
+    } catch (error) {
+      logger.error?.(`[local-runtime] lease 해제 실패: ${error?.message || error}`);
+      return { released: false, reason: 'release-error' };
+    }
+  };
+
   try {
     assertSafeLocalParentEnvironment(baseEnvironment);
-    await preflightPorts(runtimeOptions.ports ?? FIXED_PORTS, {
-      probe: portAvailabilityProbe,
+    runtimeLease = await acquireRuntimeLeaseImpl({
+      repositoryRoot: runtimeOptions.repositoryRoot ?? REPOSITORY_ROOT,
+      ports: runtimeOptions.ports ?? FIXED_PORTS,
+      ...leaseOptions,
+      ...(leaseDirectory === undefined ? {} : { directory: leaseDirectory }),
     });
 
-    if (runtime.isStopping()) throw new ShutdownRequestedError(130, 'preflight 중 종료 요청');
+    try {
+      await preflightPorts(runtimeOptions.ports ?? FIXED_PORTS, {
+        probe: portAvailabilityProbe,
+      });
+    } catch (error) {
+      await releaseOwnLease();
+      throw error;
+    }
+
+    if (runtime.isStopping()) {
+      await releaseOwnLease();
+      throw new ShutdownRequestedError(130, 'preflight 중 종료 요청');
+    }
 
     runtime.start();
     await runtime.waitUntilReady();
@@ -1129,6 +1173,7 @@ export async function runLocalRuntime({
     return termination.exitCode ?? 0;
   } catch (error) {
     await runtime.cleanup();
+    await releaseOwnLease();
     if (error instanceof ShutdownRequestedError) {
       logger.log?.(`[local-runtime] ${error.signal}에 따라 종료했습니다.`);
       return error.exitCode;
@@ -1139,6 +1184,7 @@ export async function runLocalRuntime({
       signalSource.removeListener(signal, handler);
     }
     await runtime.cleanup();
+    await releaseOwnLease();
   }
 }
 

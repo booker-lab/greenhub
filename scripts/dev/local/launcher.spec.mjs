@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -16,6 +19,7 @@ import {
   LOCAL_BROWSER_URLS,
   LocalRuntimeConfigurationError,
   LocalRuntimeError,
+  LocalRuntimeLeaseError,
   PortCollisionError,
   parseLauncherOptions,
   ReadinessTimeoutError,
@@ -24,6 +28,10 @@ import {
   terminateOwnedProcessTree,
   waitForReadiness,
 } from './launcher.mjs';
+import {
+  acquireRuntimeLease,
+  resolveLeaseFilePath,
+} from './runtime-lease.mjs';
 
 const TEST_JAVA_RUNTIME = Object.freeze({
   executable: 'C:\\Java\\21\\bin\\java.exe',
@@ -41,8 +49,54 @@ function fakeChild(pid) {
   return child;
 }
 
+let leaseCounter = 0;
+
 function runTestRuntime(options = {}) {
+  if (
+    !('acquireRuntimeLeaseImpl' in options) &&
+    !('leaseDirectory' in options) &&
+    !('leaseOptions' in options)
+  ) {
+    return runLocalRuntime({
+      javaRuntime: TEST_JAVA_RUNTIME,
+      acquireRuntimeLeaseImpl: async () => ({
+        resourceKey: 'GREENHUB_LOCAL_RUNTIME_STACK',
+        ownerPid: process.pid,
+        checkoutPath: 'test-checkout',
+        acquiredAt: new Date().toISOString(),
+        launcherIdentity: 'test-launcher',
+        ports: [...FIXED_PORTS],
+        leaseId: `test-lease-${leaseCounter++}`,
+        leasePath: 'test-lease-path',
+        directory: 'test-lease-directory',
+      }),
+      releaseRuntimeLeaseImpl: async () => ({ released: true, reason: 'released' }),
+      ...options,
+    });
+  }
   return runLocalRuntime({ javaRuntime: TEST_JAVA_RUNTIME, ...options });
+}
+
+function makeIsolatedLeaseDirectory(prefix = 'greenhub-launcher-lease-') {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+function removeIsolatedLeaseDirectory(directory) {
+  rmSync(directory, { recursive: true, force: true });
+}
+
+function readLeaseDocument(leasePath) {
+  return JSON.parse(readFileSync(leasePath, 'utf8'));
+}
+
+function leaseFileExists(leasePath) {
+  try {
+    readFileSync(leasePath, 'utf8');
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
 }
 
 function waitForServerListening(server, port) {
@@ -648,4 +702,216 @@ test('브라우저 URL은 API 없이 세 login 화면만 가진다', () => {
 
 test('동결된 fixed port 집합을 축소하지 않는다', () => {
   assert.deepEqual(FIXED_PORTS, [3000, 3001, 3002, 3003, 8080, 9099, 9199]);
+});
+
+test('C-lease. active foreign owner가 있으면 child spawn 전에 lease attribution과 함께 실패한다', async () => {
+  const leaseDirectory = makeIsolatedLeaseDirectory();
+  let spawnCount = 0;
+  try {
+    const owner = acquireRuntimeLease({
+      directory: leaseDirectory,
+      repositoryRoot: 'C:\\Develop\\greenhub-task-fe-local-01',
+      launcherIdentity: 'foreign-launcher',
+      ownerPid: 42421,
+      leaseId: 'foreign-owner-lease',
+    });
+
+    await assert.rejects(
+      runTestRuntime({
+        leaseDirectory,
+        leaseOptions: { isOwnerAlive: () => true },
+        baseEnvironment: { NODE_ENV: 'development' },
+        portAvailabilityProbe: async () => true,
+        spawnImpl: () => {
+          spawnCount += 1;
+          return fakeChild(8000 + spawnCount);
+        },
+        readinessOptions: {
+          timeoutMs: 200,
+          pollIntervalMs: 10,
+          portProbe: async () => false,
+          fetchImpl: async () => ({ status: 503, json: async () => ({}) }),
+        },
+        signalSource: new EventEmitter(),
+      }),
+      (error) => {
+        assert.ok(error instanceof LocalRuntimeLeaseError);
+        assert.equal(error.ownerPid, 42421);
+        assert.equal(error.ownerCheckout, 'C:\\Develop\\greenhub-task-fe-local-01');
+        assert.match(error.message, /42421/);
+        assert.match(error.message, /greenhub-task-fe-local-01/);
+        return true;
+      },
+    );
+
+    assert.equal(spawnCount, 0);
+    assert.equal(leaseFileExists(owner.leasePath), true);
+    assert.equal(readLeaseDocument(owner.leasePath).leaseId, 'foreign-owner-lease');
+  } finally {
+    removeIsolatedLeaseDirectory(leaseDirectory);
+  }
+});
+
+test('lease 획득은 port preflight와 child spawn보다 먼저 발생한다', async () => {
+  const leaseDirectory = makeIsolatedLeaseDirectory();
+  const events = [];
+  let spawnCount = 0;
+  try {
+    await assert.rejects(
+      runTestRuntime({
+        leaseDirectory,
+        baseEnvironment: { NODE_ENV: 'development' },
+        portAvailabilityProbe: async (port) => {
+          events.push(`preflight:${port}`);
+          return port !== 3000;
+        },
+        acquireRuntimeLeaseImpl: async (options) => {
+          events.push('lease-acquire');
+          return acquireRuntimeLease(options);
+        },
+        spawnImpl: () => {
+          events.push('spawn');
+          spawnCount += 1;
+          return fakeChild(8100 + spawnCount);
+        },
+        signalSource: new EventEmitter(),
+      }),
+      (error) => error instanceof PortCollisionError,
+    );
+
+    assert.equal(spawnCount, 0);
+    assert.equal(events[0], 'lease-acquire');
+    assert.ok(events.some((event) => event.startsWith('preflight:')));
+    assert.equal(events.includes('spawn'), false);
+  } finally {
+    removeIsolatedLeaseDirectory(leaseDirectory);
+  }
+});
+
+test('F. lease 획득 후 port preflight가 실패하면 own lease를 해제한다', async () => {
+  const leaseDirectory = makeIsolatedLeaseDirectory();
+  let spawnCount = 0;
+  try {
+    await assert.rejects(
+      runTestRuntime({
+        leaseDirectory,
+        baseEnvironment: { NODE_ENV: 'development' },
+        portAvailabilityProbe: async () => false,
+        spawnImpl: () => {
+          spawnCount += 1;
+          return fakeChild(8200 + spawnCount);
+        },
+        signalSource: new EventEmitter(),
+      }),
+      (error) => error instanceof PortCollisionError && error.ports.length === FIXED_PORTS.length,
+    );
+
+    assert.equal(spawnCount, 0);
+    assert.equal(leaseFileExists(resolveLeaseFilePath(leaseDirectory)), false);
+  } finally {
+    removeIsolatedLeaseDirectory(leaseDirectory);
+  }
+});
+
+test('G. 정상 shutdown에서 own lease를 해제하고 foreign lease는 건드리지 않는다', async () => {
+  const leaseDirectory = makeIsolatedLeaseDirectory();
+  const signalSource = new EventEmitter();
+  const cleanedPids = [];
+  let nextPid = 8300;
+  try {
+    const exitCode = await runTestRuntime({
+      leaseDirectory,
+      baseEnvironment: { NODE_ENV: 'development' },
+      portAvailabilityProbe: async () => true,
+      spawnImpl: () => fakeChild(nextPid++),
+      readinessOptions: {
+        portProbe: async () => true,
+        fetchImpl: async (url) => ({
+          status: 200,
+          json: async () => (url.endsWith('/health') ? { status: 'ok' } : {}),
+        }),
+      },
+      openBrowserImpl: async () => {
+        signalSource.emit('SIGINT');
+      },
+      openBrowser: true,
+      terminateProcessTree: async (child) => {
+        cleanedPids.push(child.pid);
+      },
+      signalSource,
+      logger: { log: () => {}, error: () => {} },
+    });
+
+    assert.equal(exitCode, 130);
+    assert.equal(leaseFileExists(resolveLeaseFilePath(leaseDirectory)), false);
+    assert.deepEqual(
+      cleanedPids.sort((left, right) => left - right),
+      [8300, 8301, 8302, 8303, 8304],
+    );
+  } finally {
+    removeIsolatedLeaseDirectory(leaseDirectory);
+  }
+});
+
+test('H-lease. launcher 실패 경로는 foreign lease instance를 삭제하지 않는다', async () => {
+  const leaseDirectory = makeIsolatedLeaseDirectory();
+  try {
+    const owner = acquireRuntimeLease({
+      directory: leaseDirectory,
+      repositoryRoot: 'C:\\Develop\\greenhub-task-fe-local-01',
+      ownerPid: 42421,
+      leaseId: 'foreign-owner-h',
+    });
+
+    await assert.rejects(
+      runTestRuntime({
+        leaseDirectory,
+        leaseOptions: { isOwnerAlive: () => true },
+        baseEnvironment: { NODE_ENV: 'development' },
+        portAvailabilityProbe: async () => true,
+        spawnImpl: () => fakeChild(8400),
+        readinessOptions: {
+          timeoutMs: 200,
+          pollIntervalMs: 10,
+          portProbe: async () => false,
+          fetchImpl: async () => ({ status: 503, json: async () => ({}) }),
+        },
+        signalSource: new EventEmitter(),
+      }),
+      (error) => error instanceof LocalRuntimeLeaseError,
+    );
+
+    assert.equal(leaseFileExists(owner.leasePath), true);
+    assert.equal(readLeaseDocument(owner.leasePath).leaseId, 'foreign-owner-h');
+  } finally {
+    removeIsolatedLeaseDirectory(leaseDirectory);
+  }
+});
+
+test('J. 기존 PortCollisionError 계약이 lease 도입 후에도 유지된다', async () => {
+  const leaseDirectory = makeIsolatedLeaseDirectory();
+  let spawnCount = 0;
+  try {
+    await assert.rejects(
+      runTestRuntime({
+        leaseDirectory,
+        baseEnvironment: { NODE_ENV: 'development' },
+        portAvailabilityProbe: async (port) => port !== 9099,
+        spawnImpl: () => {
+          spawnCount += 1;
+          return fakeChild(8500 + spawnCount);
+        },
+        signalSource: new EventEmitter(),
+      }),
+      (error) => {
+        assert.ok(error instanceof PortCollisionError);
+        assert.deepEqual(error.ports, [9099]);
+        assert.match(error.message, /9099/);
+        return true;
+      },
+    );
+    assert.equal(spawnCount, 0);
+  } finally {
+    removeIsolatedLeaseDirectory(leaseDirectory);
+  }
 });
