@@ -3,6 +3,7 @@
 import type { SaleType } from '@greenhub/shared';
 import {
   Box,
+  Button,
   Container,
   Group,
   Paper,
@@ -12,7 +13,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFirebaseReady } from '@/app/providers';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { PageHeader } from '@/components/PageHeader';
@@ -36,7 +37,8 @@ import {
   type OrderGroup,
   STATUS_GROUP_MAP,
 } from './_constants';
-import { getOrderPriorityCounts } from './order-priority';
+import { filterOrdersByPriorityFocus, getOrderPriorityCounts } from './order-priority';
+import type { PriorityFocus } from './order-priority';
 
 const VALID_TABS = new Set<OrderGroup>([
   'ACTION_REQUIRED',
@@ -106,22 +108,61 @@ export default function OrdersPage() {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
   const firebaseReady = useFirebaseReady();
-  const { orders, loading, error, groupCounts } = useOrders(storeId);
+  const { orders, loading, error, refresh } = useOrders(storeId);
   const [saleType, setSaleType] = useState<SaleType>('normal');
   const [activeTab, setActiveTab] = useState<OrderGroup>('ACTION_REQUIRED');
   const [subFilter, setSubFilter] = useState<'ALL' | 'DELIVERING' | 'HUB_ARRIVED'>('ALL');
+  const [priorityFocus, setPriorityFocus] = useState<PriorityFocus>('ALL');
   const [datePreset, setDatePreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
 
-  const saleTypeOrders = orders.filter((order) =>
-    saleType === 'group' ? order.saleType === 'group' : order.saleType !== 'group',
+  const saleTypeOrders = useMemo(
+    () =>
+      orders.filter((order) =>
+        saleType === 'group' ? order.saleType === 'group' : order.saleType !== 'group',
+      ),
+    [orders, saleType],
   );
   const priorityCounts = getOrderPriorityCounts(saleTypeOrders);
+  // 탭 뱃지는 현재 판매 유형 범위를 그대로 사용해 목록 1차 분기와 일치시킨다.
+  // useOrders의 전역 groupCounts는 홈/준비물량 등 다른 화면이 계속 사용한다.
+  const tabCounts = useMemo(() => {
+    const result: Record<OrderGroup, number> = {
+      ACTION_REQUIRED: 0,
+      WAITING: 0,
+      IN_DELIVERY: 0,
+      DONE: 0,
+      CANCELLED: 0,
+    };
+    for (const order of saleTypeOrders) {
+      result[STATUS_GROUP_MAP[order.status]] += 1;
+    }
+    return result;
+  }, [saleTypeOrders]);
 
   const handleSaleTypeChange = (next: SaleType) => {
     setSaleType(next);
+    setPriorityFocus('ALL');
     setDatePreset('week');
+    setCustomFrom('');
+    setCustomTo('');
+  };
+
+  const handleTabChange = (key: OrderGroup) => {
+    setActiveTab(key);
+    setSubFilter('ALL');
+    setPriorityFocus('ALL');
+  };
+
+  // 우선순위 건수(판매 유형 범위)와 표시 집합을 일치시키기 위해
+  // 우선순위 진입 시 날짜 범위를 해제한다. custom 빈 값은 getDateRange가 null을 반환해
+  // 날짜 필터 미적용(전체 기간)이 되며, 사용자는 칩으로 다시 범위를 좁힐 수 있다.
+  const handlePrioritySelect = (focus: PriorityFocus) => {
+    setActiveTab('ACTION_REQUIRED');
+    setSubFilter('ALL');
+    setPriorityFocus(focus);
+    setDatePreset('custom');
     setCustomFrom('');
     setCustomTo('');
   };
@@ -147,11 +188,19 @@ export default function OrdersPage() {
       : [];
   const groupConfigMap = useGroupConfigs(groupProductIds, saleType === 'group');
 
-  const filteredOrders = saleTypeOrders.filter((o) => {
+  const tabFiltered = saleTypeOrders.filter((o) => {
     if (STATUS_GROUP_MAP[o.status] !== activeTab) return false;
     if (activeTab === 'IN_DELIVERY' && subFilter !== 'ALL' && o.status !== subFilter) {
       return false;
     }
+    return true;
+  });
+  // 배송 보류 카드는 ACTION_REQUIRED 부분집합만 표시한다. predicate는 order-priority와 공유한다.
+  const focusFiltered =
+    activeTab === 'ACTION_REQUIRED'
+      ? filterOrdersByPriorityFocus(tabFiltered, priorityFocus)
+      : tabFiltered;
+  const filteredOrders = focusFiltered.filter((o) => {
     if (dateRange) {
       const d = getOrderDate(o, activeTab, groupConfigMap);
       // requestedDeliveryDate = null(공동구매 등)은 제외하지 않고 "날짜 미정"으로 내려보냄 (T6)
@@ -160,21 +209,44 @@ export default function OrdersPage() {
     return true;
   });
 
+  // read/presentation 상태의 단일 분기 순서: LOADING > FETCH_ERROR > EMPTY > HAS_ORDERS.
+  // error가 있으면 빈 목록 문구를 절대 표시하지 않는다.
+  const isLoading = loading || !firebaseReady;
+  const isFetchError = !isLoading && error !== null;
+
   return (
     <PageShell>
       <PageHeader
         title="주문 관리"
         right={
-          <ConnectionStatus
-            loading={loading}
-            error={error}
-            firebaseReady={firebaseReady}
-            source="api"
-          />
+          <Group gap="xs" align="center">
+            <ConnectionStatus
+              loading={loading}
+              error={error}
+              firebaseReady={firebaseReady}
+              source="api"
+            />
+            <UnstyledButton
+              onClick={refresh}
+              disabled={isLoading}
+              data-testid="orders-refresh"
+              aria-label="주문 목록 새로고침"
+              style={{
+                padding: '4px 10px',
+                fontSize: 'var(--font-size-sm)',
+                borderRadius: 99,
+                border: '1px solid var(--color-border)',
+                color: isLoading ? 'var(--color-text-disabled)' : 'var(--color-text)',
+                opacity: isLoading ? 0.6 : 1,
+              }}
+            >
+              새로고침
+            </UnstyledButton>
+          </Group>
         }
       />
 
-      {!loading && firebaseReady && (
+      {!isLoading && !isFetchError && (
         <Container size="sm" px="md" pt="md">
           <Paper radius="lg" shadow="xs" p="md">
             <Group justify="space-between" align="flex-end" mb="sm">
@@ -207,20 +279,14 @@ export default function OrdersPage() {
                 count={priorityCounts.deliveryHeld}
                 description="배송 일정과 고객 안내를 먼저 확인하세요."
                 urgent={priorityCounts.deliveryHeld > 0}
-                onClick={() => {
-                  setActiveTab('ACTION_REQUIRED');
-                  setSubFilter('ALL');
-                }}
+                onClick={() => handlePrioritySelect('DELIVERY_HELD')}
               />
               <PriorityItem
                 label="확인 필요"
                 count={priorityCounts.actionRequired}
                 description="기존 처리 필요 주문 상태를 모아 봅니다."
                 urgent={priorityCounts.actionRequired > 0}
-                onClick={() => {
-                  setActiveTab('ACTION_REQUIRED');
-                  setSubFilter('ALL');
-                }}
+                onClick={() => handlePrioritySelect('ALL')}
               />
             </SimpleGrid>
           </Paper>
@@ -306,14 +372,11 @@ export default function OrdersPage() {
         tabs={GROUP_TABS.map((tab) => ({
           key: tab.key,
           label: tab.label,
-          count: groupCounts[tab.key],
+          count: tabCounts[tab.key],
           badgeColor: tab.key === 'ACTION_REQUIRED' ? 'red' : 'gray',
         }))}
         value={activeTab}
-        onChange={(key) => {
-          setActiveTab(key);
-          setSubFilter('ALL');
-        }}
+        onChange={handleTabChange}
         sticky
         layout="scroll"
       />
@@ -353,9 +416,69 @@ export default function OrdersPage() {
       {/* 주문 목록 — 날짜 그룹 섹션 */}
       <Container size="sm" px="md" py="md">
         <Stack gap="lg">
-          {(loading || !firebaseReady) && <LoadingState />}
+          {isLoading && <LoadingState />}
 
-          {!loading && firebaseReady && filteredOrders.length === 0 && (
+          {!isLoading && isFetchError && (
+            <Paper
+              radius="lg"
+              shadow="xs"
+              p="md"
+              data-testid="orders-fetch-error"
+              style={{ border: '1px solid var(--color-danger)' }}
+            >
+              <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-danger)' }}>
+                주문 목록을 불러오지 못했습니다
+              </Text>
+              <Text
+                mt={4}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
+                {error}
+              </Text>
+              <Button
+                mt="sm"
+                size="sm"
+                radius="md"
+                color="red"
+                variant="light"
+                onClick={refresh}
+                data-testid="orders-retry"
+              >
+                다시 시도
+              </Button>
+            </Paper>
+          )}
+
+          {!isLoading &&
+            !isFetchError &&
+            activeTab === 'ACTION_REQUIRED' &&
+            priorityFocus === 'DELIVERY_HELD' && (
+            <Paper radius="lg" shadow="xs" p="sm" data-testid="orders-priority-focus">
+              <Group justify="space-between" gap="xs" wrap="nowrap">
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  배송 보류 {priorityCounts.deliveryHeld.toLocaleString()}건만 보는 중
+                </Text>
+                <UnstyledButton
+                  onClick={() => setPriorityFocus('ALL')}
+                  aria-label="배송 보류 필터 해제"
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-primary)',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  전체 보기
+                </UnstyledButton>
+              </Group>
+            </Paper>
+          )}
+
+          {!isLoading && !isFetchError && filteredOrders.length === 0 && (
             <EmptyState
               icon={
                 <svg
@@ -376,8 +499,8 @@ export default function OrdersPage() {
             />
           )}
 
-          {!loading &&
-            firebaseReady &&
+          {!isLoading &&
+            !isFetchError &&
             groupOrdersByDate(filteredOrders, activeTab, groupConfigMap).map((group) => (
               <DateSection
                 key={group.dateKey}
