@@ -28,12 +28,15 @@ const configured = {
 };
 
 describe('AligoClient local DENY_ALL_EXTERNAL_PROVIDER_DISPATCH', () => {
-  beforeEach(() => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
     jest.restoreAllMocks();
   });
 
   it('알림톡 dispatch를 차단하고 외부 fetch를 하지 않는다', async () => {
-    jest.spyOn(global, 'fetch');
+    global.fetch = jest.fn();
     const client = makeClient({
       ...configured,
       GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY: 'DENY_ALL_EXTERNAL_PROVIDER_DISPATCH',
@@ -50,7 +53,7 @@ describe('AligoClient local DENY_ALL_EXTERNAL_PROVIDER_DISPATCH', () => {
   });
 
   it('문자 dispatch를 차단하고 외부 fetch를 하지 않는다', async () => {
-    jest.spyOn(global, 'fetch');
+    global.fetch = jest.fn();
     const client = makeClient({
       ...configured,
       GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY: 'DENY_ALL_EXTERNAL_PROVIDER_DISPATCH',
@@ -67,7 +70,7 @@ describe('AligoClient local DENY_ALL_EXTERNAL_PROVIDER_DISPATCH', () => {
   });
 
   it('DENY 정책이 없으면 기존 설정 누락 계약을 유지한다', async () => {
-    jest.spyOn(global, 'fetch');
+    global.fetch = jest.fn();
     const client = makeClient({});
 
     await expect(client.sendAlimtalk(phone, templateCode, variables)).resolves.toMatchObject({
