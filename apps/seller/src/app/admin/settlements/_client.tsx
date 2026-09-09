@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Group, Text, Title } from '@mantine/core';
+import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -14,7 +14,7 @@ export default function AdminSettlementsClient() {
   const [storeFilter, setStoreFilter] = useState('');
   const [fromFilter, setFromFilter] = useState('');
   const [toFilter, setToFilter] = useState('');
-  const { settlements, loading, markAsPaid } = useAdminSettlements({
+  const { settlements, loading, error, reload, markAsPaid } = useAdminSettlements({
     storeId: storeFilter || undefined,
     from: fromFilter || undefined,
     to: toFilter || undefined,
@@ -48,12 +48,14 @@ export default function AdminSettlementsClient() {
       <Group justify="space-between" mb="md">
         <Title order={4}>
           정산 목록{' '}
-          <Text
-            component="span"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          >
-            ({settlements.length})
-          </Text>
+          {!loading && error === null && (
+            <Text
+              component="span"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
+              ({settlements.length})
+            </Text>
+          )}
         </Title>
       </Group>
 
@@ -66,14 +68,39 @@ export default function AdminSettlementsClient() {
         onToChange={setToFilter}
       />
 
-      {settlements.length > 0 && <SummaryCards totalFee={totalFee} totalNet={totalNet} />}
+      {error !== null && !loading ? (
+        <Paper
+          radius="lg"
+          shadow="xs"
+          style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
+        >
+          <Stack gap="sm" align="center" py={64} px="md">
+            <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+              정산 목록을 불러오지 못했습니다.
+            </Text>
+            <Text
+              ta="center"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
+              {error}
+            </Text>
+            <Button onClick={reload} size="sm" variant="outline" radius="md">
+              다시 조회
+            </Button>
+          </Stack>
+        </Paper>
+      ) : (
+        <>
+          {settlements.length > 0 && <SummaryCards totalFee={totalFee} totalNet={totalNet} />}
 
-      <SettlementTable
-        settlements={settlements}
-        loading={loading}
-        processingId={processingId}
-        onPay={setPayTargetId}
-      />
+          <SettlementTable
+            settlements={settlements}
+            loading={loading}
+            processingId={processingId}
+            onPay={setPayTargetId}
+          />
+        </>
+      )}
 
       <ConfirmModal
         opened={payTargetId !== null}
