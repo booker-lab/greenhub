@@ -279,3 +279,264 @@ test('legacy 사진 흐름과 Storage 계약은 공통 UI 추출 뒤에도 유�
   assert.match(legacyStorageSource, /getDownloadURL/);
   assert.match(legacyStorageSource, /contentType:\s*['"]image\/jpeg['"]/);
 });
+
+// DRIVER-BOARD-EMPTY-REFRESH-FAILURE-RECOVERY-01 focused regression.
+// _client.tsx의 실제 render precedence를 그대로 미러한 resolver다.
+// 순서가 바뀌면 아래 index-order 테스트가 먼저 실패하도록 source 순서와 함께 검증한다.
+function resolveBoardView(state) {
+  const {
+    loading,
+    authRequired,
+    error,
+    hasSuccessfulRead,
+    refreshing,
+    ordersLength,
+  } = state;
+  if (loading) return 'INITIAL_LOADING';
+  if (authRequired) return 'AUTH_REQUIRED';
+  if (error && !hasSuccessfulRead) return 'INITIAL_READ_FAILURE';
+  if (error && hasSuccessfulRead) {
+    return ordersLength === 0 ? 'STALE_EMPTY_FAILURE' : 'STALE_RESULTS_FAILURE';
+  }
+  if (refreshing && hasSuccessfulRead && ordersLength === 0) return 'REVALIDATING_EMPTY';
+  if (ordersLength === 0) return 'SUCCESSFUL_EMPTY';
+  return 'SUCCESSFUL_RESULTS';
+}
+
+test('Board read-state precedence는 INITIAL > AUTH > INITIAL_FAILURE > STALE > EMPTY > RESULTS다', () => {
+  const idxLoading = boardSource.indexOf('{loading ?');
+  const idxAuth = boardSource.indexOf('authRequired ?');
+  const idxInitialFailure = boardSource.indexOf('error && !hasSuccessfulRead');
+  const idxStale = boardSource.indexOf('error && hasSuccessfulRead');
+  const idxRevalidating = boardSource.indexOf('refreshing && hasSuccessfulRead');
+  const idxFreshEmpty = boardSource.indexOf('오늘 수거할 주문이 없습니다');
+  assert.ok(idxLoading !== -1, 'loading branch가 있어야 한다');
+  assert.ok(idxAuth !== -1, 'auth branch가 있어야 한다');
+  assert.ok(idxInitialFailure !== -1, 'initial failure branch가 있어야 한다');
+  assert.ok(idxStale !== -1, 'stale failure branch가 있어야 한다');
+  assert.ok(idxRevalidating !== -1, 'revalidating-empty branch가 있어야 한다');
+  assert.ok(idxFreshEmpty !== -1, 'genuine empty copy가 있어야 한다');
+  assert.ok(idxLoading < idxAuth, 'loading이 auth보다 먼저다');
+  assert.ok(idxAuth < idxInitialFailure, 'auth가 initial failure보다 먼저다');
+  assert.ok(idxInitialFailure < idxStale, 'initial failure가 stale보다 먼저다');
+  assert.ok(idxStale < idxRevalidating, 'stale이 revalidating보다 먼저다');
+  assert.ok(idxRevalidating < idxFreshEmpty, 'revalidating이 genuine empty보다 먼저다');
+  // resolver 순서와 source 순서가 일치한다.
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: false,
+      error: 'x',
+      hasSuccessfulRead: true,
+      refreshing: false,
+      ordersLength: 0,
+    }),
+    'STALE_EMPTY_FAILURE',
+  );
+});
+
+test('1. first success []는 genuine empty다', () => {
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: false,
+      error: null,
+      hasSuccessfulRead: true,
+      refreshing: false,
+      ordersLength: 0,
+    }),
+    'SUCCESSFUL_EMPTY',
+  );
+  // genuine empty 분기는 fresh copy를 쓰고 error를 쓰지 않는다.
+  const genuineStart = boardSource.lastIndexOf(') : orders.length === 0 ? (');
+  assert.ok(genuineStart !== -1, 'genuine empty branch가 있어야 한다');
+  const genuineEnd = boardSource.indexOf(') : (', genuineStart);
+  const genuineSlice = boardSource.slice(genuineStart, genuineEnd);
+  assert.match(genuineSlice, /오늘 수거할 주문이 없습니다/);
+  assert.match(genuineSlice, /현재 배송 중인 주문이 없습니다/);
+  assert.doesNotMatch(genuineSlice, /\{error\}/);
+  assert.doesNotMatch(genuineSlice, /마지막 확인 당시/);
+});
+
+test('2. first failure는 error이며 empty가 아니다', () => {
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: false,
+      error: '주문을 불러오지 못했습니다.',
+      hasSuccessfulRead: false,
+      refreshing: false,
+      ordersLength: 0,
+    }),
+    'INITIAL_READ_FAILURE',
+  );
+  assert.match(boardSource, /주문을 불러오지 못했습니다\. 잠시 후 다시 시도해주세요/);
+});
+
+test('3. success [] → refresh failure는 stale-error state다 (fresh empty 금지)', () => {
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: false,
+      error: '최신 주문을 불러오지 못했습니다.',
+      hasSuccessfulRead: true,
+      refreshing: false,
+      ordersLength: 0,
+    }),
+    'STALE_EMPTY_FAILURE',
+  );
+  const idxStale = boardSource.indexOf('error && hasSuccessfulRead');
+  const idxRevalidating = boardSource.indexOf('refreshing && hasSuccessfulRead');
+  const staleSlice = boardSource.slice(idxStale, idxRevalidating);
+  assert.match(staleSlice, /\{error\}/);
+  assert.match(staleSlice, /마지막 확인 당시/);
+  assert.match(staleSlice, /다시 시도/);
+  assert.match(staleSlice, /setReloadKey\(\(key\)\s*=>\s*key\s*\+\s*1\)/);
+  assert.doesNotMatch(staleSlice, /오늘 수거할 주문이 없습니다/);
+  assert.doesNotMatch(staleSlice, /현재 배송 중인 주문이 없습니다/);
+});
+
+test('4. stale-empty → retry → [] success는 다시 genuine empty다', () => {
+  // retry 중간(revalidating)은 fresh empty가 아니다.
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: false,
+      error: null,
+      hasSuccessfulRead: true,
+      refreshing: true,
+      ordersLength: 0,
+    }),
+    'REVALIDATING_EMPTY',
+  );
+  // retry 성공은 error를 제거한다.
+  assert.match(boardSource, /hasSuccessfulReadRef\.current = true/);
+  assert.match(boardSource, /setHasSuccessfulRead\(true\)/);
+  const successBlock = boardSource.slice(
+    boardSource.indexOf('.then((orders)'),
+    boardSource.indexOf('.catch('),
+  );
+  assert.match(successBlock, /setError\(null\)/);
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: false,
+      error: null,
+      hasSuccessfulRead: true,
+      refreshing: false,
+      ordersLength: 0,
+    }),
+    'SUCCESSFUL_EMPTY',
+  );
+});
+
+test('5. success [orders] → refresh failure는 이전 목록 + warning을 유지한다', () => {
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: false,
+      error: '최신 주문을 불러오지 못했습니다.',
+      hasSuccessfulRead: true,
+      refreshing: false,
+      ordersLength: 2,
+    }),
+    'STALE_RESULTS_FAILURE',
+  );
+  assert.match(boardSource, /최신 주문을 불러오지 못했습니다\. 기존 목록을 보여줍니다/);
+  assert.match(boardSource, /\(이전 목록 표시 중\)/);
+  assert.match(boardSource, /orders\.map\(\(order\)/);
+  // refresh 실패는 list를 지우지 않는다: stale 분기에는 setPreparing([])이 없다.
+  const catchBlock = boardSource.slice(boardSource.indexOf('.catch('), boardSource.indexOf('.finally('));
+  const refreshStart = catchBlock.indexOf('if (hasSuccessfulReadRef.current)');
+  const elseMarker = catchBlock.indexOf('} else {', refreshStart);
+  assert.ok(refreshStart !== -1 && elseMarker !== -1, 'refresh/initial 분기가 있어야 한다');
+  const refreshBranch = catchBlock.slice(refreshStart, elseMarker);
+  assert.doesNotMatch(refreshBranch, /setPreparing\(\[\]\)/);
+  assert.doesNotMatch(refreshBranch, /setDelivering\(\[\]\)/);
+});
+
+test('6. success [orders] → refresh success []는 genuine empty로 수렴한다', () => {
+  const successBlock = boardSource.slice(
+    boardSource.indexOf('.then((orders)'),
+    boardSource.indexOf('.catch('),
+  );
+  assert.match(successBlock, /setPreparing\(orders\.filter/);
+  assert.match(successBlock, /setDelivering\(/);
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: false,
+      error: null,
+      hasSuccessfulRead: true,
+      refreshing: false,
+      ordersLength: 0,
+    }),
+    'SUCCESSFUL_EMPTY',
+  );
+});
+
+test('7. auth loss는 empty가 아닌 auth state이며 성공 기록을 초기화한다', () => {
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: true,
+      error: null,
+      hasSuccessfulRead: true,
+      refreshing: false,
+      ordersLength: 0,
+    }),
+    'AUTH_REQUIRED',
+  );
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: true,
+      error: 'x',
+      hasSuccessfulRead: false,
+      refreshing: false,
+      ordersLength: 0,
+    }),
+    'AUTH_REQUIRED',
+  );
+  // auth 상실 시 stale 보호 데이터를 유지하지 않고 성공 기록도 초기화한다.
+  assert.match(boardSource, /hasSuccessfulReadRef\.current = false/);
+  assert.match(boardSource, /setHasSuccessfulRead\(false\)/);
+  assert.match(boardSource, /로그인이 필요합니다/);
+});
+
+test('8. stale old request는 retry를 덮어쓰지 못한다', () => {
+  assert.match(boardSource, /requestIdRef/);
+  assert.match(boardSource, /requestId === requestIdRef\.current/);
+  assert.match(boardSource, /controller\.abort\(\)/);
+  assert.match(boardSource, /AbortController/);
+  const guardSlice = boardSource.slice(boardSource.indexOf('const isCurrent'), boardSource.indexOf('.finally('));
+  assert.match(guardSlice, /if \(!isCurrent\(\)\) return/);
+});
+
+test('9. preparing/delivering 탭 count/filter 회귀 없음', () => {
+  assert.match(boardSource, /setPreparing\(orders\.filter/);
+  assert.match(boardSource, /order\.status\s*===\s*['"]PREPARING['"]/);
+  assert.match(
+    boardSource,
+    /order\.status\s*===\s*['"]DELIVERING['"]\s*\|\|\s*order\.status\s*===\s*['"]DELIVERY_HELD['"]/,
+  );
+  // stale-empty와 revalidating-empty도 탭 의미를 보존한다.
+  assert.match(boardSource, /마지막 확인 당시 수거할 주문이 없었습니다/);
+  assert.match(boardSource, /마지막 확인 당시 배송 중인 주문이 없었습니다/);
+  assert.match(boardSource, /오늘 수거할 주문이 없습니다/);
+  assert.match(boardSource, /현재 배송 중인 주문이 없습니다/);
+  assert.match(boardSource, /count: preparing\.length/);
+  assert.match(boardSource, /count: delivering\.length/);
+});
+
+test('10. focus/visibility revalidation 회귀 없음', () => {
+  assert.match(boardSource, /addEventListener\(['"]focus['"]/);
+  assert.match(boardSource, /addEventListener\(['"]visibilitychange['"]/);
+  assert.match(boardSource, /visibilityState\s*===\s*['"]visible['"]/);
+  assert.match(boardSource, /removeEventListener\(['"]focus['"]/);
+  assert.match(boardSource, /removeEventListener\(['"]visibilitychange['"]/);
+  assert.match(boardSource, /setReloadKey\(\(key\)\s*=>\s*key\s*\+\s*1\)/);
+  // background refresh는 loading과 분리된다.
+  assert.match(boardSource, /setRefreshing\(true\)/);
+  assert.match(boardSource, /최신 정보를 확인하는 중입니다/);
+});
