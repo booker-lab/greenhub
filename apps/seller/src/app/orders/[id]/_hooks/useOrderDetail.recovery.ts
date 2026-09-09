@@ -76,22 +76,69 @@ export function isOrderDetailNotFoundError(error: unknown): boolean {
   return (error as { status?: unknown }).status === 404;
 }
 
+/**
+ * authoritative 인증/권한 실패 판정.
+ * `GET /stores/:storeId/orders/:orderId`가 401/403을 반환한 경우에만 true다.
+ * 404(not-found)나 network/5xx(fetch-error)와 섞지 않는다.
+ */
+export function isOrderDetailAuthError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const status = (error as { status?: unknown }).status;
+  return status === 401 || status === 403;
+}
+
+export interface OrderDetailScope {
+  orderId: string;
+  storeId: string | null;
+  token: string | null | undefined;
+}
+
+/**
+ * scope가 바뀌면 이전 scope의 authoritative order를 새 scope처럼 노출하지 않는다.
+ * - orderId/storeId/token 중 하나라도 바뀌면 무효화.
+ * - 최초 마운트(prev null)는 무효화 대상이 아니다(초기 상태가 이미 비어 있음).
+ * - 동일 scope의 retry(tick/focus)는 무효화하지 않고 stale 보존한다.
+ */
+export function shouldInvalidateOrderDetailScope(
+  prev: OrderDetailScope | null,
+  next: OrderDetailScope,
+): boolean {
+  if (!prev) return false;
+  return prev.orderId !== next.orderId || prev.storeId !== next.storeId || prev.token !== next.token;
+}
+
+/**
+ * 보조 read(productName/groupConfig) scope 판정.
+ * order 변경 시 이전 productId의 보조 정보를 새 주문에 노출하지 않는다.
+ * - 둘 다 null이면 무효화하지 않는다.
+ * - 하나라도 다르면 이전 보조 정보를 clear해야 한다.
+ */
+export function shouldInvalidateOrderDetailSupplementary(
+  prevProductId: string | null,
+  nextProductId: string | null,
+): boolean {
+  return prevProductId !== nextProductId;
+}
+
 export interface ResolveOrderDetailViewInput {
   authState: SellerOrderDetailAuthState;
   hasOrder: boolean;
   isLoading: boolean;
   error: string | null;
   notFound: boolean;
+  /** authoritative GET이 401/403으로 거부된 경우 true. stale READY로 보존하지 않고 AUTH_FAILED로 닫는다. */
+  authFailed?: boolean;
 }
 
 /**
  * Detail read의 사용자 의미를 판정한다.
- * - auth 확정 실패는 stale이 있어도 AUTH_FAILED (protected data 예외).
- * - order 존재는 refresh 실패와 무관하게 READY (stale 보존, 호출부가 별도 indication).
+ * - auth 확정 실패(prereq missing)나 API 401/403(authFailed)은 stale이 있어도 AUTH_FAILED (protected data 예외).
+ * - order 존재 + auth 실패 없음 → READY (refresh 실패와 무관하게 stale 보존, 호출부가 별도 indication).
  * - order 없음 + error → READ_FAILED, order 없음 + authoritative 404 → NOT_FOUND.
  */
 export function resolveOrderDetailView(input: ResolveOrderDetailViewInput): OrderDetailViewState {
   if (input.authState === 'missing') return 'AUTH_FAILED';
+  if (input.authFailed === true) return 'AUTH_FAILED';
   if (input.hasOrder) return 'READY';
   if (input.authState === 'loading') return 'LOADING';
   if (input.isLoading) return 'LOADING';
