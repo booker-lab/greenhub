@@ -44,14 +44,14 @@ jobs:
           git merge origin/main --no-edit -m "chore(preview): sync main into preview"
           git push origin preview
 
-      # sync-preview success ≠ Vercel 실배포 완료. 여기서 막지 않으면 아래 e2e
-      # dispatch 가 stale(이전 커밋) preview 를 검사한다(세션39·60·61 race).
-      # 3앱 Vercel commit status가 현재 preview HEAD에서 success 할 때까지 폴링하고,
-      # timeout 시 fail-fast(exit 1)로 e2e dispatch 를 차단해 배포 지연을 노출한다.
-      - name: Wait for preview deploy (SHA-matched Vercel commit statuses poll)
+      # 이 자동 동기화 경로에는 workflow_dispatch로 고정한 deployment ID가 없다.
+      # 따라서 GitHub commit status는 진단 정보로만 남기고 canonical acceptance에는
+      # 사용하지 않는다. pinned metadata 검증은 round-direct workflow가 소유한다.
+      - name: Preview commit status diagnostic (non-blocking)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/wait-preview-deploy.mjs
+        continue-on-error: true
+        run: node scripts/wait-preview-deploy.mjs --diagnostic-status
 
       # GITHUB_TOKEN 으로 만든 push 는 다른 워크플로(e2e.yml 의 push 트리거)를
       # 재귀 방지 정책상 발화시키지 않는다. workflow_dispatch 는 발화하므로
