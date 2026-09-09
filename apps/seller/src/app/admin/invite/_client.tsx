@@ -7,7 +7,8 @@ import { InviteGenerator } from './_components/InviteGenerator';
 import { InviteHistoryTable } from './_components/InviteHistoryTable';
 
 export default function AdminInviteClient() {
-  const { invites, loading, generating, generate } = useAdminInvite();
+  const { invites, loading, error, reload, generating, generateError, generate } =
+    useAdminInvite();
   const [lastToken, setLastToken] = useState<{ token: string; expiresAt: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -20,6 +21,7 @@ export default function AdminInviteClient() {
 
   const handleGenerate = async () => {
     const result = await generate();
+    // 성공한 경우에만 lastToken 갱신 — 실패(null)는 이전 성공 token을 덮어쓰지 않는다.
     if (result) setLastToken(result);
   };
 
@@ -41,6 +43,7 @@ export default function AdminInviteClient() {
         generating={generating}
         lastToken={lastToken}
         copied={copied}
+        generateError={generateError}
         onGenerate={handleGenerate}
         onCopy={handleCopy}
       />
@@ -55,7 +58,7 @@ export default function AdminInviteClient() {
       >
         발급 내역
       </Text>
-      <InviteHistoryTable invites={invites} loading={loading} />
+      <InviteHistoryTable invites={invites} loading={loading} error={error} onRetry={reload} />
     </Box>
   );
 }
