@@ -16,6 +16,16 @@ export const LOCAL_RUNTIME_LAUNCHER_IDENTITY = 'greenhub-local-launcher';
 
 export const LEASE_FILE_NAME = `${LOCAL_RUNTIME_STACK_RESOURCE_KEY}.lock.json`;
 
+export const LOCAL_SHUTDOWN_CONTROL_HOST = '127.0.0.1';
+
+// Explicit test/diagnostic override key. Setting different values per
+// checkout bypasses cross-worktree mutual exclusion on purpose and MUST NOT
+// be used to separate normal local runs. Normal invocations use the shared
+// default below so every checkout of the same machine/user contends on one
+// logical lease. Test isolation uses either this variable or the explicit
+// `directory` acquire option with isolated temp directories.
+export const LEASE_DIRECTORY_ENV_KEY = 'GREENHUB_LOCAL_RUNTIME_DIR';
+
 export class LocalRuntimeLeaseError extends Error {
   constructor(message, details = {}) {
     super(message);
@@ -35,15 +45,14 @@ function readEnvValue(environment, key) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export function resolveLeaseDirectory({
+export function resolveSharedLeaseDirectory({
   platform = process.platform,
   env = process.env,
-  override,
 } = {}) {
-  if (typeof override === 'string' && override.trim()) return override;
-  const explicit = readEnvValue(env, 'GREENHUB_LOCAL_RUNTIME_DIR');
-  if (explicit) return explicit;
-
+  // Canonical checkout-independent namespace. Intentionally ignores
+  // LEASE_DIRECTORY_ENV_KEY / `override`: normal `dev:local` runs MUST resolve
+  // here so C:\Develop\greenhub and C:\Develop\greenhub-task-fe-local-01 share
+  // one lock file. Never derive this from repositoryRoot/checkoutPath/cwd.
   if (platform === 'win32') {
     const base =
       readEnvValue(env, 'LOCALAPPDATA') || readEnvValue(env, 'APPDATA') || nodeOs.tmpdir();
@@ -53,6 +62,23 @@ export function resolveLeaseDirectory({
   const xdg = readEnvValue(env, 'XDG_RUNTIME_DIR');
   if (xdg) return nodePath.join(xdg, 'greenhub', 'local-runtime');
   return nodePath.join(nodeOs.tmpdir(), 'greenhub-local-runtime');
+}
+
+export function isExplicitLeaseDirectoryOverride({ env = process.env, override } = {}) {
+  if (typeof override === 'string' && override.trim()) return true;
+  return Boolean(readEnvValue(env, LEASE_DIRECTORY_ENV_KEY));
+}
+
+export function resolveLeaseDirectory({
+  platform = process.platform,
+  env = process.env,
+  override,
+} = {}) {
+  if (typeof override === 'string' && override.trim()) return override;
+  const explicit = readEnvValue(env, LEASE_DIRECTORY_ENV_KEY);
+  if (explicit) return explicit;
+
+  return resolveSharedLeaseDirectory({ platform, env });
 }
 
 export function resolveLeaseFilePath(directory, resourceKey = LOCAL_RUNTIME_STACK_RESOURCE_KEY) {
@@ -110,7 +136,7 @@ function readExistingLease({ leasePath, resourceKey, fileSystem }) {
 }
 
 function toLeaseHandle({ document, leasePath, directory }) {
-  return {
+  const handle = {
     resourceKey: document.resourceKey,
     ownerPid: document.ownerPid,
     checkoutPath: document.checkoutPath,
@@ -121,6 +147,8 @@ function toLeaseHandle({ document, leasePath, directory }) {
     leasePath,
     directory,
   };
+  if (document.control !== undefined) handle.control = { ...document.control };
+  return handle;
 }
 
 function throwActiveOwner({ document, leasePath, reason = 'active-owner' }) {
@@ -171,6 +199,10 @@ function writeExclusiveLease({ leasePath, document, fileSystem }) {
 }
 
 export function acquireRuntimeLease({
+  // Test-isolation override only. Normal launcher runs omit `directory` so the
+  // checkout-independent shared default is used. Passing different `directory`
+  // values per checkout bypasses mutual exclusion by design (separate lock
+  // files) and MUST only be used for isolated tests/diagnostics.
   directory,
   resourceKey = LOCAL_RUNTIME_STACK_RESOURCE_KEY,
   ports = LOCAL_RUNTIME_STACK_PORTS,
@@ -279,6 +311,60 @@ export function acquireRuntimeLease({
     `Greenhub local runtime lease 획득 경쟁에서 졌습니다 (resource=${resourceKey}, lease=${leasePath}).`,
     { resourceKey, leasePath, ports: [...ports], reason: 'race-lost' },
   );
+}
+
+export function isValidShutdownControl(control) {
+  if (!control || typeof control !== 'object' || Array.isArray(control)) return false;
+  if (control.host !== LOCAL_SHUTDOWN_CONTROL_HOST) return false;
+  if (!Number.isInteger(control.port) || control.port <= 0 || control.port > 65535) return false;
+  if (typeof control.token !== 'string' || !control.token) return false;
+  return true;
+}
+
+export function readRuntimeLease({
+  directory,
+  resourceKey = LOCAL_RUNTIME_STACK_RESOURCE_KEY,
+  platform = process.platform,
+  env = process.env,
+  fileSystem = nodeFs,
+} = {}) {
+  const resolvedDirectory = directory ?? resolveLeaseDirectory({ platform, env });
+  const leasePath = resolveLeaseFilePath(resolvedDirectory, resourceKey);
+  const existing = readExistingLease({ leasePath, resourceKey, fileSystem });
+  return { ...existing, leasePath, directory: resolvedDirectory };
+}
+
+export function updateRuntimeLeaseControl(handle, control, { fileSystem = nodeFs } = {}) {
+  const leasePath =
+    handle?.leasePath ??
+    (handle?.directory
+      ? resolveLeaseFilePath(handle.directory, handle?.resourceKey ?? LOCAL_RUNTIME_STACK_RESOURCE_KEY)
+      : undefined);
+  const leaseId = handle?.leaseId;
+  if (!leasePath || !leaseId) return { updated: false, reason: 'invalid-handle' };
+  if (!isValidShutdownControl(control)) return { updated: false, reason: 'invalid-control' };
+
+  let raw;
+  try {
+    raw = fileSystem.readFileSync(leasePath, 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { updated: false, reason: 'not-found' };
+    throw error;
+  }
+  let document;
+  try {
+    document = JSON.parse(raw);
+  } catch {
+    return { updated: false, reason: 'corrupt' };
+  }
+  if (document?.leaseId !== leaseId) return { updated: false, reason: 'not-owner' };
+  if (document?.resourceKey !== (handle.resourceKey ?? LOCAL_RUNTIME_STACK_RESOURCE_KEY)) {
+    return { updated: false, reason: 'resource-mismatch' };
+  }
+
+  const next = { ...document, control: { ...control } };
+  fileSystem.writeFileSync(leasePath, JSON.stringify(next, null, 2), 'utf8');
+  return { updated: true, reason: 'updated', control: { ...control } };
 }
 
 export function releaseRuntimeLease(handle, { fileSystem = nodeFs } = {}) {

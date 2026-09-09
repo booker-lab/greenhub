@@ -48,25 +48,88 @@ NextAuth callback은 Kakao에서 받은 access token을 `POST /auth/kakao-login`
 
 ## 3. Credentials의 현재 용도
 
-세 앱의 `Credentials` provider는 일반 사용자용 이메일 로그인 UI를 의미하지 않는다. 현재 자동화/E2E 전용 게이트다.
+`Credentials` provider는 일반 사용자용 production 이메일 로그인 UI가 아니다. 앱별로 허용된 진입이 다르다.
 
-### Consumer / Seller
+### Consumer — E2E/test 전용
+
+Consumer는 E2E-only Credentials다. `apps/consumer/src/auth.ts`에 Seller/Driver와 같은 `GREENHUB_LOCAL_RUNTIME` local credentials branch가 없다.
 
 - `E2E_TEST_SECRET`이 없으면 credentials 요청을 모두 거부한다.
 - request header `x-e2e-test-token`이 secret과 정확히 일치해야 한다.
 - 이후 NestJS `POST /auth/login`을 호출한다.
-- consumer는 `consumer|admin`, seller는 `seller|admin` 역할만 허용한다.
+- consumer는 `consumer|admin` 역할만 허용한다.
+- Login UI(`apps/consumer/src/app/login/page.tsx`)는 `E2E_TEST === 'true'`일 때만 Credentials form을 노출한다.
 
-### Driver
+### Seller — E2E/test + 명시적 non-production local-runtime
 
-driver credentials는 더 좁게 제한한다.
+E2E/test 경로는 `E2E_TEST_SECRET` + `x-e2e-test-token` 헤더 게이트를 사용한 뒤 NestJS `POST /auth/login`을 호출하고 `seller|admin` 역할만 허용한다.
+
+명시적 local-runtime admission(`isLocalCredentialRuntime`, `apps/seller/src/auth.ts`)은 다음을 모두 만족할 때만 E2E header gate를 생략한다.
+
+- `GREENHUB_LOCAL_RUNTIME === 'true'`
+- AND `NODE_ENV !== 'production'`
+- AND `VERCEL_ENV !== 'production'`
+- AND `RAILWAY_ENVIRONMENT_NAME !== 'production'`
+
+production indicator가 하나라도 존재하면 fail-closed되어 기존 E2E header gate로 복귀한다.
+
+local path는 인증을 bypass하지 않는다.
+
+- 실제 `POST /auth/login`을 사용한다.
+- 응답 role이 `seller|admin`인지 검증한다.
+- `id`/`accessToken`/`refreshToken` 계약을 유지한다(`storeId` 포함).
+- API binding 실패 시 인증 실패(`upstream-rejected` / `api-binding-failure`)한다.
+
+Login UI(`apps/seller/src/app/login/page.tsx`)는 `E2E_TEST === 'true'` OR (`GREENHUB_LOCAL_RUNTIME === 'true'` AND `NODE_ENV !== 'production'`)일 때만 Credentials form을 노출한다. UI 노출 자체는 authorization control이 아니다.
+
+### Driver — Preview/E2E + 명시적 non-production local-runtime
+
+driver credentials는 Preview/E2E 경로와 local-runtime 경로가 분리돼 있다. 두 경로를 혼합하지 않는다.
+
+Preview/E2E 경로는 더 좁게 제한한다.
 
 - `VERCEL_ENV === 'preview'`
 - `ROUND_DIRECT_E2E_ENABLED === 'true'`
 - `x-round-direct-e2e-secret`이 공유 secret과 timing-safe 비교에서 일치
 - email이 `ROUND_DIRECT_E2E_DRIVER_EMAILS` allowlist에 포함
-- API 응답 role이 `driver`
+- 실제 `POST /auth/login`을 사용하고 API 응답 role이 `driver`
 - `driverApproved === true`
+
+명시적 local-runtime admission(`isLocalCredentialRuntime`, `apps/driver/src/auth.ts`)은 Seller와 동일한 production fail-closed 조건을 사용한다.
+
+- `GREENHUB_LOCAL_RUNTIME === 'true'`
+- AND `NODE_ENV !== 'production'`
+- AND `VERCEL_ENV !== 'production'`
+- AND `RAILWAY_ENVIRONMENT_NAME !== 'production'`
+
+local path에서는 Preview/E2E gate(secret·allowlist)를 사용하지 않지만, 다음을 반드시 만족해야 한다.
+
+- 실제 `POST /auth/login` 사용
+- `role === 'driver'`
+- `driverApproved === true`
+
+즉 local-runtime은 Driver approval authorization을 우회하지 않는다.
+
+Login UI(`apps/driver/src/app/login/page.tsx`)는 `GREENHUB_LOCAL_RUNTIME === 'true'` AND `NODE_ENV !== 'production'`일 때만 local Credentials form을 노출한다. 운영/Preview에서는 Kakao 로그인만 사용한다. UI 노출 자체는 authorization control이 아니다.
+
+### Seller/Driver local Firebase · API binding safety
+
+Seller/Driver local-runtime은 단순 UI flag가 아니라 로컬 runtime binding safety와 함께 사용된다. 아래는 현재 구현이 보장하는 범위다(`apps/seller/src/lib/firebase.ts`, `apps/driver/src/lib/firebase.ts`, `apps/seller/src/lib/api-base-url.ts`, `apps/driver/src/lib/api-base-url.ts`).
+
+Firebase:
+
+- local marker(`NEXT_PUBLIC_GREENHUB_LOCAL_RUNTIME === 'true'`)가 없으면 emulator binding을 거부한다. emulator host가 설정돼 있으면 throw하고 local이 아닌 경우 `false`를 반환한다.
+- local runtime은 `NODE_ENV === 'development'`를 요구하고, `NODE_ENV`/`NEXT_PUBLIC_VERCEL_ENV`/`NEXT_PUBLIC_RAILWAY_ENVIRONMENT_NAME` 중 어느 하나라도 `production`이면 거부한다.
+- local runtime에서 production identity를 거부한다. project `green-e4fe3`, storage bucket `green-e4fe3.appspot.com`·`green-e4fe3.firebasestorage.app`, auth domain `green-e4fe3.firebaseapp.com`이면 throw한다.
+- local project identity만 허용한다. project `greenhub-local`, storage bucket `greenhub-local.appspot.com`이 아니면 throw한다.
+- 허용된 emulator host만 허용한다. auth `127.0.0.1:9099`, firestore `127.0.0.1:8080`, storage `127.0.0.1:9199` 또는 미설정 외의 값이면 throw한다.
+- public/production credential 오사용을 거부한다. `NEXT_PUBLIC_GOOGLE_APPLICATION_CREDENTIALS`·`NEXT_PUBLIC_FIREBASE_SERVICE_ACCOUNT_JSON`·`NEXT_PUBLIC_FIREBASE_SERVICE_ACCOUNT_PATH`가 설정돼 있으면 항상 throw한다.
+
+API:
+
+- production runtime에서 loopback API URL(`localhost`·`127.0.0.1`·`[::1]`)을 거부한다.
+- production에서 `NEXT_PUBLIC_API_URL` 미설정, 비HTTP(S)·userinfo 포함, query/fragment 포함 URL도 거부한다.
+- `localhost`라는 사실만으로 local auth가 자동으로 열리지 않는다. 명시적 local marker + non-production 조건 + 실제 API role/approval 검증을 모두 만족해야 한다.
 
 따라서 이메일/비밀번호 endpoint가 존재한다고 해서 production 일반 로그인 경로로 노출하지 않는다. **다만 frontend가 일반 credentials UI를 노출하지 않는다는 사실은 공개 NestJS `register/login` endpoint 자체의 권한 안전성을 대신하지 않는다.**
 
@@ -157,7 +220,7 @@ Accepted source에서 확인된 조건:
 - 일반 access token refresh 기준: 앱에서 발급 후 약 55분 시점에 갱신 시도
 - refresh endpoint: `POST /auth/refresh`
 - 갱신 실패 시 session에 token error를 표시하고 유효 access token을 비운다.
-- driver E2E credentials session은 앱 레이어에서 더 짧은 access-token refresh 기준을 사용한다.
+- driver Credentials session은 E2E 경로와 local-runtime 경로 모두 `credentials` provider를 경유하므로 앱 레이어에서 더 짧은 access-token refresh 기준(15분, `E2E_ACCESS_TOKEN_TTL`)을 사용한다. 일반 Kakao session 기준(약 55분, `ACCESS_TOKEN_TTL`)과 구분된다. TTL 값을 새로 결정하지 않으며 `apps/driver/src/auth.ts`의 분기를 그대로 기술한다.
 
 실제 서버 JWT 만료값은 환경 설정에 의해 달라질 수 있으므로 오래된 문서의 “항상 1시간/30일”을 외부 환경 현재값으로 단정하지 않는다.
 
@@ -206,6 +269,7 @@ POST /auth/refresh
 - **이 두 endpoint가 공개라는 사실 자체는 현재 보안 경계다. UI 미노출을 authorization control로 취급하지 않는다.**
 - 현재 `role: driver` register→login 승인 우회는 P0 implementation finding이다.
 - 일반 사용자에게 credentials 인증을 제품 기능으로 노출하려면 별도 제품·보안 결정이 필요하다.
+- Seller/Driver의 explicit local-runtime branch 역시 production indicator(`NODE_ENV`·`VERCEL_ENV`·`RAILWAY_ENVIRONMENT_NAME` 중 어느 하나라도 `production`)가 존재하면 fail-closed된다. local marker를 켜도 production runtime에서는 local admission이 열리지 않으며, Seller는 기존 E2E header gate로, Driver는 기존 Preview/E2E gate로 복귀한다. production에서 local marker를 켠다고 사용할 수 있는 것이 아니다.
 
 ### 인증 사용자
 
@@ -298,6 +362,10 @@ interface SavedAddress {
 - 계정 정지·role/store 변경이 refresh/custom-token 경로에서 무기한 과거 권한으로 유지되지 않도록 한다.
 - 타인 주문·스토어 접근은 endpoint/service와 Firebase Rules의 소유권 검사를 통과해야 한다.
 - driver E2E allowlist와 secret을 실제 운영 driver 인증 모델로 사용하지 않는다.
+- local-runtime marker(`GREENHUB_LOCAL_RUNTIME`·`NEXT_PUBLIC_GREENHUB_LOCAL_RUNTIME`) 역시 production auth model이 아니다.
+- Seller/Driver local path도 실제 API role/approval validation을 유지한다. Seller는 `seller|admin` role 검증을, Driver는 `driver` role + `driverApproved === true` 검증을 우회하지 않는다.
+- production runtime에서는 local admission이 닫힌다. production indicator가 하나라도 존재하면 local-runtime 진입을 거부하고 기존 E2E/Preview gate로 복귀한다.
+- Credentials UI 노출 여부는 authorization control 자체가 아니다. local UI가 보인다는 사실이 인증·승인 통과를 의미하지 않는다.
 - 실계정 email, 사용자 UUID, 테스트 비밀번호를 troubleshooting 문서에 정본으로 저장하지 않는다.
 
 ## 14. 검증 진입점

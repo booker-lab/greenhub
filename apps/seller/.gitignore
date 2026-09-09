@@ -4,3 +4,6 @@
 public/workbox-*.js
 public/swe-worker-*.js
 .env*.local
+
+# next.js generated
+next-env.d.ts
