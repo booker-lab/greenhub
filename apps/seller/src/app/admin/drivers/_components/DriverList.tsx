@@ -2,18 +2,31 @@
 
 import { Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminDriver } from '@/hooks/useAdmin';
-import type { DriverAction } from '../_lib';
+import { type AdminDriversReadState, type DriverAction, getAdminDriversReadState } from '../_lib';
 import { DriverBadge } from './DriverBadge';
 
 interface DriverListProps {
   drivers: AdminDriver[];
   loading: boolean;
+  /** useAdminDrivers 조회 실패 메시지. null이면 마지막 조회가 실패하지 않았음. */
+  error: string | null;
   processingId: string | null;
   onAction: (userId: string, action: DriverAction) => void;
+  /** 조회 실패 시 재시도 — hook의 reload()에 연결된다. 현재 탭을 유지한다. */
+  onRetry: () => void;
 }
 
-export function DriverList({ drivers, loading, processingId, onAction }: DriverListProps) {
-  if (loading) {
+export function DriverList({
+  drivers,
+  loading,
+  error,
+  processingId,
+  onAction,
+  onRetry,
+}: DriverListProps) {
+  const readState: AdminDriversReadState = getAdminDriversReadState({ loading, error, drivers });
+
+  if (readState === 'LOADING') {
     return (
       <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
         불러오는 중...
@@ -21,7 +34,27 @@ export function DriverList({ drivers, loading, processingId, onAction }: DriverL
     );
   }
 
-  if (drivers.length === 0) {
+  // 조회 실패는 성공-empty와 구조적으로 구분 — "드라이버가 없습니다."로 collapse 금지.
+  if (readState === 'FETCH_ERROR') {
+    return (
+      <Stack gap="sm" align="center" py={64} px="md">
+        <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+          드라이버 목록을 불러오지 못했습니다.
+        </Text>
+        <Text
+          ta="center"
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        >
+          {error}
+        </Text>
+        <Button onClick={onRetry} size="sm" variant="outline" radius="md">
+          다시 조회
+        </Button>
+      </Stack>
+    );
+  }
+
+  if (readState === 'EMPTY') {
     return (
       <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
         드라이버가 없습니다.
