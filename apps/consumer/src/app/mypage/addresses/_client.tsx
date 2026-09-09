@@ -176,8 +176,16 @@ function AddressFormModal({
 export default function AddressesClient() {
   const { status } = useSession();
   const router = useRouter();
-  const { addresses, loading, error, addAddress, updateAddress, deleteAddress, setDefaultAddress } =
-    useAddresses();
+  const {
+    addresses,
+    loading,
+    error,
+    addAddress,
+    updateAddress,
+    deleteAddress,
+    setDefaultAddress,
+    refetch,
+  } = useAddresses();
 
   const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; addr: SavedAddress } | null>(
     null,
@@ -235,9 +243,29 @@ export default function AddressesClient() {
       </Group>
 
       {(error || actionError) && (
-        <Alert color="red" variant="light" mb="md">
-          <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error ?? actionError}</Text>
-        </Alert>
+        <Stack gap="xs" mb="md">
+          {error && (
+            <Alert color="red" variant="light">
+              <Group justify="space-between" align="center" gap="sm">
+                <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
+                <Button
+                  size="xs"
+                  variant="white"
+                  color="red"
+                  radius="sm"
+                  onClick={() => refetch()}
+                >
+                  다시 시도
+                </Button>
+              </Group>
+            </Alert>
+          )}
+          {actionError && (
+            <Alert color="red" variant="light">
+              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{actionError}</Text>
+            </Alert>
+          )}
+        </Stack>
       )}
 
       {loading ? (
@@ -248,6 +276,18 @@ export default function AddressesClient() {
         >
           불러오는 중...
         </Text>
+      ) : error && addresses.length === 0 ? (
+        <Stack align="center" gap="sm" py={48}>
+          <Text
+            ta="center"
+            style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+          >
+            배송지 정보를 불러오지 못했습니다.
+          </Text>
+          <Button size="sm" color="brand" radius="md" onClick={() => refetch()}>
+            다시 조회
+          </Button>
+        </Stack>
       ) : addresses.length === 0 ? (
         <Text
           ta="center"
