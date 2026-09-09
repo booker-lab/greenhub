@@ -30,10 +30,18 @@ export function useAddresses(): UseAddressesResult {
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [_tick, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
 
   const token = session?.user?.accessToken;
+  const [activeToken, setActiveToken] = useState(token);
 
+  if (activeToken !== token) {
+    setActiveToken(token);
+    setAddresses([]);
+    setError(null);
+  }
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick is an intentional manual-refetch trigger for authoritative GET /auth/me reread
   useEffect(() => {
     if (!token) {
       setLoading(false);
@@ -65,7 +73,7 @@ export function useAddresses(): UseAddressesResult {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, tick]);
 
   const addAddress = useCallback(
     async (data: AddressFormData) => {
