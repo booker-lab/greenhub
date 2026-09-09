@@ -3,6 +3,8 @@ import {
   spawn as nativeSpawn,
   spawnSync as nativeSpawnSync,
 } from 'node:child_process';
+import { randomUUID as nativeRandomUUID } from 'node:crypto';
+import { createServer as createHttpServer } from 'node:http';
 import { createConnection, createServer } from 'node:net';
 import { dirname, posix as posixPath, resolve, win32 as windowsPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +12,9 @@ import {
   acquireRuntimeLease as defaultAcquireRuntimeLease,
   LOCAL_RUNTIME_STACK_PORTS as RUNTIME_LEASE_PORTS,
   LOCAL_RUNTIME_STACK_RESOURCE_KEY as RUNTIME_LEASE_RESOURCE_KEY,
+  LOCAL_SHUTDOWN_CONTROL_HOST as RUNTIME_SHUTDOWN_CONTROL_HOST,
   releaseRuntimeLease as defaultReleaseRuntimeLease,
+  updateRuntimeLeaseControl as defaultUpdateRuntimeLeaseControl,
 } from './runtime-lease.mjs';
 
 export { LocalRuntimeLeaseError } from './runtime-lease.mjs';
@@ -247,6 +251,148 @@ export class ShutdownRequestedError extends LocalRuntimeError {
     this.exitCode = exitCode;
     this.signal = signal;
   }
+}
+
+export const LOCAL_SHUTDOWN_CONTROL_HOST = RUNTIME_SHUTDOWN_CONTROL_HOST;
+
+export const LOCAL_SHUTDOWN_CONTROL_PATH = '/shutdown';
+
+export function isAuthorizedShutdownRequest(
+  body,
+  { leaseId, token, resourceKey = RUNTIME_LEASE_RESOURCE_KEY } = {},
+) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  if (typeof leaseId !== 'string' || !leaseId) return false;
+  if (body.leaseId !== leaseId) return false;
+  if (body.resourceKey !== undefined && body.resourceKey !== resourceKey) return false;
+  if (typeof token === 'string' && token) {
+    if (body.token !== token) return false;
+  }
+  return true;
+}
+
+function readShutdownRequestBody(request, { maxBytes = 8192 } = {}) {
+  return new Promise((resolveResult, rejectResult) => {
+    const chunks = [];
+    let size = 0;
+    let failed = false;
+    request.on('data', (chunk) => {
+      if (failed) return;
+      size += chunk?.length ?? 0;
+      if (size > maxBytes) {
+        failed = true;
+        rejectResult(new LocalRuntimeError('shutdown request가 너무 큽니다.'));
+        request.destroy?.();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    request.once('end', () => {
+      if (failed) return;
+      resolveResult(Buffer.concat(chunks).toString('utf8'));
+    });
+    request.once('error', (error) => {
+      if (failed) return;
+      failed = true;
+      rejectResult(error);
+    });
+  });
+}
+
+export function startLocalShutdownControl({
+  expectedLeaseId,
+  expectedToken,
+  expectedResourceKey = RUNTIME_LEASE_RESOURCE_KEY,
+  onValidShutdown,
+  logger = console,
+  host = LOCAL_SHUTDOWN_CONTROL_HOST,
+  port = 0,
+  createServerImpl = createHttpServer,
+} = {}) {
+  if (host !== LOCAL_SHUTDOWN_CONTROL_HOST) {
+    throw new LocalRuntimeConfigurationError(
+      `shutdown control은 loopback(${LOCAL_SHUTDOWN_CONTROL_HOST})에만 bind할 수 있습니다.`,
+    );
+  }
+  if (typeof expectedLeaseId !== 'string' || !expectedLeaseId) {
+    throw new LocalRuntimeConfigurationError('shutdown control에는 leaseId가 필요합니다.');
+  }
+
+  const server = createServerImpl((request, response) => {
+    void (async () => {
+      try {
+        if (request.method !== 'POST' || (request.url ?? '').split('?')[0] !== LOCAL_SHUTDOWN_CONTROL_PATH) {
+          response.writeHead(404, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ status: 'NOT_FOUND' }));
+          return;
+        }
+        let body;
+        try {
+          const raw = await readShutdownRequestBody(request);
+          body = raw ? JSON.parse(raw) : undefined;
+        } catch {
+          response.writeHead(400, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ status: 'BAD_REQUEST' }));
+          return;
+        }
+        const authorized = isAuthorizedShutdownRequest(body, {
+          leaseId: expectedLeaseId,
+          token: expectedToken,
+          resourceKey: expectedResourceKey,
+        });
+        if (!authorized) {
+          response.writeHead(403, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ status: 'LEASE_MISMATCH' }));
+          return;
+        }
+        let alreadyStopping = false;
+        try {
+          const result = await onValidShutdown?.(body);
+          alreadyStopping = result?.alreadyStopping === true;
+        } catch (error) {
+          logger.error?.(`[local-runtime] explicit shutdown 처리 실패: ${error?.message || error}`);
+          response.writeHead(500, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ status: 'SHUTDOWN_FAILED' }));
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ status: alreadyStopping ? 'ALREADY_STOPPING' : 'SHUTDOWN_ACCEPTED' }));
+      } catch (error) {
+        try {
+          response.writeHead(500, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ status: 'SHUTDOWN_FAILED' }));
+        } catch {
+          // best effort: response가 이미 종료된 경우 무시한다.
+        }
+      }
+    })();
+  });
+
+  return new Promise((resolveResult, rejectResult) => {
+    server.once('error', rejectResult);
+    server.listen({ port, host, exclusive: true }, () => {
+      server.removeListener('error', rejectResult);
+      const address = server.address();
+      const actualPort = typeof address === 'object' && address ? address.port : port;
+      resolveResult({
+        host,
+        port: actualPort,
+        server,
+        close: () =>
+          new Promise((resolveClose) => {
+            try {
+              // Detached shutdown tests issue back-to-back keep-alive POSTs;
+              // destroy idle connections so close() does not wait for the
+              // default keep-alive timeout.
+              server.closeAllConnections?.();
+              server.close(() => resolveClose());
+            } catch {
+              resolveClose();
+            }
+          }),
+      });
+    });
+  });
 }
 
 function readEnvironmentValue(environment, key) {
@@ -1108,16 +1254,28 @@ export async function runLocalRuntime({
   signalSource = process,
   logger = console,
   portAvailabilityProbe = isPortAvailable,
+  // Test-isolation override only. Normal `dev:local` runs omit this so the
+  // checkout-independent shared lease namespace is used. Passing different
+  // values per checkout bypasses cross-worktree mutual exclusion by design.
+  // The lease directory is NEVER derived from repositoryRoot/checkoutPath/cwd.
   leaseDirectory,
   leaseOptions = {},
   acquireRuntimeLeaseImpl = defaultAcquireRuntimeLease,
   releaseRuntimeLeaseImpl = defaultReleaseRuntimeLease,
+  startShutdownControlImpl = startLocalShutdownControl,
+  updateLeaseControlImpl = defaultUpdateRuntimeLeaseControl,
+  generateControlToken = nativeRandomUUID,
+  controlListenPort = 0,
   ...runtimeOptions
 } = {}) {
   const runtime = createLocalRuntime({ ...runtimeOptions, baseEnvironment, logger });
+  // Single idempotent shutdown path. Console SIGINT/SIGTERM handlers and the
+  // detached explicit shutdown control request MUST converge here so cleanup
+  // and lease release run exactly once via runtime.requestStop + cleanup.
+  const requestShutdown = (exitCode, reason) => runtime.requestStop(exitCode, reason);
   const signalHandlers = {
-    SIGINT: () => runtime.requestStop(130, 'SIGINT'),
-    SIGTERM: () => runtime.requestStop(143, 'SIGTERM'),
+    SIGINT: () => requestShutdown(130, 'SIGINT'),
+    SIGTERM: () => requestShutdown(143, 'SIGTERM'),
   };
 
   for (const [signal, handler] of Object.entries(signalHandlers)) {
@@ -1125,6 +1283,17 @@ export async function runLocalRuntime({
   }
 
   let runtimeLease = null;
+  let shutdownControl = null;
+  const closeShutdownControl = async () => {
+    if (!shutdownControl) return;
+    const control = shutdownControl;
+    shutdownControl = null;
+    try {
+      await control.close();
+    } catch {
+      // best effort: control server close는 shutdown 결과를 바꾸지 않는다.
+    }
+  };
   const releaseOwnLease = async () => {
     if (!runtimeLease) return { released: false, reason: 'no-lease' };
     const handle = runtimeLease;
@@ -1146,16 +1315,84 @@ export async function runLocalRuntime({
       ...(leaseDirectory === undefined ? {} : { directory: leaseDirectory }),
     });
 
+    const controlToken = generateControlToken();
     try {
-      await preflightPorts(runtimeOptions.ports ?? FIXED_PORTS, {
-        probe: portAvailabilityProbe,
+      shutdownControl = await startShutdownControlImpl({
+        expectedLeaseId: runtimeLease.leaseId,
+        expectedToken: controlToken,
+        expectedResourceKey: runtimeLease.resourceKey,
+        onValidShutdown: () => {
+          const alreadyStopping = runtime.isStopping();
+          if (!alreadyStopping) {
+            logger.log?.('[local-runtime] explicit shutdown requested (detached control).');
+          }
+          requestShutdown(0, 'explicit-shutdown');
+          return { alreadyStopping };
+        },
+        logger,
+        host: LOCAL_SHUTDOWN_CONTROL_HOST,
+        port: controlListenPort,
       });
     } catch (error) {
       await releaseOwnLease();
       throw error;
     }
 
+    try {
+      const controlUpdate = await updateLeaseControlImpl(
+        runtimeLease,
+        {
+          host: LOCAL_SHUTDOWN_CONTROL_HOST,
+          port: shutdownControl.port,
+          token: controlToken,
+        },
+      );
+      if (!controlUpdate?.updated) {
+        // File-backed canonical leases MUST persist control metadata so the
+        // detached stop command can discover the endpoint. Synthetic test
+        // leases (mocked acquire with a non-existent leasePath) have no file
+        // to persist to; keep the in-memory control server running so existing
+        // unit contracts (preflight/spawn/readiness) stay unchanged.
+        if (controlUpdate?.reason === 'not-found' || controlUpdate?.reason === 'invalid-handle') {
+          logger.log?.(
+            `[local-runtime] shutdown control listening on ${LOCAL_SHUTDOWN_CONTROL_HOST}:${shutdownControl.port} (lease persistence skipped: ${controlUpdate?.reason})`,
+          );
+        } else {
+          throw new LocalRuntimeError(
+            `shutdown control metadata를 lease에 연결하지 못했습니다: ${controlUpdate?.reason || 'unknown'}`,
+          );
+        }
+      } else {
+        runtimeLease = {
+          ...runtimeLease,
+          control: {
+            host: LOCAL_SHUTDOWN_CONTROL_HOST,
+            port: shutdownControl.port,
+            token: controlToken,
+          },
+        };
+        logger.log?.(
+          `[local-runtime] shutdown control listening on ${LOCAL_SHUTDOWN_CONTROL_HOST}:${shutdownControl.port}`,
+        );
+      }
+    } catch (error) {
+      await closeShutdownControl();
+      await releaseOwnLease();
+      throw error;
+    }
+
+    try {
+      await preflightPorts(runtimeOptions.ports ?? FIXED_PORTS, {
+        probe: portAvailabilityProbe,
+      });
+    } catch (error) {
+      await closeShutdownControl();
+      await releaseOwnLease();
+      throw error;
+    }
+
     if (runtime.isStopping()) {
+      await closeShutdownControl();
       await releaseOwnLease();
       throw new ShutdownRequestedError(130, 'preflight 중 종료 요청');
     }
@@ -1173,6 +1410,7 @@ export async function runLocalRuntime({
     return termination.exitCode ?? 0;
   } catch (error) {
     await runtime.cleanup();
+    await closeShutdownControl();
     await releaseOwnLease();
     if (error instanceof ShutdownRequestedError) {
       logger.log?.(`[local-runtime] ${error.signal}에 따라 종료했습니다.`);
@@ -1184,6 +1422,7 @@ export async function runLocalRuntime({
       signalSource.removeListener(signal, handler);
     }
     await runtime.cleanup();
+    await closeShutdownControl();
     await releaseOwnLease();
   }
 }
