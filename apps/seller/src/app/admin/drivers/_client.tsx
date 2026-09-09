@@ -17,7 +17,7 @@ export default function DriversClient() {
   const [tab, setTab] = useState<DriverStatus>('pending');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
-  const { drivers: allDrivers, loading, approve, toggleSuspend } = useAdminDrivers();
+  const { drivers: allDrivers, loading, error, reload, approve, toggleSuspend } = useAdminDrivers();
 
   const drivers = useMemo(() => filterByTab(allDrivers, tab), [allDrivers, tab]);
 
@@ -71,8 +71,10 @@ export default function DriversClient() {
       <DriverList
         drivers={drivers}
         loading={loading}
+        error={error}
         processingId={processingId}
         onAction={handleAction}
+        onRetry={reload}
       />
 
       <ConfirmModal
