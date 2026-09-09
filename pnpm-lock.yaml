@@ -291,6 +291,9 @@ importers:
       typescript:
         specifier: ^5
         version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@20.19.37)(jiti@2.6.1)(sugarss@5.0.1(postcss@8.5.8))(terser@5.46.1)
 
   apps/e2e:
     devDependencies:

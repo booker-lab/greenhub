@@ -321,30 +321,36 @@ test('빈 GREENHUB_JAVA_HOME도 명시 override 오류로 fail-closed한다', ()
 });
 
 test('Java 런타임을 결정하지 못하면 child spawn을 0회로 유지한다', async () => {
-  let spawnCount = 0;
-  await assert.rejects(
-    runLocalRuntime({
-      baseEnvironment: {
-        NODE_ENV: 'development',
-        GREENHUB_JAVA_HOME: 'C:\\missing-java',
-      },
-      javaRuntimeResolver: ({ baseEnvironment, platform }) =>
-        resolveJavaRuntime({
-          baseEnvironment,
-          platform,
-          windowsFallbackHomes: [],
-          probeJavaRuntime: () => undefined,
-        }),
-      portAvailabilityProbe: async () => true,
-      spawnImpl: () => {
-        spawnCount += 1;
-        return fakeChild(2750 + spawnCount);
-      },
-      signalSource: new EventEmitter(),
-    }),
-    (error) => error instanceof JavaRuntimeConfigurationError,
-  );
-  assert.equal(spawnCount, 0);
+  const leaseDirectory = makeIsolatedLeaseDirectory();
+  try {
+    let spawnCount = 0;
+    await assert.rejects(
+      runLocalRuntime({
+        leaseDirectory,
+        baseEnvironment: {
+          NODE_ENV: 'development',
+          GREENHUB_JAVA_HOME: 'C:\\missing-java',
+        },
+        javaRuntimeResolver: ({ baseEnvironment, platform }) =>
+          resolveJavaRuntime({
+            baseEnvironment,
+            platform,
+            windowsFallbackHomes: [],
+            probeJavaRuntime: () => undefined,
+          }),
+        portAvailabilityProbe: async () => true,
+        spawnImpl: () => {
+          spawnCount += 1;
+          return fakeChild(2750 + spawnCount);
+        },
+        signalSource: new EventEmitter(),
+      }),
+      (error) => error instanceof JavaRuntimeConfigurationError,
+    );
+    assert.equal(spawnCount, 0);
+  } finally {
+    removeIsolatedLeaseDirectory(leaseDirectory);
+  }
 });
 
 test('production marker가 있으면 local child 환경을 만들지 않고 fail-closed한다', () => {
@@ -533,12 +539,13 @@ test('브라우저 열기는 READY 로그 뒤에만 실행되고 API URL은 포�
   });
 
   assert.equal(exitCode, 130);
-  assert.equal(events[0].kind, 'log');
-  assert.match(events[0].message, /READY/);
-  assert.equal(events[1].kind, 'browser');
-  assert.deepEqual(events[1].urls, LOCAL_BROWSER_URLS);
+  const readyIndex = events.findIndex((event) => event.kind === 'log' && /READY/.test(event.message));
+  assert.ok(readyIndex >= 0);
+  const browserIndex = events.findIndex((event) => event.kind === 'browser');
+  assert.ok(browserIndex > readyIndex);
+  assert.deepEqual(events[browserIndex].urls, LOCAL_BROWSER_URLS);
   assert.equal(
-    events[1].urls.some((url) => url.includes(':3000')),
+    events[browserIndex].urls.some((url) => url.includes(':3000')),
     false,
   );
   assert.deepEqual(

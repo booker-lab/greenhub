@@ -5,9 +5,11 @@
   "scripts": {
     "postinstall": "node scripts/copy-fonts.cjs",
     "dev:local": "node scripts/dev/local/launcher.mjs",
+    "dev:local:stop": "node scripts/dev/local/stop.mjs",
     "dev:consumer": "pnpm --filter consumer dev",
     "dev:api": "pnpm --filter api start:dev",
     "test:local-launcher": "node --test scripts/dev/local/launcher.spec.mjs",
+    "test:local-lease": "node --test scripts/dev/local/runtime-lease.spec.mjs",
     "test:local-seed": "node --test scripts/dev/local/seed-seller-orders.spec.mjs",
     "test:local-isolation": "node --test scripts/dev/local/local-isolation.spec.mjs",
     "build": "pnpm --filter @greenhub/shared build && pnpm --filter api --filter consumer --filter seller --filter driver build",
