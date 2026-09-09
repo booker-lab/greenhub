@@ -46,7 +46,10 @@ export default function BoardClient() {
     const token = session?.user.accessToken;
     if (!token) {
       // usable token 없음을 0건 성공으로 표시하지 않는다. 보호된 stale도 유지하지 않는다.
+      // stale-empty가 auth 이후 initial failure로 오분류되지 않도록 성공 기록도 초기화한다.
       requestIdRef.current += 1;
+      hasSuccessfulReadRef.current = false;
+      setHasSuccessfulRead(false);
       setPreparing([]);
       setDelivering([]);
       setAuthRequired(true);
@@ -211,6 +214,68 @@ export default function BoardClient() {
             >
               다시 시도
             </Button>
+          </Stack>
+        ) : error && hasSuccessfulRead ? (
+          orders.length === 0 ? (
+            <Stack align="center" justify="center" h={192} gap="xs">
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+                {error}
+              </Text>
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              >
+                {tab === 'preparing'
+                  ? '마지막 확인 당시 수거할 주문이 없었습니다.'
+                  : '마지막 확인 당시 배송 중인 주문이 없었습니다.'}
+              </Text>
+              <Button
+                variant="outline"
+                color="brand"
+                radius="xl"
+                onClick={() => setReloadKey((key) => key + 1)}
+              >
+                다시 시도
+              </Button>
+            </Stack>
+          ) : (
+            <Stack gap="sm">
+              {refreshing && (
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                >
+                  최신 정보를 확인하는 중입니다…
+                </Text>
+              )}
+              {error && (
+                <Stack align="center" justify="center" gap="xs">
+                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+                    {error} (이전 목록 표시 중)
+                  </Text>
+                  <Button
+                    variant="outline"
+                    color="brand"
+                    radius="xl"
+                    onClick={() => setReloadKey((key) => key + 1)}
+                  >
+                    다시 시도
+                  </Button>
+                </Stack>
+              )}
+              {orders.map((order) => (
+                <OrderCard key={order.id} order={order} tab={tab} />
+              ))}
+            </Stack>
+          )
+        ) : refreshing && hasSuccessfulRead && orders.length === 0 ? (
+          <Stack align="center" justify="center" h={192} gap="xs">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+              최신 정보를 확인하는 중입니다…
+            </Text>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+              {tab === 'preparing'
+                ? '마지막 확인 당시 수거할 주문이 없었습니다.'
+                : '마지막 확인 당시 배송 중인 주문이 없었습니다.'}
+            </Text>
           </Stack>
         ) : orders.length === 0 ? (
           <Stack align="center" justify="center" h={192} gap="xs">
