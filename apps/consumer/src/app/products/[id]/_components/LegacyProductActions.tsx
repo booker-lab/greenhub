@@ -60,9 +60,12 @@ function StoreInitialAvatar({ name }: { name: string }) {
 export default function LegacyProductActions({ product }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
-  const { config: groupConfig, loading: groupLoading } = useGroupProduct(
-    product.saleType === 'group' ? product.id : null,
-  );
+  const {
+    config: groupConfig,
+    loading: groupLoading,
+    error: groupError,
+    retry: retryGroupConfig,
+  } = useGroupProduct(product.saleType === 'group' ? product.id : null);
   const { store } = useStore(product.storeId ?? null);
   const { addItem } = useCart();
 
@@ -94,27 +97,35 @@ export default function LegacyProductActions({ product }: Props) {
   }, [groupConfig?.recruitDeadline]);
 
   const isGroup = product.saleType === 'group';
+  // read failure는 missing과 구분되는 fail-closed 상태다. 이전 config가 표시용으로
+  // 남아 있더라도 최신 error가 있으면 구매 가능으로 판정하지 않는다.
+  const isGroupLoading = isGroup && groupLoading;
+  const isGroupReadError = isGroup && !groupLoading && groupError != null;
   const groupStatus = isGroup ? getGroupBuyStatus(groupConfig) : 'open';
-  const isFull = groupStatus === 'full';
-  const isExpired = groupStatus === 'expired';
-  const isGroupUnavailable = isGroup && groupStatus !== 'open';
-  const unavailableLabel = groupLoading
+  const isFull = !isGroupLoading && !isGroupReadError && groupStatus === 'full';
+  const isExpired = !isGroupLoading && !isGroupReadError && groupStatus === 'expired';
+  const isGroupUnavailable =
+    isGroup && (isGroupLoading || isGroupReadError || groupStatus !== 'open');
+  const unavailableLabel = isGroupLoading
     ? '상품 확인 중'
-    : isExpired
-      ? '모집 마감'
-      : isFull
-        ? '모집 완료'
-        : '판매 준비 중';
+    : isGroupReadError
+      ? '공동구매 정보를 불러오지 못했습니다'
+      : isExpired
+        ? '모집 마감'
+        : isFull
+          ? '모집 완료'
+          : '판매 준비 중';
   const totalAmount = product.price * quantity;
   // 일반 상품의 배송일 선택은 슬롯 검증 대상(택배 제외)일 때만 필수.
   // 택배는 slot 미검증 분기이므로 배송일도 불필요 (플랜 D3 분기 조건 일치).
   const needsDeliveryDate = !isGroup && deliveryMethod !== 'parcel';
+  // group은 config read 확정(open) 전에는 fail-closed: loading/read-failure에서 구매 불가.
   const canBuy = isGroup
-    ? groupConsent && !isGroupUnavailable
+    ? groupConsent && !isGroupUnavailable && !isGroupLoading && !isGroupReadError
     : !needsDeliveryDate || deliveryDate !== null;
 
   function handleAddToCart() {
-    if (isGroupUnavailable) return;
+    if (isGroupUnavailable || isGroupLoading || isGroupReadError) return;
     addItem({
       productId: product.id,
       name: product.name,
@@ -130,7 +141,7 @@ export default function LegacyProductActions({ product }: Props) {
   }
 
   function handleBuyNow() {
-    if (isGroupUnavailable) return;
+    if (isGroupUnavailable || isGroupLoading || isGroupReadError) return;
     const p = new URLSearchParams({
       productId: product.id,
       quantity: String(quantity),
@@ -260,6 +271,46 @@ export default function LegacyProductActions({ product }: Props) {
               </Text>
             </Text>
           </Group>
+        </Paper>
+      )}
+
+      {/* group config read failure: missing과 구분되는 recovery 상태. 구매 CTA는 fail-closed. */}
+      {isGroupReadError && (
+        <Paper
+          radius="md"
+          p="md"
+          mb="lg"
+          data-testid="group-config-error"
+          style={{
+            background: 'var(--color-caution-bg)',
+            border: '1px solid var(--color-caution-border)',
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text)',
+              fontWeight: 'var(--fw-bold)',
+            }}
+            mb={4}
+          >
+            공동구매 정보를 불러오지 못했습니다
+          </Text>
+          <Text
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            mb="sm"
+          >
+            네트워크 상태를 확인한 뒤 다시 시도해 주세요. 정보를 확인할 때까지 구매할 수 없습니다.
+          </Text>
+          <Button
+            size="sm"
+            radius="md"
+            variant="default"
+            data-testid="group-config-retry"
+            onClick={retryGroupConfig}
+          >
+            다시 시도
+          </Button>
         </Paper>
       )}
 
