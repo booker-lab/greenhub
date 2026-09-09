@@ -1,12 +1,16 @@
 'use client';
 
-import { Badge, Box, Group, Paper, Stack, Text } from '@mantine/core';
+import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { InviteToken } from '@/hooks/useAdmin';
-import { formatExpiry, inviteStatus } from '../_lib';
+import { formatExpiry, getAdminInviteReadState, inviteStatus } from '../_lib';
 
 interface InviteHistoryTableProps {
   invites: InviteToken[];
   loading: boolean;
+  /** useAdminInvite 조회 실패 메시지. null이면 마지막 조회가 실패하지 않았음. */
+  error: string | null;
+  /** 조회 실패 시 재시도 — hook의 reload()에 연결된다. */
+  onRetry: () => void;
 }
 
 const thBase = {
@@ -16,8 +20,10 @@ const thBase = {
   color: 'var(--color-text-secondary)',
 };
 
-export function InviteHistoryTable({ invites, loading }: InviteHistoryTableProps) {
-  if (loading) {
+export function InviteHistoryTable({ invites, loading, error, onRetry }: InviteHistoryTableProps) {
+  const readState = getAdminInviteReadState({ loading, error, invites });
+
+  if (readState === 'LOADING') {
     return (
       <Text ta="center" py={32} style={{ color: 'var(--color-text-disabled)' }}>
         불러오는 중...
@@ -25,7 +31,33 @@ export function InviteHistoryTable({ invites, loading }: InviteHistoryTableProps
     );
   }
 
-  if (invites.length === 0) {
+  // 조회 실패는 성공-empty와 구조적으로 구분 — "발급된 토큰이 없습니다."로 collapse 금지.
+  if (readState === 'FETCH_ERROR') {
+    return (
+      <Paper
+        radius="lg"
+        shadow="xs"
+        style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
+      >
+        <Stack gap="sm" align="center" py={48} px="md">
+          <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+            발급 내역을 불러오지 못했습니다.
+          </Text>
+          <Text
+            ta="center"
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
+            {error}
+          </Text>
+          <Button onClick={onRetry} size="sm" variant="outline" radius="md">
+            다시 조회
+          </Button>
+        </Stack>
+      </Paper>
+    );
+  }
+
+  if (readState === 'EMPTY') {
     return (
       <Paper
         radius="lg"
