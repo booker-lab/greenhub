@@ -82,30 +82,20 @@ const remoteEnvironment = {
   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'green-e4fe3.firebaseapp.com',
 };
 
-const savedEnvironment = new Map<string, string | undefined>();
-
 function setEnvironment(values: Record<string, string>): void {
   for (const key of ENVIRONMENT_KEYS) {
-    process.env[key] = values[key] ?? '';
+    vi.stubEnv(key, values[key] ?? '');
   }
 }
 
 beforeEach(() => {
-  for (const key of ENVIRONMENT_KEYS) {
-    savedEnvironment.set(key, process.env[key]);
-  }
   firebaseMocks.apps.length = 0;
   vi.clearAllMocks();
   vi.resetModules();
 });
 
 afterEach(() => {
-  for (const key of ENVIRONMENT_KEYS) {
-    const value = savedEnvironment.get(key);
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-  savedEnvironment.clear();
+  vi.unstubAllEnvs();
 });
 
 describe('Seller Firebase local binding (FE-PILOT-L02-S, seller-only)', () => {
