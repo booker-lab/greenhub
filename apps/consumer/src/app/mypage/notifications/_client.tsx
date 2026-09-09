@@ -178,13 +178,16 @@ function NotificationItem({
 export default function NotificationsClient() {
   const { status } = useSession();
   const router = useRouter();
-  const { notifications, readIds, loading, error, markAllRead, markRead } = useNotifications();
+  const { notifications, readIds, loading, error, refetch, markAllRead, markRead } =
+    useNotifications();
 
   useEffect(() => {
-    if (!loading && notifications.length > 0) {
+    // authoritative successful load에서만 자동 읽음 처리한다.
+    // stale list + failure 상태에서는 read receipt 의미를 바꾸지 않는다.
+    if (!loading && !error && notifications.length > 0) {
       markAllRead();
     }
-  }, [loading, notifications.length, markAllRead]);
+  }, [loading, error, notifications.length, markAllRead]);
 
   if (status === 'unauthenticated') {
     router.replace('/login');
@@ -231,13 +234,7 @@ export default function NotificationsClient() {
         )}
       </Group>
 
-      {error && (
-        <Alert color="red" variant="light" m="md">
-          <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
-        </Alert>
-      )}
-
-      {loading && (
+      {loading && notifications.length === 0 && (
         <Text
           ta="center"
           style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
@@ -245,6 +242,23 @@ export default function NotificationsClient() {
         >
           불러오는 중...
         </Text>
+      )}
+
+      {!loading && error && notifications.length === 0 && (
+        <Stack gap="xs" p="md">
+          <Alert color="red" variant="light">
+            <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
+          </Alert>
+          <Button
+            variant="default"
+            size="xs"
+            radius="sm"
+            onClick={refetch}
+            data-testid="notifications-retry"
+          >
+            다시 시도
+          </Button>
+        </Stack>
       )}
 
       {!loading && !error && notifications.length === 0 && (
@@ -256,8 +270,39 @@ export default function NotificationsClient() {
         </Stack>
       )}
 
-      {!loading && notifications.length > 0 && (
+      {notifications.length > 0 && (
         <Box>
+          {loading && (
+            <Text
+              ta="center"
+              style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+              py="sm"
+            >
+              업데이트 중...
+            </Text>
+          )}
+          {error && (
+            <Box p="md">
+              <Alert color="red" variant="light">
+                <Text style={{ fontSize: 'var(--font-size-sm)' }}>
+                  최신 알림을 불러오지 못했습니다. 이전 목록을 표시합니다.
+                </Text>
+                <Text style={{ fontSize: 'var(--font-size-sm)' }} mt={4}>
+                  {error}
+                </Text>
+              </Alert>
+              <Button
+                variant="default"
+                size="xs"
+                radius="sm"
+                mt="xs"
+                onClick={refetch}
+                data-testid="notifications-retry"
+              >
+                다시 시도
+              </Button>
+            </Box>
+          )}
           {notifications.map((n) => (
             <NotificationItem
               key={n.id}

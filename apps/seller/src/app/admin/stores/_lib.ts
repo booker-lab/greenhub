@@ -108,6 +108,35 @@ export function getEmptyKind(stores: AdminStore[], filtered: AdminStore[]): Stor
   return filtered.length === 0 ? 'no-match' : 'has-data';
 }
 
+// Admin 판매자 목록 read state — 조회 실패와 정상 빈 결과의 구조적 구분.
+// useAdminStores는 error/reload를 노출하지만 화면이 이를 소비하지 않으면
+// 조회 실패가 빈 목록("등록된 판매자가 없습니다."/"조건에 맞는 판매자가 없습니다.")으로 collapse된다.
+// filterStores/sortStores/getEmptyKind 계약은 재설계하지 않고,
+// 분기 우선순위(loading > error > empty > results)만 순수 함수로 고정한다.
+// 매핑은 getEmptyKind와 일치한다: stores 0건 → EMPTY_UNFILTERED(실제 0건),
+// stores 유지 + visible 0건 → EMPTY_FILTERED(필터 결과 0건).
+// useAdminList는 조회 실패 시 items를 비우지 않고 이전 결과를 보존하므로,
+// error가 존재하면 stale 유무와 무관하게 FETCH_ERROR를 우선한다(성공-empty로 collapse 금지).
+export type AdminStoresReadState =
+  | 'LOADING'
+  | 'FETCH_ERROR'
+  | 'EMPTY_UNFILTERED'
+  | 'EMPTY_FILTERED'
+  | 'HAS_RESULTS';
+
+export function getAdminStoresReadState(args: {
+  loading: boolean;
+  error: string | null;
+  stores: readonly unknown[];
+  visible: readonly unknown[];
+}): AdminStoresReadState {
+  if (args.loading) return 'LOADING';
+  if (args.error !== null) return 'FETCH_ERROR';
+  if (args.stores.length === 0) return 'EMPTY_UNFILTERED';
+  if (args.visible.length === 0) return 'EMPTY_FILTERED';
+  return 'HAS_RESULTS';
+}
+
 export function parseRate(input: string): ParseRateResult {
   const trimmed = input.trim();
   if (trimmed === '') return { ok: false, errorCode: 'EMPTY' };
