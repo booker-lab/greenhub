@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Container, Box, TextInput, ActionIcon, Text, SimpleGrid, Stack } from '@mantine/core';
+import { Container, Box, TextInput, ActionIcon, Text, SimpleGrid, Stack, Button } from '@mantine/core';
 import { Search } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
-  const { products, loading, error } = useProducts();
+  const { products, loading, error, refetch } = useProducts();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -70,13 +70,17 @@ export default function SearchPage() {
         )}
 
         {!loading && error && (
-          <Text
-            ta="center"
-            py={48}
-            style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-          >
-            {error}
-          </Text>
+          <Stack align="center" py={48} gap="sm" role="alert">
+            <Text
+              ta="center"
+              style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+            >
+              {error}
+            </Text>
+            <Button variant="light" onClick={refetch} data-testid="products-retry">
+              다시 시도
+            </Button>
+          </Stack>
         )}
 
         {!loading && !error && !hasQuery && (
