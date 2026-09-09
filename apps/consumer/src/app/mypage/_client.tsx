@@ -226,7 +226,7 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
 export default function MyPageClient() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { orders, loading, error } = useOrders();
+  const { orders, loading, error, refetch } = useOrders();
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -284,7 +284,7 @@ export default function MyPageClient() {
           </Title>
           <Divider />
         </Stack>
-        {loading && (
+        {loading && orders.length === 0 && (
           <Text
             ta="center"
             style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
@@ -293,10 +293,21 @@ export default function MyPageClient() {
             불러오는 중...
           </Text>
         )}
-        {!loading && error && (
-          <Text style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }} py="xs">
-            주문 내역을 불러올 수 없습니다.
-          </Text>
+        {!loading && error && orders.length === 0 && (
+          <Stack gap="xs" py="xs">
+            <Text style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}>
+              주문 내역을 불러올 수 없습니다.
+            </Text>
+            <Button
+              variant="default"
+              size="xs"
+              radius="sm"
+              onClick={refetch}
+              data-testid="orders-retry"
+            >
+              다시 시도
+            </Button>
+          </Stack>
         )}
         {!loading && !error && orders.length === 0 && (
           <Text
@@ -307,8 +318,32 @@ export default function MyPageClient() {
             주문 내역이 없습니다.
           </Text>
         )}
-        {!loading && orders.length > 0 && (
+        {orders.length > 0 && (
           <Stack gap="sm">
+            {loading && (
+              <Text
+                ta="center"
+                style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+              >
+                업데이트 중...
+              </Text>
+            )}
+            {error && (
+              <Group justify="space-between" align="center">
+                <Text style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}>
+                  최신 주문 내역을 불러오지 못했습니다.
+                </Text>
+                <Button
+                  variant="default"
+                  size="xs"
+                  radius="sm"
+                  onClick={refetch}
+                  data-testid="orders-retry"
+                >
+                  다시 시도
+                </Button>
+              </Group>
+            )}
             {orders.map((order) => (
               <OrderCard
                 key={order.id}
