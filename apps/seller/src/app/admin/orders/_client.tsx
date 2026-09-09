@@ -10,7 +10,7 @@ import { OrdersTable } from './_components/OrdersTable';
 export default function AdminOrdersClient() {
   const [storeFilter, setStoreFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const { orders, loading, forceRefund } = useAdminOrders({
+  const { orders, loading, error, reload, forceRefund } = useAdminOrders({
     storeId: storeFilter || undefined,
     status: statusFilter || undefined,
   });
@@ -55,8 +55,10 @@ export default function AdminOrdersClient() {
       <OrdersTable
         orders={orders}
         loading={loading}
+        error={error}
         processingId={processingId}
         onRefund={handleRefund}
+        onRetry={reload}
       />
     </Box>
   );
