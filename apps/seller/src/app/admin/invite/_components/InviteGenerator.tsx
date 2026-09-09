@@ -7,6 +7,8 @@ interface InviteGeneratorProps {
   generating: boolean;
   lastToken: { token: string; expiresAt: string } | null;
   copied: boolean;
+  /** useAdminInvite 발급 command 실패 메시지. null이면 마지막 발급이 실패하지 않았음. */
+  generateError: string | null;
   onGenerate: () => void;
   onCopy: () => void;
 }
@@ -15,6 +17,7 @@ export function InviteGenerator({
   generating,
   lastToken,
   copied,
+  generateError,
   onGenerate,
   onCopy,
 }: InviteGeneratorProps) {
@@ -42,6 +45,32 @@ export function InviteGenerator({
       >
         {generating ? '생성중…' : '새 토큰 생성'}
       </Button>
+
+      {/* 발급 command 실패는 성공과 구분해 사용자에게 알린다. 성공한 경우에만 lastToken이 갱신되므로 이 블록은 이전 성공 토큰을 덮어쓰지 않는다. */}
+      {generateError !== null && (
+        <Box
+          mt="md"
+          p="md"
+          style={{
+            border: '1px solid var(--color-border)',
+            borderRadius: 12,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-medium)',
+              color: 'var(--color-error, #e03131)',
+            }}
+            mb={4}
+          >
+            토큰 발급에 실패했습니다.
+          </Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            {generateError}
+          </Text>
+        </Box>
+      )}
 
       {lastToken && (
         <Box

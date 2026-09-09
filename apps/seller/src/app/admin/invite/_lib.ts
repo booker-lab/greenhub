@@ -23,6 +23,23 @@ export function formatExpiry(expDate: Date | null): string {
   return expDate ? expDate.toLocaleDateString('ko-KR') : '-';
 }
 
+// 초대 이력 read state — 조회 실패와 성공-empty의 구조적 구분.
+// useAdminInvite는 error/reload를 노출하지만 화면이 이를 소비하지 않으면
+// 조회 실패가 빈 내역("발급된 토큰이 없습니다.")으로 collapse된다.
+// 분기 우선순위(loading > error > empty > results)를 순수 함수로 고정한다.
+export type AdminInviteReadState = 'LOADING' | 'FETCH_ERROR' | 'EMPTY' | 'HAS_RESULTS';
+
+export function getAdminInviteReadState(args: {
+  loading: boolean;
+  error: string | null;
+  invites: readonly unknown[];
+}): AdminInviteReadState {
+  if (args.loading) return 'LOADING';
+  if (args.error !== null) return 'FETCH_ERROR';
+  if (args.invites.length === 0) return 'EMPTY';
+  return 'HAS_RESULTS';
+}
+
 // 발급 직후 만료일 긴 표기(년 월 일).
 export function formatExpiryLong(expiresAt: string): string {
   return new Date(expiresAt).toLocaleDateString('ko-KR', {

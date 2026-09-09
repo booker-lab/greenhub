@@ -359,6 +359,7 @@ export function useAdminInvite() {
   const {
     items: invites,
     loading,
+    error,
     reload,
     token,
   } = useAdminList<InviteToken>(
@@ -367,10 +368,15 @@ export function useAdminInvite() {
     '초대 토큰',
   );
   const [generating, setGenerating] = useState(false);
+  // 발급 command 실패 — silent null로 끝내지 않고 UI에 노출한다.
+  // 성공 시에만 null을 유지하고, 실패가 이전 성공 token을 덮어쓰지 않는 것은
+  // 호출자(_client)가 result null 가드로 lastToken 갱신을 제한해 보장한다.
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   const generate = async (): Promise<{ token: string; expiresAt: string } | null> => {
     if (!token) return null;
     setGenerating(true);
+    setGenerateError(null);
     try {
       const data = await apiJson<{ token: string; expiresAt: string }>('/admin/invite', token, {
         method: 'POST',
@@ -378,11 +384,12 @@ export function useAdminInvite() {
       await reload();
       return data;
     } catch {
+      setGenerateError('초대 토큰 발급 중 오류 발생');
       return null;
     } finally {
       setGenerating(false);
     }
   };
 
-  return { invites, loading, generating, generate, reload };
+  return { invites, loading, error, generating, generateError, generate, reload };
 }
