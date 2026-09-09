@@ -38,6 +38,7 @@ interface LegacyHomeProductListProps {
   products: Product[];
   loading: boolean;
   error: string | null;
+  refetch: () => void;
   groupProducts: Product[];
   groupLoading: boolean;
 }
@@ -308,6 +309,7 @@ function LegacyHomeProductList({
   products,
   loading,
   error,
+  refetch,
   groupProducts,
   groupLoading,
 }: LegacyHomeProductListProps) {
@@ -409,11 +411,14 @@ function LegacyHomeProductList({
             ))}
           </SimpleGrid>
         )}
-        {error && (
-          <Stack align="center" py={48}>
+        {!loading && error && (
+          <Stack align="center" py={48} gap="sm" role="alert">
             <Text size="sm" c="var(--color-text-disabled)">
               {error}
             </Text>
+            <Button variant="light" onClick={refetch} data-testid="products-retry">
+              다시 시도
+            </Button>
           </Stack>
         )}
         {!loading && !error && products.length === 0 && (
@@ -438,7 +443,7 @@ function LegacyHomeProductList({
 
 export default function HomeProductList() {
   const requestedStoreId = useSearchParams().get('storeId');
-  const { products, loading, error } = useProducts();
+  const { products, loading, error, refetch } = useProducts();
   const { products: groupProducts, loading: groupLoading } = useProducts(
     undefined,
     undefined,
@@ -487,6 +492,7 @@ export default function HomeProductList() {
       products={products}
       loading={loading}
       error={error}
+      refetch={refetch}
       groupProducts={groupProducts}
       groupLoading={groupLoading}
     />
