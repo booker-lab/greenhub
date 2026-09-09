@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { apiFetch } from '@/lib/api';
 import { Box, Stack, Text, Title, Badge, Button } from '@mantine/core';
@@ -49,46 +49,94 @@ function nearestNeighbor(orders: Order[]): Order[] {
 }
 
 export default function MapPage() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [hasSuccessfulRead, setHasSuccessfulRead] = useState(false);
+  const requestIdRef = useRef(0);
+  const hasSuccessfulReadRef = useRef(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reloadKey is an intentional manual-refresh trigger for the error-state retry button
   useEffect(() => {
+    if (sessionStatus === 'loading') return;
+
     const token = session?.user.accessToken;
     if (!token) {
+      // usable token 없음을 0건 성공으로 표시하지 않는다. 보호된 stale도 유지하지 않는다.
+      // 다음 인증된 조회가 initial loading으로 시작하도록 성공 기억도 초기화한다.
+      requestIdRef.current += 1;
+      hasSuccessfulReadRef.current = false;
       setOrders([]);
+      setHasSuccessfulRead(false);
+      setAuthRequired(true);
+      setError(null);
+      setLoading(false);
+      setRefreshing(false);
       return;
     }
 
     const controller = new AbortController();
     let active = true;
+    // Abort에만 의존하지 않는 stale-wins 방어: 오래된 응답이 최신 요청을 덮지 못한다.
+    requestIdRef.current += 1;
+    const requestId = requestIdRef.current;
+    const isCurrent = () => active && requestId === requestIdRef.current;
+    // 성공한 0건도 성공한 조회다. 이전 성공이 있으면 기존 route를 유지하고 background로 갱신한다.
+    const background = hasSuccessfulReadRef.current;
+    if (background) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    setAuthRequired(false);
+    setError(null);
 
     apiFetch('/driver/orders', token, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error('driver map orders request failed: ' + response.status);
+          throw new Error(`driver map orders request failed: ${response.status}`);
         }
         const payload: unknown = await response.json();
         if (!Array.isArray(payload)) throw new Error('driver map orders response is not a list');
         return payload as Order[];
       })
       .then((driverOrders) => {
-        if (!active) return;
+        if (!isCurrent()) return;
         setOrders(
           driverOrders.filter(
             (order) => order.status === 'PREPARING' || order.status === 'DELIVERING',
           ),
         );
+        hasSuccessfulReadRef.current = true;
+        setHasSuccessfulRead(true);
+        setError(null);
       })
       .catch((cause: unknown) => {
-        if (!active || (cause instanceof DOMException && cause.name === 'AbortError')) return;
-        setOrders([]);
+        if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) return;
+        if (hasSuccessfulReadRef.current) {
+          // refresh 실패는 마지막 정상 route를 지우지 않고 stale로 유지한다.
+          // stale route를 최신 경로로 오인시키지 않도록 navigation은 fail-closed한다.
+          setError('최신 경로를 불러오지 못했습니다. 이전 경로를 보여줍니다.');
+        } else {
+          setOrders([]);
+          setError('배송 경로를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+        }
+      })
+      .finally(() => {
+        if (!isCurrent()) return;
+        setLoading(false);
+        setRefreshing(false);
       });
 
     return () => {
       active = false;
       controller.abort();
     };
-  }, [session?.user.accessToken]);
+  }, [session?.user.accessToken, sessionStatus, reloadKey]);
 
   const sorted = nearestNeighbor(orders);
 
@@ -174,7 +222,43 @@ export default function MapPage() {
 
       {/* 경유지 목록 */}
       <Box style={{ flex: 1, padding: '16px' }}>
-        {sorted.length === 0 ? (
+        {loading ? (
+          <Box
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 128 }}
+          >
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+              배송 경로를 불러오는 중입니다
+            </Text>
+          </Box>
+        ) : authRequired ? (
+          <Stack align="center" justify="center" h={128} gap="xs">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+              로그인이 필요합니다. 세션을 다시 확인해 주세요.
+            </Text>
+            <Button
+              variant="outline"
+              color="brand"
+              radius="xl"
+              onClick={() => setReloadKey((key) => key + 1)}
+            >
+              다시 시도
+            </Button>
+          </Stack>
+        ) : error && !hasSuccessfulRead ? (
+          <Stack align="center" justify="center" h={128} gap="xs">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+              {error}
+            </Text>
+            <Button
+              variant="outline"
+              color="brand"
+              radius="xl"
+              onClick={() => setReloadKey((key) => key + 1)}
+            >
+              다시 시도
+            </Button>
+          </Stack>
+        ) : sorted.length === 0 ? (
           <Box
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 128 }}
           >
@@ -184,6 +268,28 @@ export default function MapPage() {
           </Box>
         ) : (
           <Stack gap="xs">
+            {refreshing && (
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              >
+                최신 정보를 확인하는 중입니다…
+              </Text>
+            )}
+            {error && (
+              <Stack align="center" justify="center" gap="xs">
+                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+                  {error} (이전 경로 표시 중)
+                </Text>
+                <Button
+                  variant="outline"
+                  color="brand"
+                  radius="xl"
+                  onClick={() => setReloadKey((key) => key + 1)}
+                >
+                  다시 시도
+                </Button>
+              </Stack>
+            )}
             {sorted.map((order, idx) => {
               const addr =
                 order.deliveryMethod === 'hub'
@@ -250,8 +356,8 @@ export default function MapPage() {
         )}
       </Box>
 
-      {/* 주행 시작 버튼 */}
-      {sorted.length > 0 && (
+      {/* 주행 시작 버튼: error/stale에서는 fail-closed로 비활성화한다 */}
+      {sorted.length > 0 && !loading && !authRequired && !error && hasSuccessfulRead && (
         <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
           <Button
             component="a"
@@ -263,6 +369,25 @@ export default function MapPage() {
           >
             주행 시작 (카카오내비)
           </Button>
+        </Box>
+      )}
+      {sorted.length > 0 && error && hasSuccessfulRead && (
+        <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
+          <Stack gap="xs">
+            <Button fullWidth size="lg" radius="xl" color="gray" disabled>
+              주행 시작 (카카오내비)
+            </Button>
+            <Text
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--color-danger)',
+                textAlign: 'center',
+              }}
+            >
+              최신 경로 확인에 실패해 주행을 시작할 수 없습니다. 다시 시도 후 최신 경로에서
+              시작해 주세요.
+            </Text>
+          </Stack>
         </Box>
       )}
     </Box>
