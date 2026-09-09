@@ -27,16 +27,15 @@ import {
   DATE_PRESETS,
   type DateRangePreset,
   GROUP_TABS,
-  getDateRange,
   getGroupHeaderMeta,
-  getOrderDate,
-  groupOrdersByDate,
   IN_DELIVERY_SUBFILTERS,
   isArchiveTab,
   type OrderGroup,
-  STATUS_GROUP_MAP,
 } from './_constants';
-import { getOrderPriorityCounts, shouldShowActionRequiredOrder } from './order-priority';
+import {
+  buildOrdersScopedViewModel,
+  deriveOrdersFetchInput,
+} from './orders-view-model';
 
 const VALID_TABS = new Set<OrderGroup>([
   'ACTION_REQUIRED',
@@ -115,24 +114,47 @@ export default function OrdersPage() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
 
-  const saleTypeOrders = orders.filter((order) =>
-    saleType === 'group' ? order.saleType === 'group' : order.saleType !== 'group',
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') as OrderGroup | null;
+    if (tab && VALID_TABS.has(tab)) setActiveTab(tab);
+  }, []);
+
+  // PHASE_1_INPUT_DERIVATION → fetch boundary → PHASE_2_VIEW_MODEL.
+  // useGroupConfigs가 productIds fetch를 필요로 하므로 단일 호출로 합칠 수 없고,
+  // 두 순수 경계를 같은 saleTypeOrders 참조로 연결해 scope 중복을 제거한다.
+  // 뱃지(counts)와 목록(filtered)은 PHASE_2 안에서 동일 참조로 파생된다.
+  const fetchInput = useMemo(
+    () => deriveOrdersFetchInput(orders, saleType, activeTab),
+    [orders, saleType, activeTab],
   );
-  const priorityCounts = getOrderPriorityCounts(saleTypeOrders);
-  // 탭 뱃지는 표시 목록과 동일한 판매 유형 scope로 집계한다.
-  const scopedGroupCounts = useMemo(() => {
-    const result: Record<OrderGroup, number> = {
-      ACTION_REQUIRED: 0,
-      WAITING: 0,
-      IN_DELIVERY: 0,
-      DONE: 0,
-      CANCELLED: 0,
-    };
-    for (const order of saleTypeOrders) {
-      result[STATUS_GROUP_MAP[order.status]] += 1;
-    }
-    return result;
-  }, [saleTypeOrders]);
+  const groupConfigMap = useGroupConfigs(fetchInput.groupProductIds, saleType === 'group');
+  const view = useMemo(
+    () =>
+      buildOrdersScopedViewModel({
+        saleTypeOrders: fetchInput.saleTypeOrders,
+        saleType,
+        activeTab,
+        subFilter,
+        heldOnly,
+        datePreset,
+        customFrom,
+        customTo,
+        groupConfigMap,
+      }),
+    [
+      fetchInput,
+      saleType,
+      activeTab,
+      subFilter,
+      heldOnly,
+      datePreset,
+      customFrom,
+      customTo,
+      groupConfigMap,
+    ],
+  );
+  const { priorityCounts, scopedGroupCounts, customInvalid, filteredOrders, groupedOrders } = view;
 
   const handleSaleTypeChange = (next: SaleType) => {
     setSaleType(next);
@@ -162,43 +184,6 @@ export default function OrdersPage() {
     setCustomFrom('');
     setCustomTo('');
   };
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab') as OrderGroup | null;
-    if (tab && VALID_TABS.has(tab)) setActiveTab(tab);
-  }, []);
-
-  const customInvalid =
-    datePreset === 'custom' && !!customFrom && !!customTo && customFrom > customTo;
-  // 공구 토글은 날짜 필터 칩 미노출 → 범위 계산 자체를 일반에서만 수행
-  const dateRange =
-    saleType === 'normal' ? getDateRange(datePreset, activeTab, customFrom, customTo) : null;
-
-  // 공구 토글일 때만 표시 후보 productId를 모아 groupProductConfig 일괄 fetch
-  const groupProductIds =
-    saleType === 'group'
-      ? saleTypeOrders
-          .filter((o) => STATUS_GROUP_MAP[o.status] === activeTab)
-          .map((o) => o.productId)
-      : [];
-  const groupConfigMap = useGroupConfigs(groupProductIds, saleType === 'group');
-
-  const filteredOrders = saleTypeOrders.filter((o) => {
-    if (STATUS_GROUP_MAP[o.status] !== activeTab) return false;
-    if (activeTab === 'ACTION_REQUIRED' && !shouldShowActionRequiredOrder(o.status, heldOnly)) {
-      return false;
-    }
-    if (activeTab === 'IN_DELIVERY' && subFilter !== 'ALL' && o.status !== subFilter) {
-      return false;
-    }
-    if (dateRange) {
-      const d = getOrderDate(o, activeTab, groupConfigMap);
-      // requestedDeliveryDate = null(공동구매 등)은 제외하지 않고 "날짜 미정"으로 내려보냄 (T6)
-      if (d && (d < dateRange.from || d > dateRange.to)) return false;
-    }
-    return true;
-  });
 
   return (
     <PageShell>
@@ -526,7 +511,7 @@ export default function OrdersPage() {
           {!loading &&
             firebaseReady &&
             !(error && orders.length === 0) &&
-            groupOrdersByDate(filteredOrders, activeTab, groupConfigMap).map((group) => (
+            groupedOrders.map((group) => (
               <DateSection
                 key={group.dateKey}
                 meta={getGroupHeaderMeta(group.dateKey, isArchiveTab(activeTab))}
