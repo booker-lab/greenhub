@@ -211,12 +211,19 @@ function RoundEditor({
   onSave: (input: CreateSaleRoundInput) => Promise<void>;
   onRetry: () => void;
 }) {
-  const { products, loading, error } = useStoreProducts(round.storeId);
+  const { products, loading, error, retry: retryProducts } = useStoreProducts(round.storeId);
 
   if (loading) return <LoadingState />;
   if (error) {
     return (
-      <ErrorState title="스토어 상품을 불러오지 못했습니다" message={error} onRetry={onRetry} />
+      <ErrorState
+        title="스토어 상품을 불러오지 못했습니다"
+        message={error}
+        onRetry={() => {
+          retryProducts();
+          onRetry();
+        }}
+      />
     );
   }
 
