@@ -128,7 +128,8 @@ export default function OrdersPage() {
     () => deriveOrdersFetchInput(orders, saleType, activeTab),
     [orders, saleType, activeTab],
   );
-  const groupConfigMap = useGroupConfigs(fetchInput.groupProductIds, saleType === 'group');
+  const groupConfigs = useGroupConfigs(fetchInput.groupProductIds, saleType === 'group');
+  const groupConfigMap = groupConfigs.map;
   const view = useMemo(
     () =>
       buildOrdersScopedViewModel({
@@ -483,6 +484,53 @@ export default function OrdersPage() {
               </Group>
             </Paper>
           )}
+
+          {/* 공구 배송일 auxiliary metadata — core 주문 목록과 분리.
+              실패해도 주문 목록을 숨기거나 정상 empty로 속이지 않고,
+              saleType/activeTab/filter state를 보존한 채 작은 warning/retry만 노출한다. */}
+          {!loading &&
+            firebaseReady &&
+            saleType === 'group' &&
+            groupConfigs.error && (
+              <Paper radius="lg" shadow="xs" p="md">
+                <Group justify="space-between" gap="xs" wrap="nowrap">
+                  <Text
+                    style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                  >
+                    {groupConfigs.isStale
+                      ? '공구 배송일 정보를 새로 불러오지 못했습니다. 이전 정보를 표시합니다.'
+                      : '공구 배송일 정보를 불러오지 못했습니다. 주문 목록은 그대로 표시됩니다.'}
+                  </Text>
+                  <UnstyledButton
+                    onClick={groupConfigs.retry}
+                    aria-label="공구 배송일 다시 불러오기"
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: 'var(--font-size-sm)',
+                      borderRadius: 99,
+                      backgroundColor: 'var(--color-text)',
+                      color: 'var(--color-bg)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    다시 시도
+                  </UnstyledButton>
+                </Group>
+              </Paper>
+            )}
+
+          {!loading &&
+            firebaseReady &&
+            saleType === 'group' &&
+            !groupConfigs.error &&
+            groupConfigs.loading && (
+              <Text
+                aria-live="polite"
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              >
+                공구 배송일 정보를 불러오는 중입니다…
+              </Text>
+            )}
 
           {!loading &&
             firebaseReady &&
