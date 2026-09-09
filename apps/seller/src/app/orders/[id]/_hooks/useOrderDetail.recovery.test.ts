@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOrderDetailPath,
   getOrderDetailMutationOutcomeMessage,
+  isOrderDetailAuthError,
   isOrderDetailBackgroundRefresh,
   isOrderDetailNotFoundError,
   resolveOrderDetailAuthState,
@@ -9,6 +10,8 @@ import {
   resolveOrderDetailView,
   SELLER_ORDER_DETAIL_AUTH_ERROR,
   shouldIgnoreOrderDetailResponse,
+  shouldInvalidateOrderDetailScope,
+  shouldInvalidateOrderDetailSupplementary,
   shouldReconcileOrderDetailAfterMutation,
   shouldRevalidateOrderDetailOnVisibilityChange,
   shouldRevalidateOrderDetailOnWindowFocus,
@@ -210,5 +213,221 @@ describe('Seller 주문 상세 recovery — mutation reconciliation (E/F)', () =
     expect(message).toContain('최신');
     // 동일 위험 command 반복을 유도하는 실패 문구가 아니다.
     expect(message).not.toContain('상태 변경에 실패');
+  });
+});
+
+describe('Seller 주문 상세 read-recovery — authoritative read 분리 (TASK 1-6)', () => {
+  it('1. found: authoritative 성공은 order 존재 + READY로만 표현된다', () => {
+    expect(
+      resolveOrderDetailView({
+        authState: 'ready',
+        hasOrder: true,
+        isLoading: false,
+        error: null,
+        notFound: false,
+        authFailed: false,
+      }),
+    ).toBe('READY');
+  });
+
+  it('2. genuine 404: 404만 NOT_FOUND이며 주문 없음 문구로 닫는다', () => {
+    expect(isOrderDetailNotFoundError({ status: 404 })).toBe(true);
+    expect(
+      resolveOrderDetailView({
+        authState: 'ready',
+        hasOrder: false,
+        isLoading: false,
+        error: null,
+        notFound: true,
+        authFailed: false,
+      }),
+    ).toBe('NOT_FOUND');
+  });
+
+  it('3. 401/403: auth-error는 not-found·fetch-error와 분리되고 AUTH_FAILED로 닫는다', () => {
+    expect(isOrderDetailAuthError({ status: 401 })).toBe(true);
+    expect(isOrderDetailAuthError({ status: 403 })).toBe(true);
+    expect(isOrderDetailNotFoundError({ status: 401 })).toBe(false);
+    expect(isOrderDetailNotFoundError({ status: 403 })).toBe(false);
+    // 주문 없음 + API auth 거부 → AUTH_FAILED (NOT_FOUND 금지).
+    expect(
+      resolveOrderDetailView({
+        authState: 'ready',
+        hasOrder: false,
+        isLoading: false,
+        error: SELLER_ORDER_DETAIL_AUTH_ERROR,
+        notFound: false,
+        authFailed: true,
+      }),
+    ).toBe('AUTH_FAILED');
+    // stale이 있어도 protected data를 가리고 AUTH_FAILED (READY/stale 보존 금지).
+    expect(
+      resolveOrderDetailView({
+        authState: 'ready',
+        hasOrder: true,
+        isLoading: false,
+        error: SELLER_ORDER_DETAIL_AUTH_ERROR,
+        notFound: false,
+        authFailed: true,
+      }),
+    ).toBe('AUTH_FAILED');
+  });
+
+  it('4. network/5xx: fetch-error는 READ_FAILED이며 주문 없음으로 확정하지 않는다', () => {
+    expect(isOrderDetailNotFoundError({ status: 500 })).toBe(false);
+    expect(isOrderDetailAuthError({ status: 500 })).toBe(false);
+    expect(isOrderDetailNotFoundError(new Error('fetch failed'))).toBe(false);
+    expect(isOrderDetailAuthError(new Error('fetch failed'))).toBe(false);
+    expect(isOrderDetailNotFoundError({ status: 503 })).toBe(false);
+    expect(
+      resolveOrderDetailView({
+        authState: 'ready',
+        hasOrder: false,
+        isLoading: false,
+        error: '주문을 불러오지 못했습니다.',
+        notFound: false,
+        authFailed: false,
+      }),
+    ).toBe('READ_FAILED');
+    // 기존 detail + refresh 5xx는 stale READY를 유지하고 제거하지 않는다.
+    expect(
+      resolveOrderDetailView({
+        authState: 'ready',
+        hasOrder: true,
+        isLoading: false,
+        error: '서버 오류 (500)',
+        notFound: false,
+        authFailed: false,
+      }),
+    ).toBe('READY');
+  });
+
+  it('5. error → retry → success: retry는 동일한 authoritative GET 경로를 재사용한다', () => {
+    const first = buildOrderDetailPath('store-1', 'order-1');
+    const retry = buildOrderDetailPath('store-1', 'order-1');
+    expect(retry).toBe(first);
+    expect(retry).toBe('/stores/store-1/orders/order-1');
+  });
+
+  it('6. failure ≠ not-found: 401/403/5xx/network는 NOT_FOUND가 아니다', () => {
+    for (const err of [
+      { status: 401 },
+      { status: 403 },
+      { status: 500 },
+      { status: 503 },
+      new Error('network failure'),
+      null,
+    ]) {
+      expect(isOrderDetailNotFoundError(err)).toBe(false);
+    }
+    expect(isOrderDetailNotFoundError({ status: 404 })).toBe(true);
+  });
+});
+
+describe('Seller 주문 상세 read-recovery — ordering/scope (TASK 7-8)', () => {
+  it('7. stale request는 최신 orderId scope를 덮지 못한다', () => {
+    // retry/재조회로 최신 요청 id가 2가 된 뒤 늦게 도착한 요청 1의 성공/실패는 모두 무시.
+    expect(shouldIgnoreOrderDetailResponse(true, 2, 1)).toBe(true);
+    expect(shouldIgnoreOrderDetailResponse(true, 2, 2)).toBe(false);
+    // 취소된 effect의 응답도 무시.
+    expect(shouldIgnoreOrderDetailResponse(false, 2, 2)).toBe(true);
+  });
+
+  it('8. auth/store scope 변경은 이전 order를 무효화하고 동일 scope retry는 유지한다', () => {
+    const base = { orderId: 'order-1', storeId: 'store-1', token: 'token-1' };
+    expect(shouldInvalidateOrderDetailScope(null, base)).toBe(false);
+    expect(shouldInvalidateOrderDetailScope(base, { ...base })).toBe(false);
+    expect(
+      shouldInvalidateOrderDetailScope(base, { ...base, orderId: 'order-2' }),
+    ).toBe(true);
+    expect(
+      shouldInvalidateOrderDetailScope(base, { ...base, storeId: 'store-2' }),
+    ).toBe(true);
+    expect(shouldInvalidateOrderDetailScope(base, { ...base, token: 'token-2' })).toBe(true);
+    expect(
+      shouldInvalidateOrderDetailScope(base, { orderId: 'order-1', storeId: null, token: 'token-1' }),
+    ).toBe(true);
+  });
+});
+
+describe('Seller 주문 상세 read-recovery — supplementary degrade (TASK 9-11)', () => {
+  it('9. supplementary product read 실패는 authoritative order를 지우지 않는다', () => {
+    // 보조 read는 authoritative view 입력(hasOrder/error/notFound/authFailed)을 바꾸지 않는다.
+    // productName fetch 실패 → productName만 null, order는 READY 유지.
+    expect(
+      resolveOrderDetailView({
+        authState: 'ready',
+        hasOrder: true,
+        isLoading: false,
+        error: null,
+        notFound: false,
+        authFailed: false,
+      }),
+    ).toBe('READY');
+    expect(isOrderDetailNotFoundError(new Error('products getDoc failed'))).toBe(false);
+    expect(isOrderDetailAuthError(new Error('products getDoc failed'))).toBe(false);
+  });
+
+  it('10. supplementary groupConfig 실패는 authoritative order를 지우지 않는다', () => {
+    expect(
+      resolveOrderDetailView({
+        authState: 'ready',
+        hasOrder: true,
+        isLoading: false,
+        error: null,
+        notFound: false,
+        authFailed: false,
+      }),
+    ).toBe('READY');
+    expect(isOrderDetailNotFoundError(new Error('groupProductConfig getDoc failed'))).toBe(false);
+    expect(isOrderDetailAuthError(new Error('groupProductConfig getDoc failed'))).toBe(false);
+  });
+
+  it('11. order 변경은 이전 productName/groupConfig를 leak하지 않는다', () => {
+    expect(shouldInvalidateOrderDetailSupplementary(null, null)).toBe(false);
+    expect(shouldInvalidateOrderDetailSupplementary('p-1', 'p-1')).toBe(false);
+    // 다른 productId로 바뀌면 이전 보조 정보를 clear해야 한다.
+    expect(shouldInvalidateOrderDetailSupplementary('p-1', 'p-2')).toBe(true);
+    expect(shouldInvalidateOrderDetailSupplementary(null, 'p-1')).toBe(true);
+    expect(shouldInvalidateOrderDetailSupplementary('p-1', null)).toBe(true);
+    // group → normal 전환도 이전 group config를 표시하지 않는다(호출부는 null로 degrade).
+  });
+});
+
+describe('Seller 주문 상세 read-recovery — action safety (TASK 12)', () => {
+  it('12. found가 아니면 order action surface를 노출하지 않는다 (READY만 허용)', () => {
+    const nonReady: Array<Parameters<typeof resolveOrderDetailView>[0]> = [
+      { authState: 'ready', hasOrder: false, isLoading: true, error: null, notFound: false },
+      {
+        authState: 'missing',
+        hasOrder: false,
+        isLoading: false,
+        error: SELLER_ORDER_DETAIL_AUTH_ERROR,
+        notFound: false,
+      },
+      {
+        authState: 'ready',
+        hasOrder: false,
+        isLoading: false,
+        error: SELLER_ORDER_DETAIL_AUTH_ERROR,
+        notFound: false,
+        authFailed: true,
+      },
+      {
+        authState: 'ready',
+        hasOrder: false,
+        isLoading: false,
+        error: '주문을 불러오지 못했습니다.',
+        notFound: false,
+      },
+      { authState: 'ready', hasOrder: false, isLoading: false, error: null, notFound: true },
+    ];
+    for (const input of nonReady) {
+      expect(resolveOrderDetailView(input)).not.toBe('READY');
+    }
+    // mutation semantics는 변경하지 않는다.
+    expect(shouldReconcileOrderDetailAfterMutation(true)).toBe(true);
+    expect(shouldReconcileOrderDetailAfterMutation(false)).toBe(false);
+    expect(resolveOrderDetailMutationOutcome(false, true)).toBe('COMMAND_FAILED');
   });
 });
