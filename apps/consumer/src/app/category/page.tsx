@@ -306,6 +306,7 @@ function LegacyCategory({
   products,
   loading,
   error,
+  refetch,
 }: {
   selectedTab: number;
   setSelectedTab: (index: number) => void;
@@ -314,6 +315,7 @@ function LegacyCategory({
   products: Product[];
   loading: boolean;
   error: string | null;
+  refetch: () => void;
 }) {
   return (
     <>
@@ -394,9 +396,14 @@ function LegacyCategory({
         </SimpleGrid>
       )}
       {!loading && error && (
-        <Text ta="center" py={48} c="var(--color-text-disabled)" size="sm">
-          {error}
-        </Text>
+        <Stack align="center" py={48} gap="sm" role="alert">
+          <Text ta="center" c="var(--color-text-disabled)" size="sm">
+            {error}
+          </Text>
+          <Button variant="light" onClick={refetch} data-testid="products-retry">
+            다시 시도
+          </Button>
+        </Stack>
       )}
       {!loading && !error && products.length === 0 && (
         <Stack align="center" py={64}>
@@ -428,7 +435,7 @@ export default function CategoryPage() {
   const [discoveredStoreId, setDiscoveredStoreId] = useState<string | null | undefined>(undefined);
 
   const activeTab = TABS[selectedTab];
-  const { products, loading, error } = useProducts(
+  const { products, loading, error, refetch } = useProducts(
     activeTab.value,
     selectedColors,
     activeTab.saleType,
@@ -461,6 +468,7 @@ export default function CategoryPage() {
       products={products}
       loading={loading}
       error={error}
+      refetch={refetch}
     />
   );
   if (storeMode.status === 'loading') {

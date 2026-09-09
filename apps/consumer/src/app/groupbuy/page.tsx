@@ -2,7 +2,7 @@
 
 import type { Product, SalesMode } from '@greenhub/shared';
 import { getGroupBuyStatus, normalizeSalesMode } from '@greenhub/shared';
-import { Box, Container, SimpleGrid, Skeleton, Stack, Text } from '@mantine/core';
+import { Box, Button, Container, SimpleGrid, Skeleton, Stack, Text } from '@mantine/core';
 import { doc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -72,8 +72,9 @@ export default function GroupBuyPage() {
     products: discoveryProducts,
     loading: discoveryLoading,
     error: discoveryError,
+    refetch: refetchDiscovery,
   } = useProducts();
-  const { products, loading, error } = useProducts(undefined, undefined, 'group');
+  const { products, loading, error, refetch } = useProducts(undefined, undefined, 'group');
   const storeId = useMemo(() => findSingleStoreId(discoveryProducts), [discoveryProducts]);
   const storeMode = useStoreMode(storeId, discoveryLoading);
 
@@ -97,10 +98,15 @@ export default function GroupBuyPage() {
   if (discoveryError || storeMode.status === 'error') {
     return (
       <Container size="sm" px="md" pt="lg" pb={80}>
-        <Stack align="center" py={48} role="alert">
+        <Stack align="center" py={48} gap="sm" role="alert">
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             판매 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
           </Text>
+          {discoveryError && (
+            <Button variant="light" onClick={refetchDiscovery} data-testid="products-retry">
+              다시 시도
+            </Button>
+          )}
         </Stack>
       </Container>
     );
@@ -192,10 +198,13 @@ export default function GroupBuyPage() {
       )}
 
       {!loading && error && (
-        <Stack align="center" py={48}>
+        <Stack align="center" py={48} gap="sm" role="alert">
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             {error}
           </Text>
+          <Button variant="light" onClick={refetch} data-testid="products-retry">
+            다시 시도
+          </Button>
         </Stack>
       )}
 
