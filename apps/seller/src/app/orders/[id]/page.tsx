@@ -3,6 +3,8 @@
 import { Box, Button, Container, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { useCallback, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
@@ -12,8 +14,33 @@ import { OrderOperationsSection } from './_components/OrderOperationsSection';
 import { PrepareForm } from './_components/PrepareForm';
 import { useOrderDetail } from './_hooks/useOrderDetail';
 import { useOrderDetailActions } from './_hooks/useOrderDetailActions';
+import {
+  getOrderDetailMutationOutcomeMessage,
+  resolveOrderDetailMutationOutcome,
+  SELLER_ORDER_DETAIL_AUTH_ERROR,
+} from './_hooks/useOrderDetail.recovery';
 import { useOrderOperations } from './_hooks/useOrderOperations';
 import { CANCELLABLE_STATUSES, READONLY_STATUSES } from './_lib';
+
+function DetailStatusBox({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      style={{
+        minHeight: '100vh',
+        backgroundColor: 'var(--color-surface-muted)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Container size="sm" px="md" py="md">
+        <Stack gap="sm" align="center">
+          {children}
+        </Stack>
+      </Container>
+    </Box>
+  );
+}
 
 export default function OrderDetailPage() {
   const params = useParams();
@@ -22,7 +49,24 @@ export default function OrderDetailPage() {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
 
-  const { order, productName, groupConfig, loading } = useOrderDetail(orderId);
+  const {
+    order,
+    productName,
+    groupConfig,
+    refreshing,
+    error: detailError,
+    isStale,
+    view,
+    refresh,
+    reconcile,
+  } = useOrderDetail(orderId);
+  // 직전 mutation command 성공 여부를 기억한다.
+  // PATCH 성공 + 재조회 실패를 command 실패로 잘못 표현하지 않기 위한 최소 구분이다.
+  const [mutationConfirmed, setMutationConfirmed] = useState(false);
+  const handleReconciled = useCallback(() => {
+    setMutationConfirmed(true);
+    reconcile();
+  }, [reconcile]);
   const {
     actionLoading,
     actionError,
@@ -38,7 +82,7 @@ export default function OrderDetailPage() {
     handlePrepare,
     handleCancel,
     handleShipParcel,
-  } = useOrderDetailActions(storeId, orderId);
+  } = useOrderDetailActions(storeId, orderId, handleReconciled);
   const {
     issues,
     loading: operationsLoading,
@@ -48,11 +92,69 @@ export default function OrderDetailPage() {
     executeAction,
   } = useOrderOperations(storeId, orderId);
 
-  if (loading) {
+  useEffect(() => {
+    if (!isStale && !refreshing) setMutationConfirmed(false);
+  }, [isStale, refreshing]);
+
+  if (view === 'LOADING') {
     return <LoadingState fullPage />;
   }
 
-  if (!order) {
+  if (view === 'AUTH_FAILED') {
+    return (
+      <DetailStatusBox>
+        <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}>
+          {SELLER_ORDER_DETAIL_AUTH_ERROR}
+        </Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          로그인 상태 확인 후 다시 시도해 주세요.
+        </Text>
+        <Button onClick={refresh} size="sm" radius="xl">
+          다시 시도
+        </Button>
+        <UnstyledButton
+          onClick={() => router.back()}
+          style={{
+            color: 'var(--color-primary)',
+            textDecoration: 'underline',
+            fontSize: 'var(--font-size-sm)',
+          }}
+        >
+          돌아가기
+        </UnstyledButton>
+      </DetailStatusBox>
+    );
+  }
+
+  if (view === 'READ_FAILED') {
+    return (
+      <DetailStatusBox>
+        <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}>
+          주문을 불러오지 못했습니다.
+        </Text>
+        {detailError && (
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            {detailError}
+          </Text>
+        )}
+        <Button onClick={refresh} size="sm" radius="xl">
+          다시 시도
+        </Button>
+        <UnstyledButton
+          onClick={() => router.back()}
+          style={{
+            color: 'var(--color-primary)',
+            textDecoration: 'underline',
+            fontSize: 'var(--font-size-sm)',
+          }}
+        >
+          돌아가기
+        </UnstyledButton>
+      </DetailStatusBox>
+    );
+  }
+
+  if (view === 'NOT_FOUND' || !order) {
     return (
       <Box
         style={{
@@ -107,6 +209,8 @@ export default function OrderDetailPage() {
     order.saleType === 'normal'
       ? order.requestedDeliveryDate
       : (groupConfig?.groupDeliveryDate?.slice(0, 10) ?? null);
+  const reconcileOutcome = resolveOrderDetailMutationOutcome(true, isStale && mutationConfirmed);
+  const reconcileMessage = getOrderDetailMutationOutcomeMessage(reconcileOutcome);
 
   return (
     <PageShell paddingBottom={showFooter ? 200 : 96}>
@@ -114,6 +218,50 @@ export default function OrderDetailPage() {
 
       <Container size="sm" px="md" py="md">
         <Stack gap="sm">
+          <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            {refreshing ? (
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+                최신 상태 확인 중…
+              </Text>
+            ) : (
+              <UnstyledButton
+                onClick={refresh}
+                style={{
+                  color: 'var(--color-primary)',
+                  fontSize: 'var(--font-size-sm)',
+                }}
+              >
+                새로고침
+              </UnstyledButton>
+            )}
+          </Box>
+          {isStale && (
+            <Box
+              style={{
+                border: '1px solid var(--color-border)',
+                borderRadius: 8,
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+              }}
+            >
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+                {reconcileMessage ?? '최신 주문 정보를 확인하지 못했습니다.'}
+              </Text>
+              <UnstyledButton
+                onClick={reconcile}
+                style={{
+                  color: 'var(--color-primary)',
+                  fontSize: 'var(--font-size-sm)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                다시 확인
+              </UnstyledButton>
+            </Box>
+          )}
           <OrderInfoSection order={order} productName={productName} groupConfig={groupConfig} />
           <OrderOperationsSection
             order={order}
