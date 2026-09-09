@@ -1,7 +1,8 @@
 'use client';
 
 import type { Product } from '@greenhub/shared';
-import { Box, Button, Container, Group, Paper, Stack, Switch, Text } from '@mantine/core';
+import { Alert, Box, Button, Container, Group, Paper, Stack, Switch, Text } from '@mantine/core';
+import { RefreshCcw } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -12,6 +13,10 @@ import { PageShell } from '@/components/PageShell';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
+import {
+  resolveStoreProductsFilteredView,
+  resolveStoreProductsView,
+} from '@/hooks/useStoreProducts.recovery';
 import { ApiError, apiJson } from '@/lib/api';
 
 type ProductFilter = 'all' | 'active' | 'inactive';
@@ -23,9 +28,9 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 export default function ProductsPage() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const storeId = session?.user.storeId ?? null;
-  const { products, loading } = useStoreProducts(storeId);
+  const { products, loading, error, retry, hasLoaded, isStale } = useStoreProducts(storeId);
   const [filter, setFilter] = useState<ProductFilter>('all');
 
   const filtered = products.filter((p) => {
@@ -33,6 +38,19 @@ export default function ProductsPage() {
     if (filter === 'inactive') return !p.isActive;
     return true;
   });
+
+  const view = resolveStoreProductsView({
+    storeId,
+    loading,
+    error,
+    productCount: products.length,
+    hasLoaded,
+  });
+  const listView = resolveStoreProductsFilteredView(view, filtered.length);
+  // 초기 로딩·첫 조회 실패 단계에서는 0건 카운트를 확정 수치처럼 노출하지 않는다.
+  const countLabel = (count: number) => (hasLoaded && !error ? String(count) : '…');
+  const activeCount = products.filter((p) => p.isActive).length;
+  const inactiveCount = products.length - activeCount;
 
   return (
     <PageShell>
@@ -54,20 +72,73 @@ export default function ProductsPage() {
       {/* 필터 탭 */}
       <SegmentedTabs<ProductFilter>
         tabs={[
-          { key: 'all', label: `전체 ${products.length}` },
-          { key: 'active', label: `판매 중 ${products.filter((p) => p.isActive).length}` },
-          { key: 'inactive', label: `비활성 ${products.filter((p) => !p.isActive).length}` },
+          { key: 'all', label: `전체 ${countLabel(products.length)}` },
+          { key: 'active', label: `판매 중 ${countLabel(activeCount)}` },
+          { key: 'inactive', label: `비활성 ${countLabel(inactiveCount)}` },
         ]}
         value={filter}
         onChange={setFilter}
       />
 
-      {/* 상품 목록 */}
+      {/* 상품 목록 — error/empty/filter-empty 분리. 첫 조회 실패는 empty로 collapse하지 않는다. */}
       <Container size="sm" px="md" py="md">
         <Stack gap="sm">
-          {loading && <LoadingState />}
+          {!storeId && sessionStatus === 'loading' && <LoadingState />}
 
-          {!loading && filtered.length === 0 && (
+          {!storeId && sessionStatus !== 'loading' && (
+            <Alert color="red" title="스토어 정보를 확인할 수 없습니다" role="alert">
+              로그인된 셀러 스토어 정보를 확인한 뒤 다시 시도해 주세요.
+            </Alert>
+          )}
+
+          {!!storeId && listView === 'loading' && <LoadingState />}
+
+          {!!storeId && listView === 'error' && (
+            <Alert
+              color="red"
+              title="상품을 불러오지 못했습니다"
+              role="alert"
+            >
+              <Stack gap="xs">
+                <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="red"
+                  leftSection={<RefreshCcw size={14} />}
+                  onClick={retry}
+                >
+                  다시 조회
+                </Button>
+              </Stack>
+            </Alert>
+          )}
+
+          {!!storeId && isStale && (
+            <Alert
+              color="yellow"
+              title="최신 상품 정보를 확인하지 못했습니다"
+              role="alert"
+            >
+              <Stack gap="xs">
+                <Text style={{ fontSize: 'var(--font-size-sm)' }}>
+                  이전 목록을 표시합니다. 상태 변경·삭제는 서버 기준으로 처리되며 목록이
+                  오래된 상태일 수 있습니다.
+                </Text>
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="yellow"
+                  leftSection={<RefreshCcw size={14} />}
+                  onClick={retry}
+                >
+                  다시 조회
+                </Button>
+              </Stack>
+            </Alert>
+          )}
+
+          {!!storeId && listView === 'empty' && (
             <EmptyState
               icon={
                 <svg
@@ -102,9 +173,15 @@ export default function ProductsPage() {
             />
           )}
 
-          {filtered.map((product) => (
-            <ProductCard key={product.id} product={product} storeId={storeId} />
-          ))}
+          {!!storeId && listView === 'filter-empty' && (
+            <EmptyState text="조건에 맞는 상품이 없습니다" />
+          )}
+
+          {!!storeId && (listView === 'list' || listView === 'stale') && (
+            filtered.map((product) => (
+              <ProductCard key={product.id} product={product} storeId={storeId} />
+            ))
+          )}
         </Stack>
       </Container>
     </PageShell>

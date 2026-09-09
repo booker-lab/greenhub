@@ -1,8 +1,8 @@
 'use client';
 
 import type { Product } from '@greenhub/shared';
-import { Group, Stack, Text, UnstyledButton } from '@mantine/core';
-import { ChevronRight } from 'lucide-react';
+import { Button, Group, Stack, Text, UnstyledButton } from '@mantine/core';
+import { ChevronRight, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment } from 'react';
 import type { OrderGroup } from '@/app/orders/_constants';
@@ -113,10 +113,62 @@ export function SettlementCard({
 }
 
 // ─── 상품 현황 카드 ──────────────────────────────────────────────
+// 상품 조회 실패·로딩 중을 정상 0건으로 표시하지 않는다.
+// 첫 실패는 counts 대신 오류 + retry, stale은 이전 수치 + 갱신 실패 표시.
 
-export function ProductStatusCard({ products }: { products: Product[] }) {
+export function ProductStatusCard({
+  products,
+  loading,
+  error,
+  hasLoaded,
+  onRetry,
+}: {
+  products: Product[];
+  loading: boolean;
+  error: string | null;
+  hasLoaded: boolean;
+  onRetry?: () => void;
+}) {
+  if (!hasLoaded && loading) {
+    return (
+      <DashboardCard title="상품 현황" moreHref="/products">
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          불러오는 중…
+        </Text>
+      </DashboardCard>
+    );
+  }
+
+  if (error && !hasLoaded) {
+    return (
+      <DashboardCard title="상품 현황" moreHref="/products">
+        <Stack gap="xs">
+          <Text
+            role="alert"
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
+            상품 정보를 불러오지 못했습니다.
+          </Text>
+          {onRetry && (
+            <Button
+              size="xs"
+              variant="light"
+              color="red"
+              leftSection={<RefreshCcw size={14} />}
+              onClick={onRetry}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              다시 조회
+            </Button>
+          )}
+        </Stack>
+      </DashboardCard>
+    );
+  }
+
   const activeCount = products.filter((p) => p.isActive).length;
   const inactiveCount = products.length - activeCount;
+  const isStale = hasLoaded && error !== null;
   return (
     <DashboardCard title="상품 현황" moreHref="/products">
       <Group gap="lg">
@@ -144,6 +196,28 @@ export function ProductStatusCard({ products }: { products: Product[] }) {
           </Text>
         </Group>
       </Group>
+      {isStale && (
+        <Stack gap="xs" mt="xs">
+          <Text
+            role="alert"
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
+            최신 정보를 확인하지 못했습니다. 이전 수치입니다.
+          </Text>
+          {onRetry && (
+            <Button
+              size="xs"
+              variant="light"
+              color="yellow"
+              leftSection={<RefreshCcw size={14} />}
+              onClick={onRetry}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              다시 조회
+            </Button>
+          )}
+        </Stack>
+      )}
     </DashboardCard>
   );
 }
