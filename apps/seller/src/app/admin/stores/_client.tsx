@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Group, Text, Title } from '@mantine/core';
+import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -12,6 +12,7 @@ import {
   DEFAULT_SORT,
   DEFAULT_STATUS_FILTER,
   filterStores,
+  getAdminStoresReadState,
   getEmptyKind,
   parseRate,
   parseSort,
@@ -28,7 +29,8 @@ interface StoreViewState {
 }
 
 export default function AdminStoresClient() {
-  const { stores, loading, reload, setCommission, archiveStore, restoreStore } = useAdminStores();
+  const { stores, loading, error, reload, setCommission, archiveStore, restoreStore } =
+    useAdminStores();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -129,18 +131,25 @@ export default function AdminStoresClient() {
   const filtered = filterStores(stores, { keyword: view.keyword, status: view.status });
   const visible = sortStores(filtered, view.sort);
   const emptyKind = getEmptyKind(stores, visible);
+  // 조회 실패는 정상 빈 결과로 collapse하지 않는다.
+  // useAdminList는 실패 시 이전 stores를 보존하므로 stale 유무와 무관하게 error를 우선한다.
+  // filter/query state는 초기화하지 않고 Filters는 항상 유지된다.
+  const readState = getAdminStoresReadState({ loading, error, stores, visible });
+  const isFetchError = readState === 'FETCH_ERROR';
 
   return (
     <Box>
       <Group justify="space-between" mb="md">
         <Title order={4}>
           판매자 목록{' '}
-          <Text
-            component="span"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          >
-            ({visible.length})
-          </Text>
+          {error === null && (
+            <Text
+              component="span"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
+              ({visible.length})
+            </Text>
+          )}
         </Title>
       </Group>
 
@@ -155,23 +164,46 @@ export default function AdminStoresClient() {
         onReload={reload}
       />
 
-      <StoresTable
-        stores={visible}
-        loading={loading}
-        emptyKind={emptyKind}
-        sort={view.sort}
-        editId={editId}
-        rateInput={rateInput}
-        saving={saving}
-        onRateInput={setRateInput}
-        onStartEdit={handleStartEdit}
-        onCancelEdit={handleCancelEdit}
-        onSave={handleSave}
-        onArchive={handleArchive}
-        onRestore={handleRestore}
-        onResetFilters={resetFilters}
-        onSortChange={(sort) => updateView({ sort })}
-      />
+      {isFetchError ? (
+        <Paper
+          radius="lg"
+          shadow="xs"
+          style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
+        >
+          <Stack gap="sm" align="center" py={64} px="md">
+            <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+              판매자 목록을 불러오지 못했습니다.
+            </Text>
+            <Text
+              ta="center"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
+              {error}
+            </Text>
+            <Button onClick={reload} size="sm" variant="outline" radius="md">
+              다시 조회
+            </Button>
+          </Stack>
+        </Paper>
+      ) : (
+        <StoresTable
+          stores={visible}
+          loading={loading}
+          emptyKind={emptyKind}
+          sort={view.sort}
+          editId={editId}
+          rateInput={rateInput}
+          saving={saving}
+          onRateInput={setRateInput}
+          onStartEdit={handleStartEdit}
+          onCancelEdit={handleCancelEdit}
+          onSave={handleSave}
+          onArchive={handleArchive}
+          onRestore={handleRestore}
+          onResetFilters={resetFilters}
+          onSortChange={(sort) => updateView({ sort })}
+        />
+      )}
     </Box>
   );
 }
