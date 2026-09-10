@@ -599,21 +599,49 @@ export class OrdersLifecycleService {
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException();
     }
-    const order = snap.data()!;
-    if (order['userId'] !== userId) throw new ForbiddenException();
+    const staleOrder = snap.data()!;
+    if (staleOrder['userId'] !== userId) throw new ForbiddenException();
+    const entryStatus = staleOrder['status'] as string;
 
     const reviewableStatuses = ['DELIVERED', 'PICKED_UP'];
-    if (!reviewableStatuses.includes(order['status'])) {
-      throw new BadRequestException('DELIVERED 또는 PICKED_UP 상태에서만 리뷰 가능합니다.');
-    }
+    let alreadyReviewed = false;
+    let freshOrderForSettlement: Record<string, any> | null = null;
 
-    await this.firestore.doc(`orders/${orderId}`).update({
-      status: 'REVIEWED',
-      updatedAt: this.firestore.Timestamp.now(),
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const latestSnap = await tx.get(orderRef);
+      if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+        throw new NotFoundException();
+      }
+      const latestOrder = latestSnap.data()!;
+      if (latestOrder['userId'] !== userId) throw new ForbiddenException();
+      const freshStatus = latestOrder['status'] as string;
+      if (freshStatus === 'REVIEWED') {
+        if (entryStatus !== 'REVIEWED') {
+          throw new ConflictException('주문 상태가 변경되었습니다.');
+        }
+        alreadyReviewed = true;
+        freshOrderForSettlement = { ...latestOrder, id: orderId };
+        return;
+      }
+      if (!reviewableStatuses.includes(freshStatus)) {
+        if (freshStatus !== entryStatus) {
+          throw new ConflictException('주문 상태가 변경되었습니다.');
+        }
+        throw new BadRequestException('DELIVERED 또는 PICKED_UP 상태에서만 리뷰 가능합니다.');
+      }
+      tx.update(orderRef, {
+        status: 'REVIEWED',
+        updatedAt: this.firestore.Timestamp.now(),
+      });
+      freshOrderForSettlement = { ...latestOrder, id: orderId };
     });
 
-    // 정산 자동 생성
-    await this.settlements.createSettlement(order, 'REVIEWED');
+    const settlementOrder = { ...(freshOrderForSettlement ?? staleOrder), id: orderId };
+    await this.settlements.createSettlement(settlementOrder, 'REVIEWED');
+    if (alreadyReviewed) {
+      throw new BadRequestException('DELIVERED 또는 PICKED_UP 상태에서만 리뷰 가능합니다.');
+    }
 
     return { orderId, status: 'REVIEWED' };
   }
@@ -623,22 +651,54 @@ export class OrdersLifecycleService {
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException();
     }
-    const order = snap.data()!;
-    if (order['userId'] !== userId) throw new ForbiddenException();
-    if (order['status'] !== 'HUB_ARRIVED') {
-      throw new BadRequestException('HUB_ARRIVED 상태에서만 픽업 확인 가능');
-    }
-    if (order['pickupCode'] !== pickupCode) {
-      throw new BadRequestException('픽업 코드가 올바르지 않습니다.');
-    }
+    const staleOrder = snap.data()!;
+    if (staleOrder['userId'] !== userId) throw new ForbiddenException();
+    const entryStatus = staleOrder['status'] as string;
 
-    await this.firestore.doc(`orders/${orderId}`).update({
-      status: 'PICKED_UP',
-      updatedAt: this.firestore.Timestamp.now(),
+    let alreadyPickedUp = false;
+    let freshOrderForSettlement: Record<string, any> | null = null;
+
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const latestSnap = await tx.get(orderRef);
+      if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+        throw new NotFoundException();
+      }
+      const latestOrder = latestSnap.data()!;
+      if (latestOrder['userId'] !== userId) throw new ForbiddenException();
+      const freshStatus = latestOrder['status'] as string;
+      if (freshStatus === 'PICKED_UP') {
+        if (latestOrder['pickupCode'] !== pickupCode) {
+          throw new BadRequestException('픽업 코드가 올바르지 않습니다.');
+        }
+        if (entryStatus !== 'PICKED_UP') {
+          throw new ConflictException('주문 상태가 변경되었습니다.');
+        }
+        alreadyPickedUp = true;
+        freshOrderForSettlement = { ...latestOrder, id: orderId };
+        return;
+      }
+      if (freshStatus !== 'HUB_ARRIVED') {
+        if (freshStatus !== entryStatus) {
+          throw new ConflictException('주문 상태가 변경되었습니다.');
+        }
+        throw new BadRequestException('HUB_ARRIVED 상태에서만 픽업 확인 가능');
+      }
+      if (latestOrder['pickupCode'] !== pickupCode) {
+        throw new BadRequestException('픽업 코드가 올바르지 않습니다.');
+      }
+      tx.update(orderRef, {
+        status: 'PICKED_UP',
+        updatedAt: this.firestore.Timestamp.now(),
+      });
+      freshOrderForSettlement = { ...latestOrder, id: orderId };
     });
 
-    // 정산 자동 생성
-    await this.settlements.createSettlement(order, 'PICKED_UP');
+    const settlementOrder = { ...(freshOrderForSettlement ?? staleOrder), id: orderId };
+    await this.settlements.createSettlement(settlementOrder, 'PICKED_UP');
+    if (alreadyPickedUp) {
+      throw new BadRequestException('HUB_ARRIVED 상태에서만 픽업 확인 가능');
+    }
 
     return { orderId, status: 'PICKED_UP' };
   }
@@ -659,21 +719,57 @@ export class OrdersLifecycleService {
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException();
     }
-    const order = snap.data()!;
+    const staleOrder = snap.data()!;
+    const entryStatus = staleOrder['status'] as string;
 
-    if (order['status'] !== 'HUB_ARRIVED') {
-      throw new BadRequestException('HUB_ARRIVED 상태에서만 픽업 확인 가능');
-    }
-    if (order['pickupCode'] !== pickupCode) {
-      throw new BadRequestException('픽업 코드가 올바르지 않습니다.');
-    }
+    let alreadyPickedUp = false;
+    let freshOrderForSettlement: Record<string, any> | null = null;
 
-    await this.firestore.doc(`orders/${orderId}`).update({
-      status: 'PICKED_UP',
-      updatedAt: this.firestore.Timestamp.now(),
+    await this.firestore.runTransaction(async (tx) => {
+      const storeRef = this.firestore.doc(`stores/${storeId}`);
+      const latestStoreSnap = await tx.get(storeRef);
+      if (!latestStoreSnap.exists || latestStoreSnap.data()?.['ownerId'] !== requesterId) {
+        throw new ForbiddenException('해당 스토어에 대한 권한이 없습니다');
+      }
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const latestSnap = await tx.get(orderRef);
+      if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+        throw new NotFoundException();
+      }
+      const latestOrder = latestSnap.data()!;
+      const freshStatus = latestOrder['status'] as string;
+      if (freshStatus === 'PICKED_UP') {
+        if (latestOrder['pickupCode'] !== pickupCode) {
+          throw new BadRequestException('픽업 코드가 올바르지 않습니다.');
+        }
+        if (entryStatus !== 'PICKED_UP') {
+          throw new ConflictException('주문 상태가 변경되었습니다.');
+        }
+        alreadyPickedUp = true;
+        freshOrderForSettlement = { ...latestOrder, id: orderId };
+        return;
+      }
+      if (freshStatus !== 'HUB_ARRIVED') {
+        if (freshStatus !== entryStatus) {
+          throw new ConflictException('주문 상태가 변경되었습니다.');
+        }
+        throw new BadRequestException('HUB_ARRIVED 상태에서만 픽업 확인 가능');
+      }
+      if (latestOrder['pickupCode'] !== pickupCode) {
+        throw new BadRequestException('픽업 코드가 올바르지 않습니다.');
+      }
+      tx.update(orderRef, {
+        status: 'PICKED_UP',
+        updatedAt: this.firestore.Timestamp.now(),
+      });
+      freshOrderForSettlement = { ...latestOrder, id: orderId };
     });
 
-    await this.settlements.createSettlement(order, 'PICKED_UP');
+    const settlementOrder = { ...(freshOrderForSettlement ?? staleOrder), id: orderId };
+    await this.settlements.createSettlement(settlementOrder, 'PICKED_UP');
+    if (alreadyPickedUp) {
+      throw new BadRequestException('HUB_ARRIVED 상태에서만 픽업 확인 가능');
+    }
 
     return { orderId, status: 'PICKED_UP' };
   }
