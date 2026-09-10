@@ -1,9 +1,11 @@
 'use client';
 
 import { Box, Group, Title, UnstyledButton } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { type DriverStatus, useAdminDrivers } from '@/hooks/useAdmin';
+import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
 import { DriverList } from './_components/DriverList';
 import {
   ACTION_META,
@@ -23,14 +25,23 @@ export default function DriversClient() {
 
   const runPending = async () => {
     if (!pending) return;
+    const actionLabel =
+      pending.action === 'approve' ? '승인' : pending.action === 'suspend' ? '정지' : '정지 해제';
     setProcessingId(pending.userId);
     try {
-      if (pending.action === 'approve') {
-        await approve(pending.userId);
-      } else {
-        await toggleSuspend(pending.userId, pending.action === 'suspend');
-      }
+      const outcome =
+        pending.action === 'approve'
+          ? await approve(pending.userId)
+          : await toggleSuspend(pending.userId, pending.action === 'suspend');
       setPending(null);
+      if (outcome.kind === 'confirmed' && outcome.reconciled) return;
+      // rejected는 서버 reason 보존, unknown/stale은 재확인 우선 + blind retry 금지.
+      const presentation = describeAdminCommandOutcome(outcome, actionLabel);
+      notifications.show({
+        color: outcome.kind === 'rejected' ? 'red' : outcome.kind === 'unknown' ? 'orange' : 'yellow',
+        title: presentation.title,
+        message: presentation.message,
+      });
     } finally {
       setProcessingId(null);
     }
