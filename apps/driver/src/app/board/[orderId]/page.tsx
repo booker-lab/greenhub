@@ -37,6 +37,7 @@ import {
   type DeliveryHold,
   DeliveryHoldModal,
   HOLD_REASON_LABEL,
+  HOLD_UNCERTAIN_READBACK_WARNING,
 } from './_components/DeliveryHoldModal';
 
 type Order = {
@@ -66,6 +67,15 @@ const METHOD_LABEL: Record<string, string> = {
   hub: '거점 픽업',
   parcel: '택배',
 };
+
+// STATUS ACK-uncertain convergence contract (NO_RESEND + AUTHORITATIVE_GET).
+// B(2xx malformed) / C(ACK mismatch) / F(other 4xx) / G(5xx) / H(network) 모두
+// 같은 PATCH를 자동 재전송하지 않고 authoritative GET으로 수렴한다.
+// "다시 시도해주세요" 같은 same-command resend 유도 copy를 쓰지 않는다.
+const STATUS_UNCERTAIN_CONVERGENCE_MESSAGE =
+  '명령이 처리되었는지 확실하지 않습니다. 최신 상태를 다시 확인합니다.';
+const STATUS_UNCERTAIN_READBACK_WARNING =
+  '명령 결과를 확인하지 못했습니다. 상태를 다시 확인해 주세요. 같은 명령을 바로 다시 보내지 마세요.';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
@@ -281,12 +291,41 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           await readDetail(token);
           return;
         }
-        throw new Error('상태 전환 실패');
+        // F/G: 403/409 이외 4xx·5xx ACK-uncertain. 같은 PATCH를 자동 재전송하지 않고
+        // UNCERTAIN을 보존한 채 authoritative GET으로 수렴한다.
+        // fresh GET 성공이 warning을 해소하기 전에는 fail-closed로 위험 command를 차단한다.
+        notifications.show({
+          color: 'yellow',
+          message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+        });
+        setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
+        await readDetail(token);
+        return;
       }
-      const result = (await res.json()) as { orderId?: unknown; status?: unknown };
+      // B: 2xx이지만 malformed JSON 등으로 ACK 파싱 불가. 자동 resend 없이 GET 수렴한다.
+      let result: { orderId?: unknown; status?: unknown };
+      try {
+        result = (await res.json()) as { orderId?: unknown; status?: unknown };
+      } catch {
+        if (!isCommandCurrent()) return;
+        notifications.show({
+          color: 'yellow',
+          message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+        });
+        setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
+        await readDetail(token);
+        return;
+      }
       if (!isCommandCurrent()) return;
+      // C: 2xx이지만 ACK orderId/status mismatch. 자동 resend 없이 GET 수렴한다.
       if (!isDriverOrderStatusAck(result, orderId, status)) {
-        throw new Error('상태 전환 응답 불일치');
+        notifications.show({
+          color: 'yellow',
+          message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+        });
+        setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
+        await readDetail(token);
+        return;
       }
       const isTerminal = status === 'DELIVERED' || status === 'HUB_ARRIVED';
       // ACK 성공 직후 local 합성 없이 authoritative GET으로 수렴한다. 자동 resend는 하지 않는다.
@@ -331,8 +370,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         router.replace('/board?tab=preparing');
       }
     } catch {
+      // H: network/transport error 등 PATCH ACK-uncertain. 같은 PATCH를 자동 재전송하지 않고
+      // UNCERTAIN을 보존한 채 authoritative GET으로 수렴한다. same-command 재시도 유도 copy 금지.
       if (!isCommandCurrent()) return;
-      notifications.show({ color: 'red', message: '오류가 발생했습니다. 다시 시도해주세요.' });
+      notifications.show({
+        color: 'yellow',
+        message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+      });
+      setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
+      await readDetail(token);
     } finally {
       // 모든 종료 경로에서 in-flight를 해제한다. 401/403 authority-clear return,
       // 409 convergence return, readback 분기 return, throw 모두 여기를 거친다.
@@ -749,6 +795,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             if (token) void readDetail(token);
           }}
           onConvergence={() => {
+            const token = session?.user.accessToken;
+            if (token) void readDetail(token);
+          }}
+          onUncertainConvergence={() => {
+            // HOLD ACK-uncertain: 같은 HOLD를 자동 재전송하지 않고 parent authoritative GET으로
+            // 수렴한다. fresh GET 성공이 warning을 해소하기 전에는 fail-closed로 같은 HOLD와
+            // 다른 위험 command를 차단하고, manual recovery는 GET(상태 다시 확인)이다.
+            setReadbackWarning(HOLD_UNCERTAIN_READBACK_WARNING);
             const token = session?.user.accessToken;
             if (token) void readDetail(token);
           }}

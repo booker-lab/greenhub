@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import {
+  isDriverOrderCommandAllowed,
+  shouldPreserveDriverOrderOnReadError,
+} from '../_lib/driver-order-detail.ts';
 
 // DRIVER-DETAIL-COMMAND-INFLIGHT-STALE-GUARD-01 focused regression.
 // Driver 주문 상세 command의 UX 안전계약만 검증한다:
@@ -193,4 +197,200 @@ test('기존 command 안전계약이 유지된다', () => {
   const successBlock = holdModalSource.slice(successAt, successAt + 500);
   assert.match(successBlock, /resetHoldFormFields\(\)/);
   assert.match(successBlock, /onClose\(\)/);
+});
+
+
+
+test('H1. STATUS uncertain constants exist without resend copy', () => {
+  assert.match(detailSource, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(detailSource, /STATUS_UNCERTAIN_READBACK_WARNING/);
+  assert.match(
+    detailSource,
+    /\uBA85\uB839\uC774 \uCC98\uB9AC\uB418\uC5C8\uB294\uC9C0 \uD655\uC2E4\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4/,
+  );
+  assert.match(detailSource, /\uBC14\uB85C \uB2E4\uC2DC \uBCF4\uB0B4\uC9C0 \uB9C8\uC138\uC694/);
+  assert.doesNotMatch(detailSource, /setTimeout\(updateStatus/);
+  assert.doesNotMatch(detailSource, /setInterval/);
+  const updateAt = detailSource.indexOf('async function updateStatus');
+  const updateBlock = detailSource.slice(updateAt);
+  assert.doesNotMatch(updateBlock, /color: 'red'/);
+});
+
+test('H2. STATUS F/G other 4xx-5xx converges with GET and no resend', () => {
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  assert.ok(fnAt !== -1);
+  const fgMarker = detailSource.indexOf('403/409', fnAt);
+  assert.ok(fgMarker !== -1);
+  const fgBlock = detailSource.slice(fgMarker, fgMarker + 900);
+  assert.match(fgBlock, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(fgBlock, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
+  assert.match(fgBlock, /await readDetail\(token\)/);
+  assert.match(fgBlock, /return;/);
+  assert.doesNotMatch(fgBlock, /method: 'PATCH'/);
+  assert.ok(
+    fgBlock.indexOf('setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING)') <
+      fgBlock.indexOf('await readDetail(token)'),
+  );
+  const patchCount = (detailSource.match(/method: 'PATCH'/g) ?? []).length;
+  assert.equal(patchCount, 1);
+});
+
+test('H3. STATUS B malformed JSON converges with GET and no resend', () => {
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  const bMarker = detailSource.indexOf('malformed JSON', fnAt);
+  assert.ok(bMarker !== -1);
+  const bBlock = detailSource.slice(bMarker, bMarker + 900);
+  assert.match(bBlock, /await res\.json\(\)/);
+  assert.match(bBlock, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(bBlock, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
+  assert.match(bBlock, /await readDetail\(token\)/);
+  assert.match(bBlock, /return;/);
+  assert.doesNotMatch(bBlock, /method: 'PATCH'/);
+});
+
+test('H4. STATUS C ACK mismatch converges with GET and no resend', () => {
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  const cMarker = detailSource.indexOf('ACK orderId', fnAt);
+  assert.ok(cMarker !== -1);
+  const cBlock = detailSource.slice(cMarker, cMarker + 800);
+  assert.match(cBlock, /isDriverOrderStatusAck\(result/);
+  assert.match(cBlock, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(cBlock, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
+  assert.match(cBlock, /await readDetail\(token\)/);
+  assert.match(cBlock, /return;/);
+  assert.doesNotMatch(cBlock, /method: 'PATCH'/);
+});
+
+test('H5. STATUS H network catch converges with GET without resend copy', () => {
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  const navAt = detailSource.indexOf("router.replace('/board", fnAt);
+  assert.ok(navAt !== -1);
+  const catchAt = detailSource.indexOf('} catch {', navAt);
+  assert.ok(catchAt !== -1);
+  const hBlock = detailSource.slice(catchAt, catchAt + 900);
+  assert.match(hBlock, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(hBlock, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
+  assert.match(hBlock, /await readDetail\(token\)/);
+  assert.doesNotMatch(hBlock, /method: 'PATCH'/);
+  const hSetErrorAt = hBlock.indexOf('setReadbackWarning');
+  assert.ok(hSetErrorAt !== -1);
+});
+
+test('H6. STATUS uncertain keeps fail-closed and manual GET without synthesis', () => {
+  assert.match(detailSource, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
+  const recheckAt = detailSource.indexOf('recheck');
+  assert.match(detailSource, /readDetail\(token\)/);
+  assert.doesNotMatch(detailSource, /setOrder\(\{\s*\.\.\.order/);
+  for (const marker of ['malformed JSON', 'ACK orderId', '403/409']) {
+    const at = detailSource.indexOf(marker);
+    assert.ok(at !== -1);
+    const block = detailSource.slice(at, at + 900);
+    assert.doesNotMatch(block, /router\.replace/);
+  }
+});
+
+test('H7. HOLD uncertain constants exist without resend copy', () => {
+  assert.match(holdModalSource, /HOLD_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(holdModalSource, /HOLD_UNCERTAIN_READBACK_WARNING/);
+  assert.match(detailSource, /HOLD_UNCERTAIN_READBACK_WARNING/);
+  assert.doesNotMatch(
+    holdModalSource,
+    /주문 상태를 확인하고 다시 시도해주세요/,
+  );
+  assert.doesNotMatch(holdModalSource, /setTimeout\(submit/);
+  assert.doesNotMatch(holdModalSource, /setInterval/);
+});
+
+test('H8. HOLD F/G other 4xx-5xx converges to parent GET and closes modal', () => {
+  const fnAt = holdModalSource.indexOf('async function submit');
+  assert.ok(fnAt !== -1);
+  const fgMarker = holdModalSource.indexOf('403/409', fnAt);
+  assert.ok(fgMarker !== -1);
+  const after = holdModalSource.slice(fgMarker, fgMarker + 1400);
+  assert.match(after, /setError\(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE\)/);
+  assert.match(after, /onUncertainConvergence\?\.\(\)/);
+  assert.match(after, /onClose\(\)/);
+  assert.match(after, /return;/);
+  const patchCount = (holdModalSource.match(/method: 'PATCH'/g) ?? []).length;
+  assert.equal(patchCount, 1);
+});
+
+test('H9. HOLD B/C malformed and mismatch converge to parent GET', () => {
+  const fnAt = holdModalSource.indexOf('async function submit');
+  const bMarker = holdModalSource.indexOf('malformed JSON', fnAt);
+  assert.ok(bMarker !== -1);
+  const bBlock = holdModalSource.slice(bMarker, bMarker + 700);
+  assert.match(bBlock, /await response\.json\(\)/);
+  assert.match(bBlock, /setError\(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE\)/);
+  assert.match(bBlock, /onUncertainConvergence\?\.\(\)/);
+  assert.match(bBlock, /onClose\(\)/);
+  assert.doesNotMatch(bBlock, /method: 'PATCH'/);
+  const cMarker = holdModalSource.indexOf('ACK orderId', fnAt);
+  assert.ok(cMarker !== -1);
+  const cBlock = holdModalSource.slice(cMarker, cMarker + 700);
+  assert.match(cBlock, /result\.orderId !== orderId/);
+  assert.match(cBlock, /setError\(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE\)/);
+  assert.match(cBlock, /onUncertainConvergence\?\.\(\)/);
+  assert.match(cBlock, /onClose\(\)/);
+  assert.doesNotMatch(cBlock, /method: 'PATCH'/);
+});
+
+test('H10. HOLD H network catch converges to parent GET and closes modal', () => {
+  const fnAt = holdModalSource.indexOf('async function submit');
+  const savedAt = holdModalSource.indexOf('onSaved', fnAt);
+  assert.ok(savedAt !== -1);
+  const catchAt = holdModalSource.indexOf('} catch {', savedAt);
+  assert.ok(catchAt !== -1);
+  const hBlock = holdModalSource.slice(catchAt, catchAt + 900);
+  assert.match(hBlock, /setError\(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE\)/);
+  assert.match(hBlock, /onUncertainConvergence\?\.\(\)/);
+  assert.match(hBlock, /onClose\(\)/);
+  assert.doesNotMatch(hBlock, /method: 'PATCH'/);
+});
+
+test('H11. HOLD parent uncertain sets warning before GET and blocks resubmit', () => {
+  assert.match(detailSource, /onUncertainConvergence=\{/);
+  const at = detailSource.indexOf('onUncertainConvergence={');
+  assert.ok(at !== -1);
+  const block = detailSource.slice(at, at + 1000);
+  assert.match(block, /setReadbackWarning\(HOLD_UNCERTAIN_READBACK_WARNING\)/);
+  assert.match(block, /void readDetail\(token\)/);
+  assert.ok(
+    block.indexOf('setReadbackWarning(HOLD_UNCERTAIN_READBACK_WARNING)') <
+      block.indexOf('void readDetail(token)'),
+  );
+  assert.match(detailSource, /disabled=\{loading \|\| !commandsAllowed\}/);
+  assert.match(detailSource, /readDetail\(token\)/);
+  assert.match(holdModalSource, /response\.status === 403 \|\| response\.status === 409/);
+  assert.match(holdModalSource, /onSaved\?\.\(\)/);
+});
+
+test('H12. uncertain warning blocks risk commands at runtime', () => {
+  assert.equal(
+    isDriverOrderCommandAllowed({
+      hasOrder: true,
+      readErrorKind: null,
+      hasReadbackWarning: true,
+    }),
+    false,
+  );
+  assert.equal(
+    isDriverOrderCommandAllowed({
+      hasOrder: true,
+      readErrorKind: 'FETCH_ERROR',
+      hasReadbackWarning: false,
+    }),
+    false,
+  );
+  assert.equal(
+    isDriverOrderCommandAllowed({
+      hasOrder: true,
+      readErrorKind: null,
+      hasReadbackWarning: false,
+    }),
+    true,
+  );
+  assert.equal(shouldPreserveDriverOrderOnReadError('FETCH_ERROR', true), true);
+  assert.equal(shouldPreserveDriverOrderOnReadError('AUTH_ERROR', true), false);
+  assert.equal(shouldPreserveDriverOrderOnReadError('NOT_FOUND', true), false);
 });
