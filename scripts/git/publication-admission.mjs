@@ -1,4 +1,5 @@
-// Canonical owner: AGENTS.md section 2 (branch+PR principle for protected `main`).
+// Canonical owner: AGENTS.md section 2 (canonical checkout development +
+// temporary publication transport ref for protected `main`).
 // This module is the executable admission gate for that principle — it does not
 // create a parallel publication SSOT.
 //
@@ -30,9 +31,18 @@
 // Read-only contract:
 //   This gate only runs read-only git commands (`ls-tree`, `rev-parse`,
 //   `status --porcelain`). It never runs reset/restore/stash/clean/checkout,
-//   never touches foreign dirty state, and never recreates a publication branch.
-//   Unrelated movement is absorbed with canonical transport maintenance
-//   (merge live `main` into the publication branch), not by rebuilding source work.
+//   never touches foreign dirty state, never recreates a publication branch,
+//   and never performs checkout/push/PR mutation (transport is out of scope).
+//   Unrelated movement never invalidates a publication by itself and never
+//   requires source-work recreation. Freshness, when needed, is handled OUTSIDE
+//   this module by shared-checkout-free transport maintenance: publish the exact
+//   candidate commit to a temporary remote ref without worktree checkout, then
+//   use a provider-side PR-head update (GitHub "Update branch" or its semantic
+//   equivalent) only when available and conflict-free. Local merge/rebase on a
+//   foreign-dirty shared checkout is forbidden; conflict or semantic-owner
+//   overlap fails closed with BLOCKED_TRANSPORT_CONFLICT /
+//   SEMANTIC_OWNER_REVIEW_REQUIRED. See scripts/git/publication-transport.mjs
+//   for the narrow transport helper; this module stays admission-only.
 
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -127,8 +137,10 @@ export function evaluatePublicationAdmission({
     remainingDelta,
     reason:
       'owned effective delta still exists on live main; proceed with publication. ' +
-      'Unrelated main movement is absorbed with canonical transport maintenance ' +
-      '(merge live main into the publication branch) instead of recreating source work.',
+      'Unrelated main movement never requires source-work recreation; use ' +
+      'shared-checkout-free server-side transport maintenance when freshness is ' +
+      'needed, and fail closed on conflict or semantic-owner overlap instead of ' +
+      'local merge/rebase on a foreign-dirty checkout.',
   };
 }
 
