@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import {
   DriverOrderScopeService,
   DRIVER_VISIBLE_STATUSES,
 } from '../orders/driver-order-scope.service';
+import { throwDriverOrderNotFound } from '../orders/driver-order-error';
 import { OrdersQueryService } from '../orders/orders-query.service';
 
 type DriverOrderView = 'list' | 'detail';
@@ -64,11 +65,11 @@ export class DriverService {
   async getOrder(driverId: string, orderId: string) {
     const authority = await this.driverScope.assertDriverAuthority(driverId);
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
-    if (!snap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
+    if (!snap.exists) throwDriverOrderNotFound('주문을 찾을 수 없습니다.');
 
     const order = { id: orderId, ...snap.data() } as Record<string, unknown>;
     if (!(await this.driverScope.isOrderVisible(order, driverId, authority))) {
-      throw new NotFoundException('주문을 찾을 수 없습니다.');
+      throwDriverOrderNotFound('주문을 찾을 수 없습니다.');
     }
 
     return this.toDriverOrder(order, driverId, 'detail');

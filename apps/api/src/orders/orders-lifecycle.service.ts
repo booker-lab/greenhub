@@ -18,6 +18,10 @@ import {
   assertPaidRedeliveryResume,
   isCurrentRedeliveryPaymentRequired,
 } from './redelivery-resume-gate';
+import {
+  throwDriverOrderNotFound,
+  throwDriverOrderStateConflict,
+} from './driver-order-error';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 
@@ -54,6 +58,9 @@ export class OrdersLifecycleService {
   ) {
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+      if (requesterRole === 'driver') {
+        throwDriverOrderNotFound();
+      }
       throw new NotFoundException();
     }
     const order = snap.data()!;
@@ -70,6 +77,9 @@ export class OrdersLifecycleService {
 
     const allowed = getAllowedTransitions(role ?? 'consumer', currentStatus);
     if (!allowed.includes(dto.status)) {
+      if (role === 'driver') {
+        throwDriverOrderStateConflict(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
+      }
       throw new ForbiddenException(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
     }
 
@@ -491,7 +501,7 @@ export class OrdersLifecycleService {
       const orderRef = this.firestore.doc(`orders/${input.orderId}`);
       const latestSnap = await transaction.get(orderRef);
       if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== input.storeId) {
-        throw new NotFoundException();
+        throwDriverOrderNotFound();
       }
       const latestOrder = latestSnap.data()!;
       const mutationInput = {
@@ -513,6 +523,7 @@ export class OrdersLifecycleService {
           firestore: this.firestore,
           order: { ...latestOrder, id: input.orderId },
           orderId: input.orderId,
+          requesterRole: 'driver',
         });
       }
       const currentPaymentRequired = isCurrentRedeliveryPaymentRequired(latestOrder);
@@ -527,13 +538,17 @@ export class OrdersLifecycleService {
         const roundRef = this.firestore.doc(`saleRounds/${latestOrder['roundId']}`);
         const roundSnap = await transaction.get(roundRef);
         if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
-          throw new NotFoundException('회차를 찾을 수 없습니다.');
+          throwDriverOrderNotFound('회차를 찾을 수 없습니다.');
         }
         const round = roundSnap.data()!;
         transaction.update(roundRef, {
-          counters: this.nextRoundCounters(round['counters'], {
-            heldOrderCount: heldOrderDelta,
-          }),
+          counters: this.nextRoundCounters(
+            round['counters'],
+            {
+              heldOrderCount: heldOrderDelta,
+            },
+            { driverOrder: true },
+          ),
           updatedAt: input.now,
         });
       }
@@ -713,6 +728,7 @@ export class OrdersLifecycleService {
   private nextRoundCounters(
     raw: Record<string, number> | null | undefined,
     delta: Record<string, number>,
+    options?: { driverOrder?: boolean },
   ) {
     const current = {
       reservedDeliveryAddresses: raw?.['reservedDeliveryAddresses'] ?? 0,
@@ -723,6 +739,9 @@ export class OrdersLifecycleService {
     };
     const heldOrderCount = current['heldOrderCount'];
     if ((delta['heldOrderCount'] ?? 0) < 0 && heldOrderCount < 1) {
+      if (options?.driverOrder === true) {
+        throwDriverOrderStateConflict('회차 보류 주문 수가 이미 정리되었습니다.', true);
+      }
       throw new ConflictException('회차 보류 주문 수가 이미 정리되었습니다.');
     }
     return Object.fromEntries(

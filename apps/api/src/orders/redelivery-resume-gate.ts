@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import type { RedeliveryPaymentActionability, RedeliveryPaymentState } from '@greenhub/shared';
+import { throwDriverOrderStateConflict } from './driver-order-error';
 
 type OrderRecord = Record<string, any>;
 
@@ -61,6 +62,7 @@ export async function assertPaidRedeliveryResume(input: {
   firestore: { doc(path: string): any };
   order: OrderRecord;
   orderId: string;
+  requesterRole?: string;
 }) {
   if (!isCurrentRedeliveryPaymentRequired(input.order)) return null;
 
@@ -71,18 +73,30 @@ export async function assertPaidRedeliveryResume(input: {
     typeof chargeId !== 'string' ||
     input.order['redeliveryChargeHoldAt'] !== holdAt
   ) {
+    if (input.requesterRole === 'driver') {
+      throwDriverOrderStateConflict('현재 유료 재배송의 결제 연결을 확인할 수 없습니다.', true);
+    }
     throw new ConflictException('현재 유료 재배송의 결제 연결을 확인할 수 없습니다.');
   }
 
   const chargeSnap = await input.tx.get(input.firestore.doc(`orderCharges/${chargeId}`));
   if (!chargeSnap.exists) {
+    if (input.requesterRole === 'driver') {
+      throwDriverOrderStateConflict('현재 유료 재배송 결제를 찾을 수 없습니다.', true);
+    }
     throw new ConflictException('현재 유료 재배송 결제를 찾을 수 없습니다.');
   }
   const charge = chargeSnap.data() as OrderRecord;
   if (!isCurrentRedeliveryChargeLinked({ ...input.order, id: input.orderId }, charge, chargeId)) {
+    if (input.requesterRole === 'driver') {
+      throwDriverOrderStateConflict('현재 유료 재배송과 연결된 결제가 아닙니다.', true);
+    }
     throw new ConflictException('현재 유료 재배송과 연결된 결제가 아닙니다.');
   }
   if (charge['status'] !== 'PAID') {
+    if (input.requesterRole === 'driver') {
+      throwDriverOrderStateConflict('유료 재배송 결제가 완료되지 않았습니다.', true);
+    }
     throw new ConflictException('유료 재배송 결제가 완료되지 않았습니다.');
   }
   return charge;
