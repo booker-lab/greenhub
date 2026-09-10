@@ -204,6 +204,28 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 - group scheduler(`confirmGroupBuy`/`cancelGroupBuyLack`)는 active cancellation ownership을 transaction fresh 재확인으로 존중하고 broadcast에서 제외한다.
 - 증거: `apps/api/src/orders/orders-lifecycle.service.ts`, `apps/api/src/notifications/notifications.service.ts`, `apps/api/src/orders/legacy-consumer-cancel-convergence.spec.ts`(`8 tests`).
 
+### 8B. Specialized pickup/review commands — `IMPLEMENTATION COMPLETE`
+
+- 대상: `OrdersLifecycleService.reviewOrder`(`DELIVERED|PICKED_UP → REVIEWED`),
+  `confirmPickup`(`HUB_ARRIVED → PICKED_UP`, consumer ownership + `pickupCode`),
+  `hubConfirmPickup`(`HUB_ARRIVED → PICKED_UP`, seller store ownership + `pickupCode`).
+- stale read는 fast `404`/`403` + entry-status capture에만 사용하고, mutation 권한은
+  transaction 내부의 fresh snapshot으로 다시 검증한다
+  (`storeId`, consumer `userId`/seller store `ownerId`, fresh status, fresh `pickupCode`).
+- fresh expected-status compare-and-set로 stale overwrite를 차단한다.
+  `confirmPickup`과 `hubConfirmPickup`은 같은 `HUB_ARRIVED → PICKED_UP` CAS를 공유하므로
+  동시 경쟁에서도 `PICKED_UP` 전이는 정확히 한 번만 발생한다.
+- sequential duplicate(entry도 이미 target)는 settlement를 idempotent하게 수렴시킨 뒤
+  기존 `400 BadRequest` 계약을 유지한다. race loser(entry eligible + fresh 이동)는
+  order write 없이 `409 Conflict`로 종료하며 settlement를 호출하지 않는다(generic §12 loser convention).
+- transition commit 뒤 `createSettlement`가 실패하면 주문은 target에 남고 에러가 전파되며,
+  후속 retry(sequential duplicate 경로)가 settlement를 보완한다.
+- settlement는 기존 `SettlementsService.createSettlement`의 `settlements/{orderId}`
+  transactional idempotency를 재사용한다. 이미 존재하면 최초 snapshot을 보존하므로
+  `REVIEWED` retry가 `DELIVERED`/`PICKED_UP` 단계 snapshot을 다시 쓰지 않는다.
+- 증거: `apps/api/src/orders/orders-lifecycle.service.ts`,
+  `apps/api/src/orders/specialized-command-race-convergence.spec.ts`(`18 tests`).
+
 ## 9. 배송 사진
 
 회차 직배송 사진은 담당 기사가 서버 API로 비공개 Storage에 업로드하며 사진 연결 없이 직접배송 `DELIVERED` 완료를 허용하지 않는다. read URL은 주문 권한 검증 뒤 단기 signed URL로 발급한다.
