@@ -38,6 +38,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const requestIdRef = useRef<string | null>(null);
+  const uploadInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!stream) {
@@ -210,6 +211,8 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
 
   async function upload() {
     if (!blob || !session) return;
+    if (uploadInFlightRef.current) return;
+    uploadInFlightRef.current = true;
     setUploading(true);
     setError('');
     try {
@@ -245,12 +248,29 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
           { method: 'PATCH', body: JSON.stringify({ status: 'HUB_ARRIVED', photoUrl }) },
         );
         if (!response.ok) throw new Error('거점 도착 전환 실패');
+        let ack: { orderId?: unknown; status?: unknown };
+        try {
+          ack = (await response.json()) as { orderId?: unknown; status?: unknown };
+        } catch {
+          throw new Error('결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.');
+        }
+        if (ack.orderId !== orderId || ack.status !== 'HUB_ARRIVED') {
+          throw new Error('결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.');
+        }
       }
 
       router.replace('/board?tab=preparing');
-    } catch {
-      setError('업로드 실패. 다시 시도해주세요.');
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.')
+      ) {
+        setError(error.message);
+      } else {
+        setError('업로드 실패. 다시 시도해주세요.');
+      }
     } finally {
+      uploadInFlightRef.current = false;
       setUploading(false);
     }
   }
