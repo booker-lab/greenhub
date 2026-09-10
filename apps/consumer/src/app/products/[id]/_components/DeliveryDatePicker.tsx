@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { todayKST } from '@greenhub/shared';
-import { ActionIcon, Box, Group, Paper, SimpleGrid, Text } from '@mantine/core';
-import { useDeliverySlots } from '@/hooks/useDailyCap';
+import { ActionIcon, Box, Button, Group, Paper, SimpleGrid, Text } from '@mantine/core';
+import { isDeliveryDateSelectable, useDeliverySlots } from '@/hooks/useDailyCap';
 
 interface Props {
   storeId: string | null;
@@ -64,7 +64,17 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
     toMonthDate.getUTCDate(),
   );
 
-  const { slots, loading } = useDeliverySlots(storeId, from, to);
+  const { slots, loading, refreshing, error, isStale, hasLoaded, retry } = useDeliverySlots(
+    storeId,
+    from,
+    to,
+  );
+
+  // read failure/stale/loading/refreshing 중에는 이전 remainingSlots 값만 믿고
+  // 새 날짜 선택을 허용하지 않는다 (fail-closed). 기존 선택 value는 유지한다.
+  const readBlocked = error !== null || isStale || loading || refreshing;
+  const isInitialFailure = error !== null && !hasLoaded && !isStale;
+  const isStaleFailure = isStale && error !== null;
 
   const calendar = buildCalendar(viewYear, viewMonth);
   const monthLabel = new Date(Date.UTC(viewYear, viewMonth, 1)).toLocaleDateString('ko-KR', {
@@ -131,6 +141,58 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
         </ActionIcon>
       </Group>
 
+      {/* 최초 조회 실패: 정상 슬롯 없음과 구분되는 explicit read failure */}
+      {isInitialFailure && (
+        <Box data-testid="delivery-slots-error" mb="sm">
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
+            배송 가능 날짜를 확인하지 못했습니다
+          </Text>
+          <Button
+            variant="subtle"
+            size="xs"
+            onClick={retry}
+            disabled={refreshing}
+            data-testid="delivery-slots-retry"
+            mt={4}
+          >
+            다시 조회
+          </Button>
+        </Box>
+      )}
+
+      {/* 성공 후 실패: 이전 slots는 정보 표시용으로 보존하되 stale 표시 + fail-closed */}
+      {isStaleFailure && (
+        <Box data-testid="delivery-slots-stale" mb="sm">
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
+            최신 잔여 수량을 확인하지 못했습니다
+          </Text>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            이전 정보를 표시하고 있습니다
+          </Text>
+          <Button
+            variant="subtle"
+            size="xs"
+            onClick={retry}
+            disabled={refreshing}
+            data-testid="delivery-slots-retry"
+            mt={4}
+          >
+            다시 조회
+          </Button>
+        </Box>
+      )}
+
+      {refreshing && (
+        <Box mb="sm">
+          <Text
+            data-testid="delivery-slots-refreshing"
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
+            최신 정보를 다시 불러오는 중...
+          </Text>
+        </Box>
+      )}
+
       {/* 요일 헤더 */}
       <SimpleGrid cols={7} mb={4}>
         {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
@@ -146,7 +208,7 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
       </SimpleGrid>
 
       {/* 날짜 그리드 */}
-      {loading ? (
+      {loading && !hasLoaded && !error ? (
         <Box py={32} style={{ textAlign: 'center' }}>
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             불러오는 중...
@@ -158,9 +220,8 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
             {week.map((date, di) => {
               if (!date) return <Box key={di} />;
               const slot = slots[date];
-              const isPast = date < todayStr;
-              // 슬롯 미설정(문서 없음)·과거·잔여 0 → 선택 불가
-              const available = !isPast && !!slot && slot.remainingSlots > 0;
+              // 슬롯 미설정(문서 없음)·과거·잔여 0·readBlocked → 선택 불가 (fail-closed)
+              const available = isDeliveryDateSelectable(date, todayStr, slot, readBlocked);
               const isSelected = date === value;
               return (
                 <Box
@@ -204,7 +265,7 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
                           : 'var(--color-text-disabled)',
                     }}
                   >
-                    {slot && available ? `${slot.remainingSlots}석` : '—'}
+                    {slot && slot.remainingSlots > 0 ? `${slot.remainingSlots}석` : '—'}
                   </Text>
                 </Box>
               );
