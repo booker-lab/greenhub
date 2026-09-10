@@ -397,3 +397,64 @@ export function formatDateTime(value: string) {
     timeZone: 'Asia/Seoul',
   }).format(new Date(value));
 }
+
+// ---------------------------------------------------------------------------
+// Consumer order detail command / authoritative-read reconciliation contract
+//
+// Single owner for this screen's `command outcome -> authoritative
+// reconciliation -> next actionability` meaning. Cancel/review/redelivery
+// payment all consume these helpers; no repository-wide command framework.
+// ---------------------------------------------------------------------------
+
+export type CommandCapableReadStatus =
+  | 'loading'
+  | 'found'
+  | 'not-found'
+  | 'auth'
+  | 'network'
+  | 'server';
+
+export function isStaleOrderRead(status: CommandCapableReadStatus): boolean {
+  return status === 'network' || status === 'server';
+}
+
+export type CommandFailureKind = 'rejected' | 'uncertain';
+
+export function classifyCommandFailure(input: {
+  httpStatus?: number | null;
+  hasResponse: boolean;
+}): CommandFailureKind {
+  if (!input.hasResponse) return 'uncertain';
+  const httpStatus = input.httpStatus;
+  if (typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500) {
+    return 'rejected';
+  }
+  return 'uncertain';
+}
+
+export function readCommandConfirmation(
+  value: unknown,
+  expected: { orderId: string; status: OrderStatus },
+): boolean {
+  return (
+    isRecord(value) && value.orderId === expected.orderId && value.status === expected.status
+  );
+}
+
+export type CommandOutcome =
+  | { kind: 'idle' }
+  | { kind: 'executing' }
+  | { kind: 'reconciling' }
+  | { kind: 'done' }
+  | { kind: 'reconcile-failed' }
+  | { kind: 'rejected'; message: string }
+  | { kind: 'uncertain'; message: string };
+
+export const IDLE_COMMAND_OUTCOME: CommandOutcome = { kind: 'idle' };
+
+export function hasAuthoritativeOrderStatus(
+  detail: { status: OrderStatus } | null,
+  expected: OrderStatus,
+): boolean {
+  return detail !== null && detail.status === expected;
+}
