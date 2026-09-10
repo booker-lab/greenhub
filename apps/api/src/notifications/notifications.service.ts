@@ -172,9 +172,12 @@ export class NotificationsService {
       .get();
 
     // PENDING·CANCELLED·REVIEWED(종료 상태) 제외 — CONFIRMED 이후 상태(PREPARING 등)도 포함
+    // LEGACY-CONSUMER-CANCEL: exclusive cancellation ownership을 가진 RECRUITING 주문은
+    // group broadcast(확정/미달 취소 등)에서 제외해 claim 무시 last-write-wins와 중복 알림을 방지한다.
     const terminalStatuses = ['PENDING', 'CANCELLED', 'REVIEWED'];
     const promises = snap.docs
       .filter((doc) => !terminalStatuses.includes(doc.data()['status'] as string))
+      .filter((doc) => !this.isLegacyCancellationOwned(doc.data() as Record<string, unknown>))
       .map((doc) => this.sendToUser(doc.data()['userId'], templateCode, variables, doc.id));
     await Promise.all(promises);
   }
@@ -267,6 +270,18 @@ export class NotificationsService {
   // Private helpers
   // ────────────────────────────────────────────────────────────
 
+  private isLegacyCancellationOwned(order: Record<string, unknown> | null | undefined) {
+    const status = (order?.['cancellation'] as Record<string, unknown> | undefined)?.[
+      'status'
+    ] as string | undefined;
+    return (
+      status === 'REFUNDING' ||
+      status === 'LOCAL_PENDING' ||
+      status === 'LOCAL_FAILED' ||
+      status === 'REFUND_FAILED'
+    );
+  }
+
   private async confirmGroupBuy(productId: string, gc: Record<string, unknown>) {
     const ordersSnap = await this.firestore
       .collection('orders')
@@ -277,11 +292,21 @@ export class NotificationsService {
     if (ordersSnap.empty) return;
 
     const now = this.firestore.Timestamp.now();
-    const batch = this.firestore.db.batch();
-    ordersSnap.docs.forEach((d) => {
-      batch.update(d.ref, { status: 'CONFIRMED', updatedAt: now });
-    });
-    await batch.commit();
+    // LEGACY-CONSUMER-CANCEL: consumer cancellation claim을 무시하고 CONFIRMED로 덮어쓰지 않는다.
+    // snapshot 사전 필터 + transaction fresh 재확인으로 race loser overwrite를 차단한다.
+    await Promise.all(
+      ordersSnap.docs.map(async (d) => {
+        if (this.isLegacyCancellationOwned(d.data() as Record<string, unknown>)) return;
+        await this.firestore.runTransaction(async (tx) => {
+          const fresh = await tx.get(d.ref);
+          if (!fresh.exists) return;
+          const freshOrder = fresh.data() as Record<string, unknown>;
+          if (freshOrder['status'] !== 'RECRUITING') return;
+          if (this.isLegacyCancellationOwned(freshOrder)) return;
+          tx.update(d.ref, { status: 'CONFIRMED', updatedAt: now });
+        });
+      }),
+    );
 
     const productSnap = await this.firestore.doc(`products/${productId}`).get();
     const productName = productSnap.data()?.['name'] ?? '';
@@ -315,15 +340,30 @@ export class NotificationsService {
     const reason = '목표 수량 미달성으로 취소';
     const now = this.firestore.Timestamp.now();
 
+    // LEGACY-CONSUMER-CANCEL: consumer가 exclusive ownership을 획득한 주문은
+    // system refund/status 대상에서 제외한다. payment claim이 PortOne 중복을 막지만
+    // status last-write-wins와 cancelReason 덮어쓰기를 transaction으로 차단한다.
+    const candidates = ordersSnap.docs.filter(
+      (doc) => !this.isLegacyCancellationOwned(doc.data() as Record<string, unknown>),
+    );
+    if (candidates.length === 0) return;
+
     await Promise.all(
-      ordersSnap.docs.map((doc) => this.payments.processRefundByOrderId(doc.id, reason)),
+      candidates.map((doc) => this.payments.processRefundByOrderId(doc.id, reason)),
     );
 
-    const batch = this.firestore.db.batch();
-    ordersSnap.docs.forEach((d) => {
-      batch.update(d.ref, { status: 'CANCELLED', cancelReason: reason, updatedAt: now });
-    });
-    await batch.commit();
+    await Promise.all(
+      candidates.map(async (d) => {
+        await this.firestore.runTransaction(async (tx) => {
+          const fresh = await tx.get(d.ref);
+          if (!fresh.exists) return;
+          const freshOrder = fresh.data() as Record<string, unknown>;
+          if (freshOrder['status'] !== 'RECRUITING') return;
+          if (this.isLegacyCancellationOwned(freshOrder)) return;
+          tx.update(d.ref, { status: 'CANCELLED', cancelReason: reason, updatedAt: now });
+        });
+      }),
+    );
 
     const productSnap = await this.firestore.doc(`products/${productId}`).get();
     const productName = productSnap.data()?.['name'] ?? '';
