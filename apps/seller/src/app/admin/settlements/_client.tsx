@@ -5,6 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { useAdminSettlements } from '@/hooks/useAdmin';
+import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
 import { SettlementFilters } from './_components/SettlementFilters';
 import { SettlementTable } from './_components/SettlementTable';
 import { SummaryCards } from './_components/SummaryCards';
@@ -26,15 +27,16 @@ export default function AdminSettlementsClient() {
     if (!payTargetId) return;
     setProcessingId(payTargetId);
     try {
-      const ok = await markAsPaid(payTargetId);
+      const outcome = await markAsPaid(payTargetId);
       setPayTargetId(null);
-      if (!ok) {
-        notifications.show({
-          color: 'red',
-          title: '지급 처리 실패',
-          message: '정산 지급 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
-        });
-      }
+      if (outcome.kind === 'confirmed' && outcome.reconciled) return;
+      // stale은 완료+재조회 copy를 사용한다. rejected는 서버 reason 보존, unknown은 재확인 우선.
+      const presentation = describeAdminCommandOutcome(outcome, '지급');
+      notifications.show({
+        color: outcome.kind === 'rejected' ? 'red' : outcome.kind === 'unknown' ? 'orange' : 'yellow',
+        title: presentation.title,
+        message: presentation.message,
+      });
     } finally {
       setProcessingId(null);
     }

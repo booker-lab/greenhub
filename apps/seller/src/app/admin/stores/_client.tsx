@@ -5,7 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { AdminStore } from '@/hooks/useAdmin';
-import { useAdminStores } from '@/hooks/useAdmin';
+import { classifyAdminCommandError, describeAdminCommandOutcome, useAdminStores } from '@/hooks/useAdmin';
 import { StoresFilters } from './_components/StoresFilters';
 import { StoresTable } from './_components/StoresTable';
 import {
@@ -83,12 +83,28 @@ export default function AdminStoresClient() {
       return;
     }
     setSaving(true);
-    const ok = await setCommission(storeId, parsed.rate);
+    const outcome = await setCommission(storeId, parsed.rate);
     setSaving(false);
-    if (ok) {
+    if (outcome.kind === 'confirmed' && outcome.reconciled) {
       setEditId(null);
       setRateInput('');
+      return;
     }
+    if (outcome.kind === 'confirmed') {
+      // COMMAND CONFIRMED + RECONCILIATION FAILED — 실패로 되돌리지 않고 중복 실행을 유도하지 않는다.
+      setEditId(null);
+      setRateInput('');
+      const presentation = describeAdminCommandOutcome(outcome, '수수료율 변경');
+      notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
+      return;
+    }
+    // rejected: 서버 reason 보존 + 편집 유지(수정 가능). unknown: 재확인 우선 + 편집 유지.
+    const presentation = describeAdminCommandOutcome(outcome, '수수료율 변경');
+    notifications.show({
+      color: outcome.kind === 'rejected' ? 'red' : 'orange',
+      title: presentation.title,
+      message: presentation.message,
+    });
   };
 
   const handleStartEdit = (store: AdminStore) => {
@@ -105,8 +121,22 @@ export default function AdminStoresClient() {
     const label = store.name || '(미설정)';
     if (!window.confirm(`${label} 판매자를 정리할까요? 주문·정산 기록은 보존됩니다.`)) return;
     try {
-      await archiveStore(store.id);
+      const reconciliation = await archiveStore(store.id);
+      if (!reconciliation.reconciled) {
+        // COMMAND CONFIRMED + RECONCILIATION FAILED — 실패로 표현하지 않고 중복 실행을 유도하지 않는다.
+        notifications.show({
+          color: 'yellow',
+          title: '정리 처리는 완료됐으나 목록 확인 실패',
+          message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
+        });
+      }
     } catch (e) {
+      const classified = classifyAdminCommandError(e);
+      if (classified.kind === 'unknown') {
+        const presentation = describeAdminCommandOutcome(classified, '정리');
+        notifications.show({ color: 'orange', title: presentation.title, message: presentation.message });
+        return;
+      }
       // 기록 가드(400) 등 차단 사유를 서버 메시지 그대로 안내
       notifications.show({
         color: 'red',
@@ -118,8 +148,21 @@ export default function AdminStoresClient() {
 
   const handleRestore = async (store: AdminStore) => {
     try {
-      await restoreStore(store.id);
+      const reconciliation = await restoreStore(store.id);
+      if (!reconciliation.reconciled) {
+        notifications.show({
+          color: 'yellow',
+          title: '복구 처리는 완료됐으나 목록 확인 실패',
+          message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
+        });
+      }
     } catch (e) {
+      const classified = classifyAdminCommandError(e);
+      if (classified.kind === 'unknown') {
+        const presentation = describeAdminCommandOutcome(classified, '복구');
+        notifications.show({ color: 'orange', title: presentation.title, message: presentation.message });
+        return;
+      }
       notifications.show({
         color: 'red',
         title: '복구할 수 없습니다',
