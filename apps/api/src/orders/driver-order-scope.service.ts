@@ -1,6 +1,10 @@
-import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import { getAllowedTransitions } from './orders.helpers';
+import {
+  throwDriverOrderAuthorityDenied,
+  throwDriverOrderStateConflict,
+} from './driver-order-error';
 import type { OrderStatus } from './dto/update-status.dto';
 
 type OrderRecord = Record<string, any>;
@@ -136,7 +140,7 @@ export class DriverOrderScopeService {
       !this.isUsableScope(scope) ||
       !this.isAssignedVisibleForScope(scope, order, authority.requesterId)
     ) {
-      throw new ForbiddenException('파일럿 Driver 주문 조회 범위를 벗어났습니다.');
+      throwDriverOrderAuthorityDenied('파일럿 Driver 주문 조회 범위를 벗어났습니다.');
     }
     return scope.mode as DriverOrderMode;
   }
@@ -216,7 +220,7 @@ export class DriverOrderScopeService {
       user['driverApproved'] !== true ||
       user['suspended'] === true
     ) {
-      throw new ForbiddenException('현재 Driver 권한이 없습니다.');
+      throwDriverOrderAuthorityDenied('현재 Driver 권한이 없습니다.');
     }
     return { requesterId, role: 'driver', driverApproved: true };
   }
@@ -293,21 +297,23 @@ export class DriverOrderScopeService {
       input.nextStatus !== 'DELIVERING' ||
       input.order['status'] !== 'PREPARING'
     ) {
-      throw inTransaction
-        ? new ConflictException('주문 상태가 변경되었습니다.')
-        : new ForbiddenException('Driver first claim 조건을 만족하지 않습니다.');
+      throwDriverOrderStateConflict(
+        inTransaction ? '주문 상태가 변경되었습니다.' : 'Driver first claim 조건을 만족하지 않습니다.',
+        inTransaction,
+      );
     }
     if (input.order['driverId'] != null) {
-      throw inTransaction
-        ? new ConflictException('이미 다른 기사에게 배정된 주문입니다.')
-        : new ForbiddenException('이미 배정된 주문입니다.');
+      throwDriverOrderStateConflict(
+        inTransaction ? '이미 다른 기사에게 배정된 주문입니다.' : '이미 배정된 주문입니다.',
+        inTransaction,
+      );
     }
     if (
       scope.mode === 'round_direct'
         ? input.order['deliveryMethod'] !== 'direct'
         : !['direct', 'hub'].includes(String(input.order['deliveryMethod']))
     ) {
-      throw new ForbiddenException('Driver first claim 대상 주문이 아닙니다.');
+      throwDriverOrderStateConflict('Driver first claim 대상 주문이 아닙니다.');
     }
   }
 
@@ -317,23 +323,22 @@ export class DriverOrderScopeService {
     inTransaction = false,
   ) {
     if (input.order['status'] !== input.expectedStatus) {
-      throw inTransaction
-        ? new ConflictException('주문 상태가 변경되었습니다.')
-        : new ForbiddenException('주문 상태가 변경되었습니다.');
+      throwDriverOrderStateConflict('주문 상태가 변경되었습니다.', inTransaction);
     }
 
     const allowed = getAllowedTransitions('driver', input.order['status'] as OrderStatus);
     if (!allowed.includes(input.nextStatus as OrderStatus)) {
-      throw new ForbiddenException(
+      throwDriverOrderStateConflict(
         `${input.expectedStatus} → ${input.nextStatus} 전환은 허용되지 않습니다.`,
       );
     }
 
     if (input.order['driverId'] === input.requesterId) return;
     if (input.order['driverId'] != null) {
-      throw inTransaction
-        ? new ConflictException('이미 다른 기사에게 배정된 주문입니다.')
-        : new ForbiddenException('담당 기사만 배송 상태를 변경할 수 있습니다.');
+      if (inTransaction) {
+        throwDriverOrderStateConflict('이미 다른 기사에게 배정된 주문입니다.', true);
+      }
+      throwDriverOrderAuthorityDenied('담당 기사만 배송 상태를 변경할 수 있습니다.');
     }
 
     if (
@@ -345,18 +350,18 @@ export class DriverOrderScopeService {
     ) {
       return;
     }
-    throw new ForbiddenException('미배정 주문은 first claim으로만 배송을 시작할 수 있습니다.');
+    throwDriverOrderStateConflict('미배정 주문은 first claim으로만 배송을 시작할 수 있습니다.');
   }
 
   private assertPilotScope(scope: ScopeEvaluation) {
     if (scope.mode !== 'round_direct' || !scope.pilotBase) {
-      throw new ForbiddenException('유효한 round_direct Pilot 주문이 아닙니다.');
+      throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
     }
   }
 
   private assertUsableScope(scope: ScopeEvaluation) {
     if (scope.mode === 'invalid' || (scope.mode === 'round_direct' && !scope.pilotBase)) {
-      throw new ForbiddenException('유효한 Driver 주문 범위가 아닙니다.');
+      throwDriverOrderAuthorityDenied('유효한 Driver 주문 범위가 아닙니다.');
     }
   }
 

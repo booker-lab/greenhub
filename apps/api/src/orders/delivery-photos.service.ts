@@ -13,6 +13,11 @@ import { type DeliveryPhotoReconciliation, StorageService } from '../firestore/s
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { RetentionService } from '../retention/retention.service';
 import { DriverOrderScopeService } from './driver-order-scope.service';
+import {
+  throwDriverOrderAuthorityDenied,
+  throwDriverOrderNotFound,
+  throwDriverOrderStateConflict,
+} from './driver-order-error';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
 
 type OrderRecord = Record<string, unknown>;
@@ -157,7 +162,7 @@ export class DeliveryPhotosService {
       const orderRef = this.firestore.doc(`orders/${input.orderId}`);
       const snapshot = await transaction.get(orderRef);
       if (!snapshot.exists || snapshot.data()?.['storeId'] !== input.storeId) {
-        throw new NotFoundException('주문을 찾을 수 없습니다.');
+        throwDriverOrderNotFound('주문을 찾을 수 없습니다.');
       }
       const order = snapshot.data() as OrderRecord;
       const photoIds = this.readPhotoIds(order['deliveryPhotoIds']);
@@ -169,7 +174,7 @@ export class DeliveryPhotosService {
           input.requesterRole,
         );
         if (order['driverId'] !== authority.requesterId) {
-          throw new ForbiddenException('담당 기사만 배송 사진을 처리할 수 있습니다.');
+          throwDriverOrderAuthorityDenied('담당 기사만 배송 사진을 처리할 수 있습니다.');
         }
         alreadyCompleted = true;
         return;
@@ -186,7 +191,7 @@ export class DeliveryPhotosService {
 
       if (photoIds.includes(input.photoId)) return;
       if (photoIds.length > 0) {
-        throw new ConflictException('배송 사진이 이미 연결되어 있습니다.');
+        throwDriverOrderStateConflict('배송 사진이 이미 연결되어 있습니다.', true);
       }
 
       const now = this.firestore.Timestamp.now();
@@ -221,7 +226,7 @@ export class DeliveryPhotosService {
         input.requesterRole,
       );
       if (order['driverId'] !== authority.requesterId) {
-        throw new ForbiddenException('담당 기사만 배송 사진을 처리할 수 있습니다.');
+        throwDriverOrderAuthorityDenied('담당 기사만 배송 사진을 처리할 수 있습니다.');
       }
       return;
     }
@@ -236,7 +241,7 @@ export class DeliveryPhotosService {
     });
 
     if (photoIds.length > 0 && !photoIds.includes(photoId)) {
-      throw new ConflictException('배송 사진이 이미 연결되어 있습니다.');
+      throwDriverOrderStateConflict('배송 사진이 이미 연결되어 있습니다.', true);
     }
   }
 
@@ -277,8 +282,9 @@ export class DeliveryPhotosService {
     }
 
     if (reconciliation.state === 'CONFLICT') {
-      throw new ConflictException(
+      throwDriverOrderStateConflict(
         '같은 업로드 요청 식별자에 다른 배송 사진 또는 연결 상태가 있습니다.',
+        true,
       );
     }
 
@@ -335,7 +341,7 @@ export class DeliveryPhotosService {
   private async readOrder(input: Pick<UploadDeliveryPhotoInput, 'storeId' | 'orderId'>) {
     const snapshot = await this.firestore.doc(`orders/${input.orderId}`).get();
     if (!snapshot.exists || snapshot.data()?.['storeId'] !== input.storeId) {
-      throw new NotFoundException('주문을 찾을 수 없습니다.');
+      throwDriverOrderNotFound('주문을 찾을 수 없습니다.');
     }
     return snapshot.data() as OrderRecord;
   }
