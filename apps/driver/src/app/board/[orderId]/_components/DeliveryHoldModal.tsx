@@ -13,7 +13,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useSession } from 'next-auth/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 
 export type HoldReason =
@@ -43,19 +43,39 @@ interface DeliveryHoldModalProps {
   loading: boolean;
   orderId: string;
   storeId: string;
+  // modal open 이후 authority 이동을 감지하기 위한 최소 prop. version이 아닌
+  // 현재 order status만으로 hold command 허용 범위를 판정한다.
+  orderStatus: string;
   onClose: () => void;
   onLoading: (loading: boolean) => void;
   onSaved?: () => void;
+  // stale/403/409 수렴용 authoritative reread 트리거. 같은 hold command를
+  // 자동 재전송하지 않고 parent의 fresh GET으로 수렴한다.
+  onConvergence?: () => void;
 }
+
+// 배송 보류 command가 유효한 order authority 범위.
+export const HOLD_COMMAND_ALLOWED_STATUSES = ['PREPARING', 'DELIVERING'] as const;
+
+export function isHoldCommandAllowedStatus(status: string): boolean {
+  return (HOLD_COMMAND_ALLOWED_STATUSES as readonly string[]).includes(status);
+}
+
+// 403 duplicate-sequential / 409 race-loser / stale-submit 공통 수렴 메시지.
+// "실패했으니 다시 제출"이 아니라 상태 재확인을 안내한다.
+export const HOLD_STALE_CONVERGENCE_MESSAGE =
+  '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.';
 
 export function DeliveryHoldModal({
   opened,
   loading,
   orderId,
   storeId,
+  orderStatus,
   onClose,
   onLoading,
   onSaved,
+  onConvergence,
 }: DeliveryHoldModalProps) {
   const { data: session } = useSession();
   const [reasonCode, setReasonCode] = useState<HoldReason>('WEATHER');
@@ -66,6 +86,30 @@ export function DeliveryHoldModal({
   const [nextDeliveryAt, setNextDeliveryAt] = useState('');
   const [error, setError] = useState('');
   const isWeather = reasonCode === 'WEATHER';
+  // C3: 부모 loading state와 무관한 로컬 submitting guard. 동일 frame
+  // double-submit에서도 두 번째 PATCH를 dispatch하지 않는다.
+  const submittingRef = useRef(false);
+
+  function resetHoldFormFields() {
+    setReasonCode('WEATHER');
+    setReasonMessage('');
+    setCustomerResponsible(false);
+    setRedeliveryFee('');
+    setNextContactAt('');
+    setNextDeliveryAt('');
+  }
+
+  // modal open 이후 order authority가 command 허용 범위를 벗어나면 stale form을
+  // 남기지 않는다. parent가 이미 fresh authority를 들고 있으므로 별도 reread 없이
+  // reset 후 닫는다. submit 경로의 stale 가드와 403/409 수렴이 실제 dispatch를 막는다.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: opened·orderStatus만의 의도적 stale 감시이며 onClose는 parent setter다
+  useEffect(() => {
+    if (opened && !isHoldCommandAllowedStatus(orderStatus)) {
+      resetHoldFormFields();
+      setError('');
+      onClose();
+    }
+  }, [opened, orderStatus]);
 
   function changeReason(value: string) {
     const next = value as HoldReason;
@@ -77,6 +121,17 @@ export function DeliveryHoldModal({
   }
 
   async function submit() {
+    // C3: 진행 중인 submit이 있으면 두 번째 PATCH를 dispatch하지 않는다.
+    if (submittingRef.current) return;
+    // modal open 이후 authority가 이동했다면 stale form을 그대로 submit하지 않는다.
+    // dispatch 0회, form reset, convergence reread 유도 후 닫는다.
+    if (!isHoldCommandAllowedStatus(orderStatus)) {
+      resetHoldFormFields();
+      setError(HOLD_STALE_CONVERGENCE_MESSAGE);
+      onConvergence?.();
+      onClose();
+      return;
+    }
     const message = reasonMessage.trim();
     const token = session?.user.accessToken;
     if (!message) {
@@ -102,23 +157,37 @@ export function DeliveryHoldModal({
     };
 
     setError('');
+    submittingRef.current = true;
     onLoading(true);
     try {
       const response = await apiFetch(`/stores/${storeId}/orders/${orderId}/delivery-hold`, token, {
         method: 'PATCH',
         body: JSON.stringify({ deliveryHold }),
       });
-      if (!response.ok) throw new Error('배송 보류 저장 실패');
+      if (!response.ok) {
+        // 403 duplicate-sequential / 409 race-loser: 같은 hold command를 자동
+        // 재전송하지 않고 convergence path로 보낸다. 일반적인 재제출 메시지를 쓰지 않는다.
+        if (response.status === 403 || response.status === 409) {
+          resetHoldFormFields();
+          setError(HOLD_STALE_CONVERGENCE_MESSAGE);
+          onConvergence?.();
+          return;
+        }
+        throw new Error('배송 보류 저장 실패');
+      }
       const result = (await response.json()) as { orderId?: unknown; status?: unknown };
       if (result.orderId !== orderId || result.status !== 'DELIVERY_HELD') {
         throw new Error('배송 보류 응답 불일치');
       }
+      resetHoldFormFields();
+      setError('');
       onClose();
       // Order 합성 없이 parent가 authoritative GET으로 수렴한다.
       onSaved?.();
     } catch {
       setError('배송 보류를 저장하지 못했습니다. 주문 상태를 확인하고 다시 시도해주세요.');
     } finally {
+      submittingRef.current = false;
       onLoading(false);
     }
   }
@@ -173,7 +242,7 @@ export function DeliveryHoldModal({
           <Button variant="default" onClick={onClose} disabled={loading}>
             취소
           </Button>
-          <Button color="red" onClick={submit} loading={loading}>
+          <Button color="red" onClick={submit} loading={loading} disabled={loading}>
             배송 보류 저장
           </Button>
         </Group>
