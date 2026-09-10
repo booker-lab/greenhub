@@ -21,6 +21,7 @@
 
 - `main`에는 문서-only 변경을 포함해 직접 commit/push하지 않는다.
 - 모든 변경은 목적별 branch에서 만들고 PR을 통해 `main`으로 통합한다.
+- publication branch/PR 생성 직전과 merge 권한 행사 직전에 반드시 live `main`을 다시 조회하고 `scripts/git/publication-admission.mjs` admission gate로 owned effective delta를 재평가한다. delta가 0이면 새 PR·merge·CI·deploy 없이 `COMPLETE_ALREADY_PUBLISHED` / `SUPERSEDED_ALREADY_PUBLISHED`로 종료한다.
 - `main` 통합 자체를 production 배포 승인으로 해석하지 않는다.
 - production 배포는 현재 출시 PLAN의 별도 승인 게이트와 실제 release SHA 확인 뒤에만 수행한다.
 - exact-SHA 배포 또는 promotion 절차가 불명확하면 임의 production 배포보다 중단을 우선한다.
