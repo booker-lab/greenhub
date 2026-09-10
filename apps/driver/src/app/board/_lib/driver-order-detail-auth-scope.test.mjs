@@ -3,9 +3,10 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   buildDriverOrderDetailScope,
+  classifyDriverOrderCommandError,
   isDriverOrderCommandAllowed,
-  isDriverOrderCommandAuthLoss,
   isDriverOrderCommandContinuationCurrent,
+  readDriverOrderErrorCode,
   shouldPreserveDriverOrderOnReadError,
 } from './driver-order-detail.ts';
 
@@ -229,11 +230,12 @@ test('command ACK 후 authoritative GET 수렴·readback 분리 계약이 유지
 });
 
 // R1. fresh order → command PATCH 401 → order/PII clear → AUTH_REQUIRED → CTA 없음.
+// 401은 envelope code와 무관하게 authority loss다.
 test('R1. command PATCH 401은 authority loss로 이전 order를 즉시 제거한다', () => {
-  assert.equal(isDriverOrderCommandAuthLoss(401), true);
-  assert.match(detailSource, /isDriverOrderCommandAuthLoss\(res\.status\)/);
-  const authAt = detailSource.indexOf('isDriverOrderCommandAuthLoss(res.status)');
-  assert.ok(authAt !== -1, 'command 401/403 auth-loss 분기가 있어야 한다');
+  assert.equal(classifyDriverOrderCommandError({ status: 401, code: null }), 'AUTHORITY_LOSS');
+  assert.match(detailSource, /if \(res\.status === 401\)/);
+  const authAt = detailSource.indexOf('if (res.status === 401)');
+  assert.ok(authAt !== -1, 'command 401 auth-loss 분기가 있어야 한다');
   const authBlock = detailSource.slice(authAt, authAt + 600);
   assert.match(authBlock, /hasOrderRef\.current = false/);
   assert.match(authBlock, /setOrder\(null\)/);
@@ -243,17 +245,33 @@ test('R1. command PATCH 401은 authority loss로 이전 order를 즉시 제거�
   assert.doesNotMatch(authBlock, /오류가 발생했습니다/);
 });
 
-// R2. fresh order → command PATCH 403 → R1과 동일한 authority-loss branch.
-test('R2. command PATCH 403은 401과 동일한 authority-loss branch를 탄다', () => {
-  assert.equal(isDriverOrderCommandAuthLoss(403), true);
-  assert.equal(isDriverOrderCommandAuthLoss(409), false);
-  assert.equal(isDriverOrderCommandAuthLoss(500), false);
-  // 403은 별도 convergence가 아니라 401과 같은 auth-loss helper 분기를 탄다.
-  assert.match(detailSource, /isDriverOrderCommandAuthLoss\(res\.status\)/);
-  assert.match(helperSource, /status === 401 \|\| status === 403/);
-  // detail의 403 단독 convergence는 남지 않고 409만 수렴한다.
-  assert.match(detailSource, /if \(res\.status === 409\)/);
-  assert.doesNotMatch(detailSource, /res\.status === 403 \|\| res\.status === 409/);
+// R2. fresh order → command PATCH 403는 error-code로 AUTHORITY/STATE를 구분한다.
+// 403 + AUTHORITY_DENIED/unknown → AUTHORITY_LOSS, 403 + STATE_CONFLICT → STATE_CONFLICT.
+test('R2. command PATCH 403은 error-code로 authority/state를 구분한다', () => {
+  assert.equal(
+    classifyDriverOrderCommandError({ status: 403, code: 'DRIVER_ORDER_AUTHORITY_DENIED' }),
+    'AUTHORITY_LOSS',
+  );
+  assert.equal(
+    classifyDriverOrderCommandError({ status: 403, code: 'DRIVER_ORDER_STATE_CONFLICT' }),
+    'STATE_CONFLICT',
+  );
+  assert.equal(classifyDriverOrderCommandError({ status: 403, code: null }), 'AUTHORITY_LOSS');
+  assert.equal(readDriverOrderErrorCode({ code: 'DRIVER_ORDER_ALREADY_APPLIED' }), null);
+  // detail은 status-only helper 분기가 아니라 error-code aware classifier를 사용한다.
+  assert.match(detailSource, /classifyDriverOrderCommandError\(\{/);
+  assert.match(detailSource, /readDriverOrderCommandErrorCodeFromResponse\(res\)/);
+  assert.match(detailSource, /recovery === 'AUTHORITY_LOSS'/);
+  assert.match(detailSource, /recovery === 'STATE_CONFLICT'/);
+  assert.match(detailSource, /recovery === 'NOT_FOUND'/);
+  // 403 STATE를 AUTH_ERROR로 오분류하지 않는다: STATE 분기는 GET 수렴이다.
+  const stateAt = detailSource.indexOf("recovery === 'STATE_CONFLICT'");
+  assert.ok(stateAt !== -1, 'STATE_CONFLICT 분기가 있어야 한다');
+  const stateBlock = detailSource.slice(stateAt, stateAt + 600);
+  assert.match(stateBlock, /await readDetail\(token\)/);
+  assert.doesNotMatch(stateBlock, /kind: 'AUTH_ERROR'/);
+  // 구 status-only 403 auth-loss 직접 분기는 남지 않는다.
+  assert.doesNotMatch(detailSource, /isDriverOrderCommandAuthLoss\(res\.status\)/);
 });
 
 // R3. A scope command → B user/token/role 전환 → A ACK/readback이 B에 반영되지 않음.

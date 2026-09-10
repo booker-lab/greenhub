@@ -20,11 +20,12 @@ import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import {
   buildDriverOrderDetailScope,
+  classifyDriverOrderCommandError,
   type DriverOrderReadErrorKind,
   isDriverOrderCommandAllowed,
-  isDriverOrderCommandAuthLoss,
   isDriverOrderCommandContinuationCurrent,
   isDriverOrderStatusAck,
+  readDriverOrderCommandErrorCodeFromResponse,
   shouldPreserveDriverOrderOnReadError,
   toDriverOrderNetworkError,
   toDriverOrderReadError,
@@ -268,10 +269,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       );
       if (!isCommandCurrent()) return;
       if (!res.ok) {
-        // Command 401/403 = authority loss. 이전 protected order/PII/command
-        // authority를 즉시 clear하고 AUTH_ERROR로 수렴한다. generic 오류만 띄우고
-        // 이전 order를 유지하는 흐름을 남기지 않는다.
-        if (isDriverOrderCommandAuthLoss(res.status)) {
+        // 401은 envelope code와 무관하게 authority loss다. body 파싱 없이 즉시
+        // protected order/PII/command authority를 clear하고 AUTH_ERROR로 수렴한다.
+        if (res.status === 401) {
           hasOrderRef.current = false;
           setOrder(null);
           setReadError({
@@ -281,9 +281,29 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           setReadbackWarning(null);
           return;
         }
-        // 409 race-loser: 서버 authority가 이미 상태를 이동시켰다는 의미다.
-        // 같은 command를 자동 재전송하지 않고 authoritative GET으로 수렴한다.
-        if (res.status === 409) {
+        // error-code aware command recovery: envelope code를 안전하게 읽는다.
+        // body 파싱 실패는 null이며 그 자체가 same-command resend를 유도하지 않는다.
+        const errorCode = await readDriverOrderCommandErrorCodeFromResponse(res);
+        if (!isCommandCurrent()) return;
+        const recovery = classifyDriverOrderCommandError({
+          status: res.status,
+          code: errorCode,
+        });
+        // 403 AUTHORITY + unknown/missing-code 403 fail-closed authority loss.
+        // 이전 protected order/PII를 유지하는 흐름을 남기지 않는다.
+        if (recovery === 'AUTHORITY_LOSS') {
+          hasOrderRef.current = false;
+          setOrder(null);
+          setReadError({
+            kind: 'AUTH_ERROR',
+            message: '로그인 정보를 다시 확인해 주세요.',
+          });
+          setReadbackWarning(null);
+          return;
+        }
+        // 403/409 + STATE_CONFLICT: 로그인 상실이 아니다. 같은 command를 자동
+        // 재전송하지 않고 authoritative GET으로 수렴한다 (기존 409 race convergence 재사용).
+        if (recovery === 'STATE_CONFLICT') {
           notifications.show({
             color: 'yellow',
             message: '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.',
@@ -291,9 +311,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           await readDetail(token);
           return;
         }
-        // F/G: 403/409 이외 4xx·5xx ACK-uncertain. 같은 PATCH를 자동 재전송하지 않고
-        // UNCERTAIN을 보존한 채 authoritative GET으로 수렴한다.
-        // fresh GET 성공이 warning을 해소하기 전에는 fail-closed로 위험 command를 차단한다.
+        // DRIVER_ORDER_NOT_FOUND: authoritative absence/hiding. 이전 protected
+        // order를 신뢰하지 않고 NOT_FOUND 의미로 수렴한다. 자동 resend 없음.
+        if (recovery === 'NOT_FOUND') {
+          hasOrderRef.current = false;
+          setOrder(null);
+          setReadError({
+            kind: 'NOT_FOUND',
+            message: '주문을 찾을 수 없습니다',
+          });
+          setReadbackWarning(null);
+          return;
+        }
+        // F/G: 403/409 STATE·AUTHORITY·NOT_FOUND 이외 4xx·5xx ACK-uncertain.
+        // 같은 PATCH를 자동 재전송하지 않고 UNCERTAIN을 보존한 채 authoritative
+        // GET으로 수렴한다. fresh GET 성공이 warning을 해소하기 전에는 fail-closed다.
         notifications.show({
           color: 'yellow',
           message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
@@ -805,6 +837,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             setReadbackWarning(HOLD_UNCERTAIN_READBACK_WARNING);
             const token = session?.user.accessToken;
             if (token) void readDetail(token);
+          }}
+          onAuthorityLoss={() => {
+            // HOLD 401 / 403 + AUTHORITY_DENIED: modal 내부 표시에 그치지 않고
+            // parent가 protected order/PII를 즉시 제거하고 AUTH_ERROR로 수렴하며
+            // modal을 reset/close한다. 같은 hold 자동 resend 금지.
+            hasOrderRef.current = false;
+            setOrder(null);
+            setReadError({
+              kind: 'AUTH_ERROR',
+              message: '로그인 정보를 다시 확인해 주세요.',
+            });
+            setReadbackWarning(null);
+            setHoldOpened(false);
+          }}
+          onNotFound={() => {
+            // HOLD DRIVER_ORDER_NOT_FOUND: authoritative absence/hiding.
+            // 이전 protected order를 신뢰하지 않고 NOT_FOUND 의미로 수렴한다.
+            hasOrderRef.current = false;
+            setOrder(null);
+            setReadError({
+              kind: 'NOT_FOUND',
+              message: '주문을 찾을 수 없습니다',
+            });
+            setReadbackWarning(null);
+            setHoldOpened(false);
           }}
         />
       )}
