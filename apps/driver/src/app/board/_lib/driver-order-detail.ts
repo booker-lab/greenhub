@@ -4,7 +4,9 @@
  * Server authority를 유지하기 위한 최소 분류만 둔다.
  * - detail HTTP status classification (404 / 401·403 / 그 외·network)
  * - detail scope identity (orderId + user identity + role + access token)
- * - command 401·403 authority-loss classification
+ * - command 401·403 authority-loss classification (legacy fail-closed fallback)
+ * - command status + stable error-code recovery classification
+ *   (AUTHORITY_LOSS / STATE_CONFLICT / NOT_FOUND / UNCERTAIN)
  * - command scope/sequence continuation binding
  * - command semantic ACK matching (orderId + status)
  *
@@ -127,9 +129,112 @@ export function buildDriverOrderDetailScope(args: {
  * command PATCH 자체의 401·403은 authority loss다.
  * 409/422/5xx의 command recovery architecture를 재정의하지 않으며,
  * 이 판정은 401·403만을 AUTH_ERROR branch로 보낸다.
+ *
+ * @deprecated status-only fallback. 신규 command 경로는
+ * `classifyDriverOrderCommandError` (status + stable error code)를 사용한다.
+ * 403은 code가 STATE_CONFLICT이면 authority loss가 아니다. 본 함수는
+ * unknown/missing-code 403의 fail-closed fallback으로만 유지된다.
  */
 export function isDriverOrderCommandAuthLoss(status: number): boolean {
   return status === 401 || status === 403;
+}
+
+/**
+ * Driver command error-code convergence (client-local recovery meaning).
+ *
+ * Server/shared stable wire-code SSOT는
+ * `packages/shared/src/driver-order-error.types.ts`가 소유한다:
+ * - DRIVER_ORDER_AUTHORITY_DENIED
+ * - DRIVER_ORDER_STATE_CONFLICT
+ * - DRIVER_ORDER_NOT_FOUND
+ *
+ * 본 helper는 wire 문자열을 그대로 인식만 하며, shared에 client UX/recovery
+ * 의미를 추가하지 않는다. DRIVER_ORDER_ALREADY_APPLIED는 서버 Task에서
+ * DEFERRED_NOT_PROVABLE로 결정됐으므로 여기서 새로 정의·추론하지 않는다.
+ */
+export type DriverOrderCommandErrorCode =
+  | 'DRIVER_ORDER_AUTHORITY_DENIED'
+  | 'DRIVER_ORDER_STATE_CONFLICT'
+  | 'DRIVER_ORDER_NOT_FOUND';
+
+/**
+ * status + code → client recovery classification.
+ * - AUTHORITY_LOSS: protected order/PII 즉시 제거, AUTH_ERROR 수렴, resend 금지.
+ * - STATE_CONFLICT: 로그인 오류 아님, resend 금지, authoritative GET 수렴.
+ * - NOT_FOUND: authoritative absence/hiding, 이전 order 불신, resend 금지.
+ * - UNCERTAIN: 성공 추론 금지, resend 금지, 기존 ACK-uncertain/GET 수렴 유지.
+ */
+export type DriverOrderCommandRecovery =
+  | 'AUTHORITY_LOSS'
+  | 'STATE_CONFLICT'
+  | 'NOT_FOUND'
+  | 'UNCERTAIN';
+
+/**
+ * error envelope에서 stable code만 안전하게 읽는다.
+ * body parsing 실패·형식 불일치·ratified 외 문자열은 모두 null이다.
+ * null 때문에 same-command resend를 유도하지 않으며, 호출자는
+ * `classifyDriverOrderCommandError`의 fail-closed fallback을 사용한다.
+ * DRIVER_ORDER_ALREADY_APPLIED를 포함한 미정의 코드는 절대 인식하지 않는다.
+ */
+export function readDriverOrderErrorCode(body: unknown): DriverOrderCommandErrorCode | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const code = (body as { code?: unknown }).code;
+  if (
+    code === 'DRIVER_ORDER_AUTHORITY_DENIED' ||
+    code === 'DRIVER_ORDER_STATE_CONFLICT' ||
+    code === 'DRIVER_ORDER_NOT_FOUND'
+  ) {
+    return code;
+  }
+  return null;
+}
+
+/**
+ * Response error envelope의 code를 안전하게 읽는다.
+ * body가 비었거나 malformed이거나 json 파싱이 실패해도 throw하지 않고
+ * null을 반환한다. null 자체가 resend를 유도하지 않는다.
+ */
+export async function readDriverOrderCommandErrorCodeFromResponse(
+  response: Pick<Response, 'json'>,
+): Promise<DriverOrderCommandErrorCode | null> {
+  try {
+    const body: unknown = await response.json();
+    return readDriverOrderErrorCode(body);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * status + code를 client recovery 의미로 분류한다.
+ * HTTP status만 보지 않으며, 가능한 경우 envelope code가 우선한다.
+ *
+ * - 401은 code와 무관하게 AUTHORITY_LOSS다.
+ * - DRIVER_ORDER_AUTHORITY_DENIED는 status와 무관하게 AUTHORITY_LOSS다.
+ * - DRIVER_ORDER_NOT_FOUND는 authoritative absence/hiding으로 NOT_FOUND다.
+ * - 403/409 + DRIVER_ORDER_STATE_CONFLICT는 STATE_CONFLICT다.
+ * - code 없는 unknown/missing 403은 기존 보안 경계를 낮추지 않도록
+ *   fail-closed AUTHORITY_LOSS로 유지한다.
+ * - 그 외 ratified 코드 없음·malformed·예상 밖 4xx/5xx는 UNCERTAIN이다.
+ *   (404 body 미판독/코드 없음도 UNCERTAIN이며 새로운 성공 의미를 추론하지 않는다)
+ */
+export function classifyDriverOrderCommandError(args: {
+  status: number;
+  code: DriverOrderCommandErrorCode | string | null | undefined;
+}): DriverOrderCommandRecovery {
+  const { status, code } = args;
+  if (status === 401) return 'AUTHORITY_LOSS';
+  if (code === 'DRIVER_ORDER_AUTHORITY_DENIED') return 'AUTHORITY_LOSS';
+  if (code === 'DRIVER_ORDER_NOT_FOUND') return 'NOT_FOUND';
+  if (
+    code === 'DRIVER_ORDER_STATE_CONFLICT' &&
+    (status === 403 || status === 409)
+  ) {
+    return 'STATE_CONFLICT';
+  }
+  if (status === 403) return 'AUTHORITY_LOSS';
+  return 'UNCERTAIN';
 }
 
 /**
