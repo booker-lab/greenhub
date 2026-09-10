@@ -84,6 +84,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const hasOrderRef = useRef(false);
   // orderId·auth token scope가 바뀌면 이전 scope의 order/PII를 절대 남기지 않는다.
   const readScopeRef = useRef<string | null>(null);
+  // C1: status command dispatch의 실제 authority. loading UI state와 분리된 ref 기반
+  // in-flight guard이며, React state의 비동기 반영만으로는 막을 수 없는 동일 frame
+  // double-click/double-submit에서도 두 번째 PATCH dispatch를 차단한다.
+  const inFlightRef = useRef(false);
 
   const readDetail = useCallback(
     async (token: string) => {
@@ -167,6 +171,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   }, [orderId, session?.user.accessToken, readKey, readDetail]);
 
   async function updateStatus(status: string) {
+    // C1: dispatch 직전에 ref를 선점한다. 이미 진행 중인 command가 있으면
+    // 두 번째 PATCH를 dispatch하지 않고 즉시 복귀한다.
+    if (inFlightRef.current) return;
     if (!order || !session) return;
     // fail-closed: stale read confidence에서는 위험 command를 실행하지 않는다.
     // AUTH/NOT_FOUND는 원칙적으로 order가 제거된 상태이며, FETCH stale·readback 미확인도 차단한다.
@@ -180,6 +187,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       return;
     }
     const token = session.user.accessToken;
+    inFlightRef.current = true;
     setLoading(true);
     setReadbackWarning(null);
     try {
@@ -188,7 +196,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         token,
         { method: 'PATCH', body: JSON.stringify({ status }) },
       );
-      if (!res.ok) throw new Error('상태 전환 실패');
+      if (!res.ok) {
+        // 403 duplicate-sequential / 409 race-loser: 서버 authority가 이미 상태를
+        // 이동시켰다는 의미다. 같은 command를 자동 재전송하지 않고
+        // authoritative GET으로 수렴한다.
+        if (res.status === 403 || res.status === 409) {
+          notifications.show({
+            color: 'yellow',
+            message: '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.',
+          });
+          await readDetail(token);
+          return;
+        }
+        throw new Error('상태 전환 실패');
+      }
       const result = (await res.json()) as { orderId?: unknown; status?: unknown };
       if (!isDriverOrderStatusAck(result, orderId, status)) {
         throw new Error('상태 전환 응답 불일치');
@@ -234,6 +255,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
     } catch {
       notifications.show({ color: 'red', message: '오류가 발생했습니다. 다시 시도해주세요.' });
     } finally {
+      // 모든 종료 경로에서 in-flight를 해제한다. 403/409 convergence return,
+      // readback 분기 return, throw 모두 여기를 거친다.
+      inFlightRef.current = false;
       setLoading(false);
     }
   }
@@ -524,7 +548,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               radius="xl"
               color="brand"
               loading={loading}
-              disabled={!commandsAllowed}
+              disabled={loading || !commandsAllowed}
               onClick={() => updateStatus('DELIVERING')}
             >
               배송 재개
@@ -544,7 +568,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                   radius="xl"
                   color="brand"
                   loading={loading}
-                  disabled={!commandsAllowed}
+                  disabled={loading || !commandsAllowed}
                   onClick={() => updateStatus('DELIVERING')}
                 >
                   수거 완료 / 배송 시작
@@ -591,7 +615,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               radius="xl"
               color="brand"
               loading={loading}
-              disabled={!commandsAllowed}
+              disabled={loading || !commandsAllowed}
               onClick={() => updateStatus('DELIVERING')}
             >
               수거 완료 / 배송 시작
@@ -608,7 +632,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             radius="xl"
             color="brand"
             loading={loading}
-            disabled={!commandsAllowed}
+            disabled={loading || !commandsAllowed}
             onClick={() => updateStatus('DELIVERED')}
           >
             배송 완료
@@ -635,9 +659,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           loading={loading}
           orderId={orderId}
           storeId={order.storeId}
+          orderStatus={order.status}
           onClose={() => setHoldOpened(false)}
           onLoading={setLoading}
           onSaved={() => {
+            const token = session?.user.accessToken;
+            if (token) void readDetail(token);
+          }}
+          onConvergence={() => {
             const token = session?.user.accessToken;
             if (token) void readDetail(token);
           }}
