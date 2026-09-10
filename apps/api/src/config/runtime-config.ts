@@ -57,6 +57,10 @@ export function isLocalRuntime(values: RuntimeConfigValues): boolean {
   return readString(values, 'GREENHUB_LOCAL_RUNTIME') === 'true';
 }
 
+export function isApiUnitTestEnv(values: RuntimeConfigValues = process.env): boolean {
+  return readString(values, 'GREENHUB_API_UNIT_TEST') === 'true';
+}
+
 export function shouldEnableScheduledJobs(values: RuntimeConfigValues = process.env): boolean {
   return readString(values, 'GREENHUB_SCHEDULES_ENABLED') !== 'false';
 }
