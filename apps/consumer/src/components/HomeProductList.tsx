@@ -190,6 +190,9 @@ function RoundDirectHome({
   loading,
   error,
   isEmpty,
+  isRefreshing,
+  isStale,
+  status,
   refetch,
 }: ReturnType<typeof useSaleRounds>) {
   if (loading) {
@@ -205,12 +208,17 @@ function RoundDirectHome({
     );
   }
 
-  if (error) {
+  if (status === 'error') {
     return (
       <Stack align="center" py={48} gap="sm" role="alert">
         <Text size="sm" c="var(--color-text-secondary)">
           판매 회차를 불러오지 못했습니다.
         </Text>
+        {error && (
+          <Text size="sm" c="var(--color-text-disabled)">
+            {error}
+          </Text>
+        )}
         <Button variant="light" onClick={refetch}>
           다시 시도
         </Button>
@@ -220,6 +228,34 @@ function RoundDirectHome({
 
   return (
     <Stack gap="xl">
+      {isRefreshing && (
+        <Text size="sm" c="var(--color-text-secondary)" ta="center" aria-live="polite">
+          최신 회차 정보를 확인하는 중...
+        </Text>
+      )}
+      {isStale && (
+        <Box
+          p="sm"
+          role="alert"
+          style={{
+            background: 'var(--color-primary-surface)',
+            borderRadius: 'var(--radius)',
+            border: 'var(--border)',
+          }}
+        >
+          <Text size="sm" c="var(--color-text-secondary)">
+            최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
+          </Text>
+          {error && (
+            <Text size="sm" c="var(--color-text-disabled)" mt={4}>
+              {error}
+            </Text>
+          )}
+          <Button variant="light" size="xs" mt="xs" onClick={refetch}>
+            다시 시도
+          </Button>
+        </Box>
+      )}
       <Box component="section" aria-labelledby="current-round-title">
         <Stack gap={6} mb="md">
           <Title
