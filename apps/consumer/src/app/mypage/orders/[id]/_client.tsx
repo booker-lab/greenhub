@@ -24,6 +24,12 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 import { readPortonePaymentConfiguration } from '@/lib/portone-config';
 import {
   formatDateTime,
+  classifyCommandFailure,
+  hasAuthoritativeOrderStatus,
+  isStaleOrderRead,
+  readCommandConfirmation,
+  type CommandOutcome,
+  IDLE_COMMAND_OUTCOME,
   isNonEmptyString,
   isRecord,
   isSafeIdentifier,
@@ -70,14 +76,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         ? null
         : undefined;
   const { order, loading, error, status, refetch } = useOrderStatus(orderId, accessToken);
-  const [confirming, setConfirming] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelDone, setCancelDone] = useState(false);
-  const [paying, setPaying] = useState(false);
+  const [cancelOutcome, setCancelOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
+  const [reviewOutcome, setReviewOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
+  const [redeliveryOutcome, setRedeliveryOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   const [retrying, setRetrying] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const detail = orderId ? readOrderDetail(order, orderId) : null;
+  const isStaleRead = detail !== null && isStaleOrderRead(status);
+  const isAuthoritativelyCancelled = hasAuthoritativeOrderStatus(detail, 'CANCELLED');
+  const isAuthoritativelyReviewed = hasAuthoritativeOrderStatus(detail, 'REVIEWED');
+  const cancelBusy = cancelOutcome.kind === 'executing' || cancelOutcome.kind === 'reconciling';
+  const reviewBusy = reviewOutcome.kind === 'executing' || reviewOutcome.kind === 'reconciling';
+  const redeliveryBusy =
+    redeliveryOutcome.kind === 'executing' || redeliveryOutcome.kind === 'reconciling';
 
   async function handleRetry() {
     setRetrying(true);
@@ -90,42 +101,94 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   async function handleCancel() {
     if (!session?.user?.accessToken || !detail?.canRequestCancellation) return;
+    if (isAuthoritativelyCancelled) return;
+    if (isStaleRead) {
+      setActionError('최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.');
+      return;
+    }
     const message = detail.isRoundOrder
       ? '주문 취소를 요청하시겠습니까?\n서버에서 회차 마감 전인지 다시 확인합니다.'
       : '공동구매 참여를 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.';
     if (!confirm(message)) return;
-    setCancelling(true);
+    setCancelOutcome({ kind: 'executing' });
     setActionError(null);
     try {
-      const response = await fetch(
-        `${API_URL}/stores/${encodeURIComponent(detail.storeId)}/orders/${detail.id}/cancel`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.user.accessToken}`,
+      let response: Response;
+      try {
+        response = await fetch(
+          `${API_URL}/stores/${encodeURIComponent(detail.storeId)}/orders/${detail.id}/cancel`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.user.accessToken}`,
+            },
+            body: JSON.stringify({ reason: '고객 요청' }),
           },
-          body: JSON.stringify({ reason: '고객 요청' }),
-        },
-      );
-      const body: unknown = await response.json().catch(() => null);
-      if (
-        !response.ok ||
-        !isRecord(body) ||
-        body.orderId !== detail.id ||
-        body.status !== 'CANCELLED'
-      ) {
-        throw new Error(
-          isRecord(body) && isNonEmptyString(body.message)
-            ? body.message
-            : '주문을 취소할 수 없습니다.',
         );
+      } catch {
+        throw {
+          kind: 'uncertain',
+          message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+        } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
-      setCancelDone(true);
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        const failure = classifyCommandFailure({ httpStatus: response.status, hasResponse: true });
+        const serverMessage =
+          isRecord(body) && isNonEmptyString(body.message) ? body.message : null;
+        if (failure === 'rejected') {
+          throw {
+            kind: 'rejected',
+            message: serverMessage ?? '주문을 취소할 수 없습니다.',
+          } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
+        }
+        throw {
+          kind: 'uncertain',
+          message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+        } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
+      }
+      if (!readCommandConfirmation(body, { orderId: detail.id, status: 'CANCELLED' })) {
+        throw {
+          kind: 'uncertain',
+          message: '취소 확인 응답을 검증하지 못했습니다. 상태를 다시 확인해 주세요.',
+        } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
+      }
+      setCancelOutcome({ kind: 'reconciling' });
+      const latestOrder = await refetch().catch(() => undefined);
+      const latestDetail = latestOrder ? readOrderDetail(latestOrder, detail.id) : null;
+      if (latestDetail && hasAuthoritativeOrderStatus(latestDetail, 'CANCELLED')) {
+        setCancelOutcome({ kind: 'done' });
+        return;
+      }
+      // Server confirmed the cancel, but the authoritative re-read did not
+      // converge. This is not a cancel failure: keep the acknowledgement and
+      // ask for an explicit status re-check instead of a blind retry.
+      setCancelOutcome({ kind: 'reconcile-failed' });
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : '주문 취소에 실패했습니다.');
-    } finally {
-      setCancelling(false);
+      if (isRecord(caught) && typeof caught.message === 'string') {
+        if (caught.kind === 'rejected') {
+          setCancelOutcome({ kind: 'rejected', message: caught.message });
+          setActionError(caught.message);
+          return;
+        }
+        if (caught.kind === 'uncertain') {
+          setCancelOutcome({ kind: 'uncertain', message: caught.message });
+          setActionError(caught.message);
+          return;
+        }
+      }
+      if (caught instanceof TypeError) {
+        const uncertainMessage =
+          '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.';
+        setCancelOutcome({ kind: 'uncertain', message: uncertainMessage });
+        setActionError(uncertainMessage);
+        return;
+      }
+      setCancelOutcome({ kind: 'uncertain', message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.' });
+      setActionError(
+        caught instanceof Error ? caught.message : '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+      );
     }
   }
 
@@ -140,27 +203,49 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     ) {
       return;
     }
-    setPaying(true);
+    if (isStaleRead) {
+      setActionError('최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.');
+      return;
+    }
+    setRedeliveryOutcome({ kind: 'executing' });
     setActionError(null);
     try {
-      const response = await fetch(
-        `${API_URL}/stores/${encodeURIComponent(detail.storeId)}/orders/${detail.id}/redelivery-fee`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.user.accessToken}`,
+      let response: Response;
+      try {
+        response = await fetch(
+          `${API_URL}/stores/${encodeURIComponent(detail.storeId)}/orders/${detail.id}/redelivery-fee`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.user.accessToken}`,
+            },
+            body: JSON.stringify({ idempotencyKey: `redelivery:${detail.id}:first` }),
           },
-          body: JSON.stringify({ idempotencyKey: `redelivery:${detail.id}:first` }),
-        },
-      );
+        );
+      } catch {
+        throw {
+          kind: 'uncertain',
+          message:
+            '재배송비 결제 요청 결과를 확정할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.',
+        } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
+      }
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(
-          isRecord(body) && isNonEmptyString(body.message)
-            ? body.message
-            : '재배송비 결제를 시작할 수 없습니다.',
-        );
+        const failure = classifyCommandFailure({ httpStatus: response.status, hasResponse: true });
+        const serverMessage =
+          isRecord(body) && isNonEmptyString(body.message) ? body.message : null;
+        if (failure === 'rejected') {
+          throw {
+            kind: 'rejected',
+            message: serverMessage ?? '재배송비 결제를 시작할 수 없습니다.',
+          } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
+        }
+        throw {
+          kind: 'uncertain',
+          message:
+            '재배송비 결제 요청 결과를 확정할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.',
+        } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       const payment = readRedeliveryPaymentResponse(body, {
         orderId: detail.id,
@@ -168,7 +253,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         amount: fee,
       });
       if (payment.status === 'FAILED' || payment.status === 'REFUNDED') {
-        throw new Error('재배송비 결제 상태를 확인할 수 없습니다. 운영 확인이 필요합니다.');
+        throw {
+          kind: 'rejected',
+          message: '재배송비 결제 상태를 확인할 수 없습니다. 운영 확인이 필요합니다.',
+        } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
       }
       if (payment.status === 'PENDING') {
         const configuration = readPortonePaymentConfiguration('kakaopay');
@@ -184,45 +272,138 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           easyPay: { easyPayProvider: configuration.easyPayProvider },
         });
         if (result && 'code' in result) {
-          throw new Error(result.message ?? '재배송비 결제가 취소되었습니다.');
+          throw {
+            kind: 'rejected',
+            message:
+              (isRecord(result) && isNonEmptyString(result.message)
+                ? result.message
+                : null) ?? '재배송비 결제가 취소되었습니다.',
+          } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
         }
       }
 
-      const latestOrder = await refetch();
+      setRedeliveryOutcome({ kind: 'reconciling' });
+      const latestOrder = await refetch().catch(() => undefined);
       const latestDetail = latestOrder ? readOrderDetail(latestOrder, detail.id) : null;
       if (!latestDetail?.redeliveryPayment.paid) {
-        throw new Error('결제 요청은 접수되었지만 서버 확인 전입니다. 잠시 후 다시 확인해 주세요.');
+        throw {
+          kind: 'uncertain',
+          message:
+            '결제 요청은 접수되었지만 서버 확인 전입니다. 중복 결제 전에 잠시 후 다시 확인해 주세요.',
+        } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
+      setRedeliveryOutcome({ kind: 'done' });
     } catch (caught) {
-      setActionError(
-        caught instanceof Error ? caught.message : '재배송비 결제 중 오류가 발생했습니다.',
-      );
-    } finally {
-      setPaying(false);
+      if (isRecord(caught) && typeof caught.message === 'string') {
+        if (caught.kind === 'rejected') {
+          setRedeliveryOutcome({ kind: 'rejected', message: caught.message });
+          setActionError(caught.message);
+          return;
+        }
+        if (caught.kind === 'uncertain') {
+          setRedeliveryOutcome({ kind: 'uncertain', message: caught.message });
+          setActionError(caught.message);
+          return;
+        }
+      }
+      if (caught instanceof TypeError) {
+        const uncertainMessage =
+          '재배송비 결제 요청 결과를 확정할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.';
+        setRedeliveryOutcome({ kind: 'uncertain', message: uncertainMessage });
+        setActionError(uncertainMessage);
+        return;
+      }
+      const fallbackMessage =
+        caught instanceof Error ? caught.message : '재배송비 결제 중 오류가 발생했습니다.';
+      setRedeliveryOutcome({ kind: 'uncertain', message: fallbackMessage });
+      setActionError(fallbackMessage);
     }
   }
 
   async function handleConfirm() {
     if (!session?.user?.accessToken || !detail) return;
-    setConfirming(true);
+    if (isAuthoritativelyReviewed) return;
+    if (isStaleRead) {
+      setActionError('최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.');
+      return;
+    }
+    setReviewOutcome({ kind: 'executing' });
     setActionError(null);
     try {
-      const response = await fetch(
-        `${API_URL}/stores/${encodeURIComponent(detail.storeId)}/orders/${detail.id}/review`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.user.accessToken}`,
+      let response: Response;
+      try {
+        response = await fetch(
+          `${API_URL}/stores/${encodeURIComponent(detail.storeId)}/orders/${detail.id}/review`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.user.accessToken}`,
+            },
           },
-        },
-      );
-      if (!response.ok) throw new Error('구매 확정에 실패했습니다.');
-      setConfirmed(true);
+        );
+      } catch {
+        throw {
+          kind: 'uncertain',
+          message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+        } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
+      }
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        const failure = classifyCommandFailure({ httpStatus: response.status, hasResponse: true });
+        const serverMessage =
+          isRecord(body) && isNonEmptyString(body.message) ? body.message : null;
+        if (failure === 'rejected') {
+          throw {
+            kind: 'rejected',
+            message: serverMessage ?? '구매 확정에 실패했습니다.',
+          } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
+        }
+        throw {
+          kind: 'uncertain',
+          message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+        } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
+      }
+      if (!readCommandConfirmation(body, { orderId: detail.id, status: 'REVIEWED' })) {
+        throw {
+          kind: 'uncertain',
+          message: '구매 확정 확인 응답을 검증하지 못했습니다. 상태를 다시 확인해 주세요.',
+        } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
+      }
+      setReviewOutcome({ kind: 'reconciling' });
+      const latestOrder = await refetch().catch(() => undefined);
+      const latestDetail = latestOrder ? readOrderDetail(latestOrder, detail.id) : null;
+      if (latestDetail && hasAuthoritativeOrderStatus(latestDetail, 'REVIEWED')) {
+        setReviewOutcome({ kind: 'done' });
+        return;
+      }
+      // Server confirmed the review, but the authoritative re-read did not
+      // converge. This is not a review failure: keep the acknowledgement and
+      // ask for an explicit status re-check instead of a blind retry.
+      setReviewOutcome({ kind: 'reconcile-failed' });
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : '구매 확정에 실패했습니다.');
-    } finally {
-      setConfirming(false);
+      if (isRecord(caught) && typeof caught.message === 'string') {
+        if (caught.kind === 'rejected') {
+          setReviewOutcome({ kind: 'rejected', message: caught.message });
+          setActionError(caught.message);
+          return;
+        }
+        if (caught.kind === 'uncertain') {
+          setReviewOutcome({ kind: 'uncertain', message: caught.message });
+          setActionError(caught.message);
+          return;
+        }
+      }
+      if (caught instanceof TypeError) {
+        const uncertainMessage = '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.';
+        setReviewOutcome({ kind: 'uncertain', message: uncertainMessage });
+        setActionError(uncertainMessage);
+        return;
+      }
+      setReviewOutcome({ kind: 'uncertain', message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.' });
+      setActionError(
+        caught instanceof Error ? caught.message : '구매 확정에 실패했습니다.',
+      );
     }
   }
 
@@ -328,9 +509,37 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  const isCancelled = detail.status === 'CANCELLED' || cancelDone;
+  const isCancelled = isAuthoritativelyCancelled || cancelOutcome.kind === 'done';
+  const showCancelReconcileWarning =
+    !isAuthoritativelyCancelled && cancelOutcome.kind === 'reconcile-failed';
+  const showCancelCommand =
+    detail.canRequestCancellation &&
+    !isAuthoritativelyCancelled &&
+    cancelOutcome.kind !== 'done';
   const isReviewable =
-    !confirmed && (detail.status === 'DELIVERED' || detail.status === 'PICKED_UP');
+    !isAuthoritativelyReviewed &&
+    (detail.status === 'DELIVERED' || detail.status === 'PICKED_UP') &&
+    reviewOutcome.kind !== 'done';
+  const showReviewConfirmed =
+    isAuthoritativelyReviewed || reviewOutcome.kind === 'done';
+  const showReviewSection = isReviewable || reviewOutcome.kind !== 'idle' || showReviewConfirmed;
+  const showReviewReconcileWarning =
+    !isAuthoritativelyReviewed && reviewOutcome.kind === 'reconcile-failed';
+  const reviewLabel = showReviewConfirmed
+    ? '구매 확정 완료'
+    : reviewOutcome.kind === 'reconciling'
+      ? '상태 확인 중...'
+      : reviewOutcome.kind === 'reconcile-failed'
+        ? '구매 확정 확인 필요'
+        : reviewOutcome.kind === 'executing'
+          ? '구매 확정 중...'
+          : '구매 확정';
+  const needsStatusRecheck =
+    cancelOutcome.kind === 'uncertain' ||
+    cancelOutcome.kind === 'reconcile-failed' ||
+    reviewOutcome.kind === 'uncertain' ||
+    reviewOutcome.kind === 'reconcile-failed' ||
+    redeliveryOutcome.kind === 'uncertain';
   const showPickupCode =
     detail.pickupCode && ['HUB_ARRIVED', 'PICKED_UP', 'REVIEWED'].includes(detail.status);
   const steps = getTimelineSteps(detail);
@@ -348,6 +557,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <Stack gap={6}>
             <Text size="sm">{error ?? '최신 주문 정보를 확인하지 못했습니다.'}</Text>
             <Text size="sm">표시된 정보가 최신이 아닐 수 있습니다.</Text>
+            <Text size="sm">
+              최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없습니다.
+            </Text>
             <Button
               mt="xs"
               variant="outline"
@@ -479,13 +691,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <Button
                       mt="xs"
                       color="red"
-                      loading={paying}
-                      disabled={paying}
+                      loading={redeliveryBusy}
+                      disabled={redeliveryBusy || isStaleRead}
                       onClick={handleRedeliveryPayment}
                     >
-                      {detail.redeliveryPayment.status === 'PENDING'
-                        ? '재배송비 결제 계속하기'
-                        : '재배송비 결제'}
+                      {redeliveryOutcome.kind === 'reconciling'
+                        ? '서버 확인 중...'
+                        : detail.redeliveryPayment.status === 'PENDING'
+                          ? '재배송비 결제 계속하기'
+                          : '재배송비 결제'}
                     </Button>
                   )}
               </Stack>
@@ -523,7 +737,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Paper>
       )}
 
-      {detail.canRequestCancellation && !cancelDone && (
+      {showCancelCommand && (
         <Alert
           color="blue"
           variant="light"
@@ -536,16 +750,46 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               ? '취소 요청 시 서버가 회차 마감 여부를 다시 확인하고 환불과 주문 한도 반환을 처리합니다.'
               : '모집 중인 공동구매 참여를 취소할 수 있습니다.'}
           </Text>
+          {isStaleRead && (
+            <Text size="sm" mb="sm">
+              최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.
+            </Text>
+          )}
+          {cancelOutcome.kind === 'reconciling' && (
+            <Text size="sm" mb="sm">
+              서버에서 취소를 확인했습니다. 최신 주문 상태를 확인 중입니다.
+            </Text>
+          )}
           <Button
             fullWidth
             variant="outline"
             color="red"
-            loading={cancelling}
-            disabled={cancelling}
+            loading={cancelBusy}
+            disabled={cancelBusy || isStaleRead || cancelOutcome.kind === 'reconcile-failed'}
             onClick={handleCancel}
           >
             {detail.isRoundOrder ? '주문 취소' : '공동구매 참여 취소'}
           </Button>
+        </Alert>
+      )}
+
+      {showCancelReconcileWarning && (
+        <Alert color="yellow" variant="light" radius="md" mb="lg" title="취소 확인됨 · 상태 재확인 필요">
+          <Stack gap={6}>
+            <Text size="sm">
+              취소는 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 취소 실패가
+              아니므로 바로 다시 취소하지 말고 상태를 확인해 주세요.
+            </Text>
+            <Button
+              mt="xs"
+              variant="outline"
+              loading={retrying}
+              disabled={retrying}
+              onClick={handleRetry}
+            >
+              다시 시도
+            </Button>
+          </Stack>
         </Alert>
       )}
 
@@ -558,22 +802,71 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {actionError && (
         <Alert color="red" variant="light" radius="md" mb="lg">
-          {actionError}
+          <Stack gap={6}>
+            <Text size="sm">{actionError}</Text>
+            {needsStatusRecheck && (
+              <Text size="sm">
+                중복 요청 전에 다시 시도로 현재 상태를 확인해 주세요.
+              </Text>
+            )}
+            {needsStatusRecheck && (
+              <Button
+                mt="xs"
+                variant="outline"
+                loading={retrying}
+                disabled={retrying}
+                onClick={handleRetry}
+              >
+                상태 다시 확인
+              </Button>
+            )}
+          </Stack>
         </Alert>
       )}
 
-      {(isReviewable || confirmed) && (
-        <Button
-          fullWidth
-          radius="md"
-          mb="lg"
-          disabled={confirming || confirmed}
-          loading={confirming}
-          variant={confirmed ? 'outline' : 'filled'}
-          onClick={handleConfirm}
-        >
-          {confirmed ? '구매 확정 완료' : '구매 확정'}
-        </Button>
+      {showReviewSection && (
+        <Stack gap={6} mb="lg">
+          <Button
+            fullWidth
+            radius="md"
+            disabled={reviewBusy || showReviewConfirmed || showReviewReconcileWarning || isStaleRead}
+            loading={reviewBusy}
+            variant={showReviewConfirmed ? 'outline' : 'filled'}
+            onClick={handleConfirm}
+          >
+            {reviewLabel}
+          </Button>
+          {isStaleRead && isReviewable && (
+            <Text size="sm" c="var(--color-text-secondary)" ta="center">
+              최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.
+            </Text>
+          )}
+          {reviewOutcome.kind === 'reconciling' && (
+            <Text size="sm" c="var(--color-text-secondary)" ta="center">
+              서버에서 구매 확정을 확인했습니다. 최신 주문 상태를 확인 중입니다.
+            </Text>
+          )}
+        </Stack>
+      )}
+
+      {showReviewReconcileWarning && (
+        <Alert color="yellow" variant="light" radius="md" mb="lg" title="구매 확정 확인됨 · 상태 재확인 필요">
+          <Stack gap={6}>
+            <Text size="sm">
+              구매 확정은 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 확정
+              실패가 아니므로 바로 다시 확정하지 말고 상태를 확인해 주세요.
+            </Text>
+            <Button
+              mt="xs"
+              variant="outline"
+              loading={retrying}
+              disabled={retrying}
+              onClick={handleRetry}
+            >
+              다시 시도
+            </Button>
+          </Stack>
+        </Alert>
       )}
 
       {!isCancelled && detail.status !== 'DELIVERY_HELD' && (
