@@ -29,7 +29,13 @@ export default function Home() {
     retry: retryProducts,
     hasLoaded: productsHasLoaded,
   } = useStoreProducts(storeId);
-  const { summary, loading: summaryLoading, error: summaryError } = useDashboardSummary();
+  const {
+    summary,
+    loading: summaryLoading,
+    error: summaryError,
+    hasLoaded: summaryHasLoaded,
+    retry: retrySummary,
+  } = useDashboardSummary();
   const productsTrustworthy = areStoreProductCountsTrustworthy({
     hasLoaded: productsHasLoaded,
     loading: productsLoading,
@@ -71,7 +77,13 @@ export default function Home() {
             productsTrustworthy={productsTrustworthy}
           />
           <OrderStatusCard groupCounts={groupCounts} />
-          <SettlementCard summary={summary} loading={summaryLoading} error={summaryError} />
+          <SettlementCard
+            summary={summary}
+            loading={summaryLoading}
+            error={summaryError}
+            hasLoaded={summaryHasLoaded}
+            onRetry={retrySummary}
+          />
           <ProductStatusCard
             products={products}
             loading={productsLoading}
