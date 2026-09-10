@@ -218,10 +218,123 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 
 권한·금전 불변식은 UI 동작만으로 `VERIFIED` 처리하지 않는다.
 
+## 12. Status / Hold Duplicate Submission & Convergence Contract
+
+> 결정 계약 게시: `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-DECISION-01`
+> 이 절은 idempotency 재설계나 server implementation이 아니라, 이미 COMPLETE된 위 결정 계약을
+> 후속 `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-IMPLEMENTATION-01`이 추측 없이 소비할 수 있도록
+> remote-addressable canonical evidence로 게시한 것이다.
+> `IMPLEMENTATION_STATUS = PENDING`이며 `IMPLEMENTATION PENDING` 상태를 거짓으로 기록하지 않는다.
+
+### 12.1 SETTLED DECISION — 현재 계약에서 바꾸지 않는다
+
+- `STATUS` / `DELIVERY_HOLD` command에는 현 단계에서 explicit idempotency key를 도입하지 않는다.
+- 금지: `UpdateStatusDto` idempotencyKey 추가, `HoldDeliveryDto` idempotencyKey 추가,
+  `Idempotency-Key` / `X-Idempotency` header 추가, command replay collection 추가,
+  request log/idempotency collection 추가, replay response persistence 추가,
+  TTL/retention infrastructure 추가.
+- 현재 status/hold에는 durable command identity가 없다.
+  `command identity = NONE`, `persistence authority = NONE`, `TTL / retention = NONE`.
+- sequential duplicate(첫 command가 이미 commit된 뒤 같은 target status를 다시 보내는 경우)의
+  canonical response는 `403 Forbidden`이다.
+  `200 replay`는 도입하지 않으며(`DO NOT INTRODUCE`), no-op `200`도 도입하지 않는다.
+  FSM self-loop가 없으므로 side effect 실행 전 거부되는 현재 의미를 유지한다.
+  `403` 자체만으로 “내 이전 요청이 성공했다”고 판단하지 않는다.
+- concurrent duplicate(동일 old state에서 같은 command가 동시 실행되는 경우)의
+  canonical 수렴은 `winner = 200`, `loser = 409 Conflict`이다.
+- FSM상 허용되지 않는 command는 `403`, transaction 중 다른 writer가 먼저 상태를 변경한
+  race loser는 `409`이다. `403`/`409` 응답 체계를 변경하지 않는다.
+- `ACK` 성공 또는 `ACK` 불확실 이후 authoritative reread가 실패해도
+  자동 동일-command 재전송을 하지 않는다. canonical convergence는
+  `NO_RESEND + AUTHORITATIVE_GET`이며, client는 동일 command를 재전송하는 대신
+  authoritative GET으로 현재 상태를 확인한다.
+  `GET` 성공 시 현재 authoritative state를 사용하고,
+  `GET` 실패 시 상태 확인 경고 + 위험 command 제한 + 수동 재확인을 따른다.
+- `delivery-hold`는 별도의 replay/idempotency 시스템을 만들지 않는다.
+  held 상태에서 동일 hold 또는 다른 reason hold 재요청은 sequential `403`,
+  동시 race loser는 `409`이다.
+  새 hold는 이전 hold 해소 이후에만 생성 가능하며,
+  새 `heldAt`이 새로운 hold/payment linkage epoch 역할을 한다.
+- `POST redelivery-fee`의 기존 durable key/charge contract는 유지한다.
+  Status/Hold command에 이를 복제하지 않는다.
+- round-direct delivery-photo의 durable idempotency는 별도 기존 계약이며
+  이번 status/hold 계약과 섞지 않는다.
+  legacy-hub photo orphan cleanup 및 keyed server-upload 전환은
+  이번 계약과 후속 S1 구현 범위 밖이다.
+
+### 12.2 CURRENT IMPLEMENTATION — 현재 코드 사실
+
+- 진입점: `PATCH /stores/:storeId/orders/:orderId/status` →
+  `OrdersService.updateStatus` → `OrdersLifecycleService` / `RoundOrderLifecycleService`.
+- thin alias는 독립 idempotency authority가 아니라 동일 lifecycle write contract를 소비한다.
+  `PATCH .../delivery-hold`는 `status = DELIVERY_HELD`를 강제하여 동일 `updateStatus` chain으로 위임하고,
+  legacy `PATCH .../delivery-photo` alias는 `status = DELIVERED + photoUrl`로
+  동일 `updateStatus` chain을 소비한다.
+  단 delivery-photo storage/upload 고유 idempotency 문제까지 status contract로 흡수하지 않는다.
+- `UpdateStatusDto`와 `HoldDeliveryDto`에는 idempotency key field가 없으며,
+  status/hold 경로에 `Idempotency-Key` header 처리도 없다. 현재 사실과 결정이 일치한다.
+- 이미 transaction으로 보호되는 경로를 재작성 대상에서 제외한다.
+  `schemaVersion: 2 + roundId` 경로는 `expectedStatus` transaction 보호가 존재하고,
+  driver legacy status mutation 경로는 driver transaction + driver scope transaction 재확인이 존재하며,
+  일부 seller `DELIVERING` / `CANCELLED` / held-delta transaction 경로에도 transaction 보호가 존재한다.
+- 모든 status write가 transaction 내부에서
+  `current persisted order.status == entry expectedStatus`를 다시 확인하도록 수렴시키는 것이
+  서버 계약의 target invariant다.
+  `EVERY_STATUS_WRITE_REVALIDATES_EXPECTED_STATUS_INSIDE_TRANSACTION`.
+
+### 12.3 KNOWN GAP — S1 (`IMPLEMENTATION PENDING`)
+
+- `S1`: legacy non-transactional plain status write의 `expectedStatus` transaction 공백.
+- 대표적인 영향 surface: seller legacy `ACCEPTED → PREPARING`,
+  legacy parcel `PREPARING → DELIVERED`, `roundId` 없는 legacy `DELIVERY_HELD` 진입,
+  동일 `OrdersLifecycleService.updateStatus`를 타는 기타 plain branch.
+- 현재 문제: 두 요청이 같은 old state를 읽고 동시에 진입하면 plain `doc.update`가 둘 다 성공할 수 있고,
+  timestamp last-write-wins, transition notification 중복, legacy hold concurrent overwrite,
+  `heldAt` 변경에 따른 redelivery charge linkage 불일치 위험이 생긴다.
+- 후속 `IMPLEMENTATION-01`의 target invariant는 위 `EVERY_STATUS_WRITE_REVALIDATES_EXPECTED_STATUS_INSIDE_TRANSACTION`이며,
+  이 PUBLICATION Task에서는 source를 수정하지 않는다.
+- 문서 게시 시점의 상태는 `IMPLEMENTATION_STATUS = PENDING`이며 `IMPLEMENTATION PENDING`이다.
+  현재 코드가 이미 이 invariant를 만족한다고 기록하지 않는다.
+
+### 12.4 DEFERRED — 이번 계약에서 결정하지 않는다
+
+- idempotency key scope 결정은 `DEFERRED`다. 현재 계약에는 key가 없으므로
+  `scope = NO KEY IN CURRENT CONTRACT`이다.
+- 향후 별도 explicit-key 설계가 필요해질 경우,
+  `order+command(target status)`보다 request-ID 기반 `order+key` 계열이 적합하다는 설계 메모만 남긴다.
+  이것을 현재 구현 요구사항으로 승격하지 않는다.
+
+### 12.5 NON-GOALS — 후속 S1 구현에서도 하지 않는다
+
+- `200` replay 도입
+- explicit key 도입
+- request log store 추가
+- TTL system 추가
+- FSM redesign
+- redelivery payment redesign
+- notification mapping/template redesign
+- settlement redesign
+- photo upload redesign
+- client UI remediation
+- product policy change
+
+### 12.6 후속 구현 handoff
+
+- 후속 implementation owner: `apps/api/src/orders/orders-lifecycle.service.ts`.
+  후속 구현은 보호 경로를 재작성하는 것이 아니라 legacy plain branch를 동일 invariant로 수렴시키는 최소 변경이어야 하며,
+  `schemaVersion: 2` round 경로를 교체하거나 재작성하지 않는다.
+- 후속 proof:
+  sequential same-status는 `403` + side effect `0`,
+  concurrent legacy duplicate는 `1 x 200` + `1 x 409` + notification `1회` +
+  counter drift `0` + single effective timestamp/write,
+  legacy hold concurrent는 `1 x 200` + `1 x 409` + single `heldAt` +
+  single notification + charge linkage epoch overwrite 없음.
+
 ## 변경 이력
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-10 | `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-DECISION-01` 결정 계약 게시: Status/Hold duplicate submission & convergence contract 추가, S1은 `IMPLEMENTATION PENDING`으로 명시 |
 | 2026-08-30 | 현재 회차 lifecycle의 paid-before-resume guard와 `DELIVERY_HELD → PREPARING` 결제 요청 경계를 반영하고 seller API projection 경계를 정합화 |
 | 2026-08-24 | 유료 재배송비 결제 전 배송 재개 금지와 direct Firestore read authorization·최소화 finding 최초 반영 |
 | 2026-08-23 | 현행 endpoint/FSM/회차·legacy 공존 계약으로 정합화 |
