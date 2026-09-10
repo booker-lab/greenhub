@@ -404,6 +404,7 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 | 날짜 | 내용 |
 |---|---|
 | 2026-09-11 | Generic consumer `REVIEWED`와 specialized `reviewOrder`를 single semantic owner(`executeConsumerReviewedConvergence`)로 수렴 + settlement failure/retry convergence 회귀 9건 추가 |
+| 2026-09-11 | `ORDER-SPECIALIZED-COMMAND-RACE-CONVERGENCE-01`: review/confirmPickup/hubConfirmPickup fresh expected-status transaction + cross-command CAS + settlement convergence 수렴(`specialized-command-race-convergence.spec.ts` 18 tests PASS) 후 Section 8B를 `IMPLEMENTATION COMPLETE`로 수렴 |
 | 2026-09-10 | `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-DECISION-01` 결정 계약 게시: Status/Hold duplicate submission & convergence contract 추가, S1은 `IMPLEMENTATION PENDING`으로 명시 |
 | 2026-09-10 | `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-IMPLEMENTATION-01`: legacy plain branch transaction 재검증 수렴 확인 + conflicting-transition 회귀 1건 추가(`orders-duplicate-contract.spec.ts` 5 tests PASS) 후 Section 12를 `IMPLEMENTATION COMPLETE`로 수렴 |
 | 2026-08-30 | 현재 회차 lifecycle의 paid-before-resume guard와 `DELIVERY_HELD → PREPARING` 결제 요청 경계를 반영하고 seller API projection 경계를 정합화 |
