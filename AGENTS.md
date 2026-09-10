@@ -20,8 +20,11 @@
 ### `main` 변경 규칙
 
 - `main`에는 문서-only 변경을 포함해 직접 commit/push하지 않는다.
-- 모든 변경은 목적별 branch에서 만들고 PR을 통해 `main`으로 통합한다.
+- 일반 source mutation은 current canonical checkout에서 수행한다. Task 시작, parallelism, START_HEAD staleness, unrelated baseline movement만으로 feature branch/worktree를 만들지 않는다.
+- PR publication이 실제 필요한 시점에만 short-lived temporary publication transport ref를 만든다. publication transport ref는 source development branch가 아니다. publication transport ref 때문에 shared checkout을 checkout/switch로 점유하지 않는다 (`PUBLICATION_BRANCH_MAY_EXIST_AS_TRANSPORT_REF_BUT_MUST_NOT_TAKE_OVER_SHARED_CHECKOUT = YES`). 가능하면 exact candidate commit을 직접 remote temporary ref로 publish하는 worktree-checkout-free transport를 사용한다 (`scripts/git/publication-transport.mjs`).
 - publication branch/PR 생성 직전과 merge 권한 행사 직전에 반드시 live `main`을 다시 조회하고 `scripts/git/publication-admission.mjs` admission gate로 owned effective delta를 재평가한다. delta가 0이면 새 PR·merge·CI·deploy 없이 `COMPLETE_ALREADY_PUBLISHED` / `SUPERSEDED_ALREADY_PUBLISHED`로 종료한다.
+- PR 생성 후 live `main`이 이동하면 source work를 재생성하지 않는다. 먼저 PRE_MERGE admission을 다시 판단한다. owned delta가 이미 흡수됐으면 `SUPERSEDED_ALREADY_PUBLISHED`로 종료한다. owned delta가 남아 있고 movement가 unrelated이며 freshness가 필요하면 shared checkout을 건드리지 않는 server-side transport maintenance를 우선 사용한다 (GitHub PR Update branch와 semantic equivalent한 provider-side update가 사용 가능하고 충돌이 없을 때 canonical transport maintenance로 허용). 이를 source semantic reconciliation으로 확대하지 않는다. provider-side update가 conflict를 보고하거나 semantic owner overlap이 확인되면 local dirty checkout에서 merge/rebase하지 말고 fail-closed (`BLOCKED_TRANSPORT_CONFLICT` / `SEMANTIC_OWNER_REVIEW_REQUIRED`)한다. foreign dirty shared checkout에서의 local merge fallback은 금지한다.
+- temporary publication ref cleanup은 해당 ref만 제거한다. shared checkout branch/HEAD 및 foreign dirty는 publication transport cleanup 대상이 아니다.
 - `main` 통합 자체를 production 배포 승인으로 해석하지 않는다.
 - production 배포는 현재 출시 PLAN의 별도 승인 게이트와 실제 release SHA 확인 뒤에만 수행한다.
 - exact-SHA 배포 또는 promotion 절차가 불명확하면 임의 production 배포보다 중단을 우선한다.
