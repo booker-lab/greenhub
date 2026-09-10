@@ -605,8 +605,10 @@ test('기존 서버 취소·재배송비·주문 사진 조회 계약만 사용�
   assert.doesNotMatch(source, /setPaymentDone/);
   assert.doesNotMatch(source, /firebase\/storage|uploadBytes|getDownloadURL/);
 
-  const portoneSuccessGate = source.indexOf('const latestOrder = await refetch()');
-  assert.ok(portoneSuccessGate > source.indexOf('PortOne.requestPayment'));
+  const portoneCall = source.indexOf('PortOne.requestPayment');
+  assert.ok(portoneCall > 0);
+  const portoneSuccessGate = source.indexOf('await refetch()', portoneCall);
+  assert.ok(portoneSuccessGate > portoneCall);
   assert.ok(source.indexOf('latestDetail?.redeliveryPayment.paid') > portoneSuccessGate);
   assert.match(hookSource, /refetch/);
   assert.match(hookSource, /requestSequence/);
@@ -716,6 +718,152 @@ test('이전 데이터가 있는 refresh 실패는 stale을 유지하고 재시�
   assert.match(source, /최신 정보를 불러오지 못했습니다/);
   assert.match(source, /표시된 정보가 최신이 아닐 수 있습니다/);
   assert.match(source, /\(status === 'network' \|\| status === 'server'\)/);
-  assert.match(source, /loading={retrying}/);
+  assert.match(source, /loading=\{retrying\}/);
   assert.match(hookSource, /setInterval\(\(\) => void fetchOrder\(\), 3000\)/);
+});
+
+const {
+  classifyCommandFailure,
+  hasAuthoritativeOrderStatus,
+  isStaleOrderRead,
+  readCommandConfirmation,
+} = helperModule.exports;
+
+test('stale network/server read는 표시를 유지하지만 최신 상태 명령을 차단한다', () => {
+  assert.equal(isStaleOrderRead('network'), true);
+  assert.equal(isStaleOrderRead('server'), true);
+  assert.equal(isStaleOrderRead('found'), false);
+  assert.equal(isStaleOrderRead('loading'), false);
+  assert.equal(isStaleOrderRead('auth'), false);
+  assert.equal(isStaleOrderRead('not-found'), false);
+
+  assert.match(source, /isStaleOrderRead\(status\)/);
+  assert.match(source, /최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없습니다/);
+  // 세 명령 핸들러가 모두 stale 가드를 먼저 수행한다.
+  assert.equal((source.match(/if \(isStaleRead\)/g) ?? []).length >= 3, true);
+  assert.match(source, /disabled=\{cancelBusy \|\| isStaleRead \|\| cancelOutcome\.kind === 'reconcile-failed'\}/);
+  assert.match(source, /disabled=\{redeliveryBusy \|\| isStaleRead\}/);
+  assert.match(source, /showReviewReconcileWarning \|\| isStaleRead/);
+  // stale이어도 기존 상세 표시 자체는 유지된다.
+  assert.match(source, /표시된 정보가 최신이 아닐 수 있습니다/);
+});
+
+test('재시도 경로는 refetch를 호출하고 stale 해소를 전제로 actionability를 복원한다', () => {
+  assert.match(source, /async function handleRetry\(\)/);
+  assert.match(source, /await refetch\(\)/);
+  // 재시도 버튼은 일시 busy에만 비활성화되고 영구 차단하지 않는다.
+  assert.match(source, /disabled=\{retrying\}/);
+});
+
+test('cancel 확인 + 재조회 성공은 done으로 수렴한다', () => {
+  assert.equal(readCommandConfirmation({ orderId: 'o1', status: 'CANCELLED' }, { orderId: 'o1', status: 'CANCELLED' }), true);
+  assert.equal(readCommandConfirmation({ orderId: 'o1', status: 'REVIEWED' }, { orderId: 'o1', status: 'CANCELLED' }), false);
+  assert.equal(readCommandConfirmation({ orderId: 'other', status: 'CANCELLED' }, { orderId: 'o1', status: 'CANCELLED' }), false);
+  assert.equal(readCommandConfirmation(null, { orderId: 'o1', status: 'CANCELLED' }), false);
+
+  const ack = source.indexOf("readCommandConfirmation(body, { orderId: detail.id, status: 'CANCELLED' })");
+  assert.ok(ack > source.indexOf('async function handleCancel'));
+  const reconciling = source.indexOf("setCancelOutcome({ kind: 'reconciling' })");
+  assert.ok(reconciling > ack);
+  const refetchAfterAck = source.indexOf('await refetch()', reconciling);
+  assert.ok(refetchAfterAck > reconciling);
+  assert.ok(
+    source.indexOf("hasAuthoritativeOrderStatus(latestDetail, 'CANCELLED')", refetchAfterAck) >
+      refetchAfterAck,
+  );
+  assert.ok(source.indexOf("setCancelOutcome({ kind: 'done' })") > refetchAfterAck);
+});
+
+test('cancel 확인 + 재조회 실패는 취소 실패가 되지 않는다', () => {
+  assert.equal(hasAuthoritativeOrderStatus({ status: 'CANCELLED' }, 'CANCELLED'), true);
+  assert.equal(hasAuthoritativeOrderStatus({ status: 'ACCEPTED' }, 'CANCELLED'), false);
+  assert.equal(hasAuthoritativeOrderStatus(null, 'CANCELLED'), false);
+
+  assert.match(source, /setCancelOutcome\(\{ kind: 'reconcile-failed' \}\)/);
+  assert.match(source, /취소 확인됨 · 상태 재확인 필요/);
+  assert.match(source, /취소 실패가\s+아니므로 바로 다시 취소하지 말고/);
+  // 취소 배너는 authoritative CANCELLED 또는 reconcile된 done에서만 표시된다.
+  assert.match(
+    source,
+    /const isCancelled = isAuthoritativelyCancelled \|\| cancelOutcome\.kind === 'done'/,
+  );
+  // reconcile-failed는 별도 경고이며 취소 실패 문구로 수렴하지 않는다.
+  assert.doesNotMatch(source, /취소에 실패했습니다/);
+});
+
+test('review 확인 + 재조회 성공은 done으로 수렴한다', () => {
+  assert.equal(readCommandConfirmation({ orderId: 'o1', status: 'REVIEWED' }, { orderId: 'o1', status: 'REVIEWED' }), true);
+  assert.equal(readCommandConfirmation({ orderId: 'o1' }, { orderId: 'o1', status: 'REVIEWED' }), false);
+
+  // 2xx만으로 확정하지 않고 응답 본문의 REVIEWED 확인을 요구한다.
+  const ack = source.indexOf("readCommandConfirmation(body, { orderId: detail.id, status: 'REVIEWED' })");
+  assert.ok(ack > source.indexOf('async function handleConfirm'));
+  const reconciling = source.indexOf("setReviewOutcome({ kind: 'reconciling' })");
+  assert.ok(reconciling > ack);
+  assert.ok(
+    source.indexOf("hasAuthoritativeOrderStatus(latestDetail, 'REVIEWED')") > reconciling,
+  );
+  assert.ok(source.indexOf("setReviewOutcome({ kind: 'done' })") > reconciling);
+  assert.match(source, /구매 확정 완료/);
+});
+
+test('review 확인 + 재조회 실패는 확정 실패가 되지 않는다', () => {
+  assert.match(source, /setReviewOutcome\(\{ kind: 'reconcile-failed' \}\)/);
+  assert.match(source, /구매 확정 확인됨 · 상태 재확인 필요/);
+  assert.match(source, /실패가 아니므로 바로 다시 확정하지 말고/);
+  // reconcile-failed 동안 명령 버튼은 중복 확정을 막기 위해 비활성화된다.
+  assert.match(source, /showReviewReconcileWarning/);
+});
+
+test('서버 확정 거부는 실패로 표면화된다', () => {
+  assert.equal(classifyCommandFailure({ httpStatus: 400, hasResponse: true }), 'rejected');
+  assert.equal(classifyCommandFailure({ httpStatus: 403, hasResponse: true }), 'rejected');
+  assert.equal(classifyCommandFailure({ httpStatus: 404, hasResponse: true }), 'rejected');
+  assert.equal(classifyCommandFailure({ httpStatus: 409, hasResponse: true }), 'rejected');
+  assert.equal(classifyCommandFailure({ httpStatus: 422, hasResponse: true }), 'rejected');
+
+  assert.match(source, /classifyCommandFailure\(\{ httpStatus: response\.status, hasResponse: true \}\)/);
+  assert.match(source, /주문을 취소할 수 없습니다/);
+  assert.match(source, /구매 확정에 실패했습니다/);
+  assert.match(source, /재배송비 결제를 시작할 수 없습니다/);
+  assert.match(source, /kind: 'rejected'/);
+});
+
+test('전송 불확실성은 blind 중복 재시도 대신 상태 확인을 우선한다', () => {
+  assert.equal(classifyCommandFailure({ hasResponse: false }), 'uncertain');
+  assert.equal(classifyCommandFailure({ httpStatus: null, hasResponse: false }), 'uncertain');
+  assert.equal(classifyCommandFailure({ httpStatus: 500, hasResponse: true }), 'uncertain');
+  assert.equal(classifyCommandFailure({ httpStatus: 503, hasResponse: true }), 'uncertain');
+
+  assert.match(source, /결과를 확정할 수 없습니다\. 상태를 다시 확인해 주세요/);
+  assert.match(source, /중복 결제 전에/);
+  assert.match(source, /중복 요청 전에 다시 시도로 현재 상태를 확인해 주세요/);
+  assert.match(source, /상태 다시 확인/);
+  // 동일 명령 자동 재전송을 하지 않는다.
+  assert.doesNotMatch(source, /setTimeout\(.*handleCancel/);
+  assert.doesNotMatch(source, /setTimeout\(.*handleConfirm/);
+  assert.doesNotMatch(source, /setTimeout\(.*handleRedeliveryPayment/);
+});
+
+test('auth 전환 시 fail-closed가 보존된다', () => {
+  assert.match(source, /sessionStatus === 'unauthenticated' \|\| status === 'auth'/);
+  assert.match(source, /로그인이 필요하거나 이 주문을 볼 권한이 없습니다/);
+  // 명령 핸들러는 토큰 없이 시작하지 않는다.
+  assert.ok(source.indexOf('if (!session?.user?.accessToken || !detail?.canRequestCancellation)') > 0);
+  assert.ok(source.indexOf('if (!session?.user?.accessToken || !detail)') > 0);
+});
+
+test('redelivery paid 확인 게이트가 보존된다', () => {
+  assert.match(source, /latestDetail\?\.redeliveryPayment\.paid/);
+  assert.match(source, /서버 확인 전입니다/);
+  assert.match(source, /!detail\.redeliveryPayment\.requiresRecovery/);
+  assert.match(source, /재배송비 결제 상태를 확인할 수 없습니다\. 운영 확인이 필요합니다/);
+  // done은 paid 수렴 뒤에만 기록된다.
+  const paidGate = source.indexOf('latestDetail?.redeliveryPayment.paid');
+  const redeliveryDone = source.indexOf("setRedeliveryOutcome({ kind: 'done' })");
+  assert.ok(paidGate > source.indexOf('async function handleRedeliveryPayment'));
+  assert.ok(redeliveryDone > paidGate);
+  // PortOne 실제 호출 흐름은 그대로이며 테스트에서 실제 결제를 수행하지 않는다.
+  assert.match(source, /PortOne\.requestPayment/);
+  assert.doesNotMatch(source, /requestPayment\(\{\s*storeId:[^}]*test/i);
 });
