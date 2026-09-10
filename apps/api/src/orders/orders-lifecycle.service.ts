@@ -240,7 +240,26 @@ export class OrdersLifecycleService {
             transaction.update(orderRef, update);
           });
         } else {
-          await this.firestore.doc(`orders/${orderId}`).update(update);
+          await this.firestore.runTransaction(async (transaction) => {
+            const orderRef = this.firestore.doc(`orders/${orderId}`);
+            const latestSnap = await transaction.get(orderRef);
+            if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+              throw new NotFoundException();
+            }
+            if (latestSnap.data()?.['status'] !== currentStatus) {
+              throw new ConflictException('주문 상태가 변경되었습니다.');
+            }
+            transaction.update(
+              orderRef,
+              this.buildStatusUpdate(
+                latestSnap.data()!,
+                dto,
+                requesterId,
+                now,
+                confirmedCancelReason,
+              ),
+            );
+          });
         }
       }
     }
