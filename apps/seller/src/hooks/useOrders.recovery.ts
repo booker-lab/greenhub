@@ -45,6 +45,42 @@ export function buildSellerOrdersPath(storeId: string): string {
 }
 
 /**
+ * Seller 주문 read scope identity — 최소 `storeId + auth token`.
+ * 같은 store라도 token이 바뀌면 별도 scope이며, 이전 scope의
+ * orders/count/badge/hasData/error authority를 재사용하지 않는다.
+ * `\0` 구분자로 store·token 경계를 보존한다.
+ */
+export function buildSellerOrdersScopeKey(
+  storeId: string | null,
+  token: string | null | undefined,
+): string {
+  return `${storeId ?? ''}\u0000${token ?? ''}`;
+}
+
+/**
+ * Cross-scope reuse 판정: 이전 scope key와 다음 scope key가 다르면
+ * 이전 scope의 orders/count/badge/hasData/error를 즉시 무효화해야 한다.
+ * (A→B, A→missing, missing→A 포함. 동일 scope는 무효화하지 않는다.)
+ */
+export function shouldInvalidateSellerOrdersScope(
+  prevScopeKey: string | null,
+  nextScopeKey: string | null,
+): boolean {
+  return (prevScopeKey ?? null) !== (nextScopeKey ?? null);
+}
+
+/**
+ * Scope guard: 현재 scope와 응답 scope가 다르면 늦은 응답이라도
+ * 현재 scope state를 덮지 않는다. requestId guard와 함께 사용한다.
+ */
+export function shouldIgnoreSellerOrdersScopeResponse(
+  currentScopeKey: string,
+  responseScopeKey: string,
+): boolean {
+  return currentScopeKey !== responseScopeKey;
+}
+
+/**
  * 초기 결과 구분: 인증·network 오류와 빈 목록을 혼동하지 않는다.
  * - error + 데이터 없음 → error UI (EMPTY collapse 금지)
  * - error + stale 있음 → stale 유지 + 인라인 오류
