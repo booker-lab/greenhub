@@ -1,10 +1,11 @@
 'use client';
 
 import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import type { AdminUser } from '@/hooks/useAdmin';
-import { useAdminUsers } from '@/hooks/useAdmin';
+import { describeAdminCommandOutcome, useAdminUsers } from '@/hooks/useAdmin';
 import { UsersTable } from './_components/UsersTable';
 
 interface PendingUserAction {
@@ -19,10 +20,19 @@ export default function AdminUsersClient() {
 
   const runPending = async () => {
     if (!pending) return;
+    const actionLabel = pending.currentlySuspended ? '정지 해제' : '정지';
     setProcessingId(pending.userId);
     try {
-      await toggleSuspend(pending.userId, !pending.currentlySuspended);
+      const outcome = await toggleSuspend(pending.userId, !pending.currentlySuspended);
       setPending(null);
+      if (outcome.kind === 'confirmed' && outcome.reconciled) return;
+      // rejected는 서버 reason 보존, unknown/stale은 재확인 우선 + blind retry 금지.
+      const presentation = describeAdminCommandOutcome(outcome, actionLabel);
+      notifications.show({
+        color: outcome.kind === 'rejected' ? 'red' : outcome.kind === 'unknown' ? 'orange' : 'yellow',
+        title: presentation.title,
+        message: presentation.message,
+      });
     } finally {
       setProcessingId(null);
     }

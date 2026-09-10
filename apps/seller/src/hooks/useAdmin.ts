@@ -4,6 +4,19 @@ import type { SettlementStatus, StoreStatus } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
+import {
+  type AdminCommandOutcome,
+  executeAdminCommand,
+} from './useAdmin.outcome';
+
+export type { AdminCommandOutcome } from './useAdmin.outcome';
+export { classifyAdminCommandError, describeAdminCommandOutcome } from './useAdmin.outcome';
+
+/** archive/restore처럼 ApiError를 직접 전파하는 경로의 reconciliation 결과. */
+export interface AdminReconciliation {
+  reconciled: boolean;
+  readError: string | null;
+}
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -103,15 +116,18 @@ function useAdminList<T>(
   const [error, setError] = useState<string | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: buildPath/extract/errLabel은 매 렌더 재생성되는 안정 클로저 — reload는 token·필터(deps) 변화로만 트리거한다
-  const load = useCallback(async () => {
-    if (!token) return;
+  const load = useCallback(async (): Promise<string | null> => {
+    if (!token) return '인증 토큰이 없습니다. 다시 로그인해 주세요.';
     setLoading(true);
     try {
       const data = await apiJson(buildPath(), token);
       setItems(extract(data));
       setError(null);
+      return null;
     } catch {
-      setError(`${errLabel} 조회 중 오류 발생`);
+      const readError = `${errLabel} 조회 중 오류 발생`;
+      setError(readError);
+      return readError;
     } finally {
       setLoading(false);
     }
@@ -124,19 +140,25 @@ function useAdminList<T>(
   return { items, loading, error, reload: load, token };
 }
 
-/** 관리자 액션(PATCH/POST/PUT) 실행 — 성공 여부만 boolean으로 반환. */
-async function runAction(
+/**
+ * 관리자 액션(PATCH/POST/PUT) 실행 — boolean 축약 없이 outcome으로 반환한다.
+ * - 2xx + reload 성공: confirmed/reconciled.
+ * - 2xx + reload 실패: confirmed/stale (command 실패로 되돌리지 않음, readError 보존).
+ * - 4xx ApiError: rejected (서버 reason/status 보존).
+ * - 5xx ApiError·transport: unknown (재확인 우선, blind retry 금지).
+ * reload 실패는 기존 list error state에도 남는다 (load가 소유).
+ */
+async function runAdminCommand(
   token: string | undefined,
   path: string,
   options: RequestInit,
-): Promise<boolean> {
-  if (!token) return false;
-  try {
-    await apiJson(path, token, options);
-    return true;
-  } catch {
-    return false;
-  }
+  reload: () => Promise<string | null>,
+): Promise<AdminCommandOutcome> {
+  return executeAdminCommand({
+    missingToken: !token,
+    invoke: () => apiJson(path, token as string, options).then(() => undefined),
+    reload,
+  });
 }
 
 function withQuery(base: string, params: Record<string, string | undefined>): string {
@@ -163,27 +185,35 @@ export function useAdminStores() {
     token,
   } = useAdminList<AdminStore>(() => '/admin/stores', pick<AdminStore>('stores'), '판매자 목록');
 
-  const setCommission = async (storeId: string, rate: number) => {
-    const ok = await runAction(token, `/admin/stores/${storeId}/commission`, {
-      method: 'PATCH',
-      body: JSON.stringify({ rate }),
-    });
-    if (ok) await reload();
-    return ok;
+  const setCommission = async (storeId: string, rate: number): Promise<AdminCommandOutcome> => {
+    return runAdminCommand(
+      token,
+      `/admin/stores/${storeId}/commission`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ rate }),
+      },
+      reload,
+    );
   };
 
   // 치우기 — 기록 가드 차단(400) 사유를 UI에 그대로 안내해야 하므로
-  // runAction(에러 삼킴) 대신 apiJson을 직접 호출해 ApiError를 전파한다.
-  const archiveStore = async (storeId: string) => {
-    if (!token) return;
+  // outcome boolean 축약 대신 ApiError를 직접 전파한다.
+  // command 2xx 확인 뒤 reload 실패는 reconciliation으로 반환한다 (실패로 되돌리지 않음).
+  const archiveStore = async (storeId: string): Promise<AdminReconciliation> => {
+    if (!token) throw new Error('인증 토큰이 없습니다. 다시 로그인해 주세요.');
     await apiJson(`/admin/stores/${storeId}/archive`, token, { method: 'PATCH' });
-    await reload();
+    const readError = await reload();
+    if (readError === null) return { reconciled: true, readError: null };
+    return { reconciled: false, readError };
   };
 
-  const restoreStore = async (storeId: string) => {
-    if (!token) return;
+  const restoreStore = async (storeId: string): Promise<AdminReconciliation> => {
+    if (!token) throw new Error('인증 토큰이 없습니다. 다시 로그인해 주세요.');
     await apiJson(`/admin/stores/${storeId}/restore`, token, { method: 'PATCH' });
-    await reload();
+    const readError = await reload();
+    if (readError === null) return { reconciled: true, readError: null };
+    return { reconciled: false, readError };
   };
 
   return { stores, loading, error, reload, setCommission, archiveStore, restoreStore };
@@ -200,13 +230,19 @@ export function useAdminUsers() {
     token,
   } = useAdminList<AdminUser>(() => '/admin/users', pick<AdminUser>('users'), '사용자 목록');
 
-  const toggleSuspend = async (userId: string, suspended: boolean) => {
-    const ok = await runAction(token, `/admin/users/${userId}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ suspended }),
-    });
-    if (ok) await reload();
-    return ok;
+  const toggleSuspend = async (
+    userId: string,
+    suspended: boolean,
+  ): Promise<AdminCommandOutcome> => {
+    return runAdminCommand(
+      token,
+      `/admin/users/${userId}/status`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ suspended }),
+      },
+      reload,
+    );
   };
 
   return { users, loading, error, reload, toggleSuspend };
@@ -228,13 +264,16 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
     [filters?.storeId, filters?.status],
   );
 
-  const forceRefund = async (orderId: string, reason?: string) => {
-    const ok = await runAction(token, `/admin/orders/${orderId}/refund`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
-    if (ok) await reload();
-    return ok;
+  const forceRefund = async (orderId: string, reason?: string): Promise<AdminCommandOutcome> => {
+    return runAdminCommand(
+      token,
+      `/admin/orders/${orderId}/refund`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      },
+      reload,
+    );
   };
 
   return { orders, loading, error, reload, forceRefund };
@@ -261,12 +300,8 @@ export function useAdminSettlements(filters?: { storeId?: string; from?: string;
     [filters?.storeId, filters?.from, filters?.to],
   );
 
-  const markAsPaid = async (settlementId: string) => {
-    const ok = await runAction(token, `/admin/settlements/${settlementId}/pay`, {
-      method: 'PATCH',
-    });
-    if (ok) await reload();
-    return ok;
+  const markAsPaid = async (settlementId: string): Promise<AdminCommandOutcome> => {
+    return runAdminCommand(token, `/admin/settlements/${settlementId}/pay`, { method: 'PATCH' }, reload);
   };
 
   return { settlements, loading, error, reload, markAsPaid };
@@ -287,19 +322,23 @@ export function useAdminDrivers() {
     '드라이버 목록',
   );
 
-  const approve = async (userId: string) => {
-    const ok = await runAction(token, `/admin/drivers/${userId}/approve`, { method: 'PATCH' });
-    if (ok) await reload();
-    return ok;
+  const approve = async (userId: string): Promise<AdminCommandOutcome> => {
+    return runAdminCommand(token, `/admin/drivers/${userId}/approve`, { method: 'PATCH' }, reload);
   };
 
-  const toggleSuspend = async (userId: string, suspended: boolean) => {
-    const ok = await runAction(token, `/admin/drivers/${userId}/suspend`, {
-      method: 'PATCH',
-      body: JSON.stringify({ suspended }),
-    });
-    if (ok) await reload();
-    return ok;
+  const toggleSuspend = async (
+    userId: string,
+    suspended: boolean,
+  ): Promise<AdminCommandOutcome> => {
+    return runAdminCommand(
+      token,
+      `/admin/drivers/${userId}/suspend`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ suspended }),
+      },
+      reload,
+    );
   };
 
   return { drivers, loading, error, reload, approve, toggleSuspend };
