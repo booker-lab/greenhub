@@ -83,6 +83,35 @@ export class OrdersLifecycleService {
     }
     await this.assertOrderActionAccess(storeId, requesterId, role ?? 'consumer', order, nextStatus);
 
+    // Generic consumer REVIEWED shares the single semantic owner with reviewOrder.
+    // Sequential duplicate (entry REVIEWED) converges settlement before preserving 403.
+    if (
+      nextStatus === 'REVIEWED' &&
+      (role ?? 'consumer') === 'consumer' &&
+      (currentStatus === 'DELIVERED' ||
+        currentStatus === 'PICKED_UP' ||
+        currentStatus === 'REVIEWED')
+    ) {
+      const outcome = await this.executeConsumerReviewedConvergence({
+        storeId,
+        orderId,
+        requesterId,
+        entryStatus: currentStatus,
+      });
+      if (outcome === 'alreadyReviewed') {
+        throw new ForbiddenException(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
+      }
+      await this.sendTransitionNotification(
+        order,
+        currentStatus,
+        nextStatus as OrderStatus,
+        orderId,
+        undefined,
+        {},
+      );
+      return { orderId, status: nextStatus };
+    }
+
     const allowed = getAllowedTransitions(role ?? 'consumer', currentStatus);
     if (!allowed.includes(dto.status)) {
       if (role === 'driver') {
@@ -603,29 +632,54 @@ export class OrdersLifecycleService {
     if (staleOrder['userId'] !== userId) throw new ForbiddenException();
     const entryStatus = staleOrder['status'] as string;
 
+    const outcome = await this.executeConsumerReviewedConvergence({
+      storeId,
+      orderId,
+      requesterId: userId,
+      entryStatus,
+    });
+    if (outcome === 'alreadyReviewed') {
+      throw new BadRequestException('DELIVERED 또는 PICKED_UP 상태에서만 리뷰 가능합니다.');
+    }
+
+    return { orderId, status: 'REVIEWED' };
+  }
+
+  // Single semantic owner for consumer REVIEWED transition + settlement convergence.
+  // Both generic updateStatus(consumer REVIEWED) and specialized reviewOrder share this.
+  // - Fresh transaction revalidates store ownership + consumer userId + fresh status.
+  // - Only DELIVERED|PICKED_UP fresh state performs the winner REVIEWED mutation.
+  // - Same-command/cross-path loser performs no order write (409 via entry/fresh mismatch).
+  // - Settlement reuses orderId idempotency; alreadyReviewed also converges before wrapper error.
+  private async executeConsumerReviewedConvergence(input: {
+    storeId: string;
+    orderId: string;
+    requesterId: string;
+    entryStatus: string;
+  }): Promise<'transitioned' | 'alreadyReviewed'> {
     const reviewableStatuses = ['DELIVERED', 'PICKED_UP'];
     let alreadyReviewed = false;
     let freshOrderForSettlement: Record<string, any> | null = null;
 
     await this.firestore.runTransaction(async (tx) => {
-      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderRef = this.firestore.doc(`orders/${input.orderId}`);
       const latestSnap = await tx.get(orderRef);
-      if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+      if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== input.storeId) {
         throw new NotFoundException();
       }
       const latestOrder = latestSnap.data()!;
-      if (latestOrder['userId'] !== userId) throw new ForbiddenException();
+      if (latestOrder['userId'] !== input.requesterId) throw new ForbiddenException();
       const freshStatus = latestOrder['status'] as string;
       if (freshStatus === 'REVIEWED') {
-        if (entryStatus !== 'REVIEWED') {
+        if (input.entryStatus !== 'REVIEWED') {
           throw new ConflictException('주문 상태가 변경되었습니다.');
         }
         alreadyReviewed = true;
-        freshOrderForSettlement = { ...latestOrder, id: orderId };
+        freshOrderForSettlement = { ...latestOrder, id: input.orderId };
         return;
       }
       if (!reviewableStatuses.includes(freshStatus)) {
-        if (freshStatus !== entryStatus) {
+        if (freshStatus !== input.entryStatus) {
           throw new ConflictException('주문 상태가 변경되었습니다.');
         }
         throw new BadRequestException('DELIVERED 또는 PICKED_UP 상태에서만 리뷰 가능합니다.');
@@ -634,16 +688,12 @@ export class OrdersLifecycleService {
         status: 'REVIEWED',
         updatedAt: this.firestore.Timestamp.now(),
       });
-      freshOrderForSettlement = { ...latestOrder, id: orderId };
+      freshOrderForSettlement = { ...latestOrder, id: input.orderId };
     });
 
-    const settlementOrder = { ...(freshOrderForSettlement ?? staleOrder), id: orderId };
+    const settlementOrder = { ...(freshOrderForSettlement ?? {}), id: input.orderId };
     await this.settlements.createSettlement(settlementOrder, 'REVIEWED');
-    if (alreadyReviewed) {
-      throw new BadRequestException('DELIVERED 또는 PICKED_UP 상태에서만 리뷰 가능합니다.');
-    }
-
-    return { orderId, status: 'REVIEWED' };
+    return alreadyReviewed ? 'alreadyReviewed' : 'transitioned';
   }
 
   async confirmPickup(storeId: string, orderId: string, userId: string, pickupCode: string) {
