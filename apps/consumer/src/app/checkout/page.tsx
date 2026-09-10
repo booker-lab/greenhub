@@ -8,7 +8,7 @@ import type {
   Product,
   SaleType,
 } from '@greenhub/shared';
-import { Container, Text } from '@mantine/core';
+import { Box, Button, Container, Text } from '@mantine/core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { useSession } from 'next-auth/react';
@@ -418,19 +418,55 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   const scheduleError =
     saleRounds.status === 'error'
       ? saleRounds.error
-      : (saleRounds.status === 'success' || saleRounds.status === 'empty') && !schedule
-        ? '상품·가격·회차 정보가 변경되어 결제할 수 없습니다. 장바구니에서 변경 내용을 다시 확인해 주세요.'
-        : null;
+      : saleRounds.status === 'stale'
+        ? `최신 회차 정보를 불러오지 못했습니다. 이전 결과로는 결제할 수 없습니다. 다시 시도 후 결제해 주세요.${saleRounds.error ? ` (${saleRounds.error})` : ''}`
+        : (saleRounds.status === 'success' ||
+              saleRounds.status === 'empty' ||
+              saleRounds.status === 'refreshing') &&
+            !schedule
+          ? '상품·가격·회차 정보가 변경되어 결제할 수 없습니다. 장바구니에서 변경 내용을 다시 확인해 주세요.'
+          : null;
   const canPay =
     !isLoading &&
     !!schedule &&
+    !saleRounds.isStale &&
     !!address.address &&
     !!address.zipCode &&
     PHONE_PATTERN.test(deliveryPhone.trim()) &&
     !!session;
 
   return (
-    <CheckoutForm
+    <>
+      {saleRounds.isRefreshing && (
+        <Container size="sm" px="md" pt="sm">
+          <Text size="sm" c="dimmed" ta="center" aria-live="polite">
+            최신 회차 정보를 확인하는 중...
+          </Text>
+        </Container>
+      )}
+      {saleRounds.isStale && (
+        <Container size="sm" px="md" pt="sm">
+          <Box
+            p="sm"
+            role="alert"
+            style={{
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius)',
+            }}
+          >
+            <Text size="sm">최신 회차 정보를 불러오지 못했습니다. 이전 결과로는 결제할 수 없습니다.</Text>
+            {saleRounds.error && (
+              <Text size="sm" c="dimmed" mt={4}>
+                {saleRounds.error}
+              </Text>
+            )}
+            <Button variant="light" size="xs" mt="xs" onClick={saleRounds.refetch}>
+              다시 시도
+            </Button>
+          </Box>
+        </Container>
+      )}
+      <CheckoutForm
       items={cartItems}
       totalAmount={totalAmount}
       address={address}
@@ -444,6 +480,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       error={scheduleError ?? error}
       onPay={requestPayment}
     />
+    </>
   );
 }
 
