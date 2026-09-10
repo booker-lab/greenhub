@@ -114,11 +114,22 @@ test('D. HoldModal은 open 뒤 authority 이동 시 stale payload를 dispatch하
   assert.match(effectBlock, /onClose\(\)/);
 });
 
-// E. 403/409 → 자동 재전송 0회 → 상태 재확인 UX.
-test('E. 403/409는 자동 재전송 없이 authoritative read로 수렴한다', () => {
-  // detail: 403/409 분기가 readDetail 수렴 + return이며 PATCH를 추가 호출하지 않는다.
-  const branchAt = detailSource.indexOf('res.status === 403 || res.status === 409');
-  assert.ok(branchAt !== -1, '403/409 분기가 있어야 한다');
+// E. 409 → 자동 재전송 0회 → 상태 재확인 UX. detail 401/403은 authority loss로 분리된다.
+test('E. 409는 자동 재전송 없이 authoritative read로 수렴한다', () => {
+  // detail: 401/403 auth-loss 분기가 먼저 clear + AUTH_ERROR + return이며 PATCH를 추가 호출하지 않는다.
+  const authAt = detailSource.indexOf('isDriverOrderCommandAuthLoss(res.status)');
+  assert.ok(authAt !== -1, 'detail 401/403 auth-loss 분기가 있어야 한다');
+  const authBlock = detailSource.slice(authAt, authAt + 600);
+  assert.match(authBlock, /hasOrderRef\.current = false/);
+  assert.match(authBlock, /setOrder\(null\)/);
+  assert.match(authBlock, /kind: 'AUTH_ERROR'/);
+  assert.match(authBlock, /return;/);
+  assert.doesNotMatch(authBlock, /method: 'PATCH'/);
+  // detail: 403 단독 convergence는 남지 않고 409만 수렴한다.
+  assert.doesNotMatch(detailSource, /res\.status === 403 \|\| res\.status === 409/);
+  // detail: 409 분기가 readDetail 수렴 + return이며 PATCH를 추가 호출하지 않는다.
+  const branchAt = detailSource.indexOf('res.status === 409');
+  assert.ok(branchAt !== -1, '409 분기가 있어야 한다');
   const branchBlock = detailSource.slice(branchAt, branchAt + 700);
   assert.match(branchBlock, new RegExp(CONVERGENCE_MESSAGE.replace(/\./g, '\\.')));
   assert.match(branchBlock, /await readDetail\(token\)/);
