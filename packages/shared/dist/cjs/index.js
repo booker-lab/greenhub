@@ -15,6 +15,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./order.types.js"), exports);
+__exportStar(require("./driver-order-error.types.js"), exports);
 __exportStar(require("./product.types.js"), exports);
 __exportStar(require("./variety.types.js"), exports);
 __exportStar(require("./auth.types.js"), exports);

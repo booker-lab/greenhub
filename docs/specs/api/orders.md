@@ -190,6 +190,20 @@ seller ownership, driver assignment, consumer ownership guard는 구현돼 있�
 
 admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 
+### 8A. Legacy consumer cancel (RECRUITING group) — `IMPLEMENTATION COMPLETE`
+
+- 대상: legacy `RECRUITING` group 주문의 `PATCH .../cancel` (`OrdersLifecycleService.cancelOrder`).
+- `schemaVersion: 2 + roundId`는 기존 `RoundOrderLifecycleService.cancelByConsumer`로 위임하고 본 계약을 타지 않는다.
+- provider refund 전에 `orders/{orderId}.cancellation = { status: REFUNDING, refundClaim: { token, expiresAt } }` durable ownership을 transaction으로 획득한다. fresh `RECRUITING`이 아니면 refund side effect `0`으로 `403`이다.
+- 활성 `REFUNDING` claim과 충돌하는 동시 취소는 `409`이며 refund/quantity/settlement/notification을 실행하지 않는다.
+- refund 실패는 `REFUND_FAILED`로 남고 거짓 `CANCELLED`를 만들지 않으며 retry 가능하다.
+- refund 성공 뒤 local 실패는 `LOCAL_FAILED`로 남고 retry는 PortOne 의미적 중복 없이 `CANCELLED`로 수렴한다 (`PaymentRefundService` claim이 PortOne `1회`를 보장).
+- local cancellation(`CANCELLED` + `COMPLETED` + `groupProductConfig.currentQuantity` decrement)은 token 검증 transaction에서 정확히 한 번만 수행한다.
+- `settlement.cancelSettlement`는 owner만 호출하며 idempotent하고, `GROUP_CANCELLED_SELF`는 owner만 `consumer-cancel:{orderId}` stable dedupe key로 `1회` 전송한다.
+- sequential duplicate(`CANCELLED+COMPLETED` 뒤 재요청)는 `403`을 유지하고 refund/quantity/notification을 반복하지 않는다.
+- group scheduler(`confirmGroupBuy`/`cancelGroupBuyLack`)는 active cancellation ownership을 transaction fresh 재확인으로 존중하고 broadcast에서 제외한다.
+- 증거: `apps/api/src/orders/orders-lifecycle.service.ts`, `apps/api/src/notifications/notifications.service.ts`, `apps/api/src/orders/legacy-consumer-cancel-convergence.spec.ts`(`8 tests`).
+
 ## 9. 배송 사진
 
 회차 직배송 사진은 담당 기사가 서버 API로 비공개 Storage에 업로드하며 사진 연결 없이 직접배송 `DELIVERED` 완료를 허용하지 않는다. read URL은 주문 권한 검증 뒤 단기 signed URL로 발급한다.

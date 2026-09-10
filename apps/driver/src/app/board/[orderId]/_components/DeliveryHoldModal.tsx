@@ -15,6 +15,10 @@ import {
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
+import {
+  classifyDriverOrderCommandError,
+  readDriverOrderCommandErrorCodeFromResponse,
+} from '../../_lib/driver-order-detail';
 
 export type HoldReason =
   | 'WEATHER'
@@ -52,6 +56,17 @@ interface DeliveryHoldModalProps {
   // stale/403/409 수렴용 authoritative reread 트리거. 같은 hold command를
   // 자동 재전송하지 않고 parent의 fresh GET으로 수렴한다.
   onConvergence?: () => void;
+  // ACK-uncertain(B/C/F/G/H) 수렴용 parent authoritative GET 트리거.
+  // parent는 fresh GET 성공 전에는 warning으로 위험 command를 fail-closed하고,
+  // modal은 닫혀 immediate same-hold resubmit을 차단한다. 자동 resend 없음.
+  onUncertainConvergence?: () => void;
+  // authority-loss 수렴용 parent clear 트리거. 401 또는 403 + AUTHORITY_DENIED는
+  // modal 내부 표시로 끝나지 않고 parent가 protected order/PII를 즉시 제거하고
+  // AUTH_ERROR로 전환하며 modal을 reset/close한다. 자동 resend 없음.
+  onAuthorityLoss?: () => void;
+  // absence/hiding 수렴용 parent clear 트리거. DRIVER_ORDER_NOT_FOUND code를
+  // 직접 받으면 이전 protected order를 신뢰하지 않고 NOT_FOUND 의미로 수렴한다.
+  onNotFound?: () => void;
 }
 
 // 배송 보류 command가 유효한 order authority 범위.
@@ -66,6 +81,14 @@ export function isHoldCommandAllowedStatus(status: string): boolean {
 export const HOLD_STALE_CONVERGENCE_MESSAGE =
   '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.';
 
+// HOLD ACK-uncertain(B/C/F/G/H) convergence contract (NO_RESEND + AUTHORITATIVE_GET).
+// 같은 HOLD를 자동 재전송하지 않고 parent authoritative GET으로 수렴한다.
+// same-command resend 유도 copy를 쓰지 않는다.
+export const HOLD_UNCERTAIN_CONVERGENCE_MESSAGE =
+  '보류 명령이 처리되었는지 확실하지 않습니다. 최신 상태를 다시 확인합니다. 같은 보류를 바로 다시 보내지 마세요.';
+export const HOLD_UNCERTAIN_READBACK_WARNING =
+  '보류 명령 결과를 확인하지 못했습니다. 상태를 다시 확인해 주세요. 같은 보류를 바로 다시 보내지 마세요.';
+
 export function DeliveryHoldModal({
   opened,
   loading,
@@ -76,6 +99,9 @@ export function DeliveryHoldModal({
   onLoading,
   onSaved,
   onConvergence,
+  onUncertainConvergence,
+  onAuthorityLoss,
+  onNotFound,
 }: DeliveryHoldModalProps) {
   const { data: session } = useSession();
   const [reasonCode, setReasonCode] = useState<HoldReason>('WEATHER');
@@ -165,19 +191,76 @@ export function DeliveryHoldModal({
         body: JSON.stringify({ deliveryHold }),
       });
       if (!response.ok) {
-        // 403 duplicate-sequential / 409 race-loser: 같은 hold command를 자동
-        // 재전송하지 않고 convergence path로 보낸다. 일반적인 재제출 메시지를 쓰지 않는다.
-        if (response.status === 403 || response.status === 409) {
+        // 401은 envelope code와 무관하게 authority loss다. modal 내부 표시로
+        // 끝나지 않고 parent clear + AUTH_ERROR + modal reset/close로 수렴한다.
+        if (response.status === 401) {
+          resetHoldFormFields();
+          setError('로그인 정보를 다시 확인해 주세요.');
+          onAuthorityLoss?.();
+          onClose();
+          return;
+        }
+        // error-code aware hold recovery: envelope code를 안전하게 읽는다.
+        // body 파싱 실패는 null이며 그 자체가 same-hold resend를 유도하지 않는다.
+        const errorCode = await readDriverOrderCommandErrorCodeFromResponse(response);
+        const recovery = classifyDriverOrderCommandError({
+          status: response.status,
+          code: errorCode,
+        });
+        // 403 + AUTHORITY_DENIED (및 unknown/missing-code 403 fail-closed):
+        // stale/state convergence로 오분류하지 않고 authority-loss 경로로 보낸다.
+        // parent가 protected data를 즉시 제거하므로 modal 내부 표시에 그치지 않는다.
+        if (recovery === 'AUTHORITY_LOSS') {
+          resetHoldFormFields();
+          setError('로그인 정보를 다시 확인해 주세요.');
+          onAuthorityLoss?.();
+          onClose();
+          return;
+        }
+        // 403/409 + STATE_CONFLICT: authority loss로 오분류하지 않는다.
+        // 같은 hold를 자동 재전송하지 않고 convergence path로 보낸다.
+        if (recovery === 'STATE_CONFLICT') {
           resetHoldFormFields();
           setError(HOLD_STALE_CONVERGENCE_MESSAGE);
           onConvergence?.();
           return;
         }
-        throw new Error('배송 보류 저장 실패');
+        // DRIVER_ORDER_NOT_FOUND: authoritative absence/hiding. 이전 protected
+        // order를 신뢰하지 않고 NOT_FOUND 의미로 수렴한다. 자동 resend 없음.
+        if (recovery === 'NOT_FOUND') {
+          resetHoldFormFields();
+          setError('주문을 찾을 수 없습니다.');
+          onNotFound?.();
+          onClose();
+          return;
+        }
+        // F/G: 403/409 STATE·AUTHORITY·NOT_FOUND 이외 4xx·5xx ACK-uncertain.
+        // 같은 HOLD를 자동 재전송하지 않고 modal을 닫아 immediate resubmit을
+        // 차단한 뒤 parent authoritative GET으로 수렴한다.
+        resetHoldFormFields();
+        setError(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE);
+        onUncertainConvergence?.();
+        onClose();
+        return;
       }
-      const result = (await response.json()) as { orderId?: unknown; status?: unknown };
+      // B: 2xx이지만 malformed JSON 등으로 ACK 파싱 불가. 자동 resend 없이 GET 수렴한다.
+      let result: { orderId?: unknown; status?: unknown };
+      try {
+        result = (await response.json()) as { orderId?: unknown; status?: unknown };
+      } catch {
+        resetHoldFormFields();
+        setError(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE);
+        onUncertainConvergence?.();
+        onClose();
+        return;
+      }
+      // C: 2xx이지만 ACK orderId/status mismatch. 자동 resend 없이 GET 수렴한다.
       if (result.orderId !== orderId || result.status !== 'DELIVERY_HELD') {
-        throw new Error('배송 보류 응답 불일치');
+        resetHoldFormFields();
+        setError(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE);
+        onUncertainConvergence?.();
+        onClose();
+        return;
       }
       resetHoldFormFields();
       setError('');
@@ -185,7 +268,12 @@ export function DeliveryHoldModal({
       // Order 합성 없이 parent가 authoritative GET으로 수렴한다.
       onSaved?.();
     } catch {
-      setError('배송 보류를 저장하지 못했습니다. 주문 상태를 확인하고 다시 시도해주세요.');
+      // H: network/transport error ACK-uncertain. 같은 HOLD를 자동 재전송하지 않고
+      // modal을 닫아 immediate resubmit을 차단한 뒤 parent authoritative GET으로 수렴한다.
+      resetHoldFormFields();
+      setError(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE);
+      onUncertainConvergence?.();
+      onClose();
     } finally {
       submittingRef.current = false;
       onLoading(false);

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import {
+  classifyDriverOrderCommandError,
+  isDriverOrderCommandAllowed,
+  readDriverOrderErrorCode,
+  shouldPreserveDriverOrderOnReadError,
+} from '../_lib/driver-order-detail.ts';
 
 // DRIVER-DETAIL-COMMAND-INFLIGHT-STALE-GUARD-01 focused regression.
 // Driver 주문 상세 command의 UX 안전계약만 검증한다:
@@ -114,30 +120,56 @@ test('D. HoldModal은 open 뒤 authority 이동 시 stale payload를 dispatch하
   assert.match(effectBlock, /onClose\(\)/);
 });
 
-// E. 409 → 자동 재전송 0회 → 상태 재확인 UX. detail 401/403은 authority loss로 분리된다.
-test('E. 409는 자동 재전송 없이 authoritative read로 수렴한다', () => {
-  // detail: 401/403 auth-loss 분기가 먼저 clear + AUTH_ERROR + return이며 PATCH를 추가 호출하지 않는다.
-  const authAt = detailSource.indexOf('isDriverOrderCommandAuthLoss(res.status)');
-  assert.ok(authAt !== -1, 'detail 401/403 auth-loss 분기가 있어야 한다');
-  const authBlock = detailSource.slice(authAt, authAt + 600);
-  assert.match(authBlock, /hasOrderRef\.current = false/);
-  assert.match(authBlock, /setOrder\(null\)/);
-  assert.match(authBlock, /kind: 'AUTH_ERROR'/);
-  assert.match(authBlock, /return;/);
-  assert.doesNotMatch(authBlock, /method: 'PATCH'/);
-  // detail: 403 단독 convergence는 남지 않고 409만 수렴한다.
-  assert.doesNotMatch(detailSource, /res\.status === 403 \|\| res\.status === 409/);
-  // detail: 409 분기가 readDetail 수렴 + return이며 PATCH를 추가 호출하지 않는다.
-  const branchAt = detailSource.indexOf('res.status === 409');
-  assert.ok(branchAt !== -1, '409 분기가 있어야 한다');
+// E. error-code aware convergence: 401/AUTHORITY → auth-loss, STATE → GET 수렴, 자동 재전송 0회.
+test('E. error-code aware command는 authority/state를 구분해 수렴하며 자동 재전송하지 않는다', () => {
+  // pure: 401 → AUTHORITY_LOSS, 403 AUTHORITY → AUTHORITY_LOSS, 403 STATE → STATE_CONFLICT.
+  assert.equal(classifyDriverOrderCommandError({ status: 401, code: null }), 'AUTHORITY_LOSS');
+  assert.equal(
+    classifyDriverOrderCommandError({ status: 403, code: 'DRIVER_ORDER_AUTHORITY_DENIED' }),
+    'AUTHORITY_LOSS',
+  );
+  assert.equal(
+    classifyDriverOrderCommandError({ status: 403, code: 'DRIVER_ORDER_STATE_CONFLICT' }),
+    'STATE_CONFLICT',
+  );
+  assert.equal(
+    classifyDriverOrderCommandError({ status: 409, code: 'DRIVER_ORDER_STATE_CONFLICT' }),
+    'STATE_CONFLICT',
+  );
+  assert.equal(classifyDriverOrderCommandError({ status: 403, code: null }), 'AUTHORITY_LOSS');
+  // detail: 401 분기가 먼저 clear + AUTH_ERROR + return이며 PATCH를 추가 호출하지 않는다.
+  const auth401At = detailSource.indexOf('if (res.status === 401)');
+  assert.ok(auth401At !== -1, 'detail 401 auth-loss 분기가 있어야 한다');
+  const auth401Block = detailSource.slice(auth401At, auth401At + 600);
+  assert.match(auth401Block, /hasOrderRef\.current = false/);
+  assert.match(auth401Block, /setOrder\(null\)/);
+  assert.match(auth401Block, /kind: 'AUTH_ERROR'/);
+  assert.match(auth401Block, /return;/);
+  assert.doesNotMatch(auth401Block, /method: 'PATCH'/);
+  // detail: error-code aware classifier로 AUTHORITY_LOSS/STATE_CONFLICT/NOT_FOUND를 구분한다.
+  assert.match(detailSource, /readDriverOrderCommandErrorCodeFromResponse\(res\)/);
+  assert.match(detailSource, /classifyDriverOrderCommandError\(\{/);
+  assert.match(detailSource, /recovery === 'AUTHORITY_LOSS'/);
+  assert.match(detailSource, /recovery === 'STATE_CONFLICT'/);
+  assert.match(detailSource, /recovery === 'NOT_FOUND'/);
+  // detail: STATE_CONFLICT 분기가 readDetail 수렴 + return이며 PATCH를 추가 호출하지 않는다.
+  const branchAt = detailSource.indexOf("recovery === 'STATE_CONFLICT'");
+  assert.ok(branchAt !== -1, 'STATE_CONFLICT 분기가 있어야 한다');
   const branchBlock = detailSource.slice(branchAt, branchAt + 700);
   assert.match(branchBlock, new RegExp(CONVERGENCE_MESSAGE.replace(/\./g, '\\.')));
   assert.match(branchBlock, /await readDetail\(token\)/);
   assert.match(branchBlock, /return;/);
   assert.doesNotMatch(branchBlock, /method: 'PATCH'/);
-  // modal: 403/409 분기가 convergence reread 유도 + return이며 PATCH를 추가 호출하지 않는다.
-  const modalBranchAt = holdModalSource.indexOf('response.status === 403 || response.status === 409');
-  assert.ok(modalBranchAt !== -1, 'modal 403/409 분기가 있어야 한다');
+  // 구 status-only 직접 분기는 남지 않는다.
+  assert.doesNotMatch(detailSource, /isDriverOrderCommandAuthLoss\(res\.status\)/);
+  assert.doesNotMatch(detailSource, /if \(res\.status === 409\)/);
+  // modal: AUTHORITY_LOSS는 stale convergence로 오분류하지 않고 authority 경로로 보낸다.
+  assert.match(holdModalSource, /recovery === 'AUTHORITY_LOSS'/);
+  assert.match(holdModalSource, /onAuthorityLoss\?\.\(\)/);
+  // modal: STATE_CONFLICT는 authority loss로 오분류하지 않고 stale convergence로 보낸다.
+  assert.match(holdModalSource, /recovery === 'STATE_CONFLICT'/);
+  const modalBranchAt = holdModalSource.indexOf("recovery === 'STATE_CONFLICT'");
+  assert.ok(modalBranchAt !== -1, 'modal STATE_CONFLICT 분기가 있어야 한다');
   const modalBranchBlock = holdModalSource.slice(modalBranchAt, modalBranchAt + 600);
   assert.match(modalBranchBlock, /setError\(HOLD_STALE_CONVERGENCE_MESSAGE\)/);
   assert.match(modalBranchBlock, /onConvergence\?\.\(\)/);
@@ -152,6 +184,9 @@ test('E. 409는 자동 재전송 없이 authoritative read로 수렴한다', () 
   assert.doesNotMatch(holdModalSource, /setInterval/);
   // parent는 modal 수렴 요청을 authoritative GET에 연결한다.
   assert.match(detailSource, /onConvergence=\{/);
+  // parent는 modal authority-loss를 order clear + AUTH_ERROR + close로 수렴한다.
+  assert.match(detailSource, /onAuthorityLoss=\{/);
+  assert.match(holdModalSource, /onAuthorityLoss\?:/);
 });
 
 // F. ACK success + authoritative reread failure → PATCH 추가 호출 0회·warning·command disabled.
@@ -193,4 +228,252 @@ test('기존 command 안전계약이 유지된다', () => {
   const successBlock = holdModalSource.slice(successAt, successAt + 500);
   assert.match(successBlock, /resetHoldFormFields\(\)/);
   assert.match(successBlock, /onClose\(\)/);
+});
+
+
+
+test('H1. STATUS uncertain constants exist without resend copy', () => {
+  assert.match(detailSource, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(detailSource, /STATUS_UNCERTAIN_READBACK_WARNING/);
+  assert.match(
+    detailSource,
+    /\uBA85\uB839\uC774 \uCC98\uB9AC\uB418\uC5C8\uB294\uC9C0 \uD655\uC2E4\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4/,
+  );
+  assert.match(detailSource, /\uBC14\uB85C \uB2E4\uC2DC \uBCF4\uB0B4\uC9C0 \uB9C8\uC138\uC694/);
+  assert.doesNotMatch(detailSource, /setTimeout\(updateStatus/);
+  assert.doesNotMatch(detailSource, /setInterval/);
+  const updateAt = detailSource.indexOf('async function updateStatus');
+  const updateBlock = detailSource.slice(updateAt);
+  assert.doesNotMatch(updateBlock, /color: 'red'/);
+});
+
+test('H2. STATUS F/G other 4xx-5xx converges with GET and no resend', () => {
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  assert.ok(fnAt !== -1);
+  const fgMarker = detailSource.indexOf('F/G:', fnAt);
+  assert.ok(fgMarker !== -1);
+  const fgBlock = detailSource.slice(fgMarker, fgMarker + 900);
+  assert.match(fgBlock, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(fgBlock, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
+  assert.match(fgBlock, /await readDetail\(token\)/);
+  assert.match(fgBlock, /return;/);
+  assert.doesNotMatch(fgBlock, /method: 'PATCH'/);
+  assert.ok(
+    fgBlock.indexOf('setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING)') <
+      fgBlock.indexOf('await readDetail(token)'),
+  );
+  const patchCount = (detailSource.match(/method: 'PATCH'/g) ?? []).length;
+  assert.equal(patchCount, 1);
+});
+
+test('H3. STATUS B malformed JSON converges with GET and no resend', () => {
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  const bMarker = detailSource.indexOf('malformed JSON', fnAt);
+  assert.ok(bMarker !== -1);
+  const bBlock = detailSource.slice(bMarker, bMarker + 900);
+  assert.match(bBlock, /await res\.json\(\)/);
+  assert.match(bBlock, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(bBlock, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
+  assert.match(bBlock, /await readDetail\(token\)/);
+  assert.match(bBlock, /return;/);
+  assert.doesNotMatch(bBlock, /method: 'PATCH'/);
+});
+
+test('H4. STATUS C ACK mismatch converges with GET and no resend', () => {
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  const cMarker = detailSource.indexOf('ACK orderId', fnAt);
+  assert.ok(cMarker !== -1);
+  const cBlock = detailSource.slice(cMarker, cMarker + 800);
+  assert.match(cBlock, /isDriverOrderStatusAck\(result/);
+  assert.match(cBlock, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(cBlock, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
+  assert.match(cBlock, /await readDetail\(token\)/);
+  assert.match(cBlock, /return;/);
+  assert.doesNotMatch(cBlock, /method: 'PATCH'/);
+});
+
+test('H5. STATUS H network catch converges with GET without resend copy', () => {
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  const navAt = detailSource.indexOf("router.replace('/board", fnAt);
+  assert.ok(navAt !== -1);
+  const catchAt = detailSource.indexOf('} catch {', navAt);
+  assert.ok(catchAt !== -1);
+  const hBlock = detailSource.slice(catchAt, catchAt + 900);
+  assert.match(hBlock, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(hBlock, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
+  assert.match(hBlock, /await readDetail\(token\)/);
+  assert.doesNotMatch(hBlock, /method: 'PATCH'/);
+  const hSetErrorAt = hBlock.indexOf('setReadbackWarning');
+  assert.ok(hSetErrorAt !== -1);
+});
+
+test('H6. STATUS uncertain keeps fail-closed and manual GET without synthesis', () => {
+  assert.match(detailSource, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
+  const recheckAt = detailSource.indexOf('recheck');
+  assert.match(detailSource, /readDetail\(token\)/);
+  assert.doesNotMatch(detailSource, /setOrder\(\{\s*\.\.\.order/);
+  for (const marker of ['malformed JSON', 'ACK orderId', '403/409']) {
+    const at = detailSource.indexOf(marker);
+    assert.ok(at !== -1);
+    const block = detailSource.slice(at, at + 900);
+    assert.doesNotMatch(block, /router\.replace/);
+  }
+});
+
+test('H7. HOLD uncertain constants exist without resend copy', () => {
+  assert.match(holdModalSource, /HOLD_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(holdModalSource, /HOLD_UNCERTAIN_READBACK_WARNING/);
+  assert.match(detailSource, /HOLD_UNCERTAIN_READBACK_WARNING/);
+  assert.doesNotMatch(
+    holdModalSource,
+    /주문 상태를 확인하고 다시 시도해주세요/,
+  );
+  assert.doesNotMatch(holdModalSource, /setTimeout\(submit/);
+  assert.doesNotMatch(holdModalSource, /setInterval/);
+});
+
+test('H8. HOLD F/G other 4xx-5xx converges to parent GET and closes modal', () => {
+  const fnAt = holdModalSource.indexOf('async function submit');
+  assert.ok(fnAt !== -1);
+  const fgMarker = holdModalSource.indexOf('F/G:', fnAt);
+  assert.ok(fgMarker !== -1);
+  const after = holdModalSource.slice(fgMarker, fgMarker + 1400);
+  assert.match(after, /setError\(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE\)/);
+  assert.match(after, /onUncertainConvergence\?\.\(\)/);
+  assert.match(after, /onClose\(\)/);
+  assert.match(after, /return;/);
+  const patchCount = (holdModalSource.match(/method: 'PATCH'/g) ?? []).length;
+  assert.equal(patchCount, 1);
+});
+
+test('H9. HOLD B/C malformed and mismatch converge to parent GET', () => {
+  const fnAt = holdModalSource.indexOf('async function submit');
+  const bMarker = holdModalSource.indexOf('malformed JSON', fnAt);
+  assert.ok(bMarker !== -1);
+  const bBlock = holdModalSource.slice(bMarker, bMarker + 700);
+  assert.match(bBlock, /await response\.json\(\)/);
+  assert.match(bBlock, /setError\(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE\)/);
+  assert.match(bBlock, /onUncertainConvergence\?\.\(\)/);
+  assert.match(bBlock, /onClose\(\)/);
+  assert.doesNotMatch(bBlock, /method: 'PATCH'/);
+  const cMarker = holdModalSource.indexOf('ACK orderId', fnAt);
+  assert.ok(cMarker !== -1);
+  const cBlock = holdModalSource.slice(cMarker, cMarker + 700);
+  assert.match(cBlock, /result\.orderId !== orderId/);
+  assert.match(cBlock, /setError\(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE\)/);
+  assert.match(cBlock, /onUncertainConvergence\?\.\(\)/);
+  assert.match(cBlock, /onClose\(\)/);
+  assert.doesNotMatch(cBlock, /method: 'PATCH'/);
+});
+
+test('H10. HOLD H network catch converges to parent GET and closes modal', () => {
+  const fnAt = holdModalSource.indexOf('async function submit');
+  const savedAt = holdModalSource.indexOf('onSaved', fnAt);
+  assert.ok(savedAt !== -1);
+  const catchAt = holdModalSource.indexOf('} catch {', savedAt);
+  assert.ok(catchAt !== -1);
+  const hBlock = holdModalSource.slice(catchAt, catchAt + 900);
+  assert.match(hBlock, /setError\(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE\)/);
+  assert.match(hBlock, /onUncertainConvergence\?\.\(\)/);
+  assert.match(hBlock, /onClose\(\)/);
+  assert.doesNotMatch(hBlock, /method: 'PATCH'/);
+});
+
+test('H11. HOLD parent uncertain sets warning before GET and blocks resubmit', () => {
+  assert.match(detailSource, /onUncertainConvergence=\{/);
+  const at = detailSource.indexOf('onUncertainConvergence={');
+  assert.ok(at !== -1);
+  const block = detailSource.slice(at, at + 1000);
+  assert.match(block, /setReadbackWarning\(HOLD_UNCERTAIN_READBACK_WARNING\)/);
+  assert.match(block, /void readDetail\(token\)/);
+  assert.ok(
+    block.indexOf('setReadbackWarning(HOLD_UNCERTAIN_READBACK_WARNING)') <
+      block.indexOf('void readDetail(token)'),
+  );
+  assert.match(detailSource, /disabled=\{loading \|\| !commandsAllowed\}/);
+  assert.match(detailSource, /readDetail\(token\)/);
+  assert.match(holdModalSource, /classifyDriverOrderCommandError\(\{/);
+  assert.match(holdModalSource, /onSaved\?\.\(\)/);
+});
+
+test('H12. uncertain warning blocks risk commands at runtime', () => {
+  assert.equal(
+    isDriverOrderCommandAllowed({
+      hasOrder: true,
+      readErrorKind: null,
+      hasReadbackWarning: true,
+    }),
+    false,
+  );
+  assert.equal(
+    isDriverOrderCommandAllowed({
+      hasOrder: true,
+      readErrorKind: 'FETCH_ERROR',
+      hasReadbackWarning: false,
+    }),
+    false,
+  );
+  assert.equal(
+    isDriverOrderCommandAllowed({
+      hasOrder: true,
+      readErrorKind: null,
+      hasReadbackWarning: false,
+    }),
+    true,
+  );
+  assert.equal(shouldPreserveDriverOrderOnReadError('FETCH_ERROR', true), true);
+  assert.equal(shouldPreserveDriverOrderOnReadError('AUTH_ERROR', true), false);
+  assert.equal(shouldPreserveDriverOrderOnReadError('NOT_FOUND', true), false);
+});
+
+// 8. DeliveryHoldModal authority 403 → stale-conflict 분기로 오분류하지 않음.
+test('8. HoldModal authority 403은 stale 분기로 오분류하지 않는다', () => {
+  assert.equal(
+    classifyDriverOrderCommandError({ status: 403, code: 'DRIVER_ORDER_AUTHORITY_DENIED' }),
+    'AUTHORITY_LOSS',
+  );
+  const authAt = holdModalSource.indexOf("recovery === 'AUTHORITY_LOSS'");
+  assert.ok(authAt !== -1, 'modal AUTHORITY_LOSS 분기가 있어야 한다');
+  const authBlock = holdModalSource.slice(authAt, authAt + 350);
+  assert.match(authBlock, /onAuthorityLoss\?\.\(\)/);
+  assert.match(authBlock, /onClose\(\)/);
+  assert.doesNotMatch(authBlock, /onConvergence\?\.\(\)/);
+  // parent는 authority-loss를 order clear + AUTH_ERROR + close로 수렴한다.
+  const parentAt = detailSource.indexOf('onAuthorityLoss={');
+  assert.ok(parentAt !== -1, 'parent onAuthorityLoss가 있어야 한다');
+  const parentBlock = detailSource.slice(parentAt, parentAt + 800);
+  assert.match(parentBlock, /hasOrderRef\.current = false/);
+  assert.match(parentBlock, /setOrder\(null\)/);
+  assert.match(parentBlock, /kind: 'AUTH_ERROR'/);
+  assert.match(parentBlock, /setHoldOpened\(false\)/);
+});
+
+// 9. DeliveryHoldModal state-conflict 403 → authority loss로 오분류하지 않음.
+test('9. HoldModal state-conflict 403은 authority loss로 오분류하지 않는다', () => {
+  assert.equal(
+    classifyDriverOrderCommandError({ status: 403, code: 'DRIVER_ORDER_STATE_CONFLICT' }),
+    'STATE_CONFLICT',
+  );
+  const stateAt = holdModalSource.indexOf("recovery === 'STATE_CONFLICT'");
+  assert.ok(stateAt !== -1);
+  const stateBlock = holdModalSource.slice(stateAt, stateAt + 600);
+  assert.match(stateBlock, /HOLD_STALE_CONVERGENCE_MESSAGE/);
+  assert.match(stateBlock, /onConvergence\?\.\(\)/);
+  assert.doesNotMatch(stateBlock, /onAuthorityLoss/);
+  assert.doesNotMatch(stateBlock, /로그인 정보를 다시 확인해 주세요/);
+});
+
+// 10. 기존 409 race convergence 유지 (409 STATE → GET, resend 없음).
+test('10. 기존 409 race convergence가 유지된다', () => {
+  assert.equal(
+    classifyDriverOrderCommandError({ status: 409, code: 'DRIVER_ORDER_STATE_CONFLICT' }),
+    'STATE_CONFLICT',
+  );
+  assert.equal(readDriverOrderErrorCode({ code: 'DRIVER_ORDER_ALREADY_APPLIED' }), null);
+  const patchCount = (detailSource.match(/method: 'PATCH'/g) ?? []).length;
+  assert.equal(patchCount, 1, 'detail PATCH는 상태 전환 1회뿐이다');
+  const holdPatchCount = (holdModalSource.match(/method: 'PATCH'/g) ?? []).length;
+  assert.equal(holdPatchCount, 1, 'hold PATCH는 1회뿐이다');
+  assert.doesNotMatch(detailSource, /setTimeout\(updateStatus/);
+  assert.doesNotMatch(holdModalSource, /setTimeout\(submit/);
 });

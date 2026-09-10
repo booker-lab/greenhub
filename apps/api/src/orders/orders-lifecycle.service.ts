@@ -18,8 +18,20 @@ import {
   assertPaidRedeliveryResume,
   isCurrentRedeliveryPaymentRequired,
 } from './redelivery-resume-gate';
+import {
+  throwDriverOrderNotFound,
+  throwDriverOrderStateConflict,
+} from './driver-order-error';
+import { randomUUID } from 'node:crypto';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
+
+const LEGACY_CONSUMER_CANCEL_CLAIM_MS = 5 * 60 * 1000;
+
+type LegacyConsumerCancelClaimResult =
+  | { kind: 'done' }
+  | { kind: 'in_progress' }
+  | { kind: 'claimed'; token: string };
 
 const DELIVERY_HOLD_CUSTOMER_REASONS: Record<string, string> = {
   WEATHER: '기상 상황으로 배송이 지연되었습니다.',
@@ -54,6 +66,9 @@ export class OrdersLifecycleService {
   ) {
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+      if (requesterRole === 'driver') {
+        throwDriverOrderNotFound();
+      }
       throw new NotFoundException();
     }
     const order = snap.data()!;
@@ -70,6 +85,9 @@ export class OrdersLifecycleService {
 
     const allowed = getAllowedTransitions(role ?? 'consumer', currentStatus);
     if (!allowed.includes(dto.status)) {
+      if (role === 'driver') {
+        throwDriverOrderStateConflict(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
+      }
       throw new ForbiddenException(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
     }
 
@@ -320,46 +338,260 @@ export class OrdersLifecycleService {
       return this.roundLifecycle.cancelByConsumer({ storeId, orderId, userId, reason });
     }
 
-    if (order['status'] !== 'RECRUITING') {
+    // Fast stale guard preserves current 403 contract without side effects.
+    // Durable ownership below revalidates fresh state inside transaction before any refund.
+    if (order['status'] !== 'RECRUITING' && order['status'] !== 'CANCELLED') {
       throw new ForbiddenException('RECRUITING 상태에서만 취소 가능합니다.');
     }
 
     const cancelReason = reason ?? '소비자 취소';
+    const productId = order['productId'] as string;
 
-    // Portone 환불
-    await this.payments.processRefundByOrderId(orderId, cancelReason);
+    const claim = await this.claimLegacyConsumerCancellation(
+      storeId,
+      orderId,
+      userId,
+      cancelReason,
+    );
+    if (claim.kind === 'done') {
+      // Already CANCELLED+COMPLETED: converge settlement idempotently, never refund/quantity/notify again.
+      await this.settlements.cancelSettlement(orderId);
+      throw new ForbiddenException('RECRUITING 상태에서만 취소 가능합니다.');
+    }
+    if (claim.kind === 'in_progress') {
+      throw new ConflictException('주문 취소가 이미 처리 중입니다.');
+    }
 
-    // 주문 상태 + 공동구매 참여자 수 원자적 업데이트
-    const gcRef = this.firestore.doc(`groupProductConfig/${order['productId']}`);
-    const now = this.firestore.Timestamp.now();
-
-    await this.firestore.runTransaction(async (t) => {
-      // read 먼저, write 나중 (Firestore 트랜잭션 규칙)
-      const gcSnap = await t.get(gcRef);
-      t.update(this.firestore.doc(`orders/${orderId}`), {
-        status: 'CANCELLED',
+    try {
+      await this.payments.processRefundByOrderId(orderId, cancelReason);
+    } catch (error) {
+      await this.recordLegacyConsumerCancellationState(
+        storeId,
+        orderId,
+        claim.token,
+        'REFUND_FAILED',
         cancelReason,
+      );
+      throw error;
+    }
+
+    try {
+      await this.applyLegacyConsumerLocalCancellation(
+        storeId,
+        orderId,
+        claim.token,
+        cancelReason,
+      );
+      await this.settlements.cancelSettlement(orderId);
+    } catch (error) {
+      await this.recordLegacyConsumerCancellationState(
+        storeId,
+        orderId,
+        claim.token,
+        'LOCAL_FAILED',
+        cancelReason,
+      );
+      throw error;
+    }
+
+    try {
+      await this.notifications.sendToUser(
+        userId,
+        'GROUP_CANCELLED_SELF',
+        { orderId, productId },
+        orderId,
+        `consumer-cancel:${orderId}`,
+      );
+    } catch (error) {
+      await this.recordLegacyConsumerCancellationState(
+        storeId,
+        orderId,
+        claim.token,
+        'LOCAL_FAILED',
+        cancelReason,
+      );
+      throw error;
+    }
+
+    return { orderId, status: 'CANCELLED' };
+  }
+
+  private async claimLegacyConsumerCancellation(
+    storeId: string,
+    orderId: string,
+    userId: string,
+    reason: string,
+  ): Promise<LegacyConsumerCancelClaimResult> {
+    const token = randomUUID();
+    let result: LegacyConsumerCancelClaimResult = { kind: 'claimed', token };
+
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== storeId) {
+        throw new NotFoundException();
+      }
+      const order = orderSnap.data() as Record<string, any>;
+      if (order['userId'] !== userId) throw new ForbiddenException();
+      if (order['schemaVersion'] === 2 && order['roundId']) {
+        throw new ForbiddenException('RECRUITING 상태에서만 취소 가능합니다.');
+      }
+
+      const cancellation = (order['cancellation'] ?? null) as Record<string, any> | null;
+      const cancellationStatus = cancellation?.['status'] as string | undefined;
+
+      if (order['status'] === 'CANCELLED' && cancellationStatus === 'COMPLETED') {
+        result = { kind: 'done' };
+        return;
+      }
+      if (order['status'] === 'CANCELLED' && !cancellation) {
+        result = { kind: 'done' };
+        return;
+      }
+
+      let expiredClaim = false;
+      if (cancellationStatus === 'REFUNDING') {
+        const refundClaim = cancellation?.['refundClaim'] as
+          | { token?: string; expiresAt?: number }
+          | undefined;
+        if (
+          !refundClaim ||
+          typeof refundClaim.token !== 'string' ||
+          refundClaim.token.length === 0 ||
+          typeof refundClaim.expiresAt !== 'number'
+        ) {
+          result = { kind: 'in_progress' };
+          return;
+        }
+        if (refundClaim.expiresAt > Date.now()) {
+          result = { kind: 'in_progress' };
+          return;
+        }
+        expiredClaim = true;
+      }
+
+      const retryable = ['LOCAL_FAILED', 'REFUND_FAILED'].includes(cancellationStatus ?? '');
+      const isRecruiting = order['status'] === 'RECRUITING';
+      const isCancelledRetry =
+        order['status'] === 'CANCELLED' && (retryable || expiredClaim);
+      if (!isRecruiting && !isCancelledRetry) {
+        throw new ForbiddenException('RECRUITING 상태에서만 취소 가능합니다.');
+      }
+
+      const now = this.firestore.Timestamp.now();
+      tx.update(orderRef, {
+        cancellation: {
+          status: 'REFUNDING',
+          reason,
+          refundClaim: {
+            token,
+            expiresAt: Date.now() + LEGACY_CONSUMER_CANCEL_CLAIM_MS,
+          },
+          updatedAt: this.toIso(now),
+        },
+        updatedAt: now,
+      });
+    });
+
+    return result;
+  }
+
+  private async applyLegacyConsumerLocalCancellation(
+    storeId: string,
+    orderId: string,
+    token: string,
+    reason: string,
+  ) {
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== storeId) {
+        throw new NotFoundException();
+      }
+      const order = orderSnap.data() as Record<string, any>;
+      const cancellation = (order['cancellation'] ?? null) as Record<string, any> | null;
+      if (
+        cancellation?.['status'] !== 'REFUNDING' ||
+        cancellation?.['refundClaim']?.['token'] !== token
+      ) {
+        throw new ConflictException('주문 취소 claim이 더 이상 유효하지 않습니다.');
+      }
+
+      const now = this.firestore.Timestamp.now();
+      if (order['status'] === 'CANCELLED') {
+        tx.update(orderRef, {
+          cancellation: {
+            status: 'COMPLETED',
+            reason,
+            completedAt: this.toIso(now),
+            updatedAt: this.toIso(now),
+          },
+          updatedAt: now,
+        });
+        return;
+      }
+      if (order['status'] !== 'RECRUITING') {
+        throw new ConflictException('주문 상태가 변경되었습니다.');
+      }
+
+      const quantity = order['quantity'] as unknown;
+      if (typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity <= 0) {
+        throw new BadRequestException('주문 수량이 올바르지 않아 취소할 수 없습니다.');
+      }
+      const gcRef = this.firestore.doc(`groupProductConfig/${order['productId']}`);
+      const gcSnap = await tx.get(gcRef);
+
+      tx.update(orderRef, {
+        status: 'CANCELLED',
+        cancelReason: reason,
+        cancellation: {
+          status: 'COMPLETED',
+          reason,
+          completedAt: this.toIso(now),
+          updatedAt: this.toIso(now),
+        },
         updatedAt: now,
       });
       if (gcSnap.exists) {
-        t.update(gcRef, {
-          currentQuantity: this.firestore.FieldValue.increment(-(order['quantity'] as number)),
+        tx.update(gcRef, {
+          currentQuantity: this.firestore.FieldValue.increment(-(quantity as number)),
         });
       }
     });
+  }
 
-    // settlement 취소 반영 (안전망: 정상 플로우에서는 settlement 미생성 상태)
-    await this.settlements.cancelSettlement(orderId);
+  private async recordLegacyConsumerCancellationState(
+    storeId: string,
+    orderId: string,
+    token: string,
+    status: 'REFUND_FAILED' | 'LOCAL_FAILED',
+    reason: string,
+  ) {
+    await this.firestore.runTransaction(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists) return;
+      if (orderSnap.data()?.['storeId'] !== storeId) return;
 
-    // 소비자 본인 알림
-    await this.notifications.sendToUser(
-      userId,
-      'GROUP_CANCELLED_SELF',
-      { orderId, productId: order['productId'] as string },
-      orderId,
-    );
+      const cancellation = (orderSnap.data()?.['cancellation'] ?? null) as Record<
+        string,
+        any
+      > | null;
+      const ownsClaim = cancellation?.['refundClaim']?.['token'] === token;
+      const localCompletionFailed =
+        status === 'LOCAL_FAILED' && cancellation?.['status'] === 'COMPLETED';
+      if (!ownsClaim && !localCompletionFailed) return;
 
-    return { orderId, status: 'CANCELLED' };
+      const now = this.firestore.Timestamp.now();
+      tx.update(orderRef, {
+        cancellation: {
+          status,
+          reason,
+          updatedAt: this.toIso(now),
+        },
+        updatedAt: now,
+      });
+    });
   }
 
   async reviewOrder(storeId: string, orderId: string, userId: string) {
@@ -491,7 +723,7 @@ export class OrdersLifecycleService {
       const orderRef = this.firestore.doc(`orders/${input.orderId}`);
       const latestSnap = await transaction.get(orderRef);
       if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== input.storeId) {
-        throw new NotFoundException();
+        throwDriverOrderNotFound();
       }
       const latestOrder = latestSnap.data()!;
       const mutationInput = {
@@ -513,6 +745,7 @@ export class OrdersLifecycleService {
           firestore: this.firestore,
           order: { ...latestOrder, id: input.orderId },
           orderId: input.orderId,
+          requesterRole: 'driver',
         });
       }
       const currentPaymentRequired = isCurrentRedeliveryPaymentRequired(latestOrder);
@@ -527,13 +760,17 @@ export class OrdersLifecycleService {
         const roundRef = this.firestore.doc(`saleRounds/${latestOrder['roundId']}`);
         const roundSnap = await transaction.get(roundRef);
         if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
-          throw new NotFoundException('회차를 찾을 수 없습니다.');
+          throwDriverOrderNotFound('회차를 찾을 수 없습니다.');
         }
         const round = roundSnap.data()!;
         transaction.update(roundRef, {
-          counters: this.nextRoundCounters(round['counters'], {
-            heldOrderCount: heldOrderDelta,
-          }),
+          counters: this.nextRoundCounters(
+            round['counters'],
+            {
+              heldOrderCount: heldOrderDelta,
+            },
+            { driverOrder: true },
+          ),
           updatedAt: input.now,
         });
       }
@@ -713,6 +950,7 @@ export class OrdersLifecycleService {
   private nextRoundCounters(
     raw: Record<string, number> | null | undefined,
     delta: Record<string, number>,
+    options?: { driverOrder?: boolean },
   ) {
     const current = {
       reservedDeliveryAddresses: raw?.['reservedDeliveryAddresses'] ?? 0,
@@ -723,6 +961,9 @@ export class OrdersLifecycleService {
     };
     const heldOrderCount = current['heldOrderCount'];
     if ((delta['heldOrderCount'] ?? 0) < 0 && heldOrderCount < 1) {
+      if (options?.driverOrder === true) {
+        throwDriverOrderStateConflict('회차 보류 주문 수가 이미 정리되었습니다.', true);
+      }
       throw new ConflictException('회차 보류 주문 수가 이미 정리되었습니다.');
     }
     return Object.fromEntries(
