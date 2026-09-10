@@ -224,7 +224,9 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 > 이 절은 idempotency 재설계나 server implementation이 아니라, 이미 COMPLETE된 위 결정 계약을
 > 후속 `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-IMPLEMENTATION-01`이 추측 없이 소비할 수 있도록
 > remote-addressable canonical evidence로 게시한 것이다.
-> `IMPLEMENTATION_STATUS = PENDING`이며 `IMPLEMENTATION PENDING` 상태를 거짓으로 기록하지 않는다.
+> `IMPLEMENTATION_STATUS = COMPLETE`이며 legacy plain branch의 transaction 재검증이
+> `apps/api/src/orders/orders-lifecycle.service.ts`와
+> `apps/api/src/orders/orders-duplicate-contract.spec.ts`(5 tests)로 검증된다.
 
 ### 12.1 SETTLED DECISION — 현재 계약에서 바꾸지 않는다
 
@@ -277,24 +279,34 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
   `schemaVersion: 2 + roundId` 경로는 `expectedStatus` transaction 보호가 존재하고,
   driver legacy status mutation 경로는 driver transaction + driver scope transaction 재확인이 존재하며,
   일부 seller `DELIVERING` / `CANCELLED` / held-delta transaction 경로에도 transaction 보호가 존재한다.
+  남은 legacy plain branch도 `firestore.runTransaction` 안에서 order를 다시 읽고
+  `storeId`와 `latest persisted status === entry expectedStatus`를 재확인한 뒤에만 write한다.
+  불일치 시 `409 Conflict`, 일치 시 fresh snapshot 기반 update를 기록한다.
+  소유자: `OrdersLifecycleService.updateStatus`의 최종 plain branch
+  (`apps/api/src/orders/orders-lifecycle.service.ts`).
 - 모든 status write가 transaction 내부에서
   `current persisted order.status == entry expectedStatus`를 다시 확인하도록 수렴시키는 것이
   서버 계약의 target invariant다.
   `EVERY_STATUS_WRITE_REVALIDATES_EXPECTED_STATUS_INSIDE_TRANSACTION`.
 
-### 12.3 KNOWN GAP — S1 (`IMPLEMENTATION PENDING`)
+### 12.3 RESOLVED — S1 (`IMPLEMENTATION COMPLETE`)
 
-- `S1`: legacy non-transactional plain status write의 `expectedStatus` transaction 공백.
+- `S1`: legacy non-transactional plain status write의 `expectedStatus` transaction 공백은 해소됐다.
 - 대표적인 영향 surface: seller legacy `ACCEPTED → PREPARING`,
   legacy parcel `PREPARING → DELIVERED`, `roundId` 없는 legacy `DELIVERY_HELD` 진입,
-  동일 `OrdersLifecycleService.updateStatus`를 타는 기타 plain branch.
-- 현재 문제: 두 요청이 같은 old state를 읽고 동시에 진입하면 plain `doc.update`가 둘 다 성공할 수 있고,
+  동일 `OrdersLifecycleService.updateStatus`를 타는 기타 plain branch,
+  seller parcel `PREPARING`에서의 `DELIVERED` vs `DELIVERY_HELD` 상충 경쟁.
+- 해소 내용: plain branch가 `doc.update` 직접 write를 하지 않고
+  `runTransaction` + fresh-read + `expectedStatus` 재검증으로 수렴한다.
+  race loser는 status persistence 이전에 `409`로 종료하므로
   timestamp last-write-wins, transition notification 중복, legacy hold concurrent overwrite,
-  `heldAt` 변경에 따른 redelivery charge linkage 불일치 위험이 생긴다.
-- 후속 `IMPLEMENTATION-01`의 target invariant는 위 `EVERY_STATUS_WRITE_REVALIDATES_EXPECTED_STATUS_INSIDE_TRANSACTION`이며,
-  이 PUBLICATION Task에서는 source를 수정하지 않는다.
-- 문서 게시 시점의 상태는 `IMPLEMENTATION_STATUS = PENDING`이며 `IMPLEMENTATION PENDING`이다.
-  현재 코드가 이미 이 invariant를 만족한다고 기록하지 않는다.
+  `heldAt` 변경에 따른 redelivery charge linkage 불일치가 발생하지 않는다.
+  transaction 성공 이후에만 settlement/notification 후속효과가 실행된다.
+- 증거: `apps/api/src/orders/orders-lifecycle.service.ts`의 `updateStatus` 최종 plain branch,
+  `apps/api/src/orders/orders-duplicate-contract.spec.ts`(5 tests:
+  legacy success, sequential retry `403`, same-state race `409`,
+  parcel success/race, roundId-less hold, conflicting-transition `409` + side-effect `0`).
+- `IMPLEMENTATION_STATUS = COMPLETE`이다.
 
 ### 12.4 DEFERRED — 이번 계약에서 결정하지 않는다
 
@@ -335,6 +347,7 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 | 날짜 | 내용 |
 |---|---|
 | 2026-09-10 | `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-DECISION-01` 결정 계약 게시: Status/Hold duplicate submission & convergence contract 추가, S1은 `IMPLEMENTATION PENDING`으로 명시 |
+| 2026-09-10 | `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-IMPLEMENTATION-01`: legacy plain branch transaction 재검증 수렴 확인 + conflicting-transition 회귀 1건 추가(`orders-duplicate-contract.spec.ts` 5 tests PASS) 후 Section 12를 `IMPLEMENTATION COMPLETE`로 수렴 |
 | 2026-08-30 | 현재 회차 lifecycle의 paid-before-resume guard와 `DELIVERY_HELD → PREPARING` 결제 요청 경계를 반영하고 seller API projection 경계를 정합화 |
 | 2026-08-24 | 유료 재배송비 결제 전 배송 재개 금지와 direct Firestore read authorization·최소화 finding 최초 반영 |
 | 2026-08-23 | 현행 endpoint/FSM/회차·legacy 공존 계약으로 정합화 |

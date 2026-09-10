@@ -373,4 +373,44 @@ describe('legacy plain status write duplicate-submit 계약', () => {
     );
     expect(winner.memory.read('orders/order-1')['updatedAt']).toEqual(updatedAtAfterSuccess);
   });
+
+  it('seller parcel PREPARING에서 서로 다른 허용 전이가 경쟁하면 loser는 409이고 last-write-wins가 없다', async () => {
+    const winnerHold = {
+      reasonCode: 'ACCESS_UNAVAILABLE',
+      reasonMessage: '공동현관 출입 불가',
+      customerResponsible: false,
+      heldAt: '2026-08-27T00:00:00.000Z',
+      redeliveryFee: null,
+      nextContactAt: null,
+      nextDeliveryAt: null,
+      resolvedAt: null,
+    };
+    // loser는 PREPARING → DELIVERED를 entry 검증까지 통과하지만,
+    // transaction 재확인 시점에 승자가 이미 PREPARING → DELIVERY_HELD를 커밋한 상태다.
+    const loser = makeContext({
+      order: { status: 'PREPARING', deliveryMethod: 'parcel' },
+      beforeTransaction: (records) => {
+        records.set('orders/order-1', {
+          ...records.get('orders/order-1'),
+          status: 'DELIVERY_HELD',
+          deliveryHold: winnerHold,
+        });
+      },
+    });
+
+    await expect(
+      loser.lifecycle.updateStatus('store-1', 'order-1', 'seller-1', {
+        status: 'DELIVERED',
+      } as never, 'seller'),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(loser.memory.firestore.runTransaction).toHaveBeenCalled();
+    expectNoDuplicateSideEffects(loser);
+    // 승자의 hold epoch를 덮어쓰지 않고 그대로 보존한다.
+    expect(loser.memory.read('orders/order-1')).toMatchObject({
+      status: 'DELIVERY_HELD',
+      deliveryHold: winnerHold,
+    });
+    expect(directOrderWrites(loser)).toHaveLength(0);
+  });
 });
