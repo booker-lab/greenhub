@@ -3,6 +3,9 @@
  *
  * Server authority를 유지하기 위한 최소 분류만 둔다.
  * - detail HTTP status classification (404 / 401·403 / 그 외·network)
+ * - detail scope identity (orderId + user identity + role + access token)
+ * - command 401·403 authority-loss classification
+ * - command scope/sequence continuation binding
  * - command semantic ACK matching (orderId + status)
  *
  * 어떤 Server mutation policy도 재정의하지 않으며,
@@ -98,4 +101,50 @@ export function isDriverOrderStatusAck(
   expectedStatus: string,
 ): boolean {
   return result.orderId === expectedOrderId && result.status === expectedStatus;
+}
+
+/**
+ * detail scope identity: order identity + current authenticated principal/scope.
+ *
+ * list shared owner의 user-id + role + access-token 의미를 detail 최소 형태로
+ * 확장한다. token 문자열 하나만을 principal 전체의 암묵적 owner로 사용하지
+ * 않는다. 빈 값은 명시적 sentinel로 정규화하여 scope 비교가 항상 문자열
+ * 동등성으로 동작하도록 한다.
+ */
+export function buildDriverOrderDetailScope(args: {
+  orderId: string;
+  userId?: string | null;
+  role?: string | null;
+  token?: string | null;
+}): string {
+  const userId = args.userId && args.userId.length > 0 ? args.userId : '__no_user__';
+  const role = args.role && args.role.length > 0 ? args.role : '__no_role__';
+  const token = args.token && args.token.length > 0 ? args.token : '__no_token__';
+  return `${args.orderId}::${userId}::${role}::${token}`;
+}
+
+/**
+ * command PATCH 자체의 401·403은 authority loss다.
+ * 409/422/5xx의 command recovery architecture를 재정의하지 않으며,
+ * 이 판정은 401·403만을 AUTH_ERROR branch로 보낸다.
+ */
+export function isDriverOrderCommandAuthLoss(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
+/**
+ * command async continuation이 아직 동일 command generation + 동일 scope인지
+ * 판정한다. scope가 바뀌었거나 더 새로운 command가 시작됐으면 이전 ACK/
+ * readback/error/finally/navigation을 새 scope UI에 절대 반영하지 않는다.
+ * 이미 서버에 전달된 command 결과를 client가 취소됐다고 거짓 판정하지 않으며,
+ * 자동 resend도 하지 않는다. 호출자는 false일 때 state mutation·navigation·
+ * notification·reread를 모두 건너뛰어야 한다.
+ */
+export function isDriverOrderCommandContinuationCurrent(args: {
+  snapshotSeq: number;
+  snapshotScope: string | null;
+  currentSeq: number;
+  currentScope: string | null;
+}): boolean {
+  return args.snapshotSeq === args.currentSeq && args.snapshotScope === args.currentScope;
 }

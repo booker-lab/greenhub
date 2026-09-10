@@ -19,8 +19,11 @@ import { useSession } from 'next-auth/react';
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import {
+  buildDriverOrderDetailScope,
   type DriverOrderReadErrorKind,
   isDriverOrderCommandAllowed,
+  isDriverOrderCommandAuthLoss,
+  isDriverOrderCommandContinuationCurrent,
   isDriverOrderStatusAck,
   shouldPreserveDriverOrderOnReadError,
   toDriverOrderNetworkError,
@@ -66,7 +69,7 @@ const METHOD_LABEL: Record<string, string> = {
 
 export default function OrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
@@ -81,9 +84,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const [readbackWarning, setReadbackWarning] = useState<string | null>(null);
   const [readKey, setReadKey] = useState(0);
   const readSeqRef = useRef(0);
+  const commandSeqRef = useRef(0);
   const hasOrderRef = useRef(false);
-  // orderId·auth token scope가 바뀌면 이전 scope의 order/PII를 절대 남기지 않는다.
+  // detail scope: order identity + user id + role + access token.
+  // orderId·auth scope가 바뀌면 이전 scope의 order/PII를 절대 남기지 않는다.
   const readScopeRef = useRef<string | null>(null);
+  // render 중 동기 갱신되는 live scope: command continuation이 effect 실행 전
+  // 전환도 감지할 수 있도록 현재 principal을 항상 반영한다.
+  const liveScopeRef = useRef<string | null>(null);
+  liveScopeRef.current = buildDriverOrderDetailScope({
+    orderId,
+    userId: session?.user.id,
+    role: session?.user.role,
+    token: session?.user.accessToken,
+  });
   // C1: status command dispatch의 실제 authority. loading UI state와 분리된 ref 기반
   // in-flight guard이며, React state의 비동기 반영만으로는 막을 수 없는 동일 frame
   // double-click/double-submit에서도 두 번째 PATCH dispatch를 차단한다.
@@ -143,9 +157,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
     const token = session?.user.accessToken;
     if (!token) {
       // usable token 없음을 not-found/empty로 표시하지 않는다.
-      // token 상실 역시 authority loss이므로 이전 scope 잔여물을 모두 제거한다.
+      // token 상실·session loading 역시 authority loss이므로 이전 scope 잔여물을 모두 제거한다.
+      // 이전 scope에서 시작된 command continuation도 scope/sequence 무효화로 차단한다.
       readSeqRef.current += 1;
-      readScopeRef.current = `${orderId}::__no_token__`;
+      commandSeqRef.current += 1;
+      inFlightRef.current = false;
+      // stale command loading은 새 scope 소유자가 직접 해제한다: stale finally는
+      // 새 scope를 덮지 않도록 guard되므로 여기서 해제하지 않으면 leaking된다.
+      setLoading(false);
+      readScopeRef.current = buildDriverOrderDetailScope({
+        orderId,
+        userId: session?.user.id,
+        role: session?.user.role,
+        token,
+      });
       setOrder(null);
       hasOrderRef.current = false;
       setReadError({ kind: 'AUTH_ERROR', message: '로그인 정보를 다시 확인해 주세요.' });
@@ -154,11 +179,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       setReadRefreshing(false);
       return;
     }
-    const nextScope = `${orderId}::${token}`;
+    const nextScope = buildDriverOrderDetailScope({
+      orderId,
+      userId: session?.user.id,
+      role: session?.user.role,
+      token,
+    });
     if (readScopeRef.current !== nextScope) {
-      // orderId 또는 auth scope 변경: 이전 주문·PII·readError/readback을 새 scope에 남기지 않는다.
-      // 진행 중이던 이전 scope read는 seq 무효화로 덮어쓰기를 막는다.
+      // orderId 또는 user/role/token scope 변경: 이전 주문·PII·readError/readback을
+      // 새 scope에 남기지 않는다. 진행 중이던 이전 scope read는 seq 무효화로,
+      // 이전 scope command는 command sequence 무효화로 덮어쓰기를 막는다.
       readSeqRef.current += 1;
+      commandSeqRef.current += 1;
+      inFlightRef.current = false;
+      // orderId·user/role/token 전환도 새 scope가 command loading을 소유하고 해제한다.
+      setLoading(false);
       readScopeRef.current = nextScope;
       hasOrderRef.current = false;
       setOrder(null);
@@ -168,7 +203,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       setReadRefreshing(false);
     }
     void readDetail(token);
-  }, [orderId, session?.user.accessToken, readKey, readDetail]);
+  }, [
+    orderId,
+    session?.user.id,
+    session?.user.role,
+    session?.user.accessToken,
+    sessionStatus,
+    readKey,
+    readDetail,
+  ]);
 
   async function updateStatus(status: string) {
     // C1: dispatch 직전에 ref를 선점한다. 이미 진행 중인 command가 있으면
@@ -187,6 +230,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       return;
     }
     const token = session.user.accessToken;
+    commandSeqRef.current += 1;
+    const cmdSeq = commandSeqRef.current;
+    const cmdScope = buildDriverOrderDetailScope({
+      orderId,
+      userId: session.user.id,
+      role: session.user.role,
+      token,
+    });
+    const cmdOrderId = orderId;
+    const isCommandCurrent = () =>
+      cmdOrderId === liveScopeRef.current?.split('::')[0] &&
+      isDriverOrderCommandContinuationCurrent({
+        snapshotSeq: cmdSeq,
+        snapshotScope: cmdScope,
+        currentSeq: commandSeqRef.current,
+        currentScope: liveScopeRef.current,
+      });
     inFlightRef.current = true;
     setLoading(true);
     setReadbackWarning(null);
@@ -196,11 +256,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         token,
         { method: 'PATCH', body: JSON.stringify({ status }) },
       );
+      if (!isCommandCurrent()) return;
       if (!res.ok) {
-        // 403 duplicate-sequential / 409 race-loser: 서버 authority가 이미 상태를
-        // 이동시켰다는 의미다. 같은 command를 자동 재전송하지 않고
-        // authoritative GET으로 수렴한다.
-        if (res.status === 403 || res.status === 409) {
+        // Command 401/403 = authority loss. 이전 protected order/PII/command
+        // authority를 즉시 clear하고 AUTH_ERROR로 수렴한다. generic 오류만 띄우고
+        // 이전 order를 유지하는 흐름을 남기지 않는다.
+        if (isDriverOrderCommandAuthLoss(res.status)) {
+          hasOrderRef.current = false;
+          setOrder(null);
+          setReadError({
+            kind: 'AUTH_ERROR',
+            message: '로그인 정보를 다시 확인해 주세요.',
+          });
+          setReadbackWarning(null);
+          return;
+        }
+        // 409 race-loser: 서버 authority가 이미 상태를 이동시켰다는 의미다.
+        // 같은 command를 자동 재전송하지 않고 authoritative GET으로 수렴한다.
+        if (res.status === 409) {
           notifications.show({
             color: 'yellow',
             message: '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.',
@@ -211,6 +284,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         throw new Error('상태 전환 실패');
       }
       const result = (await res.json()) as { orderId?: unknown; status?: unknown };
+      if (!isCommandCurrent()) return;
       if (!isDriverOrderStatusAck(result, orderId, status)) {
         throw new Error('상태 전환 응답 불일치');
       }
@@ -218,13 +292,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       // ACK 성공 직후 local 합성 없이 authoritative GET으로 수렴한다. 자동 resend는 하지 않는다.
       try {
         const reread = await apiFetch(`/driver/orders/${encodeURIComponent(orderId)}`, token);
+        if (!isCommandCurrent()) return;
         if (!reread.ok) throw toDriverOrderReadError(reread.status);
         const fresh = (await reread.json()) as Order;
+        if (!isCommandCurrent()) return;
         hasOrderRef.current = true;
         setOrder(fresh);
         setReadError(null);
         setReadbackWarning(null);
       } catch (readbackCause: unknown) {
+        if (!isCommandCurrent()) return;
         // readback 단계의 AUTH_ERROR·NOT_FOUND 역시 authority loss이므로 이전 order를 남기지 않는다.
         const readbackKind = (readbackCause as { kind?: unknown } | null)?.kind;
         if (readbackKind === 'AUTH_ERROR' || readbackKind === 'NOT_FOUND') {
@@ -250,13 +327,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         }
       }
       if (isTerminal) {
+        if (!isCommandCurrent()) return;
         router.replace('/board?tab=preparing');
       }
     } catch {
+      if (!isCommandCurrent()) return;
       notifications.show({ color: 'red', message: '오류가 발생했습니다. 다시 시도해주세요.' });
     } finally {
-      // 모든 종료 경로에서 in-flight를 해제한다. 403/409 convergence return,
-      // readback 분기 return, throw 모두 여기를 거친다.
+      // 모든 종료 경로에서 in-flight를 해제한다. 401/403 authority-clear return,
+      // 409 convergence return, readback 분기 return, throw 모두 여기를 거친다.
+      // 이전 command의 finally가 새 scope의 command/loading 상태를 덮지 않도록
+      // 동일 generation + 동일 scope일 때만 해제한다.
+      if (!isCommandCurrent()) return;
       inFlightRef.current = false;
       setLoading(false);
     }

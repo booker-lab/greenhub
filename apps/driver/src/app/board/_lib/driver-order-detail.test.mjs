@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  buildDriverOrderDetailScope,
   classifyDriverOrderReadError,
   DriverOrderReadError,
+  isDriverOrderCommandAuthLoss,
+  isDriverOrderCommandContinuationCurrent,
   isDriverOrderStatusAck,
   toDriverOrderNetworkError,
   toDriverOrderReadError,
@@ -51,6 +54,90 @@ test('semantic ACK: orderId 불일치는 false', () => {
 test('semantic ACK: status 불일치는 false', () => {
   assert.equal(
     isDriverOrderStatusAck({ orderId: 'o1', status: 'PREPARING' }, 'o1', 'DELIVERING'),
+    false,
+  );
+});
+
+test('detail scope는 orderId·user·role·token을 모두 구분한다', () => {
+  const base = { orderId: 'o1', userId: 'u1', role: 'driver', token: 't1' };
+  assert.equal(buildDriverOrderDetailScope(base), buildDriverOrderDetailScope(base));
+  assert.notEqual(
+    buildDriverOrderDetailScope(base),
+    buildDriverOrderDetailScope({ ...base, orderId: 'o2' }),
+  );
+  assert.notEqual(
+    buildDriverOrderDetailScope(base),
+    buildDriverOrderDetailScope({ ...base, userId: 'u2' }),
+  );
+  assert.notEqual(
+    buildDriverOrderDetailScope(base),
+    buildDriverOrderDetailScope({ ...base, role: 'admin' }),
+  );
+  assert.notEqual(
+    buildDriverOrderDetailScope(base),
+    buildDriverOrderDetailScope({ ...base, token: 't2' }),
+  );
+  assert.notEqual(
+    buildDriverOrderDetailScope(base),
+    buildDriverOrderDetailScope({ orderId: 'o1', userId: null, role: null, token: null }),
+  );
+});
+
+test('command 401·403만 authority loss다', () => {
+  assert.equal(isDriverOrderCommandAuthLoss(401), true);
+  assert.equal(isDriverOrderCommandAuthLoss(403), true);
+  for (const status of [404, 409, 422, 500]) {
+    assert.equal(isDriverOrderCommandAuthLoss(status), false);
+  }
+});
+
+test('command continuation은 동일 seq·scope일 때만 current다', () => {
+  const scope = buildDriverOrderDetailScope({
+    orderId: 'o1',
+    userId: 'u1',
+    role: 'driver',
+    token: 't1',
+  });
+  const other = buildDriverOrderDetailScope({
+    orderId: 'o1',
+    userId: 'u2',
+    role: 'driver',
+    token: 't2',
+  });
+  assert.equal(
+    isDriverOrderCommandContinuationCurrent({
+      snapshotSeq: 1,
+      snapshotScope: scope,
+      currentSeq: 1,
+      currentScope: scope,
+    }),
+    true,
+  );
+  assert.equal(
+    isDriverOrderCommandContinuationCurrent({
+      snapshotSeq: 1,
+      snapshotScope: scope,
+      currentSeq: 2,
+      currentScope: scope,
+    }),
+    false,
+  );
+  assert.equal(
+    isDriverOrderCommandContinuationCurrent({
+      snapshotSeq: 1,
+      snapshotScope: scope,
+      currentSeq: 1,
+      currentScope: other,
+    }),
+    false,
+  );
+  assert.equal(
+    isDriverOrderCommandContinuationCurrent({
+      snapshotSeq: 1,
+      snapshotScope: scope,
+      currentSeq: 1,
+      currentScope: null,
+    }),
     false,
   );
 });
