@@ -7,6 +7,12 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import OrderCard from '@/components/OrderCard';
 import { apiFetch } from '@/lib/api';
+import {
+  buildDriverListScope,
+  shouldPreserveDriverListOnReadError,
+  toDriverListReadError,
+  toDriverListReadErrorKind,
+} from '@/lib/driver-list-read';
 
 export default function BoardClient() {
   const searchParams = useSearchParams();
@@ -24,6 +30,9 @@ export default function BoardClient() {
   const [hasSuccessfulRead, setHasSuccessfulRead] = useState(false);
   const requestIdRef = useRef(0);
   const hasSuccessfulReadRef = useRef(false);
+  // user identity + role + access token scope가 바뀌면 이전 scope의
+  // protected rows를 새 fetch 완료 전에 동기적으로 제거한다.
+  const listScopeRef = useRef<string | null>(null);
 
   // focus 복귀·visibility 복귀 시 새 read를 수행한다. listener 누적 방지를 위해 cleanup한다.
   useEffect(() => {
@@ -48,6 +57,7 @@ export default function BoardClient() {
       // usable token 없음을 0건 성공으로 표시하지 않는다. 보호된 stale도 유지하지 않는다.
       // stale-empty가 auth 이후 initial failure로 오분류되지 않도록 성공 기록도 초기화한다.
       requestIdRef.current += 1;
+      listScopeRef.current = '__no_token__';
       hasSuccessfulReadRef.current = false;
       setHasSuccessfulRead(false);
       setPreparing([]);
@@ -57,6 +67,27 @@ export default function BoardClient() {
       setLoading(false);
       setRefreshing(false);
       return;
+    }
+
+    const nextScope = buildDriverListScope({
+      userId: session?.user.id,
+      role: session?.user.role,
+      token,
+    });
+    if (listScopeRef.current !== nextScope) {
+      // user/token scope 변경: 새 fetch 완료를 기다리지 않고 이전 scope의
+      // protected rows·성공 기록·error/freshness를 동기적으로 제거한다.
+      // 진행 중이던 이전 scope read는 sequence 무효화로 덮어쓰기를 막는다.
+      requestIdRef.current += 1;
+      listScopeRef.current = nextScope;
+      hasSuccessfulReadRef.current = false;
+      setHasSuccessfulRead(false);
+      setPreparing([]);
+      setDelivering([]);
+      setError(null);
+      setAuthRequired(false);
+      setLoading(true);
+      setRefreshing(false);
     }
 
     const controller = new AbortController();
@@ -77,7 +108,7 @@ export default function BoardClient() {
 
     apiFetch('/driver/orders', token, { signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) throw new Error(`driver orders request failed: ${response.status}`);
+        if (!response.ok) throw toDriverListReadError(response.status);
         const payload: unknown = await response.json();
         if (!Array.isArray(payload)) throw new Error('driver orders response is not a list');
         return payload as Order[];
@@ -96,7 +127,20 @@ export default function BoardClient() {
       })
       .catch((cause: unknown) => {
         if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) return;
-        if (hasSuccessfulReadRef.current) {
+        const kind = toDriverListReadErrorKind(cause);
+        if (kind === 'AUTH_ERROR') {
+          // authority loss(401·403): 이전 protected rows를 즉시 제거하고
+          // auth-required로 전환한다. 일반 retry loop가 권한 복구 없이
+          // stale data를 유지하지 않는다.
+          hasSuccessfulReadRef.current = false;
+          setHasSuccessfulRead(false);
+          setPreparing([]);
+          setDelivering([]);
+          setAuthRequired(true);
+          setError(null);
+          return;
+        }
+        if (shouldPreserveDriverListOnReadError(kind, hasSuccessfulReadRef.current)) {
           // refresh 실패는 마지막 정상 데이터를 지우지 않고 stale로 유지한다.
           setError('최신 주문을 불러오지 못했습니다. 기존 목록을 보여줍니다.');
         } else {
@@ -115,7 +159,7 @@ export default function BoardClient() {
       active = false;
       controller.abort();
     };
-  }, [session?.user.accessToken, sessionStatus, reloadKey]);
+  }, [session?.user.id, session?.user.role, session?.user.accessToken, sessionStatus, reloadKey]);
 
   const orders = tab === 'preparing' ? preparing : delivering;
   const today = new Date().toLocaleDateString('ko-KR', {

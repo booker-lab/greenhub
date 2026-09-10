@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import {
+  buildDriverListScope,
+  classifyDriverListReadStatus,
+  shouldPreserveDriverListOnReadError,
+} from '../../lib/driver-list-read.ts';
 
 const mapSource = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
 
@@ -77,9 +82,10 @@ test('Map initial fetch failure shows error with retry, not empty', () => {
   assert.match(mapSource, /배송 경로를 불러오지 못했습니다\. 잠시 후 다시 시도해주세요\./);
   assert.match(mapSource, /다시 시도/);
   // Initial failure clears to [] AND records an error (never a silent empty).
+  // 401·403 authority loss는 별도 분기로 먼저 clear되므로 stale 판정은 공유 helper를 거친다.
   assert.match(
     mapSource,
-    /hasSuccessfulReadRef\.current\) \{\s*\/\/ refresh 실패/s,
+    /shouldPreserveDriverListOnReadError\(kind, hasSuccessfulReadRef\.current\)\) \{\s*\/\/ refresh 실패/s,
   );
   assert.match(mapSource, /\} else \{\s*setOrders\(\[\]\);\s*setError\('배송 경로를 불러오지 못했습니다/s);
   // The old collapse (catch -> setOrders([]) with no setError) must be gone.
@@ -141,7 +147,9 @@ test('Map refresh failure keeps previous route as stale with retry', () => {
   assert.match(mapSource, /최신 경로를 불러오지 못했습니다\. 이전 경로를 보여줍니다\./);
   assert.match(mapSource, /\(이전 경로 표시 중\)/);
   // Stale branch must not clear the retained route.
-  const staleIfStart = mapSource.indexOf('if (hasSuccessfulReadRef.current) {');
+  const staleIfStart = mapSource.indexOf(
+    'if (shouldPreserveDriverListOnReadError(kind, hasSuccessfulReadRef.current)) {',
+  );
   const staleSetErrorPos = mapSource.indexOf("setError('최신 경로를 불러오지 못했습니다");
   const staleSetErrorEnd = mapSource.indexOf("');", staleSetErrorPos) + 3;
   const staleBranch = mapSource.slice(staleIfStart, staleSetErrorEnd);
@@ -232,4 +240,131 @@ test('nearestNeighbor keeps input order fallback for missing coordinates', () =>
   ];
   const ids = nearestNeighborReference(orders).map((o) => o.id);
   assert.deepEqual(ids, ['a', 'no-geo', 'b']);
+});
+
+// DRIVER-LIST-AUTH-SCOPE-RECOVERY-02 focused regression.
+// Board와 같은 공유 helper로 401·403 authority loss와 user/token scope를 고정한다.
+
+// Map 목록 상태의 최소 시뮬레이터. page.tsx 분기 순서
+// (AUTH clear → helper preserve 판정 → initial clear, scope 변경 시 동기 clear)를
+// 그대로 미러하며 실제 helper 분류 함수를 사용한다.
+function createMapSim() {
+  return { orders: [], hasSuccess: false, authRequired: false, error: null };
+}
+
+function applyMapSuccess(sim, rows) {
+  sim.orders = rows;
+  sim.hasSuccess = true;
+  sim.authRequired = false;
+  sim.error = null;
+  return sim;
+}
+
+function applyMapFailure(sim, { status = null, network = false } = {}) {
+  const kind = network ? 'FETCH_ERROR' : classifyDriverListReadStatus(status);
+  if (kind === 'AUTH_ERROR') {
+    sim.orders = [];
+    sim.hasSuccess = false;
+    sim.authRequired = true;
+    sim.error = null;
+    return sim;
+  }
+  if (shouldPreserveDriverListOnReadError(kind, sim.hasSuccess)) {
+    sim.error = 'stale';
+    return sim;
+  }
+  sim.orders = [];
+  sim.error = 'initial';
+  return sim;
+}
+
+// 12. success → 401/403이면 Map protected route를 즉시 clear하고 auth 상태로 전환한다.
+test('Map 401·403 authority loss clears protected route and shows auth state', () => {
+  // 배선: generic Error 문자열이 아닌 typed 분류를 throw한다.
+  assert.match(mapSource, /throw toDriverListReadError\(response\.status\)/);
+  assert.doesNotMatch(mapSource, /request failed: \$\{response\.status\}/);
+  assert.match(mapSource, /toDriverListReadErrorKind\(cause\)/);
+  const catchBlock = mapSource.slice(mapSource.indexOf('.catch('), mapSource.indexOf('.finally('));
+  const authAt = catchBlock.indexOf("kind === 'AUTH_ERROR'");
+  const preserveAt = catchBlock.indexOf('if (shouldPreserveDriverListOnReadError');
+  assert.ok(authAt !== -1 && preserveAt !== -1 && authAt < preserveAt);
+  const authBranch = catchBlock.slice(authAt, preserveAt);
+  assert.match(authBranch, /setOrders\(\[\]\)/);
+  assert.match(authBranch, /setHasSuccessfulRead\(false\)/);
+  assert.match(authBranch, /hasSuccessfulReadRef\.current = false/);
+  assert.match(authBranch, /setAuthRequired\(true\)/);
+  // runtime: 401과 403 모두 stale 없이 auth-required로 전환된다.
+  for (const status of [401, 403]) {
+    const sim = applyMapSuccess(createMapSim(), [{ id: 'r1' }, { id: 'r2' }]);
+    applyMapFailure(sim, { status });
+    assert.deepEqual(sim.orders, []);
+    assert.equal(sim.hasSuccess, false);
+    assert.equal(sim.authRequired, true);
+    assert.equal(sim.error, null);
+  }
+});
+
+// 13. 같은 scope의 network/5xx 실패는 이전 route를 stale로 유지한다.
+test('Map same-scope transient failure preserves stale route', () => {
+  const sim = applyMapSuccess(createMapSim(), [{ id: 'r1' }]);
+  applyMapFailure(sim, { network: true });
+  assert.equal(sim.orders.length, 1);
+  assert.equal(sim.hasSuccess, true);
+  assert.equal(sim.authRequired, false);
+  assert.equal(sim.error, 'stale');
+  const failed5xx = applyMapSuccess(createMapSim(), [{ id: 'r1' }]);
+  applyMapFailure(failed5xx, { status: 500 });
+  assert.equal(failed5xx.orders.length, 1);
+  assert.equal(failed5xx.hasSuccess, true);
+});
+
+// 14. user/token A → B 전환은 새 fetch 완료 전에 A route를 동기 clear한다.
+test('Map user/token scope change synchronously clears previous route', () => {
+  assert.match(mapSource, /listScopeRef/);
+  assert.match(mapSource, /buildDriverListScope\(\{/);
+  assert.match(
+    mapSource,
+    /session\?\.user\.id,\s*session\?\.user\.role,\s*session\?\.user\.accessToken,\s*sessionStatus,\s*reloadKey\]/,
+  );
+  const scopeAt = mapSource.indexOf('listScopeRef.current !== nextScope');
+  assert.ok(scopeAt !== -1, 'scope 변경 분기가 있어야 한다');
+  const scopeBlock = mapSource.slice(scopeAt, scopeAt + 900);
+  assert.match(scopeBlock, /setOrders\(\[\]\)/);
+  assert.match(scopeBlock, /setHasSuccessfulRead\(false\)/);
+  assert.match(scopeBlock, /setError\(null\)/);
+  assert.match(mapSource, /__no_token__/);
+  // runtime: A 성공 상태에서 B scope로 바뀌는 순간 A route가 사라진다.
+  const scopeA = buildDriverListScope({ userId: 'user-a', role: 'driver', token: 'token-a' });
+  const scopeB = buildDriverListScope({ userId: 'user-b', role: 'driver', token: 'token-b' });
+  assert.notEqual(scopeA, scopeB);
+  const sim = applyMapSuccess(createMapSim(), [{ id: 'a-route' }]);
+  if (scopeA !== scopeB) {
+    sim.orders = [];
+    sim.hasSuccess = false;
+    sim.authRequired = false;
+    sim.error = null;
+  }
+  assert.deepEqual(sim.orders, []);
+  assert.equal(sim.hasSuccess, false);
+  // B의 첫 read 실패는 A route를 재노출하지 않는다.
+  applyMapFailure(sim, { network: true });
+  assert.deepEqual(sim.orders, []);
+  assert.equal(sim.hasSuccess, false);
+});
+
+// 15. AUTH 상태에서는 navigation이 노출되지 않고 stale fail-close가 유지된다.
+test('Map auth-loss exposes no navigation and stale fail-close is preserved', () => {
+  // AUTH 분기는 orders를 비우므로 active/stale navigation 가드가 모두 실패한다.
+  const catchBlock = mapSource.slice(mapSource.indexOf('.catch('), mapSource.indexOf('.finally('));
+  const authAt = catchBlock.indexOf("kind === 'AUTH_ERROR'");
+  const authBranch = catchBlock.slice(authAt, catchBlock.indexOf('if (shouldPreserveDriverListOnReadError'));
+  assert.match(authBranch, /setOrders\(\[\]\)/);
+  assert.doesNotMatch(authBranch, /buildKakaoNaviUrl/);
+  // fresh navigation 가드와 stale fail-closed 렌더는 그대로 유지된다.
+  assert.match(
+    mapSource,
+    /sorted\.length > 0 && !loading && !authRequired && !error && hasSuccessfulRead/,
+  );
+  assert.match(mapSource, /sorted\.length > 0 && error && hasSuccessfulRead/);
+  assert.match(mapSource, /disabled/);
 });
