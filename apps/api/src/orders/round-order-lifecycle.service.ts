@@ -22,6 +22,10 @@ import {
   assertPaidRedeliveryResume,
   isCurrentRedeliveryPaymentRequired,
 } from './redelivery-resume-gate';
+import {
+  throwDriverOrderNotFound,
+  throwDriverOrderStateConflict,
+} from './driver-order-error';
 
 type OrderRecord = Record<string, any>;
 
@@ -60,10 +64,16 @@ export class RoundOrderLifecycleService {
       const orderRef = this.firestore.doc(`orders/${input.orderId}`);
       const orderSnap = await tx.get(orderRef);
       if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== input.storeId) {
+        if (input.requesterRole === 'driver') {
+          throwDriverOrderNotFound();
+        }
         throw new NotFoundException();
       }
       const order = orderSnap.data() as OrderRecord;
       if (order['status'] !== input.expectedStatus) {
+        if (input.requesterRole === 'driver') {
+          throwDriverOrderStateConflict('주문 상태가 변경되었습니다.', true);
+        }
         throw new ConflictException('주문 상태가 변경되었습니다.');
       }
       if (input.requesterRole === 'driver') {
@@ -87,6 +97,7 @@ export class RoundOrderLifecycleService {
           firestore: this.firestore,
           order: { ...order, id: input.orderId },
           orderId: input.orderId,
+          requesterRole: input.requesterRole,
         });
       }
       if (
@@ -94,6 +105,9 @@ export class RoundOrderLifecycleService {
         order['deliveryMethod'] === 'direct' &&
         (!Array.isArray(order['deliveryPhotoIds']) || order['deliveryPhotoIds'].length === 0)
       ) {
+        if (input.requesterRole === 'driver') {
+          throwDriverOrderStateConflict('배송 사진 연결 후에만 배송을 완료할 수 있습니다.');
+        }
         throw new ForbiddenException('배송 사진 연결 후에만 배송을 완료할 수 있습니다.');
       }
       if (
@@ -117,11 +131,16 @@ export class RoundOrderLifecycleService {
         const roundRef = this.firestore.doc(`saleRounds/${order['roundId']}`);
         const roundSnap = await tx.get(roundRef);
         if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
+          if (input.requesterRole === 'driver') {
+            throwDriverOrderNotFound('회차를 찾을 수 없습니다.');
+          }
           throw new NotFoundException('회차를 찾을 수 없습니다.');
         }
         const round = roundSnap.data() as OrderRecord;
         tx.update(roundRef, {
-          counters: this.nextRoundCounters(round['counters'], heldOrderDelta),
+          counters: this.nextRoundCounters(round['counters'], heldOrderDelta, {
+            driverOrder: input.requesterRole === 'driver',
+          }),
           updatedAt: now,
         });
       }
@@ -501,9 +520,16 @@ export class RoundOrderLifecycleService {
     return update;
   }
 
-  private nextRoundCounters(raw: Record<string, number> | undefined, heldOrderDelta: number) {
+  private nextRoundCounters(
+    raw: Record<string, number> | undefined,
+    heldOrderDelta: number,
+    options?: { driverOrder?: boolean },
+  ) {
     const heldOrderCount = raw?.['heldOrderCount'] ?? 0;
     if (heldOrderDelta < 0 && heldOrderCount < 1) {
+      if (options?.driverOrder === true) {
+        throwDriverOrderStateConflict('회차 보류 주문 수가 이미 정리되었습니다.', true);
+      }
       throw new ConflictException('회차 보류 주문 수가 이미 정리되었습니다.');
     }
     return {

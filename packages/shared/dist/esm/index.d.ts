@@ -1,4 +1,5 @@
 export * from './order.types.js';
+export * from './driver-order-error.types.js';
 export * from './product.types.js';
 export * from './variety.types.js';
 export * from './auth.types.js';
