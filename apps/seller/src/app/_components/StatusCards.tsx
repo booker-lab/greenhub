@@ -8,6 +8,11 @@ import { Fragment } from 'react';
 import type { OrderGroup } from '@/app/orders/_constants';
 import type { Summary } from '@/app/settlements/_constants';
 import { DashboardCard } from '@/components/DashboardCard';
+import type { DashboardSummaryData } from '@/hooks/useDashboardSummary.recovery';
+import {
+  resolveDashboardSummaryAmountText,
+  resolveDashboardSummaryView,
+} from '@/hooks/useDashboardSummary.recovery';
 
 // ─── 주문 처리 현황 카드 ──────────────────────────────────────────
 
@@ -81,17 +86,85 @@ export function OrderStatusCard({ groupCounts }: { groupCounts: Record<OrderGrou
 }
 
 // ─── 정산 현황 카드 ──────────────────────────────────────────────
+// 정산 조회 실패를 정상 0원으로 표시하지 않는다.
+// 첫 실패는 "—" + 오류 + retry, stale은 이전 금액 + 갱신 실패 표시.
 
 export function SettlementCard({
   summary,
   loading,
   error,
+  hasLoaded,
+  onRetry,
 }: {
   summary: Summary | null;
   loading: boolean;
   error: string | null;
+  hasLoaded?: boolean;
+  onRetry?: () => void;
 }) {
-  const amount = summary?.totalNetAmount ?? 0;
+  const effectiveHasLoaded = hasLoaded ?? (summary !== null);
+  const view = resolveDashboardSummaryView({
+    hasLoaded: effectiveHasLoaded,
+    loading,
+    error,
+  });
+  const amountText = resolveDashboardSummaryAmountText({
+    summary: summary as unknown as DashboardSummaryData | null,
+    view,
+  });
+
+  if (view === 'LOADING') {
+    return (
+      <DashboardCard title="정산 현황" moreHref="/settlements">
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          불러오는 중…
+        </Text>
+      </DashboardCard>
+    );
+  }
+
+  if (view === 'READ_FAILED') {
+    return (
+      <DashboardCard title="정산 현황" moreHref="/settlements">
+        <Stack gap="xs">
+          <Group justify="space-between">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+              오늘 정산 예정
+            </Text>
+            <Text
+              style={{
+                fontSize: 'var(--font-size-md)',
+                fontWeight: 'var(--fw-bold)',
+                color: 'var(--color-text-disabled)',
+              }}
+            >
+              —
+            </Text>
+          </Group>
+          <Text
+            role="alert"
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
+            {error ?? '정산 정보를 불러오지 못했습니다.'}
+          </Text>
+          {onRetry && (
+            <Button
+              size="xs"
+              variant="light"
+              color="red"
+              leftSection={<RefreshCcw size={14} />}
+              onClick={onRetry}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              다시 조회
+            </Button>
+          )}
+        </Stack>
+      </DashboardCard>
+    );
+  }
+
+  const isStale = view === 'STALE';
   return (
     <DashboardCard title="정산 현황" moreHref="/settlements">
       <Group justify="space-between">
@@ -102,12 +175,34 @@ export function SettlementCard({
           style={{
             fontSize: 'var(--font-size-md)',
             fontWeight: 'var(--fw-bold)',
-            color: error ? 'var(--color-text-disabled)' : 'var(--color-primary)',
+            color: 'var(--color-primary)',
           }}
         >
-          {loading ? '불러오는 중…' : error ? '—' : `${amount.toLocaleString('ko-KR')}원`}
+          {amountText}
         </Text>
       </Group>
+      {isStale && (
+        <Stack gap="xs" mt="xs">
+          <Text
+            role="alert"
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
+            최신 정보를 확인하지 못했습니다. 이전 정보입니다.
+          </Text>
+          {onRetry && (
+            <Button
+              size="xs"
+              variant="light"
+              color="yellow"
+              leftSection={<RefreshCcw size={14} />}
+              onClick={onRetry}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              다시 조회
+            </Button>
+          )}
+        </Stack>
+      )}
     </DashboardCard>
   );
 }
