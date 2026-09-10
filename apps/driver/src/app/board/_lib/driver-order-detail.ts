@@ -54,6 +54,41 @@ export function toDriverOrderNetworkError(
 }
 
 /**
+ * authoritative GET 실패 때 이전 order를 화면에 유지해도 되는가.
+ *
+ * - AUTH_ERROR(401·403): authority loss이므로 절대 유지하지 않는다.
+ * - NOT_FOUND(404): authoritative absence이므로 절대 유지하지 않는다.
+ * - FETCH_ERROR(network/5xx 등): 일시적 refresh 실패만 이전 내용을 stale로 유지할 수 있다.
+ */
+export function shouldPreserveDriverOrderOnReadError(
+  kind: DriverOrderReadErrorKind,
+  hasOrder: boolean,
+): boolean {
+  if (!hasOrder) return false;
+  return kind === 'FETCH_ERROR';
+}
+
+/**
+ * 현재 read confidence에서 status 변경 계열 command를 노출·실행해도 되는가.
+ *
+ * - order 없음 → 불가
+ * - readError 존재(AUTH/NOT_FOUND/FETCH 모두) → 불가
+ *   (AUTH/NOT_FOUND는 원칙적으로 order가 이미 제거된 상태이며, 이중 fail-closed다)
+ * - readbackWarning 존재(처리 완료 후 최신 상태 미확인) → 불가
+ * - fresh order + error 없음 + warning 없음 → 가능
+ */
+export function isDriverOrderCommandAllowed(args: {
+  hasOrder: boolean;
+  readErrorKind: DriverOrderReadErrorKind | null;
+  hasReadbackWarning: boolean;
+}): boolean {
+  if (!args.hasOrder) return false;
+  if (args.hasReadbackWarning) return false;
+  if (args.readErrorKind !== null) return false;
+  return true;
+}
+
+/**
  * command semantic ACK: 서버가 반환한 orderId와 status가
  * 요청한 값과 정확히 일치해야 성공이다.
  */

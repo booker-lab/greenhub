@@ -20,7 +20,9 @@ import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import {
   type DriverOrderReadErrorKind,
+  isDriverOrderCommandAllowed,
   isDriverOrderStatusAck,
+  shouldPreserveDriverOrderOnReadError,
   toDriverOrderNetworkError,
   toDriverOrderReadError,
 } from '../_lib/driver-order-detail';
@@ -80,6 +82,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const [readKey, setReadKey] = useState(0);
   const readSeqRef = useRef(0);
   const hasOrderRef = useRef(false);
+  // orderId·auth token scope가 바뀌면 이전 scope의 order/PII를 절대 남기지 않는다.
+  const readScopeRef = useRef<string | null>(null);
 
   const readDetail = useCallback(
     async (token: string) => {
@@ -98,12 +102,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         if (!isCurrent()) return;
         if (!response.ok) {
           const failure = toDriverOrderReadError(response.status);
-          // 후속 refresh 실패는 기존 order를 지우지 않고 stale로 유지한다.
-          if (hasOrderRef.current) {
+          // AUTH_ERROR·NOT_FOUND는 authority loss/absence이므로 이전 order를 즉시 제거한다.
+          // FETCH_ERROR만 일시적 refresh 실패로 이전 내용을 stale로 유지할 수 있다.
+          if (shouldPreserveDriverOrderOnReadError(failure.kind, hasOrderRef.current)) {
             setReadError({ kind: failure.kind, message: failure.message });
           } else {
+            hasOrderRef.current = false;
             setOrder(null);
             setReadError({ kind: failure.kind, message: failure.message });
+            setReadbackWarning(null);
           }
         } else {
           const payload = (await response.json()) as Order;
@@ -111,6 +118,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           hasOrderRef.current = true;
           setOrder(payload);
           setReadError(null);
+          // fresh authoritative read는 이전 readback 불확실성을 해소한다.
+          setReadbackWarning(null);
         }
       } catch (cause: unknown) {
         if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) return;
@@ -130,19 +139,46 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
     const token = session?.user.accessToken;
     if (!token) {
       // usable token 없음을 not-found/empty로 표시하지 않는다.
+      // token 상실 역시 authority loss이므로 이전 scope 잔여물을 모두 제거한다.
       readSeqRef.current += 1;
+      readScopeRef.current = `${orderId}::__no_token__`;
       setOrder(null);
       hasOrderRef.current = false;
       setReadError({ kind: 'AUTH_ERROR', message: '로그인 정보를 다시 확인해 주세요.' });
+      setReadbackWarning(null);
       setReadLoading(false);
       setReadRefreshing(false);
       return;
+    }
+    const nextScope = `${orderId}::${token}`;
+    if (readScopeRef.current !== nextScope) {
+      // orderId 또는 auth scope 변경: 이전 주문·PII·readError/readback을 새 scope에 남기지 않는다.
+      // 진행 중이던 이전 scope read는 seq 무효화로 덮어쓰기를 막는다.
+      readSeqRef.current += 1;
+      readScopeRef.current = nextScope;
+      hasOrderRef.current = false;
+      setOrder(null);
+      setReadError(null);
+      setReadbackWarning(null);
+      setReadLoading(true);
+      setReadRefreshing(false);
     }
     void readDetail(token);
   }, [orderId, session?.user.accessToken, readKey, readDetail]);
 
   async function updateStatus(status: string) {
     if (!order || !session) return;
+    // fail-closed: stale read confidence에서는 위험 command를 실행하지 않는다.
+    // AUTH/NOT_FOUND는 원칙적으로 order가 제거된 상태이며, FETCH stale·readback 미확인도 차단한다.
+    if (
+      !isDriverOrderCommandAllowed({
+        hasOrder: order !== null,
+        readErrorKind: readError?.kind ?? null,
+        hasReadbackWarning: readbackWarning !== null,
+      })
+    ) {
+      return;
+    }
     const token = session.user.accessToken;
     setLoading(true);
     setReadbackWarning(null);
@@ -166,8 +202,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         hasOrderRef.current = true;
         setOrder(fresh);
         setReadError(null);
+        setReadbackWarning(null);
       } catch (readbackCause: unknown) {
-        if (isTerminal) {
+        // readback 단계의 AUTH_ERROR·NOT_FOUND 역시 authority loss이므로 이전 order를 남기지 않는다.
+        const readbackKind = (readbackCause as { kind?: unknown } | null)?.kind;
+        if (readbackKind === 'AUTH_ERROR' || readbackKind === 'NOT_FOUND') {
+          const message =
+            readbackCause instanceof Error ? readbackCause.message : '주문을 찾을 수 없습니다';
+          hasOrderRef.current = false;
+          setOrder(null);
+          setReadError({
+            kind: readbackKind as DriverOrderReadErrorKind,
+            message,
+          });
+          setReadbackWarning(null);
+          if (!isTerminal) return;
+        } else if (isTerminal) {
           // terminal은 board가 fresh fetch하므로 navigation 계약을 유지한다.
         } else {
           const message =
@@ -244,6 +294,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
     order.schemaVersion === 2 && Boolean(order.roundId) && order.deliveryMethod === 'direct';
   const paymentPresentation = getRedeliveryPaymentPresentation(order.redeliveryPayment);
   const deliveryStartAllowed = isDeliveryStartAllowed(order.redeliveryPayment);
+  // stale FETCH_ERROR 또는 readback 미확인 상태의 order는 최신 authoritative state가 아니다.
+  // 위험 command 진입(상태 변경·사진 촬영·보류)은 fail-closed로 비활성화한다.
+  const commandsAllowed = isDriverOrderCommandAllowed({
+    hasOrder: true,
+    readErrorKind: readError?.kind ?? null,
+    hasReadbackWarning: readbackWarning !== null,
+  });
   const preparedAtStr = order.preparedAt
     ? new Date(order.preparedAt).toLocaleTimeString('ko-KR', {
         hour: '2-digit',
@@ -467,6 +524,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               radius="xl"
               color="brand"
               loading={loading}
+              disabled={!commandsAllowed}
               onClick={() => updateStatus('DELIVERING')}
             >
               배송 재개
@@ -486,6 +544,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                   radius="xl"
                   color="brand"
                   loading={loading}
+                  disabled={!commandsAllowed}
                   onClick={() => updateStatus('DELIVERING')}
                 >
                   수거 완료 / 배송 시작
@@ -502,6 +561,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                 radius="xl"
                 color="brand"
                 loading={loading}
+                disabled={!commandsAllowed}
                 onClick={() =>
                   router.push(`/board/${orderId}/photo/round-direct?storeId=${order.storeId}`)
                 }
@@ -515,7 +575,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               radius="xl"
               color="red"
               variant="outline"
-              disabled={loading}
+              disabled={loading || !commandsAllowed}
               onClick={() => setHoldOpened(true)}
             >
               배송 보류
@@ -531,6 +591,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               radius="xl"
               color="brand"
               loading={loading}
+              disabled={!commandsAllowed}
               onClick={() => updateStatus('DELIVERING')}
             >
               수거 완료 / 배송 시작
@@ -547,6 +608,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             radius="xl"
             color="brand"
             loading={loading}
+            disabled={!commandsAllowed}
             onClick={() => updateStatus('DELIVERED')}
           >
             배송 완료
@@ -559,6 +621,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             radius="xl"
             color="blue"
             loading={loading}
+            disabled={!commandsAllowed}
             onClick={() => router.push(`/board/${orderId}/photo?storeId=${order.storeId}`)}
           >
             거점 도착
