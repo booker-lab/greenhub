@@ -52,6 +52,10 @@ interface DeliveryHoldModalProps {
   // stale/403/409 수렴용 authoritative reread 트리거. 같은 hold command를
   // 자동 재전송하지 않고 parent의 fresh GET으로 수렴한다.
   onConvergence?: () => void;
+  // ACK-uncertain(B/C/F/G/H) 수렴용 parent authoritative GET 트리거.
+  // parent는 fresh GET 성공 전에는 warning으로 위험 command를 fail-closed하고,
+  // modal은 닫혀 immediate same-hold resubmit을 차단한다. 자동 resend 없음.
+  onUncertainConvergence?: () => void;
 }
 
 // 배송 보류 command가 유효한 order authority 범위.
@@ -66,6 +70,14 @@ export function isHoldCommandAllowedStatus(status: string): boolean {
 export const HOLD_STALE_CONVERGENCE_MESSAGE =
   '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.';
 
+// HOLD ACK-uncertain(B/C/F/G/H) convergence contract (NO_RESEND + AUTHORITATIVE_GET).
+// 같은 HOLD를 자동 재전송하지 않고 parent authoritative GET으로 수렴한다.
+// same-command resend 유도 copy를 쓰지 않는다.
+export const HOLD_UNCERTAIN_CONVERGENCE_MESSAGE =
+  '보류 명령이 처리되었는지 확실하지 않습니다. 최신 상태를 다시 확인합니다. 같은 보류를 바로 다시 보내지 마세요.';
+export const HOLD_UNCERTAIN_READBACK_WARNING =
+  '보류 명령 결과를 확인하지 못했습니다. 상태를 다시 확인해 주세요. 같은 보류를 바로 다시 보내지 마세요.';
+
 export function DeliveryHoldModal({
   opened,
   loading,
@@ -76,6 +88,7 @@ export function DeliveryHoldModal({
   onLoading,
   onSaved,
   onConvergence,
+  onUncertainConvergence,
 }: DeliveryHoldModalProps) {
   const { data: session } = useSession();
   const [reasonCode, setReasonCode] = useState<HoldReason>('WEATHER');
@@ -173,11 +186,32 @@ export function DeliveryHoldModal({
           onConvergence?.();
           return;
         }
-        throw new Error('배송 보류 저장 실패');
+        // F/G: 403/409 이외 4xx·5xx ACK-uncertain. 같은 HOLD를 자동 재전송하지 않고
+        // modal을 닫아 immediate resubmit을 차단한 뒤 parent authoritative GET으로 수렴한다.
+        resetHoldFormFields();
+        setError(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE);
+        onUncertainConvergence?.();
+        onClose();
+        return;
       }
-      const result = (await response.json()) as { orderId?: unknown; status?: unknown };
+      // B: 2xx이지만 malformed JSON 등으로 ACK 파싱 불가. 자동 resend 없이 GET 수렴한다.
+      let result: { orderId?: unknown; status?: unknown };
+      try {
+        result = (await response.json()) as { orderId?: unknown; status?: unknown };
+      } catch {
+        resetHoldFormFields();
+        setError(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE);
+        onUncertainConvergence?.();
+        onClose();
+        return;
+      }
+      // C: 2xx이지만 ACK orderId/status mismatch. 자동 resend 없이 GET 수렴한다.
       if (result.orderId !== orderId || result.status !== 'DELIVERY_HELD') {
-        throw new Error('배송 보류 응답 불일치');
+        resetHoldFormFields();
+        setError(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE);
+        onUncertainConvergence?.();
+        onClose();
+        return;
       }
       resetHoldFormFields();
       setError('');
@@ -185,7 +219,12 @@ export function DeliveryHoldModal({
       // Order 합성 없이 parent가 authoritative GET으로 수렴한다.
       onSaved?.();
     } catch {
-      setError('배송 보류를 저장하지 못했습니다. 주문 상태를 확인하고 다시 시도해주세요.');
+      // H: network/transport error ACK-uncertain. 같은 HOLD를 자동 재전송하지 않고
+      // modal을 닫아 immediate resubmit을 차단한 뒤 parent authoritative GET으로 수렴한다.
+      resetHoldFormFields();
+      setError(HOLD_UNCERTAIN_CONVERGENCE_MESSAGE);
+      onUncertainConvergence?.();
+      onClose();
     } finally {
       submittingRef.current = false;
       onLoading(false);
