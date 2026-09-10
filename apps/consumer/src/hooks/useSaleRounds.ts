@@ -7,7 +7,13 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 const API_URL = getApiBaseUrl();
 
 export type PublicSaleRound = SaleRound & { items: SaleRoundItem[] };
-export type SaleRoundsRequestStatus = 'loading' | 'error' | 'empty' | 'success';
+export type SaleRoundsRequestStatus =
+  | 'loading'
+  | 'error'
+  | 'empty'
+  | 'success'
+  | 'refreshing'
+  | 'stale';
 
 export interface SaleRoundsState {
   rounds: PublicSaleRound[];
@@ -17,6 +23,8 @@ export interface SaleRoundsState {
   loading: boolean;
   error: string | null;
   isEmpty: boolean;
+  isRefreshing: boolean;
+  isStale: boolean;
 }
 
 export interface UseSaleRoundsResult extends SaleRoundsState {
@@ -40,26 +48,32 @@ export function createLoadingSaleRoundsState(): SaleRoundsState {
     loading: true,
     error: null,
     isEmpty: false,
+    isRefreshing: false,
+    isStale: false,
   };
 }
 
-function createEmptySaleRoundsState(): SaleRoundsState {
+export function createEmptySaleRoundsState(): SaleRoundsState {
   return {
     ...emptyData(),
     status: 'empty',
     loading: false,
     error: null,
     isEmpty: true,
+    isRefreshing: false,
+    isStale: false,
   };
 }
 
-function createErrorSaleRoundsState(error: unknown): SaleRoundsState {
+export function createErrorSaleRoundsState(error: unknown): SaleRoundsState {
   return {
     ...emptyData(),
     status: 'error',
     loading: false,
     error: error instanceof Error ? error.message : '회차 조회에 실패했습니다.',
     isEmpty: false,
+    isRefreshing: false,
+    isStale: false,
   };
 }
 
@@ -101,7 +115,67 @@ function createSuccessSaleRoundsState(rounds: PublicSaleRound[], now: Date): Sal
     loading: false,
     error: null,
     isEmpty: false,
+    isRefreshing: false,
+    isStale: false,
   };
+}
+
+function readErrorMessage(error: unknown): string {
+  if (typeof error === 'string' && error.length > 0) return error;
+  if (error instanceof Error) return error.message;
+  return '회차 조회에 실패했습니다.';
+}
+
+export function hasRecoverableSaleRoundsData(state: SaleRoundsState): boolean {
+  return state.rounds.length > 0;
+}
+
+export function createRefreshingSaleRoundsState(previous: SaleRoundsState): SaleRoundsState {
+  return {
+    rounds: previous.rounds,
+    currentRound: previous.currentRound,
+    pastRounds: previous.pastRounds,
+    status: 'refreshing',
+    loading: false,
+    error: null,
+    isEmpty: false,
+    isRefreshing: true,
+    isStale: false,
+  };
+}
+
+export function createStaleSaleRoundsState(
+  previous: SaleRoundsState,
+  error: unknown,
+): SaleRoundsState {
+  return {
+    rounds: previous.rounds,
+    currentRound: previous.currentRound,
+    pastRounds: previous.pastRounds,
+    status: 'stale',
+    loading: false,
+    error: readErrorMessage(error),
+    isEmpty: false,
+    isRefreshing: false,
+    isStale: true,
+  };
+}
+
+export function resolveSaleRoundsRefreshStart(previous: SaleRoundsState): SaleRoundsState {
+  if (hasRecoverableSaleRoundsData(previous)) {
+    return createRefreshingSaleRoundsState(previous);
+  }
+  return createLoadingSaleRoundsState();
+}
+
+export function resolveSaleRoundsRefreshResult(
+  previous: SaleRoundsState,
+  next: SaleRoundsState,
+): SaleRoundsState {
+  if (next.status === 'error' && hasRecoverableSaleRoundsData(previous)) {
+    return createStaleSaleRoundsState(previous, next.error);
+  }
+  return next;
 }
 
 function readRoundSummaries(payload: unknown): SaleRound[] {
@@ -164,29 +238,64 @@ export async function fetchPublicSaleRoundsState(
 export function useSaleRounds(storeId: string | null): UseSaleRoundsResult {
   const [state, setState] = useState<SaleRoundsState>(createLoadingSaleRoundsState);
   const requestId = useRef(0);
+  const scopeRef = useRef<string | null>(storeId);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
-  const loadRounds = useCallback(async () => {
+  useEffect(() => {
+    const target = storeId;
+    scopeRef.current = target;
     const currentRequestId = ++requestId.current;
-    if (!storeId) {
+    if (!target) {
+      setState(createEmptySaleRoundsState());
+      return () => {
+        requestId.current += 1;
+      };
+    }
+
+    // Scope 진입은 이전 scope 잔재를 무효화한다: 빈 loading으로 리셋한다.
+    setState(createLoadingSaleRoundsState());
+    void (async () => {
+      const nextState = await fetchPublicSaleRoundsState(target);
+      if (requestId.current === currentRequestId && scopeRef.current === target) {
+        setState(nextState);
+      }
+    })();
+    return () => {
+      requestId.current += 1;
+    };
+  }, [storeId]);
+
+  const refetch = useCallback(() => {
+    const target = storeId;
+    if (!target) {
+      scopeRef.current = target;
+      ++requestId.current;
       setState(createEmptySaleRoundsState());
       return;
     }
 
-    setState(createLoadingSaleRoundsState());
-    const nextState = await fetchPublicSaleRoundsState(storeId);
-    if (requestId.current === currentRequestId) setState(nextState);
+    // 동일 scope refresh는 이전 성공 데이터를 보존한다.
+    // scope가 바뀌는 동안의 호출은 loading으로 리셋해 이전 store 노출을 막는다.
+    const snapshot = stateRef.current;
+    const canRecover =
+      scopeRef.current === target && hasRecoverableSaleRoundsData(snapshot);
+    const currentRequestId = ++requestId.current;
+    setState(
+      canRecover
+        ? createRefreshingSaleRoundsState(snapshot)
+        : createLoadingSaleRoundsState(),
+    );
+    void (async () => {
+      const nextState = await fetchPublicSaleRoundsState(target);
+      if (requestId.current !== currentRequestId || scopeRef.current !== target) return;
+      if (nextState.status === 'error' && canRecover) {
+        setState(createStaleSaleRoundsState(snapshot, nextState.error));
+        return;
+      }
+      setState(nextState);
+    })();
   }, [storeId]);
-
-  useEffect(() => {
-    void loadRounds();
-    return () => {
-      requestId.current += 1;
-    };
-  }, [loadRounds]);
-
-  const refetch = useCallback(() => {
-    void loadRounds();
-  }, [loadRounds]);
 
   return { ...state, refetch };
 }

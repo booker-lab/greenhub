@@ -2,7 +2,7 @@
 
 import type { Product, SaleRoundItem, SalesMode, Variety } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
-import { Box, Container, Skeleton, Stack, Text } from '@mantine/core';
+import { Box, Button, Container, Skeleton, Stack, Text } from '@mantine/core';
 import { doc, getDoc } from 'firebase/firestore';
 import { notFound } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
@@ -287,11 +287,29 @@ function RoundDirectProductDetail({
   }
   if (saleRounds.status === 'error') {
     return (
-      <DetailStateFrame
-        label="판매 회차 조회 실패"
-        message="판매 회차를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
-        alert
-      />
+      <Container size="sm" p={0}>
+        <ProductTopBar />
+        <Stack
+          px="md"
+          pt="calc(76px + env(safe-area-inset-top))"
+          gap="sm"
+          role="alert"
+          aria-label="판매 회차 조회 실패"
+          align="center"
+        >
+          <Text ta="center" py={12} c="var(--color-text-secondary)" size="sm">
+            판매 회차를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+          </Text>
+          {saleRounds.error && (
+            <Text ta="center" c="var(--color-text-disabled)" size="sm">
+              {saleRounds.error}
+            </Text>
+          )}
+          <Button variant="light" size="xs" onClick={saleRounds.refetch}>
+            다시 시도
+          </Button>
+        </Stack>
+      </Container>
     );
   }
 
@@ -302,12 +320,87 @@ function RoundDirectProductDetail({
     saleRounds.pastRounds,
   );
   if (!roundProduct) {
+    if (saleRounds.isStale) {
+      return (
+        <Container size="sm" p={0}>
+          <ProductTopBar />
+          <Stack
+            px="md"
+            pt="calc(76px + env(safe-area-inset-top))"
+            gap="sm"
+            role="alert"
+            aria-label="판매 회차 확인 실패"
+            align="center"
+          >
+            <Text ta="center" c="var(--color-text-secondary)" size="sm">
+              최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
+            </Text>
+            {saleRounds.error && (
+              <Text ta="center" c="var(--color-text-disabled)" size="sm">
+                {saleRounds.error}
+              </Text>
+            )}
+            <Button variant="light" size="xs" onClick={saleRounds.refetch}>
+              다시 시도
+            </Button>
+            <Text ta="center" py={12} c="var(--color-text-secondary)" size="sm">
+              이 상품에 연결된 공개 판매 회차를 찾을 수 없습니다.
+            </Text>
+          </Stack>
+        </Container>
+      );
+    }
     return (
       <DetailStateFrame
         label="판매 회차 상품 확인 실패"
         message="이 상품에 연결된 공개 판매 회차를 찾을 수 없습니다."
         alert
       />
+    );
+  }
+
+  if (saleRounds.isStale) {
+    return (
+      <>
+        <Container size="sm" px="md" pt="calc(52px + env(safe-area-inset-top))">
+          <Box
+            p="sm"
+            mt="sm"
+            role="alert"
+            style={{
+              background: 'var(--color-primary-surface)',
+              borderRadius: 'var(--radius)',
+              border: 'var(--border)',
+            }}
+          >
+            <Text size="sm" c="var(--color-text-secondary)">
+              최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
+            </Text>
+            {saleRounds.error && (
+              <Text size="sm" c="var(--color-text-disabled)" mt={4}>
+                {saleRounds.error}
+              </Text>
+            )}
+            <Button variant="light" size="xs" mt="xs" onClick={saleRounds.refetch}>
+              다시 시도
+            </Button>
+          </Box>
+        </Container>
+        <ProductDetailContent product={product} variety={variety} roundProduct={roundProduct} />
+      </>
+    );
+  }
+
+  if (saleRounds.isRefreshing) {
+    return (
+      <>
+        <Container size="sm" px="md" pt="calc(52px + env(safe-area-inset-top))">
+          <Text size="sm" c="var(--color-text-secondary)" ta="center" aria-live="polite">
+            최신 회차 정보를 확인하는 중...
+          </Text>
+        </Container>
+        <ProductDetailContent product={product} variety={variety} roundProduct={roundProduct} />
+      </>
     );
   }
 
