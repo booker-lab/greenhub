@@ -41,6 +41,15 @@ const holdModalSource = await readFile(
   new URL('./[orderId]/_components/DeliveryHoldModal.tsx', import.meta.url),
   'utf8',
 );
+const listReadSource = await readFile(new URL('../../lib/driver-list-read.ts', import.meta.url), 'utf8');
+import {
+  buildDriverListScope,
+  classifyDriverListReadStatus,
+  DriverListReadError,
+  shouldPreserveDriverListOnReadError,
+  toDriverListReadError,
+  toDriverListReadErrorKind,
+} from '../../lib/driver-list-read.ts';
 
 test('Driver Board는 Driver role API에서 세 상태를 조회한다', () => {
   assert.match(boardSource, /apiFetch\(\s*['"]\/driver\/orders['"]/);
@@ -446,10 +455,16 @@ test('5. success [orders] → refresh failure는 이전 목록 + warning을 유�
   assert.match(boardSource, /\(이전 목록 표시 중\)/);
   assert.match(boardSource, /orders\.map\(\(order\)/);
   // refresh 실패는 list를 지우지 않는다: stale 분기에는 setPreparing([])이 없다.
+  // 401·403 authority loss는 별도 분기로 먼저 clear되므로 stale 판정은 공유 helper를 거친다.
   const catchBlock = boardSource.slice(boardSource.indexOf('.catch('), boardSource.indexOf('.finally('));
-  const refreshStart = catchBlock.indexOf('if (hasSuccessfulReadRef.current)');
+  const authBranchAt = catchBlock.indexOf("kind === 'AUTH_ERROR'");
+  const refreshStart = catchBlock.indexOf(
+    'if (shouldPreserveDriverListOnReadError(kind, hasSuccessfulReadRef.current))',
+  );
   const elseMarker = catchBlock.indexOf('} else {', refreshStart);
+  assert.ok(authBranchAt !== -1, 'AUTH_ERROR 분기가 있어야 한다');
   assert.ok(refreshStart !== -1 && elseMarker !== -1, 'refresh/initial 분기가 있어야 한다');
+  assert.ok(authBranchAt < refreshStart, 'authority loss가 stale 유지보다 먼저다');
   const refreshBranch = catchBlock.slice(refreshStart, elseMarker);
   assert.doesNotMatch(refreshBranch, /setPreparing\(\[\]\)/);
   assert.doesNotMatch(refreshBranch, /setDelivering\(\[\]\)/);
@@ -539,4 +554,210 @@ test('10. focus/visibility revalidation 회귀 없음', () => {
   // background refresh는 loading과 분리된다.
   assert.match(boardSource, /setRefreshing\(true\)/);
   assert.match(boardSource, /최신 정보를 확인하는 중입니다/);
+});
+
+// DRIVER-LIST-AUTH-SCOPE-RECOVERY-02 focused regression.
+// Board와 Map은 같은 목록 read 의미를 공유한다. 분류·보존·scope 판정은
+// 공유 helper의 runtime 동작으로 고정하고, 두 화면의 배선은 source로 고정한다.
+
+// 목록 read 상태机的 최소 시뮬레이터. 컴포넌트의 분기 순서
+// (AUTH clear → helper preserve 판정 → initial clear, scope 변경 시 동기 clear)를
+// 그대로 미러하며 실제 helper 분류 함수를 사용한다.
+function createListSim() {
+  return { orders: [], hasSuccess: false, authRequired: false, error: null };
+}
+
+function applyListSuccess(sim, rows) {
+  sim.orders = rows;
+  sim.hasSuccess = true;
+  sim.authRequired = false;
+  sim.error = null;
+  return sim;
+}
+
+function applyListFailure(sim, { status = null, network = false } = {}) {
+  const kind = network ? 'FETCH_ERROR' : classifyDriverListReadStatus(status);
+  if (kind === 'AUTH_ERROR') {
+    sim.orders = [];
+    sim.hasSuccess = false;
+    sim.authRequired = true;
+    sim.error = null;
+    return sim;
+  }
+  if (shouldPreserveDriverListOnReadError(kind, sim.hasSuccess)) {
+    sim.error = 'stale';
+    return sim;
+  }
+  sim.orders = [];
+  sim.error = 'initial';
+  return sim;
+}
+
+function applyListScopeChange(sim, prevScope, nextScope) {
+  if (prevScope !== nextScope) {
+    // 새 fetch 완료를 기다리지 않는 동기 clear.
+    sim.orders = [];
+    sim.hasSuccess = false;
+    sim.authRequired = false;
+    sim.error = null;
+  }
+  return sim;
+}
+
+test('11. 목록 helper는 401·403만 AUTH_ERROR로 분류한다 (runtime)', () => {
+  assert.equal(classifyDriverListReadStatus(401), 'AUTH_ERROR');
+  assert.equal(classifyDriverListReadStatus(403), 'AUTH_ERROR');
+  assert.equal(classifyDriverListReadStatus(404), 'FETCH_ERROR');
+  assert.equal(classifyDriverListReadStatus(500), 'FETCH_ERROR');
+  assert.equal(classifyDriverListReadStatus(503), 'FETCH_ERROR');
+  assert.equal(toDriverListReadError(401).kind, 'AUTH_ERROR');
+  assert.equal(toDriverListReadError(403).kind, 'AUTH_ERROR');
+  assert.equal(toDriverListReadError(500).kind, 'FETCH_ERROR');
+  assert.ok(toDriverListReadError(401) instanceof DriverListReadError);
+  // typed error는 kind를 보존하고, 일반 실패·network는 transient로 취급한다.
+  assert.equal(toDriverListReadErrorKind(toDriverListReadError(403)), 'AUTH_ERROR');
+  assert.equal(toDriverListReadErrorKind(new Error('boom')), 'FETCH_ERROR');
+  assert.equal(toDriverListReadErrorKind(null), 'FETCH_ERROR');
+  // 공유 helper source도 같은 분류를 고정한다.
+  assert.match(listReadSource, /status === 401 \|\| status === 403/);
+});
+
+test('12. AUTH_ERROR는 성공 기록이 있어도 절대 stale 유지하지 않는다 (runtime)', () => {
+  assert.equal(shouldPreserveDriverListOnReadError('AUTH_ERROR', true), false);
+  assert.equal(shouldPreserveDriverListOnReadError('AUTH_ERROR', false), false);
+  assert.equal(shouldPreserveDriverListOnReadError('FETCH_ERROR', true), true);
+  assert.equal(shouldPreserveDriverListOnReadError('FETCH_ERROR', false), false);
+});
+
+test('13. 목록 scope는 user identity + role + access token이다 (runtime)', () => {
+  const scopeA = buildDriverListScope({ userId: 'user-a', role: 'driver', token: 'token-a' });
+  assert.equal(scopeA, buildDriverListScope({ userId: 'user-a', role: 'driver', token: 'token-a' }));
+  assert.notEqual(scopeA, buildDriverListScope({ userId: 'user-b', role: 'driver', token: 'token-a' }));
+  assert.notEqual(scopeA, buildDriverListScope({ userId: 'user-a', role: 'driver', token: 'token-b' }));
+  assert.notEqual(scopeA, buildDriverListScope({ userId: 'user-a', role: 'admin', token: 'token-a' }));
+  // user/role 누락 시에도 token이 scope에 남는다.
+  assert.match(buildDriverListScope({ token: 'token-a' }), /token-a/);
+});
+
+test('14. success → 401이면 Board protected rows를 즉시 clear하고 auth 상태로 전환한다', () => {
+  // 배선: generic Error 문자열이 아닌 typed 분류를 throw한다.
+  assert.match(boardSource, /throw toDriverListReadError\(response\.status\)/);
+  assert.doesNotMatch(boardSource, /request failed: \$\{response\.status\}/);
+  assert.match(boardSource, /toDriverListReadErrorKind\(cause\)/);
+  const catchBlock = boardSource.slice(boardSource.indexOf('.catch('), boardSource.indexOf('.finally('));
+  const authBranch = catchBlock.slice(
+    catchBlock.indexOf("kind === 'AUTH_ERROR'"),
+    catchBlock.indexOf('if (shouldPreserveDriverListOnReadError'),
+  );
+  assert.match(authBranch, /setPreparing\(\[\]\)/);
+  assert.match(authBranch, /setDelivering\(\[\]\)/);
+  assert.match(authBranch, /setHasSuccessfulRead\(false\)/);
+  assert.match(authBranch, /hasSuccessfulReadRef\.current = false/);
+  assert.match(authBranch, /setAuthRequired\(true\)/);
+  // runtime: stale이 남지 않고 auth-required로 전환된다.
+  const sim = applyListSuccess(createListSim(), [{ id: 'o1' }, { id: 'o2' }]);
+  applyListFailure(sim, { status: 401 });
+  assert.deepEqual(sim.orders, []);
+  assert.equal(sim.hasSuccess, false);
+  assert.equal(sim.authRequired, true);
+  assert.equal(sim.error, null);
+  assert.equal(
+    resolveBoardView({
+      loading: false,
+      authRequired: sim.authRequired,
+      error: sim.error,
+      hasSuccessfulRead: sim.hasSuccess,
+      refreshing: false,
+      ordersLength: sim.orders.length,
+    }),
+    'AUTH_REQUIRED',
+  );
+});
+
+test('15. success → 403도 401과 같은 authority loss 분기로 clear된다', () => {
+  // 403 전용 ad-hoc 분기가 따로 있지 않고 401과 같은 kind 분기를 탄다.
+  assert.doesNotMatch(boardSource, /status === 403[\s\S]{0,200}setPreparing\(\[\]\)/);
+  const sim = applyListSuccess(createListSim(), [{ id: 'o1' }]);
+  applyListFailure(sim, { status: 403 });
+  assert.deepEqual(sim.orders, []);
+  assert.equal(sim.hasSuccess, false);
+  assert.equal(sim.authRequired, true);
+});
+
+test('16. 같은 scope의 network/5xx 실패는 stale을 유지한다 (PR #110/#111 퇴행 없음)', () => {
+  const sim = applyListSuccess(createListSim(), [{ id: 'o1' }, { id: 'o2' }]);
+  applyListFailure(sim, { network: true });
+  assert.equal(sim.orders.length, 2);
+  assert.equal(sim.hasSuccess, true);
+  assert.equal(sim.authRequired, false);
+  assert.equal(sim.error, 'stale');
+  const failed5xx = applyListSuccess(createListSim(), [{ id: 'o1' }]);
+  applyListFailure(failed5xx, { status: 503 });
+  assert.equal(failed5xx.orders.length, 1);
+  assert.equal(failed5xx.hasSuccess, true);
+  // Board stale 분기는 이전 목록 렌더를 유지한다.
+  assert.match(boardSource, /\(이전 목록 표시 중\)/);
+  assert.match(boardSource, /orders\.map\(\(order\)/);
+});
+
+test('17. user/token A → B 전환은 새 fetch 완료 전에 A 데이터를 동기 clear한다', () => {
+  // 배선: scope ref + user/token/role deps로 전환을 감지한다.
+  assert.match(boardSource, /listScopeRef/);
+  assert.match(boardSource, /buildDriverListScope\(\{/);
+  assert.match(boardSource, /session\?\.user\.id/);
+  assert.match(boardSource, /session\?\.user\.role/);
+  assert.match(
+    boardSource,
+    /session\?\.user\.id,\s*session\?\.user\.role,\s*session\?\.user\.accessToken,\s*sessionStatus,\s*reloadKey\]/,
+  );
+  const scopeAt = boardSource.indexOf('listScopeRef.current !== nextScope');
+  assert.ok(scopeAt !== -1, 'scope 변경 분기가 있어야 한다');
+  const scopeBlock = boardSource.slice(scopeAt, scopeAt + 900);
+  assert.match(scopeBlock, /setPreparing\(\[\]\)/);
+  assert.match(scopeBlock, /setDelivering\(\[\]\)/);
+  assert.match(scopeBlock, /setHasSuccessfulRead\(false\)/);
+  assert.match(scopeBlock, /setError\(null\)/);
+  // token 상실도 같은 무효화 경로를 탄다.
+  assert.match(boardSource, /__no_token__/);
+  // runtime: A 성공 상태에서 B scope로 바뀌는 순간 A rows가 사라진다.
+  const scopeA = buildDriverListScope({ userId: 'user-a', role: 'driver', token: 'token-a' });
+  const scopeB = buildDriverListScope({ userId: 'user-b', role: 'driver', token: 'token-b' });
+  const sim = applyListSuccess(createListSim(), [{ id: 'a-order' }]);
+  applyListScopeChange(sim, scopeA, scopeB);
+  assert.deepEqual(sim.orders, []);
+  assert.equal(sim.hasSuccess, false);
+  assert.equal(sim.authRequired, false);
+});
+
+test('18. scope B read 실패는 A 데이터를 재노출하지 않는다', () => {
+  const scopeA = buildDriverListScope({ userId: 'user-a', role: 'driver', token: 'token-a' });
+  const scopeB = buildDriverListScope({ userId: 'user-b', role: 'driver', token: 'token-b' });
+  const sim = applyListSuccess(createListSim(), [{ id: 'a-order' }]);
+  applyListScopeChange(sim, scopeA, scopeB);
+  // B의 첫 read가 network 실패: initial failure이며 A rows는 돌아오지 않는다.
+  applyListFailure(sim, { network: true });
+  assert.deepEqual(sim.orders, []);
+  assert.equal(sim.hasSuccess, false);
+  assert.equal(sim.error, 'initial');
+  // B의 첫 read가 401: auth-required이며 A rows는 돌아오지 않는다.
+  const sim2 = applyListSuccess(createListSim(), [{ id: 'a-order' }]);
+  applyListScopeChange(sim2, scopeA, scopeB);
+  applyListFailure(sim2, { status: 401 });
+  assert.deepEqual(sim2.orders, []);
+  assert.equal(sim2.authRequired, true);
+});
+
+test('19. Board·Map은 같은 목록 read 소유자를 공유하고 ad-hoc 분기를 따로 두지 않는다', () => {
+  for (const source of [boardSource, mapSource]) {
+    assert.match(source, /from ['"]@\/lib\/driver-list-read['"]/);
+    assert.match(source, /buildDriverListScope\(\{/);
+    assert.match(source, /toDriverListReadError\(response\.status\)/);
+    assert.match(source, /toDriverListReadErrorKind\(cause\)/);
+    assert.match(source, /shouldPreserveDriverListOnReadError\(kind/);
+    assert.match(source, /listScopeRef\.current !== nextScope/);
+    assert.doesNotMatch(source, /request failed: \$\{response\.status\}/);
+  }
+  // session loading guard는 양쪽에 보존된다.
+  assert.match(boardSource, /if \(sessionStatus === 'loading'\) return;/);
+  assert.match(mapSource, /if \(sessionStatus === 'loading'\) return;/);
 });

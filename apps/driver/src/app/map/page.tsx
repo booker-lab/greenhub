@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { apiFetch } from '@/lib/api';
+import {
+  buildDriverListScope,
+  shouldPreserveDriverListOnReadError,
+  toDriverListReadError,
+  toDriverListReadErrorKind,
+} from '@/lib/driver-list-read';
 import { Box, Stack, Text, Title, Badge, Button } from '@mantine/core';
 
 type Order = {
@@ -59,6 +65,9 @@ export default function MapPage() {
   const [hasSuccessfulRead, setHasSuccessfulRead] = useState(false);
   const requestIdRef = useRef(0);
   const hasSuccessfulReadRef = useRef(false);
+  // user identity + role + access token scope가 바뀌면 이전 scope의
+  // protected route를 새 fetch 완료 전에 동기적으로 제거한다.
+  const listScopeRef = useRef<string | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reloadKey is an intentional manual-refresh trigger for the error-state retry button
   useEffect(() => {
@@ -69,6 +78,7 @@ export default function MapPage() {
       // usable token 없음을 0건 성공으로 표시하지 않는다. 보호된 stale도 유지하지 않는다.
       // 다음 인증된 조회가 initial loading으로 시작하도록 성공 기억도 초기화한다.
       requestIdRef.current += 1;
+      listScopeRef.current = '__no_token__';
       hasSuccessfulReadRef.current = false;
       setOrders([]);
       setHasSuccessfulRead(false);
@@ -77,6 +87,26 @@ export default function MapPage() {
       setLoading(false);
       setRefreshing(false);
       return;
+    }
+
+    const nextScope = buildDriverListScope({
+      userId: session?.user.id,
+      role: session?.user.role,
+      token,
+    });
+    if (listScopeRef.current !== nextScope) {
+      // user/token scope 변경: 새 fetch 완료를 기다리지 않고 이전 scope의
+      // protected route·성공 기록·error/freshness를 동기적으로 제거한다.
+      // 진행 중이던 이전 scope read는 sequence 무효화로 덮어쓰기를 막는다.
+      requestIdRef.current += 1;
+      listScopeRef.current = nextScope;
+      hasSuccessfulReadRef.current = false;
+      setOrders([]);
+      setHasSuccessfulRead(false);
+      setError(null);
+      setAuthRequired(false);
+      setLoading(true);
+      setRefreshing(false);
     }
 
     const controller = new AbortController();
@@ -98,7 +128,7 @@ export default function MapPage() {
     apiFetch('/driver/orders', token, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error(`driver map orders request failed: ${response.status}`);
+          throw toDriverListReadError(response.status);
         }
         const payload: unknown = await response.json();
         if (!Array.isArray(payload)) throw new Error('driver map orders response is not a list');
@@ -117,7 +147,18 @@ export default function MapPage() {
       })
       .catch((cause: unknown) => {
         if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) return;
-        if (hasSuccessfulReadRef.current) {
+        const kind = toDriverListReadErrorKind(cause);
+        if (kind === 'AUTH_ERROR') {
+          // authority loss(401·403): 이전 protected route를 즉시 제거하고
+          // auth-required로 전환한다. stale route 유지·stale navigation을 허용하지 않는다.
+          hasSuccessfulReadRef.current = false;
+          setOrders([]);
+          setHasSuccessfulRead(false);
+          setAuthRequired(true);
+          setError(null);
+          return;
+        }
+        if (shouldPreserveDriverListOnReadError(kind, hasSuccessfulReadRef.current)) {
           // refresh 실패는 마지막 정상 route를 지우지 않고 stale로 유지한다.
           // stale route를 최신 경로로 오인시키지 않도록 navigation은 fail-closed한다.
           setError('최신 경로를 불러오지 못했습니다. 이전 경로를 보여줍니다.');
@@ -136,7 +177,7 @@ export default function MapPage() {
       active = false;
       controller.abort();
     };
-  }, [session?.user.accessToken, sessionStatus, reloadKey]);
+  }, [session?.user.id, session?.user.role, session?.user.accessToken, sessionStatus, reloadKey]);
 
   const sorted = nearestNeighbor(orders);
 
