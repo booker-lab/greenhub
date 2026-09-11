@@ -48,7 +48,7 @@ export default function EditProductPage() {
   useEffect(() => {
     if (!storeId || !token || !productId) return;
 
-    fetch(`${getApiBaseUrl()}/stores/${storeId}/products/${productId}`, {
+    fetch(`${getApiBaseUrl()}/stores/${storeId}/products/${productId}/owner`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (res) => {

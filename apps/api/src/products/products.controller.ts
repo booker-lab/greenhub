@@ -32,6 +32,17 @@ export class ProductsController {
     return this.productsService.getProducts(storeId, query);
   }
 
+  @Get(':productId/owner')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('seller', 'admin')
+  getOwnerProduct(
+    @Param('storeId') storeId: string,
+    @Param('productId') productId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.productsService.getOwnerProduct(storeId, productId, user.sub, user.role);
+  }
+
   @Get(':productId')
   getProduct(@Param('storeId') storeId: string, @Param('productId') productId: string) {
     return this.productsService.getProduct(storeId, productId);

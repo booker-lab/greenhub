@@ -6,16 +6,26 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { UpdateDeliveryConfigDto } from './dto/update-delivery-config.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import {
+  isPubliclyVisibleProduct,
+  toOwnerProductDetail,
+  toPublicGroupSummary,
+  toPublicProductDetail,
+  toPublicProductSummary,
+} from './product-visibility';
 
 @Injectable()
 export class ProductsService {
   constructor(private readonly firestore: FirestoreService) {}
 
   async getProducts(storeId: string, query: ProductQueryDto) {
+    // Anonymous store-scoped list is PUBLIC: always enforce the canonical
+    // visibility predicate (isActive === true AND testOnly !== true).
+    // query.isActive is intentionally ignored here — inactive/testOnly must
+    // never leak through the store-scoped bypass.
     let ref = this.firestore.collection('products').where('storeId', '==', storeId);
 
-    const isActive = query.isActive !== false;
-    ref = ref.where('isActive', '==', isActive) as any;
+    ref = ref.where('isActive', '==', true) as any;
 
     if (query.category) {
       ref = ref.where('category', '==', query.category) as any;
@@ -25,7 +35,9 @@ export class ProductsService {
     }
 
     const snap = await ref.get();
-    let products = snap.docs.map((d) => d.data());
+    let products = snap.docs
+      .map((d) => d.data())
+      .filter((p) => isPubliclyVisibleProduct(p as Record<string, unknown>));
 
     // 색상 필터 — 신규(selection.colors) / 구버전(colors) 모두 지원
     if (query.colors) {
@@ -60,30 +72,17 @@ export class ProductsService {
     }
 
     // 스펙 응답: { items: ProductSummary[], total: number }
+    // Public summary is an explicit allowlist — never spread the stored doc.
     const items = products.map((p) => {
-      const summary: Record<string, unknown> = {
-        id: p['id'],
-        name: p['name'],
-        price: p['price'],
-        images: Array.isArray(p['images']) ? [p['images'][0]] : [],
-        category: p['category'],
-        colors: p['selection']?.['colors'] ?? p['colors'] ?? [],
-        saleType: p['saleType'],
-        isActive: p['isActive'],
-      };
-      if (p['saleType'] === 'group') {
-        const gc = groupConfigMap.get(p['id'] as string);
-        if (gc) {
-          summary['groupSummary'] = {
-            currentQuantity: gc['currentQuantity'],
-            minQuantity: gc['minQuantity'],
-            targetQuantity: gc['targetQuantity'],
-            recruitDeadline:
-              typeof (gc['recruitDeadline'] as { toDate?: () => Date })?.toDate === 'function'
-                ? (gc['recruitDeadline'] as { toDate: () => Date }).toDate().toISOString()
-                : gc['recruitDeadline'],
-          };
-        }
+      const gc = groupConfigMap.get(p['id'] as string);
+      const summary = toPublicProductSummary(
+        p as Record<string, unknown>,
+        (gc as Record<string, unknown> | undefined) ?? null,
+      );
+      // Backfill groupSummary for group products when the helper omitted it
+      // (kept for contract compat with the previous manual shape).
+      if (p['saleType'] === 'group' && gc && !summary['groupSummary']) {
+        summary['groupSummary'] = toPublicGroupSummary(gc as Record<string, unknown>);
       }
       return summary;
     });
@@ -96,7 +95,11 @@ export class ProductsService {
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
-    const product = snap.data()!;
+    const product = snap.data()! as Record<string, unknown>;
+    // Anonymous store-scoped detail is PUBLIC: same canonical predicate.
+    if (!isPubliclyVisibleProduct(product)) {
+      throw new NotFoundException('상품을 찾을 수 없습니다.');
+    }
 
     let groupConfig: Record<string, unknown> | null = null;
     if (product['saleType'] === 'group') {
@@ -104,16 +107,32 @@ export class ProductsService {
       groupConfig = gc.exists ? (gc.data() as Record<string, unknown>) : null;
     }
 
-    // groupConfig가 있을 때만 포함 (스펙: optional 필드)
-    if (groupConfig) {
-      const gc: Record<string, unknown> = { ...groupConfig };
-      const rd = gc['recruitDeadline'] as { toDate?: () => Date };
-      const gd = gc['groupDeliveryDate'] as { toDate?: () => Date };
-      if (typeof rd?.toDate === 'function') gc['recruitDeadline'] = rd.toDate().toISOString();
-      if (typeof gd?.toDate === 'function') gc['groupDeliveryDate'] = gd.toDate().toISOString();
-      return { ...product, groupConfig: gc };
+    return toPublicProductDetail(product, groupConfig);
+  }
+
+  /**
+   * Owner/internal detail — seller mutation/read path.
+   * No visibility filtering, full fidelity (sellerNote/content.isEditedByUser/
+   * sellerOverride/testOnly preserved). Ownership is enforced.
+   */
+  async getOwnerProduct(storeId: string, productId: string, sellerId: string, role?: string) {
+    await this.assertSellerOwnsStore(storeId, sellerId, role);
+    return this.getOwnerProductInternal(storeId, productId);
+  }
+
+  private async getOwnerProductInternal(storeId: string, productId: string) {
+    const snap = await this.firestore.doc(`products/${productId}`).get();
+    if (!snap.exists || snap.data()!['storeId'] !== storeId) {
+      throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
-    return { ...product };
+    const product = snap.data()! as Record<string, unknown>;
+
+    let groupConfig: Record<string, unknown> | null = null;
+    if (product['saleType'] === 'group') {
+      const gc = await this.firestore.doc(`groupProductConfig/${productId}`).get();
+      groupConfig = gc.exists ? (gc.data() as Record<string, unknown>) : null;
+    }
+    return toOwnerProductDetail(product, groupConfig);
   }
 
   async createProduct(storeId: string, sellerId: string, dto: CreateProductDto, role?: string) {
@@ -143,7 +162,7 @@ export class ProductsService {
       });
     }
 
-    return this.getProduct(storeId, productId);
+    return this.getOwnerProductInternal(storeId, productId);
   }
 
   async updateProduct(
@@ -173,7 +192,7 @@ export class ProductsService {
         .set({ productId, ...groupConfig }, { merge: true });
     }
 
-    return this.getProduct(storeId, productId);
+    return this.getOwnerProductInternal(storeId, productId);
   }
 
   async toggleProductActive(
@@ -289,7 +308,7 @@ export class ProductsService {
     const snap = await ref.get();
     let products = snap.docs
       .map((d: any) => d.data())
-      .filter((product: Record<string, unknown>) => product['testOnly'] !== true);
+      .filter((product: Record<string, unknown>) => isPubliclyVisibleProduct(product));
 
     if (query.colors) {
       const colorFilter = Array.isArray(query.colors)
@@ -321,30 +340,11 @@ export class ProductsService {
       gcSnap.docs.forEach((d: any) => groupConfigMap.set(d.data()['productId'], d.data()));
     }
 
-    const items = products.map((p: any) => {
-      const summary: Record<string, unknown> = {
-        id: p['id'],
-        storeId: p['storeId'],
-        name: p['name'],
-        price: p['price'],
-        images: Array.isArray(p['images']) ? [p['images'][0]] : [],
-        category: p['category'],
-        colors: p['selection']?.['colors'] ?? p['colors'] ?? [],
-        saleType: p['saleType'],
-        isActive: p['isActive'],
-      };
-      if (p['saleType'] === 'group') {
-        const gc = groupConfigMap.get(p['id'] as string);
-        if (gc)
-          summary['groupSummary'] = {
-            currentQuantity: gc['currentQuantity'],
-            minQuantity: gc['minQuantity'],
-            targetQuantity: gc['targetQuantity'],
-            recruitDeadline: gc['recruitDeadline'],
-          };
-      }
-      return summary;
-    });
+    const items = products.map((p: any) =>
+      toPublicProductSummary(p as Record<string, unknown>, groupConfigMap.get(p['id'] as string) ?? null, {
+        includeStoreId: true,
+      }),
+    );
 
     return { items, total: items.length };
   }
@@ -352,15 +352,16 @@ export class ProductsService {
   async getPublicProduct(productId: string) {
     const snap = await this.firestore.doc(`products/${productId}`).get();
     if (!snap.exists) throw new NotFoundException('상품을 찾을 수 없습니다.');
-    const product = snap.data()!;
-    if (product['isActive'] !== true || product['testOnly'] === true) {
+    const product = snap.data()! as Record<string, unknown>;
+    if (!isPubliclyVisibleProduct(product)) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
     if (product['saleType'] === 'group') {
       const gc = await this.firestore.doc(`groupProductConfig/${productId}`).get();
-      if (gc.exists) return { ...product, groupConfig: gc.data() };
+      const groupConfig = gc.exists ? (gc.data() as Record<string, unknown>) : null;
+      return toPublicProductDetail(product, groupConfig);
     }
-    return { ...product };
+    return toPublicProductDetail(product, null);
   }
 
   private async assertSellerOwnsStore(storeId: string, sellerId: string, role?: string) {

@@ -3,7 +3,6 @@
 import type { Product, SalesMode } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
-import { doc, getDoc } from 'firebase/firestore';
 import { Home, LayoutGrid, ShoppingCart, User, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -11,7 +10,7 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
-import { db } from '@/lib/firebase';
+import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
 
 const ROUND_DIRECT_TABS = [
   { href: '/', label: '홈', Icon: Home, showBadge: false },
@@ -63,13 +62,11 @@ function useStoreMode(storeId: string | null, productsLoading: boolean): StoreMo
     let active = true;
     setState({ salesMode: 'legacy', status: 'loading' });
 
-    void getDoc(doc(db, 'stores', storeId))
-      .then((snapshot) => {
+    void fetchPublicStoreProfile(storeId)
+      .then((profile) => {
         if (!active) return;
-        if (!snapshot.exists()) throw new Error('스토어를 찾을 수 없습니다.');
-
-        const value = snapshot.data()?.salesMode;
-        if (value !== undefined && value !== 'legacy' && value !== 'round_direct') {
+        const value = profile.salesMode;
+        if (value !== 'legacy' && value !== 'round_direct') {
           throw new Error('판매 방식 정보가 올바르지 않습니다.');
         }
         setState({ salesMode: normalizeSalesMode(value), status: 'ready' });

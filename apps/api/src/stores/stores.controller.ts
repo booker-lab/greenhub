@@ -24,7 +24,6 @@ export class StoresController {
   getStore(@Param('storeId') storeId: string, @CurrentUser() user: JwtPayload) {
     return this.storesService.getStore(storeId, user.sub);
   }
-
   @Post()
   @HttpCode(HttpStatus.CREATED)
   createStore(@CurrentUser() user: JwtPayload, @Body() dto: UpdateStoreDto) {
@@ -39,5 +38,19 @@ export class StoresController {
     @Body() dto: UpdateStoreDto,
   ) {
     return this.storesService.updateStore(storeId, user.sub, dto);
+  }
+}
+
+/**
+ * Public store profile — no auth guard (OWNER_SCOPED owner API above is unchanged).
+ * Contract: GET /stores/:storeId/public-profile → { id, name, logoUrl, salesMode }.
+ */
+@Controller('stores')
+export class PublicStoresController {
+  constructor(private readonly storesService: StoresService) {}
+
+  @Get(':storeId/public-profile')
+  getPublicProfile(@Param('storeId') storeId: string) {
+    return this.storesService.getPublicProfile(storeId);
   }
 }

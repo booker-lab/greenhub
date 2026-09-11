@@ -62,6 +62,51 @@ export interface GroupProductConfig {
   deliveryFeeDiscount: number
 }
 
+/** Public group config — explicit allowlist (drops isProcessed and internals). */
+export interface GroupConfigPublic {
+  productId: string
+  minQuantity: number
+  targetQuantity: number
+  maxPerPerson: number
+  recruitDeadline: string | null
+  currentQuantity: number
+  groupDeliveryDate: string | null
+  groupDeliveryMethod: 'direct' | 'parcel'
+  deliveryFeeDiscount: number
+}
+
+/** Public group summary for list responses — minimal allowlist. */
+export interface GroupSummaryPublic {
+  currentQuantity: number
+  minQuantity: number
+  targetQuantity: number
+  recruitDeadline: string | null
+}
+
+/** Public product detail — explicit allowlist (drops sellerNote/sellerOverride/content.isEditedByUser/testOnly/raw internals). */
+export interface ProductPublic {
+  id: string
+  storeId: string
+  name: string
+  images: string[]
+  price: number
+  category: Category
+  saleType: SaleType
+  deliverySize: DeliverySize
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  varietyId?: string
+  selection?: Selection
+  content?: {
+    headline: string
+    description: string
+  }
+  description?: string
+  colors?: ColorOption[]
+  groupConfig?: GroupConfigPublic
+}
+
 export interface Product {
   id: string
   storeId: string

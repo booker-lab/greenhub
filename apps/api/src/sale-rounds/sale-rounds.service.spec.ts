@@ -270,6 +270,71 @@ describe('SaleRoundsService', () => {
     });
   });
 
+  it('public detail에서 HIDDEN item을 제외한다', async () => {
+    const { service } = makeService(
+      {
+        'saleRoundItems/item-1': makeItem({ id: 'item-1', status: 'ACTIVE', displayOrder: 1 }),
+        'saleRoundItems/item-hidden': makeItem({
+          id: 'item-hidden',
+          status: 'HIDDEN',
+          displayOrder: 0,
+        }),
+      },
+      makeRound({ status: 'OPEN' }),
+    );
+
+    const round = await service.getPublicRound('store-1', 'round-1');
+    expect(round.items.map((item) => item.id)).toEqual(['item-1']);
+    expect(round.items.some((item) => item.status === 'HIDDEN')).toBe(false);
+  });
+
+  it.each(['ACTIVE', 'SOLD_OUT', 'CLOSED'])(
+    'public detail에서 %s item을 유지한다 (품절 표시 회귀 방지)',
+    async (status) => {
+      const { service } = makeService(
+        { 'saleRoundItems/item-1': makeItem({ status }) },
+        makeRound({ status: 'OPEN' }),
+      );
+
+      await expect(service.getPublicRound('store-1', 'round-1')).resolves.toMatchObject({
+        items: [{ id: 'item-1', status }],
+      });
+    },
+  );
+
+  it('public detail에서 item displayOrder를 보존한다', async () => {
+    const { service } = makeService(
+      {
+        'saleRoundItems/item-b': makeItem({ id: 'item-b', displayOrder: 1 }),
+        'saleRoundItems/item-a': makeItem({ id: 'item-a', displayOrder: 0 }),
+        'saleRoundItems/item-hidden': makeItem({
+          id: 'item-hidden',
+          displayOrder: 2,
+          status: 'HIDDEN',
+        }),
+      },
+      makeRound({ status: 'OPEN' }),
+    );
+
+    const round = await service.getPublicRound('store-1', 'round-1');
+    expect(round.items.map((item) => item.id)).toEqual(['item-a', 'item-b']);
+  });
+
+  it('seller 상세 조회에서는 HIDDEN item을 유지한다', async () => {
+    const { service } = makeService(
+      {
+        'saleRoundItems/item-1': makeItem({ id: 'item-1', status: 'ACTIVE' }),
+        'saleRoundItems/item-hidden': makeItem({ id: 'item-hidden', status: 'HIDDEN' }),
+      },
+      makeRound({ status: 'OPEN' }),
+    );
+
+    const round = await (service as any).getRound('store-1', 'round-1', 'seller-1', 'seller');
+    expect(round.items.map((item: { id: string }) => item.id).sort()).toEqual(
+      ['item-1', 'item-hidden'].sort(),
+    );
+  });
+
   it('public detail은 requested store와 parent round store가 다르면 refresh 전에 거부한다', async () => {
     const { service, firestore, collectionCalls } = makeService(
       { 'saleRoundItems/item-1': makeItem() },
