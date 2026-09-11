@@ -10,6 +10,34 @@ import type { ApiNotificationTemplateCode } from './notification-templates';
 
 export type NotificationTemplateCode = ApiNotificationTemplateCode;
 
+export const NOTIFICATION_DELIVERY_PROCESSING_LEASE_TTL_MS = 5 * 60 * 1000;
+
+function notificationTimestampMillis(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value;
+  if (typeof (value as { toMillis?: () => number })?.toMillis === 'function') {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  if (typeof (value as { toDate?: () => Date })?.toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate().getTime();
+  }
+  if (typeof value === 'string') return new Date(value).getTime();
+  return Number.NaN;
+}
+
+function notificationDeliveryLeaseExpiryMillis(
+  data: Record<string, unknown> | null | undefined,
+): number {
+  if (!data) return Number.NaN;
+  const explicit = notificationTimestampMillis(data['leaseExpiresAt']);
+  if (Number.isFinite(explicit)) return explicit;
+  const updatedAt = notificationTimestampMillis(data['updatedAt']);
+  if (Number.isFinite(updatedAt)) {
+    return updatedAt + NOTIFICATION_DELIVERY_PROCESSING_LEASE_TTL_MS;
+  }
+  return Number.NaN;
+}
+
 @Injectable()
 export class NotificationsService {
   constructor(
@@ -64,16 +92,17 @@ export class NotificationsService {
     orderId?: string,
     idempotencyKey?: string,
   ) {
-    if (
-      idempotencyKey &&
-      !(await this.claimNotificationDelivery({
+    let leaseId: string | null = null;
+    if (idempotencyKey) {
+      leaseId = await this.claimNotificationDelivery({
         idempotencyKey,
         orderId: orderId ?? null,
         templateCode,
         userId,
-      }))
-    ) {
-      return;
+      });
+      if (!leaseId) {
+        return;
+      }
     }
 
     try {
@@ -87,7 +116,7 @@ export class NotificationsService {
         if (orderId) {
           await this.createCustomerNoticeFailedIssue(orderId, templateCode, null);
         }
-        await this.finishNotificationDelivery(idempotencyKey, 'FAILED');
+        await this.finishNotificationDelivery(idempotencyKey, 'FAILED', leaseId);
         return;
       }
 
@@ -108,9 +137,15 @@ export class NotificationsService {
       if (!result.success && orderId) {
         await this.createCustomerNoticeFailedIssue(orderId, templateCode, notificationId);
       }
-      await this.finishNotificationDelivery(idempotencyKey, result.success ? 'SENT' : 'FAILED');
+      await this.finishNotificationDelivery(
+        idempotencyKey,
+        result.success ? 'SENT' : 'FAILED',
+        leaseId,
+      );
     } catch (error) {
-      await this.finishNotificationDelivery(idempotencyKey, 'FAILED').catch(() => undefined);
+      await this.finishNotificationDelivery(idempotencyKey, 'FAILED', leaseId).catch(
+        () => undefined,
+      );
       throw error;
     }
   }
@@ -412,16 +447,33 @@ export class NotificationsService {
     orderId: string | null;
     templateCode: NotificationTemplateCode;
     userId: string;
-  }): Promise<boolean> {
+  }): Promise<string | null> {
     const ref = this.firestore.doc(
       `notificationDeliveries/${this.notificationDeliveryId(input.idempotencyKey)}`,
     );
-    let acquired = false;
+    const leaseId = uuidv4();
+    let acquired: string | null = null;
     await this.firestore.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref);
-      const status = snapshot.exists ? snapshot.data()?.['status'] : null;
-      if (status === 'SENT' || status === 'PROCESSING') return;
+      const data = snapshot.exists
+        ? (snapshot.data() as Record<string, unknown>)
+        : null;
+      const status = (data?.['status'] as string | null | undefined) ?? null;
+      if (status === 'SENT') return;
       const now = this.firestore.Timestamp.now();
+      const nowMillis = notificationTimestampMillis(now);
+      if (!Number.isFinite(nowMillis)) return;
+      if (status === 'PROCESSING') {
+        const expiryMillis = notificationDeliveryLeaseExpiryMillis(data);
+        // Active lease blocks reclaim. Expired lease (or legacy doc without a
+        // parseable expiry, treated as expired to avoid a permanent lock) may
+        // be reclaimed with a fresh lease identity.
+        if (Number.isFinite(expiryMillis) && expiryMillis > nowMillis) return;
+      }
+      const leaseExpiresAt = new Date(
+        nowMillis + NOTIFICATION_DELIVERY_PROCESSING_LEASE_TTL_MS,
+      ).toISOString();
+      const previousAttempt = typeof data?.['attempt'] === 'number' ? data['attempt'] : 0;
       transaction.set(
         ref,
         {
@@ -430,12 +482,15 @@ export class NotificationsService {
           templateCode: input.templateCode,
           userId: input.userId,
           status: 'PROCESSING',
+          leaseId,
+          leaseExpiresAt,
+          attempt: previousAttempt + 1,
           updatedAt: now,
-          createdAt: snapshot.exists ? (snapshot.data()?.['createdAt'] ?? now) : now,
+          createdAt: snapshot.exists ? (data?.['createdAt'] ?? now) : now,
         },
         { merge: true },
       );
-      acquired = true;
+      acquired = leaseId;
     });
     return acquired;
   }
@@ -443,18 +498,30 @@ export class NotificationsService {
   private async finishNotificationDelivery(
     idempotencyKey: string | undefined,
     status: 'SENT' | 'FAILED',
+    leaseId?: string | null,
   ): Promise<void> {
     if (!idempotencyKey) return;
-    await this.firestore
-      .doc(`notificationDeliveries/${this.notificationDeliveryId(idempotencyKey)}`)
-      .set(
+    if (typeof leaseId !== 'string' || leaseId.length === 0) return;
+    const ref = this.firestore.doc(
+      `notificationDeliveries/${this.notificationDeliveryId(idempotencyKey)}`,
+    );
+    await this.firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) return;
+      const data = snapshot.data() as Record<string, unknown>;
+      if (data?.['status'] !== 'PROCESSING') return;
+      if (data?.['leaseId'] !== leaseId) return;
+      const now = this.firestore.Timestamp.now();
+      transaction.set(
+        ref,
         {
           status,
-          updatedAt: this.firestore.Timestamp.now(),
-          completedAt: status === 'SENT' ? this.firestore.Timestamp.now() : null,
+          updatedAt: now,
+          completedAt: status === 'SENT' ? now : null,
         },
         { merge: true },
       );
+    });
   }
 
   private notificationDeliveryId(idempotencyKey: string): string {
