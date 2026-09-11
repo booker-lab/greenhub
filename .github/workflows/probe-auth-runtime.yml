@@ -354,7 +354,7 @@ jobs:
             result,
             expectedSha,
             targets,
-            roles: (.roles | with_entries(.value |= ({status, failureCode, steps, user}))),
+            roles: (.roles | with_entries(.value |= ({status, failureCode, steps, user, httpStatus, rejectionClass, step, role}))),
             failureCodes,
             bindingFailure,
             authSessionClaimRevocation

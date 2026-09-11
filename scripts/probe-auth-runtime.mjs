@@ -79,15 +79,18 @@ const FRONTEND_APPS = Object.freeze(['consumer', 'seller', 'driver']);
 const ALLOWED_API_PATHS = Object.freeze(['/auth/login', '/auth/me', '/auth/logout']);
 
 export class ProbeContractError extends Error {
-  constructor(code, message) {
+  constructor(code, message, details) {
     super(message);
     this.name = 'ProbeContractError';
     this.code = code;
+    if (details !== undefined) {
+      this.details = details;
+    }
   }
 }
 
-function fail(code, message) {
-  throw new ProbeContractError(code, message);
+function fail(code, message, details) {
+  throw new ProbeContractError(code, message, details);
 }
 
 function isNonEmptyString(value) {
@@ -339,6 +342,75 @@ export function evaluateDriverGate({
   return { ok: true, code: null };
 }
 
+// ---- HTTP response normalization -------------------------------------------
+// Production runtime uses native fetch Response ({ ok, status, headers, text/json })
+// while deterministic tests historically use plain { ok, status, data } mocks.
+// Both shapes are normalized to a single internal contract { ok, status, data }
+// without ever surfacing raw bodies, tokens, or credentials.
+
+export function classifyLoginRejection(status) {
+  const code = Number(status);
+  if (code === 401) return 'AUTH_LOGIN_UNAUTHORIZED';
+  if (code === 403) return 'AUTH_LOGIN_FORBIDDEN';
+  if (code === 404) return 'AUTH_LOGIN_ROUTE_NOT_FOUND';
+  if (Number.isInteger(code) && code >= 500 && code <= 599) return 'AUTH_LOGIN_SERVER_ERROR';
+  return 'AUTH_LOGIN_HTTP_REJECTED';
+}
+
+function isNativeResponseLike(raw) {
+  if (!raw || typeof raw !== 'object') return false;
+  if (typeof raw.status !== 'number') return false;
+  if (typeof raw.text !== 'function' && typeof raw.json !== 'function') return false;
+  // Mock { ok, status, data } has no headers.get / text / json fns.
+  if (typeof raw.headers?.get === 'function') return true;
+  if (typeof raw.text === 'function' && !('data' in raw)) return true;
+  return false;
+}
+
+export async function normalizeProbeHttpResponse(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { ok: false, status: 0, data: null };
+  }
+  if (isNativeResponseLike(raw)) {
+    const status = typeof raw.status === 'number' ? raw.status : 0;
+    const ok = raw.ok === true ? true : status >= 200 && status < 300;
+    let data = null;
+    try {
+      let text = '';
+      if (typeof raw.text === 'function') {
+        text = await raw.text();
+      } else if (typeof raw.json === 'function') {
+        // Fallback when only json() exists: resolve then treat as data.
+        const parsed = await raw.json();
+        return { ok, status, data: parsed ?? null };
+      }
+      if (typeof text !== 'string') {
+        return { ok, status, data: null };
+      }
+      const trimmed = text.trim();
+      if (!trimmed) {
+        return { ok, status, data: null };
+      }
+      try {
+        data = JSON.parse(trimmed);
+      } catch {
+        // Non-JSON / malformed body: never surface raw text.
+        data = null;
+      }
+    } catch {
+      data = null;
+    }
+    return { ok, status, data };
+  }
+  // Legacy deterministic mock contract { ok, status, data }.
+  const status = typeof raw.status === 'number' ? raw.status : 0;
+  return {
+    ok: raw.ok === true,
+    status,
+    data: 'data' in raw ? raw.data : null,
+  };
+}
+
 // ---- Guarded fetch -----------------------------------------------------------
 
 function apiPathOf(urlString, apiUrl) {
@@ -369,7 +441,8 @@ export function createGuardedFetch(fetchImpl, { apiUrl }) {
       fail('AUTH_MUTATION_FORBIDDEN', `probe 허용 경로가 아닌 호출을 차단합니다: ${method} ${apiPath ?? 'cross-origin'}`);
     }
     calls.push({ method, path: apiPath });
-    return fetchImpl(target, init);
+    const raw = await fetchImpl(target, init);
+    return normalizeProbeHttpResponse(raw);
   };
   guarded.calls = calls;
   return guarded;
@@ -377,7 +450,14 @@ export function createGuardedFetch(fetchImpl, { apiUrl }) {
 
 function requireOkJson(res, { role, step }) {
   if (!res || res.ok !== true) {
-    fail(`${role}_LOGIN_FAILED`, `${role} login이 거부됐습니다 (${step}).`);
+    const httpStatus = typeof res?.status === 'number' ? res.status : 0;
+    const rejectionClass = classifyLoginRejection(httpStatus);
+    const normalizedRole = String(role).toLowerCase();
+    fail(
+      `${role}_LOGIN_FAILED`,
+      `${role} login이 거부됐습니다 (${step} http=${httpStatus} class=${rejectionClass}).`,
+      { role: normalizedRole, step, httpStatus, rejectionClass },
+    );
   }
   return res.data;
 }
@@ -425,7 +505,7 @@ export async function runRoleProbe(role, { apiUrl, email, password, accessTokenF
     body: JSON.stringify({ email, password }),
   });
   const loginData = requireOkJson(loginRes, { role: ROLE, step: 'login' });
-  if (typeof loginData.accessToken !== 'string' || !loginData.accessToken) {
+  if (!loginData || typeof loginData.accessToken !== 'string' || !loginData.accessToken) {
     fail(`${ROLE}_LOGIN_FAILED`, `${role} login 응답에 accessToken이 없습니다.`);
   }
   if (typeof loginData.refreshToken !== 'string' || !loginData.refreshToken) {
@@ -466,6 +546,9 @@ export async function runRoleProbe(role, { apiUrl, email, password, accessTokenF
     ok: true,
     steps: { login: 'ok', reread: 'ok', logout: 'ok' },
     user: { id: loginData.user.id, role: String(loginData.user.role) },
+    // In-memory only: reused for the API boundary read. Never serialized
+    // into summary/artifact (see runAuthRuntimeProbe).
+    accessToken: loginData.accessToken,
     fetchCalls: [...fetch.calls],
   };
 }
@@ -496,7 +579,19 @@ export async function runApiProbe({ apiUrl, accessToken, fetchImpl }) {
 function toFailure(summary, role, error) {
   const code = error instanceof ProbeContractError ? error.code : 'PROBE_INTERNAL_ERROR';
   summary.failureCodes.push(code);
-  summary.roles[role] = { status: 'FAIL', failureCode: code, message: String(error?.message ?? error) };
+  const entry = { status: 'FAIL', failureCode: code, message: String(error?.message ?? error) };
+  // Preserve only non-sensitive diagnostic fields (role/step/status/class).
+  // Never copy email, password, token, secret, header, or raw body.
+  const details = error?.details;
+  if (details && typeof details === 'object') {
+    if (typeof details.role === 'string' && details.role) entry.role = details.role;
+    if (typeof details.step === 'string' && details.step) entry.step = details.step;
+    if (typeof details.httpStatus === 'number') entry.httpStatus = details.httpStatus;
+    if (typeof details.rejectionClass === 'string' && details.rejectionClass) {
+      entry.rejectionClass = details.rejectionClass;
+    }
+  }
+  summary.roles[role] = entry;
 }
 
 /**
@@ -589,6 +684,9 @@ export async function runAuthRuntimeProbe(options = {}, deps = {}) {
       driver: { email: driverEmail, password: options.driverPassword ?? env.TEST_DRIVER_PASSWORD },
     };
 
+    // In-memory only: successful role logins contribute real access tokens
+    // for the API boundary read. Tokens are never written into summary.
+    const roleTokens = [];
     for (const role of ['consumer', 'seller', 'driver']) {
       try {
         const result = await runRoleProbe(role, {
@@ -603,15 +701,37 @@ export async function runAuthRuntimeProbe(options = {}, deps = {}) {
           steps: result.steps,
           user: result.user,
         };
+        if (typeof result.accessToken === 'string' && result.accessToken) {
+          roleTokens.push(result.accessToken);
+        }
       } catch (error) {
         toFailure(summary, role, error);
       }
     }
 
     try {
-      const apiToken = deps.apiToken ?? options.apiToken ?? 'probe-boundary-token';
-      const apiResult = await runApiProbe({ apiUrl: binding.targets.api, accessToken: apiToken, fetchImpl });
-      summary.roles.api = { status: 'PASS', failureCode: null, steps: apiResult.steps };
+      const provided = deps.apiToken ?? options.apiToken;
+      const providedToken = isNonEmptyString(provided) ? String(provided) : '';
+      // Never fall back to a fake "probe-boundary-token": use an explicitly
+      // provided real token or a real login token from this run, held in
+      // memory only. Without any real token the boundary read is skipped
+      // with an explicit code instead of a misleading API_ME_FAILED.
+      const apiToken = providedToken || roleTokens[0] || '';
+      if (!isNonEmptyString(apiToken)) {
+        const skipError = new ProbeContractError(
+          'API_ME_SKIPPED_NO_TOKEN',
+          'API boundary read를 건너뜁니다 (사용 가능한 실제 access token 없음).',
+        );
+        summary.failureCodes.push(skipError.code);
+        summary.roles.api = {
+          status: 'SKIP',
+          failureCode: skipError.code,
+          steps: { read: 'skipped' },
+        };
+      } else {
+        const apiResult = await runApiProbe({ apiUrl: binding.targets.api, accessToken: apiToken, fetchImpl });
+        summary.roles.api = { status: 'PASS', failureCode: null, steps: apiResult.steps };
+      }
     } catch (error) {
       toFailure(summary, 'api', error);
     }
