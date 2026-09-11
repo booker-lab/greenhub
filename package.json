@@ -29,7 +29,8 @@
     "load:readiness": "node scripts/load/run-k6.mjs readiness",
     "load:run": "node scripts/load/run-k6.mjs",
     "test:e2e": "pnpm --filter e2e test",
-    "test:e2e:ui": "pnpm --filter e2e test:ui"
+    "test:e2e:ui": "pnpm --filter e2e test:ui",
+    "test:vercel-ignore": "node --test scripts/vercel/ignore-build.spec.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
