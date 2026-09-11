@@ -47,9 +47,10 @@ describe('session-only workflow dispatch contract', () => {
     );
   });
 
-  it('workflow_dispatch exposes the exact five session inputs', () => {
+  it('workflow_dispatch exposes the exact six session inputs', () => {
     const source = readWorkflow();
     for (const input of [
+      'runner_sha:',
       'expected_sha:',
       'consumer_deployment_id:',
       'seller_deployment_id:',
@@ -102,19 +103,19 @@ describe('session-only workflow dispatch contract', () => {
     assert.ok(gateSlice.includes('permissions: {}'), 'approval preflight must use empty permissions');
   });
 
-  it('exact SHA checkout is enforced before any network call', () => {
+  it('runner SHA checkout is enforced before any network call', () => {
     const source = readWorkflow();
     assert.ok(
-      source.includes('ref: ${{ inputs.expected_sha }}'),
-      'session probe must checkout the exact input SHA',
+      source.includes('ref: ${{ inputs.runner_sha }}'),
+      'session probe must checkout the exact runner input SHA',
     );
     assert.ok(
       source.includes('git rev-parse HEAD'),
-      'checkout SHA must be compared against the input SHA',
+      'checkout SHA must be compared against the runner SHA',
     );
     assert.ok(
-      source.includes('checkout SHA가 지정 SHA와 달라 실행을 차단합니다.'),
-      'SHA mismatch must fail closed with an explicit message',
+      source.includes('checkout SHA가 runner SHA와 달라 실행을 차단합니다.'),
+      'runner checkout mismatch must fail closed with an explicit message',
     );
   });
 
@@ -246,6 +247,180 @@ describe('session-only runtime boundary', () => {
     assert.ok(
       source.includes('auth-session-probe-'),
       'evidence artifact must use the session-only artifact name',
+    );
+  });
+});
+
+describe('runner/target SHA decoupling (PILOT-AUTH-PROBE-RUNNER-TARGET-SHA-DECOUPLE-17)', () => {
+  function sessionSlice(source) {
+    const start = source.indexOf('session-probe:');
+    assert.ok(start >= 0, 'workflow must contain the session-probe job');
+    const end = source.indexOf('callback-probe:');
+    return source.slice(start, end >= 0 ? end : source.length);
+  }
+
+  it('distinct runner_sha and expected_sha inputs are both required (no equality coupling)', () => {
+    const source = readWorkflow();
+    const dispatchStart = source.indexOf('workflow_dispatch:');
+    const dispatchEnd = source.indexOf('pull_request:');
+    assert.ok(dispatchStart >= 0 && dispatchEnd > dispatchStart, 'workflow must declare dispatch inputs');
+    const inputsBlock = source.slice(dispatchStart, dispatchEnd);
+    assert.ok(inputsBlock.includes('runner_sha:'), 'workflow_dispatch must declare runner_sha');
+    assert.ok(inputsBlock.includes('expected_sha:'), 'workflow_dispatch must declare expected_sha');
+    const requiredCount = (inputsBlock.match(/required:\s*true/g) ?? []).length;
+    assert.ok(
+      requiredCount >= 6,
+      `all six session inputs must be required (found ${requiredCount})`,
+    );
+    for (const line of source.split('\n')) {
+      assert.ok(
+        !(line.includes('RUNNER_SHA') && line.includes('EXPECTED_SHA')),
+        `no step may couple runner and frontend SHAs by equality: ${line.trim().slice(0, 120)}`,
+      );
+    }
+  });
+
+  it('checkout authority is runner_sha, never expected_sha', () => {
+    const slice = sessionSlice(readWorkflow());
+    assert.ok(
+      slice.includes('ref: ${{ inputs.runner_sha }}'),
+      'session-probe checkout must follow inputs.runner_sha',
+    );
+    assert.ok(
+      !slice.includes('ref: ${{ inputs.expected_sha }}'),
+      'session-probe checkout must never follow inputs.expected_sha',
+    );
+  });
+
+  it('deployment verifier authority is expected_sha, never runner_sha', () => {
+    const slice = sessionSlice(readWorkflow());
+    assert.ok(
+      slice.includes('--sha="$AUTH_PROBE_EXPECTED_SHA"'),
+      'wait-preview-deploy binding must follow the frontend expected SHA',
+    );
+    assert.ok(
+      !slice.includes('--sha="$AUTH_PROBE_RUNNER_SHA"'),
+      'deployment verifier must never bind the runner SHA',
+    );
+    assert.ok(
+      slice.includes('--expected-sha="$AUTH_PROBE_EXPECTED_SHA"'),
+      'probe runner binding must follow the frontend expected SHA',
+    );
+  });
+
+  it('malformed runner_sha fails closed', () => {
+    const source = readWorkflow();
+    assert.ok(
+      source.includes('if [[ ! "$RUNNER_SHA" =~ ^[0-9a-f]{40}$ ]]'),
+      'approval preflight must validate the runner SHA format',
+    );
+    assert.ok(
+      source.includes('if [[ ! "$AUTH_PROBE_RUNNER_SHA" =~ ^[0-9a-f]{40}$ ]]'),
+      'session-probe must re-validate the runner SHA format before checkout use',
+    );
+    assert.ok(
+      source.includes('runner SHA는 40자리 소문자 16진수여야 합니다.'),
+      'malformed runner SHA must fail closed with an explicit message',
+    );
+  });
+
+  it('malformed expected_sha fails closed', () => {
+    const source = readWorkflow();
+    assert.ok(
+      source.includes('if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]'),
+      'approval preflight must validate the frontend SHA format',
+    );
+    assert.ok(
+      source.includes('if [[ ! "$AUTH_PROBE_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]'),
+      'session-probe must re-validate the frontend SHA format',
+    );
+    assert.ok(
+      source.includes('지정 SHA는 40자리 소문자 16진수여야 합니다.'),
+      'malformed frontend SHA must fail closed with an explicit message',
+    );
+  });
+
+  it('runner checkout mismatch fails closed and records the checkout SHA', () => {
+    const slice = sessionSlice(readWorkflow());
+    assert.ok(
+      slice.includes('if [[ "$actual_sha" != "$AUTH_PROBE_RUNNER_SHA" ]]'),
+      'checkout SHA must be compared against the runner SHA',
+    );
+    assert.ok(
+      slice.includes('checkout SHA가 runner SHA와 달라 실행을 차단합니다.'),
+      'runner checkout mismatch must fail closed with an explicit message',
+    );
+    assert.ok(
+      slice.includes('AUTH_PROBE_CHECKOUT_SHA='),
+      'verified checkout SHA must be recorded for evidence',
+    );
+  });
+
+  it('frontend deployment SHA mismatch still fails closed via exact binding', () => {
+    const slice = sessionSlice(readWorkflow());
+    assert.ok(
+      slice.includes('--sha="$AUTH_PROBE_EXPECTED_SHA"'),
+      'deployment binding must keep the exact frontend SHA',
+    );
+    assert.ok(
+      slice.includes('exit "$wait_status"'),
+      'deployment verifier exit status must propagate fail-closed',
+    );
+    assert.ok(
+      slice.includes('evidence/deployment.json'),
+      'deployment evidence must still be written before the fail-closed exit',
+    );
+  });
+
+  it('workflow summary separates runner and frontend SHA evidence', () => {
+    const slice = sessionSlice(readWorkflow());
+    for (const flag of [
+      '--arg runnerSha "$AUTH_PROBE_RUNNER_SHA"',
+      '--arg expectedSha "$AUTH_PROBE_EXPECTED_SHA"',
+      '--arg expectedFrontendSha "$AUTH_PROBE_EXPECTED_SHA"',
+      '--arg checkoutSha "$AUTH_PROBE_CHECKOUT_SHA"',
+      '--arg workflowSha "$AUTH_PROBE_WORKFLOW_SHA"',
+    ]) {
+      assert.ok(slice.includes(flag), `workflow summary must bind ${flag}`);
+    }
+    for (const field of [
+      'runnerSha: $runnerSha',
+      'expectedSha: $expectedSha',
+      'expectedFrontendSha: $expectedFrontendSha',
+      'checkoutSha: $checkoutSha',
+      'workflowSha: $workflowSha',
+      'pinnedDeploymentIds:',
+      'deploymentShas:',
+      'deploymentTargetUrls:',
+    ]) {
+      assert.ok(slice.includes(field), `workflow summary must record ${field}`);
+    }
+  });
+
+  it('new evidence fields leak no secret/token/password/raw body', () => {
+    const slice = sessionSlice(readWorkflow());
+    for (const line of slice.split('\n')) {
+      if (!/runnerSha|checkoutSha|expectedFrontendSha|RUNNER_SHA|CHECKOUT_SHA/.test(line)) continue;
+      for (const sensitive of [
+        'SECRET',
+        'PASSWORD',
+        'TOKEN',
+        'COOKIE',
+        'SERVICE_ACCOUNT',
+        'CREDENTIAL_JSON',
+        'accessToken',
+        'refreshToken',
+        'set-cookie',
+      ]) {
+        assert.ok(
+          !line.includes(sensitive),
+          `decoupled SHA evidence must not reference ${sensitive}: ${line.trim().slice(0, 120)}`,
+        );
+      }
+    }
+    assert.ok(
+      !slice.includes('AUTH_PROBE_RUNNER_TOKEN') && !slice.includes('AUTH_PROBE_RUNNER_SECRET'),
+      'runner evidence must introduce no new credential-shaped names',
     );
   });
 });
