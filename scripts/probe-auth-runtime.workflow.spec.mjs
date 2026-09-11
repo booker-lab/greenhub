@@ -73,7 +73,7 @@ describe('session-only workflow dispatch contract', () => {
     );
   });
 
-  it('round-direct-e2e Environment binds only the session probe', () => {
+  it('round-direct-e2e Environment binds only the runtime probe jobs', () => {
     const source = readWorkflow();
     assert.ok(source.includes('name: round-direct-e2e'), 'session probe must bind round-direct-e2e');
     const specSlice = jobSlice(source, 'probe-spec:', ['approval_gate:', 'session-probe:']);
@@ -129,7 +129,7 @@ describe('session-only workflow dispatch contract', () => {
 });
 
 describe('session-only runtime boundary', () => {
-  it('only the two allowed scripts are invoked', () => {
+  it('only the allowed scripts are invoked (session runner + isolated callback runner)', () => {
     const source = readWorkflow();
     assert.ok(
       source.includes('scripts/wait-preview-deploy.mjs'),
@@ -143,10 +143,19 @@ describe('session-only runtime boundary', () => {
     assert.ok(invocations.length > 0, 'expected script invocations');
     for (const script of invocations) {
       assert.ok(
-        script === 'wait-preview-deploy.mjs' || script === 'probe-auth-runtime.mjs',
+        script === 'wait-preview-deploy.mjs' ||
+          script === 'probe-auth-runtime.mjs' ||
+          script === 'probe-consumer-callback.mjs',
         `forbidden script invocation: node scripts/${script}`,
       );
     }
+    // Isolation: the callback runner is invoked only from the callback-probe
+    // job, never from the session-probe job (see
+    // probe-consumer-callback.workflow.spec.mjs for the job boundary).
+    assert.ok(
+      source.includes('callback-probe:'),
+      'callback invocation must live in the isolated callback-probe job',
+    );
   });
 
   it('production targets are rejected', () => {
