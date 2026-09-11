@@ -128,20 +128,15 @@ export class RoundOrderLifecycleService {
             ? -1
             : 0;
       if (heldOrderDelta !== 0) {
-        const roundRef = this.firestore.doc(`saleRounds/${order['roundId']}`);
-        const roundSnap = await tx.get(roundRef);
-        if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
-          if (input.requesterRole === 'driver') {
-            throwDriverOrderNotFound('회차를 찾을 수 없습니다.');
-          }
-          throw new NotFoundException('회차를 찾을 수 없습니다.');
-        }
-        const round = roundSnap.data() as OrderRecord;
-        tx.update(roundRef, {
-          counters: this.nextRoundCounters(round['counters'], heldOrderDelta, {
-            driverOrder: input.requesterRole === 'driver',
-          }),
-          updatedAt: now,
+        // Single-owner held counter: OrderCapacityService is the sole writer.
+        // Read-before-write holds (order read above, round read inside the
+        // primitive, writes after), fail-closed on missing/underflow.
+        await this.capacity.adjustHeldOrderCountInTransaction(tx, {
+          storeId: input.storeId,
+          roundId: order['roundId'],
+          delta: heldOrderDelta,
+          now,
+          driverOrder: input.requesterRole === 'driver',
         });
       }
       tx.update(orderRef, update);
@@ -361,13 +356,18 @@ export class RoundOrderLifecycleService {
         result = { completed: false, needsRefund: true };
         return;
       }
-      if (order['reservationId']) {
-        await this.capacity.releaseReservationInTransaction(tx, order['reservationId']);
-      }
-      if (order['status'] === 'DELIVERY_HELD' && order['roundId']) {
-        tx.update(this.firestore.doc(`saleRounds/${order['roundId']}`), {
-          'counters.heldOrderCount': this.firestore.FieldValue.increment(-1),
-          updatedAt: now,
+      // Single-owner cancellation convergence: reservation ordered
+      // projection and held projection move exactly once in one read phase
+      // (reservation + round + items) followed by one write phase. No direct
+      // FieldValue.increment outside OrderCapacityService.
+      const needsHeldExit = order['status'] === 'DELIVERY_HELD' && order['roundId'];
+      if (order['reservationId'] || needsHeldExit) {
+        await this.capacity.releaseForOrderCancellationInTransaction(tx, {
+          reservationId: order['reservationId'] ?? null,
+          storeId: input.storeId,
+          roundId: order['roundId'] ?? null,
+          decrementHeld: Boolean(needsHeldExit),
+          now,
         });
       }
       tx.update(orderRef, {
@@ -518,27 +518,6 @@ export class RoundOrderLifecycleService {
       };
     }
     return update;
-  }
-
-  private nextRoundCounters(
-    raw: Record<string, number> | undefined,
-    heldOrderDelta: number,
-    options?: { driverOrder?: boolean },
-  ) {
-    const heldOrderCount = raw?.['heldOrderCount'] ?? 0;
-    if (heldOrderDelta < 0 && heldOrderCount < 1) {
-      if (options?.driverOrder === true) {
-        throwDriverOrderStateConflict('회차 보류 주문 수가 이미 정리되었습니다.', true);
-      }
-      throw new ConflictException('회차 보류 주문 수가 이미 정리되었습니다.');
-    }
-    return {
-      reservedDeliveryAddresses: raw?.['reservedDeliveryAddresses'] ?? 0,
-      reservedItemQuantity: raw?.['reservedItemQuantity'] ?? 0,
-      orderedDeliveryAddresses: raw?.['orderedDeliveryAddresses'] ?? 0,
-      orderedItemQuantity: raw?.['orderedItemQuantity'] ?? 0,
-      heldOrderCount: heldOrderCount + heldOrderDelta,
-    };
   }
 
   private toIso(value: any) {

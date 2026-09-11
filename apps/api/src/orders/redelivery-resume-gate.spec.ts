@@ -86,10 +86,8 @@ function makeContext(options: {
     createSettlement: jest.fn().mockResolvedValue(undefined),
     cancelSettlement: jest.fn().mockResolvedValue(undefined),
   };
-  const capacity = {
-    releaseReservation: jest.fn().mockResolvedValue(undefined),
-    releaseReservationInTransaction: jest.fn().mockResolvedValue(undefined),
-  };
+  const { OrderCapacityService } = require('./order-capacity.service');
+  const capacity = new OrderCapacityService(firestore);
   const roundLifecycle = new RoundOrderLifecycleService(
     firestore,
     payments as never,

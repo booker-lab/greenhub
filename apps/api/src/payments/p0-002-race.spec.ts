@@ -183,6 +183,19 @@ function makeFixture(orderOverrides: Data = {}) {
     reserveCheckout: jest.fn().mockResolvedValue({ id: 'late-reservation-1' }),
     consumeReservationInTransaction: jest.fn().mockResolvedValue({ status: 'CONSUMED' }),
     releaseReservationInTransaction: jest.fn().mockResolvedValue({ status: 'RELEASED' }),
+    releaseForOrderCancellationInTransaction: jest
+      .fn()
+      .mockResolvedValue({ reservation: { status: 'RELEASED' }, counters: null }),
+    adjustHeldOrderCountInTransaction: jest.fn().mockResolvedValue({
+      heldOrderCount: 0,
+      reservedDeliveryAddresses: 0,
+      reservedItemQuantity: 0,
+      orderedDeliveryAddresses: 0,
+      orderedItemQuantity: 0,
+    }),
+    reacquireAndConsumeLatePaymentInTransaction: jest
+      .fn()
+      .mockResolvedValue({ id: 'late-reservation-1', status: 'CONSUMED' }),
   };
   const notifications = { sendToUser: jest.fn() };
   const finalization = new PaymentFinalizationService(

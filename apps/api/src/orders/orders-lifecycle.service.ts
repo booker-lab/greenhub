@@ -168,6 +168,18 @@ export class OrdersLifecycleService {
       return result;
     }
 
+    // 3.6 suspicious outside-tx release proof:
+    // Valid round orders (schemaVersion:2 + roundId) already returned via
+    // RoundOrderLifecycle above, where reservation release and held updates
+    // happen in the same canonical transaction as the order flip.
+    // Any remaining schemaVersion:2 here lacks roundId and is corrupt
+    // (creation always sets schemaVersion:2 + roundId + reservationId
+    // together). Fail closed before any refund/side effect instead of
+    // releasing a reservation outside a transaction.
+    if (order['schemaVersion'] === 2) {
+      throw new ConflictException('회차 주문 상태가 올바르지 않아 처리할 수 없습니다.');
+    }
+
     if (nextStatus === 'CANCELLED') {
       const refundableStatuses: OrderStatus[] = [
         'ACCEPTED',
@@ -181,9 +193,6 @@ export class OrdersLifecycleService {
           orderId,
           confirmedCancelReason ?? '판매자 취소',
         );
-      }
-      if (order['schemaVersion'] === 2 && order['reservationId']) {
-        await this.capacity.releaseReservation(order['reservationId'] as string);
       }
     }
 
@@ -228,16 +237,13 @@ export class OrdersLifecycleService {
             orderId,
           });
         }
-        const roundRef = this.firestore.doc(`saleRounds/${order['roundId']}`);
-        const roundSnap = await t.get(roundRef);
-        if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
-          throw new NotFoundException('회차를 찾을 수 없습니다.');
-        }
-        const round = roundSnap.data()!;
-        const counters = this.nextRoundCounters(round['counters'], {
-          heldOrderCount: heldOrderDelta,
+        // Single-owner held counter: OrderCapacityService is the sole writer.
+        await this.capacity.adjustHeldOrderCountInTransaction(t, {
+          storeId,
+          roundId: order['roundId'],
+          delta: heldOrderDelta,
+          now: update['updatedAt'],
         });
-        t.update(roundRef, { counters, updatedAt: update['updatedAt'] });
         if (nextStatus === 'CANCELLED') {
           await releaseLegacyDailyCapacityInTransaction(
             this.firestore,
@@ -383,6 +389,9 @@ export class OrdersLifecycleService {
     if (order['userId'] !== userId) throw new ForbiddenException();
     if (order['schemaVersion'] === 2 && order['roundId']) {
       return this.roundLifecycle.cancelByConsumer({ storeId, orderId, userId, reason });
+    }
+    if (order['schemaVersion'] === 2) {
+      throw new ConflictException('회차 주문 상태가 올바르지 않아 처리할 수 없습니다.');
     }
 
     // Fast stale guard preserves current 403 contract without side effects.
@@ -921,21 +930,13 @@ export class OrdersLifecycleService {
             ? -1
             : 0;
       if (heldOrderDelta !== 0 && latestOrder['roundId']) {
-        const roundRef = this.firestore.doc(`saleRounds/${latestOrder['roundId']}`);
-        const roundSnap = await transaction.get(roundRef);
-        if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
-          throwDriverOrderNotFound('회차를 찾을 수 없습니다.');
-        }
-        const round = roundSnap.data()!;
-        transaction.update(roundRef, {
-          counters: this.nextRoundCounters(
-            round['counters'],
-            {
-              heldOrderCount: heldOrderDelta,
-            },
-            { driverOrder: true },
-          ),
-          updatedAt: input.now,
+        // Single-owner held counter (driver envelope preserved inside the primitive).
+        await this.capacity.adjustHeldOrderCountInTransaction(transaction, {
+          storeId: input.storeId,
+          roundId: latestOrder['roundId'],
+          delta: heldOrderDelta,
+          now: input.now,
+          driverOrder: true,
         });
       }
       transaction.update(
@@ -1111,27 +1112,4 @@ export class OrdersLifecycleService {
     return normalized;
   }
 
-  private nextRoundCounters(
-    raw: Record<string, number> | null | undefined,
-    delta: Record<string, number>,
-    options?: { driverOrder?: boolean },
-  ) {
-    const current = {
-      reservedDeliveryAddresses: raw?.['reservedDeliveryAddresses'] ?? 0,
-      reservedItemQuantity: raw?.['reservedItemQuantity'] ?? 0,
-      orderedDeliveryAddresses: raw?.['orderedDeliveryAddresses'] ?? 0,
-      orderedItemQuantity: raw?.['orderedItemQuantity'] ?? 0,
-      heldOrderCount: raw?.['heldOrderCount'] ?? 0,
-    };
-    const heldOrderCount = current['heldOrderCount'];
-    if ((delta['heldOrderCount'] ?? 0) < 0 && heldOrderCount < 1) {
-      if (options?.driverOrder === true) {
-        throwDriverOrderStateConflict('회차 보류 주문 수가 이미 정리되었습니다.', true);
-      }
-      throw new ConflictException('회차 보류 주문 수가 이미 정리되었습니다.');
-    }
-    return Object.fromEntries(
-      Object.entries(current).map(([key, value]) => [key, Math.max(0, value + (delta[key] ?? 0))]),
-    );
-  }
 }

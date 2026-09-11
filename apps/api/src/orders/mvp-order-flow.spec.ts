@@ -312,20 +312,25 @@ describe('MVP 회차 주문 흐름 계약', () => {
   });
 
   function makeLifecycle(firestore: Record<string, unknown>) {
+    const { OrderCapacityService } = require('./order-capacity.service');
+    const realCapacity = new OrderCapacityService(firestore);
     const roundLifecycle = new RoundOrderLifecycleService(
       firestore as never,
       payments as never,
       settlements as never,
-      capacity as never,
+      realCapacity as never,
     );
-    return new OrdersLifecycleService(
+    const lifecycle = new OrdersLifecycleService(
       firestore as never,
       notifications as never,
       payments as never,
       settlements as never,
-      capacity as never,
+      realCapacity as never,
       roundLifecycle,
     );
+    // Expose real capacity for tests that previously asserted mocked calls.
+    (lifecycle as unknown as Record<string, unknown>)['__capacity'] = realCapacity;
+    return lifecycle;
   }
 
   function makeCreateService(firestore: Record<string, unknown>) {
@@ -675,6 +680,40 @@ describe('MVP 회차 주문 흐름 계약', () => {
   it('마감 전 고객 취소는 결제 환불과 회차 예약·주문 한도 반환을 함께 수행한다', async () => {
     const { firestore, records } = makeFirestore(
       seedRoundRecords({
+        'saleRounds/round-1': {
+          ...seedRoundRecords()['saleRounds/round-1'],
+          counters: {
+            reservedDeliveryAddresses: 0,
+            reservedItemQuantity: 0,
+            orderedDeliveryAddresses: 1,
+            orderedItemQuantity: 2,
+            heldOrderCount: 0,
+          },
+        },
+        'saleRoundItems/round-item-1': {
+          ...seedRoundRecords()['saleRoundItems/round-item-1'],
+          reservedQuantity: 0,
+          orderedQuantity: 2,
+        },
+        'checkoutReservations/reservation-1': {
+          id: 'reservation-1',
+          roundId: 'round-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          orderId: 'order-1',
+          paymentId: 'order-1',
+          status: 'CONSUMED',
+          addressKey: 'test',
+          deliveryAddressCount: 1,
+          itemQuantityTotal: 2,
+          items: [{ roundItemId: 'round-item-1', productId: 'product-1', quantity: 2, unitPrice: 50000 }],
+          idempotencyKey: 'checkout:payment-attempt-1',
+          expiresAt: '2099-07-20T00:00:00.000Z',
+          consumedAt: '2026-07-15T00:00:00.000Z',
+          releasedAt: null,
+          createdAt: '2026-07-15T00:00:00.000Z',
+          updatedAt: '2026-07-15T00:00:00.000Z',
+        },
         'orders/order-1': {
           id: 'order-1',
           storeId: 'store-round',
@@ -694,15 +733,19 @@ describe('MVP 회차 주문 흐름 계약', () => {
     ).resolves.toMatchObject({ orderId: 'order-1', status: 'CANCELLED' });
 
     expect(payments.processRefundByOrderId).toHaveBeenCalledWith('order-1', '고객 요청');
-    expect(capacity.releaseReservationInTransaction).toHaveBeenCalledWith(
-      expect.anything(),
-      'reservation-1',
-    );
+    // Single-owner proof: assert final counters, not mock call counts.
     expect(records.get('saleRounds/round-1')).toMatchObject({
       counters: expect.objectContaining({
         orderedDeliveryAddresses: 0,
         orderedItemQuantity: 0,
       }),
+    });
+    expect(records.get('saleRoundItems/round-item-1')).toMatchObject({
+      reservedQuantity: 0,
+      orderedQuantity: 0,
+    });
+    expect(records.get('checkoutReservations/reservation-1')).toMatchObject({
+      status: 'RELEASED',
     });
   });
 
@@ -828,6 +871,40 @@ describe('MVP 회차 주문 흐름 계약', () => {
   ])('%s을 환불·저장·알림에 동일하게 사용한다', async (_name, reason, expected, requesterId, role) => {
     const { firestore, records } = makeFirestore(
       seedRoundRecords({
+        'saleRounds/round-1': {
+          ...seedRoundRecords()['saleRounds/round-1'],
+          counters: {
+            reservedDeliveryAddresses: 0,
+            reservedItemQuantity: 0,
+            orderedDeliveryAddresses: 1,
+            orderedItemQuantity: 1,
+            heldOrderCount: 0,
+          },
+        },
+        'saleRoundItems/round-item-1': {
+          ...seedRoundRecords()['saleRoundItems/round-item-1'],
+          reservedQuantity: 0,
+          orderedQuantity: 1,
+        },
+        'checkoutReservations/reservation-1': {
+          id: 'reservation-1',
+          roundId: 'round-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          orderId: 'order-cancel',
+          paymentId: 'order-cancel',
+          status: 'CONSUMED',
+          addressKey: 'test',
+          deliveryAddressCount: 1,
+          itemQuantityTotal: 1,
+          items: [{ roundItemId: 'round-item-1', productId: 'product-1', quantity: 1, unitPrice: 50000 }],
+          idempotencyKey: 'checkout:cancel',
+          expiresAt: '2099-07-20T00:00:00.000Z',
+          consumedAt: '2026-07-15T00:00:00.000Z',
+          releasedAt: null,
+          createdAt: '2026-07-15T00:00:00.000Z',
+          updatedAt: '2026-07-15T00:00:00.000Z',
+        },
         'orders/order-cancel': {
           id: 'order-cancel',
           storeId: 'store-round',
@@ -1118,6 +1195,40 @@ describe('MVP 회차 주문 흐름 계약', () => {
   it('환불 뒤 로컬 취소 실패는 환불을 반복하지 않는 재시도 상태를 보존한다', async () => {
     const { firestore, records } = makeFirestore(
       seedRoundRecords({
+        'saleRounds/round-1': {
+          ...seedRoundRecords()['saleRounds/round-1'],
+          counters: {
+            reservedDeliveryAddresses: 0,
+            reservedItemQuantity: 0,
+            orderedDeliveryAddresses: 1,
+            orderedItemQuantity: 2,
+            heldOrderCount: 0,
+          },
+        },
+        'saleRoundItems/round-item-1': {
+          ...seedRoundRecords()['saleRoundItems/round-item-1'],
+          reservedQuantity: 0,
+          orderedQuantity: 2,
+        },
+        'checkoutReservations/reservation-1': {
+          id: 'reservation-1',
+          roundId: 'round-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          orderId: 'order-1',
+          paymentId: 'order-1',
+          status: 'CONSUMED',
+          addressKey: 'test',
+          deliveryAddressCount: 1,
+          itemQuantityTotal: 2,
+          items: [{ roundItemId: 'round-item-1', productId: 'product-1', quantity: 2, unitPrice: 50000 }],
+          idempotencyKey: 'checkout:payment-attempt-1',
+          expiresAt: '2099-07-20T00:00:00.000Z',
+          consumedAt: '2026-07-15T00:00:00.000Z',
+          releasedAt: null,
+          createdAt: '2026-07-15T00:00:00.000Z',
+          updatedAt: '2026-07-15T00:00:00.000Z',
+        },
         'orders/order-1': {
           id: 'order-1',
           storeId: 'store-round',
@@ -1130,11 +1241,19 @@ describe('MVP 회차 주문 흐름 계약', () => {
         },
       }),
     );
-    capacity.releaseReservationInTransaction = jest
+    const service = makeLifecycle(firestore);
+    const realCapacity = (service as unknown as Record<string, unknown>)[
+      '__capacity'
+    ] as Record<string, unknown>;
+    const originalCombined = realCapacity[
+      'releaseForOrderCancellationInTransaction'
+    ] as (...args: unknown[]) => Promise<unknown>;
+    (realCapacity['releaseForOrderCancellationInTransaction'] as unknown as jest.Mock) = jest
       .fn()
       .mockRejectedValueOnce(new Error('예약 반환 실패'))
-      .mockResolvedValueOnce(undefined);
-    const service = makeLifecycle(firestore);
+      .mockImplementationOnce((...args: unknown[]) =>
+        (originalCombined as (...a: unknown[]) => Promise<unknown>).apply(realCapacity, args),
+      );
 
     await expect(
       service.cancelOrder('store-round', 'order-1', 'user-1', '고객 요청'),
@@ -1290,6 +1409,40 @@ describe('MVP 회차 주문 흐름 계약', () => {
   it('결제된 재배송비가 있는 주문 취소는 본 결제와 재배송비를 각각 한 번만 환불한다', async () => {
     const { firestore } = makeFirestore(
       seedRoundRecords({
+        'saleRounds/round-1': {
+          ...seedRoundRecords()['saleRounds/round-1'],
+          counters: {
+            reservedDeliveryAddresses: 0,
+            reservedItemQuantity: 0,
+            orderedDeliveryAddresses: 1,
+            orderedItemQuantity: 1,
+            heldOrderCount: 0,
+          },
+        },
+        'saleRoundItems/round-item-1': {
+          ...seedRoundRecords()['saleRoundItems/round-item-1'],
+          reservedQuantity: 0,
+          orderedQuantity: 1,
+        },
+        'checkoutReservations/reservation-1': {
+          id: 'reservation-1',
+          roundId: 'round-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          orderId: 'order-1',
+          paymentId: 'order-1',
+          status: 'CONSUMED',
+          addressKey: 'test',
+          deliveryAddressCount: 1,
+          itemQuantityTotal: 1,
+          items: [{ roundItemId: 'round-item-1', productId: 'product-1', quantity: 1, unitPrice: 50000 }],
+          idempotencyKey: 'checkout:charge-cancel',
+          expiresAt: '2099-07-20T00:00:00.000Z',
+          consumedAt: '2026-07-15T00:00:00.000Z',
+          releasedAt: null,
+          createdAt: '2026-07-15T00:00:00.000Z',
+          updatedAt: '2026-07-15T00:00:00.000Z',
+        },
         'orders/order-1': {
           id: 'order-1',
           storeId: 'store-round',
