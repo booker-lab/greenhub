@@ -113,6 +113,9 @@ function makeFinalization(overrides: Data = {}) {
     reserveCheckout: jest.fn().mockResolvedValue({ id: 'late-reservation-1' }),
     consumeReservationInTransaction: jest.fn(async () => ({ status: 'CONSUMED' })),
     releaseReservationInTransaction: jest.fn(async () => ({ status: 'EXPIRED' })),
+    reacquireAndConsumeLatePaymentInTransaction: jest
+      .fn()
+      .mockResolvedValue({ id: 'late-reservation-1', status: 'CONSUMED' }),
   };
   const issueWriter = { createOrMergeIssue: jest.fn().mockResolvedValue({ id: 'issue-1' }) };
   const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
@@ -288,7 +291,13 @@ describe('결제 최종화 경쟁 조건', () => {
     expect(['CANCELLED', 'ACCEPTED']).toContain(order.status);
     if (order.status === 'ACCEPTED') {
       expect(fixture.records.get('payments/order-1')?.status).toBe('PAID');
-      expect(fixture.capacity.consumeReservationInTransaction).toHaveBeenCalledTimes(1);
+      // Atomic late-payment convergence: finalize-first uses consume,
+      // cancel-first-then-late uses single-commit reacquire (no orphan HELD).
+      const consumeCalls = fixture.capacity.consumeReservationInTransaction.mock.calls.length;
+      const reacquireCalls = (
+        fixture.capacity.reacquireAndConsumeLatePaymentInTransaction as jest.Mock
+      ).mock.calls.length;
+      expect(consumeCalls + reacquireCalls).toBe(1);
     } else {
       expect(order.cancelReason).toBe('timeout');
       expect(fixture.capacity.releaseReservationInTransaction).toHaveBeenCalledTimes(1);
@@ -300,17 +309,20 @@ describe('결제 최종화 경쟁 조건', () => {
     await expect(fixture.service.finalizePaidOrder('order-1', paymentData)).resolves.toMatchObject({
       status: 'ACCEPTED',
     });
-    expect(fixture.capacity.reserveCheckout).toHaveBeenCalledTimes(1);
-    expect(fixture.capacity.consumeReservationInTransaction).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ reservationId: 'late-reservation-1' }),
-    );
+    // Atomic single-commit proof: no separate reserveCheckout transaction.
+    expect(
+      fixture.capacity.reacquireAndConsumeLatePaymentInTransaction,
+    ).toHaveBeenCalledTimes(1);
+    expect(fixture.capacity.reserveCheckout).not.toHaveBeenCalled();
     expect(fixture.records.get('orders/order-1')?.reservationId).toBe('late-reservation-1');
   });
 
   it('늦은 결제 한도 재확보 실패는 전액 환불 기록으로 수렴한다', async () => {
     const fixture = makeFinalization({ status: 'CANCELLED', cancelReason: 'timeout' });
-    fixture.capacity.reserveCheckout.mockRejectedValue(new Error('회차 마감'));
+    const { LatePaymentCapacityError } = require('../orders/order-capacity.service');
+    fixture.capacity.reacquireAndConsumeLatePaymentInTransaction.mockRejectedValue(
+      new LatePaymentCapacityError('결제 만료 후 회차 한도 마감'),
+    );
     await expect(fixture.service.finalizePaidOrder('order-1', paymentData)).resolves.toMatchObject({
       reason: 'late_payment_refunded',
     });
