@@ -26,26 +26,38 @@ export class PaymentRefundService {
 
     const paymentRef = paymentSnap.docs[0].ref;
     const token = randomUUID();
-    let claimed: Record<string, any> | null = null;
 
-    await this.firestore.runTransaction(async (tx) => {
+    // Retry purity: the claim decision must come from the committed attempt's
+    // return value only. An outer `let claimed` mutated inside the callback
+    // would leak an aborted attempt's decision and authorize a duplicate
+    // provider refund after retry. See PAYMENT-REFUND-OCC-RETRY-PURITY-CLOSURE-01.
+    const claimResult = await this.firestore.runTransaction(async (tx) => {
       const freshSnap = await tx.get(paymentRef);
-      if (!freshSnap.exists) return;
+      if (!freshSnap.exists) return null;
       const payment = freshSnap.data() as Record<string, any>;
-      if (payment['status'] === 'CANCELLED' || payment['refundedAt']) return;
-      if (payment['status'] !== 'PAID') return;
+      if (payment['status'] === 'CANCELLED' || payment['refundedAt']) return null;
+      if (payment['status'] !== 'PAID') return null;
       const currentClaim = payment['refundClaim'] as { expiresAt?: number } | null;
-      if (currentClaim && (currentClaim.expiresAt ?? 0) > Date.now()) return;
+      if (currentClaim && (currentClaim.expiresAt ?? 0) > Date.now()) return null;
 
       tx.update(paymentRef, {
         refundClaim: { token, expiresAt: Date.now() + REFUND_CLAIM_MS },
         updatedAt: this.firestore.Timestamp.now(),
       });
-      claimed = payment;
+      // Immutable payload for the external side effect. A fresh copy, never
+      // the live snapshot object, so a later retry cannot mutate it.
+      return {
+        id: payment['id'],
+        portonePaymentId: payment['portonePaymentId'],
+        amount: payment['amount'],
+        storeId: payment['storeId'],
+        userId: payment['userId'],
+        status: payment['status'],
+      };
     });
-    if (!claimed) return;
+    if (!claimResult) return;
 
-    const payment = claimed as Record<string, any>;
+    const payment = claimResult as Record<string, any>;
     try {
       await this.portone.refund(payment['portonePaymentId'], payment['amount'], reason);
       const now = this.firestore.Timestamp.now();
