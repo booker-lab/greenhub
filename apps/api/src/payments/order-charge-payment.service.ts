@@ -116,24 +116,31 @@ export class OrderChargePaymentService {
 
   private async refundCharge(chargeRef: any, reason: string) {
     const token = randomUUID();
-    let claimed: Record<string, any> | null = null;
-    await this.firestore.runTransaction(async (tx) => {
+    // Retry purity: only the committed attempt's return value may authorize
+    // the provider refund. An outer `let claimed` would leak an aborted
+    // attempt's decision across OCC retry. See
+    // PAYMENT-REFUND-OCC-RETRY-PURITY-CLOSURE-01.
+    const claimResult = await this.firestore.runTransaction(async (tx) => {
       const snap: any = await tx.get(chargeRef);
-      if (!snap.exists) return;
+      if (!snap.exists) return null;
       const charge = snap.data() as Record<string, any>;
-      if (charge['status'] === 'REFUNDED' || charge['refundedAt']) return;
-      if (charge['status'] !== 'PAID') return;
+      if (charge['status'] === 'REFUNDED' || charge['refundedAt']) return null;
+      if (charge['status'] !== 'PAID') return null;
       const currentClaim = charge['refundClaim'] as { expiresAt?: number } | null;
-      if (currentClaim && (currentClaim.expiresAt ?? 0) > Date.now()) return;
+      if (currentClaim && (currentClaim.expiresAt ?? 0) > Date.now()) return null;
       tx.update(chargeRef, {
         refundClaim: { token, expiresAt: Date.now() + REFUND_CLAIM_MS },
         updatedAt: this.firestore.Timestamp.now(),
       });
-      claimed = charge;
+      // Immutable payload for the external side effect.
+      return {
+        portonePaymentId: charge['portonePaymentId'],
+        amount: charge['amount'],
+      };
     });
-    if (!claimed) return;
+    if (!claimResult) return;
 
-    const charge = claimed as Record<string, any>;
+    const charge = claimResult as Record<string, any>;
     try {
       await this.portone.refund(charge['portonePaymentId'], charge['amount'], reason);
       await this.completeRefund(chargeRef, token, reason);
