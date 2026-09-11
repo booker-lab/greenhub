@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
+import { normalizeSalesMode } from '@greenhub/shared';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { UpdateStoreDto } from './dto/update-store.dto';
@@ -25,6 +26,26 @@ export class StoresService {
       address: data.address ?? '',
       businessNumber: data.businessNumber ?? null,
       logoUrl: data.logoUrl ?? null,
+    };
+  }
+
+  /**
+   * Public store profile — unauthenticated allowlist.
+   * Returns exactly { id, name, logoUrl, salesMode }. Never PII/owner/
+   * status/timestamps. Missing store → 404 (not empty profile).
+   */
+  async getPublicProfile(storeId: string) {
+    const snap = await this.firestore.doc(`stores/${storeId}`).get();
+    if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다');
+    const data = snap.data()!;
+    const salesMode = normalizeSalesMode(
+      data.salesMode === 'round_direct' ? 'round_direct' : undefined,
+    );
+    return {
+      id: storeId,
+      name: data.name ?? '',
+      logoUrl: data.logoUrl ?? null,
+      salesMode,
     };
   }
 

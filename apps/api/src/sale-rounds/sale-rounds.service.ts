@@ -24,6 +24,25 @@ function isPublicSaleRoundStatus(status: unknown): status is (typeof PUBLIC_SALE
   return (PUBLIC_SALE_ROUND_STATUSES as readonly unknown[]).includes(status);
 }
 
+/**
+ * Public round-item visibility — single semantic owner.
+ * HIDDEN is never public. ACTIVE / SOLD_OUT / CLOSED preserve the existing
+ * contract (SOLD_OUT/CLOSED remain visible as sold-out/closed display;
+ * consumer treats only ACTIVE in an OPEN round as purchasable).
+ * Seller management reads must NOT use this predicate.
+ */
+export function isPubliclyVisibleRoundItem(
+  item: Pick<SaleRoundItem, 'status'> | Record<string, unknown> | null | undefined,
+): boolean {
+  if (!item) return false;
+  return (item as { status: unknown }).status !== 'HIDDEN';
+}
+
+function toPublicRoundItems(items: SaleRoundItem[]): SaleRoundItem[] {
+  // Preserve displayOrder sorting done by getRoundItems; filter only.
+  return items.filter((item) => isPubliclyVisibleRoundItem(item));
+}
+
 @Injectable()
 export class SaleRoundsService {
   constructor(
@@ -48,6 +67,8 @@ export class SaleRoundsService {
       .where('storeId', '==', storeId)
       .where('status', 'in', PUBLIC_SALE_ROUND_STATUSES)
       .get();
+    // List returns round summaries without items by design; item visibility
+    // is enforced in getPublicRound via toPublicRoundItems (same predicate).
     const rounds = await Promise.all(
       snap.docs.map(async (doc: any) => {
         const storedRound = doc.data() as Record<string, any>;
@@ -72,11 +93,19 @@ export class SaleRoundsService {
     const items = await this.getRoundItems(roundId, storeId);
     return { ...round, items };
   }
+  private async getPublicRoundWithItems(
+    storeId: string,
+    roundId: string,
+  ): Promise<RoundWithItems> {
+    const round = await this.refreshRoundStatus(storeId, roundId);
+    const items = await this.getRoundItems(roundId, storeId);
+    return { ...round, items: toPublicRoundItems(items) };
+  }
   async getPublicRound(storeId: string, roundId: string): Promise<RoundWithItems> {
     await this.assertPublicRoundStore(storeId);
     const storedRound = await this.getStoredRound(storeId, roundId);
     this.assertPublicRoundBoundary(storeId, storedRound);
-    const round = await this.getRoundWithItems(storeId, roundId);
+    const round = await this.getPublicRoundWithItems(storeId, roundId);
     this.assertPublicRoundBoundary(storeId, round);
     return round;
   }

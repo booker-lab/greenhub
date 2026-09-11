@@ -32,3 +32,15 @@ export interface UpdateStoreRequest {
   logoUrl?: string;
   salesMode?: SalesMode;
 }
+
+/**
+ * Public store profile — explicit allowlist for unauthenticated reads.
+ * Only id/name/logoUrl/salesMode. Never ownerId/ceoName/phone/address/
+ * businessNumber/status/timestamps.
+ */
+export interface StorePublicProfile {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  salesMode: SalesMode;
+}
