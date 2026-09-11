@@ -9,7 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AuditModule } from './common/audit/audit.module';
-import { shouldEnableScheduledJobs, validateRuntimeConfig } from './config/runtime-config';
+import { shouldEnableScheduledJobs, validateRuntimeConfig, isApiUnitTestEnv } from './config/runtime-config';
 import { DriverModule } from './driver/driver.module';
 import { FirestoreModule } from './firestore/firestore.module';
 import { HubsModule } from './hubs/hubs.module';
@@ -24,7 +24,11 @@ import { SettlementsModule } from './settlements/settlements.module';
 import { StoresModule } from './stores/stores.module';
 import { VarietiesModule } from './varieties/varieties.module';
 
-const configModule = ConfigModule.forRoot({ isGlobal: true, validate: validateRuntimeConfig });
+const configModule = ConfigModule.forRoot({
+  isGlobal: true,
+  validate: validateRuntimeConfig,
+  ignoreEnvFile: isApiUnitTestEnv(process.env),
+});
 const scheduleModule = shouldEnableScheduledJobs(process.env)
   ? ScheduleModule.forRoot()
   : undefined;
