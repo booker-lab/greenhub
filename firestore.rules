@@ -58,24 +58,46 @@ service cloud.firestore {
       return currentRole('admin');
     }
 
+    // Canonical seller ownership: API는 stores/{storeId}.ownerId == uid를
+    // 정본으로 사용한다 (products/sale-rounds/stores services + specs).
+    // Rules는 token storeId + users storeId + ownerId를 모두 요구하는
+    // conjunction으로 API보다 약하지 않게 fail-closed한다.
+    // users.storeId와 stores.ownerId가 divergent하면 DENY (migration 없음).
+    function isStoreOwner(storeId) {
+      let storePath = /databases/$(database)/documents/stores/$(storeId);
+      return storeId is string &&
+        exists(storePath) &&
+        get(storePath).data.get('ownerId', null) == request.auth.uid;
+    }
+
+    function currentSellerOwnsStore(storeId) {
+      return currentSellerFor(storeId) && isStoreOwner(storeId);
+    }
+
     // orders: 매장 소유자·관리자만 직접 읽고 기사는 API를 사용한다
     match /orders/{orderId} {
       allow read: if currentSellerFor(resource.data.storeId) || currentAdmin();
       allow write: if false;
     }
 
-    // products: anonymous raw document unrestricted read 제거 — 공개 카탈로그는
-    // Public Product API projection을 사용한다. 인증된 seller owner surface
-    // (store products listener / order-detail fallback)는 유지한다.
+    // products: anonymous raw read는 PR #141에서 차단됨. 이번 Task는
+    // bare-authenticated raw read를 닫는다. own-store owning seller와
+    // canonical admin만 허용. consumer/driver/other-store seller DENY.
+    // Seller own-store query (where storeId == own storeId)는 유지되며
+    // inactive/testOnly도 owner 관리 목적으로 허용한다 (public predicate 미적용).
     match /products/{productId} {
-      allow read: if request.auth != null;
+      allow get, list: if currentSellerOwnsStore(resource.data.get('storeId', null)) ||
+        currentAdmin();
       allow write: if false;
     }
 
-    // stores: anonymous raw store get 제거 — 공개 프로필은
-    // GET /stores/:storeId/public-profile API를 사용한다.
+    // stores: anonymous raw get은 PR #141에서 차단됨. 이번 Task는
+    // bare-authenticated raw get을 닫는다. resource.ownerId를 사용해
+    // extra lookup 없이 판정한다 (list는 기존처럼 DENY).
+    // ownerId/ceoName/phone/address/businessNumber/status 등 비공개 필드 보호.
     match /stores/{storeId} {
-      allow get: if request.auth != null;
+      allow get: if (currentSellerFor(storeId) &&
+        resource.data.get('ownerId', null) == request.auth.uid) || currentAdmin();
       allow list, write: if false;
     }
 
@@ -86,12 +108,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // groupProductConfig: anonymous raw config read 제거 — 공개 현황은
-    // Public Product detail API projection을 사용한다.
-    // 인증된 seller 보조 읽기(useGroupConfigs/order-detail)는 유지한다.
+    // groupProductConfig: anonymous raw read는 PR #141에서 차단됨. 이번 Task는
+    // bare-authenticated raw read를 닫는다. point get만 owner/admin에게 허용하고
+    // list는 DENY를 유지한다 (shipped owner workflow가 list를 요구하지 않음).
+    // products/{docId}.storeId를 authoritative relation으로 사용하며
+    // groupProductConfig 자체의 storeId denormalization에 의존하지 않는다.
+    // create path가 storeId를 보장하지 않아도 동작한다. 새 migration 없음.
     match /groupProductConfig/{docId} {
-      allow read: if request.auth != null;
-      allow write: if false;
+      allow get: if (exists(/databases/$(database)/documents/products/$(docId)) &&
+        currentSellerOwnsStore(get(/databases/$(database)/documents/products/$(docId)).data.get('storeId', null))) ||
+        currentAdmin();
+      allow list, write: if false;
     }
 
     // varieties: 소비자 상품 상세에 필요한 공개 품종 단건 조회만 허용

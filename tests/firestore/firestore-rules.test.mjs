@@ -86,6 +86,12 @@ async function seedFixtures() {
         isActive: true,
         testOnly: true,
       },
+      'products/product-store2': {
+        storeId: 'store-2',
+        name: '다른 매장 상품',
+        isActive: true,
+        sellerNote: 'store-2 내부 메모',
+      },
       'stores/store-1': {
         name: '공개 매장',
         salesMode: 'round_direct',
@@ -96,7 +102,16 @@ async function seedFixtures() {
         businessNumber: '123-45-67890',
         status: 'active',
       },
-      'stores/store-2': { name: '다른 매장', salesMode: 'round_direct' },
+      'stores/store-2': {
+        name: '다른 매장',
+        salesMode: 'round_direct',
+        ownerId: 'seller-2',
+        ceoName: '김철수',
+        phone: '010-9876-5432',
+        address: '서울시 강남구',
+        businessNumber: '987-65-43210',
+        status: 'active',
+      },
       'stores/store-legacy': { name: '기존 매장', salesMode: 'legacy' },
       'stores/store-missing-mode': { name: '모드 누락 매장' },
       'stores/store-null-mode': { name: 'null 모드 매장', salesMode: null },
@@ -107,6 +122,12 @@ async function seedFixtures() {
         productId: 'product-1',
         currentQuantity: 3,
         isProcessed: true,
+      },
+      'groupProductConfig/product-store2': {
+        storeId: 'store-2',
+        productId: 'product-store2',
+        currentQuantity: 5,
+        isProcessed: false,
       },
       'varieties/variety-1': {
         name: '호접란',
@@ -174,6 +195,17 @@ async function seedFixtures() {
         id: 'seller-2',
         role: 'seller',
         storeId: 'store-2',
+        suspended: false,
+      },
+      'users/consumer-1': {
+        id: 'consumer-1',
+        role: 'consumer',
+        suspended: false,
+      },
+      'users/seller-orphan': {
+        id: 'seller-orphan',
+        role: 'seller',
+        storeId: 'store-1',
         suspended: false,
       },
       'users/admin-1': {
@@ -494,15 +526,25 @@ test('익명 products 원문 읽기는 API 사용 구간에서 거부된다', as
 
 test('비활성/testOnly product는 Firestore 우회로 얻을 수 없다', async () => {
   const anonymous = testEnvironment.unauthenticatedContext().firestore();
-  const consumer = testEnvironment.authenticatedContext('user-1').firestore();
+  const consumer = testEnvironment
+    .authenticatedContext('consumer-1', { role: 'consumer' })
+    .firestore();
+  const driver = testEnvironment
+    .authenticatedContext('driver-1', { role: 'driver', driverApproved: true })
+    .firestore();
 
   // 익명은 원문 자체를 읽을 수 없으므로 우회가 불가능하다.
   await assertFails(getDoc(doc(anonymous, 'products', 'product-inactive')));
   await assertFails(getDoc(doc(anonymous, 'products', 'product-testonly')));
-  // 인증된 원문 읽기는 owner surface용으로 유지되지만 공개 API predicate와
-  // 동일한 가시성 계약을 consumer가 직접 강제하지 않으므로,
-  // 공개 가시성 판정은 API projection이 소유한다 (아래 API 회귀 테스트로 고정).
-  await assertSucceeds(getDoc(doc(consumer, 'products', 'product-1')));
+  // 인증된 non-owner raw read는 owner boundary에서 거부된다.
+  // inactive/testOnly 관리는 own-store owning seller만 가능하며
+  // 공개 가시성 판정은 API projection이 소유한다.
+  await assertFails(getDoc(doc(consumer, 'products', 'product-inactive')));
+  await assertFails(getDoc(doc(consumer, 'products', 'product-testonly')));
+  await assertFails(getDoc(doc(consumer, 'products', 'product-1')));
+  await assertFails(getDoc(doc(driver, 'products', 'product-inactive')));
+  await assertFails(getDoc(doc(driver, 'products', 'product-testonly')));
+  await assertFails(getDoc(doc(driver, 'products', 'product-1')));
 });
 
 test('익명 stores 원문/PII 우회가 불가능하다', async () => {
@@ -527,6 +569,152 @@ test('HIDDEN saleRoundItem 익명 직접 읽기가 불가능하다', async () =>
   await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-1')));
   await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-soldout')));
   await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-closed')));
+});
+
+test('products owner boundary: consumer/driver는 raw read가 거부된다', async () => {
+  const consumer = testEnvironment
+    .authenticatedContext('consumer-1', { role: 'consumer' })
+    .firestore();
+  const driver = testEnvironment
+    .authenticatedContext('driver-1', { role: 'driver', driverApproved: true })
+    .firestore();
+
+  await assertFails(getDoc(doc(consumer, 'products', 'product-1')));
+  await assertFails(getDocs(collection(consumer, 'products')));
+  await assertFails(
+    getDocs(query(collection(consumer, 'products'), where('storeId', '==', 'store-1'))),
+  );
+  await assertFails(getDoc(doc(driver, 'products', 'product-1')));
+  await assertFails(getDocs(collection(driver, 'products')));
+  await assertFails(
+    getDocs(query(collection(driver, 'products'), where('storeId', '==', 'store-1'))),
+  );
+});
+
+test('products owner boundary: seller A는 own-store만 읽고 cross-store는 거부된다', async () => {
+  const sellerA = testEnvironment
+    .authenticatedContext('seller-1', { role: 'seller', storeId: 'store-1' })
+    .firestore();
+
+  // own active/inactive/testOnly management reads
+  await assertSucceeds(getDoc(doc(sellerA, 'products', 'product-1')));
+  await assertSucceeds(getDoc(doc(sellerA, 'products', 'product-inactive')));
+  await assertSucceeds(getDoc(doc(sellerA, 'products', 'product-testonly')));
+  // own store-constrained list (useStoreProducts 형태) — 실제 query behavior 증명
+  await assertSucceeds(
+    getDocs(query(collection(sellerA, 'products'), where('storeId', '==', 'store-1'))),
+  );
+  // cross-store denied
+  await assertFails(getDoc(doc(sellerA, 'products', 'product-store2')));
+  await assertFails(
+    getDocs(query(collection(sellerA, 'products'), where('storeId', '==', 'store-2'))),
+  );
+  // unconstrained cross-store list denied (store-1 + store-2 혼재)
+  await assertFails(getDocs(collection(sellerA, 'products')));
+});
+
+test('products owner boundary: seller B 대칭 검증', async () => {
+  const sellerB = testEnvironment
+    .authenticatedContext('seller-2', { role: 'seller', storeId: 'store-2' })
+    .firestore();
+
+  await assertSucceeds(getDoc(doc(sellerB, 'products', 'product-store2')));
+  await assertSucceeds(
+    getDocs(query(collection(sellerB, 'products'), where('storeId', '==', 'store-2'))),
+  );
+  await assertFails(getDoc(doc(sellerB, 'products', 'product-1')));
+  await assertFails(getDoc(doc(sellerB, 'products', 'product-inactive')));
+  await assertFails(
+    getDocs(query(collection(sellerB, 'products'), where('storeId', '==', 'store-1'))),
+  );
+  await assertFails(getDocs(collection(sellerB, 'products')));
+});
+
+test('products owner boundary: admin 대표 읽기를 유지한다', async () => {
+  const admin = testEnvironment.authenticatedContext('admin-1', { role: 'admin' }).firestore();
+
+  await assertSucceeds(getDoc(doc(admin, 'products', 'product-1')));
+  await assertSucceeds(getDoc(doc(admin, 'products', 'product-store2')));
+  await assertSucceeds(
+    getDocs(query(collection(admin, 'products'), where('storeId', '==', 'store-1'))),
+  );
+});
+
+test('stores owner boundary: consumer/driver/anonymous DENY, owner ALLOW', async () => {
+  const anonymous = testEnvironment.unauthenticatedContext().firestore();
+  const consumer = testEnvironment
+    .authenticatedContext('consumer-1', { role: 'consumer' })
+    .firestore();
+  const driver = testEnvironment
+    .authenticatedContext('driver-1', { role: 'driver', driverApproved: true })
+    .firestore();
+  const sellerA = testEnvironment
+    .authenticatedContext('seller-1', { role: 'seller', storeId: 'store-1' })
+    .firestore();
+  const sellerB = testEnvironment
+    .authenticatedContext('seller-2', { role: 'seller', storeId: 'store-2' })
+    .firestore();
+  const admin = testEnvironment.authenticatedContext('admin-1', { role: 'admin' }).firestore();
+
+  await assertFails(getDoc(doc(anonymous, 'stores', 'store-1')));
+  await assertFails(getDoc(doc(consumer, 'stores', 'store-1')));
+  await assertFails(getDoc(doc(driver, 'stores', 'store-1')));
+  await assertSucceeds(getDoc(doc(sellerA, 'stores', 'store-1')));
+  await assertFails(getDoc(doc(sellerA, 'stores', 'store-2')));
+  await assertSucceeds(getDoc(doc(sellerB, 'stores', 'store-2')));
+  await assertFails(getDoc(doc(sellerB, 'stores', 'store-1')));
+  await assertSucceeds(getDoc(doc(admin, 'stores', 'store-1')));
+  // list는 기존처럼 DENY (owner/admin 포함)
+  await assertFails(getDocs(collection(sellerA, 'stores')));
+  await assertFails(getDocs(collection(admin, 'stores')));
+  await assertFails(getDocs(collection(consumer, 'stores')));
+});
+
+test('groupProductConfig owner boundary: point get만 owner/admin 허용', async () => {
+  const anonymous = testEnvironment.unauthenticatedContext().firestore();
+  const consumer = testEnvironment
+    .authenticatedContext('consumer-1', { role: 'consumer' })
+    .firestore();
+  const driver = testEnvironment
+    .authenticatedContext('driver-1', { role: 'driver', driverApproved: true })
+    .firestore();
+  const sellerA = testEnvironment
+    .authenticatedContext('seller-1', { role: 'seller', storeId: 'store-1' })
+    .firestore();
+  const sellerB = testEnvironment
+    .authenticatedContext('seller-2', { role: 'seller', storeId: 'store-2' })
+    .firestore();
+  const admin = testEnvironment.authenticatedContext('admin-1', { role: 'admin' }).firestore();
+
+  await assertFails(getDoc(doc(anonymous, 'groupProductConfig', 'product-1')));
+  await assertFails(getDoc(doc(consumer, 'groupProductConfig', 'product-1')));
+  await assertFails(getDoc(doc(driver, 'groupProductConfig', 'product-1')));
+  // underlying product의 store ownership으로 판정 (products/product-1 → store-1)
+  await assertSucceeds(getDoc(doc(sellerA, 'groupProductConfig', 'product-1')));
+  await assertFails(getDoc(doc(sellerA, 'groupProductConfig', 'product-store2')));
+  await assertSucceeds(getDoc(doc(sellerB, 'groupProductConfig', 'product-store2')));
+  await assertFails(getDoc(doc(sellerB, 'groupProductConfig', 'product-1')));
+  await assertSucceeds(getDoc(doc(admin, 'groupProductConfig', 'product-1')));
+  // list는 owner workflow가 요구하지 않으므로 DENY 유지 (새 capability 생성 금지)
+  await assertFails(getDocs(collection(sellerA, 'groupProductConfig')));
+  await assertFails(getDocs(collection(consumer, 'groupProductConfig')));
+  await assertFails(getDocs(collection(admin, 'groupProductConfig')));
+});
+
+test('products owner authority는 token/users/storeId를 넘어 stores.ownerId를 요구한다', async () => {
+  // seller-orphan: token storeId + users storeId는 store-1과 일치하지만
+  // stores/store-1.ownerId(seller-1)와 달라 API도 거부하는 principal.
+  // Rules가 currentSellerFor만 복사했다면 허용됐을 것이다.
+  const orphan = testEnvironment
+    .authenticatedContext('seller-orphan', { role: 'seller', storeId: 'store-1' })
+    .firestore();
+
+  await assertFails(getDoc(doc(orphan, 'products', 'product-1')));
+  await assertFails(
+    getDocs(query(collection(orphan, 'products'), where('storeId', '==', 'store-1'))),
+  );
+  await assertFails(getDoc(doc(orphan, 'stores', 'store-1')));
+  await assertFails(getDoc(doc(orphan, 'groupProductConfig', 'product-1')));
 });
 
 test('인증된 seller owner surface 읽기( products/stores/groupConfig )를 보존한다', async () => {
