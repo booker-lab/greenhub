@@ -97,12 +97,48 @@ production은 다음 조건을 모두 충족한 뒤에만 실행한다.
 - docs-only `main` merge는 `preview` 동기화·일반 E2E dispatch를 만들지 않아야 한다.
 - 위 세 항목은 PR #33까지 실증 완료했다.
 
+## 의존성 인식 배포 선택 계약 (COORD-DEPLOY-FANOUT-01)
+
+배경: docs-only `ignoreCommand`(`git diff HEAD^` + docs grep)는 문서가 아닌 모든
+변경를 세 앱 모두에게 relevant로 취급했다. API-only(PR #145·#146 상당 delta)와
+Firestore-rules-only(PR #144 상당 delta) publication에서도 세 Preview가 모두
+생성된 직접 원인이 이것이다. `HEAD^` 기준은 merge/transport-freshness sync
+commit에서도 오판한다.
+
+현재 계약 (단일 공유 predicate `scripts/vercel/ignore-build.mjs`, 앱별
+`--app` 인자로 호출; 세 `apps/*/vercel.json`의 `ignoreCommand`가 이를 가리킨다):
+
+- API-only 변경 → 세 Preview 0개 (`apps/api`는 어떤 frontend의 workspace
+  의존성도 아니다; HTTP 계약 drift는 동일한 frontend source를 rebuild해도
+  고쳐지지 않으므로 rebuild하지 않는다).
+- Firestore Rules-only 변경 → 세 Preview 0개.
+- docs-only 변경 → 세 Preview 0개 (기존 계약 유지).
+- Consumer-only → Consumer만 BUILD, Seller-only → Seller만 BUILD,
+  Driver-only → Driver만 BUILD.
+- `packages/ui`·`packages/shared` 변경 → workspace graph상 실제 dependent만
+  BUILD (현재 세 앱 모두 의존하므로 세 앱 BUILD; 하드코딩이 아니라
+  `package.json`의 `workspace:` closure로 판정).
+- root `pnpm-lock.yaml`·`package.json`·`pnpm-workspace.yaml`·
+  `tsconfig.base.json`·`.vercelignore`·`scripts/copy-fonts.cjs` 변경 →
+  필요 앱 BUILD (보수적으로 세 앱 BUILD).
+- 기준은 `VERCEL_GIT_PREVIOUS_SHA`(해당 project+branch의 마지막 성공 배포
+  SHA)..HEAD effective delta이며, bare `HEAD^`를 쓰지 않는다. 따라서
+  publication transport freshness update나 preview sync merge만으로는
+  frontend Preview가 재생성되지 않는다. 신뢰 가능한 base가 없으면
+  fail-open(BUILD)한다.
+- 미분류 경로는 fail-open(BUILD)한다. production 배포 정책
+  (`git.deploymentEnabled.main=false`, exact-SHA 승인 절차)은 변경하지 않는다.
+
+증거: `scripts/vercel/ignore-build.spec.mjs` (`pnpm test:vercel-ignore`)가
+위 matrix와 freshness-merge 시나리오를 자동 검증한다.
+
 ## 회귀 방지
 
 다음 중 하나라도 깨지면 deployment safety regression으로 P0 처리한다.
 
 - 세 앱 중 하나의 `git.deploymentEnabled.main !== false`
-- docs-only `ignoreCommand` 제거/변경
+- 공유 `ignoreCommand`(`scripts/vercel/ignore-build.mjs --app <name>`) 제거/변경
+- predicate(`scripts/vercel/ignore-build.mjs`) 변경 후 `pnpm test:vercel-ignore` 미실행
 - `sync-preview.yml`의 docs ignore 제거
 - `AGENTS.md`의 no-direct-main 규칙 제거
 - safety CI 제거 또는 실패를 무시하고 merge
