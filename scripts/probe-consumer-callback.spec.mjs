@@ -12,18 +12,28 @@ import {
   APPROVAL_VALUE,
   ARTIFACT_KEYS,
   CREDENTIAL_SOURCE,
+  FAIL_RESULT_KEYS,
   HEADER_NAME,
   LOCKED_BRANCH,
   LOCKED_DEPLOYMENT_ID,
   LOCKED_SOURCE_SHA,
+  PROTECTION_LOCATION_CLASS,
+  PROTECTION_PASSAGE_MODE,
   REQUEST_BUILDER,
+  RUNNER_ID,
   assertDeploymentId,
   assertExpectedSha,
   assertLockedBinding,
   buildCallbackArtifact,
+  buildFailureResult,
   classifyAuthError,
+  classifyFailureLocation,
   classifyLocationClass,
+  extractDeploymentReady,
+  extractObservedDeploymentSha,
   isProductionHostname,
+  isProtectionIntercept,
+  isProtectionResponse,
   normalizeConsumerUrl,
   runConsumerCallbackProbe,
   validateEvidenceBinding,
@@ -446,5 +456,351 @@ describe('callback probe serializer safety (no secret-derived output)', () => {
     ]) {
       assert.ok(!(key in artifact), `artifact must not contain key: ${key}`);
     }
+  });
+});
+
+describe('callback FAIL evidence preservation (PILOT-AUTH-CALLBACK-FAIL-19)', () => {
+  const PROTECTION_LOCATION = 'https://vercel.com/sso-api?nonce=fixture-nonce-19&token=fixture-token-19';
+  const PROTECTION_QUERY = 'nonce=fixture-nonce-19';
+
+  function protectionHeaders(location) {
+    return fakeHeaders({ Location: location, 'Content-Type': 'text/plain; charset=utf-8' });
+  }
+
+  function appRedirectHeaders(location) {
+    return fakeHeaders({ Location: location });
+  }
+
+  async function captureFailure(input, fetch) {
+    try {
+      await runConsumerCallbackProbe(input, { env: {}, fetchImpl: fetch });
+      assert.fail('expected probe to FAIL but it succeeded');
+    } catch (error) {
+      assert.ok(error && typeof error === 'object', 'failure must throw an error object');
+      assert.ok(error.evidence && typeof error.evidence === 'object', 'FAIL must carry closed evidence');
+      return { error, evidence: error.evidence };
+    }
+    throw new Error('unreachable');
+  }
+
+  it('1: 302 text/plain + vercel.com/sso-api is DEPLOYMENT_PROTECTION_INTERCEPTED', async () => {
+    assert.equal(
+      isProtectionIntercept({
+        status: 302,
+        contentType: 'text/plain; charset=utf-8',
+        locationValue: PROTECTION_LOCATION,
+        base: CONSUMER_URL,
+      }),
+      true,
+    );
+    const fetch = mockFetch({
+      '/api/auth/csrf': jsonResponse({
+        status: 302,
+        body: {},
+        headers: protectionHeaders(PROTECTION_LOCATION),
+      }),
+      '/api/auth/callback/credentials': callbackRedirect(`${CONSUMER_URL}/`),
+      '/api/auth/session': sessionInvalid(),
+    });
+    const { error, evidence } = await captureFailure(validInput(), fetch);
+    assert.equal(error.code, 'DEPLOYMENT_PROTECTION_INTERCEPTED');
+    assert.equal(evidence.result, 'FAIL');
+    assert.equal(evidence.failureCode, 'DEPLOYMENT_PROTECTION_INTERCEPTED');
+    assert.equal(evidence.failureStage, 'csrf');
+    assert.equal(evidence.csrfStatus, 302);
+    assert.equal(evidence.httpStatus, 302);
+    assert.equal(evidence.locationClass, PROTECTION_LOCATION_CLASS);
+    assert.equal(evidence.callbackLocationClass, PROTECTION_LOCATION_CLASS);
+    assert.equal(evidence.authErrorClass, 'NONE');
+    assert.equal(evidence.protectionPassageMode, 'NONE');
+    assert.equal(evidence.callbackAttempted, false);
+    assert.equal(evidence.sessionAttempted, false);
+    assert.equal(evidence.headerConfigured, true);
+    assert.equal(evidence.headerAttachedByRunner, true);
+    assert.equal(evidence.runner, RUNNER_ID);
+    // Raw location query / nonce must never be stored.
+    const serialized = JSON.stringify(evidence);
+    assert.ok(!serialized.includes('vercel.com/sso-api?'), 'raw Location URL must not be stored');
+    assert.ok(!serialized.includes(PROTECTION_QUERY), 'raw Location query/nonce must not be stored');
+    assert.ok(!serialized.includes(MOCK_SECRET), 'secret must not be stored');
+  });
+
+  it('1b: callback-stage protection is DEPLOYMENT_PROTECTION_INTERCEPTED with callbackAttempted=true', async () => {
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': jsonResponse({
+        status: 302,
+        body: {},
+        headers: protectionHeaders(PROTECTION_LOCATION),
+      }),
+      '/api/auth/session': sessionInvalid(),
+    });
+    const { error, evidence } = await captureFailure(validInput(), fetch);
+    assert.equal(error.code, 'DEPLOYMENT_PROTECTION_INTERCEPTED');
+    assert.equal(evidence.failureStage, 'callback');
+    assert.equal(evidence.callbackStatus, 302);
+    assert.equal(evidence.httpStatus, 302);
+    assert.equal(evidence.locationClass, PROTECTION_LOCATION_CLASS);
+    assert.equal(evidence.authErrorClass, 'NONE');
+    assert.equal(evidence.callbackAttempted, true);
+    assert.equal(evidence.sessionAttempted, false);
+    assert.equal(evidence.protectionPassageMode, 'NONE');
+  });
+
+  it('2: normal application redirect is not protection intercept', async () => {
+    assert.equal(
+      isProtectionIntercept({
+        status: 302,
+        contentType: '',
+        locationValue: `${CONSUMER_URL}/login?error=CredentialsSignin&code=authorize-rejected`,
+        base: CONSUMER_URL,
+      }),
+      false,
+    );
+    assert.equal(
+      isProtectionIntercept({
+        status: 302,
+        contentType: 'text/html',
+        locationValue: PROTECTION_LOCATION,
+        base: CONSUMER_URL,
+      }),
+      false,
+    );
+    assert.equal(
+      isProtectionResponse({
+        status: 302,
+        headers: appRedirectHeaders(`${CONSUMER_URL}/login?error=CredentialsSignin`),
+        locationValue: null,
+        base: CONSUMER_URL,
+      }),
+      false,
+    );
+    // Application rejection stays SUCCESS with Auth.js taxonomy (not protection FAIL).
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(
+        `${CONSUMER_URL}/login?error=CredentialsSignin&code=authorize-rejected`,
+      ),
+      '/api/auth/session': sessionInvalid(),
+    });
+    const { artifact } = await runConsumerCallbackProbe(validInput(), {
+      env: {},
+      fetchImpl: fetch,
+    });
+    assert.equal(artifact.authErrorClass, 'authorize-rejected');
+    assert.equal(artifact.callbackLocationClass, 'LOGIN_ERROR');
+    assert.equal(artifact.callbackStatus, 302);
+  });
+
+  it('3: CSRF transport failure preserves csrf stage/code without callback attempt', async () => {
+    // Null transport (fetch throws -> null).
+    const nullFetch = mockFetch({
+      '/api/auth/csrf': () => {
+        throw new Error('mock csrf transport down');
+      },
+    });
+    const nullFailure = await captureFailure(validInput(), nullFetch);
+    assert.equal(nullFailure.error.code, 'CSRF_TRANSPORT_FAILED');
+    assert.equal(nullFailure.evidence.failureStage, 'csrf');
+    assert.equal(nullFailure.evidence.failureCode, 'CSRF_TRANSPORT_FAILED');
+    assert.equal(nullFailure.evidence.callbackAttempted, false);
+    assert.equal(nullFailure.evidence.sessionAttempted, false);
+    assert.equal(nullFailure.evidence.headerAttachedByRunner, true);
+    assert.equal(nullFailure.evidence.protectionPassageMode, 'NONE');
+
+    // Non-2xx CSRF (protection already excluded).
+    const badStatusFetch = mockFetch({
+      '/api/auth/csrf': jsonResponse({ status: 500, body: {} }),
+    });
+    const badStatus = await captureFailure(validInput(), badStatusFetch);
+    assert.equal(badStatus.error.code, 'CSRF_TRANSPORT_FAILED');
+    assert.equal(badStatus.evidence.csrfStatus, 500);
+    assert.equal(badStatus.evidence.httpStatus, 500);
+
+    // Missing csrfToken.
+    const missingTokenFetch = mockFetch({
+      '/api/auth/csrf': jsonResponse({ status: 200, body: {} }),
+    });
+    const missingToken = await captureFailure(validInput(), missingTokenFetch);
+    assert.equal(missingToken.error.code, 'CSRF_TRANSPORT_FAILED');
+    assert.equal(missingToken.evidence.failureStage, 'csrf');
+  });
+
+  it('4: callback transport failure preserves callbackAttempted=true', async () => {
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': () => {
+        throw new Error('mock callback transport down');
+      },
+    });
+    const { error, evidence } = await captureFailure(validInput(), fetch);
+    assert.equal(error.code, 'CALLBACK_TRANSPORT_FAILED');
+    assert.equal(evidence.failureCode, 'CALLBACK_TRANSPORT_FAILED');
+    assert.equal(evidence.failureStage, 'callback');
+    assert.equal(evidence.callbackAttempted, true);
+    assert.equal(evidence.sessionAttempted, false);
+    assert.equal(evidence.callbackStatus, null);
+    assert.equal(evidence.csrfStatus, 200);
+    assert.equal(evidence.httpStatus, null);
+    assert.equal(evidence.headerConfigured, true);
+    assert.equal(evidence.headerAttachedByRunner, true);
+    assert.equal(evidence.protectionPassageMode, 'NONE');
+  });
+
+  it('5: callback rejection is distinguished from transport failure', async () => {
+    // Transport failure (no application response).
+    const transportFetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': () => {
+        throw new Error('mock down');
+      },
+    });
+    const transport = await captureFailure(validInput(), transportFetch);
+    assert.equal(transport.evidence.failureCode, 'CALLBACK_TRANSPORT_FAILED');
+
+    // Application rejection SUCCESS (302 LOGIN_ERROR) is not transport FAIL.
+    const rejectionFetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(
+        `${CONSUMER_URL}/login?error=CredentialsSignin&code=authorize-rejected`,
+      ),
+      '/api/auth/session': sessionInvalid(),
+    });
+    const { artifact } = await runConsumerCallbackProbe(validInput(), {
+      env: {},
+      fetchImpl: rejectionFetch,
+    });
+    assert.equal(artifact.authErrorClass, 'authorize-rejected');
+    assert.equal(artifact.callbackStatus, 302);
+
+    // Explicit 401 application rejection is CALLBACK_REJECTED FAIL (stage callback).
+    const rejectedFetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': jsonResponse({ status: 401, body: {} }),
+    });
+    const rejected = await captureFailure(validInput(), rejectedFetch);
+    assert.equal(rejected.error.code, 'CALLBACK_REJECTED');
+    assert.equal(rejected.evidence.failureStage, 'callback');
+    assert.equal(rejected.evidence.callbackStatus, 401);
+    assert.equal(rejected.evidence.callbackAttempted, true);
+    assert.notEqual(rejected.evidence.failureCode, transport.evidence.failureCode);
+  });
+
+  it('6: session-stage failure preserves sessionAttempted and callback evidence', async () => {
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(`${CONSUMER_URL}/`),
+      '/api/auth/session': () => {
+        throw new Error('mock session transport down');
+      },
+    });
+    const { error, evidence } = await captureFailure(validInput(), fetch);
+    assert.equal(error.code, 'SESSION_READ_FAILED');
+    assert.equal(evidence.failureCode, 'SESSION_READ_FAILED');
+    assert.equal(evidence.failureStage, 'session');
+    assert.equal(evidence.sessionAttempted, true);
+    assert.equal(evidence.callbackAttempted, true);
+    assert.equal(evidence.callbackStatus, 302);
+    assert.equal(evidence.csrfStatus, 200);
+    assert.equal(evidence.sessionState, 'NOT_CHECKED');
+    assert.equal(evidence.protectionPassageMode, 'NONE');
+  });
+
+  it('7b: FAIL result key set is exactly the closed allowlist', () => {
+    const failure = buildFailureResult({
+      failureCode: 'CSRF_TRANSPORT_FAILED',
+      failureStage: 'csrf',
+      csrfStatus: 500,
+      httpStatus: 500,
+      checkedAt: '2026-09-11T00:00:00.000Z',
+      workflowSourceSha: 'workflow-sha-fixture-19',
+      message: 'fixture',
+    });
+    assert.deepEqual(Object.keys(failure).sort(), [...FAIL_RESULT_KEYS].sort());
+    assert.equal(failure.result, 'FAIL');
+    assert.equal(failure.runner, RUNNER_ID);
+    assert.equal(failure.protectionPassageMode, 'NONE');
+    assert.equal(failure.protectionPassageMode, PROTECTION_PASSAGE_MODE);
+  });
+
+  it('8: FAIL JSON exposes no secret/cookie/nonce/raw-location material', async () => {
+    const secretCookie = `__Secure-authjs.session-token=${MOCK_COOKIE_VALUE}; Path=/; HttpOnly`;
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': jsonResponse({
+        status: 302,
+        body: {},
+        headers: protectionHeaders(PROTECTION_LOCATION),
+      }),
+      '/api/auth/session': sessionInvalid(),
+    });
+    // Use a distinct cookie-carrying success path for the negative check as well.
+    const successFetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(`${CONSUMER_URL}/`, secretCookie),
+      '/api/auth/session': sessionValid(),
+    });
+    const { artifact } = await runConsumerCallbackProbe(validInput(), {
+      env: {},
+      fetchImpl: successFetch,
+    });
+    assert.ok(!JSON.stringify(artifact).includes(MOCK_COOKIE_VALUE));
+    const { evidence } = await captureFailure(validInput(), fetch);
+    const serialized = JSON.stringify(evidence);
+    for (const forbidden of [
+      MOCK_SECRET,
+      MOCK_PASSWORD,
+      MOCK_CSRF,
+      MOCK_SESSION_TOKEN,
+      MOCK_COOKIE_VALUE,
+      PROTECTION_QUERY,
+      'fixture-nonce-19',
+      'fixture-token-19',
+    ]) {
+      assert.ok(!serialized.includes(forbidden), `FAIL must not contain ${forbidden.slice(0, 20)}`);
+    }
+    for (const key of [
+      'secret',
+      'e2eSecret',
+      'authorization',
+      'cookie',
+      'cookies',
+      'setCookie',
+      'csrfToken',
+      'nonce',
+      'password',
+      'email',
+      'accessToken',
+    ]) {
+      assert.ok(!(key in evidence), `FAIL must not contain key: ${key}`);
+    }
+    // Location class only, never raw query.
+    assert.equal(evidence.locationClass, PROTECTION_LOCATION_CLASS);
+  });
+
+  it('9: existing success evidence contract is preserved', async () => {
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(
+        `${CONSUMER_URL}/login?error=CredentialsSignin&code=authorize-rejected`,
+      ),
+      '/api/auth/session': sessionInvalid(),
+    });
+    const { artifact, calls } = await runConsumerCallbackProbe(validInput(), {
+      env: {},
+      fetchImpl: fetch,
+    });
+    assert.deepEqual(Object.keys(artifact).sort(), [...ARTIFACT_KEYS].sort());
+    assert.equal(artifact.credentialSource, 'E2E_TEST_SECRET');
+    assert.equal(artifact.headerName, 'x-e2e-test-token');
+    assert.equal(artifact.headerPresent, true);
+    assert.equal(artifact.callbackStatus, 302);
+    assert.equal(artifact.callbackLocationClass, 'LOGIN_ERROR');
+    assert.equal(artifact.authErrorClass, 'authorize-rejected');
+    assert.equal(artifact.sessionState, 'INVALID');
+    assert.deepEqual(calls, ['/api/auth/csrf', '/api/auth/callback/credentials', '/api/auth/session']);
+    assert.equal(extractObservedDeploymentSha(validEvidence()), LOCKED_SOURCE_SHA);
+    assert.equal(extractDeploymentReady(validEvidence()), true);
+    assert.equal(classifyFailureLocation({ locationValue: null, base: CONSUMER_URL, isProtection: false }), 'NONE');
   });
 });
