@@ -108,8 +108,28 @@ export function cookieNamesFromHeaders(
   )].sort()
 }
 
+/**
+ * Auth.js session cookie 이름 판정의 단일 semantic owner.
+ *
+ * 허용:
+ *  - bare: authjs.session-token
+ *  - HTTPS secure prefix: __Secure-authjs.session-token
+ *  - host prefix: __Host-authjs.session-token
+ *  - 위 세 형태 모두에서 Auth.js chunk suffix .0 / .1 / .2 ... 허용
+ *
+ * 거부:
+ *  - authjs.csrf-token / __Secure-authjs.csrf-token 등 base 불일치
+ *  - authjs.callback-url
+ *  - authjs.session-tokenx / fooauthjs.session-token 등 substring 일치
+ *  - 임의 non-numeric suffix (예: __Secure-authjs.session-token.foo)
+ */
+export function isAuthJsSessionCookieName(name: unknown): boolean {
+  if (typeof name !== 'string' || !name) return false
+  return /^(?:__Secure-|__Host-)?authjs\.session-token(?:\.\d+)?$/.test(name)
+}
+
 function hasSessionCookie(names: string[]): boolean {
-  return names.some((name) => /(?:^|\.)authjs\.session-token(?:\.|$)/.test(name))
+  return names.some(isAuthJsSessionCookieName)
 }
 
 export function classifyAuthFailure(evidence: AuthDiagnosticEvidence): AuthFailureCategory | null {
