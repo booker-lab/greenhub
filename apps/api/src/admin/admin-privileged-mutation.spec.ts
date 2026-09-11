@@ -15,7 +15,17 @@ import { AdminService } from './admin.service';
 type Role = 'consumer' | 'seller' | 'driver' | 'admin';
 type Actor = 'unauthenticated' | Exclude<Role, 'admin'>;
 type Data = Record<string, any>;
-type MutationName = 'refund' | 'pay' | 'approveDriver' | 'suspendDriver';
+type MutationName =
+  | 'refund'
+  | 'pay'
+  | 'approveDriver'
+  | 'suspendDriver'
+  | 'setCommission'
+  | 'archiveStore'
+  | 'restoreStore'
+  | 'suspendUser'
+  | 'generateInvite'
+  | 'upsertBanner';
 
 const JWT_SECRET = 'admin-privileged-mutation-test-secret';
 const SETTLEMENT_PATH = 'settlements/settlement-1';
@@ -85,9 +95,32 @@ function makeHttpHarness() {
       userId: 'driver-1',
       suspended: true,
     }),
+    setCommission: jest.spyOn(adminService, 'setCommission').mockResolvedValue({
+      storeId: 'store-1',
+      commissionRate: 0.1,
+    }),
+    archiveStore: jest.spyOn(adminService, 'archiveStore').mockResolvedValue({
+      storeId: 'store-1',
+      status: 'archived',
+    }),
+    restoreStore: jest.spyOn(adminService, 'restoreStore').mockResolvedValue({
+      storeId: 'store-1',
+      status: 'active',
+    }),
+    suspendUser: jest.spyOn(adminService, 'suspendUser').mockResolvedValue({
+      userId: 'consumer-1',
+      suspended: true,
+    }),
+    generateInvite: jest.spyOn(adminService, 'generateInvite').mockResolvedValue({
+      token: 'TESTINVITE12345678',
+      expiresAt: new Date(0).toISOString(),
+    }),
+    upsertBanner: jest.spyOn(adminService, 'upsertBanner').mockResolvedValue({
+      headline: '검증 배너',
+    }),
   };
 
-  return { adminService, firestore, firestoreWrites, payments, serviceBoundary, settlements, users };
+  return { adminService, firestore, firestoreWrites, payments, roundLifecycle, serviceBoundary, settlements, users };
 }
 
 describe('Admin privileged mutation HTTP authorization boundary', () => {
@@ -142,6 +175,18 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         return http.patch('/admin/drivers/driver-1/approve');
       case 'suspendDriver':
         return http.patch('/admin/drivers/driver-1/suspend').send({ suspended: true });
+      case 'setCommission':
+        return http.patch('/admin/stores/store-1/commission').send({ rate: 0.1 });
+      case 'archiveStore':
+        return http.patch('/admin/stores/store-1/archive');
+      case 'restoreStore':
+        return http.patch('/admin/stores/store-1/restore');
+      case 'suspendUser':
+        return http.patch('/admin/users/consumer-1/status').send({ suspended: true });
+      case 'generateInvite':
+        return http.post('/admin/invite');
+      case 'upsertBanner':
+        return http.put('/admin/banner').send({ headline: '검증 배너' });
     }
   }
 
@@ -152,10 +197,21 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
   }
 
   function successStatus(name: MutationName) {
-    return name === 'refund' ? 201 : 200;
+    return name === 'refund' || name === 'generateInvite' ? 201 : 200;
   }
 
-  const mutations: MutationName[] = ['refund', 'pay', 'approveDriver', 'suspendDriver'];
+  const mutations: MutationName[] = [
+    'refund',
+    'pay',
+    'approveDriver',
+    'suspendDriver',
+    'setCommission',
+    'archiveStore',
+    'restoreStore',
+    'suspendUser',
+    'generateInvite',
+    'upsertBanner',
+  ];
 
   it.each(mutations)('%s는 인증되지 않은 요청을 401로 거부한다', async (name) => {
     await callMutation(name, 'unauthenticated').expect(401);
@@ -164,8 +220,15 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     expect(harness.serviceBoundary.markAsPaid).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.approveDriver).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendDriver).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.setCommission).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.archiveStore).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.restoreStore).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.suspendUser).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.generateInvite).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.upsertBanner).not.toHaveBeenCalled();
     expect(harness.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(harness.settlements.cancelSettlement).not.toHaveBeenCalled();
+    expect(harness.roundLifecycle.cancelForRound).not.toHaveBeenCalled();
     expect(harness.firestoreWrites.update).not.toHaveBeenCalled();
     expect(harness.firestoreWrites.set).not.toHaveBeenCalled();
     expect(harness.firestoreWrites.runTransaction).not.toHaveBeenCalled();
@@ -182,8 +245,15 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     expect(harness.serviceBoundary.markAsPaid).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.approveDriver).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendDriver).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.setCommission).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.archiveStore).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.restoreStore).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.suspendUser).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.generateInvite).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.upsertBanner).not.toHaveBeenCalled();
     expect(harness.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(harness.settlements.cancelSettlement).not.toHaveBeenCalled();
+    expect(harness.roundLifecycle.cancelForRound).not.toHaveBeenCalled();
     expect(harness.firestoreWrites.update).not.toHaveBeenCalled();
     expect(harness.firestoreWrites.set).not.toHaveBeenCalled();
     expect(harness.firestoreWrites.runTransaction).not.toHaveBeenCalled();
@@ -207,6 +277,30 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
       case 'suspendDriver':
         expect(harness.serviceBoundary.suspendDriver).toHaveBeenCalledWith('driver-1', {
           suspended: true,
+        });
+        break;
+      case 'setCommission':
+        expect(harness.serviceBoundary.setCommission).toHaveBeenCalledWith('store-1', {
+          rate: 0.1,
+        });
+        break;
+      case 'archiveStore':
+        expect(harness.serviceBoundary.archiveStore).toHaveBeenCalledWith('store-1');
+        break;
+      case 'restoreStore':
+        expect(harness.serviceBoundary.restoreStore).toHaveBeenCalledWith('store-1');
+        break;
+      case 'suspendUser':
+        expect(harness.serviceBoundary.suspendUser).toHaveBeenCalledWith('consumer-1', {
+          suspended: true,
+        });
+        break;
+      case 'generateInvite':
+        expect(harness.serviceBoundary.generateInvite).toHaveBeenCalledWith('admin-1');
+        break;
+      case 'upsertBanner':
+        expect(harness.serviceBoundary.upsertBanner).toHaveBeenCalledWith({
+          headline: '검증 배너',
         });
         break;
     }
