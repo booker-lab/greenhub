@@ -89,16 +89,68 @@ export const ARTIFACT_KEYS = Object.freeze([
   'workflowSourceSha',
 ]);
 
+// FAIL evidence contract (PILOT-AUTH-CALLBACK-FAIL-EVIDENCE-PRESERVATION-19).
+// Closed allowlist: FAIL probe-raw results can only contain these keys.
+// Success allowlist (ARTIFACT_KEYS) is preserved separately; FAIL reuses the
+// non-sensitive binding keys for projection compatibility. Raw secrets,
+// tokens, cookies, nonces, and raw Location URLs/bodies are structurally
+// unrepresentable here.
+export const RUNNER_ID = 'PILOT-AUTH-CONSUMER-CALLBACK-PROBE-16';
+export const PROTECTION_PASSAGE_MODE = 'NONE';
+export const PROTECTION_LOCATION_CLASS = 'VERCEL_SSO_PROTECTION';
+export const FAILURE_STAGE_GUARD = 'guard';
+export const FAILURE_STAGE_CSRF = 'csrf';
+export const FAILURE_STAGE_CALLBACK = 'callback';
+export const FAILURE_STAGE_SESSION = 'session';
+export const FAIL_RESULT_KEYS = Object.freeze([
+  'authErrorClass',
+  'callbackAttempted',
+  'callbackLocationClass',
+  'callbackStatus',
+  'checkedAt',
+  'credentialSource',
+  'csrfStatus',
+  'deploymentId',
+  'deploymentReady',
+  'deploymentSourceSha',
+  'expectedSha',
+  'failureCode',
+  'failureStage',
+  'headerAttachedByRunner',
+  'headerConfigured',
+  'headerName',
+  'headerPresent',
+  'httpStatus',
+  'locationClass',
+  'message',
+  'observedDeploymentSha',
+  'protectionPassageMode',
+  'requestBuilder',
+  'result',
+  'runner',
+  'sessionAttempted',
+  'sessionState',
+  'setCookiePresent',
+  'workflowSourceSha',
+]);
+
 export class CallbackProbeContractError extends Error {
-  constructor(code, message) {
+  constructor(code, message, evidence = null) {
     super(message);
     this.name = 'CallbackProbeContractError';
     this.code = code;
+    if (evidence !== null) {
+      this.evidence = evidence;
+    }
   }
 }
 
 function fail(code, message) {
   throw new CallbackProbeContractError(code, message);
+}
+
+function failWithEvidence(code, message, evidence) {
+  throw new CallbackProbeContractError(code, message, evidence);
 }
 
 function isNonEmptyString(value) {
@@ -297,6 +349,162 @@ function parseLocationEvidence(location, base) {
   }
 }
 
+// ---- FAIL evidence helpers (pure, no secrets) --------------------------------
+
+function readHeaderValue(headers, name) {
+  if (!headers) return '';
+  try {
+    if (typeof headers.get === 'function') {
+      const value = headers.get(name);
+      return typeof value === 'string' ? value : '';
+    }
+    if (Array.isArray(headers)) {
+      const entry = headers.find(
+        (item) => Array.isArray(item) && String(item[0]).toLowerCase() === String(name).toLowerCase(),
+      );
+      return entry ? String(entry[1] ?? '') : '';
+    }
+  } catch {
+    return '';
+  }
+  return '';
+}
+
+function readContentType(headers) {
+  return readHeaderValue(headers, 'content-type').toLowerCase();
+}
+
+function readLocationHeader(headers) {
+  const value = readHeaderValue(headers, 'location');
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+/**
+ * Deterministic Vercel protection intercept classifier. Direct observation
+ * only (no elimination inference):
+ *   302 + text/plain + Location host vercel.com + path /sso-api.
+ * Raw Location is used for classification only and never stored.
+ * Any non-matching redirect (e.g. application /login redirect) returns false.
+ */
+export function isProtectionIntercept({ status, contentType, locationValue, base }) {
+  if (status !== 302) return false;
+  const type = String(contentType ?? '').toLowerCase();
+  if (!type.includes('text/plain')) return false;
+  if (typeof locationValue !== 'string' || !locationValue.trim()) return false;
+  try {
+    const url = new URL(locationValue, base);
+    if (String(url.hostname ?? '').toLowerCase() !== 'vercel.com') return false;
+    const path = String(url.pathname ?? '');
+    if (path !== '/sso-api' && !path.startsWith('/sso-api/')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isProtectionResponse({ status, headers, locationValue, base }) {
+  const location = locationValue ?? readLocationHeader(headers);
+  return isProtectionIntercept({
+    status,
+    contentType: readContentType(headers),
+    locationValue: location,
+    base,
+  });
+}
+
+/** FAIL location class: protection is distinct, otherwise safe app classes. */
+export function classifyFailureLocation({ locationValue, base, isProtection }) {
+  if (isProtection) return PROTECTION_LOCATION_CLASS;
+  if (typeof locationValue !== 'string' || !locationValue.trim()) return 'NONE';
+  try {
+    const url = new URL(locationValue, base);
+    return classifyLocationClass(url.pathname || '/');
+  } catch {
+    return 'OTHER';
+  }
+}
+
+function safeNormalizedSha(value) {
+  try {
+    return assertExpectedSha(value);
+  } catch {
+    return null;
+  }
+}
+
+function safeDeploymentId(value) {
+  try {
+    return assertDeploymentId(value);
+  } catch {
+    return null;
+  }
+}
+
+export function extractObservedDeploymentSha(evidence) {
+  try {
+    const shas = evidence?.deploymentShas ?? evidence?.statusShas ?? {};
+    const value = String(shas.consumer ?? '').trim().toLowerCase();
+    return SHA_PATTERN.test(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function extractDeploymentReady(evidence) {
+  if (!evidence || typeof evidence !== 'object') return null;
+  if (typeof evidence.ready === 'boolean') return evidence.ready;
+  return null;
+}
+
+/**
+ * Closed FAIL result builder. Only FAIL_RESULT_KEYS can appear — raw
+ * header/token/cookie/location values, nonces, and credential material are
+ * structurally unrepresentable. All unknown observations must be passed as
+ * explicit null, never as raw values.
+ */
+export function buildFailureResult(fields = {}) {
+  const result = {
+    authErrorClass: fields.authErrorClass ?? null,
+    callbackAttempted: fields.callbackAttempted ?? false,
+    callbackLocationClass: fields.callbackLocationClass ?? 'NONE',
+    callbackStatus: fields.callbackStatus ?? null,
+    checkedAt: fields.checkedAt ?? new Date().toISOString(),
+    credentialSource: CREDENTIAL_SOURCE,
+    csrfStatus: fields.csrfStatus ?? null,
+    deploymentId: fields.deploymentId ?? null,
+    deploymentReady: fields.deploymentReady ?? null,
+    deploymentSourceSha: fields.deploymentSourceSha ?? null,
+    expectedSha: fields.expectedSha ?? null,
+    failureCode: fields.failureCode ?? 'PROBE_INTERNAL_ERROR',
+    failureStage: fields.failureStage ?? FAILURE_STAGE_GUARD,
+    headerAttachedByRunner: fields.headerAttachedByRunner ?? false,
+    headerConfigured: fields.headerConfigured ?? false,
+    headerName: HEADER_NAME,
+    headerPresent: fields.headerPresent ?? false,
+    httpStatus: fields.httpStatus ?? null,
+    locationClass: fields.locationClass ?? 'NONE',
+    message: fields.message ?? '',
+    observedDeploymentSha: fields.observedDeploymentSha ?? null,
+    protectionPassageMode: PROTECTION_PASSAGE_MODE,
+    requestBuilder: REQUEST_BUILDER,
+    result: 'FAIL',
+    runner: RUNNER_ID,
+    sessionAttempted: fields.sessionAttempted ?? false,
+    sessionState: fields.sessionState ?? 'NOT_CHECKED',
+    setCookiePresent: fields.setCookiePresent ?? null,
+    workflowSourceSha: fields.workflowSourceSha ?? 'local-unpublished',
+  };
+  const keys = Object.keys(result).sort();
+  const expected = [...FAIL_RESULT_KEYS].sort();
+  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
+    fail('PROBE_INTERNAL_ERROR', 'sanitized FAIL key set이 고정 계약과 다릅니다.');
+  }
+  if (result.protectionPassageMode !== 'NONE') {
+    fail('PROBE_INTERNAL_ERROR', 'protection passage mode는 이번 Task에서 NONE만 허용합니다.');
+  }
+  return result;
+}
+
 // ---- In-memory cookie jar (values never emitted) ----------------------------
 
 function readSetCookieHeaders(headers) {
@@ -403,21 +611,68 @@ export async function runConsumerCallbackProbe(
 ) {
   const env = deps.env ?? process.env;
   const fetch = deps.fetchImpl ?? fetchImpl ?? globalThis.fetch?.bind(globalThis);
+  const workflowShaValue = String(workflowSha || env.GITHUB_SHA || 'local-unpublished');
+  const checkedAtValue = String(checkedAt || new Date().toISOString());
+  const rawSecretForEvidence = String(e2eSecret ?? env.E2E_TEST_SECRET ?? '');
+  const headerConfiguredInitial = isNonEmptyString(rawSecretForEvidence);
+  const observedShaInitial = extractObservedDeploymentSha(evidence);
+  const readyInitial = extractDeploymentReady(evidence);
+  const expectedShaInitial = safeNormalizedSha(expectedSha);
+  const deploymentIdInitial = safeDeploymentId(deploymentId);
+  const guardEvidence = (code, message) =>
+    buildFailureResult({
+      authErrorClass: null,
+      callbackAttempted: false,
+      callbackLocationClass: 'NONE',
+      callbackStatus: null,
+      checkedAt: checkedAtValue,
+      csrfStatus: null,
+      deploymentId: deploymentIdInitial,
+      deploymentReady: readyInitial,
+      deploymentSourceSha: expectedShaInitial,
+      expectedSha: expectedShaInitial,
+      failureCode: code,
+      failureStage: FAILURE_STAGE_GUARD,
+      headerAttachedByRunner: false,
+      headerConfigured: headerConfiguredInitial,
+      headerPresent: headerConfiguredInitial,
+      httpStatus: null,
+      locationClass: 'NONE',
+      message,
+      observedDeploymentSha: observedShaInitial,
+      sessionAttempted: false,
+      sessionState: 'NOT_CHECKED',
+      setCookiePresent: null,
+      workflowSourceSha: workflowShaValue,
+    });
   if (typeof fetch !== 'function') {
-    fail('PROBE_INTERNAL_ERROR', 'fetch 구현이 없어 probe를 실행할 수 없습니다.');
+    failWithEvidence(
+      'PROBE_INTERNAL_ERROR',
+      'fetch 구현이 없어 probe를 실행할 수 없습니다.',
+      guardEvidence('PROBE_INTERNAL_ERROR', 'fetch 구현이 없어 probe를 실행할 수 없습니다.'),
+    );
   }
-  validateProbeGuards(
-    { approval: approval ?? env.NON_PRODUCTION_AUTH_PROBE_APPROVAL, e2eSecret, email, password },
-    env,
-  );
-  const base = normalizeConsumerUrl(consumerUrl);
-  const locked = assertLockedBinding({ deploymentId, expectedSha });
-  validateEvidenceBinding({
-    expectedSha: locked.expectedSha,
-    deploymentId: locked.deploymentId,
-    consumerUrl: base,
-    evidence,
-  });
+  let base;
+  let locked;
+  try {
+    validateProbeGuards(
+      { approval: approval ?? env.NON_PRODUCTION_AUTH_PROBE_APPROVAL, e2eSecret, email, password },
+      env,
+    );
+    base = normalizeConsumerUrl(consumerUrl);
+    locked = assertLockedBinding({ deploymentId, expectedSha });
+    validateEvidenceBinding({
+      expectedSha: locked.expectedSha,
+      deploymentId: locked.deploymentId,
+      consumerUrl: base,
+      evidence,
+    });
+  } catch (error) {
+    if (error instanceof CallbackProbeContractError && error.evidence) throw error;
+    const code = error instanceof CallbackProbeContractError ? error.code : 'PROBE_INTERNAL_ERROR';
+    const message = String(error?.message ?? error);
+    failWithEvidence(code, message, guardEvidence(code, message));
+  }
 
   // Provenance is recorded HERE: the header object carries the approved
   // E2E_TEST_SECRET input under the expected key on BOTH the CSRF GET and
@@ -426,12 +681,43 @@ export async function runConsumerCallbackProbe(
   const secret = String(e2eSecret ?? env.E2E_TEST_SECRET ?? '');
   const headers = { [HEADER_NAME]: secret };
   const headerPresent = isNonEmptyString(secret);
+  const headerConfigured = headerPresent;
+  const observedSha = extractObservedDeploymentSha(evidence);
+  const deploymentReady = extractDeploymentReady(evidence);
   if (!headerPresent) {
-    fail(
-      'CREDENTIAL_SOURCE_UNAVAILABLE',
-      'header를 구성할 승인된 E2E_TEST_SECRET input이 없어 callback을 시도하지 않습니다.',
+    const code = 'CREDENTIAL_SOURCE_UNAVAILABLE';
+    const message = 'header를 구성할 승인된 E2E_TEST_SECRET input이 없어 callback을 시도하지 않습니다.';
+    failWithEvidence(
+      code,
+      message,
+      buildFailureResult({
+        authErrorClass: null,
+        callbackAttempted: false,
+        callbackLocationClass: 'NONE',
+        callbackStatus: null,
+        checkedAt: checkedAtValue,
+        csrfStatus: null,
+        deploymentId: locked.deploymentId,
+        deploymentReady,
+        deploymentSourceSha: locked.expectedSha,
+        expectedSha: locked.expectedSha,
+        failureCode: code,
+        failureStage: FAILURE_STAGE_GUARD,
+        headerAttachedByRunner: false,
+        headerConfigured: false,
+        headerPresent: false,
+        httpStatus: null,
+        locationClass: 'NONE',
+        message,
+        observedDeploymentSha: observedSha,
+        sessionAttempted: false,
+        sessionState: 'NOT_CHECKED',
+        setCookiePresent: null,
+        workflowSourceSha: workflowShaValue,
+      }),
     );
   }
+  const headerAttachedByRunner = true;
 
   const calls = [];
   const jar = new Map();
@@ -443,25 +729,103 @@ export async function runConsumerCallbackProbe(
     requestInit({ method: 'GET', headers: { ...headers } }),
   ).catch(() => null);
   calls.push('/api/auth/csrf');
+  const csrfFail = (code, message, { csrfStatus = null, locationValue = null, isProtection = false } = {}) => {
+    const locationClass = classifyFailureLocation({ locationValue, base, isProtection });
+    const callbackLocationClass = locationClass;
+    return buildFailureResult({
+      authErrorClass: isProtection ? 'NONE' : null,
+      callbackAttempted: false,
+      callbackLocationClass,
+      callbackStatus: null,
+      checkedAt: checkedAtValue,
+      csrfStatus,
+      deploymentId: locked.deploymentId,
+      deploymentReady,
+      deploymentSourceSha: locked.expectedSha,
+      expectedSha: locked.expectedSha,
+      failureCode: code,
+      failureStage: FAILURE_STAGE_CSRF,
+      headerAttachedByRunner,
+      headerConfigured,
+      headerPresent,
+      httpStatus: csrfStatus,
+      locationClass,
+      message,
+      observedDeploymentSha: observedSha,
+      sessionAttempted: false,
+      sessionState: 'NOT_CHECKED',
+      setCookiePresent: null,
+      workflowSourceSha: workflowShaValue,
+    });
+  };
   if (!csrfRes) {
-    fail('CALLBACK_TRANSPORT_FAILED', 'CSRF 요청 전송에 실패해 callback을 시도하지 않습니다.');
+    const code = 'CSRF_TRANSPORT_FAILED';
+    const message = 'CSRF 요청 전송에 실패해 callback을 시도하지 않습니다.';
+    failWithEvidence(code, message, csrfFail(code, message, { csrfStatus: null }));
+  }
+  // Protection intercept at CSRF stage takes precedence over transport/app checks.
+  {
+    const csrfStatusObserved = typeof csrfRes.status === 'number' ? csrfRes.status : 0;
+    const csrfLocation = readLocationHeader(csrfRes.headers);
+    const csrfContentType = readContentType(csrfRes.headers);
+    // Body fallback location (same as callback): only for classification, never stored.
+    let csrfBodyLocation = null;
+    try {
+      if (typeof csrfRes.text === 'function') {
+        // Peek without consuming twice: CSRF body is JSON; read once and reuse below.
+        // We read here for protection classification; the token parse below re-reads
+        // via a second call only in mocks where text() is repeatable. In real fetch,
+        // text() can be consumed once, so we handle both by caching.
+        csrfBodyLocation = null;
+      }
+    } catch {
+      csrfBodyLocation = null;
+    }
+    const effectiveLocation = csrfLocation ?? csrfBodyLocation;
+    if (
+      isProtectionIntercept({
+        status: csrfStatusObserved,
+        contentType: csrfContentType,
+        locationValue: effectiveLocation,
+        base,
+      })
+    ) {
+      const code = 'DEPLOYMENT_PROTECTION_INTERCEPTED';
+      const message = 'Vercel protection intercept로 CSRF 단계에서 차단됐습니다.';
+      failWithEvidence(
+        code,
+        message,
+        csrfFail(code, message, {
+          csrfStatus: csrfStatusObserved,
+          locationValue: effectiveLocation,
+          isProtection: true,
+        }),
+      );
+    }
   }
   storeCookies(jar, csrfRes.headers);
   const csrfStatus = typeof csrfRes.status === 'number' ? csrfRes.status : 0;
   const csrfOk = csrfRes.ok === true || (csrfStatus >= 200 && csrfStatus < 300);
   if (!csrfOk) {
-    fail('CALLBACK_TRANSPORT_FAILED', 'CSRF 응답이 비정상이라 callback을 시도하지 않습니다.');
+    const code = 'CSRF_TRANSPORT_FAILED';
+    const message = 'CSRF 응답이 비정상이라 callback을 시도하지 않습니다.';
+    // Non-2xx CSRF is transport/app precondition failure (protection already excluded).
+    failWithEvidence(code, message, csrfFail(code, message, { csrfStatus }));
   }
   let csrfToken = '';
+  let csrfTextCache = null;
   try {
     const text = typeof csrfRes.text === 'function' ? await csrfRes.text() : '';
+    csrfTextCache = text;
     const body = parseJsonBody(text);
     if (typeof body.csrfToken === 'string') csrfToken = body.csrfToken;
   } catch {
     csrfToken = '';
   }
   if (!csrfToken) {
-    fail('CALLBACK_TRANSPORT_FAILED', 'CSRF token을 확인하지 못해 callback을 시도하지 않습니다.');
+    const code = 'CSRF_TRANSPORT_FAILED';
+    const message = 'CSRF token을 확인하지 못해 callback을 시도하지 않습니다.';
+    failWithEvidence(code, message, csrfFail(code, message, { csrfStatus }));
   }
 
   // 2) Credentials callback POST (the request under proof — must execute).
@@ -484,8 +848,43 @@ export async function runConsumerCallbackProbe(
     }),
   ).catch(() => null);
   calls.push('/api/auth/callback/credentials');
+  const callbackFail = (
+    code,
+    message,
+    { callbackStatus: cbStatus = null, locationValue: loc = null, isProtection = false, authClass = null, cookiePresent = null } = {},
+  ) => {
+    const locationClass = classifyFailureLocation({ locationValue: loc, base, isProtection });
+    const callbackLocationClass = locationClass;
+    return buildFailureResult({
+      authErrorClass: isProtection ? 'NONE' : authClass,
+      callbackAttempted: true,
+      callbackLocationClass,
+      callbackStatus: cbStatus,
+      checkedAt: checkedAtValue,
+      csrfStatus,
+      deploymentId: locked.deploymentId,
+      deploymentReady,
+      deploymentSourceSha: locked.expectedSha,
+      expectedSha: locked.expectedSha,
+      failureCode: code,
+      failureStage: FAILURE_STAGE_CALLBACK,
+      headerAttachedByRunner,
+      headerConfigured,
+      headerPresent,
+      httpStatus: cbStatus,
+      locationClass,
+      message,
+      observedDeploymentSha: observedSha,
+      sessionAttempted: false,
+      sessionState: 'NOT_CHECKED',
+      setCookiePresent: cookiePresent,
+      workflowSourceSha: workflowShaValue,
+    });
+  };
   if (!callbackRes) {
-    fail('CALLBACK_TRANSPORT_FAILED', 'callback 요청 전송에 실패했습니다.');
+    const code = 'CALLBACK_TRANSPORT_FAILED';
+    const message = 'callback 요청 전송에 실패했습니다.';
+    failWithEvidence(code, message, callbackFail(code, message, { callbackStatus: null }));
   }
   storeCookies(jar, callbackRes.headers);
   const callbackStatus = typeof callbackRes.status === 'number' ? callbackRes.status : 0;
@@ -498,14 +897,36 @@ export async function runConsumerCallbackProbe(
       locationValue = null;
     }
   }
+  let callbackBody = {};
   try {
     const text = typeof callbackRes.text === 'function' ? await callbackRes.text() : '';
     const body = parseJsonBody(text);
+    callbackBody = body;
     if (!locationValue && typeof body.url === 'string' && body.url) {
       locationValue = body.url;
     }
   } catch {
     // Body is only a location fallback source — never evidence content.
+  }
+  // Protection intercept at callback stage: never misclassified as Auth.js rejection.
+  {
+    const contentType = readContentType(callbackRes.headers);
+    if (
+      isProtectionIntercept({ status: callbackStatus, contentType, locationValue, base })
+    ) {
+      const code = 'DEPLOYMENT_PROTECTION_INTERCEPTED';
+      const message = 'Vercel protection intercept로 callback 단계에서 차단됐습니다.';
+      failWithEvidence(
+        code,
+        message,
+        callbackFail(code, message, {
+          callbackStatus,
+          locationValue,
+          isProtection: true,
+          cookiePresent: setCookiePresent,
+        }),
+      );
+    }
   }
   const locationEvidence = parseLocationEvidence(locationValue, base);
   const authErrorClass = classifyAuthError({
@@ -513,18 +934,135 @@ export async function runConsumerCallbackProbe(
     codeParam: locationEvidence.codeParam,
     errorParam: locationEvidence.errorParam,
   });
+  // Directly-observed application rejection with 401/403 status is an explicit
+  // CALLBACK_REJECTED FAIL (distinct from transport failure and from the
+  // 302 LOGIN_ERROR SUCCESS taxonomy which is preserved unchanged).
+  if (callbackStatus === 401 || callbackStatus === 403) {
+    const code = 'CALLBACK_REJECTED';
+    const message = 'callback application 응답에서 인증 거절이 직접 관찰됐습니다.';
+    failWithEvidence(
+      code,
+      message,
+      callbackFail(code, message, {
+        callbackStatus,
+        locationValue,
+        isProtection: false,
+        authClass: authErrorClass,
+        cookiePresent: setCookiePresent,
+      }),
+    );
+  }
 
   // 3) Same-jar session readback (cookie VALUES stay in memory only).
+  // Transport-level session failures are explicit SESSION_READ_FAILED FAILs
+  // with sessionAttempted=true and callback evidence preserved. Application
+  // INVALID (200 without token / non-2xx with response) remains SUCCESS to
+  // preserve the existing success semantics.
   let sessionState = 'NOT_CHECKED';
+  const sessionFail = (code, message, { sessionStatus = null } = {}) =>
+    buildFailureResult({
+      authErrorClass,
+      callbackAttempted: true,
+      callbackLocationClass: locationEvidence.locationClass,
+      callbackStatus,
+      checkedAt: checkedAtValue,
+      csrfStatus,
+      deploymentId: locked.deploymentId,
+      deploymentReady,
+      deploymentSourceSha: locked.expectedSha,
+      expectedSha: locked.expectedSha,
+      failureCode: code,
+      failureStage: FAILURE_STAGE_SESSION,
+      headerAttachedByRunner,
+      headerConfigured,
+      headerPresent,
+      httpStatus: sessionStatus,
+      locationClass: locationEvidence.locationClass,
+      message,
+      observedDeploymentSha: observedSha,
+      sessionAttempted: true,
+      sessionState: 'NOT_CHECKED',
+      setCookiePresent,
+      workflowSourceSha: workflowShaValue,
+    });
+  let sessionFetchThrew = false;
+  let sessionRes = null;
   try {
-    const sessionRes = await fetch(
+    sessionRes = await fetch(
       `${base}/api/auth/session`,
       requestInit({
         method: 'GET',
         headers: { ...(jar.size > 0 ? { Cookie: jarCookieHeader(jar) } : {}) },
       }),
     );
-    calls.push('/api/auth/session');
+  } catch {
+    sessionFetchThrew = true;
+    sessionRes = null;
+  }
+  if (sessionFetchThrew || !sessionRes) {
+    const code = 'SESSION_READ_FAILED';
+    const message = 'session 확인 단계에서 전송에 실패했습니다.';
+    failWithEvidence(code, message, sessionFail(code, message, { sessionStatus: null }));
+  }
+  calls.push('/api/auth/session');
+  // Protection intercept at session stage (directly observed) is distinct
+  // from Auth.js session INVALID.
+  {
+    const sessionStatusObserved =
+      typeof sessionRes?.status === 'number' ? sessionRes.status : 0;
+    const sessionLocation =
+      sessionRes?.headers && typeof sessionRes.headers.get === 'function'
+        ? (() => {
+            try {
+              return sessionRes.headers.get('location');
+            } catch {
+              return null;
+            }
+          })()
+        : null;
+    const sessionContentType = readContentType(sessionRes?.headers);
+    if (
+      isProtectionIntercept({
+        status: sessionStatusObserved,
+        contentType: sessionContentType,
+        locationValue: sessionLocation,
+        base,
+      })
+    ) {
+      const code = 'DEPLOYMENT_PROTECTION_INTERCEPTED';
+      const message = 'Vercel protection intercept로 session 단계에서 차단됐습니다.';
+      failWithEvidence(
+        code,
+        message,
+        buildFailureResult({
+          authErrorClass: 'NONE',
+          callbackAttempted: true,
+          callbackLocationClass: locationEvidence.locationClass,
+          callbackStatus,
+          checkedAt: checkedAtValue,
+          csrfStatus,
+          deploymentId: locked.deploymentId,
+          deploymentReady,
+          deploymentSourceSha: locked.expectedSha,
+          expectedSha: locked.expectedSha,
+          failureCode: code,
+          failureStage: FAILURE_STAGE_SESSION,
+          headerAttachedByRunner,
+          headerConfigured,
+          headerPresent,
+          httpStatus: sessionStatusObserved,
+          locationClass: PROTECTION_LOCATION_CLASS,
+          message,
+          observedDeploymentSha: observedSha,
+          sessionAttempted: true,
+          sessionState: 'NOT_CHECKED',
+          setCookiePresent,
+          workflowSourceSha: workflowShaValue,
+        }),
+      );
+    }
+  }
+  {
     const sessionStatus = typeof sessionRes?.status === 'number' ? sessionRes.status : 0;
     const sessionOk = sessionRes?.ok === true || (sessionStatus >= 200 && sessionStatus < 300);
     if (sessionOk && typeof sessionRes.text === 'function') {
@@ -539,21 +1077,19 @@ export async function runConsumerCallbackProbe(
     } else if (sessionRes) {
       sessionState = 'INVALID';
     }
-  } catch {
-    sessionState = 'NOT_CHECKED';
   }
 
   const artifact = buildCallbackArtifact({
     authErrorClass,
     callbackLocationClass: locationEvidence.locationClass,
     callbackStatus,
-    checkedAt: String(checkedAt || new Date().toISOString()),
+    checkedAt: checkedAtValue,
     deploymentId: locked.deploymentId,
     deploymentSourceSha: locked.expectedSha,
     headerPresent,
     sessionState,
     setCookiePresent,
-    workflowSourceSha: String(workflowSha || env.GITHUB_SHA || 'local-unpublished'),
+    workflowSourceSha: workflowShaValue,
   });
   return { artifact, calls };
 }
@@ -601,10 +1137,24 @@ async function main() {
     process.stdout.write(`${JSON.stringify(artifact, null, 2)}\n`);
     process.exitCode = 0;
   } catch (error) {
-    const code = error instanceof CallbackProbeContractError ? error.code : 'PROBE_INTERNAL_ERROR';
-    process.stdout.write(
-      `${JSON.stringify({ runner: 'PILOT-AUTH-CONSUMER-CALLBACK-PROBE-16', result: 'FAIL', failureCode: code, message: String(error?.message ?? error) }, null, 2)}\n`,
-    );
+    if (
+      error instanceof CallbackProbeContractError &&
+      error.evidence &&
+      typeof error.evidence === 'object'
+    ) {
+      process.stdout.write(`${JSON.stringify(error.evidence, null, 2)}\n`);
+    } else {
+      const code =
+        error instanceof CallbackProbeContractError ? error.code : 'PROBE_INTERNAL_ERROR';
+      const fallback = buildFailureResult({
+        checkedAt: new Date().toISOString(),
+        failureCode: code,
+        failureStage: FAILURE_STAGE_GUARD,
+        message: String(error?.message ?? error),
+        workflowSourceSha: String(process.env.GITHUB_SHA ?? 'local-unpublished'),
+      });
+      process.stdout.write(`${JSON.stringify(fallback, null, 2)}\n`);
+    }
     process.exitCode = 1;
   }
 }
@@ -617,10 +1167,24 @@ const isDirectRun =
 
 if (isDirectRun) {
   main().catch((error) => {
-    const code = error instanceof CallbackProbeContractError ? error.code : 'PROBE_INTERNAL_ERROR';
-    process.stdout.write(
-      `${JSON.stringify({ runner: 'PILOT-AUTH-CONSUMER-CALLBACK-PROBE-16', result: 'FAIL', failureCode: code, message: String(error?.message ?? error) }, null, 2)}\n`,
-    );
+    if (
+      error instanceof CallbackProbeContractError &&
+      error.evidence &&
+      typeof error.evidence === 'object'
+    ) {
+      process.stdout.write(`${JSON.stringify(error.evidence, null, 2)}\n`);
+    } else {
+      const code =
+        error instanceof CallbackProbeContractError ? error.code : 'PROBE_INTERNAL_ERROR';
+      const fallback = buildFailureResult({
+        checkedAt: new Date().toISOString(),
+        failureCode: code,
+        failureStage: FAILURE_STAGE_GUARD,
+        message: String(error?.message ?? error),
+        workflowSourceSha: String(process.env.GITHUB_SHA ?? 'local-unpublished'),
+      });
+      process.stdout.write(`${JSON.stringify(fallback, null, 2)}\n`);
+    }
     process.exitCode = 1;
   });
 }
