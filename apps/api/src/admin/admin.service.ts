@@ -14,6 +14,7 @@ import type { OrderStatus } from '../orders/dto/update-status.dto';
 import { getAllowedTransitions } from '../orders/orders.helpers';
 import { PaymentsService } from '../payments/payments.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
+import { releaseLegacyGroupQuantityInTransaction } from '../orders/_lib/legacy-group-quantity';
 import { SettlementsService } from '../settlements/settlements.service';
 import {
   QueryAdminSettlementsDto,
@@ -293,7 +294,27 @@ export class AdminService {
         throw new ConflictException('주문 환불 claim이 더 이상 유효하지 않습니다.');
       }
 
+      // Already CANCELLED (e.g. seller won a cross-path race, or a retry after the
+      // flip): converge to COMPLETED without restoring group quantity or capacity
+      // again. Capacity release stays idempotent; group restoration is exactly-once
+      // because only the transaction that flips to CANCELLED performs it.
+      if (order['status'] === 'CANCELLED') {
+        await releaseLegacyDailyCapacityInTransaction(this.firestore, tx, orderId, reason);
+        const convergedAt = this.firestore.Timestamp.now();
+        tx.update(orderRef, {
+          cancellation: {
+            status: 'COMPLETED',
+            reason,
+            completedAt: this.toIso(convergedAt),
+            updatedAt: this.toIso(convergedAt),
+          },
+          updatedAt: convergedAt,
+        });
+        return;
+      }
+
       await releaseLegacyDailyCapacityInTransaction(this.firestore, tx, orderId, reason);
+      await releaseLegacyGroupQuantityInTransaction(this.firestore, tx, orderId, order);
       const now = this.firestore.Timestamp.now();
       tx.update(orderRef, {
         status: 'CANCELLED',

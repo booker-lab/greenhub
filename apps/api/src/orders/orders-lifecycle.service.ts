@@ -25,6 +25,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
+import { releaseLegacyGroupQuantityInTransaction } from './_lib/legacy-group-quantity';
 
 const LEGACY_CONSUMER_CANCEL_CLAIM_MS = 5 * 60 * 1000;
 
@@ -244,6 +245,14 @@ export class OrdersLifecycleService {
             orderId,
             confirmedCancelReason ?? '판매자 취소',
           );
+          // Legacy group restoration converges in this same transaction. Round v2 and
+          // normal orders are NOT_ELIGIBLE, so round/daily-cap semantics are unchanged.
+          await releaseLegacyGroupQuantityInTransaction(
+            this.firestore,
+            t,
+            orderId,
+            (latestOrderSnap.data() ?? {}) as Record<string, any>,
+          );
         }
         t.update(orderRef, update);
       });
@@ -283,6 +292,15 @@ export class OrdersLifecycleService {
               transaction,
               orderId,
               confirmedCancelReason ?? '판매자 취소',
+            );
+            // CONFIRMED legacy group seller cancellation restores currentQuantity here,
+            // atomically with the CANCELLED flip: aborted/failed cancellations restore
+            // nothing, and the expectedStatus guard above keeps retries exactly-once.
+            await releaseLegacyGroupQuantityInTransaction(
+              this.firestore,
+              transaction,
+              orderId,
+              (latestSnap.data() ?? {}) as Record<string, any>,
             );
             transaction.update(orderRef, update);
           });
