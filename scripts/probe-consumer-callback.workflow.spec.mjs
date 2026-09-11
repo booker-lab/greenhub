@@ -228,4 +228,95 @@ describe('callback probe workflow isolation contract', () => {
       assert.ok(source.includes(trigger), `pull_request paths must include ${trigger}`);
     }
   });
+
+  it('FAIL evidence is projected from probe-raw to callback-summary without null loss', () => {
+    const slice = callbackSlice(readWorkflow());
+    // Callback-summary projection must preserve the closed FAIL allowlist.
+    for (const field of [
+      'result: (.result',
+      'failureCode: (.failureCode',
+      'failureStage: (.failureStage',
+      'csrfStatus: (.csrfStatus',
+      'httpStatus: (.httpStatus',
+      'locationClass: (.locationClass',
+      'headerConfigured: (.headerConfigured',
+      'headerAttachedByRunner: (.headerAttachedByRunner',
+      'protectionPassageMode: (.protectionPassageMode',
+      'callbackAttempted: (.callbackAttempted',
+      'sessionAttempted: (.sessionAttempted',
+      'expectedSha: (.expectedSha',
+      'observedDeploymentSha: (.observedDeploymentSha',
+    ]) {
+      assert.ok(slice.includes(field), `callback-summary must project ${field}`);
+    }
+    // Success compatibility: existing success shape fields must remain.
+    for (const field of [
+      'artifact,',
+      'authErrorClass,',
+      'callbackLocationClass,',
+      'callbackStatus,',
+      'credentialSource,',
+      'headerPresent,',
+      'sessionState,',
+    ]) {
+      assert.ok(slice.includes(field), `callback-summary must preserve success field ${field}`);
+    }
+    // Protection passage is never created; mode stays NONE.
+    assert.ok(slice.includes('protectionPassageMode'), 'protection passage mode must be projected');
+    assert.ok(!slice.includes('bypass'), 'callback projection must not introduce bypass');
+  });
+
+  it('FAIL evidence is projected from callback-summary to workflow-summary', () => {
+    const slice = callbackSlice(readWorkflow());
+    for (const field of [
+      'result: ($callback[0].result',
+      'failureCode: ($callback[0].failureCode',
+      'failureStage: ($callback[0].failureStage',
+      'csrfStatus: ($callback[0].csrfStatus',
+      'httpStatus: ($callback[0].httpStatus',
+      'locationClass: ($callback[0].locationClass',
+      'headerConfigured: ($callback[0].headerConfigured',
+      'headerAttachedByRunner: ($callback[0].headerAttachedByRunner',
+      'protectionPassageMode: ($callback[0].protectionPassageMode',
+      'callbackAttempted: ($callback[0].callbackAttempted',
+      'sessionAttempted: ($callback[0].sessionAttempted',
+      'observedDeploymentSha: ($callback[0].observedDeploymentSha',
+    ]) {
+      assert.ok(slice.includes(field), `workflow-summary must project ${field}`);
+    }
+    // Success fields and safety attestations must remain.
+    for (const field of [
+      'bindingVerdict:',
+      'credentialSource: ($callback[0].credentialSource',
+      'callbackStatus: $callback[0].callbackStatus',
+      'authErrorClass: $callback[0].authErrorClass',
+      'sessionState: $callback[0].sessionState',
+      'secretPlaintextAccessed: false',
+      'secretDerivedDiagnosticEmitted: false',
+    ]) {
+      assert.ok(slice.includes(field), `workflow-summary must preserve ${field}`);
+    }
+    assert.ok(!slice.includes('bodyIssue'), 'callback scope must not touch session bodyIssue semantics');
+    assert.ok(!slice.includes('login-rejection'), 'callback scope must not touch session login-rejection semantics');
+  });
+
+  it('callback projection exposes no secret/bypass/protection-passage material', () => {
+    const slice = callbackSlice(readWorkflow());
+    for (const forbidden of [
+      'ROUND_DIRECT_E2E_TEST_SECRET_VALUE',
+      'x-e2e-test-token value',
+      'Authorization',
+      'Set-Cookie',
+      '_vercel_jwt',
+      'bypass secret',
+      'protection passage',
+      'Trusted Sources',
+    ]) {
+      assert.ok(!slice.includes(forbidden), `callback slice must not contain ${forbidden}`);
+    }
+    // Raw Location values are never projected; only classes are.
+    assert.ok(!slice.includes('raw Location'), 'raw Location must never be projected');
+    assert.ok(slice.includes('callbackLocationClass'), 'location class must be projected');
+    assert.ok(slice.includes('locationClass'), 'FAIL location class must be projected');
+  });
 });
