@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 import type { GroupProductConfig } from '@greenhub/shared';
 
 interface UseGroupProductResult {
@@ -10,12 +9,38 @@ interface UseGroupProductResult {
   loading: boolean;
   error: string | null;
   /**
-   * Firestore authoritative snapshot에서 문서가 실제로 없다고 확인된 상태.
+   * Public API authoritative 응답에서 문서가 실제로 없다고 확인된 상태.
    * read failure(error !== null)와 반드시 구분된다.
    */
   isMissing: boolean;
-  /** onSnapshot fatal error 이후 명시적 재구독. */
+  /** fatal error 이후 명시적 재조회. */
   retry: () => void;
+}
+
+const API_URL = getApiBaseUrl();
+// Public-safe polling: Firestore 원문 onSnapshot 대신 public product detail API를
+// 사용한다. Rules convergence 후 익명 원문 read가 차단돼도 동작한다.
+// 구매 가능성·currentQuantity freshness를 위해 mount/retry/scope 변경 시 즉시
+// 조회하고 10초 간격으로 갱신한다.
+const GROUP_CONFIG_POLL_INTERVAL_MS = 10_000;
+
+function toGroupConfig(productId: string, payload: unknown): GroupProductConfig | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const record = payload as Record<string, unknown>;
+  const groupConfig = record['groupConfig'];
+  if (typeof groupConfig !== 'object' || groupConfig === null) return null;
+  const gc = groupConfig as Record<string, unknown>;
+  return {
+    productId,
+    minQuantity: Number(gc['minQuantity'] ?? 0),
+    targetQuantity: Number(gc['targetQuantity'] ?? 0),
+    maxPerPerson: Number(gc['maxPerPerson'] ?? 0),
+    recruitDeadline: String(gc['recruitDeadline'] ?? ''),
+    currentQuantity: Number(gc['currentQuantity'] ?? 0),
+    groupDeliveryDate: String(gc['groupDeliveryDate'] ?? ''),
+    groupDeliveryMethod: gc['groupDeliveryMethod'] === 'parcel' ? 'parcel' : 'direct',
+    deliveryFeeDiscount: Number(gc['deliveryFeeDiscount'] ?? 0),
+  } as GroupProductConfig;
 }
 
 export function useGroupProduct(productId: string | null): UseGroupProductResult {
@@ -27,9 +52,7 @@ export function useGroupProduct(productId: string | null): UseGroupProductResult
 
   const retry = useCallback(() => {
     if (!productId) return;
-    // 재구독 전 fail-closed 유지: loading으로 구매 판정 대기, 이전 error/missing 확정 해제.
-    // config는 effect 재구독 시 scope 기준으로 정리되며, 비동기 listener 실패 콜백은
-    // 기존 config를 지우지 않고 error만 세워 최신 read failure를 무시하지 않게 한다.
+    // 재조회 전 fail-closed 유지: loading으로 구매 판정 대기, 이전 error/missing 확정 해제.
     setError(null);
     setIsMissing(false);
     setLoading(true);
@@ -47,43 +70,65 @@ export function useGroupProduct(productId: string | null): UseGroupProductResult
       return;
     }
 
+    const targetProductId = productId;
+
     // scope 진입/변경/retry: 이전 scope 확정(config/error/missing)을 새 것처럼 보이지 않게 한다.
     setConfig(null);
     setError(null);
     setIsMissing(false);
     setLoading(true);
 
-    const ref = doc(db, 'groupProductConfig', productId);
-    const unsubscribe = onSnapshot(
-      ref,
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          // Firestore Timestamp → ISO string 변환
-          if (data.recruitDeadline?.toDate)
-            data.recruitDeadline = data.recruitDeadline.toDate().toISOString();
-          if (data.groupDeliveryDate?.toDate)
-            data.groupDeliveryDate = data.groupDeliveryDate.toDate().toISOString();
-          setConfig(data as GroupProductConfig);
-          setIsMissing(false);
-        } else {
-          // authoritative missing: 실제로 문서가 없음 (read failure와 구분).
+    let cancelled = false;
+
+    async function fetchConfig() {
+      try {
+        const res = await fetch(
+          `${API_URL}/products/${encodeURIComponent(targetProductId)}`,
+        );
+        if (cancelled) return;
+        if (res.status === 404) {
+          // authoritative missing/invisible: 비활성·testOnly·삭제·groupConfig 없음과
+          // 구분 없이 구매 불가로 fail-closed한다.
           setConfig(null);
           setIsMissing(true);
+          setError(null);
+          setLoading(false);
+          return;
         }
-        setLoading(false);
+        if (!res.ok) throw new Error(`공동구매 조회 오류: ${res.status}`);
+        const payload: unknown = await res.json();
+        if (cancelled) return;
+        const next = toGroupConfig(targetProductId, payload);
+        if (!next) {
+          setConfig(null);
+          setIsMissing(true);
+          setError(null);
+          setLoading(false);
+          return;
+        }
+        setConfig(next);
+        setIsMissing(false);
         setError(null);
-      },
-      (err) => {
+        setLoading(false);
+      } catch (e: unknown) {
+        if (cancelled) return;
         // read failure: missing으로 위장하지 않는다. config는 표시용으로 유지될 수
         // 있으나 error가 최신 상태이므로 구매 판정은 fail-closed여야 한다.
-        setError(err.message);
+        setError(e instanceof Error ? e.message : '공동구매 조회 실패');
         setLoading(false);
         setIsMissing(false);
-      },
-    );
+      }
+    }
 
-    return unsubscribe;
+    void fetchConfig();
+    const intervalId = setInterval(() => {
+      void fetchConfig();
+    }, GROUP_CONFIG_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
   }, [productId, attempt]);
 
   return { config, loading, error, isMissing, retry };

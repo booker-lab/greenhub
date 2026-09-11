@@ -1,17 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import type { Product, Category, ColorOption, SaleType, Variety } from '@greenhub/shared';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import {
+  PublicStoreProfileNotFoundError,
+  fetchPublicStoreProfile,
+} from '@/lib/public-store-profile';
 
 export interface StoreInfo {
   id: string;
   name: string;
-  ceoName: string;
-  phone: string;
-  address: string;
   logoUrl: string | null;
 }
 
@@ -84,7 +83,8 @@ export function useProducts(
 }
 
 /**
- * 단일 상품 조회
+ * 단일 상품 조회 — public Product API 사용.
+ * Firestore products 직접 읽기를 사용하지 않는다 (Rules convergence 후 익명 원문 read 차단).
  */
 export function useProduct(productId: string) {
   const [product, setProduct] = useState<Product | null>(null);
@@ -96,55 +96,101 @@ export function useProduct(productId: string) {
       setLoading(false);
       return;
     }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setProduct(null);
     async function fetchProduct() {
       try {
-        const snap = await getDoc(doc(db, 'products', productId));
-        if (snap.exists()) {
-          setProduct({ id: snap.id, ...snap.data() } as Product);
-        } else {
+        const res = await fetch(`${API_URL}/products/${encodeURIComponent(productId)}`);
+        if (cancelled) return;
+        if (res.status === 404) {
           setError('상품을 찾을 수 없습니다.');
+          setLoading(false);
+          return;
         }
+        if (!res.ok) throw new Error(`상품 조회 오류: ${res.status}`);
+        const data = (await res.json()) as Product;
+        if (cancelled) return;
+        setProduct(data);
+        setError(null);
+        setLoading(false);
       } catch (e: unknown) {
+        if (cancelled) return;
         setError(e instanceof Error ? e.message : '상품 조회 실패');
-      } finally {
         setLoading(false);
       }
     }
-    fetchProduct();
+    void fetchProduct();
+    return () => {
+      cancelled = true;
+    };
   }, [productId]);
 
   return { product, loading, error };
 }
 
 /**
- * 단일 스토어 정보 조회
+ * 단일 스토어 공개 프로필 조회 — public-profile API 사용.
+ * Firestore stores 직접 읽기를 사용하지 않는다.
+ * network failure(error)와 missing(isMissing)을 구분한다.
  */
 export function useStore(storeId: string | null) {
   const [store, setStore] = useState<StoreInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isMissing, setIsMissing] = useState(false);
 
   useEffect(() => {
     if (!storeId) {
+      setStore(null);
+      setError(null);
+      setIsMissing(false);
       setLoading(false);
       return;
     }
     const sid = storeId;
+    let cancelled = false;
+    setStore(null);
+    setError(null);
+    setIsMissing(false);
+    setLoading(true);
     async function fetchStore() {
       try {
-        const snap = await getDoc(doc(db, 'stores', sid));
-        if (snap.exists()) {
-          setStore({ id: snap.id, ...snap.data() } as StoreInfo);
+        const profile = await fetchPublicStoreProfile(sid);
+        if (cancelled) return;
+        setStore({ id: profile.id, name: profile.name, logoUrl: profile.logoUrl });
+        setError(null);
+        setIsMissing(false);
+      } catch (e: unknown) {
+        if (cancelled) return;
+        if (e instanceof PublicStoreProfileNotFoundError) {
+          setStore(null);
+          setIsMissing(true);
+          setError(null);
+        } else {
+          // network failure는 missing으로 표현하지 않는다.
+          setStore(null);
+          setIsMissing(false);
+          setError(e instanceof Error ? e.message : '스토어 조회 실패');
         }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
-    fetchStore();
+    void fetchStore();
+    return () => {
+      cancelled = true;
+    };
   }, [storeId]);
 
-  return { store, loading };
+  return { store, loading, error, isMissing };
 }
 
+/**
+ * 단일 품종 조회 — public Varieties API 사용.
+ * Firestore varieties 직접 읽기를 사용하지 않는다.
+ */
 export function useVariety(varietyId: string | null | undefined) {
   const [variety, setVariety] = useState<Variety | null>(null);
 
@@ -153,11 +199,22 @@ export function useVariety(varietyId: string | null | undefined) {
       setVariety(null);
       return;
     }
-    getDoc(doc(db, 'varieties', varietyId))
-      .then((snap) =>
-        snap.exists() ? setVariety({ id: snap.id, ...snap.data() } as Variety) : null,
-      )
+    let cancelled = false;
+    setVariety(null);
+    fetch(`${API_URL}/varieties/${encodeURIComponent(varietyId)}`)
+      .then((res) => {
+        if (cancelled) return null;
+        if (!res.ok) return null;
+        return res.json() as Promise<Variety>;
+      })
+      .then((data) => {
+        if (cancelled || !data) return;
+        setVariety(data);
+      })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [varietyId]);
 
   return { variety };

@@ -71,15 +71,43 @@ async function seedFixtures() {
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     const database = context.firestore();
     const fixtures = {
-      'products/product-1': { storeId: 'store-1', name: '공개 상품' },
-      'stores/store-1': { name: '공개 매장', salesMode: 'round_direct' },
+      'products/product-1': {
+        storeId: 'store-1',
+        name: '공개 상품',
+        isActive: true,
+        sellerNote: '내부 메모',
+        sellerOverride: true,
+        content: { headline: '제목', description: '설명', isEditedByUser: true },
+      },
+      'products/product-inactive': { storeId: 'store-1', name: '비활성 상품', isActive: false },
+      'products/product-testonly': {
+        storeId: 'store-1',
+        name: '테스트 상품',
+        isActive: true,
+        testOnly: true,
+      },
+      'stores/store-1': {
+        name: '공개 매장',
+        salesMode: 'round_direct',
+        ownerId: 'seller-1',
+        ceoName: '홍길동',
+        phone: '010-1234-5678',
+        address: '경기도 이천시',
+        businessNumber: '123-45-67890',
+        status: 'active',
+      },
       'stores/store-2': { name: '다른 매장', salesMode: 'round_direct' },
       'stores/store-legacy': { name: '기존 매장', salesMode: 'legacy' },
       'stores/store-missing-mode': { name: '모드 누락 매장' },
       'stores/store-null-mode': { name: 'null 모드 매장', salesMode: null },
       'stores/store-invalid-mode': { name: '잘못된 모드 매장', salesMode: 'unsupported' },
       'dailyCaps/store-1_2026-07-18': { storeId: 'store-1', date: '2026-07-18' },
-      'groupProductConfig/product-1': { storeId: 'store-1', productId: 'product-1' },
+      'groupProductConfig/product-1': {
+        storeId: 'store-1',
+        productId: 'product-1',
+        currentQuantity: 3,
+        isProcessed: true,
+      },
       'varieties/variety-1': {
         name: '호접란',
         category: 'orchid',
@@ -252,6 +280,25 @@ async function seedFixtures() {
         storeId: 'store-1',
         roundId: 'round-1',
         productId: 'product-1',
+        status: 'ACTIVE',
+      },
+      'saleRoundItems/item-soldout': {
+        storeId: 'store-1',
+        roundId: 'round-1',
+        productId: 'product-1',
+        status: 'SOLD_OUT',
+      },
+      'saleRoundItems/item-closed': {
+        storeId: 'store-1',
+        roundId: 'round-1',
+        productId: 'product-1',
+        status: 'CLOSED',
+      },
+      'saleRoundItems/item-hidden': {
+        storeId: 'store-1',
+        roundId: 'round-1',
+        productId: 'product-1',
+        status: 'HIDDEN',
       },
       'saleRoundItems/item-foreign-store': {
         storeId: 'store-2',
@@ -397,6 +444,7 @@ test('saleRoundItems는 공개 회차에 속한 단건 및 제한된 목록 조�
     collection(database, 'saleRoundItems'),
     where('roundId', '==', 'round-1'),
     where('storeId', '==', 'store-1'),
+    where('status', 'in', ['ACTIVE', 'SOLD_OUT', 'CLOSED']),
   );
   const roundOnlyQuery = query(
     collection(database, 'saleRoundItems'),
@@ -404,6 +452,9 @@ test('saleRoundItems는 공개 회차에 속한 단건 및 제한된 목록 조�
   );
 
   await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-1')));
+  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-soldout')));
+  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-closed')));
+  await assertFails(getDoc(doc(database, 'saleRoundItems', 'item-hidden')));
   await assertSucceeds(getDocs(publicQuery));
   for (const itemId of [
     'item-foreign-store',
@@ -429,16 +480,73 @@ for (const collectionName of PUBLIC_ROUND_COLLECTIONS) {
   });
 }
 
-test('기존 공개 상품과 매장 및 재고 조회를 보존한다', async () => {
+test('익명 products 원문 읽기는 API 사용 구간에서 거부된다', async () => {
   const database = testEnvironment.unauthenticatedContext().firestore();
 
-  await assertSucceeds(getDoc(doc(database, 'products', 'product-1')));
-  await assertSucceeds(getDocs(collection(database, 'products')));
-  await assertSucceeds(getDoc(doc(database, 'stores', 'store-1')));
+  await assertFails(getDoc(doc(database, 'products', 'product-1')));
+  await assertFails(getDoc(doc(database, 'products', 'product-inactive')));
+  await assertFails(getDoc(doc(database, 'products', 'product-testonly')));
+  await assertFails(getDocs(collection(database, 'products')));
+  await assertFails(
+    getDocs(query(collection(database, 'products'), where('storeId', '==', 'store-1'))),
+  );
+});
+
+test('비활성/testOnly product는 Firestore 우회로 얻을 수 없다', async () => {
+  const anonymous = testEnvironment.unauthenticatedContext().firestore();
+  const consumer = testEnvironment.authenticatedContext('user-1').firestore();
+
+  // 익명은 원문 자체를 읽을 수 없으므로 우회가 불가능하다.
+  await assertFails(getDoc(doc(anonymous, 'products', 'product-inactive')));
+  await assertFails(getDoc(doc(anonymous, 'products', 'product-testonly')));
+  // 인증된 원문 읽기는 owner surface용으로 유지되지만 공개 API predicate와
+  // 동일한 가시성 계약을 consumer가 직접 강제하지 않으므로,
+  // 공개 가시성 판정은 API projection이 소유한다 (아래 API 회귀 테스트로 고정).
+  await assertSucceeds(getDoc(doc(consumer, 'products', 'product-1')));
+});
+
+test('익명 stores 원문/PII 우회가 불가능하다', async () => {
+  const database = testEnvironment.unauthenticatedContext().firestore();
+
+  await assertFails(getDoc(doc(database, 'stores', 'store-1')));
+  await assertFails(getDocs(collection(database, 'stores')));
+});
+
+test('익명 groupProductConfig 원문 우회가 불가능하다', async () => {
+  const database = testEnvironment.unauthenticatedContext().firestore();
+
+  await assertFails(getDoc(doc(database, 'groupProductConfig', 'product-1')));
+  await assertFails(getDocs(collection(database, 'groupProductConfig')));
+});
+
+test('HIDDEN saleRoundItem 익명 직접 읽기가 불가능하다', async () => {
+  const database = testEnvironment.unauthenticatedContext().firestore();
+
+  await assertFails(getDoc(doc(database, 'saleRoundItems', 'item-hidden')));
+  // ACTIVE / SOLD_OUT / CLOSED는 기존 공개 의미를 유지한다.
+  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-1')));
+  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-soldout')));
+  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-closed')));
+});
+
+test('인증된 seller owner surface 읽기( products/stores/groupConfig )를 보존한다', async () => {
+  const seller = testEnvironment
+    .authenticatedContext('seller-1', { role: 'seller', storeId: 'store-1' })
+    .firestore();
+
+  await assertSucceeds(getDoc(doc(seller, 'products', 'product-1')));
+  await assertSucceeds(
+    getDocs(query(collection(seller, 'products'), where('storeId', '==', 'store-1'))),
+  );
+  await assertSucceeds(getDoc(doc(seller, 'stores', 'store-1')));
+  await assertSucceeds(getDoc(doc(seller, 'groupProductConfig', 'product-1')));
+});
+
+test('공개 dailyCaps 직접 구독을 보존한다', async () => {
+  const database = testEnvironment.unauthenticatedContext().firestore();
+
   await assertSucceeds(getDoc(doc(database, 'dailyCaps', 'store-1_2026-07-18')));
   await assertSucceeds(getDocs(collection(database, 'dailyCaps')));
-  await assertSucceeds(getDoc(doc(database, 'groupProductConfig', 'product-1')));
-  await assertSucceeds(getDocs(collection(database, 'groupProductConfig')));
 });
 
 test('품종은 공개 단건 조회만 허용하고 목록과 모든 직접 쓰기를 거부한다', async () => {

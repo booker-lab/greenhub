@@ -46,8 +46,22 @@ describe('공개 상품 API', () => {
     await expect(service.getPublicProduct(product.id)).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('활성 공개 상품 상세는 그대로 반환한다', async () => {
-    const product = { id: 'public-001', isActive: true, saleType: 'normal', name: '공개 상품' };
+  it('활성 공개 상품 상세는 public projection으로 반환한다', async () => {
+    const product = {
+      id: 'public-001',
+      storeId: 'store-1',
+      isActive: true,
+      saleType: 'normal',
+      name: '공개 상품',
+      images: ['https://example.com/a.jpg'],
+      price: 10000,
+      category: 'cut_flower',
+      deliverySize: 'small',
+      sellerNote: '내부 메모',
+      sellerOverride: true,
+      testOnly: false,
+      content: { headline: '제목', description: '설명', isEditedByUser: true },
+    };
     const firestore = {
       doc: jest.fn().mockReturnValue({
         get: jest.fn().mockResolvedValue({ exists: true, data: () => product }),
@@ -55,7 +69,174 @@ describe('공개 상품 API', () => {
     };
     const service = new ProductsService(firestore as never);
 
-    await expect(service.getPublicProduct(product.id)).resolves.toEqual(product);
+    const detail = (await service.getPublicProduct(product.id)) as Record<string, unknown>;
+    expect(detail).not.toHaveProperty('sellerNote');
+    expect(detail).not.toHaveProperty('sellerOverride');
+    expect(detail).not.toHaveProperty('testOnly');
+    expect(detail['content']).toEqual({ headline: '제목', description: '설명' });
+    expect(detail['id']).toBe('public-001');
+  });
+
+  it('public group detail에서 isProcessed를 제거한다', async () => {
+    const product = {
+      id: 'group-001',
+      storeId: 'store-1',
+      isActive: true,
+      saleType: 'group',
+      name: '공구 상품',
+      images: [],
+      price: 5000,
+      category: 'cut_flower',
+      deliverySize: 'small',
+    };
+    const groupConfig = {
+      productId: 'group-001',
+      minQuantity: 5,
+      targetQuantity: 10,
+      maxPerPerson: 2,
+      recruitDeadline: '2026-09-10T00:00:00.000Z',
+      currentQuantity: 3,
+      groupDeliveryDate: '2026-09-15T00:00:00.000Z',
+      groupDeliveryMethod: 'direct',
+      deliveryFeeDiscount: 0,
+      isProcessed: true,
+    };
+    const firestore = {
+      doc: jest.fn((path: string) => ({
+        get: jest.fn().mockResolvedValue({
+          exists: true,
+          data: () => (path === 'products/group-001' ? product : groupConfig),
+        }),
+      })),
+    };
+    const service = new ProductsService(firestore as never);
+
+    const detail = (await service.getPublicProduct('group-001')) as Record<string, unknown>;
+    const gc = detail['groupConfig'] as Record<string, unknown>;
+    expect(gc).not.toHaveProperty('isProcessed');
+    expect(gc['currentQuantity']).toBe(3);
+  });
+});
+
+describe('store-scoped anonymous product API 우회 차단', () => {
+  function makeChainable(docs: Array<{ data: () => unknown }>) {
+    const get = jest.fn().mockResolvedValue({ docs });
+    const query: { where: jest.Mock; get: jest.Mock } = {
+      where: jest.fn(() => query),
+      get,
+    };
+    return query;
+  }
+
+  it('store 목록에서 inactive/testOnly를 제외하고 isActive=false 우회를 막는다', async () => {
+    const docs = [
+      { data: () => ({ id: 'public-001', storeId: 's-1', isActive: true, saleType: 'normal' }) },
+      { data: () => ({ id: 'inactive-001', storeId: 's-1', isActive: false, saleType: 'normal' }) },
+      {
+        data: () => ({
+          id: 'e2e-001',
+          storeId: 's-1',
+          isActive: true,
+          testOnly: true,
+          saleType: 'normal',
+        }),
+      },
+    ];
+    const query = makeChainable(docs);
+    const firestore = {
+      collection: jest.fn().mockReturnValue(query),
+      doc: jest.fn(),
+    };
+    const service = new ProductsService(firestore as never);
+
+    // isActive=false를 요청해도 공개 predicate를 우회하지 못한다.
+    const result = (await service.getProducts('s-1', { isActive: false } as never)) as {
+      items: Array<Record<string, unknown>>;
+    };
+    expect(query.where).toHaveBeenCalledWith('isActive', '==', true);
+    expect(result.items.map((item) => item['id'])).toEqual(['public-001']);
+  });
+
+  it.each([
+    ['비활성 상품', { id: 'p-1', storeId: 's-1', isActive: false, saleType: 'normal' }],
+    [
+      '시험용 상품',
+      { id: 'p-1', storeId: 's-1', isActive: true, testOnly: true, saleType: 'normal' },
+    ],
+  ])('store 상세에서 %s를 상품 없음으로 처리한다', async (_label, product) => {
+    const firestore = {
+      doc: jest.fn().mockReturnValue({
+        get: jest.fn().mockResolvedValue({ exists: true, data: () => product }),
+      }),
+    };
+    const service = new ProductsService(firestore as never);
+
+    await expect(service.getProduct('s-1', 'p-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('store 상세가 다른 store 상품을 반환하지 않는다', async () => {
+    const product = { id: 'p-1', storeId: 'other-store', isActive: true, saleType: 'normal' };
+    const firestore = {
+      doc: jest.fn().mockReturnValue({
+        get: jest.fn().mockResolvedValue({ exists: true, data: () => product }),
+      }),
+    };
+    const service = new ProductsService(firestore as never);
+
+    await expect(service.getProduct('s-1', 'p-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('seller owner/internal read regression', () => {
+  it('owner 상세는 내부 필드를 보존한다', async () => {
+    const product = {
+      id: 'p-1',
+      storeId: 's-1',
+      isActive: false,
+      testOnly: true,
+      saleType: 'normal',
+      name: '비활성 시험 상품',
+      sellerNote: '내부 메모',
+      sellerOverride: true,
+      content: { headline: '제목', description: '설명', isEditedByUser: true },
+    };
+    const firestore = {
+      doc: jest.fn((path: string) => ({
+        get: jest.fn().mockResolvedValue({
+          exists: true,
+          data: () =>
+            path === 'stores/s-1' ? { ownerId: 'seller-1' } : product,
+        }),
+      })),
+    };
+    const service = new ProductsService(firestore as never);
+
+    const owner = (await service.getOwnerProduct('s-1', 'p-1', 'seller-1', 'seller')) as Record<
+      string,
+      unknown
+    >;
+    expect(owner['sellerNote']).toBe('내부 메모');
+    expect(owner['sellerOverride']).toBe(true);
+    expect(owner['content']).toEqual({
+      headline: '제목',
+      description: '설명',
+      isEditedByUser: true,
+    });
+  });
+
+  it('owner가 아닌 seller의 owner 조회를 거부한다', async () => {
+    const product = { id: 'p-1', storeId: 's-1', isActive: true, saleType: 'normal' };
+    const firestore = {
+      doc: jest.fn((path: string) => ({
+        get: jest.fn().mockResolvedValue({
+          exists: true,
+          data: () => (path === 'stores/s-1' ? { ownerId: 'seller-1' } : product),
+        }),
+      })),
+    };
+    const service = new ProductsService(firestore as never);
+
+    await expect(service.getOwnerProduct('s-1', 'p-1', 'seller-2', 'seller')).rejects.toThrow();
   });
 });
 

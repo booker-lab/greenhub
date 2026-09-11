@@ -13,7 +13,6 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { doc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -23,7 +22,7 @@ import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientIm
 import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
-import { db } from '@/lib/firebase';
+import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
 import { resolveHomeStoreId } from './home-store-selection';
 
 type StoreModeStatus = 'loading' | 'ready' | 'error';
@@ -63,13 +62,11 @@ function useStoreMode(storeId: string | null, productsLoading: boolean): StoreMo
     let active = true;
     setState({ storeId, salesMode: 'legacy', status: 'loading' });
 
-    void getDoc(doc(db, 'stores', storeId))
-      .then((snapshot) => {
+    void fetchPublicStoreProfile(storeId)
+      .then((profile) => {
         if (!active) return;
-        if (!snapshot.exists()) throw new Error('스토어를 찾을 수 없습니다.');
-
-        const value = snapshot.data()?.salesMode;
-        if (value !== undefined && value !== 'legacy' && value !== 'round_direct') {
+        const value = profile.salesMode;
+        if (value !== 'legacy' && value !== 'round_direct') {
           throw new Error('판매 방식 정보가 올바르지 않습니다.');
         }
         setState({
