@@ -5,12 +5,29 @@ import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { PaymentsService } from '../payments/payments.service';
-import { AligoClient } from './aligo.client';
+import { AligoClient, type ProviderOutcome } from './aligo.client';
 import type { ApiNotificationTemplateCode } from './notification-templates';
 
 export type NotificationTemplateCode = ApiNotificationTemplateCode;
 
+export type NotificationDeliveryStatus = 'PROCESSING' | 'SENT' | 'FAILED' | 'NEEDS_VERIFY';
+
 export const NOTIFICATION_DELIVERY_PROCESSING_LEASE_TTL_MS = 5 * 60 * 1000;
+
+const PROVIDER_OUTCOMES: readonly ProviderOutcome[] = ['ACCEPTED', 'REJECTED', 'UNKNOWN'];
+
+function normalizeProviderOutcome(value: unknown, fallbackSuccess: boolean): ProviderOutcome {
+  if (typeof value === 'string' && (PROVIDER_OUTCOMES as readonly string[]).includes(value)) {
+    return value as ProviderOutcome;
+  }
+  return fallbackSuccess ? 'ACCEPTED' : 'REJECTED';
+}
+
+function normalizeNullableString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 function notificationTimestampMillis(value: unknown): number {
   if (value instanceof Date) return value.getTime();
@@ -105,6 +122,10 @@ export class NotificationsService {
       }
     }
 
+    let observedOutcome: ProviderOutcome | null = null;
+    let observedReceipt: string | null = null;
+    let observedAttemptId: string | null = null;
+
     try {
       const orderSnap = orderId ? await this.firestore.doc(`orders/${orderId}`).get() : null;
       const userSnap = await this.firestore.doc(`users/${userId}`).get();
@@ -116,33 +137,115 @@ export class NotificationsService {
         if (orderId) {
           await this.createCustomerNoticeFailedIssue(orderId, templateCode, null);
         }
-        await this.finishNotificationDelivery(idempotencyKey, 'FAILED', leaseId);
+        await this.finishNotificationDelivery(idempotencyKey, 'FAILED', leaseId, {
+          outcome: 'REJECTED',
+          attemptId: null,
+          providerReceipt: null,
+        });
         return;
       }
 
-      const result = await this.aligo.sendAlimtalk(phone, templateCode, variables);
+      const raw = (await this.aligo.sendAlimtalk(phone, templateCode, variables)) as Record<
+        string,
+        unknown
+      >;
+      const fallbackSuccess = (raw as { success?: unknown })['success'] === true;
+      const outcome = normalizeProviderOutcome(
+        (raw as { outcome?: unknown })['outcome'],
+        fallbackSuccess,
+      );
+      const providerReceipt =
+        normalizeNullableString((raw as { providerReceipt?: unknown })['providerReceipt']);
+      const attemptId =
+        normalizeNullableString((raw as { attemptId?: unknown })['attemptId']) ?? uuidv4();
+      const needsVerify =
+        typeof (raw as { needsVerify?: unknown })['needsVerify'] === 'boolean'
+          ? ((raw as { needsVerify?: boolean })['needsVerify'] as boolean)
+          : outcome === 'UNKNOWN';
+      const channel =
+        ((raw as { channel?: unknown })['channel'] as string | null) ?? 'alimtalk';
+      const message = String((raw as { message?: unknown })['message'] ?? '');
+      const alimtalkAttempts = Number((raw as { alimtalkAttempts?: unknown })['alimtalkAttempts'] ?? 0);
+      const smsAttempts = Number((raw as { smsAttempts?: unknown })['smsAttempts'] ?? 0);
+      const errorMessage =
+        typeof (raw as { errorMessage?: unknown })['errorMessage'] === 'string'
+          ? ((raw as { errorMessage?: string })['errorMessage'] as string)
+          : null;
+      observedOutcome = outcome;
+      observedReceipt = providerReceipt;
+      observedAttemptId = attemptId;
+
+      if (idempotencyKey && leaseId) {
+        await this.recordDeliveryAttempt(idempotencyKey, leaseId, {
+          outcome,
+          providerReceipt,
+          attemptId,
+        });
+      }
+
+      const notificationStatus =
+        outcome === 'ACCEPTED' ? 'sent' : outcome === 'UNKNOWN' ? 'pending' : 'failed';
       const notificationId = await this.logNotification({
         userId,
         orderId: orderId ?? null,
-        channel: result.channel ?? 'alimtalk',
+        channel,
         templateCode,
         variables,
-        message: result.message,
+        message,
         phone,
-        status: result.success ? 'sent' : 'failed',
-        attemptCount: result.alimtalkAttempts + result.smsAttempts,
-        errorMessage: result.errorMessage ?? null,
+        status: notificationStatus,
+        attemptCount: alimtalkAttempts + smsAttempts,
+        errorMessage,
+        attemptId,
+        providerReceipt,
+        providerOutcome: outcome,
+        needsVerify,
+        idempotencyKey: idempotencyKey ?? null,
       });
 
-      if (!result.success && orderId) {
+      if (outcome === 'UNKNOWN') {
+        await this.finishNotificationDelivery(idempotencyKey, 'NEEDS_VERIFY', leaseId, {
+          outcome,
+          providerReceipt,
+          attemptId,
+        });
+        return;
+      }
+
+      if (outcome === 'ACCEPTED') {
+        await this.finishNotificationDelivery(idempotencyKey, 'SENT', leaseId, {
+          outcome,
+          providerReceipt,
+          attemptId,
+        });
+        return;
+      }
+
+      if (orderId) {
         await this.createCustomerNoticeFailedIssue(orderId, templateCode, notificationId);
       }
-      await this.finishNotificationDelivery(
-        idempotencyKey,
-        result.success ? 'SENT' : 'FAILED',
-        leaseId,
-      );
+      await this.finishNotificationDelivery(idempotencyKey, 'FAILED', leaseId, {
+        outcome,
+        providerReceipt,
+        attemptId,
+      });
     } catch (error) {
+      if (observedOutcome === 'ACCEPTED') {
+        await this.finishNotificationDelivery(idempotencyKey, 'SENT', leaseId, {
+          outcome: 'ACCEPTED',
+          providerReceipt: observedReceipt,
+          attemptId: observedAttemptId,
+        }).catch(() => undefined);
+        throw error;
+      }
+      if (observedOutcome === 'UNKNOWN') {
+        await this.finishNotificationDelivery(idempotencyKey, 'NEEDS_VERIFY', leaseId, {
+          outcome: 'UNKNOWN',
+          providerReceipt: observedReceipt,
+          attemptId: observedAttemptId,
+        }).catch(() => undefined);
+        throw error;
+      }
       await this.finishNotificationDelivery(idempotencyKey, 'FAILED', leaseId).catch(
         () => undefined,
       );
@@ -173,27 +276,74 @@ export class NotificationsService {
       throw new Error('재발송할 알림 정보가 올바르지 않습니다.');
     }
 
-    const result = await this.aligo.sendSms(
+    const raw = (await this.aligo.sendSms(
       phone,
       templateCode as NotificationTemplateCode,
       variables as Record<string, string>,
+    )) as unknown as Record<string, unknown>;
+    const fallbackSuccess = (raw as { success?: unknown })['success'] === true;
+    const outcome = normalizeProviderOutcome(
+      (raw as { outcome?: unknown })['outcome'],
+      fallbackSuccess,
     );
+    const providerReceipt = normalizeNullableString(
+      (raw as { providerReceipt?: unknown })['providerReceipt'],
+    );
+    const attemptId =
+      normalizeNullableString((raw as { attemptId?: unknown })['attemptId']) ?? uuidv4();
+    const needsVerify =
+      typeof (raw as { needsVerify?: unknown })['needsVerify'] === 'boolean'
+        ? ((raw as { needsVerify?: boolean })['needsVerify'] as boolean)
+        : outcome === 'UNKNOWN';
+    const message = String((raw as { message?: unknown })['message'] ?? '');
+    const smsAttempts = Number((raw as { smsAttempts?: unknown })['smsAttempts'] ?? 1);
+    const errorMessage =
+      typeof (raw as { errorMessage?: unknown })['errorMessage'] === 'string'
+        ? ((raw as { errorMessage?: string })['errorMessage'] as string)
+        : null;
+    const originIdempotencyKey =
+      typeof notification['idempotencyKey'] === 'string'
+        ? (notification['idempotencyKey'] as string)
+        : null;
     await this.logNotification({
       userId: String(notification['userId']),
       orderId: (notification['orderId'] as string | null) ?? null,
-      channel: 'sms',
+      channel: outcome === 'ACCEPTED' ? 'sms' : 'sms',
       templateCode,
       variables: variables as Record<string, string>,
-      message: result.message,
+      message,
       phone,
-      status: result.success ? 'sent' : 'failed',
-      attemptCount: result.smsAttempts,
-      errorMessage: result.errorMessage ?? null,
+      status: outcome === 'ACCEPTED' ? 'sent' : outcome === 'UNKNOWN' ? 'pending' : 'failed',
+      attemptCount: smsAttempts,
+      errorMessage,
+      attemptId,
+      providerReceipt,
+      providerOutcome: outcome,
+      needsVerify,
+      idempotencyKey: originIdempotencyKey,
+      resendOfNotificationId: notificationId,
     });
-    if (!result.success) {
-      throw new Error(result.errorMessage ?? '문자 재발송에 실패했습니다.');
+    if (outcome === 'UNKNOWN') {
+      throw new Error(
+        errorMessage ??
+          '문자 재발송 접수 여부를 확인할 수 없습니다. blind 재시도 없이 수동 확인이 필요합니다.',
+      );
     }
-    return result;
+    if (outcome !== 'ACCEPTED') {
+      throw new Error(errorMessage ?? '문자 재발송에 실패했습니다.');
+    }
+    return {
+      success: true,
+      outcome,
+      channel: 'sms' as const,
+      message,
+      alimtalkAttempts: 0,
+      smsAttempts,
+      providerReceipt,
+      attemptId,
+      needsVerify: false,
+      errorMessage: undefined,
+    };
   }
 
   async sendToGroupParticipants(
@@ -430,11 +580,23 @@ export class NotificationsService {
     status: string;
     attemptCount: number;
     errorMessage: string | null;
+    attemptId?: string | null;
+    providerReceipt?: string | null;
+    providerOutcome?: ProviderOutcome | null;
+    needsVerify?: boolean;
+    idempotencyKey?: string | null;
+    resendOfNotificationId?: string | null;
   }) {
     const id = uuidv4();
     await this.firestore.doc(`notifications/${id}`).set({
       id,
       ...data,
+      attemptId: data.attemptId ?? null,
+      providerReceipt: data.providerReceipt ?? null,
+      providerOutcome: data.providerOutcome ?? null,
+      needsVerify: data.needsVerify ?? false,
+      idempotencyKey: data.idempotencyKey ?? null,
+      resendOfNotificationId: data.resendOfNotificationId ?? null,
       fcmToken: null,
       sentAt: data.status === 'sent' ? this.firestore.Timestamp.now() : null,
       createdAt: this.firestore.Timestamp.now(),
@@ -459,7 +621,16 @@ export class NotificationsService {
         ? (snapshot.data() as Record<string, unknown>)
         : null;
       const status = (data?.['status'] as string | null | undefined) ?? null;
+      // SENT is provider-accepted terminal (not device DELIVERED). Never re-dispatch.
       if (status === 'SENT') return;
+      // NEEDS_VERIFY requires manual verification. Lease expiry alone must not
+      // trigger blind provider redispatch.
+      if (status === 'NEEDS_VERIFY') return;
+      if (data?.['needsVerify'] === true) return;
+      // ACCEPTED observed but SENT finalize not yet durable (e.g. crash between
+      // receipt record and SENT finish). Do not blind-resend; wait for manual
+      // verification instead of treating as retryable.
+      if (data?.['lastOutcome'] === 'ACCEPTED') return;
       const now = this.firestore.Timestamp.now();
       const nowMillis = notificationTimestampMillis(now);
       if (!Number.isFinite(nowMillis)) return;
@@ -485,6 +656,10 @@ export class NotificationsService {
           leaseId,
           leaseExpiresAt,
           attempt: previousAttempt + 1,
+          lastAttemptId: null,
+          providerReceipt: null,
+          lastOutcome: null,
+          needsVerify: false,
           updatedAt: now,
           createdAt: snapshot.exists ? (data?.['createdAt'] ?? now) : now,
         },
@@ -495,10 +670,52 @@ export class NotificationsService {
     return acquired;
   }
 
+  private async recordDeliveryAttempt(
+    idempotencyKey: string | undefined,
+    leaseId: string | null | undefined,
+    detail: {
+      outcome: ProviderOutcome;
+      providerReceipt: string | null;
+      attemptId: string | null;
+    },
+  ): Promise<boolean> {
+    if (!idempotencyKey) return false;
+    if (typeof leaseId !== 'string' || leaseId.length === 0) return false;
+    const ref = this.firestore.doc(
+      `notificationDeliveries/${this.notificationDeliveryId(idempotencyKey)}`,
+    );
+    let recorded = false;
+    await this.firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) return;
+      const data = snapshot.data() as Record<string, unknown>;
+      if (data?.['status'] !== 'PROCESSING') return;
+      if (data?.['leaseId'] !== leaseId) return;
+      transaction.set(
+        ref,
+        {
+          lastAttemptId: detail.attemptId,
+          providerReceipt: detail.providerReceipt,
+          lastOutcome: detail.outcome,
+          needsVerify: detail.outcome === 'UNKNOWN',
+          updatedAt: this.firestore.Timestamp.now(),
+        },
+        { merge: true },
+      );
+      recorded = true;
+    });
+    return recorded;
+  }
+
   private async finishNotificationDelivery(
     idempotencyKey: string | undefined,
-    status: 'SENT' | 'FAILED',
+    status: 'SENT' | 'FAILED' | 'NEEDS_VERIFY',
     leaseId?: string | null,
+    detail?: {
+      outcome?: ProviderOutcome | null;
+      providerReceipt?: string | null;
+      attemptId?: string | null;
+    },
   ): Promise<void> {
     if (!idempotencyKey) return;
     if (typeof leaseId !== 'string' || leaseId.length === 0) return;
@@ -512,15 +729,22 @@ export class NotificationsService {
       if (data?.['status'] !== 'PROCESSING') return;
       if (data?.['leaseId'] !== leaseId) return;
       const now = this.firestore.Timestamp.now();
-      transaction.set(
-        ref,
-        {
-          status,
-          updatedAt: now,
-          completedAt: status === 'SENT' ? now : null,
-        },
-        { merge: true },
-      );
+      const patch: Record<string, unknown> = {
+        status,
+        updatedAt: now,
+        completedAt: status === 'SENT' ? now : null,
+        needsVerify: status === 'NEEDS_VERIFY',
+      };
+      if (detail) {
+        patch['lastAttemptId'] = detail.attemptId ?? null;
+        patch['providerReceipt'] = detail.providerReceipt ?? null;
+        patch['lastOutcome'] =
+          detail.outcome ?? (status === 'SENT' ? 'ACCEPTED' : status === 'NEEDS_VERIFY' ? 'UNKNOWN' : 'REJECTED');
+      } else if (data?.['lastOutcome'] == null) {
+        patch['lastOutcome'] =
+          status === 'SENT' ? 'ACCEPTED' : status === 'NEEDS_VERIFY' ? 'UNKNOWN' : 'REJECTED';
+      }
+      transaction.set(ref, patch, { merge: true });
     });
   }
 

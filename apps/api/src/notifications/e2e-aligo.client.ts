@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { NotificationChannel } from '@greenhub/shared';
+import { v4 as uuidv4 } from 'uuid';
 import { resolveE2EProviderMode } from '../common/e2e-provider-mode';
 import type { NotificationDeliveryResult } from './aligo.client';
 import {
@@ -51,29 +52,42 @@ export class E2EAligoClient {
   ): Promise<NotificationDeliveryResult> {
     const scenario = scenarioFromVariables(variables);
     const message = renderNotificationMessage(templateCode, variables);
-    const result =
+    const attemptId = uuidv4();
+    const result: NotificationDeliveryResult =
       scenario === 'alimtalk_success'
         ? {
             success: true,
+            outcome: 'ACCEPTED',
             channel: 'alimtalk' as const,
             message,
             alimtalkAttempts: 1,
             smsAttempts: 0,
+            providerReceipt: 'e2e-alimtalk-mid-stub-001',
+            attemptId,
+            needsVerify: false,
           }
         : scenario === 'alimtalk_retry_sms_success'
           ? {
               success: true,
+              outcome: 'ACCEPTED',
               channel: 'sms' as const,
               message,
               alimtalkAttempts: 3,
               smsAttempts: 1,
+              providerReceipt: 'e2e-sms-msg-id-stub-001',
+              attemptId,
+              needsVerify: false,
             }
           : {
               success: false,
+              outcome: 'REJECTED',
               channel: null,
               message,
               alimtalkAttempts: 3,
               smsAttempts: 1,
+              providerReceipt: null,
+              attemptId,
+              needsVerify: false,
               errorMessage: 'E2E 알림톡과 문자 최종 실패 fixture입니다.',
             };
     this.record('sendAlimtalk', templateCode, scenario, result.channel);
@@ -90,10 +104,14 @@ export class E2EAligoClient {
     const success = scenario !== 'final_failure';
     const result: NotificationDeliveryResult = {
       success,
+      outcome: success ? 'ACCEPTED' : 'REJECTED',
       channel: success ? 'sms' : null,
       message,
       alimtalkAttempts: 0,
       smsAttempts: 1,
+      providerReceipt: success ? 'e2e-sms-msg-id-stub-001' : null,
+      attemptId: uuidv4(),
+      needsVerify: false,
       errorMessage: success ? undefined : 'E2E 문자 최종 실패 fixture입니다.',
     };
     this.record('sendSms', templateCode, scenario, result.channel);
