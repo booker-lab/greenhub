@@ -33,6 +33,7 @@ import {
   ADMIN_STATE_PATH,
   AUTH_STATE_PATH,
   BYPASS_STATE_PATH,
+  isAuthJsSessionCookieName,
   loginViaCredentials,
   ROUND_DIRECT_STATE_PATHS,
 } from './tests/_helpers/auth'
@@ -125,7 +126,7 @@ async function verifyRoleSession(page: Page, base: string, expectedRole: string)
     throw new Error(`${expectedRole} 세션 만료 시각 검증 실패`)
   }
   const cookies = await page.context().cookies(base)
-  if (!cookies.some(({ name }) => /authjs\.session-token/.test(name))) {
+  if (!cookies.some(({ name }) => isAuthJsSessionCookieName(name))) {
     throw new Error(`${expectedRole} 대상 도메인의 세션 쿠키 검증 실패`)
   }
 }
