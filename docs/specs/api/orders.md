@@ -226,6 +226,27 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 - 증거: `apps/api/src/orders/orders-lifecycle.service.ts`,
   `apps/api/src/orders/specialized-command-race-convergence.spec.ts`(`18 tests`).
 
+### 8C. Generic consumer REVIEWED convergence — `IMPLEMENTATION COMPLETE`
+
+- 대상: generic `PATCH /stores/:storeId/orders/:orderId/status`의 consumer `REVIEWED`
+  (`DELIVERED|PICKED_UP → REVIEWED` + `REVIEWED` sequential retry)가 specialized
+  `PATCH .../review`(`reviewOrder`)와 동일한 semantic transition/settlement invariant를 공유한다.
+- single semantic owner: `OrdersLifecycleService.executeConsumerReviewedConvergence`가
+  fresh transaction(`storeId` + consumer `userId` + fresh status 재검증) + `REVIEWED` winner
+  mutation + `settlements/{orderId}` idempotent convergence를 소유하고, generic과
+  specialized는 wrapper의 외부 오류 계약만 유지한다.
+- sequential duplicate는 settlement를 먼저 수렴시킨 뒤 기존 계약을 보존한다:
+  generic은 `403 Forbidden`, specialized는 `400 BadRequest`.
+- concurrent duplicate/cross-path race(generic `updateStatus(REVIEWED)` vs `reviewOrder()`)는
+  winner `1 x 200` + loser `409 Conflict`로 수렴하고 order 중복 mutation 없이
+  settlement를 exactly-once/idempotent하게 수렴한다. loser는 settlement를 호출하지 않는다.
+- transition commit 뒤 `createSettlement` 실패 시 주문은 `REVIEWED`에 남고 에러가 전파되며,
+  후속 동일 경로 retry(sequential duplicate 경로)가 settlement를 보완한다.
+- 이미 존재하는 settlement는 최초 snapshot을 보존하므로 `REVIEWED` 재시도가
+  `DELIVERED`/`PICKED_UP` 단계 snapshot을 덮지 않는다.
+- 증거: `apps/api/src/orders/orders-lifecycle.service.ts`,
+  `apps/api/src/orders/generic-consumer-reviewed-convergence.spec.ts`(`9 tests`).
+
 ## 9. 배송 사진
 
 회차 직배송 사진은 담당 기사가 서버 API로 비공개 Storage에 업로드하며 사진 연결 없이 직접배송 `DELIVERED` 완료를 허용하지 않는다. read URL은 주문 권한 검증 뒤 단기 signed URL로 발급한다.
@@ -382,6 +403,8 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-11 | Generic consumer `REVIEWED`와 specialized `reviewOrder`를 single semantic owner(`executeConsumerReviewedConvergence`)로 수렴 + settlement failure/retry convergence 회귀 9건 추가 |
+| 2026-09-11 | `ORDER-SPECIALIZED-COMMAND-RACE-CONVERGENCE-01`: review/confirmPickup/hubConfirmPickup fresh expected-status transaction + cross-command CAS + settlement convergence 수렴(`specialized-command-race-convergence.spec.ts` 18 tests PASS) 후 Section 8B를 `IMPLEMENTATION COMPLETE`로 수렴 |
 | 2026-09-10 | `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-DECISION-01` 결정 계약 게시: Status/Hold duplicate submission & convergence contract 추가, S1은 `IMPLEMENTATION PENDING`으로 명시 |
 | 2026-09-10 | `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-IMPLEMENTATION-01`: legacy plain branch transaction 재검증 수렴 확인 + conflicting-transition 회귀 1건 추가(`orders-duplicate-contract.spec.ts` 5 tests PASS) 후 Section 12를 `IMPLEMENTATION COMPLETE`로 수렴 |
 | 2026-08-30 | 현재 회차 lifecycle의 paid-before-resume guard와 `DELIVERY_HELD → PREPARING` 결제 요청 경계를 반영하고 seller API projection 경계를 정합화 |
