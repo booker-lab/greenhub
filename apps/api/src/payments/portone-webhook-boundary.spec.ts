@@ -136,6 +136,12 @@ const timestampCases: Array<[string, number, number]> = [
   ['미래 허용 창 밖 301초', 301, 401],
 ];
 
+const missingHeaderCases: Array<['webhook-id' | 'webhook-timestamp' | 'webhook-signature']> = [
+  ['webhook-id'],
+  ['webhook-timestamp'],
+  ['webhook-signature'],
+];
+
 describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
   let app: INestApplication;
   let portoneClient: PortoneClient;
@@ -172,14 +178,20 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
     await app.close();
   });
 
-  function postWebhook(webhook: WebhookRequest) {
-    return request(app.getHttpServer())
+  function postWebhook(webhook: WebhookRequest, omitHeader?: string) {
+    let req = request(app.getHttpServer())
       .post('/payments/webhook/portone')
-      .set('Content-Type', 'application/json')
-      .set('webhook-id', webhook.webhookId)
-      .set('webhook-timestamp', webhook.webhookTimestamp)
-      .set('webhook-signature', webhook.webhookSignature)
-      .send(webhook.rawBody.toString('utf8'));
+      .set('Content-Type', 'application/json');
+    if (omitHeader !== 'webhook-id') {
+      req = req.set('webhook-id', webhook.webhookId);
+    }
+    if (omitHeader !== 'webhook-timestamp') {
+      req = req.set('webhook-timestamp', webhook.webhookTimestamp);
+    }
+    if (omitHeader !== 'webhook-signature') {
+      req = req.set('webhook-signature', webhook.webhookSignature);
+    }
+    return req.send(webhook.rawBody.toString('utf8'));
   }
 
   it('production bootstrap이 rawBody를 활성화하고 실제 raw bytes를 verifier에 전달한다', async () => {
@@ -257,6 +269,19 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
     } else {
       expectBusinessBoundaryClosed();
     }
+  });
+
+  it.each(
+    missingHeaderCases,
+  )('missing header %s는 실제 HTTP boundary에서 거부하고 업무 경계에 도달하지 않는다', async (omitHeader) => {
+    const response = await postWebhook(createSignedWebhook(), omitHeader);
+
+    expect(response.status).toBe(401);
+    expect(auditService.log).toHaveBeenCalledWith(
+      'payment.webhook.invalid_sig',
+      expect.anything(),
+    );
+    expectBusinessBoundaryClosed();
   });
 
   it('invalid cryptographic request의 order/payment/orderCharge/capacity 의미는 모두 0이다', async () => {
