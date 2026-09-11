@@ -3,7 +3,10 @@ import { AuditService } from '../common/audit/audit.service';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
-import { OrderCapacityService } from '../orders/order-capacity.service';
+import {
+  LatePaymentCapacityError,
+  OrderCapacityService,
+} from '../orders/order-capacity.service';
 import { RetentionService } from '../retention/retention.service';
 import { PortoneClient } from './portone.client';
 import { PaymentRefundService } from './payment-refund.service';
@@ -76,32 +79,10 @@ export class PaymentFinalizationService {
       return { ok: false, reason: 'amount_mismatch' };
     }
 
-    let reservationId = order['reservationId'] as string | undefined;
-    if (
-      order['schemaVersion'] === 2 &&
-      order['status'] === 'CANCELLED' &&
-      order['cancelReason'] === 'timeout'
-    ) {
-      try {
-        const reservation = await this.capacity.reserveCheckout({
-          storeId: order['storeId'],
-          roundId: order['roundId'],
-          userId: order['userId'],
-          idempotencyKey: `late-payment:${orderId}`,
-          deliveryAddress: order['deliveryAddress'],
-          items: (order['orderItems'] as Array<Record<string, any>>).map((item) => ({
-            roundItemId: item['roundItemId'],
-            quantity: item['quantity'],
-          })),
-        });
-        reservationId = reservation.id;
-      } catch {
-        await this.portone.refund(orderId, paymentData.amount.total, LATE_PAYMENT_REFUND_REASON);
-        await this.recordLateRefund(orderId, order, paymentData);
-        return { ok: false, reason: 'late_payment_refunded' };
-      }
-    }
-
+    // Late-payment reacquisition is atomic inside the finalize transaction
+    // below (reacquireAndConsumeLatePaymentInTransaction). No separate
+    // reserveCheckout transaction exists here, so no intermediate external
+    // HELD leak is possible on crash between reserve and consume.
     const newStatus = order['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED';
     const now = this.firestore.Timestamp.now();
     let applied = false;
@@ -136,13 +117,40 @@ export class PaymentFinalizationService {
         if (this.isLegacyTimeoutPaymentCandidate(freshOrder)) {
           await reacquireLegacyDailyCapacityInTransaction(this.firestore, tx, orderId, freshOrder);
         }
+        let reservationId: string | undefined;
         if (freshOrder['schemaVersion'] === 2) {
-          if (!reservationId) throw new Error('결제 예약 식별자가 없습니다.');
-          await this.capacity.consumeReservationInTransaction(tx, {
-            reservationId,
-            orderId,
-            paymentId: orderId,
-          });
+          if (this.isRoundLatePaymentCandidate(freshOrder)) {
+            // Single-commit reacquire + CONSUMED (no orphan HELD).
+            // All capacity reads happen before any write in this tx.
+            const lateItems = (
+              freshOrder['orderItems'] as Array<Record<string, any>> | undefined
+            )?.map((item) => ({
+              roundItemId: item['roundItemId'],
+              quantity: item['quantity'],
+            }));
+            if (!freshOrder['deliveryAddress'] || !lateItems?.length) {
+              throw new LatePaymentCapacityError('결제 만료 후 회차 한도 마감');
+            }
+            const reacquired =
+              await this.capacity.reacquireAndConsumeLatePaymentInTransaction(tx, {
+                storeId: freshOrder['storeId'],
+                roundId: freshOrder['roundId'],
+                userId: freshOrder['userId'],
+                orderId,
+                paymentId: orderId,
+                deliveryAddress: freshOrder['deliveryAddress'],
+                items: lateItems,
+              });
+            reservationId = reacquired.id;
+          } else {
+            reservationId = freshOrder['reservationId'] as string | undefined;
+            if (!reservationId) throw new Error('결제 예약 식별자가 없습니다.');
+            await this.capacity.consumeReservationInTransaction(tx, {
+              reservationId,
+              orderId,
+              paymentId: orderId,
+            });
+          }
         }
         tx.update(orderRef, {
           status: freshOrder['saleType'] === 'group' ? 'RECRUITING' : 'ACCEPTED',
@@ -161,6 +169,11 @@ export class PaymentFinalizationService {
         applied = true;
       });
     } catch (error) {
+      if (error instanceof LatePaymentCapacityError) {
+        await this.portone.refund(orderId, paymentData.amount.total, LATE_PAYMENT_REFUND_REASON);
+        await this.recordLateRefund(orderId, order, paymentData);
+        return { ok: false, reason: 'late_payment_refunded' };
+      }
       if (error instanceof LegacyDailyCapacityError) {
         await this.portone.refund(
           orderId,
@@ -255,6 +268,15 @@ export class PaymentFinalizationService {
       order['status'] === 'CANCELLED' &&
       order['cancelReason'] === 'timeout' &&
       isLegacyDailyCapacityEligible(order)
+    );
+  }
+
+  private isRoundLatePaymentCandidate(order: Record<string, any>) {
+    return (
+      order['schemaVersion'] === 2 &&
+      order['status'] === 'CANCELLED' &&
+      order['cancelReason'] === 'timeout' &&
+      !order['latePaymentRefundedAt']
     );
   }
 
