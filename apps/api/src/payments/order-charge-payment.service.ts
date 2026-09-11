@@ -46,71 +46,75 @@ export class OrderChargePaymentService {
   }
 
   private async finalizePaid(chargeId: string, paymentId: string, paymentData: PaymentData) {
-    let result: Record<string, unknown> = { ok: false, reason: 'charge_not_found' };
-    await this.firestore.runTransaction(async (tx) => {
-      const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
-      const chargeSnap = await tx.get(chargeRef);
-      if (!chargeSnap.exists) return;
-      const charge = chargeSnap.data() as Record<string, any>;
-      if (charge['status'] === 'PAID') {
-        result = { ok: true, reason: 'already_processed' };
-        return;
-      }
-      if (
-        charge['status'] !== 'PENDING' ||
-        charge['type'] !== 'REDELIVERY_FEE' ||
-        charge['portonePaymentId'] !== paymentId ||
-        paymentData.status !== 'PAID' ||
-        paymentData.amount.total !== charge['amount']
-      ) {
-        throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
-      }
+    // Retry purity: the post-transaction decision must come only from the
+    // committed attempt's return value. An outer `let result` would leak an
+    // aborted attempt's decision across OCC retry.
+    const result: Record<string, unknown> =
+      await this.firestore.runTransaction(async (tx) => {
+        const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
+        const chargeSnap = await tx.get(chargeRef);
+        if (!chargeSnap.exists) return { ok: false, reason: 'charge_not_found' };
+        const charge = chargeSnap.data() as Record<string, any>;
+        if (charge['status'] === 'PAID') {
+          return { ok: true, reason: 'already_processed' };
+        }
+        if (
+          charge['status'] !== 'PENDING' ||
+          charge['type'] !== 'REDELIVERY_FEE' ||
+          charge['portonePaymentId'] !== paymentId ||
+          paymentData.status !== 'PAID' ||
+          paymentData.amount.total !== charge['amount']
+        ) {
+          throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
+        }
 
-      const orderSnap = await tx.get(this.firestore.doc(`orders/${charge['orderId']}`));
-      const order = orderSnap.data() as Record<string, any> | undefined;
-      if (
-        !orderSnap.exists ||
-        !isCurrentRedeliveryPaymentRequired({ ...order, id: charge['orderId'] }) ||
-        !isCurrentRedeliveryChargeLinked(
-          { ...order, id: charge['orderId'] },
-          charge,
-          chargeId,
-        )
-      ) {
-        throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
-      }
-      const now = this.firestore.Timestamp.now();
-      tx.update(chargeRef, {
-        status: 'PAID',
-        portoneTransactionId: paymentData.transactionId,
-        payMethod: paymentData.method?.type ?? null,
-        paidAt: now,
-        failedAt: null,
-        updatedAt: now,
+        const orderSnap = await tx.get(this.firestore.doc(`orders/${charge['orderId']}`));
+        const order = orderSnap.data() as Record<string, any> | undefined;
+        if (
+          !orderSnap.exists ||
+          !isCurrentRedeliveryPaymentRequired({ ...order, id: charge['orderId'] }) ||
+          !isCurrentRedeliveryChargeLinked(
+            { ...order, id: charge['orderId'] },
+            charge,
+            chargeId,
+          )
+        ) {
+          throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
+        }
+        const now = this.firestore.Timestamp.now();
+        tx.update(chargeRef, {
+          status: 'PAID',
+          portoneTransactionId: paymentData.transactionId,
+          payMethod: paymentData.method?.type ?? null,
+          paidAt: now,
+          failedAt: null,
+          updatedAt: now,
+        });
+        return { ok: true, status: 'PAID' };
       });
-      result = { ok: true, status: 'PAID' };
-    });
     return result;
   }
 
   private async markFailed(chargeId: string, paymentId: string) {
-    let result: Record<string, unknown> = { ok: false, reason: 'charge_not_found' };
-    await this.firestore.runTransaction(async (tx) => {
-      const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
-      const chargeSnap = await tx.get(chargeRef);
-      if (!chargeSnap.exists) return;
-      const charge = chargeSnap.data() as Record<string, any>;
-      if (charge['portonePaymentId'] !== paymentId) {
-        throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
-      }
-      if (charge['status'] !== 'PENDING') {
-        result = { ok: true, reason: 'already_processed' };
-        return;
-      }
-      const now = this.firestore.Timestamp.now();
-      tx.update(chargeRef, { status: 'FAILED', failedAt: now, updatedAt: now });
-      result = { ok: true, status: 'FAILED' };
-    });
+    // Retry purity: the post-transaction decision must come only from the
+    // committed attempt's return value. An outer `let result` would leak an
+    // aborted attempt's decision across OCC retry.
+    const result: Record<string, unknown> =
+      await this.firestore.runTransaction(async (tx) => {
+        const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
+        const chargeSnap = await tx.get(chargeRef);
+        if (!chargeSnap.exists) return { ok: false, reason: 'charge_not_found' };
+        const charge = chargeSnap.data() as Record<string, any>;
+        if (charge['portonePaymentId'] !== paymentId) {
+          throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
+        }
+        if (charge['status'] !== 'PENDING') {
+          return { ok: true, reason: 'already_processed' };
+        }
+        const now = this.firestore.Timestamp.now();
+        tx.update(chargeRef, { status: 'FAILED', failedAt: now, updatedAt: now });
+        return { ok: true, status: 'FAILED' };
+      });
     return result;
   }
 
