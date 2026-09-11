@@ -674,4 +674,250 @@ describe('PILOT-AUTH-PROBE-16 native HTTP adapter + login diagnostic', () => {
     await assert.rejects(guarded('https://api.portone.io/x', { method: 'GET' }), (e) => e.code === 'PROVIDER_EGRESS_FORBIDDEN');
     await assert.rejects(guarded(`${URLS.api}/auth/kakao-login`, { method: 'POST' }), (e) => e.code === 'KAKAO_COMPLETION_NOT_ALLOWED');
   });
+
+  it('10. standard Response 200 malformed JSON은 BODY_INVALID_JSON으로 구분된다', async () => {
+    const rawMarker = 'raw-body-marker-10';
+    const fetchImpl = async (url, init = {}) => {
+      const path = new URL(url).pathname;
+      if (path === '/auth/login') {
+        return new Response(`<html>${rawMarker}</html>`, {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        });
+      }
+      return new Response('x', { status: 404 });
+    };
+    await assert.rejects(
+      runRoleProbe('consumer', {
+        apiUrl: URLS.api,
+        email: 'consumer@example.test',
+        password: 'pw-consumer',
+        fetchImpl,
+      }),
+      (e) => {
+        assert.ok(e instanceof ProbeContractError);
+        assert.equal(e.code, 'CONSUMER_LOGIN_FAILED');
+        assert.equal(e.details?.httpStatus, 200);
+        assert.equal(e.details?.rejectionClass, 'AUTH_LOGIN_BODY_INVALID_JSON');
+        assert.equal(e.details?.step, 'login');
+        assert.ok(!String(e.message).includes(rawMarker));
+        assert.ok(!JSON.stringify(e.details ?? {}).includes(rawMarker));
+        return true;
+      },
+    );
+    const normalized = await normalizeProbeHttpResponse(
+      new Response('<html>oops</html>', { status: 200, headers: { 'content-type': 'text/html' } }),
+    );
+    assert.equal(normalized.ok, true);
+    assert.equal(normalized.status, 200);
+    assert.equal(normalized.data, null);
+    assert.equal(normalized.bodyIssue, 'MALFORMED');
+  });
+
+  it('11. standard Response 200 accessToken missing은 TOKEN_MISSING으로 구분된다', async () => {
+    const fetchImpl = async (url, init = {}) => {
+      const path = new URL(url).pathname;
+      if (path === '/auth/login') {
+        return new Response(
+          JSON.stringify({
+            refreshToken: 'rt-user-consumer-1',
+            user: { id: 'user-consumer-1', email: 'consumer@example.test', role: 'consumer' },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('x', { status: 404 });
+    };
+    await assert.rejects(
+      runRoleProbe('consumer', {
+        apiUrl: URLS.api,
+        email: 'consumer@example.test',
+        password: 'pw-consumer',
+        fetchImpl,
+      }),
+      (e) => {
+        assert.equal(e.code, 'CONSUMER_LOGIN_FAILED');
+        assert.equal(e.details?.httpStatus, 200);
+        assert.equal(e.details?.rejectionClass, 'AUTH_LOGIN_TOKEN_MISSING');
+        assert.equal(e.details?.step, 'login');
+        return true;
+      },
+    );
+  });
+
+  it('12. standard Response 200 empty body는 BODY_EMPTY로 구분된다', async () => {
+    const fetchImpl = async (url, init = {}) => {
+      const path = new URL(url).pathname;
+      if (path === '/auth/login') {
+        return new Response('', { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('x', { status: 404 });
+    };
+    await assert.rejects(
+      runRoleProbe('consumer', {
+        apiUrl: URLS.api,
+        email: 'consumer@example.test',
+        password: 'pw-consumer',
+        fetchImpl,
+      }),
+      (e) => {
+        assert.equal(e.code, 'CONSUMER_LOGIN_FAILED');
+        assert.equal(e.details?.httpStatus, 200);
+        assert.equal(e.details?.rejectionClass, 'AUTH_LOGIN_BODY_EMPTY');
+        return true;
+      },
+    );
+    const normalized = await normalizeProbeHttpResponse(new Response('', { status: 200 }));
+    assert.equal(normalized.ok, true);
+    assert.equal(normalized.data, null);
+    assert.equal(normalized.bodyIssue, 'EMPTY');
+  });
+
+  it('13. body read failure는 READ_FAILED로 구분되고 원문을 노출하지 않는다', async () => {
+    const nativeThrowing = {
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      text: async () => {
+        throw new Error('boom-read');
+      },
+      json: async () => {
+        throw new Error('boom-read');
+      },
+    };
+    const normalized = await normalizeProbeHttpResponse(nativeThrowing);
+    assert.equal(normalized.ok, true);
+    assert.equal(normalized.status, 200);
+    assert.equal(normalized.data, null);
+    assert.equal(normalized.bodyIssue, 'READ_FAILED');
+    const fetchImpl = async (url, init = {}) => {
+      const path = new URL(url).pathname;
+      if (path === '/auth/login') return nativeThrowing;
+      return new Response('x', { status: 404 });
+    };
+    await assert.rejects(
+      runRoleProbe('seller', {
+        apiUrl: URLS.api,
+        email: 'seller@example.test',
+        password: 'pw-seller',
+        fetchImpl,
+      }),
+      (e) => {
+        assert.equal(e.code, 'SELLER_LOGIN_FAILED');
+        assert.equal(e.details?.rejectionClass, 'AUTH_LOGIN_BODY_READ_FAILED');
+        assert.equal(e.details?.httpStatus, 200);
+        assert.ok(!String(e.message).includes('boom-read'));
+        return true;
+      },
+    );
+  });
+
+  it('14. runApiProbe standard Response /auth/me success를 소비한다', async () => {
+    const meUser = { id: 'user-api-1', email: 'consumer@example.test', role: 'consumer' };
+    const fetchImpl = async (url, init = {}) => {
+      const path = new URL(url).pathname;
+      assert.equal(path, '/auth/me');
+      assert.match(String(init.headers?.Authorization ?? ''), /^Bearer \S+$/);
+      return new Response(JSON.stringify(meUser), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    const result = await runApiProbe({ apiUrl: URLS.api, accessToken: 'at-user-api-1', fetchImpl });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.steps, { read: 'ok' });
+  });
+
+  it('15. runApiProbe standard Response /auth/me non-2xx는 API_ME_FAILED이다', async () => {
+    const fetchImpl = async () => new Response('unauthorized', { status: 401 });
+    await assert.rejects(
+      runApiProbe({ apiUrl: URLS.api, accessToken: 'at-user-api-1', fetchImpl }),
+      (e) => {
+        assert.ok(e instanceof ProbeContractError);
+        assert.equal(e.code, 'API_ME_FAILED');
+        return true;
+      },
+    );
+  });
+
+  it('16. runRoleProbe /auth/me non-2xx native Response는 REREAD_FAILED이다', async () => {
+    const loginUser = { id: 'user-consumer-1', email: 'consumer@example.test', role: 'consumer' };
+    const fetchImpl = async (url, init = {}) => {
+      const method = String(init.method ?? 'GET').toUpperCase();
+      const path = new URL(url).pathname;
+      if (path === '/auth/login' && method === 'POST') {
+        return new Response(
+          JSON.stringify({ accessToken: 'at-user-consumer-1', refreshToken: 'rt-user-consumer-1', user: loginUser }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (path === '/auth/me' && method === 'GET') {
+        return new Response('unauthorized', { status: 401 });
+      }
+      return new Response(null, { status: 204 });
+    };
+    await assert.rejects(
+      runRoleProbe('consumer', {
+        apiUrl: URLS.api,
+        email: 'consumer@example.test',
+        password: 'pw-consumer',
+        fetchImpl,
+      }),
+      (e) => {
+        assert.equal(e.code, 'CONSUMER_REREAD_FAILED');
+        return true;
+      },
+    );
+  });
+
+  it('17. failure-code collapse 해소: 401 vs malformed vs token-missing이 구분된다', async () => {
+    const loginUser = { id: 'user-consumer-1', email: 'consumer@example.test', role: 'consumer' };
+    const mkFetch = (loginResponse) => async (url, init = {}) => {
+      const path = new URL(url).pathname;
+      if (path === '/auth/login') return loginResponse;
+      if (path === '/auth/me') {
+        return new Response(JSON.stringify(loginUser), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(null, { status: 204 });
+    };
+    const capture = async (loginResponse) => {
+      try {
+        await runRoleProbe('consumer', {
+          apiUrl: URLS.api,
+          email: 'consumer@example.test',
+          password: 'pw-consumer',
+          fetchImpl: mkFetch(loginResponse),
+        });
+      } catch (e) {
+        return e;
+      }
+      assert.fail('expected login failure');
+    };
+    const e401 = await capture(
+      new Response(JSON.stringify({ error: 'rejected' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const eMalformed = await capture(
+      new Response('<html>bad</html>', { status: 200, headers: { 'content-type': 'text/html' } }),
+    );
+    const eTokenMissing = await capture(
+      new Response(
+        JSON.stringify({ refreshToken: 'rt-x', user: loginUser }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    assert.equal(e401.code, 'CONSUMER_LOGIN_FAILED');
+    assert.equal(e401.details?.rejectionClass, 'AUTH_LOGIN_UNAUTHORIZED');
+    assert.equal(eMalformed.details?.rejectionClass, 'AUTH_LOGIN_BODY_INVALID_JSON');
+    assert.equal(eTokenMissing.details?.rejectionClass, 'AUTH_LOGIN_TOKEN_MISSING');
+    assert.ok(
+      new Set([e401.details?.rejectionClass, eMalformed.details?.rejectionClass, eTokenMissing.details?.rejectionClass]).size === 3,
+      'three login failure classes must be distinct',
+    );
+  });
 });

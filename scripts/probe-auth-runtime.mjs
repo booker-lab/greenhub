@@ -381,24 +381,29 @@ export async function normalizeProbeHttpResponse(raw) {
         text = await raw.text();
       } else if (typeof raw.json === 'function') {
         // Fallback when only json() exists: resolve then treat as data.
-        const parsed = await raw.json();
-        return { ok, status, data: parsed ?? null };
+        // Body-read failure is classified without surfacing raw content.
+        try {
+          const parsed = await raw.json();
+          return { ok, status, data: parsed ?? null };
+        } catch {
+          return { ok, status, data: null, bodyIssue: 'READ_FAILED' };
+        }
       }
       if (typeof text !== 'string') {
-        return { ok, status, data: null };
+        return { ok, status, data: null, bodyIssue: 'READ_FAILED' };
       }
       const trimmed = text.trim();
       if (!trimmed) {
-        return { ok, status, data: null };
+        return { ok, status, data: null, bodyIssue: 'EMPTY' };
       }
       try {
         data = JSON.parse(trimmed);
       } catch {
         // Non-JSON / malformed body: never surface raw text.
-        data = null;
+        return { ok, status, data: null, bodyIssue: 'MALFORMED' };
       }
     } catch {
-      data = null;
+      return { ok, status, data: null, bodyIssue: 'READ_FAILED' };
     }
     return { ok, status, data };
   }
@@ -505,11 +510,37 @@ export async function runRoleProbe(role, { apiUrl, email, password, accessTokenF
     body: JSON.stringify({ email, password }),
   });
   const loginData = requireOkJson(loginRes, { role: ROLE, step: 'login' });
-  if (!loginData || typeof loginData.accessToken !== 'string' || !loginData.accessToken) {
-    fail(`${ROLE}_LOGIN_FAILED`, `${role} login 응답에 accessToken이 없습니다.`);
+  const loginHttpStatus = typeof loginRes?.status === 'number' ? loginRes.status : 0;
+  const loginRole = String(role).toLowerCase();
+  if (!loginData || typeof loginData !== 'object') {
+    const bodyIssue = typeof loginRes?.bodyIssue === 'string' ? loginRes.bodyIssue : '';
+    const rejectionClass =
+      bodyIssue === 'EMPTY'
+        ? 'AUTH_LOGIN_BODY_EMPTY'
+        : bodyIssue === 'MALFORMED'
+          ? 'AUTH_LOGIN_BODY_INVALID_JSON'
+          : bodyIssue === 'READ_FAILED'
+            ? 'AUTH_LOGIN_BODY_READ_FAILED'
+            : 'AUTH_LOGIN_BODY_INVALID';
+    fail(
+      `${ROLE}_LOGIN_FAILED`,
+      `${role} login 응답 본문이 유효하지 않습니다 (http=${loginHttpStatus} class=${rejectionClass}).`,
+      { role: loginRole, step: 'login', httpStatus: loginHttpStatus, rejectionClass },
+    );
+  }
+  if (typeof loginData.accessToken !== 'string' || !loginData.accessToken) {
+    fail(
+      `${ROLE}_LOGIN_FAILED`,
+      `${role} login 응답에 accessToken이 없습니다 (http=${loginHttpStatus}).`,
+      { role: loginRole, step: 'login', httpStatus: loginHttpStatus, rejectionClass: 'AUTH_LOGIN_TOKEN_MISSING' },
+    );
   }
   if (typeof loginData.refreshToken !== 'string' || !loginData.refreshToken) {
-    fail(`${ROLE}_LOGIN_FAILED`, `${role} login 응답에 refreshToken이 없습니다.`);
+    fail(
+      `${ROLE}_LOGIN_FAILED`,
+      `${role} login 응답에 refreshToken이 없습니다 (http=${loginHttpStatus}).`,
+      { role: loginRole, step: 'login', httpStatus: loginHttpStatus, rejectionClass: 'AUTH_LOGIN_REFRESH_MISSING' },
+    );
   }
   validateLoginUser(role, loginData.user);
 
