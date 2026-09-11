@@ -212,71 +212,75 @@ export class AdminService {
     reason: string,
   ): Promise<LegacyRefundClaimResult> {
     const token = randomUUID();
-    let result: LegacyRefundClaimResult = { kind: 'claimed', token };
 
-    await this.firestore.runTransaction(async (tx) => {
-      const orderRef = this.firestore.doc(`orders/${orderId}`);
-      const orderSnap = await tx.get(orderRef);
-      if (!orderSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
+    // Retry purity: the post-transaction decision must come from the committed
+    // attempt's return value only. An outer `let result` mutated inside the
+    // callback would leak an aborted attempt's done/in_progress decision into
+    // a retried claim (or vice versa). See
+    // ADMIN-LEGACY-REFUND-OCC-RETRY-PURITY-CLOSURE-02.
+    const claimResult = await this.firestore.runTransaction<LegacyRefundClaimResult>(
+      async (tx) => {
+        const orderRef = this.firestore.doc(`orders/${orderId}`);
+        const orderSnap = await tx.get(orderRef);
+        if (!orderSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
 
-      const order = orderSnap.data() as Record<string, any>;
-      const cancellation = (order['cancellation'] ?? null) as Record<string, any> | null;
-      const cancellationStatus = cancellation?.['status'] as string | undefined;
+        const order = orderSnap.data() as Record<string, any>;
+        const cancellation = (order['cancellation'] ?? null) as Record<string, any> | null;
+        const cancellationStatus = cancellation?.['status'] as string | undefined;
 
-      // 이미 cancellation까지 완료된 취소는 외부 provider와 capacity를 다시 건드리지 않는다.
-      if (order['status'] === 'CANCELLED' && cancellationStatus === 'COMPLETED') {
-        result = { kind: 'done' };
-        return;
-      }
-
-      let expiredClaim = false;
-      if (cancellationStatus === 'REFUNDING') {
-        const refundClaim = cancellation?.['refundClaim'] as
-          | { token?: string; expiresAt?: number }
-          | undefined;
-        if (
-          !refundClaim ||
-          typeof refundClaim.token !== 'string' ||
-          refundClaim.token.length === 0 ||
-          typeof refundClaim.expiresAt !== 'number'
-        ) {
-          result = { kind: 'in_progress' };
-          return;
+        // 이미 cancellation까지 완료된 취소는 외부 provider와 capacity를 다시 건드리지 않는다.
+        if (order['status'] === 'CANCELLED' && cancellationStatus === 'COMPLETED') {
+          return { kind: 'done' };
         }
-        if (refundClaim.expiresAt > Date.now()) {
-          result = { kind: 'in_progress' };
-          return;
+
+        let expiredClaim = false;
+        if (cancellationStatus === 'REFUNDING') {
+          const refundClaim = cancellation?.['refundClaim'] as
+            | { token?: string; expiresAt?: number }
+            | undefined;
+          if (
+            !refundClaim ||
+            typeof refundClaim.token !== 'string' ||
+            refundClaim.token.length === 0 ||
+            typeof refundClaim.expiresAt !== 'number'
+          ) {
+            return { kind: 'in_progress' };
+          }
+          if (refundClaim.expiresAt > Date.now()) {
+            return { kind: 'in_progress' };
+          }
+          expiredClaim = true;
         }
-        expiredClaim = true;
-      }
 
-      const retryable = ['LOCAL_PENDING', 'LOCAL_FAILED', 'REFUND_FAILED'].includes(
-        cancellationStatus ?? '',
-      );
-      const statusAllowsRefund = this.isLegacyRefundableStatus(order['status']);
-      const cancelledRetryAllowsRefund =
-        order['status'] === 'CANCELLED' && (retryable || expiredClaim);
-      const cancelledWithoutState = order['status'] === 'CANCELLED' && !cancellation;
-      if (!statusAllowsRefund && !cancelledRetryAllowsRefund && !cancelledWithoutState) {
-        throw new BadRequestException('현재 주문 상태에서는 관리자 환불을 처리할 수 없습니다.');
-      }
+        const retryable = ['LOCAL_PENDING', 'LOCAL_FAILED', 'REFUND_FAILED'].includes(
+          cancellationStatus ?? '',
+        );
+        const statusAllowsRefund = this.isLegacyRefundableStatus(order['status']);
+        const cancelledRetryAllowsRefund =
+          order['status'] === 'CANCELLED' && (retryable || expiredClaim);
+        const cancelledWithoutState = order['status'] === 'CANCELLED' && !cancellation;
+        if (!statusAllowsRefund && !cancelledRetryAllowsRefund && !cancelledWithoutState) {
+          throw new BadRequestException('현재 주문 상태에서는 관리자 환불을 처리할 수 없습니다.');
+        }
 
-      const now = this.firestore.Timestamp.now();
-      tx.update(orderRef, {
-        cancellation: {
-          status: 'REFUNDING',
-          reason,
-          refundClaim: {
-            token,
-            expiresAt: Date.now() + LEGACY_REFUND_CLAIM_MS,
+        const now = this.firestore.Timestamp.now();
+        tx.update(orderRef, {
+          cancellation: {
+            status: 'REFUNDING',
+            reason,
+            refundClaim: {
+              token,
+              expiresAt: Date.now() + LEGACY_REFUND_CLAIM_MS,
+            },
+            updatedAt: this.toIso(now),
           },
-          updatedAt: this.toIso(now),
-        },
-        updatedAt: now,
-      });
-    });
+          updatedAt: now,
+        });
+        return { kind: 'claimed', token };
+      },
+    );
 
-    return result;
+    return claimResult;
   }
 
   private async applyLegacyLocalCancellation(orderId: string, token: string, reason: string) {
