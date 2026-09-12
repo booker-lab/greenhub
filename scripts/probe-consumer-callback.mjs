@@ -44,8 +44,20 @@
  * Non-sensitive evidence ONLY (structurally fixed key set ??see
  * buildCallbackArtifact; the serializer cannot emit secret-derived keys):
  *   requestBuilder, credentialSource, headerName, headerPresent,
+ *   protectionPassageMode, protectionBypassHeaderName,
+ *   protectionBypassHeaderPresent,
  *   callbackStatus, callbackLocationClass, authErrorClass, setCookiePresent,
  *   sessionState, deploymentId, deploymentSourceSha, workflowSourceSha.
+ *
+ * Vercel protection passage (PILOT-AUTH-VERCEL-AUTOMATION-BYPASS-27):
+ *   --protection-passage-mode=NONE (default, historical) |
+ *     AUTOMATION_BYPASS. AUTOMATION_BYPASS attaches
+ *   x-vercel-protection-bypass to the three Consumer Preview requests only
+ *   (CSRF, callback, session) while x-e2e-test-token is preserved. The
+ *   bypass credential comes from VERCEL_AUTOMATION_BYPASS_SECRET env only
+ *   (workflow maps ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET); CLI literals,
+ *   logs, and secret-derived diagnostics are forbidden. Missing credential
+ *   fails closed with AUTOMATION_BYPASS_CREDENTIAL_UNAVAILABLE.
  *
  * Exit codes: 0 whenever the callback path was executed and a sanitized
  * artifact was produced (ANY gate outcome is adjudicable evidence);
@@ -58,10 +70,12 @@
  *     --consumer-url=https://<invocation-bound-consumer-preview> \
  *     --consumer-deployment-id=dpl_... \
  *     --evidence-json=.artifacts/.../probe-evidence.json \
- *     --approval=NON_PRODUCTION_AUTH_PROBE_APPROVED
+ *     --approval=NON_PRODUCTION_AUTH_PROBE_APPROVED \
+ *     --protection-passage-mode=AUTOMATION_BYPASS
  *
  * Secrets come from env (never logged, never serialized):
- *   E2E_TEST_SECRET, TEST_CONSUMER_EMAIL, TEST_CONSUMER_PASSWORD
+ *   E2E_TEST_SECRET, TEST_CONSUMER_EMAIL, TEST_CONSUMER_PASSWORD,
+ *   VERCEL_AUTOMATION_BYPASS_SECRET (AUTOMATION_BYPASS only)
  */
 
 export const APPROVAL_VALUE = 'NON_PRODUCTION_AUTH_PROBE_APPROVED';
@@ -70,6 +84,17 @@ export const HEADER_NAME = 'x-e2e-test-token';
 export const CREDENTIAL_SOURCE = 'E2E_TEST_SECRET';
 export const REQUEST_BUILDER =
   'scripts/probe-consumer-callback.mjs#runConsumerCallbackProbe';
+
+// Vercel protection passage layer (PILOT-AUTH-VERCEL-AUTOMATION-BYPASS-27).
+// This layer is SEPARATE from the application/E2E credential layer above:
+//   Vercel passage: x-vercel-protection-bypass <- VERCEL_AUTOMATION_BYPASS_SECRET
+//     (workflow maps it from ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET)
+//   Application/E2E auth: x-e2e-test-token <- ROUND_DIRECT_E2E_TEST_SECRET
+// The two layers are never merged: the bypass header only opens the Vercel
+// protection edge, while x-e2e-test-token still proves the application input.
+export const PROTECTION_BYPASS_HEADER_NAME = 'x-vercel-protection-bypass';
+export const PROTECTION_BYPASS_CREDENTIAL_ENV = 'VERCEL_AUTOMATION_BYPASS_SECRET';
+export const PROTECTION_PASSAGE_MODES = Object.freeze(['NONE', 'AUTOMATION_BYPASS']);
 
 // Invocation-scoped immutable exact binding
 // (PILOT-AUTH-CALLBACK-DYNAMIC-EXACT-BINDING-CONTRACT-22).
@@ -102,6 +127,9 @@ export const ARTIFACT_KEYS = Object.freeze([
   'deploymentSourceSha',
   'headerName',
   'headerPresent',
+  'protectionBypassHeaderName',
+  'protectionBypassHeaderPresent',
+  'protectionPassageMode',
   'requestBuilder',
   'runner',
   'sessionState',
@@ -144,6 +172,8 @@ export const FAIL_RESULT_KEYS = Object.freeze([
   'locationClass',
   'message',
   'observedDeploymentSha',
+  'protectionBypassHeaderName',
+  'protectionBypassHeaderPresent',
   'protectionPassageMode',
   'requestBuilder',
   'result',
@@ -179,20 +209,62 @@ function isNonEmptyString(value) {
 
 export function assertExpectedSha(value) {
   if (!isNonEmptyString(value)) {
-    fail('EXPECTED_SHA_REQUIRED', 'expected SHA가 ?�습?�다. --expected-sha=<40hex>가 ?�요?�니??');
+    fail('EXPECTED_SHA_REQUIRED', 'expected SHA가 ?�습?�다. --expected-sha=<40hex>가 ?�요?�니??');
   }
   const normalized = String(value).trim().toLowerCase();
   if (!SHA_PATTERN.test(normalized)) {
-    fail('EXPECTED_SHA_MALFORMED', 'expected SHA ?�식???�바르�? ?�습?�다 (40?�리 ?�문??16진수).');
+    fail('EXPECTED_SHA_MALFORMED', 'expected SHA ?�식???�바르�? ?�습?�다 (40?�리 ?�문??16진수).');
   }
   return normalized;
 }
 
 export function assertDeploymentId(value) {
   if (!isNonEmptyString(value) || !DEPLOYMENT_ID_PATTERN.test(String(value).trim())) {
-    fail('DEPLOYMENT_ID_MALFORMED', 'pinned Vercel deployment ID ?�식???�바르�? ?�습?�다.');
+    fail('DEPLOYMENT_ID_MALFORMED', 'pinned Vercel deployment ID ?�식???�바르�? ?�습?�다.');
   }
   return String(value).trim();
+}
+
+/**
+ * Vercel protection passage mode (PILOT-AUTH-VERCEL-AUTOMATION-BYPASS-27).
+ * NONE preserves the historical behavior exactly (no bypass header).
+ * AUTOMATION_BYPASS attaches x-vercel-protection-bypass to the three
+ * Consumer Preview requests only. Unknown modes fail closed.
+ */
+export function normalizeProtectionPassageMode(value) {
+  const raw = String(value ?? 'NONE').trim().toUpperCase();
+  if (raw === '' || raw === 'NONE') return 'NONE';
+  if (raw === 'AUTOMATION_BYPASS') return 'AUTOMATION_BYPASS';
+  fail('PROTECTION_PASSAGE_MODE_UNSUPPORTED', 'protection passage mode가 지원되지 않습니다 (NONE | AUTOMATION_BYPASS).');
+}
+
+function readProtectionBypassSecret(inputBypassSecret, env) {
+  if (typeof inputBypassSecret === 'string' && isNonEmptyString(inputBypassSecret)) {
+    return String(inputBypassSecret);
+  }
+  const fromEnv = env?.[PROTECTION_BYPASS_CREDENTIAL_ENV] ?? process.env[PROTECTION_BYPASS_CREDENTIAL_ENV] ?? '';
+  return typeof fromEnv === 'string' ? fromEnv : '';
+}
+
+/**
+ * Resolve the bypass credential for the requested mode WITHOUT ever
+ * serializing, logging, hashing, or measuring it. NONE needs no credential.
+ * AUTOMATION_BYPASS without a credential fails closed BEFORE any network
+ * call with AUTOMATION_BYPASS_CREDENTIAL_UNAVAILABLE.
+ */
+export function assertProtectionPassageReady({ protectionPassageMode, protectionBypassSecret } = {}, env = process.env) {
+  const mode = normalizeProtectionPassageMode(
+    protectionPassageMode ?? env?.PROTECTION_PASSAGE_MODE ?? 'NONE',
+  );
+  if (mode === 'NONE') return { protectionPassageMode: mode, bypassSecret: '' };
+  const secret = readProtectionBypassSecret(protectionBypassSecret, env);
+  if (!isNonEmptyString(secret)) {
+    fail(
+      'AUTOMATION_BYPASS_CREDENTIAL_UNAVAILABLE',
+      'AUTOMATION_BYPASS mode인데 bypass credential이 없어 network 호출 전에 차단합니다.',
+    );
+  }
+  return { protectionPassageMode: mode, bypassSecret: String(secret) };
 }
 
 function hostnameOf(urlString) {
@@ -214,27 +286,27 @@ export function isProductionHostname(hostname) {
 
 export function normalizeConsumerUrl(value) {
   if (!isNonEmptyString(value)) {
-    fail('RUNTIME_NOT_BOUND', 'consumer URL???�어 runtime binding??증명?????�습?�다.');
+    fail('RUNTIME_NOT_BOUND', 'consumer URL???�어 runtime binding??증명?????�습?�다.');
   }
   let url;
   try {
     url = new URL(String(value).trim());
   } catch {
-    fail('RUNTIME_NOT_BOUND', 'consumer URL ?�식???�바르�? ?�아 runtime binding??거�??�니??');
+    fail('RUNTIME_NOT_BOUND', 'consumer URL ?�식???�바르�? ?�아 runtime binding??거�??�니??');
   }
   if (url.username || url.password || url.search || url.hash) {
-    fail('RUNTIME_NOT_BOUND', 'consumer URL???�증?�보/query/fragment가 ?�어 binding??거�??�니??');
+    fail('RUNTIME_NOT_BOUND', 'consumer URL???�증?�보/query/fragment가 ?�어 binding??거�??�니??');
   }
   const isLoopback =
     url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
   if (!isLoopback && url.protocol !== 'https:') {
-    fail('RUNTIME_NOT_BOUND', 'consumer URL?� loopback???�니�?https�??�용?�니??');
+    fail('RUNTIME_NOT_BOUND', 'consumer URL?� loopback???�니�?https�??�용?�니??');
   }
   if (isProductionHostname(url.hostname)) {
-    fail('PRODUCTION_TARGET_REJECTED', 'consumer target???�영 ?�스?�이므�?차단?�니??');
+    fail('PRODUCTION_TARGET_REJECTED', 'consumer target???�영 ?�스?�이므�?차단?�니??');
   }
   if (!url.hostname.endsWith('.vercel.app')) {
-    fail('RUNTIME_NOT_BOUND', 'consumer target??invocation-bound Preview deployment ?�스?��? ?�닙?�다.');
+    fail('RUNTIME_NOT_BOUND', 'consumer target??invocation-bound Preview deployment ?�스?��? ?�닙?�다.');
   }
   return url.toString().replace(/\/$/, '');
 }
@@ -273,37 +345,37 @@ export function validateEvidenceBinding({ expectedSha, deploymentId, consumerUrl
   const sha = assertExpectedSha(expectedSha);
   const id = assertDeploymentId(deploymentId);
   if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) {
-    fail('RUNTIME_NOT_BOUND', 'runtime binding evidence가 ?�어 ?�행??차단?�니??');
+    fail('RUNTIME_NOT_BOUND', 'runtime binding evidence가 ?�어 ?�행??차단?�니??');
   }
   if (evidence.ready !== true) {
-    fail('RUNTIME_NOT_BOUND', 'binding evidence가 exact READY ?�태�?증명?��? ?�아 ?�행??차단?�니??');
+    fail('RUNTIME_NOT_BOUND', 'binding evidence가 exact READY ?�태�?증명?��? ?�아 ?�행??차단?�니??');
   }
   const evidenceSha = String(evidence.expectedSha ?? '').trim().toLowerCase();
   if (!evidenceSha || evidenceSha !== sha) {
-    fail('EXPECTED_SHA_MISMATCH', 'binding evidence SHA가 --expected-sha?� ?�릅?�다.');
+    fail('EXPECTED_SHA_MISMATCH', 'binding evidence SHA가 --expected-sha?� ?�릅?�다.');
   }
   const shas = evidence.deploymentShas ?? evidence.statusShas ?? {};
   const observedSha = String(shas.consumer ?? '').trim().toLowerCase();
   if (!observedSha || observedSha !== sha) {
-    fail('DEPLOYMENT_SHA_MISMATCH', 'consumer 배포 SHA가 지??SHA?� ?�치?��? ?�습?�다.');
+    fail('DEPLOYMENT_SHA_MISMATCH', 'consumer 배포 SHA가 지??SHA?� ?�치?��? ?�습?�다.');
   }
   const pinned =
     evidence.pinnedDeploymentIds ?? evidence.deploymentIds ?? evidence.pinnedDeploymentIDs ?? {};
   const pinnedConsumer = pinned.consumer ?? evidence.consumerDeploymentId ?? '';
   if (!isNonEmptyString(pinnedConsumer)) {
-    fail('RUNTIME_NOT_BOUND', 'binding evidence??consumer deployment ID가 ?�어 ?�행??차단?�니??');
+    fail('RUNTIME_NOT_BOUND', 'binding evidence??consumer deployment ID가 ?�어 ?�행??차단?�니??');
   }
   if (String(pinnedConsumer).trim() !== id) {
-    fail('RUNTIME_BINDING_MISMATCH', 'consumer deployment ID가 evidence binding�??�릅?�다.');
+    fail('RUNTIME_BINDING_MISMATCH', 'consumer deployment ID가 evidence binding�??�릅?�다.');
   }
   const targets = evidence.deploymentTargetUrls ?? evidence.statusTargetUrls ?? evidence.targetUrls ?? {};
   const evidenceTarget = targets.consumer ?? '';
   if (!isNonEmptyString(evidenceTarget)) {
-    fail('RUNTIME_NOT_BOUND', 'binding evidence??consumer target URL???�어 ?�행??차단?�니??');
+    fail('RUNTIME_NOT_BOUND', 'binding evidence??consumer target URL???�어 ?�행??차단?�니??');
   }
   const observed = normalizeConsumerUrl(evidenceTarget);
   if (observed !== consumerUrl) {
-    fail('RUNTIME_BINDING_MISMATCH', 'consumer target??evidence binding�??�릅?�다.');
+    fail('RUNTIME_BINDING_MISMATCH', 'consumer target??evidence binding�??�릅?�다.');
   }
   return { expectedSha: sha, deploymentId: id };
 }
@@ -311,21 +383,32 @@ export function validateEvidenceBinding({ expectedSha, deploymentId, consumerUrl
 export function validateProbeGuards(input = {}, env = process.env) {
   const approval = String(input.approval ?? env.NON_PRODUCTION_AUTH_PROBE_APPROVAL ?? '').trim();
   if (approval !== APPROVAL_VALUE) {
-    fail('MISSING_APPROVAL', 'explicit non-production approval???�어 ?�행??차단?�니??');
+    fail('MISSING_APPROVAL', 'explicit non-production approval???�어 ?�행??차단?�니??');
   }
   const e2eSecret = input.e2eSecret ?? env.E2E_TEST_SECRET ?? '';
   if (!isNonEmptyString(e2eSecret)) {
     fail(
       'CREDENTIAL_SOURCE_UNAVAILABLE',
-      'header�?구성???�인??E2E_TEST_SECRET input???�어 callback???�도?��? ?�습?�다.',
+      'header�?구성???�인??E2E_TEST_SECRET input???�어 callback???�도?��? ?�습?�다.',
     );
   }
   const email = input.email ?? env.TEST_CONSUMER_EMAIL ?? '';
   const password = input.password ?? env.TEST_CONSUMER_PASSWORD ?? '';
   if (!isNonEmptyString(email) || !isNonEmptyString(password)) {
-    fail('CONSUMER_CREDENTIALS_MISSING', 'consumer test credential???�어 ?�행??차단?�니??');
+    fail('CONSUMER_CREDENTIALS_MISSING', 'consumer test credential???�어 ?�행??차단?�니??');
   }
-  return { approval };
+  // Vercel passage layer is validated here as well so AUTOMATION_BYPASS
+  // without a credential fails closed BEFORE any network call. NONE needs
+  // no credential and preserves the historical guard behavior exactly.
+  const { protectionPassageMode } = assertProtectionPassageReady(
+    {
+      protectionPassageMode:
+        input.protectionPassageMode ?? env.PROTECTION_PASSAGE_MODE ?? 'NONE',
+      protectionBypassSecret: input.protectionBypassSecret,
+    },
+    env,
+  );
+  return { approval, protectionPassageMode };
 }
 
 // ---- Safe classifiers (pure, no network) -----------------------------------
@@ -498,6 +581,7 @@ export function extractDeploymentReady(evidence) {
  * explicit null, never as raw values.
  */
 export function buildFailureResult(fields = {}) {
+  const mode = normalizeProtectionPassageMode(fields.protectionPassageMode ?? 'NONE');
   const result = {
     authErrorClass: fields.authErrorClass ?? null,
     callbackAttempted: fields.callbackAttempted ?? false,
@@ -520,7 +604,9 @@ export function buildFailureResult(fields = {}) {
     locationClass: fields.locationClass ?? 'NONE',
     message: fields.message ?? '',
     observedDeploymentSha: fields.observedDeploymentSha ?? null,
-    protectionPassageMode: PROTECTION_PASSAGE_MODE,
+    protectionBypassHeaderName: PROTECTION_BYPASS_HEADER_NAME,
+    protectionBypassHeaderPresent: fields.protectionBypassHeaderPresent ?? false,
+    protectionPassageMode: mode,
     requestBuilder: REQUEST_BUILDER,
     result: 'FAIL',
     runner: RUNNER_ID,
@@ -532,10 +618,10 @@ export function buildFailureResult(fields = {}) {
   const keys = Object.keys(result).sort();
   const expected = [...FAIL_RESULT_KEYS].sort();
   if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
-    fail('PROBE_INTERNAL_ERROR', 'sanitized FAIL key set??고정 계약�??�릅?�다.');
+    fail('PROBE_INTERNAL_ERROR', 'sanitized FAIL key set??고정 계약�??�릅?�다.');
   }
-  if (result.protectionPassageMode !== 'NONE') {
-    fail('PROBE_INTERNAL_ERROR', 'protection passage mode???�번 Task?�서 NONE�??�용?�니??');
+  if (!PROTECTION_PASSAGE_MODES.includes(result.protectionPassageMode)) {
+    fail('PROBE_INTERNAL_ERROR', 'protection passage mode가 허용 목록에 없습니다.');
   }
   return result;
 }
@@ -595,6 +681,7 @@ function parseJsonBody(value) {
  * secret/token/cookie value could enter the artifact.
  */
 export function buildCallbackArtifact(fields) {
+  const mode = normalizeProtectionPassageMode(fields.protectionPassageMode ?? 'NONE');
   const artifact = {
     artifact: 'pilot-auth-consumer-callback-input-binding-proof-16',
     authErrorClass: fields.authErrorClass,
@@ -606,6 +693,9 @@ export function buildCallbackArtifact(fields) {
     deploymentSourceSha: fields.deploymentSourceSha,
     headerName: HEADER_NAME,
     headerPresent: fields.headerPresent,
+    protectionBypassHeaderName: PROTECTION_BYPASS_HEADER_NAME,
+    protectionBypassHeaderPresent: fields.protectionBypassHeaderPresent ?? false,
+    protectionPassageMode: mode,
     requestBuilder: REQUEST_BUILDER,
     runner: 'PILOT-AUTH-CONSUMER-CALLBACK-PROBE-16',
     sessionState: fields.sessionState,
@@ -615,7 +705,7 @@ export function buildCallbackArtifact(fields) {
   const keys = Object.keys(artifact).sort();
   const expected = [...ARTIFACT_KEYS].sort();
   if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
-    fail('PROBE_INTERNAL_ERROR', 'sanitized artifact key set??고정 계약�??�릅?�다.');
+    fail('PROBE_INTERNAL_ERROR', 'sanitized artifact key set??고정 계약�??�릅?�다.');
   }
   return artifact;
 }
@@ -644,6 +734,8 @@ export async function runConsumerCallbackProbe(
     email,
     password,
     approval,
+    protectionPassageMode,
+    protectionBypassSecret,
     workflowSha = '',
     checkedAt = '',
     fetchImpl,
@@ -660,6 +752,20 @@ export async function runConsumerCallbackProbe(
   const readyInitial = extractDeploymentReady(evidence);
   const expectedShaInitial = safeNormalizedSha(expectedSha);
   const deploymentIdInitial = safeDeploymentId(deploymentId);
+  const requestedModeRaw =
+    protectionPassageMode ?? env.PROTECTION_PASSAGE_MODE ?? 'NONE';
+  const safeModeInitial = (() => {
+    try {
+      return normalizeProtectionPassageMode(requestedModeRaw);
+    } catch {
+      return 'NONE';
+    }
+  })();
+  const rawBypassForInitial = String(
+    protectionBypassSecret ?? env[PROTECTION_BYPASS_CREDENTIAL_ENV] ?? '',
+  );
+  const protectionPresentInitial =
+    safeModeInitial === 'AUTOMATION_BYPASS' && isNonEmptyString(rawBypassForInitial);
   const guardEvidence = (code, message) =>
     buildFailureResult({
       authErrorClass: null,
@@ -681,6 +787,8 @@ export async function runConsumerCallbackProbe(
       locationClass: 'NONE',
       message,
       observedDeploymentSha: observedShaInitial,
+      protectionBypassHeaderPresent: protectionPresentInitial,
+      protectionPassageMode: safeModeInitial,
       sessionAttempted: false,
       sessionState: 'NOT_CHECKED',
       setCookiePresent: null,
@@ -689,15 +797,23 @@ export async function runConsumerCallbackProbe(
   if (typeof fetch !== 'function') {
     failWithEvidence(
       'PROBE_INTERNAL_ERROR',
-      'fetch 구현???�어 probe�??�행?????�습?�다.',
-      guardEvidence('PROBE_INTERNAL_ERROR', 'fetch 구현???�어 probe�??�행?????�습?�다.'),
+      'fetch 구현???�어 probe�??�행?????�습?�다.',
+      guardEvidence('PROBE_INTERNAL_ERROR', 'fetch 구현???�어 probe�??�행?????�습?�다.'),
     );
   }
   let base;
   let bound;
+  let passage;
   try {
     validateProbeGuards(
-      { approval: approval ?? env.NON_PRODUCTION_AUTH_PROBE_APPROVAL, e2eSecret, email, password },
+      {
+        approval: approval ?? env.NON_PRODUCTION_AUTH_PROBE_APPROVAL,
+        e2eSecret,
+        email,
+        password,
+        protectionPassageMode: requestedModeRaw,
+        protectionBypassSecret,
+      },
       env,
     );
     base = normalizeConsumerUrl(consumerUrl);
@@ -708,6 +824,16 @@ export async function runConsumerCallbackProbe(
       consumerUrl: base,
       evidence,
     });
+    // Resolve the Vercel passage credential AFTER the shared guards so the
+    // mode + credential contract fails closed before any network call.
+    // The secret value never leaves this scope except as a request header.
+    passage = assertProtectionPassageReady(
+      {
+        protectionPassageMode: requestedModeRaw,
+        protectionBypassSecret,
+      },
+      env,
+    );
   } catch (error) {
     if (error instanceof CallbackProbeContractError && error.evidence) throw error;
     const code = error instanceof CallbackProbeContractError ? error.code : 'PROBE_INTERNAL_ERROR';
@@ -719,15 +845,26 @@ export async function runConsumerCallbackProbe(
   // E2E_TEST_SECRET input under the expected key on BOTH the CSRF GET and
   // the callback POST (same construction as loginViaCredentials). Only the
   // key name + presence boolean ever leave this scope.
+  // Vercel passage layer (separate): when AUTOMATION_BYPASS is selected,
+  // x-vercel-protection-bypass carries the bypass credential on the three
+  // Consumer Preview requests (CSRF, callback, session) only. It is never
+  // merged with x-e2e-test-token and never sent to any other origin.
   const secret = String(e2eSecret ?? env.E2E_TEST_SECRET ?? '');
+  const bypassSecret = String(passage.bypassSecret ?? '');
+  const protectionMode = String(passage.protectionPassageMode ?? 'NONE');
+  const protectionPresent = protectionMode === 'AUTOMATION_BYPASS' && isNonEmptyString(bypassSecret);
   const headers = { [HEADER_NAME]: secret };
+  const bypassHeaders =
+    protectionMode === 'AUTOMATION_BYPASS' ? { [PROTECTION_BYPASS_HEADER_NAME]: bypassSecret } : {};
+  const csrfHeaders = { ...headers, ...bypassHeaders };
+  const callbackHeadersBase = { ...headers, ...bypassHeaders };
   const headerPresent = isNonEmptyString(secret);
   const headerConfigured = headerPresent;
   const observedSha = extractObservedDeploymentSha(evidence);
   const deploymentReady = extractDeploymentReady(evidence);
   if (!headerPresent) {
     const code = 'CREDENTIAL_SOURCE_UNAVAILABLE';
-    const message = 'header�?구성???�인??E2E_TEST_SECRET input???�어 callback???�도?��? ?�습?�다.';
+    const message = 'header�?구성???�인??E2E_TEST_SECRET input???�어 callback???�도?��? ?�습?�다.';
     failWithEvidence(
       code,
       message,
@@ -751,6 +888,8 @@ export async function runConsumerCallbackProbe(
         locationClass: 'NONE',
         message,
         observedDeploymentSha: observedSha,
+        protectionBypassHeaderPresent: protectionPresent,
+        protectionPassageMode: protectionMode,
         sessionAttempted: false,
         sessionState: 'NOT_CHECKED',
         setCookiePresent: null,
@@ -767,7 +906,7 @@ export async function runConsumerCallbackProbe(
   // 1) CSRF (same header object as the callback POST).
   const csrfRes = await fetch(
     `${base}/api/auth/csrf`,
-    requestInit({ method: 'GET', headers: { ...headers } }),
+    requestInit({ method: 'GET', headers: { ...csrfHeaders } }),
   ).catch(() => null);
   calls.push('/api/auth/csrf');
   const csrfFail = (code, message, { csrfStatus = null, locationValue = null, isProtection = false } = {}) => {
@@ -793,6 +932,8 @@ export async function runConsumerCallbackProbe(
       locationClass,
       message,
       observedDeploymentSha: observedSha,
+      protectionBypassHeaderPresent: protectionPresent,
+      protectionPassageMode: protectionMode,
       sessionAttempted: false,
       sessionState: 'NOT_CHECKED',
       setCookiePresent: null,
@@ -801,7 +942,7 @@ export async function runConsumerCallbackProbe(
   };
   if (!csrfRes) {
     const code = 'CSRF_TRANSPORT_FAILED';
-    const message = 'CSRF ?�청 ?�송???�패??callback???�도?��? ?�습?�다.';
+    const message = 'CSRF ?�청 ?�송???�패??callback???�도?��? ?�습?�다.';
     failWithEvidence(code, message, csrfFail(code, message, { csrfStatus: null }));
   }
   // Protection intercept at CSRF stage takes precedence over transport/app checks.
@@ -832,7 +973,7 @@ export async function runConsumerCallbackProbe(
       })
     ) {
       const code = 'DEPLOYMENT_PROTECTION_INTERCEPTED';
-      const message = 'Vercel protection intercept�?CSRF ?�계?�서 차단?�습?�다.';
+      const message = 'Vercel protection intercept�?CSRF ?�계?�서 차단?�습?�다.';
       failWithEvidence(
         code,
         message,
@@ -849,7 +990,7 @@ export async function runConsumerCallbackProbe(
   const csrfOk = csrfRes.ok === true || (csrfStatus >= 200 && csrfStatus < 300);
   if (!csrfOk) {
     const code = 'CSRF_TRANSPORT_FAILED';
-    const message = 'CSRF ?�답??비정?�이??callback???�도?��? ?�습?�다.';
+    const message = 'CSRF ?�답??비정?�이??callback???�도?��? ?�습?�다.';
     // Non-2xx CSRF is transport/app precondition failure (protection already excluded).
     failWithEvidence(code, message, csrfFail(code, message, { csrfStatus }));
   }
@@ -865,7 +1006,7 @@ export async function runConsumerCallbackProbe(
   }
   if (!csrfToken) {
     const code = 'CSRF_TRANSPORT_FAILED';
-    const message = 'CSRF token???�인?��? 못해 callback???�도?��? ?�습?�다.';
+    const message = 'CSRF token???�인?��? 못해 callback???�도?��? ?�습?�다.';
     failWithEvidence(code, message, csrfFail(code, message, { csrfStatus }));
   }
 
@@ -881,7 +1022,7 @@ export async function runConsumerCallbackProbe(
     requestInit({
       method: 'POST',
       headers: {
-        ...headers,
+        ...callbackHeadersBase,
         'Content-Type': 'application/x-www-form-urlencoded',
         ...(jar.size > 0 ? { Cookie: jarCookieHeader(jar) } : {}),
       },
@@ -916,6 +1057,8 @@ export async function runConsumerCallbackProbe(
       locationClass,
       message,
       observedDeploymentSha: observedSha,
+      protectionBypassHeaderPresent: protectionPresent,
+      protectionPassageMode: protectionMode,
       sessionAttempted: false,
       sessionState: 'NOT_CHECKED',
       setCookiePresent: cookiePresent,
@@ -924,7 +1067,7 @@ export async function runConsumerCallbackProbe(
   };
   if (!callbackRes) {
     const code = 'CALLBACK_TRANSPORT_FAILED';
-    const message = 'callback ?�청 ?�송???�패?�습?�다.';
+    const message = 'callback ?�청 ?�송???�패?�습?�다.';
     failWithEvidence(code, message, callbackFail(code, message, { callbackStatus: null }));
   }
   storeCookies(jar, callbackRes.headers);
@@ -956,7 +1099,7 @@ export async function runConsumerCallbackProbe(
       isProtectionIntercept({ status: callbackStatus, contentType, locationValue, base })
     ) {
       const code = 'DEPLOYMENT_PROTECTION_INTERCEPTED';
-      const message = 'Vercel protection intercept�?callback ?�계?�서 차단?�습?�다.';
+      const message = 'Vercel protection intercept�?callback ?�계?�서 차단?�습?�다.';
       failWithEvidence(
         code,
         message,
@@ -980,7 +1123,7 @@ export async function runConsumerCallbackProbe(
   // 302 LOGIN_ERROR SUCCESS taxonomy which is preserved unchanged).
   if (callbackStatus === 401 || callbackStatus === 403) {
     const code = 'CALLBACK_REJECTED';
-    const message = 'callback application ?�답?�서 ?�증 거절??직접 관찰됐?�니??';
+    const message = 'callback application ?�답?�서 ?�증 거절??직접 관찰됐?�니??';
     failWithEvidence(
       code,
       message,
@@ -1021,6 +1164,8 @@ export async function runConsumerCallbackProbe(
       locationClass: locationEvidence.locationClass,
       message,
       observedDeploymentSha: observedSha,
+      protectionBypassHeaderPresent: protectionPresent,
+      protectionPassageMode: protectionMode,
       sessionAttempted: true,
       sessionState: 'NOT_CHECKED',
       setCookiePresent,
@@ -1028,12 +1173,16 @@ export async function runConsumerCallbackProbe(
     });
   let sessionFetchThrew = false;
   let sessionRes = null;
+  const sessionHeaders = {
+    ...bypassHeaders,
+    ...(jar.size > 0 ? { Cookie: jarCookieHeader(jar) } : {}),
+  };
   try {
     sessionRes = await fetch(
       `${base}/api/auth/session`,
       requestInit({
         method: 'GET',
-        headers: { ...(jar.size > 0 ? { Cookie: jarCookieHeader(jar) } : {}) },
+        headers: { ...sessionHeaders },
       }),
     );
   } catch {
@@ -1042,7 +1191,7 @@ export async function runConsumerCallbackProbe(
   }
   if (sessionFetchThrew || !sessionRes) {
     const code = 'SESSION_READ_FAILED';
-    const message = 'session ?�인 ?�계?�서 ?�송???�패?�습?�다.';
+    const message = 'session ?�인 ?�계?�서 ?�송???�패?�습?�다.';
     failWithEvidence(code, message, sessionFail(code, message, { sessionStatus: null }));
   }
   calls.push('/api/auth/session');
@@ -1071,7 +1220,7 @@ export async function runConsumerCallbackProbe(
       })
     ) {
       const code = 'DEPLOYMENT_PROTECTION_INTERCEPTED';
-      const message = 'Vercel protection intercept�?session ?�계?�서 차단?�습?�다.';
+      const message = 'Vercel protection intercept�?session ?�계?�서 차단?�습?�다.';
       failWithEvidence(
         code,
         message,
@@ -1095,6 +1244,8 @@ export async function runConsumerCallbackProbe(
           locationClass: PROTECTION_LOCATION_CLASS,
           message,
           observedDeploymentSha: observedSha,
+          protectionBypassHeaderPresent: protectionPresent,
+          protectionPassageMode: protectionMode,
           sessionAttempted: true,
           sessionState: 'NOT_CHECKED',
           setCookiePresent,
@@ -1128,6 +1279,8 @@ export async function runConsumerCallbackProbe(
     deploymentId: bound.deploymentId,
     deploymentSourceSha: bound.expectedSha,
     headerPresent,
+    protectionBypassHeaderPresent: protectionPresent,
+    protectionPassageMode: protectionMode,
     sessionState,
     setCookiePresent,
     workflowSourceSha: workflowShaValue,
@@ -1170,6 +1323,11 @@ async function main() {
         deploymentId: args['consumer-deployment-id'],
         evidence,
         approval: args.approval,
+        // Vercel passage mode comes from an explicit CLI flag only.
+        // The bypass CREDENTIAL itself is NEVER a CLI literal: it is read
+        // from VERCEL_AUTOMATION_BYPASS_SECRET env inside the runner.
+        protectionPassageMode:
+          args['protection-passage-mode'] ?? process.env.PROTECTION_PASSAGE_MODE ?? 'NONE',
         workflowSha: process.env.GITHUB_SHA ?? '',
         checkedAt: '',
       },
