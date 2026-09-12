@@ -1,19 +1,37 @@
 /**
- * PILOT-AUTH-CONSUMER-CALLBACK-INPUT-BINDING-PROOF-16 — locked Consumer
- * Preview deployment NextAuth credentials callback provenance probe.
+ * PILOT-AUTH-CONSUMER-CALLBACK-INPUT-BINDING-PROOF-16 ??invocation-scoped
+ * exact Consumer Preview deployment NextAuth credentials callback
+ * provenance probe (PILOT-AUTH-CALLBACK-DYNAMIC-EXACT-BINDING-CONTRACT-22).
  *
- * Purpose (CASE B1 closeout):
- *   Prove, at runtime, whether the locked Consumer Preview deployment's
- *   NextAuth credentials callback request was actually constructed with the
- *   approved E2E_TEST_SECRET input as the `x-e2e-test-token` header, and how
- *   far that request progressed through the runtime gate. The callback gate
- *   itself is used as the opaque equality proof — secret plaintext, value,
- *   hash, fingerprint, prefix/suffix, and length are NEVER accessed for
- *   output, comparison logging, or diagnostics.
+ * Purpose (CASE B1 closeout, dynamic binding):
+ *   Prove, at runtime, whether the invocation-bound Consumer Preview
+ *   deployment's NextAuth credentials callback request was actually
+ *   constructed with the approved E2E_TEST_SECRET input as the
+ *   `x-e2e-test-token` header, and how far that request progressed through
+ *   the runtime gate. The callback gate itself is used as the opaque
+ *   equality proof ??secret plaintext, value, hash, fingerprint,
+ *   prefix/suffix, and length are NEVER accessed for output, comparison
+ *   logging, or diagnostics.
+ *
+ * Binding authority (STATIC lock REMOVED):
+ *   There is intentionally NO compile-time deployment/SHA/branch literal in
+ *   this file. A literal roll-forward (e.g. rewriting a LOCKED_* constant to
+ *   the current main) would self-invalidate on publication, because the
+ *   publication merge itself creates a new main SHA. Instead the exact
+ *   target is selected explicitly by the caller (workflow inputs:
+ *   expected_sha + consumer/seller/driver deployment IDs) and verified
+ *   independently against provider deployment metadata evidence. The bound
+ *   values (expected SHA, Consumer deployment ID, exact Consumer URL/origin,
+ *   deployment evidence) are frozen at invocation start as the immutable
+ *   binding for that run: no fallback, auto-discovery, latest-selection, or
+ *   branch-tip substitution is permitted afterwards. Source ref/branch may
+ *   appear in evidence as provenance only and never outranks exact SHA +
+ *   exact deployment metadata.
+ *
  *
  * What this probe does (callback path only, never the direct API path):
  *   1. Fail-closed guards BEFORE any network call (approval, production
- *      target, locked deployment/branch/SHA binding, evidence binding,
+ *      target, invocation-scoped deployment/SHA/URL evidence binding,
  *      credential-source presence).
  *   2. GET  /api/auth/csrf with the constructed header (provenance recorded
  *      as headerName/headerPresent BEFORE the request is sent).
@@ -23,7 +41,7 @@
  *   4. GET  /api/auth/session with the same in-memory cookie jar
  *      (Set-Cookie values never leave memory; only presence is recorded).
  *
- * Non-sensitive evidence ONLY (structurally fixed key set — see
+ * Non-sensitive evidence ONLY (structurally fixed key set ??see
  * buildCallbackArtifact; the serializer cannot emit secret-derived keys):
  *   requestBuilder, credentialSource, headerName, headerPresent,
  *   callbackStatus, callbackLocationClass, authErrorClass, setCookiePresent,
@@ -33,11 +51,11 @@
  * artifact was produced (ANY gate outcome is adjudicable evidence);
  * 1 only on fail-closed contract violations (no callback attempted).
  *
- * Usage (real run — via the approved workflow with Environment-injected
+ * Usage (real run ??via the approved workflow with Environment-injected
  * secrets; never pass secrets as CLI literals):
  *   node scripts/probe-consumer-callback.mjs \
  *     --expected-sha=<40hex> \
- *     --consumer-url=https://<locked-consumer-preview> \
+ *     --consumer-url=https://<invocation-bound-consumer-preview> \
  *     --consumer-deployment-id=dpl_... \
  *     --evidence-json=.artifacts/.../probe-evidence.json \
  *     --approval=NON_PRODUCTION_AUTH_PROBE_APPROVED
@@ -53,12 +71,14 @@ export const CREDENTIAL_SOURCE = 'E2E_TEST_SECRET';
 export const REQUEST_BUILDER =
   'scripts/probe-consumer-callback.mjs#runConsumerCallbackProbe';
 
-// Locked runtime target (CASE B1 canonical input). Requests to any other
-// deployment/branch/SHA fail closed with TARGET_BINDING_MOVED — the callback
-// is never retargeted to a different deployment.
-export const LOCKED_DEPLOYMENT_ID = 'dpl_B7TCW4CzUgWZv9JTUffMdpjCY7Qd';
-export const LOCKED_SOURCE_SHA = '67632ede1d7196456bcf1fe5320a7a7e7d509c0c';
-export const LOCKED_BRANCH = 'tmp/pilot-auth-verifier-cookie-04a-publication-01';
+// Invocation-scoped immutable exact binding
+// (PILOT-AUTH-CALLBACK-DYNAMIC-EXACT-BINDING-CONTRACT-22).
+// No LOCKED_DEPLOYMENT_ID / LOCKED_SOURCE_SHA / LOCKED_BRANCH literal exists
+// by design: the exact target comes from the caller's --expected-sha /
+// --consumer-deployment-id / --consumer-url inputs and is verified against
+// provider deployment metadata evidence via validateEvidenceBinding().
+// The publication merge that carries this file creates a new main SHA, so a
+// compile-time literal could never stay exact across publication.
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const DEPLOYMENT_ID_PATTERN = /^dpl_[A-Za-z0-9]+$/;
@@ -70,7 +90,7 @@ const KNOWN_AUTH_ERROR_CLASSES = Object.freeze([
 ]);
 
 // Exact sanitized artifact key set. buildCallbackArtifact() can only produce
-// these keys — secret/token/cookie values are structurally unrepresentable.
+// these keys ??secret/token/cookie values are structurally unrepresentable.
 export const ARTIFACT_KEYS = Object.freeze([
   'artifact',
   'authErrorClass',
@@ -159,18 +179,18 @@ function isNonEmptyString(value) {
 
 export function assertExpectedSha(value) {
   if (!isNonEmptyString(value)) {
-    fail('EXPECTED_SHA_REQUIRED', 'expected SHA가 없습니다. --expected-sha=<40hex>가 필요합니다.');
+    fail('EXPECTED_SHA_REQUIRED', 'expected SHA가 ?�습?�다. --expected-sha=<40hex>가 ?�요?�니??');
   }
   const normalized = String(value).trim().toLowerCase();
   if (!SHA_PATTERN.test(normalized)) {
-    fail('EXPECTED_SHA_MALFORMED', 'expected SHA 형식이 올바르지 않습니다 (40자리 소문자 16진수).');
+    fail('EXPECTED_SHA_MALFORMED', 'expected SHA ?�식???�바르�? ?�습?�다 (40?�리 ?�문??16진수).');
   }
   return normalized;
 }
 
 export function assertDeploymentId(value) {
   if (!isNonEmptyString(value) || !DEPLOYMENT_ID_PATTERN.test(String(value).trim())) {
-    fail('DEPLOYMENT_ID_MALFORMED', 'pinned Vercel deployment ID 형식이 올바르지 않습니다.');
+    fail('DEPLOYMENT_ID_MALFORMED', 'pinned Vercel deployment ID ?�식???�바르�? ?�습?�다.');
   }
   return String(value).trim();
 }
@@ -194,81 +214,96 @@ export function isProductionHostname(hostname) {
 
 export function normalizeConsumerUrl(value) {
   if (!isNonEmptyString(value)) {
-    fail('RUNTIME_NOT_BOUND', 'consumer URL이 없어 runtime binding을 증명할 수 없습니다.');
+    fail('RUNTIME_NOT_BOUND', 'consumer URL???�어 runtime binding??증명?????�습?�다.');
   }
   let url;
   try {
     url = new URL(String(value).trim());
   } catch {
-    fail('RUNTIME_NOT_BOUND', 'consumer URL 형식이 올바르지 않아 runtime binding을 거부합니다.');
+    fail('RUNTIME_NOT_BOUND', 'consumer URL ?�식???�바르�? ?�아 runtime binding??거�??�니??');
   }
   if (url.username || url.password || url.search || url.hash) {
-    fail('RUNTIME_NOT_BOUND', 'consumer URL에 인증정보/query/fragment가 있어 binding을 거부합니다.');
+    fail('RUNTIME_NOT_BOUND', 'consumer URL???�증?�보/query/fragment가 ?�어 binding??거�??�니??');
   }
   const isLoopback =
     url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
   if (!isLoopback && url.protocol !== 'https:') {
-    fail('RUNTIME_NOT_BOUND', 'consumer URL은 loopback이 아니면 https만 허용합니다.');
+    fail('RUNTIME_NOT_BOUND', 'consumer URL?� loopback???�니�?https�??�용?�니??');
   }
   if (isProductionHostname(url.hostname)) {
-    fail('PRODUCTION_TARGET_REJECTED', 'consumer target이 운영 호스트이므로 차단합니다.');
+    fail('PRODUCTION_TARGET_REJECTED', 'consumer target???�영 ?�스?�이므�?차단?�니??');
   }
   if (!url.hostname.endsWith('.vercel.app')) {
-    fail('RUNTIME_NOT_BOUND', 'consumer target이 locked Preview deployment 호스트가 아닙니다.');
+    fail('RUNTIME_NOT_BOUND', 'consumer target??invocation-bound Preview deployment ?�스?��? ?�닙?�다.');
   }
   return url.toString().replace(/\/$/, '');
 }
 
 /**
- * Locked-target pinning: the probe may only address the CASE B1 locked
- * deployment/source. Anything else fails closed without a network call.
+ * Invocation-scoped immutable exact binding: freeze the caller's explicit
+ * --expected-sha / --consumer-deployment-id inputs for this run. There is no
+ * compile-time literal to compare against ??exactness is proven by
+ * validateEvidenceBinding() against provider deployment metadata. The
+ * returned values are the immutable binding authority for the remainder of
+ * the run (no retargeting afterwards).
  */
-export function assertLockedBinding({ deploymentId, expectedSha }) {
+export function assertInvocationBinding({ deploymentId, expectedSha }) {
   const id = assertDeploymentId(deploymentId);
   const sha = assertExpectedSha(expectedSha);
-  if (id !== LOCKED_DEPLOYMENT_ID || sha !== LOCKED_SOURCE_SHA) {
-    fail(
-      'TARGET_BINDING_MOVED',
-      'locked runtime target 바인딩과 달라 callback을 다른 배포로 대체하지 않습니다.',
-    );
-  }
   return { deploymentId: id, expectedSha: sha };
 }
 
 /**
- * Evidence binding (consumer slice of wait-preview-deploy JSON): the pinned
- * deployment id + expected SHA + target URL must all agree before any
- * network call.
+ * Evidence binding (consumer slice of wait-preview-deploy JSON): the
+ * invocation-bound deployment id + expected SHA + exact target URL must all
+ * agree with provider deployment metadata before any network call.
+ *
+ * Strict exact-equality contract (no fallback / auto-discovery /
+ * latest-selection / alias substitution):
+ *   - evidence must exist and prove ready === true (exact READY proof);
+ *   - evidence.expectedSha must equal the invocation expected SHA;
+ *   - evidence consumer deployment SHA must equal the invocation SHA;
+ *   - evidence consumer deployment ID must exist and equal the invocation ID;
+ *   - evidence consumer target URL must exist and equal the invocation URL
+ *     (exact, after trailing-slash normalization);
+ *   - source ref/branch fields, when present, are provenance only and never
+ *     substitute for the exact SHA or deployment metadata.
  */
 export function validateEvidenceBinding({ expectedSha, deploymentId, consumerUrl, evidence }) {
   const sha = assertExpectedSha(expectedSha);
   const id = assertDeploymentId(deploymentId);
   if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) {
-    fail('RUNTIME_NOT_BOUND', 'runtime binding evidence가 없어 실행을 차단합니다.');
+    fail('RUNTIME_NOT_BOUND', 'runtime binding evidence가 ?�어 ?�행??차단?�니??');
   }
-  if (evidence.ready === false) {
-    fail('RUNTIME_NOT_BOUND', 'binding evidence가 ready 상태가 아닙니다.');
+  if (evidence.ready !== true) {
+    fail('RUNTIME_NOT_BOUND', 'binding evidence가 exact READY ?�태�?증명?��? ?�아 ?�행??차단?�니??');
   }
   const evidenceSha = String(evidence.expectedSha ?? '').trim().toLowerCase();
-  if (evidenceSha !== sha) {
-    fail('EXPECTED_SHA_MISMATCH', 'binding evidence SHA가 --expected-sha와 다릅니다.');
+  if (!evidenceSha || evidenceSha !== sha) {
+    fail('EXPECTED_SHA_MISMATCH', 'binding evidence SHA가 --expected-sha?� ?�릅?�다.');
   }
   const shas = evidence.deploymentShas ?? evidence.statusShas ?? {};
-  if (shas.consumer !== sha) {
-    fail('DEPLOYMENT_SHA_MISMATCH', 'consumer 배포 SHA가 지정 SHA와 일치하지 않습니다.');
+  const observedSha = String(shas.consumer ?? '').trim().toLowerCase();
+  if (!observedSha || observedSha !== sha) {
+    fail('DEPLOYMENT_SHA_MISMATCH', 'consumer 배포 SHA가 지??SHA?� ?�치?��? ?�습?�다.');
   }
   const pinned =
     evidence.pinnedDeploymentIds ?? evidence.deploymentIds ?? evidence.pinnedDeploymentIDs ?? {};
   const pinnedConsumer = pinned.consumer ?? evidence.consumerDeploymentId ?? '';
-  if (isNonEmptyString(pinnedConsumer) && String(pinnedConsumer).trim() !== id) {
-    fail('RUNTIME_BINDING_MISMATCH', 'consumer deployment ID가 evidence binding과 다릅니다.');
+  if (!isNonEmptyString(pinnedConsumer)) {
+    fail('RUNTIME_NOT_BOUND', 'binding evidence??consumer deployment ID가 ?�어 ?�행??차단?�니??');
+  }
+  if (String(pinnedConsumer).trim() !== id) {
+    fail('RUNTIME_BINDING_MISMATCH', 'consumer deployment ID가 evidence binding�??�릅?�다.');
   }
   const targets = evidence.deploymentTargetUrls ?? evidence.statusTargetUrls ?? evidence.targetUrls ?? {};
-  if (isNonEmptyString(targets.consumer)) {
-    const observed = normalizeConsumerUrl(targets.consumer);
-    if (observed !== consumerUrl) {
-      fail('RUNTIME_BINDING_MISMATCH', 'consumer target이 evidence binding과 다릅니다.');
-    }
+  const evidenceTarget = targets.consumer ?? '';
+  if (!isNonEmptyString(evidenceTarget)) {
+    fail('RUNTIME_NOT_BOUND', 'binding evidence??consumer target URL???�어 ?�행??차단?�니??');
+  }
+  const observed = normalizeConsumerUrl(evidenceTarget);
+  if (observed !== consumerUrl) {
+    fail('RUNTIME_BINDING_MISMATCH', 'consumer target??evidence binding�??�릅?�다.');
   }
   return { expectedSha: sha, deploymentId: id };
 }
@@ -276,19 +311,19 @@ export function validateEvidenceBinding({ expectedSha, deploymentId, consumerUrl
 export function validateProbeGuards(input = {}, env = process.env) {
   const approval = String(input.approval ?? env.NON_PRODUCTION_AUTH_PROBE_APPROVAL ?? '').trim();
   if (approval !== APPROVAL_VALUE) {
-    fail('MISSING_APPROVAL', 'explicit non-production approval이 없어 실행을 차단합니다.');
+    fail('MISSING_APPROVAL', 'explicit non-production approval???�어 ?�행??차단?�니??');
   }
   const e2eSecret = input.e2eSecret ?? env.E2E_TEST_SECRET ?? '';
   if (!isNonEmptyString(e2eSecret)) {
     fail(
       'CREDENTIAL_SOURCE_UNAVAILABLE',
-      'header를 구성할 승인된 E2E_TEST_SECRET input이 없어 callback을 시도하지 않습니다.',
+      'header�?구성???�인??E2E_TEST_SECRET input???�어 callback???�도?��? ?�습?�다.',
     );
   }
   const email = input.email ?? env.TEST_CONSUMER_EMAIL ?? '';
   const password = input.password ?? env.TEST_CONSUMER_PASSWORD ?? '';
   if (!isNonEmptyString(email) || !isNonEmptyString(password)) {
-    fail('CONSUMER_CREDENTIALS_MISSING', 'consumer test credential이 없어 실행을 차단합니다.');
+    fail('CONSUMER_CREDENTIALS_MISSING', 'consumer test credential???�어 ?�행??차단?�니??');
   }
   return { approval };
 }
@@ -457,7 +492,7 @@ export function extractDeploymentReady(evidence) {
 }
 
 /**
- * Closed FAIL result builder. Only FAIL_RESULT_KEYS can appear — raw
+ * Closed FAIL result builder. Only FAIL_RESULT_KEYS can appear ??raw
  * header/token/cookie/location values, nonces, and credential material are
  * structurally unrepresentable. All unknown observations must be passed as
  * explicit null, never as raw values.
@@ -497,10 +532,10 @@ export function buildFailureResult(fields = {}) {
   const keys = Object.keys(result).sort();
   const expected = [...FAIL_RESULT_KEYS].sort();
   if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
-    fail('PROBE_INTERNAL_ERROR', 'sanitized FAIL key set이 고정 계약과 다릅니다.');
+    fail('PROBE_INTERNAL_ERROR', 'sanitized FAIL key set??고정 계약�??�릅?�다.');
   }
   if (result.protectionPassageMode !== 'NONE') {
-    fail('PROBE_INTERNAL_ERROR', 'protection passage mode는 이번 Task에서 NONE만 허용합니다.');
+    fail('PROBE_INTERNAL_ERROR', 'protection passage mode???�번 Task?�서 NONE�??�용?�니??');
   }
   return result;
 }
@@ -556,7 +591,7 @@ function parseJsonBody(value) {
 
 /**
  * Exact sanitized artifact builder. Only ARTIFACT_KEYS can appear in the
- * output — there is no parameter, code path, or spread through which a
+ * output ??there is no parameter, code path, or spread through which a
  * secret/token/cookie value could enter the artifact.
  */
 export function buildCallbackArtifact(fields) {
@@ -580,18 +615,24 @@ export function buildCallbackArtifact(fields) {
   const keys = Object.keys(artifact).sort();
   const expected = [...ARTIFACT_KEYS].sort();
   if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
-    fail('PROBE_INTERNAL_ERROR', 'sanitized artifact key set이 고정 계약과 다릅니다.');
+    fail('PROBE_INTERNAL_ERROR', 'sanitized artifact key set??고정 계약�??�릅?�다.');
   }
   return artifact;
 }
 
 /**
- * One callback provenance lifecycle against the locked Consumer deployment:
- * CSRF -> credentials callback POST -> same-jar session readback.
+ * One callback provenance lifecycle against the invocation-bound Consumer
+ * deployment: CSRF -> credentials callback POST -> same-jar session readback.
+ * The invocation binding (expected SHA + deployment ID + exact URL + READY
+ * evidence) is frozen before any network call and never retargeted.
  *
  * fetchImpl is injectable (mock in tests, global fetch in real runs with
  * redirect:'manual' enforced below). Returns { artifact, calls } where calls
  * is the non-sensitive list of request paths (direct-API confusion check).
+ *
+ * workflowSha is the probe-code version (workflow ref); it is recorded as
+ * workflowSourceSha provenance only and never substitutes for the
+ * invocation-bound target deployment SHA.
  */
 export async function runConsumerCallbackProbe(
   {
@@ -648,22 +689,22 @@ export async function runConsumerCallbackProbe(
   if (typeof fetch !== 'function') {
     failWithEvidence(
       'PROBE_INTERNAL_ERROR',
-      'fetch 구현이 없어 probe를 실행할 수 없습니다.',
-      guardEvidence('PROBE_INTERNAL_ERROR', 'fetch 구현이 없어 probe를 실행할 수 없습니다.'),
+      'fetch 구현???�어 probe�??�행?????�습?�다.',
+      guardEvidence('PROBE_INTERNAL_ERROR', 'fetch 구현???�어 probe�??�행?????�습?�다.'),
     );
   }
   let base;
-  let locked;
+  let bound;
   try {
     validateProbeGuards(
       { approval: approval ?? env.NON_PRODUCTION_AUTH_PROBE_APPROVAL, e2eSecret, email, password },
       env,
     );
     base = normalizeConsumerUrl(consumerUrl);
-    locked = assertLockedBinding({ deploymentId, expectedSha });
+    bound = assertInvocationBinding({ deploymentId, expectedSha });
     validateEvidenceBinding({
-      expectedSha: locked.expectedSha,
-      deploymentId: locked.deploymentId,
+      expectedSha: bound.expectedSha,
+      deploymentId: bound.deploymentId,
       consumerUrl: base,
       evidence,
     });
@@ -686,7 +727,7 @@ export async function runConsumerCallbackProbe(
   const deploymentReady = extractDeploymentReady(evidence);
   if (!headerPresent) {
     const code = 'CREDENTIAL_SOURCE_UNAVAILABLE';
-    const message = 'header를 구성할 승인된 E2E_TEST_SECRET input이 없어 callback을 시도하지 않습니다.';
+    const message = 'header�?구성???�인??E2E_TEST_SECRET input???�어 callback???�도?��? ?�습?�다.';
     failWithEvidence(
       code,
       message,
@@ -697,10 +738,10 @@ export async function runConsumerCallbackProbe(
         callbackStatus: null,
         checkedAt: checkedAtValue,
         csrfStatus: null,
-        deploymentId: locked.deploymentId,
+        deploymentId: bound.deploymentId,
         deploymentReady,
-        deploymentSourceSha: locked.expectedSha,
-        expectedSha: locked.expectedSha,
+        deploymentSourceSha: bound.expectedSha,
+        expectedSha: bound.expectedSha,
         failureCode: code,
         failureStage: FAILURE_STAGE_GUARD,
         headerAttachedByRunner: false,
@@ -739,10 +780,10 @@ export async function runConsumerCallbackProbe(
       callbackStatus: null,
       checkedAt: checkedAtValue,
       csrfStatus,
-      deploymentId: locked.deploymentId,
+      deploymentId: bound.deploymentId,
       deploymentReady,
-      deploymentSourceSha: locked.expectedSha,
-      expectedSha: locked.expectedSha,
+      deploymentSourceSha: bound.expectedSha,
+      expectedSha: bound.expectedSha,
       failureCode: code,
       failureStage: FAILURE_STAGE_CSRF,
       headerAttachedByRunner,
@@ -760,7 +801,7 @@ export async function runConsumerCallbackProbe(
   };
   if (!csrfRes) {
     const code = 'CSRF_TRANSPORT_FAILED';
-    const message = 'CSRF 요청 전송에 실패해 callback을 시도하지 않습니다.';
+    const message = 'CSRF ?�청 ?�송???�패??callback???�도?��? ?�습?�다.';
     failWithEvidence(code, message, csrfFail(code, message, { csrfStatus: null }));
   }
   // Protection intercept at CSRF stage takes precedence over transport/app checks.
@@ -791,7 +832,7 @@ export async function runConsumerCallbackProbe(
       })
     ) {
       const code = 'DEPLOYMENT_PROTECTION_INTERCEPTED';
-      const message = 'Vercel protection intercept로 CSRF 단계에서 차단됐습니다.';
+      const message = 'Vercel protection intercept�?CSRF ?�계?�서 차단?�습?�다.';
       failWithEvidence(
         code,
         message,
@@ -808,7 +849,7 @@ export async function runConsumerCallbackProbe(
   const csrfOk = csrfRes.ok === true || (csrfStatus >= 200 && csrfStatus < 300);
   if (!csrfOk) {
     const code = 'CSRF_TRANSPORT_FAILED';
-    const message = 'CSRF 응답이 비정상이라 callback을 시도하지 않습니다.';
+    const message = 'CSRF ?�답??비정?�이??callback???�도?��? ?�습?�다.';
     // Non-2xx CSRF is transport/app precondition failure (protection already excluded).
     failWithEvidence(code, message, csrfFail(code, message, { csrfStatus }));
   }
@@ -824,11 +865,11 @@ export async function runConsumerCallbackProbe(
   }
   if (!csrfToken) {
     const code = 'CSRF_TRANSPORT_FAILED';
-    const message = 'CSRF token을 확인하지 못해 callback을 시도하지 않습니다.';
+    const message = 'CSRF token???�인?��? 못해 callback???�도?��? ?�습?�다.';
     failWithEvidence(code, message, csrfFail(code, message, { csrfStatus }));
   }
 
-  // 2) Credentials callback POST (the request under proof — must execute).
+  // 2) Credentials callback POST (the request under proof ??must execute).
   const form = new URLSearchParams();
   form.set('email', String(email));
   form.set('password', String(password));
@@ -862,10 +903,10 @@ export async function runConsumerCallbackProbe(
       callbackStatus: cbStatus,
       checkedAt: checkedAtValue,
       csrfStatus,
-      deploymentId: locked.deploymentId,
+      deploymentId: bound.deploymentId,
       deploymentReady,
-      deploymentSourceSha: locked.expectedSha,
-      expectedSha: locked.expectedSha,
+      deploymentSourceSha: bound.expectedSha,
+      expectedSha: bound.expectedSha,
       failureCode: code,
       failureStage: FAILURE_STAGE_CALLBACK,
       headerAttachedByRunner,
@@ -883,7 +924,7 @@ export async function runConsumerCallbackProbe(
   };
   if (!callbackRes) {
     const code = 'CALLBACK_TRANSPORT_FAILED';
-    const message = 'callback 요청 전송에 실패했습니다.';
+    const message = 'callback ?�청 ?�송???�패?�습?�다.';
     failWithEvidence(code, message, callbackFail(code, message, { callbackStatus: null }));
   }
   storeCookies(jar, callbackRes.headers);
@@ -906,7 +947,7 @@ export async function runConsumerCallbackProbe(
       locationValue = body.url;
     }
   } catch {
-    // Body is only a location fallback source — never evidence content.
+    // Body is only a location fallback source ??never evidence content.
   }
   // Protection intercept at callback stage: never misclassified as Auth.js rejection.
   {
@@ -915,7 +956,7 @@ export async function runConsumerCallbackProbe(
       isProtectionIntercept({ status: callbackStatus, contentType, locationValue, base })
     ) {
       const code = 'DEPLOYMENT_PROTECTION_INTERCEPTED';
-      const message = 'Vercel protection intercept로 callback 단계에서 차단됐습니다.';
+      const message = 'Vercel protection intercept�?callback ?�계?�서 차단?�습?�다.';
       failWithEvidence(
         code,
         message,
@@ -939,7 +980,7 @@ export async function runConsumerCallbackProbe(
   // 302 LOGIN_ERROR SUCCESS taxonomy which is preserved unchanged).
   if (callbackStatus === 401 || callbackStatus === 403) {
     const code = 'CALLBACK_REJECTED';
-    const message = 'callback application 응답에서 인증 거절이 직접 관찰됐습니다.';
+    const message = 'callback application ?�답?�서 ?�증 거절??직접 관찰됐?�니??';
     failWithEvidence(
       code,
       message,
@@ -967,10 +1008,10 @@ export async function runConsumerCallbackProbe(
       callbackStatus,
       checkedAt: checkedAtValue,
       csrfStatus,
-      deploymentId: locked.deploymentId,
+      deploymentId: bound.deploymentId,
       deploymentReady,
-      deploymentSourceSha: locked.expectedSha,
-      expectedSha: locked.expectedSha,
+      deploymentSourceSha: bound.expectedSha,
+      expectedSha: bound.expectedSha,
       failureCode: code,
       failureStage: FAILURE_STAGE_SESSION,
       headerAttachedByRunner,
@@ -1001,7 +1042,7 @@ export async function runConsumerCallbackProbe(
   }
   if (sessionFetchThrew || !sessionRes) {
     const code = 'SESSION_READ_FAILED';
-    const message = 'session 확인 단계에서 전송에 실패했습니다.';
+    const message = 'session ?�인 ?�계?�서 ?�송???�패?�습?�다.';
     failWithEvidence(code, message, sessionFail(code, message, { sessionStatus: null }));
   }
   calls.push('/api/auth/session');
@@ -1030,7 +1071,7 @@ export async function runConsumerCallbackProbe(
       })
     ) {
       const code = 'DEPLOYMENT_PROTECTION_INTERCEPTED';
-      const message = 'Vercel protection intercept로 session 단계에서 차단됐습니다.';
+      const message = 'Vercel protection intercept�?session ?�계?�서 차단?�습?�다.';
       failWithEvidence(
         code,
         message,
@@ -1041,10 +1082,10 @@ export async function runConsumerCallbackProbe(
           callbackStatus,
           checkedAt: checkedAtValue,
           csrfStatus,
-          deploymentId: locked.deploymentId,
+          deploymentId: bound.deploymentId,
           deploymentReady,
-          deploymentSourceSha: locked.expectedSha,
-          expectedSha: locked.expectedSha,
+          deploymentSourceSha: bound.expectedSha,
+          expectedSha: bound.expectedSha,
           failureCode: code,
           failureStage: FAILURE_STAGE_SESSION,
           headerAttachedByRunner,
@@ -1084,8 +1125,8 @@ export async function runConsumerCallbackProbe(
     callbackLocationClass: locationEvidence.locationClass,
     callbackStatus,
     checkedAt: checkedAtValue,
-    deploymentId: locked.deploymentId,
-    deploymentSourceSha: locked.expectedSha,
+    deploymentId: bound.deploymentId,
+    deploymentSourceSha: bound.expectedSha,
     headerPresent,
     sessionState,
     setCookiePresent,
