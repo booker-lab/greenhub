@@ -479,9 +479,12 @@ export class OrdersLifecycleService {
     reason: string,
   ): Promise<LegacyConsumerCancelClaimResult> {
     const token = randomUUID();
-    let result: LegacyConsumerCancelClaimResult = { kind: 'claimed', token };
 
-    await this.firestore.runTransaction(async (tx) => {
+    // Retry purity: the post-transaction decision must come from the committed
+    // attempt's return value only. An outer `let result` mutated inside the
+    // callback would leak an aborted attempt's done/in_progress decision into
+    // a retried claim (or vice versa).
+    return this.firestore.runTransaction<LegacyConsumerCancelClaimResult>(async (tx) => {
       const orderRef = this.firestore.doc(`orders/${orderId}`);
       const orderSnap = await tx.get(orderRef);
       if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== storeId) {
@@ -497,12 +500,10 @@ export class OrdersLifecycleService {
       const cancellationStatus = cancellation?.['status'] as string | undefined;
 
       if (order['status'] === 'CANCELLED' && cancellationStatus === 'COMPLETED') {
-        result = { kind: 'done' };
-        return;
+        return { kind: 'done' };
       }
       if (order['status'] === 'CANCELLED' && !cancellation) {
-        result = { kind: 'done' };
-        return;
+        return { kind: 'done' };
       }
 
       let expiredClaim = false;
@@ -516,12 +517,10 @@ export class OrdersLifecycleService {
           refundClaim.token.length === 0 ||
           typeof refundClaim.expiresAt !== 'number'
         ) {
-          result = { kind: 'in_progress' };
-          return;
+          return { kind: 'in_progress' };
         }
         if (refundClaim.expiresAt > Date.now()) {
-          result = { kind: 'in_progress' };
-          return;
+          return { kind: 'in_progress' };
         }
         expiredClaim = true;
       }
@@ -547,9 +546,8 @@ export class OrdersLifecycleService {
         },
         updatedAt: now,
       });
+      return { kind: 'claimed', token };
     });
-
-    return result;
   }
 
   private async applyLegacyConsumerLocalCancellation(
