@@ -48,13 +48,18 @@ jobs:
   probe-spec:
     name: probe runner deterministic spec
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
+
+      - uses: pnpm/action-setup@v6
+
+      - name: 의존성 설치 (deterministic spec bcrypt/fixture parity)
+        run: pnpm install --frozen-lockfile
 
       - name: run probe deterministic spec (mock/local only, no external calls)
         run: node --test scripts/probe-auth-runtime.spec.mjs scripts/probe-auth-runtime.workflow.spec.mjs scripts/probe-consumer-callback.spec.mjs scripts/probe-consumer-callback.workflow.spec.mjs scripts/probe-auth-identities.spec.mjs

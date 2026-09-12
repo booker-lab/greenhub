@@ -74,6 +74,13 @@ describe('session-only workflow dispatch contract', () => {
     );
   });
 
+  it('deterministic probe-spec installs workspace deps for bcrypt parity', () => {
+    const source = readWorkflow();
+    const specSlice = jobSlice(source, 'probe-spec:', ['approval_gate:', 'auth_identity_seed:', 'session-probe:']);
+    assert.ok(specSlice.includes('pnpm/action-setup'), 'probe-spec must set up pnpm for bcrypt parity');
+    assert.ok(specSlice.includes('pnpm install --frozen-lockfile'), 'probe-spec must install deps before bcrypt tests');
+  });
+
   it('round-direct-e2e Environment binds only the runtime probe jobs', () => {
     const source = readWorkflow();
     assert.ok(source.includes('name: round-direct-e2e'), 'session probe must bind round-direct-e2e');
