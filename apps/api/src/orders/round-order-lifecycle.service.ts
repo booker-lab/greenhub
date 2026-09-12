@@ -232,63 +232,66 @@ export class RoundOrderLifecycleService {
     requireOpenRound?: boolean;
     cancellationClaim?: SaleRoundCancellationClaim;
   }) {
-    let result = { done: false, needsRefund: false };
-    await this.firestore.runTransaction(async (tx) => {
-      const orderRef = this.firestore.doc(`orders/${input.orderId}`);
-      const paymentRef = this.firestore.doc(`payments/${input.orderId}`);
-      const orderSnap = await tx.get(orderRef);
-      if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== input.storeId) {
-        throw new NotFoundException();
-      }
-      const order = orderSnap.data() as OrderRecord;
-      const paymentSnap = await tx.get(paymentRef);
-      const payment = paymentSnap.exists ? (paymentSnap.data() as OrderRecord) : null;
-      const paymentIsPaid = payment?.['status'] === 'PAID' && !payment['refundedAt'];
-      if (input.cancellationClaim) {
-        await this.assertRoundCancellationClaimInTransaction(tx, order, input.cancellationClaim);
-      }
-      if (order['status'] === 'CANCELLED') {
-        result = {
-          done: order['cancellation']?.['status'] === 'COMPLETED' && !paymentIsPaid,
-          needsRefund: paymentIsPaid,
-        };
-        return;
-      }
-      const cancellationStatus = order['cancellation']?.['status'] as string | undefined;
-      if (cancellationStatus === 'REFUNDING') {
-        result = { done: false, needsRefund: paymentIsPaid };
-        return;
-      }
-      if (!['LOCAL_PENDING', 'LOCAL_FAILED'].includes(cancellationStatus ?? '')) {
-        if (
-          ![
-            'PENDING',
-            'ACCEPTED',
-            'RECRUITING',
-            'CONFIRMED',
-            'PREPARING',
-            'DELIVERY_HELD',
-          ].includes(order['status'])
-        ) {
-          throw new ForbiddenException('취소할 수 없는 주문 상태입니다.');
+    // Retry purity: the post-transaction decision must come from the committed
+    // attempt's return value only. An outer `let result` mutated inside the
+    // callback would leak an aborted attempt's done/needsRefund decision into
+    // the committed retry.
+    return this.firestore.runTransaction<{ done: boolean; needsRefund: boolean }>(
+      async (tx) => {
+        const orderRef = this.firestore.doc(`orders/${input.orderId}`);
+        const paymentRef = this.firestore.doc(`payments/${input.orderId}`);
+        const orderSnap = await tx.get(orderRef);
+        if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== input.storeId) {
+          throw new NotFoundException();
         }
-        if (input.requireOpenRound) await this.assertRoundOpen(tx, order, input.storeId);
+        const order = orderSnap.data() as OrderRecord;
+        const paymentSnap = await tx.get(paymentRef);
+        const payment = paymentSnap.exists ? (paymentSnap.data() as OrderRecord) : null;
+        const paymentIsPaid = payment?.['status'] === 'PAID' && !payment['refundedAt'];
+        if (input.cancellationClaim) {
+          await this.assertRoundCancellationClaimInTransaction(tx, order, input.cancellationClaim);
+        }
+        if (order['status'] === 'CANCELLED') {
+          return {
+            done: order['cancellation']?.['status'] === 'COMPLETED' && !paymentIsPaid,
+            needsRefund: paymentIsPaid,
+          };
+        }
+        const cancellationStatus = order['cancellation']?.['status'] as string | undefined;
         if (cancellationStatus === 'REFUNDING') {
-          throw new ConflictException('주문 취소가 이미 처리 중입니다.');
+          return { done: false, needsRefund: paymentIsPaid };
         }
-        const needsRefund = order['status'] !== 'PENDING' || paymentIsPaid;
-        tx.update(orderRef, {
-          cancellation: {
-            status: needsRefund ? 'REFUNDING' : 'LOCAL_PENDING',
-            reason: input.reason,
-            updatedAt: this.toIso(this.firestore.Timestamp.now()),
-          },
-          updatedAt: this.firestore.Timestamp.now(),
-        });
-        result = { done: false, needsRefund };
-      }
-    });
-    return result;
+        if (!['LOCAL_PENDING', 'LOCAL_FAILED'].includes(cancellationStatus ?? '')) {
+          if (
+            ![
+              'PENDING',
+              'ACCEPTED',
+              'RECRUITING',
+              'CONFIRMED',
+              'PREPARING',
+              'DELIVERY_HELD',
+            ].includes(order['status'])
+          ) {
+            throw new ForbiddenException('취소할 수 없는 주문 상태입니다.');
+          }
+          if (input.requireOpenRound) await this.assertRoundOpen(tx, order, input.storeId);
+          if (cancellationStatus === 'REFUNDING') {
+            throw new ConflictException('주문 취소가 이미 처리 중입니다.');
+          }
+          const needsRefund = order['status'] !== 'PENDING' || paymentIsPaid;
+          tx.update(orderRef, {
+            cancellation: {
+              status: needsRefund ? 'REFUNDING' : 'LOCAL_PENDING',
+              reason: input.reason,
+              updatedAt: this.toIso(this.firestore.Timestamp.now()),
+            },
+            updatedAt: this.firestore.Timestamp.now(),
+          });
+          return { done: false, needsRefund };
+        }
+        return { done: false, needsRefund: false };
+      },
+    );
   }
 
   private async applyLocalCancellation(input: {
@@ -298,22 +301,53 @@ export class RoundOrderLifecycleService {
     cancellationClaim?: SaleRoundCancellationClaim;
   }) {
     const now = this.firestore.Timestamp.now();
-    let result = { completed: false, needsRefund: false };
-    await this.firestore.runTransaction(async (tx) => {
-      const orderRef = this.firestore.doc(`orders/${input.orderId}`);
-      const paymentRef = this.firestore.doc(`payments/${input.orderId}`);
-      const orderSnap = await tx.get(orderRef);
-      if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== input.storeId) {
-        throw new NotFoundException();
-      }
-      const order = orderSnap.data() as OrderRecord;
-      const paymentSnap = await tx.get(paymentRef);
-      const payment = paymentSnap.exists ? (paymentSnap.data() as OrderRecord) : null;
-      const paymentIsPaid = payment?.['status'] === 'PAID' && !payment['refundedAt'];
-      if (input.cancellationClaim) {
-        await this.assertRoundCancellationClaimInTransaction(tx, order, input.cancellationClaim);
-      }
-      if (order['status'] === 'CANCELLED') {
+    // Retry purity: same committed-callback-return-only principle as
+    // claimCancellation. Every non-throw path returns its decision; no outer
+    // mutable result may carry an aborted attempt's values into the caller.
+    return this.firestore.runTransaction<{ completed: boolean; needsRefund: boolean }>(
+      async (tx) => {
+        const orderRef = this.firestore.doc(`orders/${input.orderId}`);
+        const paymentRef = this.firestore.doc(`payments/${input.orderId}`);
+        const orderSnap = await tx.get(orderRef);
+        if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== input.storeId) {
+          throw new NotFoundException();
+        }
+        const order = orderSnap.data() as OrderRecord;
+        const paymentSnap = await tx.get(paymentRef);
+        const payment = paymentSnap.exists ? (paymentSnap.data() as OrderRecord) : null;
+        const paymentIsPaid = payment?.['status'] === 'PAID' && !payment['refundedAt'];
+        if (input.cancellationClaim) {
+          await this.assertRoundCancellationClaimInTransaction(tx, order, input.cancellationClaim);
+        }
+        if (order['status'] === 'CANCELLED') {
+          if (paymentIsPaid) {
+            tx.update(orderRef, {
+              cancellation: {
+                status: 'REFUNDING',
+                reason: input.reason,
+                updatedAt: this.toIso(now),
+              },
+              updatedAt: now,
+            });
+            return { completed: false, needsRefund: true };
+          }
+          if (order['cancellation']?.['status'] !== 'COMPLETED') {
+            tx.update(orderRef, {
+              cancellation: {
+                status: 'COMPLETED',
+                reason: input.reason,
+                completedAt: this.toIso(now),
+                updatedAt: this.toIso(now),
+              },
+              updatedAt: now,
+            });
+          }
+          return { completed: true, needsRefund: false };
+        }
+        const cancellationStatus = order['cancellation']?.['status'];
+        if (!['LOCAL_PENDING', 'LOCAL_FAILED'].includes(cancellationStatus)) {
+          throw new ConflictException('주문 취소 재시도 상태가 아닙니다.');
+        }
         if (paymentIsPaid) {
           tx.update(orderRef, {
             cancellation: {
@@ -323,67 +357,36 @@ export class RoundOrderLifecycleService {
             },
             updatedAt: now,
           });
-          result = { completed: false, needsRefund: true };
-          return;
+          return { completed: false, needsRefund: true };
         }
-        if (order['cancellation']?.['status'] !== 'COMPLETED') {
-          tx.update(orderRef, {
-            cancellation: {
-              status: 'COMPLETED',
-              reason: input.reason,
-              completedAt: this.toIso(now),
-              updatedAt: this.toIso(now),
-            },
-            updatedAt: now,
+        // Single-owner cancellation convergence: reservation ordered
+        // projection and held projection move exactly once in one read phase
+        // (reservation + round + items) followed by one write phase. No direct
+        // FieldValue.increment outside OrderCapacityService.
+        const needsHeldExit = order['status'] === 'DELIVERY_HELD' && order['roundId'];
+        if (order['reservationId'] || needsHeldExit) {
+          await this.capacity.releaseForOrderCancellationInTransaction(tx, {
+            reservationId: order['reservationId'] ?? null,
+            storeId: input.storeId,
+            roundId: order['roundId'] ?? null,
+            decrementHeld: Boolean(needsHeldExit),
+            now,
           });
         }
-        result = { completed: true, needsRefund: false };
-        return;
-      }
-      const cancellationStatus = order['cancellation']?.['status'];
-      if (!['LOCAL_PENDING', 'LOCAL_FAILED'].includes(cancellationStatus)) {
-        throw new ConflictException('주문 취소 재시도 상태가 아닙니다.');
-      }
-      if (paymentIsPaid) {
         tx.update(orderRef, {
+          status: 'CANCELLED',
+          cancelReason: input.reason,
           cancellation: {
-            status: 'REFUNDING',
+            status: 'COMPLETED',
             reason: input.reason,
+            completedAt: this.toIso(now),
             updatedAt: this.toIso(now),
           },
           updatedAt: now,
         });
-        result = { completed: false, needsRefund: true };
-        return;
-      }
-      // Single-owner cancellation convergence: reservation ordered
-      // projection and held projection move exactly once in one read phase
-      // (reservation + round + items) followed by one write phase. No direct
-      // FieldValue.increment outside OrderCapacityService.
-      const needsHeldExit = order['status'] === 'DELIVERY_HELD' && order['roundId'];
-      if (order['reservationId'] || needsHeldExit) {
-        await this.capacity.releaseForOrderCancellationInTransaction(tx, {
-          reservationId: order['reservationId'] ?? null,
-          storeId: input.storeId,
-          roundId: order['roundId'] ?? null,
-          decrementHeld: Boolean(needsHeldExit),
-          now,
-        });
-      }
-      tx.update(orderRef, {
-        status: 'CANCELLED',
-        cancelReason: input.reason,
-        cancellation: {
-          status: 'COMPLETED',
-          reason: input.reason,
-          completedAt: this.toIso(now),
-          updatedAt: this.toIso(now),
-        },
-        updatedAt: now,
-      });
-      result = { completed: true, needsRefund: false };
-    });
-    return result;
+        return { completed: true, needsRefund: false };
+      },
+    );
   }
 
   private async processCancellationRefund(input: {
