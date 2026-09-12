@@ -796,15 +796,20 @@ jobs:
           E2E_TEST_SECRET: ${{ secrets.ROUND_DIRECT_E2E_TEST_SECRET }}
           TEST_CONSUMER_EMAIL: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM }}
           TEST_CONSUMER_PASSWORD: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_PASSWORD_CHROMIUM }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET }}
         run: |
           set -euo pipefail
           # Secret-name mapping note (values never logged):
           # - E2E_TEST_SECRET <- ROUND_DIRECT_E2E_TEST_SECRET
           # - TEST_CONSUMER_EMAIL <- ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM
           # - TEST_CONSUMER_PASSWORD <- ROUND_DIRECT_E2E_CONSUMER_PASSWORD_CHROMIUM
+          # - VERCEL_AUTOMATION_BYPASS_SECRET <- ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET
+          #   (Vercel protection passage only; never merged with x-e2e-test-token)
           # The approved Environment secret input is passed to the probe via
           # env only; the probe records credentialSource/headerName/
-          # headerPresent provenance metadata and never serializes values.
+          # headerPresent + protectionPassageMode/protectionBypassHeaderName/
+          # protectionBypassHeaderPresent provenance metadata and never
+          # serializes values.
           # No seller/driver frontend origin is called by this step.
           evidence_root=".artifacts/auth-callback-probe/$AUTH_CALLBACK_RUN_ID"
           mkdir -p "$evidence_root/evidence"
@@ -815,6 +820,7 @@ jobs:
             --consumer-deployment-id="$AUTH_CALLBACK_CONSUMER_DEPLOYMENT_ID" \
             --evidence-json="$evidence_root/probe-evidence.json" \
             --approval="${{ inputs.approval }}" \
+            --protection-passage-mode="AUTOMATION_BYPASS" \
             > "$evidence_root/probe-raw.json"
           probe_status=$?
           set -e
@@ -832,6 +838,8 @@ jobs:
             headerConfigured: (.headerConfigured // (.headerPresent // null)),
             headerAttachedByRunner: (.headerAttachedByRunner // (.headerPresent // null)),
             protectionPassageMode: (.protectionPassageMode // "NONE"),
+            protectionBypassHeaderName: (.protectionBypassHeaderName // "x-vercel-protection-bypass"),
+            protectionBypassHeaderPresent: (.protectionBypassHeaderPresent // null),
             callbackAttempted: (.callbackAttempted // (if .artifact then true else null end)),
             callbackStatus,
             sessionAttempted: (.sessionAttempted // (if .artifact then true else null end)),
@@ -897,6 +905,8 @@ jobs:
               headerConfigured: ($callback[0].headerConfigured // $callback[0].headerPresent),
               headerAttachedByRunner: ($callback[0].headerAttachedByRunner // $callback[0].headerPresent),
               protectionPassageMode: ($callback[0].protectionPassageMode // "NONE"),
+              protectionBypassHeaderName: ($callback[0].protectionBypassHeaderName // "x-vercel-protection-bypass"),
+              protectionBypassHeaderPresent: ($callback[0].protectionBypassHeaderPresent // null),
               callbackAttempted: ($callback[0].callbackAttempted // null),
               sessionAttempted: ($callback[0].sessionAttempted // null),
               observedDeploymentSha: ($callback[0].observedDeploymentSha // $callback[0].deploymentSourceSha),
