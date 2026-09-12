@@ -167,7 +167,17 @@ export class DeliveryPhotosService {
       const order = snapshot.data() as OrderRecord;
       const photoIds = this.readPhotoIds(order['deliveryPhotoIds']);
       if (photoIds.includes(input.photoId) && order['status'] === 'DELIVERED') {
-        await this.driverScope.assertPilotBaseInTransaction(transaction, order, input.storeId);
+        try {
+          await this.driverScope.assertPilotBaseInTransaction(transaction, order, input.storeId);
+        } catch (error) {
+          if (!(error instanceof ForbiddenException)) throw error;
+          await this.assertHistoricalPilotBaseInTransaction(
+            transaction,
+            order,
+            input.storeId,
+            input.photoId,
+          );
+        }
         const authority = await this.driverScope.assertDriverAuthorityInTransaction(
           transaction,
           input.requesterId,
@@ -220,7 +230,12 @@ export class DeliveryPhotosService {
     const isAttachedRetry = photoIds.includes(photoId) && order['status'] === 'DELIVERED';
 
     if (isAttachedRetry) {
-      await this.driverScope.assertPilotBase(order, input.storeId);
+      try {
+        await this.driverScope.assertPilotBase(order, input.storeId);
+      } catch (error) {
+        if (!(error instanceof ForbiddenException)) throw error;
+        await this.assertHistoricalPilotBase(order, input.storeId, photoId);
+      }
       const authority = await this.driverScope.assertDriverAuthority(
         input.requesterId,
         input.requesterRole,
@@ -242,6 +257,63 @@ export class DeliveryPhotosService {
 
     if (photoIds.length > 0 && !photoIds.includes(photoId)) {
       throwDriverOrderStateConflict('배송 사진이 이미 연결되어 있습니다.', true);
+    }
+  }
+
+  private async assertHistoricalPilotBase(
+    order: OrderRecord,
+    storeId: string,
+    photoId: string,
+  ): Promise<void> {
+    const photoIds = this.readPhotoIds(order['deliveryPhotoIds']);
+    if (
+      order['storeId'] !== storeId ||
+      order['schemaVersion'] !== 2 ||
+      typeof order['roundId'] !== 'string' ||
+      (order['roundId'] as string).trim().length === 0 ||
+      order['deliveryMethod'] !== 'direct' ||
+      order['status'] !== 'DELIVERED' ||
+      !photoIds.includes(photoId)
+    ) {
+      throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
+    }
+    const roundId = order['roundId'] as string;
+    const snapshot = await this.firestore.doc(`saleRounds/${roundId}`).get();
+    if (!snapshot.exists) {
+      throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
+    }
+    const round = snapshot.data() as OrderRecord | undefined;
+    if (round?.['id'] !== order['roundId'] || round?.['storeId'] !== order['storeId']) {
+      throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
+    }
+  }
+
+  private async assertHistoricalPilotBaseInTransaction(
+    transaction: { get: (ref: unknown) => Promise<{ exists: boolean; data: () => unknown }> },
+    order: OrderRecord,
+    storeId: string,
+    photoId: string,
+  ): Promise<void> {
+    const photoIds = this.readPhotoIds(order['deliveryPhotoIds']);
+    if (
+      order['storeId'] !== storeId ||
+      order['schemaVersion'] !== 2 ||
+      typeof order['roundId'] !== 'string' ||
+      (order['roundId'] as string).trim().length === 0 ||
+      order['deliveryMethod'] !== 'direct' ||
+      order['status'] !== 'DELIVERED' ||
+      !photoIds.includes(photoId)
+    ) {
+      throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
+    }
+    const roundId = order['roundId'] as string;
+    const snapshot = await transaction.get(this.firestore.doc(`saleRounds/${roundId}`));
+    if (!snapshot.exists) {
+      throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
+    }
+    const round = snapshot.data() as OrderRecord | undefined;
+    if (round?.['id'] !== order['roundId'] || round?.['storeId'] !== order['storeId']) {
+      throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
     }
   }
 
