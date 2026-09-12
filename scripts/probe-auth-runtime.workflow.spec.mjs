@@ -195,8 +195,12 @@ describe('session-only runtime boundary', () => {
 
   it('provider, full-suite, fixture, and service-account paths are scoped', () => {
     const source = readWorkflow();
-    // Global forbiddens: never appear anywhere (no Vercel bypass, no full
-    // fixture seed, no provider egress, no broad E2E execution).
+    // Global forbiddens: never appear anywhere (no full fixture seed, no
+    // provider egress, no broad E2E execution, no OIDC writer).
+    // NOTE (PILOT-AUTH-VERCEL-AUTOMATION-BYPASS-27): x-vercel-protection-bypass
+    // is intentionally ALLOWED but strictly scoped to the callback-probe job
+    // only (see scoped assertion below). It must never leak into session,
+    // identity, approval, or probe-spec jobs.
     for (const forbidden of [
       'api.portone.io',
       'aligo.in',
@@ -207,12 +211,39 @@ describe('session-only runtime boundary', () => {
       'round-direct-e2e-fixtures',
       'check-round-direct-e2e-readiness',
       'pnpm --filter e2e',
-      'x-vercel-protection-bypass',
       'x-vercel-trusted-oidc-idp-token',
       'id-token: write',
     ]) {
       assert.ok(!source.includes(forbidden), `workflow must never contain ${forbidden}`);
     }
+    // Automation bypass passage is scoped to the callback-probe job only.
+    const sessionStartScoped = source.indexOf('session-probe:');
+    const callbackStartScoped = source.indexOf('callback-probe:');
+    const cleanupStartScoped = source.indexOf('auth_identity_cleanup:');
+    assert.ok(
+      sessionStartScoped >= 0 && callbackStartScoped > sessionStartScoped && cleanupStartScoped > callbackStartScoped,
+      'lifecycle job order must hold for bypass scoping',
+    );
+    const callbackOnlyScoped = source.slice(callbackStartScoped, cleanupStartScoped);
+    assert.ok(
+      callbackOnlyScoped.includes('x-vercel-protection-bypass') ||
+        callbackOnlyScoped.includes('VERCEL_AUTOMATION_BYPASS_SECRET') ||
+        callbackOnlyScoped.includes('AUTOMATION_BYPASS'),
+      'callback-probe must carry the automation bypass passage contract',
+    );
+    const sessionSliceScoped = source.slice(sessionStartScoped, callbackStartScoped);
+    assert.ok(
+      !sessionSliceScoped.includes('x-vercel-protection-bypass'),
+      'session-probe must never handle the bypass header',
+    );
+    assert.ok(
+      !sessionSliceScoped.includes('ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET'),
+      'session-probe must never bind the bypass secret',
+    );
+    assert.ok(
+      !sessionSliceScoped.includes('AUTOMATION_BYPASS'),
+      'session-probe must never select the bypass passage mode',
+    );
     // Service-account material is scoped to identity jobs only; session and
     // callback probes must never handle it.
     const sessionStart = source.indexOf('session-probe:');
@@ -546,6 +577,24 @@ describe('auth probe identity lifecycle (PILOT-AUTH-PROBE-IDENTITY-LIFECYCLE-26A
     assert.ok(cleanup.includes('retention-days: 7'), 'cleanup evidence must keep the 7-day retention contract');
     assert.ok(!seed.includes('bypass'), 'identity seed must not introduce protection bypass');
     assert.ok(!cleanup.includes('bypass'), 'identity cleanup must not introduce protection bypass');
+    for (const slice of [seed, cleanup]) {
+      assert.ok(
+        !slice.includes('ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET'),
+        'identity jobs must never bind the bypass secret',
+      );
+      assert.ok(
+        !slice.includes('VERCEL_AUTOMATION_BYPASS_SECRET'),
+        'identity jobs must never bind the bypass credential env',
+      );
+      assert.ok(
+        !slice.includes('AUTOMATION_BYPASS'),
+        'identity jobs must never select the bypass passage mode',
+      );
+      assert.ok(
+        !slice.includes('x-vercel-protection-bypass'),
+        'identity jobs must never handle the bypass header',
+      );
+    }
   });
 
   it('deterministic probe-spec and PR triggers cover the identity contract', () => {
