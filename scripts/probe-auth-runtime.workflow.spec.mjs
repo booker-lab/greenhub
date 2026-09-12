@@ -77,7 +77,7 @@ describe('session-only workflow dispatch contract', () => {
   it('round-direct-e2e Environment binds only the runtime probe jobs', () => {
     const source = readWorkflow();
     assert.ok(source.includes('name: round-direct-e2e'), 'session probe must bind round-direct-e2e');
-    const specSlice = jobSlice(source, 'probe-spec:', ['approval_gate:', 'session-probe:']);
+    const specSlice = jobSlice(source, 'probe-spec:', ['approval_gate:', 'auth_identity_seed:', 'session-probe:']);
     assert.ok(
       !specSlice.includes('environment:'),
       'deterministic probe-spec must not bind the credential Environment',
@@ -86,11 +86,17 @@ describe('session-only workflow dispatch contract', () => {
       !specSlice.includes('round-direct-e2e'),
       'deterministic probe-spec must not reference the Environment',
     );
-    const gateSlice = jobSlice(source, 'approval_gate:', ['session-probe:']);
+    const gateSlice = jobSlice(source, 'approval_gate:', ['auth_identity_seed:']);
     assert.ok(
       !gateSlice.includes('environment:'),
       'approval preflight must not bind the credential Environment',
     );
+    // Identity lifecycle jobs bind the same approved Environment; probes
+    // keep their existing binding. No new Environment is introduced.
+    for (const job of ['auth_identity_seed:', 'session-probe:', 'callback-probe:', 'auth_identity_cleanup:']) {
+      const slice = jobSlice(source, job, ['auth_identity_seed:', 'session-probe:', 'callback-probe:', 'auth_identity_cleanup:'].filter((m) => m !== job));
+      assert.ok(slice.includes('name: round-direct-e2e'), `${job} must bind round-direct-e2e`);
+    }
   });
 
   it('permissions stay minimal (read-only, no writes)', () => {
@@ -99,7 +105,7 @@ describe('session-only workflow dispatch contract', () => {
     for (const forbidden of ['contents: write', 'actions: write', 'packages: write', 'deployments: write']) {
       assert.ok(!source.includes(forbidden), `workflow must not grant ${forbidden}`);
     }
-    const gateSlice = jobSlice(source, 'approval_gate:', ['session-probe:']);
+    const gateSlice = jobSlice(source, 'approval_gate:', ['auth_identity_seed:']);
     assert.ok(gateSlice.includes('permissions: {}'), 'approval preflight must use empty permissions');
   });
 
@@ -130,7 +136,7 @@ describe('session-only workflow dispatch contract', () => {
 });
 
 describe('session-only runtime boundary', () => {
-  it('only the allowed scripts are invoked (session runner + isolated callback runner)', () => {
+  it('only the allowed scripts are invoked (session + callback + identity lifecycle)', () => {
     const source = readWorkflow();
     assert.ok(
       source.includes('scripts/wait-preview-deploy.mjs'),
@@ -140,13 +146,18 @@ describe('session-only runtime boundary', () => {
       source.includes('scripts/probe-auth-runtime.mjs'),
       'runtime probe must invoke only the existing probe runner',
     );
+    assert.ok(
+      source.includes('scripts/probe-auth-identities.mjs'),
+      'identity lifecycle must invoke the owned identity script',
+    );
     const invocations = [...source.matchAll(/node\s+scripts\/([^\s'"]+)/g)].map((m) => m[1]);
     assert.ok(invocations.length > 0, 'expected script invocations');
     for (const script of invocations) {
       assert.ok(
         script === 'wait-preview-deploy.mjs' ||
           script === 'probe-auth-runtime.mjs' ||
-          script === 'probe-consumer-callback.mjs',
+          script === 'probe-consumer-callback.mjs' ||
+          script === 'probe-auth-identities.mjs',
         `forbidden script invocation: node scripts/${script}`,
       );
     }
@@ -157,6 +168,16 @@ describe('session-only runtime boundary', () => {
       source.includes('callback-probe:'),
       'callback invocation must live in the isolated callback-probe job',
     );
+    // Identity isolation: seed/cleanup own the identity script; probes never
+    // invoke it and identity jobs never invoke probe runners.
+    const sessionStart = source.indexOf('session-probe:');
+    const callbackStart = source.indexOf('callback-probe:');
+    const sessionSlice = source.slice(sessionStart, callbackStart >= 0 ? callbackStart : source.length);
+    assert.ok(!sessionSlice.includes('probe-auth-identities.mjs'), 'session job must never invoke the identity script');
+    const callbackSlice = source.slice(callbackStart);
+    const cleanupStart = callbackSlice.indexOf('auth_identity_cleanup:');
+    const callbackOnly = cleanupStart >= 0 ? callbackSlice.slice(0, cleanupStart) : callbackSlice;
+    assert.ok(!callbackOnly.includes('probe-auth-identities.mjs'), 'callback job must never invoke the identity script');
   });
 
   it('production targets are rejected', () => {
@@ -165,22 +186,40 @@ describe('session-only runtime boundary', () => {
     assert.ok(source.includes('api-production-'), 'production API hosts must be rejected');
   });
 
-  it('provider, full-suite, fixture, and service-account paths are never invoked', () => {
+  it('provider, full-suite, fixture, and service-account paths are scoped', () => {
     const source = readWorkflow();
+    // Global forbiddens: never appear anywhere (no Vercel bypass, no full
+    // fixture seed, no provider egress, no broad E2E execution).
     for (const forbidden of [
       'api.portone.io',
       'aligo.in',
       'kauth.kakao.com',
       'kapi.kakao.com',
       'auth/kakao-login',
-      'FIREBASE_SERVICE_ACCOUNT_JSON',
       'playwright test',
       'round-direct-e2e-fixtures',
       'check-round-direct-e2e-readiness',
       'pnpm --filter e2e',
+      'x-vercel-protection-bypass',
+      'x-vercel-trusted-oidc-idp-token',
+      'id-token: write',
     ]) {
       assert.ok(!source.includes(forbidden), `workflow must never contain ${forbidden}`);
     }
+    // Service-account material is scoped to identity jobs only; session and
+    // callback probes must never handle it.
+    const sessionStart = source.indexOf('session-probe:');
+    const callbackStart = source.indexOf('callback-probe:');
+    const cleanupStart = source.indexOf('auth_identity_cleanup:');
+    assert.ok(sessionStart >= 0 && callbackStart > sessionStart && cleanupStart > callbackStart, 'lifecycle job order must hold');
+    const sessionSlice = source.slice(sessionStart, callbackStart);
+    const callbackOnly = source.slice(callbackStart, cleanupStart);
+    assert.ok(!sessionSlice.includes('FIREBASE_SERVICE_ACCOUNT_JSON'), 'session probe must never handle service-account material');
+    assert.ok(!callbackOnly.includes('FIREBASE_SERVICE_ACCOUNT_JSON'), 'callback probe must never handle service-account material');
+    const seedSlice = source.slice(source.indexOf('auth_identity_seed:'), sessionStart);
+    const cleanupSlice = source.slice(cleanupStart);
+    assert.ok(seedSlice.includes('FIREBASE_SERVICE_ACCOUNT_JSON'), 'identity seed must bind the approved service-account secret');
+    assert.ok(cleanupSlice.includes('FIREBASE_SERVICE_ACCOUNT_JSON'), 'identity cleanup must bind the approved service-account secret');
   });
 
   it('probe CLI passes only non-secret binding flags', () => {
@@ -422,5 +461,91 @@ describe('runner/target SHA decoupling (PILOT-AUTH-PROBE-RUNNER-TARGET-SHA-DECOU
       !slice.includes('AUTH_PROBE_RUNNER_TOKEN') && !slice.includes('AUTH_PROBE_RUNNER_SECRET'),
       'runner evidence must introduce no new credential-shaped names',
     );
+  });
+});
+
+describe('auth probe identity lifecycle (PILOT-AUTH-PROBE-IDENTITY-LIFECYCLE-26A)', () => {
+  function seedSlice(source) {
+    const start = source.indexOf('auth_identity_seed:');
+    assert.ok(start >= 0, 'workflow must contain the identity seed job');
+    const end = source.indexOf('session-probe:');
+    return source.slice(start, end >= 0 ? end : source.length);
+  }
+
+  function cleanupSlice(source) {
+    const start = source.indexOf('auth_identity_cleanup:');
+    assert.ok(start >= 0, 'workflow must contain the identity cleanup job');
+    return source.slice(start);
+  }
+
+  it('approval → identity → probes → always cleanup dependency holds', () => {
+    const source = readWorkflow();
+    const seedStart = source.indexOf('auth_identity_seed:');
+    const sessionStart = source.indexOf('session-probe:');
+    const callbackStart = source.indexOf('callback-probe:');
+    const cleanupStart = source.indexOf('auth_identity_cleanup:');
+    assert.ok(seedStart >= 0 && sessionStart > seedStart, 'seed must precede session-probe');
+    assert.ok(callbackStart > seedStart, 'seed must precede callback-probe');
+    assert.ok(cleanupStart > sessionStart && cleanupStart > callbackStart, 'cleanup must follow both probes');
+    assert.ok(source.slice(seedStart, sessionStart).includes('needs: approval_gate'), 'seed must need approval_gate');
+    assert.ok(source.slice(sessionStart, callbackStart).includes('needs: auth_identity_seed'), 'session must need identity seed');
+    const callbackOnly = source.slice(callbackStart, cleanupStart);
+    assert.ok(callbackOnly.includes('needs: auth_identity_seed'), 'callback must need identity seed');
+    assert.ok(!/^(\s*)needs:.*session-probe/m.test(callbackOnly), 'callback must not depend on session-probe');
+    const cleanup = source.slice(cleanupStart);
+    assert.ok(cleanup.includes('needs: [auth_identity_seed, session-probe, callback-probe]'), 'cleanup must need seed + both probes');
+    assert.ok(cleanup.includes('if: ${{ always()'), 'cleanup must run always()');
+  });
+
+  it('identity seed prepares exactly the 3 chromium roles without new secrets', () => {
+    const slice = seedSlice(readWorkflow());
+    assert.ok(slice.includes('scripts/probe-auth-identities.mjs'), 'seed must invoke the identity script');
+    assert.ok(!slice.includes('probe-auth-runtime.mjs'), 'seed must not invoke the session runner');
+    assert.ok(!slice.includes('probe-consumer-callback.mjs'), 'seed must not invoke the callback runner');
+    for (const name of [
+      'ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM',
+      'ROUND_DIRECT_E2E_CONSUMER_PASSWORD_CHROMIUM',
+      'ROUND_DIRECT_E2E_SELLER_EMAIL_CHROMIUM',
+      'ROUND_DIRECT_E2E_SELLER_PASSWORD_CHROMIUM',
+      'ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM',
+      'ROUND_DIRECT_E2E_DRIVER_PASSWORD_CHROMIUM',
+    ]) {
+      assert.ok(slice.includes(name), `seed must reuse approved name ${name}`);
+    }
+    assert.ok(slice.includes('--run-id='), 'seed must pass --run-id=');
+    assert.ok(slice.includes('--manifest='), 'seed must pass --manifest=');
+    assert.ok(slice.includes('identity-manifest.json'), 'seed must write the redacted identity manifest');
+    assert.ok(slice.includes('identity-summary.json'), 'seed must write the non-sensitive identity summary');
+  });
+
+  it('identity evidence stays non-sensitive with 7-day retention', () => {
+    const seed = seedSlice(readWorkflow());
+    const cleanup = cleanupSlice(readWorkflow());
+    for (const slice of [seed, cleanup]) {
+      for (const line of slice.split('\n')) {
+        if (line.trim().startsWith('#')) continue;
+        if (!/echo|printf/.test(line)) continue;
+        for (const sensitive of ['SECRET', 'PASSWORD', 'TOKEN', 'COOKIE', 'SERVICE_ACCOUNT', 'CREDENTIAL_JSON']) {
+          assert.ok(!line.includes(sensitive), `identity log line must not reference ${sensitive}`);
+        }
+      }
+      for (const sensitive of ['passwordHash', 'accessToken', 'refreshToken', 'set-cookie', 'private_key']) {
+        assert.ok(!slice.includes(sensitive), `identity job must not handle raw ${sensitive}`);
+      }
+    }
+    assert.ok(seed.includes('auth-probe-identities-'), 'identity artifact must use the lifecycle artifact name');
+    assert.ok(cleanup.includes('auth-probe-identities-cleanup-'), 'cleanup artifact must use its own name');
+    assert.ok(seed.includes('retention-days: 7'), 'identity evidence must keep the 7-day retention contract');
+    assert.ok(cleanup.includes('retention-days: 7'), 'cleanup evidence must keep the 7-day retention contract');
+    assert.ok(!seed.includes('bypass'), 'identity seed must not introduce protection bypass');
+    assert.ok(!cleanup.includes('bypass'), 'identity cleanup must not introduce protection bypass');
+  });
+
+  it('deterministic probe-spec and PR triggers cover the identity contract', () => {
+    const source = readWorkflow();
+    assert.ok(source.includes('scripts/probe-auth-identities.spec.mjs'), 'probe-spec must run the identity deterministic spec');
+    for (const trigger of ['scripts/probe-auth-identities.mjs', 'scripts/probe-auth-identities.spec.mjs']) {
+      assert.ok(source.includes(trigger), `pull_request paths must include ${trigger}`);
+    }
   });
 });

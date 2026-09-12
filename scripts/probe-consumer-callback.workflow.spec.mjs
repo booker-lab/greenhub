@@ -33,11 +33,12 @@ function readWorkflow() {
   return readFileSync(WORKFLOW_PATH, 'utf8');
 }
 
-/** Slice of the callback-probe job (last job in the workflow file). */
+/** Slice of the callback-probe job (bounded by the cleanup job). */
 function callbackSlice(source) {
   const start = source.indexOf('callback-probe:');
   assert.ok(start >= 0, 'workflow must contain the callback-probe job');
-  return source.slice(start);
+  const end = source.indexOf('auth_identity_cleanup:');
+  return source.slice(start, end >= 0 ? end : source.length);
 }
 
 function sessionSlice(source) {
@@ -86,7 +87,7 @@ describe('callback probe workflow isolation contract', () => {
       slice.includes("name: locked Consumer callback input-binding probe"),
       'callback job must carry its isolation name',
     );
-    assert.ok(slice.includes('needs: approval_gate'), 'callback job must need only approval_gate');
+    assert.ok(slice.includes('needs: auth_identity_seed'), 'callback job must need the identity seed job');
     assert.ok(!/^(\s*)needs:.*session-probe/m.test(slice), 'callback must not depend on session-probe');
     assert.ok(
       slice.includes("github.event_name == 'workflow_dispatch'"),
@@ -99,7 +100,7 @@ describe('callback probe workflow isolation contract', () => {
     assert.ok(slice.includes('group: auth-callback-probe'), 'callback job must use its own concurrency group');
   });
 
-  it('session-probe job is untouched by the callback integration', () => {
+  it('session-probe job keeps its isolation while gaining the identity dependency', () => {
     const source = readWorkflow();
     const slice = sessionSlice(source);
     assert.ok(
@@ -117,6 +118,14 @@ describe('callback probe workflow isolation contract', () => {
     assert.ok(
       !slice.includes('auth-callback-probe-'),
       'session job must not reference callback artifact paths',
+    );
+    assert.ok(
+      slice.includes('needs: auth_identity_seed'),
+      'session job must need the identity seed job (lifecycle)',
+    );
+    assert.ok(
+      !slice.includes('probe-auth-identities.mjs'),
+      'session job must never invoke the identity script',
     );
   });
 
