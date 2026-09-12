@@ -1,10 +1,11 @@
 /**
- * PILOT-AUTH-CALLBACK-PROBE-PUBLICATION-AND-DISPATCH-17 — callback workflow
- * contract spec.
+ * PILOT-AUTH-CALLBACK dynamic exact-binding workflow contract spec
+ * (PILOT-AUTH-CALLBACK-DYNAMIC-EXACT-BINDING-CONTRACT-22).
  *
  * Deterministic only: reads .github/workflows/probe-auth-runtime.yml as text
- * plus the callback runner's canonical constants and the session runner's
- * network allowlist. No network, no secrets, no external mutation. Run:
+ * plus the callback runner's invocation-scoped binding contract and the
+ * session runner's network allowlist. No network, no secrets, no external
+ * mutation. Run:
  *   node --test scripts/probe-consumer-callback.workflow.spec.mjs
  */
 import assert from 'node:assert/strict';
@@ -13,12 +14,12 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import * as callbackModule from './probe-consumer-callback.mjs';
 import {
   APPROVAL_VALUE,
   CREDENTIAL_SOURCE,
   HEADER_NAME,
-  LOCKED_DEPLOYMENT_ID,
-  LOCKED_SOURCE_SHA,
+  assertInvocationBinding,
 } from './probe-consumer-callback.mjs';
 import { readFileSync as readRunnerSource } from 'node:fs';
 
@@ -26,6 +27,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..');
 const WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'probe-auth-runtime.yml');
 const SESSION_RUNNER_PATH = path.join(REPO_ROOT, 'scripts', 'probe-auth-runtime.mjs');
+const CALLBACK_RUNNER_PATH = path.join(REPO_ROOT, 'scripts', 'probe-consumer-callback.mjs');
 
 function readWorkflow() {
   return readFileSync(WORKFLOW_PATH, 'utf8');
@@ -46,12 +48,35 @@ function sessionSlice(source) {
 }
 
 describe('callback probe workflow isolation contract', () => {
-  it('callback runner canonical input binding matches CASE B1', () => {
-    assert.equal(LOCKED_DEPLOYMENT_ID, 'dpl_B7TCW4CzUgWZv9JTUffMdpjCY7Qd');
-    assert.equal(LOCKED_SOURCE_SHA, '67632ede1d7196456bcf1fe5320a7a7e7d509c0c');
+  it('callback runner uses invocation-scoped binding (no static historical lock)', () => {
+    assert.equal('LOCKED_DEPLOYMENT_ID' in callbackModule, false);
+    assert.equal('LOCKED_SOURCE_SHA' in callbackModule, false);
+    assert.equal('LOCKED_BRANCH' in callbackModule, false);
+    assert.equal(typeof assertInvocationBinding, 'function');
+    // Arbitrary new exact inputs are admissible as invocation bindings.
+    assert.deepEqual(
+      assertInvocationBinding({
+        deploymentId: 'dpl_WorkflowSpecDynamic111111',
+        expectedSha: '0123456789abcdef0123456789abcdef01234567',
+      }),
+      {
+        deploymentId: 'dpl_WorkflowSpecDynamic111111',
+        expectedSha: '0123456789abcdef0123456789abcdef01234567',
+      },
+    );
     assert.equal(HEADER_NAME, 'x-e2e-test-token');
     assert.equal(CREDENTIAL_SOURCE, 'E2E_TEST_SECRET');
     assert.equal(APPROVAL_VALUE, 'NON_PRODUCTION_AUTH_PROBE_APPROVED');
+  });
+
+  it('callback runner source carries no historical literal target', () => {
+    const runner = readRunnerSource(CALLBACK_RUNNER_PATH, 'utf8');
+    assert.ok(!runner.includes('dpl_B7TCW4CzUgWZv9JTUffMdpjCY7Qd'), 'historical deployment literal must be gone');
+    assert.ok(!runner.includes('67632ede1d7196456bcf1fe5320a7a7e7d509c0c'), 'historical SHA literal must be gone');
+    assert.ok(!runner.includes('tmp/pilot-auth-verifier-cookie-04a-publication-01'), 'historical branch literal must be gone');
+    assert.ok(!/export const LOCKED_/.test(runner), 'no LOCKED_* export may remain');
+    assert.ok(runner.includes('assertInvocationBinding'), 'invocation binding entrypoint must exist');
+    assert.ok(runner.includes('evidence.ready !== true'), 'exact READY proof must be required');
   });
 
   it('callback-probe is an isolated job gated on manual dispatch only', () => {
@@ -95,7 +120,7 @@ describe('callback probe workflow isolation contract', () => {
     );
   });
 
-  it('callback code checkout follows the workflow ref, binding follows the locked SHA', () => {
+  it('callback code checkout follows the workflow ref, binding follows the invocation exact SHA', () => {
     const slice = callbackSlice(readWorkflow());
     assert.ok(
       slice.includes('ref: ${{ github.sha }}'),
@@ -111,11 +136,11 @@ describe('callback probe workflow isolation contract', () => {
     );
     assert.ok(
       slice.includes('--sha="$AUTH_CALLBACK_EXPECTED_SHA"'),
-      'deployment binding must still follow inputs.expected_sha (locked source)',
+      'deployment binding must still follow inputs.expected_sha (invocation exact input)',
     );
     assert.ok(
       slice.includes('--expected-sha="$AUTH_CALLBACK_EXPECTED_SHA"'),
-      'callback probe binding must follow inputs.expected_sha (locked source)',
+      'callback probe binding must follow inputs.expected_sha (invocation exact input)',
     );
   });
 
