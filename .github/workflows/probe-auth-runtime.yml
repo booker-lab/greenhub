@@ -37,6 +37,8 @@ on:
       - scripts/probe-consumer-callback.mjs
       - scripts/probe-consumer-callback.spec.mjs
       - scripts/probe-consumer-callback.workflow.spec.mjs
+      - scripts/probe-auth-identities.mjs
+      - scripts/probe-auth-identities.spec.mjs
       - .github/workflows/probe-auth-runtime.yml
 
 permissions:
@@ -46,7 +48,7 @@ jobs:
   probe-spec:
     name: probe runner deterministic spec
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -54,8 +56,13 @@ jobs:
         with:
           node-version: '22'
 
+      - uses: pnpm/action-setup@v6
+
+      - name: 의존성 설치 (deterministic spec bcrypt/fixture parity)
+        run: pnpm install --frozen-lockfile
+
       - name: run probe deterministic spec (mock/local only, no external calls)
-        run: node --test scripts/probe-auth-runtime.spec.mjs scripts/probe-auth-runtime.workflow.spec.mjs scripts/probe-consumer-callback.spec.mjs scripts/probe-consumer-callback.workflow.spec.mjs
+        run: node --test scripts/probe-auth-runtime.spec.mjs scripts/probe-auth-runtime.workflow.spec.mjs scripts/probe-consumer-callback.spec.mjs scripts/probe-consumer-callback.workflow.spec.mjs scripts/probe-auth-identities.spec.mjs
 
   approval_gate:
     name: session-only probe approval preflight
@@ -119,6 +126,153 @@ jobs:
             fi
           done
 
+  auth_identity_seed:
+    name: auth probe identity seed (3-role, invocation-owned)
+    # Bounded identity lifecycle (PILOT-AUTH-PROBE-IDENTITY-LIFECYCLE-26A):
+    # approval_gate -> auth_identity_seed -> session-probe/callback-probe
+    # -> auth_identity_cleanup(always). This job prepares exactly 3 owned
+    # user docs (consumer/seller/driver) in the staging dataset
+    # greenhub-round-direct-e2e via scripts/probe-auth-identities.mjs. It
+    # never runs the full round-direct fixture seed and never creates
+    # products/orders/saleRounds/storage objects or a production store.
+    # Credential source reuses only the approved chromium Environment
+    # secrets (mapped to TEST_* env below); no new secret is introduced.
+    # Service-account usage is scoped to this job and the cleanup job only;
+    # session/callback probe jobs never handle raw service-account material.
+    needs: approval_gate
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: auth-probe-identities
+      cancel-in-progress: false
+    environment:
+      name: round-direct-e2e
+    permissions:
+      contents: read
+    env:
+      AUTH_PROBE_IDENTITY_RUN_ID: auth-probe-${{ github.run_id }}-${{ github.run_attempt }}
+      AUTH_PROBE_RUNNER_SHA: ${{ inputs.runner_sha }}
+      AUTH_PROBE_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      ROUND_DIRECT_E2E_ENABLED: 'true'
+      ROUND_DIRECT_E2E_ENV: preview
+      NODE_ENV: test
+      VERCEL_ENV: preview
+      RAILWAY_ENVIRONMENT_NAME: staging
+      FIREBASE_PROJECT_ID: ${{ vars.ROUND_DIRECT_E2E_FIREBASE_PROJECT_ID }}
+      ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS }}
+    steps:
+      - name: runner SHA checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.runner_sha }}
+          fetch-depth: 0
+
+      - name: 수동 승인과 runner checkout SHA 확인
+        shell: bash
+        env:
+          APPROVAL: ${{ inputs.approval }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch 이외의 이벤트에서는 auth probe identity를 준비할 수 없습니다.' >&2
+            exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow 실행자가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow triggering actor가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$APPROVAL" != 'NON_PRODUCTION_AUTH_PROBE_APPROVED' ]]; then
+            echo 'auth probe 수동 승인이 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ ! "$AUTH_PROBE_RUNNER_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'runner SHA는 40자리 소문자 16진수여야 합니다.' >&2
+            exit 1
+          fi
+          actual_sha="$(git rev-parse HEAD)"
+          if [[ "$actual_sha" != "$AUTH_PROBE_RUNNER_SHA" ]]; then
+            echo 'checkout SHA가 runner SHA와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v6
+
+      - name: 의존성 설치 (identity seed only)
+        run: pnpm install --frozen-lockfile
+
+      - name: auth probe identities seed/verify (3-role, non-production only)
+        shell: bash
+        env:
+          NON_PRODUCTION_AUTH_PROBE_APPROVAL: ${{ inputs.approval }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+          TEST_CONSUMER_EMAIL: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM }}
+          TEST_CONSUMER_PASSWORD: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_PASSWORD_CHROMIUM }}
+          TEST_SELLER_EMAIL: ${{ secrets.ROUND_DIRECT_E2E_SELLER_EMAIL_CHROMIUM }}
+          TEST_SELLER_PASSWORD: ${{ secrets.ROUND_DIRECT_E2E_SELLER_PASSWORD_CHROMIUM }}
+          TEST_DRIVER_EMAIL: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM }}
+          TEST_DRIVER_PASSWORD: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_PASSWORD_CHROMIUM }}
+        run: |
+          set -euo pipefail
+          # Secret-name mapping note (values never logged):
+          # - FIREBASE_SERVICE_ACCOUNT_JSON <- ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON
+          # - TEST_* per-role identity <- approved chromium Environment secrets
+          # Target guard (enabled/preview/non-production/staging project/
+          # allowlist/service-account match) runs inside the script before
+          # any Firestore mutation. No product/order/round/storage seed.
+          evidence_root=".artifacts/auth-probe-identities/$AUTH_PROBE_IDENTITY_RUN_ID"
+          mkdir -p "$evidence_root/evidence"
+          set +e
+          node scripts/probe-auth-identities.mjs \
+            seed \
+            --run-id="$AUTH_PROBE_IDENTITY_RUN_ID" \
+            --manifest="$evidence_root/evidence/identity-manifest.json" \
+            > "$evidence_root/seed-raw.json"
+          seed_status=$?
+          set -e
+          if [[ ! -s "$evidence_root/seed-raw.json" ]]; then
+            echo 'identity seed 요약을 만들지 못해 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          jq '{
+            action,
+            runId,
+            ready,
+            evidence: (.evidence | {
+              purpose,
+              runId,
+              documentPaths,
+              storeIdPresent,
+              storeIdIsProduction,
+              roles,
+              failureCodes
+            })
+            }' \
+            "$evidence_root/seed-raw.json" \
+            > "$evidence_root/evidence/identity-summary.json"
+          exit "$seed_status"
+
+      - name: 비민감 identity 증거 artifact 업로드
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: auth-probe-identities-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/auth-probe-identities/${{ env.AUTH_PROBE_IDENTITY_RUN_ID }}/evidence/
+          if-no-files-found: error
+          retention-days: 7
+
   session-probe:
     name: pinned Preview session-only auth probe
     # Session-only boundary: this job exercises ONLY the existing
@@ -129,7 +283,11 @@ jobs:
     # Negative fixture creation is out of scope: when no approved negative
     # identity is configured the evidence records
     # NEGATIVE_IDENTITY_NOT_CONFIGURED instead of failing the probe itself.
-    needs: approval_gate
+    # Identity lifecycle: this job runs ONLY after auth_identity_seed
+    # succeeds (owned 3-role identities exist in staging). It never handles
+    # raw service-account material; identity mutation lives only in the
+    # seed/cleanup jobs.
+    needs: auth_identity_seed
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -448,10 +606,12 @@ jobs:
     # with manual redirect -> same-context session readback). It never
     # invokes scripts/probe-auth-runtime.mjs, never widens that runner's
     # ALLOWED_API_PATHS, never merges network allowlists, and never calls
-    # seller/driver frontend origins. The session-probe job above is left
-    # untouched; this job needs only approval_gate so a session-probe
-    # failure cannot mask or block callback provenance evidence.
-    needs: approval_gate
+    # seller/driver frontend origins. Identity lifecycle: this job runs
+    # ONLY after auth_identity_seed succeeds (owned consumer identity
+    # exists in staging) and stays independent of session-probe so a
+    # session-probe failure cannot mask or block callback provenance
+    # evidence. It never handles raw service-account material.
+    needs: auth_identity_seed
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -763,5 +923,109 @@ jobs:
         with:
           name: auth-callback-probe-${{ github.run_id }}-${{ github.run_attempt }}
           path: .artifacts/auth-callback-probe/${{ env.AUTH_CALLBACK_RUN_ID }}/evidence/
+          if-no-files-found: error
+          retention-days: 7
+
+  auth_identity_cleanup:
+    name: auth probe identity cleanup (always, owned-only)
+    # Bounded lifecycle closeout: deletes ONLY invocation-owned
+    # auth-probe docs (purpose + runId match). Foreign docs are never
+    # deleted; missing docs are idempotent success. Runs always() even
+    # when seed/session/callback fail or are skipped, so partial seeds
+    # cannot leak staging identities. Manifest transfer uses only the
+    # redacted (non-sensitive) artifact: no password/hash/email/token/
+    # service-account material is ever persisted or logged.
+    needs: [auth_identity_seed, session-probe, callback-probe]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: auth-probe-identities
+      cancel-in-progress: false
+    environment:
+      name: round-direct-e2e
+    permissions:
+      contents: read
+    env:
+      AUTH_PROBE_IDENTITY_RUN_ID: auth-probe-${{ github.run_id }}-${{ github.run_attempt }}
+      AUTH_PROBE_RUNNER_SHA: ${{ inputs.runner_sha }}
+      ROUND_DIRECT_E2E_ENABLED: 'true'
+      ROUND_DIRECT_E2E_ENV: preview
+      NODE_ENV: test
+      VERCEL_ENV: preview
+      RAILWAY_ENVIRONMENT_NAME: staging
+      FIREBASE_PROJECT_ID: ${{ vars.ROUND_DIRECT_E2E_FIREBASE_PROJECT_ID }}
+      ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS }}
+    steps:
+      - name: runner SHA checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.runner_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v6
+
+      - name: 의존성 설치 (identity cleanup only)
+        run: pnpm install --frozen-lockfile
+
+      - name: identity manifest 복원 (non-sensitive artifact only)
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: auth-probe-identities-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/auth-probe-identities/${{ env.AUTH_PROBE_IDENTITY_RUN_ID }}/evidence/
+
+      - name: auth probe identities cleanup + verification (owned-only, idempotent)
+        shell: bash
+        env:
+          NON_PRODUCTION_AUTH_PROBE_APPROVAL: ${{ inputs.approval }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          # No secret values are logged. Manifest holds only redacted
+          # paths/roles/namespaced storeId/_e2e markers (see seed job).
+          evidence_root=".artifacts/auth-probe-identities/$AUTH_PROBE_IDENTITY_RUN_ID"
+          mkdir -p "$evidence_root/evidence"
+          manifest="$evidence_root/evidence/identity-manifest.json"
+          if [[ ! -f "$manifest" ]]; then
+            printf '{"action":"cleanup","runId":"%s","status":"not-seeded"}\n' "$AUTH_PROBE_IDENTITY_RUN_ID" \
+              > "$evidence_root/evidence/cleanup-summary.json"
+            printf 'identity manifest가 없어 cleanup을 건너뜁니다 (not-seeded).\n'
+            exit 0
+          fi
+          set +e
+          node scripts/probe-auth-identities.mjs \
+            cleanup \
+            --manifest="$manifest" \
+            > "$evidence_root/cleanup-raw.json"
+          cleanup_status=$?
+          set -e
+          if [[ ! -s "$evidence_root/cleanup-raw.json" ]]; then
+            echo 'identity cleanup 요약을 만들지 못해 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          jq '{
+            action,
+            runId,
+            ready,
+            deleted,
+            skippedForeign,
+            missing,
+            remainingOwned
+            }' \
+            "$evidence_root/cleanup-raw.json" \
+            > "$evidence_root/evidence/cleanup-summary.json"
+          exit "$cleanup_status"
+
+      - name: 비민감 cleanup 증거 artifact 업로드
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: auth-probe-identities-cleanup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/auth-probe-identities/${{ env.AUTH_PROBE_IDENTITY_RUN_ID }}/evidence/
           if-no-files-found: error
           retention-days: 7
