@@ -276,6 +276,8 @@ describe('callback probe workflow isolation contract', () => {
       'headerConfigured: (.headerConfigured',
       'headerAttachedByRunner: (.headerAttachedByRunner',
       'protectionPassageMode: (.protectionPassageMode',
+      'protectionBypassHeaderName:',
+      'protectionBypassHeaderPresent:',
       'callbackAttempted: (.callbackAttempted',
       'sessionAttempted: (.sessionAttempted',
       'expectedSha: (.expectedSha',
@@ -295,9 +297,26 @@ describe('callback probe workflow isolation contract', () => {
     ]) {
       assert.ok(slice.includes(field), `callback-summary must preserve success field ${field}`);
     }
-    // Protection passage is never created; mode stays NONE.
+    // Protection passage is projected as non-sensitive metadata only.
+    // AUTOMATION_BYPASS mode + bypass header name/presence are required;
+    // secret VALUES must never appear (see next test).
     assert.ok(slice.includes('protectionPassageMode'), 'protection passage mode must be projected');
-    assert.ok(!slice.includes('bypass'), 'callback projection must not introduce bypass');
+    assert.ok(
+      slice.includes('protectionBypassHeaderName'),
+      'callback projection must carry the bypass header name',
+    );
+    assert.ok(
+      slice.includes('protectionBypassHeaderPresent'),
+      'callback projection must carry the bypass header presence',
+    );
+    assert.ok(
+      slice.includes('AUTOMATION_BYPASS'),
+      'callback job must select the AUTOMATION_BYPASS passage mode',
+    );
+    assert.ok(
+      slice.includes('x-vercel-protection-bypass'),
+      'callback projection must name the Vercel bypass header',
+    );
   });
 
   it('FAIL evidence is projected from callback-summary to workflow-summary', () => {
@@ -312,6 +331,8 @@ describe('callback probe workflow isolation contract', () => {
       'headerConfigured: ($callback[0].headerConfigured',
       'headerAttachedByRunner: ($callback[0].headerAttachedByRunner',
       'protectionPassageMode: ($callback[0].protectionPassageMode',
+      'protectionBypassHeaderName:',
+      'protectionBypassHeaderPresent:',
       'callbackAttempted: ($callback[0].callbackAttempted',
       'sessionAttempted: ($callback[0].sessionAttempted',
       'observedDeploymentSha: ($callback[0].observedDeploymentSha',
@@ -334,16 +355,16 @@ describe('callback probe workflow isolation contract', () => {
     assert.ok(!slice.includes('login-rejection'), 'callback scope must not touch session login-rejection semantics');
   });
 
-  it('callback projection exposes no secret/bypass/protection-passage material', () => {
+  it('callback projection exposes no secret values (names only)', () => {
     const slice = callbackSlice(readWorkflow());
+    // Secret VALUES, cookies, tokens, and raw locations must never appear.
+    // Non-sensitive NAMES (secret name, header names, mode) are required.
     for (const forbidden of [
       'ROUND_DIRECT_E2E_TEST_SECRET_VALUE',
       'x-e2e-test-token value',
       'Authorization',
       'Set-Cookie',
       '_vercel_jwt',
-      'bypass secret',
-      'protection passage',
       'Trusted Sources',
     ]) {
       assert.ok(!slice.includes(forbidden), `callback slice must not contain ${forbidden}`);
@@ -352,5 +373,91 @@ describe('callback probe workflow isolation contract', () => {
     assert.ok(!slice.includes('raw Location'), 'raw Location must never be projected');
     assert.ok(slice.includes('callbackLocationClass'), 'location class must be projected');
     assert.ok(slice.includes('locationClass'), 'FAIL location class must be projected');
+    // Non-sensitive passage metadata MUST be present (Task 27 contract).
+    assert.ok(
+      slice.includes('ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET'),
+      'callback job must reference the approved bypass secret NAME (value never logged)',
+    );
+    assert.ok(
+      slice.includes('VERCEL_AUTOMATION_BYPASS_SECRET'),
+      'callback job must map the bypass secret to the runner env name',
+    );
+    assert.ok(
+      slice.includes('--protection-passage-mode='),
+      'callback invocation must pass the explicit passage mode flag',
+    );
+    assert.ok(
+      slice.includes('protectionBypassHeaderName'),
+      'bypass header name provenance must be projected',
+    );
+    assert.ok(
+      slice.includes('protectionBypassHeaderPresent'),
+      'bypass header presence provenance must be projected',
+    );
+  });
+
+  it('callback job binds the automation bypass secret without new permissions', () => {
+    const slice = callbackSlice(readWorkflow());
+    assert.ok(
+      slice.includes('VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET }}'),
+      'callback job must map VERCEL_AUTOMATION_BYPASS_SECRET from the approved Environment secret',
+    );
+    assert.ok(
+      slice.includes('--protection-passage-mode="AUTOMATION_BYPASS"') ||
+        slice.includes("--protection-passage-mode='AUTOMATION_BYPASS'") ||
+        slice.includes('--protection-passage-mode="AUTOMATION_BYPASS"'),
+      'callback invocation must select AUTOMATION_BYPASS',
+    );
+    assert.ok(!slice.includes('id-token: write'), 'callback job must not add OIDC writer permission');
+    assert.ok(
+      !slice.includes('x-vercel-trusted-oidc-idp-token'),
+      'callback job must not use the OIDC trusted-source flow',
+    );
+    // Existing credential mapping is preserved.
+    assert.ok(
+      slice.includes('E2E_TEST_SECRET: ${{ secrets.ROUND_DIRECT_E2E_TEST_SECRET }}'),
+      'existing E2E secret mapping must be preserved',
+    );
+  });
+
+  it('session-probe and identity jobs do not spread the bypass secret', () => {
+    const source = readWorkflow();
+    const sessionStart = source.indexOf('session-probe:');
+    const callbackStart = source.indexOf('callback-probe:');
+    const cleanupStart = source.indexOf('auth_identity_cleanup:');
+    const sessionOnly = source.slice(sessionStart, callbackStart);
+    const seedStart = source.indexOf('auth_identity_seed:');
+    const seedOnly = source.slice(seedStart, sessionStart);
+    const cleanupOnly = source.slice(cleanupStart);
+    for (const [name, jobSlice] of [
+      ['session-probe', sessionOnly],
+      ['auth_identity_seed', seedOnly],
+      ['auth_identity_cleanup', cleanupOnly],
+    ]) {
+      assert.ok(
+        !jobSlice.includes('ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET'),
+        `${name} must not bind the bypass secret`,
+      );
+      assert.ok(
+        !jobSlice.includes('VERCEL_AUTOMATION_BYPASS_SECRET'),
+        `${name} must not bind the bypass credential env`,
+      );
+      assert.ok(
+        !jobSlice.includes('AUTOMATION_BYPASS'),
+        `${name} must not select the bypass passage mode`,
+      );
+    }
+    // Lifecycle dependency is preserved.
+    assert.ok(sessionOnly.includes('needs: auth_identity_seed'), 'session must need identity seed');
+    const callbackOnly = source.slice(callbackStart, cleanupStart);
+    assert.ok(callbackOnly.includes('needs: auth_identity_seed'), 'callback must need identity seed');
+    assert.ok(!/^(\s*)needs:.*session-probe/m.test(callbackOnly), 'callback must not depend on session-probe');
+    assert.ok(
+      cleanupOnly.includes('needs: [auth_identity_seed, session-probe, callback-probe]'),
+      'cleanup must need seed + both probes',
+    );
+    assert.ok(cleanupOnly.includes('if: ${{ always()'), 'cleanup must run always()');
+    // No OIDC writer anywhere.
+    assert.ok(!source.includes('id-token: write'), 'workflow must not add OIDC writer permission');
   });
 });

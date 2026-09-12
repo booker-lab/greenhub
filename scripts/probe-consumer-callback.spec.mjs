@@ -19,13 +19,17 @@ import {
   CREDENTIAL_SOURCE,
   FAIL_RESULT_KEYS,
   HEADER_NAME,
+  PROTECTION_BYPASS_CREDENTIAL_ENV,
+  PROTECTION_BYPASS_HEADER_NAME,
   PROTECTION_LOCATION_CLASS,
   PROTECTION_PASSAGE_MODE,
+  PROTECTION_PASSAGE_MODES,
   REQUEST_BUILDER,
   RUNNER_ID,
   assertDeploymentId,
   assertExpectedSha,
   assertInvocationBinding,
+  assertProtectionPassageReady,
   buildCallbackArtifact,
   buildFailureResult,
   classifyAuthError,
@@ -37,6 +41,7 @@ import {
   isProtectionIntercept,
   isProtectionResponse,
   normalizeConsumerUrl,
+  normalizeProtectionPassageMode,
   runConsumerCallbackProbe,
   validateEvidenceBinding,
   validateProbeGuards,
@@ -1067,5 +1072,191 @@ describe('callback FAIL evidence preservation (PILOT-AUTH-CALLBACK-FAIL-19)', ()
     assert.equal(extractObservedDeploymentSha(validEvidence()), DYNAMIC_SHA_1);
     assert.equal(extractDeploymentReady(validEvidence()), true);
     assert.equal(classifyFailureLocation({ locationValue: null, base: CONSUMER_URL, isProtection: false }), 'NONE');
+  });
+});
+
+describe('automation bypass passage (PILOT-AUTH-VERCEL-AUTOMATION-BYPASS-27)', () => {
+  const MOCK_BYPASS = 'mock-bypass-secret-fixture-27';
+
+  function bypassInput(overrides = {}) {
+    return validInput({
+      protectionPassageMode: 'AUTOMATION_BYPASS',
+      protectionBypassSecret: MOCK_BYPASS,
+      ...overrides,
+    });
+  }
+
+  function bypassEnvInput(overrides = {}, envBypass = MOCK_BYPASS) {
+    const { protectionBypassSecret, ...rest } = bypassInput(overrides);
+    void protectionBypassSecret;
+    return { input: { ...rest, protectionPassageMode: 'AUTOMATION_BYPASS' }, env: { [PROTECTION_BYPASS_CREDENTIAL_ENV]: envBypass } };
+  }
+
+  it('A: NONE mode preserves existing behavior (no bypass header)', async () => {
+    assert.deepEqual([...PROTECTION_PASSAGE_MODES].sort(), ['AUTOMATION_BYPASS', 'NONE']);
+    assert.equal(PROTECTION_PASSAGE_MODE, 'NONE');
+    assert.equal(PROTECTION_BYPASS_HEADER_NAME, 'x-vercel-protection-bypass');
+    assert.equal(normalizeProtectionPassageMode(undefined), 'NONE');
+    assert.equal(normalizeProtectionPassageMode('none'), 'NONE');
+    assert.equal(normalizeProtectionPassageMode('AUTOMATION_BYPASS'), 'AUTOMATION_BYPASS');
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(
+        `${CONSUMER_URL}/login?error=CredentialsSignin&code=authorize-rejected`,
+      ),
+      '/api/auth/session': sessionInvalid(),
+    });
+    const { artifact } = await runConsumerCallbackProbe(validInput(), { env: {}, fetchImpl: fetch });
+    assert.equal(artifact.protectionPassageMode, 'NONE');
+    assert.equal(artifact.protectionBypassHeaderName, 'x-vercel-protection-bypass');
+    assert.equal(artifact.protectionBypassHeaderPresent, false);
+    assert.equal(artifact.headerName, 'x-e2e-test-token');
+    assert.equal(artifact.headerPresent, true);
+    for (const entry of fetch.seen) {
+      assert.ok(!(PROTECTION_BYPASS_HEADER_NAME in entry.headers), `NONE must not send bypass on ${entry.path}`);
+    }
+    assert.equal(fetch.seen.find((e) => e.path === '/api/auth/csrf').headers[HEADER_NAME], MOCK_SECRET);
+  });
+
+  it('B: AUTOMATION_BYPASS attaches the bypass header to all three Consumer requests', async () => {
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(`${CONSUMER_URL}/`),
+      '/api/auth/session': sessionInvalid(),
+    });
+    const { artifact, calls } = await runConsumerCallbackProbe(bypassInput(), { env: {}, fetchImpl: fetch });
+    assert.deepEqual(calls, ['/api/auth/csrf', '/api/auth/callback/credentials', '/api/auth/session']);
+    assert.equal(artifact.protectionPassageMode, 'AUTOMATION_BYPASS');
+    assert.equal(artifact.protectionBypassHeaderName, 'x-vercel-protection-bypass');
+    assert.equal(artifact.protectionBypassHeaderPresent, true);
+    for (const path of ['/api/auth/csrf', '/api/auth/callback/credentials', '/api/auth/session']) {
+      const entry = fetch.seen.find((e) => e.path === path);
+      assert.ok(entry, `expected request to ${path}`);
+      assert.equal(entry.headers[PROTECTION_BYPASS_HEADER_NAME], MOCK_BYPASS);
+    }
+  });
+
+  it('C: x-e2e-test-token and x-vercel-protection-bypass coexist as distinct headers', async () => {
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(`${CONSUMER_URL}/`),
+      '/api/auth/session': sessionInvalid(),
+    });
+    await runConsumerCallbackProbe(bypassInput(), { env: {}, fetchImpl: fetch });
+    assert.notEqual(HEADER_NAME, PROTECTION_BYPASS_HEADER_NAME);
+    assert.equal(HEADER_NAME, 'x-e2e-test-token');
+    assert.equal(PROTECTION_BYPASS_HEADER_NAME, 'x-vercel-protection-bypass');
+    const csrf = fetch.seen.find((e) => e.path === '/api/auth/csrf').headers;
+    const callback = fetch.seen.find((e) => e.path === '/api/auth/callback/credentials').headers;
+    assert.equal(csrf[HEADER_NAME], MOCK_SECRET);
+    assert.equal(csrf[PROTECTION_BYPASS_HEADER_NAME], MOCK_BYPASS);
+    assert.equal(callback[HEADER_NAME], MOCK_SECRET);
+    assert.equal(callback[PROTECTION_BYPASS_HEADER_NAME], MOCK_BYPASS);
+    assert.notEqual(csrf[HEADER_NAME], csrf[PROTECTION_BYPASS_HEADER_NAME]);
+  });
+
+  it('D: AUTOMATION_BYPASS without credential fails closed before any network call', async () => {
+    const fetch = mockFetch({});
+    await assert.rejects(
+      runConsumerCallbackProbe(bypassInput({ protectionBypassSecret: '' }), { env: {}, fetchImpl: fetch }),
+      (error) => error.code === 'AUTOMATION_BYPASS_CREDENTIAL_UNAVAILABLE',
+    );
+    await assert.rejects(
+      runConsumerCallbackProbe(
+        validInput({ protectionPassageMode: 'AUTOMATION_BYPASS' }),
+        { env: {}, fetchImpl: fetch },
+      ),
+      (error) => error.code === 'AUTOMATION_BYPASS_CREDENTIAL_UNAVAILABLE',
+    );
+    // Env-only credential also works; empty env fails closed.
+    const { input, env } = bypassEnvInput();
+    const okFetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(`${CONSUMER_URL}/`),
+      '/api/auth/session': sessionInvalid(),
+    });
+    const { artifact } = await runConsumerCallbackProbe(input, { env, fetchImpl: okFetch });
+    assert.equal(artifact.protectionBypassHeaderPresent, true);
+    await assert.rejects(
+      runConsumerCallbackProbe(input, { env: {}, fetchImpl: mockFetch({}) }),
+      (error) => error.code === 'AUTOMATION_BYPASS_CREDENTIAL_UNAVAILABLE',
+    );
+    assert.deepEqual(fetch.paths(), []);
+  });
+
+  it('E/F: artifact serializes no secret value or secret-derived diagnostic', async () => {
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(
+        `${CONSUMER_URL}/`,
+        `__Secure-authjs.session-token=${MOCK_COOKIE_VALUE}; Path=/; HttpOnly`,
+      ),
+      '/api/auth/session': sessionValid(),
+    });
+    const { artifact } = await runConsumerCallbackProbe(bypassInput(), { env: {}, fetchImpl: fetch });
+    assert.deepEqual(Object.keys(artifact).sort(), [...ARTIFACT_KEYS].sort());
+    const serialized = JSON.stringify(artifact);
+    for (const forbidden of [MOCK_SECRET, MOCK_BYPASS, MOCK_PASSWORD, MOCK_CSRF, MOCK_SESSION_TOKEN, MOCK_COOKIE_VALUE]) {
+      assert.ok(!serialized.includes(forbidden), 'artifact must not contain credential material');
+    }
+    const lowered = serialized.toLowerCase();
+    for (const derived of ['hash', 'fingerprint', 'prefix', 'suffix', 'length']) {
+      // No secret-derived diagnostic key may appear in the artifact.
+      assert.ok(!Object.keys(artifact).some((k) => k.toLowerCase().includes(derived)), `artifact key must not be ${derived}`);
+      void lowered;
+    }
+    for (const key of ['secret', 'e2eSecret', 'bypassSecret', 'token', 'cookie', 'password', 'email', 'value', 'authorization']) {
+      assert.ok(!(key in artifact), `artifact must not contain key: ${key}`);
+    }
+  });
+
+  it('G: FAIL artifact is equally redacted', async () => {
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': jsonResponse({
+        status: 302,
+        body: {},
+        headers: fakeHeaders({
+          Location: 'https://vercel.com/sso-api?nonce=fixture-nonce-27&token=fixture-token-27',
+          'Content-Type': 'text/plain; charset=utf-8',
+        }),
+      }),
+      '/api/auth/session': sessionInvalid(),
+    });
+    let evidence = null;
+    try {
+      await runConsumerCallbackProbe(bypassInput(), { env: {}, fetchImpl: fetch });
+      assert.fail('expected FAIL');
+    } catch (error) {
+      evidence = error.evidence;
+    }
+    assert.ok(evidence);
+    assert.deepEqual(Object.keys(evidence).sort(), [...FAIL_RESULT_KEYS].sort());
+    assert.equal(evidence.protectionPassageMode, 'AUTOMATION_BYPASS');
+    assert.equal(evidence.protectionBypassHeaderName, 'x-vercel-protection-bypass');
+    assert.equal(evidence.protectionBypassHeaderPresent, true);
+    const serialized = JSON.stringify(evidence);
+    for (const forbidden of [MOCK_SECRET, MOCK_BYPASS, 'fixture-nonce-27', 'fixture-token-27']) {
+      assert.ok(!serialized.includes(forbidden), 'FAIL must not contain credential material');
+    }
+  });
+
+  it('bypass credential is never a CLI literal surface (env-only)', () => {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(path.join(here, 'probe-consumer-callback.mjs'), 'utf8');
+    assert.ok(source.includes(PROTECTION_BYPASS_CREDENTIAL_ENV), 'runner must read the env credential name');
+    assert.ok(!source.includes('--bypass-secret'), 'runner must not accept a CLI bypass secret literal');
+    assert.ok(!source.includes('--protection-bypass-secret'), 'runner must not accept a CLI bypass secret literal');
+    assert.deepEqual(
+      assertProtectionPassageReady(
+        { protectionPassageMode: 'AUTOMATION_BYPASS', protectionBypassSecret: MOCK_BYPASS },
+        {},
+      ),
+      { protectionPassageMode: 'AUTOMATION_BYPASS', bypassSecret: MOCK_BYPASS },
+    );
+    assert.throws(
+      () => assertProtectionPassageReady({ protectionPassageMode: 'AUTOMATION_BYPASS' }, {}),
+      (error) => error.code === 'AUTOMATION_BYPASS_CREDENTIAL_UNAVAILABLE',
+    );
   });
 });
