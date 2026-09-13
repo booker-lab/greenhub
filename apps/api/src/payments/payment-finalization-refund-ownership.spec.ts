@@ -7,6 +7,16 @@
 // F4: UNKNOWN results must reconcile provider state before retry.
 // F5: crash-after-success must not reissue cancel without readback.
 //
+// 28C closure cases (same file, no new harness):
+// A. aborted claim attempt must not authorize provider (retry committed
+//    already_handled wins).
+// C/E. pre-existing foreign owner: provider 0, foreign token/status kept.
+// D1. stale success after takeover: no overwrite/clear of foreign outcome.
+// D2. stale failure after takeover: no clear of foreign ownership.
+// G. late marker: stale caller writes nothing; authoritative write uses
+//    fresh order fields (no outer snapshot flows into persistence).
+// H. cancelPendingOrder aborted attempt must not leak (committed boolean).
+//
 // Real provider is never used; PortOne is fully mocked.
 
 import { LatePaymentCapacityError } from '../orders/order-capacity.service';
@@ -345,5 +355,223 @@ describe('PILOT-PAYMENT-FINALIZATION-REFUND-OWNERSHIP-27C', () => {
     expect(fixture.portone.refund).not.toHaveBeenCalled();
     expect(fixture.portone.getPayment).not.toHaveBeenCalled();
     expect(notifications.sendToUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('28C-A. aborted claim attempt must not authorize provider: retry already_handled wins', async () => {
+    const occ = createOccFirestore();
+    const fixture = makeFixture(occ);
+    occ.setBeforeCommit(() => {
+      occ.updateOutsideTransaction('orders/order-1', {
+        status: 'CANCELLED',
+        cancelReason: 'amount_mismatch',
+        latePaymentRefundedAt: new Date('2026-09-01T00:00:00.000Z'),
+        finalizationRefund: {
+          token: 'committed-token',
+          owner: 'payment-finalization',
+          reason: 'amount_mismatch',
+          status: 'REFUNDED',
+          claimedAt: new Date('2026-09-01T00:00:00.000Z'),
+          expiresAt: Date.now() + 300000,
+          updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+        },
+      });
+    });
+
+    await expect(
+      fixture.service.finalizePaidOrder('order-1', paidPayment(99999)),
+    ).resolves.toEqual({ ok: false, reason: 'amount_mismatch' });
+    occ.clearHooks();
+
+    expect(fixture.portone.refund).not.toHaveBeenCalled();
+    expect(occ.getData('orders/order-1')?.['finalizationRefund']).toMatchObject({
+      token: 'committed-token',
+      status: 'REFUNDED',
+    });
+  });
+
+  it('28C-CE. pre-existing foreign owner: provider 0, foreign token/status preserved', async () => {
+    const occ = createOccFirestore();
+    const fixture = makeFixture(occ, {
+      finalizationRefund: {
+        token: 'foreign-token',
+        owner: 'foreign-service',
+        reason: 'amount_mismatch',
+        status: 'CLAIMED',
+        claimedAt: new Date('2026-09-01T00:00:00.000Z'),
+        expiresAt: Date.now() + 300000,
+        updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+      },
+    });
+
+    await expect(
+      fixture.service.finalizePaidOrder('order-1', paidPayment(99999)),
+    ).resolves.toEqual({ ok: false, reason: 'amount_mismatch' });
+
+    expect(fixture.portone.refund).not.toHaveBeenCalled();
+    expect(fixture.portone.getPayment).not.toHaveBeenCalled();
+    expect(occ.getData('orders/order-1')?.['finalizationRefund']).toMatchObject({
+      token: 'foreign-token',
+      owner: 'foreign-service',
+      status: 'CLAIMED',
+    });
+  });
+
+  it('28C-D1. stale success after takeover must not write foreign outcome', async () => {
+    const occ = createOccFirestore();
+    const fixture = makeFixture(occ, {
+      status: 'CANCELLED',
+      cancelReason: 'timeout',
+      userId: 'user-2',
+      storeId: 'store-2',
+      finalizationRefund: {
+        token: 'authoritative-token',
+        owner: 'payment-finalization',
+        reason: 'late_capacity_round',
+        status: 'UNKNOWN',
+        claimedAt: new Date('2026-09-01T00:00:00.000Z'),
+        expiresAt: Date.now() + 300000,
+        updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+      },
+    });
+    const priv = fixture.service as unknown as {
+      completeFinalizationRefund: (
+        orderId: string,
+        payment: never,
+        reason: string,
+        providerReason: string,
+        token: string,
+      ) => Promise<void>;
+    };
+
+    await priv.completeFinalizationRefund(
+      'order-1',
+      paidPayment(),
+      'late_capacity_round',
+      '결제 만료 후 회차 한도 마감',
+      'stale-token',
+    );
+
+    expect(occ.getData('orders/order-1')?.['finalizationRefund']).toMatchObject({
+      token: 'authoritative-token',
+      status: 'UNKNOWN',
+    });
+    expect(occ.getData('orders/order-1')?.['latePaymentRefundedAt']).toBeUndefined();
+    expect(occ.getData('payments/order-1')).toBeUndefined();
+  });
+
+  it('28C-D2. stale failure after takeover must not clear foreign ownership', async () => {
+    const occ = createOccFirestore();
+    const fixture = makeFixture(occ, {
+      status: 'CANCELLED',
+      cancelReason: 'timeout',
+      finalizationRefund: {
+        token: 'authoritative-token',
+        owner: 'payment-finalization',
+        reason: 'late_capacity_round',
+        status: 'UNKNOWN',
+        claimedAt: new Date('2026-09-01T00:00:00.000Z'),
+        expiresAt: Date.now() + 300000,
+        updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+      },
+    });
+    const priv = fixture.service as unknown as {
+      persistUncertainFinalizationRefund: (
+        orderId: string,
+        token: string,
+        reason: string,
+        error: unknown,
+        failureStage: 'provider_refund' | 'provider_readback',
+      ) => Promise<void>;
+    };
+
+    await priv.persistUncertainFinalizationRefund(
+      'order-1',
+      'stale-token',
+      'late_capacity_round',
+      new Error('stale provider timeout'),
+      'provider_refund',
+    );
+
+    expect(occ.getData('orders/order-1')?.['finalizationRefund']).toMatchObject({
+      token: 'authoritative-token',
+      status: 'UNKNOWN',
+    });
+  });
+
+  it('28C-G. authoritative late completion uses fresh order fields (no outer snapshot channel)', async () => {
+    const occ = createOccFirestore();
+    const fixture = makeFixture(occ, {
+      status: 'CANCELLED',
+      cancelReason: 'timeout',
+      userId: 'user-2',
+      storeId: 'store-2',
+      finalizationRefund: {
+        token: 'owner-token',
+        owner: 'payment-finalization',
+        reason: 'late_capacity_round',
+        status: 'CLAIMED',
+        claimedAt: new Date('2026-09-01T00:00:00.000Z'),
+        expiresAt: Date.now() + 300000,
+        updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+      },
+    });
+    const priv = fixture.service as unknown as {
+      completeFinalizationRefund: (
+        orderId: string,
+        payment: never,
+        reason: string,
+        providerReason: string,
+        token: string,
+      ) => Promise<void>;
+    };
+
+    await priv.completeFinalizationRefund(
+      'order-1',
+      paidPayment(),
+      'late_capacity_round',
+      '결제 만료 후 회차 한도 마감',
+      'owner-token',
+    );
+
+    expect(occ.getData('orders/order-1')?.['finalizationRefund']).toMatchObject({
+      token: 'owner-token',
+      status: 'REFUNDED',
+    });
+    expect(occ.getData('orders/order-1')?.['latePaymentRefundedAt']).toBeDefined();
+    expect(occ.getData('payments/order-1')).toMatchObject({
+      userId: 'user-2',
+      storeId: 'store-2',
+      status: 'CANCELLED',
+      refundAmount: 100000,
+    });
+  });
+
+  it('28C-H1. cancelPendingOrder aborted true-attempt must not leak: committed false wins', async () => {
+    const occ = createOccFirestore();
+    const fixture = makeFixture(occ);
+    occ.setBeforeCommit(() => {
+      occ.updateOutsideTransaction('orders/order-1', { status: 'ACCEPTED' });
+    });
+
+    await expect(fixture.service.cancelPendingOrder('order-1', 'timeout')).resolves.toBe(false);
+    occ.clearHooks();
+
+    expect(occ.getData('orders/order-1')).toMatchObject({ status: 'ACCEPTED' });
+  });
+
+  it('28C-H2. cancelPendingOrder aborted false-attempt retries to committed true', async () => {
+    const occ = createOccFirestore();
+    const fixture = makeFixture(occ, { status: 'ACCEPTED' });
+    occ.setBeforeCommit(() => {
+      occ.updateOutsideTransaction('orders/order-1', { status: 'PENDING' });
+    });
+
+    await expect(fixture.service.cancelPendingOrder('order-1', 'timeout')).resolves.toBe(true);
+    occ.clearHooks();
+
+    expect(occ.getData('orders/order-1')).toMatchObject({
+      status: 'CANCELLED',
+      cancelReason: 'timeout',
+    });
   });
 });
