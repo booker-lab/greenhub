@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { RetentionService } from '../retention/retention.service';
-import { PortoneClient } from './portone.client';
+import { createPortoneRefundIdempotencyKey, PortoneClient } from './portone.client';
 
 const REFUND_CLAIM_MS = 5 * 60 * 1000;
 const REFUND_OWNER = 'payment-refund';
@@ -20,8 +20,8 @@ type RefundPayload = {
 };
 
 type RefundClaimOutcome =
-  | { outcome: 'claimed_fresh'; token: string; payload: RefundPayload }
-  | { outcome: 'claimed_retry'; token: string; payload: RefundPayload }
+  | { outcome: 'claimed_fresh'; token: string; providerKey: string; payload: RefundPayload }
+  | { outcome: 'claimed_retry'; token: string; providerKey: string; payload: RefundPayload }
   | { outcome: 'already_handled' }
   | { outcome: 'doc_missing' };
 
@@ -61,11 +61,17 @@ export class PaymentRefundService {
         const marker = this.readRefundMarker(payment);
         const now = this.firestore.Timestamp.now();
         if (!marker) {
+          // Fresh refund operation: fix the stable provider idempotency
+          // identity now. It is persisted with the claim and reused by every
+          // UNKNOWN-recovery retry POST of this same operation, while the
+          // local ownership token may be reissued on takeover.
+          const providerKey = createPortoneRefundIdempotencyKey('payment-refund');
           tx.update(paymentRef, {
             refundClaim: {
               token,
               owner: REFUND_OWNER,
               status: 'CLAIMED' satisfies RefundClaimStatus,
+              providerKey,
               expiresAt: Date.now() + REFUND_CLAIM_MS,
               updatedAt: now,
             },
@@ -76,6 +82,7 @@ export class PaymentRefundService {
           return {
             outcome: 'claimed_fresh',
             token,
+            providerKey,
             payload: {
               id: payment['id'],
               portonePaymentId: payment['portonePaymentId'],
@@ -92,12 +99,18 @@ export class PaymentRefundService {
         }
         // Expired CLAIMED or any UNKNOWN: a prior attempt may already have
         // reached the provider. Take over as uncertain so a getPayment
-        // readback is mandatory before any refund POST.
+        // readback is mandatory before any refund POST. The local token is
+        // reissued, but the provider idempotency identity is preserved so a
+        // retry POST is the same provider operation as the first POST.
+        // (Legacy claims without a key predate 28B and their prior POST, if
+        // any, was unkeyed, so minting one at takeover is safe.)
+        const providerKey = marker.providerKey ?? createPortoneRefundIdempotencyKey('payment-refund');
         tx.update(paymentRef, {
           refundClaim: {
             token,
             owner: REFUND_OWNER,
             status: 'UNKNOWN' satisfies RefundClaimStatus,
+            providerKey,
             expiresAt: Date.now() + REFUND_CLAIM_MS,
             updatedAt: now,
           },
@@ -106,6 +119,7 @@ export class PaymentRefundService {
         return {
           outcome: 'claimed_retry',
           token,
+          providerKey,
           payload: {
             id: payment['id'],
             portonePaymentId: payment['portonePaymentId'],
@@ -123,6 +137,7 @@ export class PaymentRefundService {
 
     const payment = claimResult.payload;
     const claimToken = claimResult.token;
+    const providerKey = claimResult.providerKey;
     if (claimResult.outcome === 'claimed_retry') {
       const reconciled = await this.reconcileUncertainRefund(
         paymentRef,
@@ -130,12 +145,13 @@ export class PaymentRefundService {
         payment,
         reason,
         claimToken,
+        providerKey,
       );
       if (reconciled !== 'proceed') return;
     }
 
     try {
-      await this.portone.refund(payment.portonePaymentId, payment.amount, reason);
+      await this.portone.refund(payment.portonePaymentId, payment.amount, reason, providerKey);
     } catch (error) {
       // Provider result UNKNOWN (throw/timeout included): the cancel may or
       // may not have landed. Never blind-release; persist uncertainty and
@@ -145,6 +161,7 @@ export class PaymentRefundService {
         orderId,
         payment,
         claimToken,
+        providerKey,
         'provider_refund',
       );
       throw error;
@@ -159,6 +176,7 @@ export class PaymentRefundService {
         orderId,
         payment,
         claimToken,
+        providerKey,
         'local_completion',
       );
       throw error;
@@ -177,6 +195,7 @@ export class PaymentRefundService {
     payment: RefundPayload,
     reason: string,
     token: string,
+    providerKey: string,
   ): Promise<'proceed' | 'already_handled'> {
     let providerState: Record<string, any>;
     try {
@@ -185,7 +204,14 @@ export class PaymentRefundService {
         any
       >;
     } catch (error) {
-      await this.persistUncertainRefund(paymentRef, orderId, payment, token, 'provider_readback');
+      await this.persistUncertainRefund(
+        paymentRef,
+        orderId,
+        payment,
+        token,
+        providerKey,
+        'provider_readback',
+      );
       throw error;
     }
     if (providerState?.['status'] === 'CANCELLED') {
@@ -203,7 +229,14 @@ export class PaymentRefundService {
       (providerId !== undefined && providerId !== payment.portonePaymentId)
     ) {
       const error = new Error('PortOne 결제 상태를 확정할 수 없어 환불을 중단합니다.');
-      await this.persistUncertainRefund(paymentRef, orderId, payment, token, 'provider_readback');
+      await this.persistUncertainRefund(
+        paymentRef,
+        orderId,
+        payment,
+        token,
+        providerKey,
+        'provider_readback',
+      );
       throw error;
     }
     // Fresh ownership recheck: only the current token holder may POST.
@@ -263,6 +296,7 @@ export class PaymentRefundService {
     orderId: string,
     payment: RefundPayload,
     token: string,
+    providerKey: string,
     failureStage: 'provider_refund' | 'provider_readback' | 'local_completion',
   ): Promise<void> {
     const now = this.firestore.Timestamp.now();
@@ -276,6 +310,9 @@ export class PaymentRefundService {
           token,
           owner: REFUND_OWNER,
           status: 'UNKNOWN' satisfies RefundClaimStatus,
+          // Preserve the operation's provider identity across UNKNOWN
+          // persistence so every retry POST reuses the first POST's key.
+          providerKey: marker?.providerKey ?? providerKey,
           expiresAt: Date.now() + REFUND_CLAIM_MS,
           updatedAt: now,
         },
@@ -303,6 +340,7 @@ export class PaymentRefundService {
     token: string;
     owner: string;
     status: RefundClaimStatus;
+    providerKey: string | null;
     expiresAt: number;
   } | null {
     const marker = payment['refundClaim'] as Record<string, any> | null | undefined;
@@ -310,8 +348,12 @@ export class PaymentRefundService {
     if (typeof marker['token'] !== 'string' || marker['token'].length === 0) return null;
     const status: RefundClaimStatus = marker['status'] === 'UNKNOWN' ? 'UNKNOWN' : 'CLAIMED';
     const owner = typeof marker['owner'] === 'string' ? marker['owner'] : REFUND_OWNER;
+    const providerKey =
+      typeof marker['providerKey'] === 'string' && marker['providerKey'].length > 0
+        ? (marker['providerKey'] as string)
+        : null;
     const expiresAt = typeof marker['expiresAt'] === 'number' ? marker['expiresAt'] : 0;
-    return { token: marker['token'], owner, status, expiresAt };
+    return { token: marker['token'], owner, status, providerKey, expiresAt };
   }
 
   private toDate(value: { toDate?: () => Date } | Date): Date {

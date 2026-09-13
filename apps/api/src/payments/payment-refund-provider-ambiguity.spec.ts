@@ -76,7 +76,12 @@ describe('PaymentRefund provider ambiguity 28A (R1-R7)', () => {
     await service.refundByOrderId('order-r1', '고객 요청');
 
     expect(portone.refund).toHaveBeenCalledTimes(1);
-    expect(portone.refund).toHaveBeenCalledWith('portone-order-r1', 100000, '고객 요청');
+    expect(portone.refund).toHaveBeenCalledWith(
+      'portone-order-r1',
+      100000,
+      '고객 요청',
+      expect.stringMatching(/^ghr-payment-refund-/),
+    );
     expect(portone.getPayment).not.toHaveBeenCalled();
     expect(occ.getData('payments/pay-r1')).toMatchObject({
       status: 'CANCELLED',

@@ -60,7 +60,12 @@ describe('OrderCharge refund provider ambiguity 28A (C1-C7)', () => {
     await service.refundByOrderId('order-c1', '주문 취소');
 
     expect(portone.refund).toHaveBeenCalledTimes(1);
-    expect(portone.refund).toHaveBeenCalledWith('order-charge-c-c1', 3000, '주문 취소');
+    expect(portone.refund).toHaveBeenCalledWith(
+      'order-charge-c-c1',
+      3000,
+      '주문 취소',
+      expect.stringMatching(/^ghr-order-charge-refund-/),
+    );
     expect(portone.getPayment).not.toHaveBeenCalled();
     expect(occ.getData('orderCharges/c-c1')).toMatchObject({
       status: 'REFUNDED',
