@@ -379,7 +379,7 @@ describe('P0-002 회차 취소와 결제 finalization 경합', () => {
     });
     expect(fixture.records.get('payments/order-1')).toMatchObject({
       status: 'PAID',
-      refundClaim: null,
+      refundClaim: expect.objectContaining({ owner: 'payment-refund', status: 'UNKNOWN' }),
     });
   });
 

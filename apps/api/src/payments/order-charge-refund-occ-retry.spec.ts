@@ -159,7 +159,7 @@ describe('OrderCharge refund OCC retry purity', () => {
     ).toBeUndefined();
   });
 
-  it('5a. provider failure releases own claim without changing status', async () => {
+  it('5a. provider failure persists UNKNOWN without changing status', async () => {
     const occ = createOccFirestore();
     const chargePath = 'orderCharges/c-fail-1';
     seedPaidCharge(occ, 'c-fail-1', 'order-oc-fail-1');
@@ -171,10 +171,14 @@ describe('OrderCharge refund OCC retry purity', () => {
     );
 
     expect(refund).toHaveBeenCalledTimes(1);
-    expect(occ.getData(chargePath)).toMatchObject({ status: 'PAID', refundClaim: null });
+    // 28A: provider POST started => UNKNOWN, never blind-released to null.
+    expect(occ.getData(chargePath)).toMatchObject({
+      status: 'PAID',
+      refundClaim: expect.objectContaining({ owner: 'order-charge-refund', status: 'UNKNOWN' }),
+    });
   });
 
-  it('5b. provider-failure release never removes a foreign/newer claim', async () => {
+  it('5b. UNKNOWN persist never removes a foreign/newer claim', async () => {
     const occ = createOccFirestore();
     const chargePath = 'orderCharges/c-fail-foreign-1';
     seedPaidCharge(occ, 'c-fail-foreign-1', 'order-oc-fail-foreign-1');
