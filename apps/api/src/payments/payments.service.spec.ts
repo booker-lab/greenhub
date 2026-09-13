@@ -632,7 +632,12 @@ describe('재배송비 결제 수명주기', () => {
     await fixture.service.refundByOrderId('order-1', '주문 취소');
 
     expect(fixture.portone.refund).toHaveBeenCalledTimes(1);
-    expect(fixture.portone.refund).toHaveBeenCalledWith('order-charge-charge-1', 5000, '주문 취소');
+    expect(fixture.portone.refund).toHaveBeenCalledWith(
+      'order-charge-charge-1',
+      5000,
+      '주문 취소',
+      expect.stringMatching(/^ghr-order-charge-refund-/),
+    );
     expect(fixture.records.get('orderCharges/charge-1')).toMatchObject({
       status: 'REFUNDED',
       refundedAt: expect.anything(),

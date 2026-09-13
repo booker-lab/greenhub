@@ -62,7 +62,12 @@ describe('PaymentRefund OCC retry purity', () => {
     occ.clearHooks();
 
     expect(refund).toHaveBeenCalledTimes(1);
-    expect(refund).toHaveBeenCalledWith('portone-order-normal-1', 100000, '고객 요청');
+    expect(refund).toHaveBeenCalledWith(
+      'portone-order-normal-1',
+      100000,
+      '고객 요청',
+      expect.stringMatching(/^ghr-payment-refund-/),
+    );
     // Claim transaction + finalize transaction, each committed once.
     expect(commits).toHaveLength(2);
     expect(commits[0].writeCount).toBe(1);

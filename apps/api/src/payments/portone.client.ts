@@ -12,6 +12,38 @@ interface PortonePaymentData {
 
 const WEBHOOK_TOLERANCE_SECONDS = 5 * 60;
 
+/**
+ * PortOne V2 idempotency contract (PILOT-REFUND-PROVIDER-IDEMPOTENCY-BINDING-28B).
+ *
+ * - POST /payments/{paymentId}/cancel accepts an `Idempotency-Key` header.
+ * - The same business refund operation must reuse one stable key across its
+ *   initial POST and every UNKNOWN-recovery retry POST, so PortOne treats
+ *   them as a single provider operation (no duplicate processing).
+ * - A key must never be reused across different refund operations.
+ * - Official shape: 16-256 ASCII string. No secret/PII, no raw user input
+ *   (reason/payment payloads) inside the key.
+ */
+export type PortoneRefundIdempotencyNamespace = 'payment-refund' | 'order-charge-refund';
+
+const REFUND_IDEMPOTENCY_KEY_MIN_LENGTH = 16;
+const REFUND_IDEMPOTENCY_KEY_MAX_LENGTH = 256;
+const REFUND_IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7E]+$/;
+
+export function createPortoneRefundIdempotencyKey(
+  namespace: PortoneRefundIdempotencyNamespace,
+): string {
+  return `ghr-${namespace}-${crypto.randomUUID()}`;
+}
+
+export function isPortoneIdempotencyKeyShape(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length >= REFUND_IDEMPOTENCY_KEY_MIN_LENGTH &&
+    value.length <= REFUND_IDEMPOTENCY_KEY_MAX_LENGTH &&
+    REFUND_IDEMPOTENCY_KEY_PATTERN.test(value)
+  );
+}
+
 export class PortoneError extends Error {
   constructor(
     public readonly status: number,
@@ -136,14 +168,33 @@ export class PortoneClient {
     return res.json() as Promise<PortonePaymentData>;
   }
 
-  async refund(paymentId: string, amount: number, reason: string): Promise<void> {
+  async refund(
+    paymentId: string,
+    amount: number,
+    reason: string,
+    idempotencyKey?: string,
+  ): Promise<void> {
     this.assertOutboundAllowed('refund');
+    // Fail closed on malformed keys: never send a key PortOne would reject
+    // with a confusing error, and never silently downgrade to an unkeyed
+    // POST (which would lose duplicate protection for this operation).
+    if (idempotencyKey !== undefined && !isPortoneIdempotencyKeyShape(idempotencyKey)) {
+      throw new PortoneError(
+        400,
+        'INVALID_IDEMPOTENCY_KEY',
+        'PortOne idempotency key 형식이 올바르지 않습니다.',
+      );
+    }
+    const headers: Record<string, string> = {
+      Authorization: `PortOne ${this.secret}`,
+      'Content-Type': 'application/json',
+    };
+    if (idempotencyKey !== undefined) {
+      headers['Idempotency-Key'] = idempotencyKey;
+    }
     const res = await fetch(`${this.baseUrl}/payments/${encodeURIComponent(paymentId)}/cancel`, {
       method: 'POST',
-      headers: {
-        Authorization: `PortOne ${this.secret}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ reason, amount }),
     });
     if (!res.ok) {
