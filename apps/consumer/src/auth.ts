@@ -13,10 +13,69 @@ type CredentialsFailureCode =
   | 'api-binding-failure';
 
 class DiagnosticCredentialsSignin extends CredentialsSignin {
-  constructor(code: CredentialsFailureCode) {
+  constructor(code: CredentialsFailureCode | string) {
     super();
     this.code = code;
   }
+}
+
+// PILOT-AUTH-CALLBACK-UPSTREAM-DIAGNOSTIC-PROJECTION-29A.
+// Non-sensitive diagnostic projection for upstream non-2xx: the actual
+// upstream HTTP status plus a stable fingerprint of the upstream origin are
+// embedded in the Auth.js `code` channel as
+// `upstream-rejected__s<status>__o<fp16>` (status 100-599, fp = first 16 hex
+// chars of SHA-256 over the canonical origin). Top-level classification stays
+// `upstream-rejected` (prefix). Credentials, tokens, and response bodies
+// never enter the code.
+export const UPSTREAM_DIAGNOSTIC_CODE_PREFIX = 'upstream-rejected';
+export const UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH = 16;
+
+export function canonicalUpstreamOrigin(value: string): string | null {
+  try {
+    const url = new URL(String(value));
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (!url.hostname) return null;
+    // WHATWG `origin`: protocol + '//' + hostname + optional non-default
+    // port. Path, query, fragment, and userinfo are structurally excluded.
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+export async function fingerprintUpstreamOrigin(
+  canonicalOrigin: string,
+): Promise<string | null> {
+  try {
+    if (typeof canonicalOrigin !== 'string' || !canonicalOrigin) return null;
+    const digest = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(canonicalOrigin),
+    );
+    const hex = [...new Uint8Array(digest)]
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+    return hex.slice(0, UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH);
+  } catch {
+    return null;
+  }
+}
+
+export function buildUpstreamRejectedCode(
+  status: number,
+  originFingerprint: string | null,
+): string {
+  if (!Number.isInteger(status) || status < 100 || status > 599) {
+    return UPSTREAM_DIAGNOSTIC_CODE_PREFIX;
+  }
+  if (
+    typeof originFingerprint !== 'string' ||
+    originFingerprint.length !== UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH ||
+    !/^[0-9a-f]+$/.test(originFingerprint)
+  ) {
+    return UPSTREAM_DIAGNOSTIC_CODE_PREFIX;
+  }
+  return `${UPSTREAM_DIAGNOSTIC_CODE_PREFIX}__s${status}__o${originFingerprint}`;
 }
 
 async function refreshAccessToken(token: Record<string, unknown>) {
@@ -74,7 +133,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         } catch {
           throw new DiagnosticCredentialsSignin('api-binding-failure');
         }
-        if (!res.ok) throw new DiagnosticCredentialsSignin('upstream-rejected');
+        if (!res.ok) {
+          // Diagnostic projection (29A): preserve the actual upstream status
+          // plus a fingerprint of the upstream origin. The actual response
+          // target (`res.url`, redirect-aware) is preferred; the configured
+          // request origin is the fallback when the response URL is
+          // absent/unparseable. Only the canonical origin (no path, query,
+          // or credentials) is fingerprinted — never bodies or secrets.
+          const status = res.status;
+          const fingerprint = await fingerprintUpstreamOrigin(
+            canonicalUpstreamOrigin(res.url) ?? canonicalUpstreamOrigin(API) ?? '',
+          );
+          throw new DiagnosticCredentialsSignin(
+            buildUpstreamRejectedCode(status, fingerprint),
+          );
+        }
 
         let data: {
           accessToken?: unknown;

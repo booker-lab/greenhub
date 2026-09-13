@@ -26,22 +26,29 @@ import {
   PROTECTION_PASSAGE_MODES,
   REQUEST_BUILDER,
   RUNNER_ID,
+  UPSTREAM_DIAGNOSTIC_CODE_PREFIX,
+  UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH,
   assertDeploymentId,
   assertExpectedSha,
   assertInvocationBinding,
   assertProtectionPassageReady,
   buildCallbackArtifact,
   buildFailureResult,
+  buildUpstreamRejectedCode,
+  canonicalUpstreamOrigin,
   classifyAuthError,
   classifyFailureLocation,
   classifyLocationClass,
   extractDeploymentReady,
   extractObservedDeploymentSha,
+  fingerprintUpstreamOrigin,
   isProductionHostname,
   isProtectionIntercept,
   isProtectionResponse,
   normalizeConsumerUrl,
   normalizeProtectionPassageMode,
+  parseUpstreamDiagnosticCode,
+  resolveExpectedApiOrigin,
   runConsumerCallbackProbe,
   validateEvidenceBinding,
   validateProbeGuards,
@@ -683,12 +690,18 @@ describe('callback probe serializer safety (no secret-derived output)', () => {
       checkedAt: '2026-09-11T00:00:00.000Z',
       deploymentId: DYNAMIC_DEPLOYMENT_1,
       deploymentSourceSha: DYNAMIC_SHA_1,
+      expectedApiOriginFingerprint: '0123456789abcdef',
       headerPresent: true,
       sessionState: 'INVALID',
       setCookiePresent: false,
+      upstreamOriginFingerprint: null,
+      upstreamOriginMatchesExpected: null,
+      upstreamStatus: null,
       workflowSourceSha: 'workflow-sha-fixture-16',
     });
     assert.deepEqual(Object.keys(artifact).sort(), [...ARTIFACT_KEYS].sort());
+    assert.equal(artifact.expectedApiOriginFingerprint, '0123456789abcdef');
+    assert.equal(artifact.upstreamStatus, null);
   });
 
   it('serialized runtime artifact contains no mock secret-derived material', async () => {
@@ -1199,12 +1212,17 @@ describe('automation bypass passage (PILOT-AUTH-VERCEL-AUTOMATION-BYPASS-27)', (
     for (const forbidden of [MOCK_SECRET, MOCK_BYPASS, MOCK_PASSWORD, MOCK_CSRF, MOCK_SESSION_TOKEN, MOCK_COOKIE_VALUE]) {
       assert.ok(!serialized.includes(forbidden), 'artifact must not contain credential material');
     }
-    const lowered = serialized.toLowerCase();
-    for (const derived of ['hash', 'fingerprint', 'prefix', 'suffix', 'length']) {
+    for (const derived of ['hash', 'prefix', 'suffix', 'length']) {
       // No secret-derived diagnostic key may appear in the artifact.
       assert.ok(!Object.keys(artifact).some((k) => k.toLowerCase().includes(derived)), `artifact key must not be ${derived}`);
-      void lowered;
     }
+    // Origin fingerprints are the approved 29A non-sensitive projection
+    // (SHA-256 prefix over canonical origin hostnames only — no secret,
+    // token, or body material); no other fingerprint key may appear.
+    assert.deepEqual(
+      Object.keys(artifact).filter((k) => k.toLowerCase().includes('fingerprint')).sort(),
+      ['expectedApiOriginFingerprint', 'upstreamOriginFingerprint'],
+    );
     for (const key of ['secret', 'e2eSecret', 'bypassSecret', 'token', 'cookie', 'password', 'email', 'value', 'authorization']) {
       assert.ok(!(key in artifact), `artifact must not contain key: ${key}`);
     }
@@ -1258,5 +1276,395 @@ describe('automation bypass passage (PILOT-AUTH-VERCEL-AUTOMATION-BYPASS-27)', (
       () => assertProtectionPassageReady({ protectionPassageMode: 'AUTOMATION_BYPASS' }, {}),
       (error) => error.code === 'AUTOMATION_BYPASS_CREDENTIAL_UNAVAILABLE',
     );
+  });
+});
+
+describe('upstream diagnostic projection (PILOT-AUTH-CALLBACK-UPSTREAM-DIAGNOSTIC-PROJECTION-29A)', () => {
+  // Synthetic staging origins (fixtures only — never real secrets).
+  const EXPECTED_API_ORIGIN_29A = 'https://api-staging-29a.up.railway.app';
+  const OTHER_API_ORIGIN_29A = 'https://api-staging-29a-other.up.railway.app';
+
+  function diagnosticCodeFor29A(status, origin) {
+    return buildUpstreamRejectedCode(
+      status,
+      fingerprintUpstreamOrigin(canonicalUpstreamOrigin(origin)),
+    );
+  }
+
+  function diagnosticRedirect29A(code) {
+    return `${CONSUMER_URL}/login?error=CredentialsSignin&code=${encodeURIComponent(code)}`;
+  }
+
+  function callbackFetchWithCode29A(code) {
+    return mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': callbackRedirect(diagnosticRedirect29A(code)),
+      '/api/auth/session': sessionInvalid(),
+    });
+  }
+
+  function inputWithExpectedApi29A(overrides = {}, expectedApiOrigin = EXPECTED_API_ORIGIN_29A) {
+    return validInput({ expectedApiOrigin, ...overrides });
+  }
+
+  it('T1: expected origin + 401 -> upstream-rejected, status=401, originMatch=true', async () => {
+    const code = diagnosticCodeFor29A(401, EXPECTED_API_ORIGIN_29A);
+    const { artifact } = await runConsumerCallbackProbe(inputWithExpectedApi29A(), {
+      env: {},
+      fetchImpl: callbackFetchWithCode29A(code),
+    });
+    const expectedFp = fingerprintUpstreamOrigin(canonicalUpstreamOrigin(EXPECTED_API_ORIGIN_29A));
+    assert.equal(artifact.authErrorClass, 'upstream-rejected');
+    assert.equal(artifact.callbackLocationClass, 'LOGIN_ERROR');
+    assert.equal(artifact.upstreamStatus, 401);
+    assert.equal(artifact.upstreamOriginFingerprint, expectedFp);
+    assert.equal(artifact.expectedApiOriginFingerprint, expectedFp);
+    assert.equal(artifact.upstreamOriginMatchesExpected, true);
+  });
+
+  it('T2: mismatched origin + 401 -> upstream-rejected, status=401, originMatch=false', async () => {
+    const code = diagnosticCodeFor29A(401, OTHER_API_ORIGIN_29A);
+    const { artifact } = await runConsumerCallbackProbe(inputWithExpectedApi29A(), {
+      env: {},
+      fetchImpl: callbackFetchWithCode29A(code),
+    });
+    const expectedFp = fingerprintUpstreamOrigin(canonicalUpstreamOrigin(EXPECTED_API_ORIGIN_29A));
+    const otherFp = fingerprintUpstreamOrigin(canonicalUpstreamOrigin(OTHER_API_ORIGIN_29A));
+    assert.equal(artifact.authErrorClass, 'upstream-rejected');
+    assert.equal(artifact.upstreamStatus, 401);
+    assert.equal(artifact.upstreamOriginFingerprint, otherFp);
+    assert.equal(artifact.expectedApiOriginFingerprint, expectedFp);
+    assert.notEqual(otherFp, expectedFp);
+    assert.equal(artifact.upstreamOriginMatchesExpected, false);
+  });
+
+  it('T3: expected origin + 429 -> status=429, originMatch=true', async () => {
+    const code = diagnosticCodeFor29A(429, EXPECTED_API_ORIGIN_29A);
+    const { artifact } = await runConsumerCallbackProbe(inputWithExpectedApi29A(), {
+      env: {},
+      fetchImpl: callbackFetchWithCode29A(code),
+    });
+    assert.equal(artifact.authErrorClass, 'upstream-rejected');
+    assert.equal(artifact.upstreamStatus, 429);
+    assert.equal(artifact.upstreamOriginMatchesExpected, true);
+  });
+
+  it('T4: expected origin + 503 -> status=503, originMatch=true', async () => {
+    const code = diagnosticCodeFor29A(503, EXPECTED_API_ORIGIN_29A);
+    const { artifact } = await runConsumerCallbackProbe(inputWithExpectedApi29A(), {
+      env: {},
+      fetchImpl: callbackFetchWithCode29A(code),
+    });
+    assert.equal(artifact.authErrorClass, 'upstream-rejected');
+    assert.equal(artifact.upstreamStatus, 503);
+    assert.equal(artifact.upstreamOriginMatchesExpected, true);
+    // Status breadth at the pure-parser level (400/500/502 recover exactly).
+    for (const status of [400, 500, 502]) {
+      const parsed = parseUpstreamDiagnosticCode(diagnosticCodeFor29A(status, EXPECTED_API_ORIGIN_29A));
+      assert.equal(parsed?.upstreamStatus, status);
+      assert.equal(parsed?.topClass, UPSTREAM_DIAGNOSTIC_CODE_PREFIX);
+    }
+  });
+
+  async function bindingFailureArtifact29A() {
+    // apps/consumer/src/auth.ts maps fetch-throw, invalid-JSON, and
+    // schema-mismatch to the SAME plain code; the probe must not fabricate
+    // an upstream status from it.
+    const { artifact } = await runConsumerCallbackProbe(inputWithExpectedApi29A(), {
+      env: {},
+      fetchImpl: callbackFetchWithCode29A('api-binding-failure'),
+    });
+    return artifact;
+  }
+
+  it('T5: fetch throw (code api-binding-failure) fabricates no upstream status', async () => {
+    const artifact = await bindingFailureArtifact29A();
+    assert.equal(artifact.authErrorClass, 'api-binding-failure');
+    assert.equal(artifact.upstreamStatus, null);
+    assert.equal(artifact.upstreamOriginFingerprint, null);
+    assert.equal(artifact.upstreamOriginMatchesExpected, null);
+    assert.equal(parseUpstreamDiagnosticCode('api-binding-failure'), null);
+  });
+
+  it('T6: invalid JSON (code api-binding-failure) fabricates no upstream status', async () => {
+    const artifact = await bindingFailureArtifact29A();
+    assert.equal(artifact.authErrorClass, 'api-binding-failure');
+    assert.equal(artifact.upstreamStatus, null);
+    assert.equal(artifact.upstreamOriginFingerprint, null);
+    assert.equal(artifact.upstreamOriginMatchesExpected, null);
+  });
+
+  it('T7: schema mismatch (code api-binding-failure) fabricates no upstream status', async () => {
+    const artifact = await bindingFailureArtifact29A();
+    assert.equal(artifact.authErrorClass, 'api-binding-failure');
+    assert.equal(artifact.upstreamStatus, null);
+    assert.equal(artifact.upstreamOriginFingerprint, null);
+    assert.equal(artifact.upstreamOriginMatchesExpected, null);
+  });
+
+  it('T8: E2E token mismatch (code authorize-rejected) carries no upstream diagnostic', async () => {
+    const { artifact } = await runConsumerCallbackProbe(inputWithExpectedApi29A(), {
+      env: {},
+      fetchImpl: callbackFetchWithCode29A('authorize-rejected'),
+    });
+    assert.equal(artifact.authErrorClass, 'authorize-rejected');
+    assert.equal(artifact.upstreamStatus, null);
+    assert.equal(artifact.upstreamOriginFingerprint, null);
+    assert.equal(artifact.upstreamOriginMatchesExpected, null);
+    // The expected-origin comparison basis itself is still computable.
+    assert.equal(
+      artifact.expectedApiOriginFingerprint,
+      fingerprintUpstreamOrigin(canonicalUpstreamOrigin(EXPECTED_API_ORIGIN_29A)),
+    );
+    assert.equal(parseUpstreamDiagnosticCode('authorize-rejected'), null);
+  });
+
+  it('T9: artifact and code expose no credential or raw-body material', async () => {
+    const emailMarker = 'sensitive-29a-user@example.test';
+    const passwordMarker = 'sensitive-29a-password-marker';
+    const tokenMarker = 'sensitive-29a-token-marker';
+    const rawBodyMarker = 'sensitive-29a-raw-body-marker';
+    const code = diagnosticCodeFor29A(401, EXPECTED_API_ORIGIN_29A);
+    // The code channel is structurally status digits + hex only.
+    assert.match(code, /^upstream-rejected__s\d{1,3}__o[0-9a-f]{16}$/);
+    for (const marker of [emailMarker, passwordMarker, tokenMarker, rawBodyMarker]) {
+      assert.ok(!code.includes(marker), 'diagnostic code must not carry sensitive material');
+    }
+    const fetch = mockFetch({
+      '/api/auth/csrf': csrfOk(),
+      '/api/auth/callback/credentials': jsonResponse({
+        status: 302,
+        body: { url: diagnosticRedirect29A(code), rawDetail: rawBodyMarker },
+        headers: fakeHeaders({ Location: diagnosticRedirect29A(code) }),
+      }),
+      '/api/auth/session': jsonResponse({
+        status: 200,
+        body: { user: { id: 'user-29a', accessToken: tokenMarker } },
+      }),
+    });
+    const { artifact } = await runConsumerCallbackProbe(
+      validInput({ email: emailMarker, password: passwordMarker, expectedApiOrigin: EXPECTED_API_ORIGIN_29A }),
+      { env: {}, fetchImpl: fetch },
+    );
+    assert.equal(artifact.authErrorClass, 'upstream-rejected');
+    assert.equal(artifact.upstreamStatus, 401);
+    const serialized = JSON.stringify(artifact);
+    for (const forbidden of [emailMarker, passwordMarker, tokenMarker, rawBodyMarker, MOCK_SECRET, MOCK_CSRF]) {
+      assert.ok(!serialized.includes(forbidden), 'artifact must not contain sensitive material');
+    }
+    for (const key of [
+      'email',
+      'password',
+      'accessToken',
+      'refreshToken',
+      'secret',
+      'token',
+      'cookie',
+      'body',
+      'rawDetail',
+      'url',
+    ]) {
+      assert.ok(!(key in artifact), `artifact must not contain key: ${key}`);
+    }
+  });
+
+  it('T10: same origin always fingerprints equal; different origins never match', () => {
+    const expectedFp = fingerprintUpstreamOrigin(canonicalUpstreamOrigin(EXPECTED_API_ORIGIN_29A));
+    // Path / query / fragment / case / default-port variants canonicalize equal.
+    assert.equal(
+      fingerprintUpstreamOrigin('https://api-staging-29a.up.railway.app/auth/login?x=1#frag'),
+      expectedFp,
+    );
+    assert.equal(
+      fingerprintUpstreamOrigin('HTTPS://API-STAGING-29A.UP.RAILWAY.APP/x'),
+      expectedFp,
+    );
+    assert.equal(
+      fingerprintUpstreamOrigin('https://api-staging-29a.up.railway.app:443/y'),
+      expectedFp,
+    );
+    const otherFp = fingerprintUpstreamOrigin(canonicalUpstreamOrigin(OTHER_API_ORIGIN_29A));
+    assert.notEqual(otherFp, expectedFp);
+    // Pinned cross-implementation vector: identical digest to the auth.ts
+    // WebCrypto SHA-256 path for the same canonical origin.
+    assert.equal(
+      fingerprintUpstreamOrigin(canonicalUpstreamOrigin('https://api-staging-94af.up.railway.app')),
+      '5915e9f4748f7015',
+    );
+    assert.equal(UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH, 16);
+    assert.ok(expectedFp.length === 16 && /^[0-9a-f]+$/.test(expectedFp));
+  });
+
+  it('legacy plain classes keep their meaning and carry no diagnostic', async () => {
+    assert.equal(
+      classifyAuthError({ status: 302, codeParam: 'authorize-rejected', errorParam: null }),
+      'authorize-rejected',
+    );
+    assert.equal(
+      classifyAuthError({ status: 302, codeParam: 'upstream-rejected', errorParam: null }),
+      'upstream-rejected',
+    );
+    assert.equal(
+      classifyAuthError({ status: 302, codeParam: 'api-binding-failure', errorParam: null }),
+      'api-binding-failure',
+    );
+    // Plain `upstream-rejected` (legacy/degenerate) must NOT fabricate a status.
+    const { artifact } = await runConsumerCallbackProbe(inputWithExpectedApi29A(), {
+      env: {},
+      fetchImpl: callbackFetchWithCode29A('upstream-rejected'),
+    });
+    assert.equal(artifact.authErrorClass, 'upstream-rejected');
+    assert.equal(artifact.upstreamStatus, null);
+    assert.equal(artifact.upstreamOriginFingerprint, null);
+    assert.equal(artifact.upstreamOriginMatchesExpected, null);
+  });
+
+  it('malformed diagnostic lookalikes are other, never upstream', async () => {
+    const goodFp = fingerprintUpstreamOrigin(canonicalUpstreamOrigin(EXPECTED_API_ORIGIN_29A));
+    const malformed = [
+      `upstream-rejected__s99__o${goodFp}`,
+      `upstream-rejected__s600__o${goodFp}`,
+      'upstream-rejected__s401__oshort',
+      'upstream-rejected__s401__oZZZZZZZZZZZZZZZZ',
+      'upstream-rejected:s401:oabcdef0123456789',
+      'upstream-rejected__s401',
+      `upstream-rejected__s401__o${goodFp}extra`,
+      `UPSTREAM-REJECTED__s401__o${goodFp}`,
+    ];
+    for (const bad of malformed) {
+      assert.equal(parseUpstreamDiagnosticCode(bad), null, `must not parse: ${bad}`);
+      assert.equal(
+        classifyAuthError({ status: 302, codeParam: bad, errorParam: 'CredentialsSignin' }),
+        'other',
+        `must not classify as upstream: ${bad}`,
+      );
+    }
+    // End-to-end: a malformed code through the real Location parser is
+    // sanitized to unknown -> other, with no recovered diagnostic.
+    const { artifact } = await runConsumerCallbackProbe(inputWithExpectedApi29A(), {
+      env: {},
+      fetchImpl: callbackFetchWithCode29A('upstream-rejected__s401__oshort'),
+    });
+    assert.equal(artifact.authErrorClass, 'other');
+    assert.equal(artifact.upstreamStatus, null);
+    assert.equal(artifact.upstreamOriginFingerprint, null);
+  });
+});
+
+describe('upstream diagnostic code contract (pure)', () => {
+  it('round-trips status 400/401/403/429/500/502/503 with origin fingerprint', () => {
+    const fp = fingerprintUpstreamOrigin(canonicalUpstreamOrigin('https://api-staging-29a.up.railway.app'));
+    for (const status of [400, 401, 403, 429, 500, 502, 503]) {
+      const code = buildUpstreamRejectedCode(status, fp);
+      const parsed = parseUpstreamDiagnosticCode(code);
+      assert.equal(parsed?.topClass, 'upstream-rejected');
+      assert.equal(parsed?.upstreamStatus, status);
+      assert.equal(parsed?.upstreamOriginFingerprint, fp);
+      assert.equal(
+        classifyAuthError({ status: 302, codeParam: code, errorParam: 'CredentialsSignin' }),
+        'upstream-rejected',
+      );
+    }
+  });
+
+  it('canonical origin excludes path/query/fragment/userinfo, keeps non-default ports', () => {
+    assert.equal(
+      canonicalUpstreamOrigin('https://user:pass@api.example.test:8443/a?b=c#d'),
+      'https://api.example.test:8443',
+    );
+    assert.equal(
+      canonicalUpstreamOrigin('http://localhost:3000/auth/login'),
+      'http://localhost:3000',
+    );
+    assert.equal(canonicalUpstreamOrigin('https://api.example.test:443/x'), 'https://api.example.test');
+    assert.equal(canonicalUpstreamOrigin('ftp://api.example.test/x'), null);
+    assert.equal(canonicalUpstreamOrigin('not-a-url'), null);
+    assert.equal(canonicalUpstreamOrigin(''), null);
+    assert.equal(canonicalUpstreamOrigin(null), null);
+  });
+
+  it('builder collapses degenerate inputs to the plain top-level class', () => {
+    const fp = 'a'.repeat(16);
+    assert.equal(buildUpstreamRejectedCode(99, fp), 'upstream-rejected');
+    assert.equal(buildUpstreamRejectedCode(600, fp), 'upstream-rejected');
+    assert.equal(buildUpstreamRejectedCode(401, null), 'upstream-rejected');
+    assert.equal(buildUpstreamRejectedCode(401, 'short'), 'upstream-rejected');
+    assert.equal(buildUpstreamRejectedCode(401, 'ZZZZZZZZZZZZZZZZ'), 'upstream-rejected');
+    assert.equal(buildUpstreamRejectedCode(Number.NaN, fp), 'upstream-rejected');
+    assert.equal(fingerprintUpstreamOrigin(null), null);
+    assert.equal(fingerprintUpstreamOrigin('not-a-url'), null);
+  });
+
+  it('expected API origin prefers input, falls back to approved env names', () => {
+    const canonical = canonicalUpstreamOrigin('https://api-staging-29a.up.railway.app');
+    assert.equal(
+      resolveExpectedApiOrigin({ expectedApiOrigin: 'https://api-staging-29a.up.railway.app/auth/login' }, {}),
+      canonical,
+    );
+    assert.equal(
+      resolveExpectedApiOrigin({}, { ROUND_DIRECT_E2E_API_ORIGIN: 'https://api-staging-29a.up.railway.app/' }),
+      canonical,
+    );
+    assert.equal(
+      resolveExpectedApiOrigin({}, { AUTH_PROBE_API_ORIGIN: 'https://api-staging-29a.up.railway.app' }),
+      canonical,
+    );
+    assert.equal(resolveExpectedApiOrigin({}, {}), null);
+    assert.equal(resolveExpectedApiOrigin({ expectedApiOrigin: 'notaurl' }, {}), null);
+  });
+});
+
+describe('consumer auth.ts diagnostic projection parity (source contract)', () => {
+  const HERE_PARITY = path.dirname(fileURLToPath(import.meta.url));
+  const AUTH_SOURCE = readFileSync(
+    path.join(HERE_PARITY, '..', 'apps', 'consumer', 'src', 'auth.ts'),
+    'utf8',
+  );
+
+  it('non-2xx branch builds the diagnostic code from res.status + origin fingerprint', () => {
+    assert.ok(
+      AUTH_SOURCE.includes('buildUpstreamRejectedCode(status, fingerprint)'),
+      'auth.ts must build the diagnostic code from status + fingerprint',
+    );
+    assert.ok(
+      AUTH_SOURCE.includes('canonicalUpstreamOrigin(res.url)'),
+      'auth.ts must prefer the actual response URL (redirect-aware)',
+    );
+    assert.ok(
+      AUTH_SOURCE.includes('canonicalUpstreamOrigin(API)'),
+      'auth.ts must fall back to the configured request origin',
+    );
+    assert.ok(AUTH_SOURCE.includes('SHA-256'), 'auth.ts must fingerprint with SHA-256');
+    assert.ok(
+      AUTH_SOURCE.includes('UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH'),
+      'auth.ts must share the 16-hex fingerprint length contract',
+    );
+  });
+
+  it('E2E gate / transport / parse / schema sites keep plain top-level classes', () => {
+    const authorizeSites = (
+      AUTH_SOURCE.match(/throw new DiagnosticCredentialsSignin\('authorize-rejected'\)/g) ?? []
+    ).length;
+    assert.equal(authorizeSites, 2);
+    const bindingSites = (
+      AUTH_SOURCE.match(/throw new DiagnosticCredentialsSignin\('api-binding-failure'\)/g) ?? []
+    ).length;
+    assert.equal(bindingSites, 3);
+    // Anchor on the braced authorize branch (the refresh helper above uses
+    // the unbraced single-line form and must not be sliced in).
+    const branchStart = AUTH_SOURCE.indexOf('if (!res.ok) {');
+    const branchEnd = AUTH_SOURCE.indexOf('let data:', branchStart);
+    assert.ok(branchStart >= 0 && branchEnd > branchStart, 'must locate the !res.ok branch');
+    const branch = AUTH_SOURCE.slice(branchStart, branchEnd);
+    for (const forbidden of [
+      'credentials.email',
+      'credentials.password',
+      'accessToken',
+      'refreshToken',
+      'res.json',
+      'E2E_TEST_SECRET',
+    ]) {
+      assert.ok(!branch.includes(forbidden), `!res.ok branch must not reference ${forbidden}`);
+    }
   });
 });
