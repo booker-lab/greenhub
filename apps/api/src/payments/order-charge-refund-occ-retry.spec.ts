@@ -56,7 +56,12 @@ describe('OrderCharge refund OCC retry purity', () => {
     occ.clearHooks();
 
     expect(refund).toHaveBeenCalledTimes(1);
-    expect(refund).toHaveBeenCalledWith('order-charge-c-normal-1', 3000, '주문 취소');
+    expect(refund).toHaveBeenCalledWith(
+      'order-charge-c-normal-1',
+      3000,
+      '주문 취소',
+      expect.stringMatching(/^ghr-order-charge-refund-/),
+    );
     // Claim + completeRefund, each one committed attempt.
     expect(commits).toHaveLength(2);
     expect(occ.getData('orderCharges/c-normal-1')).toMatchObject({
