@@ -193,7 +193,7 @@ describe('PaymentRefund OCC retry purity', () => {
     ).toBeUndefined();
   });
 
-  it('E1. provider failure releases own claim and records the operational issue', async () => {
+  it('E1. provider failure persists UNKNOWN (no blind release) and records the operational issue', async () => {
     const occ = createOccFirestore();
     const paymentPath = 'payments/pay-fail-1';
     seedPaid(occ, paymentPath, 'order-fail-1');
@@ -205,7 +205,11 @@ describe('PaymentRefund OCC retry purity', () => {
     );
 
     expect(refund).toHaveBeenCalledTimes(1);
-    expect(occ.getData(paymentPath)).toMatchObject({ status: 'PAID', refundClaim: null });
+    // 28A: provider POST started => outcome UNKNOWN, never blind-released to null.
+    expect(occ.getData(paymentPath)).toMatchObject({
+      status: 'PAID',
+      refundClaim: expect.objectContaining({ owner: 'payment-refund', status: 'UNKNOWN' }),
+    });
     expect(issueWriter.createOrMergeIssue).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'AUTO_REFUND_FAILED',
@@ -214,7 +218,7 @@ describe('PaymentRefund OCC retry purity', () => {
     );
   });
 
-  it('E2. provider-failure release never removes a foreign/newer claim', async () => {
+  it('E2. UNKNOWN persist never removes a foreign/newer claim', async () => {
     const occ = createOccFirestore();
     const paymentPath = 'payments/pay-fail-foreign-1';
     seedPaid(occ, paymentPath, 'order-fail-foreign-1');
