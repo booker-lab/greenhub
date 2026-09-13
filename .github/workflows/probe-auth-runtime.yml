@@ -636,6 +636,7 @@ jobs:
       AUTH_CALLBACK_CONSUMER_DEPLOYMENT_ID: ${{ inputs.consumer_deployment_id }}
       AUTH_CALLBACK_SELLER_DEPLOYMENT_ID: ${{ inputs.seller_deployment_id }}
       AUTH_CALLBACK_DRIVER_DEPLOYMENT_ID: ${{ inputs.driver_deployment_id }}
+      AUTH_CALLBACK_EXPECTED_API_ORIGIN: ${{ vars.ROUND_DIRECT_E2E_API_ORIGIN }}
 
     steps:
       - name: probe 코드 checkout (workflow ref)
@@ -819,6 +820,7 @@ jobs:
             --consumer-url="$AUTH_CALLBACK_CONSUMER_URL" \
             --consumer-deployment-id="$AUTH_CALLBACK_CONSUMER_DEPLOYMENT_ID" \
             --evidence-json="$evidence_root/probe-evidence.json" \
+            --expected-api-origin="$AUTH_CALLBACK_EXPECTED_API_ORIGIN" \
             --approval="${{ inputs.approval }}" \
             --protection-passage-mode="AUTOMATION_BYPASS" \
             > "$evidence_root/probe-raw.json"
@@ -842,6 +844,10 @@ jobs:
             protectionBypassHeaderPresent: (.protectionBypassHeaderPresent // null),
             callbackAttempted: (.callbackAttempted // (if .artifact then true else null end)),
             callbackStatus,
+            upstreamStatus: (.upstreamStatus // null),
+            upstreamOriginFingerprint: (.upstreamOriginFingerprint // null),
+            expectedApiOriginFingerprint: (.expectedApiOriginFingerprint // null),
+            upstreamOriginMatchesExpected: (.upstreamOriginMatchesExpected // null),
             sessionAttempted: (.sessionAttempted // (if .artifact then true else null end)),
             runner,
             deploymentReady: (.deploymentReady // null),
@@ -918,6 +924,10 @@ jobs:
               secretPlaintextAccessed: false,
               secretDerivedDiagnosticEmitted: false,
               callbackStatus: $callback[0].callbackStatus,
+              upstreamStatus: ($callback[0].upstreamStatus // null),
+              upstreamOriginFingerprint: ($callback[0].upstreamOriginFingerprint // null),
+              expectedApiOriginFingerprint: ($callback[0].expectedApiOriginFingerprint // null),
+              upstreamOriginMatchesExpected: ($callback[0].upstreamOriginMatchesExpected // null),
               callbackLocationClass: $callback[0].callbackLocationClass,
               authErrorClass: $callback[0].authErrorClass,
               setCookiePresent: $callback[0].setCookiePresent,

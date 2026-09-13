@@ -461,3 +461,155 @@ describe('callback probe workflow isolation contract', () => {
     assert.ok(!source.includes('id-token: write'), 'workflow must not add OIDC writer permission');
   });
 });
+
+describe('callback upstream diagnostic evidence wiring (31A)', () => {
+  it('callback-probe binds the approved staging API origin explicitly', () => {
+    const source = readWorkflow();
+    const slice = callbackSlice(source);
+    assert.ok(
+      slice.includes('AUTH_CALLBACK_EXPECTED_API_ORIGIN: ${{ vars.ROUND_DIRECT_E2E_API_ORIGIN }}'),
+      'callback-probe must bind AUTH_CALLBACK_EXPECTED_API_ORIGIN from vars.ROUND_DIRECT_E2E_API_ORIGIN',
+    );
+    // Same approved staging authority as session-probe.
+    assert.ok(
+      source.includes('AUTH_PROBE_API_ORIGIN: ${{ vars.ROUND_DIRECT_E2E_API_ORIGIN }}'),
+      'session-probe must keep the same approved staging API origin authority',
+    );
+    assert.ok(
+      slice.includes('vars.ROUND_DIRECT_E2E_API_ORIGIN'),
+      'callback expected origin must come from the approved vars authority',
+    );
+  });
+
+  it('callback runner invocation passes --expected-api-origin explicitly', () => {
+    const slice = callbackSlice(readWorkflow());
+    assert.ok(
+      slice.includes('--expected-api-origin='),
+      'callback invocation must pass --expected-api-origin',
+    );
+    assert.ok(
+      slice.includes('--expected-api-origin="$AUTH_CALLBACK_EXPECTED_API_ORIGIN"'),
+      'callback invocation must forward the bound expected API origin env',
+    );
+  });
+
+  it('callback-summary projects the upstream diagnostic quartet at top level', () => {
+    const slice = callbackSlice(readWorkflow());
+    for (const field of [
+      'upstreamStatus: (.upstreamStatus',
+      'upstreamOriginFingerprint: (.upstreamOriginFingerprint',
+      'expectedApiOriginFingerprint: (.expectedApiOriginFingerprint',
+      'upstreamOriginMatchesExpected: (.upstreamOriginMatchesExpected',
+    ]) {
+      assert.ok(slice.includes(field), `callback-summary must project ${field}`);
+    }
+    // Existing evidence is preserved.
+    for (const field of [
+      'callbackStatus,',
+      'authErrorClass,',
+      'setCookiePresent,',
+      'sessionState,',
+    ]) {
+      assert.ok(slice.includes(field), `callback-summary must preserve ${field}`);
+    }
+  });
+
+  it('workflow-summary projects the upstream diagnostic quartet at top level', () => {
+    const slice = callbackSlice(readWorkflow());
+    for (const field of [
+      'upstreamStatus: ($callback[0].upstreamStatus',
+      'upstreamOriginFingerprint: ($callback[0].upstreamOriginFingerprint',
+      'expectedApiOriginFingerprint: ($callback[0].expectedApiOriginFingerprint',
+      'upstreamOriginMatchesExpected: ($callback[0].upstreamOriginMatchesExpected',
+    ]) {
+      assert.ok(slice.includes(field), `workflow-summary must project ${field}`);
+    }
+    // Existing evidence is preserved.
+    for (const field of [
+      'bindingVerdict:',
+      'callbackStatus: $callback[0].callbackStatus',
+      'authErrorClass: $callback[0].authErrorClass',
+      'setCookiePresent: $callback[0].setCookiePresent',
+      'sessionState: $callback[0].sessionState',
+    ]) {
+      assert.ok(slice.includes(field), `workflow-summary must preserve ${field}`);
+    }
+  });
+
+  it('expected origin is a vars binding, never a secret source', () => {
+    const slice = callbackSlice(readWorkflow());
+    assert.ok(
+      !slice.includes('AUTH_CALLBACK_EXPECTED_API_ORIGIN: ${{ secrets.'),
+      'expected API origin must not come from secrets',
+    );
+    assert.ok(
+      !slice.includes('secrets.ROUND_DIRECT_E2E_API_ORIGIN'),
+      'approved API origin must not be read from secrets',
+    );
+    assert.ok(
+      slice.includes('vars.ROUND_DIRECT_E2E_API_ORIGIN'),
+      'expected API origin must use the approved vars authority',
+    );
+    // No production origin literal is introduced for the expected value.
+    assert.ok(
+      !slice.includes('api-production-13e7.up.railway.app" --expected-api-origin'),
+      'expected origin must not be a production literal',
+    );
+  });
+
+  it('new upstream evidence leaks no raw origin/location/credential values', () => {
+    const slice = callbackSlice(readWorkflow());
+    // Only fingerprints/comparison booleans are projected; raw origins are forbidden.
+    for (const forbidden of [
+      'upstreamOrigin: (',
+      'upstreamOrigin:($',
+      'expectedApiOrigin: (',
+      'expectedApiOrigin:($',
+      'raw Location',
+      'raw response body',
+    ]) {
+      assert.ok(!slice.includes(forbidden), `callback slice must not contain ${forbidden}`);
+    }
+    // Fingerprint projections must exist (sanitized form only).
+    assert.ok(slice.includes('upstreamOriginFingerprint'), 'sanitized upstream fingerprint must be projected');
+    assert.ok(
+      slice.includes('expectedApiOriginFingerprint'),
+      'sanitized expected fingerprint must be projected',
+    );
+    // Credential/token/cookie values are never added by the new projection.
+    for (const forbidden of ['accessToken', 'refreshToken', 'set-cookie', 'Set-Cookie']) {
+      assert.ok(!slice.includes(forbidden), `callback slice must not handle raw ${forbidden}`);
+    }
+  });
+
+  it('session allowlist and callback isolation are unchanged', () => {
+    const source = readWorkflow();
+    const sessionOnly = sessionSlice(source);
+    const runner = readRunnerSource(SESSION_RUNNER_PATH, 'utf8');
+    assert.ok(
+      runner.includes("'/auth/login', '/auth/me', '/auth/logout'"),
+      'session runner allowlist must stay exactly the three session paths',
+    );
+    assert.ok(!runner.includes('/api/auth/callback'), 'session runner must not gain a callback path');
+    assert.ok(sessionOnly.includes('needs: auth_identity_seed'), 'session must need identity seed');
+    const callbackOnly = callbackSlice(source);
+    assert.ok(callbackOnly.includes('needs: auth_identity_seed'), 'callback must need identity seed');
+    assert.ok(
+      !/^(\s*)needs:.*session-probe/m.test(callbackOnly),
+      'callback must stay independent of session-probe',
+    );
+    assert.ok(callbackOnly.includes('retention-days: 7'), 'callback must keep 7-day retention');
+    assert.ok(
+      callbackOnly.includes('secretPlaintextAccessed: false'),
+      'secret non-access attestation must be preserved',
+    );
+    assert.ok(
+      callbackOnly.includes('secretDerivedDiagnosticEmitted: false'),
+      'secret-derived diagnostic denial must be preserved',
+    );
+    assert.ok(
+      callbackOnly.includes('needs: auth_identity_seed'),
+      'callback isolation lifecycle must be preserved',
+    );
+  });
+});
