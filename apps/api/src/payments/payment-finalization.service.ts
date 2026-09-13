@@ -117,7 +117,6 @@ export class PaymentFinalizationService {
       });
       const refundOutcome = await this.refundWithFinalizationOwnership(
         orderId,
-        order,
         paymentData,
         'amount_mismatch',
         '금액 위변조 감지',
@@ -219,7 +218,6 @@ export class PaymentFinalizationService {
       if (error instanceof LatePaymentCapacityError) {
         const refundOutcome = await this.refundWithFinalizationOwnership(
           orderId,
-          order,
           paymentData,
           'late_capacity_round',
           LATE_PAYMENT_REFUND_REASON,
@@ -230,7 +228,6 @@ export class PaymentFinalizationService {
       if (error instanceof LegacyDailyCapacityError) {
         const refundOutcome = await this.refundWithFinalizationOwnership(
           orderId,
-          order,
           paymentData,
           'late_capacity_legacy',
           LEGACY_LATE_PAYMENT_REFUND_REASON,
@@ -305,7 +302,6 @@ export class PaymentFinalizationService {
    */
   private async refundWithFinalizationOwnership(
     orderId: string,
-    order: Record<string, any>,
     paymentData: PaymentData,
     reason: FinalizationRefundReasonClass,
     providerReason: string,
@@ -317,7 +313,6 @@ export class PaymentFinalizationService {
     if (claim.outcome === 'claimed_retry') {
       const reconciled = await this.reconcileUncertainFinalizationRefund(
         orderId,
-        order,
         paymentData,
         reason,
         providerReason,
@@ -342,7 +337,6 @@ export class PaymentFinalizationService {
     }
     await this.completeFinalizationRefund(
       orderId,
-      order,
       paymentData,
       reason,
       providerReason,
@@ -383,6 +377,19 @@ export class PaymentFinalizationService {
         return { outcome: 'already_handled' };
       }
       if (!marker) {
+        // A foreign owner holds this order's finalization money (a live
+        // token this service did not issue). Never overwrite its
+        // token/status and never authorize a provider call (CASE C/E).
+        const rawRefund = freshOrder['finalizationRefund'] as Record<string, any> | null | undefined;
+        if (
+          rawRefund &&
+          typeof rawRefund === 'object' &&
+          typeof rawRefund['token'] === 'string' &&
+          rawRefund['token'].length > 0 &&
+          rawRefund['owner'] !== FINALIZATION_REFUND_OWNER
+        ) {
+          return { outcome: 'already_handled' };
+        }
         tx.update(orderRef, {
           finalizationRefund: {
             token,
@@ -421,7 +428,6 @@ export class PaymentFinalizationService {
 
   private async reconcileUncertainFinalizationRefund(
     orderId: string,
-    order: Record<string, any>,
     paymentData: PaymentData,
     reason: FinalizationRefundReasonClass,
     providerReason: string,
@@ -444,7 +450,6 @@ export class PaymentFinalizationService {
       // Provider already terminal: converge locally, never re-POST.
       await this.completeFinalizationRefund(
         orderId,
-        order,
         paymentData,
         reason,
         providerReason,
@@ -475,14 +480,13 @@ export class PaymentFinalizationService {
 
   private async completeFinalizationRefund(
     orderId: string,
-    order: Record<string, any>,
     paymentData: PaymentData,
     reason: FinalizationRefundReasonClass,
     providerReason: string,
     token: string,
   ): Promise<void> {
     if (reason === 'late_capacity_round' || reason === 'late_capacity_legacy') {
-      await this.recordLateRefund(orderId, order, paymentData, providerReason);
+      await this.recordLateRefund(orderId, paymentData, providerReason, token);
     }
     const now = this.firestore.Timestamp.now();
     await this.firestore.runTransaction(async (tx) => {
@@ -669,23 +673,32 @@ export class PaymentFinalizationService {
     return buyerName && buyerName !== userId ? buyerName : '고객';
   }
 
+  // STALE_SUCCESS_MUST_NOT_WRITE_FOREIGN_OUTCOME: the late marker and its
+  // payment document are written only by the currently authoritative owner
+  // (matching token) and only from the transaction's fresh order fields.
+  // A stale caller that lost ownership between the provider success and
+  // persistence writes nothing, and no captured outer snapshot can
+  // overwrite newer document fields.
   private async recordLateRefund(
     orderId: string,
-    order: Record<string, any>,
     paymentData: PaymentData,
-    refundReason = LATE_PAYMENT_REFUND_REASON,
+    refundReason: string,
+    token: string,
   ) {
     const now = this.firestore.Timestamp.now();
     await this.firestore.runTransaction(async (tx) => {
       const orderRef = this.firestore.doc(`orders/${orderId}`);
       const freshSnap = await tx.get(orderRef);
       if (!freshSnap.exists || freshSnap.data()?.['latePaymentRefundedAt']) return;
+      const freshOrder = freshSnap.data() as Record<string, any>;
+      const marker = this.readFinalizationRefundMarker(freshOrder);
+      if (marker?.token !== token) return;
       tx.update(orderRef, { latePaymentRefundedAt: now, updatedAt: now });
       tx.set(this.firestore.doc(`payments/${orderId}`), {
         id: orderId,
         orderId,
-        userId: order['userId'],
-        storeId: order['storeId'],
+        userId: freshOrder['userId'],
+        storeId: freshOrder['storeId'],
         amount: paymentData.amount.total,
         payMethod: paymentData.method?.type ?? null,
         status: 'CANCELLED',
