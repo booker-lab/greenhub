@@ -41,13 +41,27 @@
  *   4. GET  /api/auth/session with the same in-memory cookie jar
  *      (Set-Cookie values never leave memory; only presence is recorded).
  *
- * Non-sensitive evidence ONLY (structurally fixed key set ??see
- * buildCallbackArtifact; the serializer cannot emit secret-derived keys):
- *   requestBuilder, credentialSource, headerName, headerPresent,
- *   protectionPassageMode, protectionBypassHeaderName,
- *   protectionBypassHeaderPresent,
- *   callbackStatus, callbackLocationClass, authErrorClass, setCookiePresent,
- *   sessionState, deploymentId, deploymentSourceSha, workflowSourceSha.
+  * Non-sensitive evidence ONLY (structurally fixed key set ??see
+  * buildCallbackArtifact; the serializer cannot emit secret-derived keys):
+  *   requestBuilder, credentialSource, headerName, headerPresent,
+  *   protectionPassageMode, protectionBypassHeaderName,
+  *   protectionBypassHeaderPresent,
+  *   callbackStatus, callbackLocationClass, authErrorClass, setCookiePresent,
+  *   sessionState, deploymentId, deploymentSourceSha, workflowSourceSha,
+  *   upstreamStatus, upstreamOriginFingerprint (SHA-256 prefix of the
+  *   canonical upstream origin only), expectedApiOriginFingerprint,
+  *   upstreamOriginMatchesExpected.
+  *
+  * Upstream diagnostic projection
+  * (PILOT-AUTH-CALLBACK-UPSTREAM-DIAGNOSTIC-PROJECTION-29A):
+  *   the Consumer callback projects upstream non-2xx evidence as
+  *   `upstream-rejected__s<status>__o<fp16>` in the Auth.js `code` channel.
+  *   This probe recovers upstreamStatus + upstreamOriginFingerprint from
+  *   that code and compares against the expected staging API origin
+  *   (--expected-api-origin, else ROUND_DIRECT_E2E_API_ORIGIN /
+  *   AUTH_PROBE_API_ORIGIN env) via the same canonical-origin SHA-256
+  *   fingerprint. Absent/unparseable expected origin yields null comparison
+  *   fields, never a failure.
  *
  * Vercel protection passage (PILOT-AUTH-VERCEL-AUTOMATION-BYPASS-27):
  *   --protection-passage-mode=NONE (default, historical) |
@@ -65,18 +79,21 @@
  *
  * Usage (real run ??via the approved workflow with Environment-injected
  * secrets; never pass secrets as CLI literals):
- *   node scripts/probe-consumer-callback.mjs \
- *     --expected-sha=<40hex> \
- *     --consumer-url=https://<invocation-bound-consumer-preview> \
- *     --consumer-deployment-id=dpl_... \
- *     --evidence-json=.artifacts/.../probe-evidence.json \
- *     --approval=NON_PRODUCTION_AUTH_PROBE_APPROVED \
- *     --protection-passage-mode=AUTOMATION_BYPASS
+  *   node scripts/probe-consumer-callback.mjs \
+  *     --expected-sha=<40hex> \
+  *     --consumer-url=https://<invocation-bound-consumer-preview> \
+  *     --consumer-deployment-id=dpl_... \
+  *     --evidence-json=.artifacts/.../probe-evidence.json \
+  *     --expected-api-origin=https://<staging-api-origin> \
+  *     --approval=NON_PRODUCTION_AUTH_PROBE_APPROVED \
+  *     --protection-passage-mode=AUTOMATION_BYPASS
  *
  * Secrets come from env (never logged, never serialized):
  *   E2E_TEST_SECRET, TEST_CONSUMER_EMAIL, TEST_CONSUMER_PASSWORD,
  *   VERCEL_AUTOMATION_BYPASS_SECRET (AUTOMATION_BYPASS only)
  */
+
+import { createHash } from 'node:crypto';
 
 export const APPROVAL_VALUE = 'NON_PRODUCTION_AUTH_PROBE_APPROVED';
 
@@ -114,6 +131,113 @@ const KNOWN_AUTH_ERROR_CLASSES = Object.freeze([
   'api-binding-failure',
 ]);
 
+// Upstream diagnostic projection
+// (PILOT-AUTH-CALLBACK-UPSTREAM-DIAGNOSTIC-PROJECTION-29A).
+// The Consumer callback embeds non-2xx evidence in the Auth.js `code`
+// channel as `upstream-rejected__s<status>__o<fp16>`: the top-level class
+// stays `upstream-rejected` (prefix), the actual upstream HTTP status
+// (100-599) and a stable SHA-256 prefix (16 hex) of the canonical upstream
+// origin are recoverable. Credentials, tokens, and response bodies never
+// enter the code. Plain `upstream-rejected` (no suffix, legacy/degenerate)
+// carries no diagnostic rather than a fabricated one.
+export const UPSTREAM_DIAGNOSTIC_CODE_PREFIX = 'upstream-rejected';
+export const UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH = 16;
+const UPSTREAM_DIAGNOSTIC_CODE_PATTERN = /^upstream-rejected__s(\d{1,3})__o([0-9a-f]{16})$/;
+
+/**
+ * Canonical upstream origin: protocol + "//" + hostname + optional
+ * non-default port (WHATWG `origin`). Path, query, fragment, and userinfo
+ * are structurally excluded. Returns null when unparseable/non-http(s).
+ * Mirrors canonicalUpstreamOrigin() in apps/consumer/src/auth.ts.
+ */
+export function canonicalUpstreamOrigin(value) {
+  try {
+    const url = new URL(String(value));
+    const protocol = String(url.protocol ?? '').toLowerCase();
+    if (protocol !== 'http:' && protocol !== 'https:') return null;
+    if (!url.hostname) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stable fingerprint of a canonical upstream origin: first 16 hex chars of
+ * SHA-256. Deterministic; same origin always yields the same fingerprint.
+ * Returns null for absent/unparseable input (never throws).
+ * Mirrors fingerprintUpstreamOrigin() in apps/consumer/src/auth.ts
+ * (WebCrypto SHA-256 there, node:crypto SHA-256 here — same digest).
+ */
+export function fingerprintUpstreamOrigin(canonicalOrigin) {
+  try {
+    if (typeof canonicalOrigin !== 'string' || !canonicalOrigin) return null;
+    const canonical = canonicalUpstreamOrigin(canonicalOrigin);
+    if (!canonical) return null;
+    return createHash('sha256')
+      .update(canonical, 'utf8')
+      .digest('hex')
+      .slice(0, UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mirror of buildUpstreamRejectedCode() in apps/consumer/src/auth.ts, for
+ * constructing deterministic test fixtures. Degenerate inputs collapse to
+ * the plain top-level class (no fabricated diagnostic).
+ */
+export function buildUpstreamRejectedCode(status, originFingerprint) {
+  if (!Number.isInteger(status) || status < 100 || status > 599) {
+    return UPSTREAM_DIAGNOSTIC_CODE_PREFIX;
+  }
+  if (
+    typeof originFingerprint !== 'string' ||
+    originFingerprint.length !== UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH ||
+    !/^[0-9a-f]+$/.test(originFingerprint)
+  ) {
+    return UPSTREAM_DIAGNOSTIC_CODE_PREFIX;
+  }
+  return `${UPSTREAM_DIAGNOSTIC_CODE_PREFIX}__s${status}__o${originFingerprint}`;
+}
+
+/**
+ * Strict parser for the upstream diagnostic code. Returns
+ * { topClass, upstreamStatus, upstreamOriginFingerprint } or null when the
+ * value carries no well-formed diagnostic (including the plain top-level
+ * classes, which must NOT fabricate a status).
+ */
+export function parseUpstreamDiagnosticCode(value) {
+  if (typeof value !== 'string' || !value) return null;
+  const match = UPSTREAM_DIAGNOSTIC_CODE_PATTERN.exec(value);
+  if (!match) return null;
+  const status = Number(match[1]);
+  if (!Number.isInteger(status) || status < 100 || status > 599) return null;
+  return {
+    topClass: UPSTREAM_DIAGNOSTIC_CODE_PREFIX,
+    upstreamStatus: status,
+    upstreamOriginFingerprint: match[2],
+  };
+}
+
+/**
+ * Resolve the expected staging API origin for origin-equality comparison.
+ * Explicit input wins; otherwise the already-approved workflow names
+ * ROUND_DIRECT_E2E_API_ORIGIN / AUTH_PROBE_API_ORIGIN are read (origin
+ * hostname only — secret-adjacent values are never involved). Absent or
+ * unparseable yields null (comparison unavailable), never a failure.
+ */
+export function resolveExpectedApiOrigin(input = {}, env = process.env) {
+  const raw =
+    input?.expectedApiOrigin ??
+    env?.ROUND_DIRECT_E2E_API_ORIGIN ??
+    env?.AUTH_PROBE_API_ORIGIN ??
+    '';
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  return canonicalUpstreamOrigin(raw.trim());
+}
+
 // Exact sanitized artifact key set. buildCallbackArtifact() can only produce
 // these keys ??secret/token/cookie values are structurally unrepresentable.
 export const ARTIFACT_KEYS = Object.freeze([
@@ -125,6 +249,7 @@ export const ARTIFACT_KEYS = Object.freeze([
   'credentialSource',
   'deploymentId',
   'deploymentSourceSha',
+  'expectedApiOriginFingerprint',
   'headerName',
   'headerPresent',
   'protectionBypassHeaderName',
@@ -134,6 +259,9 @@ export const ARTIFACT_KEYS = Object.freeze([
   'runner',
   'sessionState',
   'setCookiePresent',
+  'upstreamOriginFingerprint',
+  'upstreamOriginMatchesExpected',
+  'upstreamStatus',
   'workflowSourceSha',
 ]);
 
@@ -427,6 +555,10 @@ export function classifyLocationClass(pathname) {
  */
 export function classifyAuthError({ status, codeParam, errorParam }) {
   if (KNOWN_AUTH_ERROR_CLASSES.includes(codeParam)) return codeParam;
+  // Upstream diagnostic projection (29A): extended code keeps the
+  // top-level `upstream-rejected` classification while carrying status +
+  // origin fingerprint for the artifact below.
+  if (parseUpstreamDiagnosticCode(codeParam)) return UPSTREAM_DIAGNOSTIC_CODE_PREFIX;
   if (codeParam === 'unknown') return 'other';
   if (codeParam != null) return 'other';
   if (errorParam === 'CredentialsSignin' || errorParam === 'CallbackRouteError') {
@@ -441,6 +573,10 @@ export function classifyAuthError({ status, codeParam, errorParam }) {
 function safeCodeParam(value) {
   if (typeof value !== 'string' || !value) return null;
   if (KNOWN_AUTH_ERROR_CLASSES.includes(value)) return value;
+  // Well-formed upstream diagnostic codes pass through verbatim so the
+  // classifier and the artifact can recover status + origin fingerprint.
+  // Malformed lookalikes collapse to 'unknown' (never misclassified).
+  if (parseUpstreamDiagnosticCode(value)) return value;
   return 'unknown';
 }
 
@@ -691,6 +827,7 @@ export function buildCallbackArtifact(fields) {
     credentialSource: CREDENTIAL_SOURCE,
     deploymentId: fields.deploymentId,
     deploymentSourceSha: fields.deploymentSourceSha,
+    expectedApiOriginFingerprint: fields.expectedApiOriginFingerprint ?? null,
     headerName: HEADER_NAME,
     headerPresent: fields.headerPresent,
     protectionBypassHeaderName: PROTECTION_BYPASS_HEADER_NAME,
@@ -700,6 +837,9 @@ export function buildCallbackArtifact(fields) {
     runner: 'PILOT-AUTH-CONSUMER-CALLBACK-PROBE-16',
     sessionState: fields.sessionState,
     setCookiePresent: fields.setCookiePresent,
+    upstreamOriginFingerprint: fields.upstreamOriginFingerprint ?? null,
+    upstreamOriginMatchesExpected: fields.upstreamOriginMatchesExpected ?? null,
+    upstreamStatus: fields.upstreamStatus ?? null,
     workflowSourceSha: fields.workflowSourceSha,
   };
   const keys = Object.keys(artifact).sort();
@@ -736,6 +876,7 @@ export async function runConsumerCallbackProbe(
     approval,
     protectionPassageMode,
     protectionBypassSecret,
+    expectedApiOrigin,
     workflowSha = '',
     checkedAt = '',
     fetchImpl,
@@ -853,6 +994,14 @@ export async function runConsumerCallbackProbe(
   const bypassSecret = String(passage.bypassSecret ?? '');
   const protectionMode = String(passage.protectionPassageMode ?? 'NONE');
   const protectionPresent = protectionMode === 'AUTOMATION_BYPASS' && isNonEmptyString(bypassSecret);
+  // Upstream diagnostic comparison basis (29A): optional expected staging
+  // API origin (explicit input, else approved ROUND_DIRECT_E2E_API_ORIGIN /
+  // AUTH_PROBE_API_ORIGIN env). Absent/unparseable yields a null expected
+  // fingerprint (comparison unavailable), never a probe failure.
+  const expectedApiCanonical = resolveExpectedApiOrigin({ expectedApiOrigin }, env);
+  const expectedApiOriginFingerprint = expectedApiCanonical
+    ? fingerprintUpstreamOrigin(expectedApiCanonical)
+    : null;
   const headers = { [HEADER_NAME]: secret };
   const bypassHeaders =
     protectionMode === 'AUTOMATION_BYPASS' ? { [PROTECTION_BYPASS_HEADER_NAME]: bypassSecret } : {};
@@ -1118,6 +1267,10 @@ export async function runConsumerCallbackProbe(
     codeParam: locationEvidence.codeParam,
     errorParam: locationEvidence.errorParam,
   });
+  // Upstream diagnostic recovery (29A): the sanitized codeParam already
+  // passes well-formed diagnostic codes through verbatim (safeCodeParam),
+  // so status + origin fingerprint recover here without touching secrets.
+  const upstreamDiagnostic = parseUpstreamDiagnosticCode(locationEvidence.codeParam);
   // Directly-observed application rejection with 401/403 status is an explicit
   // CALLBACK_REJECTED FAIL (distinct from transport failure and from the
   // 302 LOGIN_ERROR SUCCESS taxonomy which is preserved unchanged).
@@ -1278,11 +1431,18 @@ export async function runConsumerCallbackProbe(
     checkedAt: checkedAtValue,
     deploymentId: bound.deploymentId,
     deploymentSourceSha: bound.expectedSha,
+    expectedApiOriginFingerprint,
     headerPresent,
     protectionBypassHeaderPresent: protectionPresent,
     protectionPassageMode: protectionMode,
     sessionState,
     setCookiePresent,
+    upstreamOriginFingerprint: upstreamDiagnostic?.upstreamOriginFingerprint ?? null,
+    upstreamOriginMatchesExpected:
+      upstreamDiagnostic?.upstreamOriginFingerprint && expectedApiOriginFingerprint
+        ? upstreamDiagnostic.upstreamOriginFingerprint === expectedApiOriginFingerprint
+        : null,
+    upstreamStatus: upstreamDiagnostic?.upstreamStatus ?? null,
     workflowSourceSha: workflowShaValue,
   });
   return { artifact, calls };
@@ -1323,6 +1483,11 @@ async function main() {
         deploymentId: args['consumer-deployment-id'],
         evidence,
         approval: args.approval,
+        // Expected staging API origin for upstream-origin comparison (29A).
+        // Non-sensitive origin hostname; value comes from the CLI flag or
+        // the approved ROUND_DIRECT_E2E_API_ORIGIN / AUTH_PROBE_API_ORIGIN
+        // env inside the runner. Absent yields null comparison fields.
+        expectedApiOrigin: args['expected-api-origin'],
         // Vercel passage mode comes from an explicit CLI flag only.
         // The bypass CREDENTIAL itself is NEVER a CLI literal: it is read
         // from VERCEL_AUTOMATION_BYPASS_SECRET env inside the runner.
