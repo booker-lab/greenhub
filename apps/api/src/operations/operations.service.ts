@@ -179,20 +179,28 @@ export class OperationsService {
       await action();
       return await this.recordSuccess(issueRef, issue, input, true, claimToken);
     } catch (error) {
-      const failedAction: OperationAction = {
-        actorId: input.actorId,
-        actionType: input.actionType,
-        performedAt: this.firestore.Timestamp.now(),
-        status: 'FAILED',
-        failureReason: this.safeFailureReason(error),
-      };
-      const saved = {
-        ...issue,
-        actions: [...(issue.actions ?? []), failedAction],
-        actionClaim: null,
-        updatedAt: failedAction.performedAt,
-      };
-      await issueRef.update(saved);
+      const failureReason = this.safeFailureReason(error);
+      await this.firestore.runTransaction(async (tx) => {
+        const snap = await tx.get(issueRef);
+        if (!snap.exists) return null;
+        const fresh = snap.data() as OperationIssue;
+        const current = fresh['actionClaim'] as { token?: unknown } | null | undefined;
+        if (current?.token !== claimToken) return null;
+        const performedAt = this.firestore.Timestamp.now();
+        const failedAction: OperationAction = {
+          actorId: input.actorId,
+          actionType: input.actionType,
+          performedAt,
+          status: 'FAILED',
+          failureReason,
+        };
+        tx.update(issueRef, {
+          actions: [...(fresh.actions ?? []), failedAction],
+          actionClaim: null,
+          updatedAt: performedAt,
+        });
+        return null;
+      });
       throw error;
     }
   }
@@ -204,23 +212,51 @@ export class OperationsService {
     resolve: boolean,
     claimToken?: string,
   ) {
-    const performedAt = this.firestore.Timestamp.now();
-    const action: OperationAction = {
-      actorId: input.actorId,
-      actionType: input.actionType,
-      performedAt,
-      status: 'SUCCEEDED',
-    };
-    const saved = {
-      ...issue,
-      actions: [...(issue.actions ?? []), action],
-      status: resolve ? 'RESOLVED' : issue.status,
-      resolvedAt: resolve ? performedAt : null,
-      ...(claimToken ? { actionClaim: null } : {}),
-      updatedAt: performedAt,
-    };
-    await issueRef.update(saved);
-    return saved;
+    void issue;
+    const committed = await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(issueRef);
+      if (!snap.exists) {
+        throw new NotFoundException('운영 예외를 찾을 수 없습니다.');
+      }
+      const fresh = snap.data() as OperationIssue;
+      if (claimToken !== undefined) {
+        const current = fresh['actionClaim'] as { token?: unknown } | null | undefined;
+        if (current?.token !== claimToken) {
+          return fresh;
+        }
+      }
+      const performedAt = this.firestore.Timestamp.now();
+      const action: OperationAction = {
+        actorId: input.actorId,
+        actionType: input.actionType,
+        performedAt,
+        status: 'SUCCEEDED',
+      };
+      const nextActions = [...(fresh.actions ?? []), action];
+      const nextStatus = resolve ? 'RESOLVED' : fresh.status;
+      const nextResolvedAt = resolve
+        ? performedAt
+        : ((fresh as Record<string, unknown>)['resolvedAt'] ?? null);
+      const patch: Record<string, unknown> = {
+        actions: nextActions,
+        status: nextStatus,
+        resolvedAt: nextResolvedAt,
+        updatedAt: performedAt,
+      };
+      if (claimToken !== undefined) {
+        patch['actionClaim'] = null;
+      }
+      tx.update(issueRef, patch);
+      return {
+        ...fresh,
+        actions: nextActions,
+        status: nextStatus,
+        resolvedAt: nextResolvedAt,
+        ...(claimToken !== undefined ? { actionClaim: null } : {}),
+        updatedAt: performedAt,
+      } as OperationIssue;
+    });
+    return committed;
   }
 
   private async readRelatedDocument(collection: string, id: string | null | undefined) {
@@ -320,19 +356,18 @@ export class OperationsService {
   private async claimAction(input: ExecuteActionInput): Promise<string | null> {
     const issueRef = this.firestore.doc(`operationIssues/${input.issueId}`);
     const token = randomUUID();
-    let claimed = false;
-    await this.firestore.runTransaction(async (tx) => {
+    const committed = await this.firestore.runTransaction(async (tx) => {
       const snap = await tx.get(issueRef);
-      if (!snap.exists) return;
+      if (!snap.exists) return null;
       const fresh = snap.data() as OperationIssue;
       const current = fresh['actionClaim'] as { expiresAt?: number } | null | undefined;
-      if (fresh.status !== 'OPEN' || (current?.expiresAt ?? 0) > Date.now()) return;
+      if (fresh.status !== 'OPEN' || (current?.expiresAt ?? 0) > Date.now()) return null;
       tx.update(issueRef, {
         actionClaim: { token, actionType: input.actionType, expiresAt: Date.now() + 300_000 },
         updatedAt: this.firestore.Timestamp.now(),
       });
-      claimed = true;
+      return token;
     });
-    return claimed ? token : null;
+    return committed ?? null;
   }
 }
