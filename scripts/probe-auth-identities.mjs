@@ -555,6 +555,44 @@ export function buildPersistedEvidence({ manifest, verifyResult, cleanupResult }
   return { manifest: redacted, evidence };
 }
 
+/**
+ * PILOT-AUTH-IDENTITY-LIFECYCLE-RACE-32F — seed summary projection.
+ *
+ * Purpose:
+ * - Project raw seed stdout (seed-raw.json) into the redacted
+ *   identity-summary.json artifact with an explicit allowlist.
+ * - SUCCESS shape ({ action, runId, ready, evidence }) keeps its existing
+ *   projection; result/failureCode project as null.
+ * - FAIL shape ({ result: 'FAIL', failureCode, message }) preserves result +
+ *   failureCode (plus action/runId/ready when present) while never copying
+ *   message/details/email/password/passwordHash/service-account material.
+ * - Pure: no network, no secrets, no mutation. Used by the workflow seed
+ *   step so a fail-closed seed still classifies by code.
+ */
+export function projectSeedSummaryForArtifact(raw) {
+  const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const evidenceSource =
+    source.evidence && typeof source.evidence === 'object' && !Array.isArray(source.evidence)
+      ? source.evidence
+      : {};
+  return {
+    action: source.action ?? null,
+    runId: source.runId ?? null,
+    ready: source.ready ?? null,
+    result: source.result ?? null,
+    failureCode: source.failureCode ?? null,
+    evidence: {
+      purpose: evidenceSource.purpose ?? null,
+      runId: evidenceSource.runId ?? null,
+      documentPaths: evidenceSource.documentPaths ?? null,
+      storeIdPresent: evidenceSource.storeIdPresent ?? null,
+      storeIdIsProduction: evidenceSource.storeIdIsProduction ?? null,
+      roles: evidenceSource.roles ?? null,
+      failureCodes: evidenceSource.failureCodes ?? null,
+    },
+  };
+}
+
 function argument(name) {
   return process.argv
     .slice(2)
@@ -603,8 +641,26 @@ async function main() {
   const { readFileSync, writeFileSync, mkdirSync } = await import('node:fs');
   const { default: path } = await import('node:path');
   const action = process.argv[2];
-  if (!['seed', 'verify', 'cleanup'].includes(action)) {
-    throw new Error('사용법: node scripts/probe-auth-identities.mjs seed|verify|cleanup --manifest=<경로> [--run-id=<runId>]');
+  if (!['seed', 'verify', 'cleanup', 'project-seed-summary'].includes(action)) {
+    throw new Error('사용법: node scripts/probe-auth-identities.mjs seed|verify|cleanup|project-seed-summary --manifest=<경로> [--run-id=<runId>] | project-seed-summary --input=<seed-raw> --output=<summary>');
+  }
+  // Pure redaction helper: no target guard, no network, no secrets. It only
+  // allowlists safe summary fields so FAIL failureCode survives artifact
+  // projection while message/details/credentials never do.
+  if (action === 'project-seed-summary') {
+    const inputPath = path.resolve(argument('input') ?? '');
+    if (!inputPath || argument('input') == null || String(argument('input')).trim() === '') {
+      throw new Error('seed raw 입력 경로가 필요합니다: --input=<seed-raw.json>');
+    }
+    const outputPath = path.resolve(argument('output') ?? '');
+    if (!outputPath || argument('output') == null || String(argument('output')).trim() === '') {
+      throw new Error('summary 출력 경로가 필요합니다: --output=<identity-summary.json>');
+    }
+    const raw = JSON.parse(readFileSync(inputPath, 'utf8'));
+    const summary = projectSeedSummaryForArtifact(raw);
+    mkdirSync(path.dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, `${JSON.stringify(summary, null, 2)}\n`);
+    return;
   }
   // Target guard runs BEFORE any Firestore mutation or credential hashing.
   const target = validateIdentityTarget({}, process.env);
