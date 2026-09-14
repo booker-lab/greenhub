@@ -144,6 +144,35 @@ export const UPSTREAM_DIAGNOSTIC_CODE_PREFIX = 'upstream-rejected';
 export const UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH = 16;
 const UPSTREAM_DIAGNOSTIC_CODE_PATTERN = /^upstream-rejected__s(\d{1,3})__o([0-9a-f]{16})$/;
 
+// Pre-upstream static diagnostic projection
+// (PILOT-AUTH-PROBE-PREUPSTREAM-SAFE-CODE-PASSTHROUGH-38E).
+// Consumer/Driver authorize gates emit deterministic static codes only (no
+// values, lengths, hashes, timing, headers, or env contents). Top-level
+// class stays `authorize-rejected` (prefix). Only the exact allowlisted
+// tokens below pass through verbatim; anything else collapses to `unknown`
+// (never misclassified, never serialized).
+//   Consumer (38C): g1-secret-missing, g2-secret-mismatch,
+//     g3-credential-admission-rejected.
+//   Driver (38D, repository-conformant): driver-g2-enabled,
+//     driver-g3-secret-mismatch, driver-g4-allowlist-rejected.
+// App policy/gates are owned by 38C/38D; this probe only preserves the
+// already-emitted static token in a sanitized artifact field.
+export const PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX = 'authorize-rejected';
+export const CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES = Object.freeze([
+  'authorize-rejected__g1-secret-missing',
+  'authorize-rejected__g2-secret-mismatch',
+  'authorize-rejected__g3-credential-admission-rejected',
+]);
+export const DRIVER_PRE_UPSTREAM_DIAGNOSTIC_CODES = Object.freeze([
+  'authorize-rejected__driver-g2-enabled',
+  'authorize-rejected__driver-g3-secret-mismatch',
+  'authorize-rejected__driver-g4-allowlist-rejected',
+]);
+export const PRE_UPSTREAM_DIAGNOSTIC_CODES = Object.freeze([
+  ...CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES,
+  ...DRIVER_PRE_UPSTREAM_DIAGNOSTIC_CODES,
+]);
+
 /**
  * Canonical upstream origin: protocol + "//" + hostname + optional
  * non-default port (WHATWG `origin`). Path, query, fragment, and userinfo
@@ -222,6 +251,23 @@ export function parseUpstreamDiagnosticCode(value) {
 }
 
 /**
+ * Strict parser for the pre-upstream static diagnostic code (38E). Returns
+ * { topClass, diagnosticCode } only for the exact allowlisted static tokens
+ * (consumer g1/g2/g3 + driver enabled/secret-mismatch/allowlist-rejected).
+ * Anything else — arbitrary suffixes, injected email/secret/token-like text,
+ * raw URLs, lengths, hashes — yields null (collapsed upstream by the
+ * caller, never serialized verbatim).
+ */
+export function parsePreUpstreamDiagnosticCode(value) {
+  if (typeof value !== 'string' || !value) return null;
+  if (!PRE_UPSTREAM_DIAGNOSTIC_CODES.includes(value)) return null;
+  return {
+    topClass: PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX,
+    diagnosticCode: value,
+  };
+}
+
+/**
  * Resolve the expected staging API origin for origin-equality comparison.
  * Explicit input wins; otherwise the already-approved workflow names
  * ROUND_DIRECT_E2E_API_ORIGIN / AUTH_PROBE_API_ORIGIN are read (origin
@@ -240,6 +286,8 @@ export function resolveExpectedApiOrigin(input = {}, env = process.env) {
 
 // Exact sanitized artifact key set. buildCallbackArtifact() can only produce
 // these keys ??secret/token/cookie values are structurally unrepresentable.
+// preUpstreamDiagnosticCode (38E) carries only the exact allowlisted static
+// token or null; high-level authErrorClass keeps its existing meaning.
 export const ARTIFACT_KEYS = Object.freeze([
   'artifact',
   'authErrorClass',
@@ -252,6 +300,7 @@ export const ARTIFACT_KEYS = Object.freeze([
   'expectedApiOriginFingerprint',
   'headerName',
   'headerPresent',
+  'preUpstreamDiagnosticCode',
   'protectionBypassHeaderName',
   'protectionBypassHeaderPresent',
   'protectionPassageMode',
@@ -559,6 +608,10 @@ export function classifyAuthError({ status, codeParam, errorParam }) {
   // top-level `upstream-rejected` classification while carrying status +
   // origin fingerprint for the artifact below.
   if (parseUpstreamDiagnosticCode(codeParam)) return UPSTREAM_DIAGNOSTIC_CODE_PREFIX;
+  // Pre-upstream static projection (38E): allowlisted static token keeps the
+  // top-level `authorize-rejected` classification while the exact token is
+  // preserved separately in preUpstreamDiagnosticCode.
+  if (parsePreUpstreamDiagnosticCode(codeParam)) return PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX;
   if (codeParam === 'unknown') return 'other';
   if (codeParam != null) return 'other';
   if (errorParam === 'CredentialsSignin' || errorParam === 'CallbackRouteError') {
@@ -577,6 +630,9 @@ function safeCodeParam(value) {
   // classifier and the artifact can recover status + origin fingerprint.
   // Malformed lookalikes collapse to 'unknown' (never misclassified).
   if (parseUpstreamDiagnosticCode(value)) return value;
+  // Allowlisted pre-upstream static tokens pass through verbatim (38E).
+  // Arbitrary suffixes / injected values collapse to 'unknown'.
+  if (parsePreUpstreamDiagnosticCode(value)) return value;
   return 'unknown';
 }
 
@@ -818,6 +874,10 @@ function parseJsonBody(value) {
  */
 export function buildCallbackArtifact(fields) {
   const mode = normalizeProtectionPassageMode(fields.protectionPassageMode ?? 'NONE');
+  const preUpstreamDiagnosticCode = fields.preUpstreamDiagnosticCode ?? null;
+  if (preUpstreamDiagnosticCode !== null && !PRE_UPSTREAM_DIAGNOSTIC_CODES.includes(preUpstreamDiagnosticCode)) {
+    fail('PROBE_INTERNAL_ERROR', 'preUpstreamDiagnosticCode가 허용된 static token이 아닙니다.');
+  }
   const artifact = {
     artifact: 'pilot-auth-consumer-callback-input-binding-proof-16',
     authErrorClass: fields.authErrorClass,
@@ -830,6 +890,7 @@ export function buildCallbackArtifact(fields) {
     expectedApiOriginFingerprint: fields.expectedApiOriginFingerprint ?? null,
     headerName: HEADER_NAME,
     headerPresent: fields.headerPresent,
+    preUpstreamDiagnosticCode,
     protectionBypassHeaderName: PROTECTION_BYPASS_HEADER_NAME,
     protectionBypassHeaderPresent: fields.protectionBypassHeaderPresent ?? false,
     protectionPassageMode: mode,
@@ -1271,6 +1332,8 @@ export async function runConsumerCallbackProbe(
   // passes well-formed diagnostic codes through verbatim (safeCodeParam),
   // so status + origin fingerprint recover here without touching secrets.
   const upstreamDiagnostic = parseUpstreamDiagnosticCode(locationEvidence.codeParam);
+  // Pre-upstream static recovery (38E): allowlisted static token only.
+  const preUpstreamDiagnostic = parsePreUpstreamDiagnosticCode(locationEvidence.codeParam);
   // Directly-observed application rejection with 401/403 status is an explicit
   // CALLBACK_REJECTED FAIL (distinct from transport failure and from the
   // 302 LOGIN_ERROR SUCCESS taxonomy which is preserved unchanged).
@@ -1433,6 +1496,7 @@ export async function runConsumerCallbackProbe(
     deploymentSourceSha: bound.expectedSha,
     expectedApiOriginFingerprint,
     headerPresent,
+    preUpstreamDiagnosticCode: preUpstreamDiagnostic?.diagnosticCode ?? null,
     protectionBypassHeaderPresent: protectionPresent,
     protectionPassageMode: protectionMode,
     sessionState,
