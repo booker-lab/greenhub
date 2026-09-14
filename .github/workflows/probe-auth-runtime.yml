@@ -39,6 +39,9 @@ on:
       - scripts/probe-consumer-callback.workflow.spec.mjs
       - scripts/probe-auth-identities.mjs
       - scripts/probe-auth-identities.spec.mjs
+      - scripts/probe-authjs-role-callback.mjs
+      - scripts/probe-authjs-role-callback.spec.mjs
+      - scripts/probe-authjs-role-callback.workflow.spec.mjs
       - .github/workflows/probe-auth-runtime.yml
 
 permissions:
@@ -73,7 +76,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: run probe deterministic spec (mock/local only, no external calls)
-        run: node --test scripts/probe-auth-runtime.spec.mjs scripts/probe-auth-runtime.workflow.spec.mjs scripts/probe-consumer-callback.spec.mjs scripts/probe-consumer-callback.workflow.spec.mjs scripts/probe-auth-identities.spec.mjs
+        run: node --test scripts/probe-auth-runtime.spec.mjs scripts/probe-auth-runtime.workflow.spec.mjs scripts/probe-consumer-callback.spec.mjs scripts/probe-consumer-callback.workflow.spec.mjs scripts/probe-auth-identities.spec.mjs scripts/probe-authjs-role-callback.spec.mjs scripts/probe-authjs-role-callback.workflow.spec.mjs
 
   approval_gate:
     name: session-only probe approval preflight
@@ -957,16 +960,363 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  role-callback-probe:
+    name: Seller/Driver Auth.js callback boundary probe (34B)
+    # Triple gap-closure boundary: exercises ONLY the
+    # scripts/probe-authjs-role-callback.mjs contract against the locked
+    # Seller + Driver Preview deployments (CSRF GET -> credentials callback
+    # POST with manual redirect -> same-context session readback, per role).
+    # It never invokes scripts/probe-auth-runtime.mjs, never widens that
+    # runner's allowlists, and never calls the consumer frontend origin.
+    # The locked Consumer callback-probe job above is preserved unchanged.
+    # Identity lifecycle: runs ONLY after auth_identity_seed succeeds (owned
+    # seller/driver identities exist in staging) and stays independent of
+    # session-probe/callback-probe so those failures cannot mask role evidence.
+    # It never handles raw service-account material.
+    needs: auth_identity_seed
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: auth-role-callback-probe
+      cancel-in-progress: false
+    environment:
+      name: round-direct-e2e
+    permissions:
+      contents: read
+    env:
+      ROLE_CALLBACK_RUN_ID: auth-role-callback-${{ github.run_id }}-${{ github.run_attempt }}
+      ROLE_CALLBACK_RUN_ATTEMPT: ${{ github.run_attempt }}
+      ROLE_CALLBACK_EVENT_NAME: ${{ github.event_name }}
+      ROLE_CALLBACK_ACTOR: ${{ github.actor }}
+      ROLE_CALLBACK_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      ROLE_CALLBACK_WORKFLOW_SHA: ${{ github.sha }}
+      ROLE_CALLBACK_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      ROLE_CALLBACK_SELLER_DEPLOYMENT_ID: ${{ inputs.seller_deployment_id }}
+      ROLE_CALLBACK_DRIVER_DEPLOYMENT_ID: ${{ inputs.driver_deployment_id }}
+      ROLE_CALLBACK_CONSUMER_DEPLOYMENT_ID: ${{ inputs.consumer_deployment_id }}
+      ROLE_CALLBACK_EXPECTED_API_ORIGIN: ${{ vars.ROUND_DIRECT_E2E_API_ORIGIN }}
+
+    steps:
+      - name: probe 코드 checkout (workflow ref)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: 수동 승인과 checkout SHA 확인
+        shell: bash
+        env:
+          APPROVAL: ${{ inputs.approval }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch 이외의 이벤트에서는 role callback probe를 실행할 수 없습니다.' >&2
+            exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow 실행자가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow triggering actor가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$APPROVAL" != 'NON_PRODUCTION_AUTH_PROBE_APPROVED' ]]; then
+            echo 'role callback probe 수동 승인이 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ ! "$ROLE_CALLBACK_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'workflow SHA는 40자리 소문자 16진수여야 합니다.' >&2
+            exit 1
+          fi
+          if [[ ! "$ROLE_CALLBACK_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'binding SHA는 40자리 소문자 16진수여야 합니다.' >&2
+            exit 1
+          fi
+          actual_sha="$(git rev-parse HEAD)"
+          if [[ "$actual_sha" != "$ROLE_CALLBACK_WORKFLOW_SHA" ]]; then
+            echo 'checkout SHA가 workflow SHA와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: locked Seller/Driver deployment binding 직접 확인
+        shell: bash
+        env:
+          ROUND_DIRECT_E2E_VERCEL_READ_TOKEN: ${{ secrets.ROUND_DIRECT_E2E_VERCEL_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          evidence_root=".artifacts/auth-role-callback-probe/$ROLE_CALLBACK_RUN_ID"
+          mkdir -p "$evidence_root/evidence"
+          set +e
+          node scripts/wait-preview-deploy.mjs \
+            --json \
+            --sha="$ROLE_CALLBACK_EXPECTED_SHA" \
+            --consumer-deployment-id="$ROLE_CALLBACK_CONSUMER_DEPLOYMENT_ID" \
+            --seller-deployment-id="$ROLE_CALLBACK_SELLER_DEPLOYMENT_ID" \
+            --driver-deployment-id="$ROLE_CALLBACK_DRIVER_DEPLOYMENT_ID" \
+            > "$evidence_root/deployment-raw.json"
+          wait_status=$?
+          set -e
+          if [[ ! -s "$evidence_root/deployment-raw.json" ]]; then
+            echo '배포 증거 JSON을 만들지 못해 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          jq -c '.deploymentShas' "$evidence_root/deployment-raw.json" \
+            | sed 's/^/ROLE_CALLBACK_DEPLOYMENT_SHAS_JSON=/' >> "$GITHUB_ENV"
+          jq -c '.deploymentTargetUrls' "$evidence_root/deployment-raw.json" \
+            | sed 's/^/ROLE_CALLBACK_TARGET_URLS_JSON=/' >> "$GITHUB_ENV"
+          jq -er '.ready' "$evidence_root/deployment-raw.json" \
+            | sed 's/^/ROLE_CALLBACK_DEPLOYMENT_READY=/' >> "$GITHUB_ENV"
+          if [[ "$wait_status" -eq 0 ]]; then
+            jq -er '.deploymentTargetUrls.seller' "$evidence_root/deployment-raw.json" \
+              | sed 's/^/ROLE_CALLBACK_SELLER_URL=/' >> "$GITHUB_ENV"
+            jq -er '.deploymentTargetUrls.driver' "$evidence_root/deployment-raw.json" \
+              | sed 's/^/ROLE_CALLBACK_DRIVER_URL=/' >> "$GITHUB_ENV"
+          fi
+          jq '{
+            ready,
+            evidenceSource,
+            checkedAt,
+            repository,
+            expectedSha,
+            pinnedDeploymentIds,
+            deploymentIds,
+            deploymentShas,
+            deploymentTargetUrls,
+            deploymentStates,
+            failureCodes,
+            apps: [.apps[] | {
+              app,
+              project,
+              projectId,
+              environment,
+              deploymentId,
+              deploymentSha,
+              state,
+              readyState,
+              target,
+              target_url: .targetUrl,
+              failureCode,
+              ready
+            }]
+            }' \
+            "$evidence_root/deployment-raw.json" \
+            > "$evidence_root/evidence/deployment.json"
+          jq --arg expectedSha "$ROLE_CALLBACK_EXPECTED_SHA" \
+            '. + {expectedSha: $expectedSha}' \
+            "$evidence_root/deployment-raw.json" \
+            > "$evidence_root/probe-evidence.json"
+          exit "$wait_status"
+
+      - name: locked Seller/Driver frontend origin 확인
+        shell: bash
+        run: |
+          set -euo pipefail
+          for role_var in "seller:ROLE_CALLBACK_SELLER_URL" "driver:ROLE_CALLBACK_DRIVER_URL"; do
+            role="${role_var%%:*}"
+            var="${role_var##*:}"
+            target_url="$(printf '%s' "${!var:-}" | tr -d '[:space:]')"
+            if [[ -z "$target_url" ]]; then
+              echo "callback 대상 ${role} URL이 비어 있어 실행을 차단합니다." >&2
+              exit 1
+            fi
+            case "$target_url" in
+              https://*) ;;
+              *) echo "callback 대상은 https만 허용합니다 (${role})." >&2; exit 1 ;;
+            esac
+            target_host="$(printf '%s' "$target_url" | sed -e 's#^https://##' -e 's#/.*$##' -e 's#:.*$##' | tr '[:upper:]' '[:lower:]')"
+            case "$target_host" in
+              greenlove.co.kr|*.greenlove.co.kr|api-production-*)
+                echo "운영 ${role} origin이므로 실행을 차단합니다." >&2
+                exit 1
+                ;;
+            esac
+            if [[ "$target_host" == 'api-production-13e7.up.railway.app' ]]; then
+              echo "운영 ${role} origin이므로 실행을 차단합니다." >&2
+              exit 1
+            fi
+            case "$target_host" in
+              *.vercel.app) ;;
+              *) echo "callback 대상이 locked Preview deployment 호스트가 아닙니다 (${role})." >&2; exit 1 ;;
+            esac
+            printf '%s_host=%s\n' "$role" "$target_host"
+          done
+
+      - name: locked Seller callback probe 실행
+        shell: bash
+        env:
+          E2E_TEST_SECRET: ${{ secrets.ROUND_DIRECT_E2E_TEST_SECRET }}
+          TEST_SELLER_EMAIL: ${{ secrets.ROUND_DIRECT_E2E_SELLER_EMAIL_CHROMIUM }}
+          TEST_SELLER_PASSWORD: ${{ secrets.ROUND_DIRECT_E2E_SELLER_PASSWORD_CHROMIUM }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SELLER_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          # Secret-name mapping note (values never logged):
+          # - E2E_TEST_SECRET <- ROUND_DIRECT_E2E_TEST_SECRET
+          # - TEST_SELLER_EMAIL <- ROUND_DIRECT_E2E_SELLER_EMAIL_CHROMIUM
+          # - TEST_SELLER_PASSWORD <- ROUND_DIRECT_E2E_SELLER_PASSWORD_CHROMIUM
+          # - VERCEL_AUTOMATION_BYPASS_SECRET <- ROUND_DIRECT_E2E_SELLER_BYPASS_SECRET
+          #   (Vercel protection passage only; never merged with x-e2e-test-token)
+          # No consumer/driver frontend origin is called by this step.
+          evidence_root=".artifacts/auth-role-callback-probe/$ROLE_CALLBACK_RUN_ID"
+          mkdir -p "$evidence_root/evidence"
+          set +e
+          node scripts/probe-authjs-role-callback.mjs \
+            --role=seller \
+            --expected-sha="$ROLE_CALLBACK_EXPECTED_SHA" \
+            --target-url="$ROLE_CALLBACK_SELLER_URL" \
+            --deployment-id="$ROLE_CALLBACK_SELLER_DEPLOYMENT_ID" \
+            --evidence-json="$evidence_root/probe-evidence.json" \
+            --expected-api-origin="$ROLE_CALLBACK_EXPECTED_API_ORIGIN" \
+            --approval="${{ inputs.approval }}" \
+            --protection-passage-mode="AUTOMATION_BYPASS" \
+            > "$evidence_root/seller-raw.json"
+          probe_status=$?
+          set -e
+          if [[ ! -s "$evidence_root/seller-raw.json" ]]; then
+            echo 'seller callback probe 요약을 만들지 못해 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          jq '{
+            result: (.result // (if .artifact then "SUCCESS" else null end)),
+            failureCode: (.failureCode // null),
+            failureStage: (.failureStage // null),
+            role,
+            runner,
+            deploymentReady: (.deploymentReady // null),
+            expectedSha: (.expectedSha // (.deploymentSourceSha // null)),
+            observedDeploymentSha: (.observedDeploymentSha // (.deploymentSourceSha // null)),
+            artifact,
+            authErrorClass,
+            callbackLocationClass,
+            callbackStatus,
+            checkedAt,
+            credentialSource,
+            deploymentId,
+            deploymentSourceSha,
+            headerName,
+            headerPresent,
+            requestBuilder,
+            sessionContract,
+            sessionRoleAdmitted,
+            sessionStoreBindingPresent,
+            sessionState,
+            setCookiePresent,
+            upstreamStatus,
+            upstreamOriginFingerprint,
+            expectedApiOriginFingerprint,
+            upstreamOriginMatchesExpected,
+            verdict,
+            workflowSourceSha,
+            message: (.message // null)
+            }' \
+            "$evidence_root/seller-raw.json" \
+            > "$evidence_root/evidence/seller-summary.json"
+          exit "$probe_status"
+
+      - name: locked Driver callback probe 실행
+        shell: bash
+        env:
+          ROUND_DIRECT_E2E_SHARED_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SHARED_SECRET }}
+          TEST_DRIVER_EMAIL: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM }}
+          TEST_DRIVER_PASSWORD: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_PASSWORD_CHROMIUM }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          # Secret-name mapping note (values never logged):
+          # - ROUND_DIRECT_E2E_SHARED_SECRET is the driver application credential
+          #   (x-round-direct-e2e-secret); never merged with x-e2e-test-token.
+          # - TEST_DRIVER_EMAIL <- ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM
+          # - TEST_DRIVER_PASSWORD <- ROUND_DIRECT_E2E_DRIVER_PASSWORD_CHROMIUM
+          # - VERCEL_AUTOMATION_BYPASS_SECRET <- ROUND_DIRECT_E2E_DRIVER_BYPASS_SECRET
+          #   (Vercel protection passage only)
+          # No consumer/seller frontend origin is called by this step.
+          evidence_root=".artifacts/auth-role-callback-probe/$ROLE_CALLBACK_RUN_ID"
+          mkdir -p "$evidence_root/evidence"
+          set +e
+          node scripts/probe-authjs-role-callback.mjs \
+            --role=driver \
+            --expected-sha="$ROLE_CALLBACK_EXPECTED_SHA" \
+            --target-url="$ROLE_CALLBACK_DRIVER_URL" \
+            --deployment-id="$ROLE_CALLBACK_DRIVER_DEPLOYMENT_ID" \
+            --evidence-json="$evidence_root/probe-evidence.json" \
+            --expected-api-origin="$ROLE_CALLBACK_EXPECTED_API_ORIGIN" \
+            --approval="${{ inputs.approval }}" \
+            --protection-passage-mode="AUTOMATION_BYPASS" \
+            > "$evidence_root/driver-raw.json"
+          probe_status=$?
+          set -e
+          if [[ ! -s "$evidence_root/driver-raw.json" ]]; then
+            echo 'driver callback probe 요약을 만들지 못해 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          jq '{
+            result: (.result // (if .artifact then "SUCCESS" else null end)),
+            failureCode: (.failureCode // null),
+            failureStage: (.failureStage // null),
+            role,
+            runner,
+            deploymentReady: (.deploymentReady // null),
+            expectedSha: (.expectedSha // (.deploymentSourceSha // null)),
+            observedDeploymentSha: (.observedDeploymentSha // (.deploymentSourceSha // null)),
+            artifact,
+            authErrorClass,
+            callbackLocationClass,
+            callbackStatus,
+            checkedAt,
+            credentialSource,
+            deploymentId,
+            deploymentSourceSha,
+            headerName,
+            headerPresent,
+            requestBuilder,
+            sessionContract,
+            sessionRoleAdmitted,
+            sessionStoreBindingPresent,
+            sessionState,
+            setCookiePresent,
+            upstreamStatus,
+            upstreamOriginFingerprint,
+            expectedApiOriginFingerprint,
+            upstreamOriginMatchesExpected,
+            verdict,
+            workflowSourceSha,
+            message: (.message // null)
+            }' \
+            "$evidence_root/driver-raw.json" \
+            > "$evidence_root/evidence/driver-summary.json"
+          exit "$probe_status"
+
+      - name: 비민감 증거 artifact 업로드
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: auth-role-callback-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/auth-role-callback-probe/${{ env.ROLE_CALLBACK_RUN_ID }}/evidence/
+          if-no-files-found: error
+          retention-days: 7
+
   auth_identity_cleanup:
     name: auth probe identity cleanup (always, owned-only)
     # Bounded lifecycle closeout: deletes ONLY invocation-owned
     # auth-probe docs (purpose + runId match). Foreign docs are never
     # deleted; missing docs are idempotent success. Runs always() even
-    # when seed/session/callback fail or are skipped, so partial seeds
+    # when seed/session/callback/role-callback fail or are skipped, so partial seeds
     # cannot leak staging identities. Manifest transfer uses only the
     # redacted (non-sensitive) artifact: no password/hash/email/token/
     # service-account material is ever persisted or logged.
-    needs: [auth_identity_seed, session-probe, callback-probe]
+    # 34B: role-callback-probe joins the closeout set so seller/driver seeds
+    # cannot leak when the role probe fails or is skipped.
+    needs: [auth_identity_seed, session-probe, callback-probe, role-callback-probe]
     if: ${{ always() && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
