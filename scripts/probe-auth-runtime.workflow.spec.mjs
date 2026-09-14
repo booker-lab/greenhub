@@ -164,6 +164,7 @@ describe('session-only runtime boundary', () => {
         script === 'wait-preview-deploy.mjs' ||
           script === 'probe-auth-runtime.mjs' ||
           script === 'probe-consumer-callback.mjs' ||
+          script === 'probe-authjs-role-callback.mjs' ||
           script === 'probe-auth-identities.mjs',
         `forbidden script invocation: node scripts/${script}`,
       );
@@ -531,7 +532,11 @@ describe('auth probe identity lifecycle (PILOT-AUTH-PROBE-IDENTITY-LIFECYCLE-26A
     assert.ok(callbackOnly.includes('needs: auth_identity_seed'), 'callback must need identity seed');
     assert.ok(!/^(\s*)needs:.*session-probe/m.test(callbackOnly), 'callback must not depend on session-probe');
     const cleanup = source.slice(cleanupStart);
-    assert.ok(cleanup.includes('needs: [auth_identity_seed, session-probe, callback-probe]'), 'cleanup must need seed + both probes');
+    assert.ok(
+      cleanup.includes('needs: [auth_identity_seed, session-probe, callback-probe]') ||
+        cleanup.includes('needs: [auth_identity_seed, session-probe, callback-probe, role-callback-probe]'),
+      'cleanup must need seed + both probes (34B may add the role-callback-probe closeout)',
+    );
     assert.ok(cleanup.includes('if: ${{ always()'), 'cleanup must run always()');
   });
 

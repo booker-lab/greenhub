@@ -453,8 +453,9 @@ describe('callback probe workflow isolation contract', () => {
     assert.ok(callbackOnly.includes('needs: auth_identity_seed'), 'callback must need identity seed');
     assert.ok(!/^(\s*)needs:.*session-probe/m.test(callbackOnly), 'callback must not depend on session-probe');
     assert.ok(
-      cleanupOnly.includes('needs: [auth_identity_seed, session-probe, callback-probe]'),
-      'cleanup must need seed + both probes',
+      cleanupOnly.includes('needs: [auth_identity_seed, session-probe, callback-probe]') ||
+        cleanupOnly.includes('needs: [auth_identity_seed, session-probe, callback-probe, role-callback-probe]'),
+      'cleanup must need seed + both probes (34B may add the role-callback-probe closeout)',
     );
     assert.ok(cleanupOnly.includes('if: ${{ always()'), 'cleanup must run always()');
     // No OIDC writer anywhere.
