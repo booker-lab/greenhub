@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import NextAuth from 'next-auth';
+import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
 import { getApiBaseUrl } from '@/lib/api-base-url';
@@ -7,6 +7,28 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 const API = getApiBaseUrl();
 const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
 const E2E_ACCESS_TOKEN_TTL = 15 * 60 * 1000;
+
+// PILOT-AUTH-DRIVER-PREUPSTREAM-DIAGNOSTIC-PROJECTION-38D.
+// Pre-upstream admission (B/C/D) previously collapsed to bare `return null`
+// (`EXPECTED_APPLICATION_REJECTION` with no stage distinction). Project each
+// stage into a distinct static Auth.js `code` via the repository's safe
+// diagnostic mechanism (DiagnosticCredentialsSignin, cf. 29A
+// `upstream-rejected__...` projection). Codes are static literals only —
+// no email, secret, header, env, allowlist, hash, length, or timing material.
+// Policy is unchanged: conditions, timing-safe compare semantics, allowlist
+// membership, password presence, Preview-only gate, and upstream contract
+// stay exactly as before; only the rejection projection changes.
+type DriverPreUpstreamRejectionCode =
+  | 'authorize-rejected__driver-g2-enabled'
+  | 'authorize-rejected__driver-g3-secret-mismatch'
+  | 'authorize-rejected__driver-g4-allowlist-rejected';
+
+class DiagnosticCredentialsSignin extends CredentialsSignin {
+  constructor(code: DriverPreUpstreamRejectionCode) {
+    super();
+    this.code = code;
+  }
+}
 
 function secretsMatch(received: string | null, expected: string | undefined): boolean {
   if (!received || !expected) return false;
@@ -106,16 +128,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           process.env.VERCEL_ENV !== 'preview' ||
           process.env.ROUND_DIRECT_E2E_ENABLED !== 'true'
         ) {
-          return null;
+          throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g2-enabled');
         }
         const expectedSecret = process.env.ROUND_DIRECT_E2E_SHARED_SECRET;
         const receivedSecret = request?.headers?.get('x-round-direct-e2e-secret') ?? null;
-        if (!secretsMatch(receivedSecret, expectedSecret)) return null;
+        if (!secretsMatch(receivedSecret, expectedSecret))
+          throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g3-secret-mismatch');
         if (
           !isAllowedE2EDriverEmail(credentials.email) ||
           typeof credentials.password !== 'string'
         ) {
-          return null;
+          throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g4-allowlist-rejected');
         }
 
         const res = await fetch(`${API}/auth/login`, {
