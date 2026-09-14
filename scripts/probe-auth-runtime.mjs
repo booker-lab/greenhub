@@ -348,13 +348,83 @@ export function evaluateDriverGate({
 // Both shapes are normalized to a single internal contract { ok, status, data }
 // without ever surfacing raw bodies, tokens, or credentials.
 
-export function classifyLoginRejection(status) {
+export function classifyLoginRejection(status, data) {
   const code = Number(status);
   if (code === 401) return 'AUTH_LOGIN_UNAUTHORIZED';
   if (code === 403) return 'AUTH_LOGIN_FORBIDDEN';
   if (code === 404) return 'AUTH_LOGIN_ROUTE_NOT_FOUND';
   if (Number.isInteger(code) && code >= 500 && code <= 599) return 'AUTH_LOGIN_SERVER_ERROR';
+  if (code === 400) return classifyLoginValidationRejection(data);
   return 'AUTH_LOGIN_HTTP_REJECTED';
+}
+
+// ---- Sanitized 400 validation classification projection ----------------------
+// PILOT-AUTH-RUNTIME-SANITIZED-VALIDATION-CLASSIFICATION-PROJECTION-35A.
+//
+// EVIDENCE-ONLY projection of the already-published sanitized
+// `data.validation.fields` contract into the existing rejectionClass channel.
+// Observable inputs are ONLY:
+//   - data.validation.fields (array)
+//   - entry.property (must be exactly "email" or "password")
+//   - entry.constraints (array of strings, only "isEmail" / "isString" kept)
+//
+// Structurally excluded (never read, never emitted):
+//   - credential email/password values, request body, data.message,
+//     arbitrary response body, token, cookie, Authorization, secret,
+//     provider credential, error.value, error.target, error.contexts.
+// This function intentionally reads ONLY data.validation.fields,
+// entry.property, and entry.constraints. It never accesses .message,
+// .value, .target, or any other field.
+//
+// Contract:
+//   - 400 + at least one allowed property×constraint pair
+//     -> `AUTH_LOGIN_VALIDATION__<pair[+pair...]>`
+//        where pair = `<property>.<constraint>`, pairs are deduplicated,
+//        sorted lexicographically (property-major), and joined with `+`.
+//        e.g. `AUTH_LOGIN_VALIDATION__email.isEmail`,
+//             `AUTH_LOGIN_VALIDATION__email.isEmail+password.isString`.
+//   - 400 + missing/malformed validation, or no allowed pair
+//     -> `AUTH_LOGIN_HTTP_REJECTED` (fail closed, no raw-message fallback).
+//   - Unknown properties/constraints are dropped silently; mixed
+//     allowed+unknown projects allowed-only.
+//   - Non-400 statuses never consult `data` (byte semantics preserved).
+
+export const LOGIN_VALIDATION_ALLOWED_PROPERTIES = Object.freeze(['email', 'password']);
+
+export const LOGIN_VALIDATION_ALLOWED_CONSTRAINTS = Object.freeze(['isEmail', 'isString']);
+
+const LOGIN_VALIDATION_PREFIX = 'AUTH_LOGIN_VALIDATION__';
+const LOGIN_VALIDATION_PAIR_SEPARATOR = '+';
+
+export function classifyLoginValidationRejection(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return 'AUTH_LOGIN_HTTP_REJECTED';
+  }
+  const validation = data.validation;
+  if (!validation || typeof validation !== 'object' || Array.isArray(validation)) {
+    return 'AUTH_LOGIN_HTTP_REJECTED';
+  }
+  const fields = validation.fields;
+  if (!Array.isArray(fields)) {
+    return 'AUTH_LOGIN_HTTP_REJECTED';
+  }
+  const pairs = new Set();
+  for (const entry of fields) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const property = entry.property;
+    if (property !== 'email' && property !== 'password') continue;
+    const constraints = entry.constraints;
+    if (!Array.isArray(constraints)) continue;
+    for (const constraint of constraints) {
+      if (constraint !== 'isEmail' && constraint !== 'isString') continue;
+      pairs.add(`${property}.${constraint}`);
+    }
+  }
+  if (pairs.size === 0) {
+    return 'AUTH_LOGIN_HTTP_REJECTED';
+  }
+  const ordered = [...pairs].sort();
+  return `${LOGIN_VALIDATION_PREFIX}${ordered.join(LOGIN_VALIDATION_PAIR_SEPARATOR)}`;
 }
 
 function isNativeResponseLike(raw) {
@@ -456,7 +526,9 @@ export function createGuardedFetch(fetchImpl, { apiUrl }) {
 function requireOkJson(res, { role, step }) {
   if (!res || res.ok !== true) {
     const httpStatus = typeof res?.status === 'number' ? res.status : 0;
-    const rejectionClass = classifyLoginRejection(httpStatus);
+    // Sanitized 400 projection reads ONLY res.data.validation.fields
+    // (property + constraint keys). Never credential values, message, or body.
+    const rejectionClass = classifyLoginRejection(httpStatus, res?.data);
     const normalizedRole = String(role).toLowerCase();
     fail(
       `${role}_LOGIN_FAILED`,

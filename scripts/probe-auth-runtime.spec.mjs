@@ -7,9 +7,12 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   APPROVAL_VALUE,
+  LOGIN_VALIDATION_ALLOWED_CONSTRAINTS,
+  LOGIN_VALIDATION_ALLOWED_PROPERTIES,
   ProbeContractError,
   assertExpectedSha,
   classifyLoginRejection,
+  classifyLoginValidationRejection,
   createGuardedFetch,
   evaluateConsumerGate,
   evaluateDriverGate,
@@ -919,5 +922,215 @@ describe('PILOT-AUTH-PROBE-16 native HTTP adapter + login diagnostic', () => {
       new Set([e401.details?.rejectionClass, eMalformed.details?.rejectionClass, eTokenMissing.details?.rejectionClass]).size === 3,
       'three login failure classes must be distinct',
     );
+  });
+});
+
+describe('PILOT-AUTH-RUNTIME-35A sanitized validation classification projection', () => {
+  function validation400Fetch(data) {
+    return async (url, init = {}) => {
+      const path = new URL(url).pathname;
+      if (path === '/auth/login') {
+        return { ok: false, status: 400, data };
+      }
+      return { ok: false, status: 404, data: null };
+    };
+  }
+
+  function nativeValidation400Fetch(data) {
+    return async (url, init = {}) => {
+      const path = new URL(url).pathname;
+      const method = String(init.method ?? 'GET').toUpperCase();
+      if (path === '/auth/login' && method === 'POST') {
+        return new Response(JSON.stringify(data), {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('not-found', { status: 404 });
+    };
+  }
+
+  async function captureLoginRejection(fetchImpl, role = 'consumer') {
+    const email = role === 'seller' ? 'seller@example.test' : 'consumer@example.test';
+    const password = role === 'seller' ? 'pw-seller' : 'pw-consumer';
+    try {
+      await runRoleProbe(role, { apiUrl: URLS.api, email, password, fetchImpl });
+    } catch (e) {
+      return e;
+    }
+    assert.fail('expected login rejection');
+  }
+
+  it('1. 400 + email/isEmail -> AUTH_LOGIN_VALIDATION__email.isEmail', () => {
+    assert.equal(
+      classifyLoginRejection(400, { validation: { fields: [{ property: 'email', constraints: ['isEmail'] }] } }),
+      'AUTH_LOGIN_VALIDATION__email.isEmail',
+    );
+    assert.equal(
+      classifyLoginValidationRejection({ validation: { fields: [{ property: 'email', constraints: ['isEmail'] }] } }),
+      'AUTH_LOGIN_VALIDATION__email.isEmail',
+    );
+  });
+
+  it('2. 400 + password/isString -> AUTH_LOGIN_VALIDATION__password.isString', () => {
+    assert.equal(
+      classifyLoginRejection(400, { validation: { fields: [{ property: 'password', constraints: ['isString'] }] } }),
+      'AUTH_LOGIN_VALIDATION__password.isString',
+    );
+  });
+
+  it('3. 역순/중복 허용 항목은 canonical ordering으로 결정된다', async () => {
+    const reversed = {
+      validation: {
+        fields: [
+          { property: 'password', constraints: ['isString'] },
+          { property: 'email', constraints: ['isEmail'] },
+        ],
+      },
+    };
+    const duplicated = {
+      validation: {
+        fields: [
+          { property: 'password', constraints: ['isString', 'isString'] },
+          { property: 'email', constraints: ['isEmail'] },
+          { property: 'email', constraints: ['isEmail'] },
+        ],
+      },
+    };
+    const expected = 'AUTH_LOGIN_VALIDATION__email.isEmail+password.isString';
+    assert.equal(classifyLoginRejection(400, reversed), expected);
+    assert.equal(classifyLoginRejection(400, duplicated), expected);
+    assert.equal(classifyLoginValidationRejection(duplicated), expected);
+    // Native + mock shapes agree through the role channel.
+    const eMock = await captureLoginRejection(validation400Fetch(duplicated));
+    assert.equal(eMock.details?.rejectionClass, expected);
+    const eNative = await captureLoginRejection(nativeValidation400Fetch(duplicated));
+    assert.equal(eNative.details?.rejectionClass, expected);
+  });
+
+  it('4. credential-like values/message가 있어도 classification에 노출되지 않는다', async () => {
+    const sensitiveEmail = 'sensitive-user-35a@example.test';
+    const sensitivePassword = 'sensitive-pw-35a-value';
+    const data = {
+      message: ['email must be an email', sensitiveEmail, sensitivePassword],
+      validation: { fields: [{ property: 'email', constraints: ['isEmail'] }] },
+      email: sensitiveEmail,
+      password: sensitivePassword,
+    };
+    const rejectionClass = classifyLoginRejection(400, data);
+    assert.equal(rejectionClass, 'AUTH_LOGIN_VALIDATION__email.isEmail');
+    assert.ok(!rejectionClass.includes(sensitiveEmail));
+    assert.ok(!rejectionClass.includes(sensitivePassword));
+    assert.ok(!rejectionClass.includes('must be an email'));
+    const error = await captureLoginRejection(validation400Fetch(data));
+    assert.equal(error.details?.rejectionClass, 'AUTH_LOGIN_VALIDATION__email.isEmail');
+    const serialized = JSON.stringify(error.details ?? {});
+    assert.ok(!serialized.includes(sensitiveEmail));
+    assert.ok(!serialized.includes(sensitivePassword));
+    assert.ok(!serialized.includes('must be an email'));
+    assert.ok(!String(error.message).includes(sensitiveEmail));
+    assert.ok(!String(error.message).includes(sensitivePassword));
+  });
+
+  it('5. unknown property/constraint는 fail-closed: 단독이면 fallback, 혼합이면 허용 항목만 projection', () => {
+    // Unknown-only -> generic 400.
+    assert.equal(
+      classifyLoginRejection(400, { validation: { fields: [{ property: 'nickname', constraints: ['isString'] }] } }),
+      'AUTH_LOGIN_HTTP_REJECTED',
+    );
+    assert.equal(
+      classifyLoginRejection(400, { validation: { fields: [{ property: 'email', constraints: ['isNotEmpty'] }] } }),
+      'AUTH_LOGIN_HTTP_REJECTED',
+    );
+    assert.equal(
+      classifyLoginRejection(400, {
+        validation: { fields: [{ property: 'extra-evil-prop', constraints: ['evil-constraint'] }] },
+      }),
+      'AUTH_LOGIN_HTTP_REJECTED',
+    );
+    // Mixed allowed + unknown -> allowed-only projection, unknown never emitted.
+    const mixed = {
+      validation: {
+        fields: [
+          { property: 'email', constraints: ['isEmail', 'evil-constraint'] },
+          { property: 'nickname', constraints: ['isString'] },
+          { property: 'extra', constraints: ['isEmail'] },
+        ],
+      },
+    };
+    const projected = classifyLoginRejection(400, mixed);
+    assert.equal(projected, 'AUTH_LOGIN_VALIDATION__email.isEmail');
+    assert.ok(!projected.includes('nickname'));
+    assert.ok(!projected.includes('extra'));
+    assert.ok(!projected.includes('evil'));
+  });
+
+  it('6. malformed validation은 AUTH_LOGIN_HTTP_REJECTED로 fail closed한다', () => {
+    for (const malformed of [
+      null,
+      {},
+      { validation: null },
+      { validation: {} },
+      { validation: { fields: null } },
+      { validation: { fields: 'email.isEmail' } },
+      { validation: { fields: [{ property: 'email' }] } },
+      { validation: { fields: [{ constraints: ['isEmail'] }] } },
+      { validation: { fields: [{ property: 'email', constraints: 'isEmail' }] } },
+      { validation: { fields: [{ property: 42, constraints: ['isEmail'] }] } },
+      // message-only bait: raw message fallback을 하지 않음을 증명한다.
+      { message: ['email must be an email'] },
+      { message: ['password must be a string'], validation: { fields: [] } },
+    ]) {
+      assert.equal(classifyLoginRejection(400, malformed), 'AUTH_LOGIN_HTTP_REJECTED', JSON.stringify(malformed));
+    }
+  });
+
+  it('7-10. 401/403/404/5xx 기존 classification byte semantics 유지 (data가 있어도 무시)', () => {
+    const withValidation = { validation: { fields: [{ property: 'email', constraints: ['isEmail'] }] } };
+    assert.equal(classifyLoginRejection(401), 'AUTH_LOGIN_UNAUTHORIZED');
+    assert.equal(classifyLoginRejection(401, withValidation), 'AUTH_LOGIN_UNAUTHORIZED');
+    assert.equal(classifyLoginRejection(403), 'AUTH_LOGIN_FORBIDDEN');
+    assert.equal(classifyLoginRejection(403, withValidation), 'AUTH_LOGIN_FORBIDDEN');
+    assert.equal(classifyLoginRejection(404), 'AUTH_LOGIN_ROUTE_NOT_FOUND');
+    assert.equal(classifyLoginRejection(404, withValidation), 'AUTH_LOGIN_ROUTE_NOT_FOUND');
+    assert.equal(classifyLoginRejection(500), 'AUTH_LOGIN_SERVER_ERROR');
+    assert.equal(classifyLoginRejection(500, withValidation), 'AUTH_LOGIN_SERVER_ERROR');
+    assert.equal(classifyLoginRejection(503, withValidation), 'AUTH_LOGIN_SERVER_ERROR');
+    assert.equal(classifyLoginRejection(418, withValidation), 'AUTH_LOGIN_HTTP_REJECTED');
+    assert.equal(classifyLoginRejection(400), 'AUTH_LOGIN_HTTP_REJECTED');
+  });
+
+  it('7b. role 채널 401/403/404/5xx regression이 sanitized class를 유지한다', async () => {
+    for (const [status, expected] of [
+      [401, 'AUTH_LOGIN_UNAUTHORIZED'],
+      [403, 'AUTH_LOGIN_FORBIDDEN'],
+      [404, 'AUTH_LOGIN_ROUTE_NOT_FOUND'],
+      [500, 'AUTH_LOGIN_SERVER_ERROR'],
+    ]) {
+      const statusFetch = async (url, init = {}) => {
+        const path = new URL(url).pathname;
+        if (path === '/auth/login') return { ok: false, status, data: null };
+        return { ok: false, status: 404, data: null };
+      };
+      const captured = await captureLoginRejection(statusFetch);
+      assert.equal(captured.details?.rejectionClass, expected, `status=${status}`);
+      assert.equal(captured.details?.httpStatus, status);
+    }
+  });
+
+  it('11. 성공 login lifecycle regression PASS', async () => {
+    const result = await runRoleProbe('consumer', {
+      apiUrl: URLS.api,
+      email: 'consumer@example.test',
+      password: 'pw-consumer',
+      fetchImpl: mockApiFetch(),
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.steps, { login: 'ok', reread: 'ok', logout: 'ok' });
+  });
+
+  it('allowlist 계약이 email/password + isEmail/isString으로 제한된다', () => {
+    assert.deepEqual([...LOGIN_VALIDATION_ALLOWED_PROPERTIES].sort(), ['email', 'password']);
+    assert.deepEqual([...LOGIN_VALIDATION_ALLOWED_CONSTRAINTS].sort(), ['isEmail', 'isString']);
   });
 });
