@@ -8,13 +8,18 @@ import {
   isAllowedVercelPreviewOrigin,
 } from './common/cors-origin';
 import { TimestampInterceptor } from './common/interceptors/timestamp.interceptor';
+import { sanitizedValidationPipeOptions } from './common/validation/sanitized-validation';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.use(helmet());
 
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+  // PILOT-AUTH-SANITIZED-VALIDATION-OBSERVABILITY-AND-EXACT-REVERIFY-34A:
+  // OBSERVABILITY ONLY. Acceptance unchanged (whitelist + forbidNonWhitelisted).
+  // The factory preserves 400 message/error/statusCode and additively attaches
+  // sanitized validation.fields (property + constraint keys only, no values).
+  app.useGlobalPipes(new ValidationPipe(sanitizedValidationPipeOptions()));
   app.useGlobalInterceptors(new TimestampInterceptor());
 
   const allowedOrigins = configuredCorsOrigins();
