@@ -1642,10 +1642,13 @@ describe('consumer auth.ts diagnostic projection parity (source contract)', () =
   });
 
   it('E2E gate / transport / parse / schema sites keep plain top-level classes', () => {
+    // PILOT-AUTH-CALLBACK-EMAIL-ADMISSION-CONVERGENCE-34A: authorize-rejected
+    // sites are E2E secret gate (1) + E2E token gate (1) + LoginDto admission
+    // gate (1) = 3. All carry static codes only (29A projection unchanged).
     const authorizeSites = (
       AUTH_SOURCE.match(/throw new DiagnosticCredentialsSignin\('authorize-rejected'\)/g) ?? []
     ).length;
-    assert.equal(authorizeSites, 2);
+    assert.equal(authorizeSites, 3);
     const bindingSites = (
       AUTH_SOURCE.match(/throw new DiagnosticCredentialsSignin\('api-binding-failure'\)/g) ?? []
     ).length;
