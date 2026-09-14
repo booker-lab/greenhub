@@ -44,6 +44,17 @@ on:
 permissions:
   contents: read
 
+# Identity lifecycle serialization (PILOT-AUTH-IDENTITY-LIFECYCLE-RACE-32F):
+# the same staging test credential set is shared by every invocation, and the
+# seed job's lock alone releases before session/callback probes run. Serialize
+# the whole workflow_dispatch invocation lifecycle (seed -> session/callback
+# -> cleanup) so the next invocation's seed cannot enter while owned
+# identities are still live. Never cancel a running invocation: cleanup must
+# always close the owned lifecycle.
+concurrency:
+  group: auth-probe-runtime
+  cancel-in-progress: false
+
 jobs:
   probe-spec:
     name: probe runner deterministic spec
@@ -143,6 +154,9 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Defense-in-depth only: the authoritative lifecycle lock is the
+    # workflow-level `auth-probe-runtime` group (seed -> probes -> cleanup).
+    # This job-level group never replaces it.
     concurrency:
       group: auth-probe-identities
       cancel-in-progress: false
@@ -246,22 +260,15 @@ jobs:
             echo 'identity seed 요약을 만들지 못해 실행을 차단합니다.' >&2
             exit 1
           fi
-          jq '{
-            action,
-            runId,
-            ready,
-            evidence: (.evidence | {
-              purpose,
-              runId,
-              documentPaths,
-              storeIdPresent,
-              storeIdIsProduction,
-              roles,
-              failureCodes
-            })
-            }' \
-            "$evidence_root/seed-raw.json" \
-            > "$evidence_root/evidence/identity-summary.json"
+          # Redacted projection (PILOT-AUTH-IDENTITY-LIFECYCLE-RACE-32F):
+          # allowlisted summary keeps action/runId/ready when present plus
+          # result/failureCode on FAIL; message/details/credentials never
+          # enter the artifact. The helper exits 0 even for FAIL raw so the
+          # original seed_status still decides the job outcome below.
+          node scripts/probe-auth-identities.mjs \
+            project-seed-summary \
+            --input="$evidence_root/seed-raw.json" \
+            --output="$evidence_root/evidence/identity-summary.json"
           exit "$seed_status"
 
       - name: 비민감 identity 증거 artifact 업로드
@@ -291,6 +298,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Defense-in-depth only: the authoritative lifecycle lock is the
+    # workflow-level `auth-probe-runtime` group.
     concurrency:
       group: auth-session-probe
       cancel-in-progress: false
@@ -615,6 +624,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Defense-in-depth only: the authoritative lifecycle lock is the
+    # workflow-level `auth-probe-runtime` group.
     concurrency:
       group: auth-callback-probe
       cancel-in-progress: false
@@ -959,6 +970,8 @@ jobs:
     if: ${{ always() && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Defense-in-depth only: the authoritative lifecycle lock is the
+    # workflow-level `auth-probe-runtime` group.
     concurrency:
       group: auth-probe-identities
       cancel-in-progress: false
