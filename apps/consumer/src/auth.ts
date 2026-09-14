@@ -10,6 +10,9 @@ const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
 
 type CredentialsFailureCode =
   | 'authorize-rejected'
+  | 'authorize-rejected__g1-secret-missing'
+  | 'authorize-rejected__g2-secret-mismatch'
+  | 'authorize-rejected__g3-credential-admission-rejected'
   | 'upstream-rejected'
   | 'api-binding-failure';
 
@@ -110,6 +113,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
     // E2E 헤더 게이팅 — 일치하는 x-e2e-test-token 없으면 즉시 거부.
     // SECRET 미설정 시 모든 credentials 요청 차단(안전 기본값).
+    // PILOT-AUTH-CONSUMER-PREUPSTREAM-DIAGNOSTIC-PROJECTION-38C: the three
+    // pre-upstream gates emit deterministic static codes only (no values,
+    // lengths, hashes, timing, headers, or env contents). Top-level class
+    // stays `authorize-rejected` (prefix). Ordering is fixed:
+    //   S1 g1-secret-missing (runtime E2E secret missing),
+    //   S2 g2-secret-mismatch (x-e2e-test-token != runtime secret),
+    //   S3 g3-credential-admission-rejected (LoginDto admission rejected).
+    // S1/S2/S3 are all fail-closed with zero upstream calls.
     Credentials({
       credentials: {
         email: { label: '이메일', type: 'email' },
@@ -117,9 +128,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials, request) {
         const expected = process.env.E2E_TEST_SECRET;
-        if (!expected) throw new DiagnosticCredentialsSignin('authorize-rejected');
+        if (!expected)
+          throw new DiagnosticCredentialsSignin('authorize-rejected__g1-secret-missing');
         const got = request?.headers?.get('x-e2e-test-token');
-        if (got !== expected) throw new DiagnosticCredentialsSignin('authorize-rejected');
+        if (got !== expected)
+          throw new DiagnosticCredentialsSignin('authorize-rejected__g2-secret-mismatch');
 
         // PILOT-AUTH-CALLBACK-EMAIL-ADMISSION-CONVERGENCE-34A: fail closed
         // before any upstream call when the credentials would be rejected by
@@ -127,7 +140,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // the rejection; the admitted pair is forwarded verbatim with the
         // exact {email,password} shape (no extra keys, no normalization).
         if (!isAdmittedLoginCredentials(credentials)) {
-          throw new DiagnosticCredentialsSignin('authorize-rejected');
+          throw new DiagnosticCredentialsSignin(
+            'authorize-rejected__g3-credential-admission-rejected',
+          );
         }
         const email = credentials.email;
         const password = credentials.password;
