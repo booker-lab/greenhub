@@ -605,3 +605,51 @@ describe('auth probe identity lifecycle (PILOT-AUTH-PROBE-IDENTITY-LIFECYCLE-26A
     }
   });
 });
+
+describe('auth probe identity lifecycle race closure (PILOT-AUTH-IDENTITY-LIFECYCLE-RACE-32F)', () => {
+  function topLevelConcurrencyBlock(source) {
+    const lines = source.split('\n');
+    const idx = lines.findIndex((line) => line === 'concurrency:');
+    assert.ok(idx >= 0, 'workflow must declare a top-level concurrency block');
+    return lines.slice(idx, idx + 4).join('\n');
+  }
+
+  it('workflow_dispatch invocation lifecycle 전체가 동일 concurrency group에 묶인다', () => {
+    const source = readWorkflow();
+    const block = topLevelConcurrencyBlock(source);
+    assert.ok(block.includes('group: auth-probe-runtime'), 'lifecycle lock must use the auth-probe-runtime group');
+    assert.ok(block.includes('cancel-in-progress: false'), 'running invocation must never be cancelled');
+  });
+
+  it('seed job 종료만으로 lock이 풀리는 기존 취약 구조가 재발하지 않는다', () => {
+    const source = readWorkflow();
+    // The authoritative lock is workflow-level: it is held for the whole
+    // run (seed -> session/callback -> cleanup), so the next invocation's
+    // seed cannot enter while owned identities are still live. Job-level
+    // groups below remain only as defense-in-depth and must never cancel.
+    const block = topLevelConcurrencyBlock(source);
+    assert.ok(block.includes('group: auth-probe-runtime'), 'workflow-level lifecycle lock must exist');
+    assert.ok(block.includes('cancel-in-progress: false'), 'lifecycle lock must never cancel a running invocation');
+    for (const line of source.split('\n')) {
+      if (!line.includes('cancel-in-progress:')) continue;
+      assert.ok(line.includes('false'), `no lock may cancel a running invocation: ${line.trim().slice(0, 80)}`);
+    }
+    const seedStart = source.indexOf('auth_identity_seed:');
+    const cleanupStart = source.indexOf('auth_identity_cleanup:');
+    assert.ok(seedStart >= 0 && cleanupStart > seedStart, 'lifecycle job order must hold');
+    assert.ok(source.slice(cleanupStart).includes('if: ${{ always()'), 'cleanup must still run always()');
+  });
+
+  it('seed FAIL evidence가 failureCode를 보존하고 민감 필드를 제외한다', () => {
+    const source = readWorkflow();
+    const seedStart = source.indexOf('auth_identity_seed:');
+    const sessionStart = source.indexOf('session-probe:');
+    assert.ok(seedStart >= 0 && sessionStart > seedStart, 'seed job order must hold');
+    const seed = source.slice(seedStart, sessionStart);
+    assert.ok(seed.includes('project-seed-summary'), 'seed step must use the redacted projection helper');
+    assert.ok(seed.includes('--input='), 'projection must read the raw seed output');
+    assert.ok(seed.includes('--output='), 'projection must write the redacted summary');
+    assert.ok(seed.includes('identity-summary.json'), 'projection must write identity-summary.json');
+    assert.ok(!seed.includes('message,'), 'seed projection must not copy message into the artifact');
+  });
+});

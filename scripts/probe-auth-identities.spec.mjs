@@ -19,6 +19,7 @@ import {
   hashPassword,
   isBcryptHash,
   normalizeRunId,
+  projectSeedSummaryForArtifact,
   redactPersistedManifest,
   seedAuthProbeIdentities,
   validateIdentityTarget,
@@ -365,5 +366,85 @@ describe('PILOT-AUTH-PROBE-IDENTITY-LIFECYCLE-26A workflow + regression', () => 
     // Seller still requires storeId; driver still requires approval (runner contract).
     const sellerMismatch = runtime.validateRuntimeBinding;
     assert.equal(typeof sellerMismatch, 'function');
+  });
+});
+
+describe('PILOT-AUTH-IDENTITY-LIFECYCLE-RACE-32F seed summary projection', () => {
+  it('14. FAIL raw에서 result/failureCode를 보존하고 민감 필드를 제거한다', () => {
+    const raw = {
+      result: 'FAIL',
+      failureCode: 'IDENTITY_COLLISION',
+      message: 'sensitive-or-unneeded-message',
+      details: { path: 'users/some-doc' },
+      email: 'leak@example.test',
+      password: 'leak-password',
+      passwordHash: '$2b$12$leak',
+    };
+    const summary = projectSeedSummaryForArtifact(raw);
+    assert.equal(summary.result, 'FAIL');
+    assert.equal(summary.failureCode, 'IDENTITY_COLLISION');
+    const serialized = JSON.stringify(summary);
+    for (const forbidden of [
+      'sensitive-or-unneeded-message',
+      'leak@example.test',
+      'leak-password',
+      '$2b$12$leak',
+    ]) {
+      assert.ok(!serialized.includes(forbidden), 'redacted summary must not contain sensitive material');
+    }
+    assert.ok(!('message' in summary), 'summary must not carry message');
+    assert.ok(!('details' in summary), 'summary must not carry details');
+    assert.ok(!('email' in summary), 'summary must not carry email');
+    assert.ok(!('password' in summary), 'summary must not carry password');
+    assert.ok(!('passwordHash' in summary), 'summary must not carry passwordHash');
+    assert.ok(!('serviceAccount' in summary), 'summary must not carry service-account material');
+  });
+
+  it('15. SUCCESS projection 계약을 깨뜨리지 않는다', async () => {
+    const manifest = validManifest();
+    const adapter = memoryAdapter();
+    await seedAuthProbeIdentities(adapter, manifest);
+    const verify = await verifyAuthProbeIdentities(adapter, manifest);
+    const raw = {
+      action: 'seed',
+      runId: RUN_ID,
+      ready: verify.ready,
+      evidence: {
+        purpose: IDENTITY_PURPOSE,
+        runId: RUN_ID,
+        documentPaths: manifest.documentPaths,
+        storeIdPresent: true,
+        storeIdIsProduction: false,
+        roles: { consumer: { ok: true } },
+        failureCodes: [],
+      },
+    };
+    const summary = projectSeedSummaryForArtifact(raw);
+    assert.equal(summary.action, 'seed');
+    assert.equal(summary.runId, RUN_ID);
+    assert.equal(summary.ready, true);
+    assert.equal(summary.evidence.purpose, IDENTITY_PURPOSE);
+    assert.equal(summary.evidence.runId, RUN_ID);
+    assert.deepEqual(summary.evidence.documentPaths, manifest.documentPaths);
+    assert.equal(summary.evidence.storeIdPresent, true);
+    assert.equal(summary.evidence.storeIdIsProduction, false);
+  });
+
+  it('16. FAIL shape에 action/runId/ready가 있으면 보존한다', () => {
+    const raw = {
+      action: 'seed',
+      runId: RUN_ID,
+      ready: false,
+      result: 'FAIL',
+      failureCode: 'FIREBASE_PROJECT_NOT_ALLOWED',
+      message: 'must-not-leak',
+    };
+    const summary = projectSeedSummaryForArtifact(raw);
+    assert.equal(summary.action, 'seed');
+    assert.equal(summary.runId, RUN_ID);
+    assert.equal(summary.ready, false);
+    assert.equal(summary.result, 'FAIL');
+    assert.equal(summary.failureCode, 'FIREBASE_PROJECT_NOT_ALLOWED');
+    assert.ok(!JSON.stringify(summary).includes('must-not-leak'));
   });
 });
