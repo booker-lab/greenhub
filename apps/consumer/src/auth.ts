@@ -2,6 +2,7 @@ import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { isAdmittedLoginCredentials } from '@/auth-credentials';
 
 const API = getApiBaseUrl();
 // accessToken 만료 55분 후 갱신 (Railway 기본값 1h 기준)
@@ -120,14 +121,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const got = request?.headers?.get('x-e2e-test-token');
         if (got !== expected) throw new DiagnosticCredentialsSignin('authorize-rejected');
 
+        // PILOT-AUTH-CALLBACK-EMAIL-ADMISSION-CONVERGENCE-34A: fail closed
+        // before any upstream call when the credentials would be rejected by
+        // API LoginDto (email @IsEmail). No value is logged or embedded in
+        // the rejection; the admitted pair is forwarded verbatim with the
+        // exact {email,password} shape (no extra keys, no normalization).
+        if (!isAdmittedLoginCredentials(credentials)) {
+          throw new DiagnosticCredentialsSignin('authorize-rejected');
+        }
+        const email = credentials.email;
+        const password = credentials.password;
+
         let res: Response;
         try {
           res = await fetch(`${API}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              email: credentials.email,
-              password: credentials.password,
+              email,
+              password,
             }),
           });
         } catch {
