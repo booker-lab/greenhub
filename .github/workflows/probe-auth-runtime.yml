@@ -41,6 +41,7 @@ on:
       - scripts/probe-auth-identities.spec.mjs
       - scripts/probe-authjs-role-callback.mjs
       - scripts/probe-authjs-role-callback.spec.mjs
+      - scripts/probe-authjs-role-callback.gate-38b.spec.mjs
       - scripts/probe-authjs-role-callback.workflow.spec.mjs
       - .github/workflows/probe-auth-runtime.yml
 
@@ -76,7 +77,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: run probe deterministic spec (mock/local only, no external calls)
-        run: node --test scripts/probe-auth-runtime.spec.mjs scripts/probe-auth-runtime.workflow.spec.mjs scripts/probe-consumer-callback.spec.mjs scripts/probe-consumer-callback.workflow.spec.mjs scripts/probe-auth-identities.spec.mjs scripts/probe-authjs-role-callback.spec.mjs scripts/probe-authjs-role-callback.workflow.spec.mjs
+        run: node --test scripts/probe-auth-runtime.spec.mjs scripts/probe-auth-runtime.workflow.spec.mjs scripts/probe-consumer-callback.spec.mjs scripts/probe-consumer-callback.workflow.spec.mjs scripts/probe-auth-identities.spec.mjs scripts/probe-authjs-role-callback.spec.mjs scripts/probe-authjs-role-callback.gate-38b.spec.mjs scripts/probe-authjs-role-callback.workflow.spec.mjs
 
   approval_gate:
     name: session-only probe approval preflight
@@ -1197,6 +1198,8 @@ jobs:
             observedDeploymentSha: (.observedDeploymentSha // (.deploymentSourceSha // null)),
             artifact,
             authErrorClass,
+            gateClass: (.gateClass // null),
+            preUpstreamDiagnosticCode: (.preUpstreamDiagnosticCode // null),
             callbackLocationClass,
             callbackStatus,
             checkedAt,
@@ -1270,6 +1273,8 @@ jobs:
             observedDeploymentSha: (.observedDeploymentSha // (.deploymentSourceSha // null)),
             artifact,
             authErrorClass,
+            gateClass: (.gateClass // null),
+            preUpstreamDiagnosticCode: (.preUpstreamDiagnosticCode // null),
             callbackLocationClass,
             callbackStatus,
             checkedAt,
