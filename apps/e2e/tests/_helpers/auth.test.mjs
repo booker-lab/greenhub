@@ -217,4 +217,122 @@ describe('Auth.js 콜백 진단 계약', () => {
       assert.deepEqual(nonCommentOwners, []);
     });
   });
+
+  describe('opaque consumer reject stages (g1/g2/g3) compatibility', () => {
+    const BASE = 'https://consumer-preview.example.test';
+
+    function classifiedCategoryForCode(code) {
+      return classifyAuthFailure(
+        evidence({
+          callback: {
+            status: 302,
+            redirected: true,
+            location: {
+              path: '/login',
+              origin: 'same-origin',
+              authjsErrorCode: 'CredentialsSignin',
+              authjsErrorCategory: code,
+            },
+            setCookie: false,
+            setCookieNames: [],
+          },
+        }),
+      );
+    }
+
+    it('plain legacy authorize-rejected를 그대로 지원한다', () => {
+      const sanitized = sanitizeAuthLocation('/login?error=CredentialsSignin&code=authorize-rejected', BASE);
+      assert.equal(sanitized.authjsErrorCategory, 'authorize-rejected');
+      assert.equal(classifiedCategoryForCode('authorize-rejected'), 'AUTHJS_AUTHORIZE_REJECTED');
+      assert.equal(
+        classifiedCategoryForCode(
+          sanitizeAuthLocation('/login?error=CredentialsSignin&code=authorize-rejected', BASE).authjsErrorCategory,
+        ),
+        'AUTHJS_AUTHORIZE_REJECTED',
+      );
+    });
+
+    it('g1/g2/g3를 safe code로 인정하고 AUTHJS_AUTHORIZE_REJECTED로 분류한다', () => {
+      for (const code of ['authorize-rejected__g1', 'authorize-rejected__g2', 'authorize-rejected__g3']) {
+        const sanitized = sanitizeAuthLocation(`/login?error=CredentialsSignin&code=${code}`, BASE);
+        assert.equal(sanitized.authjsErrorCategory, code, code);
+        assert.equal(JSON.stringify(sanitized).includes(code), true);
+        assert.equal(classifiedCategoryForCode(code), 'AUTHJS_AUTHORIZE_REJECTED', code);
+        assert.equal(classifiedCategoryForCode(sanitized.authjsErrorCategory), 'AUTHJS_AUTHORIZE_REJECTED', code);
+      }
+    });
+
+    it('malformed는 unknown으로 fail-closed하고 family로 분류하지 않는다', () => {
+      const malformed = [
+        'authorize-rejected__g4',
+        'authorize-rejected__g1-extra',
+        'authorize-rejected__secret',
+        'authorize-rejected__g1/',
+        'authorize-rejected__G1',
+        'authorize-rejected__g1-secret-missing',
+        'authorize-rejected__g2-secret-mismatch',
+        'authorize-rejected__g3-credential-admission-rejected',
+      ];
+      function classifiedWithoutFallback(code) {
+        return classifyAuthFailure(
+          evidence({
+            callback: {
+              status: 302,
+              redirected: true,
+              location: {
+                path: '/login',
+                origin: 'same-origin',
+                authjsErrorCode: null,
+                authjsErrorCategory: code,
+              },
+              setCookie: false,
+              setCookieNames: [],
+            },
+          }),
+        );
+      }
+      for (const code of malformed) {
+        const sanitized = sanitizeAuthLocation(`/login?error=CredentialsSignin&code=${encodeURIComponent(code)}`, BASE);
+        assert.equal(sanitized.authjsErrorCategory, 'unknown', code);
+        assert.equal(JSON.stringify(sanitized).includes(code), false, code);
+        assert.notEqual(classifiedWithoutFallback(sanitized.authjsErrorCategory), 'AUTHJS_AUTHORIZE_REJECTED', code);
+        assert.notEqual(classifiedWithoutFallback(code), 'AUTHJS_AUTHORIZE_REJECTED', code);
+      }
+    });
+
+    it('upstream-rejected / api-binding-failure 분류를 유지한다', () => {
+      const upstream = sanitizeAuthLocation('/login?error=CredentialsSignin&code=upstream-rejected', BASE);
+      assert.equal(upstream.authjsErrorCategory, 'upstream-rejected');
+      assert.equal(classifiedCategoryForCode('upstream-rejected'), 'UPSTREAM_CREDENTIAL_REJECTED');
+
+      const binding = sanitizeAuthLocation('/login?error=CredentialsSignin&code=api-binding-failure', BASE);
+      assert.equal(binding.authjsErrorCategory, 'api-binding-failure');
+      assert.equal(classifiedCategoryForCode('api-binding-failure'), 'API_BINDING_FAILURE');
+    });
+
+    it('CredentialsSignin / CallbackRouteError fallback을 유지한다', () => {
+      for (const errorCode of ['CredentialsSignin', 'CallbackRouteError']) {
+        assert.equal(
+          classifyAuthFailure(
+            evidence({
+              callback: {
+                status: 302,
+                redirected: true,
+                location: {
+                  path: '/login',
+                  origin: 'same-origin',
+                  authjsErrorCode: errorCode,
+                  authjsErrorCategory: null,
+                },
+                setCookie: false,
+                setCookieNames: [],
+              },
+            }),
+          ),
+          'AUTHJS_AUTHORIZE_REJECTED',
+          errorCode,
+        );
+      }
+    });
+  });
 });
