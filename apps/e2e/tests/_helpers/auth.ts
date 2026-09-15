@@ -53,12 +53,30 @@ export type AuthDiagnosticEvidence = {
   category: AuthFailureCategory | null
 }
 
-const SAFE_AUTH_CODES = new Set([
+/**
+ * authorize-rejected family closed exact allowlist (single semantic owner).
+ *
+ * - plain legacy `authorize-rejected`
+ * - opaque pre-upstream stages `authorize-rejected__g1/g2/g3`
+ *
+ * Exact match only. No prefix/passthrough. Malformed (g4, extra suffix,
+ * secret-derived, case variant, verbose legacy) must stay unknown.
+ */
+const AUTHORIZE_REJECTED_FAMILY: readonly string[] = [
+  'authorize-rejected',
+  'authorize-rejected__g1',
+  'authorize-rejected__g2',
+  'authorize-rejected__g3',
+]
+
+const AUTHORIZE_REJECTED_CODES = new Set<string>(AUTHORIZE_REJECTED_FAMILY)
+
+const SAFE_AUTH_CODES = new Set<string>([
   'CredentialsSignin',
   'CallbackRouteError',
   'AccessDenied',
   'MissingCSRF',
-  'authorize-rejected',
+  ...AUTHORIZE_REJECTED_FAMILY,
   'upstream-rejected',
   'api-binding-failure',
 ])
@@ -138,7 +156,9 @@ export function classifyAuthFailure(evidence: AuthDiagnosticEvidence): AuthFailu
   const errorCategory = callback.location.authjsErrorCategory
 
   if (errorCategory === 'upstream-rejected') return 'UPSTREAM_CREDENTIAL_REJECTED'
-  if (errorCategory === 'authorize-rejected') return 'AUTHJS_AUTHORIZE_REJECTED'
+  if (typeof errorCategory === 'string' && AUTHORIZE_REJECTED_CODES.has(errorCategory)) {
+    return 'AUTHJS_AUTHORIZE_REJECTED'
+  }
   if (errorCategory === 'api-binding-failure') return 'API_BINDING_FAILURE'
   if (callback.status !== null && callback.status >= 500) return 'API_BINDING_FAILURE'
   if (sessionCookieEmitted && !sessionCookiePersisted) {
