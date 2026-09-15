@@ -17,8 +17,10 @@ import { fileURLToPath } from 'node:url';
 import * as callbackModule from './probe-consumer-callback.mjs';
 import {
   APPROVAL_VALUE,
+  CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES,
   CREDENTIAL_SOURCE,
   HEADER_NAME,
+  PRE_UPSTREAM_DIAGNOSTIC_CODES,
   assertInvocationBinding,
 } from './probe-consumer-callback.mjs';
 import { readFileSync as readRunnerSource } from 'node:fs';
@@ -664,5 +666,133 @@ describe('consumer-only exact binding gate (PILOT-AUTH-CONSUMER-ONLY-CALLBACK-BI
     assert.ok(slice.includes('--driver-deployment-id='), 'session binding must keep driver');
     assert.ok(slice.includes('--sha="$AUTH_PROBE_EXPECTED_SHA"'), 'session binding must keep exact SHA');
     assert.ok(!slice.includes('--only='), 'session-probe must never narrow verification with --only');
+  });
+});
+
+describe('consumer diagnostic projection parity (43D)', () => {
+  /** The consumer callback-probe job only (excludes the role-callback-probe job). */
+  function callbackJobOnly(source) {
+    const start = source.indexOf('callback-probe:');
+    assert.ok(start >= 0, 'workflow must contain the callback-probe job');
+    const end = source.indexOf('role-callback-probe:');
+    assert.ok(end > start, 'workflow must contain the role-callback-probe job after callback-probe');
+    return source.slice(start, end);
+  }
+
+  /** Mirrors the consumer callback-summary jq projection for the owned fields. */
+  function projectConsumerCallbackSummary(raw) {
+    return {
+      preUpstreamDiagnosticCode: raw.preUpstreamDiagnosticCode ?? null,
+      upstreamStatus: raw.upstreamStatus ?? null,
+      upstreamOriginFingerprint: raw.upstreamOriginFingerprint ?? null,
+      expectedApiOriginFingerprint: raw.expectedApiOriginFingerprint ?? null,
+      upstreamOriginMatchesExpected: raw.upstreamOriginMatchesExpected ?? null,
+    };
+  }
+
+  /** Mirrors the consumer workflow-summary jq projection for the owned fields. */
+  function projectConsumerWorkflowSummary(callbackSummary) {
+    return {
+      preUpstreamDiagnosticCode: callbackSummary.preUpstreamDiagnosticCode ?? null,
+      upstreamStatus: callbackSummary.upstreamStatus ?? null,
+      upstreamOriginFingerprint: callbackSummary.upstreamOriginFingerprint ?? null,
+      expectedApiOriginFingerprint: callbackSummary.expectedApiOriginFingerprint ?? null,
+      upstreamOriginMatchesExpected: callbackSummary.upstreamOriginMatchesExpected ?? null,
+    };
+  }
+
+  it('1: detailed G1/G2/G3 diagnostic survives raw -> callback-summary (consumer job only)', () => {
+    const slice = callbackJobOnly(readWorkflow());
+    assert.ok(
+      slice.includes('preUpstreamDiagnosticCode: (.preUpstreamDiagnosticCode // null)'),
+      'consumer callback-summary must preserve preUpstreamDiagnosticCode (driver parity)',
+    );
+    assert.deepEqual(
+      [...CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES].sort(),
+      [
+        'authorize-rejected__g1-secret-missing',
+        'authorize-rejected__g2-secret-mismatch',
+        'authorize-rejected__g3-credential-admission-rejected',
+      ].sort(),
+      'consumer allowlist must stay exactly the G1/G2/G3 static tokens',
+    );
+    for (const code of CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES) {
+      assert.ok(PRE_UPSTREAM_DIAGNOSTIC_CODES.includes(code), `allowlisted code must pass the runner gate: ${code}`);
+      const projected = projectConsumerCallbackSummary({
+        preUpstreamDiagnosticCode: code,
+        upstreamStatus: null,
+        upstreamOriginFingerprint: null,
+        expectedApiOriginFingerprint: null,
+        upstreamOriginMatchesExpected: null,
+      });
+      assert.equal(projected.preUpstreamDiagnosticCode, code);
+    }
+  });
+
+  it('2: same diagnostic value survives callback-summary -> workflow-summary', () => {
+    const slice = callbackJobOnly(readWorkflow());
+    assert.ok(
+      slice.includes('preUpstreamDiagnosticCode: ($callback[0].preUpstreamDiagnosticCode // null)'),
+      'consumer workflow-summary must preserve preUpstreamDiagnosticCode (driver parity)',
+    );
+    for (const code of CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES) {
+      const callbackSummary = projectConsumerCallbackSummary({ preUpstreamDiagnosticCode: code });
+      const workflowSummary = projectConsumerWorkflowSummary(callbackSummary);
+      assert.equal(workflowSummary.preUpstreamDiagnosticCode, code);
+    }
+  });
+
+  it('3: absent diagnostic projects as null (no fabrication)', () => {
+    const callbackSummary = projectConsumerCallbackSummary({});
+    assert.equal(callbackSummary.preUpstreamDiagnosticCode, null);
+    const workflowSummary = projectConsumerWorkflowSummary(callbackSummary);
+    assert.equal(workflowSummary.preUpstreamDiagnosticCode, null);
+    const explicitNull = projectConsumerWorkflowSummary(
+      projectConsumerCallbackSummary({ preUpstreamDiagnosticCode: null }),
+    );
+    assert.equal(explicitNull.preUpstreamDiagnosticCode, null);
+  });
+
+  it('4: diagnostic projection exposes no raw Location/credential/secret values', () => {
+    const slice = callbackJobOnly(readWorkflow());
+    for (const forbidden of [
+      'preUpstreamDiagnosticCode: "',
+      "preUpstreamDiagnosticCode: '",
+      'upstreamOrigin: (',
+      'upstreamOrigin:($',
+      'expectedApiOrigin: (',
+      'expectedApiOrigin:($',
+      'raw Location',
+    ]) {
+      assert.ok(!slice.includes(forbidden), `consumer job must not contain ${forbidden}`);
+    }
+    for (const code of CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES) {
+      const serialized = JSON.stringify(
+        projectConsumerWorkflowSummary(projectConsumerCallbackSummary({ preUpstreamDiagnosticCode: code })),
+      );
+      assert.ok(!serialized.includes('@'), 'projected diagnostic must not contain email values');
+      assert.ok(!serialized.includes('http'), 'projected diagnostic must not contain raw URLs');
+      assert.ok(!serialized.includes('dpl_'), 'projected diagnostic must not contain deployment IDs');
+    }
+  });
+
+  it('5: upstream quartet contract is preserved in both projections', () => {
+    const slice = callbackJobOnly(readWorkflow());
+    for (const field of [
+      'upstreamStatus: (.upstreamStatus',
+      'upstreamOriginFingerprint: (.upstreamOriginFingerprint',
+      'expectedApiOriginFingerprint: (.expectedApiOriginFingerprint',
+      'upstreamOriginMatchesExpected: (.upstreamOriginMatchesExpected',
+    ]) {
+      assert.ok(slice.includes(field), `consumer callback-summary must preserve ${field}`);
+    }
+    for (const field of [
+      'upstreamStatus: ($callback[0].upstreamStatus',
+      'upstreamOriginFingerprint: ($callback[0].upstreamOriginFingerprint',
+      'expectedApiOriginFingerprint: ($callback[0].expectedApiOriginFingerprint',
+      'upstreamOriginMatchesExpected: ($callback[0].upstreamOriginMatchesExpected',
+    ]) {
+      assert.ok(slice.includes(field), `consumer workflow-summary must preserve ${field}`);
+    }
   });
 });
