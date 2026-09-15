@@ -31,11 +31,12 @@
  * - Unknown paths fail OPEN (BUILD): a new top-level config or package must
  *   never be silently skipped.
  *
- * Exact-preview provisioning (PILOT-AUTH-EXACT-REF-42A): refs
- * `preview-exact/<consumer|seller|both>/<sha>` bypass the empty-delta SKIP
+ * Exact-preview provisioning (PILOT-AUTH-EXACT-REF-42A + DRIVER-43A): refs
+ * `preview-exact/<consumer|seller|driver|both>/<sha>` bypass the empty-delta SKIP
  * via shouldBypassIgnoreForExactPreview() so a requested exact SHA always
- * builds. All other refs use the standard predicate unchanged; production
- * and driver never bypass.
+ * builds. `both` covers consumer + seller only; `driver` covers driver only.
+ * All other refs use the standard predicate unchanged; production
+ * never bypasses.
  *
  * Runtime needs: `node` + `git` only. No dependencies, no install step.
  */
@@ -52,18 +53,20 @@ export const EXIT_BUILD = 1;
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 
-// Exact-preview provisioning bypass (PILOT-AUTH-EXACT-REF-PREVIEW-PROVISIONING-CAPABILITY-42A).
+// Exact-preview provisioning bypass (PILOT-AUTH-EXACT-REF-PREVIEW-PROVISIONING-CAPABILITY-42A
+// + PILOT-AUTH-DRIVER-EXACT-PREVIEW-CAPABILITY-43A).
 //
 // Diagnostic/runtime-proof refs `preview-exact/<scope>/<sha>` trigger the
 // existing Vercel Git integration with githubCommitSha == requested exact SHA
 // (no new merge commit, no main mutation). The normal `preview` sync flow
 // never uses this prefix, so the bypass cannot leak into regular Git
-// integration builds. Production is never bypassed. Driver is out of scope:
-// `both` covers consumer + seller only.
+// integration builds. Production is never bypassed. `both` covers
+// consumer + seller only; `driver` is an independent single scope covering
+// driver only.
 export const EXACT_PREVIEW_PROVISIONING_REF_PREFIX = 'preview-exact/';
-export const EXACT_PREVIEW_PROVISIONING_SCOPES = Object.freeze(['consumer', 'seller', 'both']);
+export const EXACT_PREVIEW_PROVISIONING_SCOPES = Object.freeze(['consumer', 'seller', 'driver', 'both']);
 export const EXACT_PREVIEW_PROVISIONING_REF_PATTERN =
-  /^preview-exact\/(consumer|seller|both)\/[0-9a-f]{40}$/;
+  /^preview-exact\/(consumer|seller|driver|both)\/[0-9a-f]{40}$/;
 
 // Files read by `pnpm install` or by `next build` (via @greenhub/shared or the
 // font prebuild) of every frontend app. A change here must rebuild all three.
@@ -151,11 +154,11 @@ function isOtherWorkspaceScope(posixPath) {
  * Fail-closed: any malformed ref/sha, scope/app mismatch, or production
  * environment returns { bypass: false }. Only an exact
  * `preview-exact/<scope>/<sha>` ref whose sha suffix equals the deployment
- * commit SHA bypasses the empty-delta SKIP. `both` covers consumer + seller;
- * driver never bypasses via this mechanism.
+ * commit SHA bypasses the empty-delta SKIP. `both` covers consumer + seller
+ * only (never driver); `driver` covers driver only (never consumer/seller).
  */
 export function shouldBypassIgnoreForExactPreview({ app, ref, sha, vercelEnv = null }) {
-  if (app !== 'consumer' && app !== 'seller') return { bypass: false, reason: 'not a provisioned app' };
+  if (app !== 'consumer' && app !== 'seller' && app !== 'driver') return { bypass: false, reason: 'not a provisioned app' };
   if (vercelEnv != null && String(vercelEnv).trim().toLowerCase() === 'production') {
     return { bypass: false, reason: 'production target never bypasses' };
   }
@@ -173,7 +176,11 @@ export function shouldBypassIgnoreForExactPreview({ app, ref, sha, vercelEnv = n
   if (refSha !== normalizedSha) {
     return { bypass: false, reason: 'ref SHA suffix does not match deployment commit SHA' };
   }
-  if (refScope !== app && refScope !== 'both') {
+  if (refScope === 'both') {
+    if (app !== 'consumer' && app !== 'seller') {
+      return { bypass: false, reason: `scope both does not cover ${app}` };
+    }
+  } else if (refScope !== app) {
     return { bypass: false, reason: `scope ${refScope} does not cover ${app}` };
   }
   return {

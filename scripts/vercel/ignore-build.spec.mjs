@@ -26,6 +26,7 @@ import {
   APPS,
   decideForChangedFiles,
   resolveAppSourceDirs,
+  shouldBypassIgnoreForExactPreview,
 } from './ignore-build.mjs';
 
 const SCRIPT_PATH = fileURLToPath(new URL('./ignore-build.mjs', import.meta.url));
@@ -329,4 +330,77 @@ test('integration: missing base fails OPEN (BUILD)', () => {
 test('cli: unknown app fails OPEN (BUILD)', () => {
   const result = runNode(['--app', 'nope', '--repo', REPO_ROOT]);
   assert.equal(result.exitCode, 1);
+});
+
+// ---------------------------------------------------------------------------
+// 4. Exact-preview bypass: driver single scope (PILOT-AUTH-43A)
+// ---------------------------------------------------------------------------
+// `both` covers consumer + seller only; `driver` covers driver only.
+// Normal predicate above is unchanged; this block only pins the bypass.
+
+const DRIVER_BYPASS_SHA = '58e4c0128cf51cb96aea2529d1428f28172a7822';
+const DRIVER_OTHER_SHA = 'b'.repeat(40);
+
+test('exact-preview bypass: driver + exact driver ref builds', () => {
+  const ref = `preview-exact/driver/${DRIVER_BYPASS_SHA}`;
+  assert.equal(
+    shouldBypassIgnoreForExactPreview({ app: 'driver', ref, sha: DRIVER_BYPASS_SHA }).bypass,
+    true,
+  );
+});
+
+test('exact-preview bypass: cross-scope refs never bypass driver', () => {
+  for (const ref of [
+    `preview-exact/consumer/${DRIVER_BYPASS_SHA}`,
+    `preview-exact/seller/${DRIVER_BYPASS_SHA}`,
+    `preview-exact/both/${DRIVER_BYPASS_SHA}`,
+  ]) {
+    assert.equal(
+      shouldBypassIgnoreForExactPreview({ app: 'driver', ref, sha: DRIVER_BYPASS_SHA }).bypass,
+      false,
+      `${ref} must not bypass driver`,
+    );
+  }
+  for (const app of ['consumer', 'seller']) {
+    assert.equal(
+      shouldBypassIgnoreForExactPreview({ app, ref: `preview-exact/driver/${DRIVER_BYPASS_SHA}`, sha: DRIVER_BYPASS_SHA }).bypass,
+      false,
+      `driver ref must not bypass ${app}`,
+    );
+  }
+});
+
+test('exact-preview bypass: driver normal refs/production/mismatch never bypass', () => {
+  for (const ref of ['preview', 'main', 'tmp/anything-publication']) {
+    assert.equal(
+      shouldBypassIgnoreForExactPreview({ app: 'driver', ref, sha: DRIVER_BYPASS_SHA }).bypass,
+      false,
+      `${ref} must not bypass driver`,
+    );
+  }
+  assert.equal(
+    shouldBypassIgnoreForExactPreview({
+      app: 'driver',
+      ref: `preview-exact/driver/${DRIVER_BYPASS_SHA}`,
+      sha: DRIVER_BYPASS_SHA,
+      vercelEnv: 'production',
+    }).bypass,
+    false,
+  );
+  assert.equal(
+    shouldBypassIgnoreForExactPreview({
+      app: 'driver',
+      ref: `preview-exact/driver/${DRIVER_BYPASS_SHA}`,
+      sha: DRIVER_OTHER_SHA,
+    }).bypass,
+    false,
+  );
+  assert.equal(
+    shouldBypassIgnoreForExactPreview({
+      app: 'driver',
+      ref: `preview-exact/driver/${DRIVER_BYPASS_SHA}`,
+      sha: 'short',
+    }).bypass,
+    false,
+  );
 });
