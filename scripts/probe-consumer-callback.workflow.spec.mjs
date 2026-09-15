@@ -614,3 +614,55 @@ describe('callback upstream diagnostic evidence wiring (31A)', () => {
     );
   });
 });
+
+describe('consumer-only exact binding gate (PILOT-AUTH-CONSUMER-ONLY-CALLBACK-BINDING-42B)', () => {
+  /** The callback-probe job only (excludes the role-callback-probe job). */
+  function callbackJobOnly(source) {
+    const start = source.indexOf('callback-probe:');
+    assert.ok(start >= 0, 'workflow must contain the callback-probe job');
+    const end = source.indexOf('role-callback-probe:');
+    assert.ok(end > start, 'workflow must contain the role-callback-probe job after callback-probe');
+    return source.slice(start, end);
+  }
+
+  it('callback-probe binds the Consumer deployment with --only=consumer', () => {
+    const slice = callbackJobOnly(readWorkflow());
+    assert.ok(slice.includes('node scripts/wait-preview-deploy.mjs'), 'callback binding must reuse wait-preview-deploy');
+    assert.ok(
+      slice.includes('--sha="$AUTH_CALLBACK_EXPECTED_SHA"'),
+      'consumer-only binding must keep the invocation exact SHA',
+    );
+    assert.ok(
+      slice.includes('--consumer-deployment-id="$AUTH_CALLBACK_CONSUMER_DEPLOYMENT_ID"'),
+      'consumer-only binding must pass the pinned Consumer deployment ID',
+    );
+    assert.ok(slice.includes('--only=consumer'), 'consumer-only binding must select --only=consumer');
+    assert.ok(
+      slice.includes('locked Consumer deployment binding'),
+      'consumer-only binding step must stay explicit',
+    );
+  });
+
+  it('seller/driver deployment state cannot enter the Consumer callback verdict', () => {
+    const slice = callbackJobOnly(readWorkflow());
+    assert.ok(!slice.includes('--seller-deployment-id='), 'consumer-only binding must not require seller binding');
+    assert.ok(!slice.includes('--driver-deployment-id='), 'consumer-only binding must not require driver binding');
+    assert.ok(
+      !slice.includes('AUTH_CALLBACK_SELLER_DEPLOYMENT_ID'),
+      'consumer-only job must not forward the seller deployment ID',
+    );
+    assert.ok(
+      !slice.includes('AUTH_CALLBACK_DRIVER_DEPLOYMENT_ID'),
+      'consumer-only job must not forward the driver deployment ID',
+    );
+  });
+
+  it('session-probe keeps the triple binding (no --only weakening)', () => {
+    const slice = sessionSlice(readWorkflow());
+    assert.ok(slice.includes('--consumer-deployment-id='), 'session binding must keep consumer');
+    assert.ok(slice.includes('--seller-deployment-id='), 'session binding must keep seller');
+    assert.ok(slice.includes('--driver-deployment-id='), 'session binding must keep driver');
+    assert.ok(slice.includes('--sha="$AUTH_PROBE_EXPECTED_SHA"'), 'session binding must keep exact SHA');
+    assert.ok(!slice.includes('--only='), 'session-probe must never narrow verification with --only');
+  });
+});
