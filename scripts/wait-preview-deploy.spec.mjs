@@ -7,6 +7,7 @@ import {
   normalizeTargetUrl,
   PREVIEW_APPS,
   requestVercelDeployment,
+  resolveSelectedAppConfigs,
   VERCEL_API_ORIGIN,
   VERCEL_CREDENTIAL_NAME,
   VERCEL_TEAM_ID,
@@ -380,5 +381,149 @@ describe('Vercel pinned Preview deployment metadata 증거 계약', () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0].init.headers.Authorization, 'Bearer opaque-test-token');
     assert.equal(VERCEL_CREDENTIAL_NAME, 'ROUND_DIRECT_E2E_VERCEL_READ_TOKEN');
+  });
+});
+
+describe('Driver-only bounded exact binding (PILOT-AUTH-DRIVER-ONLY-EXACT-BINDING-GATE-40B)', () => {
+  function collectDriverOnly(deployments, { expectedSha = SHA, ids = null } = {}) {
+    const calls = [];
+    const request = async (deploymentId, app) => {
+      calls.push({ deploymentId, app });
+      return deployments[app];
+    };
+    const deploymentIds = ids ?? { driver: DEPLOYMENT_IDS.driver };
+    return {
+      calls,
+      promise: collectDeploymentEvidence(expectedSha, deploymentIds, {
+        request,
+        only: 'driver',
+      }),
+    };
+  }
+
+  it('default는 seller CANCELED면 FAIL을 유지한다 (triple preserved)', async () => {
+    const deployments = validDeployments({
+      seller: { state: 'CANCELED', readyState: 'CANCELED' },
+    });
+    const evidence = await collectWith(deployments).promise;
+
+    assert.equal(evidence.ready, false);
+    assert.equal(evidence.apps.length, 3);
+    assert.equal(evidence.apps.find(({ app }) => app === 'seller').failureCode, 'VERCEL_NOT_READY');
+    assert.equal(evidence.apps.find(({ app }) => app === 'driver').ready, true);
+  });
+
+  it('Driver-only는 consumer/seller CANCELED에도 driver READY+exact SHA면 PASS한다', async () => {
+    // Consumer/Seller 상태는 Driver-only 결과에 들어가지 않는다: request는
+    // driver pinned ID만 조회하고, evidence apps는 driver 1건만 포함한다.
+    const deployments = {
+      driver: validDeployment('driver'),
+    };
+    const { promise, calls } = collectDriverOnly(deployments);
+    const evidence = await promise;
+
+    assert.equal(evidence.ready, true);
+    assert.deepEqual(evidence.selectedApps, ['driver']);
+    assert.equal(evidence.apps.length, 1);
+    assert.equal(evidence.apps[0].app, 'driver');
+    assert.equal(evidence.apps[0].ready, true);
+    assert.equal(evidence.apps[0].deploymentSha, SHA);
+    assert.equal(evidence.deploymentShas.driver, SHA);
+    assert.ok(String(evidence.deploymentTargetUrls.driver ?? '').startsWith('https://'));
+    assert.deepEqual(
+      calls.map(({ deploymentId }) => deploymentId),
+      [DEPLOYMENT_IDS.driver],
+    );
+    // Self-fulfilling 방지: observed가 아닌 expected 기준 검증이며,
+    // consumer/seller 키가 결과에 존재하지 않는다.
+    assert.equal(Object.hasOwn(evidence.deploymentShas, 'consumer'), false);
+    assert.equal(Object.hasOwn(evidence.deploymentShas, 'seller'), false);
+    assert.equal(Object.hasOwn(evidence.pinnedDeploymentIds, 'consumer'), false);
+    assert.equal(Object.hasOwn(evidence.pinnedDeploymentIds, 'seller'), false);
+  });
+
+  it('Driver-only는 driver CANCELED면 FAIL한다', async () => {
+    const deployments = {
+      driver: validDeployment('driver', { state: 'CANCELED', readyState: 'CANCELED' }),
+    };
+    const evidence = await collectDriverOnly(deployments).promise;
+
+    assert.equal(evidence.ready, false);
+    assert.equal(evidence.apps[0].failureCode, 'VERCEL_NOT_READY');
+    assert.equal(evidence.apps[0].retryable, false);
+  });
+
+  it('Driver-only는 driver READY라도 SHA mismatch면 FAIL한다', async () => {
+    const deployments = {
+      driver: validDeployment('driver', { meta: { githubCommitSha: OTHER_SHA } }),
+    };
+    const evidence = await collectDriverOnly(deployments).promise;
+
+    assert.equal(evidence.ready, false);
+    assert.equal(evidence.apps[0].failureCode, 'VERCEL_GITHUB_COMMIT_SHA_MISMATCH');
+    assert.equal(evidence.apps[0].deploymentSha, OTHER_SHA);
+  });
+
+  it('Driver-only는 wrong project/repository/deployment ID를 FAIL한다', async () => {
+    const wrongProject = {
+      driver: validDeployment('driver', {
+        projectId: 'prj_wrong',
+        project: { id: 'prj_wrong', name: 'wrong-project' },
+        name: 'wrong-project',
+      }),
+    };
+    const wrongProjectEvidence = await collectDriverOnly(wrongProject).promise;
+    assert.equal(wrongProjectEvidence.ready, false);
+    assert.equal(wrongProjectEvidence.apps[0].failureCode, 'VERCEL_PROJECT_MISMATCH');
+
+    const wrongId = {
+      driver: validDeployment('driver', { id: 'dpl_WrongId00000000', uid: 'dpl_WrongId00000000' }),
+    };
+    const wrongIdEvidence = await collectDriverOnly(wrongId).promise;
+    assert.equal(wrongIdEvidence.ready, false);
+    assert.equal(wrongIdEvidence.apps[0].failureCode, 'VERCEL_DEPLOYMENT_ID_MISMATCH');
+  });
+
+  it('Driver-only는 production target이면 FAIL한다', async () => {
+    const deployments = {
+      driver: validDeployment('driver', { target: 'production' }),
+    };
+    const evidence = await collectDriverOnly(deployments).promise;
+
+    assert.equal(evidence.ready, false);
+    assert.equal(evidence.apps[0].failureCode, 'VERCEL_TARGET_NOT_PREVIEW');
+  });
+
+  it('--only 알 수 없는 앱은 fail-closed한다', async () => {
+    await assert.rejects(
+      collectDeploymentEvidence(SHA, DEPLOYMENT_IDS, { request: async () => ({}) , only: 'unknown-app' }),
+      (error) => error?.code === 'UNKNOWN_PREVIEW_APP',
+    );
+    assert.throws(() => resolveSelectedAppConfigs('unknown-app'), (error) => error?.code === 'UNKNOWN_PREVIEW_APP');
+  });
+
+  it('default --only 없음은 세 앱을 모두 요구한다', () => {
+    assert.deepEqual(
+      resolveSelectedAppConfigs(null).map(({ app }) => app),
+      ['consumer', 'seller', 'driver'],
+    );
+    assert.deepEqual(
+      resolveSelectedAppConfigs('').map(({ app }) => app),
+      ['consumer', 'seller', 'driver'],
+    );
+    assert.deepEqual(
+      resolveSelectedAppConfigs('driver').map(({ app }) => app),
+      ['driver'],
+    );
+  });
+
+  it('Driver-only는 driver deployment ID만 요구한다 (consumer/seller 불필요)', async () => {
+    await assert.rejects(
+      collectDeploymentEvidence(SHA, {}, { request: async () => ({}), only: 'driver' }),
+      (error) => error?.code === 'DEPLOYMENT_ID_REQUIRED',
+    );
+    const deployments = { driver: validDeployment('driver') };
+    const evidence = await collectDriverOnly(deployments).promise;
+    assert.equal(evidence.ready, true);
   });
 });
