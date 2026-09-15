@@ -1,6 +1,7 @@
 /**
  * PILOT-AUTH-SELLER-DRIVER-AUTHJS-BOUNDARY-PROBE-GAP-CLOSURE-34B workflow
- * contract spec for scripts/probe-authjs-role-callback.mjs.
+ * contract spec for scripts/probe-authjs-role-callback.mjs, extended by
+ * PILOT-AUTH-DRIVER-ONLY-EXACT-BINDING-GATE-40B (driver-only exact binding).
  *
  * Deterministic only: reads .github/workflows/probe-auth-runtime.yml as text
  * plus the role runner source. No network, no secrets, no external mutation.
@@ -43,6 +44,20 @@ function callbackSlice(source) {
   return source.slice(start, end >= 0 ? end : source.length);
 }
 
+function roleSlice(source) {
+  const start = source.indexOf('role-callback-probe:');
+  assert.ok(start >= 0, 'workflow must contain the role-callback-probe job');
+  const end = source.indexOf('auth_identity_cleanup:');
+  return source.slice(start, end >= 0 ? end : source.length);
+}
+
+function sessionSlice(source) {
+  const start = source.indexOf('session-probe:');
+  assert.ok(start >= 0, 'workflow must contain the session-probe job');
+  const end = source.indexOf('callback-probe:');
+  return source.slice(start, end >= 0 ? end : source.length);
+}
+
 describe('role runner invocation-scoped binding contract (34B)', () => {
   it('role runner uses invocation-scoped binding (no static lock)', () => {
     assert.equal('LOCKED_DEPLOYMENT_ID' in roleModule, false);
@@ -73,30 +88,39 @@ describe('role runner invocation-scoped binding contract (34B)', () => {
   });
 });
 
-describe('workflow seller/driver probe invocation (34B)', () => {
-  it('workflow invokes the role probe for seller', () => {
+describe('workflow seller/driver probe invocation (34B, driver-only 40B)', () => {
+  it('workflow invokes the role probe for driver (driver-only)', () => {
     const source = readWorkflow();
+    const slice = roleSlice(source);
     assert.ok(
       source.includes('scripts/probe-authjs-role-callback.mjs'),
       'workflow must reference the role callback runner',
     );
     assert.ok(
-      source.includes('--role=seller') || source.includes("--role='seller'") || source.includes('--role="seller"'),
-      'workflow must invoke the role probe with --role=seller',
+      slice.includes('--role=driver') || slice.includes("--role='driver'") || slice.includes('--role="driver"'),
+      'role-callback-probe must invoke the role probe with --role=driver',
     );
   });
 
-  it('workflow invokes the role probe for driver', () => {
-    const source = readWorkflow();
+  it('driver-only boundary does not gate driver on seller (40B)', () => {
+    const slice = roleSlice(readWorkflow());
     assert.ok(
-      source.includes('--role=driver') || source.includes("--role='driver'") || source.includes('--role="driver"'),
-      'workflow must invoke the role probe with --role=driver',
+      !slice.includes('--role=seller'),
+      'role-callback-probe must not invoke --role=seller in the driver-only boundary (seller is follow-up)',
+    );
+    assert.ok(
+      !slice.includes('--seller-deployment-id='),
+      'driver-only binding must not require --seller-deployment-id',
+    );
+    assert.ok(
+      !slice.includes('--consumer-deployment-id='),
+      'driver-only binding must not require --consumer-deployment-id',
     );
   });
 
   it('role invocations bind exact deployment/SHA explicitly (no latest/fallback)', () => {
     const source = readWorkflow();
-    const slice = callbackSlice(source);
+    const slice = roleSlice(source);
     assert.ok(slice.includes('--expected-sha='), 'role probe must bind --expected-sha explicitly');
     assert.ok(slice.includes('--deployment-id='), 'role probe must bind --deployment-id explicitly');
     assert.ok(slice.includes('--target-url='), 'role probe must bind --target-url explicitly');
@@ -111,30 +135,21 @@ describe('workflow seller/driver probe invocation (34B)', () => {
     assert.ok(!/branch-tip substitution/i.test(withoutRunnerImage) || true);
   });
 
-  it('seller invocation uses the approved seller credential + bypass mapping', () => {
-    const source = readWorkflow();
-    const slice = callbackSlice(source);
+  it('seller credential mapping is not required in the driver-only job (40B follow-up)', () => {
+    const slice = roleSlice(readWorkflow());
     assert.ok(
-      slice.includes('ROUND_DIRECT_E2E_SELLER_EMAIL_CHROMIUM'),
-      'seller probe must use the approved seller email secret',
+      !slice.includes('ROUND_DIRECT_E2E_SELLER_EMAIL_CHROMIUM'),
+      'driver-only role job must not bind the seller email secret',
     );
     assert.ok(
-      slice.includes('ROUND_DIRECT_E2E_SELLER_PASSWORD_CHROMIUM'),
-      'seller probe must use the approved seller password secret',
-    );
-    assert.ok(
-      slice.includes('ROUND_DIRECT_E2E_TEST_SECRET'),
-      'seller probe must use the approved E2E_TEST_SECRET mapping',
-    );
-    assert.ok(
-      slice.includes('ROUND_DIRECT_E2E_SELLER_BYPASS_SECRET'),
-      'seller probe must map the existing seller bypass secret (no new secret)',
+      !slice.includes('ROUND_DIRECT_E2E_SELLER_BYPASS_SECRET'),
+      'driver-only role job must not bind the seller bypass secret',
     );
   });
 
   it('driver invocation uses the approved driver credential + bypass mapping', () => {
     const source = readWorkflow();
-    const slice = callbackSlice(source);
+    const slice = roleSlice(source);
     assert.ok(
       slice.includes('ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM'),
       'driver probe must use the approved driver email secret',
@@ -155,7 +170,7 @@ describe('workflow seller/driver probe invocation (34B)', () => {
 
   it('role probes run in the approved non-production environment only', () => {
     const source = readWorkflow();
-    const slice = callbackSlice(source);
+    const slice = roleSlice(source);
     assert.ok(slice.includes('round-direct-e2e'), 'role probes must run in the round-direct-e2e environment');
     assert.ok(
       slice.includes('NON_PRODUCTION_AUTH_PROBE_APPROVED'),
@@ -201,11 +216,70 @@ describe('workflow seller/driver probe invocation (34B)', () => {
   });
 });
 
-describe('driver gate artifact projection (39A)', () => {
+describe('driver-only exact binding gate (PILOT-AUTH-DRIVER-ONLY-EXACT-BINDING-GATE-40B)', () => {
+  it('session-probe keeps the triple binding (no --only weakening)', () => {
+    const slice = sessionSlice(readWorkflow());
+    assert.ok(slice.includes('--consumer-deployment-id='), 'session binding must keep consumer');
+    assert.ok(slice.includes('--seller-deployment-id='), 'session binding must keep seller');
+    assert.ok(slice.includes('--driver-deployment-id='), 'session binding must keep driver');
+    assert.ok(slice.includes('--sha="$AUTH_PROBE_EXPECTED_SHA"'), 'session binding must keep exact SHA');
+    assert.ok(!slice.includes('--only='), 'session-probe must never narrow verification with --only');
+  });
+
+  it('role-callback-probe uses driver-only exact binding', () => {
+    const slice = roleSlice(readWorkflow());
+    assert.ok(slice.includes('node scripts/wait-preview-deploy.mjs'), 'role binding must reuse wait-preview-deploy');
+    assert.ok(slice.includes('--sha="$ROLE_CALLBACK_EXPECTED_SHA"'), 'driver-only binding must keep exact SHA');
+    assert.ok(
+      slice.includes('--driver-deployment-id="$ROLE_CALLBACK_DRIVER_DEPLOYMENT_ID"'),
+      'driver-only binding must pass the pinned driver deployment ID',
+    );
+    assert.ok(slice.includes('--only=driver'), 'driver-only binding must select --only=driver');
+    assert.ok(
+      slice.includes('locked Driver deployment binding'),
+      'driver-only binding step must be explicit',
+    );
+    // Consumer/Seller must not enter the driver-only PASS/FAIL verdict.
+    assert.ok(!slice.includes('--consumer-deployment-id='), 'driver-only must not require consumer binding');
+    assert.ok(!slice.includes('--seller-deployment-id='), 'driver-only must not require seller binding');
+  });
+
+  it('driver callback keeps the VERCEL_AUTOMATION_BYPASS_SECRET binding', () => {
+    const slice = roleSlice(readWorkflow());
+    assert.ok(
+      slice.includes('VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_BYPASS_SECRET }}'),
+      'driver job must map VERCEL_AUTOMATION_BYPASS_SECRET from the approved driver bypass secret',
+    );
+    assert.ok(
+      slice.includes('--protection-passage-mode="AUTOMATION_BYPASS"'),
+      'driver invocation must select AUTOMATION_BYPASS',
+    );
+    assert.ok(
+      slice.includes('ROUND_DIRECT_E2E_DRIVER_BYPASS_SECRET'),
+      'driver job must reference the approved driver bypass secret name (value never logged)',
+    );
+    assert.ok(
+      slice.includes('ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM') &&
+        slice.includes('ROUND_DIRECT_E2E_DRIVER_PASSWORD_CHROMIUM') &&
+        slice.includes('ROUND_DIRECT_E2E_SHARED_SECRET'),
+      'driver credential mapping must be preserved (no new secret)',
+    );
+  });
+
+  it('deterministic probe-spec and PR triggers cover the bounded verifier', () => {
+    const source = readWorkflow();
+    assert.ok(
+      source.includes('scripts/wait-preview-deploy.spec.mjs'),
+      'probe-spec must run the bounded verifier deterministic spec',
+    );
+    for (const trigger of ['scripts/wait-preview-deploy.mjs', 'scripts/wait-preview-deploy.spec.mjs']) {
+      assert.ok(source.includes(trigger), `pull_request paths must include ${trigger}`);
+    }
+  });
+});
+
+describe('driver gate artifact projection (39A, driver-only 40B)', () => {
   function roleSummarySlice(source, summaryName) {
-    // The jq projection writes to evidence/<summaryName>-summary.json; the jq
-    // block immediately precedes that redirect. Use the summary marker (not
-    // the earlier raw redirect) so the window covers the jq accessors.
     const marker = `evidence/${summaryName}-summary.json`;
     const idx = source.indexOf(marker);
     assert.ok(idx >= 0, `workflow must project ${summaryName}-summary.json`);
@@ -214,10 +288,6 @@ describe('driver gate artifact projection (39A)', () => {
   }
 
   function projectRoleSummary(raw) {
-    // Mirrors the workflow jq: `gateClass: (.gateClass // null)` and
-    // `preUpstreamDiagnosticCode: (.preUpstreamDiagnosticCode // null)`.
-    // Only the two gate fields plus the preserved legacy fields are modeled;
-    // the workflow must not drop legacy fields (checked separately via text).
     return {
       authErrorClass: raw.authErrorClass ?? null,
       gateClass: raw.gateClass ?? null,
@@ -230,20 +300,20 @@ describe('driver gate artifact projection (39A)', () => {
     };
   }
 
-  it('1: gateClass survives raw probe -> role summary -> uploaded workflow evidence', () => {
+  it('1: gateClass survives raw probe -> driver summary -> uploaded workflow evidence (driver-only)', () => {
     const source = readWorkflow();
     assert.ok(
       source.includes('scripts/probe-authjs-role-callback.gate-38b.spec.mjs'),
       'probe-spec must run the 38B gate deterministic spec',
     );
-    for (const summaryName of ['seller', 'driver']) {
-      const slice = roleSummarySlice(source, summaryName);
-      assert.ok(slice.includes('gateClass: (.gateClass // null)'), `${summaryName} projection must preserve gateClass`);
-      assert.ok(
-        slice.includes('preUpstreamDiagnosticCode: (.preUpstreamDiagnosticCode // null)'),
-        `${summaryName} projection must preserve preUpstreamDiagnosticCode`,
-      );
-    }
+    // Driver-only boundary: only the driver summary exists (seller is
+    // follow-up and has no summary in the role job).
+    const slice = roleSummarySlice(source, 'driver');
+    assert.ok(slice.includes('gateClass: (.gateClass // null)'), 'driver projection must preserve gateClass');
+    assert.ok(
+      slice.includes('preUpstreamDiagnosticCode: (.preUpstreamDiagnosticCode // null)'),
+      'driver projection must preserve preUpstreamDiagnosticCode',
+    );
     const raw = buildRoleArtifact({
       role: 'driver',
       authErrorClass: 'authorize-rejected',
@@ -269,8 +339,7 @@ describe('driver gate artifact projection (39A)', () => {
 
   it('2: no gate is fabricated when absent', () => {
     const source = readWorkflow();
-    // Fallback is null-coalescing, never a hardcoded gate literal.
-    assert.ok(!source.includes("gateClass: \"RUNTIME_DISABLED\""), 'workflow must not hardcode a gate');
+    assert.ok(!source.includes('gateClass: "RUNTIME_DISABLED"'), 'workflow must not hardcode a gate');
     assert.ok(!source.includes("gateClass: 'RUNTIME_DISABLED'"), 'workflow must not hardcode a gate');
     const sellerRaw = buildRoleArtifact({
       role: 'seller',
@@ -298,10 +367,9 @@ describe('driver gate artifact projection (39A)', () => {
     );
   });
 
-  it('3: seller behavior remains backward compatible', () => {
+  it('3: driver behavior remains backward compatible (driver-only)', () => {
     const source = readWorkflow();
-    const sellerSlice = roleSummarySlice(source, 'seller');
-    // Legacy seller fields must still be projected verbatim.
+    const driverSlice = roleSummarySlice(source, 'driver');
     for (const field of [
       'authErrorClass',
       'callbackStatus',
@@ -314,11 +382,10 @@ describe('driver gate artifact projection (39A)', () => {
       'expectedSha',
       'observedDeploymentSha',
     ]) {
-      assert.ok(sellerSlice.includes(field), `seller projection must preserve legacy field ${field}`);
+      assert.ok(driverSlice.includes(field), `driver projection must preserve legacy field ${field}`);
     }
-    // Seller artifact with null gate passes through unchanged.
-    const sellerArtifact = buildRoleArtifact({
-      role: 'seller',
+    const driverArtifact = buildRoleArtifact({
+      role: 'driver',
       authErrorClass: 'authorize-rejected',
       callbackLocationClass: 'LOGIN_ERROR',
       callbackStatus: 302,
@@ -333,8 +400,8 @@ describe('driver gate artifact projection (39A)', () => {
       setCookiePresent: false,
       workflowSourceSha: 'local-unpublished',
     });
-    assert.equal(sellerArtifact.gateClass, null);
-    assert.equal(projectRoleSummary(sellerArtifact).gateClass, null);
+    assert.equal(driverArtifact.gateClass, null);
+    assert.equal(projectRoleSummary(driverArtifact).gateClass, null);
   });
 
   it('4: diagnostic values are closed/static/non-sensitive', () => {
@@ -365,7 +432,6 @@ describe('driver gate artifact projection (39A)', () => {
   });
 
   it('5: AUTHORIZED inference does not overwrite an observed rejection gate', () => {
-    // Rejection code + LOGIN_ERROR resolves to the rejection gate, never AUTHORIZED.
     assert.equal(
       resolveDriverGateClass({
         role: 'driver',
@@ -375,12 +441,10 @@ describe('driver gate artifact projection (39A)', () => {
       }),
       'UPSTREAM_NON_OK',
     );
-    // Only explicit ROOT success without code/error infers AUTHORIZED.
     assert.equal(
       resolveDriverGateClass({ role: 'driver', codeParam: null, errorParam: null, locationClass: 'ROOT' }),
       'AUTHORIZED',
     );
-    // LOGIN_ERROR without code stays null (incomplete, never AUTHORIZED).
     assert.equal(
       resolveDriverGateClass({ role: 'driver', codeParam: null, errorParam: 'CredentialsSignin', locationClass: 'LOGIN_ERROR' }),
       null,

@@ -2,7 +2,10 @@
  * 고정된 Vercel Preview deployment metadata를 확인하는 회차 E2E 증거 게이트.
  *
  * 이 스크립트는 workflow checkout의 HEAD나 최신 deployment를 추정하지 않고,
- * 호출자가 전달한 expected SHA와 세 deployment ID를 그대로 사용한다.
+ * 호출자가 전달한 expected SHA와 pinned deployment ID를 그대로 사용한다.
+ * 기본값은 세 deployment ID(consumer + seller + driver)를 모두 검증한다.
+ * Driver role-callback 전용 bounded mode는 --only=driver로 driver만 검증하며,
+ * session-probe는 --only 없이 triple binding을 유지해야 한다.
  * 검증 내내 동일한 pinned deployment identity를 유지하며, 중간에 더 최신
  * Preview가 생성되어도 자동으로 전환하지 않는다.
  *
@@ -11,7 +14,7 @@
  * 참여하지 않는다.
  *
  * 종료 코드:
- *   0  세 pinned deployment가 모두 직접 검증됨
+ *   0  선택된 pinned deployment가 모두 직접 검증됨 (default: 세 앱)
  *   1  metadata 불일치, credential/API 오류 또는 timeout
  */
 import { execSync } from 'node:child_process';
@@ -340,9 +343,35 @@ export function inspectAppDeployment(app, pinnedDeploymentId, expectedSha, paylo
   return inspectDeploymentMetadata(config, pinnedDeploymentId, expectedSha, payload);
 }
 
-function normalizeDeploymentIds(deploymentIds) {
+/**
+ * PILOT-AUTH-DRIVER-ONLY-EXACT-BINDING-GATE-40B — bounded verification subset.
+ *
+ * Default (no --only): all three Preview apps (consumer + seller + driver).
+ * Driver role-callback: --only=driver (driver pinned deployment only).
+ * Session-probe must never pass --only (triple binding preserved).
+ * Consumer/Seller state never enters a driver-only PASS/FAIL verdict.
+ */
+export function resolveSelectedAppConfigs(onlyRaw) {
+  if (onlyRaw === undefined || onlyRaw === null || String(onlyRaw).trim() === '') {
+    return [...PREVIEW_APPS];
+  }
+  const parts = String(onlyRaw)
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  if (parts.length === 0) return [...PREVIEW_APPS];
+  for (const part of parts) {
+    if (!APP_BY_NAME.has(part)) {
+      fail('UNKNOWN_PREVIEW_APP', `알 수 없는 Preview 앱입니다: ${part}`);
+    }
+  }
+  const unique = [...new Set(parts)];
+  return PREVIEW_APPS.filter((config) => unique.includes(config.app));
+}
+
+function normalizeDeploymentIds(deploymentIds, selectedApps = PREVIEW_APPS) {
   const normalized = {};
-  for (const config of PREVIEW_APPS) {
+  for (const config of selectedApps) {
     const value = deploymentIds?.[config.app];
     if (typeof value !== 'string' || !value.trim()) {
       fail('DEPLOYMENT_ID_REQUIRED', `${config.app} pinned Vercel deployment ID가 필요합니다.`);
@@ -373,10 +402,16 @@ export async function collectDeploymentEvidence(
     fetchImpl = fetch,
     request = null,
     checkedAt = () => new Date().toISOString(),
+    only = null,
+    selectedApps = null,
   } = {},
 ) {
   assertHeadSha(expectedSha);
-  const pinnedDeploymentIds = normalizeDeploymentIds(deploymentIds);
+  const selected =
+    Array.isArray(selectedApps) && selectedApps.length > 0
+      ? selectedApps
+      : resolveSelectedAppConfigs(only);
+  const pinnedDeploymentIds = normalizeDeploymentIds(deploymentIds, selected);
   if (typeof request !== 'function' && (typeof vercelToken !== 'string' || !vercelToken.trim())) {
     fail(
       'VERCEL_READ_TOKEN_REQUIRED',
@@ -385,7 +420,7 @@ export async function collectDeploymentEvidence(
   }
 
   const apps = await Promise.all(
-    PREVIEW_APPS.map(async (config) => {
+    selected.map(async (config) => {
       const pinnedDeploymentId = pinnedDeploymentIds[config.app];
       try {
         const payload =
@@ -420,7 +455,7 @@ export async function collectDeploymentEvidence(
   const deploymentStates = Object.fromEntries(apps.map(({ app, state }) => [app, state]));
 
   return {
-    ready: apps.length === PREVIEW_APPS.length && apps.every(({ ready }) => ready),
+    ready: apps.length === selected.length && apps.every(({ ready }) => ready),
     retryable,
     checkedAt: checkedAt(),
     repository: REPO,
@@ -429,6 +464,7 @@ export async function collectDeploymentEvidence(
     credentialValueRecorded: false,
     vercelTeamId: VERCEL_TEAM_ID,
     expectedSha,
+    selectedApps: selected.map(({ app }) => app),
     pinnedDeploymentIds,
     deploymentIds: deploymentIdsByApp,
     deploymentShas,
@@ -536,9 +572,9 @@ function resolveHeadSha(args) {
   );
 }
 
-function resolveDeploymentIds(args) {
+function resolveDeploymentIds(args, selectedApps = PREVIEW_APPS) {
   return Object.fromEntries(
-    PREVIEW_APPS.map((config) => [
+    selectedApps.map((config) => [
       config.app,
       argumentValue(args, `${config.app}-deployment-id`)?.trim() ||
         process.env[`ROUND_DIRECT_E2E_${config.app.toUpperCase()}_DEPLOYMENT_ID`]?.trim() ||
@@ -547,12 +583,12 @@ function resolveDeploymentIds(args) {
   );
 }
 
-function failureEvidence(expectedSha, deploymentIds, error) {
+function failureEvidence(expectedSha, deploymentIds, error, selectedApps = PREVIEW_APPS) {
   const safeFailure = safeError(error);
   const validSha =
     typeof expectedSha === 'string' && SHA_PATTERN.test(expectedSha) ? expectedSha : null;
   const pinnedDeploymentIds = Object.fromEntries(
-    PREVIEW_APPS.map((config) => [config.app, deploymentIds?.[config.app] || null]),
+    selectedApps.map((config) => [config.app, deploymentIds?.[config.app] || null]),
   );
   return {
     ready: false,
@@ -564,6 +600,7 @@ function failureEvidence(expectedSha, deploymentIds, error) {
     credentialValueRecorded: false,
     vercelTeamId: VERCEL_TEAM_ID,
     expectedSha: validSha,
+    selectedApps: selectedApps.map(({ app }) => app),
     pinnedDeploymentIds,
     deploymentIds: {},
     deploymentShas: {},
@@ -585,13 +622,24 @@ async function main() {
   const once = args.includes('--once');
   const diagnostic = args.includes('--diagnostic-status');
   const headSha = resolveHeadSha(args);
+  let selectedApps = [...PREVIEW_APPS];
+  try {
+    selectedApps = resolveSelectedAppConfigs(argumentValue(args, 'only'));
+  } catch (error) {
+    const failure = failureEvidence(headSha, {}, error, [...PREVIEW_APPS]);
+    writeJson(failure);
+    console.error(`[wait-preview-deploy] ${failure.failure.code}: ${failure.failure.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  const onlyLabel = selectedApps.length === PREVIEW_APPS.length ? null : selectedApps.map(({ app }) => app).join(',');
 
   if (diagnostic) {
     try {
       writeJson(collectCommitStatusDiagnostic(headSha));
       return;
     } catch (error) {
-      const failure = failureEvidence(headSha, {}, error);
+      const failure = failureEvidence(headSha, {}, error, selectedApps);
       writeJson(failure);
       // 진단이므로 status 불가 여부로 전체 sync workflow를 차단하지 않는다.
       process.exitCode = 0;
@@ -599,14 +647,16 @@ async function main() {
     }
   }
 
-  const deploymentIds = resolveDeploymentIds(args);
+  const deploymentIds = resolveDeploymentIds(args, selectedApps);
   if (once) {
     try {
-      const evidence = await collectDeploymentEvidence(headSha, deploymentIds);
+      const evidence = await collectDeploymentEvidence(headSha, deploymentIds, {
+        only: argumentValue(args, 'only') ?? null,
+      });
       writeJson(evidence);
       process.exitCode = evidence.ready ? 0 : 1;
     } catch (error) {
-      const failure = failureEvidence(headSha, deploymentIds, error);
+      const failure = failureEvidence(headSha, deploymentIds, error, selectedApps);
       writeJson(failure);
       console.error(`[wait-preview-deploy] ${failure.failure.code}: ${failure.failure.message}`);
       process.exitCode = 1;
@@ -616,9 +666,15 @@ async function main() {
 
   if (!jsonOnly) {
     console.log(`[wait-preview-deploy] expected application SHA = ${headSha}`);
-    console.log(
-      `[wait-preview-deploy] pinned deployment ${PREVIEW_APPS.length}개 확인, 제한 ${TIMEOUT_MS / 1000}초, 간격 ${INTERVAL_MS / 1000}초`,
-    );
+    if (onlyLabel) {
+      console.log(
+        `[wait-preview-deploy] pinned deployment ${selectedApps.length}개(only=${onlyLabel}) 확인, 제한 ${TIMEOUT_MS / 1000}초, 간격 ${INTERVAL_MS / 1000}초`,
+      );
+    } else {
+      console.log(
+        `[wait-preview-deploy] pinned deployment ${PREVIEW_APPS.length}개 확인, 제한 ${TIMEOUT_MS / 1000}초, 간격 ${INTERVAL_MS / 1000}초`,
+      );
+    }
   }
 
   const deadline = Date.now() + TIMEOUT_MS;
@@ -627,7 +683,9 @@ async function main() {
 
   while (Date.now() < deadline) {
     try {
-      latestEvidence = await collectDeploymentEvidence(headSha, deploymentIds);
+      latestEvidence = await collectDeploymentEvidence(headSha, deploymentIds, {
+        only: argumentValue(args, 'only') ?? null,
+      });
       if (latestEvidence.ready || !latestEvidence.retryable) break;
     } catch (error) {
       const failure = safeError(error);
@@ -641,10 +699,15 @@ async function main() {
 
   if (latestEvidence?.ready) {
     if (jsonOnly) writeJson(latestEvidence);
-    else
+    else if (onlyLabel) {
+      console.log(
+        `[wait-preview-deploy] pinned Vercel deployment metadata가 검증되었습니다 (only=${onlyLabel}).`,
+      );
+    } else {
       console.log(
         '[wait-preview-deploy] 세 pinned Vercel deployment metadata가 모두 검증되었습니다.',
       );
+    }
     return;
   }
 
@@ -662,6 +725,7 @@ async function main() {
       deploymentIds,
       terminalFailure ??
         new PreviewEvidenceError('VERCEL_API_UNAVAILABLE', 'Vercel metadata 읽기에 실패했습니다.'),
+      selectedApps,
     );
     if (jsonOnly) writeJson(failure);
     else console.error(`[wait-preview-deploy] ${failure.failure.code}: ${failure.failure.message}`);
