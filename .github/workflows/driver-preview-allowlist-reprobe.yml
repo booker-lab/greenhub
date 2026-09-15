@@ -15,9 +15,17 @@ name: Driver preview allowlist secure bridge (43C)
 # - Production mutation is structurally unreachable (Preview literal only).
 # - Write credential: ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN only.
 #   The read credential is NEVER a write fallback and is not referenced here.
-# - Reprovisioning reuses the 43A exact-preview capability with the exact
-#   expected source SHA only. Latest-commit promotion / latest-ref flows are
-#   forbidden and absent (no latest-SHA resolution exists in this bridge).
+# - Post-mutation deployment authority is the 44A provider-native workflow
+#   ONLY: .github/workflows/create-exact-preview-deployment.yml with
+#   exact_sha=33cb9773df86abc486783e53757448280b80be96 and app=driver
+#   (exactly ONE POST /v13/deployments, Preview only). The superseded 43A
+#   Git-ref-push path MUST NOT RUN after this mutation: never run
+#   scripts/vercel/provision-exact-preview.mjs and never push a
+#   preview-exact/* ref. Running both paths would create duplicate
+#   deployment intents for the same SHA and break the
+#   single-authoritative-deployment-ID contract. Latest-commit promotion /
+#   latest-ref flows are forbidden and absent (no latest-SHA resolution
+#   exists in this bridge).
 # - Secrets and raw allowlist values never enter stdout/stderr/artifacts;
 #   evidence is boolean/count only.
 #
@@ -207,10 +215,11 @@ jobs:
             process.stdout.write(JSON.stringify(plan.evidence) + '\n');
           "
 
-      - name: exact preview reprovision evidence (43A reuse, expected SHA only)
+      - name: post-mutation successor evidence (44A provider-native only)
         shell: bash
         env:
           DRIVER_PREVIEW_EXPECTED_SHA: 33cb9773df86abc486783e53757448280b80be96
+          DRIVER_PREVIEW_OLD_DEPLOYMENT_ID: dpl_BM6yZATGyH2R6LW6uL8uvkAPhCjn
         run: |
           set -euo pipefail
           {
@@ -222,21 +231,31 @@ jobs:
             echo "- old deployment: \`dpl_BM6yZATGyH2R6LW6uL8uvkAPhCjn\`"
             echo "- expected source SHA: \`$DRIVER_PREVIEW_EXPECTED_SHA\`"
             echo "- mutation: additive-only (CURRENT_SET + canonical identity)"
-            echo "- reprovision: existing 43A capability, exact expected SHA only"
+            echo "- successor: 44A provider-native ONLY (.github/workflows/create-exact-preview-deployment.yml)"
+            echo "- successor inputs: exact_sha=\`$DRIVER_PREVIEW_EXPECTED_SHA\` app=\`driver\`"
+            echo "- deployment authority: exactly ONE provider-native POST /v13/deployments (Preview only)"
+            echo "- forbidden: 43A scripts/vercel/provision-exact-preview.mjs MUST NOT RUN (superseded Git-ref-push path)"
+            echo "- forbidden: no preview-exact/* ref push"
+            echo "- authoritative new ID: created Driver deploymentId dpl_* (single-authoritative-deployment-ID)"
+            echo "- binding: strict waiter uses that exact 44A-created dpl_* via --driver-deployment-id"
+            echo "- binding: target must remain Preview/null; exact provider SHA must equal pinned SHA"
+            echo "- binding: new deployment ID must differ from old \`$DRIVER_PREVIEW_OLD_DEPLOYMENT_ID\` (new != old)"
             echo ""
-            echo "Reprovision the exact Preview deployment with:"
+            echo "Run the sole successor (exactly once) with:"
             echo ""
             echo '```bash'
-            echo "node scripts/vercel/provision-exact-preview.mjs --sha=\"$DRIVER_PREVIEW_EXPECTED_SHA\" --app=driver"
+            echo 'gh workflow run .github/workflows/create-exact-preview-deployment.yml \'
+            echo "  --ref main -f exact_sha=\"$DRIVER_PREVIEW_EXPECTED_SHA\" -f app=driver"
             echo '```'
             echo ""
-            echo "Then prove exact binding with:"
+            echo "Then prove exact binding with the 44A-created ID only:"
             echo ""
             echo '```bash'
-            echo "node scripts/wait-preview-deploy.mjs --json --once \\"
-            echo "  --sha=\"$DRIVER_PREVIEW_EXPECTED_SHA\" \\"
+            echo "node scripts/wait-preview-deploy.mjs --json --sha=\"$DRIVER_PREVIEW_EXPECTED_SHA\" \\"
             echo '  --driver-deployment-id="$DRIVER_DPL" \'
             echo '  --only=driver'
             echo '```'
+            echo ""
+            echo 'where $DRIVER_DPL is the Driver deploymentId dpl_* returned by the single 44A POST above.'
           } >> "$GITHUB_STEP_SUMMARY"
           printf 'bridge complete: driver preview additive-only (evidence: boolean/count only)\n'
