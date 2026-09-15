@@ -31,6 +31,12 @@
  * - Unknown paths fail OPEN (BUILD): a new top-level config or package must
  *   never be silently skipped.
  *
+ * Exact-preview provisioning (PILOT-AUTH-EXACT-REF-42A): refs
+ * `preview-exact/<consumer|seller|both>/<sha>` bypass the empty-delta SKIP
+ * via shouldBypassIgnoreForExactPreview() so a requested exact SHA always
+ * builds. All other refs use the standard predicate unchanged; production
+ * and driver never bypass.
+ *
  * Runtime needs: `node` + `git` only. No dependencies, no install step.
  */
 
@@ -45,6 +51,19 @@ export const EXIT_SKIP = 0;
 export const EXIT_BUILD = 1;
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
+
+// Exact-preview provisioning bypass (PILOT-AUTH-EXACT-REF-PREVIEW-PROVISIONING-CAPABILITY-42A).
+//
+// Diagnostic/runtime-proof refs `preview-exact/<scope>/<sha>` trigger the
+// existing Vercel Git integration with githubCommitSha == requested exact SHA
+// (no new merge commit, no main mutation). The normal `preview` sync flow
+// never uses this prefix, so the bypass cannot leak into regular Git
+// integration builds. Production is never bypassed. Driver is out of scope:
+// `both` covers consumer + seller only.
+export const EXACT_PREVIEW_PROVISIONING_REF_PREFIX = 'preview-exact/';
+export const EXACT_PREVIEW_PROVISIONING_SCOPES = Object.freeze(['consumer', 'seller', 'both']);
+export const EXACT_PREVIEW_PROVISIONING_REF_PATTERN =
+  /^preview-exact\/(consumer|seller|both)\/[0-9a-f]{40}$/;
 
 // Files read by `pnpm install` or by `next build` (via @greenhub/shared or the
 // font prebuild) of every frontend app. A change here must rebuild all three.
@@ -124,6 +143,58 @@ function isBackendOnlyPath(posixPath) {
  */
 function isOtherWorkspaceScope(posixPath) {
   return /^(apps|packages)\/[^/]+\//.test(posixPath);
+}
+
+/**
+ * Pure exact-preview provisioning bypass decision.
+ *
+ * Fail-closed: any malformed ref/sha, scope/app mismatch, or production
+ * environment returns { bypass: false }. Only an exact
+ * `preview-exact/<scope>/<sha>` ref whose sha suffix equals the deployment
+ * commit SHA bypasses the empty-delta SKIP. `both` covers consumer + seller;
+ * driver never bypasses via this mechanism.
+ */
+export function shouldBypassIgnoreForExactPreview({ app, ref, sha, vercelEnv = null }) {
+  if (app !== 'consumer' && app !== 'seller') return { bypass: false, reason: 'not a provisioned app' };
+  if (vercelEnv != null && String(vercelEnv).trim().toLowerCase() === 'production') {
+    return { bypass: false, reason: 'production target never bypasses' };
+  }
+  const normalizedRef = String(ref ?? '').trim();
+  const normalizedSha = String(sha ?? '').trim().toLowerCase();
+  if (!EXACT_PREVIEW_PROVISIONING_REF_PATTERN.test(normalizedRef)) {
+    return { bypass: false, reason: 'not an exact-preview provisioning ref' };
+  }
+  if (!SHA_PATTERN.test(normalizedSha)) {
+    return { bypass: false, reason: 'deployment commit SHA malformed' };
+  }
+  const match = normalizedRef.match(EXACT_PREVIEW_PROVISIONING_REF_PATTERN);
+  const refScope = match[1];
+  const refSha = normalizedRef.slice(-40).toLowerCase();
+  if (refSha !== normalizedSha) {
+    return { bypass: false, reason: 'ref SHA suffix does not match deployment commit SHA' };
+  }
+  if (refScope !== app && refScope !== 'both') {
+    return { bypass: false, reason: `scope ${refScope} does not cover ${app}` };
+  }
+  return {
+    bypass: true,
+    reason: `exact-preview provisioning ref ${normalizedRef} for ${app}: BUILD`,
+  };
+}
+
+/**
+ * Resolve the provisioning bypass from Vercel system environment variables.
+ * Requires VERCEL_GIT_COMMIT_REF + VERCEL_GIT_COMMIT_SHA; missing values
+ * never bypass (fail-closed). Normal `preview`/main refs never match.
+ */
+export function resolveExactPreviewBypassFromEnv({ app, env = process.env }) {
+  const ref = env?.VERCEL_GIT_COMMIT_REF ?? env?.VERCEL_GIT_COMMIT_REF_ALT ?? '';
+  const sha = env?.VERCEL_GIT_COMMIT_SHA ?? '';
+  const vercelEnv = env?.VERCEL_ENV ?? null;
+  if (!String(ref).trim() || !String(sha).trim()) {
+    return { bypass: false, reason: 'provisioning ref context absent' };
+  }
+  return shouldBypassIgnoreForExactPreview({ app, ref, sha, vercelEnv });
 }
 
 /**
@@ -378,6 +449,15 @@ if (invokedAsMainScript) {
   }
   try {
     const repositoryRoot = repoRootOverride ?? resolveRepositoryRoot();
+    // Scoped fail-closed bypass: only exact `preview-exact/<scope>/<sha>`
+    // refs build through an otherwise empty effective delta. Every other
+    // ref (including normal `preview` sync and `main`) falls through to the
+    // standard predicate below, which is unchanged.
+    const provisioning = resolveExactPreviewBypassFromEnv({ app, env: process.env });
+    if (provisioning.bypass) {
+      console.log(`[vercel-ignore:${app}] BUILD: ${provisioning.reason}`);
+      process.exit(EXIT_BUILD);
+    }
     const base = resolveBaseSha({ repositoryRoot });
     if (base.sha == null) {
       console.log(`[vercel-ignore:${app}] BUILD: ${base.reason}`);

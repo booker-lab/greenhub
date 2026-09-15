@@ -1,0 +1,205 @@
+name: Provision exact-preview deployment (diagnostic/runtime-proof)
+
+# Controlled Pilot auth runtime verification: preserve an arbitrary approved
+# exact Git commit SHA as the source identity of a Consumer / Seller Vercel
+# Preview deployment.
+#
+# Mechanism (minimal official path):
+# - workflow_dispatch with exact_sha + app (consumer|seller|both).
+# - Validate syntax/allowlist/provenance, then push ONLY the dedicated ref
+#   `preview-exact/<scope>/<sha>` pointing EXACTLY at the requested commit
+#   (no new commit, no merge, no main mutation, no force, no history rewrite).
+# - The existing Vercel Git integration creates Preview deployments with
+#   meta.githubCommitSha == requested exact SHA and target == null (preview).
+#   `main` deployments stay disabled via apps/<app>/vercel.json.
+# - scripts/vercel/ignore-build.mjs bypasses the empty-delta SKIP ONLY for
+#   `preview-exact/*` refs. Normal `preview` sync flow is unchanged.
+#
+# Locked contract: never creates production deployments, never re-enables
+# main auto-deploy, never spoofs merge-commit identity, never reuses
+# publication transport refs, never weakens the global ignore predicate,
+# never touches wait-preview-deploy.mjs exact-SHA comparison.
+
+on:
+  workflow_dispatch:
+    inputs:
+      exact_sha:
+        description: 'Preview에 그대로 보존할 40자리 exact commit SHA'
+        required: true
+        type: string
+      app:
+        description: 'Provisioning 대상 앱'
+        required: true
+        type: choice
+        options:
+          - consumer
+          - seller
+          - both
+  pull_request:
+    paths:
+      - scripts/vercel/provision-exact-preview.mjs
+      - scripts/vercel/provision-exact-preview.spec.mjs
+      - scripts/vercel/ignore-build.mjs
+      - scripts/vercel/ignore-build.spec.mjs
+      - .github/workflows/provision-exact-preview.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provision-exact-preview
+  cancel-in-progress: false
+
+jobs:
+  deterministic-spec:
+    name: exact-preview deterministic spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: run exact-preview + ignore predicate specs (mock/local only)
+        run: node --test scripts/vercel/provision-exact-preview.spec.mjs scripts/vercel/ignore-build.spec.mjs
+
+  provision:
+    name: provision exact-preview ref
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: deterministic-spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: full history checkout (SHA provenance check)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: owner + input preflight (fail-closed)
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          EXACT_SHA: ${{ inputs.exact_sha }}
+          APP: ${{ inputs.app }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch 이외의 이벤트에서는 provisioning을 실행할 수 없습니다.' >&2
+            exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow 실행자가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow triggering actor가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ ! "$EXACT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'exact SHA는 40자리 소문자 16진수여야 합니다.' >&2
+            exit 1
+          fi
+          case "$APP" in
+            consumer|seller|both) ;;
+            *)
+              echo 'app은 consumer|seller|both만 허용됩니다.' >&2
+              exit 1
+              ;;
+          esac
+          printf 'preflight ok: app=%s sha=%s\n' "$APP" "$EXACT_SHA"
+
+      - name: helper validation + commit existence (fail-closed)
+        id: validate
+        shell: bash
+        env:
+          EXACT_SHA: ${{ inputs.exact_sha }}
+          APP: ${{ inputs.app }}
+        run: |
+          set -euo pipefail
+          request_json="$(node scripts/vercel/provision-exact-preview.mjs --sha="$EXACT_SHA" --app="$APP")"
+          printf '%s' "$request_json" > /tmp/exact-preview-request.json
+          ref="$(node -p "JSON.parse(require('fs').readFileSync('/tmp/exact-preview-request.json','utf8')).ref")"
+          apps="$(node -p "JSON.parse(require('fs').readFileSync('/tmp/exact-preview-request.json','utf8')).apps.join(',')")"
+          if [[ ! "$ref" =~ ^preview-exact/(consumer|seller|both)/[0-9a-f]{40}$ ]]; then
+            echo 'provisioning ref가 dedicated preview-exact/* 형식이 아니라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$ref" != "preview-exact/$APP/$EXACT_SHA" ]]; then
+            echo 'provisioning ref가 요청 SHA/app와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          git cat-file -e "${EXACT_SHA}^{commit}"
+          printf 'ref=%s\n' "$ref" >> "$GITHUB_OUTPUT"
+          printf 'apps=%s\n' "$apps" >> "$GITHUB_OUTPUT"
+          printf 'validated ref=%s apps=%s\n' "$ref" "$apps"
+
+      - name: push dedicated provisioning ref only (no main/preview mutation)
+        shell: bash
+        env:
+          EXACT_SHA: ${{ inputs.exact_sha }}
+          REF: ${{ steps.validate.outputs.ref }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$REF" =~ ^preview-exact/(consumer|seller|both)/[0-9a-f]{40}$ ]]; then
+            echo 'dedicated provisioning ref가 아니라 push를 차단합니다.' >&2
+            exit 1
+          fi
+          case "$REF" in
+            main|preview|refs/heads/main|refs/heads/preview)
+              echo 'main/preview ref push는 금지됩니다.' >&2
+              exit 1
+              ;;
+          esac
+          # Exact identity: push the requested commit object itself to the new
+          # ref. No new commit, no merge, no force, no history rewrite. If the
+          # ref already points at the same SHA this is a no-op success.
+          git push origin "${EXACT_SHA}:refs/heads/${REF}"
+          printf 'pushed=%s\n' "$REF"
+
+      - name: provisioning evidence summary (IDs via wait-preview-deploy)
+        shell: bash
+        env:
+          EXACT_SHA: ${{ inputs.exact_sha }}
+          APP: ${{ inputs.app }}
+          REF: ${{ steps.validate.outputs.ref }}
+          APPS: ${{ steps.validate.outputs.apps }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Exact-preview provisioning"
+            echo ""
+            echo "- requested SHA: \`$EXACT_SHA\`"
+            echo "- app selection: \`$APP\` (apps: \`$APPS\`)"
+            echo "- provisioning ref: \`$REF\`"
+            echo "- target: Preview (non-production, \`main\` deployments stay disabled)"
+            echo "- source identity: ref points EXACTLY at the requested commit (no merge commit)"
+            echo ""
+            echo "Vercel Git integration creates one Preview deployment per"
+            echo "connected project from this ref with"
+            echo "\`meta.githubCommitSha == $EXACT_SHA\`."
+            echo "Resolve deployment IDs from the Vercel dashboard or the"
+            echo "deployment list API, then prove exact binding with:"
+            echo ""
+            echo '```bash'
+            echo "node scripts/wait-preview-deploy.mjs --json --once \\"
+            echo "  --sha=\"$EXACT_SHA\" \\"
+            echo '  --consumer-deployment-id="$CONSUMER_DPL" \'
+            echo '  --seller-deployment-id="$SELLER_DPL"'
+            echo '```'
+            echo ""
+            echo "For a single-app proof, pass --only=consumer (or seller) with"
+            echo "only that app's deployment ID."
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf 'requested=%s ref=%s apps=%s target=preview\n' "$EXACT_SHA" "$REF" "$APPS"
