@@ -626,6 +626,14 @@ jobs:
     # exists in staging) and stays independent of session-probe so a
     # session-probe failure cannot mask or block callback provenance
     # evidence. It never handles raw service-account material.
+    # Consumer-only exact-binding boundary
+    # (PILOT-AUTH-CONSUMER-ONLY-CALLBACK-BINDING-42B): deployment binding
+    # uses scripts/wait-preview-deploy.mjs --only=consumer so ONLY the
+    # pinned Consumer deployment (expected SHA + consumer deployment ID)
+    # enters this job's PASS/FAIL verdict. Seller/Driver deployment state
+    # or source mismatch never contaminates the Consumer callback verdict.
+    # session-probe keeps the triple binding; the Driver role-callback
+    # keeps its driver-only exact-binding semantics.
     needs: auth_identity_seed
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
@@ -651,8 +659,6 @@ jobs:
       AUTH_CALLBACK_WORKFLOW_SHA: ${{ github.sha }}
       AUTH_CALLBACK_EXPECTED_SHA: ${{ inputs.expected_sha }}
       AUTH_CALLBACK_CONSUMER_DEPLOYMENT_ID: ${{ inputs.consumer_deployment_id }}
-      AUTH_CALLBACK_SELLER_DEPLOYMENT_ID: ${{ inputs.seller_deployment_id }}
-      AUTH_CALLBACK_DRIVER_DEPLOYMENT_ID: ${{ inputs.driver_deployment_id }}
       AUTH_CALLBACK_EXPECTED_API_ORIGIN: ${{ vars.ROUND_DIRECT_E2E_API_ORIGIN }}
 
     steps:
@@ -711,7 +717,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: locked Consumer deployment binding 직접 확인
+      - name: locked Consumer deployment binding 직접 확인 (consumer-only 42B)
         shell: bash
         env:
           ROUND_DIRECT_E2E_VERCEL_READ_TOKEN: ${{ secrets.ROUND_DIRECT_E2E_VERCEL_READ_TOKEN }}
@@ -724,8 +730,7 @@ jobs:
             --json \
             --sha="$AUTH_CALLBACK_EXPECTED_SHA" \
             --consumer-deployment-id="$AUTH_CALLBACK_CONSUMER_DEPLOYMENT_ID" \
-            --seller-deployment-id="$AUTH_CALLBACK_SELLER_DEPLOYMENT_ID" \
-            --driver-deployment-id="$AUTH_CALLBACK_DRIVER_DEPLOYMENT_ID" \
+            --only=consumer \
             > "$evidence_root/deployment-raw.json"
           wait_status=$?
           set -e
