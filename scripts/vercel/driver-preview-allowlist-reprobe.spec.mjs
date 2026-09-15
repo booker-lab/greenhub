@@ -565,4 +565,22 @@ test('workflow contract: dispatch-only mutation, driver preview exact identity',
   assert.equal(/greenhub-seller/.test(workflow), false);
   assert.equal(/consumer-deployment-id/.test(workflow), false);
   assert.equal(/seller-deployment-id/.test(workflow), false);
+
+  // 44C operator-guidance convergence: the superseded 43A Git-ref-push path
+  // must not be offered as a post-mutation operator step. The runnable 43A
+  // command must be absent; only the explicit MUST NOT RUN prohibition may
+  // mention the superseded script name (duplicate-deployment guard).
+  assert.equal(workflow.includes('node scripts/vercel/provision-exact-preview.mjs'), false);
+  assert.equal(workflow.includes('existing 43A capability'), false);
+  assert.equal(workflow.includes('43A reuse'), false);
+  assert.match(workflow, /provision-exact-preview\.mjs MUST NOT RUN/);
+  assert.match(workflow, /no preview-exact\/\* ref push/);
+  // Canonical successor is the 44A provider-native workflow, exactly once.
+  assert.match(workflow, /create-exact-preview-deployment\.yml/);
+  assert.match(workflow, /exactly ONE provider-native POST/);
+  assert.match(workflow, /single-authoritative-deployment-ID/);
+  assert.match(workflow, /44A-created dpl_\*/);
+  assert.match(workflow, /--driver-deployment-id/);
+  assert.match(workflow, /new != old/);
+  assert.match(workflow, /Preview\/null/);
 });
