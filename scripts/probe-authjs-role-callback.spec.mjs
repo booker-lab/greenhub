@@ -11,7 +11,11 @@ import { describe, it } from 'node:test';
 import {
   APPROVAL_VALUE,
   ARTIFACT_KEYS,
+  CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES,
+  DRIVER_PRE_UPSTREAM_DIAGNOSTIC_CODES,
   FAIL_RESULT_KEYS,
+  PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX,
+  PRE_UPSTREAM_DIAGNOSTIC_CODES,
   PROTECTION_BYPASS_CREDENTIAL_ENV,
   PROTECTION_BYPASS_HEADER_NAME,
   PROTECTION_PASSAGE_MODES,
@@ -40,6 +44,7 @@ import {
   isProtectionIntercept,
   normalizeProtectionPassageMode,
   normalizeTargetUrl,
+  parsePreUpstreamDiagnosticCode,
   parseUpstreamDiagnosticCode,
   resolveExpectedApiOrigin,
   roleConfig,
@@ -842,5 +847,182 @@ describe('consumer probe preservation (34B boundary)', () => {
   it('role request builders are distinct from the consumer builder', () => {
     assert.ok(!String(ROLE_CONFIG.seller.requestBuilder).includes('probe-consumer-callback'));
     assert.ok(!String(ROLE_CONFIG.driver.requestBuilder).includes('probe-consumer-callback'));
+  });
+});
+
+describe('pre-upstream static diagnostic passthrough (38E)', () => {
+  const G1 = 'authorize-rejected__g1-secret-missing';
+  const G2 = 'authorize-rejected__g2-secret-mismatch';
+  const G3 = 'authorize-rejected__g3-credential-admission-rejected';
+  const D_ENABLED = 'authorize-rejected__driver-g2-enabled';
+  const D_SECRET = 'authorize-rejected__driver-g3-secret-mismatch';
+  const D_ALLOW = 'authorize-rejected__driver-g4-allowlist-rejected';
+
+  function redirectFor(code) {
+    return `/login?code=${encodeURIComponent(code)}&error=CredentialsSignin`;
+  }
+
+  function callbackFetchFor(code) {
+    return async (url) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === '/api/auth/csrf') {
+        return {
+          ok: true,
+          status: 200,
+          headers: fakeHeaders({}),
+          text: async () => JSON.stringify({ csrfToken: MOCK_CSRF }),
+        };
+      }
+      if (parsed.pathname === '/api/auth/callback/credentials') {
+        return {
+          ok: false,
+          status: 302,
+          headers: fakeHeaders({ location: redirectFor(code) }),
+          text: async () => JSON.stringify({ url: redirectFor(code) }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: fakeHeaders({}),
+        text: async () => JSON.stringify({ user: null }),
+      };
+    };
+  }
+
+  async function artifactFor(role, code) {
+    const input = role === 'seller' ? sellerInput() : driverInput();
+    const env =
+      role === 'seller'
+        ? {
+            NON_PRODUCTION_AUTH_PROBE_APPROVAL: APPROVAL_VALUE,
+            E2E_TEST_SECRET: MOCK_SELLER_SECRET,
+            TEST_SELLER_EMAIL: MOCK_EMAIL_SELLER,
+            TEST_SELLER_PASSWORD: MOCK_PASSWORD,
+          }
+        : {
+            NON_PRODUCTION_AUTH_PROBE_APPROVAL: APPROVAL_VALUE,
+            ROUND_DIRECT_E2E_SHARED_SECRET: MOCK_DRIVER_SECRET,
+            TEST_DRIVER_EMAIL: MOCK_EMAIL_DRIVER,
+            TEST_DRIVER_PASSWORD: MOCK_PASSWORD,
+          };
+    const { artifact } = await runRoleCallbackProbe(input, { env, fetchImpl: callbackFetchFor(code) });
+    return artifact;
+  }
+
+  it('allowlist exposes exactly the consumer 3 + driver 3 static tokens', () => {
+    assert.deepEqual([...CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES], [G1, G2, G3]);
+    assert.deepEqual([...DRIVER_PRE_UPSTREAM_DIAGNOSTIC_CODES], [D_ENABLED, D_SECRET, D_ALLOW]);
+    assert.deepEqual([...PRE_UPSTREAM_DIAGNOSTIC_CODES].sort(), [G1, G2, G3, D_ENABLED, D_SECRET, D_ALLOW].sort());
+    assert.equal(PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX, 'authorize-rejected');
+  });
+
+  it('1: known safe diagnostics keep their existing meaning', () => {
+    assert.equal(classifyAuthError({ status: 302, codeParam: 'authorize-rejected', errorParam: null }), 'authorize-rejected');
+    assert.equal(classifyAuthError({ status: 302, codeParam: 'upstream-rejected', errorParam: null }), 'upstream-rejected');
+    assert.equal(classifyAuthError({ status: 302, codeParam: 'api-binding-failure', errorParam: null }), 'api-binding-failure');
+    assert.equal(parsePreUpstreamDiagnosticCode('authorize-rejected'), null);
+    assert.equal(parseUpstreamDiagnosticCode('upstream-rejected'), null);
+  });
+
+  it('2: consumer g1/g2/g3 are distinguished and preserved (seller slice)', async () => {
+    for (const code of [G1, G2, G3]) {
+      assert.equal(classifyAuthError({ status: 302, codeParam: code, errorParam: 'CredentialsSignin' }), 'authorize-rejected');
+      const artifact = await artifactFor('seller', code);
+      assert.equal(artifact.authErrorClass, 'authorize-rejected');
+      assert.equal(artifact.preUpstreamDiagnosticCode, code);
+      assert.equal(artifact.sessionState, 'INVALID');
+      assert.equal(artifact.verdict, 'EXPECTED_APPLICATION_REJECTION');
+    }
+  });
+
+  it('3: driver enabled/secret/allowlist codes are distinguished and preserved', async () => {
+    for (const code of [D_ENABLED, D_SECRET, D_ALLOW]) {
+      assert.equal(classifyAuthError({ status: 302, codeParam: code, errorParam: 'CredentialsSignin' }), 'authorize-rejected');
+      const artifact = await artifactFor('driver', code);
+      assert.equal(artifact.authErrorClass, 'authorize-rejected');
+      assert.equal(artifact.preUpstreamDiagnosticCode, code);
+      assert.equal(artifact.role, 'driver');
+      assert.equal(artifact.sessionState, 'INVALID');
+    }
+    assert.notEqual(D_ENABLED, D_SECRET);
+    assert.notEqual(D_ENABLED, D_ALLOW);
+    assert.notEqual(D_SECRET, D_ALLOW);
+  });
+
+  it('4: arbitrary suffixes do not pass through', async () => {
+    const bad = [
+      'authorize-rejected__g1-evil',
+      'authorize-rejected__driver-g2-Evil',
+      'authorize-rejected__driver-g5-unknown',
+      'authorize-rejected__g1-secret-missing-extra',
+    ];
+    for (const code of bad) {
+      assert.equal(parsePreUpstreamDiagnosticCode(code), null);
+      assert.equal(classifyAuthError({ status: 302, codeParam: code, errorParam: 'CredentialsSignin' }), 'other');
+    }
+    const artifact = await artifactFor('driver', 'authorize-rejected__driver-g2-evil');
+    assert.equal(artifact.authErrorClass, 'other');
+    assert.equal(artifact.preUpstreamDiagnosticCode, null);
+  });
+
+  it('5: secret/email/token-like injected text does not pass through', () => {
+    const injected = [
+      `${G1}:${MOCK_SELLER_SECRET}`,
+      `${D_SECRET}?email=${encodeURIComponent(MOCK_EMAIL_DRIVER)}`,
+      `${D_ALLOW} ${MOCK_PASSWORD}`,
+      'authorize-rejected__g1-secret-missing\nSet-Cookie: x=1',
+    ];
+    for (const code of injected) {
+      assert.equal(parsePreUpstreamDiagnosticCode(code), null);
+    }
+    const serialized = JSON.stringify(PRE_UPSTREAM_DIAGNOSTIC_CODES);
+    assert.ok(!serialized.includes(MOCK_SELLER_SECRET));
+    assert.ok(!serialized.includes(MOCK_DRIVER_SECRET));
+    assert.ok(!serialized.includes(MOCK_EMAIL_DRIVER));
+  });
+
+  it('6: seller normal classification regresses clean', async () => {
+    const plain = await artifactFor('seller', 'authorize-rejected');
+    assert.equal(plain.authErrorClass, 'authorize-rejected');
+    assert.equal(plain.preUpstreamDiagnosticCode, null);
+    const upstream = await artifactFor('seller', 'upstream-rejected');
+    assert.equal(upstream.authErrorClass, 'upstream-rejected');
+    assert.equal(upstream.preUpstreamDiagnosticCode, null);
+  });
+
+  it('7: generic authorize-rejected stays backward-compatible', async () => {
+    const artifact = await artifactFor('driver', 'authorize-rejected');
+    assert.equal(artifact.authErrorClass, 'authorize-rejected');
+    assert.equal(artifact.preUpstreamDiagnosticCode, null);
+    assert.equal(artifact.upstreamStatus, null);
+  });
+
+  it('8: 29A post-upstream diagnostic regresses clean (preUpstream null)', () => {
+    const parsed = parseUpstreamDiagnosticCode('upstream-rejected__s400__o0123456789abcdef');
+    assert.equal(parsed?.upstreamStatus, 400);
+    assert.equal(parsePreUpstreamDiagnosticCode('upstream-rejected__s400__o0123456789abcdef'), null);
+  });
+
+  it('artifact builder rejects non-allowlisted diagnostic (fail-closed)', () => {
+    assert.throws(
+      () =>
+        buildRoleArtifact({
+          role: 'driver',
+          authErrorClass: 'authorize-rejected',
+          callbackLocationClass: 'LOGIN_ERROR',
+          callbackStatus: 302,
+          checkedAt: '2026-09-14T00:00:00.000Z',
+          deploymentId: DYNAMIC_DRIVER_DPL,
+          deploymentSourceSha: DYNAMIC_SHA_1,
+          headerPresent: true,
+          preUpstreamDiagnosticCode: 'authorize-rejected__g1-evil',
+          sessionContract: 'NOT_CHECKED',
+          sessionState: 'INVALID',
+          setCookiePresent: false,
+          workflowSourceSha: DYNAMIC_SHA_2,
+        }),
+      (error) => error.code === 'PROBE_INTERNAL_ERROR',
+    );
   });
 });

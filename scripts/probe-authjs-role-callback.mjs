@@ -134,6 +134,34 @@ export const UPSTREAM_ORIGIN_FINGERPRINT_HEX_LENGTH = 16;
 const UPSTREAM_DIAGNOSTIC_CODE_PATTERN =
   /^upstream-rejected__s(\d{1,3})__o([0-9a-f]{16})(?:__l([A-Z_]+(?:\+[A-Z_]+)*))?$/;
 
+// Pre-upstream static diagnostic projection
+// (PILOT-AUTH-PROBE-PREUPSTREAM-SAFE-CODE-PASSTHROUGH-38E).
+// Consumer/Driver authorize gates emit deterministic static codes only (no
+// values, lengths, hashes, timing, headers, or env contents). Top-level
+// class stays `authorize-rejected` (prefix). Only the exact allowlisted
+// tokens below pass through verbatim; anything else collapses to `unknown`.
+//   Consumer (38C): g1-secret-missing, g2-secret-mismatch,
+//     g3-credential-admission-rejected.
+//   Driver (38D, repository-conformant): driver-g2-enabled,
+//     driver-g3-secret-mismatch, driver-g4-allowlist-rejected.
+// App policy/gates are owned by 38C/38D; this probe only preserves the
+// already-emitted static token in a sanitized artifact field.
+export const PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX = 'authorize-rejected';
+export const CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES = Object.freeze([
+  'authorize-rejected__g1-secret-missing',
+  'authorize-rejected__g2-secret-mismatch',
+  'authorize-rejected__g3-credential-admission-rejected',
+]);
+export const DRIVER_PRE_UPSTREAM_DIAGNOSTIC_CODES = Object.freeze([
+  'authorize-rejected__driver-g2-enabled',
+  'authorize-rejected__driver-g3-secret-mismatch',
+  'authorize-rejected__driver-g4-allowlist-rejected',
+]);
+export const PRE_UPSTREAM_DIAGNOSTIC_CODES = Object.freeze([
+  ...CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES,
+  ...DRIVER_PRE_UPSTREAM_DIAGNOSTIC_CODES,
+]);
+
 // Result verdicts (section 6, closed allowlist).
 export const ROLE_VERDICTS = Object.freeze([
   'AUTHJS_SESSION_VALID',
@@ -150,6 +178,8 @@ export const SESSION_CONTRACT_STATES = Object.freeze(['PASS', 'FAIL', 'NOT_CHECK
 
 // Exact sanitized artifact key set. No secret/token/cookie/email/password
 // value is structurally representable here.
+// preUpstreamDiagnosticCode (38E) carries only the exact allowlisted static
+// token or null; high-level authErrorClass keeps its existing meaning.
 export const ARTIFACT_KEYS = Object.freeze([
   'artifact',
   'authErrorClass',
@@ -162,6 +192,7 @@ export const ARTIFACT_KEYS = Object.freeze([
   'expectedApiOriginFingerprint',
   'headerName',
   'headerPresent',
+  'preUpstreamDiagnosticCode',
   'protectionBypassHeaderName',
   'protectionBypassHeaderPresent',
   'protectionPassageMode',
@@ -455,9 +486,25 @@ export function parseUpstreamDiagnosticCode(value) {
   };
 }
 
+/**
+ * Strict parser for the pre-upstream static diagnostic code (38E). Returns
+ * { topClass, diagnosticCode } only for the exact allowlisted static tokens
+ * (consumer g1/g2/g3 + driver enabled/secret-mismatch/allowlist-rejected).
+ * Anything else yields null (collapsed upstream, never serialized verbatim).
+ */
+export function parsePreUpstreamDiagnosticCode(value) {
+  if (typeof value !== 'string' || !value) return null;
+  if (!PRE_UPSTREAM_DIAGNOSTIC_CODES.includes(value)) return null;
+  return {
+    topClass: PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX,
+    diagnosticCode: value,
+  };
+}
+
 export function classifyAuthError({ status, codeParam, errorParam }) {
   if (KNOWN_AUTH_ERROR_CLASSES.includes(codeParam)) return codeParam;
   if (parseUpstreamDiagnosticCode(codeParam)) return UPSTREAM_DIAGNOSTIC_CODE_PREFIX;
+  if (parsePreUpstreamDiagnosticCode(codeParam)) return PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX;
   if (codeParam === 'unknown') return 'other';
   if (codeParam != null) return 'other';
   if (errorParam === 'CredentialsSignin' || errorParam === 'CallbackRouteError') {
@@ -473,6 +520,7 @@ function safeCodeParam(value) {
   if (typeof value !== 'string' || !value) return null;
   if (KNOWN_AUTH_ERROR_CLASSES.includes(value)) return value;
   if (parseUpstreamDiagnosticCode(value)) return value;
+  if (parsePreUpstreamDiagnosticCode(value)) return value;
   return 'unknown';
 }
 
@@ -807,6 +855,10 @@ export function buildRoleArtifact(fields) {
     sessionContract: contract,
     authErrorClass: fields.authErrorClass ?? null,
   });
+  const preUpstreamDiagnosticCode = fields.preUpstreamDiagnosticCode ?? null;
+  if (preUpstreamDiagnosticCode !== null && !PRE_UPSTREAM_DIAGNOSTIC_CODES.includes(preUpstreamDiagnosticCode)) {
+    fail('PROBE_INTERNAL_ERROR', 'preUpstreamDiagnosticCode가 허용된 static token이 아닙니다.');
+  }
   const artifact = {
     artifact: ARTIFACT_ID,
     authErrorClass: fields.authErrorClass,
@@ -819,6 +871,7 @@ export function buildRoleArtifact(fields) {
     expectedApiOriginFingerprint: fields.expectedApiOriginFingerprint ?? null,
     headerName: config.headerName,
     headerPresent: fields.headerPresent,
+    preUpstreamDiagnosticCode,
     protectionBypassHeaderName: PROTECTION_BYPASS_HEADER_NAME,
     protectionBypassHeaderPresent: fields.protectionBypassHeaderPresent ?? false,
     protectionPassageMode: mode,
@@ -1288,6 +1341,8 @@ export async function runRoleCallbackProbe(
     errorParam: locationEvidence.errorParam,
   });
   const upstreamDiagnostic = parseUpstreamDiagnosticCode(locationEvidence.codeParam);
+  // Pre-upstream static recovery (38E): allowlisted static token only.
+  const preUpstreamDiagnostic = parsePreUpstreamDiagnosticCode(locationEvidence.codeParam);
   if (callbackStatus === 401 || callbackStatus === 403) {
     const code = 'CALLBACK_REJECTED';
     const message = 'callback application 응답에서 인증 거절이 직접 관찰됐습니다.';
@@ -1467,6 +1522,7 @@ export async function runRoleCallbackProbe(
     deploymentSourceSha: bound.expectedSha,
     expectedApiOriginFingerprint,
     headerPresent,
+    preUpstreamDiagnosticCode: preUpstreamDiagnostic?.diagnosticCode ?? null,
     protectionBypassHeaderPresent: protectionPresent,
     protectionPassageMode: protectionMode,
     role: normalizedRole,
