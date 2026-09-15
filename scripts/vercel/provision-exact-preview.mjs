@@ -1,9 +1,10 @@
 /**
- * Exact-preview provisioning helper (PILOT-AUTH-EXACT-REF-PREVIEW-PROVISIONING-CAPABILITY-42A).
+ * Exact-preview provisioning helper (PILOT-AUTH-EXACT-REF-PREVIEW-PROVISIONING-CAPABILITY-42A
+ * + PILOT-AUTH-DRIVER-EXACT-PREVIEW-CAPABILITY-43A).
  *
  * Minimal diagnostic/runtime-proof capability: preserve an arbitrary approved
- * exact Git commit SHA as the source identity of a Consumer / Seller Vercel
- * Preview deployment.
+ * exact Git commit SHA as the source identity of a Consumer / Seller / Driver
+ * Vercel Preview deployment.
  *
  * Mechanism (smallest official path):
  * - Build a dedicated ref `preview-exact/<scope>/<sha>` pointing EXACTLY at
@@ -33,12 +34,13 @@ import { fileURLToPath } from 'node:url';
 
 export const REPO = 'booker-lab/greenhub';
 
-/** Provisioning caller allowlist. `both` = consumer + seller. Driver is out of scope. */
-export const APP_ALLOWLIST = Object.freeze(['consumer', 'seller', 'both']);
+/** Provisioning caller allowlist. `both` = consumer + seller (driver excluded). Driver is an independent single scope. */
+export const APP_ALLOWLIST = Object.freeze(['consumer', 'seller', 'driver', 'both']);
 
 export const SCOPE_TO_APPS = Object.freeze({
   consumer: Object.freeze(['consumer']),
   seller: Object.freeze(['seller']),
+  driver: Object.freeze(['driver']),
   both: Object.freeze(['consumer', 'seller']),
 });
 
@@ -47,7 +49,7 @@ export const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 export const REF_PREFIX = 'preview-exact/';
 
-export const REF_PATTERN = /^preview-exact\/(consumer|seller|both)\/[0-9a-f]{40}$/;
+export const REF_PATTERN = /^preview-exact\/(consumer|seller|driver|both)\/[0-9a-f]{40}$/;
 
 export class ProvisioningError extends Error {
   constructor(code, message) {
@@ -69,13 +71,13 @@ export function assertExactSha(value) {
   return value;
 }
 
-/** Validate the app selection against the allowlist. Production/driver/main/preview are impossible here. */
+/** Validate the app selection against the allowlist. Production/main/preview are impossible here. */
 export function assertProvisioningApp(value) {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (!APP_ALLOWLIST.includes(normalized)) {
     fail(
       'UNKNOWN_PROVISIONING_APP',
-      `알 수 없는 provisioning 앱입니다: ${JSON.stringify(value)} (consumer|seller|both만 허용)`,
+      `알 수 없는 provisioning 앱입니다: ${JSON.stringify(value)} (consumer|seller|driver|both만 허용)`,
     );
   }
   return normalized;
