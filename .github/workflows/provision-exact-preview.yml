@@ -1,14 +1,15 @@
 name: Provision exact-preview deployment (diagnostic/runtime-proof)
 
 # Controlled Pilot auth runtime verification: preserve an arbitrary approved
-# exact Git commit SHA as the source identity of a Consumer / Seller Vercel
-# Preview deployment.
+# exact Git commit SHA as the source identity of a Consumer / Seller / Driver
+# Vercel Preview deployment.
 #
 # Mechanism (minimal official path):
-# - workflow_dispatch with exact_sha + app (consumer|seller|both).
+# - workflow_dispatch with exact_sha + app (consumer|seller|driver|both).
 # - Validate syntax/allowlist/provenance, then push ONLY the dedicated ref
 #   `preview-exact/<scope>/<sha>` pointing EXACTLY at the requested commit
 #   (no new commit, no merge, no main mutation, no force, no history rewrite).
+# `both` covers consumer + seller only; `driver` is an independent single scope.
 # - The existing Vercel Git integration creates Preview deployments with
 #   meta.githubCommitSha == requested exact SHA and target == null (preview).
 #   `main` deployments stay disabled via apps/<app>/vercel.json.
@@ -34,6 +35,7 @@ on:
         options:
           - consumer
           - seller
+          - driver
           - both
   pull_request:
     paths:
@@ -112,9 +114,9 @@ jobs:
             exit 1
           fi
           case "$APP" in
-            consumer|seller|both) ;;
+            consumer|seller|driver|both) ;;
             *)
-              echo 'app은 consumer|seller|both만 허용됩니다.' >&2
+              echo 'app은 consumer|seller|driver|both만 허용됩니다.' >&2
               exit 1
               ;;
           esac
@@ -132,7 +134,7 @@ jobs:
           printf '%s' "$request_json" > /tmp/exact-preview-request.json
           ref="$(node -p "JSON.parse(require('fs').readFileSync('/tmp/exact-preview-request.json','utf8')).ref")"
           apps="$(node -p "JSON.parse(require('fs').readFileSync('/tmp/exact-preview-request.json','utf8')).apps.join(',')")"
-          if [[ ! "$ref" =~ ^preview-exact/(consumer|seller|both)/[0-9a-f]{40}$ ]]; then
+          if [[ ! "$ref" =~ ^preview-exact/(consumer|seller|driver|both)/[0-9a-f]{40}$ ]]; then
             echo 'provisioning ref가 dedicated preview-exact/* 형식이 아니라 실행을 차단합니다.' >&2
             exit 1
           fi
@@ -152,7 +154,7 @@ jobs:
           REF: ${{ steps.validate.outputs.ref }}
         run: |
           set -euo pipefail
-          if [[ ! "$REF" =~ ^preview-exact/(consumer|seller|both)/[0-9a-f]{40}$ ]]; then
+          if [[ ! "$REF" =~ ^preview-exact/(consumer|seller|driver|both)/[0-9a-f]{40}$ ]]; then
             echo 'dedicated provisioning ref가 아니라 push를 차단합니다.' >&2
             exit 1
           fi
@@ -201,5 +203,16 @@ jobs:
             echo ""
             echo "For a single-app proof, pass --only=consumer (or seller) with"
             echo "only that app's deployment ID."
+            echo ""
+            echo "For a driver single-scope proof (app=driver, ref"
+            echo "\`preview-exact/driver/$EXACT_SHA\`), resolve the driver"
+            echo "deployment ID, then prove exact binding with:"
+            echo ""
+            echo '```bash'
+            echo "node scripts/wait-preview-deploy.mjs --json --once \\"
+            echo "  --sha=\"$EXACT_SHA\" \\"
+            echo '  --driver-deployment-id="$DRIVER_DPL" \'
+            echo '  --only=driver'
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           printf 'requested=%s ref=%s apps=%s target=preview\n' "$EXACT_SHA" "$REF" "$APPS"
