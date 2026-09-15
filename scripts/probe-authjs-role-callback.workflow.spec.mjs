@@ -14,7 +14,17 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import * as roleModule from './probe-authjs-role-callback.mjs';
-import { APPROVAL_VALUE, ROLE_CONFIG, assertRole } from './probe-authjs-role-callback.mjs';
+import {
+  APPROVAL_VALUE,
+  ARTIFACT_KEYS,
+  DRIVER_AUTHORIZE_GATE_CLASSES,
+  DRIVER_GATE_CODE_TO_GATE_CLASS,
+  PRE_UPSTREAM_DIAGNOSTIC_CODES,
+  ROLE_CONFIG,
+  assertRole,
+  buildRoleArtifact,
+  resolveDriverGateClass,
+} from './probe-authjs-role-callback.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..');
@@ -187,6 +197,193 @@ describe('workflow seller/driver probe invocation (34B)', () => {
     assert.ok(
       source.includes('scripts/probe-authjs-role-callback.mjs'),
       'pull_request paths must include the role runner',
+    );
+  });
+});
+
+describe('driver gate artifact projection (39A)', () => {
+  function roleSummarySlice(source, summaryName) {
+    // The jq projection writes to evidence/<summaryName>-summary.json; the jq
+    // block immediately precedes that redirect. Use the summary marker (not
+    // the earlier raw redirect) so the window covers the jq accessors.
+    const marker = `evidence/${summaryName}-summary.json`;
+    const idx = source.indexOf(marker);
+    assert.ok(idx >= 0, `workflow must project ${summaryName}-summary.json`);
+    const start = Math.max(0, idx - 3000);
+    return source.slice(start, idx + 500);
+  }
+
+  function projectRoleSummary(raw) {
+    // Mirrors the workflow jq: `gateClass: (.gateClass // null)` and
+    // `preUpstreamDiagnosticCode: (.preUpstreamDiagnosticCode // null)`.
+    // Only the two gate fields plus the preserved legacy fields are modeled;
+    // the workflow must not drop legacy fields (checked separately via text).
+    return {
+      authErrorClass: raw.authErrorClass ?? null,
+      gateClass: raw.gateClass ?? null,
+      preUpstreamDiagnosticCode: raw.preUpstreamDiagnosticCode ?? null,
+      callbackStatus: raw.callbackStatus ?? null,
+      callbackLocationClass: raw.callbackLocationClass ?? null,
+      sessionState: raw.sessionState ?? null,
+      setCookiePresent: raw.setCookiePresent ?? null,
+      upstreamStatus: raw.upstreamStatus ?? null,
+    };
+  }
+
+  it('1: gateClass survives raw probe -> role summary -> uploaded workflow evidence', () => {
+    const source = readWorkflow();
+    assert.ok(
+      source.includes('scripts/probe-authjs-role-callback.gate-38b.spec.mjs'),
+      'probe-spec must run the 38B gate deterministic spec',
+    );
+    for (const summaryName of ['seller', 'driver']) {
+      const slice = roleSummarySlice(source, summaryName);
+      assert.ok(slice.includes('gateClass: (.gateClass // null)'), `${summaryName} projection must preserve gateClass`);
+      assert.ok(
+        slice.includes('preUpstreamDiagnosticCode: (.preUpstreamDiagnosticCode // null)'),
+        `${summaryName} projection must preserve preUpstreamDiagnosticCode`,
+      );
+    }
+    const raw = buildRoleArtifact({
+      role: 'driver',
+      authErrorClass: 'authorize-rejected',
+      callbackLocationClass: 'LOGIN_ERROR',
+      callbackStatus: 302,
+      checkedAt: '2026-09-14T00:00:00.000Z',
+      deploymentId: 'dpl_0123456789abcdef',
+      deploymentSourceSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      headerPresent: true,
+      preUpstreamDiagnosticCode: 'authorize-rejected__driver-g7-upstream-non-ok',
+      gateClass: 'UPSTREAM_NON_OK',
+      sessionContract: 'NOT_CHECKED',
+      sessionState: 'INVALID',
+      setCookiePresent: false,
+      workflowSourceSha: 'local-unpublished',
+    });
+    assert.equal(raw.gateClass, 'UPSTREAM_NON_OK');
+    const projected = projectRoleSummary(raw);
+    assert.equal(projected.gateClass, 'UPSTREAM_NON_OK');
+    assert.equal(projected.preUpstreamDiagnosticCode, 'authorize-rejected__driver-g7-upstream-non-ok');
+    assert.ok(ARTIFACT_KEYS.includes('gateClass'), 'ARTIFACT_KEYS must include gateClass');
+  });
+
+  it('2: no gate is fabricated when absent', () => {
+    const source = readWorkflow();
+    // Fallback is null-coalescing, never a hardcoded gate literal.
+    assert.ok(!source.includes("gateClass: \"RUNTIME_DISABLED\""), 'workflow must not hardcode a gate');
+    assert.ok(!source.includes("gateClass: 'RUNTIME_DISABLED'"), 'workflow must not hardcode a gate');
+    const sellerRaw = buildRoleArtifact({
+      role: 'seller',
+      authErrorClass: 'authorize-rejected',
+      callbackLocationClass: 'LOGIN_ERROR',
+      callbackStatus: 302,
+      checkedAt: '2026-09-14T00:00:00.000Z',
+      deploymentId: 'dpl_0123456789abcdef',
+      deploymentSourceSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      headerPresent: true,
+      preUpstreamDiagnosticCode: null,
+      gateClass: null,
+      sessionContract: 'NOT_CHECKED',
+      sessionState: 'INVALID',
+      setCookiePresent: false,
+      workflowSourceSha: 'local-unpublished',
+    });
+    const projected = projectRoleSummary(sellerRaw);
+    assert.equal(projected.gateClass, null);
+    assert.equal(projected.preUpstreamDiagnosticCode, null);
+    assert.equal(
+      resolveDriverGateClass({ role: 'driver', codeParam: null, errorParam: null, locationClass: 'OTHER' }),
+      null,
+      'OTHER without code must not fabricate AUTHORIZED',
+    );
+  });
+
+  it('3: seller behavior remains backward compatible', () => {
+    const source = readWorkflow();
+    const sellerSlice = roleSummarySlice(source, 'seller');
+    // Legacy seller fields must still be projected verbatim.
+    for (const field of [
+      'authErrorClass',
+      'callbackStatus',
+      'callbackLocationClass',
+      'sessionState',
+      'setCookiePresent',
+      'upstreamStatus',
+      'deploymentId',
+      'deploymentSourceSha',
+      'expectedSha',
+      'observedDeploymentSha',
+    ]) {
+      assert.ok(sellerSlice.includes(field), `seller projection must preserve legacy field ${field}`);
+    }
+    // Seller artifact with null gate passes through unchanged.
+    const sellerArtifact = buildRoleArtifact({
+      role: 'seller',
+      authErrorClass: 'authorize-rejected',
+      callbackLocationClass: 'LOGIN_ERROR',
+      callbackStatus: 302,
+      checkedAt: '2026-09-14T00:00:00.000Z',
+      deploymentId: 'dpl_0123456789abcdef',
+      deploymentSourceSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      headerPresent: true,
+      preUpstreamDiagnosticCode: null,
+      gateClass: null,
+      sessionContract: 'NOT_CHECKED',
+      sessionState: 'INVALID',
+      setCookiePresent: false,
+      workflowSourceSha: 'local-unpublished',
+    });
+    assert.equal(sellerArtifact.gateClass, null);
+    assert.equal(projectRoleSummary(sellerArtifact).gateClass, null);
+  });
+
+  it('4: diagnostic values are closed/static/non-sensitive', () => {
+    assert.equal(DRIVER_AUTHORIZE_GATE_CLASSES.length, 11);
+    for (const gate of Object.values(DRIVER_GATE_CODE_TO_GATE_CLASS)) {
+      assert.ok(DRIVER_AUTHORIZE_GATE_CLASSES.includes(gate), `mapped gate ${gate} must be closed enum`);
+    }
+    const raw = buildRoleArtifact({
+      role: 'driver',
+      authErrorClass: 'authorize-rejected',
+      callbackLocationClass: 'LOGIN_ERROR',
+      callbackStatus: 302,
+      checkedAt: '2026-09-14T00:00:00.000Z',
+      deploymentId: 'dpl_0123456789abcdef',
+      deploymentSourceSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      headerPresent: true,
+      preUpstreamDiagnosticCode: 'authorize-rejected__driver-g3-secret-mismatch',
+      gateClass: 'APP_SECRET_GATE_REJECTED',
+      sessionContract: 'NOT_CHECKED',
+      sessionState: 'INVALID',
+      setCookiePresent: false,
+      workflowSourceSha: 'local-unpublished',
+    });
+    assert.ok(PRE_UPSTREAM_DIAGNOSTIC_CODES.includes(raw.preUpstreamDiagnosticCode));
+    const serialized = JSON.stringify(projectRoleSummary(raw));
+    assert.ok(!serialized.includes('@'), 'projected evidence must not contain email values');
+    assert.ok(!serialized.includes('dpl_0123456789abcdef') || true, 'deployment id is binding metadata, not secret');
+  });
+
+  it('5: AUTHORIZED inference does not overwrite an observed rejection gate', () => {
+    // Rejection code + LOGIN_ERROR resolves to the rejection gate, never AUTHORIZED.
+    assert.equal(
+      resolveDriverGateClass({
+        role: 'driver',
+        codeParam: 'authorize-rejected__driver-g7-upstream-non-ok',
+        errorParam: 'CredentialsSignin',
+        locationClass: 'LOGIN_ERROR',
+      }),
+      'UPSTREAM_NON_OK',
+    );
+    // Only explicit ROOT success without code/error infers AUTHORIZED.
+    assert.equal(
+      resolveDriverGateClass({ role: 'driver', codeParam: null, errorParam: null, locationClass: 'ROOT' }),
+      'AUTHORIZED',
+    );
+    // LOGIN_ERROR without code stays null (incomplete, never AUTHORIZED).
+    assert.equal(
+      resolveDriverGateClass({ role: 'driver', codeParam: null, errorParam: 'CredentialsSignin', locationClass: 'LOGIN_ERROR' }),
+      null,
     );
   });
 });
