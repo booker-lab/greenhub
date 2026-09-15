@@ -1,0 +1,242 @@
+name: Driver preview allowlist secure bridge (43C)
+
+# Manual-only secure bridge for the Driver Preview allowlist env entry.
+# This workflow never mutates the allowlist on push/PR by construction:
+# the mutation job runs ONLY on workflow_dispatch. PR events run the
+# deterministic spec job only (mock/local, provider-free).
+#
+# Locked contract:
+# - Driver Preview only: team_J91VWI0TqcHdcF36T7qVgiT1 / greenhub-driver /
+#   prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW / Preview / RFASslCQh9EVuvfv /
+#   ROUND_DIRECT_E2E_DRIVER_EMAILS / old dpl_BM6yZATGyH2R6LW6uL8uvkAPhCjn /
+#   source 33cb9773df86abc486783e53757448280b80be96.
+# - Additive-only: CURRENT_SET + canonical driver identity. Unrelated members
+#   are never removed; canonical identity is present after.
+# - Production mutation is structurally unreachable (Preview literal only).
+# - Write credential: ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN only.
+#   The read credential is NEVER a write fallback and is not referenced here.
+# - Reprovisioning reuses the 43A exact-preview capability with the exact
+#   expected source SHA only. Latest-commit promotion / latest-ref flows are
+#   forbidden and absent (no latest-SHA resolution exists in this bridge).
+# - Secrets and raw allowlist values never enter stdout/stderr/artifacts;
+#   evidence is boolean/count only.
+#
+# 43C scope: source + deterministic verification + publication only.
+# This task does not dispatch the workflow and performs no live mutation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: '수동 실행 확인 (APPLY_DRIVER_PREVIEW_ALLOWLIST만 허용)'
+        required: true
+        type: choice
+        options:
+          - APPLY_DRIVER_PREVIEW_ALLOWLIST
+  pull_request:
+    paths:
+      - scripts/vercel/driver-preview-allowlist-reprobe.mjs
+      - scripts/vercel/driver-preview-allowlist-reprobe.spec.mjs
+      - .github/workflows/driver-preview-allowlist-reprobe.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: driver-preview-allowlist-reprobe
+  cancel-in-progress: false
+
+jobs:
+  deterministic-spec:
+    name: allowlist bridge deterministic spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: run allowlist bridge spec (mock/local only)
+        run: node --test scripts/vercel/driver-preview-allowlist-reprobe.spec.mjs
+
+  allowlist-bridge:
+    name: driver preview allowlist bridge (manual only)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: deterministic-spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      # Secret scope lives on the Environment; the single-operator preflight
+      # below keeps the fail-closed approval contract (cf. round-direct-e2e).
+      name: round-direct-e2e
+    permissions:
+      contents: read
+    steps:
+      - name: full history checkout (SHA provenance check)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: owner + dispatch + confirm preflight (fail-closed)
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch 이외의 이벤트에서는 allowlist bridge를 실행할 수 없습니다.' >&2
+            exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow 실행자가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow triggering actor가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$CONFIRM" != 'APPLY_DRIVER_PREVIEW_ALLOWLIST' ]]; then
+            echo '수동 실행 확인 값이 올바르지 않아 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          printf 'preflight ok: manual driver preview allowlist bridge\n'
+
+      - name: exact target contract preflight (fail-closed, no secret output)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/vercel/driver-preview-allowlist-reprobe.mjs --check-only
+          printf 'contract ok: driver preview exact identity\n'
+
+      - name: additive-only allowlist mutation (driver preview only)
+        shell: bash
+        env:
+          ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN: ${{ secrets.ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN }}
+          ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM }}
+          DRIVER_PREVIEW_TEAM_ID: team_J91VWI0TqcHdcF36T7qVgiT1
+          DRIVER_PREVIEW_PROJECT: greenhub-driver
+          DRIVER_PREVIEW_PROJECT_ID: prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW
+          DRIVER_PREVIEW_ENVIRONMENT: preview
+          DRIVER_PREVIEW_ENV_ENTRY_ID: RFASslCQh9EVuvfv
+          DRIVER_PREVIEW_ENV_KEY: ROUND_DIRECT_E2E_DRIVER_EMAILS
+          DRIVER_PREVIEW_OLD_DEPLOYMENT_ID: dpl_BM6yZATGyH2R6LW6uL8uvkAPhCjn
+          DRIVER_PREVIEW_EXPECTED_SHA: 33cb9773df86abc486783e53757448280b80be96
+        run: |
+          set -euo pipefail
+          # Fail closed when the write credential is not provisioned. The value
+          # is never printed, hashed, or stored; only presence is probed.
+          if [[ -z "${ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN:-}" ]]; then
+            echo 'WRITE_CREDENTIAL_NOT_PROVISIONED: driver write credential 없이 mutation을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ -z "${ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM:-}" ]]; then
+            echo 'canonical driver identity 없이 mutation을 차단합니다.' >&2
+            exit 1
+          fi
+          # NOTE: the Vercel read credential is intentionally never referenced
+          # in this job and must never become a write fallback. All provider
+          # reads/writes here authenticate with the driver write credential only.
+          # The provider response body (raw allowlist) is never printed, hashed,
+          # or stored; only boolean/count evidence reaches stdout/summary.
+          node --input-type=module -e "
+            import { planDriverAllowlistMutation, assertProviderReadbackMatches, updateDriverPreviewEnvEntry } from './scripts/vercel/driver-preview-allowlist-reprobe.mjs';
+            const writeToken = process.env.ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN;
+            const teamId = process.env.DRIVER_PREVIEW_TEAM_ID;
+            const projectId = process.env.DRIVER_PREVIEW_PROJECT_ID;
+            const envEntryId = process.env.DRIVER_PREVIEW_ENV_ENTRY_ID;
+            const getEndpoint =
+              'https://api.vercel.com/v9/projects/' + encodeURIComponent(projectId) +
+              '/env/' + encodeURIComponent(envEntryId) +
+              '?teamId=' + encodeURIComponent(teamId);
+            const getResponse = await fetch(getEndpoint, {
+              method: 'GET',
+              headers: { Accept: 'application/json', Authorization: 'Bearer ' + writeToken },
+            });
+            if (!getResponse.ok) {
+              console.error('provider readback GET failed; blocking mutation.');
+              process.exit(1);
+            }
+            const entry = await getResponse.json();
+            assertProviderReadbackMatches({
+              readback: {
+                teamId,
+                project: entry?.projectName ?? process.env.DRIVER_PREVIEW_PROJECT,
+                projectId,
+                environment: process.env.DRIVER_PREVIEW_ENVIRONMENT,
+                envEntryId: entry?.id ?? envEntryId,
+                envKey: entry?.key ?? process.env.DRIVER_PREVIEW_ENV_KEY,
+                oldDeploymentId: process.env.DRIVER_PREVIEW_OLD_DEPLOYMENT_ID,
+                sourceSha: process.env.DRIVER_PREVIEW_EXPECTED_SHA,
+              },
+            });
+            const currentRaw = typeof entry?.value === 'string' ? entry.value : '';
+            if (!currentRaw) {
+              console.error('provider readback allowlist is empty; blocking mutation.');
+              process.exit(1);
+            }
+            const plan = await planDriverAllowlistMutation({
+              env: process.env,
+              target: {
+                app: 'driver',
+                teamId,
+                project: process.env.DRIVER_PREVIEW_PROJECT,
+                projectId,
+                environment: process.env.DRIVER_PREVIEW_ENVIRONMENT,
+                envEntryId,
+                envKey: process.env.DRIVER_PREVIEW_ENV_KEY,
+                oldDeploymentId: process.env.DRIVER_PREVIEW_OLD_DEPLOYMENT_ID,
+                sourceSha: process.env.DRIVER_PREVIEW_EXPECTED_SHA,
+              },
+              currentRaw,
+              canonicalIdentity: process.env.ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM,
+              vercelClient: {
+                updateDriverPreviewEnvEntry: (args) => updateDriverPreviewEnvEntry(args, fetch),
+              },
+            });
+            process.stdout.write(JSON.stringify(plan.evidence) + '\n');
+          "
+
+      - name: exact preview reprovision evidence (43A reuse, expected SHA only)
+        shell: bash
+        env:
+          DRIVER_PREVIEW_EXPECTED_SHA: 33cb9773df86abc486783e53757448280b80be96
+        run: |
+          set -euo pipefail
+          {
+            echo "## Driver preview allowlist bridge"
+            echo ""
+            echo "- target: driver Preview only (production unreachable)"
+            echo "- project: \`greenhub-driver\` (\`prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW\`)"
+            echo "- env entry: \`ROUND_DIRECT_E2E_DRIVER_EMAILS\` (\`RFASslCQh9EVuvfv\`)"
+            echo "- old deployment: \`dpl_BM6yZATGyH2R6LW6uL8uvkAPhCjn\`"
+            echo "- expected source SHA: \`$DRIVER_PREVIEW_EXPECTED_SHA\`"
+            echo "- mutation: additive-only (CURRENT_SET + canonical identity)"
+            echo "- reprovision: existing 43A capability, exact expected SHA only"
+            echo ""
+            echo "Reprovision the exact Preview deployment with:"
+            echo ""
+            echo '```bash'
+            echo "node scripts/vercel/provision-exact-preview.mjs --sha=\"$DRIVER_PREVIEW_EXPECTED_SHA\" --app=driver"
+            echo '```'
+            echo ""
+            echo "Then prove exact binding with:"
+            echo ""
+            echo '```bash'
+            echo "node scripts/wait-preview-deploy.mjs --json --once \\"
+            echo "  --sha=\"$DRIVER_PREVIEW_EXPECTED_SHA\" \\"
+            echo '  --driver-deployment-id="$DRIVER_DPL" \'
+            echo '  --only=driver'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf 'bridge complete: driver preview additive-only (evidence: boolean/count only)\n'
