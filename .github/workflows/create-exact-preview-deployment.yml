@@ -1,0 +1,240 @@
+name: Create exact-preview deployment via provider-native targeted API (44A)
+
+# Provider-native exact Git SHA Preview capability (44A).
+#
+# Problem closed: `provision-exact-preview.yml` (Git ref push ->
+# Vercel Git auto-trigger) was proven in 42C to NOT create Consumer/Seller
+# deployments (`VERCEL_DEPLOYMENT_NOT_CREATED`). This workflow uses the
+# Vercel-official provider-native path instead:
+#
+#   POST /v13/deployments?teamId=<team>&forceNew=1&skipAutoDetectionConfirmation=1
+#   { name, project, gitSource: { type:'github', org, repo, ref: sha, sha } }
+#   # `target` omitted => Preview (null). Production impossible.
+#
+# Contracts:
+# - Inputs: exact_sha (40 lower hex, real commit object) + app
+#   (consumer|seller|driver|both; both = consumer + seller only).
+# - No `preview-exact/*` ref push, no merge commit, no tree-for-SHA
+#   substitution, no main/preview mutation, no production target/promote/alias.
+# - Project allowlist authority = scripts/wait-preview-deploy.mjs PREVIEW_APPS.
+#   Mismatch fails closed. Creation IDs feed the STRICT waiter unchanged.
+# - Credential: secrets.VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN (team-scoped,
+#   Preview-create only). The read-only ROUND_DIRECT_E2E_VERCEL_READ_TOKEN
+#   CANNOT create and is used only for the waiter readback.
+# - One-time provisioning: register VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN once as
+#   a GitHub Actions secret (minimal permission: create Preview deployments
+#   on the three allowlisted projects; no production promote/alias, no env
+#   mutation). Token value is never logged.
+#
+# Live proof boundary: consumer single scope first; no Seller/Driver fan-out
+# until consumer proves READY + exact SHA + Preview + strict waiter.
+
+on:
+  workflow_dispatch:
+    inputs:
+      exact_sha:
+        description: 'Preview에 직접 결합할 40자리 exact commit SHA'
+        required: true
+        type: string
+      app:
+        description: 'Targeted deployment 대상 앱'
+        required: true
+        type: choice
+        options:
+          - consumer
+          - seller
+          - driver
+          - both
+  pull_request:
+    paths:
+      - scripts/vercel/create-exact-preview-deployment.mjs
+      - scripts/vercel/create-exact-preview-deployment.spec.mjs
+      - .github/workflows/create-exact-preview-deployment.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: create-exact-preview-deployment
+  cancel-in-progress: false
+
+jobs:
+  deterministic-spec:
+    name: targeted-preview deterministic spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: run targeted-preview deterministic specs (mock/local only)
+        run: node --test scripts/vercel/create-exact-preview-deployment.spec.mjs
+
+  targeted-deploy:
+    name: provider-native targeted Preview deployment
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: deterministic-spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN }}
+      ROUND_DIRECT_E2E_VERCEL_READ_TOKEN: ${{ secrets.ROUND_DIRECT_E2E_VERCEL_READ_TOKEN }}
+    steps:
+      - name: full history checkout (SHA provenance check)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: owner + input preflight (fail-closed, Preview only)
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          EXACT_SHA: ${{ inputs.exact_sha }}
+          APP: ${{ inputs.app }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch 이외의 이벤트에서는 targeted deployment를 실행할 수 없습니다.' >&2
+            exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow 실행자가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow triggering actor가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ ! "$EXACT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'exact SHA는 40자리 소문자 16진수여야 합니다.' >&2
+            exit 1
+          fi
+          case "$APP" in
+            consumer|seller|driver|both) ;;
+            *)
+              echo 'app은 consumer|seller|driver|both만 허용됩니다.' >&2
+              exit 1
+              ;;
+          esac
+          if [[ -z "${VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN:-}" ]]; then
+            echo 'VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN이 없어 provider-native deployment를 생성할 수 없습니다.' >&2
+            echo 'ONE_TIME_CREDENTIAL_PROVISIONING_REQUIRED: GitHub Actions secret에 1회 등록 필요 (Preview-create 최소 권한, production promote/alias 없음).' >&2
+            exit 1
+          fi
+          printf 'preflight ok: app=%s sha=%s target=preview (production forbidden)\n' "$APP" "$EXACT_SHA"
+
+      - name: helper dry-run validation + commit existence (fail-closed)
+        shell: bash
+        env:
+          EXACT_SHA: ${{ inputs.exact_sha }}
+          APP: ${{ inputs.app }}
+        run: |
+          set -euo pipefail
+          node scripts/vercel/create-exact-preview-deployment.mjs --sha="$EXACT_SHA" --app="$APP" --dry-run > /tmp/targeted-plan.json
+          node -e "
+            const plan = JSON.parse(require('fs').readFileSync('/tmp/targeted-plan.json','utf8'));
+            if (plan.sha !== process.env.EXACT_SHA) { console.error('plan SHA mismatch'); process.exit(1); }
+            if (plan.target !== null || plan.production !== false) { console.error('plan must be Preview-only'); process.exit(1); }
+            if (plan.gitRefPushRequired !== false) { console.error('plan must not require Git ref push'); process.exit(1); }
+            for (const item of plan.plans) {
+              if (item.body.gitSource.sha !== process.env.EXACT_SHA || item.body.gitSource.ref !== process.env.EXACT_SHA) { console.error('gitSource exact SHA mismatch'); process.exit(1); }
+              if ('target' in item.body && item.body.target != null) { console.error('body target must be omitted'); process.exit(1); }
+            }
+            console.log('dry-run plan ok: apps=' + plan.apps.join(','));
+          "
+          git cat-file -e "${EXACT_SHA}^{commit}"
+
+      - name: provider-native creation (Preview only, no ref push)
+        id: create
+        shell: bash
+        env:
+          EXACT_SHA: ${{ inputs.exact_sha }}
+          APP: ${{ inputs.app }}
+        run: |
+          set -euo pipefail
+          # Token travels only via env -> Authorization header; never echoed.
+          set +x
+          node scripts/vercel/create-exact-preview-deployment.mjs --sha="$EXACT_SHA" --app="$APP" > /tmp/targeted-result.json
+          node -e "
+            const result = JSON.parse(require('fs').readFileSync('/tmp/targeted-result.json','utf8'));
+            if (result.requestedSha !== process.env.EXACT_SHA) { console.error('result SHA mismatch'); process.exit(1); }
+            if (result.target !== null || result.production !== false) { console.error('result must be Preview-only'); process.exit(1); }
+            if (result.credentialValueRecorded === true) { console.error('credential must never be recorded'); process.exit(1); }
+            for (const d of result.deployments) {
+              if (!/^dpl_[A-Za-z0-9]+$/.test(d.deploymentId ?? '')) { console.error('missing deployment ID for ' + d.app); process.exit(1); }
+              if (d.failureCode) { console.error(d.app + ' creation failed: ' + d.failureCode); process.exit(1); }
+              if (d.target !== null) { console.error(d.app + ' target is not Preview'); process.exit(1); }
+            }
+            console.log('creation ok: ' + result.deployments.map((d) => d.app + '=' + d.deploymentId).join(' '));
+          "
+          # Export IDs for the strict waiter without logging secrets.
+          CONSUMER_DPL="$(node -p "JSON.parse(require('fs').readFileSync('/tmp/targeted-result.json','utf8')).deployments.find((d)=>d.app==='consumer')?.deploymentId ?? ''")"
+          SELLER_DPL="$(node -p "JSON.parse(require('fs').readFileSync('/tmp/targeted-result.json','utf8')).deployments.find((d)=>d.app==='seller')?.deploymentId ?? ''")"
+          DRIVER_DPL="$(node -p "JSON.parse(require('fs').readFileSync('/tmp/targeted-result.json','utf8')).deployments.find((d)=>d.app==='driver')?.deploymentId ?? ''")"
+          printf 'consumer_deployment_id=%s\n' "$CONSUMER_DPL" >> "$GITHUB_OUTPUT"
+          printf 'seller_deployment_id=%s\n' "$SELLER_DPL" >> "$GITHUB_OUTPUT"
+          printf 'driver_deployment_id=%s\n' "$DRIVER_DPL" >> "$GITHUB_OUTPUT"
+
+      - name: strict waiter exact-SHA proof (existing predicate, unchanged)
+        shell: bash
+        env:
+          EXACT_SHA: ${{ inputs.exact_sha }}
+          APP: ${{ inputs.app }}
+          CONSUMER_DPL: ${{ steps.create.outputs.consumer_deployment_id }}
+          SELLER_DPL: ${{ steps.create.outputs.seller_deployment_id }}
+          DRIVER_DPL: ${{ steps.create.outputs.driver_deployment_id }}
+        run: |
+          set -euo pipefail
+          case "$APP" in
+            consumer)
+              node scripts/wait-preview-deploy.mjs --json --only=consumer --sha="$EXACT_SHA" --consumer-deployment-id="$CONSUMER_DPL"
+              ;;
+            seller)
+              node scripts/wait-preview-deploy.mjs --json --only=seller --sha="$EXACT_SHA" --seller-deployment-id="$SELLER_DPL"
+              ;;
+            driver)
+              node scripts/wait-preview-deploy.mjs --json --only=driver --sha="$EXACT_SHA" --driver-deployment-id="$DRIVER_DPL"
+              ;;
+            both)
+              node scripts/wait-preview-deploy.mjs --json --sha="$EXACT_SHA" --consumer-deployment-id="$CONSUMER_DPL" --seller-deployment-id="$SELLER_DPL"
+              ;;
+          esac
+
+      - name: targeted evidence summary (no secrets)
+        shell: bash
+        env:
+          EXACT_SHA: ${{ inputs.exact_sha }}
+          APP: ${{ inputs.app }}
+          CONSUMER_DPL: ${{ steps.create.outputs.consumer_deployment_id }}
+          SELLER_DPL: ${{ steps.create.outputs.seller_deployment_id }}
+          DRIVER_DPL: ${{ steps.create.outputs.driver_deployment_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Provider-native targeted Preview deployment"
+            echo ""
+            echo "- requested SHA: \`$EXACT_SHA\`"
+            echo "- app selection: \`$APP\`"
+            echo "- method: POST /v13/deployments gitSource exact SHA (no ref push)"
+            echo "- target: Preview only (production forbidden, target omitted)"
+            echo "- consumer deployment: \`${CONSUMER_DPL:-none}\`"
+            echo "- seller deployment: \`${SELLER_DPL:-none}\`"
+            echo "- driver deployment: \`${DRIVER_DPL:-none}\`"
+            echo ""
+            echo "Exact binding proven by existing strict waiter"
+            echo "(\`meta.githubCommitSha == requested SHA\` + Preview + READY)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf 'requested=%s app=%s target=preview gitRefPush=no\n' "$EXACT_SHA" "$APP"
