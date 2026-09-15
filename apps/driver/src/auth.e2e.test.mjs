@@ -84,34 +84,54 @@ describe('드라이버 pre-upstream diagnostic projection (38D)', () => {
     );
   });
 
-  it('D: allowlist rejection은 membership + password 조건을 유지하고 고유 code로 projection한다', () => {
+  it('D: allowlist rejection은 membership + password 조건을 유지하고 고유 code로 projection한다 (38B extends 38D: shape split)', () => {
     // 정책 불변: allowlist membership + password 존재 조건을 유지한다.
+    // 38B refines 38D D: password-shape는 g5로 분리, well-shaped email의
+    // membership만 g4로 유지한다 (둘 다 여전히 reject).
     assert.match(source, /ROUND_DIRECT_E2E_DRIVER_EMAILS/);
-    assert.match(source, /isAllowedE2EDriverEmail\s*\(\s*credentials\.email\s*\)/);
-    assert.match(source, /typeof credentials\.password\s*!==\s*['"]string['"]/);
+    assert.match(source, /isAllowedE2EDriverEmail\s*\(\s*credShape\.email\s*\)/);
+    assert.match(source, /typeof credShape\.password\s*!==\s*['"]string['"]/);
     assert.match(
       source,
-      /new DiagnosticCredentialsSignin\(\s*['"]authorize-rejected__driver-g4-allowlist-rejected['"]\s*\)/,
+      /new DiagnosticCredentialsSignin\(\s*['"]authorize-rejected__driver-g4-allowlist-rejected['"]\s*,?\s*\)/,
+    );
+    // Shape split gate g5가 존재한다 (CREDENTIAL_SHAPE_REJECTED, multiline throw 허용).
+    assert.ok(
+      source.includes(`'authorize-rejected__driver-g5-credential-shape-rejected'`),
+      'g5 code site missing',
     );
   });
 
-  it('E/F/G는 bare null 계약을 유지하고 diagnostic projection을 추가하지 않는다', () => {
-    // E: upstream non-2xx는 여전히 bare null이다.
-    assert.match(source, /if\s*\(\s*!res\.ok\s*\)\s*return null/);
-    // F/G: role + approval은 여전히 bare null이다.
-    assert.match(source, /data\.user\.role\s*!==\s*['"]driver['"]/);
-    assert.match(source, /data\.user\.driverApproved\s*!==\s*true/);
-    // Diagnostic throw는 B/C/D 세 곳에만 존재한다.
+  it('E/F/G는 38B full gate로 projection된다 (38D bare-null 계약을 확장)', () => {
+    // 38B extends 38D: previously bare-null upstream/contract branches
+    // (E/F/G) are now exact closed-enum throws (still reject, no
+    // authorize flip). Preview E2E path has no bare `return null`;
+    // `return null` remains only in the local-runtime helper (unchanged).
+    // E: upstream dispatch-failed (fetch throw) vs non-ok (res.ok false) distinct.
+    // Multiline throws carry trailing comma; match verbatim code presence.
+    for (const code of [
+      'authorize-rejected__driver-g6-upstream-dispatch-failed',
+      'authorize-rejected__driver-g7-upstream-non-ok',
+      'authorize-rejected__driver-g8-upstream-response-invalid',
+      'authorize-rejected__driver-g9-role-rejected',
+      'authorize-rejected__driver-g10-approval-rejected',
+    ]) {
+      assert.ok(source.includes(`'${code}'`), `${code} site missing`);
+    }
+    assert.match(source, /if\s*\(\s*!res\.ok\s*\)/);
+    // Diagnostic throw는 B/C/D/G5-G10 고유 static codes로 존재한다 (38D 3종 + 38B 6종).
     const signinArgs = [...source.matchAll(/new DiagnosticCredentialsSignin\(([^)]*)\)/g)].map(
       (match) => match[1].trim(),
     );
-    assert.equal(signinArgs.length, 3);
-    assert.deepEqual(new Set(signinArgs).size, 3);
+    // 38B sites: g2(1)+g3(1)+g5(3 sites)+g4(1)+g6(1)+g7(1)+g8(2 sites)+g9(1)+g10(1) = 12 occurrences.
+    assert.ok(signinArgs.length >= 9, `expected >=9 diagnostic sites, got ${signinArgs.length}`);
+    const distinct = new Set(signinArgs.map((a) => a.split('\n').join('').trim()));
+    assert.ok(distinct.size >= 9, `expected >=9 distinct codes, got ${distinct.size}`);
     for (const arg of signinArgs) {
       assert.match(
         arg,
-        /^'authorize-rejected__driver-g2-enabled'$|^'authorize-rejected__driver-g3-secret-mismatch'$|^'authorize-rejected__driver-g4-allowlist-rejected'$/,
-        `diagnostic must be one of the three static B/C/D codes, got: ${arg}`,
+        /authorize-rejected__driver-g2-enabled|authorize-rejected__driver-g3-secret-mismatch|authorize-rejected__driver-g4-allowlist-rejected|authorize-rejected__driver-g5-credential-shape-rejected|authorize-rejected__driver-g6-upstream-dispatch-failed|authorize-rejected__driver-g7-upstream-non-ok|authorize-rejected__driver-g8-upstream-response-invalid|authorize-rejected__driver-g9-role-rejected|authorize-rejected__driver-g10-approval-rejected/,
+        `diagnostic must be one of the 38B static driver codes, got: ${arg}`,
       );
     }
   });

@@ -850,13 +850,20 @@ describe('consumer probe preservation (34B boundary)', () => {
   });
 });
 
-describe('pre-upstream static diagnostic passthrough (38E)', () => {
+describe('pre-upstream static diagnostic passthrough (38E, extended by 38B)', () => {
   const G1 = 'authorize-rejected__g1-secret-missing';
   const G2 = 'authorize-rejected__g2-secret-mismatch';
   const G3 = 'authorize-rejected__g3-credential-admission-rejected';
   const D_ENABLED = 'authorize-rejected__driver-g2-enabled';
   const D_SECRET = 'authorize-rejected__driver-g3-secret-mismatch';
   const D_ALLOW = 'authorize-rejected__driver-g4-allowlist-rejected';
+  // 38B full gate (preserves 38D g2/g3/g4, adds g5-g10 for exact attribution).
+  const D_SHAPE = 'authorize-rejected__driver-g5-credential-shape-rejected';
+  const D_DISPATCH = 'authorize-rejected__driver-g6-upstream-dispatch-failed';
+  const D_NON_OK = 'authorize-rejected__driver-g7-upstream-non-ok';
+  const D_INVALID = 'authorize-rejected__driver-g8-upstream-response-invalid';
+  const D_ROLE = 'authorize-rejected__driver-g9-role-rejected';
+  const D_APPROVAL = 'authorize-rejected__driver-g10-approval-rejected';
 
   function redirectFor(code) {
     return `/login?code=${encodeURIComponent(code)}&error=CredentialsSignin`;
@@ -910,10 +917,16 @@ describe('pre-upstream static diagnostic passthrough (38E)', () => {
     return artifact;
   }
 
-  it('allowlist exposes exactly the consumer 3 + driver 3 static tokens', () => {
+  it('allowlist exposes exactly the consumer 3 + driver 9 static tokens (38B extends 38D)', () => {
     assert.deepEqual([...CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES], [G1, G2, G3]);
-    assert.deepEqual([...DRIVER_PRE_UPSTREAM_DIAGNOSTIC_CODES], [D_ENABLED, D_SECRET, D_ALLOW]);
-    assert.deepEqual([...PRE_UPSTREAM_DIAGNOSTIC_CODES].sort(), [G1, G2, G3, D_ENABLED, D_SECRET, D_ALLOW].sort());
+    assert.deepEqual(
+      [...DRIVER_PRE_UPSTREAM_DIAGNOSTIC_CODES],
+      [D_ENABLED, D_SECRET, D_ALLOW, D_SHAPE, D_DISPATCH, D_NON_OK, D_INVALID, D_ROLE, D_APPROVAL],
+    );
+    assert.deepEqual(
+      [...PRE_UPSTREAM_DIAGNOSTIC_CODES].sort(),
+      [G1, G2, G3, D_ENABLED, D_SECRET, D_ALLOW, D_SHAPE, D_DISPATCH, D_NON_OK, D_INVALID, D_ROLE, D_APPROVAL].sort(),
+    );
     assert.equal(PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX, 'authorize-rejected');
   });
 
@@ -936,8 +949,8 @@ describe('pre-upstream static diagnostic passthrough (38E)', () => {
     }
   });
 
-  it('3: driver enabled/secret/allowlist codes are distinguished and preserved', async () => {
-    for (const code of [D_ENABLED, D_SECRET, D_ALLOW]) {
+  it('3: driver enabled/secret/allowlist codes are distinguished and preserved (38B: all 9 driver gates)', async () => {
+    for (const code of [D_ENABLED, D_SECRET, D_ALLOW, D_SHAPE, D_DISPATCH, D_NON_OK, D_INVALID, D_ROLE, D_APPROVAL]) {
       assert.equal(classifyAuthError({ status: 302, codeParam: code, errorParam: 'CredentialsSignin' }), 'authorize-rejected');
       const artifact = await artifactFor('driver', code);
       assert.equal(artifact.authErrorClass, 'authorize-rejected');
@@ -948,6 +961,8 @@ describe('pre-upstream static diagnostic passthrough (38E)', () => {
     assert.notEqual(D_ENABLED, D_SECRET);
     assert.notEqual(D_ENABLED, D_ALLOW);
     assert.notEqual(D_SECRET, D_ALLOW);
+    // 38B: dispatch vs non-ok are distinct codes (never collapsed).
+    assert.notEqual(D_DISPATCH, D_NON_OK);
   });
 
   it('4: arbitrary suffixes do not pass through', async () => {

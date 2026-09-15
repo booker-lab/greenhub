@@ -144,8 +144,14 @@ const UPSTREAM_DIAGNOSTIC_CODE_PATTERN =
 //     g3-credential-admission-rejected.
 //   Driver (38D, repository-conformant): driver-g2-enabled,
 //     driver-g3-secret-mismatch, driver-g4-allowlist-rejected.
-// App policy/gates are owned by 38C/38D; this probe only preserves the
-// already-emitted static token in a sanitized artifact field.
+//   Driver 38B (extends 38D, preserves it): g5-credential-shape-rejected,
+//     g6-upstream-dispatch-failed, g7-upstream-non-ok,
+//     g8-upstream-response-invalid, g9-role-rejected,
+//     g10-approval-rejected. All stay `authorize-rejected__driver-...`
+//     so existing top-level `authErrorClass` meaning is preserved; exact
+//     gate is projected separately as `gateClass` (38B closed enum).
+// App policy/gates are owned by 38C/38D/38B; this probe only preserves the
+// already-emitted static token in sanitized artifact fields.
 export const PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX = 'authorize-rejected';
 export const CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES = Object.freeze([
   'authorize-rejected__g1-secret-missing',
@@ -156,11 +162,48 @@ export const DRIVER_PRE_UPSTREAM_DIAGNOSTIC_CODES = Object.freeze([
   'authorize-rejected__driver-g2-enabled',
   'authorize-rejected__driver-g3-secret-mismatch',
   'authorize-rejected__driver-g4-allowlist-rejected',
+  'authorize-rejected__driver-g5-credential-shape-rejected',
+  'authorize-rejected__driver-g6-upstream-dispatch-failed',
+  'authorize-rejected__driver-g7-upstream-non-ok',
+  'authorize-rejected__driver-g8-upstream-response-invalid',
+  'authorize-rejected__driver-g9-role-rejected',
+  'authorize-rejected__driver-g10-approval-rejected',
 ]);
 export const PRE_UPSTREAM_DIAGNOSTIC_CODES = Object.freeze([
   ...CONSUMER_PRE_UPSTREAM_DIAGNOSTIC_CODES,
   ...DRIVER_PRE_UPSTREAM_DIAGNOSTIC_CODES,
 ]);
+
+// PILOT-AUTH-DRIVER-AUTHORIZE-GATE-CLASS-DIAGNOSTIC-38B.
+// Closed-enum gate class projected from the verbatim driver code suffix.
+// API_BASE_UNRESOLVED is contract-complete but never emitted by current
+// source (no authorize-time branch; see apps/driver/src/auth.ts), so it
+// maps to null in practice and AUTHORIZED is inferred from callback success
+// (no error code + ROOT location), not from a code.
+export const DRIVER_AUTHORIZE_GATE_CLASSES = Object.freeze([
+  'RUNTIME_DISABLED',
+  'APP_SECRET_GATE_REJECTED',
+  'DRIVER_ALLOWLIST_REJECTED',
+  'CREDENTIAL_SHAPE_REJECTED',
+  'API_BASE_UNRESOLVED',
+  'UPSTREAM_DISPATCH_FAILED',
+  'UPSTREAM_NON_OK',
+  'UPSTREAM_RESPONSE_INVALID',
+  'ROLE_REJECTED',
+  'APPROVAL_REJECTED',
+  'AUTHORIZED',
+]);
+export const DRIVER_GATE_CODE_TO_GATE_CLASS = Object.freeze({
+  'authorize-rejected__driver-g2-enabled': 'RUNTIME_DISABLED',
+  'authorize-rejected__driver-g3-secret-mismatch': 'APP_SECRET_GATE_REJECTED',
+  'authorize-rejected__driver-g4-allowlist-rejected': 'DRIVER_ALLOWLIST_REJECTED',
+  'authorize-rejected__driver-g5-credential-shape-rejected': 'CREDENTIAL_SHAPE_REJECTED',
+  'authorize-rejected__driver-g6-upstream-dispatch-failed': 'UPSTREAM_DISPATCH_FAILED',
+  'authorize-rejected__driver-g7-upstream-non-ok': 'UPSTREAM_NON_OK',
+  'authorize-rejected__driver-g8-upstream-response-invalid': 'UPSTREAM_RESPONSE_INVALID',
+  'authorize-rejected__driver-g9-role-rejected': 'ROLE_REJECTED',
+  'authorize-rejected__driver-g10-approval-rejected': 'APPROVAL_REJECTED',
+});
 
 // Result verdicts (section 6, closed allowlist).
 export const ROLE_VERDICTS = Object.freeze([
@@ -178,8 +221,10 @@ export const SESSION_CONTRACT_STATES = Object.freeze(['PASS', 'FAIL', 'NOT_CHECK
 
 // Exact sanitized artifact key set. No secret/token/cookie/email/password
 // value is structurally representable here.
-// preUpstreamDiagnosticCode (38E) carries only the exact allowlisted static
-// token or null; high-level authErrorClass keeps its existing meaning.
+// preUpstreamDiagnosticCode (38E, extended by 38B) carries only the exact
+// allowlisted static token or null; gateClass (38B) carries the closed-enum
+// driver gate (or null for seller/non-driver); high-level authErrorClass
+// keeps its existing meaning.
 export const ARTIFACT_KEYS = Object.freeze([
   'artifact',
   'authErrorClass',
@@ -190,6 +235,7 @@ export const ARTIFACT_KEYS = Object.freeze([
   'deploymentId',
   'deploymentSourceSha',
   'expectedApiOriginFingerprint',
+  'gateClass',
   'headerName',
   'headerPresent',
   'preUpstreamDiagnosticCode',
@@ -487,9 +533,9 @@ export function parseUpstreamDiagnosticCode(value) {
 }
 
 /**
- * Strict parser for the pre-upstream static diagnostic code (38E). Returns
- * { topClass, diagnosticCode } only for the exact allowlisted static tokens
- * (consumer g1/g2/g3 + driver enabled/secret-mismatch/allowlist-rejected).
+ * Strict parser for the pre-upstream static diagnostic code (38E, extended
+ * by 38B). Returns { topClass, diagnosticCode } only for the exact
+ * allowlisted static tokens (consumer g1/g2/g3 + driver g2-g10).
  * Anything else yields null (collapsed upstream, never serialized verbatim).
  */
 export function parsePreUpstreamDiagnosticCode(value) {
@@ -499,6 +545,57 @@ export function parsePreUpstreamDiagnosticCode(value) {
     topClass: PRE_UPSTREAM_DIAGNOSTIC_CODE_PREFIX,
     diagnosticCode: value,
   };
+}
+
+/**
+ * 38B closed-enum gate resolution (pure, no network). Maps a verbatim
+ * driver diagnostic code to its 38B gate class. Returns null for
+ * non-driver codes, unknown codes, or seller role (seller gateClass is
+ * always null). AUTHORIZED is never returned here (no code on success);
+ * use resolveDriverGateClass() for success inference. API_BASE_UNRESOLVED
+ * is never returned (no authorize-time branch emits it).
+ */
+export function parseDriverAuthorizeGateClass(value) {
+  if (typeof value !== 'string' || !value) return null;
+  const gate = DRIVER_GATE_CODE_TO_GATE_CLASS[value] ?? null;
+  if (gate === null) return null;
+  if (!DRIVER_AUTHORIZE_GATE_CLASSES.includes(gate)) return null;
+  if (gate === 'AUTHORIZED' || gate === 'API_BASE_UNRESOLVED') return null;
+  return gate;
+}
+
+/**
+ * Resolve the 38B gateClass for a role callback observation.
+ *   driver + allowlisted driver code -> mapped rejection gate (g2-g10).
+ *   driver + no error code + ROOT location (callback success) -> AUTHORIZED
+ *     (session VALID vs INVALID then distinguishes VALID vs DIVERGED
+ *     downstream; gate itself stays AUTHORIZED).
+ *   seller or any other shape -> null (no driver gate).
+ * Only closed-enum values or null are ever returned; no values/hashes.
+ */
+export function resolveDriverGateClass({ role, codeParam, errorParam, locationClass }) {
+  let normalizedRole = null;
+  try {
+    normalizedRole = assertRole(role);
+  } catch {
+    return null;
+  }
+  if (normalizedRole !== 'driver') return null;
+  const fromCode = parseDriverAuthorizeGateClass(codeParam);
+  if (fromCode !== null) return fromCode;
+  // AUTHORIZED inference: Auth.js success carries no `code` and no `error`;
+  // the callback redirects to the callbackUrl (base, ROOT). LOGIN_ERROR or
+  // any error/code means rejection (or incomplete if unparseable).
+  if (codeParam === null || codeParam === undefined) {
+    if (errorParam === null || errorParam === undefined) {
+      // Only claim AUTHORIZED on explicit ROOT success; OTHER/NONE stays null
+      // (incomplete projection, never fabricated).
+      if (locationClass === 'ROOT') return 'AUTHORIZED';
+    }
+  }
+  // Explicit NONE error state (no code, no error, e.g., protection path)
+  // is not a driver gate.
+  return null;
 }
 
 export function classifyAuthError({ status, codeParam, errorParam }) {
@@ -859,6 +956,13 @@ export function buildRoleArtifact(fields) {
   if (preUpstreamDiagnosticCode !== null && !PRE_UPSTREAM_DIAGNOSTIC_CODES.includes(preUpstreamDiagnosticCode)) {
     fail('PROBE_INTERNAL_ERROR', 'preUpstreamDiagnosticCode가 허용된 static token이 아닙니다.');
   }
+  const gateClass = fields.gateClass ?? null;
+  if (gateClass !== null && !DRIVER_AUTHORIZE_GATE_CLASSES.includes(gateClass)) {
+    fail('PROBE_INTERNAL_ERROR', 'gateClass가 허용된 38B closed enum이 아닙니다.');
+  }
+  if (role !== 'driver' && gateClass !== null) {
+    fail('PROBE_INTERNAL_ERROR', 'gateClass는 driver role에서만 설정됩니다.');
+  }
   const artifact = {
     artifact: ARTIFACT_ID,
     authErrorClass: fields.authErrorClass,
@@ -869,6 +973,7 @@ export function buildRoleArtifact(fields) {
     deploymentId: fields.deploymentId,
     deploymentSourceSha: fields.deploymentSourceSha,
     expectedApiOriginFingerprint: fields.expectedApiOriginFingerprint ?? null,
+    gateClass,
     headerName: config.headerName,
     headerPresent: fields.headerPresent,
     preUpstreamDiagnosticCode,
@@ -1341,8 +1446,16 @@ export async function runRoleCallbackProbe(
     errorParam: locationEvidence.errorParam,
   });
   const upstreamDiagnostic = parseUpstreamDiagnosticCode(locationEvidence.codeParam);
-  // Pre-upstream static recovery (38E): allowlisted static token only.
+  // Pre-upstream static recovery (38E, extended by 38B): allowlisted static token only.
   const preUpstreamDiagnostic = parsePreUpstreamDiagnosticCode(locationEvidence.codeParam);
+  // 38B gateClass: closed-enum driver gate (rejection via code, AUTHORIZED
+  // via ROOT success). Seller always null. No values/hashes/lengths.
+  const gateClass = resolveDriverGateClass({
+    role: normalizedRole,
+    codeParam: locationEvidence.codeParam,
+    errorParam: locationEvidence.errorParam,
+    locationClass: locationEvidence.locationClass,
+  });
   if (callbackStatus === 401 || callbackStatus === 403) {
     const code = 'CALLBACK_REJECTED';
     const message = 'callback application 응답에서 인증 거절이 직접 관찰됐습니다.';
@@ -1521,6 +1634,7 @@ export async function runRoleCallbackProbe(
     deploymentId: bound.deploymentId,
     deploymentSourceSha: bound.expectedSha,
     expectedApiOriginFingerprint,
+    gateClass,
     headerPresent,
     preUpstreamDiagnosticCode: preUpstreamDiagnostic?.diagnosticCode ?? null,
     protectionBypassHeaderPresent: protectionPresent,
