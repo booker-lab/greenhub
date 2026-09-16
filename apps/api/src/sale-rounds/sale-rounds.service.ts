@@ -42,9 +42,85 @@ export function isPubliclyVisibleRoundItem(
   return (item as { status: unknown }).status !== 'HIDDEN';
 }
 
-function toPublicRoundItems(items: SaleRoundItem[]): SaleRoundItem[] {
-  // Preserve displayOrder sorting done by getRoundItems; filter only.
-  return items.filter((item) => isPubliclyVisibleRoundItem(item));
+/**
+ * Public sale-round projection — explicit allowlist.
+ * Stored document != public DTO: each public field is listed below, so a
+ * future stored field is never auto-exposed to anonymous consumers.
+ * Excluded as internal/operational: cancellation (lease/worker/order-internal
+ * metadata: failedOrderId/ownerId/leaseId/leaseExpiresAt), counters,
+ * cancelledAt/completedAt/createdAt/updatedAt.
+ * Kept (consumer-verified public business facts): id/storeId/name,
+ * effective status/closeReason, full schedule, deliveryRegion, limits,
+ * carrotLandingUrl. Seller management reads must NOT use this projection.
+ */
+export interface PublicSaleRound {
+  id: string;
+  storeId: string;
+  name: string;
+  status: SaleRound['status'];
+  closeReason: SaleRound['closeReason'];
+  schedule: SaleRound['schedule'];
+  deliveryRegion: SaleRound['deliveryRegion'];
+  limits: SaleRound['limits'];
+  carrotLandingUrl: string | null;
+}
+
+/**
+ * Public sale-round item projection — explicit allowlist.
+ * Excluded as internal: reservedQuantity/orderedQuantity (inventory signals),
+ * createdAt/updatedAt. saleLimitQuantity stays public: it is the per-item
+ * purchase constraint, not internal metadata.
+ */
+export interface PublicSaleRoundItem {
+  id: string;
+  roundId: string;
+  storeId: string;
+  productId: string;
+  productNameSnapshot: string;
+  productImageUrlSnapshot: string | null;
+  roundPrice: number;
+  saleLimitQuantity: number;
+  displayOrder: number;
+  status: SaleRoundItem['status'];
+}
+
+export type PublicSaleRoundWithItems = PublicSaleRound & { items: PublicSaleRoundItem[] };
+
+export function toPublicSaleRound(round: SaleRound): PublicSaleRound {
+  return {
+    id: round.id,
+    storeId: round.storeId,
+    name: round.name,
+    status: round.status,
+    closeReason: round.closeReason,
+    schedule: round.schedule,
+    deliveryRegion: round.deliveryRegion,
+    limits: round.limits,
+    carrotLandingUrl: round.carrotLandingUrl,
+  };
+}
+
+export function toPublicSaleRoundItem(item: SaleRoundItem): PublicSaleRoundItem {
+  return {
+    id: item.id,
+    roundId: item.roundId,
+    storeId: item.storeId,
+    productId: item.productId,
+    productNameSnapshot: item.productNameSnapshot,
+    productImageUrlSnapshot: item.productImageUrlSnapshot,
+    roundPrice: item.roundPrice,
+    saleLimitQuantity: item.saleLimitQuantity,
+    displayOrder: item.displayOrder,
+    status: item.status,
+  };
+}
+
+function toPublicRoundItems(items: SaleRoundItem[]): PublicSaleRoundItem[] {
+  // Preserve displayOrder sorting done by getRoundItems; HIDDEN filter first,
+  // then explicit projection (same visibility predicate as before).
+  return items
+    .filter((item) => isPubliclyVisibleRoundItem(item))
+    .map((item) => toPublicSaleRoundItem(item));
 }
 
 @Injectable()
@@ -74,16 +150,19 @@ export class SaleRoundsService {
     // READ-ONLY: public list must not persist automatic transitions.
     // Effective status is derived purely via resolveAutomaticState; storage
     // mutation stays on the authenticated write-side state machine.
-    // List returns round summaries without items by design; item visibility
-    // is enforced in getPublicRound via toPublicRoundItems (same predicate).
+    // List returns projected round summaries without items by design; item
+    // visibility is enforced in getPublicRound via toPublicRoundItems
+    // (same predicate) plus toPublicSaleRoundItem projection.
     const nowMillis = timestampMillis(this.firestore.Timestamp.now());
     const rounds = snap.docs.map((doc: any) => {
       const storedRound = doc.data() as SaleRound;
       this.assertPublicRoundBoundary(storeId, storedRound as unknown as Record<string, any>);
       const round = this.normalizeRound(this.applyEffectiveState(storedRound, nowMillis));
-      return round.storeId === storeId && isPublicSaleRoundStatus(round.status) ? round : null;
+      return round.storeId === storeId && isPublicSaleRoundStatus(round.status)
+        ? toPublicSaleRound(round)
+        : null;
     });
-    return { items: rounds.filter((round): round is SaleRound => round !== null) };
+    return { items: rounds.filter((round): round is PublicSaleRound => round !== null) };
   }
   async getRound(
     storeId: string,
@@ -102,16 +181,16 @@ export class SaleRoundsService {
   private async getPublicRoundWithItems(
     storeId: string,
     roundId: string,
-  ): Promise<RoundWithItems> {
+  ): Promise<PublicSaleRoundWithItems> {
     // READ-ONLY: derive effective status purely; never call refreshRoundStatus
     // (which persists via transaction) from the public path.
     const stored = await this.getStoredRound(storeId, roundId);
     const nowMillis = timestampMillis(this.firestore.Timestamp.now());
     const round = this.normalizeRound(this.applyEffectiveState(stored, nowMillis));
     const items = await this.getRoundItems(roundId, storeId);
-    return { ...round, items: toPublicRoundItems(items) };
+    return { ...toPublicSaleRound(round), items: toPublicRoundItems(items) };
   }
-  async getPublicRound(storeId: string, roundId: string): Promise<RoundWithItems> {
+  async getPublicRound(storeId: string, roundId: string): Promise<PublicSaleRoundWithItems> {
     await this.assertPublicRoundStore(storeId);
     const storedRound = await this.getStoredRound(storeId, roundId);
     this.assertPublicRoundBoundary(storeId, storedRound);
