@@ -1,20 +1,25 @@
-name: Driver preview allowlist secure bridge (43C)
+name: Driver preview allowlist secure bridge (43C, 45C credential convergence)
 
 # Manual-only secure bridge for the Driver Preview allowlist env entry.
 # This workflow never mutates the allowlist on push/PR by construction:
 # the mutation job runs ONLY on workflow_dispatch. PR events run the
 # deterministic spec job only (mock/local, provider-free).
 #
-# Locked contract:
-# - Driver Preview only: team_J91VWI0TqcHdcF36T7qVgiT1 / greenhub-driver /
+# Locked contract (45C project-scoped convergence, same authority as exact-preview):
+# - Driver Preview only: greenhub-driver /
 #   prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW / Preview / RFASslCQh9EVuvfv /
 #   ROUND_DIRECT_E2E_DRIVER_EMAILS / old dpl_BM6yZATGyH2R6LW6uL8uvkAPhCjn /
 #   source 33cb9773df86abc486783e53757448280b80be96.
+#   Project ID is the path authority. No teamId query is sent: the
+#   project-scoped token carries its own project/team context.
 # - Additive-only: CURRENT_SET + canonical driver identity. Unrelated members
 #   are never removed; canonical identity is present after.
 # - Production mutation is structurally unreachable (Preview literal only).
-# - Write credential: ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN only.
-#   The read credential is NEVER a write fallback and is not referenced here.
+# - Write credential: VERCEL_EXACT_PREVIEW_DRIVER_TOKEN only (repository-level
+#   Actions secret, Vercel project-scoped to exactly greenhub-driver).
+#   No legacy environment write credential is referenced in any active
+#   mutation path. The Vercel read credential is NEVER a write fallback
+#   and is not referenced here.
 # - Post-mutation deployment authority is the 44A provider-native workflow
 #   ONLY: .github/workflows/create-exact-preview-deployment.yml with
 #   exact_sha=33cb9773df86abc486783e53757448280b80be96 and app=driver
@@ -130,9 +135,8 @@ jobs:
       - name: additive-only allowlist mutation (driver preview only)
         shell: bash
         env:
-          ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN: ${{ secrets.ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN }}
+          VERCEL_EXACT_PREVIEW_DRIVER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN }}
           ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM }}
-          DRIVER_PREVIEW_TEAM_ID: team_J91VWI0TqcHdcF36T7qVgiT1
           DRIVER_PREVIEW_PROJECT: greenhub-driver
           DRIVER_PREVIEW_PROJECT_ID: prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW
           DRIVER_PREVIEW_ENVIRONMENT: preview
@@ -142,9 +146,11 @@ jobs:
           DRIVER_PREVIEW_EXPECTED_SHA: 33cb9773df86abc486783e53757448280b80be96
         run: |
           set -euo pipefail
-          # Fail closed when the write credential is not provisioned. The value
-          # is never printed, hashed, or stored; only presence is probed.
-          if [[ -z "${ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN:-}" ]]; then
+          # Fail closed when the project-scoped write credential is not
+          # provisioned. The value is never printed, hashed, or stored; only
+          # presence is probed. Repository-level secret; the round-direct-e2e
+          # environment remains for approval/gating + Driver identity only.
+          if [[ -z "${VERCEL_EXACT_PREVIEW_DRIVER_TOKEN:-}" ]]; then
             echo 'WRITE_CREDENTIAL_NOT_PROVISIONED: driver write credential 없이 mutation을 차단합니다.' >&2
             exit 1
           fi
@@ -154,19 +160,18 @@ jobs:
           fi
           # NOTE: the Vercel read credential is intentionally never referenced
           # in this job and must never become a write fallback. All provider
-          # reads/writes here authenticate with the driver write credential only.
+          # reads/writes here authenticate with the project-scoped driver
+          # credential only (no teamId query; project ID is the path authority).
           # The provider response body (raw allowlist) is never printed, hashed,
           # or stored; only boolean/count evidence reaches stdout/summary.
           node --input-type=module -e "
             import { planDriverAllowlistMutation, assertProviderReadbackMatches, updateDriverPreviewEnvEntry } from './scripts/vercel/driver-preview-allowlist-reprobe.mjs';
-            const writeToken = process.env.ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN;
-            const teamId = process.env.DRIVER_PREVIEW_TEAM_ID;
+            const writeToken = process.env.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN;
             const projectId = process.env.DRIVER_PREVIEW_PROJECT_ID;
             const envEntryId = process.env.DRIVER_PREVIEW_ENV_ENTRY_ID;
             const getEndpoint =
               'https://api.vercel.com/v9/projects/' + encodeURIComponent(projectId) +
-              '/env/' + encodeURIComponent(envEntryId) +
-              '?teamId=' + encodeURIComponent(teamId);
+              '/env/' + encodeURIComponent(envEntryId);
             const getResponse = await fetch(getEndpoint, {
               method: 'GET',
               headers: { Accept: 'application/json', Authorization: 'Bearer ' + writeToken },
@@ -178,7 +183,6 @@ jobs:
             const entry = await getResponse.json();
             assertProviderReadbackMatches({
               readback: {
-                teamId,
                 project: entry?.projectName ?? process.env.DRIVER_PREVIEW_PROJECT,
                 projectId,
                 environment: process.env.DRIVER_PREVIEW_ENVIRONMENT,
@@ -197,7 +201,6 @@ jobs:
               env: process.env,
               target: {
                 app: 'driver',
-                teamId,
                 project: process.env.DRIVER_PREVIEW_PROJECT,
                 projectId,
                 environment: process.env.DRIVER_PREVIEW_ENVIRONMENT,
