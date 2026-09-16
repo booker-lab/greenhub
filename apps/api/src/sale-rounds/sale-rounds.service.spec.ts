@@ -872,10 +872,27 @@ describe('SaleRoundsService', () => {
       expect(listed.items[0]).toMatchObject({ id: 'round-1', status: 'OPEN' });
       expect(listHarness.writes).toHaveLength(0);
       expect(listHarness.records.get('saleRounds/round-1')).toMatchObject({ status: 'SCHEDULED' });
-      // Response contract preserved: full SaleRound shape (no projection).
-      expect(listed.items[0]).toHaveProperty('cancellation');
-      expect(listed.items[0]).toHaveProperty('counters');
-      expect(listed.items[0]).toHaveProperty('createdAt');
+      // Public projection (54A): explicit allowlist only — internal
+      // cancellation/counters/timestamps are never exposed.
+      expect(listed.items[0]).not.toHaveProperty('cancellation');
+      expect(listed.items[0]).not.toHaveProperty('counters');
+      expect(listed.items[0]).not.toHaveProperty('createdAt');
+      expect(listed.items[0]).not.toHaveProperty('updatedAt');
+      expect(listed.items[0]).not.toHaveProperty('cancelledAt');
+      expect(listed.items[0]).not.toHaveProperty('completedAt');
+      expect(Object.keys(listed.items[0]).sort()).toEqual(
+        [
+          'carrotLandingUrl',
+          'closeReason',
+          'deliveryRegion',
+          'id',
+          'limits',
+          'name',
+          'schedule',
+          'status',
+          'storeId',
+        ].sort(),
+      );
 
       const detailHarness = makeService(
         { 'saleRoundItems/item-1': makeItem() },
@@ -969,6 +986,165 @@ describe('SaleRoundsService', () => {
       // Seller read keeps internal fields and hidden-item contract untouched.
       expect(round).toHaveProperty('cancellation');
       expect(round).toHaveProperty('counters');
+    });
+  });
+
+  describe('public response projection minimization (54A)', () => {
+    const PUBLIC_ROUND_KEYS = [
+      'carrotLandingUrl',
+      'closeReason',
+      'deliveryRegion',
+      'id',
+      'limits',
+      'name',
+      'schedule',
+      'status',
+      'storeId',
+    ].sort();
+    const PUBLIC_ITEM_KEYS = [
+      'displayOrder',
+      'id',
+      'productId',
+      'productImageUrlSnapshot',
+      'productNameSnapshot',
+      'roundId',
+      'roundPrice',
+      'saleLimitQuantity',
+      'status',
+      'storeId',
+    ].sort();
+
+    function makeLeasedCancellation() {
+      return {
+        status: 'CANCELLING',
+        reason: '판매 회차 취소',
+        failedOrderId: 'order-1',
+        ownerId: 'worker-a',
+        leaseId: 'lease-a',
+        leaseExpiresAt: '2026-07-14T01:00:00.000+09:00',
+        updatedAt: '2026-07-14T00:30:00.000+09:00',
+        completedAt: null,
+      };
+    }
+
+    it('1. public list excludes internal round metadata and keeps exact allowlist', async () => {
+      const { service, firestore, writes } = makeService(
+        { 'saleRoundItems/item-1': makeItem({ reservedQuantity: 2, orderedQuantity: 1 }) },
+        makeRound({
+          status: 'OPEN',
+          cancellation: makeLeasedCancellation() as never,
+          counters: {
+            reservedDeliveryAddresses: 3,
+            reservedItemQuantity: 5,
+            orderedDeliveryAddresses: 7,
+            orderedItemQuantity: 9,
+            heldOrderCount: 1,
+          },
+        }),
+      );
+      const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+      const result = await service.listPublicRounds('store-1');
+
+      expect(result.items).toHaveLength(1);
+      const summary = result.items[0] as unknown as Record<string, unknown>;
+      expect(Object.keys(summary).sort()).toEqual(PUBLIC_ROUND_KEYS);
+      expect(summary).toMatchObject({
+        id: 'round-1',
+        storeId: 'store-1',
+        status: 'OPEN',
+        schedule: expect.objectContaining({ timezone: 'Asia/Seoul' }),
+      });
+      expect(summary).not.toHaveProperty('cancellation');
+      expect(summary).not.toHaveProperty('counters');
+      expect(summary).not.toHaveProperty('items');
+      expect(refresh).not.toHaveBeenCalled();
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+      expect(writes).toHaveLength(0);
+    });
+
+    it('2. public detail excludes cancellation lease metadata with effective status', async () => {
+      const { service, firestore, writes } = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        makeRound({ status: 'OPEN', cancellation: makeLeasedCancellation() as never }),
+      );
+      const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+      const round = await service.getPublicRound('store-1', 'round-1');
+
+      expect(round).toMatchObject({ id: 'round-1', storeId: 'store-1', status: 'OPEN' });
+      expect(Object.keys(round).sort()).toEqual([...PUBLIC_ROUND_KEYS, 'items'].sort());
+      expect(round).not.toHaveProperty('cancellation');
+      expect(round).not.toHaveProperty('counters');
+      expect(round).not.toHaveProperty('createdAt');
+      expect(round).not.toHaveProperty('updatedAt');
+      expect(refresh).not.toHaveBeenCalled();
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+      expect(writes).toHaveLength(0);
+    });
+
+    it('3. public detail items exclude internal quantity metadata and keep exact allowlist', async () => {
+      const { service, firestore, writes } = makeService(
+        {
+          'saleRoundItems/item-1': makeItem({
+            id: 'item-1',
+            status: 'SOLD_OUT',
+            displayOrder: 0,
+            reservedQuantity: 4,
+            orderedQuantity: 6,
+          }),
+        },
+        makeRound({ status: 'OPEN' }),
+      );
+
+      const round = await service.getPublicRound('store-1', 'round-1');
+
+      expect(round.items).toHaveLength(1);
+      const item = round.items[0] as unknown as Record<string, unknown>;
+      expect(Object.keys(item).sort()).toEqual(PUBLIC_ITEM_KEYS);
+      // SOLD_OUT display contract preserved through the projection.
+      expect(item).toMatchObject({
+        id: 'item-1',
+        roundId: 'round-1',
+        storeId: 'store-1',
+        productId: 'product-1',
+        status: 'SOLD_OUT',
+        displayOrder: 0,
+      });
+      expect(item).not.toHaveProperty('reservedQuantity');
+      expect(item).not.toHaveProperty('orderedQuantity');
+      expect(item).not.toHaveProperty('createdAt');
+      expect(item).not.toHaveProperty('updatedAt');
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+      expect(writes).toHaveLength(0);
+    });
+
+    it('4. seller management read keeps full internal shape (projection regression guard)', async () => {
+      const { service } = makeService(
+        {
+          'saleRoundItems/item-1': makeItem({
+            id: 'item-1',
+            status: 'HIDDEN',
+            reservedQuantity: 2,
+            orderedQuantity: 3,
+          }),
+        },
+        makeRound({ status: 'OPEN', cancellation: makeLeasedCancellation() as never }),
+      );
+
+      const listed = await (service as any).listSellerRounds('store-1', 'seller-1', 'seller');
+      expect(listed.items[0]).toHaveProperty('cancellation');
+      expect(listed.items[0]).toHaveProperty('counters');
+      expect(listed.items[0]).toHaveProperty('createdAt');
+
+      const round = await (service as any).getRound('store-1', 'round-1', 'seller-1', 'seller');
+      expect(round).toHaveProperty('cancellation');
+      expect(round).toHaveProperty('counters');
+      expect(round.cancellation).toMatchObject({ ownerId: 'worker-a', leaseId: 'lease-a' });
+      // Seller keeps HIDDEN items with internal quantity metadata.
+      expect(round.items.map((item: { id: string }) => item.id)).toEqual(['item-1']);
+      expect(round.items[0]).toMatchObject({ reservedQuantity: 2, orderedQuantity: 3 });
+      expect(round.items[0]).toHaveProperty('createdAt');
     });
   });
 });
