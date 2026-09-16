@@ -18,17 +18,27 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  assertCreateCredentialMode,
   assertNonProductionTarget,
   buildTargetedDeploymentPlan,
   buildVercelCreateBody,
   createExactPreviewDeployments,
+  CREATE_CREDENTIAL_MODE_LEGACY_TEAM,
+  CREATE_CREDENTIAL_MODE_PROJECT_SCOPED,
+  EXACT_PREVIEW_CREATE_TOKENS_BY_APP,
+  exactPreviewCreateTokenEnvForApp,
+  exactPreviewCreateTokenRequiredCode,
   inspectTargetedCreationResult,
+  requestVercelCreateDeployment,
+  resolveAppProjectToken,
   resolveCreateToken,
+  resolveProjectScopedTokensForScope,
   resolveTargetedApps,
   TARGETED_APP_ALLOWLIST,
   TARGETED_SCOPE_TO_APPS,
   VERCEL_CREATE_CREDENTIAL_ENV,
   vercelCreatePath,
+  vercelCreateProjectScopedPath,
 } from './create-exact-preview-deployment.mjs';
 import { commitExists } from './provision-exact-preview.mjs';
 import { inspectAppDeployment, PREVIEW_APPS, VERCEL_TEAM_ID } from '../wait-preview-deploy.mjs';
@@ -446,7 +456,17 @@ test('targeted workflow requires no ref push and forbids production', () => {
   const workflowPath = path.join(REPO_ROOT, '.github', 'workflows', 'create-exact-preview-deployment.yml');
   const workflow = readFileSync(workflowPath, 'utf8');
   assert.match(workflow, /consumer\|seller\|driver\|both/);
-  assert.match(workflow, /VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN/);
+  // 45B project-scoped credentials: one secret per app; the legacy single
+  // team secret must NOT be consumed by this workflow anymore.
+  assert.match(workflow, /secrets\.VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN/);
+  assert.match(workflow, /secrets\.VERCEL_EXACT_PREVIEW_SELLER_TOKEN/);
+  assert.match(workflow, /secrets\.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN/);
+  assert.doesNotMatch(workflow, /VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN/);
+  assert.doesNotMatch(workflow, /secrets\.ROUND_DIRECT_E2E_VERCEL_READ_TOKEN/);
+  // Project-scoped readback for the strict waiter; both stays bounded to
+  // consumer + seller (driver ID never required there).
+  assert.match(workflow, /--credential-mode=project-scoped/);
+  assert.match(workflow, /--only=consumer,seller/);
   assert.match(workflow, /create-exact-preview-deployment\.mjs/);
   assert.match(workflow, /wait-preview-deploy\.mjs/);
   // No executable ref push. Doc comments may reference the legacy
@@ -454,4 +474,452 @@ test('targeted workflow requires no ref push and forbids production', () => {
   // actual git push command.
   assert.doesNotMatch(workflow, /git push origin/);
   assert.match(workflow, /PRODUCTION_SAFETY_VIOLATION|production.*forbidden|Preview.*only/i);
+  // Secrets travel via env only: `set +x` guards creation, and only
+  // deployment IDs (never token values) reach GITHUB_OUTPUT/summary.
+  assert.match(workflow, /set \+x/);
+  assert.match(workflow, /consumer_deployment_id=%s/);
+});
+
+// ---------------------------------------------------------------------------
+// 45B. Project-scoped credential convergence (mock/local only)
+// ---------------------------------------------------------------------------
+
+const PROJECT_TOKEN_ENVS = [
+  'VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN',
+  'VERCEL_EXACT_PREVIEW_SELLER_TOKEN',
+  'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN',
+];
+
+function clearProjectTokenEnvs() {
+  const saved = {};
+  for (const env of PROJECT_TOKEN_ENVS) {
+    saved[env] = process.env[env];
+    delete process.env[env];
+  }
+  return () => {
+    for (const env of PROJECT_TOKEN_ENVS) {
+      if (saved[env] !== undefined) process.env[env] = saved[env];
+      else delete process.env[env];
+    }
+  };
+}
+
+const SCOPE_TOKENS = Object.freeze({
+  consumer: 'project-token-consumer-aaa-001',
+  seller: 'project-token-seller-bbb-002',
+  driver: 'project-token-driver-ccc-003',
+});
+
+/** Mock Vercel creation POST: records calls, answers per body.project. */
+function mockProjectScopedCreateFetch(sha, { state = 'BUILDING' } = {}) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push({ url, init, body, authorization: init.headers.Authorization });
+    const config = PREVIEW_APPS.find((entry) => entry.projectId === body.project);
+    assert.ok(config, 'mock only serves allowlisted projectIds');
+    const deploymentId = `dpl_Mock${config.app}1234567890abcd`;
+    return {
+      ok: true,
+      json: async () => ({
+        id: deploymentId,
+        url: `${config.project}-abc123.vercel.app`,
+        name: config.project,
+        projectId: config.projectId,
+        project: { id: config.projectId, name: config.project },
+        state,
+        readyState: state,
+        target: null,
+        meta: { githubCommitSha: sha },
+        gitSource: { type: 'github', org: 'booker-lab', repo: 'greenhub', ref: sha, sha },
+      }),
+    };
+  };
+  return { calls, fetchImpl };
+}
+
+function assertNoTokenLeak(values, ...haystacks) {
+  for (const token of values) {
+    for (const haystack of haystacks) {
+      assert.equal(String(haystack).includes(token), false);
+    }
+  }
+}
+
+test('45B credential authority: one env per app + per-app fail-closed codes', () => {
+  assert.deepEqual({ ...EXACT_PREVIEW_CREATE_TOKENS_BY_APP }, {
+    consumer: 'VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN',
+    seller: 'VERCEL_EXACT_PREVIEW_SELLER_TOKEN',
+    driver: 'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN',
+  });
+  assert.equal(exactPreviewCreateTokenEnvForApp('consumer'), 'VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN');
+  assert.equal(exactPreviewCreateTokenEnvForApp('seller'), 'VERCEL_EXACT_PREVIEW_SELLER_TOKEN');
+  assert.equal(exactPreviewCreateTokenEnvForApp('driver'), 'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN');
+  assert.equal(exactPreviewCreateTokenRequiredCode('consumer'), 'VERCEL_CONSUMER_PROJECT_TOKEN_REQUIRED');
+  assert.equal(exactPreviewCreateTokenRequiredCode('seller'), 'VERCEL_SELLER_PROJECT_TOKEN_REQUIRED');
+  assert.equal(exactPreviewCreateTokenRequiredCode('driver'), 'VERCEL_DRIVER_PROJECT_TOKEN_REQUIRED');
+  assert.equal(assertCreateCredentialMode('project-scoped'), CREATE_CREDENTIAL_MODE_PROJECT_SCOPED);
+  assert.equal(assertCreateCredentialMode('legacy-team-scoped'), CREATE_CREDENTIAL_MODE_LEGACY_TEAM);
+  assert.throws(() => assertCreateCredentialMode('auto'), (error) => error?.code === 'UNKNOWN_CREDENTIAL_MODE');
+  assert.throws(() => assertCreateCredentialMode(''), (error) => error?.code === 'UNKNOWN_CREDENTIAL_MODE');
+});
+
+test('45B project-scoped POST omits teamId; legacy POST keeps teamId', () => {
+  const scoped = vercelCreateProjectScopedPath();
+  assert.match(scoped, /\/v13\/deployments\?/);
+  assert.match(scoped, /forceNew=1/);
+  assert.match(scoped, /skipAutoDetectionConfirmation=1/);
+  assert.equal(scoped.includes('teamId'), false);
+  const legacy = vercelCreatePath();
+  assert.match(legacy, /teamId=team_J91VWI0TqcHdcF36T7qVgiT1/);
+});
+
+test('45B scope resolves only its own project token (both = consumer + seller)', () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    assert.deepEqual(resolveProjectScopedTokensForScope('driver', { ...SCOPE_TOKENS }), {
+      driver: SCOPE_TOKENS.driver,
+    });
+    assert.deepEqual(resolveProjectScopedTokensForScope('consumer', { ...SCOPE_TOKENS }), {
+      consumer: SCOPE_TOKENS.consumer,
+    });
+    assert.deepEqual(resolveProjectScopedTokensForScope('seller', { ...SCOPE_TOKENS }), {
+      seller: SCOPE_TOKENS.seller,
+    });
+    // both resolves consumer + seller independently; driver token untouched.
+    assert.deepEqual(resolveProjectScopedTokensForScope('both', { ...SCOPE_TOKENS }), {
+      consumer: SCOPE_TOKENS.consumer,
+      seller: SCOPE_TOKENS.seller,
+    });
+  } finally {
+    restore();
+  }
+});
+
+test('45B missing project token fails with its own code (no cross-app reuse)', () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    // Only the consumer token exists: driver scope must NOT borrow it.
+    process.env.VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN = SCOPE_TOKENS.consumer;
+    assert.throws(() => resolveAppProjectToken('driver', null), (error) => {
+      assert.equal(error?.code, 'VERCEL_DRIVER_PROJECT_TOKEN_REQUIRED');
+      assert.equal(String(error?.message ?? '').includes('VERCEL_EXACT_PREVIEW_DRIVER_TOKEN'), true);
+      assert.equal(String(error?.message ?? '').includes(SCOPE_TOKENS.consumer), false);
+      return true;
+    });
+    delete process.env.VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN;
+    // both with seller token missing fails as the seller code.
+    assert.throws(
+      () => resolveProjectScopedTokensForScope('both', { consumer: SCOPE_TOKENS.consumer }),
+      (error) => error?.code === 'VERCEL_SELLER_PROJECT_TOKEN_REQUIRED',
+    );
+    assert.throws(
+      () => resolveProjectScopedTokensForScope('consumer', {}),
+      (error) => error?.code === 'VERCEL_CONSUMER_PROJECT_TOKEN_REQUIRED',
+    );
+  } finally {
+    restore();
+  }
+});
+
+test('45B driver scope uses DRIVER token only (no teamId, exact body)', async () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    const { dir, head } = initTempRepo();
+    const { calls, fetchImpl } = mockProjectScopedCreateFetch(head);
+    const result = await createExactPreviewDeployments({
+      sha: head,
+      app: 'driver',
+      tokensByApp: { ...SCOPE_TOKENS },
+      fetchImpl,
+      repositoryRoot: dir,
+    });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].authorization, `Bearer ${SCOPE_TOKENS.driver}`);
+    assert.equal(calls[0].url.includes('teamId'), false);
+    assert.equal(calls[0].body.project, 'prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW');
+    assert.equal(calls[0].body.name, 'greenhub-driver');
+    assert.equal(calls[0].body.gitSource.ref, head);
+    assert.equal(calls[0].body.gitSource.sha, head);
+    assert.equal(result.scope, 'driver');
+    assert.equal(result.credentialMode, 'project-scoped');
+    assert.deepEqual({ ...result.credentialEnvs }, { driver: 'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN' });
+    assert.equal(result.credentialValueRecorded, false);
+    assert.equal(result.deployments.length, 1);
+    assertNoTokenLeak(
+      Object.values(SCOPE_TOKENS),
+      calls[0].url,
+      JSON.stringify(calls[0].body),
+      JSON.stringify(result),
+    );
+  } finally {
+    restore();
+  }
+});
+
+test('45B consumer scope uses CONSUMER token only', async () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    const { dir, head } = initTempRepo();
+    const { calls, fetchImpl } = mockProjectScopedCreateFetch(head);
+    await createExactPreviewDeployments({
+      sha: head,
+      app: 'consumer',
+      tokensByApp: { ...SCOPE_TOKENS },
+      fetchImpl,
+      repositoryRoot: dir,
+    });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].authorization, `Bearer ${SCOPE_TOKENS.consumer}`);
+    assert.equal(calls[0].body.project, 'prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w');
+    assertNoTokenLeak(Object.values(SCOPE_TOKENS), calls[0].url, JSON.stringify(calls[0].body));
+  } finally {
+    restore();
+  }
+});
+
+test('45B seller scope uses SELLER token only', async () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    const { dir, head } = initTempRepo();
+    const { calls, fetchImpl } = mockProjectScopedCreateFetch(head);
+    await createExactPreviewDeployments({
+      sha: head,
+      app: 'seller',
+      tokensByApp: { ...SCOPE_TOKENS },
+      fetchImpl,
+      repositoryRoot: dir,
+    });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].authorization, `Bearer ${SCOPE_TOKENS.seller}`);
+    assert.equal(calls[0].body.project, 'prj_OPOveVw4QADTbTE7mt32mo14H5dv');
+    assertNoTokenLeak(Object.values(SCOPE_TOKENS), calls[0].url, JSON.stringify(calls[0].body));
+  } finally {
+    restore();
+  }
+});
+
+test('45B both uses consumer + seller tokens independently, driver token unused', async () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    const { dir, head } = initTempRepo();
+    const { calls, fetchImpl } = mockProjectScopedCreateFetch(head);
+    const result = await createExactPreviewDeployments({
+      sha: head,
+      app: 'both',
+      tokensByApp: { ...SCOPE_TOKENS },
+      fetchImpl,
+      repositoryRoot: dir,
+    });
+    assert.equal(calls.length, 2);
+    const byProject = new Map(calls.map((call) => [call.body.project, call]));
+    const consumerCall = byProject.get('prj_ttIlOxV4e2Xb1sf1xhpSXibzph2w');
+    const sellerCall = byProject.get('prj_OPOveVw4QADTbTE7mt32mo14H5dv');
+    assert.ok(consumerCall);
+    assert.ok(sellerCall);
+    assert.equal(consumerCall.authorization, `Bearer ${SCOPE_TOKENS.consumer}`);
+    assert.equal(sellerCall.authorization, `Bearer ${SCOPE_TOKENS.seller}`);
+    for (const call of calls) {
+      assert.equal(call.url.includes('teamId'), false);
+      assert.equal(call.body.gitSource.ref, head);
+      assert.equal(call.body.gitSource.sha, head);
+      assert.notEqual(call.authorization, `Bearer ${SCOPE_TOKENS.driver}`);
+      assert.equal(call.url.includes(SCOPE_TOKENS.driver), false);
+      assert.equal(JSON.stringify(call.body).includes(SCOPE_TOKENS.driver), false);
+    }
+    assert.deepEqual({ ...result.credentialEnvs }, {
+      consumer: 'VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN',
+      seller: 'VERCEL_EXACT_PREVIEW_SELLER_TOKEN',
+    });
+    assertNoTokenLeak(Object.values(SCOPE_TOKENS), JSON.stringify(result));
+  } finally {
+    restore();
+  }
+});
+
+test('45B missing project token => deployment POST 0회', async () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    const { dir, head } = initTempRepo();
+    for (const [scope, code] of [
+      ['driver', 'VERCEL_DRIVER_PROJECT_TOKEN_REQUIRED'],
+      ['consumer', 'VERCEL_CONSUMER_PROJECT_TOKEN_REQUIRED'],
+      ['seller', 'VERCEL_SELLER_PROJECT_TOKEN_REQUIRED'],
+    ]) {
+      const { calls, fetchImpl } = mockProjectScopedCreateFetch(head);
+      await assert.rejects(
+        () =>
+          createExactPreviewDeployments({
+            sha: head,
+            app: scope,
+            tokensByApp: {},
+            fetchImpl,
+            repositoryRoot: dir,
+          }),
+        (error) => error?.code === code,
+      );
+      assert.equal(calls.length, 0);
+    }
+    // both with seller token missing: seller code, still 0 POSTs.
+    const both = mockProjectScopedCreateFetch(head);
+    await assert.rejects(
+      () =>
+        createExactPreviewDeployments({
+          sha: head,
+          app: 'both',
+          tokensByApp: { consumer: SCOPE_TOKENS.consumer },
+          fetchImpl: both.fetchImpl,
+          repositoryRoot: dir,
+        }),
+      (error) => error?.code === 'VERCEL_SELLER_PROJECT_TOKEN_REQUIRED',
+    );
+    assert.equal(both.calls.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('45B single project token is never reused for another allowlisted project', async () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    const { dir, head } = initTempRepo();
+    // Only the driver token is handed over for a consumer request: the fan-out
+    // must fail closed instead of spending the driver token on consumer.
+    const { calls, fetchImpl } = mockProjectScopedCreateFetch(head);
+    await assert.rejects(
+      () =>
+        createExactPreviewDeployments({
+          sha: head,
+          app: 'consumer',
+          tokensByApp: { driver: SCOPE_TOKENS.driver },
+          fetchImpl,
+          repositoryRoot: dir,
+        }),
+      (error) => error?.code === 'VERCEL_CONSUMER_PROJECT_TOKEN_REQUIRED',
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('45B project-scoped request URL never forces teamId; legacy request keeps it', async () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    const { dir, head } = initTempRepo();
+    const seen = [];
+    const fetchImpl = async (url, init) => {
+      seen.push({ url, init });
+      const config = PREVIEW_APPS.find(({ app }) => app === 'driver');
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'dpl_Mockdriver1234567890abcd',
+          url: `${config.project}-abc123.vercel.app`,
+          name: config.project,
+          projectId: config.projectId,
+          project: { id: config.projectId, name: config.project },
+          state: 'BUILDING',
+          readyState: 'BUILDING',
+          target: null,
+          meta: { githubCommitSha: head },
+        }),
+      };
+    };
+    await requestVercelCreateDeployment({
+      app: 'driver',
+      sha: head,
+      token: SCOPE_TOKENS.driver,
+      fetchImpl,
+      credentialMode: 'project-scoped',
+    });
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].url.includes('teamId'), false);
+    assert.equal(seen[0].init.headers.Authorization, `Bearer ${SCOPE_TOKENS.driver}`);
+    await requestVercelCreateDeployment({
+      app: 'driver',
+      sha: head,
+      token: 'legacy-team-token-xyz',
+      fetchImpl,
+      credentialMode: 'legacy-team-scoped',
+    });
+    assert.equal(seen.length, 2);
+    assert.equal(seen[1].url.includes('teamId=team_J91VWI0TqcHdcF36T7qVgiT1'), true);
+  } finally {
+    restore();
+  }
+});
+
+test('45B production target via fan-out is refused with POST 0회', async () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    const { dir, head } = initTempRepo();
+    const { calls, fetchImpl } = mockProjectScopedCreateFetch(head);
+    await assert.rejects(
+      () =>
+        createExactPreviewDeployments({
+          sha: head,
+          app: 'driver',
+          target: 'production',
+          tokensByApp: { ...SCOPE_TOKENS },
+          fetchImpl,
+          repositoryRoot: dir,
+        }),
+      (error) => error?.code === 'PRODUCTION_TARGET_REFUSED',
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('45B creation failure never leaks token values in errors', async () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    const { dir, head } = initTempRepo();
+    const fetchImpl = async () => ({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: { message: 'forbidden' } }),
+    });
+    await assert.rejects(
+      () =>
+        createExactPreviewDeployments({
+          sha: head,
+          app: 'driver',
+          tokensByApp: { ...SCOPE_TOKENS },
+          fetchImpl,
+          repositoryRoot: dir,
+        }),
+      (error) => {
+        assert.equal(error?.code, 'PROVIDER_TARGETED_DEPLOYMENT_FAILED');
+        assertNoTokenLeak(Object.values(SCOPE_TOKENS), String(error?.message ?? ''));
+        return true;
+      },
+    );
+  } finally {
+    restore();
+  }
+});
+
+test('45B cli dry-run stdout carries credential names only, never values', () => {
+  const restore = clearProjectTokenEnvs();
+  try {
+    const { dir, head } = initTempRepo();
+    const secret = 'cli-dry-run-secret-value-789xyz';
+    process.env.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN = secret;
+    const helperPath = new URL('./create-exact-preview-deployment.mjs', import.meta.url);
+    const out = execFileSync(
+      'node',
+      [fileURLToPath(helperPath), `--sha=${head}`, '--app=driver', '--dry-run', `--repo=${dir}`],
+      { encoding: 'utf8' },
+    );
+    assert.equal(out.includes(secret), false);
+    const plan = JSON.parse(out);
+    assert.equal(plan.credentialMode, 'project-scoped');
+    assert.deepEqual(plan.credentialEnvs, { driver: 'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN' });
+    assert.equal(plan.plans[0].body.gitSource.sha, head);
+  } finally {
+    restore();
+  }
 });

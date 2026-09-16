@@ -1,17 +1,26 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  assertExactPreviewCredentialMode,
   collectCommitStatusDiagnostic,
   collectDeploymentEvidence,
+  EXACT_PREVIEW_CREDENTIAL_MODE_LEGACY_GLOBAL,
+  EXACT_PREVIEW_CREDENTIAL_MODE_PROJECT_SCOPED,
+  EXACT_PREVIEW_TOKENS_BY_APP,
+  exactPreviewTokenEnvForApp,
+  exactPreviewTokenRequiredCode,
   inspectAppDeployment,
   normalizeTargetUrl,
   PREVIEW_APPS,
   requestVercelDeployment,
+  resolveProjectScopedReadToken,
+  resolveProjectScopedReadTokensForApps,
   resolveSelectedAppConfigs,
   VERCEL_API_ORIGIN,
   VERCEL_CREDENTIAL_NAME,
   VERCEL_TEAM_ID,
   vercelDeploymentPath,
+  vercelDeploymentProjectScopedPath,
 } from './wait-preview-deploy.mjs';
 
 const SHA = 'a'.repeat(40);
@@ -525,5 +534,250 @@ describe('Driver-only bounded exact binding (PILOT-AUTH-DRIVER-ONLY-EXACT-BINDIN
     const deployments = { driver: validDeployment('driver') };
     const evidence = await collectDriverOnly(deployments).promise;
     assert.equal(evidence.ready, true);
+  });
+});
+
+describe('45B project-scoped exact-preview readback (mock/local only)', () => {
+  const PROJECT_TOKEN_ENVS = [
+    'VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN',
+    'VERCEL_EXACT_PREVIEW_SELLER_TOKEN',
+    'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN',
+  ];
+
+  function clearProjectTokenEnvs() {
+    const saved = {};
+    for (const env of PROJECT_TOKEN_ENVS) {
+      saved[env] = process.env[env];
+      delete process.env[env];
+    }
+    return () => {
+      for (const env of PROJECT_TOKEN_ENVS) {
+        if (saved[env] !== undefined) process.env[env] = saved[env];
+        else delete process.env[env];
+      }
+    };
+  }
+
+  const READ_TOKENS = Object.freeze({
+    consumer: 'read-token-consumer-aaa-001',
+    seller: 'read-token-seller-bbb-002',
+    driver: 'read-token-driver-ccc-003',
+  });
+
+  function scopedFetch(deployments, calls) {
+    return async (url, init) => {
+      calls.push({ url, init });
+      const deploymentId = decodeURIComponent(new URL(url).pathname.split('/').at(-1));
+      const app = Object.entries(DEPLOYMENT_IDS).find(([, id]) => id === deploymentId)?.[0];
+      return response(deployments[app]);
+    };
+  }
+
+  it('credential authority: one env per app + per-app fail-closed codes', () => {
+    assert.deepEqual({ ...EXACT_PREVIEW_TOKENS_BY_APP }, {
+      consumer: 'VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN',
+      seller: 'VERCEL_EXACT_PREVIEW_SELLER_TOKEN',
+      driver: 'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN',
+    });
+    assert.equal(exactPreviewTokenEnvForApp('driver'), 'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN');
+    assert.equal(exactPreviewTokenRequiredCode('consumer'), 'VERCEL_CONSUMER_PROJECT_TOKEN_REQUIRED');
+    assert.equal(exactPreviewTokenRequiredCode('seller'), 'VERCEL_SELLER_PROJECT_TOKEN_REQUIRED');
+    assert.equal(exactPreviewTokenRequiredCode('driver'), 'VERCEL_DRIVER_PROJECT_TOKEN_REQUIRED');
+    assert.equal(
+      assertExactPreviewCredentialMode('project-scoped'),
+      EXACT_PREVIEW_CREDENTIAL_MODE_PROJECT_SCOPED,
+    );
+    assert.equal(
+      assertExactPreviewCredentialMode('legacy-global'),
+      EXACT_PREVIEW_CREDENTIAL_MODE_LEGACY_GLOBAL,
+    );
+    assert.throws(
+      () => assertExactPreviewCredentialMode('auto'),
+      (error) => error?.code === 'UNKNOWN_CREDENTIAL_MODE',
+    );
+  });
+
+  it('project-scoped GET omits teamId; legacy GET keeps teamId (compat)', () => {
+    assert.equal(
+      vercelDeploymentProjectScopedPath(DEPLOYMENT_IDS.driver),
+      `/v13/deployments/${DEPLOYMENT_IDS.driver}`,
+    );
+    assert.equal(vercelDeploymentProjectScopedPath(DEPLOYMENT_IDS.driver).includes('teamId'), false);
+    assert.equal(
+      vercelDeploymentPath(DEPLOYMENT_IDS.driver),
+      `/v13/deployments/${DEPLOYMENT_IDS.driver}?teamId=${VERCEL_TEAM_ID}`,
+    );
+  });
+
+  it('legacy global read contract unchanged (KEEP_COMPATIBILITY)', async () => {
+    // No credentialMode => legacy-global: single global token + teamId query.
+    const calls = [];
+    const evidence = await collectDeploymentEvidence(SHA, DEPLOYMENT_IDS, {
+      vercelToken: 'opaque-test-token',
+      fetchImpl: scopedFetch(validDeployments(), calls),
+    });
+    assert.equal(evidence.ready, true);
+    assert.equal(evidence.credentialMode, 'legacy-global');
+    assert.equal(calls.length, 3);
+    for (const { url, init } of calls) {
+      assert.equal(new URL(url).searchParams.get('teamId'), VERCEL_TEAM_ID);
+      assert.equal(init.headers.Authorization, 'Bearer opaque-test-token');
+    }
+    assert.equal(JSON.stringify(evidence).includes('opaque-test-token'), false);
+  });
+
+  it('strict waiter validates only the pinned dpl_* with that app token', async () => {
+    const restore = clearProjectTokenEnvs();
+    try {
+      const calls = [];
+      const evidence = await collectDeploymentEvidence(SHA, { driver: DEPLOYMENT_IDS.driver }, {
+        tokensByApp: { ...READ_TOKENS },
+        credentialMode: 'project-scoped',
+        only: 'driver',
+        fetchImpl: scopedFetch(validDeployments(), calls),
+      });
+      assert.equal(evidence.ready, true);
+      assert.equal(evidence.credentialMode, 'project-scoped');
+      assert.deepEqual({ ...evidence.vercelCredentialNames }, {
+        driver: 'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN',
+      });
+      assert.equal(evidence.vercelTeamId, null);
+      assert.equal(evidence.credentialValueRecorded, false);
+      assert.deepEqual(evidence.selectedApps, ['driver']);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].url.includes('teamId'), false);
+      assert.equal(calls[0].init.headers.Authorization, `Bearer ${READ_TOKENS.driver}`);
+      assert.equal(JSON.stringify(evidence).includes(READ_TOKENS.driver), false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('consumer+seller readback uses each app token; driver token unused', async () => {
+    const restore = clearProjectTokenEnvs();
+    try {
+      const calls = [];
+      const evidence = await collectDeploymentEvidence(
+        SHA,
+        { consumer: DEPLOYMENT_IDS.consumer, seller: DEPLOYMENT_IDS.seller },
+        {
+          tokensByApp: { ...READ_TOKENS },
+          credentialMode: 'project-scoped',
+          only: 'consumer,seller',
+          fetchImpl: scopedFetch(validDeployments(), calls),
+        },
+      );
+      assert.equal(evidence.ready, true);
+      assert.equal(calls.length, 2);
+      for (const { url, init } of calls) {
+        assert.equal(url.includes('teamId'), false);
+        assert.notEqual(init.headers.Authorization, `Bearer ${READ_TOKENS.driver}`);
+        assert.equal(url.includes(READ_TOKENS.driver), false);
+      }
+      const auths = calls.map(({ init }) => init.headers.Authorization).sort();
+      assert.deepEqual(auths, [`Bearer ${READ_TOKENS.consumer}`, `Bearer ${READ_TOKENS.seller}`].sort());
+      assert.equal(JSON.stringify(evidence).includes(READ_TOKENS.driver), false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('missing project token fails before any GET (GET 0회, own code)', async () => {
+    const restore = clearProjectTokenEnvs();
+    try {
+      const calls = [];
+      await assert.rejects(
+        collectDeploymentEvidence(SHA, { driver: DEPLOYMENT_IDS.driver }, {
+          tokensByApp: { consumer: READ_TOKENS.consumer },
+          credentialMode: 'project-scoped',
+          only: 'driver',
+          fetchImpl: scopedFetch(validDeployments(), calls),
+        }),
+        (error) => error?.code === 'VERCEL_DRIVER_PROJECT_TOKEN_REQUIRED',
+      );
+      assert.equal(calls.length, 0);
+      // Resolver unit: another app's token is never borrowed.
+      process.env.VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN = READ_TOKENS.consumer;
+      assert.throws(
+        () => resolveProjectScopedReadToken('seller', null),
+        (error) => error?.code === 'VERCEL_SELLER_PROJECT_TOKEN_REQUIRED',
+      );
+      assert.deepEqual(Object.keys(resolveProjectScopedReadTokensForApps([{ app: 'driver' }], {
+        driver: READ_TOKENS.driver,
+      })), ['driver']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('project-scoped strict predicate stays fail-closed', async () => {
+    const restore = clearProjectTokenEnvs();
+    try {
+      async function scopedEvidence(app, overrides) {
+        const calls = [];
+        const deployments = validDeployments({ [app]: { ...validDeployment(app), ...overrides } });
+        const evidence = await collectDeploymentEvidence(SHA, { [app]: DEPLOYMENT_IDS[app] }, {
+          tokensByApp: { ...READ_TOKENS },
+          credentialMode: 'project-scoped',
+          only: app,
+          fetchImpl: scopedFetch(deployments, calls),
+        });
+        return { evidence, calls };
+      }
+      const wrongSha = await scopedEvidence('driver', { meta: { githubCommitSha: OTHER_SHA } });
+      assert.equal(wrongSha.evidence.ready, false);
+      assert.equal(wrongSha.evidence.apps[0].failureCode, 'VERCEL_GITHUB_COMMIT_SHA_MISMATCH');
+      const wrongProject = await scopedEvidence('driver', {
+        projectId: 'prj_wrong',
+        project: { id: 'prj_wrong', name: 'wrong-project' },
+        name: 'wrong-project',
+      });
+      assert.equal(wrongProject.evidence.ready, false);
+      assert.equal(wrongProject.evidence.apps[0].failureCode, 'VERCEL_PROJECT_MISMATCH');
+      const production = await scopedEvidence('driver', { target: 'production' });
+      assert.equal(production.evidence.ready, false);
+      assert.equal(production.evidence.apps[0].failureCode, 'VERCEL_TARGET_NOT_PREVIEW');
+      for (const state of ['ERROR', 'CANCELED']) {
+        const failed = await scopedEvidence('driver', { state, readyState: state });
+        assert.equal(failed.evidence.ready, false);
+        assert.equal(failed.evidence.apps[0].failureCode, 'VERCEL_NOT_READY');
+      }
+      // ID substitution is refused even with the right token + SHA.
+      const calls = [];
+      const deployments = validDeployments();
+      const evidence = await collectDeploymentEvidence(SHA, { driver: DEPLOYMENT_IDS.driver }, {
+        tokensByApp: { ...READ_TOKENS },
+        credentialMode: 'project-scoped',
+        only: 'driver',
+        request: async () => validDeployment('driver', {
+          id: 'dpl_Substituted00000000',
+          uid: 'dpl_Substituted00000000',
+        }),
+      });
+      assert.equal(evidence.ready, false);
+      assert.equal(evidence.apps[0].failureCode, 'VERCEL_DEPLOYMENT_ID_MISMATCH');
+      assert.equal(calls.length, 0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('requestVercelDeployment project-scoped sends no teamId (header-only token)', async () => {
+    const calls = [];
+    const payload = { deployment: validDeployment('consumer') };
+    const result = await requestVercelDeployment(
+      DEPLOYMENT_IDS.consumer,
+      'scoped-token-abc',
+      async (url, init) => {
+        calls.push({ url, init });
+        return response(payload);
+      },
+      { credentialMode: 'project-scoped' },
+    );
+    assert.deepEqual(result, payload);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url.includes('teamId'), false);
+    assert.equal(calls[0].init.headers.Authorization, 'Bearer scoped-token-abc');
+    assert.equal(JSON.stringify(result).includes('scoped-token-abc'), false);
   });
 });
