@@ -226,9 +226,16 @@ Accepted source에서 확인된 조건:
 
 ### 현재 구현 한계 — stale authorization claims
 
-현재 `AuthService.refresh()`는 refresh token 자체와 rotation record를 검증한 뒤 **기존 refresh JWT payload의 `sub/role/storeId`를 그대로 새 access/refresh token에 재사용**한다. 사용자 문서의 현재 `suspended`, `role`, `storeId`, driver 승인 상태를 refresh 시 다시 조회하지 않는다.
+~~현재 `AuthService.refresh()`는 refresh token 자체와 rotation record를 검증한 뒤 **기존 refresh JWT payload의 `sub/role/storeId`를 그대로 새 access/refresh token에 재사용**한다. 사용자 문서의 현재 `suspended`, `role`, `storeId`, driver 승인 상태를 refresh 시 다시 조회하지 않는다.~~
 
-또한 `JwtStrategy.validate()`와 `RolesGuard`는 현재 JWT payload의 role/storeId를 사용하며 매 요청마다 user 문서의 suspension/권한 변경을 재검증하지 않는다.
+~~또한 `JwtStrategy.validate()`와 `RolesGuard`는 현재 JWT payload의 role/storeId를 사용하며 매 요청마다 user 문서의 suspension/권한 변경을 재검증하지 않는다.~~
+
+위 두 문단은 과거 상태 기술이다. 현재 source에서는 `AuthService.refresh()`가
+rotation record 검증 뒤 authoritative user를 재조회하고 payload `role/storeId`와
+비교하여 stale claims 재발급을 거부하며(`apps/api/src/auth/auth.service.spec.ts`
+`refresh current authority`), `JwtStrategy.validate()`도 매 요청마다 현재 user
+문서의 `suspended/role/storeId/driverApproved`를 재검증한다
+(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`).
 
 따라서 관리자가 계정을 정지하거나 role/store 연결을 바꾼 뒤 기존 세션이 언제 차단되어야 하는지에 대한 **revocation SLA가 current spec에 명확히 정의돼 있지 않고**, 현재 refresh 경로는 stale claims를 계속 재발급할 수 있다.
 
@@ -239,6 +246,27 @@ Accepted source에서 확인된 조건:
 - 특히 “정지된 계정이 refresh를 통해 계속 새 권한 토큰을 얻을 수 있음”을 정상 계약으로 간주하지 않는다.
 
 Task 2F-A/2F-B의 public approval-gate와 current-user 경계 검증은 이 refresh/session lifecycle finding을 닫지 않는다.
+
+### Same-deployment session revocation closure (48A)
+
+API access-token 검증만으로는 닫히지 않는 Auth.js same-deployment stale session
+gap을 다음 최소 authority로 닫는다.
+
+- canonical owner는 `GET /auth/session` 하나다. `JwtAuthGuard` 재검증 +
+  authoritative user 재조회 + `refreshTokens/{sub}` 존재 검사를 수행하는
+  read-only endpoint이며, `{ sub, role, storeId? }` projection만 반환한다
+  (토큰·비밀값 반환 없음, write/rotation/deletion 없음).
+- 세 앱 `src/auth.ts`의 `jwt` callback은 `accessTokenExpires` TTL과 무관하게
+  매 호출마다 `GET /auth/session`으로 권위를 확인한다. `401/403`은 명시적 폐기
+  (logout·`suspended`·role/store mismatch·`driverApproved` 철회·앱 허용 role 밖)로
+  fail-closed (`jwt`가 `null` 반환 → Auth.js cookie 삭제, `auth()`는 `null`).
+  네트워크 throw·timeout·5xx·429는 transient으로 보존하고 다음 호출에 재시도하며
+  전역 로그아웃으로 오인하지 않는다.
+- TTL 만료 단독은 폐기로 단정하지 않는다. verify가 `401/403`이어도
+  `POST /auth/refresh`를 한 번 시도해 access 만료(refresh 성공, 새 토큰)인가
+  실제 폐기(refresh도 명시적 거부, `null`)인가를 구분한다.
+- `ACCESS_TOKEN_TTL` 단축으로 해결하지 않으며, user 문서 스키마·firestore.rules
+  변경 없이 기존 `refreshTokens` 바인딩을 재사용한다.
 
 `AUTH-SESSION-CLAIM-REVOCATION` 최소 완료 조건:
 
@@ -275,6 +303,7 @@ POST /auth/refresh
 
 ```text
 GET    /auth/me
+GET    /auth/session
 PATCH  /auth/me
 POST   /auth/me/addresses
 PATCH  /auth/me/addresses/:addressId

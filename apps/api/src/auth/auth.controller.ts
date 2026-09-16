@@ -55,6 +55,13 @@ export class AuthController {
     return this.authService.refresh(refreshToken);
   }
 
+  @Get('session')
+  @UseGuards(JwtAuthGuard)
+  @SkipThrottle()
+  getSession(@CurrentUser() user: JwtPayload) {
+    return this.authService.getSession(user);
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   getMe(@CurrentUser() user: JwtPayload) {
