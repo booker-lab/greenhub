@@ -1,29 +1,89 @@
 # Greenhub 작업 규칙
 
+## 0. 전역 Canonical Coordination Policy
+
+현재 Greenhub 개발·Coordination의 상위 실행 규칙은 다음 문서가 소유한다.
+
+- `docs/specs/ops/greenhub-branch-recurrence-prevention-and-control-tower-closure-policy.md`
+
+충돌 시 위 정책을 우선한다. 역사 문서는 과거 기록으로 보존하되 현재 실행 규칙의 권위로 자동 승격하지 않는다.
+
+핵심 불변식:
+
+- `BRANCH_REQUIRED_FOR_TASK = NO`
+- `TASK_BRANCH = PROHIBITED`
+- `FEATURE_BRANCH = PROHIBITED`
+- `AGENT_BRANCH = PROHIBITED`
+- `PARALLELISM_BRANCH = PROHIBITED`
+- `LONG_LIVED_INTEGRATION_BRANCH = PROHIBITED`
+- `MAIN_ROLE = CANONICAL_MIRROR_ONLY`
+- 정상 main: `HEAD = LIVE_MAIN`, worktree `CLEAN`
+- 병렬 mutation의 물리적 독립성을 증명할 수 없으면 branch/worktree를 만들지 말고 `SERIALIZE`한다.
+- worktree는 task/agent branch factory로 사용하지 않는다.
+- short-lived publication transport ref는 PR 운송에 실제 필요한 경우에만 허용되며 source-development branch가 아니다. checkout하여 개발하지 않고, unrelated history를 쌓지 않으며, publication/closure 후 retire한다.
+- Executor Task Closure와 Control Tower Closure를 구분한다. publication 후 live main과 canonical mirror health를 다시 확인해야 coordination cycle이 닫힌다.
+
+모든 향후 Greenhub 개발 프롬프트와 결과 형식은 이 불변식을 보존하고 마지막에 `friction_observed`를 포함한다.
+
 ## 1. 우선순위와 범위
 
 - 상위 지침, 사용자 요청, 현재 Task의 범위와 제외 범위를 우선한다.
 - 요청받지 않은 리팩터링, 정리, 문서 갱신을 함께 수행하지 않는다.
 - 하위 `AGENTS.md`는 해당 디렉터리에서 이 규칙을 보충한다.
 
-## 2. 기준선 확인
+## 2. 기준선 확인과 Mutation Admission
 
 작업 전에 반드시 다음을 확인한다.
 
-- 현재 브랜치와 `HEAD`
-- 기준 브랜치와 원격 추적 상태
+- 현재 브랜치/ref와 `HEAD`
+- live `main`과 원격 추적 상태
 - 작업 트리의 수정·추가 파일
 - 현재 Task가 전제한 기준 SHA와의 일치 여부
 
 기준선이 다르면 임의로 전환하거나 덮어쓰지 말고 차이를 먼저 보고한다. 사용자의 기존 dirty 변경은 보존하며, 해당 변경을 되돌리거나 덮어쓰거나 함께 커밋하지 않는다.
 
-### `main` 변경 규칙
+### `main` 역할
+
+- `main`은 canonical mirror only다. source/document mutation workspace로 사용하지 않는다.
+- 정상 상태는 branch/ref authority=`main`, `HEAD=LIVE_MAIN`, worktree=`CLEAN`이다.
+- `main`에 task-local commit, unpublished candidate history, 여러 executor의 변경, publication 준비 commit, stale integration commit을 축적하지 않는다.
+- live main 또는 canonical mirror가 dirty/stale/unresolved라면 새 mutating task를 그 상태에서 시작하지 않는다. 먼저 분류·복구·보존 판단을 한다.
+
+### Mutating Task Admission
+
+모든 source/test/config/docs mutation은 실제 변경 전에 admission을 통과해야 한다.
+
+1. **Canonical mirror health**: live main 직접 조회, canonical main mirror health, dirty/local commit 존재 여부를 확인한다.
+2. **Exact live-main verification**: current live-main을 독립적인 현재 조회로 재확인한다. 오래된 memory/plan의 SHA를 canonical truth로 사용하지 않는다.
+3. **Semantic mutator overlap**: owned surface와 현재 진행/게시된 semantic change의 겹침을 확인한다.
+
+Admission 후 사용할 mutation surface는 다음을 모두 만족해야 한다.
+
+- exact live-main SHA에서 시작
+- named development branch 없음
+- 장기 independent history 없음
+- 하나의 bounded semantic owner만 소유
+- 다른 parallel Task와 mutable state를 공유하지 않음
+- 다음 Task의 workspace로 재사용하지 않음
+- Task 종료 후 완전히 retire 가능
+
+이 조건을 물리적으로 증명할 수 없으면 자동 branch/worktree를 만들지 않는다.
+
+```text
+MUTATION_COLLISION / POSSIBLE_COLLISION / UNKNOWN_OVERLAP
+→ SERIALIZE 또는 RE-SPLIT
+```
+
+### Publication transport
 
 - `main`에는 문서-only 변경을 포함해 직접 commit/push하지 않는다.
-- 일반 source mutation은 current canonical checkout에서 수행한다. Task 시작, parallelism, START_HEAD staleness, unrelated baseline movement만으로 feature branch/worktree를 만들지 않는다.
-- PR publication이 실제 필요한 시점에만 short-lived temporary publication transport ref를 만든다. publication transport ref는 source development branch가 아니다. publication transport ref 때문에 shared checkout을 checkout/switch로 점유하지 않는다 (`PUBLICATION_BRANCH_MAY_EXIST_AS_TRANSPORT_REF_BUT_MUST_NOT_TAKE_OVER_SHARED_CHECKOUT = YES`). 가능하면 exact candidate commit을 직접 remote temporary ref로 publish하는 worktree-checkout-free transport를 사용한다 (`scripts/git/publication-transport.mjs`).
+- PR publication이 실제 필요한 시점에만 short-lived temporary publication transport ref를 만든다. publication transport ref는 source development branch가 아니다.
+- publication transport ref 때문에 shared checkout을 checkout/switch로 점유하지 않는다 (`PUBLICATION_BRANCH_MAY_EXIST_AS_TRANSPORT_REF_BUT_MUST_NOT_TAKE_OVER_SHARED_CHECKOUT = YES`). 가능하면 exact candidate commit을 직접 remote temporary ref로 publish하는 worktree-checkout-free transport를 사용한다 (`scripts/git/publication-transport.mjs`).
 - publication branch/PR 생성 직전과 merge 권한 행사 직전에 반드시 live `main`을 다시 조회하고 `scripts/git/publication-admission.mjs` admission gate로 owned effective delta를 재평가한다. delta가 0이면 새 PR·merge·CI·deploy 없이 `COMPLETE_ALREADY_PUBLISHED` / `SUPERSEDED_ALREADY_PUBLISHED`로 종료한다.
-- PR 생성 후 live `main`이 이동하면 source work를 재생성하지 않는다. 먼저 PRE_MERGE admission을 다시 판단한다. owned delta가 이미 흡수됐으면 `SUPERSEDED_ALREADY_PUBLISHED`로 종료한다. owned delta가 남아 있고 movement가 unrelated이며 freshness가 필요하면 shared checkout을 건드리지 않는 server-side transport maintenance를 우선 사용한다 (GitHub PR Update branch와 semantic equivalent한 provider-side update가 사용 가능하고 충돌이 없을 때 canonical transport maintenance로 허용). 이를 source semantic reconciliation으로 확대하지 않는다. provider-side update가 conflict를 보고하거나 semantic owner overlap이 확인되면 local dirty checkout에서 merge/rebase하지 말고 fail-closed (`BLOCKED_TRANSPORT_CONFLICT` / `SEMANTIC_OWNER_REVIEW_REQUIRED`)한다. foreign dirty shared checkout에서의 local merge fallback은 금지한다.
+- PR 생성 후 live `main`이 이동하면 source work를 재생성하지 않는다. 먼저 PRE_MERGE admission을 다시 판단한다. owned delta가 이미 흡수됐으면 `SUPERSEDED_ALREADY_PUBLISHED`로 종료한다.
+- owned delta가 남아 있고 movement가 unrelated이며 freshness가 필요하면 shared checkout을 건드리지 않는 server-side transport maintenance만 고려한다. 이를 source semantic reconciliation으로 확대하지 않는다.
+- provider-side update가 conflict를 보고하거나 semantic owner overlap이 확인되면 local dirty checkout에서 merge/rebase하지 말고 fail-closed (`BLOCKED_TRANSPORT_CONFLICT` / `SEMANTIC_OWNER_REVIEW_REQUIRED`)한다.
+- foreign dirty shared checkout에서의 local merge/rebase/cherry-pick fallback은 금지한다.
 - temporary publication ref cleanup은 해당 ref만 제거한다. shared checkout branch/HEAD 및 foreign dirty는 publication transport cleanup 대상이 아니다.
 - `main` 통합 자체를 production 배포 승인으로 해석하지 않는다.
 - production 배포는 현재 출시 PLAN의 별도 승인 게이트와 실제 release SHA 확인 뒤에만 수행한다.
@@ -85,7 +145,25 @@
 - 검증을 위해 사용자 변경을 임시 수정·삭제하지 않는다.
 - 실행하지 못했거나 실패한 검증은 숨기지 않고 완료 결과와 분리해 보고한다.
 
-## 7. Task 종료 처리
+## 7. Result Intake / Task 종료 / Control Tower Closure
+
+Executor 결과를 받으면 STATUS 문자열만 반복하지 말고 현재 직접 증거로 의미를 재분류한다.
+
+기본 순서:
+
+```text
+RESULT INTAKE
+→ CANONICAL STATE UPDATE
+→ LIVE MAIN RE-READ
+→ PUBLICATION / EFFECTIVE DELTA CLASSIFICATION
+→ CANONICAL MAIN MIRROR HEALTH CHECK
+→ DIRTY / LOCAL COMMIT CLASSIFICATION
+→ SAFE RETIREMENT OR PRESERVATION DECISION
+→ MIRROR RECOVERY IF REQUIRED
+→ main + HEAD=LIVE_MAIN + CLEAN 확인
+→ NEXT BOUNDED STATE TRANSITION
+→ CONTROL TOWER CLOSED
+```
 
 Task를 완료할 때 다음을 확인한다.
 
@@ -94,5 +172,6 @@ Task를 완료할 때 다음을 확인한다.
 - 변경 파일과 남은 위험
 - `git diff`와 최종 작업 트리 상태
 - 후속 Task 또는 차단 요인
+- `friction_observed`: 이번 세션에서 반복 가능성이 있는 문제, coordination friction, 정책/도구 공백. 없으면 `NONE`.
 
 문서 수정이 허용된 Task에서만 현재 Task의 상태, 검증 증거, 완료 결론을 갱신한다. `docs/memory.md`는 프로젝트 현재 상태가 실제로 바뀌었을 때만 갱신한다. 역사 문서를 자동으로 아카이브하지 않는다.
