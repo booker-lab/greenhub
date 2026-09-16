@@ -1,13 +1,16 @@
 /**
  * Deterministic verification for the driver Preview allowlist secure bridge
  * (PILOT-AUTH-DRIVER-ALLOWLIST-SECURE-BRIDGE-43C,
- *  PILOT-AUTH-DRIVER-PROJECT-CREDENTIAL-CONTRACT-CONVERGENCE-45C).
+ *  PILOT-AUTH-DRIVER-PROJECT-CREDENTIAL-CONTRACT-CONVERGENCE-45C,
+ *  PILOT-AUTH-43C-EXECUTABLE-44A-SUCCESSOR-CONVERGENCE-45D).
  *
  * Run: node --test scripts/vercel/driver-preview-allowlist-reprobe.spec.mjs
  *
  * Fully provider-free: the Vercel client is an in-memory counting mock.
  * No workflow is dispatched, no Vercel mutation runs, no auth is reprobed.
  * No real credential is minted, read, or mutated here.
+ * No deployment POST is performed here; 44A creation lives only in the
+ * provider-native workflow.
  */
 
 import assert from 'node:assert/strict';
@@ -24,7 +27,7 @@ import {
   assertProviderReadbackMatches,
   buildAdditiveAllowlist,
   buildAllowlistEvidence,
-  buildDriverExactProvisioningRequest,
+  buildDriver44ASuccessorDescriptor,
   CREDENTIAL_PROJECT,
   CREDENTIAL_PROJECT_ID,
   CREDENTIAL_SCOPE,
@@ -41,6 +44,9 @@ import {
   READ_CREDENTIAL_NAME,
   resolveWriteCredential,
   shouldProceedToProbe,
+  SUCCESSOR_CREATION_AUTHORITY,
+  SUCCESSOR_CREATION_METHOD,
+  SUCCESSOR_KIND,
   updateDriverPreviewEnvEntry,
   validateNewDriverDeployment,
   vercelDriverEnvPath,
@@ -587,7 +593,7 @@ test('45C-11. token material is never recorded in plan results or evidence', asy
   const serializedPlan = JSON.stringify(plan);
   assert.equal(serializedPlan.includes(secret), false);
   assert.equal(JSON.stringify(plan.evidence).includes(secret), false);
-  assert.equal(JSON.stringify(plan.provisioningRequest).includes(secret), false);
+  assert.equal(JSON.stringify(plan.successor).includes(secret), false);
   assert.equal(JSON.stringify(plan.result).includes(secret), false);
   // The transport authenticator reaches the client args (header-only at the
   // fetch seam) but never the observable evidence/artifact payload.
@@ -651,45 +657,181 @@ test('13. consumer/seller targets are isolated out', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 14. withLatestCommit / latest-ref flows are absent and unusable
+// 14. withLatestCommit / latest-ref flows are absent and unusable;
+//     43A Git-ref-push path is NOT an executable successor (45D)
 // ---------------------------------------------------------------------------
 
-test('14. no withLatestCommit or latest-ref provisioning path exists', () => {
+test('14. no withLatestCommit, latest-ref, or 43A executable successor exists', () => {
   const source = readFileSync(MODULE_PATH, 'utf8');
   assert.equal(source.includes('withLatestCommit'), false);
   assert.equal(source.includes('with_latest_commit'), false);
-  assert.match(source, /provision-exact-preview\.mjs/);
-  assert.throws(
-    () => buildDriverExactProvisioningRequest({ sourceSha: 'latest' }),
-    (error) => error?.code === 'SOURCE_SHA_MISMATCH',
-  );
-  assert.throws(
-    () => buildDriverExactProvisioningRequest({ sourceSha: 'HEAD' }),
-    (error) => error?.code === 'SOURCE_SHA_MISMATCH',
-  );
-  assert.throws(
-    () => buildDriverExactProvisioningRequest({}),
-    (error) => error?.code === 'SOURCE_SHA_MISMATCH',
-  );
+  // No executable 43A successor: no import, no builder call, no ref builder.
+  assert.equal(source.includes("from './provision-exact-preview.mjs'"), false);
+  assert.equal(source.includes('from "./provision-exact-preview.mjs"'), false);
+  assert.equal(source.includes('buildProvisioningRequest'), false);
+  assert.equal(source.includes('buildDriverExactProvisioningRequest'), false);
+  assert.equal(source.includes('43A reuse'), false);
+  assert.equal(source.includes('existing 43A capability'), false);
+  assert.equal(source.includes('43A capability only'), false);
+  // No preview-exact ref creation contract: the exact driver ref literal
+  // must never be constructed as a successor artifact.
+  assert.equal(source.includes('preview-exact/driver/'), false);
+  // The superseded script may only appear in an explicit MUST NOT RUN /
+  // not-imported prohibition (duplicate-deployment guard), never as a
+  // runnable import or successor.
+  if (source.includes('provision-exact-preview.mjs')) {
+    assert.match(source, /MUST NOT RUN|not imported|never pushes/i);
+  }
+  if (source.includes('preview-exact/')) {
+    assert.match(source, /never pushes|MUST NOT|no preview-exact/i);
+  }
+  // The removed 43A builder must not be importable from the converged module.
+  assert.equal('buildDriverExactProvisioningRequest' in globalThis, false);
+  // 43C never POSTs a deployment: the only provider write in this module is
+  // the Preview allowlist PATCH; no POST method and no /v13/deployments fetch
+  // endpoint exists (the /v13 string survives only inside the secret-free 44A
+  // successor descriptor + comments, never as a fetch call).
+  assert.equal(source.includes("method: 'POST'"), false);
+  assert.equal(source.includes('method: "POST"'), false);
+  assert.equal(source.includes('fetchImpl('), true); // allowlist PATCH seam still exists
+  assert.match(source, /method:\s*'PATCH'/);
+  // Production mutation path is absent by construction (Preview literal only).
+  assert.equal(source.includes("target: ['production']"), false);
+  assert.equal(source.includes('target: ["production"]'), false);
+  assert.equal(source.includes("target: 'production'"), false);
+  assert.equal(source.includes('target: "production"'), false);
+  // Project-scoped 45C invariant holds: no teamId query is built.
+  assert.equal(source.includes('?teamId='), false);
 });
 
 // ---------------------------------------------------------------------------
-// 15. exact Preview provisioning request uses the expected SHA only
+// 15. 44A provider-native successor descriptor is the SOLE successor (45D)
 // ---------------------------------------------------------------------------
 
-test('15. provisioning reuses 43A with the exact expected SHA only', () => {
-  const request = buildDriverExactProvisioningRequest({ sourceSha: EXPECTED_SOURCE_SHA });
-  assert.equal(request.sha, EXPECTED_SOURCE_SHA);
-  assert.equal(request.requestedSha, EXPECTED_SOURCE_SHA);
-  assert.equal(request.app, 'driver');
-  assert.equal(request.scope, 'driver');
-  assert.equal(request.ref, `preview-exact/driver/${EXPECTED_SOURCE_SHA}`);
-  assert.equal(request.target, null);
-  assert.equal(request.production, false);
+test('15. 44A successor descriptor is sole, exact, driver-only, Preview-only', async () => {
+  assert.equal(SUCCESSOR_KIND, '44A');
+  assert.equal(
+    SUCCESSOR_CREATION_AUTHORITY,
+    '.github/workflows/create-exact-preview-deployment.yml',
+  );
+  assert.match(SUCCESSOR_CREATION_METHOD, /POST \/v13\/deployments/);
+  assert.match(SUCCESSOR_CREATION_METHOD, /exactly-one/i);
+
+  const successor = buildDriver44ASuccessorDescriptor({
+    sourceSha: EXPECTED_SOURCE_SHA,
+    oldDeploymentId: OLD_DRIVER_DEPLOYMENT_ID,
+    app: 'driver',
+  });
+  assert.equal(successor.successor, '44A');
+  assert.equal(successor.app, 'driver');
+  assert.equal(successor.exactSha, EXPECTED_SOURCE_SHA);
+  assert.equal(successor.oldDeploymentId, OLD_DRIVER_DEPLOYMENT_ID);
+  assert.equal(successor.newDeploymentRequired, true);
+  assert.equal(successor.newDeploymentMustDifferFromOld, true);
+  assert.equal(
+    successor.creationAuthority,
+    '.github/workflows/create-exact-preview-deployment.yml',
+  );
+  assert.match(String(successor.creationMethod), /POST \/v13\/deployments/);
+  assert.equal(successor.target, 'preview');
+  assert.equal(successor.production, false);
+  assert.ok(Object.isFrozen(successor));
+
+  // Exact SHA only; driver only; old ID must match.
   assert.throws(
-    () => buildDriverExactProvisioningRequest({ sourceSha: 'a'.repeat(40) }),
+    () =>
+      buildDriver44ASuccessorDescriptor({
+        sourceSha: 'a'.repeat(40),
+        oldDeploymentId: OLD_DRIVER_DEPLOYMENT_ID,
+        app: 'driver',
+      }),
     (error) => error?.code === 'SOURCE_SHA_MISMATCH',
   );
+  assert.throws(
+    () =>
+      buildDriver44ASuccessorDescriptor({
+        sourceSha: 'latest',
+        oldDeploymentId: OLD_DRIVER_DEPLOYMENT_ID,
+        app: 'driver',
+      }),
+    (error) => error?.code === 'SOURCE_SHA_MISMATCH',
+  );
+  // Defaults are the exact pinned identity, so an empty object converges to
+  // the canonical descriptor (no silent latest resolution).
+  const defaulted = buildDriver44ASuccessorDescriptor({});
+  assert.equal(defaulted.exactSha, EXPECTED_SOURCE_SHA);
+  assert.equal(defaulted.oldDeploymentId, OLD_DRIVER_DEPLOYMENT_ID);
+  assert.equal(defaulted.app, 'driver');
+  // Explicit wrong app / old deployment must fail.
+  assert.throws(
+    () =>
+      buildDriver44ASuccessorDescriptor({
+        sourceSha: EXPECTED_SOURCE_SHA,
+        oldDeploymentId: OLD_DRIVER_DEPLOYMENT_ID,
+        app: 'consumer',
+      }),
+    (error) => error?.code === 'DRIVER_ONLY_ISOLATION_VIOLATION',
+  );
+  assert.throws(
+    () =>
+      buildDriver44ASuccessorDescriptor({
+        sourceSha: EXPECTED_SOURCE_SHA,
+        oldDeploymentId: 'dpl_WRONG0000000000000000',
+        app: 'driver',
+      }),
+    (error) => error?.code === 'OLD_DEPLOYMENT_MISMATCH',
+  );
+
+  // planDriverAllowlistMutation exposes the 44A successor and never a 43A
+  // provisioning request; the descriptor is secret-free pure data.
+  const client = countingClient();
+  const plan = await planDriverAllowlistMutation({
+    env: writeEnv(),
+    target: exactTarget(),
+    currentRaw: `${UNRELATED_A},${UNRELATED_B}`,
+    canonicalIdentity: CANONICAL,
+    vercelClient: client,
+  });
+  assert.equal('provisioningRequest' in plan, false);
+  assert.ok(plan.successor);
+  assert.equal(plan.successor.successor, '44A');
+  assert.equal(plan.successor.app, 'driver');
+  assert.equal(plan.successor.exactSha, EXPECTED_SOURCE_SHA);
+  assert.equal(plan.successor.oldDeploymentId, OLD_DRIVER_DEPLOYMENT_ID);
+  assert.equal(plan.successor.newDeploymentRequired, true);
+  assert.equal(plan.successor.newDeploymentMustDifferFromOld, true);
+  assert.equal(
+    plan.successor.creationAuthority,
+    '.github/workflows/create-exact-preview-deployment.yml',
+  );
+  const serialized = JSON.stringify(plan.successor);
+  assert.equal(serialized.includes('preview-exact/driver/'), false);
+  assert.equal(serialized.includes('write-token-for-tests'), false);
+  // Evidence + result + successor together never carry token material or raw
+  // identities; the token reaches only the transport authenticator args.
+  const secretPlan = await planDriverAllowlistMutation({
+    env: { [WRITE_CREDENTIAL_NAME]: 'super-secret-45D-token-xyz' },
+    target: exactTarget(),
+    currentRaw: `${UNRELATED_A},${UNRELATED_B}`,
+    canonicalIdentity: CANONICAL,
+    vercelClient: countingClient(),
+  });
+  assert.equal(JSON.stringify(secretPlan.evidence).includes('super-secret-45D-token-xyz'), false);
+  assert.equal(JSON.stringify(secretPlan.successor).includes('super-secret-45D-token-xyz'), false);
+  assert.equal(JSON.stringify(secretPlan.result ?? {}).includes('super-secret-45D-token-xyz'), false);
+  assert.equal(evidenceExposesRawIdentity(secretPlan.evidence, [CANONICAL, UNRELATED_A]), false);
+
+  // Planning without a client also returns the successor (no provider call).
+  const planned = await planDriverAllowlistMutation({
+    env: writeEnv(),
+    target: exactTarget(),
+    currentRaw: UNRELATED_A,
+    canonicalIdentity: CANONICAL,
+    vercelClient: null,
+  });
+  assert.equal(planned.providerCalls, 0);
+  assert.equal(planned.successor.successor, '44A');
+  assert.equal('provisioningRequest' in planned, false);
 });
 
 // ---------------------------------------------------------------------------
