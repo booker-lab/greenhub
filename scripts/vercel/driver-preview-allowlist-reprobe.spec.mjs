@@ -1,11 +1,13 @@
 /**
  * Deterministic verification for the driver Preview allowlist secure bridge
- * (PILOT-AUTH-DRIVER-ALLOWLIST-SECURE-BRIDGE-43C).
+ * (PILOT-AUTH-DRIVER-ALLOWLIST-SECURE-BRIDGE-43C,
+ *  PILOT-AUTH-DRIVER-PROJECT-CREDENTIAL-CONTRACT-CONVERGENCE-45C).
  *
  * Run: node --test scripts/vercel/driver-preview-allowlist-reprobe.spec.mjs
  *
  * Fully provider-free: the Vercel client is an in-memory counting mock.
  * No workflow is dispatched, no Vercel mutation runs, no auth is reprobed.
+ * No real credential is minted, read, or mutated here.
  */
 
 import assert from 'node:assert/strict';
@@ -18,16 +20,19 @@ import {
   assertAdditiveInvariant,
   assertDriverScope,
   assertExactDriverTarget,
+  assertNoTeamIdQuery,
   assertProviderReadbackMatches,
   buildAdditiveAllowlist,
   buildAllowlistEvidence,
   buildDriverExactProvisioningRequest,
+  CREDENTIAL_PROJECT,
+  CREDENTIAL_PROJECT_ID,
+  CREDENTIAL_SCOPE,
   DRIVER_ENV_ENTRY_ID,
   DRIVER_ENV_KEY,
   DRIVER_PREVIEW_ENVIRONMENT,
   DRIVER_PROJECT,
   DRIVER_PROJECT_ID,
-  DRIVER_TEAM_ID,
   evidenceExposesRawIdentity,
   EXPECTED_SOURCE_SHA,
   hasWriteCredential,
@@ -38,6 +43,7 @@ import {
   shouldProceedToProbe,
   updateDriverPreviewEnvEntry,
   validateNewDriverDeployment,
+  vercelDriverEnvPath,
   WRITE_CREDENTIAL_NAME,
 } from './driver-preview-allowlist-reprobe.mjs';
 
@@ -50,10 +56,13 @@ const CANONICAL = 'canonical-driver@example.test';
 const UNRELATED_A = 'teammate-a@example.test';
 const UNRELATED_B = 'teammate-b@example.test';
 
+// Legacy environment write credential removed by 45C convergence. Named here
+// ONLY so specs can prove it is absent from the active workflow/helper.
+const LEGACY_WRITE_CREDENTIAL_NAME = 'ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN';
+
 function exactTarget(overrides = {}) {
   return {
     app: 'driver',
-    teamId: DRIVER_TEAM_ID,
     project: DRIVER_PROJECT,
     projectId: DRIVER_PROJECT_ID,
     environment: DRIVER_PREVIEW_ENVIRONMENT,
@@ -65,8 +74,8 @@ function exactTarget(overrides = {}) {
   };
 }
 
-function writeEnv() {
-  return { [WRITE_CREDENTIAL_NAME]: 'write-token-for-tests' };
+function writeEnv(token = 'write-token-for-tests') {
+  return { [WRITE_CREDENTIAL_NAME]: token };
 }
 
 function countingClient() {
@@ -95,6 +104,37 @@ function driverPreviewPayload({ sha = EXPECTED_SOURCE_SHA, state = 'READY', targ
     meta: { githubCommitSha: sha },
   };
 }
+
+// ---------------------------------------------------------------------------
+// 45C-1. canonical credential contract: single project-scoped driver secret
+// ---------------------------------------------------------------------------
+
+test('45C-1. canonical credential is VERCEL_EXACT_PREVIEW_DRIVER_TOKEN, project-scoped driver only', () => {
+  assert.equal(WRITE_CREDENTIAL_NAME, 'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN');
+  assert.equal(CREDENTIAL_SCOPE, 'project-scoped');
+  assert.equal(CREDENTIAL_PROJECT, 'greenhub-driver');
+  assert.equal(CREDENTIAL_PROJECT_ID, 'prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW');
+  assert.equal(DRIVER_PROJECT, 'greenhub-driver');
+  assert.equal(DRIVER_PROJECT_ID, 'prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW');
+  // The e2e read credential is untouched by this task (compat read path only).
+  assert.equal(READ_CREDENTIAL_NAME, 'ROUND_DIRECT_E2E_VERCEL_READ_TOKEN');
+});
+
+// ---------------------------------------------------------------------------
+// 45C-2. legacy write token is no longer required in the active path
+// ---------------------------------------------------------------------------
+
+test('45C-2. legacy write token is absent from the active workflow/helper', () => {
+  const moduleSource = readFileSync(MODULE_PATH, 'utf8');
+  const workflow = readFileSync(WORKFLOW_PATH, 'utf8');
+  assert.equal(moduleSource.includes(LEGACY_WRITE_CREDENTIAL_NAME), false);
+  assert.equal(workflow.includes(LEGACY_WRITE_CREDENTIAL_NAME), false);
+  assert.equal(workflow.includes('secrets.' + LEGACY_WRITE_CREDENTIAL_NAME), false);
+  // Canonical secret is the only write credential referenced.
+  assert.match(workflow, /secrets\.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN/);
+  assert.match(workflow, /VERCEL_EXACT_PREVIEW_DRIVER_TOKEN/);
+  assert.match(moduleSource, /VERCEL_EXACT_PREVIEW_DRIVER_TOKEN/);
+});
 
 // ---------------------------------------------------------------------------
 // 1. write secret missing -> mutation client 0 calls
@@ -180,15 +220,47 @@ test('3. production (or any non-preview) target is hard-blocked', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4-9. exact identity mismatches -> block
+// 45C-4. teamId authority is forbidden; project ID is the path authority
 // ---------------------------------------------------------------------------
 
-test('4. wrong team blocks', () => {
+test('45C-4. any teamId authority is rejected; provider paths carry no teamId query', () => {
   assert.throws(
-    () => assertExactDriverTarget(exactTarget({ teamId: 'team_WRONG' })),
-    (error) => error?.code === 'TEAM_MISMATCH',
+    () => assertExactDriverTarget({ ...exactTarget(), teamId: 'team_WRONG' }),
+    (error) => error?.code === 'TEAM_QUERY_FORBIDDEN',
   );
+  assert.doesNotThrow(() => assertExactDriverTarget(exactTarget()));
+  assert.throws(
+    () =>
+      assertProviderReadbackMatches({
+        readback: {
+          teamId: 'team_J91VWI0TqcHdcF36T7qVgiT1',
+          project: DRIVER_PROJECT,
+          projectId: DRIVER_PROJECT_ID,
+          environment: 'preview',
+          envEntryId: DRIVER_ENV_ENTRY_ID,
+          envKey: DRIVER_ENV_KEY,
+        },
+      }),
+    (error) => error?.code === 'TEAM_QUERY_FORBIDDEN',
+  );
+
+  // Canonical path has no teamId query by construction.
+  const pathname = vercelDriverEnvPath(DRIVER_PROJECT_ID, DRIVER_ENV_ENTRY_ID);
+  assert.equal(pathname.includes('teamId'), false);
+  assert.equal(assertNoTeamIdQuery(`https://api.vercel.com${pathname}`), true);
+  assert.throws(() => assertNoTeamIdQuery('https://api.vercel.com/v9/projects/x/env/y?teamId=z'), (error) => error?.code === 'TEAM_QUERY_FORBIDDEN');
+
+  // Module + workflow sources build no teamId query for the env endpoint.
+  const moduleSource = readFileSync(MODULE_PATH, 'utf8');
+  const workflow = readFileSync(WORKFLOW_PATH, 'utf8');
+  assert.equal(moduleSource.includes('?teamId='), false);
+  assert.equal(workflow.includes('?teamId='), false);
+  assert.equal(workflow.includes('DRIVER_PREVIEW_TEAM_ID'), false);
 });
+
+// ---------------------------------------------------------------------------
+// 5. wrong project ID blocks (fail closed on non-exact project)
+// ---------------------------------------------------------------------------
 
 test('5. wrong project ID blocks', () => {
   assert.throws(
@@ -199,11 +271,19 @@ test('5. wrong project ID blocks', () => {
     () => assertExactDriverTarget(exactTarget({ project: 'greenhub-consumer' })),
     (error) => error?.code === 'PROJECT_MISMATCH',
   );
+  assert.throws(
+    () => vercelDriverEnvPath('prj_WRONG', DRIVER_ENV_ENTRY_ID),
+    (error) => error?.code === 'PROJECT_ID_MISMATCH',
+  );
 });
 
 test('6. wrong env entry ID blocks', () => {
   assert.throws(
     () => assertExactDriverTarget(exactTarget({ envEntryId: 'WRONG_ENTRY' })),
+    (error) => error?.code === 'ENV_ENTRY_ID_MISMATCH',
+  );
+  assert.throws(
+    () => vercelDriverEnvPath(DRIVER_PROJECT_ID, 'WRONG_ENTRY'),
     (error) => error?.code === 'ENV_ENTRY_ID_MISMATCH',
   );
 });
@@ -231,7 +311,6 @@ test('9. wrong expected source SHA blocks', () => {
 
 test('provider readback mismatch blocks before mutation', () => {
   const goodReadback = {
-    teamId: DRIVER_TEAM_ID,
     project: DRIVER_PROJECT,
     projectId: DRIVER_PROJECT_ID,
     environment: 'preview',
@@ -242,8 +321,8 @@ test('provider readback mismatch blocks before mutation', () => {
   };
   assert.equal(assertProviderReadbackMatches({ readback: goodReadback }), true);
   const cases = [
-    [{ ...goodReadback, teamId: 'team_WRONG' }, 'TEAM_MISMATCH'],
     [{ ...goodReadback, projectId: 'prj_WRONG' }, 'PROJECT_ID_MISMATCH'],
+    [{ ...goodReadback, project: 'greenhub-consumer' }, 'PROJECT_MISMATCH'],
     [{ ...goodReadback, environment: 'production' }, 'PRODUCTION_TARGET_BLOCKED'],
     [{ ...goodReadback, envEntryId: 'WRONG' }, 'ENV_ENTRY_ID_MISMATCH'],
     [{ ...goodReadback, envKey: 'WRONG' }, 'ENV_KEY_MISMATCH'],
@@ -261,15 +340,16 @@ test('provider readback mismatch blocks before mutation', () => {
 
 test('mutation transport is preview-only and credential-gated (mock fetch)', async () => {
   const fetchCalls = [];
-  const okFetch = async () => {
+  const seenUrls = [];
+  const okFetch = async (url) => {
     fetchCalls.push(true);
+    seenUrls.push(String(url));
     return { ok: true };
   };
   await assert.rejects(
     updateDriverPreviewEnvEntry(
       {
         writeToken: '',
-        teamId: DRIVER_TEAM_ID,
         projectId: DRIVER_PROJECT_ID,
         envEntryId: DRIVER_ENV_ENTRY_ID,
         key: DRIVER_ENV_KEY,
@@ -285,7 +365,6 @@ test('mutation transport is preview-only and credential-gated (mock fetch)', asy
     updateDriverPreviewEnvEntry(
       {
         writeToken: 'write-token-for-tests',
-        teamId: DRIVER_TEAM_ID,
         projectId: DRIVER_PROJECT_ID,
         envEntryId: DRIVER_ENV_ENTRY_ID,
         key: DRIVER_ENV_KEY,
@@ -297,10 +376,25 @@ test('mutation transport is preview-only and credential-gated (mock fetch)', asy
     (error) => error?.code === 'EXACT_TARGET_MISMATCH',
   );
   assert.equal(fetchCalls.length, 0);
+  await assert.rejects(
+    updateDriverPreviewEnvEntry(
+      {
+        writeToken: 'write-token-for-tests',
+        projectId: DRIVER_PROJECT_ID,
+        envEntryId: DRIVER_ENV_ENTRY_ID,
+        key: DRIVER_ENV_KEY,
+        target: 'preview',
+        newRaw: UNRELATED_A,
+        teamId: 'team_J91VWI0TqcHdcF36T7qVgiT1',
+      },
+      okFetch,
+    ),
+    (error) => error?.code === 'TEAM_QUERY_FORBIDDEN',
+  );
+  assert.equal(fetchCalls.length, 0);
   const result = await updateDriverPreviewEnvEntry(
     {
       writeToken: 'write-token-for-tests',
-      teamId: DRIVER_TEAM_ID,
       projectId: DRIVER_PROJECT_ID,
       envEntryId: DRIVER_ENV_ENTRY_ID,
       key: DRIVER_ENV_KEY,
@@ -311,6 +405,68 @@ test('mutation transport is preview-only and credential-gated (mock fetch)', asy
   );
   assert.equal(result.ok, true);
   assert.equal(fetchCalls.length, 1);
+  assert.equal(seenUrls.length, 1);
+  assert.equal(seenUrls[0].includes('teamId'), false);
+  assert.ok(seenUrls[0].includes(encodeURIComponent(DRIVER_PROJECT_ID)));
+  assert.ok(seenUrls[0].includes(encodeURIComponent(DRIVER_ENV_ENTRY_ID)));
+});
+
+// ---------------------------------------------------------------------------
+// 45C-10. provider GET/PATCH failure fails closed (no silent success)
+// ---------------------------------------------------------------------------
+
+test('45C-10. provider PATCH failure fails closed without leaking the token', async () => {
+  const secret = 'patch-failure-secret-token-45C';
+  const rejectedFetch = async () => ({ ok: false, status: 403 });
+  await assert.rejects(
+    updateDriverPreviewEnvEntry(
+      {
+        writeToken: secret,
+        projectId: DRIVER_PROJECT_ID,
+        envEntryId: DRIVER_ENV_ENTRY_ID,
+        key: DRIVER_ENV_KEY,
+        target: 'preview',
+        newRaw: UNRELATED_A,
+      },
+      rejectedFetch,
+    ),
+    (error) => error?.code === 'VERCEL_MUTATION_REJECTED',
+  );
+  const throwingFetch = async () => {
+    throw new Error('network down');
+  };
+  await assert.rejects(
+    updateDriverPreviewEnvEntry(
+      {
+        writeToken: secret,
+        projectId: DRIVER_PROJECT_ID,
+        envEntryId: DRIVER_ENV_ENTRY_ID,
+        key: DRIVER_ENV_KEY,
+        target: 'preview',
+        newRaw: UNRELATED_A,
+      },
+      throwingFetch,
+    ),
+    (error) => error?.code === 'VERCEL_API_UNAVAILABLE',
+  );
+  // Failure messages never embed the token.
+  try {
+    await updateDriverPreviewEnvEntry(
+      {
+        writeToken: secret,
+        projectId: DRIVER_PROJECT_ID,
+        envEntryId: DRIVER_ENV_ENTRY_ID,
+        key: DRIVER_ENV_KEY,
+        target: 'preview',
+        newRaw: UNRELATED_A,
+      },
+      rejectedFetch,
+    );
+    assert.fail('must throw');
+  } catch (error) {
+    assert.equal(String(error?.message ?? '').includes(secret), false);
+    assert.equal(JSON.stringify(error ?? {}).includes(secret), false);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -347,6 +503,7 @@ test('10. additive-only merge preserves unrelated members and adds canonical', a
   assert.equal(client.calls[0].target, 'preview');
   assert.equal(client.calls[0].projectId, DRIVER_PROJECT_ID);
   assert.equal(client.calls[0].envEntryId, DRIVER_ENV_ENTRY_ID);
+  assert.equal('teamId' in client.calls[0], false);
   assert.equal(plan.evidence.CANONICAL_IDENTITY_PRESENT_AFTER, true);
   assert.equal(plan.evidence.UNRELATED_MEMBER_COUNT_PRESERVED, true);
   assert.ok(!String(client.calls[0].newRaw).includes('production'));
@@ -411,6 +568,52 @@ test('12. evidence exposes booleans/counts only, never raw identities', () => {
   } catch (error) {
     assert.equal(JSON.stringify(error.message).includes('write-token'), false);
   }
+});
+
+// ---------------------------------------------------------------------------
+// 45C-11. token material never enters result/stdout/artifact payloads
+// ---------------------------------------------------------------------------
+
+test('45C-11. token material is never recorded in plan results or evidence', async () => {
+  const secret = 'super-secret-driver-project-token-45C-xyz';
+  const client = countingClient();
+  const plan = await planDriverAllowlistMutation({
+    env: writeEnv(secret),
+    target: exactTarget(),
+    currentRaw: `${UNRELATED_A},${UNRELATED_B}`,
+    canonicalIdentity: CANONICAL,
+    vercelClient: client,
+  });
+  const serializedPlan = JSON.stringify(plan);
+  assert.equal(serializedPlan.includes(secret), false);
+  assert.equal(JSON.stringify(plan.evidence).includes(secret), false);
+  assert.equal(JSON.stringify(plan.provisioningRequest).includes(secret), false);
+  assert.equal(JSON.stringify(plan.result).includes(secret), false);
+  // The transport authenticator reaches the client args (header-only at the
+  // fetch seam) but never the observable evidence/artifact payload.
+  assert.equal(client.calls[0].writeToken, secret);
+
+  const seen = [];
+  const capturingFetch = async (url, init) => {
+    seen.push({ url: String(url), init });
+    return { ok: true };
+  };
+  await updateDriverPreviewEnvEntry(
+    {
+      writeToken: secret,
+      projectId: DRIVER_PROJECT_ID,
+      envEntryId: DRIVER_ENV_ENTRY_ID,
+      key: DRIVER_ENV_KEY,
+      target: 'preview',
+      newRaw: `${UNRELATED_A},${CANONICAL}`,
+    },
+    capturingFetch,
+  );
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].url.includes(secret), false);
+  assert.equal(seen[0].url.includes('teamId'), false);
+  assert.equal(JSON.stringify(seen[0].init?.body ?? '').includes(secret), false);
+  assert.equal(String(seen[0].init?.headers?.Authorization ?? '').includes('Bearer '), true);
 });
 
 // ---------------------------------------------------------------------------
@@ -531,24 +734,48 @@ test('17. non-READY deployment never proceeds to probe; READY preview does', () 
 });
 
 // ---------------------------------------------------------------------------
-// Workflow source-contract test
+// 45C-12. production mutation path is absent by construction
 // ---------------------------------------------------------------------------
 
-test('workflow contract: dispatch-only mutation, driver preview exact identity', () => {
+test('45C-12. no production mutation path exists in the module', () => {
+  const source = readFileSync(MODULE_PATH, 'utf8');
+  // Preview-only literals exist; production is only a fail-closed guard.
+  assert.match(source, /DRIVER_PREVIEW_ENVIRONMENT/);
+  assert.match(source, /PRODUCTION_TARGET_BLOCKED/);
+  assert.equal(source.includes("target: ['production']"), false);
+  assert.equal(source.includes('target: ["production"]'), false);
+  assert.equal(source.includes("target: 'production'"), false);
+  assert.equal(source.includes('target: "production"'), false);
+  assert.equal(source.includes('/env/${encodeURIComponent(envEntryId)}?teamId='), false);
+  assert.equal(source.includes('?teamId='), false);
+});
+
+// ---------------------------------------------------------------------------
+// Workflow source-contract test (45C convergence)
+// ---------------------------------------------------------------------------
+
+test('workflow contract: dispatch-only mutation, project-scoped driver identity', () => {
   const workflow = readFileSync(WORKFLOW_PATH, 'utf8');
   // Manual dispatch exists; automatic push mutation path must not exist.
   assert.match(workflow, /workflow_dispatch/);
   assert.equal(/^\s*push\s*:/m.test(workflow), false);
   // Mutation job is gated to workflow_dispatch.
   assert.match(workflow, /github\.event_name == 'workflow_dispatch'/);
-  // Environment + write credential contract.
+  // Environment gate remains for approval + Driver identity; the Driver Vercel
+  // token is the repository-level project-scoped secret.
   assert.match(workflow, /round-direct-e2e/);
-  assert.match(workflow, /ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN/);
+  assert.match(workflow, /secrets\.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN/);
+  assert.match(workflow, /VERCEL_EXACT_PREVIEW_DRIVER_TOKEN/);
+  // Legacy environment write credential is absent from the active path.
+  assert.equal(workflow.includes(LEGACY_WRITE_CREDENTIAL_NAME), false);
+  // Project-scoped requests carry no teamId query.
+  assert.equal(workflow.includes('?teamId='), false);
+  assert.equal(workflow.includes('DRIVER_PREVIEW_TEAM_ID'), false);
   // The read credential must never appear in the mutation job: no fallback vector.
   assert.equal(workflow.includes('ROUND_DIRECT_E2E_VERCEL_READ_TOKEN'), false);
-  // Exact driver preview identity is pinned in the workflow.
+  // Exact driver preview identity is pinned in the workflow (project-scoped:
+  // project ID path authority, no teamId).
   for (const literal of [
-    DRIVER_TEAM_ID,
     DRIVER_PROJECT_ID,
     DRIVER_ENV_ENTRY_ID,
     DRIVER_ENV_KEY,
@@ -557,6 +784,9 @@ test('workflow contract: dispatch-only mutation, driver preview exact identity',
   ]) {
     assert.ok(workflow.includes(literal), `${literal} must be pinned in workflow`);
   }
+  // Provider GET failure and empty-readback failure both block mutation.
+  assert.match(workflow, /provider readback GET failed/);
+  assert.match(workflow, /provider readback allowlist is empty/);
   // Production mutation and latest-ref provisioning are absent.
   assert.equal(workflow.includes('withLatestCommit'), false);
   assert.match(workflow, /preview/i);
