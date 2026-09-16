@@ -800,4 +800,175 @@ describe('SaleRoundsService', () => {
       ],
     });
   });
+
+  describe('public read purity exact live rebind (51A)', () => {
+    it('1. public list: ZERO state write', async () => {
+      const { service, firestore, writes, records } = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        makeRound({ status: 'SCHEDULED' }),
+      );
+      const before = JSON.stringify(records.get('saleRounds/round-1'));
+
+      const result = await service.listPublicRounds('store-1');
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toMatchObject({ id: 'round-1', status: 'OPEN' });
+      expect(writes).toHaveLength(0);
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+      expect(JSON.stringify(records.get('saleRounds/round-1'))).toBe(before);
+      expect(records.get('saleRounds/round-1')).toMatchObject({ status: 'SCHEDULED' });
+    });
+
+    it('2. public detail: ZERO state write', async () => {
+      const closing = makeRound({
+        status: 'OPEN',
+        schedule: { ...makeRound().schedule, orderCloseAt: '2026-07-14T00:00:00.000+09:00' },
+      });
+      const { service, firestore, writes, records } = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        closing,
+      );
+      const before = JSON.stringify(records.get('saleRounds/round-1'));
+
+      const round = await service.getPublicRound('store-1', 'round-1');
+
+      expect(round).toMatchObject({ id: 'round-1', status: 'CLOSED', closeReason: 'SCHEDULE_ENDED' });
+      expect(writes).toHaveLength(0);
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+      expect(JSON.stringify(records.get('saleRounds/round-1'))).toBe(before);
+      expect(records.get('saleRounds/round-1')).toMatchObject({ status: 'OPEN' });
+    });
+
+    it('3. public list: ZERO refreshRoundStatus invocation', async () => {
+      const { service, firestore } = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        makeRound({ status: 'OPEN' }),
+      );
+      const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+      await service.listPublicRounds('store-1');
+
+      expect(refresh).not.toHaveBeenCalled();
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+    });
+
+    it('4. public detail: ZERO refreshRoundStatus invocation', async () => {
+      const { service, firestore } = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        makeRound({ status: 'OPEN' }),
+      );
+      const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+      await service.getPublicRound('store-1', 'round-1');
+
+      expect(refresh).not.toHaveBeenCalled();
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+    });
+
+    it('5. scheduled/open boundary: pure effective status correct', async () => {
+      const stored = makeRound({ status: 'SCHEDULED' });
+      const listHarness = makeService({ 'saleRoundItems/item-1': makeItem() }, stored);
+      const listed = await listHarness.service.listPublicRounds('store-1');
+      expect(listed.items[0]).toMatchObject({ id: 'round-1', status: 'OPEN' });
+      expect(listHarness.writes).toHaveLength(0);
+      expect(listHarness.records.get('saleRounds/round-1')).toMatchObject({ status: 'SCHEDULED' });
+      // Response contract preserved: full SaleRound shape (no projection).
+      expect(listed.items[0]).toHaveProperty('cancellation');
+      expect(listed.items[0]).toHaveProperty('counters');
+      expect(listed.items[0]).toHaveProperty('createdAt');
+
+      const detailHarness = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        makeRound({ status: 'SCHEDULED' }),
+      );
+      const detailed = await detailHarness.service.getPublicRound('store-1', 'round-1');
+      expect(detailed).toMatchObject({ id: 'round-1', status: 'OPEN' });
+      expect(detailHarness.writes).toHaveLength(0);
+      expect(detailHarness.records.get('saleRounds/round-1')).toMatchObject({ status: 'SCHEDULED' });
+    });
+
+    it('6. open/closed boundary: pure effective status correct', async () => {
+      const closing = makeRound({
+        status: 'OPEN',
+        schedule: { ...makeRound().schedule, orderCloseAt: '2026-07-14T00:00:00.000+09:00' },
+      });
+      const listHarness = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        { ...closing },
+      );
+      const listed = await listHarness.service.listPublicRounds('store-1');
+      expect(listed.items[0]).toMatchObject({ status: 'CLOSED', closeReason: 'SCHEDULE_ENDED' });
+      expect(listHarness.writes).toHaveLength(0);
+      expect(listHarness.records.get('saleRounds/round-1')).toMatchObject({ status: 'OPEN' });
+
+      const detailHarness = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        { ...closing },
+      );
+      const detailed = await detailHarness.service.getPublicRound('store-1', 'round-1');
+      expect(detailed).toMatchObject({ status: 'CLOSED', closeReason: 'SCHEDULE_ENDED' });
+      expect(detailHarness.writes).toHaveLength(0);
+      expect(detailHarness.records.get('saleRounds/round-1')).toMatchObject({ status: 'OPEN' });
+    });
+
+    it('7. completed: persisted terminal semantics preserved', async () => {
+      const stored = makeRound({ status: 'COMPLETED' });
+      const { service, firestore, writes, records } = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        stored,
+      );
+      const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+      const listed = await service.listPublicRounds('store-1');
+      expect(listed.items[0]).toMatchObject({ status: 'COMPLETED' });
+
+      const detailed = await service.getPublicRound('store-1', 'round-1');
+      expect(detailed).toMatchObject({ status: 'COMPLETED' });
+
+      expect(refresh).not.toHaveBeenCalled();
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+      expect(writes).toHaveLength(0);
+      expect(records.get('saleRounds/round-1')).toMatchObject({ status: 'COMPLETED' });
+    });
+
+    it('8. hidden items: public response exclusion preserved', async () => {
+      const { service, firestore, writes } = makeService(
+        {
+          'saleRoundItems/item-1': makeItem({ id: 'item-1', status: 'ACTIVE', displayOrder: 1 }),
+          'saleRoundItems/item-hidden': makeItem({
+            id: 'item-hidden',
+            status: 'HIDDEN',
+            displayOrder: 0,
+          }),
+        },
+        makeRound({ status: 'OPEN' }),
+      );
+      const refresh = jest.spyOn(service, 'refreshRoundStatus');
+
+      const round = await service.getPublicRound('store-1', 'round-1');
+
+      expect(round.items.map((item) => item.id)).toEqual(['item-1']);
+      expect(round.items.some((item) => item.status === 'HIDDEN')).toBe(false);
+      expect(refresh).not.toHaveBeenCalled();
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+      expect(writes).toHaveLength(0);
+    });
+
+    it('9. seller authenticated read/mutation path: existing persistence behavior regression 없음', async () => {
+      const { service, firestore, records } = makeService(
+        { 'saleRoundItems/item-1': makeItem() },
+        makeRound({ status: 'SCHEDULED' }),
+      );
+
+      const round = await (service as any).getRound('store-1', 'round-1', 'seller-1', 'seller');
+
+      // Seller path still uses refresh/persist semantics (transition persisted).
+      expect(round).toMatchObject({ status: 'OPEN' });
+      expect(firestore.runTransaction).toHaveBeenCalled();
+      expect(records.get('saleRounds/round-1')).toMatchObject({ status: 'OPEN' });
+      // Seller read keeps internal fields and hidden-item contract untouched.
+      expect(round).toHaveProperty('cancellation');
+      expect(round).toHaveProperty('counters');
+    });
+  });
 });
