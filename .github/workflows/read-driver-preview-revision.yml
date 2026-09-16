@@ -1,0 +1,179 @@
+name: Read driver preview revision metadata (45E read-only)
+
+# Dedicated READ-ONLY execution wrapper for the Driver Preview pinned
+# deployment + allowlist env revision metadata (ONE bounded operation).
+# This workflow performs NO mutation and dispatches NO other workflow.
+#
+# Locked contract:
+# - Driver Preview only: greenhub-driver /
+#   prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW / preview / RFASslCQh9EVuvfv /
+#   ROUND_DIRECT_E2E_DRIVER_EMAILS / pinned dpl_BM6yZATGyH2R6LW6uL8uvkAPhCjn /
+#   source 33cb9773df86abc486783e53757448280b80be96 /
+#   ref tmp/pilot-auth-driver-full-gate-39b-publication.
+# - Read credential ONLY: secrets.ROUND_DIRECT_E2E_VERCEL_READ_TOKEN
+#   (GitHub Environment round-direct-e2e). The write credential
+#   (project-scoped driver token) is NEVER injected here and is never a
+#   fallback. New credentials are never minted here.
+# - Allowed provider method: method: 'GET' only (exactly ONE deployment GET
+#   + exactly ONE env list GET on success; zero on pre-call fail). No POST,
+#   no PATCH, no PUT, no DELETE. No deploy/redeploy/promote, no env
+#   update/create/delete, no Git ref push, no workflow chaining.
+# - Env list uses the Vercel-official canonical list endpoint
+#   GET /v10/projects/{projectId}/env with NO decrypt query
+#   (decrypt=true is absolutely forbidden). Deployment uses
+#   GET /v13/deployments/{deploymentId} with the canonical team query fixed
+#   inside the reader module.
+# - Value non-disclosure: token values, env values, allowlist raw values,
+#   ciphertext, hashes, lengths, prefixes, suffixes, and membership never
+#   enter stdout/stderr/artifacts/summary. Only whitelist projections reach
+#   outputs (env: id/key/type/target/gitBranch/createdAt/updatedAt;
+#   deployment: id/project/projectId/sourceSha/sourceRef/state/target/
+#   createdAt; missing timestamps are FIELD_UNAVAILABLE).
+#
+# 45E scope: capability only. This Task does not dispatch the workflow and
+# performs no live provider readback. A follow-up Task owns live readback.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: read-driver-preview-revision
+  cancel-in-progress: false
+
+jobs:
+  deterministic-spec:
+    name: revision reader deterministic spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: run revision reader spec (mock/local only)
+        run: node --test scripts/vercel/read-driver-preview-revision.spec.mjs
+
+  read-revision:
+    name: driver preview revision read (manual only)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: deterministic-spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: round-direct-e2e
+    permissions:
+      contents: read
+    steps:
+      - name: full history checkout (SHA provenance check)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: owner + dispatch preflight (fail-closed)
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch 이외의 이벤트에서는 revision read를 실행할 수 없습니다.' >&2
+            exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow 실행자가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow triggering actor가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          printf 'preflight ok: manual driver preview revision read\n'
+
+      - name: exact target contract preflight (fail-closed, no secret output)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/vercel/read-driver-preview-revision.mjs --check-only
+          printf 'contract ok: driver preview exact read identity\n'
+
+      - name: read-only revision metadata (deployment + env GET only)
+        shell: bash
+        env:
+          ROUND_DIRECT_E2E_VERCEL_READ_TOKEN: ${{ secrets.ROUND_DIRECT_E2E_VERCEL_READ_TOKEN }}
+          DRIVER_PREVIEW_PROJECT: greenhub-driver
+          DRIVER_PREVIEW_PROJECT_ID: prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW
+          DRIVER_PREVIEW_ENVIRONMENT: preview
+          DRIVER_PREVIEW_ENV_ENTRY_ID: RFASslCQh9EVuvfv
+          DRIVER_PREVIEW_ENV_KEY: ROUND_DIRECT_E2E_DRIVER_EMAILS
+          DRIVER_PREVIEW_PINNED_DEPLOYMENT_ID: dpl_BM6yZATGyH2R6LW6uL8uvkAPhCjn
+          DRIVER_PREVIEW_EXPECTED_SHA: 33cb9773df86abc486783e53757448280b80be96
+          DRIVER_PREVIEW_EXPECTED_REF: tmp/pilot-auth-driver-full-gate-39b-publication
+        run: |
+          set -euo pipefail
+          # Fail closed when the read credential is not provisioned. The value
+          # is never printed, hashed, or stored; only presence is probed.
+          # NOTE: the write credential is intentionally never referenced here
+          # and must never become a read fallback. All provider reads here use
+          # method GET only with the read credential (header-only, never in
+          # URL/body/logs). decrypt=true is never sent. Raw provider payloads
+          # and values never reach stdout/summary; only whitelist projections do.
+          if [[ -z "${ROUND_DIRECT_E2E_VERCEL_READ_TOKEN:-}" ]]; then
+            echo 'READ_CREDENTIAL_NOT_PROVISIONED: read credential 없이 revision read를 차단합니다.' >&2
+            exit 1
+          fi
+          node --input-type=module -e "
+            import { readDriverPreviewRevision } from './scripts/vercel/read-driver-preview-revision.mjs';
+            const result = await readDriverPreviewRevision({
+              env: process.env,
+              target: {
+                project: process.env.DRIVER_PREVIEW_PROJECT,
+                projectId: process.env.DRIVER_PREVIEW_PROJECT_ID,
+                environment: process.env.DRIVER_PREVIEW_ENVIRONMENT,
+                envEntryId: process.env.DRIVER_PREVIEW_ENV_ENTRY_ID,
+                envKey: process.env.DRIVER_PREVIEW_ENV_KEY,
+                deploymentId: process.env.DRIVER_PREVIEW_PINNED_DEPLOYMENT_ID,
+                sourceSha: process.env.DRIVER_PREVIEW_EXPECTED_SHA,
+                sourceRef: process.env.DRIVER_PREVIEW_EXPECTED_REF,
+              },
+              fetchImpl: fetch,
+            });
+            // Whitelist projections only; raw provider JSON and values are
+            // never printed. Timestamps unavailable are FIELD_UNAVAILABLE.
+            process.stdout.write(JSON.stringify({ deployment: result.deployment, env: result.env, providerCalls: result.providerCalls }) + '\n');
+          "
+
+      - name: revision evidence summary (no secrets, no values)
+        shell: bash
+        env:
+          DRIVER_PREVIEW_EXPECTED_SHA: 33cb9773df86abc486783e53757448280b80be96
+          DRIVER_PREVIEW_EXPECTED_REF: tmp/pilot-auth-driver-full-gate-39b-publication
+          DRIVER_PREVIEW_PINNED_DEPLOYMENT_ID: dpl_BM6yZATGyH2R6LW6uL8uvkAPhCjn
+        run: |
+          set -euo pipefail
+          {
+            echo "## Driver preview revision read (read-only)"
+            echo ""
+            echo "- target: driver Preview only (production unreachable)"
+            echo "- project: \`greenhub-driver\` (\`prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW\`)"
+            echo "- env entry: \`ROUND_DIRECT_E2E_DRIVER_EMAILS\` (\`RFASslCQh9EVuvfv\`)"
+            echo "- pinned deployment: \`$DRIVER_PREVIEW_PINNED_DEPLOYMENT_ID\`"
+            echo "- expected source SHA: \`$DRIVER_PREVIEW_EXPECTED_SHA\`"
+            echo "- expected source ref: \`$DRIVER_PREVIEW_EXPECTED_REF\`"
+            echo "- methods: GET only (deployment GET + env list GET; decrypt=true never sent)"
+            echo "- evidence: whitelist metadata only (no values, no tokens, no hashes)"
+            echo "- no mutation, no deployment creation, no E2E, no chaining"
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf 'read complete: driver preview revision metadata (whitelist only)\n'
