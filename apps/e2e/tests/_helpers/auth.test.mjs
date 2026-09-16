@@ -218,8 +218,13 @@ describe('Auth.js 콜백 진단 계약', () => {
     });
   });
 
-  describe('opaque consumer reject stages (g1/g2/g3) compatibility', () => {
+  describe('canonical verbose consumer reject stages (g1/g2/g3) compatibility', () => {
     const BASE = 'https://consumer-preview.example.test';
+    const CANONICAL_VERBOSE_FAMILY = [
+      'authorize-rejected__g1-secret-missing',
+      'authorize-rejected__g2-secret-mismatch',
+      'authorize-rejected__g3-credential-admission-rejected',
+    ];
 
     function classifiedCategoryForCode(code) {
       return classifyAuthFailure(
@@ -240,57 +245,74 @@ describe('Auth.js 콜백 진단 계약', () => {
       );
     }
 
+    function classifiedWithoutFallback(code) {
+      return classifyAuthFailure(
+        evidence({
+          callback: {
+            status: 302,
+            redirected: true,
+            location: {
+              path: '/login',
+              origin: 'same-origin',
+              authjsErrorCode: null,
+              authjsErrorCategory: code,
+            },
+            setCookie: false,
+            setCookieNames: [],
+          },
+        }),
+      );
+    }
+
     it('plain legacy authorize-rejected를 그대로 지원한다', () => {
       const sanitized = sanitizeAuthLocation('/login?error=CredentialsSignin&code=authorize-rejected', BASE);
       assert.equal(sanitized.authjsErrorCategory, 'authorize-rejected');
       assert.equal(classifiedCategoryForCode('authorize-rejected'), 'AUTHJS_AUTHORIZE_REJECTED');
+      assert.equal(classifiedWithoutFallback('authorize-rejected'), 'AUTHJS_AUTHORIZE_REJECTED');
       assert.equal(
         classifiedCategoryForCode(
           sanitizeAuthLocation('/login?error=CredentialsSignin&code=authorize-rejected', BASE).authjsErrorCategory,
         ),
         'AUTHJS_AUTHORIZE_REJECTED',
       );
+      assert.equal(
+        classifiedWithoutFallback(
+          sanitizeAuthLocation('/login?code=authorize-rejected', BASE).authjsErrorCategory,
+        ),
+        'AUTHJS_AUTHORIZE_REJECTED',
+      );
     });
 
-    it('g1/g2/g3를 safe code로 인정하고 AUTHJS_AUTHORIZE_REJECTED로 분류한다', () => {
-      for (const code of ['authorize-rejected__g1', 'authorize-rejected__g2', 'authorize-rejected__g3']) {
+    it('canonical verbose g1/g2/g3를 safe code verbatim으로 인정하고 fallback 없이도 AUTHJS_AUTHORIZE_REJECTED로 분류한다', () => {
+      for (const code of CANONICAL_VERBOSE_FAMILY) {
         const sanitized = sanitizeAuthLocation(`/login?error=CredentialsSignin&code=${code}`, BASE);
         assert.equal(sanitized.authjsErrorCategory, code, code);
         assert.equal(JSON.stringify(sanitized).includes(code), true);
         assert.equal(classifiedCategoryForCode(code), 'AUTHJS_AUTHORIZE_REJECTED', code);
         assert.equal(classifiedCategoryForCode(sanitized.authjsErrorCategory), 'AUTHJS_AUTHORIZE_REJECTED', code);
+        assert.equal(classifiedWithoutFallback(code), 'AUTHJS_AUTHORIZE_REJECTED', code);
+        assert.equal(classifiedWithoutFallback(sanitized.authjsErrorCategory), 'AUTHJS_AUTHORIZE_REJECTED', code);
       }
     });
 
-    it('malformed는 unknown으로 fail-closed하고 family로 분류하지 않는다', () => {
+    it('malformed/phantom은 unknown으로 fail-closed하고 direct family로 분류하지 않는다', () => {
       const malformed = [
+        'authorize-rejected__g1',
+        'authorize-rejected__g2',
+        'authorize-rejected__g3',
         'authorize-rejected__g4',
         'authorize-rejected__g1-extra',
-        'authorize-rejected__secret',
-        'authorize-rejected__g1/',
         'authorize-rejected__G1',
-        'authorize-rejected__g1-secret-missing',
-        'authorize-rejected__g2-secret-mismatch',
-        'authorize-rejected__g3-credential-admission-rejected',
+        'authorize-rejected__g1/',
+        '/authorize-rejected__g1-secret-missing',
+        'authorize-rejected__g1-secret-missing/extra',
+        'xauthorize-rejected__g1-secret-missing',
+        'authorize-rejected__g1-secret-missingx',
+        'prefix-authorize-rejected',
+        'authorize-rejected-suffix',
+        'authorize-rejected__secret',
+        'super-secret-value-123',
       ];
-      function classifiedWithoutFallback(code) {
-        return classifyAuthFailure(
-          evidence({
-            callback: {
-              status: 302,
-              redirected: true,
-              location: {
-                path: '/login',
-                origin: 'same-origin',
-                authjsErrorCode: null,
-                authjsErrorCategory: code,
-              },
-              setCookie: false,
-              setCookieNames: [],
-            },
-          }),
-        );
-      }
       for (const code of malformed) {
         const sanitized = sanitizeAuthLocation(`/login?error=CredentialsSignin&code=${encodeURIComponent(code)}`, BASE);
         assert.equal(sanitized.authjsErrorCategory, 'unknown', code);
