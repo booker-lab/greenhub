@@ -32,16 +32,31 @@
  *   strict predicate. This module never weakens it; creation IDs are
  *   passed straight into that waiter.
  *
- * Credential model (values are NEVER logged):
- * - Creation needs `VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN` (team-scoped token
- *   with deployment-creation scope for Preview only). The existing
- *   `ROUND_DIRECT_E2E_VERCEL_READ_TOKEN` is read-only and CANNOT create.
+ * Credential model (values are NEVER logged) — 45B project-scoped convergence:
+ * - Canonical exact-preview credential is PER APP, each scoped to ONE Vercel
+ *   project only:
+ *     consumer -> VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN
+ *     seller   -> VERCEL_EXACT_PREVIEW_SELLER_TOKEN
+ *     driver   -> VERCEL_EXACT_PREVIEW_DRIVER_TOKEN
+ *   `app=both` requires the consumer token + the seller token together; the
+ *   driver token is never consumed and never fanned out to another project.
+ * - One project token is used for BOTH that app's exact Preview creation POST
+ *   and the pinned deployment metadata readback of that creation. Vercel has
+ *   no operation-level create-only/read-only scope, so credential scope and
+ *   the application guard below are SEPARATE defense lines.
+ * - Project-scoped requests send NO `teamId` query: the credential itself
+ *   carries the project/team context. The legacy team-scoped creation secret
+ *   (`VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN` + `?teamId=`) stays only as an
+ *   explicit opt-in (`credentialMode: 'legacy-team-scoped'`); credential type
+ *   is never guessed from token shape.
  * - Token travels only in the `Authorization: Bearer` header. It is never
  *   placed in URL, body, logs, artifacts, or return values.
- * - Missing token fails as `VERCEL_DEPLOY_TOKEN_REQUIRED` (distinct from
- *   the waiter `VERCEL_READ_TOKEN_REQUIRED`).
- * - Minimal permission: create Preview deployments on the three allowlisted
- *   projects. No production deploy/promote/alias, no env/secret mutation.
+ * - Missing per-app token fails with that app's own fail-closed code
+ *   (`VERCEL_CONSUMER_PROJECT_TOKEN_REQUIRED` /
+ *   `VERCEL_SELLER_PROJECT_TOKEN_REQUIRED` /
+ *   `VERCEL_DRIVER_PROJECT_TOKEN_REQUIRED`) BEFORE any provider POST.
+ * - Minimal permission: create Preview deployments on the allowlisted
+ *   project(s) of its own app. No production deploy/promote/alias, no env/secret mutation.
  *
  * Result contract (per app):
  * - project / projectId exact match, deployment ID present (`dpl_*`),
@@ -54,7 +69,10 @@
  * - Failure codes:
  *   - `EXACT_SHA_MALFORMED` / `UNKNOWN_TARGETED_APP` / `PRODUCTION_TARGET_REFUSED`
  *   - `UNKNOWN_COMMIT_SHA` (no such commit object)
- *   - `VERCEL_DEPLOY_TOKEN_REQUIRED` (auth missing)
+ *   - `VERCEL_CONSUMER_PROJECT_TOKEN_REQUIRED` /
+ *     `VERCEL_SELLER_PROJECT_TOKEN_REQUIRED` /
+ *     `VERCEL_DRIVER_PROJECT_TOKEN_REQUIRED` (per-app project token missing)
+ *   - `VERCEL_DEPLOY_TOKEN_REQUIRED` (legacy team-scoped secret missing)
  *   - `PROVIDER_TARGETED_DEPLOYMENT_FAILED` (POST / HTTP / JSON failure)
  *   - `MISSING_DEPLOYMENT_ID` / `VERCEL_PROJECT_MISMATCH`
  *   - `PRODUCTION_SAFETY_VIOLATION` (provider target is production/staging)
@@ -70,6 +88,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  EXACT_PREVIEW_CREDENTIAL_MODE_PROJECT_SCOPED,
+  EXACT_PREVIEW_TOKEN_REQUIRED_BY_APP,
+  EXACT_PREVIEW_TOKENS_BY_APP,
   PREVIEW_APPS,
   VERCEL_API_ORIGIN,
   VERCEL_TEAM_ID,
@@ -80,7 +101,26 @@ export const REPO = 'booker-lab/greenhub';
 export const REPO_ORG = 'booker-lab';
 export const REPO_NAME = 'greenhub';
 
-/** Creation-capable credential name. Read-only token is insufficient by design. */
+/**
+ * Canonical 45B creation credential modes. `project-scoped` (default) uses one
+ * token per app with no `teamId` query. `legacy-team-scoped` keeps the single
+ * team secret + `?teamId=` path for explicit opt-in only.
+ */
+export const CREATE_CREDENTIAL_MODE_PROJECT_SCOPED = EXACT_PREVIEW_CREDENTIAL_MODE_PROJECT_SCOPED;
+export const CREATE_CREDENTIAL_MODE_LEGACY_TEAM = 'legacy-team-scoped';
+
+/** Per-app project-scoped creation token env names (canonical 45B). */
+export const VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN = EXACT_PREVIEW_TOKENS_BY_APP.consumer;
+export const VERCEL_EXACT_PREVIEW_SELLER_TOKEN = EXACT_PREVIEW_TOKENS_BY_APP.seller;
+export const VERCEL_EXACT_PREVIEW_DRIVER_TOKEN = EXACT_PREVIEW_TOKENS_BY_APP.driver;
+export const EXACT_PREVIEW_CREATE_TOKENS_BY_APP = EXACT_PREVIEW_TOKENS_BY_APP;
+/** Per-app fail-closed codes for a missing project token. */
+export const EXACT_PREVIEW_CREATE_TOKEN_REQUIRED_BY_APP = EXACT_PREVIEW_TOKEN_REQUIRED_BY_APP;
+
+/**
+ * Legacy single-secret creation credential (team-scoped). Deprecated for the
+ * 44A exact-preview path; retained for explicit `legacy-team-scoped` opt-in.
+ */
 export const VERCEL_CREATE_CREDENTIAL_ENV = 'VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN';
 export const VERCEL_READ_CREDENTIAL_ENV = 'ROUND_DIRECT_E2E_VERCEL_READ_TOKEN';
 
@@ -217,7 +257,7 @@ export function buildVercelCreateBody({ app, sha }) {
   return body;
 }
 
-/** POST path with team scope + dedup bypass + automation confirmation skip. */
+/** Legacy team-scoped POST path (explicit opt-in only; 45B canonical path omits teamId). */
 export function vercelCreatePath(teamId = VERCEL_TEAM_ID) {
   if (typeof teamId !== 'string' || !teamId.trim()) {
     fail('VERCEL_PROJECT_MISMATCH', 'Vercel team scope가 비어 있어 실행을 차단합니다.');
@@ -230,6 +270,100 @@ export function vercelCreatePath(teamId = VERCEL_TEAM_ID) {
   return `/v13/deployments?${query}`;
 }
 
+/**
+ * Canonical 45B project-scoped POST path: NO `teamId` query is forced. The
+ * per-app project token itself carries the project/team context.
+ */
+export function vercelCreateProjectScopedPath() {
+  const query = new URLSearchParams({
+    forceNew: '1',
+    skipAutoDetectionConfirmation: '1',
+  });
+  const pathname = `/v13/deployments?${query}`;
+  if (pathname.includes('teamId')) {
+    fail('SECRET_REDACTION_VIOLATION', 'project-scoped creation path must never force teamId.');
+  }
+  return pathname;
+}
+
+export function assertCreateCredentialMode(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (
+    normalized !== CREATE_CREDENTIAL_MODE_PROJECT_SCOPED &&
+    normalized !== CREATE_CREDENTIAL_MODE_LEGACY_TEAM
+  ) {
+    fail(
+      'UNKNOWN_CREDENTIAL_MODE',
+      `알 수 없는 credential mode입니다: ${JSON.stringify(value)} (project-scoped|legacy-team-scoped만 허용)`,
+    );
+  }
+  return normalized;
+}
+
+/** Env name holding the project-scoped creation token for one app. */
+export function exactPreviewCreateTokenEnvForApp(app) {
+  const env = EXACT_PREVIEW_CREATE_TOKENS_BY_APP[app];
+  if (!env) {
+    fail('VERCEL_PROJECT_MISMATCH', `allowlist에 없는 앱입니다: ${JSON.stringify(app)}`);
+  }
+  return env;
+}
+
+/** Fail-closed code when one app's project token is missing. */
+export function exactPreviewCreateTokenRequiredCode(app) {
+  const code = EXACT_PREVIEW_CREATE_TOKEN_REQUIRED_BY_APP[app];
+  if (!code) {
+    fail('VERCEL_PROJECT_MISMATCH', `allowlist에 없는 앱입니다: ${JSON.stringify(app)}`);
+  }
+  return code;
+}
+
+function readProjectScopedCreateTokenFromEnv(app) {
+  const value = process.env?.[exactPreviewCreateTokenEnvForApp(app)];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Resolve ONE app's project-scoped creation token. No cross-app reuse: a
+ * missing token for `app` fails with that app's own code even when another
+ * app's token is present. Explicit `tokensByApp` entries win; absent entries
+ * fall back to their own per-app env var only.
+ */
+export function resolveAppProjectToken(app, tokensByApp = null) {
+  const normalizedApp = assertTargetedApp(app);
+  if (normalizedApp === 'both') {
+    fail('UNKNOWN_TARGETED_APP', 'both는 fan-out 선택자이며 단일 project token으로 해석할 수 없습니다.');
+  }
+  getProjectConfig(normalizedApp);
+  const explicit = tokensByApp?.[normalizedApp];
+  const token =
+    typeof explicit === 'string' && explicit.trim()
+      ? explicit.trim()
+      : readProjectScopedCreateTokenFromEnv(normalizedApp);
+  if (!token) {
+    fail(
+      exactPreviewCreateTokenRequiredCode(normalizedApp),
+      `${exactPreviewCreateTokenEnvForApp(normalizedApp)}가 없어 ${normalizedApp} Preview deployment를 생성할 수 없습니다 (타 앱 token으로 대체 불가).`,
+    );
+  }
+  return token;
+}
+
+/**
+ * Resolve every app in scope to its OWN project token BEFORE any provider
+ * POST, so a missing token fails with POST 0회. `both` resolves consumer +
+ * seller independently; the driver token is never consulted for `both`.
+ * Returns a frozen app -> token map.
+ */
+export function resolveProjectScopedTokensForScope(scope, tokensByApp = null) {
+  const apps = resolveTargetedApps(scope);
+  const resolved = {};
+  for (const app of apps) {
+    resolved[app] = resolveAppProjectToken(app, tokensByApp);
+  }
+  return Object.freeze(resolved);
+}
+
 function vercelCreateHeaders(token) {
   return {
     Accept: 'application/json',
@@ -238,6 +372,11 @@ function vercelCreateHeaders(token) {
   };
 }
 
+/**
+ * Legacy single-secret resolver (team-scoped). Retained for explicit
+ * `legacy-team-scoped` opt-in; the canonical 45B path resolves per-app tokens
+ * via `resolveProjectScopedTokensForScope` instead.
+ */
 export function resolveCreateToken(explicitToken) {
   const fromArg = typeof explicitToken === 'string' && explicitToken.trim() ? explicitToken.trim() : null;
   const fromEnv =
@@ -258,23 +397,45 @@ export function resolveCreateToken(explicitToken) {
 /**
  * Provider-native creation POST for one app. `fetchImpl` is injectable for
  * deterministic tests. Token is header-only, never in URL/body/logs.
+ * `credentialMode` selects the POST path explicitly: `project-scoped`
+ * (default, no `teamId` query) or `legacy-team-scoped` (`?teamId=`).
+ * Callers must pass THIS app's own project token; cross-app reuse is refused
+ * by the fan-out wrapper (`createExactPreviewDeployments`), never here.
  */
-export async function requestVercelCreateDeployment({ app, sha, token, fetchImpl = fetch }) {
+export async function requestVercelCreateDeployment({ app, sha, token, fetchImpl = fetch, credentialMode = CREATE_CREDENTIAL_MODE_PROJECT_SCOPED }) {
   const validSha = assertExactSha(sha);
   const config = getProjectConfig(assertTargetedApp(app));
+  const mode = assertCreateCredentialMode(credentialMode);
   if (typeof token !== 'string' || !token.trim()) {
+    if (mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM) {
+      fail(
+        'VERCEL_DEPLOY_TOKEN_REQUIRED',
+        `${VERCEL_CREATE_CREDENTIAL_ENV}가 없어 provider-native Preview deployment를 생성할 수 없습니다.`,
+      );
+    }
     fail(
-      'VERCEL_DEPLOY_TOKEN_REQUIRED',
-      `${VERCEL_CREATE_CREDENTIAL_ENV}가 없어 provider-native Preview deployment를 생성할 수 없습니다.`,
+      exactPreviewCreateTokenRequiredCode(config.app),
+      `${exactPreviewCreateTokenEnvForApp(config.app)}가 없어 provider-native Preview deployment를 생성할 수 없습니다.`,
     );
   }
   const cleanToken = token.trim();
   const body = buildVercelCreateBody({ app: config.app, sha: validSha });
   // Fail closed if caller accidentally passes the read-only token VALUE as creation token?
   // We cannot know the read token value here; the workflow documents non-substitutability.
-  const url = `${VERCEL_API_ORIGIN}${vercelCreatePath()}`;
+  const url =
+    mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM
+      ? `${VERCEL_API_ORIGIN}${vercelCreatePath()}`
+      : `${VERCEL_API_ORIGIN}${vercelCreateProjectScopedPath()}`;
   if (url.includes(cleanToken) || JSON.stringify(body).includes(cleanToken)) {
     fail('SECRET_REDACTION_VIOLATION', 'credential value must never appear in URL or body.');
+  }
+  if (url.includes('teamId=') === (mode === CREATE_CREDENTIAL_MODE_PROJECT_SCOPED)) {
+    fail(
+      'SECRET_REDACTION_VIOLATION',
+      mode === CREATE_CREDENTIAL_MODE_PROJECT_SCOPED
+        ? 'project-scoped creation request must not force teamId.'
+        : 'legacy-team-scoped creation request must carry teamId.',
+    );
   }
 
   let response;
@@ -491,17 +652,26 @@ function resolveRepositoryRoot(scriptDir) {
 /**
  * End-to-end creation for one scope (consumer|seller|driver|both).
  * Validates provenance (commit object must exist), then POSTs one deployment
- * per app. Returns per-app creation evidence for the strict waiter.
+ * per app — each POST carrying ONLY that app's own project-scoped token.
+ * `both` resolves consumer + seller independently and never touches the
+ * driver token. All required tokens resolve BEFORE the first POST (POST 0회
+ * on missing). Explicit `credentialMode: 'legacy-team-scoped'` with a single
+ * `token` keeps the deprecated single-secret path; otherwise `tokensByApp`
+ * (or per-app env vars) is required. Returns per-app creation evidence for
+ * the strict waiter.
  */
 export async function createExactPreviewDeployments({
   sha,
   app,
   target = null,
   token = null,
+  tokensByApp = null,
+  credentialMode = CREATE_CREDENTIAL_MODE_PROJECT_SCOPED,
   fetchImpl = fetch,
   repositoryRoot = null,
 }) {
   const plan = buildTargetedDeploymentPlan({ sha, app, target });
+  const mode = assertCreateCredentialMode(credentialMode);
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const root = repositoryRoot ?? resolveRepositoryRoot(scriptDir);
   let exists = false;
@@ -514,14 +684,27 @@ export async function createExactPreviewDeployments({
   if (!exists) {
     fail('UNKNOWN_COMMIT_SHA', 'repository에 존재하지 않는 commit SHA이므로 targeted deployment를 거부합니다.');
   }
-  const cleanToken = resolveCreateToken(token);
+  // Resolve ALL credentials before any network: missing token => POST 0회.
+  const scopedTokens =
+    mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM
+      ? null
+      : resolveProjectScopedTokensForScope(plan.scope, tokensByApp);
+  const legacyToken = mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM ? resolveCreateToken(token) : null;
   const results = [];
   for (const item of plan.plans) {
+    const appToken = mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM ? legacyToken : scopedTokens[item.app];
+    if (typeof appToken !== 'string' || !appToken.trim()) {
+      fail(
+        exactPreviewCreateTokenRequiredCode(item.app),
+        `${exactPreviewCreateTokenEnvForApp(item.app)}가 없어 ${item.app} Preview deployment를 생성할 수 없습니다.`,
+      );
+    }
     const payload = await requestVercelCreateDeployment({
       app: item.app,
       sha: item.sha,
-      token: cleanToken,
+      token: appToken,
       fetchImpl,
+      credentialMode: mode,
     });
     const inspected = inspectTargetedCreationResult({
       app: item.app,
@@ -538,14 +721,20 @@ export async function createExactPreviewDeployments({
     target: null,
     production: false,
     gitRefPushRequired: false,
-    credentialEnv: VERCEL_CREATE_CREDENTIAL_ENV,
+    credentialMode: mode,
+    credentialEnv:
+      mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM ? VERCEL_CREATE_CREDENTIAL_ENV : null,
+    credentialEnvs:
+      mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM
+        ? null
+        : Object.freeze(Object.fromEntries(plan.apps.map((name) => [name, exactPreviewCreateTokenEnvForApp(name)]))),
     credentialValueRecorded: false,
     deployments: Object.freeze(results),
   });
 }
 
 function parseArgs(argv) {
-  const out = { sha: null, app: null, target: null, dryRun: false, repo: null };
+  const out = { sha: null, app: null, target: null, dryRun: false, repo: null, credentialMode: CREATE_CREDENTIAL_MODE_PROJECT_SCOPED };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--sha' && index + 1 < argv.length) out.sha = argv[(index += 1)];
@@ -556,6 +745,8 @@ function parseArgs(argv) {
     else if (arg.startsWith('--target=')) out.target = arg.slice('--target='.length);
     else if (arg === '--repo' && index + 1 < argv.length) out.repo = argv[(index += 1)];
     else if (arg.startsWith('--repo=')) out.repo = arg.slice('--repo='.length);
+    else if (arg === '--credential-mode' && index + 1 < argv.length) out.credentialMode = argv[(index += 1)];
+    else if (arg.startsWith('--credential-mode=')) out.credentialMode = arg.slice('--credential-mode='.length);
     else if (arg === '--dry-run' || arg === '--dryRun') out.dryRun = true;
   }
   return out;
@@ -565,8 +756,9 @@ const invokedAsMainScript =
   process.argv[1] != null && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (invokedAsMainScript) {
-  const { sha, app, target, dryRun, repo } = parseArgs(process.argv.slice(2));
+  const { sha, app, target, dryRun, repo, credentialMode } = parseArgs(process.argv.slice(2));
   try {
+    const mode = assertCreateCredentialMode(credentialMode);
     const plan = buildTargetedDeploymentPlan({ sha, app, target });
     const scriptDir = path.dirname(fileURLToPath(import.meta.url));
     const repositoryRoot = repo ?? resolveRepositoryRoot(scriptDir);
@@ -581,18 +773,33 @@ if (invokedAsMainScript) {
       fail('UNKNOWN_COMMIT_SHA', 'repository에 존재하지 않는 commit SHA이므로 targeted deployment를 거부합니다.');
     }
     if (dryRun) {
+      // Dry-run prints the plan plus credential NAMES only — never values.
       const safe = {
         ...plan,
+        credentialMode: mode,
+        credentialEnvs:
+          mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM
+            ? { legacy: VERCEL_CREATE_CREDENTIAL_ENV }
+            : Object.fromEntries(plan.apps.map((name) => [name, exactPreviewCreateTokenEnvForApp(name)])),
         plans: plan.plans.map((item) => ({ ...item })),
       };
       process.stdout.write(`${JSON.stringify(safe)}\n`);
     } else {
-      const token = resolveCreateToken(null);
+      // Resolve ALL required tokens before any POST (missing => POST 0회).
+      const scopedTokens =
+        mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM
+          ? null
+          : resolveProjectScopedTokensForScope(plan.scope, null);
+      const legacyToken = mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM ? resolveCreateToken(null) : null;
+      const tokensByApp =
+        mode === CREATE_CREDENTIAL_MODE_LEGACY_TEAM ? null : Object.fromEntries(plan.apps.map((name) => [name, scopedTokens[name]]));
       createExactPreviewDeployments({
         sha: plan.sha,
         app: plan.scope,
         target,
-        token,
+        token: legacyToken,
+        tokensByApp,
+        credentialMode: mode,
         repositoryRoot,
       })
         .then((result) => {
@@ -601,6 +808,9 @@ if (invokedAsMainScript) {
         .catch((error) => {
           const code = error instanceof TargetedDeploymentError ? error.code : 'PROVIDER_TARGETED_DEPLOYMENT_FAILED';
           const message = error instanceof Error ? error.message : String(error);
+          for (const name of plan.apps) {
+            redactCheck(message, process.env?.[exactPreviewCreateTokenEnvForApp(name)] ?? '');
+          }
           redactCheck(message, process.env?.[VERCEL_CREATE_CREDENTIAL_ENV] ?? '');
           process.stderr.write(`[create-exact-preview-deployment] ${code}: ${message}\n`);
           process.exit(1);
