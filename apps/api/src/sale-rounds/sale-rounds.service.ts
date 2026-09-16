@@ -13,7 +13,11 @@ import type {
   UpdateSaleRoundDto,
   UpdateSaleRoundStatusDto,
 } from './dto/sale-round.dto';
-import { assertScheduleOrder as assertCanonicalScheduleOrder } from './sale-round-state.contract';
+import {
+  assertScheduleOrder as assertCanonicalScheduleOrder,
+  resolveAutomaticState,
+  timestampMillis,
+} from './sale-round-state.contract';
 import { SaleRoundStateService } from './sale-round-state.service';
 
 type RoundWithItems = SaleRound & { items: SaleRoundItem[] };
@@ -67,16 +71,18 @@ export class SaleRoundsService {
       .where('storeId', '==', storeId)
       .where('status', 'in', PUBLIC_SALE_ROUND_STATUSES)
       .get();
+    // READ-ONLY: public list must not persist automatic transitions.
+    // Effective status is derived purely via resolveAutomaticState; storage
+    // mutation stays on the authenticated write-side state machine.
     // List returns round summaries without items by design; item visibility
     // is enforced in getPublicRound via toPublicRoundItems (same predicate).
-    const rounds = await Promise.all(
-      snap.docs.map(async (doc: any) => {
-        const storedRound = doc.data() as Record<string, any>;
-        this.assertPublicRoundBoundary(storeId, storedRound);
-        const round = await this.refreshRoundStatus(storeId, doc.id);
-        return round.storeId === storeId && isPublicSaleRoundStatus(round.status) ? round : null;
-      }),
-    );
+    const nowMillis = timestampMillis(this.firestore.Timestamp.now());
+    const rounds = snap.docs.map((doc: any) => {
+      const storedRound = doc.data() as SaleRound;
+      this.assertPublicRoundBoundary(storeId, storedRound as unknown as Record<string, any>);
+      const round = this.normalizeRound(this.applyEffectiveState(storedRound, nowMillis));
+      return round.storeId === storeId && isPublicSaleRoundStatus(round.status) ? round : null;
+    });
     return { items: rounds.filter((round): round is SaleRound => round !== null) };
   }
   async getRound(
@@ -97,7 +103,11 @@ export class SaleRoundsService {
     storeId: string,
     roundId: string,
   ): Promise<RoundWithItems> {
-    const round = await this.refreshRoundStatus(storeId, roundId);
+    // READ-ONLY: derive effective status purely; never call refreshRoundStatus
+    // (which persists via transaction) from the public path.
+    const stored = await this.getStoredRound(storeId, roundId);
+    const nowMillis = timestampMillis(this.firestore.Timestamp.now());
+    const round = this.normalizeRound(this.applyEffectiveState(stored, nowMillis));
     const items = await this.getRoundItems(roundId, storeId);
     return { ...round, items: toPublicRoundItems(items) };
   }
@@ -323,6 +333,17 @@ export class SaleRoundsService {
       })
       .filter((item) => item.storeId === storeId)
       .sort((a, b) => a.displayOrder - b.displayOrder);
+  }
+  private applyEffectiveState(stored: SaleRound, nowMillis: number): SaleRound {
+    // Pure automatic transition for public reads. Reuses the single
+    // write-side domain function without persisting (no transaction/write).
+    // Preserves the full SaleRound response contract; only status/closeReason
+    // are overlaid with the effective values.
+    const next = resolveAutomaticState(
+      stored as unknown as Parameters<typeof resolveAutomaticState>[0],
+      nowMillis,
+    );
+    return { ...stored, status: next.status, closeReason: next.closeReason } as SaleRound;
   }
   private normalizeRound(round: SaleRound): SaleRound {
     const normalized = { ...round } as unknown as Record<string, any>;
