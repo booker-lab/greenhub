@@ -1,22 +1,29 @@
 /**
- * Driver Preview allowlist secure bridge (PILOT-AUTH-DRIVER-ALLOWLIST-SECURE-BRIDGE-43C).
+ * Driver Preview allowlist secure bridge
+ * (PILOT-AUTH-DRIVER-ALLOWLIST-SECURE-BRIDGE-43C,
+ *  PILOT-AUTH-DRIVER-PROJECT-CREDENTIAL-CONTRACT-CONVERGENCE-45C).
  *
  * Manual-only secure bridge that performs an ADDITIVE-ONLY mutation of the
  * Driver Preview allowlist env entry, then allows exact-preview reprovisioning
- * exclusively through the existing 43A capability
- * (`scripts/vercel/provision-exact-preview.mjs`).
+ * exclusively through the 44A provider-native workflow
+ * (`.github/workflows/create-exact-preview-deployment.yml`, app=driver).
  *
  * Locked contract (fail-closed, no silent fallback):
  * - Driver only. Consumer / seller targets are structurally rejected.
  * - Preview only. Production mutation is structurally unreachable: the only
  *   mutation entry point hardcodes the Preview target and asserts it before
  *   any provider call. No update/delete/create path accepts `production`.
- * - Exact target identity enforced before mutation: team, project, project ID,
+ * - Exact target identity enforced before mutation: project, project ID,
  *   env entry ID, env key, old deployment ID, expected source SHA. Any mismatch
- *   aborts before any provider write.
- * - Write credential: ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN only. The read
+ *   aborts before any provider write. Project ID is the path authority.
+ * - Write credential (45C convergence, same authority as exact-preview):
+ *   VERCEL_EXACT_PREVIEW_DRIVER_TOKEN only (Vercel project-scoped, exactly
+ *   greenhub-driver / prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW). The read
  *   credential is NEVER a write fallback. Missing/empty write credential aborts
  *   with WRITE_CREDENTIAL_NOT_PROVISIONED before any provider call.
+ * - Project-scoped provider requests send NO `teamId` query: the credential
+ *   itself carries the project/team context (45B contract). Any `teamId`
+ *   authority is rejected with TEAM_QUERY_FORBIDDEN before any provider call.
  * - Additive-only: NEW_SET = CURRENT_SET + CANONICAL_DRIVER_IDENTITY.
  *   Unrelated members are never removed. Canonical identity is present after.
  * - Evidence is boolean/count only. Raw allowlist values, secret values,
@@ -30,7 +37,9 @@
  * client is an injected seam (`vercelClient`) so deterministic specs can prove
  * zero-call fail-closed behavior. Live dispatch happens only through
  * `.github/workflows/driver-preview-allowlist-reprobe.yml` (workflow_dispatch,
- * round-direct-e2e environment) and is out of scope for 43C verification.
+ * round-direct-e2e environment for approval/gating + Driver identity; the
+ * Driver Vercel token is the repository-level VERCEL_EXACT_PREVIEW_DRIVER_TOKEN)
+ * and is out of scope for 45C verification.
  *
  * Run: node --test scripts/vercel/driver-preview-allowlist-reprobe.spec.mjs
  */
@@ -42,10 +51,12 @@ import { buildProvisioningRequest } from './provision-exact-preview.mjs';
 import { inspectAppDeployment } from '../wait-preview-deploy.mjs';
 
 // ---------------------------------------------------------------------------
-// Exact target contract (verbatim, driver Preview only)
+// Exact target contract (verbatim, driver Preview only, 45C project-scoped)
 // ---------------------------------------------------------------------------
 
-export const DRIVER_TEAM_ID = 'team_J91VWI0TqcHdcF36T7qVgiT1';
+// 45C: project-scoped convergence removed the teamId query authority. The
+// per-app project token carries its own project/team context, so no teamId
+// constant is exported and no request path accepts a teamId.
 export const DRIVER_PROJECT = 'greenhub-driver';
 export const DRIVER_PROJECT_ID = 'prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW';
 export const DRIVER_ENV_ENTRY_ID = 'RFASslCQh9EVuvfv';
@@ -54,7 +65,11 @@ export const OLD_DRIVER_DEPLOYMENT_ID = 'dpl_BM6yZATGyH2R6LW6uL8uvkAPhCjn';
 export const EXPECTED_SOURCE_SHA = '33cb9773df86abc486783e53757448280b80be96';
 export const DRIVER_PREVIEW_ENVIRONMENT = 'preview';
 
-export const WRITE_CREDENTIAL_NAME = 'ROUND_DIRECT_E2E_VERCEL_DRIVER_WRITE_TOKEN';
+// Canonical 45C credential authority (same as exact-preview driver scope).
+export const WRITE_CREDENTIAL_NAME = 'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN';
+export const CREDENTIAL_SCOPE = 'project-scoped';
+export const CREDENTIAL_PROJECT = DRIVER_PROJECT;
+export const CREDENTIAL_PROJECT_ID = DRIVER_PROJECT_ID;
 // Named explicitly so reviewers can verify it is never used as a write path.
 // This module never reads it for mutation purposes.
 export const READ_CREDENTIAL_NAME = 'ROUND_DIRECT_E2E_VERCEL_READ_TOKEN';
@@ -136,10 +151,10 @@ export function assertDriverScope({ app, project, projectId } = {}) {
 /**
  * Enforce the exact driver Preview target. Every field is compared verbatim.
  * Production (or any non-preview environment) is refused first.
+ * 45C: project ID is the path authority; any teamId authority is forbidden.
  */
 export function assertExactDriverTarget({
   app,
-  teamId,
   project,
   projectId,
   environment,
@@ -147,7 +162,14 @@ export function assertExactDriverTarget({
   envKey,
   oldDeploymentId,
   sourceSha,
+  teamId,
 } = {}) {
+  if (teamId !== undefined) {
+    fail(
+      'TEAM_QUERY_FORBIDDEN',
+      'project-scoped allowlist bridge에서는 teamId authority를 사용하지 않아 차단합니다.',
+    );
+  }
   assertDriverScope({ app, project, projectId });
 
   const normalizedEnv = typeof environment === 'string' ? environment.trim().toLowerCase() : '';
@@ -156,9 +178,6 @@ export function assertExactDriverTarget({
       'PRODUCTION_TARGET_BLOCKED',
       'Preview가 아닌 target에 대한 allowlist mutation을 차단합니다.',
     );
-  }
-  if (teamId !== DRIVER_TEAM_ID) {
-    fail('TEAM_MISMATCH', 'Vercel team이 예상값과 달라 차단합니다.');
   }
   if (project !== DRIVER_PROJECT) {
     fail('PROJECT_MISMATCH', 'driver project가 예상값과 달라 차단합니다.');
@@ -341,11 +360,15 @@ export function shouldProceedToProbe(readback) {
  * Compare provider readback against the exact expected identity BEFORE any
  * mutation. Any single mismatch aborts. `readback` is the live provider state
  * (env entry GET + pinned deployment metadata); no field is trusted blindly.
+ * 45C: project ID is the authority; any teamId field is forbidden.
  */
 export function assertProviderReadbackMatches({ readback } = {}) {
   const observed = readback ?? {};
-  if (observed.teamId !== DRIVER_TEAM_ID) {
-    fail('TEAM_MISMATCH', 'provider readback team이 예상값과 달라 차단합니다.');
+  if (observed.teamId !== undefined) {
+    fail(
+      'TEAM_QUERY_FORBIDDEN',
+      'project-scoped allowlist bridge에서는 provider readback teamId를 사용하지 않아 차단합니다.',
+    );
   }
   if (observed.project !== DRIVER_PROJECT) {
     fail('PROJECT_MISMATCH', 'provider readback project가 예상값과 달라 차단합니다.');
@@ -372,6 +395,38 @@ export function assertProviderReadbackMatches({ readback } = {}) {
   }
   if (observed.sourceSha !== undefined && observed.sourceSha !== EXPECTED_SOURCE_SHA) {
     fail('SOURCE_SHA_MISMATCH', 'provider readback source SHA가 예상값과 달라 차단합니다.');
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Project-scoped provider paths (canonical 45C: NO teamId query)
+// ---------------------------------------------------------------------------
+
+/**
+ * Canonical project-scoped env entry path. Project ID is the path authority;
+ * no teamId query is emitted because the project token carries its own
+ * project/team context. Any teamId substring fails closed.
+ */
+export function vercelDriverEnvPath(projectId = DRIVER_PROJECT_ID, envEntryId = DRIVER_ENV_ENTRY_ID) {
+  if (projectId !== DRIVER_PROJECT_ID) {
+    fail('PROJECT_ID_MISMATCH', 'driver project ID가 예상값과 달라 차단합니다.');
+  }
+  if (envEntryId !== DRIVER_ENV_ENTRY_ID) {
+    fail('ENV_ENTRY_ID_MISMATCH', 'allowlist env entry ID가 예상값과 달라 차단합니다.');
+  }
+  const pathname =
+    `/v9/projects/${encodeURIComponent(projectId)}` + `/env/${encodeURIComponent(envEntryId)}`;
+  if (pathname.includes('teamId')) {
+    fail('TEAM_QUERY_FORBIDDEN', 'project-scoped provider path must never force teamId.');
+  }
+  return pathname;
+}
+
+/** Assert a fully built provider URL carries no teamId query. */
+export function assertNoTeamIdQuery(url) {
+  if (typeof url === 'string' && url.includes('teamId')) {
+    fail('TEAM_QUERY_FORBIDDEN', 'project-scoped provider request must not carry teamId.');
   }
   return true;
 }
@@ -424,9 +479,9 @@ export async function planDriverAllowlistMutation({
 
   // Single Preview-only write. The target environment literal is fixed to
   // Preview; production is not representable through this call.
+  // 45C: project-scoped — no teamId travels in the client args.
   const result = await vercelClient.updateDriverPreviewEnvEntry({
     writeToken,
-    teamId: DRIVER_TEAM_ID,
     projectId: DRIVER_PROJECT_ID,
     envEntryId: DRIVER_ENV_ENTRY_ID,
     key: DRIVER_ENV_KEY,
@@ -440,11 +495,18 @@ export async function planDriverAllowlistMutation({
  * Direct mutation helper used by the workflow runtime. Structurally Preview-only:
  * there is no parameter, branch, or export that can address a production env
  * entry. Production update/delete/create is unreachable by construction.
+ * 45C: project-scoped — project ID path authority, no teamId query.
  */
 export async function updateDriverPreviewEnvEntry(
-  { writeToken, teamId, projectId, envEntryId, key, target, newRaw },
+  { writeToken, projectId, envEntryId, key, target, newRaw, teamId },
   fetchImpl = fetch,
 ) {
+  if (teamId !== undefined) {
+    fail(
+      'TEAM_QUERY_FORBIDDEN',
+      'project-scoped allowlist mutation에서는 teamId를 사용하지 않아 차단합니다.',
+    );
+  }
   if (typeof writeToken !== 'string' || writeToken.trim() === '') {
     fail(
       'WRITE_CREDENTIAL_NOT_PROVISIONED',
@@ -452,7 +514,6 @@ export async function updateDriverPreviewEnvEntry(
     );
   }
   if (
-    teamId !== DRIVER_TEAM_ID ||
     projectId !== DRIVER_PROJECT_ID ||
     envEntryId !== DRIVER_ENV_ENTRY_ID ||
     key !== DRIVER_ENV_KEY ||
@@ -463,9 +524,8 @@ export async function updateDriverPreviewEnvEntry(
   if (typeof newRaw !== 'string' || !newRaw) {
     fail('ALLOWLIST_MALFORMED', 'mutation 대상 allowlist가 비어 있어 차단합니다.');
   }
-  const endpoint =
-    `${VERCEL_API_ORIGIN}/v9/projects/${encodeURIComponent(projectId)}` +
-    `/env/${encodeURIComponent(envEntryId)}?teamId=${encodeURIComponent(teamId)}`;
+  const endpoint = `${VERCEL_API_ORIGIN}${vercelDriverEnvPath(projectId, envEntryId)}`;
+  assertNoTeamIdQuery(endpoint);
   let response;
   try {
     response = await fetchImpl(endpoint, {
@@ -500,9 +560,9 @@ if (invokedAsMainScript) {
   const mode = argv.includes('--apply') ? 'apply' : 'check-only';
   try {
     // Static contract self-check: exact constants + 43A reuse + Preview-only.
+    // 45C: project-scoped — no teamId authority.
     assertExactDriverTarget({
       app: DRIVER_SCOPE,
-      teamId: DRIVER_TEAM_ID,
       project: DRIVER_PROJECT,
       projectId: DRIVER_PROJECT_ID,
       environment: DRIVER_PREVIEW_ENVIRONMENT,
