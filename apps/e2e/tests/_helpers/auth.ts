@@ -56,17 +56,23 @@ export type AuthDiagnosticEvidence = {
 /**
  * authorize-rejected family closed exact allowlist (single semantic owner).
  *
- * - plain legacy `authorize-rejected`
- * - opaque pre-upstream stages `authorize-rejected__g1/g2/g3`
+ * - plain legacy `authorize-rejected` (backward-compatible top-level code)
+ * - canonical verbose pre-upstream stages:
+ *   `authorize-rejected__g1-secret-missing`
+ *   `authorize-rejected__g2-secret-mismatch`
+ *   `authorize-rejected__g3-credential-admission-rejected`
+ *   (static diagnostic literals emitted by apps/consumer/src/auth.ts;
+ *   no secret values enter the code)
  *
- * Exact match only. No prefix/passthrough. Malformed (g4, extra suffix,
- * secret-derived, case variant, verbose legacy) must stay unknown.
+ * Exact match only. No prefix/substring/startsWith admission, no unknown
+ * passthrough. Opaque `authorize-rejected__g1/g2/g3`, g4, extra suffix,
+ * case variant, slash/path, injected values must stay unknown.
  */
 const AUTHORIZE_REJECTED_FAMILY: readonly string[] = [
   'authorize-rejected',
-  'authorize-rejected__g1',
-  'authorize-rejected__g2',
-  'authorize-rejected__g3',
+  'authorize-rejected__g1-secret-missing',
+  'authorize-rejected__g2-secret-mismatch',
+  'authorize-rejected__g3-credential-admission-rejected',
 ]
 
 const AUTHORIZE_REJECTED_CODES = new Set<string>(AUTHORIZE_REJECTED_FAMILY)
