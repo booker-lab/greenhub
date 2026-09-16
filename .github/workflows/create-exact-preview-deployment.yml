@@ -1,15 +1,17 @@
 name: Create exact-preview deployment via provider-native targeted API (44A)
 
-# Provider-native exact Git SHA Preview capability (44A).
+# Provider-native exact Git SHA Preview capability (44A, 45B credential convergence).
 #
 # Problem closed: `provision-exact-preview.yml` (Git ref push ->
 # Vercel Git auto-trigger) was proven in 42C to NOT create Consumer/Seller
 # deployments (`VERCEL_DEPLOYMENT_NOT_CREATED`). This workflow uses the
 # Vercel-official provider-native path instead:
 #
-#   POST /v13/deployments?teamId=<team>&forceNew=1&skipAutoDetectionConfirmation=1
+#   POST /v13/deployments?forceNew=1&skipAutoDetectionConfirmation=1
 #   { name, project, gitSource: { type:'github', org, repo, ref: sha, sha } }
 #   # `target` omitted => Preview (null). Production impossible.
+#   # NO `teamId` query: each per-app project token carries its own
+#   # project/team context (45B project-scoped convergence).
 #
 # Contracts:
 # - Inputs: exact_sha (40 lower hex, real commit object) + app
@@ -18,16 +20,31 @@ name: Create exact-preview deployment via provider-native targeted API (44A)
 #   substitution, no main/preview mutation, no production target/promote/alias.
 # - Project allowlist authority = scripts/wait-preview-deploy.mjs PREVIEW_APPS.
 #   Mismatch fails closed. Creation IDs feed the STRICT waiter unchanged.
-# - Credential: secrets.VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN (team-scoped,
-#   Preview-create only). The read-only ROUND_DIRECT_E2E_VERCEL_READ_TOKEN
-#   CANNOT create and is used only for the waiter readback.
-# - One-time provisioning: register VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN once as
-#   a GitHub Actions secret (minimal permission: create Preview deployments
-#   on the three allowlisted projects; no production promote/alias, no env
-#   mutation). Token value is never logged.
+# - Credential (45B, per-app project-scoped; each token is scoped to ONE
+#   Vercel project only):
+#     consumer -> secrets.VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN
+#     seller   -> secrets.VERCEL_EXACT_PREVIEW_SELLER_TOKEN
+#     driver   -> secrets.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN
+#   `both` = consumer token + seller token (driver token never consumed,
+#   never fanned out). Missing per-app token fails closed BEFORE any POST
+#   (VERCEL_{CONSUMER,SELLER,DRIVER}_PROJECT_TOKEN_REQUIRED).
+# - One project token covers BOTH that app's creation POST and the pinned
+#   deployment metadata readback (strict waiter `--credential-mode=
+#   project-scoped`, no `teamId`). Vercel has no operation-level
+#   create-only/read-only scope: credential scope and the application guard
+#   (Preview-only + exact SHA + allowlisted project + pinned ID) are separate
+#   defense lines. The legacy global read secret
+#   (ROUND_DIRECT_E2E_VERCEL_READ_TOKEN + `?teamId=`) is NOT used here; it
+#   stays for the existing e2e/probe consumers (KEEP_COMPATIBILITY).
+# - One-time provisioning: the Vercel account owner creates a token scoped to
+#   ONE project only and registers its plaintext ONCE as the matching GitHub
+#   Actions secret (minimal permission: Preview on that project; no production
+#   promote/alias, no env mutation). Token value is never logged.
 #
-# Live proof boundary: consumer single scope first; no Seller/Driver fan-out
-# until consumer proves READY + exact SHA + Preview + strict waiter.
+# Live proof boundary: driver single scope first (DRIVER token only);
+# no Consumer/Seller fan-out until driver proves READY + exact SHA + Preview
+# + strict waiter. This workflow never dispatches itself; humans dispatch it
+# exactly once per authorized Task.
 
 on:
   workflow_dispatch:
@@ -49,6 +66,8 @@ on:
     paths:
       - scripts/vercel/create-exact-preview-deployment.mjs
       - scripts/vercel/create-exact-preview-deployment.spec.mjs
+      - scripts/wait-preview-deploy.mjs
+      - scripts/wait-preview-deploy.spec.mjs
       - .github/workflows/create-exact-preview-deployment.yml
 
 permissions:
@@ -71,7 +90,7 @@ jobs:
           node-version: '22'
 
       - name: run targeted-preview deterministic specs (mock/local only)
-        run: node --test scripts/vercel/create-exact-preview-deployment.spec.mjs
+        run: node --test scripts/vercel/create-exact-preview-deployment.spec.mjs scripts/wait-preview-deploy.spec.mjs
 
   targeted-deploy:
     name: provider-native targeted Preview deployment
@@ -82,8 +101,9 @@ jobs:
     permissions:
       contents: read
     env:
-      VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN }}
-      ROUND_DIRECT_E2E_VERCEL_READ_TOKEN: ${{ secrets.ROUND_DIRECT_E2E_VERCEL_READ_TOKEN }}
+      VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN }}
+      VERCEL_EXACT_PREVIEW_SELLER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_SELLER_TOKEN }}
+      VERCEL_EXACT_PREVIEW_DRIVER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN }}
     steps:
       - name: full history checkout (SHA provenance check)
         uses: actions/checkout@v6
@@ -122,18 +142,44 @@ jobs:
             echo 'exact SHA는 40자리 소문자 16진수여야 합니다.' >&2
             exit 1
           fi
+          # 45B per-app project-scoped credentials: each scope requires ONLY
+          # its own project token(s). `both` = consumer + seller (driver token
+          # never consumed); single scopes never borrow another app's token.
           case "$APP" in
-            consumer|seller|driver|both) ;;
+            consumer)
+              if [[ -z "${VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN:-}" ]]; then
+                echo 'VERCEL_CONSUMER_PROJECT_TOKEN_REQUIRED: VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN이 없어 실행을 차단합니다.' >&2
+                exit 1
+              fi
+              ;;
+            seller)
+              if [[ -z "${VERCEL_EXACT_PREVIEW_SELLER_TOKEN:-}" ]]; then
+                echo 'VERCEL_SELLER_PROJECT_TOKEN_REQUIRED: VERCEL_EXACT_PREVIEW_SELLER_TOKEN이 없어 실행을 차단합니다.' >&2
+                exit 1
+              fi
+              ;;
+            driver)
+              if [[ -z "${VERCEL_EXACT_PREVIEW_DRIVER_TOKEN:-}" ]]; then
+                echo 'VERCEL_DRIVER_PROJECT_TOKEN_REQUIRED: VERCEL_EXACT_PREVIEW_DRIVER_TOKEN이 없어 실행을 차단합니다.' >&2
+                echo 'ONE_TIME_CREDENTIAL_PROVISIONING_REQUIRED: Vercel account owner가 greenhub-driver (prj_e3OU9YIAGTkDcrWQdpTvkbHnJ4XW) 하나에만 scoped된 token을 1회 생성해 GitHub Actions secret에 등록 필요.' >&2
+                exit 1
+              fi
+              ;;
+            both)
+              if [[ -z "${VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN:-}" ]]; then
+                echo 'VERCEL_CONSUMER_PROJECT_TOKEN_REQUIRED: both는 consumer token을 요구합니다.' >&2
+                exit 1
+              fi
+              if [[ -z "${VERCEL_EXACT_PREVIEW_SELLER_TOKEN:-}" ]]; then
+                echo 'VERCEL_SELLER_PROJECT_TOKEN_REQUIRED: both는 seller token을 요구합니다.' >&2
+                exit 1
+              fi
+              ;;
             *)
               echo 'app은 consumer|seller|driver|both만 허용됩니다.' >&2
               exit 1
               ;;
           esac
-          if [[ -z "${VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN:-}" ]]; then
-            echo 'VERCEL_EXACT_PREVIEW_DEPLOY_TOKEN이 없어 provider-native deployment를 생성할 수 없습니다.' >&2
-            echo 'ONE_TIME_CREDENTIAL_PROVISIONING_REQUIRED: GitHub Actions secret에 1회 등록 필요 (Preview-create 최소 권한, production promote/alias 없음).' >&2
-            exit 1
-          fi
           printf 'preflight ok: app=%s sha=%s target=preview (production forbidden)\n' "$APP" "$EXACT_SHA"
 
       - name: helper dry-run validation + commit existence (fail-closed)
@@ -149,6 +195,7 @@ jobs:
             if (plan.sha !== process.env.EXACT_SHA) { console.error('plan SHA mismatch'); process.exit(1); }
             if (plan.target !== null || plan.production !== false) { console.error('plan must be Preview-only'); process.exit(1); }
             if (plan.gitRefPushRequired !== false) { console.error('plan must not require Git ref push'); process.exit(1); }
+            if (plan.credentialMode !== 'project-scoped') { console.error('plan must use project-scoped credentials'); process.exit(1); }
             for (const item of plan.plans) {
               if (item.body.gitSource.sha !== process.env.EXACT_SHA || item.body.gitSource.ref !== process.env.EXACT_SHA) { console.error('gitSource exact SHA mismatch'); process.exit(1); }
               if ('target' in item.body && item.body.target != null) { console.error('body target must be omitted'); process.exit(1); }
@@ -172,6 +219,7 @@ jobs:
             const result = JSON.parse(require('fs').readFileSync('/tmp/targeted-result.json','utf8'));
             if (result.requestedSha !== process.env.EXACT_SHA) { console.error('result SHA mismatch'); process.exit(1); }
             if (result.target !== null || result.production !== false) { console.error('result must be Preview-only'); process.exit(1); }
+            if (result.credentialMode !== 'project-scoped') { console.error('result must use project-scoped credentials'); process.exit(1); }
             if (result.credentialValueRecorded === true) { console.error('credential must never be recorded'); process.exit(1); }
             for (const d of result.deployments) {
               if (!/^dpl_[A-Za-z0-9]+$/.test(d.deploymentId ?? '')) { console.error('missing deployment ID for ' + d.app); process.exit(1); }
@@ -196,20 +244,28 @@ jobs:
           CONSUMER_DPL: ${{ steps.create.outputs.consumer_deployment_id }}
           SELLER_DPL: ${{ steps.create.outputs.seller_deployment_id }}
           DRIVER_DPL: ${{ steps.create.outputs.driver_deployment_id }}
+          VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN }}
+          VERCEL_EXACT_PREVIEW_SELLER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_SELLER_TOKEN }}
+          VERCEL_EXACT_PREVIEW_DRIVER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN }}
         run: |
           set -euo pipefail
+          # Project-scoped readback: each app is read with ITS OWN project
+          # token and NO teamId query (credential carries project context).
+          # Strict acceptance predicate itself is unchanged.
           case "$APP" in
             consumer)
-              node scripts/wait-preview-deploy.mjs --json --only=consumer --sha="$EXACT_SHA" --consumer-deployment-id="$CONSUMER_DPL"
+              node scripts/wait-preview-deploy.mjs --json --credential-mode=project-scoped --only=consumer --sha="$EXACT_SHA" --consumer-deployment-id="$CONSUMER_DPL"
               ;;
             seller)
-              node scripts/wait-preview-deploy.mjs --json --only=seller --sha="$EXACT_SHA" --seller-deployment-id="$SELLER_DPL"
+              node scripts/wait-preview-deploy.mjs --json --credential-mode=project-scoped --only=seller --sha="$EXACT_SHA" --seller-deployment-id="$SELLER_DPL"
               ;;
             driver)
-              node scripts/wait-preview-deploy.mjs --json --only=driver --sha="$EXACT_SHA" --driver-deployment-id="$DRIVER_DPL"
+              node scripts/wait-preview-deploy.mjs --json --credential-mode=project-scoped --only=driver --sha="$EXACT_SHA" --driver-deployment-id="$DRIVER_DPL"
               ;;
             both)
-              node scripts/wait-preview-deploy.mjs --json --sha="$EXACT_SHA" --consumer-deployment-id="$CONSUMER_DPL" --seller-deployment-id="$SELLER_DPL"
+              # both = consumer + seller only: bound the waiter to exactly
+              # those two pinned IDs (driver ID is never required here).
+              node scripts/wait-preview-deploy.mjs --json --credential-mode=project-scoped --only=consumer,seller --sha="$EXACT_SHA" --consumer-deployment-id="$CONSUMER_DPL" --seller-deployment-id="$SELLER_DPL"
               ;;
           esac
 
@@ -228,7 +284,7 @@ jobs:
             echo ""
             echo "- requested SHA: \`$EXACT_SHA\`"
             echo "- app selection: \`$APP\`"
-            echo "- method: POST /v13/deployments gitSource exact SHA (no ref push)"
+            echo "- method: POST /v13/deployments gitSource exact SHA, project-scoped token, no teamId (no ref push)"
             echo "- target: Preview only (production forbidden, target omitted)"
             echo "- consumer deployment: \`${CONSUMER_DPL:-none}\`"
             echo "- seller deployment: \`${SELLER_DPL:-none}\`"

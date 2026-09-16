@@ -26,6 +26,47 @@ export const VERCEL_API_ORIGIN = 'https://api.vercel.com';
 export const VERCEL_TEAM_ID = 'team_J91VWI0TqcHdcF36T7qVgiT1';
 export const VERCEL_CREDENTIAL_NAME = 'ROUND_DIRECT_E2E_VERCEL_READ_TOKEN';
 
+/**
+ * 45B project-scoped exact-preview credential authority (per-app, single
+ * Project scope each). Values are NEVER logged; only names travel in evidence.
+ *
+ * - consumer -> VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN (greenhubconsumer only)
+ * - seller   -> VERCEL_EXACT_PREVIEW_SELLER_TOKEN   (greenhub-seller only)
+ * - driver   -> VERCEL_EXACT_PREVIEW_DRIVER_TOKEN   (greenhub-driver only)
+ *
+ * A project-scoped token is used for BOTH the exact Preview creation POST and
+ * the pinned deployment metadata GET of its own app. Vercel offers no
+ * operation-level create-only/read-only scope, so the token scope (single
+ * Project) and the application guard below are SEPARATE defense lines:
+ * credential scope limits blast radius, application code still enforces
+ * Preview-only + exact-SHA + allowlisted-project + pinned-ID fail-closed.
+ *
+ * Legacy/global mode (`legacy-global`: ROUND_DIRECT_E2E_VERCEL_READ_TOKEN +
+ * `?teamId=`) stays for existing e2e/probe consumers (KEEP_COMPATIBILITY).
+ * Project-scoped mode (`project-scoped`) sends NO `teamId` query: the
+ * credential itself carries the project/team context. Mode is always explicit
+ * (`credentialMode`); credential type is never guessed from token shape.
+ */
+export const VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN = 'VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN';
+export const VERCEL_EXACT_PREVIEW_SELLER_TOKEN = 'VERCEL_EXACT_PREVIEW_SELLER_TOKEN';
+export const VERCEL_EXACT_PREVIEW_DRIVER_TOKEN = 'VERCEL_EXACT_PREVIEW_DRIVER_TOKEN';
+
+export const EXACT_PREVIEW_CREDENTIAL_MODE_PROJECT_SCOPED = 'project-scoped';
+export const EXACT_PREVIEW_CREDENTIAL_MODE_LEGACY_GLOBAL = 'legacy-global';
+
+export const EXACT_PREVIEW_TOKENS_BY_APP = Object.freeze({
+  consumer: VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN,
+  seller: VERCEL_EXACT_PREVIEW_SELLER_TOKEN,
+  driver: VERCEL_EXACT_PREVIEW_DRIVER_TOKEN,
+});
+
+/** Per-app fail-closed codes when a required project token is missing. */
+export const EXACT_PREVIEW_TOKEN_REQUIRED_BY_APP = Object.freeze({
+  consumer: 'VERCEL_CONSUMER_PROJECT_TOKEN_REQUIRED',
+  seller: 'VERCEL_SELLER_PROJECT_TOKEN_REQUIRED',
+  driver: 'VERCEL_DRIVER_PROJECT_TOKEN_REQUIRED',
+});
+
 export const PREVIEW_APPS = Object.freeze([
   {
     app: 'consumer',
@@ -132,6 +173,85 @@ export function vercelDeploymentPath(deploymentId) {
   return `/v13/deployments/${encodeURIComponent(deploymentId)}?${query}`;
 }
 
+/**
+ * Project-scoped exact-preview GET path: NO `teamId` query is forced. The
+ * per-app project token itself carries the project/team context. Callers must
+ * pass `credentialMode: 'project-scoped'` explicitly to use this path; the
+ * default legacy path above is unchanged for existing global consumers.
+ */
+export function vercelDeploymentProjectScopedPath(deploymentId) {
+  assertDeploymentId(deploymentId);
+  return `/v13/deployments/${encodeURIComponent(deploymentId)}`;
+}
+
+export function assertExactPreviewCredentialMode(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (
+    normalized !== EXACT_PREVIEW_CREDENTIAL_MODE_PROJECT_SCOPED &&
+    normalized !== EXACT_PREVIEW_CREDENTIAL_MODE_LEGACY_GLOBAL
+  ) {
+    fail(
+      'UNKNOWN_CREDENTIAL_MODE',
+      `알 수 없는 credential mode입니다: ${JSON.stringify(value)} (project-scoped|legacy-global만 허용)`,
+    );
+  }
+  return normalized;
+}
+
+/** Env name holding the project-scoped token for one app. */
+export function exactPreviewTokenEnvForApp(app) {
+  const env = EXACT_PREVIEW_TOKENS_BY_APP[app];
+  if (!env) fail('UNKNOWN_PREVIEW_APP', `알 수 없는 Preview 앱입니다: ${app}`);
+  return env;
+}
+
+/** Fail-closed code when one app's project token is missing. */
+export function exactPreviewTokenRequiredCode(app) {
+  const code = EXACT_PREVIEW_TOKEN_REQUIRED_BY_APP[app];
+  if (!code) fail('UNKNOWN_PREVIEW_APP', `알 수 없는 Preview 앱입니다: ${app}`);
+  return code;
+}
+
+function readProjectScopedTokenFromEnv(app) {
+  const env = exactPreviewTokenEnvForApp(app);
+  const value = process.env?.[env];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Resolve ONE app's project-scoped token. No cross-app reuse: a missing token
+ * for `app` fails with that app's own code even when another app's token is
+ * present. Explicit `tokensByApp` entries win; absent entries fall back to
+ * their own per-app env var only (never to another app's credential).
+ */
+export function resolveProjectScopedReadToken(app, tokensByApp = null) {
+  if (!APP_BY_NAME.has(app)) fail('UNKNOWN_PREVIEW_APP', `알 수 없는 Preview 앱입니다: ${app}`);
+  const explicit = tokensByApp?.[app];
+  const token =
+    typeof explicit === 'string' && explicit.trim() ? explicit.trim() : readProjectScopedTokenFromEnv(app);
+  if (!token) {
+    fail(
+      exactPreviewTokenRequiredCode(app),
+      `${exactPreviewTokenEnvForApp(app)}가 없어 ${app} Vercel metadata를 읽을 수 없습니다 (타 앱 token으로 대체 불가).`,
+    );
+  }
+  return token;
+}
+
+/**
+ * Resolve every selected app's project-scoped token BEFORE any provider call,
+ * so a missing token fails with GET 0회 (no partial readback with mixed
+ * credentials). Returns a frozen app -> token map.
+ */
+export function resolveProjectScopedReadTokensForApps(apps, tokensByApp = null) {
+  const names = [...new Set((Array.isArray(apps) ? apps : []).map((entry) => entry?.app ?? entry))];
+  const resolved = {};
+  for (const app of names) {
+    resolved[app] = resolveProjectScopedReadToken(app, tokensByApp);
+  }
+  return Object.freeze(resolved);
+}
+
 function vercelHeaders(token) {
   return {
     Accept: 'application/json',
@@ -139,7 +259,7 @@ function vercelHeaders(token) {
   };
 }
 
-export async function requestVercelDeployment(deploymentId, token, fetchImpl = fetch) {
+export async function requestVercelDeployment(deploymentId, token, fetchImpl = fetch, options = {}) {
   assertDeploymentId(deploymentId);
   if (typeof token !== 'string' || !token.trim()) {
     fail(
@@ -147,12 +267,23 @@ export async function requestVercelDeployment(deploymentId, token, fetchImpl = f
       `${VERCEL_CREDENTIAL_NAME}가 없어 Vercel metadata를 읽을 수 없습니다.`,
     );
   }
+  const credentialMode =
+    options?.credentialMode ?? EXACT_PREVIEW_CREDENTIAL_MODE_LEGACY_GLOBAL;
+  assertExactPreviewCredentialMode(credentialMode);
+  const cleanToken = token.trim();
+  const deploymentPath =
+    credentialMode === EXACT_PREVIEW_CREDENTIAL_MODE_PROJECT_SCOPED
+      ? vercelDeploymentProjectScopedPath(deploymentId)
+      : vercelDeploymentPath(deploymentId);
+  if (deploymentPath.includes(cleanToken)) {
+    fail('SECRET_REDACTION_VIOLATION', 'credential value must never appear in URL.');
+  }
 
   let response;
   try {
-    response = await fetchImpl(VERCEL_API_ORIGIN + vercelDeploymentPath(deploymentId), {
+    response = await fetchImpl(VERCEL_API_ORIGIN + deploymentPath, {
       method: 'GET',
-      headers: vercelHeaders(token),
+      headers: vercelHeaders(cleanToken),
     });
   } catch {
     fail('VERCEL_API_UNAVAILABLE', 'Vercel metadata 읽기 요청에 실패했습니다.');
@@ -399,6 +530,8 @@ export async function collectDeploymentEvidence(
   deploymentIds,
   {
     vercelToken = process.env[VERCEL_CREDENTIAL_NAME],
+    tokensByApp = null,
+    credentialMode = EXACT_PREVIEW_CREDENTIAL_MODE_LEGACY_GLOBAL,
     fetchImpl = fetch,
     request = null,
     checkedAt = () => new Date().toISOString(),
@@ -407,12 +540,18 @@ export async function collectDeploymentEvidence(
   } = {},
 ) {
   assertHeadSha(expectedSha);
+  const mode = assertExactPreviewCredentialMode(credentialMode);
+  const projectScoped = mode === EXACT_PREVIEW_CREDENTIAL_MODE_PROJECT_SCOPED;
   const selected =
     Array.isArray(selectedApps) && selectedApps.length > 0
       ? selectedApps
       : resolveSelectedAppConfigs(only);
   const pinnedDeploymentIds = normalizeDeploymentIds(deploymentIds, selected);
-  if (typeof request !== 'function' && (typeof vercelToken !== 'string' || !vercelToken.trim())) {
+  // Project-scoped mode: resolve EVERY selected app's own token up front so a
+  // missing token fails before any GET (GET 0회) and no app ever borrows
+  // another app's credential. Legacy mode keeps the single global token.
+  const scopedTokens = projectScoped ? resolveProjectScopedReadTokensForApps(selected, tokensByApp) : null;
+  if (!projectScoped && typeof request !== 'function' && (typeof vercelToken !== 'string' || !vercelToken.trim())) {
     fail(
       'VERCEL_READ_TOKEN_REQUIRED',
       `${VERCEL_CREDENTIAL_NAME}가 없어 Vercel metadata를 읽을 수 없습니다.`,
@@ -426,7 +565,13 @@ export async function collectDeploymentEvidence(
         const payload =
           typeof request === 'function'
             ? await request(pinnedDeploymentId, config.app)
-            : await requestVercelDeployment(pinnedDeploymentId, vercelToken, fetchImpl);
+            : projectScoped
+              ? await requestVercelDeployment(pinnedDeploymentId, scopedTokens[config.app], fetchImpl, {
+                  credentialMode: mode,
+                })
+              : await requestVercelDeployment(pinnedDeploymentId, vercelToken, fetchImpl, {
+                  credentialMode: mode,
+                });
         return inspectDeploymentMetadata(config, pinnedDeploymentId, expectedSha, payload);
       } catch (error) {
         const failure = safeError(error);
@@ -461,8 +606,12 @@ export async function collectDeploymentEvidence(
     repository: REPO,
     evidenceSource: 'vercel-deployment-metadata',
     vercelCredentialName: VERCEL_CREDENTIAL_NAME,
+    credentialMode: mode,
+    vercelCredentialNames: projectScoped
+      ? Object.freeze(Object.fromEntries(selected.map(({ app }) => [app, exactPreviewTokenEnvForApp(app)])))
+      : null,
     credentialValueRecorded: false,
-    vercelTeamId: VERCEL_TEAM_ID,
+    vercelTeamId: projectScoped ? null : VERCEL_TEAM_ID,
     expectedSha,
     selectedApps: selected.map(({ app }) => app),
     pinnedDeploymentIds,
@@ -583,13 +732,14 @@ function resolveDeploymentIds(args, selectedApps = PREVIEW_APPS) {
   );
 }
 
-function failureEvidence(expectedSha, deploymentIds, error, selectedApps = PREVIEW_APPS) {
+function failureEvidence(expectedSha, deploymentIds, error, selectedApps = PREVIEW_APPS, credentialMode = null) {
   const safeFailure = safeError(error);
   const validSha =
     typeof expectedSha === 'string' && SHA_PATTERN.test(expectedSha) ? expectedSha : null;
   const pinnedDeploymentIds = Object.fromEntries(
     selectedApps.map((config) => [config.app, deploymentIds?.[config.app] || null]),
   );
+  const scoped = credentialMode === EXACT_PREVIEW_CREDENTIAL_MODE_PROJECT_SCOPED;
   return {
     ready: false,
     retryable: false,
@@ -597,8 +747,12 @@ function failureEvidence(expectedSha, deploymentIds, error, selectedApps = PREVI
     repository: REPO,
     evidenceSource: 'vercel-deployment-metadata',
     vercelCredentialName: VERCEL_CREDENTIAL_NAME,
+    credentialMode: credentialMode ?? EXACT_PREVIEW_CREDENTIAL_MODE_LEGACY_GLOBAL,
+    vercelCredentialNames: scoped
+      ? Object.freeze(Object.fromEntries(selectedApps.map(({ app }) => [app, exactPreviewTokenEnvForApp(app)])))
+      : null,
     credentialValueRecorded: false,
-    vercelTeamId: VERCEL_TEAM_ID,
+    vercelTeamId: scoped ? null : VERCEL_TEAM_ID,
     expectedSha: validSha,
     selectedApps: selectedApps.map(({ app }) => app),
     pinnedDeploymentIds,
@@ -621,12 +775,23 @@ async function main() {
   const jsonOnly = args.includes('--json');
   const once = args.includes('--once');
   const diagnostic = args.includes('--diagnostic-status');
+  const credentialModeRaw = argumentValue(args, 'credential-mode');
+  let credentialMode = EXACT_PREVIEW_CREDENTIAL_MODE_LEGACY_GLOBAL;
+  try {
+    if (credentialModeRaw !== undefined) credentialMode = assertExactPreviewCredentialMode(credentialModeRaw);
+  } catch (error) {
+    const failure = failureEvidence(null, {}, error, [...PREVIEW_APPS], EXACT_PREVIEW_CREDENTIAL_MODE_LEGACY_GLOBAL);
+    writeJson(failure);
+    console.error(`[wait-preview-deploy] ${failure.failure.code}: ${failure.failure.message}`);
+    process.exitCode = 1;
+    return;
+  }
   const headSha = resolveHeadSha(args);
   let selectedApps = [...PREVIEW_APPS];
   try {
     selectedApps = resolveSelectedAppConfigs(argumentValue(args, 'only'));
   } catch (error) {
-    const failure = failureEvidence(headSha, {}, error, [...PREVIEW_APPS]);
+    const failure = failureEvidence(headSha, {}, error, [...PREVIEW_APPS], credentialMode);
     writeJson(failure);
     console.error(`[wait-preview-deploy] ${failure.failure.code}: ${failure.failure.message}`);
     process.exitCode = 1;
@@ -652,11 +817,12 @@ async function main() {
     try {
       const evidence = await collectDeploymentEvidence(headSha, deploymentIds, {
         only: argumentValue(args, 'only') ?? null,
+        credentialMode,
       });
       writeJson(evidence);
       process.exitCode = evidence.ready ? 0 : 1;
     } catch (error) {
-      const failure = failureEvidence(headSha, deploymentIds, error, selectedApps);
+      const failure = failureEvidence(headSha, deploymentIds, error, selectedApps, credentialMode);
       writeJson(failure);
       console.error(`[wait-preview-deploy] ${failure.failure.code}: ${failure.failure.message}`);
       process.exitCode = 1;
@@ -685,6 +851,7 @@ async function main() {
     try {
       latestEvidence = await collectDeploymentEvidence(headSha, deploymentIds, {
         only: argumentValue(args, 'only') ?? null,
+        credentialMode,
       });
       if (latestEvidence.ready || !latestEvidence.retryable) break;
     } catch (error) {
@@ -726,6 +893,7 @@ async function main() {
       terminalFailure ??
         new PreviewEvidenceError('VERCEL_API_UNAVAILABLE', 'Vercel metadata 읽기에 실패했습니다.'),
       selectedApps,
+      credentialMode,
     );
     if (jsonOnly) writeJson(failure);
     else console.error(`[wait-preview-deploy] ${failure.failure.code}: ${failure.failure.message}`);
