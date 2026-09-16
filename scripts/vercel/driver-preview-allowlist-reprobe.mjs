@@ -1,12 +1,19 @@
 /**
  * Driver Preview allowlist secure bridge
  * (PILOT-AUTH-DRIVER-ALLOWLIST-SECURE-BRIDGE-43C,
- *  PILOT-AUTH-DRIVER-PROJECT-CREDENTIAL-CONTRACT-CONVERGENCE-45C).
+ *  PILOT-AUTH-DRIVER-PROJECT-CREDENTIAL-CONTRACT-CONVERGENCE-45C,
+ *  PILOT-AUTH-43C-EXECUTABLE-44A-SUCCESSOR-CONVERGENCE-45D).
  *
  * Manual-only secure bridge that performs an ADDITIVE-ONLY mutation of the
- * Driver Preview allowlist env entry, then allows exact-preview reprovisioning
- * exclusively through the 44A provider-native workflow
+ * Driver Preview allowlist env entry, then requires the 44A provider-native
+ * workflow as the SOLE successor
  * (`.github/workflows/create-exact-preview-deployment.yml`, app=driver).
+ *
+ * This module never creates a deployment itself: no provider POST
+ * /v13/deployments exists here, no preview-exact/* ref is created or pushed,
+ * and the superseded 43A Git-ref-push path MUST NOT RUN
+ * (`scripts/vercel/provision-exact-preview.mjs` is not imported, not called,
+ * and not offered as a successor).
  *
  * Locked contract (fail-closed, no silent fallback):
  * - Driver only. Consumer / seller targets are structurally rejected.
@@ -28,10 +35,16 @@
  *   Unrelated members are never removed. Canonical identity is present after.
  * - Evidence is boolean/count only. Raw allowlist values, secret values,
  *   hashes, prefixes, and lengths are never emitted.
- * - Reprovisioning reuses the 43A exact provisioning builder with the exact
- *   expected source SHA only. Latest-commit promotion / latest-ref flows are
- *   forbidden and absent from this module (no latest-SHA resolution exists
- *   here; the exact SHA is the only accepted source identity).
+ * - Post-mutation successor is the 44A provider-native workflow ONLY with the
+ *   exact expected source SHA. The 44A descriptor in this module is secret-free
+ *   pure data (no credential value, no provider mutation): successor=44A,
+ *   app=driver, exactSha=EXPECTED_SOURCE_SHA, oldDeploymentId=
+ *   OLD_DRIVER_DEPLOYMENT_ID, newDeploymentRequired=true,
+ *   newDeploymentMustDifferFromOld=true, creationAuthority=
+ *   `.github/workflows/create-exact-preview-deployment.yml` with exactly ONE
+ *   POST /v13/deployments (Preview only). Latest-commit promotion / latest-ref
+ *   flows are forbidden and absent from this module (no latest-SHA resolution
+ *   exists here; the exact SHA is the only accepted source identity).
  *
  * This module performs no live provider I/O by itself in tests: the Vercel
  * client is an injected seam (`vercelClient`) so deterministic specs can prove
@@ -39,7 +52,7 @@
  * `.github/workflows/driver-preview-allowlist-reprobe.yml` (workflow_dispatch,
  * round-direct-e2e environment for approval/gating + Driver identity; the
  * Driver Vercel token is the repository-level VERCEL_EXACT_PREVIEW_DRIVER_TOKEN)
- * and is out of scope for 45C verification.
+ * and is out of scope for 45D verification.
  *
  * Run: node --test scripts/vercel/driver-preview-allowlist-reprobe.spec.mjs
  */
@@ -47,7 +60,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildProvisioningRequest } from './provision-exact-preview.mjs';
 import { inspectAppDeployment } from '../wait-preview-deploy.mjs';
 
 // ---------------------------------------------------------------------------
@@ -297,29 +309,61 @@ export function evidenceExposesRawIdentity(evidence, rawIdentities) {
 }
 
 // ---------------------------------------------------------------------------
-// Exact-preview reprovisioning via the existing 43A capability only
+// Post-mutation successor: 44A provider-native workflow ONLY (secret-free)
 // ---------------------------------------------------------------------------
 
 /**
- * Build the driver exact-preview provisioning request through the existing 43A
- * builder. Only the exact expected source SHA is accepted; latest-commit
- * promotion and latest-ref flows do not exist in this module.
+ * Canonical 44A successor identity. This module never creates a deployment
+ * itself and never pushes a Git ref: the sole creation authority is the 44A
+ * provider-native workflow with exactly ONE POST /v13/deployments.
  */
-export function buildDriverExactProvisioningRequest({ sourceSha } = {}) {
+export const SUCCESSOR_KIND = '44A';
+export const SUCCESSOR_CREATION_AUTHORITY =
+  '.github/workflows/create-exact-preview-deployment.yml';
+export const SUCCESSOR_CREATION_METHOD = 'exactly-one POST /v13/deployments';
+
+/**
+ * Build the secret-free 44A successor descriptor. Pure data only: no
+ * credential value, no provider mutation, no deployment POST, no Git ref.
+ * Only the exact expected source SHA with driver scope is accepted;
+ * latest-commit promotion and latest-ref flows do not exist in this module.
+ */
+export function buildDriver44ASuccessorDescriptor({
+  sourceSha = EXPECTED_SOURCE_SHA,
+  oldDeploymentId = OLD_DRIVER_DEPLOYMENT_ID,
+  app = DRIVER_SCOPE,
+} = {}) {
+  const normalizedApp = typeof app === 'string' ? app.trim().toLowerCase() : '';
+  if (normalizedApp !== DRIVER_SCOPE) {
+    fail(
+      'DRIVER_ONLY_ISOLATION_VIOLATION',
+      'driver 이외 scope에 대한 successor 요구를 차단합니다.',
+    );
+  }
   if (sourceSha !== EXPECTED_SOURCE_SHA) {
     fail(
       'SOURCE_SHA_MISMATCH',
-      'exact preview provisioning은 expected source SHA만 허용됩니다.',
+      '44A successor는 expected source SHA만 허용됩니다.',
     );
   }
-  const request = buildProvisioningRequest({ sha: sourceSha, app: DRIVER_SCOPE, target: null });
-  if (request.ref !== `preview-exact/driver/${EXPECTED_SOURCE_SHA}`) {
-    fail('SOURCE_SHA_MISMATCH', 'provisioning ref가 expected source SHA와 달라 차단합니다.');
+  if (oldDeploymentId !== OLD_DRIVER_DEPLOYMENT_ID) {
+    fail(
+      'OLD_DEPLOYMENT_MISMATCH',
+      '44A successor의 old deployment ID가 예상값과 달라 차단합니다.',
+    );
   }
-  if (request.target !== null || request.production !== false) {
-    fail('PRODUCTION_TARGET_BLOCKED', 'provisioning target은 Preview만 허용됩니다.');
-  }
-  return request;
+  return Object.freeze({
+    successor: SUCCESSOR_KIND,
+    app: DRIVER_SCOPE,
+    exactSha: EXPECTED_SOURCE_SHA,
+    oldDeploymentId: OLD_DRIVER_DEPLOYMENT_ID,
+    newDeploymentRequired: true,
+    newDeploymentMustDifferFromOld: true,
+    creationAuthority: SUCCESSOR_CREATION_AUTHORITY,
+    creationMethod: SUCCESSOR_CREATION_METHOD,
+    target: DRIVER_PREVIEW_ENVIRONMENT,
+    production: false,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -465,13 +509,16 @@ export async function planDriverAllowlistMutation({
   const evidence = buildAllowlistEvidence({ beforeSet, afterSet, canonicalIdentity });
   assertAdditiveInvariant(evidence);
 
-  // 4. Exact-preview provisioning request bound to the expected SHA (43A reuse).
-  const provisioningRequest = buildDriverExactProvisioningRequest({
+  // 4. 44A successor requirement bound to the expected SHA (secret-free,
+  // descriptive only; this module never POSTs a deployment or pushes a ref).
+  const successor = buildDriver44ASuccessorDescriptor({
     sourceSha: target.sourceSha ?? EXPECTED_SOURCE_SHA,
+    oldDeploymentId: target.oldDeploymentId ?? OLD_DRIVER_DEPLOYMENT_ID,
+    app: target.app ?? DRIVER_SCOPE,
   });
 
   if (vercelClient == null) {
-    return Object.freeze({ evidence, provisioningRequest, providerCalls: 0 });
+    return Object.freeze({ evidence, successor, providerCalls: 0 });
   }
   if (typeof vercelClient.updateDriverPreviewEnvEntry !== 'function') {
     fail('VERCEL_CLIENT_MALFORMED', 'Vercel client seam이 올바르지 않아 차단합니다.');
@@ -488,7 +535,7 @@ export async function planDriverAllowlistMutation({
     target: DRIVER_PREVIEW_ENVIRONMENT,
     newRaw,
   });
-  return Object.freeze({ evidence, provisioningRequest, providerCalls: 1, result: result ?? null });
+  return Object.freeze({ evidence, successor, providerCalls: 1, result: result ?? null });
 }
 
 /**
@@ -559,8 +606,9 @@ if (invokedAsMainScript) {
   const argv = process.argv.slice(2);
   const mode = argv.includes('--apply') ? 'apply' : 'check-only';
   try {
-    // Static contract self-check: exact constants + 43A reuse + Preview-only.
+    // Static contract self-check: exact constants + 44A successor + Preview-only.
     // 45C: project-scoped — no teamId authority.
+    // This module never POSTs a deployment and never pushes a preview-exact ref.
     assertExactDriverTarget({
       app: DRIVER_SCOPE,
       project: DRIVER_PROJECT,
@@ -571,7 +619,11 @@ if (invokedAsMainScript) {
       oldDeploymentId: OLD_DRIVER_DEPLOYMENT_ID,
       sourceSha: EXPECTED_SOURCE_SHA,
     });
-    buildDriverExactProvisioningRequest({ sourceSha: EXPECTED_SOURCE_SHA });
+    buildDriver44ASuccessorDescriptor({
+      sourceSha: EXPECTED_SOURCE_SHA,
+      oldDeploymentId: OLD_DRIVER_DEPLOYMENT_ID,
+      app: DRIVER_SCOPE,
+    });
     if (mode === 'check-only') {
       process.stdout.write(
         `${JSON.stringify({ mode, contract: 'EXACT_DRIVER_PREVIEW_ADDITIVE_ONLY', mutationExecuted: false })}\n`,
