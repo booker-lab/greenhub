@@ -619,4 +619,77 @@ describe('AuthService', () => {
       expect(refreshTokenRef.set).not.toHaveBeenCalled();
     });
   });
+
+  describe('getSession same-deployment authority', () => {
+    it('유효한 session은 현재 권한 projection으로 유지된다', async () => {
+      const { service } = makeKakaoLoginService({
+        user: { id: 'seller-1', role: 'seller', storeId: 'store-1', suspended: false },
+        refreshToken: 'stored-refresh',
+      });
+
+      await expect(
+        service.getSession({ sub: 'seller-1', role: 'seller', storeId: 'store-1' }),
+      ).resolves.toEqual({ sub: 'seller-1', role: 'seller', storeId: 'store-1' });
+    });
+
+    it('storeId가 없는 유효 session은 storeId 없이 유지된다', async () => {
+      const { service } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
+        refreshToken: 'stored-refresh',
+      });
+
+      await expect(
+        service.getSession({ sub: 'consumer-1', role: 'consumer' }),
+      ).resolves.toEqual({ sub: 'consumer-1', role: 'consumer' });
+    });
+
+    it('explicit logout(refresh 기록 삭제) 후 기존 session 재사용을 거부한다', async () => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
+      });
+
+      await expect(
+        service.getSession({ sub: 'consumer-1', role: 'consumer' }),
+      ).rejects.toMatchObject({ status: 401 });
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['사용자 없음', {}, { sub: 'consumer-1', role: 'consumer' }, 401],
+      [
+        '정지됨',
+        { id: 'consumer-1', role: 'consumer', storeId: null, suspended: true },
+        { sub: 'consumer-1', role: 'consumer' },
+        401,
+      ],
+      [
+        '역할 변경',
+        { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
+        { sub: 'consumer-1', role: 'admin' },
+        401,
+      ],
+      [
+        '매장 변경',
+        { id: 'seller-1', role: 'seller', storeId: 'store-current', suspended: false },
+        { sub: 'seller-1', role: 'seller', storeId: 'store-old' },
+        401,
+      ],
+      [
+        'driver 승인 철회',
+        { id: 'driver-1', role: 'driver', driverApproved: false, suspended: false },
+        { sub: 'driver-1', role: 'driver' },
+        403,
+      ],
+    ])('%s session은 write 없이 거부한다', async (_label, user, payload, status) => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user,
+        refreshToken: 'stored-refresh',
+      });
+
+      await expect(service.getSession(payload as never)).rejects.toMatchObject({ status });
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+  });
 });

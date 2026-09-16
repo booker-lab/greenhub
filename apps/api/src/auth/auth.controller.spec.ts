@@ -7,6 +7,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AuditService } from '../common/audit/audit.service';
 import { FirestoreService } from '../firestore/firestore.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { KakaoClient } from './kakao.client';
@@ -232,5 +233,32 @@ describe('AuthController public driver approval boundary', () => {
       .post('/auth/login')
       .send({ email: `${role}@example.com`, password })
       .expect(200);
+  });
+});
+
+describe('AuthController GET /auth/session wiring', () => {
+  it('JwtAuthGuard 통과 시 service getSession projection을 반환한다', async () => {
+    const getSession = jest.fn().mockResolvedValue({ sub: 'u-1', role: 'consumer' });
+    const module = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [{ provide: AuthService, useValue: { getSession } }],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+
+    const app = module.createNestApplication();
+    await app.init();
+    try {
+      await request(app.getHttpServer())
+        .get('/auth/session')
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toEqual({ sub: 'u-1', role: 'consumer' });
+        });
+      expect(getSession).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+    }
   });
 });

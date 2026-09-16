@@ -394,6 +394,36 @@ export class AuthService {
     });
   }
 
+  async getSession(user: JwtPayload) {
+    // PILOT-AUTH-SAME-DEPLOYMENT-SESSION-REVOCATION-48A.
+    // Same-deployment Auth.js session authority: single canonical owner is
+    // this API (authoritative user doc + refresh binding). Cookie-local values
+    // are never authority. Read-only: no token issuance, rotation, or deletion.
+    // Explicit revocation (401/403) covers suspended, missing user, role/store
+    // mismatch, driver approval withdrawal, and explicit logout (refresh doc
+    // deleted). Transient Firestore/network failures throw other errors and
+    // must not be mistaken for revocation by callers.
+    const currentUser = await this.getAuthoritativeUser(user.sub);
+    if (
+      !isStoreIdValue(user.storeId) ||
+      user.role !== currentUser.role ||
+      normalizeStoreId(user.storeId) !== currentUser.storeId
+    ) {
+      throw new UnauthorizedException('현재 사용자 권한과 일치하지 않는 세션입니다.');
+    }
+
+    const tokenSnap = await this.firestore.doc(`refreshTokens/${user.sub}`).get();
+    if (!tokenSnap.exists) {
+      throw new UnauthorizedException('폐기된 세션입니다.');
+    }
+
+    return {
+      sub: user.sub,
+      role: currentUser.role,
+      ...(currentUser.storeId !== null ? { storeId: currentUser.storeId } : {}),
+    };
+  }
+
   async logout(userId: string) {
     await this.firestore.doc(`refreshTokens/${userId}`).delete();
     await this.audit.log('auth.logout', { userId });

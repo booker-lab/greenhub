@@ -145,6 +145,49 @@ async function authorizeLocalDriver(credentials: Record<string, unknown>) {
   };
 }
 
+// PILOT-AUTH-SAME-DEPLOYMENT-SESSION-REVOCATION-48A.
+// Same-deployment session authority. Canonical owner is API GET /auth/session
+// (JwtStrategy revalidation + refresh binding). Cookie-local values are never
+// authority. 401/403 = explicit revocation -> fail closed (jwt returns null,
+// Auth.js deletes the session cookie and auth() resolves to null). Network
+// throw, timeout, 5xx, and 429 = transient -> preserve the token and retry on
+// the next invocation; never mistake transient for a global logout.
+// TTL expiry alone is not revocation: a verify-revoked token always attempts
+// POST /auth/refresh once to disambiguate access expiry (refresh succeeds)
+// from true revocation (refresh explicitly rejects).
+const SESSION_ALLOWED_ROLES = ['driver', 'admin'];
+
+function isExplicitSessionRevocationStatus(status: unknown): boolean {
+  return status === 401 || status === 403;
+}
+
+async function verifySessionAuthority(
+  accessToken: string,
+): Promise<{ kind: 'ok' } | { kind: 'revoked' } | { kind: 'transient' }> {
+  try {
+    const res = await fetch(`${API}/auth/session`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      let data: { role?: unknown } | null = null;
+      try {
+        data = (await res.json()) as { role?: unknown };
+      } catch {
+        return { kind: 'transient' };
+      }
+      if (!SESSION_ALLOWED_ROLES.includes(data?.role as string)) {
+        return { kind: 'revoked' };
+      }
+      return { kind: 'ok' };
+    }
+    if (isExplicitSessionRevocationStatus(res.status)) return { kind: 'revoked' };
+    return { kind: 'transient' };
+  } catch {
+    return { kind: 'transient' };
+  }
+}
+
 async function refreshAccessToken(token: Record<string, unknown>) {
   try {
     const res = await fetch(`${API}/auth/refresh`, {
@@ -152,7 +195,12 @@ async function refreshAccessToken(token: Record<string, unknown>) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: token.refreshToken }),
     });
-    if (!res.ok) throw new Error('refresh failed');
+    if (!res.ok) {
+      if (isExplicitSessionRevocationStatus(res.status)) {
+        return null as unknown as Record<string, unknown>;
+      }
+      return { ...token };
+    }
     const data = await res.json();
     return {
       ...token,
@@ -162,7 +210,7 @@ async function refreshAccessToken(token: Record<string, unknown>) {
       error: undefined,
     };
   } catch {
-    return { ...token, error: 'RefreshTokenError' };
+    return { ...token };
   }
 }
 
@@ -304,7 +352,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       user.role = data.user.role;
       return true;
     },
-    jwt({ token, user, account }) {
+    jwt: async ({ token, user, account }) => {
       if (user) {
         return {
           ...token,
@@ -315,12 +363,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             (account?.provider === 'credentials' ? E2E_ACCESS_TOKEN_TTL : ACCESS_TOKEN_TTL),
           role: user.role,
           sub: user.id,
+          error: undefined,
         };
+      }
+      const accessToken = token.accessToken;
+      const refreshToken = token.refreshToken;
+      if (
+        typeof accessToken !== 'string' ||
+        !accessToken ||
+        typeof refreshToken !== 'string' ||
+        !refreshToken
+      ) {
+        return token;
+      }
+      const authority = await verifySessionAuthority(accessToken as string);
+      if (authority.kind === 'revoked') {
+        return refreshAccessToken(token as unknown as Record<string, unknown>);
+      }
+      if (authority.kind === 'ok') {
+        if (Date.now() < (token.accessTokenExpires as number)) {
+          const { error: _revokedError, ...rest } = token as unknown as Record<string, unknown>;
+          void _revokedError;
+          return rest;
+        }
+        return refreshAccessToken(token as unknown as Record<string, unknown>);
       }
       if (Date.now() < (token.accessTokenExpires as number)) {
         return token;
       }
-      return refreshAccessToken(token);
+      return refreshAccessToken(token as unknown as Record<string, unknown>);
     },
     session({ session, token }) {
       session.user.id = token.sub as string;
