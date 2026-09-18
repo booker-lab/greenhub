@@ -1,11 +1,16 @@
-// Bounded mutation owner: GREENHUB-COORDINATION-DURABLE-CORE-01.
-// Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED.
+// Bounded mutation owner: GREENHUB-COORDINATION-DURABLE-CORE-01
+// + GREENHUB-COORDINATION-DISPOSITION-STORE-07 (disposition persistence/state/fencing only).
+// Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
+// plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
+// NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result.
 //
 // Filesystem layout under a durable home (never the repository worktree):
 //   <home>/tasks/<taskId>/task.json
 //   <home>/tasks/<taskId>/claim.json
 //   <home>/tasks/<taskId>/result.json            (canonical terminal result)
 //   <home>/tasks/<taskId>/results/<resultId>.json (per-delivery record)
+//   <home>/tasks/<taskId>/disposition/current.json
+//   <home>/tasks/<taskId>/disposition/generations/<n>.json (immutable history)
 //
 // Claim atomicity uses OS exclusive-create (`wx`) semantics plus a
 // read-verify-unlink-recreate takeover dance (same family as
@@ -35,6 +40,14 @@ import {
   validateResultEnvelope,
   validateTaskEnvelope,
 } from './task-envelope.mjs';
+import {
+  DISPOSITION_STATE_PENDING,
+  assertLegalDispositionTransition,
+  buildCanonicalTransitionId,
+  buildDispositionRecord,
+  computeResultBinding,
+  validateDispositionRecord,
+} from './disposition.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -44,6 +57,17 @@ export const TASK_NOT_FOUND = 'TASK_NOT_FOUND';
 export const TASK_NOT_READY = 'TASK_NOT_READY';
 export const TASK_TERMINAL = 'TASK_TERMINAL';
 export const DUPLICATE_RESULT_ID_CONFLICT = 'DUPLICATE_RESULT_ID_CONFLICT';
+export const DISPOSITION_NOT_FOUND = 'DISPOSITION_NOT_FOUND';
+export const DISPOSITION_CONFLICT = 'DISPOSITION_CONFLICT';
+export const STALE_DISPOSITION_GENERATION = 'STALE_DISPOSITION_GENERATION';
+export const DISPOSITION_GENERATION_GAP = 'DISPOSITION_GENERATION_GAP';
+export const DISPOSITION_ILLEGAL_TRANSITION = 'DISPOSITION_ILLEGAL_TRANSITION';
+export const DISPOSITION_MISSING_RESULT = 'DISPOSITION_MISSING_RESULT';
+export const DISPOSITION_RESULT_MISMATCH = 'DISPOSITION_RESULT_MISMATCH';
+export const DISPOSITION_RESULT_BINDING_MISMATCH = 'DISPOSITION_RESULT_BINDING_MISMATCH';
+export const DISPOSITION_TRANSITION_ID_MISMATCH = 'DISPOSITION_TRANSITION_ID_MISMATCH';
+export const CORRUPT_DISPOSITION = 'CORRUPT_DISPOSITION';
+export const DISPOSITION_TASK_NOT_DELIVERED = 'DISPOSITION_TASK_NOT_DELIVERED';
 
 export class CoordinationStoreError extends Error {
   constructor(message, details = {}) {
@@ -66,7 +90,66 @@ function taskFilePaths(home, taskId) {
     claimPath: nodePath.join(taskDir, 'claim.json'),
     resultPath: nodePath.join(taskDir, 'result.json'),
     resultsDir: nodePath.join(taskDir, 'results'),
+    dispositionDir: nodePath.join(taskDir, 'disposition'),
+    dispositionCurrentPath: nodePath.join(taskDir, 'disposition', 'current.json'),
+    dispositionGenerationsDir: nodePath.join(taskDir, 'disposition', 'generations'),
   };
+}
+
+function dispositionGenerationPath(home, taskId, generation) {
+  return nodePath.join(
+    resolveTaskDirectory(home, taskId),
+    'disposition',
+    'generations',
+    `${generation}.json`,
+  );
+}
+
+function readValidatedDispositionDocument(path, taskId, generation) {
+  const found = readJsonFile(path);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') {
+    storeFail(
+      `disposition record is corrupt (fail-closed, no auto-repair): ${taskId}@${generation}`,
+      { code: CORRUPT_DISPOSITION, taskId },
+    );
+  }
+  let record;
+  try {
+    record = validateDispositionRecord(found.document);
+  } catch (error) {
+    const code =
+      error?.code === 'DISPOSITION_TRANSITION_ID_MISMATCH'
+        ? DISPOSITION_TRANSITION_ID_MISMATCH
+        : error?.code === 'CONTEXT_BUDGET_EXCEEDED'
+          ? 'CONTEXT_BUDGET_EXCEEDED'
+          : error?.code === 'DISPOSITION_GENERATION_GAP'
+            ? DISPOSITION_GENERATION_GAP
+            : error?.code === 'DISPOSITION_ILLEGAL_TRANSITION'
+              ? DISPOSITION_ILLEGAL_TRANSITION
+              : CORRUPT_DISPOSITION;
+    storeFail(`disposition record invalid (fail-closed): ${taskId}@${generation}: ${error?.message}`, {
+      code,
+      taskId,
+    });
+  }
+  if (record.taskId !== taskId) {
+    storeFail(`disposition taskId/path mismatch (fail-closed): ${taskId}@${generation}`, {
+      code: CORRUPT_DISPOSITION,
+      taskId,
+    });
+  }
+  if (record.dispositionGeneration !== generation) {
+    storeFail(`disposition generation/path mismatch (fail-closed): ${taskId}@${generation}`, {
+      code: CORRUPT_DISPOSITION,
+      taskId,
+    });
+  }
+  return { state: 'present', record };
+}
+
+function canonicalRecordsEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function readJsonFile(path) {
@@ -102,36 +185,50 @@ function writeJsonAtomic(targetPath, document) {
 }
 
 /**
- * Exclusive-create write. Returns true when this caller created the file;
- * false when another claimant already owns the path (EEXIST). Never follows
- * the race-prone exists()->write() pattern.
+ * Exclusive-create write with atomic publication.
+ * INVARIANT: TARGET_VISIBLE => TARGET_COMPLETE_AND_PARSEABLE.
+ * The target name never becomes visible with empty/partial bytes: JSON is
+ * fully written + closed to a unique temp file in the same directory, then
+ * published via hard-link. `link(temp, target)` is atomic and exclusive on
+ * POSIX + Windows/NTFS: EEXIST means a complete winner already owns target,
+ * and the loser never overwrites it (rename would violate exclusivity, so it
+ * is not used here). Temp artifacts are cleaned up on success and failure.
+ * No fsync is added: the pre-existing durability contract used close-only
+ * semantics for both atomic and exclusive writes.
  */
 function writeJsonExclusive(targetPath, document) {
   nodeFs.mkdirSync(nodePath.dirname(targetPath), { recursive: true });
-  let descriptor;
-  try {
-    descriptor = nodeFs.openSync(targetPath, 'wx', 0o600);
-  } catch (error) {
-    if (error?.code === 'EEXIST') return { created: false };
-    throw error;
-  }
-  try {
-    nodeFs.writeSync(descriptor, JSON.stringify(document, null, 2));
-  } catch (error) {
+  const payload = JSON.stringify(document, null, 2);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const tempPath = `${targetPath}.${process.pid}.${randomUUID().replace(/-/g, '')}.tmp`;
     try {
-      nodeFs.closeSync(descriptor);
-    } catch {
-      // best effort
+      nodeFs.writeFileSync(tempPath, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    } catch (error) {
+      if (error?.code === 'EEXIST' && attempt < 2) continue;
+      throw error;
     }
     try {
-      nodeFs.unlinkSync(targetPath);
-    } catch {
-      // best effort
+      nodeFs.linkSync(tempPath, targetPath);
+    } catch (error) {
+      try {
+        nodeFs.unlinkSync(tempPath);
+      } catch {
+        // best effort
+      }
+      if (error?.code === 'EEXIST') return { created: false };
+      throw error;
     }
-    throw error;
+    try {
+      nodeFs.unlinkSync(tempPath);
+    } catch {
+      // best effort: target already holds the complete bytes.
+    }
+    return { created: true };
   }
-  nodeFs.closeSync(descriptor);
-  return { created: true };
+  storeFail(`exclusive temp publication could not allocate a unique temp name: ${targetPath}`, {
+    code: CORRUPT_DISPOSITION,
+  });
+  return { created: false };
 }
 
 export class CoordinationStore {
@@ -525,5 +622,499 @@ export class CoordinationStore {
       storeFail(`stored result is corrupt (fail-closed): ${resultId}`, { code: 'CORRUPT_RESULT', taskId });
     }
     return validateResultEnvelope(found.document);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Disposition domain (separate durable fencing from executor claim fencing).
+  // RESULT_DELIVERED never auto-creates a disposition; Control Tower must
+  // explicitly begin generation 1 as PENDING_DISPOSITION bound to the exact
+  // canonical result. Generations are immutable; current pointer moves only
+  // via explicitly allowed transitions. No ACK/consumed/cursor/materialization
+  // is modelled here.
+  // ---------------------------------------------------------------------------
+
+  #requireDeliveredTask(taskId) {
+    const task = this.readTask(taskId);
+    if (task.status !== TASK_STATUS_RESULT_DELIVERED) {
+      storeFail(
+        `disposition requires RESULT_DELIVERED (task=${taskId} status=${task.status}).`,
+        { code: DISPOSITION_TASK_NOT_DELIVERED, taskId },
+      );
+    }
+    return task;
+  }
+
+  #requireCanonicalResultForDisposition(taskId, resultId) {
+    const paths = taskFilePaths(this.home, taskId);
+    const terminal = readJsonFile(paths.resultPath);
+    if (terminal.state === 'missing') {
+      storeFail(`disposition cannot reference missing RESULT (fail-closed): ${taskId}`, {
+        code: DISPOSITION_MISSING_RESULT,
+        taskId,
+      });
+    }
+    if (terminal.state === 'corrupt') {
+      storeFail(`canonical result is corrupt (disposition fail-closed): ${taskId}`, {
+        code: 'CORRUPT_RESULT',
+        taskId,
+      });
+    }
+    let canonical;
+    try {
+      canonical = validateResultEnvelope(terminal.document);
+    } catch {
+      storeFail(`canonical result is invalid (disposition fail-closed): ${taskId}`, {
+        code: 'CORRUPT_RESULT',
+        taskId,
+      });
+    }
+    const effectiveResultId = resultId ?? canonical.resultId;
+    if (effectiveResultId !== canonical.resultId) {
+      storeFail(
+        `disposition resultId mismatch: requested=${effectiveResultId} canonical=${canonical.resultId} (fail-closed).`,
+        { code: DISPOSITION_RESULT_MISMATCH, taskId },
+      );
+    }
+    if (canonical.taskId !== taskId) {
+      storeFail(`canonical result taskId mismatch (fail-closed): ${taskId}`, {
+        code: DISPOSITION_RESULT_MISMATCH,
+        taskId,
+      });
+    }
+    return canonical;
+  }
+
+  #readCurrentDispositionInternal(taskId) {
+    assertValidTaskId(taskId);
+    const paths = taskFilePaths(this.home, taskId);
+    const currentFound = readJsonFile(paths.dispositionCurrentPath);
+    if (currentFound.state === 'missing') return { state: 'missing' };
+    if (currentFound.state === 'corrupt') {
+      storeFail(`disposition current pointer is corrupt (fail-closed): ${taskId}`, {
+        code: CORRUPT_DISPOSITION,
+        taskId,
+      });
+    }
+    let current;
+    try {
+      current = validateDispositionRecord(currentFound.document);
+    } catch (error) {
+      const code =
+        error?.code === 'DISPOSITION_TRANSITION_ID_MISMATCH'
+          ? DISPOSITION_TRANSITION_ID_MISMATCH
+          : error?.code === 'CONTEXT_BUDGET_EXCEEDED'
+            ? 'CONTEXT_BUDGET_EXCEEDED'
+            : CORRUPT_DISPOSITION;
+      storeFail(`disposition current pointer invalid (fail-closed): ${taskId}: ${error?.message}`, {
+        code,
+        taskId,
+      });
+    }
+    if (current.taskId !== taskId) {
+      storeFail(`disposition current taskId mismatch (fail-closed): ${taskId}`, {
+        code: CORRUPT_DISPOSITION,
+        taskId,
+      });
+    }
+    // Current pointer must reference an existing identical generation record.
+    const generationFound = readValidatedDispositionDocument(
+      dispositionGenerationPath(this.home, taskId, current.dispositionGeneration),
+      taskId,
+      current.dispositionGeneration,
+    );
+    if (generationFound.state === 'missing') {
+      storeFail(
+        `disposition current pointer references missing generation ${current.dispositionGeneration} (fail-closed): ${taskId}`,
+        { code: CORRUPT_DISPOSITION, taskId },
+      );
+    }
+    if (!canonicalRecordsEqual(current, generationFound.record)) {
+      storeFail(
+        `conflicting same-generation disposition record: current.json != generations/${current.dispositionGeneration}.json (fail-closed): ${taskId}`,
+        { code: DISPOSITION_CONFLICT, taskId },
+      );
+    }
+    // Linear history check: every generation 1..current must exist and chain.
+    for (let generation = 1; generation <= current.dispositionGeneration; generation += 1) {
+      const entry = readValidatedDispositionDocument(
+        dispositionGenerationPath(this.home, taskId, generation),
+        taskId,
+        generation,
+      );
+      if (entry.state === 'missing') {
+        storeFail(`disposition generation gap at ${generation} (fail-closed): ${taskId}`, {
+          code: DISPOSITION_GENERATION_GAP,
+          taskId,
+        });
+      }
+    }
+    // Result binding check against live canonical result (fail-closed on drift).
+    const canonical = this.#requireCanonicalResultForDisposition(taskId, current.resultId);
+    const expectedBinding = computeResultBinding(canonical);
+    if (current.resultBinding !== expectedBinding) {
+      storeFail(`disposition result binding mismatch (fail-closed): ${taskId}@${current.dispositionGeneration}`, {
+        code: DISPOSITION_RESULT_BINDING_MISMATCH,
+        taskId,
+      });
+    }
+    if (current.claimGeneration !== canonical.claimGeneration) {
+      storeFail(`disposition claim-generation provenance mismatch (fail-closed): ${taskId}`, {
+        code: DISPOSITION_RESULT_BINDING_MISMATCH,
+        taskId,
+      });
+    }
+    const expectedTransitionId = buildCanonicalTransitionId({
+      taskId,
+      dispositionGeneration: current.dispositionGeneration,
+      resultId: current.resultId,
+    });
+    if (current.canonicalTransitionId !== expectedTransitionId) {
+      storeFail(`disposition canonicalTransitionId mismatch (fail-closed): ${taskId}`, {
+        code: DISPOSITION_TRANSITION_ID_MISMATCH,
+        taskId,
+      });
+    }
+    return { state: 'present', record: current };
+  }
+
+  readCurrentDisposition(taskId) {
+    const found = this.#readCurrentDispositionInternal(taskId);
+    if (found.state === 'missing') {
+      storeFail(`no disposition for task: ${taskId}`, { code: DISPOSITION_NOT_FOUND, taskId });
+    }
+    return found.record;
+  }
+
+  readDispositionGeneration(taskId, generation) {
+    assertValidTaskId(taskId);
+    if (!Number.isInteger(generation) || generation < 1) {
+      storeFail('disposition generation must be an integer >= 1.', {
+        code: DISPOSITION_GENERATION_GAP,
+        taskId,
+      });
+    }
+    const found = readValidatedDispositionDocument(
+      dispositionGenerationPath(this.home, taskId, generation),
+      taskId,
+      generation,
+    );
+    if (found.state === 'missing') {
+      storeFail(`disposition generation not found: ${taskId}@${generation}`, {
+        code: DISPOSITION_NOT_FOUND,
+        taskId,
+      });
+    }
+    const canonical = this.#requireCanonicalResultForDisposition(taskId, found.record.resultId);
+    const expectedBinding = computeResultBinding(canonical);
+    if (found.record.resultBinding !== expectedBinding) {
+      storeFail(`disposition result binding mismatch (fail-closed): ${taskId}@${generation}`, {
+        code: DISPOSITION_RESULT_BINDING_MISMATCH,
+        taskId,
+      });
+    }
+    return found.record;
+  }
+
+  #ensureCurrentPointer(taskId, record) {
+    const paths = taskFilePaths(this.home, taskId);
+    const current = readJsonFile(paths.dispositionCurrentPath);
+    if (current.state === 'missing') {
+      writeJsonAtomic(paths.dispositionCurrentPath, record);
+      return this.#readCurrentDispositionInternal(taskId).record;
+    }
+    if (current.state === 'corrupt') {
+      storeFail(`disposition current pointer is corrupt (fail-closed, no takeover): ${taskId}`, {
+        code: CORRUPT_DISPOSITION,
+        taskId,
+      });
+    }
+    let stored;
+    try {
+      stored = validateDispositionRecord(current.document);
+    } catch (error) {
+      storeFail(`disposition current pointer invalid (fail-closed, no takeover): ${taskId}: ${error?.message}`, {
+        code: CORRUPT_DISPOSITION,
+        taskId,
+      });
+    }
+    if (stored.dispositionGeneration < record.dispositionGeneration) {
+      writeJsonAtomic(paths.dispositionCurrentPath, record);
+      return this.#readCurrentDispositionInternal(taskId).record;
+    }
+    if (stored.dispositionGeneration === record.dispositionGeneration) {
+      if (!canonicalRecordsEqual(stored, record)) {
+        storeFail(`conflicting same-generation disposition record (fail-closed): ${taskId}@${record.dispositionGeneration}`, {
+          code: DISPOSITION_CONFLICT,
+          taskId,
+        });
+      }
+      return stored;
+    }
+    return stored;
+  }
+
+  /**
+   * Write/advance a disposition generation with Control Tower fencing.
+   * - generation 1 must be PENDING_DISPOSITION (RESULT_DELIVERED never auto-adopts).
+   * - generation N+1 requires an explicitly allowed transition + supersedes=N.
+   * - same-generation concurrent writers: exactly one canonical winner;
+   *   identical replay is idempotent, conflicting payload is DISPOSITION_CONFLICT.
+   * - stale (generation < current) is STALE_DISPOSITION_GENERATION.
+   * - gap (generation > current+1) is DISPOSITION_GENERATION_GAP.
+   */
+  writeDisposition({
+    taskId,
+    dispositionGeneration,
+    resultId,
+    controlTowerToken,
+    controlTowerId,
+    state,
+    policyRefs = [],
+    proofRefs = [],
+    evidenceRefs = [],
+    supersedes,
+    userDecision,
+    decidedAt,
+    ...extraTopLevel
+  } = {}) {
+    assertValidTaskId(taskId);
+    if (!Number.isInteger(dispositionGeneration) || dispositionGeneration < 1) {
+      storeFail('dispositionGeneration must be an integer >= 1.', {
+        code: DISPOSITION_GENERATION_GAP,
+        taskId,
+      });
+    }
+    this.#requireDeliveredTask(taskId);
+    const canonical = this.#requireCanonicalResultForDisposition(taskId, resultId);
+
+    const current = this.#readCurrentDispositionInternal(taskId);
+    if (current.state === 'missing') {
+      if (dispositionGeneration !== 1) {
+        storeFail(
+          `first disposition generation must be 1 (requested ${dispositionGeneration}); no gap/fork allowed.`,
+          { code: DISPOSITION_GENERATION_GAP, taskId },
+        );
+      }
+    } else {
+      const currentGeneration = current.record.dispositionGeneration;
+      if (dispositionGeneration < currentGeneration) {
+        storeFail(
+          `stale disposition generation ${dispositionGeneration} (current=${currentGeneration}); never overwrite winner.`,
+          { code: STALE_DISPOSITION_GENERATION, taskId },
+        );
+      }
+      if (dispositionGeneration === currentGeneration) {
+        // Same-generation fencing: compare against canonical winner.
+        // extraTopLevel is forwarded so blocked inline-embed fields fail
+        // closed instead of being silently dropped (reference-first).
+        // Uses the same supersedes normalization as the main write path so a
+        // replay that omits supersedes (gen>=2 => gen-1) validates before the
+        // canonical payload comparison instead of failing with GAP.
+        const effectiveSupersedesForReplay =
+          supersedes !== undefined
+            ? supersedes
+            : dispositionGeneration === 1
+              ? undefined
+              : dispositionGeneration - 1;
+        let candidate;
+        try {
+          candidate = buildDispositionRecord({
+            ...extraTopLevel,
+            taskId,
+            dispositionGeneration,
+            resultId: canonical.resultId,
+            resultBinding: computeResultBinding(canonical),
+            claimGeneration: canonical.claimGeneration,
+            controlTowerToken,
+            controlTowerId,
+            state,
+            decidedAt: decidedAt ?? this.nowIso(),
+            policyRefs,
+            proofRefs,
+            evidenceRefs,
+            ...(effectiveSupersedesForReplay === undefined ? {} : { supersedes: effectiveSupersedesForReplay }),
+            ...(userDecision === undefined ? {} : { userDecision }),
+          });
+        } catch (error) {
+          if (error?.code) {
+            storeFail(`invalid disposition replay (fail-closed): ${error.message}`, {
+              code: error.code,
+              taskId,
+            });
+          }
+          throw error;
+        }
+        const winnerFound = readValidatedDispositionDocument(
+          dispositionGenerationPath(this.home, taskId, dispositionGeneration),
+          taskId,
+          dispositionGeneration,
+        );
+        if (winnerFound.state === 'missing') {
+          storeFail(`disposition current/generation inconsistency (fail-closed): ${taskId}@${dispositionGeneration}`, {
+            code: CORRUPT_DISPOSITION,
+            taskId,
+          });
+        }
+        if (canonicalRecordsEqual(winnerFound.record, candidate)) {
+          this.#ensureCurrentPointer(taskId, winnerFound.record);
+          return { record: winnerFound.record, duplicate: true };
+        }
+        storeFail(`conflicting same-generation disposition payload (first wins, fail-closed): ${taskId}@${dispositionGeneration}`, {
+          code: DISPOSITION_CONFLICT,
+          taskId,
+        });
+      }
+      if (dispositionGeneration > currentGeneration + 1) {
+        storeFail(
+          `disposition generation gap: requested ${dispositionGeneration}, current ${currentGeneration} (fail-closed).`,
+          { code: DISPOSITION_GENERATION_GAP, taskId },
+        );
+      }
+      try {
+        assertLegalDispositionTransition(current.record.state, state);
+      } catch (error) {
+        storeFail(error.message, { code: DISPOSITION_ILLEGAL_TRANSITION, taskId });
+      }
+      if (supersedes !== undefined && supersedes !== currentGeneration) {
+        storeFail(
+          `supersedes must equal previous generation (${currentGeneration}) for generation ${dispositionGeneration}.`,
+          { code: DISPOSITION_GENERATION_GAP, taskId },
+        );
+      }
+    }
+
+    const effectiveSupersedes =
+      supersedes !== undefined ? supersedes : dispositionGeneration === 1 ? undefined : dispositionGeneration - 1;
+    let candidate;
+    try {
+      candidate = buildDispositionRecord({
+        ...extraTopLevel,
+        taskId,
+        dispositionGeneration,
+        resultId: canonical.resultId,
+        resultBinding: computeResultBinding(canonical),
+        claimGeneration: canonical.claimGeneration,
+        controlTowerToken,
+        controlTowerId,
+        state,
+        decidedAt: decidedAt ?? this.nowIso(),
+        policyRefs,
+        proofRefs,
+        evidenceRefs,
+        ...(effectiveSupersedes === undefined ? {} : { supersedes: effectiveSupersedes }),
+        ...(userDecision === undefined ? {} : { userDecision }),
+      });
+    } catch (error) {
+      if (error?.code) {
+        storeFail(`invalid disposition record (fail-closed): ${error.message}`, {
+          code: error.code,
+          taskId,
+        });
+      }
+      throw error;
+    }
+
+    // Enforce initial-disposition rule explicitly (defense in depth; the
+    // record validator already requires gen 1 == PENDING_DISPOSITION).
+    if (dispositionGeneration === 1 && candidate.state !== DISPOSITION_STATE_PENDING) {
+      storeFail('generation 1 must be PENDING_DISPOSITION (RESULT_DELIVERED never auto-adopts).', {
+        code: DISPOSITION_ILLEGAL_TRANSITION,
+        taskId,
+      });
+    }
+
+    const generationPath = dispositionGenerationPath(this.home, taskId, dispositionGeneration);
+    const created = writeJsonExclusive(generationPath, candidate);
+    if (!created.created) {
+      const winnerFound = readValidatedDispositionDocument(generationPath, taskId, dispositionGeneration);
+      if (winnerFound.state === 'missing') {
+        storeFail(`disposition race could not be resolved deterministically: ${taskId}@${dispositionGeneration}`, {
+          code: CORRUPT_DISPOSITION,
+          taskId,
+        });
+      }
+      if (canonicalRecordsEqual(winnerFound.record, candidate)) {
+        const reconciled = this.#ensureCurrentPointer(taskId, winnerFound.record);
+        return { record: reconciled, duplicate: true };
+      }
+      storeFail(`conflicting same-generation disposition payload (first wins, fail-closed): ${taskId}@${dispositionGeneration}`, {
+        code: DISPOSITION_CONFLICT,
+        taskId,
+      });
+    }
+
+    const paths = taskFilePaths(this.home, taskId);
+    if (current.state === 'missing') {
+      writeJsonAtomic(paths.dispositionCurrentPath, candidate);
+    } else {
+      // Advance the canonical pointer only from the expected previous
+      // generation; never overwrite a newer winner.
+      const reread = this.#readCurrentDispositionInternal(taskId);
+      if (reread.record.dispositionGeneration !== dispositionGeneration - 1) {
+        // Another writer already advanced (or a concurrent winner exists).
+        // Resolve deterministically against the canonical generation file.
+        if (reread.record.dispositionGeneration >= dispositionGeneration) {
+          const winnerFound = readValidatedDispositionDocument(
+            generationPath,
+            taskId,
+            dispositionGeneration,
+          );
+          if (canonicalRecordsEqual(winnerFound.record, candidate)) {
+            return { record: reread.record, duplicate: true };
+          }
+          storeFail(`conflicting same-generation disposition payload (first wins, fail-closed): ${taskId}@${dispositionGeneration}`, {
+            code: DISPOSITION_CONFLICT,
+            taskId,
+          });
+        }
+        storeFail(`disposition current moved during write (fail-closed): ${taskId}`, {
+          code: DISPOSITION_CONFLICT,
+          taskId,
+        });
+      }
+      writeJsonAtomic(paths.dispositionCurrentPath, candidate);
+    }
+    const verified = this.#readCurrentDispositionInternal(taskId);
+    if (
+      verified.state !== 'present' ||
+      verified.record.dispositionGeneration !== dispositionGeneration ||
+      !canonicalRecordsEqual(verified.record, candidate)
+    ) {
+      storeFail(`disposition current pointer failed to verify after write (fail-closed): ${taskId}@${dispositionGeneration}`, {
+        code: CORRUPT_DISPOSITION,
+        taskId,
+      });
+    }
+    return { record: candidate, duplicate: false };
+  }
+
+  /**
+   * Begin the pending disposition for a RESULT_DELIVERED task.
+   * Convenience wrapper for generation 1 PENDING_DISPOSITION.
+   */
+  beginDisposition({
+    taskId,
+    resultId,
+    controlTowerToken,
+    controlTowerId,
+    policyRefs = [],
+    proofRefs = [],
+    evidenceRefs = [],
+    decidedAt,
+    ...extraTopLevel
+  } = {}) {
+    return this.writeDisposition({
+      ...extraTopLevel,
+      taskId,
+      dispositionGeneration: 1,
+      ...(resultId === undefined ? {} : { resultId }),
+      controlTowerToken,
+      controlTowerId,
+      state: DISPOSITION_STATE_PENDING,
+      policyRefs,
+      proofRefs,
+      evidenceRefs,
+      decidedAt,
+    });
   }
 }
