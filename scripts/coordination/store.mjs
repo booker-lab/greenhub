@@ -13,6 +13,12 @@
 //   admitEmittedTask/readEmissionAdmission + admission persistence, then the
 //   existing markReady() path; no scheduler, no polling, no claim automation,
 //   no dispatch, no fan-out, no adapters, no autonomous loop).
+// + GREENHUB-COORDINATION-ADMISSION-BOUND-CLAIM-15
+//   (admission-bound claim over the exact canonical emission admission ONLY:
+//   claimAdmittedTask/readAdmissionBoundClaim + deterministic admission-bound
+//   claimToken, then the existing claimTask() path; no scheduler, no READY
+//   scan, no worker selection, no dispatch, no fan-out, no adapters,
+//   no autonomous loop).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -20,10 +26,12 @@
 // ACK, CONSUMED, and highest-contiguous-CONSUMED cursor over an append-stable
 // task sequence, plus deterministic next-task emission from a CONSUMED closure,
 // plus emission-bound admission of the exact canonical emission converging the
-// exact canonical child through the existing markReady() path.
-// Scheduler, queue polling, claim automation, dispatch, fan-out, adapters,
-// Astra/OpenCode integration, autonomous loop, application code, publication
-// automation, and 57C remain out of scope.
+// exact canonical child through the existing markReady() path, plus
+// admission-bound claim of the exact admitted child through the existing
+// claimTask() path with a deterministic admission-bound claimToken.
+// Scheduler, queue polling, READY scan, worker selection, dispatch, fan-out,
+// adapters, Astra/OpenCode integration, autonomous loop, application code,
+// publication automation, and 57C remain out of scope.
 //
 // Filesystem layout under a durable home (never the repository worktree):
 //   <home>/tasks/<taskId>/task.json
@@ -44,6 +52,10 @@
 //     (emission-bound admission authority, bound to the exact canonical emission;
 //     READY is reached only through the existing markReady() path after this
 //     authority is durable)
+// Claim authority stays <home>/tasks/<taskId>/claim.json (no new claim file,
+// no new lease subsystem, no worker registry): the admission-bound layer only
+// derives a deterministic claimToken bound to the canonical admission and
+// reuses the existing claimTask()/generation fencing.
 //
 // Claim atomicity uses OS exclusive-create (`wx`) semantics plus a
 // read-verify-unlink-recreate takeover dance (same family as
@@ -118,6 +130,7 @@ import {
   buildAdmissionRecord,
   validateAdmissionRecord,
 } from './emission-admission.mjs';
+import { buildAdmissionBoundClaimToken } from './admission-bound-claim.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -171,6 +184,7 @@ export const ADMISSION_BINDING_MISMATCH = 'ADMISSION_BINDING_MISMATCH';
 export const CORRUPT_ADMISSION = 'CORRUPT_ADMISSION';
 export const ADMISSION_NOT_FOUND = 'ADMISSION_NOT_FOUND';
 export const ADMISSION_BYPASS_DETECTED = 'ADMISSION_BYPASS_DETECTED';
+export const CLAIM_ADMISSION_BYPASS_DETECTED = 'CLAIM_ADMISSION_BYPASS_DETECTED';
 
 export class CoordinationStoreError extends Error {
   constructor(message, details = {}) {
@@ -3194,5 +3208,643 @@ export class CoordinationStore {
     }
     this.#assertSingleAdmissionSequenceMembership(sourceTaskId, found.record.nextTaskId);
     return found.record;
+  }
+
+  // -------------------------------------------------------------------------
+  // Admission-bound claim domain.
+  // claimAdmittedTask() != emitNextTask() != admitEmittedTask()
+  //   != scheduleNextTask() != dispatchNextTask() != decideNextTask():
+  // the caller explicitly supplies (sourceTaskId, emissionSlot, workerId);
+  // this primitive never scans emissions, never polls a queue, never picks
+  // oldest/newest, never scores priority/fairness, never selects workers,
+  // and never runs a scheduler loop. Ordering is ADMISSION AUTHORITY ->
+  // CLAIM (never CLAIM -> ADMISSION): every binding is re-verified live,
+  // a deterministic admission-bound claimToken is derived ONLY over
+  // (admissionId, nextTaskId, workerId), then the existing claimTask() path
+  // moves the exact canonical child to CLAIMED. Timestamps are provenance
+  // only. No new claim file, no new lease subsystem, no worker registry.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Re-verify the live canonical admission binding for a source slot.
+   * Returns { emission, admission, child, childBinding }.
+   * Missing/ineligible/corrupt/drift propagates fail-closed with no claim
+   * mutation and no auto-repair.
+   */
+  #requireLiveAdmissionClaimBinding(sourceTaskId, emissionSlot) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    // Source must exist (fail-closed before any claim mutation).
+    this.readTask(sourceTaskId);
+    // Canonical emission + live CONSUMED closure binding.
+    const emission = this.readEmission(sourceTaskId, emissionSlot);
+    // Canonical admission + emission binding + child binding + sequence.
+    const admission = this.readEmissionAdmission({ sourceTaskId, emissionSlot });
+    if (
+      admission.sourceTaskId !== sourceTaskId ||
+      admission.emissionSlot !== emissionSlot ||
+      admission.emissionId !== emission.emissionId ||
+      admission.nextTaskId !== emission.nextTaskId ||
+      admission.nextTaskSpecBinding !== emission.nextTaskSpecBinding
+    ) {
+      storeFail(
+        `admission drift vs live canonical emission (fail-closed, no claim): ${admissionRef(sourceTaskId, emissionSlot)}`,
+        { code: ADMISSION_BINDING_MISMATCH, taskId: sourceTaskId },
+      );
+    }
+    const child = this.readTask(admission.nextTaskId);
+    if (child.taskId !== admission.nextTaskId) {
+      storeFail(`admission-bound child taskId mismatch (fail-closed): ${admission.nextTaskId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    let childBinding;
+    try {
+      childBinding = computeNextTaskSpecBinding(child);
+    } catch (error) {
+      storeFail(
+        `admission-bound child violates the Task Envelope v1 contract (fail-closed): ${admission.nextTaskId}: ${error?.message}`,
+        {
+          code: typeof error?.code === 'string' && error.code ? error.code : ADMISSION_BINDING_MISMATCH,
+          taskId: sourceTaskId,
+        },
+      );
+    }
+    if (childBinding !== admission.nextTaskSpecBinding || childBinding !== emission.nextTaskSpecBinding) {
+      storeFail(`admission-bound child spec binding mismatch (fail-closed): ${admission.nextTaskId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    // Single append-stable sequence membership (fail-closed on duplication).
+    this.#assertSingleAdmissionSequenceMembership(sourceTaskId, admission.nextTaskId);
+    return { emission, admission, child, childBinding };
+  }
+
+  /**
+   * Read the current claim for a child without auto-repair.
+   * Returns { state: 'missing' } or { state: 'present', record }.
+   * Corrupt/invalid bytes throw CORRUPT_CLAIM (never repaired, never removed).
+   */
+  #readCurrentAdmissionClaim(childTaskId) {
+    const claimPath = taskFilePaths(this.home, childTaskId).claimPath;
+    const raw = readJsonFile(claimPath);
+    if (raw.state === 'missing') return { state: 'missing' };
+    if (raw.state === 'corrupt') {
+      storeFail(`claim record is corrupt (fail-closed, no auto-repair): ${childTaskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId: childTaskId,
+      });
+    }
+    try {
+      const record = validateClaimRecord(raw.document);
+      if (record.taskId !== childTaskId) {
+        storeFail(`claim taskId/path mismatch (fail-closed): ${childTaskId}`, {
+          code: 'CORRUPT_CLAIM',
+          taskId: childTaskId,
+        });
+      }
+      return { state: 'present', record };
+    } catch (error) {
+      if (error?.code === 'CORRUPT_CLAIM') throw error;
+      storeFail(`claim record is corrupt (fail-closed, no auto-repair): ${childTaskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId: childTaskId,
+      });
+    }
+    return { state: 'missing' };
+  }
+
+  #expectedAdmissionBoundToken(admissionId, nextTaskId, workerId, sourceTaskId) {
+    try {
+      return buildAdmissionBoundClaimToken({ admissionId, nextTaskId, workerId });
+    } catch (error) {
+      storeFail(`invalid admission-bound claim binding (fail-closed): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : 'INVALID_ADMISSION_BOUND_CLAIM',
+        taskId: sourceTaskId ?? nextTaskId,
+      });
+    }
+    return null;
+  }
+
+  #isClaimLeaseActive(claimRecord, now) {
+    return Number.isFinite(Date.parse(claimRecord.leaseExpiresAt)) && Date.parse(claimRecord.leaseExpiresAt) > now;
+  }
+
+  /**
+   * Claim the exact canonical admitted child for a caller-supplied worker.
+   *
+   * Caller supplies (sourceTaskId, emissionSlot, workerId) explicitly: no
+   * emission scan, no polling, no oldest/newest, no priority, no scheduler
+   * loop, no worker inference.
+   *
+   * - live admission/child/sequence re-verified before any claim mutation.
+   * - deterministic admission-bound claimToken derived ONLY over
+   *   (admissionId, nextTaskId, workerId); clock/pid/random never participate.
+   * - READY -> CLAIMED itself is owned ONLY by the existing claimTask().
+   * - same logical active replay returns duplicate:true with no new claim,
+   *   no generation change, no bytes overwrite, no lease extension.
+   * - claim authority without status (claim present + READY) converges to
+   *   CLAIMED only for the exact expected token/worker via the existing
+   *   markClaimed path (claim bytes preserved).
+   * - foreign/manual/random tokens never auto-adopt: fail closed with
+   *   CLAIM_ADMISSION_BYPASS_DETECTED.
+   * - expired leases reuse the existing takeover semantics (generation + 1).
+   * - terminal replay returns duplicate:true terminal:true without rewind.
+   */
+  claimAdmittedTask(
+    { sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT, workerId, leaseDurationMs = 60_000, nowMs } = {},
+  ) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    if (typeof workerId !== 'string' || !workerId.trim()) {
+      storeFail('workerId must be a non-empty string (caller-supplied; never inferred).', {
+        code: 'INVALID_WORKER',
+        taskId: sourceTaskId,
+      });
+    }
+    if (!Number.isInteger(leaseDurationMs) || leaseDurationMs <= 0) {
+      storeFail('leaseDurationMs must be a positive integer.', { code: 'INVALID_LEASE', taskId: sourceTaskId });
+    }
+    const now = Number.isInteger(nowMs) ? nowMs : this.nowMs();
+
+    // A-K. Live admission re-verification before any claim mutation.
+    const { emission, admission, child: liveChild } = this.#requireLiveAdmissionClaimBinding(
+      sourceTaskId,
+      emissionSlot,
+    );
+    const childId = admission.nextTaskId;
+    const expectedToken = this.#expectedAdmissionBoundToken(admission.admissionId, childId, workerId, sourceTaskId);
+
+    // CREATED children refuse the claim path: Task 14 admission/READY first.
+    if (liveChild.status === TASK_STATUS_CREATED) {
+      storeFail(
+        `only READY admitted children can be claimed (task=${childId} status=CREATED; converge via admitEmittedTask first).`,
+        { code: TASK_NOT_READY, taskId: childId },
+      );
+    }
+    if (
+      liveChild.status !== TASK_STATUS_READY &&
+      liveChild.status !== TASK_STATUS_CLAIMED &&
+      liveChild.status !== TASK_STATUS_RESULT_DELIVERED
+    ) {
+      storeFail(`admission-bound child in unexpected status (fail-closed): ${childId} status=${liveChild.status}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId: childId,
+      });
+    }
+
+    const currentFound = this.#readCurrentAdmissionClaim(childId);
+    const expectedForPersisted = (persistedWorkerId) =>
+      this.#expectedAdmissionBoundToken(admission.admissionId, childId, persistedWorkerId, sourceTaskId);
+
+    // TERMINAL path: never a new claim, never rewind, never generation bump.
+    if (liveChild.status === TASK_STATUS_RESULT_DELIVERED) {
+      if (currentFound.state === 'missing') {
+        storeFail(`no admission-bound claim for terminal child (fail-closed, no auto-repair): ${childId}`, {
+          code: CLAIM_NOT_FOUND,
+          taskId: childId,
+        });
+      }
+      const persisted = currentFound.record;
+      let expectedPersisted;
+      try {
+        expectedPersisted = buildAdmissionBoundClaimToken({
+          admissionId: admission.admissionId,
+          nextTaskId: childId,
+          workerId: persisted.workerId,
+        });
+      } catch {
+        storeFail(`terminal child carries a foreign claim (fail-closed, no auto-adoption): ${childId}`, {
+          code: CLAIM_ADMISSION_BYPASS_DETECTED,
+          taskId: sourceTaskId,
+        });
+      }
+      if (persisted.claimToken !== expectedPersisted) {
+        storeFail(`terminal child carries a foreign claim (fail-closed, no auto-adoption): ${childId}`, {
+          code: CLAIM_ADMISSION_BYPASS_DETECTED,
+          taskId: sourceTaskId,
+        });
+      }
+      return {
+        record: admission,
+        emission,
+        child: liveChild,
+        claim: persisted,
+        duplicate: true,
+        terminal: true,
+      };
+    }
+
+    // CLAIMED / READY paths share the persisted-validity gate.
+    if (currentFound.state === 'present') {
+      const persisted = currentFound.record;
+      let expectedPersisted;
+      try {
+        expectedPersisted = buildAdmissionBoundClaimToken({
+          admissionId: admission.admissionId,
+          nextTaskId: childId,
+          workerId: persisted.workerId,
+        });
+      } catch {
+        storeFail(`foreign claim for admitted child (fail-closed, no auto-adoption): ${childId}`, {
+          code: CLAIM_ADMISSION_BYPASS_DETECTED,
+          taskId: sourceTaskId,
+        });
+      }
+      const persistedIsBound = persisted.claimToken === expectedPersisted;
+      if (!persistedIsBound) {
+        storeFail(
+          `foreign claim for admitted child (fail-closed, no auto-adoption): ${childId} owner=${persisted.workerId}`,
+          { code: CLAIM_ADMISSION_BYPASS_DETECTED, taskId: sourceTaskId },
+        );
+      }
+      const isSameLogical = persisted.workerId === workerId && persisted.claimToken === expectedToken;
+
+      if (liveChild.status === TASK_STATUS_READY) {
+        if (isSameLogical) {
+          if (this.#isClaimLeaseActive(persisted, now)) {
+            // Authority-without-status recovery: converge READY -> CLAIMED
+            // without touching claim bytes/generation/token.
+            const beforeBytes = JSON.stringify(persisted);
+            const converged = this.#markClaimed(childId);
+            const reread = this.#readCurrentAdmissionClaim(childId);
+            if (reread.state !== 'present' || JSON.stringify(reread.record) !== beforeBytes) {
+              storeFail(`admission-bound claim changed during status convergence (fail-closed): ${childId}`, {
+                code: 'CORRUPT_CLAIM',
+                taskId: childId,
+              });
+            }
+            return {
+              record: admission,
+              emission,
+              child: converged,
+              claim: reread.record,
+              duplicate: true,
+              terminal: false,
+            };
+          }
+          // Same worker, expired lease, still READY: reclaim via takeover.
+          return this.#takeoverAdmissionBoundClaim({
+            sourceTaskId,
+            emissionSlot,
+            admission,
+            emission,
+            childId,
+            workerId,
+            expectedToken,
+            leaseDurationMs,
+            now,
+          });
+        }
+        // Valid claim for another worker while READY: delegate to the
+        // existing claimTask for canonical contention (active -> LEASE_ACTIVE,
+        // expired -> takeover). Never converge for a mismatched worker.
+        return this.#takeoverAdmissionBoundClaim({
+          sourceTaskId,
+          emissionSlot,
+          admission,
+          emission,
+          childId,
+          workerId,
+          expectedToken,
+          leaseDurationMs,
+          now,
+        });
+      }
+
+      // CLAIMED with a persisted valid claim.
+      if (isSameLogical) {
+        if (this.#isClaimLeaseActive(persisted, now)) {
+          return {
+            record: admission,
+            emission,
+            child: liveChild,
+            claim: persisted,
+            duplicate: true,
+            terminal: false,
+          };
+        }
+        // Same worker, expired lease: reclaim via takeover (generation + 1,
+        // same deterministic token).
+        return this.#takeoverAdmissionBoundClaim({
+          sourceTaskId,
+          emissionSlot,
+          admission,
+          emission,
+          childId,
+          workerId,
+          expectedToken,
+          leaseDurationMs,
+          now,
+        });
+      }
+      // Valid claim for another worker: contention or takeover via existing
+      // semantics (active -> LEASE_ACTIVE, expired -> generation + 1).
+      return this.#takeoverAdmissionBoundClaim({
+        sourceTaskId,
+        emissionSlot,
+        admission,
+        emission,
+        childId,
+        workerId,
+        expectedToken,
+        leaseDurationMs,
+        now,
+      });
+    }
+
+    // No claim yet.
+    if (liveChild.status !== TASK_STATUS_READY) {
+      // CLAIMED without authority is inconsistent: never auto-create.
+      storeFail(`no admission-bound claim for progressed child (fail-closed, no auto-repair): ${childId}`, {
+        code: CLAIM_NOT_FOUND,
+        taskId: childId,
+      });
+    }
+    try {
+      const claim = this.claimTask({
+        taskId: childId,
+        workerId,
+        leaseDurationMs,
+        claimToken: expectedToken,
+        nowMs: now,
+      });
+      return this.#verifyAdmissionBoundClaimAfterWrite({
+        sourceTaskId,
+        emissionSlot,
+        admission,
+        emission,
+        childId,
+        workerId,
+        expectedToken,
+        claim,
+        duplicate: false,
+      });
+    } catch (error) {
+      return this.#resolveAdmissionBoundClaimWriteRace({
+        error,
+        sourceTaskId,
+        emissionSlot,
+        admission,
+        emission,
+        childId,
+        workerId,
+        expectedToken,
+        leaseDurationMs,
+        now,
+      });
+    }
+  }
+
+  /**
+   * Takeover/reclaim path: delegate to the existing claimTask() (expiry-gated
+   * generation + 1) then read-back verify the admission binding.
+   */
+  #takeoverAdmissionBoundClaim({
+    sourceTaskId,
+    emissionSlot,
+    admission,
+    emission,
+    childId,
+    workerId,
+    expectedToken,
+    leaseDurationMs,
+    now,
+  }) {
+    let claim;
+    try {
+      claim = this.claimTask({
+        taskId: childId,
+        workerId,
+        leaseDurationMs,
+        claimToken: expectedToken,
+        nowMs: now,
+      });
+    } catch (error) {
+      return this.#resolveAdmissionBoundClaimWriteRace({
+        error,
+        sourceTaskId,
+        emissionSlot,
+        admission,
+        emission,
+        childId,
+        workerId,
+        expectedToken,
+        leaseDurationMs,
+        now,
+      });
+    }
+    return this.#verifyAdmissionBoundClaimAfterWrite({
+      sourceTaskId,
+      emissionSlot,
+      admission,
+      emission,
+      childId,
+      workerId,
+      expectedToken,
+      claim,
+      duplicate: false,
+    });
+  }
+
+  /**
+   * Read-back contract after a successful claimTask(): claim bytes bind the
+   * live admission deterministically and the child is CLAIMED.
+   * Write-syscall success alone never decides success.
+   */
+  #verifyAdmissionBoundClaimAfterWrite({
+    sourceTaskId,
+    emissionSlot,
+    admission,
+    emission,
+    childId,
+    workerId,
+    expectedToken,
+    claim,
+    duplicate,
+  }) {
+    if (claim.taskId !== childId || claim.workerId !== workerId || claim.claimToken !== expectedToken) {
+      storeFail(`admission-bound claim failed binding read-back (fail-closed): ${childId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId: childId,
+      });
+    }
+    const reread = this.#readCurrentAdmissionClaim(childId);
+    if (reread.state !== 'present' || JSON.stringify(reread.record) !== JSON.stringify(claim)) {
+      storeFail(`admission-bound claim failed to verify after write (fail-closed): ${childId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId: childId,
+      });
+    }
+    const liveChild = this.readTask(childId);
+    if (liveChild.status !== TASK_STATUS_CLAIMED && liveChild.status !== TASK_STATUS_RESULT_DELIVERED) {
+      storeFail(`admission-bound child never reached CLAIMED (fail-closed): ${childId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId: childId,
+      });
+    }
+    if (liveChild.status === TASK_STATUS_RESULT_DELIVERED) {
+      return { record: admission, emission, child: liveChild, claim: reread.record, duplicate: true, terminal: true };
+    }
+    void sourceTaskId;
+    void emissionSlot;
+    void emission;
+    return { record: admission, emission, child: liveChild, claim: reread.record, duplicate, terminal: false };
+  }
+
+  /**
+   * Resolve a claimTask() race deterministically. A LEASE_ACTIVE loser that
+   * is the same logical admission-bound claim recovers to duplicate:true
+   * (response-loss / concurrent same-worker replay) with no new ownership
+   * event; a valid foreign winner propagates LEASE_ACTIVE; a foreign persisted
+   * claim fails closed with CLAIM_ADMISSION_BYPASS_DETECTED; a concurrent
+   * terminal delivery recovers to terminal replay when the persisted claim is
+   * the exact admission-bound claim.
+   */
+  #resolveAdmissionBoundClaimWriteRace({
+    error,
+    sourceTaskId,
+    emissionSlot,
+    admission,
+    emission,
+    childId,
+    workerId,
+    expectedToken,
+    leaseDurationMs,
+    now,
+  }) {
+    void leaseDurationMs;
+    if (error?.code === CLAIM_ADMISSION_BYPASS_DETECTED || error?.code === 'CORRUPT_CLAIM') throw error;
+    if (error?.code !== LEASE_ACTIVE && error?.code !== TASK_TERMINAL) throw error;
+    const liveChild = this.readTask(childId);
+    const currentFound = this.#readCurrentAdmissionClaim(childId);
+    if (currentFound.state === 'missing') throw error;
+    const persisted = currentFound.record;
+    let expectedPersisted;
+    try {
+      expectedPersisted = buildAdmissionBoundClaimToken({
+        admissionId: admission.admissionId,
+        nextTaskId: childId,
+        workerId: persisted.workerId,
+      });
+    } catch {
+      storeFail(`foreign claim for admitted child (fail-closed, no auto-adoption): ${childId}`, {
+        code: CLAIM_ADMISSION_BYPASS_DETECTED,
+        taskId: sourceTaskId,
+      });
+    }
+    if (persisted.claimToken !== expectedPersisted) {
+      storeFail(`foreign claim for admitted child (fail-closed, no auto-adoption): ${childId}`, {
+        code: CLAIM_ADMISSION_BYPASS_DETECTED,
+        taskId: sourceTaskId,
+      });
+    }
+    const isSameLogical = persisted.workerId === workerId && persisted.claimToken === expectedToken;
+    if (liveChild.status === TASK_STATUS_RESULT_DELIVERED) {
+      return { record: admission, emission, child: liveChild, claim: persisted, duplicate: true, terminal: true };
+    }
+    if (isSameLogical) {
+      if (liveChild.status === TASK_STATUS_READY && this.#isClaimLeaseActive(persisted, now)) {
+        const beforeBytes = JSON.stringify(persisted);
+        const converged = this.#markClaimed(childId);
+        const reread = this.#readCurrentAdmissionClaim(childId);
+        if (reread.state !== 'present' || JSON.stringify(reread.record) !== beforeBytes) {
+          storeFail(`admission-bound claim changed during status convergence (fail-closed): ${childId}`, {
+            code: 'CORRUPT_CLAIM',
+            taskId: childId,
+          });
+        }
+        void emissionSlot;
+        return { record: admission, emission, child: converged, claim: reread.record, duplicate: true, terminal: false };
+      }
+      if (liveChild.status === TASK_STATUS_CLAIMED && this.#isClaimLeaseActive(persisted, now)) {
+        return { record: admission, emission, child: liveChild, claim: persisted, duplicate: true, terminal: false };
+      }
+    }
+    throw error;
+  }
+
+  /**
+   * Read the canonical admission-bound claim for a source slot.
+   * Pure read: never mutates, never repairs, never rewinds a progressed child.
+   * A foreign/manual/random token is never returned as a valid claim: it
+   * fails closed with CLAIM_ADMISSION_BYPASS_DETECTED.
+   */
+  readAdmissionBoundClaim({ sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT } = {}) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    const admission = this.readEmissionAdmission({ sourceTaskId, emissionSlot });
+    const emission = this.readEmission(sourceTaskId, emissionSlot);
+    const child = this.readTask(admission.nextTaskId);
+    let childBinding;
+    try {
+      childBinding = computeNextTaskSpecBinding(child);
+    } catch (error) {
+      storeFail(`admission-bound child failed spec read-back (fail-closed): ${admission.nextTaskId}: ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    if (childBinding !== admission.nextTaskSpecBinding || child.taskId !== admission.nextTaskId) {
+      storeFail(`admission-bound child spec binding mismatch (fail-closed): ${admission.nextTaskId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    this.#assertSingleAdmissionSequenceMembership(sourceTaskId, admission.nextTaskId);
+    const currentFound = this.#readCurrentAdmissionClaim(admission.nextTaskId);
+    if (currentFound.state === 'missing') {
+      storeFail(`no admission-bound claim for admitted child (fail-closed): ${admission.nextTaskId}`, {
+        code: CLAIM_NOT_FOUND,
+        taskId: admission.nextTaskId,
+      });
+    }
+    const claim = currentFound.record;
+    if (claim.taskId !== admission.nextTaskId) {
+      storeFail(`admission-bound claim taskId mismatch (fail-closed): ${admission.nextTaskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId: admission.nextTaskId,
+      });
+    }
+    if (typeof claim.workerId !== 'string' || !claim.workerId.trim()) {
+      storeFail(`admission-bound claim workerId missing (fail-closed): ${admission.nextTaskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId: admission.nextTaskId,
+      });
+    }
+    let expected;
+    try {
+      expected = buildAdmissionBoundClaimToken({
+        admissionId: admission.admissionId,
+        nextTaskId: admission.nextTaskId,
+        workerId: claim.workerId,
+      });
+    } catch {
+      storeFail(`foreign claim for admitted child (fail-closed): ${admission.nextTaskId}`, {
+        code: CLAIM_ADMISSION_BYPASS_DETECTED,
+        taskId: sourceTaskId,
+      });
+    }
+    if (claim.claimToken !== expected) {
+      storeFail(`foreign claim for admitted child (fail-closed, no auto-adoption): ${admission.nextTaskId}`, {
+        code: CLAIM_ADMISSION_BYPASS_DETECTED,
+        taskId: sourceTaskId,
+      });
+    }
+    if (child.status !== TASK_STATUS_CLAIMED && child.status !== TASK_STATUS_RESULT_DELIVERED) {
+      storeFail(
+        `admission-bound child is not CLAIMED (task=${admission.nextTaskId} status=${child.status}; converge via claimAdmittedTask first).`,
+        { code: TASK_NOT_READY, taskId: admission.nextTaskId },
+      );
+    }
+    if (!Number.isInteger(claim.generation) || claim.generation < 1) {
+      storeFail(`admission-bound claim generation invalid (fail-closed): ${admission.nextTaskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId: admission.nextTaskId,
+      });
+    }
+    return { admission, emission, child, claim };
   }
 }
