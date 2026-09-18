@@ -603,7 +603,7 @@ test('CURSOR. sequence contract pinned; order violations and rewind refused', ()
   try {
     const clock = controllableClock();
     const store = new CoordinationStore({ dir: home, nowProvider: () => clock.provider() });
-    assert.equal(CURSOR_SEQUENCE_CONTRACT, 'lexicographic-task-id-v1');
+    assert.equal(CURSOR_SEQUENCE_CONTRACT, 'append-stable-task-sequence-v1');
     for (const taskId of ['MAT11G01', 'MAT11G02']) {
       driveToAdopted(store, clock, taskId, `result-${taskId.toLowerCase()}`);
       clock.advance(1000);

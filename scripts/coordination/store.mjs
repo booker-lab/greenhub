@@ -2,11 +2,14 @@
 // + GREENHUB-COORDINATION-DISPOSITION-STORE-07 (disposition persistence/state/fencing only)
 // + GREENHUB-COORDINATION-CANONICAL-MATERIALIZATION-CONSUMPTION-CURSOR-11
 //   (ADOPTED materialization/read-back/ACK/CONSUMED/cursor only; no emission).
+// + GREENHUB-COORDINATION-CURSOR-APPEND-STABILITY-12
+//   (append-stable task sequence + v1 cursor migration ONLY; no emission).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
 // plus ADOPTED-only canonical per-task materialization with durable read-back,
-// ACK, CONSUMED, and highest-contiguous-CONSUMED cursor. Next-task emission,
+// ACK, CONSUMED, and highest-contiguous-CONSUMED cursor over an append-stable
+// task sequence. Next-task emission,
 // scheduler, fan-out, adapters, Astra/OpenCode integration, autonomous loop,
 // application code, publication automation, and 57C remain out of scope.
 //
@@ -21,6 +24,8 @@
 //   <home>/tasks/<taskId>/ack.json              (durable read-back ACK, bound to materialization)
 //   <home>/tasks/<taskId>/consumed.json         (durable closure marker, bound to ACK)
 //   <home>/consumption/cursor.json              (highest contiguous CONSUMED watermark; not truth)
+//   <home>/consumption/sequence/entries/<seq10>.json (append-stable task sequence; not truth)
+//   <home>/consumption/sequence/migration.json  (v1 migration provenance, if migrated)
 //
 // Claim atomicity uses OS exclusive-create (`wx`) semantics plus a
 // read-verify-unlink-recreate takeover dance (same family as
@@ -63,14 +68,24 @@ import {
 } from './disposition.mjs';
 import {
   CURSOR_SEQUENCE_CONTRACT,
+  LEGACY_CURSOR_SEQUENCE_CONTRACT,
   buildAckRecord,
   buildConsumedRecord,
   buildMaterializationRecord,
   validateAckRecord,
   validateConsumedRecord,
   validateCursorRecord,
+  validateLegacyCursorRecord,
   validateMaterializationRecord,
 } from './materialization.mjs';
+import {
+  buildSequenceEntryRecord,
+  buildSequenceMigrationRecord,
+  parseSequenceEntryFileName,
+  sequenceEntryFileName,
+  validateSequenceEntryRecord,
+  validateSequenceMigrationRecord,
+} from './task-sequence.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -111,6 +126,9 @@ export const CORRUPT_CURSOR = 'CORRUPT_CURSOR';
 export const CURSOR_CONFLICT = 'CURSOR_CONFLICT';
 export const CURSOR_REWIND_REFUSED = 'CURSOR_REWIND_REFUSED';
 export const CURSOR_ORDER_VIOLATION = 'CURSOR_ORDER_VIOLATION';
+export const CORRUPT_SEQUENCE = 'CORRUPT_SEQUENCE';
+export const SEQUENCE_CONFLICT = 'SEQUENCE_CONFLICT';
+export const SEQUENCE_ORDER_VIOLATION = 'SEQUENCE_ORDER_VIOLATION';
 
 export class CoordinationStoreError extends Error {
   constructor(message, details = {}) {
@@ -166,6 +184,213 @@ function listTaskIds(home) {
       }
     })
     .sort();
+}
+
+// ---------------------------------------------------------------------------
+// Append-stable task sequence authority (CURSOR_APPEND_STABILITY).
+// Durable under <home>/consumption/sequence/entries/<seq10>.json.
+// BOOTSTRAP ONCE from the existing task set lexicographically; afterwards
+// new tasks append only after the frozen prefix. Positions immutable,
+// exclusive-create, no overwrite, no delete-and-recreate, no timestamps.
+// ---------------------------------------------------------------------------
+
+function sequenceBaseDirectory(home) {
+  return nodePath.join(home, 'consumption', 'sequence');
+}
+
+function sequenceEntriesDirectory(home) {
+  return nodePath.join(sequenceBaseDirectory(home), 'entries');
+}
+
+function sequenceMigrationFilePath(home) {
+  return nodePath.join(sequenceBaseDirectory(home), 'migration.json');
+}
+
+function sequenceEntryPath(home, sequenceNumber) {
+  return nodePath.join(sequenceEntriesDirectory(home), sequenceEntryFileName(sequenceNumber));
+}
+
+function readValidatedSequenceEntryDocument(path, expectedSequenceNumber) {
+  const found = readJsonFile(path);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') {
+    storeFail(
+      `task sequence entry is corrupt (fail-closed, no auto-repair): seq=${expectedSequenceNumber}`,
+      { code: CORRUPT_SEQUENCE },
+    );
+  }
+  let record;
+  try {
+    record = validateSequenceEntryRecord(found.document);
+  } catch (error) {
+    const code =
+      error?.code === 'CONTEXT_BUDGET_EXCEEDED' ? 'CONTEXT_BUDGET_EXCEEDED' : CORRUPT_SEQUENCE;
+    storeFail(`task sequence entry invalid (fail-closed): seq=${expectedSequenceNumber}: ${error?.message}`, {
+      code,
+    });
+  }
+  if (record.sequenceNumber !== expectedSequenceNumber) {
+    storeFail(
+      `task sequence entry number/filename mismatch (fail-closed): expected=${expectedSequenceNumber} got=${record.sequenceNumber}`,
+      { code: CORRUPT_SEQUENCE },
+    );
+  }
+  return { state: 'present', record };
+}
+
+/**
+ * Load the canonical append-stable sequence, validated fail-closed.
+ * Returns array of { sequenceNumber, taskId } sorted by sequenceNumber.
+ * Empty array means not yet bootstrapped (not an error).
+ * Corruption (gap, duplicate seq/task, invalid entry) throws fail-closed.
+ */
+function listCanonicalSequenceEntries(home) {
+  let names;
+  try {
+    names = nodeFs.readdirSync(sequenceEntriesDirectory(home));
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
+  const parsed = [];
+  for (const name of names) {
+    const seq = parseSequenceEntryFileName(name);
+    if (seq === null) {
+      storeFail(`task sequence directory contains non-entry file (fail-closed): ${name}`, {
+        code: CORRUPT_SEQUENCE,
+      });
+    }
+    parsed.push(seq);
+  }
+  parsed.sort((a, b) => a - b);
+  const entries = [];
+  const seenTaskIds = new Set();
+  let expected = 1;
+  for (const seq of parsed) {
+    if (seq !== expected) {
+      storeFail(`task sequence gap (fail-closed): expected seq=${expected} got=${seq}`, {
+        code: CORRUPT_SEQUENCE,
+      });
+    }
+    const found = readValidatedSequenceEntryDocument(sequenceEntryPath(home, seq), seq);
+    if (found.state === 'missing') {
+      storeFail(`task sequence entry vanished during load (fail-closed): seq=${seq}`, {
+        code: CORRUPT_SEQUENCE,
+      });
+    }
+    if (seenTaskIds.has(found.record.taskId)) {
+      storeFail(`task sequence duplicate membership (fail-closed): ${found.record.taskId}`, {
+        code: CORRUPT_SEQUENCE,
+      });
+    }
+    seenTaskIds.add(found.record.taskId);
+    entries.push(found.record);
+    expected += 1;
+  }
+  return entries;
+}
+
+function readValidatedSequenceMigrationDocument(path) {
+  const found = readJsonFile(path);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') {
+    storeFail('task sequence migration provenance is corrupt (fail-closed, no auto-repair).', {
+      code: CORRUPT_SEQUENCE,
+    });
+  }
+  let record;
+  try {
+    record = validateSequenceMigrationRecord(found.document);
+  } catch (error) {
+    storeFail(`task sequence migration provenance invalid (fail-closed): ${error?.message}`, {
+      code: CORRUPT_SEQUENCE,
+    });
+  }
+  return { state: 'present', record };
+}
+
+/**
+ * Claim a single sequence position for a task via exclusive-create.
+ * Idempotent replay (same seq + same taskId, identical payload) returns
+ * duplicate:true. Different taskId for the same seq is a canonical conflict:
+ * the loser must retry at a new tail position (handled by the caller loop).
+ */
+function claimSequencePosition(home, sequenceNumber, taskId) {
+  const candidate = buildSequenceEntryRecord({ sequenceNumber, taskId });
+  const created = writeJsonExclusive(sequenceEntryPath(home, sequenceNumber), candidate);
+  if (created.created) {
+    const reread = readValidatedSequenceEntryDocument(sequenceEntryPath(home, sequenceNumber), sequenceNumber);
+    if (reread.state !== 'present' || JSON.stringify(reread.record) !== JSON.stringify(candidate)) {
+      storeFail(`task sequence entry failed to verify after write (fail-closed): seq=${sequenceNumber}`, {
+        code: CORRUPT_SEQUENCE,
+        taskId,
+      });
+    }
+    return { record: candidate, duplicate: false };
+  }
+  const winnerFound = readValidatedSequenceEntryDocument(sequenceEntryPath(home, sequenceNumber), sequenceNumber);
+  if (winnerFound.state === 'missing') {
+    storeFail(`task sequence race could not be resolved deterministically: seq=${sequenceNumber}`, {
+      code: CORRUPT_SEQUENCE,
+      taskId,
+    });
+  }
+  if (JSON.stringify(winnerFound.record) === JSON.stringify(candidate)) {
+    return { record: winnerFound.record, duplicate: true };
+  }
+  storeFail(`task sequence position conflict (first wins, retry at tail): seq=${sequenceNumber} winner=${winnerFound.record.taskId} loser=${taskId}`, {
+    code: SEQUENCE_CONFLICT,
+    taskId,
+  });
+  return { record: winnerFound.record, duplicate: true };
+}
+
+/**
+ * Ensure every taskId in orderedTaskIds has a canonical position, in order.
+ * Missing tasks are appended at the tail via exclusive-create retries.
+ * Already-sequenced tasks are skipped (idempotent). Previously assigned
+ * positions are never changed. Concurrent winners serialize in the OS:
+ * exactly one winner per position; losers retry at the new tail.
+ */
+function ensureSequenceContainsOrdered(home, orderedTaskIds) {
+  for (const taskId of orderedTaskIds) {
+    assertValidTaskId(taskId);
+  }
+  for (const taskId of orderedTaskIds) {
+    // Fast + race-safe loop per task: re-list, claim next when missing.
+    for (;;) {
+      const entries = listCanonicalSequenceEntries(home);
+      const existing = entries.find((entry) => entry.taskId === taskId);
+      if (existing) break;
+      const next = entries.length === 0 ? 1 : entries[entries.length - 1].sequenceNumber + 1;
+      try {
+        claimSequencePosition(home, next, taskId);
+        break;
+      } catch (error) {
+        if (error?.code === SEQUENCE_CONFLICT) {
+          // Another writer won this position; retry at the new tail.
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+  return listCanonicalSequenceEntries(home);
+}
+
+/**
+ * Deterministic recovery for post-bootstrap divergence:
+ * every current taskId missing from the sequence is appended after the
+ * frozen prefix in lexicographic order among the missing set.
+ * Existing prefix order is never rewritten.
+ */
+function reconcileSequenceWithCurrentTasks(home) {
+  const current = listTaskIds(home);
+  const entries = listCanonicalSequenceEntries(home);
+  const sequenced = new Set(entries.map((entry) => entry.taskId));
+  const missing = current.filter((taskId) => !sequenced.has(taskId)).sort();
+  if (missing.length === 0) return entries;
+  return ensureSequenceContainsOrdered(home, missing);
 }
 
 function dispositionGenerationPath(home, taskId, generation) {
@@ -441,7 +666,27 @@ export class CoordinationStore {
         taskId: envelope.taskId,
       });
     }
+    // Append-stable sequence membership: every task.json must have a
+    // canonical position. Bootstrap once lexicographically; afterwards new
+    // tasks append only after the frozen prefix. Deterministic recovery for
+    // crash windows (task file visible but sequence entry not yet claimed)
+    // happens here and in cursor reconciliation. No timestamp ordering.
+    try {
+      this.#ensureSequenceMembershipAfterTaskWrite();
+    } catch (error) {
+      // Task file already won exclusive-create; sequence divergence is
+      // fail-closed here (never silently skipped). A later cursor
+      // reconciliation will deterministically append the missing member.
+      if (error?.code === CORRUPT_SEQUENCE || error?.code === SEQUENCE_CONFLICT) {
+        throw error;
+      }
+      throw error;
+    }
     return validateTaskEnvelope(envelope);
+  }
+
+  #ensureSequenceMembershipAfterTaskWrite() {
+    reconcileSequenceWithCurrentTasks(this.home);
   }
 
   readTask(taskId) {
@@ -1738,14 +1983,33 @@ export class CoordinationStore {
     return true;
   }
 
-  readCursor() {
-    const found = readValidatedCursorDocument(cursorFilePath(this.home));
-    if (found.state === 'missing') {
-      storeFail('no cursor watermark yet.', { code: CURSOR_NOT_FOUND });
-    }
-    // Cursor never overwrites truth: verify the persisted prefix is still
-    // contiguous CONSUMED. Any corruption/gap fails closed here.
-    for (const taskId of found.record.consumedThrough) {
+  // -------------------------------------------------------------------------
+  // Append-stable task sequence public surface (cursor ordering authority).
+  // TaskId is identity; sequence position is authority. No timestamps used.
+  // -------------------------------------------------------------------------
+
+  /** Canonical taskIds in append-stable sequence order (pure read, fail-closed). */
+  readTaskSequence() {
+    return listCanonicalSequenceEntries(this.home).map((entry) => entry.taskId);
+  }
+
+  /** Canonical sequence entries [{ sequenceNumber, taskId }] (pure read). */
+  readSequenceEntries() {
+    return listCanonicalSequenceEntries(this.home).map((entry) => ({ ...entry }));
+  }
+
+  /**
+   * Deterministic recovery: append every current task missing from the
+   * sequence after the frozen prefix (missing sorted lexicographically).
+   * Previously assigned positions never change. Concurrent winners serialize
+   * via exclusive-create; losers retry at the new tail.
+   */
+  syncTaskSequence() {
+    return reconcileSequenceWithCurrentTasks(this.home).map((entry) => entry.taskId);
+  }
+
+  #revalidateCursorPrefixConsumed(consumedThrough) {
+    for (const taskId of consumedThrough) {
       let consumed;
       try {
         consumed = this.isConsumed(taskId);
@@ -1762,26 +2026,194 @@ export class CoordinationStore {
         });
       }
     }
-    return found.record;
+  }
+
+  #assertCursorPrefixIsCanonicalPrefix(consumedThrough, canonicalEntries) {
+    if (consumedThrough.length > canonicalEntries.length) {
+      storeFail('cursor prefix longer than canonical task sequence (fail-closed, no rewind/skip).', {
+        code: CORRUPT_CURSOR,
+      });
+    }
+    for (let index = 0; index < consumedThrough.length; index += 1) {
+      if (consumedThrough[index] !== canonicalEntries[index].taskId) {
+        storeFail(
+          `cursor prefix diverges from canonical task sequence at position ${index + 1} (fail-closed): expected=${canonicalEntries[index].taskId} got=${consumedThrough[index]}`,
+          { code: CORRUPT_CURSOR },
+        );
+      }
+    }
   }
 
   /**
-   * Advance the cursor watermark over the minimal deterministic sequence
-   * contract: lexicographic ascending taskId order. Caller may supply an
-   * explicit orderedTaskIds array (must already be strictly ascending unique);
-   * otherwise the durable tasks directory is scanned and sorted.
-   * Contiguity: stop at the first non-CONSUMED gap; never skip BLOCKED /
-   * NEEDS_USER_DECISION / REJECTED / SUPERSEDED / missing. Corrupt canonical
-   * records fail closed. Silent rewind is refused. Idempotent replay returns
-   * the canonical winner.
+   * Migrate a legacy lexicographic-task-id-v1 cursor to the append-stable
+   * contract. Fail-closed, no silent delete/reset/rewind/credit-loss.
+   * Preserves the existing prefix, appends remaining current tasks after it,
+   * and leaves durable migration provenance. Idempotent replay returns winner.
+   */
+  #migrateLegacyCursorIfNeeded(evaluatorId) {
+    const cursorPath = cursorFilePath(this.home);
+    const raw = readJsonFile(cursorPath);
+    if (raw.state === 'missing') return null;
+    if (raw.state === 'corrupt') {
+      storeFail('cursor record is corrupt (fail-closed, no auto-repair).', { code: CORRUPT_CURSOR });
+    }
+    const document = raw.document;
+    if (!document || typeof document !== 'object' || Array.isArray(document)) {
+      storeFail('cursor record invalid (fail-closed).', { code: CORRUPT_CURSOR });
+    }
+    if (document.sequenceContract === CURSOR_SEQUENCE_CONTRACT) return null;
+    if (document.sequenceContract !== LEGACY_CURSOR_SEQUENCE_CONTRACT) {
+      storeFail('cursor sequence contract mismatch (fail-closed).', { code: CORRUPT_CURSOR });
+    }
+    let legacy;
+    try {
+      legacy = validateLegacyCursorRecord(document);
+    } catch (error) {
+      const code = error?.code === 'CONTEXT_BUDGET_EXCEEDED' ? 'CONTEXT_BUDGET_EXCEEDED' : CORRUPT_CURSOR;
+      storeFail(`legacy cursor record invalid (fail-closed, no auto-repair): ${error?.message}`, { code });
+    }
+    // Existing watermark + entire consumedThrough revalidation (no credit loss).
+    this.#revalidateCursorPrefixConsumed(legacy.consumedThrough);
+    const current = listTaskIds(this.home);
+    for (const taskId of legacy.consumedThrough) {
+      if (!current.includes(taskId)) {
+        storeFail(`legacy cursor prefix task missing from durable tasks (fail-closed): ${taskId}`, {
+          code: CORRUPT_CURSOR,
+          taskId,
+        });
+      }
+    }
+    const prefixSet = new Set(legacy.consumedThrough);
+    const remaining = current.filter((taskId) => !prefixSet.has(taskId)).sort();
+    const bootstrapOrder = [...legacy.consumedThrough, ...remaining];
+    const preExisting = listCanonicalSequenceEntries(this.home);
+    if (preExisting.length > 0) {
+      if (preExisting.length < legacy.consumedThrough.length) {
+        storeFail('canonical task sequence shorter than legacy cursor prefix (fail-closed).', {
+          code: CORRUPT_CURSOR,
+        });
+      }
+      for (let index = 0; index < legacy.consumedThrough.length; index += 1) {
+        if (preExisting[index].taskId !== legacy.consumedThrough[index]) {
+          storeFail(
+            `canonical task sequence does not preserve legacy cursor prefix at position ${index + 1} (fail-closed): expected=${legacy.consumedThrough[index]} got=${preExisting[index].taskId}`,
+            { code: CORRUPT_CURSOR },
+          );
+        }
+      }
+    }
+    const canonical = ensureSequenceContainsOrdered(this.home, bootstrapOrder);
+    for (let index = 0; index < legacy.consumedThrough.length; index += 1) {
+      if (canonical[index].taskId !== legacy.consumedThrough[index]) {
+        storeFail('migrated task sequence failed to preserve legacy prefix (fail-closed).', {
+          code: CORRUPT_CURSOR,
+        });
+      }
+    }
+    const migrator = typeof evaluatorId === 'string' && evaluatorId.trim() ? evaluatorId : legacy.evaluatorId;
+    const migrated = validateCursorRecord({
+      schemaVersion: '1',
+      sequenceContract: CURSOR_SEQUENCE_CONTRACT,
+      watermarkTaskId: legacy.watermarkTaskId,
+      consumedThrough: [...legacy.consumedThrough],
+      updatedAt: this.nowIso(),
+      evaluatorId: migrator,
+    });
+    writeJsonAtomic(cursorPath, migrated);
+    const reread = readValidatedCursorDocument(cursorPath);
+    if (reread.state !== 'present' || !canonicalRecordsEqual(reread.record, migrated)) {
+      storeFail('migrated cursor failed to verify after write (fail-closed).', { code: CORRUPT_CURSOR });
+    }
+    const provenance = buildSequenceMigrationRecord({
+      preservedPrefix: [...legacy.consumedThrough],
+      appendedRemaining: [...remaining],
+      migratorId: migrator,
+      migratedAt: this.nowIso(),
+    });
+    const migrationPath = sequenceMigrationFilePath(this.home);
+    const migrationCreated = writeJsonExclusive(migrationPath, provenance);
+    if (!migrationCreated.created) {
+      const winner = readValidatedSequenceMigrationDocument(migrationPath);
+      if (winner.state === 'missing') {
+        storeFail('sequence migration race could not be resolved deterministically.', {
+          code: CORRUPT_SEQUENCE,
+        });
+      }
+      if (JSON.stringify(winner.record.preservedPrefix) !== JSON.stringify(provenance.preservedPrefix)) {
+        storeFail('concurrent cursor migration prefix divergence (fail-closed).', { code: CORRUPT_CURSOR });
+      }
+    } else {
+      const verifyMigration = readValidatedSequenceMigrationDocument(migrationPath);
+      if (
+        verifyMigration.state !== 'present' ||
+        JSON.stringify(verifyMigration.record) !== JSON.stringify(provenance)
+      ) {
+        storeFail('migration provenance failed to verify after write (fail-closed).', {
+          code: CORRUPT_SEQUENCE,
+        });
+      }
+    }
+    return { record: migrated, duplicate: false };
+  }
+
+  readCursor() {
+    // Deterministic migration first: legacy v1 cursors are preserved, never
+    // silently deleted/reset. Migration appends remaining tasks after the
+    // frozen prefix and leaves provenance.
+    const migrated = this.#migrateLegacyCursorIfNeeded();
+    if (migrated) {
+      const canonicalAfterMigration = listCanonicalSequenceEntries(this.home);
+      this.#revalidateCursorPrefixConsumed(migrated.record.consumedThrough);
+      this.#assertCursorPrefixIsCanonicalPrefix(migrated.record.consumedThrough, canonicalAfterMigration);
+      return migrated.record;
+    }
+    const found = readValidatedCursorDocument(cursorFilePath(this.home));
+    if (found.state === 'missing') {
+      storeFail('no cursor watermark yet.', { code: CURSOR_NOT_FOUND });
+    }
+    // Cursor never overwrites truth: verify the persisted prefix is still
+    // contiguous CONSUMED. Any corruption/gap fails closed here.
+    this.#revalidateCursorPrefixConsumed(found.record.consumedThrough);
+    // Append-stability: persisted prefix must remain the canonical prefix.
+    // Deterministic recovery appends missing tail tasks first so a crash
+    // window (task.json visible, sequence entry pending) never hides a task.
+    const canonical = reconcileSequenceWithCurrentTasks(this.home);
+    this.#assertCursorPrefixIsCanonicalPrefix(found.record.consumedThrough, canonical);
+    // Re-read after reconciliation to return the verified winner.
+    const verified = readValidatedCursorDocument(cursorFilePath(this.home));
+    if (verified.state === 'missing') {
+      storeFail('no cursor watermark yet.', { code: CURSOR_NOT_FOUND });
+    }
+    return verified.record;
+  }
+
+  /**
+   * Advance the cursor watermark over the append-stable task sequence.
+   * The durable sequence (not lexicographic taskId, not timestamps) is the
+   * sole ordering authority. Caller may supply orderedTaskIds only as an
+   * explicit view: it must contain no duplicates and must already be in
+   * canonical sequence order, otherwise CURSOR_ORDER_VIOLATION. When omitted,
+   * the canonical sequence is used. Missing tail tasks are deterministically
+   * appended after the frozen prefix before computing contiguity.
+   * Contiguity: stop at the first non-CONSUMED gap; never skip. Corrupt
+   * canonical records fail closed. Silent rewind is refused. Idempotent replay
+   * returns the canonical winner.
    */
   advanceCursor({ orderedTaskIds, evaluatorId } = {}) {
     if (typeof evaluatorId !== 'string' || !evaluatorId.trim()) {
       storeFail('evaluatorId must be a non-empty string.', { code: 'INVALID_EVALUATOR' });
     }
+    // Migrate legacy cursors first (preserves credit, appends remaining).
+    this.#migrateLegacyCursorIfNeeded(evaluatorId);
+    // Deterministic recovery: every current task must have a position.
+    // New tasks append only after the frozen prefix.
+    const canonicalEntries = reconcileSequenceWithCurrentTasks(this.home);
+    const canonicalOrder = canonicalEntries.map((entry) => entry.taskId);
+    const positionByTaskId = new Map(canonicalEntries.map((entry) => [entry.taskId, entry.sequenceNumber]));
+
     let sequence;
     if (orderedTaskIds === undefined) {
-      sequence = listTaskIds(this.home);
+      sequence = [...canonicalOrder];
     } else {
       if (!Array.isArray(orderedTaskIds)) {
         storeFail('orderedTaskIds must be an array of taskIds when present.', {
@@ -1789,7 +2221,7 @@ export class CoordinationStore {
         });
       }
       const seen = new Set();
-      let previous = null;
+      let previousPosition = null;
       for (const taskId of orderedTaskIds) {
         try {
           assertValidTaskId(taskId);
@@ -1802,12 +2234,19 @@ export class CoordinationStore {
           storeFail('orderedTaskIds must not contain duplicates.', { code: CURSOR_ORDER_VIOLATION });
         }
         seen.add(taskId);
-        if (previous !== null && !(previous < taskId)) {
-          storeFail('orderedTaskIds must be strictly ascending lexicographic order.', {
+        const position = positionByTaskId.get(taskId);
+        if (position === undefined) {
+          storeFail(`orderedTaskIds contains task outside the canonical sequence (fail-closed): ${taskId}.`, {
+            code: CURSOR_ORDER_VIOLATION,
+            taskId,
+          });
+        }
+        if (previousPosition !== null && !(previousPosition < position)) {
+          storeFail('orderedTaskIds must be in canonical append-stable sequence order.', {
             code: CURSOR_ORDER_VIOLATION,
           });
         }
-        previous = taskId;
+        previousPosition = position;
       }
       sequence = [...orderedTaskIds];
     }
@@ -1839,6 +2278,11 @@ export class CoordinationStore {
         updatedAt: this.nowIso(),
         evaluatorId,
       });
+      // Initial prefix must itself be a canonical prefix (it is, when the
+      // view is canonical; for an explicit subset view it must still start
+      // at the canonical head).
+      const freshCanonical = listCanonicalSequenceEntries(this.home);
+      this.#assertCursorPrefixIsCanonicalPrefix(prefix, freshCanonical);
       const created = writeJsonExclusive(cursorPath, initial);
       if (!created.created) {
         const winnerFound = readValidatedCursorDocument(cursorPath);
@@ -1859,23 +2303,10 @@ export class CoordinationStore {
       storeFail('cursor sequence contract mismatch (fail-closed).', { code: CORRUPT_CURSOR });
     }
     // Revalidate the persisted prefix is still contiguous CONSUMED.
-    for (const taskId of existing.consumedThrough) {
-      let consumed;
-      try {
-        consumed = this.isConsumed(taskId);
-      } catch (error) {
-        storeFail(`existing cursor prefix failed revalidation (fail-closed): ${taskId}: ${error?.message}`, {
-          code: error?.code ?? CORRUPT_CURSOR,
-          taskId,
-        });
-      }
-      if (!consumed) {
-        storeFail(`existing cursor prefix is no longer contiguous CONSUMED (fail-closed): ${taskId}`, {
-          code: CORRUPT_CURSOR,
-          taskId,
-        });
-      }
-    }
+    this.#revalidateCursorPrefixConsumed(existing.consumedThrough);
+    // Append-stability: persisted prefix must remain the canonical prefix.
+    const currentCanonical = listCanonicalSequenceEntries(this.home);
+    this.#assertCursorPrefixIsCanonicalPrefix(existing.consumedThrough, currentCanonical);
 
     const existingPrefix = existing.consumedThrough;
     const prefixesEqual =
@@ -1886,6 +2317,9 @@ export class CoordinationStore {
     const isStrictPrefix = (shorter, longer) =>
       shorter.length < longer.length && shorter.every((value, index) => value === longer[index]);
     if (isStrictPrefix(existingPrefix, prefix)) {
+      // Advance only when the recomputed view extends the canonical prefix.
+      // The view must itself start at the canonical head.
+      this.#assertCursorPrefixIsCanonicalPrefix(prefix, currentCanonical);
       const next = validateCursorRecord({
         schemaVersion: '1',
         sequenceContract: CURSOR_SEQUENCE_CONTRACT,
