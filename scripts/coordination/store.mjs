@@ -1,8 +1,14 @@
 // Bounded mutation owner: GREENHUB-COORDINATION-DURABLE-CORE-01
-// + GREENHUB-COORDINATION-DISPOSITION-STORE-07 (disposition persistence/state/fencing only).
+// + GREENHUB-COORDINATION-DISPOSITION-STORE-07 (disposition persistence/state/fencing only)
+// + GREENHUB-COORDINATION-CANONICAL-MATERIALIZATION-CONSUMPTION-CURSOR-11
+//   (ADOPTED materialization/read-back/ACK/CONSUMED/cursor only; no emission).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
-// NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result.
+// NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
+// plus ADOPTED-only canonical per-task materialization with durable read-back,
+// ACK, CONSUMED, and highest-contiguous-CONSUMED cursor. Next-task emission,
+// scheduler, fan-out, adapters, Astra/OpenCode integration, autonomous loop,
+// application code, publication automation, and 57C remain out of scope.
 //
 // Filesystem layout under a durable home (never the repository worktree):
 //   <home>/tasks/<taskId>/task.json
@@ -11,6 +17,10 @@
 //   <home>/tasks/<taskId>/results/<resultId>.json (per-delivery record)
 //   <home>/tasks/<taskId>/disposition/current.json
 //   <home>/tasks/<taskId>/disposition/generations/<n>.json (immutable history)
+//   <home>/tasks/<taskId>/materialization.json  (ADOPTED-only canonical adoption record)
+//   <home>/tasks/<taskId>/ack.json              (durable read-back ACK, bound to materialization)
+//   <home>/tasks/<taskId>/consumed.json         (durable closure marker, bound to ACK)
+//   <home>/consumption/cursor.json              (highest contiguous CONSUMED watermark; not truth)
 //
 // Claim atomicity uses OS exclusive-create (`wx`) semantics plus a
 // read-verify-unlink-recreate takeover dance (same family as
@@ -20,8 +30,10 @@
 // exactly one wins. Takeover additionally re-verifies generation before
 // unlink so a concurrent winner is never clobbered silently.
 //
-// Cursor/disposition is out of scope: delivered results stay in the inbox;
-// no consumed/acknowledged marking exists in this module.
+// Cursor/disposition note: delivered results stay in the inbox; CONSUMED is a
+// durable closure marker and cursor.json is only the highest contiguous
+// CONSUMED watermark. Raw RESULT/disposition/materialization history is never
+// deleted by ACK/CONSUMED/cursor.
 
 import { randomUUID } from 'node:crypto';
 import nodeFs from 'node:fs';
@@ -41,6 +53,7 @@ import {
   validateTaskEnvelope,
 } from './task-envelope.mjs';
 import {
+  DISPOSITION_STATE_ADOPTED,
   DISPOSITION_STATE_PENDING,
   assertLegalDispositionTransition,
   buildCanonicalTransitionId,
@@ -48,6 +61,16 @@ import {
   computeResultBinding,
   validateDispositionRecord,
 } from './disposition.mjs';
+import {
+  CURSOR_SEQUENCE_CONTRACT,
+  buildAckRecord,
+  buildConsumedRecord,
+  buildMaterializationRecord,
+  validateAckRecord,
+  validateConsumedRecord,
+  validateCursorRecord,
+  validateMaterializationRecord,
+} from './materialization.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -68,6 +91,26 @@ export const DISPOSITION_RESULT_BINDING_MISMATCH = 'DISPOSITION_RESULT_BINDING_M
 export const DISPOSITION_TRANSITION_ID_MISMATCH = 'DISPOSITION_TRANSITION_ID_MISMATCH';
 export const CORRUPT_DISPOSITION = 'CORRUPT_DISPOSITION';
 export const DISPOSITION_TASK_NOT_DELIVERED = 'DISPOSITION_TASK_NOT_DELIVERED';
+export const MATERIALIZATION_NOT_ELIGIBLE = 'MATERIALIZATION_NOT_ELIGIBLE';
+export const MATERIALIZATION_CONFLICT = 'MATERIALIZATION_CONFLICT';
+export const MATERIALIZATION_ID_MISMATCH = 'MATERIALIZATION_ID_MISMATCH';
+export const CORRUPT_MATERIALIZATION = 'CORRUPT_MATERIALIZATION';
+export const MATERIALIZATION_NOT_FOUND = 'MATERIALIZATION_NOT_FOUND';
+export const ACK_NOT_READY = 'ACK_NOT_READY';
+export const ACK_CONFLICT = 'ACK_CONFLICT';
+export const ACK_BINDING_MISMATCH = 'ACK_BINDING_MISMATCH';
+export const CORRUPT_ACK = 'CORRUPT_ACK';
+export const ACK_NOT_FOUND = 'ACK_NOT_FOUND';
+export const CONSUMED_NOT_READY = 'CONSUMED_NOT_READY';
+export const CONSUMED_CONFLICT = 'CONSUMED_CONFLICT';
+export const CONSUMED_BINDING_MISMATCH = 'CONSUMED_BINDING_MISMATCH';
+export const CORRUPT_CONSUMED = 'CORRUPT_CONSUMED';
+export const CONSUMED_NOT_FOUND = 'CONSUMED_NOT_FOUND';
+export const CURSOR_NOT_FOUND = 'CURSOR_NOT_FOUND';
+export const CORRUPT_CURSOR = 'CORRUPT_CURSOR';
+export const CURSOR_CONFLICT = 'CURSOR_CONFLICT';
+export const CURSOR_REWIND_REFUSED = 'CURSOR_REWIND_REFUSED';
+export const CURSOR_ORDER_VIOLATION = 'CURSOR_ORDER_VIOLATION';
 
 export class CoordinationStoreError extends Error {
   constructor(message, details = {}) {
@@ -93,7 +136,36 @@ function taskFilePaths(home, taskId) {
     dispositionDir: nodePath.join(taskDir, 'disposition'),
     dispositionCurrentPath: nodePath.join(taskDir, 'disposition', 'current.json'),
     dispositionGenerationsDir: nodePath.join(taskDir, 'disposition', 'generations'),
+    materializationPath: nodePath.join(taskDir, 'materialization.json'),
+    ackPath: nodePath.join(taskDir, 'ack.json'),
+    consumedPath: nodePath.join(taskDir, 'consumed.json'),
   };
+}
+
+function cursorFilePath(home) {
+  return nodePath.join(home, 'consumption', 'cursor.json');
+}
+
+function listTaskIds(home) {
+  let entries;
+  try {
+    entries = nodeFs.readdirSync(nodePath.join(home, 'tasks'), { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => {
+      try {
+        assertValidTaskId(name);
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .sort();
 }
 
 function dispositionGenerationPath(home, taskId, generation) {
@@ -150,6 +222,117 @@ function readValidatedDispositionDocument(path, taskId, generation) {
 
 function canonicalRecordsEqual(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function readValidatedMaterializationDocument(path, taskId) {
+  const found = readJsonFile(path);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') {
+    storeFail(`materialization record is corrupt (fail-closed, no auto-repair): ${taskId}`, {
+      code: CORRUPT_MATERIALIZATION,
+      taskId,
+    });
+  }
+  let record;
+  try {
+    record = validateMaterializationRecord(found.document);
+  } catch (error) {
+    const code =
+      error?.code === 'MATERIALIZATION_NOT_ELIGIBLE'
+        ? MATERIALIZATION_NOT_ELIGIBLE
+        : error?.code === 'CONTEXT_BUDGET_EXCEEDED'
+          ? 'CONTEXT_BUDGET_EXCEEDED'
+          : error?.code === 'MATERIALIZATION_ID_MISMATCH'
+            ? MATERIALIZATION_ID_MISMATCH
+            : error?.code === 'DISPOSITION_TRANSITION_ID_MISMATCH'
+              ? DISPOSITION_TRANSITION_ID_MISMATCH
+              : CORRUPT_MATERIALIZATION;
+    storeFail(`materialization record invalid (fail-closed): ${taskId}: ${error?.message}`, {
+      code,
+      taskId,
+    });
+  }
+  if (record.taskId !== taskId) {
+    storeFail(`materialization taskId/path mismatch (fail-closed): ${taskId}`, {
+      code: CORRUPT_MATERIALIZATION,
+      taskId,
+    });
+  }
+  return { state: 'present', record };
+}
+
+function readValidatedAckDocument(path, taskId) {
+  const found = readJsonFile(path);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') {
+    storeFail(`ack record is corrupt (fail-closed, no auto-repair): ${taskId}`, {
+      code: CORRUPT_ACK,
+      taskId,
+    });
+  }
+  let record;
+  try {
+    record = validateAckRecord(found.document);
+  } catch (error) {
+    const code =
+      error?.code === 'CONTEXT_BUDGET_EXCEEDED'
+        ? 'CONTEXT_BUDGET_EXCEEDED'
+        : error?.code === 'ACK_BINDING_MISMATCH'
+          ? ACK_BINDING_MISMATCH
+          : CORRUPT_ACK;
+    storeFail(`ack record invalid (fail-closed): ${taskId}: ${error?.message}`, { code, taskId });
+  }
+  if (record.taskId !== taskId) {
+    storeFail(`ack taskId/path mismatch (fail-closed): ${taskId}`, { code: CORRUPT_ACK, taskId });
+  }
+  return { state: 'present', record };
+}
+
+function readValidatedConsumedDocument(path, taskId) {
+  const found = readJsonFile(path);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') {
+    storeFail(`consumed record is corrupt (fail-closed, no auto-repair): ${taskId}`, {
+      code: CORRUPT_CONSUMED,
+      taskId,
+    });
+  }
+  let record;
+  try {
+    record = validateConsumedRecord(found.document);
+  } catch (error) {
+    const code =
+      error?.code === 'CONTEXT_BUDGET_EXCEEDED'
+        ? 'CONTEXT_BUDGET_EXCEEDED'
+        : error?.code === 'CONSUMED_BINDING_MISMATCH'
+          ? CONSUMED_BINDING_MISMATCH
+          : CORRUPT_CONSUMED;
+    storeFail(`consumed record invalid (fail-closed): ${taskId}: ${error?.message}`, { code, taskId });
+  }
+  if (record.taskId !== taskId) {
+    storeFail(`consumed taskId/path mismatch (fail-closed): ${taskId}`, {
+      code: CORRUPT_CONSUMED,
+      taskId,
+    });
+  }
+  return { state: 'present', record };
+}
+
+function readValidatedCursorDocument(path) {
+  const found = readJsonFile(path);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') {
+    storeFail('cursor record is corrupt (fail-closed, no auto-repair).', { code: CORRUPT_CURSOR });
+  }
+  let record;
+  try {
+    record = validateCursorRecord(found.document);
+  } catch (error) {
+    const code =
+      error?.code === 'CONTEXT_BUDGET_EXCEEDED' ? 'CONTEXT_BUDGET_EXCEEDED' : CORRUPT_CURSOR;
+    storeFail(`cursor record invalid (fail-closed): ${error?.message}`, { code });
+  }
+  return { state: 'present', record };
 }
 
 function readJsonFile(path) {
@@ -1115,6 +1298,618 @@ export class CoordinationStore {
       proofRefs,
       evidenceRefs,
       decidedAt,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Canonical materialization / read-back / ACK / CONSUMED / cursor domain.
+  // ADOPTED-only. Reference-first. Deterministic identity. Revision-guarded
+  // exclusive-create + reopen verification. Fail-closed, no auto-repair.
+  // Raw RESULT/disposition history is preserved. No next-task emission,
+  // scheduler, fan-out, adapters, Astra/OpenCode, or autonomous loop here.
+  // ---------------------------------------------------------------------------
+
+  #requireAdoptedDisposition(taskId) {
+    let current;
+    try {
+      current = this.#readCurrentDispositionInternal(taskId);
+    } catch (error) {
+      if (error?.code) {
+        storeFail(`materialization requires canonical ADOPTED disposition (fail-closed): ${taskId}: ${error.message}`, {
+          code: error.code === CORRUPT_DISPOSITION ? CORRUPT_DISPOSITION : MATERIALIZATION_NOT_ELIGIBLE,
+          taskId,
+        });
+      }
+      throw error;
+    }
+    if (current.state === 'missing') {
+      storeFail(`materialization requires canonical ADOPTED disposition (none present): ${taskId}`, {
+        code: MATERIALIZATION_NOT_ELIGIBLE,
+        taskId,
+      });
+    }
+    if (current.record.state !== DISPOSITION_STATE_ADOPTED) {
+      storeFail(
+        `only ADOPTED dispositions may materialize (task=${taskId} state=${current.record.state}).`,
+        { code: MATERIALIZATION_NOT_ELIGIBLE, taskId },
+      );
+    }
+    return current.record;
+  }
+
+  #verifyMaterializationBinding(taskId, record) {
+    const canonical = this.#requireCanonicalResultForDisposition(taskId, record.resultId);
+    const expectedBinding = computeResultBinding(canonical);
+    if (record.resultBinding !== expectedBinding) {
+      storeFail(`materialization result binding mismatch (fail-closed): ${taskId}`, {
+        code: CORRUPT_MATERIALIZATION,
+        taskId,
+      });
+    }
+    if (record.claimGeneration !== canonical.claimGeneration) {
+      storeFail(`materialization claim-generation provenance mismatch (fail-closed): ${taskId}`, {
+        code: CORRUPT_MATERIALIZATION,
+        taskId,
+      });
+    }
+    const expectedTransitionId = buildCanonicalTransitionId({
+      taskId,
+      dispositionGeneration: record.dispositionGeneration,
+      resultId: record.resultId,
+    });
+    if (record.canonicalTransitionId !== expectedTransitionId) {
+      storeFail(`materialization canonicalTransitionId mismatch (fail-closed): ${taskId}`, {
+        code: CORRUPT_MATERIALIZATION,
+        taskId,
+      });
+    }
+    return canonical;
+  }
+
+  /**
+   * Materialize an ADOPTED disposition as a canonical per-task adoption record.
+   * WRITE -> CLOSE/REOPEN -> READ BACK -> SCHEMA/IDENTITY/BINDING VERIFY.
+   * Same identity + same payload = idempotent. Same identity + different
+   * payload (including a different disposition generation) = fail-closed
+   * MATERIALIZATION_CONFLICT. Never overwrites, never repairs.
+   */
+  materializeAdoption({
+    taskId,
+    materializerId,
+    policyRefs = [],
+    proofRefs = [],
+    evidenceRefs = [],
+    authorityRefs,
+    publicationRefs,
+    closureRefs,
+    materializedAt,
+    ...extraTopLevel
+  } = {}) {
+    assertValidTaskId(taskId);
+    if (typeof materializerId !== 'string' || !materializerId.trim()) {
+      storeFail('materializerId must be a non-empty string.', { code: 'INVALID_MATERIALIZER', taskId });
+    }
+    const disposition = this.#requireAdoptedDisposition(taskId);
+    const canonical = this.#requireCanonicalResultForDisposition(taskId, disposition.resultId);
+    let candidate;
+    try {
+      candidate = buildMaterializationRecord({
+        ...extraTopLevel,
+        taskId,
+        resultId: canonical.resultId,
+        claimGeneration: canonical.claimGeneration,
+        dispositionGeneration: disposition.dispositionGeneration,
+        resultBinding: computeResultBinding(canonical),
+        policyRefs,
+        proofRefs,
+        evidenceRefs,
+        ...(authorityRefs === undefined ? {} : { authorityRefs }),
+        ...(publicationRefs === undefined ? {} : { publicationRefs }),
+        ...(closureRefs === undefined ? {} : { closureRefs }),
+        materializedAt: materializedAt ?? this.nowIso(),
+        materializerId,
+      });
+    } catch (error) {
+      if (error?.code) {
+        storeFail(`invalid materialization record (fail-closed): ${error.message}`, {
+          code: error.code,
+          taskId,
+        });
+      }
+      throw error;
+    }
+    // Defense in depth: candidate must bind exactly to the live ADOPTED winner.
+    if (
+      candidate.dispositionGeneration !== disposition.dispositionGeneration ||
+      candidate.resultId !== disposition.resultId ||
+      candidate.canonicalTransitionId !== disposition.canonicalTransitionId ||
+      candidate.resultBinding !== disposition.resultBinding ||
+      candidate.claimGeneration !== disposition.claimGeneration
+    ) {
+      storeFail(`materialization binding drift vs canonical ADOPTED disposition (fail-closed): ${taskId}`, {
+        code: CORRUPT_MATERIALIZATION,
+        taskId,
+      });
+    }
+
+    const paths = taskFilePaths(this.home, taskId);
+    const created = writeJsonExclusive(paths.materializationPath, candidate);
+    if (!created.created) {
+      const winnerFound = readValidatedMaterializationDocument(paths.materializationPath, taskId);
+      if (winnerFound.state === 'missing') {
+        storeFail(`materialization race could not be resolved deterministically: ${taskId}`, {
+          code: CORRUPT_MATERIALIZATION,
+          taskId,
+        });
+      }
+      if (canonicalRecordsEqual(winnerFound.record, candidate)) {
+        const verified = this.verifyMaterializationReadback(taskId);
+        if (!canonicalRecordsEqual(verified.record, candidate)) {
+          storeFail(`materialization read-back mismatch after idempotent replay (fail-closed): ${taskId}`, {
+            code: CORRUPT_MATERIALIZATION,
+            taskId,
+          });
+        }
+        return { record: winnerFound.record, duplicate: true };
+      }
+      storeFail(`conflicting materialization payload for same ADOPTED identity (first wins, fail-closed): ${taskId}`, {
+        code: MATERIALIZATION_CONFLICT,
+        taskId,
+      });
+    }
+    const verified = this.verifyMaterializationReadback(taskId);
+    if (!canonicalRecordsEqual(verified.record, candidate)) {
+      storeFail(`materialization failed to verify after write (fail-closed): ${taskId}`, {
+        code: CORRUPT_MATERIALIZATION,
+        taskId,
+      });
+    }
+    return { record: candidate, duplicate: false };
+  }
+
+  /** Durable reopen/read-back verification for a materialization record. */
+  verifyMaterializationReadback(taskId) {
+    assertValidTaskId(taskId);
+    const paths = taskFilePaths(this.home, taskId);
+    const found = readValidatedMaterializationDocument(paths.materializationPath, taskId);
+    if (found.state === 'missing') {
+      storeFail(`no materialization for task: ${taskId}`, { code: MATERIALIZATION_NOT_FOUND, taskId });
+    }
+    this.#verifyMaterializationBinding(taskId, found.record);
+    // Cross-check the live ADOPTED disposition still binds identically.
+    const disposition = this.#requireAdoptedDisposition(taskId);
+    if (
+      found.record.dispositionGeneration !== disposition.dispositionGeneration ||
+      found.record.resultId !== disposition.resultId ||
+      found.record.canonicalTransitionId !== disposition.canonicalTransitionId ||
+      found.record.resultBinding !== disposition.resultBinding
+    ) {
+      storeFail(`materialization drift vs canonical ADOPTED disposition (fail-closed): ${taskId}`, {
+        code: CORRUPT_MATERIALIZATION,
+        taskId,
+      });
+    }
+    return { record: found.record, ok: true };
+  }
+
+  readMaterialization(taskId) {
+    const verified = this.verifyMaterializationReadback(taskId);
+    return verified.record;
+  }
+
+  #requireMaterializationForAck(taskId) {
+    try {
+      return this.verifyMaterializationReadback(taskId).record;
+    } catch (error) {
+      if (error?.code) {
+        const code =
+          error.code === MATERIALIZATION_NOT_FOUND || error.code === MATERIALIZATION_NOT_ELIGIBLE
+            ? ACK_NOT_READY
+            : error.code;
+        storeFail(`ACK requires durable materialization read-back PASS (fail-closed): ${taskId}: ${error.message}`, {
+          code,
+          taskId,
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * ACK an ADOPTED materialization after durable read-back PASS.
+   * ACK means: Control Tower materialized the ADOPTED disposition as canonical
+   * per-task state and verified durable reopen/read-back identity + binding.
+   */
+  ackAdoption({ taskId, acknowledgerId, proofRefs = [], ackedAt, ...extraTopLevel } = {}) {
+    assertValidTaskId(taskId);
+    if (typeof acknowledgerId !== 'string' || !acknowledgerId.trim()) {
+      storeFail('acknowledgerId must be a non-empty string.', { code: 'INVALID_ACKNOWLEDGER', taskId });
+    }
+    this.#requireAdoptedDisposition(taskId);
+    const materialization = this.#requireMaterializationForAck(taskId);
+    let candidate;
+    try {
+      candidate = buildAckRecord({
+        ...extraTopLevel,
+        taskId,
+        dispositionGeneration: materialization.dispositionGeneration,
+        resultId: materialization.resultId,
+        resultBinding: materialization.resultBinding,
+        ackedAt: ackedAt ?? this.nowIso(),
+        acknowledgerId,
+        proofRefs,
+      });
+    } catch (error) {
+      if (error?.code) {
+        storeFail(`invalid ack record (fail-closed): ${error.message}`, { code: error.code, taskId });
+      }
+      throw error;
+    }
+    if (
+      candidate.materializationId !== materialization.materializationId ||
+      candidate.canonicalTransitionId !== materialization.canonicalTransitionId ||
+      candidate.resultBinding !== materialization.resultBinding
+    ) {
+      storeFail(`ack binding drift vs canonical materialization (fail-closed): ${taskId}`, {
+        code: CORRUPT_ACK,
+        taskId,
+      });
+    }
+    const paths = taskFilePaths(this.home, taskId);
+    const created = writeJsonExclusive(paths.ackPath, candidate);
+    if (!created.created) {
+      const winnerFound = readValidatedAckDocument(paths.ackPath, taskId);
+      if (winnerFound.state === 'missing') {
+        storeFail(`ack race could not be resolved deterministically: ${taskId}`, {
+          code: CORRUPT_ACK,
+          taskId,
+        });
+      }
+      if (canonicalRecordsEqual(winnerFound.record, candidate)) {
+        return { record: winnerFound.record, duplicate: true };
+      }
+      storeFail(`conflicting ack payload for same materialization (first wins, fail-closed): ${taskId}`, {
+        code: ACK_CONFLICT,
+        taskId,
+      });
+    }
+    const reread = readValidatedAckDocument(paths.ackPath, taskId);
+    if (reread.state !== 'present' || !canonicalRecordsEqual(reread.record, candidate)) {
+      storeFail(`ack failed to verify after write (fail-closed): ${taskId}`, {
+        code: CORRUPT_ACK,
+        taskId,
+      });
+    }
+    return { record: candidate, duplicate: false };
+  }
+
+  readAck(taskId) {
+    assertValidTaskId(taskId);
+    const paths = taskFilePaths(this.home, taskId);
+    const found = readValidatedAckDocument(paths.ackPath, taskId);
+    if (found.state === 'missing') {
+      storeFail(`no ack for task: ${taskId}`, { code: ACK_NOT_FOUND, taskId });
+    }
+    const materialization = this.#requireMaterializationForAck(taskId);
+    if (
+      found.record.materializationId !== materialization.materializationId ||
+      found.record.canonicalTransitionId !== materialization.canonicalTransitionId ||
+      found.record.resultBinding !== materialization.resultBinding
+    ) {
+      storeFail(`ack drift vs canonical materialization (fail-closed): ${taskId}`, {
+        code: CORRUPT_ACK,
+        taskId,
+      });
+    }
+    return found.record;
+  }
+
+  #requireAckForConsumed(taskId) {
+    try {
+      return this.readAck(taskId);
+    } catch (error) {
+      if (error?.code) {
+        const code =
+          error.code === ACK_NOT_FOUND || error.code === ACK_NOT_READY ? CONSUMED_NOT_READY : error.code;
+        storeFail(`CONSUMED requires valid ACK (fail-closed): ${taskId}: ${error.message}`, {
+          code,
+          taskId,
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Mark a task CONSUMED after RESULT + ADOPTED + materialization read-back +
+   * ACK are all valid. Durable closure marker; never deletes raw evidence.
+   */
+  markConsumed({ taskId, consumerId, proofRefs = [], consumedAt, ...extraTopLevel } = {}) {
+    assertValidTaskId(taskId);
+    if (typeof consumerId !== 'string' || !consumerId.trim()) {
+      storeFail('consumerId must be a non-empty string.', { code: 'INVALID_CONSUMER', taskId });
+    }
+    this.#requireAdoptedDisposition(taskId);
+    let materialization;
+    try {
+      materialization = this.#requireMaterializationForAck(taskId);
+    } catch (error) {
+      if (error?.code) {
+        storeFail(`CONSUMED requires durable materialization read-back PASS (fail-closed): ${taskId}: ${error.message}`, {
+          code: CONSUMED_NOT_READY,
+          taskId,
+        });
+      }
+      throw error;
+    }
+    const ack = this.#requireAckForConsumed(taskId);
+    let candidate;
+    try {
+      candidate = buildConsumedRecord({
+        ...extraTopLevel,
+        taskId,
+        dispositionGeneration: materialization.dispositionGeneration,
+        resultId: materialization.resultId,
+        resultBinding: materialization.resultBinding,
+        consumedAt: consumedAt ?? this.nowIso(),
+        consumerId,
+        proofRefs,
+      });
+    } catch (error) {
+      if (error?.code) {
+        storeFail(`invalid consumed record (fail-closed): ${error.message}`, { code: error.code, taskId });
+      }
+      throw error;
+    }
+    if (
+      candidate.materializationId !== materialization.materializationId ||
+      candidate.ackId !== ack.ackId ||
+      candidate.canonicalTransitionId !== materialization.canonicalTransitionId ||
+      candidate.resultBinding !== materialization.resultBinding
+    ) {
+      storeFail(`consumed binding drift vs canonical materialization/ack (fail-closed): ${taskId}`, {
+        code: CORRUPT_CONSUMED,
+        taskId,
+      });
+    }
+    const paths = taskFilePaths(this.home, taskId);
+    const created = writeJsonExclusive(paths.consumedPath, candidate);
+    if (!created.created) {
+      const winnerFound = readValidatedConsumedDocument(paths.consumedPath, taskId);
+      if (winnerFound.state === 'missing') {
+        storeFail(`consumed race could not be resolved deterministically: ${taskId}`, {
+          code: CORRUPT_CONSUMED,
+          taskId,
+        });
+      }
+      if (canonicalRecordsEqual(winnerFound.record, candidate)) {
+        return { record: winnerFound.record, duplicate: true };
+      }
+      storeFail(`conflicting consumed payload for same adoption (first wins, fail-closed): ${taskId}`, {
+        code: CONSUMED_CONFLICT,
+        taskId,
+      });
+    }
+    const reread = readValidatedConsumedDocument(paths.consumedPath, taskId);
+    if (reread.state !== 'present' || !canonicalRecordsEqual(reread.record, candidate)) {
+      storeFail(`consumed failed to verify after write (fail-closed): ${taskId}`, {
+        code: CORRUPT_CONSUMED,
+        taskId,
+      });
+    }
+    return { record: candidate, duplicate: false };
+  }
+
+  readConsumed(taskId) {
+    assertValidTaskId(taskId);
+    const paths = taskFilePaths(this.home, taskId);
+    const found = readValidatedConsumedDocument(paths.consumedPath, taskId);
+    if (found.state === 'missing') {
+      storeFail(`no consumed marker for task: ${taskId}`, { code: CONSUMED_NOT_FOUND, taskId });
+    }
+    const materialization = this.#requireMaterializationForAck(taskId);
+    const ack = this.#requireAckForConsumed(taskId);
+    if (
+      found.record.materializationId !== materialization.materializationId ||
+      found.record.ackId !== ack.ackId ||
+      found.record.canonicalTransitionId !== materialization.canonicalTransitionId ||
+      found.record.resultBinding !== materialization.resultBinding
+    ) {
+      storeFail(`consumed drift vs canonical materialization/ack (fail-closed): ${taskId}`, {
+        code: CORRUPT_CONSUMED,
+        taskId,
+      });
+    }
+    return found.record;
+  }
+
+  /**
+   * True when a task is fully CONSUMED with every prerequisite verified.
+   * Missing consumed marker = gap (false). Corrupt/missing canonical chain
+   * with a consumed marker present = fail-closed throw (never treated as gap).
+   */
+  isConsumed(taskId) {
+    assertValidTaskId(taskId);
+    const paths = taskFilePaths(this.home, taskId);
+    const consumedFound = readValidatedConsumedDocument(paths.consumedPath, taskId);
+    if (consumedFound.state === 'missing') return false;
+    // Full chain verification; any drift/corruption throws fail-closed.
+    this.readConsumed(taskId);
+    return true;
+  }
+
+  readCursor() {
+    const found = readValidatedCursorDocument(cursorFilePath(this.home));
+    if (found.state === 'missing') {
+      storeFail('no cursor watermark yet.', { code: CURSOR_NOT_FOUND });
+    }
+    // Cursor never overwrites truth: verify the persisted prefix is still
+    // contiguous CONSUMED. Any corruption/gap fails closed here.
+    for (const taskId of found.record.consumedThrough) {
+      let consumed;
+      try {
+        consumed = this.isConsumed(taskId);
+      } catch (error) {
+        storeFail(`cursor prefix failed revalidation (fail-closed): ${taskId}: ${error?.message}`, {
+          code: error?.code ?? CORRUPT_CURSOR,
+          taskId,
+        });
+      }
+      if (!consumed) {
+        storeFail(`cursor prefix is no longer contiguous CONSUMED (fail-closed): ${taskId}`, {
+          code: CORRUPT_CURSOR,
+          taskId,
+        });
+      }
+    }
+    return found.record;
+  }
+
+  /**
+   * Advance the cursor watermark over the minimal deterministic sequence
+   * contract: lexicographic ascending taskId order. Caller may supply an
+   * explicit orderedTaskIds array (must already be strictly ascending unique);
+   * otherwise the durable tasks directory is scanned and sorted.
+   * Contiguity: stop at the first non-CONSUMED gap; never skip BLOCKED /
+   * NEEDS_USER_DECISION / REJECTED / SUPERSEDED / missing. Corrupt canonical
+   * records fail closed. Silent rewind is refused. Idempotent replay returns
+   * the canonical winner.
+   */
+  advanceCursor({ orderedTaskIds, evaluatorId } = {}) {
+    if (typeof evaluatorId !== 'string' || !evaluatorId.trim()) {
+      storeFail('evaluatorId must be a non-empty string.', { code: 'INVALID_EVALUATOR' });
+    }
+    let sequence;
+    if (orderedTaskIds === undefined) {
+      sequence = listTaskIds(this.home);
+    } else {
+      if (!Array.isArray(orderedTaskIds)) {
+        storeFail('orderedTaskIds must be an array of taskIds when present.', {
+          code: CURSOR_ORDER_VIOLATION,
+        });
+      }
+      const seen = new Set();
+      let previous = null;
+      for (const taskId of orderedTaskIds) {
+        try {
+          assertValidTaskId(taskId);
+        } catch {
+          storeFail(`orderedTaskIds contains invalid taskId: ${JSON.stringify(taskId)}.`, {
+            code: CURSOR_ORDER_VIOLATION,
+          });
+        }
+        if (seen.has(taskId)) {
+          storeFail('orderedTaskIds must not contain duplicates.', { code: CURSOR_ORDER_VIOLATION });
+        }
+        seen.add(taskId);
+        if (previous !== null && !(previous < taskId)) {
+          storeFail('orderedTaskIds must be strictly ascending lexicographic order.', {
+            code: CURSOR_ORDER_VIOLATION,
+          });
+        }
+        previous = taskId;
+      }
+      sequence = [...orderedTaskIds];
+    }
+
+    const prefix = [];
+    for (const taskId of sequence) {
+      let consumed;
+      try {
+        consumed = this.isConsumed(taskId);
+      } catch (error) {
+        storeFail(`cursor advance refused: corrupt canonical chain at ${taskId} (fail-closed): ${error?.message}`, {
+          code: error?.code ?? CORRUPT_CURSOR,
+          taskId,
+        });
+      }
+      if (!consumed) break;
+      prefix.push(taskId);
+    }
+    const desiredWatermark = prefix.length > 0 ? prefix[prefix.length - 1] : null;
+
+    const cursorPath = cursorFilePath(this.home);
+    const existingFound = readValidatedCursorDocument(cursorPath);
+    if (existingFound.state === 'missing') {
+      const initial = validateCursorRecord({
+        schemaVersion: '1',
+        sequenceContract: CURSOR_SEQUENCE_CONTRACT,
+        watermarkTaskId: desiredWatermark,
+        consumedThrough: prefix,
+        updatedAt: this.nowIso(),
+        evaluatorId,
+      });
+      const created = writeJsonExclusive(cursorPath, initial);
+      if (!created.created) {
+        const winnerFound = readValidatedCursorDocument(cursorPath);
+        if (winnerFound.state === 'missing') {
+          storeFail('cursor race could not be resolved deterministically.', { code: CORRUPT_CURSOR });
+        }
+        return { record: winnerFound.record, duplicate: true, advanced: false };
+      }
+      const reread = readValidatedCursorDocument(cursorPath);
+      if (reread.state !== 'present' || !canonicalRecordsEqual(reread.record, initial)) {
+        storeFail('cursor failed to verify after write (fail-closed).', { code: CORRUPT_CURSOR });
+      }
+      return { record: initial, duplicate: false, advanced: prefix.length > 0 };
+    }
+
+    const existing = existingFound.record;
+    if (existing.sequenceContract !== CURSOR_SEQUENCE_CONTRACT) {
+      storeFail('cursor sequence contract mismatch (fail-closed).', { code: CORRUPT_CURSOR });
+    }
+    // Revalidate the persisted prefix is still contiguous CONSUMED.
+    for (const taskId of existing.consumedThrough) {
+      let consumed;
+      try {
+        consumed = this.isConsumed(taskId);
+      } catch (error) {
+        storeFail(`existing cursor prefix failed revalidation (fail-closed): ${taskId}: ${error?.message}`, {
+          code: error?.code ?? CORRUPT_CURSOR,
+          taskId,
+        });
+      }
+      if (!consumed) {
+        storeFail(`existing cursor prefix is no longer contiguous CONSUMED (fail-closed): ${taskId}`, {
+          code: CORRUPT_CURSOR,
+          taskId,
+        });
+      }
+    }
+
+    const existingPrefix = existing.consumedThrough;
+    const prefixesEqual =
+      existingPrefix.length === prefix.length && existingPrefix.every((value, index) => value === prefix[index]);
+    if (prefixesEqual && existing.watermarkTaskId === desiredWatermark) {
+      return { record: existing, duplicate: true, advanced: false };
+    }
+    const isStrictPrefix = (shorter, longer) =>
+      shorter.length < longer.length && shorter.every((value, index) => value === longer[index]);
+    if (isStrictPrefix(existingPrefix, prefix)) {
+      const next = validateCursorRecord({
+        schemaVersion: '1',
+        sequenceContract: CURSOR_SEQUENCE_CONTRACT,
+        watermarkTaskId: desiredWatermark,
+        consumedThrough: prefix,
+        updatedAt: this.nowIso(),
+        evaluatorId,
+      });
+      writeJsonAtomic(cursorPath, next);
+      const reread = readValidatedCursorDocument(cursorPath);
+      if (reread.state !== 'present' || !canonicalRecordsEqual(reread.record, next)) {
+        storeFail('cursor failed to verify after advance (fail-closed).', { code: CORRUPT_CURSOR });
+      }
+      return { record: next, duplicate: false, advanced: true };
+    }
+    if (isStrictPrefix(prefix, existingPrefix)) {
+      // Stale view: already advanced beyond. Never rewind silently.
+      return { record: existing, duplicate: true, advanced: false };
+    }
+    if (prefix.length === 0 && existingPrefix.length === 0) {
+      return { record: existing, duplicate: true, advanced: false };
+    }
+    storeFail('cursor advancement diverges from canonical prefix (fail-closed, no skip/rewind).', {
+      code: CURSOR_CONFLICT,
     });
   }
 }
