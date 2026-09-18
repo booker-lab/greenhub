@@ -30,6 +30,13 @@
 //   buildClaimBoundDispatchEnvelope identity; no mutation, no repair, no
 //   scheduler, no READY scan, no worker selection, no dispatch persistence,
 //   no transport, no executor invocation).
+// + GREENHUB-COORDINATION-DURABLE-DISPATCH-ATTEMPT-19
+//   (immutable durable dispatch-attempt persistence ONLY:
+//   persistDispatchAttempt / readDispatchAttempt over the exact LIVE Task 18
+//   envelope, exclusive-create per dispatchId under
+//   <home>/tasks/<sourceTaskId>/dispatch-attempts/<dispatchId>.json; no
+//   transport, no scheduler, no worker selection, no executor invocation,
+//   no ACK, no task status mutation, no new generation/retry authority).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -63,6 +70,9 @@
 //     (emission-bound admission authority, bound to the exact canonical emission;
 //     READY is reached only through the existing markReady() path after this
 //     authority is durable)
+//   <home>/tasks/<sourceTaskId>/dispatch-attempts/<dispatchId>.json
+//     (immutable durable dispatch-attempt intent, bound to the exact LIVE Task 18
+//     envelope; exclusive-create, no overwrite, no transport)
 // Claim authority stays <home>/tasks/<taskId>/claim.json (no new claim file,
 // no new lease subsystem, no worker registry): the admission-bound layer only
 // derives a deterministic claimToken bound to the canonical admission and
@@ -147,6 +157,12 @@ import {
   buildClaimBoundDispatchEnvelope,
   validateClaimBoundDispatchEnvelope,
 } from './claim-bound-dispatch-envelope.mjs';
+import {
+  assertValidDispatchAttemptId,
+  buildDispatchAttemptRecord,
+  dispatchAttemptFilePath,
+  validateDispatchAttemptRecord,
+} from './dispatch-attempt.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -205,6 +221,10 @@ export const INVALID_DISPATCH_BINDING = 'INVALID_DISPATCH_BINDING';
 export const DISPATCH_BINDING_MISMATCH = 'DISPATCH_BINDING_MISMATCH';
 export const STALE_DISPATCH = 'STALE_DISPATCH';
 export const TASK_NOT_CLAIMED = 'TASK_NOT_CLAIMED';
+export const DISPATCH_ATTEMPT_NOT_FOUND = 'DISPATCH_ATTEMPT_NOT_FOUND';
+export const CORRUPT_DISPATCH_ATTEMPT = 'CORRUPT_DISPATCH_ATTEMPT';
+export const DISPATCH_ATTEMPT_CONFLICT = 'DISPATCH_ATTEMPT_CONFLICT';
+export const DISPATCH_ATTEMPT_BINDING_MISMATCH = 'DISPATCH_ATTEMPT_BINDING_MISMATCH';
 
 export class CoordinationStoreError extends Error {
   constructor(message, details = {}) {
@@ -3979,6 +3999,178 @@ export class CoordinationStore {
       sequencePosition: membership[0].sequenceNumber,
       childStatus: child.status,
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // Durable dispatch-attempt domain
+  // (GREENHUB-COORDINATION-DURABLE-DISPATCH-ATTEMPT-19, persistence ONLY).
+  // persistDispatchAttempt() != sendDispatch() != dispatchNextTask()
+  //   != scheduleNextTask() != decideNextTask(): the caller explicitly supplies
+  //   (sourceTaskId, emissionSlot, workerId); this primitive never READY-scans,
+  //   never infers workers, never creates/increments/resets dispatch
+  //   generations, never takes over claims, never extends leases, never mutates
+  //   task/claim/admission/emission, never transports, never invokes executors,
+  //   never ACKs, never sets task status. Ordering is preserved exactly:
+  //   1. caller supplies (sourceTaskId, emissionSlot, workerId),
+  //   2. live Task 18 envelope read (fail-closed, durable delta 0 on error),
+  //   3. deterministic attempt record build (timestamp-free),
+  //   4. dispatchId exact-path exclusive-create (OS `wx` family),
+  //   5. EEXIST -> read + validate winner (no repair),
+  //   6. byte/semantic equivalent -> idempotent replay,
+  //   7. different/corrupt binding -> fail-closed (no overwrite, no delete).
+  //   Drift/corruption fails closed (no auto-repair, no last-writer-wins).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Persist the immutable durable dispatch attempt for the CURRENT live
+   * claim-bound dispatch envelope. Exclusive-create per dispatchId.
+   * Idempotent replay returns the existing record when byte/semantically
+   * equivalent. Never mutates claim/task/admission.
+   */
+  persistDispatchAttempt({ sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT, workerId } = {}) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    if (typeof workerId !== 'string' || !workerId.trim()) {
+      storeFail('workerId must be a non-empty string (caller-supplied; never inferred).', {
+        code: 'INVALID_WORKER',
+        taskId: sourceTaskId,
+      });
+    }
+
+    // 1. LIVE canonical envelope (Task 18 read; throws fail-closed with zero
+    //    durable dispatch delta on wrong worker / unclaimed / terminal /
+    //    missing / foreign / corrupt claim).
+    const envelope = this.readClaimBoundDispatchEnvelope({ sourceTaskId, emissionSlot, workerId });
+
+    // 2. Deterministic timestamp-free record (provenance + Task 18 binding).
+    let candidate;
+    try {
+      candidate = buildDispatchAttemptRecord({ sourceTaskId, emissionSlot, envelope });
+    } catch (error) {
+      storeFail(`dispatch attempt build failed (fail-closed): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : CORRUPT_DISPATCH_ATTEMPT,
+        taskId: sourceTaskId,
+      });
+    }
+
+    // 3. Exact-path exclusive-create (never exists()->write()).
+    const targetPath = dispatchAttemptFilePath(this.home, sourceTaskId, candidate.dispatchId);
+    const created = writeJsonExclusive(targetPath, candidate);
+    if (created.created) {
+      const reread = readJsonFile(targetPath);
+      if (reread.state !== 'present' || JSON.stringify(reread.document) !== JSON.stringify(candidate)) {
+        storeFail(`dispatch attempt failed to verify after write (fail-closed): ${sourceTaskId}@${candidate.dispatchId}`, {
+          code: CORRUPT_DISPATCH_ATTEMPT,
+          taskId: sourceTaskId,
+        });
+      }
+      try {
+        validateDispatchAttemptRecord(reread.document);
+      } catch (error) {
+        storeFail(`persisted dispatch attempt invalid after write (fail-closed): ${error?.message}`, {
+          code: CORRUPT_DISPATCH_ATTEMPT,
+          taskId: sourceTaskId,
+        });
+      }
+      return candidate;
+    }
+
+    // 4. EEXIST: read + validate winner (no repair, no overwrite).
+    const winnerFound = readJsonFile(targetPath);
+    if (winnerFound.state === 'missing') {
+      storeFail(`dispatch attempt race could not be resolved deterministically: ${sourceTaskId}@${candidate.dispatchId}`, {
+        code: CORRUPT_DISPATCH_ATTEMPT,
+        taskId: sourceTaskId,
+      });
+    }
+    if (winnerFound.state === 'corrupt') {
+      storeFail(`dispatch attempt is corrupt (fail-closed, no auto-repair, no overwrite): ${sourceTaskId}@${candidate.dispatchId}`, {
+        code: CORRUPT_DISPATCH_ATTEMPT,
+        taskId: sourceTaskId,
+      });
+    }
+    let winner;
+    try {
+      winner = validateDispatchAttemptRecord(winnerFound.document);
+    } catch (error) {
+      if (error?.code === DISPATCH_BINDING_MISMATCH) {
+        storeFail(`existing dispatch attempt binding mismatch (fail-closed, no overwrite): ${sourceTaskId}@${candidate.dispatchId}: ${error?.message}`, {
+          code: error.code,
+          taskId: sourceTaskId,
+        });
+      }
+      storeFail(`existing dispatch attempt invalid (fail-closed, no auto-repair, no overwrite): ${sourceTaskId}@${candidate.dispatchId}: ${error?.message}`, {
+        code: CORRUPT_DISPATCH_ATTEMPT,
+        taskId: sourceTaskId,
+      });
+    }
+    if (winner.sourceTaskId !== sourceTaskId || winner.dispatchId !== candidate.dispatchId) {
+      storeFail(`dispatch attempt path/record binding mismatch (fail-closed, no overwrite): ${sourceTaskId}@${candidate.dispatchId}`, {
+        code: DISPATCH_ATTEMPT_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    if (JSON.stringify(winner) === JSON.stringify(candidate)) {
+      return winner;
+    }
+    storeFail(`dispatch attempt conflict (first wins, no overwrite, no last-writer-wins): ${sourceTaskId}@${candidate.dispatchId}`, {
+      code: DISPATCH_ATTEMPT_CONFLICT,
+      taskId: sourceTaskId,
+    });
+    return winner;
+  }
+
+  /**
+   * Read one durable dispatch attempt by exact (sourceTaskId, dispatchId).
+   * Strict validation, path/record identity match, corruption fail-closed,
+   * no repair.
+   */
+  readDispatchAttempt({ sourceTaskId, dispatchId } = {}) {
+    assertValidTaskId(sourceTaskId);
+    try {
+      assertValidDispatchAttemptId(dispatchId);
+    } catch (error) {
+      storeFail(`dispatch attempt id invalid (fail-closed): ${error?.message}`, {
+        code: CORRUPT_DISPATCH_ATTEMPT,
+        taskId: sourceTaskId,
+      });
+    }
+    const targetPath = dispatchAttemptFilePath(this.home, sourceTaskId, dispatchId);
+    const found = readJsonFile(targetPath);
+    if (found.state === 'missing') {
+      storeFail(`dispatch attempt not found: ${sourceTaskId}@${dispatchId}`, {
+        code: DISPATCH_ATTEMPT_NOT_FOUND,
+        taskId: sourceTaskId,
+      });
+    }
+    if (found.state === 'corrupt') {
+      storeFail(`dispatch attempt is corrupt (fail-closed, no auto-repair): ${sourceTaskId}@${dispatchId}`, {
+        code: CORRUPT_DISPATCH_ATTEMPT,
+        taskId: sourceTaskId,
+      });
+    }
+    let record;
+    try {
+      record = validateDispatchAttemptRecord(found.document);
+    } catch (error) {
+      if (error?.code === DISPATCH_BINDING_MISMATCH) {
+        storeFail(`dispatch attempt binding mismatch (fail-closed): ${sourceTaskId}@${dispatchId}: ${error?.message}`, {
+          code: error.code,
+          taskId: sourceTaskId,
+        });
+      }
+      storeFail(`dispatch attempt invalid (fail-closed, no auto-repair): ${sourceTaskId}@${dispatchId}: ${error?.message}`, {
+        code: CORRUPT_DISPATCH_ATTEMPT,
+        taskId: sourceTaskId,
+      });
+    }
+    if (record.sourceTaskId !== sourceTaskId || record.dispatchId !== dispatchId) {
+      storeFail(`dispatch attempt path/record binding mismatch (fail-closed): ${sourceTaskId}@${dispatchId}`, {
+        code: DISPATCH_ATTEMPT_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    return record;
   }
 
   // -------------------------------------------------------------------------
