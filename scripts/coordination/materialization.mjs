@@ -1,4 +1,5 @@
-// Bounded mutation owner: GREENHUB-COORDINATION-CANONICAL-MATERIALIZATION-CONSUMPTION-CURSOR-11.
+// Bounded mutation owner: GREENHUB-COORDINATION-CANONICAL-MATERIALIZATION-CONSUMPTION-CURSOR-11
+// + GREENHUB-COORDINATION-CURSOR-APPEND-STABILITY-12 (append-stable sequence/cursor migration ONLY).
 // Surface: scripts/coordination/** materialization/readback/ACK/consumed/cursor ONLY.
 //
 // Explicitly OUT OF SCOPE (must NOT be implemented here):
@@ -17,16 +18,25 @@
 import { createHash } from 'node:crypto';
 import { TASK_ID_PATTERN } from './task-envelope.mjs';
 import { buildCanonicalTransitionId, DISPOSITION_STATE_ADOPTED } from './disposition.mjs';
+import {
+  LEGACY_CURSOR_SEQUENCE_CONTRACT as LEGACY_SEQUENCE_CONTRACT,
+  TASK_SEQUENCE_CONTRACT,
+} from './task-sequence.mjs';
 
 export const MATERIALIZATION_SCHEMA_VERSION = '1';
 export const ACK_SCHEMA_VERSION = '1';
 export const CONSUMED_SCHEMA_VERSION = '1';
 export const CURSOR_SCHEMA_VERSION = '1';
 
-// Minimal sequence contract for the cursor watermark. Derived only from
-// existing durable task/result identity (lexicographic taskId order). No
-// timestamp ordering is invented here.
-export const CURSOR_SEQUENCE_CONTRACT = 'lexicographic-task-id-v1';
+// Append-stable cursor ordering authority. TaskId is identity only; the
+// durable append-only task sequence (scripts/coordination/task-sequence.mjs)
+// is the sole cursor ordering authority. BOOTSTRAP ONCE may order the initial
+// snapshot lexicographically (legacy v1 meaning preserved for bootstrap only);
+// after bootstrap new tasks append only after the frozen prefix. No timestamp
+// (createdAt/updatedAt/consumedAt/materializedAt/mtime/wall-clock) is ordering
+// authority.
+export const CURSOR_SEQUENCE_CONTRACT = TASK_SEQUENCE_CONTRACT;
+export const LEGACY_CURSOR_SEQUENCE_CONTRACT = LEGACY_SEQUENCE_CONTRACT;
 
 export const MATERIALIZATION_STATE_ADOPTED = DISPOSITION_STATE_ADOPTED;
 
@@ -495,6 +505,10 @@ export function buildConsumedRecord(input) {
 /**
  * Validate the global cursor watermark record. Returns frozen copy.
  * watermarkTaskId is null when no contiguous CONSUMED prefix exists yet.
+ * Ordering note: consumedThrough order is the append-stable task sequence
+ * order enforced at the store layer (prefix of the canonical sequence).
+ * This pure validator checks identity/uniqueness/watermark only and MUST NOT
+ * reintroduce lexicographic taskId ordering as authority.
  */
 export function validateCursorRecord(record) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) {
@@ -511,15 +525,10 @@ export function validateCursorRecord(record) {
     fail('cursor consumedThrough must be an array of taskIds.', 'INVALID_CURSOR');
   }
   const seen = new Set();
-  let previous = null;
   for (const taskId of record.consumedThrough) {
     assertValidTaskId(taskId);
     if (seen.has(taskId)) fail('cursor consumedThrough must not contain duplicates.', 'INVALID_CURSOR');
     seen.add(taskId);
-    if (previous !== null && !(previous < taskId)) {
-      fail('cursor consumedThrough must be strictly ascending lexicographic order.', 'INVALID_CURSOR');
-    }
-    previous = taskId;
   }
   if (record.consumedThrough.length === 0) {
     if (record.watermarkTaskId !== null) {
@@ -537,6 +546,57 @@ export function validateCursorRecord(record) {
   const json = JSON.stringify(record);
   if (json.length > MAX_MATERIALIZATION_JSON_BYTES) {
     fail('cursor record exceeds size budget.', 'CONTEXT_BUDGET_EXCEEDED');
+  }
+  return Object.freeze({ ...record, consumedThrough: Object.freeze([...record.consumedThrough]) });
+}
+
+/**
+ * Validate a legacy lexicographic-task-id-v1 cursor record (migration input only).
+ * Preserves the published v1 meaning: strictly ascending lexicographic order.
+ * New code MUST NOT create legacy records; this is fail-closed input validation
+ * for safe migration (prefix preservation, no silent rewind/credit loss).
+ */
+export function validateLegacyCursorRecord(record) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) {
+    fail('legacy cursor record must be an object.', 'INVALID_CURSOR');
+  }
+  assertNoBlockedInlineFields(record);
+  if (record.schemaVersion !== CURSOR_SCHEMA_VERSION) {
+    fail(`legacy cursor schemaVersion must be ${JSON.stringify(CURSOR_SCHEMA_VERSION)}.`, 'INVALID_SCHEMA_VERSION');
+  }
+  if (record.sequenceContract !== LEGACY_CURSOR_SEQUENCE_CONTRACT) {
+    fail(`legacy cursor sequenceContract must be ${JSON.stringify(LEGACY_CURSOR_SEQUENCE_CONTRACT)}.`, 'INVALID_CURSOR');
+  }
+  if (!Array.isArray(record.consumedThrough)) {
+    fail('legacy cursor consumedThrough must be an array of taskIds.', 'INVALID_CURSOR');
+  }
+  const seen = new Set();
+  let previous = null;
+  for (const taskId of record.consumedThrough) {
+    assertValidTaskId(taskId);
+    if (seen.has(taskId)) fail('legacy cursor consumedThrough must not contain duplicates.', 'INVALID_CURSOR');
+    seen.add(taskId);
+    if (previous !== null && !(previous < taskId)) {
+      fail('legacy cursor consumedThrough must be strictly ascending lexicographic order.', 'INVALID_CURSOR');
+    }
+    previous = taskId;
+  }
+  if (record.consumedThrough.length === 0) {
+    if (record.watermarkTaskId !== null) {
+      fail('legacy cursor watermarkTaskId must be null when consumedThrough is empty.', 'INVALID_CURSOR');
+    }
+  } else {
+    const last = record.consumedThrough[record.consumedThrough.length - 1];
+    if (record.watermarkTaskId !== last) {
+      fail('legacy cursor watermarkTaskId must equal the last entry of consumedThrough.', 'INVALID_CURSOR');
+    }
+  }
+  if (record.watermarkTaskId !== null) assertValidTaskId(record.watermarkTaskId);
+  if (!isIsoDateTime(record.updatedAt)) fail('legacy cursor updatedAt must be an ISO date-time string.', 'INVALID_CURSOR');
+  assertNonEmptyString(record.evaluatorId, 'evaluatorId', MAX_MATERIALIZATION_ID_FIELD_LENGTH);
+  const json = JSON.stringify(record);
+  if (json.length > MAX_MATERIALIZATION_JSON_BYTES) {
+    fail('legacy cursor record exceeds size budget.', 'CONTEXT_BUDGET_EXCEEDED');
   }
   return Object.freeze({ ...record, consumedThrough: Object.freeze([...record.consumedThrough]) });
 }
