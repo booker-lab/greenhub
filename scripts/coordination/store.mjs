@@ -23,6 +23,13 @@
 //   (pure read-only projection readCanonicalSchedulableWork over the exact
 //   canonical emission admission ONLY; no mutation, no repair, no scheduler,
 //   no READY scan, no dispatch).
+// + GREENHUB-COORDINATION-CLAIM-BOUND-DISPATCH-ENVELOPE-18
+//   (pure read-only identity readClaimBoundDispatchEnvelope /
+//   verifyClaimBoundDispatchEnvelope over the exact canonical emission
+//   admission + current claim.json ONLY, consuming the deterministic
+//   buildClaimBoundDispatchEnvelope identity; no mutation, no repair, no
+//   scheduler, no READY scan, no worker selection, no dispatch persistence,
+//   no transport, no executor invocation).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -136,6 +143,10 @@ import {
 } from './emission-admission.mjs';
 import { buildAdmissionBoundClaimToken } from './admission-bound-claim.mjs';
 import { buildSchedulableWorkProjection } from './canonical-schedulable-work-read.mjs';
+import {
+  buildClaimBoundDispatchEnvelope,
+  validateClaimBoundDispatchEnvelope,
+} from './claim-bound-dispatch-envelope.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -190,6 +201,10 @@ export const CORRUPT_ADMISSION = 'CORRUPT_ADMISSION';
 export const ADMISSION_NOT_FOUND = 'ADMISSION_NOT_FOUND';
 export const ADMISSION_BYPASS_DETECTED = 'ADMISSION_BYPASS_DETECTED';
 export const CLAIM_ADMISSION_BYPASS_DETECTED = 'CLAIM_ADMISSION_BYPASS_DETECTED';
+export const INVALID_DISPATCH_BINDING = 'INVALID_DISPATCH_BINDING';
+export const DISPATCH_BINDING_MISMATCH = 'DISPATCH_BINDING_MISMATCH';
+export const STALE_DISPATCH = 'STALE_DISPATCH';
+export const TASK_NOT_CLAIMED = 'TASK_NOT_CLAIMED';
 
 export class CoordinationStoreError extends Error {
   constructor(message, details = {}) {
@@ -3964,5 +3979,206 @@ export class CoordinationStore {
       sequencePosition: membership[0].sequenceNumber,
       childStatus: child.status,
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // Claim-bound dispatch envelope domain
+  // (GREENHUB-COORDINATION-CLAIM-BOUND-DISPATCH-ENVELOPE-18, pure read).
+  // readClaimBoundDispatchEnvelope() != emitNextTask() != admitEmittedTask()
+  //   != claimAdmittedTask() != scheduleNextTask() != dispatchNextTask()
+  //   != decideNextTask(): the caller explicitly supplies
+  //   (sourceTaskId, emissionSlot, workerId); this primitive never creates,
+  //   increments, resets, or repairs generations, never takes over claims,
+  //   never extends leases, never READY->CLAIMED, never scans READY, never
+  //   selects workers, never persists dispatch attempts, never transports,
+  //   and never invokes executors. Ordering is preserved exactly:
+  //   1. canonical schedulable-work identity live read,
+  //   2. canonical admission identity confirm,
+  //   3. child nextTaskId confirm,
+  //   4. current claim.json read,
+  //   5. claim.workerId exact match,
+  //   6. current claim generation confirm,
+  //   7. admission-bound claimToken recompute,
+  //   8. persisted claimToken exact match,
+  //   9. child status CLAIMED confirm,
+  //   10. current-generation dispatch envelope build.
+  //   Drift/corruption fails closed (no auto-repair, no auto-claim, no
+  //   rewind of RESULT_DELIVERED).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Read the claim-bound dispatch envelope for one exact
+   * (sourceTaskId, emissionSlot) admission binding + one caller worker.
+   * Pure read + builder consumption: never mutates, never repairs, never
+   * rewinds a progressed child, never recreates READY, never auto-claims.
+   *
+   * - CLAIMED child + exact current claim -> current-generation envelope.
+   * - READY/CREATED child -> TASK_NOT_CLAIMED (no automatic claim).
+   * - RESULT_DELIVERED child -> TASK_TERMINAL (no new envelope, no rewind).
+   * - missing claim -> CLAIM_NOT_FOUND; corrupt -> CORRUPT_CLAIM.
+   * - foreign/manual/random token -> CLAIM_ADMISSION_BYPASS_DETECTED.
+   * - caller worker != current claim worker -> DISPATCH_BINDING_MISMATCH.
+   */
+  readClaimBoundDispatchEnvelope({ sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT, workerId } = {}) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    if (typeof workerId !== 'string' || !workerId.trim()) {
+      storeFail('workerId must be a non-empty string (caller-supplied; never inferred).', {
+        code: 'INVALID_WORKER',
+        taskId: sourceTaskId,
+      });
+    }
+
+    // 1. Canonical schedulable-work identity, re-verified live (emission +
+    //    admission + child spec + sequence bindings inside).
+    const schedulable = this.readCanonicalSchedulableWork({ sourceTaskId, emissionSlot });
+
+    // 2. Canonical admission identity confirm: exact live admission must
+    //    carry the same admission identity as the schedulable projection.
+    const admission = this.readEmissionAdmission({ sourceTaskId, emissionSlot });
+    if (admission.admissionId !== schedulable.admissionId || admission.nextTaskId !== schedulable.nextTaskId) {
+      storeFail(`dispatch admission identity drift vs schedulable projection (fail-closed): ${admissionRef(sourceTaskId, emissionSlot)}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+
+    // 3. Child nextTaskId confirm: exact child must exist (never auto-created).
+    const childId = admission.nextTaskId;
+    const child = this.readTask(childId);
+    if (child.taskId !== childId || child.taskId !== schedulable.nextTaskId) {
+      storeFail(`dispatch child taskId mismatch (fail-closed): ${childId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+
+    // 4. Current claim.json read (no auto-repair, no auto-create).
+    const currentFound = this.#readCurrentAdmissionClaim(childId);
+    if (currentFound.state === 'missing') {
+      storeFail(`no claim for dispatch-bound child (fail-closed, claim first): ${childId}`, {
+        code: CLAIM_NOT_FOUND,
+        taskId: childId,
+      });
+    }
+    const claim = currentFound.record;
+
+    // 5. claim.workerId exact match (no inference, no selection).
+    if (claim.workerId !== workerId) {
+      storeFail(
+        `dispatch worker binding mismatch (fail-closed, no claim mutation): live owner=${claim.workerId} caller=${workerId}.`,
+        { code: DISPATCH_BINDING_MISMATCH, taskId: childId },
+      );
+    }
+
+    // 6. Current claim generation confirm (SOLE fencing authority).
+    if (!Number.isInteger(claim.generation) || claim.generation < 1) {
+      storeFail(`dispatch claim generation invalid (fail-closed): ${childId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId: childId,
+      });
+    }
+
+    // 7-8. Admission-bound claimToken recompute + persisted exact match.
+    let expectedToken;
+    try {
+      expectedToken = buildAdmissionBoundClaimToken({
+        admissionId: admission.admissionId,
+        nextTaskId: childId,
+        workerId: claim.workerId,
+      });
+    } catch {
+      storeFail(`dispatch child carries a foreign claim (fail-closed, no auto-adoption): ${childId}`, {
+        code: CLAIM_ADMISSION_BYPASS_DETECTED,
+        taskId: sourceTaskId,
+      });
+    }
+    if (claim.claimToken !== expectedToken) {
+      storeFail(`dispatch child carries a foreign claim (fail-closed, no auto-adoption): ${childId}`, {
+        code: CLAIM_ADMISSION_BYPASS_DETECTED,
+        taskId: sourceTaskId,
+      });
+    }
+
+    // 9. Child status must be exactly CLAIMED. READY/CREATED never auto-claim;
+    //    RESULT_DELIVERED never rewinds into a new envelope.
+    if (child.status === TASK_STATUS_RESULT_DELIVERED) {
+      storeFail(`dispatch child is terminal (RESULT_DELIVERED); no new dispatch envelope: ${childId}`, {
+        code: TASK_TERMINAL,
+        taskId: childId,
+      });
+    }
+    if (child.status !== TASK_STATUS_CLAIMED) {
+      storeFail(
+        `dispatch child is not CLAIMED (task=${childId} status=${child.status}; converge via claimAdmittedTask first, never auto-claim here).`,
+        { code: TASK_NOT_CLAIMED, taskId: childId },
+      );
+    }
+
+    // 10. Current-generation dispatch envelope build (pure builder).
+    try {
+      return buildClaimBoundDispatchEnvelope({
+        admissionId: admission.admissionId,
+        nextTaskId: childId,
+        workerId: claim.workerId,
+        claimGeneration: claim.generation,
+      });
+    } catch (error) {
+      storeFail(`dispatch envelope build failed (fail-closed): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : INVALID_DISPATCH_BINDING,
+        taskId: childId,
+      });
+    }
+    return null;
+  }
+
+  /**
+   * Verify a supplied dispatch envelope against the current live binding.
+   * Pure read + recomputation: never mutates, never repairs.
+   * - malformed/tampered envelope -> INVALID_DISPATCH_BINDING /
+   *   DISPATCH_BINDING_MISMATCH (pure recomputation gate first).
+   * - admission/task/worker drift vs live -> DISPATCH_BINDING_MISMATCH.
+   * - same bindings but generation/dispatchId behind live ->
+   *   STALE_DISPATCH (replayed envelope fenced by current generation).
+   * - live READY/CREATED -> TASK_NOT_CLAIMED; live terminal ->
+   *   TASK_TERMINAL; missing/foreign claim propagates unchanged.
+   * Returns the current live envelope when the supplied envelope is current.
+   */
+  verifyClaimBoundDispatchEnvelope({ sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT, envelope } = {}) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    let supplied;
+    try {
+      supplied = validateClaimBoundDispatchEnvelope(envelope);
+    } catch (error) {
+      storeFail(`supplied dispatch envelope invalid (fail-closed): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : INVALID_DISPATCH_BINDING,
+        taskId: sourceTaskId,
+      });
+    }
+    const current = this.readClaimBoundDispatchEnvelope({
+      sourceTaskId,
+      emissionSlot,
+      workerId: supplied.workerId,
+    });
+    if (supplied.admissionId !== current.admissionId || supplied.nextTaskId !== current.nextTaskId) {
+      storeFail(
+        `supplied dispatch envelope binds a different admission/task than live (fail-closed): supplied admission=${supplied.admissionId} task=${supplied.nextTaskId} live admission=${current.admissionId} task=${current.nextTaskId}.`,
+        { code: DISPATCH_BINDING_MISMATCH, taskId: sourceTaskId },
+      );
+    }
+    if (supplied.workerId !== current.workerId) {
+      storeFail(
+        `supplied dispatch envelope binds a different worker than live (fail-closed): supplied=${supplied.workerId} live=${current.workerId}.`,
+        { code: DISPATCH_BINDING_MISMATCH, taskId: sourceTaskId },
+      );
+    }
+    if (supplied.claimGeneration !== current.claimGeneration || supplied.dispatchId !== current.dispatchId) {
+      storeFail(
+        `stale dispatch envelope: supplied generation=${supplied.claimGeneration} dispatchId=${supplied.dispatchId} vs current generation=${current.claimGeneration} dispatchId=${current.dispatchId} (fail-closed, no rewind).`,
+        { code: STALE_DISPATCH, taskId: sourceTaskId },
+      );
+    }
+    return current;
   }
 }
