@@ -19,6 +19,10 @@
 //   claimToken, then the existing claimTask() path; no scheduler, no READY
 //   scan, no worker selection, no dispatch, no fan-out, no adapters,
 //   no autonomous loop).
+// + GREENHUB-COORDINATION-CANONICAL-SCHEDULABLE-WORK-READ-17A
+//   (pure read-only projection readCanonicalSchedulableWork over the exact
+//   canonical emission admission ONLY; no mutation, no repair, no scheduler,
+//   no READY scan, no dispatch).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -131,6 +135,7 @@ import {
   validateAdmissionRecord,
 } from './emission-admission.mjs';
 import { buildAdmissionBoundClaimToken } from './admission-bound-claim.mjs';
+import { buildSchedulableWorkProjection } from './canonical-schedulable-work-read.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -3846,5 +3851,118 @@ export class CoordinationStore {
       });
     }
     return { admission, emission, child, claim };
+  }
+
+  // -------------------------------------------------------------------------
+  // Canonical schedulable-work read domain
+  // (GREENHUB-COORDINATION-CANONICAL-SCHEDULABLE-WORK-READ-17A, pure read).
+  // readCanonicalSchedulableWork() != emitNextTask() != admitEmittedTask()
+  //   != claimAdmittedTask() != scheduleNextTask() != dispatchNextTask()
+  //   != decideNextTask(): the caller explicitly supplies
+  //   (sourceTaskId, emissionSlot); this primitive never scans READY tasks,
+  //   never enumerates tasks/, never orders by filesystem/mtime/timestamps,
+  //   never picks oldest/newest, never scores priority/fairness, never
+  //   selects or infers workers, never mutates, never repairs, and never
+  //   runs a scheduler loop. Every binding is re-verified live against the
+  //   durable authority; drift fails closed. Sequence membership is read
+  //   as-is (no sync append, no repair): missing/duplicate fails closed.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Read the canonical schedulable-work projection for one exact
+   * (sourceTaskId, emissionSlot) admission binding.
+   * Pure read: never mutates, never repairs, never rewinds a progressed
+   * child, never recreates READY.
+   *
+   * - admitted + READY returns the exact canonical projection.
+   * - admitted + CLAIMED returns the same canonical identity with CLAIMED.
+   * - admitted + RESULT_DELIVERED returns the same identity as terminal.
+   * - READY/CLAIMED/RESULT_DELIVERED child without admission authority
+   *   fails closed with ADMISSION_BYPASS_DETECTED (never auto-adopted).
+   * - emission/admission/child-spec/sequence drift fails closed.
+   */
+  readCanonicalSchedulableWork({ sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT } = {}) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    // Source task must exist (fail-closed before any further read).
+    this.readTask(sourceTaskId);
+    // Canonical emission + live CONSUMED closure binding, re-verified live.
+    // Missing/ineligible/corrupt/drift propagates fail-closed.
+    const emission = this.readEmission(sourceTaskId, emissionSlot);
+    // Canonical admission authority, read as-is (no sync, no repair, no
+    // converge). Corrupt bytes propagate fail-closed.
+    const admissionFound = readValidatedAdmissionDocument(
+      admissionFilePath(this.home, sourceTaskId, emissionSlot),
+      sourceTaskId,
+      emissionSlot,
+    );
+    if (admissionFound.state === 'missing') {
+      // No authority yet: a progressed emission child without authority is a
+      // bypass (fail-closed, never auto-adopted). A CREATED-or-absent child
+      // is the normal pre-admission state.
+      let progressedStatus = null;
+      try {
+        const emissionChild = this.readTask(emission.nextTaskId);
+        progressedStatus = emissionChild.status;
+      } catch (error) {
+        if (error?.code !== TASK_NOT_FOUND) throw error;
+      }
+      if (progressedStatus !== null && progressedStatus !== TASK_STATUS_CREATED) {
+        storeFail(
+          `admission bypass detected: child ${emission.nextTaskId} is ${progressedStatus} without canonical admission authority (fail-closed, no auto-adoption).`,
+          { code: ADMISSION_BYPASS_DETECTED, taskId: sourceTaskId },
+        );
+      }
+      storeFail(`no admission for source slot: ${admissionRef(sourceTaskId, emissionSlot)}`, {
+        code: ADMISSION_NOT_FOUND,
+        taskId: sourceTaskId,
+      });
+    }
+    const admission = admissionFound.record;
+    this.#assertAdmissionBindsLiveEmission({ sourceTaskId, emissionSlot, admission, emission });
+    // Exact child must exist (never auto-created) and bind exactly.
+    const child = this.readTask(admission.nextTaskId);
+    if (child.taskId !== admission.nextTaskId) {
+      storeFail(`schedulable-work child taskId mismatch (fail-closed): ${admission.nextTaskId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    let childBinding;
+    try {
+      childBinding = computeNextTaskSpecBinding(child);
+    } catch (error) {
+      storeFail(`schedulable-work child failed spec read-back (fail-closed): ${admission.nextTaskId}: ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    if (childBinding !== admission.nextTaskSpecBinding || childBinding !== emission.nextTaskSpecBinding) {
+      storeFail(`schedulable-work child spec binding mismatch (fail-closed): ${admission.nextTaskId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    // Single append-stable sequence membership, read as-is: no sync append,
+    // no repair. Missing/duplicate fails closed.
+    const membership = listCanonicalSequenceEntries(this.home).filter(
+      (entry) => entry.taskId === admission.nextTaskId,
+    );
+    if (membership.length !== 1) {
+      storeFail(
+        `schedulable-work child sequence membership != 1 (fail-closed, no repair): ${admission.nextTaskId} count=${membership.length}`,
+        { code: CORRUPT_SEQUENCE, taskId: sourceTaskId },
+      );
+    }
+    return buildSchedulableWorkProjection({
+      sourceTaskId,
+      emissionSlot,
+      emissionId: emission.emissionId,
+      admissionId: admission.admissionId,
+      nextTaskId: admission.nextTaskId,
+      nextTaskSpecBinding: admission.nextTaskSpecBinding,
+      sequencePosition: membership[0].sequenceNumber,
+      childStatus: child.status,
+    });
   }
 }
