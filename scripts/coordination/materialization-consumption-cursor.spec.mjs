@@ -653,12 +653,16 @@ test('CURSOR. sequence contract pinned; order violations and rewind refused', ()
   }
 });
 
-test('BOUNDARY. no emission / scheduler / adapters; app code untouched; evidence preserved', () => {
+test('BOUNDARY. emission owned by Task 13; no scheduler / adapters; app code untouched; evidence preserved', () => {
   const home = makeHome();
   try {
     const clock = controllableClock();
     const store = new CoordinationStore({ dir: home, nowProvider: () => clock.provider() });
-    for (const forbidden of ['emitNextTask', 'emitNext', 'createChildTask', 'schedule', 'fanOut', 'registerAdapter', 'astraSync', 'openCodeSync']) {
+    // Task-13 published primitive: emitNextTask/readEmission exist; shadow
+    // emission APIs, scheduler, dispatch, fan-out, and adapters stay absent.
+    assert.equal(typeof store.emitNextTask, 'function');
+    assert.equal(typeof store.readEmission, 'function');
+    for (const forbidden of ['emitNext', 'createChildTask', 'schedule', 'scheduleNextTask', 'dispatchNextTask', 'decideNextTask', 'fanOut', 'registerAdapter', 'astraSync', 'openCodeSync']) {
       assert.equal(store[forbidden], undefined);
     }
     driveToAdopted(store, clock, 'MAT11H01', 'result-h01');
