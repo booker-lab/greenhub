@@ -8,14 +8,22 @@
 //   (deterministic next-task emission over a CONSUMED closure ONLY:
 //   emitNextTask/readEmission + emission persistence; no scheduler, no
 //   dispatch, no fan-out, no adapters, no autonomous loop).
+// + GREENHUB-COORDINATION-EMISSION-BOUND-ADMISSION-14
+//   (emission-bound admission over the exact canonical emission ONLY:
+//   admitEmittedTask/readEmissionAdmission + admission persistence, then the
+//   existing markReady() path; no scheduler, no polling, no claim automation,
+//   no dispatch, no fan-out, no adapters, no autonomous loop).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
 // plus ADOPTED-only canonical per-task materialization with durable read-back,
 // ACK, CONSUMED, and highest-contiguous-CONSUMED cursor over an append-stable
-// task sequence, plus deterministic next-task emission from a CONSUMED closure.
-// Scheduler, fan-out, adapters, Astra/OpenCode integration, autonomous loop,
-// application code, publication automation, and 57C remain out of scope.
+// task sequence, plus deterministic next-task emission from a CONSUMED closure,
+// plus emission-bound admission of the exact canonical emission converging the
+// exact canonical child through the existing markReady() path.
+// Scheduler, queue polling, claim automation, dispatch, fan-out, adapters,
+// Astra/OpenCode integration, autonomous loop, application code, publication
+// automation, and 57C remain out of scope.
 //
 // Filesystem layout under a durable home (never the repository worktree):
 //   <home>/tasks/<taskId>/task.json
@@ -32,6 +40,10 @@
 //   <home>/consumption/sequence/migration.json  (v1 migration provenance, if migrated)
 //   <home>/tasks/<sourceTaskId>/emissions/<emissionSlot>.json
 //     (deterministic next-task emission authority, bound to the CONSUMED closure)
+//   <home>/tasks/<sourceTaskId>/emission-admissions/<emissionSlot>.json
+//     (emission-bound admission authority, bound to the exact canonical emission;
+//     READY is reached only through the existing markReady() path after this
+//     authority is durable)
 //
 // Claim atomicity uses OS exclusive-create (`wx`) semantics plus a
 // read-verify-unlink-recreate takeover dance (same family as
@@ -101,6 +113,11 @@ import {
   normalizeNextTaskSpec,
   validateEmissionRecord,
 } from './next-task-emission.mjs';
+import {
+  admissionRef,
+  buildAdmissionRecord,
+  validateAdmissionRecord,
+} from './emission-admission.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -149,6 +166,11 @@ export const EMISSION_CONFLICT = 'EMISSION_CONFLICT';
 export const EMISSION_BINDING_MISMATCH = 'EMISSION_BINDING_MISMATCH';
 export const CORRUPT_EMISSION = 'CORRUPT_EMISSION';
 export const EMISSION_NOT_FOUND = 'EMISSION_NOT_FOUND';
+export const ADMISSION_CONFLICT = 'ADMISSION_CONFLICT';
+export const ADMISSION_BINDING_MISMATCH = 'ADMISSION_BINDING_MISMATCH';
+export const CORRUPT_ADMISSION = 'CORRUPT_ADMISSION';
+export const ADMISSION_NOT_FOUND = 'ADMISSION_NOT_FOUND';
+export const ADMISSION_BYPASS_DETECTED = 'ADMISSION_BYPASS_DETECTED';
 
 export class CoordinationStoreError extends Error {
   constructor(message, details = {}) {
@@ -220,6 +242,47 @@ function readValidatedEmissionDocument(path, sourceTaskId, emissionSlot) {
     storeFail(
       `emission identity/path mismatch (fail-closed): ${emissionRef(sourceTaskId, emissionSlot)}`,
       { code: CORRUPT_EMISSION, taskId: sourceTaskId },
+    );
+  }
+  return { state: 'present', record };
+}
+
+// ---------------------------------------------------------------------------
+// Emission-bound admission authority (EMISSION_BOUND_ADMISSION).
+// Durable under <home>/tasks/<sourceTaskId>/emission-admissions/<slot>.json.
+// One canonical admission per canonical emission slot; exclusive-create
+// serializes concurrent admitters so exactly one wins; admittedAt/admitterId
+// are provenance only and never enter admission identity.
+// ---------------------------------------------------------------------------
+
+function admissionFilePath(home, sourceTaskId, emissionSlot) {
+  assertValidTaskId(sourceTaskId);
+  assertValidEmissionSlot(emissionSlot);
+  return nodePath.join(resolveTaskDirectory(home, sourceTaskId), 'emission-admissions', `${emissionSlot}.json`);
+}
+
+function readValidatedAdmissionDocument(path, sourceTaskId, emissionSlot) {
+  const found = readJsonFile(path);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') {
+    storeFail(
+      `admission record is corrupt (fail-closed, no auto-repair): ${admissionRef(sourceTaskId, emissionSlot)}`,
+      { code: CORRUPT_ADMISSION, taskId: sourceTaskId },
+    );
+  }
+  let record;
+  try {
+    record = validateAdmissionRecord(found.document);
+  } catch (error) {
+    storeFail(`admission record invalid (fail-closed): ${admissionRef(sourceTaskId, emissionSlot)}: ${error?.message}`, {
+      code: typeof error?.code === 'string' && error.code ? error.code : CORRUPT_ADMISSION,
+      taskId: sourceTaskId,
+    });
+  }
+  if (record.sourceTaskId !== sourceTaskId || record.emissionSlot !== emissionSlot) {
+    storeFail(
+      `admission identity/path mismatch (fail-closed): ${admissionRef(sourceTaskId, emissionSlot)}`,
+      { code: CORRUPT_ADMISSION, taskId: sourceTaskId },
     );
   }
   return { state: 'present', record };
@@ -2784,5 +2847,352 @@ export class CoordinationStore {
       });
     }
     return winner;
+  }
+
+  // -------------------------------------------------------------------------
+  // Emission-bound admission domain.
+  // admitEmittedTask() != emitNextTask() != scheduleNextTask() != claimTask()
+  //   != dispatchNextTask() != decideNextTask():
+  // the caller explicitly supplies (sourceTaskId, emissionSlot); this primitive
+  // never scans emissions, never polls a queue, never picks oldest/newest,
+  // never decides priority, and never runs a scheduler loop.
+  // Ordering is ADMISSION AUTHORITY -> READY (never READY -> ADMISSION):
+  // every binding is verified, the durable admission authority is created via
+  // OS exclusive-create, then the existing markReady(nextTaskId) path moves the
+  // exact canonical child to READY. Timestamps are provenance only.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Verify the admitted child holds exactly one append-stable sequence
+   * membership. A crash window (task file visible, sequence entry pending) is
+   * recovered deterministically via syncTaskSequence; duplicates fail closed.
+   */
+  #assertSingleAdmissionSequenceMembership(sourceTaskId, nextTaskId) {
+    const countMembership = () =>
+      listCanonicalSequenceEntries(this.home).filter((entry) => entry.taskId === nextTaskId).length;
+    let count;
+    try {
+      count = countMembership();
+    } catch (error) {
+      throw error;
+    }
+    if (count === 0) {
+      this.syncTaskSequence();
+      count = countMembership();
+    }
+    if (count !== 1) {
+      storeFail(`admission child sequence membership != 1 (fail-closed): ${nextTaskId} count=${count}`, {
+        code: CORRUPT_SEQUENCE,
+        taskId: sourceTaskId,
+      });
+    }
+  }
+
+  /**
+   * Verify a durable admission record still binds the live canonical emission.
+   * Drift/tamper fails closed (no auto-repair, no overwrite).
+   */
+  #assertAdmissionBindsLiveEmission({ sourceTaskId, emissionSlot, admission, emission }) {
+    if (
+      admission.sourceTaskId !== sourceTaskId ||
+      admission.emissionSlot !== emissionSlot ||
+      admission.emissionId !== emission.emissionId ||
+      admission.nextTaskId !== emission.nextTaskId ||
+      admission.nextTaskSpecBinding !== emission.nextTaskSpecBinding ||
+      admission.sourceConsumedId !== emission.sourceConsumedId ||
+      admission.sourceMaterializationId !== emission.sourceMaterializationId ||
+      admission.sourceAckId !== emission.sourceAckId ||
+      admission.dispositionGeneration !== emission.dispositionGeneration ||
+      admission.resultId !== emission.resultId ||
+      admission.resultBinding !== emission.resultBinding ||
+      admission.canonicalTransitionId !== emission.canonicalTransitionId
+    ) {
+      storeFail(`admission drift vs live canonical emission (fail-closed, no auto-repair): ${admissionRef(sourceTaskId, emissionSlot)}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+  }
+
+  /**
+   * Converge the admitted child to at least READY without ever rewinding a
+   * progressed lifecycle: CREATED -> markReady(); READY -> idempotent
+   * markReady(); CLAIMED/RESULT_DELIVERED -> returned as-is (normal history).
+   */
+  #convergeAdmissionChild(nextTaskId) {
+    const live = this.readTask(nextTaskId);
+    if (live.status === TASK_STATUS_CREATED) return this.markReady(nextTaskId);
+    if (live.status === TASK_STATUS_READY) return this.markReady(nextTaskId);
+    if (live.status === TASK_STATUS_CLAIMED || live.status === TASK_STATUS_RESULT_DELIVERED) return live;
+    storeFail(`admission child in unexpected status (fail-closed): ${nextTaskId} status=${live.status}`, {
+      code: CORRUPT_ADMISSION,
+      taskId: nextTaskId,
+    });
+    return live;
+  }
+
+  /**
+   * Full read-back contract: canonical admission record + live emission binding
+   * + child spec binding + sequence membership + child at least READY.
+   * Write-syscall success alone never decides success.
+   */
+  #verifyAdmissionReadback({ sourceTaskId, emissionSlot, candidate }) {
+    const path = admissionFilePath(this.home, sourceTaskId, emissionSlot);
+    const reread = readValidatedAdmissionDocument(path, sourceTaskId, emissionSlot);
+    if (reread.state !== 'present' || !canonicalRecordsEqual(reread.record, candidate)) {
+      storeFail(`admission failed to verify after write (fail-closed): ${admissionRef(sourceTaskId, emissionSlot)}`, {
+        code: CORRUPT_ADMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    const emission = this.readEmission(sourceTaskId, emissionSlot);
+    this.#assertAdmissionBindsLiveEmission({ sourceTaskId, emissionSlot, admission: reread.record, emission });
+    const rereadChild = this.readTask(candidate.nextTaskId);
+    let childBinding;
+    try {
+      childBinding = computeNextTaskSpecBinding(rereadChild);
+    } catch (error) {
+      storeFail(`admission child failed spec read-back (fail-closed): ${candidate.nextTaskId}: ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : CORRUPT_ADMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    if (childBinding !== candidate.nextTaskSpecBinding || rereadChild.taskId !== candidate.nextTaskId) {
+      storeFail(`admission child spec binding mismatch on read-back (fail-closed): ${candidate.nextTaskId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    this.#assertSingleAdmissionSequenceMembership(sourceTaskId, candidate.nextTaskId);
+    if (rereadChild.status === TASK_STATUS_CREATED) {
+      storeFail(`admission child never reached READY (fail-closed): ${candidate.nextTaskId}`, {
+        code: CORRUPT_ADMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    return { record: reread.record, child: rereadChild };
+  }
+
+  /**
+   * Resolve an admission-slot creation race deterministically: the canonical
+   * winner is re-validated against the live emission; an identical logical
+   * admission (same admissionId) recovers to the same record + converged child
+   * (duplicate:true, first provenance bytes preserved, never overwritten); a
+   * conflicting logical identity fails closed with ADMISSION_CONFLICT.
+   */
+  #resolveAdmissionRaceAndConverge({ sourceTaskId, emissionSlot, emission, candidate }) {
+    const path = admissionFilePath(this.home, sourceTaskId, emissionSlot);
+    const winnerFound = readValidatedAdmissionDocument(path, sourceTaskId, emissionSlot);
+    if (winnerFound.state === 'missing') {
+      storeFail(`admission race could not be resolved deterministically: ${admissionRef(sourceTaskId, emissionSlot)}`, {
+        code: CORRUPT_ADMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    const winner = winnerFound.record;
+    this.#assertAdmissionBindsLiveEmission({ sourceTaskId, emissionSlot, admission: winner, emission });
+    if (winner.admissionId !== candidate.admissionId) {
+      storeFail(`conflicting admission for same source slot (first wins, fail-closed): ${admissionRef(sourceTaskId, emissionSlot)} winner=${winner.nextTaskId}`, {
+        code: ADMISSION_CONFLICT,
+        taskId: sourceTaskId,
+      });
+    }
+    if (winner.nextTaskId !== candidate.nextTaskId || winner.nextTaskSpecBinding !== candidate.nextTaskSpecBinding) {
+      storeFail(`conflicting admission binding for same source slot (first wins, fail-closed): ${admissionRef(sourceTaskId, emissionSlot)}`, {
+        code: ADMISSION_CONFLICT,
+        taskId: sourceTaskId,
+      });
+    }
+    // Identical logical replay: converge the winner child (covers crash windows
+    // where the authority won but markReady never completed). First provenance
+    // bytes are preserved; the loser never overwrites the winner.
+    const child = this.#convergeAdmissionChild(winner.nextTaskId);
+    const verified = this.#verifyAdmissionReadback({ sourceTaskId, emissionSlot, candidate: winner });
+    void child;
+    return { record: verified.record, child: verified.child, duplicate: true };
+  }
+
+  /**
+   * Admit the exact canonical emission of a source slot, then move the exact
+   * canonical child through the existing markReady() path.
+   *
+   * Caller supplies (sourceTaskId, emissionSlot) explicitly: no emission scan,
+   * no polling, no oldest/newest, no priority, no scheduler loop.
+   *
+   * - emission missing/corrupt/tampered, source closure drift, child missing,
+   *   child spec mismatch, or sequence violation fails closed with no mutation
+   *   of the child and no admission created (or winner bytes preserved).
+   * - admission missing + child already READY/CLAIMED/RESULT_DELIVERED fails
+   *   closed with ADMISSION_BYPASS_DETECTED (never auto-adopted).
+   * - existing admission + child CLAIMED/RESULT_DELIVERED is normal history:
+   *   replay succeeds without rewind (duplicate:true).
+   * - same logical admission replays idempotently to the same record
+   *   (duplicate:true); admittedAt/admitterId never fork identity and never
+   *   overwrite the first canonical provenance.
+   */
+  admitEmittedTask({ sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT, admitterId, admittedAt } = {}) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    if (typeof admitterId !== 'string' || !admitterId.trim()) {
+      storeFail('admitterId must be a non-empty string.', { code: 'INVALID_ADMITTER', taskId: sourceTaskId });
+    }
+    const admittedAtIso = admittedAt ?? this.nowIso();
+    if (typeof admittedAtIso !== 'string' || !Number.isFinite(Date.parse(admittedAtIso))) {
+      storeFail('admittedAt must be an ISO date-time string (provenance only).', {
+        code: 'INVALID_ADMISSION',
+        taskId: sourceTaskId,
+      });
+    }
+
+    // A. Source task must exist (fail-closed before any admission mutation).
+    this.readTask(sourceTaskId);
+
+    // B-D. Canonical emission + live CONSUMED closure binding, re-verified live.
+    // Missing/ineligible/corrupt/drift propagates fail-closed (EMISSION_*,
+    // CORRUPT_*, *_MISMATCH) with no child mutation and no admission created.
+    const emission = this.readEmission(sourceTaskId, emissionSlot);
+
+    // E-F. Exact child must exist (never auto-created) and its canonical spec
+    // must bind the emission spec exactly.
+    const child = this.readTask(emission.nextTaskId);
+    if (child.taskId !== emission.nextTaskId) {
+      storeFail(`admission child taskId mismatch (fail-closed): ${emission.nextTaskId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    let childBinding;
+    try {
+      childBinding = computeNextTaskSpecBinding(child);
+    } catch (error) {
+      storeFail(`admission child violates the Task Envelope v1 contract (fail-closed): ${emission.nextTaskId}: ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    if (childBinding !== emission.nextTaskSpecBinding) {
+      storeFail(`admission child spec binding mismatch (fail-closed): ${emission.nextTaskId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+
+    // G. Single append-stable sequence membership (fail-closed on duplication).
+    this.#assertSingleAdmissionSequenceMembership(sourceTaskId, emission.nextTaskId);
+
+    const path = admissionFilePath(this.home, sourceTaskId, emissionSlot);
+    const existingFound = readValidatedAdmissionDocument(path, sourceTaskId, emissionSlot);
+
+    if (existingFound.state === 'missing') {
+      // No authority yet: the child must still be CREATED, otherwise this is a
+      // bypass (READY/CLAIMED/RESULT_DELIVERED without admission) and must fail
+      // closed without auto-adoption.
+      if (child.status !== TASK_STATUS_CREATED) {
+        storeFail(`admission bypass detected: child ${emission.nextTaskId} is ${child.status} without canonical admission authority (fail-closed, no auto-adoption).`, {
+          code: ADMISSION_BYPASS_DETECTED,
+          taskId: sourceTaskId,
+        });
+      }
+      let candidate;
+      try {
+        candidate = buildAdmissionRecord({
+          sourceTaskId,
+          emissionSlot,
+          emissionId: emission.emissionId,
+          nextTaskId: emission.nextTaskId,
+          nextTaskSpecBinding: emission.nextTaskSpecBinding,
+          sourceConsumedId: emission.sourceConsumedId,
+          sourceMaterializationId: emission.sourceMaterializationId,
+          sourceAckId: emission.sourceAckId,
+          dispositionGeneration: emission.dispositionGeneration,
+          resultId: emission.resultId,
+          resultBinding: emission.resultBinding,
+          canonicalTransitionId: emission.canonicalTransitionId,
+          admittedAt: admittedAtIso,
+          admitterId,
+        });
+      } catch (error) {
+        storeFail(`invalid admission record (fail-closed): ${error?.message}`, {
+          code: typeof error?.code === 'string' && error.code ? error.code : 'INVALID_ADMISSION',
+          taskId: sourceTaskId,
+        });
+      }
+      const created = writeJsonExclusive(path, candidate);
+      if (!created.created) {
+        return this.#resolveAdmissionRaceAndConverge({ sourceTaskId, emissionSlot, emission, candidate });
+      }
+      // Admission authority now durable (CASE2 boundary); the READY transition
+      // below is recovered by replay on crash (never a duplicate, never rewind).
+      this.#convergeAdmissionChild(candidate.nextTaskId);
+      const verified = this.#verifyAdmissionReadback({ sourceTaskId, emissionSlot, candidate });
+      return { record: verified.record, child: verified.child, duplicate: false };
+    }
+
+    // Existing authority: replay path (CASE3/CASE4). Re-validate the winner
+    // against the live emission, converge the child without rewind, verify.
+    const winner = existingFound.record;
+    this.#assertAdmissionBindsLiveEmission({ sourceTaskId, emissionSlot, admission: winner, emission });
+    const liveChild = this.readTask(winner.nextTaskId);
+    let liveBinding;
+    try {
+      liveBinding = computeNextTaskSpecBinding(liveChild);
+    } catch (error) {
+      storeFail(`admission child failed spec read-back (fail-closed): ${winner.nextTaskId}: ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    if (liveBinding !== winner.nextTaskSpecBinding || liveChild.taskId !== winner.nextTaskId) {
+      storeFail(`admission child spec binding mismatch on replay (fail-closed): ${winner.nextTaskId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    this.#assertSingleAdmissionSequenceMembership(sourceTaskId, winner.nextTaskId);
+    this.#convergeAdmissionChild(winner.nextTaskId);
+    const verified = this.#verifyAdmissionReadback({ sourceTaskId, emissionSlot, candidate: winner });
+    return { record: verified.record, child: verified.child, duplicate: true };
+  }
+
+  /**
+   * Read the canonical admission for a source slot, re-validated against the
+   * live canonical emission, child spec binding, and sequence membership.
+   * Pure read: never mutates, never repairs, never rewinds a progressed child.
+   * Drift/corruption fails closed (no auto-repair).
+   */
+  readEmissionAdmission({ sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT } = {}) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    const found = readValidatedAdmissionDocument(
+      admissionFilePath(this.home, sourceTaskId, emissionSlot),
+      sourceTaskId,
+      emissionSlot,
+    );
+    if (found.state === 'missing') {
+      storeFail(`no admission for source slot: ${admissionRef(sourceTaskId, emissionSlot)}`, {
+        code: ADMISSION_NOT_FOUND,
+        taskId: sourceTaskId,
+      });
+    }
+    const emission = this.readEmission(sourceTaskId, emissionSlot);
+    this.#assertAdmissionBindsLiveEmission({ sourceTaskId, emissionSlot, admission: found.record, emission });
+    const child = this.readTask(found.record.nextTaskId);
+    let childBinding;
+    try {
+      childBinding = computeNextTaskSpecBinding(child);
+    } catch (error) {
+      storeFail(`admission child failed spec read-back (fail-closed): ${found.record.nextTaskId}: ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    if (childBinding !== found.record.nextTaskSpecBinding || child.taskId !== found.record.nextTaskId) {
+      storeFail(`admission child spec binding mismatch (fail-closed): ${found.record.nextTaskId}`, {
+        code: ADMISSION_BINDING_MISMATCH,
+        taskId: sourceTaskId,
+      });
+    }
+    this.#assertSingleAdmissionSequenceMembership(sourceTaskId, found.record.nextTaskId);
+    return found.record;
   }
 }
