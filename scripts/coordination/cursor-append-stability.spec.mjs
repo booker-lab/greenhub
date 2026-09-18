@@ -565,12 +565,16 @@ test('I. same-task concurrent replay: single canonical membership only', { timeo
   }
 });
 
-test('BOUNDARY12. no emission / scheduler / adapters; sequence outside repo', () => {
+test('BOUNDARY12. no scheduler / adapters; sequence outside repo (emission owned by Task 13)', () => {
   const home = makeHome();
   try {
     const clock = controllableClock();
     const store = new CoordinationStore({ dir: home, nowProvider: () => clock.provider() });
-    for (const forbidden of ['emitNextTask', 'emitNext', 'createChildTask', 'schedule', 'fanOut', 'registerAdapter', 'astraSync', 'openCodeSync']) {
+    // Task-13 published primitive: emitNextTask/readEmission exist; shadow
+    // emission APIs, scheduler, dispatch, fan-out, and adapters stay absent.
+    assert.equal(typeof store.emitNextTask, 'function');
+    assert.equal(typeof store.readEmission, 'function');
+    for (const forbidden of ['emitNext', 'createChildTask', 'schedule', 'scheduleNextTask', 'dispatchNextTask', 'decideNextTask', 'fanOut', 'registerAdapter', 'astraSync', 'openCodeSync']) {
       assert.equal(store[forbidden], undefined);
     }
     // Sequence APIs exist and are bounded to cursor/sequence.

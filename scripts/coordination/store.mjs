@@ -4,13 +4,17 @@
 //   (ADOPTED materialization/read-back/ACK/CONSUMED/cursor only; no emission).
 // + GREENHUB-COORDINATION-CURSOR-APPEND-STABILITY-12
 //   (append-stable task sequence + v1 cursor migration ONLY; no emission).
+// + GREENHUB-COORDINATION-DETERMINISTIC-NEXT-TASK-EMISSION-13
+//   (deterministic next-task emission over a CONSUMED closure ONLY:
+//   emitNextTask/readEmission + emission persistence; no scheduler, no
+//   dispatch, no fan-out, no adapters, no autonomous loop).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
 // plus ADOPTED-only canonical per-task materialization with durable read-back,
 // ACK, CONSUMED, and highest-contiguous-CONSUMED cursor over an append-stable
-// task sequence. Next-task emission,
-// scheduler, fan-out, adapters, Astra/OpenCode integration, autonomous loop,
+// task sequence, plus deterministic next-task emission from a CONSUMED closure.
+// Scheduler, fan-out, adapters, Astra/OpenCode integration, autonomous loop,
 // application code, publication automation, and 57C remain out of scope.
 //
 // Filesystem layout under a durable home (never the repository worktree):
@@ -26,6 +30,8 @@
 //   <home>/consumption/cursor.json              (highest contiguous CONSUMED watermark; not truth)
 //   <home>/consumption/sequence/entries/<seq10>.json (append-stable task sequence; not truth)
 //   <home>/consumption/sequence/migration.json  (v1 migration provenance, if migrated)
+//   <home>/tasks/<sourceTaskId>/emissions/<emissionSlot>.json
+//     (deterministic next-task emission authority, bound to the CONSUMED closure)
 //
 // Claim atomicity uses OS exclusive-create (`wx`) semantics plus a
 // read-verify-unlink-recreate takeover dance (same family as
@@ -86,6 +92,15 @@ import {
   validateSequenceEntryRecord,
   validateSequenceMigrationRecord,
 } from './task-sequence.mjs';
+import {
+  DEFAULT_EMISSION_SLOT,
+  assertValidEmissionSlot,
+  buildEmissionRecord,
+  computeNextTaskSpecBinding,
+  emissionRef,
+  normalizeNextTaskSpec,
+  validateEmissionRecord,
+} from './next-task-emission.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -129,6 +144,11 @@ export const CURSOR_ORDER_VIOLATION = 'CURSOR_ORDER_VIOLATION';
 export const CORRUPT_SEQUENCE = 'CORRUPT_SEQUENCE';
 export const SEQUENCE_CONFLICT = 'SEQUENCE_CONFLICT';
 export const SEQUENCE_ORDER_VIOLATION = 'SEQUENCE_ORDER_VIOLATION';
+export const EMISSION_NOT_ELIGIBLE = 'EMISSION_NOT_ELIGIBLE';
+export const EMISSION_CONFLICT = 'EMISSION_CONFLICT';
+export const EMISSION_BINDING_MISMATCH = 'EMISSION_BINDING_MISMATCH';
+export const CORRUPT_EMISSION = 'CORRUPT_EMISSION';
+export const EMISSION_NOT_FOUND = 'EMISSION_NOT_FOUND';
 
 export class CoordinationStoreError extends Error {
   constructor(message, details = {}) {
@@ -162,6 +182,58 @@ function taskFilePaths(home, taskId) {
 
 function cursorFilePath(home) {
   return nodePath.join(home, 'consumption', 'cursor.json');
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic next-task emission authority (DETERMINISTIC_NEXT_TASK_EMISSION).
+// Durable under <home>/tasks/<sourceTaskId>/emissions/<emissionSlot>.json.
+// One canonical slot per source closure by default (`next`); exclusive-create
+// serializes concurrent writers so exactly one wins; timestamps are provenance
+// only and never enter emission identity.
+// ---------------------------------------------------------------------------
+
+function emissionFilePath(home, sourceTaskId, emissionSlot) {
+  assertValidTaskId(sourceTaskId);
+  assertValidEmissionSlot(emissionSlot);
+  return nodePath.join(resolveTaskDirectory(home, sourceTaskId), 'emissions', `${emissionSlot}.json`);
+}
+
+function readValidatedEmissionDocument(path, sourceTaskId, emissionSlot) {
+  const found = readJsonFile(path);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') {
+    storeFail(
+      `emission record is corrupt (fail-closed, no auto-repair): ${emissionRef(sourceTaskId, emissionSlot)}`,
+      { code: CORRUPT_EMISSION, taskId: sourceTaskId },
+    );
+  }
+  let record;
+  try {
+    record = validateEmissionRecord(found.document);
+  } catch (error) {
+    storeFail(`emission record invalid (fail-closed): ${emissionRef(sourceTaskId, emissionSlot)}: ${error?.message}`, {
+      code: typeof error?.code === 'string' && error.code ? error.code : CORRUPT_EMISSION,
+      taskId: sourceTaskId,
+    });
+  }
+  if (record.sourceTaskId !== sourceTaskId || record.emissionSlot !== emissionSlot) {
+    storeFail(
+      `emission identity/path mismatch (fail-closed): ${emissionRef(sourceTaskId, emissionSlot)}`,
+      { code: CORRUPT_EMISSION, taskId: sourceTaskId },
+    );
+  }
+  return { state: 'present', record };
+}
+
+/**
+ * True for fail-closed corruption/drift codes that must propagate unchanged
+ * (never remapped to eligibility, never auto-repaired).
+ */
+function isFailClosedCorruptionCode(code) {
+  return (
+    typeof code === 'string' &&
+    (code.startsWith('CORRUPT_') || code.endsWith('_MISMATCH') || code.endsWith('_CONFLICT'))
+  );
 }
 
 function listTaskIds(home) {
@@ -2345,5 +2417,372 @@ export class CoordinationStore {
     storeFail('cursor advancement diverges from canonical prefix (fail-closed, no skip/rewind).', {
       code: CURSOR_CONFLICT,
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // Deterministic next-task emission domain.
+  // emitNextTask() != scheduleNextTask() != dispatchNextTask() != decideNextTask():
+  // the caller has ALREADY decided nextTaskSpec; this primitive only binds it
+  // to one canonical slot of one fully-closed (CONSUMED) source task and
+  // durably creates the child through the canonical createTask path, exactly
+  // once per logical emission. No planning, scheduling, dispatch, fan-out,
+  // adapters, or autonomous loop exists here.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Re-verify the full source closure chain live against durable bindings:
+   * canonical ADOPTED disposition -> materialization -> read-back ACK ->
+   * CONSUMED. Returns { disposition, materialization, ack, consumed, canonical }.
+   * Missing/ineligible prerequisites map to EMISSION_NOT_ELIGIBLE;
+   * corruption/drift codes propagate unchanged (fail closed, no auto-repair).
+   */
+  #requireConsumedSourceClosure(sourceTaskId) {
+    assertValidTaskId(sourceTaskId);
+    const eligibleOrThrow = (error) => {
+      if (isFailClosedCorruptionCode(error?.code)) throw error;
+      storeFail(`emission requires a fully CONSUMED source closure (fail-closed): ${sourceTaskId}: ${error?.message}`, {
+        code: EMISSION_NOT_ELIGIBLE,
+        taskId: sourceTaskId,
+      });
+    };
+    let disposition;
+    try {
+      disposition = this.#requireAdoptedDisposition(sourceTaskId);
+    } catch (error) {
+      eligibleOrThrow(error);
+    }
+    let materialization;
+    try {
+      materialization = this.verifyMaterializationReadback(sourceTaskId).record;
+    } catch (error) {
+      eligibleOrThrow(error);
+    }
+    let ack;
+    try {
+      ack = this.readAck(sourceTaskId);
+    } catch (error) {
+      eligibleOrThrow(error);
+    }
+    let consumed;
+    try {
+      consumed = this.readConsumed(sourceTaskId);
+    } catch (error) {
+      eligibleOrThrow(error);
+    }
+    // Coherence: every link must bind the same adopted generation/result.
+    if (
+      materialization.dispositionGeneration !== disposition.dispositionGeneration ||
+      ack.dispositionGeneration !== disposition.dispositionGeneration ||
+      consumed.dispositionGeneration !== disposition.dispositionGeneration ||
+      materialization.resultId !== disposition.resultId ||
+      ack.resultId !== disposition.resultId ||
+      consumed.resultId !== disposition.resultId ||
+      materialization.resultBinding !== disposition.resultBinding ||
+      ack.resultBinding !== disposition.resultBinding ||
+      consumed.resultBinding !== disposition.resultBinding ||
+      consumed.materializationId !== materialization.materializationId ||
+      consumed.ackId !== ack.ackId
+    ) {
+      storeFail(`emission source closure drift vs canonical ADOPTED disposition (fail-closed): ${sourceTaskId}`, {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    let canonical;
+    try {
+      canonical = this.#requireCanonicalResultForDisposition(sourceTaskId, disposition.resultId);
+    } catch (error) {
+      if (isFailClosedCorruptionCode(error?.code)) throw error;
+      eligibleOrThrow(error);
+    }
+    return { disposition, materialization, ack, consumed, canonical };
+  }
+
+  /**
+   * Durably create (or recover) the emitted child through the canonical
+   * createTask path. TASK_ALREADY_EXISTS with an identical canonical spec
+   * binding is safe recovery to the same child; a colliding taskId with
+   * different content fails closed (never reused, never overwritten).
+   */
+  #ensureEmissionChild(sourceTaskId, candidate) {
+    const nextTaskId = candidate.nextTaskId;
+    try {
+      return this.createTask({ ...candidate.nextTaskSpec });
+    } catch (error) {
+      if (error?.code !== TASK_ALREADY_EXISTS) throw error;
+    }
+    let existing;
+    try {
+      existing = this.readTask(nextTaskId);
+    } catch (error) {
+      storeFail(`emission child race could not be resolved deterministically: ${nextTaskId}`, {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    let existingBinding;
+    try {
+      existingBinding = computeNextTaskSpecBinding(existing);
+    } catch (validationError) {
+      storeFail(`emission child violates the Task Envelope v1 contract (fail-closed): ${nextTaskId}`, {
+        code: validationError?.code ?? CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    if (existingBinding !== candidate.nextTaskSpecBinding) {
+      storeFail(
+        `emission child taskId collides with different content (first task wins, never reused): ${nextTaskId}`,
+        { code: EMISSION_CONFLICT, taskId: sourceTaskId },
+      );
+    }
+    return existing;
+  }
+
+  /**
+   * Verify the emitted child holds exactly one append-stable sequence
+   * membership. A crash window (task file visible, sequence entry pending) is
+   * recovered deterministically via syncTaskSequence; duplicates fail closed.
+   */
+  #assertSingleEmissionSequenceMembership(sourceTaskId, nextTaskId) {
+    const countMembership = () =>
+      listCanonicalSequenceEntries(this.home).filter((entry) => entry.taskId === nextTaskId).length;
+    let count;
+    try {
+      count = countMembership();
+    } catch (error) {
+      throw error;
+    }
+    if (count === 0) {
+      this.syncTaskSequence();
+      count = countMembership();
+    }
+    if (count !== 1) {
+      storeFail(`emission child sequence membership != 1 (fail-closed): ${nextTaskId} count=${count}`, {
+        code: CORRUPT_SEQUENCE,
+        taskId: sourceTaskId,
+      });
+    }
+  }
+
+  /**
+   * Full read-back contract: canonical emission record + emitted child task +
+   * spec binding + sequence membership + live source closure binding.
+   * Write-syscall success alone never decides success.
+   */
+  #verifyEmissionReadback({ sourceTaskId, emissionSlot, candidate, child, closure }) {
+    const path = emissionFilePath(this.home, sourceTaskId, emissionSlot);
+    const reread = readValidatedEmissionDocument(path, sourceTaskId, emissionSlot);
+    if (reread.state !== 'present' || !canonicalRecordsEqual(reread.record, candidate)) {
+      storeFail(`emission failed to verify after write (fail-closed): ${emissionRef(sourceTaskId, emissionSlot)}`, {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    const rereadChild = this.readTask(candidate.nextTaskId);
+    let childBinding;
+    try {
+      childBinding = computeNextTaskSpecBinding(rereadChild);
+    } catch (error) {
+      storeFail(`emission child failed spec read-back (fail-closed): ${candidate.nextTaskId}`, {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    if (childBinding !== candidate.nextTaskSpecBinding || rereadChild.taskId !== candidate.nextTaskId) {
+      storeFail(`emission child spec binding mismatch on read-back (fail-closed): ${candidate.nextTaskId}`, {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    if (child != null && child.taskId !== candidate.nextTaskId) {
+      storeFail(`emission child identity mismatch on read-back (fail-closed): ${candidate.nextTaskId}`, {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    this.#assertSingleEmissionSequenceMembership(sourceTaskId, candidate.nextTaskId);
+    // Source closure must still be the same CONSUMED winner (no drift).
+    let liveConsumed;
+    try {
+      liveConsumed = this.readConsumed(sourceTaskId);
+    } catch (error) {
+      storeFail(`emission source closure failed revalidation on read-back (fail-closed): ${sourceTaskId}`, {
+        code: isFailClosedCorruptionCode(error?.code) ? error.code : CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    if (liveConsumed.consumedId !== closure.consumed.consumedId) {
+      storeFail(`emission source closure changed during emission (fail-closed): ${sourceTaskId}`, {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    return { record: reread.record, child: rereadChild };
+  }
+
+  /**
+   * Resolve an emission-slot creation race deterministically: the canonical
+   * winner is re-validated against the live source closure; an identical
+   * replay recovers to the same emission + same child (duplicate:true); a
+   * conflicting spec fails closed with EMISSION_CONFLICT (never overwritten).
+   */
+  #resolveEmissionRace({ sourceTaskId, emissionSlot, candidate, closure }) {
+    const path = emissionFilePath(this.home, sourceTaskId, emissionSlot);
+    const winnerFound = readValidatedEmissionDocument(path, sourceTaskId, emissionSlot);
+    if (winnerFound.state === 'missing') {
+      storeFail(`emission race could not be resolved deterministically: ${emissionRef(sourceTaskId, emissionSlot)}`, {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    const winner = winnerFound.record;
+    // Winner must still bind the live CONSUMED closure; drift fails closed.
+    if (
+      winner.sourceConsumedId !== closure.consumed.consumedId ||
+      winner.sourceMaterializationId !== closure.materialization.materializationId ||
+      winner.sourceAckId !== closure.ack.ackId ||
+      winner.dispositionGeneration !== closure.disposition.dispositionGeneration ||
+      winner.resultId !== closure.disposition.resultId ||
+      winner.resultBinding !== closure.disposition.resultBinding ||
+      winner.canonicalTransitionId !== closure.disposition.canonicalTransitionId
+    ) {
+      storeFail(`emission winner drift vs live CONSUMED closure (fail-closed, no overwrite): ${emissionRef(sourceTaskId, emissionSlot)}`, {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    if (
+      winner.nextTaskSpecBinding !== candidate.nextTaskSpecBinding ||
+      winner.nextTaskId !== candidate.nextTaskId ||
+      winner.emissionId !== candidate.emissionId
+    ) {
+      storeFail(`conflicting emission for same source slot (first wins, fail-closed): ${emissionRef(sourceTaskId, emissionSlot)} winner=${winner.nextTaskId}`, {
+        code: EMISSION_CONFLICT,
+        taskId: sourceTaskId,
+      });
+    }
+    // Identical replay: recover to the same child (covers crash windows where
+    // the authority won but the child create or read-back never completed).
+    const child = this.#ensureEmissionChild(sourceTaskId, winner);
+    const verified = this.#verifyEmissionReadback({
+      sourceTaskId,
+      emissionSlot,
+      candidate: winner,
+      child,
+      closure,
+    });
+    return { record: verified.record, child: verified.child, duplicate: true };
+  }
+
+  /**
+   * Deterministically emit the caller-decided nextTaskSpec from a CONSUMED
+   * source closure into one canonical emission slot.
+   *
+   * - same source + same slot + same spec -> idempotent replay
+   *   ({ duplicate:true }, same emission, same child, single sequence member).
+   * - same source + same slot + different spec -> EMISSION_CONFLICT, the first
+   *   winner is preserved and never overwritten (no last-writer-wins).
+   * - concurrent writers serialize via exclusive-create: exactly one winner.
+   * - emittedAt is provenance only and never enters emission identity.
+   */
+  emitNextTask({ sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT, nextTaskSpec, emitterId, emittedAt } = {}) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    if (typeof emitterId !== 'string' || !emitterId.trim()) {
+      storeFail('emitterId must be a non-empty string.', { code: 'INVALID_EMITTER', taskId: sourceTaskId });
+    }
+    // Caller spec validation FIRST: context budget / reference-first / Task
+    // Envelope v1 contract fail closed before any durable mutation.
+    let normalized;
+    let specBinding;
+    try {
+      normalized = normalizeNextTaskSpec(nextTaskSpec);
+      specBinding = computeNextTaskSpecBinding(normalized);
+    } catch (error) {
+      storeFail(`invalid nextTaskSpec (fail-closed, no emission): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : 'INVALID_EMISSION',
+        taskId: sourceTaskId,
+      });
+    }
+    // Source eligibility: the full CONSUMED closure is re-verified live.
+    // RESULT_DELIVERED-only, PENDING/BLOCKED/REJECTED/SUPERSEDED, pre-
+    // materialization, pre-ACK, and pre-CONSUMED sources are all refused here.
+    const closure = this.#requireConsumedSourceClosure(sourceTaskId);
+    let candidate;
+    try {
+      candidate = buildEmissionRecord({
+        sourceTaskId,
+        emissionSlot,
+        sourceConsumedId: closure.consumed.consumedId,
+        sourceMaterializationId: closure.materialization.materializationId,
+        sourceAckId: closure.ack.ackId,
+        dispositionGeneration: closure.disposition.dispositionGeneration,
+        resultId: closure.canonical.resultId,
+        resultBinding: computeResultBinding(closure.canonical),
+        nextTaskSpec: normalized,
+        emittedAt: emittedAt ?? this.nowIso(),
+        emitterId,
+      });
+    } catch (error) {
+      storeFail(`invalid emission record (fail-closed): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : 'INVALID_EMISSION',
+        taskId: sourceTaskId,
+      });
+    }
+    if (specBinding !== candidate.nextTaskSpecBinding) {
+      storeFail('emission spec binding mismatch (fail-closed, no emission).', {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+
+    const path = emissionFilePath(this.home, sourceTaskId, emissionSlot);
+    const created = writeJsonExclusive(path, candidate);
+    if (!created.created) {
+      return this.#resolveEmissionRace({ sourceTaskId, emissionSlot, candidate, closure });
+    }
+    // Emission authority now durable; the child create below is the
+    // partial-failure boundary B/C: a crash here is recovered by replay to the
+    // same child (never a duplicate, never delete-and-recreate).
+    const child = this.#ensureEmissionChild(sourceTaskId, candidate);
+    const verified = this.#verifyEmissionReadback({ sourceTaskId, emissionSlot, candidate, child, closure });
+    return { record: verified.record, child: verified.child, duplicate: false };
+  }
+
+  /**
+   * Read the canonical emission for a source slot, re-validated against the
+   * live CONSUMED closure binding. Drift fails closed (no auto-repair).
+   */
+  readEmission(sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    const found = readValidatedEmissionDocument(
+      emissionFilePath(this.home, sourceTaskId, emissionSlot),
+      sourceTaskId,
+      emissionSlot,
+    );
+    if (found.state === 'missing') {
+      storeFail(`no emission for source slot: ${emissionRef(sourceTaskId, emissionSlot)}`, {
+        code: EMISSION_NOT_FOUND,
+        taskId: sourceTaskId,
+      });
+    }
+    const closure = this.#requireConsumedSourceClosure(sourceTaskId);
+    const winner = found.record;
+    if (
+      winner.sourceConsumedId !== closure.consumed.consumedId ||
+      winner.sourceMaterializationId !== closure.materialization.materializationId ||
+      winner.sourceAckId !== closure.ack.ackId ||
+      winner.dispositionGeneration !== closure.disposition.dispositionGeneration ||
+      winner.resultId !== closure.disposition.resultId ||
+      winner.resultBinding !== closure.disposition.resultBinding ||
+      winner.canonicalTransitionId !== closure.disposition.canonicalTransitionId
+    ) {
+      storeFail(`emission drift vs live CONSUMED closure (fail-closed, no auto-repair): ${emissionRef(sourceTaskId, emissionSlot)}`, {
+        code: CORRUPT_EMISSION,
+        taskId: sourceTaskId,
+      });
+    }
+    return winner;
   }
 }
