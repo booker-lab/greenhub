@@ -1296,8 +1296,9 @@ test('I2. store surface gains no Task 27 invocation/execution primitive', async 
     const store = new CoordinationStore({ dir: home });
     assert.equal(store.readExecutorInvocationInput, undefined);
     assert.equal(store.createExecutorInvocationInput, undefined);
-    assert.equal(store.readExecutorInvocationAttempt, undefined);
-    assert.equal(store.createExecutorInvocationAttempt, undefined);
+    // readExecutorInvocationAttempt / createExecutorInvocationAttempt belong to
+    // the Task 28 durable executor invocation attempt surface; this test keeps
+    // proving only that Task 27 adds no store primitive of its own.
     assert.equal(store.invokeExecutor, undefined);
     assert.equal(store.executeTask, undefined);
     assert.equal(store.acknowledgeExecutor, undefined);
