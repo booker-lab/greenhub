@@ -37,6 +37,15 @@
 //   <home>/tasks/<sourceTaskId>/dispatch-attempts/<dispatchId>.json; no
 //   transport, no scheduler, no worker selection, no executor invocation,
 //   no ACK, no task status mutation, no new generation/retry authority).
+// + GREENHUB-COORDINATION-DURABLE-RECEIVER-ACCEPTANCE-22
+//   (immutable durable receiver acceptance persistence ONLY:
+//   readReceiverDispatchAcceptance / createReceiverDispatchAcceptance keyed by
+//   dispatchId ONLY under <home>/receiver-acceptances/<dispatchId>.json; the
+//   durable value is the EXACT validated Task 20 transport request itself;
+//   exclusive-create, no overwrite, no auto-repair, no delete-and-recreate,
+//   no last-writer-wins; no ACK, no executor invocation, no scheduler, no
+//   retry/backoff/resend, no new generation authority, no concrete transport,
+//   no task/claim/admission/emission/attempt/result mutation).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -73,6 +82,10 @@
 //   <home>/tasks/<sourceTaskId>/dispatch-attempts/<dispatchId>.json
 //     (immutable durable dispatch-attempt intent, bound to the exact LIVE Task 18
 //     envelope; exclusive-create, no overwrite, no transport)
+//   <home>/receiver-acceptances/<dispatchId>.json
+//     (immutable durable receiver acceptance fact keyed by dispatchId ONLY: the
+//     EXACT validated Task 20 transport request itself; exclusive-create,
+//     no wrapper metadata, no ACK, no overwrite, no auto-repair)
 // Claim authority stays <home>/tasks/<taskId>/claim.json (no new claim file,
 // no new lease subsystem, no worker registry): the admission-bound layer only
 // derives a deterministic claimToken bound to the canonical admission and
@@ -163,6 +176,12 @@ import {
   dispatchAttemptFilePath,
   validateDispatchAttemptRecord,
 } from './dispatch-attempt.mjs';
+import { validateTransportRequest } from './dispatch-transport-contract.mjs';
+import {
+  CORRUPT_RECEIVER_DISPATCH_ACCEPTANCE,
+  assertValidReceiverAcceptanceDispatchId,
+  receiverDispatchAcceptanceFilePath,
+} from './dispatch-receiver-acceptance.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -4171,6 +4190,91 @@ export class CoordinationStore {
       });
     }
     return record;
+  }
+
+  // -------------------------------------------------------------------------
+  // Durable receiver dispatch acceptance domain
+  // (GREENHUB-COORDINATION-DURABLE-RECEIVER-ACCEPTANCE-22, dispatchId ONLY).
+  // acceptReceiverDispatch() != acknowledgeDispatch() != executeTask():
+  // this domain is the durable storage primitive ONLY. The durable value is
+  // the EXACT validated Task 20 transport request itself (no wrapper metadata,
+  // no timestamps, no ACK, no new generation). LOOKUP KEY = dispatchId ONLY:
+  // sourceTaskId / workerId / taskId / admissionId / claim are never lookup
+  // keys here. Ordering:
+  //   1. dispatchId path resolution (path-safe identity family),
+  //   2. existing record -> validated exact request (or missing -> null),
+  //   3. corruption / invalid request / key-binding mismatch -> fail closed,
+  //   4. create -> OS exclusive-create (never exists()->write()),
+  //   5. existing winner -> created:false (caller resolves the race; this
+  //      primitive never overwrites, never repairs, never deletes).
+  // No task/claim/admission/emission/attempt/result mutation happens here.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Read one durable receiver acceptance record by dispatchId ONLY.
+   * Returns null when no acceptance exists for this dispatchId (unseen), or
+   * the EXACT validated frozen Task 20 transport request when present.
+   * Corrupt / invalid / wrong-key records fail closed with no auto-repair.
+   */
+  readReceiverDispatchAcceptance(dispatchId) {
+    try {
+      assertValidReceiverAcceptanceDispatchId(dispatchId);
+    } catch (error) {
+      storeFail(`receiver acceptance dispatchId invalid (fail-closed): ${error?.message}`, {
+        code: CORRUPT_RECEIVER_DISPATCH_ACCEPTANCE,
+      });
+    }
+    const targetPath = receiverDispatchAcceptanceFilePath(this.home, dispatchId);
+    const found = readJsonFile(targetPath);
+    if (found.state === 'missing') return null;
+    if (found.state === 'corrupt') {
+      storeFail(`receiver acceptance record is corrupt (fail-closed, no auto-repair): ${dispatchId}`, {
+        code: CORRUPT_RECEIVER_DISPATCH_ACCEPTANCE,
+      });
+    }
+    let record;
+    try {
+      record = validateTransportRequest(found.document);
+    } catch (error) {
+      storeFail(
+        `receiver acceptance record invalid (fail-closed, no auto-repair): ${dispatchId}: ${error?.message}`,
+        {
+          code:
+            typeof error?.code === 'string' && error.code
+              ? error.code
+              : CORRUPT_RECEIVER_DISPATCH_ACCEPTANCE,
+        },
+      );
+    }
+    if (record.dispatchId !== dispatchId) {
+      storeFail(
+        `receiver acceptance key/binding mismatch (fail-closed): looked up ${dispatchId} but the record carries ${record.dispatchId}`,
+        { code: CORRUPT_RECEIVER_DISPATCH_ACCEPTANCE },
+      );
+    }
+    return record;
+  }
+
+  /**
+   * Exclusive-create one immutable receiver acceptance record keyed by
+   * dispatchId ONLY. The persisted value is the EXACT validated Task 20
+   * request with no wrapper metadata. Returns { created: true } when this
+   * call won the OS exclusive-create, { created: false } when a record
+   * already exists. Never overwrites, never repairs, never deletes:
+   * the existing winner is immutable.
+   */
+  createReceiverDispatchAcceptance(request) {
+    let candidate;
+    try {
+      candidate = validateTransportRequest(request);
+    } catch (error) {
+      storeFail(`receiver acceptance request invalid (fail-closed): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : CORRUPT_RECEIVER_DISPATCH_ACCEPTANCE,
+      });
+    }
+    const targetPath = receiverDispatchAcceptanceFilePath(this.home, candidate.dispatchId);
+    const created = writeJsonExclusive(targetPath, candidate);
+    return { created: created.created };
   }
 
   // -------------------------------------------------------------------------
