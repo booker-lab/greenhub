@@ -46,6 +46,17 @@
 //   no last-writer-wins; no ACK, no executor invocation, no scheduler, no
 //   retry/backoff/resend, no new generation authority, no concrete transport,
 //   no task/claim/admission/emission/attempt/result mutation).
+// + GREENHUB-COORDINATION-DURABLE-RECEIVER-DECISION-24
+//   (immutable durable receiver decision persistence ONLY:
+//   readReceiverDispatchDecision / createReceiverDispatchDecision keyed by
+//   dispatchId ONLY under <home>/receiver-decisions/<dispatchId>.json; the
+//   durable value binds the EXACT Task 23 validated decision input as
+//   { schemaVersion, dispatchId, decision, decisionInput }; exclusive-create,
+//   no overwrite, no auto-repair, no delete-and-recreate, no last-writer-wins;
+//   no ACK, no receipt, no executor acceptance/invocation, no scheduler, no
+//   worker selection, no retry/backoff/resend, no new generation authority,
+//   no concrete transport, no task/claim/admission/emission/attempt/
+//   receiver-acceptance/result mutation).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -86,6 +97,11 @@
 //     (immutable durable receiver acceptance fact keyed by dispatchId ONLY: the
 //     EXACT validated Task 20 transport request itself; exclusive-create,
 //     no wrapper metadata, no ACK, no overwrite, no auto-repair)
+//   <home>/receiver-decisions/<dispatchId>.json
+//     (immutable durable receiver decision fact keyed by dispatchId ONLY: the
+//     EXACT Task 23 validated decision input bound as decisionInput;
+//     exclusive-create, no ACK/receipt, no overwrite, no auto-repair, no new
+//     generation)
 // Claim authority stays <home>/tasks/<taskId>/claim.json (no new claim file,
 // no new lease subsystem, no worker registry): the admission-bound layer only
 // derives a deterministic claimToken bound to the canonical admission and
@@ -182,6 +198,12 @@ import {
   assertValidReceiverAcceptanceDispatchId,
   receiverDispatchAcceptanceFilePath,
 } from './dispatch-receiver-acceptance.mjs';
+import {
+  CORRUPT_RECEIVER_DISPATCH_DECISION,
+  assertValidReceiverDecisionDispatchId,
+  receiverDispatchDecisionFilePath,
+  validateReceiverDecisionRecord,
+} from './dispatch-receiver-decision.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -4273,6 +4295,97 @@ export class CoordinationStore {
       });
     }
     const targetPath = receiverDispatchAcceptanceFilePath(this.home, candidate.dispatchId);
+    const created = writeJsonExclusive(targetPath, candidate);
+    return { created: created.created };
+  }
+
+  // -------------------------------------------------------------------------
+  // Durable receiver dispatch decision domain
+  // (GREENHUB-COORDINATION-DURABLE-RECEIVER-DECISION-24, dispatchId ONLY).
+  // persistReceiverDecision() != acknowledgeDispatch() != executeTask():
+  // this domain is the durable storage primitive ONLY. The durable value binds
+  // the EXACT Task 23 validated decision input as
+  // { schemaVersion, dispatchId, decision, decisionInput } (no timestamps, no
+  // ACK/receipt, no new generation; claimGeneration stays the SOLE fencing
+  // generation inside decisionInput). LOOKUP KEY = dispatchId ONLY:
+  // sourceTaskId / workerId / taskId / admissionId / claim are never lookup
+  // keys here. Ordering:
+  //   1. dispatchId path resolution (path-safe identity family),
+  //   2. existing record -> validated exact record (or missing -> null),
+  //   3. corruption / invalid record / key-binding mismatch -> fail closed,
+  //   4. create -> OS exclusive-create (never exists()->write()),
+  //   5. existing winner -> created:false (caller resolves the race; this
+  //      primitive never overwrites, never repairs, never deletes).
+  // No task/claim/admission/emission/attempt/receiver-acceptance/result
+  // mutation happens here.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Read one durable receiver decision record by dispatchId ONLY.
+   * Returns null when no decision exists for this dispatchId (unseen), or the
+   * EXACT validated frozen decision record when present.
+   * Corrupt / invalid / wrong-key records fail closed with no auto-repair.
+   */
+  readReceiverDispatchDecision(dispatchId) {
+    try {
+      assertValidReceiverDecisionDispatchId(dispatchId);
+    } catch (error) {
+      storeFail(`receiver decision dispatchId invalid (fail-closed): ${error?.message}`, {
+        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+      });
+    }
+    const targetPath = receiverDispatchDecisionFilePath(this.home, dispatchId);
+    const found = readJsonFile(targetPath);
+    if (found.state === 'missing') return null;
+    if (found.state === 'corrupt') {
+      storeFail(`receiver decision record is corrupt (fail-closed, no auto-repair): ${dispatchId}`, {
+        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+      });
+    }
+    let record;
+    try {
+      record = validateReceiverDecisionRecord(found.document);
+    } catch (error) {
+      storeFail(
+        `receiver decision record invalid (fail-closed, no auto-repair): ${dispatchId}: ${error?.message}`,
+        {
+          code:
+            typeof error?.code === 'string' && error.code
+              ? error.code
+              : CORRUPT_RECEIVER_DISPATCH_DECISION,
+        },
+      );
+    }
+    if (record.dispatchId !== dispatchId) {
+      storeFail(
+        `receiver decision key/binding mismatch (fail-closed): looked up ${dispatchId} but the record carries ${record.dispatchId}`,
+        { code: CORRUPT_RECEIVER_DISPATCH_DECISION },
+      );
+    }
+    return record;
+  }
+
+  /**
+   * Exclusive-create one immutable receiver decision record keyed by
+   * dispatchId ONLY. The persisted value is the EXACT validated decision
+   * record binding the exact Task 23 decision input. Returns
+   * { created: true } when this call won the OS exclusive-create,
+   * { created: false } when a record already exists. Never overwrites,
+   * never repairs, never deletes: the existing winner is immutable.
+   */
+  createReceiverDispatchDecision(record) {
+    let candidate;
+    try {
+      candidate = validateReceiverDecisionRecord(record);
+    } catch (error) {
+      storeFail(`receiver decision record invalid (fail-closed): ${error?.message}`, {
+        code:
+          typeof error?.code === 'string' && error.code
+            ? error.code
+            : CORRUPT_RECEIVER_DISPATCH_DECISION,
+      });
+    }
+    const targetPath = receiverDispatchDecisionFilePath(this.home, candidate.dispatchId);
     const created = writeJsonExclusive(targetPath, candidate);
     return { created: created.created };
   }
