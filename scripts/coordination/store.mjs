@@ -70,6 +70,19 @@
 //   generation authority, no concrete transport, no execution start, no
 //   task/claim/admission/emission/attempt/receiver-acceptance/
 //   receiver-decision/result mutation).
+// + GREENHUB-COORDINATION-DURABLE-EXECUTOR-INVOCATION-ATTEMPT-28
+//   (immutable durable executor invocation attempt persistence ONLY:
+//   readExecutorInvocationAttempt / createExecutorInvocationAttempt keyed by
+//   dispatchId ONLY under <home>/executor-invocation-attempts/<dispatchId>.json;
+//   the durable value is the EXACT validated Task 27 invocation input itself
+//   ({ schemaVersion, dispatchId, decision, decisionInput }), with the
+//   invocation-attempt fact expressed by the namespace/path authority ONLY;
+//   exclusive-create, no overwrite, no auto-repair, no delete-and-recreate,
+//   no last-writer-wins; no ACK, no receipt, no executor invocation, no
+//   scheduler, no worker selection, no retry/backoff/resend, no new
+//   generation authority, no concrete transport, no execution start, no
+//   task/claim/admission/emission/attempt/receiver-acceptance/
+//   receiver-decision/executor-acceptance/result mutation).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -119,6 +132,12 @@
 //     (immutable durable executor acceptance fact keyed by dispatchId ONLY:
 //     the EXACT validated Task 24 receiver decision record itself, with the
 //     acceptance meaning expressed by this path authority ONLY;
+//     exclusive-create, no wrapper metadata, no ACK/receipt, no executor
+//     invocation, no overwrite, no auto-repair, no new generation)
+//   <home>/executor-invocation-attempts/<dispatchId>.json
+//     (immutable durable executor invocation attempt fact keyed by dispatchId
+//     ONLY: the EXACT validated Task 27 invocation input itself, with the
+//     invocation-attempt meaning expressed by this path authority ONLY;
 //     exclusive-create, no wrapper metadata, no ACK/receipt, no executor
 //     invocation, no overwrite, no auto-repair, no new generation)
 // Claim authority stays <home>/tasks/<taskId>/claim.json (no new claim file,
@@ -228,6 +247,11 @@ import {
   assertValidExecutorAcceptanceDispatchId,
   executorDispatchAcceptanceFilePath,
 } from './dispatch-executor-acceptance.mjs';
+import {
+  CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
+  assertValidExecutorInvocationAttemptDispatchId,
+  executorInvocationAttemptFilePath,
+} from './dispatch-executor-invocation-attempt.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -4505,6 +4529,106 @@ export class CoordinationStore {
       });
     }
     const targetPath = executorDispatchAcceptanceFilePath(this.home, candidate.dispatchId);
+    const created = writeJsonExclusive(targetPath, candidate);
+    return { created: created.created };
+  }
+
+  // -------------------------------------------------------------------------
+  // Durable executor invocation attempt domain
+  // (GREENHUB-COORDINATION-DURABLE-EXECUTOR-INVOCATION-ATTEMPT-28,
+  // dispatchId ONLY).
+  // persistExecutorInvocationAttempt() != acknowledgeDispatch() !=
+  // executeTask() != invokeExecutor(): this domain is the durable storage
+  // primitive ONLY. The durable value is the EXACT validated Task 27
+  // invocation input itself (the EXACT Task 26 receiver decision record:
+  // { schemaVersion, dispatchId, decision, decisionInput }); the executor
+  // invocation attempt fact is expressed by the namespace/path authority
+  // <home>/executor-invocation-attempts/<dispatchId>.json ONLY (no wrapper
+  // metadata, no timestamps, no ACK/receipt, no executor invocation, no new
+  // generation; claimGeneration stays the SOLE fencing generation inside
+  // decisionInput). LOOKUP KEY = dispatchId ONLY: sourceTaskId / nextTaskId /
+  // taskId / workerId / admissionId / emissionSlot / claimToken /
+  // claimGeneration are never lookup keys here. Ordering:
+  //   1. dispatchId path resolution (path-safe identity family),
+  //   2. existing record -> validated exact record (or missing -> null),
+  //   3. corruption / invalid record / key-binding mismatch -> fail closed,
+  //   4. create -> OS exclusive-create (never exists()->write()),
+  //   5. existing winner -> created:false (caller resolves the race; this
+  //      primitive never overwrites, never repairs, never deletes).
+  // No task/claim/admission/emission/attempt/receiver-acceptance/receiver-
+  // decision/executor-acceptance/result mutation happens here.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Read one durable executor invocation attempt by dispatchId ONLY.
+   * Returns null when no invocation attempt exists for this dispatchId
+   * (unseen), or the EXACT validated frozen Task 27 invocation input when
+   * present. Corrupt / invalid / wrong-key records fail closed with no
+   * auto-repair.
+   */
+  readExecutorInvocationAttempt(dispatchId) {
+    try {
+      assertValidExecutorInvocationAttemptDispatchId(dispatchId);
+    } catch (error) {
+      storeFail(`executor invocation attempt dispatchId invalid (fail-closed): ${error?.message}`, {
+        code: CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
+      });
+    }
+    const targetPath = executorInvocationAttemptFilePath(this.home, dispatchId);
+    const found = readJsonFile(targetPath);
+    if (found.state === 'missing') return null;
+    if (found.state === 'corrupt') {
+      storeFail(
+        `executor invocation attempt record is corrupt (fail-closed, no auto-repair): ${dispatchId}`,
+        {
+          code: CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
+        },
+      );
+    }
+    let record;
+    try {
+      record = validateReceiverDecisionRecord(found.document);
+    } catch (error) {
+      storeFail(
+        `executor invocation attempt record invalid (fail-closed, no auto-repair): ${dispatchId}: ${error?.message}`,
+        {
+          code:
+            typeof error?.code === 'string' && error.code
+              ? error.code
+              : CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
+        },
+      );
+    }
+    if (record.dispatchId !== dispatchId) {
+      storeFail(
+        `executor invocation attempt key/binding mismatch (fail-closed): looked up ${dispatchId} but the record carries ${record.dispatchId}`,
+        { code: CORRUPT_EXECUTOR_INVOCATION_ATTEMPT },
+      );
+    }
+    return record;
+  }
+
+  /**
+   * Exclusive-create one immutable executor invocation-attempt record keyed by
+   * dispatchId ONLY. The persisted value is the EXACT validated Task 27
+   * invocation input with no wrapper metadata. Returns { created: true } when
+   * this call won the OS exclusive-create, { created: false } when a record
+   * already exists. Never overwrites, never repairs, never deletes: the
+   * existing winner is immutable.
+   */
+  createExecutorInvocationAttempt(record) {
+    let candidate;
+    try {
+      candidate = validateReceiverDecisionRecord(record);
+    } catch (error) {
+      storeFail(`executor invocation attempt record invalid (fail-closed): ${error?.message}`, {
+        code:
+          typeof error?.code === 'string' && error.code
+            ? error.code
+            : CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
+      });
+    }
+    const targetPath = executorInvocationAttemptFilePath(this.home, candidate.dispatchId);
     const created = writeJsonExclusive(targetPath, candidate);
     return { created: created.created };
   }
