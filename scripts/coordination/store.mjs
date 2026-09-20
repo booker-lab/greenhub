@@ -113,6 +113,12 @@
 //   task/claim/admission/emission/attempt/receiver-acceptance/
 //   receiver-decision/executor-acceptance/executor-invocation-attempt/
 //   executor-invocation-outcome/result mutation).
+// + COORD-AUDIT-C01 (interrupted result delivery replay convergence ONLY:
+//   an already stored per-id/canonical Result is immutable authority; an exact
+//   full-semantic-payload replay converges only the missing canonical/terminal
+//   steps with no rewrite and no executor re-invocation; a same-resultId
+//   payload difference fails closed with DUPLICATE_RESULT_ID_CONFLICT;
+//   first-winner and live claim fencing semantics are unchanged).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -1049,6 +1055,45 @@ function writeJsonExclusive(targetPath, document) {
   return { created: false };
 }
 
+// ---------------------------------------------------------------------------
+// Result replay identity (COORD-AUDIT-C01).
+// A stored Result is the durable authority. An exact replay is recognized only
+// when the full semantic payload matches; the stored bytes are then reused and
+// only the missing canonical/terminal steps are completed. deliveredAt is the
+// store clock authority: a replay that omits it converges against the stored
+// timestamp, while an explicitly authored different timestamp is a payload
+// conflict. usage is compared by presence and content (absence != explicit).
+// ---------------------------------------------------------------------------
+
+const RESULT_REPLAY_IDENTITY_FIELDS = Object.freeze([
+  'schemaVersion',
+  'resultId',
+  'taskId',
+  'workerId',
+  'claimToken',
+  'claimGeneration',
+  'status',
+  'summary',
+  'proofRefs',
+  'evidenceRefs',
+  'frictionObserved',
+]);
+
+function sameResultSemanticPayload(stored, candidate, { deliveredAtAuthored = false } = {}) {
+  const project = (record) => {
+    const projected = {};
+    for (const field of RESULT_REPLAY_IDENTITY_FIELDS) {
+      projected[field] = record[field];
+    }
+    projected.proofRefs = record.proofRefs ?? [];
+    projected.evidenceRefs = record.evidenceRefs ?? [];
+    projected.usage = record.usage ?? null;
+    if (deliveredAtAuthored) projected.deliveredAt = record.deliveredAt;
+    return projected;
+  };
+  return JSON.stringify(project(stored)) === JSON.stringify(project(candidate));
+}
+
 export class CoordinationStore {
   constructor({ dir, home, env = process.env, platform = process.platform, nowProvider } = {}) {
     this.home = dir ?? home ?? resolveCoordinationHome({ env, platform });
@@ -1287,9 +1332,48 @@ export class CoordinationStore {
   }
 
   /**
+   * Converge the CLAIMED -> RESULT_DELIVERED terminal projection. Idempotent,
+   * never rewinds, and never republishes a superseded status.
+   */
+  #markResultDelivered(taskId) {
+    const task = this.readTask(taskId);
+    if (task.status === TASK_STATUS_RESULT_DELIVERED) return task;
+    const paths = taskFilePaths(this.home, taskId);
+    const outcome = writeJsonAtomic(paths.taskPath, () => {
+      const current = this.readTask(taskId);
+      if (current.status === TASK_STATUS_RESULT_DELIVERED) return null;
+      return validateTaskEnvelope({
+        ...current,
+        status: TASK_STATUS_RESULT_DELIVERED,
+        updatedAt: this.nowIso(),
+      });
+    });
+    return outcome.written ? outcome.document : this.readTask(taskId);
+  }
+
+  /**
+   * Publish the canonical result from a stored per-id record if it is still
+   * missing. Exclusive-create only: a concurrent winner is never overwritten.
+   */
+  #ensureCanonicalResult(taskId, paths, stored) {
+    const created = writeJsonExclusive(paths.resultPath, stored);
+    if (created.created) return stored;
+    const winner = readJsonFile(paths.resultPath);
+    if (winner.state !== 'present') {
+      storeFail(`canonical result race could not be resolved deterministically: ${taskId}`, {
+        code: 'CORRUPT_RESULT',
+        taskId,
+      });
+    }
+    return validateResultEnvelope(winner.document);
+  }
+
+  /**
    * Deliver an executor RESULT. Verifies current claim owner + fencing token.
    * - stale claimToken/generation -> STALE_CLAIM (never adopted as canonical)
-   * - same resultId retransmission with identical payload -> idempotent return
+   * - same resultId retransmission with identical full semantic payload ->
+   *   idempotent return; a stored per-id result whose canonical/terminal steps
+   *   never completed converges those steps from the stored authority
    * - same resultId with different payload -> DUPLICATE_RESULT_ID_CONFLICT (first wins)
    * - different resultId after terminal delivery -> deterministic ALREADY_DELIVERED (first wins)
    */
@@ -1334,25 +1418,22 @@ export class CoordinationStore {
 
     const paths = taskFilePaths(this.home, taskId);
     const task = this.readTask(taskId);
+    const alreadyDelivered = task.status === TASK_STATUS_RESULT_DELIVERED;
+    const deliveredAtAuthored = deliveredAt !== undefined;
 
-    // Duplicate fast path: same resultId already stored -> deterministic handling.
+    // Duplicate fast path: same resultId already stored -> deterministic
+    // handling. The full semantic payload must match; the stored record is the
+    // authority and is never rewritten, deleted, or regenerated.
     const existingById = readJsonFile(nodePath.join(paths.resultsDir, `${finalResultId}.json`));
+    let storedById = null;
     if (existingById.state === 'present') {
-      const stored = validateResultEnvelope(existingById.document);
-      if (
-        stored.taskId === candidate.taskId &&
-        stored.workerId === candidate.workerId &&
-        stored.claimToken === candidate.claimToken &&
-        stored.claimGeneration === candidate.claimGeneration &&
-        stored.status === candidate.status &&
-        stored.summary === candidate.summary
-      ) {
-        return { record: stored, duplicate: true, alreadyDelivered: task.status === TASK_STATUS_RESULT_DELIVERED };
+      storedById = validateResultEnvelope(existingById.document);
+      if (!sameResultSemanticPayload(storedById, candidate, { deliveredAtAuthored })) {
+        storeFail(`duplicate resultId with different payload (first delivery wins): ${finalResultId}`, {
+          code: DUPLICATE_RESULT_ID_CONFLICT,
+          taskId,
+        });
       }
-      storeFail(`duplicate resultId with different payload (first delivery wins): ${finalResultId}`, {
-        code: DUPLICATE_RESULT_ID_CONFLICT,
-        taskId,
-      });
     }
     if (existingById.state === 'corrupt') {
       storeFail(`stored result is corrupt (fail-closed): ${finalResultId}`, {
@@ -1366,7 +1447,16 @@ export class CoordinationStore {
     if (terminal.state === 'present') {
       const stored = validateResultEnvelope(terminal.document);
       if (stored.resultId === finalResultId) {
-        return { record: stored, duplicate: true, alreadyDelivered: true };
+        if (!sameResultSemanticPayload(stored, candidate, { deliveredAtAuthored })) {
+          storeFail(`duplicate resultId with different payload (first delivery wins): ${finalResultId}`, {
+            code: DUPLICATE_RESULT_ID_CONFLICT,
+            taskId,
+          });
+        }
+        // The canonical authority already won; only a lagging terminal task
+        // projection is repaired. No re-fencing, no rewrite.
+        this.#markResultDelivered(taskId);
+        return { record: stored, duplicate: true, alreadyDelivered };
       }
       return { record: stored, duplicate: false, alreadyDelivered: true };
     }
@@ -1403,10 +1493,24 @@ export class CoordinationStore {
       );
     }
 
+    if (storedById) {
+      // Crash recovery: per-id bytes already exist but the canonical/terminal
+      // steps never completed. The stored record is the authority; only the
+      // missing steps are completed. No overwrite, no executor re-invocation.
+      const canonicalRecord = this.#ensureCanonicalResult(taskId, paths, storedById);
+      if (canonicalRecord.resultId !== storedById.resultId) {
+        return { record: canonicalRecord, duplicate: false, alreadyDelivered: true };
+      }
+      this.#markResultDelivered(taskId);
+      return { record: canonicalRecord, duplicate: true, alreadyDelivered };
+    }
+
     nodeFs.mkdirSync(paths.resultsDir, { recursive: true });
     const perIdCreated = writeJsonExclusive(nodePath.join(paths.resultsDir, `${finalResultId}.json`), candidate);
     if (!perIdCreated.created) {
-      // Concurrent duplicate delivery won the race; resolve deterministically.
+      // Concurrent duplicate delivery won the race; resolve deterministically
+      // through the stored authority (recursion re-reads the stored bytes and
+      // keeps deliveredAt store-clock-owned, exactly like the original call).
       return this.deliverResult({
         taskId,
         resultId: finalResultId,
@@ -1419,7 +1523,6 @@ export class CoordinationStore {
         evidenceRefs,
         frictionObserved,
         ...(usage === undefined ? {} : { usage }),
-        deliveredAt: candidate.deliveredAt,
       });
     }
     const canonicalCreated = writeJsonExclusive(paths.resultPath, candidate);
@@ -1427,6 +1530,10 @@ export class CoordinationStore {
       const winner = readJsonFile(paths.resultPath);
       if (winner.state === 'present') {
         const stored = validateResultEnvelope(winner.document);
+        if (stored.resultId === finalResultId) {
+          this.#markResultDelivered(taskId);
+          return { record: stored, duplicate: false, alreadyDelivered };
+        }
         return { record: stored, duplicate: false, alreadyDelivered: true };
       }
       storeFail(`canonical result race could not be resolved deterministically: ${taskId}`, {
@@ -1435,15 +1542,7 @@ export class CoordinationStore {
       });
     }
 
-    writeJsonAtomic(paths.taskPath, () => {
-      const current = this.readTask(taskId);
-      if (current.status === TASK_STATUS_RESULT_DELIVERED) return null;
-      return validateTaskEnvelope({
-        ...current,
-        status: TASK_STATUS_RESULT_DELIVERED,
-        updatedAt: this.nowIso(),
-      });
-    });
+    this.#markResultDelivered(taskId);
     return { record: candidate, duplicate: false, alreadyDelivered: false };
   }
 
