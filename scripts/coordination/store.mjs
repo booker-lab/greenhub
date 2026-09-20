@@ -199,6 +199,17 @@
 // exactly one wins. Takeover additionally re-verifies generation before
 // unlink so a concurrent winner is never clobbered silently.
 //
+// Windows/NTFS replacement contention: durable replacement publishes a
+// same-directory temp file through an atomic rename (hard-link for
+// exclusive-create). While another process holds the target open, that rename
+// can transiently fail with EPERM/EBUSY even though the replacement is
+// logically valid. Those two codes only are absorbed by a small bounded retry;
+// the target is never deleted first and partial JSON is never exposed. Task
+// status transitions re-read their current state before every attempt so a
+// retried write can never republish a superseded status. Directory scans
+// ignore this module's own in-flight `<name>.json.<pid>.<uuid>.tmp` artifacts
+// for the same reason.
+//
 // Cursor/disposition note: delivered results stay in the inbox; CONSUMED is a
 // durable closure marker and cursor.json is only the highest contiguous
 // CONSUMED watermark. Raw RESULT/disposition/materialization history is never
@@ -372,6 +383,7 @@ export const DISPATCH_ATTEMPT_NOT_FOUND = 'DISPATCH_ATTEMPT_NOT_FOUND';
 export const CORRUPT_DISPATCH_ATTEMPT = 'CORRUPT_DISPATCH_ATTEMPT';
 export const DISPATCH_ATTEMPT_CONFLICT = 'DISPATCH_ATTEMPT_CONFLICT';
 export const DISPATCH_ATTEMPT_BINDING_MISMATCH = 'DISPATCH_ATTEMPT_BINDING_MISMATCH';
+export const ATOMIC_WRITE_CONTENTION_EXHAUSTED = 'ATOMIC_WRITE_CONTENTION_EXHAUSTED';
 
 export class CoordinationStoreError extends Error {
   constructor(message, details = {}) {
@@ -592,6 +604,11 @@ function listCanonicalSequenceEntries(home) {
   for (const name of names) {
     const seq = parseSequenceEntryFileName(name);
     if (seq === null) {
+      // A concurrent writer's in-flight temp artifact is transient by
+      // construction: its creator publishes it under a durable name or
+      // unlinks it. It is not durable corruption, so a scan must not fail
+      // closed on it. Any other unexpected file still fails closed.
+      if (isInFlightTempArtifactName(name)) continue;
       storeFail(`task sequence directory contains non-entry file (fail-closed): ${name}`, {
         code: CORRUPT_SEQUENCE,
       });
@@ -911,21 +928,78 @@ function readJsonFile(path) {
   }
 }
 
-/** Durable atomic write: temp file in the same directory + atomic rename. */
-function writeJsonAtomic(targetPath, document) {
-  nodeFs.mkdirSync(nodePath.dirname(targetPath), { recursive: true });
-  const tempPath = `${targetPath}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
-  nodeFs.writeFileSync(tempPath, JSON.stringify(document, null, 2), 'utf8');
-  try {
-    nodeFs.renameSync(tempPath, targetPath);
-  } catch (error) {
+// ---------------------------------------------------------------------------
+// Atomic durable replacement (Windows/NTFS contention policy).
+// EPERM/EBUSY are the only codes retried, they are retried a small bounded
+// number of times with a short synchronous backoff, and every other error
+// keeps the existing immediate fail-closed semantics.
+// ---------------------------------------------------------------------------
+
+const ATOMIC_WRITE_RETRYABLE_CODES = new Set(['EPERM', 'EBUSY']);
+const ATOMIC_WRITE_MAX_ATTEMPTS = 8;
+const ATOMIC_WRITE_MAX_RETRY_DELAY_MS = 20;
+
+/** Unique in-flight temp artifact path for this module's atomic writers. */
+function atomicTempPath(targetPath) {
+  return `${targetPath}.${process.pid}.${randomUUID().replace(/-/g, '')}.tmp`;
+}
+
+/** True for this module's own in-flight temp artifacts (`<name>.json.<pid>.<uuid>.tmp`). */
+function isInFlightTempArtifactName(name) {
+  return /\.json\.[0-9]+\.[0-9a-f]+\.tmp$/.test(name);
+}
+
+function atomicWriteRetryDelayMs(attempt) {
+  return Math.min(2 ** (attempt - 1), ATOMIC_WRITE_MAX_RETRY_DELAY_MS);
+}
+
+function sleepSyncMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Durable atomic write: temp file in the same directory + atomic rename.
+ *
+ * `documentOrBuilder` is either the document to publish or a function that
+ * returns the document to publish (null/undefined means the write became
+ * obsolete and nothing is published). The builder form is re-evaluated before
+ * every attempt so a retried write never republishes superseded state.
+ *
+ * INVARIANT: TARGET_VISIBLE => TARGET_COMPLETE_AND_PARSEABLE. The target is
+ * never unlinked before the replacement rename, so a failed or exhausted
+ * write leaves the previous complete document in place.
+ *
+ * Returns { written, document }.
+ */
+export function writeJsonAtomic(targetPath, documentOrBuilder, { fileSystem = nodeFs } = {}) {
+  fileSystem.mkdirSync(nodePath.dirname(targetPath), { recursive: true });
+  const buildDocument = typeof documentOrBuilder === 'function' ? documentOrBuilder : () => documentOrBuilder;
+  let lastContentionError = null;
+  for (let attempt = 1; attempt <= ATOMIC_WRITE_MAX_ATTEMPTS; attempt += 1) {
+    const document = buildDocument();
+    if (document === null || document === undefined) return { written: false, document: null };
+    const tempPath = atomicTempPath(targetPath);
+    fileSystem.writeFileSync(tempPath, JSON.stringify(document, null, 2), 'utf8');
     try {
-      nodeFs.unlinkSync(tempPath);
-    } catch {
-      // best effort
+      fileSystem.renameSync(tempPath, targetPath);
+      return { written: true, document };
+    } catch (error) {
+      try {
+        fileSystem.unlinkSync(tempPath);
+      } catch {
+        // best effort: the temp name is unique to this writer.
+      }
+      if (!ATOMIC_WRITE_RETRYABLE_CODES.has(error?.code)) throw error;
+      lastContentionError = error;
+      if (attempt < ATOMIC_WRITE_MAX_ATTEMPTS) sleepSyncMs(atomicWriteRetryDelayMs(attempt));
     }
-    throw error;
   }
+  storeFail(
+    `atomic replacement exhausted ${ATOMIC_WRITE_MAX_ATTEMPTS} attempts under transient filesystem ` +
+      `contention (last=${lastContentionError?.code}) for ${targetPath}; no partial target was published.`,
+    { code: ATOMIC_WRITE_CONTENTION_EXHAUSTED },
+  );
+  return { written: false, document: null };
 }
 
 /**
@@ -944,7 +1018,7 @@ function writeJsonExclusive(targetPath, document) {
   nodeFs.mkdirSync(nodePath.dirname(targetPath), { recursive: true });
   const payload = JSON.stringify(document, null, 2);
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const tempPath = `${targetPath}.${process.pid}.${randomUUID().replace(/-/g, '')}.tmp`;
+    const tempPath = atomicTempPath(targetPath);
     try {
       nodeFs.writeFileSync(tempPath, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     } catch (error) {
@@ -1050,10 +1124,15 @@ export class CoordinationStore {
         taskId,
       });
     }
-    const next = validateTaskEnvelope({ ...task, status: TASK_STATUS_READY, updatedAt: this.nowIso() });
     const paths = taskFilePaths(this.home, taskId);
-    writeJsonAtomic(paths.taskPath, next);
-    return next;
+    const outcome = writeJsonAtomic(paths.taskPath, () => {
+      const current = this.readTask(taskId);
+      // Never rewind a progressed lifecycle: another writer already converged
+      // or advanced this task while we were retrying contention.
+      if (current.status !== TASK_STATUS_CREATED) return null;
+      return validateTaskEnvelope({ ...current, status: TASK_STATUS_READY, updatedAt: this.nowIso() });
+    });
+    return outcome.written ? outcome.document : this.readTask(taskId);
   }
 
   readClaim(taskId) {
@@ -1198,10 +1277,13 @@ export class CoordinationStore {
   #markClaimed(taskId) {
     const task = this.readTask(taskId);
     if (task.status === TASK_STATUS_CLAIMED || task.status === TASK_STATUS_RESULT_DELIVERED) return task;
-    const next = validateTaskEnvelope({ ...task, status: TASK_STATUS_CLAIMED, updatedAt: this.nowIso() });
     const paths = taskFilePaths(this.home, taskId);
-    writeJsonAtomic(paths.taskPath, next);
-    return next;
+    const outcome = writeJsonAtomic(paths.taskPath, () => {
+      const current = this.readTask(taskId);
+      if (current.status === TASK_STATUS_CLAIMED || current.status === TASK_STATUS_RESULT_DELIVERED) return null;
+      return validateTaskEnvelope({ ...current, status: TASK_STATUS_CLAIMED, updatedAt: this.nowIso() });
+    });
+    return outcome.written ? outcome.document : this.readTask(taskId);
   }
 
   /**
@@ -1353,12 +1435,15 @@ export class CoordinationStore {
       });
     }
 
-    const nextTask = validateTaskEnvelope({
-      ...task,
-      status: TASK_STATUS_RESULT_DELIVERED,
-      updatedAt: this.nowIso(),
+    writeJsonAtomic(paths.taskPath, () => {
+      const current = this.readTask(taskId);
+      if (current.status === TASK_STATUS_RESULT_DELIVERED) return null;
+      return validateTaskEnvelope({
+        ...current,
+        status: TASK_STATUS_RESULT_DELIVERED,
+        updatedAt: this.nowIso(),
+      });
     });
-    writeJsonAtomic(paths.taskPath, nextTask);
     return { record: candidate, duplicate: false, alreadyDelivered: false };
   }
 
