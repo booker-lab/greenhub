@@ -119,6 +119,14 @@
 //   steps with no rewrite and no executor re-invocation; a same-resultId
 //   payload difference fails closed with DUPLICATE_RESULT_ID_CONFLICT;
 //   first-winner and live claim fencing semantics are unchanged).
+// + COORD-AUDIT-C02 (expired claim takeover concurrency safety ONLY: every
+//   claim.json mutation is serialized by a per-task generation-bound takeover
+//   lock that records the exact generation/token it may replace, so concurrent
+//   takeover contenders elect exactly one authoritative winner, a contender
+//   that observed generation N can never delete an already-published N+1
+//   replacement, and the remove/replace crash window publishes
+//   baseGeneration + 1 instead of rewinding; stale-result fencing, terminal
+//   safety, and first-winner result semantics are unchanged).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -136,6 +144,10 @@
 // Filesystem layout under a durable home (never the repository worktree):
 //   <home>/tasks/<taskId>/task.json
 //   <home>/tasks/<taskId>/claim.json
+//   <home>/tasks/<taskId>/claim.takeover.lock
+//     (transient generation-bound claim mutation lock; never durable state:
+//     created and retired inside one claim operation, and recovered
+//     deterministically when its owner process died)
 //   <home>/tasks/<taskId>/result.json            (canonical terminal result)
 //   <home>/tasks/<taskId>/results/<resultId>.json (per-delivery record)
 //   <home>/tasks/<taskId>/disposition/current.json
@@ -197,13 +209,21 @@
 // derives a deterministic claimToken bound to the canonical admission and
 // reuses the existing claimTask()/generation fencing.
 //
-// Claim atomicity uses OS exclusive-create (`wx`) semantics plus a
-// read-verify-unlink-recreate takeover dance (same family as
-// scripts/dev/local/runtime-lease.mjs). The race-prone
-// `exists() -> write()` pattern is never used: every creation goes through
-// `openSync(path, 'wx')`, so concurrent claimants serialize in the OS and
-// exactly one wins. Takeover additionally re-verifies generation before
-// unlink so a concurrent winner is never clobbered silently.
+// Claim atomicity (COORD-AUDIT-C02) serializes every claim.json mutation
+// (first creation and expired takeover alike) behind a per-task
+// generation-bound takeover lock (`claim.takeover.lock`). The lock records the
+// exact claim generation/token it may replace (generation 0 for a first
+// creation), so a holder only ever removes the exact generation it validated:
+// concurrent takeover contenders elect exactly one authoritative winner (the
+// rest fail closed with LEASE_ACTIVE), and a contender that observed
+// generation N can never delete an already-published N+1 replacement. A stale
+// lock (provably dead owner pid) is retired deterministically, and the
+// remove/replace crash window publishes baseGeneration + 1 so the canonical
+// generation never rewinds. The
+// race-prone `exists() -> write()` and unconditional-delete patterns are never
+// used: every creation goes through an atomic exclusive create. Claim
+// authority stays the single claim.json file; the lock is transient
+// mutual-exclusion state, not a new durable registry.
 //
 // Windows/NTFS replacement contention: durable replacement publishes a
 // same-directory temp file through an atomic rename (hard-link for
@@ -390,6 +410,7 @@ export const CORRUPT_DISPATCH_ATTEMPT = 'CORRUPT_DISPATCH_ATTEMPT';
 export const DISPATCH_ATTEMPT_CONFLICT = 'DISPATCH_ATTEMPT_CONFLICT';
 export const DISPATCH_ATTEMPT_BINDING_MISMATCH = 'DISPATCH_ATTEMPT_BINDING_MISMATCH';
 export const ATOMIC_WRITE_CONTENTION_EXHAUSTED = 'ATOMIC_WRITE_CONTENTION_EXHAUSTED';
+export const CORRUPT_CLAIM_TAKEOVER_LOCK = 'CORRUPT_CLAIM_TAKEOVER_LOCK';
 
 export class CoordinationStoreError extends Error {
   constructor(message, details = {}) {
@@ -1056,6 +1077,73 @@ function writeJsonExclusive(targetPath, document) {
 }
 
 // ---------------------------------------------------------------------------
+// Generation-bound claim takeover lock (COORD-AUDIT-C02).
+// Every claim.json mutation is serialized by one transient lock file per task.
+// The lock records the exact base generation/token it may replace (generation
+// 0 / null token for a first creation), so a holder can only ever delete the
+// claim generation it validated. A lock is stale only when its owner process
+// is provably dead: a live holder's lock is never removed, even when the claim
+// has already moved past its base, because that holder may still be inside its
+// remove/replace window. The lock carries no lease/time-based authority.
+// ---------------------------------------------------------------------------
+
+const CLAIM_TAKEOVER_LOCK_SCHEMA_VERSION = 1;
+const CLAIM_TAKEOVER_LOCK_WAIT_BUDGET_MS = 500;
+const CLAIM_TAKEOVER_LOCK_POLL_INTERVAL_MS = 5;
+const CLAIM_TAKEOVER_MAX_ATTEMPTS = 32;
+
+function claimTakeoverLockPath(paths) {
+  return nodePath.join(paths.taskDir, 'claim.takeover.lock');
+}
+
+/** Owner-process liveness: false only when the OS proves the pid is absent. */
+function isClaimLockOwnerAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return undefined;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ESRCH') return false;
+    if (error?.code === 'EPERM') return true;
+    return undefined;
+  }
+}
+
+function validateClaimTakeoverLock(document, taskId) {
+  if (!document || typeof document !== 'object' || Array.isArray(document)) return null;
+  if (document.schemaVersion !== CLAIM_TAKEOVER_LOCK_SCHEMA_VERSION) return null;
+  if (document.taskId !== taskId) return null;
+  if (typeof document.lockId !== 'string' || !document.lockId) return null;
+  if (!Number.isInteger(document.ownerPid) || document.ownerPid <= 0) return null;
+  if (!Number.isInteger(document.baseGeneration) || document.baseGeneration < 0) return null;
+  if (
+    document.baseClaimToken !== null &&
+    (typeof document.baseClaimToken !== 'string' || !document.baseClaimToken)
+  ) {
+    return null;
+  }
+  if (typeof document.acquiredAt !== 'string' || !document.acquiredAt) return null;
+  return {
+    schemaVersion: document.schemaVersion,
+    taskId: document.taskId,
+    lockId: document.lockId,
+    ownerPid: document.ownerPid,
+    baseGeneration: document.baseGeneration,
+    baseClaimToken: document.baseClaimToken,
+    acquiredAt: document.acquiredAt,
+  };
+}
+
+function readValidatedClaimTakeoverLock(lockPath, taskId) {
+  const found = readJsonFile(lockPath);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') return { state: 'corrupt' };
+  const record = validateClaimTakeoverLock(found.document, taskId);
+  if (!record) return { state: 'corrupt' };
+  return { state: 'present', record };
+}
+
+// ---------------------------------------------------------------------------
 // Result replay identity (COORD-AUDIT-C01).
 // A stored Result is the durable authority. An exact replay is recognized only
 // when the full semantic payload matches; the stored bytes are then reused and
@@ -1199,6 +1287,17 @@ export class CoordinationStore {
   /**
    * Atomically acquire (or take over after expiry) the claim for a READY task.
    * Exactly one concurrent claimant wins; losers get LEASE_ACTIVE.
+   *
+   * Every claim.json mutation (first creation and expired takeover alike) is
+   * serialized by the per-task generation-bound takeover lock. The lock binds
+   * the exact claim generation/token the holder may replace, so:
+   *   - a holder only ever deletes the generation it validated, and a
+   *     contender that observed generation N can never delete the N+1
+   *     replacement published by the winner;
+   *   - concurrent takeover contenders produce exactly one authoritative
+   *     winner (the rest fail closed with LEASE_ACTIVE);
+   *   - the crash window between removing the old claim and publishing the
+   *     replacement publishes baseGeneration + 1, never a rewound generation.
    */
   claimTask({ taskId, workerId, leaseDurationMs = 60_000, claimToken, nowMs } = {}) {
     assertValidTaskId(taskId);
@@ -1234,79 +1333,200 @@ export class CoordinationStore {
         claimedAt: new Date(now).toISOString(),
         leaseExpiresAt: new Date(now + leaseDurationMs).toISOString(),
       });
+    const deadlineMs = Date.now() + CLAIM_TAKEOVER_LOCK_WAIT_BUDGET_MS;
+    // Carried base generation of a crashed takeover whose claim.json had
+    // already been removed; only consulted while the claim stays missing.
+    let carriedBase = null;
 
-    // Fast path: no claim yet -> exclusive create generation 1.
-    const first = writeJsonExclusive(paths.claimPath, buildCandidate(1));
-    if (first.created) {
-      const claim = this.readClaim(taskId);
-      this.#markClaimed(taskId);
-      return claim;
-    }
-
-    const existing = readJsonFile(paths.claimPath);
-    if (existing.state === 'corrupt') {
-      storeFail(`claim record is corrupt (fail-closed, no auto-takeover): ${taskId}`, {
-        code: 'CORRUPT_CLAIM',
-        taskId,
-      });
-    }
-    if (existing.state === 'missing') {
-      // Lost a creation race that then vanished: retry once as generation 1.
-      const retry = writeJsonExclusive(paths.claimPath, buildCandidate(1));
-      if (retry.created) {
-        const claim = this.readClaim(taskId);
-        this.#markClaimed(taskId);
-        return claim;
+    for (let attempt = 1; attempt <= CLAIM_TAKEOVER_MAX_ATTEMPTS; attempt += 1) {
+      const found = readJsonFile(paths.claimPath);
+      if (found.state === 'corrupt') {
+        storeFail(`claim record is corrupt (fail-closed, no auto-takeover): ${taskId}`, {
+          code: 'CORRUPT_CLAIM',
+          taskId,
+        });
       }
-      return this.#rejectLeaseActive(taskId);
-    }
-
-    const current = validateClaimRecord(existing.document);
-    if (current.leaseExpiresAt && Date.parse(current.leaseExpiresAt) > now) {
-      return this.#rejectLeaseActive(taskId, current);
-    }
-
-    // Lease expired -> takeover with generation+1. Re-verify generation
-    // immediately before unlink so a concurrent winner is never clobbered.
-    const reread = readJsonFile(paths.claimPath);
-    if (reread.state !== 'present') {
-      const retry = writeJsonExclusive(paths.claimPath, buildCandidate(current.generation + 1));
-      if (retry.created) {
-        const claim = this.readClaim(taskId);
-        this.#markClaimed(taskId);
-        return claim;
+      let current = null;
+      let base;
+      if (found.state === 'present') {
+        current = this.#validateCurrentClaimRecord(found.document, taskId);
+        if (current.leaseExpiresAt && Date.parse(current.leaseExpiresAt) > now) {
+          return this.#rejectLeaseActive(taskId, current);
+        }
+        base = { generation: current.generation, claimToken: current.claimToken };
+        carriedBase = null;
+      } else {
+        base = carriedBase ?? { generation: 0, claimToken: null };
       }
-      return this.#rejectLeaseActive(taskId);
-    }
-    let latest;
-    try {
-      latest = validateClaimRecord(reread.document);
-    } catch {
-      storeFail(`claim record is corrupt (fail-closed, no auto-takeover): ${taskId}`, {
-        code: 'CORRUPT_CLAIM',
-        taskId,
-      });
-    }
-    if (latest.claimToken !== current.claimToken || latest.generation !== current.generation) {
-      // Another worker already took over between our reads.
-      return this.#rejectLeaseActive(taskId, latest);
-    }
-    if (Date.parse(latest.leaseExpiresAt) > now) {
-      return this.#rejectLeaseActive(taskId, latest);
-    }
 
-    try {
-      nodeFs.unlinkSync(paths.claimPath);
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error;
-    }
-    const takeover = writeJsonExclusive(paths.claimPath, buildCandidate(current.generation + 1));
-    if (takeover.created) {
-      const claim = this.readClaim(taskId);
-      this.#markClaimed(taskId);
-      return claim;
+      const lockAttempt = this.#acquireClaimTakeoverLock({ paths, taskId, base, deadlineMs });
+      if (lockAttempt.state === 'retry') continue;
+      if (lockAttempt.state === 'stale') {
+        // Dead holder: adopt its base only while the claim is still missing so
+        // the crash window publishes baseGeneration + 1 instead of rewinding.
+        carriedBase = {
+          generation: lockAttempt.lock.baseGeneration,
+          claimToken: lockAttempt.lock.baseClaimToken,
+        };
+        continue;
+      }
+      if (lockAttempt.state === 'timeout') {
+        return this.#rejectLeaseActive(taskId, current);
+      }
+      if (lockAttempt.state === 'busy') {
+        sleepSyncMs(CLAIM_TAKEOVER_LOCK_POLL_INTERVAL_MS);
+        continue;
+      }
+
+      // Lock acquired: this contender is the only claim.json mutator for the
+      // exact generation/token recorded in the lock.
+      try {
+        const under = readJsonFile(paths.claimPath);
+        if (under.state === 'corrupt') {
+          storeFail(`claim record is corrupt (fail-closed, no auto-takeover): ${taskId}`, {
+            code: 'CORRUPT_CLAIM',
+            taskId,
+          });
+        }
+        if (under.state === 'present') {
+          const latest = this.#validateCurrentClaimRecord(under.document, taskId);
+          if (latest.claimToken !== base.claimToken || latest.generation !== base.generation) {
+            // The guarded generation moved on between the optimistic read and
+            // the lock acquisition. Never delete a claim this lock does not
+            // own; reclassify on the next iteration.
+            continue;
+          }
+          if (latest.leaseExpiresAt && Date.parse(latest.leaseExpiresAt) > now) {
+            return this.#rejectLeaseActive(taskId, latest);
+          }
+          try {
+            nodeFs.unlinkSync(paths.claimPath);
+          } catch (error) {
+            if (error?.code !== 'ENOENT') throw error;
+          }
+          const candidate = buildCandidate(latest.generation + 1);
+          const takeover = writeJsonExclusive(paths.claimPath, candidate);
+          if (!takeover.created) continue;
+          return this.#verifyClaimAfterWrite({ taskId, candidate });
+        }
+
+        // Claim missing while the lock is held: first creation (base
+        // generation 0), or the crash window of a takeover whose stale lock
+        // carried the base generation. Never rewind.
+        const candidate = buildCandidate(base.generation + 1);
+        const creation = writeJsonExclusive(paths.claimPath, candidate);
+        if (!creation.created) continue;
+        return this.#verifyClaimAfterWrite({ taskId, candidate });
+      } finally {
+        this.#releaseClaimTakeoverLock(lockAttempt.lock, lockAttempt.lockPath);
+      }
     }
     return this.#rejectLeaseActive(taskId);
+  }
+
+  #validateCurrentClaimRecord(document, taskId) {
+    try {
+      return validateClaimRecord(document);
+    } catch (error) {
+      storeFail(`claim record is corrupt (fail-closed, no auto-takeover): ${taskId}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : 'CORRUPT_CLAIM',
+        taskId,
+      });
+    }
+    return null;
+  }
+
+  /**
+   * Read-back contract of a published claim: a write-syscall success alone is
+   * never a success. The returned record must be the canonical claim.
+   */
+  #verifyClaimAfterWrite({ taskId, candidate }) {
+    const claim = this.readClaim(taskId);
+    if (claim.claimToken !== candidate.claimToken || claim.generation !== candidate.generation) {
+      storeFail(`claim failed to verify after write (fail-closed): ${taskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId,
+      });
+    }
+    this.#markClaimed(taskId);
+    return claim;
+  }
+
+  /**
+   * Try to acquire the generation-bound takeover lock. Returns:
+   *   acquired -> this contender owns the lock
+   *   stale    -> a dead holder's lock was retired; caller may carry its base
+   *   busy     -> a live holder owns the lock; caller retries within budget
+   *   timeout  -> budget exhausted while a live holder owns the lock
+   *   retry    -> the lock vanished between create and read; caller retries
+   * A corrupt lock fails closed (no auto-repair).
+   */
+  #acquireClaimTakeoverLock({ paths, taskId, base, deadlineMs }) {
+    const lockPath = claimTakeoverLockPath(paths);
+    const candidate = {
+      schemaVersion: CLAIM_TAKEOVER_LOCK_SCHEMA_VERSION,
+      taskId,
+      lockId: randomUUID(),
+      ownerPid: process.pid,
+      baseGeneration: base.generation,
+      baseClaimToken: base.claimToken,
+      acquiredAt: this.nowIso(),
+    };
+    const created = writeJsonExclusive(lockPath, candidate);
+    if (created.created) return { state: 'acquired', lock: candidate, lockPath };
+
+    const existing = readValidatedClaimTakeoverLock(lockPath, taskId);
+    if (existing.state === 'corrupt') {
+      storeFail(`claim takeover lock is corrupt (fail-closed, no auto-repair): ${taskId}`, {
+        code: CORRUPT_CLAIM_TAKEOVER_LOCK,
+        taskId,
+      });
+    }
+    if (existing.state === 'missing') return { state: 'retry' };
+
+    const lock = existing.record;
+    const claimFound = readJsonFile(paths.claimPath);
+    if (claimFound.state === 'corrupt') {
+      storeFail(`claim record is corrupt (fail-closed, no auto-takeover): ${taskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId,
+      });
+    }
+    // Only a provably dead owner makes a lock stale. A live holder's lock is
+    // never retired, even when the claim has already moved past its base: that
+    // holder may still be inside its remove/replace window, and removing its
+    // lock would let two mutators overlap.
+    if (isClaimLockOwnerAlive(lock.ownerPid) === false) {
+      try {
+        nodeFs.unlinkSync(lockPath);
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+      return { state: 'stale', lock };
+    }
+    if (Date.now() >= deadlineMs) return { state: 'timeout', lock };
+    return { state: 'busy', lock };
+  }
+
+  #releaseClaimTakeoverLock(lock, lockPath) {
+    const found = readJsonFile(lockPath);
+    if (found.state !== 'present') return;
+    if (found.document?.lockId !== lock.lockId) return;
+    // Best effort: the claim mutation already succeeded, so a release failure
+    // must not mask it. Transient Windows share violations are retried a small
+    // bounded number of times; a lock that still cannot be retired keeps the
+    // task fail-closed until its owner process exits, after which dead-owner
+    // recovery retires it.
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        nodeFs.unlinkSync(lockPath);
+        return;
+      } catch (error) {
+        if (error?.code === 'ENOENT') return;
+        if (attempt >= 3 || !ATOMIC_WRITE_RETRYABLE_CODES.has(error?.code)) return;
+        sleepSyncMs(atomicWriteRetryDelayMs(attempt));
+      }
+    }
   }
 
   #rejectLeaseActive(taskId, current) {
