@@ -99,7 +99,7 @@ import {
   executorResultReceiptFilePath,
   persistExecutorResultReceipt,
 } from './executor-result-receipt.mjs';
-import { CoordinationStore } from './store.mjs';
+import { CoordinationStore, DUPLICATE_RESULT_ID_CONFLICT } from './store.mjs';
 import {
   TASK_STATUS_CLAIMED,
   TASK_STATUS_READY,
@@ -1394,9 +1394,12 @@ test('L.3 same resultId with different evidence fails closed without any per-id 
     writeJsonFile(resultJsonPath(home, child), divergent);
     const divergentBytes = readFileSync(resultJsonPath(home, child), 'utf8');
     const before = snapshotHomeBytes(home);
+    // Same resultId + different semantic payload is the store's canonical
+    // duplicate-conflict authority; store fail-closed codes propagate UNCHANGED
+    // (COORD-AUDIT-C01), so the conflict surfaces before any per-id write.
     await expectFailure(
       deliverExecutorResultReceipt({ dispatchId, store }),
-      EXECUTOR_RESULT_DELIVERY_CONFLICT,
+      DUPLICATE_RESULT_ID_CONFLICT,
     );
     assert.deepEqual(snapshotHomeBytes(home), before);
     assert.equal(readFileSync(resultJsonPath(home, child), 'utf8'), divergentBytes);
