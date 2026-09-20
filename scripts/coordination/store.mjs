@@ -83,6 +83,20 @@
 //   generation authority, no concrete transport, no execution start, no
 //   task/claim/admission/emission/attempt/receiver-acceptance/
 //   receiver-decision/executor-acceptance/result mutation).
+// + GREENHUB-COORDINATION-DURABLE-EXECUTOR-INVOCATION-OUTCOME-32
+//   (immutable durable executor invocation outcome persistence ONLY:
+//   readExecutorInvocationOutcome / createExecutorInvocationOutcome keyed by
+//   dispatchId ONLY under <home>/executor-invocation-outcomes/<dispatchId>.json;
+//   the durable value is the EXACT canonical Task 30 validated outcome itself
+//   ({ schemaVersion: 1, dispatchId, outcome }) with no wrapper metadata, with
+//   the durable-recording fact expressed by the namespace/path authority ONLY;
+//   exclusive-create, no overwrite, no auto-repair, no delete-and-recreate,
+//   no last-writer-wins; no ACK, no receipt, no executor invocation, no task
+//   status transition, no scheduler, no worker selection, no retry/backoff/
+//   resend, no new generation authority, no concrete transport, no execution
+//   start, no task/claim/admission/emission/attempt/receiver-acceptance/
+//   receiver-decision/executor-acceptance/executor-invocation-attempt/result
+//   mutation).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -140,6 +154,13 @@
 //     invocation-attempt meaning expressed by this path authority ONLY;
 //     exclusive-create, no wrapper metadata, no ACK/receipt, no executor
 //     invocation, no overwrite, no auto-repair, no new generation)
+//   <home>/executor-invocation-outcomes/<dispatchId>.json
+//     (immutable durable executor invocation outcome fact keyed by dispatchId
+//     ONLY: the EXACT canonical Task 30 validated outcome itself
+//     ({ schemaVersion: 1, dispatchId, outcome }), with the durable-recording
+//     meaning expressed by this path authority ONLY; exclusive-create, no
+//     wrapper metadata, no ACK/receipt, no executor invocation, no task
+//     status transition, no overwrite, no auto-repair, no new generation)
 // Claim authority stays <home>/tasks/<taskId>/claim.json (no new claim file,
 // no new lease subsystem, no worker registry): the admission-bound layer only
 // derives a deterministic claimToken bound to the canonical admission and
@@ -252,6 +273,12 @@ import {
   assertValidExecutorInvocationAttemptDispatchId,
   executorInvocationAttemptFilePath,
 } from './dispatch-executor-invocation-attempt.mjs';
+import {
+  CORRUPT_EXECUTOR_INVOCATION_OUTCOME,
+  assertValidExecutorInvocationOutcomeDispatchId,
+  executorInvocationOutcomeFilePath,
+  validateExecutorInvocationOutcomeRecord,
+} from './dispatch-executor-invocation-outcome-persistence.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -4629,6 +4656,106 @@ export class CoordinationStore {
       });
     }
     const targetPath = executorInvocationAttemptFilePath(this.home, candidate.dispatchId);
+    const created = writeJsonExclusive(targetPath, candidate);
+    return { created: created.created };
+  }
+
+  // -------------------------------------------------------------------------
+  // Durable executor invocation outcome domain
+  // (GREENHUB-COORDINATION-DURABLE-EXECUTOR-INVOCATION-OUTCOME-32,
+  // dispatchId ONLY).
+  // persistExecutorInvocationOutcome() != executeTask() != invokeExecutor()
+  // != invokeExecutorAndValidateOutcome != invokeExecutorInvocationAdapter
+  // != persistExecutorInvocationAttempt(): this domain is the durable storage
+  // primitive ONLY. The durable value is the EXACT canonical Task 30 validated
+  // outcome itself ({ schemaVersion: 1, dispatchId, outcome }); the durable
+  // recording fact is expressed by the namespace/path authority
+  // <home>/executor-invocation-outcomes/<dispatchId>.json ONLY (no wrapper
+  // metadata, no timestamps, no ACK/receipt, no executor invocation, no task
+  // status transition, no new generation; claimGeneration stays the SOLE
+  // fencing generation). LOOKUP KEY = dispatchId ONLY: sourceTaskId /
+  // nextTaskId / taskId / workerId / admissionId / emissionSlot / claimToken /
+  // claimGeneration are never lookup keys here. Ordering:
+  //   1. dispatchId path resolution (path-safe identity family),
+  //   2. existing record -> validated exact record (or missing -> null),
+  //   3. corruption / invalid record / key-binding mismatch -> fail closed,
+  //   4. create -> OS exclusive-create (never exists()->write()),
+  //   5. existing winner -> created:false (caller resolves the race; this
+  //      primitive never overwrites, never repairs, never deletes).
+  // No task/claim/admission/emission/attempt/receiver-acceptance/receiver-
+  // decision/executor-acceptance/executor-invocation-attempt/result mutation
+  // happens here.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Read one durable executor invocation outcome by dispatchId ONLY.
+   * Returns null when no outcome exists for this dispatchId (unseen), or the
+   * EXACT validated frozen Task 30 outcome record when present. Corrupt /
+   * invalid / wrong-key records fail closed with no auto-repair.
+   */
+  readExecutorInvocationOutcome(dispatchId) {
+    try {
+      assertValidExecutorInvocationOutcomeDispatchId(dispatchId);
+    } catch (error) {
+      storeFail(`executor invocation outcome dispatchId invalid (fail-closed): ${error?.message}`, {
+        code: CORRUPT_EXECUTOR_INVOCATION_OUTCOME,
+      });
+    }
+    const targetPath = executorInvocationOutcomeFilePath(this.home, dispatchId);
+    const found = readJsonFile(targetPath);
+    if (found.state === 'missing') return null;
+    if (found.state === 'corrupt') {
+      storeFail(
+        `executor invocation outcome record is corrupt (fail-closed, no auto-repair): ${dispatchId}`,
+        {
+          code: CORRUPT_EXECUTOR_INVOCATION_OUTCOME,
+        },
+      );
+    }
+    let record;
+    try {
+      record = validateExecutorInvocationOutcomeRecord(found.document);
+    } catch (error) {
+      storeFail(
+        `executor invocation outcome record invalid (fail-closed, no auto-repair): ${dispatchId}: ${error?.message}`,
+        {
+          code:
+            typeof error?.code === 'string' && error.code
+              ? error.code
+              : CORRUPT_EXECUTOR_INVOCATION_OUTCOME,
+        },
+      );
+    }
+    if (record.dispatchId !== dispatchId) {
+      storeFail(
+        `executor invocation outcome key/binding mismatch (fail-closed): looked up ${dispatchId} but the record carries ${record.dispatchId}`,
+        { code: CORRUPT_EXECUTOR_INVOCATION_OUTCOME },
+      );
+    }
+    return record;
+  }
+
+  /**
+   * Exclusive-create one immutable executor invocation outcome record keyed by
+   * dispatchId ONLY. The persisted value is the EXACT canonical Task 30
+   * validated outcome with no wrapper metadata. Returns { created: true } when
+   * this call won the OS exclusive-create, { created: false } when a record
+   * already exists. Never overwrites, never repairs, never deletes: the
+   * existing winner is immutable.
+   */
+  createExecutorInvocationOutcome(record) {
+    let candidate;
+    try {
+      candidate = validateExecutorInvocationOutcomeRecord(record);
+    } catch (error) {
+      storeFail(`executor invocation outcome record invalid (fail-closed): ${error?.message}`, {
+        code:
+          typeof error?.code === 'string' && error.code
+            ? error.code
+            : CORRUPT_EXECUTOR_INVOCATION_OUTCOME,
+      });
+    }
+    const targetPath = executorInvocationOutcomeFilePath(this.home, candidate.dispatchId);
     const created = writeJsonExclusive(targetPath, candidate);
     return { created: created.created };
   }
