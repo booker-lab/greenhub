@@ -97,6 +97,22 @@
 //   start, no task/claim/admission/emission/attempt/receiver-acceptance/
 //   receiver-decision/executor-acceptance/executor-invocation-attempt/result
 //   mutation).
+// + GREENHUB-COORDINATION-DURABLE-EXECUTOR-RESULT-RECEIPT-33
+//   (immutable durable executor result receipt persistence ONLY:
+//   readExecutorResultReceipt / createExecutorResultReceipt keyed by
+//   dispatchId ONLY under <home>/executor-result-receipts/<dispatchId>.json;
+//   the durable value is the EXACT validated structured executor evidence
+//   ({ schemaVersion: 1, dispatchId, taskId, status, summary, proofRefs,
+//   evidenceRefs, frictionObserved }) with no wrapper metadata, with the
+//   durable-recording fact expressed by the namespace/path authority ONLY;
+//   exclusive-create, no overwrite, no auto-repair, no delete-and-recreate,
+//   no last-writer-wins; no canonical task result, no deliverResult, no
+//   RESULT_DELIVERED, no ACK, no disposition, no task status transition, no
+//   executor invocation, no scheduler, no worker selection, no retry/backoff/
+//   resend, no new generation authority, no concrete transport, no
+//   task/claim/admission/emission/attempt/receiver-acceptance/
+//   receiver-decision/executor-acceptance/executor-invocation-attempt/
+//   executor-invocation-outcome/result mutation).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -161,6 +177,15 @@
 //     meaning expressed by this path authority ONLY; exclusive-create, no
 //     wrapper metadata, no ACK/receipt, no executor invocation, no task
 //     status transition, no overwrite, no auto-repair, no new generation)
+//   <home>/executor-result-receipts/<dispatchId>.json
+//     (immutable durable executor result receipt fact keyed by dispatchId
+//     ONLY: the EXACT validated structured executor evidence
+//     ({ schemaVersion: 1, dispatchId, taskId, status, summary, proofRefs,
+//     evidenceRefs, frictionObserved }), with the durable-recording meaning
+//     expressed by this path authority ONLY; exclusive-create, no wrapper
+//     metadata, no canonical task result, no ACK/disposition, no executor
+//     invocation, no task status transition, no overwrite, no auto-repair,
+//     no new generation)
 // Claim authority stays <home>/tasks/<taskId>/claim.json (no new claim file,
 // no new lease subsystem, no worker registry): the admission-bound layer only
 // derives a deterministic claimToken bound to the canonical admission and
@@ -279,6 +304,12 @@ import {
   executorInvocationOutcomeFilePath,
   validateExecutorInvocationOutcomeRecord,
 } from './dispatch-executor-invocation-outcome-persistence.mjs';
+import {
+  CORRUPT_EXECUTOR_RESULT_RECEIPT,
+  assertValidExecutorResultReceiptDispatchId,
+  executorResultReceiptFilePath,
+  validateExecutorResultReceiptRecord,
+} from './executor-result-receipt.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -4756,6 +4787,104 @@ export class CoordinationStore {
       });
     }
     const targetPath = executorInvocationOutcomeFilePath(this.home, candidate.dispatchId);
+    const created = writeJsonExclusive(targetPath, candidate);
+    return { created: created.created };
+  }
+
+  // -------------------------------------------------------------------------
+  // Durable executor result receipt domain
+  // (GREENHUB-COORDINATION-DURABLE-EXECUTOR-RESULT-RECEIPT-33, dispatchId
+  // ONLY).
+  // persistExecutorResultReceipt() != executeTask() != invokeExecutor()
+  // != canonical result delivery != persistExecutorInvocationOutcome(): this
+  // domain is the durable storage primitive ONLY. The durable value is the
+  // EXACT validated structured executor evidence itself ({ schemaVersion: 1,
+  // dispatchId, taskId, status, summary, proofRefs, evidenceRefs,
+  // frictionObserved }); the durable-recording fact is expressed by the
+  // namespace/path authority <home>/executor-result-receipts/<dispatchId>.json
+  // ONLY (no wrapper metadata, no timestamps, no canonical result, no ACK, no
+  // disposition, no executor invocation, no task status transition, no new
+  // generation; claimGeneration stays the SOLE fencing generation). LOOKUP KEY
+  // = dispatchId ONLY: taskId / sourceTaskId / nextTaskId / workerId /
+  // admissionId / emissionSlot / claimToken / claimGeneration are never lookup
+  // keys here. Ordering:
+  //   1. dispatchId path resolution (path-safe identity family),
+  //   2. existing record -> validated exact record (or missing -> null),
+  //   3. corruption / invalid record / key-binding mismatch -> fail closed,
+  //   4. create -> OS exclusive-create (never exists()->write()),
+  //   5. existing winner -> created:false (caller resolves the race; this
+  //      primitive never overwrites, never repairs, never deletes).
+  // No task/claim/admission/emission/attempt/receiver-acceptance/receiver-
+  // decision/executor-acceptance/executor-invocation-attempt/executor-
+  // invocation-outcome/result/disposition mutation happens here.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Read one durable executor result receipt by dispatchId ONLY.
+   * Returns null when no receipt exists for this dispatchId (unseen), or the
+   * EXACT validated frozen receipt record when present. Corrupt / invalid /
+   * wrong-key records fail closed with no auto-repair.
+   */
+  readExecutorResultReceipt(dispatchId) {
+    try {
+      assertValidExecutorResultReceiptDispatchId(dispatchId);
+    } catch (error) {
+      storeFail(`executor result receipt dispatchId invalid (fail-closed): ${error?.message}`, {
+        code: CORRUPT_EXECUTOR_RESULT_RECEIPT,
+      });
+    }
+    const targetPath = executorResultReceiptFilePath(this.home, dispatchId);
+    const found = readJsonFile(targetPath);
+    if (found.state === 'missing') return null;
+    if (found.state === 'corrupt') {
+      storeFail(`executor result receipt record is corrupt (fail-closed, no auto-repair): ${dispatchId}`, {
+        code: CORRUPT_EXECUTOR_RESULT_RECEIPT,
+      });
+    }
+    let record;
+    try {
+      record = validateExecutorResultReceiptRecord(found.document);
+    } catch (error) {
+      storeFail(
+        `executor result receipt record invalid (fail-closed, no auto-repair): ${dispatchId}: ${error?.message}`,
+        {
+          code:
+            typeof error?.code === 'string' && error.code
+              ? error.code
+              : CORRUPT_EXECUTOR_RESULT_RECEIPT,
+        },
+      );
+    }
+    if (record.dispatchId !== dispatchId) {
+      storeFail(
+        `executor result receipt key/binding mismatch (fail-closed): looked up ${dispatchId} but the record carries ${record.dispatchId}`,
+        { code: CORRUPT_EXECUTOR_RESULT_RECEIPT },
+      );
+    }
+    return record;
+  }
+
+  /**
+   * Exclusive-create one immutable executor result receipt keyed by dispatchId
+   * ONLY. The persisted value is the EXACT validated structured executor
+   * evidence with no wrapper metadata. Returns { created: true } when this
+   * call won the OS exclusive-create, { created: false } when a record already
+   * exists. Never overwrites, never repairs, never deletes: the existing
+   * winner is immutable.
+   */
+  createExecutorResultReceipt(record) {
+    let candidate;
+    try {
+      candidate = validateExecutorResultReceiptRecord(record);
+    } catch (error) {
+      storeFail(`executor result receipt record invalid (fail-closed): ${error?.message}`, {
+        code:
+          typeof error?.code === 'string' && error.code
+            ? error.code
+            : CORRUPT_EXECUTOR_RESULT_RECEIPT,
+      });
+    }
+    const targetPath = executorResultReceiptFilePath(this.home, candidate.dispatchId);
     const created = writeJsonExclusive(targetPath, candidate);
     return { created: created.created };
   }
