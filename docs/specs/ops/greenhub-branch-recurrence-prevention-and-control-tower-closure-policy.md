@@ -188,11 +188,36 @@ RESULT INTAKE
 → branch/ref authority = main
 → HEAD = LIVE_MAIN
 → worktree = CLEAN
-→ NEXT BOUNDED STATE TRANSITION
+→ PROBLEM FRAMER v2.0: DROP | WATCH | CHANGE
+→ DROP: NO SUCCESSOR → CONTROL TOWER CLOSED
+→ WATCH: SIGNAL + PROMOTION_TRIGGER ONLY, NO TASK → CONTROL TOWER CLOSED
+→ CHANGE: SMALLEST SUFFICIENT CLOSURE → NEXT BOUNDED STATE TRANSITION
 → CONTROL TOWER CLOSED
 ```
 
-A Control Tower response must not stop after summarizing an executor `RESULT`. It must classify what the evidence actually proves, update canonical state, close/reclassify the completed task, and emit the narrowest next bounded transition when one exists.
+A Control Tower response must not stop after summarizing an executor `RESULT`. It must classify what the evidence actually proves, update canonical state, close/reclassify the completed task, then apply Problem Framer v2.0 before any successor emission.
+
+### Problem Framer v2.0 successor-emission gate
+
+The default successor rule is no longer “closure implies another task.” The active rule is:
+
+```text
+OBSERVATION / RESULT / ADJACENT FINDING / friction_observed
+→ EVIDENCE
+→ DROP | WATCH | CHANGE
+```
+
+- `DROP`: close with no successor. Create no task, tracking mechanism, policy, or reminder.
+- `WATCH`: exceptional. It is valid only when a specific future signal can materially change the decision and that signal is expected to reappear naturally during normal work. Preserve only `SIGNAL` and `PROMOTION_TRIGGER`; create no polling, scheduled review, watchdog, dedicated registry, lifecycle machinery, review cadence, reminder, or successor task.
+- `CHANGE`: successor/task emission is allowed only when present evidence shows intervention now is better than leaving the state unchanged. The burden of proof is on the change.
+
+For `CHANGE`, emit only the smallest independently closable semantic outcome. Prefer, in order: no structural change; a small change in an existing owner/primitive; a concrete local solution; only then a new durable abstraction or structure. Directly necessary implementation, callers, nearest faithful proof, and task-owned residue cleanup belong to the same bounded closure.
+
+Create a successor only when the current bounded transition cannot safely close because of a real boundary: independent semantic ownership; external authority/provider dependency; material user decision; separate safety/blast-radius boundary; execution/publication boundary; or unavailable credential, hardware, environment, or live authority. Do not create successors for adjacent improvements, while-we-are-here cleanup, speculative prevention, generalization opportunities, documentation polish, or arbitrary micro-tasking.
+
+Runtime emission/dispatch primitives do not perform Problem Framing and must not infer `CHANGE`. They may run only after an upper caller has established `CHANGE` and supplied the bounded next-task spec. If the framing result is `DROP` or `WATCH`, no next-task emission primitive is invoked.
+
+`friction_observed` is non-authorizing evidence only. It can become a future candidate for independent Problem Framing, but never directly authorizes a successor.
 
 ## 9. Future prompt contract
 
@@ -206,6 +231,9 @@ All future Greenhub mutating prompts must make the following explicit:
 - physical mutation-surface independence or serialization
 - publication transport is transport-only
 - post-publication canonical mirror recovery/closure
+- Problem Framer v2.0 gate before successor/task emission: `DROP | WATCH | CHANGE`; only `CHANGE` may emit a task
+- `WATCH` stores only `SIGNAL` + `PROMOTION_TRIGGER` and creates no polling/reminder/lifecycle machinery
+- `friction_observed` is evidence/candidate only, never automatic successor authority
 - no automatic merge/rebase/cherry-pick for baseline movement
 - unrelated semantic movement alone is not a reason to recreate source work
 
