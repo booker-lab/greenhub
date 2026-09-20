@@ -11,17 +11,22 @@
 // The entry is EXACTLY one composition path:
 //   (dispatchId, store, adapter)
 //     1. store capability gate (readExecutorInvocationOutcome /
-//        createExecutorInvocationOutcome ONLY)
+//        createExecutorInvocationOutcome / readExecutorResultReceipt ONLY)
 //     2. dispatchId identity validation (Task 28 identity family verbatim)
 //     3. store.readExecutorInvocationOutcome(dispatchId) — durable-first
 //     4. existing valid durable outcome -> authoritative replay: zero adapter
 //        invocations, zero writes, zero byte/mtime change, never retry
-//     5. outcome absent ONLY -> invokeExecutorAndValidateOutcome({ dispatchId,
+//     5. outcome absent -> store.readExecutorResultReceipt(dispatchId)
+//        cross-boundary fence: an existing valid Task 33 receipt fails closed
+//        (EXECUTOR_INVOCATION_OUTCOME_ABSENT_FOR_RECORDED_RECEIPT) with zero
+//        adapter invocations, zero writes, and no repair; this is the exact
+//        mirror of Task 33's recorded-outcome fence
+//     6. neither record exists -> invokeExecutorAndValidateOutcome({ dispatchId,
 //        store, adapter }) exactly once [Task 30 verbatim]
-//     6. OS exclusive-create of the EXACT canonical Task 30 outcome under
+//     7. OS exclusive-create of the EXACT canonical Task 30 outcome under
 //        <home>/executor-invocation-outcomes/<dispatchId>.json
-//     7. exact durable read-back verification
-//     8. race loser -> winner re-read: same = idempotent convergence,
+//     8. exact durable read-back verification
+//     9. race loser -> winner re-read: same = idempotent convergence,
 //        different valid = fail-closed conflict, corrupt = fail closed;
 //        the first durable winner is preserved
 //   Adapter/process throw or rejection reaches the caller with the exact same
@@ -29,8 +34,9 @@
 //   and never persisted.
 //
 // Global exactly-once executor invocation is NOT claimed: two concurrent
-// processes can both observe an absent durable outcome and both enter Task 30;
-// OS exclusive-create serializes only the durable outcome winner.
+// processes can both observe an absent durable outcome AND an absent durable
+// receipt and both enter Task 30; OS exclusive-create serializes only the
+// durable outcome winner.
 //
 // Proof map:
 //   A. ACCEPTED is persisted exactly (three fields, exclusive-create, one call).
@@ -40,7 +46,8 @@
 //   E. existing durable REJECTED: zero adapter calls, zero writes.
 //   F. existing durable UNKNOWN: zero adapter calls, zero writes.
 //   G. unseen dispatchId: Task 30 composed exactly once (single attempt read,
-//      single adapter invocation, single durable outcome read before create).
+//      single receipt fence read, single adapter invocation, single durable
+//      outcome read before create).
 //   H. created record is verified by exact durable read-back; a tampered or
 //      vanished read-back fails closed.
 //   I. exclusive-create race loser with the same valid winner converges
@@ -58,6 +65,11 @@
 //   R. no retry/fallback/registry authority (static + behavioral).
 //   S. Task 24~31 predecessor surfaces and semantics stay intact.
 //   T. durable replay never changes bytes or mtimes.
+//   U. cross-boundary receipt fence: a durable Task 33 receipt (all status
+//      values) refuses the outcome entry with zero adapter calls, zero writes,
+//      unchanged receipt/attempt bytes; corrupt/mismatched receipts fail
+//      closed; outcome + receipt both present still replays the outcome
+//      read-only; the mirror Task 33 fence stays intact.
 //   CONCURRENCY. two real processes -> exactly one durable winner, each entered
 //      path invokes the adapter at most once, total invocation may be 2.
 //   STORE. durable read/create primitives: missing -> null, exact canonical,
@@ -120,6 +132,7 @@ import * as persistenceModule from './dispatch-executor-invocation-outcome-persi
 import {
   CORRUPT_EXECUTOR_INVOCATION_OUTCOME,
   EXECUTOR_INVOCATION_OUTCOMES_DIRNAME,
+  EXECUTOR_INVOCATION_OUTCOME_ABSENT_FOR_RECORDED_RECEIPT,
   EXECUTOR_INVOCATION_OUTCOME_CONFLICT,
   EXECUTOR_INVOCATION_OUTCOME_PERSISTENCE_NEW_FIELDS,
   EXECUTOR_INVOCATION_OUTCOME_PERSISTENCE_REPLAY_FIELDS,
@@ -136,6 +149,16 @@ import {
 } from './dispatch-receiver-decision.mjs';
 import { prepareDispatchTransportRequest } from './dispatch-transport-contract.mjs';
 import { DISPOSITION_STATE_ADOPTED } from './disposition.mjs';
+import {
+  CORRUPT_EXECUTOR_RESULT_RECEIPT,
+  EXECUTOR_RESULT_RECEIPTS_DIRNAME,
+  EXECUTOR_RESULT_RECEIPT_ABSENT_FOR_RECORDED_OUTCOME,
+  EXECUTOR_RESULT_RECEIPT_SCHEMA_VERSION,
+  EXECUTOR_RESULT_RECEIPT_STATUS_BLOCKED,
+  EXECUTOR_RESULT_RECEIPT_STATUS_FAILED,
+  EXECUTOR_RESULT_RECEIPT_STATUS_SUCCEEDED,
+  persistExecutorResultReceipt,
+} from './executor-result-receipt.mjs';
 import { CoordinationStore } from './store.mjs';
 import { TASK_STATUS_CLAIMED } from './task-envelope.mjs';
 
@@ -497,6 +520,26 @@ function seedOutcome(store, dispatchId, outcome) {
   assert.deepEqual(created, { created: true });
 }
 
+// A valid Task 33 durable executor result receipt (the cross-boundary fence
+// authority) for this spec's dispatchId/child task.
+function validReceipt(dispatchId, taskId, overrides = {}) {
+  return {
+    schemaVersion: EXECUTOR_RESULT_RECEIPT_SCHEMA_VERSION,
+    dispatchId,
+    taskId,
+    status: EXECUTOR_RESULT_RECEIPT_STATUS_SUCCEEDED,
+    summary: 'bounded structured executor evidence',
+    proofRefs: ['proof:structured-result'],
+    evidenceRefs: ['evidence:structured-result'],
+    frictionObserved: ['NONE'],
+    ...overrides,
+  };
+}
+
+function receiptPath(home, dispatchId) {
+  return join(home, EXECUTOR_RESULT_RECEIPTS_DIRNAME, `${dispatchId}.json`);
+}
+
 // Simulates a lost exclusive-create race deterministically: the first durable
 // read reports "unseen" even though a real winner already exists on disk; then
 // create delegates to the real store and loses; winner reads delegate.
@@ -517,6 +560,10 @@ function raceLoserStore(store) {
     readExecutorInvocationAttempt: (dispatchId) => {
       calls.push({ op: 'readExecutorInvocationAttempt' });
       return store.readExecutorInvocationAttempt(dispatchId);
+    },
+    readExecutorResultReceipt: (dispatchId) => {
+      calls.push({ op: 'readExecutorResultReceipt' });
+      return store.readExecutorResultReceipt(dispatchId);
     },
   };
   return { calls, store: wrapper };
@@ -748,12 +795,14 @@ test('G. unseen dispatchId composes Task 30 exactly once and consults only dispa
     });
     assert.equal(result.newlyRecorded, true);
 
-    // Exactly one durable outcome read, one Task 28 attempt read (Task 29/30
-    // composition), one exclusive-create, one read-back.
+    // Exactly one durable outcome read, one cross-boundary receipt fence read,
+    // one Task 28 attempt read (Task 29/30 composition), one exclusive-create,
+    // one read-back.
     assert.deepEqual(
       calls.map((call) => call.op),
       [
         'readExecutorInvocationOutcome',
+        'readExecutorResultReceipt',
         'readExecutorInvocationAttempt',
         'createExecutorInvocationOutcome',
         'readExecutorInvocationOutcome',
@@ -804,6 +853,7 @@ test('H. exclusive-create is verified by exact durable read-back; tampered or va
       },
       createExecutorInvocationOutcome: (record) => store.createExecutorInvocationOutcome(record),
       readExecutorInvocationAttempt: (id) => store.readExecutorInvocationAttempt(id),
+      readExecutorResultReceipt: (id) => store.readExecutorResultReceipt(id),
     };
     const { calls, adapter } = countingAdapter(() => validOutcome(dispatchId, 'ACCEPTED'));
     await assert.rejects(
@@ -829,6 +879,7 @@ test('H. exclusive-create is verified by exact durable read-back; tampered or va
       },
       createExecutorInvocationOutcome: () => ({ created: true }),
       readExecutorInvocationAttempt: (id) => store.readExecutorInvocationAttempt(id),
+      readExecutorResultReceipt: (id) => store.readExecutorResultReceipt(id),
     };
     const { adapter: adapter2 } = countingAdapter(() => validOutcome(dispatchId, 'ACCEPTED'));
     await assert.rejects(
@@ -873,6 +924,7 @@ test('I. exclusive-create race loser with the same valid winner converges idempo
       storeCalls.map((call) => call.op),
       [
         'readExecutorInvocationOutcome',
+        'readExecutorResultReceipt',
         'readExecutorInvocationAttempt',
         'createExecutorInvocationOutcome',
         'readExecutorInvocationOutcome',
@@ -922,6 +974,7 @@ test('J. race loser with a different valid winner fails closed and the first win
       },
       createExecutorInvocationOutcome: (record) => store.createExecutorInvocationOutcome(record),
       readExecutorInvocationAttempt: (id) => store.readExecutorInvocationAttempt(id),
+      readExecutorResultReceipt: (id) => store.readExecutorResultReceipt(id),
     };
     const { adapter: adapter2 } = countingAdapter(() => validOutcome(dispatchId, 'UNKNOWN'));
     await assert.rejects(
@@ -1210,6 +1263,7 @@ test('P. no ACK/receipt/result/disposition artifact or store primitive is create
     assert.equal(typeof store.readExecutorInvocationOutcome, 'function');
     assert.equal(typeof store.createExecutorInvocationOutcome, 'function');
     assert.equal(typeof store.readExecutorInvocationAttempt, 'function');
+    assert.equal(typeof store.readExecutorResultReceipt, 'function');
   } finally {
     removeHome(home);
   }
@@ -1409,6 +1463,162 @@ test('T. existing durable replay does not change bytes or mtimes', async () => {
     assert.equal(calls.length, 0);
     assert.equal(readFileSync(outcomePath(home, dispatchId), 'utf8'), bytesAfterCreate);
     assert.deepEqual(snapshotHomeStats(home), statsAfterCreate);
+  } finally {
+    removeHome(home);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// U. Cross-boundary receipt fence: a durable Task 33 receipt refuses the
+// outcome entry (exact mirror of Task 33's recorded-outcome fence).
+// ---------------------------------------------------------------------------
+
+test('U. a durable Task 33 receipt refuses the outcome entry with zero adapter calls and zero writes', async () => {
+  const { home, store, dispatchId } = await setupAccepted(
+    'greenhub-executor-invocation-outcome32-u-',
+    'EIOP32-U-SRC',
+    'EIOP32-U-CHILD',
+  );
+  try {
+    for (const status of [
+      EXECUTOR_RESULT_RECEIPT_STATUS_SUCCEEDED,
+      EXECUTOR_RESULT_RECEIPT_STATUS_FAILED,
+      EXECUTOR_RESULT_RECEIPT_STATUS_BLOCKED,
+    ]) {
+      const path = receiptPath(home, dispatchId);
+      rmSync(path, { force: true });
+      const receipt = validReceipt(dispatchId, 'EIOP32-U-CHILD', { status });
+      assert.deepEqual(store.createExecutorResultReceipt(receipt), { created: true });
+      const receiptBytes = readFileSync(path, 'utf8');
+      const before = snapshotHomeBytes(home);
+
+      const { calls, adapter } = countingAdapter(() => {
+        throw new Error('a recorded receipt must never re-invoke the executor');
+      });
+      await assert.rejects(
+        persistExecutorInvocationOutcome({ dispatchId, store, adapter }),
+        (error) =>
+          error instanceof ExecutorInvocationOutcomePersistenceError &&
+          error.code === EXECUTOR_INVOCATION_OUTCOME_ABSENT_FOR_RECORDED_RECEIPT,
+        status,
+      );
+      assert.equal(calls.length, 0, status);
+      assert.deepEqual(snapshotHomeBytes(home), before, status);
+      assert.equal(readFileSync(path, 'utf8'), receiptBytes, status);
+      assert.equal(store.readExecutorInvocationOutcome(dispatchId), null, status);
+      assert.deepEqual(listOutcomeFiles(home), [], status);
+      assert.equal(store.readTask('EIOP32-U-CHILD').status, TASK_STATUS_CLAIMED, status);
+    }
+  } finally {
+    removeHome(home);
+  }
+});
+
+test('U2. corrupt or mismatched durable receipts fail closed with zero adapter calls and zero writes', async () => {
+  const { home, store, dispatchId } = await setupAccepted(
+    'greenhub-executor-invocation-outcome32-u2-',
+    'EIOP32-U2-SRC',
+    'EIOP32-U2-CHILD',
+  );
+  try {
+    const path = receiptPath(home, dispatchId);
+    mkdirSync(dirname(path), { recursive: true });
+    const variants = [
+      { name: 'unparseable bytes', bytes: '{ not json' },
+      { name: 'wrong shape', bytes: JSON.stringify({ hello: 'not-a-receipt' }, null, 2) },
+      {
+        name: 'extra field',
+        bytes: JSON.stringify(
+          { ...validReceipt(dispatchId, 'EIOP32-U2-CHILD'), acceptedAt: 'now' },
+          null,
+          2,
+        ),
+      },
+      {
+        name: 'invalid status',
+        bytes: JSON.stringify(
+          { ...validReceipt(dispatchId, 'EIOP32-U2-CHILD'), status: 'DONE' },
+          null,
+          2,
+        ),
+      },
+      {
+        name: 'dispatchId/path mismatch',
+        bytes: JSON.stringify(
+          validReceipt(`dsp_${'a'.repeat(64)}`, 'EIOP32-U2-CHILD'),
+          null,
+          2,
+        ),
+      },
+    ];
+    for (const variant of variants) {
+      writeFileSync(path, variant.bytes, 'utf8');
+      const { calls, adapter } = countingAdapter(() => validOutcome(dispatchId, 'ACCEPTED'));
+      await assert.rejects(
+        persistExecutorInvocationOutcome({ dispatchId, store, adapter }),
+        (error) => error?.code === CORRUPT_EXECUTOR_RESULT_RECEIPT,
+        variant.name,
+      );
+      assert.equal(calls.length, 0, variant.name);
+      assert.equal(readFileSync(path, 'utf8'), variant.bytes, variant.name);
+      assert.deepEqual(listOutcomeFiles(home), [], variant.name);
+      assert.equal(existsSync(outcomePath(home, dispatchId)), false, variant.name);
+    }
+  } finally {
+    removeHome(home);
+  }
+});
+
+test('U3. an existing durable outcome still replays read-only when a receipt also exists', async () => {
+  const { home, store, dispatchId } = await setupAccepted(
+    'greenhub-executor-invocation-outcome32-u3-',
+    'EIOP32-U3-SRC',
+    'EIOP32-U3-CHILD',
+  );
+  try {
+    seedOutcome(store, dispatchId, 'UNKNOWN');
+    assert.deepEqual(
+      store.createExecutorResultReceipt(validReceipt(dispatchId, 'EIOP32-U3-CHILD')),
+      { created: true },
+    );
+    const before = snapshotHomeBytes(home);
+    const { calls, adapter } = countingAdapter(() => {
+      throw new Error('replay must not invoke the executor');
+    });
+    const replayed = await persistExecutorInvocationOutcome({ dispatchId, store, adapter });
+    assert.equal(replayed.exactReplay, true);
+    assert.equal(replayed.outcome, 'UNKNOWN');
+    assert.equal(calls.length, 0);
+    assert.deepEqual(snapshotHomeBytes(home), before);
+  } finally {
+    removeHome(home);
+  }
+});
+
+test('U4. mirror fence: a recorded outcome without a receipt still refuses the Task 33 receipt entry', async () => {
+  const { home, store, dispatchId } = await setupAccepted(
+    'greenhub-executor-invocation-outcome32-u4-',
+    'EIOP32-U4-SRC',
+    'EIOP32-U4-CHILD',
+  );
+  try {
+    seedOutcome(store, dispatchId, 'ACCEPTED');
+    const before = snapshotHomeBytes(home);
+    let executorCalls = 0;
+    await assert.rejects(
+      persistExecutorResultReceipt({
+        dispatchId,
+        store,
+        executor: async () => {
+          executorCalls += 1;
+          return { schemaVersion: 1, dispatchId, outcome: 'ACCEPTED', result: null };
+        },
+      }),
+      (error) => error?.code === EXECUTOR_RESULT_RECEIPT_ABSENT_FOR_RECORDED_OUTCOME,
+    );
+    assert.equal(executorCalls, 0);
+    assert.equal(existsSync(receiptPath(home, dispatchId)), false);
+    assert.deepEqual(snapshotHomeBytes(home), before);
   } finally {
     removeHome(home);
   }
@@ -1619,18 +1829,23 @@ test('STATIC. production module carries no concrete executor/transport/process/f
     assert.equal(code.includes(forbidden), false, `code must not contain ${forbidden}`);
   }
 
-  // The only composition is the Task 30 public entry and the Task 28 identity
-  // family; no predecessor durable reader/mutator is imported directly.
+  // The only composition is the Task 30 public entry, the Task 28 identity
+  // family, and the Task 33 receipt validator (the cross-boundary fence reads
+  // the receipt authority; no predecessor durable reader/mutator is imported
+  // directly and the receipt namespace is never written).
   const importSpecifiers = [...code.matchAll(/from\s+'([^']+)'/g)].map((match) => match[1]);
   assert.deepEqual(importSpecifiers, [
     'node:path',
     './dispatch-executor-invocation-attempt.mjs',
     './dispatch-executor-invocation-outcome.mjs',
+    './executor-result-receipt.mjs',
   ]);
   assert.ok(code.includes('invokeExecutorAndValidateOutcome('));
+  assert.ok(code.includes('validateExecutorResultReceiptRecord('));
   assert.equal(code.includes('validateExecutorInvocationOutcome('), false);
   assert.equal(code.includes('validateReceiverDecisionRecord('), false);
   assert.equal(code.includes('readExecutorInvocationInput('), false);
+  assert.equal(code.includes('createExecutorResultReceipt('), false);
 
   // Exported surface: constants + error class + narrow helpers + ONE entry.
   const exportedFunctions = Object.entries(persistenceModule)
@@ -1652,6 +1867,10 @@ test('STATIC. production module carries no concrete executor/transport/process/f
   assert.equal(
     INVALID_EXECUTOR_INVOCATION_OUTCOME_STORE,
     'INVALID_EXECUTOR_INVOCATION_OUTCOME_STORE',
+  );
+  assert.equal(
+    EXECUTOR_INVOCATION_OUTCOME_ABSENT_FOR_RECORDED_RECEIPT,
+    'EXECUTOR_INVOCATION_OUTCOME_ABSENT_FOR_RECORDED_RECEIPT',
   );
   assert.deepEqual(
     [...EXECUTOR_INVOCATION_OUTCOME_PERSISTENCE_NEW_FIELDS],
