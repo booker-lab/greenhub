@@ -25,6 +25,31 @@
 
 모든 향후 Greenhub 개발 프롬프트와 결과 형식은 이 불변식을 보존하고 마지막에 `friction_observed`를 포함한다.
 
+### Problem Framer v2.0 — 작업 생성 게이트
+
+관찰, 완료된 Task, 인접 finding, `friction_observed`, successor 후보를 곧바로 작업으로 만들지 않는다. 먼저 현재 증거로 다음 중 하나를 판정한다.
+
+```text
+EVIDENCE
+→ DROP | WATCH | CHANGE
+```
+
+- `DROP`: 새 Task, 추적 장치, 정책, reminder를 만들지 않고 종료한다.
+- `WATCH`: 자연스러운 정상 작업 중 다시 나타날 구체적 신호가 있고 그 신호가 결정을 바꿀 수 있을 때만 허용한다. 기록은 `SIGNAL`과 `PROMOTION_TRIGGER`만 유지하며 polling, scheduled review, watchdog, dedicated registry, reminder를 만들지 않는다.
+- `CHANGE`: 현재 증거가 지금 개입하는 편이 현상 유지보다 낫다는 것을 보여줄 때만 작업을 생성한다. 실행 가능성·자동화 가능성·낮은 구현 비용 자체는 CHANGE의 근거가 아니다.
+
+CHANGE일 때는 smallest independently closable semantic outcome을 선택한다. 작은 diff보다 실제 문제를 닫는 최소 semantic closure를 우선하며, 직접 필요한 구현·caller·nearest faithful proof·task-owned residue cleanup은 같은 bounded closure에 포함한다.
+
+Successor는 독립 semantic ownership, 외부 authority/provider, material user decision, 별도 safety/blast-radius, execution/publication boundary, unavailable credential/hardware/environment/live authority 같은 실제 경계 때문에 현재 closure에서 안전하게 닫을 수 없을 때만 만든다.
+
+`friction_observed`는 다음 Problem Framing의 evidence/candidate일 뿐 작업 생성 권한이 아니다.
+
+Operating shorthand:
+
+```text
+EVIDENCE → SMALLEST CLOSURE → STOP
+```
+
 ## 1. 우선순위와 범위
 
 - 상위 지침, 사용자 요청, 현재 Task의 범위와 제외 범위를 우선한다.
@@ -161,7 +186,10 @@ RESULT INTAKE
 → SAFE RETIREMENT OR PRESERVATION DECISION
 → MIRROR RECOVERY IF REQUIRED
 → main + HEAD=LIVE_MAIN + CLEAN 확인
-→ NEXT BOUNDED STATE TRANSITION
+→ PROBLEM FRAMER v2.0: DROP | WATCH | CHANGE
+→ DROP: NO SUCCESSOR → CONTROL TOWER CLOSED
+→ WATCH: SIGNAL + PROMOTION_TRIGGER ONLY, NO TASK → CONTROL TOWER CLOSED
+→ CHANGE: SMALLEST SUFFICIENT CLOSURE → NEXT BOUNDED STATE TRANSITION
 → CONTROL TOWER CLOSED
 ```
 
