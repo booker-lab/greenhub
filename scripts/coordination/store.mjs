@@ -113,6 +113,20 @@
 //   task/claim/admission/emission/attempt/receiver-acceptance/
 //   receiver-decision/executor-acceptance/executor-invocation-attempt/
 //   executor-invocation-outcome/result mutation).
+// + GREENHUB-COORDINATION-EXECUTOR-INVOCATION-FENCE (COORD-AUDIT-C03,
+//   immutable pre-invocation fence persistence ONLY:
+//   readExecutorInvocationFence / createExecutorInvocationFence keyed by
+//   dispatchId ONLY under <home>/executor-invocation-fences/<dispatchId>.json;
+//   the durable value is the EXACT canonical fence record
+//   ({ schemaVersion: 1, dispatchId }) with no wrapper metadata, with the
+//   pre-invocation fencing fact expressed by the namespace/path authority
+//   ONLY; exclusive-create, no overwrite, no auto-repair, no delete-and-
+//   recreate, no last-writer-wins, no lease, no expiry; no ACK, no receipt, no
+//   executor invocation, no task status transition, no scheduler, no worker
+//   selection, no retry/backoff/resend, no new generation authority, no
+//   concrete transport, no execution start, no task/claim/admission/emission/
+//   attempt/receiver-acceptance/receiver-decision/executor-acceptance/
+//   executor-invocation-attempt/executor-invocation-outcome/result mutation).
 // + COORD-AUDIT-C01 (interrupted result delivery replay convergence ONLY:
 //   an already stored per-id/canonical Result is immutable authority; an exact
 //   full-semantic-payload replay converges only the missing canonical/terminal
@@ -347,6 +361,12 @@ import {
   executorResultReceiptFilePath,
   validateExecutorResultReceiptRecord,
 } from './executor-result-receipt.mjs';
+import {
+  CORRUPT_EXECUTOR_INVOCATION_FENCE,
+  assertValidExecutorInvocationFenceDispatchId,
+  executorInvocationFenceFilePath,
+  validateExecutorInvocationFenceRecord,
+} from './dispatch-executor-invocation-fence.mjs';
 
 export const LEASE_ACTIVE = 'LEASE_ACTIVE';
 export const CLAIM_NOT_FOUND = 'CLAIM_NOT_FOUND';
@@ -5191,6 +5211,106 @@ export class CoordinationStore {
       });
     }
     const targetPath = executorInvocationOutcomeFilePath(this.home, candidate.dispatchId);
+    const created = writeJsonExclusive(targetPath, candidate);
+    return { created: created.created };
+  }
+
+  // -------------------------------------------------------------------------
+  // Durable executor invocation fence domain
+  // (GREENHUB-COORDINATION-EXECUTOR-INVOCATION-FENCE / COORD-AUDIT-C03,
+  // dispatchId ONLY).
+  // invokeExecutorWithInvocationFence() != executeTask() != invokeExecutor()
+  // != persistExecutorInvocationOutcome() != persistExecutorResultReceipt():
+  // this domain is the durable storage primitive ONLY. The durable value is the
+  // EXACT canonical fence record itself ({ schemaVersion: 1, dispatchId }); the
+  // pre-invocation fencing fact is expressed by the namespace/path authority
+  // <home>/executor-invocation-fences/<dispatchId>.json ONLY (no owner pid, no
+  // hostname, no claimToken, no timestamps, no lease, no expiry, no attempt/
+  // retry counter, no new generation; claimGeneration stays the SOLE fencing
+  // generation). The record is an immutable one-way fact: once published, the
+  // executor boundary is treated as possibly crossed for exactly one
+  // invocation accounting and is never removed, overwritten, or expired.
+  // LOOKUP KEY = dispatchId ONLY: sourceTaskId / nextTaskId / taskId /
+  // workerId / admissionId / emissionSlot / claimToken / claimGeneration are
+  // never lookup keys here. Ordering:
+  //   1. dispatchId path resolution (path-safe identity family),
+  //   2. existing record -> validated exact record (or missing -> null),
+  //   3. corruption / invalid record / key-binding mismatch -> fail closed,
+  //   4. create -> OS exclusive-create (never exists()->write()),
+  //   5. existing winner -> created:false (caller resolves the race; this
+  //      primitive never overwrites, never repairs, never deletes).
+  // No task/claim/admission/emission/attempt/receiver-acceptance/receiver-
+  // decision/executor-acceptance/executor-invocation-attempt/executor-
+  // invocation-outcome/result mutation happens here.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Read one durable executor invocation fence by dispatchId ONLY.
+   * Returns null when no fence exists for this dispatchId (unseen), or the
+   * EXACT validated frozen fence record when present. Corrupt / invalid /
+   * wrong-key records fail closed with no auto-repair.
+   */
+  readExecutorInvocationFence(dispatchId) {
+    try {
+      assertValidExecutorInvocationFenceDispatchId(dispatchId);
+    } catch (error) {
+      storeFail(`executor invocation fence dispatchId invalid (fail-closed): ${error?.message}`, {
+        code: CORRUPT_EXECUTOR_INVOCATION_FENCE,
+      });
+    }
+    const targetPath = executorInvocationFenceFilePath(this.home, dispatchId);
+    const found = readJsonFile(targetPath);
+    if (found.state === 'missing') return null;
+    if (found.state === 'corrupt') {
+      storeFail(
+        `executor invocation fence record is corrupt (fail-closed, no auto-repair): ${dispatchId}`,
+        { code: CORRUPT_EXECUTOR_INVOCATION_FENCE },
+      );
+    }
+    let record;
+    try {
+      record = validateExecutorInvocationFenceRecord(found.document);
+    } catch (error) {
+      storeFail(
+        `executor invocation fence record invalid (fail-closed, no auto-repair): ${dispatchId}: ${error?.message}`,
+        {
+          code:
+            typeof error?.code === 'string' && error.code
+              ? error.code
+              : CORRUPT_EXECUTOR_INVOCATION_FENCE,
+        },
+      );
+    }
+    if (record.dispatchId !== dispatchId) {
+      storeFail(
+        `executor invocation fence key/binding mismatch (fail-closed): looked up ${dispatchId} but the record carries ${record.dispatchId}`,
+        { code: CORRUPT_EXECUTOR_INVOCATION_FENCE },
+      );
+    }
+    return record;
+  }
+
+  /**
+   * Exclusive-create one immutable executor invocation fence keyed by
+   * dispatchId ONLY. The persisted value is the EXACT canonical fence record
+   * with no wrapper metadata. Returns { created: true } when this call won the
+   * OS exclusive-create, { created: false } when a fence already exists. Never
+   * overwrites, never repairs, never deletes: the existing winner is
+   * immutable, has no lease, and never expires.
+   */
+  createExecutorInvocationFence(record) {
+    let candidate;
+    try {
+      candidate = validateExecutorInvocationFenceRecord(record);
+    } catch (error) {
+      storeFail(`executor invocation fence record invalid (fail-closed): ${error?.message}`, {
+        code:
+          typeof error?.code === 'string' && error.code
+            ? error.code
+            : CORRUPT_EXECUTOR_INVOCATION_FENCE,
+      });
+    }
+    const targetPath = executorInvocationFenceFilePath(this.home, candidate.dispatchId);
     const created = writeJsonExclusive(targetPath, candidate);
     return { created: created.created };
   }
