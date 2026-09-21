@@ -118,6 +118,17 @@
 //   replacement, and the remove/replace crash window publishes
 //   baseGeneration + 1 instead of rewinding; stale-result fencing, terminal
 //   safety, and first-winner result semantics are unchanged).
+// + GREENHUB-COORDINATION-USER-APPROVED-READONLY-INTAKE-GF06
+//   (user-approved external READ_ONLY task intake ONLY:
+//   intakeUserApprovedReadOnlyTask / readUserApprovedIntake plus the
+//   intake-bound claim/dispatch-attempt/envelope reads for the existing GF-05
+//   operator run path over ONE explicit user-approved READ_ONLY Task Envelope
+//   spec, durable under <home>/intake-authorities/<taskId>.json; ordering is
+//   INTAKE AUTHORITY -> task create -> READY via the existing markReady()
+//   path; no fake CONSUMED source, no emission/admission relaxation, no
+//   scheduler, no READY scan, no claim automation, no dispatch automation, no
+//   executor invocation, no result delivery, no fan-out, no adapter, no
+//   autonomous loop).
 // Durable local coordination store: TASK CREATED -> READY -> CLAIMED -> RESULT_DELIVERED,
 // plus a separate durable disposition domain (PENDING_DISPOSITION/BLOCKED/
 // NEEDS_USER_DECISION/ADOPTED/REJECTED/SUPERSEDED) bound to the canonical result,
@@ -155,6 +166,11 @@
 //     (emission-bound admission authority, bound to the exact canonical emission;
 //     READY is reached only through the existing markReady() path after this
 //     authority is durable)
+//   <home>/intake-authorities/<taskId>.json
+//     (user-approved external READ_ONLY intake authority, bound to the explicit
+//     approval provenance + the exact canonical task spec bytes; ordering is
+//     INTAKE AUTHORITY -> task create -> READY through the existing markReady()
+//     path; exclusive-create, one canonical slot per taskId, no overwrite)
 //   <home>/tasks/<sourceTaskId>/dispatch-attempts/<dispatchId>.json
 //     (immutable durable dispatch-attempt intent, bound to the exact LIVE Task 18
 //     envelope; exclusive-create, no overwrite, no transport)
@@ -283,6 +299,14 @@ import {
   buildAdmissionRecord,
   validateAdmissionRecord,
 } from './emission-admission.mjs';
+import {
+  USER_APPROVED_INTAKE_DISPATCH_SLOT,
+  buildUserApprovedIntakeRecord,
+  userApprovedIntakeFilePath,
+  userApprovedIntakeRecordsEquivalent,
+  userApprovedIntakeRef,
+  validateUserApprovedIntakeRecord,
+} from './user-approved-intake.mjs';
 import { buildAdmissionBoundClaimToken } from './admission-bound-claim.mjs';
 import { buildSchedulableWorkProjection } from './canonical-schedulable-work-read.mjs';
 import {
@@ -386,6 +410,13 @@ export const ADMISSION_BINDING_MISMATCH = 'ADMISSION_BINDING_MISMATCH';
 export const CORRUPT_ADMISSION = 'CORRUPT_ADMISSION';
 export const ADMISSION_NOT_FOUND = 'ADMISSION_NOT_FOUND';
 export const ADMISSION_BYPASS_DETECTED = 'ADMISSION_BYPASS_DETECTED';
+export const INTAKE_CONFLICT = 'INTAKE_CONFLICT';
+export const INTAKE_BINDING_MISMATCH = 'INTAKE_BINDING_MISMATCH';
+export const CORRUPT_INTAKE_AUTHORITY = 'CORRUPT_INTAKE_AUTHORITY';
+export const INTAKE_NOT_FOUND = 'INTAKE_NOT_FOUND';
+export const INTAKE_AUTHORITY_CONFLICT = 'INTAKE_AUTHORITY_CONFLICT';
+export const INTAKE_TASK_IDENTITY_CONFLICT = 'INTAKE_TASK_IDENTITY_CONFLICT';
+export const INTAKE_TASK_BYPASS_DETECTED = 'INTAKE_TASK_BYPASS_DETECTED';
 export const CLAIM_ADMISSION_BYPASS_DETECTED = 'CLAIM_ADMISSION_BYPASS_DETECTED';
 export const INVALID_DISPATCH_BINDING = 'INVALID_DISPATCH_BINDING';
 export const DISPATCH_BINDING_MISMATCH = 'DISPATCH_BINDING_MISMATCH';
@@ -514,6 +545,46 @@ function readValidatedAdmissionDocument(path, sourceTaskId, emissionSlot) {
   return { state: 'present', record };
 }
 
+// ---------------------------------------------------------------------------
+// User-approved external READ_ONLY intake authority
+// (USER_APPROVED_READONLY_INTAKE_GF06).
+// Durable under <home>/intake-authorities/<taskId>.json. One canonical slot per
+// taskId; exclusive-create serializes concurrent intakes so exactly one wins;
+// recordedAt/recorderId are provenance only and never enter intake identity.
+// This is a DIFFERENT authority source from successor emission: no source
+// CONSUMED closure, no emission, no emission admission.
+// ---------------------------------------------------------------------------
+
+function readValidatedIntakeDocument(path, taskId) {
+  const found = readJsonFile(path);
+  if (found.state === 'missing') return { state: 'missing' };
+  if (found.state === 'corrupt') {
+    storeFail(
+      `intake authority record is corrupt (fail-closed, no auto-repair): ${userApprovedIntakeRef(taskId)}`,
+      { code: CORRUPT_INTAKE_AUTHORITY, taskId },
+    );
+  }
+  let record;
+  try {
+    record = validateUserApprovedIntakeRecord(found.document);
+  } catch (error) {
+    storeFail(
+      `intake authority record invalid (fail-closed): ${userApprovedIntakeRef(taskId)}: ${error?.message}`,
+      {
+        code: typeof error?.code === 'string' && error.code ? error.code : CORRUPT_INTAKE_AUTHORITY,
+        taskId,
+      },
+    );
+  }
+  if (record.taskId !== taskId) {
+    storeFail(
+      `intake authority identity/path mismatch (fail-closed): ${userApprovedIntakeRef(taskId)}`,
+      { code: CORRUPT_INTAKE_AUTHORITY, taskId },
+    );
+  }
+  return { state: 'present', record };
+}
+
 /**
  * True for fail-closed corruption/drift codes that must propagate unchanged
  * (never remapped to eligibility, never auto-repaired).
@@ -544,6 +615,28 @@ function listTaskIds(home) {
         return false;
       }
     })
+    .sort();
+}
+
+/**
+ * Durable `.json` file names of one directory, sorted. Missing directory means
+ * empty. This module's own in-flight atomic-write temp artifacts are skipped;
+ * every other unexpected file is returned as-is (callers validate contents).
+ */
+function listDurableJsonFileNames(directory) {
+  let entries;
+  try {
+    entries = nodeFs.readdirSync(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
+  return entries
+    .filter(
+      (entry) =>
+        entry.isFile() && entry.name.endsWith('.json') && !isInFlightTempArtifactName(entry.name),
+    )
+    .map((entry) => entry.name)
     .sort();
 }
 
@@ -3788,6 +3881,734 @@ export class CoordinationStore {
   }
 
   // -------------------------------------------------------------------------
+  // User-approved external READ_ONLY intake domain
+  // (GREENHUB-COORDINATION-USER-APPROVED-READONLY-INTAKE-GF06).
+  // intakeUserApprovedReadOnlyTask() != emitNextTask() != admitEmittedTask()
+  //   != claimAdmittedTask() != scheduleNextTask() != dispatchNextTask():
+  // the caller explicitly supplies ONE bounded user-approved READ_ONLY task
+  // spec. This primitive never scans READY tasks, never polls a queue, never
+  // picks priority, never claims, never dispatches, never invokes an executor,
+  // and never generates a successor. Ordering is INTAKE AUTHORITY -> TASK
+  // CREATE -> READY (never READY -> AUTHORITY): the durable intake authority
+  // (explicit approval + canonical task bytes binding) is created first via OS
+  // exclusive-create, then the exact canonical task is created through the
+  // existing createTask path, then converged through the existing markReady()
+  // path. A crash between authority and READY is recovered by replay
+  // converging to the same authority + task + READY (never a duplicate, never
+  // delete-and-recreate, never a rewind of CLAIMED/RESULT_DELIVERED).
+  // The successor emission/admission contract is a DIFFERENT authority source
+  // and is never relaxed, merged, or faked here.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Verify no existing successor emission or emission admission already binds
+   * `taskId` as its child. A task produced by successor emission is never
+   * adopted by user-approved intake (fail-closed, authority sources are never
+   * merged). Corruption in a scanned record fails closed (no auto-repair).
+   */
+  #assertNoEmissionAuthorityBindsTask(taskId) {
+    assertValidTaskId(taskId);
+    for (const sourceTaskId of listTaskIds(this.home)) {
+      const taskDirectory = resolveTaskDirectory(this.home, sourceTaskId);
+      const emissionsDirectory = nodePath.join(taskDirectory, 'emissions');
+      for (const fileName of listDurableJsonFileNames(emissionsDirectory)) {
+        const path = nodePath.join(emissionsDirectory, fileName);
+        const found = readJsonFile(path);
+        if (found.state !== 'present') continue;
+        let record;
+        try {
+          record = validateEmissionRecord(found.document);
+        } catch (error) {
+          storeFail(
+            `emission record invalid while checking intake authority conflicts (fail-closed, no auto-repair): ${sourceTaskId}/${fileName}: ${error?.message}`,
+            {
+              code: typeof error?.code === 'string' && error.code ? error.code : CORRUPT_EMISSION,
+              taskId,
+            },
+          );
+        }
+        if (record.nextTaskId === taskId) {
+          storeFail(
+            `successor emission authority already binds taskId ${taskId} (${emissionRef(sourceTaskId, record.emissionSlot)}): a task produced by successor emission is never adopted by user-approved intake (fail-closed; the two authority sources are never merged).`,
+            { code: INTAKE_AUTHORITY_CONFLICT, taskId },
+          );
+        }
+      }
+      const admissionsDirectory = nodePath.join(taskDirectory, 'emission-admissions');
+      for (const fileName of listDurableJsonFileNames(admissionsDirectory)) {
+        const path = nodePath.join(admissionsDirectory, fileName);
+        const found = readJsonFile(path);
+        if (found.state !== 'present') continue;
+        let record;
+        try {
+          record = validateAdmissionRecord(found.document);
+        } catch (error) {
+          storeFail(
+            `admission record invalid while checking intake authority conflicts (fail-closed, no auto-repair): ${sourceTaskId}/${fileName}: ${error?.message}`,
+            {
+              code: typeof error?.code === 'string' && error.code ? error.code : CORRUPT_ADMISSION,
+              taskId,
+            },
+          );
+        }
+        if (record.nextTaskId === taskId) {
+          storeFail(
+            `emission admission authority already binds taskId ${taskId} (${admissionRef(sourceTaskId, record.emissionSlot)}): a task admitted by successor emission is never adopted by user-approved intake (fail-closed; the two authority sources are never merged).`,
+            { code: INTAKE_AUTHORITY_CONFLICT, taskId },
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * Create (or recover) the exact canonical task of one intake authority
+   * through the existing createTask path and verify its canonical bytes bind
+   * the authority binding exactly. A colliding taskId with different bytes
+   * fails closed (never reused, never overwritten).
+   */
+  #ensureIntakeTask(record) {
+    const paths = taskFilePaths(this.home, record.taskId);
+    const found = readJsonFile(paths.taskPath);
+    let task;
+    if (found.state === 'missing') {
+      try {
+        task = this.createTask({ ...record.taskSpec });
+      } catch (error) {
+        if (error?.code !== TASK_ALREADY_EXISTS) throw error;
+        task = this.readTask(record.taskId);
+      }
+    } else if (found.state === 'corrupt') {
+      storeFail(`intake task record is corrupt (fail-closed, no auto-repair): ${record.taskId}`, {
+        code: 'CORRUPT_TASK',
+        taskId: record.taskId,
+      });
+    } else {
+      task = validateTaskEnvelope(found.document);
+    }
+    let binding;
+    try {
+      binding = computeNextTaskSpecBinding(task);
+    } catch (error) {
+      storeFail(
+        `intake task violates the Task Envelope v1 contract (fail-closed): ${record.taskId}: ${error?.message}`,
+        {
+          code: typeof error?.code === 'string' && error.code ? error.code : INTAKE_TASK_IDENTITY_CONFLICT,
+          taskId: record.taskId,
+        },
+      );
+    }
+    if (binding !== record.intakeSpecBinding || task.taskId !== record.taskId) {
+      storeFail(
+        `intake task identity conflict: taskId ${record.taskId} is bound to different canonical task bytes (first authority wins; never reused or overwritten).`,
+        { code: INTAKE_TASK_IDENTITY_CONFLICT, taskId: record.taskId },
+      );
+    }
+    return task;
+  }
+
+  /**
+   * Converge the intake task to at least READY without ever rewinding a
+   * progressed lifecycle: CREATED -> markReady(); READY -> idempotent
+   * markReady(); CLAIMED/RESULT_DELIVERED -> returned as-is (normal history).
+   */
+  #convergeIntakeTask(taskId) {
+    const live = this.readTask(taskId);
+    if (live.status === TASK_STATUS_CREATED || live.status === TASK_STATUS_READY) {
+      return this.markReady(taskId);
+    }
+    if (live.status === TASK_STATUS_CLAIMED || live.status === TASK_STATUS_RESULT_DELIVERED) {
+      return live;
+    }
+    storeFail(`intake task in unexpected status (fail-closed): ${taskId} status=${live.status}`, {
+      code: CORRUPT_INTAKE_AUTHORITY,
+      taskId,
+    });
+    return live;
+  }
+
+  /**
+   * Full read-back contract: canonical intake authority record + canonical
+   * task bytes binding + single sequence membership + task at least READY.
+   * Write-syscall success alone never decides success.
+   */
+  #verifyIntakeReadback(record) {
+    const found = readValidatedIntakeDocument(
+      userApprovedIntakeFilePath(this.home, record.taskId),
+      record.taskId,
+    );
+    if (found.state !== 'present' || !userApprovedIntakeRecordsEquivalent(found.record, record)) {
+      storeFail(
+        `intake authority failed to verify after write (fail-closed): ${userApprovedIntakeRef(record.taskId)}`,
+        { code: CORRUPT_INTAKE_AUTHORITY, taskId: record.taskId },
+      );
+    }
+    const task = this.readTask(record.taskId);
+    let binding;
+    try {
+      binding = computeNextTaskSpecBinding(task);
+    } catch (error) {
+      storeFail(`intake task failed spec read-back (fail-closed): ${record.taskId}: ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : INTAKE_BINDING_MISMATCH,
+        taskId: record.taskId,
+      });
+    }
+    if (binding !== found.record.intakeSpecBinding || task.taskId !== found.record.taskId) {
+      storeFail(`intake task spec binding mismatch on read-back (fail-closed): ${record.taskId}`, {
+        code: INTAKE_BINDING_MISMATCH,
+        taskId: record.taskId,
+      });
+    }
+    this.#assertSingleAdmissionSequenceMembership(record.taskId, record.taskId);
+    if (task.status === TASK_STATUS_CREATED) {
+      storeFail(`intake task never reached READY (fail-closed): ${record.taskId}`, {
+        code: TASK_NOT_READY,
+        taskId: record.taskId,
+      });
+    }
+    return { record: found.record, task };
+  }
+
+  /**
+   * Intake exactly ONE explicitly user-approved bounded READ_ONLY task spec
+   * into one canonical durable intake authority, then converge the exact
+   * canonical task to READY.
+   *
+   * - taskKind != READ_ONLY -> refused before any durable write.
+   * - mutationBoundary.allowsWrite != false -> refused before any durable write.
+   * - userApproved !== true / approval provenance missing -> refused before any
+   *   durable write.
+   * - malformed Task Envelope v1 spec -> refused before any durable write.
+   * - same logical intake replays idempotently (duplicate:true) with the first
+   *   provenance bytes preserved; different payload for the same taskId fails
+   *   closed with INTAKE_CONFLICT (never overwritten, never merged).
+   * - a task produced by successor emission/admission fails closed with
+   *   INTAKE_AUTHORITY_CONFLICT; a pre-existing task without this intake
+   *   authority fails closed with INTAKE_TASK_BYPASS_DETECTED (no
+   *   auto-adoption).
+   * - no claim, no dispatch, no executor invocation, no result delivery, no
+   *   successor generation.
+   */
+  intakeUserApprovedReadOnlyTask({ userApproved, approval, taskSpec, recorderId, recordedAt } = {}) {
+    let candidate;
+    try {
+      candidate = buildUserApprovedIntakeRecord({
+        userApproved,
+        approval,
+        taskSpec,
+        recorderId,
+        recordedAt: recordedAt ?? this.nowIso(),
+      });
+    } catch (error) {
+      storeFail(`invalid user-approved intake (fail-closed, zero durable writes): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : 'INVALID_INTAKE_RECORD',
+        taskId: taskSpec?.taskId,
+      });
+    }
+
+    // Gate G: no existing successor emission/admission may already bind this
+    // taskId (authority sources are never merged).
+    this.#assertNoEmissionAuthorityBindsTask(candidate.taskId);
+
+    const path = userApprovedIntakeFilePath(this.home, candidate.taskId);
+    const existingFound = readValidatedIntakeDocument(path, candidate.taskId);
+    let record;
+    let duplicate;
+    if (existingFound.state === 'present') {
+      if (!userApprovedIntakeRecordsEquivalent(existingFound.record, candidate)) {
+        storeFail(
+          `conflicting user-approved intake for taskId (first wins, fail-closed, no overwrite/merge): ${userApprovedIntakeRef(candidate.taskId)} winner=${existingFound.record.intakeId}`,
+          { code: INTAKE_CONFLICT, taskId: candidate.taskId },
+        );
+      }
+      record = existingFound.record;
+      duplicate = true;
+    } else {
+      // No authority yet: a pre-existing task must never be adopted by a newly
+      // created intake authority. This check runs BEFORE the authority write so
+      // the bypass/identity conflict leaves zero durable intake delta.
+      const preExistingTask = readJsonFile(taskFilePaths(this.home, candidate.taskId).taskPath);
+      if (preExistingTask.state === 'corrupt') {
+        storeFail(`intake task record is corrupt (fail-closed, no auto-repair): ${candidate.taskId}`, {
+          code: 'CORRUPT_TASK',
+          taskId: candidate.taskId,
+        });
+      }
+      if (preExistingTask.state === 'present') {
+        const task = validateTaskEnvelope(preExistingTask.document);
+        let binding;
+        try {
+          binding = computeNextTaskSpecBinding(task);
+        } catch (error) {
+          storeFail(
+            `pre-existing task violates the Task Envelope v1 contract (fail-closed): ${candidate.taskId}: ${error?.message}`,
+            {
+              code: typeof error?.code === 'string' && error.code ? error.code : INTAKE_TASK_IDENTITY_CONFLICT,
+              taskId: candidate.taskId,
+            },
+          );
+        }
+        if (binding !== candidate.intakeSpecBinding || task.taskId !== candidate.taskId) {
+          storeFail(
+            `intake task identity conflict: taskId ${candidate.taskId} already exists with different canonical task bytes (first task wins; never reused or overwritten).`,
+            { code: INTAKE_TASK_IDENTITY_CONFLICT, taskId: candidate.taskId },
+          );
+        }
+        storeFail(
+          `intake bypass detected: task ${candidate.taskId} already exists (${task.status}) without a pre-existing user-approved intake authority (fail-closed, no auto-adoption).`,
+          { code: INTAKE_TASK_BYPASS_DETECTED, taskId: candidate.taskId },
+        );
+      }
+      const created = writeJsonExclusive(path, candidate);
+      if (created.created) {
+        record = candidate;
+        duplicate = false;
+      } else {
+        const winnerFound = readValidatedIntakeDocument(path, candidate.taskId);
+        if (winnerFound.state !== 'present') {
+          storeFail(
+            `intake authority race could not be resolved deterministically: ${userApprovedIntakeRef(candidate.taskId)}`,
+            { code: CORRUPT_INTAKE_AUTHORITY, taskId: candidate.taskId },
+          );
+        }
+        if (!userApprovedIntakeRecordsEquivalent(winnerFound.record, candidate)) {
+          storeFail(
+            `conflicting user-approved intake for taskId (first wins, fail-closed, no overwrite/merge): ${userApprovedIntakeRef(candidate.taskId)} winner=${winnerFound.record.intakeId}`,
+            { code: INTAKE_CONFLICT, taskId: candidate.taskId },
+          );
+        }
+        record = winnerFound.record;
+        duplicate = true;
+      }
+    }
+
+    // Authority durable: task create + READY convergence (crash windows
+    // recover on replay to the same authority + task + READY).
+    this.#ensureIntakeTask(record);
+    this.#assertNoEmissionAuthorityBindsTask(record.taskId);
+    this.#convergeIntakeTask(record.taskId);
+    const verified = this.#verifyIntakeReadback(record);
+    return { record: verified.record, task: verified.task, duplicate };
+  }
+
+  /**
+   * Read the canonical intake authority for one taskId, re-validated against
+   * the live exact task bytes and sequence membership. Pure read: never
+   * mutates the authority, never repairs, never rewinds.
+   */
+  readUserApprovedIntake({ taskId } = {}) {
+    assertValidTaskId(taskId);
+    const found = readValidatedIntakeDocument(userApprovedIntakeFilePath(this.home, taskId), taskId);
+    if (found.state === 'missing') {
+      storeFail(`no user-approved intake for task: ${userApprovedIntakeRef(taskId)}`, {
+        code: INTAKE_NOT_FOUND,
+        taskId,
+      });
+    }
+    const task = this.readTask(taskId);
+    let binding;
+    try {
+      binding = computeNextTaskSpecBinding(task);
+    } catch (error) {
+      storeFail(`intake task failed spec read-back (fail-closed): ${taskId}: ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : INTAKE_BINDING_MISMATCH,
+        taskId,
+      });
+    }
+    if (binding !== found.record.intakeSpecBinding || task.taskId !== found.record.taskId) {
+      storeFail(`intake task spec binding mismatch (fail-closed): ${taskId}`, {
+        code: INTAKE_BINDING_MISMATCH,
+        taskId,
+      });
+    }
+    this.#assertSingleAdmissionSequenceMembership(taskId, taskId);
+    return found.record;
+  }
+
+  #verifyIntakeClaimAfterWrite({ taskId, authority, workerId, expectedToken, claim }) {
+    if (claim.taskId !== taskId || claim.workerId !== workerId || claim.claimToken !== expectedToken) {
+      storeFail(`intake-bound claim failed binding read-back (fail-closed): ${taskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId,
+      });
+    }
+    const reread = this.#readCurrentAdmissionClaim(taskId);
+    if (reread.state !== 'present' || JSON.stringify(reread.record) !== JSON.stringify(claim)) {
+      storeFail(`intake-bound claim failed to verify after write (fail-closed): ${taskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId,
+      });
+    }
+    const liveChild = this.readTask(taskId);
+    if (liveChild.status !== TASK_STATUS_CLAIMED && liveChild.status !== TASK_STATUS_RESULT_DELIVERED) {
+      storeFail(`intake-bound task never reached CLAIMED (fail-closed): ${taskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId,
+      });
+    }
+    if (liveChild.status === TASK_STATUS_RESULT_DELIVERED) {
+      return { record: authority, child: liveChild, claim: reread.record, duplicate: true, terminal: true };
+    }
+    return { record: authority, child: liveChild, claim: reread.record, duplicate: false, terminal: false };
+  }
+
+  #resolveIntakeClaimWriteRace({ error, taskId, authority, workerId, expectedToken, now }) {
+    if (error?.code === CLAIM_ADMISSION_BYPASS_DETECTED || error?.code === 'CORRUPT_CLAIM') throw error;
+    if (error?.code !== LEASE_ACTIVE && error?.code !== TASK_TERMINAL) throw error;
+    const liveChild = this.readTask(taskId);
+    const currentFound = this.#readCurrentAdmissionClaim(taskId);
+    if (currentFound.state === 'missing') throw error;
+    const persisted = currentFound.record;
+    let expectedPersisted;
+    try {
+      expectedPersisted = buildAdmissionBoundClaimToken({
+        admissionId: authority.intakeId,
+        nextTaskId: taskId,
+        workerId: persisted.workerId,
+      });
+    } catch {
+      storeFail(`foreign claim for intake task (fail-closed, no auto-adoption): ${taskId}`, {
+        code: CLAIM_ADMISSION_BYPASS_DETECTED,
+        taskId,
+      });
+    }
+    if (persisted.claimToken !== expectedPersisted) {
+      storeFail(`foreign claim for intake task (fail-closed, no auto-adoption): ${taskId}`, {
+        code: CLAIM_ADMISSION_BYPASS_DETECTED,
+        taskId,
+      });
+    }
+    const isSameLogical = persisted.workerId === workerId && persisted.claimToken === expectedToken;
+    if (liveChild.status === TASK_STATUS_RESULT_DELIVERED) {
+      return { record: authority, child: liveChild, claim: persisted, duplicate: true, terminal: true };
+    }
+    if (isSameLogical && this.#isClaimLeaseActive(persisted, now)) {
+      if (liveChild.status === TASK_STATUS_CLAIMED) {
+        return { record: authority, child: liveChild, claim: persisted, duplicate: true, terminal: false };
+      }
+      if (liveChild.status === TASK_STATUS_READY) {
+        const beforeBytes = JSON.stringify(persisted);
+        const converged = this.#markClaimed(taskId);
+        const reread = this.#readCurrentAdmissionClaim(taskId);
+        if (reread.state !== 'present' || JSON.stringify(reread.record) !== beforeBytes) {
+          storeFail(`intake-bound claim changed during status convergence (fail-closed): ${taskId}`, {
+            code: 'CORRUPT_CLAIM',
+            taskId,
+          });
+        }
+        return { record: authority, child: converged, claim: reread.record, duplicate: true, terminal: false };
+      }
+    }
+    throw error;
+  }
+
+  /**
+   * Claim the exact user-approved intake task for a caller-supplied worker
+   * through the existing claimTask() path with a deterministic authority-bound
+   * claimToken over (intakeId, taskId, workerId).
+   *
+   * - live intake authority + task bytes + sequence re-verified first.
+   * - READY -> CLAIMED is owned ONLY by the existing claimTask().
+   * - same logical active replay returns duplicate:true with no new claim and
+   *   no generation change; expired leases reuse the existing takeover
+   *   semantics; terminal replay never rewinds.
+   * - a foreign/manual claim never auto-adopts (CLAIM_ADMISSION_BYPASS_DETECTED).
+   * - no emission/admission authority is created or consumed here.
+   */
+  claimUserApprovedIntakeTask(
+    { taskId, workerId, leaseDurationMs = 60_000, nowMs } = {},
+  ) {
+    assertValidTaskId(taskId);
+    if (typeof workerId !== 'string' || !workerId.trim()) {
+      storeFail('workerId must be a non-empty string (caller-supplied; never inferred).', {
+        code: 'INVALID_WORKER',
+        taskId,
+      });
+    }
+    if (!Number.isInteger(leaseDurationMs) || leaseDurationMs <= 0) {
+      storeFail('leaseDurationMs must be a positive integer.', { code: 'INVALID_LEASE', taskId });
+    }
+    const now = Number.isInteger(nowMs) ? nowMs : this.nowMs();
+
+    const authority = this.readUserApprovedIntake({ taskId });
+    const expectedToken = buildAdmissionBoundClaimToken({
+      admissionId: authority.intakeId,
+      nextTaskId: taskId,
+      workerId,
+    });
+    const liveChild = this.readTask(taskId);
+    if (liveChild.status === TASK_STATUS_CREATED) {
+      storeFail(
+        `only READY intake-authorized tasks can be claimed (task=${taskId} status=CREATED; converge via intakeUserApprovedReadOnlyTask first).`,
+        { code: TASK_NOT_READY, taskId },
+      );
+    }
+    if (
+      liveChild.status !== TASK_STATUS_READY &&
+      liveChild.status !== TASK_STATUS_CLAIMED &&
+      liveChild.status !== TASK_STATUS_RESULT_DELIVERED
+    ) {
+      storeFail(`intake-bound task in unexpected status (fail-closed): ${taskId} status=${liveChild.status}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId,
+      });
+    }
+
+    const currentFound = this.#readCurrentAdmissionClaim(taskId);
+
+    // TERMINAL path: never a new claim, never rewind.
+    if (liveChild.status === TASK_STATUS_RESULT_DELIVERED) {
+      if (currentFound.state === 'missing') {
+        storeFail(`no intake-bound claim for terminal task (fail-closed, no auto-repair): ${taskId}`, {
+          code: CLAIM_NOT_FOUND,
+          taskId,
+        });
+      }
+      const persisted = currentFound.record;
+      let expectedPersisted;
+      try {
+        expectedPersisted = buildAdmissionBoundClaimToken({
+          admissionId: authority.intakeId,
+          nextTaskId: taskId,
+          workerId: persisted.workerId,
+        });
+      } catch {
+        storeFail(`terminal task carries a foreign claim (fail-closed, no auto-adoption): ${taskId}`, {
+          code: CLAIM_ADMISSION_BYPASS_DETECTED,
+          taskId,
+        });
+      }
+      if (persisted.claimToken !== expectedPersisted) {
+        storeFail(`terminal task carries a foreign claim (fail-closed, no auto-adoption): ${taskId}`, {
+          code: CLAIM_ADMISSION_BYPASS_DETECTED,
+          taskId,
+        });
+      }
+      return { record: authority, child: liveChild, claim: persisted, duplicate: true, terminal: true };
+    }
+
+    if (currentFound.state === 'present') {
+      const persisted = currentFound.record;
+      let expectedPersisted;
+      try {
+        expectedPersisted = buildAdmissionBoundClaimToken({
+          admissionId: authority.intakeId,
+          nextTaskId: taskId,
+          workerId: persisted.workerId,
+        });
+      } catch {
+        storeFail(`foreign claim for intake task (fail-closed, no auto-adoption): ${taskId}`, {
+          code: CLAIM_ADMISSION_BYPASS_DETECTED,
+          taskId,
+        });
+      }
+      if (persisted.claimToken !== expectedPersisted) {
+        storeFail(`foreign claim for intake task (fail-closed, no auto-adoption): ${taskId}`, {
+          code: CLAIM_ADMISSION_BYPASS_DETECTED,
+          taskId,
+        });
+      }
+      const isSameLogical = persisted.workerId === workerId && persisted.claimToken === expectedToken;
+      if (liveChild.status === TASK_STATUS_READY && isSameLogical && this.#isClaimLeaseActive(persisted, now)) {
+        const beforeBytes = JSON.stringify(persisted);
+        const converged = this.#markClaimed(taskId);
+        const reread = this.#readCurrentAdmissionClaim(taskId);
+        if (reread.state !== 'present' || JSON.stringify(reread.record) !== beforeBytes) {
+          storeFail(`intake-bound claim changed during status convergence (fail-closed): ${taskId}`, {
+            code: 'CORRUPT_CLAIM',
+            taskId,
+          });
+        }
+        return { record: authority, child: converged, claim: reread.record, duplicate: true, terminal: false };
+      }
+      if (liveChild.status === TASK_STATUS_CLAIMED && isSameLogical && this.#isClaimLeaseActive(persisted, now)) {
+        return { record: authority, child: liveChild, claim: persisted, duplicate: true, terminal: false };
+      }
+      // Valid claim for another worker (or expired same-worker lease): delegate
+      // to the existing claimTask() for canonical contention/takeover.
+    } else if (liveChild.status !== TASK_STATUS_READY) {
+      storeFail(`no intake-bound claim for progressed task (fail-closed, no auto-repair): ${taskId}`, {
+        code: CLAIM_NOT_FOUND,
+        taskId,
+      });
+    }
+
+    try {
+      const claim = this.claimTask({
+        taskId,
+        workerId,
+        leaseDurationMs,
+        claimToken: expectedToken,
+        nowMs: now,
+      });
+      return this.#verifyIntakeClaimAfterWrite({ taskId, authority, workerId, expectedToken, claim });
+    } catch (error) {
+      return this.#resolveIntakeClaimWriteRace({ error, taskId, authority, workerId, expectedToken, now });
+    }
+  }
+
+  /**
+   * Read the claim-bound dispatch envelope for one intake-authorized task and
+   * one caller worker. Pure read + builder consumption: the dispatch envelope
+   * shape is the EXISTING Task 18 identity/binding envelope with the intake
+   * authority id in the generic authority binding slot. Never mutates, never
+   * auto-claims, never rewinds.
+   */
+  readUserApprovedIntakeClaimBoundDispatchEnvelope({ taskId, workerId } = {}) {
+    assertValidTaskId(taskId);
+    if (typeof workerId !== 'string' || !workerId.trim()) {
+      storeFail('workerId must be a non-empty string (caller-supplied; never inferred).', {
+        code: 'INVALID_WORKER',
+        taskId,
+      });
+    }
+    const authority = this.readUserApprovedIntake({ taskId });
+    const child = this.readTask(taskId);
+    if (child.taskId !== taskId) {
+      storeFail(`intake dispatch child taskId mismatch (fail-closed): ${taskId}`, {
+        code: INTAKE_BINDING_MISMATCH,
+        taskId,
+      });
+    }
+    const currentFound = this.#readCurrentAdmissionClaim(taskId);
+    if (currentFound.state === 'missing') {
+      storeFail(`no claim for intake dispatch-bound task (fail-closed, claim first): ${taskId}`, {
+        code: CLAIM_NOT_FOUND,
+        taskId,
+      });
+    }
+    const claim = currentFound.record;
+    if (claim.workerId !== workerId) {
+      storeFail(
+        `intake dispatch worker binding mismatch (fail-closed, no claim mutation): live owner=${claim.workerId} caller=${workerId}.`,
+        { code: DISPATCH_BINDING_MISMATCH, taskId },
+      );
+    }
+    if (!Number.isInteger(claim.generation) || claim.generation < 1) {
+      storeFail(`intake dispatch claim generation invalid (fail-closed): ${taskId}`, {
+        code: 'CORRUPT_CLAIM',
+        taskId,
+      });
+    }
+    let expectedToken;
+    try {
+      expectedToken = buildAdmissionBoundClaimToken({
+        admissionId: authority.intakeId,
+        nextTaskId: taskId,
+        workerId: claim.workerId,
+      });
+    } catch {
+      storeFail(`intake dispatch child carries a foreign claim (fail-closed, no auto-adoption): ${taskId}`, {
+        code: CLAIM_ADMISSION_BYPASS_DETECTED,
+        taskId,
+      });
+    }
+    if (claim.claimToken !== expectedToken) {
+      storeFail(`intake dispatch child carries a foreign claim (fail-closed, no auto-adoption): ${taskId}`, {
+        code: CLAIM_ADMISSION_BYPASS_DETECTED,
+        taskId,
+      });
+    }
+    if (child.status === TASK_STATUS_RESULT_DELIVERED) {
+      storeFail(`intake dispatch child is terminal (RESULT_DELIVERED); no new dispatch envelope: ${taskId}`, {
+        code: TASK_TERMINAL,
+        taskId,
+      });
+    }
+    if (child.status !== TASK_STATUS_CLAIMED) {
+      storeFail(
+        `intake dispatch child is not CLAIMED (task=${taskId} status=${child.status}; converge via claimUserApprovedIntakeTask first, never auto-claim here).`,
+        { code: TASK_NOT_CLAIMED, taskId },
+      );
+    }
+    try {
+      return buildClaimBoundDispatchEnvelope({
+        admissionId: authority.intakeId,
+        nextTaskId: taskId,
+        workerId: claim.workerId,
+        claimGeneration: claim.generation,
+      });
+    } catch (error) {
+      storeFail(`intake dispatch envelope build failed (fail-closed): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : INVALID_DISPATCH_BINDING,
+        taskId,
+      });
+    }
+    return null;
+  }
+
+  /**
+   * Verify a supplied dispatch envelope against the current live intake
+   * authority + claim binding. Pure read + recomputation: never mutates,
+   * never repairs.
+   */
+  verifyUserApprovedIntakeClaimBoundDispatchEnvelope({ taskId, envelope } = {}) {
+    assertValidTaskId(taskId);
+    let supplied;
+    try {
+      supplied = validateClaimBoundDispatchEnvelope(envelope);
+    } catch (error) {
+      storeFail(`supplied intake dispatch envelope invalid (fail-closed): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : INVALID_DISPATCH_BINDING,
+        taskId,
+      });
+    }
+    const current = this.readUserApprovedIntakeClaimBoundDispatchEnvelope({
+      taskId,
+      workerId: supplied.workerId,
+    });
+    if (supplied.admissionId !== current.admissionId || supplied.nextTaskId !== current.nextTaskId) {
+      storeFail(
+        `supplied intake dispatch envelope binds a different authority/task than live (fail-closed): supplied authority=${supplied.admissionId} task=${supplied.nextTaskId} live authority=${current.admissionId} task=${current.nextTaskId}.`,
+        { code: DISPATCH_BINDING_MISMATCH, taskId },
+      );
+    }
+    if (supplied.workerId !== current.workerId) {
+      storeFail(
+        `supplied intake dispatch envelope binds a different worker than live (fail-closed): supplied=${supplied.workerId} live=${current.workerId}.`,
+        { code: DISPATCH_BINDING_MISMATCH, taskId },
+      );
+    }
+    if (supplied.claimGeneration !== current.claimGeneration || supplied.dispatchId !== current.dispatchId) {
+      storeFail(
+        `stale intake dispatch envelope: supplied generation=${supplied.claimGeneration} dispatchId=${supplied.dispatchId} vs current generation=${current.claimGeneration} dispatchId=${current.dispatchId} (fail-closed, no rewind).`,
+        { code: STALE_DISPATCH, taskId },
+      );
+    }
+    return current;
+  }
+
+  /**
+   * Persist the immutable durable dispatch attempt for the CURRENT live
+   * intake claim-bound dispatch envelope (exclusive-create per dispatchId,
+   * idempotent replay, never overwrites).
+   */
+  persistUserApprovedIntakeDispatchAttempt({ taskId, workerId } = {}) {
+    assertValidTaskId(taskId);
+    if (typeof workerId !== 'string' || !workerId.trim()) {
+      storeFail('workerId must be a non-empty string (caller-supplied; never inferred).', {
+        code: 'INVALID_WORKER',
+        taskId,
+      });
+    }
+    const envelope = this.readUserApprovedIntakeClaimBoundDispatchEnvelope({ taskId, workerId });
+    let candidate;
+    try {
+      candidate = buildDispatchAttemptRecord({
+        sourceTaskId: taskId,
+        emissionSlot: USER_APPROVED_INTAKE_DISPATCH_SLOT,
+        envelope,
+      });
+    } catch (error) {
+      storeFail(`intake dispatch attempt build failed (fail-closed): ${error?.message}`, {
+        code: typeof error?.code === 'string' && error.code ? error.code : CORRUPT_DISPATCH_ATTEMPT,
+        taskId,
+      });
+    }
+    return this.#writeDispatchAttemptCandidate(taskId, candidate);
+  }
+
+  // -------------------------------------------------------------------------
   // Admission-bound claim domain.
   // claimAdmittedTask() != emitNextTask() != admitEmittedTask()
   //   != scheduleNextTask() != dispatchNextTask() != decideNextTask():
@@ -4713,6 +5534,15 @@ export class CoordinationStore {
     }
 
     // 3. Exact-path exclusive-create (never exists()->write()).
+    return this.#writeDispatchAttemptCandidate(sourceTaskId, candidate);
+  }
+
+  /**
+   * Exact-path exclusive-create of one immutable dispatch-attempt record with
+   * fail-closed read-back and first-winner race resolution. Shared by the
+   * emission-admission-bound and user-approved-intake-bound dispatch attempts.
+   */
+  #writeDispatchAttemptCandidate(sourceTaskId, candidate) {
     const targetPath = dispatchAttemptFilePath(this.home, sourceTaskId, candidate.dispatchId);
     const created = writeJsonExclusive(targetPath, candidate);
     if (created.created) {
@@ -4734,7 +5564,7 @@ export class CoordinationStore {
       return candidate;
     }
 
-    // 4. EEXIST: read + validate winner (no repair, no overwrite).
+    // EEXIST: read + validate winner (no repair, no overwrite).
     const winnerFound = readJsonFile(targetPath);
     if (winnerFound.state === 'missing') {
       storeFail(`dispatch attempt race could not be resolved deterministically: ${sourceTaskId}@${candidate.dispatchId}`, {
