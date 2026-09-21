@@ -566,9 +566,26 @@ test('G. missing executor configuration fails closed before claim mutation', asy
     assert.equal(store.readTask('OPSCLI-CHILD003').status, 'READY');
     assert.equal(existsSync(join(home, 'tasks', 'OPSCLI-CHILD003', 'claim.json')), false);
     assert.throws(
-      () => buildConfiguredExecutor({ codexPath: null, workdir: null, resultDirectory: null }, {}),
+      () => buildConfiguredExecutor({ opencodePath: null, model: null, workdir: null }, {}),
       (error) => error?.code === OPERATOR_EXECUTOR_NOT_CONFIGURED,
     );
+    assert.throws(
+      () =>
+        buildConfiguredExecutor(
+          { opencodePath: 'C:\\fake\\opencode.exe', model: null, workdir: null },
+          {},
+        ),
+      (error) => error?.code === OPERATOR_EXECUTOR_NOT_CONFIGURED,
+    );
+    const configured = buildConfiguredExecutor(
+      {
+        opencodePath: process.platform === 'win32' ? 'C:\\fake\\opencode.exe' : '/fake/opencode',
+        model: 'opencode-go/deepseek-v4.1-flash',
+        workdir: null,
+      },
+      {},
+    );
+    assert.equal(typeof configured, 'function');
   } finally {
     removeHome(home);
   }
@@ -679,6 +696,23 @@ test('K. argument parsing is explicit and fails closed on invalid input', () => 
   const inspectOptions = parseOperatorArgv(['inspect', 'OPSCLI-CHILD001']);
   assert.equal(inspectOptions.command, 'inspect');
   assert.equal(inspectOptions.taskId, 'OPSCLI-CHILD001');
+  const executorOptions = parseOperatorArgv([
+    'run',
+    'OPSCLI-CHILD001',
+    '--opencode',
+    'C:\\tools\\opencode.exe',
+    '--model',
+    'opencode-go/deepseek-v4.1-flash',
+    '--workdir',
+    'C:\\repo',
+  ]);
+  assert.equal(executorOptions.opencodePath, 'C:\\tools\\opencode.exe');
+  assert.equal(executorOptions.model, 'opencode-go/deepseek-v4.1-flash');
+  assert.equal(executorOptions.workdir, 'C:\\repo');
+  assert.throws(
+    () => parseOperatorArgv(['run', 'OPSCLI-CHILD001', '--codex', 'C:\\tools\\codex.exe']),
+    (error) => error?.code === OPERATOR_ARGUMENT_INVALID,
+  );
   assert.throws(
     () => parseOperatorArgv(['run', 'OPSCLI-CHILD001', '--lease-ms', '0']),
     (error) => error?.code === OPERATOR_ARGUMENT_INVALID,

@@ -38,8 +38,10 @@
 // Executor capability is READ_ONLY ONLY: a task whose canonical envelope is
 // not taskKind=READ_ONLY / mutationBoundary.allowsWrite=false is refused with
 // an explicit unsupported-capability error BEFORE any claim or durable
-// mutation. The default executor is the existing concrete Codex CLI
-// structured-result executor (read-only sandbox); no fallback exists.
+// mutation. The default executor is the ONE concrete OpenCode CLI
+// structured-result executor (structurally read-only agent: no write/edit/bash
+// tool and deny permissions injected outside the task payload); no fallback
+// and no executor selection exist.
 //
 // coordination home resolution is the existing coordination-home contract
 // (GREENHUB_COORDINATION_HOME env, then the OS user-home path): durable runtime
@@ -50,7 +52,6 @@
 // all; run writes only the same durable records the composed engine owns).
 
 import nodeFs from 'node:fs';
-import nodeOs from 'node:os';
 import nodePath from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildClaimBoundDispatchId } from './claim-bound-dispatch-envelope.mjs';
@@ -60,10 +61,8 @@ import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
 import { prepareDispatchTransportRequest } from './dispatch-transport-contract.mjs';
 import { validateAdmissionRecord } from './emission-admission.mjs';
 import { deliverExecutorResultReceipt } from './executor-result-delivery.mjs';
-import {
-  createCodexCliStructuredResultExecutor,
-  EXECUTOR_RESULT_RECEIPTS_DIRNAME,
-} from './executor-result-receipt.mjs';
+import { EXECUTOR_RESULT_RECEIPTS_DIRNAME } from './executor-result-receipt.mjs';
+import { createOpenCodeCliStructuredResultExecutor } from './opencode-cli-executor-adapter.mjs';
 import { CoordinationStore } from './store.mjs';
 import { TASK_ID_PATTERN, TASK_KIND_READ_ONLY } from './task-envelope.mjs';
 
@@ -88,7 +87,8 @@ export const RUN_OUTCOME_ALREADY_TERMINAL = 'ALREADY_TERMINAL';
 
 export const DEFAULT_OPERATOR_WORKER_ID = 'operator-cli';
 export const DEFAULT_OPERATOR_LEASE_MS = 15 * 60_000;
-export const CODEX_CLI_PATH_ENV_KEY = 'GREENHUB_CODEX_CLI_PATH';
+export const OPENCODE_CLI_PATH_ENV_KEY = 'GREENHUB_OPENCODE_CLI_PATH';
+export const OPENCODE_MODEL_ENV_KEY = 'GREENHUB_OPENCODE_MODEL';
 
 // Mirrors the durable store layout (store.mjs taskFilePaths /
 // emission-admission paths): used only to RESOLVE the operator-named task's
@@ -193,7 +193,7 @@ function deriveNextAction(code) {
     return 'multiple canonical admissions bind this task; pass --source and --slot explicitly';
   }
   if (code === OPERATOR_EXECUTOR_NOT_CONFIGURED) {
-    return `set ${CODEX_CLI_PATH_ENV_KEY} or pass --codex <absolute path> (READ_ONLY executor only)`;
+    return `set ${OPENCODE_CLI_PATH_ENV_KEY} and ${OPENCODE_MODEL_ENV_KEY}, or pass --opencode <absolute path> --model <provider/model> (READ_ONLY executor only)`;
   }
   if (code === OPERATOR_RECEIPT_AMBIGUOUS) {
     return 'multiple durable receipts bind this task; stop and inspect the durable state manually';
@@ -701,9 +701,9 @@ export function parseOperatorArgv(argv = []) {
     emissionSlot: 'next',
     workerId: DEFAULT_OPERATOR_WORKER_ID,
     leaseDurationMs: DEFAULT_OPERATOR_LEASE_MS,
-    codexPath: null,
+    opencodePath: null,
+    model: null,
     workdir: null,
-    resultDirectory: null,
   };
   const positionals = [];
   const readValue = (flag, index) => {
@@ -758,16 +758,16 @@ export function parseOperatorArgv(argv = []) {
         options.leaseDurationMs = parsed;
         break;
       }
-      case '--codex':
-        options.codexPath = readValue(argument, index);
+      case '--opencode':
+        options.opencodePath = readValue(argument, index);
+        index += 1;
+        break;
+      case '--model':
+        options.model = readValue(argument, index);
         index += 1;
         break;
       case '--workdir':
         options.workdir = readValue(argument, index);
-        index += 1;
-        break;
-      case '--results-dir':
-        options.resultDirectory = readValue(argument, index);
         index += 1;
         break;
       default:
@@ -820,12 +820,12 @@ export function renderUsage() {
     '  pnpm coordination:status  [--json]',
     '  pnpm coordination:inspect <TASK_ID> [--json]',
     '  pnpm coordination:run <TASK_ID> [--source <SOURCE_TASK_ID>] [--slot <EMISSION_SLOT>]',
-    '      [--worker <WORKER_ID>] [--lease-ms <MILLISECONDS>] [--codex <ABSOLUTE_PATH>]',
-    '      [--workdir <ABSOLUTE_PATH>] [--results-dir <ABSOLUTE_PATH>] [--json]',
+    '      [--worker <WORKER_ID>] [--lease-ms <MILLISECONDS>] [--opencode <ABSOLUTE_PATH>]',
+    '      [--model <PROVIDER/MODEL>] [--workdir <ABSOLUTE_PATH>] [--json]',
     '',
     'notes:',
     '  run executes exactly one operator-named READ_ONLY task boundary.',
-    `  the executor is the read-only Codex CLI structured-result executor; ${CODEX_CLI_PATH_ENV_KEY} or --codex is required.`,
+    `  the executor is the read-only OpenCode CLI structured-result executor; ${OPENCODE_CLI_PATH_ENV_KEY} and ${OPENCODE_MODEL_ENV_KEY} (or --opencode/--model) are required.`,
     '  status/inspect never write. JSON output is a read-only projection, never durable authority.',
     '',
   ].join('\n');
@@ -990,15 +990,20 @@ export function renderRunResult(projection) {
 }
 
 export function buildConfiguredExecutor(
-  { codexPath, workdir, resultDirectory, taskId = null },
+  { opencodePath, model, workdir, taskId = null },
   env = process.env,
 ) {
   const envPath =
-    typeof env?.[CODEX_CLI_PATH_ENV_KEY] === 'string' ? env[CODEX_CLI_PATH_ENV_KEY].trim() : '';
-  const executablePath = codexPath ?? (envPath.length > 0 ? envPath : null);
-  if (executablePath === null) {
+    typeof env?.[OPENCODE_CLI_PATH_ENV_KEY] === 'string'
+      ? env[OPENCODE_CLI_PATH_ENV_KEY].trim()
+      : '';
+  const executablePath = opencodePath ?? (envPath.length > 0 ? envPath : null);
+  const envModel =
+    typeof env?.[OPENCODE_MODEL_ENV_KEY] === 'string' ? env[OPENCODE_MODEL_ENV_KEY].trim() : '';
+  const resolvedModel = model ?? (envModel.length > 0 ? envModel : null);
+  if (executablePath === null || resolvedModel === null) {
     fail(
-      `no READ_ONLY executor is configured: ${CODEX_CLI_PATH_ENV_KEY} is unset and --codex was not provided (no registry, no auto-selection, no fallback executor).`,
+      `no READ_ONLY executor is configured: ${OPENCODE_CLI_PATH_ENV_KEY} / ${OPENCODE_MODEL_ENV_KEY} are unset and --opencode / --model were not both provided (no registry, no auto-selection, no fallback executor).`,
       {
         code: OPERATOR_EXECUTOR_NOT_CONFIGURED,
         taskId,
@@ -1008,13 +1013,11 @@ export function buildConfiguredExecutor(
     );
   }
   const resolvedWorkdir = workdir ?? process.cwd();
-  const resolvedResultDirectory =
-    resultDirectory ?? nodePath.join(nodeOs.tmpdir(), 'greenhub-codex-structured-results');
   try {
-    return createCodexCliStructuredResultExecutor({
+    return createOpenCodeCliStructuredResultExecutor({
       executablePath,
       workdir: resolvedWorkdir,
-      resultDirectory: resolvedResultDirectory,
+      model: resolvedModel,
     });
   } catch (error) {
     fail(error?.message ?? String(error), {
