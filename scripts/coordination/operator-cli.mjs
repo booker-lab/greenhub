@@ -3,10 +3,15 @@
 //   subcommand and the authority-compatible `run` resolution ONLY)
 // + GREENHUB-COORDINATION-CONTROL-TOWER-RESULT-INTAKE-GF07 (the `return`
 //   subcommand and the automatic post-delivery Control Tower intake step
-//   inside `run`, both composing control-tower-result-intake.mjs ONLY).
-// Surface: scripts/coordination/operator-cli.mjs ONLY (+ the five
+//   inside `run`, both composing control-tower-result-intake.mjs ONLY)
+// + GREENHUB-COORDINATION-SHARED-CONTROL-TOWER-RESULT-RELAY-GF08 (the `relay`
+//   subcommand and the automatic post-intake relay attempt inside `run`, both
+//   composing control-tower-result-relay.mjs ONLY; the GitHub relay is a
+//   non-canonical projection and never changes canonical coordination truth).
+// Surface: scripts/coordination/operator-cli.mjs ONLY (+ the six
 // package.json operator commands coordination:run / coordination:return /
-// coordination:status / coordination:inspect / coordination:intake).
+// coordination:relay / coordination:status / coordination:inspect /
+// coordination:intake).
 //
 // Thin operator-facing composition over the EXISTING durable coordination
 // authorities. This module owns NO durable semantics and creates NO durable
@@ -42,6 +47,13 @@
 //             later Control Tower verdict converges read-only). It never
 //             invokes an executor, never authors a verdict, never emits a
 //             successor.
+//   relay   = ONE explicit operator-named delivered task through the EXISTING
+//             canonical result + EXISTING PENDING/later disposition, projected
+//             to the configured shared GitHub relay issue. The relay is
+//             NON-CANONICAL: it never writes durable coordination bytes, never
+//             invokes an executor, never claims, never authors a verdict, and
+//             never emits a successor. GitHub unavailable/unauthenticated
+//             reports RELAY_PENDING with canonical truth untouched.
 //
 // Explicitly NOT implemented here (and asserted absent by the proof spec):
 //   scheduler, READY scan for work selection, queue polling, daemon, cron,
@@ -82,6 +94,23 @@ import {
   INVALID_CONTROL_TOWER_RESULT_INTAKE_AUTHORITY,
   performControlTowerResultIntake,
 } from './control-tower-result-intake.mjs';
+import {
+  CONTROL_TOWER_RELAY_REPO_ENV_KEY,
+  CONTROL_TOWER_RESULT_RELAY_DISPOSITION_NOT_FOUND,
+  CONTROL_TOWER_RESULT_RELAY_PROJECTION_BINDING_MISMATCH,
+  CONTROL_TOWER_RESULT_RELAY_PROJECTION_CORRUPT,
+  CONTROL_TOWER_RESULT_RELAY_REPOSITORY_INVALID,
+  CONTROL_TOWER_RESULT_RELAY_STATUS_EXACT_REPLAY,
+  CONTROL_TOWER_RESULT_RELAY_STATUS_NOT_CONFIGURED,
+  CONTROL_TOWER_RESULT_RELAY_STATUS_PENDING,
+  CONTROL_TOWER_RESULT_RELAY_STATUS_RELAYED,
+  CONTROL_TOWER_RESULT_RELAY_TRANSPORT_UNAVAILABLE,
+  ControlTowerResultRelayTransportError,
+  INVALID_CONTROL_TOWER_RESULT_RELAY_TRANSPORT,
+  performControlTowerResultRelay,
+  redactControlTowerRelayText,
+  resolveConfiguredControlTowerRelayTransport,
+} from './control-tower-result-relay.mjs';
 import { dispositionRef } from './disposition.mjs';
 import { persistExecutorInvocationAttempt } from './dispatch-executor-invocation-attempt.mjs';
 import { invokeExecutorWithInvocationFence } from './dispatch-executor-invocation-fence.mjs';
@@ -110,6 +139,7 @@ export const OPERATOR_INSPECTION_PROJECTION = 'operator-inspection';
 export const OPERATOR_RUN_PROJECTION = 'operator-run';
 export const OPERATOR_INTAKE_PROJECTION = 'operator-intake';
 export const OPERATOR_RETURN_PROJECTION = 'operator-control-tower-return';
+export const OPERATOR_RELAY_PROJECTION = 'operator-control-tower-relay';
 
 export const OPERATOR_ARGUMENT_INVALID = 'OPERATOR_ARGUMENT_INVALID';
 export const OPERATOR_TASK_ADMISSION_NOT_FOUND = 'OPERATOR_TASK_ADMISSION_NOT_FOUND';
@@ -165,7 +195,7 @@ function isSamePathOrDescendant(candidate, parent) {
   );
 }
 
-const COMMANDS = Object.freeze(['status', 'inspect', 'run', 'intake', 'return']);
+const COMMANDS = Object.freeze(['status', 'inspect', 'run', 'intake', 'return', 'relay']);
 
 const MAX_ERROR_MESSAGE_LENGTH = 512;
 
@@ -285,6 +315,124 @@ export function buildControlTowerReturnProjection({ taskId, resolved, performed 
   });
 }
 
+/**
+ * Bounded read-only summary of one attempted (or converged) shared Control
+ * Tower result relay. The status is an external projection/transport meaning
+ * ONLY: it is never durable authority and never a canonical task lifecycle
+ * state. GitHub deletion/duplication/failure leaves canonical truth unchanged.
+ */
+function buildControlTowerRelaySummary(performed) {
+  if (performed === null || performed === undefined) return null;
+  return Object.freeze({
+    status: performed.status,
+    relayId: performed.relayId ?? null,
+    marker: performed.marker ?? null,
+    issueNumber: performed.issue?.issueNumber ?? null,
+    issueUrl: performed.issue?.url ?? null,
+    commentId: performed.comment?.commentId ?? null,
+    commentUrl: performed.comment?.url ?? null,
+    duplicateProjectionCount: performed.duplicateProjectionCount ?? 0,
+    failureCode: performed.failureCode ?? null,
+    failureMessage: performed.failureMessage ?? null,
+  });
+}
+
+/**
+ * A transport whose first use fails closed with the EXISTING configuration
+ * error. Used when the relay environment binding is malformed: the automatic
+ * best-effort relay step must report the configuration failure instead of
+ * blocking the canonical execution path it follows.
+ */
+function createUnavailableRelayTransport(error) {
+  const throwTransportError = () => {
+    throw new ControlTowerResultRelayTransportError(
+      error?.message ?? 'the relay transport is not configured correctly.',
+      { code: error?.code ?? INVALID_CONTROL_TOWER_RESULT_RELAY_TRANSPORT },
+    );
+  };
+  return Object.freeze({
+    ensureRelayIssue: throwTransportError,
+    findProjections: throwTransportError,
+    createProjection: throwTransportError,
+  });
+}
+
+/**
+ * Automatic post-intake relay attempt for `coordination:run`. This is a
+ * best-effort NON-CANONICAL projection: no transport means RELAY_NOT_CONFIGURED
+ * (visible in the projection, not an execution failure), and any relay error
+ * converges to RELAY_PENDING with canonical truth untouched. It never invokes
+ * an executor, never writes durable coordination bytes, and never authors a
+ * verdict.
+ */
+async function attemptControlTowerResultRelay({ store, taskId, authority, relayTransport }) {
+  if (!relayTransport) {
+    return Object.freeze({
+      status: CONTROL_TOWER_RESULT_RELAY_STATUS_NOT_CONFIGURED,
+      taskId,
+      relayId: null,
+      marker: null,
+      issue: null,
+      comment: null,
+      duplicateProjectionCount: 0,
+      failureCode: CONTROL_TOWER_RESULT_RELAY_STATUS_NOT_CONFIGURED,
+      failureMessage: `no shared relay transport is configured; set ${CONTROL_TOWER_RELAY_REPO_ENV_KEY}=owner/name to enable the automatic Control Tower relay`,
+    });
+  }
+  try {
+    return await performControlTowerResultRelay({ store, taskId, authority, transport: relayTransport });
+  } catch (error) {
+    return Object.freeze({
+      status: CONTROL_TOWER_RESULT_RELAY_STATUS_PENDING,
+      taskId,
+      relayId: null,
+      marker: null,
+      issue: null,
+      comment: null,
+      duplicateProjectionCount: 0,
+      failureCode:
+        typeof error?.code === 'string' && error.code ? error.code : OPERATOR_STAGE_FAILED,
+      failureMessage: redactControlTowerRelayText(error?.message ?? String(error)),
+    });
+  }
+}
+
+/**
+ * Projection for the explicit `coordination:relay` command: the canonical
+ * provenance binding, the transport status, the shared issue/comment identity,
+ * and the exact projected (non-canonical) relay document. Nothing here is
+ * durable authority.
+ */
+export function buildControlTowerRelayProjection({ taskId, resolved, performed }) {
+  return Object.freeze({
+    schemaVersion: OPERATOR_PROJECTION_SCHEMA_VERSION,
+    projection: OPERATOR_RELAY_PROJECTION,
+    taskId,
+    authorityKind: resolved.authorityKind,
+    authorityId: resolved.authorityId,
+    sourceTaskId: resolved.sourceTaskId,
+    emissionSlot: resolved.emissionSlot,
+    status: performed.status,
+    newlyRelayed: performed.status === CONTROL_TOWER_RESULT_RELAY_STATUS_RELAYED,
+    exactReplay: performed.status === CONTROL_TOWER_RESULT_RELAY_STATUS_EXACT_REPLAY,
+    relayId: performed.relayId ?? null,
+    marker: performed.marker ?? null,
+    issue: performed.issue ?? null,
+    comment: performed.comment ?? null,
+    duplicateProjectionCount: performed.duplicateProjectionCount ?? 0,
+    failureCode: performed.failureCode ?? null,
+    failureMessage: performed.failureMessage ?? null,
+    disposition:
+      performed.document === null || performed.document === undefined
+        ? null
+        : Object.freeze({
+            dispositionRef: performed.document.dispositionRef,
+            dispositionState: performed.document.dispositionState,
+          }),
+    document: performed.document ?? null,
+  });
+}
+
 function deriveNextAction(code) {
   if (code === 'TASK_NOT_FOUND') {
     return 'verify the task id from `pnpm coordination:status`';
@@ -330,6 +478,27 @@ function deriveNextAction(code) {
   }
   if (code === INVALID_CONTROL_TOWER_RESULT_INTAKE_AUTHORITY) {
     return 'the requested task has no single canonical pre-execution authority binding; inspect the durable state and pass --source/--slot explicitly for emission-admitted tasks';
+  }
+  if (code === CONTROL_TOWER_RESULT_RELAY_DISPOSITION_NOT_FOUND) {
+    return 'the task has no Control Tower disposition pointer yet; run `pnpm coordination:return <TASK_ID>` first, then rerun `pnpm coordination:relay <TASK_ID>`';
+  }
+  if (code === INVALID_CONTROL_TOWER_RESULT_RELAY_TRANSPORT) {
+    return `set ${CONTROL_TOWER_RELAY_REPO_ENV_KEY} to the explicit owner/name relay repository (the external relay is never inferred)`;
+  }
+  if (code === CONTROL_TOWER_RESULT_RELAY_REPOSITORY_INVALID) {
+    return `fix ${CONTROL_TOWER_RELAY_REPO_ENV_KEY}: it must be an explicit "owner/name" GitHub repository`;
+  }
+  if (code === CONTROL_TOWER_RESULT_RELAY_STATUS_NOT_CONFIGURED) {
+    return `set ${CONTROL_TOWER_RELAY_REPO_ENV_KEY}=owner/name to enable the shared Control Tower relay, then rerun \`pnpm coordination:relay <TASK_ID>\``;
+  }
+  if (code === CONTROL_TOWER_RESULT_RELAY_TRANSPORT_UNAVAILABLE) {
+    return 'GitHub is unavailable or unauthenticated; the canonical result and disposition are unchanged — rerun `pnpm coordination:relay <TASK_ID>` when the transport is available (never retry the executor)';
+  }
+  if (
+    code === CONTROL_TOWER_RESULT_RELAY_PROJECTION_BINDING_MISMATCH ||
+    code === CONTROL_TOWER_RESULT_RELAY_PROJECTION_CORRUPT
+  ) {
+    return 'the shared relay projection conflicts with canonical truth; stop and review manually — never rewrite or delete the projection automatically';
   }
   if (code === 'EXECUTOR_INVOCATION_FENCE_UNCERTAIN') {
     return 'a prior or concurrent invocation may already have crossed the executor boundary and no durable outcome/receipt proves its disposition; do NOT retry automatically — inspect the durable state and decide manually';
@@ -699,6 +868,7 @@ export async function executeOperatorTask({
   workerId = DEFAULT_OPERATOR_WORKER_ID,
   leaseDurationMs = DEFAULT_OPERATOR_LEASE_MS,
   executor,
+  relayTransport = null,
 } = {}) {
   if (!store || typeof store.readTask !== 'function') {
     fail('run requires a durable coordination store (composition only).', {
@@ -811,6 +981,25 @@ export async function executeOperatorTask({
             }),
           )
         : null;
+    // GF-08: the intaken result is projected to the shared Control Tower relay
+    // (non-canonical; best-effort). A missing/failed transport never changes
+    // canonical truth and never blocks terminal convergence.
+    const controlTowerRelay =
+      controlTowerIntake === null
+        ? null
+        : await atStage('control-tower-relay', taskId, async () =>
+            attemptControlTowerResultRelay({
+              store,
+              taskId,
+              authority: {
+                authorityKind,
+                authorityId,
+                sourceTaskId: boundSourceTaskId,
+                emissionSlot: boundEmissionSlot,
+              },
+              relayTransport,
+            }),
+          );
     return Object.freeze({
       schemaVersion: OPERATOR_PROJECTION_SCHEMA_VERSION,
       projection: OPERATOR_RUN_PROJECTION,
@@ -830,6 +1019,7 @@ export async function executeOperatorTask({
       resultId: canonicalResult?.resultId ?? null,
       taskStatus: claimed.child.status,
       controlTowerIntake: buildControlTowerIntakeSummary(controlTowerIntake),
+      controlTowerRelay: buildControlTowerRelaySummary(controlTowerRelay),
     });
   }
 
@@ -889,6 +1079,25 @@ export async function executeOperatorTask({
           }),
         )
       : null;
+  // GF-08: automatic non-canonical relay attempt after the Control Tower
+  // intake. Best-effort only: no transport -> RELAY_NOT_CONFIGURED, transport
+  // failure -> RELAY_PENDING, canonical result/disposition always unchanged.
+  const controlTowerRelay =
+    controlTowerIntake === null
+      ? null
+      : await atStage('control-tower-relay', taskId, async () =>
+          attemptControlTowerResultRelay({
+            store,
+            taskId,
+            authority: {
+              authorityKind,
+              authorityId,
+              sourceTaskId: boundSourceTaskId,
+              emissionSlot: boundEmissionSlot,
+            },
+            relayTransport,
+          }),
+        );
   const outcome =
     receiptOutcome.outcome === 'ACCEPTED'
       ? RUN_OUTCOME_EXECUTED
@@ -921,6 +1130,7 @@ export async function executeOperatorTask({
     resultId: delivery?.resultId ?? null,
     taskStatus: finalTask.status,
     controlTowerIntake: buildControlTowerIntakeSummary(controlTowerIntake),
+    controlTowerRelay: buildControlTowerRelaySummary(controlTowerRelay),
   });
 }
 
@@ -1030,7 +1240,7 @@ export function parseOperatorArgv(argv = []) {
     });
   }
   options.command = command;
-  if (command === 'inspect' || command === 'run' || command === 'return') {
+  if (command === 'inspect' || command === 'run' || command === 'return' || command === 'relay') {
     if (positionals.length < 2) {
       fail(`${command} requires an explicit <TASK_ID>.`, {
         code: OPERATOR_ARGUMENT_INVALID,
@@ -1086,12 +1296,14 @@ export function renderUsage() {
     '      [--worker <WORKER_ID>] [--lease-ms <MILLISECONDS>] [--opencode <ABSOLUTE_PATH>]',
     '      [--model <PROVIDER/MODEL>] [--workdir <ABSOLUTE_PATH>] [--json]',
     '  pnpm coordination:return <TASK_ID> [--source <SOURCE_TASK_ID>] [--slot <EMISSION_SLOT>] [--json]',
+    '  pnpm coordination:relay <TASK_ID> [--source <SOURCE_TASK_ID>] [--slot <EMISSION_SLOT>] [--json]',
     '  pnpm coordination:intake --spec <ABSOLUTE_JSON_PATH> [<TASK_ID>] [--recorder <ID>] [--json]',
     '',
     'notes:',
-    '  run executes exactly one operator-named READ_ONLY task boundary through its existing pre-execution authority (emission admission or user-approved intake) and automatically hands the delivered canonical result to the Control Tower result intake (generation 1 PENDING_DISPOSITION).',
+    '  run executes exactly one operator-named READ_ONLY task boundary through its existing pre-execution authority (emission admission or user-approved intake), automatically hands the delivered canonical result to the Control Tower result intake (generation 1 PENDING_DISPOSITION), and then attempts the shared Control Tower result relay.',
     `  the executor is the read-only OpenCode CLI structured-result executor; ${OPENCODE_CLI_PATH_ENV_KEY} and ${OPENCODE_MODEL_ENV_KEY} (or --opencode/--model) are required.`,
     '  return hands ONE already delivered canonical result to the Control Tower result intake (idempotent; no executor invocation, no verdict, no successor).',
+    `  relay projects ONE already delivered canonical result (existing PENDING/later disposition) to the configured shared GitHub relay issue; set ${CONTROL_TOWER_RELAY_REPO_ENV_KEY}=owner/name to enable it. The relay is non-canonical: it never invokes an executor, never writes durable coordination bytes, and never authors a verdict.`,
     '  intake intakes exactly ONE explicitly user-approved READ_ONLY task spec (userApproved: true + approval + bounded taskSpec) to READY; it never claims, dispatches, or invokes an executor.',
     '  status/inspect never write. JSON output is a read-only projection, never durable authority.',
     '',
@@ -1252,6 +1464,11 @@ export function renderRunResult(projection) {
   if (projection.controlTowerIntake !== null && projection.controlTowerIntake !== undefined) {
     lines.push(
       `return:   ${projection.controlTowerIntake.intakeId} disposition=${projection.controlTowerIntake.dispositionRef} ${projection.controlTowerIntake.dispositionState} (${projection.controlTowerIntake.newlyIntaken ? 'newly intaken' : 'exact replay'})`,
+    );
+  }
+  if (projection.controlTowerRelay !== null && projection.controlTowerRelay !== undefined) {
+    lines.push(
+      `relay:    ${projection.controlTowerRelay.status}${projection.controlTowerRelay.commentId ? ` comment=${projection.controlTowerRelay.commentId}` : ''}${projection.controlTowerRelay.failureCode ? ` (${projection.controlTowerRelay.failureCode})` : ''}`,
     );
   }
   if (projection.outcome === RUN_OUTCOME_EXECUTOR_REJECTED) {
@@ -1481,6 +1698,43 @@ export function renderControlTowerReturn(projection) {
   ].join('\n');
 }
 
+export function renderControlTowerRelay(projection) {
+  const lines = [
+    `greenhub coordination relay ${projection.taskId}`,
+    `authority:   ${projection.authorityKind} ${projection.authorityId}`,
+    `status:      ${projection.status}`,
+  ];
+  if (projection.relayId !== null) lines.push(`relay:       ${projection.relayId}`);
+  if (projection.issue !== null && projection.issue !== undefined) {
+    lines.push(
+      `issue:       #${projection.issue.issueNumber} ${projection.issue.url ?? ''} (${projection.issue.created ? 'created' : 'reused'})`.trimEnd(),
+    );
+  }
+  if (projection.comment !== null && projection.comment !== undefined) {
+    lines.push(
+      `comment:     ${projection.comment.commentId ?? '(unknown)'} ${projection.comment.url ?? ''}`.trimEnd(),
+    );
+  }
+  if (projection.duplicateProjectionCount > 1) {
+    lines.push(
+      `duplicates:  ${projection.duplicateProjectionCount} identical projections converged read-only (no rewrite, no delete)`,
+    );
+  }
+  if (projection.disposition !== null && projection.disposition !== undefined) {
+    lines.push(
+      `disposition: ${projection.disposition.dispositionRef} ${projection.disposition.dispositionState}`,
+    );
+  }
+  if (projection.failureCode !== null) {
+    lines.push(`failure:     ${projection.failureCode}: ${projection.failureMessage ?? ''}`.trimEnd());
+  }
+  lines.push(
+    'next:        Control Tower reads the shared relay; canonical truth remains local (no manual copy/paste)',
+  );
+  lines.push('');
+  return lines.join('\n');
+}
+
 export async function runOperatorCli({
   argv = [],
   env = process.env,
@@ -1489,6 +1743,7 @@ export async function runOperatorCli({
   stderr = process.stderr,
   store,
   executor,
+  relayTransport,
 } = {}) {
   let options;
   try {
@@ -1572,7 +1827,75 @@ export async function runOperatorCli({
       );
       return 0;
     }
+    if (options.command === 'relay') {
+      const resolvedTransport =
+        relayTransport ?? resolveConfiguredControlTowerRelayTransport({ env });
+      if (resolvedTransport === null) {
+        fail(
+          `no shared relay transport is configured (fail-closed): set ${CONTROL_TOWER_RELAY_REPO_ENV_KEY}=owner/name to enable the non-canonical GitHub relay.`,
+          {
+            code: CONTROL_TOWER_RESULT_RELAY_STATUS_NOT_CONFIGURED,
+            taskId: options.taskId,
+            stage: 'control-tower-relay',
+            nextAction: deriveNextAction(CONTROL_TOWER_RESULT_RELAY_STATUS_NOT_CONFIGURED),
+          },
+        );
+      }
+      const projection = await atStage('control-tower-relay', options.taskId, async () => {
+        const resolved = resolveTaskAdmission({
+          store: activeStore,
+          taskId: options.taskId,
+          sourceTaskId: options.sourceTaskId ?? undefined,
+          emissionSlot: options.emissionSlot,
+        });
+        if (resolved === null) {
+          fail(
+            `no canonical pre-execution authority (emission admission or user-approved intake) binds task ${options.taskId} (fail-closed): the operator CLI never creates an authority and relays only authority-bound results.`,
+            {
+              code: OPERATOR_TASK_ADMISSION_NOT_FOUND,
+              taskId: options.taskId,
+              stage: 'control-tower-relay',
+              nextAction: deriveNextAction(OPERATOR_TASK_ADMISSION_NOT_FOUND),
+            },
+          );
+        }
+        const performed = await performControlTowerResultRelay({
+          store: activeStore,
+          taskId: options.taskId,
+          authority: {
+            authorityKind: resolved.authorityKind,
+            authorityId: resolved.authorityId,
+            sourceTaskId: resolved.sourceTaskId,
+            emissionSlot: resolved.emissionSlot,
+          },
+          transport: resolvedTransport,
+        });
+        return buildControlTowerRelayProjection({
+          taskId: options.taskId,
+          resolved,
+          performed,
+        });
+      });
+      stdout.write(
+        options.json
+          ? `${JSON.stringify(projection, null, 2)}\n`
+          : renderControlTowerRelay(projection),
+      );
+      return projection.status === CONTROL_TOWER_RESULT_RELAY_STATUS_PENDING ? 1 : 0;
+    }
     const activeExecutor = executor ?? buildConfiguredExecutor(options, env);
+    // GF-08 automatic relay transport: explicit injection wins; otherwise the
+    // explicit environment binding. A malformed binding must not block the
+    // canonical execution path, so it degrades to a transport that reports
+    // RELAY_PENDING with the configuration code.
+    let activeRelayTransport = relayTransport ?? null;
+    if (activeRelayTransport === null) {
+      try {
+        activeRelayTransport = resolveConfiguredControlTowerRelayTransport({ env });
+      } catch (error) {
+        activeRelayTransport = createUnavailableRelayTransport(error);
+      }
+    }
     const projection = await executeOperatorTask({
       store: activeStore,
       taskId: options.taskId,
@@ -1581,6 +1904,7 @@ export async function runOperatorCli({
       workerId: options.workerId,
       leaseDurationMs: options.leaseDurationMs,
       executor: activeExecutor,
+      relayTransport: activeRelayTransport,
     });
     stdout.write(
       options.json ? `${JSON.stringify(projection, null, 2)}\n` : renderRunResult(projection),
