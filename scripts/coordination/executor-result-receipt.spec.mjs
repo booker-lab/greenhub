@@ -106,7 +106,6 @@ import {
   CodexCliExecutorAdapterError,
   createCodexCliExecutorAdapter,
 } from './codex-cli-executor-adapter.mjs';
-import { acceptExecutorDispatchDecision } from './dispatch-executor-acceptance.mjs';
 import {
   EXECUTOR_INVOCATION_ATTEMPTS_DIRNAME,
   persistExecutorInvocationAttempt,
@@ -128,7 +127,6 @@ import {
   persistExecutorInvocationOutcome,
 } from './dispatch-executor-invocation-outcome-persistence.mjs';
 import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
-import { persistReceiverDecision } from './dispatch-receiver-decision.mjs';
 import { prepareDispatchTransportRequest } from './dispatch-transport-contract.mjs';
 import * as receiptModule from './executor-result-receipt.mjs';
 import {
@@ -432,13 +430,6 @@ async function setupReadOnly(prefix, sourceTaskId, childTaskId) {
   });
   const accepted = await acceptReceiverDispatch({ request, store });
   assert.equal(accepted.newlyAccepted, true);
-  const decided = await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-  assert.equal(decided.newlyDecided, true);
-  const executorAccepted = await acceptExecutorDispatchDecision({
-    dispatchId: attempt.dispatchId,
-    store,
-  });
-  assert.equal(executorAccepted.newlyAccepted, true);
   const persisted = await persistExecutorInvocationAttempt({
     dispatchId: attempt.dispatchId,
     store,
@@ -472,8 +463,6 @@ async function setupBoundedMutation(prefix, sourceTaskId, childTaskId) {
     dispatchId: attempt.dispatchId,
   });
   await acceptReceiverDispatch({ request, store });
-  await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-  await acceptExecutorDispatchDecision({ dispatchId: attempt.dispatchId, store });
   await persistExecutorInvocationAttempt({ dispatchId: attempt.dispatchId, store });
   return { home, clock, store, attempt, dispatchId: attempt.dispatchId, child: childTaskId };
 }
@@ -1769,8 +1758,8 @@ test('R. Task 28/29/30/31/32 predecessor public surfaces stay intact', async () 
   assert.equal(typeof CoordinationStore.prototype.createExecutorInvocationOutcome, 'function');
   assert.equal(typeof CoordinationStore.prototype.readExecutorInvocationAttempt, 'function');
   assert.equal(typeof CoordinationStore.prototype.createExecutorInvocationAttempt, 'function');
-  assert.equal(typeof CoordinationStore.prototype.readExecutorDispatchAcceptance, 'function');
-  assert.equal(typeof CoordinationStore.prototype.readReceiverDispatchDecision, 'function');
+  assert.equal(typeof CoordinationStore.prototype.readReceiverDispatchAcceptance, 'function');
+  assert.equal(typeof CoordinationStore.prototype.createReceiverDispatchAcceptance, 'function');
   assert.equal(typeof CoordinationStore.prototype.readDispatchAttempt, 'function');
   assert.equal(typeof CoordinationStore.prototype.deliverResult, 'function');
   assert.equal(EXECUTOR_INVOCATION_ATTEMPTS_DIRNAME, 'executor-invocation-attempts');

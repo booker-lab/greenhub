@@ -12,13 +12,15 @@
 //
 // The entry is EXACTLY:
 //   (dispatchId, store)
-//     -> store capability gate (readExecutorDispatchAcceptance /
+//     -> store capability gate (readReceiverDispatchAcceptance /
 //        readExecutorInvocationAttempt / createExecutorInvocationAttempt)
 //     -> readExecutorInvocationInput({ dispatchId, store })
-//        [Task 27 verbatim: dispatchId identity validation, durable executor
-//         acceptance read, Task 24 validation, direct binding re-check;
-//         missing/corrupt input fails closed with predecessor codes propagated
-//         UNCHANGED; zero writes; zero auto-repair]
+//        [Task 27 verbatim: dispatchId identity validation, durable
+//         receiver-acceptance read via the Task 23 direct derivation,
+//         canonical invocation input record construction/validation, direct
+//         binding re-check; missing/corrupt input fails closed with
+//         predecessor codes propagated UNCHANGED; zero writes; zero
+//         auto-repair]
 //     -> existing attempt: exact serialized replay or conflict (first wins)
 //     -> unseen: OS exclusive-create under
 //        <home>/executor-invocation-attempts/<dispatchId>.json of the EXACT
@@ -44,11 +46,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import {
-  acceptExecutorDispatchDecision,
-  CORRUPT_EXECUTOR_DISPATCH_ACCEPTANCE,
-  executorDispatchAcceptanceFilePath,
-} from './dispatch-executor-acceptance.mjs';
 import * as invocationAttemptModule from './dispatch-executor-invocation-attempt.mjs';
 import {
   CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
@@ -62,16 +59,17 @@ import {
   persistExecutorInvocationAttempt,
 } from './dispatch-executor-invocation-attempt.mjs';
 import {
-  EXECUTOR_DISPATCH_ACCEPTANCE_NOT_FOUND,
+  buildExecutorInvocationInputRecord,
+  CORRUPT_EXECUTOR_INVOCATION_INPUT,
+  EXECUTOR_INVOCATION_INPUT_DECISION_VALUE,
   readExecutorInvocationInput,
 } from './dispatch-executor-invocation-input.mjs';
-import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
 import {
-  CORRUPT_RECEIVER_DISPATCH_DECISION,
-  persistReceiverDecision,
-  RECEIVER_DECISION_VALUE,
-  receiverDispatchDecisionFilePath,
-} from './dispatch-receiver-decision.mjs';
+  acceptReceiverDispatch,
+  CORRUPT_RECEIVER_DISPATCH_ACCEPTANCE,
+  receiverDispatchAcceptanceFilePath,
+} from './dispatch-receiver-acceptance.mjs';
+import { RECEIVER_DISPATCH_ACCEPTANCE_NOT_FOUND } from './dispatch-receiver-decision-input.mjs';
 import {
   CORRUPT_TRANSPORT_REQUEST,
   prepareDispatchTransportRequest,
@@ -86,21 +84,26 @@ const MODULE_PATH = join(MODULE_DIRECTORY, 'dispatch-executor-invocation-attempt
 const MODULE_URL = pathToFileURL(MODULE_PATH).href;
 const STORE_MODULE_URL = pathToFileURL(join(MODULE_DIRECTORY, 'store.mjs')).href;
 
-// Task 18~27 predecessor source/spec bytes are pinned to the exact live-main
-// baseline this durable invocation attempt was built against. A change to any
-// pinned file is a predecessor-contract change and must come from an explicitly
-// predecessor-owning Task, never from this durable surface. store.mjs is the
-// only composed predecessor file allowed to grow (additive primitives only), so
-// it is not pinned; its Task 18~27 sections are covered by the byte-immutability
-// proofs below.
+// Retained Task 18~23/27 predecessor source/spec bytes are pinned to the exact
+// live-main baseline this durable invocation attempt was built against (GF-02
+// direct-composition revision). A change to any pinned file is a
+// predecessor-contract change and must come from an explicitly
+// predecessor-owning Task, never from this durable surface. The retired Task
+// 24/25/26 receiver-decision / executor-acceptance families and their specs are
+// deleted by GF-02, so their pins are intentionally absent. store.mjs is the
+// only composed predecessor file allowed to grow (additive primitives only),
+// so it is not pinned; its composed sections are covered by the
+// byte-immutability proofs below.
 //
 // Single Task 28 boundary adaptation (semantic-neutral, predecessor-owner
-// reviewed by Control Tower): dispatch-executor-invocation-input.spec.mjs
-// previously asserted `store.readExecutorInvocationAttempt === undefined` and
+// reviewed by Control Tower, retained through the GF-02 direct-composition
+// revision): dispatch-executor-invocation-input.spec.mjs previously asserted
+// `store.readExecutorInvocationAttempt === undefined` and
 // `store.createExecutorInvocationAttempt === undefined`. Those two absence
 // assertions pinned the NEXT (Task 28) task's store surface, which this Task
 // owns by contract; the test's own intent ("Task 27 adds no store primitive of
-// its own") is preserved. Every other Task 27 assertion still runs unchanged.
+// its own") is preserved. No further Task 27 assertion relaxation is claimed by
+// this durable surface.
 const PREDECESSOR_SHA256 = Object.freeze({
   'claim-bound-dispatch-envelope.mjs':
     '5007584743e70f73a8076990718ae81223200a4b71b0600078ed8bf975ca3133',
@@ -124,22 +127,10 @@ const PREDECESSOR_SHA256 = Object.freeze({
     'e4c660412fdb7cdab0d3c8cb505aa08e73a8a192c08886fbf50ba6b9c8957226',
   'dispatch-receiver-decision-input.spec.mjs':
     'cd77a8d8ecf83244cc0c6c32ab734d68cfcf5ed9b876cacf2fad8bc3b958bddf',
-  'dispatch-receiver-decision.mjs':
-    'cd75cd57a632338de9c3babc4822ce5da1ed059f1bce14c2f5453be7cb52aa63',
-  'dispatch-receiver-decision.spec.mjs':
-    '0a62ddbe2da88d84585ad8db0807468145898ecb467df9431a8e3c7254be65bf',
-  'dispatch-receiver-executor-acceptance-input.mjs':
-    '9a965e3d4af73b2f3b1db54e8c0ed58b97c83d18723c6d873e6e8c0977d58b0a',
-  'dispatch-receiver-executor-acceptance-input.spec.mjs':
-    '3c8d806102c0053a88c67b2cde4fc9bd671ce7ff8ea9e8e5c1b7a15f1c1ffb60',
-  'dispatch-executor-acceptance.mjs':
-    'ef74b58438011feff1141568ae76985ae751dad2ebbfe8f3712b1ae5e69adfe0',
-  'dispatch-executor-acceptance.spec.mjs':
-    '252a2faf7f3bf67c71b7ee4a3abbcd0b11601471fd3a86b39453f4ba8374beb3',
   'dispatch-executor-invocation-input.mjs':
-    'c58030c0213dff49f843f2630be1f82336baabf429e29989fdaf17c2c11b84fd',
+    'be5d8936eff0816b51d8df2f50c03a398f1a3e3291e22c1511fc0820045d9cc6',
   'dispatch-executor-invocation-input.spec.mjs':
-    'b891655a68b323df65edde5512ce0fd62cb1ba58d8f2a28965117592725daae2',
+    '47b69a35846950dee36644ddb146fa859bea45d448e12d5f23cc04ddf0122450',
 });
 
 const FORBIDDEN_NEW_ARTIFACT_DIRS = Object.freeze([
@@ -335,9 +326,9 @@ function driveToAttempt(
 }
 
 // Task 28 setup: source -> child claim -> durable dispatch attempt -> Task 20
-// request -> Task 22 durable receiver acceptance -> Task 24 durable receiver
-// decision -> Task 26 durable executor acceptance -> Task 27 readable
-// invocation input. NO Task 28 invocation attempt yet.
+// request -> Task 22 durable receiver acceptance -> Task 27 readable
+// invocation input (direct composition over the durable receiver acceptance).
+// NO Task 28 invocation attempt yet.
 async function setupAccepted(prefix, sourceTaskId, childTaskId) {
   const home = makeHome(prefix);
   const clock = controllableClock();
@@ -356,20 +347,13 @@ async function setupAccepted(prefix, sourceTaskId, childTaskId) {
   });
   const accepted = await acceptReceiverDispatch({ request, store });
   assert.equal(accepted.newlyAccepted, true);
-  const decided = await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-  assert.equal(decided.newlyDecided, true);
-  const executorAccepted = await acceptExecutorDispatchDecision({
-    dispatchId: attempt.dispatchId,
-    store,
-  });
-  assert.equal(executorAccepted.newlyAccepted, true);
   const input = await readExecutorInvocationInput({ dispatchId: attempt.dispatchId, store });
   return { home, clock, store, attempt, request, input };
 }
 
-// Task 24 durable receiver decision exists but NO Task 26 executor acceptance:
-// the Task 27 readable invocation input is unavailable (missing predecessor).
-async function setupDecidedOnly(prefix, sourceTaskId, childTaskId) {
+// Durable dispatch attempt exists but NO Task 22 receiver acceptance yet: the
+// Task 27 readable invocation input is unavailable (missing predecessor).
+async function setupUnaccepted(prefix, sourceTaskId, childTaskId) {
   const home = makeHome(prefix);
   const clock = controllableClock();
   const store = new CoordinationStore({ dir: home, nowProvider: () => clock.provider() });
@@ -385,10 +369,6 @@ async function setupDecidedOnly(prefix, sourceTaskId, childTaskId) {
     sourceTaskId,
     dispatchId: attempt.dispatchId,
   });
-  const accepted = await acceptReceiverDispatch({ request, store });
-  assert.equal(accepted.newlyAccepted, true);
-  const decided = await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-  assert.equal(decided.newlyDecided, true);
   return { home, clock, store, attempt, request };
 }
 
@@ -459,12 +439,8 @@ function attemptPath(home, dispatchId) {
   return executorInvocationAttemptFilePath(home, dispatchId);
 }
 
-function executorAcceptancePath(home, dispatchId) {
-  return executorDispatchAcceptanceFilePath(home, dispatchId);
-}
-
-function decisionPath(home, dispatchId) {
-  return receiverDispatchDecisionFilePath(home, dispatchId);
+function receiverAcceptancePath(home, dispatchId) {
+  return receiverDispatchAcceptanceFilePath(home, dispatchId);
 }
 
 function listAttemptFiles(home) {
@@ -479,22 +455,26 @@ function expectedRecordBytes(record) {
   return JSON.stringify(record, null, 2);
 }
 
-// Same-dispatchId record that stays valid (Task 24/20 validation passes) but
+// Same-dispatchId record that stays valid (Task 27/20 validation passes) but
 // carries a different inner binding (task.desiredExitState): the canonical
-// same-key/different-value conflict fixture.
+// same-key/different-value conflict fixture, built from the durable Task 22
+// receiver acceptance exactly as the direct composition does.
 function differentValidRecord(store, dispatchId) {
-  const good = store.readExecutorDispatchAcceptance(dispatchId);
-  const record = JSON.parse(JSON.stringify(good));
-  record.decisionInput.task.desiredExitState = 'DIFFERENT_VALID_INVOCATION_ATTEMPT_BINDING';
-  return record;
+  const good = JSON.parse(
+    JSON.stringify(
+      buildExecutorInvocationInputRecord(store.readReceiverDispatchAcceptance(dispatchId)),
+    ),
+  );
+  good.decisionInput.task.desiredExitState = 'DIFFERENT_VALID_INVOCATION_ATTEMPT_BINDING';
+  return good;
 }
 
 function countingStore(store) {
   const calls = [];
   const wrapper = {
-    readExecutorDispatchAcceptance: (dispatchId, ...rest) => {
+    readReceiverDispatchAcceptance: (dispatchId, ...rest) => {
       calls.push({ op: 'readAcceptance', dispatchId, rest });
-      return store.readExecutorDispatchAcceptance(dispatchId);
+      return store.readReceiverDispatchAcceptance(dispatchId);
     },
     readExecutorInvocationAttempt: (dispatchId, ...rest) => {
       calls.push({ op: 'readAttempt', dispatchId, rest });
@@ -595,23 +575,20 @@ test('A. durable invocation attempt persists the exact Task 27 input under dispa
     assert.deepEqual(result, { dispatchId: attempt.dispatchId, newlyPersisted: true });
 
     // The durable value is EXACTLY the Task 27 readable invocation input:
-    // byte-equal to the executor-acceptance file, the receiver-decision file,
-    // and the Task 27 reader result. The invocation-attempt fact is expressed
-    // by the path authority ONLY.
+    // byte-equal to the canonical Task 27 record built from the durable Task 22
+    // receiver acceptance and to the Task 27 reader result. The
+    // invocation-attempt fact is expressed by the path authority ONLY.
     const path = attemptPath(home, attempt.dispatchId);
     const stored = store.readExecutorInvocationAttempt(attempt.dispatchId);
     const viaTask27 = await readExecutorInvocationInput({ dispatchId: attempt.dispatchId, store });
+    const builtFromAcceptance = buildExecutorInvocationInputRecord(
+      store.readReceiverDispatchAcceptance(attempt.dispatchId),
+    );
     assert.equal(readFileSync(path, 'utf8'), expectedRecordBytes(input));
-    assert.equal(
-      readFileSync(path, 'utf8'),
-      readFileSync(executorAcceptancePath(home, attempt.dispatchId), 'utf8'),
-    );
-    assert.equal(
-      readFileSync(path, 'utf8'),
-      readFileSync(decisionPath(home, attempt.dispatchId), 'utf8'),
-    );
+    assert.equal(readFileSync(path, 'utf8'), expectedRecordBytes(builtFromAcceptance));
     assert.equal(JSON.stringify(stored), JSON.stringify(input));
     assert.equal(JSON.stringify(viaTask27), JSON.stringify(input));
+    assert.deepEqual(viaTask27, builtFromAcceptance);
     assert.deepEqual(Object.keys(stored), [
       'schemaVersion',
       'dispatchId',
@@ -619,10 +596,10 @@ test('A. durable invocation attempt persists the exact Task 27 input under dispa
       'decisionInput',
     ]);
     assert.equal(stored.dispatchId, attempt.dispatchId);
-    assert.equal(stored.decision, RECEIVER_DECISION_VALUE);
+    assert.equal(stored.decision, EXECUTOR_INVOCATION_INPUT_DECISION_VALUE);
     assert.deepEqual(Object.keys(stored.decisionInput), [...TRANSPORT_REQUEST_FIELDS]);
 
-    // dispatchId binding + inherited Task 26/24/20 bindings + sole fencing
+    // dispatchId binding + inherited Task 22/20 bindings + sole fencing
     // generation claimGeneration are preserved verbatim.
     assert.equal(stored.decisionInput.dispatchId, attempt.dispatchId);
     assert.equal(stored.decisionInput.sourceTaskId, 'EIA28-A-SRC');
@@ -695,18 +672,18 @@ test('B. exact replay is idempotent: byte/mtime-identical with zero write and di
     });
     assert.deepEqual(first, { dispatchId: attempt.dispatchId, newlyPersisted: true });
 
-    // First persist consults exactly the composed Task 27 acceptance read plus
-    // the two invocation-attempt primitives; no alternate capability is even
-    // consulted.
+    // First persist consults exactly the composed Task 27 receiver-acceptance
+    // read plus the two invocation-attempt primitives; no alternate capability
+    // is even consulted.
     assert.deepEqual([...new Set(reads)].sort(), [
       'createExecutorInvocationAttempt',
-      'readExecutorDispatchAcceptance',
       'readExecutorInvocationAttempt',
+      'readReceiverDispatchAcceptance',
     ]);
     assert.deepEqual(
       calls.map((call) => call.op),
       [
-        'readExecutorDispatchAcceptance',
+        'readReceiverDispatchAcceptance',
         'readExecutorInvocationAttempt',
         'createExecutorInvocationAttempt',
         'readExecutorInvocationAttempt',
@@ -744,7 +721,7 @@ test('B. exact replay is idempotent: byte/mtime-identical with zero write and di
     });
     assert.deepEqual(
       replayTrace.calls.map((call) => call.op),
-      ['readExecutorDispatchAcceptance', 'readExecutorInvocationAttempt'],
+      ['readReceiverDispatchAcceptance', 'readExecutorInvocationAttempt'],
     );
 
     // write = 0, byte change = 0, mtime change = 0, task mutation = 0.
@@ -918,20 +895,16 @@ test('E. separate-process race yields exactly one OS exclusive-create winner', {
 // F. MISSING PREDECESSOR: Task 27 read failure only, zero attempt side effect.
 // ---------------------------------------------------------------------------
 
-test('F. missing Task 26 executor acceptance fails with the Task 27 code and writes nothing', async () => {
-  const { home, store, attempt } = await setupDecidedOnly(
+test('F. missing durable receiver acceptance fails with the predecessor read code and writes nothing', async () => {
+  const { home, store, attempt } = await setupUnaccepted(
     'greenhub-executor-invocation-attempt28-f-',
     'EIA28-F-SRC',
     'EIA28-F-CHILD',
   );
   try {
-    // Task 24 durable receiver decision exists; Task 26 executor acceptance does
-    // not, so Task 27 reports the read failure.
-    assert.equal(
-      store.readReceiverDispatchDecision(attempt.dispatchId).decision,
-      RECEIVER_DECISION_VALUE,
-    );
-    assert.equal(store.readExecutorDispatchAcceptance(attempt.dispatchId), null);
+    // The durable Task 22 receiver acceptance does not exist, so the Task 27
+    // direct derivation reports the read failure.
+    assert.equal(store.readReceiverDispatchAcceptance(attempt.dispatchId), null);
     assert.equal(store.readExecutorInvocationAttempt(attempt.dispatchId), null);
     const before = snapshotHomeBytes(home);
     const { calls, store: spyStore } = countingStore(store);
@@ -941,12 +914,12 @@ test('F. missing Task 26 executor acceptance fails with the Task 27 code and wri
     // unavailable.
     await assert.rejects(
       persistExecutorInvocationAttempt({ dispatchId: attempt.dispatchId, store: spyStore }),
-      (error) => error?.code === EXECUTOR_DISPATCH_ACCEPTANCE_NOT_FOUND,
+      (error) => error?.code === RECEIVER_DISPATCH_ACCEPTANCE_NOT_FOUND,
     );
 
     // The Task 27 composition read happened exactly once with dispatchId only;
     // no attempt read, no create, no auto-acceptance, no auto-attempt, no retry,
-    // no receiver-decision reconstruction.
+    // no receiver-acceptance reconstruction.
     const acceptanceReads = calls.filter((call) => call.op === 'readAcceptance');
     assert.equal(acceptanceReads.length, 1);
     assert.equal(acceptanceReads[0].dispatchId, attempt.dispatchId);
@@ -961,7 +934,7 @@ test('F. missing Task 26 executor acceptance fails with the Task 27 code and wri
     );
     assert.deepEqual(snapshotHomeBytes(home), before);
     assert.equal(existsSync(attemptDir(home)), false);
-    assert.equal(store.readExecutorDispatchAcceptance(attempt.dispatchId), null);
+    assert.equal(store.readReceiverDispatchAcceptance(attempt.dispatchId), null);
     assert.equal(store.readExecutorInvocationAttempt(attempt.dispatchId), null);
     assert.equal(store.readTask('EIA28-F-CHILD').status, TASK_STATUS_CLAIMED);
   } finally {
@@ -986,9 +959,9 @@ test('G. invalid dispatchId and invalid stores fail closed before any attempt ac
     // primitive is invoked (predecessor code propagates unchanged).
     let primitiveCalls = 0;
     const countingProbeStore = {
-      readExecutorDispatchAcceptance: (dispatchId) => {
+      readReceiverDispatchAcceptance: (dispatchId) => {
         primitiveCalls += 1;
-        return store.readExecutorDispatchAcceptance(dispatchId);
+        return store.readReceiverDispatchAcceptance(dispatchId);
       },
       readExecutorInvocationAttempt: (dispatchId) => {
         primitiveCalls += 1;
@@ -1015,7 +988,7 @@ test('G. invalid dispatchId and invalid stores fail closed before any attempt ac
     ]) {
       await assert.rejects(
         persistExecutorInvocationAttempt({ dispatchId: invalidId, store: countingProbeStore }),
-        (error) => error?.code === CORRUPT_EXECUTOR_DISPATCH_ACCEPTANCE,
+        (error) => error?.code === CORRUPT_EXECUTOR_INVOCATION_INPUT,
       );
     }
     assert.equal(primitiveCalls, 0);
@@ -1029,14 +1002,14 @@ test('G. invalid dispatchId and invalid stores fail closed before any attempt ac
       'store',
       42,
       {},
-      { readExecutorDispatchAcceptance: () => null },
-      { readExecutorDispatchAcceptance: () => null, readExecutorInvocationAttempt: () => null },
+      { readReceiverDispatchAcceptance: () => null },
+      { readReceiverDispatchAcceptance: () => null, readExecutorInvocationAttempt: () => null },
       {
-        readExecutorDispatchAcceptance: () => null,
+        readReceiverDispatchAcceptance: () => null,
         createExecutorInvocationAttempt: () => ({ created: true }),
       },
       {
-        readExecutorDispatchAcceptance: () => {
+        readReceiverDispatchAcceptance: () => {
           probeCalls += 1;
           return null;
         },
@@ -1062,29 +1035,30 @@ test('G. invalid dispatchId and invalid stores fail closed before any attempt ac
 });
 
 // ---------------------------------------------------------------------------
-// H. CORRUPT PREDECESSOR INPUT: Task 27 codes propagate, zero attempt file.
+// H. CORRUPT PREDECESSOR INPUT: predecessor codes propagate through the direct
+// composition, zero attempt file.
 // ---------------------------------------------------------------------------
 
-test('H. corrupt Task 26/24/20 acceptance fails closed with predecessor codes and no attempt file', async () => {
-  const { home, store, attempt, request } = await setupAccepted(
+test('H. corrupt durable Task 22 receiver acceptance fails closed with predecessor codes and no attempt file', async () => {
+  const { home, store, attempt } = await setupAccepted(
     'greenhub-executor-invocation-attempt28-h-',
     'EIA28-H-SRC',
     'EIA28-H-CHILD',
   );
   try {
-    const path = executorAcceptancePath(home, attempt.dispatchId);
+    const path = receiverAcceptancePath(home, attempt.dispatchId);
     const pristineBytes = readFileSync(path, 'utf8');
     const record = JSON.parse(pristineBytes);
     const variants = [
       {
         name: 'unparseable acceptance bytes',
         bytes: '{ not json',
-        code: CORRUPT_EXECUTOR_DISPATCH_ACCEPTANCE,
+        code: CORRUPT_RECEIVER_DISPATCH_ACCEPTANCE,
       },
       {
         name: 'valid JSON, invalid acceptance record',
         bytes: JSON.stringify({ hello: 'not-an-acceptance' }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_TRANSPORT_REQUEST,
       },
       {
         name: 'key order drift',
@@ -1092,46 +1066,47 @@ test('H. corrupt Task 26/24/20 acceptance fails closed with predecessor codes an
           {
             dispatchId: record.dispatchId,
             schemaVersion: record.schemaVersion,
-            decision: record.decision,
-            decisionInput: record.decisionInput,
+            sourceTaskId: record.sourceTaskId,
+            emissionSlot: record.emissionSlot,
+            admissionId: record.admissionId,
+            nextTaskId: record.nextTaskId,
+            workerId: record.workerId,
+            claimGeneration: record.claimGeneration,
+            task: record.task,
           },
           null,
           2,
         ),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_TRANSPORT_REQUEST,
       },
       {
-        name: 'decision value drift',
-        bytes: JSON.stringify({ ...record, decision: 'ACK' }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        name: 'schema value drift',
+        bytes: JSON.stringify({ ...record, schemaVersion: '2' }, null, 2),
+        code: CORRUPT_TRANSPORT_REQUEST,
       },
       {
         name: 'blocked timestamp field',
-        bytes: JSON.stringify({ ...record, acceptedAt: 'now' }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        bytes: JSON.stringify({ ...record, dispatchedAt: 'now' }, null, 2),
+        code: CORRUPT_TRANSPORT_REQUEST,
       },
       {
         name: 'extra smuggled field',
         bytes: JSON.stringify({ ...record, attemptGeneration: 2 }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_TRANSPORT_REQUEST,
       },
       {
-        name: 'inner request tamper (workerId)',
-        bytes: JSON.stringify(
-          { ...record, decisionInput: { ...request, workerId: 'worker-tampered' } },
-          null,
-          2,
-        ),
+        name: 'binding tamper (workerId)',
+        bytes: JSON.stringify({ ...record, workerId: 'worker-tampered' }, null, 2),
         code: 'DISPATCH_BINDING_MISMATCH',
       },
       {
-        name: 'inner generation smuggling',
+        name: 'embedded task envelope binding tamper',
         bytes: JSON.stringify(
-          { ...record, decisionInput: { ...request, attemptGeneration: 1 } },
+          { ...record, task: { ...record.task, taskId: 'EIA28-H-OTHER' } },
           null,
           2,
         ),
-        code: CORRUPT_TRANSPORT_REQUEST,
+        code: 'DISPATCH_ATTEMPT_BINDING_MISMATCH',
       },
     ];
 
@@ -1184,7 +1159,7 @@ test('I. corrupt durable invocation attempt fails closed with exact bytes preser
       {
         name: 'valid JSON wrong shape',
         bytes: JSON.stringify({ hello: 'not-an-attempt' }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_EXECUTOR_INVOCATION_INPUT,
       },
       {
         name: 'key order drift',
@@ -1198,22 +1173,22 @@ test('I. corrupt durable invocation attempt fails closed with exact bytes preser
           null,
           2,
         ),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_EXECUTOR_INVOCATION_INPUT,
       },
       {
         name: 'decision value drift',
         bytes: JSON.stringify({ ...goodRecord, decision: 'ACCEPTED' }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_EXECUTOR_INVOCATION_INPUT,
       },
       {
         name: 'blocked timestamp field',
         bytes: JSON.stringify({ ...goodRecord, attemptedAt: 'now' }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_EXECUTOR_INVOCATION_INPUT,
       },
       {
         name: 'new generation smuggling',
         bytes: JSON.stringify({ ...goodRecord, invocationGeneration: 1 }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_EXECUTOR_INVOCATION_INPUT,
       },
       {
         name: 'inner request tamper (workerId)',
@@ -1279,8 +1254,8 @@ test('J. different valid record under the same dispatchId fails closed with the 
     // Existing different valid winner: conflict before any create.
     let createCalls = 0;
     const observedDifferentStore = {
-      readExecutorDispatchAcceptance: (dispatchId) =>
-        store.readExecutorDispatchAcceptance(dispatchId),
+      readReceiverDispatchAcceptance: (dispatchId) =>
+        store.readReceiverDispatchAcceptance(dispatchId),
       readExecutorInvocationAttempt: () => different,
       createExecutorInvocationAttempt: () => {
         createCalls += 1;
@@ -1320,8 +1295,8 @@ test('J. different valid record under the same dispatchId fails closed with the 
     // (a) winner equals the candidate -> idempotent replay.
     let reads = 0;
     const raceReplayStore = {
-      readExecutorDispatchAcceptance: (dispatchId) =>
-        store.readExecutorDispatchAcceptance(dispatchId),
+      readReceiverDispatchAcceptance: (dispatchId) =>
+        store.readReceiverDispatchAcceptance(dispatchId),
       readExecutorInvocationAttempt: () => {
         reads += 1;
         return reads === 1 ? null : input;
@@ -1342,8 +1317,8 @@ test('J. different valid record under the same dispatchId fails closed with the 
     // (b) winner is a different valid record -> conflict.
     let conflictReads = 0;
     const raceConflictStore = {
-      readExecutorDispatchAcceptance: (dispatchId) =>
-        store.readExecutorDispatchAcceptance(dispatchId),
+      readReceiverDispatchAcceptance: (dispatchId) =>
+        store.readReceiverDispatchAcceptance(dispatchId),
       readExecutorInvocationAttempt: () => {
         conflictReads += 1;
         return conflictReads === 1 ? null : different;
@@ -1361,8 +1336,8 @@ test('J. different valid record under the same dispatchId fails closed with the 
 
     // (c) winner vanished after the create race -> deterministic fail-closed.
     const raceVanishedStore = {
-      readExecutorDispatchAcceptance: (dispatchId) =>
-        store.readExecutorDispatchAcceptance(dispatchId),
+      readReceiverDispatchAcceptance: (dispatchId) =>
+        store.readReceiverDispatchAcceptance(dispatchId),
       readExecutorInvocationAttempt: () => null,
       createExecutorInvocationAttempt: () => ({ created: false }),
     };
@@ -1376,8 +1351,8 @@ test('J. different valid record under the same dispatchId fails closed with the 
 
     // (d) read-back mismatch after a winning create -> fail closed.
     const badReadBackStore = {
-      readExecutorDispatchAcceptance: (dispatchId) =>
-        store.readExecutorDispatchAcceptance(dispatchId),
+      readReceiverDispatchAcceptance: (dispatchId) =>
+        store.readReceiverDispatchAcceptance(dispatchId),
       readExecutorInvocationAttempt: () => different,
       createExecutorInvocationAttempt: () => ({ created: true }),
     };
@@ -1391,8 +1366,8 @@ test('J. different valid record under the same dispatchId fails closed with the 
     );
     let readBackReads = 0;
     const readBackMismatchStore = {
-      readExecutorDispatchAcceptance: (dispatchId) =>
-        store.readExecutorDispatchAcceptance(dispatchId),
+      readReceiverDispatchAcceptance: (dispatchId) =>
+        store.readReceiverDispatchAcceptance(dispatchId),
       readExecutorInvocationAttempt: () => {
         readBackReads += 1;
         return readBackReads === 1 ? null : different;
@@ -1446,8 +1421,8 @@ test('K. persistence leaves every predecessor durable byte identical and no forb
     assert.equal(result.newlyPersisted, true);
 
     // Only one added path; every pre-existing byte (task, claim, admission,
-    // emission, dispatch attempt, receiver acceptance, receiver decision,
-    // executor acceptance, results, dispositions) is untouched.
+    // emission, dispatch attempt, receiver acceptance, results, dispositions)
+    // is untouched.
     const after = snapshotHomeBytes(home);
     const added = Object.keys(after).filter((name) => !(name in before));
     assert.equal(added.length, 1, JSON.stringify(added));
@@ -1674,9 +1649,12 @@ test('M. production module carries no ACK/receipt/invocation/scheduler/retry/new
   assert.ok(code.includes('readExecutorInvocationInput('));
   assert.ok(code.includes('store.readExecutorInvocationAttempt('));
   assert.ok(code.includes('store.createExecutorInvocationAttempt('));
-  assert.ok(code.includes('assertValidExecutorAcceptanceDispatchId('));
+  assert.ok(code.includes('assertValidExecutorInvocationAttemptDispatchId('));
+  assert.ok(code.includes('assertValidReceiverAcceptanceDispatchId('));
+  assert.equal(code.includes('store.readReceiverDispatchAcceptance('), false);
   assert.equal(code.includes('store.readExecutorDispatchAcceptance('), false);
   assert.equal(code.includes('validateReceiverDecisionRecord('), false);
+  assert.equal(code.includes('validateExecutorInvocationInputRecord('), false);
   assert.equal(code.includes('node:path'), true);
 
   // Exported surface: constants/helpers/entry + error class only.
@@ -1701,7 +1679,7 @@ test('M2. store exposes the minimal invocation-attempt primitive and keeps forbi
     const store = new CoordinationStore({ dir: home });
     assert.equal(typeof store.readExecutorInvocationAttempt, 'function');
     assert.equal(typeof store.createExecutorInvocationAttempt, 'function');
-    assert.equal(typeof store.readExecutorDispatchAcceptance, 'function');
+    assert.equal(typeof store.readReceiverDispatchAcceptance, 'function');
     for (const forbidden of [
       'acknowledgeDispatch',
       'ackDispatch',
@@ -1731,7 +1709,7 @@ test('M2. store exposes the minimal invocation-attempt primitive and keeps forbi
     assert.ok(section.includes('writeJsonExclusive('));
     assert.equal(section.includes('existsSync('), false);
     assert.equal(section.includes('writeJsonAtomic('), false);
-    assert.equal(section.includes('validateReceiverDecisionRecord('), true);
+    assert.equal(section.includes('validateExecutorInvocationInputRecord('), true);
     assert.equal(section.includes('createExecutorInvocationAttempt('), true);
     assert.equal(section.includes('readExecutorInvocationAttempt('), true);
   } finally {
@@ -1740,10 +1718,10 @@ test('M2. store exposes the minimal invocation-attempt primitive and keeps forbi
 });
 
 // ---------------------------------------------------------------------------
-// N. PREDECESSOR IMMUTABILITY: Task 18~27 source/spec bytes unchanged.
+// N. PREDECESSOR IMMUTABILITY: Task 18~23/27 source/spec bytes unchanged.
 // ---------------------------------------------------------------------------
 
-test('N. Task 18~27 predecessor source/spec bytes are unchanged', () => {
+test('N. retained Task 18~23/27 predecessor source/spec bytes are unchanged', () => {
   for (const [name, expected] of Object.entries(PREDECESSOR_SHA256)) {
     const actual = createHash('sha256')
       .update(readFileSync(join(MODULE_DIRECTORY, name)))
@@ -1851,7 +1829,7 @@ test('P. persistence consults only dispatchId-keyed primitives and never an alte
     assert.deepEqual(
       calls.map((call) => call.op),
       [
-        'readExecutorDispatchAcceptance',
+        'readReceiverDispatchAcceptance',
         'readExecutorInvocationAttempt',
         'createExecutorInvocationAttempt',
         'readExecutorInvocationAttempt',

@@ -64,15 +64,14 @@ import {
   INVALID_CODEX_CLI_EXECUTOR_TASK28_RECORD,
 } from './codex-cli-executor-adapter.mjs';
 import {
-  acceptExecutorDispatchDecision,
-  executorDispatchAcceptanceFilePath,
-} from './dispatch-executor-acceptance.mjs';
-import {
   EXECUTOR_INVOCATION_ATTEMPTS_DIRNAME,
   persistExecutorInvocationAttempt,
 } from './dispatch-executor-invocation-attempt.mjs';
 import { invokeExecutorInvocationAdapter } from './dispatch-executor-invocation-contract.mjs';
-import { readExecutorInvocationInput } from './dispatch-executor-invocation-input.mjs';
+import {
+  buildExecutorInvocationInputRecord,
+  readExecutorInvocationInput,
+} from './dispatch-executor-invocation-input.mjs';
 import {
   EXECUTOR_INVOCATION_OUTCOME_ACCEPTED,
   EXECUTOR_INVOCATION_OUTCOME_FIELDS,
@@ -82,8 +81,10 @@ import {
   EXECUTOR_INVOCATION_OUTCOME_VALUES,
   invokeExecutorAndValidateOutcome,
 } from './dispatch-executor-invocation-outcome.mjs';
-import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
-import { persistReceiverDecision } from './dispatch-receiver-decision.mjs';
+import {
+  acceptReceiverDispatch,
+  receiverDispatchAcceptanceFilePath,
+} from './dispatch-receiver-acceptance.mjs';
 import { prepareDispatchTransportRequest } from './dispatch-transport-contract.mjs';
 import { DISPOSITION_STATE_ADOPTED } from './disposition.mjs';
 import { CoordinationStore } from './store.mjs';
@@ -382,13 +383,6 @@ async function setupAccepted(prefix, sourceTaskId, childTaskId, nextTaskOverride
   });
   const accepted = await acceptReceiverDispatch({ request, store });
   assert.equal(accepted.newlyAccepted, true);
-  const decided = await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-  assert.equal(decided.newlyDecided, true);
-  const executorAccepted = await acceptExecutorDispatchDecision({
-    dispatchId: attempt.dispatchId,
-    store,
-  });
-  assert.equal(executorAccepted.newlyAccepted, true);
   const persisted = await persistExecutorInvocationAttempt({
     dispatchId: attempt.dispatchId,
     store,
@@ -1141,9 +1135,21 @@ test('L. every outcome path leaves every durable byte and task/claim state uncha
     assert.equal(claimAfter.generation, claimBefore.generation);
     assert.equal(claimAfter.claimToken, claimBefore.claimToken);
 
-    // Durable target domains are present and byte-stable.
+    // Durable target domains are present and byte-stable: the Task 22
+    // receiver acceptance exists, and the durable invocation-attempt bytes are
+    // EXACTLY the Task 27 record built from the durable receiver-acceptance
+    // bytes (direct composition; the retired decision/executor-acceptance
+    // layers are never reconstructed).
     assert.deepEqual(listAttemptFiles(home), [`${dispatchId}.json`]);
-    assert.ok(existsSync(executorDispatchAcceptanceFilePath(home, dispatchId)));
+    const acceptancePath = receiverDispatchAcceptanceFilePath(home, dispatchId);
+    assert.ok(existsSync(acceptancePath));
+    const builtFromAcceptance = buildExecutorInvocationInputRecord(
+      JSON.parse(readFileSync(acceptancePath, 'utf8')),
+    );
+    assert.equal(
+      readFileSync(join(home, EXECUTOR_INVOCATION_ATTEMPTS_DIRNAME, `${dispatchId}.json`), 'utf8'),
+      JSON.stringify(builtFromAcceptance, null, 2),
+    );
     for (const forbiddenDir of FORBIDDEN_NEW_ARTIFACT_DIRS) {
       assert.equal(existsSync(join(home, forbiddenDir)), false, forbiddenDir);
     }
@@ -1314,7 +1320,7 @@ test('O. the module carries no registry/selection/fallback/retry/fs authority an
     'persistExecutorInvocationAttempt',
     'readExecutorInvocationInput',
     'readExecutorInvocationAttempt',
-    'validateReceiverDecisionRecord',
+    'validateExecutorInvocationInputRecord',
     'store.',
     'require(',
   ]) {

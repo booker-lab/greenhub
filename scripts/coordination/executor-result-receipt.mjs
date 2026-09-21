@@ -155,7 +155,7 @@ import {
   assertValidExecutorInvocationOutcomeDispatchId,
   validateExecutorInvocationOutcomeRecord,
 } from './dispatch-executor-invocation-outcome-persistence.mjs';
-import { validateReceiverDecisionRecord } from './dispatch-receiver-decision.mjs';
+import { validateExecutorInvocationInputRecord } from './dispatch-executor-invocation-input.mjs';
 import {
   MAX_FRICTION_ENTRIES,
   MAX_FRICTION_ENTRY_LENGTH,
@@ -683,7 +683,7 @@ export async function persistExecutorResultReceipt({ dispatchId, store, executor
   //    wrapper never retries, never catches, and never remaps.
   let expectedTaskId = null;
   const guardedExecutor = async (task28Record) => {
-    const validatedRecord = validateReceiverDecisionRecord(task28Record);
+    const validatedRecord = validateExecutorInvocationInputRecord(task28Record);
     const task = validatedRecord.decisionInput.task;
     if (task.taskKind !== TASK_KIND_READ_ONLY) {
       fail(

@@ -744,7 +744,7 @@ test('C. ordinary OpenCode RESULT -> RESULT_DELIVERED -> Control Tower closure n
       'store.mjs',
       'executor-result-receipt.mjs',
       'executor-result-delivery.mjs',
-      'dispatch-receiver-decision.mjs',
+      'dispatch-executor-invocation-input.mjs',
       'next-task-emission.mjs',
       'materialization.mjs',
       'disposition.mjs',

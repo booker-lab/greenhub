@@ -1,10 +1,11 @@
 // Bounded invocation-contract owner:
-// GREENHUB-COORDINATION-EXECUTOR-INVOCATION-ADAPTER-CONTRACT-29.
+// GREENHUB-COORDINATION-EXECUTOR-INVOCATION-ADAPTER-CONTRACT-29
+// (GF-02 record-contract owner revision).
 // Surface: scripts/coordination/*dispatch-executor-invocation-contract*
-// (this module) + composition of the existing public Task 28/24 primitives ONLY
+// (this module) + composition of the existing public Task 28/27 primitives ONLY
 //   assertValidExecutorInvocationAttemptDispatchId(dispatchId)
 //   store.readExecutorInvocationAttempt(dispatchId)
-//   validateReceiverDecisionRecord(record)
+//   validateExecutorInvocationInputRecord(record)
 // over the unchanged durable authority
 // <coordination-home>/executor-invocation-attempts/<dispatchId>.json.
 // No store.mjs mutation. No Task 18~28 source or spec mutation.
@@ -41,8 +42,8 @@
 //          [Task 29-native read failure ONLY: never retry / executor
 //           unavailable / ACK timeout / task failure / scheduler failure;
 //           zero writes, zero auto-create, zero repair]
-//       6. Task 28 durable record validation/binding check [Task 24 public
-//          validator validateReceiverDecisionRecord() VERBATIM: exact key
+//       6. Task 28 durable record validation/binding check [Task 27 public
+//          validator validateExecutorInvocationInputRecord(): exact key
 //          shape/order, schemaVersion, fixed decision value, Task 20
 //          decisionInput validation with predecessor codes propagated
 //          UNCHANGED; no duplicated validator; corrupt/tampered records fail
@@ -102,7 +103,7 @@ import {
   assertValidExecutorInvocationAttemptDispatchId,
   CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
 } from './dispatch-executor-invocation-attempt.mjs';
-import { validateReceiverDecisionRecord } from './dispatch-receiver-decision.mjs';
+import { validateExecutorInvocationInputRecord } from './dispatch-executor-invocation-input.mjs';
 
 // Invocation-contract-native meanings ONLY. Missing durable Task 28 invocation
 // attempt gets its own read-failure code; store corruption / invalid records /
@@ -140,9 +141,8 @@ function fail(message, code = EXECUTOR_INVOCATION_ATTEMPT_NOT_FOUND) {
  * 3. `store` must expose readExecutorInvocationAttempt(dispatchId); no other
  *    capability is required, consulted, or read (no task store, claim store,
  *    admission store, emission store, dispatch attempt store,
- *    receiver-acceptance store, receiver-decision store, executor-acceptance
- *    store, result store, ACK store, worker/executor registry, or scheduler
- *    state).
+ *    receiver-acceptance store, result store, ACK store, worker/executor
+ *    registry, or scheduler state).
  * 4. The reader receives dispatchId ONLY (one argument) and is invoked AT MOST
  *    ONCE per call: no polling, no retry, no re-read loop, no fallback lookup,
  *    no second read after success, no directory scan, no newest-record scan.
@@ -152,8 +152,8 @@ function fail(message, code = EXECUTOR_INVOCATION_ATTEMPT_NOT_FOUND) {
  *    status, invocation readiness, executor availability, ACK timeout,
  *    retry, transport, or delivery decision; no write is performed, no
  *    attempt is auto-created, and no predecessor input is reconstructed).
- * 6. A returned record is re-validated with the Task 24 public validator
- *    validateReceiverDecisionRecord() VERBATIM: exact key shape and order,
+ * 6. A returned record is re-validated with the Task 27 public validator
+ *    validateExecutorInvocationInputRecord(): exact key shape and order,
  *    schemaVersion, fixed decision value, blocked-field absence, and Task 20
  *    decisionInput validation. Malformed / tampered / binding-drift records
  *    fail closed with their existing codes propagating UNCHANGED. The record
@@ -212,9 +212,9 @@ export async function invokeExecutorInvocationAdapter({ dispatchId, store, adapt
     );
   }
 
-  // 6. Task 24 validation is reused verbatim: existing Task 28/24/20/18/19
-  //    codes propagate UNCHANGED; nothing is repaired or rewritten.
-  const validated = validateReceiverDecisionRecord(stored);
+  // 6. Task 27 record validation is reused verbatim: existing Task 28/27/23/
+  //    22/20/18/19 codes propagate UNCHANGED; nothing is repaired or rewritten.
+  const validated = validateExecutorInvocationInputRecord(stored);
 
   // 7. Direct key/binding re-check against the requested dispatchId.
   if (validated.dispatchId !== dispatchId) {
