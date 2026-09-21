@@ -1,7 +1,9 @@
-// Bounded mutation owner: GREENHUB-COORDINATION-OPERATOR-CLI-35.
-// Surface: scripts/coordination/operator-cli.mjs ONLY (+ the three
+// Bounded mutation owner: GREENHUB-COORDINATION-OPERATOR-CLI-35
+// + GREENHUB-COORDINATION-USER-APPROVED-READONLY-INTAKE-GF06 (the `intake`
+//   subcommand and the authority-compatible `run` resolution ONLY).
+// Surface: scripts/coordination/operator-cli.mjs ONLY (+ the four
 // package.json operator commands coordination:run / coordination:status /
-// coordination:inspect).
+// coordination:inspect / coordination:intake).
 //
 // Thin operator-facing composition over the EXISTING durable coordination
 // authorities. This module owns NO durable semantics and creates NO durable
@@ -9,13 +11,21 @@
 //   status  = read-only projection over existing task lifecycle truth
 //             (<home>/tasks/** + the append-stable sequence);
 //   inspect = read-only projection over ONE task's existing durable records
-//             (task/claim/result/disposition/materialization/ACK/consumed and
-//             the relevant durable executor result receipt);
+//             (task/claim/result/disposition/materialization/ACK/consumed, the
+//             user-approved intake authority when present, and the relevant
+//             durable executor result receipt);
+//   intake  = ONE explicit operator-supplied user-approved READ_ONLY task spec
+//             through the EXISTING intake authority chain:
+//             explicit approval -> canonical task identity -> durable intake
+//             authority -> task create -> READY. It never claims, never
+//             dispatches, never invokes an executor, never scans READY tasks,
+//             and never creates a successor;
 //   run     = ONE explicit operator-named task through the EXISTING chain:
-//             admission -> claim -> dispatch attempt -> transport request ->
-//             receiver acceptance -> receiver decision -> executor acceptance
-//             -> invocation attempt -> durable pre-invocation fence ->
-//             durable executor result receipt -> canonical result delivery.
+//             pre-execution authority resolution (emission admission OR
+//             user-approved intake, never created here) -> claim -> dispatch
+//             attempt -> transport request -> receiver acceptance ->
+//             invocation attempt -> durable pre-invocation fence -> durable
+//             executor result receipt -> canonical result delivery.
 //             The executor boundary is fenced BEFORE the adapter can run, so
 //             concurrent/restarted operators never cross it twice for one
 //             dispatchId and a durable outcome/receipt is always replayed
@@ -53,8 +63,8 @@
 
 import nodeFs from 'node:fs';
 import nodePath from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { buildClaimBoundDispatchId } from './claim-bound-dispatch-envelope.mjs';
+import { fileURLToPath } from 'node:url';import { buildClaimBoundDispatchId } from './claim-bound-dispatch-envelope.mjs';
+import { COORDINATION_HOME_ENV_KEY } from './coordination-home.mjs';
 import { persistExecutorInvocationAttempt } from './dispatch-executor-invocation-attempt.mjs';
 import { invokeExecutorWithInvocationFence } from './dispatch-executor-invocation-fence.mjs';
 import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
@@ -65,15 +75,25 @@ import { EXECUTOR_RESULT_RECEIPTS_DIRNAME } from './executor-result-receipt.mjs'
 import { createOpenCodeCliStructuredResultExecutor } from './opencode-cli-executor-adapter.mjs';
 import { CoordinationStore } from './store.mjs';
 import { TASK_ID_PATTERN, TASK_KIND_READ_ONLY } from './task-envelope.mjs';
+import {
+  AUTHORITY_KIND_EMISSION_ADMISSION,
+  AUTHORITY_KIND_USER_APPROVED_INTAKE,
+  USER_APPROVED_INTAKE_DISPATCH_SLOT,
+} from './user-approved-intake.mjs';
+import { prepareUserApprovedIntakeDispatchTransportRequest } from './user-approved-intake-transport.mjs';
 
 export const OPERATOR_PROJECTION_SCHEMA_VERSION = '1';
 export const OPERATOR_STATUS_PROJECTION = 'operator-status';
 export const OPERATOR_INSPECTION_PROJECTION = 'operator-inspection';
 export const OPERATOR_RUN_PROJECTION = 'operator-run';
+export const OPERATOR_INTAKE_PROJECTION = 'operator-intake';
 
 export const OPERATOR_ARGUMENT_INVALID = 'OPERATOR_ARGUMENT_INVALID';
 export const OPERATOR_TASK_ADMISSION_NOT_FOUND = 'OPERATOR_TASK_ADMISSION_NOT_FOUND';
 export const OPERATOR_TASK_ADMISSION_AMBIGUOUS = 'OPERATOR_TASK_ADMISSION_AMBIGUOUS';
+export const OPERATOR_TASK_AUTHORITY_AMBIGUOUS = 'OPERATOR_TASK_AUTHORITY_AMBIGUOUS';
+export const OPERATOR_INTAKE_SPEC_INVALID = 'OPERATOR_INTAKE_SPEC_INVALID';
+export const OPERATOR_INTAKE_HOME_INVALID = 'OPERATOR_INTAKE_HOME_INVALID';
 export const OPERATOR_EXECUTOR_NOT_CONFIGURED = 'OPERATOR_EXECUTOR_NOT_CONFIGURED';
 export const OPERATOR_RECEIPT_AMBIGUOUS = 'OPERATOR_RECEIPT_AMBIGUOUS';
 export const OPERATOR_STAGE_FAILED = 'OPERATOR_STAGE_FAILED';
@@ -86,6 +106,7 @@ export const RUN_OUTCOME_EXECUTOR_UNKNOWN = 'EXECUTOR_UNKNOWN';
 export const RUN_OUTCOME_ALREADY_TERMINAL = 'ALREADY_TERMINAL';
 
 export const DEFAULT_OPERATOR_WORKER_ID = 'operator-cli';
+export const DEFAULT_OPERATOR_RECORDER_ID = 'operator-cli';
 export const DEFAULT_OPERATOR_LEASE_MS = 15 * 60_000;
 export const OPENCODE_CLI_PATH_ENV_KEY = 'GREENHUB_OPENCODE_CLI_PATH';
 export const OPENCODE_MODEL_ENV_KEY = 'GREENHUB_OPENCODE_MODEL';
@@ -95,7 +116,33 @@ export const OPENCODE_MODEL_ENV_KEY = 'GREENHUB_OPENCODE_MODEL';
 // canonical admission; the authoritative read is the store primitive.
 const TASK_EMISSION_ADMISSIONS_DIRNAME = 'emission-admissions';
 
-const COMMANDS = Object.freeze(['status', 'inspect', 'run']);
+// Exact operator intake request file shape: the explicit approval signal, the
+// approval provenance, and ONE bounded READ_ONLY task spec. Executable /
+// cwd / environment / claim / dispatch / executor options are structurally
+// impossible here.
+const OPERATOR_INTAKE_REQUEST_FIELDS = Object.freeze(['userApproved', 'approval', 'taskSpec']);
+
+// The source checkout this CLI module belongs to. Used ONLY to fail closed when
+// an operator tries to configure the coordination runtime home inside the
+// repository worktree (runtime state is external local durable state).
+const MODULE_DIRECTORY = nodePath.dirname(fileURLToPath(import.meta.url));
+const REPOSITORY_ROOT = nodePath.resolve(MODULE_DIRECTORY, '..', '..');
+
+function normalizePathForComparison(value) {
+  const resolved = nodePath.resolve(value);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function isSamePathOrDescendant(candidate, parent) {
+  const normalizedCandidate = normalizePathForComparison(candidate);
+  const normalizedParent = normalizePathForComparison(parent);
+  return (
+    normalizedCandidate === normalizedParent ||
+    normalizedCandidate.startsWith(`${normalizedParent}${nodePath.sep}`)
+  );
+}
+
+const COMMANDS = Object.freeze(['status', 'inspect', 'run', 'intake']);
 
 const MAX_ERROR_MESSAGE_LENGTH = 512;
 
@@ -191,6 +238,15 @@ function deriveNextAction(code) {
   }
   if (code === OPERATOR_TASK_ADMISSION_AMBIGUOUS) {
     return 'multiple canonical admissions bind this task; pass --source and --slot explicitly';
+  }
+  if (code === OPERATOR_TASK_AUTHORITY_AMBIGUOUS) {
+    return 'both an emission admission and a user-approved intake authority bind this task; stop and inspect the durable state manually';
+  }
+  if (code === OPERATOR_INTAKE_SPEC_INVALID) {
+    return 'fix the intake spec file (userApproved: true, approval { approvedBy, approvalRef }, and a bounded READ_ONLY taskSpec) and rerun `pnpm coordination:intake --spec <PATH>`';
+  }
+  if (code === 'INTAKE_NOT_FOUND') {
+    return 'intake the task first with `pnpm coordination:intake --spec <PATH>` (the operator CLI never creates an intake authority)';
   }
   if (code === OPERATOR_EXECUTOR_NOT_CONFIGURED) {
     return `set ${OPENCODE_CLI_PATH_ENV_KEY} and ${OPENCODE_MODEL_ENV_KEY}, or pass --opencode <absolute path> --model <provider/model> (READ_ONLY executor only)`;
@@ -375,6 +431,10 @@ export function collectTaskInspection({ store, taskId } = {}) {
     );
     const ack = optionalRead(() => store.readAck(taskId), 'ACK_NOT_FOUND');
     const consumed = optionalRead(() => store.readConsumed(taskId), 'CONSUMED_NOT_FOUND');
+    const intake =
+      typeof store.readUserApprovedIntake === 'function'
+        ? optionalRead(() => store.readUserApprovedIntake({ taskId }), 'INTAKE_NOT_FOUND')
+        : null;
     const executorResultReceipt = findExecutorResultReceiptForTask({ home: store.home, taskId });
     return Object.freeze({
       schemaVersion: OPERATOR_PROJECTION_SCHEMA_VERSION,
@@ -388,17 +448,23 @@ export function collectTaskInspection({ store, taskId } = {}) {
       materialization,
       ack,
       consumed,
+      intake,
       executorResultReceipt,
     });
   });
 }
 
 /**
- * Bounded identity resolution of the operator-named task's canonical admission:
- *   - explicit (sourceTaskId, emissionSlot) -> authoritative store read;
- *   - otherwise exact nextTaskId match over EXISTING admission records
+ * Bounded identity resolution of the operator-named task's canonical
+ * pre-execution authority:
+ *   - explicit (sourceTaskId, emissionSlot) -> authoritative emission-admission
+ *     store read (unchanged);
+ *   - otherwise exact nextTaskId match over EXISTING emission admission records
  *     (identity resolution only: never a READY scan, never oldest/newest,
- *     never priority/fairness).
+ *     never priority/fairness);
+ *   - if no emission admission binds the task, the exact user-approved intake
+ *     authority for that taskId is read (read-only, never created here).
+ * Both authority sources binding the same task fails closed as ambiguous.
  * Absent -> null; ambiguous -> fail closed; corruption -> fail closed.
  */
 export function resolveTaskAdmission({ store, taskId, sourceTaskId, emissionSlot = 'next' } = {}) {
@@ -417,7 +483,14 @@ export function resolveTaskAdmission({ store, taskId, sourceTaskId, emissionSlot
         },
       );
     }
-    return { sourceTaskId, emissionSlot, admission };
+    return {
+      authorityKind: AUTHORITY_KIND_EMISSION_ADMISSION,
+      authorityId: admission.admissionId,
+      sourceTaskId,
+      emissionSlot,
+      admission,
+      intake: null,
+    };
   }
   const tasksDirectory = nodePath.join(store.home, 'tasks');
   const matches = [];
@@ -481,7 +554,6 @@ export function resolveTaskAdmission({ store, taskId, sourceTaskId, emissionSlot
       matches.push({ sourceTaskId: taskEntry.name, emissionSlot: slot, admission: record });
     }
   }
-  if (matches.length === 0) return null;
   if (matches.length > 1) {
     fail(`multiple canonical admissions bind task ${taskId} (fail-closed, no selection).`, {
       code: OPERATOR_TASK_ADMISSION_AMBIGUOUS,
@@ -490,13 +562,46 @@ export function resolveTaskAdmission({ store, taskId, sourceTaskId, emissionSlot
       nextAction: deriveNextAction(OPERATOR_TASK_ADMISSION_AMBIGUOUS),
     });
   }
+  const intake =
+    typeof store.readUserApprovedIntake === 'function'
+      ? optionalRead(() => store.readUserApprovedIntake({ taskId }), 'INTAKE_NOT_FOUND')
+      : null;
+  if (matches.length === 1 && intake !== null) {
+    fail(
+      `both an emission admission and a user-approved intake authority bind task ${taskId} (fail-closed, authority sources are never merged).`,
+      {
+        code: OPERATOR_TASK_AUTHORITY_AMBIGUOUS,
+        taskId,
+        stage: 'resolve-admission',
+        nextAction: deriveNextAction(OPERATOR_TASK_AUTHORITY_AMBIGUOUS),
+      },
+    );
+  }
+  if (matches.length === 0 && intake === null) return null;
+  if (intake !== null) {
+    return {
+      authorityKind: AUTHORITY_KIND_USER_APPROVED_INTAKE,
+      authorityId: intake.intakeId,
+      sourceTaskId: taskId,
+      emissionSlot: USER_APPROVED_INTAKE_DISPATCH_SLOT,
+      admission: null,
+      intake,
+    };
+  }
   const match = matches[0];
   // Re-read through the authoritative store primitive (full binding check).
   const admission = store.readEmissionAdmission({
     sourceTaskId: match.sourceTaskId,
     emissionSlot: match.emissionSlot,
   });
-  return { sourceTaskId: match.sourceTaskId, emissionSlot: match.emissionSlot, admission };
+  return {
+    authorityKind: AUTHORITY_KIND_EMISSION_ADMISSION,
+    authorityId: admission.admissionId,
+    sourceTaskId: match.sourceTaskId,
+    emissionSlot: match.emissionSlot,
+    admission,
+    intake: null,
+  };
 }
 
 /**
@@ -574,7 +679,7 @@ export async function executeOperatorTask({
     const found = resolveTaskAdmission({ store, taskId, sourceTaskId, emissionSlot });
     if (found === null) {
       fail(
-        `no canonical emission admission binds task ${taskId} (fail-closed): the operator CLI runs only emission-admitted tasks.`,
+        `no canonical pre-execution authority (emission admission or user-approved intake) binds task ${taskId} (fail-closed): the operator CLI never creates an authority and runs only authority-bound tasks.`,
         {
           code: OPERATOR_TASK_ADMISSION_NOT_FOUND,
           taskId,
@@ -585,22 +690,27 @@ export async function executeOperatorTask({
     }
     return found;
   });
+  const authorityKind = resolved.authorityKind ?? AUTHORITY_KIND_EMISSION_ADMISSION;
+  const authorityId = resolved.authorityId;
   const boundSourceTaskId = resolved.sourceTaskId;
   const boundEmissionSlot = resolved.emissionSlot;
+  const intakeAuthorized = authorityKind === AUTHORITY_KIND_USER_APPROVED_INTAKE;
 
   const claimed = await atStage('claim', taskId, async () =>
-    store.claimAdmittedTask({
-      sourceTaskId: boundSourceTaskId,
-      emissionSlot: boundEmissionSlot,
-      workerId,
-      leaseDurationMs,
-    }),
+    intakeAuthorized
+      ? store.claimUserApprovedIntakeTask({ taskId, workerId, leaseDurationMs })
+      : store.claimAdmittedTask({
+          sourceTaskId: boundSourceTaskId,
+          emissionSlot: boundEmissionSlot,
+          workerId,
+          leaseDurationMs,
+        }),
   );
   const claim = claimed.claim;
 
   if (claimed.terminal === true) {
     const dispatchId = buildClaimBoundDispatchId({
-      admissionId: claimed.record.admissionId,
+      admissionId: authorityId,
       nextTaskId: taskId,
       workerId: claim.workerId,
       claimGeneration: claim.generation,
@@ -616,6 +726,7 @@ export async function executeOperatorTask({
       terminal: true,
       executorInvocations: 0,
       taskId,
+      authorityKind,
       sourceTaskId: boundSourceTaskId,
       emissionSlot: boundEmissionSlot,
       workerId: claim.workerId,
@@ -630,16 +741,24 @@ export async function executeOperatorTask({
   }
 
   const attempt = await atStage('dispatch-attempt', taskId, async () =>
-    store.persistDispatchAttempt({
-      sourceTaskId: boundSourceTaskId,
-      emissionSlot: boundEmissionSlot,
-      workerId,
-    }),
+    intakeAuthorized
+      ? store.persistUserApprovedIntakeDispatchAttempt({ taskId, workerId })
+      : store.persistDispatchAttempt({
+          sourceTaskId: boundSourceTaskId,
+          emissionSlot: boundEmissionSlot,
+          workerId,
+        }),
   );
   const dispatchId = attempt.dispatchId;
 
   const request = await atStage('transport-request', taskId, async () =>
-    prepareDispatchTransportRequest({ store, sourceTaskId: boundSourceTaskId, dispatchId }),
+    intakeAuthorized
+      ? prepareUserApprovedIntakeDispatchTransportRequest({
+          store,
+          taskId: boundSourceTaskId,
+          dispatchId,
+        })
+      : prepareDispatchTransportRequest({ store, sourceTaskId: boundSourceTaskId, dispatchId }),
   );
   await atStage('receiver-acceptance', taskId, async () =>
     acceptReceiverDispatch({ request, store }),
@@ -671,6 +790,7 @@ export async function executeOperatorTask({
     terminal: false,
     executorInvocations: receiptOutcome.executorInvoked === true ? 1 : 0,
     taskId,
+    authorityKind,
     sourceTaskId: boundSourceTaskId,
     emissionSlot: boundEmissionSlot,
     workerId: claim.workerId,
@@ -704,6 +824,8 @@ export function parseOperatorArgv(argv = []) {
     opencodePath: null,
     model: null,
     workdir: null,
+    specPath: null,
+    recorderId: DEFAULT_OPERATOR_RECORDER_ID,
   };
   const positionals = [];
   const readValue = (flag, index) => {
@@ -770,6 +892,14 @@ export function parseOperatorArgv(argv = []) {
         options.workdir = readValue(argument, index);
         index += 1;
         break;
+      case '--spec':
+        options.specPath = readValue(argument, index);
+        index += 1;
+        break;
+      case '--recorder':
+        options.recorderId = readValue(argument, index);
+        index += 1;
+        break;
       default:
         fail(`unknown option: ${argument}`, {
           code: OPERATOR_ARGUMENT_INVALID,
@@ -804,6 +934,26 @@ export function parseOperatorArgv(argv = []) {
         nextAction: 'run `node scripts/coordination/operator-cli.mjs --help`',
       });
     }
+  } else if (command === 'intake') {
+    if (positionals.length > 2) {
+      fail(`unexpected argument(s): ${positionals.slice(2).join(' ')}`, {
+        code: OPERATOR_ARGUMENT_INVALID,
+        stage: 'arguments',
+        nextAction: 'run `node scripts/coordination/operator-cli.mjs --help`',
+      });
+    }
+    if (positionals.length === 2) {
+      // Optional cross-check only: the spec file remains the task identity.
+      options.taskId = positionals[1];
+      assertOperatorTaskId(options.taskId, 'arguments');
+    }
+    if (typeof options.specPath !== 'string' || !options.specPath.trim()) {
+      fail('intake requires --spec <ABSOLUTE_JSON_PATH> carrying the explicit user approval and the bounded READ_ONLY task spec.', {
+        code: OPERATOR_ARGUMENT_INVALID,
+        stage: 'arguments',
+        nextAction: 'run `pnpm coordination:intake --spec <ABSOLUTE_JSON_PATH>`',
+      });
+    }
   } else if (positionals.length > (command === null ? 0 : 1)) {
     fail(`unexpected argument(s): ${positionals.slice(1).join(' ')}`, {
       code: OPERATOR_ARGUMENT_INVALID,
@@ -822,10 +972,12 @@ export function renderUsage() {
     '  pnpm coordination:run <TASK_ID> [--source <SOURCE_TASK_ID>] [--slot <EMISSION_SLOT>]',
     '      [--worker <WORKER_ID>] [--lease-ms <MILLISECONDS>] [--opencode <ABSOLUTE_PATH>]',
     '      [--model <PROVIDER/MODEL>] [--workdir <ABSOLUTE_PATH>] [--json]',
+    '  pnpm coordination:intake --spec <ABSOLUTE_JSON_PATH> [<TASK_ID>] [--recorder <ID>] [--json]',
     '',
     'notes:',
-    '  run executes exactly one operator-named READ_ONLY task boundary.',
+    '  run executes exactly one operator-named READ_ONLY task boundary through its existing pre-execution authority (emission admission or user-approved intake).',
     `  the executor is the read-only OpenCode CLI structured-result executor; ${OPENCODE_CLI_PATH_ENV_KEY} and ${OPENCODE_MODEL_ENV_KEY} (or --opencode/--model) are required.`,
+    '  intake intakes exactly ONE explicitly user-approved READ_ONLY task spec (userApproved: true + approval + bounded taskSpec) to READY; it never claims, dispatches, or invokes an executor.',
     '  status/inspect never write. JSON output is a read-only projection, never durable authority.',
     '',
   ].join('\n');
@@ -947,6 +1099,11 @@ export function renderInspection(projection) {
       ['consumedId', 'consumedId'],
       ['consumedAt', 'consumedAt'],
     ])}`,
+    `intake:         ${describePresence(projection.intake, [
+      ['intakeId', 'intakeId'],
+      ['recorderId', 'recorderId'],
+      ['recordedAt', 'recordedAt'],
+    ])}`,
     `receipt:        ${describePresence(projection.executorResultReceipt, [
       ['dispatchId', 'dispatchId'],
       ['status', 'status'],
@@ -960,6 +1117,7 @@ export function renderInspection(projection) {
 export function renderRunResult(projection) {
   const lines = [
     `greenhub coordination run ${projection.taskId}`,
+    `authority: ${projection.authorityKind ?? AUTHORITY_KIND_EMISSION_ADMISSION}`,
     `outcome:  ${projection.outcome}`,
     `source:   ${projection.sourceTaskId} (slot=${projection.emissionSlot})`,
     `worker:   ${projection.workerId} generation=${projection.claimGeneration}`,
@@ -1033,6 +1191,163 @@ export function buildConfiguredExecutor(
   return null;
 }
 
+/**
+ * Read ONE operator intake request file: the explicit approval signal, the
+ * approval provenance, and ONE bounded READ_ONLY task spec. The file is
+ * INPUT ONLY: it is never runtime state, and unknown fields fail closed.
+ */
+export function readOperatorIntakeRequest({ specPath } = {}) {
+  if (typeof specPath !== 'string' || !specPath.trim()) {
+    fail('intake requires --spec <ABSOLUTE_JSON_PATH>.', {
+      code: OPERATOR_ARGUMENT_INVALID,
+      stage: 'intake',
+      nextAction: 'run `pnpm coordination:intake --spec <ABSOLUTE_JSON_PATH>`',
+    });
+  }
+  let raw;
+  try {
+    raw = nodeFs.readFileSync(specPath, 'utf8');
+  } catch (error) {
+    fail(`intake spec file could not be read (fail-closed): ${specPath}: ${error?.message}`, {
+      code: OPERATOR_INTAKE_SPEC_INVALID,
+      stage: 'intake',
+      nextAction: deriveNextAction(OPERATOR_INTAKE_SPEC_INVALID),
+    });
+  }
+  let document;
+  try {
+    document = JSON.parse(raw);
+  } catch (error) {
+    fail(`intake spec file is not valid JSON (fail-closed): ${specPath}: ${error?.message}`, {
+      code: OPERATOR_INTAKE_SPEC_INVALID,
+      stage: 'intake',
+      nextAction: deriveNextAction(OPERATOR_INTAKE_SPEC_INVALID),
+    });
+  }
+  if (document === null || typeof document !== 'object' || Array.isArray(document)) {
+    fail(`intake spec file must contain a JSON object (fail-closed): ${specPath}`, {
+      code: OPERATOR_INTAKE_SPEC_INVALID,
+      stage: 'intake',
+      nextAction: deriveNextAction(OPERATOR_INTAKE_SPEC_INVALID),
+    });
+  }
+  for (const key of Object.keys(document)) {
+    if (!OPERATOR_INTAKE_REQUEST_FIELDS.includes(key)) {
+      fail(
+        `intake spec file must carry exactly (${OPERATOR_INTAKE_REQUEST_FIELDS.join(', ')}); unknown field "${key}" fails closed.`,
+        {
+          code: OPERATOR_INTAKE_SPEC_INVALID,
+          stage: 'intake',
+          nextAction: deriveNextAction(OPERATOR_INTAKE_SPEC_INVALID),
+        },
+      );
+    }
+  }
+  return Object.freeze({
+    userApproved: document.userApproved,
+    approval: document.approval,
+    taskSpec: document.taskSpec,
+  });
+}
+
+/**
+ * Intake exactly ONE explicitly user-approved bounded READ_ONLY task spec into
+ * the canonical durable intake authority and converge it to READY. This is the
+ * ONLY operator intake entry: it never claims, never dispatches, never invokes
+ * an executor, never scans READY tasks, and never creates a successor.
+ * The durable store primitive owns all authority semantics; this composition
+ * validates the request boundary and the operator-named task cross-check only.
+ */
+export function performUserApprovedIntake({
+  store,
+  request,
+  taskId = null,
+  recorderId = DEFAULT_OPERATOR_RECORDER_ID,
+} = {}) {
+  if (!store || typeof store.intakeUserApprovedReadOnlyTask !== 'function') {
+    fail('intake requires a durable coordination store exposing intakeUserApprovedReadOnlyTask (composition only).', {
+      code: OPERATOR_ARGUMENT_INVALID,
+      stage: 'intake',
+      nextAction: 'use the package.json coordination:intake command',
+    });
+  }
+  if (typeof store.home !== 'string' || !store.home.trim()) {
+    fail('intake requires a resolved coordination home.', {
+      code: OPERATOR_INTAKE_SPEC_INVALID,
+      stage: 'intake',
+      nextAction: deriveNextAction(OPERATOR_INTAKE_SPEC_INVALID),
+    });
+  }
+  if (isSamePathOrDescendant(store.home, REPOSITORY_ROOT)) {
+    fail(
+      `the coordination runtime home must never live inside the repository worktree (got ${store.home}); runtime state is external local durable state. Set ${COORDINATION_HOME_ENV_KEY} to an external directory.`,
+      {
+        code: OPERATOR_INTAKE_HOME_INVALID,
+        stage: 'intake',
+        nextAction: `set ${COORDINATION_HOME_ENV_KEY} to an external durable directory outside the repository worktree`,
+      },
+    );
+  }
+  if (typeof recorderId !== 'string' || !recorderId.trim()) {
+    fail('recorder id must be a non-empty string.', {
+      code: OPERATOR_ARGUMENT_INVALID,
+      stage: 'intake',
+      nextAction: 'pass --recorder <ID>',
+    });
+  }
+  if (!request || typeof request !== 'object' || Array.isArray(request)) {
+    fail('intake request must be the exact { userApproved, approval, taskSpec } object.', {
+      code: OPERATOR_INTAKE_SPEC_INVALID,
+      stage: 'intake',
+      nextAction: deriveNextAction(OPERATOR_INTAKE_SPEC_INVALID),
+    });
+  }
+  if (taskId !== null && request.taskSpec?.taskId !== taskId) {
+    fail(
+      `intake positional taskId ${JSON.stringify(taskId)} does not match the spec taskSpec.taskId ${JSON.stringify(request.taskSpec?.taskId)} (fail-closed).`,
+      {
+        code: OPERATOR_INTAKE_SPEC_INVALID,
+        stage: 'intake',
+        taskId,
+        nextAction: deriveNextAction(OPERATOR_INTAKE_SPEC_INVALID),
+      },
+    );
+  }
+  const result = atSyncStage('intake', request.taskSpec?.taskId ?? null, () =>
+    store.intakeUserApprovedReadOnlyTask({
+      userApproved: request.userApproved,
+      approval: request.approval,
+      taskSpec: request.taskSpec,
+      recorderId,
+    }),
+  );
+  return Object.freeze({
+    schemaVersion: OPERATOR_PROJECTION_SCHEMA_VERSION,
+    projection: OPERATOR_INTAKE_PROJECTION,
+    authorityKind: AUTHORITY_KIND_USER_APPROVED_INTAKE,
+    intakeId: result.record.intakeId,
+    taskId: result.record.taskId,
+    taskKind: result.record.taskSpec.taskKind,
+    desiredExitState: result.record.taskSpec.desiredExitState,
+    intakeSpecBinding: result.record.intakeSpecBinding,
+    approval: result.record.approval,
+    duplicate: result.duplicate === true,
+    taskStatus: result.task.status,
+  });
+}
+
+export function renderIntakeResult(projection) {
+  return [
+    `greenhub coordination intake ${projection.taskId}`,
+    `intake:   ${projection.intakeId} (${projection.duplicate ? 'exact replay' : 'newly recorded'})`,
+    `approval: ${projection.approval.approvedBy} ref=${JSON.stringify(projection.approval.approvalRef)}`,
+    `binding:  ${projection.intakeSpecBinding}`,
+    `task:     ${projection.taskKind} ${projection.taskStatus}`,
+    'next:     pnpm coordination:run ' + projection.taskId,
+    '',
+  ].join('\n');
+}
+
 export async function runOperatorCli({
   argv = [],
   env = process.env,
@@ -1066,6 +1381,19 @@ export async function runOperatorCli({
       const projection = collectTaskInspection({ store: activeStore, taskId: options.taskId });
       stdout.write(
         options.json ? `${JSON.stringify(projection, null, 2)}\n` : renderInspection(projection),
+      );
+      return 0;
+    }
+    if (options.command === 'intake') {
+      const request = readOperatorIntakeRequest({ specPath: options.specPath });
+      const projection = performUserApprovedIntake({
+        store: activeStore,
+        request,
+        taskId: options.taskId,
+        recorderId: options.recorderId,
+      });
+      stdout.write(
+        options.json ? `${JSON.stringify(projection, null, 2)}\n` : renderIntakeResult(projection),
       );
       return 0;
     }
