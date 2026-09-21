@@ -64,12 +64,11 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { buildAdmissionBoundClaimToken } from './admission-bound-claim.mjs';
-import { acceptExecutorDispatchDecision } from './dispatch-executor-acceptance.mjs';
 import { persistExecutorInvocationAttempt } from './dispatch-executor-invocation-attempt.mjs';
+import { readExecutorInvocationInput } from './dispatch-executor-invocation-input.mjs';
 import { EXECUTOR_INVOCATION_OUTCOME_ACCEPTED } from './dispatch-executor-invocation-outcome.mjs';
 import { persistExecutorInvocationOutcome } from './dispatch-executor-invocation-outcome-persistence.mjs';
 import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
-import { persistReceiverDecision } from './dispatch-receiver-decision.mjs';
 import { prepareDispatchTransportRequest } from './dispatch-transport-contract.mjs';
 import * as deliveryModule from './executor-result-delivery.mjs';
 import {
@@ -359,11 +358,15 @@ async function setupReceiptChain({
     dispatchId: attempt.dispatchId,
   });
   await acceptReceiverDispatch({ request, store });
-  await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-  await acceptExecutorDispatchDecision({ dispatchId: attempt.dispatchId, store });
   await persistExecutorInvocationAttempt({ dispatchId: attempt.dispatchId, store });
   const dispatchId = attempt.dispatchId;
+  // The durable invocation-attempt bytes are the authority for the canonical
+  // result delivery (workerId / claimGeneration always come from the durable
+  // coordination record, never from the receipt). The durable bytes are
+  // exactly the canonical Task 27 invocation input built from the durable
+  // receiver acceptance.
   const authority = store.readExecutorInvocationAttempt(dispatchId);
+  assert.deepEqual(authority, await readExecutorInvocationInput({ dispatchId, store }));
   let receipt = null;
   if (recordReceipt) {
     const persisted = await persistExecutorResultReceipt({

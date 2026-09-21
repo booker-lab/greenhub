@@ -60,10 +60,6 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  acceptExecutorDispatchDecision,
-  executorDispatchAcceptanceFilePath,
-} from './dispatch-executor-acceptance.mjs';
-import {
   CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
   EXECUTOR_INVOCATION_ATTEMPTS_DIRNAME,
   ExecutorInvocationAttemptError,
@@ -77,7 +73,10 @@ import {
   INVALID_EXECUTOR_INVOCATION_CONTRACT_STORE,
   invokeExecutorInvocationAdapter,
 } from './dispatch-executor-invocation-contract.mjs';
-import { readExecutorInvocationInput } from './dispatch-executor-invocation-input.mjs';
+import {
+  buildExecutorInvocationInputRecord,
+  readExecutorInvocationInput,
+} from './dispatch-executor-invocation-input.mjs';
 import * as outcomeModule from './dispatch-executor-invocation-outcome.mjs';
 import {
   EXECUTOR_INVOCATION_OUTCOME_ACCEPTED,
@@ -90,11 +89,10 @@ import {
   INVALID_EXECUTOR_INVOCATION_OUTCOME,
   invokeExecutorAndValidateOutcome,
 } from './dispatch-executor-invocation-outcome.mjs';
-import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
 import {
-  persistReceiverDecision,
-  receiverDispatchDecisionFilePath,
-} from './dispatch-receiver-decision.mjs';
+  acceptReceiverDispatch,
+  receiverDispatchAcceptanceFilePath,
+} from './dispatch-receiver-acceptance.mjs';
 import { prepareDispatchTransportRequest } from './dispatch-transport-contract.mjs';
 import { DISPOSITION_STATE_ADOPTED } from './disposition.mjs';
 import { CoordinationStore } from './store.mjs';
@@ -330,10 +328,9 @@ function driveToAttempt(
 }
 
 // Task 30 setup: source -> child claim -> durable dispatch attempt -> Task 20
-// request -> Task 22 durable receiver acceptance -> Task 24 durable receiver
-// decision -> Task 26 durable executor acceptance -> Task 27 readable
-// invocation input. The Task 28 durable invocation attempt is NOT persisted
-// here.
+// request -> Task 22 durable receiver acceptance -> Task 27 readable
+// invocation input (direct composition over the durable receiver acceptance).
+// The Task 28 durable invocation attempt is NOT persisted here.
 async function setupInputOnly(prefix, sourceTaskId, childTaskId) {
   const home = makeHome(prefix);
   const clock = controllableClock();
@@ -352,13 +349,6 @@ async function setupInputOnly(prefix, sourceTaskId, childTaskId) {
   });
   const accepted = await acceptReceiverDispatch({ request, store });
   assert.equal(accepted.newlyAccepted, true);
-  const decided = await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-  assert.equal(decided.newlyDecided, true);
-  const executorAccepted = await acceptExecutorDispatchDecision({
-    dispatchId: attempt.dispatchId,
-    store,
-  });
-  assert.equal(executorAccepted.newlyAccepted, true);
   const input = await readExecutorInvocationInput({ dispatchId: attempt.dispatchId, store });
   return { home, clock, store, attempt, request, input };
 }
@@ -399,13 +389,6 @@ async function setupTwoAccepted(prefix, sourceA, childA, sourceB, childB) {
     });
     const accepted = await acceptReceiverDispatch({ request, store });
     assert.equal(accepted.newlyAccepted, true);
-    const decided = await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-    assert.equal(decided.newlyDecided, true);
-    const executorAccepted = await acceptExecutorDispatchDecision({
-      dispatchId: attempt.dispatchId,
-      store,
-    });
-    assert.equal(executorAccepted.newlyAccepted, true);
     const persisted = await persistExecutorInvocationAttempt({
       dispatchId: attempt.dispatchId,
       store,
@@ -483,12 +466,8 @@ function attemptPath(home, dispatchId) {
   return executorInvocationAttemptFilePath(home, dispatchId);
 }
 
-function executorAcceptancePath(home, dispatchId) {
-  return executorDispatchAcceptanceFilePath(home, dispatchId);
-}
-
-function decisionPath(home, dispatchId) {
-  return receiverDispatchDecisionFilePath(home, dispatchId);
+function receiverAcceptancePath(home, dispatchId) {
+  return receiverDispatchAcceptanceFilePath(home, dispatchId);
 }
 
 function listAttemptFiles(home) {
@@ -1166,6 +1145,10 @@ test('L. success, validation failure, and thrown adapter all leave every durable
     const taskBefore = store.readTask('EIOC30-L-CHILD');
     const claimBefore = store.readClaim('EIOC30-L-CHILD');
     const attemptBytes = readFileSync(attemptPath(home, attempt.dispatchId), 'utf8');
+    const receiverAcceptanceBytes = readFileSync(
+      receiverAcceptancePath(home, attempt.dispatchId),
+      'utf8',
+    );
 
     // (1) Success.
     const { adapter: okAdapter } = countingAdapter(() =>
@@ -1207,13 +1190,26 @@ test('L. success, validation failure, and thrown adapter all leave every durable
     assert.deepEqual(snapshotHomeBytes(home), before);
     assert.deepEqual(snapshotHomeStats(home), beforeStats);
 
-    // Target durable domains are present and byte-stable.
+    // Target durable domains are present and byte-stable: the outcome entry
+    // touches neither the durable receiver acceptance nor the durable
+    // invocation attempt.
     assert.equal(readFileSync(attemptPath(home, attempt.dispatchId), 'utf8'), attemptBytes);
     assert.equal(
-      readFileSync(executorAcceptancePath(home, attempt.dispatchId), 'utf8'),
-      attemptBytes,
+      readFileSync(receiverAcceptancePath(home, attempt.dispatchId), 'utf8'),
+      receiverAcceptanceBytes,
     );
-    assert.equal(readFileSync(decisionPath(home, attempt.dispatchId), 'utf8'), attemptBytes);
+    // The durable invocation-attempt bytes are exactly the canonical Task 27
+    // record built from the durable receiver acceptance (direct composition).
+    assert.equal(
+      attemptBytes,
+      JSON.stringify(
+        buildExecutorInvocationInputRecord(
+          store.readReceiverDispatchAcceptance(attempt.dispatchId),
+        ),
+        null,
+        2,
+      ),
+    );
     assert.deepEqual(listAttemptFiles(home), [`${attempt.dispatchId}.json`]);
 
     // Task/claim state unchanged.
@@ -1473,6 +1469,7 @@ test('O. production module carries no concrete executor/transport/process/fs/ret
   assert.ok(code.includes('invokeExecutorInvocationAdapter('));
   assert.equal(code.includes('store.readExecutorInvocationAttempt('), false);
   assert.equal(code.includes('validateReceiverDecisionRecord('), false);
+  assert.equal(code.includes('validateExecutorInvocationInputRecord('), false);
   assert.equal(code.includes('readExecutorInvocationInput('), false);
   assert.equal(code.includes('persistExecutorInvocationAttempt('), false);
 

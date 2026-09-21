@@ -1,11 +1,12 @@
 // Bounded durable invocation-attempt owner:
-// GREENHUB-COORDINATION-DURABLE-EXECUTOR-INVOCATION-ATTEMPT-28.
+// GREENHUB-COORDINATION-DURABLE-EXECUTOR-INVOCATION-ATTEMPT-28
+// (GF-02 direct composition revision).
 // Surface: scripts/coordination/*dispatch-executor-invocation-attempt* (this
 // module) + the durable executor-invocation-attempt store primitives ONLY
 // (readExecutorInvocationAttempt / createExecutorInvocationAttempt over
 // <coordination-home>/executor-invocation-attempts/<dispatchId>.json).
-// Task 27 readExecutorInvocationInput is composed verbatim; Task 26
-// assertValidExecutorAcceptanceDispatchId is reused verbatim; Task 18~27
+// Task 27 readExecutorInvocationInput is composed verbatim; the Task 22
+// receiver-acceptance identity family is reused verbatim; Task 18~23/27
 // source/spec semantics are never modified or duplicated.
 //
 // Contract summary:
@@ -24,13 +25,15 @@
 //     that any executor was actually invoked, notified, or started.
 //   Entry is EXACTLY one path:
 //     (dispatchId, store)
-//       -> store capability gate (readExecutorDispatchAcceptance /
+//       -> store capability gate (readReceiverDispatchAcceptance /
 //          readExecutorInvocationAttempt / createExecutorInvocationAttempt)
 //       -> readExecutorInvocationInput({ dispatchId, store })
 //          [Task 27 verbatim: dispatchId identity validation, durable
-//           executor-acceptance read, Task 24 validation, direct binding
-//           re-check; missing/corrupt input fails closed with predecessor
-//           codes propagated UNCHANGED, zero writes, zero auto-repair]
+//           receiver-acceptance read via the Task 23 direct derivation,
+//           canonical invocation input record construction, record validation,
+//           direct binding re-check; missing/corrupt input fails closed with
+//           predecessor codes propagated UNCHANGED, zero writes, zero
+//           auto-repair]
 //       -> existing invocation attempt: exact serialized replay or
 //          fail-closed conflict (first winner preserved; never overwrite/
 //          merge/repair)
@@ -54,11 +57,11 @@
 //   generation/fencing counter: claimGeneration stays the SOLE fencing
 //   generation, inherited verbatim inside decisionInput.
 //   Missing input causes ZERO writes and ZERO task/claim/admission/emission/
-//   dispatch-attempt/receiver-acceptance/receiver-decision/executor-
-//   acceptance/result mutation: no Task 26 acceptance is auto-created and no
-//   Task 28 invocation attempt is auto-created on corruption.
+//   dispatch-attempt/receiver-acceptance/result mutation: no receiver
+//   acceptance is auto-created and no Task 28 invocation attempt is
+//   auto-created on corruption.
 //   Corrupt / wrong-shape / wrong-order / wrong-value / tampered-decisionInput
-//   / mismatched-binding inputs fail closed with the existing Task 27/26/24/
+//   / mismatched-binding inputs fail closed with the existing Task 27/23/22/
 //   20/18/19 codes propagated UNCHANGED; nothing is repaired, normalized,
 //   overwritten, deleted, recreated, or merged, and the exact durable bytes
 //   stay untouched.
@@ -86,7 +89,7 @@
 //   retryGeneration), any node:fs access.
 
 import nodePath from 'node:path';
-import { assertValidExecutorAcceptanceDispatchId } from './dispatch-executor-acceptance.mjs';
+import { assertValidReceiverAcceptanceDispatchId } from './dispatch-receiver-acceptance.mjs';
 import { readExecutorInvocationInput } from './dispatch-executor-invocation-input.mjs';
 
 export const EXECUTOR_INVOCATION_ATTEMPTS_DIRNAME = 'executor-invocation-attempts';
@@ -128,7 +131,7 @@ function fail(message, code = CORRUPT_EXECUTOR_INVOCATION_ATTEMPT) {
 
 export function assertValidExecutorInvocationAttemptDispatchId(dispatchId) {
   try {
-    assertValidExecutorAcceptanceDispatchId(dispatchId);
+    assertValidReceiverAcceptanceDispatchId(dispatchId);
   } catch (error) {
     fail(error.message, CORRUPT_EXECUTOR_INVOCATION_ATTEMPT);
   }
@@ -181,18 +184,20 @@ function assertStoredAttemptBinding(record, dispatchId) {
  *
  * The persisted record is NOT an executor invocation, NOT an ACK, NOT a
  * receipt, NOT execution start, and NOT a task status transition: it only
- * makes the already-readable Task 26 durable executor acceptance reachable
- * through this durable invocation-attempt namespace/path authority.
+ * makes the already-derived canonical invocation input (bound to the durable
+ * receiver acceptance) reachable through this durable invocation-attempt
+ * namespace/path authority.
  *
  * Contract (fail-closed, no repair, no overwrite):
- * 1. `store` must expose readExecutorDispatchAcceptance(dispatchId) (Task 27
- *    requirement), readExecutorInvocationAttempt(dispatchId), and
+ * 1. `store` must expose readReceiverDispatchAcceptance(dispatchId) (Task 27
+ *    requirement via the Task 23 direct derivation),
+ *    readExecutorInvocationAttempt(dispatchId), and
  *    createExecutorInvocationAttempt(record); otherwise
  *    INVALID_EXECUTOR_INVOCATION_ATTEMPT_STORE and nothing is read or
  *    persisted.
  * 2. The invocation input is the EXACT Task 27 readExecutorInvocationInput
- *    result: missing durable executor acceptance ->
- *    EXECUTOR_DISPATCH_ACCEPTANCE_NOT_FOUND; corrupt/invalid input ->
+ *    result: missing durable receiver acceptance ->
+ *    RECEIVER_DISPATCH_ACCEPTANCE_NOT_FOUND; corrupt/invalid input ->
  *    predecessor codes propagate UNCHANGED; no write, no auto-acceptance, no
  *    receiver-decision reconstruction, no task mutation, no retry.
  * 3. The durable value is that EXACT validated Task 27 input; no wrapper
@@ -217,20 +222,21 @@ export async function persistExecutorInvocationAttempt({ dispatchId, store } = {
   //    auto-detection, no transport.
   if (
     !store ||
-    typeof store.readExecutorDispatchAcceptance !== 'function' ||
+    typeof store.readReceiverDispatchAcceptance !== 'function' ||
     typeof store.readExecutorInvocationAttempt !== 'function' ||
     typeof store.createExecutorInvocationAttempt !== 'function'
   ) {
     fail(
-      'executor invocation attempt persistence requires a store exposing readExecutorDispatchAcceptance / readExecutorInvocationAttempt / createExecutorInvocationAttempt (composition only; no registry, no auto-detection).',
+      'executor invocation attempt persistence requires a store exposing readReceiverDispatchAcceptance / readExecutorInvocationAttempt / createExecutorInvocationAttempt (composition only; no registry, no auto-detection).',
       INVALID_EXECUTOR_INVOCATION_ATTEMPT_STORE,
     );
   }
 
   // 2. Task 27 verbatim: dispatchId identity validation, durable
-  //    executor-acceptance read, Task 24 validation, and the direct dispatchId
-  //    binding re-check. All predecessor codes propagate UNCHANGED; missing
-  //    input performs no write at all.
+  //    receiver-acceptance read via the Task 23 direct derivation, canonical
+  //    invocation input record construction/validation, and the direct
+  //    dispatchId binding re-check. All predecessor codes propagate UNCHANGED;
+  //    missing input performs no write at all.
   const input = await readExecutorInvocationInput({ dispatchId, store });
 
   // 3. The EXACT validated Task 27 invocation input is the durable value: no

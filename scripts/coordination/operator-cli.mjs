@@ -54,11 +54,9 @@ import nodeOs from 'node:os';
 import nodePath from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildClaimBoundDispatchId } from './claim-bound-dispatch-envelope.mjs';
-import { acceptExecutorDispatchDecision } from './dispatch-executor-acceptance.mjs';
 import { persistExecutorInvocationAttempt } from './dispatch-executor-invocation-attempt.mjs';
 import { invokeExecutorWithInvocationFence } from './dispatch-executor-invocation-fence.mjs';
 import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
-import { persistReceiverDecision } from './dispatch-receiver-decision.mjs';
 import { prepareDispatchTransportRequest } from './dispatch-transport-contract.mjs';
 import { validateAdmissionRecord } from './emission-admission.mjs';
 import { deliverExecutorResultReceipt } from './executor-result-delivery.mjs';
@@ -645,12 +643,6 @@ export async function executeOperatorTask({
   );
   await atStage('receiver-acceptance', taskId, async () =>
     acceptReceiverDispatch({ request, store }),
-  );
-  await atStage('receiver-decision', taskId, async () =>
-    persistReceiverDecision({ dispatchId, store }),
-  );
-  await atStage('executor-acceptance', taskId, async () =>
-    acceptExecutorDispatchDecision({ dispatchId, store }),
   );
   await atStage('invocation-attempt', taskId, async () =>
     persistExecutorInvocationAttempt({ dispatchId, store }),

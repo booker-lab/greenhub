@@ -63,7 +63,7 @@
 //   P. no ACK/receipt/result/disposition artifact or store primitive.
 //   Q. no new generation authority.
 //   R. no retry/fallback/registry authority (static + behavioral).
-//   S. Task 24~31 predecessor surfaces and semantics stay intact.
+//   S. Task 22~31 predecessor surfaces and semantics stay intact.
 //   T. durable replay never changes bytes or mtimes.
 //   U. cross-boundary receipt fence: a durable Task 33 receipt (all status
 //      values) refuses the outcome entry with zero adapter calls, zero writes,
@@ -103,10 +103,6 @@ import {
   createCodexCliExecutorAdapter,
 } from './codex-cli-executor-adapter.mjs';
 import {
-  acceptExecutorDispatchDecision,
-  executorDispatchAcceptanceFilePath,
-} from './dispatch-executor-acceptance.mjs';
-import {
   CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
   EXECUTOR_INVOCATION_ATTEMPTS_DIRNAME,
   executorInvocationAttemptFilePath,
@@ -117,6 +113,7 @@ import {
   ExecutorInvocationContractError,
   invokeExecutorInvocationAdapter,
 } from './dispatch-executor-invocation-contract.mjs';
+import { buildExecutorInvocationInputRecord } from './dispatch-executor-invocation-input.mjs';
 import * as outcomeModule from './dispatch-executor-invocation-outcome.mjs';
 import {
   EXECUTOR_INVOCATION_OUTCOME_ACCEPTED,
@@ -142,11 +139,10 @@ import {
   persistExecutorInvocationOutcome,
   validateExecutorInvocationOutcomeRecord,
 } from './dispatch-executor-invocation-outcome-persistence.mjs';
-import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
 import {
-  persistReceiverDecision,
-  receiverDispatchDecisionFilePath,
-} from './dispatch-receiver-decision.mjs';
+  acceptReceiverDispatch,
+  receiverDispatchAcceptanceFilePath,
+} from './dispatch-receiver-acceptance.mjs';
 import { prepareDispatchTransportRequest } from './dispatch-transport-contract.mjs';
 import { DISPOSITION_STATE_ADOPTED } from './disposition.mjs';
 import {
@@ -386,13 +382,6 @@ async function setupAccepted(prefix, sourceTaskId, childTaskId) {
   });
   const accepted = await acceptReceiverDispatch({ request, store });
   assert.equal(accepted.newlyAccepted, true);
-  const decided = await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-  assert.equal(decided.newlyDecided, true);
-  const executorAccepted = await acceptExecutorDispatchDecision({
-    dispatchId: attempt.dispatchId,
-    store,
-  });
-  assert.equal(executorAccepted.newlyAccepted, true);
   const persisted = await persistExecutorInvocationAttempt({
     dispatchId: attempt.dispatchId,
     store,
@@ -616,6 +605,14 @@ async function assertExactPersistence(prefix, sourceTaskId, childTaskId, outcome
   const { home, store, dispatchId } = await setupAccepted(prefix, sourceTaskId, childTaskId);
   try {
     const before = snapshotHomeBytes(home);
+    const attemptBytesBefore = readFileSync(
+      executorInvocationAttemptFilePath(home, dispatchId),
+      'utf8',
+    );
+    const receiverAcceptanceBytesBefore = readFileSync(
+      receiverDispatchAcceptanceFilePath(home, dispatchId),
+      'utf8',
+    );
     const { calls, adapter } = countingAdapter(() => validOutcome(dispatchId, outcome));
     const result = await persistExecutorInvocationOutcome({ dispatchId, store, adapter });
 
@@ -653,11 +650,24 @@ async function assertExactPersistence(prefix, sourceTaskId, childTaskId, outcome
     assert.deepEqual(added, [join(EXECUTOR_INVOCATION_OUTCOMES_DIRNAME, `${dispatchId}.json`)]);
     assert.deepEqual(listOutcomeFiles(home), [`${dispatchId}.json`]);
 
-    // The attempt and receiver-decision domains stay byte-identical.
+    // The attempt and receiver-acceptance domains stay byte-identical, and the
+    // durable attempt bytes are exactly the canonical Task 27 record built from
+    // the durable receiver acceptance.
     assert.equal(readFileSync(outcomePath(home, dispatchId), 'utf8'), expectedRecordBytes(record));
-    assert.equal(existsSync(executorInvocationAttemptFilePath(home, dispatchId)), true);
-    assert.equal(existsSync(executorDispatchAcceptanceFilePath(home, dispatchId)), true);
-    assert.equal(existsSync(receiverDispatchDecisionFilePath(home, dispatchId)), true);
+    assert.equal(
+      readFileSync(executorInvocationAttemptFilePath(home, dispatchId), 'utf8'),
+      attemptBytesBefore,
+    );
+    assert.equal(
+      readFileSync(receiverDispatchAcceptanceFilePath(home, dispatchId), 'utf8'),
+      receiverAcceptanceBytesBefore,
+    );
+    assert.equal(
+      attemptBytesBefore,
+      expectedRecordBytes(
+        buildExecutorInvocationInputRecord(store.readReceiverDispatchAcceptance(dispatchId)),
+      ),
+    );
   } finally {
     removeHome(home);
   }
@@ -1369,7 +1379,7 @@ test('R. no retry/fallback/registry authority exists (static + behavioral)', asy
 // S. Predecessor Task 24~31 semantics intact.
 // ---------------------------------------------------------------------------
 
-test('S. Task 24~31 predecessor surfaces and semantics stay intact', async () => {
+test('S. Task 22~31 predecessor surfaces and semantics stay intact', async () => {
   // Task 30 surface unchanged.
   assert.equal(typeof invokeExecutorAndValidateOutcome, 'function');
   assert.equal(EXECUTOR_INVOCATION_OUTCOME_SCHEMA_VERSION, 1);
@@ -1405,9 +1415,8 @@ test('S. Task 24~31 predecessor surfaces and semantics stay intact', async () =>
 
     // Predecessor store primitives still exist and behave.
     for (const name of [
-      'readExecutorDispatchAcceptance',
-      'createExecutorDispatchAcceptance',
-      'readReceiverDispatchDecision',
+      'readReceiverDispatchAcceptance',
+      'createReceiverDispatchAcceptance',
       'readExecutorInvocationAttempt',
       'createExecutorInvocationAttempt',
     ]) {
@@ -1417,7 +1426,7 @@ test('S. Task 24~31 predecessor surfaces and semantics stay intact', async () =>
     assert.equal(typeof store.createExecutorInvocationOutcome, 'function');
 
     // The store's invocation-attempt domain still uses exclusive-create and
-    // the Task 24 public validator; no exists()->write() pattern was added.
+    // the Task 27 public validator; no exists()->write() pattern was added.
     const storeSource = readFileSync(join(MODULE_DIRECTORY, 'store.mjs'), 'utf8');
     const start = storeSource.indexOf('Durable executor invocation attempt domain');
     const end = storeSource.indexOf('Claim-bound dispatch envelope domain', start);
@@ -1426,7 +1435,7 @@ test('S. Task 24~31 predecessor surfaces and semantics stay intact', async () =>
     assert.ok(section.includes('writeJsonExclusive('));
     assert.equal(section.includes('existsSync('), false);
     assert.equal(section.includes('writeJsonAtomic('), false);
-    assert.equal(section.includes('validateReceiverDecisionRecord('), true);
+    assert.equal(section.includes('validateExecutorInvocationInputRecord('), true);
   } finally {
     removeHome(home);
   }
@@ -1844,6 +1853,7 @@ test('STATIC. production module carries no concrete executor/transport/process/f
   assert.ok(code.includes('validateExecutorResultReceiptRecord('));
   assert.equal(code.includes('validateExecutorInvocationOutcome('), false);
   assert.equal(code.includes('validateReceiverDecisionRecord('), false);
+  assert.equal(code.includes('validateExecutorInvocationInputRecord('), false);
   assert.equal(code.includes('readExecutorInvocationInput('), false);
   assert.equal(code.includes('createExecutorResultReceipt('), false);
 
