@@ -1,5 +1,9 @@
 // Bounded composition owner:
-// GREENHUB-COORDINATION-SHARED-CONTROL-TOWER-RESULT-RELAY-GF08.
+// GREENHUB-COORDINATION-SHARED-CONTROL-TOWER-RESULT-RELAY-GF08
+// + the read-only shared-surface lookup extension for
+//   GREENHUB-COORDINATION-SHARED-CONTROL-TOWER-DISPOSITION-RETURN-GF09
+//   (findRelayIssue / findComments ONLY: both are read-only, create nothing,
+//   author no verdict, and never write durable coordination bytes).
 // Surface: scripts/coordination/*control-tower-result-relay* (this module + its
 // proof spec) + the operator-facing `coordination:relay` composition and the
 // automatic post-intake relay step inside the existing `coordination:run` ONLY
@@ -813,46 +817,99 @@ export function createGitHubIssueCommentRelayTransport({
     return stdout;
   }
 
+  async function searchExactIssuesByTitle(title) {
+    const searchOut = await runGh(
+      [
+        'issue',
+        'list',
+        '--repo',
+        targetRepository,
+        '--state',
+        'all',
+        '--limit',
+        String(MAX_CONTROL_TOWER_RESULT_RELAY_ISSUE_LIST),
+        '--search',
+        `in:title ${title}`,
+        '--json',
+        'number,title,state,url',
+      ],
+      'issue search',
+    );
+    const issues = parseJsonOutput(searchOut, 'issue search');
+    if (!Array.isArray(issues)) {
+      failTransport('GitHub CLI issue search returned a non-array payload.');
+    }
+    return issues
+      .filter(
+        (entry) =>
+          entry !== null &&
+          typeof entry === 'object' &&
+          entry.title === title &&
+          Number.isInteger(entry.number) &&
+          entry.number > 0,
+      )
+      .sort((left, right) => {
+        const leftOpen = left.state === 'OPEN' ? 0 : 1;
+        const rightOpen = right.state === 'OPEN' ? 0 : 1;
+        if (leftOpen !== rightOpen) return leftOpen - rightOpen;
+        return left.number - right.number;
+      });
+  }
+
+  async function findCommentsByMarker({ issueNumber, marker }) {
+    if (!Number.isInteger(issueNumber) || issueNumber < 1) {
+      failTransport('comment lookup requires a valid issue number.');
+    }
+    const stdout = await runGh(
+      [
+        'api',
+        '--paginate',
+        '--slurp',
+        `repos/${targetRepository}/issues/${issueNumber}/comments?per_page=100`,
+      ],
+      'comment list',
+    );
+    const pages = parseJsonOutput(stdout, 'comment list');
+    const comments = flattenCommentPages(pages);
+    return comments
+      .filter(
+        (entry) =>
+          entry !== null &&
+          typeof entry === 'object' &&
+          typeof entry.body === 'string' &&
+          entry.body.includes(marker),
+      )
+      .map((entry) => ({
+        commentId: Number.isInteger(entry.id) ? entry.id : null,
+        url: typeof entry.html_url === 'string' ? entry.html_url : null,
+        createdAt: typeof entry.created_at === 'string' ? entry.created_at : null,
+        body: entry.body,
+      }))
+      .sort((left, right) => (left.commentId ?? 0) - (right.commentId ?? 0));
+  }
+
   return Object.freeze({
     repository: targetRepository,
 
+    /**
+     * READ-ONLY exact-title relay issue lookup. Returns null when no exact-title
+     * issue exists (it never creates one) and carries `duplicateIssueCount` so
+     * callers can fail closed on an ambiguous shared surface.
+     */
+    async findRelayIssue({ title }) {
+      const exact = await searchExactIssuesByTitle(title);
+      if (exact.length === 0) return null;
+      const winner = exact[0];
+      return {
+        issueNumber: winner.number,
+        url: typeof winner.url === 'string' ? winner.url : null,
+        state: winner.state ?? null,
+        duplicateIssueCount: exact.length,
+      };
+    },
+
     async ensureRelayIssue({ title, body }) {
-      const searchOut = await runGh(
-        [
-          'issue',
-          'list',
-          '--repo',
-          targetRepository,
-          '--state',
-          'all',
-          '--limit',
-          String(MAX_CONTROL_TOWER_RESULT_RELAY_ISSUE_LIST),
-          '--search',
-          `in:title ${title}`,
-          '--json',
-          'number,title,state,url',
-        ],
-        'issue search',
-      );
-      const issues = parseJsonOutput(searchOut, 'issue search');
-      if (!Array.isArray(issues)) {
-        failTransport('GitHub CLI issue search returned a non-array payload.');
-      }
-      const exact = issues
-        .filter(
-          (entry) =>
-            entry !== null &&
-            typeof entry === 'object' &&
-            entry.title === title &&
-            Number.isInteger(entry.number) &&
-            entry.number > 0,
-        )
-        .sort((left, right) => {
-          const leftOpen = left.state === 'OPEN' ? 0 : 1;
-          const rightOpen = right.state === 'OPEN' ? 0 : 1;
-          if (leftOpen !== rightOpen) return leftOpen - rightOpen;
-          return left.number - right.number;
-        });
+      const exact = await searchExactIssuesByTitle(title);
       if (exact.length > 0) {
         const winner = exact[0];
         return {
@@ -895,35 +952,16 @@ export function createGitHubIssueCommentRelayTransport({
     },
 
     async findProjections({ issueNumber, marker }) {
-      if (!Number.isInteger(issueNumber) || issueNumber < 1) {
-        failTransport('findProjections requires a valid issue number.');
-      }
-      const stdout = await runGh(
-        [
-          'api',
-          '--paginate',
-          '--slurp',
-          `repos/${targetRepository}/issues/${issueNumber}/comments?per_page=100`,
-        ],
-        'comment list',
-      );
-      const pages = parseJsonOutput(stdout, 'comment list');
-      const comments = flattenCommentPages(pages);
-      return comments
-        .filter(
-          (entry) =>
-            entry !== null &&
-            typeof entry === 'object' &&
-            typeof entry.body === 'string' &&
-            entry.body.includes(marker),
-        )
-        .map((entry) => ({
-          commentId: Number.isInteger(entry.id) ? entry.id : null,
-          url: typeof entry.html_url === 'string' ? entry.html_url : null,
-          createdAt: typeof entry.created_at === 'string' ? entry.created_at : null,
-          body: entry.body,
-        }))
-        .sort((left, right) => (left.commentId ?? 0) - (right.commentId ?? 0));
+      return findCommentsByMarker({ issueNumber, marker });
+    },
+
+    /**
+     * READ-ONLY marker-filtered comment lookup over the shared surface. Shared
+     * by the relay projection reconciliation (findProjections) and the GF-09
+     * shared decision read; create nothing, rewrite nothing, delete nothing.
+     */
+    async findComments({ issueNumber, marker }) {
+      return findCommentsByMarker({ issueNumber, marker });
     },
 
     async createProjection({ issueNumber, marker, body }) {
