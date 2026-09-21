@@ -20,7 +20,7 @@
 //        ONLY lookup key; at most one read; no polling/scan/fallback]
 //     5. missing -> EXECUTOR_INVOCATION_ATTEMPT_NOT_FOUND [Task 29-native read
 //        failure only; zero writes; never retry/availability/ACK/transport]
-//     6. Task 28 record validation via Task 24 validateReceiverDecisionRecord
+//     6. Task 28 record validation via Task 27 validateExecutorInvocationInputRecord
 //        VERBATIM [predecessor codes propagate UNCHANGED; no repair]
 //     7. validated.dispatchId === dispatchId [binding re-check]
 //     8. caller-supplied adapter(EXACT validated record) AT MOST ONCE per API
@@ -48,7 +48,7 @@
 //   L. production module static boundary (no transport/process/fs/retry).
 //   M. no ACK/receipt/execution status token added to durable state.
 //   N. claimGeneration stays the SOLE generation field.
-//   O. Task 18~28 predecessor source/spec bytes unchanged.
+//   O. retained Task 18~28 predecessor source/spec bytes unchanged.
 //
 // All runtime state lives in isolated temp directories. No network required.
 
@@ -67,10 +67,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import {
-  acceptExecutorDispatchDecision,
-  executorDispatchAcceptanceFilePath,
-} from './dispatch-executor-acceptance.mjs';
 import * as invocationAttemptModule from './dispatch-executor-invocation-attempt.mjs';
 import {
   CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
@@ -88,15 +84,15 @@ import {
   invokeExecutorInvocationAdapter,
 } from './dispatch-executor-invocation-contract.mjs';
 import {
-  EXECUTOR_DISPATCH_ACCEPTANCE_NOT_FOUND,
+  buildExecutorInvocationInputRecord,
+  CORRUPT_EXECUTOR_INVOCATION_INPUT,
   readExecutorInvocationInput,
 } from './dispatch-executor-invocation-input.mjs';
-import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
 import {
-  CORRUPT_RECEIVER_DISPATCH_DECISION,
-  persistReceiverDecision,
-  receiverDispatchDecisionFilePath,
-} from './dispatch-receiver-decision.mjs';
+  acceptReceiverDispatch,
+  receiverDispatchAcceptanceFilePath,
+} from './dispatch-receiver-acceptance.mjs';
+import { RECEIVER_DISPATCH_ACCEPTANCE_NOT_FOUND } from './dispatch-receiver-decision-input.mjs';
 import {
   CORRUPT_TRANSPORT_REQUEST,
   prepareDispatchTransportRequest,
@@ -138,26 +134,14 @@ const PREDECESSOR_SHA256 = Object.freeze({
     'e4c660412fdb7cdab0d3c8cb505aa08e73a8a192c08886fbf50ba6b9c8957226',
   'dispatch-receiver-decision-input.spec.mjs':
     'cd77a8d8ecf83244cc0c6c32ab734d68cfcf5ed9b876cacf2fad8bc3b958bddf',
-  'dispatch-receiver-decision.mjs':
-    'cd75cd57a632338de9c3babc4822ce5da1ed059f1bce14c2f5453be7cb52aa63',
-  'dispatch-receiver-decision.spec.mjs':
-    '0a62ddbe2da88d84585ad8db0807468145898ecb467df9431a8e3c7254be65bf',
-  'dispatch-receiver-executor-acceptance-input.mjs':
-    '9a965e3d4af73b2f3b1db54e8c0ed58b97c83d18723c6d873e6e8c0977d58b0a',
-  'dispatch-receiver-executor-acceptance-input.spec.mjs':
-    '3c8d806102c0053a88c67b2cde4fc9bd671ce7ff8ea9e8e5c1b7a15f1c1ffb60',
-  'dispatch-executor-acceptance.mjs':
-    'ef74b58438011feff1141568ae76985ae751dad2ebbfe8f3712b1ae5e69adfe0',
-  'dispatch-executor-acceptance.spec.mjs':
-    '252a2faf7f3bf67c71b7ee4a3abbcd0b11601471fd3a86b39453f4ba8374beb3',
   'dispatch-executor-invocation-input.mjs':
-    'c58030c0213dff49f843f2630be1f82336baabf429e29989fdaf17c2c11b84fd',
+    'be5d8936eff0816b51d8df2f50c03a398f1a3e3291e22c1511fc0820045d9cc6',
   'dispatch-executor-invocation-input.spec.mjs':
-    'b891655a68b323df65edde5512ce0fd62cb1ba58d8f2a28965117592725daae2',
+    '47b69a35846950dee36644ddb146fa859bea45d448e12d5f23cc04ddf0122450',
   'dispatch-executor-invocation-attempt.mjs':
-    '03ee013362e55193f74dd2f380d502e304c4a79098ad3b953ac64127494d705d',
+    'e96271e28141ed33e03e9bfd8fce680166e189d6e965ee4d5a3f4d45cc12c395',
   'dispatch-executor-invocation-attempt.spec.mjs':
-    '7950be924daccd1b563e2df50da7fd9498b3b5e4950888355a3a79779f81f2eb',
+    '8a49aa9c3bdc6fb798c365dcb155f4ce466ab47c16695a6e9c9a1b234dce8de6',
 });
 
 const FORBIDDEN_NEW_ARTIFACT_DIRS = Object.freeze([
@@ -355,10 +339,9 @@ function driveToAttempt(
 }
 
 // Task 29 setup: source -> child claim -> durable dispatch attempt -> Task 20
-// request -> Task 22 durable receiver acceptance -> Task 24 durable receiver
-// decision -> Task 26 durable executor acceptance -> Task 27 readable
-// invocation input. The Task 28 durable invocation attempt is NOT persisted
-// here.
+// request -> Task 22 durable receiver acceptance -> Task 27 readable
+// invocation input (direct composition over the durable receiver acceptance).
+// The Task 28 durable invocation attempt is NOT persisted here.
 async function setupInputOnly(prefix, sourceTaskId, childTaskId) {
   const home = makeHome(prefix);
   const clock = controllableClock();
@@ -377,13 +360,6 @@ async function setupInputOnly(prefix, sourceTaskId, childTaskId) {
   });
   const accepted = await acceptReceiverDispatch({ request, store });
   assert.equal(accepted.newlyAccepted, true);
-  const decided = await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-  assert.equal(decided.newlyDecided, true);
-  const executorAccepted = await acceptExecutorDispatchDecision({
-    dispatchId: attempt.dispatchId,
-    store,
-  });
-  assert.equal(executorAccepted.newlyAccepted, true);
   const input = await readExecutorInvocationInput({ dispatchId: attempt.dispatchId, store });
   return { home, clock, store, attempt, request, input };
 }
@@ -424,13 +400,6 @@ async function setupTwoAccepted(prefix, sourceA, childA, sourceB, childB) {
     });
     const accepted = await acceptReceiverDispatch({ request, store });
     assert.equal(accepted.newlyAccepted, true);
-    const decided = await persistReceiverDecision({ dispatchId: attempt.dispatchId, store });
-    assert.equal(decided.newlyDecided, true);
-    const executorAccepted = await acceptExecutorDispatchDecision({
-      dispatchId: attempt.dispatchId,
-      store,
-    });
-    assert.equal(executorAccepted.newlyAccepted, true);
     const persisted = await persistExecutorInvocationAttempt({
       dispatchId: attempt.dispatchId,
       store,
@@ -506,14 +475,6 @@ function attemptDir(home) {
 
 function attemptPath(home, dispatchId) {
   return executorInvocationAttemptFilePath(home, dispatchId);
-}
-
-function executorAcceptancePath(home, dispatchId) {
-  return executorDispatchAcceptanceFilePath(home, dispatchId);
-}
-
-function decisionPath(home, dispatchId) {
-  return receiverDispatchDecisionFilePath(home, dispatchId);
 }
 
 function listAttemptFiles(home) {
@@ -802,7 +763,7 @@ test('D. invalid/missing adapter fails closed before any store read; invalid sto
       {},
       { readExecutorInvocationAttempt: 7 },
       { readExecutorInvocationAttempt: undefined },
-      { readExecutorDispatchAcceptance: () => null },
+      { readReceiverDispatchAcceptance: () => null },
     ]) {
       await assert.rejects(
         invokeExecutorInvocationAdapter({
@@ -827,15 +788,16 @@ test('D. invalid/missing adapter fails closed before any store read; invalid sto
 // ---------------------------------------------------------------------------
 
 test('E. missing Task 28 durable attempt fails with EXECUTOR_INVOCATION_ATTEMPT_NOT_FOUND, zero adapter calls, zero mutation', async () => {
-  const { home, store, attempt } = await setupInputOnly(
+  const { home, store, attempt, input } = await setupInputOnly(
     'greenhub-executor-invocation-contract29-e-',
     'EIC29-E-SRC',
     'EIC29-E-CHILD',
   );
   try {
-    // Task 26 executor acceptance + Task 27 readable input exist; the Task 28
-    // durable invocation attempt does not.
-    assert.equal(store.readExecutorDispatchAcceptance(attempt.dispatchId) !== null, true);
+    // Task 22 durable receiver acceptance + Task 27 readable input exist; the
+    // Task 28 durable invocation attempt does not.
+    assert.equal(store.readReceiverDispatchAcceptance(attempt.dispatchId) !== null, true);
+    assert.equal(input.dispatchId, attempt.dispatchId);
     assert.equal(store.readExecutorInvocationAttempt(attempt.dispatchId), null);
 
     const before = snapshotHomeBytes(home);
@@ -862,8 +824,9 @@ test('E. missing Task 28 durable attempt fails with EXECUTOR_INVOCATION_ATTEMPT_
     }
 
     // Read-failure meaning ONLY: never retry / executor unavailable / ACK
-    // timeout / task failure / scheduler failure.
-    assert.notEqual(EXECUTOR_INVOCATION_ATTEMPT_NOT_FOUND, EXECUTOR_DISPATCH_ACCEPTANCE_NOT_FOUND);
+    // timeout / task failure / scheduler failure; distinct from the retained
+    // Task 23 predecessor missing-record code.
+    assert.notEqual(EXECUTOR_INVOCATION_ATTEMPT_NOT_FOUND, RECEIVER_DISPATCH_ACCEPTANCE_NOT_FOUND);
     assert.equal(reads, 2);
     assert.equal(adapterCalls.length, 0);
 
@@ -903,7 +866,7 @@ test('F. corrupt Task 28 durable attempt fails closed with predecessor codes, ze
       {
         name: 'valid JSON wrong shape',
         bytes: JSON.stringify({ hello: 'not-an-attempt' }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_EXECUTOR_INVOCATION_INPUT,
       },
       {
         name: 'key order drift',
@@ -917,22 +880,22 @@ test('F. corrupt Task 28 durable attempt fails closed with predecessor codes, ze
           null,
           2,
         ),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_EXECUTOR_INVOCATION_INPUT,
       },
       {
         name: 'decision value drift',
         bytes: JSON.stringify({ ...goodRecord, decision: 'ACK' }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_EXECUTOR_INVOCATION_INPUT,
       },
       {
         name: 'blocked timestamp field',
         bytes: JSON.stringify({ ...goodRecord, attemptedAt: 'now' }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_EXECUTOR_INVOCATION_INPUT,
       },
       {
         name: 'new generation smuggling',
         bytes: JSON.stringify({ ...goodRecord, invocationGeneration: 1 }, null, 2),
-        code: CORRUPT_RECEIVER_DISPATCH_DECISION,
+        code: CORRUPT_EXECUTOR_INVOCATION_INPUT,
       },
       {
         name: 'inner request tamper (workerId)',
@@ -1047,7 +1010,7 @@ test('G. dispatchId/path-record binding mismatch fails closed with zero adapter 
     writeFileSync(firstPath, firstBytes, 'utf8');
 
     // (3) Caller-supplied store returns a corrupt record without throwing: the
-    // Task 29 re-validation fails closed with the Task 24 code.
+    // Task 29 re-validation fails closed with the Task 27 code.
     const corruptStore = { readExecutorInvocationAttempt: () => ({ hello: 'nope' }) };
     await assert.rejects(
       invokeExecutorInvocationAdapter({
@@ -1055,7 +1018,7 @@ test('G. dispatchId/path-record binding mismatch fails closed with zero adapter 
         store: corruptStore,
         adapter,
       }),
-      (error) => error?.code === CORRUPT_RECEIVER_DISPATCH_DECISION,
+      (error) => error?.code === CORRUPT_EXECUTOR_INVOCATION_INPUT,
     );
     assert.equal(adapterCalls, 0);
 
@@ -1275,15 +1238,19 @@ test('K. invocation leaves every predecessor durable byte identical, adds no sto
     assert.deepEqual(snapshotHomeBytes(home), afterSuccess);
     assert.deepEqual(snapshotHomeStats(home), beforeStats);
 
-    // Target domains are present and byte-stable.
+    // Target domains are present and byte-stable. The retired receiver-decision
+    // and executor-acceptance durable files no longer exist: their invariant is
+    // expressed directly as the invocation-attempt bytes being EXACTLY the Task
+    // 27 canonical record built from the durable receiver-acceptance bytes.
     assert.equal(readFileSync(attemptPath(home, attempt.dispatchId), 'utf8'), attemptBytes);
-    assert.equal(
-      readFileSync(executorAcceptancePath(home, attempt.dispatchId), 'utf8'),
-      readFileSync(attemptPath(home, attempt.dispatchId), 'utf8'),
+    const acceptanceBytes = readFileSync(
+      receiverDispatchAcceptanceFilePath(home, attempt.dispatchId),
+      'utf8',
     );
+    assert.deepEqual(JSON.parse(attemptBytes).decisionInput, JSON.parse(acceptanceBytes));
     assert.equal(
-      readFileSync(decisionPath(home, attempt.dispatchId), 'utf8'),
-      readFileSync(attemptPath(home, attempt.dispatchId), 'utf8'),
+      attemptBytes,
+      expectedRecordBytes(buildExecutorInvocationInputRecord(JSON.parse(acceptanceBytes))),
     );
 
     // Task/claim state unchanged: no CLAIMED -> RUNNING, no lease/generation
@@ -1454,11 +1421,11 @@ test('L. production module carries no concrete executor/transport/process/fs/ret
     assert.equal(code.includes(status), false, `${status} must not exist in code`);
   }
 
-  // The contract composes the Task 28 identity/read primitive and the Task 24
-  // public validator verbatim; it never reads Task 26 acceptance, never
-  // persists anything, and never reconstructs Task 27 input.
+  // The contract composes the Task 28 identity/read primitive and the Task 27
+  // public validator verbatim; it never reads the durable receiver acceptance,
+  // never persists anything, and never reconstructs Task 27 input.
   assert.ok(code.includes('store.readExecutorInvocationAttempt('));
-  assert.ok(code.includes('validateReceiverDecisionRecord('));
+  assert.ok(code.includes('validateExecutorInvocationInputRecord('));
   assert.ok(code.includes('assertValidExecutorInvocationAttemptDispatchId('));
   assert.equal(code.includes('store.readExecutorDispatchAcceptance('), false);
   assert.equal(code.includes('store.createExecutorInvocationAttempt('), false);

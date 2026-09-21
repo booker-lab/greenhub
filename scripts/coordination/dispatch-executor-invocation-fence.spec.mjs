@@ -44,7 +44,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { acceptExecutorDispatchDecision } from './dispatch-executor-acceptance.mjs';
 import { persistExecutorInvocationAttempt } from './dispatch-executor-invocation-attempt.mjs';
 import {
   CORRUPT_EXECUTOR_INVOCATION_FENCE,
@@ -61,7 +60,6 @@ import {
   EXECUTOR_INVOCATION_OUTCOME_UNKNOWN,
 } from './dispatch-executor-invocation-outcome.mjs';
 import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
-import { persistReceiverDecision } from './dispatch-receiver-decision.mjs';
 import { prepareDispatchTransportRequest } from './dispatch-transport-contract.mjs';
 import { DISPOSITION_STATE_ADOPTED } from './disposition.mjs';
 import {
@@ -240,8 +238,6 @@ async function driveToInvocationAttempt({
   const dispatchId = attempt.dispatchId;
   const request = await prepareDispatchTransportRequest({ store, sourceTaskId, dispatchId });
   await acceptReceiverDispatch({ request, store });
-  await persistReceiverDecision({ dispatchId, store });
-  await acceptExecutorDispatchDecision({ dispatchId, store });
   if (persistInvocationAttempt) {
     await persistExecutorInvocationAttempt({ dispatchId, store });
   }

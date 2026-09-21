@@ -32,8 +32,8 @@
 //       4. Task 33 receipt exact validation via
 //          validateExecutorResultReceiptRecord VERBATIM
 //       5. store.readExecutorInvocationAttempt(dispatchId) [durable Task 28
-//          dispatch/claim authority; missing fails closed] + Task 24
-//          validateReceiverDecisionRecord VERBATIM
+//          dispatch/claim authority; missing fails closed] + Task 27
+//          validateExecutorInvocationInputRecord VERBATIM
 //       6. receipt.taskId exact binding against the durable dispatch
 //          authority's nextTaskId [fail-closed binding mismatch]
 //       7. current task lifecycle read: CLAIMED -> deliver; RESULT_DELIVERED
@@ -113,7 +113,7 @@ import { buildAdmissionBoundClaimToken } from './admission-bound-claim.mjs';
 import {
   CORRUPT_EXECUTOR_INVOCATION_ATTEMPT,
 } from './dispatch-executor-invocation-attempt.mjs';
-import { validateReceiverDecisionRecord } from './dispatch-receiver-decision.mjs';
+import { validateExecutorInvocationInputRecord } from './dispatch-executor-invocation-input.mjs';
 import {
   CORRUPT_EXECUTOR_RESULT_RECEIPT,
   assertValidExecutorResultReceiptDispatchId,
@@ -278,7 +278,7 @@ async function readValidatedDispatchAuthority(store, dispatchId) {
   }
   let decision;
   try {
-    decision = validateReceiverDecisionRecord(observed);
+    decision = validateExecutorInvocationInputRecord(observed);
   } catch (error) {
     fail(
       `durable executor invocation attempt is invalid (fail-closed, no repair): ${error?.message}`,
