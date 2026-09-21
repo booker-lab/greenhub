@@ -8,10 +8,15 @@
 //   subcommand and the automatic post-intake relay attempt inside `run`, both
 //   composing control-tower-result-relay.mjs ONLY; the GitHub relay is a
 //   non-canonical projection and never changes canonical coordination truth).
-// Surface: scripts/coordination/operator-cli.mjs ONLY (+ the six
+// + GREENHUB-COORDINATION-SHARED-CONTROL-TOWER-DISPOSITION-RETURN-GF09 (the
+//   `disposition` subcommand: reads the Control Tower-authored verdict from the
+//   non-canonical shared surface and adopts it through the EXISTING local
+//   disposition authority. It authors no verdict, invokes no executor, and
+//   leaves canonical truth unchanged on transport failure/stale/conflict.)
+// Surface: scripts/coordination/operator-cli.mjs ONLY (+ the seven
 // package.json operator commands coordination:run / coordination:return /
-// coordination:relay / coordination:status / coordination:inspect /
-// coordination:intake).
+// coordination:relay / coordination:disposition / coordination:status /
+// coordination:inspect / coordination:intake).
 //
 // Thin operator-facing composition over the EXISTING durable coordination
 // authorities. This module owns NO durable semantics and creates NO durable
@@ -54,6 +59,16 @@
 //             invokes an executor, never claims, never authors a verdict, and
 //             never emits a successor. GitHub unavailable/unauthenticated
 //             reports RELAY_PENDING with canonical truth untouched.
+//   disposition
+//           = ONE explicit operator-named delivered task whose Control
+//             Tower-authored verdict was written to the shared surface. Reads
+//             the shared decision read-only, validates the exact task/result/
+//             resultBinding/current disposition generation binding, and adopts
+//             it as exactly ONE legal immutable next disposition generation
+//             through the EXISTING local disposition authority. It invents no
+//             verdict, invokes no executor, reruns no source task, emits no
+//             successor, and leaves canonical truth unchanged when GitHub is
+//             unavailable or the decision is stale/conflicting.
 //
 // Explicitly NOT implemented here (and asserted absent by the proof spec):
 //   scheduler, READY scan for work selection, queue polling, daemon, cron,
@@ -94,6 +109,18 @@ import {
   INVALID_CONTROL_TOWER_RESULT_INTAKE_AUTHORITY,
   performControlTowerResultIntake,
 } from './control-tower-result-intake.mjs';
+import {
+  CONTROL_TOWER_DISPOSITION_RETURN_DECISION_CONFLICT,
+  CONTROL_TOWER_DISPOSITION_RETURN_DECISION_STALE,
+  CONTROL_TOWER_DISPOSITION_RETURN_DISPOSITION_NOT_FOUND,
+  CONTROL_TOWER_DISPOSITION_RETURN_NOT_CONFIGURED,
+  CONTROL_TOWER_DISPOSITION_RETURN_STATUS_EXACT_REPLAY,
+  CONTROL_TOWER_DISPOSITION_RETURN_STATUS_PENDING,
+  CONTROL_TOWER_DISPOSITION_RETURN_STATUS_RETURNED,
+  CONTROL_TOWER_DISPOSITION_RETURN_SURFACE_AMBIGUOUS,
+  CONTROL_TOWER_DISPOSITION_RETURN_TRANSPORT_UNAVAILABLE,
+  performControlTowerDispositionReturn,
+} from './control-tower-disposition-return.mjs';
 import {
   CONTROL_TOWER_RELAY_REPO_ENV_KEY,
   CONTROL_TOWER_RESULT_RELAY_DISPOSITION_NOT_FOUND,
@@ -140,6 +167,8 @@ export const OPERATOR_RUN_PROJECTION = 'operator-run';
 export const OPERATOR_INTAKE_PROJECTION = 'operator-intake';
 export const OPERATOR_RETURN_PROJECTION = 'operator-control-tower-return';
 export const OPERATOR_RELAY_PROJECTION = 'operator-control-tower-relay';
+export const OPERATOR_DISPOSITION_RETURN_PROJECTION =
+  'operator-control-tower-disposition-return';
 
 export const OPERATOR_ARGUMENT_INVALID = 'OPERATOR_ARGUMENT_INVALID';
 export const OPERATOR_TASK_ADMISSION_NOT_FOUND = 'OPERATOR_TASK_ADMISSION_NOT_FOUND';
@@ -195,7 +224,7 @@ function isSamePathOrDescendant(candidate, parent) {
   );
 }
 
-const COMMANDS = Object.freeze(['status', 'inspect', 'run', 'intake', 'return', 'relay']);
+const COMMANDS = Object.freeze(['status', 'inspect', 'run', 'intake', 'return', 'relay', 'disposition']);
 
 const MAX_ERROR_MESSAGE_LENGTH = 512;
 
@@ -433,6 +462,41 @@ export function buildControlTowerRelayProjection({ taskId, resolved, performed }
   });
 }
 
+/**
+ * Projection for the explicit `coordination:disposition` command: the canonical
+ * provenance binding, the shared-surface decision identity, and the exact
+ * canonical disposition generation the validated decision returned/converged to.
+ * The shared decision surface is NON-CANONICAL; this projection is read-only
+ * output and never a second authority.
+ */
+export function buildControlTowerDispositionReturnProjection({ taskId, resolved, performed }) {
+  return Object.freeze({
+    schemaVersion: OPERATOR_PROJECTION_SCHEMA_VERSION,
+    projection: OPERATOR_DISPOSITION_RETURN_PROJECTION,
+    taskId,
+    authorityKind: resolved.authorityKind,
+    authorityId: resolved.authorityId,
+    sourceTaskId: resolved.sourceTaskId,
+    emissionSlot: resolved.emissionSlot,
+    status: performed.status,
+    newlyReturned: performed.status === CONTROL_TOWER_DISPOSITION_RETURN_STATUS_RETURNED,
+    exactReplay: performed.status === CONTROL_TOWER_DISPOSITION_RETURN_STATUS_EXACT_REPLAY,
+    resultId: performed.resultId,
+    resultBinding: performed.resultBinding,
+    surface: performed.surface ?? null,
+    decision: performed.decision ?? null,
+    decisionSource: performed.decisionSource ?? null,
+    duplicateDecisionSourceCount: performed.duplicateDecisionSourceCount ?? 0,
+    observedDisposition: performed.observedDisposition ?? null,
+    returnedDisposition: performed.returnedDisposition ?? null,
+    canonicalWrites: performed.canonicalWrites ?? 0,
+    executorInvocations: performed.executorInvocations ?? 0,
+    manualCopyPasteRequired: performed.manualCopyPasteRequired === true,
+    failureCode: performed.failureCode ?? null,
+    failureMessage: performed.failureMessage ?? null,
+  });
+}
+
 function deriveNextAction(code) {
   if (code === 'TASK_NOT_FOUND') {
     return 'verify the task id from `pnpm coordination:status`';
@@ -499,6 +563,24 @@ function deriveNextAction(code) {
     code === CONTROL_TOWER_RESULT_RELAY_PROJECTION_CORRUPT
   ) {
     return 'the shared relay projection conflicts with canonical truth; stop and review manually — never rewrite or delete the projection automatically';
+  }
+  if (code === CONTROL_TOWER_DISPOSITION_RETURN_NOT_CONFIGURED) {
+    return `set ${CONTROL_TOWER_RELAY_REPO_ENV_KEY}=owner/name to enable the shared Control Tower decision surface, then rerun \`pnpm coordination:disposition <TASK_ID>\``;
+  }
+  if (code === CONTROL_TOWER_DISPOSITION_RETURN_DISPOSITION_NOT_FOUND) {
+    return 'the task has no Control Tower disposition pointer yet; run `pnpm coordination:return <TASK_ID>` first, then wait for the Control Tower decision and rerun `pnpm coordination:disposition <TASK_ID>`';
+  }
+  if (code === CONTROL_TOWER_DISPOSITION_RETURN_TRANSPORT_UNAVAILABLE) {
+    return 'GitHub is unavailable or unauthenticated; the canonical result and disposition are unchanged — rerun `pnpm coordination:disposition <TASK_ID>` when the transport is available (never rerun the executor)';
+  }
+  if (code === CONTROL_TOWER_DISPOSITION_RETURN_DECISION_STALE) {
+    return 'the shared decision is stale against the canonical disposition; the Control Tower must author a new decision bound to the current dispositionRef — canonical state is never rewound';
+  }
+  if (code === CONTROL_TOWER_DISPOSITION_RETURN_DECISION_CONFLICT) {
+    return 'multiple conflicting shared decisions exist; stop and review the shared surface manually — canonical adoption never uses last-writer-wins';
+  }
+  if (code === CONTROL_TOWER_DISPOSITION_RETURN_SURFACE_AMBIGUOUS) {
+    return 'multiple relay issues carry the exact shared surface title; resolve the ambiguous non-canonical surface manually before adopting any decision';
   }
   if (code === 'EXECUTOR_INVOCATION_FENCE_UNCERTAIN') {
     return 'a prior or concurrent invocation may already have crossed the executor boundary and no durable outcome/receipt proves its disposition; do NOT retry automatically — inspect the durable state and decide manually';
@@ -1240,7 +1322,13 @@ export function parseOperatorArgv(argv = []) {
     });
   }
   options.command = command;
-  if (command === 'inspect' || command === 'run' || command === 'return' || command === 'relay') {
+  if (
+    command === 'inspect' ||
+    command === 'run' ||
+    command === 'return' ||
+    command === 'relay' ||
+    command === 'disposition'
+  ) {
     if (positionals.length < 2) {
       fail(`${command} requires an explicit <TASK_ID>.`, {
         code: OPERATOR_ARGUMENT_INVALID,
@@ -1297,6 +1385,7 @@ export function renderUsage() {
     '      [--model <PROVIDER/MODEL>] [--workdir <ABSOLUTE_PATH>] [--json]',
     '  pnpm coordination:return <TASK_ID> [--source <SOURCE_TASK_ID>] [--slot <EMISSION_SLOT>] [--json]',
     '  pnpm coordination:relay <TASK_ID> [--source <SOURCE_TASK_ID>] [--slot <EMISSION_SLOT>] [--json]',
+    '  pnpm coordination:disposition <TASK_ID> [--source <SOURCE_TASK_ID>] [--slot <EMISSION_SLOT>] [--json]',
     '  pnpm coordination:intake --spec <ABSOLUTE_JSON_PATH> [<TASK_ID>] [--recorder <ID>] [--json]',
     '',
     'notes:',
@@ -1304,6 +1393,7 @@ export function renderUsage() {
     `  the executor is the read-only OpenCode CLI structured-result executor; ${OPENCODE_CLI_PATH_ENV_KEY} and ${OPENCODE_MODEL_ENV_KEY} (or --opencode/--model) are required.`,
     '  return hands ONE already delivered canonical result to the Control Tower result intake (idempotent; no executor invocation, no verdict, no successor).',
     `  relay projects ONE already delivered canonical result (existing PENDING/later disposition) to the configured shared GitHub relay issue; set ${CONTROL_TOWER_RELAY_REPO_ENV_KEY}=owner/name to enable it. The relay is non-canonical: it never invokes an executor, never writes durable coordination bytes, and never authors a verdict.`,
+    `  disposition reads the Control Tower-authored verdict from the shared decision surface and adopts it as exactly ONE legal next canonical disposition generation; set ${CONTROL_TOWER_RELAY_REPO_ENV_KEY}=owner/name to enable the shared surface. It authors no verdict, invokes no executor, reruns no source task, and fails closed on stale/conflicting decisions or an unavailable surface.`,
     '  intake intakes exactly ONE explicitly user-approved READ_ONLY task spec (userApproved: true + approval + bounded taskSpec) to READY; it never claims, dispatches, or invokes an executor.',
     '  status/inspect never write. JSON output is a read-only projection, never durable authority.',
     '',
@@ -1735,6 +1825,43 @@ export function renderControlTowerRelay(projection) {
   return lines.join('\n');
 }
 
+export function renderControlTowerDispositionReturn(projection) {
+  const lines = [
+    `greenhub coordination disposition ${projection.taskId}`,
+    `authority:   ${projection.authorityKind} ${projection.authorityId}`,
+    `status:      ${projection.status}`,
+  ];
+  if (projection.surface !== null && projection.surface !== undefined) {
+    lines.push(
+      `surface:     issue #${projection.surface.issueNumber} ${projection.surface.url ?? ''}`.trimEnd(),
+    );
+  }
+  if (projection.decision !== null && projection.decision !== undefined) {
+    lines.push(`decision:    ${projection.decision.decisionId}`);
+    lines.push(
+      `verdict:     ${projection.decision.dispositionRef} ${projection.decision.dispositionState} -> ${projection.decision.targetDispositionState} (decidedAt ${projection.decision.decidedAt})`,
+    );
+  }
+  if (projection.observedDisposition !== null && projection.observedDisposition !== undefined) {
+    lines.push(
+      `observed:    ${projection.observedDisposition.dispositionRef} ${projection.observedDisposition.state}`,
+    );
+  }
+  if (projection.returnedDisposition !== null && projection.returnedDisposition !== undefined) {
+    lines.push(
+      `canonical:   ${projection.returnedDisposition.dispositionRef} ${projection.returnedDisposition.state}`,
+    );
+  }
+  if (projection.failureCode !== null) {
+    lines.push(`failure:     ${projection.failureCode}: ${projection.failureMessage ?? ''}`.trimEnd());
+  }
+  lines.push(
+    'next:        canonical truth is local; the shared decision surface remains non-canonical (no manual copy/paste)',
+  );
+  lines.push('');
+  return lines.join('\n');
+}
+
 export async function runOperatorCli({
   argv = [],
   env = process.env,
@@ -1744,6 +1871,7 @@ export async function runOperatorCli({
   store,
   executor,
   relayTransport,
+  dispositionTransport,
 } = {}) {
   let options;
   try {
@@ -1882,6 +2010,66 @@ export async function runOperatorCli({
           : renderControlTowerRelay(projection),
       );
       return projection.status === CONTROL_TOWER_RESULT_RELAY_STATUS_PENDING ? 1 : 0;
+    }
+    if (options.command === 'disposition') {
+      const resolvedTransport =
+        dispositionTransport ?? resolveConfiguredControlTowerRelayTransport({ env });
+      if (resolvedTransport === null) {
+        fail(
+          `no shared Control Tower decision surface is configured (fail-closed): set ${CONTROL_TOWER_RELAY_REPO_ENV_KEY}=owner/name to enable the non-canonical shared surface.`,
+          {
+            code: CONTROL_TOWER_DISPOSITION_RETURN_NOT_CONFIGURED,
+            taskId: options.taskId,
+            stage: 'control-tower-disposition-return',
+            nextAction: deriveNextAction(CONTROL_TOWER_DISPOSITION_RETURN_NOT_CONFIGURED),
+          },
+        );
+      }
+      const projection = await atStage(
+        'control-tower-disposition-return',
+        options.taskId,
+        async () => {
+          const resolved = resolveTaskAdmission({
+            store: activeStore,
+            taskId: options.taskId,
+            sourceTaskId: options.sourceTaskId ?? undefined,
+            emissionSlot: options.emissionSlot,
+          });
+          if (resolved === null) {
+            fail(
+              `no canonical pre-execution authority (emission admission or user-approved intake) binds task ${options.taskId} (fail-closed): the operator CLI never creates an authority and adopts only authority-bound decisions.`,
+              {
+                code: OPERATOR_TASK_ADMISSION_NOT_FOUND,
+                taskId: options.taskId,
+                stage: 'control-tower-disposition-return',
+                nextAction: deriveNextAction(OPERATOR_TASK_ADMISSION_NOT_FOUND),
+              },
+            );
+          }
+          const performed = await performControlTowerDispositionReturn({
+            store: activeStore,
+            taskId: options.taskId,
+            authority: {
+              authorityKind: resolved.authorityKind,
+              authorityId: resolved.authorityId,
+              sourceTaskId: resolved.sourceTaskId,
+              emissionSlot: resolved.emissionSlot,
+            },
+            transport: resolvedTransport,
+          });
+          return buildControlTowerDispositionReturnProjection({
+            taskId: options.taskId,
+            resolved,
+            performed,
+          });
+        },
+      );
+      stdout.write(
+        options.json
+          ? `${JSON.stringify(projection, null, 2)}\n`
+          : renderControlTowerDispositionReturn(projection),
+      );
+      return projection.status === CONTROL_TOWER_DISPOSITION_RETURN_STATUS_PENDING ? 1 : 0;
     }
     const activeExecutor = executor ?? buildConfiguredExecutor(options, env);
     // GF-08 automatic relay transport: explicit injection wins; otherwise the
