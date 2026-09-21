@@ -13,6 +13,7 @@
     "test:local-seed": "node --test scripts/dev/local/seed-seller-orders.spec.mjs",
     "test:local-isolation": "node --test scripts/dev/local/local-isolation.spec.mjs",
     "coordination:run": "node scripts/coordination/operator-cli.mjs run",
+    "coordination:return": "node scripts/coordination/operator-cli.mjs return",
     "coordination:status": "node scripts/coordination/operator-cli.mjs status",
     "coordination:inspect": "node scripts/coordination/operator-cli.mjs inspect",
     "coordination:intake": "node scripts/coordination/operator-cli.mjs intake",

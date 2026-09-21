@@ -1,9 +1,12 @@
 // Bounded mutation owner: GREENHUB-COORDINATION-OPERATOR-CLI-35
 // + GREENHUB-COORDINATION-USER-APPROVED-READONLY-INTAKE-GF06 (the `intake`
-//   subcommand and the authority-compatible `run` resolution ONLY).
-// Surface: scripts/coordination/operator-cli.mjs ONLY (+ the four
-// package.json operator commands coordination:run / coordination:status /
-// coordination:inspect / coordination:intake).
+//   subcommand and the authority-compatible `run` resolution ONLY)
+// + GREENHUB-COORDINATION-CONTROL-TOWER-RESULT-INTAKE-GF07 (the `return`
+//   subcommand and the automatic post-delivery Control Tower intake step
+//   inside `run`, both composing control-tower-result-intake.mjs ONLY).
+// Surface: scripts/coordination/operator-cli.mjs ONLY (+ the five
+// package.json operator commands coordination:run / coordination:return /
+// coordination:status / coordination:inspect / coordination:intake).
 //
 // Thin operator-facing composition over the EXISTING durable coordination
 // authorities. This module owns NO durable semantics and creates NO durable
@@ -25,11 +28,20 @@
 //             user-approved intake, never created here) -> claim -> dispatch
 //             attempt -> transport request -> receiver acceptance ->
 //             invocation attempt -> durable pre-invocation fence -> durable
-//             executor result receipt -> canonical result delivery.
+//             executor result receipt -> canonical result delivery ->
+//             AUTOMATIC Control Tower result intake (generation 1
+//             PENDING_DISPOSITION over the existing disposition authority).
 //             The executor boundary is fenced BEFORE the adapter can run, so
 //             concurrent/restarted operators never cross it twice for one
 //             dispatchId and a durable outcome/receipt is always replayed
 //             without re-invoking the executor.
+//   return  = ONE explicit operator-named delivered task through the EXISTING
+//             Control Tower result intake: canonical result/task/claim/
+//             authority binding verification -> durable generation 1
+//             PENDING_DISPOSITION (idempotent; an existing pending intake OR a
+//             later Control Tower verdict converges read-only). It never
+//             invokes an executor, never authors a verdict, never emits a
+//             successor.
 //
 // Explicitly NOT implemented here (and asserted absent by the proof spec):
 //   scheduler, READY scan for work selection, queue polling, daemon, cron,
@@ -65,6 +77,12 @@ import nodeFs from 'node:fs';
 import nodePath from 'node:path';
 import { fileURLToPath } from 'node:url';import { buildClaimBoundDispatchId } from './claim-bound-dispatch-envelope.mjs';
 import { COORDINATION_HOME_ENV_KEY } from './coordination-home.mjs';
+import {
+  CONTROL_TOWER_RESULT_INTAKE_NOT_DELIVERED,
+  INVALID_CONTROL_TOWER_RESULT_INTAKE_AUTHORITY,
+  performControlTowerResultIntake,
+} from './control-tower-result-intake.mjs';
+import { dispositionRef } from './disposition.mjs';
 import { persistExecutorInvocationAttempt } from './dispatch-executor-invocation-attempt.mjs';
 import { invokeExecutorWithInvocationFence } from './dispatch-executor-invocation-fence.mjs';
 import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
@@ -74,7 +92,11 @@ import { deliverExecutorResultReceipt } from './executor-result-delivery.mjs';
 import { EXECUTOR_RESULT_RECEIPTS_DIRNAME } from './executor-result-receipt.mjs';
 import { createOpenCodeCliStructuredResultExecutor } from './opencode-cli-executor-adapter.mjs';
 import { CoordinationStore } from './store.mjs';
-import { TASK_ID_PATTERN, TASK_KIND_READ_ONLY } from './task-envelope.mjs';
+import {
+  TASK_ID_PATTERN,
+  TASK_KIND_READ_ONLY,
+  TASK_STATUS_RESULT_DELIVERED,
+} from './task-envelope.mjs';
 import {
   AUTHORITY_KIND_EMISSION_ADMISSION,
   AUTHORITY_KIND_USER_APPROVED_INTAKE,
@@ -87,6 +109,7 @@ export const OPERATOR_STATUS_PROJECTION = 'operator-status';
 export const OPERATOR_INSPECTION_PROJECTION = 'operator-inspection';
 export const OPERATOR_RUN_PROJECTION = 'operator-run';
 export const OPERATOR_INTAKE_PROJECTION = 'operator-intake';
+export const OPERATOR_RETURN_PROJECTION = 'operator-control-tower-return';
 
 export const OPERATOR_ARGUMENT_INVALID = 'OPERATOR_ARGUMENT_INVALID';
 export const OPERATOR_TASK_ADMISSION_NOT_FOUND = 'OPERATOR_TASK_ADMISSION_NOT_FOUND';
@@ -142,7 +165,7 @@ function isSamePathOrDescendant(candidate, parent) {
   );
 }
 
-const COMMANDS = Object.freeze(['status', 'inspect', 'run', 'intake']);
+const COMMANDS = Object.freeze(['status', 'inspect', 'run', 'intake', 'return']);
 
 const MAX_ERROR_MESSAGE_LENGTH = 512;
 
@@ -214,6 +237,54 @@ function optionalRead(readFn, notFoundCode) {
   }
 }
 
+/**
+ * Read-only summary of one performed (or converged) Control Tower result
+ * intake. Carries the existing durable disposition pointer and the derived
+ * intake envelope (which embeds the exact canonical result); it is a
+ * projection, never a second authority.
+ */
+function buildControlTowerIntakeSummary(performed) {
+  if (performed === null || performed === undefined) return null;
+  const { intake, disposition } = performed;
+  return Object.freeze({
+    intakeId: intake.intakeId,
+    taskId: intake.taskId,
+    resultId: intake.resultId,
+    dispositionRef: dispositionRef(intake.taskId, disposition.dispositionGeneration),
+    dispositionGeneration: disposition.dispositionGeneration,
+    dispositionState: disposition.state,
+    newlyIntaken: performed.newlyIntaken === true,
+    exactReplay: performed.exactReplay === true,
+    intake,
+  });
+}
+
+/**
+ * Projection for the explicit `coordination:return` handover: the exact
+ * canonical result plus its verified provenance binding and the durable
+ * Control Tower disposition pointer. Nothing here is durable authority.
+ */
+export function buildControlTowerReturnProjection({ taskId, resolved, performed }) {
+  return Object.freeze({
+    schemaVersion: OPERATOR_PROJECTION_SCHEMA_VERSION,
+    projection: OPERATOR_RETURN_PROJECTION,
+    taskId,
+    authorityKind: resolved.authorityKind,
+    authorityId: resolved.authorityId,
+    sourceTaskId: resolved.sourceTaskId,
+    emissionSlot: resolved.emissionSlot,
+    newlyIntaken: performed.newlyIntaken === true,
+    exactReplay: performed.exactReplay === true,
+    disposition: Object.freeze({
+      dispositionRef: dispositionRef(taskId, performed.disposition.dispositionGeneration),
+      dispositionGeneration: performed.disposition.dispositionGeneration,
+      state: performed.disposition.state,
+      decidedAt: performed.disposition.decidedAt,
+    }),
+    intake: performed.intake,
+  });
+}
+
 function deriveNextAction(code) {
   if (code === 'TASK_NOT_FOUND') {
     return 'verify the task id from `pnpm coordination:status`';
@@ -253,6 +324,12 @@ function deriveNextAction(code) {
   }
   if (code === OPERATOR_RECEIPT_AMBIGUOUS) {
     return 'multiple durable receipts bind this task; stop and inspect the durable state manually';
+  }
+  if (code === CONTROL_TOWER_RESULT_INTAKE_NOT_DELIVERED) {
+    return 'the task has no delivered canonical result; run the task to delivery first, then rerun `pnpm coordination:return <TASK_ID>`';
+  }
+  if (code === INVALID_CONTROL_TOWER_RESULT_INTAKE_AUTHORITY) {
+    return 'the requested task has no single canonical pre-execution authority binding; inspect the durable state and pass --source/--slot explicitly for emission-admitted tasks';
   }
   if (code === 'EXECUTOR_INVOCATION_FENCE_UNCERTAIN') {
     return 'a prior or concurrent invocation may already have crossed the executor boundary and no durable outcome/receipt proves its disposition; do NOT retry automatically — inspect the durable state and decide manually';
@@ -719,6 +796,21 @@ export async function executeOperatorTask({
       store.readExecutorResultReceipt(dispatchId),
     );
     const canonicalResult = optionalRead(() => store.readResult(taskId), 'RESULT_NOT_FOUND');
+    const controlTowerIntake =
+      claimed.child.status === TASK_STATUS_RESULT_DELIVERED
+        ? await atStage('control-tower-intake', taskId, async () =>
+            performControlTowerResultIntake({
+              store,
+              taskId,
+              authority: {
+                authorityKind,
+                authorityId,
+                sourceTaskId: boundSourceTaskId,
+                emissionSlot: boundEmissionSlot,
+              },
+            }),
+          )
+        : null;
     return Object.freeze({
       schemaVersion: OPERATOR_PROJECTION_SCHEMA_VERSION,
       projection: OPERATOR_RUN_PROJECTION,
@@ -737,6 +829,7 @@ export async function executeOperatorTask({
       delivery: null,
       resultId: canonicalResult?.resultId ?? null,
       taskStatus: claimed.child.status,
+      controlTowerIntake: buildControlTowerIntakeSummary(controlTowerIntake),
     });
   }
 
@@ -777,6 +870,25 @@ export async function executeOperatorTask({
     );
   }
   const finalTask = store.readTask(taskId);
+  // GF-07: the delivered canonical result is automatically handed to the
+  // Control Tower result intake (generation 1 PENDING_DISPOSITION over the
+  // existing disposition authority). A crash between delivery and intake is
+  // recovered by the next run/return replay through the same convergence.
+  const controlTowerIntake =
+    finalTask.status === TASK_STATUS_RESULT_DELIVERED
+      ? await atStage('control-tower-intake', taskId, async () =>
+          performControlTowerResultIntake({
+            store,
+            taskId,
+            authority: {
+              authorityKind,
+              authorityId,
+              sourceTaskId: boundSourceTaskId,
+              emissionSlot: boundEmissionSlot,
+            },
+          }),
+        )
+      : null;
   const outcome =
     receiptOutcome.outcome === 'ACCEPTED'
       ? RUN_OUTCOME_EXECUTED
@@ -808,6 +920,7 @@ export async function executeOperatorTask({
           },
     resultId: delivery?.resultId ?? null,
     taskStatus: finalTask.status,
+    controlTowerIntake: buildControlTowerIntakeSummary(controlTowerIntake),
   });
 }
 
@@ -917,7 +1030,7 @@ export function parseOperatorArgv(argv = []) {
     });
   }
   options.command = command;
-  if (command === 'inspect' || command === 'run') {
+  if (command === 'inspect' || command === 'run' || command === 'return') {
     if (positionals.length < 2) {
       fail(`${command} requires an explicit <TASK_ID>.`, {
         code: OPERATOR_ARGUMENT_INVALID,
@@ -972,11 +1085,13 @@ export function renderUsage() {
     '  pnpm coordination:run <TASK_ID> [--source <SOURCE_TASK_ID>] [--slot <EMISSION_SLOT>]',
     '      [--worker <WORKER_ID>] [--lease-ms <MILLISECONDS>] [--opencode <ABSOLUTE_PATH>]',
     '      [--model <PROVIDER/MODEL>] [--workdir <ABSOLUTE_PATH>] [--json]',
+    '  pnpm coordination:return <TASK_ID> [--source <SOURCE_TASK_ID>] [--slot <EMISSION_SLOT>] [--json]',
     '  pnpm coordination:intake --spec <ABSOLUTE_JSON_PATH> [<TASK_ID>] [--recorder <ID>] [--json]',
     '',
     'notes:',
-    '  run executes exactly one operator-named READ_ONLY task boundary through its existing pre-execution authority (emission admission or user-approved intake).',
+    '  run executes exactly one operator-named READ_ONLY task boundary through its existing pre-execution authority (emission admission or user-approved intake) and automatically hands the delivered canonical result to the Control Tower result intake (generation 1 PENDING_DISPOSITION).',
     `  the executor is the read-only OpenCode CLI structured-result executor; ${OPENCODE_CLI_PATH_ENV_KEY} and ${OPENCODE_MODEL_ENV_KEY} (or --opencode/--model) are required.`,
+    '  return hands ONE already delivered canonical result to the Control Tower result intake (idempotent; no executor invocation, no verdict, no successor).',
     '  intake intakes exactly ONE explicitly user-approved READ_ONLY task spec (userApproved: true + approval + bounded taskSpec) to READY; it never claims, dispatches, or invokes an executor.',
     '  status/inspect never write. JSON output is a read-only projection, never durable authority.',
     '',
@@ -1134,6 +1249,11 @@ export function renderRunResult(projection) {
     );
   }
   lines.push(`task:     ${projection.taskStatus}`);
+  if (projection.controlTowerIntake !== null && projection.controlTowerIntake !== undefined) {
+    lines.push(
+      `return:   ${projection.controlTowerIntake.intakeId} disposition=${projection.controlTowerIntake.dispositionRef} ${projection.controlTowerIntake.dispositionState} (${projection.controlTowerIntake.newlyIntaken ? 'newly intaken' : 'exact replay'})`,
+    );
+  }
   if (projection.outcome === RUN_OUTCOME_EXECUTOR_REJECTED) {
     lines.push(
       'next:     executor boundary exited non-zero; no retry exists — inspect the task and decide manually',
@@ -1348,6 +1468,19 @@ export function renderIntakeResult(projection) {
   ].join('\n');
 }
 
+export function renderControlTowerReturn(projection) {
+  return [
+    `greenhub coordination return ${projection.taskId}`,
+    `authority:  ${projection.authorityKind} ${projection.authorityId}`,
+    `intake:     ${projection.intake.intakeId} (${projection.newlyIntaken ? 'newly intaken' : 'exact replay'})`,
+    `disposition: ${projection.disposition.dispositionRef} ${projection.disposition.state}`,
+    `result:     ${projection.intake.resultId} status=${projection.intake.result.status}`,
+    `summary:    ${JSON.stringify(projection.intake.result.summary)}`,
+    'next:       Control Tower canonical state recompute / live-main re-read / publication classification (no manual copy/paste)',
+    '',
+  ].join('\n');
+}
+
 export async function runOperatorCli({
   argv = [],
   env = process.env,
@@ -1394,6 +1527,48 @@ export async function runOperatorCli({
       });
       stdout.write(
         options.json ? `${JSON.stringify(projection, null, 2)}\n` : renderIntakeResult(projection),
+      );
+      return 0;
+    }
+    if (options.command === 'return') {
+      const projection = atSyncStage('control-tower-intake', options.taskId, () => {
+        const resolved = resolveTaskAdmission({
+          store: activeStore,
+          taskId: options.taskId,
+          sourceTaskId: options.sourceTaskId ?? undefined,
+          emissionSlot: options.emissionSlot,
+        });
+        if (resolved === null) {
+          fail(
+            `no canonical pre-execution authority (emission admission or user-approved intake) binds task ${options.taskId} (fail-closed): the operator CLI never creates an authority and returns only authority-bound results.`,
+            {
+              code: OPERATOR_TASK_ADMISSION_NOT_FOUND,
+              taskId: options.taskId,
+              stage: 'control-tower-intake',
+              nextAction: deriveNextAction(OPERATOR_TASK_ADMISSION_NOT_FOUND),
+            },
+          );
+        }
+        const performed = performControlTowerResultIntake({
+          store: activeStore,
+          taskId: options.taskId,
+          authority: {
+            authorityKind: resolved.authorityKind,
+            authorityId: resolved.authorityId,
+            sourceTaskId: resolved.sourceTaskId,
+            emissionSlot: resolved.emissionSlot,
+          },
+        });
+        return buildControlTowerReturnProjection({
+          taskId: options.taskId,
+          resolved,
+          performed,
+        });
+      });
+      stdout.write(
+        options.json
+          ? `${JSON.stringify(projection, null, 2)}\n`
+          : renderControlTowerReturn(projection),
       );
       return 0;
     }
