@@ -286,6 +286,12 @@ import {
 import { buildAdmissionBoundClaimToken } from './admission-bound-claim.mjs';
 import { buildSchedulableWorkProjection } from './canonical-schedulable-work-read.mjs';
 import {
+  RUNNABLE_OCCURRENCE_STATE_CLAIMED,
+  RUNNABLE_OCCURRENCE_STATE_RUNNABLE,
+  RUNNABLE_OCCURRENCE_STATE_TERMINAL,
+  buildRunnableOccurrenceRecord,
+} from './runnable-occurrence.mjs';
+import {
   buildClaimBoundDispatchEnvelope,
   validateClaimBoundDispatchEnvelope,
 } from './claim-bound-dispatch-envelope.mjs';
@@ -4529,6 +4535,128 @@ export class CoordinationStore {
       nextTaskSpecBinding: admission.nextTaskSpecBinding,
       sequencePosition: membership[0].sequenceNumber,
       childStatus: child.status,
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Runnable-occurrence read domain
+  // (GREENHUB-COORDINATION-RUNNABLE-OCCURRENCE-GF03, pure read).
+  // readRunnableOccurrence() != claimTask() != claimAdmittedTask()
+  //   != admitEmittedTask() != emitNextTask() != scheduleNextTask()
+  //   != dispatchNextTask() != decideNextTask(): the caller explicitly supplies
+  //   (sourceTaskId, emissionSlot); this primitive never scans tasks or
+  //   emissions, never polls a queue, never picks oldest/newest, never selects
+  //   or infers workers/executors, never mutates, never repairs, and never runs
+  //   a scheduler loop. It derives the ONE runnable occurrence of the exact
+  //   canonical admission authority from durable bytes only: no clock, no lease
+  //   activity, no pid, no random, and no mtime participates, so the same
+  //   logical admission + durable claim state always projects identically in
+  //   any process under any clock skew. claimGeneration stays the SOLE fencing
+  //   generation; the projection never invents another one and never exposes
+  //   the claimToken capability. Exactly one approved admission projects to
+  //   exactly one occurrence identity (occ_<sha256> over admissionId,
+  //   nextTaskId, nextTaskSpecBinding); replay creates no duplicate occurrence
+  //   and no durable byte churn.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Read the canonical runnable occurrence for one exact (sourceTaskId,
+   * emissionSlot) admission binding. Pure read: never mutates, never repairs,
+   * never rewinds a progressed child, never creates READY.
+   *
+   * - admitted + READY without claim authority -> RUNNABLE.
+   * - valid admission-bound claim authority -> CLAIMED, including the crash
+   *   window where claim.json was published but the child never reached
+   *   CLAIMED (the durable claim winner decides, never the status).
+   * - RESULT_DELIVERED -> TERMINAL.
+   * - admission authority without READY (child CREATED) fails closed with
+   *   TASK_NOT_READY (converge via admitEmittedTask first): the occurrence is
+   *   not materialized yet and no claim authority may exist.
+   * - CLAIMED/RESULT_DELIVERED without claim authority fails closed with
+   *   CLAIM_NOT_FOUND (no auto-repair).
+   * - foreign/manual/corrupt claim bytes fail closed with the exact existing
+   *   claim codes and are never projected or adopted.
+   */
+  readRunnableOccurrence({ sourceTaskId, emissionSlot = DEFAULT_EMISSION_SLOT } = {}) {
+    assertValidTaskId(sourceTaskId);
+    assertValidEmissionSlot(emissionSlot);
+    // Canonical schedulable-work projection: pure read of the exact admission
+    // binding (source/emission/admission/child-spec/sequence). Drift fails
+    // closed with the existing codes; membership is read as-is (no repair).
+    const projection = this.readCanonicalSchedulableWork({ sourceTaskId, emissionSlot });
+    // Current durable claim bytes, read as-is (corrupt fails closed, never
+    // repaired, never removed).
+    const currentFound = this.#readCurrentAdmissionClaim(projection.nextTaskId);
+    let claim = null;
+    if (currentFound.state === 'present') {
+      const persisted = currentFound.record;
+      let expected;
+      try {
+        expected = buildAdmissionBoundClaimToken({
+          admissionId: projection.admissionId,
+          nextTaskId: projection.nextTaskId,
+          workerId: persisted.workerId,
+        });
+      } catch {
+        storeFail(`foreign claim for admitted child (fail-closed, no auto-adoption): ${projection.nextTaskId}`, {
+          code: CLAIM_ADMISSION_BYPASS_DETECTED,
+          taskId: sourceTaskId,
+        });
+      }
+      if (persisted.claimToken !== expected) {
+        storeFail(`foreign claim for admitted child (fail-closed, no auto-adoption): ${projection.nextTaskId}`, {
+          code: CLAIM_ADMISSION_BYPASS_DETECTED,
+          taskId: sourceTaskId,
+        });
+      }
+      claim = persisted;
+    }
+    let occurrenceState;
+    if (projection.childStatus === TASK_STATUS_CREATED) {
+      if (claim !== null) {
+        storeFail(`claim authority exists before READY (fail-closed, no auto-repair): ${projection.nextTaskId}`, {
+          code: 'CORRUPT_CLAIM',
+          taskId: projection.nextTaskId,
+        });
+      }
+      storeFail(
+        `admission authority exists but the occurrence is not materialized yet (task=${projection.nextTaskId} status=CREATED; converge via admitEmittedTask first).`,
+        { code: TASK_NOT_READY, taskId: projection.nextTaskId },
+      );
+    } else if (projection.childStatus === TASK_STATUS_READY) {
+      occurrenceState =
+        claim === null ? RUNNABLE_OCCURRENCE_STATE_RUNNABLE : RUNNABLE_OCCURRENCE_STATE_CLAIMED;
+    } else if (projection.childStatus === TASK_STATUS_CLAIMED) {
+      if (claim === null) {
+        storeFail(`no admission-bound claim for progressed child (fail-closed, no auto-repair): ${projection.nextTaskId}`, {
+          code: CLAIM_NOT_FOUND,
+          taskId: projection.nextTaskId,
+        });
+      }
+      occurrenceState = RUNNABLE_OCCURRENCE_STATE_CLAIMED;
+    } else if (projection.childStatus === TASK_STATUS_RESULT_DELIVERED) {
+      if (claim === null) {
+        storeFail(`no admission-bound claim for terminal child (fail-closed, no auto-repair): ${projection.nextTaskId}`, {
+          code: CLAIM_NOT_FOUND,
+          taskId: projection.nextTaskId,
+        });
+      }
+      occurrenceState = RUNNABLE_OCCURRENCE_STATE_TERMINAL;
+    } else {
+      storeFail(
+        `runnable-occurrence child in unexpected status (fail-closed): ${projection.nextTaskId} status=${projection.childStatus}`,
+        { code: 'CORRUPT_CLAIM', taskId: projection.nextTaskId },
+      );
+    }
+    return buildRunnableOccurrenceRecord({
+      sourceTaskId,
+      emissionSlot,
+      emissionId: projection.emissionId,
+      admissionId: projection.admissionId,
+      nextTaskId: projection.nextTaskId,
+      nextTaskSpecBinding: projection.nextTaskSpecBinding,
+      occurrenceState,
+      claim: claim === null ? null : { workerId: claim.workerId, claimGeneration: claim.generation },
     });
   }
 
