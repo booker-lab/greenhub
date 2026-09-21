@@ -14,8 +14,12 @@
 //   run     = ONE explicit operator-named task through the EXISTING chain:
 //             admission -> claim -> dispatch attempt -> transport request ->
 //             receiver acceptance -> receiver decision -> executor acceptance
-//             -> invocation attempt -> durable executor result receipt ->
-//             canonical result delivery.
+//             -> invocation attempt -> durable pre-invocation fence ->
+//             durable executor result receipt -> canonical result delivery.
+//             The executor boundary is fenced BEFORE the adapter can run, so
+//             concurrent/restarted operators never cross it twice for one
+//             dispatchId and a durable outcome/receipt is always replayed
+//             without re-invoking the executor.
 //
 // Explicitly NOT implemented here (and asserted absent by the proof spec):
 //   scheduler, READY scan for work selection, queue polling, daemon, cron,
@@ -52,6 +56,7 @@ import { fileURLToPath } from 'node:url';
 import { buildClaimBoundDispatchId } from './claim-bound-dispatch-envelope.mjs';
 import { acceptExecutorDispatchDecision } from './dispatch-executor-acceptance.mjs';
 import { persistExecutorInvocationAttempt } from './dispatch-executor-invocation-attempt.mjs';
+import { invokeExecutorWithInvocationFence } from './dispatch-executor-invocation-fence.mjs';
 import { acceptReceiverDispatch } from './dispatch-receiver-acceptance.mjs';
 import { persistReceiverDecision } from './dispatch-receiver-decision.mjs';
 import { prepareDispatchTransportRequest } from './dispatch-transport-contract.mjs';
@@ -60,7 +65,6 @@ import { deliverExecutorResultReceipt } from './executor-result-delivery.mjs';
 import {
   createCodexCliStructuredResultExecutor,
   EXECUTOR_RESULT_RECEIPTS_DIRNAME,
-  persistExecutorResultReceipt,
 } from './executor-result-receipt.mjs';
 import { CoordinationStore } from './store.mjs';
 import { TASK_ID_PATTERN, TASK_KIND_READ_ONLY } from './task-envelope.mjs';
@@ -195,6 +199,9 @@ function deriveNextAction(code) {
   }
   if (code === OPERATOR_RECEIPT_AMBIGUOUS) {
     return 'multiple durable receipts bind this task; stop and inspect the durable state manually';
+  }
+  if (code === 'EXECUTOR_INVOCATION_FENCE_UNCERTAIN') {
+    return 'a prior or concurrent invocation may already have crossed the executor boundary and no durable outcome/receipt proves its disposition; do NOT retry automatically — inspect the durable state and decide manually';
   }
   if (
     typeof code === 'string' &&
@@ -499,9 +506,10 @@ export function resolveTaskAdmission({ store, taskId, sourceTaskId, emissionSlot
  * the existing chain. No scheduler, no READY scan, no retry, no fallback, no
  * successor execution, no automatic disposition.
  *
- * The executor boundary is crossed at most once per call (existing Task 33
- * semantics); an existing durable receipt/invocation record is replayed without
- * re-invoking the executor.
+ * The executor boundary is crossed at most once per dispatchId through the
+ * durable pre-invocation fence; an existing durable receipt/invocation outcome
+ * is replayed without re-invoking the executor, and a fenced boundary without
+ * durable evidence fails closed (never automatic retry).
  */
 export async function executeOperatorTask({
   store,
@@ -647,8 +655,8 @@ export async function executeOperatorTask({
   await atStage('invocation-attempt', taskId, async () =>
     persistExecutorInvocationAttempt({ dispatchId, store }),
   );
-  const receiptOutcome = await atStage('executor-result-receipt', taskId, async () =>
-    persistExecutorResultReceipt({ dispatchId, store, executor }),
+  const receiptOutcome = await atStage('executor-invocation-fence', taskId, async () =>
+    invokeExecutorWithInvocationFence({ dispatchId, store, executor }),
   );
 
   let delivery = null;
@@ -669,7 +677,7 @@ export async function executeOperatorTask({
     projection: OPERATOR_RUN_PROJECTION,
     outcome,
     terminal: false,
-    executorInvocations: 1,
+    executorInvocations: receiptOutcome.executorInvoked === true ? 1 : 0,
     taskId,
     sourceTaskId: boundSourceTaskId,
     emissionSlot: boundEmissionSlot,
