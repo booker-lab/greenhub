@@ -10,6 +10,14 @@
 //     -> DURABLE EXECUTOR RESULT RECEIPT -> CANONICAL RESULT DELIVERY
 //     -> RESULT_DELIVERED -> GF-04 TERMINAL RECONCILIATION -> READ_ONLY_TERMINAL
 //
+// Cycle C additionally proves the GF-06 -> GF-05 -> GF-07 chain end to end in
+// the same isolated home with ONE bounded synthetic READ_ONLY probe:
+//   GF-06 user-approved intake -> READY -> REAL OPENCODE execution ->
+//   RESULT_DELIVERED -> GF-07 automatic Control Tower result intake
+//   (PENDING_DISPOSITION generation 1) -> exact-replay convergence with zero
+//   executor invocations and zero durable byte changes.
+// No Pilot work is executed by this harness.
+//
 // plus crash/replay semantics:
 //   R1 receipt durable, no canonical result -> operator rerun delivers WITHOUT
 //      a second OpenCode invocation,
@@ -54,6 +62,7 @@ import {
   reconcileTerminalResult,
   TERMINAL_RECONCILIATION_READ_ONLY_TERMINAL,
 } from './terminal-reconciliation.mjs';
+import { AUTHORITY_KIND_USER_APPROVED_INTAKE } from './user-approved-intake.mjs';
 
 const MODULE_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = resolve(MODULE_DIRECTORY, '../..');
@@ -63,6 +72,7 @@ const SOURCE_A = 'GF05-REALPROBE-SRCA';
 const CHILD_A = 'GF05-REALPROBE-CHILDA';
 const SOURCE_B = 'GF05-REALPROBE-SRCB';
 const CHILD_B = 'GF05-REALPROBE-CHILDB';
+const INTAKE_C = 'GF07-REALPROBE-INTAKEC';
 
 const NEVER_CALLED = async () => {
   throw new Error('Git publication evidence reader must not be called for a READ_ONLY terminal');
@@ -608,6 +618,95 @@ async function main(options) {
     replayExecutorInvocations: projectionReplayB.executorInvocations,
     canonicalResultId: resultB.resultId,
     terminalVerdict: verdictB.verdict,
+  };
+
+  // --- Cycle C: GF-06 user-approved intake -> GF-05 real execution ->
+  //     GF-07 automatic Control Tower return (one bounded synthetic
+  //     READ_ONLY probe; no Pilot work is executed) ------------------------
+  store.intakeUserApprovedReadOnlyTask({
+    userApproved: true,
+    approval: {
+      approvedBy: 'gf07-real-proof',
+      approvalRef: 'gf07:real-opencode-readonly-roundtrip',
+    },
+    taskSpec: sampleTaskInput(INTAKE_C),
+    recorderId: 'gf07-real-proof-harness',
+  });
+  const stdoutC = captureStream();
+  const stderrC = captureStream();
+  const exitC = await runOperatorCli({
+    argv: ['run', INTAKE_C, '--json'],
+    store,
+    executor: instrumentedExecutor,
+    stdout: stdoutC,
+    stderr: stderrC,
+  });
+  assert.equal(stderrC.text, '', `operator run C stderr must be empty: ${stderrC.text}`);
+  assert.equal(exitC, 0, 'operator run C must exit 0');
+  const projectionC = JSON.parse(stdoutC.text);
+  assert.equal(projectionC.outcome, 'EXECUTED');
+  assert.equal(projectionC.authorityKind, AUTHORITY_KIND_USER_APPROVED_INTAKE);
+  assert.equal(processInvocations, 3, 'exactly one real OpenCode process for cycle C');
+  assert.notEqual(projectionC.controlTowerIntake, null);
+  assert.equal(projectionC.controlTowerIntake.newlyIntaken, true);
+  assert.equal(projectionC.controlTowerIntake.dispositionState, 'PENDING_DISPOSITION');
+  assert.equal(
+    projectionC.controlTowerIntake.dispositionRef,
+    `${INTAKE_C}@1`,
+    'the automatic return durably points at generation 1 PENDING_DISPOSITION',
+  );
+  const dispositionC = store.readCurrentDisposition(INTAKE_C);
+  assert.equal(dispositionC.state, 'PENDING_DISPOSITION');
+  assert.equal(dispositionC.resultId, projectionC.delivery.resultId);
+
+  const homeBytesBeforeIntakeReplay = snapshotHome(home);
+  const stdoutReturnC = captureStream();
+  const stderrReturnC = captureStream();
+  const exitReturnC = await runOperatorCli({
+    argv: ['return', INTAKE_C, '--json'],
+    store,
+    stdout: stdoutReturnC,
+    stderr: stderrReturnC,
+  });
+  assert.equal(
+    stderrReturnC.text,
+    '',
+    `operator return C stderr must be empty: ${stderrReturnC.text}`,
+  );
+  assert.equal(exitReturnC, 0, 'operator return C must exit 0');
+  const returnC = JSON.parse(stdoutReturnC.text);
+  assert.equal(returnC.newlyIntaken, false);
+  assert.equal(returnC.exactReplay, true);
+  assert.equal(returnC.disposition.state, 'PENDING_DISPOSITION');
+  assert.equal(processInvocations, 3, 'automatic return never invokes OpenCode');
+  assert.deepEqual(
+    snapshotHome(home),
+    homeBytesBeforeIntakeReplay,
+    'return replay must not change durable coordination bytes',
+  );
+
+  // Literal `coordination:return` process path (no executor configuration).
+  const spawnedReturn = await runChildProcess(['return', INTAKE_C, '--json'], {
+    ...process.env,
+    GREENHUB_COORDINATION_HOME: home,
+  });
+  assert.equal(spawnedReturn.code, 0, `spawned return stderr: ${spawnedReturn.stderr}`);
+  const spawnedReturnProjection = JSON.parse(spawnedReturn.stdout);
+  assert.equal(spawnedReturnProjection.exactReplay, true);
+  assert.deepEqual(snapshotHome(home), homeBytesBeforeIntakeReplay);
+
+  report.cycleC = {
+    taskId: INTAKE_C,
+    dispatchId: projectionC.dispatchId,
+    authorityKind: projectionC.authorityKind,
+    canonicalResultId: projectionC.controlTowerIntake.intake.resultId,
+    dispositionRef: projectionC.controlTowerIntake.dispositionRef,
+    dispositionState: projectionC.controlTowerIntake.dispositionState,
+    newlyIntaken: projectionC.controlTowerIntake.newlyIntaken,
+    returnReplayExact: returnC.exactReplay,
+    spawnedReturnExactReplay: spawnedReturnProjection.exactReplay,
+    realProcessInvocations: 3,
+    manualCopyPasteRequired: false,
   };
 
   report.terminalReconciliation = {
