@@ -15,6 +15,7 @@
     "coordination:run": "node scripts/coordination/operator-cli.mjs run",
     "coordination:return": "node scripts/coordination/operator-cli.mjs return",
     "coordination:relay": "node scripts/coordination/operator-cli.mjs relay",
+    "coordination:disposition": "node scripts/coordination/operator-cli.mjs disposition",
     "coordination:status": "node scripts/coordination/operator-cli.mjs status",
     "coordination:inspect": "node scripts/coordination/operator-cli.mjs inspect",
     "coordination:intake": "node scripts/coordination/operator-cli.mjs intake",
