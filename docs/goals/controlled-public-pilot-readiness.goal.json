@@ -1,0 +1,203 @@
+{
+  "GOAL": "현재 Greenhub live main이 Controlled Public Pilot GO 결정을 요청할 수 있는 상태인지 판정한다. Repository 안에서 검증 가능한 준비사항은 직접 검증한다. 외부 runtime/provider 증거가 필요한 항목은 외부 gate로 분리한다. 제품·법무·Pilot GO 판단은 인간 권위로 남긴다. 이 Goal은 production activation, salesMode 전환, 실제 결제, 실제 알림 발송, live round 시작을 수행하지 않는다.",
+  "ACCEPTANCE_AUTHORITY": [
+    "docs/specs/mvp-sales-round-direct-delivery.md",
+    "docs/specs/ops/mvp-sales-round-runbook.md",
+    "docs/specs/legal/README.md",
+    "docs/specs/legal/consumer-legal-documents.md",
+    "docs/specs/api/auth.md",
+    "docs/specs/api/notifications.md",
+    "docs/BACKLOG.md"
+  ],
+  "PRESERVE": [
+    "production deployment 수행 금지 — Production activation requires a separate future authority.",
+    "production activation 수행 금지 — Production activation requires a separate future authority.",
+    "salesMode 변경 금지",
+    "live round 생성/개방 금지",
+    "actual payment 실행 금지",
+    "actual refund 실행 금지",
+    "actual Alimtalk/SMS 발송 금지",
+    "Firebase production mutation 금지",
+    "Vercel/Railway production mutation 금지",
+    "product policy 임의 결정 금지",
+    "legal policy 임의 결정 금지",
+    "Pilot GO 자동 승인 금지",
+    "historical evidence를 current proof로 승격 금지"
+  ],
+  "AUTONOMOUSLY_ALLOWED": [
+    "docs/specs/legal/README.md",
+    "docs/specs/legal/consumer-legal-documents.md",
+    "docs/specs/api/notifications.md",
+    "docs/specs/mvp-sales-round-direct-delivery.md",
+    "apps/consumer/src/app/legal-documents.test.mjs",
+    "apps/consumer/src/app/mypage/notifications/settings/page.test.mjs",
+    "apps/consumer/src/app/checkout/page.test.mjs",
+    "scripts/probe-consumer-callback.spec.mjs",
+    "scripts/probe-consumer-callback.workflow.spec.mjs",
+    "scripts/probe-authjs-role-callback.spec.mjs",
+    "scripts/probe-authjs-role-callback.workflow.spec.mjs",
+    "scripts/probe-auth-runtime.spec.mjs"
+  ],
+  "ESCALATE_IF": [
+    "PRODUCT_POLICY_FORK",
+    "LEGAL_OPERATIONAL_POLICY",
+    "PILOT_GO",
+    "EXTERNAL_AUTHORITY"
+  ],
+  "STOP_WHEN": [
+    "모든 declared criterion이 exact live main에서 현재 평가를 가진다.",
+    "open AUTONOMOUS gap은 declared authority 안에서 bounded planner/executor task로 처리하고, HUMAN/EXTERNAL gate는 자동으로 닫지 않으며, autonomous progress가 더 없으면 finite terminal status로 종료한다. Pilot GO, production activation, external provider mutation은 수행하지 않는다.",
+    "criterion별 disposition과 terminal decision이 기록되어 다음 Control Tower 판단으로 넘긴다.",
+    "Pilot GO, production activation, external provider mutation은 시도되지 않는다."
+  ],
+  "CRITERIA": [
+    {
+      "id": "PILOT_MARKETING_LEGAL_POLICY_TOKEN",
+      "statement": "현재 legal spec이 Controlled Public Pilot의 선택 마케팅 미사용 정책 토큰 MARKETING_NOT_USED_IN_PILOT을 소유한다.",
+      "authority": ["docs/specs/legal/README.md"],
+      "check": "DOC_TOKEN",
+      "class": "AUTONOMOUS",
+      "path": "docs/specs/legal/README.md",
+      "token": "MARKETING_NOT_USED_IN_PILOT"
+    },
+    {
+      "id": "PILOT_MARKETING_NOTIFICATION_CONTRACT_TOKEN",
+      "statement": "현재 notifications spec이 선택 마케팅 미사용 정책과 거래성 알림 분리 계약을 소유한다.",
+      "authority": ["docs/specs/api/notifications.md"],
+      "check": "DOC_TOKEN",
+      "class": "AUTONOMOUS",
+      "path": "docs/specs/api/notifications.md",
+      "token": "MARKETING_NOT_USED_IN_PILOT"
+    },
+    {
+      "id": "PILOT_MARKETING_ROUND_SPEC_TOKEN",
+      "statement": "현재 회차 직배송 spec이 주문 계약 범위에서 마케팅 동의 field를 정의하지 않음을 소유한다.",
+      "authority": ["docs/specs/mvp-sales-round-direct-delivery.md"],
+      "check": "DOC_TOKEN",
+      "class": "AUTONOMOUS",
+      "path": "docs/specs/mvp-sales-round-direct-delivery.md",
+      "token": "MARKETING_NOT_USED_IN_PILOT"
+    },
+    {
+      "id": "PILOT_MARKETING_CANONICAL_LEGAL_DOC",
+      "statement": "정본 legal 문서가 파일럿에서 선택 마케팅 동의 수집·발송을 운영하지 않음을 소유한다.",
+      "authority": ["docs/specs/legal/consumer-legal-documents.md"],
+      "check": "DOC_TOKEN",
+      "class": "AUTONOMOUS",
+      "path": "docs/specs/legal/consumer-legal-documents.md",
+      "token": "선택 마케팅 동의를 수집하거나 마케팅 발송을 운영하지 않으며"
+    },
+    {
+      "id": "PUBLIC_LEGAL_PILOT_REGRESSION",
+      "statement": "기존 focused consumer legal 회귀가 live main에서 통과해 공개 /privacy·/terms와 거래성 알림 8종/마케팅 분리가 현재 파일럿 계약과 일치함을 확인한다.",
+      "authority": [
+        "docs/specs/legal/README.md",
+        "apps/consumer/src/app/privacy/page.tsx",
+        "apps/consumer/src/app/terms/page.tsx"
+      ],
+      "check": "PROOF_AT_MAIN",
+      "class": "AUTONOMOUS",
+      "command": "node --test apps/consumer/src/app/legal-documents.test.mjs"
+    },
+    {
+      "id": "EXACT_PREVIEW_WORKFLOW_PRESENT",
+      "statement": "exact-source Preview deployment 도구 workflow가 live main에 존재한다.",
+      "authority": [".github/workflows/create-exact-preview-deployment.yml"],
+      "check": "PATH_PRESENT",
+      "class": "AUTONOMOUS",
+      "path": ".github/workflows/create-exact-preview-deployment.yml"
+    },
+    {
+      "id": "EXACT_PREVIEW_TOOLING_PROOF",
+      "statement": "기존 exact-preview/provision tooling의 focused deterministic spec이 live main에서 통과한다.",
+      "authority": [
+        ".github/workflows/create-exact-preview-deployment.yml",
+        ".github/workflows/provision-exact-preview.yml",
+        "scripts/vercel/create-exact-preview-deployment.spec.mjs",
+        "scripts/vercel/provision-exact-preview.spec.mjs"
+      ],
+      "check": "PROOF_AT_MAIN",
+      "class": "AUTONOMOUS",
+      "command": "node --test scripts/vercel/create-exact-preview-deployment.spec.mjs scripts/vercel/provision-exact-preview.spec.mjs scripts/wait-preview-deploy.spec.mjs"
+    },
+    {
+      "id": "AUTH_PROBE_TOOLING_PROOF",
+      "statement": "기존 auth runtime/role callback probe tooling의 focused deterministic spec이 live main에서 통과한다.",
+      "authority": [
+        "scripts/probe-auth-runtime.mjs",
+        "scripts/probe-authjs-role-callback.mjs",
+        "scripts/probe-consumer-callback.mjs"
+      ],
+      "check": "PROOF_AT_MAIN",
+      "class": "AUTONOMOUS",
+      "command": "node --test scripts/probe-auth-runtime.spec.mjs scripts/probe-auth-runtime.workflow.spec.mjs scripts/probe-authjs-role-callback.spec.mjs scripts/probe-authjs-role-callback.workflow.spec.mjs scripts/probe-authjs-role-callback.gate-38b.spec.mjs scripts/probe-consumer-callback.workflow.spec.mjs"
+    },
+    {
+      "id": "CONSUMER_CALLBACK_PROBE_SOURCE_PARITY",
+      "statement": "consumer callback probe spec이 live main의 apps/consumer/src/auth.ts 진단 projection과 결정적으로 일치한다.",
+      "authority": [
+        "scripts/probe-consumer-callback.spec.mjs",
+        "apps/consumer/src/auth.ts"
+      ],
+      "check": "PROOF_AT_MAIN",
+      "class": "AUTONOMOUS",
+      "command": "node --test scripts/probe-consumer-callback.spec.mjs"
+    },
+    {
+      "id": "CURRENT_EXACT_RELEASE_PREVIEW_RUNTIME_PROOF",
+      "statement": "현재 exact live/release source에 대한 Preview/browser/runtime proof가 필요하다. 역사적 Preview evidence는 현재 proof로 승격하지 않는다.",
+      "authority": [
+        ".github/workflows/create-exact-preview-deployment.yml",
+        "docs/specs/ops/mvp-sales-round-runbook.md",
+        "docs/BACKLOG.md"
+      ],
+      "check": "EXTERNAL_GATE",
+      "class": "EXTERNAL"
+    },
+    {
+      "id": "AUTH_SESSION_RUNTIME_CURRENT_RELEASE",
+      "statement": "Auth.js cookie 발급, 동일 browser context persistence, logout/session invalidation, stale role/store/approval claim convergence는 현재 runtime/browser evidence가 필요하다. static source만으로 satisfied 처리하지 않는다.",
+      "authority": ["docs/specs/api/auth.md", "docs/BACKLOG.md"],
+      "check": "EXTERNAL_GATE",
+      "class": "EXTERNAL"
+    },
+    {
+      "id": "ALIGO_PROVIDER_CURRENT_METADATA",
+      "statement": "repository logical template contract와 provider current authenticated metadata는 분리된 gate다. 역사적 심사/승인 snapshot을 current metadata로 사용하지 않으며 이 Goal은 실제 message를 발송하지 않는다.",
+      "authority": [
+        "docs/specs/api/notifications.md",
+        "docs/specs/ops/mvp-sales-round-runbook.md",
+        "docs/BACKLOG.md"
+      ],
+      "check": "EXTERNAL_GATE",
+      "class": "EXTERNAL"
+    },
+    {
+      "id": "CONSUMER_SELF_CANCEL_ORDER_CANCELLED_POLICY",
+      "statement": "consumer self-cancel ORDER_CANCELLED 알림 정책은 현재 authority가 PRODUCT_POLICY_DECISION_REQUIRED로 유지한다. Goal authoring은 이 정책을 선택하지 않는다.",
+      "authority": ["docs/BACKLOG.md", "docs/specs/api/notifications.md"],
+      "check": "HUMAN_AUTHORITY",
+      "class": "HUMAN"
+    },
+    {
+      "id": "CONTROLLED_PUBLIC_PILOT_GO",
+      "statement": "Controlled Public Pilot GO는 사용자의 semantic/operational authority다. Goal Loop가 자동으로 true로 만들 수 없으며 production activation은 이 Goal 밖이다.",
+      "authority": [
+        "docs/specs/ops/mvp-sales-round-runbook.md",
+        "docs/BACKLOG.md",
+        "docs/specs/legal/README.md"
+      ],
+      "check": "HUMAN_AUTHORITY",
+      "class": "HUMAN"
+    }
+  ],
+  "TASK_CATALOG": [],
+  "PLANNER": {
+    "enabled": true
+  },
+  "BUDGET": {
+    "max_iterations": 1,
+    "max_tasks": 1,
+    "max_wall_clock_ms": 900000
+  }
+}
