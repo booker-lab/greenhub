@@ -2,7 +2,8 @@
 // (bounded task contract, outcome-relative publication, thin stateless
 // automation).
 //
-// Goal-Constrained Development Loop, Phase 1 (deterministic goal core).
+// Goal-Constrained Development Loop, Phase 1 deterministic core with an
+// optional read-only Phase 2 planner seam.
 //
 // One caller-supplied Goal Contract, one foreground process, one exit. Every
 // bounded iteration:
@@ -14,6 +15,18 @@
 //   5. delegates the entire execution/publication mechanics to the existing GN
 //      executors, then re-reads live `main` and recomputes.
 //
+// A declared eligible catalog task always wins. Only when no eligible declared
+// task exists, an open AUTONOMOUS gap remains, and the Goal Contract opts in
+// with `PLANNER.enabled` does this module ask one read-only planner for at most
+// one bounded proposal per criterion-state fingerprint, validate that proposal
+// deterministically, derive the executable task from existing goal authority,
+// and hand it to the same GN executors.
+//
+// The planner is never a writer: it reads one disposable workspace created from
+// the exact pinned live main, never receives publication credentials, and any
+// Git-observed mutation in its workspace rejects the proposal before any
+// executor is invoked.
+//
 // This module owns composition and deterministic goal bookkeeping only:
 //   scripts/agent/run-once.mjs          execution core (isolated workspace,
 //                                       OpenCode invocation, mutation boundary,
@@ -22,10 +35,10 @@
 //                                       PR, required checks, merge, remote
 //                                       read-back, task-owned cleanup)
 //
-// This phase has no AI planning, no cross-process task state or task recovery,
-// no background execution, no ref cleanup for pre-existing remote refs, no
-// concurrent task admission, and no long-running service. Its only execution
-// guarantee is scoped to one foreground attempt:
+// This phase has no cross-process task state or task recovery, no background
+// execution, no ref cleanup for pre-existing remote refs, no concurrent task
+// admission, and no long-running service. Its only execution guarantee is
+// scoped to one foreground attempt:
 //   one selected task attempt -> one GN execution -> at most one OpenCode
 //   mutation invocation.
 // A process crash before remote publication evidence may let a later
@@ -41,16 +54,22 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  DEFAULT_OPENCODE_TIMEOUT_MS,
   DEFAULT_PROOF_TIMEOUT_MS,
   SUCCESS as RUN_ONCE_SUCCESS,
+  buildChildEnv,
+  buildOpencodeArgs,
   createBaselineWorkspace,
+  defaultInvokeOpencode,
   defaultRemoveWorkspace,
   defaultRunProofCommand,
   fetchBaseline,
   gitCapture,
   isPathAllowed,
   normalizeRepoPath,
+  observeChangedPaths,
   readLiveRemoteMain,
+  resolveOpencodeCommand,
   runOnce as defaultRunOnce,
 } from './run-once.mjs';
 import {
@@ -102,6 +121,46 @@ export const CHECK_KINDS = Object.freeze([
 export const CRITERION_CLASSES = Object.freeze(['AUTONOMOUS', 'HUMAN', 'EXTERNAL']);
 
 export const PUBLICATION_MODES = Object.freeze(['required', 'none']);
+
+export const PLANNER_DECISIONS = Object.freeze(['TASK', 'NO_TASK', 'ESCALATE']);
+
+// Bounded planner evidence statuses. They are planner-proposal dispositions,
+// never goal statuses; the goal status mapping stays in PLANNER_TERMINALS.
+export const PLANNER_STATUSES = Object.freeze([
+  'TASK',
+  'NO_TASK',
+  'ESCALATE',
+  'INVALID_OUTPUT',
+  'MUTATION_REJECTED',
+  'INVOCATION_FAILED',
+  'WORKSPACE_FAILED',
+  'ALLOW_OUTSIDE_AUTHORITY',
+  'HUMAN_CRITERION_REJECTED',
+  'EXTERNAL_CRITERION_REJECTED',
+  'PROOF_AUTHORITY_REQUIRED',
+  'ID_COLLISION',
+]);
+
+const PLANNER_TASK_FIELDS = Object.freeze(['id', 'outcome', 'closes', 'allow', 'semantic_owner']);
+const PLANNER_TASK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const PLANNER_OUTCOME_MAX_CHARS = 500;
+const PLANNER_OUTPUT_TAIL_CHARS = 4000;
+
+// A rejected planner proposal still fails closed, but the goal status it maps
+// to depends on which authority boundary was touched.
+const PLANNER_TERMINALS = Object.freeze({
+  NO_TASK: NO_TASK_FOR_GAP,
+  ESCALATE: HUMAN_DECISION_REQUIRED,
+  INVALID_OUTPUT: BLOCKED_EXTERNAL,
+  MUTATION_REJECTED: BLOCKED_EXTERNAL,
+  INVOCATION_FAILED: BLOCKED_EXTERNAL,
+  WORKSPACE_FAILED: BLOCKED_EXTERNAL,
+  ID_COLLISION: BLOCKED_EXTERNAL,
+  EXTERNAL_CRITERION_REJECTED: BLOCKED_EXTERNAL,
+  ALLOW_OUTSIDE_AUTHORITY: HUMAN_DECISION_REQUIRED,
+  HUMAN_CRITERION_REJECTED: HUMAN_DECISION_REQUIRED,
+  PROOF_AUTHORITY_REQUIRED: HUMAN_DECISION_REQUIRED,
+});
 
 // Fixed Phase 1 escalation vocabulary. An undeclared or unknown token fails
 // closed as a contract validation error; the evaluator never infers one of
@@ -548,6 +607,23 @@ export function validateGoalContract(raw) {
     }
   }
 
+  const planner = { enabled: false };
+  if (raw.PLANNER != null) {
+    if (!isPlainObject(raw.PLANNER)) {
+      goalErrors.push('PLANNER must be an object');
+    } else {
+      for (const key of Object.keys(raw.PLANNER)) {
+        if (key !== 'enabled') {
+          goalErrors.push(`PLANNER contains an unsupported field: ${key}`);
+        }
+      }
+      if (raw.PLANNER.enabled != null && typeof raw.PLANNER.enabled !== 'boolean') {
+        goalErrors.push('PLANNER.enabled must be a boolean');
+      }
+      planner.enabled = raw.PLANNER.enabled === true;
+    }
+  }
+
   if (goalErrors.length > 0 || taskErrors.length > 0) {
     return {
       ok: false,
@@ -567,6 +643,7 @@ export function validateGoalContract(raw) {
       criteria,
       task_catalog: taskCatalog,
       budget,
+      planner,
     },
   };
 }
@@ -925,6 +1002,478 @@ function isChildSuccess(task, child) {
   return child.status === RUN_ONCE_SUCCESS;
 }
 
+function criterionStateFingerprint(criteria) {
+  return JSON.stringify(
+    criteria
+      .filter(
+        (criterion) =>
+          !criterion.satisfied && criterion.class === 'AUTONOMOUS' && !criterion.evaluationError,
+      )
+      .map((criterion) => criterion.id)
+      .sort(),
+  );
+}
+
+export function buildPlannerPrompt({ contract, pin, criteria }) {
+  const openAutonomous = criteria.filter(
+    (criterion) =>
+      !criterion.satisfied && criterion.class === 'AUTONOMOUS' && !criterion.evaluationError,
+  );
+  const criterionBlocks = openAutonomous.map((criterion) =>
+    [
+      `- id: ${criterion.id}`,
+      `  statement: ${criterion.statement}`,
+      `  check: ${criterion.check}`,
+      `  authority: ${criterion.authority.join(', ') || '(none declared)'}`,
+      `  current evaluation: ${criterion.reason ?? 'not evaluated'}`,
+    ].join('\n'),
+  );
+  return [
+    'You are the read-only planner for exactly one bounded development goal.',
+    'Inspect this disposable workspace, then propose at most one next bounded task.',
+    '',
+    'You are not a writer. Do not modify, create, or delete any file. Do not commit.',
+    'Do not create branches, tags, or refs. Do not push. Do not open pull requests.',
+    'Do not deploy. Do not mutate any external system. Git observes this workspace',
+    'after you exit; any repository mutation rejects your proposal.',
+    '',
+    '## GOAL',
+    contract.goal,
+    '',
+    '## Current live main',
+    pin.fetchedSha,
+    '',
+    '## ACCEPTANCE_AUTHORITY',
+    ...contract.acceptance_authority.map((path) => `- ${path}`),
+    '',
+    '## PRESERVE (must not change)',
+    ...contract.preserve.map((entry) => `- ${entry}`),
+    '',
+    '## AUTONOMOUSLY_ALLOWED',
+    ...contract.autonomously_allowed.map((path) => `- ${path}`),
+    '',
+    '## Declared escalation tokens (the only tokens you may return)',
+    ...(contract.escalate_if.length > 0
+      ? contract.escalate_if.map((token) => `- ${token}`)
+      : ['- (none declared)']),
+    '',
+    '## Unsatisfied AUTONOMOUS criteria',
+    ...(criterionBlocks.length > 0 ? criterionBlocks : ['- (none)']),
+    '',
+    '## Required output',
+    'Return exactly one JSON object and nothing else: no markdown fence, no',
+    'commentary, no second payload. Allowed shapes:',
+    '{"decision":"TASK","reason":"...","task":{"id":"...","outcome":"...","closes":["criterion-id"],"allow":["repo/path"],"semantic_owner":["repo/path"]}}',
+    '{"decision":"NO_TASK","reason":"..."}',
+    '{"decision":"ESCALATE","reason":"...","escalation_token":"..."}',
+    '',
+    'Rules:',
+    '- "closes" must be a non-empty subset of the unsatisfied AUTONOMOUS criterion ids above.',
+    '- "allow" must be non-empty repo-relative paths inside AUTONOMOUSLY_ALLOWED.',
+    '- "semantic_owner" entries must be repo-relative paths inside AUTONOMOUSLY_ALLOWED.',
+    '- Do not return proof commands, publication fields, commit messages, PR titles, dependencies, or any other field; the runner derives them.',
+    '- Return NO_TASK when no single safe autonomous task can advance the goal.',
+    '- Return ESCALATE only with one of the declared escalation tokens.',
+  ].join('\n');
+}
+
+function parsePlannerOutput(stdout) {
+  const textParts = [];
+  for (const line of String(stdout).split(/\r?\n/)) {
+    if (line.trim().length === 0) continue;
+    const event = parseJson(line);
+    if (!isPlainObject(event)) {
+      return { ok: false, reason: 'planner stdout contains a line that is not a JSON event' };
+    }
+    if (event.type !== 'text') continue;
+    const part = event.part;
+    if (!isPlainObject(part) || typeof part.text !== 'string') {
+      return { ok: false, reason: 'planner text event has no text payload' };
+    }
+    textParts.push(part.text);
+  }
+  if (textParts.length === 0) {
+    return { ok: false, reason: 'planner output contained no assistant text' };
+  }
+  const text = textParts.join('').trim();
+  const proposal = parseJson(text);
+  if (!isPlainObject(proposal)) {
+    return { ok: false, reason: 'planner final text is not exactly one JSON object' };
+  }
+  return { ok: true, proposal, text };
+}
+
+function validatePlannerProposal({ proposal, contract, criteria, usedTaskIds }) {
+  const reject = (kind, reason) => ({ ok: false, kind, reason });
+  if (!PLANNER_DECISIONS.includes(proposal.decision)) {
+    return reject('INVALID_OUTPUT', 'planner decision must be TASK, NO_TASK, or ESCALATE');
+  }
+  if (!isNonEmptyString(proposal.reason)) {
+    return reject('INVALID_OUTPUT', 'planner reason must be a non-empty string');
+  }
+  const topLevelFields =
+    proposal.decision === 'TASK'
+      ? ['decision', 'reason', 'task']
+      : proposal.decision === 'ESCALATE'
+        ? ['decision', 'reason', 'escalation_token']
+        : ['decision', 'reason'];
+  const extraTopLevel = Object.keys(proposal).filter((key) => !topLevelFields.includes(key));
+  if (extraTopLevel.length > 0) {
+    return reject(
+      'INVALID_OUTPUT',
+      `planner proposal contains unsupported field(s): ${extraTopLevel.join(', ')}`,
+    );
+  }
+
+  if (proposal.decision === 'NO_TASK') {
+    return { ok: true, decision: 'NO_TASK', reason: proposal.reason.trim() };
+  }
+
+  if (proposal.decision === 'ESCALATE') {
+    const token = isNonEmptyString(proposal.escalation_token)
+      ? proposal.escalation_token.trim()
+      : null;
+    if (token === null) {
+      return reject('INVALID_OUTPUT', 'planner ESCALATE requires a non-empty escalation_token');
+    }
+    if (!contract.escalate_if.includes(token)) {
+      return reject(
+        'INVALID_OUTPUT',
+        `planner escalation_token is not declared in the Goal Contract: ${token}`,
+      );
+    }
+    return { ok: true, decision: 'ESCALATE', reason: proposal.reason.trim(), escalation_token: token };
+  }
+
+  if (!isPlainObject(proposal.task)) {
+    return reject('INVALID_OUTPUT', 'planner TASK requires a task object');
+  }
+  const extraTask = Object.keys(proposal.task).filter(
+    (key) => !PLANNER_TASK_FIELDS.includes(key),
+  );
+  if (extraTask.length > 0) {
+    return reject(
+      'INVALID_OUTPUT',
+      `planner task contains unsupported field(s): ${extraTask.join(', ')}`,
+    );
+  }
+  const id = isNonEmptyString(proposal.task.id) ? proposal.task.id.trim() : null;
+  if (id === null || !PLANNER_TASK_ID_PATTERN.test(id)) {
+    return reject('INVALID_OUTPUT', 'planner task id must be a deterministic-safe identifier');
+  }
+  if (usedTaskIds.has(id)) {
+    return reject('ID_COLLISION', `planner task id collides with an already used task id: ${id}`);
+  }
+  const outcome = isNonEmptyString(proposal.task.outcome) ? proposal.task.outcome.trim() : null;
+  if (outcome === null || outcome.length > PLANNER_OUTCOME_MAX_CHARS) {
+    return reject(
+      'INVALID_OUTPUT',
+      `planner task outcome must be a non-empty string of at most ${PLANNER_OUTCOME_MAX_CHARS} characters`,
+    );
+  }
+  if (!Array.isArray(proposal.task.closes) || proposal.task.closes.length === 0) {
+    return reject('INVALID_OUTPUT', 'planner task closes must be a non-empty array of criterion ids');
+  }
+  const openAutonomous = new Set(
+    criteria
+      .filter(
+        (criterion) =>
+          !criterion.satisfied && criterion.class === 'AUTONOMOUS' && !criterion.evaluationError,
+      )
+      .map((criterion) => criterion.id),
+  );
+  const byId = criteriaById(criteria);
+  const closes = [];
+  const humanCloses = [];
+  const externalCloses = [];
+  for (const entry of proposal.task.closes) {
+    if (!isNonEmptyString(entry)) {
+      return reject('INVALID_OUTPUT', 'planner task closes entries must be non-empty strings');
+    }
+    const criterionId = entry.trim();
+    const criterion = byId.get(criterionId);
+    if (criterion === undefined) {
+      return reject('INVALID_OUTPUT', `planner task closes an unknown criterion: ${criterionId}`);
+    }
+    if (criterion.class === 'HUMAN') {
+      humanCloses.push(criterionId);
+      continue;
+    }
+    if (criterion.class === 'EXTERNAL') {
+      externalCloses.push(criterionId);
+      continue;
+    }
+    if (!openAutonomous.has(criterionId)) {
+      return reject(
+        'INVALID_OUTPUT',
+        `planner task closes a criterion that is not an unsatisfied AUTONOMOUS gap: ${criterionId}`,
+      );
+    }
+    closes.push(criterionId);
+  }
+  if (humanCloses.length > 0) {
+    return reject(
+      'HUMAN_CRITERION_REJECTED',
+      `planner must not close a HUMAN criterion: ${humanCloses.join(', ')}`,
+    );
+  }
+  if (externalCloses.length > 0) {
+    return reject(
+      'EXTERNAL_CRITERION_REJECTED',
+      `planner must not close an EXTERNAL criterion: ${externalCloses.join(', ')}`,
+    );
+  }
+  if (!Array.isArray(proposal.task.allow) || proposal.task.allow.length === 0) {
+    return reject('INVALID_OUTPUT', 'planner task allow must be a non-empty array of repo-relative paths');
+  }
+  const allow = [];
+  for (const entry of proposal.task.allow) {
+    if (!isSafeRepoPath(entry)) {
+      return reject(
+        'INVALID_OUTPUT',
+        `planner task allow contains an invalid repo-relative path: ${JSON.stringify(entry)}`,
+      );
+    }
+    allow.push(normalizeRepoPath(entry.trim()));
+  }
+  const semanticOwnerRaw = proposal.task.semantic_owner ?? [];
+  if (!Array.isArray(semanticOwnerRaw)) {
+    return reject('INVALID_OUTPUT', 'planner task semantic_owner must be an array of repo-relative paths');
+  }
+  const semanticOwner = [];
+  for (const entry of semanticOwnerRaw) {
+    if (!isSafeRepoPath(entry)) {
+      return reject(
+        'INVALID_OUTPUT',
+        `planner task semantic_owner contains an invalid repo-relative path: ${JSON.stringify(entry)}`,
+      );
+    }
+    semanticOwner.push(normalizeRepoPath(entry.trim()));
+  }
+  const outside = [...new Set([...allow, ...semanticOwner].filter((path) => !isPathAllowed(path, contract.autonomously_allowed)))];
+  if (outside.length > 0) {
+    return reject(
+      'ALLOW_OUTSIDE_AUTHORITY',
+      `planner path(s) outside AUTONOMOUSLY_ALLOWED: ${outside.join(', ')}`,
+    );
+  }
+  return {
+    ok: true,
+    decision: 'TASK',
+    reason: proposal.reason.trim(),
+    task: { id, outcome, closes, allow, semantic_owner: semanticOwner },
+  };
+}
+
+/**
+ * Runner-authored executable task for a validated planner proposal. Proof comes
+ * only from canonical PROOF_AT_MAIN commands already declared in the Goal
+ * Contract, copied exactly; the planner never authors a proof command.
+ */
+export function buildPlannerTask({ validated, contract }) {
+  const contractById = criteriaById(contract.criteria);
+  const proof = [];
+  const proofOwner = [];
+  for (const criterionId of validated.task.closes) {
+    const criterion = contractById.get(criterionId);
+    if (criterion.check === 'PROOF_AT_MAIN') {
+      proof.push(criterion.command);
+      proofOwner.push([]);
+    }
+  }
+  if (proof.length === 0) return null;
+  return {
+    id: validated.task.id,
+    outcome: validated.task.outcome,
+    preserve: `Preserve ${contract.preserve.join(', ')} and every current live-main behavior outside the bounded outcome.`,
+    closes: [...validated.task.closes],
+    allow: [...validated.task.allow],
+    proof,
+    proof_owner: proofOwner,
+    semantic_owner: [...validated.task.semantic_owner],
+    publication: 'required',
+    commit_message: `feat(agent): ${validated.task.id} ${validated.task.outcome}`,
+    pr_title: `feat(agent): ${validated.task.outcome}`,
+    escalate_only_if: [...contract.escalate_if],
+    depends_on: [],
+  };
+}
+
+function runPlanner({ contract, pin, criteria, options, deps, log, usedTaskIds }) {
+  const repositoryRoot = resolve(options.repositoryRoot);
+  const baseEnv = deps.env ?? process.env;
+  const invokeOpencode = deps.invokePlannerOpencode ?? defaultInvokeOpencode;
+  const removeWorkspace = deps.removeWorkspace ?? defaultRemoveWorkspace;
+  const evidence = {
+    status: null,
+    reason: null,
+    decision: null,
+    proposal: null,
+    task: null,
+    terminal: null,
+    changedPaths: [],
+    workspaceCleanup: 'NOT_CREATED',
+    outputTail: '',
+    executor: {
+      invoked: false,
+      commandSource: null,
+      exitCode: null,
+      timedOut: false,
+      startErrorCode: null,
+    },
+  };
+  let tempRoot = null;
+  let workspacePath = null;
+  let mutationObserved = false;
+  let invocationFailure = null;
+  try {
+    tempRoot = mkdtempSync(join(tmpdir(), 'greenhub-run-goal-planner-'));
+    workspacePath = createBaselineWorkspace({
+      repositoryRoot,
+      tempRoot,
+      baselineSha: pin.fetchedSha,
+    });
+    let resolvedCommand = null;
+    if (deps.invokePlannerOpencode === undefined) {
+      resolvedCommand = resolveOpencodeCommand({ explicitBin: options.opencodeBin ?? null, baseEnv });
+      evidence.executor.commandSource = resolvedCommand.source;
+    }
+    const prompt = buildPlannerPrompt({ contract, pin, criteria });
+    const args = buildOpencodeArgs({
+      taskText: prompt,
+      workspacePath,
+      model: options.model ?? null,
+      agent: options.agent ?? null,
+      title: isNonEmptyString(options.title) ? `${options.title} planner` : null,
+    });
+    const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot });
+    evidence.executor.invoked = true;
+    log(`[run-goal] planner opencode start in ${workspacePath}`);
+    const execution = invokeOpencode({
+      resolvedCommand,
+      args,
+      cwd: workspacePath,
+      env: childEnv,
+      timeoutMs: options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
+    });
+    evidence.executor.exitCode = execution?.exitCode ?? null;
+    evidence.executor.timedOut = Boolean(execution?.timedOut);
+    evidence.executor.startErrorCode = execution?.startErrorCode ?? null;
+    evidence.outputTail = tail(execution?.stdout, PLANNER_OUTPUT_TAIL_CHARS);
+    log(
+      `[run-goal] planner opencode exit=${evidence.executor.exitCode} timedOut=${evidence.executor.timedOut}`,
+    );
+    const observation = observeChangedPaths({ workspacePath, baselineSha: pin.fetchedSha });
+    evidence.changedPaths = observation.changedPaths;
+    const executionSucceeded =
+      !evidence.executor.startErrorCode &&
+      !evidence.executor.timedOut &&
+      evidence.executor.exitCode === 0;
+    if (observation.changedPaths.length > 0) {
+      mutationObserved = true;
+      if (executionSucceeded) {
+        const parsed = parsePlannerOutput(execution?.stdout);
+        if (parsed.ok) {
+          evidence.proposal = parsed.proposal;
+          evidence.decision = parsed.proposal.decision;
+        }
+      }
+    } else if (!executionSucceeded) {
+      invocationFailure =
+        `exit=${evidence.executor.exitCode} timedOut=${evidence.executor.timedOut} ` +
+        `startError=${evidence.executor.startErrorCode ?? 'none'}`;
+    } else {
+      const parsed = parsePlannerOutput(execution?.stdout);
+      if (!parsed.ok) {
+        evidence.status = 'INVALID_OUTPUT';
+        evidence.reason = parsed.reason;
+      } else {
+        evidence.proposal = parsed.proposal;
+        evidence.decision = parsed.proposal.decision;
+        const validation = validatePlannerProposal({
+          proposal: parsed.proposal,
+          contract,
+          criteria,
+          usedTaskIds,
+        });
+        if (!validation.ok) {
+          evidence.status = validation.kind;
+          evidence.reason = validation.reason;
+        } else if (validation.decision === 'TASK') {
+          const task = buildPlannerTask({ validated: validation, contract });
+          if (task === null) {
+            evidence.status = 'PROOF_AUTHORITY_REQUIRED';
+            evidence.reason =
+              `planner task ${validation.task.id} has no canonical PROOF_AT_MAIN authority: ` +
+              'PROOF_AUTHORITY_REQUIRED';
+          } else {
+            evidence.status = 'TASK';
+            evidence.reason = `planner proposed bounded task ${task.id}`;
+            evidence.task = task;
+          }
+        } else if (validation.decision === 'NO_TASK') {
+          evidence.status = 'NO_TASK';
+          evidence.reason = `planner returned NO_TASK: ${validation.reason}`;
+        } else {
+          evidence.status = 'ESCALATE';
+          evidence.reason =
+            `planner escalated with declared token ${validation.escalation_token}: ${validation.reason}`;
+        }
+      }
+    }
+  } catch (error) {
+    evidence.status = 'WORKSPACE_FAILED';
+    evidence.reason = `planner workspace could not be prepared or invoked: ${messageOf(error)}`;
+  } finally {
+    if (tempRoot !== null) {
+      try {
+        const removal = removeWorkspace({ repositoryRoot, tempRoot, workspacePath });
+        evidence.workspaceCleanup = removal.removed ? 'REMOVED' : 'FAILED';
+        if (!removal.removed) {
+          evidence.status = 'WORKSPACE_FAILED';
+          evidence.reason = `planner workspace cleanup failed: ${(removal.errors ?? []).join('; ')}`;
+          evidence.task = null;
+        }
+      } catch (error) {
+        evidence.workspaceCleanup = 'FAILED';
+        evidence.status = 'WORKSPACE_FAILED';
+        evidence.reason = `planner workspace cleanup failed: ${messageOf(error)}`;
+        evidence.task = null;
+      }
+    }
+  }
+  if (evidence.status === null) {
+    if (mutationObserved) {
+      evidence.status = 'MUTATION_REJECTED';
+      evidence.reason =
+        `planner workspace mutation observed: ${evidence.changedPaths.join(', ')}; ` +
+        'PLANNER_MUTATION_REJECTED';
+    } else {
+      evidence.status = 'INVOCATION_FAILED';
+      evidence.reason = `planner invocation did not complete successfully (${invocationFailure})`;
+    }
+  }
+  if (evidence.status !== 'TASK') evidence.task = null;
+  evidence.terminal = PLANNER_TERMINALS[evidence.status] ?? null;
+  log(`[run-goal] planner status=${evidence.status} terminal=${evidence.terminal ?? 'none'}`);
+  return evidence;
+}
+
+function createPlannerResult() {
+  return {
+    enabled: false,
+    calls: 0,
+    decisions: [],
+    lastStatus: null,
+    lastReason: null,
+    lastProposal: null,
+    lastOutputTail: '',
+    lastChangedPaths: [],
+    lastWorkspaceCleanup: 'NOT_CREATED',
+    lastExecutor: null,
+  };
+}
+
 function criteriaChanged(previous, next) {
   const before = criteriaById(previous);
   return next.some((criterion) => before.get(criterion.id)?.satisfied !== criterion.satisfied);
@@ -1015,6 +1564,7 @@ function createGoalResult() {
     refusals: [],
     attempts: [],
     childCalls: 0,
+    planner: createPlannerResult(),
     canonicalCheckout: { before: null, after: null, unchanged: null },
   };
 }
@@ -1141,6 +1691,7 @@ export function runGoal(options = {}, deps = {}) {
     stopWhen: [...contract.stop_when],
     budget: { ...contract.budget },
   };
+  result.planner.enabled = contract.planner.enabled;
   result.budget.maxIterations = contract.budget.max_iterations;
   result.budget.maxTasks = contract.budget.max_tasks;
   result.budget.maxWallClockMs = contract.budget.max_wall_clock_ms;
@@ -1178,6 +1729,7 @@ export function runGoal(options = {}, deps = {}) {
 
   const attemptedTaskIds = new Set();
   const completedTaskIds = new Set();
+  const plannerFingerprints = new Set();
   let evaluation;
   try {
     evaluation = evaluateGoalCriteria({
@@ -1212,7 +1764,6 @@ export function runGoal(options = {}, deps = {}) {
 
     selection = selectTask({ contract, criteria: evaluation, attemptedTaskIds, completedTaskIds });
     if (selection.task === null) {
-      result.iterations = passCount;
       result.selection = {
         taskId: null,
         closes: [],
@@ -1220,31 +1771,100 @@ export function runGoal(options = {}, deps = {}) {
         skipped: selection.skipped,
       };
       result.refusals = selection.refusals;
-      result.criteria = annotateCriteria({
-        contract,
-        criteria: evaluation,
-        attemptedTaskIds,
-        completedTaskIds,
-      });
-      const status = classifyTerminal({
-        criteria: result.criteria,
-        attempts: result.attempts,
-        refusals: selection.refusals,
-        attemptedTaskIds,
-      });
-      const reason =
-        status === HUMAN_DECISION_REQUIRED
-          ? selection.refusals.length > 0
-            ? `catalog task(s) outside AUTONOMOUSLY_ALLOWED: ${selection.refusals
-                .map((refusal) => refusal.taskId)
-                .join(', ')}`
-            : 'unsatisfied HUMAN criterion requires a human decision'
-          : status === BLOCKED_EXTERNAL
-            ? 'unsatisfied EXTERNAL criterion or unreadable external observation'
-            : status === NO_PROGRESS
-              ? 'attempted task(s) did not change criterion state'
-              : 'no declared catalog task closes the remaining AUTONOMOUS gap';
-      return finish(status, reason);
+
+      const openAutonomous = openAutonomousCriteria(evaluation);
+      if (contract.planner.enabled && openAutonomous.size > 0) {
+        const fingerprint = criterionStateFingerprint(evaluation);
+        const plannerBudget = checkBudget({
+          passCount,
+          attemptsCount: result.attempts.length,
+          startedAt,
+          now,
+          budget: contract.budget,
+        });
+        if (plannerBudget !== null) {
+          result.iterations = passCount;
+          result.criteria = annotateCriteria({
+            contract,
+            criteria: evaluation,
+            attemptedTaskIds,
+            completedTaskIds,
+          });
+          result.budget.exhausted = plannerBudget;
+          return finish(BUDGET_EXHAUSTED, `budget exhausted: ${plannerBudget}`);
+        }
+        if (!plannerFingerprints.has(fingerprint)) {
+          plannerFingerprints.add(fingerprint);
+          const usedTaskIds = new Set([
+            ...contract.task_catalog.map((task) => task.id),
+            ...attemptedTaskIds,
+          ]);
+          const plannerRun = runPlanner({
+            contract,
+            pin,
+            criteria: evaluation,
+            options,
+            deps,
+            log,
+            usedTaskIds,
+          });
+          result.planner.calls += 1;
+          result.planner.decisions.push(plannerRun.decision ?? plannerRun.status);
+          result.planner.lastStatus = plannerRun.status;
+          result.planner.lastReason = plannerRun.reason;
+          result.planner.lastProposal = plannerRun.proposal;
+          result.planner.lastOutputTail = plannerRun.outputTail;
+          result.planner.lastChangedPaths = [...plannerRun.changedPaths];
+          result.planner.lastWorkspaceCleanup = plannerRun.workspaceCleanup;
+          result.planner.lastExecutor = plannerRun.executor;
+          if (plannerRun.task !== null) {
+            selection = {
+              task: plannerRun.task,
+              closes: [...plannerRun.task.closes],
+              skipped: selection.skipped,
+              refusals: selection.refusals,
+            };
+          } else {
+            result.iterations = passCount;
+            result.criteria = annotateCriteria({
+              contract,
+              criteria: evaluation,
+              attemptedTaskIds,
+              completedTaskIds,
+            });
+            return finish(plannerRun.terminal ?? BLOCKED_EXTERNAL, plannerRun.reason);
+          }
+        }
+      }
+
+      if (selection.task === null) {
+        result.iterations = passCount;
+        result.criteria = annotateCriteria({
+          contract,
+          criteria: evaluation,
+          attemptedTaskIds,
+          completedTaskIds,
+        });
+        const status = classifyTerminal({
+          criteria: result.criteria,
+          attempts: result.attempts,
+          refusals: selection.refusals,
+          attemptedTaskIds,
+        });
+        const reason =
+          status === HUMAN_DECISION_REQUIRED
+            ? selection.refusals.length > 0
+              ? `catalog task(s) outside AUTONOMOUSLY_ALLOWED: ${selection.refusals
+                  .map((refusal) => refusal.taskId)
+                  .join(', ')}`
+              : 'unsatisfied HUMAN criterion requires a human decision'
+            : status === BLOCKED_EXTERNAL
+              ? 'unsatisfied EXTERNAL criterion or unreadable external observation'
+              : status === NO_PROGRESS
+                ? 'attempted task(s) did not change criterion state'
+                : 'no declared catalog task closes the remaining AUTONOMOUS gap';
+        return finish(status, reason);
+      }
     }
 
     const budgetExhausted = checkBudget({
@@ -1363,7 +1983,7 @@ export function runGoal(options = {}, deps = {}) {
 export const USAGE = [
   'usage: node scripts/agent/run-goal.mjs --goal <file> [--repo <dir>] [--remote <name>]',
   '',
-  '  --goal <file>               Goal Contract JSON file (GOAL/ACCEPTANCE_AUTHORITY/CRITERIA/TASK_CATALOG/BUDGET)',
+  '  --goal <file>               Goal Contract JSON file (GOAL/ACCEPTANCE_AUTHORITY/CRITERIA/TASK_CATALOG/PLANNER/BUDGET)',
   '  --repo <dir>                canonical checkout root (default: current directory)',
   '  --remote <name>             remote observed for live main (default: origin)',
   '  --title <title>             optional OpenCode session title for child tasks',
