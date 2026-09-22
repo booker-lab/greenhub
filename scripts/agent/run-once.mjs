@@ -11,6 +11,12 @@
 // Never invoked here: publication, PR/merge, deployment, git push, canonical
 // checkout switching, and reset/restore/stash/clean of foreign state. See the
 // module contract in AGENTS.md and docs/specs/ops/development-authority.md.
+//
+// Optional in-process handoff: `runOnce(options, { successFinalizer })` calls
+// the caller-owned finalizer exactly once, only after a Git-verified SUCCESS,
+// while the task-owned workspace is still alive. The local-only CLI never
+// provides one, so its behavior is unchanged. The finalizer result is attached
+// as `result.successHandoff`; the workspace is still cleaned up afterwards.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -257,7 +263,7 @@ function gitMessageOf(error) {
   return messageOf(error);
 }
 
-function gitCapture(cwd, args, { allowFailure = false } = {}) {
+export function gitCapture(cwd, args, { allowFailure = false } = {}) {
   try {
     const stdout = execFileSync('git', args, {
       cwd,
@@ -272,7 +278,7 @@ function gitCapture(cwd, args, { allowFailure = false } = {}) {
   }
 }
 
-function revParse(cwd, ref) {
+export function revParse(cwd, ref) {
   return gitCapture(cwd, ['rev-parse', ref]).stdout.trim();
 }
 
@@ -469,6 +475,7 @@ function createResult(options = {}) {
       after: null,
       unchanged: null,
     },
+    successHandoff: null,
   };
 }
 
@@ -505,12 +512,13 @@ function validateRunOnceInput(options) {
 /**
  * Execute one bounded task. Returns a deterministic summary object.
  * `deps` is a narrow seam for deterministic tests: invokeOpencode,
- * runProofCommand, removeWorkspace, log, env.
+ * runProofCommand, removeWorkspace, log, env, successFinalizer.
  */
 export function runOnce(options, deps = {}) {
   const invokeOpencode = deps.invokeOpencode ?? defaultInvokeOpencode;
   const runProofCommand = deps.runProofCommand ?? defaultRunProofCommand;
   const removeWorkspace = deps.removeWorkspace ?? defaultRemoveWorkspace;
+  const successFinalizer = deps.successFinalizer ?? null;
   const log = deps.log ?? ((message) => process.stderr.write(`${message}\n`));
   const baseEnv = deps.env ?? process.env;
 
@@ -766,6 +774,25 @@ export function runOnce(options, deps = {}) {
     (status === null || status === SUCCESS || status === ALREADY_SATISFIED)
   ) {
     fail(EXECUTOR_FAILED, 'canonical checkout state changed during the run');
+  }
+
+  if (status === SUCCESS && typeof successFinalizer === 'function') {
+    try {
+      const output = successFinalizer({
+        repositoryRoot,
+        remote,
+        baselineSha: result.baseline.baselineSha,
+        workspacePath,
+        tempRoot,
+        changedPaths: [...result.changedPaths],
+        proofResults: [...result.proofResults],
+        log,
+      });
+      result.successHandoff = { invoked: true, error: null, output: output ?? null };
+    } catch (error) {
+      result.successHandoff = { invoked: true, error: messageOf(error), output: null };
+      log(`[run-once] success finalizer failed: ${messageOf(error)}`);
+    }
   }
 
   if (tempRoot !== null) {
