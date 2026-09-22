@@ -45,8 +45,18 @@ assert.equal(
 const agents = readFileSync('AGENTS.md', 'utf8');
 assert.match(
   agents,
-  /`main`에는 문서-only 변경을 포함해 직접 commit\/push하지 않는다\./,
-  'AGENTS.md must keep the no-direct-main rule',
+  /normal non-force publication/,
+  'AGENTS.md must keep non-force publication safety',
+);
+assert.match(
+  agents,
+  /canonical remote를 직접 read-back한다\./,
+  'AGENTS.md must require canonical remote read-back after publication',
+);
+assert.match(
+  agents,
+  /배포.*명시적 승인 없이 변경하지 않는다\./,
+  'AGENTS.md must keep deployment inside the explicit approval boundary',
 );
 
 console.log('Deployment safety guard: OK');
