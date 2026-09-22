@@ -30,7 +30,7 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 - #70 `SALE-ROUND-STATE-01`은 `MERGED`; 회차 atomicity/recovery implementation과 직접 proof가 publication되었다.
 - 역사적 exact-source Preview 기준선: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` — 현재 main, PR, merge, production 증거로 승격하지 않는다.
 - #63의 accepted closure는 닫힌 semantic work를 다시 열지 않는다는 뜻이며, Preview·Auth.js runtime 검증 잔여와 production/activation은 별도 상태다.
-- 기존 문서 candidate는 PR #69에서 후속 갱신하며, 이 Goal은 PR #69를 merge하지 않고 Control Tower publication queue로 반환한다.
+- 기존 문서 candidate는 PR #69에서 후속 갱신하며, 이 Goal은 PR #69를 merge하지 않고 Git-native publication 경계(`docs/specs/ops/development-authority.md`)를 따른다.
 
 ---
 
