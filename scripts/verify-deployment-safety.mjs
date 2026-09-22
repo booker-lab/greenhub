@@ -42,11 +42,45 @@ assert.equal(
   'scripts/vercel/ignore-build.spec.mjs (predicate matrix proof) must exist',
 );
 
+const authorityDoc = 'docs/specs/ops/development-authority.md';
+assert.equal(
+  existsSync(authorityDoc),
+  true,
+  'docs/specs/ops/development-authority.md (detailed development rules owner) must exist',
+);
+assert.equal(
+  existsSync('docs/specs/ops/greenhub-branch-recurrence-prevention-and-control-tower-closure-policy.md'),
+  false,
+  'the retired control-tower coordination policy must not be reintroduced',
+);
+assert.equal(
+  existsSync('scripts/coordination'),
+  false,
+  'the retired coordination control plane must not be reintroduced',
+);
+
 const agents = readFileSync('AGENTS.md', 'utf8');
 assert.match(
   agents,
-  /`main`에는 문서-only 변경을 포함해 직접 commit\/push하지 않는다\./,
-  'AGENTS.md must keep the no-direct-main rule',
+  /docs\/specs\/ops\/development-authority\.md/,
+  'AGENTS.md must delegate detailed development rules to the development authority',
+);
+assert.match(
+  agents,
+  /배포.*명시적 승인 없이 변경하지 않는다\./,
+  'AGENTS.md must keep deployment inside the explicit approval boundary',
+);
+
+const authority = readFileSync(authorityDoc, 'utf8');
+assert.match(
+  authority,
+  /normal non-force publication/,
+  'development authority must keep non-force publication safety',
+);
+assert.match(
+  authority,
+  /canonical remote를 직접 read-back한다\./,
+  'development authority must require canonical remote read-back after publication',
 );
 
 console.log('Deployment safety guard: OK');

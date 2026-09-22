@@ -1,5 +1,6 @@
-// Canonical owner: AGENTS.md section 2 (canonical checkout development +
-// temporary publication transport ref for protected `main`).
+// Canonical owner: docs/specs/ops/development-authority.md section 6
+// (outcome-relative publication; temporary publication transport ref for
+// protected `main`).
 // This module is the executable admission gate for that principle — it does not
 // create a parallel publication SSOT.
 //

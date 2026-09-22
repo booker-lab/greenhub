@@ -1,4 +1,5 @@
-// Canonical owner: AGENTS.md section 2 (temporary publication transport ref).
+// Canonical owner: docs/specs/ops/development-authority.md section 6
+// (temporary publication transport ref).
 // Narrow transport helper — admission stays in publication-admission.mjs.
 //
 // Purpose: carry an admission-allowed exact candidate to a temporary remote
