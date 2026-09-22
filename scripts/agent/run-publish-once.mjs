@@ -97,6 +97,7 @@ export const PUBLISH_ONCE_STATUSES = Object.freeze([
 export const DEFAULT_CI_TIMEOUT_MS = 45 * 60 * 1000;
 export const DEFAULT_MERGE_TIMEOUT_MS = 10 * 60 * 1000;
 export const DEFAULT_MAX_REBIND_ATTEMPTS = 2;
+export const DEFAULT_REQUIRED_CHECKS_RETRY_MS = 5000;
 
 // Transient per-command commit identity. Global and repository Git config are
 // never modified; signing and hooks are disabled per command so publication is
@@ -549,7 +550,34 @@ function closePullRequest({ runGh, cwd, repository, prNumber }) {
   return { ok: true };
 }
 
-/** Wait for the current PR's required checks only. Provider-native watch. */
+/**
+ * Block the synchronous foreground process without a busy loop. Deterministic
+ * tests inject a no-op substitute through the `sleep` seam.
+ */
+function defaultSleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * `gh pr checks --required` reports "no required checks reported on the
+ * '<branch>' branch" while the provider has not yet registered the check suite
+ * for a just-created PR head. That observation is a transient registration
+ * race, not a failed or missing required check.
+ */
+function isRequiredChecksRegistrationError(message) {
+  return /no (required )?checks reported/i.test(String(message ?? ''));
+}
+
+/**
+ * Wait for the current PR's required checks only. Provider-native watch.
+ *
+ * A just-created PR can briefly have zero registered checks (the provider
+ * registers the required workflow check run a few seconds after PR creation).
+ * In that window gh exits immediately with a registration error, so the watch
+ * is re-observed inside the same bounded timeout instead of failing closed on
+ * the transient response. Permanent failures, failed checks, pending check
+ * resolution, and timeout exhaustion keep their previous outcomes.
+ */
 export function waitForRequiredChecks({
   runGh,
   cwd,
@@ -557,58 +585,79 @@ export function waitForRequiredChecks({
   prNumber,
   requiredChecks,
   timeoutMs,
+  sleep = defaultSleep,
 }) {
   if (!Array.isArray(requiredChecks) || requiredChecks.length === 0) {
     return { ok: true, status: 'NONE_REQUIRED', checks: [] };
   }
-  const watch = runGh(
-    [
-      'pr',
-      'checks',
-      String(prNumber),
-      '--repo',
-      repository,
-      '--required',
-      '--watch',
-      '--fail-fast',
-      '--interval',
-      '10',
-    ],
-    { cwd, timeoutMs },
-  );
-  const observed = runGh(
-    ['pr', 'checks', String(prNumber), '--repo', repository, '--required', '--json', 'name,bucket,state'],
-    { cwd },
-  );
-  const checks = !ghFailed(observed) ? parseJson(observed.stdout) : null;
-  if (Array.isArray(checks)) {
-    const failed = checks.filter((entry) => entry?.bucket === 'fail');
-    const pending = checks.filter((entry) => entry?.bucket === 'pending');
-    if (failed.length > 0) {
+  const deadline = timeoutMs > 0 ? Date.now() + timeoutMs : null;
+  for (;;) {
+    const remainingMs = deadline === null ? 0 : Math.max(0, deadline - Date.now());
+    if (deadline !== null && remainingMs === 0) {
       return {
         ok: false,
-        status: 'FAILED',
-        checks,
-        reason: `required check(s) failed: ${failed.map((entry) => entry.name).join(', ')}`,
+        status: 'TIMED_OUT',
+        checks: [],
+        reason: 'required check watch did not complete within the bounded timeout',
       };
     }
-    if (pending.length > 0) {
-      return {
-        ok: false,
-        status: 'PENDING',
-        checks,
-        reason: `required check(s) still pending: ${pending.map((entry) => entry.name).join(', ')}`,
-      };
+    const watch = runGh(
+      [
+        'pr',
+        'checks',
+        String(prNumber),
+        '--repo',
+        repository,
+        '--required',
+        '--watch',
+        '--fail-fast',
+        '--interval',
+        '10',
+      ],
+      { cwd, timeoutMs: remainingMs },
+    );
+    const observed = runGh(
+      ['pr', 'checks', String(prNumber), '--repo', repository, '--required', '--json', 'name,bucket,state'],
+      { cwd },
+    );
+    const checks = !ghFailed(observed) ? parseJson(observed.stdout) : null;
+    if (Array.isArray(checks)) {
+      const failed = checks.filter((entry) => entry?.bucket === 'fail');
+      const pending = checks.filter((entry) => entry?.bucket === 'pending');
+      if (failed.length > 0) {
+        return {
+          ok: false,
+          status: 'FAILED',
+          checks,
+          reason: `required check(s) failed: ${failed.map((entry) => entry.name).join(', ')}`,
+        };
+      }
+      if (pending.length > 0) {
+        return {
+          ok: false,
+          status: 'PENDING',
+          checks,
+          reason: `required check(s) still pending: ${pending.map((entry) => entry.name).join(', ')}`,
+        };
+      }
+      return { ok: true, status: 'PASSED', checks };
     }
-    return { ok: true, status: 'PASSED', checks };
+    if (!ghFailed(watch)) return { ok: true, status: 'PASSED', checks: [] };
+    if (
+      !watch.timedOut &&
+      isRequiredChecksRegistrationError(ghMessageOf(watch)) &&
+      (deadline === null || Date.now() < deadline)
+    ) {
+      sleep(DEFAULT_REQUIRED_CHECKS_RETRY_MS);
+      continue;
+    }
+    return {
+      ok: false,
+      status: watch.timedOut ? 'TIMED_OUT' : 'FAILED',
+      checks: [],
+      reason: `required check watch did not pass: ${ghMessageOf(watch)}`,
+    };
   }
-  if (!ghFailed(watch)) return { ok: true, status: 'PASSED', checks: [] };
-  return {
-    ok: false,
-    status: watch.timedOut ? 'TIMED_OUT' : 'FAILED',
-    checks: [],
-    reason: `required check watch did not pass: ${ghMessageOf(watch)}`,
-  };
 }
 
 export function mergePullRequest({
@@ -1144,6 +1193,7 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
         prNumber: prResult.pr.number,
         requiredChecks: publication.requiredChecks,
         timeoutMs: options.ciTimeoutMs ?? DEFAULT_CI_TIMEOUT_MS,
+        sleep: deps.sleep,
       });
       publication.checks = {
         status: checkWait.status,
