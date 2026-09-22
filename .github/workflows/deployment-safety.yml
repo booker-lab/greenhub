@@ -26,3 +26,5 @@ jobs:
         run: node --test scripts/agent/run-once.spec.mjs
       - name: Verify stateless run-publish-once publication safety
         run: node --test scripts/agent/run-publish-once.spec.mjs
+      - name: Verify deterministic run-goal core safety
+        run: node --test scripts/agent/run-goal.spec.mjs

@@ -33,7 +33,8 @@
     "test:vercel-ignore": "node --test scripts/vercel/ignore-build.spec.mjs",
     "test:git-safety": "node --test scripts/git/*.spec.mjs",
     "test:agent-runner": "node --test scripts/agent/run-once.spec.mjs",
-    "test:agent-publication": "node --test scripts/agent/run-publish-once.spec.mjs"
+    "test:agent-publication": "node --test scripts/agent/run-publish-once.spec.mjs",
+    "test:agent-goal": "node --test scripts/agent/run-goal.spec.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
