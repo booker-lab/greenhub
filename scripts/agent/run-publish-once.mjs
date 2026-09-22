@@ -571,12 +571,21 @@ function isRequiredChecksRegistrationError(message) {
 /**
  * Wait for the current PR's required checks only. Provider-native watch.
  *
- * A just-created PR can briefly have zero registered checks (the provider
- * registers the required workflow check run a few seconds after PR creation).
- * In that window gh exits immediately with a registration error, so the watch
- * is re-observed inside the same bounded timeout instead of failing closed on
- * the transient response. Permanent failures, failed checks, pending check
- * resolution, and timeout exhaustion keep their previous outcomes.
+ * Two distinct transient provider states are re-observed inside the same
+ * bounded foreground timeout instead of ending the publication:
+ *
+ *   1. NO CHECK REGISTERED YET (GN-04): a just-created PR can briefly have zero
+ *      registered checks (the provider registers the required workflow check
+ *      run a few seconds after PR creation). gh exits with a registration
+ *      error in that window.
+ *   2. CHECK REGISTERED AND PENDING (GN-05): a registered required check that
+ *      is still running is observed with bucket `pending`. Pending is "still
+ *      running", not a failed required check, so the synchronous loop keeps
+ *      observing until the budget is spent. It never recreates the candidate,
+ *      re-invokes OpenCode, or starts a background watcher.
+ *
+ * Actual check failures fail fast, permanent provider errors fail closed, and
+ * budget exhaustion returns TIMED_OUT. `timeoutMs = 0` disables the bound.
  */
 export function waitForRequiredChecks({
   runGh,
@@ -633,12 +642,23 @@ export function waitForRequiredChecks({
         };
       }
       if (pending.length > 0) {
-        return {
-          ok: false,
-          status: 'PENDING',
-          checks,
-          reason: `required check(s) still pending: ${pending.map((entry) => entry.name).join(', ')}`,
-        };
+        const remainingNow = deadline === null ? null : Math.max(0, deadline - Date.now());
+        if (remainingNow === 0) {
+          return {
+            ok: false,
+            status: 'TIMED_OUT',
+            checks,
+            reason:
+              'required check(s) were still pending when the bounded timeout was exhausted: ' +
+              `${pending.map((entry) => entry.name).join(', ')}`,
+          };
+        }
+        sleep(
+          remainingNow === null
+            ? DEFAULT_REQUIRED_CHECKS_RETRY_MS
+            : Math.min(DEFAULT_REQUIRED_CHECKS_RETRY_MS, remainingNow),
+        );
+        continue;
       }
       return { ok: true, status: 'PASSED', checks };
     }

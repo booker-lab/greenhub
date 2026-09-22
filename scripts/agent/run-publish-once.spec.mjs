@@ -244,6 +244,8 @@ function createFakeGithub({
   requiredChecks = ['verify'],
   checksResult = 'pass',
   checksUnavailableCount = 0,
+  checksResults = null,
+  checksError = null,
   allowSquashMerge = true,
   mergeEffect = null,
   onChecks = null,
@@ -255,6 +257,7 @@ function createFakeGithub({
     mergeCalls: [],
     closeCalls: [],
     checksUnavailableRemaining: checksUnavailableCount,
+    checksResults: Array.isArray(checksResults) ? [...checksResults] : null,
   };
   const ok = (stdout) => ({
     exitCode: 0,
@@ -328,21 +331,26 @@ function createFakeGithub({
     if (args[0] === 'pr' && args[1] === 'checks') {
       const pr = findPr(args[2]);
       if (pr === null) return fail(`no such PR: ${args[2]}`);
+      if (checksError !== null) return fail(checksError);
       if (state.checksUnavailableRemaining > 0) {
         state.checksUnavailableRemaining -= 1;
         return fail(`no required checks reported on the '${pr.headRefName}' branch\n`);
       }
+      let current = checksResult;
+      if (state.checksResults !== null && state.checksResults.length > 0) {
+        current = state.checksResults.shift();
+      }
       if (onChecks) onChecks({ pr, prs, state });
       if (args.includes('--json')) {
-        const bucket = checksResult === 'pass' ? 'pass' : checksResult === 'fail' ? 'fail' : 'pending';
+        const bucket = current === 'pass' ? 'pass' : current === 'fail' ? 'fail' : 'pending';
         return ok(
           JSON.stringify(
             requiredChecks.map((name) => ({ name, bucket, state: bucket.toUpperCase() })),
           ),
         );
       }
-      if (checksResult === 'pass') return ok('All required checks pass\n');
-      if (checksResult === 'fail') return fail('Some required checks fail\n');
+      if (current === 'pass') return ok('All required checks pass\n');
+      if (current === 'fail') return fail('Some required checks fail\n');
       return fail('Checks are still pending\n', 8);
     }
     if (args[0] === 'pr' && args[1] === 'close') {
@@ -485,6 +493,162 @@ test('CI wait retries transient required-check registration instead of failing c
     assert.equal(result.publication.preMerge.status, 'PUBLICATION_ALLOWED');
     assert.equal(github.state.checksUnavailableRemaining, 0);
     assert.equal(remoteRefSha(fixture.bare, 'tmp/spec-transport'), null);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GN-05 registered PENDING is re-observed and converges to PASSED in one foreground publication', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      checksResults: ['pending', 'pending', 'pass', 'pass'],
+    });
+    const sleeps = [];
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      sleep: (ms) => {
+        sleeps.push(ms);
+      },
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS_PUBLISHED);
+    assert.equal(result.publication.checks.status, 'PASSED');
+    assert.equal(result.publication.checks.entries.length, 1);
+    assert.equal(result.publication.preMerge.status, 'PUBLICATION_ALLOWED');
+    assert.equal(result.publication.merge.method, 'squash');
+
+    // PENDING did not recreate the candidate, the PR, or re-invoke OpenCode.
+    assert.equal(result.publication.attempts, 1);
+    assert.equal(fake.invocations.length, 1);
+    assert.equal(github.prs.size, 1);
+    const candidate = result.publication.candidate.candidateSha;
+    assert.equal(github.prs.get(1).headRefOid, candidate);
+    assert.equal(valueOf(github.state.mergeCalls[0].args, '--match-head-commit'), candidate);
+    assert.deepEqual(sleeps, [5000]);
+
+    const remoteMain = git(fixture.bare, ['rev-parse', 'refs/heads/main']);
+    assert.equal(git(fixture.bare, ['show', `${remoteMain}:src/allowed.txt`]), 'ok');
+    assert.equal(result.publication.remoteMainSha, remoteMain);
+    assert.equal(result.publication.remoteDeltaVerified, true);
+    assert.equal(remoteRefSha(fixture.bare, 'tmp/spec-transport'), null);
+    assert.equal(result.publication.transportCleanup, 'REMOVED');
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+    assert.equal(result.publication.canonicalCheckoutUnchanged, true);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GN-05 registered PENDING that later fails ends FAILED with no merge', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      checksResults: ['pending', 'pending', 'fail', 'fail'],
+    });
+    const sleeps = [];
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      sleep: (ms) => {
+        sleeps.push(ms);
+      },
+      log: () => {},
+    });
+
+    assert.equal(result.status, CI_FAILED);
+    assert.equal(result.publication.checks.status, 'FAILED');
+    assert.equal(result.publication.checks.entries[0].bucket, 'fail');
+    assert.equal(github.state.mergeCalls.length, 0);
+    assert.equal(result.publication.retained, true);
+    assert.equal(result.publication.transportCleanup, 'RETAINED');
+    assert.equal(fake.invocations.length, 1);
+    assert.deepEqual(sleeps, [5000]);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GN-05 sustained registered PENDING converges to TIMED_OUT at the bounded budget', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare, checksResult: 'pending' });
+    const result = runPublishOnce(publishOptions(fixture, { ciTimeoutMs: 120 }), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+    });
+
+    assert.equal(result.status, CI_FAILED);
+    assert.equal(result.publication.checks.status, 'TIMED_OUT');
+    assert.equal(github.state.mergeCalls.length, 0);
+    assert.equal(result.publication.retained, true);
+    assert.equal(fake.invocations.length, 1);
+    assert.equal(result.publication.attempts, 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GN-05 an immediately failed required check is terminal without re-observation', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare, checksResult: 'fail' });
+    const sleeps = [];
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      sleep: (ms) => {
+        sleeps.push(ms);
+      },
+      log: () => {},
+    });
+
+    assert.equal(result.status, CI_FAILED);
+    assert.equal(result.publication.checks.status, 'FAILED');
+    assert.deepEqual(sleeps, []);
+    const checkCalls = github.calls.filter(
+      (call) => call.args[0] === 'pr' && call.args[1] === 'checks',
+    );
+    assert.equal(checkCalls.length, 2);
+    assert.equal(fake.invocations.length, 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GN-05 a permanent provider error fails closed without re-observation', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      checksError: 'HTTP 500: required checks could not be read',
+    });
+    const sleeps = [];
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      sleep: (ms) => {
+        sleeps.push(ms);
+      },
+      log: () => {},
+    });
+
+    assert.equal(result.status, CI_FAILED);
+    assert.equal(result.publication.checks.status, 'FAILED');
+    assert.deepEqual(sleeps, []);
+    assert.equal(github.state.mergeCalls.length, 0);
+    assert.equal(result.publication.retained, true);
+    assert.equal(fake.invocations.length, 1);
   } finally {
     removeFixture(fixture);
   }
