@@ -243,13 +243,19 @@ function createFakeGithub({
   repository = 'booker-lab/greenhub',
   requiredChecks = ['verify'],
   checksResult = 'pass',
+  checksUnavailableCount = 0,
   allowSquashMerge = true,
   mergeEffect = null,
   onChecks = null,
 } = {}) {
   const calls = [];
   const prs = new Map();
-  const state = { nextNumber: 1, mergeCalls: [], closeCalls: [] };
+  const state = {
+    nextNumber: 1,
+    mergeCalls: [],
+    closeCalls: [],
+    checksUnavailableRemaining: checksUnavailableCount,
+  };
   const ok = (stdout) => ({
     exitCode: 0,
     signal: null,
@@ -322,6 +328,10 @@ function createFakeGithub({
     if (args[0] === 'pr' && args[1] === 'checks') {
       const pr = findPr(args[2]);
       if (pr === null) return fail(`no such PR: ${args[2]}`);
+      if (state.checksUnavailableRemaining > 0) {
+        state.checksUnavailableRemaining -= 1;
+        return fail(`no required checks reported on the '${pr.headRefName}' branch\n`);
+      }
       if (onChecks) onChecks({ pr, prs, state });
       if (args.includes('--json')) {
         const bucket = checksResult === 'pass' ? 'pass' : checksResult === 'fail' ? 'fail' : 'pending';
@@ -449,6 +459,32 @@ test('GOLDEN ??candidate is committed from observed paths, published, merged, re
       'proof-check.cjs',
       'src',
     ]);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CI wait retries transient required-check registration instead of failing closed', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      checksUnavailableCount: 2,
+      checksResult: 'pass',
+    });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      sleep: () => {},
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS_PUBLISHED);
+    assert.equal(result.publication.checks.status, 'PASSED');
+    assert.equal(result.publication.preMerge.status, 'PUBLICATION_ALLOWED');
+    assert.equal(github.state.checksUnavailableRemaining, 0);
+    assert.equal(remoteRefSha(fixture.bare, 'tmp/spec-transport'), null);
   } finally {
     removeFixture(fixture);
   }
