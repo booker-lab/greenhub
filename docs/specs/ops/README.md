@@ -2,6 +2,7 @@
 
 ## 현행 계약
 
+- `development-authority.md` — Git-native 개발 실행 권위(semantic scope·freshness·verification·publication·closure·automation)
 - `mvp-sales-round-runbook.md` — 회차 직배송 운영 런북
 - `mvp-sales-round-e2e-environment.md` — 지정 SHA 비운영 E2E 격리 계약
 - `preview-auth-url-policy.md` — Preview/Kakao OAuth URL 정책
