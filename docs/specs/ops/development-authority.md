@@ -46,6 +46,8 @@ generic Git workspace 안전(foreign dirty 보존, transport-only ref cleanup)�
 - semantic owner가 바뀌었으면 affected semantics만 re-evaluate한다.
 - proof owner가 바뀌었으면 affected proof만 다시 실행한다.
 - topology-only movement이면 semantic work와 still-valid proof를 보존하고 publication binding만 갱신한다.
+- 하나의 bounded task 안에서 live `main`이 이동해도 movement가 task-owned path와 선언된 proof owner를 침범하지 않으면 기존 task delta를 fresh main에 re-bind해 publication binding만 갱신한다. OpenCode를 다시 호출하지 않는다.
+- 선언된 proof owner와 겹치는 movement는 affected proof만 다시 검증하고, 겹치지 않는 proof는 보존한다.
 - unknown fact는 실제로 그 fact에 의존하는 transition만 막는다.
 
 ## 4. Risk-directed verification (nearest faithful proof)
@@ -93,6 +95,8 @@ semantic result
 - temporary remote transport가 필요하면 `scripts/git/publication-transport.mjs`의 non-force exact-candidate transport를 사용한다. transport ref 때문에 shared checkout을 checkout/switch하지 않는다.
 - ordinary shared-history rewrite, force push, protected ref 직접 push를 수행하지 않는다.
 - semantic/integration conflict 또는 semantic-owner overlap은 local merge/rebase fallback 없이 fail closed한다.
+- live `main` movement가 task-owned semantic/proof boundary와 겹치지 않으면 같은 foreground process가 기존 task delta를 fresh main 위에 exact Git evidence(parent = fresh main, owned-path entry equality, tree delta ⊆ owned paths)로 재구성해 publication을 계속할 수 있다. 이 rebind는 OpenCode 재호출, force push, shared checkout의 local merge/rebase, foreign change 흡수를 수행하지 않는다.
+- owned path의 foreign edit, non-ancestor live main, 재구성 실패, proof 재검증 실패, bounded attempt 소진은 fail closed한다.
 - 반복적인 same-target publication contention이 직접 증명되기 전에는 publication queue, daemon, custom lock service를 추가하지 않는다. 필요성이 입증되면 provider-native 기능을 우선하고 최종 publication critical section만 가장 작게 serialize한다.
 - `main` 통합은 production 배포 승인이 아니다. production 배포는 별도 승인 게이트와 exact release SHA 확인 뒤에만 수행한다.
 

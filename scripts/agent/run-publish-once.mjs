@@ -30,7 +30,12 @@ import {
   CLEANUP_FAILED,
   EXECUTOR_FAILED,
   INVALID_INPUT,
+  PROOF_FAILED,
   SUCCESS,
+  createBaselineWorkspace,
+  defaultRemoveWorkspace,
+  defaultRunProofCommand,
+  DEFAULT_PROOF_TIMEOUT_MS,
   fetchBaseline,
   gitCapture,
   normalizeRepoPath,
@@ -48,6 +53,13 @@ import {
   decidePrePublication,
   readOwnedBlobs,
 } from '../git/publication-admission.mjs';
+import {
+  REBIND_ALLOWED,
+  SEMANTIC_OWNER_REVIEW_REQUIRED as REBIND_SEMANTIC_OWNER_REVIEW_REQUIRED,
+  buildReboundCandidate,
+  classifyFreshMainRebind,
+  selectStaleProofs,
+} from '../git/publication-rebind.mjs';
 import {
   captureCheckoutState,
   deleteTemporaryTransportRef,
@@ -84,6 +96,7 @@ export const PUBLISH_ONCE_STATUSES = Object.freeze([
 
 export const DEFAULT_CI_TIMEOUT_MS = 45 * 60 * 1000;
 export const DEFAULT_MERGE_TIMEOUT_MS = 10 * 60 * 1000;
+export const DEFAULT_MAX_REBIND_ATTEMPTS = 2;
 
 // Transient per-command commit identity. Global and repository Git config are
 // never modified; signing and hooks are disabled per command so publication is
@@ -126,6 +139,92 @@ function ghMessageOf(result) {
 
 function ghFailed(result) {
   return Boolean(result?.startErrorCode) || result?.exitCode !== 0;
+}
+
+const PROOF_TAIL_CHARS = 4000;
+
+function tail(value, limit = PROOF_TAIL_CHARS) {
+  const text = typeof value === 'string' ? value : '';
+  return text.length <= limit ? text : text.slice(text.length - limit);
+}
+
+/**
+ * Re-execute only the stale, proof-owner-scoped proof commands on the rebound
+ * candidate in an ephemeral, task-owned detached worktree. The worktree never
+ * touches the canonical checkout and is removed before returning.
+ */
+function reexecuteProofsAtCommit({
+  repositoryRoot,
+  parentTempRoot,
+  label,
+  candidateSha,
+  entries,
+  timeoutMs,
+  runProofCommand,
+  env,
+  log,
+}) {
+  const proofRoot = join(parentTempRoot, label);
+  const results = [];
+  const cleanupErrors = [];
+  let workspacePath = null;
+  try {
+    workspacePath = createBaselineWorkspace({
+      repositoryRoot,
+      tempRoot: proofRoot,
+      baselineSha: candidateSha,
+    });
+    for (const entry of entries) {
+      let proof;
+      try {
+        proof = runProofCommand({ command: entry.command, cwd: workspacePath, env, timeoutMs });
+      } catch (error) {
+        proof = {
+          exitCode: null,
+          signal: null,
+          timedOut: false,
+          startErrorCode: error?.code ?? null,
+          stdout: '',
+          stderr: messageOf(error),
+        };
+      }
+      const record = {
+        command: entry.command,
+        exitCode: proof.exitCode ?? null,
+        signal: proof.signal ?? null,
+        timedOut: Boolean(proof.timedOut),
+        startErrorCode: proof.startErrorCode ?? null,
+        ok: proof.exitCode === 0 && !proof.startErrorCode,
+        stdoutTail: tail(proof.stdout),
+        stderrTail: tail(proof.stderr),
+      };
+      results.push(record);
+      log(
+        `[run-publish-once] rebound proof "${entry.command}" exit=${record.exitCode} ok=${record.ok}`,
+      );
+    }
+  } catch (error) {
+    cleanupErrors.push(messageOf(error));
+  } finally {
+    try {
+      const removal = defaultRemoveWorkspace({
+        repositoryRoot,
+        tempRoot: proofRoot,
+        workspacePath,
+      });
+      if (!removal.removed) {
+        cleanupErrors.push(...removal.errors);
+        gitCapture(repositoryRoot, ['worktree', 'prune'], { allowFailure: true });
+      }
+    } catch (error) {
+      cleanupErrors.push(messageOf(error));
+    }
+  }
+  return {
+    results,
+    cleanup: cleanupErrors.length === 0 ? 'REMOVED' : 'FAILED',
+    cleanupErrors,
+  };
 }
 
 /** Invocation-unique, task-owned temporary transport ref name. */
@@ -608,6 +707,14 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
   const removeTransportRef = deps.deleteTemporaryTransportRef ?? deleteTemporaryTransportRef;
   const decidePrePr = deps.decidePrePublication ?? decidePrePublication;
   const decidePreMrg = deps.decidePreMerge ?? decidePreMerge;
+  const runProofCommand = deps.runProofCommand ?? defaultRunProofCommand;
+  const baseEnv = deps.env ?? process.env;
+  const proofTimeoutMs = options.proofTimeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS;
+  const maxRebindAttempts = Number.isInteger(options.maxRebindAttempts)
+    ? options.maxRebindAttempts
+    : DEFAULT_MAX_REBIND_ATTEMPTS;
+  const proofCommands = Array.isArray(options.proofCommands) ? options.proofCommands : [];
+  const proofOwners = Array.isArray(options.proofOwners) ? options.proofOwners : [];
 
   let canonicalBefore = null;
   try {
@@ -640,7 +747,18 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
     remoteDeltaVerified: null,
     remoteBlobsMismatched: [],
     canonicalCheckoutUnchanged: null,
+    attempts: 0,
+    rebind: {
+      status: 'NOT_REQUIRED',
+      count: 0,
+      maxAttempts: maxRebindAttempts,
+      history: [],
+    },
+    stalePublications: [],
   };
+
+  let openAttempt = null;
+  let provider = null;
 
   const finish = (outcome, reason) => {
     publication.outcome = outcome;
@@ -662,17 +780,18 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
   };
 
   const cleanupTransportRef = () => {
-    if (!publication.transportCreated) {
-      publication.transportCleanup = 'NOT_CREATED';
+    if (openAttempt === null) {
+      if (!publication.transportCreated) publication.transportCleanup = 'NOT_CREATED';
       return true;
     }
     try {
       removeTransportRef({
         repositoryRoot: context.repositoryRoot,
-        transportRef: publication.transportRef,
+        transportRef: openAttempt.transportRef,
         remote: context.remote,
       });
       publication.transportCleanup = 'REMOVED';
+      openAttempt = null;
       return true;
     } catch (error) {
       publication.transportCleanup = 'FAILED';
@@ -680,6 +799,52 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
       log(`[run-publish-once] transport ref cleanup failed: ${messageOf(error)}`);
       return false;
     }
+  };
+
+  const retireOpenPublication = (reason) => {
+    if (openAttempt === null) return { ok: true, reason: null };
+    const target = openAttempt;
+    const record = {
+      attempt: target.attempt,
+      prNumber: target.prNumber,
+      candidateSha: target.candidateSha,
+      transportRef: target.transportRef,
+      prClose: null,
+      transportCleanup: null,
+      reason,
+    };
+    let ok = true;
+    if (target.prNumber !== null) {
+      const closed = closePullRequest({
+        runGh,
+        cwd: context.repositoryRoot,
+        repository: provider.repository,
+        prNumber: target.prNumber,
+      });
+      record.prClose = closed.ok ? 'CLOSED' : `FAILED: ${closed.reason}`;
+      if (!closed.ok) ok = false;
+    }
+    try {
+      removeTransportRef({
+        repositoryRoot: context.repositoryRoot,
+        transportRef: target.transportRef,
+        remote: context.remote,
+      });
+      record.transportCleanup = 'REMOVED';
+    } catch {
+      record.transportCleanup = 'FAILED';
+      ok = false;
+    }
+    publication.stalePublications.push(record);
+    publication.transportCleanup = record.transportCleanup;
+    openAttempt = null;
+    return {
+      ok,
+      reason: ok
+        ? null
+        : `retiring the previous publication attempt failed ` +
+          `(prClose=${record.prClose ?? 'NONE'}, transportCleanup=${record.transportCleanup})`,
+    };
   };
 
   try {
@@ -706,276 +871,489 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
       `[run-publish-once] candidate ${candidate.candidateSha} (${candidate.changedPaths.length} owned path(s))`,
     );
 
-    publication.stage = 'PRE_PR';
-    const prePrFresh = refreshLiveMain({
-      repositoryRoot: context.repositoryRoot,
-      remote: context.remote,
-    });
-    const prePrDecision = decidePrePr({
-      repositoryRoot: context.repositoryRoot,
-      liveMainRef: prePrFresh.fetchedSha,
-      candidateRef: candidate.candidateSha,
-      ownedPaths: candidate.changedPaths,
-    });
-    publication.prePr = {
-      ...prePrDecision,
-      remoteMainSha: prePrFresh.remoteSha,
-      fetchedMainSha: prePrFresh.fetchedSha,
-    };
-    if (prePrDecision.status === COMPLETE_ALREADY_PUBLISHED) {
-      publication.remoteMainSha = prePrFresh.remoteSha;
-      publication.remoteDeltaVerified = true;
-      return finish(COMPLETE_ALREADY_PUBLISHED, prePrDecision.reason);
-    }
-    if (prePrDecision.status === SEMANTIC_OWNER_REVIEW_REQUIRED) {
-      return finish(
-        PUBLICATION_BLOCKED,
-        `PRE_PR admission requires semantic owner review: ${prePrDecision.reason}`,
-      );
-    }
-    if (prePrDecision.status !== PUBLICATION_ALLOWED) {
-      return finish(
-        PUBLICATION_BLOCKED,
-        `unexpected PRE_PR admission status: ${prePrDecision.status}`,
-      );
-    }
-
-    publication.stage = 'GITHUB';
-    const repository = resolveRepository({
-      runGh,
-      cwd: context.repositoryRoot,
-      explicit: options.githubRepository ?? null,
-    });
-    if (!repository.ok) return finish(PUBLICATION_BLOCKED, repository.reason);
-    publication.github = { repository: repository.repository };
-    const auth = checkGithubAuth({ runGh, cwd: context.repositoryRoot });
-    if (!auth.ok) return finish(PUBLICATION_BLOCKED, auth.reason);
-    const capabilities = readRepositoryCapabilities({
-      runGh,
-      cwd: context.repositoryRoot,
-      repository: repository.repository,
-    });
-    if (!capabilities.ok) return finish(PUBLICATION_BLOCKED, capabilities.reason);
-    publication.github.allowSquashMerge = capabilities.allowSquashMerge;
-    if (capabilities.allowSquashMerge !== true) {
-      return finish(
-        PUBLICATION_BLOCKED,
-        'the repository configuration does not allow squash merges, so automated publication is refused',
-      );
-    }
-    const checks = readRequiredChecks({
-      runGh,
-      cwd: context.repositoryRoot,
-      repository: repository.repository,
-    });
-    if (!checks.ok) return finish(PUBLICATION_BLOCKED, checks.reason);
-    publication.protection = checks.protection;
-    publication.requiredChecks = checks.requiredChecks;
-
-    publication.stage = 'TRANSPORT';
-    const transportRef = options.transportRef ?? createTemporaryTransportRef();
-    publication.transportRef = transportRef;
-    publishExact({
-      repositoryRoot: context.repositoryRoot,
+    let current = {
+      parentSha: candidate.parentSha,
       candidateSha: candidate.candidateSha,
-      transportRef,
-      remote: context.remote,
-    });
-    publication.transportCreated = true;
-    log(`[run-publish-once] transport ${transportRef} -> ${candidate.candidateSha}`);
-
-    publication.stage = 'PR';
-    const bodyFile = join(context.tempRoot, 'publication-pr-body.md');
-    writeFileSync(
-      bodyFile,
-      buildPrBody({
-        commitMessage: options.commitMessage,
-        baselineSha: candidate.parentSha,
-        candidateSha: candidate.candidateSha,
-        changedPaths: candidate.changedPaths,
-        proofResults: context.proofResults,
-        extraBody,
-      }),
-      'utf8',
-    );
-    const prResult = createPullRequest({
-      runGh,
-      cwd: context.repositoryRoot,
-      repository: repository.repository,
-      transportRef,
-      title: options.prTitle,
-      bodyFile,
-      candidateSha: candidate.candidateSha,
-    });
-    if (!prResult.ok) {
-      // No PR exists yet, so the transport ref has no publication provenance.
-      cleanupTransportRef();
-      return finish(PUBLICATION_BLOCKED, prResult.reason);
-    }
-    publication.pr = prResult.pr;
-    log(`[run-publish-once] PR #${prResult.pr.number} ${prResult.pr.url}`);
-
-    publication.stage = 'CI';
-    const checkWait = waitForRequiredChecks({
-      runGh,
-      cwd: context.repositoryRoot,
-      repository: repository.repository,
-      prNumber: prResult.pr.number,
-      requiredChecks: publication.requiredChecks,
-      timeoutMs: options.ciTimeoutMs ?? DEFAULT_CI_TIMEOUT_MS,
-    });
-    publication.checks = {
-      status: checkWait.status,
-      required: publication.requiredChecks,
-      entries: Array.isArray(checkWait.checks) ? checkWait.checks : [],
+      changedPaths: candidate.changedPaths,
     };
-    if (!checkWait.ok) {
-      publication.retained = true;
-      return finish(CI_FAILED, checkWait.reason);
-    }
+    let rebindsRemaining = maxRebindAttempts;
+    let attempt = 0;
 
-    publication.stage = 'PRE_MERGE';
-    const preMergeFresh = refreshLiveMain({
-      repositoryRoot: context.repositoryRoot,
-      remote: context.remote,
-    });
-    const prView = viewPullRequest({
-      runGh,
-      cwd: context.repositoryRoot,
-      repository: repository.repository,
-      target: prResult.pr.number,
-    });
-    if (!prView.ok) {
-      publication.retained = true;
-      return finish(PUBLICATION_BLOCKED, prView.reason);
-    }
-    if (prView.pr.state !== 'OPEN') {
-      publication.retained = true;
-      return finish(PUBLICATION_BLOCKED, `PR is not open (state=${prView.pr.state})`);
-    }
-    if (prView.pr.headRefOid !== candidate.candidateSha) {
-      publication.retained = true;
-      return finish(
-        PUBLICATION_BLOCKED,
-        `PR head ${prView.pr.headRefOid} is no longer the exact candidate ${candidate.candidateSha}`,
+    for (;;) {
+      attempt += 1;
+      publication.attempts = attempt;
+
+      publication.stage = 'PRE_PR';
+      const fresh = refreshLiveMain({
+        repositoryRoot: context.repositoryRoot,
+        remote: context.remote,
+      });
+      const classification = classifyFreshMainRebind({
+        repositoryRoot: context.repositoryRoot,
+        baselineSha: current.parentSha,
+        candidateSha: current.candidateSha,
+        liveMainSha: fresh.fetchedSha,
+        ownedPaths: publication.ownedPaths,
+      });
+      if (classification.status === REBIND_SEMANTIC_OWNER_REVIEW_REQUIRED) {
+        publication.rebind.status = 'BLOCKED';
+        if (openAttempt !== null) publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `fresh live main movement requires semantic owner review: ${classification.reason}`,
+        );
+      }
+      if (classification.status === REBIND_ALLOWED && rebindsRemaining <= 0) {
+        publication.rebind.status = 'EXHAUSTED';
+        publication.retained = openAttempt !== null;
+        return finish(
+          PUBLICATION_REFRESH_REQUIRED,
+          `live main moved on the task-owned boundary and the rebind budget is exhausted ` +
+            `(${publication.rebind.count}/${maxRebindAttempts} used)`,
+        );
+      }
+      if (classification.status === REBIND_ALLOWED) {
+        const staleProofs = selectStaleProofs({
+          proofCommands,
+          proofOwners,
+          movedPaths: classification.movedPaths,
+        });
+        const rebound = buildReboundCandidate({
+          repositoryRoot: context.repositoryRoot,
+          scratchDir: context.tempRoot,
+          liveMainSha: fresh.fetchedSha,
+          candidateSha: current.candidateSha,
+          ownedPaths: publication.ownedPaths,
+          message: options.commitMessage,
+        });
+        if (!rebound.ok) {
+          publication.rebind.status = 'FAILED';
+          if (openAttempt !== null) publication.retained = true;
+          return finish(
+            PUBLICATION_BLOCKED,
+            `fresh-main rebind could not be constructed: ${rebound.reason}`,
+          );
+        }
+        const staleEntries = staleProofs.filter((entry) => entry.stale);
+        let proofResults = [];
+        if (staleEntries.length > 0) {
+          const proofRun = reexecuteProofsAtCommit({
+            repositoryRoot: context.repositoryRoot,
+            parentTempRoot: context.tempRoot,
+            label: `publication-rebind-proof-${attempt}`,
+            candidateSha: rebound.candidateSha,
+            entries: staleEntries,
+            timeoutMs: proofTimeoutMs,
+            runProofCommand,
+            env: baseEnv,
+            log,
+          });
+          if (proofRun.cleanup === 'FAILED') {
+            if (openAttempt !== null) publication.retained = true;
+            return finish(
+              CLEANUP_FAILED,
+              `rebound proof workspace cleanup failed: ${proofRun.cleanupErrors.join('; ')}`,
+            );
+          }
+          proofResults = proofRun.results;
+          const failedProof = proofResults.find((entry) => !entry.ok);
+          if (failedProof) {
+            publication.rebind.status = 'PROOF_FAILED';
+            if (openAttempt !== null) publication.retained = true;
+            return finish(PROOF_FAILED, `rebound proof command did not pass: ${failedProof.command}`);
+          }
+        }
+        rebindsRemaining -= 1;
+        publication.rebind.count += 1;
+        publication.rebind.status = 'REBOUND';
+        publication.rebind.history.push({
+          attempt,
+          trigger: 'PRE_PUBLICATION',
+          previousBaselineSha: current.parentSha,
+          previousCandidateSha: current.candidateSha,
+          freshMainSha: fresh.fetchedSha,
+          reboundCandidateSha: rebound.candidateSha,
+          movedPaths: classification.movedPaths,
+          alreadyAppliedPaths: classification.alreadyAppliedPaths,
+          ownedPathStates: classification.ownedPathStates,
+          proofReexecutions: staleProofs.map((entry) => ({
+            command: entry.command,
+            owners: entry.owners,
+            stale: entry.stale,
+          })),
+          proofResults,
+          evidence: rebound.evidence,
+        });
+        current = {
+          parentSha: fresh.fetchedSha,
+          candidateSha: rebound.candidateSha,
+          changedPaths: publication.ownedPaths,
+        };
+        publication.candidate = {
+          baselineSha: publication.candidate.baselineSha,
+          parentSha: fresh.fetchedSha,
+          candidateSha: rebound.candidateSha,
+          changedPaths: publication.ownedPaths,
+        };
+        log(
+          `[run-publish-once] rebound candidate ${rebound.candidateSha} onto fresh main ${fresh.fetchedSha}`,
+        );
+      }
+
+      publication.stage = 'PRE_PR';
+      const prePrDecision = decidePrePr({
+        repositoryRoot: context.repositoryRoot,
+        liveMainRef: fresh.fetchedSha,
+        candidateRef: current.candidateSha,
+        ownedPaths: publication.ownedPaths,
+      });
+      publication.prePr = {
+        ...prePrDecision,
+        remoteMainSha: fresh.remoteSha,
+        fetchedMainSha: fresh.fetchedSha,
+        attempt,
+      };
+      if (prePrDecision.status === COMPLETE_ALREADY_PUBLISHED) {
+        const retired = retireOpenPublication('complete already published');
+        if (!retired.ok) {
+          publication.retained = true;
+          return finish(CLEANUP_FAILED, retired.reason);
+        }
+        publication.remoteMainSha = fresh.remoteSha;
+        publication.remoteDeltaVerified = true;
+        return finish(COMPLETE_ALREADY_PUBLISHED, prePrDecision.reason);
+      }
+      if (prePrDecision.status === SEMANTIC_OWNER_REVIEW_REQUIRED) {
+        if (openAttempt !== null) publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `PRE_PR admission requires semantic owner review: ${prePrDecision.reason}`,
+        );
+      }
+      if (prePrDecision.status !== PUBLICATION_ALLOWED) {
+        if (openAttempt !== null) publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `unexpected PRE_PR admission status: ${prePrDecision.status}`,
+        );
+      }
+
+      if (provider === null) {
+        publication.stage = 'GITHUB';
+        const repository = resolveRepository({
+          runGh,
+          cwd: context.repositoryRoot,
+          explicit: options.githubRepository ?? null,
+        });
+        if (!repository.ok) return finish(PUBLICATION_BLOCKED, repository.reason);
+        publication.github = { repository: repository.repository };
+        const auth = checkGithubAuth({ runGh, cwd: context.repositoryRoot });
+        if (!auth.ok) return finish(PUBLICATION_BLOCKED, auth.reason);
+        const capabilities = readRepositoryCapabilities({
+          runGh,
+          cwd: context.repositoryRoot,
+          repository: repository.repository,
+        });
+        if (!capabilities.ok) return finish(PUBLICATION_BLOCKED, capabilities.reason);
+        publication.github.allowSquashMerge = capabilities.allowSquashMerge;
+        if (capabilities.allowSquashMerge !== true) {
+          return finish(
+            PUBLICATION_BLOCKED,
+            'the repository configuration does not allow squash merges, so automated publication is refused',
+          );
+        }
+        const checks = readRequiredChecks({
+          runGh,
+          cwd: context.repositoryRoot,
+          repository: repository.repository,
+        });
+        if (!checks.ok) return finish(PUBLICATION_BLOCKED, checks.reason);
+        publication.protection = checks.protection;
+        publication.requiredChecks = checks.requiredChecks;
+        provider = { repository: repository.repository };
+      }
+
+      const retired = retireOpenPublication('rebind re-publication');
+      if (!retired.ok) {
+        publication.retained = true;
+        return finish(CLEANUP_FAILED, retired.reason);
+      }
+
+      publication.stage = 'TRANSPORT';
+      const transportRef =
+        attempt === 1 &&
+        typeof options.transportRef === 'string' &&
+        options.transportRef.length > 0
+          ? options.transportRef
+          : createTemporaryTransportRef();
+      publication.transportRef = transportRef;
+      publication.transportCreated = true;
+      publication.transportCleanup = 'NOT_CREATED';
+      publication.transportCleanupErrors = [];
+      publishExact({
+        repositoryRoot: context.repositoryRoot,
+        candidateSha: current.candidateSha,
+        transportRef,
+        remote: context.remote,
+      });
+      openAttempt = {
+        attempt,
+        prNumber: null,
+        transportRef,
+        candidateSha: current.candidateSha,
+      };
+      log(`[run-publish-once] transport ${transportRef} -> ${current.candidateSha}`);
+
+      publication.stage = 'PR';
+      const bodyFile = join(context.tempRoot, `publication-pr-body-${attempt}.md`);
+      writeFileSync(
+        bodyFile,
+        buildPrBody({
+          commitMessage: options.commitMessage,
+          baselineSha: publication.candidate.baselineSha,
+          candidateSha: current.candidateSha,
+          changedPaths: publication.ownedPaths,
+          proofResults: context.proofResults,
+          extraBody,
+        }),
+        'utf8',
       );
-    }
-    const preMergeDecision = decidePreMrg({
-      repositoryRoot: context.repositoryRoot,
-      liveMainRef: preMergeFresh.fetchedSha,
-      candidateRef: candidate.candidateSha,
-      ownedPaths: candidate.changedPaths,
-    });
-    publication.preMerge = {
-      ...preMergeDecision,
-      remoteMainSha: preMergeFresh.remoteSha,
-      fetchedMainSha: preMergeFresh.fetchedSha,
-      mergeStateStatus: prView.pr.mergeStateStatus ?? null,
-    };
-    if (preMergeDecision.status === SUPERSEDED_ALREADY_PUBLISHED) {
-      const closed = closePullRequest({
+      const prResult = createPullRequest({
         runGh,
         cwd: context.repositoryRoot,
-        repository: repository.repository,
-        prNumber: prResult.pr.number,
+        repository: provider.repository,
+        transportRef,
+        title: options.prTitle,
+        bodyFile,
+        candidateSha: current.candidateSha,
       });
-      publication.prClose = closed.ok ? 'CLOSED' : `FAILED: ${closed.reason}`;
-      const cleaned = cleanupTransportRef();
+      if (!prResult.ok) {
+        // No PR exists yet, so the transport ref has no publication provenance.
+        cleanupTransportRef();
+        return finish(PUBLICATION_BLOCKED, prResult.reason);
+      }
+      openAttempt.prNumber = prResult.pr.number;
+      publication.pr = prResult.pr;
+      log(`[run-publish-once] PR #${prResult.pr.number} ${prResult.pr.url}`);
+
+      publication.stage = 'CI';
+      const checkWait = waitForRequiredChecks({
+        runGh,
+        cwd: context.repositoryRoot,
+        repository: provider.repository,
+        prNumber: prResult.pr.number,
+        requiredChecks: publication.requiredChecks,
+        timeoutMs: options.ciTimeoutMs ?? DEFAULT_CI_TIMEOUT_MS,
+      });
+      publication.checks = {
+        status: checkWait.status,
+        required: publication.requiredChecks,
+        entries: Array.isArray(checkWait.checks) ? checkWait.checks : [],
+      };
+      if (!checkWait.ok) {
+        publication.retained = true;
+        return finish(CI_FAILED, checkWait.reason);
+      }
+
+      publication.stage = 'PRE_MERGE';
+      const preMergeFresh = refreshLiveMain({
+        repositoryRoot: context.repositoryRoot,
+        remote: context.remote,
+      });
+      const prView = viewPullRequest({
+        runGh,
+        cwd: context.repositoryRoot,
+        repository: provider.repository,
+        target: prResult.pr.number,
+      });
+      if (!prView.ok) {
+        publication.retained = true;
+        return finish(PUBLICATION_BLOCKED, prView.reason);
+      }
+      if (prView.pr.state !== 'OPEN') {
+        publication.retained = true;
+        return finish(PUBLICATION_BLOCKED, `PR is not open (state=${prView.pr.state})`);
+      }
+      if (prView.pr.headRefOid !== current.candidateSha) {
+        publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `PR head ${prView.pr.headRefOid} is no longer the exact candidate ${current.candidateSha}`,
+        );
+      }
+      const preMergeClassification = classifyFreshMainRebind({
+        repositoryRoot: context.repositoryRoot,
+        baselineSha: current.parentSha,
+        candidateSha: current.candidateSha,
+        liveMainSha: preMergeFresh.fetchedSha,
+        ownedPaths: publication.ownedPaths,
+      });
+      if (preMergeClassification.status === REBIND_SEMANTIC_OWNER_REVIEW_REQUIRED) {
+        publication.rebind.status = 'BLOCKED';
+        publication.preMerge = {
+          remoteMainSha: preMergeFresh.remoteSha,
+          fetchedMainSha: preMergeFresh.fetchedSha,
+          mergeStateStatus: prView.pr.mergeStateStatus ?? null,
+          classification: preMergeClassification.status,
+        };
+        publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `PRE_MERGE fresh live main movement requires semantic owner review: ${preMergeClassification.reason}`,
+        );
+      }
+      if (preMergeClassification.status === REBIND_ALLOWED && rebindsRemaining <= 0) {
+        publication.rebind.status = 'EXHAUSTED';
+        publication.preMerge = {
+          remoteMainSha: preMergeFresh.remoteSha,
+          fetchedMainSha: preMergeFresh.fetchedSha,
+          mergeStateStatus: prView.pr.mergeStateStatus ?? null,
+          classification: preMergeClassification.status,
+        };
+        publication.retained = true;
+        return finish(
+          PUBLICATION_REFRESH_REQUIRED,
+          `live main moved again and the rebind budget is exhausted ` +
+            `(${publication.rebind.count}/${maxRebindAttempts} used)`,
+        );
+      }
+      if (preMergeClassification.status === REBIND_ALLOWED) {
+        publication.preMerge = {
+          remoteMainSha: preMergeFresh.remoteSha,
+          fetchedMainSha: preMergeFresh.fetchedSha,
+          mergeStateStatus: prView.pr.mergeStateStatus ?? null,
+          classification: preMergeClassification.status,
+        };
+        log(
+          '[run-publish-once] PRE_MERGE live main moved on non-owned paths; rebinding on the next attempt',
+        );
+        continue;
+      }
+
+      const preMergeDecision = decidePreMrg({
+        repositoryRoot: context.repositoryRoot,
+        liveMainRef: preMergeFresh.fetchedSha,
+        candidateRef: current.candidateSha,
+        ownedPaths: publication.ownedPaths,
+      });
+      publication.preMerge = {
+        ...preMergeDecision,
+        remoteMainSha: preMergeFresh.remoteSha,
+        fetchedMainSha: preMergeFresh.fetchedSha,
+        mergeStateStatus: prView.pr.mergeStateStatus ?? null,
+        classification: preMergeClassification.status,
+      };
+      if (preMergeDecision.status === SUPERSEDED_ALREADY_PUBLISHED) {
+        const closed = closePullRequest({
+          runGh,
+          cwd: context.repositoryRoot,
+          repository: provider.repository,
+          prNumber: prResult.pr.number,
+        });
+        publication.prClose = closed.ok ? 'CLOSED' : `FAILED: ${closed.reason}`;
+        const cleaned = cleanupTransportRef();
+        const readBack = verifyRemoteOwnedDelta({
+          repositoryRoot: context.repositoryRoot,
+          remote: context.remote,
+          candidateSha: current.candidateSha,
+          ownedPaths: publication.ownedPaths,
+        });
+        publication.remoteMainSha = readBack.remoteMainSha;
+        publication.remoteDeltaVerified = readBack.verified;
+        publication.remoteBlobsMismatched = readBack.mismatched;
+        if (!cleaned) {
+          return finish(
+            CLEANUP_FAILED,
+            'publication was superseded but transport ref cleanup failed',
+          );
+        }
+        return finish(SUPERSEDED_ALREADY_PUBLISHED, preMergeDecision.reason);
+      }
+      if (preMergeDecision.status === SEMANTIC_OWNER_REVIEW_REQUIRED) {
+        publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `PRE_MERGE admission requires semantic owner review: ${preMergeDecision.reason}`,
+        );
+      }
+      if (preMergeDecision.status !== PUBLICATION_ALLOWED) {
+        publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `unexpected PRE_MERGE admission status: ${preMergeDecision.status}`,
+        );
+      }
+      if (prView.pr.mergeStateStatus === 'BEHIND') {
+        publication.retained = true;
+        return finish(
+          PUBLICATION_REFRESH_REQUIRED,
+          'live main moved after required checks passed; the provider refuses a stale merge under ' +
+            'strict required checks and no automatic update is created',
+        );
+      }
+      if (prView.pr.mergeStateStatus === 'DIRTY') {
+        publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          'the provider reports a merge conflict; local merge/rebase fallback is forbidden',
+        );
+      }
+
+      publication.stage = 'MERGE';
+      const merge = mergePullRequest({
+        runGh,
+        cwd: context.repositoryRoot,
+        repository: provider.repository,
+        prNumber: prResult.pr.number,
+        candidateSha: current.candidateSha,
+        pullTitle: options.prTitle,
+      });
+      if (!merge.ok) {
+        publication.retained = true;
+        return finish(
+          merge.refreshRequired ? PUBLICATION_REFRESH_REQUIRED : PUBLICATION_BLOCKED,
+          merge.reason,
+        );
+      }
+      publication.merge = {
+        method: 'squash',
+        matchHeadCommit: current.candidateSha,
+        mergeSha: merge.mergeSha,
+        pullRequestState: merge.pr.state,
+      };
+      log(`[run-publish-once] merged (squash) ${merge.mergeSha ?? 'merge SHA unobserved'}`);
+
+      publication.stage = 'READ_BACK';
       const readBack = verifyRemoteOwnedDelta({
         repositoryRoot: context.repositoryRoot,
         remote: context.remote,
-        candidateSha: candidate.candidateSha,
-        ownedPaths: candidate.changedPaths,
+        candidateSha: current.candidateSha,
+        ownedPaths: publication.ownedPaths,
       });
       publication.remoteMainSha = readBack.remoteMainSha;
       publication.remoteDeltaVerified = readBack.verified;
       publication.remoteBlobsMismatched = readBack.mismatched;
-      if (!cleaned) {
-        return finish(CLEANUP_FAILED, 'publication was superseded but transport ref cleanup failed');
+
+      publication.stage = 'CLEANUP';
+      const cleaned = cleanupTransportRef();
+      if (!readBack.verified) {
+        return finish(
+          REMOTE_READBACK_FAILED,
+          `remote owned delta does not match the candidate after merge: ${readBack.mismatched.join(', ')}`,
+        );
       }
-      return finish(SUPERSEDED_ALREADY_PUBLISHED, preMergeDecision.reason);
-    }
-    if (preMergeDecision.status === SEMANTIC_OWNER_REVIEW_REQUIRED) {
-      publication.retained = true;
+      if (!cleaned) {
+        return finish(CLEANUP_FAILED, 'publication succeeded but transport ref cleanup failed');
+      }
       return finish(
-        PUBLICATION_BLOCKED,
-        `PRE_MERGE admission requires semantic owner review: ${preMergeDecision.reason}`,
+        SUCCESS_PUBLISHED,
+        'candidate published, merged, and verified on canonical remote main',
       );
     }
-    if (preMergeDecision.status !== PUBLICATION_ALLOWED) {
-      publication.retained = true;
-      return finish(
-        PUBLICATION_BLOCKED,
-        `unexpected PRE_MERGE admission status: ${preMergeDecision.status}`,
-      );
-    }
-    if (prView.pr.mergeStateStatus === 'BEHIND') {
-      publication.retained = true;
-      return finish(
-        PUBLICATION_REFRESH_REQUIRED,
-        'live main moved after required checks passed; the provider refuses a stale merge under ' +
-          'strict required checks and no automatic update is created',
-      );
-    }
-    if (prView.pr.mergeStateStatus === 'DIRTY') {
-      publication.retained = true;
-      return finish(
-        PUBLICATION_BLOCKED,
-        'the provider reports a merge conflict; local merge/rebase fallback is forbidden',
-      );
-    }
-
-    publication.stage = 'MERGE';
-    const merge = mergePullRequest({
-      runGh,
-      cwd: context.repositoryRoot,
-      repository: repository.repository,
-      prNumber: prResult.pr.number,
-      candidateSha: candidate.candidateSha,
-      pullTitle: options.prTitle,
-    });
-    if (!merge.ok) {
-      publication.retained = true;
-      return finish(
-        merge.refreshRequired ? PUBLICATION_REFRESH_REQUIRED : PUBLICATION_BLOCKED,
-        merge.reason,
-      );
-    }
-    publication.merge = {
-      method: 'squash',
-      matchHeadCommit: candidate.candidateSha,
-      mergeSha: merge.mergeSha,
-      pullRequestState: merge.pr.state,
-    };
-    log(`[run-publish-once] merged (squash) ${merge.mergeSha ?? 'merge SHA unobserved'}`);
-
-    publication.stage = 'READ_BACK';
-    const readBack = verifyRemoteOwnedDelta({
-      repositoryRoot: context.repositoryRoot,
-      remote: context.remote,
-      candidateSha: candidate.candidateSha,
-      ownedPaths: candidate.changedPaths,
-    });
-    publication.remoteMainSha = readBack.remoteMainSha;
-    publication.remoteDeltaVerified = readBack.verified;
-    publication.remoteBlobsMismatched = readBack.mismatched;
-
-    publication.stage = 'CLEANUP';
-    const cleaned = cleanupTransportRef();
-    if (!readBack.verified) {
-      return finish(
-        REMOTE_READBACK_FAILED,
-        `remote owned delta does not match the candidate after merge: ${readBack.mismatched.join(', ')}`,
-      );
-    }
-    if (!cleaned) {
-      return finish(CLEANUP_FAILED, 'publication succeeded but transport ref cleanup failed');
-    }
-    return finish(SUCCESS_PUBLISHED, 'candidate published, merged, and verified on canonical remote main');
   } catch (error) {
-    if (publication.transportCreated && publication.pr === null) {
+    if (openAttempt !== null && openAttempt.prNumber === null) {
       cleanupTransportRef();
-    } else if (publication.transportCreated) {
+    } else if (openAttempt !== null) {
       publication.retained = true;
     }
     return finish(PUBLICATION_BLOCKED, `publication did not complete: ${messageOf(error)}`);
@@ -1011,6 +1389,12 @@ export function validatePublishOnceInput(options) {
   }
   if (options.ciTimeoutMs != null && (!Number.isFinite(options.ciTimeoutMs) || options.ciTimeoutMs < 0)) {
     return '--ci-timeout-ms must be >= 0';
+  }
+  if (
+    options.maxRebindAttempts != null &&
+    (!Number.isInteger(options.maxRebindAttempts) || options.maxRebindAttempts < 0)
+  ) {
+    return '--max-rebind-attempts must be a non-negative integer';
   }
   return null;
 }
@@ -1055,6 +1439,7 @@ export function runPublishOnce(options, deps = {}) {
       taskText: options.taskText,
       allowedPaths: options.allowedPaths,
       proofCommands: options.proofCommands ?? [],
+      proofOwners: options.proofOwners,
       title: options.title ?? null,
       model: options.model ?? null,
       agent: options.agent ?? null,
@@ -1109,12 +1494,14 @@ export const USAGE = [
   '  --task <file>               bounded task contract file (OUTCOME/PRESERVE/PROOF/ESCALATE ONLY IF)',
   '  --allow <path>              repo-relative path the task may mutate (repeatable, required)',
   '  --proof <command>           focused proof command, run in order in the workspace (repeatable)',
+  '  --proof-owner <path>        semantic/proof owner path for the most recent --proof (repeatable)',
   '  --commit-message <message>  candidate commit message (required)',
   '  --pr-title <title>          pull request title (required)',
   '  --pr-body <file>            optional pull request body file, appended before execution evidence',
   '  --transport-ref <name>      optional explicit temporary transport ref name',
   '  --github-repo <owner/name>  optional explicit GitHub repository (default: resolved by gh)',
   '  --ci-timeout-ms <n>         required-check watch timeout in ms (default: 2700000, 0 disables)',
+  '  --max-rebind-attempts <n>   bounded fresh-main rebind constructions per process (default: 2)',
   '  --title <title>             optional OpenCode session title',
   '  --model <provider/model>    optional OpenCode model override',
   '  --agent <name>              optional OpenCode agent override',
@@ -1136,6 +1523,7 @@ export function parseArgs(argv) {
     transportRef: null,
     githubRepository: null,
     ciTimeoutMs: DEFAULT_CI_TIMEOUT_MS,
+    maxRebindAttempts: DEFAULT_MAX_REBIND_ATTEMPTS,
   };
   const valueFlags = {
     '--commit-message': 'commitMessage',
@@ -1162,6 +1550,16 @@ export function parseArgs(argv) {
       }
       index += 1;
       publication.ciTimeoutMs = parsed;
+      continue;
+    }
+    if (arg === '--max-rebind-attempts') {
+      const value = argv[index + 1];
+      const parsed = Number(value);
+      if (value === undefined || !Number.isInteger(parsed) || parsed < 0) {
+        return { ok: false, error: '--max-rebind-attempts requires a non-negative integer' };
+      }
+      index += 1;
+      publication.maxRebindAttempts = parsed;
       continue;
     }
     executionArgs.push(arg);
