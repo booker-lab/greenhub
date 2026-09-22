@@ -1671,12 +1671,21 @@ describe('consumer auth.ts diagnostic projection parity (source contract)', () =
       AUTH_SOURCE.match(/throw new DiagnosticCredentialsSignin\('api-binding-failure'\)/g) ?? []
     ).length;
     assert.equal(bindingSites, 3);
-    // Anchor on the braced authorize branch (the refresh helper above uses
-    // the unbraced single-line form and must not be sliced in).
-    const branchStart = AUTH_SOURCE.indexOf('if (!res.ok) {');
+    // Anchor deterministically on the 29A authorize upstream diagnostic
+    // branch: locate its projection marker, then bind to the nearest
+    // preceding braced `if (!res.ok) {`. The refresh helper above now also
+    // uses the braced form, so the first braced occurrence is no longer the
+    // authorize branch and must not be relied upon.
+    const diagnosticAnchor = AUTH_SOURCE.indexOf('// Diagnostic projection (29A)');
+    assert.ok(diagnosticAnchor >= 0, 'must locate the 29A diagnostic projection anchor');
+    const branchStart = AUTH_SOURCE.lastIndexOf('if (!res.ok) {', diagnosticAnchor);
     const branchEnd = AUTH_SOURCE.indexOf('let data:', branchStart);
     assert.ok(branchStart >= 0 && branchEnd > branchStart, 'must locate the !res.ok branch');
     const branch = AUTH_SOURCE.slice(branchStart, branchEnd);
+    assert.ok(
+      branch.includes('buildUpstreamRejectedCode(status, fingerprint)'),
+      'slice must be the authorize upstream diagnostic branch',
+    );
     for (const forbidden of [
       'credentials.email',
       'credentials.password',
