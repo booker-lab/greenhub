@@ -46,7 +46,7 @@
   ],
   "STOP_WHEN": [
     "모든 declared criterion이 exact live main에서 현재 평가를 가진다.",
-    "이 baseline에서 repository mutation attempt는 0이며 PLANNER 호출도 0이다.",
+    "open AUTONOMOUS gap은 declared authority 안에서 bounded planner/executor task로 처리하고, HUMAN/EXTERNAL gate는 자동으로 닫지 않으며, autonomous progress가 더 없으면 finite terminal status로 종료한다. Pilot GO, production activation, external provider mutation은 수행하지 않는다.",
     "criterion별 disposition과 terminal decision이 기록되어 다음 Control Tower 판단으로 넘긴다.",
     "Pilot GO, production activation, external provider mutation은 시도되지 않는다."
   ],
@@ -193,7 +193,7 @@
   ],
   "TASK_CATALOG": [],
   "PLANNER": {
-    "enabled": false
+    "enabled": true
   },
   "BUDGET": {
     "max_iterations": 1,
