@@ -136,6 +136,7 @@ pnpm load:smoke
 pnpm test:git-safety
 pnpm test:agent-runner
 pnpm test:agent-publication
+pnpm test:agent-goal
 ```
 
 주의:
