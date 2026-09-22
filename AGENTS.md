@@ -1,118 +1,85 @@
 # Greenhub 작업 규칙
 
-## 0. 전역 Canonical Coordination Policy
+## 0. Git-native 실행 Kernel
 
-현재 Greenhub 개발·Coordination의 상위 실행 규칙은 다음 문서가 소유한다.
+Greenhub 개발의 기본 실행 모델은 별도 coordination control plane이 아니라 **현재 repository authority + bounded semantic task + Git-native publication**이다.
 
-- `docs/specs/ops/greenhub-branch-recurrence-prevention-and-control-tower-closure-policy.md`
+Canonical invariants:
 
-충돌 시 위 정책을 우선한다. 역사 문서는 과거 기록으로 보존하되 현재 실행 규칙의 권위로 자동 승격하지 않는다.
+1. **Current truth first**  
+   현재 repository/runtime의 직접 증거를 우선한다. 과거 branch, worktree, exact SHA, launcher, task state, report는 필요성을 다시 입증하지 않는 한 다음 실행의 권위가 아니다.
 
-핵심 불변식:
+2. **Bounded semantic ownership**  
+   하나의 mutating task는 하나의 independently closable semantic outcome을 소유한다. 파일 겹침보다 semantic owner, shared contract, proof dependency를 우선한다. 실행 중 다른 semantic boundary가 필요해져도 조용히 소유 범위를 넓히지 않는다.
 
-- `BRANCH_REQUIRED_FOR_TASK = NO`
-- `TASK_BRANCH = PROHIBITED`
-- `FEATURE_BRANCH = PROHIBITED`
-- `AGENT_BRANCH = PROHIBITED`
-- `PARALLELISM_BRANCH = PROHIBITED`
-- `LONG_LIVED_INTEGRATION_BRANCH = PROHIBITED`
-- `MAIN_ROLE = CANONICAL_MIRROR_ONLY`
-- 정상 main: `HEAD = LIVE_MAIN`, worktree `CLEAN`
-- 병렬 mutation의 물리적 독립성을 증명할 수 없으면 branch/worktree를 만들지 말고 `SERIALIZE`한다.
-- worktree는 task/agent branch factory로 사용하지 않는다.
-- short-lived publication transport ref는 PR 운송에 실제 필요한 경우에만 허용되며 source-development branch가 아니다. checkout하여 개발하지 않고, unrelated history를 쌓지 않으며, publication/closure 후 retire한다.
-- Executor Task Closure와 Control Tower Closure를 구분한다. publication 후 live main과 canonical mirror health를 다시 확인해야 coordination cycle이 닫힌다.
+3. **Freshness dimensions stay separate**  
+   semantic freshness, proof freshness, publication freshness를 구분한다. Git revision movement만으로 완료된 구현이나 유효한 proof를 무효화하지 않는다. 영향을 받은 dimension만 다시 판정한다.
 
-모든 향후 Greenhub 개발 프롬프트와 결과 형식은 이 불변식을 보존하고 마지막에 `friction_observed`를 포함한다.
+4. **Nearest faithful proof**  
+   Acceptance Criterion을 실제로 falsify/confirm할 수 있는 가장 가까운 충실한 proof부터 실행한다. full-suite-first를 기본값으로 사용하지 않고, cross-cutting risk·repository gate·release requirement·더 높은 runtime fidelity가 필요할 때만 확대한다.
 
-### Problem Framer v2.0 — 작업 생성 게이트
+5. **Outcome-relative completion**  
+   완료는 현재 bounded outcome 기준이다. local-only task라면 publication을 요구하지 않는다. publication이 outcome에 포함되면 fresh remote 확인, safe publication, remote read-back까지 closure에 포함한다.
 
-관찰, 완료된 Task, 인접 finding, `friction_observed`, successor 후보를 곧바로 작업으로 만들지 않는다. 먼저 현재 증거로 다음 중 하나를 판정한다.
+6. **Scoped uncertainty and closure**  
+   UNKNOWN이나 blocker는 정확히 영향을 받는 transition에만 적용한다. 독립적으로 완료된 work/proof는 보존한다. 종료 전에는 현재 task가 직접 만들거나 supersede한 transient residue만 reconcile하고, foreign/shared/uncertain ownership state는 임의 cleanup하지 않는다.
 
-```text
-EVIDENCE
-→ DROP | WATCH | CHANGE
-```
+7. **Existing primitives before new systems**  
+   Git, repository, test runner, CI/provider, OS/runtime primitive로 충분히 해결 가능한 문제를 위해 새 registry, queue, scheduler, daemon, lease/heartbeat, task database, proof graph, second SSOT를 만들지 않는다. 새 durable automation은 반복되는 material failure와 기존 primitive의 불충분함이 직접 증명될 때만 검토한다.
 
-- `DROP`: 새 Task, 추적 장치, 정책, reminder를 만들지 않고 종료한다.
-- `WATCH`: 자연스러운 정상 작업 중 다시 나타날 구체적 신호가 있고 그 신호가 결정을 바꿀 수 있을 때만 허용한다. 기록은 `SIGNAL`과 `PROMOTION_TRIGGER`만 유지하며 polling, scheduled review, watchdog, dedicated registry, reminder를 만들지 않는다.
-- `CHANGE`: 현재 증거가 지금 개입하는 편이 현상 유지보다 낫다는 것을 보여줄 때만 작업을 생성한다. 실행 가능성·자동화 가능성·낮은 구현 비용 자체는 CHANGE의 근거가 아니다.
-
-CHANGE일 때는 smallest independently closable semantic outcome을 선택한다. 작은 diff보다 실제 문제를 닫는 최소 semantic closure를 우선하며, 직접 필요한 구현·caller·nearest faithful proof·task-owned residue cleanup은 같은 bounded closure에 포함한다.
-
-Successor는 독립 semantic ownership, 외부 authority/provider, material user decision, 별도 safety/blast-radius, execution/publication boundary, unavailable credential/hardware/environment/live authority 같은 실제 경계 때문에 현재 closure에서 안전하게 닫을 수 없을 때만 만든다.
-
-`friction_observed`는 다음 Problem Framing의 evidence/candidate일 뿐 작업 생성 권한이 아니다.
-
-Operating shorthand:
+Default flow:
 
 ```text
-EVIDENCE → SMALLEST CLOSURE → STOP
+current authority
+→ bounded semantic outcome
+→ smallest root-cause-complete change
+→ nearest faithful proof
+→ affected freshness only
+→ publication when required
+→ remote read-back
+→ task-owned residue reconciliation
+→ stop
 ```
+
+Transient coordination view는 병렬 작업을 이해하는 임시 도구로 사용할 수 있지만 repository authority나 durable lifecycle state로 승격하지 않는다.
 
 ## 1. 우선순위와 범위
 
 - 상위 지침, 사용자 요청, 현재 Task의 범위와 제외 범위를 우선한다.
 - 요청받지 않은 리팩터링, 정리, 문서 갱신을 함께 수행하지 않는다.
 - 하위 `AGENTS.md`는 해당 디렉터리에서 이 규칙을 보충한다.
+- 관찰이나 `friction_observed`는 자동으로 새 작업을 만들지 않는다. 현재 evidence가 실제 변경 필요성을 보여줄 때만 별도 bounded task로 다룬다.
 
-## 2. 기준선 확인과 Mutation Admission
+## 2. Repository authority와 workspace
 
-작업 전에 반드시 다음을 확인한다.
+작업 전에 필요한 범위에서 다음을 확인한다.
 
-- 현재 브랜치/ref와 `HEAD`
-- live `main`과 원격 추적 상태
-- 작업 트리의 수정·추가 파일
-- 현재 Task가 전제한 기준 SHA와의 일치 여부
+- 현재 branch/ref와 `HEAD`
+- current remote `main`/target ref
+- 작업 트리의 modified/untracked 상태
+- 현재 task의 semantic owner와 mutation boundary
+- 기존 proof가 의존하는 surface가 바뀌었는지 여부
 
-기준선이 다르면 임의로 전환하거나 덮어쓰지 말고 차이를 먼저 보고한다. 사용자의 기존 dirty 변경은 보존하며, 해당 변경을 되돌리거나 덮어쓰거나 함께 커밋하지 않는다.
+과거 prompt/report에 기록된 branch, worktree, SHA, command sequence를 기계적으로 재사용하지 않는다.
 
-### `main` 역할
+### Workspace / isolation
 
-- `main`은 canonical mirror only다. source/document mutation workspace로 사용하지 않는다.
-- 정상 상태는 branch/ref authority=`main`, `HEAD=LIVE_MAIN`, worktree=`CLEAN`이다.
-- `main`에 task-local commit, unpublished candidate history, 여러 executor의 변경, publication 준비 commit, stale integration commit을 축적하지 않는다.
-- live main 또는 canonical mirror가 dirty/stale/unresolved라면 새 mutating task를 그 상태에서 시작하지 않는다. 먼저 분류·복구·보존 판단을 한다.
+- branch, worktree, detached workspace는 **opt-in execution mechanics**다.
+- current checkout에 foreign dirty state가 있거나, 다른 live mutator와 physical isolation이 실제로 필요하거나, recovery identity가 필요한 경우에만 사용한다.
+- 동일한 mutable semantic/runtime surface에는 동시에 하나의 active mutator만 둔다.
+- read-only 조사와 서로 독립적인 mutation은 실제 mutable surface가 분리되어 있을 때 병렬 수행할 수 있다.
+- 사용자나 다른 작업의 dirty/untracked/ignored/recovery state를 reset, restore, stash, clean, stage, commit, delete하지 않는다.
+- task-local topology를 다음 task의 authority로 자동 승계하지 않는다.
 
-### Mutating Task Admission
-
-모든 source/test/config/docs mutation은 실제 변경 전에 admission을 통과해야 한다.
-
-1. **Canonical mirror health**: live main 직접 조회, canonical main mirror health, dirty/local commit 존재 여부를 확인한다.
-2. **Exact live-main verification**: current live-main을 독립적인 현재 조회로 재확인한다. 오래된 memory/plan의 SHA를 canonical truth로 사용하지 않는다.
-3. **Semantic mutator overlap**: owned surface와 현재 진행/게시된 semantic change의 겹침을 확인한다.
-
-Admission 후 사용할 mutation surface는 다음을 모두 만족해야 한다.
-
-- exact live-main SHA에서 시작
-- named development branch 없음
-- 장기 independent history 없음
-- 하나의 bounded semantic owner만 소유
-- 다른 parallel Task와 mutable state를 공유하지 않음
-- 다음 Task의 workspace로 재사용하지 않음
-- Task 종료 후 완전히 retire 가능
-
-이 조건을 물리적으로 증명할 수 없으면 자동 branch/worktree를 만들지 않는다.
+필요할 때 task context에만 다음 transient evidence를 둘 수 있다.
 
 ```text
-MUTATION_COLLISION / POSSIBLE_COLLISION / UNKNOWN_OVERLAP
-→ SERIALIZE 또는 RE-SPLIT
+DIRECT_PATHS
+SEMANTIC_OWNERS
+PROOF_OWNERS
 ```
 
-### Publication transport
-
-- `main`에는 문서-only 변경을 포함해 직접 commit/push하지 않는다.
-- PR publication이 실제 필요한 시점에만 short-lived temporary publication transport ref를 만든다. publication transport ref는 source development branch가 아니다.
-- publication transport ref 때문에 shared checkout을 checkout/switch로 점유하지 않는다 (`PUBLICATION_BRANCH_MAY_EXIST_AS_TRANSPORT_REF_BUT_MUST_NOT_TAKE_OVER_SHARED_CHECKOUT = YES`). 가능하면 exact candidate commit을 직접 remote temporary ref로 publish하는 worktree-checkout-free transport를 사용한다 (`scripts/git/publication-transport.mjs`).
-- publication branch/PR 생성 직전과 merge 권한 행사 직전에 반드시 live `main`을 다시 조회하고 `scripts/git/publication-admission.mjs` admission gate로 owned effective delta를 재평가한다. delta가 0이면 새 PR·merge·CI·deploy 없이 `COMPLETE_ALREADY_PUBLISHED` / `SUPERSEDED_ALREADY_PUBLISHED`로 종료한다.
-- PR 생성 후 live `main`이 이동하면 source work를 재생성하지 않는다. 먼저 PRE_MERGE admission을 다시 판단한다. owned delta가 이미 흡수됐으면 `SUPERSEDED_ALREADY_PUBLISHED`로 종료한다.
-- owned delta가 남아 있고 movement가 unrelated이며 freshness가 필요하면 shared checkout을 건드리지 않는 server-side transport maintenance만 고려한다. 이를 source semantic reconciliation으로 확대하지 않는다.
-- provider-side update가 conflict를 보고하거나 semantic owner overlap이 확인되면 local dirty checkout에서 merge/rebase하지 말고 fail-closed (`BLOCKED_TRANSPORT_CONFLICT` / `SEMANTIC_OWNER_REVIEW_REQUIRED`)한다.
-- foreign dirty shared checkout에서의 local merge/rebase/cherry-pick fallback은 금지한다.
-- temporary publication ref cleanup은 해당 ref만 제거한다. shared checkout branch/HEAD 및 foreign dirty는 publication transport cleanup 대상이 아니다.
-- `main` 통합 자체를 production 배포 승인으로 해석하지 않는다.
-- production 배포는 현재 출시 PLAN의 별도 승인 게이트와 실제 release SHA 확인 뒤에만 수행한다.
-- exact-SHA 배포 또는 promotion 절차가 불명확하면 임의 production 배포보다 중단을 우선한다.
+이 정보를 위한 global ownership registry는 만들지 않는다.
 
 ## 3. 최소 Context 로딩
 
@@ -135,71 +102,106 @@ MUTATION_COLLISION / POSSIBLE_COLLISION / UNKNOWN_OVERLAP
 3. 공통 타입과 해당 API·도메인 명세
 4. 실제 의존 증거가 있는 인접 도메인
 
-가능성만으로 다른 앱이나 전체 도메인을 로드하지 않는다.
+세션이 사라져도 repository truth와 durable decision을 복원할 수 있어야 한다. cross-session continuity가 정말 필요하고 기존 project authority에서 재구성할 수 없는 정보만 현재 canonical owner에 남긴다.
 
 ## 4. 설계와 변경 원칙
 
 - 동작이나 공개 계약을 바꾸기 전에 관련 `docs/specs/`와 현재 계약을 확인한다.
 - 신규 기능이나 계약 변경은 권한이 있는 Task에서 명세와 구현을 함께 정합화한다.
 - 비즈니스 규칙과 인프라·외부 공급자 코드를 분리한다.
-- 현재 Task의 대상 파일과 Acceptance Criteria 안에서만 변경한다.
-- 파일 규모나 구조 부채는 범위 밖이면 별도 Backlog 또는 후속 Task로 남긴다.
+- current task의 root cause를 닫는 smallest coherent change를 만든다. 최소 LOC나 최소 파일 수가 목표가 아니다.
+- 다른 semantic owner가 필요한 boundary drift를 발견하면 현재 boundary 안에서 독립적으로 가능한 작업은 계속하고, cross-boundary mutation은 별도 dependency/reframe 대상으로 남긴다.
 
 ### 문서 정합성 감사
 
 - 문서끼리 표현을 맞추는 것보다 현재 사실·의도된 계약·검증된 보장의 일치를 우선한다.
 - 실제 동작은 코드·설정, 검증된 보장은 테스트, 의도된 계약은 current spec으로 구분한다.
-- 코드와 문서가 다르면 문서를 무조건 코드에 맞추지 않는다.
-- 결제·환불·권한·개인정보·배포·운영 데이터 등 중요 계약 불일치는 implementation finding으로 승격할 수 있다.
-- current 상태는 사실 소유 문서에만 유지하고 다른 문서에는 역할상 필요한 최소 요약만 둔다.
 - historical 문서의 과거 TODO·실행 지시를 현재 작업으로 자동 승계하지 않는다.
-- 문서 감사에서 발견한 코드 결함은 계약·위험도·Acceptance Criteria까지 정의하되 실제 remediation은 별도 Task로 분리한다.
+- current 상태는 사실 소유 문서에만 유지하고 다른 문서에는 역할상 필요한 최소 요약만 둔다.
 - 세부 판정·분류는 `docs/DOCUMENT_CONSISTENCY.md`를 따른다.
 
 ## 5. 승인 경계
 
 - 외부 서비스, 운영 환경, 배포, 환경 변수, 비밀값, 운영 데이터, 마이그레이션, 알림 발송은 명시적 승인 없이 변경하지 않는다.
-- `commit`, `push`, PR 생성·수정·병합, GitHub 설정 변경은 현재 사용자 요청이 명시적으로 승인한 경우에만 수행한다.
-- 삭제, 대량 이동, 이력 변경 등 복구가 어려운 작업은 정확한 대상을 확인하고 별도 승인을 받는다.
+- `commit`, `push`, PR 생성·수정·병합, GitHub 설정 변경은 현재 사용자 요청의 bounded intent 안에서만 수행한다.
+- 삭제, 대량 이동, 이력 변경 등 복구가 어려운 작업은 정확한 대상과 소유권을 확인한다.
+- blocker나 proof 부족은 더 넓은 외부 mutation 권한을 자동으로 만들지 않는다.
 
 ## 6. 검증
 
-- Acceptance Criteria에 직접 대응하는 최소 검증을 실행한다.
-- 검증 명령을 실행하기 전에 실제 스크립트 내용을 확인한다.
-- `--fix`, 쓰기형 formatter, seed, migration, deploy처럼 파일이나 외부 상태를 수정하는 명령을 읽기 전용 검증으로 사용하지 않는다.
-- 검증을 위해 사용자 변경을 임시 수정·삭제하지 않는다.
-- 실행하지 못했거나 실패한 검증은 숨기지 않고 완료 결과와 분리해 보고한다.
+Criterion first.
 
-## 7. Result Intake / Task 종료 / Control Tower Closure
+- 먼저 “어떤 테스트를 추가할까”가 아니라 “이 criterion을 가장 싸고 충실하게 falsify/confirm할 evidence가 무엇인가”를 묻는다.
+- focused unit/contract/static proof로 충분하면 거기서 멈춘다.
+- 실제 DB transaction, browser, process lifecycle, device/OS, concurrency/timing이 criterion이면 그 boundary에서 검증한다.
+- broad/full verification은 실제 cross-cutting risk, shared contract 영향, repository/release gate, targeted proof로 해결되지 않는 uncertainty가 있을 때만 확대한다.
+- unrelated broad-gate failure는 현재 change delta인지 분류한 뒤 active failure domain에 속할 때만 수정한다.
+- 실행하지 못했거나 실패한 검증은 숨기지 않고 outcome과 분리해 보고한다.
 
-Executor 결과를 받으면 STATUS 문자열만 반복하지 말고 현재 직접 증거로 의미를 재분류한다.
+Git publication safety의 focused regression은 다음으로 실행할 수 있다.
 
-기본 순서:
-
-```text
-RESULT INTAKE
-→ CANONICAL STATE UPDATE
-→ LIVE MAIN RE-READ
-→ PUBLICATION / EFFECTIVE DELTA CLASSIFICATION
-→ CANONICAL MAIN MIRROR HEALTH CHECK
-→ DIRTY / LOCAL COMMIT CLASSIFICATION
-→ SAFE RETIREMENT OR PRESERVATION DECISION
-→ MIRROR RECOVERY IF REQUIRED
-→ main + HEAD=LIVE_MAIN + CLEAN 확인
-→ PROBLEM FRAMER v2.0: DROP | WATCH | CHANGE
-→ DROP: NO SUCCESSOR → CONTROL TOWER CLOSED
-→ WATCH: SIGNAL + PROMOTION_TRIGGER ONLY, NO TASK → CONTROL TOWER CLOSED
-→ CHANGE: SMALLEST SUFFICIENT CLOSURE → NEXT BOUNDED STATE TRANSITION
-→ CONTROL TOWER CLOSED
+```bash
+pnpm test:git-safety
 ```
 
-Task를 완료할 때 다음을 확인한다.
+## 7. Publication과 closure
 
-- Acceptance Criteria 충족 여부
-- 실행한 Verify와 결과
-- 변경 파일과 남은 위험
-- `git diff`와 최종 작업 트리 상태
-- 후속 Task 또는 차단 요인
-- `friction_observed`: 이번 세션에서 반복 가능성이 있는 문제, coordination friction, 정책/도구 공백. 없으면 `NONE`.
+Publication이 current bounded outcome에 포함된 경우에만 수행한다.
 
-문서 수정이 허용된 Task에서만 현재 Task의 상태, 검증 증거, 완료 결론을 갱신한다. `docs/memory.md`는 프로젝트 현재 상태가 실제로 바뀌었을 때만 갱신한다. 역사 문서를 자동으로 아카이브하지 않는다.
+기본:
+
+```text
+semantic result
+→ nearest faithful proof
+→ fresh remote authority
+→ semantic / proof / publication freshness classification
+→ minimum necessary binding
+→ normal non-force publication
+→ remote read-back
+```
+
+- remote SHA movement만으로 semantic work를 재구현하거나 unrelated proof를 다시 돌리지 않는다.
+- semantic owner가 바뀌었으면 affected semantics를 re-evaluate한다.
+- proof owner만 바뀌었으면 affected proof만 다시 실행한다.
+- topology-only movement이면 semantic work와 still-valid proof를 보존하고 publication binding만 갱신한다.
+- exact owned-path publication 중복/충돌 판정이 필요한 경우 `scripts/git/publication-admission.mjs`를 사용한다.
+- temporary remote transport가 필요한 경우 `scripts/git/publication-transport.mjs`의 non-force exact-candidate transport를 사용한다.
+- push/merge 명령 성공만으로 publication 완료를 선언하지 않고 canonical remote를 직접 read-back한다.
+- 반복적인 same-target publication contention이 직접 증명되기 전에는 publication queue, daemon, custom lock service를 추가하지 않는다. 필요성이 입증되면 최종 publication critical section만 가장 작게 serialize하고 provider-native 기능을 우선한다.
+
+Task 종료 전 current task가 직접 만든 transient workspace/ref/artifact만 reconcile한다. repository 전체 cleanup은 수행하지 않는다.
+
+## 8. UNKNOWN / blocker / 사람에게 묻기
+
+UNKNOWN은 lifecycle state가 아니라 **현재 결론에 필요한데 아직 확인되지 않은 정확한 fact**로 취급한다.
+
+- 현재 outcome의 필수 precondition이 아니면 독립 작업을 계속하고 residual로 남긴다.
+- 직접 evidence로 확인 가능하면 nearest faithful observation으로 해결한다.
+- product/domain/security/policy/risk/irreversible authority처럼 사용자 소유의 material fork가 남을 때만 질문한다.
+- failed test, debugging difficulty, ordinary implementation choice, stale historical mechanics는 그 자체로 human escalation 조건이 아니다.
+- 안전성이나 authority가 불명확하면 전체 task가 아니라 해당 unsafe transition만 fail closed한다.
+
+## 9. Automation admission
+
+자동화의 기본 대상은 deterministic하고 직접 검증 가능한 개발 단계다.
+
+허용되는 기본 예:
+
+- focused tests / lint / typecheck / build
+- Git status/fresh remote/read-back
+- non-force publication guard
+- exact owned-delta check
+- task-owned temporary artifact의 안전한 closure
+- CI/repository-native gate
+
+현재 기본적으로 만들지 않는 것:
+
+- task queue / scheduler
+- persistent task or ownership registry
+- READY/IN_FLIGHT/claim/lease/heartbeat lifecycle
+- coordinator daemon / wake loop
+- executor report transport/reconciliation control plane
+- custom publication queue/lock platform
+- context/proof/session database
+
+향후 autonomous execution 수요가 실제로 입증되면 먼저 stateless 또는 thin local runner로 시작하고, persistent state는 기존 primitive로 해결할 수 없는 반복적 실패가 직접 증명될 때만 추가한다.
