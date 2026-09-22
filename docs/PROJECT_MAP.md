@@ -133,6 +133,9 @@ pnpm test:firestore-rules
 pnpm test:storage-rules
 pnpm test:e2e
 pnpm load:smoke
+pnpm test:git-safety
+pnpm test:agent-runner
+pnpm test:agent-publication
 ```
 
 주의:
