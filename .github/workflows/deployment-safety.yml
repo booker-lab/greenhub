@@ -20,3 +20,5 @@ jobs:
           node-version: '22'
       - name: Verify deployment safety invariants
         run: node scripts/verify-deployment-safety.mjs
+      - name: Verify Git publication safety
+        run: node --test scripts/git/publication-admission.spec.mjs scripts/git/publication-transport.spec.mjs
