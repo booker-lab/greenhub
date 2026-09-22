@@ -191,6 +191,11 @@ function remoteRefSha(bare, ref) {
   return output.length > 0 ? output.split(/\s+/)[0] : null;
 }
 
+function remoteTemporaryRefs(bare) {
+  const output = git(bare, ['for-each-ref', '--format=%(refname)', 'refs/heads/tmp/']);
+  return output.length > 0 ? output.split('\n').filter((entry) => entry.length > 0) : [];
+}
+
 function squashMergeIntoBare({ bare, candidateSha, message }) {
   const tree = git(bare, ['rev-parse', `${candidateSha}^{tree}`]);
   const parent = git(bare, ['rev-parse', 'refs/heads/main']);
@@ -271,7 +276,7 @@ function createFakeGithub({
   };
   const runGh = (args) => {
     calls.push({ args: [...args] });
-    if (args[0] === 'auth' && args[1] === 'status') return ok('github.com\n  ✓ Logged in\n');
+    if (args[0] === 'auth' && args[1] === 'status') return ok('github.com\n  ??Logged in\n');
     if (args[0] === 'repo' && args[1] === 'view') return ok(`${repository}\n`);
     if (args[0] === 'api' && args[1] === `repos/${repository}`) {
       return ok(JSON.stringify({ allow_squash_merge: allowSquashMerge }));
@@ -366,7 +371,7 @@ function createFakeGithub({
   return { runGh, calls, prs, state };
 }
 
-test('GOLDEN — candidate is committed from observed paths, published, merged, read back, cleaned', () => {
+test('GOLDEN ??candidate is committed from observed paths, published, merged, read back, cleaned', () => {
   const fixture = buildFixture();
   try {
     const fake = createFakeOpencode({
@@ -413,6 +418,10 @@ test('GOLDEN — candidate is committed from observed paths, published, merged, 
     assert.deepEqual(result.publication.requiredChecks, ['verify']);
     assert.equal(result.publication.checks.status, 'PASSED');
     assert.equal(result.publication.preMerge.status, 'PUBLICATION_ALLOWED');
+    assert.equal(result.publication.rebind.status, 'NOT_REQUIRED');
+    assert.equal(result.publication.rebind.count, 0);
+    assert.equal(result.publication.attempts, 1);
+    assert.deepEqual(result.publication.stalePublications, []);
 
     const mergeArgs = github.state.mergeCalls[0].args;
     assert.ok(mergeArgs.includes('--squash'));
@@ -421,6 +430,7 @@ test('GOLDEN — candidate is committed from observed paths, published, merged, 
     const remoteMain = git(fixture.bare, ['rev-parse', 'refs/heads/main']);
     assert.notEqual(remoteMain, candidate);
     assert.throws(() => git(fixture.bare, ['merge-base', '--is-ancestor', candidate, remoteMain]));
+    assert.equal(git(fixture.bare, ['show', `${remoteMain}:src/allowed.txt`]), 'ok');
     assert.equal(result.publication.merge.mergeSha, remoteMain);
     assert.equal(result.publication.remoteMainSha, remoteMain);
     assert.equal(result.publication.remoteDeltaVerified, true);
@@ -1037,4 +1047,347 @@ test('transport ref names are task-owned, invocation-unique, and candidate-only'
   assert.ok(args.includes('user.name=greenhub-run-publish-once'));
   assert.ok(args.some((entry) => entry.startsWith('core.hooksPath=')));
   assert.equal(PUBLICATION_SUCCESS_OUTCOMES.includes(SUCCESS_PUBLISHED), true);
+});
+
+test('B ??unrelated PRE_PR movement re-binds the exact delta without a second OpenCode run', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare });
+    let movedMainSha = null;
+    let proofCalls = 0;
+    const result = runPublishOnce(publishOptions(fixture, { proofCommands: ['rebind-move-proof'] }), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+      runProofCommand: () => {
+        proofCalls += 1;
+        if (movedMainSha === null) {
+          movedMainSha = rivalPublish({
+            bare: fixture.bare,
+            files: { 'unrelated.txt': 'moved-unrelated\n' },
+            message: 'unrelated movement before PRE_PR',
+          });
+        }
+        return { exitCode: 0, signal: null, timedOut: false, stdout: '', stderr: '' };
+      },
+    });
+
+    assert.equal(result.status, SUCCESS_PUBLISHED);
+    assert.equal(fake.invocations.length, 1);
+    assert.equal(result.publication.rebind.status, 'REBOUND');
+    assert.equal(result.publication.rebind.count, 1);
+    assert.equal(result.publication.attempts, 1);
+    assert.notEqual(movedMainSha, null);
+    assert.equal(proofCalls, 2);
+
+    const candidate = result.publication.candidate.candidateSha;
+    const originalCandidate = result.publication.rebind.history[0].previousCandidateSha;
+    assert.deepEqual(
+      git(fixture.root, ['rev-list', '--parents', '-n', '1', candidate]).split(/\s+/),
+      [candidate, movedMainSha],
+    );
+    assert.deepEqual(
+      git(fixture.root, ['diff', '--name-only', `${movedMainSha}..${candidate}`])
+        .split('\n')
+        .filter((entry) => entry.length > 0),
+      ['src/allowed.txt'],
+    );
+    assert.equal(
+      git(fixture.root, ['ls-tree', candidate, '--', 'src/allowed.txt']),
+      git(fixture.root, ['ls-tree', originalCandidate, '--', 'src/allowed.txt']),
+    );
+    assert.equal(git(fixture.root, ['show', `${candidate}:unrelated.txt`]), 'moved-unrelated');
+    const remoteMain = git(fixture.bare, ['rev-parse', 'refs/heads/main']);
+    assert.equal(git(fixture.bare, ['show', `${remoteMain}:unrelated.txt`]), 'moved-unrelated');
+    assert.equal(git(fixture.bare, ['show', `${remoteMain}:src/allowed.txt`]), 'ok');
+
+    assert.equal(github.prs.get(1).headRefOid, candidate);
+    assert.equal(valueOf(github.state.mergeCalls[0].args, '--match-head-commit'), candidate);
+    assert.equal(remoteRefSha(fixture.bare, 'tmp/spec-transport'), null);
+    assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+    assert.equal(existsSync(result.workspace.path), false);
+    assert.equal(existsSync(dirname(result.workspace.path)), false);
+    assert.equal(result.canonicalCheckout.unchanged, true);
+    assert.equal(result.publication.remoteDeltaVerified, true);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('C ??movement during CI retires the first PR and publishes the rebound candidate', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const checkedPrs = new Set();
+    let movedMainSha = null;
+    let moved = false;
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      onChecks: ({ pr }) => {
+        checkedPrs.add(pr.number);
+        if (!moved) {
+          moved = true;
+          movedMainSha = rivalPublish({
+            bare: fixture.bare,
+            files: { 'unrelated-1.txt': 'moved-during-ci\n' },
+            message: 'movement during CI',
+          });
+        }
+      },
+    });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS_PUBLISHED);
+    assert.equal(fake.invocations.length, 1);
+    assert.equal(github.prs.size, 2);
+    assert.equal(github.prs.get(1).state, 'CLOSED');
+    assert.equal(github.prs.get(2).state, 'MERGED');
+    assert.equal(github.state.closeCalls.length, 1);
+    assert.deepEqual([...checkedPrs].sort(), [1, 2]);
+    assert.equal(result.publication.attempts, 2);
+    assert.equal(result.publication.rebind.count, 1);
+    assert.equal(result.publication.stalePublications.length, 1);
+    assert.equal(result.publication.stalePublications[0].prClose, 'CLOSED');
+    assert.equal(result.publication.stalePublications[0].transportCleanup, 'REMOVED');
+    assert.equal(result.publication.pr.number, 2);
+    const candidate = result.publication.candidate.candidateSha;
+    assert.deepEqual(
+      git(fixture.root, ['rev-list', '--parents', '-n', '1', candidate]).split(/\s+/),
+      [candidate, movedMainSha],
+    );
+    assert.equal(valueOf(github.state.mergeCalls[0].args, '--match-head-commit'), candidate);
+    assert.equal(result.publication.remoteDeltaVerified, true);
+    assert.equal(remoteRefSha(fixture.bare, 'tmp/spec-transport'), null);
+    assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('D ??owned path conflict before PRE_PR blocks with zero provider calls and no overwrite', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare });
+    let foreignMainSha = null;
+    const result = runPublishOnce(
+      publishOptions(fixture, { proofCommands: ['foreign-owned-proof'] }),
+      {
+        invokeOpencode: fake.invokeOpencode,
+        runGh: github.runGh,
+        log: () => {},
+        runProofCommand: () => {
+          if (foreignMainSha === null) {
+            foreignMainSha = rivalPublish({
+              bare: fixture.bare,
+              files: { 'src/allowed.txt': 'foreign-owned\n' },
+              message: 'foreign edit on the owned path',
+            });
+          }
+          return { exitCode: 0, signal: null, timedOut: false, stdout: '', stderr: '' };
+        },
+      },
+    );
+    assert.equal(result.status, PUBLICATION_BLOCKED);
+    assert.equal(result.publication.rebind.status, 'BLOCKED');
+    assert.equal(github.calls.length, 0);
+    assert.equal(github.state.mergeCalls.length, 0);
+    assert.equal(remoteRefSha(fixture.bare, 'tmp/spec-transport'), null);
+    assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+    assert.equal(git(fixture.bare, ['show', `${foreignMainSha}:src/allowed.txt`]), 'foreign-owned');
+    assert.equal(result.canonicalCheckout.unchanged, true);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('D2 ??owned path conflict during CI retains the PR and blocks the merge', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    let moved = false;
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      onChecks: () => {
+        if (!moved) {
+          moved = true;
+          rivalPublish({
+            bare: fixture.bare,
+            files: { 'src/allowed.txt': 'foreign-during-ci\n' },
+            message: 'foreign owned edit during CI',
+          });
+        }
+      },
+    });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+    });
+    assert.equal(result.status, PUBLICATION_BLOCKED);
+    assert.equal(result.publication.rebind.status, 'BLOCKED');
+    assert.equal(github.state.mergeCalls.length, 0);
+    assert.equal(github.prs.get(1).state, 'OPEN');
+    assert.equal(result.publication.retained, true);
+    assert.equal(result.publication.transportCleanup, 'RETAINED');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('E ??proof-owner-scoped movement re-executes only the affected proof', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare });
+    const executed = [];
+    let moved = false;
+    const result = runPublishOnce(
+      publishOptions(fixture, {
+        proofCommands: ['proof-one', 'proof-two'],
+        proofOwners: [['src'], ['docs']],
+      }),
+      {
+        invokeOpencode: fake.invokeOpencode,
+        runGh: github.runGh,
+        log: () => {},
+        runProofCommand: ({ command }) => {
+          executed.push(command);
+          if (!moved) {
+            moved = true;
+            rivalPublish({
+              bare: fixture.bare,
+              files: { 'src/unrelated.txt': 'owner-one movement\n' },
+              message: 'movement inside proof-one owner',
+            });
+          }
+          return { exitCode: 0, signal: null, timedOut: false, stdout: '', stderr: '' };
+        },
+      },
+    );
+    assert.equal(result.status, SUCCESS_PUBLISHED);
+    assert.deepEqual(executed, ['proof-one', 'proof-two', 'proof-one']);
+    assert.deepEqual(result.publication.rebind.history[0].proofReexecutions, [
+      { command: 'proof-one', owners: ['src'], stale: true },
+      { command: 'proof-two', owners: ['docs'], stale: false },
+    ]);
+    assert.equal(result.publication.rebind.count, 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('E2 ??no movement and no proof owners re-executes nothing', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare });
+    let calls = 0;
+    const result = runPublishOnce(publishOptions(fixture, { proofCommands: ['only-proof'] }), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+      runProofCommand: () => {
+        calls += 1;
+        return { exitCode: 0, signal: null, timedOut: false, stdout: '', stderr: '' };
+      },
+    });
+    assert.equal(result.status, SUCCESS_PUBLISHED);
+    assert.equal(calls, 1);
+    assert.equal(result.publication.rebind.status, 'NOT_REQUIRED');
+    assert.equal(result.publication.rebind.count, 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('F ??repeated movement is bounded by maxRebindAttempts and ends REFRESH_REQUIRED', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const movedPrs = new Set();
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      onChecks: ({ pr }) => {
+        if (!movedPrs.has(pr.number)) {
+          movedPrs.add(pr.number);
+          rivalPublish({
+            bare: fixture.bare,
+            files: { [`unrelated-${pr.number}.txt`]: `moved-${pr.number}\n` },
+            message: `movement during CI for PR ${pr.number}`,
+          });
+        }
+      },
+    });
+    const result = runPublishOnce(publishOptions(fixture, { maxRebindAttempts: 1 }), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+    });
+    assert.equal(result.status, PUBLICATION_REFRESH_REQUIRED);
+    assert.equal(result.publication.rebind.status, 'EXHAUSTED');
+    assert.equal(result.publication.rebind.count, 1);
+    assert.equal(result.publication.attempts, 2);
+    assert.ok(github.prs.size <= 2);
+    assert.equal(result.publication.retained, true);
+    assert.equal(fake.invocations.length, 1);
+    assert.equal(result.publication.transportCleanup, 'RETAINED');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('G ??a rebind whose affected proof fails ends PROOF_FAILED with no PR and no leak', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare });
+    let calls = 0;
+    const result = runPublishOnce(
+      publishOptions(fixture, { proofCommands: ['proof-one'], proofOwners: [['src']] }),
+      {
+        invokeOpencode: fake.invokeOpencode,
+        runGh: github.runGh,
+        log: () => {},
+        runProofCommand: () => {
+          calls += 1;
+          if (calls === 1) {
+            rivalPublish({
+              bare: fixture.bare,
+              files: { 'src/unrelated.txt': 'movement\n' },
+              message: 'movement inside proof-one owner',
+            });
+            return { exitCode: 0, signal: null, timedOut: false, stdout: '', stderr: '' };
+          }
+          return {
+            exitCode: 1,
+            signal: null,
+            timedOut: false,
+            stdout: '',
+            stderr: 'rebound proof failed',
+          };
+        },
+      },
+    );
+    assert.equal(result.status, PROOF_FAILED);
+    assert.equal(result.publication.rebind.status, 'PROOF_FAILED');
+    assert.equal(github.calls.length, 0);
+    assert.equal(github.prs.size, 0);
+    assert.equal(remoteRefSha(fixture.bare, 'tmp/spec-transport'), null);
+    assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+    assert.equal(existsSync(result.workspace.path), false);
+    assert.equal(existsSync(dirname(result.workspace.path)), false);
+    assert.equal(result.canonicalCheckout.unchanged, true);
+    assert.equal(fake.invocations.length, 1);
+  } finally {
+    removeFixture(fixture);
+  }
 });

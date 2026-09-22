@@ -433,6 +433,11 @@ function createResult(options = {}) {
       title: options.title ?? null,
       allowedPaths: Array.isArray(options.allowedPaths) ? [...options.allowedPaths] : [],
       proofCommands: Array.isArray(options.proofCommands) ? [...options.proofCommands] : [],
+      proofOwners: Array.isArray(options.proofOwners)
+        ? options.proofOwners.map((owners) =>
+            Array.isArray(owners) ? owners.map((entry) => String(entry)) : [],
+          )
+        : [],
     },
     baseline: {
       remote: options.remote ?? 'origin',
@@ -501,6 +506,23 @@ function validateRunOnceInput(options) {
       options.proofCommands.some((entry) => typeof entry !== 'string' || entry.trim().length === 0))
   ) {
     return '--proof commands must be non-empty strings';
+  }
+  if (options.proofOwners != null) {
+    const proofCommands = Array.isArray(options.proofCommands) ? options.proofCommands : [];
+    if (!Array.isArray(options.proofOwners)) {
+      return '--proof-owner entries must be arrays of non-empty strings';
+    }
+    if (options.proofOwners.length !== proofCommands.length) {
+      return '--proof-owner entries must be index-parallel with --proof commands';
+    }
+    for (const owners of options.proofOwners) {
+      if (
+        !Array.isArray(owners) ||
+        owners.some((entry) => typeof entry !== 'string' || entry.trim().length === 0)
+      ) {
+        return '--proof-owner entries must be arrays of non-empty strings';
+      }
+    }
   }
   for (const numeric of ['opencodeTimeoutMs', 'proofTimeoutMs']) {
     const value = options[numeric];
@@ -829,6 +851,7 @@ export const USAGE = [
   '  --task <file>               bounded task contract file (OUTCOME/PRESERVE/PROOF/ESCALATE ONLY IF)',
   '  --allow <path>              repo-relative path the task may mutate (repeatable, required)',
   '  --proof <command>           focused proof command, run in order in the workspace (repeatable)',
+  '  --proof-owner <path>        semantic/proof owner path for the most recent --proof (repeatable)',
   '  --title <title>             optional OpenCode session title',
   '  --model <provider/model>    optional OpenCode model override',
   '  --agent <name>              optional OpenCode agent override',
@@ -846,6 +869,7 @@ export function parseArgs(argv) {
     taskFile: null,
     allowedPaths: [],
     proofCommands: [],
+    proofOwners: [],
     title: null,
     model: null,
     agent: null,
@@ -875,12 +899,20 @@ export function parseArgs(argv) {
       options.help = true;
       continue;
     }
-    if (arg === '--allow' || arg === '--proof') {
+    if (arg === '--allow' || arg === '--proof' || arg === '--proof-owner') {
       const value = argv[index + 1];
       if (value === undefined) return { ok: false, error: `${arg} requires a value` };
       index += 1;
       if (arg === '--allow') options.allowedPaths.push(value);
-      else options.proofCommands.push(value);
+      else if (arg === '--proof') {
+        options.proofCommands.push(value);
+        options.proofOwners.push([]);
+      } else {
+        if (options.proofCommands.length === 0) {
+          return { ok: false, error: '--proof-owner requires a preceding --proof' };
+        }
+        options.proofOwners[options.proofOwners.length - 1].push(value);
+      }
       continue;
     }
     if (Object.hasOwn(valueFlags, arg)) {

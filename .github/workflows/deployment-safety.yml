@@ -21,7 +21,7 @@ jobs:
       - name: Verify deployment safety invariants
         run: node scripts/verify-deployment-safety.mjs
       - name: Verify Git publication safety
-        run: node --test scripts/git/publication-admission.spec.mjs scripts/git/publication-transport.spec.mjs
+        run: node --test scripts/git/publication-admission.spec.mjs scripts/git/publication-transport.spec.mjs scripts/git/publication-rebind.spec.mjs
       - name: Verify stateless run-once executor safety
         run: node --test scripts/agent/run-once.spec.mjs
       - name: Verify stateless run-publish-once publication safety
