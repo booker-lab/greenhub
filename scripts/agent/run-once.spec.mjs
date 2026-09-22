@@ -67,6 +67,10 @@ function buildFixture() {
     mkdirSync(join(root, 'src'), { recursive: true });
     writeFileSync(join(root, 'src', 'base.txt'), 'base\n');
     writeFileSync(join(root, 'README.md'), 'base\n');
+    writeFileSync(
+      join(root, 'proof-check.cjs'),
+      "const { readFileSync } = require('node:fs');\nconst content = readFileSync('src/allowed.txt', 'utf8');\nif (content !== 'ok\\n') process.exit(1);\n",
+    );
     git(root, ['add', '-A']);
     git(root, ['commit', '-m', 'base']);
     const baseSha = git(root, ['rev-parse', 'HEAD']);
@@ -394,19 +398,22 @@ test('CASE 8b — default proof runner executes the caller command in the worksp
   const fixture = buildFixture();
   try {
     const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
-    const passing = runOnce(runOptions(fixture, { proofCommands: ['node -e process.exit(0)'] }), {
+    const passing = runOnce(runOptions(fixture, { proofCommands: ['node proof-check.cjs'] }), {
       invokeOpencode: fake.invokeOpencode,
       log: () => {},
     });
     assert.equal(passing.status, SUCCESS);
     assert.equal(passing.proofResults[0].exitCode, 0);
 
-    const failing = runOnce(runOptions(fixture, { proofCommands: ['node -e process.exit(7)'] }), {
-      invokeOpencode: fake.invokeOpencode,
-      log: () => {},
-    });
+    const failing = runOnce(
+      runOptions(fixture, { proofCommands: ['node --definitely-not-a-flag'] }),
+      {
+        invokeOpencode: fake.invokeOpencode,
+        log: () => {},
+      },
+    );
     assert.equal(failing.status, PROOF_FAILED);
-    assert.equal(failing.proofResults[0].exitCode, 7);
+    assert.notEqual(failing.proofResults[0].exitCode, 0);
   } finally {
     removeFixture(fixture);
   }
@@ -646,18 +653,19 @@ test('OpenCode command builder uses one-shot JSON automation flags', () => {
 });
 
 test('Windows shim resolution finds the real executable behind a cmd shim', () => {
-  const shimPath = 'C:\\tools\\opencode.cmd';
-  const exePath = 'C:\\tools\\node_modules\\opencode-ai\\bin\\opencode.exe';
+  const toolsDirectory = 'C:\\tools';
+  const shimPath = join(toolsDirectory, 'opencode.cmd');
+  const exePath = `${toolsDirectory}\\node_modules\\opencode-ai\\bin\\opencode.exe`;
   const resolved = resolveOpencodeCommand({
     explicitBin: null,
-    baseEnv: { PATH: 'C:\\tools' },
+    baseEnv: { PATH: toolsDirectory },
     platform: 'win32',
     exists: (candidate) => candidate === shimPath || candidate === exePath,
     readFile: () => '@ECHO off\n"%dp0%\\node_modules\\opencode-ai\\bin\\opencode.exe" %*\n',
   });
   assert.deepEqual(resolved, { command: exePath, prefixArgs: [], source: 'windows-shim' });
 
-  const scriptPath = 'C:\\tools\\node_modules\\pkg\\bin\\cli.js';
+  const scriptPath = `${toolsDirectory}\\node_modules\\pkg\\bin\\cli.js`;
   const scriptTarget = extractWindowsShimTarget({
     shimPath,
     exists: (candidate) => candidate === scriptPath,
