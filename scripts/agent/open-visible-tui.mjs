@@ -3,6 +3,11 @@
 // automation).
 //
 // One foreground, operator-observed OpenCode TUI for live mutation sessions.
+// The TUI process owns its own OpenCode server, so the operator sees exactly one
+// process and there is no separate `serve` + `attach` pair:
+//
+//   opencode <repository-root> --hostname 127.0.0.1 --port <port>
+//
 // This launcher is a transport/observation surface only:
 //
 //   - foreground process only; no background ownership and no supervision loop
@@ -10,13 +15,15 @@
 //   - no durable state, no task selection, no task registry, no work target
 //   - no Git/GitHub authority and no publication credentials
 //   - no automatic repository mutation
+//   - no `opencode web`, no browser, and no additional terminal window
 //
-// It starts a headless `opencode serve` with the same sanitized environment the
-// mutation executor uses (`buildChildEnv` from scripts/agent/run-once.mjs) and
-// then attaches a real OpenCode TUI client to that server. Mutation tasks run as
-// `opencode run --attach` sessions on the same server (run-once VISIBLE_TUI
-// mode), so their tool execution happens inside this sanitized server process
-// and the attached TUI only observes it.
+// The TUI process is spawned with the same sanitized environment the mutation
+// executor uses (`buildChildEnv` from scripts/agent/run-once.mjs). The TUI-owned
+// server is what executes attached mutation sessions, so `opencode run --attach`
+// tools inherit the hardened Git configuration and credential-free environment.
+// Mutation tasks appear in this TUI as sessions (run-once VISIBLE_TUI mode) and
+// the operator selects them with the normal session selector (Ctrl+X L /
+// `/sessions`).
 //
 // Temporary scratch (including the isolated empty GH_CONFIG_DIR) is removed
 // when the TUI exits.
@@ -32,18 +39,11 @@ import { buildChildEnv, OPENCODE_ATTACH_URL_ENV, resolveOpencodeCommand } from '
 
 export const DEFAULT_VISIBLE_HOSTNAME = '127.0.0.1';
 export const DEFAULT_VISIBLE_TUI_PORT = 4096;
-export const DEFAULT_HEALTH_TIMEOUT_MS = 30000;
-export const DEFAULT_HEALTH_POLL_INTERVAL_MS = 500;
-export const HEALTH_REQUEST_TIMEOUT_MS = 4000;
 export const PORT_PROBE_TIMEOUT_MS = 1000;
 
 function messageOf(error) {
   if (error instanceof Error && typeof error.message === 'string') return error.message;
   return String(error);
-}
-
-function defaultSleep(ms) {
-  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
 
 export function repositoryRootFromScript() {
@@ -56,9 +56,9 @@ export function visibleServerUrl({ port = DEFAULT_VISIBLE_TUI_PORT } = {}) {
 
 /**
  * True when something is already listening on the loopback port. The launcher
- * refuses to start when this is the case: attaching the TUI to a server this
- * launcher did not spawn (with the sanitized mutation environment) would break
- * the execution security boundary this mode depends on.
+ * refuses to start when this is the case: the operator must end up with exactly
+ * one TUI-owned server, and silently joining or racing an unknown listener
+ * would break the execution security boundary this mode depends on.
  */
 export function probeTcpPort({
   host = DEFAULT_VISIBLE_HOSTNAME,
@@ -81,55 +81,32 @@ export function probeTcpPort({
   });
 }
 
-export function buildServerArgs({ port = DEFAULT_VISIBLE_TUI_PORT } = {}) {
-  return ['serve', '--hostname', DEFAULT_VISIBLE_HOSTNAME, '--port', String(port)];
-}
-
-export function buildTuiArgs({ url, repositoryRoot }) {
-  const args = ['attach', url];
-  if (typeof repositoryRoot === 'string' && repositoryRoot.length > 0) {
-    args.push('--dir', repositoryRoot);
-  }
-  return args;
+/**
+ * Compose the single operator-visible TUI command. The project positional pins
+ * the TUI to the repository root, and `--hostname`/`--port` make its owned
+ * server bind an explicit loopback port that `run-once` can attach to. There is
+ * deliberately no subcommand: `serve`, `attach`, and `web` must never appear in
+ * this topology.
+ */
+export function buildOperatorArgs({
+  repositoryRoot,
+  port = DEFAULT_VISIBLE_TUI_PORT,
+  hostname = DEFAULT_VISIBLE_HOSTNAME,
+} = {}) {
+  return [repositoryRoot, '--hostname', hostname, '--port', String(port)];
 }
 
 /**
- * Compose the headless server invocation from the same primitives the mutation
+ * Compose the operator TUI invocation from the same primitives the mutation
  * executor uses. `--hostname` is intentionally not caller-selectable at the
- * CLI; the server stays on loopback and its environment is the sanitized child
- * environment (no publication/provider credentials, hardened Git).
+ * CLI; the TUI-owned server stays on loopback and runs under the sanitized
+ * child environment (no publication/provider credentials, hardened Git), which
+ * is the environment attached mutation sessions execute in.
  */
-export function buildServerInvocation({
+export function buildOperatorInvocation({
   opencodeBin = null,
   env = process.env,
   scratchDir,
-  port = DEFAULT_VISIBLE_TUI_PORT,
-  platform,
-  exists,
-  readFile,
-} = {}) {
-  const resolvedCommand = resolveOpencodeCommand({
-    explicitBin: opencodeBin,
-    baseEnv: env,
-    ...(platform === undefined ? {} : { platform }),
-    ...(exists === undefined ? {} : { exists }),
-    ...(readFile === undefined ? {} : { readFile }),
-  });
-  return {
-    resolvedCommand,
-    args: buildServerArgs({ port }),
-    env: buildChildEnv({ baseEnv: env, scratchDir }),
-  };
-}
-
-/**
- * Compose the TUI client invocation. The TUI is a display/control client of the
- * already running server, so it keeps the operator environment; it never
- * executes mutation tools itself.
- */
-export function buildTuiInvocation({
-  opencodeBin = null,
-  env = process.env,
   port = DEFAULT_VISIBLE_TUI_PORT,
   repositoryRoot,
   platform,
@@ -145,7 +122,8 @@ export function buildTuiInvocation({
   });
   return {
     resolvedCommand,
-    args: buildTuiArgs({ url: visibleServerUrl({ port }), repositoryRoot }),
+    args: buildOperatorArgs({ repositoryRoot, port }),
+    env: buildChildEnv({ baseEnv: env, scratchDir }),
   };
 }
 
@@ -184,55 +162,21 @@ export function parseArgs(argv) {
 export const USAGE = [
   'usage: node scripts/agent/open-visible-tui.mjs [--port <n>] [--opencode-bin <path>]',
   '',
-  `  --port <n>                  loopback port to serve (default: ${DEFAULT_VISIBLE_TUI_PORT})`,
+  `  --port <n>                  loopback port for the TUI-owned server (default: ${DEFAULT_VISIBLE_TUI_PORT})`,
   '  --opencode-bin <path>       explicit OpenCode executable (default: resolved from PATH)',
   '',
-  'Starts a headless OpenCode server on 127.0.0.1 with the same sanitized',
-  'environment as the mutation executor, then attaches a foreground OpenCode TUI',
-  'to it. Mutation tasks become visible as sessions once the executor runs with:',
+  'Starts one foreground OpenCode TUI bound to the repository root. The TUI owns',
+  'its own server on 127.0.0.1 with the same sanitized environment as the',
+  'mutation executor, so it is the only operator-visible process: no separate',
+  'serve + attach pair and no web UI. Mutation tasks become visible as sessions',
+  'in this TUI once the executor runs with:',
   '',
   `  $env:${OPENCODE_ATTACH_URL_ENV}='${visibleServerUrl()}'`,
   '',
-  'Stop the TUI normally; the launcher then stops the server and removes its',
-  'temporary security scratch.',
+  'Select them with the normal session selector (Ctrl+X L or /sessions).',
+  'Stop the TUI normally; the launcher then removes its temporary security',
+  'scratch.',
 ].join('\n');
-
-/**
- * Poll the loopback health endpoint until the server reports healthy or the
- * bounded deadline is reached. Never retries a non-loopback target: the URL is
- * built from the launcher's own constant hostname.
- */
-export async function waitForHealthyServer({
-  url,
-  fetchFn = fetch,
-  timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS,
-  intervalMs = DEFAULT_HEALTH_POLL_INTERVAL_MS,
-  sleepFn = defaultSleep,
-  nowFn = Date.now,
-} = {}) {
-  const deadline = nowFn() + timeoutMs;
-  let lastError = 'health check did not succeed';
-  for (;;) {
-    try {
-      const response = await fetchFn(`${url}/global/health`, {
-        signal: AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS),
-      });
-      if (response.ok) {
-        const body = await response.json();
-        if (body && body.healthy === true) {
-          return { ok: true, error: null, version: body.version ?? null };
-        }
-        lastError = 'health endpoint did not report a healthy server';
-      } else {
-        lastError = `health endpoint returned HTTP ${response.status}`;
-      }
-    } catch (error) {
-      lastError = messageOf(error);
-    }
-    if (nowFn() >= deadline) return { ok: false, error: lastError };
-    await sleepFn(intervalMs);
-  }
-}
 
 function waitForExit(child) {
   return new Promise((resolveExit) => {
@@ -257,8 +201,9 @@ function terminateChild(child) {
 }
 
 /**
- * Run the visible TUI session in the foreground. Resolves with the TUI exit
- * code after the launcher-owned server is stopped and scratch is removed.
+ * Run the operator TUI in the foreground. Resolves with the TUI exit code after
+ * scratch is removed. Exactly one child process is spawned; it is the TUI that
+ * owns the server.
  */
 export async function main(
   argv,
@@ -266,10 +211,7 @@ export async function main(
     env = process.env,
     stderr = process.stderr,
     spawnFn = spawn,
-    fetchFn = fetch,
     repositoryRoot = repositoryRootFromScript(),
-    sleepFn = defaultSleep,
-    healthTimeoutMs = DEFAULT_HEALTH_TIMEOUT_MS,
     probePortFn = probeTcpPort,
   } = {},
 ) {
@@ -286,17 +228,14 @@ export async function main(
   const port = parsed.options.port;
   const url = visibleServerUrl({ port });
   const scratchDir = mkdtempSync(join(tmpdir(), 'greenhub-visible-tui-'));
-  let server = null;
   let tui = null;
   let exitCode = 1;
   const forwardSignal = (signal) => {
-    for (const child of [tui, server]) {
-      if (child === null) continue;
-      try {
-        child.kill(signal);
-      } catch {
-        // the child may already be gone; the exit path still runs
-      }
+    if (tui === null) return;
+    try {
+      tui.kill(signal);
+    } catch {
+      // the child may already be gone; the exit path still runs
     }
   };
 
@@ -305,76 +244,39 @@ export async function main(
     if (portInUse) {
       stderr.write(
         `[visible-tui] VISIBILITY_UNAVAILABLE: port ${port} is already in use; ` +
-          'refusing to attach the TUI to a server this launcher does not own\n',
+          'refusing to start a second operator TUI or join an unknown server\n',
       );
       return 1;
     }
 
-    const serverInvocation = buildServerInvocation({
+    const invocation = buildOperatorInvocation({
       opencodeBin: parsed.options.opencodeBin,
       env,
       scratchDir,
       port,
-    });
-    const tuiInvocation = buildTuiInvocation({
-      opencodeBin: parsed.options.opencodeBin,
-      env,
-      port,
       repositoryRoot,
     });
 
-    server = spawnFn(
-      serverInvocation.resolvedCommand.command,
-      [...serverInvocation.resolvedCommand.prefixArgs, ...serverInvocation.args],
-      {
-        cwd: scratchDir,
-        env: serverInvocation.env,
-        stdio: ['ignore', 'ignore', 'pipe'],
-        windowsHide: true,
-      },
-    );
-    if (server.stderr && typeof server.stderr.on === 'function') {
-      server.stderr.on('data', (chunk) => stderr.write(`[visible-tui:server] ${String(chunk)}`));
-    }
-    const serverFailure = new Promise((resolveFailure) => {
-      server.once('error', (error) =>
-        resolveFailure(`server failed to start: ${messageOf(error)}`),
-      );
-      server.once('exit', (code) => resolveFailure(`server exited with code ${code}`));
-    });
-
-    const health = await Promise.race([
-      waitForHealthyServer({ url, fetchFn, sleepFn, timeoutMs: healthTimeoutMs }),
-      serverFailure.then((error) => ({ ok: false, error })),
-    ]);
-    if (!health.ok) {
-      stderr.write(
-        `[visible-tui] VISIBILITY_UNAVAILABLE: no healthy OpenCode server at ${url}: ${health.error}\n`,
-      );
-      return 1;
-    }
-    if (server.exitCode !== null || server.signalCode !== null) {
-      stderr.write(
-        '[visible-tui] VISIBILITY_UNAVAILABLE: the launcher server exited before the TUI attached\n',
-      );
-      return 1;
-    }
-
-    stderr.write(`[visible-tui] server ready: ${url}\n`);
+    stderr.write(`[visible-tui] operator TUI: ${url} (project: ${repositoryRoot})\n`);
     stderr.write(`[visible-tui] automation: $env:${OPENCODE_ATTACH_URL_ENV}='${url}'\n`);
 
     process.once('SIGINT', forwardSignal);
     process.once('SIGTERM', forwardSignal);
     tui = spawnFn(
-      tuiInvocation.resolvedCommand.command,
-      [...tuiInvocation.resolvedCommand.prefixArgs, ...tuiInvocation.args],
+      invocation.resolvedCommand.command,
+      [...invocation.resolvedCommand.prefixArgs, ...invocation.args],
       {
         cwd: repositoryRoot,
-        env,
+        env: invocation.env,
         stdio: 'inherit',
         windowsHide: false,
       },
     );
+    if (tui && typeof tui.once === 'function') {
+      tui.once('error', (error) =>
+        stderr.write(`[visible-tui] operator TUI failed to start: ${messageOf(error)}\n`),
+      );
+    }
     exitCode = await waitForExit(tui);
   } catch (error) {
     stderr.write(`[visible-tui] launch failed: ${messageOf(error)}\n`);
@@ -383,7 +285,6 @@ export async function main(
     process.removeListener('SIGINT', forwardSignal);
     process.removeListener('SIGTERM', forwardSignal);
     terminateChild(tui);
-    terminateChild(server);
     try {
       rmSync(scratchDir, { recursive: true, force: true });
     } catch (error) {
