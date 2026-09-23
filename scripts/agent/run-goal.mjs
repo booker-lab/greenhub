@@ -143,7 +143,7 @@ export const PLANNER_STATUSES = Object.freeze([
 
 const PLANNER_TASK_FIELDS = Object.freeze(['id', 'outcome', 'closes', 'allow', 'semantic_owner']);
 const PLANNER_TASK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-const PLANNER_OUTCOME_MAX_CHARS = 500;
+export const PLANNER_OUTCOME_MAX_CHARS = 500;
 const PLANNER_OUTPUT_TAIL_CHARS = 4000;
 
 // A rejected planner proposal still fails closed, but the goal status it maps
@@ -1068,6 +1068,7 @@ export function buildPlannerPrompt({ contract, pin, criteria }) {
     '{"decision":"ESCALATE","reason":"...","escalation_token":"..."}',
     '',
     'Rules:',
+    `- "outcome" must be a non-empty string of at most ${PLANNER_OUTCOME_MAX_CHARS} characters.`,
     '- "closes" must be a non-empty subset of the unsatisfied AUTONOMOUS criterion ids above.',
     '- "allow" must be non-empty repo-relative paths inside AUTONOMOUSLY_ALLOWED.',
     '- "semantic_owner" entries must be repo-relative paths inside AUTONOMOUSLY_ALLOWED.',

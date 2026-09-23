@@ -28,6 +28,7 @@ import {
   INVALID_TASK,
   NO_PROGRESS,
   NO_TASK_FOR_GAP,
+  PLANNER_OUTCOME_MAX_CHARS,
   buildPlannerPrompt,
   buildTaskText,
   parseArgs,
@@ -247,6 +248,13 @@ function plannerTaskProposal(overrides = {}) {
       ...overrides,
     },
   };
+}
+
+/** Deterministic planner proposal whose outcome is exactly `length` characters. */
+function plannerOutcomeOfLength(length) {
+  const seed = 'Close the open autonomous gap inside the declared boundary.';
+  if (length <= seed.length) return seed.slice(0, length);
+  return `${seed} ${'x'.repeat(length - seed.length - 1)}`;
 }
 
 function plannerStdout(proposal) {
@@ -1759,4 +1767,113 @@ test('PLANNER PROMPT — bounded context and a strict output contract reach the 
   assert.match(prompt, /"decision":"NO_TASK"/);
   assert.match(prompt, /"decision":"ESCALATE"/);
   assert.equal(prompt.includes('TASK_CATALOG'), false);
+});
+
+test('PLANNER OUTCOME CONTRACT A — the actual invocation prompt advertises the authoritative outcome limit', () => {
+  const fixture = buildFixture();
+  try {
+    const planner = createFakePlanner({
+      proposals: { decision: 'NO_TASK', reason: 'contract visibility probe' },
+    });
+    const fake = createFakeChildren();
+    const result = runGoalOn(
+      fixture,
+      baseContract({ CRITERIA: [proofCriterion()], PLANNER: { enabled: true } }),
+      { ...fake.deps, ...planner.deps },
+    );
+
+    assert.equal(result.status, NO_TASK_FOR_GAP);
+    assert.equal(planner.calls.length, 1);
+    const invokedArgs = planner.calls[0].args;
+    const prompt = invokedArgs[invokedArgs.length - 1];
+    assert.ok(
+      prompt.includes(
+        `- "outcome" must be a non-empty string of at most ${PLANNER_OUTCOME_MAX_CHARS} characters.`,
+      ),
+      'the planner invocation prompt must state the authoritative outcome limit',
+    );
+    assert.equal(childCallCount(fake), 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('PLANNER OUTCOME CONTRACT B — an outcome within the advertised limit is accepted and reaches the executor', () => {
+  const fixture = buildFixture();
+  try {
+    const outcome = plannerOutcomeOfLength(PLANNER_OUTCOME_MAX_CHARS - 20);
+    const planner = createFakePlanner({ proposals: plannerTaskProposal({ outcome }) });
+    const fake = createFakeChildren({
+      runPublishBehavior: () => {
+        pushCommitToLiveMain(fixture, { path: 'docs/feature.md', content: '# feature\n' });
+        return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+      },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({ CRITERIA: [proofCriterion()], PLANNER: { enabled: true } }),
+      { ...fake.deps, ...planner.deps },
+    );
+
+    assert.equal(result.status, GOAL_SATISFIED);
+    assert.equal(result.planner.lastStatus, 'TASK');
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+    assert.ok(fake.calls.runPublishOnce[0].taskText.includes(outcome));
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('PLANNER OUTCOME CONTRACT C — an outcome over the advertised limit stays INVALID_OUTPUT', () => {
+  const fixture = buildFixture();
+  try {
+    const outcome = plannerOutcomeOfLength(PLANNER_OUTCOME_MAX_CHARS + 1);
+    const planner = createFakePlanner({ proposals: plannerTaskProposal({ outcome }) });
+    const fake = createFakeChildren();
+    const result = runGoalOn(
+      fixture,
+      baseContract({ CRITERIA: [proofCriterion()], PLANNER: { enabled: true } }),
+      { ...fake.deps, ...planner.deps },
+    );
+
+    assert.equal(result.status, BLOCKED_EXTERNAL);
+    assert.equal(result.planner.lastStatus, 'INVALID_OUTPUT');
+    assert.match(
+      result.planner.lastReason,
+      new RegExp(`at most ${PLANNER_OUTCOME_MAX_CHARS} characters`),
+    );
+    assert.equal(childCallCount(fake), 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('PLANNER OUTCOME CONTRACT D — a GA-02C-class boundary outcome is not blocked before task construction', () => {
+  const fixture = buildFixture();
+  try {
+    const outcome = plannerOutcomeOfLength(PLANNER_OUTCOME_MAX_CHARS);
+    const planner = createFakePlanner({ proposals: plannerTaskProposal({ outcome }) });
+    const fake = createFakeChildren({
+      runPublishBehavior: () => {
+        pushCommitToLiveMain(fixture, { path: 'docs/feature.md', content: '# feature\n' });
+        return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+      },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({ CRITERIA: [proofCriterion()], PLANNER: { enabled: true } }),
+      { ...fake.deps, ...planner.deps },
+    );
+
+    assert.equal(outcome.length, PLANNER_OUTCOME_MAX_CHARS);
+    assert.equal(result.planner.lastStatus, 'TASK');
+    assert.equal(result.attempts.length, 1);
+    assert.equal(result.attempts[0].taskId, 'P1');
+    assert.equal(result.attempts[0].publication, 'required');
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+    const taskText = fake.calls.runPublishOnce[0].taskText;
+    assert.ok(taskText.includes(outcome), 'the accepted outcome must reach the executor untruncated');
+  } finally {
+    removeFixture(fixture);
+  }
 });
