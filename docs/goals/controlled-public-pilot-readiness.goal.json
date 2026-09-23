@@ -36,7 +36,8 @@
     "scripts/probe-consumer-callback.workflow.spec.mjs",
     "scripts/probe-authjs-role-callback.spec.mjs",
     "scripts/probe-authjs-role-callback.workflow.spec.mjs",
-    "scripts/probe-auth-runtime.spec.mjs"
+    "scripts/probe-auth-runtime.spec.mjs",
+    ".github/workflows/probe-auth-runtime.yml"
   ],
   "ESCALATE_IF": [
     "PRODUCT_POLICY_FORK",
@@ -142,6 +143,18 @@
       "check": "PROOF_AT_MAIN",
       "class": "AUTONOMOUS",
       "command": "node --test scripts/probe-consumer-callback.spec.mjs"
+    },
+    {
+      "id": "CONSUMER_AUTH_SOURCE_PROBE_TRIGGER_COVERAGE",
+      "statement": "apps/consumer/src/auth.ts가 callback source-parity contract의 직접 source authority이므로, 해당 파일이 변경되는 PR에서 probe-auth-runtime deterministic callback contract가 실행되어야 하며, workflow regression spec이 그 trigger dependency를 명시적으로 고정해야 한다.",
+      "authority": [
+        ".github/workflows/probe-auth-runtime.yml",
+        "scripts/probe-consumer-callback.workflow.spec.mjs",
+        "apps/consumer/src/auth.ts"
+      ],
+      "check": "PROOF_AT_MAIN",
+      "class": "AUTONOMOUS",
+      "command": "node -e \"const fs=require('fs');const cp=require('child_process');const NL=String.fromCharCode(10);const wfPath='.github/workflows/probe-auth-runtime.yml';const specPath='scripts/probe-consumer-callback.workflow.spec.mjs';const triggerPath='apps/consumer/src/auth.ts';const die=(m)=>{console.error('TRIGGER_COVERAGE_PROOF_FAIL: '+m);process.exit(1);};const wf=fs.readFileSync(wfPath,'utf8');const spec=fs.readFileSync(specPath,'utf8');const start=wf.indexOf('pull_request:');const end=wf.indexOf('permissions:',start);if(start<0||end<0)die('workflow pull_request paths block not found');const block=wf.slice(start,end);if(!block.split(NL).some((l)=>l.trim()==='- '+triggerPath))die('workflow pull_request.paths must include the exact trigger path '+triggerPath);if(!spec.includes(triggerPath))die('workflow spec must explicitly reference the trigger path '+triggerPath);const run=()=>cp.spawnSync(process.execPath,['--test',specPath],{encoding:'utf8'});const base=run();if(base.status!==0)die('workflow spec does not pass on the current tree');const mutated=wf.split(triggerPath).join('apps/consumer/src/auth-removed.ts');if(mutated===wf)die('trigger path was not found for the mutation check');fs.writeFileSync(wfPath,mutated);let mut;try{mut=run();}finally{fs.writeFileSync(wfPath,wf);}if(fs.readFileSync(wfPath,'utf8')!==wf)die('workflow restore failed');if(mut.status===0)die('workflow spec still passes without the trigger path, so the regression is not bound to the trigger');console.log('CONSUMER_AUTH_SOURCE_PROBE_TRIGGER_COVERAGE_OK');\""
     },
     {
       "id": "CURRENT_EXACT_RELEASE_PREVIEW_RUNTIME_PROOF",
