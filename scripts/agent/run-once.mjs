@@ -17,6 +17,17 @@
 // while the task-owned workspace is still alive. The local-only CLI never
 // provides one, so its behavior is unchanged. The finalizer result is attached
 // as `result.successHandoff`; the workspace is still cleaned up afterwards.
+//
+// Optional visible observation: when `GREENHUB_OPENCODE_ATTACH_URL` names a
+// loopback OpenCode server, the single mutation invocation attaches to that
+// already running server (`opencode run --attach <url> ...`) so an operator can
+// watch the task session live in an OpenCode TUI attached to the same server.
+// The environment variable is an explicit contract: an unusable target fails
+// closed before any workspace side effect and there is no silent standalone
+// retry. Isolation, boundary, proof, publication, and credential rules are
+// unchanged; the attach URL is only the transport for the same single
+// invocation, and tool execution stays in the server process, which the
+// operator starts under this same sanitized environment.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -50,6 +61,29 @@ export const TASK_TEXT_MAX_CHARS = 30000;
 export const DEFAULT_OPENCODE_TIMEOUT_MS = 60 * 60 * 1000;
 export const DEFAULT_PROOF_TIMEOUT_MS = 30 * 60 * 1000;
 export const OUTPUT_TAIL_CHARS = 4000;
+
+// Execution visibility modes. HEADLESS is the default and behaves exactly like
+// the original standalone invocation. VISIBLE_TUI is selected only by an
+// explicit loopback attach target; the mutation still runs as one invocation,
+// but through a shared OpenCode server whose session an operator can watch.
+export const HEADLESS_MODE = 'HEADLESS';
+export const VISIBLE_TUI_MODE = 'VISIBLE_TUI';
+
+// Visible-mode configuration. Only a loopback origin is accepted so repository
+// mutation authority is never handed to a remote OpenCode server.
+export const OPENCODE_ATTACH_URL_ENV = 'GREENHUB_OPENCODE_ATTACH_URL';
+export const VISIBLE_ATTACH_HOSTS = Object.freeze(['127.0.0.1', 'localhost', '[::1]']);
+export const DEFAULT_VISIBLE_PREFLIGHT_TIMEOUT_MS = 15000;
+export const VISIBLE_CLEANUP_RETRY_ATTEMPTS = 5;
+export const VISIBLE_CLEANUP_RETRY_DELAY_MS = 300;
+
+function sleepSync(ms) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    // a failed synchronous wait must not break cleanup; the retry loop continues
+  }
+}
 
 // Credential-shaped environment names that must not reach the OpenCode child.
 // Operational publication/provider credentials are dropped here; model provider
@@ -167,13 +201,97 @@ export function buildOpencodeArgs({
   model = null,
   agent = null,
   title = null,
+  attachUrl = null,
 }) {
-  const args = ['run', '--format', 'json', '--dir', workspacePath, '--auto'];
+  const args = ['run'];
+  if (attachUrl) args.push('--attach', attachUrl);
+  args.push('--format', 'json', '--dir', workspacePath, '--auto');
   if (model) args.push('--model', model);
   if (agent) args.push('--agent', agent);
   if (title) args.push('--title', title);
   args.push(taskText);
   return args;
+}
+
+/**
+ * Validate an explicitly configured visible attach target. The result is either
+ * `{ ok: true, url }` with a normalized bare origin or `{ ok: false, reason }`
+ * describing why the target cannot carry mutation authority. Only loopback
+ * origins without credentials, path, query, or fragment are allowed.
+ */
+export function parseVisibleAttachUrl(value) {
+  const candidate = typeof value === 'string' ? value.trim() : '';
+  if (candidate.length === 0) return { ok: false, reason: 'attach URL is empty' };
+  let parsed;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return { ok: false, reason: `attach URL is not a valid URL: ${candidate}` };
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { ok: false, reason: `attach URL must use http or https: ${candidate}` };
+  }
+  if (parsed.username.length > 0 || parsed.password.length > 0) {
+    return { ok: false, reason: 'attach URL must not carry credentials' };
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (!VISIBLE_ATTACH_HOSTS.includes(hostname)) {
+    return {
+      ok: false,
+      reason:
+        'attach URL must target the local machine ' +
+        `(${VISIBLE_ATTACH_HOSTS.join(', ')}): ${candidate}`,
+    };
+  }
+  if (parsed.pathname !== '/' || parsed.search.length > 0 || parsed.hash.length > 0) {
+    return {
+      ok: false,
+      reason: `attach URL must be a bare origin without path, query, or fragment: ${candidate}`,
+    };
+  }
+  return { ok: true, url: `${parsed.protocol}//${parsed.host}` };
+}
+
+// Visible mode fails closed before any workspace side effect: an explicitly
+// requested visible run must not silently become an invisible standalone run.
+// The preflight asks the target server for its health endpoint from a short
+// child process so the runner stays synchronous.
+const HEALTH_PREFLIGHT_SCRIPT = [
+  'const [url] = process.argv.slice(1);',
+  "fetch(url + '/global/health', { signal: AbortSignal.timeout(4000) })",
+  '  .then((response) => response.json())',
+  '  .then((body) => process.exit(body && body.healthy === true ? 0 : 1))',
+  '  .catch(() => process.exit(1));',
+].join('\n');
+
+export function probeVisibleServer({
+  attachUrl,
+  spawn = spawnSync,
+  execPath = process.execPath,
+  timeoutMs = DEFAULT_VISIBLE_PREFLIGHT_TIMEOUT_MS,
+} = {}) {
+  if (!attachUrl) return { attempted: false, ok: false, error: 'attach URL is required' };
+  let result;
+  try {
+    result = spawn(execPath, ['-e', HEALTH_PREFLIGHT_SCRIPT, attachUrl], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'ignore', 'pipe'],
+      timeout: timeoutMs > 0 ? timeoutMs : undefined,
+      windowsHide: true,
+    });
+  } catch (error) {
+    return { attempted: true, ok: false, error: messageOf(error) };
+  }
+  if (result.status === 0) return { attempted: true, ok: true, error: null };
+  const stderr = typeof result.stderr === 'string' ? result.stderr.trim() : '';
+  return {
+    attempted: true,
+    ok: false,
+    error:
+      stderr.length > 0
+        ? stderr
+        : (result.error?.message ?? `health preflight exited with status ${result.status}`),
+  };
 }
 
 export function findOnPath({ fileName, baseEnv, platform, exists = existsSync }) {
@@ -400,6 +518,77 @@ export function defaultRunProofCommand({ command, cwd, env, timeoutMs }) {
   };
 }
 
+// Visible mode attaches the mutation child to a long-lived OpenCode server that
+// keeps a per-directory instance alive after the invocation completes. That
+// live instance keeps the task-owned workspace open on some platforms (its MCP
+// server children and watchers hold the directory), so the runner asks the same
+// loopback server to disconnect the instance's MCP servers and dispose the
+// instance before cleanup. The request is best-effort: a failure is reported
+// through `executor.instanceDisposal` and only becomes fatal if the workspace
+// cannot then be removed.
+const DISPOSE_INSTANCE_SCRIPT = [
+  'const [url, directory] = process.argv.slice(1);',
+  "const query = '?directory=' + encodeURIComponent(directory);",
+  'async function main() {',
+  '  try {',
+  '    const statusResponse = await fetch(url + "/mcp" + query, {',
+  '      signal: AbortSignal.timeout(5000),',
+  '    });',
+  '    if (statusResponse.ok) {',
+  '      const servers = await statusResponse.json();',
+  '      for (const name of Object.keys(servers ?? {})) {',
+  '        try {',
+  '          await fetch(',
+  '            url + "/mcp/" + encodeURIComponent(name) + "/disconnect" + query,',
+  '            { method: "POST", signal: AbortSignal.timeout(5000) },',
+  '          );',
+  '        } catch {}',
+  '      }',
+  '    }',
+  '  } catch {}',
+  '  let disposed = false;',
+  '  try {',
+  '    const response = await fetch(url + "/instance/dispose" + query, {',
+  '      method: "POST",',
+  '      signal: AbortSignal.timeout(5000),',
+  '    });',
+  '    disposed = response.ok;',
+  '  } catch {}',
+  '  process.exitCode = disposed ? 0 : 1;',
+  '}',
+  'main();',
+].join('\n');
+
+export function disposeVisibleInstance({
+  attachUrl,
+  workspacePath,
+  spawn = spawnSync,
+  execPath = process.execPath,
+} = {}) {
+  if (!attachUrl || !workspacePath) return { attempted: false, ok: true, error: null };
+  let result;
+  try {
+    result = spawn(execPath, ['-e', DISPOSE_INSTANCE_SCRIPT, attachUrl, workspacePath], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'ignore', 'pipe'],
+      timeout: 30000,
+      windowsHide: true,
+    });
+  } catch (error) {
+    return { attempted: true, ok: false, error: messageOf(error) };
+  }
+  if (result.status === 0) return { attempted: true, ok: true, error: null };
+  const stderr = typeof result.stderr === 'string' ? result.stderr.trim() : '';
+  return {
+    attempted: true,
+    ok: false,
+    error:
+      stderr.length > 0
+        ? stderr
+        : (result.error?.message ?? `instance disposal exited with status ${result.status}`),
+  };
+}
+
 export function defaultRemoveWorkspace({ repositoryRoot, tempRoot, workspacePath }) {
   const errors = [];
   if (existsSync(workspacePath)) {
@@ -458,6 +647,10 @@ function createResult(options = {}) {
     },
     executor: {
       invoked: false,
+      mode: HEADLESS_MODE,
+      attachUrl: null,
+      preflight: 'NOT_ATTEMPTED',
+      instanceDisposal: 'NOT_ATTEMPTED',
       commandSource: null,
       exitCode: null,
       signal: null,
@@ -534,12 +727,15 @@ function validateRunOnceInput(options) {
 /**
  * Execute one bounded task. Returns a deterministic summary object.
  * `deps` is a narrow seam for deterministic tests: invokeOpencode,
- * runProofCommand, removeWorkspace, log, env, successFinalizer.
+ * runProofCommand, removeWorkspace, probeVisibleServer,
+ * disposeVisibleInstance, log, env, successFinalizer.
  */
 export function runOnce(options, deps = {}) {
   const invokeOpencode = deps.invokeOpencode ?? defaultInvokeOpencode;
   const runProofCommand = deps.runProofCommand ?? defaultRunProofCommand;
   const removeWorkspace = deps.removeWorkspace ?? defaultRemoveWorkspace;
+  const probeVisibleServerImpl = deps.probeVisibleServer ?? probeVisibleServer;
+  const disposeVisibleInstanceImpl = deps.disposeVisibleInstance ?? disposeVisibleInstance;
   const successFinalizer = deps.successFinalizer ?? null;
   const log = deps.log ?? ((message) => process.stderr.write(`${message}\n`));
   const baseEnv = deps.env ?? process.env;
@@ -550,6 +746,37 @@ export function runOnce(options, deps = {}) {
     result.status = INVALID_INPUT;
     result.reason = invalidReason;
     return result;
+  }
+
+  // Visible observation is an explicit operator contract. An unusable attach
+  // target or an unhealthy server fails closed here, before any Git observation
+  // or workspace side effect, and is never downgraded to a private standalone
+  // invocation.
+  const requestedAttachUrl =
+    typeof baseEnv[OPENCODE_ATTACH_URL_ENV] === 'string'
+      ? baseEnv[OPENCODE_ATTACH_URL_ENV].trim()
+      : '';
+  let attachUrl = null;
+  if (requestedAttachUrl.length > 0) {
+    const parsedAttach = parseVisibleAttachUrl(requestedAttachUrl);
+    if (!parsedAttach.ok) {
+      result.executor.mode = VISIBLE_TUI_MODE;
+      result.status = EXECUTOR_FAILED;
+      result.reason = `VISIBLE_TUI mode was requested but the attach target is not allowed: ${parsedAttach.reason}`;
+      return result;
+    }
+    attachUrl = parsedAttach.url;
+    result.executor.mode = VISIBLE_TUI_MODE;
+    result.executor.attachUrl = attachUrl;
+    const preflight = probeVisibleServerImpl({ attachUrl });
+    result.executor.preflight = preflight.ok ? 'HEALTHY' : 'FAILED';
+    if (!preflight.ok) {
+      result.status = EXECUTOR_FAILED;
+      result.reason =
+        `VISIBLE_TUI unavailable (VISIBILITY_UNAVAILABLE): ` +
+        `no healthy OpenCode server at ${attachUrl}: ${preflight.error}`;
+      return result;
+    }
   }
 
   const repositoryRoot = resolve(options.repositoryRoot);
@@ -648,10 +875,14 @@ export function runOnce(options, deps = {}) {
         model: options.model ?? null,
         agent: options.agent ?? null,
         title: options.title ?? null,
+        attachUrl,
       });
       const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot });
       result.executor.invoked = true;
-      log(`[run-once] opencode start (${resolvedCommand.source}) in ${workspacePath}`);
+      log(
+        `[run-once] opencode start (${resolvedCommand.source})` +
+          `${attachUrl ? ` attached to ${attachUrl}` : ''} in ${workspacePath}`,
+      );
       execution = invokeOpencode({
         resolvedCommand,
         args,
@@ -817,9 +1048,33 @@ export function runOnce(options, deps = {}) {
     }
   }
 
+  if (attachUrl !== null && workspacePath !== null) {
+    const disposal = disposeVisibleInstanceImpl({ attachUrl, workspacePath });
+    result.executor.instanceDisposal = disposal.ok ? 'DISPOSED' : 'FAILED';
+    if (!disposal.ok) {
+      log(`[run-once] visible OpenCode instance disposal failed: ${disposal.error}`);
+    }
+  }
+
   if (tempRoot !== null) {
     try {
-      const removal = removeWorkspace({ repositoryRoot, tempRoot, workspacePath });
+      let removal = removeWorkspace({ repositoryRoot, tempRoot, workspacePath });
+      // Visible mode: the attached server releases its per-directory instance
+      // asynchronously after `/instance/dispose`, so the first removal attempt
+      // can observe a transient Windows sharing violation. Retry the disposal
+      // and the task-owned removal a bounded number of times before reporting
+      // cleanup failure.
+      if (!removal.removed && attachUrl !== null) {
+        for (
+          let attempt = 0;
+          attempt < VISIBLE_CLEANUP_RETRY_ATTEMPTS && !removal.removed;
+          attempt += 1
+        ) {
+          sleepSync(VISIBLE_CLEANUP_RETRY_DELAY_MS);
+          disposeVisibleInstanceImpl({ attachUrl, workspacePath });
+          removal = removeWorkspace({ repositoryRoot, tempRoot, workspacePath });
+        }
+      }
       result.workspace.cleanup = removal.removed ? 'REMOVED' : 'FAILED';
       result.workspace.cleanupErrors = Array.isArray(removal.errors) ? removal.errors : [];
     } catch (error) {
@@ -860,6 +1115,14 @@ export const USAGE = [
   '  --remote <name>             publication remote observed for the live baseline (default: origin)',
   '  --opencode-timeout-ms <n>   opencode timeout in ms (default: 3600000, 0 disables)',
   '  --proof-timeout-ms <n>      per-proof timeout in ms (default: 1800000, 0 disables)',
+  '',
+  'Environment:',
+  `  ${OPENCODE_ATTACH_URL_ENV}=<loopback origin>`,
+  '                              attaches the single mutation invocation to an',
+  '                              already running visible OpenCode server',
+  '                              (e.g. http://127.0.0.1:4096). An unreachable or',
+  '                              non-loopback target fails closed; there is no',
+  '                              private standalone fallback.',
   '',
   'Prints one deterministic JSON result to stdout. Exit code 0 for SUCCESS/ALREADY_SATISFIED.',
 ].join('\n');
@@ -970,6 +1233,7 @@ export function main(
   stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   const summary = [
     `[run-once] STATUS ${result.status}`,
+    `[run-once] EXECUTOR_MODE ${result.executor.mode}`,
     `[run-once] BASELINE ${result.baseline.baselineSha ?? 'unknown'}`,
     `[run-once] LIVE_MAIN_AT_END ${result.liveMainAtEnd ?? 'unobserved'}`,
     `[run-once] CHANGED_PATHS ${result.changedPaths.length}`,
