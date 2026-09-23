@@ -10,10 +10,25 @@
 //   1. reads current live `main` (two independent observations),
 //   2. re-resolves the declared ACCEPTANCE_AUTHORITY at that exact live SHA,
 //   3. recomputes every criterion at that live SHA,
-//   4. selects at most one declared catalog task for an open AUTONOMOUS
-//      criterion, and
+//   4. admits a bounded batch of at most five pairwise-independent declared
+//      catalog tasks for open AUTONOMOUS criteria, and
 //   5. delegates the entire execution/publication mechanics to the existing GN
-//      executors, then re-reads live `main` and recomputes.
+//      executors, then re-reads live `main` once for the settled batch and
+//      recomputes.
+//
+// Batch admission is still one foreground owner: the same process admits the
+// batch, starts each admitted task in a task-owned worker thread, waits for the
+// whole batch to settle, and then performs exactly one authoritative live-main
+// re-observation and criterion recomputation. No durable coordination state,
+// background service, or cross-process wake loop is created; worker threads
+// exist only inside one bounded batch and are gone before the next evaluation.
+//
+// Two admitted tasks are never started together when they materially overlap:
+// semantic_owner, declared mutation allow surface, proof_owner against the
+// sibling mutation surface, or an explicit depends_on relationship. A task that
+// admission or the task budget excludes stays eligible for a later
+// recomputation and is never marked failed for being excluded. A failing task
+// does not cancel independent siblings that already started.
 //
 // A declared eligible catalog task always wins. Only when no eligible declared
 // task exists, an open AUTONOMOUS gap remains, and the Goal Contract opts in
@@ -36,22 +51,28 @@
 //                                       read-back, task-owned cleanup)
 //
 // This phase has no cross-process task state or task recovery, no background
-// execution, no ref cleanup for pre-existing remote refs, no concurrent task
-// admission, and no long-running service. Its only execution guarantee is
-// scoped to one foreground attempt:
-//   one selected task attempt -> one GN execution -> at most one OpenCode
+// execution, no ref cleanup for pre-existing remote refs, and no long-running
+// service. Its only execution guarantee is scoped to one foreground attempt:
+//   one admitted task attempt -> one GN execution -> at most one OpenCode
 //   mutation invocation.
 // A process crash before remote publication evidence may let a later
 // invocation re-run the same unfinished task; cross-process exactly-once is out
 // of scope for this phase.
 //
+// Deterministic test seam: when the caller injects the in-process child
+// executors (`runOnce` / `runPublishOnce`), the batch runs those executors
+// in-process in declaration order instead of starting worker threads, so the
+// same admission, bookkeeping, and recomputation path stays fully deterministic
+// without real OpenCode processes. Production runs use the worker batch below.
+//
 // Never invoked here: reset/restore/stash/clean of foreign state, checkout
 // switching, force push, direct push to `main`, or local merge/rebase.
 
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Worker, isMainThread, workerData } from 'node:worker_threads';
 
 import {
   DEFAULT_OPENCODE_TIMEOUT_MS,
@@ -183,8 +204,23 @@ export const DEFAULT_BUDGET = Object.freeze({
   max_wall_clock_ms: 60 * 60 * 1000,
 });
 
+// Fixed batch concurrency contract: one foreground owner admits at most five
+// pairwise-independent tasks per live-main evaluation.
+export const MAX_BATCH_CONCURRENCY = 5;
+
 const LIVE_MAIN_PIN_ATTEMPTS = 3;
 const PROOF_TAIL_CHARS = 2000;
+
+// Worker batch signaling. Each admitted task owns one state slot in a shared
+// Int32Array; the last slot is a cross-thread mutex that serializes the
+// task-owned workspace removal so concurrent `git worktree remove`/`prune`
+// calls cannot race each other.
+const BATCH_STATE_CREATED = 0;
+const BATCH_STATE_STARTED = 1;
+const BATCH_STATE_DONE = 2;
+const BATCH_STATE_CANCELLED = -1;
+const BATCH_WORKER_START_TIMEOUT_MS = 30000;
+const BATCH_WORKER_POLL_MS = 1000;
 
 // Narrow child seam keys forwarded to run-once / run-publish-once. Everything
 // else stays owned by the existing executors.
@@ -974,6 +1010,124 @@ export function selectTask({ contract, criteria, attemptedTaskIds, completedTask
   return { task: null, closes: [], skipped, refusals };
 }
 
+/** True when any declared path of `left` and `right` overlap by prefix. */
+function pathListsOverlap(left, right) {
+  return left.some((a) => right.some((b) => isPathAllowed(a, [b]) || isPathAllowed(b, [a])));
+}
+
+/**
+ * Material overlap between two admitted candidates. `null` means the two tasks
+ * may start together. The returned kind names the exact dimension that would be
+ * violated by concurrent execution.
+ */
+function taskConflict(task, sibling) {
+  if (task.depends_on.includes(sibling.id) || sibling.depends_on.includes(task.id)) {
+    return { kind: 'DEPENDS_ON', reason: `explicit depends_on relationship between ${task.id} and ${sibling.id}` };
+  }
+  if (pathListsOverlap(task.semantic_owner, sibling.semantic_owner)) {
+    return {
+      kind: 'SEMANTIC_OWNER',
+      reason: `semantic_owner overlap between ${task.id} and ${sibling.id}`,
+    };
+  }
+  if (pathListsOverlap(task.allow, sibling.allow)) {
+    return {
+      kind: 'ALLOW_SURFACE',
+      reason: `declared mutation allow surface overlap between ${task.id} and ${sibling.id}`,
+    };
+  }
+  if (pathListsOverlap(task.semantic_owner, sibling.allow) || pathListsOverlap(sibling.semantic_owner, task.allow)) {
+    return {
+      kind: 'SEMANTIC_MUTATION',
+      reason: `semantic_owner against the sibling mutation surface between ${task.id} and ${sibling.id}`,
+    };
+  }
+  const taskProofOwners = task.proof_owner.flat();
+  const siblingProofOwners = sibling.proof_owner.flat();
+  if (pathListsOverlap(taskProofOwners, sibling.allow) || pathListsOverlap(siblingProofOwners, task.allow)) {
+    return {
+      kind: 'PROOF_OWNER',
+      reason: `proof_owner against the sibling mutation surface between ${task.id} and ${sibling.id}`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Deterministic batch admission: up to `maxConcurrency` pairwise-independent
+ * eligible catalog tasks in declaration order. Excluded tasks are reported with
+ * the exact reason and stay eligible for a later recomputation; they are never
+ * failed merely because this batch refused them.
+ */
+export function admitTaskBatch({
+  contract,
+  criteria,
+  attemptedTaskIds,
+  completedTaskIds,
+  maxConcurrency = MAX_BATCH_CONCURRENCY,
+}) {
+  const state = buildSelectionState({ contract, criteria, attemptedTaskIds, completedTaskIds });
+  const tasks = [];
+  const skipped = [];
+  const refusals = [];
+  const excluded = [];
+  for (const task of contract.task_catalog) {
+    const eligibility = taskEligibility(task, state);
+    if (!eligibility.eligible) {
+      if (eligibility.refusal !== null) {
+        refusals.push({ taskId: task.id, closes: eligibility.closes, reason: eligibility.refusal });
+      } else if (
+        eligibility.skip !== null &&
+        eligibility.skip !== 'no open AUTONOMOUS criterion it closes'
+      ) {
+        skipped.push({ taskId: task.id, reason: eligibility.skip });
+      }
+      continue;
+    }
+    if (tasks.length >= maxConcurrency) {
+      excluded.push({
+        taskId: task.id,
+        closes: eligibility.closes,
+        kind: 'CONCURRENCY_LIMIT',
+        withTaskId: null,
+        reason: `batch concurrency limit ${maxConcurrency} reached`,
+      });
+      continue;
+    }
+    let conflict = null;
+    for (const admitted of tasks) {
+      conflict = taskConflict(task, admitted.task);
+      if (conflict !== null) {
+        conflict = { ...conflict, withTaskId: admitted.task.id };
+        break;
+      }
+    }
+    if (conflict !== null) {
+      excluded.push({
+        taskId: task.id,
+        closes: eligibility.closes,
+        kind: conflict.kind,
+        withTaskId: conflict.withTaskId,
+        reason: conflict.reason,
+      });
+      continue;
+    }
+    tasks.push({ task, closes: eligibility.closes });
+  }
+  return { tasks, skipped, refusals, excluded };
+}
+
+/**
+ * Stable, distinct OpenCode session title for one task. Serial batches keep the
+ * caller-supplied title exactly; a concurrent batch derives a distinct title
+ * from the task id so the shared OpenCode server shows separate sessions.
+ */
+export function buildTaskTitle({ baseTitle = null, taskId, concurrent = false }) {
+  if (!concurrent) return isNonEmptyString(baseTitle) ? baseTitle : null;
+  const base = isNonEmptyString(baseTitle) ? baseTitle.trim() : 'run-goal';
+  return `${base} [${taskId}]`;
+}
+
 /** OpenCode-facing semantic text in the existing four-section shape. */
 export function buildTaskText({ task, contract }) {
   const preserveLines = [task.preserve];
@@ -1564,6 +1718,8 @@ function createGoalResult() {
     selection: { taskId: null, closes: [], refusals: [], skipped: [] },
     refusals: [],
     attempts: [],
+    batches: [],
+    maxBatchConcurrency: MAX_BATCH_CONCURRENCY,
     childCalls: 0,
     planner: createPlannerResult(),
     canonicalCheckout: { before: null, after: null, unchanged: null },
@@ -1591,26 +1747,26 @@ function buildChildDeps(deps, log) {
   return childDeps;
 }
 
-function invokeChild({ task, taskText, options, deps, log }) {
+/** Serializable child invocation for one admitted task. */
+export function buildChildInvocation({ task, taskText, options, title }) {
   const shared = {
-    repositoryRoot: options.repositoryRoot,
+    repositoryRoot: resolve(options.repositoryRoot ?? process.cwd()),
     remote: options.remote ?? 'origin',
     taskText,
     allowedPaths: [...task.allow],
     proofCommands: [...task.proof],
     proofOwners: task.proof_owner.map((owners) => [...owners]),
-    title: options.title ?? null,
+    title,
     model: options.model ?? null,
     agent: options.agent ?? null,
     opencodeBin: options.opencodeBin ?? null,
     opencodeTimeoutMs: options.opencodeTimeoutMs,
     proofTimeoutMs: options.proofTimeoutMs,
   };
-  const childDeps = buildChildDeps(deps, log);
   if (task.publication === 'required') {
-    const runner = deps.runPublishOnce ?? defaultRunPublishOnce;
-    return runner(
-      {
+    return {
+      runner: 'runPublishOnce',
+      options: {
         ...shared,
         commitMessage: task.commit_message,
         prTitle: task.pr_title,
@@ -1618,11 +1774,269 @@ function invokeChild({ task, taskText, options, deps, log }) {
         ciTimeoutMs: options.ciTimeoutMs,
         maxRebindAttempts: options.maxRebindAttempts,
       },
-      childDeps,
+    };
+  }
+  return { runner: 'runOnce', options: shared };
+}
+
+function invokeDescriptorInProcess({ descriptor, deps, log }) {
+  const startedAt = Date.now();
+  const childDeps = buildChildDeps(deps, log);
+  const runner =
+    descriptor.invocation.runner === 'runPublishOnce'
+      ? (deps.runPublishOnce ?? defaultRunPublishOnce)
+      : (deps.runOnce ?? defaultRunOnce);
+  let child;
+  try {
+    child = runner(descriptor.invocation.options, childDeps);
+  } catch (error) {
+    child = { status: 'EXECUTOR_FAILED', reason: `child invocation failed: ${messageOf(error)}` };
+  }
+  return {
+    taskId: descriptor.taskId,
+    title: descriptor.title,
+    child,
+    startedAt,
+    endedAt: Date.now(),
+  };
+}
+
+function serializeWorkerEnv(env) {
+  if (!isPlainObject(env)) return null;
+  const serialized = {};
+  for (const [name, value] of Object.entries(env)) {
+    if (typeof value === 'string') serialized[name] = value;
+  }
+  return serialized;
+}
+
+function withBatchLock(states, lockIndex, action) {
+  for (;;) {
+    if (Atomics.compareExchange(states, lockIndex, 0, 1) === 0) break;
+    Atomics.wait(states, lockIndex, 1);
+  }
+  try {
+    return action();
+  } finally {
+    Atomics.store(states, lockIndex, 0);
+    Atomics.notify(states, lockIndex);
+  }
+}
+
+function workerChildDeps({ states, lockIndex, env }) {
+  const deps = {
+    // Task-owned workspace removal is serialized across the batch so
+    // concurrent `git worktree remove`/`prune` calls cannot race each other.
+    removeWorkspace: (input) => withBatchLock(states, lockIndex, () => defaultRemoveWorkspace(input)),
+  };
+  if (env !== null) deps.env = env;
+  return deps;
+}
+
+function batchWorkerMain(payload) {
+  const { index, states: shared, lockIndex, invocation, env, resultPath } = payload;
+  const states = new Int32Array(shared);
+  const claimed = Atomics.compareExchange(states, index, BATCH_STATE_CREATED, BATCH_STATE_STARTED);
+  if (claimed !== BATCH_STATE_CREATED) {
+    // The foreground owner cancelled this slot before it started; no task-owned
+    // side effect may happen.
+    try {
+      writeFileSync(
+        resultPath,
+        JSON.stringify({
+          child: { status: 'EXECUTOR_FAILED', reason: 'batch task was cancelled before start' },
+          startedAt: null,
+          endedAt: null,
+        }),
+      );
+    } catch {
+      // the owner observes the missing result and fails this task closed
+    }
+    Atomics.store(states, index, BATCH_STATE_DONE);
+    Atomics.notify(states, index);
+    return;
+  }
+  Atomics.notify(states, index);
+  const startedAt = Date.now();
+  let child;
+  try {
+    const runner = invocation.runner === 'runPublishOnce' ? defaultRunPublishOnce : defaultRunOnce;
+    child = runner(invocation.options, workerChildDeps({ states, lockIndex, env }));
+  } catch (error) {
+    child = { status: 'EXECUTOR_FAILED', reason: `batch task invocation failed: ${messageOf(error)}` };
+  }
+  const endedAt = Date.now();
+  try {
+    writeFileSync(resultPath, JSON.stringify({ child, startedAt, endedAt }));
+  } catch {
+    // the owner observes the missing result and fails this task closed
+  }
+  Atomics.store(states, index, BATCH_STATE_DONE);
+  Atomics.notify(states, index);
+}
+
+function maxObservedConcurrency(results) {
+  const intervals = results
+    .filter((entry) => Number.isFinite(entry.startedAt) && Number.isFinite(entry.endedAt))
+    .map((entry) => ({ startedAt: entry.startedAt, endedAt: entry.endedAt }));
+  if (intervals.length === 0) return null;
+  let max = 0;
+  for (const point of intervals) {
+    let active = 0;
+    for (const other of intervals) {
+      if (other.startedAt <= point.startedAt && point.startedAt < other.endedAt) active += 1;
+    }
+    max = Math.max(max, active);
+  }
+  return max;
+}
+
+/**
+ * Execute one admitted batch. Production starts one task-owned worker thread per
+ * admitted task and blocks the foreground owner on shared-memory completion
+ * signals until the whole batch settles. Deterministic tests provide an
+ * in-process executor through `executeTask`; the batch is then run in
+ * declaration order without starting threads.
+ */
+export function runTaskBatch({
+  descriptors,
+  maxConcurrency = MAX_BATCH_CONCURRENCY,
+  env = null,
+  log = () => {},
+  executeTask = null,
+}) {
+  if (!Array.isArray(descriptors) || descriptors.length === 0) return [];
+  if (descriptors.length > maxConcurrency) {
+    throw new Error(
+      `batch of ${descriptors.length} task(s) exceeds the maximum concurrency ${maxConcurrency}`,
     );
   }
-  const runner = deps.runOnce ?? defaultRunOnce;
-  return runner(shared, childDeps);
+  if (typeof executeTask === 'function') {
+    return descriptors.map((descriptor) => executeTask(descriptor));
+  }
+
+  const count = descriptors.length;
+  const lockIndex = count;
+  const shared = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * (count + 1));
+  const states = new Int32Array(shared);
+  const tempRoot = mkdtempSync(join(tmpdir(), 'greenhub-run-goal-batch-'));
+  const workerEnv = serializeWorkerEnv(env);
+  const workers = [];
+  try {
+    for (let index = 0; index < count; index += 1) {
+      let worker;
+      try {
+        worker = new Worker(new URL(import.meta.url), {
+          workerData: {
+            greenhubRunGoalBatchTask: {
+              index,
+              states: shared,
+              lockIndex,
+              invocation: descriptors[index].invocation,
+              env: workerEnv,
+              resultPath: join(tempRoot, `task-${index}-result.json`),
+            },
+          },
+        });
+      } catch (error) {
+        Atomics.store(states, index, BATCH_STATE_DONE);
+        Atomics.notify(states, index);
+        log(`[run-goal] batch worker ${index} could not start: ${messageOf(error)}`);
+      }
+      if (worker !== undefined) workers.push(worker);
+    }
+
+    const startupDeadline = Date.now() + BATCH_WORKER_START_TIMEOUT_MS;
+    for (let index = 0; index < count; index += 1) {
+      for (;;) {
+        const state = Atomics.load(states, index);
+        if (state !== BATCH_STATE_CREATED) break;
+        const remaining = startupDeadline - Date.now();
+        if (remaining <= 0) {
+          const previous = Atomics.compareExchange(
+            states,
+            index,
+            BATCH_STATE_CREATED,
+            BATCH_STATE_CANCELLED,
+          );
+          if (previous !== BATCH_STATE_CREATED) continue;
+          Atomics.notify(states, index);
+          log(
+            `[run-goal] batch worker ${index} did not start within ${BATCH_WORKER_START_TIMEOUT_MS} ms; ` +
+              'cancelled before any task-owned side effect',
+          );
+          break;
+        }
+        Atomics.wait(states, index, BATCH_STATE_CREATED, Math.min(remaining, BATCH_WORKER_POLL_MS));
+      }
+    }
+
+    for (let index = 0; index < count; index += 1) {
+      for (;;) {
+        const state = Atomics.load(states, index);
+        if (state === BATCH_STATE_DONE || state === BATCH_STATE_CANCELLED) break;
+        Atomics.wait(states, index, state, BATCH_WORKER_POLL_MS);
+      }
+    }
+
+    const results = [];
+    for (let index = 0; index < count; index += 1) {
+      const descriptor = descriptors[index];
+      const state = Atomics.load(states, index);
+      let record = null;
+      if (state === BATCH_STATE_DONE) {
+        const resultPath = join(tempRoot, `task-${index}-result.json`);
+        if (existsSync(resultPath)) {
+          try {
+            record = JSON.parse(readFileSync(resultPath, 'utf8'));
+          } catch {
+            record = null;
+          }
+        }
+      }
+      results.push({
+        taskId: descriptor.taskId,
+        title: descriptor.title,
+        child: record?.child ?? {
+          status: 'EXECUTOR_FAILED',
+          reason: 'batch task did not produce a result',
+        },
+        startedAt: record?.startedAt ?? null,
+        endedAt: record?.endedAt ?? null,
+      });
+    }
+    return results;
+  } finally {
+    for (const worker of workers) {
+      worker.terminate().catch(() => {});
+    }
+    try {
+      rmSync(tempRoot, { recursive: true, force: true });
+    } catch (error) {
+      log(`[run-goal] batch scratch cleanup failed: ${messageOf(error)}`);
+    }
+  }
+}
+
+function executeTaskBatch({ descriptors, deps, log }) {
+  // Any injected in-process child seam (an executor, an invocation seam, or a
+  // publication seam) requires the deterministic in-process path; those seams
+  // cannot cross a worker boundary. `env` is excluded because workers support it
+  // natively.
+  const hasInProcessSeam =
+    deps.runOnce !== undefined ||
+    deps.runPublishOnce !== undefined ||
+    CHILD_SEAM_KEYS.some((key) => key !== 'env' && deps[key] !== undefined);
+  const executeTask = hasInProcessSeam
+    ? (descriptor) => invokeDescriptorInProcess({ descriptor, deps, log })
+    : null;
+  return runTaskBatch({
+    descriptors,
+    maxConcurrency: MAX_BATCH_CONCURRENCY,
+    env: deps.env ?? null,
+    log,
+    executeTask,
+  });
 }
 
 /**
@@ -1763,8 +2177,21 @@ export function runGoal(options = {}, deps = {}) {
       );
     }
 
-    selection = selectTask({ contract, criteria: evaluation, attemptedTaskIds, completedTaskIds });
-    if (selection.task === null) {
+    const admission = admitTaskBatch({
+      contract,
+      criteria: evaluation,
+      attemptedTaskIds,
+      completedTaskIds,
+    });
+    selection = {
+      task: admission.tasks[0]?.task ?? null,
+      closes: admission.tasks[0]?.closes ?? [],
+      skipped: admission.skipped,
+      refusals: admission.refusals,
+    };
+    let batchEntries = admission.tasks;
+
+    if (batchEntries.length === 0) {
       result.selection = {
         taskId: null,
         closes: [],
@@ -1819,12 +2246,7 @@ export function runGoal(options = {}, deps = {}) {
           result.planner.lastWorkspaceCleanup = plannerRun.workspaceCleanup;
           result.planner.lastExecutor = plannerRun.executor;
           if (plannerRun.task !== null) {
-            selection = {
-              task: plannerRun.task,
-              closes: [...plannerRun.task.closes],
-              skipped: selection.skipped,
-              refusals: selection.refusals,
-            };
+            batchEntries = [{ task: plannerRun.task, closes: [...plannerRun.task.closes] }];
           } else {
             result.iterations = passCount;
             result.criteria = annotateCriteria({
@@ -1838,7 +2260,7 @@ export function runGoal(options = {}, deps = {}) {
         }
       }
 
-      if (selection.task === null) {
+      if (batchEntries.length === 0) {
         result.iterations = passCount;
         result.criteria = annotateCriteria({
           contract,
@@ -1894,24 +2316,79 @@ export function runGoal(options = {}, deps = {}) {
       return finish(BUDGET_EXHAUSTED, `budget exhausted: ${budgetExhausted}`);
     }
 
-    const task = selection.task;
+    const remainingTaskBudget = contract.budget.max_tasks - result.attempts.length;
+    const batch = batchEntries.slice(0, Math.max(0, remainingTaskBudget));
+    if (batch.length === 0) {
+      result.iterations = passCount;
+      result.selection = {
+        taskId: null,
+        closes: [],
+        refusals: selection.refusals,
+        skipped: selection.skipped,
+      };
+      result.refusals = selection.refusals;
+      result.criteria = annotateCriteria({
+        contract,
+        criteria: evaluation,
+        attemptedTaskIds,
+        completedTaskIds,
+      });
+      result.budget.exhausted = 'TASKS';
+      return finish(BUDGET_EXHAUSTED, 'budget exhausted: TASKS');
+    }
+    // Eligible tasks that do not fit this batch (concurrency or task budget)
+    // stay eligible for a later recomputation and are never marked failed.
+    const batchExcluded = batchEntries.slice(batch.length).map((entry) => ({
+      taskId: entry.task.id,
+      closes: [...entry.closes],
+      kind: 'TASK_BUDGET',
+      withTaskId: null,
+      reason: `task budget leaves room for ${remainingTaskBudget} more attempt(s)`,
+    }));
+
+    passCount += 1;
+    const concurrent = batch.length > 1;
     result.selection = {
-      taskId: task.id,
-      closes: selection.closes,
+      taskId: batch[0].task.id,
+      closes: [...batch[0].closes],
       refusals: selection.refusals,
       skipped: selection.skipped,
     };
     result.refusals = selection.refusals;
-    passCount += 1;
 
-    const taskText = buildTaskText({ task, contract });
-    let child;
+    const descriptors = batch.map((entry) => {
+      const title = buildTaskTitle({
+        baseTitle: options.title ?? null,
+        taskId: entry.task.id,
+        concurrent,
+      });
+      return {
+        taskId: entry.task.id,
+        task: entry.task,
+        closes: [...entry.closes],
+        title,
+        invocation: buildChildInvocation({
+          task: entry.task,
+          taskText: buildTaskText({ task: entry.task, contract }),
+          options,
+          title,
+        }),
+      };
+    });
+
+    let batchResults;
     try {
-      child = invokeChild({ task, taskText, options, deps, log });
+      batchResults = executeTaskBatch({ descriptors, deps, log });
     } catch (error) {
-      child = { status: 'EXECUTOR_FAILED', reason: `child invocation failed: ${messageOf(error)}` };
+      batchResults = descriptors.map((descriptor) => ({
+        taskId: descriptor.taskId,
+        title: descriptor.title,
+        child: { status: 'EXECUTOR_FAILED', reason: `batch execution failed: ${messageOf(error)}` },
+        startedAt: null,
+        endedAt: null,
+      }));
     }
-    attemptedTaskIds.add(task.id);
+    for (const descriptor of descriptors) attemptedTaskIds.add(descriptor.taskId);
 
     let nextPin;
     try {
@@ -1921,25 +2398,33 @@ export function runGoal(options = {}, deps = {}) {
         readLiveMain: deps.readLiveMain ?? readLiveRemoteMain,
         fetchLiveMain: deps.fetchLiveMain ?? fetchBaseline,
       });
-      result.liveMain.observations.push({ phase: `AFTER_TASK_${passCount}`, ...nextPin });
+      result.liveMain.observations.push({ phase: `AFTER_BATCH_${passCount}`, ...nextPin });
       pin = nextPin;
       lastPinSnapshot = { remoteSha: pin.remoteSha, fetchedSha: pin.fetchedSha, stable: pin.stable };
     } catch (error) {
-      result.attempts.push({
-        iteration: passCount,
-        taskId: task.id,
-        publication: task.publication,
-        semanticOwner: [...task.semantic_owner],
-        childStatus: child.status ?? null,
-        childReason: child.reason ?? null,
-        succeeded: isChildSuccess(task, child),
-        progressed: null,
-        changedPaths: Array.isArray(child.changedPaths) ? child.changedPaths : [],
-        child,
-      });
+      for (const descriptor of descriptors) {
+        const entry = batchResults.find((candidate) => candidate.taskId === descriptor.taskId);
+        const child = entry?.child ?? { status: 'EXECUTOR_FAILED', reason: 'no batch result' };
+        result.attempts.push({
+          iteration: passCount,
+          taskId: descriptor.taskId,
+          title: descriptor.title,
+          publication: descriptor.task.publication,
+          semanticOwner: [...descriptor.task.semantic_owner],
+          childStatus: child.status ?? null,
+          childReason: child.reason ?? null,
+          succeeded: isChildSuccess(descriptor.task, child),
+          progressed: null,
+          changedPaths: Array.isArray(child.changedPaths) ? child.changedPaths : [],
+          child,
+        });
+      }
       result.iterations = passCount;
       result.criteria = evaluation;
-      return finish(BLOCKED_EXTERNAL, `live main could not be re-read after a task: ${messageOf(error)}`);
+      return finish(
+        BLOCKED_EXTERNAL,
+        `live main could not be re-read after a task batch: ${messageOf(error)}`,
+      );
     }
 
     let nextEvaluation;
@@ -1949,23 +2434,54 @@ export function runGoal(options = {}, deps = {}) {
       return finish(BLOCKED_EXTERNAL, `criteria could not be re-evaluated: ${messageOf(error)}`);
     }
     const progressed = criteriaChanged(evaluation, nextEvaluation);
-    const succeeded = isChildSuccess(task, child);
-    if (succeeded) completedTaskIds.add(task.id);
-    result.attempts.push({
+    const batchResultsByTask = new Map(batchResults.map((entry) => [entry.taskId, entry]));
+    const batchAttempts = [];
+    for (const descriptor of descriptors) {
+      const entry = batchResultsByTask.get(descriptor.taskId);
+      const child = entry?.child ?? { status: 'EXECUTOR_FAILED', reason: 'no batch result' };
+      const succeeded = isChildSuccess(descriptor.task, child);
+      if (succeeded) completedTaskIds.add(descriptor.taskId);
+      const attempt = {
+        iteration: passCount,
+        taskId: descriptor.taskId,
+        title: descriptor.title,
+        publication: descriptor.task.publication,
+        semanticOwner: [...descriptor.task.semantic_owner],
+        childStatus: child.status ?? null,
+        childReason: child.reason ?? null,
+        succeeded,
+        progressed,
+        changedPaths: Array.isArray(child.changedPaths) ? child.changedPaths : [],
+        child,
+      };
+      result.attempts.push(attempt);
+      batchAttempts.push(attempt);
+    }
+    result.batches.push({
       iteration: passCount,
-      taskId: task.id,
-      publication: task.publication,
-      semanticOwner: [...task.semantic_owner],
-      childStatus: child.status ?? null,
-      childReason: child.reason ?? null,
-      succeeded,
-      progressed,
-      changedPaths: Array.isArray(child.changedPaths) ? child.changedPaths : [],
-      child,
+      taskIds: descriptors.map((descriptor) => descriptor.taskId),
+      titles: descriptors.map((descriptor) => descriptor.title),
+      admitted: descriptors.map((descriptor) => ({
+        taskId: descriptor.taskId,
+        title: descriptor.title,
+        closes: [...descriptor.closes],
+      })),
+      excluded: [...admission.excluded, ...batchExcluded],
+      concurrencyLimit: MAX_BATCH_CONCURRENCY,
+      observedConcurrency: maxObservedConcurrency(batchResults),
+      results: batchAttempts.map((attempt) => ({
+        taskId: attempt.taskId,
+        childStatus: attempt.childStatus,
+        succeeded: attempt.succeeded,
+        progressed: attempt.progressed,
+        startedAt: batchResultsByTask.get(attempt.taskId)?.startedAt ?? null,
+        endedAt: batchResultsByTask.get(attempt.taskId)?.endedAt ?? null,
+      })),
     });
     evaluation = nextEvaluation;
 
-    if (succeeded && !progressed) {
+    const succeededInBatch = batchAttempts.filter((attempt) => attempt.succeeded).length;
+    if (succeededInBatch > 0 && !progressed) {
       result.iterations = passCount;
       result.criteria = annotateCriteria({
         contract,
@@ -1975,7 +2491,11 @@ export function runGoal(options = {}, deps = {}) {
       });
       return finish(
         NO_PROGRESS,
-        `task ${task.id} completed but no criterion state changed at live main ${pin.fetchedSha}`,
+        batch.length === 1
+          ? `task ${descriptors[0].taskId} completed but no criterion state changed at live main ${pin.fetchedSha}`
+          : `task batch [${descriptors
+              .map((descriptor) => descriptor.taskId)
+              .join(', ')}] completed but no criterion state changed at live main ${pin.fetchedSha}`,
       );
     }
   }
@@ -2090,7 +2610,17 @@ export function main(
 }
 
 const invokedAsMainScript =
-  process.argv[1] != null && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  isMainThread &&
+  process.argv[1] != null &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedAsMainScript) {
   process.exitCode = main(process.argv.slice(2));
+}
+
+// Task-owned worker entry for one admitted batch task. The worker never talks
+// to the foreground owner through the event loop; it signals completion through
+// the shared state slot and a task-owned result file, so the owner can stay
+// synchronous while the batch runs.
+if (!isMainThread && workerData != null && workerData.greenhubRunGoalBatchTask != null) {
+  batchWorkerMain(workerData.greenhubRunGoalBatchTask);
 }

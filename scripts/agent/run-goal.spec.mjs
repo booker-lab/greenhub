@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -16,7 +17,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -26,16 +27,19 @@ import {
   HUMAN_DECISION_REQUIRED,
   INVALID_GOAL,
   INVALID_TASK,
+  MAX_BATCH_CONCURRENCY,
   NO_PROGRESS,
   NO_TASK_FOR_GAP,
   PLANNER_OUTCOME_MAX_CHARS,
+  admitTaskBatch,
   buildPlannerPrompt,
   buildTaskText,
   parseArgs,
   runGoal,
+  runTaskBatch,
   validateGoalContract,
 } from './run-goal.mjs';
-import { defaultRunProofCommand } from './run-once.mjs';
+import { defaultRunProofCommand, fetchBaseline, readLiveRemoteMain } from './run-once.mjs';
 
 function git(cwd, args) {
   return execFileSync('git', args, {
@@ -86,6 +90,12 @@ function buildFixture() {
       join(root, 'proof-two.cjs'),
       "const { existsSync } = require('node:fs');\nprocess.exit(existsSync('docs/two.md') ? 0 : 1);\n",
     );
+    for (let index = 1; index <= 5; index += 1) {
+      writeFileSync(
+        join(root, `proof-ga03-${index}.cjs`),
+        `const { existsSync } = require('node:fs');\nprocess.exit(existsSync('docs/ga03/p${index}.md') ? 0 : 1);\n`,
+      );
+    }
     git(root, ['add', '-A']);
     git(root, ['commit', '-m', 'base']);
     const baseSha = git(root, ['rev-parse', 'HEAD']);
@@ -186,6 +196,115 @@ function listProofWorkspaceDirs() {
   return readdirSync(tmpdir())
     .filter((name) => name.startsWith('greenhub-run-goal-proof-'))
     .sort();
+}
+
+function listRunOnceWorkspaceDirs() {
+  return readdirSync(tmpdir())
+    .filter((name) => name.startsWith('greenhub-run-once-'))
+    .sort();
+}
+
+function listBatchWorkspaceDirs() {
+  return readdirSync(tmpdir())
+    .filter((name) => name.startsWith('greenhub-run-goal-batch-'))
+    .sort();
+}
+
+/** One bounded no-publication task closing one path criterion. */
+function batchTask({ id, path, criterionId, overrides = {} }) {
+  return {
+    id,
+    outcome: `Create the declared deliverable ${path} inside the allowed boundary.`,
+    preserve: 'Unrelated files and runtime behavior.',
+    closes: [criterionId],
+    allow: [path],
+    proof: [],
+    proof_owner: [],
+    semantic_owner: [path],
+    publication: 'none',
+    commit_message: null,
+    pr_title: null,
+    escalate_only_if: [],
+    depends_on: [],
+    ...overrides,
+  };
+}
+
+/**
+ * Deterministic real-process concurrency probe: a fake OpenCode executable that
+ * writes a start marker, blocks until every expected sibling has started (a
+ * filesystem barrier, never a fixed sleep), then writes an end marker.
+ */
+function createFakeOpencodeBin({ expected }) {
+  const binDir = mkdtempSync(join(tmpdir(), 'greenhub-run-goal-fake-opencode-'));
+  const eventsDir = mkdtempSync(join(tmpdir(), 'greenhub-run-goal-fake-events-'));
+  const script = [
+    "const fs = require('node:fs');",
+    "const path = require('node:path');",
+    'const dir = process.env.GREENHUB_GA03_FAKE_DIR;',
+    'const expected = Number(process.env.GREENHUB_GA03_FAKE_EXPECT || "5");',
+    'const args = process.argv.slice(2);',
+    "const dirIndex = args.indexOf('--dir');",
+    'const workspace = dirIndex >= 0 ? args[dirIndex + 1] : null;',
+    "const titleIndex = args.indexOf('--title');",
+    'const title = titleIndex >= 0 ? args[titleIndex + 1] : null;',
+    'if (!dir || !workspace) {',
+    "  console.error('fake opencode: --dir and GREENHUB_GA03_FAKE_DIR are required');",
+    '  process.exit(2);',
+    '}',
+    'const key = path.basename(path.dirname(workspace));',
+    'const startedAt = Date.now();',
+    "fs.writeFileSync(path.join(dir, 'start-' + key + '.json'), JSON.stringify({ key, title, startedAt, pid: process.pid }));",
+    'const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);',
+    'const deadline = Date.now() + 120000;',
+    'for (;;) {',
+    "  const starts = fs.readdirSync(dir).filter((name) => name.startsWith('start-')).length;",
+    '  if (starts >= expected) break;',
+    '  if (Date.now() > deadline) {',
+    "    console.error('fake opencode: barrier timeout ' + starts + '/' + expected);",
+    '    process.exit(3);',
+    '  }',
+    '  sleep(20);',
+    '}',
+    'const endedAt = Date.now();',
+    "fs.writeFileSync(path.join(dir, 'end-' + key + '.json'), JSON.stringify({ key, title, startedAt, endedAt, pid: process.pid }));",
+    'process.exit(0);',
+    '',
+  ].join('\n');
+  writeFileSync(join(binDir, 'fake-opencode.cjs'), script, 'utf8');
+  let opencodeBin = null;
+  if (process.platform === 'win32') {
+    writeFileSync(
+      join(binDir, 'opencode.cmd'),
+      '@echo off\r\n"%~dp0\\fake-opencode.cjs" %*\r\n',
+      'utf8',
+    );
+  } else {
+    const executable = join(binDir, 'opencode');
+    writeFileSync(executable, `#!/usr/bin/env node\n${script}`, 'utf8');
+    chmodSync(executable, 0o755);
+    opencodeBin = executable;
+  }
+  return {
+    binDir,
+    eventsDir,
+    opencodeBin,
+    env: {
+      ...process.env,
+      PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
+      GREENHUB_GA03_FAKE_DIR: eventsDir,
+      GREENHUB_GA03_FAKE_EXPECT: String(expected),
+    },
+    readEvents(prefix) {
+      return readdirSync(eventsDir)
+        .filter((name) => name.startsWith(prefix))
+        .map((name) => JSON.parse(readFileSync(join(eventsDir, name), 'utf8')));
+    },
+    remove() {
+      rmSync(binDir, { recursive: true, force: true });
+      rmSync(eventsDir, { recursive: true, force: true });
+    },
+  };
 }
 
 function criterionById(result, id) {
@@ -1073,11 +1192,12 @@ test('task text uses the existing OUTCOME/PRESERVE/PROOF/ESCALATE ONLY IF shape'
 
 test('the source introduces no retired or out-of-scope automation concepts', () => {
   const source = readFileSync(new URL('./run-goal.mjs', import.meta.url), 'utf8');
+  // The GA-03 contract allows bounded in-run concurrency only. Persistent
+  // coordination concepts stay forbidden; the retired terms must not return.
   const forbidden = [
     /queue/i,
     /scheduler/i,
     /daemon/i,
-    /\bworker/i,
     /registry/i,
     /database/i,
     /\blease\b/i,
@@ -1085,7 +1205,6 @@ test('the source introduces no retired or out-of-scope automation concepts', () 
     /journal/i,
     /watcher/i,
     /watchdog/i,
-    /parallel/i,
     /orphan/i,
     /\block\b/i,
     /adopt/i,
@@ -1093,10 +1212,16 @@ test('the source introduces no retired or out-of-scope automation concepts', () 
     /\bcache\b/i,
     /control.?tower/i,
     /coordinator/i,
+    /setInterval/,
+    /setTimeout/,
+    /detached:\s*true/,
+    /SHARE_ENV/,
   ];
   for (const pattern of forbidden) {
     assert.ok(!pattern.test(source), `run-goal.mjs must not contain ${pattern}`);
   }
+  // Concurrency is fixed and bounded by the declared batch contract.
+  assert.match(source, /export const MAX_BATCH_CONCURRENCY = 5;/);
   // The planner seam is foreground-only and keeps no durable planner state; the
   // runner forwards existing executor seams but never imports or re-implements
   // admission/rebind/transport mechanics itself.
@@ -1873,6 +1998,561 @@ test('PLANNER OUTCOME CONTRACT D — a GA-02C-class boundary outcome is not bloc
     assert.equal(fake.calls.runPublishOnce.length, 1);
     const taskText = fake.calls.runPublishOnce[0].taskText;
     assert.ok(taskText.includes(outcome), 'the accepted outcome must reach the executor untruncated');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 A — five pairwise-independent tasks are admitted into one batch', () => {
+  const fixture = buildFixture();
+  try {
+    const paths = [1, 2, 3, 4, 5].map((index) => `docs/ga03/p${index}.md`);
+    const fake = createFakeChildren({
+      runOnceBehavior: (options) => ({
+        status: 'SUCCESS',
+        reason: 'fake execution',
+        changedPaths: [...options.allowedPaths],
+      }),
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({
+        CRITERIA: paths.map((path, index) => pathCriterion({ id: `C${index + 1}`, path })),
+        TASK_CATALOG: paths.map((path, index) =>
+          batchTask({ id: `T${index + 1}`, path, criterionId: `C${index + 1}` }),
+        ),
+        BUDGET: { max_iterations: 3, max_tasks: 5, max_wall_clock_ms: 60000 },
+      }),
+      fake.deps,
+    );
+
+    assert.equal(result.status, NO_PROGRESS);
+    assert.equal(result.batches.length, 1);
+    assert.deepEqual(result.batches[0].taskIds, ['T1', 'T2', 'T3', 'T4', 'T5']);
+    assert.deepEqual(result.batches[0].excluded, []);
+    assert.equal(result.batches[0].concurrencyLimit, MAX_BATCH_CONCURRENCY);
+    assert.equal(result.maxBatchConcurrency, MAX_BATCH_CONCURRENCY);
+    assert.equal(fake.calls.runOnce.length, 5);
+    assert.equal(result.childCalls, 5);
+    const titles = fake.calls.runOnce.map((options) => options.title);
+    assert.equal(new Set(titles).size, 5, 'each concurrent task needs a distinct session title');
+    assert.ok(titles.every((title) => typeof title === 'string' && title.length > 0));
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 B — admitted children actually overlap in real processes', () => {
+  const fixture = buildFixture();
+  const runOnceDirsBefore = listRunOnceWorkspaceDirs();
+  const batchDirsBefore = listBatchWorkspaceDirs();
+  const fakeOpencode = createFakeOpencodeBin({ expected: MAX_BATCH_CONCURRENCY });
+  try {
+    const descriptors = [1, 2, 3, 4, 5].map((index) => ({
+      taskId: `B${index}`,
+      title: `ga03-proof [B${index}]`,
+      closes: [],
+      invocation: {
+        runner: 'runOnce',
+        options: {
+          repositoryRoot: fixture.root,
+          remote: 'origin',
+          taskText: `OUTCOME:\nCreate docs/ga03/p${index}.md inside the allowed boundary.`,
+          allowedPaths: [`docs/ga03/p${index}.md`],
+          proofCommands: [],
+          proofOwners: [],
+          title: `ga03-proof [B${index}]`,
+          model: null,
+          agent: null,
+          opencodeBin: fakeOpencode.opencodeBin,
+          opencodeTimeoutMs: 120000,
+          proofTimeoutMs: 60000,
+        },
+      },
+    }));
+    const results = runTaskBatch({
+      descriptors,
+      maxConcurrency: MAX_BATCH_CONCURRENCY,
+      env: fakeOpencode.env,
+      log: () => {},
+    });
+
+    assert.equal(results.length, 5);
+    for (const entry of results) {
+      assert.equal(entry.child.status, 'ALREADY_SATISFIED');
+      assert.ok(Number.isFinite(entry.startedAt) && Number.isFinite(entry.endedAt));
+    }
+    const starts = fakeOpencode.readEvents('start-');
+    const ends = fakeOpencode.readEvents('end-');
+    assert.equal(starts.length, 5);
+    assert.equal(ends.length, 5);
+    assert.equal(new Set(starts.map((entry) => entry.title)).size, 5);
+    // The filesystem barrier means every child observed all five starts before
+    // any child ended; overlap is structural, not an after-the-fact recording.
+    assert.ok(
+      Math.max(...starts.map((entry) => entry.startedAt)) <=
+        Math.min(...ends.map((entry) => entry.endedAt)),
+      'all five child processes must be inside the barrier together',
+    );
+    const maxStart = Math.max(...results.map((entry) => entry.startedAt));
+    const minEnd = Math.min(...results.map((entry) => entry.endedAt));
+    assert.ok(maxStart < minEnd, 'worker execution intervals must overlap');
+    assert.deepEqual(listRunOnceWorkspaceDirs(), runOnceDirsBefore);
+    assert.deepEqual(listBatchWorkspaceDirs(), batchDirsBefore);
+  } finally {
+    fakeOpencode.remove();
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 C — overlapping semantic_owner tasks serialize across batches', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeChildren({
+      runPublishBehavior: (options, callNumber) => {
+        pushCommitToLiveMain(fixture, {
+          path: callNumber === 1 ? 'docs/one.md' : 'docs/two.md',
+          content: '# done\n',
+          message: `publication ${callNumber}`,
+        });
+        return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+      },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({
+        CRITERIA: [
+          pathCriterion({ id: 'C1', path: 'docs/one.md' }),
+          pathCriterion({ id: 'C2', path: 'docs/two.md' }),
+        ],
+        TASK_CATALOG: [
+          publicationTask({
+            id: 'T1',
+            closes: ['C1'],
+            allow: ['docs/one.md'],
+            semantic_owner: ['docs/shared'],
+            proof: [],
+            proof_owner: [],
+          }),
+          publicationTask({
+            id: 'T2',
+            closes: ['C2'],
+            allow: ['docs/two.md'],
+            semantic_owner: ['docs/shared'],
+            proof: [],
+            proof_owner: [],
+          }),
+        ],
+        BUDGET: { max_iterations: 4, max_tasks: 4, max_wall_clock_ms: 60000 },
+      }),
+      fake.deps,
+    );
+
+    assert.equal(result.status, GOAL_SATISFIED);
+    assert.deepEqual(
+      result.batches.map((batch) => batch.taskIds),
+      [['T1'], ['T2']],
+    );
+    assert.equal(result.batches[0].excluded.length, 1);
+    assert.deepEqual(
+      {
+        taskId: result.batches[0].excluded[0].taskId,
+        kind: result.batches[0].excluded[0].kind,
+        withTaskId: result.batches[0].excluded[0].withTaskId,
+      },
+      { taskId: 'T2', kind: 'SEMANTIC_OWNER', withTaskId: 'T1' },
+    );
+    assert.equal(fake.calls.runPublishOnce.length, 2);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 D — overlapping declared allow surfaces serialize', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeChildren({
+      runPublishBehavior: (options, callNumber) => {
+        pushCommitToLiveMain(fixture, {
+          path: callNumber === 1 ? 'docs/one.md' : 'docs/two.md',
+          content: '# done\n',
+          message: `publication ${callNumber}`,
+        });
+        return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+      },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({
+        CRITERIA: [
+          pathCriterion({ id: 'C1', path: 'docs/one.md' }),
+          pathCriterion({ id: 'C2', path: 'docs/two.md' }),
+        ],
+        TASK_CATALOG: [
+          publicationTask({
+            id: 'T1',
+            closes: ['C1'],
+            allow: ['docs/a'],
+            semantic_owner: [],
+            proof: [],
+            proof_owner: [],
+          }),
+          publicationTask({
+            id: 'T2',
+            closes: ['C2'],
+            allow: ['docs/a/nested'],
+            semantic_owner: [],
+            proof: [],
+            proof_owner: [],
+          }),
+        ],
+        BUDGET: { max_iterations: 4, max_tasks: 4, max_wall_clock_ms: 60000 },
+      }),
+      fake.deps,
+    );
+
+    assert.equal(result.status, GOAL_SATISFIED);
+    assert.deepEqual(
+      result.batches.map((batch) => batch.taskIds),
+      [['T1'], ['T2']],
+    );
+    assert.equal(result.batches[0].excluded[0].kind, 'ALLOW_SURFACE');
+    assert.equal(result.batches[0].excluded[0].withTaskId, 'T1');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 C2 — a proof_owner against a sibling mutation surface serializes', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeChildren({
+      runPublishBehavior: (options, callNumber) => {
+        pushCommitToLiveMain(fixture, {
+          path: callNumber === 1 ? 'docs/one.md' : 'docs/two.md',
+          content: '# done\n',
+          message: `publication ${callNumber}`,
+        });
+        return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+      },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({
+        CRITERIA: [
+          pathCriterion({ id: 'C1', path: 'docs/one.md' }),
+          pathCriterion({ id: 'C2', path: 'docs/two.md' }),
+        ],
+        TASK_CATALOG: [
+          publicationTask({
+            id: 'T1',
+            closes: ['C1'],
+            allow: ['docs/one.md'],
+            semantic_owner: [],
+            proof: ['node proof-ok.cjs'],
+            proof_owner: [['docs/two.md']],
+          }),
+          publicationTask({
+            id: 'T2',
+            closes: ['C2'],
+            allow: ['docs/two.md'],
+            semantic_owner: [],
+            proof: [],
+            proof_owner: [],
+          }),
+        ],
+        BUDGET: { max_iterations: 4, max_tasks: 4, max_wall_clock_ms: 60000 },
+      }),
+      fake.deps,
+    );
+
+    assert.equal(result.status, GOAL_SATISFIED);
+    assert.deepEqual(
+      result.batches.map((batch) => batch.taskIds),
+      [['T1'], ['T2']],
+    );
+    assert.equal(result.batches[0].excluded[0].kind, 'PROOF_OWNER');
+    assert.equal(result.batches[0].excluded[0].withTaskId, 'T1');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 E — depends_on tasks serialize in dependency order', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeChildren({
+      runPublishBehavior: (options, callNumber) => {
+        pushCommitToLiveMain(fixture, {
+          path: callNumber === 1 ? 'docs/one.md' : 'docs/two.md',
+          content: '# done\n',
+          message: `publication ${callNumber}`,
+        });
+        return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+      },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({
+        CRITERIA: [
+          pathCriterion({ id: 'C1', path: 'docs/one.md' }),
+          pathCriterion({ id: 'C2', path: 'docs/two.md' }),
+        ],
+        TASK_CATALOG: [
+          publicationTask({ id: 'T2', closes: ['C2'], depends_on: ['T1'] }),
+          publicationTask({ id: 'T1', closes: ['C1'] }),
+        ],
+        BUDGET: { max_iterations: 4, max_tasks: 4, max_wall_clock_ms: 60000 },
+      }),
+      fake.deps,
+    );
+
+    assert.equal(result.status, GOAL_SATISFIED);
+    assert.deepEqual(
+      result.batches.map((batch) => batch.taskIds),
+      [['T1'], ['T2']],
+    );
+    assert.deepEqual(
+      result.attempts.map((attempt) => attempt.taskId),
+      ['T1', 'T2'],
+    );
+    assert.equal(fake.calls.runPublishOnce.length, 2);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 F — one sibling failure does not cancel the other four tasks', () => {
+  const fixture = buildFixture();
+  try {
+    const paths = [1, 2, 3, 4, 5].map((index) => `docs/ga03/p${index}.md`);
+    const fake = createFakeChildren({
+      runOnceBehavior: (options) =>
+        options.allowedPaths[0].includes('/p3.')
+          ? { status: 'EXECUTOR_FAILED', reason: 'simulated sibling failure' }
+          : { status: 'SUCCESS', reason: 'fake execution', changedPaths: [...options.allowedPaths] },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({
+        CRITERIA: paths.map((path, index) => pathCriterion({ id: `C${index + 1}`, path })),
+        TASK_CATALOG: paths.map((path, index) =>
+          batchTask({ id: `T${index + 1}`, path, criterionId: `C${index + 1}` }),
+        ),
+        BUDGET: { max_iterations: 3, max_tasks: 5, max_wall_clock_ms: 60000 },
+      }),
+      fake.deps,
+    );
+
+    assert.equal(result.batches.length, 1);
+    assert.equal(result.batches[0].taskIds.length, 5);
+    assert.equal(result.childCalls, 5);
+    assert.equal(fake.calls.runOnce.length, 5);
+    assert.equal(
+      result.attempts.filter((attempt) => attempt.succeeded).length,
+      4,
+      'the four independent siblings must complete',
+    );
+    assert.equal(result.attempts.find((attempt) => attempt.taskId === 'T3').succeeded, false);
+    assert.equal(result.attempts.find((attempt) => attempt.taskId === 'T4').succeeded, true);
+    assert.equal(result.attempts.find((attempt) => attempt.taskId === 'T5').succeeded, true);
+    assert.equal(result.status, NO_PROGRESS);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 G — batch completion causes one authoritative recomputation from fresh live main', () => {
+  const fixture = buildFixture();
+  try {
+    let readCalls = 0;
+    let fetchCalls = 0;
+    let proofRuns = 0;
+    const fake = createFakeChildren({
+      runOnceBehavior: (options) => {
+        const index = options.allowedPaths[0].match(/p(\d)\.md/)[1];
+        pushCommitToLiveMain(fixture, {
+          path: `docs/ga03/p${index}.md`,
+          content: `# p${index}\n`,
+          message: `publish p${index}`,
+        });
+        return { status: 'SUCCESS', reason: 'fake execution', changedPaths: [...options.allowedPaths] };
+      },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({
+        CRITERIA: [1, 2, 3, 4, 5].map((index) =>
+          proofCriterion({ id: `C${index}`, command: `node proof-ga03-${index}.cjs` }),
+        ),
+        TASK_CATALOG: [1, 2, 3, 4, 5].map((index) =>
+          batchTask({ id: `T${index}`, path: `docs/ga03/p${index}.md`, criterionId: `C${index}` }),
+        ),
+        BUDGET: { max_iterations: 3, max_tasks: 5, max_wall_clock_ms: 120000 },
+      }),
+      {
+        ...fake.deps,
+        readLiveMain: (input) => {
+          readCalls += 1;
+          return readLiveRemoteMain(input);
+        },
+        fetchLiveMain: (input) => {
+          fetchCalls += 1;
+          return fetchBaseline(input);
+        },
+        runProofCommand: (input) => {
+          proofRuns += 1;
+          return defaultRunProofCommand(input);
+        },
+      },
+    );
+
+    assert.equal(result.status, GOAL_SATISFIED);
+    assert.equal(result.childCalls, 5);
+    assert.equal(result.batches.length, 1);
+    assert.equal(readCalls, 2, 'one start observation and one post-batch observation');
+    assert.equal(fetchCalls, 2, 'one start fetch and one post-batch fetch');
+    assert.equal(proofRuns, 10, 'five proofs before and five after the single recomputation');
+    assert.equal(result.criteria.every((criterion) => criterion.satisfied), true);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 H — sibling-caused live-main movement does not reinvoke executed tasks', () => {
+  const fixture = buildFixture();
+  try {
+    let readCalls = 0;
+    const fake = createFakeChildren({
+      runPublishBehavior: (options, callNumber) => {
+        pushCommitToLiveMain(fixture, {
+          path: callNumber === 1 ? 'docs/one.md' : 'docs/two.md',
+          content: '# done\n',
+          message: `sibling publication ${callNumber}`,
+        });
+        return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication with existing rebind semantics' };
+      },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({
+        CRITERIA: [
+          pathCriterion({ id: 'C1', path: 'docs/one.md' }),
+          pathCriterion({ id: 'C2', path: 'docs/two.md' }),
+        ],
+        TASK_CATALOG: [
+          publicationTask({ id: 'T1', closes: ['C1'], allow: ['docs/one.md'], semantic_owner: ['docs/one.md'], proof: [], proof_owner: [] }),
+          publicationTask({ id: 'T2', closes: ['C2'], allow: ['docs/two.md'], semantic_owner: ['docs/two.md'], proof: [], proof_owner: [] }),
+        ],
+        BUDGET: { max_iterations: 4, max_tasks: 4, max_wall_clock_ms: 60000 },
+      }),
+      {
+        ...fake.deps,
+        readLiveMain: (input) => {
+          readCalls += 1;
+          return readLiveRemoteMain(input);
+        },
+      },
+    );
+
+    assert.equal(result.status, GOAL_SATISFIED);
+    assert.equal(result.liveMain.movement, 'MOVED');
+    assert.equal(fake.calls.runPublishOnce.length, 2, 'no task may be reinvoked after sibling movement');
+    assert.deepEqual(
+      result.attempts.map((attempt) => attempt.taskId),
+      ['T1', 'T2'],
+    );
+    assert.equal(readCalls, 2, 'the sibling movement triggers exactly one recomputation');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 I — the batch never exceeds the fixed concurrency maximum', () => {
+  const fixture = buildFixture();
+  try {
+    const indexes = [1, 2, 3, 4, 5, 6];
+    const fake = createFakeChildren({
+      runOnceBehavior: (options) => {
+        const index = options.allowedPaths[0].match(/p(\d)\.md/)[1];
+        pushCommitToLiveMain(fixture, {
+          path: `docs/ga03/p${index}.md`,
+          content: `# p${index}\n`,
+          message: `publish p${index}`,
+        });
+        return { status: 'SUCCESS', reason: 'fake execution', changedPaths: [...options.allowedPaths] };
+      },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({
+        CRITERIA: indexes.map((index) => pathCriterion({ id: `C${index}`, path: `docs/ga03/p${index}.md` })),
+        TASK_CATALOG: indexes.map((index) =>
+          batchTask({ id: `T${index}`, path: `docs/ga03/p${index}.md`, criterionId: `C${index}` }),
+        ),
+        BUDGET: { max_iterations: 4, max_tasks: 6, max_wall_clock_ms: 60000 },
+      }),
+      fake.deps,
+    );
+
+    assert.equal(result.status, GOAL_SATISFIED);
+    assert.deepEqual(
+      result.batches.map((batch) => batch.taskIds),
+      [['T1', 'T2', 'T3', 'T4', 'T5'], ['T6']],
+    );
+    assert.ok(result.batches.every((batch) => batch.taskIds.length <= MAX_BATCH_CONCURRENCY));
+    assert.equal(result.batches[0].excluded[0].taskId, 'T6');
+    assert.equal(result.batches[0].excluded[0].kind, 'CONCURRENCY_LIMIT');
+    assert.equal(fake.calls.runOnce.length, 6, 'the excluded task runs in a later batch');
+    assert.throws(
+      () =>
+        runTaskBatch({
+          descriptors: indexes.map((index) => ({ taskId: `X${index}` })),
+          maxConcurrency: MAX_BATCH_CONCURRENCY,
+        }),
+      /exceeds the maximum concurrency/,
+    );
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('GA-03 J — a single eligible task keeps the existing serial behavior', () => {
+  const fixture = buildFixture();
+  try {
+    const contract = () =>
+      baseContract({
+        CRITERIA: [pathCriterion({ id: 'C1', path: 'docs/ga03/p1.md' })],
+        TASK_CATALOG: [batchTask({ id: 'T1', path: 'docs/ga03/p1.md', criterionId: 'C1' })],
+        BUDGET: { max_iterations: 3, max_tasks: 2, max_wall_clock_ms: 60000 },
+      });
+    const fake = createFakeChildren({
+      runOnceBehavior: () => ({ status: 'SUCCESS', reason: 'fake execution', changedPaths: ['docs/ga03/p1.md'] }),
+    });
+    const titled = runGoal(
+      {
+        goalFile: writeGoal(fixture, contract()),
+        repositoryRoot: fixture.root,
+        remote: 'origin',
+        title: 'ga03-serial-title',
+      },
+      { log: () => {}, ...fake.deps },
+    );
+    assert.equal(titled.status, NO_PROGRESS);
+    assert.equal(titled.batches.length, 1);
+    assert.deepEqual(titled.batches[0].taskIds, ['T1']);
+    assert.deepEqual(titled.batches[0].titles, ['ga03-serial-title']);
+    assert.equal(fake.calls.runOnce[0].title, 'ga03-serial-title');
+    assert.equal(titled.childCalls, 1);
+    assert.equal(titled.iterations, 1);
+
+    const untitled = runGoal(
+      { goalFile: writeGoal(fixture, contract()), repositoryRoot: fixture.root, remote: 'origin' },
+      { log: () => {}, ...fake.deps },
+    );
+    assert.equal(untitled.status, NO_PROGRESS);
+    assert.deepEqual(untitled.batches[0].titles, [null]);
+    assert.equal(fake.calls.runOnce[1].title, null);
   } finally {
     removeFixture(fixture);
   }
