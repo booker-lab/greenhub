@@ -26,16 +26,22 @@ import {
   buildTaskPrompt,
   CLEANUP_FAILED,
   classifyChangedPaths,
+  defaultRemoveWorkspace,
   EXECUTOR_FAILED,
   extractWindowsShimTarget,
+  HEADLESS_MODE,
   INVALID_INPUT,
   isPathAllowed,
+  OPENCODE_ATTACH_URL_ENV,
   PROOF_FAILED,
   parseArgs,
+  parseVisibleAttachUrl,
+  probeVisibleServer,
   RUN_ONCE_STATUSES,
   resolveOpencodeCommand,
   runOnce,
   SUCCESS,
+  VISIBLE_TUI_MODE,
 } from './run-once.mjs';
 
 function git(cwd, args) {
@@ -742,4 +748,482 @@ test('task prompt carries the contract and the execution boundary', () => {
   assert.match(prompt, /OUTCOME: x/);
   assert.match(prompt, /Allowed paths[^\n]*src, scripts\/agent/);
   assert.match(prompt, /Do not run git push/);
+});
+
+function visibleEnv(attachUrl) {
+  return { PATH: process.env.PATH, [OPENCODE_ATTACH_URL_ENV]: attachUrl };
+}
+
+function createDisposalRecorder({ ok = true, error = null, calls = [] } = {}) {
+  return (args) => {
+    calls.push(args);
+    return { attempted: true, ok, error };
+  };
+}
+
+function createPreflightRecorder({ ok = true, error = null, calls = [] } = {}) {
+  return (args) => {
+    calls.push(args);
+    return { attempted: true, ok, error: ok ? null : (error ?? 'simulated unhealthy server') };
+  };
+}
+
+function titleOf(invocation) {
+  return invocation.args[invocation.args.indexOf('--title') + 1];
+}
+
+test('VISIBLE_TUI A ??headless mode is byte-identical when no attach URL is configured', () => {
+  const args = buildOpencodeArgs({
+    taskText: 'contract',
+    workspacePath: '/tmp/ws',
+    model: 'provider/model',
+    agent: 'greenhub',
+    title: 'GN-01',
+  });
+  assert.deepEqual(args, [
+    'run',
+    '--format',
+    'json',
+    '--dir',
+    '/tmp/ws',
+    '--auto',
+    '--model',
+    'provider/model',
+    '--agent',
+    'greenhub',
+    '--title',
+    'GN-01',
+    'contract',
+  ]);
+  assert.ok(!args.includes('--attach'));
+
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      env: { PATH: process.env.PATH },
+      log: () => {},
+    });
+    assert.equal(result.status, SUCCESS);
+    assert.equal(result.executor.mode, HEADLESS_MODE);
+    assert.equal(result.executor.attachUrl, null);
+    assert.equal(result.executor.preflight, 'NOT_ATTEMPTED');
+    assert.equal(result.executor.instanceDisposal, 'NOT_ATTEMPTED');
+    assert.ok(!fake.invocations[0].args.includes('--attach'));
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI B ??a loopback attach URL produces one attached invocation with preserved semantics', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const preflightCalls = [];
+    const result = runOnce(
+      runOptions(fixture, { title: 'OV-01 task A', model: 'provider/model', agent: 'greenhub' }),
+      {
+        invokeOpencode: fake.invokeOpencode,
+        probeVisibleServer: createPreflightRecorder({ calls: preflightCalls }),
+        disposeVisibleInstance: createDisposalRecorder(),
+        env: visibleEnv('http://127.0.0.1:4096'),
+        log: () => {},
+      },
+    );
+
+    assert.equal(result.status, SUCCESS);
+    assert.equal(result.executor.mode, VISIBLE_TUI_MODE);
+    assert.equal(result.executor.attachUrl, 'http://127.0.0.1:4096');
+    assert.equal(result.executor.preflight, 'HEALTHY');
+    assert.equal(preflightCalls.length, 1);
+    assert.equal(preflightCalls[0].attachUrl, 'http://127.0.0.1:4096');
+    assert.equal(fake.invocations.length, 1);
+    const invocation = fake.invocations[0];
+    assert.deepEqual(invocation.args.slice(0, 8), [
+      'run',
+      '--attach',
+      'http://127.0.0.1:4096',
+      '--format',
+      'json',
+      '--dir',
+      invocation.cwd,
+      '--auto',
+    ]);
+    assert.ok(invocation.args.includes('--model') && invocation.args.includes('provider/model'));
+    assert.ok(invocation.args.includes('--agent') && invocation.args.includes('greenhub'));
+    assert.equal(titleOf(invocation), 'OV-01 task A');
+    assert.match(invocation.args[invocation.args.length - 1], /^Execute exactly one bounded task/);
+    assert.equal(result.baseline.baselineSha, fixture.baseSha);
+    assert.deepEqual(result.changedPaths, ['src/allowed.txt']);
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI B2 ??loopback host variants are accepted and normalized to a bare origin', () => {
+  assert.deepEqual(parseVisibleAttachUrl('http://127.0.0.1:4096'), {
+    ok: true,
+    url: 'http://127.0.0.1:4096',
+  });
+  assert.deepEqual(parseVisibleAttachUrl('http://localhost:4096/'), {
+    ok: true,
+    url: 'http://localhost:4096',
+  });
+  assert.deepEqual(parseVisibleAttachUrl('http://[::1]:4096'), {
+    ok: true,
+    url: 'http://[::1]:4096',
+  });
+  assert.deepEqual(parseVisibleAttachUrl('  http://LOCALHOST:4096  '), {
+    ok: true,
+    url: 'http://localhost:4096',
+  });
+  assert.deepEqual(parseVisibleAttachUrl('http://127.0.0.1'), {
+    ok: true,
+    url: 'http://127.0.0.1',
+  });
+});
+
+test('VISIBLE_TUI C ??non-loopback or malformed attach targets fail closed before any effect', () => {
+  for (const target of [
+    'http://192.168.0.10:4096',
+    'http://10.0.0.5:4096',
+    'http://0.0.0.0:4096',
+    'http://localhost.evil.example:4096',
+    'https://opencode.example.com',
+    'ftp://127.0.0.1:4096',
+    'http://user:pass@127.0.0.1:4096',
+    'http://127.0.0.1:4096/prefix',
+    'http://127.0.0.1:4096/?x=1',
+    'not-a-url',
+    '',
+  ]) {
+    assert.equal(parseVisibleAttachUrl(target).ok, false, `${target} must be rejected`);
+  }
+
+  const fixture = buildFixture();
+  try {
+    const statusBefore = gitRaw(fixture.root, ['status', '--porcelain=v1']);
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const preflightCalls = [];
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: createPreflightRecorder({ calls: preflightCalls }),
+      env: visibleEnv('http://192.168.0.10:4096'),
+      log: () => {},
+    });
+
+    assert.equal(result.status, EXECUTOR_FAILED);
+    assert.equal(result.executor.mode, VISIBLE_TUI_MODE);
+    assert.equal(result.executor.invoked, false);
+    assert.match(result.reason, /attach target is not allowed/);
+    assert.equal(preflightCalls.length, 0);
+    assert.equal(fake.invocations.length, 0);
+    assert.equal(result.workspace.created, false);
+    assert.equal(result.workspace.cleanup, 'NOT_CREATED');
+    assert.deepEqual(result.changedPaths, []);
+    assert.equal(gitRaw(fixture.root, ['status', '--porcelain=v1']), statusBefore);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI D ??an attached invocation failure is EXECUTOR_FAILED with no standalone retry', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ fail: true });
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: createPreflightRecorder(),
+      disposeVisibleInstance: createDisposalRecorder(),
+      env: visibleEnv('http://127.0.0.1:4096'),
+      log: () => {},
+    });
+
+    assert.equal(result.status, EXECUTOR_FAILED);
+    assert.equal(result.executor.mode, VISIBLE_TUI_MODE);
+    assert.equal(fake.invocations.length, 1);
+    assert.ok(fake.invocations[0].args.includes('--attach'));
+    assert.equal(
+      fake.invocations.filter((invocation) => !invocation.args.includes('--attach')).length,
+      0,
+      'a standalone retry would be a second invocation without --attach',
+    );
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI D2 ??a throwing attached invocation stays EXECUTOR_FAILED without fallback', () => {
+  const fixture = buildFixture();
+  try {
+    let calls = 0;
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: () => {
+        calls += 1;
+        const error = new Error('connect ECONNREFUSED 127.0.0.1:4096');
+        error.code = 'ECONNREFUSED';
+        throw error;
+      },
+      probeVisibleServer: createPreflightRecorder(),
+      disposeVisibleInstance: createDisposalRecorder(),
+      env: visibleEnv('http://127.0.0.1:4096'),
+      log: () => {},
+    });
+
+    assert.equal(result.status, EXECUTOR_FAILED);
+    assert.equal(calls, 1);
+    assert.equal(result.executor.startErrorCode, 'ECONNREFUSED');
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI E ??the attached mutation child keeps the sanitized child environment', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const baseEnv = {
+      PATH: process.env.PATH,
+      GH_TOKEN: 'gh',
+      GITHUB_TOKEN: 'github',
+      VERCEL_TOKEN: 'vercel',
+      [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096',
+    };
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: createPreflightRecorder(),
+      disposeVisibleInstance: createDisposalRecorder(),
+      env: baseEnv,
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS);
+    const childEnv = fake.invocations[0].env;
+    for (const dropped of ['GH_TOKEN', 'GITHUB_TOKEN', 'VERCEL_TOKEN']) {
+      assert.equal(childEnv[dropped], undefined, `${dropped} must not reach the child`);
+    }
+    for (const credentialValue of ['gh', 'github', 'vercel']) {
+      assert.ok(
+        !Object.values(childEnv).includes(credentialValue),
+        `${credentialValue} must not be a child environment value`,
+      );
+    }
+    assert.equal(childEnv.GIT_TERMINAL_PROMPT, '0');
+    assert.equal(childEnv.GIT_CONFIG_KEY_1, 'protocol.allow');
+    assert.equal(childEnv.GIT_CONFIG_VALUE_1, 'never');
+    assert.equal(childEnv.GIT_CONFIG_KEY_3, 'push.default');
+    assert.equal(childEnv.GIT_CONFIG_VALUE_3, 'nothing');
+    assert.equal(
+      childEnv.GH_CONFIG_DIR,
+      join(dirname(fake.invocations[0].cwd), 'opencode-child-gh-config'),
+    );
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI F ??each attached task keeps its own title, workspace, and invocation', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const env = visibleEnv('http://127.0.0.1:4096');
+    const first = runOnce(runOptions(fixture, { title: 'OV-01 task A' }), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: createPreflightRecorder(),
+      disposeVisibleInstance: createDisposalRecorder(),
+      env,
+      log: () => {},
+    });
+    const second = runOnce(runOptions(fixture, { title: 'OV-01 task B' }), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: createPreflightRecorder(),
+      disposeVisibleInstance: createDisposalRecorder(),
+      env,
+      log: () => {},
+    });
+
+    assert.equal(first.status, SUCCESS);
+    assert.equal(second.status, SUCCESS);
+    assert.equal(fake.invocations.length, 2);
+    const [taskA, taskB] = fake.invocations;
+    assert.notEqual(taskA.cwd, taskB.cwd);
+    assert.notEqual(taskA.cwd, fixture.root);
+    assert.equal(titleOf(taskA), 'OV-01 task A');
+    assert.equal(titleOf(taskB), 'OV-01 task B');
+    assert.notEqual(titleOf(taskA), titleOf(taskB));
+    for (const invocation of fake.invocations) {
+      assert.ok(invocation.args.includes('--attach'));
+    }
+    assert.equal(listRegisteredWorktrees(fixture.root).length, 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI G ??attached runs dispose the visible instance before workspace cleanup', () => {
+  const fixture = buildFixture();
+  try {
+    const calls = [];
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: createPreflightRecorder(),
+      disposeVisibleInstance: createDisposalRecorder({ calls }),
+      env: visibleEnv('http://localhost:4096'),
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS);
+    assert.equal(result.executor.instanceDisposal, 'DISPOSED');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].attachUrl, 'http://localhost:4096');
+    assert.equal(calls[0].workspacePath, fake.invocations[0].cwd);
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+    assert.equal(existsSync(result.workspace.path), false);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI G1 ??a transient workspace sharing violation is retried after re-disposal', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const disposalCalls = [];
+    let removalAttempts = 0;
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: createPreflightRecorder(),
+      disposeVisibleInstance: (args) => {
+        disposalCalls.push(args);
+        return { attempted: true, ok: true, error: null };
+      },
+      removeWorkspace: (args) => {
+        removalAttempts += 1;
+        if (removalAttempts === 1) {
+          return { removed: false, errors: ['simulated transient sharing violation'] };
+        }
+        return defaultRemoveWorkspace(args);
+      },
+      env: visibleEnv('http://127.0.0.1:4096'),
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS);
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+    assert.equal(removalAttempts, 2);
+    assert.equal(disposalCalls.length, 2, 'the retry re-disposes before removing again');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI G2 ??a failed instance disposal is reported without masking successful cleanup', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: createPreflightRecorder(),
+      disposeVisibleInstance: createDisposalRecorder({
+        ok: false,
+        error: 'simulated disposal failure',
+      }),
+      env: visibleEnv('http://127.0.0.1:4096'),
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS);
+    assert.equal(result.executor.instanceDisposal, 'FAILED');
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI G3 ??headless runs never attempt visible instance disposal', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: () => {
+        throw new Error('headless runs must not probe a visible server');
+      },
+      disposeVisibleInstance: () => {
+        throw new Error('headless runs must not dispose a visible instance');
+      },
+      env: { PATH: process.env.PATH },
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS);
+    assert.equal(result.executor.preflight, 'NOT_ATTEMPTED');
+    assert.equal(result.executor.instanceDisposal, 'NOT_ATTEMPTED');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI H ??an unhealthy visible server fails closed as VISIBILITY_UNAVAILABLE before any side effect', () => {
+  const fixture = buildFixture();
+  try {
+    const statusBefore = gitRaw(fixture.root, ['status', '--porcelain=v1']);
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: createPreflightRecorder({
+        ok: false,
+        error: 'health preflight exited with status 1',
+      }),
+      disposeVisibleInstance: createDisposalRecorder(),
+      env: visibleEnv('http://127.0.0.1:4096'),
+      log: () => {},
+    });
+
+    assert.equal(result.status, EXECUTOR_FAILED);
+    assert.equal(result.executor.mode, VISIBLE_TUI_MODE);
+    assert.equal(result.executor.attachUrl, 'http://127.0.0.1:4096');
+    assert.equal(result.executor.preflight, 'FAILED');
+    assert.equal(result.executor.invoked, false);
+    assert.match(result.reason, /VISIBILITY_UNAVAILABLE/);
+    assert.equal(fake.invocations.length, 0);
+    assert.equal(result.workspace.created, false);
+    assert.equal(result.workspace.cleanup, 'NOT_CREATED');
+    assert.equal(gitRaw(fixture.root, ['status', '--porcelain=v1']), statusBefore);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('VISIBLE_TUI H2 ??probeVisibleServer reports health through its spawn seam only', () => {
+  const healthy = probeVisibleServer({
+    attachUrl: 'http://127.0.0.1:4096',
+    spawn: () => ({ status: 0, stderr: '' }),
+  });
+  assert.deepEqual(healthy, { attempted: true, ok: true, error: null });
+
+  let observedArgs = null;
+  const unhealthy = probeVisibleServer({
+    attachUrl: 'http://127.0.0.1:4096',
+    spawn: (command, args) => {
+      observedArgs = { command, args };
+      return { status: 1, stderr: 'connect ECONNREFUSED 127.0.0.1:4096\n' };
+    },
+  });
+  assert.equal(unhealthy.attempted, true);
+  assert.equal(unhealthy.ok, false);
+  assert.match(unhealthy.error, /ECONNREFUSED/);
+  assert.equal(observedArgs.args[observedArgs.args.length - 1], 'http://127.0.0.1:4096');
+
+  const missingTarget = probeVisibleServer({ spawn: () => ({ status: 0, stderr: '' }) });
+  assert.deepEqual(missingTarget, {
+    attempted: false,
+    ok: false,
+    error: 'attach URL is required',
+  });
 });

@@ -24,6 +24,8 @@ jobs:
         run: node --test scripts/git/publication-admission.spec.mjs scripts/git/publication-transport.spec.mjs scripts/git/publication-rebind.spec.mjs
       - name: Verify stateless run-once executor safety
         run: node --test scripts/agent/run-once.spec.mjs
+      - name: Verify visible OpenCode TUI launcher safety
+        run: node --test scripts/agent/open-visible-tui.spec.mjs
       - name: Verify stateless run-publish-once publication safety
         run: node --test scripts/agent/run-publish-once.spec.mjs
       - name: Verify deterministic run-goal core safety
