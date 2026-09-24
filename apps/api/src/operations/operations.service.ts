@@ -175,6 +175,8 @@ export class OperationsService {
     action: () => Promise<void>,
     claimToken: string,
   ) {
+    const confirmed = await this.confirmActionClaim(issueRef, claimToken);
+    if (!confirmed) return issue;
     try {
       await action();
       return await this.recordSuccess(issueRef, issue, input, true, claimToken);
@@ -203,6 +205,19 @@ export class OperationsService {
       });
       throw error;
     }
+  }
+
+  private async confirmActionClaim(
+    issueRef: ReturnType<FirestoreService['doc']>,
+    claimToken: string,
+  ): Promise<boolean> {
+    return this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(issueRef);
+      if (!snap.exists) return false;
+      const fresh = snap.data() as OperationIssue;
+      const current = fresh['actionClaim'] as { token?: unknown } | null | undefined;
+      return current?.token === claimToken;
+    });
   }
 
   private async recordSuccess(
