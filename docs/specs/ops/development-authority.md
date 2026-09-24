@@ -107,6 +107,14 @@ semantic result
 - shared/foreign/durable/uncertain ownership state는 시각적 cleanliness를 위해 cleanup하지 않는다.
 - historical 문서·보고서는 provenance로 보존한다. 다만 실행 권위, freshness 권위, queue, lifecycle owner로 승격하지 않는다.
 
+### 7.1 Spec temporary fixture lifecycle
+
+- `run-build` / `run-goal`을 포함한 모든 agent spec이 만든 temporary fixture(root checkout, bare remote, request/goal directory, selector/proof/batch workspace)의 lifetime owner는 그것을 만든 test/helper다.
+- fixture는 success, assertion failure, exception 경로 모두에서 cleanup된다. fixture setup 도중 실패해도 그 전에 만든 디렉터리를 남기지 않는다.
+- cleanup 실패는 조용히 성공으로 처리하지 않는다. 정리되지 않은 fixture와 오류는 evidence로 노출한다.
+- provenance가 확인되지 않은 pre-existing temp residue는 wildcard로 삭제하지 않는다. test-owned residue임이 deterministic하게 증명된 경우에만 별도 bounded cleanup을 수행한다.
+- invariant는 "기존 residue 정리"가 아니라 "새 residue가 발생하지 않음"이다.
+
 ## 8. Automation complexity admission
 
 자동화의 기본 대상은 deterministic하고 직접 검증 가능한 개발 단계다.
@@ -153,3 +161,29 @@ BUILD request (MODE: BUILD + 자연어)
 - BUILD terminal은 `FRONTIER_COMPLETE`, `ALREADY_SATISFIED`, `HUMAN_DECISION_REQUIRED`, `BLOCKED_EXTERNAL`, `NO_EXECUTABLE_FRONTIER`, `PROOF_FAILED`, `PUBLICATION_FAILED`다. 요청 형식 자체가 invalid하면 executor invocation 없이 `INVALID_BUILD_REQUEST`로 거부한다.
 - publication은 기존 `run-publish-once`만 사용하고, publication 뒤 canonical remote read-back을 필수로 한다. canonical local mirror 동기화는 BUILD 성공 판정의 authority가 아니다.
 - focused deterministic proof: `pnpm test:agent-build`.
+
+### 9.1 Selector contract authority
+
+- BUILD selector의 generator-visible generation contract와 deterministic validator는 하나의 authoritative selector contract(constants layer)에서 파생한다.
+- required/optional fields, allowed fields, enums, check별 criterion field set, identifier/path/authority requirement, considered·batch frontier count limit, text length limit은 그 contract가 소유한다. prompt와 validator에 같은 constraint를 각각 magic literal로 복제하지 않는다.
+- validator는 contract가 선언한 constraint만 강제한다. prompt에 없는 hidden rule을 추가하지 않는다.
+- malformed output, missing/invalid authority, contract 밖 field는 계속 fail closed한다. invalid output을 truncate하거나 `INVALID_OUTPUT`을 무시하거나 validation을 완화해 성공률을 높이지 않는다.
+- generated decision은 retry 없이 deterministic validation을 통과해야 하며, 실패형 regression은 focused spec으로 고정한다.
+
+### 9.2 Current-evidence reconciliation
+
+- selector는 frontier candidate를 만들기 전에 현재 문서의 미완료 표현과 current implementation/direct proof를 대조해 다음 중 하나로 분류한다.
+  - `IMPLEMENTATION_GAP`: intended contract와 구현/proof 사이에 실제 gap이 있다.
+  - `STALE_SPEC`: current spec, current implementation, direct proof가 같은 의미를 가리키는데 spec 표현만 뒤처져 있다.
+  - `SEMANTIC_CONFLICT`: spec과 implementation이 서로 다른 계약을 주장한다.
+- 판정 기준은 current intended semantic contract, current source behavior, nearest faithful direct proof다. 코드가 존재한다는 이유만으로 semantic spec을 덮어쓰지 않고, test가 존재한다는 이유만으로 intended contract가 바뀌었다고 추론하지 않는다.
+- `IMPLEMENTATION_GAP`만 product frontier 후보다. `STALE_SPEC`은 product gap으로 취급하지 않으며 같은 bounded task 안에서 authoritative spec line을 current contract에 맞게 sync할 수 있다. `SEMANTIC_CONFLICT`는 자동 수정하지 않고 `HUMAN_DECISION_REQUIRED`로 escalation한다.
+- reconciliation 결과를 durable registry나 별도 state로 저장하지 않는다.
+
+### 9.3 Multi-frontier batch admission
+
+- BUILD front door는 product priority 순으로 considered frontier를 최대 5개까지 평가하고, 하나의 bounded batch에 여러 independently closable frontier를 admission할 수 있다.
+- 병렬 독립성은 파일 개수가 아니라 semantic_owner, mutation allow surface, proof_owner, depends_on, shared contract/runtime boundary로 판정한다.
+- admission한 frontier들은 하나의 ephemeral Goal Contract로 합성되어 기존 run-goal의 bounded batch executor로 전달된다. 겹치는 frontier는 이번 batch에서 시작하지 않고 다음 live-main recomputation 대상으로 남으며, exclusion 때문에 실패로 기록되지 않는다.
+- batch가 settle되면 fresh live main을 다시 읽고 criterion을 재평가한다. 새 scheduler, queue, durable frontier registry, coordinator를 만들지 않는다.
+- 각 frontier는 기존 `run-publish-once` publication path와 freshness/rebind 계약을 그대로 사용한다.

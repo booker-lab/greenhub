@@ -169,6 +169,39 @@ const PLANNER_TASK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 export const PLANNER_OUTCOME_MAX_CHARS = 500;
 const PLANNER_OUTPUT_TAIL_CHARS = 4000;
 
+// Authoritative Goal Contract field sets. This module owns the fields
+// `validateGoalContract` accepts; run-build derives the strict BUILD-mode
+// selector contract from the same lists so the generator-facing contract and
+// the deterministic validator cannot drift apart.
+export const GOAL_CONTRACT_FIELDS = Object.freeze([
+  'GOAL',
+  'ACCEPTANCE_AUTHORITY',
+  'PRESERVE',
+  'AUTONOMOUSLY_ALLOWED',
+  'ESCALATE_IF',
+  'STOP_WHEN',
+  'CRITERIA',
+  'TASK_CATALOG',
+  'PLANNER',
+  'BUDGET',
+]);
+
+export const GOAL_TASK_FIELDS = Object.freeze([
+  'id',
+  'outcome',
+  'preserve',
+  'closes',
+  'allow',
+  'proof',
+  'proof_owner',
+  'semantic_owner',
+  'publication',
+  'commit_message',
+  'pr_title',
+  'escalate_only_if',
+  'depends_on',
+]);
+
 // A rejected planner proposal still fails closed, but the goal status it maps
 // to depends on which authority boundary was touched.
 const PLANNER_TERMINALS = Object.freeze({
