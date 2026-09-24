@@ -2,7 +2,7 @@
 
 # Notifications API / Domain Spec
 
-> **최종 정합화**: 2026-08-30
+> **최종 정합화**: 2026-09-25
 > **상태**: Current
 > **코드 정본**: `packages/shared/src/notification.types.ts`, `apps/api/src/notifications/**`
 > **운영 승인 상태**: 이 문서에 복제하지 않고 `docs/memory.md`와 활성 HANDOFF를 따른다.
@@ -156,7 +156,24 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 6. 성공 채널과 시도 횟수를 결과로 반환한다.
 7. 알림톡과 SMS가 모두 실패하면 최종 실패를 반환한다.
 
-현재 코드에는 retry 간격/backoff, provider 오류 분류, rate-limit별 지연 정책이 없다. 해당 고도화는 `docs/BACKLOG.md`의 `NOTIFICATION-RETRY-POLICY` 후속 범위다.
+### 재시도 backoff와 provider 오류 분류 — `NOTIFICATION_RETRY_BACKOFF_POLICY`
+
+`apps/api/src/notifications/aligo.client.ts`의 `NOTIFICATION_RETRY_BACKOFF_POLICY`가 retry 상한과 지연 범위를 소유한다.
+
+- `maxAlimtalkAttempts`: 알림톡 최대 시도 3회
+- `maxSmsFallbackAttempts`: SMS fallback 최대 1회
+- `baseBackoffMs`, `rateLimitBackoffMs`, `backoffMultiplier`, `maxBackoffMs`: 시도 사이 지연의 일반 base·rate-limit base·지수 배수·상한
+
+`computeNotificationRetryDelayMs()`가 오류 분류와 retry index로 다음 시도 전 지연을 계산하며, 모든 지연은 `maxBackoffMs`로 상한된다.
+
+provider 응답은 `classifyAlimtalkProviderError()`/`classifySmsProviderError()`로 다음처럼 분류한다.
+
+- `RATE_LIMITED`: HTTP 429 또는 발송·요청·호출 한도/제한/초과 문구. 같은 채널을 `rateLimitBackoffMs` 이상 쉬게 한 뒤 재시도한다.
+- `RETRYABLE`: 일시/시간 초과/5xx 등 일시 오류. bounded backoff 뒤 같은 채널을 재시도한다.
+- `PERMANENT`: 명시적 요청 오류. 같은 채널 blind 재시도를 줄이고 SMS fallback 1회로 넘긴다.
+- `UNKNOWN`: 응답 파싱·transport 불확실. 재시도하지 않고 수동 확인 대상(`needsVerify`)으로 남긴다.
+
+`UNKNOWN` 결과는 접수 여부가 불확실하므로 SMS fallback을 포함한 blind 재발송을 하지 않는다. 위 4~7의 시도 상한은 유지되지만, `PERMANENT`는 3회를 다 채우지 않을 수 있다.
 
 ### 설정 오류의 fail-closed
 
@@ -179,6 +196,15 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 - 성공 channel과 attempt count 기록
 - 최종 실패 운영 예외
 - 동일 delivery idempotency key의 단일 발송
+
+`notification-retry-policy.spec.ts`는 위 상한 위에서 다음을 추가로 직접 검증한다.
+
+- `NOTIFICATION_RETRY_BACKOFF_POLICY` 상한·지연 계산의 유한성과 `maxBackoffMs` 상한
+- 재시도 사이 bounded backoff 실제 적용(경과 시간 = 계산된 지연 합)
+- rate-limit 응답의 별도 지연과 재시도
+- 명시적 영구 오류의 blind 재시도 축소와 SMS 1회 fallback
+- `UNKNOWN`에서 blind 중복 SMS 미발생
+- 설정 누락 fail-closed와 직접 SMS rate-limit 분류
 
 따라서 위 **격리된 client/service 전달 계약은 직접 테스트 근거가 있다.** 다만 이 증거를 ALIGO provider 실제 승인 상태나 실제 외부 발송 성공으로 확장하지 않는다. 실제 provider 검증은 활성 출시 PLAN의 별도 승인 게이트다.
 
@@ -311,6 +337,8 @@ FCM을 다시 도입할 경우 별도 Task에서 다음을 함께 정의한다.
 - `apps/api/src/notifications/notifications.service.ts`
 - `apps/api/src/notifications/notifications.controller.ts`
 - `apps/api/src/notifications/notifications-delivery.spec.ts`
+- `apps/api/src/notifications/notification-retry-policy.spec.ts`
+- `apps/api/src/notifications/notifications-provider-outcome.spec.ts`
 - `apps/api/src/notifications/notifications-preferences.spec.ts`
 - `apps/consumer/src/app/mypage/notifications/settings/**`
 - `apps/consumer/src/app/checkout/**`
@@ -330,6 +358,7 @@ state → withdrawal → retention evidence → sender gating의 lifecycle을 �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-25 | `NOTIFICATION_RETRY_BACKOFF_POLICY` 토큰과 provider 오류 분류·bounded backoff·rate-limit 지연·blind 중복 SMS 방지 계약 및 전용 회귀 추가 |
 | 2026-08-30 | 파일럿 선택 마케팅 미사용, 거래성 `ORDER_*` 8종 유지, 과거 preference·consent 보존 정책을 반영 |
 | 2026-08-24 | checkout consent·user preference·철회·retention evidence 분리와 legacy 목표미달 consumer 취소 알림 누락 가능성을 기록 |
 | 2026-08-24 | ALIGO 3회 retry+SMS fallback·fail-closed·delivery idempotency의 직접 테스트 근거와 실제 provider 검증을 분리 |
