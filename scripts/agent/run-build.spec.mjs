@@ -224,6 +224,7 @@ function task({ id, closes, allow, proof, semanticOwner = null }) {
 function frontierDecision({
   considered,
   selected,
+  batch,
   authorityResolved = ['docs/authority.md', 'docs/BACKLOG.md'],
   reason = 'select the highest-priority open frontier',
 }) {
@@ -238,6 +239,51 @@ function frontierDecision({
     authority_resolved: authorityResolved,
     considered: reconciled,
     selected,
+    ...(batch === undefined ? {} : { batch }),
+  };
+}
+
+/** One open considered frontier entry plus its selected/batch goal payload. */
+function independentFrontier({ priority, id, path, proof, taskId = null }) {
+  const entry = {
+    priority,
+    id,
+    statement: `${path} is missing at live main.`,
+    kind: 'PRODUCT',
+    criteria: [criterion({ id: `C${priority}`, path })],
+    satisfied: false,
+  };
+  return {
+    entry,
+    selected: {
+      priority,
+      id,
+      statement: entry.statement,
+      kind: 'PRODUCT',
+      why_selected: `independent frontier ${id}`,
+      goal: goalFor({
+        criteria: entry.criteria,
+        tasks: [
+          task({
+            id: taskId ?? `T${priority}`,
+            closes: [`C${priority}`],
+            allow: [path],
+            proof: [proof],
+          }),
+        ],
+      }),
+    },
+  };
+}
+
+function batchEntryFor(frontier, overrides = {}) {
+  return {
+    priority: frontier.entry.priority,
+    id: frontier.entry.id,
+    kind: 'PRODUCT',
+    why_selected: `independent frontier ${frontier.entry.id}`,
+    goal: frontier.selected.goal,
+    ...overrides,
   };
 }
 
@@ -2135,6 +2181,282 @@ test('CASE R5 — a stale TODO claiming an implemented deliverable is not an ope
   } finally {
     removeFixture(fixture);
   }
+});
+
+// ---------------------------------------------------------------------------
+// M. multi-frontier batch admission through the existing bounded executor
+// ---------------------------------------------------------------------------
+
+test('CASE M1 — five independent frontier candidates are admitted into one batch', () => {
+  const fixture = buildFixture();
+  try {
+    const frontiers = [1, 2, 3, 4, 5].map((priority) =>
+      independentFrontier({
+        priority,
+        id: `F${priority}`,
+        path: `docs/m${priority}.md`,
+        proof: 'node proof-one.cjs',
+      }),
+    );
+    const decision = frontierDecision({
+      considered: frontiers.map((frontier) => frontier.entry),
+      selected: frontiers[0].selected,
+      batch: frontiers.slice(1).map((frontier) => batchEntryFor(frontier)),
+    });
+    const { result, selector, fake } = runBuildOn(fixture, { decision });
+    assert.equal(result.status, FRONTIER_COMPLETE);
+    assert.equal(selector.calls.length, 1);
+    assert.deepEqual(result.goal.frontierIds, ['F1', 'F2', 'F3', 'F4', 'F5']);
+    assert.equal(result.batch.admitted.length, 5);
+    assert.equal(result.batch.deferred.length, 0);
+    assert.deepEqual(
+      result.decision.batch.map((candidate) => candidate.id),
+      ['F2', 'F3', 'F4', 'F5'],
+    );
+    assert.equal(result.goalResult.batches.length, 1);
+    assert.deepEqual(result.goalResult.batches[0].taskIds, ['T1', 'T2', 'T3', 'T4', 'T5']);
+    assert.equal(result.goalResult.batches[0].excluded.length, 0);
+    assert.equal(result.goalResult.batches[0].concurrencyLimit, MAX_BATCH_CONCURRENCY);
+    assert.equal(result.goalResult.maxBatchConcurrency, MAX_BATCH_CONCURRENCY);
+    assert.equal(fake.calls.runPublishOnce.length, 5);
+    assert.equal(result.goalResult.criteria.filter((entry) => entry.satisfied).length, 5);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE M2 — overlapping candidates are deferred, never started together', () => {
+  const fixture = buildFixture();
+  try {
+    const first = independentFrontier({
+      priority: 1,
+      id: 'F1',
+      path: 'docs/shared.md',
+      proof: 'node proof-one.cjs',
+    });
+    const second = independentFrontier({
+      priority: 2,
+      id: 'F2',
+      path: 'docs/shared.md',
+      proof: 'node proof-two.cjs',
+    });
+    const decision = frontierDecision({
+      considered: [first.entry, second.entry],
+      selected: first.selected,
+      batch: [batchEntryFor(second)],
+    });
+    const { result, fake } = runBuildOn(fixture, { decision });
+    assert.equal(result.status, FRONTIER_COMPLETE);
+    assert.deepEqual(result.goal.frontierIds, ['F1']);
+    assert.equal(result.batch.admitted.length, 1);
+    assert.equal(result.batch.deferred.length, 1);
+    assert.equal(result.batch.deferred[0].id, 'F2');
+    assert.equal(result.batch.deferred[0].kind, 'SEMANTIC_OWNER');
+    assert.equal(result.batch.deferred[0].withId, 'F1');
+    assert.deepEqual(result.goalResult.batches[0].taskIds, ['T1']);
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE M3 — a declared depends_on task is ordered across executor batches', () => {
+  const fixture = buildFixture();
+  try {
+    const entry = {
+      priority: 1,
+      id: 'F-DEP',
+      statement: 'two dependent deliverables are missing.',
+      kind: 'PRODUCT',
+      criteria: [
+        criterion({ id: 'C1', path: 'docs/m1.md' }),
+        criterion({ id: 'C2', path: 'docs/m2.md' }),
+      ],
+      satisfied: false,
+    };
+    const decision = frontierDecision({
+      considered: [entry],
+      selected: {
+        priority: 1,
+        id: 'F-DEP',
+        statement: entry.statement,
+        kind: 'PRODUCT',
+        why_selected: 'one frontier with an explicit dependency order',
+        goal: goalFor({
+          criteria: entry.criteria,
+          tasks: [
+            task({
+              id: 'T1',
+              closes: ['C1'],
+              allow: ['docs/m1.md'],
+              proof: ['node proof-one.cjs'],
+            }),
+            {
+              ...task({
+                id: 'T2',
+                closes: ['C2'],
+                allow: ['docs/m2.md'],
+                proof: ['node proof-two.cjs'],
+              }),
+              depends_on: ['T1'],
+            },
+          ],
+        }),
+      },
+    });
+    const { result, fake } = runBuildOn(fixture, { decision });
+    assert.equal(result.status, FRONTIER_COMPLETE);
+    assert.equal(result.goalResult.batches.length, 2);
+    assert.deepEqual(result.goalResult.batches[0].taskIds, ['T1']);
+    assert.deepEqual(result.goalResult.batches[1].taskIds, ['T2']);
+    assert.equal(fake.calls.runPublishOnce.length, 2);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE M4 — a failing sibling never cancels an already-started independent sibling', () => {
+  const fixture = buildFixture();
+  try {
+    const first = independentFrontier({
+      priority: 1,
+      id: 'F1',
+      path: 'docs/m1.md',
+      proof: 'node proof-one.cjs',
+    });
+    const second = independentFrontier({
+      priority: 2,
+      id: 'F2',
+      path: 'docs/m2.md',
+      proof: 'node proof-two.cjs',
+    });
+    const decision = frontierDecision({
+      considered: [first.entry, second.entry],
+      selected: first.selected,
+      batch: [batchEntryFor(second)],
+    });
+    const { result, fake } = runBuildOn(fixture, {
+      decision,
+      children: {
+        runPublishBehavior: (options) => {
+          if (options.allowedPaths[0] === 'docs/m2.md') {
+            return { status: 'PROOF_FAILED', reason: 'deliberate sibling proof failure' };
+          }
+          pushCommitToLiveMain(fixture, {
+            path: options.allowedPaths[0],
+            content: 'deliverable\n',
+          });
+          return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+        },
+      },
+    });
+    assert.equal(result.status, PROOF_FAILED);
+    assert.equal(result.goalResult.batches[0].taskIds.length, 2);
+    const attempts = result.goalResult.attempts;
+    assert.equal(attempts.find((attempt) => attempt.taskId === 'T1').succeeded, true);
+    assert.equal(attempts.find((attempt) => attempt.taskId === 'T2').succeeded, false);
+    assert.equal(fake.calls.runPublishOnce.length, 2);
+    const criteria = result.goalResult.criteria;
+    assert.equal(criteria.find((criterion) => criterion.id === 'C1').satisfied, true);
+    assert.equal(criteria.find((criterion) => criterion.id === 'C2').satisfied, false);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE M5 — invalid batch candidates fail closed before any executor', () => {
+  const fixture = buildFixture();
+  try {
+    const frontiers = [1, 2, 3, 4, 5].map((priority) =>
+      independentFrontier({
+        priority,
+        id: `F${priority}`,
+        path: `docs/m${priority}.md`,
+        proof: 'node proof-one.cjs',
+      }),
+    );
+    const baseDecision = () =>
+      frontierDecision({
+        considered: frontiers.map((frontier) => frontier.entry),
+        selected: frontiers[0].selected,
+        batch: frontiers.slice(1).map((frontier) => batchEntryFor(frontier)),
+      });
+    const variants = [
+      [
+        'priority order',
+        (decision) => {
+          decision.batch[0].priority = 1;
+        },
+        /priority must be an integer greater than the previous/,
+      ],
+      [
+        'id mismatch',
+        (decision) => {
+          decision.batch[0].id = 'F-OTHER';
+        },
+        /id must equal the considered frontier id/,
+      ],
+      [
+        'unknown field',
+        (decision) => {
+          decision.batch[0].unexpected = 'x';
+        },
+        /unsupported field/,
+      ],
+      [
+        'satisfied entry',
+        (decision) => {
+          decision.considered[1].criteria = [criterion({ id: 'C2', path: 'docs/authority.md' })];
+          decision.considered[1].satisfied = true;
+          decision.considered[1].evidence = 'already present at live main';
+        },
+        /already satisfied at live main/,
+      ],
+      [
+        'kind mismatch',
+        (decision) => {
+          decision.batch[0].kind = 'MAINTENANCE';
+          decision.batch[0].maintenance_justification = 'not actually maintenance';
+        },
+        /must equal the considered frontier kind/,
+      ],
+      [
+        'too many candidates',
+        (decision) => {
+          decision.batch.push({
+            priority: 6,
+            id: 'F6',
+            kind: 'PRODUCT',
+            why_selected: 'over the batch limit',
+            goal: frontiers[4].selected.goal,
+          });
+        },
+        /batch must contain at most 4 candidates/,
+      ],
+    ];
+    for (const [label, mutate, pattern] of variants) {
+      const decision = structuredClone(baseDecision());
+      mutate(decision);
+      const { result, fake } = runBuildOn(fixture, { decision });
+      assert.equal(result.status, BLOCKED_EXTERNAL, label);
+      assert.match(result.reason, pattern, label);
+      assert.equal(childCallCount(fake), 0, label);
+    }
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE M6 — the prompt states the batch contract and the independence rule', () => {
+  const prompt = selectorPrompt();
+  assert.ok(
+    prompt.includes(`- batch entry fields: ${SELECTOR_FIELD_SETS.batchEntry.join(', ')}`),
+  );
+  assert.match(prompt, /batch candidates: 0\.\.4 entries; priorities strictly/);
+  assert.match(prompt, /frontier independence: candidates are admitted in priority order/);
+  assert.match(prompt, /deferred to the\s+next live-main recomputation/);
+  assert.match(prompt, /12\. Batch candidates\./);
+  assert.match(prompt, /A failing candidate never cancels an already-started\s+independent sibling/);
 });
 
 // ---------------------------------------------------------------------------
