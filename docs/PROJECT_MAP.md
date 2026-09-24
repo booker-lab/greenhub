@@ -137,6 +137,7 @@ pnpm test:git-safety
 pnpm test:agent-runner
 pnpm test:agent-publication
 pnpm test:agent-goal
+pnpm test:agent-build
 ```
 
 주의:

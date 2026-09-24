@@ -130,3 +130,26 @@ semantic result
 - context/proof/session database
 
 새 durable automation은 반복되는 material failure와 기존 primitive(Git, repository, test runner, CI/provider, OS/runtime)의 불충분함이 직접 증명될 때만 검토한다. 향후 autonomous execution 수요가 실제로 입증되면 먼저 stateless 또는 thin local runner로 시작하고, persistent state는 기존 primitive로 해결할 수 없는 반복적 실패가 직접 증명될 때만 추가한다.
+
+## 9. Natural-language BUILD front door
+
+`MODE: BUILD` 자연어 요청 하나는 `scripts/agent/run-build.mjs`가 소유한다. 이 thin adapter는 자체 executor나 control plane이 아니라 기존 loop의 front door이며, 다음 순서만 소유한다.
+
+```text
+BUILD request (MODE: BUILD + 자연어)
+→ fresh live main pin
+→ 요청이 지명한 authority의 exact-SHA 확인 (없으면 대체 파일 없이 fail closed)
+→ disposable workspace의 read-only frontier selector 1회
+→ selector 판정의 deterministic 검증 (live main 재평가와 불일치하면 fail closed)
+→ ephemeral Goal Contract
+→ 기존 run-goal 1회 (run-once / run-publish-once / 5-way batch 재사용)
+→ finite BUILD terminal
+```
+
+- Goal Contract는 durable queue, backlog, registry로 저장하지 않는다. invocation당 정확히 하나의 frontier만 닫고, 완료 후 다음 frontier를 자동 선택하지 않는다.
+- selector는 writer가 아니며, workspace mutation이 관찰되면 executor invocation 없이 판정을 거부한다.
+- 이미 satisfied인 frontier는 다시 구현하지 않고, higher-priority open frontier가 남아 있으면 lower-priority를 선택하지 않는다.
+- 새로운 product meaning, UX·정책 fork, security·privacy authority, clinical·safety·financial·legal 정책, 되돌릴 수 없는 외부 action, acceptance 의미 변경은 구현하지 않고 `HUMAN_DECISION_REQUIRED`로 종료한다.
+- BUILD terminal은 `FRONTIER_COMPLETE`, `ALREADY_SATISFIED`, `HUMAN_DECISION_REQUIRED`, `BLOCKED_EXTERNAL`, `NO_EXECUTABLE_FRONTIER`, `PROOF_FAILED`, `PUBLICATION_FAILED`다. 요청 형식 자체가 invalid하면 executor invocation 없이 `INVALID_BUILD_REQUEST`로 거부한다.
+- publication은 기존 `run-publish-once`만 사용하고, publication 뒤 canonical remote read-back을 필수로 한다. canonical local mirror 동기화는 BUILD 성공 판정의 authority가 아니다.
+- focused deterministic proof: `pnpm test:agent-build`.
