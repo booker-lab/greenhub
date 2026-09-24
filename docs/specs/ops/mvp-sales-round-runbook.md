@@ -322,7 +322,7 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 1. 운영 예외 `refresh`로 주문·로컬 결제 상태를 재확인한다.
 2. 허용 조치가 `RETRY_REFUND`인지 확인한다.
 3. 별도 승인 뒤 한 번만 실행한다.
-4. 서버는 5분 claim으로 정상 동시 실행을 막고, 로컬 결제가 이미 `REFUNDED|CANCELLED`면 외부 환불을 반복하지 않는다. lease 만료 뒤 takeover와 stale worker fencing은 현재 직접 검증되지 않았으므로, 호출 결과나 소유권이 불명확하면 자동 재시도하지 않고 기술 담당자에게 전달한다.
+4. 서버는 5분 claim으로 정상 동시 실행을 막고, 로컬 결제가 이미 `REFUNDED|CANCELLED`면 외부 환불을 반복하지 않는다. 외부 환불 호출 직전과 성공·실패 기록에서 fresh claim token을 확인하므로 lease 만료 뒤 takeover 시 stale worker는 외부 호출·상태 write·claim clear를 수행하지 않는다(`apps/api/src/operations/operations-action-claim-lease-expiry.spec.ts`). 그래도 호출 결과나 소유권이 불명확하면 자동 재시도하지 않고 기술 담당자에게 전달한다.
 5. `SUCCEEDED` 감사 기록, 예외 `RESOLVED`, PortOne 취소 상태, 로컬 `CANCELLED`를 모두 확인한다.
 
 실패하면 같은 버튼을 연속 클릭하지 않는다. `FAILED` 감사 기록과 실패 시각을 남기고 결제 운영자·기술 담당자에게 전달한다.
