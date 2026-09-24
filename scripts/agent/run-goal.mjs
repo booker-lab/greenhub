@@ -1064,9 +1064,10 @@ function pathListsOverlap(left, right) {
 /**
  * Material overlap between two admitted candidates. `null` means the two tasks
  * may start together. The returned kind names the exact dimension that would be
- * violated by concurrent execution.
+ * violated by concurrent execution. Exported so the BUILD front door can apply
+ * the same declared-overlap contract when it admits multiple frontiers.
  */
-function taskConflict(task, sibling) {
+export function taskConflict(task, sibling) {
   if (task.depends_on.includes(sibling.id) || sibling.depends_on.includes(task.id)) {
     return { kind: 'DEPENDS_ON', reason: `explicit depends_on relationship between ${task.id} and ${sibling.id}` };
   }

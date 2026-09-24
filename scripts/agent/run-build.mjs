@@ -47,10 +47,12 @@ import {
   INVALID_GOAL,
   INVALID_TASK,
   isSafeRepoPath,
+  MAX_BATCH_CONCURRENCY,
   NO_PROGRESS,
   NO_TASK_FOR_GAP,
   pinLiveMain,
   runGoal,
+  taskConflict,
   validateGoalContract,
 } from './run-goal.mjs';
 import {
@@ -178,6 +180,7 @@ export const SELECTOR_FIELD_SETS = Object.freeze({
     'authority_resolved',
     'considered',
     'selected',
+    'batch',
     'escalation_token',
   ]),
   considered: Object.freeze([
@@ -195,6 +198,14 @@ export const SELECTOR_FIELD_SETS = Object.freeze({
     'priority',
     'id',
     'statement',
+    'kind',
+    'why_selected',
+    'maintenance_justification',
+    'goal',
+  ]),
+  batchEntry: Object.freeze([
+    'priority',
+    'id',
     'kind',
     'why_selected',
     'maintenance_justification',
@@ -399,9 +410,17 @@ function selectorContractLines() {
     `  task outcome <= ${SELECTOR_TASK_OUTCOME_MAX_CHARS}`,
     `- considered frontiers: 1..${MAX_CONSIDERED_FRONTIERS} entries, priorities exactly 1..N with no`,
     '  gaps and no duplicate ids',
+    `- batch candidates: 0..${MAX_CONSIDERED_FRONTIERS - 1} entries; priorities strictly`,
+    '  increasing and greater than selected.priority; selected + batch <=',
+    `  ${MAX_CONSIDERED_FRONTIERS}`,
     `- decision fields: ${SELECTOR_FIELD_SETS.decision.join(', ')}`,
     `- considered entry fields: ${SELECTOR_FIELD_SETS.considered.join(', ')}`,
     `- selected fields: ${SELECTOR_FIELD_SETS.selected.join(', ')}`,
+    `- batch entry fields: ${SELECTOR_FIELD_SETS.batchEntry.join(', ')}`,
+    '- frontier independence: candidates are admitted in priority order; a candidate whose',
+    '  tasks share semantic_owner, mutation allow surface, proof_owner against a sibling',
+    '  mutation surface, or depends_on with an already-admitted candidate is deferred to the',
+    '  next live-main recomputation instead of starting concurrently',
     '- criterion fields by check:',
     ...BUILD_CRITERION_CHECKS.map(
       (check) => `  - ${check}: ${SELECTOR_FIELD_SETS.criterionByCheck[check].join(', ')}`,
@@ -506,6 +525,15 @@ export function buildFrontierPrompt({ buildRequest, declaredAuthority, canonical
     '    ACCEPTANCE_AUTHORITY must include every path the BUILD REQUEST names and every',
     '    criterion authority path that exists as a blob at live main.',
     '11. Do not invent fields. Unknown fields at any level reject the decision.',
+    '12. Batch candidates. You may add up to 4 additional open frontiers to "batch" so one',
+    '    invocation can close several independent frontiers in one bounded batch. Batch',
+    '    priorities must strictly increase and stay greater than selected.priority. The runner',
+    '    computes pairwise independence from declared semantic_owner, mutation allow surface,',
+    '    proof_owner, and depends_on: a candidate overlapping an already-admitted candidate is',
+    '    not started in this batch and stays for the next live-main recomputation, and it is',
+    '    never failed for being deferred. Do not propose a candidate whose tasks depend on',
+    '    another proposed frontier. A failing candidate never cancels an already-started',
+    '    independent sibling. Every batch entry uses the same goal contract shape as selected.',
     '',
     '## Required output',
     'Return exactly one JSON object and nothing else: no markdown fence, no commentary, no',
@@ -515,6 +543,8 @@ export function buildFrontierPrompt({ buildRequest, declaredAuthority, canonical
     '{"status":"NO_EXECUTABLE_FRONTIER","reason":"...","authority_resolved":["repo/path"]}',
     '{"status":"HUMAN_DECISION_REQUIRED","reason":"...","escalation_token":"...","authority_resolved":["repo/path"]}',
     '{"status":"BLOCKED_EXTERNAL","reason":"...","authority_resolved":["repo/path"]}',
+    'Optional additional independent candidates on a FRONTIER decision:',
+    '"batch":[{"priority":2,"id":"...","kind":"PRODUCT","why_selected":"...","goal":{...same goal contract as selected...}}]',
     '',
     ...selectorContractLines(),
     '',
@@ -1058,6 +1088,32 @@ export function validateGeneratedGoal({
     );
   }
   const contract = validation.contract;
+  const core = validateBuildContractCore({
+    contract,
+    declaredAuthority,
+    repositoryRoot,
+    pin,
+    expectedCriteria: selectedEntry.criteria,
+  });
+  if (!core.ok) return core;
+  return { ok: true, contract };
+}
+
+/**
+ * Shared BUILD-mode contract core: criterion/task shape, closure, declared
+ * boundaries, historical-path exclusion, and live-main blob existence. When
+ * `expectedCriteria` is provided, the contract criteria must be exactly them
+ * (one frontier); a composed batch contract passes `null` because the union is
+ * already the validated concatenation of per-frontier criteria.
+ */
+function validateBuildContractCore({
+  contract,
+  declaredAuthority,
+  repositoryRoot,
+  pin,
+  expectedCriteria = null,
+}) {
+  const reject = (reason) => ({ ok: false, reason });
   if (contract.criteria.length === 0) {
     return reject('ephemeral Goal Contract must declare at least one criterion');
   }
@@ -1082,18 +1138,20 @@ export function validateGeneratedGoal({
   if (contract.autonomously_allowed.length === 0) {
     return reject('AUTONOMOUSLY_ALLOWED must declare at least one path');
   }
-  const expected = JSON.stringify(
-    [...selectedEntry.criteria].sort((left, right) =>
-      left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
-    ),
-  );
-  const actual = JSON.stringify(
-    [...contract.criteria].sort((left, right) =>
-      left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
-    ),
-  );
-  if (actual !== expected) {
-    return reject('CRITERIA must be exactly the selected considered frontier criteria');
+  if (expectedCriteria !== null) {
+    const expected = JSON.stringify(
+      [...expectedCriteria].sort((left, right) =>
+        left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+      ),
+    );
+    const actual = JSON.stringify(
+      [...contract.criteria].sort((left, right) =>
+        left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+      ),
+    );
+    if (actual !== expected) {
+      return reject('CRITERIA must be exactly the selected considered frontier criteria');
+    }
   }
   const criterionIds = new Set(contract.criteria.map((criterion) => criterion.id));
   const closed = new Set();
@@ -1148,7 +1206,139 @@ export function validateGeneratedGoal({
       }
     }
   }
-  return { ok: true, contract };
+  return { ok: true };
+}
+
+function uniqueStrings(values) {
+  return [...new Set(values)];
+}
+
+function acceptanceCompletenessReason({ goalContract, declaredAuthority, resolution }) {
+  const blobPaths = new Set(
+    resolution.filter((entry) => entry.objectType === 'blob').map((entry) => entry.path),
+  );
+  const required = [
+    ...new Set([
+      ...declaredAuthority,
+      ...goalContract.criteria.flatMap((criterion) => criterion.authority),
+    ]),
+  ].filter((path) => blobPaths.has(path));
+  const missing = required.filter((path) => !goalContract.acceptance_authority.includes(path));
+  if (missing.length === 0) return null;
+  return (
+    'ACCEPTANCE_AUTHORITY must include every blob the BUILD REQUEST names and every criterion ' +
+    `authority blob: ${missing.join(', ')}`
+  );
+}
+
+/**
+ * Deterministic frontier-level admission for one bounded batch. Candidates are
+ * evaluated in priority order and the same declared-overlap contract the task
+ * batch uses (`semantic_owner`, mutation allow surface, `proof_owner` against a
+ * sibling mutation surface, `depends_on`) decides whether a candidate may start
+ * with the already-admitted ones. Deferred candidates are reported with the
+ * exact dimension and stay for the next live-main recomputation; they are never
+ * failed for being deferred.
+ */
+export function admitFrontierBatch({ candidates, maxFrontiers = MAX_BATCH_CONCURRENCY }) {
+  const admitted = [];
+  const deferred = [];
+  for (const candidate of candidates) {
+    if (admitted.length >= maxFrontiers) {
+      deferred.push({
+        priority: candidate.priority,
+        id: candidate.id,
+        kind: 'CONCURRENCY_LIMIT',
+        withPriority: null,
+        withId: null,
+        reason: `frontier batch limit ${maxFrontiers} reached`,
+      });
+      continue;
+    }
+    let conflict = null;
+    for (const existing of admitted) {
+      for (const task of candidate.goal.task_catalog) {
+        for (const sibling of existing.goal.task_catalog) {
+          const found = taskConflict(task, sibling);
+          if (found !== null) {
+            conflict = { ...found, withPriority: existing.priority, withId: existing.id };
+            break;
+          }
+        }
+        if (conflict !== null) break;
+      }
+      if (conflict !== null) break;
+    }
+    if (conflict === null) {
+      admitted.push(candidate);
+    } else {
+      deferred.push({
+        priority: candidate.priority,
+        id: candidate.id,
+        kind: conflict.kind,
+        withPriority: conflict.withPriority,
+        withId: conflict.withId,
+        reason: conflict.reason,
+      });
+    }
+  }
+  return { admitted, deferred };
+}
+
+/**
+ * Compose the single ephemeral Goal Contract for one admitted frontier batch.
+ * Every admitted candidate already passed per-frontier validation; the union
+ * re-validates the combined criteria/task ids, boundaries, historical paths,
+ * and live-main blobs before anything is handed to run-goal.
+ */
+function composeBatchGoal({ admitted, declaredAuthority, repositoryRoot, pin }) {
+  const raw = {
+    GOAL: admitted.map((candidate) => `[${candidate.id}] ${candidate.goal.goal}`).join('\n'),
+    ACCEPTANCE_AUTHORITY: uniqueStrings(
+      admitted.flatMap((candidate) => candidate.goal.acceptance_authority),
+    ),
+    PRESERVE: uniqueStrings(admitted.flatMap((candidate) => candidate.goal.preserve)),
+    AUTONOMOUSLY_ALLOWED: uniqueStrings(
+      admitted.flatMap((candidate) => candidate.goal.autonomously_allowed),
+    ),
+    ESCALATE_IF: uniqueStrings(admitted.flatMap((candidate) => candidate.goal.escalate_if)),
+    STOP_WHEN: uniqueStrings(admitted.flatMap((candidate) => candidate.goal.stop_when)),
+    CRITERIA: admitted.flatMap((candidate) => candidate.goal.criteria),
+    TASK_CATALOG: admitted.flatMap((candidate) => candidate.goal.task_catalog),
+    PLANNER: { enabled: false },
+    BUDGET: {
+      max_iterations: admitted.reduce(
+        (total, candidate) => total + candidate.goal.budget.max_iterations,
+        0,
+      ),
+      max_tasks: admitted.reduce((total, candidate) => total + candidate.goal.budget.max_tasks, 0),
+      max_wall_clock_ms: admitted.reduce(
+        (longest, candidate) => Math.max(longest, candidate.goal.budget.max_wall_clock_ms),
+        0,
+      ),
+    },
+  };
+  const composedGoalTextReason = textLimitReason(
+    raw.GOAL,
+    SELECTOR_GOAL_TEXT_MAX_CHARS,
+    'composed Goal Contract GOAL',
+  );
+  if (composedGoalTextReason !== null) return { ok: false, reason: composedGoalTextReason };
+  const validation = validateGoalContract(raw);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      reason: `composed batch Goal Contract is invalid (${validation.kind}): ${validation.errors.join('; ')}`,
+    };
+  }
+  const core = validateBuildContractCore({
+    contract: validation.contract,
+    declaredAuthority,
+    repositoryRoot,
+    pin,
+  });
+  if (!core.ok) return core;
+  return { ok: true, raw, contract: validation.contract };
 }
 
 /**
@@ -1220,6 +1410,9 @@ export function validateFrontierDecision({
     if (decision.selected != null) {
       return reject('HUMAN_DECISION_REQUIRED must not carry a selected frontier');
     }
+    if (decision.batch != null) {
+      return reject('HUMAN_DECISION_REQUIRED must not carry a frontier batch');
+    }
     if (!isNonEmptyString(decision.escalation_token)) {
       return reject('HUMAN_DECISION_REQUIRED requires a non-empty escalation_token');
     }
@@ -1240,6 +1433,9 @@ export function validateFrontierDecision({
   if (decision.status === 'NO_EXECUTABLE_FRONTIER' || decision.status === 'BLOCKED_EXTERNAL') {
     if (decision.selected != null) {
       return reject(`${decision.status} must not carry a selected frontier`);
+    }
+    if (decision.batch != null) {
+      return reject(`${decision.status} must not carry a frontier batch`);
     }
     if (decision.considered != null) {
       const considered = validateConsideredEntries({
@@ -1291,6 +1487,9 @@ export function validateFrontierDecision({
   if (decision.status === 'ALREADY_SATISFIED') {
     if (decision.selected != null) {
       return reject('ALREADY_SATISFIED must not carry a selected frontier');
+    }
+    if (decision.batch != null) {
+      return reject('ALREADY_SATISFIED must not carry a frontier batch');
     }
     const unsatisfied = considered.entries.filter((entry) => !entry.satisfied);
     if (unsatisfied.length > 0) {
@@ -1388,23 +1587,58 @@ export function validateFrontierDecision({
     pin,
   });
   if (!goalValidation.ok) return reject(goalValidation.reason);
-  const blobPaths = new Set(
-    resolution.filter((entry) => entry.objectType === 'blob').map((entry) => entry.path),
-  );
-  const requiredAcceptanceBlobs = [
-    ...new Set([
-      ...declaredAuthority,
-      ...goalValidation.contract.criteria.flatMap((criterion) => criterion.authority),
-    ]),
-  ].filter((path) => blobPaths.has(path));
-  const missingDeclared = requiredAcceptanceBlobs.filter(
-    (path) => !goalValidation.contract.acceptance_authority.includes(path),
-  );
-  if (missingDeclared.length > 0) {
-    return reject(
-      `ACCEPTANCE_AUTHORITY must include every blob the BUILD REQUEST names and every criterion authority blob: ${missingDeclared.join(', ')}`,
-    );
+  const selectedCompleteness = acceptanceCompletenessReason({
+    goalContract: goalValidation.contract,
+    declaredAuthority,
+    resolution,
+  });
+  if (selectedCompleteness !== null) return reject(selectedCompleteness);
+  const selectedCandidate = {
+    priority: selectedEntry.priority,
+    id: selectedEntry.id,
+    kind: selected.kind,
+    whySelected: selected.why_selected.trim(),
+    maintenanceJustification: isNonEmptyString(selected.maintenance_justification)
+      ? selected.maintenance_justification.trim()
+      : null,
+    entry: selectedEntry,
+    goal: goalValidation.contract,
+    rawGoal: selected.goal,
+  };
+
+  const batchValidation = validateBatchCandidates({
+    value: decision.batch,
+    consideredEntries: considered.entries,
+    selectedEntry,
+    declaredAuthority,
+    resolution,
+    repositoryRoot,
+    pin,
+  });
+  if (!batchValidation.ok) {
+    if (batchValidation.terminal !== undefined) {
+      return {
+        ok: true,
+        terminal: batchValidation.terminal,
+        reason: batchValidation.reason,
+        authorityResolved,
+        escalationToken: batchValidation.escalationToken ?? null,
+      };
+    }
+    return reject(batchValidation.reason);
   }
+
+  const admission = admitFrontierBatch({
+    candidates: [selectedCandidate, ...batchValidation.candidates],
+  });
+  const composed = composeBatchGoal({
+    admitted: admission.admitted,
+    declaredAuthority,
+    repositoryRoot,
+    pin,
+  });
+  if (!composed.ok) return reject(composed.reason);
+
   return {
     ok: true,
     terminal: null,
@@ -1417,13 +1651,155 @@ export function validateFrontierDecision({
       statement: selectedEntry.statement,
       kind: selected.kind,
       whySelected: selected.why_selected.trim(),
-      maintenanceJustification: isNonEmptyString(selected.maintenance_justification)
-        ? selected.maintenance_justification.trim()
-        : null,
+      maintenanceJustification: selectedCandidate.maintenanceJustification,
       entry: selectedEntry,
     },
-    goal: { raw: selected.goal, contract: goalValidation.contract },
+    batch: batchValidation.candidates.map((candidate) => ({
+      priority: candidate.priority,
+      id: candidate.id,
+      kind: candidate.kind,
+      entry: candidate.entry,
+    })),
+    admission: {
+      admitted: admission.admitted.map((candidate) => ({
+        priority: candidate.priority,
+        id: candidate.id,
+        kind: candidate.kind,
+      })),
+      deferred: admission.deferred,
+    },
+    goal: {
+      raw: composed.raw,
+      contract: composed.contract,
+      frontierIds: admission.admitted.map((candidate) => candidate.id),
+    },
   };
+}
+
+/**
+ * Validate the optional `batch` candidate list on a FRONTIER decision. Each
+ * entry names an open considered frontier and carries the same validated goal
+ * contract shape as `selected`. Structural violations fail closed; a
+ * SEMANTIC_CONFLICT candidate resolves to a human-decision terminal instead.
+ */
+function validateBatchCandidates({
+  value,
+  consideredEntries,
+  selectedEntry,
+  declaredAuthority,
+  resolution,
+  repositoryRoot,
+  pin,
+}) {
+  if (value == null) return { ok: true, candidates: [] };
+  if (!Array.isArray(value)) return { ok: false, reason: 'batch must be an array when present' };
+  if (value.length > MAX_CONSIDERED_FRONTIERS - 1) {
+    return {
+      ok: false,
+      reason: `batch must contain at most ${MAX_CONSIDERED_FRONTIERS - 1} candidates`,
+    };
+  }
+  const candidates = [];
+  let previousPriority = selectedEntry.priority;
+  for (let index = 0; index < value.length; index += 1) {
+    const raw = value[index];
+    const label = `batch[${index}]`;
+    if (!isPlainObject(raw)) return { ok: false, reason: `${label} must be an object` };
+    const extra = unknownFieldReason(raw, SELECTOR_FIELD_SETS.batchEntry, label);
+    if (extra !== null) return { ok: false, reason: extra };
+    if (!Number.isInteger(raw.priority) || raw.priority <= previousPriority) {
+      return {
+        ok: false,
+        reason: `${label} priority must be an integer greater than the previous candidate priority`,
+      };
+    }
+    previousPriority = raw.priority;
+    const entry = consideredEntries.find((candidate) => candidate.priority === raw.priority);
+    if (entry === undefined) {
+      return {
+        ok: false,
+        reason: `${label} priority ${raw.priority} does not match a considered frontier`,
+      };
+    }
+    if (!isNonEmptyString(raw.id) || raw.id.trim() !== entry.id) {
+      return { ok: false, reason: `${label} id must equal the considered frontier id at its priority` };
+    }
+    if (entry.satisfied) {
+      return { ok: false, reason: `${label} frontier ${entry.id} is already satisfied at live main` };
+    }
+    if (!isNonEmptyString(raw.why_selected)) {
+      return { ok: false, reason: `${label} why_selected must be a non-empty string` };
+    }
+    const whyReason = textLimitReason(
+      raw.why_selected,
+      SELECTOR_WHY_SELECTED_MAX_CHARS,
+      `${label} why_selected`,
+    );
+    if (whyReason !== null) return { ok: false, reason: whyReason };
+    if (!FRONTIER_KINDS.includes(raw.kind)) {
+      return { ok: false, reason: `${label} kind must be one of ${FRONTIER_KINDS.join(', ')}` };
+    }
+    if (raw.kind !== entry.kind) {
+      return {
+        ok: false,
+        reason: `${label} kind ${raw.kind} must equal the considered frontier kind ${entry.kind}`,
+      };
+    }
+    if (raw.kind === 'MAINTENANCE') {
+      if (!isNonEmptyString(raw.maintenance_justification)) {
+        return { ok: false, reason: `${label} MAINTENANCE requires a maintenance_justification` };
+      }
+      const openProduct = consideredEntries.filter(
+        (candidate) => candidate.kind === 'PRODUCT' && !candidate.satisfied,
+      );
+      if (openProduct.length > 0) {
+        return {
+          ok: false,
+          reason: `${label} MAINTENANCE is only allowed when no PRODUCT frontier is open`,
+        };
+      }
+    }
+    if (entry.reconciliation === 'SEMANTIC_CONFLICT') {
+      return {
+        ok: false,
+        terminal: HUMAN_DECISION_REQUIRED,
+        reason:
+          `batch candidate ${entry.id} is classified SEMANTIC_CONFLICT: current spec and ` +
+          'current implementation claim different contracts, which is a human decision',
+        escalationToken: 'ACCEPTANCE_MEANING_CHANGE',
+      };
+    }
+    if (!isPlainObject(raw.goal)) {
+      return { ok: false, reason: `${label} goal must be an object` };
+    }
+    const goalValidation = validateGeneratedGoal({
+      goal: raw.goal,
+      selectedEntry: entry,
+      declaredAuthority,
+      repositoryRoot,
+      pin,
+    });
+    if (!goalValidation.ok) return { ok: false, reason: goalValidation.reason };
+    const completeness = acceptanceCompletenessReason({
+      goalContract: goalValidation.contract,
+      declaredAuthority,
+      resolution,
+    });
+    if (completeness !== null) return { ok: false, reason: completeness };
+    candidates.push({
+      priority: entry.priority,
+      id: entry.id,
+      kind: raw.kind,
+      whySelected: raw.why_selected.trim(),
+      maintenanceJustification: isNonEmptyString(raw.maintenance_justification)
+        ? raw.maintenance_justification.trim()
+        : null,
+      entry,
+      goal: goalValidation.contract,
+      rawGoal: raw.goal,
+    });
+  }
+  return { ok: true, candidates };
 }
 
 /**
@@ -1507,6 +1883,7 @@ function createBuildResult(options) {
       executor: null,
     },
     decision: null,
+    batch: { admitted: [], deferred: [] },
     goal: null,
     goalResult: null,
     childCalls: 0,
@@ -1657,6 +2034,11 @@ export function runBuild(options = {}, deps = {}) {
           reconciliation: entry.reconciliation,
         })),
         selected: validation.selected ?? null,
+        batch: (validation.batch ?? []).map((candidate) => ({
+          priority: candidate.priority,
+          id: candidate.id,
+          kind: candidate.kind,
+        })),
         escalationToken: validation.escalationToken ?? null,
       }
     : { status: selector.decision.status, reason: validation.reason, rejected: true };
@@ -1667,9 +2049,14 @@ export function runBuild(options = {}, deps = {}) {
     return finish(validation.terminal, validation.reason);
   }
 
+  result.batch = {
+    admitted: (validation.admission?.admitted ?? []).map((candidate) => ({ ...candidate })),
+    deferred: (validation.admission?.deferred ?? []).map((candidate) => ({ ...candidate })),
+  };
   result.goal = {
     frontierId: validation.selected.id,
     frontierPriority: validation.selected.priority,
+    frontierIds: [...(validation.goal.frontierIds ?? [validation.selected.id])],
     raw: validation.goal.raw,
     contract: validation.goal.contract,
   };
@@ -1730,6 +2117,10 @@ export const USAGE = [
   '  MODE: BUILD',
   '  <natural-language outcome, authority order, frontier priority, preserve,',
   '   escalation conditions, stop condition>',
+  '',
+  'One selector decision may propose up to five open frontiers (selected + batch); the runner',
+  'admits only pairwise-independent candidates into the existing bounded batch executor and',
+  'leaves overlapping candidates for the next live-main recomputation.',
   '',
   'Backticked concrete repo-relative paths whose first segment is an actual top-level entry of',
   'live main are the declared authority set; including one that does not exist at live main',
@@ -1822,6 +2213,7 @@ export function main(
     `[run-build] STATUS ${result.status}`,
     `[run-build] LIVE_MAIN ${result.observedMain?.fetchedSha ?? 'unknown'}`,
     `[run-build] FRONTIER ${result.decision?.selected?.id ?? 'none'}`,
+    `[run-build] BATCH admitted=${result.batch?.admitted?.length ?? 0} deferred=${result.batch?.deferred?.length ?? 0}`,
     `[run-build] CHILD_CALLS ${result.childCalls}`,
     `[run-build] NEXT_FRONTIER_SELECTED ${result.nextFrontierSelected ? 'YES' : 'NO'}`,
   ].join('\n');
