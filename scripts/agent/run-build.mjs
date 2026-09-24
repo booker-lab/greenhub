@@ -392,9 +392,8 @@ export function buildFrontierPrompt({ buildRequest, declaredAuthority, canonical
     '   be exactly the selected criteria.',
     '9. PLANNER.enabled must be false. The runner never enables a second generator.',
     '10. Every ACCEPTANCE_AUTHORITY path must exist as a file (blob) at live main.',
-    '    ACCEPTANCE_AUTHORITY must include every path the BUILD REQUEST names, every',
-    '    criterion authority path, and every authority_resolved path that exists as a blob',
-    '    at live main.',
+    '    ACCEPTANCE_AUTHORITY must include every path the BUILD REQUEST names and every',
+    '    criterion authority path that exists as a blob at live main.',
     '11. Do not invent fields. Unknown fields reject the decision.',
     '',
     '## Required output',
@@ -1109,15 +1108,21 @@ export function validateFrontierDecision({
     pin,
   });
   if (!goalValidation.ok) return reject(goalValidation.reason);
-  const declaredBlobs = new Set(
+  const blobPaths = new Set(
     resolution.filter((entry) => entry.objectType === 'blob').map((entry) => entry.path),
   );
-  const missingDeclared = [...declaredBlobs].filter(
+  const requiredAcceptanceBlobs = [
+    ...new Set([
+      ...declaredAuthority,
+      ...goalValidation.contract.criteria.flatMap((criterion) => criterion.authority),
+    ]),
+  ].filter((path) => blobPaths.has(path));
+  const missingDeclared = requiredAcceptanceBlobs.filter(
     (path) => !goalValidation.contract.acceptance_authority.includes(path),
   );
   if (missingDeclared.length > 0) {
     return reject(
-      `ACCEPTANCE_AUTHORITY must include every blob the BUILD REQUEST names: ${missingDeclared.join(', ')}`,
+      `ACCEPTANCE_AUTHORITY must include every blob the BUILD REQUEST names and every criterion authority blob: ${missingDeclared.join(', ')}`,
     );
   }
   return {

@@ -321,7 +321,7 @@ test('CASE A0d — the selector prompt states the ACCEPTANCE_AUTHORITY completen
   });
   assert.match(
     prompt,
-    /ACCEPTANCE_AUTHORITY must include every path the BUILD REQUEST names, every\s+criterion authority path, and every authority_resolved path that exists as a blob\s+at live main\./,
+    /ACCEPTANCE_AUTHORITY must include every path the BUILD REQUEST names and every\s+criterion authority path that exists as a blob\s+at live main\./,
   );
 });
 
@@ -879,7 +879,7 @@ test('CASE G2 — a selector that drops a declared authority path is rejected', 
   }
 });
 
-test('CASE G3 — an authority_resolved blob missing from ACCEPTANCE_AUTHORITY is rejected', () => {
+test('CASE G3 — a BUILD-REQUEST-named blob missing from ACCEPTANCE_AUTHORITY is rejected', () => {
   const fixture = buildFixture();
   try {
     const entry = {
@@ -919,6 +919,52 @@ test('CASE G3 — an authority_resolved blob missing from ACCEPTANCE_AUTHORITY i
     assert.match(result.reason, /docs\/BACKLOG\.md/);
     assert.equal(childCallCount(fake), 0);
     assert.equal(result.goal, null);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE G4 — an authority_resolved-only path does not block a valid decision', () => {
+  const fixture = buildFixture();
+  try {
+    const entry = {
+      priority: 1,
+      id: 'F1',
+      statement: 'docs/feature.md exists.',
+      kind: 'PRODUCT',
+      criteria: [criterion({ id: 'C1', path: 'docs/feature.md' })],
+      satisfied: false,
+    };
+    const decision = frontierDecision({
+      considered: [entry],
+      authorityResolved: ['docs/authority.md', 'docs/BACKLOG.md', 'docs/README.md'],
+      selected: {
+        priority: 1,
+        id: 'F1',
+        statement: entry.statement,
+        kind: 'PRODUCT',
+        why_selected: 'only frontier',
+        goal: goalFor({
+          criteria: entry.criteria,
+          tasks: [
+            task({
+              id: 'T1',
+              closes: ['C1'],
+              allow: ['docs/feature.md'],
+              proof: ['node proof-feature.cjs'],
+            }),
+          ],
+        }),
+      },
+    });
+    const { result, selector, fake } = runBuildOn(fixture, { decision });
+    assert.equal(result.status, FRONTIER_COMPLETE);
+    assert.equal(
+      result.goal.contract.acceptance_authority.includes('docs/README.md'),
+      false,
+    );
+    assert.equal(selector.calls.length, 1);
+    assert.equal(childCallCount(fake), 1);
   } finally {
     removeFixture(fixture);
   }
