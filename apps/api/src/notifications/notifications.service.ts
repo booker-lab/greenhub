@@ -533,10 +533,19 @@ export class NotificationsService {
     );
     if (candidates.length === 0) return;
 
+    // LEGACY-GROUP-CANCEL-NOTIFICATION: 상태 변경 전에 취소 대상 participant snapshot을
+    // 확정한다. CANCELLED 전환 뒤에는 sendToGroupParticipants의 terminal filtering에
+    // 걸려 사라지므로, consumer 알림 recipient 집합을 상태 변경 전에 보존한다.
+    const cancellationTargets = candidates.map((doc) => ({
+      orderId: doc.id,
+      userId: doc.data()['userId'] as string,
+    }));
+
     await Promise.all(
       candidates.map((doc) => this.payments.processRefundByOrderId(doc.id, reason)),
     );
 
+    const cancelledOrderIds = new Set<string>();
     await Promise.all(
       candidates.map(async (d) => {
         await this.firestore.runTransaction(async (tx) => {
@@ -546,6 +555,7 @@ export class NotificationsService {
           if (freshOrder['status'] !== 'RECRUITING') return;
           if (this.isLegacyCancellationOwned(freshOrder)) return;
           tx.update(d.ref, { status: 'CANCELLED', cancelReason: reason, updatedAt: now });
+          cancelledOrderIds.add(d.id);
         });
       }),
     );
@@ -554,10 +564,14 @@ export class NotificationsService {
     const productName = productSnap.data()?.['name'] ?? '';
     const storeId = productSnap.data()?.['storeId'] as string | undefined;
 
-    // 소비자 전체 알림
-    await this.sendToGroupParticipants(productId, 'GROUP_CANCELLED_LACK', {
-      productName,
-    });
+    // 소비자 알림 — 취소 대상 participant snapshot을 기준으로 consumer GROUP_CANCELLED_LACK를
+    // 정확히 1회 전달한다. sendToGroupParticipants의 terminal filtering은 다른 template에
+    // 그대로 유지한다.
+    await this.sendToExplicitParticipants(
+      cancellationTargets.filter((target) => cancelledOrderIds.has(target.orderId)),
+      'GROUP_CANCELLED_LACK',
+      { productName },
+    );
 
     // 판매자 알림
     if (storeId) {
@@ -567,6 +581,21 @@ export class NotificationsService {
         minQuantity: String(gc['minQuantity']),
       });
     }
+  }
+
+  // 취소 대상 participant snapshot 등 명시적 recipient 집합에 직접 전달한다.
+  // sendToGroupParticipants의 terminal filtering은 다른 template에 그대로 유지하고,
+  // 취소 알림만 snapshot 기준으로 우회 전달하기 위해 사용한다.
+  private async sendToExplicitParticipants(
+    recipients: readonly { userId: string; orderId: string }[],
+    templateCode: NotificationTemplateCode,
+    variables: Record<string, string>,
+  ) {
+    await Promise.all(
+      recipients.map((recipient) =>
+        this.sendToUser(recipient.userId, templateCode, variables, recipient.orderId),
+      ),
+    );
   }
 
   private async logNotification(data: {

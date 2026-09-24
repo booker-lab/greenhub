@@ -623,16 +623,16 @@ owner 제안: `apps/api/src/operations/**`; refund·SMS provider 경계의 idemp
 
 ### LEGACY-GROUP-CANCEL-NOTIFICATION
 
-legacy 목표 미달 공동구매에서 consumer `GROUP_CANCELLED_LACK` 알림이 누락될 수 있다.
+`RESOLVED` — legacy 목표 미달 공동구매에서 consumer `GROUP_CANCELLED_LACK` 알림이 누락되던 문제를 해소했다.
 
-현재 `cancelGroupBuyLack()`가 주문을 먼저 `CANCELLED`로 바꾼 뒤 `sendToGroupParticipants()`를 호출하고, sender는 `CANCELLED`를 대상에서 제외한다.
+`cancelGroupBuyLack()`는 상태 변경 전에 취소 대상 participant snapshot을 확정하고, `CANCELLED` 전환 뒤 해당 명시적 recipient 집합에 consumer `GROUP_CANCELLED_LACK`를 정확히 1회 직접 전달한다. `sendToGroupParticipants()`의 terminal filtering은 다른 template에 그대로 유지하고 판매자 `SELLER_GROUP_CANCELLED_LACK` 알림도 유지한다.
 
-- [ ] 취소 대상 participant snapshot 또는 동등 명시적 recipient 집합 사용
-- [ ] consumer 목표미달 취소 알림 1회 직접 회귀
-- [ ] 판매자 취소 알림 정상 유지
-- [ ] 다른 template의 terminal filtering 의미 유지
+- [x] 취소 대상 participant snapshot 또는 동등 명시적 recipient 집합 사용
+- [x] consumer 목표미달 취소 알림 1회 직접 회귀
+- [x] 판매자 취소 알림 정상 유지
+- [x] 다른 template의 terminal filtering 의미 유지
 
-정본: `docs/specs/api/notifications.md`.
+정본: `docs/specs/api/notifications.md`. 회귀: `apps/api/src/notifications/legacy-group-cancel-notification.spec.ts`.
 
 ### NOTIFICATION-RETRY-POLICY
 - [ ] backoff·오류 분류·rate limit·중복 SMS·관측 지표
