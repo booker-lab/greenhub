@@ -210,7 +210,7 @@ export class DeliveryPhotosService {
         purpose: 'DELIVERY_PHOTO',
         basisAt: this.toDate(now),
         storagePath: input.storagePath,
-        metadata: { orderId: input.orderId, photoId: input.photoId },
+        metadata: { orderId: input.orderId, photoId: input.photoId, storeId: input.storeId },
         transaction,
       });
       transaction.update(orderRef, {

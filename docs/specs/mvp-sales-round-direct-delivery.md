@@ -156,9 +156,10 @@ proof나 production deployment·activation·first live round를 의미하지 않
 - 법정 보관 컬렉션과 배송 사진 원본은 소비자앱·드라이버앱·일반 셀러 권한에서 직접 접근할 수 없다.
 - 각 보관 기록은 파기 예정 시각을 가지며 정기 작업이 만료 기록과 연결 Storage 파일을 영구 삭제한다.
 - 정기 파기는 Firestore 쓰기 한도보다 작은 450건 배치로 500건 초과 대상도 반복 처리하며, Storage 삭제가 최종 실패하면 안전한 운영 예외만 남기고 보관 문서는 유지한다.
-- `RETENTION_DELETE_FAILED`는 store-scoped route 또는 admin/technical global queue에서 확인할 수
-  있어야 한다. 현재 배송 사진 failure route의 store identity·global visibility 공백은
-  `RETENTION-DELETE-ISSUE-ROUTING`에서 별도 추적한다.
+- `RETENTION_DELETE_FAILED`는 store-scoped route에서 확인할 수 있어야 한다. 배송 사진 보관 기록은
+  비-PII `storeId`를 `orderId`·`photoId`와 함께 저장하므로 최종 삭제 실패 issue가 실제 storeId를
+  포함해 store-scoped `operationIssues` 목록에 노출된다. admin/technical용 cross-store global
+  queue는 아직 계약하지 않으며 `RETENTION-DELETE-ISSUE-ROUTING`에서 별도 추적한다.
 
 ## 검증 기준
 
