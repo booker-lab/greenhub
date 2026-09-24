@@ -16,6 +16,7 @@ import test from 'node:test';
 import {
   ALREADY_SATISFIED,
   BLOCKED_EXTERNAL,
+  buildFrontierPrompt,
   extractDeclaredAuthorityPaths,
   FRONTIER_COMPLETE,
   HUMAN_DECISION_REQUIRED,
@@ -309,6 +310,19 @@ test('CASE A0c — parseArgs requires only an explicit flag surface', () => {
   assert.equal(parsed.ok, true);
   assert.equal(parsed.options.requestFile, 'req.txt');
   assert.equal(parsed.options.ciTimeoutMs, 5);
+});
+
+test('CASE A0d — the selector prompt states the ACCEPTANCE_AUTHORITY completeness rule', () => {
+  const prompt = buildFrontierPrompt({
+    buildRequest: 'MODE: BUILD\n\nclose exactly one bounded frontier',
+    declaredAuthority: ['docs/authority.md'],
+    canonicalAuthority: ['AGENTS.md', 'docs/README.md'],
+    pin: { fetchedSha: 'a'.repeat(40) },
+  });
+  assert.match(
+    prompt,
+    /ACCEPTANCE_AUTHORITY must include every path the BUILD REQUEST names, every\s+criterion authority path, and every authority_resolved path that exists as a blob\s+at live main\./,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -860,6 +874,51 @@ test('CASE G2 — a selector that drops a declared authority path is rejected', 
     assert.equal(result.status, BLOCKED_EXTERNAL);
     assert.match(result.reason, /not resolved by the selector/);
     assert.equal(childCallCount(fake), 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE G3 — an authority_resolved blob missing from ACCEPTANCE_AUTHORITY is rejected', () => {
+  const fixture = buildFixture();
+  try {
+    const entry = {
+      priority: 1,
+      id: 'F1',
+      statement: 'docs/feature.md exists.',
+      kind: 'PRODUCT',
+      criteria: [criterion({ id: 'C1', path: 'docs/feature.md' })],
+      satisfied: false,
+    };
+    const decision = frontierDecision({
+      considered: [entry],
+      authorityResolved: ['docs/authority.md', 'docs/BACKLOG.md'],
+      selected: {
+        priority: 1,
+        id: 'F1',
+        statement: entry.statement,
+        kind: 'PRODUCT',
+        why_selected: 'only frontier',
+        goal: goalFor({
+          criteria: entry.criteria,
+          tasks: [
+            task({
+              id: 'T1',
+              closes: ['C1'],
+              allow: ['docs/feature.md'],
+              proof: ['node proof-feature.cjs'],
+            }),
+          ],
+          accept: ['docs/authority.md'],
+        }),
+      },
+    });
+    const { result, fake } = runBuildOn(fixture, { decision });
+    assert.equal(result.status, BLOCKED_EXTERNAL);
+    assert.match(result.reason, /ACCEPTANCE_AUTHORITY must include every blob/);
+    assert.match(result.reason, /docs\/BACKLOG\.md/);
+    assert.equal(childCallCount(fake), 0);
+    assert.equal(result.goal, null);
   } finally {
     removeFixture(fixture);
   }
