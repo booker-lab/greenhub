@@ -635,7 +635,13 @@ owner 제안: `apps/api/src/operations/**`; refund·SMS provider 경계의 idemp
 정본: `docs/specs/api/notifications.md`. 회귀: `apps/api/src/notifications/legacy-group-cancel-notification.spec.ts`.
 
 ### NOTIFICATION-RETRY-POLICY
-- [ ] backoff·오류 분류·rate limit·중복 SMS·관측 지표
+
+알림톡/SMS 전달 경로가 provider 응답을 재시도 가능·rate-limit·영구·불확실로 분류하고, `NOTIFICATION_RETRY_BACKOFF_POLICY`에 따라 시도 사이 bounded backoff와 rate-limit 지연을 적용한다. `UNKNOWN`에서는 blind 중복 SMS를 시도하지 않는다. 3회 알림톡 상한·1회 SMS fallback·설정 오류 fail-closed·delivery idempotency는 유지한다.
+
+- [x] backoff·오류 분류·rate limit·중복 SMS
+- [ ] 관측 지표(분류·지연 metric 노출)는 후속 범위로 남김
+
+정본: `docs/specs/api/notifications.md`. 회귀: `apps/api/src/notifications/notification-retry-policy.spec.ts`.
 
 ### API-LINT-BASELINE
 - [ ] auth `any`, spec mock 타입, lint command 분리

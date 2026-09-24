@@ -11,9 +11,101 @@ import {
 
 export type ProviderOutcome = 'ACCEPTED' | 'REJECTED' | 'UNKNOWN';
 
+// provider 오류를 재시도 가능/rate-limit/영구/불확실로 분류한다. 분류 결과가
+// 재시도 backoff와 SMS fallback 여부를 결정한다.
+export type ProviderErrorClass = 'RETRYABLE' | 'RATE_LIMITED' | 'PERMANENT' | 'UNKNOWN';
+
+export const NOTIFICATION_RETRY_BACKOFF_POLICY = {
+  maxAlimtalkAttempts: 3,
+  maxSmsFallbackAttempts: 1,
+  baseBackoffMs: 200,
+  rateLimitBackoffMs: 1000,
+  backoffMultiplier: 2,
+  maxBackoffMs: 2000,
+} as const;
+
+const RATE_LIMIT_MESSAGE_PATTERNS: readonly RegExp[] = [
+  /rate.?limit/i,
+  /too many/i,
+  /(발송|요청|호출|전송)[^\n]{0,20}(한도|제한|초과)/,
+  /(한도|제한|초과)[^\n]{0,20}(발송|요청|호출|전송)/,
+];
+
+const RETRYABLE_MESSAGE_PATTERNS: readonly RegExp[] = [
+  /일시/,
+  /잠시/,
+  /timeout/i,
+  /temporar/i,
+  /try again/i,
+  /server error/i,
+];
+
+const RETRYABLE_ALIMTALK_CODES: ReadonlySet<number> = new Set([-1, -2, -3, -99, -100]);
+const RETRYABLE_SMS_CODES: ReadonlySet<number> = new Set([-1, -2, -3, -99, -100]);
+
+export function classifyProviderError(input: {
+  code?: number | null;
+  message?: string | null;
+  httpStatus?: number | null;
+  retryableCodes: ReadonlySet<number>;
+}): ProviderErrorClass {
+  if (input.httpStatus === 429) return 'RATE_LIMITED';
+  const message = typeof input.message === 'string' ? input.message : '';
+  if (RATE_LIMIT_MESSAGE_PATTERNS.some((pattern) => pattern.test(message))) {
+    return 'RATE_LIMITED';
+  }
+  if (
+    typeof input.httpStatus === 'number' &&
+    Number.isFinite(input.httpStatus) &&
+    input.httpStatus >= 500
+  ) {
+    return 'RETRYABLE';
+  }
+  const hasRetryableCode =
+    typeof input.code === 'number' &&
+    Number.isFinite(input.code) &&
+    input.retryableCodes.has(input.code);
+  if (hasRetryableCode || RETRYABLE_MESSAGE_PATTERNS.some((pattern) => pattern.test(message))) {
+    return 'RETRYABLE';
+  }
+  return 'PERMANENT';
+}
+
+export function classifyAlimtalkProviderError(input: {
+  code?: number | null;
+  message?: string | null;
+  httpStatus?: number | null;
+}): ProviderErrorClass {
+  return classifyProviderError({ ...input, retryableCodes: RETRYABLE_ALIMTALK_CODES });
+}
+
+export function classifySmsProviderError(input: {
+  code?: number | null;
+  message?: string | null;
+  httpStatus?: number | null;
+}): ProviderErrorClass {
+  return classifyProviderError({ ...input, retryableCodes: RETRYABLE_SMS_CODES });
+}
+
+// 재시도 사이 지연을 지수적으로 늘리되 maxBackoffMs로 상한한다. rate-limit은
+// 같은 채널을 더 오래 쉬게 하는 별도 base를 사용한다.
+export function computeNotificationRetryDelayMs(
+  errorClass: ProviderErrorClass,
+  retryIndex: number,
+): number {
+  const base =
+    errorClass === 'RATE_LIMITED'
+      ? NOTIFICATION_RETRY_BACKOFF_POLICY.rateLimitBackoffMs
+      : NOTIFICATION_RETRY_BACKOFF_POLICY.baseBackoffMs;
+  const exponent = Number.isFinite(retryIndex) ? Math.max(0, Math.trunc(retryIndex)) : 0;
+  const raw = base * NOTIFICATION_RETRY_BACKOFF_POLICY.backoffMultiplier ** exponent;
+  return Math.min(raw, NOTIFICATION_RETRY_BACKOFF_POLICY.maxBackoffMs);
+}
+
 export type NotificationDeliveryResult = {
   success: boolean;
   outcome: ProviderOutcome;
+  errorClass: ProviderErrorClass | null;
   channel: Extract<NotificationChannel, 'alimtalk' | 'sms'> | null;
   message: string;
   alimtalkAttempts: number;
@@ -28,6 +120,7 @@ type ProviderAttemptResult = {
   outcome: ProviderOutcome;
   providerReceipt: string | null;
   errorMessage?: string;
+  errorClass?: ProviderErrorClass;
 };
 
 export function normalizeProviderReceipt(value: unknown): string | null {
@@ -64,6 +157,7 @@ function localRejection(
   return {
     success: false,
     outcome: 'REJECTED',
+    errorClass: null,
     channel: null,
     message,
     alimtalkAttempts,
@@ -107,6 +201,7 @@ export class AligoClient {
       return {
         ...rendered,
         outcome: 'REJECTED',
+        errorClass: null,
         providerReceipt: null,
         attemptId: null,
         needsVerify: false,
@@ -139,16 +234,24 @@ export class AligoClient {
 
     const attemptId = uuidv4();
     let errorMessage = '알림톡 발송에 실패했습니다.';
+    let alimtalkAttemptsUsed = 0;
+    let lastErrorClass: ProviderErrorClass = 'RETRYABLE';
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < NOTIFICATION_RETRY_BACKOFF_POLICY.maxAlimtalkAttempts;
+      attempt += 1
+    ) {
       const result = await this.sendAlimtalkOnce(phone, providerTemplateCode, message);
+      alimtalkAttemptsUsed = attempt + 1;
       if (result.outcome === 'ACCEPTED') {
         return {
           success: true,
           outcome: 'ACCEPTED',
+          errorClass: null,
           channel: 'alimtalk',
           message,
-          alimtalkAttempts: attempt + 1,
+          alimtalkAttempts: alimtalkAttemptsUsed,
           smsAttempts: 0,
           providerReceipt: result.providerReceipt,
           attemptId,
@@ -156,12 +259,14 @@ export class AligoClient {
         };
       }
       if (result.outcome === 'UNKNOWN') {
+        // 접수 여부가 불확실하면 blind 재시도나 SMS 대체를 하지 않는다.
         return {
           success: false,
           outcome: 'UNKNOWN',
+          errorClass: 'UNKNOWN',
           channel: null,
           message,
-          alimtalkAttempts: attempt + 1,
+          alimtalkAttempts: alimtalkAttemptsUsed,
           smsAttempts: 0,
           providerReceipt: null,
           attemptId,
@@ -171,7 +276,13 @@ export class AligoClient {
             'provider 접수 여부를 확인할 수 없습니다. blind retry 없이 수동 확인이 필요합니다.',
         };
       }
+      lastErrorClass = result.errorClass ?? 'RETRYABLE';
       errorMessage = result.errorMessage ?? errorMessage;
+      const hasNextAttempt =
+        attempt + 1 < NOTIFICATION_RETRY_BACKOFF_POLICY.maxAlimtalkAttempts;
+      // 명시적 영구 오류는 같은 채널 blind 재시도 대신 1회 SMS fallback으로 넘긴다.
+      if (!hasNextAttempt || lastErrorClass === 'PERMANENT') break;
+      await this.delay(computeNotificationRetryDelayMs(lastErrorClass, attempt));
     }
 
     const smsResult = await this.sendSmsMessage(phone, message);
@@ -179,9 +290,10 @@ export class AligoClient {
       return {
         success: true,
         outcome: 'ACCEPTED',
+        errorClass: null,
         channel: 'sms',
         message,
-        alimtalkAttempts: 3,
+        alimtalkAttempts: alimtalkAttemptsUsed,
         smsAttempts: 1,
         providerReceipt: smsResult.providerReceipt,
         attemptId,
@@ -192,9 +304,10 @@ export class AligoClient {
       return {
         success: false,
         outcome: 'UNKNOWN',
+        errorClass: 'UNKNOWN',
         channel: null,
         message,
-        alimtalkAttempts: 3,
+        alimtalkAttempts: alimtalkAttemptsUsed,
         smsAttempts: 1,
         providerReceipt: null,
         attemptId,
@@ -208,9 +321,10 @@ export class AligoClient {
     return {
       success: false,
       outcome: 'REJECTED',
+      errorClass: smsResult.errorClass ?? lastErrorClass,
       channel: null,
       message,
-      alimtalkAttempts: 3,
+      alimtalkAttempts: alimtalkAttemptsUsed,
       smsAttempts: 1,
       providerReceipt: null,
       attemptId,
@@ -229,6 +343,7 @@ export class AligoClient {
       return {
         ...rendered,
         outcome: 'REJECTED',
+        errorClass: null,
         providerReceipt: null,
         attemptId: null,
         needsVerify: false,
@@ -252,6 +367,7 @@ export class AligoClient {
       return {
         success: true,
         outcome: 'ACCEPTED',
+        errorClass: null,
         channel: 'sms',
         message,
         alimtalkAttempts: 0,
@@ -265,6 +381,7 @@ export class AligoClient {
       return {
         success: false,
         outcome: 'UNKNOWN',
+        errorClass: 'UNKNOWN',
         channel: null,
         message,
         alimtalkAttempts: 0,
@@ -280,6 +397,7 @@ export class AligoClient {
     return {
       success: false,
       outcome: 'REJECTED',
+      errorClass: result.errorClass ?? 'PERMANENT',
       channel: null,
       message,
       alimtalkAttempts: 0,
@@ -318,6 +436,11 @@ export class AligoClient {
     }
   }
 
+  private async delay(ms: number): Promise<void> {
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, ms));
+  }
+
   private async sendAlimtalkOnce(
     phone: string,
     templateCode: string,
@@ -346,6 +469,7 @@ export class AligoClient {
         return {
           outcome: 'UNKNOWN',
           providerReceipt: null,
+          errorClass: 'UNKNOWN',
           errorMessage: `알림톡 응답 파싱 실패: ${String(e)}`,
         };
       }
@@ -354,6 +478,7 @@ export class AligoClient {
         return {
           outcome: 'UNKNOWN',
           providerReceipt: null,
+          errorClass: 'UNKNOWN',
           errorMessage: '알림톡 응답 코드 파싱 실패로 접수 여부를 확인할 수 없습니다.',
         };
       }
@@ -362,13 +487,23 @@ export class AligoClient {
           typeof record['message'] === 'string' && record['message'].trim().length > 0
             ? (record['message'] as string)
             : '알림톡 발송에 실패했습니다.';
-        return { outcome: 'REJECTED', providerReceipt: null, errorMessage: messageText };
+        return {
+          outcome: 'REJECTED',
+          providerReceipt: null,
+          errorClass: classifyAlimtalkProviderError({
+            code: record['code'],
+            message: messageText,
+            httpStatus: res.status,
+          }),
+          errorMessage: messageText,
+        };
       }
       return { outcome: 'ACCEPTED', providerReceipt: parseAlimtalkReceipt(json) };
     } catch (e) {
       return {
         outcome: 'UNKNOWN',
         providerReceipt: null,
+        errorClass: 'UNKNOWN',
         errorMessage: `알림톡 transport 불확실: ${String(e)}`,
       };
     }
@@ -398,6 +533,7 @@ export class AligoClient {
         return {
           outcome: 'UNKNOWN',
           providerReceipt: null,
+          errorClass: 'UNKNOWN',
           errorMessage: `문자 응답 파싱 실패: ${String(e)}`,
         };
       }
@@ -407,6 +543,7 @@ export class AligoClient {
         return {
           outcome: 'UNKNOWN',
           providerReceipt: null,
+          errorClass: 'UNKNOWN',
           errorMessage: '문자 응답 코드 파싱 실패로 접수 여부를 확인할 수 없습니다.',
         };
       }
@@ -415,13 +552,23 @@ export class AligoClient {
           typeof record['message'] === 'string' && record['message'].trim().length > 0
             ? (record['message'] as string)
             : '문자 대체 발송에 실패했습니다.';
-        return { outcome: 'REJECTED', providerReceipt: null, errorMessage: messageText };
+        return {
+          outcome: 'REJECTED',
+          providerReceipt: null,
+          errorClass: classifySmsProviderError({
+            code: resultCode,
+            message: messageText,
+            httpStatus: res.status,
+          }),
+          errorMessage: messageText,
+        };
       }
       return { outcome: 'ACCEPTED', providerReceipt: parseSmsReceipt(json) };
     } catch (e) {
       return {
         outcome: 'UNKNOWN',
         providerReceipt: null,
+        errorClass: 'UNKNOWN',
         errorMessage: `문자 transport 불확실: ${String(e)}`,
       };
     }

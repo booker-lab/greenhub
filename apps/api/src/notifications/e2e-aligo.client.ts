@@ -58,6 +58,7 @@ export class E2EAligoClient {
         ? {
             success: true,
             outcome: 'ACCEPTED',
+            errorClass: null,
             channel: 'alimtalk' as const,
             message,
             alimtalkAttempts: 1,
@@ -70,6 +71,7 @@ export class E2EAligoClient {
           ? {
               success: true,
               outcome: 'ACCEPTED',
+              errorClass: null,
               channel: 'sms' as const,
               message,
               alimtalkAttempts: 3,
@@ -81,6 +83,7 @@ export class E2EAligoClient {
           : {
               success: false,
               outcome: 'REJECTED',
+              errorClass: 'PERMANENT',
               channel: null,
               message,
               alimtalkAttempts: 3,
@@ -105,6 +108,7 @@ export class E2EAligoClient {
     const result: NotificationDeliveryResult = {
       success,
       outcome: success ? 'ACCEPTED' : 'REJECTED',
+      errorClass: success ? null : 'PERMANENT',
       channel: success ? 'sms' : null,
       message,
       alimtalkAttempts: 0,
