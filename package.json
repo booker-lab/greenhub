@@ -35,7 +35,8 @@
     "test:agent-runner": "node --test scripts/agent/run-once.spec.mjs",
     "test:agent-visible-tui": "node --test scripts/agent/open-visible-tui.spec.mjs",
     "test:agent-publication": "node --test scripts/agent/run-publish-once.spec.mjs",
-    "test:agent-goal": "node --test scripts/agent/run-goal.spec.mjs"
+    "test:agent-goal": "node --test scripts/agent/run-goal.spec.mjs",
+    "test:agent-build": "node --test scripts/agent/run-build.spec.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",

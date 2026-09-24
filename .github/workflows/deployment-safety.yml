@@ -30,3 +30,5 @@ jobs:
         run: node --test scripts/agent/run-publish-once.spec.mjs
       - name: Verify deterministic run-goal core safety
         run: node --test scripts/agent/run-goal.spec.mjs
+      - name: Verify natural-language BUILD front door safety
+        run: node --test scripts/agent/run-build.spec.mjs
