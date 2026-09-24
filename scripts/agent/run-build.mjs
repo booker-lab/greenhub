@@ -39,7 +39,9 @@ import {
   BLOCKED_EXTERNAL,
   BUDGET_EXHAUSTED,
   evaluateGoalCriteria,
+  GOAL_CONTRACT_FIELDS,
   GOAL_SATISFIED,
+  GOAL_TASK_FIELDS,
   HUMAN_DECISION_REQUIRED,
   HUMAN_ESCALATION_TOKENS,
   INVALID_GOAL,
@@ -142,6 +144,71 @@ export const HISTORICAL_PATH_PREFIXES = Object.freeze([
 export const HISTORICAL_BASENAME_PATTERN = /^(PLAN_|REPORT_|PROMPT_)/i;
 
 export const MAX_CONSIDERED_FRONTIERS = 5;
+
+// ---------------------------------------------------------------------------
+// Authoritative selector contract
+// ---------------------------------------------------------------------------
+// The generator-visible contract (`buildFrontierPrompt`) and the deterministic
+// validators (`validateFrontierDecision` / `validateGeneratedGoal`) are both
+// derived from the declarations below. A constraint must never be stated only
+// in the prompt or enforced only by a validator literal: the prompt prints
+// these exact field sets and limits, and the validator enforces exactly them.
+// Malformed output stays fail closed; this layer never relaxes validation to
+// raise the selector success rate.
+
+export const SELECTOR_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+export const SELECTOR_STATEMENT_MAX_CHARS = 2000;
+export const SELECTOR_EVIDENCE_MAX_CHARS = 2000;
+export const SELECTOR_WHY_SELECTED_MAX_CHARS = 2000;
+export const SELECTOR_REASON_MAX_CHARS = 4000;
+export const SELECTOR_GOAL_TEXT_MAX_CHARS = 20000;
+export const SELECTOR_TASK_OUTCOME_MAX_CHARS = 2000;
+
+// Ephemeral current-evidence classification (development-authority 9.2).
+export const SELECTOR_RECONCILIATIONS = Object.freeze([
+  'IMPLEMENTATION_GAP',
+  'STALE_SPEC',
+  'SEMANTIC_CONFLICT',
+]);
+
+export const SELECTOR_FIELD_SETS = Object.freeze({
+  decision: Object.freeze([
+    'status',
+    'reason',
+    'authority_resolved',
+    'considered',
+    'selected',
+    'escalation_token',
+  ]),
+  considered: Object.freeze([
+    'priority',
+    'id',
+    'statement',
+    'kind',
+    'criteria',
+    'satisfied',
+    'evidence',
+    'reconciliation',
+    'maintenance_justification',
+  ]),
+  selected: Object.freeze([
+    'priority',
+    'id',
+    'statement',
+    'kind',
+    'why_selected',
+    'maintenance_justification',
+    'goal',
+  ]),
+  criterionByCheck: Object.freeze({
+    PATH_PRESENT: Object.freeze(['id', 'statement', 'authority', 'check', 'class', 'path']),
+    PATH_ABSENT: Object.freeze(['id', 'statement', 'authority', 'check', 'class', 'path']),
+    DOC_TOKEN: Object.freeze(['id', 'statement', 'authority', 'check', 'class', 'path', 'token']),
+    PROOF_AT_MAIN: Object.freeze(['id', 'statement', 'authority', 'check', 'class', 'command']),
+  }),
+  goal: GOAL_CONTRACT_FIELDS,
+  task: GOAL_TASK_FIELDS,
+});
 
 // Repository canonical authority reading order (AGENTS.md section 2). Only
 // pointers that exist at the pinned live SHA are handed to the selector.
@@ -322,6 +389,36 @@ function readRequestText(options) {
   }
 }
 
+function selectorContractLines() {
+  return [
+    '## Field contract (authoritative: the validator enforces exactly this)',
+    `- identifier pattern for every frontier/criterion/task id: ${SELECTOR_ID_PATTERN.source}`,
+    `- text limits (characters): statement <= ${SELECTOR_STATEMENT_MAX_CHARS},`,
+    `  evidence <= ${SELECTOR_EVIDENCE_MAX_CHARS}, why_selected <= ${SELECTOR_WHY_SELECTED_MAX_CHARS},`,
+    `  reason <= ${SELECTOR_REASON_MAX_CHARS}, goal GOAL <= ${SELECTOR_GOAL_TEXT_MAX_CHARS},`,
+    `  task outcome <= ${SELECTOR_TASK_OUTCOME_MAX_CHARS}`,
+    `- considered frontiers: 1..${MAX_CONSIDERED_FRONTIERS} entries, priorities exactly 1..N with no`,
+    '  gaps and no duplicate ids',
+    `- decision fields: ${SELECTOR_FIELD_SETS.decision.join(', ')}`,
+    `- considered entry fields: ${SELECTOR_FIELD_SETS.considered.join(', ')}`,
+    `- selected fields: ${SELECTOR_FIELD_SETS.selected.join(', ')}`,
+    '- criterion fields by check:',
+    ...BUILD_CRITERION_CHECKS.map(
+      (check) => `  - ${check}: ${SELECTOR_FIELD_SETS.criterionByCheck[check].join(', ')}`,
+    ),
+    `- goal contract fields: ${SELECTOR_FIELD_SETS.goal.join(', ')}`,
+    `- task fields: ${SELECTOR_FIELD_SETS.task.join(', ')}`,
+    '- selected.kind must equal the considered frontier kind',
+    '- goal CRITERIA must be exactly the selected considered frontier criteria (same ids,',
+    '  statements, authorities, checks, and check-specific fields)',
+    '- each task: allow declares at least one path, closes at least one criterion, proof at',
+    '  least one command; proof_owner is index-positional with proof when present',
+    '- AUTONOMOUSLY_ALLOWED declares at least one path; BUDGET values are non-negative integers',
+    `- reconciliation is required when satisfied is false and must be one of: ${SELECTOR_RECONCILIATIONS.join(', ')}`,
+    '- unknown fields at any level reject the decision (there is no tolerant extra-field mode)',
+  ];
+}
+
 /**
  * The exact Goal Contract the build layer must consult. The generator (selector
  * prompt) and this validator see the same field set.
@@ -371,24 +468,35 @@ export function buildFrontierPrompt({ buildRequest, declaredAuthority, canonical
     '   priorities must be exactly 1..N with no gaps and must not exceed',
     `   ${MAX_CONSIDERED_FRONTIERS}, and the selected frontier must be the lowest-numbered`,
     '   considered frontier whose criteria are not all satisfied.',
-    '4. A considered frontier is PRODUCT by default. MAINTENANCE is allowed only when',
-    '   every considered PRODUCT frontier is already satisfied and the selected',
-    '   maintenance_justification names the real blocker.',
+    '4. A considered frontier is PRODUCT by default. selected.kind must equal the considered',
+    '   frontier kind. MAINTENANCE is allowed only when every considered PRODUCT frontier is',
+    '   already satisfied and the selected maintenance_justification names the real blocker.',
     '5. Semantic gate. Return HUMAN_DECISION_REQUIRED instead of a frontier when closing',
     '   it would create new product meaning, choose a UX/product policy fork, decide',
     '   security/privacy authority, decide clinical/safety/financial/legal policy, perform',
     '   an irreversible external action, or change acceptance meaning.',
-    '6. Exactly one frontier. Its criteria and tasks may be several independent bounded',
-    '   subtasks, but every criterion and task must belong to that one frontier.',
+    '6. Reconcile current evidence before declaring a frontier open. For every considered',
+    `   frontier, compare the current authority against the current implementation and the`,
+    '   nearest faithful direct proof, then set reconciliation to exactly one of:',
+    '   - IMPLEMENTATION_GAP: the intended contract has a real implementation or proof gap.',
+    '   - STALE_SPEC: current spec text, current implementation, and direct proof all point',
+    '     at the same contract and only the spec wording is behind. STALE_SPEC is not a',
+    '     product gap; a selected STALE_SPEC frontier closes by syncing the authoritative',
+    '     spec line and must not change runtime behavior. STALE_SPEC requires an evidence',
+    '     string naming the implementation and the direct proof that already exist.',
+    '   - SEMANTIC_CONFLICT: spec and implementation claim different contracts. Do not',
+    '     choose this as a frontier; return HUMAN_DECISION_REQUIRED instead.',
+    '   Existing code alone never makes a spec stale, and an existing test alone never',
+    '   changes the intended contract. All three sources must agree.',
     '7. Criteria use only the checks PATH_PRESENT, PATH_ABSENT, DOC_TOKEN, PROOF_AT_MAIN and',
     '   class AUTONOMOUS. Every criterion authority path must already exist at live main,',
     '   and authority_resolved must list every authority path the BUILD REQUEST names plus',
-    '   every criterion authority path. A PROOF_AT_MAIN command runs in a disposable',
-    '   live-main worktree with no installed project dependencies, so it must be',
-    '   self-contained (for example `node --test` against a dependency-free spec). A',
-    '   behavior check that needs the project toolchain belongs in a task `proof` command',
-    '   instead: task proof runs in the task workspace after the task may have installed',
-    '   what it needs.',
+    '   every criterion authority path. A DOC_TOKEN criterion declares both its path and its',
+    '   token. A PROOF_AT_MAIN command runs in a disposable live-main worktree with no',
+    '   installed project dependencies, so it must be self-contained (for example',
+    '   `node --test` against a dependency-free spec). A behavior check that needs the',
+    '   project toolchain belongs in a task `proof` command instead: task proof runs in the',
+    '   task workspace after the task may have installed what it needs.',
     '8. Every task must declare publication "required", at least one proof command, and',
     '   non-empty commit_message and pr_title. Its allow, semantic_owner, and proof_owner',
     '   paths must all stay inside AUTONOMOUSLY_ALLOWED, and the union of task closes must',
@@ -397,23 +505,21 @@ export function buildFrontierPrompt({ buildRequest, declaredAuthority, canonical
     '10. Every ACCEPTANCE_AUTHORITY path must exist as a file (blob) at live main.',
     '    ACCEPTANCE_AUTHORITY must include every path the BUILD REQUEST names and every',
     '    criterion authority path that exists as a blob at live main.',
-    '11. Do not invent fields. Unknown fields reject the decision.',
+    '11. Do not invent fields. Unknown fields at any level reject the decision.',
     '',
     '## Required output',
     'Return exactly one JSON object and nothing else: no markdown fence, no commentary, no',
     'second payload. Allowed shapes:',
-    '{"status":"FRONTIER","reason":"...","authority_resolved":["repo/path"],"considered":[{"priority":1,"id":"...","statement":"...","kind":"PRODUCT","criteria":[{"id":"...","statement":"...","authority":["repo/path"],"check":"PATH_PRESENT","class":"AUTONOMOUS","path":"repo/path"}],"satisfied":false}],"selected":{"priority":1,"id":"...","statement":"...","kind":"PRODUCT","why_selected":"...","goal":{"GOAL":"...","ACCEPTANCE_AUTHORITY":["repo/path"],"PRESERVE":["..."],"AUTONOMOUSLY_ALLOWED":["repo/path"],"ESCALATE_IF":["PRODUCT_POLICY_FORK"],"STOP_WHEN":["..."],"CRITERIA":[{"id":"...","statement":"...","authority":["repo/path"],"check":"PATH_PRESENT","class":"AUTONOMOUS","path":"repo/path"}],"TASK_CATALOG":[{"id":"...","outcome":"...","preserve":"...","closes":["criterion-id"],"allow":["repo/path"],"proof":["node --test ..."],"proof_owner":[["repo/path"]],"semantic_owner":["repo/path"],"publication":"required","commit_message":"...","pr_title":"...","escalate_only_if":[],"depends_on":[]}],"PLANNER":{"enabled":false},"BUDGET":{"max_iterations":2,"max_tasks":3}}}}',
+    '{"status":"FRONTIER","reason":"...","authority_resolved":["repo/path"],"considered":[{"priority":1,"id":"...","statement":"...","kind":"PRODUCT","criteria":[{"id":"...","statement":"...","authority":["repo/path"],"check":"PATH_PRESENT","class":"AUTONOMOUS","path":"repo/path"}],"satisfied":false,"reconciliation":"IMPLEMENTATION_GAP"}],"selected":{"priority":1,"id":"...","statement":"...","kind":"PRODUCT","why_selected":"...","goal":{"GOAL":"...","ACCEPTANCE_AUTHORITY":["repo/path"],"PRESERVE":["..."],"AUTONOMOUSLY_ALLOWED":["repo/path"],"ESCALATE_IF":["PRODUCT_POLICY_FORK"],"STOP_WHEN":["..."],"CRITERIA":[{"id":"...","statement":"...","authority":["repo/path"],"check":"PATH_PRESENT","class":"AUTONOMOUS","path":"repo/path"}],"TASK_CATALOG":[{"id":"...","outcome":"...","preserve":"...","closes":["criterion-id"],"allow":["repo/path"],"proof":["node --test ..."],"proof_owner":[["repo/path"]],"semantic_owner":["repo/path"],"publication":"required","commit_message":"...","pr_title":"...","escalate_only_if":[],"depends_on":[]}],"PLANNER":{"enabled":false},"BUDGET":{"max_iterations":2,"max_tasks":3}}}}',
     '{"status":"ALREADY_SATISFIED","reason":"...","authority_resolved":["repo/path"],"considered":[{"priority":1,"id":"...","statement":"...","kind":"PRODUCT","criteria":[...],"satisfied":true,"evidence":"..."}]}',
     '{"status":"NO_EXECUTABLE_FRONTIER","reason":"...","authority_resolved":["repo/path"]}',
     '{"status":"HUMAN_DECISION_REQUIRED","reason":"...","escalation_token":"...","authority_resolved":["repo/path"]}',
     '{"status":"BLOCKED_EXTERNAL","reason":"...","authority_resolved":["repo/path"]}',
     '',
-    'Criterion fields by check:',
-    '- PATH_PRESENT / PATH_ABSENT: {"id","statement","authority","check","class","path"}',
-    '- DOC_TOKEN: the same plus "token"',
-    '- PROOF_AT_MAIN: {"id","statement","authority","check","class","command"}',
+    ...selectorContractLines(),
     '',
     'A considered entry with satisfied true must carry a non-empty "evidence" string.',
+    'A STALE_SPEC considered entry must also carry its contradiction evidence string.',
     'HUMAN_DECISION_REQUIRED escalation_token must be one of: ' +
       HUMAN_ESCALATION_TOKENS.join(', ') +
       '.',
@@ -673,6 +779,39 @@ function runFrontierSelector({
   return evidence;
 }
 
+function unknownFieldReason(value, allowed, field) {
+  const extra = Object.keys(value).filter((key) => !allowed.includes(key));
+  return extra.length > 0 ? `${field} contains unsupported field(s): ${extra.join(', ')}` : null;
+}
+
+function selectorIdentifierReason(value, field) {
+  if (typeof value !== 'string' || !SELECTOR_ID_PATTERN.test(value.trim())) {
+    return `${field} must match ${SELECTOR_ID_PATTERN.source}`;
+  }
+  return null;
+}
+
+function textLimitReason(value, limit, field) {
+  if (typeof value === 'string' && value.length > limit) {
+    return `${field} must be at most ${limit} characters`;
+  }
+  return null;
+}
+
+/** Unknown fields on a criterion are rejected by its check's field set. */
+function strictCriterionFieldReason(criteria, field) {
+  if (!Array.isArray(criteria)) return null;
+  for (let index = 0; index < criteria.length; index += 1) {
+    const criterion = criteria[index];
+    if (!isPlainObject(criterion)) continue;
+    const allowed = SELECTOR_FIELD_SETS.criterionByCheck[criterion.check];
+    if (allowed === undefined) continue;
+    const reason = unknownFieldReason(criterion, allowed, `${field}[${index}]`);
+    if (reason !== null) return reason;
+  }
+  return null;
+}
+
 function canonicalCriteria(criteria) {
   const synthetic = validateGoalContract({
     GOAL: 'frontier criterion normalization',
@@ -691,6 +830,8 @@ function canonicalCriteria(criteria) {
 }
 
 function validateCriterionSet({ criteria, field }) {
+  const strictReason = strictCriterionFieldReason(criteria, field);
+  if (strictReason !== null) return { ok: false, reason: strictReason };
   const normalized = canonicalCriteria(criteria);
   if (normalized === null) {
     return { ok: false, reason: `${field} contains invalid criterion entries` };
@@ -731,34 +872,28 @@ function validateConsideredEntries({ value, authorityResolved }) {
     const raw = value[index];
     const label = `considered[${index}]`;
     if (!isPlainObject(raw)) return { ok: false, reason: `${label} must be an object` };
-    const allowed = [
-      'priority',
-      'id',
-      'statement',
-      'kind',
-      'criteria',
-      'satisfied',
-      'evidence',
-      'maintenance_justification',
-    ];
-    const extra = Object.keys(raw).filter((key) => !allowed.includes(key));
-    if (extra.length > 0) {
-      return { ok: false, reason: `${label} contains unsupported field(s): ${extra.join(', ')}` };
-    }
+    const extra = unknownFieldReason(raw, SELECTOR_FIELD_SETS.considered, label);
+    if (extra !== null) return { ok: false, reason: extra };
     if (raw.priority !== index + 1) {
       return {
         ok: false,
         reason: `${label} priority must be ${index + 1} in request priority order`,
       };
     }
-    if (!isNonEmptyString(raw.id))
-      return { ok: false, reason: `${label} id must be a non-empty string` };
+    const idReason = selectorIdentifierReason(raw.id, `${label} id`);
+    if (idReason !== null) return { ok: false, reason: idReason };
     if (ids.has(raw.id.trim()))
       return { ok: false, reason: `${label} id is duplicated: ${raw.id}` };
     ids.add(raw.id.trim());
     if (!isNonEmptyString(raw.statement)) {
       return { ok: false, reason: `${label} statement must be a non-empty string` };
     }
+    const statementReason = textLimitReason(
+      raw.statement,
+      SELECTOR_STATEMENT_MAX_CHARS,
+      `${label} statement`,
+    );
+    if (statementReason !== null) return { ok: false, reason: statementReason };
     if (!FRONTIER_KINDS.includes(raw.kind)) {
       return { ok: false, reason: `${label} kind must be one of ${FRONTIER_KINDS.join(', ')}` };
     }
@@ -768,8 +903,41 @@ function validateConsideredEntries({ value, authorityResolved }) {
     if (raw.satisfied && !isNonEmptyString(raw.evidence)) {
       return { ok: false, reason: `${label} requires a non-empty evidence string when satisfied` };
     }
+    const evidenceReason = textLimitReason(
+      raw.evidence,
+      SELECTOR_EVIDENCE_MAX_CHARS,
+      `${label} evidence`,
+    );
+    if (evidenceReason !== null) return { ok: false, reason: evidenceReason };
     if (raw.kind === 'MAINTENANCE' && !isNonEmptyString(raw.maintenance_justification)) {
       return { ok: false, reason: `${label} MAINTENANCE requires a maintenance_justification` };
+    }
+    const reconciliation = raw.reconciliation;
+    if (raw.satisfied === false) {
+      if (!SELECTOR_RECONCILIATIONS.includes(reconciliation)) {
+        return {
+          ok: false,
+          reason:
+            `${label} reconciliation must be one of ${SELECTOR_RECONCILIATIONS.join(', ')} ` +
+            'when satisfied is false',
+        };
+      }
+    } else if (reconciliation != null && !SELECTOR_RECONCILIATIONS.includes(reconciliation)) {
+      return {
+        ok: false,
+        reason: `${label} reconciliation must be one of ${SELECTOR_RECONCILIATIONS.join(', ')}`,
+      };
+    }
+    if (raw.satisfied !== false && reconciliation === 'STALE_SPEC') {
+      return { ok: false, reason: `${label} STALE_SPEC cannot be satisfied at live main` };
+    }
+    if (reconciliation === 'STALE_SPEC' && !isNonEmptyString(raw.evidence)) {
+      return {
+        ok: false,
+        reason:
+          `${label} STALE_SPEC requires an evidence string naming the current implementation ` +
+          'and direct proof that contradict the spec text',
+      };
     }
     const criteriaValidation = validateCriterionSet({
       criteria: raw.criteria,
@@ -793,6 +961,7 @@ function validateConsideredEntries({ value, authorityResolved }) {
       criteria: criteriaValidation.criteria,
       satisfied: raw.satisfied,
       evidence: isNonEmptyString(raw.evidence) ? raw.evidence.trim() : null,
+      reconciliation: reconciliation ?? null,
     });
   }
   return { ok: true, entries };
@@ -855,6 +1024,33 @@ export function validateGeneratedGoal({
   pin,
 }) {
   const reject = (reason) => ({ ok: false, reason });
+  if (!isPlainObject(goal)) return reject('ephemeral Goal Contract must be a JSON object');
+  const extraGoalFields = unknownFieldReason(goal, SELECTOR_FIELD_SETS.goal, 'Goal Contract');
+  if (extraGoalFields !== null) return reject(extraGoalFields);
+  const goalTextReason = textLimitReason(
+    goal.GOAL,
+    SELECTOR_GOAL_TEXT_MAX_CHARS,
+    'Goal Contract GOAL',
+  );
+  if (goalTextReason !== null) return reject(goalTextReason);
+  const criterionFieldsReason = strictCriterionFieldReason(goal.CRITERIA, 'Goal Contract CRITERIA');
+  if (criterionFieldsReason !== null) return reject(criterionFieldsReason);
+  if (Array.isArray(goal.TASK_CATALOG)) {
+    for (let index = 0; index < goal.TASK_CATALOG.length; index += 1) {
+      const task = goal.TASK_CATALOG[index];
+      if (!isPlainObject(task)) continue;
+      const taskExtra = unknownFieldReason(task, SELECTOR_FIELD_SETS.task, `task[${index}]`);
+      if (taskExtra !== null) return reject(taskExtra);
+      const taskIdReason = selectorIdentifierReason(task.id, `task[${index}] id`);
+      if (taskIdReason !== null) return reject(taskIdReason);
+      const outcomeReason = textLimitReason(
+        task.outcome,
+        SELECTOR_TASK_OUTCOME_MAX_CHARS,
+        `task ${task.id ?? index} outcome`,
+      );
+      if (outcomeReason !== null) return reject(outcomeReason);
+    }
+  }
   const validation = validateGoalContract(goal);
   if (!validation.ok) {
     return reject(
@@ -866,6 +1062,8 @@ export function validateGeneratedGoal({
     return reject('ephemeral Goal Contract must declare at least one criterion');
   }
   for (const criterion of contract.criteria) {
+    const criterionIdReason = selectorIdentifierReason(criterion.id, `criterion ${criterion.id} id`);
+    if (criterionIdReason !== null) return reject(criterionIdReason);
     if (criterion.class !== 'AUTONOMOUS') {
       return reject(`criterion ${criterion.id} must be class AUTONOMOUS for a BUILD frontier`);
     }
@@ -977,18 +1175,14 @@ export function validateFrontierDecision({
   if (!isNonEmptyString(decision.reason)) {
     return reject('selector reason must be a non-empty string');
   }
-  const allowedTop = [
-    'status',
-    'reason',
-    'authority_resolved',
-    'considered',
-    'selected',
-    'escalation_token',
-  ];
-  const extraTop = Object.keys(decision).filter((key) => !allowedTop.includes(key));
-  if (extraTop.length > 0) {
-    return reject(`selector decision contains unsupported field(s): ${extraTop.join(', ')}`);
-  }
+  const reasonReason = textLimitReason(
+    decision.reason,
+    SELECTOR_REASON_MAX_CHARS,
+    'selector reason',
+  );
+  if (reasonReason !== null) return reject(reasonReason);
+  const extraTop = unknownFieldReason(decision, SELECTOR_FIELD_SETS.decision, 'selector decision');
+  if (extraTop !== null) return reject(extraTop);
 
   const rawAuthority = decision.authority_resolved;
   if (!Array.isArray(rawAuthority) || rawAuthority.length === 0) {
@@ -1117,19 +1311,8 @@ export function validateFrontierDecision({
 
   const selected = decision.selected;
   if (!isPlainObject(selected)) return reject('FRONTIER requires a selected object');
-  const allowedSelected = [
-    'priority',
-    'id',
-    'statement',
-    'kind',
-    'why_selected',
-    'maintenance_justification',
-    'goal',
-  ];
-  const extraSelected = Object.keys(selected).filter((key) => !allowedSelected.includes(key));
-  if (extraSelected.length > 0) {
-    return reject(`selected contains unsupported field(s): ${extraSelected.join(', ')}`);
-  }
+  const extraSelected = unknownFieldReason(selected, SELECTOR_FIELD_SETS.selected, 'selected');
+  if (extraSelected !== null) return reject(extraSelected);
   if (!Number.isInteger(selected.priority)) {
     return reject('selected.priority must be an integer');
   }
@@ -1155,8 +1338,30 @@ export function validateFrontierDecision({
   if (!isNonEmptyString(selected.why_selected)) {
     return reject('selected.why_selected must be a non-empty string');
   }
+  const whySelectedReason = textLimitReason(
+    selected.why_selected,
+    SELECTOR_WHY_SELECTED_MAX_CHARS,
+    'selected.why_selected',
+  );
+  if (whySelectedReason !== null) return reject(whySelectedReason);
   if (!FRONTIER_KINDS.includes(selected.kind)) {
     return reject(`selected.kind must be one of ${FRONTIER_KINDS.join(', ')}`);
+  }
+  if (selected.kind !== selectedEntry.kind) {
+    return reject(
+      `selected.kind ${selected.kind} must equal the considered frontier kind ${selectedEntry.kind}`,
+    );
+  }
+  if (selectedEntry.reconciliation === 'SEMANTIC_CONFLICT') {
+    return {
+      ok: true,
+      terminal: HUMAN_DECISION_REQUIRED,
+      reason:
+        `considered frontier ${selectedEntry.id} is classified SEMANTIC_CONFLICT: current spec ` +
+        'and current implementation claim different contracts, which is a human decision',
+      authorityResolved,
+      escalationToken: 'ACCEPTANCE_MEANING_CHANGE',
+    };
   }
   if (selected.kind === 'MAINTENANCE') {
     if (!isNonEmptyString(selected.maintenance_justification)) {
@@ -1449,6 +1654,7 @@ export function runBuild(options = {}, deps = {}) {
           kind: entry.kind,
           satisfied: entry.satisfied,
           evidence: entry.evidence,
+          reconciliation: entry.reconciliation,
         })),
         selected: validation.selected ?? null,
         escalationToken: validation.escalationToken ?? null,

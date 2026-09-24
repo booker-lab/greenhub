@@ -16,6 +16,7 @@ import test from 'node:test';
 import {
   ALREADY_SATISFIED,
   BLOCKED_EXTERNAL,
+  BUILD_CRITERION_CHECKS,
   buildFrontierPrompt,
   extractDeclaredAuthorityPaths,
   FRONTIER_COMPLETE,
@@ -29,6 +30,12 @@ import {
   parseArgs,
   parseBuildRequest,
   runBuild,
+  SELECTOR_FIELD_SETS,
+  SELECTOR_ID_PATTERN,
+  SELECTOR_RECONCILIATIONS,
+  SELECTOR_REASON_MAX_CHARS,
+  SELECTOR_STATEMENT_MAX_CHARS,
+  SELECTOR_TASK_OUTCOME_MAX_CHARS,
 } from './run-build.mjs';
 import { MAX_BATCH_CONCURRENCY } from './run-goal.mjs';
 
@@ -220,11 +227,16 @@ function frontierDecision({
   authorityResolved = ['docs/authority.md', 'docs/BACKLOG.md'],
   reason = 'select the highest-priority open frontier',
 }) {
+  const reconciled = (Array.isArray(considered) ? considered : []).map((entry) =>
+    entry.satisfied === false && entry.reconciliation === undefined
+      ? { ...entry, reconciliation: 'IMPLEMENTATION_GAP' }
+      : entry,
+  );
   return {
     status: 'FRONTIER',
     reason,
     authority_resolved: authorityResolved,
-    considered,
+    considered: reconciled,
     selected,
   };
 }
@@ -1690,6 +1702,436 @@ test('CASE V3 — PLANNER, publication, and proof requirements are enforced', ()
       assert.match(result.reason, variant.pattern);
       assert.equal(childCallCount(fake), 0);
     }
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// K. authoritative selector contract: prompt and validator share one layer
+// ---------------------------------------------------------------------------
+
+function selectorPrompt() {
+  return buildFrontierPrompt({
+    buildRequest: DEFAULT_REQUEST,
+    declaredAuthority: ['docs/authority.md'],
+    canonicalAuthority: ['AGENTS.md', 'docs/README.md'],
+    pin: { fetchedSha: 'a'.repeat(40) },
+  });
+}
+
+test('CASE K1 — the prompt prints the exact field sets, ids, and limits the validator enforces', () => {
+  const prompt = selectorPrompt();
+  assert.ok(prompt.includes(`- decision fields: ${SELECTOR_FIELD_SETS.decision.join(', ')}`));
+  assert.ok(
+    prompt.includes(`- considered entry fields: ${SELECTOR_FIELD_SETS.considered.join(', ')}`),
+  );
+  assert.ok(prompt.includes(`- selected fields: ${SELECTOR_FIELD_SETS.selected.join(', ')}`));
+  assert.ok(
+    prompt.includes(
+      `identifier pattern for every frontier/criterion/task id: ${SELECTOR_ID_PATTERN.source}`,
+    ),
+  );
+  for (const check of BUILD_CRITERION_CHECKS) {
+    assert.ok(
+      prompt.includes(`  - ${check}: ${SELECTOR_FIELD_SETS.criterionByCheck[check].join(', ')}`),
+      `prompt must print the ${check} criterion field set`,
+    );
+  }
+  assert.ok(prompt.includes(`- goal contract fields: ${SELECTOR_FIELD_SETS.goal.join(', ')}`));
+  assert.ok(prompt.includes(`- task fields: ${SELECTOR_FIELD_SETS.task.join(', ')}`));
+  assert.match(prompt, /- selected\.kind must equal the considered frontier kind/);
+  assert.match(prompt, /goal CRITERIA must be exactly the selected considered frontier criteria/);
+  assert.match(prompt, /proof_owner is index-positional with proof when present/);
+  assert.ok(
+    prompt.includes(
+      `- reconciliation is required when satisfied is false and must be one of: ${SELECTOR_RECONCILIATIONS.join(', ')}`,
+    ),
+  );
+  assert.match(prompt, /statement <= 2000/);
+  assert.match(prompt, /reason <= 4000/);
+  assert.match(prompt, /task outcome <= 2000/);
+});
+
+test('CASE K2 — unknown fields at every level fail closed before any executor', () => {
+  const fixture = buildFixture();
+  try {
+    const variants = [
+      ['considered', (decision) => { decision.considered[0].unexpected = 'x'; }],
+      ['selected', (decision) => { decision.selected.unexpected = 'x'; }],
+      ['criterion', (decision) => { decision.considered[0].criteria[0].unexpected = 'x'; }],
+      ['task', (decision) => { decision.selected.goal.TASK_CATALOG[0].unexpected = 'x'; }],
+      ['goal', (decision) => { decision.selected.goal.UNEXPECTED_FIELD = 'x'; }],
+    ];
+    for (const [label, mutate] of variants) {
+      const decision = structuredClone(openProductFrontierDecision());
+      mutate(decision);
+      const { result, fake } = runBuildOn(fixture, { decision });
+      assert.equal(result.status, BLOCKED_EXTERNAL, `${label} must fail closed`);
+      assert.match(result.reason, /unsupported field/, label);
+      assert.equal(childCallCount(fake), 0, label);
+    }
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE K3 — a DOC_TOKEN frontier keeps path+token and completes in one selector invocation', () => {
+  const fixture = buildFixture();
+  try {
+    const entry = {
+      priority: 1,
+      id: 'F-DOC',
+      statement: 'docs/authority.md owns the synced marker.',
+      kind: 'PRODUCT',
+      criteria: [
+        {
+          id: 'C1',
+          statement: 'the synced marker is present in the authority document',
+          authority: ['docs/authority.md'],
+          check: 'DOC_TOKEN',
+          class: 'AUTONOMOUS',
+          path: 'docs/authority.md',
+          token: 'SYNCED',
+        },
+      ],
+      satisfied: false,
+    };
+    const decision = frontierDecision({
+      considered: [entry],
+      selected: {
+        priority: 1,
+        id: 'F-DOC',
+        statement: entry.statement,
+        kind: 'PRODUCT',
+        why_selected: 'the document marker is missing at live main',
+        goal: goalFor({
+          criteria: entry.criteria,
+          tasks: [
+            task({
+              id: 'T1',
+              closes: ['C1'],
+              allow: ['docs/authority.md'],
+              proof: ['node proof-feature.cjs'],
+            }),
+          ],
+        }),
+      },
+    });
+    const { result, selector, fake } = runBuildOn(fixture, {
+      decision,
+      children: {
+        runPublishBehavior: (options) => {
+          pushCommitToLiveMain(fixture, {
+            path: options.allowedPaths[0],
+            content: 'SYNCED\n',
+          });
+          return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+        },
+      },
+    });
+    assert.equal(result.status, FRONTIER_COMPLETE);
+    assert.equal(selector.calls.length, 1);
+    assert.equal(result.selector.status, 'DECISION');
+    assert.equal(result.decision.rejected, undefined);
+    assert.equal(result.goal.contract.criteria[0].check, 'DOC_TOKEN');
+    assert.equal(result.goal.contract.criteria[0].token, 'SYNCED');
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE K4 — a criterion authority path missing from authority_resolved is rejected', () => {
+  const fixture = buildFixture();
+  try {
+    const entry = {
+      priority: 1,
+      id: 'F1',
+      statement: 'docs/feature.md exists.',
+      kind: 'PRODUCT',
+      criteria: [
+        criterion({ id: 'C1', path: 'docs/feature.md' }),
+        {
+          id: 'C2',
+          statement: 'docs/memory.md is a criterion authority.',
+          authority: ['docs/memory.md'],
+          check: 'PATH_PRESENT',
+          class: 'AUTONOMOUS',
+          path: 'docs/feature.md',
+        },
+      ],
+      satisfied: false,
+    };
+    const decision = frontierDecision({
+      considered: [entry],
+      authorityResolved: ['docs/authority.md', 'docs/BACKLOG.md'],
+      selected: {
+        priority: 1,
+        id: 'F1',
+        statement: entry.statement,
+        kind: 'PRODUCT',
+        why_selected: 'only frontier',
+        goal: goalFor({
+          criteria: entry.criteria,
+          tasks: [
+            task({
+              id: 'T1',
+              closes: ['C1', 'C2'],
+              allow: ['docs/feature.md'],
+              proof: ['node proof-feature.cjs'],
+            }),
+          ],
+        }),
+      },
+    });
+    const { result, fake } = runBuildOn(fixture, { decision });
+    assert.equal(result.status, BLOCKED_EXTERNAL);
+    assert.match(result.reason, /criterion authority path\(s\) are not resolved/);
+    assert.equal(childCallCount(fake), 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE K5 — identifiers, kind equality, and length limits fail closed', () => {
+  const fixture = buildFixture();
+  try {
+    const variants = [
+      ['considered id', (d) => { d.considered[0].id = 'F 1'; }, /must match/],
+      [
+        'criterion id',
+        (d) => {
+          d.considered[0].criteria[0].id = 'C 1';
+          d.selected.goal.TASK_CATALOG[0].closes = ['C 1'];
+        },
+        /must match/,
+      ],
+      ['task id', (d) => { d.selected.goal.TASK_CATALOG[0].id = 'T 1'; }, /must match/],
+      [
+        'kind equality',
+        (d) => {
+          d.selected.kind = 'MAINTENANCE';
+          d.selected.maintenance_justification = 'not actually maintenance';
+        },
+        /must equal the considered frontier kind/,
+      ],
+      [
+        'statement limit',
+        (d) => { d.considered[0].statement = 'x'.repeat(SELECTOR_STATEMENT_MAX_CHARS + 1); },
+        /statement must be at most/,
+      ],
+      ['reason limit', (d) => { d.reason = 'x'.repeat(SELECTOR_REASON_MAX_CHARS + 1); }, /reason must be at most/],
+      [
+        'task outcome limit',
+        (d) => {
+          d.selected.goal.TASK_CATALOG[0].outcome = 'x'.repeat(SELECTOR_TASK_OUTCOME_MAX_CHARS + 1);
+        },
+        /outcome must be at most/,
+      ],
+    ];
+    for (const [label, mutate, pattern] of variants) {
+      const decision = structuredClone(openProductFrontierDecision());
+      mutate(decision);
+      const { result, fake } = runBuildOn(fixture, { decision });
+      assert.equal(result.status, BLOCKED_EXTERNAL, label);
+      assert.match(result.reason, pattern, label);
+      assert.equal(childCallCount(fake), 0, label);
+    }
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R. current-evidence reconciliation classification
+// ---------------------------------------------------------------------------
+
+test('CASE R1 — the prompt states the reconciliation classification rules', () => {
+  const prompt = selectorPrompt();
+  for (const kind of SELECTOR_RECONCILIATIONS) {
+    assert.ok(prompt.includes(kind), `prompt must name ${kind}`);
+  }
+  assert.match(prompt, /Existing code alone never makes a spec stale/);
+  assert.match(prompt, /an existing test alone never\s+changes the intended contract/);
+  assert.match(prompt, /STALE_SPEC is not a\s+product gap/);
+  assert.match(prompt, /must not change runtime behavior/);
+  assert.match(prompt, /Do not\s+choose this as a frontier; return HUMAN_DECISION_REQUIRED instead/);
+  assert.match(prompt, /STALE_SPEC requires an evidence\s+string naming the implementation/);
+});
+
+test('CASE R2 — a selected SEMANTIC_CONFLICT frontier escalates with zero executor calls', () => {
+  const fixture = buildFixture();
+  try {
+    const entry = {
+      priority: 1,
+      id: 'F-CONFLICT',
+      statement: 'orders spec and orders implementation claim different contracts.',
+      kind: 'PRODUCT',
+      criteria: [criterion({ id: 'C1', path: 'docs/feature.md' })],
+      satisfied: false,
+      reconciliation: 'SEMANTIC_CONFLICT',
+    };
+    const decision = frontierDecision({
+      considered: [entry],
+      selected: {
+        priority: 1,
+        id: 'F-CONFLICT',
+        statement: entry.statement,
+        kind: 'PRODUCT',
+        why_selected: 'the contradiction needs a human decision',
+        goal: goalFor({
+          criteria: entry.criteria,
+          tasks: [
+            task({
+              id: 'T1',
+              closes: ['C1'],
+              allow: ['docs/feature.md'],
+              proof: ['node proof-feature.cjs'],
+            }),
+          ],
+        }),
+      },
+    });
+    const { result, selector, fake } = runBuildOn(fixture, { decision });
+    assert.equal(result.status, HUMAN_DECISION_REQUIRED);
+    assert.match(result.reason, /SEMANTIC_CONFLICT/);
+    assert.equal(selector.calls.length, 1);
+    assert.equal(childCallCount(fake), 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE R3 — a STALE_SPEC documentation-sync frontier is admitted and completes', () => {
+  const fixture = buildFixture();
+  try {
+    const entry = {
+      priority: 1,
+      id: 'F-STALE',
+      statement: 'docs/authority.md wording is behind an already implemented behavior.',
+      kind: 'PRODUCT',
+      criteria: [
+        {
+          id: 'C1',
+          statement: 'the authority document carries the current synced marker',
+          authority: ['docs/authority.md'],
+          check: 'DOC_TOKEN',
+          class: 'AUTONOMOUS',
+          path: 'docs/authority.md',
+          token: 'SYNCED',
+        },
+      ],
+      satisfied: false,
+      reconciliation: 'STALE_SPEC',
+      evidence: 'apps/api/src/orders plus the direct proof already implement the synced behavior',
+    };
+    const decision = frontierDecision({
+      considered: [entry],
+      selected: {
+        priority: 1,
+        id: 'F-STALE',
+        statement: entry.statement,
+        kind: 'PRODUCT',
+        why_selected: 'sync the stale spec line to the current proven contract',
+        goal: goalFor({
+          criteria: entry.criteria,
+          tasks: [
+            task({
+              id: 'T1',
+              closes: ['C1'],
+              allow: ['docs/authority.md'],
+              proof: ['node proof-feature.cjs'],
+            }),
+          ],
+        }),
+      },
+    });
+    const { result, fake } = runBuildOn(fixture, {
+      decision,
+      children: {
+        runPublishBehavior: (options) => {
+          pushCommitToLiveMain(fixture, { path: options.allowedPaths[0], content: 'SYNCED\n' });
+          return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+        },
+      },
+    });
+    assert.equal(result.status, FRONTIER_COMPLETE);
+    assert.equal(result.decision.considered[0].reconciliation, 'STALE_SPEC');
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE R4 — a missing reconciliation or STALE_SPEC without evidence fails closed', () => {
+  const fixture = buildFixture();
+  try {
+    const variants = [
+      [
+        'missing reconciliation',
+        (d) => { d.considered[0].reconciliation = null; },
+        /reconciliation must be one of/,
+      ],
+      [
+        'stale without evidence',
+        (d) => {
+          d.considered[0].reconciliation = 'STALE_SPEC';
+          delete d.considered[0].evidence;
+        },
+        /STALE_SPEC requires an evidence string/,
+      ],
+    ];
+    for (const [label, mutate, pattern] of variants) {
+      const decision = structuredClone(openProductFrontierDecision());
+      mutate(decision);
+      const { result, fake } = runBuildOn(fixture, { decision });
+      assert.equal(result.status, BLOCKED_EXTERNAL, label);
+      assert.match(result.reason, pattern, label);
+      assert.equal(childCallCount(fake), 0, label);
+    }
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE R5 — a stale TODO claiming an implemented deliverable is not an open gap', () => {
+  const fixture = buildFixture();
+  try {
+    const entry = {
+      priority: 1,
+      id: 'F-TODO',
+      statement: 'docs/authority.md is listed as missing.',
+      kind: 'PRODUCT',
+      criteria: [criterion({ id: 'C1', path: 'docs/authority.md' })],
+      satisfied: false,
+      reconciliation: 'IMPLEMENTATION_GAP',
+    };
+    const decision = frontierDecision({
+      considered: [entry],
+      selected: {
+        priority: 1,
+        id: 'F-TODO',
+        statement: entry.statement,
+        kind: 'PRODUCT',
+        why_selected: 'stale TODO claims the deliverable is missing',
+        goal: goalFor({
+          criteria: entry.criteria,
+          tasks: [
+            task({
+              id: 'T1',
+              closes: ['C1'],
+              allow: ['docs/feature.md'],
+              proof: ['node proof-feature.cjs'],
+            }),
+          ],
+        }),
+      },
+    });
+    const { result, fake } = runBuildOn(fixture, { decision });
+    assert.equal(result.status, BLOCKED_EXTERNAL);
+    assert.match(result.reason, /claims satisfied=false but live main .* evaluates satisfied=true/);
+    assert.equal(childCallCount(fake), 0);
   } finally {
     removeFixture(fixture);
   }
