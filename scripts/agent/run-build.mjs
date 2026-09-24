@@ -430,12 +430,20 @@ function parseSelectorOutput(stdout) {
   if (textParts.length === 0) {
     return { ok: false, reason: 'selector output contained no assistant text' };
   }
-  const text = textParts.join('').trim();
-  const decision = parseJson(text);
-  if (!isPlainObject(decision)) {
-    return { ok: false, reason: 'selector final text is not exactly one JSON object' };
+  // The OpenCode JSON stream may carry earlier commentary text parts before the
+  // final answer. The final assistant text part is the required payload; the
+  // joined stream is accepted only when it is already exactly one JSON object.
+  const joined = textParts.join('').trim();
+  const joinedDecision = parseJson(joined);
+  if (isPlainObject(joinedDecision)) {
+    return { ok: true, decision: joinedDecision, text: joined };
   }
-  return { ok: true, decision, text };
+  const finalText = textParts[textParts.length - 1].trim();
+  const finalDecision = parseJson(finalText);
+  if (isPlainObject(finalDecision)) {
+    return { ok: true, decision: finalDecision, text: finalText };
+  }
+  return { ok: false, reason: 'selector final text is not exactly one JSON object' };
 }
 
 function createSelectorEvidence() {

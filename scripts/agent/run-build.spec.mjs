@@ -1230,6 +1230,46 @@ test('CASE S2 — an invalid selector payload fails closed as BLOCKED_EXTERNAL',
   }
 });
 
+test('CASE S4 — earlier commentary text parts do not break the final selector decision', () => {
+  const fixture = buildFixture();
+  try {
+    const decision = {
+      status: 'NO_EXECUTABLE_FRONTIER',
+      reason: 'no currently-open frontier is autonomously closable',
+      authority_resolved: ['docs/authority.md', 'docs/BACKLOG.md'],
+    };
+    const events = [
+      { type: 'text', part: { text: 'Tests are green at live main. Now cleaning up.' } },
+      { type: 'text', part: { text: JSON.stringify(decision) } },
+    ];
+    const selector = {
+      calls: [],
+      deps: {
+        invokeSelectorOpencode: (input) => {
+          selector.calls.push(input);
+          return {
+            exitCode: 0,
+            timedOut: false,
+            startErrorCode: null,
+            stdout: `${events.map((event) => JSON.stringify(event)).join('\n')}\n`,
+            stderr: '',
+          };
+        },
+      },
+    };
+    const fake = createFakeChildren();
+    const result = runBuild(
+      { requestText: DEFAULT_REQUEST, repositoryRoot: fixture.root, remote: 'origin' },
+      { log: () => {}, ...selector.deps, ...fake.deps },
+    );
+    assert.equal(result.status, NO_EXECUTABLE_FRONTIER);
+    assert.equal(selector.calls.length, 1);
+    assert.equal(childCallCount(fake), 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
 test('CASE S3 — ALREADY_SATISFIED and NO_EXECUTABLE_FRONTIER are finite terminals', () => {
   const fixture = buildFixture();
   try {
