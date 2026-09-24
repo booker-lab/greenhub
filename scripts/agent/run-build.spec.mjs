@@ -325,6 +325,22 @@ test('CASE A0d — the selector prompt states the ACCEPTANCE_AUTHORITY completen
   );
 });
 
+test('CASE A0e — the selector prompt caps considered frontiers by grouping request priorities', () => {
+  const prompt = buildFrontierPrompt({
+    buildRequest: 'MODE: BUILD\n\nclose exactly one bounded frontier',
+    declaredAuthority: ['docs/authority.md'],
+    canonicalAuthority: ['AGENTS.md', 'docs/README.md'],
+    pin: { fetchedSha: 'a'.repeat(40) },
+  });
+  assert.match(prompt, /priority list is a ranking, not one frontier per entry/);
+  assert.match(
+    prompt,
+    /into at most 5 considered frontiers, preserving the same\s+relative order when the request names more than that many priorities/,
+  );
+  assert.match(prompt, /priorities must be exactly 1\.\.N with no gaps and must not exceed\s+5/);
+  assert.match(prompt, /lowest-numbered\s+considered frontier whose criteria are not all satisfied/);
+});
+
 // ---------------------------------------------------------------------------
 // A. natural-language BUILD request -> validated ephemeral Goal Contract
 // ---------------------------------------------------------------------------
@@ -1407,6 +1423,126 @@ test('CASE S3 — ALREADY_SATISFIED and NO_EXECUTABLE_FRONTIER are finite termin
     });
     assert.equal(none.result.status, NO_EXECUTABLE_FRONTIER);
     assert.equal(childCallCount(none.fake), 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+function selectorTextDeps(text) {
+  const calls = [];
+  return {
+    calls,
+    deps: {
+      invokeSelectorOpencode: (input) => {
+        calls.push(input);
+        return {
+          exitCode: 0,
+          timedOut: false,
+          startErrorCode: null,
+          stdout: `${JSON.stringify({ type: 'text', part: { text } })}\n`,
+          stderr: '',
+        };
+      },
+    },
+  };
+}
+
+function openProductFrontierDecision() {
+  const entry = {
+    priority: 1,
+    id: 'F1',
+    statement: 'docs/feature.md exists.',
+    kind: 'PRODUCT',
+    criteria: [criterion({ id: 'C1', path: 'docs/feature.md' })],
+    satisfied: false,
+  };
+  return frontierDecision({
+    considered: [entry],
+    selected: {
+      priority: 1,
+      id: 'F1',
+      statement: entry.statement,
+      kind: 'PRODUCT',
+      why_selected: 'only frontier',
+      goal: goalFor({
+        criteria: entry.criteria,
+        tasks: [
+          task({
+            id: 'T1',
+            closes: ['C1'],
+            allow: ['docs/feature.md'],
+            proof: ['node proof-feature.cjs'],
+          }),
+        ],
+      }),
+    },
+  });
+}
+
+function publishToLiveMain(fixture) {
+  return (options) => {
+    pushCommitToLiveMain(fixture, { path: options.allowedPaths[0], content: 'deliverable\n' });
+    return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+  };
+}
+
+test('CASE S5 — a trailing extra brace after the decision object is tolerated', () => {
+  const fixture = buildFixture();
+  try {
+    const decision = openProductFrontierDecision();
+    const selector = selectorTextDeps(`${JSON.stringify(decision)}}`);
+    const fake = createFakeChildren({ runPublishBehavior: publishToLiveMain(fixture) });
+    const result = runBuild(
+      { requestText: DEFAULT_REQUEST, repositoryRoot: fixture.root, remote: 'origin' },
+      { log: () => {}, ...selector.deps, ...fake.deps },
+    );
+    assert.equal(result.status, FRONTIER_COMPLETE);
+    assert.equal(result.nextFrontierSelected, false);
+    assert.equal(result.selector.status, 'DECISION');
+    assert.equal(selector.calls.length, 1);
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+    assert.equal(childCallCount(fake), 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE S6 — prose around the decision object is tolerated', () => {
+  const fixture = buildFixture();
+  try {
+    const decision = openProductFrontierDecision();
+    const selector = selectorTextDeps(
+      `Here is the selected frontier.\n${JSON.stringify(decision)}\nThat is the decision.`,
+    );
+    const fake = createFakeChildren({ runPublishBehavior: publishToLiveMain(fixture) });
+    const result = runBuild(
+      { requestText: DEFAULT_REQUEST, repositoryRoot: fixture.root, remote: 'origin' },
+      { log: () => {}, ...selector.deps, ...fake.deps },
+    );
+    assert.equal(result.status, FRONTIER_COMPLETE);
+    assert.equal(result.nextFrontierSelected, false);
+    assert.equal(result.selector.status, 'DECISION');
+    assert.equal(selector.calls.length, 1);
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+    assert.equal(childCallCount(fake), 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE S7 — two decision objects fail closed', () => {
+  const fixture = buildFixture();
+  try {
+    const decision = openProductFrontierDecision();
+    const selector = selectorTextDeps(`${JSON.stringify(decision)}\n${JSON.stringify(decision)}`);
+    const fake = createFakeChildren();
+    const result = runBuild(
+      { requestText: DEFAULT_REQUEST, repositoryRoot: fixture.root, remote: 'origin' },
+      { log: () => {}, ...selector.deps, ...fake.deps },
+    );
+    assert.equal(result.status, BLOCKED_EXTERNAL);
+    assert.equal(result.selector.status, 'INVALID_OUTPUT');
+    assert.equal(childCallCount(fake), 0);
   } finally {
     removeFixture(fixture);
   }
