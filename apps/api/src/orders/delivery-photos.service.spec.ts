@@ -178,7 +178,7 @@ describe('회차 직배송 사진 API 서비스 계약', () => {
         id: `order-safe:${photoId}`,
         purpose: 'DELIVERY_PHOTO',
         storagePath: `deliveryPhotos/order-safe/${photoId}.jpg`,
-        metadata: { orderId: 'order-safe', photoId },
+        metadata: { orderId: 'order-safe', photoId, storeId: 'store-safe' },
         transaction: context.transaction,
       }),
     );

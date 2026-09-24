@@ -45,7 +45,7 @@ const RETENTION_POLICIES: Record<RetentionPurpose, RetentionPolicy> = {
   DELIVERY_PHOTO: {
     collection: 'deliveryPhotoRecords',
     expiresAt: (basisAt) => addUtcDays(basisAt, 90),
-    allowedMetadata: new Set(['orderId', 'photoId', 'disputeStatus', 'legalHold']),
+    allowedMetadata: new Set(['orderId', 'photoId', 'storeId', 'disputeStatus', 'legalHold']),
   },
   MARKETING_CONSENT: {
     collection: 'marketingConsentLogs',

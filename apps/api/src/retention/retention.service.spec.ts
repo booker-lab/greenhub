@@ -399,6 +399,7 @@ describe('보관 기간과 파기 계약', () => {
       'deliveryPhotoRecords/photo-failed': {
         expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
         storagePath: 'deliveryPhotos/order-safe/photo-safe.jpg',
+        storeId: 'store-safe',
         orderId: 'order-safe',
       },
     });
@@ -414,6 +415,8 @@ describe('보관 기간과 파기 계약', () => {
     expect(issueWriter.createOrMergeIssue).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'RETENTION_DELETE_FAILED',
+        storeId: 'store-safe',
+        orderId: 'order-safe',
         idempotencyKey:
           'retention-delete-failed:deliveryPhotoRecords:deliveryPhotos/order-safe/photo-safe.jpg',
       }),
