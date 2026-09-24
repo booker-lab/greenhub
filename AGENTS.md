@@ -18,6 +18,18 @@ Canonical invariants:
 4. **Nearest faithful proof, then scoped fail-closed**  
    criterion을 실제로 falsify/confirm할 수 있는 가장 가까운 충실한 evidence부터 실행한다. 불확실하면 전체 task가 아니라 실제로 위험한 transition만 fail closed한다.
 
+5. **Single selector contract**  
+   BUILD selector의 generation contract와 deterministic validator는 하나의 authoritative constraint layer에서 파생한다. validator는 그 contract가 선언한 constraint만 강제하고, malformed output은 fail closed하며, 성공률을 위해 완화하지 않는다.
+
+6. **Reconciliation before frontier**  
+   문서의 미완료 표현은 current implementation/direct proof와 대조해 `IMPLEMENTATION_GAP` / `STALE_SPEC` / `SEMANTIC_CONFLICT`로 분류한다. `STALE_SPEC`은 product gap이 아니고, `SEMANTIC_CONFLICT`는 human decision이다.
+
+7. **Bounded batch, deterministic admission**  
+   product priority 순으로 최대 5개 frontier를 평가하고, semantic_owner·mutation surface·proof_owner·depends_on이 겹치지 않는 frontier만 한 batch에 admission한다. 겹치는 작업은 직렬화하거나 다음 recomputation으로 남긴다.
+
+8. **Fixture lifetime ownership**  
+   spec temporary fixture는 만든 test/helper가 lifetime owner이며 success·assertion failure·exception 경로 모두에서 cleanup한다. cleanup 실패를 숨기지 않고, provenance 없는 기존 residue를 삭제하지 않는다.
+
 Default flow:
 
 ```text
