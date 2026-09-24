@@ -83,11 +83,13 @@ proof나 production deployment·activation·first live round를 의미하지 않
 - 해결된 같은 원인이 재발하면 최신 안전 스냅샷을 병합하고 항목을 다시 연다.
 - 예외 유형별 허용 action만 실행하며, 동시 조치는 claim을 획득한 한 요청만 외부 동작을 수행한다.
 - 조치 실행 전 최신 결제·주문 상태를 다시 검증하고, 담당자·시각·결과·실패 사유를 감사 기록으로 남긴다.
-- lease 만료 뒤 새 claimant가 생길 수 있는 action은 성공·실패 기록에서 fresh owner token 또는
-  generation을 확인해 stale worker가 최신 claim·status·audit를 덮지 못하게 한다.
-
-현재 `claimAction()`의 만료 takeover fencing은 직접 검증되지 않았고
-`OPERATION-ACTION-CLAIM-FENCING`에서 별도 implementation finding으로 추적한다.
+- lease 만료 뒤 새 claimant가 생길 수 있는 action은 외부 환불·문자 호출 직전과 성공·실패
+  기록에서 fresh owner token을 확인해, stale worker가 외부 side effect·claim clear·최신
+  claim·status·audit를 수행하거나 덮지 못하게 한다.
+- 이 fresh-token fencing은 `apps/api/src/operations/operations-action-claim-lease-expiry.spec.ts`가
+  lease 만료 takeover(RETRY_REFUND·RESEND_SMS), stale success, stale failure를 직접 고정한다.
+  `apps/api/src/operations/operations-action-claim-occ-retry.spec.ts`가 aborted owner와 정상 동시
+  claim을 함께 고정한다.
 
 ## API 계약
 
