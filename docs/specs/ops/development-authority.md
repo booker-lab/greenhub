@@ -141,15 +141,52 @@ BUILD request (MODE: BUILD + 자연어)
 → 요청이 지명한 authority의 exact-SHA 확인 (없으면 대체 파일 없이 fail closed)
 → disposable workspace의 read-only frontier selector 1회
 → selector 판정의 deterministic 검증 (live main 재평가와 불일치하면 fail closed)
-→ ephemeral Goal Contract
+→ ephemeral Goal Contract (admitted frontier 조각들의 병합)
 → 기존 run-goal 1회 (run-once / run-publish-once / 5-way batch 재사용)
 → finite BUILD terminal
 ```
 
-- Goal Contract는 durable queue, backlog, registry로 저장하지 않는다. invocation당 정확히 하나의 frontier만 닫고, 완료 후 다음 frontier를 자동 선택하지 않는다.
+- Goal Contract는 durable queue, backlog, registry로 저장하지 않는다. invocation당 admitted batch를 한 번 닫고, 완료 후 다음 frontier를 자동 선택하지 않는다.
 - selector는 writer가 아니며, workspace mutation이 관찰되면 executor invocation 없이 판정을 거부한다.
 - 이미 satisfied인 frontier는 다시 구현하지 않고, higher-priority open frontier가 남아 있으면 lower-priority를 선택하지 않는다.
 - 새로운 product meaning, UX·정책 fork, security·privacy authority, clinical·safety·financial·legal 정책, 되돌릴 수 없는 외부 action, acceptance 의미 변경은 구현하지 않고 `HUMAN_DECISION_REQUIRED`로 종료한다.
 - BUILD terminal은 `FRONTIER_COMPLETE`, `ALREADY_SATISFIED`, `HUMAN_DECISION_REQUIRED`, `BLOCKED_EXTERNAL`, `NO_EXECUTABLE_FRONTIER`, `PROOF_FAILED`, `PUBLICATION_FAILED`다. 요청 형식 자체가 invalid하면 executor invocation 없이 `INVALID_BUILD_REQUEST`로 거부한다.
 - publication은 기존 `run-publish-once`만 사용하고, publication 뒤 canonical remote read-back을 필수로 한다. canonical local mirror 동기화는 BUILD 성공 판정의 authority가 아니다.
 - focused deterministic proof: `pnpm test:agent-build`.
+
+### 9.1 Selector contract authority
+
+- generator-visible selector contract(selector prompt)와 deterministic validator는 하나의 authoritative descriptor에서 파생한다. required/optional fields, allowed fields, enums, identifier·path rules, criterion authority rules, frontier count limit, length limit을 prompt와 validator에 별도 magic literal로 복제하지 않는다.
+- criterion field set은 check별로 결정적이다. `DOC_TOKEN`은 `path`와 `token`을, `PROOF_AT_MAIN`은 `command`를 요구한다. 각 shape은 허용 field 외의 field를 fail closed로 거부한다.
+- malformed output은 계속 fail closed한다. validator 완화, invalid output truncate, retry 증가로 성공률을 높이지 않는다.
+
+### 9.2 Current-evidence reconciliation
+
+spec/document의 미완료 표현과 current implementation/proof가 다를 수 있다. selector는 frontier candidate를 만들기 전에 current evidence를 다음 중 하나로 분류한다.
+
+| classification | 의미 | 처리 |
+|---|---|---|
+| `IMPLEMENTATION_GAP` | current source behavior가 intended contract를 만족하지 않고 direct proof도 현재 실패한다 | product frontier 후보 |
+| `STALE_SPEC` | source behavior와 direct proof가 이미 intended contract를 만족하며 spec/document 표현만 다르다 | product gap으로 취급하지 않는다. 같은 bounded task에서 actual current contract로 sync할 수 있고 `MAINTENANCE`로 선택한다 |
+| `SEMANTIC_CONFLICT` | current intended contract와 current implementation이 의미 자체에서 충돌하거나 current authority끼리 충돌한다 | 자동 수정하지 않고 `HUMAN_DECISION_REQUIRED` |
+
+- 판정은 current intended semantic contract, current source behavior, nearest faithful direct proof를 모두 확인해 내린다.
+- 코드 존재만으로 `STALE_SPEC`을 추론하지 않고, test 존재만으로 intended contract가 바뀌었다고 추론하지 않는다.
+- 기준 문서 밖의 current spec line을 대량 정리하지 않는다. `STALE_SPEC`으로 증명된 current spec line만 bounded task로 sync한다.
+- reconciliation 결과는 ephemeral selector 판정에만 존재하며 별도 durable registry/state로 저장하지 않는다.
+
+### 9.3 Bounded multi-frontier batch admission
+
+- front door는 한 invocation에서 최대 5개의 considered product candidate를 평가할 수 있다.
+- 각 considered open frontier는 자체 Goal Contract 조각(`CRITERIA`/`TASK_CATALOG`)을 가질 수 있다.
+- front door는 다음 dimension으로 pairwise independence를 deterministic하게 계산해 독립 frontier만 하나의 bounded batch로 admission한다.
+  - `semantic_owner`
+  - mutation allow surface
+  - `proof_owner`
+  - `depends_on`
+  - shared contract/runtime boundary (선언된 path surface로 표현된다)
+- 겹치는 candidate는 같은 batch에서 실행하지 않고 다음 recomputation 대상으로 남긴다.
+- admission은 considered priority 순서로 수행하며, higher-priority open frontier를 건너뛰지 않는다.
+- 실행은 기존 `run-goal`의 bounded executor를 그대로 재사용한다. 별도 executor, scheduler, durable task queue를 만들지 않는다.
+- batch가 settle되면 fresh live main을 다시 읽고 재평가한다. main movement가 task-owned semantic/proof boundary와 겹치지 않으면 완료된 implementation/proof를 보존한다.
+- batch admission 결과는 BUILD result의 ephemeral 판정으로만 남고 durable state로 저장하지 않는다.

@@ -18,6 +18,12 @@ Canonical invariants:
 4. **Nearest faithful proof, then scoped fail-closed**  
    criterion을 실제로 falsify/confirm할 수 있는 가장 가까운 충실한 evidence부터 실행한다. 불확실하면 전체 task가 아니라 실제로 위험한 transition만 fail closed한다.
 
+5. **Single-source selector contract**  
+   BUILD selector의 generator-visible contract와 deterministic validator는 하나의 authoritative descriptor에서 파생한다. 한쪽에만 있는 hidden rule이나 magic literal을 두지 않으며, malformed output은 계속 fail closed한다.
+
+6. **Current-evidence reconciliation과 bounded batch admission**  
+   미완료 문서 표현을 자동으로 실행하지 않는다. current intended contract·source behavior·direct proof를 기준으로 `IMPLEMENTATION_GAP` / `STALE_SPEC` / `SEMANTIC_CONFLICT`를 구분하고 `SEMANTIC_CONFLICT`는 `HUMAN_DECISION_REQUIRED`로 남긴다. BUILD front door는 독립성이 증명된 frontier만 기존 executor의 bounded batch(최대 5)로 admission하고 겹치는 작업은 직렬화한다.
+
 Default flow:
 
 ```text

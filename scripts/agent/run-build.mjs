@@ -3,22 +3,26 @@
 // Git-native publication, thin stateless automation).
 //
 // BUILD-mode natural-language front door for the existing Goal-Constrained
-// Development Loop. One invocation owns exactly one coherent product frontier:
+// Development Loop. One invocation owns one bounded batch of independently
+// closable product frontiers:
 //
 //   BUILD request (MODE: BUILD + natural language)
 //   -> fresh live `main` pin
 //   -> declared-authority resolution at that exact SHA
 //   -> one read-only frontier-selector invocation in a disposable workspace
 //   -> deterministic validation of the selector decision
-//   -> ephemeral Goal Contract (in memory, never a durable queue/registry)
+//   -> deterministic admission of the independently closable frontier fragments
+//   -> ephemeral merged Goal Contract (in memory, never a durable queue/registry)
 //   -> the existing run-goal loop (run-once / run-publish-once / 5-way batch)
 //   -> one finite BUILD terminal
 //   -> stop, never select a next frontier
 //
 // This module owns composition of the natural-language front door only. It does
-// not reimplement execution, admission, publication, or semantic-overlap
-// detection; all of those stay with scripts/agent/run-goal.mjs,
-// scripts/agent/run-once.mjs, and scripts/agent/run-publish-once.mjs.
+// not reimplement execution, publication, or task-level conflict detection; all
+// of those stay with scripts/agent/run-goal.mjs, scripts/agent/run-once.mjs, and
+// scripts/agent/run-publish-once.mjs. Frontier-level independence reuses the
+// exported run-goal `taskConflict` rule so both layers admit on the same
+// semantic_owner / mutation surface / proof_owner / depends_on dimensions.
 //
 // The selector is never a writer: it runs in a detached worktree created from
 // the pinned live main, receives the same sanitized child environment as every
@@ -49,6 +53,7 @@ import {
   NO_TASK_FOR_GAP,
   pinLiveMain,
   runGoal,
+  taskConflict,
   validateGoalContract,
 } from './run-goal.mjs';
 import {
@@ -66,6 +71,7 @@ import {
   observeChangedPaths,
   readLiveRemoteMain,
   resolveOpencodeCommand,
+  TASK_TEXT_MAX_CHARS,
 } from './run-once.mjs';
 import {
   CI_FAILED,
@@ -142,6 +148,121 @@ export const HISTORICAL_PATH_PREFIXES = Object.freeze([
 export const HISTORICAL_BASENAME_PATTERN = /^(PLAN_|REPORT_|PROMPT_)/i;
 
 export const MAX_CONSIDERED_FRONTIERS = 5;
+
+// Boundary for the bounded multi-frontier batch (section 9.3): the existing
+// run-goal executor already admits at most five independent tasks per live-main
+// evaluation, so the front door supplies at most that many frontiers.
+export const MAX_BATCH_FRONTIERS = MAX_CONSIDERED_FRONTIERS;
+
+// Current-evidence classification for every considered open frontier
+// (development-authority section 9.2). It is an ephemeral selector judgment;
+// nothing here is persisted.
+export const GAP_CLASSES = Object.freeze([
+  'IMPLEMENTATION_GAP',
+  'STALE_SPEC',
+  'SEMANTIC_CONFLICT',
+]);
+
+// Criterion field sets by check. The selector prompt and the validator both
+// read this table; neither side keeps a second copy.
+export const BUILD_CRITERION_FIELDS = Object.freeze({
+  PATH_PRESENT: Object.freeze(['id', 'statement', 'authority', 'check', 'class', 'path']),
+  PATH_ABSENT: Object.freeze(['id', 'statement', 'authority', 'check', 'class', 'path']),
+  DOC_TOKEN: Object.freeze(['id', 'statement', 'authority', 'check', 'class', 'path', 'token']),
+  PROOF_AT_MAIN: Object.freeze(['id', 'statement', 'authority', 'check', 'class', 'command']),
+});
+
+// Canonical Goal Contract field set (run-goal validateGoalContract).
+export const GOAL_CONTRACT_FIELDS = Object.freeze([
+  'GOAL',
+  'ACCEPTANCE_AUTHORITY',
+  'PRESERVE',
+  'AUTONOMOUSLY_ALLOWED',
+  'ESCALATE_IF',
+  'STOP_WHEN',
+  'CRITERIA',
+  'TASK_CATALOG',
+  'PLANNER',
+  'BUDGET',
+]);
+
+export const GOAL_TASK_FIELDS = Object.freeze([
+  'id',
+  'outcome',
+  'preserve',
+  'closes',
+  'allow',
+  'proof',
+  'proof_owner',
+  'semantic_owner',
+  'publication',
+  'commit_message',
+  'pr_title',
+  'escalate_only_if',
+  'depends_on',
+]);
+
+export const RECONCILIATION_FIELDS = Object.freeze([
+  'statement',
+  'intended_contract',
+  'behavior_evidence',
+  'proof_evidence',
+  'spec_paths',
+]);
+
+/**
+ * The single authoritative selector-facing contract. `buildFrontierPrompt`
+ * renders the generator-visible constraints from this descriptor and the
+ * deterministic validator reads the same arrays; adding a field, enum, or limit
+ * here changes both sides at once. No parallel magic literals.
+ */
+export const BUILD_SELECTOR_CONTRACT = Object.freeze({
+  statuses: SELECTOR_DECISIONS,
+  kinds: FRONTIER_KINDS,
+  checks: BUILD_CRITERION_CHECKS,
+  criterionClass: 'AUTONOMOUS',
+  gapClasses: GAP_CLASSES,
+  escalationTokens: HUMAN_ESCALATION_TOKENS,
+  maxConsideredFrontiers: MAX_CONSIDERED_FRONTIERS,
+  maxBatchFrontiers: MAX_BATCH_FRONTIERS,
+  topLevelFields: Object.freeze([
+    'status',
+    'reason',
+    'authority_resolved',
+    'considered',
+    'selected',
+    'escalation_token',
+  ]),
+  consideredFields: Object.freeze([
+    'priority',
+    'id',
+    'statement',
+    'kind',
+    'criteria',
+    'satisfied',
+    'evidence',
+    'maintenance_justification',
+    'gap_class',
+    'reconciliation',
+    'goal',
+  ]),
+  selectedFields: Object.freeze([
+    'priority',
+    'id',
+    'statement',
+    'kind',
+    'why_selected',
+    'maintenance_justification',
+    'goal',
+  ]),
+  reconciliationFields: RECONCILIATION_FIELDS,
+  criterionFieldsByCheck: BUILD_CRITERION_FIELDS,
+  goalFields: GOAL_CONTRACT_FIELDS,
+  goalTaskFields: GOAL_TASK_FIELDS,
+  publicationMode: 'required',
+  plannerEnabled: false,
+  taskTextMaxChars: TASK_TEXT_MAX_CHARS,
+});
 
 // Repository canonical authority reading order (AGENTS.md section 2). Only
 // pointers that exist at the pinned live SHA are handed to the selector.
@@ -322,12 +443,103 @@ function readRequestText(options) {
   }
 }
 
+const CRITERION_VALUE_PLACEHOLDERS = Object.freeze({
+  id: '"criterion-id"',
+  statement: '"..."',
+  authority: '["repo/path"]',
+  check: '"CHECK"',
+  class: '"AUTONOMOUS"',
+  path: '"repo/path"',
+  token: '"..."',
+  command: '"node --test ..."',
+});
+
+function renderCriterionFields(check) {
+  const fields = BUILD_SELECTOR_CONTRACT.criterionFieldsByCheck[check];
+  return `{${fields.map((field) => `"${field}":${CRITERION_VALUE_PLACEHOLDERS[field]}`).join(',')}}`;
+}
+
+function renderCriterionFieldList() {
+  return BUILD_SELECTOR_CONTRACT.checks.map(
+    (check) =>
+      `- ${check}: ${BUILD_SELECTOR_CONTRACT.criterionFieldsByCheck[check].join(', ')}`,
+  );
+}
+
+function renderGoalTaskFields() {
+  return `{${GOAL_TASK_FIELDS.map((field) => {
+    switch (field) {
+      case 'closes':
+        return `"${field}":["criterion-id"]`;
+      case 'allow':
+      case 'semantic_owner':
+        return `"${field}":["repo/path"]`;
+      case 'proof':
+        return `"${field}":["node --test ..."]`;
+      case 'proof_owner':
+        return `"${field}":[["repo/path"]]`;
+      case 'publication':
+        return `"${field}":"required"`;
+      case 'escalate_only_if':
+      case 'depends_on':
+        return `"${field}":[]`;
+      default:
+        return `"${field}":"..."`;
+    }
+  }).join(',')}}`;
+}
+
+function renderGoalSkeleton() {
+  return [
+    '{"GOAL":"..."',
+    '"ACCEPTANCE_AUTHORITY":["repo/path"]',
+    '"PRESERVE":["..."]',
+    '"AUTONOMOUSLY_ALLOWED":["repo/path"]',
+    `"ESCALATE_IF":["${HUMAN_ESCALATION_TOKENS[0]}"]`,
+    '"STOP_WHEN":["..."]',
+    '"CRITERIA":[<criterion objects, one per frontier criterion>]',
+    `"TASK_CATALOG":[${renderGoalTaskFields()}]`,
+    `"PLANNER":{"enabled":${BUILD_SELECTOR_CONTRACT.plannerEnabled}}`,
+    '"BUDGET":{"max_iterations":2,"max_tasks":3}}',
+  ].join(',');
+}
+
+function renderReconciliationSkeleton() {
+  return `{${RECONCILIATION_FIELDS.map((field) =>
+    field === 'statement' ? '"statement":"..."' : `"${field}":["..."]`,
+  ).join(',')}}`;
+}
+
+function renderFrontierDecisionSkeleton() {
+  const criterion = renderCriterionFields('PATH_PRESENT');
+  return [
+    '{"status":"FRONTIER"',
+    '"reason":"..."',
+    '"authority_resolved":["repo/path"]',
+    `"considered":[{"priority":1,"id":"..."`,
+    '"statement":"..."',
+    `"kind":"${FRONTIER_KINDS[0]}"`,
+    `"criteria":[${criterion}]`,
+    '"satisfied":false',
+    `"gap_class":"${GAP_CLASSES[0]}"`,
+    `"reconciliation":${renderReconciliationSkeleton()}}]`,
+    '"selected":{"priority":1,"id":"..."',
+    '"statement":"..."',
+    `"kind":"${FRONTIER_KINDS[0]}"`,
+    '"why_selected":"..."',
+    `"goal":${renderGoalSkeleton()}}}`,
+  ].join(',');
+}
+
 /**
- * The exact Goal Contract the build layer must consult. The generator (selector
- * prompt) and this validator see the same field set.
+ * The exact selector contract the build layer must consult. The generator
+ * (selector prompt) and the deterministic validator are both rendered from
+ * `BUILD_SELECTOR_CONTRACT`; neither side keeps a parallel copy of a field,
+ * enum, or limit.
  */
 export function buildFrontierPrompt({ buildRequest, declaredAuthority, canonicalAuthority, pin }) {
   const sha = pin.fetchedSha;
+  const contract = BUILD_SELECTOR_CONTRACT;
   return [
     'You are the read-only frontier selector for exactly one BUILD-mode development request.',
     '',
@@ -351,8 +563,10 @@ export function buildFrontierPrompt({ buildRequest, declaredAuthority, canonical
     ...canonicalAuthority.map((path) => `- ${path}`),
     '',
     '## Task',
-    'Read the current authority in this workspace and select exactly one currently-open',
-    'product frontier that is autonomously closable inside the BUILD request boundaries.',
+    'Read the current authority in this workspace. For every considered frontier, classify',
+    'the current evidence, then select the lowest-numbered currently-open frontier. Provide',
+    'one Goal Contract fragment for the selected frontier and, when they are independently',
+    'closable, for the other open considered frontiers the runner may batch with it.',
     '',
     '## Rules',
     `1. Authority is current truth only: files that exist at live main ${sha}.`,
@@ -360,62 +574,100 @@ export function buildFrontierPrompt({ buildRequest, declaredAuthority, canonical
     '   discussion into frontier authority. Historical paths are docs/archive/**,',
     '   docs/discussions/**, docs/plans/**, docs/reports/**, and any PLAN_*/REPORT_*/',
     '   PROMPT_* file. They must not appear in ACCEPTANCE_AUTHORITY, criterion authority,',
-    '   task allow, task semantic_owner, or task proof_owner unless the BUILD REQUEST',
-    '   names that exact path.',
+    '   reconciliation, task allow, task semantic_owner, or task proof_owner unless the',
+    '   BUILD REQUEST names that exact path.',
     '2. A frontier is open only when live main does not already satisfy it. Its criteria',
     '   are deterministic checks; the runner re-evaluates every satisfied/unsatisfied',
     '   claim at live main and rejects a mismatch, then does not invoke any executor.',
     '3. The BUILD REQUEST priority list is a ranking, not one frontier per entry. Group it',
-    `   into at most ${MAX_CONSIDERED_FRONTIERS} considered frontiers, preserving the same`,
-    '   relative order when the request names more than that many priorities. Considered',
-    '   priorities must be exactly 1..N with no gaps and must not exceed',
-    `   ${MAX_CONSIDERED_FRONTIERS}, and the selected frontier must be the lowest-numbered`,
-    '   considered frontier whose criteria are not all satisfied.',
+    `   into at most ${contract.maxConsideredFrontiers} considered frontiers, preserving the`,
+    '   same relative order when the request names more than that many priorities.',
+    `   Considered priorities must be exactly 1..N with no gaps and must not exceed`,
+    `   ${contract.maxConsideredFrontiers}.`,
     '4. A considered frontier is PRODUCT by default. MAINTENANCE is allowed only when',
     '   every considered PRODUCT frontier is already satisfied and the selected',
-    '   maintenance_justification names the real blocker.',
+    '   maintenance_justification names the real blocker. A STALE_SPEC frontier is',
+    '   MAINTENANCE: only spec/document wording is synced, never implementation behavior.',
     '5. Semantic gate. Return HUMAN_DECISION_REQUIRED instead of a frontier when closing',
     '   it would create new product meaning, choose a UX/product policy fork, decide',
     '   security/privacy authority, decide clinical/safety/financial/legal policy, perform',
     '   an irreversible external action, or change acceptance meaning.',
-    '6. Exactly one frontier. Its criteria and tasks may be several independent bounded',
-    '   subtasks, but every criterion and task must belong to that one frontier.',
-    '7. Criteria use only the checks PATH_PRESENT, PATH_ABSENT, DOC_TOKEN, PROOF_AT_MAIN and',
-    '   class AUTONOMOUS. Every criterion authority path must already exist at live main,',
-    '   and authority_resolved must list every authority path the BUILD REQUEST names plus',
-    '   every criterion authority path. A PROOF_AT_MAIN command runs in a disposable',
-    '   live-main worktree with no installed project dependencies, so it must be',
-    '   self-contained (for example `node --test` against a dependency-free spec). A',
-    '   behavior check that needs the project toolchain belongs in a task `proof` command',
-    '   instead: task proof runs in the task workspace after the task may have installed',
-    '   what it needs.',
-    '8. Every task must declare publication "required", at least one proof command, and',
-    '   non-empty commit_message and pr_title. Its allow, semantic_owner, and proof_owner',
-    '   paths must all stay inside AUTONOMOUSLY_ALLOWED, and the union of task closes must',
-    '   be exactly the selected criteria.',
-    '9. PLANNER.enabled must be false. The runner never enables a second generator.',
-    '10. Every ACCEPTANCE_AUTHORITY path must exist as a file (blob) at live main.',
+    '6. Every considered OPEN frontier must carry a gap_class from',
+    `   ${contract.gapClasses.join(', ')}:`,
+    '   - IMPLEMENTATION_GAP: current source behavior does not satisfy the intended',
+    '     contract and a direct proof currently fails. Product frontier candidate.',
+    '   - STALE_SPEC: current source behavior and a direct proof already satisfy the',
+    '     intended contract and only current spec/document wording differs. Product gap',
+    '     is not created; the frontier is MAINTENANCE and may only sync the current spec',
+    '     lines that are stale. Do not infer STALE_SPEC from code existence alone and do',
+    '     not treat test existence as a changed intended contract.',
+    '   - SEMANTIC_CONFLICT: current intended contract and current implementation directly',
+    '     contradict each other, or current authorities conflict about meaning. Never',
+    '     resolve it automatically; return HUMAN_DECISION_REQUIRED with an allowed',
+    '     escalation_token instead of a frontier.',
+    '   Every open frontier also declares a reconciliation object: non-empty',
+    '   intended_contract paths, and for IMPLEMENTATION_GAP/STALE_SPEC non-empty',
+    '   proof_evidence; STALE_SPEC additionally requires non-empty behavior_evidence and',
+    '   non-empty spec_paths. Every reconciliation path must exist at live main.',
+    '7. The selected frontier is the lowest-numbered considered frontier whose criteria are',
+    '   not all satisfied. An open considered frontier may carry its own goal fragment with',
+    '   CRITERIA exactly equal to that frontier criteria and a TASK_CATALOG that closes',
+    '   exactly those criteria. The runner admits independently closable fragments in',
+    '   priority order into one bounded batch (at most',
+    `   ${contract.maxBatchFrontiers} frontiers) and serializes the rest for a later`,
+    '   evaluation; overlapping fragments are never executed together. Criterion ids and',
+    '   task ids must be globally unique across all fragments. A frontier without a goal',
+    '   fragment simply is not batched.',
+    '8. Criteria use only the checks ' +
+      contract.checks.join(', ') +
+      ` and class ${contract.criterionClass}. Every criterion authority path must already`,
+    '   exist at live main, and authority_resolved must list every authority path the',
+    '   BUILD REQUEST names plus every criterion authority path of every considered',
+    '   frontier. A PROOF_AT_MAIN command runs in a disposable live-main worktree with no',
+    '   installed project dependencies, so it must be self-contained (for example',
+    '   `node --test` against a dependency-free spec). A behavior check that needs the',
+    '   project toolchain belongs in a task `proof` command instead: task proof runs in',
+    '   the task workspace after the task may have installed what it needs.',
+    `9. Every task must declare publication "${contract.publicationMode}", at least one`,
+    '   proof command, and non-empty commit_message and pr_title. Its allow,',
+    '   semantic_owner, and proof_owner paths must all stay inside AUTONOMOUSLY_ALLOWED,',
+    '   and the union of goal-fragment task closes must be exactly that fragment CRITERIA.',
+    `10. PLANNER.enabled must be ${contract.plannerEnabled}. The runner never enables a`,
+    '    second generator.',
+    '11. Every ACCEPTANCE_AUTHORITY path must exist as a file (blob) at live main.',
     '    ACCEPTANCE_AUTHORITY must include every path the BUILD REQUEST names and every',
     '    criterion authority path that exists as a blob at live main.',
-    '11. Do not invent fields. Unknown fields reject the decision.',
+    `12. Do not invent fields. Every shape allows exactly these fields:`,
+    `    - decision: ${contract.topLevelFields.join(', ')}`,
+    `    - considered entry: ${contract.consideredFields.join(', ')}`,
+    `    - selected: ${contract.selectedFields.join(', ')}`,
+    `    - reconciliation: ${contract.reconciliationFields.join(', ')}`,
+    `    - goal: ${contract.goalFields.join(', ')}`,
+    `    - task: ${contract.goalTaskFields.join(', ')}`,
+    '    Unknown fields, missing required fields, and any criterion field outside its',
+    '    check field set reject the decision. Generated task text must stay under',
+    `    ${contract.taskTextMaxChars} characters.`,
     '',
     '## Required output',
     'Return exactly one JSON object and nothing else: no markdown fence, no commentary, no',
     'second payload. Allowed shapes:',
-    '{"status":"FRONTIER","reason":"...","authority_resolved":["repo/path"],"considered":[{"priority":1,"id":"...","statement":"...","kind":"PRODUCT","criteria":[{"id":"...","statement":"...","authority":["repo/path"],"check":"PATH_PRESENT","class":"AUTONOMOUS","path":"repo/path"}],"satisfied":false}],"selected":{"priority":1,"id":"...","statement":"...","kind":"PRODUCT","why_selected":"...","goal":{"GOAL":"...","ACCEPTANCE_AUTHORITY":["repo/path"],"PRESERVE":["..."],"AUTONOMOUSLY_ALLOWED":["repo/path"],"ESCALATE_IF":["PRODUCT_POLICY_FORK"],"STOP_WHEN":["..."],"CRITERIA":[{"id":"...","statement":"...","authority":["repo/path"],"check":"PATH_PRESENT","class":"AUTONOMOUS","path":"repo/path"}],"TASK_CATALOG":[{"id":"...","outcome":"...","preserve":"...","closes":["criterion-id"],"allow":["repo/path"],"proof":["node --test ..."],"proof_owner":[["repo/path"]],"semantic_owner":["repo/path"],"publication":"required","commit_message":"...","pr_title":"...","escalate_only_if":[],"depends_on":[]}],"PLANNER":{"enabled":false},"BUDGET":{"max_iterations":2,"max_tasks":3}}}}',
+    renderFrontierDecisionSkeleton(),
     '{"status":"ALREADY_SATISFIED","reason":"...","authority_resolved":["repo/path"],"considered":[{"priority":1,"id":"...","statement":"...","kind":"PRODUCT","criteria":[...],"satisfied":true,"evidence":"..."}]}',
     '{"status":"NO_EXECUTABLE_FRONTIER","reason":"...","authority_resolved":["repo/path"]}',
-    '{"status":"HUMAN_DECISION_REQUIRED","reason":"...","escalation_token":"...","authority_resolved":["repo/path"]}',
+    `{"status":"HUMAN_DECISION_REQUIRED","reason":"...","escalation_token":"...","authority_resolved":["repo/path"]}`,
     '{"status":"BLOCKED_EXTERNAL","reason":"...","authority_resolved":["repo/path"]}',
     '',
+    'Allowed statuses: ' + contract.statuses.join(', ') + '.',
+    'A non-selected open considered frontier that the runner may batch with the selected',
+    'frontier carries its own "goal" fragment with the same shape as selected.goal. The',
+    'selected frontier fragment may go in selected.goal or in its considered entry goal;',
+    'if both are present they must be the same fragment.',
     'Criterion fields by check:',
-    '- PATH_PRESENT / PATH_ABSENT: {"id","statement","authority","check","class","path"}',
-    '- DOC_TOKEN: the same plus "token"',
-    '- PROOF_AT_MAIN: {"id","statement","authority","check","class","command"}',
+    ...renderCriterionFieldList(),
     '',
     'A considered entry with satisfied true must carry a non-empty "evidence" string.',
     'HUMAN_DECISION_REQUIRED escalation_token must be one of: ' +
-      HUMAN_ESCALATION_TOKENS.join(', ') +
+      contract.escalationTokens.join(', ') +
       '.',
   ].join('\n');
 }
@@ -684,45 +936,163 @@ function canonicalCriteria(criteria) {
     CRITERIA: criteria,
     TASK_CATALOG: [],
   });
-  if (!synthetic.ok) return null;
-  return [...synthetic.contract.criteria].sort((left, right) =>
-    left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
-  );
+  if (!synthetic.ok) return { ok: false, errors: synthetic.errors };
+  return {
+    ok: true,
+    criteria: [...synthetic.contract.criteria].sort((left, right) =>
+      left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+    ),
+  };
 }
 
 function validateCriterionSet({ criteria, field }) {
-  const normalized = canonicalCriteria(criteria);
-  if (normalized === null) {
-    return { ok: false, reason: `${field} contains invalid criterion entries` };
+  if (Array.isArray(criteria)) {
+    for (const raw of criteria) {
+      if (!isPlainObject(raw)) continue;
+      const allowed = BUILD_SELECTOR_CONTRACT.criterionFieldsByCheck[raw.check];
+      if (allowed === undefined) continue;
+      const extra = Object.keys(raw).filter((key) => !allowed.includes(key));
+      if (extra.length > 0) {
+        return {
+          ok: false,
+          reason: `${field} criterion for ${raw.check} contains field(s) outside the check field set: ${extra.join(', ')}`,
+        };
+      }
+    }
   }
+  const canonical = canonicalCriteria(criteria);
+  if (!canonical.ok) {
+    return {
+      ok: false,
+      reason: `${field} contains invalid criterion entries: ${canonical.errors.join('; ')}`,
+    };
+  }
+  const normalized = canonical.criteria;
   if (normalized.length === 0) {
     return { ok: false, reason: `${field} must declare at least one criterion` };
   }
   for (const criterion of normalized) {
-    if (criterion.class !== 'AUTONOMOUS') {
+    if (criterion.class !== BUILD_SELECTOR_CONTRACT.criterionClass) {
       return {
         ok: false,
-        reason: `${field} criterion ${criterion.id} must be class AUTONOMOUS for a BUILD frontier`,
+        reason: `${field} criterion ${criterion.id} must be class ${BUILD_SELECTOR_CONTRACT.criterionClass} for a BUILD frontier`,
       };
     }
-    if (!BUILD_CRITERION_CHECKS.includes(criterion.check)) {
+    if (!BUILD_SELECTOR_CONTRACT.checks.includes(criterion.check)) {
       return {
         ok: false,
-        reason: `${field} criterion ${criterion.id} check must be one of ${BUILD_CRITERION_CHECKS.join(', ')}`,
+        reason: `${field} criterion ${criterion.id} check must be one of ${BUILD_SELECTOR_CONTRACT.checks.join(', ')}`,
       };
     }
   }
   return { ok: true, criteria: normalized };
 }
 
-function validateConsideredEntries({ value, authorityResolved }) {
+function validateEvidencePaths({ value, field, required, repositoryRoot, pin }) {
+  if (value == null) {
+    if (required) return { ok: false, reason: `${field} must be a non-empty path array` };
+    return { ok: true, paths: [] };
+  }
+  if (!Array.isArray(value) || value.some((entry) => !isSafeRepoPath(entry))) {
+    return { ok: false, reason: `${field} must be an array of safe repo-relative paths` };
+  }
+  const paths = uniqueNormalizedPaths(value);
+  if (required && paths.length === 0) {
+    return { ok: false, reason: `${field} must be a non-empty path array` };
+  }
+  for (const path of paths) {
+    if (observeRepoObject({ repositoryRoot, ref: pin.fetchedSha, path }) === null) {
+      return {
+        ok: false,
+        reason: `${field} path does not exist at live main ${pin.fetchedSha}: ${path}`,
+      };
+    }
+  }
+  return { ok: true, paths };
+}
+
+/**
+ * Current-evidence reconciliation for one open considered frontier
+ * (development-authority section 9.2). Classification and evidence are
+ * ephemeral selector judgments; nothing is persisted.
+ */
+function validateReconciliation({
+  value,
+  label,
+  gapClass,
+  repositoryRoot,
+  pin,
+  declaredAuthority,
+}) {
+  if (!isPlainObject(value)) {
+    return { ok: false, reason: `${label} reconciliation must be an object` };
+  }
+  const extra = Object.keys(value).filter(
+    (key) => !BUILD_SELECTOR_CONTRACT.reconciliationFields.includes(key),
+  );
+  if (extra.length > 0) {
+    return {
+      ok: false,
+      reason: `${label} reconciliation contains unsupported field(s): ${extra.join(', ')}`,
+    };
+  }
+  if (!isNonEmptyString(value.statement)) {
+    return { ok: false, reason: `${label} reconciliation statement must be a non-empty string` };
+  }
+  const staleSpec = gapClass === 'STALE_SPEC';
+  const requiresProof = gapClass === 'IMPLEMENTATION_GAP' || staleSpec;
+  const fields = {
+    intended_contract: { required: true },
+    behavior_evidence: { required: staleSpec },
+    proof_evidence: { required: requiresProof },
+    spec_paths: { required: staleSpec },
+  };
+  const normalized = { statement: value.statement.trim() };
+  for (const [field, rule] of Object.entries(fields)) {
+    const validated = validateEvidencePaths({
+      value: value[field],
+      field: `${label} reconciliation ${field}`,
+      required: rule.required,
+      repositoryRoot,
+      pin,
+    });
+    if (!validated.ok) return validated;
+    normalized[field] = validated.paths;
+  }
+  const historical = historicalViolations({
+    paths: [
+      ...normalized.intended_contract,
+      ...normalized.behavior_evidence,
+      ...normalized.proof_evidence,
+      ...normalized.spec_paths,
+    ],
+    declaredAuthority,
+  });
+  if (historical.length > 0) {
+    return {
+      ok: false,
+      reason:
+        `${label} reconciliation must not use historical documentation unless the BUILD ` +
+        `REQUEST names it exactly: ${historical.join(', ')}`,
+    };
+  }
+  return { ok: true, reconciliation: normalized };
+}
+
+function validateConsideredEntries({
+  value,
+  authorityResolved,
+  repositoryRoot,
+  pin,
+  declaredAuthority,
+}) {
   if (!Array.isArray(value) || value.length === 0) {
     return { ok: false, reason: 'considered must be a non-empty array' };
   }
-  if (value.length > MAX_CONSIDERED_FRONTIERS) {
+  if (value.length > BUILD_SELECTOR_CONTRACT.maxConsideredFrontiers) {
     return {
       ok: false,
-      reason: `considered must contain at most ${MAX_CONSIDERED_FRONTIERS} frontiers`,
+      reason: `considered must contain at most ${BUILD_SELECTOR_CONTRACT.maxConsideredFrontiers} frontiers`,
     };
   }
   const entries = [];
@@ -731,17 +1101,9 @@ function validateConsideredEntries({ value, authorityResolved }) {
     const raw = value[index];
     const label = `considered[${index}]`;
     if (!isPlainObject(raw)) return { ok: false, reason: `${label} must be an object` };
-    const allowed = [
-      'priority',
-      'id',
-      'statement',
-      'kind',
-      'criteria',
-      'satisfied',
-      'evidence',
-      'maintenance_justification',
-    ];
-    const extra = Object.keys(raw).filter((key) => !allowed.includes(key));
+    const extra = Object.keys(raw).filter(
+      (key) => !BUILD_SELECTOR_CONTRACT.consideredFields.includes(key),
+    );
     if (extra.length > 0) {
       return { ok: false, reason: `${label} contains unsupported field(s): ${extra.join(', ')}` };
     }
@@ -759,8 +1121,11 @@ function validateConsideredEntries({ value, authorityResolved }) {
     if (!isNonEmptyString(raw.statement)) {
       return { ok: false, reason: `${label} statement must be a non-empty string` };
     }
-    if (!FRONTIER_KINDS.includes(raw.kind)) {
-      return { ok: false, reason: `${label} kind must be one of ${FRONTIER_KINDS.join(', ')}` };
+    if (!BUILD_SELECTOR_CONTRACT.kinds.includes(raw.kind)) {
+      return {
+        ok: false,
+        reason: `${label} kind must be one of ${BUILD_SELECTOR_CONTRACT.kinds.join(', ')}`,
+      };
     }
     if (typeof raw.satisfied !== 'boolean') {
       return { ok: false, reason: `${label} satisfied must be a boolean` };
@@ -785,6 +1150,52 @@ function validateConsideredEntries({ value, authorityResolved }) {
         reason: `${label} criterion authority path(s) are not resolved at live main: ${[...new Set(outside)].join(', ')}`,
       };
     }
+
+    let gapClass = null;
+    let reconciliation = null;
+    let rawGoal = null;
+    if (!raw.satisfied) {
+      if (!BUILD_SELECTOR_CONTRACT.gapClasses.includes(raw.gap_class)) {
+        return {
+          ok: false,
+          reason: `${label} open frontier requires gap_class one of ${BUILD_SELECTOR_CONTRACT.gapClasses.join(', ')}`,
+        };
+      }
+      gapClass = raw.gap_class;
+      const reconciled = validateReconciliation({
+        value: raw.reconciliation,
+        label,
+        gapClass,
+        repositoryRoot,
+        pin,
+        declaredAuthority,
+      });
+      if (!reconciled.ok) return reconciled;
+      reconciliation = reconciled.reconciliation;
+      if (raw.goal != null) {
+        if (!isPlainObject(raw.goal)) {
+          return { ok: false, reason: `${label} goal must be an object` };
+        }
+        rawGoal = raw.goal;
+      }
+      if (gapClass === 'STALE_SPEC' && raw.kind !== 'MAINTENANCE') {
+        return {
+          ok: false,
+          reason: `${label} STALE_SPEC is a spec-sync maintenance frontier and must declare kind MAINTENANCE`,
+        };
+      }
+    } else {
+      if (raw.gap_class != null && !BUILD_SELECTOR_CONTRACT.gapClasses.includes(raw.gap_class)) {
+        return {
+          ok: false,
+          reason: `${label} gap_class must be one of ${BUILD_SELECTOR_CONTRACT.gapClasses.join(', ')}`,
+        };
+      }
+      if (raw.goal != null) {
+        return { ok: false, reason: `${label} satisfied frontier must not carry a goal` };
+      }
+    }
+
     entries.push({
       priority: raw.priority,
       id: raw.id.trim(),
@@ -793,6 +1204,12 @@ function validateConsideredEntries({ value, authorityResolved }) {
       criteria: criteriaValidation.criteria,
       satisfied: raw.satisfied,
       evidence: isNonEmptyString(raw.evidence) ? raw.evidence.trim() : null,
+      maintenanceJustification: isNonEmptyString(raw.maintenance_justification)
+        ? raw.maintenance_justification.trim()
+        : null,
+      gapClass,
+      reconciliation,
+      rawGoal,
     });
   }
   return { ok: true, entries };
@@ -847,61 +1264,104 @@ function historicalViolations({ paths, declaredAuthority }) {
   return [...new Set(paths)].filter((path) => isHistoricalPath(path) && !declared.has(path));
 }
 
-export function validateGeneratedGoal({
+function validateGoalShape({ goal, label }) {
+  if (!isPlainObject(goal)) return { ok: false, reason: `${label} must be an object` };
+  const extraGoal = Object.keys(goal).filter(
+    (key) => !BUILD_SELECTOR_CONTRACT.goalFields.includes(key),
+  );
+  if (extraGoal.length > 0) {
+    return { ok: false, reason: `${label} contains unsupported field(s): ${extraGoal.join(', ')}` };
+  }
+  if (Array.isArray(goal.CRITERIA)) {
+    for (const raw of goal.CRITERIA) {
+      if (!isPlainObject(raw)) continue;
+      const allowed = BUILD_SELECTOR_CONTRACT.criterionFieldsByCheck[raw.check];
+      if (allowed === undefined) continue;
+      const extra = Object.keys(raw).filter((key) => !allowed.includes(key));
+      if (extra.length > 0) {
+        return {
+          ok: false,
+          reason: `${label} criterion for ${raw.check} contains field(s) outside the check field set: ${extra.join(', ')}`,
+        };
+      }
+    }
+  }
+  if (Array.isArray(goal.TASK_CATALOG)) {
+    for (const rawTask of goal.TASK_CATALOG) {
+      if (!isPlainObject(rawTask)) continue;
+      const extra = Object.keys(rawTask).filter(
+        (key) => !BUILD_SELECTOR_CONTRACT.goalTaskFields.includes(key),
+      );
+      if (extra.length > 0) {
+        return {
+          ok: false,
+          reason: `${label} task ${rawTask.id ?? '(unknown)'} contains unsupported field(s): ${extra.join(', ')}`,
+        };
+      }
+    }
+  }
+  return { ok: true };
+}
+
+function sortedById(entries) {
+  return [...entries].sort((left, right) =>
+    left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+  );
+}
+
+function validateGoalCore({
   goal,
-  selectedEntry,
+  expectedCriteria,
+  criteriaMessage,
   declaredAuthority,
   repositoryRoot,
   pin,
 }) {
   const reject = (reason) => ({ ok: false, reason });
+  const label = 'ephemeral Goal Contract';
+  const shape = validateGoalShape({ goal, label });
+  if (!shape.ok) return reject(shape.reason);
   const validation = validateGoalContract(goal);
   if (!validation.ok) {
-    return reject(
-      `ephemeral Goal Contract is invalid (${validation.kind}): ${validation.errors.join('; ')}`,
-    );
+    return reject(`${label} is invalid (${validation.kind}): ${validation.errors.join('; ')}`);
   }
   const contract = validation.contract;
   if (contract.criteria.length === 0) {
-    return reject('ephemeral Goal Contract must declare at least one criterion');
+    return reject(`${label} must declare at least one criterion`);
   }
   for (const criterion of contract.criteria) {
-    if (criterion.class !== 'AUTONOMOUS') {
-      return reject(`criterion ${criterion.id} must be class AUTONOMOUS for a BUILD frontier`);
-    }
-    if (!BUILD_CRITERION_CHECKS.includes(criterion.check)) {
+    if (criterion.class !== BUILD_SELECTOR_CONTRACT.criterionClass) {
       return reject(
-        `criterion ${criterion.id} check must be one of ${BUILD_CRITERION_CHECKS.join(', ')}`,
+        `criterion ${criterion.id} must be class ${BUILD_SELECTOR_CONTRACT.criterionClass} for a BUILD frontier`,
+      );
+    }
+    if (!BUILD_SELECTOR_CONTRACT.checks.includes(criterion.check)) {
+      return reject(
+        `criterion ${criterion.id} check must be one of ${BUILD_SELECTOR_CONTRACT.checks.join(', ')}`,
       );
     }
   }
   if (contract.task_catalog.length === 0) {
-    return reject('ephemeral Goal Contract must declare at least one task');
+    return reject(`${label} must declare at least one task`);
   }
-  if (contract.planner.enabled) {
-    return reject('ephemeral Goal Contract must not enable PLANNER');
+  if (contract.planner.enabled !== BUILD_SELECTOR_CONTRACT.plannerEnabled) {
+    return reject(`${label} must not enable PLANNER`);
   }
   if (contract.autonomously_allowed.length === 0) {
     return reject('AUTONOMOUSLY_ALLOWED must declare at least one path');
   }
-  const expected = JSON.stringify(
-    [...selectedEntry.criteria].sort((left, right) =>
-      left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
-    ),
-  );
-  const actual = JSON.stringify(
-    [...contract.criteria].sort((left, right) =>
-      left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
-    ),
-  );
+  const expected = JSON.stringify(sortedById(expectedCriteria));
+  const actual = JSON.stringify(sortedById(contract.criteria));
   if (actual !== expected) {
-    return reject('CRITERIA must be exactly the selected considered frontier criteria');
+    return reject(criteriaMessage);
   }
   const criterionIds = new Set(contract.criteria.map((criterion) => criterion.id));
   const closed = new Set();
   for (const task of contract.task_catalog) {
-    if (task.publication !== 'required') {
-      return reject(`task ${task.id} must declare publication "required" in BUILD mode`);
+    if (task.publication !== BUILD_SELECTOR_CONTRACT.publicationMode) {
+      return reject(
+        `task ${task.id} must declare publication "${BUILD_SELECTOR_CONTRACT.publicationMode}" in BUILD mode`,
+      );
     }
     if (task.proof.length === 0) {
       return reject(`task ${task.id} must declare at least one proof command`);
@@ -954,6 +1414,152 @@ export function validateGeneratedGoal({
 }
 
 /**
+ * A STALE_SPEC frontier may only sync the current spec lines its reconciliation
+ * proves stale; its mutation surface must stay inside reconciliation.spec_paths.
+ */
+function validateStaleSpecBoundaries({ entry, contract }) {
+  const specPaths = entry.reconciliation?.spec_paths ?? [];
+  for (const task of contract.task_catalog) {
+    const declared = [...task.allow, ...task.semantic_owner];
+    const outside = declared.filter((path) => !isPathAllowed(path, specPaths));
+    if (outside.length > 0) {
+      return {
+        ok: false,
+        reason:
+          `STALE_SPEC task ${task.id} may only sync its reconciliation spec_paths; ` +
+          `outside: ${[...new Set(outside)].join(', ')}`,
+      };
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * One considered frontier's Goal Contract fragment. CRITERIA must equal that
+ * frontier's criteria exactly.
+ */
+export function validateGeneratedGoal({
+  goal,
+  selectedEntry,
+  declaredAuthority,
+  repositoryRoot,
+  pin,
+}) {
+  const core = validateGoalCore({
+    goal,
+    expectedCriteria: selectedEntry.criteria,
+    criteriaMessage: 'CRITERIA must be exactly the selected considered frontier criteria',
+    declaredAuthority,
+    repositoryRoot,
+    pin,
+  });
+  if (!core.ok) return core;
+  if (selectedEntry.gapClass === 'STALE_SPEC') {
+    const stale = validateStaleSpecBoundaries({ entry: selectedEntry, contract: core.contract });
+    if (!stale.ok) return stale;
+  }
+  return core;
+}
+
+/** Independently closable fragments merged into one run-goal contract. */
+function validateMergedGoal({
+  goal,
+  expectedCriteria,
+  declaredAuthority,
+  repositoryRoot,
+  pin,
+}) {
+  return validateGoalCore({
+    goal,
+    expectedCriteria,
+    criteriaMessage: 'CRITERIA must be exactly the union of the admitted frontier criteria',
+    declaredAuthority,
+    repositoryRoot,
+    pin,
+  });
+}
+
+/**
+ * Pairwise independence of two frontier fragments, derived from the same
+ * authoritative conflict rule the run-goal batch admission uses. `null` means
+ * the two fragments may run in one bounded batch.
+ */
+function fragmentConflict(leftContract, rightContract) {
+  const leftTaskIds = new Set(leftContract.task_catalog.map((task) => task.id));
+  const rightTaskIds = new Set(rightContract.task_catalog.map((task) => task.id));
+  for (const id of leftTaskIds) {
+    if (rightTaskIds.has(id)) {
+      return { kind: 'TASK_ID', reason: `task id ${id} is declared by both fragments` };
+    }
+  }
+  const leftCriterionIds = new Set(leftContract.criteria.map((criterion) => criterion.id));
+  for (const criterion of rightContract.criteria) {
+    if (leftCriterionIds.has(criterion.id)) {
+      return {
+        kind: 'CRITERION_ID',
+        reason: `criterion id ${criterion.id} is declared by both fragments`,
+      };
+    }
+  }
+  for (const left of leftContract.task_catalog) {
+    for (const right of rightContract.task_catalog) {
+      const conflict = taskConflict(left, right);
+      if (conflict !== null) return conflict;
+    }
+    const cross = left.depends_on.find((id) => rightTaskIds.has(id));
+    if (cross !== undefined) {
+      return {
+        kind: 'DEPENDS_ON',
+        reason: `task ${left.id} depends on ${cross} across fragments`,
+      };
+    }
+  }
+  for (const right of rightContract.task_catalog) {
+    const cross = right.depends_on.find((id) => leftTaskIds.has(id));
+    if (cross !== undefined) {
+      return {
+        kind: 'DEPENDS_ON',
+        reason: `task ${right.id} depends on ${cross} across fragments`,
+      };
+    }
+  }
+  return null;
+}
+
+/** Deterministic merge of admitted fragments into one ephemeral Goal Contract. */
+function mergeGoalFragments(fragments) {
+  if (fragments.length === 1) {
+    return { ok: true, raw: fragments[0].raw, contract: fragments[0].contract };
+  }
+  const list = (key) => [...new Set(fragments.flatMap((fragment) => fragment.contract[key]))];
+  const budgets = fragments.map((fragment) => fragment.contract.budget);
+  const merged = {
+    GOAL: fragments[0].raw.GOAL,
+    ACCEPTANCE_AUTHORITY: list('acceptance_authority'),
+    PRESERVE: list('preserve'),
+    AUTONOMOUSLY_ALLOWED: list('autonomously_allowed'),
+    ESCALATE_IF: list('escalate_if'),
+    STOP_WHEN: list('stop_when'),
+    CRITERIA: fragments.flatMap((fragment) => fragment.raw.CRITERIA),
+    TASK_CATALOG: fragments.flatMap((fragment) => fragment.raw.TASK_CATALOG),
+    PLANNER: { enabled: BUILD_SELECTOR_CONTRACT.plannerEnabled },
+    BUDGET: {
+      max_iterations: Math.max(...budgets.map((budget) => budget.max_iterations)),
+      max_tasks: budgets.reduce((sum, budget) => sum + budget.max_tasks, 0),
+      max_wall_clock_ms: Math.max(...budgets.map((budget) => budget.max_wall_clock_ms)),
+    },
+  };
+  const validation = validateGoalContract(merged);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      reason: `merged batch Goal Contract is invalid (${validation.kind}): ${validation.errors.join('; ')}`,
+    };
+  }
+  return { ok: true, raw: merged, contract: validation.contract };
+}
+
+/**
  * Deterministic validation of one selector decision. `ok: true` with a
  * `terminal` means the selector resolved a finite terminal; `ok: true` with a
  * `goal` means exactly one validated ephemeral Goal Contract may be handed to
@@ -971,21 +1577,15 @@ export function validateFrontierDecision({
 }) {
   const reject = (reason) => ({ ok: false, terminal: BLOCKED_EXTERNAL, reason });
   if (!isPlainObject(decision)) return reject('selector decision is not a JSON object');
-  if (!SELECTOR_DECISIONS.includes(decision.status)) {
-    return reject(`selector status must be one of ${SELECTOR_DECISIONS.join(', ')}`);
+  if (!BUILD_SELECTOR_CONTRACT.statuses.includes(decision.status)) {
+    return reject(`selector status must be one of ${BUILD_SELECTOR_CONTRACT.statuses.join(', ')}`);
   }
   if (!isNonEmptyString(decision.reason)) {
     return reject('selector reason must be a non-empty string');
   }
-  const allowedTop = [
-    'status',
-    'reason',
-    'authority_resolved',
-    'considered',
-    'selected',
-    'escalation_token',
-  ];
-  const extraTop = Object.keys(decision).filter((key) => !allowedTop.includes(key));
+  const extraTop = Object.keys(decision).filter(
+    (key) => !BUILD_SELECTOR_CONTRACT.topLevelFields.includes(key),
+  );
   if (extraTop.length > 0) {
     return reject(`selector decision contains unsupported field(s): ${extraTop.join(', ')}`);
   }
@@ -1051,6 +1651,9 @@ export function validateFrontierDecision({
       const considered = validateConsideredEntries({
         value: decision.considered,
         authorityResolved: resolvedSet,
+        repositoryRoot,
+        pin,
+        declaredAuthority,
       });
       if (!considered.ok) return reject(considered.reason);
       for (const entry of considered.entries.filter((candidate) => candidate.satisfied)) {
@@ -1076,6 +1679,9 @@ export function validateFrontierDecision({
   const considered = validateConsideredEntries({
     value: decision.considered,
     authorityResolved: resolvedSet,
+    repositoryRoot,
+    pin,
+    declaredAuthority,
   });
   if (!considered.ok) return reject(considered.reason);
 
@@ -1092,6 +1698,21 @@ export function validateFrontierDecision({
     }
     const verified = verifyEntrySatisfaction({ entry, repositoryRoot, pin, options, deps, log });
     if (!verified.ok) return reject(verified.reason);
+  }
+
+  const semanticConflicts = considered.entries.filter(
+    (entry) => !entry.satisfied && entry.gapClass === 'SEMANTIC_CONFLICT',
+  );
+  if (semanticConflicts.length > 0) {
+    return {
+      ok: false,
+      terminal: HUMAN_DECISION_REQUIRED,
+      reason:
+        `considered frontier(s) ${semanticConflicts
+          .map((entry) => entry.id)
+          .join(', ')} are SEMANTIC_CONFLICT: current intended contract and current ` +
+        'implementation contradict each other, so no autonomous frontier is selected',
+    };
   }
 
   if (decision.status === 'ALREADY_SATISFIED') {
@@ -1117,16 +1738,9 @@ export function validateFrontierDecision({
 
   const selected = decision.selected;
   if (!isPlainObject(selected)) return reject('FRONTIER requires a selected object');
-  const allowedSelected = [
-    'priority',
-    'id',
-    'statement',
-    'kind',
-    'why_selected',
-    'maintenance_justification',
-    'goal',
-  ];
-  const extraSelected = Object.keys(selected).filter((key) => !allowedSelected.includes(key));
+  const extraSelected = Object.keys(selected).filter(
+    (key) => !BUILD_SELECTOR_CONTRACT.selectedFields.includes(key),
+  );
   if (extraSelected.length > 0) {
     return reject(`selected contains unsupported field(s): ${extraSelected.join(', ')}`);
   }
@@ -1139,6 +1753,11 @@ export function validateFrontierDecision({
   }
   if (!isNonEmptyString(selected.id) || selected.id.trim() !== selectedEntry.id) {
     return reject('selected.id must equal the considered frontier id at selected.priority');
+  }
+  if (!isNonEmptyString(selected.statement) || selected.statement.trim() !== selectedEntry.statement) {
+    return reject(
+      'selected.statement must equal the considered frontier statement at selected.priority',
+    );
   }
   if (selectedEntry.satisfied) {
     return reject(`selected frontier ${selectedEntry.id} is already satisfied at live main`);
@@ -1155,8 +1774,13 @@ export function validateFrontierDecision({
   if (!isNonEmptyString(selected.why_selected)) {
     return reject('selected.why_selected must be a non-empty string');
   }
-  if (!FRONTIER_KINDS.includes(selected.kind)) {
-    return reject(`selected.kind must be one of ${FRONTIER_KINDS.join(', ')}`);
+  if (!BUILD_SELECTOR_CONTRACT.kinds.includes(selected.kind)) {
+    return reject(`selected.kind must be one of ${BUILD_SELECTOR_CONTRACT.kinds.join(', ')}`);
+  }
+  if (selected.kind !== selectedEntry.kind) {
+    return reject(
+      'selected.kind must equal the considered frontier kind at selected.priority',
+    );
   }
   if (selected.kind === 'MAINTENANCE') {
     if (!isNonEmptyString(selected.maintenance_justification)) {
@@ -1172,28 +1796,118 @@ export function validateFrontierDecision({
       );
     }
   }
-  if (!isPlainObject(selected.goal)) {
+
+  // Primary fragment: selected.goal, or the selected considered entry's own
+  // fragment. When both are present they must be the same contract.
+  if (selected.goal != null && !isPlainObject(selected.goal)) {
     return reject('selected.goal must be an object');
   }
-  const goalValidation = validateGeneratedGoal({
-    goal: selected.goal,
+  const primaryRaw = isPlainObject(selected.goal) ? selected.goal : selectedEntry.rawGoal;
+  if (!isPlainObject(primaryRaw)) {
+    return reject('selected.goal must be an object');
+  }
+  const primaryValidation = validateGeneratedGoal({
+    goal: primaryRaw,
     selectedEntry,
     declaredAuthority,
     repositoryRoot,
     pin,
   });
-  if (!goalValidation.ok) return reject(goalValidation.reason);
+  if (!primaryValidation.ok) return reject(primaryValidation.reason);
+  if (isPlainObject(selected.goal) && selectedEntry.rawGoal != null) {
+    const entryValidation = validateGeneratedGoal({
+      goal: selectedEntry.rawGoal,
+      selectedEntry,
+      declaredAuthority,
+      repositoryRoot,
+      pin,
+    });
+    if (!entryValidation.ok) return reject(entryValidation.reason);
+    if (
+      JSON.stringify(entryValidation.contract) !== JSON.stringify(primaryValidation.contract)
+    ) {
+      return reject(
+        'selected.goal and the selected considered frontier goal must be the same fragment',
+      );
+    }
+  }
+
+  // Deterministic bounded batch admission: start from the selected frontier and
+  // add each higher-numbered independently closable open frontier in priority
+  // order. Conflicting candidates stay for a later recomputation and are never
+  // executed together.
+  const fragments = [
+    { entry: selectedEntry, raw: primaryRaw, contract: primaryValidation.contract },
+  ];
+  const deferred = [];
+  for (const entry of considered.entries) {
+    if (entry.priority === selectedEntry.priority || entry.satisfied) continue;
+    if (entry.rawGoal == null) {
+      deferred.push({ priority: entry.priority, id: entry.id, kind: 'NO_FRAGMENT', withId: null });
+      continue;
+    }
+    const candidate = validateGeneratedGoal({
+      goal: entry.rawGoal,
+      selectedEntry: entry,
+      declaredAuthority,
+      repositoryRoot,
+      pin,
+    });
+    if (!candidate.ok) {
+      return reject(`considered frontier ${entry.id} goal fragment is invalid: ${candidate.reason}`);
+    }
+    if (fragments.length >= BUILD_SELECTOR_CONTRACT.maxBatchFrontiers) {
+      deferred.push({
+        priority: entry.priority,
+        id: entry.id,
+        kind: 'CONCURRENCY_LIMIT',
+        withId: null,
+      });
+      continue;
+    }
+    let conflict = null;
+    let conflictWith = null;
+    for (const admitted of fragments) {
+      conflict = fragmentConflict(admitted.contract, candidate.contract);
+      if (conflict !== null) {
+        conflictWith = admitted.entry.id;
+        break;
+      }
+    }
+    if (conflict !== null) {
+      deferred.push({
+        priority: entry.priority,
+        id: entry.id,
+        kind: conflict.kind,
+        withId: conflictWith,
+      });
+      continue;
+    }
+    fragments.push({ entry, raw: entry.rawGoal, contract: candidate.contract });
+  }
+
+  const merged = mergeGoalFragments(fragments);
+  if (!merged.ok) return reject(merged.reason);
+  const mergedValidation = validateMergedGoal({
+    goal: merged.raw,
+    expectedCriteria: fragments.flatMap((fragment) => fragment.contract.criteria),
+    declaredAuthority,
+    repositoryRoot,
+    pin,
+  });
+  if (!mergedValidation.ok) return reject(mergedValidation.reason);
+
   const blobPaths = new Set(
     resolution.filter((entry) => entry.objectType === 'blob').map((entry) => entry.path),
   );
   const requiredAcceptanceBlobs = [
     ...new Set([
       ...declaredAuthority,
-      ...goalValidation.contract.criteria.flatMap((criterion) => criterion.authority),
+      ...mergedValidation.contract.criteria.flatMap((criterion) => criterion.authority),
     ]),
   ].filter((path) => blobPaths.has(path));
   const missingDeclared = requiredAcceptanceBlobs.filter(
-    (path) => !goalValidation.contract.acceptance_authority.includes(path),
+    (path) => !mergedValidation.contract.acceptance_authority.includes(path),
   );
   if (missingDeclared.length > 0) {
     return reject(
@@ -1211,13 +1925,23 @@ export function validateFrontierDecision({
       id: selectedEntry.id,
       statement: selectedEntry.statement,
       kind: selected.kind,
+      gapClass: selectedEntry.gapClass,
       whySelected: selected.why_selected.trim(),
       maintenanceJustification: isNonEmptyString(selected.maintenance_justification)
         ? selected.maintenance_justification.trim()
         : null,
       entry: selectedEntry,
     },
-    goal: { raw: selected.goal, contract: goalValidation.contract },
+    batch: {
+      admitted: fragments.map((fragment) => ({
+        priority: fragment.entry.priority,
+        id: fragment.entry.id,
+        kind: fragment.entry.kind,
+        gapClass: fragment.entry.gapClass,
+      })),
+      deferred,
+    },
+    goal: { raw: merged.raw, contract: mergedValidation.contract },
   };
 }
 
@@ -1449,8 +2173,10 @@ export function runBuild(options = {}, deps = {}) {
           kind: entry.kind,
           satisfied: entry.satisfied,
           evidence: entry.evidence,
+          gapClass: entry.gapClass,
         })),
         selected: validation.selected ?? null,
+        batch: validation.batch ?? null,
         escalationToken: validation.escalationToken ?? null,
       }
     : { status: selector.decision.status, reason: validation.reason, rejected: true };
@@ -1464,6 +2190,9 @@ export function runBuild(options = {}, deps = {}) {
   result.goal = {
     frontierId: validation.selected.id,
     frontierPriority: validation.selected.priority,
+    frontierIds: (validation.batch?.admitted ?? [{ id: validation.selected.id }]).map(
+      (frontier) => frontier.id,
+    ),
     raw: validation.goal.raw,
     contract: validation.goal.contract,
   };
