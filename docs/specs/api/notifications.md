@@ -270,15 +270,15 @@ ALIGO 실제 발송은 별도 승인된 운영 readiness 검증의 대상이다.
 - 목표 미달 시 환불 후 `CANCELLED` 전환 및 참여자 알림 의도
 - 판매자 그룹 확정/취소 알림
 
-### 현재 legacy 구현 finding — 목표 미달 consumer 취소 알림
+### 목표 미달 consumer 취소 알림 계약 (resolved)
 
-`cancelGroupBuyLack()`는 RECRUITING 주문을 환불한 뒤 먼저 `CANCELLED`로 batch update하고 이후 `sendToGroupParticipants(..., 'GROUP_CANCELLED_LACK')`를 호출한다.
+`cancelGroupBuyLack()`는 RECRUITING 주문을 환불한 뒤 `CANCELLED`로 전환한다. consumer `GROUP_CANCELLED_LACK` 알림은 상태 변경 전에 확정한 취소 대상 participant snapshot을 기준으로 consumer 명시적 recipient 집합에 정확히 1회 직접 전달한다. `CANCELLED` 전환 뒤에는 terminal filtering에 걸려 recipient가 사라지므로 snapshot을 별도로 보존한다.
 
-그러나 `sendToGroupParticipants()`는 `PENDING`, `CANCELLED`, `REVIEWED`를 terminal status로 제외한다. 따라서 방금 `CANCELLED`된 참여자는 consumer 취소 알림 대상에서 빠질 수 있다.
+`sendToGroupParticipants()`는 `PENDING`, `CANCELLED`, `REVIEWED`를 terminal status로 제외하며, 이 terminal filtering은 `GROUP_CONFIRMED`·`GROUP_DEADLINE_SOON` 등 다른 template에 대해 그대로 유지한다. `GROUP_CANCELLED_LACK`만 snapshot recipient 집합으로 우회 전달한다.
 
-이 경로는 회차 직배송 출시 8종과 별개의 legacy 경로이므로 `LEGACY-GROUP-CANCEL-NOTIFICATION` LATER `IMPLEMENTATION FINDING`으로 추적한다. 현재 코드를 정당화하기 위해 “목표 미달 consumer 알림은 보내지 않는다”로 계약을 바꾸지 않는다.
+판매자 `SELLER_GROUP_CANCELLED_LACK` 알림은 기존대로 유지한다.
 
-회귀 시에는 취소 대상 snapshot 또는 명시적 recipient 집합을 기준으로 consumer 취소 알림이 한 번만 전달되고, 다른 template의 terminal filtering 의미는 유지되는지 직접 확인한다.
+회귀는 `apps/api/src/notifications/legacy-group-cancel-notification.spec.ts`에서 취소 대상 participant snapshot 기준 consumer 알림 1회 전달, 판매자 알림 유지, 다른 template의 terminal filtering 의미 유지를 직접 확인한다.
 
 ## 11. FCM 상태
 
