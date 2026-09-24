@@ -417,6 +417,66 @@ export function buildFrontierPrompt({ buildRequest, declaredAuthority, canonical
   ].join('\n');
 }
 
+/**
+ * Index of the `}` that balances the `{` at `startIndex`, ignoring braces that
+ * appear inside JSON strings. Returns -1 when no balanced end exists.
+ */
+function findBalancedObjectEnd(text, startIndex) {
+  if (text[startIndex] !== '{') return -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Extract exactly one parseable plain JSON object from arbitrary text using a
+ * string-aware brace balance scan. Returns the object when the text contains
+ * exactly one parseable object; returns null for zero or two-or-more objects.
+ */
+function extractSingleJsonObject(text) {
+  const source = typeof text === 'string' ? text : '';
+  let found = null;
+  let index = source.indexOf('{');
+  while (index !== -1) {
+    const end = findBalancedObjectEnd(source, index);
+    if (end === -1) {
+      index = source.indexOf('{', index + 1);
+      continue;
+    }
+    const parsed = parseJson(source.slice(index, end + 1));
+    if (isPlainObject(parsed)) {
+      if (found !== null) return null;
+      found = parsed;
+    }
+    index = source.indexOf('{', end + 1);
+  }
+  return found;
+}
+
 function parseSelectorOutput(stdout) {
   const textParts = [];
   for (const line of String(stdout).split(/\r?\n/)) {
@@ -447,6 +507,18 @@ function parseSelectorOutput(stdout) {
   const finalDecision = parseJson(finalText);
   if (isPlainObject(finalDecision)) {
     return { ok: true, decision: finalDecision, text: finalText };
+  }
+  // The exact-JSON attempts above are strict. As a last resort, accept exactly
+  // one parseable plain object embedded in the final text part (tolerating
+  // surrounding prose or a stray trailing brace), then in the concatenated
+  // text. Zero or two-or-more objects still fails closed unchanged.
+  const extractedFinal = extractSingleJsonObject(finalText);
+  if (extractedFinal !== null) {
+    return { ok: true, decision: extractedFinal, text: finalText };
+  }
+  const extractedJoined = extractSingleJsonObject(joined);
+  if (extractedJoined !== null) {
+    return { ok: true, decision: extractedJoined, text: joined };
   }
   return { ok: false, reason: 'selector final text is not exactly one JSON object' };
 }
