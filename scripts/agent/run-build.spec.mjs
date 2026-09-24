@@ -325,6 +325,22 @@ test('CASE A0d — the selector prompt states the ACCEPTANCE_AUTHORITY completen
   );
 });
 
+test('CASE A0e — the selector prompt caps considered frontiers by grouping request priorities', () => {
+  const prompt = buildFrontierPrompt({
+    buildRequest: 'MODE: BUILD\n\nclose exactly one bounded frontier',
+    declaredAuthority: ['docs/authority.md'],
+    canonicalAuthority: ['AGENTS.md', 'docs/README.md'],
+    pin: { fetchedSha: 'a'.repeat(40) },
+  });
+  assert.match(prompt, /priority list is a ranking, not one frontier per entry/);
+  assert.match(
+    prompt,
+    /into at most 5 considered frontiers, preserving the same\s+relative order when the request names more than that many priorities/,
+  );
+  assert.match(prompt, /priorities must be exactly 1\.\.N with no gaps and must not exceed\s+5/);
+  assert.match(prompt, /lowest-numbered\s+considered frontier whose criteria are not all satisfied/);
+});
+
 // ---------------------------------------------------------------------------
 // A. natural-language BUILD request -> validated ephemeral Goal Contract
 // ---------------------------------------------------------------------------
