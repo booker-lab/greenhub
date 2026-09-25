@@ -170,11 +170,11 @@ PATCH /stores/:storeId/orders/:orderId/hub-confirm
 - Firestore Rules의 legacy direct-read 잔여 계약이 별도로 남아 있다면 현재 API projection의
   근거로 사용하지 않으며, 법률 문구가 원문 전체 접근을 정당화하지 않는다.
 
-### 상태 변경 authorization — `IMPLEMENTED / UNVERIFIED`
+### 상태 변경 authorization — `IMPLEMENTED / PROVEN`
 
-seller ownership, driver assignment, consumer ownership guard는 구현돼 있으나 타-store seller·비담당 driver·first-claim 외 미배정 driver action과 거부 side-effect 0의 직접 회귀가 부족하다.
+seller ownership, driver assignment, consumer ownership guard가 구현돼 있고, 타-store seller·비담당 driver·first-claim 외 미배정 driver action과 거부 side-effect 0가 `apps/api/src/orders/order-mutation-authorization.spec.ts`의 직접 회귀로 고정됐다. admin privileged mutation authorization과 settlement 지급 상태 전이는 `docs/specs/api/admin.md`가 별도로 소유한다.
 
-추적: `ORDER-MUTATION-AUTHORIZATION-COVERAGE`.
+추적: `ORDER-MUTATION-AUTHORIZATION-COVERAGE` — 직접 회귀 완료.
 
 ## 8. 회차 주문 취소
 

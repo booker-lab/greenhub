@@ -548,36 +548,19 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### RETENTION-DELETE-ISSUE-ROUTING
 
-현재 source 재검증 결과 `CURRENT_UNRESOLVED`다. 배송 사진 Storage 삭제가 3회 모두 실패하면
-`RETENTION_DELETE_FAILED`는 생성되지만, 배송 사진 보관 record에 `storeId`가 없어 현재 store-scoped
-운영 예외 목록으로 안정적으로 route되지 않는다.
+`RESOLVED` — 배송 사진 retention metadata에 non-PII `storeId`를 보존하고, Storage 삭제 3회 실패 시
+생성되는 `RETENTION_DELETE_FAILED` issue가 실제 storeId로 store-scoped 운영 목록에 노출되며 재실행에도
+멱등하다. 보관 metadata는 non-PII `storeId` 외 개인정보 필드를 거부한다.
 
-현재 직접 근거:
+- [x] non-PII `storeId` 보존으로 store issue route 보장
+- [x] retry·resolve·record 보존 관계와 동일 실패 멱등성 직접 회귀
+- [x] issue와 보관 metadata에 주소·전화번호·Storage 서명 URL·비밀값 미기록
 
-- [x] `DeliveryPhotosService.attachPhoto()`가 배송 사진 retention metadata로 `{ orderId, photoId }`만
-  저장하고 `storeId`를 저장하지 않는다.
-- [x] `RetentionService.deleteStorageObject()`는 누락된 `storeId`를 `String(... ?? '')`로 바꾸어
-  issue를 생성한다.
-- [x] `OperationsController`와 `OperationsService.listIssuesForStore()`는 `/stores/:storeId`와
-  issue `storeId` 일치를 요구한다.
-- [x] seller parser도 비어 있거나 손상된 `storeId`를 읽지 않는다.
-- [x] retention purge의 3회 retry, record 보존, 멱등 issue 생성 자체는 직접 테스트되지만, 누락·알 수
-  없는 store의 운영자 visibility와 global queue는 직접 테스트·구현 근거가 없다.
+legacy record처럼 `storeId`가 없는 기록은 이번 계약의 신규 기록 범위가 아니며, 필요하면 별도
+migration·visibility Task로 다룬다.
 
-영향: 삭제 실패한 비공개 배송 사진과 보관 record가 남을 수 있고, 담당 셀러의 store-scoped
-운영 화면에서 확인·재처리 대상이 유실될 수 있다. 일반 배송 사진 만료가 완료 후 90일이므로
-현재 출시 직전 gate로 확정하지 않고 `P2_CANDIDATE` / `LATER`로 routing한다.
-
-완료 acceptance:
-
-- [ ] non-PII `storeId` 보존으로 store issue route를 보장하거나 admin/technical global retention
-  queue 중 하나를 current contract로 확정
-- [ ] missing/unknown store가 false success가 되지 않고 지정된 운영 queue에 항상 보인다.
-- [ ] retry·resolve·record 보존 관계와 동일 실패 멱등성을 직접 회귀하고 원본 삭제·record 선삭제를 금지
-- [ ] issue와 보관 metadata에 주소·전화번호·Storage 서명 URL·비밀값을 기록하지 않음
-
-owner 제안: `apps/api/src/orders/delivery-photos.service.ts`, `apps/api/src/retention/**`,
-`apps/api/src/operations/**`; seller 표시가 필요하면 최소 parser/UI 변경은 별도 구현 Task로 분리한다.
+직접 회귀: `apps/api/src/retention/delivery-photo-store-routing.spec.ts`,
+`apps/api/src/retention/retention.service.spec.ts`.
 
 정본 routing: LATER summary는 이 항목, 보관 계약은
 `docs/specs/mvp-sales-round-direct-delivery.md`, 현재 운영 중단·전달 규칙은
@@ -585,37 +568,17 @@ owner 제안: `apps/api/src/orders/delivery-photos.service.ts`, `apps/api/src/re
 
 ### OPERATION-ACTION-CLAIM-FENCING
 
-현재 source 재검증 결과 `CURRENT_UNRESOLVED`다. `claimAction()`은 5분 `actionClaim` token을
-발급하지만 action 실행 후 성공·실패 write가 현재 claim의 fresh token을 확인하지 않아, 만료된
-worker가 새 claimant의 최신 상태를 지우거나 덮을 수 있다.
+`RESOLVED` — `runAction()`이 외부 action dispatch 전에 transaction에서 fresh `actionClaim.token`을
+확인하고, 현재 claim이 아니면 side effect·상태 write 없이 종료한다. lease 만료 takeover 뒤 stale
+success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
-현재 직접 근거:
+- [x] 외부 action 직전 fresh token 확인, 비소유자 side effect·write 0
+- [x] lease 만료 takeover에서 RETRY_REFUND·RESEND_SMS 외부 side effect 0
+- [x] stale success/failure가 최신 claim·status·audit를 보존
+- [x] 기존 action mapping·정상 동시 claim 회귀 유지
 
-- [x] `claimAction()`은 transaction에서 lease token과 expiry를 저장한다.
-- [x] `runAction()`은 최초에 읽은 issue snapshot을 spread해 성공·실패를 일반 update하고,
-  `claimToken`을 새 문서의 token과 비교하지 않는다.
-- [x] `RESEND_SMS`는 outer operation claim과 별도로 직접 외부 문자 발송을 호출한다.
-- [x] 정상 lease 안의 동시 요청은 한 번만 외부 호출하는 테스트가 있지만, lease 만료 후 takeover와
-  stale completion/failure race를 검증하는 직접 테스트는 없다.
-
-영향: worker A가 지연된 사이 worker B가 takeover하면 A의 늦은 completion/failure가 B의 claim·action
-감사·issue status를 덮을 수 있다. 특히 문자 재발송은 operation-level 외부 중복 방어가 직접 입증되지
-않았고, 환불 내부 claim이 있더라도 operation claim fencing의 대체 증거가 아니다.
-
-우선순위 후보: `P1_CANDIDATE` / 현재 Backlog routing은 수동 운영 경로인 `LATER`로 둔다.
-
-완료 acceptance:
-
-- [ ] 외부 action 직전과 completion/failure write에서 owner token 또는 generation을 fresh-read해
-  현재 claim이 아니면 side effect·상태 write·claim clear를 수행하지 않음
-- [ ] lease가 외부 호출 중 만료될 수 있는 action은 provider idempotency 또는 authoritative
-  reconciliation 없이는 자동 재시도하지 않음
-- [ ] A 지연 → B takeover → A 늦은 성공/실패 race에서 B의 최신 claim·status·audit가 보존되고
-  문자·환불 외부 side effect가 중복되지 않음
-- [ ] 기존 action mapping, 최신 주문·결제 재조회, 민감정보 없는 감사 기록, 정상 동시 claim 회귀 유지
-
-owner 제안: `apps/api/src/operations/**`; refund·SMS provider 경계의 idempotency/reconciliation은
-각 `payments`·`notifications` owner와 함께 별도 구현 Task로 정의한다.
+직접 회귀: `apps/api/src/operations/operations-action-claim-lease-expiry.spec.ts`,
+`apps/api/src/operations/operations-action-claim-occ-retry.spec.ts`.
 
 정본 routing: LATER summary는 이 항목, operation issue 기술 계약은
 `docs/specs/mvp-sales-round-direct-delivery.md`, 수동 조치 중단 규칙은
