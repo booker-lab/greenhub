@@ -153,19 +153,22 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 
 증거: `apps/api/src/settlements/settlements-lifecycle.spec.ts`, `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
 
-### Admin 강제 환불과의 현재 불일치 — P0
+### Admin 강제 환불 정산 수렴 — `ADMIN-FORCE-REFUND-CONSISTENCY` `IMPLEMENTATION_PROVEN`
 
-`cancelSettlement()` 자체의 위 규칙과 별개로, 현재 `AdminService.forceRefund()`는 이 메서드를 호출하지 않는다.
+`AdminService.forceRefund()`는 주문 취소 후 `SettlementsService.cancelSettlement(orderId)`를 호출한다. 회차 주문(`schemaVersion === 2 && roundId`)은 `RoundOrderLifecycleService.cancelForRound()`에 위임한 뒤, legacy 주문은 `forceLegacyRefund()`의 `done` 및 local cancellation 확정 경로에서 각각 `cancelSettlement()`를 호출한다.
 
-따라서 `POST /admin/orders/:orderId/refund`를 통해 주문을 `CANCELLED`로 직접 바꿔도 기존 settlement가 `pending|confirmed|paid` 상태로 그대로 남을 수 있다.
+따라서 `POST /admin/orders/:orderId/refund`로 주문이 `CANCELLED`로 수렴하면 연결 settlement도 함께 수렴한다.
 
-특히:
+- settlement 없음 → no-op
+- `pending|confirmed` settlement → `cancelled`
+- `cancelled` → 멱등 no-op
+- `paid` settlement → 역전하지 않고 보존
 
-- `pending|confirmed` settlement는 정상 order cancellation이면 `cancelSettlement()`로 `cancelled`되어야 하지만 admin force refund 경로는 이를 우회한다.
-- `paid` settlement는 원래도 단순 상태 역전 대상이 아니므로, 환불이 필요하다면 별도 회계 조정/운영 이슈/승인 흐름이 필요하다.
-- 현재 admin force refund는 `CANCELLED` 외 주문 상태를 제한하지 않으므로 완료/정산 생성 후 주문에도 진입할 수 있다.
+`paid` settlement 이후 환불의 회계 처리는 단순 status 역전으로 해결하지 않고 별도 회계 조정/운영 이슈/승인 흐름을 따른다.
 
-이 불일치는 `ADMIN-FORCE-REFUND-CONSISTENCY` P0로 추적한다. `cancelSettlement()`의 내부 멱등성만으로 admin 환불 전체 정산 일관성이 보장된다고 기록하지 않는다.
+직접 증거: `apps/api/src/admin/admin.service.spec.ts`와 `apps/api/src/admin/admin-legacy-refund-occ-retry.spec.ts`가 실제 `AdminService.forceRefund()`를 구동해 legacy `done`/확정 경로의 `cancelSettlement()` 수렴, conflict·provider 실패·local 선행 실패 시 미호출, 회차 경로의 `cancelForRound()` 위임을 직접 고정한다. `cancelSettlement()` 자체의 pending/confirmed → cancelled, paid 보존, 멱등성 계약은 core lifecycle proof(`apps/api/src/settlements/settlements-lifecycle.spec.ts`)가 소유한다.
+
+`ADMIN-FORCE-REFUND-CONSISTENCY: PROVEN (admin refund converges settlement)`
 
 정본: `docs/specs/api/admin.md`, `docs/BACKLOG.md`.
 
@@ -294,7 +297,7 @@ seller/admin UI는 공통 `SettlementStatus`, `STATUS_LABEL`, `STATUS_COLOR`를 
 
 - 배송사진 완료 → `DELIVERED` 회차 전환 자체와 정산 생성의 회차 E2E assertion
 - `paid` settlement 이후 환불은 별도 회계 정책을 따름
-- admin 강제 환불도 `ADMIN-FORCE-REFUND-CONSISTENCY` 해결 후 같은 회계 불변식에 수렴
+- admin 강제 환불은 `admin.service.spec.ts`·`admin-legacy-refund-occ-retry.spec.ts` proof로 `cancelSettlement()` 수렴이 `ADMIN-FORCE-REFUND-CONSISTENCY` `IMPLEMENTATION_PROVEN`
 - admin 지급은 `admin-privileged-mutation.spec.ts` direct status/race 증거로 서버 boundary와 지급 전이가 고정됨
 
 출시 상태 자체는 `docs/memory.md`와 활성 출시 PLAN을 따른다.
@@ -327,6 +330,7 @@ admin 지급 상태 전이는 코드의 transaction 존재만으로 `VERIFIED` �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-26 | admin 강제 환불이 `cancelSettlement()`로 pending/confirmed를 cancelled로 수렴하고 paid를 역전하지 않는 계약을 `admin.service.spec.ts`·`admin-legacy-refund-occ-retry.spec.ts` proof로 `ADMIN-FORCE-REFUND-CONSISTENCY` `IMPLEMENTATION_PROVEN`에 동기화 |
 | 2026-09-26 | admin privileged mutation authorization과 `markAsPaid` 지급 전이가 `admin-privileged-mutation.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`임을 §9·§12에 동기화 |
 | 2026-09-25 | core lifecycle이 `settlements-lifecycle.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`임을 §7·§12에 동기화 |
 | 2026-08-24 | settlement 생성·confirm·cancel core lifecycle의 직접 상태/race assertion 부재를 `SETTLEMENT-LIFECYCLE-COVERAGE` P0 `IMPLEMENTED / UNVERIFIED`로 분리 |
