@@ -1,4 +1,4 @@
-// Focused deterministic proof for scripts/agent/run-night.mjs (N1-N12).
+// Focused deterministic proof for scripts/agent/run-night.mjs (N1-N13).
 //
 // In-process coverage uses the explicit `invokeBuild` / `readLiveMain` /
 // `signalSource` seams of `runNight`; no real OpenCode, no GitHub, and no
@@ -6,7 +6,12 @@
 // `run-night.mjs` CLI as a real child process, driving the real `run-build.mjs`
 // and a deterministic fake OpenCode executable, and deliver a real console
 // Ctrl+C on Windows (AttachConsole + GenerateConsoleCtrlEvent) or a real
-// SIGINT on POSIX.
+// SIGINT on POSIX. N13 proves the existing VISIBLE_TUI attachment contract
+// survives the whole real chain against a real loopback TUI server.
+//
+// The real operator TUI (`open-visible-tui.mjs` with the interactive OpenCode
+// client) is an operator-observed Windows run; see the GA-06 N13 evidence. This
+// spec proves the same attachment mechanics deterministically in CI.
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -22,6 +27,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import test from 'node:test';
@@ -47,6 +53,7 @@ import {
   runNight,
   USER_STOPPED,
 } from './run-night.mjs';
+import { OPENCODE_ATTACH_URL_ENV } from './run-once.mjs';
 
 const RUN_NIGHT_PATH = fileURLToPath(new URL('./run-night.mjs', import.meta.url));
 
@@ -129,6 +136,7 @@ function buildFixture() {
   try {
     git(bare, ['init', '--bare', '-b', 'main']);
     initRepository(root);
+    writeFileSync(join(root, 'proof-ok.cjs'), 'process.exit(0);\n');
     for (const relative of [
       'AGENTS.md',
       'docs/README.md',
@@ -249,22 +257,26 @@ function syntheticCycleResult({
   startMain = null,
   endMain = null,
   escalationToken = null,
+  executorModes = [],
 }) {
-  const attempts =
-    prNumbers.length > 0 || mergeShas.length > 0
-      ? [
-          {
-            taskId: 'T1',
-            child: {
-              status: 'SUCCESS_PUBLISHED',
-              publication: {
-                pr: prNumbers.length > 0 ? { number: prNumbers[0] } : null,
-                merge: mergeShas.length > 0 ? { mergeSha: mergeShas[0] } : null,
-              },
-            },
-          },
-        ]
-      : [];
+  const attemptCount = Math.max(
+    executorModes.length,
+    prNumbers.length > 0 || mergeShas.length > 0 ? 1 : 0,
+  );
+  const attempts = [];
+  for (let index = 0; index < attemptCount; index += 1) {
+    attempts.push({
+      taskId: `T${index + 1}`,
+      child: {
+        status: 'SUCCESS',
+        ...(executorModes[index] === undefined ? {} : { executor: { mode: executorModes[index] } }),
+        publication: {
+          pr: index === 0 && prNumbers.length > 0 ? { number: prNumbers[0] } : null,
+          merge: index === 0 && mergeShas.length > 0 ? { mergeSha: mergeShas[0] } : null,
+        },
+      },
+    });
+  }
   return {
     status,
     reason,
@@ -675,6 +687,106 @@ test('N10 — the exact same request text reaches every cycle unchanged', async 
 });
 
 // ---------------------------------------------------------------------------
+// N13 — VISIBLE_TUI preservation (in-process contract)
+// ---------------------------------------------------------------------------
+
+test('N13a — an operator attach URL is explicitly preserved into every BUILD child env', async () => {
+  const attach = 'http://127.0.0.1:4096';
+  let probes = 0;
+  const harness = createNightHarness({
+    mains: [shaFor(1), shaFor(2), shaFor(2), shaFor(3)],
+    buildCycle: (index) =>
+      index === 1
+        ? syntheticCycleResult({
+            status: FRONTIER_COMPLETE,
+            selected: { id: 'F1' },
+            childCalls: 1,
+            executorModes: ['VISIBLE_TUI'],
+          })
+        : syntheticCycleResult({ status: ALREADY_SATISFIED }),
+  });
+  harness.deps.env = { PATH: 'fake-path', [OPENCODE_ATTACH_URL_ENV]: `  ${attach}  ` };
+  harness.deps.probeVisibleServer = () => {
+    probes += 1;
+    return { attempted: true, ok: true, error: null };
+  };
+
+  const result = await runHarness(harness);
+
+  assert.equal(probes, 1);
+  assert.equal(result.status, ALREADY_SATISFIED);
+  assert.equal(result.visibility.requested, true);
+  assert.equal(result.visibility.attachUrl, attach);
+  assert.equal(result.visibility.health, 'HEALTHY');
+  assert.equal(result.visibility.preservedToBuildChildren, true);
+  assert.deepEqual(result.visibility.mutationExecutorModes, ['VISIBLE_TUI']);
+  assert.equal(result.visibility.visibleTuiTasks, 1);
+  assert.equal(harness.buildCalls.length, 2);
+  for (const call of harness.buildCalls) {
+    assert.equal(call.env[OPENCODE_ATTACH_URL_ENV], attach);
+    assert.equal(call.env.PATH, 'fake-path');
+  }
+  assert.equal(harness.buildCalls[0].env[OPENCODE_ATTACH_URL_ENV], attach);
+  assert.match(
+    harness.logLines.join('\n'),
+    /\[NIGHT RUN\] visible OpenCode TUI http:\/\/127\.0\.0\.1:4096 \(HEALTHY\)/,
+  );
+  assert.match(harness.logLines.join('\n'), /\/sessions or Ctrl\+X L/);
+});
+
+test('N13a2 — no attach URL means no visibility request and no injected env var', async () => {
+  let probes = 0;
+  const harness = createNightHarness({
+    mains: [shaFor(1), shaFor(2)],
+    buildCycle: () => syntheticCycleResult({ status: ALREADY_SATISFIED }),
+  });
+  harness.deps.env = { PATH: 'fake-path' };
+  harness.deps.probeVisibleServer = () => {
+    probes += 1;
+    return { attempted: true, ok: true, error: null };
+  };
+
+  const result = await runHarness(harness);
+
+  assert.equal(probes, 0);
+  assert.equal(result.visibility.requested, false);
+  assert.equal(result.visibility.attachUrl, null);
+  assert.equal(result.visibility.health, 'NOT_REQUESTED');
+  assert.equal(result.visibility.preservedToBuildChildren, false);
+  assert.equal(harness.buildCalls.length, 1);
+  assert.equal(Object.hasOwn(harness.buildCalls[0].env, OPENCODE_ATTACH_URL_ENV), false);
+});
+
+test('N13b — an invalid or unavailable attach target fails closed with no BUILD and no HEADLESS downgrade', async () => {
+  const invalidHarness = createNightHarness({ buildCycle: CYCLE_COMPLETE });
+  invalidHarness.deps.env = { [OPENCODE_ATTACH_URL_ENV]: 'http://example.com:4096' };
+  invalidHarness.deps.probeVisibleServer = () => {
+    throw new Error('an invalid attach target must not be probed');
+  };
+  const invalid = await runHarness(invalidHarness);
+  assert.equal(invalid.status, BLOCKED_EXTERNAL);
+  assert.equal(invalid.visibility.health, 'INVALID');
+  assert.equal(invalid.visibility.preservedToBuildChildren, false);
+  assert.equal(invalidHarness.buildCalls.length, 0);
+  assert.match(invalid.stopReason, /VISIBILITY_UNAVAILABLE/);
+
+  const downHarness = createNightHarness({ buildCycle: CYCLE_COMPLETE });
+  downHarness.deps.env = { [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096' };
+  downHarness.deps.probeVisibleServer = () => ({
+    attempted: true,
+    ok: false,
+    error: 'connect ECONNREFUSED 127.0.0.1:4096',
+  });
+  const down = await runHarness(downHarness);
+  assert.equal(down.status, BLOCKED_EXTERNAL);
+  assert.equal(down.visibility.health, 'UNAVAILABLE');
+  assert.equal(down.visibility.preservedToBuildChildren, false);
+  assert.equal(downHarness.buildCalls.length, 0);
+  assert.match(down.stopReason, /VISIBILITY_UNAVAILABLE/);
+  assert.match(down.stopReason, /never downgraded to HEADLESS/);
+});
+
+// ---------------------------------------------------------------------------
 // N11 — foreign state preservation after a Night Run stop
 // ---------------------------------------------------------------------------
 
@@ -768,10 +880,46 @@ const FAKE_OPENCODE_SOURCE = [
   '',
 ].join('\n');
 
-function createFakeNightOpencode() {
+// N13 chain: the fake OpenCode behaves as the selector (reads a valid
+// deterministic decision from the events dir) and as the attached mutation
+// (records `--attach`, writes the owned deliverable in `--dir`). This lets the
+// real run-build -> run-goal -> run-publish-once -> run-once chain prove
+// VISIBLE_TUI preservation without a real model.
+const FAKE_VISIBLE_OPENCODE_SOURCE = [
+  "const fs = require('node:fs');",
+  "const path = require('node:path');",
+  'const dir = process.env.GREENHUB_NIGHT_FAKE_DIR;',
+  "if (!dir) { console.error('fake opencode: GREENHUB_NIGHT_FAKE_DIR is required'); process.exit(2); }",
+  'const args = process.argv.slice(2);',
+  'const valueOf = (flag) => { const at = args.indexOf(flag); return at >= 0 ? args[at + 1] : null; };',
+  'const title = valueOf("--title");',
+  'const attach = valueOf("--attach");',
+  'const workspace = valueOf("--dir");',
+  "const marker = 'invoke-' + process.pid + '-' + Math.random().toString(16).slice(2) + '.json';",
+  'fs.writeFileSync(path.join(dir, marker), JSON.stringify({ pid: process.pid, title, attach, workspace, args: args.length }));',
+  'if (title !== null && title.indexOf("selector") >= 0) {',
+  "  const decision = JSON.parse(fs.readFileSync(path.join(dir, 'selector-decision.json'), 'utf8'));",
+  "  process.stdout.write(JSON.stringify({ type: 'text', part: { text: JSON.stringify(decision) } }) + '\\n');",
+  '  process.exit(0);',
+  '}',
+  'if (attach === null) {',
+  '  fs.writeFileSync(path.join(dir, "mutation-without-attach"), "");',
+  '  process.exit(4);',
+  '}',
+  'const writePath = process.env.GREENHUB_NIGHT_FAKE_WRITE;',
+  'if (workspace !== null && writePath) {',
+  '  const absolute = path.join(workspace, writePath);',
+  '  fs.mkdirSync(path.dirname(absolute), { recursive: true });',
+  "  fs.writeFileSync(absolute, 'delivered by the attached visible session\\n');",
+  '}',
+  'process.exit(0);',
+  '',
+].join('\n');
+
+function createFakeNightOpencode({ source = FAKE_OPENCODE_SOURCE, writePath = null } = {}) {
   const binDir = mkdtempSync(join(tmpdir(), 'greenhub-run-night-fake-opencode-'));
   const eventsDir = mkdtempSync(join(tmpdir(), 'greenhub-run-night-fake-events-'));
-  writeFileSync(join(binDir, 'fake-opencode.cjs'), FAKE_OPENCODE_SOURCE, 'utf8');
+  writeFileSync(join(binDir, 'fake-opencode.cjs'), source, 'utf8');
   if (process.platform === 'win32') {
     writeFileSync(
       join(binDir, 'opencode.cmd'),
@@ -780,7 +928,7 @@ function createFakeNightOpencode() {
     );
   } else {
     const executable = join(binDir, 'opencode');
-    writeFileSync(executable, `#!/usr/bin/env node\n${FAKE_OPENCODE_SOURCE}`, 'utf8');
+    writeFileSync(executable, `#!/usr/bin/env node\n${source}`, 'utf8');
     chmodSync(executable, 0o755);
   }
   return {
@@ -790,6 +938,7 @@ function createFakeNightOpencode() {
       ...process.env,
       PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
       GREENHUB_NIGHT_FAKE_DIR: eventsDir,
+      ...(writePath === null ? {} : { GREENHUB_NIGHT_FAKE_WRITE: writePath }),
     },
     readEvents(prefix) {
       if (!existsSync(eventsDir)) return [];
@@ -799,6 +948,114 @@ function createFakeNightOpencode() {
     },
     remove() {
       cleanupFixturePaths([binDir, eventsDir]);
+    },
+  };
+}
+
+// Minimal real loopback TUI-owned server stand-in: the visible preflight,
+// attach, and instance disposal all talk to a real HTTP listener.
+async function startFakeTuiServer() {
+  const requests = [];
+  const server = createServer((request, response) => {
+    requests.push({ method: request.method, url: request.url });
+    if (request.url?.startsWith('/global/health')) {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ healthy: true }));
+      return;
+    }
+    if (request.url?.startsWith('/instance/dispose')) {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ disposed: true }));
+      return;
+    }
+    if (request.url?.startsWith('/mcp')) {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end('{}');
+      return;
+    }
+    response.writeHead(404, { 'content-type': 'application/json' });
+    response.end('{}');
+  });
+  await new Promise((resolveListen, rejectListen) => {
+    server.once('error', rejectListen);
+    server.listen(0, '127.0.0.1', resolveListen);
+  });
+  const address = server.address();
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    requests,
+    async close() {
+      server.closeAllConnections?.();
+      await new Promise((resolveClose) => server.close(() => resolveClose()));
+    },
+  };
+}
+
+function visibleCriterion() {
+  return {
+    id: 'C1',
+    statement: 'docs/feature.md exists at live main',
+    authority: ['docs/authority.md'],
+    check: 'PATH_PRESENT',
+    class: 'AUTONOMOUS',
+    path: 'docs/feature.md',
+  };
+}
+
+function visibleGoal() {
+  return {
+    GOAL: 'Close exactly one bounded product frontier at live main.',
+    ACCEPTANCE_AUTHORITY: ['docs/BACKLOG.md', 'docs/authority.md'],
+    PRESERVE: ['docs/authority.md'],
+    AUTONOMOUSLY_ALLOWED: ['docs'],
+    ESCALATE_IF: ['PRODUCT_POLICY_FORK'],
+    STOP_WHEN: ['all declared criteria are satisfied or a finite terminal remains'],
+    CRITERIA: [visibleCriterion()],
+    TASK_CATALOG: [
+      {
+        id: 'T1',
+        outcome: 'Create the declared deliverable inside the allowed boundary.',
+        preserve: 'Unrelated files and runtime behavior.',
+        closes: ['C1'],
+        allow: ['docs/feature.md'],
+        proof: ['node proof-ok.cjs'],
+        proof_owner: [[]],
+        semantic_owner: ['docs/feature.md'],
+        publication: 'required',
+        commit_message: 'docs: deliver the bounded outcome',
+        pr_title: 'docs: deliver the bounded outcome',
+        escalate_only_if: [],
+        depends_on: [],
+      },
+    ],
+    PLANNER: { enabled: false },
+    BUDGET: { max_iterations: 2, max_tasks: 2 },
+  };
+}
+
+function visibleSelectorDecision() {
+  return {
+    status: 'FRONTIER',
+    reason: 'the missing deliverable is the only open product frontier',
+    authority_resolved: ['docs/BACKLOG.md', 'docs/authority.md'],
+    considered: [
+      {
+        priority: 1,
+        id: 'F1',
+        statement: 'docs/feature.md is missing at live main.',
+        kind: 'PRODUCT',
+        criteria: [visibleCriterion()],
+        satisfied: false,
+        reconciliation: 'IMPLEMENTATION_GAP',
+      },
+    ],
+    selected: {
+      priority: 1,
+      id: 'F1',
+      statement: 'docs/feature.md is missing at live main.',
+      kind: 'PRODUCT',
+      why_selected: 'the only considered open product frontier',
+      goal: visibleGoal(),
     },
   };
 }
@@ -813,7 +1070,8 @@ const WINDOWS_START_WRAPPER = [
   '  [Parameter(Mandatory = $true)][string]$OutFile,',
   '  [Parameter(Mandatory = $true)][string]$ErrFile,',
   '  [Parameter(Mandatory = $true)][string]$PidFile,',
-  '  [Parameter(Mandatory = $true)][string]$ExitFile',
+  '  [Parameter(Mandatory = $true)][string]$ExitFile,',
+  '  [Parameter(Mandatory = $true)][string]$ExtraEnvFile',
   ')',
   '$signature = @"',
   'using System;',
@@ -827,6 +1085,12 @@ const WINDOWS_START_WRAPPER = [
   'Add-Type -TypeDefinition $signature',
   '$env:PATH = $PathValue',
   '$env:GREENHUB_NIGHT_FAKE_DIR = $FakeDir',
+  'if (Test-Path -LiteralPath $ExtraEnvFile) {',
+  '  $extra = Get-Content -LiteralPath $ExtraEnvFile -Raw | ConvertFrom-Json',
+  '  foreach ($property in $extra.PSObject.Properties) {',
+  '    Set-Item -Path ("env:" + $property.Name) -Value ([string]$property.Value)',
+  '  }',
+  '}',
   '$p = Start-Process -FilePath $NodePath -ArgumentList $ArgumentString -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile -PassThru',
   'if ($null -eq $p) { Set-Content -LiteralPath $ExitFile -Value -1; exit 1 }',
   'Set-Content -LiteralPath $PidFile -Value $p.Id',
@@ -895,7 +1159,14 @@ async function waitFor(predicate, { timeoutMs = 60000, intervalMs = 50, message 
   }
 }
 
-function startRealNight({ scratch, fixture, fake, requestText = DEFAULT_REQUEST, maxCycles = 5 }) {
+function startRealNight({
+  scratch,
+  fixture,
+  fake,
+  requestText = DEFAULT_REQUEST,
+  maxCycles = 5,
+  extraEnv = {},
+}) {
   const requestFile = requestFileFor(fixture, requestText);
   const baseArgs = [
     RUN_NIGHT_PATH,
@@ -915,8 +1186,10 @@ function startRealNight({ scratch, fixture, fake, requestText = DEFAULT_REQUEST,
     const exitFile = join(scratch, 'night-exit.txt');
     const helperPath = join(scratch, 'send-ctrlc.ps1');
     const wrapperPath = join(scratch, 'start-night.ps1');
+    const extraEnvFile = join(scratch, 'extra-env.json');
     writeFileSync(wrapperPath, WINDOWS_START_WRAPPER, 'utf8');
     writeFileSync(helperPath, WINDOWS_SEND_CTRL_C, 'utf8');
+    writeFileSync(extraEnvFile, JSON.stringify(extraEnv), 'utf8');
     const argumentString = baseArgs.map(quoteForStartProcess).join(' ');
     const wrapper = spawn(
       'powershell.exe',
@@ -944,6 +1217,8 @@ function startRealNight({ scratch, fixture, fake, requestText = DEFAULT_REQUEST,
         pidFile,
         '-ExitFile',
         exitFile,
+        '-ExtraEnvFile',
+        extraEnvFile,
       ],
       { stdio: 'ignore', windowsHide: true },
     );
@@ -999,7 +1274,7 @@ function startRealNight({ scratch, fixture, fake, requestText = DEFAULT_REQUEST,
 
   const child = spawn(process.execPath, baseArgs, {
     cwd: fixture.root,
-    env: fake.env,
+    env: { ...fake.env, ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
@@ -1153,6 +1428,88 @@ test('N8 — repeated Ctrl+C converges on one graceful stop instead of a hard ki
   timeout: 240000,
 }, async () => {
   await runRealNightProof({ maxCycles: 5, signals: 3 });
+});
+
+test('N13c — the real BUILD chain preserves VISIBLE_TUI and attaches the mutation child', {
+  timeout: 240000,
+}, async () => {
+  await withScratch(async (scratch) => {
+    await withFixture(async (fixture) => {
+      const tui = await startFakeTuiServer();
+      const fake = createFakeNightOpencode({
+        source: FAKE_VISIBLE_OPENCODE_SOURCE,
+        writePath: 'docs/feature.md',
+      });
+      writeFileSync(
+        join(fake.eventsDir, 'selector-decision.json'),
+        JSON.stringify(visibleSelectorDecision()),
+        'utf8',
+      );
+      let night = null;
+      try {
+        night = startRealNight({
+          scratch,
+          fixture,
+          fake,
+          maxCycles: 2,
+          extraEnv: { [OPENCODE_ATTACH_URL_ENV]: tui.url },
+        });
+        const exited = await night.waitForExit({ timeoutMs: 180000 });
+        assert.equal(
+          typeof exited.code,
+          'number',
+          `Night Run did not exit normally: ${JSON.stringify(exited)}`,
+        );
+        const payload = JSON.parse(exited.stdout);
+        const cycleDiagnostics = JSON.stringify({
+          status: payload.status,
+          stopReason: payload.stopReason,
+          cycle: payload.cycles[0] ?? null,
+        });
+        assert.equal(payload.bound.cyclesStarted, 1, cycleDiagnostics);
+        assert.equal(payload.visibility.requested, true, cycleDiagnostics);
+        assert.equal(payload.visibility.attachUrl, tui.url, cycleDiagnostics);
+        assert.equal(payload.visibility.health, 'HEALTHY', cycleDiagnostics);
+        assert.equal(payload.visibility.preservedToBuildChildren, true, cycleDiagnostics);
+        assert.deepEqual(
+          payload.visibility.mutationExecutorModes,
+          ['VISIBLE_TUI'],
+          cycleDiagnostics,
+        );
+        assert.equal(payload.visibility.visibleTuiTasks, 1, cycleDiagnostics);
+        assert.equal(
+          payload.cycles[0].executorModes.includes('VISIBLE_TUI'),
+          true,
+          cycleDiagnostics,
+        );
+        assert.equal(payload.cycles[0].visibleTuiTaskCount, 1, cycleDiagnostics);
+
+        const invocations = fake.readEvents('invoke-');
+        assert.equal(invocations.length, 2, JSON.stringify({ invocations, cycleDiagnostics }));
+        const selectorInvocation = invocations.find((entry) => entry.attach === null);
+        const mutationInvocation = invocations.find((entry) => entry.attach === tui.url);
+        assert.ok(selectorInvocation, 'the selector invocation is missing');
+        assert.ok(mutationInvocation, 'no mutation invocation carried --attach');
+        assert.equal(
+          typeof mutationInvocation.title === 'string' &&
+            mutationInvocation.title.includes('selector'),
+          false,
+          'the attached invocation must be the mutation task, not the selector',
+        );
+        assert.equal(existsSync(join(fake.eventsDir, 'mutation-without-attach')), false);
+        assert.equal(
+          tui.requests.some((request) => request.url.startsWith('/global/health')),
+          true,
+          'the visible preflight never reached the TUI-owned server',
+        );
+        assert.match(exited.stderr, /visible OpenCode TUI/);
+      } finally {
+        night?.cleanup();
+        fake.remove();
+        await tui.close();
+      }
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
