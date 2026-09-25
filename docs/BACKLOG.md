@@ -599,12 +599,12 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 ### NOTIFICATION-RETRY-POLICY
 
-알림톡/SMS 전달 경로가 provider 응답을 재시도 가능·rate-limit·영구·불확실로 분류하고, `NOTIFICATION_RETRY_BACKOFF_POLICY`에 따라 시도 사이 bounded backoff와 rate-limit 지연을 적용한다. `UNKNOWN`에서는 blind 중복 SMS를 시도하지 않는다. 3회 알림톡 상한·1회 SMS fallback·설정 오류 fail-closed·delivery idempotency는 유지한다.
+`RESOLVED` — 알림톡/SMS 전달 경로가 provider 응답을 재시도 가능·rate-limit·영구·불확실로 분류하고, `NOTIFICATION_RETRY_BACKOFF_POLICY`에 따라 시도 사이 bounded backoff와 rate-limit 지연을 적용한다. `UNKNOWN`에서는 blind 중복 SMS를 시도하지 않는다. 3회 알림톡 상한·1회 SMS fallback·설정 오류 fail-closed·delivery idempotency는 유지한다. 채널별 provider 오류 분류 counter와 재시도 사이 적용 지연 값은 `NOTIFICATION_RETRY_METRICS` in-process 관측 recorder로 기록·노출하며 전화번호·본문·receipt 등 PII는 기록하지 않는다.
 
 - [x] backoff·오류 분류·rate limit·중복 SMS
-- [ ] 관측 지표(분류·지연 metric 노출)는 후속 범위로 남김
+- [x] 관측 지표(분류·지연 metric 노출)
 
-정본: `docs/specs/api/notifications.md`. 회귀: `apps/api/src/notifications/notification-retry-policy.spec.ts`.
+정본: `docs/specs/api/notifications.md`. 회귀: `apps/api/src/notifications/notification-retry-policy.spec.ts`, `apps/api/src/notifications/notification-retry-metrics.spec.ts`.
 
 ### API-LINT-BASELINE
 - [ ] auth `any`, spec mock 타입, lint command 분리
