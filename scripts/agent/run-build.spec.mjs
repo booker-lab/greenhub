@@ -20,7 +20,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import test, { after, before } from 'node:test';
+import test from 'node:test';
 
 import {
   ALREADY_SATISFIED,
@@ -57,22 +57,8 @@ import { MAX_BATCH_CONCURRENCY } from './run-goal.mjs';
 // failure is surfaced rather than swallowed. Pre-existing temp residue is never
 // wildcard-deleted: only recorded fixture paths are touched.
 
-const FIXTURE_DIR_PREFIXES = Object.freeze([
-  'greenhub-run-build-spec-',
-  'greenhub-run-build-spec-remote-',
-  'greenhub-run-build-spec-requests-',
-  'greenhub-run-build-clone-',
-  'greenhub-run-build-selector-',
-]);
-
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
-}
-
-function listTempDirsByPrefix(prefixes) {
-  return readdirSync(tmpdir())
-    .filter((name) => prefixes.some((prefix) => name.startsWith(prefix)))
-    .sort();
 }
 
 /**
@@ -316,35 +302,22 @@ function childCallCount(fake) {
   return fake.calls.runOnce.length + fake.calls.runPublishOnce.length;
 }
 
-function listSelectorWorkspaceDirs() {
-  return listTempDirsByPrefix(['greenhub-run-build-selector-']);
-}
-
-// The suite owns only the residue it creates. Pre-existing temp dirs are
-// recorded, never deleted, and the suite fails if it leaves any new one behind.
-let fixtureTempDirsAtStart = [];
-let selectorWorkspaceDirsAtStart = [];
-
-before(() => {
-  fixtureTempDirsAtStart = listTempDirsByPrefix(FIXTURE_DIR_PREFIXES);
-  selectorWorkspaceDirsAtStart = listSelectorWorkspaceDirs();
-});
-
-after(() => {
-  const beforeSet = new Set(fixtureTempDirsAtStart);
-  const newResidue = listTempDirsByPrefix(FIXTURE_DIR_PREFIXES).filter(
-    (name) => !beforeSet.has(name),
+/**
+ * Attribution-safe selector cleanup proof: the workspace directory this
+ * invocation handed to OpenCode (and its task-owned temp root) must be gone.
+ * A global tempdir listing is not used because a concurrent foreign spec run
+ * can create same-prefix directories in the shared OS tempdir.
+ */
+function assertSelectorWorkspaceRemoved(selector) {
+  const dirIndex = selector.calls[0].args.indexOf('--dir');
+  assert.ok(dirIndex >= 0, 'selector invocation must carry --dir');
+  const workspacePath = selector.calls[0].args[dirIndex + 1];
+  assert.equal(existsSync(workspacePath), false, `selector workspace still exists: ${workspacePath}`);
+  assert.equal(
+    existsSync(dirname(workspacePath)),
+    false,
+    `selector temp root still exists: ${dirname(workspacePath)}`,
   );
-  assert.deepEqual(
-    newResidue,
-    [],
-    `new fixture residue must not remain after this suite: ${newResidue.join(', ')}`,
-  );
-});
-
-function selectorWorkspaceDirsCreatedDuringSuite() {
-  const beforeSet = new Set(selectorWorkspaceDirsAtStart);
-  return listSelectorWorkspaceDirs().filter((name) => !beforeSet.has(name));
 }
 
 function criterion({ id, path, statement = `criterion ${id}`, command = null }) {
@@ -611,7 +584,7 @@ test('CASE A — one natural-language request yields one validated ephemeral Goa
     assert.deepEqual(fake.calls.runPublishOnce[0].proofCommands, ['node proof-feature.cjs']);
     assert.deepEqual(fake.calls.runPublishOnce[0].allowedPaths, ['docs/feature.md']);
     assert.equal(fake.calls.runPublishOnce[0].commitMessage, 'feat(agent): T1');
-    assert.deepEqual(selectorWorkspaceDirsCreatedDuringSuite(), []);
+    assertSelectorWorkspaceRemoved(selector);
   } finally {
     removeFixture(fixture);
   }
@@ -1514,7 +1487,7 @@ test('CASE S1 — a selector workspace mutation rejects the whole decision', () 
         }),
       },
     });
-    const { result, fake } = runBuildOn(fixture, {
+    const { result, selector, fake } = runBuildOn(fixture, {
       decision,
       selectorOptions: {
         onInvoke: (input) => {
@@ -1527,7 +1500,7 @@ test('CASE S1 — a selector workspace mutation rejects the whole decision', () 
     assert.match(result.reason, /MUTATION_REJECTED|mutation observed/);
     assert.equal(childCallCount(fake), 0);
     assert.equal(result.selector.workspaceCleanup, 'REMOVED');
-    assert.deepEqual(selectorWorkspaceDirsCreatedDuringSuite(), []);
+    assertSelectorWorkspaceRemoved(selector);
   } finally {
     removeFixture(fixture);
   }
