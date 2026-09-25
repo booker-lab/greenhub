@@ -19,7 +19,7 @@
 - API `JwtStrategy`와 Firebase custom-token 경계가 현재 Firestore user의 role, `driverApproved`, `suspended`를 확인하며, stale/suspended/role-mismatch/missing-user/cross-driver 경계가 기존 candidate Rules/API 회귀로 확인됐다.
 - 직접 근거: `apps/api/src/auth/auth.controller.spec.ts`, `apps/api/src/auth/auth.service.spec.ts`, `apps/api/src/auth/strategies/jwt.strategy.spec.ts`.
 
-`AUTH-SESSION-CLAIM-REVOCATION`은 여전히 OPEN이다. refresh 시 authoritative user 상태 재조회, suspended/role/store/approval 변경 수렴, access-token revocation window와 session rotation 정책은 이 candidate에서 완료로 주장하지 않는다.
+`AUTH-SESSION-CLAIM-REVOCATION`의 static/refresh 경계는 `IMPLEMENTED / PROVEN`이다. `AuthService.refresh()`는 rotation record 검증 뒤 authoritative user를 재조회해 `suspended`/`role`/`storeId`/`driverApproved` 불일치를 token/session write 없이 거부하고, `GET /auth/session`과 세 앱 `jwt` callback이 same-deployment session authority를 재검증한다. 직접 근거: `apps/api/src/auth/auth.service.spec.ts`의 `refresh current authority`, `getSession same-deployment authority`. 남은 것은 access-token 이미 발급분의 revocation window 정책 결정(`DECISION REQUIRED`)과 runtime/browser session lifecycle proof(`PENDING`)이며, 이 spec은 그 둘을 완료로 주장하지 않는다.
 
 ## 1. 인증 계층
 
@@ -237,15 +237,16 @@ rotation record 검증 뒤 authoritative user를 재조회하고 payload `role/s
 문서의 `suspended/role/storeId/driverApproved`를 재검증한다
 (`apps/api/src/auth/strategies/jwt.strategy.spec.ts`).
 
-따라서 관리자가 계정을 정지하거나 role/store 연결을 바꾼 뒤 기존 세션이 언제 차단되어야 하는지에 대한 **revocation SLA가 current spec에 명확히 정의돼 있지 않고**, 현재 refresh 경로는 stale claims를 계속 재발급할 수 있다.
+따라서 관리자가 계정을 정지하거나 role/store 연결을 바꾼 뒤 기존 세션이 언제 차단되어야 하는지에 대한 **API access-token 이미 발급분의 revocation window 정책은 아직 명시적으로 결정되지 않았다**. 다만 refresh 경로는 더 이상 stale claims를 재발급하지 않는다: `AuthService.refresh()`가 authoritative user를 재조회해 불일치를 거부하고(`refresh current authority`), `GET /auth/session`이 `JwtAuthGuard` 재검증 + authoritative user 재조회 + `refreshTokens/{sub}` 존재 검사로 same-deployment session authority를 확인하며(`getSession same-deployment authority`), 세 앱 `jwt` callback이 매 호출마다 이를 확인한다.
 
 판정:
 
 - 신규 로그인에서 `suspended === true`를 거부하는 동작은 구현·테스트됨.
-- **이미 발급된 세션의 정지/권한 변경 수렴은 `AUTH-SESSION-CLAIM-REVOCATION` OPEN, `DECISION REQUIRED` + P0 authorization remediation 대상**이다.
-- 특히 “정지된 계정이 refresh를 통해 계속 새 권한 토큰을 얻을 수 있음”을 정상 계약으로 간주하지 않는다.
+- refresh/session 경계의 stale-claim 재발급 차단과 `suspended`/`role`/`store`/`driverApproved` 변경 수렴은 `IMPLEMENTED / PROVEN`이다.
+- 남은 `DECISION REQUIRED`는 access-token 이미 발급분의 revocation window 정책이며, runtime/browser session lifecycle proof는 `PENDING`이다. 이 둘을 완료로 주장하지 않는다.
+- “정지된 계정이 refresh를 통해 계속 새 권한 토큰을 얻을 수 있음”은 현재 계약이 아니다.
 
-Task 2F-A/2F-B의 public approval-gate와 current-user 경계 검증은 이 refresh/session lifecycle finding을 닫지 않는다.
+Task 2F-A/2F-B의 public approval-gate와 current-user 경계 검증에 더해, 위 refresh/session 직접 회귀가 static/refresh 경계를 닫는다.
 
 ### Same-deployment session revocation closure (48A)
 
@@ -278,6 +279,8 @@ gap을 다음 최소 authority로 닫는다.
 - logout/refresh-token rotation 동작 유지
 - suspended/role-changed/store-changed/driver-approval-changed 시나리오 직접 회귀
 
+현재 상태: authoritative refresh 재조회, stale claim 재발급 차단, `suspended`/`role`/`store`/`driverApproved` 회귀, logout/rotation 유지는 `IMPLEMENTED / PROVEN`이다(`apps/api/src/auth/auth.service.spec.ts`). access-token 이미 발급분의 revocation window 결정과 runtime/browser proof는 아직 완료가 아니다.
+
 ## 7. 현재 Auth API
 
 ### 공개/인증 진입
@@ -295,7 +298,7 @@ POST /auth/refresh
 
 - `/auth/login`과 `/auth/register`는 API 기능으로 존재하지만 현재 세 앱의 production 일반 이메일 로그인 provider라는 뜻은 아니다.
 - **이 두 endpoint가 공개라는 사실 자체는 현재 보안 경계다. UI 미노출을 authorization control로 취급하지 않는다.**
-- 현재 `role: driver` register→login 승인 우회는 P0 implementation finding이다.
+- `role: driver` register→login 승인 우회는 해소됐다: 공개 `register`는 `driverApproved: false`를 저장하고 client 주입을 거부하며, 승인값이 false/누락인 driver의 `login`·`getFirebaseToken`은 token side effect 전에 거부된다(`apps/api/src/auth/auth.service.spec.ts`). 공개 endpoint라는 사실 자체는 계속 현재 보안 경계다.
 - 일반 사용자에게 credentials 인증을 제품 기능으로 노출하려면 별도 제품·보안 결정이 필요하다.
 - Seller/Driver의 explicit local-runtime branch 역시 production indicator(`NODE_ENV`·`VERCEL_ENV`·`RAILWAY_ENVIRONMENT_NAME` 중 어느 하나라도 `production`)가 존재하면 fail-closed된다. local marker를 켜도 production runtime에서는 local admission이 열리지 않으며, Seller는 기존 E2E header gate로, Driver는 기존 Preview/E2E gate로 복귀한다. production에서 local marker를 켠다고 사용할 수 있는 것이 아니다.
 
