@@ -213,3 +213,15 @@ RUN NIGHT
 - operator stop: 첫 SIGINT/Ctrl+C는 process-local `STOP_REQUESTED`만 설정한다. cycle 사이면 새 BUILD 없이 즉시 summary를 출력하고, cycle 중이면 현재 BUILD가 자신의 bounded terminal에 도달한 뒤 새 cycle 없이 summary를 출력한다. 반복 SIGINT는 diagnostic만 출력하고 hard kill로 승격하지 않는다. Task Manager 종료, 콘솔 강제 닫기, reboot는 graceful stop 계약이 아니다.
 - summary는 status, stop reason, live main start/end, cycles, completed frontier, human/blocked/failure, operator stop, bound, task-owned residue를 deterministic JSON으로 출력한다. child stdout 전체를 복제하지 않고 필요한 structured evidence만 aggregate한다.
 - focused deterministic proof: `pnpm test:agent-night`.
+
+### 10.1 Operator-visible OpenCode TUI 보존
+
+기존 operator-visible OpenCode TUI workflow(`scripts/agent/open-visible-tui.mjs`, `GREENHUB_OPENCODE_ATTACH_URL`, run-once `VISIBLE_TUI` mode, `opencode run --attach <loopback-url>`)는 Night Run에서도 그대로 유지된다.
+
+- 두 foreground window 계약: Window A는 `open-visible-tui.mjs`가 소유하는 operator TUI이고 Window B는 Night Run control terminal이다. mutation session은 Window A에 나타나며 `/sessions` 또는 `Ctrl+X L`로 선택한다.
+- Night Run environment에 `GREENHUB_OPENCODE_ATTACH_URL`이 있으면 Night Run은 검증한 loopback URL을 매 BUILD child env에 명시적으로 전달한다. `run-build → run-goal → run-publish-once → run-once`는 기존 sanitized environment를 유지한 채 run-once의 `VISIBLE_TUI` mode와 `opencode run --attach <loopback-url>`를 그대로 사용한다.
+- visible mode는 조용히 `HEADLESS`로 downgrade되지 않는다. attach URL이 invalid하거나 server가 healthy하지 않으면 Night Run은 BUILD를 시작하지 않고 `VISIBILITY_UNAVAILABLE` reason의 `BLOCKED_EXTERNAL`로 fail closed한다. mutation 단계에서도 run-once의 기존 fail-closed preflight가 유지된다.
+- Night Run의 Ctrl+C는 Night Run process-local stop request로만 처리된다. Night Run은 OpenCode TUI/server/attached mutation에 SIGINT를 전달하지 않는다. mutation child는 자체 process group(detached)이고 TUI는 별도 foreground process다.
+- summary는 `visibility.requested`, `attachUrl`, `health`, `preservedToBuildChildren`, `mutationExecutorModes`, `visibleTuiTasks`와 cycle별 `executorModes`를 기록한다.
+- Windows 사용법: Window A에서 `node scripts/agent/open-visible-tui.mjs`, 별도 Window B에서 `$env:GREENHUB_OPENCODE_ATTACH_URL='http://127.0.0.1:4096'` 설정 뒤 `node scripts/agent/run-night.mjs --request .\night-request.txt --max-cycles 10`. 종료는 Window B에서 Ctrl+C 한 번이다.
+- focused deterministic proof: `pnpm test:agent-night` (N13). 실제 두 창 operator run은 Windows에서 별도로 수행한다.

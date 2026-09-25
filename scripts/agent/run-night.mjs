@@ -51,6 +51,9 @@ import { DEFAULT_CI_TIMEOUT_MS, DEFAULT_MAX_REBIND_ATTEMPTS } from './run-publis
 import {
   DEFAULT_OPENCODE_TIMEOUT_MS,
   DEFAULT_PROOF_TIMEOUT_MS,
+  OPENCODE_ATTACH_URL_ENV,
+  parseVisibleAttachUrl,
+  probeVisibleServer,
   readLiveRemoteMain,
 } from './run-once.mjs';
 
@@ -230,6 +233,50 @@ function readNightRequest(options) {
 }
 
 /**
+ * VISIBLE_TUI is the existing operator contract read from
+ * `GREENHUB_OPENCODE_ATTACH_URL` (run-once). Night Run never redesigns it: when
+ * the URL is present it must be preserved to every BUILD child explicitly, and
+ * an unusable or unavailable attach target fails closed before any cycle
+ * starts. A silent HEADLESS downgrade is never allowed.
+ */
+function resolveNightVisibility({ baseEnv, probe = probeVisibleServer }) {
+  const raw =
+    typeof baseEnv?.[OPENCODE_ATTACH_URL_ENV] === 'string'
+      ? baseEnv[OPENCODE_ATTACH_URL_ENV].trim()
+      : '';
+  if (raw.length === 0) {
+    return { requested: false, attachUrl: null, health: 'NOT_REQUESTED', error: null };
+  }
+  const parsed = parseVisibleAttachUrl(raw);
+  if (!parsed.ok) {
+    return { requested: true, attachUrl: null, health: 'INVALID', error: parsed.reason };
+  }
+  const preflight = probe({ attachUrl: parsed.url });
+  if (!preflight?.ok) {
+    return {
+      requested: true,
+      attachUrl: parsed.url,
+      health: 'UNAVAILABLE',
+      error: preflight?.error ?? 'no healthy OpenCode server',
+    };
+  }
+  return { requested: true, attachUrl: parsed.url, health: 'HEALTHY', error: null };
+}
+
+/**
+ * Explicit visibility preservation: the BUILD child inherits the operator
+ * environment (run-once still sanitizes the OpenCode child), and the validated
+ * attach URL is written into it explicitly so the run-build -> run-goal ->
+ * run-publish-once -> run-once chain cannot lose VISIBLE_TUI through
+ * inheritance gaps.
+ */
+function buildBuildChildEnv({ baseEnv, attachUrl }) {
+  const childEnv = { ...baseEnv };
+  if (attachUrl !== null) childEnv[OPENCODE_ATTACH_URL_ENV] = attachUrl;
+  return childEnv;
+}
+
+/**
  * Spawn one real run-build child in its own process group so a console Ctrl+C
  * addressed to the Night Run process is never delivered into an active BUILD
  * mutation/proof/publication critical section. Child stderr is relayed live to
@@ -379,6 +426,15 @@ function createNightResult(options) {
     },
     nextFrontierSelected: false,
     childCalls: 0,
+    visibility: {
+      requested: false,
+      attachUrl: null,
+      health: 'NOT_REQUESTED',
+      error: null,
+      preservedToBuildChildren: false,
+      mutationExecutorModes: [],
+      visibleTuiTasks: 0,
+    },
     residue: {
       taskOwned: [],
       foreign: 'NOT_TOUCHED',
@@ -454,6 +510,16 @@ function summarizeCycle({
       : liveMainStart === liveMainEnd
         ? 'UNCHANGED'
         : 'MOVED';
+  const attempts = Array.isArray(buildResult?.goalResult?.attempts)
+    ? buildResult.goalResult.attempts
+    : [];
+  const executorModes = [
+    ...new Set(
+      attempts
+        .map((attempt) => attempt?.child?.executor?.mode)
+        .filter((value) => typeof value === 'string' && value.length > 0),
+    ),
+  ];
   return {
     cycle: cycleNumber,
     liveMainStart,
@@ -476,6 +542,10 @@ function summarizeCycle({
     publication: extractCyclePublication(buildResult),
     escalationToken: buildResult?.decision?.escalationToken ?? null,
     nextFrontierSelected: buildResult?.nextFrontierSelected === true,
+    executorModes,
+    visibleTuiTaskCount: attempts.filter(
+      (attempt) => attempt?.child?.executor?.mode === 'VISIBLE_TUI',
+    ).length,
     child: {
       exitCode: invocation.exitCode,
       signal: invocation.signal,
@@ -585,6 +655,42 @@ export async function runNight(options = {}, deps = {}) {
     log('[NIGHT RUN] Ctrl+C once = stop safely after the current BUILD cycle.');
     log('[NIGHT RUN] the current BUILD will not be killed mid-publication.');
 
+    // VISIBLE_TUI contract: if the operator requested the existing OpenCode TUI
+    // workflow, preserve it explicitly or fail closed. Never fall back HEADLESS.
+    const visibility = resolveNightVisibility({
+      baseEnv: env,
+      probe: deps.probeVisibleServer ?? probeVisibleServer,
+    });
+    result.visibility = {
+      requested: visibility.requested,
+      attachUrl: visibility.attachUrl,
+      health: visibility.health,
+      error: visibility.error,
+      preservedToBuildChildren: visibility.requested && visibility.health === 'HEALTHY',
+      mutationExecutorModes: [],
+      visibleTuiTasks: 0,
+    };
+    if (visibility.health === 'INVALID' || visibility.health === 'UNAVAILABLE') {
+      log(`[NIGHT RUN] VISIBILITY_UNAVAILABLE: ${visibility.error}`);
+      return finish(
+        BLOCKED_EXTERNAL,
+        `VISIBILITY_UNAVAILABLE: ${visibility.error}; no BUILD was started and VISIBLE_TUI is never downgraded to HEADLESS`,
+      );
+    }
+    const buildChildEnv = buildBuildChildEnv({
+      baseEnv: env,
+      attachUrl: visibility.attachUrl,
+    });
+    if (visibility.requested) {
+      log(
+        `[NIGHT RUN] visible OpenCode TUI ${visibility.attachUrl} (HEALTHY); mutation tasks attach to it.`,
+      );
+      log('[NIGHT RUN] watch Window A with /sessions or Ctrl+X L.');
+      log(
+        '[NIGHT RUN] Ctrl+C stops only this Night Run process; the TUI and the active BUILD are never signaled.',
+      );
+    }
+
     const request = readNightRequest(options);
     if (!request.ok) {
       return finish(INVALID_NIGHT_REQUEST, request.error);
@@ -626,7 +732,7 @@ export async function runNight(options = {}, deps = {}) {
           buildScriptPath,
           args,
           cwd: result.repositoryRoot,
-          env,
+          env: buildChildEnv,
           requestText: request.text,
           stderr,
         });
@@ -718,6 +824,12 @@ export async function runNight(options = {}, deps = {}) {
       } else if (cycle.status === BLOCKED_EXTERNAL) {
         result.blockedExternal = { cycle: cycleNumber, reason: cycle.reason };
       }
+      for (const executorMode of cycle.executorModes) {
+        if (!result.visibility.mutationExecutorModes.includes(executorMode)) {
+          result.visibility.mutationExecutorModes.push(executorMode);
+        }
+      }
+      result.visibility.visibleTuiTasks += cycle.visibleTuiTaskCount;
       appendFailure(result, cycle);
 
       if (stopRequested) {
@@ -796,6 +908,19 @@ export const USAGE = [
   'prints a diagnostic and never escalates to a hard kill. The BUILD request is',
   'read once into process memory and reused unchanged for every cycle; it is',
   'never stored as durable coordination state.',
+  '',
+  'Windows two-window usage (operator-visible OpenCode TUI):',
+  '  Window A - OpenCode TUI:',
+  '    node scripts/agent/open-visible-tui.mjs',
+  '    -> prints the loopback URL for this TUI-owned server.',
+  '  Window B - Night Run control (separate PowerShell):',
+  "    $env:GREENHUB_OPENCODE_ATTACH_URL='http://127.0.0.1:4096'",
+  '    node scripts/agent/run-night.mjs --request .\\night-request.txt --max-cycles 10',
+  '  Watch the current mutation BUILD in Window A with /sessions or Ctrl+X L.',
+  '  Press Ctrl+C once in Window B only; the active BUILD finishes safely, no',
+  '  new BUILD starts, and the OpenCode TUI is never signaled.',
+  '  If the attach URL is set but invalid or the server is unavailable, Night Run',
+  '  fails closed with VISIBILITY_UNAVAILABLE instead of downgrading to HEADLESS.',
   '',
   'Prints one deterministic JSON summary to stdout. Exit codes: 0 (product',
   'terminal, max-cycles, or max-minutes), 130 (operator Ctrl+C safe stop),',
@@ -910,6 +1035,11 @@ export async function main(
     `[NIGHT RUN] LIVE_MAIN ${result.liveMain?.atStart ?? 'unknown'} -> ${result.liveMain?.atEnd ?? 'unknown'}`,
     `[NIGHT RUN] CYCLES started=${result.bound?.cyclesStarted ?? 0} completed=${result.bound?.cyclesCompleted ?? 0} max=${result.bound?.maxCycles ?? 'none'}`,
     `[NIGHT RUN] OPERATOR_STOP requested=${result.operatorStop?.requested ? 'YES' : 'NO'} during_cycle=${result.operatorStop?.duringCycle ? 'YES' : 'NO'}`,
+    `[NIGHT RUN] VISIBILITY ${
+      result.visibility?.requested
+        ? `VISIBLE_TUI ${result.visibility.health} tasks=${result.visibility.visibleTuiTasks}`
+        : 'HEADLESS_DEFAULT'
+    }`,
     `[NIGHT RUN] NEXT_FRONTIER_SELECTED ${result.nextFrontierSelected ? 'YES' : 'NO'}`,
   ].join('\n');
   stderr.write(`${summary}\n`);
