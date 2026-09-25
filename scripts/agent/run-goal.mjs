@@ -1828,9 +1828,11 @@ export function buildChildInvocation({ task, taskText, options, title }) {
 
 /**
  * A baseline observation that failed before any OpenCode invocation and before
- * any task-owned mutation is a transient start race (for example concurrent
- * `git` observations on one canonical checkout), not a semantic failure. It is
- * the only failure class the batch may retry.
+ * any task-owned mutation is a transient start race (for example a concurrent
+ * fetch/object-store race on the shared repository or a transient remote
+ * observation failure), not a semantic failure. It is the only failure class
+ * the batch may retry. Caller/canonical checkout movement is never retried
+ * here: that checkout is a source locator only and its movement is diagnostic.
  */
 export function isRetryableStartFailure(child) {
   if (!isPlainObject(child)) return false;
