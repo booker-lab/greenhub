@@ -598,29 +598,127 @@ export function disposeVisibleInstance({
   };
 }
 
-export function defaultRemoveWorkspace({ repositoryRoot, tempRoot, workspacePath }) {
-  const errors = [];
-  if (existsSync(workspacePath)) {
-    const removal = gitCapture(repositoryRoot, ['worktree', 'remove', '--force', workspacePath], {
-      allowFailure: true,
-    });
+function comparableWorktreePath(value, platform = process.platform) {
+  const normalized = String(value).replace(/\\/g, '/').replace(/\/+$/, '');
+  return platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+/**
+ * Registered worktree paths of the canonical repository. Unreadable worktree
+ * administration state is reported as `ok: false` so callers fail closed
+ * instead of reporting a convergence they could not observe.
+ */
+export function readRegisteredWorktreePaths({ repositoryRoot, gitCapture: capture = gitCapture }) {
+  const listing = capture(repositoryRoot, ['worktree', 'list', '--porcelain'], {
+    allowFailure: true,
+  });
+  if (!listing.ok) return { ok: false, paths: [], error: gitMessageOf(listing.error) };
+  const paths = listing.stdout
+    .split('\n')
+    .filter((line) => line.startsWith('worktree '))
+    .map((line) => line.slice('worktree '.length).trim())
+    .filter((entry) => entry.length > 0);
+  return { ok: true, paths, error: null };
+}
+
+/**
+ * Remove one task-owned disposable workspace and its temporary root.
+ *
+ * Windows hardening: Git for Windows refuses to delete content deeper than
+ * MAX_PATH unless `core.longpaths` is enabled, so the Git-aware primary
+ * removal passes `-c core.longpaths=true` for this command only (never global
+ * Git configuration). The recursive filesystem fallback is long-path safe on
+ * its own and is idempotent for already-removed or partially removed targets.
+ *
+ * The verdict is read back directly from the filesystem and the registered
+ * worktree paths, never from which strategy happened to succeed, so a converged
+ * cleanup is not reported as CLEANUP_FAILED and a real residue is never hidden.
+ * `attemptErrors` preserves non-fatal strategy diagnostics; `errors` is
+ * non-empty only while a target or worktree entry still remains.
+ */
+export function defaultRemoveWorkspace({ repositoryRoot, tempRoot, workspacePath }, deps = {}) {
+  const capture = deps.gitCapture ?? gitCapture;
+  const removeTree = deps.rmSync ?? rmSync;
+  const pathExists = deps.existsSync ?? existsSync;
+  const attemptErrors = [];
+  const workspaceTarget =
+    typeof workspacePath === 'string' && workspacePath.length > 0 ? workspacePath : null;
+
+  if (workspaceTarget !== null && pathExists(workspaceTarget)) {
+    const removal = capture(
+      repositoryRoot,
+      ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', workspaceTarget],
+      { allowFailure: true },
+    );
     if (!removal.ok) {
-      errors.push(`git worktree remove failed: ${gitMessageOf(removal.error)}`);
-      try {
-        rmSync(workspacePath, { recursive: true, force: true });
-      } catch (error) {
-        errors.push(`workspace removal failed: ${messageOf(error)}`);
-      }
-      gitCapture(repositoryRoot, ['worktree', 'prune'], { allowFailure: true });
+      attemptErrors.push(`git worktree remove failed: ${gitMessageOf(removal.error)}`);
     }
   }
-  try {
-    rmSync(tempRoot, { recursive: true, force: true });
-  } catch (error) {
-    errors.push(`temporary run directory removal failed: ${messageOf(error)}`);
+
+  for (const target of [workspaceTarget, tempRoot]) {
+    if (typeof target !== 'string' || target.length === 0 || !pathExists(target)) continue;
+    try {
+      removeTree(target, { recursive: true, force: true });
+    } catch (error) {
+      attemptErrors.push(`filesystem removal failed for ${target}: ${messageOf(error)}`);
+    }
   }
-  if (existsSync(tempRoot)) errors.push(`temporary run directory still exists: ${tempRoot}`);
-  return { removed: errors.length === 0, errors };
+
+  // A forced filesystem fallback can leave the worktree admin entry of an
+  // already-deleted directory behind. `worktree prune` only drops entries whose
+  // directory is gone; live and foreign worktrees are never touched.
+  let registered = readRegisteredWorktreePaths({ repositoryRoot, gitCapture: capture });
+  if (!registered.ok) {
+    attemptErrors.push(`worktree registration observation failed: ${registered.error}`);
+  } else if (
+    workspaceTarget !== null &&
+    !pathExists(workspaceTarget) &&
+    registered.paths.some(
+      (entry) => comparableWorktreePath(entry) === comparableWorktreePath(workspaceTarget),
+    )
+  ) {
+    const pruned = capture(repositoryRoot, ['worktree', 'prune'], { allowFailure: true });
+    if (!pruned.ok) {
+      attemptErrors.push(`git worktree prune failed: ${gitMessageOf(pruned.error)}`);
+    }
+    registered = readRegisteredWorktreePaths({ repositoryRoot, gitCapture: capture });
+    if (!registered.ok) {
+      attemptErrors.push(`worktree registration observation failed: ${registered.error}`);
+    }
+  }
+
+  const errors = [];
+  if (workspaceTarget !== null && pathExists(workspaceTarget)) {
+    errors.push(`workspace still exists: ${workspaceTarget}`);
+  }
+  if (typeof tempRoot === 'string' && tempRoot.length > 0 && pathExists(tempRoot)) {
+    errors.push(`temporary run directory still exists: ${tempRoot}`);
+  }
+  if (!registered.ok) {
+    // Worktree admin state lives inside the canonical repository. A vanished
+    // repository cannot retain a registration, so an unreadable observation is
+    // diagnostic there instead of a task-owned cleanup residue.
+    if (pathExists(repositoryRoot)) {
+      errors.push(`worktree registration could not be observed: ${registered.error}`);
+    } else {
+      attemptErrors.push(
+        `worktree registration could not be observed and the repository root is gone: ${registered.error}`,
+      );
+    }
+  } else if (
+    workspaceTarget !== null &&
+    registered.paths.some(
+      (entry) => comparableWorktreePath(entry) === comparableWorktreePath(workspaceTarget),
+    )
+  ) {
+    errors.push(`worktree registration still lists: ${workspaceTarget}`);
+  }
+
+  return {
+    removed: errors.length === 0,
+    errors: errors.length > 0 ? [...errors, ...attemptErrors] : [],
+    attemptErrors,
+  };
 }
 
 function createResult(options = {}) {
@@ -676,6 +774,7 @@ function createResult(options = {}) {
       headSha: null,
       cleanup: 'NOT_CREATED',
       cleanupErrors: [],
+      cleanupAttemptErrors: [],
     },
     canonicalCheckout: {
       before: null,
@@ -1088,6 +1187,9 @@ export function runOnce(options, deps = {}) {
       }
       result.workspace.cleanup = removal.removed ? 'REMOVED' : 'FAILED';
       result.workspace.cleanupErrors = Array.isArray(removal.errors) ? removal.errors : [];
+      result.workspace.cleanupAttemptErrors = Array.isArray(removal.attemptErrors)
+        ? removal.attemptErrors
+        : [];
     } catch (error) {
       result.workspace.cleanup = 'FAILED';
       result.workspace.cleanupErrors = [messageOf(error)];
