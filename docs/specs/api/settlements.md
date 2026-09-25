@@ -2,7 +2,7 @@
 
 # Settlements API / Domain Spec
 
-> **최종 정합화**: 2026-08-24
+> **최종 정합화**: 2026-09-25
 > **상태**: Current
 > **타입·라벨 SSOT**: `packages/shared/src/settlement.types.ts`
 > **Seller API 정본**: `apps/api/src/settlements/**`
@@ -131,33 +131,26 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 
 지급 완료 후 주문 취소·환불의 회계 처리는 단순 status 역전으로 해결하지 않는다. 현재 service는 warning을 남기고 paid settlement를 보존한다. 후속 회계 조정이 필요하면 별도 설계가 필요하다.
 
-### Core lifecycle 검증 상태 — `IMPLEMENTED / UNVERIFIED` + P0 `COVERAGE GAP`
+### Core lifecycle 검증 상태 — `IMPLEMENTATION_PROVEN`
 
-2026-08-24 감사에서 위 생성·자동 확정·취소 구현은 직접 확인했다. 또한 회차 API E2E fixture는 실제 `SettlementsService`를 주입한다.
+2026-08-24 감사에서 위 생성·자동 확정·취소 구현을 직접 확인했고, 이후 `apps/api/src/settlements/settlements-lifecycle.spec.ts`가 실제 `SettlementsService`를 구동해 위 금전 불변식을 직접 회귀한다. 따라서 core lifecycle은 `IMPLEMENTATION_PROVEN`이다.
 
-그러나 현재 `apps/api/src/settlements`에는 core lifecycle 전용 `*.spec.ts`가 없고, 회차 전체 흐름 E2E도 다음 금전 불변식을 직접 assertion하지 않는다.
+직접 proof가 고정하는 계약:
 
-- 완료 주문에서 settlement가 정확히 1건 생성됨
-- `DELIVERED → REVIEWED` 또는 동시 완료 호출이 기존 settlement를 덮어쓰거나 `settledAt`을 갱신하지 않음
-- fee/net/status/completedStatus snapshot이 의도대로 고정됨
-- cutoff 이전 pending은 유지되고 due pending만 confirmed로 전환됨
-- confirm과 cancel race에서 cancelled가 다시 confirmed로 덮이지 않음
-- pending/confirmed 취소는 cancelled로 수렴하고 cancelled는 멱등
-- paid settlement가 cancellation으로 역전되지 않음
+- 완료 주문에서 settlement가 정확히 1건 생성되고 `totalAmount`·`platformFeeRate`·`platformFee`·`netAmount`·`status: pending`·`completedStatus`와 초기 `settledAt`/`createdAt`/`updatedAt` snapshot이 의도대로 고정됨
+- 같은 주문의 중복 호출과 동시 완료 호출이 추가 생성이나 최초 snapshot·`settledAt` 덮어쓰기를 일으키지 않음
+- `DELIVERED → REVIEWED`에서도 기존 1건과 최초 snapshot이 보존됨
+- cutoff 이전 pending은 유지되고 due pending만 transaction fresh-read 후 confirmed로 전환되며 `confirmedAt`이 기록됨
+- 이미 confirmed인 settlement는 다시 쓰지 않고, query가 stale해도 transaction fresh status가 우선함
+- confirm commit 직전 cancel 경합에서도 cancelled가 confirmed로 되살아나지 않음
+- missing settlement는 no-op, pending/confirmed는 cancelled로 수렴, cancelled는 멱등 no-op
+- paid settlement가 cancellation으로 역전되지 않고 보존됨
+- 실제 주문 완료 경로(`DELIVERED`)가 settlement 1건을 만들고 후속 `REVIEWED`가 중복 생성하지 않음
+- 정상 order cancellation이 pending/confirmed settlement를 cancelled로 수렴시킴
 
-실제 service가 E2E에 주입돼 호출될 수 있다는 사실은 위 상태를 직접 검사한 증거가 아니므로 core lifecycle을 `PARTIALLY VERIFIED`로도 승격하지 않는다.
+실제 주문 lifecycle(`OrdersLifecycleService`)과 실제 `SettlementsService`를 함께 구동하는 integration assertion도 위 spec에 포함된다.
 
-이 공백은 `SETTLEMENT-LIFECYCLE-COVERAGE` P0가 소유한다. 최소 완료 조건:
-
-- `createSettlement()` 정상·중복·동시 호출 직접 회귀
-- fee/net/completedStatus/초기 timestamp snapshot 검증
-- `confirmDueSettlements()` cutoff 전/후와 fresh-status race 회귀
-- cancelled/paid를 confirm batch가 덮지 않는 회귀
-- `cancelSettlement()` missing/pending/confirmed/cancelled/paid 직접 회귀
-- 실제 회차 주문 `DELIVERED`가 settlement 1건을 만들고 `REVIEWED`가 중복 생성하지 않는 integration assertion
-- 정상 취소 lifecycle이 pending/confirmed settlement를 cancelled로 수렴시키는 integration assertion
-
-증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+증거: `apps/api/src/settlements/settlements-lifecycle.spec.ts`, `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
 
 ### Admin 강제 환불과의 현재 불일치 — P0
 
@@ -293,12 +286,15 @@ seller/admin UI는 공통 `SettlementStatus`, `STATUS_LABEL`, `STATUS_COLOR`를 
 
 ## 12. 회차 직배송과 정산
 
-회차 주문도 orders lifecycle에서 완료 상태에 도달하면 기존 settlement 생성 경로와 연결될 수 있다. 첫 운영 회차 출시 전에 `SETTLEMENT-LIFECYCLE-COVERAGE`의 직접 증거로 다음을 고정한다.
+회차 주문도 orders lifecycle에서 완료 상태에 도달하면 기존 settlement 생성 경로와 연결된다. core settlement lifecycle은 `settlements-lifecycle.spec.ts`의 직접 proof로 `IMPLEMENTATION_PROVEN`이고, 실제 주문 lifecycle과 `SettlementsService`를 함께 구동해 다음을 직접 고정한다.
 
-- 배송사진 완료 → `DELIVERED`
-- settlement 1건만 생성
+- 완료 경로(`DELIVERED`)가 settlement 1건만 생성
 - 후속 `REVIEWED`가 동일 settlement를 중복 생성하거나 최초 snapshot을 덮지 않음
-- 정상 취소/환불 경합에서 pending/confirmed settlement가 `cancelled`로 수렴
+- 정상 취소 경로에서 pending/confirmed settlement가 `cancelled`로 수렴
+
+다음 항목은 여전히 별도 gate에 의존한다.
+
+- 배송사진 완료 → `DELIVERED` 회차 전환 자체와 정산 생성의 회차 E2E assertion
 - `paid` settlement 이후 환불은 별도 회계 정책을 따름
 - admin 강제 환불도 `ADMIN-FORCE-REFUND-CONSISTENCY` 해결 후 같은 회계 불변식에 수렴
 - admin 지급은 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` 해결 후 direct status/race 증거를 포함
@@ -333,6 +329,7 @@ admin 지급 상태 전이는 코드의 transaction 존재만으로 `VERIFIED` �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-25 | core lifecycle이 `settlements-lifecycle.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`임을 §7·§12에 동기화 |
 | 2026-08-24 | settlement 생성·confirm·cancel core lifecycle의 직접 상태/race assertion 부재를 `SETTLEMENT-LIFECYCLE-COVERAGE` P0 `IMPLEMENTED / UNVERIFIED`로 분리 |
 | 2026-08-24 | admin `confirmed → paid` 구현과 직접 검증 증거를 분리해 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` P0 COVERAGE GAP에 연결 |
 | 2026-08-24 | admin force refund가 `cancelSettlement()` 및 정상 취소 lifecycle을 우회하는 P0 정산 불일치를 명시 |
