@@ -2,7 +2,7 @@
 
 # Payments API / Domain Spec
 
-> **최종 정합화**: 2026-08-30
+> **최종 정합화**: 2026-09-25
 > **상태**: Current
 > **공통 타입 정본**: `packages/shared/src/payment.types.ts`
 > **서버 구현 정본**: `apps/api/src/payments/**`
@@ -247,10 +247,25 @@ REDELIVERY_FEE
 
 판정 기준은 `docs/DOCUMENT_CONSISTENCY.md`를 따른다.
 
-### 본 결제 finalization provider 상태 — `IMPLEMENTED / FINAL REGRESSION REQUIRED`
+### 본 결제 finalization provider 상태 `PAYMENT-FINALIZATION-PAID-GUARD` — `IMPLEMENTED / PROVEN`
 
-현재 `finalizePaidOrder()`가 비`PAID` 입력을 자체 차단한다. 다만 이 문서는 최종 release의
-동시성·늦은 결제·환불 전체 회귀를 대신하지 않는다.
+`finalizePaidOrder()`가 비`PAID` provider 입력을 상태 변경·환불·알림 없이 자체 차단하고,
+`PAID` 결제에 대해서만 정상 finalization과 금액 불일치·timeout·late-payment 수렴을
+수행한다. 비`PAID` 직접 거부와 정상/불일치/race 회귀가 직접 고정되어 있다.
+
+직접 근거: `apps/api/src/payments/payment-finalization.service.ts`,
+`apps/api/src/payments/payments.service.spec.ts`.
+
+### PortOne webhook signature 검증 coverage `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE` — `IMPLEMENTED / PROVEN`
+
+`PortoneClient.verifyWebhookSignature()`가 raw body와 `webhook-id`·`webhook-timestamp`·
+`webhook-signature`를 요구하고, `PORTONE_WEBHOOK_SECRET` 기반 HMAC SHA-256 timing-safe
+비교와 ±5분 timestamp 창을 강제한다. 실제 controller HTTP boundary에서 known-valid HMAC
+통과, raw body/id/signed timestamp/signature 변조 거부, 필수 header 누락 거부, timestamp
+허용창 경계, invalid 요청의 업무 경계·side effect 0이 직접 고정되어 있다.
+
+직접 근거: `apps/api/src/payments/portone.client.ts`,
+`apps/api/src/payments/portone-webhook-boundary.spec.ts`.
 
 ### 본 결제 환불 멱등성 — `VERIFIED`
 
@@ -380,6 +395,7 @@ export interface Payment {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-25 | `PAYMENT-FINALIZATION-PAID-GUARD`와 `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`를 직접 회귀 증거와 함께 `IMPLEMENTED / PROVEN`으로 정합화하고 stale 최종 회귀 요구 표현 제거 |
 | 2026-08-30 | `finalizePaidOrder()`의 자체 `PAID` guard와 실제 PortOne·PG 결제/환불 역할을 current source에 맞춰 정렬 |
 | 2026-08-24 | 문서 정합성 기준에 따라 finalization P0, 본 결제 환불, 재배송비 결제·환불의 검증 상태를 분리 |
 | 2026-08-23 | webhook 서명, PortOne 재조회, PENDING reconciliation, 늦은 결제 재확보/환불, refund claim, 재배송비 결제에 맞춰 전면 정합화 |
