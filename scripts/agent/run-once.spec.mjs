@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -30,6 +31,7 @@ import {
   defaultRemoveWorkspace,
   EXECUTOR_FAILED,
   extractWindowsShimTarget,
+  gitCapture,
   HEADLESS_MODE,
   INVALID_INPUT,
   isPathAllowed,
@@ -571,6 +573,302 @@ test('CASE 12b — cleanup failure does not mask an earlier failure status', () 
     assert.deepEqual(result.workspace.cleanupErrors, ['simulated cleanup failure']);
   } finally {
     if (leftoverRoot !== null) rmSync(leftoverRoot, { recursive: true, force: true });
+    removeFixture(fixture);
+  }
+});
+
+function normalizeWorktreePath(value) {
+  return String(value).replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function isRegisteredWorktree(repositoryRoot, target) {
+  const normalized = normalizeWorktreePath(target);
+  return listRegisteredWorktrees(repositoryRoot).some(
+    (entry) => normalizeWorktreePath(entry) === normalized,
+  );
+}
+
+/** A task-owned temp root + detached worktree, created the same way run-once does. */
+function createOwnedWorkspace(fixture, { depth = 0 } = {}) {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'greenhub-run-once-'));
+  const workspace = join(tempRoot, 'workspace');
+  git(fixture.root, ['worktree', 'add', '--detach', workspace, fixture.baseSha]);
+  let deepest = workspace;
+  while (depth > 0 && join(deepest, 'leaf.txt').length < depth) {
+    deepest = join(deepest, `nested-${deepest.length.toString(36)}-xxxxxxxxxxxxxxxx`);
+    mkdirSync(deepest, { recursive: true });
+  }
+  const deepestFile = join(deepest, 'leaf.txt');
+  if (depth > 0) writeFileSync(deepestFile, 'deep\n');
+  return { tempRoot, workspace, deepestFile };
+}
+
+/** Test-owned teardown for a workspace fixture; removal failures surface in the test body. */
+function removeOwnedWorkspace({ fixture, tempRoot, workspace }) {
+  if (process.platform !== 'win32' && existsSync(workspace)) {
+    try {
+      chmodSync(workspace, 0o755);
+    } catch {
+      // best-effort permission restore; the removal below reports any real failure
+    }
+  }
+  try {
+    rmSync(tempRoot, { recursive: true, force: true });
+  } catch {
+    // fixture teardown continues; the owning test already asserted the verdict
+  }
+  try {
+    git(fixture.root, ['worktree', 'prune']);
+  } catch {
+    // fixture teardown is best-effort
+  }
+}
+
+test('CASE 12c — a task-owned workspace deeper than MAX_PATH is fully removed (W1/W2/W6)', () => {
+  const fixture = buildFixture();
+  const tempBefore = listRunOnceTempDirs();
+  let owned = null;
+  try {
+    owned = createOwnedWorkspace(fixture, { depth: 700 });
+    assert.ok(owned.deepestFile.length >= 700);
+
+    const removal = defaultRemoveWorkspace({
+      repositoryRoot: fixture.root,
+      tempRoot: owned.tempRoot,
+      workspacePath: owned.workspace,
+    });
+
+    assert.equal(removal.removed, true);
+    assert.deepEqual(removal.errors, []);
+    assert.deepEqual(removal.attemptErrors, []);
+    assert.equal(existsSync(owned.workspace), false);
+    assert.equal(existsSync(owned.tempRoot), false);
+    assert.equal(isRegisteredWorktree(fixture.root, owned.workspace), false);
+    assert.deepEqual(listRunOnceTempDirs(), tempBefore);
+  } finally {
+    if (owned !== null) removeOwnedWorkspace({ fixture, ...owned });
+    removeFixture(fixture);
+  }
+});
+
+test('CASE 12d — a forced Git removal failure converges through the long-path-safe fallback (W2/W3)', () => {
+  const fixture = buildFixture();
+  let owned = null;
+  try {
+    owned = createOwnedWorkspace(fixture);
+    const injectedGit = (cwd, args, options) => {
+      if (args.includes('worktree') && args.includes('remove')) {
+        const error = new Error('injected git worktree remove failure');
+        error.stderr = "error: failed to delete 'workspace': Filename too long";
+        if (options?.allowFailure) return { ok: false, stdout: '', error };
+        throw error;
+      }
+      return gitCapture(cwd, args, options);
+    };
+    const target = {
+      repositoryRoot: fixture.root,
+      tempRoot: owned.tempRoot,
+      workspacePath: owned.workspace,
+    };
+
+    const removal = defaultRemoveWorkspace(target, { gitCapture: injectedGit });
+    assert.equal(removal.removed, true);
+    assert.deepEqual(removal.errors, []);
+    assert.equal(removal.attemptErrors.length, 1);
+    assert.match(removal.attemptErrors[0], /Filename too long/);
+    assert.equal(existsSync(owned.workspace), false);
+    assert.equal(existsSync(owned.tempRoot), false);
+    assert.equal(isRegisteredWorktree(fixture.root, owned.workspace), false);
+
+    const retry = defaultRemoveWorkspace(target);
+    assert.equal(retry.removed, true);
+    assert.deepEqual(retry.errors, []);
+    assert.deepEqual(retry.attemptErrors, []);
+  } finally {
+    if (owned !== null) removeOwnedWorkspace({ fixture, ...owned });
+    removeFixture(fixture);
+  }
+});
+
+test('CASE 12e — registry-only and filesystem-only residue both converge (W3)', () => {
+  const fixture = buildFixture();
+  let owned = null;
+  let plainRoot = null;
+  try {
+    owned = createOwnedWorkspace(fixture);
+    // Registry-only residue: the filesystem target is gone, the worktree admin
+    // entry survives a partial cleanup.
+    rmSync(owned.workspace, { recursive: true, force: true });
+    assert.equal(isRegisteredWorktree(fixture.root, owned.workspace), true);
+
+    const registryOnly = defaultRemoveWorkspace({
+      repositoryRoot: fixture.root,
+      tempRoot: owned.tempRoot,
+      workspacePath: owned.workspace,
+    });
+    assert.equal(registryOnly.removed, true);
+    assert.deepEqual(registryOnly.errors, []);
+    assert.equal(existsSync(owned.tempRoot), false);
+    assert.equal(isRegisteredWorktree(fixture.root, owned.workspace), false);
+    assert.equal(listRegisteredWorktrees(fixture.root).length, 1);
+
+    // Filesystem-only residue: a plain directory at the workspace path with no
+    // registry entry at all.
+    plainRoot = mkdtempSync(join(tmpdir(), 'greenhub-run-once-'));
+    const plainWorkspace = join(plainRoot, 'workspace');
+    mkdirSync(join(plainWorkspace, 'src'), { recursive: true });
+    writeFileSync(join(plainWorkspace, 'src', 'x.txt'), 'x\n');
+
+    const filesystemOnly = defaultRemoveWorkspace({
+      repositoryRoot: fixture.root,
+      tempRoot: plainRoot,
+      workspacePath: plainWorkspace,
+    });
+    assert.equal(filesystemOnly.removed, true);
+    assert.deepEqual(filesystemOnly.errors, []);
+    assert.ok(
+      filesystemOnly.attemptErrors.some((entry) => /git worktree remove failed/.test(entry)),
+    );
+    assert.equal(existsSync(plainRoot), false);
+  } finally {
+    if (owned !== null) removeOwnedWorkspace({ fixture, ...owned });
+    if (plainRoot !== null) rmSync(plainRoot, { recursive: true, force: true });
+    removeFixture(fixture);
+  }
+});
+
+test('CASE 12f — foreign dirs, foreign worktrees, and foreign live temp roots are preserved (W4/W5)', () => {
+  const fixture = buildFixture();
+  const foreignDir = join(tmpdir(), `greenhub-run-once-foreign-${process.pid}-dir`);
+  const foreignWorktree = join(tmpdir(), `greenhub-run-once-foreign-${process.pid}-worktree`);
+  const foreignLiveRoot = join(tmpdir(), `greenhub-run-once-foreign-${process.pid}-live`);
+  let owned = null;
+  let foreignChild = null;
+  try {
+    owned = createOwnedWorkspace(fixture);
+    mkdirSync(foreignDir, { recursive: true });
+    writeFileSync(join(foreignDir, 'marker.txt'), 'foreign\n');
+    git(fixture.root, ['worktree', 'add', '--detach', foreignWorktree, fixture.baseSha]);
+    mkdirSync(foreignLiveRoot, { recursive: true });
+    writeFileSync(join(foreignLiveRoot, 'owned-by-other.txt'), 'other\n');
+    foreignChild = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000);'], {
+      cwd: foreignLiveRoot,
+      stdio: 'ignore',
+    });
+
+    const removal = defaultRemoveWorkspace({
+      repositoryRoot: fixture.root,
+      tempRoot: owned.tempRoot,
+      workspacePath: owned.workspace,
+    });
+
+    assert.equal(removal.removed, true);
+    assert.equal(existsSync(foreignDir), true);
+    assert.equal(readFileSync(join(foreignDir, 'marker.txt'), 'utf8'), 'foreign\n');
+    assert.equal(existsSync(foreignWorktree), true);
+    assert.equal(isRegisteredWorktree(fixture.root, foreignWorktree), true);
+    assert.equal(existsSync(join(foreignLiveRoot, 'owned-by-other.txt')), true);
+  } finally {
+    if (foreignChild !== null) foreignChild.kill();
+    if (existsSync(foreignWorktree)) {
+      gitCapture(
+        fixture.root,
+        ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', foreignWorktree],
+        { allowFailure: true },
+      );
+    }
+    if (owned !== null) removeOwnedWorkspace({ fixture, ...owned });
+    rmSync(foreignDir, { recursive: true, force: true });
+    rmSync(foreignWorktree, { recursive: true, force: true });
+    rmSync(foreignLiveRoot, { recursive: true, force: true });
+    removeFixture(fixture);
+  }
+});
+
+test('CASE 12g — a genuinely undeletable owned workspace is reported, then converges (W7)', async (t) => {
+  const fixture = buildFixture();
+  let owned = null;
+  let holder = null;
+  try {
+    owned = createOwnedWorkspace(fixture);
+    const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+    if (process.platform === 'win32') {
+      const holderScript = [
+        "const fs = require('node:fs');",
+        "fs.writeFileSync('hold-ready.txt', 'ready');",
+        'setTimeout(() => {}, 60000);',
+      ].join('\n');
+      holder = spawn(process.execPath, ['-e', holderScript], {
+        cwd: owned.workspace,
+        stdio: 'ignore',
+      });
+      const deadline = Date.now() + 15000;
+      while (!existsSync(join(owned.workspace, 'hold-ready.txt'))) {
+        if (Date.now() > deadline) throw new Error('held fixture did not start');
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    } else if (isRoot) {
+      t.skip('root can delete a permission-blocked fixture');
+      return;
+    } else {
+      chmodSync(owned.workspace, 0o555);
+    }
+
+    const target = {
+      repositoryRoot: fixture.root,
+      tempRoot: owned.tempRoot,
+      workspacePath: owned.workspace,
+    };
+    const blocked = defaultRemoveWorkspace(target);
+    assert.equal(blocked.removed, false);
+    assert.equal(
+      blocked.errors.some((entry) => entry.includes(`workspace still exists: ${owned.workspace}`)),
+      true,
+    );
+    assert.ok(blocked.attemptErrors.length > 0);
+
+    if (holder !== null) {
+      const exited = new Promise((resolve) => holder.once('exit', resolve));
+      holder.kill();
+      await exited;
+      holder = null;
+    } else if (process.platform !== 'win32') {
+      chmodSync(owned.workspace, 0o755);
+    }
+
+    const retried = defaultRemoveWorkspace(target);
+    assert.equal(retried.removed, true);
+    assert.deepEqual(retried.errors, []);
+    assert.equal(existsSync(owned.workspace), false);
+    assert.equal(existsSync(owned.tempRoot), false);
+    assert.equal(isRegisteredWorktree(fixture.root, owned.workspace), false);
+  } finally {
+    if (holder !== null) holder.kill();
+    if (owned !== null) removeOwnedWorkspace({ fixture, ...owned });
+    removeFixture(fixture);
+  }
+});
+
+test('CASE 12h — a vanished canonical checkout does not turn task-owned cleanup into a false failure', () => {
+  const fixture = buildFixture();
+  let owned = null;
+  try {
+    owned = createOwnedWorkspace(fixture);
+    rmSync(fixture.root, { recursive: true, force: true });
+
+    const removal = defaultRemoveWorkspace({
+      repositoryRoot: fixture.root,
+      tempRoot: owned.tempRoot,
+      workspacePath: owned.workspace,
+    });
+
+    assert.equal(removal.removed, true);
+    assert.deepEqual(removal.errors, []);
+    assert.equal(existsSync(owned.workspace), false);
+    assert.equal(existsSync(owned.tempRoot), false);
+    assert.ok(removal.attemptErrors.some((entry) => /repository root is gone/.test(entry)));
+  } finally {
+    if (owned !== null) removeOwnedWorkspace({ fixture, ...owned });
     removeFixture(fixture);
   }
 });

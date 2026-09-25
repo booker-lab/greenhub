@@ -41,7 +41,12 @@ import {
   runTaskBatch,
   validateGoalContract,
 } from './run-goal.mjs';
-import { defaultRunProofCommand, fetchBaseline, readLiveRemoteMain } from './run-once.mjs';
+import {
+  CLEANUP_FAILED,
+  defaultRunProofCommand,
+  fetchBaseline,
+  readLiveRemoteMain,
+} from './run-once.mjs';
 
 function git(cwd, args) {
   return execFileSync('git', args, {
@@ -2780,4 +2785,69 @@ test('CASE L4 — a fixture cleanup failure is surfaced, not silent', () => {
   assert.equal(existsSync(fixture.bare), true);
   removeTreeRobust(fixture.bare);
   assert.equal(existsSync(fixture.bare), false);
+});
+
+test('CASE W8a — publication success with cleanup failure still closes the product goal', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeChildren({
+      runPublishBehavior: () => {
+        pushCommitToLiveMain(fixture, {
+          path: 'docs/feature.md',
+          content: 'delivered\n',
+          message: 'docs: deliver the bounded outcome',
+        });
+        return {
+          status: CLEANUP_FAILED,
+          reason: 'publication succeeded but task-owned workspace cleanup failed',
+          publication: { outcome: 'SUCCESS_PUBLISHED', remoteDeltaVerified: true },
+          changedPaths: ['docs/feature.md'],
+        };
+      },
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({ CRITERIA: [pathCriterion()], TASK_CATALOG: [publicationTask()] }),
+      fake.deps,
+    );
+
+    assert.equal(result.status, GOAL_SATISFIED);
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+    assert.equal(result.attempts.length, 1);
+    assert.equal(result.attempts[0].childStatus, CLEANUP_FAILED);
+    assert.equal(result.attempts[0].succeeded, false);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE W8b — a published task is never re-executed for the same invocation', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeChildren({
+      runPublishBehavior: () => ({
+        status: CLEANUP_FAILED,
+        reason: 'publication succeeded but task-owned workspace cleanup failed',
+        publication: { outcome: 'SUCCESS_PUBLISHED', remoteDeltaVerified: true },
+        changedPaths: ['docs/feature.md'],
+      }),
+    });
+    const result = runGoalOn(
+      fixture,
+      baseContract({ CRITERIA: [pathCriterion()], TASK_CATALOG: [publicationTask()] }),
+      fake.deps,
+    );
+
+    assert.equal(result.status, NO_PROGRESS);
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+    assert.equal(result.attempts.length, 1);
+    assert.equal(result.attempts[0].childStatus, CLEANUP_FAILED);
+    assert.ok(
+      result.selection.skipped.some(
+        (entry) => entry.taskId === 'T1' && /already attempted/.test(entry.reason),
+      ),
+    );
+  } finally {
+    removeFixture(fixture);
+  }
 });
