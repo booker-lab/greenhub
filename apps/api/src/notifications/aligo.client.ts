@@ -4,6 +4,11 @@ import type { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { resolveAligoTemplateCode } from './aligo-template-codes';
 import {
+  type NotificationRetryMetricsChannel,
+  type NotificationRetryMetricsRecorder,
+  notificationRetryMetrics,
+} from './notification-retry-metrics';
+import {
   type ApiNotificationTemplateCode,
   NOTIFICATION_TEMPLATES,
   renderNotificationMessage,
@@ -177,8 +182,12 @@ export class AligoClient {
   private readonly senderPhone: string;
   private readonly templateCodesJson: string;
   private readonly outboundDenied: boolean;
+  private readonly retryMetrics: NotificationRetryMetricsRecorder;
 
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    metrics: NotificationRetryMetricsRecorder = notificationRetryMetrics,
+  ) {
     this.apiKey = config.get<string>('ALIGO_API_KEY', '');
     this.userId = config.get<string>('ALIGO_USER_ID', '');
     this.senderKey = config.get<string>('ALIGO_SENDER_KEY', '');
@@ -189,6 +198,7 @@ export class AligoClient {
     this.outboundDenied =
       config.get<string>('GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY', '') ===
       'DENY_ALL_EXTERNAL_PROVIDER_DISPATCH';
+    this.retryMetrics = metrics;
   }
 
   async sendAlimtalk(
@@ -260,6 +270,7 @@ export class AligoClient {
       }
       if (result.outcome === 'UNKNOWN') {
         // 접수 여부가 불확실하면 blind 재시도나 SMS 대체를 하지 않는다.
+        this.recordProviderAttemptError('alimtalk', result);
         return {
           success: false,
           outcome: 'UNKNOWN',
@@ -277,12 +288,15 @@ export class AligoClient {
         };
       }
       lastErrorClass = result.errorClass ?? 'RETRYABLE';
+      this.recordProviderAttemptError('alimtalk', result);
       errorMessage = result.errorMessage ?? errorMessage;
       const hasNextAttempt =
         attempt + 1 < NOTIFICATION_RETRY_BACKOFF_POLICY.maxAlimtalkAttempts;
       // 명시적 영구 오류는 같은 채널 blind 재시도 대신 1회 SMS fallback으로 넘긴다.
       if (!hasNextAttempt || lastErrorClass === 'PERMANENT') break;
-      await this.delay(computeNotificationRetryDelayMs(lastErrorClass, attempt));
+      const retryDelayMs = computeNotificationRetryDelayMs(lastErrorClass, attempt);
+      this.retryMetrics.recordAppliedRetryDelay('alimtalk', retryDelayMs);
+      await this.delay(retryDelayMs);
     }
 
     const smsResult = await this.sendSmsMessage(phone, message);
@@ -301,6 +315,7 @@ export class AligoClient {
       };
     }
     if (smsResult.outcome === 'UNKNOWN') {
+      this.recordProviderAttemptError('sms', smsResult);
       return {
         success: false,
         outcome: 'UNKNOWN',
@@ -318,6 +333,7 @@ export class AligoClient {
       };
     }
 
+    this.recordProviderAttemptError('sms', smsResult);
     return {
       success: false,
       outcome: 'REJECTED',
@@ -378,6 +394,7 @@ export class AligoClient {
       };
     }
     if (result.outcome === 'UNKNOWN') {
+      this.recordProviderAttemptError('sms', result);
       return {
         success: false,
         outcome: 'UNKNOWN',
@@ -394,6 +411,7 @@ export class AligoClient {
           'provider 접수 여부를 확인할 수 없습니다. blind retry 없이 수동 확인이 필요합니다.',
       };
     }
+    this.recordProviderAttemptError('sms', result);
     return {
       success: false,
       outcome: 'REJECTED',
@@ -439,6 +457,18 @@ export class AligoClient {
   private async delay(ms: number): Promise<void> {
     if (!Number.isFinite(ms) || ms <= 0) return;
     await new Promise<void>((resolve) => setTimeout(resolve, ms));
+  }
+
+  // 관측 기록은 채널·오류 분류만 담고 PII는 기록하지 않는다. 관측이 전달 경로를
+  // 깨지 않으므로 provider 호출 동작과 결과 계약은 그대로 유지한다.
+  private recordProviderAttemptError(
+    channel: NotificationRetryMetricsChannel,
+    result: ProviderAttemptResult,
+  ): void {
+    this.retryMetrics.recordProviderErrorClassification(
+      channel,
+      result.outcome === 'UNKNOWN' ? 'UNKNOWN' : (result.errorClass ?? 'UNKNOWN'),
+    );
   }
 
   private async sendAlimtalkOnce(
