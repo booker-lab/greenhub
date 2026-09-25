@@ -4,7 +4,7 @@
 // mutation of the Greenhub checkout.
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -17,6 +17,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   ALREADY_SATISFIED,
@@ -237,6 +238,57 @@ test('CASE 3 — foreign dirty state is preserved exactly', () => {
       readFileSync(join(fixture.root, 'foreign-untracked.txt'), 'utf8'),
       untrackedBefore,
     );
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('C1/C2 — unrelated caller checkout movement during the run never fails the task', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const movingInvoke = (invocation) => {
+      // Deterministic stand-in for an unrelated concurrent process that moves
+      // the shared caller checkout (branch + HEAD + unrelated dirty state)
+      // while this task-owned invocation is running.
+      git(fixture.root, ['checkout', '-b', 'foreign-movement']);
+      git(fixture.root, ['commit', '--allow-empty', '-m', 'foreign movement']);
+      writeFileSync(join(fixture.root, 'foreign-untracked.txt'), 'foreign\n');
+      return fake.invokeOpencode(invocation);
+    };
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: movingInvoke,
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS);
+    assert.equal(result.canonicalCheckout.unchanged, false);
+    // Caller checkout movement is distinct from live-main authority.
+    assert.equal(result.baselineMovement, 'UNCHANGED');
+    assert.deepEqual(result.changedPaths, ['src/allowed.txt']);
+    assert.equal(fake.invocations.length, 1);
+    assert.equal(git(fixture.root, ['branch', '--show-current']), 'foreign-movement');
+    assert.equal(readFileSync(join(fixture.root, 'foreign-untracked.txt'), 'utf8'), 'foreign\n');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('C1b — an unobservable caller checkout state is diagnostic, not task failure', () => {
+  const fixture = buildFixture();
+  try {
+    git(fixture.root, ['symbolic-ref', 'HEAD', 'refs/heads/not-created-yet']);
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS);
+    assert.equal(result.canonicalCheckout.before, null);
+    assert.equal(result.canonicalCheckout.unchanged, null);
+    assert.equal(typeof result.canonicalCheckout.observationError, 'string');
+    assert.deepEqual(result.changedPaths, ['src/allowed.txt']);
   } finally {
     removeFixture(fixture);
   }
@@ -1226,4 +1278,218 @@ test('VISIBLE_TUI H2 ??probeVisibleServer reports health through its spawn seam 
     ok: false,
     error: 'attach URL is required',
   });
+});
+
+// Real-process child runner for the C6 concurrency proof. It imports the
+// product runner by absolute path and holds the invocation open until the
+// parent signals that caller-side movement has happened. It is written to a
+// task-owned temp directory, never into product source.
+const CHILD_RUNNER_SOURCE = `
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const [, , runnerPath, repositoryRoot, allowedPath, readyFile, proceedFile, resultFile] =
+  process.argv;
+const { runOnce } = await import(pathToFileURL(runnerPath).href);
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+const invokeOpencode = ({ cwd }) => {
+  writeFileSync(readyFile, '');
+  const deadline = Date.now() + 120000;
+  while (!existsSync(proceedFile)) {
+    if (Date.now() > deadline) throw new Error('timed out waiting for the caller movement');
+    sleep(25);
+  }
+  const absolute = join(cwd, allowedPath);
+  mkdirSync(dirname(absolute), { recursive: true });
+  writeFileSync(absolute, 'ok\\n');
+  return {
+    exitCode: 0,
+    signal: null,
+    timedOut: false,
+    startErrorCode: null,
+    stdout: '',
+    stderr: '',
+  };
+};
+
+const options = {
+  repositoryRoot,
+  remote: 'origin',
+  taskText:
+    'OUTCOME: write ' + allowedPath + '\\n' +
+    'PRESERVE: every other path\\n' +
+    'PROOF: none\\n' +
+    'ESCALATE ONLY IF: the boundary is unclear',
+  allowedPaths: [allowedPath],
+  proofCommands: [],
+};
+
+// Two independent invocations share one object store, so a transient
+// pre-invocation baseline race (for example a concurrent fetch writing
+// FETCH_HEAD) is retried exactly like run-goal's bounded start retry does in
+// production. The caller-side movement under test happens later, while both
+// invocations are running, and is never retried.
+let result = null;
+let attempts = 0;
+for (attempts = 1; attempts <= 5; attempts += 1) {
+  try {
+    result = runOnce(options, { invokeOpencode, log: () => {} });
+  } catch (error) {
+    result = {
+      status: 'EXECUTOR_THREW',
+      reason: String(error && error.stack ? error.stack : error),
+    };
+  }
+  const retryable =
+    result.status === 'BASELINE_OBSERVATION_FAILED' && result.executor?.invoked !== true;
+  if (!retryable) break;
+  sleep(100 * attempts);
+}
+
+writeFileSync(
+  resultFile,
+  JSON.stringify({
+    status: result.status,
+    reason: result.reason,
+    attempts,
+    canonicalCheckout: result.canonicalCheckout ?? null,
+    baselineMovement: result.baselineMovement ?? null,
+    changedPaths: result.changedPaths ?? [],
+    executorInvoked: result.executor?.invoked ?? false,
+  }),
+);
+`;
+
+function startChildRunner({
+  scriptPath,
+  runnerPath,
+  fixture,
+  allowedPath,
+  readyFile,
+  proceedFile,
+  resultFile,
+}) {
+  const child = spawn(
+    process.execPath,
+    [scriptPath, runnerPath, fixture.root, allowedPath, readyFile, proceedFile, resultFile],
+    { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+  );
+  let stderr = '';
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+  let exited = false;
+  const done = new Promise((resolve) => {
+    child.on('close', (code) => {
+      exited = true;
+      resolve({ code, stderr });
+    });
+    child.on('error', (error) => {
+      exited = true;
+      resolve({ code: null, stderr: `${stderr}${String(error)}` });
+    });
+  });
+  return { done, didExit: () => exited };
+}
+
+function describeChildReport(resultFile) {
+  if (!existsSync(resultFile)) return `${resultFile}: <missing>`;
+  try {
+    return `${resultFile}: ${readFileSync(resultFile, 'utf8')}`;
+  } catch (error) {
+    return `${resultFile}: <unreadable: ${String(error)}>`;
+  }
+}
+
+async function waitForChildrenReady(children, paths, resultFiles, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (!paths.every((filePath) => existsSync(filePath))) {
+    if (children.some((child) => child.didExit())) {
+      throw new Error(
+        `a child exited before signaling readiness: ${resultFiles.map(describeChildReport).join(' | ')}`,
+      );
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `timed out waiting for ${paths.join(', ')}; ` +
+          resultFiles.map(describeChildReport).join(' | '),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+test('C6 — two independent invocations on one baseline survive caller-side movement in real processes', async () => {
+  const fixture = buildFixture();
+  const scratch = mkdtempSync(join(tmpdir(), 'greenhub-run-once-two-process-'));
+  try {
+    const runnerPath = fileURLToPath(new URL('./run-once.mjs', import.meta.url));
+    const scriptPath = join(scratch, 'child-runner.mjs');
+    writeFileSync(scriptPath, CHILD_RUNNER_SOURCE);
+
+    const readyA = join(scratch, 'ready-a');
+    const readyB = join(scratch, 'ready-b');
+    const proceedA = join(scratch, 'proceed-a');
+    const proceedB = join(scratch, 'proceed-b');
+    const resultA = join(scratch, 'result-a.json');
+    const resultB = join(scratch, 'result-b.json');
+
+    const first = startChildRunner({
+      scriptPath,
+      runnerPath,
+      fixture,
+      allowedPath: 'src/a.txt',
+      readyFile: readyA,
+      proceedFile: proceedA,
+      resultFile: resultA,
+    });
+    const second = startChildRunner({
+      scriptPath,
+      runnerPath,
+      fixture,
+      allowedPath: 'src/b.txt',
+      readyFile: readyB,
+      proceedFile: proceedB,
+      resultFile: resultB,
+    });
+
+    // Both real subprocesses are alive and past baseline observation.
+    await waitForChildrenReady([first, second], [readyA, readyB], [resultA, resultB], 60000);
+
+    // Unrelated concurrent caller-side movement while both tasks are running.
+    git(fixture.root, ['checkout', '-b', 'foreign-movement']);
+    git(fixture.root, ['commit', '--allow-empty', '-m', 'foreign movement']);
+    writeFileSync(join(fixture.root, 'foreign-untracked.txt'), 'foreign\n');
+    writeFileSync(proceedA, '');
+    writeFileSync(proceedB, '');
+
+    const [exitA, exitB] = await Promise.all([first.done, second.done]);
+    assert.equal(exitA.code, 0, exitA.stderr);
+    assert.equal(exitB.code, 0, exitB.stderr);
+
+    const a = JSON.parse(readFileSync(resultA, 'utf8'));
+    const b = JSON.parse(readFileSync(resultB, 'utf8'));
+    assert.equal(a.status, SUCCESS, a.reason);
+    assert.equal(b.status, SUCCESS, b.reason);
+    assert.equal(a.executorInvoked, true);
+    assert.equal(b.executorInvoked, true);
+    assert.equal(a.canonicalCheckout.unchanged, false);
+    assert.equal(b.canonicalCheckout.unchanged, false);
+    assert.equal(a.baselineMovement, 'UNCHANGED');
+    assert.equal(b.baselineMovement, 'UNCHANGED');
+    assert.deepEqual(a.changedPaths, ['src/a.txt']);
+    assert.deepEqual(b.changedPaths, ['src/b.txt']);
+
+    // The foreign caller-side state is preserved exactly and owned by no task.
+    assert.equal(git(fixture.root, ['branch', '--show-current']), 'foreign-movement');
+    assert.equal(readFileSync(join(fixture.root, 'foreign-untracked.txt'), 'utf8'), 'foreign\n');
+  } finally {
+    removeFixture(fixture);
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });

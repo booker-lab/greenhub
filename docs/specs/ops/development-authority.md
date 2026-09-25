@@ -29,6 +29,7 @@ material하게 필요한 경우에만 `SEMANTIC OWNER`, `LOCAL UNKNOWN`, `PUBLIC
 - read-only 조사와 서로 독립적인 mutation은 실제 mutable surface가 분리되어 있을 때 병렬 수행할 수 있다.
 - 사용자나 다른 작업의 dirty/untracked/ignored/recovery state를 reset, restore, stash, clean, stage, commit, delete하지 않는다.
 - task-local topology를 다음 task의 authority로 자동 승계하지 않는다.
+- canonical checkout은 source locator, remote locator, operator entrypoint다. invocation의 correctness authority가 아니다. 다른 프로세스가 그 checkout의 branch, HEAD, index, tracked/untracked file을 이동시킨 사실은 diagnostic일 뿐이며 독립 invocation을 실패시키지 않는다. correctness는 fresh live main, exact pinned baseline Git object, task-owned disposable workspace, Git으로 관찰한 owned mutation surface, proof/publication evidence로만 판정한다. 단 task-owned workspace 자체의 foreign mutation과 실제 semantic/mutation surface overlap은 계속 fail closed한다.
 - 필요할 때 task context에만 다음 transient evidence를 둔다.
 
 ```text

@@ -12,6 +12,15 @@
 // checkout switching, and reset/restore/stash/clean of foreign state. See the
 // module contract in AGENTS.md and docs/specs/ops/development-authority.md.
 //
+// Caller/canonical checkout authority: the checkout named by `--repo` is a
+// source locator, remote locator, and operator entrypoint only. Its before/after
+// branch, HEAD, and porcelain state are captured as diagnostics; unrelated
+// concurrent movement of that checkout (branch, HEAD, index, tracked or
+// untracked files) never fails this task, and an unobservable checkout state is
+// diagnostic too. Correctness is decided by the fresh live remote main, the
+// exact pinned baseline objects, the task-owned disposable workspace, the
+// Git-observed mutation boundary, and proof results.
+//
 // Optional in-process handoff: `runOnce(options, { successFinalizer })` calls
 // the caller-owned finalizer exactly once, only after a Git-verified SUCCESS,
 // while the task-owned workspace is still alive. The local-only CLI never
@@ -672,6 +681,7 @@ function createResult(options = {}) {
       before: null,
       after: null,
       unchanged: null,
+      observationError: null,
     },
     successHandoff: null,
   };
@@ -817,7 +827,10 @@ export function runOnce(options, deps = {}) {
       head: canonicalBeforeState.head,
     };
   } catch (error) {
-    fail(BASELINE_OBSERVATION_FAILED, `canonical checkout observation failed: ${messageOf(error)}`);
+    // Diagnostic only: the caller checkout is not task authority, so a foreign
+    // process holding it in an unobservable state must not fail this task.
+    result.canonicalCheckout.observationError = messageOf(error);
+    log(`[run-once] canonical checkout observation failed (diagnostic only): ${messageOf(error)}`);
   }
 
   if (status === null) {
@@ -1019,14 +1032,12 @@ export function runOnce(options, deps = {}) {
     result.canonicalCheckout.unchanged =
       canonicalBeforeState === null ? null : isCheckoutUnchanged(canonicalBeforeState, after);
   } catch (error) {
-    result.canonicalCheckout.unchanged = null;
-    log(`[run-once] canonical checkout re-observation failed: ${messageOf(error)}`);
-  }
-  if (
-    result.canonicalCheckout.unchanged === false &&
-    (status === null || status === SUCCESS || status === ALREADY_SATISFIED)
-  ) {
-    fail(EXECUTOR_FAILED, 'canonical checkout state changed during the run');
+    // Diagnostic only: re-observation failure never downgrades a Git-verified
+    // task result.
+    result.canonicalCheckout.observationError = messageOf(error);
+    log(
+      `[run-once] canonical checkout re-observation failed (diagnostic only): ${messageOf(error)}`,
+    );
   }
 
   if (status === SUCCESS && typeof successFinalizer === 'function') {
