@@ -2,11 +2,12 @@
 
 # Settlements API / Domain Spec
 
-> **최종 정합화**: 2026-09-25
+> **최종 정합화**: 2026-09-26
 > **상태**: Current
 > **타입·라벨 SSOT**: `packages/shared/src/settlement.types.ts`
 > **Seller API 정본**: `apps/api/src/settlements/**`
 > **Admin 지급 처리 정본**: `apps/api/src/admin/**`
+> **Admin privileged mutation direct proof**: `apps/api/src/admin/admin-privileged-mutation.spec.ts`
 
 ## 1. 범위
 
@@ -222,7 +223,7 @@ GET /stores/:storeId/settlements/summary?date=<date>
 
 admin controller 전체에는 `JwtAuthGuard + RolesGuard + @Roles('admin')` 구현이 적용된다.
 
-2026-08-24 감사 기준 이 privileged mutation server boundary의 직접 거부 회귀는 충분하지 않아 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` P0 `COVERAGE GAP`으로 추적한다. UI redirect를 서버 authorization 전체의 직접 증거로 사용하지 않는다.
+`apps/api/src/admin/admin-privileged-mutation.spec.ts`가 실제 `AdminController` + `JwtAuthGuard` + `RolesGuard` + `JwtStrategy` HTTP 경계를 구동해 10개 privileged mutation에 대해 unauthenticated 401, consumer/seller/driver 403, invalid role의 side-effect 0, admin 정상 요청의 service boundary 도달을 직접 고정한다. `markAsPaid`는 같은 spec에서 missing 및 `pending|cancelled|paid` 거부, `confirmed → paid` 전이와 `paidAt`/`updatedAt` 기록, 동시 지급 race의 단일 수렴까지 직접 assertion한다. 따라서 이 direct proof 범위에서는 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`의 서버 authorization + 지급 상태 전이 항목이 닫혔다.
 
 ### 목록
 
@@ -248,21 +249,18 @@ PATCH /admin/settlements/:settlementId/pay
 
 즉 코드상 `pending → paid` 직접 전환은 허용하지 않는다.
 
-### 검증 상태 — `IMPLEMENTED / UNVERIFIED` + P0 `COVERAGE GAP`
+### 검증 상태 — `IMPLEMENTATION_PROVEN`
 
-이번 감사에서 `apps/api/src/admin`에 전용 service/controller spec을 확인하지 못했고, seller settlements Playwright는 UI 날짜·탭 smoke 중심이다. 따라서 위 금전 상태 전이 구현을 `VERIFIED`로 승격하지 않는다.
+위 금전 상태 전이 구현은 `apps/api/src/admin/admin-privileged-mutation.spec.ts`의 `AdminService.markAsPaid 상태 계약` suite가 실제 `AdminService`를 구동해 직접 회귀한다.
 
-`ADMIN-PRIVILEGED-MUTATION-COVERAGE` 완료 시 최소 다음을 직접 고정한다.
+직접 proof가 고정하는 계약:
 
-- missing settlement 거부
-- `pending|cancelled|paid` 거부
-- `confirmed → paid` 정상 성공
-- transaction에서 fresh status 재확인
-- 동시 지급 요청이 한 번만 안정적으로 수렴
-- invalid state/invalid role side effect 0
-- 실제 controller guard + service 조합에서 admin만 mutation에 도달
+- missing settlement 거부와 transaction write 0
+- `pending|cancelled|paid` 거부와 transaction write 0
+- `confirmed → paid` 정상 성공, transaction fresh read, `paidAt`·`updatedAt` 기록
+- 동시 지급 요청이 fresh status 기준으로 한 번만 수렴
 
-증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
+증거: `apps/api/src/admin/admin-privileged-mutation.spec.ts`, `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
 `SETTLEMENT-LIFECYCLE-COVERAGE`와 역할을 구분한다. core P0는 생성·confirm·cancel lifecycle을 소유하고, admin P0는 admin role boundary와 `confirmed → paid` 지급 mutation을 소유한다.
 
@@ -297,7 +295,7 @@ seller/admin UI는 공통 `SettlementStatus`, `STATUS_LABEL`, `STATUS_COLOR`를 
 - 배송사진 완료 → `DELIVERED` 회차 전환 자체와 정산 생성의 회차 E2E assertion
 - `paid` settlement 이후 환불은 별도 회계 정책을 따름
 - admin 강제 환불도 `ADMIN-FORCE-REFUND-CONSISTENCY` 해결 후 같은 회계 불변식에 수렴
-- admin 지급은 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` 해결 후 direct status/race 증거를 포함
+- admin 지급은 `admin-privileged-mutation.spec.ts` direct status/race 증거로 서버 boundary와 지급 전이가 고정됨
 
 출시 상태 자체는 `docs/memory.md`와 활성 출시 PLAN을 따른다.
 
@@ -329,6 +327,7 @@ admin 지급 상태 전이는 코드의 transaction 존재만으로 `VERIFIED` �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-26 | admin privileged mutation authorization과 `markAsPaid` 지급 전이가 `admin-privileged-mutation.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`임을 §9·§12에 동기화 |
 | 2026-09-25 | core lifecycle이 `settlements-lifecycle.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`임을 §7·§12에 동기화 |
 | 2026-08-24 | settlement 생성·confirm·cancel core lifecycle의 직접 상태/race assertion 부재를 `SETTLEMENT-LIFECYCLE-COVERAGE` P0 `IMPLEMENTED / UNVERIFIED`로 분리 |
 | 2026-08-24 | admin `confirmed → paid` 구현과 직접 검증 증거를 분리해 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` P0 COVERAGE GAP에 연결 |
