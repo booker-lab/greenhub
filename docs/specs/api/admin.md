@@ -29,13 +29,16 @@ admin role을 어떤 운영 절차로 부여하는지는 계정 보안 정책이
 
 ### 검증 상태 — privileged mutation boundary
 
-위 class-level guard **구현은 존재**한다. 그러나 2026-08-24 감사에서 `apps/api/src/admin`에 controller/service 전용 `*.spec.ts`가 없고, 현재 확인한 API E2E도 admin mutation의 unauthenticated/non-admin 거부와 side-effect 0을 직접 고정하지 않는 것을 확인했다.
+위 class-level guard 구현이 존재한다. `apps/api/src/admin/admin-privileged-mutation.spec.ts`가 실제 `AdminController` + `JwtAuthGuard` + `RolesGuard` + `JwtStrategy`를 Nest HTTP 경계로 구동해 다음을 직접 고정한다.
 
-현재 Playwright admin 테스트는 비로그인 admin UI redirect와 admin 화면 read smoke 중심이며 운영 DB 보호를 위해 archive/restore 같은 mutation을 실제 수행하지 않는다. 이 UI 증거를 NestJS admin API role boundary 전체의 직접 검증으로 확장하지 않는다.
+- 10개 privileged mutation(`refund`, `pay`, `approveDriver`, `suspendDriver`, `setCommission`, `archiveStore`, `restoreStore`, `suspendUser`, `generateInvite`, `upsertBanner`)에 대한 unauthenticated 401
+- consumer/seller/driver 요청의 403
+- invalid role에서 service 호출·payment/settlement/round lifecycle·Firestore write side-effect 0
+- admin 정상 요청이 controller service boundary까지 도달
 
-따라서 고위험 admin mutation authorization은 **`IMPLEMENTED / UNVERIFIED` + P0 `COVERAGE GAP`**으로 둔다.
+따라서 고위험 admin mutation authorization은 **`IMPLEMENTATION_PROVEN`**이다. 이 proof는 class-level guard를 우회하지 않고 실제 guard/service 조합을 통과한 HTTP 경계를 고정하므로, admin API role boundary를 read smoke/UI redirect로 판단하지 않는다.
 
-추적: `docs/BACKLOG.md`의 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
+추적: `docs/BACKLOG.md`의 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`; 직접 증거: `apps/api/src/admin/admin-privileged-mutation.spec.ts`. `ADMIN-FORCE-REFUND-CONSISTENCY`의 lifecycle 일관성 결함은 이 authorization proof와 별개다.
 
 ## 2. 접근 URL
 
@@ -140,14 +143,29 @@ GET /admin/orders?storeId=<storeId>&status=<OrderStatus>
 POST /admin/orders/:orderId/refund
 ```
 
-`AdminService.forceRefund()`의 현재 실제 흐름:
+`AdminService.forceRefund()`는 현재 두 경로로 분기한다.
 
-1. 주문 존재 확인
-2. `status === CANCELLED`만 거부
-3. `PaymentsService.processRefundByOrderId()`로 **본 결제** 환불 시도
-4. 주문 문서를 직접 `status: CANCELLED`, `cancelReason`으로 갱신
+- `schemaVersion === 2 && roundId`인 회차 주문은 `RoundOrderLifecycleService.cancelForRound({ storeId, orderId, expectedStatus, reason })`로 위임한 뒤 `SettlementsService.cancelSettlement(orderId)`를 호출한다.
+- 그 외 legacy 주문은 아래 `forceLegacyRefund` claim/orchestration 경로를 사용한다.
 
-본 결제 provider 환불 자체의 claim/idempotency는 `PaymentRefundService`가 보호한다. 그러나 이 endpoint를 **정상 주문 취소 lifecycle과 동일한 원자적 취소 계약**으로 해석하면 안 된다.
+legacy 경로 `forceLegacyRefund()`의 현재 실제 흐름:
+
+1. `claimLegacyRefund()`가 주문을 transaction에서 fresh read하고, 환불 허용 상태(`isLegacyRefundableStatus` + cancellation retry/missing 상태)만 `cancellation.status: REFUNDING` + 만료 claim으로 선점한다.
+2. 이미 `CANCELLED + cancellation COMPLETED`면 `done`으로 수렴하고 `SettlementsService.cancelSettlement(orderId)`를 호출한다.
+3. 유효한 진행 중 claim이 있으면 `in_progress`로 conflict 처리하고 provider를 호출하지 않는다.
+4. claim을 획득한 경우에만 `PaymentsService.processRefundByOrderId()`로 본 결제를 환불한다.
+5. `applyLegacyLocalCancellation()`이 claim token 검증 후 주문을 `CANCELLED`/`cancellation COMPLETED`로 확정하고 legacy capacity·group quantity를 반환한다. 이후 `SettlementsService.cancelSettlement(orderId)`를 호출한다.
+6. provider 실패는 `REFUND_FAILED`, local 실패는 `LOCAL_FAILED`로 기록해 재시도를 보존하고 외부 환불을 반복하지 않는다.
+
+`claimLegacyRefund()`의 post-transaction decision은 committed attempt의 return value만 사용한다. aborted attempt의 `done`/`in_progress` 결정을 retried claim으로 누출하지 않는다.
+
+본 결제 provider 환불 자체의 claim/idempotency는 `PaymentRefundService`가 보호한다. `AdminService.forceRefund()`와 `RoundOrderLifecycleService.cancelForRound()`의 단일 orchestration 경계, reservation/counter 반환, paid 재배송비 환불, `paid` settlement 회계 처리는 아래 `ADMIN-FORCE-REFUND-CONSISTENCY`가 계속 소유한다.
+
+### Retry purity와 회차 취소 proof
+
+legacy claim의 committed-return retry purity는 `apps/api/src/admin/admin-legacy-refund-occ-retry.spec.ts`가 직접 회귀한다. 회차 정상 취소 경로(`RoundOrderLifecycleService.cancelForRound` / `claimCancellation` / `applyLocalCancellation`)의 OCC retry purity는 `apps/api/src/orders/round-cancellation-occ-retry.spec.ts`가 aborted attempt가 committed retry를 오염시키지 않고 provider 환불이 정확히 한 번 수행되는 것을 직접 고정한다.
+
+이 proof는 회차/legacy 취소 transaction의 retry-purity 계약을 고정하는 것이며, `ADMIN-FORCE-REFUND-CONSISTENCY`의 전체 후속효과 수렴을 의미하지 않는다.
 
 ### 현재 구현 불일치 — `ADMIN-FORCE-REFUND-CONSISTENCY` P0
 
@@ -219,20 +237,21 @@ PATCH /admin/settlements/:settlementId/pay
 - transaction 안에서 status 재확인
 - `paidAt`, `updatedAt` 기록
 
-### 검증 상태 — `IMPLEMENTED / UNVERIFIED`
+### 검증 상태 — `IMPLEMENTATION_PROVEN`
 
-금전 상태 전이 구현은 있으나 이번 감사에서 `markAsPaid()`의 직접 service/API 회귀를 확인하지 못했다. seller settlement Playwright는 UI 날짜·탭 smoke 중심이며 admin 지급 mutation의 증거가 아니다.
+금전 상태 전이 구현은 `apps/api/src/admin/admin-privileged-mutation.spec.ts`의 `AdminService.markAsPaid 상태 계약` suite가 실제 `AdminService`를 구동해 직접 회귀한다.
 
-다음이 직접 고정되기 전에는 지급 상태 전이를 `VERIFIED`로 승격하지 않는다.
+직접 proof가 고정하는 계약:
 
 - settlement 없음 거부
 - `pending|cancelled|paid` 거부
-- `confirmed → paid` 정상 성공
-- transaction 재조회와 동시 요청에서 한 번만 수렴
+- `confirmed → paid` 정상 성공과 `paidAt`·`updatedAt` 기록
+- transaction에서 fresh status 재확인
+- 동시 요청에서 한 번만 수렴
 - invalid state/invalid role side effect 0
 - 실제 controller guard + service 조합에서 admin만 도달
 
-이 공백은 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` P0가 소유한다. 상세 정산 상태 계약은 `docs/specs/api/settlements.md`가 정본이다.
+이 공백은 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`가 소유한다. 상세 정산 상태 계약은 `docs/specs/api/settlements.md`가 정본이다.
 
 ## 7. Driver 관리
 
@@ -363,8 +382,8 @@ Storage write/read 권한은 현재 `storage.rules`를 정본으로 확인한다
 - admin 주문 목록: 최대 200건, pagination 없음
 - admin 정산 목록: 최대 500건, pagination 없음
 - driver 목록: 최대 100건 read 후 메모리 필터
-- admin privileged mutation의 서버 authorization + side-effect 0 직접 회귀는 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` 해결 전 `VERIFIED`가 아님
-- admin settlement 지급 전이는 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` 해결 전 `VERIFIED`가 아님
+- admin privileged mutation의 서버 authorization + side-effect 0은 `apps/api/src/admin/admin-privileged-mutation.spec.ts`로 `IMPLEMENTATION_PROVEN`
+- admin settlement 지급 전이는 `apps/api/src/admin/admin-privileged-mutation.spec.ts`로 `IMPLEMENTATION_PROVEN`
 - admin 강제 환불은 `ADMIN-FORCE-REFUND-CONSISTENCY` 해결 전 주문 취소 lifecycle과 동일한 P0 안전 계약으로 사용하지 않음
 - store 수수료 설정과 settlement 생성의 `PLATFORM_FEE_RATE` 관계는 단일 정책으로 완전히 통합돼 있지 않을 수 있으므로 변경 전 코드 재검증 필요
 - driver 관리자 승인 게이트는 `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION` 해결 전 `VERIFIED`가 아님
@@ -402,6 +421,7 @@ settlement 지급처럼 금전 상태를 변경하는 admin mutation은 정상·
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-26 | privileged mutation HTTP authorization과 `markAsPaid` 지급 전이를 `admin-privileged-mutation.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`에 동기화하고, 회차 취소 OCC retry purity를 `round-cancellation-occ-retry.spec.ts`에 연결 |
 | 2026-08-24 | admin privileged mutation 서버 authorization과 settlement 지급 상태 전이의 직접 회귀 부재를 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` P0로 분리 |
 | 2026-08-24 | 공개 email driver register/login 우회를 driver 승인 P0에 연결 |
 | 2026-08-24 | admin force refund가 정상 회차 취소의 재배송비·reservation/counter·settlement 후속효과를 우회하는 구조를 P0 IMPLEMENTATION FINDING으로 정합화 |
