@@ -30,6 +30,7 @@ import {
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
+import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -37,6 +38,7 @@ import {
   ALREADY_SATISFIED,
   BLOCKED_EXTERNAL,
   BUILD_CHILD_FAILED,
+  defaultInvokeBuild,
   FRONTIER_COMPLETE,
   HUMAN_DECISION_REQUIRED,
   INVALID_BUILD_REQUEST,
@@ -46,10 +48,10 @@ import {
   NIGHT_STATUSES,
   NO_EXECUTABLE_FRONTIER,
   NO_PROGRESS,
-  parseArgs,
-  parseBuildResultOutput,
   PROOF_FAILED,
   PUBLICATION_FAILED,
+  parseArgs,
+  parseBuildResultOutput,
   runNight,
   USER_STOPPED,
 } from './run-night.mjs';
@@ -187,43 +189,39 @@ function removeFixture(fixture, { removeTree = removeTreeRobust } = {}) {
 
 async function withFixture(body) {
   const fixture = buildFixture();
-  let bodyError = null;
+  let result;
+  const errors = [];
   try {
-    return await body(fixture);
+    result = await body(fixture);
   } catch (error) {
-    bodyError = error;
-    throw error;
-  } finally {
-    try {
-      removeFixture(fixture);
-    } catch (cleanupError) {
-      if (bodyError === null) throw cleanupError;
-      throw new Error(
-        `body failed: ${errorMessage(bodyError)}; fixture cleanup also failed: ${errorMessage(cleanupError)}`,
-      );
-    }
+    errors.push(error);
   }
+  try {
+    removeFixture(fixture);
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1)
+    throw new AggregateError(errors, '테스트와 fixture 저장소 정리가 실패했습니다');
+  return result;
 }
 
 async function withScratch(body) {
   const scratch = mkdtempSync(join(tmpdir(), 'greenhub-run-night-spec-scratch-'));
-  let bodyError = null;
+  let result;
+  const failures = [];
   try {
-    return await body(scratch);
+    result = await body(scratch);
   } catch (error) {
-    bodyError = error;
-    throw error;
-  } finally {
-    try {
-      const errors = cleanupFixturePaths([scratch]);
-      if (errors.length > 0) throw new Error(errors.join('; '));
-    } catch (cleanupError) {
-      if (bodyError === null) throw cleanupError;
-      throw new Error(
-        `body failed: ${errorMessage(bodyError)}; scratch cleanup also failed: ${errorMessage(cleanupError)}`,
-      );
-    }
+    failures.push(error);
   }
+  const errors = cleanupFixturePaths([scratch]);
+  if (errors.length > 0) failures.push(new Error(errors.join('; ')));
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, '테스트와 임시 디렉터리 정리가 실패했습니다');
+  return result;
 }
 
 const DEFAULT_REQUEST = [
@@ -572,6 +570,167 @@ test('N5 — proof/publication/invalid/unparseable terminals start no further cy
   assert.match(startFailure.failures[0].reason, /failed to start/);
 });
 
+test('H1/H2 — JSON 완료 뒤 실제 자식 종료 상태도 확인하고 비정상이면 계속하지 않는다', async () => {
+  const successHarness = createNightHarness({
+    mains: [shaFor(1), shaFor(2), shaFor(2), shaFor(3), shaFor(3), shaFor(4)],
+    buildCycle: (index) =>
+      index === 1
+        ? syntheticCycleResult({
+            status: FRONTIER_COMPLETE,
+            selected: { id: 'F1' },
+            admitted: ['F1'],
+            childCalls: 1,
+          })
+        : syntheticCycleResult({ status: ALREADY_SATISFIED }),
+  });
+  const success = await runHarness(successHarness);
+  assert.equal(success.status, ALREADY_SATISFIED);
+  assert.equal(successHarness.buildCalls.length, 2);
+
+  for (const terminal of [
+    { exitCode: 7, signal: null },
+    { exitCode: null, signal: 'SIGTERM' },
+  ]) {
+    const failureHarness = createNightHarness({
+      buildCycle: () =>
+        syntheticCycleResult({
+          status: FRONTIER_COMPLETE,
+          selected: { id: 'F1' },
+          admitted: ['F1'],
+          childCalls: 1,
+        }),
+    });
+    const invokeBuild = failureHarness.deps.invokeBuild;
+    failureHarness.deps.invokeBuild = async (input) => ({
+      ...(await invokeBuild(input)),
+      ...terminal,
+    });
+    const result = await runHarness(failureHarness);
+    assert.equal(result.status, BUILD_CHILD_FAILED);
+    assert.equal(failureHarness.buildCalls.length, 1);
+    assert.deepEqual(result.completedFrontiers, []);
+    assert.match(result.failures[0].reason, /자식 프로세스가 비정상 종료되었습니다/);
+  }
+});
+
+test('H3 — 완성된 성공 JSON보다 실제 프로세스 종료를 기다린다', async () => {
+  const buildTerminal = JSON.stringify(
+    syntheticCycleResult({
+      status: FRONTIER_COMPLETE,
+      selected: { id: 'F1' },
+      admitted: ['F1'],
+      childCalls: 1,
+    }),
+  );
+  const source =
+    `process.stdout.write(${JSON.stringify(buildTerminal)}); ` +
+    'setTimeout(() => process.exit(7), 150);';
+  let stdoutObserved = false;
+  let settled = false;
+  const completion = defaultInvokeBuild({
+    buildScriptPath: '-e',
+    args: [source],
+    cwd: process.cwd(),
+    env: process.env,
+    requestText: 'MODE: BUILD\r\nunicode: 초록\r\n',
+    stderr: { write() {} },
+    spawnFn: (command, args, options) => {
+      const child = spawn(command, args, options);
+      child.stdout.once('data', () => {
+        stdoutObserved = true;
+      });
+      return child;
+    },
+  }).then((result) => {
+    settled = true;
+    return result;
+  });
+
+  await waitFor(() => stdoutObserved, { message: '자식 성공 JSON이 출력되지 않았습니다' });
+  assert.equal(settled, false);
+  const result = await completion;
+  assert.equal(result.exitCode, 7);
+  assert.equal(result.signal, null);
+  assert.equal(parseBuildResultOutput(result.stdout).ok, true);
+});
+
+test('H4/H5 — 요청 stdin의 동기·비동기 오류와 조기 닫힘을 자식 종료 뒤 회수한다', async () => {
+  for (const failureKind of ['동기', '비동기', '조기닫힘']) {
+    const child = new EventEmitter();
+    child.stdin = new PassThrough();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    if (failureKind === '동기') {
+      child.stdin.end = () => {
+        throw new Error('동기 pipe 오류');
+      };
+    } else if (failureKind === '조기닫힘') {
+      child.stdin.end = () => {
+        child.stdin.emit('close');
+      };
+    }
+
+    let settled = false;
+    const completion = defaultInvokeBuild({
+      buildScriptPath: 'fixture.mjs',
+      args: [],
+      cwd: process.cwd(),
+      env: {},
+      requestText: 'MODE: BUILD\r\n요청 ✓\r\n',
+      stderr: { write() {} },
+      spawnFn: () => child,
+    }).then((result) => {
+      settled = true;
+      return result;
+    });
+    if (failureKind === '비동기') {
+      child.stdin.emit('error', new Error('EPIPE'));
+    }
+    await new Promise((resolveNext) => setImmediate(resolveNext));
+    assert.equal(settled, false, failureKind);
+    child.emit('close', 1, null);
+    const result = await completion;
+    assert.equal(result.startErrorCode, 'STDIN_WRITE_FAILED', failureKind);
+    assert.equal(result.exitCode, 1, failureKind);
+    child.stdin.destroy();
+    child.stdout.destroy();
+    child.stderr.destroy();
+  }
+});
+
+test('H4 — 조기 종료한 synthetic child에 성공 JSON이 있어도 다음 cycle을 시작하지 않는다', {
+  timeout: 30000,
+}, async () => {
+  const requestText = 'x'.repeat(32 * 1024 * 1024);
+  const harness = createNightHarness({ requestText, buildCycle: CYCLE_COMPLETE });
+  let childInvocation = null;
+  harness.deps.invokeBuild = async (input) => {
+    harness.buildCalls.push(input);
+    const terminal = JSON.stringify(CYCLE_COMPLETE(1));
+    const source =
+      `process.stdout.write(${JSON.stringify(terminal)}); ` +
+      'setTimeout(() => process.exit(0), 100);';
+    childInvocation = await defaultInvokeBuild({
+      buildScriptPath: '-e',
+      args: [source],
+      cwd: input.cwd,
+      env: process.env,
+      requestText: input.requestText,
+      stderr: { write() {} },
+    });
+    return childInvocation;
+  };
+
+  const result = await runHarness(harness);
+  assert.equal(parseBuildResultOutput(childInvocation.stdout).ok, true);
+  assert.equal(childInvocation.exitCode, 0);
+  assert.equal(childInvocation.startErrorCode, 'STDIN_WRITE_FAILED');
+  assert.equal(result.status, BUILD_CHILD_FAILED);
+  assert.equal(harness.buildCalls.length, 1);
+  assert.equal(result.cycles.length, 1);
+  assert.deepEqual(result.completedFrontiers, []);
+});
+
 // ---------------------------------------------------------------------------
 // N6 — Ctrl+C between cycles
 // ---------------------------------------------------------------------------
@@ -906,13 +1065,24 @@ const FAKE_VISIBLE_OPENCODE_SOURCE = [
   '  fs.writeFileSync(path.join(dir, "mutation-without-attach"), "");',
   '  process.exit(4);',
   '}',
+  'process.on("SIGINT", () => fs.writeFileSync(path.join(dir, "mutation-sigint"), ""));',
+  'fs.writeFileSync(path.join(dir, "mutation-ready"), "");',
+  'const deadline = Date.now() + 60000;',
+  'const timer = setInterval(() => {',
+  '  if (!fs.existsSync(path.join(dir, "proceed"))) {',
+  '    if (Date.now() > deadline) process.exit(5);',
+  '    return;',
+  '  }',
+  '  clearInterval(timer);',
   'const writePath = process.env.GREENHUB_NIGHT_FAKE_WRITE;',
   'if (workspace !== null && writePath) {',
   '  const absolute = path.join(workspace, writePath);',
   '  fs.mkdirSync(path.dirname(absolute), { recursive: true });',
   "  fs.writeFileSync(absolute, 'delivered by the attached visible session\\n');",
   '}',
+  'fs.writeFileSync(path.join(dir, "mutation-done"), "");',
   'process.exit(0);',
+  '}, 25);',
   '',
 ].join('\n');
 
@@ -1094,8 +1264,8 @@ const WINDOWS_START_WRAPPER = [
   '$p = Start-Process -FilePath $NodePath -ArgumentList $ArgumentString -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile -PassThru',
   'if ($null -eq $p) { Set-Content -LiteralPath $ExitFile -Value -1; exit 1 }',
   'Set-Content -LiteralPath $PidFile -Value $p.Id',
-  '$p.WaitForExit()',
   '$handle = [NightProcessExit]::OpenProcess((0x00100000 -bor 0x1000), $false, $p.Id)',
+  '$p.WaitForExit()',
   'if ($handle -eq [IntPtr]::Zero) {',
   '  Set-Content -LiteralPath $ExitFile -Value -1',
   '} else {',
@@ -1418,6 +1588,55 @@ async function runRealNightProof({ maxCycles = 5, signals = 1 }) {
   });
 }
 
+test('H3 — Windows는 성공 JSON보다 실제 프로세스 종료 후의 exit code를 읽는다', {
+  skip: process.platform !== 'win32',
+  timeout: 30000,
+}, async () => {
+  await withScratch(async (scratch) => {
+    const probePath = join(scratch, 'windows-exit-probe.cjs');
+    const wrapperPath = join(scratch, 'windows-exit-wrapper.ps1');
+    const outFile = join(scratch, 'windows-exit-out.json');
+    const errFile = join(scratch, 'windows-exit-err.log');
+    const pidFile = join(scratch, 'windows-exit-pid.txt');
+    const exitFile = join(scratch, 'windows-exit-result.txt');
+    const extraEnvFile = join(scratch, 'windows-exit-env.json');
+    const terminal = JSON.stringify({ status: FRONTIER_COMPLETE });
+    writeFileSync(
+      probePath,
+      `process.stdout.write(${JSON.stringify(terminal)}); setTimeout(() => process.exit(37), 200);`,
+      'utf8',
+    );
+    writeFileSync(wrapperPath, WINDOWS_START_WRAPPER, 'utf8');
+    writeFileSync(extraEnvFile, '{}', 'utf8');
+
+    spawnPowerShell(wrapperPath, [
+      '-OutFile',
+      outFile,
+      '-ErrFile',
+      errFile,
+      '-PidFile',
+      pidFile,
+      '-ExitFile',
+      exitFile,
+      '-NodePath',
+      process.execPath,
+      '-ArgumentString',
+      quoteForStartProcess(probePath),
+      '-WorkingDirectory',
+      scratch,
+      '-PathValue',
+      process.env.PATH ?? '',
+      '-FakeDir',
+      scratch,
+      '-ExtraEnvFile',
+      extraEnvFile,
+    ]);
+
+    assert.equal(JSON.parse(readFileSync(outFile, 'utf8')).status, FRONTIER_COMPLETE);
+    assert.equal(Number.parseInt(readFileSync(exitFile, 'utf8').trim(), 10), 37);
+  });
+});
+
 test('N7 — real console Ctrl+C during an active BUILD: child finishes, no new cycle, USER_STOPPED', {
   timeout: 240000,
 }, async () => {
@@ -1430,7 +1649,7 @@ test('N8 — repeated Ctrl+C converges on one graceful stop instead of a hard ki
   await runRealNightProof({ maxCycles: 5, signals: 3 });
 });
 
-test('N13c — the real BUILD chain preserves VISIBLE_TUI and attaches the mutation child', {
+test('H8 — VISIBLE_TUI 중 Night Run Ctrl+C는 mutation child와 visible server를 보존한다', {
   timeout: 240000,
 }, async () => {
   await withScratch(async (scratch) => {
@@ -1454,13 +1673,22 @@ test('N13c — the real BUILD chain preserves VISIBLE_TUI and attaches the mutat
           maxCycles: 2,
           extraEnv: { [OPENCODE_ATTACH_URL_ENV]: tui.url },
         });
+        await waitFor(() => existsSync(join(fake.eventsDir, 'mutation-ready')), {
+          timeoutMs: 90000,
+          message: '연결된 가짜 mutation이 시작되지 않았습니다',
+        });
+        await night.sendStop();
+        assert.equal(await night.hasExited(), false);
+        writeFileSync(join(fake.eventsDir, 'proceed'), '');
         const exited = await night.waitForExit({ timeoutMs: 180000 });
-        assert.equal(
-          typeof exited.code,
-          'number',
-          `Night Run did not exit normally: ${JSON.stringify(exited)}`,
-        );
+        assert.equal(exited.code, 130, exited.stderr);
         const payload = JSON.parse(exited.stdout);
+        assert.equal(payload.status, USER_STOPPED);
+        assert.equal(payload.operatorStop.duringCycle, true);
+        assert.equal(payload.bound.cyclesStarted, 1);
+        assert.equal(payload.cycles.length, 1);
+        assert.equal(existsSync(join(fake.eventsDir, 'mutation-done')), true);
+        assert.equal(existsSync(join(fake.eventsDir, 'mutation-sigint')), false);
         const cycleDiagnostics = JSON.stringify({
           status: payload.status,
           stopReason: payload.stopReason,
@@ -1498,12 +1726,18 @@ test('N13c — the real BUILD chain preserves VISIBLE_TUI and attaches the mutat
         );
         assert.equal(existsSync(join(fake.eventsDir, 'mutation-without-attach')), false);
         assert.equal(
+          fake.readEvents('invoke-').filter((entry) => entry.attach === tui.url).length,
+          1,
+        );
+        assert.equal(
           tui.requests.some((request) => request.url.startsWith('/global/health')),
           true,
           'the visible preflight never reached the TUI-owned server',
         );
         assert.match(exited.stderr, /visible OpenCode TUI/);
+        assert.equal((await fetch(`${tui.url}/global/health`)).status, 200);
       } finally {
+        writeFileSync(join(fake.eventsDir, 'proceed'), '');
         night?.cleanup();
         fake.remove();
         await tui.close();
