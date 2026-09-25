@@ -8,7 +8,16 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -61,11 +70,51 @@ function messageOf(error) {
 }
 
 /**
+ * Windows-safe recursive removal. Git's object store contains read-only files,
+ * so the first attempt may fail with EPERM; clear the read-only bit and retry.
+ * A removal that still leaves the target behind throws instead of being
+ * silently treated as success.
+ */
+function removeTreeRobust(target) {
+  const remove = () =>
+    rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  try {
+    remove();
+  } catch {
+    const stack = [target];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      let stats = null;
+      try {
+        stats = lstatSync(current);
+      } catch {
+        continue;
+      }
+      try {
+        chmodSync(current, 0o700);
+      } catch {
+        // best-effort attribute clear; the retry below reports any real failure
+      }
+      if (stats.isDirectory()) {
+        let entries = [];
+        try {
+          entries = readdirSync(current);
+        } catch {
+          entries = [];
+        }
+        for (const entry of entries) stack.push(join(current, entry));
+      }
+    }
+    remove();
+  }
+}
+
+/**
  * The test/helper that created a fixture owns its lifetime. Every owned
  * directory is attempted exactly once; a removal failure is surfaced instead of
  * being swallowed or silently skipping the remaining targets.
  */
-function removeOwnedDirs({ dirs, rm = rmSync, label = 'fixture' }) {
+function removeOwnedDirs({ dirs, rm = removeTreeRobust, label = 'fixture' }) {
   const errors = [];
   for (const dir of dirs) {
     try {
@@ -79,11 +128,7 @@ function removeOwnedDirs({ dirs, rm = rmSync, label = 'fixture' }) {
   }
 }
 
-function listBuildFixtureDirs() {
-  return readdirSync(tmpdir())
-    .filter((name) => name.startsWith('greenhub-run-build-spec-'))
-    .sort();
-}
+
 
 /** Canonical checkout + real bare remote with a clean live `main`. */
 function buildFixture({ failAfterInit = false } = {}) {
@@ -136,10 +181,18 @@ function buildFixture({ failAfterInit = false } = {}) {
     } catch {
       // setup cleanup is best-effort; the removal below still runs
     }
+    let cleanupFailure = null;
     try {
       removeOwnedDirs({ dirs: [root, bare, requestDir], label: 'fixture setup' });
     } catch (cleanupError) {
-      throw new Error(`${messageOf(error)}; ${messageOf(cleanupError)}`);
+      cleanupFailure = cleanupError;
+    }
+    if (error instanceof Error) {
+      error.fixturePaths = [root, bare, requestDir];
+      if (cleanupFailure !== null) error.fixtureCleanupErrors = [messageOf(cleanupFailure)];
+    }
+    if (cleanupFailure !== null) {
+      throw new Error(`${messageOf(error)}; ${messageOf(cleanupFailure)}`);
     }
     throw error;
   }
@@ -170,7 +223,7 @@ function pushCommitToLiveMain(fixture, { path, content, message = 'live main mov
     git(clone, ['push', '--quiet', 'origin', 'main']);
     return git(clone, ['rev-parse', 'HEAD']);
   } finally {
-    rmSync(clone, { recursive: true, force: true });
+    removeTreeRobust(clone);
   }
 }
 
@@ -225,10 +278,22 @@ function childCallCount(fake) {
   return fake.calls.runOnce.length + fake.calls.runPublishOnce.length;
 }
 
-function listSelectorWorkspaceDirs() {
-  return readdirSync(tmpdir())
-    .filter((name) => name.startsWith('greenhub-run-build-selector-'))
-    .sort();
+/**
+ * Attribution-safe selector cleanup proof: the workspace directory this
+ * invocation handed to OpenCode (and its task-owned temp root) must be gone.
+ * A global tempdir listing is not used because a concurrent foreign spec run
+ * can create same-prefix directories in the shared OS tempdir.
+ */
+function assertSelectorWorkspaceRemoved(selector) {
+  const dirIndex = selector.calls[0].args.indexOf('--dir');
+  assert.ok(dirIndex >= 0, 'selector invocation must carry --dir');
+  const workspacePath = selector.calls[0].args[dirIndex + 1];
+  assert.equal(existsSync(workspacePath), false, `selector workspace still exists: ${workspacePath}`);
+  assert.equal(
+    existsSync(dirname(workspacePath)),
+    false,
+    `selector temp root still exists: ${dirname(workspacePath)}`,
+  );
 }
 
 function criterion({ id, path, statement = `criterion ${id}`, command = null }) {
@@ -481,6 +546,7 @@ test('CASE A — one natural-language request yields one validated ephemeral Goa
     assert.equal(selector.calls.length, 1);
     assert.equal(result.selector.status, 'DECISION');
     assert.equal(result.selector.workspaceCleanup, 'REMOVED');
+    assertSelectorWorkspaceRemoved(selector);
     // The generated Goal Contract is validated, ephemeral, and never a file.
     assert.equal(result.goal.frontierId, 'F1');
     assert.equal(result.goal.raw.CRITERIA.length, 1);
@@ -495,7 +561,6 @@ test('CASE A — one natural-language request yields one validated ephemeral Goa
     assert.deepEqual(fake.calls.runPublishOnce[0].proofCommands, ['node proof-feature.cjs']);
     assert.deepEqual(fake.calls.runPublishOnce[0].allowedPaths, ['docs/feature.md']);
     assert.equal(fake.calls.runPublishOnce[0].commitMessage, 'feat(agent): T1');
-    assert.equal(listSelectorWorkspaceDirs().length, 0);
   } finally {
     removeFixture(fixture);
   }
@@ -1398,7 +1463,7 @@ test('CASE S1 — a selector workspace mutation rejects the whole decision', () 
         }),
       },
     });
-    const { result, fake } = runBuildOn(fixture, {
+    const { result, selector, fake } = runBuildOn(fixture, {
       decision,
       selectorOptions: {
         onInvoke: (input) => {
@@ -1411,7 +1476,7 @@ test('CASE S1 — a selector workspace mutation rejects the whole decision', () 
     assert.match(result.reason, /MUTATION_REJECTED|mutation observed/);
     assert.equal(childCallCount(fake), 0);
     assert.equal(result.selector.workspaceCleanup, 'REMOVED');
-    assert.equal(listSelectorWorkspaceDirs().length, 0);
+    assertSelectorWorkspaceRemoved(selector);
   } finally {
     removeFixture(fixture);
   }
@@ -2640,19 +2705,21 @@ test('CASE CLI2 — main() rejects an invalid argument surface without any invoc
 // L. temporary fixture lifetime ownership
 // ---------------------------------------------------------------------------
 
-test('CASE L1 — a fixture lifetime leaves no temp residue', () => {
-  const before = listBuildFixtureDirs();
+test('CASE L1 — a fixture lifetime removes exactly its own temp dirs', () => {
   const fixture = buildFixture();
   try {
-    assert.equal(listBuildFixtureDirs().length, before.length + 3);
+    assert.ok(existsSync(fixture.root));
+    assert.ok(existsSync(fixture.bare));
+    assert.ok(existsSync(fixture.requestDir));
   } finally {
     removeFixture(fixture);
   }
-  assert.deepEqual(listBuildFixtureDirs(), before);
+  assert.equal(existsSync(fixture.root), false);
+  assert.equal(existsSync(fixture.bare), false);
+  assert.equal(existsSync(fixture.requestDir), false);
 });
 
 test('CASE L2 — the assertion-failure path removes the fixture', () => {
-  const before = listBuildFixtureDirs();
   let fixture = null;
   assert.throws(() => {
     fixture = buildFixture();
@@ -2665,17 +2732,26 @@ test('CASE L2 — the assertion-failure path removes the fixture', () => {
   assert.equal(existsSync(fixture.root), false);
   assert.equal(existsSync(fixture.bare), false);
   assert.equal(existsSync(fixture.requestDir), false);
-  assert.deepEqual(listBuildFixtureDirs(), before);
 });
 
 test('CASE L3 — a fixture setup failure does not leak its temp dirs', () => {
-  const before = listBuildFixtureDirs();
-  assert.throws(() => buildFixture({ failAfterInit: true }), /injected fixture setup failure/);
-  assert.deepEqual(listBuildFixtureDirs(), before);
+  let captured = null;
+  try {
+    buildFixture({ failAfterInit: true });
+  } catch (error) {
+    captured = error;
+  }
+  assert.ok(captured instanceof Error);
+  assert.match(captured.message, /injected fixture setup failure/);
+  assert.ok(Array.isArray(captured.fixturePaths));
+  assert.deepEqual(
+    captured.fixturePaths.filter((target) => existsSync(target)),
+    [],
+  );
+  assert.equal(captured.fixtureCleanupErrors, undefined);
 });
 
 test('CASE L4 — a fixture cleanup failure is surfaced, not silent', () => {
-  const before = listBuildFixtureDirs();
   const fixture = buildFixture();
   assert.throws(
     () =>
@@ -2688,10 +2764,10 @@ test('CASE L4 — a fixture cleanup failure is surfaced, not silent', () => {
     /fixture cleanup failed: .*injected removal failure/,
   );
   // Every healthy target was still attempted and removed; only the failing one
-  // remains, and the test that owns it removes it before asserting.
+  // remains, and the test that owns it removes it before finishing.
   assert.equal(existsSync(fixture.root), false);
   assert.equal(existsSync(fixture.requestDir), false);
   assert.equal(existsSync(fixture.bare), true);
-  rmSync(fixture.bare, { recursive: true, force: true });
-  assert.deepEqual(listBuildFixtureDirs(), before);
+  removeTreeRobust(fixture.bare);
+  assert.equal(existsSync(fixture.bare), false);
 });
