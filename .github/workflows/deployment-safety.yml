@@ -32,3 +32,5 @@ jobs:
         run: node --test scripts/agent/run-goal.spec.mjs
       - name: Verify natural-language BUILD front door safety
         run: node --test scripts/agent/run-build.spec.mjs
+      - name: Verify bounded foreground Night Run safety
+        run: node --test scripts/agent/run-night.spec.mjs
