@@ -188,3 +188,28 @@ BUILD request (MODE: BUILD + 자연어)
 - admission한 frontier들은 하나의 ephemeral Goal Contract로 합성되어 기존 run-goal의 bounded batch executor로 전달된다. 겹치는 frontier는 이번 batch에서 시작하지 않고 다음 live-main recomputation 대상으로 남으며, exclusion 때문에 실패로 기록되지 않는다.
 - batch가 settle되면 fresh live main을 다시 읽고 criterion을 재평가한다. 새 scheduler, queue, durable frontier registry, coordinator를 만들지 않는다.
 - 각 frontier는 기존 `run-publish-once` publication path와 freshness/rebind 계약을 그대로 사용한다.
+
+## 10. Foreground Night Run
+
+`RUN NIGHT`는 여러 BUILD cycle을 밤새 연속 실행하는 얇은 foreground wrapper이며 `scripts/agent/run-night.mjs`가 소유한다. 새 planner나 control plane이 아니라 기존 BUILD front door의 반복/lifetime 실행자다.
+
+```text
+RUN NIGHT
+→ fresh live main 관찰 (기록용)
+→ BUILD cycle 1 (run-build 자식 process 1회)
+→ cycle terminal 해석
+→ FRONTIER_COMPLETE + provable progress일 때만 다음 cycle
+→ finite max-cycles / max-minutes / operator stop / terminal
+→ deterministic summary 1회
+→ process exit
+```
+
+- Night Run은 product frontier를 선택하거나 semantic decision을 내리지 않는다. 각 cycle은 기존 `run-build`가 fresh live main에서 독립적으로 다시 판단한다. 이전 cycle의 selector decision, candidate, batch 결과를 다음 cycle authority로 넘기지 않는다.
+- `--max-cycles`는 필수 positive integer finite bound다. unattended 실행은 finite bound 없이 시작하지 않는다. `--max-minutes`는 cycle 사이에서만 검사하는 선택적 wall-clock bound다. scheduler, daemon, durable queue, watchdog, polling service를 만들지 않는다.
+- continuation은 `FRONTIER_COMPLETE`만이다. `ALREADY_SATISFIED`, `NO_EXECUTABLE_FRONTIER`, `HUMAN_DECISION_REQUIRED`, `BLOCKED_EXTERNAL`, `PROOF_FAILED`, `PUBLICATION_FAILED`, `INVALID_BUILD_REQUEST`, selector/planner failure, parse할 수 없는 child terminal, `--max-cycles`/`--max-minutes` 도달은 새 BUILD 없이 즉시 종료한다. 기존 BUILD status vocabulary를 그대로 매핑하며 Night 전용 status를 최소화한다.
+- progress guard: `FRONTIER_COMPLETE`인데 live main이 이동하지 않았거나 movement를 증명할 수 없거나, 동일한 `(start main, end main, frontier, batch, terminal)` fingerprint가 반복되면 fail closed한다. durable loop-state 없이 process-local 비교만 사용한다.
+- BUILD request는 process 시작 시 정확히 한 번 읽어 memory에 보관하고 모든 cycle에 동일하게 전달한다. durable coordination state로 저장하지 않는다.
+- 각 BUILD cycle은 별도 child process이며 parent와 다른 process group(detached, Windows에서는 자체 console 없음)에서 실행한다. 따라서 console Ctrl+C는 mutation/proof/publication critical section에 전달되지 않는다. parent는 child의 JSON terminal을 읽어 continue/stop만 판정하고 child stderr/live progress는 operator에게 relay한다.
+- operator stop: 첫 SIGINT/Ctrl+C는 process-local `STOP_REQUESTED`만 설정한다. cycle 사이면 새 BUILD 없이 즉시 summary를 출력하고, cycle 중이면 현재 BUILD가 자신의 bounded terminal에 도달한 뒤 새 cycle 없이 summary를 출력한다. 반복 SIGINT는 diagnostic만 출력하고 hard kill로 승격하지 않는다. Task Manager 종료, 콘솔 강제 닫기, reboot는 graceful stop 계약이 아니다.
+- summary는 status, stop reason, live main start/end, cycles, completed frontier, human/blocked/failure, operator stop, bound, task-owned residue를 deterministic JSON으로 출력한다. child stdout 전체를 복제하지 않고 필요한 structured evidence만 aggregate한다.
+- focused deterministic proof: `pnpm test:agent-night`.
