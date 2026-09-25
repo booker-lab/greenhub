@@ -8,10 +8,19 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import test from 'node:test';
+import test, { after, before } from 'node:test';
 
 import {
   ALREADY_SATISFIED,
@@ -39,6 +48,88 @@ import {
 } from './run-build.mjs';
 import { MAX_BATCH_CONCURRENCY } from './run-goal.mjs';
 
+// ---------------------------------------------------------------------------
+// Fixture lifetime ownership (development-authority section 7.1)
+// ---------------------------------------------------------------------------
+// Every temporary directory this spec creates is owned by the helper that
+// created it and is removed on the success, assertion-failure, and exception
+// paths. Removal verifies the result instead of assuming it, and a cleanup
+// failure is surfaced rather than swallowed. Pre-existing temp residue is never
+// wildcard-deleted: only recorded fixture paths are touched.
+
+const FIXTURE_DIR_PREFIXES = Object.freeze([
+  'greenhub-run-build-spec-',
+  'greenhub-run-build-spec-remote-',
+  'greenhub-run-build-spec-requests-',
+  'greenhub-run-build-clone-',
+  'greenhub-run-build-selector-',
+]);
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function listTempDirsByPrefix(prefixes) {
+  return readdirSync(tmpdir())
+    .filter((name) => prefixes.some((prefix) => name.startsWith(prefix)))
+    .sort();
+}
+
+/**
+ * Windows-safe recursive removal. Git's object store contains read-only files,
+ * so the first attempt may fail with EPERM; clear the read-only bit and retry.
+ * A removal that still leaves the target behind throws instead of being
+ * silently treated as success.
+ */
+function removeTreeRobust(target) {
+  const remove = () =>
+    rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  try {
+    remove();
+  } catch {
+    const stack = [target];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      let stats = null;
+      try {
+        stats = lstatSync(current);
+      } catch {
+        continue;
+      }
+      try {
+        chmodSync(current, 0o700);
+      } catch {
+        // best-effort attribute clear; the retry below reports any real failure
+      }
+      if (stats.isDirectory()) {
+        let entries = [];
+        try {
+          entries = readdirSync(current);
+        } catch {
+          entries = [];
+        }
+        for (const entry of entries) stack.push(join(current, entry));
+      }
+    }
+    remove();
+  }
+}
+
+/** Remove exactly the recorded fixture paths and report anything left behind. */
+function cleanupFixturePaths(paths, { removeTree = removeTreeRobust } = {}) {
+  const errors = [];
+  for (const target of paths) {
+    if (target == null) continue;
+    try {
+      removeTree(target);
+    } catch (error) {
+      errors.push(`removal failed for ${target}: ${errorMessage(error)}`);
+    }
+    if (existsSync(target)) errors.push(`fixture path still exists: ${target}`);
+  }
+  return errors;
+}
+
 function git(cwd, args) {
   return execFileSync('git', args, {
     cwd,
@@ -55,10 +146,11 @@ function initRepository(directory) {
 }
 
 /** Canonical checkout + real bare remote with a clean live `main`. */
-function buildFixture() {
+function buildFixture({ gitImpl = git } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'greenhub-run-build-spec-'));
   const bare = mkdtempSync(join(tmpdir(), 'greenhub-run-build-spec-remote-'));
   const requestDir = mkdtempSync(join(tmpdir(), 'greenhub-run-build-spec-requests-'));
+  const createdPaths = [root, bare, requestDir];
   try {
     git(bare, ['init', '--bare', '-b', 'main']);
     initRepository(root);
@@ -93,26 +185,64 @@ function buildFixture() {
       "const { existsSync } = require('node:fs');\nprocess.exit(existsSync('docs/three.md') ? 0 : 1);\n",
     );
     git(root, ['add', '-A']);
-    git(root, ['commit', '-m', 'base']);
+    gitImpl(root, ['commit', '-m', 'base']);
     const baseSha = git(root, ['rev-parse', 'HEAD']);
     git(root, ['remote', 'add', 'origin', bare]);
     git(root, ['push', '-u', 'origin', 'main']);
     return { root, bare, requestDir, baseSha };
   } catch (error) {
-    git(root, ['worktree', 'prune']);
+    try {
+      git(root, ['worktree', 'prune']);
+    } catch {
+      // the recorded paths below are the ownership boundary, not the prune
+    }
+    const cleanupErrors = cleanupFixturePaths(createdPaths);
+    if (error instanceof Error) {
+      error.fixturePaths = [...createdPaths];
+      if (cleanupErrors.length > 0) error.fixtureCleanupErrors = cleanupErrors;
+    }
     throw error;
   }
 }
 
-function removeFixture(fixture) {
+function removeFixture(fixture, { removeTree = removeTreeRobust } = {}) {
   try {
     git(fixture.root, ['worktree', 'prune']);
   } catch {
-    // fixture teardown is best-effort
+    // prune is best-effort; the recorded paths below are the ownership boundary
   }
-  rmSync(fixture.root, { recursive: true, force: true });
-  rmSync(fixture.bare, { recursive: true, force: true });
-  rmSync(fixture.requestDir, { recursive: true, force: true });
+  const errors = cleanupFixturePaths([fixture.root, fixture.bare, fixture.requestDir], {
+    removeTree,
+  });
+  if (errors.length > 0) {
+    throw new Error(`fixture cleanup failed: ${errors.join('; ')}`);
+  }
+}
+
+/**
+ * Fixture-scoped test body. The helper owns the fixture lifetime, so cleanup
+ * runs on the success, assertion-failure, and exception paths. When both the
+ * body and cleanup fail, both failures are reported instead of one masking the
+ * other.
+ */
+function withFixture(body) {
+  const fixture = buildFixture();
+  let bodyError = null;
+  try {
+    return body(fixture);
+  } catch (error) {
+    bodyError = error;
+    throw error;
+  } finally {
+    try {
+      removeFixture(fixture);
+    } catch (cleanupError) {
+      if (bodyError === null) throw cleanupError;
+      throw new Error(
+        `body failed: ${errorMessage(bodyError)}; fixture cleanup also failed: ${errorMessage(cleanupError)}`,
+      );
+    }
+  }
 }
 
 /** Simulated publication: pushes a commit to live main via a clone. */
@@ -131,7 +261,7 @@ function pushCommitToLiveMain(fixture, { path, content, message = 'live main mov
     git(clone, ['push', '--quiet', 'origin', 'main']);
     return git(clone, ['rev-parse', 'HEAD']);
   } finally {
-    rmSync(clone, { recursive: true, force: true });
+    removeTreeRobust(clone);
   }
 }
 
@@ -187,9 +317,34 @@ function childCallCount(fake) {
 }
 
 function listSelectorWorkspaceDirs() {
-  return readdirSync(tmpdir())
-    .filter((name) => name.startsWith('greenhub-run-build-selector-'))
-    .sort();
+  return listTempDirsByPrefix(['greenhub-run-build-selector-']);
+}
+
+// The suite owns only the residue it creates. Pre-existing temp dirs are
+// recorded, never deleted, and the suite fails if it leaves any new one behind.
+let fixtureTempDirsAtStart = [];
+let selectorWorkspaceDirsAtStart = [];
+
+before(() => {
+  fixtureTempDirsAtStart = listTempDirsByPrefix(FIXTURE_DIR_PREFIXES);
+  selectorWorkspaceDirsAtStart = listSelectorWorkspaceDirs();
+});
+
+after(() => {
+  const beforeSet = new Set(fixtureTempDirsAtStart);
+  const newResidue = listTempDirsByPrefix(FIXTURE_DIR_PREFIXES).filter(
+    (name) => !beforeSet.has(name),
+  );
+  assert.deepEqual(
+    newResidue,
+    [],
+    `new fixture residue must not remain after this suite: ${newResidue.join(', ')}`,
+  );
+});
+
+function selectorWorkspaceDirsCreatedDuringSuite() {
+  const beforeSet = new Set(selectorWorkspaceDirsAtStart);
+  return listSelectorWorkspaceDirs().filter((name) => !beforeSet.has(name));
 }
 
 function criterion({ id, path, statement = `criterion ${id}`, command = null }) {
@@ -456,7 +611,7 @@ test('CASE A — one natural-language request yields one validated ephemeral Goa
     assert.deepEqual(fake.calls.runPublishOnce[0].proofCommands, ['node proof-feature.cjs']);
     assert.deepEqual(fake.calls.runPublishOnce[0].allowedPaths, ['docs/feature.md']);
     assert.equal(fake.calls.runPublishOnce[0].commitMessage, 'feat(agent): T1');
-    assert.equal(listSelectorWorkspaceDirs().length, 0);
+    assert.deepEqual(selectorWorkspaceDirsCreatedDuringSuite(), []);
   } finally {
     removeFixture(fixture);
   }
@@ -1372,7 +1527,7 @@ test('CASE S1 — a selector workspace mutation rejects the whole decision', () 
     assert.match(result.reason, /MUTATION_REJECTED|mutation observed/);
     assert.equal(childCallCount(fake), 0);
     assert.equal(result.selector.workspaceCleanup, 'REMOVED');
-    assert.equal(listSelectorWorkspaceDirs().length, 0);
+    assert.deepEqual(selectorWorkspaceDirsCreatedDuringSuite(), []);
   } finally {
     removeFixture(fixture);
   }
@@ -2520,6 +2675,86 @@ test('CASE J — BUILD delegates execution to the imported run-goal loop unchang
     assert.equal(selector.calls.length, 1);
   } finally {
     removeFixture(fixture);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// F. fixture lifetime ownership
+// ---------------------------------------------------------------------------
+
+test('CASE F1 — a passing fixture body removes every owned directory', () => {
+  let recorded = null;
+  const value = withFixture((fixture) => {
+    recorded = [fixture.root, fixture.bare, fixture.requestDir];
+    assert.ok(recorded.every((target) => existsSync(target)));
+    return 'body-result';
+  });
+  assert.equal(value, 'body-result');
+  assert.deepEqual(
+    recorded.filter((target) => existsSync(target)),
+    [],
+  );
+});
+
+test('CASE F2 — an exception path still removes the fixture and rethrows the body error', () => {
+  let recorded = null;
+  const sentinel = new Error('simulated assertion failure');
+  assert.throws(
+    () =>
+      withFixture((fixture) => {
+        recorded = [fixture.root, fixture.bare, fixture.requestDir];
+        throw sentinel;
+      }),
+    (error) => error === sentinel,
+  );
+  assert.deepEqual(
+    recorded.filter((target) => existsSync(target)),
+    [],
+  );
+});
+
+test('CASE F3 — a fixture setup failure removes the directories it already created', () => {
+  const failingGit = (cwd, args) => {
+    if (args[0] === 'commit') throw new Error('simulated setup failure');
+    return git(cwd, args);
+  };
+  let captured = null;
+  try {
+    buildFixture({ gitImpl: failingGit });
+  } catch (error) {
+    captured = error;
+  }
+  assert.ok(captured instanceof Error);
+  assert.match(captured.message, /simulated setup failure/);
+  assert.ok(Array.isArray(captured.fixturePaths));
+  assert.deepEqual(
+    captured.fixturePaths.filter((target) => existsSync(target)),
+    [],
+  );
+  assert.equal(captured.fixtureCleanupErrors, undefined);
+});
+
+test('CASE F4 — a cleanup failure is surfaced instead of being treated as success', () => {
+  const fixture = buildFixture();
+  try {
+    assert.throws(
+      () => removeFixture(fixture, { removeTree: () => {} }),
+      /fixture cleanup failed: .*fixture path still exists/,
+    );
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE F5 — fixture removal touches only its own recorded paths', () => {
+  const foreign = mkdtempSync(join(tmpdir(), 'greenhub-run-build-spec-foreign-'));
+  const fixture = buildFixture();
+  try {
+    writeFileSync(join(foreign, 'marker.txt'), 'foreign state\n');
+    removeFixture(fixture);
+    assert.equal(existsSync(join(foreign, 'marker.txt')), true);
+  } finally {
+    removeTreeRobust(foreign);
   }
 });
 
