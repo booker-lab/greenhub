@@ -1317,30 +1317,50 @@ const invokeOpencode = ({ cwd }) => {
   };
 };
 
-const result = runOnce(
-  {
-    repositoryRoot,
-    remote: 'origin',
-    taskText:
-      'OUTCOME: write ' + allowedPath + '\\n' +
-      'PRESERVE: every other path\\n' +
-      'PROOF: none\\n' +
-      'ESCALATE ONLY IF: the boundary is unclear',
-    allowedPaths: [allowedPath],
-    proofCommands: [],
-  },
-  { invokeOpencode, log: () => {} },
-);
+const options = {
+  repositoryRoot,
+  remote: 'origin',
+  taskText:
+    'OUTCOME: write ' + allowedPath + '\\n' +
+    'PRESERVE: every other path\\n' +
+    'PROOF: none\\n' +
+    'ESCALATE ONLY IF: the boundary is unclear',
+  allowedPaths: [allowedPath],
+  proofCommands: [],
+};
+
+// Two independent invocations share one object store, so a transient
+// pre-invocation baseline race (for example a concurrent fetch writing
+// FETCH_HEAD) is retried exactly like run-goal's bounded start retry does in
+// production. The caller-side movement under test happens later, while both
+// invocations are running, and is never retried.
+let result = null;
+let attempts = 0;
+for (attempts = 1; attempts <= 5; attempts += 1) {
+  try {
+    result = runOnce(options, { invokeOpencode, log: () => {} });
+  } catch (error) {
+    result = {
+      status: 'EXECUTOR_THREW',
+      reason: String(error && error.stack ? error.stack : error),
+    };
+  }
+  const retryable =
+    result.status === 'BASELINE_OBSERVATION_FAILED' && result.executor?.invoked !== true;
+  if (!retryable) break;
+  sleep(100 * attempts);
+}
 
 writeFileSync(
   resultFile,
   JSON.stringify({
     status: result.status,
     reason: result.reason,
-    canonicalCheckout: result.canonicalCheckout,
-    baselineMovement: result.baselineMovement,
-    changedPaths: result.changedPaths,
-    executorInvoked: result.executor.invoked,
+    attempts,
+    canonicalCheckout: result.canonicalCheckout ?? null,
+    baselineMovement: result.baselineMovement ?? null,
+    changedPaths: result.changedPaths ?? [],
+    executorInvoked: result.executor?.invoked ?? false,
   }),
 );
 `;
@@ -1363,17 +1383,42 @@ function startChildRunner({
   child.stderr.on('data', (chunk) => {
     stderr += chunk;
   });
-  return new Promise((resolve) => {
-    child.on('close', (code) => resolve({ code, stderr }));
-    child.on('error', (error) => resolve({ code: null, stderr: `${stderr}${String(error)}` }));
+  let exited = false;
+  const done = new Promise((resolve) => {
+    child.on('close', (code) => {
+      exited = true;
+      resolve({ code, stderr });
+    });
+    child.on('error', (error) => {
+      exited = true;
+      resolve({ code: null, stderr: `${stderr}${String(error)}` });
+    });
   });
+  return { done, didExit: () => exited };
 }
 
-async function waitForFiles(paths, timeoutMs) {
+function describeChildReport(resultFile) {
+  if (!existsSync(resultFile)) return `${resultFile}: <missing>`;
+  try {
+    return `${resultFile}: ${readFileSync(resultFile, 'utf8')}`;
+  } catch (error) {
+    return `${resultFile}: <unreadable: ${String(error)}>`;
+  }
+}
+
+async function waitForChildrenReady(children, paths, resultFiles, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   while (!paths.every((filePath) => existsSync(filePath))) {
+    if (children.some((child) => child.didExit())) {
+      throw new Error(
+        `a child exited before signaling readiness: ${resultFiles.map(describeChildReport).join(' | ')}`,
+      );
+    }
     if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${paths.join(', ')}`);
+      throw new Error(
+        `timed out waiting for ${paths.join(', ')}; ` +
+          resultFiles.map(describeChildReport).join(' | '),
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -1414,7 +1459,7 @@ test('C6 — two independent invocations on one baseline survive caller-side mov
     });
 
     // Both real subprocesses are alive and past baseline observation.
-    await waitForFiles([readyA, readyB], 120000);
+    await waitForChildrenReady([first, second], [readyA, readyB], [resultA, resultB], 60000);
 
     // Unrelated concurrent caller-side movement while both tasks are running.
     git(fixture.root, ['checkout', '-b', 'foreign-movement']);
@@ -1423,7 +1468,7 @@ test('C6 — two independent invocations on one baseline survive caller-side mov
     writeFileSync(proceedA, '');
     writeFileSync(proceedB, '');
 
-    const [exitA, exitB] = await Promise.all([first, second]);
+    const [exitA, exitB] = await Promise.all([first.done, second.done]);
     assert.equal(exitA.code, 0, exitA.stderr);
     assert.equal(exitB.code, 0, exitB.stderr);
 
