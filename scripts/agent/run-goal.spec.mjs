@@ -61,8 +61,39 @@ function initRepository(directory) {
   git(directory, ['config', 'commit.gpgsign', 'false']);
 }
 
+function messageOf(error) {
+  return error instanceof Error && typeof error.message === 'string'
+    ? error.message
+    : String(error);
+}
+
+/**
+ * The test/helper that created a fixture owns its lifetime. Every owned
+ * directory is attempted exactly once; a removal failure is surfaced instead of
+ * being swallowed or silently skipping the remaining targets.
+ */
+function removeOwnedDirs({ dirs, rm = rmSync, label = 'fixture' }) {
+  const errors = [];
+  for (const dir of dirs) {
+    try {
+      rm(dir, { recursive: true, force: true });
+    } catch (error) {
+      errors.push(`${dir}: ${messageOf(error)}`);
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(`${label} cleanup failed: ${errors.join('; ')}`);
+  }
+}
+
+function listGoalFixtureDirs() {
+  return readdirSync(tmpdir())
+    .filter((name) => name.startsWith('greenhub-run-goal-spec-'))
+    .sort();
+}
+
 /** Canonical checkout + real bare remote, with a clean live `main`. */
-function buildFixture() {
+function buildFixture({ failAfterInit = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'greenhub-run-goal-spec-'));
   const bare = mkdtempSync(join(tmpdir(), 'greenhub-run-goal-spec-remote-'));
   const goalDir = mkdtempSync(join(tmpdir(), 'greenhub-run-goal-spec-goals-'));
@@ -102,24 +133,30 @@ function buildFixture() {
     const baseSha = git(root, ['rev-parse', 'HEAD']);
     git(root, ['remote', 'add', 'origin', bare]);
     git(root, ['push', '-u', 'origin', 'main']);
+    if (failAfterInit) throw new Error('injected fixture setup failure');
     return { root, bare, goalDir, baseSha };
   } catch (error) {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(bare, { recursive: true, force: true });
-    rmSync(goalDir, { recursive: true, force: true });
+    try {
+      git(root, ['worktree', 'prune']);
+    } catch {
+      // setup cleanup is best-effort; the removal below still runs
+    }
+    try {
+      removeOwnedDirs({ dirs: [root, bare, goalDir], label: 'fixture setup' });
+    } catch (cleanupError) {
+      throw new Error(`${messageOf(error)}; ${messageOf(cleanupError)}`);
+    }
     throw error;
   }
 }
 
-function removeFixture(fixture) {
+function removeFixture(fixture, { rm = rmSync } = {}) {
   try {
     git(fixture.root, ['worktree', 'prune']);
   } catch {
     // fixture teardown is best-effort
   }
-  rmSync(fixture.root, { recursive: true, force: true });
-  rmSync(fixture.bare, { recursive: true, force: true });
-  rmSync(fixture.goalDir, { recursive: true, force: true });
+  removeOwnedDirs({ dirs: [fixture.root, fixture.bare, fixture.goalDir], rm });
 }
 
 function baseContract(overrides = {}) {
@@ -2631,4 +2668,62 @@ test('GA-03 K — a transient pre-invocation baseline failure is retried in-batc
   } finally {
     removeFixture(fixture);
   }
+});
+
+// ---------------------------------------------------------------------------
+// L. temporary fixture lifetime ownership
+// ---------------------------------------------------------------------------
+
+test('CASE L1 — a fixture lifetime leaves no temp residue', () => {
+  const before = listGoalFixtureDirs();
+  const fixture = buildFixture();
+  try {
+    assert.equal(listGoalFixtureDirs().length, before.length + 3);
+  } finally {
+    removeFixture(fixture);
+  }
+  assert.deepEqual(listGoalFixtureDirs(), before);
+});
+
+test('CASE L2 — the assertion-failure path removes the fixture', () => {
+  const before = listGoalFixtureDirs();
+  let fixture = null;
+  assert.throws(() => {
+    fixture = buildFixture();
+    try {
+      assert.fail('synthetic assertion failure');
+    } finally {
+      removeFixture(fixture);
+    }
+  }, /synthetic assertion failure/);
+  assert.equal(existsSync(fixture.root), false);
+  assert.equal(existsSync(fixture.bare), false);
+  assert.equal(existsSync(fixture.goalDir), false);
+  assert.deepEqual(listGoalFixtureDirs(), before);
+});
+
+test('CASE L3 — a fixture setup failure does not leak its temp dirs', () => {
+  const before = listGoalFixtureDirs();
+  assert.throws(() => buildFixture({ failAfterInit: true }), /injected fixture setup failure/);
+  assert.deepEqual(listGoalFixtureDirs(), before);
+});
+
+test('CASE L4 — a fixture cleanup failure is surfaced, not silent', () => {
+  const before = listGoalFixtureDirs();
+  const fixture = buildFixture();
+  assert.throws(
+    () =>
+      removeFixture(fixture, {
+        rm: (target, options) => {
+          if (target === fixture.bare) throw new Error('injected removal failure');
+          rmSync(target, options);
+        },
+      }),
+    /fixture cleanup failed: .*injected removal failure/,
+  );
+  assert.equal(existsSync(fixture.root), false);
+  assert.equal(existsSync(fixture.goalDir), false);
+  assert.equal(existsSync(fixture.bare), true);
+  rmSync(fixture.bare, { recursive: true, force: true });
+  assert.deepEqual(listGoalFixtureDirs(), before);
 });
