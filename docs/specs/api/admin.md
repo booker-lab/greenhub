@@ -253,13 +253,13 @@ PATCH /admin/drivers/:userId/approve
 - `role === driver` 확인
 - `driverApproved: true`
 
-이 endpoint가 존재한다는 사실과 **관리자 승인만이 driver 권한을 부여하는 유일한 경로라는 보장**은 현재 동일하지 않다. 2026-08-24 감사에서 다음 우회를 확인했다.
+이 endpoint가 관리자 승인 경로라는 계약은 유지되며, 2026-08-24 감사에서 확인한 다음 우회는 현재 구현에서 닫혔다.
 
-- 신규 Kakao `targetRole: driver`가 `driverApproved: true`로 생성됨
-- 기존 승인 필드 누락 driver가 Kakao 로그인 중 자동 승인됨
-- 공개 email `POST /auth/register`가 `role: driver`를 생성할 수 있고 이어지는 `POST /auth/login`이 `driverApproved` 확인 없이 `role=driver` JWT를 발급함
+- 신규 Kakao `targetRole: driver`는 `driverApproved: false`로 생성되고 자동 승인되지 않는다.
+- 기존 승인 필드 누락 driver는 로그인 side effect로 자동 승인되지 않는다.
+- 공개 `POST /auth/register`의 `role: driver`는 `driverApproved: false`를 저장하고 client 주입을 거부하며, false/누락 승인 driver의 `POST /auth/login`은 token side effect 전에 거부된다.
 
-따라서 현재 driver 승인 게이트는 P0 `IMPLEMENTATION FINDING`이며, admin 승인 UI/API만 보고 `VERIFIED`로 판단하지 않는다. 정본과 완료 조건: `docs/specs/api/auth.md` 및 Backlog `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`.
+따라서 driver 승인 게이트는 `IMPLEMENTED / PROVEN`이다. 직접 근거: `apps/api/src/auth/auth.service.spec.ts`, `apps/api/src/auth/strategies/jwt.strategy.spec.ts`. runtime/browser session lifecycle proof는 별도 `PENDING`이며 정본은 `docs/specs/api/auth.md`다.
 
 ### 정지/복구
 
