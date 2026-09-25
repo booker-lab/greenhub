@@ -47,7 +47,6 @@ import {
   PUBLICATION_FAILED,
 } from './run-build.mjs';
 import { NO_PROGRESS } from './run-goal.mjs';
-import { DEFAULT_CI_TIMEOUT_MS, DEFAULT_MAX_REBIND_ATTEMPTS } from './run-publish-once.mjs';
 import {
   DEFAULT_OPENCODE_TIMEOUT_MS,
   DEFAULT_PROOF_TIMEOUT_MS,
@@ -56,6 +55,7 @@ import {
   probeVisibleServer,
   readLiveRemoteMain,
 } from './run-once.mjs';
+import { DEFAULT_CI_TIMEOUT_MS, DEFAULT_MAX_REBIND_ATTEMPTS } from './run-publish-once.mjs';
 
 // Night-level terminals. Product frontiers reuse the existing BUILD vocabulary
 // unchanged; only the repetition/lifetime terminals are new here.
@@ -317,6 +317,8 @@ export function defaultInvokeBuild({
     let stdout = '';
     let stderrBytes = 0;
     let stdoutOverflow = false;
+    let stdinError = null;
+    let stdinFinished = false;
     let settled = false;
     const settle = (payload) => {
       if (settled) return;
@@ -349,34 +351,40 @@ export function defaultInvokeBuild({
         // the operator stream may already be gone; the child terminal is unaffected
       }
     });
+    child.stdin.on('finish', () => {
+      stdinFinished = true;
+    });
+    child.stdin.on('error', (error) => {
+      stdinError ??= messageOf(error);
+    });
+    child.stdin.on('close', () => {
+      if (!stdinFinished) {
+        stdinError ??= 'BUILD 자식이 요청 stdin 쓰기를 마치기 전에 파이프를 닫았습니다';
+      }
+    });
     child.on('close', (code, signal) => {
+      const requestDeliveryError =
+        stdinError ??
+        (!stdinFinished ? 'BUILD 자식이 요청 stdin 쓰기를 마치기 전에 종료되었습니다' : null);
       settle({
         exitCode: code,
         signal: signal ?? null,
         stdout,
         stderrBytes,
         stdoutOverflow,
-        startErrorCode: null,
-        startErrorMessage: null,
+        startErrorCode: requestDeliveryError === null ? null : 'STDIN_WRITE_FAILED',
+        startErrorMessage: requestDeliveryError,
       });
     });
     try {
       child.stdin.end(requestText);
     } catch (error) {
+      stdinError ??= messageOf(error);
       try {
         child.stdin.destroy();
       } catch {
         // the child terminal below still settles on close/error
       }
-      settle({
-        exitCode: null,
-        signal: null,
-        stdout,
-        stderrBytes,
-        stdoutOverflow,
-        startErrorCode: 'STDIN_WRITE_FAILED',
-        startErrorMessage: messageOf(error),
-      });
     }
   });
 }
@@ -767,6 +775,15 @@ export async function runNight(options = {}, deps = {}) {
         childFailureReason =
           `BUILD child did not produce a parseable terminal (exitCode=${invocation?.exitCode ?? 'null'}, ` +
           `signal=${invocation?.signal ?? 'null'}): ${parsed.reason}; stdout tail: ${tail(invocation?.stdout) || '<empty>'}`;
+      } else if (
+        buildResult?.status === FRONTIER_COMPLETE &&
+        (invocation?.signal != null ||
+          !Number.isInteger(invocation?.exitCode) ||
+          invocation.exitCode !== 0)
+      ) {
+        childFailureReason =
+          `BUILD 자식 프로세스가 비정상 종료되었습니다 (exitCode=${invocation?.exitCode ?? 'null'}, ` +
+          `signal=${invocation?.signal ?? 'null'})`;
       }
 
       const liveMainStart = startObservation.sha ?? buildResult?.observedMain?.fetchedSha ?? null;
