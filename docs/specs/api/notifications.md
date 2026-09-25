@@ -2,7 +2,7 @@
 
 # Notifications API / Domain Spec
 
-> **최종 정합화**: 2026-09-25
+> **최종 정합화**: 2026-09-26
 > **상태**: Current
 > **코드 정본**: `packages/shared/src/notification.types.ts`, `apps/api/src/notifications/**`
 > **운영 승인 상태**: 이 문서에 복제하지 않고 `docs/memory.md`와 활성 HANDOFF를 따른다.
@@ -175,6 +175,26 @@ provider 응답은 `classifyAlimtalkProviderError()`/`classifySmsProviderError()
 
 `UNKNOWN` 결과는 접수 여부가 불확실하므로 SMS fallback을 포함한 blind 재발송을 하지 않는다. 위 4~7의 시도 상한은 유지되지만, `PERMANENT`는 3회를 다 채우지 않을 수 있다.
 
+### 재시도 관측 — `NOTIFICATION_RETRY_METRICS`
+
+`apps/api/src/notifications/notification-retry-metrics.ts`가 알림톡/SMS 재시도 관측의 in-process recorder를 소유한다.
+
+- `NotificationRetryMetricsRecorder`는 채널별(`alimtalk`/`sms`) provider 오류 분류 counter(`RATE_LIMITED`/`RETRYABLE`/`PERMANENT`/`UNKNOWN`)와 재시도 사이 실제 적용 지연 집계(`count`/`totalMs`/`minMs`/`maxMs`/`lastMs`)를 기록·노출한다.
+- 분류 counter는 실제 provider 시도가 실패(`REJECTED`/`UNKNOWN`)했을 때만 늘어난다. 성공한 시도와 설정 누락·본문 변수·템플릿 매핑 등 local fail-closed 거부는 provider 오류가 아니므로 기록하지 않는다.
+- 적용 지연은 알림톡 재시도 loop에서 `computeNotificationRetryDelayMs()` 계산값이 실제 대기에 적용될 때만 기록한다. SMS는 1회 시도 계약상 재시도 지연이 없다.
+- 관측 상태는 고정 크기(채널 2 × 분류 4 counter + 채널별 지연 집계)만 유지하며 event별 기록을 쌓지 않는다. 노출은 in-process `snapshot()` 복제본뿐이고 endpoint·영속 저장·외부 전송은 이 계약에 없다.
+- 관측 기록은 채널·오류 분류·지연 밀리초만 담는다. 전화번호·본문·variables·provider receipt·템플릿 코드 등 PII는 recorder API가 입력으로 받지 않고 기록하지 않는다. 잘못된 입력은 예외 없이 무시해 관측이 전달 경로를 깨지 않는다.
+- wiring은 `AligoClient` 생성자의 선택적 두 번째 인자다. 기본값은 process 공유 `notificationRetryMetrics` instance이며, 기존 1-인자 생성자 호출과 `NotificationDeliveryResult` 계약·외부 provider 호출 동작은 그대로 유지한다.
+
+`notification-retry-metrics.spec.ts`가 이 계약을 직접 회귀한다.
+
+- 분류 counter: 알림톡 일시·rate-limit·영구·UNKNOWN 분류와 SMS fallback·직접 SMS 분류, 설정 누락 fail-closed 미기록
+- 적용 지연 기록: 일반 backoff와 rate-limit 별도 base·`maxBackoffMs` 상한이 계산값 그대로 집계에 반영
+- PII 미기록: 전화번호·본문 변수·receipt·템플릿 코드가 관측 snapshot에 존재하지 않고 노출 필드가 counter·집계로 고정
+- 기존 전달 결과 불변: 기존 1-인자 생성자 결과와 recorder 주입 여부 무관 동일 결과
+
+이 관측 계약은 in-process counter 노출만 소유한다. metric 외부 export·alerting·대시보드 연동은 별도 계약이며, 실제 외부 provider 승인 상태나 발송 성공을 주장하지 않는다.
+
 ### 설정 오류의 fail-closed
 
 다음은 SMS fallback까지 실행하지 않고 요청 전 실패한다.
@@ -338,6 +358,8 @@ FCM을 다시 도입할 경우 별도 Task에서 다음을 함께 정의한다.
 - `apps/api/src/notifications/notifications.controller.ts`
 - `apps/api/src/notifications/notifications-delivery.spec.ts`
 - `apps/api/src/notifications/notification-retry-policy.spec.ts`
+- `apps/api/src/notifications/notification-retry-metrics.ts`
+- `apps/api/src/notifications/notification-retry-metrics.spec.ts`
 - `apps/api/src/notifications/notifications-provider-outcome.spec.ts`
 - `apps/api/src/notifications/notifications-preferences.spec.ts`
 - `apps/consumer/src/app/mypage/notifications/settings/**`
@@ -358,6 +380,7 @@ state → withdrawal → retention evidence → sender gating의 lifecycle을 �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-26 | `NOTIFICATION_RETRY_METRICS` in-process 관측 recorder 계약(채널별 오류 분류 counter·적용 지연 집계·PII 미기록·전달 결과 불변) 및 전용 회귀 추가 |
 | 2026-09-25 | `NOTIFICATION_RETRY_BACKOFF_POLICY` 토큰과 provider 오류 분류·bounded backoff·rate-limit 지연·blind 중복 SMS 방지 계약 및 전용 회귀 추가 |
 | 2026-08-30 | 파일럿 선택 마케팅 미사용, 거래성 `ORDER_*` 8종 유지, 과거 preference·consent 보존 정책을 반영 |
 | 2026-08-24 | checkout consent·user preference·철회·retention evidence 분리와 legacy 목표미달 consumer 취소 알림 누락 가능성을 기록 |
