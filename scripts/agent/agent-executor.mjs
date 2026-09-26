@@ -122,8 +122,24 @@ export function resolveCodexCommand({
   return { command: 'codex', prefixArgs: [], source: 'path' };
 }
 
-export function buildCodexArgs({ taskText, model = null, sandboxMode = 'workspace-write' } = {}) {
-  const args = ['exec', '--ephemeral', '--ignore-user-config', '--json', '--sandbox', sandboxMode];
+export function buildCodexArgs({
+  taskText,
+  model = null,
+  sandboxMode = 'workspace-write',
+  platform = process.platform,
+} = {}) {
+  const args = platform === 'win32'
+    ? [
+        '-c',
+        'windows.sandbox="elevated"',
+        'exec',
+        '--ephemeral',
+        '--ignore-user-config',
+        '--json',
+        '--sandbox',
+        sandboxMode,
+      ]
+    : ['exec', '--ephemeral', '--ignore-user-config', '--json', '--sandbox', sandboxMode];
   if (model) args.push('--model', model);
   args.push(taskText);
   return args;

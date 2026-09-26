@@ -50,7 +50,7 @@ test('executor 선택은 CLI, 환경 변수, 기본값 순서이며 알 수 없�
 
 test('Codex 인자는 selector read-only와 mutation workspace-write를 분리한다', () => {
   assert.deepEqual(
-    buildCodexArgs({ taskText: 'selector prompt', model: 'gpt-test', sandboxMode: 'read-only' }),
+    buildCodexArgs({ taskText: 'selector prompt', model: 'gpt-test', sandboxMode: 'read-only', platform: 'linux' }),
     [
       'exec',
       '--ephemeral',
@@ -63,7 +63,7 @@ test('Codex 인자는 selector read-only와 mutation workspace-write를 분리�
       'selector prompt',
     ],
   );
-  assert.deepEqual(buildCodexArgs({ taskText: 'bounded task' }), [
+  assert.deepEqual(buildCodexArgs({ taskText: 'bounded task', platform: 'linux' }), [
     'exec',
     '--ephemeral',
     '--ignore-user-config',
@@ -72,6 +72,37 @@ test('Codex 인자는 selector read-only와 mutation workspace-write를 분리�
     'workspace-write',
     'bounded task',
   ]);
+});
+
+test('Windows Codex 인자는 elevated 설정을 exec 앞에 전달하고 sandbox 권한을 보존한다', () => {
+  assert.deepEqual(
+    buildCodexArgs({ taskText: 'selector prompt', sandboxMode: 'read-only', platform: 'win32' }),
+    [
+      '-c',
+      'windows.sandbox="elevated"',
+      'exec',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--json',
+      '--sandbox',
+      'read-only',
+      'selector prompt',
+    ],
+  );
+  assert.deepEqual(
+    buildCodexArgs({ taskText: 'bounded task', sandboxMode: 'workspace-write', platform: 'win32' }),
+    [
+      '-c',
+      'windows.sandbox="elevated"',
+      'exec',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--json',
+      '--sandbox',
+      'workspace-write',
+      'bounded task',
+    ],
+  );
 });
 
 test('Windows Codex resolver는 exe, cmd, bat 및 환경 변수 경로를 판별한다', () => {
