@@ -6,6 +6,23 @@ export const AGENT_EXECUTOR_ENV = 'GREENHUB_AGENT_EXECUTOR';
 export const OPENCODE_EXECUTOR = 'OPENCODE';
 export const CODEX_EXECUTOR = 'CODEX';
 export const DEFAULT_CODEX_TIMEOUT_MS = 60 * 60 * 1000;
+export const CODEX_REASONING_EFFORTS = Object.freeze([
+  'none',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]);
+
+export function validateReasoningEffort(value) {
+  if (value === null || value === undefined) return { ok: true, reason: null };
+  if (CODEX_REASONING_EFFORTS.includes(value)) return { ok: true, reason: null };
+  return {
+    ok: false,
+    reason: `--reasoning-effort 값이 올바르지 않습니다: ${String(value)}; 허용값은 ${CODEX_REASONING_EFFORTS.join(', ')}입니다`,
+  };
+}
 
 const CODEX_JSONL_EVENT_TYPES = new Set([
   'thread.started',
@@ -44,8 +61,20 @@ export function resolveAgentExecutor({ explicitValue = null, baseEnv = process.e
   };
 }
 
-export function validateAgentExecutorOptions({ selection, agent = null } = {}) {
+export function validateAgentExecutorOptions({
+  selection,
+  agent = null,
+  reasoningEffort = null,
+} = {}) {
   if (selection?.ok !== true) return { ok: false, reason: selection?.reason ?? 'executor 값이 올바르지 않습니다' };
+  const reasoningValidation = validateReasoningEffort(reasoningEffort);
+  if (!reasoningValidation.ok) return reasoningValidation;
+  if (selection.backend !== CODEX_EXECUTOR && reasoningEffort != null) {
+    return {
+      ok: false,
+      reason: '--reasoning-effort는 executor=codex에서만 사용할 수 있습니다',
+    };
+  }
   if (selection.backend === CODEX_EXECUTOR && agent !== null && agent !== undefined) {
     return {
       ok: false,
@@ -125,24 +154,42 @@ export function resolveCodexCommand({
 export function buildCodexArgs({
   taskText,
   model = null,
+  reasoningEffort = null,
   sandboxMode = 'workspace-write',
   platform = process.platform,
 } = {}) {
-  const args = platform === 'win32'
-    ? [
-        '-c',
-        'windows.sandbox="elevated"',
-        'exec',
-        '--ephemeral',
-        '--ignore-user-config',
-        '--json',
-        '--sandbox',
-        sandboxMode,
-      ]
-    : ['exec', '--ephemeral', '--ignore-user-config', '--json', '--sandbox', sandboxMode];
+  const args = platform === 'win32' ? ['-c', 'windows.sandbox="elevated"'] : [];
+  if (reasoningEffort !== null && reasoningEffort !== undefined) {
+    const validation = validateReasoningEffort(reasoningEffort);
+    if (!validation.ok) throw new Error(validation.reason);
+    args.push('-c', `model_reasoning_effort="${reasoningEffort}"`);
+  }
+  args.push('exec', '--ephemeral', '--ignore-user-config', '--json', '--sandbox', sandboxMode);
   if (model) args.push('--model', model);
   args.push(taskText);
   return args;
+}
+
+export function codexInvocationEvidence({
+  resolvedCommand,
+  args,
+  model = null,
+  reasoningEffort = null,
+  sandboxMode = null,
+  execution = null,
+} = {}) {
+  return {
+    command: resolvedCommand?.command ?? null,
+    prefixArgs: Array.isArray(resolvedCommand?.prefixArgs) ? [...resolvedCommand.prefixArgs] : [],
+    codexArgs: Array.isArray(args) ? args.slice(0, -1) : [],
+    model: model ?? null,
+    reasoningEffort: reasoningEffort ?? null,
+    sandboxMode,
+    exitCode: execution?.exitCode ?? null,
+    signal: execution?.signal ?? null,
+    timedOut: Boolean(execution?.timedOut),
+    startErrorCode: execution?.startErrorCode ?? null,
+  };
 }
 
 export function defaultInvokeCodex({ resolvedCommand, args, cwd, env, timeoutMs, spawn = spawnSync }) {

@@ -490,7 +490,8 @@ test('Codex run-publish-once는 workspace mutation부터 proof, candidate, read-
     const result = runPublishOnce(
       publishOptions(fixture, {
         executor: 'codex',
-        model: 'gpt-test-model',
+        model: 'gpt-6-luna',
+        reasoningEffort: 'max',
         codexTimeoutMs: 5000,
         proofCommands: ['node proof-check.cjs'],
       }),
@@ -502,7 +503,8 @@ test('Codex run-publish-once는 workspace mutation부터 proof, candidate, read-
           assert.equal(input.env.OPENAI_API_KEY, undefined);
           assert.equal(input.env.CODEX_API_KEY, undefined);
           assert.ok(input.args.includes('--sandbox') && input.args.includes('workspace-write'));
-          assert.ok(input.args.includes('--model') && input.args.includes('gpt-test-model'));
+          assert.ok(input.args.includes('--model') && input.args.includes('gpt-6-luna'));
+          assert.ok(input.args.includes('model_reasoning_effort="max"'));
           mkdirSync(join(input.cwd, 'src'), { recursive: true });
           writeFileSync(join(input.cwd, 'src', 'allowed.txt'), 'ok\n');
           return {
@@ -528,6 +530,21 @@ test('Codex run-publish-once는 workspace mutation부터 proof, candidate, read-
     assert.equal(result.status, SUCCESS_PUBLISHED);
     assert.equal(result.executionStatus, SUCCESS);
     assert.equal(result.executor.backend, 'CODEX');
+    assert.equal(result.model, 'gpt-6-luna');
+    assert.equal(result.reasoningEffort, 'max');
+    assert.deepEqual(result.executor.invocationEvidence.codexArgs, [
+      ...(process.platform === 'win32' ? ['-c', 'windows.sandbox="elevated"'] : []),
+      '-c',
+      'model_reasoning_effort="max"',
+      'exec',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--json',
+      '--sandbox',
+      'workspace-write',
+      '--model',
+      'gpt-6-luna',
+    ]);
     assert.equal(result.executor.mode, 'NOT_APPLICABLE_TO_CODEX');
     assert.equal(invocations.length, 1);
     assert.deepEqual(result.changedPaths, ['src/allowed.txt']);
@@ -1265,6 +1282,12 @@ test('parseArgs reuses the GN-01 convention and requires publication input', () 
     'Bounded change',
     '--ci-timeout-ms',
     '1234',
+    '--executor',
+    'codex',
+    '--model',
+    'gpt-6-luna',
+    '--reasoning-effort',
+    'max',
     '--repo',
     'C:\\repo',
   ]);
@@ -1274,6 +1297,9 @@ test('parseArgs reuses the GN-01 convention and requires publication input', () 
   assert.equal(parsed.options.commitMessage, 'feat: bounded change');
   assert.equal(parsed.options.prTitle, 'Bounded change');
   assert.equal(parsed.options.ciTimeoutMs, 1234);
+  assert.equal(parsed.options.executor, 'codex');
+  assert.equal(parsed.options.model, 'gpt-6-luna');
+  assert.equal(parsed.options.reasoningEffort, 'max');
   assert.equal(parsed.options.repositoryRoot, 'C:\\repo');
 
   assert.equal(parseArgs(['--task', 't.md', '--allow', 'src']).ok, false);
@@ -1286,6 +1312,21 @@ test('parseArgs reuses the GN-01 convention and requires publication input', () 
   assert.equal(
     parseArgs(['--task', 't.md', '--allow', 'src', '--commit-message', 'm', '--pr-title', 'T', '--pr-body'])
       .ok,
+    false,
+  );
+  assert.equal(
+    parseArgs([
+      '--task',
+      't.md',
+      '--allow',
+      'src',
+      '--commit-message',
+      'm',
+      '--pr-title',
+      'T',
+      '--reasoning-effort',
+      'ultra',
+    ]).ok,
     false,
   );
 });

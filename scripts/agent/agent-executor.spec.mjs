@@ -12,6 +12,7 @@ import {
   resolveAgentExecutor,
   resolveCodexCommand,
   validateAgentExecutorOptions,
+  validateReasoningEffort,
 } from './agent-executor.mjs';
 
 function jsonl(text) {
@@ -74,6 +75,53 @@ test('Codex 인자는 selector read-only와 mutation workspace-write를 분리�
   ]);
 });
 
+test('Codex reasoning effort는 허용 목록만 받고 생략하면 기존 기본값을 유지한다', () => {
+  for (const effort of ['none', 'low', 'medium', 'high', 'xhigh', 'max']) {
+    assert.equal(validateReasoningEffort(effort).ok, true, effort);
+  }
+  assert.equal(validateReasoningEffort('minimal').ok, false);
+  assert.equal(
+    validateAgentExecutorOptions({
+      selection: { ok: true, backend: CODEX_EXECUTOR },
+      reasoningEffort: 'surprise',
+    }).ok,
+    false,
+  );
+  assert.equal(
+    validateAgentExecutorOptions({
+      selection: { ok: true, backend: OPENCODE_EXECUTOR },
+      reasoningEffort: 'max',
+    }).ok,
+    false,
+  );
+  assert.deepEqual(
+    buildCodexArgs({
+      taskText: 'bounded task',
+      model: 'gpt-6-luna',
+      reasoningEffort: 'max',
+      sandboxMode: 'read-only',
+      platform: 'linux',
+    }),
+    [
+      '-c',
+      'model_reasoning_effort="max"',
+      'exec',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--json',
+      '--sandbox',
+      'read-only',
+      '--model',
+      'gpt-6-luna',
+      'bounded task',
+    ],
+  );
+  assert.throws(
+    () => buildCodexArgs({ taskText: 'bounded task', reasoningEffort: 'surprise' }),
+    /--reasoning-effort/,
+  );
+});
+
 test('Windows Codex 인자는 elevated 설정을 exec 앞에 전달하고 sandbox 권한을 보존한다', () => {
   assert.deepEqual(
     buildCodexArgs({ taskText: 'selector prompt', sandboxMode: 'read-only', platform: 'win32' }),
@@ -100,6 +148,30 @@ test('Windows Codex 인자는 elevated 설정을 exec 앞에 전달하고 sandbo
       '--json',
       '--sandbox',
       'workspace-write',
+      'bounded task',
+    ],
+  );
+  assert.deepEqual(
+    buildCodexArgs({
+      taskText: 'bounded task',
+      model: 'gpt-6-luna',
+      reasoningEffort: 'max',
+      sandboxMode: 'workspace-write',
+      platform: 'win32',
+    }),
+    [
+      '-c',
+      'windows.sandbox="elevated"',
+      '-c',
+      'model_reasoning_effort="max"',
+      'exec',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--json',
+      '--sandbox',
+      'workspace-write',
+      '--model',
+      'gpt-6-luna',
       'bounded task',
     ],
   );

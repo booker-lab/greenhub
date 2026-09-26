@@ -505,6 +505,18 @@ test('CASE A0c — parseArgs requires only an explicit flag surface', () => {
   assert.equal(parsed.ok, true);
   assert.equal(parsed.options.requestFile, 'req.txt');
   assert.equal(parsed.options.ciTimeoutMs, 5);
+  const modelOptions = parseArgs([
+    '--request',
+    'req.txt',
+    '--executor',
+    'codex',
+    '--model',
+    'gpt-6-luna',
+    '--reasoning-effort',
+    'max',
+  ]);
+  assert.equal(modelOptions.options.reasoningEffort, 'max');
+  assert.equal(parseArgs(['--request', 'req.txt', '--reasoning-effort', 'ultra']).ok, false);
 });
 
 test('CASE A0d — the selector prompt states the ACCEPTANCE_AUTHORITY completeness rule', () => {
@@ -1531,6 +1543,8 @@ test('Codex selector는 read-only JSONL 결과를 기존 validator에 전달하�
     const children = createFakeChildren({
       runPublishBehavior: (options) => {
         assert.equal(options.executor, 'codex');
+        assert.equal(options.model, 'gpt-6-luna');
+        assert.equal(options.reasoningEffort, 'max');
         pushCommitToLiveMain(fixture, {
           path: options.allowedPaths[0],
           content: 'delivered by synthetic publication\n',
@@ -1550,7 +1564,8 @@ test('Codex selector는 read-only JSONL 결과를 기존 validator에 전달하�
         repositoryRoot: fixture.root,
         remote: 'origin',
         executor: 'codex',
-        model: 'gpt-test-model',
+        model: 'gpt-6-luna',
+        reasoningEffort: 'max',
       },
       {
         ...children.deps,
@@ -1562,7 +1577,8 @@ test('Codex selector는 read-only JSONL 결과를 기존 validator에 전달하�
           assert.equal(input.env.OPENAI_API_KEY, undefined);
           assert.ok(input.args.includes('--json'));
           assert.ok(input.args.includes('--sandbox') && input.args.includes('read-only'));
-          assert.ok(input.args.includes('--model') && input.args.includes('gpt-test-model'));
+          assert.ok(input.args.includes('--model') && input.args.includes('gpt-6-luna'));
+          assert.ok(input.args.includes('model_reasoning_effort="max"'));
           return {
             exitCode: 0,
             signal: null,
@@ -1575,9 +1591,25 @@ test('Codex selector는 read-only JSONL 결과를 기존 validator에 전달하�
       },
     );
     assert.equal(result.status, FRONTIER_COMPLETE, JSON.stringify({ status: result.status, reason: result.reason, selector: result.selector, decision: result.decision, goal: result.goalResult }));
+    assert.equal(result.model, 'gpt-6-luna');
+    assert.equal(result.reasoningEffort, 'max');
     assert.equal(result.executor.selected, 'CODEX');
     assert.deepEqual(result.executor.backendsObserved, ['CODEX']);
     assert.equal(result.selector.executor.backend, 'CODEX');
+    assert.deepEqual(result.selector.executor.invocationEvidence.codexArgs, [
+      ...(process.platform === 'win32' ? ['-c', 'windows.sandbox="elevated"'] : []),
+      '-c',
+      'model_reasoning_effort="max"',
+      'exec',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--json',
+      '--sandbox',
+      'read-only',
+      '--model',
+      'gpt-6-luna',
+    ]);
+    assert.equal(result.selector.executor.invocationEvidence.exitCode, 0);
     assert.equal(result.selector.status, 'DECISION');
     assert.equal(result.decision.selected.id, 'F-CODEX');
     assert.equal(invocations.length, 1);

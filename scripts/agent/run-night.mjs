@@ -50,6 +50,7 @@ import { NO_PROGRESS } from './run-goal.mjs';
 import {
   CODEX_EXECUTOR,
   DEFAULT_CODEX_TIMEOUT_MS,
+  validateReasoningEffort,
   resolveAgentExecutor,
   validateAgentExecutorOptions,
 } from './agent-executor.mjs';
@@ -411,7 +412,9 @@ function createNightResult(options) {
     finalTerminal: null,
     repositoryRoot: resolve(options.repositoryRoot ?? process.cwd()),
     remote: options.remote ?? 'origin',
-    executor: { selected: null, backendsObserved: [] },
+    model: options.model ?? null,
+    reasoningEffort: options.reasoningEffort ?? null,
+    executor: { selected: null, backendsObserved: [], invocations: [] },
     request: {
       source: null,
       characters: 0,
@@ -477,6 +480,7 @@ function buildChildArgs(options) {
     ['executor', '--executor'],
     ['title', '--title'],
     ['model', '--model'],
+    ['reasoningEffort', '--reasoning-effort'],
     ['agent', '--agent'],
     ['opencodeBin', '--opencode-bin'],
     ['codexBin', '--codex-bin'],
@@ -555,11 +559,29 @@ function summarizeCycle({
     buildResult?.goalResult?.planner?.lastExecutor?.backend,
     ...attempts.map((attempt) => attempt?.child?.executor?.backend),
   ].filter((value) => typeof value === 'string' && value.length > 0));
+  const codexInvocations = [];
+  const appendCodexInvocation = (phase, executorEvidence) => {
+    if (
+      executorEvidence?.backend === CODEX_EXECUTOR &&
+      executorEvidence.invocationEvidence !== null &&
+      typeof executorEvidence.invocationEvidence === 'object'
+    ) {
+      codexInvocations.push({ phase, ...executorEvidence.invocationEvidence });
+    }
+  };
+  appendCodexInvocation('selector', buildResult?.selector?.executor);
+  appendCodexInvocation('planner', buildResult?.goalResult?.planner?.lastExecutor);
+  attempts.forEach((attempt, index) => {
+    appendCodexInvocation(`mutation-${index + 1}`, attempt?.child?.executor);
+  });
   return {
     cycle: cycleNumber,
     executor: {
       selected: buildResult?.executor?.selected ?? null,
+      model: buildResult?.model ?? null,
+      reasoningEffort: buildResult?.reasoningEffort ?? null,
       backendsObserved: [...observedBackends],
+      invocations: codexInvocations,
     },
     liveMainStart,
     liveMainEnd,
@@ -665,6 +687,7 @@ export async function runNight(options = {}, deps = {}) {
   const executorOptions = validateAgentExecutorOptions({
     selection: executorSelection,
     agent: options.agent,
+    reasoningEffort: options.reasoningEffort,
   });
   if (!executorOptions.ok) return finish(INVALID_NIGHT_REQUEST, executorOptions.reason);
   result.executor.selected = executorSelection.backend;
@@ -866,6 +889,9 @@ export async function runNight(options = {}, deps = {}) {
           result.executor.backendsObserved.push(backend);
         }
       }
+      for (const invocationEvidence of cycle.executor.invocations) {
+        result.executor.invocations.push({ cycle: cycleNumber, ...invocationEvidence });
+      }
       if (cycle.liveMainStart !== null && result.liveMain.atStart === null) {
         result.liveMain.atStart = cycle.liveMainStart;
       }
@@ -970,6 +996,7 @@ export const USAGE = [
   '  GREENHUB_AGENT_EXECUTOR     --executor가 없을 때 backend 환경 변수로 사용',
   '  --title <title>             optional OpenCode session title for child tasks',
   '  --model <value>             backend가 지원하는 model 지정; Codex에서는 값을 그대로 전달',
+  '  --reasoning-effort <value>  Codex reasoning effort: none, low, medium, high, xhigh, max',
   '  --agent <name>              optional OpenCode agent override for child tasks',
   '  --opencode-bin <path>       explicit OpenCode executable for child tasks',
   '  --opencode-timeout-ms <n>   child/selector opencode timeout in ms (default: 3600000)',
@@ -1016,6 +1043,7 @@ export function parseArgs(argv) {
     executor: null,
     title: null,
     model: null,
+    reasoningEffort: null,
     agent: null,
     opencodeBin: null,
     codexBin: null,
@@ -1034,6 +1062,7 @@ export function parseArgs(argv) {
     '--executor': 'executor',
     '--title': 'title',
     '--model': 'model',
+    '--reasoning-effort': 'reasoningEffort',
     '--agent': 'agent',
     '--opencode-bin': 'opencodeBin',
     '--codex-bin': 'codexBin',
@@ -1093,6 +1122,8 @@ export function parseArgs(argv) {
     }
     return { ok: false, error: `unknown argument: ${arg}` };
   }
+  const reasoningValidation = validateReasoningEffort(options.reasoningEffort);
+  if (!reasoningValidation.ok) return { ok: false, error: reasoningValidation.reason };
   return { ok: true, options };
 }
 
@@ -1118,6 +1149,7 @@ export async function main(
     `[NIGHT RUN] STATUS ${result.status}`,
     `[NIGHT RUN] STOP_REASON ${result.stopReason}`,
     `[NIGHT RUN] EXECUTOR selected=${result.executor?.selected ?? 'unknown'} observed=${(result.executor?.backendsObserved ?? []).join(',') || 'none'}`,
+    `[NIGHT RUN] MODEL model=${result.model ?? 'default'} reasoningEffort=${result.reasoningEffort ?? 'default'}`,
     `[NIGHT RUN] LIVE_MAIN ${result.liveMain?.atStart ?? 'unknown'} -> ${result.liveMain?.atEnd ?? 'unknown'}`,
     `[NIGHT RUN] CYCLES started=${result.bound?.cyclesStarted ?? 0} completed=${result.bound?.cyclesCompleted ?? 0} max=${result.bound?.maxCycles ?? 'none'}`,
     `[NIGHT RUN] OPERATOR_STOP requested=${result.operatorStop?.requested ? 'YES' : 'NO'} during_cycle=${result.operatorStop?.duringCycle ? 'YES' : 'NO'}`,
