@@ -852,13 +852,40 @@ test('Codex Night Run은 3개 cycle에 선택을 유지하고 stale OpenCode TUI
   const harness = createNightHarness({
     requestText,
     mains: [shaFor(1), shaFor(2), shaFor(2), shaFor(3), shaFor(3), shaFor(4)],
-    buildCycle: (index) =>
-      syntheticCycleResult({
+    buildCycle: (index) => ({
+      ...syntheticCycleResult({
         status: index < 3 ? FRONTIER_COMPLETE : ALREADY_SATISFIED,
         selected: index < 3 ? { id: `F${index}` } : null,
         childCalls: index < 3 ? 1 : 0,
         executor: { selected: 'CODEX', backendsObserved: ['CODEX'] },
       }),
+      model: 'gpt-6-luna',
+      reasoningEffort: 'max',
+      selector: {
+        executor: {
+          backend: 'CODEX',
+          invocationEvidence: {
+            model: 'gpt-6-luna',
+            reasoningEffort: 'max',
+            codexArgs: [
+              ...(process.platform === 'win32' ? ['-c', 'windows.sandbox="elevated"'] : []),
+              '-c',
+              'model_reasoning_effort="max"',
+              'exec',
+              '--ephemeral',
+              '--ignore-user-config',
+              '--json',
+              '--sandbox',
+              'read-only',
+              '--model',
+              'gpt-6-luna',
+            ],
+            sandboxMode: 'read-only',
+            exitCode: 0,
+          },
+        },
+      },
+    }),
   });
   harness.deps.env = {
     PATH: 'fake-path',
@@ -870,11 +897,22 @@ test('Codex Night Run은 3개 cycle에 선택을 유지하고 stale OpenCode TUI
     throw new Error('Codex must skip OpenCode visibility checks');
   };
 
-  const result = await runHarness(harness, { executor: 'codex', maxCycles: 3 });
+  const result = await runHarness(harness, {
+    executor: 'codex',
+    model: 'gpt-6-luna',
+    reasoningEffort: 'max',
+    maxCycles: 3,
+  });
 
   assert.equal(result.status, ALREADY_SATISFIED);
+  assert.equal(result.model, 'gpt-6-luna');
+  assert.equal(result.reasoningEffort, 'max');
   assert.equal(result.executor.selected, 'CODEX');
   assert.deepEqual(result.executor.backendsObserved, ['CODEX']);
+  assert.equal(result.executor.invocations.length, 3);
+  assert.equal(result.executor.invocations[0].model, 'gpt-6-luna');
+  assert.equal(result.executor.invocations[0].reasoningEffort, 'max');
+  assert.ok(result.executor.invocations[0].codexArgs.includes('model_reasoning_effort="max"'));
   assert.equal(result.cycles.length, 3);
   assert.deepEqual(
     result.cycles.map((cycle) => cycle.status),
@@ -887,6 +925,8 @@ test('Codex Night Run은 3개 cycle에 선택을 유지하고 stale OpenCode TUI
   assert.equal(harness.logLines.join('\n').includes('visible OpenCode TUI'), false);
   for (const call of harness.buildCalls) {
     assert.ok(call.args.includes('--executor') && call.args.includes('codex'));
+    assert.ok(call.args.includes('--model') && call.args.includes('gpt-6-luna'));
+    assert.ok(call.args.includes('--reasoning-effort') && call.args.includes('max'));
     assert.equal(call.env[OPENCODE_ATTACH_URL_ENV], undefined);
     assert.equal(call.requestText, requestText);
   }
@@ -2004,6 +2044,22 @@ test('CLI2 — parseArgs keeps a strict explicit flag surface', () => {
   assert.equal(parseArgs(['--max-minutes', '0']).ok, false);
   assert.equal(parseArgs(['--nope']).ok, false);
   const parsed = parseArgs(['--max-cycles', '2', '--max-minutes', '0.5', '--repo', '.']);
+  const modelOptions = parseArgs([
+    '--max-cycles',
+    '1',
+    '--executor',
+    'codex',
+    '--model',
+    'gpt-6-luna',
+    '--reasoning-effort',
+    'max',
+  ]);
+  assert.equal(modelOptions.ok, true);
+  assert.equal(modelOptions.options.reasoningEffort, 'max');
+  assert.equal(
+    parseArgs(['--max-cycles', '1', '--reasoning-effort', 'ultra']).ok,
+    false,
+  );
   assert.equal(parsed.ok, true);
   assert.equal(parsed.options.maxCycles, 2);
   assert.equal(parsed.options.maxMinutes, 0.5);

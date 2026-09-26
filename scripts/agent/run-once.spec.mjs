@@ -1096,7 +1096,8 @@ test('Codex mutation은 격리 workspace에서 기존 경계와 proof를 적용�
     const result = runOnce(
       runOptions(fixture, {
         executor: 'codex',
-        model: 'gpt-test-model',
+        model: 'gpt-6-luna',
+        reasoningEffort: 'max',
         codexTimeoutMs: 5000,
         proofCommands: ['node proof-check.cjs'],
       }),
@@ -1121,7 +1122,8 @@ test('Codex mutation은 격리 workspace에서 기존 경계와 proof를 적용�
           assert.notEqual(input.cwd, fixture.root);
           assert.ok(input.args.includes('--json'));
           assert.ok(input.args.includes('--sandbox') && input.args.includes('workspace-write'));
-          assert.ok(input.args.includes('--model') && input.args.includes('gpt-test-model'));
+          assert.ok(input.args.includes('--model') && input.args.includes('gpt-6-luna'));
+          assert.ok(input.args.includes('-c') && input.args.includes('model_reasoning_effort="max"'));
           mkdirSync(join(input.cwd, 'src'), { recursive: true });
           writeFileSync(join(input.cwd, 'src', 'allowed.txt'), 'ok\n');
           return {
@@ -1140,8 +1142,25 @@ test('Codex mutation은 격리 workspace에서 기존 경계와 proof를 적용�
     assert.equal(visibleProbeCalls, 0);
     assert.equal(result.status, SUCCESS);
     assert.equal(result.executor.backend, CODEX_EXECUTOR);
+    assert.equal(result.executor.selected, CODEX_EXECUTOR);
+    assert.equal(result.model, 'gpt-6-luna');
+    assert.equal(result.reasoningEffort, 'max');
     assert.equal(result.executor.mode, 'NOT_APPLICABLE_TO_CODEX');
     assert.equal(result.executor.invoked, true);
+    assert.deepEqual(result.executor.invocationEvidence.codexArgs, [
+      ...(process.platform === 'win32' ? ['-c', 'windows.sandbox="elevated"'] : []),
+      '-c',
+      'model_reasoning_effort="max"',
+      'exec',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--json',
+      '--sandbox',
+      'workspace-write',
+      '--model',
+      'gpt-6-luna',
+    ]);
+    assert.equal(result.executor.invocationEvidence.exitCode, 0);
     assert.ok(invocation.cwd.startsWith(tmpdir()));
     assert.deepEqual(result.changedPaths, ['src/allowed.txt']);
     assert.equal(result.proofResults.length, 1);
@@ -1226,6 +1245,30 @@ test('parseArgs accepts repeated flags with safe defaults', () => {
   assert.equal(
     parseArgs(['--task', 'task.md', '--allow', 'src', '--executor', 'codex']).options.executor,
     'codex',
+  );
+  assert.equal(
+    parseArgs([
+      '--task',
+      'task.md',
+      '--allow',
+      'src',
+      '--executor',
+      'codex',
+      '--reasoning-effort',
+      'max',
+    ]).options.reasoningEffort,
+    'max',
+  );
+  assert.equal(
+    parseArgs([
+      '--task',
+      'task.md',
+      '--allow',
+      'src',
+      '--reasoning-effort',
+      'ultra',
+    ]).ok,
+    false,
   );
 
   assert.equal(parseArgs(['--task', 'task.md']).ok, false);

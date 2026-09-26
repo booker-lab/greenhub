@@ -49,12 +49,14 @@ import {
   DEFAULT_CODEX_TIMEOUT_MS,
   OPENCODE_EXECUTOR,
   buildCodexArgs,
+  codexInvocationEvidence,
   defaultInvokeCodex,
   extractWindowsShimTarget,
   invokeAgent,
   resolveAgentExecutor,
   resolveCodexCommand,
   validateAgentExecutorOptions,
+  validateReasoningEffort,
 } from './agent-executor.mjs';
 import { captureCheckoutState, isCheckoutUnchanged } from '../git/publication-transport.mjs';
 
@@ -732,6 +734,8 @@ function createResult(options = {}) {
   return {
     status: null,
     reason: null,
+    model: options.model ?? null,
+    reasoningEffort: options.reasoningEffort ?? null,
     task: {
       title: options.title ?? null,
       allowedPaths: Array.isArray(options.allowedPaths) ? [...options.allowedPaths] : [],
@@ -761,8 +765,12 @@ function createResult(options = {}) {
     },
     executor: {
       invoked: false,
+      selected: null,
       mode: HEADLESS_MODE,
       backend: OPENCODE_EXECUTOR,
+      model: options.model ?? null,
+      reasoningEffort: options.reasoningEffort ?? null,
+      invocationEvidence: null,
       attachUrl: null,
       preflight: 'NOT_ATTEMPTED',
       instanceDisposal: 'NOT_ATTEMPTED',
@@ -873,6 +881,7 @@ export function runOnce(options, deps = {}) {
   const executorOptions = validateAgentExecutorOptions({
     selection: executorSelection,
     agent: options.agent,
+    reasoningEffort: options.reasoningEffort,
   });
   if (!executorOptions.ok) {
     result.status = INVALID_INPUT;
@@ -880,6 +889,7 @@ export function runOnce(options, deps = {}) {
     return result;
   }
   const backend = executorSelection.backend;
+  result.executor.selected = backend;
   result.executor.backend = backend;
   if (backend === CODEX_EXECUTOR) result.executor.mode = 'NOT_APPLICABLE_TO_CODEX';
 
@@ -1009,7 +1019,12 @@ export function runOnce(options, deps = {}) {
         : resolveOpencodeCommand({ explicitBin: options.opencodeBin ?? null, baseEnv });
       result.executor.commandSource = resolvedCommand.source;
       const args = backend === CODEX_EXECUTOR
-        ? buildCodexArgs({ taskText: prompt, model: options.model ?? null, sandboxMode: 'workspace-write' })
+        ? buildCodexArgs({
+            taskText: prompt,
+            model: options.model ?? null,
+            reasoningEffort: options.reasoningEffort ?? null,
+            sandboxMode: 'workspace-write',
+          })
         : buildOpencodeArgs({
             taskText: prompt,
             workspacePath,
@@ -1019,6 +1034,15 @@ export function runOnce(options, deps = {}) {
             attachUrl,
           });
       const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot, backend });
+      if (backend === CODEX_EXECUTOR) {
+        result.executor.invocationEvidence = codexInvocationEvidence({
+          resolvedCommand,
+          args,
+          model: options.model ?? null,
+          reasoningEffort: options.reasoningEffort ?? null,
+          sandboxMode: 'workspace-write',
+        });
+      }
       result.executor.invoked = true;
       log(
         `[run-once] ${backend.toLowerCase()} start (${resolvedCommand.source})` +
@@ -1034,6 +1058,16 @@ export function runOnce(options, deps = {}) {
         env: childEnv,
         timeoutMs: executorTimeoutMs,
       });
+      if (backend === CODEX_EXECUTOR) {
+        result.executor.invocationEvidence = codexInvocationEvidence({
+          resolvedCommand,
+          args,
+          model: options.model ?? null,
+          reasoningEffort: options.reasoningEffort ?? null,
+          sandboxMode: 'workspace-write',
+          execution,
+        });
+      }
       result.executor.exitCode = execution.exitCode ?? null;
       result.executor.signal = execution.signal ?? null;
       result.executor.timedOut = Boolean(execution.timedOut);
@@ -1050,6 +1084,12 @@ export function runOnce(options, deps = {}) {
     } catch (error) {
       result.executor.invoked = true;
       result.executor.startErrorCode = error?.code ?? null;
+      if (backend === CODEX_EXECUTOR && result.executor.invocationEvidence !== null) {
+        result.executor.invocationEvidence = {
+          ...result.executor.invocationEvidence,
+          startErrorCode: error?.code ?? null,
+        };
+      }
       fail(EXECUTOR_FAILED, `${backend.toLowerCase()} invocation failed: ${messageOf(error)}`);
     }
   }
@@ -1259,6 +1299,7 @@ export const USAGE = [
   '  --title <title>             optional OpenCode session title',
   '  --executor <name>           실행 backend: opencode (기본값) 또는 codex',
   '  --model <value>             backend가 지원하는 model 지정; Codex에서는 값을 그대로 전달',
+  '  --reasoning-effort <value>  Codex reasoning effort: none, low, medium, high, xhigh, max',
   '  --agent <name>              optional OpenCode agent override',
   '  --opencode-bin <path>       explicit OpenCode executable (default: resolved from PATH)',
   '  --codex-bin <path>          explicit Codex executable (default: resolved from PATH)',
@@ -1289,6 +1330,7 @@ export function parseArgs(argv) {
     executor: null,
     title: null,
     model: null,
+    reasoningEffort: null,
     agent: null,
     opencodeBin: null,
     codexBin: null,
@@ -1304,6 +1346,7 @@ export function parseArgs(argv) {
     '--executor': 'executor',
     '--title': 'title',
     '--model': 'model',
+    '--reasoning-effort': 'reasoningEffort',
     '--agent': 'agent',
     '--opencode-bin': 'opencodeBin',
     '--codex-bin': 'codexBin',
@@ -1357,6 +1400,8 @@ export function parseArgs(argv) {
     return { ok: false, error: `unknown argument: ${arg}` };
   }
   if (options.help) return { ok: true, options };
+  const reasoningValidation = validateReasoningEffort(options.reasoningEffort);
+  if (!reasoningValidation.ok) return { ok: false, error: reasoningValidation.reason };
   if (!options.taskFile) return { ok: false, error: '--task is required' };
   if (options.allowedPaths.length === 0)
     return { ok: false, error: 'at least one --allow is required' };
