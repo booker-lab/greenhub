@@ -1327,6 +1327,12 @@ test('the source introduces no retired or out-of-scope automation concepts', () 
 test('parseArgs requires an explicit goal contract', () => {
   assert.equal(parseArgs([]).ok, false);
   assert.equal(parseArgs(['--goal', 'goal.json']).ok, true);
+  assert.equal(
+    parseArgs(['--goal', 'goal.json', '--executor', 'codex', '--reasoning-effort', 'max'])
+      .options.reasoningEffort,
+    'max',
+  );
+  assert.equal(parseArgs(['--goal', 'goal.json', '--reasoning-effort', 'ultra']).ok, false);
   assert.equal(parseArgs(['--goal', 'goal.json', '--bogus']).ok, false);
   assert.equal(parseArgs(['--goal', 'goal.json', '--max-tasks', '3']).ok, false);
 });
@@ -1449,6 +1455,8 @@ test('Codex planner는 read-only JSONL 제안을 검증하고 같은 backend로 
     const fake = createFakeChildren({
       runPublishBehavior: (options) => {
         assert.equal(options.executor, 'codex');
+        assert.equal(options.model, 'gpt-6-luna');
+        assert.equal(options.reasoningEffort, 'max');
         pushCommitToLiveMain(fixture, {
           path: 'docs/feature.md',
           content: '# feature\n',
@@ -1466,7 +1474,8 @@ test('Codex planner는 read-only JSONL 제안을 검증하고 같은 backend로 
         repositoryRoot: fixture.root,
         remote: 'origin',
         executor: 'codex',
-        model: 'gpt-test-model',
+        model: 'gpt-6-luna',
+        reasoningEffort: 'max',
       },
       {
         ...fake.deps,
@@ -1481,7 +1490,8 @@ test('Codex planner는 read-only JSONL 제안을 검증하고 같은 backend로 
           assert.equal(input.env.GREENHUB_OPENCODE_ATTACH_URL, undefined);
           assert.equal(input.env.OPENAI_API_KEY, undefined);
           assert.ok(input.args.includes('--sandbox') && input.args.includes('read-only'));
-          assert.ok(input.args.includes('--model') && input.args.includes('gpt-test-model'));
+          assert.ok(input.args.includes('--model') && input.args.includes('gpt-6-luna'));
+          assert.ok(input.args.includes('model_reasoning_effort="max"'));
           return {
             exitCode: 0,
             signal: null,
@@ -1498,10 +1508,27 @@ test('Codex planner는 read-only JSONL 제안을 검증하고 같은 backend로 
     assert.deepEqual(result.executor.backendsObserved, ['CODEX']);
     assert.equal(result.planner.lastStatus, 'TASK');
     assert.equal(result.planner.lastExecutor.backend, 'CODEX');
+    assert.equal(result.model, 'gpt-6-luna');
+    assert.equal(result.reasoningEffort, 'max');
+    assert.deepEqual(result.planner.lastExecutor.invocationEvidence.codexArgs, [
+      ...(process.platform === 'win32' ? ['-c', 'windows.sandbox="elevated"'] : []),
+      '-c',
+      'model_reasoning_effort="max"',
+      'exec',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--json',
+      '--sandbox',
+      'read-only',
+      '--model',
+      'gpt-6-luna',
+    ]);
     assert.equal(result.planner.lastWorkspaceCleanup, 'REMOVED');
     assert.equal(calls.length, 1);
     assert.equal(fake.calls.runPublishOnce.length, 1);
     assert.equal(fake.calls.runPublishOnce[0].executor, 'codex');
+    assert.equal(fake.calls.runPublishOnce[0].model, 'gpt-6-luna');
+    assert.equal(fake.calls.runPublishOnce[0].reasoningEffort, 'max');
     assert.equal(fake.calls.runPublishOnce[0].codexTimeoutMs, undefined);
   } finally {
     removeFixture(fixture);

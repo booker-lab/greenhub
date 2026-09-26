@@ -60,11 +60,13 @@ import {
   DEFAULT_CODEX_TIMEOUT_MS,
   OPENCODE_EXECUTOR,
   buildCodexArgs,
+  codexInvocationEvidence,
   defaultInvokeCodex,
   invokeAgent,
   resolveAgentExecutor,
   resolveCodexCommand,
   validateAgentExecutorOptions,
+  validateReasoningEffort,
 } from './agent-executor.mjs';
 import {
   buildChildEnv,
@@ -706,6 +708,7 @@ function createSelectorEvidence() {
       exitCode: null,
       timedOut: false,
       startErrorCode: null,
+      invocationEvidence: null,
     },
   };
 }
@@ -755,7 +758,12 @@ function runFrontierSelector({
       pin,
     });
     const args = backend === CODEX_EXECUTOR
-      ? buildCodexArgs({ taskText: prompt, model: options.model ?? null, sandboxMode: 'read-only' })
+      ? buildCodexArgs({
+          taskText: prompt,
+          model: options.model ?? null,
+          reasoningEffort: options.reasoningEffort ?? null,
+          sandboxMode: 'read-only',
+        })
       : buildOpencodeArgs({
           taskText: prompt,
           workspacePath,
@@ -766,6 +774,15 @@ function runFrontierSelector({
             : 'build-frontier-selector',
         });
     const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot, backend });
+    if (backend === CODEX_EXECUTOR) {
+      evidence.executor.invocationEvidence = codexInvocationEvidence({
+        resolvedCommand,
+        args,
+        model: options.model ?? null,
+        reasoningEffort: options.reasoningEffort ?? null,
+        sandboxMode: 'read-only',
+      });
+    }
     evidence.executor.invoked = true;
     evidence.executor.backend = backend;
     log(`[run-build] selector ${backend.toLowerCase()} start in ${workspacePath}`);
@@ -781,6 +798,16 @@ function runFrontierSelector({
         ? options.codexTimeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS
         : options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
     });
+    if (backend === CODEX_EXECUTOR) {
+      evidence.executor.invocationEvidence = codexInvocationEvidence({
+        resolvedCommand,
+        args,
+        model: options.model ?? null,
+        reasoningEffort: options.reasoningEffort ?? null,
+        sandboxMode: 'read-only',
+        execution,
+      });
+    }
     evidence.executor.exitCode = execution?.exitCode ?? null;
     evidence.executor.timedOut = Boolean(execution?.timedOut);
     evidence.executor.startErrorCode = execution?.startErrorCode ?? null;
@@ -1909,6 +1936,8 @@ function createBuildResult(options) {
     status: null,
     reason: null,
     mode: BUILD_MODE,
+    model: options.model ?? null,
+    reasoningEffort: options.reasoningEffort ?? null,
     executor: { selected: null, source: null, backendsObserved: [] },
     nextFrontierSelected: false,
     repositoryRoot: resolve(options.repositoryRoot ?? process.cwd()),
@@ -1968,6 +1997,7 @@ export function runBuild(options = {}, deps = {}) {
   const executorOptions = validateAgentExecutorOptions({
     selection: executorSelection,
     agent: options.agent,
+    reasoningEffort: options.reasoningEffort,
   });
   if (!executorOptions.ok) return finish(INVALID_BUILD_REQUEST, executorOptions.reason);
   result.executor.selected = executorSelection.backend;
@@ -2130,6 +2160,7 @@ export function runBuild(options = {}, deps = {}) {
         title: selectedOptions.title ?? null,
         executor: selectedOptions.executor,
         model: selectedOptions.model ?? null,
+        reasoningEffort: selectedOptions.reasoningEffort ?? null,
         agent: selectedOptions.agent ?? null,
         opencodeBin: selectedOptions.opencodeBin ?? null,
         codexBin: selectedOptions.codexBin ?? null,
@@ -2179,6 +2210,7 @@ export const USAGE = [
   '  --executor <name>           실행 backend: opencode (기본값) 또는 codex',
   '  --title <title>             optional OpenCode session title for child tasks',
   '  --model <value>             backend가 지원하는 model 지정; Codex에서는 값을 그대로 전달',
+  '  --reasoning-effort <value>  Codex reasoning effort: none, low, medium, high, xhigh, max',
   '  --agent <name>              optional OpenCode agent override for child tasks',
   '  --opencode-bin <path>       explicit OpenCode executable for child tasks',
   '  --codex-bin <path>          explicit Codex executable for child tasks',
@@ -2215,6 +2247,7 @@ export function parseArgs(argv) {
     executor: null,
     title: null,
     model: null,
+    reasoningEffort: null,
     agent: null,
     opencodeBin: null,
     codexBin: null,
@@ -2233,6 +2266,7 @@ export function parseArgs(argv) {
     '--executor': 'executor',
     '--title': 'title',
     '--model': 'model',
+    '--reasoning-effort': 'reasoningEffort',
     '--agent': 'agent',
     '--opencode-bin': 'opencodeBin',
     '--codex-bin': 'codexBin',
@@ -2270,6 +2304,8 @@ export function parseArgs(argv) {
     }
     return { ok: false, error: `unknown argument: ${arg}` };
   }
+  const reasoningValidation = validateReasoningEffort(options.reasoningEffort);
+  if (!reasoningValidation.ok) return { ok: false, error: reasoningValidation.reason };
   return { ok: true, options };
 }
 

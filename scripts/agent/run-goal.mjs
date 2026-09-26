@@ -81,11 +81,13 @@ import {
   DEFAULT_CODEX_TIMEOUT_MS,
   OPENCODE_EXECUTOR,
   buildCodexArgs,
+  codexInvocationEvidence,
   defaultInvokeCodex,
   invokeAgent,
   resolveAgentExecutor,
   resolveCodexCommand,
   validateAgentExecutorOptions,
+  validateReasoningEffort,
 } from './agent-executor.mjs';
 import {
   DEFAULT_OPENCODE_TIMEOUT_MS,
@@ -1556,6 +1558,7 @@ function runPlanner({ contract, pin, criteria, options, deps, log, usedTaskIds }
       exitCode: null,
       timedOut: false,
       startErrorCode: null,
+      invocationEvidence: null,
     },
   };
   let tempRoot = null;
@@ -1581,7 +1584,12 @@ function runPlanner({ contract, pin, criteria, options, deps, log, usedTaskIds }
     }
     const prompt = buildPlannerPrompt({ contract, pin, criteria });
     const args = backend === CODEX_EXECUTOR
-      ? buildCodexArgs({ taskText: prompt, model: options.model ?? null, sandboxMode: 'read-only' })
+      ? buildCodexArgs({
+          taskText: prompt,
+          model: options.model ?? null,
+          reasoningEffort: options.reasoningEffort ?? null,
+          sandboxMode: 'read-only',
+        })
       : buildOpencodeArgs({
           taskText: prompt,
           workspacePath,
@@ -1590,6 +1598,15 @@ function runPlanner({ contract, pin, criteria, options, deps, log, usedTaskIds }
           title: isNonEmptyString(options.title) ? `${options.title} planner` : null,
         });
     const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot, backend });
+    if (backend === CODEX_EXECUTOR) {
+      evidence.executor.invocationEvidence = codexInvocationEvidence({
+        resolvedCommand,
+        args,
+        model: options.model ?? null,
+        reasoningEffort: options.reasoningEffort ?? null,
+        sandboxMode: 'read-only',
+      });
+    }
     evidence.executor.invoked = true;
     evidence.executor.backend = backend;
     log(`[run-goal] planner ${backend.toLowerCase()} start in ${workspacePath}`);
@@ -1605,6 +1622,16 @@ function runPlanner({ contract, pin, criteria, options, deps, log, usedTaskIds }
         ? options.codexTimeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS
         : options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
     });
+    if (backend === CODEX_EXECUTOR) {
+      evidence.executor.invocationEvidence = codexInvocationEvidence({
+        resolvedCommand,
+        args,
+        model: options.model ?? null,
+        reasoningEffort: options.reasoningEffort ?? null,
+        sandboxMode: 'read-only',
+        execution,
+      });
+    }
     evidence.executor.exitCode = execution?.exitCode ?? null;
     evidence.executor.timedOut = Boolean(execution?.timedOut);
     evidence.executor.startErrorCode = execution?.startErrorCode ?? null;
@@ -1777,10 +1804,12 @@ function classifyTerminal({ criteria, attempts, refusals, attemptedTaskIds }) {
   return NO_TASK_FOR_GAP;
 }
 
-function createGoalResult() {
+function createGoalResult(options = {}) {
   return {
     status: null,
     reason: null,
+    model: options.model ?? null,
+    reasoningEffort: options.reasoningEffort ?? null,
     executor: { selected: null, source: null, backendsObserved: [] },
     goal: {
       text: null,
@@ -1856,6 +1885,7 @@ export function buildChildInvocation({ task, taskText, options, title }) {
     title,
     executor: options.executor ?? null,
     model: options.model ?? null,
+    reasoningEffort: options.reasoningEffort ?? null,
     agent: options.agent ?? null,
     opencodeBin: options.opencodeBin ?? null,
     codexBin: options.codexBin ?? null,
@@ -2207,7 +2237,7 @@ function executeTaskBatch({ descriptors, deps, log }) {
 export function runGoal(options = {}, deps = {}) {
   const log = deps.log ?? ((message) => process.stderr.write(`${message}\n`));
   const now = deps.now ?? (() => Date.now());
-  const result = createGoalResult();
+  const result = createGoalResult(options);
   const repositoryRoot = resolve(options.repositoryRoot ?? process.cwd());
   const remote = options.remote ?? 'origin';
   let lastPinSnapshot = null;
@@ -2253,6 +2283,7 @@ export function runGoal(options = {}, deps = {}) {
   const executorOptions = validateAgentExecutorOptions({
     selection: executorSelection,
     agent: options.agent,
+    reasoningEffort: options.reasoningEffort,
   });
   if (!executorOptions.ok) {
     result.validation = { kind: INVALID_GOAL, errors: [executorOptions.reason] };
@@ -2697,6 +2728,7 @@ export const USAGE = [
   '  --executor <name>           실행 backend: opencode (기본값) 또는 codex',
   '  --title <title>             optional OpenCode session title for child tasks',
   '  --model <value>             backend가 지원하는 model 지정; Codex에서는 값을 그대로 전달',
+  '  --reasoning-effort <value>  Codex reasoning effort: none, low, medium, high, xhigh, max',
   '  --agent <name>              optional OpenCode agent override for child tasks',
   '  --opencode-bin <path>       explicit OpenCode executable for child tasks',
   '  --codex-bin <path>          explicit Codex executable for child tasks',
@@ -2718,6 +2750,7 @@ export function parseArgs(argv) {
     executor: null,
     title: null,
     model: null,
+    reasoningEffort: null,
     agent: null,
     opencodeBin: null,
     codexBin: null,
@@ -2736,6 +2769,7 @@ export function parseArgs(argv) {
     '--executor': 'executor',
     '--title': 'title',
     '--model': 'model',
+    '--reasoning-effort': 'reasoningEffort',
     '--agent': 'agent',
     '--opencode-bin': 'opencodeBin',
     '--codex-bin': 'codexBin',
@@ -2773,6 +2807,8 @@ export function parseArgs(argv) {
     }
     return { ok: false, error: `unknown argument: ${arg}` };
   }
+  const reasoningValidation = validateReasoningEffort(options.reasoningEffort);
+  if (!reasoningValidation.ok) return { ok: false, error: reasoningValidation.reason };
   if (options.help) return { ok: true, options };
   if (!options.goalFile) return { ok: false, error: '--goal is required' };
   return { ok: true, options };
