@@ -248,6 +248,9 @@ describe('callback probe workflow isolation contract', () => {
 
   it('deterministic probe-spec and PR triggers cover the callback contract', () => {
     const source = readWorkflow();
+    const pathsBlock = source.match(/^  pull_request:\r?\n    paths:\r?\n((?:      [^\r\n]*\r?\n)*)/m);
+    assert.ok(pathsBlock, 'workflow must declare pull_request.paths');
+    const triggerPaths = pathsBlock[1].split(/\r?\n/).map((line) => line.trim());
     assert.ok(
       source.includes('scripts/probe-consumer-callback.spec.mjs'),
       'probe-spec must run the callback deterministic spec',
@@ -257,11 +260,12 @@ describe('callback probe workflow isolation contract', () => {
       'probe-spec must run the callback workflow contract spec',
     );
     for (const trigger of [
+      'apps/consumer/src/auth.ts',
       'scripts/probe-consumer-callback.mjs',
       'scripts/probe-consumer-callback.spec.mjs',
       'scripts/probe-consumer-callback.workflow.spec.mjs',
     ]) {
-      assert.ok(source.includes(trigger), `pull_request paths must include ${trigger}`);
+      assert.ok(triggerPaths.includes(`- ${trigger}`), `pull_request paths must include ${trigger}`);
     }
   });
 
