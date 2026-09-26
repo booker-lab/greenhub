@@ -48,6 +48,12 @@ import {
 } from './run-build.mjs';
 import { NO_PROGRESS } from './run-goal.mjs';
 import {
+  CODEX_EXECUTOR,
+  DEFAULT_CODEX_TIMEOUT_MS,
+  resolveAgentExecutor,
+  validateAgentExecutorOptions,
+} from './agent-executor.mjs';
+import {
   DEFAULT_OPENCODE_TIMEOUT_MS,
   DEFAULT_PROOF_TIMEOUT_MS,
   OPENCODE_ATTACH_URL_ENV,
@@ -239,11 +245,19 @@ function readNightRequest(options) {
  * an unusable or unavailable attach target fails closed before any cycle
  * starts. A silent HEADLESS downgrade is never allowed.
  */
-function resolveNightVisibility({ baseEnv, probe = probeVisibleServer }) {
+function resolveNightVisibility({ baseEnv, backend, probe = probeVisibleServer }) {
   const raw =
     typeof baseEnv?.[OPENCODE_ATTACH_URL_ENV] === 'string'
       ? baseEnv[OPENCODE_ATTACH_URL_ENV].trim()
       : '';
+  if (backend === CODEX_EXECUTOR) {
+    return {
+      requested: raw.length > 0,
+      attachUrl: null,
+      health: 'NOT_APPLICABLE_TO_CODEX',
+      error: null,
+    };
+  }
   if (raw.length === 0) {
     return { requested: false, attachUrl: null, health: 'NOT_REQUESTED', error: null };
   }
@@ -270,8 +284,9 @@ function resolveNightVisibility({ baseEnv, probe = probeVisibleServer }) {
  * run-publish-once -> run-once chain cannot lose VISIBLE_TUI through
  * inheritance gaps.
  */
-function buildBuildChildEnv({ baseEnv, attachUrl }) {
+function buildBuildChildEnv({ baseEnv, attachUrl, backend }) {
   const childEnv = { ...baseEnv };
+  if (backend === CODEX_EXECUTOR) delete childEnv[OPENCODE_ATTACH_URL_ENV];
   if (attachUrl !== null) childEnv[OPENCODE_ATTACH_URL_ENV] = attachUrl;
   return childEnv;
 }
@@ -396,6 +411,7 @@ function createNightResult(options) {
     finalTerminal: null,
     repositoryRoot: resolve(options.repositoryRoot ?? process.cwd()),
     remote: options.remote ?? 'origin',
+    executor: { selected: null, backendsObserved: [] },
     request: {
       source: null,
       characters: 0,
@@ -458,10 +474,12 @@ function buildChildArgs(options) {
     options.remote ?? 'origin',
   ];
   const valueFlags = [
+    ['executor', '--executor'],
     ['title', '--title'],
     ['model', '--model'],
     ['agent', '--agent'],
     ['opencodeBin', '--opencode-bin'],
+    ['codexBin', '--codex-bin'],
     ['githubRepository', '--github-repo'],
   ];
   for (const [key, flag] of valueFlags) {
@@ -469,6 +487,7 @@ function buildChildArgs(options) {
   }
   const numberFlags = [
     ['opencodeTimeoutMs', '--opencode-timeout-ms'],
+    ['codexTimeoutMs', '--codex-timeout-ms'],
     ['proofTimeoutMs', '--proof-timeout-ms'],
     ['ciTimeoutMs', '--ci-timeout-ms'],
     ['maxRebindAttempts', '--max-rebind-attempts'],
@@ -528,8 +547,20 @@ function summarizeCycle({
         .filter((value) => typeof value === 'string' && value.length > 0),
     ),
   ];
+  const observedBackends = new Set([
+    ...(Array.isArray(buildResult?.executor?.backendsObserved)
+      ? buildResult.executor.backendsObserved
+      : []),
+    buildResult?.selector?.executor?.backend,
+    buildResult?.goalResult?.planner?.lastExecutor?.backend,
+    ...attempts.map((attempt) => attempt?.child?.executor?.backend),
+  ].filter((value) => typeof value === 'string' && value.length > 0));
   return {
     cycle: cycleNumber,
+    executor: {
+      selected: buildResult?.executor?.selected ?? null,
+      backendsObserved: [...observedBackends],
+    },
     liveMainStart,
     liveMainEnd,
     liveMainObservation: { start: startObservation, end: endObservation },
@@ -627,6 +658,18 @@ export async function runNight(options = {}, deps = {}) {
     return result;
   };
 
+  const executorSelection = resolveAgentExecutor({
+    explicitValue: options.executor ?? null,
+    baseEnv: env,
+  });
+  const executorOptions = validateAgentExecutorOptions({
+    selection: executorSelection,
+    agent: options.agent,
+  });
+  if (!executorOptions.ok) return finish(INVALID_NIGHT_REQUEST, executorOptions.reason);
+  result.executor.selected = executorSelection.backend;
+  options = { ...options, executor: executorSelection.backend.toLowerCase() };
+
   if (!Number.isInteger(maxCycles) || maxCycles <= 0) {
     return finish(INVALID_NIGHT_REQUEST, '--max-cycles must be a positive integer');
   }
@@ -667,6 +710,7 @@ export async function runNight(options = {}, deps = {}) {
     // workflow, preserve it explicitly or fail closed. Never fall back HEADLESS.
     const visibility = resolveNightVisibility({
       baseEnv: env,
+      backend: executorSelection.backend,
       probe: deps.probeVisibleServer ?? probeVisibleServer,
     });
     result.visibility = {
@@ -688,8 +732,9 @@ export async function runNight(options = {}, deps = {}) {
     const buildChildEnv = buildBuildChildEnv({
       baseEnv: env,
       attachUrl: visibility.attachUrl,
+      backend: executorSelection.backend,
     });
-    if (visibility.requested) {
+    if (visibility.health === 'HEALTHY' && visibility.attachUrl !== null) {
       log(
         `[NIGHT RUN] visible OpenCode TUI ${visibility.attachUrl} (HEALTHY); mutation tasks attach to it.`,
       );
@@ -804,11 +849,23 @@ export async function runNight(options = {}, deps = {}) {
         endObservation: endObservation.sha === null ? 'UNKNOWN' : 'DIRECT',
         elapsedMs: Math.max(0, now() - cycleStartedAt),
       });
+      const mismatchedBackend = cycle.executor.backendsObserved.find(
+        (backend) => backend !== result.executor.selected,
+      );
+      if (mismatchedBackend !== undefined && childFailureReason === null) {
+        childFailureReason =
+          `선택한 executor ${result.executor.selected} 대신 ${mismatchedBackend} 실행이 관찰됐습니다`;
+      }
       if (childFailureReason !== null) {
         cycle.status = BUILD_CHILD_FAILED;
         cycle.reason = childFailureReason;
       }
       result.cycles.push(cycle);
+      for (const backend of cycle.executor.backendsObserved) {
+        if (!result.executor.backendsObserved.includes(backend)) {
+          result.executor.backendsObserved.push(backend);
+        }
+      }
       if (cycle.liveMainStart !== null && result.liveMain.atStart === null) {
         result.liveMain.atStart = cycle.liveMainStart;
       }
@@ -909,11 +966,15 @@ export const USAGE = [
   '  --request <file>            BUILD request text; omit to read stdin once',
   '  --repo <dir>                canonical checkout root (default: current directory)',
   '  --remote <name>             remote observed for live main (default: origin)',
+  '  --executor <name>           실행 backend: opencode (기본값) 또는 codex',
+  '  GREENHUB_AGENT_EXECUTOR     --executor가 없을 때 backend 환경 변수로 사용',
   '  --title <title>             optional OpenCode session title for child tasks',
-  '  --model <provider/model>    optional OpenCode model override for child tasks',
+  '  --model <value>             backend가 지원하는 model 지정; Codex에서는 값을 그대로 전달',
   '  --agent <name>              optional OpenCode agent override for child tasks',
   '  --opencode-bin <path>       explicit OpenCode executable for child tasks',
   '  --opencode-timeout-ms <n>   child/selector opencode timeout in ms (default: 3600000)',
+  '  --codex-bin <path>          Codex 실행 파일 경로를 지정',
+  '  --codex-timeout-ms <n>      Codex 자식/selector 제한 시간(ms, 기본값: 3600000)',
   '  --proof-timeout-ms <n>      child/proof timeout in ms (default: 1800000, 0 disables)',
   '  --ci-timeout-ms <n>         child required-check watch timeout in ms (default: 2700000)',
   '  --max-rebind-attempts <n>   child fresh-main rebind constructions (default: 2)',
@@ -938,6 +999,7 @@ export const USAGE = [
   '  new BUILD starts, and the OpenCode TUI is never signaled.',
   '  If the attach URL is set but invalid or the server is unavailable, Night Run',
   '  fails closed with VISIBILITY_UNAVAILABLE instead of downgrading to HEADLESS.',
+  '  Codex는 OpenCode TUI 연결을 사용하지 않으며 진행 상태는 이 control terminal에 표시된다.',
   '',
   'Prints one deterministic JSON summary to stdout. Exit codes: 0 (product',
   'terminal, max-cycles, or max-minutes), 130 (operator Ctrl+C safe stop),',
@@ -951,11 +1013,14 @@ export function parseArgs(argv) {
     maxMinutes: null,
     repositoryRoot: process.cwd(),
     remote: 'origin',
+    executor: null,
     title: null,
     model: null,
     agent: null,
     opencodeBin: null,
+    codexBin: null,
     opencodeTimeoutMs: DEFAULT_OPENCODE_TIMEOUT_MS,
+    codexTimeoutMs: DEFAULT_CODEX_TIMEOUT_MS,
     proofTimeoutMs: DEFAULT_PROOF_TIMEOUT_MS,
     ciTimeoutMs: DEFAULT_CI_TIMEOUT_MS,
     maxRebindAttempts: DEFAULT_MAX_REBIND_ATTEMPTS,
@@ -966,16 +1031,19 @@ export function parseArgs(argv) {
     '--request': 'requestFile',
     '--repo': 'repositoryRoot',
     '--remote': 'remote',
+    '--executor': 'executor',
     '--title': 'title',
     '--model': 'model',
     '--agent': 'agent',
     '--opencode-bin': 'opencodeBin',
+    '--codex-bin': 'codexBin',
     '--github-repo': 'githubRepository',
   };
   const positiveIntegerFlags = { '--max-cycles': 'maxCycles' };
   const positiveNumberFlags = { '--max-minutes': 'maxMinutes' };
   const numberFlags = {
     '--opencode-timeout-ms': 'opencodeTimeoutMs',
+    '--codex-timeout-ms': 'codexTimeoutMs',
     '--proof-timeout-ms': 'proofTimeoutMs',
     '--ci-timeout-ms': 'ciTimeoutMs',
     '--max-rebind-attempts': 'maxRebindAttempts',
@@ -1049,11 +1117,14 @@ export async function main(
   const summary = [
     `[NIGHT RUN] STATUS ${result.status}`,
     `[NIGHT RUN] STOP_REASON ${result.stopReason}`,
+    `[NIGHT RUN] EXECUTOR selected=${result.executor?.selected ?? 'unknown'} observed=${(result.executor?.backendsObserved ?? []).join(',') || 'none'}`,
     `[NIGHT RUN] LIVE_MAIN ${result.liveMain?.atStart ?? 'unknown'} -> ${result.liveMain?.atEnd ?? 'unknown'}`,
     `[NIGHT RUN] CYCLES started=${result.bound?.cyclesStarted ?? 0} completed=${result.bound?.cyclesCompleted ?? 0} max=${result.bound?.maxCycles ?? 'none'}`,
     `[NIGHT RUN] OPERATOR_STOP requested=${result.operatorStop?.requested ? 'YES' : 'NO'} during_cycle=${result.operatorStop?.duringCycle ? 'YES' : 'NO'}`,
     `[NIGHT RUN] VISIBILITY ${
-      result.visibility?.requested
+      result.visibility?.health === 'NOT_APPLICABLE_TO_CODEX'
+        ? 'NOT_APPLICABLE_TO_CODEX'
+        : result.visibility?.requested
         ? `VISIBLE_TUI ${result.visibility.health} tasks=${result.visibility.visibleTuiTasks}`
         : 'HEADLESS_DEFAULT'
     }`,

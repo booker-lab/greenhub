@@ -46,6 +46,10 @@ import {
   SUCCESS,
   VISIBLE_TUI_MODE,
 } from './run-once.mjs';
+import {
+  CODEX_EXECUTOR,
+  DEFAULT_CODEX_TIMEOUT_MS,
+} from './agent-executor.mjs';
 
 function git(cwd, args) {
   return execFileSync('git', args, {
@@ -158,6 +162,23 @@ function createFakeOpencode({ writes = [], fail = false, proofCalls = null } = {
     };
   };
   return { invocations, invokeOpencode };
+}
+
+function codexJsonlOutput(text = '완료') {
+  return [
+    { type: 'thread.started', thread_id: 'thread-1' },
+    { type: 'turn.started', turn_id: 'turn-1' },
+    { type: 'item.completed', item: { id: 'message-1', type: 'agent_message', text } },
+    { type: 'turn.completed', turn_id: 'turn-1', status: 'completed' },
+  ].map((event) => JSON.stringify(event)).join('\n') + '\n';
+}
+
+function codexOutputWithoutFinalMessage() {
+  return [
+    { type: 'thread.started', thread_id: 'thread-1' },
+    { type: 'turn.started', turn_id: 'turn-1' },
+    { type: 'turn.completed', turn_id: 'turn-1', status: 'completed' },
+  ].map((event) => JSON.stringify(event)).join('\n') + '\n';
 }
 
 function listRunOnceTempDirs() {
@@ -952,6 +973,10 @@ test('child environment drops operational credentials and hardens git', () => {
       GREENHUB_LOCAL_AUTH_SECRET: 'greenhub-secret',
       GREENHUB_LOCAL_SELLER_PASSWORD: 'greenhub-password',
       ANTHROPIC_API_KEY: 'model-provider-key',
+      OPENAI_API_KEY: 'openai-model-key',
+      CODEX_API_KEY: 'codex-model-key',
+      SERVICE_ACCESS_TOKEN: 'service-token-value',
+      [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096',
       GIT_CONFIG_COUNT: '99',
       GIT_CONFIG_KEY_0: 'attacker',
       OPENCODE: '1',
@@ -980,6 +1005,10 @@ test('child environment drops operational credentials and hardens git', () => {
     'parent Git config overrides must be dropped',
   );
   assert.equal(env.ANTHROPIC_API_KEY, 'model-provider-key');
+  assert.equal(env.OPENAI_API_KEY, 'openai-model-key');
+  assert.equal(env.CODEX_API_KEY, 'codex-model-key');
+  assert.equal(env.SERVICE_ACCESS_TOKEN, 'service-token-value');
+  assert.equal(env[OPENCODE_ATTACH_URL_ENV], 'http://127.0.0.1:4096');
   assert.equal(env.HOME, '/home/operator');
   assert.equal(env.GIT_CONFIG_COUNT, '5');
   assert.equal(env.GIT_CONFIG_KEY_0, 'credential.helper');
@@ -990,6 +1019,20 @@ test('child environment drops operational credentials and hardens git', () => {
   assert.equal(env.GIT_CONFIG_VALUE_3, 'nothing');
   assert.equal(env.GIT_TERMINAL_PROMPT, '0');
   assert.equal(env.GH_CONFIG_DIR, join('/tmp/scratch', 'opencode-child-gh-config'));
+
+  const codexEnv = buildChildEnv({
+    baseEnv: {
+      PATH: '/usr/bin',
+      [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096',
+      OPENAI_API_KEY: 'openai-model-key',
+      CODEX_API_KEY: 'codex-model-key',
+    },
+    scratchDir: '/tmp/codex-scratch',
+    backend: CODEX_EXECUTOR,
+  });
+  assert.equal(codexEnv[OPENCODE_ATTACH_URL_ENV], undefined);
+  assert.equal(codexEnv.OPENAI_API_KEY, undefined);
+  assert.equal(codexEnv.CODEX_API_KEY, undefined);
 });
 
 test('OpenCode command builder uses one-shot JSON automation flags', () => {
@@ -1043,6 +1086,119 @@ test('Windows shim resolution finds the real executable behind a cmd shim', () =
   );
 });
 
+test('Codex mutation은 격리 workspace에서 기존 경계와 proof를 적용하고 secret 출력을 가린다', () => {
+  const fixture = buildFixture();
+  try {
+    const secret = 'codex-test-secret-742';
+    let invocation = null;
+    let visibleProbeCalls = 0;
+    const logs = [];
+    const result = runOnce(
+      runOptions(fixture, {
+        executor: 'codex',
+        model: 'gpt-test-model',
+        codexTimeoutMs: 5000,
+        proofCommands: ['node proof-check.cjs'],
+      }),
+      {
+        env: {
+          PATH: process.env.PATH ?? '',
+          OPENAI_API_KEY: secret,
+          CODEX_API_KEY: 'codex-api-secret-123',
+          SERVICE_ACCESS_TOKEN: 'other-auth-secret-456',
+          [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:9',
+        },
+        probeVisibleServer: () => {
+          visibleProbeCalls += 1;
+          throw new Error('Codex must not probe OpenCode visibility');
+        },
+        invokeCodex: (input) => {
+          invocation = input;
+          assert.equal(input.env.OPENAI_API_KEY, undefined);
+          assert.equal(input.env.CODEX_API_KEY, undefined);
+          assert.equal(input.env.SERVICE_ACCESS_TOKEN, undefined);
+          assert.equal(input.env[OPENCODE_ATTACH_URL_ENV], undefined);
+          assert.notEqual(input.cwd, fixture.root);
+          assert.ok(input.args.includes('--json'));
+          assert.ok(input.args.includes('--sandbox') && input.args.includes('workspace-write'));
+          assert.ok(input.args.includes('--model') && input.args.includes('gpt-test-model'));
+          mkdirSync(join(input.cwd, 'src'), { recursive: true });
+          writeFileSync(join(input.cwd, 'src', 'allowed.txt'), 'ok\n');
+          return {
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            startErrorCode: null,
+            stdout: codexJsonlOutput(`작업 완료 ${secret}`),
+            stderr: `진단 ${secret}`,
+          };
+        },
+        log: (message) => logs.push(String(message)),
+      },
+    );
+
+    assert.equal(visibleProbeCalls, 0);
+    assert.equal(result.status, SUCCESS);
+    assert.equal(result.executor.backend, CODEX_EXECUTOR);
+    assert.equal(result.executor.mode, 'NOT_APPLICABLE_TO_CODEX');
+    assert.equal(result.executor.invoked, true);
+    assert.ok(invocation.cwd.startsWith(tmpdir()));
+    assert.deepEqual(result.changedPaths, ['src/allowed.txt']);
+    assert.equal(result.proofResults.length, 1);
+    assert.equal(result.proofResults[0].ok, true);
+    assert.equal(result.workspace.cleanup, 'REMOVED');
+    assert.match(result.executor.stdoutTail, /\[가림\]/);
+    assert.match(result.executor.stderrTail, /\[가림\]/);
+    assert.equal(JSON.stringify(result).includes(secret), false);
+    assert.equal(logs.join('\n').includes(secret), false);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('Codex 금지 경로 변경은 boundary 위반이며 JSONL·종료·timeout 오류는 정리 후 실패한다', () => {
+  const fixture = buildFixture();
+  const baseOptions = runOptions(fixture, { executor: 'codex', codexTimeoutMs: 5 });
+  const depsFor = (invokeCodex) => ({ invokeCodex, log: () => {} });
+  try {
+    const violation = runOnce(baseOptions, depsFor((input) => {
+      mkdirSync(join(input.cwd, 'outside'), { recursive: true });
+      writeFileSync(join(input.cwd, 'outside', 'escape.txt'), 'outside boundary\n');
+      return {
+        exitCode: 0,
+        signal: null,
+        timedOut: false,
+        startErrorCode: null,
+        stdout: codexJsonlOutput('완료'),
+        stderr: '',
+      };
+    }));
+    assert.equal(violation.status, BOUNDARY_VIOLATION);
+    assert.deepEqual(violation.boundary.violations, ['outside/escape.txt']);
+    assert.equal(violation.workspace.cleanup, 'REMOVED');
+
+    const failures = [
+      ['malformed JSONL', { exitCode: 0, stdout: '{broken}\n', timedOut: false }],
+      ['missing final output', { exitCode: 0, stdout: codexOutputWithoutFinalMessage(), timedOut: false }],
+      ['nonzero exit', { exitCode: 7, stdout: codexJsonlOutput('완료'), timedOut: false }],
+      ['timeout', { exitCode: null, stdout: codexJsonlOutput('완료'), timedOut: true }],
+    ];
+    for (const [label, execution] of failures) {
+      const result = runOnce(baseOptions, depsFor(() => ({
+        signal: null,
+        startErrorCode: null,
+        stderr: '',
+        ...execution,
+      })));
+      assert.equal(result.status, EXECUTOR_FAILED, label);
+      assert.equal(result.proofResults.length, 0, label);
+      assert.equal(result.workspace.cleanup, 'REMOVED', label);
+    }
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
 test('parseArgs accepts repeated flags with safe defaults', () => {
   const parsed = parseArgs([
     '--task',
@@ -1066,6 +1222,11 @@ test('parseArgs accepts repeated flags with safe defaults', () => {
   assert.equal(parsed.options.repositoryRoot, 'C:\\repo');
   assert.equal(parsed.options.remote, 'origin');
   assert.ok(parsed.options.opencodeTimeoutMs > 0);
+  assert.equal(parsed.options.codexTimeoutMs, DEFAULT_CODEX_TIMEOUT_MS);
+  assert.equal(
+    parseArgs(['--task', 'task.md', '--allow', 'src', '--executor', 'codex']).options.executor,
+    'codex',
+  );
 
   assert.equal(parseArgs(['--task', 'task.md']).ok, false);
   assert.equal(parseArgs(['--allow', 'src']).ok, false);

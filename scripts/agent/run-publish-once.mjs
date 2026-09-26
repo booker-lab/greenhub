@@ -1483,7 +1483,7 @@ function invalidResult(reason) {
 
 /**
  * Execute one bounded task and close its publication in the same foreground
- * process. `deps` forwards the run-once seams (invokeOpencode,
+ * process. `deps` forwards the run-once seams (invokeOpencode, invokeCodex,
  * runProofCommand, removeWorkspace, env, log) plus the publication seams
  * (runGh, publishExactCandidate, deleteTemporaryTransportRef,
  * decidePrePublication, decidePreMerge).
@@ -1511,14 +1511,18 @@ export function runPublishOnce(options, deps = {}) {
       proofCommands: options.proofCommands ?? [],
       proofOwners: options.proofOwners,
       title: options.title ?? null,
+      executor: options.executor ?? null,
       model: options.model ?? null,
       agent: options.agent ?? null,
       opencodeBin: options.opencodeBin ?? null,
+      codexBin: options.codexBin ?? null,
       opencodeTimeoutMs: options.opencodeTimeoutMs,
+      codexTimeoutMs: options.codexTimeoutMs,
       proofTimeoutMs: options.proofTimeoutMs,
     },
     {
       invokeOpencode: deps.invokeOpencode,
+      invokeCodex: deps.invokeCodex,
       runProofCommand: deps.runProofCommand,
       removeWorkspace: deps.removeWorkspace,
       log,
@@ -1573,9 +1577,12 @@ export const USAGE = [
   '  --ci-timeout-ms <n>         required-check watch timeout in ms (default: 2700000, 0 disables)',
   '  --max-rebind-attempts <n>   bounded fresh-main rebind constructions per process (default: 2)',
   '  --title <title>             optional OpenCode session title',
-  '  --model <provider/model>    optional OpenCode model override',
+  '  --model <value>             backend가 지원하는 model 지정; Codex에서는 값을 그대로 전달',
   '  --agent <name>              optional OpenCode agent override',
   '  --opencode-bin <path>       explicit OpenCode executable (default: resolved from PATH)',
+  '  --executor <name>           실행 backend: opencode (기본값) 또는 codex',
+  '  --codex-bin <path>          Codex 실행 파일 경로를 지정',
+  '  --codex-timeout-ms <n>      Codex 제한 시간(ms, 기본값: 3600000, 0이면 제한 없음)',
   '  --repo <dir>                canonical checkout root (default: current directory)',
   '  --remote <name>             publication remote observed for the live baseline (default: origin)',
   '  --opencode-timeout-ms <n>   opencode timeout in ms (default: 3600000, 0 disables)',

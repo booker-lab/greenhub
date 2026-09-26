@@ -256,6 +256,7 @@ function syntheticCycleResult({
   endMain = null,
   escalationToken = null,
   executorModes = [],
+  executor = null,
 }) {
   const attemptCount = Math.max(
     executorModes.length,
@@ -306,6 +307,7 @@ function syntheticCycleResult({
       },
       attempts,
     },
+    ...(executor === null ? {} : { executor }),
     childCalls,
   };
 }
@@ -845,6 +847,69 @@ test('N10 — the exact same request text reaches every cycle unchanged', async 
   assert.equal(result.request.reusedAcrossCycles, true);
 });
 
+test('Codex Night Run은 3개 cycle에 선택을 유지하고 stale OpenCode TUI를 요구하지 않는다', async () => {
+  const requestText = 'MODE: BUILD\r\n\r\n요청 ✓ 1\r\n요청 2   \r\n';
+  const harness = createNightHarness({
+    requestText,
+    mains: [shaFor(1), shaFor(2), shaFor(2), shaFor(3), shaFor(3), shaFor(4)],
+    buildCycle: (index) =>
+      syntheticCycleResult({
+        status: index < 3 ? FRONTIER_COMPLETE : ALREADY_SATISFIED,
+        selected: index < 3 ? { id: `F${index}` } : null,
+        childCalls: index < 3 ? 1 : 0,
+        executor: { selected: 'CODEX', backendsObserved: ['CODEX'] },
+      }),
+  });
+  harness.deps.env = {
+    PATH: 'fake-path',
+    [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:9',
+  };
+  let visibilityProbes = 0;
+  harness.deps.probeVisibleServer = () => {
+    visibilityProbes += 1;
+    throw new Error('Codex must skip OpenCode visibility checks');
+  };
+
+  const result = await runHarness(harness, { executor: 'codex', maxCycles: 3 });
+
+  assert.equal(result.status, ALREADY_SATISFIED);
+  assert.equal(result.executor.selected, 'CODEX');
+  assert.deepEqual(result.executor.backendsObserved, ['CODEX']);
+  assert.equal(result.cycles.length, 3);
+  assert.deepEqual(
+    result.cycles.map((cycle) => cycle.status),
+    [FRONTIER_COMPLETE, FRONTIER_COMPLETE, ALREADY_SATISFIED],
+  );
+  assert.equal(result.visibility.health, 'NOT_APPLICABLE_TO_CODEX');
+  assert.equal(result.visibility.attachUrl, null);
+  assert.equal(result.visibility.preservedToBuildChildren, false);
+  assert.equal(visibilityProbes, 0);
+  assert.equal(harness.logLines.join('\n').includes('visible OpenCode TUI'), false);
+  for (const call of harness.buildCalls) {
+    assert.ok(call.args.includes('--executor') && call.args.includes('codex'));
+    assert.equal(call.env[OPENCODE_ATTACH_URL_ENV], undefined);
+    assert.equal(call.requestText, requestText);
+  }
+  assert.equal(result.request.reusedAcrossCycles, true);
+});
+
+test('Codex Night Run은 선택 backend와 다른 실행이 관찰되면 다음 cycle을 시작하지 않는다', async () => {
+  const harness = createNightHarness({
+    mains: [shaFor(1), shaFor(2)],
+    buildCycle: () =>
+      syntheticCycleResult({
+        status: FRONTIER_COMPLETE,
+        selected: { id: 'F1' },
+        executor: { selected: 'CODEX', backendsObserved: ['OPENCODE'] },
+      }),
+  });
+  const result = await runHarness(harness, { executor: 'codex', maxCycles: 3 });
+  assert.equal(result.status, BUILD_CHILD_FAILED);
+  assert.equal(result.cycles.length, 1);
+  assert.match(result.cycles[0].reason, /CODEX 대신 OPENCODE/);
+  assert.equal(harness.buildCalls.length, 1);
+});
+
 // ---------------------------------------------------------------------------
 // N13 — VISIBLE_TUI preservation (in-process contract)
 // ---------------------------------------------------------------------------
@@ -1122,6 +1187,89 @@ function createFakeNightOpencode({ source = FAKE_OPENCODE_SOURCE, writePath = nu
   };
 }
 
+const FAKE_CODEX_SOURCE = [
+  "const fs = require('node:fs');",
+  "const path = require('node:path');",
+  'const dir = process.env.GREENHUB_NIGHT_FAKE_DIR;',
+  'const args = process.argv.slice(2);',
+  'const valueOf = (flag) => { const at = args.indexOf(flag); return at >= 0 ? args[at + 1] : null; };',
+  'const sandbox = valueOf("--sandbox");',
+  'const pid = process.pid;',
+  'const emit = (text) => {',
+  '  const events = [',
+  '    { type: "thread.started", thread_id: "fake-thread" },',
+  '    { type: "turn.started", turn_id: "fake-turn" },',
+  '    { type: "item.completed", item: { id: "fake-message", type: "agent_message", text } },',
+  '    { type: "turn.completed", turn_id: "fake-turn", status: "completed" },',
+  '  ];',
+  '  process.stdout.write(events.map((event) => JSON.stringify(event)).join("\\n") + "\\n");',
+  '};',
+  'fs.writeFileSync(path.join(dir, "codex-invoke-" + pid + ".json"), JSON.stringify({ pid, sandbox, cwd: process.cwd() }));',
+  'if (sandbox === "read-only") {',
+  '  const decision = JSON.parse(fs.readFileSync(path.join(dir, "selector-decision.json"), "utf8"));',
+  '  emit(JSON.stringify(decision));',
+  '  process.exit(0);',
+  '}',
+  'process.on("SIGINT", () => fs.writeFileSync(path.join(dir, "codex-sigint-" + pid), ""));',
+  'fs.writeFileSync(path.join(dir, "mutation-ready"), String(pid));',
+  'const deadline = Date.now() + 120000;',
+  'const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);',
+  'while (!fs.existsSync(path.join(dir, "proceed"))) {',
+  '  if (Date.now() > deadline) process.exit(3);',
+  '  sleep(25);',
+  '}',
+  'const writePath = process.env.GREENHUB_NIGHT_FAKE_WRITE;',
+  'if (writePath) {',
+  '  const absolute = path.join(process.cwd(), writePath);',
+  '  fs.mkdirSync(path.dirname(absolute), { recursive: true });',
+  '  fs.writeFileSync(absolute, "created by fake Codex\\n");',
+  '}',
+  'emit("bounded fake Codex task complete");',
+  'fs.writeFileSync(path.join(dir, "mutation-done"), String(pid));',
+  'process.exit(0);',
+  '',
+].join('\n');
+
+function createFakeNightCodex({ writePath = 'docs/feature.md' } = {}) {
+  const binDir = mkdtempSync(join(tmpdir(), 'greenhub-run-night-fake-codex-'));
+  const eventsDir = mkdtempSync(join(tmpdir(), 'greenhub-run-night-fake-codex-events-'));
+  writeFileSync(join(binDir, 'fake-codex.cjs'), FAKE_CODEX_SOURCE, 'utf8');
+  let codexBin;
+  if (process.platform === 'win32') {
+    codexBin = join(binDir, 'codex.cmd');
+    writeFileSync(codexBin, '@echo off\r\n"%~dp0\\fake-codex.cjs" %*\r\n', 'utf8');
+  } else {
+    codexBin = join(binDir, 'codex');
+    writeFileSync(codexBin, `#!/usr/bin/env node\n${FAKE_CODEX_SOURCE}`, 'utf8');
+    chmodSync(codexBin, 0o755);
+  }
+  return {
+    binDir,
+    eventsDir,
+    codexBin,
+    env: {
+      ...process.env,
+      PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
+      GREENHUB_NIGHT_FAKE_DIR: eventsDir,
+      GREENHUB_NIGHT_FAKE_WRITE: writePath,
+      CODEX_BIN: codexBin,
+    },
+    readEvents(prefix) {
+      if (!existsSync(eventsDir)) return [];
+      return readdirSync(eventsDir)
+        .filter((name) => name.startsWith(prefix))
+        .map((name) => {
+          const path = join(eventsDir, name);
+          const text = readFileSync(path, 'utf8');
+          return text.startsWith('{') ? JSON.parse(text) : { pid: Number.parseInt(text, 10) };
+        });
+    },
+    remove() {
+      cleanupFixturePaths([binDir, eventsDir]);
+    },
+  };
+}
+
 // Minimal real loopback TUI-owned server stand-in: the visible preflight,
 // attach, and instance disposal all talk to a real HTTP listener.
 async function startFakeTuiServer() {
@@ -1335,6 +1483,7 @@ function startRealNight({
   fake,
   requestText = DEFAULT_REQUEST,
   maxCycles = 5,
+  executor = null,
   extraEnv = {},
 }) {
   const requestFile = requestFileFor(fixture, requestText);
@@ -1349,6 +1498,7 @@ function startRealNight({
     '--max-cycles',
     String(maxCycles),
   ];
+  if (executor !== null) baseArgs.push('--executor', executor);
   if (process.platform === 'win32') {
     const outFile = join(scratch, 'night-out.json');
     const errFile = join(scratch, 'night-err.log');
@@ -1359,7 +1509,14 @@ function startRealNight({
     const extraEnvFile = join(scratch, 'extra-env.json');
     writeFileSync(wrapperPath, WINDOWS_START_WRAPPER, 'utf8');
     writeFileSync(helperPath, WINDOWS_SEND_CTRL_C, 'utf8');
-    writeFileSync(extraEnvFile, JSON.stringify(extraEnv), 'utf8');
+    const childExtraEnv = {
+      ...extraEnv,
+      ...(executor === 'codex' && fake.codexBin ? { CODEX_BIN: fake.codexBin } : {}),
+      ...(executor === 'codex' && fake.env?.GREENHUB_NIGHT_FAKE_WRITE
+        ? { GREENHUB_NIGHT_FAKE_WRITE: fake.env.GREENHUB_NIGHT_FAKE_WRITE }
+        : {}),
+    };
+    writeFileSync(extraEnvFile, JSON.stringify(childExtraEnv), 'utf8');
     const argumentString = baseArgs.map(quoteForStartProcess).join(' ');
     const wrapper = spawn(
       'powershell.exe',
@@ -1741,6 +1898,83 @@ test('H8 — VISIBLE_TUI 중 Night Run Ctrl+C는 mutation child와 visible serve
         night?.cleanup();
         fake.remove();
         await tui.close();
+      }
+    });
+  });
+});
+
+test('C15 — Windows Codex 자식은 Ctrl+C 한 번 뒤 BUILD terminal까지 signal 없이 끝난다', {
+  skip: process.platform !== 'win32',
+  timeout: 240000,
+}, async () => {
+  await withScratch(async (scratch) => {
+    await withFixture(async (fixture) => {
+      const fake = createFakeNightCodex();
+      writeFileSync(
+        join(fake.eventsDir, 'selector-decision.json'),
+        JSON.stringify(visibleSelectorDecision()),
+        'utf8',
+      );
+      let night = null;
+      try {
+        night = startRealNight({
+          scratch,
+          fixture,
+          fake,
+          maxCycles: 3,
+          executor: 'codex',
+          extraEnv: { [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:9' },
+        });
+        await waitFor(() => existsSync(join(fake.eventsDir, 'mutation-ready')), {
+          timeoutMs: 90000,
+          message: '가짜 Codex mutation이 시작되지 않았습니다',
+        });
+        const codexPid = Number.parseInt(
+          readFileSync(join(fake.eventsDir, 'mutation-ready'), 'utf8'),
+          10,
+        );
+        await night.sendStop();
+        assert.equal(await night.hasExited(), false);
+        writeFileSync(join(fake.eventsDir, 'proceed'), '');
+        const exited = await night.waitForExit({ timeoutMs: 180000 });
+        assert.equal(exited.code, 130, exited.stderr);
+        const payload = JSON.parse(exited.stdout);
+        assert.equal(payload.status, USER_STOPPED);
+        assert.equal(payload.operatorStop.duringCycle, true);
+        assert.equal(payload.operatorStop.cyclesFinishedAfterRequest, 1);
+        assert.equal(payload.bound.cyclesStarted, 1);
+        assert.equal(payload.cycles.length, 1);
+        assert.equal(payload.executor.selected, 'CODEX');
+        assert.ok(payload.executor.backendsObserved.includes('CODEX'));
+        assert.equal(payload.visibility.health, 'NOT_APPLICABLE_TO_CODEX');
+        assert.equal(payload.visibility.attachUrl, null);
+        assert.equal(existsSync(join(fake.eventsDir, 'mutation-done')), true);
+        assert.equal(existsSync(join(fake.eventsDir, `codex-sigint-${codexPid}`)), false);
+        assert.equal(fake.readEvents('codex-invoke-').length, 2);
+        assert.deepEqual(
+          fake.readEvents('codex-invoke-').map((entry) => entry.sandbox).sort(),
+          ['read-only', 'workspace-write'],
+        );
+        let processAlive = false;
+        try {
+          execFileSync(
+            'powershell.exe',
+            [
+              '-NoProfile',
+              '-Command',
+              `if (Get-Process -Id ${codexPid} -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }`,
+            ],
+            { stdio: 'ignore', timeout: 10000 },
+          );
+          processAlive = true;
+        } catch {
+          processAlive = false;
+        }
+        assert.equal(processAlive, false, 'Codex 자식 프로세스가 남았습니다');
+      } finally {
+        writeFileSync(join(fake.eventsDir, 'proceed'), '');
+        night?.cleanup();
+        fake.remove();
       }
     });
   });

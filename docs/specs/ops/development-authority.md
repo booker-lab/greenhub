@@ -225,3 +225,10 @@ RUN NIGHT
 - summary는 `visibility.requested`, `attachUrl`, `health`, `preservedToBuildChildren`, `mutationExecutorModes`, `visibleTuiTasks`와 cycle별 `executorModes`를 기록한다.
 - Windows 사용법: Window A에서 `node scripts/agent/open-visible-tui.mjs`, 별도 Window B에서 `$env:GREENHUB_OPENCODE_ATTACH_URL='http://127.0.0.1:4096'` 설정 뒤 `node scripts/agent/run-night.mjs --request .\night-request.txt --max-cycles 10`. 종료는 Window B에서 Ctrl+C 한 번이다.
 - focused deterministic proof: `pnpm test:agent-night` (N13). 실제 두 창 operator run은 Windows에서 별도로 수행한다.
+
+### 10.2 선택 가능한 agent executor
+
+- `--executor opencode|codex`로 backend를 선택한다. 기본값은 기존 호환성을 위한 `opencode`이며 `GREENHUB_AGENT_EXECUTOR`는 CLI 값이 없을 때만 사용한다.
+- OpenCode는 기존 `VISIBLE_TUI` 계약을 유지한다. Codex는 제한된 `codex exec --json` backend로 selector/planner에는 `read-only`, mutation에는 task-owned isolated workspace의 `workspace-write` sandbox를 사용한다.
+- Codex는 OpenCode attach/TUI를 요구하지 않는다. Night Run control terminal에서 Codex 진행과 진단을 관찰한다. Codex의 책임은 bounded workspace mutation까지이며 proof, candidate, publication, PR, merge, remote read-back은 기존 Greenhub authority가 계속 소유한다.
+- Night summary는 선택 backend와 관찰된 backend를 기록한다. 한 Night Run은 하나의 backend를 모든 BUILD cycle에 전달한다.

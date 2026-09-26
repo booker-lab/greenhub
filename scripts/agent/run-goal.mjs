@@ -77,6 +77,17 @@ import { fileURLToPath } from 'node:url';
 import { Worker, isMainThread, workerData } from 'node:worker_threads';
 
 import {
+  CODEX_EXECUTOR,
+  DEFAULT_CODEX_TIMEOUT_MS,
+  OPENCODE_EXECUTOR,
+  buildCodexArgs,
+  defaultInvokeCodex,
+  invokeAgent,
+  resolveAgentExecutor,
+  resolveCodexCommand,
+  validateAgentExecutorOptions,
+} from './agent-executor.mjs';
+import {
   DEFAULT_OPENCODE_TIMEOUT_MS,
   DEFAULT_PROOF_TIMEOUT_MS,
   SUCCESS as RUN_ONCE_SUCCESS,
@@ -272,6 +283,8 @@ function sleepSync(ms) {
 // else stays owned by the existing executors.
 const CHILD_SEAM_KEYS = Object.freeze([
   'invokeOpencode',
+  'invokeCodex',
+  'invokePlannerCodex',
   'runProofCommand',
   'removeWorkspace',
   'runGh',
@@ -1305,6 +1318,24 @@ function parsePlannerOutput(stdout) {
   return { ok: true, proposal, text };
 }
 
+function parseCodexPlannerText(finalText) {
+  if (typeof finalText !== 'string' || finalText.trim().length === 0) {
+    return { ok: false, reason: 'Codex planner 최종 출력이 비어 있습니다' };
+  }
+  const text = finalText.trim();
+  const proposal = parseJson(text);
+  if (!isPlainObject(proposal)) {
+    return { ok: false, reason: 'Codex planner 최종 출력이 JSON 객체 하나가 아닙니다' };
+  }
+  return { ok: true, proposal, text };
+}
+
+function parsePlannerExecution({ backend, execution }) {
+  return backend === CODEX_EXECUTOR
+    ? parseCodexPlannerText(execution?.finalText)
+    : parsePlannerOutput(execution?.stdout);
+}
+
 function validatePlannerProposal({ proposal, contract, criteria, usedTaskIds }) {
   const reject = (kind, reason) => ({ ok: false, kind, reason });
   if (!PLANNER_DECISIONS.includes(proposal.decision)) {
@@ -1505,6 +1536,8 @@ function runPlanner({ contract, pin, criteria, options, deps, log, usedTaskIds }
   const repositoryRoot = resolve(options.repositoryRoot);
   const baseEnv = deps.env ?? process.env;
   const invokeOpencode = deps.invokePlannerOpencode ?? defaultInvokeOpencode;
+  const invokeCodex = deps.invokePlannerCodex ?? deps.invokeCodex ?? defaultInvokeCodex;
+  const backend = options.executor === 'codex' ? CODEX_EXECUTOR : OPENCODE_EXECUTOR;
   const removeWorkspace = deps.removeWorkspace ?? defaultRemoveWorkspace;
   const evidence = {
     status: null,
@@ -1518,6 +1551,7 @@ function runPlanner({ contract, pin, criteria, options, deps, log, usedTaskIds }
     outputTail: '',
     executor: {
       invoked: false,
+      backend: null,
       commandSource: null,
       exitCode: null,
       timedOut: false,
@@ -1536,45 +1570,59 @@ function runPlanner({ contract, pin, criteria, options, deps, log, usedTaskIds }
       baselineSha: pin.fetchedSha,
     });
     let resolvedCommand = null;
-    if (deps.invokePlannerOpencode === undefined) {
-      resolvedCommand = resolveOpencodeCommand({ explicitBin: options.opencodeBin ?? null, baseEnv });
+    const hasInjectedExecutor = backend === CODEX_EXECUTOR
+      ? deps.invokePlannerCodex !== undefined || deps.invokeCodex !== undefined
+      : deps.invokePlannerOpencode !== undefined;
+    if (!hasInjectedExecutor) {
+      resolvedCommand = backend === CODEX_EXECUTOR
+        ? resolveCodexCommand({ explicitBin: options.codexBin ?? null, baseEnv })
+        : resolveOpencodeCommand({ explicitBin: options.opencodeBin ?? null, baseEnv });
       evidence.executor.commandSource = resolvedCommand.source;
     }
     const prompt = buildPlannerPrompt({ contract, pin, criteria });
-    const args = buildOpencodeArgs({
-      taskText: prompt,
-      workspacePath,
-      model: options.model ?? null,
-      agent: options.agent ?? null,
-      title: isNonEmptyString(options.title) ? `${options.title} planner` : null,
-    });
-    const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot });
+    const args = backend === CODEX_EXECUTOR
+      ? buildCodexArgs({ taskText: prompt, model: options.model ?? null, sandboxMode: 'read-only' })
+      : buildOpencodeArgs({
+          taskText: prompt,
+          workspacePath,
+          model: options.model ?? null,
+          agent: options.agent ?? null,
+          title: isNonEmptyString(options.title) ? `${options.title} planner` : null,
+        });
+    const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot, backend });
     evidence.executor.invoked = true;
-    log(`[run-goal] planner opencode start in ${workspacePath}`);
-    const execution = invokeOpencode({
+    evidence.executor.backend = backend;
+    log(`[run-goal] planner ${backend.toLowerCase()} start in ${workspacePath}`);
+    const execution = invokeAgent({
+      backend,
+      invokeOpencode,
+      invokeCodex,
       resolvedCommand,
       args,
       cwd: workspacePath,
       env: childEnv,
-      timeoutMs: options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
+      timeoutMs: backend === CODEX_EXECUTOR
+        ? options.codexTimeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS
+        : options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
     });
     evidence.executor.exitCode = execution?.exitCode ?? null;
     evidence.executor.timedOut = Boolean(execution?.timedOut);
     evidence.executor.startErrorCode = execution?.startErrorCode ?? null;
-    evidence.outputTail = tail(execution?.stdout, PLANNER_OUTPUT_TAIL_CHARS);
+    evidence.outputTail = tail(execution?.finalText ?? execution?.stdout, PLANNER_OUTPUT_TAIL_CHARS);
     log(
-      `[run-goal] planner opencode exit=${evidence.executor.exitCode} timedOut=${evidence.executor.timedOut}`,
+      `[run-goal] planner ${backend.toLowerCase()} exit=${evidence.executor.exitCode} timedOut=${evidence.executor.timedOut}`,
     );
     const observation = observeChangedPaths({ workspacePath, baselineSha: pin.fetchedSha });
     evidence.changedPaths = observation.changedPaths;
     const executionSucceeded =
       !evidence.executor.startErrorCode &&
       !evidence.executor.timedOut &&
+      !execution?.outputError &&
       evidence.executor.exitCode === 0;
     if (observation.changedPaths.length > 0) {
       mutationObserved = true;
       if (executionSucceeded) {
-        const parsed = parsePlannerOutput(execution?.stdout);
+        const parsed = parsePlannerExecution({ backend, execution });
         if (parsed.ok) {
           evidence.proposal = parsed.proposal;
           evidence.decision = parsed.proposal.decision;
@@ -1583,9 +1631,10 @@ function runPlanner({ contract, pin, criteria, options, deps, log, usedTaskIds }
     } else if (!executionSucceeded) {
       invocationFailure =
         `exit=${evidence.executor.exitCode} timedOut=${evidence.executor.timedOut} ` +
-        `startError=${evidence.executor.startErrorCode ?? 'none'}`;
+        `startError=${evidence.executor.startErrorCode ?? 'none'} ` +
+        `outputError=${execution?.outputError ?? 'none'}`;
     } else {
-      const parsed = parsePlannerOutput(execution?.stdout);
+      const parsed = parsePlannerExecution({ backend, execution });
       if (!parsed.ok) {
         evidence.status = 'INVALID_OUTPUT';
         evidence.reason = parsed.reason;
@@ -1732,6 +1781,7 @@ function createGoalResult() {
   return {
     status: null,
     reason: null,
+    executor: { selected: null, source: null, backendsObserved: [] },
     goal: {
       text: null,
       acceptanceAuthority: [],
@@ -1804,10 +1854,13 @@ export function buildChildInvocation({ task, taskText, options, title }) {
     proofCommands: [...task.proof],
     proofOwners: task.proof_owner.map((owners) => [...owners]),
     title,
+    executor: options.executor ?? null,
     model: options.model ?? null,
     agent: options.agent ?? null,
     opencodeBin: options.opencodeBin ?? null,
+    codexBin: options.codexBin ?? null,
     opencodeTimeoutMs: options.opencodeTimeoutMs,
+    codexTimeoutMs: options.codexTimeoutMs,
     proofTimeoutMs: options.proofTimeoutMs,
   };
   if (task.publication === 'required') {
@@ -2171,6 +2224,15 @@ export function runGoal(options = {}, deps = {}) {
       result.liveMain.movement =
         result.liveMain.atStart.fetchedSha === lastPinSnapshot.fetchedSha ? 'UNCHANGED' : 'MOVED';
     }
+    const observedBackends = [
+      result.planner.lastExecutor?.backend,
+      ...result.attempts.map((attempt) => attempt?.child?.executor?.backend),
+    ];
+    for (const backend of observedBackends) {
+      if (typeof backend === 'string' && !result.executor.backendsObserved.includes(backend)) {
+        result.executor.backendsObserved.push(backend);
+      }
+    }
     try {
       const after = captureCheckoutState({ repositoryRoot });
       result.canonicalCheckout.after = { branch: after.branch, head: after.head };
@@ -2184,6 +2246,21 @@ export function runGoal(options = {}, deps = {}) {
   };
 
   const startedAt = now();
+  const executorSelection = resolveAgentExecutor({
+    explicitValue: options.executor ?? null,
+    baseEnv: deps.env ?? process.env,
+  });
+  const executorOptions = validateAgentExecutorOptions({
+    selection: executorSelection,
+    agent: options.agent,
+  });
+  if (!executorOptions.ok) {
+    result.validation = { kind: INVALID_GOAL, errors: [executorOptions.reason] };
+    return finish(INVALID_GOAL, executorOptions.reason);
+  }
+  result.executor.selected = executorSelection.backend;
+  result.executor.source = executorSelection.source;
+  options = { ...options, executor: executorSelection.backend.toLowerCase() };
   let canonicalBefore = null;
   try {
     canonicalBefore = captureCheckoutState({ repositoryRoot });
@@ -2617,11 +2694,14 @@ export const USAGE = [
   '  --goal <file>               Goal Contract JSON file (GOAL/ACCEPTANCE_AUTHORITY/CRITERIA/TASK_CATALOG/PLANNER/BUDGET)',
   '  --repo <dir>                canonical checkout root (default: current directory)',
   '  --remote <name>             remote observed for live main (default: origin)',
+  '  --executor <name>           실행 backend: opencode (기본값) 또는 codex',
   '  --title <title>             optional OpenCode session title for child tasks',
-  '  --model <provider/model>    optional OpenCode model override for child tasks',
+  '  --model <value>             backend가 지원하는 model 지정; Codex에서는 값을 그대로 전달',
   '  --agent <name>              optional OpenCode agent override for child tasks',
   '  --opencode-bin <path>       explicit OpenCode executable for child tasks',
+  '  --codex-bin <path>          explicit Codex executable for child tasks',
   '  --opencode-timeout-ms <n>   child opencode timeout in ms (default: 3600000, 0 disables)',
+  '  --codex-timeout-ms <n>      child Codex timeout in ms (default: 3600000, 0 disables)',
   '  --proof-timeout-ms <n>      child/proof timeout in ms (default: 1800000, 0 disables)',
   '  --ci-timeout-ms <n>         child required-check watch timeout in ms (default: 2700000)',
   '  --max-rebind-attempts <n>   child fresh-main rebind constructions (default: 2)',
@@ -2635,11 +2715,14 @@ export function parseArgs(argv) {
     goalFile: null,
     repositoryRoot: process.cwd(),
     remote: 'origin',
+    executor: null,
     title: null,
     model: null,
     agent: null,
     opencodeBin: null,
+    codexBin: null,
     opencodeTimeoutMs: 60 * 60 * 1000,
+    codexTimeoutMs: DEFAULT_CODEX_TIMEOUT_MS,
     proofTimeoutMs: DEFAULT_PROOF_TIMEOUT_MS,
     ciTimeoutMs: DEFAULT_CI_TIMEOUT_MS,
     maxRebindAttempts: DEFAULT_MAX_REBIND_ATTEMPTS,
@@ -2650,14 +2733,17 @@ export function parseArgs(argv) {
     '--goal': 'goalFile',
     '--repo': 'repositoryRoot',
     '--remote': 'remote',
+    '--executor': 'executor',
     '--title': 'title',
     '--model': 'model',
     '--agent': 'agent',
     '--opencode-bin': 'opencodeBin',
+    '--codex-bin': 'codexBin',
     '--github-repo': 'githubRepository',
   };
   const numberFlags = {
     '--opencode-timeout-ms': 'opencodeTimeoutMs',
+    '--codex-timeout-ms': 'codexTimeoutMs',
     '--proof-timeout-ms': 'proofTimeoutMs',
     '--ci-timeout-ms': 'ciTimeoutMs',
     '--max-rebind-attempts': 'maxRebindAttempts',
