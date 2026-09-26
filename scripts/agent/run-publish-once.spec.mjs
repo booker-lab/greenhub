@@ -178,6 +178,15 @@ function createFakeOpencode({ writes = [], after = null, fail = false } = {}) {
   return { invocations, invokeOpencode };
 }
 
+function codexJsonlOutput(text = '완료') {
+  return [
+    { type: 'thread.started', thread_id: 'publication-thread' },
+    { type: 'turn.started', turn_id: 'publication-turn' },
+    { type: 'item.completed', item: { id: 'publication-message', type: 'agent_message', text } },
+    { type: 'turn.completed', turn_id: 'publication-turn', status: 'completed' },
+  ].map((event) => JSON.stringify(event)).join('\n') + '\n';
+}
+
 function valueOf(args, flag) {
   const index = args.indexOf(flag);
   return index >= 0 && index + 1 < args.length ? args[index + 1] : null;
@@ -467,6 +476,78 @@ test('GOLDEN ??candidate is committed from observed paths, published, merged, re
       'proof-check.cjs',
       'src',
     ]);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('Codex run-publish-once는 workspace mutation부터 proof, candidate, read-back까지 기존 authority를 사용한다', () => {
+  const fixture = buildFixture();
+  try {
+    const github = createFakeGithub({ bare: fixture.bare });
+    const secret = 'codex-publication-secret-738';
+    const invocations = [];
+    const result = runPublishOnce(
+      publishOptions(fixture, {
+        executor: 'codex',
+        model: 'gpt-test-model',
+        codexTimeoutMs: 5000,
+        proofCommands: ['node proof-check.cjs'],
+      }),
+      {
+        invokeCodex: (input) => {
+          invocations.push(input);
+          assert.notEqual(input.cwd, fixture.root);
+          assert.equal(input.env.GH_TOKEN, undefined);
+          assert.equal(input.env.OPENAI_API_KEY, undefined);
+          assert.equal(input.env.CODEX_API_KEY, undefined);
+          assert.ok(input.args.includes('--sandbox') && input.args.includes('workspace-write'));
+          assert.ok(input.args.includes('--model') && input.args.includes('gpt-test-model'));
+          mkdirSync(join(input.cwd, 'src'), { recursive: true });
+          writeFileSync(join(input.cwd, 'src', 'allowed.txt'), 'ok\n');
+          return {
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            startErrorCode: null,
+            stdout: codexJsonlOutput(`bounded mutation ${secret}`),
+            stderr: `Codex diagnostic ${secret}`,
+          };
+        },
+        runGh: github.runGh,
+        log: () => {},
+        env: {
+          ...process.env,
+          GH_TOKEN: 'publication-credential-sentinel',
+          OPENAI_API_KEY: secret,
+          CODEX_API_KEY: 'codex-auth-key-sentinel',
+        },
+      },
+    );
+
+    assert.equal(result.status, SUCCESS_PUBLISHED);
+    assert.equal(result.executionStatus, SUCCESS);
+    assert.equal(result.executor.backend, 'CODEX');
+    assert.equal(result.executor.mode, 'NOT_APPLICABLE_TO_CODEX');
+    assert.equal(invocations.length, 1);
+    assert.deepEqual(result.changedPaths, ['src/allowed.txt']);
+    assert.equal(result.proofResults.length, 1);
+    assert.equal(result.proofResults[0].ok, true);
+    assert.match(result.executor.stdoutTail, /\[가림\]/);
+    assert.match(result.executor.stderrTail, /\[가림\]/);
+    assert.equal(JSON.stringify(result).includes(secret), false);
+    const candidate = result.publication.candidate.candidateSha;
+    assert.match(candidate, /^[0-9a-f]{40}$/);
+    assert.deepEqual(
+      git(fixture.root, ['diff', '--name-only', `${fixture.baseSha}..${candidate}`])
+        .split('\n')
+        .filter((entry) => entry.length > 0),
+      ['src/allowed.txt'],
+    );
+    assert.equal(result.publication.remoteDeltaVerified, true);
+    assert.equal(result.publication.transportCleanup, 'REMOVED');
+    assert.equal(remoteTemporaryRefs(fixture.bare).length, 0);
+    assert.equal(result.workspace.cleanup, 'REMOVED');
   } finally {
     removeFixture(fixture);
   }

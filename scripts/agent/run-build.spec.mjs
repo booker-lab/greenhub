@@ -261,6 +261,15 @@ function selectorStdout(decision) {
   return `${JSON.stringify({ type: 'text', part: { text: JSON.stringify(decision) } })}\n`;
 }
 
+function codexSelectorStdout(text) {
+  return [
+    { type: 'thread.started', thread_id: 'thread-selector' },
+    { type: 'turn.started', turn_id: 'turn-selector' },
+    { type: 'item.completed', item: { id: 'message-selector', type: 'agent_message', text } },
+    { type: 'turn.completed', turn_id: 'turn-selector', status: 'completed' },
+  ].map((event) => JSON.stringify(event)).join('\n') + '\n';
+}
+
 function createFakeSelector({ decision, onInvoke = null }) {
   const calls = [];
   const invoke = (input) => {
@@ -1501,6 +1510,109 @@ test('CASE S1 — a selector workspace mutation rejects the whole decision', () 
     assert.equal(childCallCount(fake), 0);
     assert.equal(result.selector.workspaceCleanup, 'REMOVED');
     assertSelectorWorkspaceRemoved(selector);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('Codex selector는 read-only JSONL 결과를 기존 validator에 전달하고 mutation을 거부한다', () => {
+  const fixture = buildFixture();
+  try {
+    const frontier = independentFrontier({
+      priority: 1,
+      id: 'F-CODEX',
+      path: 'docs/codex-feature.md',
+      proof: 'node proof-feature.cjs',
+    });
+    const decision = frontierDecision({
+      considered: [frontier.entry],
+      selected: frontier.selected,
+    });
+    const children = createFakeChildren({
+      runPublishBehavior: (options) => {
+        assert.equal(options.executor, 'codex');
+        pushCommitToLiveMain(fixture, {
+          path: options.allowedPaths[0],
+          content: 'delivered by synthetic publication\n',
+        });
+        return { status: 'SUCCESS_PUBLISHED', reason: 'fixture publication' };
+      },
+    });
+    const invocations = [];
+    const environment = {
+      PATH: process.env.PATH ?? '',
+      GREENHUB_OPENCODE_ATTACH_URL: 'http://127.0.0.1:9',
+      OPENAI_API_KEY: 'selector-secret-value',
+    };
+    const result = runBuild(
+      {
+        requestText: DEFAULT_REQUEST,
+        repositoryRoot: fixture.root,
+        remote: 'origin',
+        executor: 'codex',
+        model: 'gpt-test-model',
+      },
+      {
+        ...children.deps,
+        env: environment,
+        log: () => {},
+        invokeCodex: (input) => {
+          invocations.push(input);
+          assert.equal(input.env.GREENHUB_OPENCODE_ATTACH_URL, undefined);
+          assert.equal(input.env.OPENAI_API_KEY, undefined);
+          assert.ok(input.args.includes('--json'));
+          assert.ok(input.args.includes('--sandbox') && input.args.includes('read-only'));
+          assert.ok(input.args.includes('--model') && input.args.includes('gpt-test-model'));
+          return {
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            startErrorCode: null,
+            stdout: codexSelectorStdout(JSON.stringify(decision)),
+            stderr: '',
+          };
+        },
+      },
+    );
+    assert.equal(result.status, FRONTIER_COMPLETE, JSON.stringify({ status: result.status, reason: result.reason, selector: result.selector, decision: result.decision, goal: result.goalResult }));
+    assert.equal(result.executor.selected, 'CODEX');
+    assert.deepEqual(result.executor.backendsObserved, ['CODEX']);
+    assert.equal(result.selector.executor.backend, 'CODEX');
+    assert.equal(result.selector.status, 'DECISION');
+    assert.equal(result.decision.selected.id, 'F-CODEX');
+    assert.equal(invocations.length, 1);
+    assert.equal(existsSync(dirname(invocations[0].cwd)), false);
+
+    const mutationChildren = createFakeChildren();
+    const mutationResult = runBuild(
+      {
+        requestText: DEFAULT_REQUEST,
+        repositoryRoot: fixture.root,
+        remote: 'origin',
+        executor: 'codex',
+      },
+      {
+        ...mutationChildren.deps,
+        env: { PATH: process.env.PATH ?? '' },
+        log: () => {},
+        invokeCodex: (input) => {
+          writeFileSync(join(input.cwd, 'selector-mutated.txt'), 'forbidden mutation\n');
+          return {
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            startErrorCode: null,
+            stdout: codexSelectorStdout(JSON.stringify(decision)),
+            stderr: '',
+          };
+        },
+      },
+    );
+    assert.equal(mutationResult.status, BLOCKED_EXTERNAL);
+    assert.equal(mutationResult.selector.status, 'MUTATION_REJECTED');
+    assert.deepEqual(mutationResult.selector.changedPaths, ['selector-mutated.txt']);
+    assert.equal(childCallCount(mutationChildren), 0);
+    assert.equal(mutationResult.selector.workspaceCleanup, 'REMOVED');
   } finally {
     removeFixture(fixture);
   }

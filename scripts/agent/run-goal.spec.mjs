@@ -482,6 +482,15 @@ function plannerSuccess(stdout) {
   };
 }
 
+function codexJsonlOutput(text) {
+  return [
+    { type: 'thread.started', thread_id: 'planner-thread' },
+    { type: 'turn.started', turn_id: 'planner-turn' },
+    { type: 'item.completed', item: { id: 'planner-message', type: 'agent_message', text } },
+    { type: 'turn.completed', turn_id: 'planner-turn', status: 'completed' },
+  ].map((event) => JSON.stringify(event)).join('\n') + '\n';
+}
+
 /** Deterministic planner invocation seam: records input, returns fake output. */
 function createFakePlanner({ proposals, onCall = null } = {}) {
   const calls = [];
@@ -1429,6 +1438,71 @@ test('PLANNER C — a validated planner task bridges to one GN publication', () 
     assert.match(childOptions.commitMessage, /P1/);
     assert.ok(childOptions.prTitle.length > 0);
     assert.deepEqual(listPlannerWorkspaceDirs(), plannerDirsBefore);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('Codex planner는 read-only JSONL 제안을 검증하고 같은 backend로 child에 전달한다', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeChildren({
+      runPublishBehavior: (options) => {
+        assert.equal(options.executor, 'codex');
+        pushCommitToLiveMain(fixture, {
+          path: 'docs/feature.md',
+          content: '# feature\n',
+        });
+        return { status: 'SUCCESS_PUBLISHED', reason: 'fixture publication' };
+      },
+    });
+    const calls = [];
+    const result = runGoal(
+      {
+        goalFile: writeGoal(
+          fixture,
+          baseContract({ CRITERIA: [proofCriterion()], PLANNER: { enabled: true } }),
+        ),
+        repositoryRoot: fixture.root,
+        remote: 'origin',
+        executor: 'codex',
+        model: 'gpt-test-model',
+      },
+      {
+        ...fake.deps,
+        env: {
+          PATH: process.env.PATH ?? '',
+          GREENHUB_OPENCODE_ATTACH_URL: 'http://127.0.0.1:9',
+          OPENAI_API_KEY: 'planner-secret-value',
+        },
+        log: () => {},
+        invokeCodex: (input) => {
+          calls.push(input);
+          assert.equal(input.env.GREENHUB_OPENCODE_ATTACH_URL, undefined);
+          assert.equal(input.env.OPENAI_API_KEY, undefined);
+          assert.ok(input.args.includes('--sandbox') && input.args.includes('read-only'));
+          assert.ok(input.args.includes('--model') && input.args.includes('gpt-test-model'));
+          return {
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            startErrorCode: null,
+            stdout: codexJsonlOutput(JSON.stringify(plannerTaskProposal())),
+            stderr: '',
+          };
+        },
+      },
+    );
+    assert.equal(result.status, GOAL_SATISFIED, JSON.stringify({ status: result.status, reason: result.reason, planner: result.planner, attempts: result.attempts }));
+    assert.equal(result.executor.selected, 'CODEX');
+    assert.deepEqual(result.executor.backendsObserved, ['CODEX']);
+    assert.equal(result.planner.lastStatus, 'TASK');
+    assert.equal(result.planner.lastExecutor.backend, 'CODEX');
+    assert.equal(result.planner.lastWorkspaceCleanup, 'REMOVED');
+    assert.equal(calls.length, 1);
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+    assert.equal(fake.calls.runPublishOnce[0].executor, 'codex');
+    assert.equal(fake.calls.runPublishOnce[0].codexTimeoutMs, undefined);
   } finally {
     removeFixture(fixture);
   }
