@@ -62,11 +62,11 @@ export class ProductsService {
       .map((p) => p['id'] as string);
 
     const groupConfigMap = new Map<string, Record<string, unknown>>();
-    if (groupProductIds.length > 0) {
-      // Firestore 'in' 쿼리는 30개 제한이지만 MVP는 충분
+    for (let offset = 0; offset < groupProductIds.length; offset += 30) {
+      // Firestore 'in' 조회 제한 내에서 모든 반환 대상의 설정을 읽는다.
       const gcSnap = await this.firestore
         .collection('groupProductConfig')
-        .where('productId', 'in', groupProductIds.slice(0, 30))
+        .where('productId', 'in', groupProductIds.slice(offset, offset + 30))
         .get();
       gcSnap.docs.forEach((d) => groupConfigMap.set(d.data()['productId'], d.data()));
     }
@@ -332,10 +332,10 @@ export class ProductsService {
       .filter((p: any) => p['saleType'] === 'group')
       .map((p: any) => p['id'] as string);
     const groupConfigMap = new Map<string, Record<string, unknown>>();
-    if (groupProductIds.length > 0) {
+    for (let offset = 0; offset < groupProductIds.length; offset += 30) {
       const gcSnap = await this.firestore
         .collection('groupProductConfig')
-        .where('productId', 'in', groupProductIds.slice(0, 30))
+        .where('productId', 'in', groupProductIds.slice(offset, offset + 30))
         .get();
       gcSnap.docs.forEach((d: any) => groupConfigMap.set(d.data()['productId'], d.data()));
     }
