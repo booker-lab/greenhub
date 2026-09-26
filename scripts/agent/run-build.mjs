@@ -56,6 +56,17 @@ import {
   validateGoalContract,
 } from './run-goal.mjs';
 import {
+  CODEX_EXECUTOR,
+  DEFAULT_CODEX_TIMEOUT_MS,
+  OPENCODE_EXECUTOR,
+  buildCodexArgs,
+  defaultInvokeCodex,
+  invokeAgent,
+  resolveAgentExecutor,
+  resolveCodexCommand,
+  validateAgentExecutorOptions,
+} from './agent-executor.mjs';
+import {
   buildChildEnv,
   buildOpencodeArgs,
   createBaselineWorkspace,
@@ -662,6 +673,24 @@ function parseSelectorOutput(stdout) {
   return { ok: false, reason: 'selector final text is not exactly one JSON object' };
 }
 
+function parseCodexSelectorText(finalText) {
+  if (typeof finalText !== 'string' || finalText.trim().length === 0) {
+    return { ok: false, reason: 'Codex selector 최종 출력이 비어 있습니다' };
+  }
+  const text = finalText.trim();
+  const decision = parseJson(text);
+  if (isPlainObject(decision)) return { ok: true, decision, text };
+  const extracted = extractSingleJsonObject(text);
+  if (extracted !== null) return { ok: true, decision: extracted, text };
+  return { ok: false, reason: 'Codex selector 최종 출력이 JSON 객체 하나가 아닙니다' };
+}
+
+function parseSelectorExecution({ backend, execution }) {
+  return backend === CODEX_EXECUTOR
+    ? parseCodexSelectorText(execution?.finalText)
+    : parseSelectorOutput(execution?.stdout);
+}
+
 function createSelectorEvidence() {
   return {
     status: null,
@@ -672,6 +701,7 @@ function createSelectorEvidence() {
     outputTail: '',
     executor: {
       invoked: false,
+      backend: null,
       commandSource: null,
       exitCode: null,
       timedOut: false,
@@ -693,6 +723,8 @@ function runFrontierSelector({
 }) {
   const baseEnv = deps.env ?? process.env;
   const invokeOpencode = deps.invokeSelectorOpencode ?? defaultInvokeOpencode;
+  const invokeCodex = deps.invokeSelectorCodex ?? deps.invokeCodex ?? defaultInvokeCodex;
+  const backend = options.executor === 'codex' ? CODEX_EXECUTOR : OPENCODE_EXECUTOR;
   const removeWorkspace = deps.removeWorkspace ?? defaultRemoveWorkspace;
   const evidence = createSelectorEvidence();
   let tempRoot = null;
@@ -707,11 +739,13 @@ function runFrontierSelector({
       baselineSha: pin.fetchedSha,
     });
     let resolvedCommand = null;
-    if (deps.invokeSelectorOpencode === undefined) {
-      resolvedCommand = resolveOpencodeCommand({
-        explicitBin: options.opencodeBin ?? null,
-        baseEnv,
-      });
+    const hasInjectedExecutor = backend === CODEX_EXECUTOR
+      ? deps.invokeSelectorCodex !== undefined || deps.invokeCodex !== undefined
+      : deps.invokeSelectorOpencode !== undefined;
+    if (!hasInjectedExecutor) {
+      resolvedCommand = backend === CODEX_EXECUTOR
+        ? resolveCodexCommand({ explicitBin: options.codexBin ?? null, baseEnv })
+        : resolveOpencodeCommand({ explicitBin: options.opencodeBin ?? null, baseEnv });
       evidence.executor.commandSource = resolvedCommand.source;
     }
     const prompt = buildFrontierPrompt({
@@ -720,42 +754,51 @@ function runFrontierSelector({
       canonicalAuthority,
       pin,
     });
-    const args = buildOpencodeArgs({
-      taskText: prompt,
-      workspacePath,
-      model: options.model ?? null,
-      agent: options.agent ?? null,
-      title: isNonEmptyString(options.title)
-        ? `${options.title} selector`
-        : 'build-frontier-selector',
-    });
-    const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot });
+    const args = backend === CODEX_EXECUTOR
+      ? buildCodexArgs({ taskText: prompt, model: options.model ?? null, sandboxMode: 'read-only' })
+      : buildOpencodeArgs({
+          taskText: prompt,
+          workspacePath,
+          model: options.model ?? null,
+          agent: options.agent ?? null,
+          title: isNonEmptyString(options.title)
+            ? `${options.title} selector`
+            : 'build-frontier-selector',
+        });
+    const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot, backend });
     evidence.executor.invoked = true;
-    log(`[run-build] selector opencode start in ${workspacePath}`);
-    const execution = invokeOpencode({
+    evidence.executor.backend = backend;
+    log(`[run-build] selector ${backend.toLowerCase()} start in ${workspacePath}`);
+    const execution = invokeAgent({
+      backend,
+      invokeOpencode,
+      invokeCodex,
       resolvedCommand,
       args,
       cwd: workspacePath,
       env: childEnv,
-      timeoutMs: options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
+      timeoutMs: backend === CODEX_EXECUTOR
+        ? options.codexTimeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS
+        : options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
     });
     evidence.executor.exitCode = execution?.exitCode ?? null;
     evidence.executor.timedOut = Boolean(execution?.timedOut);
     evidence.executor.startErrorCode = execution?.startErrorCode ?? null;
-    evidence.outputTail = tail(execution?.stdout);
+    evidence.outputTail = tail(execution?.finalText ?? execution?.stdout);
     log(
-      `[run-build] selector opencode exit=${evidence.executor.exitCode} timedOut=${evidence.executor.timedOut}`,
+      `[run-build] selector ${backend.toLowerCase()} exit=${evidence.executor.exitCode} timedOut=${evidence.executor.timedOut}`,
     );
     const observation = observeChangedPaths({ workspacePath, baselineSha: pin.fetchedSha });
     evidence.changedPaths = observation.changedPaths;
     const executionSucceeded =
       !evidence.executor.startErrorCode &&
       !evidence.executor.timedOut &&
+      !execution?.outputError &&
       evidence.executor.exitCode === 0;
     if (observation.changedPaths.length > 0) {
       mutationObserved = true;
       if (executionSucceeded) {
-        const parsed = parseSelectorOutput(execution?.stdout);
+        const parsed = parseSelectorExecution({ backend, execution });
         if (parsed.ok) {
           evidence.decision = parsed.decision;
         }
@@ -763,9 +806,10 @@ function runFrontierSelector({
     } else if (!executionSucceeded) {
       invocationFailure =
         `exit=${evidence.executor.exitCode} timedOut=${evidence.executor.timedOut} ` +
-        `startError=${evidence.executor.startErrorCode ?? 'none'}`;
+        `startError=${evidence.executor.startErrorCode ?? 'none'} ` +
+        `outputError=${execution?.outputError ?? 'none'}`;
     } else {
-      const parsed = parseSelectorOutput(execution?.stdout);
+      const parsed = parseSelectorExecution({ backend, execution });
       if (!parsed.ok) {
         evidence.status = 'INVALID_OUTPUT';
         evidence.reason = parsed.reason;
@@ -1865,6 +1909,7 @@ function createBuildResult(options) {
     status: null,
     reason: null,
     mode: BUILD_MODE,
+    executor: { selected: null, source: null, backendsObserved: [] },
     nextFrontierSelected: false,
     repositoryRoot: resolve(options.repositoryRoot ?? process.cwd()),
     remote: options.remote ?? 'origin',
@@ -1915,6 +1960,19 @@ export function runBuild(options = {}, deps = {}) {
     result.elapsedMs = Math.max(0, now() - startedAt);
     return result;
   };
+
+  const executorSelection = resolveAgentExecutor({
+    explicitValue: options.executor ?? null,
+    baseEnv: deps.env ?? process.env,
+  });
+  const executorOptions = validateAgentExecutorOptions({
+    selection: executorSelection,
+    agent: options.agent,
+  });
+  if (!executorOptions.ok) return finish(INVALID_BUILD_REQUEST, executorOptions.reason);
+  result.executor.selected = executorSelection.backend;
+  result.executor.source = executorSelection.source;
+  const selectedOptions = { ...options, executor: executorSelection.backend.toLowerCase() };
 
   const requestText = readRequestText(options);
   if (!requestText.ok) {
@@ -1994,7 +2052,7 @@ export function runBuild(options = {}, deps = {}) {
     canonicalAuthority,
     repositoryRoot,
     pin,
-    options,
+    options: selectedOptions,
     deps,
     log,
   });
@@ -2006,6 +2064,7 @@ export function runBuild(options = {}, deps = {}) {
     executor: { ...selector.executor },
     outputTail: selector.outputTail,
   };
+  if (selector.executor.backend) result.executor.backendsObserved.push(selector.executor.backend);
   if (selector.status !== 'DECISION') {
     return finish(BLOCKED_EXTERNAL, `frontier selector failed: ${selector.reason}`);
   }
@@ -2068,15 +2127,18 @@ export function runBuild(options = {}, deps = {}) {
         goalText: JSON.stringify(validation.goal.raw, null, 2),
         repositoryRoot,
         remote,
-        title: options.title ?? null,
-        model: options.model ?? null,
-        agent: options.agent ?? null,
-        opencodeBin: options.opencodeBin ?? null,
-        opencodeTimeoutMs: options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
-        proofTimeoutMs: options.proofTimeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS,
-        ciTimeoutMs: options.ciTimeoutMs ?? DEFAULT_CI_TIMEOUT_MS,
-        maxRebindAttempts: options.maxRebindAttempts ?? DEFAULT_MAX_REBIND_ATTEMPTS,
-        githubRepository: options.githubRepository ?? null,
+        title: selectedOptions.title ?? null,
+        executor: selectedOptions.executor,
+        model: selectedOptions.model ?? null,
+        agent: selectedOptions.agent ?? null,
+        opencodeBin: selectedOptions.opencodeBin ?? null,
+        codexBin: selectedOptions.codexBin ?? null,
+        opencodeTimeoutMs: selectedOptions.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
+        codexTimeoutMs: selectedOptions.codexTimeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS,
+        proofTimeoutMs: selectedOptions.proofTimeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS,
+        ciTimeoutMs: selectedOptions.ciTimeoutMs ?? DEFAULT_CI_TIMEOUT_MS,
+        maxRebindAttempts: selectedOptions.maxRebindAttempts ?? DEFAULT_MAX_REBIND_ATTEMPTS,
+        githubRepository: selectedOptions.githubRepository ?? null,
       },
       deps,
     );
@@ -2084,6 +2146,17 @@ export function runBuild(options = {}, deps = {}) {
     return finish(BLOCKED_EXTERNAL, `goal execution failed to start: ${messageOf(error)}`);
   }
   result.goalResult = goalResult;
+  const observedBackends = [
+    goalResult?.planner?.lastExecutor?.backend,
+    ...(Array.isArray(goalResult?.attempts)
+      ? goalResult.attempts.map((attempt) => attempt?.child?.executor?.backend)
+      : []),
+  ];
+  for (const backend of observedBackends) {
+    if (typeof backend === 'string' && !result.executor.backendsObserved.includes(backend)) {
+      result.executor.backendsObserved.push(backend);
+    }
+  }
   result.childCalls = goalResult?.childCalls ?? 0;
   const goalStart = goalResult?.liveMain?.atStart?.fetchedSha ?? null;
   result.mainMovement =
@@ -2103,11 +2176,14 @@ export const USAGE = [
   '  --request <file>            BUILD request text; omit to read stdin',
   '  --repo <dir>                canonical checkout root (default: current directory)',
   '  --remote <name>             remote observed for live main (default: origin)',
+  '  --executor <name>           실행 backend: opencode (기본값) 또는 codex',
   '  --title <title>             optional OpenCode session title for child tasks',
-  '  --model <provider/model>    optional OpenCode model override for child tasks',
+  '  --model <value>             backend가 지원하는 model 지정; Codex에서는 값을 그대로 전달',
   '  --agent <name>              optional OpenCode agent override for child tasks',
   '  --opencode-bin <path>       explicit OpenCode executable for child tasks',
+  '  --codex-bin <path>          explicit Codex executable for child tasks',
   '  --opencode-timeout-ms <n>   child/selector opencode timeout in ms (default: 3600000)',
+  '  --codex-timeout-ms <n>      child/selector Codex timeout in ms (default: 3600000)',
   '  --proof-timeout-ms <n>      child/proof timeout in ms (default: 1800000, 0 disables)',
   '  --ci-timeout-ms <n>         child required-check watch timeout in ms (default: 2700000)',
   '  --max-rebind-attempts <n>   child fresh-main rebind constructions (default: 2)',
@@ -2136,11 +2212,14 @@ export function parseArgs(argv) {
     requestFile: null,
     repositoryRoot: process.cwd(),
     remote: 'origin',
+    executor: null,
     title: null,
     model: null,
     agent: null,
     opencodeBin: null,
+    codexBin: null,
     opencodeTimeoutMs: 60 * 60 * 1000,
+    codexTimeoutMs: DEFAULT_CODEX_TIMEOUT_MS,
     proofTimeoutMs: DEFAULT_PROOF_TIMEOUT_MS,
     ciTimeoutMs: DEFAULT_CI_TIMEOUT_MS,
     maxRebindAttempts: DEFAULT_MAX_REBIND_ATTEMPTS,
@@ -2151,14 +2230,17 @@ export function parseArgs(argv) {
     '--request': 'requestFile',
     '--repo': 'repositoryRoot',
     '--remote': 'remote',
+    '--executor': 'executor',
     '--title': 'title',
     '--model': 'model',
     '--agent': 'agent',
     '--opencode-bin': 'opencodeBin',
+    '--codex-bin': 'codexBin',
     '--github-repo': 'githubRepository',
   };
   const numberFlags = {
     '--opencode-timeout-ms': 'opencodeTimeoutMs',
+    '--codex-timeout-ms': 'codexTimeoutMs',
     '--proof-timeout-ms': 'proofTimeoutMs',
     '--ci-timeout-ms': 'ciTimeoutMs',
     '--max-rebind-attempts': 'maxRebindAttempts',

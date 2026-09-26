@@ -44,7 +44,21 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  CODEX_EXECUTOR,
+  DEFAULT_CODEX_TIMEOUT_MS,
+  OPENCODE_EXECUTOR,
+  buildCodexArgs,
+  defaultInvokeCodex,
+  extractWindowsShimTarget,
+  invokeAgent,
+  resolveAgentExecutor,
+  resolveCodexCommand,
+  validateAgentExecutorOptions,
+} from './agent-executor.mjs';
 import { captureCheckoutState, isCheckoutUnchanged } from '../git/publication-transport.mjs';
+
+export { extractWindowsShimTarget };
 
 export const SUCCESS = 'SUCCESS';
 export const ALREADY_SATISFIED = 'ALREADY_SATISFIED';
@@ -124,6 +138,13 @@ const DENIED_ENV_NAME_PATTERNS = Object.freeze([
   /^NODE_AUTH_TOKEN$/i,
 ]);
 
+const CODEX_CREDENTIAL_ENV_NAME_PATTERNS = Object.freeze([
+  /API[_-]?KEY/i,
+  /ACCESS[_-]?TOKEN/i,
+  /AUTH[_-]?TOKEN/i,
+  /(?:^|_)TOKEN$/i,
+]);
+
 // Runner-authored Git hardening for the child process. Network transports fail
 // closed, credential helpers and hooks are disabled, and `git push` defaults to
 // nothing so the child cannot publish even if it ignores its instructions.
@@ -167,16 +188,33 @@ export function classifyChangedPaths({ changedPaths, allowedPaths }) {
   return { withinBoundary, violations };
 }
 
-export function isDeniedEnvName(name) {
-  return DENIED_ENV_NAME_PATTERNS.some((pattern) => pattern.test(name));
+export function isDeniedEnvName(name, backend = OPENCODE_EXECUTOR) {
+  return DENIED_ENV_NAME_PATTERNS.some((pattern) => pattern.test(name)) ||
+    (backend === CODEX_EXECUTOR && CODEX_CREDENTIAL_ENV_NAME_PATTERNS.some((pattern) => pattern.test(name)));
 }
 
-export function buildChildEnv({ baseEnv, scratchDir }) {
+function redactCredentialValues(value, baseEnv) {
+  if (typeof value !== 'string' || value.length === 0) return value ?? '';
+  let redacted = value;
+  for (const [name, secret] of Object.entries(baseEnv ?? {})) {
+    if (
+      typeof secret === 'string' &&
+      secret.length >= 3 &&
+      /(?:API[_-]?KEY|(?:^|_)TOKEN$|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|CREDENTIAL|AUTH)/i.test(name)
+    ) {
+      redacted = redacted.replaceAll(secret, '[가림]');
+    }
+  }
+  return redacted;
+}
+
+export function buildChildEnv({ baseEnv, scratchDir, backend = OPENCODE_EXECUTOR }) {
   const childEnv = {};
   for (const [name, value] of Object.entries(baseEnv)) {
     if (value === undefined) continue;
-    if (isDeniedEnvName(name)) continue;
+    if (isDeniedEnvName(name, backend)) continue;
     if (/^GIT_CONFIG_/i.test(name)) continue;
+    if (backend === CODEX_EXECUTOR && name.toUpperCase() === OPENCODE_ATTACH_URL_ENV) continue;
     childEnv[name] = value;
   }
   Object.assign(childEnv, CHILD_GIT_SAFETY_ENV);
@@ -310,37 +348,6 @@ export function findOnPath({ fileName, baseEnv, platform, exists = existsSync })
     if (directory.length === 0) continue;
     const candidate = join(directory, fileName);
     if (exists(candidate)) return candidate;
-  }
-  return null;
-}
-
-export function extractWindowsShimTarget({
-  shimPath,
-  exists = existsSync,
-  readFile = readFileSync,
-}) {
-  let text;
-  try {
-    text = readFile(shimPath, 'utf8');
-  } catch {
-    return null;
-  }
-  const shimDirectory = dirname(shimPath);
-  const tokens = [];
-  const pattern = /"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s"'=]+)/g;
-  let match = pattern.exec(text);
-  while (match !== null) {
-    const raw = match[1] ?? match[2] ?? match[3] ?? '';
-    const candidate = raw.replace(/%~?dp0%?/gi, shimDirectory);
-    if (candidate.includes('\\') || candidate.includes('/')) tokens.push(candidate);
-    match = pattern.exec(text);
-  }
-  for (let index = tokens.length - 1; index >= 0; index -= 1) {
-    const token = tokens[index];
-    if (/\.(exe|com)$/i.test(token) && exists(token)) return { command: token, prefixArgs: [] };
-    if (/\.(js|mjs|cjs)$/i.test(token) && exists(token)) {
-      return { command: process.execPath, prefixArgs: [token] };
-    }
   }
   return null;
 }
@@ -755,6 +762,7 @@ function createResult(options = {}) {
     executor: {
       invoked: false,
       mode: HEADLESS_MODE,
+      backend: OPENCODE_EXECUTOR,
       attachUrl: null,
       preflight: 'NOT_ATTEMPTED',
       instanceDisposal: 'NOT_ATTEMPTED',
@@ -826,7 +834,7 @@ function validateRunOnceInput(options) {
       }
     }
   }
-  for (const numeric of ['opencodeTimeoutMs', 'proofTimeoutMs']) {
+  for (const numeric of ['opencodeTimeoutMs', 'codexTimeoutMs', 'proofTimeoutMs']) {
     const value = options[numeric];
     if (value != null && (!Number.isFinite(value) || value < 0)) return `${numeric} must be >= 0`;
   }
@@ -841,6 +849,7 @@ function validateRunOnceInput(options) {
  */
 export function runOnce(options, deps = {}) {
   const invokeOpencode = deps.invokeOpencode ?? defaultInvokeOpencode;
+  const invokeCodex = deps.invokeCodex ?? defaultInvokeCodex;
   const runProofCommand = deps.runProofCommand ?? defaultRunProofCommand;
   const removeWorkspace = deps.removeWorkspace ?? defaultRemoveWorkspace;
   const probeVisibleServerImpl = deps.probeVisibleServer ?? probeVisibleServer;
@@ -857,12 +866,29 @@ export function runOnce(options, deps = {}) {
     return result;
   }
 
+  const executorSelection = resolveAgentExecutor({
+    explicitValue: options.executor ?? null,
+    baseEnv,
+  });
+  const executorOptions = validateAgentExecutorOptions({
+    selection: executorSelection,
+    agent: options.agent,
+  });
+  if (!executorOptions.ok) {
+    result.status = INVALID_INPUT;
+    result.reason = executorOptions.reason;
+    return result;
+  }
+  const backend = executorSelection.backend;
+  result.executor.backend = backend;
+  if (backend === CODEX_EXECUTOR) result.executor.mode = 'NOT_APPLICABLE_TO_CODEX';
+
   // Visible observation is an explicit operator contract. An unusable attach
   // target or an unhealthy server fails closed here, before any Git observation
   // or workspace side effect, and is never downgraded to a private standalone
   // invocation.
   const requestedAttachUrl =
-    typeof baseEnv[OPENCODE_ATTACH_URL_ENV] === 'string'
+    backend === OPENCODE_EXECUTOR && typeof baseEnv[OPENCODE_ATTACH_URL_ENV] === 'string'
       ? baseEnv[OPENCODE_ATTACH_URL_ENV].trim()
       : '';
   let attachUrl = null;
@@ -892,7 +918,9 @@ export function runOnce(options, deps = {}) {
   const remote = options.remote ?? 'origin';
   const allowedPaths = [...options.allowedPaths];
   const proofCommands = [...(options.proofCommands ?? [])];
-  const opencodeTimeoutMs = options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS;
+  const executorTimeoutMs = backend === CODEX_EXECUTOR
+    ? options.codexTimeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS
+    : options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS;
   const proofTimeoutMs = options.proofTimeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS;
 
   const prompt = buildTaskPrompt({ taskText: options.taskText, allowedPaths });
@@ -976,47 +1004,53 @@ export function runOnce(options, deps = {}) {
   let execution = null;
   if (status === null) {
     try {
-      const resolvedCommand = resolveOpencodeCommand({
-        explicitBin: options.opencodeBin ?? null,
-        baseEnv,
-      });
+      const resolvedCommand = backend === CODEX_EXECUTOR
+        ? resolveCodexCommand({ explicitBin: options.codexBin ?? null, baseEnv })
+        : resolveOpencodeCommand({ explicitBin: options.opencodeBin ?? null, baseEnv });
       result.executor.commandSource = resolvedCommand.source;
-      const args = buildOpencodeArgs({
-        taskText: prompt,
-        workspacePath,
-        model: options.model ?? null,
-        agent: options.agent ?? null,
-        title: options.title ?? null,
-        attachUrl,
-      });
-      const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot });
+      const args = backend === CODEX_EXECUTOR
+        ? buildCodexArgs({ taskText: prompt, model: options.model ?? null, sandboxMode: 'workspace-write' })
+        : buildOpencodeArgs({
+            taskText: prompt,
+            workspacePath,
+            model: options.model ?? null,
+            agent: options.agent ?? null,
+            title: options.title ?? null,
+            attachUrl,
+          });
+      const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot, backend });
       result.executor.invoked = true;
       log(
-        `[run-once] opencode start (${resolvedCommand.source})` +
+        `[run-once] ${backend.toLowerCase()} start (${resolvedCommand.source})` +
           `${attachUrl ? ` attached to ${attachUrl}` : ''} in ${workspacePath}`,
       );
-      execution = invokeOpencode({
+      execution = invokeAgent({
+        backend,
+        invokeOpencode,
+        invokeCodex,
         resolvedCommand,
         args,
         cwd: workspacePath,
         env: childEnv,
-        timeoutMs: opencodeTimeoutMs,
+        timeoutMs: executorTimeoutMs,
       });
       result.executor.exitCode = execution.exitCode ?? null;
       result.executor.signal = execution.signal ?? null;
       result.executor.timedOut = Boolean(execution.timedOut);
       result.executor.startErrorCode = execution.startErrorCode ?? null;
       result.executor.stdoutBytes = Buffer.byteLength(execution.stdout ?? '', 'utf8');
-      result.executor.stdoutTail = tail(execution.stdout);
-      result.executor.stderrTail = tail(execution.stderr);
+      result.executor.stdoutTail = tail(redactCredentialValues(execution.finalText ?? execution.stdout, baseEnv));
+      result.executor.stderrTail = tail(redactCredentialValues(execution.stderr, baseEnv));
       log(
-        `[run-once] opencode exit=${result.executor.exitCode} timedOut=${result.executor.timedOut} stdoutBytes=${result.executor.stdoutBytes}`,
+        `[run-once] ${backend.toLowerCase()} exit=${result.executor.exitCode} timedOut=${result.executor.timedOut} stdoutBytes=${result.executor.stdoutBytes}`,
       );
-      if (execution.stderr) log(`[run-once] opencode stderr:\n${tail(execution.stderr, 6000)}`);
+      if (execution.stderr) {
+        log(`[run-once] ${backend.toLowerCase()} stderr:\n${tail(redactCredentialValues(execution.stderr, baseEnv), 6000)}`);
+      }
     } catch (error) {
       result.executor.invoked = true;
       result.executor.startErrorCode = error?.code ?? null;
-      fail(EXECUTOR_FAILED, `opencode invocation failed: ${messageOf(error)}`);
+      fail(EXECUTOR_FAILED, `${backend.toLowerCase()} invocation failed: ${messageOf(error)}`);
     }
   }
 
@@ -1047,14 +1081,16 @@ export function runOnce(options, deps = {}) {
 
   if (status === null) {
     if (execution === null) {
-      fail(EXECUTOR_FAILED, 'opencode invocation did not run');
+      fail(EXECUTOR_FAILED, `${backend.toLowerCase()} invocation did not run`);
     } else if (execution.startErrorCode || execution.timedOut || execution.exitCode !== 0) {
       fail(
         EXECUTOR_FAILED,
-        `opencode did not complete successfully (exit=${execution.exitCode}, timedOut=${Boolean(
+        `${backend.toLowerCase()} did not complete successfully (exit=${execution.exitCode}, timedOut=${Boolean(
           execution.timedOut,
         )}, startError=${execution.startErrorCode ?? 'none'})`,
       );
+    } else if (execution.outputError) {
+      fail(EXECUTOR_FAILED, `Codex 출력을 거부했습니다: ${execution.outputError}`);
     } else if (result.boundary.error !== null) {
       fail(
         BASELINE_OBSERVATION_FAILED,
@@ -1221,12 +1257,15 @@ export const USAGE = [
   '  --proof <command>           focused proof command, run in order in the workspace (repeatable)',
   '  --proof-owner <path>        semantic/proof owner path for the most recent --proof (repeatable)',
   '  --title <title>             optional OpenCode session title',
-  '  --model <provider/model>    optional OpenCode model override',
+  '  --executor <name>           실행 backend: opencode (기본값) 또는 codex',
+  '  --model <value>             backend가 지원하는 model 지정; Codex에서는 값을 그대로 전달',
   '  --agent <name>              optional OpenCode agent override',
   '  --opencode-bin <path>       explicit OpenCode executable (default: resolved from PATH)',
+  '  --codex-bin <path>          explicit Codex executable (default: resolved from PATH)',
   '  --repo <dir>                canonical checkout root (default: current directory)',
   '  --remote <name>             publication remote observed for the live baseline (default: origin)',
   '  --opencode-timeout-ms <n>   opencode timeout in ms (default: 3600000, 0 disables)',
+  '  --codex-timeout-ms <n>      Codex timeout in ms (default: 3600000, 0 disables)',
   '  --proof-timeout-ms <n>      per-proof timeout in ms (default: 1800000, 0 disables)',
   '',
   'Environment:',
@@ -1236,6 +1275,7 @@ export const USAGE = [
   '                              (e.g. http://127.0.0.1:4096). An unreachable or',
   '                              non-loopback target fails closed; there is no',
   '                              private standalone fallback.',
+  `  GREENHUB_AGENT_EXECUTOR=opencode|codex (explicit --executor overrides it)`,
   '',
   'Prints one deterministic JSON result to stdout. Exit code 0 for SUCCESS/ALREADY_SATISFIED.',
 ].join('\n');
@@ -1246,27 +1286,33 @@ export function parseArgs(argv) {
     allowedPaths: [],
     proofCommands: [],
     proofOwners: [],
+    executor: null,
     title: null,
     model: null,
     agent: null,
     opencodeBin: null,
+    codexBin: null,
     repositoryRoot: process.cwd(),
     remote: 'origin',
     opencodeTimeoutMs: DEFAULT_OPENCODE_TIMEOUT_MS,
+    codexTimeoutMs: DEFAULT_CODEX_TIMEOUT_MS,
     proofTimeoutMs: DEFAULT_PROOF_TIMEOUT_MS,
     help: false,
   };
   const valueFlags = {
     '--task': 'taskFile',
+    '--executor': 'executor',
     '--title': 'title',
     '--model': 'model',
     '--agent': 'agent',
     '--opencode-bin': 'opencodeBin',
+    '--codex-bin': 'codexBin',
     '--repo': 'repositoryRoot',
     '--remote': 'remote',
   };
   const numberFlags = {
     '--opencode-timeout-ms': 'opencodeTimeoutMs',
+    '--codex-timeout-ms': 'codexTimeoutMs',
     '--proof-timeout-ms': 'proofTimeoutMs',
   };
   for (let index = 0; index < argv.length; index += 1) {
