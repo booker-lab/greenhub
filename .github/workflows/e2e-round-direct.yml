@@ -379,6 +379,56 @@ jobs:
             .stats.flaky == 0
           ' "$PLAYWRIGHT_JSON_OUTPUT_FILE" > /dev/null
 
+      # 로그아웃·정지는 같은 계정의 다른 세션에도 영향을 줄 수 있어 52건이 모두 끝난 뒤에만 실행한다.
+      # 사용자 상태 변경은 비운영 fixture 가드를 통과한 이번 실행 fixture 사용자에게만 적용되고 즉시 복원된다.
+      - name: 세션 수명주기 12건 실행
+        id: session_lifecycle
+        env:
+          SELLER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SELLER_BYPASS_SECRET }}
+          CONSUMER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_BYPASS_SECRET }}
+          DRIVER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_BYPASS_SECRET }}
+          E2E_TEST_SECRET: ${{ secrets.ROUND_DIRECT_E2E_TEST_SECRET }}
+          ROUND_DIRECT_E2E_SHARED_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SHARED_SECRET }}
+          TEST_CONSUMER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM }}
+          TEST_CONSUMER_PASSWORD_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_PASSWORD_CHROMIUM }}
+          TEST_SELLER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_SELLER_EMAIL_CHROMIUM }}
+          TEST_SELLER_PASSWORD_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_SELLER_PASSWORD_CHROMIUM }}
+          TEST_DRIVER_EMAIL_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM }}
+          TEST_DRIVER_PASSWORD_CHROMIUM: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_PASSWORD_CHROMIUM }}
+          TEST_CONSUMER_EMAIL_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_MOBILE }}
+          TEST_CONSUMER_PASSWORD_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_PASSWORD_MOBILE }}
+          TEST_SELLER_EMAIL_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_SELLER_EMAIL_MOBILE }}
+          TEST_SELLER_PASSWORD_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_SELLER_PASSWORD_MOBILE }}
+          TEST_DRIVER_EMAIL_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_MOBILE }}
+          TEST_DRIVER_PASSWORD_MOBILE: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_PASSWORD_MOBILE }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/.artifacts/round-direct/task-6-7-${{ github.run_id }}-${{ github.run_attempt }}/playwright-session-raw.json
+        run: >-
+          pnpm --filter e2e exec playwright test
+          auth-session-lifecycle
+          --project=chromium
+          --project=mobile
+          --workers=1
+          --retries=0
+          --reporter=list,json
+
+      - name: 세션 수명주기 12건 무건너뜀 판정
+        id: session_lifecycle_gate
+        shell: bash
+        env:
+          SESSION_JSON: ${{ github.workspace }}/.artifacts/round-direct/task-6-7-${{ github.run_id }}-${{ github.run_attempt }}/playwright-session-raw.json
+        run: |
+          set -euo pipefail
+          jq -e '
+            .stats.expected == 12 and
+            .stats.skipped == 0 and
+            .stats.unexpected == 0 and
+            .stats.flaky == 0
+          ' "$SESSION_JSON" > /dev/null
+          evidence_root=".artifacts/round-direct/$ROUND_DIRECT_E2E_RUN_ID"
+          mkdir -p "$evidence_root/evidence"
+          jq '.stats | {expected, skipped, unexpected, flaky}' "$SESSION_JSON"             > "$evidence_root/evidence/session-lifecycle-summary.json"
+
       - name: chromium fixture cleanup
         id: cleanup_chromium
         if: ${{ always() }}
