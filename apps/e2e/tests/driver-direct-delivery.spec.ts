@@ -274,7 +274,8 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await expect(completeButton).toBeEnabled();
     await completeButton.click();
 
-    await expect(page).toHaveURL(new RegExp('/board\\?tab=preparing$'));
+    // 사진 업로드는 Storage 저장과 완료 전이를 함께 수행해 스테이징에서 5초를 넘길 수 있다.
+    await expect(page).toHaveURL(new RegExp('/board\\?tab=preparing$'), { timeout: 20_000 });
     await expect(page.getByTestId(`driver-order-${orderId}`)).toHaveCount(0);
   });
 });
