@@ -410,7 +410,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 상태: `PRE_RELEASE_PROVEN` — 출시 SHA 확정 뒤 재실행 필요.
 
-- 2026-09-28 run `36341189483`(SHA `9ba65c1f`): exact Preview 3개 + 스테이징 API로 회차 52/52 + 세션 12/12, cleanup 잔여 0.
+- 2026-09-28 run `36348002412`(live `main` `c8bec1f5`): exact Preview 3개 + 스테이징 API로 회차 52/52 + 세션 12/12, cleanup 잔여 0.
 - 출시 SHA의 증거는 출시 SHA로 다시 실행한 run만 인정한다.
 
 - #63이 인정한 Preview/browser/fixture 결과는 해당 exact source에 대한 재사용 가능한 역사적 증거다.

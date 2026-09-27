@@ -111,6 +111,7 @@ live round·actual payment/notification·first-round completion을 주장하지 
 
 - run `36338292480`(SHA `31d122c5`): Playwright 52/52, fixture cleanup 잔여 0
 - run `36341189483`(SHA `9ba65c1f`, #309): 52/52 + 세션 수명주기 12/12, cleanup 잔여 0
+- run `36348002412`(live `main` `c8bec1f5`, #310 포함): 52/52 + 세션 12/12, cleanup 잔여 0 — 가장 최근 증거
 - 절차: `docs/specs/ops/mvp-sales-round-e2e-environment.md` §2의 exact Preview 생성 방식
 
 이 결과는 해당 SHA에 대한 증거이며 출시 SHA의 증거를 대신하지 않는다.
@@ -308,7 +309,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 검증 상태
 
-- 최근 원격 회차 E2E: run `36341189483`(SHA `9ba65c1f`) 52/52 + 세션 12/12, 양쪽 cleanup 잔여 0 — 출시 전 증거이며 출시 SHA 증거가 아니다.
+- 최근 원격 회차 E2E: run `36348002412`(live `main` `c8bec1f5`) 52/52 + 세션 12/12, 양쪽 cleanup 잔여 0 — 출시 전 증거이며 출시 SHA 증거가 아니다.
 - 이전 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`(52건).
 - 과거 run을 현재 release 증거로 확장하지 않는다.
 - exact-SHA Preview/browser/fixture와 필요한 legal/release proof는 actual release candidate에서 다시 판정한다.
