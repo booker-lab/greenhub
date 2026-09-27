@@ -128,7 +128,10 @@ export default function OrdersPage() {
     () => deriveOrdersFetchInput(orders, saleType, activeTab),
     [orders, saleType, activeTab],
   );
-  const groupConfigs = useGroupConfigs(fetchInput.groupProductIds, saleType === 'group');
+  const groupConfigs = useGroupConfigs(
+    fetchInput.groupProductIds,
+    saleType === 'group' && firebaseReady,
+  );
   const groupConfigMap = groupConfigs.map;
   const view = useMemo(
     () =>
@@ -222,7 +225,7 @@ export default function OrdersPage() {
         }
       />
 
-      {!loading && firebaseReady && (
+      {!loading && (
         <Container size="sm" px="md" pt="md">
           <Paper radius="lg" shadow="xs" p="md">
             <Group justify="space-between" align="flex-end" mb="sm">
@@ -438,9 +441,9 @@ export default function OrdersPage() {
       {/* 주문 목록 — 날짜 그룹 섹션 */}
       <Container size="sm" px="md" py="md">
         <Stack gap="lg">
-          {(loading || !firebaseReady) && <LoadingState />}
+          {(loading || (saleType === 'group' && !firebaseReady)) && <LoadingState />}
 
-          {!loading && firebaseReady && error && orders.length === 0 && (
+          {!loading && error && orders.length === 0 && (
             <EmptyState
               text={error}
               action={
@@ -460,7 +463,7 @@ export default function OrdersPage() {
             />
           )}
 
-          {!loading && firebaseReady && error && orders.length > 0 && (
+          {!loading && error && orders.length > 0 && (
             <Paper radius="lg" shadow="xs" p="md">
               <Group justify="space-between" gap="xs" wrap="nowrap">
                 <Text
@@ -533,7 +536,7 @@ export default function OrdersPage() {
             )}
 
           {!loading &&
-            firebaseReady &&
+            (saleType !== 'group' || firebaseReady) &&
             !(error && orders.length === 0) &&
             filteredOrders.length === 0 && (
               <EmptyState
@@ -557,7 +560,7 @@ export default function OrdersPage() {
             )}
 
           {!loading &&
-            firebaseReady &&
+            (saleType !== 'group' || firebaseReady) &&
             !(error && orders.length === 0) &&
             groupedOrders.map((group) => (
               <DateSection
