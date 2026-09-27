@@ -2,7 +2,7 @@
 
 # Greenhub Backlog
 
-> 기준일: 2026-09-06 KST
+> 기준일: 2026-09-28 KST
 >
 > 현재 미완료·향후 작업만 관리한다. 완료 상세는 Git history, `docs/CRITICAL_LOGIC.md`, `docs/archive/`, 완료 PLAN·REPORT를 사용한다.
 
@@ -39,12 +39,12 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 | 주장 | 현재 판정 |
 |---|---|
 | implementation | `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`는 `IMPLEMENTATION_PROVEN`; #66이 race/recovery proof를 accepted함 |
-| verification | Sale Round implementation/race/recovery proof는 `PROVEN`; exact-release Preview/runtime/browser proof는 `PENDING` |
+| verification | Sale Round proof `PROVEN`; 2026-09-28 exact Preview 원격 E2E 52 + 세션 12 통과(`PRE_RELEASE_PROVEN`), 출시 SHA 재실행은 `PENDING` |
 | prior candidate | PR #69의 기존 accepted candidate는 `9c921684a26597cb57887b6049288f1143b017c8` |
 | updated candidate | PR #69의 후속 candidate는 remote-addressable 상태로 갱신하며, 정확한 head SHA는 Issue #75 TASK_RECORD에 기록 |
 | PR | 기존 documentation PR #69는 `OPEN`; 이번 Goal은 merge하지 않음 |
 | published / merged | PR #70은 `MERGED`; live `main`은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` |
-| Preview runtime proof | exact-release runtime/browser proof는 `PENDING`; historical Preview evidence를 승격하지 않음 |
+| Preview runtime proof | Auth.js 세션 런타임 `RUNTIME_PROVEN`(Preview); 출시 SHA 기준 재실행은 `PENDING` |
 | production deployment | `PRODUCTION_AUTHORITY_PENDING` |
 | production activation | `PRODUCTION_AUTHORITY_PENDING` |
 | first live round | `PRODUCTION_AUTHORITY_PENDING` |
@@ -408,7 +408,10 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### Preview·exact-SHA proof
 
-상태: `VERIFICATION_PENDING`.
+상태: `PRE_RELEASE_PROVEN` — 출시 SHA 확정 뒤 재실행 필요.
+
+- 2026-09-28 run `36341189483`(SHA `9ba65c1f`): exact Preview 3개 + 스테이징 API로 회차 52/52 + 세션 12/12, cleanup 잔여 0.
+- 출시 SHA의 증거는 출시 SHA로 다시 실행한 run만 인정한다.
 
 - #63이 인정한 Preview/browser/fixture 결과는 해당 exact source에 대한 재사용 가능한 역사적 증거다.
 - `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`와 그 Preview deployment를 현재 main, 현재 candidate, production deployment로 표현하지 않는다.
@@ -419,21 +422,19 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### Auth.js session runtime
 
-상태: `EXTERNAL_RUNTIME_BLOCKED`.
+상태: `RUNTIME_PROVEN`(Preview, 2026-09-28) — run `36341189483`, `apps/e2e/tests/auth-session-lifecycle.spec.ts` 12건.
 
-- Auth.js session cookie 발급·동일 브라우저 context persistence·logout/rotation·stale claim lifecycle은 runtime/browser proof가 필요하다.
-- static source, fixture, callback 응답만으로 session runtime 성공을 주장하지 않는다.
-- 필요한 runtime/browser authority가 없으면 `UNVERIFIED`로 유지하며 source/runtime mutation을 이 Goal에서 수행하지 않는다.
+- 쿠키 발급·같은 컨텍스트 유지·로그아웃 후 소멸·정지/기사 승인 철회 뒤 세션 종료를 세 역할 × chromium·mobile로 확인했다.
+- 이후 회차 E2E는 52건 뒤 이 12건을 함께 실행한다.
 
 ### ALIGO provider current metadata
 
 상태: `EXTERNAL_GATE_PENDING`.
 
 - repository logical 8-code contract: `VERIFIED` — #65에서 8개 logical code/body/required-variable 계약을 확인했다.
-- provider current metadata: `UNVERIFIED` — authenticated provider read-back이 없다.
-- production mapping: provider metadata와 별도의 `UNVERIFIED` gate다.
-- actual Alimtalk/SMS send: `NOT RUN`이며 별도 authority가 필요하다.
-- 과거의 provider 승인·심사 상태를 현재 metadata read-back으로 승격하지 않는다.
+- provider 템플릿: 2026-09-28 콘솔에서 UK_5691~5698 코드·이름·승인완료·본문·변수 일치 확인.
+- production mapping: Railway production 변수 저장값은 8종 모두 올바르다. 실행 중인 운영 API(8/23 이전 배포)에는 아직 반영되지 않았다.
+- 남은 gate: 출시 배포 뒤 운영 송신 IP의 ALIGO 등록 확인, API 기준 템플릿 대조, 격리 actual Alimtalk/SMS 및 fallback(별도 authority).
 
 ## AUTHORITY_PENDING
 
@@ -467,10 +468,11 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### 외부·권한 gate
 
-- [ ] authenticated ALIGO metadata read-back
-- [ ] provider metadata와 repository logical 8-code mapping 직접 대조
+- [x] provider 템플릿과 repository logical 8-code mapping 대조 (2026-09-28 콘솔)
+- [ ] 출시 배포 뒤 운영 송신 IP ALIGO 등록 확인 + API 기준 템플릿 read-back
 - [ ] 별도 authority 후 격리 actual Alimtalk/SMS 및 fallback 검증
-- [ ] exact release SHA 기준 Preview/browser/fixture와 Auth.js session lifecycle 검증
+- [ ] exact release SHA 기준 원격 회차 E2E 52 + 세션 12 재실행
+- [ ] 운영 Firebase rules/indexes read-only 재조회와 저장소 대조
 - [ ] production deployment·activation·첫 회차 전용 승인 및 read-back
 
 ### 법무·출시 후보 정합성
@@ -623,6 +625,15 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 ### 인프라/확장
 - [ ] Railway contingency, 다중 판매자, hub_staff, 외부 driver 정산, 결제수단 확장
+
+### AUTH-LOGOUT-SERVER-REVOCATION
+- [ ] 세 앱 Auth.js 로그아웃 시 API `POST /auth/logout`도 호출해 서버 refresh token을 폐기한다. 현재는 쿠키만 삭제되어 로그아웃 전에 복사된 쿠키가 refresh 만료(30일)까지 재사용될 수 있다. `refreshTokens/{sub}`가 사용자당 1개라 같은 계정의 다른 기기도 함께 로그아웃되는 영향을 설계에 포함한다. 2026-09-28 결정(D2)으로 출시 후 과제.
+
+### PREVIEW-GENERIC-ENV-ALIGNMENT
+- [ ] exact Preview(브랜치 없는 배포)는 Vercel의 브랜치 미지정 Preview env를 쓴다. 판매자 앱은 이 env에서 API=스테이징, Firebase=운영(`green-e4fe3`, 운영·Preview·개발 공통 항목)으로 어긋나 Firebase 클라이언트 로그인이 실패한다. 세 앱의 브랜치 미지정 Preview Firebase 설정을 비운영 프로젝트로 분리할지 결정한다.
+
+### EXACT-PREVIEW-WORKFLOW-CREDENTIALS
+- [ ] `create-exact-preview-deployment.yml`은 앱별 Vercel 토큰(`VERCEL_EXACT_PREVIEW_{CONSUMER,SELLER,DRIVER}_TOKEN`) 미등록으로 성공한 적이 없다. 현재 exact Preview는 로컬 Vercel CLI 권한으로 `preview-exact/<scope>/<sha>` ref를 사용해 만든다. 워크플로 경로로 옮길지 결정한다.
 
 ---
 

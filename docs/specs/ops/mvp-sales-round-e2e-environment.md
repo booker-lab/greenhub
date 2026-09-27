@@ -30,6 +30,15 @@
 
 과거 성공 run은 새 출시 후보 SHA의 통과 증거를 대신하지 않는다.
 
+### 2.1 exact Preview 생성과 입력값
+
+- 세 앱 Preview는 모두 지정 SHA로 새로 만들어야 한다. `preview` 브랜치 자동 배포는 `scripts/vercel/ignore-build.mjs`가 앱 변경이 없는 머지를 건너뛰어(`Canceled`) 세 앱이 같은 SHA로 준비되지 않는다. GitHub commit status의 성공 표시는 빌드 여부를 뜻하지 않으므로 deployment 상태를 직접 확인한다.
+- 생성은 Vercel `POST /v13/deployments`에 `gitSource.ref=preview-exact/<both|driver>/<sha>`, `gitSource.sha=<sha>`, `target` 생략으로 요청한다. 이 ref는 ignore-build의 exact Preview 예외라 같은 SHA 재생성도 항상 빌드된다. `both`는 consumer·seller, `driver`는 driver만 덮는다.
+- `create-exact-preview-deployment.yml`은 앱별 Vercel 토큰이 등록돼야 동작한다(`EXACT-PREVIEW-WORKFLOW-CREDENTIALS`). 등록 전에는 운영자 Vercel 권한으로 위 요청을 만든다.
+- 브랜치 없는 exact Preview는 Vercel의 **브랜치 미지정 Preview env**를 쓴다. driver 프로젝트의 이 env에는 `ROUND_DIRECT_E2E_ENABLED=true`, GitHub `round-direct-e2e`와 같은 `ROUND_DIRECT_E2E_SHARED_SECRET`, `ROUND_DIRECT_E2E_DRIVER_EMAIL_{CHROMIUM,MOBILE}`과 같은 `ROUND_DIRECT_E2E_DRIVER_EMAILS`가 있어야 한다. fixture는 매 실행 GitHub secret의 이메일로 계정을 만들므로 허용목록과 어긋나면 driver 로그인이 API 호출 전에 거부된다.
+- workflow 입력값은 지정 SHA와 세 deployment ID(`dpl_…`)다. 배포 metadata 확인은 GitHub Environment secret `ROUND_DIRECT_E2E_VERCEL_READ_TOKEN`을 쓰며, 토큰이 만료되면 세 앱 모두 `VERCEL_API_HTTP_403`으로 실행 전에 멈춘다.
+- API는 스테이징(`ROUND_DIRECT_E2E_API_ORIGIN`)이며 `main`에서만 배포된다. API 변경은 병합 뒤 스테이징 배포 성공을 확인한 다음 실행한다.
+
 ## 3. 필수 E2E mode
 
 API/runner에서 다음 의미가 유지돼야 한다.
