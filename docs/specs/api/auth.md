@@ -19,7 +19,7 @@
 - API `JwtStrategy`와 Firebase custom-token 경계가 현재 Firestore user의 role, `driverApproved`, `suspended`를 확인하며, stale/suspended/role-mismatch/missing-user/cross-driver 경계가 기존 candidate Rules/API 회귀로 확인됐다.
 - 직접 근거: `apps/api/src/auth/auth.controller.spec.ts`, `apps/api/src/auth/auth.service.spec.ts`, `apps/api/src/auth/strategies/jwt.strategy.spec.ts`.
 
-`AUTH-SESSION-CLAIM-REVOCATION`의 static/refresh 경계는 `IMPLEMENTED / PROVEN`이다. `AuthService.refresh()`는 rotation record 검증 뒤 authoritative user를 재조회해 `suspended`/`role`/`storeId`/`driverApproved` 불일치를 token/session write 없이 거부하고, `GET /auth/session`과 세 앱 `jwt` callback이 same-deployment session authority를 재검증한다. 직접 근거: `apps/api/src/auth/auth.service.spec.ts`의 `refresh current authority`, `getSession same-deployment authority`. 남은 것은 access-token 이미 발급분의 revocation window 정책 결정(`DECISION REQUIRED`)과 runtime/browser session lifecycle proof(`PENDING`)이며, 이 spec은 그 둘을 완료로 주장하지 않는다.
+`AUTH-SESSION-CLAIM-REVOCATION`의 static/refresh 경계는 `IMPLEMENTED / PROVEN`이다. `AuthService.refresh()`는 rotation record 검증 뒤 authoritative user를 재조회해 `suspended`/`role`/`storeId`/`driverApproved` 불일치를 token/session write 없이 거부하고, `GET /auth/session`과 세 앱 `jwt` callback이 same-deployment session authority를 재검증한다. 직접 근거: `apps/api/src/auth/auth.service.spec.ts`의 `refresh current authority`, `getSession same-deployment authority`. revocation window는 2026-09-28 결정(D2)으로 **즉시(다음 요청)**로 확정했고, Preview 브라우저 증거는 원격 회차 E2E run `36341189483`의 `auth-session-lifecycle.spec.ts` 12건이다. 로그아웃 시 서버 refresh token 폐기는 출시 후 `AUTH-LOGOUT-SERVER-REVOCATION`에서 다룬다.
 
 ## 1. 인증 계층
 
@@ -237,13 +237,14 @@ rotation record 검증 뒤 authoritative user를 재조회하고 payload `role/s
 문서의 `suspended/role/storeId/driverApproved`를 재검증한다
 (`apps/api/src/auth/strategies/jwt.strategy.spec.ts`).
 
-따라서 관리자가 계정을 정지하거나 role/store 연결을 바꾼 뒤 기존 세션이 언제 차단되어야 하는지에 대한 **API access-token 이미 발급분의 revocation window 정책은 아직 명시적으로 결정되지 않았다**. 다만 refresh 경로는 더 이상 stale claims를 재발급하지 않는다: `AuthService.refresh()`가 authoritative user를 재조회해 불일치를 거부하고(`refresh current authority`), `GET /auth/session`이 `JwtAuthGuard` 재검증 + authoritative user 재조회 + `refreshTokens/{sub}` 존재 검사로 same-deployment session authority를 확인하며(`getSession same-deployment authority`), 세 앱 `jwt` callback이 매 호출마다 이를 확인한다.
+관리자가 계정을 정지하거나 role/store 연결·기사 승인을 바꾼 뒤 기존 세션의 **revocation window는 즉시(다음 요청)**다(2026-09-28 결정 D2). 이미 발급된 API access token도 `JwtStrategy.validate()`가 요청마다 authoritative user를 재조회해 `suspended`·role 불일치·`driverApproved` 철회를 403으로 거부하고(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`), Firestore Rules는 `get(users/{uid})`로 `suspended`·role·storeId를 실시간 확인한다. 다만 refresh 경로는 더 이상 stale claims를 재발급하지 않는다: `AuthService.refresh()`가 authoritative user를 재조회해 불일치를 거부하고(`refresh current authority`), `GET /auth/session`이 `JwtAuthGuard` 재검증 + authoritative user 재조회 + `refreshTokens/{sub}` 존재 검사로 same-deployment session authority를 확인하며(`getSession same-deployment authority`), 세 앱 `jwt` callback이 매 호출마다 이를 확인한다.
 
 판정:
 
 - 신규 로그인에서 `suspended === true`를 거부하는 동작은 구현·테스트됨.
 - refresh/session 경계의 stale-claim 재발급 차단과 `suspended`/`role`/`store`/`driverApproved` 변경 수렴은 `IMPLEMENTED / PROVEN`이다.
-- 남은 `DECISION REQUIRED`는 access-token 이미 발급분의 revocation window 정책이며, runtime/browser session lifecycle proof는 `PENDING`이다. 이 둘을 완료로 주장하지 않는다.
+- revocation window는 즉시(다음 요청)로 결정됐고(D2), runtime/browser session lifecycle은 Preview에서 `RUNTIME_PROVEN`이다(run `36341189483`, 12건).
+- Auth.js 로그아웃은 브라우저 쿠키만 삭제하고 서버 `refreshTokens/{sub}`는 유지한다. 로그아웃 전에 복사된 쿠키는 refresh 만료(30일)까지 재사용될 수 있으며, 파일럿에서는 이를 수용하고 출시 후 `AUTH-LOGOUT-SERVER-REVOCATION`으로 개선한다.
 - “정지된 계정이 refresh를 통해 계속 새 권한 토큰을 얻을 수 있음”은 현재 계약이 아니다.
 
 Task 2F-A/2F-B의 public approval-gate와 current-user 경계 검증에 더해, 위 refresh/session 직접 회귀가 static/refresh 경계를 닫는다.
@@ -279,7 +280,7 @@ gap을 다음 최소 authority로 닫는다.
 - logout/refresh-token rotation 동작 유지
 - suspended/role-changed/store-changed/driver-approval-changed 시나리오 직접 회귀
 
-현재 상태: authoritative refresh 재조회, stale claim 재발급 차단, `suspended`/`role`/`store`/`driverApproved` 회귀, logout/rotation 유지는 `IMPLEMENTED / PROVEN`이다(`apps/api/src/auth/auth.service.spec.ts`). access-token 이미 발급분의 revocation window 결정과 runtime/browser proof는 아직 완료가 아니다.
+현재 상태: authoritative refresh 재조회, stale claim 재발급 차단, `suspended`/`role`/`store`/`driverApproved` 회귀, logout/rotation 유지는 `IMPLEMENTED / PROVEN`이다(`apps/api/src/auth/auth.service.spec.ts`). revocation window는 즉시(다음 요청)로 결정됐고(2026-09-28 D2), Preview 브라우저 증거는 run `36341189483`의 세션 수명주기 12건이다.
 
 ## 7. 현재 Auth API
 
@@ -423,6 +424,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-28 | revocation window를 즉시(다음 요청)로 결정(D2)하고 JwtStrategy·Firestore Rules 실시간 확인 근거와 Preview 세션 수명주기 E2E 12건 증거를 연결, 로그아웃 서버 폐기는 출시 후 과제로 분리 |
 | 2026-08-24 | Task 2F-B candidate에서 public driver register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계를 검증하고 `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN으로 유지 |
 | 2026-08-24 | 공개 email `register(role=driver) → login`이 승인 없이 driver JWT를 발급할 수 있는 추가 P0 우회를 반영하고 Kakao/refresh/Firebase claim과 하나의 driver authorization lifecycle로 정합화 |
 | 2026-08-24 | 신규/legacy driver 자동 승인 경로를 P0 IMPLEMENTATION FINDING으로 분리하고, 정지·role/store 변경의 refresh/custom-token stale claims를 P0 revocation 결정·remediation으로 명시 |
