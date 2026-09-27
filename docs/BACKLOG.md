@@ -448,10 +448,10 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### Consumer self-cancel `ORDER_CANCELLED` notification
 
-상태: `PRODUCT_POLICY_DECISION_REQUIRED`.
+상태: `RESOLVED` — 2026-09-28 사용자 결정으로 소비자 회차 직접 취소도 `ORDER_CANCELLED`를 보낸다.
 
-- consumer self-cancel 경로에서 `ORDER_CANCELLED` 알림을 어떻게 처리할지는 정책 결정이 필요하다.
-- 이 Goal에서는 정책을 선택하거나 runtime/callsite를 변경하지 않는다.
+- 결제 전(`PENDING`)·이미 취소된 주문은 제외하고, 사유는 고정 문구 `고객 요청`, 멱등 키 `round-consumer-cancel:<orderId>`를 사용한다.
+- 계약 정본: `docs/specs/api/notifications.md`. 직접 근거: `legacy-consumer-cancel-convergence.spec.ts` S9~S12.
 
 ## DOC_DELTA
 

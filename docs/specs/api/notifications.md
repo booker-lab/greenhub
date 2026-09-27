@@ -100,7 +100,9 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 
 - `ORDER_ACCEPTED.name`: 결제 확정 시 주문 snapshot의 표시명을 사용하고 유효한 표시명이 없으면 서버 규칙에 따라 비개인 fallback을 사용한다.
 - `ORDER_DELIVERY_HELD.reason`: 자유 입력 원문이 아니라 서버가 허용한 reason code의 비개인 고정 문구를 사용한다.
-- `ORDER_CANCELLED.reason`: 서버가 정규화한 취소 사유를 사용한다.
+- `ORDER_CANCELLED.reason`: 서버가 정규화한 취소 사유를 사용한다. 소비자 직접 취소는 자유 입력 사유 대신 고정 문구 `고객 요청`을 사용한다.
+
+소비자 직접 취소 알림 정책(2026-09-28 결정): 회차 주문을 소비자가 주문 마감 전에 직접 취소해도 `ORDER_CANCELLED` 거래성 알림을 보낸다. 결제 전(`PENDING`) 주문과 호출 시점에 이미 `CANCELLED`인 주문은 보내지 않으며, 같은 취소의 재호출은 멱등 키 `round-consumer-cancel:<orderId>`로 한 번만 발송한다. 직접 근거: `apps/api/src/orders/legacy-consumer-cancel-convergence.spec.ts` S9~S12.
 
 세부 생성 규칙은 실제 호출부와 회차 직배송 spec을 함께 확인한다.
 
@@ -380,6 +382,7 @@ state → withdrawal → retention evidence → sender gating의 lifecycle을 �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-28 | 소비자 회차 직접 취소 `ORDER_CANCELLED` 발송 정책 결정과 구현 반영(고정 사유 `고객 요청`, PENDING·기취소 제외, 멱등 키) |
 | 2026-09-26 | `NOTIFICATION_RETRY_METRICS` in-process 관측 recorder 계약(채널별 오류 분류 counter·적용 지연 집계·PII 미기록·전달 결과 불변) 및 전용 회귀 추가 |
 | 2026-09-25 | `NOTIFICATION_RETRY_BACKOFF_POLICY` 토큰과 provider 오류 분류·bounded backoff·rate-limit 지연·blind 중복 SMS 방지 계약 및 전용 회귀 추가 |
 | 2026-08-30 | 파일럿 선택 마케팅 미사용, 거래성 `ORDER_*` 8종 유지, 과거 preference·consent 보존 정책을 반영 |

@@ -28,6 +28,7 @@ import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy
 import { releaseLegacyGroupQuantityInTransaction } from './_lib/legacy-group-quantity';
 
 const LEGACY_CONSUMER_CANCEL_CLAIM_MS = 5 * 60 * 1000;
+const ROUND_CONSUMER_CANCEL_NOTIFICATION_REASON = '고객 요청';
 
 type LegacyConsumerCancelClaimResult =
   | { kind: 'done' }
@@ -388,7 +389,23 @@ export class OrdersLifecycleService {
 
     if (order['userId'] !== userId) throw new ForbiddenException();
     if (order['schemaVersion'] === 2 && order['roundId']) {
-      return this.roundLifecycle.cancelByConsumer({ storeId, orderId, userId, reason });
+      const result = await this.roundLifecycle.cancelByConsumer({ storeId, orderId, userId, reason });
+      // 소비자 직접 취소도 ORDER_CANCELLED 거래성 알림을 보낸다(2026-09-28 정책 결정).
+      // 결제 전(PENDING) 주문은 접수 알림을 받은 적이 없고, 이미 취소돼 있던 주문은 이전 취소에서
+      // 알림을 보냈으므로 제외한다. 사유는 자유 입력 대신 고정 문구를 쓰고, 같은 취소의 재호출은
+      // 멱등 키로 한 번만 발송한다.
+      const previousStatus = order['status'] as OrderStatus;
+      if (previousStatus !== 'PENDING' && previousStatus !== 'CANCELLED') {
+        await this.sendTransitionNotification(
+          order,
+          previousStatus,
+          'CANCELLED',
+          orderId,
+          `round-consumer-cancel:${orderId}`,
+          { reason: ROUND_CONSUMER_CANCEL_NOTIFICATION_REASON },
+        );
+      }
+      return result;
     }
     if (order['schemaVersion'] === 2) {
       throw new ConflictException('회차 주문 상태가 올바르지 않아 처리할 수 없습니다.');
