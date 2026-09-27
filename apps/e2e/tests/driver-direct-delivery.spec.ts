@@ -52,6 +52,19 @@ async function installDeliveryPhotoCamera(page: Page, idempotencyKey: string): P
       configurable: true,
       value: async () => undefined,
     });
+    // 셔터는 첫 프레임이 준비돼야 활성화되므로 프레임이 있는 비디오처럼 보이게 한다.
+    Object.defineProperty(HTMLMediaElement.prototype, 'readyState', {
+      configurable: true,
+      get: () => HTMLMediaElement.HAVE_ENOUGH_DATA,
+    });
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', {
+      configurable: true,
+      get: () => 640,
+    });
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', {
+      configurable: true,
+      get: () => 480,
+    });
     Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
       configurable: true,
       value: () => ({ drawImage: () => undefined }),
@@ -89,7 +102,7 @@ const ORDER_FIXTURE_SUFFIXES = {
 } as const;
 
 test.describe('드라이버 회차 직배송 화면 계약', () => {
-  test('배송 보드는 직접배송과 거점배송 주문을 노출하고 택배 주문은 제외한다', async ({ page, roundDirect }) => {
+  test('회차 배송 보드는 직접배송 주문만 노출하고 거점배송·택배 주문은 제외한다', async ({ page, roundDirect }) => {
     await page.goto(`${BASE}/board?tab=preparing`);
 
     await expect(
@@ -101,7 +114,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
       page.getByTestId(
         `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_HUB)}`,
       ),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(
       page.getByTestId(
         `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_PARCEL_EXCLUDED)}`,
@@ -248,12 +261,12 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await expect(page.getByRole('button', { name: '배송 완료' })).toHaveCount(0);
     await page.getByRole('button', { name: '배송 완료 사진 촬영' }).click();
 
-    await expect(page).toHaveURL(new RegExp(`/board/${orderId}/photo(?:\\?|$)`));
+    await expect(page).toHaveURL(new RegExp(`/board/${orderId}/photo/round-direct(?:\\?|$)`));
     await expect(page.getByRole('heading', { name: '배송 완료 사진' })).toBeVisible();
     const completeButton = page.getByRole('button', { name: '사진을 등록하고 배송 완료' });
     await expect(completeButton).toBeDisabled();
 
-    await page.getByRole('button', { name: '사진 촬영', exact: true }).click();
+    await page.getByRole('button', { name: '카메라 촬영', exact: true }).click();
     await expect(page.locator('video')).toBeVisible();
     await page.getByRole('button', { name: '사진 촬영', exact: true }).click();
 
