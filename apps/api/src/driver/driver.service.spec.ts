@@ -7,12 +7,17 @@ type Data = Record<string, any>;
 
 function makeFirestore(records: Record<string, Data>) {
   const filters: Array<[string, string, unknown]> = [];
+  const orderFields: string[] = [];
   const query = {
     where: jest.fn((field: string, operator: string, value: unknown) => {
       filters.push([field, operator, value]);
       return query;
     }),
-    orderBy: jest.fn().mockReturnThis(),
+    // 실제 Firestore처럼 orderBy 필드가 없는 문서는 결과에서 제외한다.
+    orderBy: jest.fn((field: string) => {
+      orderFields.push(field);
+      return query;
+    }),
     get: jest.fn(async () => {
       const docs = Object.entries(records)
         .filter(([path]) => path.startsWith('orders/'))
@@ -23,6 +28,7 @@ function makeFirestore(records: Record<string, Data>) {
               : data[field] === value,
           ),
         )
+        .filter(([, data]) => orderFields.every((field) => field in data))
         .map(([path, data]) => ({
           id: path.split('/')[1],
           data: () => data,
@@ -132,6 +138,45 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     const result = await service.getOrders('driver-1');
 
     expect(result.map((order) => order.id)).toEqual(['assigned-held', 'assigned-delivering']);
+  });
+
+  it('preparedAt이 없는 주문도 제외하지 않고 preparedAt, 없으면 updatedAt 순으로 정렬한다', async () => {
+    const at = (iso: string) => ({ toMillis: () => new Date(iso).getTime() });
+    const { service, query } = makeService({
+      'orders/held-without-prepared-at': {
+        status: 'DELIVERY_HELD',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+        updatedAt: at('2026-09-01T02:00:00Z'),
+      },
+      'orders/prepared-early': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+        preparedAt: at('2026-09-01T01:00:00Z'),
+      },
+      'orders/no-timestamps': {
+        status: 'DELIVERING',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+      },
+      'orders/prepared-late': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+        preparedAt: at('2026-09-01T03:00:00Z'),
+      },
+    });
+
+    const result = await service.getOrders('driver-1');
+
+    expect(query.orderBy).not.toHaveBeenCalled();
+    expect(result.map((order) => order.id)).toEqual([
+      'prepared-early',
+      'held-without-prepared-at',
+      'prepared-late',
+      'no-timestamps',
+    ]);
   });
 
   it('status 필터에서도 DELIVERY_HELD를 포함한 기존 discovery 범위를 유지한다', async () => {
