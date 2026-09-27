@@ -250,7 +250,14 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     ['round-open', 'OPEN', {}],
     ['seller-round-copy-source-completed', 'COMPLETED', {}],
     ['seller-round-schedule-draft', 'DRAFT', {}],
-    ['seller-round-close-open', 'OPEN', {}],
+    // 소비자 앱은 orderOpenAt 최신 OPEN 회차를 현재 회차로 고른다. 호출마다 Date.now()가
+    // 달라 round-open보다 늦게 찍히면 round-open이 가려지므로 한 시간 이르게 고정한다.
+    ['seller-round-close-open', 'OPEN', {
+      schedule: {
+        ...scheduleFor('OPEN'),
+        orderOpenAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      },
+    }],
     ['seller-round-complete-blocked-held', 'CLOSED', {
       counters: {
         reservedDeliveryAddresses: 0, reservedItemQuantity: 0,
