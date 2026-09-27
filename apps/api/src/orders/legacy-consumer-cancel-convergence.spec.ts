@@ -374,9 +374,9 @@ describe('legacy consumer cancel refund-race convergence', () => {
     });
   });
 
-  it('S9: schemaVersion 2 + roundId still delegates to RoundOrderLifecycleService', async () => {
+  it('S9: schemaVersion 2 + roundId still delegates to RoundOrderLifecycleService and notifies ORDER_CANCELLED once', async () => {
     const context = makeContext({
-      order: { schemaVersion: 2, roundId: 'round-1' },
+      order: { schemaVersion: 2, roundId: 'round-1', saleType: 'normal', status: 'ACCEPTED' },
     });
 
     await expect(
@@ -393,6 +393,53 @@ describe('legacy consumer cancel refund-race convergence', () => {
     expect(context.memory.read('groupProductConfig/product-1')).toMatchObject({
       currentQuantity: 5,
     });
+    // 자유 입력 사유('변심') 대신 고정 문구를 쓰고, 같은 취소는 멱등 키로 한 번만 발송한다.
+    expect(context.notifications.sendToUser).toHaveBeenCalledTimes(1);
+    expect(context.notifications.sendToUser).toHaveBeenCalledWith(
+      'consumer-1',
+      'ORDER_CANCELLED',
+      { orderId: 'order-1', reason: '고객 요청' },
+      'order-1',
+      'round-consumer-cancel:order-1',
+    );
+    expect(context.notifications.sendToGroupParticipants).not.toHaveBeenCalled();
+  });
+
+  it('S10: round consumer cancel does not notify an unpaid PENDING order', async () => {
+    const context = makeContext({
+      order: { schemaVersion: 2, roundId: 'round-1', saleType: 'normal', status: 'PENDING' },
+    });
+
+    await expect(
+      context.lifecycle.cancelOrder('store-1', 'order-1', 'consumer-1'),
+    ).resolves.toEqual({ orderId: 'order-1', status: 'CANCELLED' });
+
+    expect(context.roundLifecycle.cancelByConsumer).toHaveBeenCalledTimes(1);
+    expect(context.notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
+  it('S11: round consumer cancel does not re-notify an order that was already CANCELLED', async () => {
+    const context = makeContext({
+      order: { schemaVersion: 2, roundId: 'round-1', saleType: 'normal', status: 'CANCELLED' },
+    });
+
+    await expect(
+      context.lifecycle.cancelOrder('store-1', 'order-1', 'consumer-1'),
+    ).resolves.toEqual({ orderId: 'order-1', status: 'CANCELLED' });
+
+    expect(context.notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
+  it('S12: round consumer cancel failure propagates without notifying', async () => {
+    const context = makeContext({
+      order: { schemaVersion: 2, roundId: 'round-1', saleType: 'normal', status: 'ACCEPTED' },
+    });
+    context.roundLifecycle.cancelByConsumer.mockRejectedValueOnce(new ForbiddenException());
+
+    await expect(
+      context.lifecycle.cancelOrder('store-1', 'order-1', 'consumer-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
     expect(context.notifications.sendToUser).not.toHaveBeenCalled();
   });
 });
