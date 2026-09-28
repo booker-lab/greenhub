@@ -7,8 +7,9 @@
 ## 검증 기준
 
 - Git·GitHub와 #63/#70/#71 release state: `2026-09-06 KST` 직접 재조회
+- 파일럿 준비 재판정: `2026-09-28 KST` — live `main`, 원격 회차 E2E, Auth.js 세션 E2E, ALIGO 콘솔, 운영 Railway 배포 기록을 직접 재조회
 - Vercel 배포 안전·exact-source Preview: 역사적 증거 snapshot; 현재 release proof로 재사용하지 않는다.
-- ALIGO provider current metadata: `UNVERIFIED` — #65에서 authenticated provider read-back이 없음을 확인했다.
+- ALIGO provider current metadata: 콘솔 기준 템플릿 8종 `VERIFIED`(2026-09-28), API read-back은 출시 배포 뒤 재확인 — 아래 ALIGO 상태 참고.
 - 운영 상태 변경은 별도 승인 없이 수행하지 않는다.
 
 ## Git·배포 기준선
@@ -78,10 +79,11 @@
 - 회차 직배송 MVP는 `main` 통합 완료.
 - consumer 구매, seller 회차·주문, driver 직배송, 결제·환불·재배송비·보류·사진·운영 예외 흐름 존재.
 - 카카오 비즈니스 채널 승인 완료.
-- repository ALIGO logical 8-code contract: `VERIFIED` — #65에서 확인한 repository 계약이며 provider current metadata와 다르다.
-- ALIGO provider current metadata: `UNVERIFIED`; production mapping은 별도 gate이며 actual send는 `NOT RUN`이다.
+- repository ALIGO logical 8-code contract: `VERIFIED` — #65에서 확인한 repository 계약.
+- ALIGO 템플릿 8종(UK_5691~5698): 2026-09-28 콘솔에서 코드·이름·승인완료·본문·변수 일치 확인. actual send는 `NOT RUN`이다.
+- **운영 배포 완료(2026-09-28, 출시 SHA `197f84a4`)**: API·프런트 3개·Firestore/Storage 규칙·인덱스가 같은 SHA로 반영됐다. `salesMode`는 `legacy`를 유지한다. 상세는 아래 5절.
 - 운영 Firebase rules/indexes는 출시 전 read-only 재조회 필요.
-- production 회차 배포·첫 운영 회차·`salesMode` 전환 미실행.
+- production 배포는 완료(`197f84a4`). 첫 운영 회차·`salesMode` 전환은 미실행.
 - 판매 모드: `legacy`.
 
 ## 현재 release residual
@@ -103,33 +105,61 @@ live round·actual payment/notification·first-round completion을 주장하지 
 
 ### 2. Preview·exact-SHA proof
 
-상태: `VERIFICATION_PENDING`.
+상태: `PRE_RELEASE_PROVEN` — 출시 SHA 확정 뒤 같은 절차로 재실행이 필요하다.
 
-historical exact-source Preview/browser/fixture evidence는 현재 release candidate의 exact-SHA proof를 대체하지 않는다. 필요한 Preview/browser/fixture 검증은 Auth.js session lifecycle과 별도 gate다.
+2026-09-28 원격 회차 E2E가 exact-SHA Preview 3개 + 스테이징 API로 전건 통과했다.
+
+- run `36338292480`(SHA `31d122c5`): Playwright 52/52, fixture cleanup 잔여 0
+- run `36341189483`(SHA `9ba65c1f`, #309): 52/52 + 세션 수명주기 12/12, cleanup 잔여 0
+- run `36348002412`(live `main` `c8bec1f5`, #310 포함): 52/52 + 세션 12/12, cleanup 잔여 0 — 가장 최근 증거
+- 절차: `docs/specs/ops/mvp-sales-round-e2e-environment.md` §2의 exact Preview 생성 방식
+
+이 결과는 해당 SHA에 대한 증거이며 출시 SHA의 증거를 대신하지 않는다.
 
 ### 3. Auth.js session runtime
 
-상태: `EXTERNAL_RUNTIME_BLOCKED`.
+상태: `RUNTIME_PROVEN`(Preview, 2026-09-28).
 
-cookie 발급·동일 browser context persistence·logout/rotation·stale-claim lifecycle은 runtime/browser proof가 없으므로 `UNVERIFIED`다. static source나 callback 응답으로 승격하지 않는다.
+run `36341189483`에서 consumer·seller·driver × chromium·mobile로 다음을 실제 Preview 브라우저에서 확인했다(`apps/e2e/tests/auth-session-lifecycle.spec.ts`, 12건).
+
+- Credentials 로그인 쿠키 발급과 같은 컨텍스트 유지
+- Auth.js 로그아웃 후 쿠키·세션 소멸
+- 계정 정지(consumer·seller)·기사 승인 철회(driver) 뒤 다음 세션 조회에서 세션 종료, 복원 후 재로그인
+
+revocation window 결정(D2, 2026-09-28)은 `docs/specs/api/auth.md`를 따른다. 로그아웃 시 서버 refresh token 폐기는 출시 후 `AUTH-LOGOUT-SERVER-REVOCATION`으로 다룬다.
 
 ### 4. ALIGO provider metadata
 
-상태: `EXTERNAL_GATE_PENDING`.
+상태: 템플릿 `VERIFIED`(콘솔) / 운영 반영·IP·실발송 `RELEASE_GATE`.
 
-repository logical 8-code contract는 `VERIFIED`지만 provider current metadata는 `UNVERIFIED`다. production mapping과 actual Alimtalk/SMS send는 각각 별도 authority gate다.
+- 템플릿 8종과 운영 매핑 `ALIGO_TEMPLATE_CODES_JSON`(Railway 저장값)은 일치한다.
+- 실행 중인 운영 API 프로세스에는 ALIGO 변수가 아직 없다(8/23 이전 배포). 출시 배포 때 반영된다.
+- ALIGO는 등록 IP만 허용한다. 출시 배포 뒤 운영 송신 IP 등록과 API 기준 템플릿 대조, 격리 실발송을 각각 확인한다.
 
 ### 5. Production activation
 
-상태: `PRODUCTION_AUTHORITY_PENDING`.
+상태: production deployment `DONE`(2026-09-28) / activation `PRODUCTION_AUTHORITY_PENDING`.
 
-production deployment, activation, `salesMode`, live round, actual payment, actual notification, first-round completion은 모두 별도 상태이며 현재 `NOT DONE` / `NOT CLAIMED`다.
+출시 SHA `197f84a4`(원격 회차 E2E run `36372493414` 52/52 + 세션 12/12, cleanup 잔여 0)를 사용자 승인(Task 3.1)으로 배포했다. 순서는 API → 프런트 3개 → 규칙·인덱스다. 옛 프런트(8/11·8/23 배포본)가 Firestore를 직접 읽었으므로 규칙을 앱보다 먼저 배포하지 않았다.
+
+| 대상 | 새 배포 | 이전(되돌리기) |
+|---|---|---|
+| API (Railway production) | `3f851757-ee67-48b2-9197-9eb29a2fb5db` SUCCESS | `aee6057b-8cac-4ba5-8613-607f21f19ab3` (`e55f2591`) |
+| consumer (Vercel) | `dpl_79CBcA2hcxsUt88u2fQNv7NRfDWF` | `dpl_DmjsrFiKga82mHjvc7e3Srw3taQ5` |
+| seller (Vercel) | `dpl_FXtMd6FkhLGZgikQD48mHjqXi7yg` | `dpl_5CdhRd1XAW7LFxUTiEe2HHY7qTqP` |
+| driver (Vercel) | `dpl_FBSZWeeMnzSMM6njySy5DwNJT3gx` | `dpl_FZbbKMh362QGayFyeTNLTBSU5cKi` |
+| Firestore 규칙 | ruleset `2562b836-5c66-4253-a672-023e7c580afc` | `32837978-27e9-4076-a953-b42e1838e2fa` (2026-07-31) |
+| Storage 규칙 | ruleset `b723c937-fb80-4cfc-8bc8-d112b5177c26` | `798bd8ce-8f20-46a9-b8f3-648f3e2afe45` (2026-07-31) |
+
+- 배포 뒤 확인: 배포 기록 SHA 일치, API health 200, 운영 도메인 주요 페이지 200, CORS 허용, 비인증 driver API 401, 5xx 없음, 규칙 재조회 저장소 일치, 인덱스 41개 반영(운영 전용 미사용 인덱스 1개 유지).
+- 운영 규칙 반영으로 driver 전체 주문 읽기 등 7/31 이후 수정된 경계가 운영에서도 적용된다.
+- activation(`salesMode` 전환), live round, actual payment/notification, first-round completion은 `NOT DONE`이다.
 
 ### 6. Consumer self-cancel `ORDER_CANCELLED`
 
-상태: `PRODUCT_POLICY_DECISION_REQUIRED`.
+상태: `RESOLVED` — 2026-09-28 결정(D1)과 #310 구현.
 
-consumer self-cancel notification callsite의 정책은 이 Goal에서 결정하거나 변경하지 않는다.
+소비자 회차 직접 취소도 `ORDER_CANCELLED`를 보낸다. 결제 전·이미 취소된 주문은 제외하고 사유는 고정 문구 `고객 요청`이다. 계약은 `docs/specs/api/notifications.md`가 소유한다.
 
 ### 7. Pilot marketing wording
 
@@ -138,6 +168,8 @@ consumer self-cancel notification callsite의 정책은 이 Goal에서 결정하
 Pilot 정책은 `MARKETING_NOT_USED_IN_PILOT`이며, 선택 consent/retention wording만 문서에서 정규화한다. 새로운 runtime 사실이나 marketing 기능을 만들지 않는다.
 
 ## HISTORICAL / CLOSED BY REL-STATE-01
+
+> 2026-09-28 재대조: 아래 P0의 구현·직접 회귀는 현재 `main`에 있다(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, admin 강제환불·권한, 정산 lifecycle, auth 세션 폐기 근거 spec 7개 191건 통과, `firestore.rules`의 orders read는 seller·admin만 허용). 각 절의 "미완료" 서술은 당시 기록이다.
 
 > 아래 과거 P0 서술은 #63의 `A-N closed semantic work` 분류에 따른 historical record다. 현재 release blocker, current implementation finding, current verification proof, remote-addressable candidate, PR, merged, Preview, production 상태를 이 기록만으로 추론하지 않는다.
 
@@ -245,8 +277,9 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 현재 상태:
 
 - repository logical 8-code contract: `VERIFIED` — #65에서 8개 logical code/body/required-variable 계약을 확인했다.
-- provider current metadata: `UNVERIFIED` — authenticated provider read-back이 없다.
-- production mapping: provider metadata와 별도의 `UNVERIFIED` gate다.
+- provider 템플릿 metadata: `VERIFIED`(2026-09-28 콘솔) — UK_5691~5698 코드·이름·승인완료·본문·변수가 저장소 계약과 일치하고, 채널 `@greenlove`는 정상, 버튼은 없다. 템플릿 대체문자는 `발송안함`이며 SMS fallback은 코드가 별도로 수행한다.
+- production mapping: Railway production 변수 `ALIGO_TEMPLATE_CODES_JSON`이 8종을 올바른 코드로 매핑한다. 다만 실행 중인 운영 API 프로세스에는 아직 반영되지 않았다(8/23 이전 배포).
+- 운영 송신 IP: 출시 배포 뒤 `152.55.177.34`(배포 전 `152.55.176.19` — **재배포로 바뀜**). 배포 뒤 운영 컨테이너 조회에서 ALIGO 변수 5개는 반영됐으나 `code=-99 인증되지 않는 서버 IP`로 거부됐다. 고정 송신 IP 설정과 ALIGO 허용 IP 등록 전에는 운영 알림톡이 실패한다.
 - actual Alimtalk/SMS send: `NOT RUN`이며 별도 authority가 필요하다.
 
 ### 역사적 provider snapshot
@@ -289,8 +322,8 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 검증 상태
 
-- 마지막 전체 원격 회차 E2E 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404` — 현재 release proof가 아니다.
-- chromium 26 + mobile 26 = 52, 양쪽 cleanup 성공.
+- 최근 원격 회차 E2E: run `36348002412`(live `main` `c8bec1f5`) 52/52 + 세션 12/12, 양쪽 cleanup 잔여 0 — 출시 전 증거이며 출시 SHA 증거가 아니다.
+- 이전 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`(52건).
 - 과거 run을 현재 release 증거로 확장하지 않는다.
 - exact-SHA Preview/browser/fixture와 필요한 legal/release proof는 actual release candidate에서 다시 판정한다.
 
@@ -313,8 +346,8 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 다음 작업
 
-1. exact-SHA Preview/browser/fixture와 Auth.js session lifecycle을 필요한 runtime/browser authority에서 검증한다.
-2. authenticated ALIGO provider metadata read-back → repository 8-code mapping 대조 → 별도 authority 후 actual send 검증.
-3. production deployment·activation·live round·actual payment·actual notification·first-round completion은 각각 별도 authority와 read-back으로 판정한다.
-4. consumer self-cancel `ORDER_CANCELLED` notification은 `PRODUCT_POLICY_DECISION_REQUIRED`로 유지한다.
+1. Railway 운영 API 고정 송신 IP 설정 → ALIGO 허용 IP 등록 → 운영 컨테이너 조회로 `code=0`·템플릿 API 대조.
+2. 격리 실제 알림톡·SMS fallback 검증(별도 승인).
+3. 이후 배포는 같은 순서(API → 프런트 → 규칙)와 배포 뒤 ALIGO IP 재확인을 따른다.
+4. Pilot GO·`salesMode` 전환·첫 회차는 runbook §4·§10과 별도 authority를 따른다.
 5. Pilot `MARKETING_NOT_USED_IN_PILOT`와 legal/source wording을 문서 범위에서 정합화한다.

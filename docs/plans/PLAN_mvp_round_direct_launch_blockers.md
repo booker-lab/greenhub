@@ -33,27 +33,29 @@
 
 ## 출시 게이트
 
+> 2026-09-28 재대조: 0B~0K는 현재 `main`의 구현과 직접 회귀로 종결됐다(근거 spec 7개 191건 통과). 운영 API는 8/23 이전 코드로 실행 중이며 출시 배포에서 함께 반영된다. 상태 SSOT는 `docs/memory.md`다.
+
 | ID | 게이트 | 상태 |
 |---|---|---|
 | 0A | GitHub `main` protection/ruleset | 완료 — `protected=true`, PR required, `verify` strict required, force-push·delete 차단; Issue #32 `CLOSED` |
-| 0B | payment finalization 비`PAID` 차단 | candidate 검증 완료 — main 통합 대기 |
-| 0C | order mutation authorization 직접 거부 회귀 | candidate 관련 회귀 완료 — main 통합 대기 |
-| 0D | order direct Firestore read·최소화 | candidate Rules 경계 검증 완료 — field minimization/main 통합 대기 |
-| 0E | driver 승인 + session/claims revocation | candidate public/Kakao/JWT gate 검증 완료 — `AUTH-SESSION-CLAIM-REVOCATION` OPEN, main 통합 대기 |
-| 0F | admin force-refund lifecycle | 미완료 — P0 FINDING |
-| 0G | 유료 재배송 payment-request/hold-resolution/resume 상태머신 | 미완료 — P0 FINDING, candidate 범위 밖 |
-| 0H | payment webhook real-signature coverage | 미완료 — P0 COVERAGE GAP |
-| 0I | admin privileged mutation authorization + settlement pay coverage | 미완료 — P0 COVERAGE GAP |
-| 0J | settlement 생성·confirm·cancel core lifecycle coverage | 미완료 — P0 COVERAGE GAP |
-| 0K | marketing consent→preference→withdrawal→retention lifecycle | 미완료 — P0 FINDING |
+| 0B | payment finalization 비`PAID` 차단 | 완료 — main 포함, `payment-finalization-refund-ownership.spec.ts` (`payments.md` `IMPLEMENTED / PROVEN`) |
+| 0C | order mutation authorization 직접 거부 회귀 | 완료 — main 포함 (#291 정합화) |
+| 0D | order direct Firestore read·최소화 | 완료 — `firestore.rules` orders read는 seller·admin만 허용, driver는 API projection |
+| 0E | driver 승인 + session/claims revocation | 완료 — revocation window 즉시(D2, 2026-09-28), Preview 세션 E2E 12건(run `36341189483`); 로그아웃 서버 폐기는 출시 후 |
+| 0F | admin force-refund lifecycle | 완료 — `ADMIN-FORCE-REFUND-CONSISTENCY` `IMPLEMENTATION_PROVEN` (`admin.service.spec.ts`) |
+| 0G | 유료 재배송 payment-request/hold-resolution/resume 상태머신 | 완료 — `redelivery-resume-gate.ts` + spec; 준비시각 없는 주문의 기사 보드 누락은 #305로 수정 |
+| 0H | payment webhook real-signature coverage | 완료 — `portone-webhook-boundary.spec.ts` (`payments.md` `IMPLEMENTED / PROVEN`) |
+| 0I | admin privileged mutation authorization + settlement pay coverage | 완료 — `admin-privileged-mutation.spec.ts` `IMPLEMENTATION_PROVEN` |
+| 0J | settlement 생성·confirm·cancel core lifecycle coverage | 완료 — `settlements-lifecycle.spec.ts` `IMPLEMENTATION_PROVEN` |
+| 0K | marketing consent→preference→withdrawal→retention lifecycle | 대체 종결 — Pilot `MARKETING_NOT_USED_IN_PILOT` |
 | 1 | ALIGO 8종 최종 승인 | 완료 — 2026-08-27 provider UI 8종 `승인완료` |
-| 2 | provider code 1:1 검사 + 실제 알림톡 | 미실행 |
+| 2 | provider code 1:1 검사 + 실제 알림톡 | code 1:1 완료(2026-09-28 콘솔) — 실제 알림톡은 출시 배포 뒤 |
 | 3 | SMS fallback | 미실행 |
 | 4 | 판매 활성화 legal | 미실행 |
 | 5 | actual release SHA | 미실행 |
-| 6 | exact SHA E2E 52+cleanup | 미실행 |
+| 6 | exact SHA E2E 52+cleanup | 출시 전 통과(2026-09-28, 52 + 세션 12) — 출시 SHA로 재실행 필요 |
 | 7 | 운영 Firebase 재조회 | 미실행 |
-| 8 | 운영 ALIGO 설정 | 미실행 |
+| 8 | 운영 ALIGO 설정 | Railway 변수 저장 완료, 운영 API 미반영(8/23 이전 배포) — 출시 배포 때 반영 후 송신 IP 등록 확인 |
 | 9 | exact-SHA production | 별도 승인 필요 |
 | 10~12 | 첫 회차 → 최종 판정 → `round_direct` | 미실행 |
 
