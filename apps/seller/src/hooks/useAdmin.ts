@@ -47,6 +47,9 @@ export interface AdminOrder {
   totalAmount: number;
   deliveryMethod: string;
   createdAt: unknown;
+  // 회차 주문 판별(강제환불 허용 상태가 일반 주문과 다름)
+  schemaVersion?: number;
+  roundId?: string | null;
 }
 
 export interface AdminSettlement {

@@ -53,6 +53,8 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
 
 ## B-2. 정합성 진단 — 강제환불 정책 프론트/백 불일치 (D1 확정)
 
+> **2026-09-28 재결정 (이 절의 아래 표·"두 단계 정책"을 대체):** 아래 진단의 전제("백엔드는 CANCELLED만 거부")는 stale이다. 현재 백엔드는 배달 시작 이후 환불을 이미 차단한다 — 회차 주문(`schemaVersion 2`+`roundId`)은 `round-order-lifecycle.service.ts` `claimCancellation`의 PENDING·ACCEPTED·RECRUITING·CONFIRMED·PREPARING·DELIVERY_HELD, 일반 주문은 `orders.helpers.ts` `getAllowedTransitions('admin')`의 ACCEPTED·CONFIRMED·PREPARING. **사용자 결정: 새 정책(배달 후 사유 필수 환불)을 만들지 않고, 프론트 버튼 노출을 현재 서버 규칙에 맞춘다.** 구현은 `admin/orders/_lib.ts` `isRefundable`. 그룹 B(백엔드 두 단계 가드)·위험 단계 모달은 폐기. 취소 주문의 환불 재시도(서버는 `cancellation` 상태에 따라 허용)는 버튼에 포함하지 않았다 — 필요 시 별도 결정.
+
 | 레이어 | 환불 허용 조건 | 위치 |
 |--------|---------------|------|
 | 프론트 (버튼 노출) | `REFUNDABLE = [ACCEPTED, RECRUITING, CONFIRMED, PREPARING]` 4개만 | `_lib.ts:23` |
