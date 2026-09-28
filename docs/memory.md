@@ -81,10 +81,10 @@
 - 카카오 비즈니스 채널 승인 완료.
 - repository ALIGO logical 8-code contract: `VERIFIED` — #65에서 확인한 repository 계약.
 - ALIGO 템플릿 8종(UK_5691~5698): 2026-09-28 콘솔에서 코드·이름·승인완료·본문·변수 일치 확인. actual send는 `NOT RUN`이다.
-- **운영 배포 완료(2026-09-28, 출시 SHA `197f84a4`)**: API·프런트 3개·Firestore/Storage 규칙·인덱스가 같은 SHA로 반영됐다. `salesMode`는 `legacy`를 유지한다. 상세는 아래 5절.
+- **운영 배포 완료(2026-09-28, 출시 SHA `197f84a4`)**: API·프런트 3개·Firestore/Storage 규칙·인덱스가 같은 SHA로 반영됐다. 이후 운영 API는 `781285ea`(ALIGO 프록시), 판매자 앱은 `437af74b`(새 회차 화면)로 갱신됐다. 상세는 아래 5절.
 - 운영 Firebase rules/indexes는 출시 전 read-only 재조회 필요.
-- production 배포는 완료(`197f84a4`). 첫 운영 회차·`salesMode` 전환은 미실행.
-- 판매 모드: `legacy`.
+- production 배포 완료. 첫 회차 "10월 6일 배송 회차"가 `SCHEDULED`다.
+- 판매 모드: **`round_direct`**(2026-09-29 전환). 파일럿 운영 시작은 프런트엔드 개편 뒤로 **연기(일정 미정)**다.
 
 ## 현재 release residual
 
@@ -134,7 +134,8 @@ revocation window 결정(D2, 2026-09-28)은 `docs/specs/api/auth.md`를 따른�
 
 - 템플릿 8종과 운영 매핑 `ALIGO_TEMPLATE_CODES_JSON`(Railway 저장값)은 일치한다.
 - 실행 중인 운영 API 프로세스에는 ALIGO 변수가 아직 없다(8/23 이전 배포). 출시 배포 때 반영된다.
-- ALIGO는 등록 IP만 허용한다. 출시 배포 뒤 운영 송신 IP 등록과 API 기준 템플릿 대조, 격리 실발송을 각각 확인한다.
+- ALIGO는 등록 IP만 허용한다. Railway 현재 요금제에 고정 송신 IP가 없어 Fixie 고정 IP 프록시(`ALIGO_OUTBOUND_PROXY_URL`)를 거친다. 2026-09-28 운영 컨테이너 조회에서 `code=0`, 템플릿 8종 API 기준 글자 단위 일치를 확인했다.
+- 격리 실발송: 알림톡은 휴대폰 도착까지 확인했다. 문자(SMS fallback)는 발신번호(`ALIGO_SENDER_PHONE`, 개인 휴대폰)가 통신사 번호도용 문자차단 서비스에 가입돼 차단된다 → 사업자 번호로 교체 필요.
 
 ### 5. Production activation
 
@@ -153,7 +154,11 @@ revocation window 결정(D2, 2026-09-28)은 `docs/specs/api/auth.md`를 따른�
 
 - 배포 뒤 확인: 배포 기록 SHA 일치, API health 200, 운영 도메인 주요 페이지 200, CORS 허용, 비인증 driver API 401, 5xx 없음, 규칙 재조회 저장소 일치, 인덱스 41개 반영(운영 전용 미사용 인덱스 1개 유지).
 - 운영 규칙 반영으로 driver 전체 주문 읽기 등 7/31 이후 수정된 경계가 운영에서도 적용된다.
-- activation(`salesMode` 전환), live round, actual payment/notification, first-round completion은 `NOT DONE`이다.
+- 2026-09-28 운영 API `781285ea`(ALIGO 송신 프록시, 배포 `1e3e57b1…`), 판매자 앱 `437af74b`(새 회차 화면, `dpl_7bcozKG2bkMhoHWXMumUoH1B27Yr`, 이전 `dpl_FXtMd6FkhLGZgikQD48mHjqXi7yg`)로 갱신했다. 각 SHA는 원격 회차 E2E 52 + 세션 12를 통과했다(run `36383185604`, `36410582745`).
+- **activation(2026-09-29)**: 첫 회차 `e8ca686f-a9db-4c6b-8ebf-2bf190351a3c` "10월 6일 배송 회차"를 판매자 앱에서 만들어 `SCHEDULED`로 예약했다(주문 10/1 목 10:00 ~ 10/5 월 00:00, 경매 10/5 07:00, 배송 10/6 00:00~09:00, 경기도 이천시, 배송지 15곳·수량 30개, 빅립 30,000·만천홍 25,000·v3 45,000원 각 10개). 사용자 승인으로 `salesMode`를 `legacy → round_direct`로 전환했고(dry-run 대상 1곳 확인 후 `--confirm` 적용), 공개 회차 API에서 회차와 상품 3개를 확인했다. 전환 시점 미해결 운영 예외 0건.
+- 회차 상태는 조회 시 계산된다: `SCHEDULED`는 `orderOpenAt` 경과 시 자동 `OPEN`, `orderCloseAt` 경과 시 자동 `CLOSED`다. 공개 회차에는 `SCHEDULED`도 노출된다.
+- 롤백: `node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=legacy --confirm=80189070-2c3d-45f2-bc11-68a870b13951:round_direct:legacy`
+- live round 주문, 실제 결제·환불, first-round completion은 `NOT DONE`이다. 파일럿 운영은 프런트엔드 개편 뒤로 연기했다.
 
 ### 6. Consumer self-cancel `ORDER_CANCELLED`
 
@@ -279,8 +284,9 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 - repository logical 8-code contract: `VERIFIED` — #65에서 8개 logical code/body/required-variable 계약을 확인했다.
 - provider 템플릿 metadata: `VERIFIED`(2026-09-28 콘솔) — UK_5691~5698 코드·이름·승인완료·본문·변수가 저장소 계약과 일치하고, 채널 `@greenlove`는 정상, 버튼은 없다. 템플릿 대체문자는 `발송안함`이며 SMS fallback은 코드가 별도로 수행한다.
 - production mapping: Railway production 변수 `ALIGO_TEMPLATE_CODES_JSON`이 8종을 올바른 코드로 매핑한다. 다만 실행 중인 운영 API 프로세스에는 아직 반영되지 않았다(8/23 이전 배포).
-- 운영 송신 IP: 출시 배포 뒤 `152.55.177.34`(배포 전 `152.55.176.19` — **재배포로 바뀜**). 배포 뒤 운영 컨테이너 조회에서 ALIGO 변수 5개는 반영됐으나 `code=-99 인증되지 않는 서버 IP`로 거부됐다. 고정 송신 IP 설정과 ALIGO 허용 IP 등록 전에는 운영 알림톡이 실패한다.
-- actual Alimtalk/SMS send: `NOT RUN`이며 별도 authority가 필요하다.
+- 운영 송신 IP: Railway 송신 IP는 재배포로 바뀐다(`152.55.176.19` → `152.55.177.34`). 그래서 ALIGO 호출은 Fixie 고정 IP 2개를 거치며, 두 IP를 ALIGO 허용 IP에 등록했다(2026-09-28, 조회 `code=0`). Railway Pro 전환 시에는 고정 IP 3개를 먼저 추가 등록한 뒤 `ALIGO_OUTBOUND_PROXY_URL`을 삭제한다.
+- actual Alimtalk: 2026-09-28 격리 시험(`ORDER_PREPARING`, 가짜 주문번호 `TEST-0928`)에서 `@greenlove` 채널로 휴대폰 도착 확인. 첫 시도는 ALIGO 선불 잔액 부족으로 거부됐고 충전 뒤 성공했다.
+- actual SMS: ALIGO 접수 뒤 `이통사 번호도용문자차단서비스에 가입된 발신번호 사용`으로 차단. 사업자 번호를 ALIGO 발신번호로 추가 등록(통신서비스 이용증명원 필요)하고 승인 뒤 `ALIGO_SENDER_PHONE`을 교체한 다음 재시험한다. 새 번호가 승인되기 전에 변수를 바꾸면 알림톡 요청에도 같은 발신번호가 쓰여 실패한다.
 
 ### 역사적 provider snapshot
 
@@ -346,8 +352,8 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 다음 작업
 
-1. Railway 운영 API 고정 송신 IP 설정 → ALIGO 허용 IP 등록 → 운영 컨테이너 조회로 `code=0`·템플릿 API 대조.
-2. 격리 실제 알림톡·SMS fallback 검증(별도 승인).
-3. 이후 배포는 같은 순서(API → 프런트 → 규칙)와 배포 뒤 ALIGO IP 재확인을 따른다.
-4. Pilot GO·`salesMode` 전환·첫 회차는 runbook §4·§10과 별도 authority를 따른다.
+1. 파일럿 운영 연기(프런트엔드 개편 우선): 첫 회차는 `orderOpenAt`(10/1 10:00)에 자동 `OPEN`되므로, 운영을 미룰 동안 회차 일정을 뒤로 옮기거나 `salesMode`를 되돌려 주문 오픈을 막는다.
+2. SMS 발신번호를 사업자 번호로 교체하고 문자 재시험.
+3. 파일럿 시작 직후 실제 결제 1건(결제 → 접수 알림톡 → 소비자 취소·환불 → 취소 알림톡)으로 운영 PortOne 경로를 확인한다. 결제는 지금까지 E2E 모의 결제로만 검증됐다.
+4. 운영 배포는 검증된 SHA를 지정해 API → 프런트 → 규칙 순으로 한다. Railway UI "Deploy"는 `main` HEAD를 배포하므로 병합 후 미검증 코드가 나갈 수 있다.
 5. Pilot `MARKETING_NOT_USED_IN_PILOT`와 legal/source wording을 문서 범위에서 정합화한다.
