@@ -219,7 +219,7 @@
 - [ ] **T0** — `consumeInvite`·`signup` 경로 grep, 분기 표 작성 → 본 문서 T4 명세 보완.
 
 **아토믹 태스크 (커밋 3):**
-- [ ] **T1** — 행별 토큰 복사 버튼 (모든 상태 노출)
+- [x] **T1** — 행별 토큰 복사 버튼 (모든 상태 노출) — 2026-09-28 코드 완료(`feat/admin-invite-row-copy` PR, T3와 한 커밋·육안 미확인)
   - 정합성 검토 (커밋 직전):
     - [ ] C1 tsc 0 (admin 앱)
     - [ ] C2 biome 0 (신규 0)
@@ -242,7 +242,7 @@
     - [ ] **vitest** — `toDateTimeStrKST` 케이스 통과
   - 커밋: `feat(admin): #CL-55 invite 발급일·사용일 컬럼 + toDateTimeStrKST SSOT (T2)`
 
-- [ ] **T3** — clipboard try/catch + 폴백 + notification
+- [x] **T3** — clipboard try/catch + 폴백 + notification — 2026-09-28 코드 완료(T1과 공용 `_clipboard.ts`·`_useTokenCopy.ts`, 최종 실패 시 직접 복사 창 `ManualCopyModal`·육안 미확인)
   - 정합성 검토:
     - [ ] C1·C2·C3·C4·C5·C6 통과
     - [ ] C7 시각 변경 0 (실패 시 notification만 추가)

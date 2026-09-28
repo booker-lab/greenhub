@@ -149,7 +149,7 @@
 
 | 태스크 | 내용 | 의존 | 정합성 |
 |--------|------|------|--------|
-| **T1** (D-3·Q1) | shared `toDateStrKST`에 `{ hour?: '2-digit'; minute?: '2-digit' }` **옵션 추가** → 어드민 `_lib.ts toDateStr` 치환. 셀러 사용처(세션85 결과물) 회귀 0 확인 | 독립 | shared 수정 시 셀러·소비자 앱 영향 grep 필수. vitest 케이스 추가(옵션 on/off 2건) |
+| **T1** (D-3·Q1) ✅ 2026-09-28 `fix/admin-settlements-kst` — **Q1 대신 최소 해결**: shared 시그니처는 바꾸지 않고 `_lib.ts toDateStr`를 `Intl.DateTimeFormat`(`timeZone: 'Asia/Seoul'`, 기존 표시 옵션 동일)로 교체 + `_lib.test.ts` KST 경계 vitest. 기간 기본값 계산 없음(필터 초기값 빈 문자열), `from`/`to` 쿼리는 백엔드가 이미 `dateRangeKST`로 해석하므로 불변. 아래는 원 계획: shared `toDateStrKST`에 `{ hour?: '2-digit'; minute?: '2-digit' }` **옵션 추가** → 어드민 `_lib.ts toDateStr` 치환. 셀러 사용처(세션85 결과물) 회귀 0 확인 | 독립 | shared 수정 시 셀러·소비자 앱 영향 grep 필수. vitest 케이스 추가(옵션 on/off 2건) |
 | **T2** (D-3·Q4) | `useAdminSettlements`의 `error` 구독을 `_client.tsx`에 추가 → Mantine `Alert color="red"` 배너 노출. **Table은 손대지 않음**(3분기 유지) | 독립 | 다른 탭과 패턴 동일성. error 발생 시점에 빈결과 가드와 동시 노출 시 우선순위(error만 표시) |
 | **T3** (D-4·Q6) | `SummaryCards`의 두 카드 라벨에 Mantine `Tooltip` 부착("현재 필터 범위의 confirmed+paid 합계, pending·cancelled 제외"). **라벨 텍스트는 불변** | 독립 | C7 시각 회귀 0. 모바일 카드 폭 영향 0 |
 | **T7** (F6) | `_client.tsx`에 reload 버튼 노출(헤더 우측, `ActionIcon`). hook의 reload 호출 | 독립 | stores T9·orders F2·drivers F2와 동일 패턴 |

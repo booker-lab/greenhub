@@ -56,12 +56,22 @@ describe('AdminInviteClient recovery wiring', () => {
     expect(source).not.toContain('setLastToken(null)');
   });
 
-  it('기존 token copy 계약을 보존한다', () => {
-    expect(source).toContain('navigator.clipboard.writeText(lastToken.token)');
-    expect(source).toContain('setCopied(true)');
-    expect(source).toContain('setTimeout(() => setCopied(false), 2000)');
+  it('발급 직후 토큰과 행별 복사가 공용 복사 훅(useTokenCopy)을 공유한다', () => {
+    expect(source).toContain('useTokenCopy()');
+    // 클립보드 직접 호출 금지 — 폴백 포함 복사 로직은 _clipboard/_useTokenCopy가 소유한다.
+    expect(source).not.toContain('navigator.clipboard');
+    expect(source).toContain('void copy(lastToken.token)');
     expect(source).toContain('onCopy={handleCopy}');
     expect(source).toContain('if (!lastToken) return;');
+    // lastToken 복사됨 피드백은 토큰별 상태에서 파생한다.
+    expect(source).toContain('copiedToken === lastToken.token');
+    // 발급 내역 행별 복사 배선.
+    expect(source).toContain('copiedToken={copiedToken}');
+    expect(source).toContain('onCopy={(token) => void copy(token)}');
+  });
+
+  it('복사 실패 시 직접 복사 창(ManualCopyModal)을 배선한다', () => {
+    expect(source).toContain('<ManualCopyModal token={manualToken} onClose={closeManual} />');
   });
 
   it('기존 generate/copy 컴포넌트 배선을 유지한다', () => {

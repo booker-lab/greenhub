@@ -469,12 +469,16 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 ### 외부·권한 gate
 
 - [x] provider 템플릿과 repository logical 8-code mapping 대조 (2026-09-28 콘솔)
-- [ ] 운영 송신 IP ALIGO 등록 — 2026-09-28 배포 뒤 `152.55.177.34`에서 `code=-99`(미등록). Railway 고정 송신 IP 설정 후 등록하고 API 기준 템플릿 read-back
+- [x] 운영 ALIGO 호출 경로 — Fixie 고정 IP 프록시 경유, 2026-09-28 `code=0`·템플릿 8종 API 대조 일치
+- [x] 격리 실제 알림톡 — 2026-09-28 휴대폰 도착 확인
+- [ ] SMS fallback — 발신번호(개인 휴대폰) 통신사 번호도용 차단으로 실패. 사업자 번호로 발신번호 교체 후 재시험
 - [ ] 별도 authority 후 격리 actual Alimtalk/SMS 및 fallback 검증
 - [x] exact release SHA 기준 원격 회차 E2E 52 + 세션 12 재실행 — `197f84a4`, run `36372493414`
 - [x] 운영 Firebase rules/indexes 대조와 배포 — 7/31 배포본 → `197f84a4` 규칙 반영, 재조회 일치
 - [x] production deployment — 2026-09-28 `197f84a4` (API·프런트 3개·규칙)
-- [ ] activation·첫 회차 전용 승인 및 read-back
+- [x] activation — 2026-09-29 `salesMode` `round_direct` 전환, 첫 회차 `SCHEDULED`(read-back 확인)
+- [ ] 파일럿 운영 시작 — 프런트엔드 개편 뒤로 연기(일정 미정). 연기 동안 첫 회차 자동 오픈(10/1 10:00) 차단 필요
+- [ ] 파일럿 시작 직후 실제 결제·환불 1건 시험
 
 ### 법무·출시 후보 정합성
 
