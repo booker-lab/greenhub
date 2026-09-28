@@ -11,6 +11,10 @@ interface InviteHistoryTableProps {
   error: string | null;
   /** 조회 실패 시 재시도 — hook의 reload()에 연결된다. */
   onRetry: () => void;
+  /** 방금 복사에 성공한 토큰(2초간). 해당 행 버튼만 '복사됨!'으로 바뀐다. */
+  copiedToken: string | null;
+  /** 행별 토큰 복사 — 모든 상태(유효·사용됨·만료)에 노출한다(계획서 결정10). */
+  onCopy: (token: string) => void;
 }
 
 const thBase = {
@@ -20,7 +24,37 @@ const thBase = {
   color: 'var(--color-text-secondary)',
 };
 
-export function InviteHistoryTable({ invites, loading, error, onRetry }: InviteHistoryTableProps) {
+function CopyTokenButton({
+  token,
+  copied,
+  onCopy,
+}: {
+  token: string;
+  copied: boolean;
+  onCopy: (token: string) => void;
+}) {
+  return (
+    <Button
+      onClick={() => onCopy(token)}
+      size="compact-xs"
+      variant="outline"
+      color="green"
+      radius="md"
+      aria-label={`토큰 ${token} 복사`}
+    >
+      {copied ? '복사됨!' : '복사'}
+    </Button>
+  );
+}
+
+export function InviteHistoryTable({
+  invites,
+  loading,
+  error,
+  onRetry,
+  copiedToken,
+  onCopy,
+}: InviteHistoryTableProps) {
   const readState = getAdminInviteReadState({ loading, error, invites });
 
   if (readState === 'LOADING') {
@@ -87,13 +121,20 @@ export function InviteHistoryTable({ invites, loading, error, onRetry }: InviteH
               style={{ border: '1px solid var(--color-border)' }}
             >
               <Group justify="space-between" mb="xs">
-                <Text
-                  component="code"
-                  ff="monospace"
-                  style={{ letterSpacing: '0.1em', color: 'var(--color-text)' }}
-                >
-                  {inv.token}
-                </Text>
+                <Group gap="xs" wrap="nowrap">
+                  <Text
+                    component="code"
+                    ff="monospace"
+                    style={{ letterSpacing: '0.1em', color: 'var(--color-text)' }}
+                  >
+                    {inv.token}
+                  </Text>
+                  <CopyTokenButton
+                    token={inv.token}
+                    copied={copiedToken === inv.token}
+                    onCopy={onCopy}
+                  />
+                </Group>
                 <Badge color={color} variant="light" radius="xl">
                   {label}
                 </Badge>
@@ -151,13 +192,20 @@ export function InviteHistoryTable({ invites, loading, error, onRetry }: InviteH
                   style={{ borderTop: '1px solid var(--color-border)' }}
                 >
                   <Box component="td" style={{ padding: '12px 16px' }}>
-                    <Text
-                      component="code"
-                      ff="monospace"
-                      style={{ letterSpacing: '0.1em', color: 'var(--color-text)' }}
-                    >
-                      {inv.token}
-                    </Text>
+                    <Group gap="xs" wrap="nowrap">
+                      <Text
+                        component="code"
+                        ff="monospace"
+                        style={{ letterSpacing: '0.1em', color: 'var(--color-text)' }}
+                      >
+                        {inv.token}
+                      </Text>
+                      <CopyTokenButton
+                        token={inv.token}
+                        copied={copiedToken === inv.token}
+                        onCopy={onCopy}
+                      />
+                    </Group>
                   </Box>
                   <Box component="td" style={{ padding: '12px 16px' }}>
                     <Badge color={color} variant="light" radius="xl">
