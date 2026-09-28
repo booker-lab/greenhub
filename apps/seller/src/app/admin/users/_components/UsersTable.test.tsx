@@ -44,19 +44,22 @@ function textsOf(node: ReactNode): string[] {
 const render = (users: User[]) => UsersTable({ users, processingId: null, onToggle: () => {} });
 
 describe('Admin UsersTable 가입일·전화 표시 (T1)', () => {
-  it('데스크톱 표에 전화·가입일 컬럼 헤더를 추가하고 기존 컬럼을 유지한다', () => {
+  it('데스크톱 표는 기존 4칸을 유지한다(480px 셸에서 상태·정지 버튼 잘림 방지)', () => {
     const texts = textsOf(render([user()]));
-    for (const header of ['이름', '이메일', '전화', '가입일', '상태']) {
+    for (const header of ['이름', '이메일', '상태']) {
       expect(texts).toContain(header);
     }
+    // 전화·가입일은 별도 칸이 아니라 이메일 칸의 보조 줄이다.
+    expect(texts).not.toContain('전화');
+    expect(texts).not.toContain('가입일');
   });
 
   it('모바일 카드와 데스크톱 표 모두 전화·KST 가입일을 표시한다', () => {
     const texts = textsOf(render([user()]));
     expect(texts.filter((t) => t === '010-1234-5678')).toHaveLength(2);
     expect(texts.filter((t) => t === '2026-09-01')).toHaveLength(2);
-    expect(texts).toContain('전화 ');
-    expect(texts).toContain('가입일 ');
+    expect(texts.filter((t) => t === '전화 ')).toHaveLength(2);
+    expect(texts.filter((t) => t === '가입일 ')).toHaveLength(2);
   });
 
   it('전화·가입일이 없으면 두 레이아웃 모두 자리표시자를 표시한다', () => {
