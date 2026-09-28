@@ -1,4 +1,4 @@
-import { type OrderStatus, todayKST, toDateStrKST } from '@greenhub/shared';
+import { type Order, type OrderStatus, toDateStrKST, todayKST } from '@greenhub/shared';
 
 export function toDate(v: unknown): Date {
   if (v && typeof v === 'object' && 'toDate' in v) return (v as { toDate(): Date }).toDate();
@@ -34,3 +34,20 @@ export const READONLY_STATUSES: OrderStatus[] = [
 ];
 
 export const CANCELLABLE_STATUSES: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
+
+// 셀러 상세 API는 받는 분 연락처를 deliveryPhone 하나로 내려준다(없으면 buyerPhone 대체).
+export function displayBuyerName(order: Pick<Order, 'buyerName'>): string {
+  return order.buyerName?.trim() || '이름 없음';
+}
+
+export function displayBuyerPhone(order: Pick<Order, 'deliveryPhone'>): string | null {
+  return order.deliveryPhone?.trim() || null;
+}
+
+// tel: 링크에는 숫자와 맨 앞 +만 남긴다. 숫자가 없으면 링크를 만들지 않는다.
+export function toTelHref(phone: string): string | null {
+  const trimmed = phone.trim();
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits) return null;
+  return `tel:${trimmed.startsWith('+') ? '+' : ''}${digits}`;
+}
