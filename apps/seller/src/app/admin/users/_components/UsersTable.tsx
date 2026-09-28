@@ -2,6 +2,7 @@
 
 import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminUser } from '@/hooks/useAdmin';
+import { formatJoinedDate, formatPhone } from '../_lib';
 
 interface UsersTableProps {
   users: AdminUser[];
@@ -56,6 +57,16 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                 >
                   {user.email}
                 </Text>
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  전화 {formatPhone(user.phone)}
+                </Text>
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                >
+                  가입일 {formatJoinedDate(user.createdAt)}
+                </Text>
               </Box>
               <Badge color={user.suspended ? 'red' : 'green'} variant="light" radius="xl">
                 {user.suspended ? '정지됨' : '정상'}
@@ -103,6 +114,12 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                 이메일
               </Box>
               <Box component="th" style={thBase}>
+                전화
+              </Box>
+              <Box component="th" style={thBase}>
+                가입일
+              </Box>
+              <Box component="th" style={thBase}>
                 상태
               </Box>
               <Box component="th" style={{ padding: '12px 16px' }} />
@@ -132,6 +149,26 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                   style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}
                 >
                   {user.email}
+                </Box>
+                <Box
+                  component="td"
+                  style={{
+                    padding: '12px 16px',
+                    color: 'var(--color-text-secondary)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {formatPhone(user.phone)}
+                </Box>
+                <Box
+                  component="td"
+                  style={{
+                    padding: '12px 16px',
+                    color: 'var(--color-text-secondary)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {formatJoinedDate(user.createdAt)}
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px' }}>
                   <Badge color={user.suspended ? 'red' : 'green'} variant="light" radius="xl">

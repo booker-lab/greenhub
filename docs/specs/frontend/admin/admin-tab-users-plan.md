@@ -93,6 +93,7 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 ### 그룹 A — 표시 정보 보강 (저위험, 묶음 커밋)
 
 #### **T1. 가입일·전화 표시 (F1+F2)**
+- **상태(2026-09-28):** 구현 완료·PR 병합 대기, 육안 미확인. 실제 위치 `apps/seller/src/app/admin/users/` — `_lib.ts`(`formatJoinedDate`·`formatPhone`, `toDateStrKST` 재사용) + `_lib.test.ts`·`_components/UsersTable.test.tsx` 신설. API(`getUsers`)는 이미 `createdAt`·`phone`을 내려줘 변경 없음.
 - **변경:**
   - `_components/UsersTable.tsx` 데스크톱: `<th>가입일</th>`·`<th>전화</th>` 컬럼 2개 추가
   - `_components/UsersTable.tsx` 모바일 카드: 이메일 아래에 `가입일` 별도 줄, `전화` 별도 줄
@@ -102,6 +103,7 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 - **위험:** 모바일 카드 높이 증가 = C7 시각 회귀 항목. 의도적 변경, 육안 §추가.
 
 #### **T2. 새로고침 버튼 (F4)**
+- **상태(2026-09-28):** 구현 완료·PR 병합 대기, 육안 미확인. stores `StoresFilters` 새로고침 버튼 형태(`Button variant="light" color="gray"`)를 따름 — `ActionIcon` 대신 텍스트 버튼.
 - **변경:** `users/_client.tsx`에 `useAdminUsers().reload` 노출. 제목 헤더 우측에 `<ActionIcon><IconRefresh/></ActionIcon>`. 로딩 중 `loading` prop.
 - **표준 위치 약속:** 후속 6개 탭(stores·orders·drivers·settlements·invite·banner)도 동일 위치 따라감(SDD 부채 기록).
 - **선행 = 없음.** T1과 묶음 커밋.
