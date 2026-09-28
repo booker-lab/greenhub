@@ -2,6 +2,7 @@
 
 import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminUser } from '@/hooks/useAdmin';
+import { formatJoinedDate, formatPhone } from '../_lib';
 
 interface UsersTableProps {
   users: AdminUser[];
@@ -56,6 +57,16 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                 >
                   {user.email}
                 </Text>
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  전화 {formatPhone(user.phone)}
+                </Text>
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                >
+                  가입일 {formatJoinedDate(user.createdAt)}
+                </Text>
               </Box>
               <Badge color={user.suspended ? 'red' : 'green'} variant="light" radius="xl">
                 {user.suspended ? '정지됨' : '정상'}
@@ -77,7 +88,8 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
         ))}
       </Stack>
 
-      {/* 데스크톱(≥sm): 기존 테이블 유지(시각 회귀 0) */}
+      {/* 데스크톱(≥sm): 기존 4칸 테이블 유지. 앱 셸이 480px라 칸을 늘리면 상태·정지 버튼이
+          잘리므로 전화·가입일은 이메일 칸 아래 보조 줄로 둔다. */}
       <Paper
         radius="lg"
         shadow="xs"
@@ -131,7 +143,22 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                   component="td"
                   style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}
                 >
-                  {user.email}
+                  <Text style={{ fontSize: 'var(--font-size-sm)', wordBreak: 'break-all' }}>
+                    {user.email}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-text-secondary)',
+                    }}
+                  >
+                    전화 {formatPhone(user.phone)}
+                  </Text>
+                  <Text
+                    style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                  >
+                    가입일 {formatJoinedDate(user.createdAt)}
+                  </Text>
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px' }}>
                   <Badge color={user.suspended ? 'red' : 'green'} variant="light" radius="xl">

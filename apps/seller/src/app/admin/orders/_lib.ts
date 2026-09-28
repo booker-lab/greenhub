@@ -1,11 +1,15 @@
+import type { OrderStatus } from '@greenhub/shared';
+
 // 주문 상태 라벨/색 — orders 탭 표현 SSOT(테이블·카드·필터 공용).
-export const STATUS_LABEL: Record<string, string> = {
+// Record<OrderStatus>라 공유 상태가 늘면 라벨 누락을 컴파일 단계에서 잡는다.
+export const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: '결제대기',
   RECRUITING: '모집중',
   ACCEPTED: '접수됨',
   CONFIRMED: '확정',
   PREPARING: '준비중',
   DELIVERING: '배달중',
+  DELIVERY_HELD: '배송 보류',
   HUB_ARRIVED: '거점도착',
   PICKED_UP: '픽업완료',
   DELIVERED: '배달완료',
@@ -13,14 +17,37 @@ export const STATUS_LABEL: Record<string, string> = {
   CANCELLED: '취소됨',
 };
 
-export function getStatusColor(status: string): string {
-  if (status === 'CANCELLED') return 'red';
+export function getStatusColor(status: OrderStatus): string {
+  if (status === 'CANCELLED' || status === 'DELIVERY_HELD') return 'red';
   if (status === 'DELIVERED' || status === 'REVIEWED') return 'green';
   return 'yellow';
 }
 
-// 강제환불 가능 상태 — 배달 진행 전까지만 허용.
-export const REFUNDABLE = ['ACCEPTED', 'RECRUITING', 'CONFIRMED', 'PREPARING'];
+// 강제환불 버튼 노출 — 서버(admin.service forceRefund)가 허용하는 상태와 같게 유지한다.
+// 회차 주문(schemaVersion 2 + roundId): round-order-lifecycle.service claimCancellation 허용 상태.
+const ROUND_REFUNDABLE: readonly string[] = [
+  'PENDING',
+  'ACCEPTED',
+  'RECRUITING',
+  'CONFIRMED',
+  'PREPARING',
+  'DELIVERY_HELD',
+];
+// 일반 주문: orders.helpers getAllowedTransitions('admin')가 CANCELLED를 허용하는 상태.
+const LEGACY_REFUNDABLE: readonly string[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
+
+export function isRoundOrder(order: { schemaVersion?: number; roundId?: string | null }): boolean {
+  return order.schemaVersion === 2 && !!order.roundId;
+}
+
+export function isRefundable(order: {
+  status: string;
+  schemaVersion?: number;
+  roundId?: string | null;
+}): boolean {
+  const allowed = isRoundOrder(order) ? ROUND_REFUNDABLE : LEGACY_REFUNDABLE;
+  return allowed.includes(order.status);
+}
 
 // Admin 주문 목록 read state — 조회 실패와 성공-empty의 구조적 구분.
 // useAdminOrders는 error/reload를 노출하지만 화면이 이를 소비하지 않으면
