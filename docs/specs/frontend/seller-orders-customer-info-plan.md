@@ -2,7 +2,9 @@
 
 > 작성: 2026-05-26 (세션92) · 출처: `/further` 세션(셀러앱 "손님 관련 화면" 발전 가능성 진단)
 > 성격: **독립 세션 1~2건**으로 완결 가능한 소~중 규모. 데이터 SSOT 불변(주문 문서에 이미 손님 이름·전화 존재), UI 표시 + 한 칸 검색 + `tel:` 링크 추가.
-> 코드 변경: 미착수(이 문서로 진단·계획 단계 종결)
+> 코드 변경: 2026-09-28 상세 화면(T0·T2·T3)만 구현. 목록(T1·T4)은 아래 "2026-09-28 재대조"로 보류.
+
+> **2026-09-28 재대조 (현재 코드 기준):** §1의 "셀러 hook이 Firestore 전체 구독으로 모든 필드 수신" 전제는 stale이다. 셀러 주문은 API로 읽고, 응답은 `apps/api/src/orders/seller-order-read-model.ts`가 필드를 최소화한다. 상세(`detail`)는 `buyerName`과 `deliveryPhone`(없으면 `buyerPhone` 대체)을 내려주지만, 목록(`list`)에는 손님 이름·전화가 없다. 따라서 T1(카드 이름)·T4(이름·전화 검색)는 API 목록 필드 확장(개인정보 최소화 계약 변경)이 선행돼야 하며, 파일럿 첫 회차 안정 뒤 별도로 결정한다. 상세 화면의 연락처는 `buyerPhone`이 아니라 `deliveryPhone`을 쓴다.
 
 ---
 
@@ -114,13 +116,13 @@
 
 | Task | 상태 | 커밋 | 비고 |
 |------|------|------|------|
-| T0 폴백 헬퍼 | ☐ | - | `_lib.ts` 2함수 |
-| T1 카드 이름 | ☐ | - | OrderCard 한 줄 |
-| T2 상세 손님 섹션 | ☐ | - | Paper 신설 / 분리 검토 |
-| T3 전화 걸기 | ☐ | - | `tel:` 링크 |
-| T4 통합 검색 | ☐ | - | TextInput + matchesOrderSearch |
-| T5 정합성·빌드 | ☐ | - | tsc·build·biome·500라인 |
-| T6 육안 항목 추가 | ☐ | - | pending-visual-verify.md |
+| T0 폴백 헬퍼 | ✅ | 이 PR | `orders/[id]/_lib.ts` `displayBuyerName`·`displayBuyerPhone`(deliveryPhone)·`toTelHref` + `_lib.test.ts` |
+| T1 카드 이름 | ⏸ 보류 | - | 목록 API에 `buyerName` 없음 → API 계약 변경 선행 |
+| T2 상세 손님 섹션 | ✅ | 이 PR | `_components/CustomerInfoSection.tsx`, 상품 정보와 배송 정보 사이 |
+| T3 전화 걸기 | ✅ | 이 PR | `tel:` 링크 버튼(연락처 있을 때만) |
+| T4 통합 검색 | ⏸ 보류 | - | 목록 API에 손님 이름·전화 없음 → API 계약 변경 선행 |
+| T5 정합성·빌드 | ✅ | 이 PR | vitest 74/74·tsc 0·biome 0·seller build 0 |
+| T6 육안 항목 추가 | ☐ | - | 카카오 로그인 환경에서 사용자 확인 필요 |
 
 ---
 

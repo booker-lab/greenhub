@@ -4,6 +4,7 @@ import type { GroupProductConfig, Order } from '@greenhub/shared';
 import { Badge, Box, Group, Paper, Stack, Text } from '@mantine/core';
 import { DELIVERY_LABEL, STATUS_COLOR, STATUS_LABEL } from '../../_constants';
 import { formatDeadlineCountdown, toDate } from '../_lib';
+import { CustomerInfoSection } from './CustomerInfoSection';
 import { Row } from './OrderRow';
 
 interface OrderInfoSectionProps {
@@ -104,6 +105,8 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           </Stack>
         </Paper>
       )}
+
+      <CustomerInfoSection order={order} />
 
       <Paper radius="lg" shadow="xs" p="md">
         <Text
