@@ -2,7 +2,7 @@
 
 import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminOrder } from '@/hooks/useAdmin';
-import { getAdminOrdersReadState, getStatusColor, REFUNDABLE, STATUS_LABEL } from '../_lib';
+import { getAdminOrdersReadState, getStatusColor, isRefundable, STATUS_LABEL } from '../_lib';
 
 interface OrdersTableProps {
   orders: AdminOrder[];
@@ -113,7 +113,7 @@ export function OrdersTable({ orders, loading, error, processingId, onRefund, on
               <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
                 ₩{order.totalAmount.toLocaleString()}
               </Text>
-              {REFUNDABLE.includes(order.status) && (
+              {isRefundable(order) && (
                 <Button
                   onClick={() => onRefund(order.id)}
                   disabled={processingId === order.id}
@@ -209,7 +209,7 @@ export function OrdersTable({ orders, loading, error, processingId, onRefund, on
                   ₩{order.totalAmount.toLocaleString()}
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
-                  {REFUNDABLE.includes(order.status) && (
+                  {isRefundable(order) && (
                     <Button
                       onClick={() => onRefund(order.id)}
                       disabled={processingId === order.id}

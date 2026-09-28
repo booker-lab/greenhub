@@ -17,7 +17,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
-import { AlertTriangle, CalendarDays, Copy, MapPin, RefreshCcw } from 'lucide-react';
+import { AlertTriangle, CalendarDays, Copy, MapPin, Plus, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
@@ -336,15 +336,26 @@ export default function SaleRoundsPage() {
       <PageHeader
         title="판매 회차"
         right={
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            aria-label="회차 다시 조회"
-            disabled={loading}
-            onClick={() => void refetch()}
-          >
-            <RefreshCcw size={18} />
-          </ActionIcon>
+          <Group gap="xs" wrap="nowrap">
+            <Button
+              component={Link}
+              href="/sale-rounds/new"
+              size="xs"
+              variant="light"
+              leftSection={<Plus size={14} />}
+            >
+              새 회차
+            </Button>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              aria-label="회차 다시 조회"
+              disabled={loading}
+              onClick={() => void refetch()}
+            >
+              <RefreshCcw size={18} />
+            </ActionIcon>
+          </Group>
         }
       />
 
@@ -402,6 +413,11 @@ export default function SaleRoundsPage() {
             <EmptyState
               icon={<CalendarDays size={48} strokeWidth={1.5} />}
               text="아직 등록된 판매 회차가 없습니다"
+              action={
+                <Button component={Link} href="/sale-rounds/new" leftSection={<Plus size={16} />}>
+                  새 회차 만들기
+                </Button>
+              }
             />
           )}
 

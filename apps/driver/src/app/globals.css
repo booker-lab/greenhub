@@ -28,9 +28,12 @@
 @import "@mantine/core/styles/Divider.css";
 @import "@mantine/core/styles/Group.css";
 @import "@mantine/core/styles/Loader.css";
+@import "@mantine/core/styles/Notification.css";
 @import "@mantine/core/styles/Stack.css";
 @import "@mantine/core/styles/Text.css";
 @import "@mantine/core/styles/Title.css";
+/* notifications 컨테이너(고정 위치) — Notifications가 providers에서 렌더된다 */
+@import "@mantine/notifications/styles.css";
 
 @import "@greenhub/ui/style.css";
 

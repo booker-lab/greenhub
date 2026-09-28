@@ -117,6 +117,9 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 - `ALIGO_SENDER_KEY`
 - `ALIGO_SENDER_PHONE`
 - `ALIGO_TEMPLATE_CODES_JSON`
+- `ALIGO_OUTBOUND_PROXY_URL` (선택)
+
+ALIGO는 등록된 송신 IP의 호출만 허용한다(`code=-99 인증되지 않는 서버 IP`). 호스팅 송신 IP가 고정되지 않으면 `ALIGO_OUTBOUND_PROXY_URL`에 고정 IP HTTP 프록시(`http(s)://user:password@host:port`)를 설정하고, 그 프록시의 고정 IP를 ALIGO 허용 IP에 모두 등록한다. 설정이 있으면 알림톡(`kakaoapi.aligo.in`)과 SMS(`apis.aligo.in`) 호출만 프록시를 거치고 다른 외부 호출은 그대로다. HTTPS는 CONNECT 터널로 전달되어 프록시가 본문을 볼 수 없다. 값은 비밀값으로 다루며 오류·로그에 남기지 않는다. 직접 근거: `apps/api/src/notifications/aligo-outbound-proxy.spec.ts`.
 
 `ALIGO_TEMPLATE_CODES_JSON`은 논리 코드 → 실제 ALIGO `tpl_code` 문자열의 JSON 객체다.
 
@@ -203,6 +206,7 @@ provider 응답은 `classifyAlimtalkProviderError()`/`classifySmsProviderError()
 
 - 필수 본문 변수 누락
 - ALIGO 필수 자격 증명 누락
+- `ALIGO_OUTBOUND_PROXY_URL` 형식 오류(`http:`·`https:` 외 또는 URL 아님) — 직접 호출로 우회하지 않는다
 - `ALIGO_TEMPLATE_CODES_JSON` 파싱 오류
 - 허용되지 않은 논리 코드
 - 현재 템플릿의 provider 매핑 누락
@@ -382,6 +386,7 @@ state → withdrawal → retention evidence → sender gating의 lifecycle을 �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-09-28 | 선택 설정 `ALIGO_OUTBOUND_PROXY_URL`(고정 IP 프록시 경유)과 형식 오류 fail-closed 계약 추가 |
 | 2026-09-28 | 소비자 회차 직접 취소 `ORDER_CANCELLED` 발송 정책 결정과 구현 반영(고정 사유 `고객 요청`, PENDING·기취소 제외, 멱등 키) |
 | 2026-09-26 | `NOTIFICATION_RETRY_METRICS` in-process 관측 recorder 계약(채널별 오류 분류 counter·적용 지연 집계·PII 미기록·전달 결과 불변) 및 전용 회귀 추가 |
 | 2026-09-25 | `NOTIFICATION_RETRY_BACKOFF_POLICY` 토큰과 provider 오류 분류·bounded backoff·rate-limit 지연·blind 중복 SMS 방지 계약 및 전용 회귀 추가 |

@@ -11,6 +11,8 @@ const baseProps: Props = {
   loading: false,
   error: null,
   onRetry: () => {},
+  copiedToken: null,
+  onCopy: () => {},
 };
 
 // 보안: 실제 토큰 원문이 아닌 구조 검증용 더미 식별자만 사용한다.
@@ -74,6 +76,36 @@ function handlersFor(tree: ReactNode, label: string): Array<() => void> {
   return handlers;
 }
 
+interface CopyButtonProps {
+  token: string;
+  copied: boolean;
+  onCopy: (token: string) => void;
+}
+
+/** 행별 복사 버튼(CopyTokenButton) 요소를 수집한다 — token·onCopy prop으로 식별. */
+function copyButtonsOf(tree: ReactNode): Array<ReactElement<CopyButtonProps>> {
+  const out: Array<ReactElement<CopyButtonProps>> = [];
+  const visit = (current: ReactNode): void => {
+    if (Array.isArray(current)) {
+      for (const child of current) visit(child);
+      return;
+    }
+    if (!isElement(current)) return;
+    const props = current.props as Partial<CopyButtonProps> & Clickable;
+    if (typeof props.token === 'string' && typeof props.onCopy === 'function') {
+      out.push(current as unknown as ReactElement<CopyButtonProps>);
+    }
+    visit(props.children);
+  };
+  visit(tree);
+  return out;
+}
+
+/** 복사 버튼 컴포넌트를 한 단계 전개(DOM 없이 함수 호출)해 실제 Button 트리를 얻는다. */
+function expand(el: ReactElement<CopyButtonProps>): ReactNode {
+  return (el.type as (p: CopyButtonProps) => ReactNode)(el.props);
+}
+
 describe('InviteHistoryTable read state', () => {
   it('loading은 로딩 UI를 표시한다', () => {
     const tree = InviteHistoryTable({ ...baseProps, loading: true });
@@ -121,5 +153,78 @@ describe('InviteHistoryTable read state', () => {
     expect(handlers.length).toBeGreaterThan(0);
     handlers[0]();
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('InviteHistoryTable 행별 토큰 복사', () => {
+  it('결과 행마다 모바일 카드·데스크톱 표 양쪽에 복사 버튼을 노출한다', () => {
+    const tree = InviteHistoryTable({
+      ...baseProps,
+      invites: [invite('test-invite-aaa'), invite('test-invite-bbb')],
+    });
+    const buttons = copyButtonsOf(tree);
+    // 2행 × 2레이아웃(hiddenFrom/visibleFrom sm)
+    expect(buttons).toHaveLength(4);
+    expect(buttons.map((b) => b.props.token).sort()).toEqual([
+      'test-invite-aaa',
+      'test-invite-aaa',
+      'test-invite-bbb',
+      'test-invite-bbb',
+    ]);
+  });
+
+  it('복사 버튼 클릭은 해당 행의 토큰으로 onCopy를 호출한다', () => {
+    const onCopy = vi.fn();
+    const tree = InviteHistoryTable({
+      ...baseProps,
+      onCopy,
+      invites: [invite('test-invite-aaa'), invite('test-invite-bbb')],
+    });
+    for (const button of copyButtonsOf(tree)) {
+      const handlers = handlersFor(expand(button), '복사');
+      expect(handlers).toHaveLength(1);
+      handlers[0]();
+    }
+    expect(onCopy.mock.calls.map(([token]) => token).sort()).toEqual([
+      'test-invite-aaa',
+      'test-invite-aaa',
+      'test-invite-bbb',
+      'test-invite-bbb',
+    ]);
+  });
+
+  it('사용된 토큰에도 복사 버튼을 노출한다(모든 상태 노출)', () => {
+    const used = {
+      ...invite('test-invite-used'),
+      usedAt: '2026-09-02T00:00:00.000Z',
+      usedBy: 'seller-test',
+    };
+    const tree = InviteHistoryTable({ ...baseProps, invites: [used] });
+    expect(copyButtonsOf(tree)).toHaveLength(2);
+  });
+
+  it('copiedToken과 일치하는 행만 복사됨! 피드백을 표시한다', () => {
+    const tree = InviteHistoryTable({
+      ...baseProps,
+      copiedToken: 'test-invite-bbb',
+      invites: [invite('test-invite-aaa'), invite('test-invite-bbb')],
+    });
+    for (const button of copyButtonsOf(tree)) {
+      const texts = textsOf(expand(button));
+      if (button.props.token === 'test-invite-bbb') {
+        expect(texts).toContain('복사됨!');
+      } else {
+        expect(texts).toContain('복사');
+        expect(texts).not.toContain('복사됨!');
+      }
+    }
+  });
+
+  it('loading·조회 실패·빈 결과에서는 행 복사 버튼이 없다', () => {
+    expect(copyButtonsOf(InviteHistoryTable({ ...baseProps, loading: true }))).toHaveLength(0);
+    expect(
+      copyButtonsOf(InviteHistoryTable({ ...baseProps, error: FETCH_ERROR_MESSAGE })),
+    ).toHaveLength(0);
+    expect(copyButtonsOf(InviteHistoryTable({ ...baseProps }))).toHaveLength(0);
   });
 });

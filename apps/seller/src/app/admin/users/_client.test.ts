@@ -35,6 +35,14 @@ describe('AdminUsersClient 조회 실패/복구 배선', () => {
     expect(source).toContain('({users.length})');
   });
 
+  it('정상 목록 헤더에 새로고침 버튼을 두고 hook reload를 재사용한다 (T2)', () => {
+    const normalBranch = source.lastIndexOf('return (');
+    const refreshButton = source.indexOf('새로고침');
+    expect(refreshButton).toBeGreaterThan(normalBranch);
+    expect(refreshButton).toBeLessThan(source.indexOf('<UsersTable'));
+    expect(source).toContain('loading={loading} onClick={reload}');
+  });
+
   it('조회 실패를 빈 목록과 구분한다', () => {
     // 실패 분기는 UsersTable(성공 0건 경로)과 분리된 early return이다.
     const errorBranch = source.indexOf('error !== null && !loading');
