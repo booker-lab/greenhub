@@ -81,9 +81,9 @@
 - 카카오 비즈니스 채널 승인 완료.
 - repository ALIGO logical 8-code contract: `VERIFIED` — #65에서 확인한 repository 계약.
 - ALIGO 템플릿 8종(UK_5691~5698): 2026-09-28 콘솔에서 코드·이름·승인완료·본문·변수 일치 확인. actual send는 `NOT RUN`이다.
-- **운영 API는 2026-08-23 이전 코드로 실행 중이다.** PR #30 이후 `main` 병합이 Railway production에 자동 배포되지 않으며(배포 기록 전부 `SKIPPED`), 그 뒤의 수정·ALIGO 운영 변수는 출시 배포 때 반영된다.
+- **운영 배포 완료(2026-09-28, 출시 SHA `197f84a4`)**: API·프런트 3개·Firestore/Storage 규칙·인덱스가 같은 SHA로 반영됐다. `salesMode`는 `legacy`를 유지한다. 상세는 아래 5절.
 - 운영 Firebase rules/indexes는 출시 전 read-only 재조회 필요.
-- production 회차 배포·첫 운영 회차·`salesMode` 전환 미실행.
+- production 배포는 완료(`197f84a4`). 첫 운영 회차·`salesMode` 전환은 미실행.
 - 판매 모드: `legacy`.
 
 ## 현재 release residual
@@ -138,9 +138,22 @@ revocation window 결정(D2, 2026-09-28)은 `docs/specs/api/auth.md`를 따른�
 
 ### 5. Production activation
 
-상태: `PRODUCTION_AUTHORITY_PENDING`.
+상태: production deployment `DONE`(2026-09-28) / activation `PRODUCTION_AUTHORITY_PENDING`.
 
-production deployment, activation, `salesMode`, live round, actual payment, actual notification, first-round completion은 모두 별도 상태이며 현재 `NOT DONE` / `NOT CLAIMED`다.
+출시 SHA `197f84a4`(원격 회차 E2E run `36372493414` 52/52 + 세션 12/12, cleanup 잔여 0)를 사용자 승인(Task 3.1)으로 배포했다. 순서는 API → 프런트 3개 → 규칙·인덱스다. 옛 프런트(8/11·8/23 배포본)가 Firestore를 직접 읽었으므로 규칙을 앱보다 먼저 배포하지 않았다.
+
+| 대상 | 새 배포 | 이전(되돌리기) |
+|---|---|---|
+| API (Railway production) | `3f851757-ee67-48b2-9197-9eb29a2fb5db` SUCCESS | `aee6057b-8cac-4ba5-8613-607f21f19ab3` (`e55f2591`) |
+| consumer (Vercel) | `dpl_79CBcA2hcxsUt88u2fQNv7NRfDWF` | `dpl_DmjsrFiKga82mHjvc7e3Srw3taQ5` |
+| seller (Vercel) | `dpl_FXtMd6FkhLGZgikQD48mHjqXi7yg` | `dpl_5CdhRd1XAW7LFxUTiEe2HHY7qTqP` |
+| driver (Vercel) | `dpl_FBSZWeeMnzSMM6njySy5DwNJT3gx` | `dpl_FZbbKMh362QGayFyeTNLTBSU5cKi` |
+| Firestore 규칙 | ruleset `2562b836-5c66-4253-a672-023e7c580afc` | `32837978-27e9-4076-a953-b42e1838e2fa` (2026-07-31) |
+| Storage 규칙 | ruleset `b723c937-fb80-4cfc-8bc8-d112b5177c26` | `798bd8ce-8f20-46a9-b8f3-648f3e2afe45` (2026-07-31) |
+
+- 배포 뒤 확인: 배포 기록 SHA 일치, API health 200, 운영 도메인 주요 페이지 200, CORS 허용, 비인증 driver API 401, 5xx 없음, 규칙 재조회 저장소 일치, 인덱스 41개 반영(운영 전용 미사용 인덱스 1개 유지).
+- 운영 규칙 반영으로 driver 전체 주문 읽기 등 7/31 이후 수정된 경계가 운영에서도 적용된다.
+- activation(`salesMode` 전환), live round, actual payment/notification, first-round completion은 `NOT DONE`이다.
 
 ### 6. Consumer self-cancel `ORDER_CANCELLED`
 
@@ -266,7 +279,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 - repository logical 8-code contract: `VERIFIED` — #65에서 8개 logical code/body/required-variable 계약을 확인했다.
 - provider 템플릿 metadata: `VERIFIED`(2026-09-28 콘솔) — UK_5691~5698 코드·이름·승인완료·본문·변수가 저장소 계약과 일치하고, 채널 `@greenlove`는 정상, 버튼은 없다. 템플릿 대체문자는 `발송안함`이며 SMS fallback은 코드가 별도로 수행한다.
 - production mapping: Railway production 변수 `ALIGO_TEMPLATE_CODES_JSON`이 8종을 올바른 코드로 매핑한다. 다만 실행 중인 운영 API 프로세스에는 아직 반영되지 않았다(8/23 이전 배포).
-- 운영 송신 IP: 2026-09-28 운영 컨테이너 기준 `152.55.176.19`. ALIGO는 등록 IP 외 호출을 `code=-99`로 거부하므로 출시 배포 뒤 등록 여부를 확인한다(재배포 시 IP 변동 가능).
+- 운영 송신 IP: 출시 배포 뒤 `152.55.177.34`(배포 전 `152.55.176.19` — **재배포로 바뀜**). 배포 뒤 운영 컨테이너 조회에서 ALIGO 변수 5개는 반영됐으나 `code=-99 인증되지 않는 서버 IP`로 거부됐다. 고정 송신 IP 설정과 ALIGO 허용 IP 등록 전에는 운영 알림톡이 실패한다.
 - actual Alimtalk/SMS send: `NOT RUN`이며 별도 authority가 필요하다.
 
 ### 역사적 provider snapshot
@@ -333,8 +346,8 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 다음 작업
 
-1. 출시 SHA를 확정하고 같은 절차로 원격 회차 E2E(52 + 세션 12)를 재실행한다.
-2. 운영 Firebase rules/indexes를 read-only로 재조회해 저장소와 대조한다.
-3. 출시 SHA로 production 배포(별도 승인) → ALIGO 운영 IP 등록·API 템플릿 대조 → 격리 실발송(별도 승인).
+1. Railway 운영 API 고정 송신 IP 설정 → ALIGO 허용 IP 등록 → 운영 컨테이너 조회로 `code=0`·템플릿 API 대조.
+2. 격리 실제 알림톡·SMS fallback 검증(별도 승인).
+3. 이후 배포는 같은 순서(API → 프런트 → 규칙)와 배포 뒤 ALIGO IP 재확인을 따른다.
 4. Pilot GO·`salesMode` 전환·첫 회차는 runbook §4·§10과 별도 authority를 따른다.
 5. Pilot `MARKETING_NOT_USED_IN_PILOT`와 legal/source wording을 문서 범위에서 정합화한다.

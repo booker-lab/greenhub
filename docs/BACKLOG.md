@@ -469,11 +469,12 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 ### 외부·권한 gate
 
 - [x] provider 템플릿과 repository logical 8-code mapping 대조 (2026-09-28 콘솔)
-- [ ] 출시 배포 뒤 운영 송신 IP ALIGO 등록 확인 + API 기준 템플릿 read-back
+- [ ] 운영 송신 IP ALIGO 등록 — 2026-09-28 배포 뒤 `152.55.177.34`에서 `code=-99`(미등록). Railway 고정 송신 IP 설정 후 등록하고 API 기준 템플릿 read-back
 - [ ] 별도 authority 후 격리 actual Alimtalk/SMS 및 fallback 검증
-- [ ] exact release SHA 기준 원격 회차 E2E 52 + 세션 12 재실행
-- [ ] 운영 Firebase rules/indexes read-only 재조회와 저장소 대조
-- [ ] production deployment·activation·첫 회차 전용 승인 및 read-back
+- [x] exact release SHA 기준 원격 회차 E2E 52 + 세션 12 재실행 — `197f84a4`, run `36372493414`
+- [x] 운영 Firebase rules/indexes 대조와 배포 — 7/31 배포본 → `197f84a4` 규칙 반영, 재조회 일치
+- [x] production deployment — 2026-09-28 `197f84a4` (API·프런트 3개·규칙)
+- [ ] activation·첫 회차 전용 승인 및 read-back
 
 ### 법무·출시 후보 정합성
 
@@ -631,6 +632,9 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 ### PREVIEW-GENERIC-ENV-ALIGNMENT
 - [ ] exact Preview(브랜치 없는 배포)는 Vercel의 브랜치 미지정 Preview env를 쓴다. 판매자 앱은 이 env에서 API=스테이징, Firebase=운영(`green-e4fe3`, 운영·Preview·개발 공통 항목)으로 어긋나 Firebase 클라이언트 로그인이 실패한다. 세 앱의 브랜치 미지정 Preview Firebase 설정을 비운영 프로젝트로 분리할지 결정한다.
+
+### LEGACY-E2E-WORKFLOW-VARS
+- [ ] 일반 E2E `e2e.yml`은 저장소 수준 `vars.ROUND_DIRECT_E2E_*`를 읽지만 값이 `round-direct-e2e` 환경에만 있어 대상 확인 단계에서 매번 실패한다(최근 100회 성공 없음). legacy 판매 재도입 전에 설정 출처를 고치고 legacy 흐름을 새 코드로 검증한다.
 
 ### EXACT-PREVIEW-WORKFLOW-CREDENTIALS
 - [ ] `create-exact-preview-deployment.yml`은 앱별 Vercel 토큰(`VERCEL_EXACT_PREVIEW_{CONSUMER,SELLER,DRIVER}_TOKEN`) 미등록으로 성공한 적이 없다. 현재 exact Preview는 로컬 Vercel CLI 권한으로 `preview-exact/<scope>/<sha>` ref를 사용해 만든다. 워크플로 경로로 옮길지 결정한다.
