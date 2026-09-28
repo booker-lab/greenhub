@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getAdminOrdersReadState } from './_lib';
+import {
+  buildStatusOptions,
+  getAdminOrdersReadState,
+  getStatusColor,
+  STATUS_LABEL,
+} from './_lib';
 
 const FETCH_ERROR_MESSAGE = '주문 목록 조회 중 오류 발생';
 
@@ -42,5 +47,13 @@ describe('getAdminOrdersReadState', () => {
         orders: [order('o1')],
       }),
     ).toBe('FETCH_ERROR');
+  });
+});
+
+describe('주문 상태 라벨·필터 옵션', () => {
+  it('배송 보류(DELIVERY_HELD)를 라벨·빨강 색·필터 옵션에 포함한다', () => {
+    expect(STATUS_LABEL.DELIVERY_HELD).toBe('배송 보류');
+    expect(getStatusColor('DELIVERY_HELD')).toBe('red');
+    expect(buildStatusOptions()).toContainEqual({ value: 'DELIVERY_HELD', label: '배송 보류' });
   });
 });
