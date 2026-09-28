@@ -2,6 +2,18 @@
 import type { AdminSettlement } from '@/hooks/useAdmin';
 
 /**
+ * 정산일시 표기 포매터 — 브라우저 시간대와 무관하게 항상 KST(Asia/Seoul)로 표시.
+ * shared `toDateStrKST`는 YYYY-MM-DD만 지원하므로 시·분 표시는 timeZone 지정으로 해결.
+ */
+const SETTLED_AT_FORMAT_KST = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/**
  * 정산일시 표기 — settledAt 직렬화 형태가 호출 경로마다 다름(#CL-46).
  * API TimestampInterceptor는 ISO 문자열, Firestore raw 직렬화는 `{ _seconds }`.
  * 양쪽 모두 방어적으로 파싱하고, 불가하면 '-'.
@@ -15,12 +27,7 @@ export function toDateStr(ts: unknown): string {
     date = new Date((ts as { _seconds: number })._seconds * 1000);
   }
   if (!date || Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString('ko-KR', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return SETTLED_AT_FORMAT_KST.format(date);
 }
 
 export function toKRW(n: number): string {
