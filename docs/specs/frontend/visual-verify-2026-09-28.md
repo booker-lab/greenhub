@@ -7,7 +7,7 @@
 
 외부 서비스에 접속하지 않고, 운영 데이터 없이 확인했다.
 - 구성: 7개 브랜치를 로컬에서 합치고(push 안 함), 셀러 앱을 `next dev`로 띄워 가짜 API(localhost)에 연결했다.
-- 스크린샷: `C:	mpisual-verify-20260928\shots\`
+- 스크린샷: `C:\tmp\visual-verify-20260928\shots\`
 - 보고서: `report.md`
 
 | PR | 결과 |
