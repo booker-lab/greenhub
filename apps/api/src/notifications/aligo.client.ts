@@ -1,6 +1,7 @@
 import type { NotificationChannel } from '@greenhub/shared';
 import { Injectable } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { v4 as uuidv4 } from 'uuid';
 import { resolveAligoTemplateCode } from './aligo-template-codes';
 import {
@@ -15,6 +16,37 @@ import {
 } from './notification-templates';
 
 export type ProviderOutcome = 'ACCEPTED' | 'REJECTED' | 'UNKNOWN';
+
+type AligoFetch = (url: string, init: { method: string; body: URLSearchParams }) => Promise<Response>;
+
+/**
+ * ALIGO는 등록된 송신 IP만 허용한다. 호스팅의 송신 IP가 고정되지 않을 때는
+ * ALIGO_OUTBOUND_PROXY_URL(고정 IP HTTP 프록시)을 설정해 ALIGO 호출만 그 프록시로 보낸다.
+ * 값이 없으면 직접 호출하고, 형식이 잘못되면 직접 호출로 우회하지 않고 발송을 거부한다.
+ * 프록시 URL에는 인증 정보가 들어 있으므로 오류·로그에 원문을 남기지 않는다.
+ */
+export function resolveAligoOutboundFetch(
+  rawProxyUrl: string | undefined,
+): { fetch: AligoFetch } | { configError: string } {
+  const raw = (rawProxyUrl ?? '').trim();
+  if (!raw) {
+    return { fetch: (url, init) => fetch(url, init) };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return { configError: 'ALIGO 송신 프록시 설정이 올바르지 않습니다.' };
+  }
+  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname) {
+    return { configError: 'ALIGO 송신 프록시 설정이 올바르지 않습니다.' };
+  }
+  const dispatcher = new ProxyAgent(raw);
+  return {
+    fetch: (url, init) =>
+      undiciFetch(url, { ...init, dispatcher }) as unknown as Promise<Response>,
+  };
+}
 
 // provider 오류를 재시도 가능/rate-limit/영구/불확실로 분류한다. 분류 결과가
 // 재시도 backoff와 SMS fallback 여부를 결정한다.
@@ -182,6 +214,8 @@ export class AligoClient {
   private readonly senderPhone: string;
   private readonly templateCodesJson: string;
   private readonly outboundDenied: boolean;
+  private readonly aligoFetch: AligoFetch | null;
+  private readonly outboundProxyError: string | null;
   private readonly retryMetrics: NotificationRetryMetricsRecorder;
 
   constructor(
@@ -198,6 +232,9 @@ export class AligoClient {
     this.outboundDenied =
       config.get<string>('GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY', '') ===
       'DENY_ALL_EXTERNAL_PROVIDER_DISPATCH';
+    const outbound = resolveAligoOutboundFetch(config.get<string>('ALIGO_OUTBOUND_PROXY_URL', ''));
+    this.aligoFetch = 'fetch' in outbound ? outbound.fetch : null;
+    this.outboundProxyError = 'configError' in outbound ? outbound.configError : null;
     this.retryMetrics = metrics;
   }
 
@@ -228,6 +265,14 @@ export class AligoClient {
     }
     if (!this.apiKey || !this.userId || !this.senderKey || !this.senderPhone) {
       return localRejection(message, 0, 0, '알림 발송 필수 설정이 누락되었습니다.');
+    }
+    if (this.outboundProxyError || !this.aligoFetch) {
+      return localRejection(
+        message,
+        0,
+        0,
+        this.outboundProxyError ?? 'ALIGO 송신 프록시 설정이 올바르지 않습니다.',
+      );
     }
 
     let providerTemplateCode: string;
@@ -377,6 +422,14 @@ export class AligoClient {
     if (!this.apiKey || !this.userId || !this.senderPhone) {
       return localRejection(message, 0, 0, '문자 발송 필수 설정이 누락되었습니다.');
     }
+    if (this.outboundProxyError || !this.aligoFetch) {
+      return localRejection(
+        message,
+        0,
+        0,
+        this.outboundProxyError ?? 'ALIGO 송신 프록시 설정이 올바르지 않습니다.',
+      );
+    }
     const attemptId = uuidv4();
     const result = await this.sendSmsMessage(phone, message);
     if (result.outcome === 'ACCEPTED') {
@@ -488,7 +541,7 @@ export class AligoClient {
         message_1: message,
       });
 
-      const res = await fetch('https://kakaoapi.aligo.in/akv10/alimtalk/send/', {
+      const res = await this.requireAligoFetch()('https://kakaoapi.aligo.in/akv10/alimtalk/send/', {
         method: 'POST',
         body: params,
       });
@@ -539,6 +592,13 @@ export class AligoClient {
     }
   }
 
+  private requireAligoFetch(): AligoFetch {
+    if (!this.aligoFetch) {
+      throw new Error(this.outboundProxyError ?? 'ALIGO 송신 프록시 설정이 올바르지 않습니다.');
+    }
+    return this.aligoFetch;
+  }
+
   private async sendSmsMessage(
     phone: string,
     message: string,
@@ -552,7 +612,7 @@ export class AligoClient {
         msg: message,
       });
 
-      const res = await fetch('https://apis.aligo.in/send/', {
+      const res = await this.requireAligoFetch()('https://apis.aligo.in/send/', {
         method: 'POST',
         body: params,
       });
