@@ -1,23 +1,20 @@
 'use client';
 
 import { Box, Group, Text, Title } from '@mantine/core';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useAdminInvite } from '@/hooks/useAdmin';
 import { InviteGenerator } from './_components/InviteGenerator';
 import { InviteHistoryTable } from './_components/InviteHistoryTable';
+import { ManualCopyModal } from './_components/ManualCopyModal';
+import { useTokenCopy } from './_useTokenCopy';
 
 export default function AdminInviteClient() {
   const { invites, loading, error, reload, generating, generateError, generate } =
     useAdminInvite();
   const [lastToken, setLastToken] = useState<{ token: string; expiresAt: string } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    };
-  }, []);
+  // 복사 로직 SSOT — 발급 직후 토큰과 발급 내역 행별 복사가 공유한다(성공 피드백·실패 폴백 포함).
+  const { copiedToken, manualToken, copy, closeManual } = useTokenCopy();
+  const copied = lastToken !== null && copiedToken === lastToken.token;
 
   const handleGenerate = async () => {
     const result = await generate();
@@ -27,10 +24,7 @@ export default function AdminInviteClient() {
 
   const handleCopy = () => {
     if (!lastToken) return;
-    navigator.clipboard.writeText(lastToken.token);
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    setCopied(true);
-    copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
+    void copy(lastToken.token);
   };
 
   return (
@@ -58,7 +52,15 @@ export default function AdminInviteClient() {
       >
         발급 내역
       </Text>
-      <InviteHistoryTable invites={invites} loading={loading} error={error} onRetry={reload} />
+      <InviteHistoryTable
+        invites={invites}
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        copiedToken={copiedToken}
+        onCopy={(token) => void copy(token)}
+      />
+      <ManualCopyModal token={manualToken} onClose={closeManual} />
     </Box>
   );
 }
