@@ -91,6 +91,10 @@ export default function AdminUsersClient() {
             ({users.length})
           </Text>
         </Title>
+        {/* 새로고침 — stores 탭(StoresFilters)과 같은 버튼 형태, hook reload 재사용 */}
+        <Button variant="light" color="gray" radius="md" loading={loading} onClick={reload}>
+          새로고침
+        </Button>
       </Group>
 
       <UsersTable users={users} processingId={processingId} onToggle={handleToggle} />
