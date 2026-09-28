@@ -1,3 +1,4 @@
+import type { OrderStatus } from '@greenhub/shared';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { OrdersTable } from './OrdersTable';
@@ -18,7 +19,7 @@ const baseProps: Props = {
 function order(
   id: string,
   orderNumber: string,
-  status = 'ACCEPTED',
+  status: OrderStatus = 'ACCEPTED',
 ): Props['orders'][number] {
   return {
     id,

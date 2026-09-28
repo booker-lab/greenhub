@@ -1,6 +1,6 @@
 'use client';
 
-import type { SettlementStatus, StoreStatus } from '@greenhub/shared';
+import type { OrderStatus, SettlementStatus, StoreStatus } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
@@ -43,10 +43,13 @@ export interface AdminOrder {
   orderNumber?: string;
   storeId: string;
   userId: string;
-  status: string;
+  status: OrderStatus;
   totalAmount: number;
   deliveryMethod: string;
   createdAt: unknown;
+  // 회차 주문 판별(강제환불 허용 상태가 일반 주문과 다름)
+  schemaVersion?: number;
+  roundId?: string | null;
 }
 
 export interface AdminSettlement {
