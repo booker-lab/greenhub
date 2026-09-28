@@ -1,11 +1,15 @@
+import type { OrderStatus } from '@greenhub/shared';
+
 // 주문 상태 라벨/색 — orders 탭 표현 SSOT(테이블·카드·필터 공용).
-export const STATUS_LABEL: Record<string, string> = {
+// Record<OrderStatus>라 공유 상태가 늘면 라벨 누락을 컴파일 단계에서 잡는다.
+export const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: '결제대기',
   RECRUITING: '모집중',
   ACCEPTED: '접수됨',
   CONFIRMED: '확정',
   PREPARING: '준비중',
   DELIVERING: '배달중',
+  DELIVERY_HELD: '배송 보류',
   HUB_ARRIVED: '거점도착',
   PICKED_UP: '픽업완료',
   DELIVERED: '배달완료',
@@ -13,8 +17,8 @@ export const STATUS_LABEL: Record<string, string> = {
   CANCELLED: '취소됨',
 };
 
-export function getStatusColor(status: string): string {
-  if (status === 'CANCELLED') return 'red';
+export function getStatusColor(status: OrderStatus): string {
+  if (status === 'CANCELLED' || status === 'DELIVERY_HELD') return 'red';
   if (status === 'DELIVERED' || status === 'REVIEWED') return 'green';
   return 'yellow';
 }

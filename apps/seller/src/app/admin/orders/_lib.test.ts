@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getAdminOrdersReadState, isRefundable } from './_lib';
+import {
+  buildStatusOptions,
+  getAdminOrdersReadState,
+  getStatusColor,
+  isRefundable,
+  STATUS_LABEL,
+} from './_lib';
 
 const FETCH_ERROR_MESSAGE = '주문 목록 조회 중 오류 발생';
 
@@ -89,5 +95,13 @@ describe('isRefundable — 서버 강제환불 허용 상태와 일치', () => {
   it('roundId가 없거나 schemaVersion이 2가 아니면 일반 주문으로 본다', () => {
     expect(isRefundable({ status: 'PENDING', schemaVersion: 2, roundId: null })).toBe(false);
     expect(isRefundable({ status: 'PENDING', schemaVersion: 1, roundId: 'round-1' })).toBe(false);
+  });
+});
+
+describe('주문 상태 라벨·필터 옵션', () => {
+  it('배송 보류(DELIVERY_HELD)를 라벨·빨강 색·필터 옵션에 포함한다', () => {
+    expect(STATUS_LABEL.DELIVERY_HELD).toBe('배송 보류');
+    expect(getStatusColor('DELIVERY_HELD')).toBe('red');
+    expect(buildStatusOptions()).toContainEqual({ value: 'DELIVERY_HELD', label: '배송 보류' });
   });
 });
