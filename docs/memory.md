@@ -82,9 +82,9 @@
 - repository ALIGO logical 8-code contract: `VERIFIED` — #65에서 확인한 repository 계약.
 - ALIGO 템플릿 8종(UK_5691~5698): 2026-09-28 콘솔에서 코드·이름·승인완료·본문·변수 일치 확인. actual send는 `NOT RUN`이다.
 - **운영 배포 완료(2026-09-28, 출시 SHA `197f84a4`)**: API·프런트 3개·Firestore/Storage 규칙·인덱스가 같은 SHA로 반영됐다. 이후 운영 API는 `781285ea`(ALIGO 프록시), 판매자 앱은 `437af74b`(새 회차 화면)로 갱신됐다. 상세는 아래 5절.
-- 운영 Firebase rules/indexes는 출시 전 read-only 재조회 필요.
-- production 배포 완료. 첫 회차 "10월 6일 배송 회차"가 `SCHEDULED`다.
-- 판매 모드: **`round_direct`**(2026-09-29 전환). 파일럿 운영 시작은 프런트엔드 개편 뒤로 **연기(일정 미정)**다.
+- 첫 회차 "11월 10일 배송 회차"가 `SCHEDULED`다(주문 11/1 10:00 자동 오픈). 2026-09-30 공개 회차 API로 확인.
+- 판매 모드: **`round_direct`**(2026-09-29 전환). 파일럿 운영 시작은 **2026-11-01**로 연기했다(그 전까지 프런트엔드 점검·수정).
+- `main` `81c19a56`에는 운영 미반영 프런트 변경(판매자·어드민 PR #314~#320, 판매자·기사 Mantine 알림 CSS #323)이 있다. 원격 회차 E2E는 통과했고 육안 확인 뒤 운영 반영한다.
 
 ## 현재 release residual
 
@@ -156,9 +156,10 @@ revocation window 결정(D2, 2026-09-28)은 `docs/specs/api/auth.md`를 따른�
 - 운영 규칙 반영으로 driver 전체 주문 읽기 등 7/31 이후 수정된 경계가 운영에서도 적용된다.
 - 2026-09-28 운영 API `781285ea`(ALIGO 송신 프록시, 배포 `1e3e57b1…`), 판매자 앱 `437af74b`(새 회차 화면, `dpl_7bcozKG2bkMhoHWXMumUoH1B27Yr`, 이전 `dpl_FXtMd6FkhLGZgikQD48mHjqXi7yg`)로 갱신했다. 각 SHA는 원격 회차 E2E 52 + 세션 12를 통과했다(run `36383185604`, `36410582745`).
 - **activation(2026-09-29)**: 첫 회차 `e8ca686f-a9db-4c6b-8ebf-2bf190351a3c` "10월 6일 배송 회차"를 판매자 앱에서 만들어 `SCHEDULED`로 예약했다(주문 10/1 목 10:00 ~ 10/5 월 00:00, 경매 10/5 07:00, 배송 10/6 00:00~09:00, 경기도 이천시, 배송지 15곳·수량 30개, 빅립 30,000·만천홍 25,000·v3 45,000원 각 10개). 사용자 승인으로 `salesMode`를 `legacy → round_direct`로 전환했고(dry-run 대상 1곳 확인 후 `--confirm` 적용), 공개 회차 API에서 회차와 상품 3개를 확인했다. 전환 시점 미해결 운영 예외 0건.
+- **일정 변경(2026-09-29)**: 파일럿 연기에 맞춰 같은 회차를 "11월 10일 배송 회차"로 바꿨다 — 주문 11/1(일) 10:00 ~ 11/9(월) 00:00, 경매 11/9 07:00, 배송 11/10 00:00~09:00. 서버 회차 수정과 같은 검사(DRAFT/SCHEDULED·예약/주문 0·일정 순서)를 트랜잭션에서 거쳐 이름·일정만 바꿨고, `SCHEDULED`·지역·한도·상품은 그대로다.
 - 회차 상태는 조회 시 계산된다: `SCHEDULED`는 `orderOpenAt` 경과 시 자동 `OPEN`, `orderCloseAt` 경과 시 자동 `CLOSED`다. 공개 회차에는 `SCHEDULED`도 노출된다.
 - 롤백: `node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=legacy --confirm=80189070-2c3d-45f2-bc11-68a870b13951:round_direct:legacy`
-- live round 주문, 실제 결제·환불, first-round completion은 `NOT DONE`이다. 파일럿 운영은 프런트엔드 개편 뒤로 연기했다.
+- live round 주문, 실제 결제·환불, first-round completion은 `NOT DONE`이다. 파일럿 운영은 2026-11-01로 연기했다.
 
 ### 6. Consumer self-cancel `ORDER_CANCELLED`
 
@@ -328,7 +329,8 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 검증 상태
 
-- 최근 원격 회차 E2E: run `36348002412`(live `main` `c8bec1f5`) 52/52 + 세션 12/12, 양쪽 cleanup 잔여 0 — 출시 전 증거이며 출시 SHA 증거가 아니다.
+- 최근 원격 회차 E2E: run `36583346359`(`main` `81c19a56`) 52/52 + 세션 12/12 — 운영 반영 전 증거이며, 운영에 나갈 SHA가 바뀌면 그 SHA로 다시 판정한다.
+- 운영 배포 SHA 증거: 출시 `197f84a4` run `36372493414`, API `781285ea` run `36383185604`, 판매자 앱 `437af74b` run `36410582745`(각 52/52 + 세션 12/12, cleanup 0).
 - 이전 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`(52건).
 - 과거 run을 현재 release 증거로 확장하지 않는다.
 - exact-SHA Preview/browser/fixture와 필요한 legal/release proof는 actual release candidate에서 다시 판정한다.
@@ -352,7 +354,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 다음 작업
 
-1. 파일럿 운영 연기(프런트엔드 개편 우선): 첫 회차는 `orderOpenAt`(10/1 10:00)에 자동 `OPEN`되므로, 운영을 미룰 동안 회차 일정을 뒤로 옮기거나 `salesMode`를 되돌려 주문 오픈을 막는다.
+1. 11/1 파일럿 전 소비자 화면·기사 앱 실사용 점검과 수정, 결정 3건(`ADMIN-CANCELLED-REFUND-RETRY`·`SELLER-ORDER-LIST-BUYER-INFO`·`ADMIN-DESKTOP-TABLE-IN-480-SHELL`), 육안 확인 뒤 `main` 프런트 변경 운영 반영.
 2. SMS 발신번호를 사업자 번호로 교체하고 문자 재시험.
 3. 파일럿 시작 직후 실제 결제 1건(결제 → 접수 알림톡 → 소비자 취소·환불 → 취소 알림톡)으로 운영 PortOne 경로를 확인한다. 결제는 지금까지 E2E 모의 결제로만 검증됐다.
 4. 운영 배포는 검증된 SHA를 지정해 API → 프런트 → 규칙 순으로 한다. Railway UI "Deploy"는 `main` HEAD를 배포하므로 병합 후 미검증 코드가 나갈 수 있다.
