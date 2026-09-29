@@ -18,6 +18,7 @@ import {
   isRoundCartItem,
   parseCartSnapshot,
   type RoundCartItem,
+  useCart,
 } from '@/hooks/useCart';
 import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
@@ -378,6 +379,7 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
 function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] }) {
   const { data: session } = useSession();
   const router = useRouter();
+  const { removeRoundItems } = useCart();
   const [address, setAddress] = useState<DeliveryAddress>({
     address: '',
     addressDetail: '',
@@ -410,8 +412,14 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   useEffect(() => {
     if (state !== 'done' || !orderId) return;
     sessionStorage.removeItem('checkout_cart');
+    try {
+      // 바로 구매로 들어온 경우 장바구니의 다른 상품은 남겨야 하므로 결제한 회차 상품만 뺀다.
+      removeRoundItems(cartItems.map((item) => item.roundItemId));
+    } catch {
+      // 저장소 접근이 막혀도 결제 완료 화면 이동은 막지 않는다.
+    }
     router.replace(`/order/success?orderId=${orderId}`);
-  }, [orderId, router, state]);
+  }, [cartItems, orderId, removeRoundItems, router, state]);
 
   const totalAmount = cartItems.reduce((sum, item) => sum + item.roundPrice * item.quantity, 0);
   const isLoading = state === 'creating' || state === 'paying';

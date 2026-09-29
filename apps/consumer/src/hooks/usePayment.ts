@@ -206,6 +206,14 @@ function readOrderPaymentResponse(value: unknown, expectedAmount?: number): Orde
   };
 }
 
+/**
+ * 서버가 이번 요청으로 주문을 만들지 않고 확정 거절한 4xx인지 판정한다.
+ * 408(요청 시간 초과)·429(요청 제한)는 재시도 대상이라 결제 시도 ID를 유지한다.
+ */
+function isSettledRejection(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 export function usePayment(options: UsePaymentOptions): UsePaymentResult {
   const [state, setState] = useState<PaymentState>('idle');
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -223,6 +231,9 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
     transition('creating');
     setError(null);
     paymentAttemptId.current ??= crypto.randomUUID();
+    // 서버 거절·결제창 취소처럼 결과가 확정된 실패에서만 결제 시도 ID를 새로 만든다.
+    // 응답 없음·5xx처럼 서버 처리 여부가 불확실하면 같은 ID로 멱등 재시도해야 한다.
+    let attemptSettled = false;
 
     try {
       const configuration = readPortonePaymentConfiguration(options.paymentMethod);
@@ -239,6 +250,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
         },
       );
       if (!res.ok) {
+        attemptSettled = isSettledRejection(res.status);
         const body = await res.json().catch(() => ({}));
         throw new Error(body.message ?? '주문 생성 실패');
       }
@@ -259,11 +271,13 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
       });
 
       if (response && 'code' in response) {
+        attemptSettled = true;
         throw new Error(response.message ?? '결제가 취소되었습니다.');
       }
 
       transition('done');
     } catch (e: unknown) {
+      if (attemptSettled) paymentAttemptId.current = null;
       const message = e instanceof Error ? e.message : '오류가 발생했습니다.';
       setError(message);
       transition('error');
