@@ -318,10 +318,69 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     await expect(service.getOrder('driver-1', 'assigned-preparing')).resolves.not.toHaveProperty(
       'buyerPhone',
     );
+    // 고객 전화는 결제 때 받은 수령 연락처(deliveryPhone)를 우선한다.
     await expect(service.getOrder('driver-1', 'assigned-delivering')).resolves.toHaveProperty(
+      'buyerPhone',
+      '010-0000-0000',
+    );
+  });
+
+  it('본인 배정 직배송의 배송 중·보류 상세에 수령 연락처 우선 고객 전화를 반환한다', async () => {
+    const { service } = makeService({
+      'orders/delivering-profile-only': {
+        status: 'DELIVERING',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+        buyerPhone: '010-1111-1111',
+      },
+      'orders/delivering-kakao': {
+        status: 'DELIVERING',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+        buyerPhone: null,
+        deliveryPhone: '010-3333-3333',
+      },
+      'orders/held-direct': {
+        status: 'DELIVERY_HELD',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+        buyerPhone: null,
+        deliveryPhone: '010-3333-3333',
+        sellerPhone: '010-2222-2222',
+      },
+      'orders/held-hub': {
+        status: 'DELIVERY_HELD',
+        deliveryMethod: 'hub',
+        driverId: 'driver-1',
+        buyerPhone: '010-1111-1111',
+        deliveryPhone: '010-3333-3333',
+      },
+    });
+
+    // deliveryPhone이 없는 과거 주문은 가입 프로필 전화로 대체한다.
+    await expect(service.getOrder('driver-1', 'delivering-profile-only')).resolves.toHaveProperty(
       'buyerPhone',
       '010-1111-1111',
     );
+    // 카카오 가입자처럼 프로필 전화가 없어도 수령 연락처를 반환한다.
+    await expect(service.getOrder('driver-1', 'delivering-kakao')).resolves.toHaveProperty(
+      'buyerPhone',
+      '010-3333-3333',
+    );
+    // 보류 주문은 재배송 연락을 위해 고객 전화를 반환하고 판매자 전화는 그대로 숨긴다.
+    const held = await service.getOrder('driver-1', 'held-direct');
+    expect(held).toHaveProperty('buyerPhone', '010-3333-3333');
+    expect(held).not.toHaveProperty('sellerPhone');
+    expect(held).not.toHaveProperty('deliveryPhone');
+    // 거점 주문은 보류여도 소비자 연락처를 노출하지 않는다.
+    await expect(service.getOrder('driver-1', 'held-hub')).resolves.not.toHaveProperty(
+      'buyerPhone',
+    );
+    // 목록 응답에는 어떤 전화번호도 싣지 않는다.
+    for (const order of await service.getOrders('driver-1')) {
+      expect(order).not.toHaveProperty('buyerPhone');
+      expect(order).not.toHaveProperty('deliveryPhone');
+    }
   });
 
   it('상세 보류 정보도 화면에 필요한 필드만 반환한다', async () => {
