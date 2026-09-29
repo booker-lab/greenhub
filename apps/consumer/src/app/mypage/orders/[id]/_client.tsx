@@ -30,6 +30,7 @@ import {
   readCommandConfirmation,
   type CommandOutcome,
   IDLE_COMMAND_OUTCOME,
+  isDeliveryHoldActive,
   isNonEmptyString,
   isRecord,
   isSafeIdentifier,
@@ -655,7 +656,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Stack>
       </Paper>
 
-      {detail.deliveryHold && (
+      {detail.deliveryHold && isDeliveryHoldActive(detail) && (
         <Alert color="red" variant="light" radius="md" mb="lg" title="배송 보류">
           <Stack gap={6}>
             <Text size="sm">{detail.deliveryHold.reasonMessage}</Text>
