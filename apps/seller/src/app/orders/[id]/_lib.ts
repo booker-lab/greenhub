@@ -44,6 +44,11 @@ export function displayBuyerPhone(order: Pick<Order, 'deliveryPhone'>): string |
   return order.deliveryPhone?.trim() || null;
 }
 
+// 소비자 요청사항(받는 분·선물 문구·배송 요청). 없거나 공백뿐이면 영역을 그리지 않는다.
+export function displayRequestNote(order: Pick<Order, 'requestNote'>): string | null {
+  return order.requestNote?.trim() || null;
+}
+
 // tel: 링크에는 숫자와 맨 앞 +만 남긴다. 숫자가 없으면 링크를 만들지 않는다.
 export function toTelHref(phone: string): string | null {
   const trimmed = phone.trim();
