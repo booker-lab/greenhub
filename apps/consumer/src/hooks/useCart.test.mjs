@@ -28,7 +28,8 @@ new Function('require', 'module', 'exports', compiled)(
   cartModule.exports,
 );
 
-const { addCartItem, isRoundCartItem, parseCartSnapshot } = cartModule.exports;
+const { addCartItem, isRoundCartItem, parseCartSnapshot, removeCartRoundItems } =
+  cartModule.exports;
 
 const legacyItem = {
   productId: 'product-1',
@@ -180,4 +181,24 @@ test('저장소에 이미 혼합된 회차 데이터는 구매 가능한 장바�
 
   assert.deepEqual(parseCartSnapshot(JSON.stringify(mixedRounds)), []);
   assert.deepEqual(parseCartSnapshot(JSON.stringify([legacyItem, roundItem])), []);
+});
+
+test('결제 완료 정리는 결제한 roundItemId만 빼고 나머지 회차 항목은 보존한다', () => {
+  const otherRoundItem = {
+    ...roundItem,
+    productId: 'product-2',
+    roundItemId: 'round-item-2',
+  };
+
+  assert.deepEqual(removeCartRoundItems([roundItem, otherRoundItem], ['round-item-1']), [
+    otherRoundItem,
+  ]);
+  assert.deepEqual(removeCartRoundItems([roundItem, otherRoundItem], ['round-item-9']), [
+    roundItem,
+    otherRoundItem,
+  ]);
+});
+
+test('결제 완료 정리는 roundItemId가 없는 기존 장바구니 항목을 지우지 않는다', () => {
+  assert.deepEqual(removeCartRoundItems([legacyItem], ['round-item-1']), [legacyItem]);
 });
