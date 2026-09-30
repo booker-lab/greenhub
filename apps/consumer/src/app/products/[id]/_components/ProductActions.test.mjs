@@ -44,8 +44,10 @@ test('round_direct는 회차 가격과 직배송만 사용하고 legacy 선택 U
 test('round_direct는 isPurchasable이 거짓이면 두 구매 동작을 모두 비활성화한다', () => {
   assert.match(roundSource, /canBuy=\{roundProduct\.isPurchasable\}/);
   assert.match(roundSource, /canAddToCart=\{roundProduct\.isPurchasable\}/);
-  assert.match(roundSource, /addToCartLabel="장바구니 담기"/);
-  assert.match(roundSource, /buyNowLabel="바로 구매"/);
+  // 좁은 화면에서 잘리지 않도록 짧은 문구를 쓰고, 구매 불가일 때는 이유(주문 시작 전·마감)를 보여준다.
+  assert.match(roundSource, /addToCartLabel="장바구니"/);
+  assert.match(roundSource, /buyNowLabel=\{roundProduct\.isPurchasable \? '바로 구매' : undefined\}/);
+  assert.match(roundSource, /unavailableLabel=\{notOpenYet \? '주문 시작 전' : '주문 마감'\}/);
   assert.match(ctaSource, /disabled=\{!canAddToCart\}/);
   assert.match(ctaSource, /disabled=\{!canBuy\}/);
 });
