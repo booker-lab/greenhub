@@ -5,7 +5,7 @@ import ts from 'typescript';
 
 const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
 const testableSource = `${source}
-export { parseOrderId, readSuccessOrder };`;
+export { isReceivedStatus, parseOrderId, readSuccessOrder };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
     esModuleInterop: true,
@@ -43,7 +43,7 @@ new Function('require', 'module', 'exports', compiled)(
   pageModule.exports,
 );
 
-const { parseOrderId, readSuccessOrder } = pageModule.exports;
+const { isReceivedStatus, parseOrderId, readSuccessOrder } = pageModule.exports;
 
 const roundOrder = {
   id: 'round-order-1',
@@ -167,4 +167,28 @@ test('회차 성공 화면은 화요일 오전 9시 문 앞 배송 약속과 서
   assert.match(source, /주문 상품/);
   assert.match(source, /화요일 오전 9시까지 문 앞 배송/);
   assert.match(source, /successOrder\.items\.map/);
+});
+
+test('결제 확인·성공·취소 외 유효 상태는 접수 안내 화면으로 수렴한다', () => {
+  const received = [
+    'CONFIRMED',
+    'PREPARING',
+    'DELIVERING',
+    'DELIVERY_HELD',
+    'HUB_ARRIVED',
+    'PICKED_UP',
+    'DELIVERED',
+    'REVIEWED',
+  ];
+  for (const status of received) {
+    assert.equal(isReceivedStatus(status), true, status);
+  }
+  for (const status of ['PENDING', 'ACCEPTED', 'RECRUITING', 'CANCELLED', 'UNKNOWN']) {
+    assert.equal(isReceivedStatus(status), false, status);
+  }
+  // 진행 상태 주문도 성공 응답 판정에서 제외되어 오류 화면으로 가지 않는다.
+  assert.equal(readSuccessOrder({ ...roundOrder, status: 'PREPARING' }, 'round-order-1'), null);
+  assert.match(source, /주문이 접수되었습니다/);
+  assert.match(source, /isReceived && validOrder && !errorMessage/);
+  assert.equal(source.match(/<OrderResultActions/g)?.length, 2);
 });
