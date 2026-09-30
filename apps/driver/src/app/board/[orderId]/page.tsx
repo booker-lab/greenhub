@@ -686,7 +686,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               {isPreparing && order.sellerPhone && (
                 <ContactRow label="판매자" phone={order.sellerPhone} />
               )}
-              {isDelivering && !isHub && order.buyerPhone && (
+              {(isDelivering || isHeld) && !isHub && order.buyerPhone && (
                 <ContactRow label="소비자" phone={order.buyerPhone} />
               )}
               {isDelivering && isHub && order.sellerPhone && (
