@@ -50,6 +50,8 @@ export interface AdminOrder {
   // 회차 주문 판별(강제환불 허용 상태가 일반 주문과 다름)
   schemaVersion?: number;
   roundId?: string | null;
+  // 소비자 요청사항(회차 주문만)
+  requestNote?: string | null;
 }
 
 export interface AdminSettlement {

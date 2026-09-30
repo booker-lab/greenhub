@@ -15,6 +15,27 @@ interface OrdersTableProps {
   onRetry: () => void;
 }
 
+// 요청사항은 표 폭을 넓히지 않도록 주문번호 아래 작은 글씨로 최대 3줄만 보여준다.
+export function RequestNote({ note }: { note?: string | null }) {
+  const text = note?.trim();
+  if (!text) return null;
+  return (
+    <Text
+      lineClamp={3}
+      title={text}
+      style={{
+        fontSize: 'var(--font-size-xs)',
+        color: 'var(--color-text-secondary)',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        maxWidth: 240,
+      }}
+    >
+      요청: {text}
+    </Text>
+  );
+}
+
 const thBase = {
   padding: '12px 16px',
   fontWeight: 500,
@@ -109,6 +130,7 @@ export function OrdersTable({ orders, loading, error, processingId, onRefund, on
             >
               스토어 {order.storeId.slice(0, 8)}…
             </Text>
+            <RequestNote note={order.requestNote} />
             <Group justify="space-between" align="center" mt="xs">
               <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
                 ₩{order.totalAmount.toLocaleString()}
@@ -181,6 +203,7 @@ export function OrdersTable({ orders, loading, error, processingId, onRefund, on
                   >
                     {order.orderNumber ?? `${order.id.slice(0, 12)}…`}
                   </Text>
+                  <RequestNote note={order.requestNote} />
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px' }}>
                   <Text

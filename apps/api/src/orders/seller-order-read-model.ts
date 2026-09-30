@@ -27,6 +27,7 @@ const DETAIL_FIELDS = [
   'hubId',
   'cancelReason',
   'buyerName',
+  'requestNote',
 ] as const;
 
 const DELIVERY_HOLD_FIELDS = [
