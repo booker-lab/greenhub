@@ -11,23 +11,16 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+  // 카메라는 배송 사진 촬영에 쓰며 자기 출처만 허용한다. 경로별로 나누면 클라이언트 이동 시
+  // 처음 문서의 정책이 유지되어 촬영 화면에서 getUserMedia가 막히므로 앱 전체에 같은 정책을 둔다.
+  { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
 ];
-
-const pilotPhotoPermissionsPolicy = {
-  key: 'Permissions-Policy',
-  value: 'camera=(self), microphone=(), geolocation=()',
-};
 
 const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: '/(.*)', headers: securityHeaders },
-      {
-        source: '/board/:orderId/photo/round-direct',
-        headers: [pilotPhotoPermissionsPolicy],
-      },
     ];
   },
   images: {
