@@ -25,7 +25,8 @@ new Function('require', 'module', 'exports', compiled)(
   helperModule.exports,
 );
 
-const { readOrderDetail, readRedeliveryPaymentResponse } = helperModule.exports;
+const { isDeliveryHoldActive, readOrderDetail, readRedeliveryPaymentResponse } =
+  helperModule.exports;
 
 const activeOrder = {
   id: 'round-order-active',
@@ -135,7 +136,7 @@ test('활성·보류·완료·취소 회차 주문 fixture는 상호 배타 상�
         canPay: true,
         paymentStatus: 'MISSING',
         paymentRequired: true,
-        canCancel: true,
+        canCancel: false,
       },
       {
         status: 'DELIVERED',
@@ -180,6 +181,136 @@ test('활성·보류·완료·취소 회차 주문 fixture는 상호 배타 상�
       subtotalAmount: 80000,
     },
   ]);
+});
+
+test('회차 주문 직접 취소는 주문 마감 전에만 존재하는 PENDING·ACCEPTED에서만 노출한다', () => {
+  const holdFields = {
+    deliveryHold: {
+      heldAt: '2026-07-21T01:00:00.000Z',
+      reasonCode: 'WEATHER',
+      reasonMessage: '기상 악화로 배송을 보류합니다.',
+      customerResponsible: false,
+      redeliveryFee: null,
+      nextContactAt: null,
+      nextDeliveryAt: null,
+      resolvedAt: null,
+    },
+  };
+  const statuses = [
+    'PENDING',
+    'ACCEPTED',
+    'PREPARING',
+    'DELIVERY_HELD',
+    'DELIVERING',
+    'DELIVERED',
+    'REVIEWED',
+    'CANCELLED',
+  ];
+  const result = Object.fromEntries(
+    statuses.map((status) => {
+      const detail = readOrderDetail(
+        {
+          ...activeOrder,
+          id: `round-order-${status}`,
+          status,
+          ...(status === 'DELIVERY_HELD' ? holdFields : {}),
+        },
+        `round-order-${status}`,
+      );
+      assert.ok(detail, status);
+      return [status, detail.canRequestCancellation];
+    }),
+  );
+  assert.deepEqual(result, {
+    PENDING: true,
+    ACCEPTED: true,
+    PREPARING: false,
+    DELIVERY_HELD: false,
+    DELIVERING: false,
+    DELIVERED: false,
+    REVIEWED: false,
+    CANCELLED: false,
+  });
+});
+
+test('해제된 배송 보류는 경고로 남기지 않고 결제 후 배송 재개 대기 보류는 유지한다', () => {
+  const baseHold = {
+    heldAt: '2026-07-21T01:00:00.000Z',
+    reasonCode: 'ACCESS_UNAVAILABLE',
+    reasonMessage: '공동현관 출입이 불가능합니다.',
+    customerResponsible: true,
+    redeliveryFee: 5000,
+    nextContactAt: null,
+    nextDeliveryAt: null,
+  };
+  const paidPayment = {
+    required: true,
+    holdAt: '2026-07-21T01:00:00.000Z',
+    chargeId: 'charge-1',
+    status: 'PAID',
+    canPay: false,
+    paid: true,
+    requiresRecovery: false,
+  };
+  const read = (name, overrides) =>
+    readOrderDetail(
+      { ...activeOrder, id: `round-order-${name}`, ...overrides },
+      `round-order-${name}`,
+    );
+
+  const held = read('held', {
+    status: 'DELIVERY_HELD',
+    deliveryHold: { ...baseHold, resolvedAt: null },
+    redeliveryPayment: {
+      ...paidPayment,
+      chargeId: null,
+      status: 'MISSING',
+      canPay: true,
+      paid: false,
+    },
+  });
+  const awaitingResume = read('awaiting-resume', {
+    status: 'PREPARING',
+    deliveryHold: { ...baseHold, resolvedAt: null },
+    redeliveryPayment: paidPayment,
+  });
+  const delivered = read('delivered', {
+    status: 'DELIVERED',
+    deliveryHold: { ...baseHold, resolvedAt: '2026-07-22T02:00:00.000Z' },
+  });
+  const resumedFree = read('resumed-free', {
+    status: 'PREPARING',
+    deliveryHold: {
+      ...baseHold,
+      customerResponsible: false,
+      redeliveryFee: null,
+      resolvedAt: '2026-07-21T05:00:00.000Z',
+    },
+  });
+  const invalidResolvedAt = read('invalid-resolved', {
+    status: 'PREPARING',
+    deliveryHold: { ...baseHold, resolvedAt: 'not-a-date' },
+    redeliveryPayment: paidPayment,
+  });
+
+  assert.equal(held?.deliveryHold?.resolvedAt, null);
+  assert.equal(delivered?.deliveryHold?.resolvedAt, '2026-07-22T02:00:00.000Z');
+  assert.deepEqual(
+    [held, awaitingResume, delivered, resumedFree, invalidResolvedAt].map((detail) =>
+      detail ? isDeliveryHoldActive(detail) : 'unreadable',
+    ),
+    [true, true, false, false, true],
+  );
+  assert.equal(awaitingResume?.redeliveryPayment.paid, true);
+  assert.equal(isDeliveryHoldActive({ status: 'DELIVERY_HELD', deliveryHold: null }), false);
+  assert.equal(
+    isDeliveryHoldActive({
+      status: 'DELIVERY_HELD',
+      deliveryHold: { ...baseHold, resolvedAt: '2026-07-21T05:00:00.000Z' },
+    }),
+    true,
+  );
+  assert.ok(source.includes('{detail.deliveryHold && isDeliveryHoldActive(detail) && ('));
 });
 
 test('서버 redeliveryPayment 상태가 주문 상태와 독립적으로 결제 상태를 결정한다', () => {

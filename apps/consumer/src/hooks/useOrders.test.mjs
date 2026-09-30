@@ -370,3 +370,67 @@ test('MyPage retry는 window.location.reload를 사용하지 않는다', () => {
   assert.doesNotMatch(clientSource, /location\.reload/);
   assert.doesNotMatch(hookSource, /location\.reload/);
 });
+
+function loadPureExports() {
+  const pureModule = { exports: {} };
+  const requireForPure = (specifier) => {
+    if (specifier === 'react') return {};
+    if (specifier === 'next-auth/react') return {};
+    if (specifier === '@/lib/api-base-url') return { getApiBaseUrl: () => API_BASE_URL };
+    throw new Error(`예상하지 못한 주문 조회 모듈 요청: ${specifier}`);
+  };
+  new Function('require', 'module', 'exports', compiled)(
+    requireForPure,
+    pureModule,
+    pureModule.exports,
+  );
+  return pureModule.exports;
+}
+
+test('createdAt은 ISO 문자열·직렬화 Timestamp를 안전하게 밀리초로 읽는다', () => {
+  const { readCreatedAtMillis } = loadPureExports();
+  assert.equal(readCreatedAtMillis('2026-09-01T00:00:00.000Z'), Date.UTC(2026, 8, 1));
+  assert.equal(
+    readCreatedAtMillis({ _seconds: 1_790_000_000, _nanoseconds: 500_000_000 }),
+    1_790_000_000_500,
+  );
+  assert.equal(readCreatedAtMillis({ seconds: 1_790_000_000, nanoseconds: 0 }), 1_790_000_000_000);
+  assert.equal(readCreatedAtMillis(1_790_000_000_000), 1_790_000_000_000);
+  for (const invalid of [undefined, null, '', 'not-a-date', {}, { _seconds: 'x' }, Number.NaN]) {
+    assert.ok(Number.isNaN(readCreatedAtMillis(invalid)), String(invalid));
+  }
+});
+
+test('주문 목록은 createdAt 내림차순이고 읽을 수 없는 시각은 뒤에서 원래 순서를 유지한다', () => {
+  const { sortOrdersNewestFirst } = loadPureExports();
+  const input = [
+    { id: 'old-iso', createdAt: '2026-08-01T00:00:00.000Z' },
+    { id: 'broken-1', createdAt: 'not-a-date' },
+    { id: 'new-ts', createdAt: { _seconds: Date.UTC(2026, 8, 20) / 1000, _nanoseconds: 0 } },
+    { id: 'missing' },
+    { id: 'mid-iso', createdAt: '2026-09-10T00:00:00.000Z' },
+    { id: 'mid-iso-same', createdAt: '2026-09-10T00:00:00.000Z' },
+  ];
+  const sorted = sortOrdersNewestFirst(input);
+  assert.deepEqual(
+    sorted.map((order) => order.id),
+    ['new-ts', 'mid-iso', 'mid-iso-same', 'old-iso', 'broken-1', 'missing'],
+  );
+  assert.deepEqual(
+    input.map((order) => order.id),
+    ['old-iso', 'broken-1', 'new-ts', 'missing', 'mid-iso', 'mid-iso-same'],
+    '입력 배열을 변경하지 않는다',
+  );
+});
+
+test('useOrders는 서버 응답 순서와 무관하게 최신 주문을 먼저 노출한다', async () => {
+  const older = { id: 'hash-zzz', createdAt: '2026-09-01T00:00:00.000Z' };
+  const newer = { id: 'hash-aaa', createdAt: '2026-09-20T00:00:00.000Z' };
+  const harness = mountHook({ fetchImpl: async () => okResponse([older, newer]) });
+  await harness.settle();
+
+  assert.deepEqual(
+    harness.get().orders.map((order) => order.id),
+    ['hash-aaa', 'hash-zzz'],
+  );
+});
