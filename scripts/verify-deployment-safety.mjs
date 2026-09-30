@@ -14,10 +14,12 @@ for (const app of apps) {
   const path = `apps/${app}/vercel.json`;
   const config = JSON.parse(readFileSync(path, 'utf8'));
 
+  // 커밋 푸시로 생기는 자동 배포는 모든 브랜치에서 끈다. Preview(E2E용 exact)와
+  // production은 검증된 SHA를 지정해 REST API로만 만든다(Vercel Hobby 하루 100건 한도 보호).
   assert.equal(
-    config.git?.deploymentEnabled?.main,
+    config.git?.deploymentEnabled,
     false,
-    `${path}: git.deploymentEnabled.main must remain false`,
+    `${path}: git.deploymentEnabled must remain false (no automatic Git deployments on any branch)`,
   );
   assert.equal(
     config.ignoreCommand,
