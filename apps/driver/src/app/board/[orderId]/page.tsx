@@ -686,7 +686,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               {isPreparing && order.sellerPhone && (
                 <ContactRow label="판매자" phone={order.sellerPhone} />
               )}
-              {isDelivering && !isHub && order.buyerPhone && (
+              {(isDelivering || isHeld) && !isHub && order.buyerPhone && (
                 <ContactRow label="소비자" phone={order.buyerPhone} />
               )}
               {isDelivering && isHub && order.sellerPhone && (
@@ -718,7 +718,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       </Box>
 
       {/* 하단 CTA */}
-      <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
+      <Box
+        style={{
+          position: 'sticky',
+          bottom: 'calc(72px + env(safe-area-inset-bottom))',
+          padding: '0 16px 16px',
+        }}
+      >
         {isHeld &&
           isRoundDirect &&
           (deliveryStartAllowed ? (
@@ -767,7 +773,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                 loading={loading}
                 disabled={!commandsAllowed}
                 onClick={() =>
-                  router.push(`/board/${orderId}/photo/round-direct?storeId=${order.storeId}`)
+                  // Permissions-Policy는 문서 최초 로드 때 정해진다. 클라이언트 이동(router.push)은
+                  // 현재 문서의 camera=()를 유지하므로, 촬영 경로 전용 camera=(self) 헤더를 받도록 문서째 이동한다.
+                  window.location.assign(
+                    `/board/${orderId}/photo/round-direct?storeId=${order.storeId}`,
+                  )
                 }
               >
                 배송 완료 사진 촬영
