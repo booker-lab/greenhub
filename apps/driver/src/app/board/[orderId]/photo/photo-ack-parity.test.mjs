@@ -104,3 +104,13 @@ test('legacy Storage lifecycle을 건드리지 않는다', () => {
   assert.match(photoCaptureSource, /uploadLegacyHubPhoto\(orderId,\s*blob\)/);
   assert.doesNotMatch(photoCaptureSource, /deleteObject|uploadDeliveryPhoto/);
 });
+
+// 촬영 화면은 문서 이동으로 열려 세션을 다시 받는다. 세션 전에 완료를 누르면 upload()가
+// 조용히 반환하므로, 완료 버튼은 세션 준비 전까지 비활성이어야 한다.
+test('완료 버튼은 세션(access token)이 준비되기 전까지 비활성이다', () => {
+  assert.match(
+    photoCaptureSource,
+    /const sessionReady = Boolean\(session\?\.user\?\.accessToken\);/,
+  );
+  assert.match(photoCaptureSource, /disabled=\{!captured \|\| uploading \|\| !sessionReady\}/);
+});
