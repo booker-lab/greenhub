@@ -1,9 +1,11 @@
-import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 
-export async function proxy(request: NextRequest) {
-  const session = await auth();
+// auth() 래퍼로 감싸야 proxy에서 토큰이 갱신될 때 새 세션 쿠키가 응답에 실린다.
+// 인자 없이 `await auth()`를 부르면 갱신된 쿠키가 버려져 다음 요청이 이미 회전된
+// refresh token을 다시 보내고, API가 이를 재사용으로 보고 세션을 폐기한다.
+export const proxy = auth((request) => {
+  const session = request.auth;
   const { pathname } = request.nextUrl;
 
   // 미로그인 → /login 리다이렉트
@@ -27,7 +29,7 @@ export async function proxy(request: NextRequest) {
   // storeId 있어도 /onboarding 재접근 허용 — 설정 > 사업자 정보 수정 경로
 
   return NextResponse.next();
-}
+});
 
 export const config = {
   matcher: [
