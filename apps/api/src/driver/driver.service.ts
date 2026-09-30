@@ -136,6 +136,11 @@ export class DriverService {
     const deliveryAddress = this.projectDeliveryAddress(order['deliveryAddress']);
     if (deliveryAddress) projected['deliveryAddress'] = deliveryAddress;
 
+    // 요청사항에는 받는 분 정보가 들어갈 수 있어 배정된 기사에게만 보인다.
+    if (isAssignedToRequester && typeof order['requestNote'] === 'string') {
+      projected['requestNote'] = order['requestNote'];
+    }
+
     if (order['status'] === 'DELIVERY_HELD') {
       const deliveryHold = this.projectDeliveryHold(order['deliveryHold']);
       if (deliveryHold) projected['deliveryHold'] = deliveryHold;
@@ -148,12 +153,14 @@ export class DriverService {
     ) {
       projected['sellerPhone'] = order['sellerPhone'];
     }
+    // 고객 전화는 본인 배정 직배송 주문의 배송 중·보류(재배송 연락) 단계에서만 노출한다.
+    // 값은 결제 때 받은 수령 연락처(deliveryPhone)를 우선하고, 없으면 가입 프로필 전화로 대체한다.
     if (
       isAssignedToRequester &&
-      order['status'] === 'DELIVERING' &&
+      (order['status'] === 'DELIVERING' || order['status'] === 'DELIVERY_HELD') &&
       order['deliveryMethod'] !== 'hub'
     ) {
-      projected['buyerPhone'] = order['buyerPhone'];
+      projected['buyerPhone'] = order['deliveryPhone'] ?? order['buyerPhone'];
     }
 
     return projected;

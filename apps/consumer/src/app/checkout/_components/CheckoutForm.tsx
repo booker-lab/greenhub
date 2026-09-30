@@ -1,6 +1,10 @@
 'use client';
 
-import type { DeliveryAddress, DeliveryMethod } from '@greenhub/shared';
+import {
+  type DeliveryAddress,
+  type DeliveryMethod,
+  ORDER_REQUEST_NOTE_MAX_LENGTH,
+} from '@greenhub/shared';
 import {
   Alert,
   Button,
@@ -10,6 +14,7 @@ import {
   Paper,
   Stack,
   Text,
+  Textarea,
   TextInput,
   Title,
 } from '@mantine/core';
@@ -39,6 +44,9 @@ export interface CheckoutFormProps {
   onAddressChange: (a: DeliveryAddress) => void;
   deliveryPhone: string;
   onDeliveryPhoneChange: (phone: string) => void;
+  /** 회차 주문에서만 넘긴다. 없으면 요청사항 칸을 그리지 않는다. */
+  requestNote?: string;
+  onRequestNoteChange?: (note: string) => void;
   paymentMethod: PaymentMethod;
   onPaymentMethodChange: (m: PaymentMethod) => void;
   isLoading: boolean;
@@ -71,6 +79,8 @@ export default function CheckoutForm({
   onAddressChange,
   deliveryPhone,
   onDeliveryPhoneChange,
+  requestNote,
+  onRequestNoteChange,
   paymentMethod,
   onPaymentMethodChange,
   isLoading,
@@ -274,6 +284,22 @@ export default function CheckoutForm({
           radius="md"
           required
         />
+        {isRoundCheckout && onRequestNoteChange && (
+          <Textarea
+            label="요청사항 (선택)"
+            description={`받는 분 성함·연락처, 선물 문구, 배송 요청을 적어 주세요. (${
+              requestNote?.length ?? 0
+            }/${ORDER_REQUEST_NOTE_MAX_LENGTH})`}
+            placeholder="예) 받는 분 김그린 010-0000-0000 / 문구: 개업을 축하합니다"
+            value={requestNote ?? ''}
+            onChange={(e) => onRequestNoteChange(e.target.value)}
+            maxLength={ORDER_REQUEST_NOTE_MAX_LENGTH}
+            autosize
+            minRows={2}
+            maxRows={6}
+            radius="md"
+          />
+        )}
       </Stack>
 
       {isRoundCheckout && (

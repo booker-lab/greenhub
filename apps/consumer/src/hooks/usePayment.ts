@@ -22,7 +22,7 @@ export type RoundPaymentOrderRequest = Pick<
   CreateOrderRequest,
   'deliveryAddress' | 'deliveryPhone'
 > &
-  Partial<Pick<CreateOrderRequest, 'requestedDeliveryDate' | 'acquisition'>>;
+  Partial<Pick<CreateOrderRequest, 'requestedDeliveryDate' | 'acquisition' | 'requestNote'>>;
 
 export type UsePaymentOptions = BasePaymentOptions &
   (
@@ -145,6 +145,7 @@ function prepareRoundOrderRequest(
         ? { requestedDeliveryDate: orderRequest.requestedDeliveryDate }
         : {}),
       ...(orderRequest.acquisition ? { acquisition: orderRequest.acquisition } : {}),
+      ...(orderRequest.requestNote ? { requestNote: orderRequest.requestNote } : {}),
       roundId: firstItem.roundId,
       roundItems: roundItems.map((item) => ({
         roundItemId: item.roundItemId,

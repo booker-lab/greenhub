@@ -1,7 +1,7 @@
 import type { OrderStatus } from '@greenhub/shared';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { OrdersTable } from './OrdersTable';
+import { OrdersTable, RequestNote } from './OrdersTable';
 
 type Props = ComponentProps<typeof OrdersTable>;
 
@@ -132,5 +132,39 @@ describe('Admin OrdersTable read state', () => {
       processingId: 'o1',
     });
     expect(textsOf(processing)).toContain('처리중…');
+  });
+});
+
+/** 렌더 트리에서 주어진 컴포넌트 요소의 props를 수집한다. */
+function propsOf<P>(tree: ReactNode, type: unknown): P[] {
+  const out: P[] = [];
+  const visit = (current: ReactNode): void => {
+    if (Array.isArray(current)) {
+      for (const child of current) visit(child);
+      return;
+    }
+    if (!isElement(current)) return;
+    if ((current as ReactElement).type === type) out.push(current.props as P);
+    visit(current.props.children);
+  };
+  visit(tree);
+  return out;
+}
+
+describe('Admin OrdersTable 요청사항', () => {
+  it('요청사항이 있는 주문은 모바일 카드와 데스크톱 행 모두에 넘긴다', () => {
+    const tree = OrdersTable({
+      ...baseProps,
+      orders: [{ ...order('o1', 'ORD-1'), requestNote: '문구: 개업 축하' }],
+    });
+    const notes = propsOf<{ note?: string | null }>(tree, RequestNote).map((props) => props.note);
+    expect(notes).toEqual(['문구: 개업 축하', '문구: 개업 축하']);
+  });
+
+  it('요청사항 문구를 보여주고 없거나 공백뿐이면 그리지 않는다', () => {
+    expect(textsOf(RequestNote({ note: ' 문구: 개업 축하 ' }))).toContain('문구: 개업 축하');
+    expect(RequestNote({ note: '   ' })).toBeNull();
+    expect(RequestNote({ note: null })).toBeNull();
+    expect(RequestNote({})).toBeNull();
   });
 });
