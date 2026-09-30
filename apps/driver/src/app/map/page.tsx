@@ -399,7 +399,13 @@ export default function MapPage() {
 
       {/* 주행 시작 버튼: error/stale에서는 fail-closed로 비활성화한다 */}
       {sorted.length > 0 && !loading && !authRequired && !error && hasSuccessfulRead && (
-        <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
+        <Box
+          style={{
+            position: 'sticky',
+            bottom: 'calc(72px + env(safe-area-inset-bottom))',
+            padding: '0 16px 16px',
+          }}
+        >
           <Button
             component="a"
             href={buildKakaoNaviUrl()}
@@ -413,7 +419,13 @@ export default function MapPage() {
         </Box>
       )}
       {sorted.length > 0 && error && hasSuccessfulRead && (
-        <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
+        <Box
+          style={{
+            position: 'sticky',
+            bottom: 'calc(72px + env(safe-area-inset-bottom))',
+            padding: '0 16px 16px',
+          }}
+        >
           <Stack gap="xs">
             <Button fullWidth size="lg" radius="xl" color="gray" disabled>
               주행 시작 (카카오내비)
