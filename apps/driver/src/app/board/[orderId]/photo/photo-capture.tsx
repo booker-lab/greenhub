@@ -25,6 +25,9 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
   const storeId = useSearchParams().get('storeId') ?? '';
   const isRoundDirect = mode === 'round-direct';
   const { data: session } = useSession();
+  // 촬영 화면은 문서 이동으로 열리므로 세션을 다시 받는 동안 완료 버튼을 막는다
+  // (세션 없이 누르면 업로드가 조용히 무시되어 화면에 머문다).
+  const sessionReady = Boolean(session?.user?.accessToken);
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -495,7 +498,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
           <Button
             flex={1}
             onClick={upload}
-            disabled={!captured || uploading}
+            disabled={!captured || uploading || !sessionReady}
             color="brand"
             radius="xl"
             size="lg"
