@@ -8,6 +8,7 @@ import { createHash } from 'crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import {
   assertOrderWindowOpen,
+  resolveAutomaticState,
   type SaleRoundRecord,
   timestampMillis,
 } from '../sale-rounds/sale-round-state.contract';
@@ -121,8 +122,11 @@ export class OrderCapacityService {
     if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
       throw new NotFoundException('회차를 찾을 수 없습니다.');
     }
-    const round = roundSnap.data() as Record<string, any>;
     const now = this.firestore.Timestamp.now();
+    const { round, statusTransition } = this.effectiveRound(
+      roundSnap.data() as Record<string, any>,
+      timestampMillis(now),
+    );
     this.assertRoundReservable(round, timestampMillis(now));
     this.assertDeliveryCity(input.deliveryAddress.address, round['deliveryRegion']?.['city']);
 
@@ -195,6 +199,7 @@ export class OrderCapacityService {
 
     tx.set(reservationRef, reservation);
     tx.update(roundRef, {
+      ...statusTransition,
       counters: nextReserveCounters,
       updatedAt: nowIso,
     });
@@ -519,12 +524,15 @@ export class OrderCapacityService {
     if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
       throw new LatePaymentCapacityError('결제 만료 후 회차 한도 마감');
     }
-    const round = roundSnap.data() as Record<string, any>;
     const now = this.firestore.Timestamp.now();
     const nowMillis = timestampMillis(now);
     if (!Number.isFinite(nowMillis)) {
       throw new LatePaymentCapacityError('결제 만료 후 회차 한도 마감');
     }
+    const { round, statusTransition } = this.effectiveRound(
+      roundSnap.data() as Record<string, any>,
+      nowMillis,
+    );
     // Window / city / upper-bound failures all converge to refund (no orphan).
     try {
       this.assertRoundReservable(round, nowMillis);
@@ -600,7 +608,7 @@ export class OrderCapacityService {
       orderedItemQuantity: totalQuantity,
     });
     tx.set(reservationRef, reservation);
-    tx.update(roundRef, { counters: nextCounters, updatedAt: nowIso });
+    tx.update(roundRef, { ...statusTransition, counters: nextCounters, updatedAt: nowIso });
     itemRecords.forEach((item) => {
       tx.update(this.firestore.doc(`saleRoundItems/${item.input.roundItemId}`), {
         orderedQuantity:
@@ -762,6 +770,18 @@ export class OrderCapacityService {
     });
 
     return { ...reservation, ...update } as ReservationRecord;
+  }
+
+  // 공개 조회와 같은 자동 상태 계산으로 판정한다. 저장값이 아직 SCHEDULED여도
+  // 주문 시작 시각이 지났으면 OPEN으로 보고, 예약이 성립하면 그 전이를 같은
+  // 트랜잭션에서 함께 저장한다(refreshStatus와 같은 규칙).
+  private effectiveRound(stored: Record<string, any>, nowMillis: number) {
+    const next = resolveAutomaticState(stored as SaleRoundRecord, nowMillis);
+    const changed = next.status !== stored['status'] || next.closeReason !== stored['closeReason'];
+    return {
+      round: changed ? { ...stored, ...next } : stored,
+      statusTransition: changed ? next : {},
+    };
   }
 
   private assertRoundReservable(round: Record<string, any>, nowMillis: number) {
