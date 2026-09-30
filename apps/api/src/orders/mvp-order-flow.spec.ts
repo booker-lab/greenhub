@@ -267,6 +267,50 @@ describe('MVP 회차 주문 흐름 계약', () => {
     expect(error).toBeInstanceOf(ConflictException);
   });
 
+  it('요청사항은 앞뒤 공백과 줄바꿈을 정리해 저장하고 비어 있으면 null로 저장한다', async () => {
+    const { firestore, records } = makeFirestore(seedRoundRecords());
+    const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
+    const service = new RoundOrderCreateService(firestore as never, capacity, {
+      saveRecord: jest.fn().mockResolvedValue({}),
+    } as never);
+
+    const withNote = await service.create(
+      'store-round',
+      'user-1',
+      roundOrderRequest({ requestNote: '  받는 분 김그린\r\n토퍼: 개업 축하  ' }) as never,
+    );
+    const blank = await service.create(
+      'store-round',
+      'user-1',
+      roundOrderRequest({ clientOrderRequestId: 'payment-attempt-2', requestNote: '   ' }) as never,
+    );
+
+    expect(records.get(`orders/${withNote.orderId}`)?.['requestNote']).toBe(
+      '받는 분 김그린\n토퍼: 개업 축하',
+    );
+    expect(records.get(`orders/${blank.orderId}`)?.['requestNote']).toBeNull();
+  });
+
+  it('같은 결제 시도 ID에 요청사항만 달라도 충돌로 거부하고, 빈 요청사항은 없는 것과 같게 본다', async () => {
+    const { firestore } = makeFirestore(seedRoundRecords());
+    const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
+    const service = new RoundOrderCreateService(firestore as never, capacity, {
+      saveRecord: jest.fn().mockResolvedValue({}),
+    } as never);
+
+    const first = await service.create('store-round', 'user-1', roundOrderRequest() as never);
+    await expect(
+      service.create('store-round', 'user-1', roundOrderRequest({ requestNote: ' ' }) as never),
+    ).resolves.toEqual(first);
+    await expect(
+      service.create(
+        'store-round',
+        'user-1',
+        roundOrderRequest({ requestNote: '토퍼: 승진 축하' }) as never,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
   it('주문 저장 직전 실패해도 예약과 카운터 부분 데이터가 남지 않는다', async () => {
     const { firestore, records } = makeFirestore(seedRoundRecords());
     const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
