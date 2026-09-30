@@ -718,7 +718,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       </Box>
 
       {/* 하단 CTA */}
-      <Box style={{ position: 'sticky', bottom: 72, padding: '0 16px 16px' }}>
+      <Box
+        style={{
+          position: 'sticky',
+          bottom: 'calc(72px + env(safe-area-inset-bottom))',
+          padding: '0 16px 16px',
+        }}
+      >
         {isHeld &&
           isRoundDirect &&
           (deliveryStartAllowed ? (
