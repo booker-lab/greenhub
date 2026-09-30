@@ -1,3 +1,4 @@
+import { ORDER_REQUEST_NOTE_MAX_LENGTH } from '@greenhub/shared';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -10,6 +11,7 @@ import {
   IsString,
   IsUrl,
   Matches,
+  MaxLength,
   Min,
   ValidateIf,
   ValidateNested,
@@ -111,6 +113,12 @@ export class CreateOrderDto {
   @IsString()
   @Matches(/^[0-9+\-\s()]{8,20}$/, { message: 'deliveryPhone은 유효한 전화번호 형식이어야 합니다.' })
   deliveryPhone: string;
+
+  // 회차 주문 요청사항(받는 분·토퍼 문구·배송 요청). 일반 주문은 저장하지 않는다.
+  @IsOptional()
+  @IsString()
+  @MaxLength(ORDER_REQUEST_NOTE_MAX_LENGTH)
+  requestNote?: string;
 
   // 일반 주문(슬롯 검증 대상)에서만 필수 — 택배·공동구매는 옵셔널
   @ValidateIf((o) => o.saleType === 'normal' && o.deliveryMethod !== 'parcel')

@@ -243,6 +243,23 @@ test('회차 장바구니는 usePayment 회차 계약과 단일 주문 ID 완료
   );
 });
 
+test('회차 결제 완료 뒤 결제한 회차 상품만 로컬 장바구니에서 제거한다', () => {
+  const start = source.indexOf('function RoundCartCheckoutContent');
+  const end = source.indexOf('function CartCheckoutContent', start);
+  const roundCheckoutSource = source.slice(start, end);
+
+  assert.match(roundCheckoutSource, /const \{ removeRoundItems \} = useCart\(\)/);
+  assert.match(
+    roundCheckoutSource,
+    /removeRoundItems\(cartItems\.map\(\(item\) => item\.roundItemId\)\)/,
+  );
+  assert.doesNotMatch(roundCheckoutSource, /clearCart/);
+  const doneGuard = roundCheckoutSource.indexOf("state !== 'done' || !orderId");
+  const removal = roundCheckoutSource.indexOf('removeRoundItems(cartItems');
+  const redirect = roundCheckoutSource.indexOf('router.replace(`/order/success');
+  assert.ok(doneGuard < removal && removal < redirect);
+});
+
 test('회차 checkout은 mount 뒤 재검증한 유입 스냅샷만 주문 요청에 포함한다', () => {
   const start = source.indexOf('function RoundCartCheckoutContent');
   const end = source.indexOf('function CartCheckoutContent', start);

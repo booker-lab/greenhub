@@ -39,7 +39,7 @@ test.after(() => {
   }
 });
 
-function loadHook() {
+function loadHook({ paymentResponses = [] } = {}) {
   const paymentCalls = [];
   const stateChanges = [];
   const paymentModule = { exports: {} };
@@ -82,7 +82,7 @@ function loadHook() {
       return {
         requestPayment: async (parameters) => {
           paymentCalls.push(parameters);
-          return undefined;
+          return paymentResponses.shift();
         },
       };
     }
@@ -101,9 +101,10 @@ function loadHook() {
   };
 }
 
-function jsonResponse(body, ok = true) {
+function jsonResponse(body, ok = true, status = ok ? 200 : 400) {
   return {
     ok,
+    status,
     json: async () => body,
   };
 }
@@ -156,8 +157,8 @@ const successfulRoundResponse = {
   },
 };
 
-function createRoundHook(roundItems = [firstRoundItem, secondRoundItem]) {
-  const loaded = loadHook();
+function createRoundHook(roundItems = [firstRoundItem, secondRoundItem], hookOptions = {}) {
+  const loaded = loadHook(hookOptions);
   // biome-ignore lint/correctness/useHookAtTopLevel: React를 모의한 훅 계약 단위 테스트다.
   const result = loaded.usePayment({
     storeId: 'store-1',
@@ -196,6 +197,33 @@ test('검증된 같은 회차 상품 전체를 주문 한 번과 PortOne 결제 
   assert.equal(paymentCalls.length, 1);
   assert.equal(paymentCalls[0].paymentId, 'order-1');
   assert.equal(paymentCalls[0].totalAmount, 69000);
+});
+
+test('회차 주문 요청사항은 있을 때만 주문 요청에 담는다', async () => {
+  const bodies = [];
+  globalThis.fetch = async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return jsonResponse(successfulRoundResponse);
+  };
+
+  for (const orderRequest of [
+    { ...deliveryRequest, requestNote: '받는 분 김그린 / 선물 문구: 개업 축하' },
+    deliveryRequest,
+  ]) {
+    const loaded = loadHook();
+    // biome-ignore lint/correctness/useHookAtTopLevel: React를 모의한 훅 계약 단위 테스트다.
+    const result = loaded.usePayment({
+      storeId: 'store-1',
+      orderRequest,
+      roundItems: [firstRoundItem, secondRoundItem],
+      accessToken: 'access-token',
+      paymentMethod: 'kakaopay',
+    });
+    await result.requestPayment();
+  }
+
+  assert.equal(bodies[0].requestNote, '받는 분 김그린 / 선물 문구: 개업 축하');
+  assert.equal(Object.hasOwn(bodies[1], 'requestNote'), false);
 });
 
 test('빈 배열·다른 회차 혼합·손상 항목은 주문 API 호출 전에 거부한다', async () => {
@@ -270,6 +298,83 @@ test('네트워크 오류 재시도에는 같은 clientOrderRequestId를 재사�
   assert.equal(requestBodies.length, 2);
   assert.equal(requestBodies[0].clientOrderRequestId, requestBodies[1].clientOrderRequestId);
   assert.equal(paymentCalls.length, 1);
+});
+
+test('결제창 취소·실패(code 응답) 뒤 재시도는 새 clientOrderRequestId로 주문한다', async () => {
+  const requestBodies = [];
+  globalThis.fetch = async (_url, init) => {
+    requestBodies.push(JSON.parse(init.body));
+    return jsonResponse(successfulRoundResponse);
+  };
+  const { result, paymentCalls, stateChanges } = createRoundHook(undefined, {
+    paymentResponses: [{ code: 'FAILURE_TYPE_PG', message: '사용자가 결제를 취소했습니다.' }],
+  });
+
+  await result.requestPayment();
+  assert.equal(stateChanges.at(-1), 'error');
+  await result.requestPayment();
+
+  assert.equal(requestBodies.length, 2);
+  assert.notEqual(requestBodies[0].clientOrderRequestId, requestBodies[1].clientOrderRequestId);
+  assert.equal(paymentCalls.length, 2);
+  assert.equal(stateChanges.at(-1), 'done');
+});
+
+test('서버가 4xx로 확정 거절하면 다음 시도는 새 clientOrderRequestId를 쓴다', async () => {
+  for (const status of [400, 401, 403, 404, 409, 422]) {
+    const requestBodies = [];
+    let attempt = 0;
+    globalThis.fetch = async (_url, init) => {
+      requestBodies.push(JSON.parse(init.body));
+      attempt += 1;
+      if (attempt === 1) {
+        return jsonResponse(
+          { message: '같은 결제 시도 ID에 다른 주문 내용이 요청되었습니다.' },
+          false,
+          status,
+        );
+      }
+      return jsonResponse(successfulRoundResponse);
+    };
+    const { result, paymentCalls } = createRoundHook();
+
+    await result.requestPayment();
+    await result.requestPayment();
+
+    assert.equal(requestBodies.length, 2);
+    assert.notEqual(
+      requestBodies[0].clientOrderRequestId,
+      requestBodies[1].clientOrderRequestId,
+      `${status} 거절 뒤에는 새 ID여야 한다`,
+    );
+    assert.equal(paymentCalls.length, 1);
+  }
+});
+
+test('5xx·408·429·응답 손상처럼 처리 여부가 불확실하면 같은 clientOrderRequestId를 유지한다', async () => {
+  const uncertainResponses = [
+    jsonResponse({ message: '서버 오류' }, false, 500),
+    jsonResponse({ message: '게이트웨이 시간 초과' }, false, 504),
+    jsonResponse({ message: '요청 시간 초과' }, false, 408),
+    jsonResponse({ message: '요청이 너무 많습니다' }, false, 429),
+    jsonResponse({ ...successfulRoundResponse, orderId: '' }),
+  ];
+  for (const uncertain of uncertainResponses) {
+    const requestBodies = [];
+    let attempt = 0;
+    globalThis.fetch = async (_url, init) => {
+      requestBodies.push(JSON.parse(init.body));
+      attempt += 1;
+      return attempt === 1 ? uncertain : jsonResponse(successfulRoundResponse);
+    };
+    const { result } = createRoundHook();
+
+    await result.requestPayment();
+    await result.requestPayment();
+
+    assert.equal(requestBodies.length, 2);
+    assert.equal(requestBodies[0].clientOrderRequestId, requestBodies[1].clientOrderRequestId);
+  }
 });
 
 test('동시에 반복 클릭해도 주문과 결제는 한 번만 시작한다', async () => {

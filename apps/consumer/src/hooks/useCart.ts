@@ -201,6 +201,15 @@ export function addCartItem(currentValue: CartItem[], input: CartItemInput): Car
   };
 }
 
+/** 결제 완료된 회차 상품만 장바구니에서 뺀다. 바로 구매 경로 때문에 다른 항목은 보존한다. */
+export function removeCartRoundItems(
+  currentValue: CartItem[],
+  roundItemIds: readonly string[],
+): CartItem[] {
+  const paid = new Set(roundItemIds);
+  return currentValue.filter((item) => !isRoundCartItem(item) || !paid.has(item.roundItemId));
+}
+
 // SSR에서도 안전한 localStorage 외부 저장소
 let listeners: Array<() => void> = [];
 function emitChange() {
@@ -262,6 +271,12 @@ export function useCart() {
     persist(getSnapshot().map((i) => (i.productId === productId ? { ...i, quantity } : i)));
   }, []);
 
+  const removeRoundItems = useCallback((roundItemIds: readonly string[]) => {
+    const current = getSnapshot();
+    const next = removeCartRoundItems(current, roundItemIds);
+    if (next.length !== current.length) persist(next);
+  }, []);
+
   const clearCart = useCallback(() => {
     persist([]);
   }, []);
@@ -269,5 +284,14 @@ export function useCart() {
   const totalAmount = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
-  return { items, addItem, removeItem, updateQuantity, clearCart, totalAmount, itemCount };
+  return {
+    items,
+    addItem,
+    removeItem,
+    removeRoundItems,
+    updateQuantity,
+    clearCart,
+    totalAmount,
+    itemCount,
+  };
 }

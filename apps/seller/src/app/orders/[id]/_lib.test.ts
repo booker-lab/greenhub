@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayBuyerName, displayBuyerPhone, toTelHref } from './_lib';
+import { displayBuyerName, displayBuyerPhone, displayRequestNote, toTelHref } from './_lib';
 
 describe('displayBuyerName', () => {
   it('이름이 있으면 앞뒤 공백을 지우고 보여준다', () => {
@@ -9,6 +9,20 @@ describe('displayBuyerName', () => {
   it('이름이 없거나 공백뿐이면 대체 문구를 보여준다', () => {
     expect(displayBuyerName({})).toBe('이름 없음');
     expect(displayBuyerName({ buyerName: '   ' })).toBe('이름 없음');
+  });
+});
+
+describe('displayRequestNote', () => {
+  it('요청사항이 있으면 앞뒤 공백만 지우고 줄바꿈은 유지한다', () => {
+    expect(displayRequestNote({ requestNote: ' 받는 분 김그린\n문구: 개업 축하 ' })).toBe(
+      '받는 분 김그린\n문구: 개업 축하',
+    );
+  });
+
+  it('없거나 비어 있으면 null', () => {
+    expect(displayRequestNote({})).toBeNull();
+    expect(displayRequestNote({ requestNote: null })).toBeNull();
+    expect(displayRequestNote({ requestNote: '  ' })).toBeNull();
   });
 });
 
