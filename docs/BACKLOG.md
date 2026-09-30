@@ -477,7 +477,8 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [x] 운영 Firebase rules/indexes 대조와 배포 — 7/31 배포본 → `197f84a4` 규칙 반영, 재조회 일치
 - [x] production deployment — 2026-09-28 `197f84a4` (API·프런트 3개·규칙)
 - [x] activation — 2026-09-29 `salesMode` `round_direct` 전환, 첫 회차 `SCHEDULED`(read-back 확인)
-- [ ] 파일럿 운영 시작 — 프런트엔드 개편 뒤로 연기(일정 미정). 연기 동안 첫 회차 자동 오픈(10/1 10:00) 차단 필요
+- [x] 첫 회차 자동 오픈 차단 — 2026-09-29 회차 일정을 11/1 오픈·11/10 배송으로 이동
+- [ ] 파일럿 운영 시작 — 2026-11-01(첫 회차 주문 11/1 10:00 자동 오픈)
 - [ ] 파일럿 시작 직후 실제 결제·환불 1건 시험
 
 ### 법무·출시 후보 정합성
@@ -644,7 +645,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] `create-exact-preview-deployment.yml`은 앱별 Vercel 토큰(`VERCEL_EXACT_PREVIEW_{CONSUMER,SELLER,DRIVER}_TOKEN`) 미등록으로 성공한 적이 없다. 현재 exact Preview는 로컬 Vercel CLI 권한으로 `preview-exact/<scope>/<sha>` ref를 사용해 만든다. 워크플로 경로로 옮길지 결정한다.
 
 ### SELLER-SETTLEMENT-KST
-- [ ] 셀러 정산 탭 정산일시가 timeZone 미지정 `toLocaleDateString`으로 표시되고, CSV는 UTC(`Z`) ISO로 기록되어 KST 자정 전후 정산이 전날로 읽힌다. 수정 PR #320(화면 Asia/Seoul 고정·CSV `+09:00`) 병합과 육안 확인 대기. 어드민 정산은 #316. 2026-09-28 발견.
+- [x] 셀러 정산 탭 정산일시가 timeZone 미지정 `toLocaleDateString`으로 표시되고, CSV는 UTC(`Z`) ISO로 기록되어 KST 자정 전후 정산이 전날로 읽힌다. 수정 PR #320(화면 Asia/Seoul 고정·CSV `+09:00`)과 어드민 정산 #316 병합, 2026-09-30 운영 반영(`389066c8`). 2026-09-28 발견.
 
 ### ADMIN-CANCELLED-REFUND-RETRY
 - [ ] 서버 강제환불은 이미 취소된 주문도 재시도를 허용한다(일반: `cancellation.status` LOCAL_PENDING·LOCAL_FAILED·REFUND_FAILED·만료 claim·취소 상태 기록 없음, 회차: 결제가 아직 PAID). 어드민 주문 탭은 취소 주문에 버튼이 없다(#318 이후에도 동일). 결과 불명확 환불은 운영 이슈 `AUTO_REFUND_FAILED`→`RETRY_REFUND`로, 취소 전 주문은 기존 버튼으로 복구할 수 있어 급하지 않다. 취소 주문용 "환불 재시도" 버튼을 둘지 사람이 결정한다. 2026-09-28 발견.
