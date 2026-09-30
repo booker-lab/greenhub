@@ -139,6 +139,7 @@ describe('OrdersQueryService 조회 권한', () => {
       buyerName: '구매자',
       deliveryPhone: '010-1111-1111',
       buyerPhone: '010-2222-2222',
+      requestNote: '토퍼 문구: 개업 축하',
       deliveryHold: {
         heldAt: '2026-08-29T00:00:00.000Z',
         reasonCode: 'ACCESS_UNAVAILABLE',
@@ -195,6 +196,7 @@ describe('OrdersQueryService 조회 권한', () => {
     expect(list[0]).not.toHaveProperty('marketingConsent');
     expect(list[0]).not.toHaveProperty('acquisition');
     expect(list[0]).not.toHaveProperty('redeliveryChargeId');
+    expect(list[0]).not.toHaveProperty('requestNote');
 
     expect(detail).toMatchObject({
       id: 'seller-order',
@@ -205,6 +207,7 @@ describe('OrdersQueryService 조회 권한', () => {
       },
       buyerName: '구매자',
       deliveryPhone: '010-1111-1111',
+      requestNote: '토퍼 문구: 개업 축하',
       orderItems: [
         {
           productId: 'product-1',

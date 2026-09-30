@@ -10,9 +10,11 @@ import { useOrderStatus } from '@/hooks/useOrderStatus';
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   PENDING: '결제 확인 중...',
   RECRUITING: '공동구매 모집 중',
+  CONFIRMED: '주문 확정',
   ACCEPTED: '주문 접수 완료',
   PREPARING: '상품 준비 중',
   DELIVERING: '배송 중',
+  DELIVERY_HELD: '배송 보류',
   HUB_ARRIVED: '거점 도착',
   PICKED_UP: '픽업 완료',
   DELIVERED: '배송 완료',
@@ -35,6 +37,7 @@ const ORDER_STATUSES = new Set<OrderStatus>([
   'REVIEWED',
 ]);
 const SUCCESS_STATUSES = new Set<OrderStatus>(['ACCEPTED', 'RECRUITING']);
+const WAITING_OR_CANCELLED_STATUSES = new Set<OrderStatus>(['PENDING', 'CANCELLED']);
 const MAX_IDENTIFIER_LENGTH = 128;
 const UNSAFE_IDENTIFIER_CHARACTERS = '/?#\\';
 const ROUND_ORDER_NUMBER_PATTERN = /^\d{8}-\d{6}$/;
@@ -183,6 +186,39 @@ function readSuccessOrder(value: unknown, requestedOrderId: string): SuccessOrde
   };
 }
 
+// 결제 확인(PENDING)·성공(ACCEPTED/RECRUITING)·취소 외의 유효 상태는 이미 결제가 끝나
+// 다음 단계로 진행된 주문이다(뒤로 가기·재진입 등). 빈 화면 대신 접수 안내를 보인다.
+function isReceivedStatus(status: OrderStatus): boolean {
+  return (
+    ORDER_STATUSES.has(status) &&
+    !SUCCESS_STATUSES.has(status) &&
+    !WAITING_OR_CANCELLED_STATUSES.has(status)
+  );
+}
+
+function OrderResultActions({
+  onOrders,
+  onHome,
+}: {
+  onOrders: () => void;
+  onHome: () => void;
+}) {
+  return (
+    <>
+      <Button color="brand" radius="md" size="md" mt="lg" onClick={onOrders}>
+        주문 내역 보기
+      </Button>
+      <Button
+        variant="transparent"
+        style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
+        onClick={onHome}
+      >
+        홈으로
+      </Button>
+    </>
+  );
+}
+
 function ErrorState({ message, onHome }: { message: string; onHome: () => void }) {
   return (
     <>
@@ -219,6 +255,7 @@ function OrderSuccessContent() {
 
   const isPending = !error && validOrder?.status === 'PENDING';
   const isCancelled = !error && validOrder?.status === 'CANCELLED';
+  const isReceived = !loading && !error && !!validOrder && isReceivedStatus(validOrder.status);
   const responseError =
     !loading &&
     !error &&
@@ -316,22 +353,30 @@ function OrderSuccessContent() {
               </>
             )}
 
-            <Button
-              color="brand"
-              radius="md"
-              size="md"
-              mt="lg"
-              onClick={() => router.push('/mypage')}
+            <OrderResultActions
+              onOrders={() => router.push('/mypage')}
+              onHome={() => router.push('/')}
+            />
+          </>
+        )}
+
+        {isReceived && validOrder && !errorMessage && (
+          <>
+            <Text style={{ fontSize: 56 }}>✅</Text>
+            <Title order={2}>주문이 접수되었습니다</Title>
+            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>
+              현재 상태: {STATUS_LABELS[validOrder.status] ?? '주문 진행 중'}
+            </Text>
+            <Text
+              style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+              ta="center"
             >
-              주문 내역 보기
-            </Button>
-            <Button
-              variant="transparent"
-              style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
-              onClick={() => router.push('/')}
-            >
-              홈으로
-            </Button>
+              결제가 완료된 주문입니다. 진행 상황은 주문 내역에서 확인해 주세요.
+            </Text>
+            <OrderResultActions
+              onOrders={() => router.push('/mypage')}
+              onHome={() => router.push('/')}
+            />
           </>
         )}
 

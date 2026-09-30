@@ -18,6 +18,9 @@ export type DeliveryMethod = 'direct' | 'hub' | 'parcel'
 
 export type SaleType = 'normal' | 'group'
 
+/** 주문 요청사항(받는 분·토퍼 문구·배송 요청 등 자유 입력) 최대 글자 수 */
+export const ORDER_REQUEST_NOTE_MAX_LENGTH = 200
+
 export interface DeliveryAddress {
   address: string
   addressDetail: string
@@ -118,6 +121,7 @@ export interface Order {
   deliveryHold?: DeliveryHoldSnapshot | null
   redeliveryPayment?: RedeliveryPaymentActionability
   deliveryPhone?: string | null
+  requestNote?: string | null        // 소비자 요청사항 — 회차 주문만, 없으면 null
   deliveryPhotoIds?: string[]
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
@@ -158,6 +162,7 @@ export interface CreateOrderRequest {
     quantity: number
   }>
   deliveryPhone: string
+  requestNote?: string           // 선택 — ORDER_REQUEST_NOTE_MAX_LENGTH 이하
   marketingConsent?: MarketingConsentInput
   acquisition?: OrderAcquisitionSnapshot
 }

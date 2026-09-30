@@ -15,6 +15,11 @@ import {
   LegacyDailyCapacityError,
   reserveLegacyDailyCapacity,
 } from '../payments/_lib/legacy-daily-capacity';
+import {
+  assertOrderWindowOpen,
+  resolveAutomaticState,
+  type SaleRoundRecord,
+} from '../sale-rounds/sale-round-state.contract';
 
 @Injectable()
 export class OrdersCreateService {
@@ -240,14 +245,11 @@ export class OrdersCreateService {
     if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== storeId) {
       throw new NotFoundException('회차를 찾을 수 없습니다.');
     }
-    const round = roundSnap.data()!;
-    if (round['status'] !== 'OPEN') {
-      throw new ConflictException('현재 주문 가능한 회차가 아닙니다.');
-    }
-    const closeAt = new Date(round['schedule']?.['orderCloseAt'] ?? 0).getTime();
-    if (!Number.isFinite(closeAt) || closeAt <= Date.now()) {
-      throw new ConflictException('주문 마감된 회차입니다.');
-    }
+    // 예약·공개 조회와 같은 자동 상태 계산으로 판정한다(저장값 SCHEDULED라도 시작 시각이 지나면 OPEN).
+    const storedRound = roundSnap.data() as SaleRoundRecord;
+    const nowMillis = Date.now();
+    const round = { ...storedRound, ...resolveAutomaticState(storedRound, nowMillis) };
+    assertOrderWindowOpen(round, nowMillis);
     const deliveryCity = round['deliveryRegion']?.['city'] as string | undefined;
     this.assertDeliveryCity(dto.deliveryAddress.address, deliveryCity);
 

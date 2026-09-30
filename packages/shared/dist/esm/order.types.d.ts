@@ -2,6 +2,8 @@ import type { ClientOrderRequestId } from './sale-round.types.js';
 export type OrderStatus = 'PENDING' | 'RECRUITING' | 'CONFIRMED' | 'ACCEPTED' | 'PREPARING' | 'DELIVERING' | 'DELIVERY_HELD' | 'HUB_ARRIVED' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED' | 'REVIEWED';
 export type DeliveryMethod = 'direct' | 'hub' | 'parcel';
 export type SaleType = 'normal' | 'group';
+/** 주문 요청사항(받는 분·토퍼 문구·배송 요청 등 자유 입력) 최대 글자 수 */
+export declare const ORDER_REQUEST_NOTE_MAX_LENGTH = 200;
 export interface DeliveryAddress {
     address: string;
     addressDetail: string;
@@ -82,6 +84,7 @@ export interface Order {
     deliveryHold?: DeliveryHoldSnapshot | null;
     redeliveryPayment?: RedeliveryPaymentActionability;
     deliveryPhone?: string | null;
+    requestNote?: string | null;
     deliveryPhotoIds?: string[];
     createdAt: string;
     updatedAt: string;
@@ -119,6 +122,7 @@ export interface CreateOrderRequest {
         quantity: number;
     }>;
     deliveryPhone: string;
+    requestNote?: string;
     marketingConsent?: MarketingConsentInput;
     acquisition?: OrderAcquisitionSnapshot;
 }

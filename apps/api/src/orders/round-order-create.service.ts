@@ -95,6 +95,7 @@ export class RoundOrderCreateService {
         deliveryFee: 0,
         deliveryAddress: dto.deliveryAddress,
         deliveryPhone: dto.deliveryPhone,
+        requestNote: normalizeRequestNote(dto.requestNote),
         requestedDeliveryDate: dto.requestedDeliveryDate ?? null,
         schemaVersion: 2,
         roundId: dto.roundId,
@@ -177,6 +178,7 @@ export class RoundOrderCreateService {
   }
 
   private payloadHash(storeId: string, userId: string, dto: CreateOrderDto) {
+    const requestNote = normalizeRequestNote(dto.requestNote);
     return createHash('sha256')
       .update(
         JSON.stringify({
@@ -188,6 +190,8 @@ export class RoundOrderCreateService {
           deliveryPhone: dto.deliveryPhone,
           requestedDeliveryDate: dto.requestedDeliveryDate ?? null,
           acquisition: dto.acquisition ?? null,
+          // 요청사항이 없으면 필드 자체를 빼서 기존 결제 시도의 해시를 유지한다.
+          ...(requestNote !== null ? { requestNote } : {}),
         }),
       )
       .digest('hex');
@@ -196,4 +200,11 @@ export class RoundOrderCreateService {
   private toDate(value: { toDate?: () => Date } | Date): Date {
     return value instanceof Date ? value : value.toDate!();
   }
+}
+
+// 요청사항은 줄바꿈을 LF로 맞추고 앞뒤 공백을 지운다. 비어 있으면 null로 저장한다.
+export function normalizeRequestNote(value: string | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.replace(/\r\n?/g, '\n').trim();
+  return normalized.length > 0 ? normalized : null;
 }

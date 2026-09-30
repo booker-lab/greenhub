@@ -21,14 +21,11 @@ const ORDER_STATUSES = new Set<OrderStatus>([
   'CANCELLED',
   'REVIEWED',
 ]);
-const ROUND_CANCELLABLE_STATUSES = new Set<OrderStatus>([
-  'PENDING',
-  'ACCEPTED',
-  'RECRUITING',
-  'CONFIRMED',
-  'PREPARING',
-  'DELIVERY_HELD',
-]);
+// 회차 주문 소비자 직접 취소는 서버가 `orderCloseAt > now`(주문 마감 전)를 함께 요구한다
+// (round-order-lifecycle.service `assertRoundOpen`). 회차 주문은 saleType 'normal'이라
+// RECRUITING·CONFIRMED가 없고, PREPARING·DELIVERY_HELD는 마감 뒤 준비·배송 단계에서만
+// 생기므로 버튼을 노출하면 항상 거절된다. 마감 전에 존재하는 상태만 남긴다.
+const ROUND_CANCELLABLE_STATUSES = new Set<OrderStatus>(['PENDING', 'ACCEPTED']);
 const DELIVERY_HOLD_REASONS = new Set([
   'WEATHER',
   'ACCESS_UNAVAILABLE',
@@ -66,6 +63,7 @@ export interface DeliveryHoldView {
   redeliveryFee: number | null;
   nextContactAt: string | null;
   nextDeliveryAt: string | null;
+  resolvedAt: string | null;
 }
 
 export interface OrderDetailView {
@@ -166,6 +164,21 @@ function readItems(value: unknown, requireRoundItemId: boolean): DetailItem[] | 
   return new Set(items.map((item) => item.id)).size === items.length ? items : null;
 }
 
+// 서버 `isUnresolved`(redelivery-resume-gate)와 같은 의미: 유효한 시각이면 해제,
+// null·빈 문자열·파싱 불가 문자열은 미해제로 읽는다.
+function readResolvedAt(value: unknown): string | null {
+  if (isNonEmptyString(value)) {
+    return Number.isNaN(new Date(value).getTime()) ? null : value;
+  }
+  if (isRecord(value)) {
+    const seconds = value.seconds ?? value._seconds;
+    if (typeof seconds === 'number' && Number.isFinite(seconds)) {
+      return new Date(seconds * 1000).toISOString();
+    }
+  }
+  return null;
+}
+
 function readDeliveryHold(value: unknown): DeliveryHoldView | null {
   if (
     !isRecord(value) ||
@@ -189,7 +202,19 @@ function readDeliveryHold(value: unknown): DeliveryHoldView | null {
     redeliveryFee: value.redeliveryFee as number | null,
     nextContactAt,
     nextDeliveryAt,
+    resolvedAt: readResolvedAt(value.resolvedAt),
   };
+}
+
+// 배송 보류 경고는 현재 보류 중이거나 아직 해제되지 않은 보류에만 표시한다.
+// 유료 재배송비 결제 후 PREPARING으로 돌아온 주문은 배송 재개(DELIVERING) 전까지
+// 서버가 resolvedAt을 비워 두므로 "배송 재개 대기" 안내가 계속 보인다.
+export function isDeliveryHoldActive(detail: {
+  status: OrderStatus;
+  deliveryHold: DeliveryHoldView | null;
+}): boolean {
+  if (!detail.deliveryHold) return false;
+  return detail.status === 'DELIVERY_HELD' || detail.deliveryHold.resolvedAt === null;
 }
 
 function readRedeliveryPaymentActionability(
