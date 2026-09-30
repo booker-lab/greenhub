@@ -773,11 +773,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                 loading={loading}
                 disabled={!commandsAllowed}
                 onClick={() =>
-                  // Permissions-Policy는 문서 최초 로드 때 정해진다. 클라이언트 이동(router.push)은
-                  // 현재 문서의 camera=()를 유지하므로, 촬영 경로 전용 camera=(self) 헤더를 받도록 문서째 이동한다.
-                  window.location.assign(
-                    `/board/${orderId}/photo/round-direct?storeId=${order.storeId}`,
-                  )
+                  router.push(`/board/${orderId}/photo/round-direct?storeId=${order.storeId}`)
                 }
               >
                 배송 완료 사진 촬영
