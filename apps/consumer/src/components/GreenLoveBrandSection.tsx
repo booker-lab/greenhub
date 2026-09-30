@@ -2,10 +2,11 @@
 
 import { Box, Group, Stack, Text } from '@mantine/core';
 
+// 실제 운영 방식(경매 당일 매입 → 이천 직배송)과 다른 표현을 쓰지 않는다.
 const POINTS = [
-  { icon: '🌿', title: '산지 직송', desc: '농가에서 고객까지 중간 유통 없이 바로 배송' },
-  { icon: '✂️', title: '신선도 보장', desc: '수확 후 최단 시간 내 포장·출하' },
-  { icon: '🤝', title: '농가 직거래', desc: '판매 수익이 고스란히 재배 농가에게' },
+  { icon: '🌿', title: '경매 당일 매입', desc: '월요일 경매에서 산 꽃을 매장에 쌓아 두지 않고 바로 준비합니다' },
+  { icon: '🚚', title: '화요일 문 앞 배송', desc: '이천은 직접 배송해 화요일 오전 9시까지 문 앞에 둡니다' },
+  { icon: '🔍', title: '농부가 고른 품질', desc: '8년차 난 농부가 꽃 상태를 직접 보고 고릅니다' },
 ];
 
 export default function GreenLoveBrandSection() {
@@ -37,7 +38,7 @@ export default function GreenLoveBrandSection() {
               color: 'var(--color-text)',
             }}
           >
-            화훼 농가 직거래 플랫폼
+            월요일 경매 당일 매입 → 화요일 문 앞 배송
           </Text>
           <Text
             style={{
@@ -46,7 +47,7 @@ export default function GreenLoveBrandSection() {
               lineHeight: 1.6,
             }}
           >
-            그린러브는 꽃을 사랑하는 농가와 소비자를 직접 연결합니다.
+            8년차 난 농부가 직접 고른 싱싱한 꽃을 보내드립니다.
           </Text>
         </Stack>
 

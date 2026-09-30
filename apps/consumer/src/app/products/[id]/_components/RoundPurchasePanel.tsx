@@ -1,28 +1,12 @@
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
 import { Badge, Box, Divider, Group, Paper, Stack, Text } from '@mantine/core';
-
-const ORDER_CLOSE_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
-  timeZone: 'Asia/Seoul',
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-  weekday: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
+import { formatOrderCloseLabel, formatRoundTime } from '@/lib/round-schedule-label';
 
 interface RoundPurchasePanelProps {
   round: SaleRound;
   item: SaleRoundItem;
   state: 'current' | 'closed';
   isPurchasable: boolean;
-}
-
-function formatOrderCloseAt(value: string) {
-  const orderCloseAt = new Date(value);
-  if (Number.isNaN(orderCloseAt.getTime())) return '마감 시각 확인 필요';
-  return `${ORDER_CLOSE_FORMATTER.format(orderCloseAt)} (한국시간)`;
 }
 
 export default function RoundPurchasePanel({
@@ -33,6 +17,7 @@ export default function RoundPurchasePanel({
 }: RoundPurchasePanelProps) {
   const closed = state === 'closed';
   const statusLabel = isPurchasable ? '구매 가능' : closed ? '판매 마감' : '판매 예정';
+  const notOpenYet = !closed && round.status === 'SCHEDULED';
 
   return (
     <Paper
@@ -60,7 +45,7 @@ export default function RoundPurchasePanel({
                 color: closed ? 'var(--color-text-secondary)' : 'var(--color-primary)',
               }}
             >
-              {closed ? '마감된 회차' : '이번 주 판매 회차'}
+              {closed ? '마감된 회차' : notOpenYet ? '판매 예정 회차' : '이번 주 판매 회차'}
             </Text>
             <Text
               mt={2}
@@ -99,12 +84,22 @@ export default function RoundPurchasePanel({
         <Divider />
 
         <Stack gap="xs">
+          {notOpenYet && (
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <Text size="sm" fw="var(--fw-bold)">
+                주문 시작
+              </Text>
+              <Text size="sm" ta="right" c="var(--color-primary)" fw="var(--fw-bold)">
+                {formatRoundTime(round.schedule.orderOpenAt) ?? '일정 확인 중'}
+              </Text>
+            </Group>
+          )}
           <Group justify="space-between" align="flex-start" wrap="nowrap">
             <Text size="sm" fw="var(--fw-bold)">
               주문 마감
             </Text>
             <Text size="sm" ta="right" c="var(--color-text-secondary)">
-              {formatOrderCloseAt(round.schedule.orderCloseAt)}
+              {formatOrderCloseLabel(round.schedule.orderCloseAt)}
             </Text>
           </Group>
           <Text size="sm" fw="var(--fw-bold)">

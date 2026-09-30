@@ -73,7 +73,7 @@ test.describe('Consumer 회차 직배송 공개 화면 계약', () => {
     await expect(page.getByText(/배송 방법/)).toHaveCount(0);
     await expect(page.getByText(/배송 희망일/)).toHaveCount(0);
     await expect(page.getByText(/공동구매/)).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /장바구니 담기/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: '장바구니', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /바로 구매/ })).toBeVisible();
   });
 });

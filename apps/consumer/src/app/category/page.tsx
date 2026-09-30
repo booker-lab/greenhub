@@ -274,7 +274,7 @@ function RoundDirectCategory({
           mb="md"
           style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
         >
-          이번 주 회차
+          {currentRound?.status === 'SCHEDULED' ? '판매 예정 회차' : '이번 주 회차'}
         </Title>
         {currentRound && currentItems.length > 0 ? (
           <Stack gap="sm">
