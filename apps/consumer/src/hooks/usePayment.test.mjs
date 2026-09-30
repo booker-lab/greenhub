@@ -198,6 +198,33 @@ test('검증된 같은 회차 상품 전체를 주문 한 번과 PortOne 결제 
   assert.equal(paymentCalls[0].totalAmount, 69000);
 });
 
+test('회차 주문 요청사항은 있을 때만 주문 요청에 담는다', async () => {
+  const bodies = [];
+  globalThis.fetch = async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return jsonResponse(successfulRoundResponse);
+  };
+
+  for (const orderRequest of [
+    { ...deliveryRequest, requestNote: '받는 분 김그린 / 선물 문구: 개업 축하' },
+    deliveryRequest,
+  ]) {
+    const loaded = loadHook();
+    // biome-ignore lint/correctness/useHookAtTopLevel: React를 모의한 훅 계약 단위 테스트다.
+    const result = loaded.usePayment({
+      storeId: 'store-1',
+      orderRequest,
+      roundItems: [firstRoundItem, secondRoundItem],
+      accessToken: 'access-token',
+      paymentMethod: 'kakaopay',
+    });
+    await result.requestPayment();
+  }
+
+  assert.equal(bodies[0].requestNote, '받는 분 김그린 / 선물 문구: 개업 축하');
+  assert.equal(Object.hasOwn(bodies[1], 'requestNote'), false);
+});
+
 test('빈 배열·다른 회차 혼합·손상 항목은 주문 API 호출 전에 거부한다', async () => {
   let fetchCount = 0;
   globalThis.fetch = async () => {

@@ -243,6 +243,7 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
       acquisition: { source: 'direct' },
       deliveryPhotoIds: ['photo-1'],
       deliveryPhone: '010-0000-0000',
+      requestNote: '받는 분 김그린 010-3333-3333',
       driverId: null,
     };
     const { service } = makeService({
@@ -297,6 +298,7 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
         'acquisition',
         'deliveryPhotoIds',
         'deliveryPhone',
+        'requestNote',
         'buyerPhone',
         'sellerPhone',
         'driverId',
@@ -322,6 +324,13 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     await expect(service.getOrder('driver-1', 'assigned-delivering')).resolves.toHaveProperty(
       'buyerPhone',
       '010-0000-0000',
+    );
+    await expect(service.getOrder('driver-1', 'discovery')).resolves.not.toHaveProperty(
+      'requestNote',
+    );
+    await expect(service.getOrder('driver-1', 'assigned-preparing')).resolves.toHaveProperty(
+      'requestNote',
+      '받는 분 김그린 010-3333-3333',
     );
   });
 

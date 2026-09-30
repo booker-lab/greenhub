@@ -136,6 +136,11 @@ export class DriverService {
     const deliveryAddress = this.projectDeliveryAddress(order['deliveryAddress']);
     if (deliveryAddress) projected['deliveryAddress'] = deliveryAddress;
 
+    // 요청사항에는 받는 분 정보가 들어갈 수 있어 배정된 기사에게만 보인다.
+    if (isAssignedToRequester && typeof order['requestNote'] === 'string') {
+      projected['requestNote'] = order['requestNote'];
+    }
+
     if (order['status'] === 'DELIVERY_HELD') {
       const deliveryHold = this.projectDeliveryHold(order['deliveryHold']);
       if (deliveryHold) projected['deliveryHold'] = deliveryHold;

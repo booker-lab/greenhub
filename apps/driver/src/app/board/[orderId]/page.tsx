@@ -59,6 +59,7 @@ type Order = {
   updatedAt?: string | null;
   sellerPhone?: string;
   buyerPhone?: string;
+  requestNote?: string | null;
   deliveryHold?: DeliveryHold | null;
   redeliveryPayment?: RedeliveryPaymentActionability;
 };
@@ -648,6 +649,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                 />
               )}
               {isPreparing && <InfoRow label="소비자" value={order.buyerName ?? '-'} />}
+              {order.requestNote?.trim() && (
+                <Stack gap={2}>
+                  <Text
+                    style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                  >
+                    요청사항
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      fontWeight: 'var(--fw-medium)',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {order.requestNote.trim()}
+                  </Text>
+                </Stack>
+              )}
             </Stack>
           </Card>
 
