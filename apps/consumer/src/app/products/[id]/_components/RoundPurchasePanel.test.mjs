@@ -10,10 +10,21 @@ test('회차 가격은 상품 원본 가격이 아니라 SaleRoundItem.roundPric
   assert.doesNotMatch(panelSource, /product\.price/);
 });
 
-test('주문 마감은 회차 schedule.orderCloseAt을 Asia\\/Seoul 기준으로 표시한다', () => {
-  assert.match(panelSource, /round\.schedule\.orderCloseAt/);
-  assert.match(panelSource, /timeZone: 'Asia\/Seoul'/);
+test('주문 마감은 회차 schedule.orderCloseAt을 Asia\\/Seoul 기준 공통 표기로 보여준다', async () => {
+  const labelSource = await readFile(
+    new URL('../../../../lib/round-schedule-label.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(panelSource, /formatOrderCloseLabel\(round\.schedule\.orderCloseAt\)/);
+  assert.match(labelSource, /timeZone: 'Asia\/Seoul'/);
   assert.match(panelSource, /주문 마감/);
+});
+
+test('주문 시작 전 회차는 판매 예정 제목과 주문 시작 시각을 보여준다', () => {
+  assert.match(panelSource, /round\.status === 'SCHEDULED'/);
+  assert.match(panelSource, /판매 예정 회차/);
+  assert.match(panelSource, /주문 시작/);
+  assert.match(panelSource, /round\.schedule\.orderOpenAt/);
 });
 
 test('이천 직접배송과 화요일 배송 및 기상 연기 원칙을 명확히 고지한다', () => {

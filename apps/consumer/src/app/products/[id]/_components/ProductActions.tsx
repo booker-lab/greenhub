@@ -1,6 +1,6 @@
 'use client';
 
-import type { Product, SaleRoundItem } from '@greenhub/shared';
+import type { Product, SaleRound, SaleRoundItem } from '@greenhub/shared';
 import LegacyProductActions from './LegacyProductActions';
 import RoundDirectProductActions from './RoundDirectProductActions';
 
@@ -8,6 +8,8 @@ export interface RoundProductActionContext {
   item: SaleRoundItem;
   state: 'current' | 'closed';
   isPurchasable: boolean;
+  /** 주문 시작 전(SCHEDULED) 안내에 쓴다. */
+  round?: Pick<SaleRound, 'status'>;
 }
 
 interface Props {

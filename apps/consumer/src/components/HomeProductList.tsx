@@ -23,6 +23,11 @@ import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
 import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import {
+  formatOrderCloseLabel,
+  formatOrderOpenLabel,
+  roundSectionTitle,
+} from '@/lib/round-schedule-label';
 import { resolveHomeStoreId } from './home-store-selection';
 
 type StoreModeStatus = 'loading' | 'ready' | 'error';
@@ -85,19 +90,6 @@ function useStoreMode(storeId: string | null, productsLoading: boolean): StoreMo
   }, [productsLoading, storeId]);
 
   return state;
-}
-
-function formatDeadline(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '일정 확인 중';
-  return new Intl.DateTimeFormat('ko-KR', {
-    timeZone: 'Asia/Seoul',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
 }
 
 function visibleItems(round: PublicSaleRound) {
@@ -260,11 +252,18 @@ function RoundDirectHome({
             order={3}
             style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
           >
-            이번 주 판매
+            {currentRound ? roundSectionTitle(currentRound.status) : '이번 주 판매'}
           </Title>
+          {currentRound?.status === 'SCHEDULED' && (
+            <Text size="sm" fw="var(--fw-bold)" c="var(--color-primary)">
+              {formatOrderOpenLabel(currentRound.schedule.orderOpenAt)}
+            </Text>
+          )}
           <Text size="sm" c="var(--color-text-secondary)">
             주문 마감{' '}
-            {currentRound ? formatDeadline(currentRound.schedule.orderCloseAt) : '일정 준비 중'}
+            {currentRound
+              ? formatOrderCloseLabel(currentRound.schedule.orderCloseAt)
+              : '일정 준비 중'}
           </Text>
           <Text size="sm" c="var(--color-text-secondary)">
             경기도 이천시 직접배송
