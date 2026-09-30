@@ -384,6 +384,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     zipCode: '',
   });
   const [deliveryPhone, setDeliveryPhone] = useState('');
+  const [requestNote, setRequestNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
   const [acquisition, setAcquisition] = useState<OrderAcquisitionSnapshot | null>(null);
   const storeId = cartItems[0]?.storeId ?? '';
@@ -399,6 +400,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     orderRequest: {
       deliveryAddress: address,
       deliveryPhone: deliveryPhone.trim(),
+      ...(requestNote.trim() ? { requestNote: requestNote.trim() } : {}),
       ...(schedule ? { requestedDeliveryDate: schedule.requestedDeliveryDate } : {}),
       ...(acquisition ? { acquisition } : {}),
     },
@@ -473,6 +475,8 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       onAddressChange={setAddress}
       deliveryPhone={deliveryPhone}
       onDeliveryPhoneChange={setDeliveryPhone}
+      requestNote={requestNote}
+      onRequestNoteChange={setRequestNote}
       paymentMethod={paymentMethod}
       onPaymentMethodChange={setPaymentMethod}
       isLoading={isLoading}
