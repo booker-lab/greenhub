@@ -246,6 +246,29 @@ test('Driver Permissions-Policy는 전역 deny와 정확한 Pilot route 허용�
   assert.doesNotMatch(driverConfigSource, /microphone=\(self\)|geolocation=\(self\)/);
 });
 
+test('직배송 촬영 화면은 문서째 이동해 촬영 경로의 camera=(self) 헤더를 받는다', () => {
+  assert.match(
+    detailSource,
+    /window\.location\.assign\(\s*`\/board\/\$\{orderId\}\/photo\/round-direct\?storeId=/,
+  );
+  assert.doesNotMatch(detailSource, /router\.push\(\s*`[^`]*\/photo\/round-direct/);
+});
+
+test('Driver 서비스워커는 API·인증 요청을 캐시하지 않고 온라인 복구 자동 새로고침을 끈다', () => {
+  assert.match(driverConfigSource, /reloadOnOnline:\s*false/);
+  assert.doesNotMatch(driverConfigSource, /reloadOnOnline:\s*true/);
+  assert.match(driverConfigSource, /extendDefaultRuntimeCaching:\s*true/);
+  assert.match(driverConfigSource, /urlPattern:\s*apiOriginPattern,\s*handler:\s*'NetworkOnly'/);
+  assert.match(
+    driverConfigSource,
+    /request\.headers\.has\('Authorization'\),\s*handler:\s*'NetworkOnly'/,
+  );
+  assert.match(
+    driverConfigSource,
+    /url\.pathname\.startsWith\('\/api\/'\),\s*handler:\s*'NetworkOnly'/,
+  );
+});
+
 test('Pilot 사진 화면은 JPEG 파일 대체 경로와 기존 업로드 계약을 유지한다', () => {
   assert.match(photoCaptureSource, /navigator\.mediaDevices\.getUserMedia/);
   assert.match(photoCaptureSource, /카메라 촬영/);
