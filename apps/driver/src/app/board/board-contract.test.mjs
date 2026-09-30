@@ -237,21 +237,19 @@ test('직배송 사진 링크는 정확한 Pilot 경로로 분리하고 legacy �
   assert.doesNotMatch(legacyPhotoRouteSource, /flow/);
 });
 
-test('Driver Permissions-Policy는 전역 deny와 정확한 Pilot route 허용을 분리한다', () => {
-  assert.match(driverConfigSource, /camera=\(\), microphone=\(\), geolocation=\(\)/);
+test('Driver Permissions-Policy는 앱 전체에서 카메라만 자기 출처로 허용한다', () => {
+  // 경로별 정책은 클라이언트 이동 시 처음 문서의 정책이 유지되어 촬영 화면에서 카메라가 막힌다.
   assert.match(driverConfigSource, /source:\s*['"]\/\(\.\*\)['"]/);
-  assert.match(driverConfigSource, /source:\s*['"]\/board\/:orderId\/photo\/round-direct['"]/);
   assert.match(driverConfigSource, /camera=\(self\), microphone=\(\), geolocation=\(\)/);
+  assert.doesNotMatch(driverConfigSource, /camera=\(\)/);
   assert.doesNotMatch(driverConfigSource, /camera=\*/);
   assert.doesNotMatch(driverConfigSource, /microphone=\(self\)|geolocation=\(self\)/);
+  assert.doesNotMatch(driverConfigSource, /source:\s*['"]\/board\/:orderId\/photo/);
 });
 
-test('직배송 촬영 화면은 문서째 이동해 촬영 경로의 camera=(self) 헤더를 받는다', () => {
-  assert.match(
-    detailSource,
-    /window\.location\.assign\(\s*`\/board\/\$\{orderId\}\/photo\/round-direct\?storeId=/,
-  );
-  assert.doesNotMatch(detailSource, /router\.push\(\s*`[^`]*\/photo\/round-direct/);
+test('직배송 촬영 화면은 앱 안 이동으로 열어 세션·화면 준비를 유지한다', () => {
+  assert.match(detailSource, /router\.push\(`\/board\/\$\{orderId\}\/photo\/round-direct\?storeId=/);
+  assert.doesNotMatch(detailSource, /window\.location\.assign/);
 });
 
 test('Driver 서비스워커는 API·인증 요청을 캐시하지 않고 온라인 복구 자동 새로고침을 끈다', () => {
