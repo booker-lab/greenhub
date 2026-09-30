@@ -46,6 +46,27 @@ function toTokenStoreId(storeId: string | null): string | undefined {
   return storeId ?? undefined;
 }
 
+// 직전 refresh token을 받아 줄 유예. 같은 세션의 동시 갱신과 쿠키 반영 전 재요청만
+// 흡수할 만큼 짧게 둔다(2026-09-30 사용자 승인).
+export const REFRESH_ROTATION_GRACE_MS = 60_000;
+
+function isWithinRotationGrace(
+  stored: Record<string, unknown>,
+  presented: string,
+  nowMillis: number,
+): boolean {
+  const rotatedAt = stored['rotatedAt'];
+  if (
+    typeof stored['token'] !== 'string' ||
+    stored['previousToken'] !== presented ||
+    typeof rotatedAt !== 'number'
+  ) {
+    return false;
+  }
+  const elapsed = nowMillis - rotatedAt;
+  return elapsed >= 0 && elapsed <= REFRESH_ROTATION_GRACE_MS;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -365,19 +386,6 @@ export class AuthService {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
     }
 
-    // Rotation: Firestore에 저장된 토큰과 일치하는지 검증
-    const tokenSnap = await this.firestore.doc(`refreshTokens/${payload.sub}`).get();
-    if (!tokenSnap.exists) {
-      throw new UnauthorizedException('만료된 리프레시 토큰입니다.');
-    }
-
-    if (tokenSnap.data()?.['token'] !== refreshToken) {
-      // Firestore에 다른 토큰이 존재 = 탈취 후 재사용 시도 — 모든 세션 무효화
-      await this.firestore.doc(`refreshTokens/${payload.sub}`).delete();
-      await this.audit.log('auth.token.stolen', { userId: payload.sub });
-      throw new UnauthorizedException('만료된 리프레시 토큰입니다.');
-    }
-
     const currentUser = await this.getAuthoritativeUser(payload.sub);
     if (
       !isStoreIdValue(payload.storeId) ||
@@ -386,12 +394,50 @@ export class AuthService {
     ) {
       throw new UnauthorizedException('현재 사용자 권한과 일치하지 않는 리프레시 토큰입니다.');
     }
-
-    return this.issueTokens({
+    const nextPayload: JwtPayload = {
       sub: payload.sub,
       role: currentUser.role,
       storeId: toTokenStoreId(currentUser.storeId),
+    };
+
+    // Rotation: 저장된 최신 토큰이면 회전한다. 같은 세션의 동시 요청이나 쿠키 반영 전
+    // 재요청으로 직전 토큰이 짧은 유예 안에 다시 오면, 다시 회전하지 않고 현재 토큰을 돌려준다.
+    // 그 밖의 토큰은 탈취 후 재사용으로 보고 모든 세션을 무효화한다.
+    const tokenRef = this.firestore.doc(`refreshTokens/${payload.sub}`);
+    const outcome = await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(tokenRef);
+      if (!snap.exists) return { kind: 'missing' as const };
+      const stored = snap.data() ?? {};
+      if (stored['token'] === refreshToken) {
+        const tokens = this.signTokens(nextPayload);
+        tx.set(tokenRef, {
+          token: tokens.refreshToken,
+          previousToken: refreshToken,
+          rotatedAt: Date.now(),
+          updatedAt: this.firestore.Timestamp.now(),
+        });
+        return { kind: 'issued' as const, tokens };
+      }
+      if (isWithinRotationGrace(stored, refreshToken, Date.now())) {
+        return {
+          kind: 'issued' as const,
+          tokens: {
+            accessToken: this.signAccessToken(nextPayload),
+            refreshToken: stored['token'] as string,
+          },
+        };
+      }
+      tx.delete(tokenRef);
+      return { kind: 'reused' as const };
     });
+
+    if (outcome.kind === 'reused') {
+      await this.audit.log('auth.token.stolen', { userId: payload.sub });
+    }
+    if (outcome.kind !== 'issued') {
+      throw new UnauthorizedException('만료된 리프레시 토큰입니다.');
+    }
+    return outcome.tokens;
   }
 
   async getSession(user: JwtPayload) {
@@ -475,17 +521,27 @@ export class AuthService {
     };
   }
 
-  private async issueTokens(payload: JwtPayload) {
-    const accessToken = this.jwt.sign(payload, {
+  private signAccessToken(payload: JwtPayload) {
+    return this.jwt.sign(payload, {
       secret: this.config.get('JWT_SECRET'),
       expiresIn: this.config.get('JWT_EXPIRES_IN', '1h'),
     });
+  }
+
+  private signTokens(payload: JwtPayload) {
+    const accessToken = this.signAccessToken(payload);
     const refreshToken = this.jwt.sign(payload, {
       secret: this.config.get('JWT_REFRESH_SECRET'),
       expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '30d'),
     });
+    return { accessToken, refreshToken };
+  }
 
-    // Rotation: 최신 refresh token만 유효 (이전 토큰 자동 무효화)
+  private async issueTokens(payload: JwtPayload) {
+    const { accessToken, refreshToken } = this.signTokens(payload);
+
+    // Rotation: 최신 refresh token만 유효 (이전 토큰 자동 무효화). 로그인 발급은
+    // previousToken을 남기지 않으므로 직전 세션의 회전 유예도 함께 끊는다.
     await this.firestore.doc(`refreshTokens/${payload.sub}`).set({
       token: refreshToken,
       updatedAt: this.firestore.Timestamp.now(),
