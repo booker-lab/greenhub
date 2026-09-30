@@ -82,7 +82,6 @@
 - repository ALIGO logical 8-code contract: `VERIFIED` — #65에서 확인한 repository 계약.
 - ALIGO 템플릿 8종(UK_5691~5698): 2026-09-28 콘솔에서 코드·이름·승인완료·본문·변수 일치 확인. actual send는 `NOT RUN`이다.
 - **운영 배포 완료(2026-09-28, 출시 SHA `197f84a4`)**: API·프런트 3개·Firestore/Storage 규칙·인덱스가 같은 SHA로 반영됐다. 이후 2026-09-30 API·프런트 3개를 `389066c8`(회차 주문 요청사항 칸 포함)로 갱신했다(규칙·인덱스 변경 없음). 상세는 아래 5절.
-- 운영 Firebase rules/indexes는 출시 전 read-only 재조회 필요.
 - production 배포 완료. 첫 회차 "11월 10일 배송 회차"가 `SCHEDULED`다(주문 11/1 10:00 오픈).
 - 판매 모드: **`round_direct`**(2026-09-29 전환). 파일럿 운영 시작은 **2026-11-01로 연기**했다.
 
@@ -329,7 +328,8 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 검증 상태
 
-- 최근 원격 회차 E2E: run `36348002412`(live `main` `c8bec1f5`) 52/52 + 세션 12/12, 양쪽 cleanup 잔여 0 — 출시 전 증거이며 출시 SHA 증거가 아니다.
+- 최근 원격 회차 E2E: run `36727676723`(현재 운영 SHA `389066c8`) 52/52 + 세션 12/12, fixture 잔여 0. 운영에 나갈 SHA가 바뀌면 그 SHA로 다시 판정한다.
+- 이전 운영 SHA 증거: 출시 `197f84a4` run `36372493414`, API `781285ea` run `36383185604`, 판매자 앱 `437af74b` run `36410582745`(각 52/52 + 세션 12/12, cleanup 0).
 - 이전 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`(52건).
 - 과거 run을 현재 release 증거로 확장하지 않는다.
 - exact-SHA Preview/browser/fixture와 필요한 legal/release proof는 actual release candidate에서 다시 판정한다.
@@ -353,7 +353,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 다음 작업
 
-1. 파일럿 시작(2026-11-01) 전 프런트엔드 점검: 첫 회차는 `orderOpenAt`(11/1 10:00)에 자동 `OPEN`된다. 일정을 다시 미루면 그 전에 회차 일정을 옮긴다.
+1. 파일럿 시작(2026-11-01) 전 프런트엔드 점검: 첫 회차는 `orderOpenAt`(11/1 10:00)에 자동 `OPEN`된다. 일정을 다시 미루면 그 전에 회차 일정을 옮긴다. 결정 3건(`ADMIN-CANCELLED-REFUND-RETRY`·`SELLER-ORDER-LIST-BUYER-INFO`·`ADMIN-DESKTOP-TABLE-IN-480-SHELL`)도 파일럿 전에 정한다.
 2. SMS 발신번호를 사업자 번호로 교체하고 문자 재시험.
 3. 파일럿 시작 직후 실제 결제 1건(결제 → 접수 알림톡 → 소비자 취소·환불 → 취소 알림톡)으로 운영 PortOne 경로를 확인한다. 결제는 지금까지 E2E 모의 결제로만 검증됐다.
 4. 운영 배포는 검증된 SHA를 지정해 API → 프런트 → 규칙 순으로 한다. Railway UI "Deploy"는 `main` HEAD를 배포하므로 병합 후 미검증 코드가 나갈 수 있다.
