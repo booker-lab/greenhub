@@ -643,6 +643,24 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 ### EXACT-PREVIEW-WORKFLOW-CREDENTIALS
 - [ ] `create-exact-preview-deployment.yml`은 앱별 Vercel 토큰(`VERCEL_EXACT_PREVIEW_{CONSUMER,SELLER,DRIVER}_TOKEN`) 미등록으로 성공한 적이 없다. 현재 exact Preview는 로컬 Vercel CLI 권한으로 `preview-exact/<scope>/<sha>` ref를 사용해 만든다. 워크플로 경로로 옮길지 결정한다.
 
+### SELLER-SETTLEMENT-KST
+- [ ] 셀러 정산 탭 정산일시가 timeZone 미지정 `toLocaleDateString`으로 표시되고, CSV는 UTC(`Z`) ISO로 기록되어 KST 자정 전후 정산이 전날로 읽힌다. 수정 PR #320(화면 Asia/Seoul 고정·CSV `+09:00`) 병합과 육안 확인 대기. 어드민 정산은 #316. 2026-09-28 발견.
+
+### ADMIN-CANCELLED-REFUND-RETRY
+- [ ] 서버 강제환불은 이미 취소된 주문도 재시도를 허용한다(일반: `cancellation.status` LOCAL_PENDING·LOCAL_FAILED·REFUND_FAILED·만료 claim·취소 상태 기록 없음, 회차: 결제가 아직 PAID). 어드민 주문 탭은 취소 주문에 버튼이 없다(#318 이후에도 동일). 결과 불명확 환불은 운영 이슈 `AUTO_REFUND_FAILED`→`RETRY_REFUND`로, 취소 전 주문은 기존 버튼으로 복구할 수 있어 급하지 않다. 취소 주문용 "환불 재시도" 버튼을 둘지 사람이 결정한다. 2026-09-28 발견.
+
+### SELLER-ORDER-LIST-BUYER-INFO
+- [ ] 셀러 주문 목록 카드의 손님 이름과 이름·전화 통합 검색(`seller-orders-customer-info-plan.md` T1·T4)은 목록 API(`seller-order-read-model.ts` `LIST_FIELDS`)에 손님 정보가 없어 보류했다. 개인정보 최소화 계약을 넓힐지 결정한 뒤 진행한다. 상세 화면 표시는 #314. 2026-09-28 발견.
+
+### ADMIN-DESKTOP-TABLE-IN-480-SHELL
+- [ ] 셀러 앱 루트 레이아웃이 폭 480px로 고정돼 있다. 그런데 어드민 탭은 Mantine `visibleFrom="sm"`(창 폭 기준)으로 데스크톱 표를 고른다. 그래서 PC에서도 카드 폭 446px 안에 표가 들어가고 `overflow:hidden`으로 오른쪽이 잘린다. 어드민 주문 표(489px)는 강제환불 버튼이 "강제환"까지만 보인다. 기존 결함이다(#318과 무관). 어드민을 넓은 레이아웃으로 뺄지, 표 기준을 컨테이너 폭으로 바꿀지 결정한다. #317은 표를 4칸으로 유지해 피했다. 2026-09-28 로컬 하네스 검증에서 발견.
+
+### DRIVER-MANTINE-CSS-AUDIT
+- [ ] 드라이버 `globals.css`는 Mantine CSS를 골라 import한다. 알림 스타일 누락은 #323으로 고쳤지만, `Modal.css` 같은 다른 사용 컴포넌트 CSS도 빠졌을 수 있다. 실제 사용 컴포넌트와 import 목록을 대조한다. 2026-09-28 발견.
+
+### ADMIN-TAB-PLANS-STALE-PROGRESS
+- [ ] 어드민 탭 계획서(`docs/specs/frontend/admin-tabs-improve-plan.md`와 `admin/admin-tab-*-plan.md`) 진행표가 현재 코드보다 뒤처져 있다. stores는 T7·T8을 빼고 구현을 마쳤고, 6개 탭 공통 조회 실패 표시와 users D1·banner T1·T3도 끝났는데 표에는 "미착수"로 남아 있다. 문서 정합성 작업으로 정리한다. 2026-09-28 코드 대조로 확인.
+
 ---
 
 ## STALE_OR_SUPERSEDED
