@@ -30,6 +30,9 @@ Canonical invariants:
 8. **Fixture lifetime ownership**  
    spec temporary fixture는 만든 test/helper가 lifetime owner이며 success·assertion failure·exception 경로 모두에서 cleanup한다. cleanup 실패를 숨기지 않고, provenance 없는 기존 residue를 삭제하지 않는다.
 
+9. **Local-first proof, release-train remote E2E**  
+   PR 단계 proof는 로컬(테스트·타입·빌드, 필요하면 운영 빌드 `next start`)에서 끝낸다. 원격 Preview·E2E는 공유 예산이므로 PR마다 쓰지 않고, 병합을 모은 최종 `main` SHA로 배포 직전 1회만 실행한다. 상세는 `development-authority.md` §4.1.
+
 Default flow:
 
 ```text
