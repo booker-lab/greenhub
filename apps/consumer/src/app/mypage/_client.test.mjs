@@ -26,6 +26,7 @@ const requireForTest = (specifier) => {
   }
   if (
     specifier === '@mantine/core' ||
+    specifier === 'lucide-react' ||
     specifier === 'next-auth/react' ||
     specifier === 'next/navigation' ||
     specifier === '@/hooks/useOrders' ||
