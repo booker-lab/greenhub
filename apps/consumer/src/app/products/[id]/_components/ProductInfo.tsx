@@ -21,9 +21,11 @@ const CARE_LABEL: Record<string, string> = {
 interface Props {
   product: Product;
   variety: Variety | null;
+  /** 분류·이름·원래 가격 묶음. 회차 상품은 회차 패널이 대신 보여주므로 false로 숨긴다. */
+  showSummary?: boolean;
 }
 
-export default function ProductInfo({ product, variety }: Props) {
+export default function ProductInfo({ product, variety, showSummary = true }: Props) {
   const isGroup = product.saleType === 'group';
   const headline = product.content?.headline ?? null;
   const description = product.content?.description ?? product.description ?? null;
@@ -69,36 +71,40 @@ export default function ProductInfo({ product, variety }: Props) {
         </Text>
       )}
 
-      <Stack gap="xs" mb="lg">
-        <Group gap="xs">
-          {isGroup && (
-            <Badge color="brand" variant="filled" size="sm">
-              공동구매
-            </Badge>
-          )}
-          <Badge color="gray" variant="light" size="sm">
-            {product.category === 'cut_flower'
-              ? '절화'
-              : product.category === 'orchid'
-                ? '난'
-                : '관엽'}
-          </Badge>
-        </Group>
-        <Title order={2} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
-          {product.name}
-        </Title>
-        <Text
-          style={{
-            fontSize: 'var(--font-size-xl)',
-            fontWeight: 'var(--fw-bold)',
-            color: 'var(--color-text)',
-          }}
-        >
-          {product.price.toLocaleString()}원
-        </Text>
-      </Stack>
+      {showSummary && (
+        <>
+          <Stack gap="xs" mb="lg">
+            <Group gap="xs">
+              {isGroup && (
+                <Badge color="brand" variant="filled" size="sm">
+                  공동구매
+                </Badge>
+              )}
+              <Badge color="gray" variant="light" size="sm">
+                {product.category === 'cut_flower'
+                  ? '절화'
+                  : product.category === 'orchid'
+                    ? '난'
+                    : '관엽'}
+              </Badge>
+            </Group>
+            <Title order={2} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
+              {product.name}
+            </Title>
+            <Text
+              style={{
+                fontSize: 'var(--font-size-xl)',
+                fontWeight: 'var(--fw-bold)',
+                color: 'var(--color-text)',
+              }}
+            >
+              {product.price.toLocaleString()}원
+            </Text>
+          </Stack>
 
-      <Divider mb="lg" />
+          <Divider mb="lg" />
+        </>
+      )}
 
       {careCards.length > 0 && (
         <Paper
