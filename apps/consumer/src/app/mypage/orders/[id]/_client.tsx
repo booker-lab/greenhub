@@ -726,7 +726,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {showPickupCode && (
         <Paper withBorder radius="md" p="lg" mb="lg" ta="center">
-          <Text size="sm" fw="var(--fw-bold)" c="brand">
+          <Text size="sm" fw="var(--fw-bold)" c="brand.8">
             픽업 코드
           </Text>
           <Text fz={36} ff="monospace" fw="var(--fw-bold)" lts={8}>

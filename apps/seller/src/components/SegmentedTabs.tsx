@@ -48,7 +48,7 @@ export function SegmentedTabs<T extends string>({
               fontWeight: active ? 700 : 'var(--fw-medium)',
               textAlign: 'center',
               borderBottom: `2px solid ${active ? 'var(--color-primary)' : 'transparent'}`,
-              color: active ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+              color: active ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
               transition: 'all 0.15s',
               ...(layout === 'flex' ? { flex: 1 } : { flexShrink: 0 }),
             };

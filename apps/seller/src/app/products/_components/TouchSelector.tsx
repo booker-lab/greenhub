@@ -136,7 +136,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
                 backgroundColor: value.colors.includes(color)
                   ? 'var(--color-primary-surface)'
                   : undefined,
-                color: value.colors.includes(color) ? 'var(--color-primary)' : undefined,
+                color: value.colors.includes(color) ? 'var(--color-primary-dark)' : undefined,
                 borderColor: value.colors.includes(color) ? 'var(--color-primary)' : undefined,
               }}
             >

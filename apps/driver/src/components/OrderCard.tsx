@@ -83,7 +83,7 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
               fontSize: 'var(--font-size-sm)',
               color:
                 payment.color === 'green'
-                  ? 'var(--color-primary)'
+                  ? 'var(--color-primary-dark)'
                   : payment.color === 'red'
                     ? 'var(--color-danger)'
                     : '#d97706',
