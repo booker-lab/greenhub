@@ -65,6 +65,18 @@ generic Git workspace 안전(foreign dirty 보존, transport-only ref cleanup)�
 pnpm test:git-safety
 ```
 
+### 4.1 로컬 우선 검증과 원격 배포 예산
+
+원격 Preview·E2E는 공유 자원이다. Vercel Hobby는 하루 배포 100건(빌드를 건너뛴 배포도 포함), 동시 빌드 1개이고, 원격 회차 E2E는 1회에 30분 이상과 exact Preview 3건을 쓴다. 2026-09-30~10-01에 PR마다 원격 검증을 돌리다 24시간 112건으로 한도를 넘겨 최종 E2E·운영 배포가 하루 막혔다.
+
+- PR 단계 proof는 로컬에서 끝낸다: 단위·계약 테스트, 타입 검사, 해당 앱 빌드. 화면 작업은 `next dev`로 반복하고, 병합 전 확인은 운영과 같은 빌드(`next build && next start`)로 한다. `dev` 모드는 서비스워커·Permissions-Policy·hydration 타이밍이 운영과 달라 그것이 criterion이면 proof가 아니다.
+- 로컬에서 원격 회차 E2E를 돌릴 수 있게 되면(로컬 대상 모드) 브라우저·런타임 criterion도 PR 단계에서 그 모드로 검증한다.
+  - 로컬 대상 모드 사용법: [`apps/e2e/README.md`](../../../apps/e2e/README.md#회차-e2e-로컬-대상-모드) (`pnpm test:e2e:local`).
+- PR마다 exact Preview나 원격 E2E를 만들지 않는다. 커밋 푸시로 생기는 Vercel 자동 배포는 모든 브랜치에서 꺼져 있다(`git.deploymentEnabled=false`, `scripts/verify-deployment-safety.mjs`가 강제).
+- 원격 회차 E2E는 release train으로 묶는다: 여러 PR을 병합한 뒤 운영에 나갈 최종 `main` SHA로 1회 실행하고, 통과한 그 SHA를 그대로 배포한다. 여러 세션이 각자 원격 E2E를 돌리지 않는다.
+- 원격 E2E가 실패하면 원인을 로컬에서 재현·수정·검증한 뒤 다시 1회 실행한다. 원격 실행으로 수정 시도를 반복하지 않는다.
+- 원격 실행 전 남은 예산을 확인한다(Vercel `/v6/deployments?since=<24시간 전>` 집계). 한도가 부족하면 실행을 미루고 이유를 보고한다.
+
 ## 5. Uncertainty / blocker handling
 
 - UNKNOWN은 lifecycle state가 아니라 **현재 결론에 필요한데 아직 확인되지 않은 정확한 fact**로 취급한다.
