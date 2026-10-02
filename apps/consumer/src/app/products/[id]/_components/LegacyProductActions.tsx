@@ -179,7 +179,9 @@ export default function LegacyProductActions({ product }: Props) {
             <Text
               style={{
                 fontWeight: 'var(--fw-bold)',
-                color: isGroupUnavailable ? 'var(--color-text-secondary)' : 'var(--color-primary)',
+                color: isGroupUnavailable
+                  ? 'var(--color-text-secondary)'
+                  : 'var(--color-primary-dark)',
               }}
             >
               ⚡ 공동구매 현황
@@ -208,7 +210,9 @@ export default function LegacyProductActions({ product }: Props) {
                 fontSize: 36,
                 fontWeight: 'var(--fw-bold)',
                 lineHeight: 1,
-                color: isGroupUnavailable ? 'var(--color-text-disabled)' : 'var(--color-primary)',
+                color: isGroupUnavailable
+                  ? 'var(--color-text-disabled)'
+                  : 'var(--color-primary-dark)',
               }}
             >
               {groupConfig.currentQuantity}
@@ -249,7 +253,7 @@ export default function LegacyProductActions({ product }: Props) {
                   fontWeight: 'var(--fw-bold)',
                   color: isGroupUnavailable
                     ? 'var(--color-text-secondary)'
-                    : 'var(--color-primary)',
+                    : 'var(--color-primary-dark)',
                 }}
               >
                 {new Date(groupConfig.recruitDeadline).toLocaleString('ko-KR', {

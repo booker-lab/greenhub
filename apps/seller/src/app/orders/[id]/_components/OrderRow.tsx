@@ -36,7 +36,7 @@ export function Row({
           color: bold
             ? 'var(--color-text)'
             : highlight
-              ? 'var(--color-primary)'
+              ? 'var(--color-primary-dark)'
               : 'var(--color-text-secondary)',
         }}
       >

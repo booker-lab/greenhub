@@ -40,7 +40,7 @@ export function StepIndicator({ step }: { step: number }) {
                     color: active
                       ? 'white'
                       : done
-                        ? 'var(--color-primary)'
+                        ? 'var(--color-primary-dark)'
                         : 'var(--color-text-disabled)',
                   }}
                 >
@@ -49,7 +49,7 @@ export function StepIndicator({ step }: { step: number }) {
                 <Text
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    color: active ? 'var(--color-primary)' : 'var(--color-text-disabled)',
+                    color: active ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
                     fontWeight: active ? 'var(--fw-medium)' : 400,
                   }}
                 >

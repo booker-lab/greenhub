@@ -197,7 +197,7 @@ export default function HubPickupPage() {
                         step === 'error'
                           ? 'var(--color-danger)'
                           : digit
-                            ? 'var(--color-primary)'
+                            ? 'var(--color-primary-dark)'
                             : 'var(--color-text)',
                       outline: 'none',
                     }}

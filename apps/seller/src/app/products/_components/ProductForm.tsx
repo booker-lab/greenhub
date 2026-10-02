@@ -85,7 +85,7 @@ export default function ProductForm(props: ProductFormProps) {
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
-                color: f.draftSaved ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                color: f.draftSaved ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
               }}
             >
               {f.draftSaved ? '저장됨 ✓' : '임시저장'}
