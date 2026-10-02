@@ -116,7 +116,7 @@ export default function EditProductPage() {
         <UnstyledButton
           onClick={() => router.back()}
           style={{
-            color: 'var(--color-primary)',
+            color: 'var(--color-primary-dark)',
             textDecoration: 'underline',
             fontSize: 'var(--font-size-sm)',
           }}

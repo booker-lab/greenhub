@@ -10,7 +10,7 @@ export default function LoginPage() {
   return (
     <Container size={400} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
       <Stack gap="lg" w="100%">
-        <Title order={1} ta="center" style={{ color: 'var(--color-primary)' }}>
+        <Title order={1} ta="center" style={{ color: 'var(--color-primary-dark)' }}>
           Green Love
         </Title>
         <Suspense fallback={<div style={{ height: 240 }} />}>

@@ -89,7 +89,7 @@ export function SettlementTable({
               </Text>
             </Group>
             <Group justify="space-between" align="center" mt="xs">
-              <Text style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
+              <Text style={{ fontWeight: 500, color: 'var(--color-primary-dark)' }}>
                 지급액 ₩{s.netAmount.toLocaleString()}
               </Text>
               {s.status === 'confirmed' && (
@@ -192,7 +192,7 @@ export function SettlementTable({
                     padding: '12px 16px',
                     textAlign: 'right',
                     fontWeight: 500,
-                    color: 'var(--color-primary)',
+                    color: 'var(--color-primary-dark)',
                   }}
                 >
                   ₩{s.netAmount.toLocaleString()}

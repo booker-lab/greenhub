@@ -175,7 +175,7 @@ export function SettlementCard({
           style={{
             fontSize: 'var(--font-size-md)',
             fontWeight: 'var(--fw-bold)',
-            color: 'var(--color-primary)',
+            color: 'var(--color-primary-dark)',
           }}
         >
           {amountText}

@@ -123,7 +123,7 @@ function DeadlineCard({ product }: { product: Product }) {
       <p
         style={{
           fontSize: 'var(--font-size-sm)',
-          color: 'var(--color-primary)',
+          color: 'var(--color-primary-dark)',
           marginTop: 2,
           marginBottom: 0,
           fontWeight: 'var(--fw-medium)',

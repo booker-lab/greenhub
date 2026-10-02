@@ -2,22 +2,25 @@
 
 :root {
   /* ── Colors ── */
-  --color-primary: #2D6A4F;
-  --color-primary-dark: #1B4332;
-  --color-primary-light: #52B788;
-  --color-primary-surface: #F2FBF6;
+  /* 디자인 기준(2026-10-03 확정, docs/specs/frontend/design-standard.md): 4번 프레시 그린 */
+  --color-primary: #00A65A; /* 버튼·선택 탭 같은 면 전용. 흰 바탕 작은 글자에는 쓰지 않는다 */
+  --color-primary-dark: #007A43; /* 초록 글자·링크 (흰 바탕 대비 5.4:1) */
+  --color-primary-light: #45C67F;
+  --color-primary-surface: #E9F9EF;
   --color-bg: #FFFFFF;
   --color-surface: #FFFFFF;
-  --color-border: #E8E8E8;
+  --color-border: #ECEFED;
   --color-text: #111111;
-  --color-text-secondary: #555555;
-  --color-text-disabled: #AAAAAA;
+  --color-text-secondary: #6B716E;
+  --color-text-disabled: #A3A9A6;
 
   /* ── Typography ── */
   --font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --fw-light: 300;
+  --fw-regular: 400;
   --fw-medium: 500;
   --fw-bold: 700;
+  --fw-extrabold: 800;
   --font-size-xs: 12px;
   --font-size-sm: 15px;
   --font-size-md: 16px;
@@ -28,22 +31,28 @@
   /* ── Shape ── */
   --radius: 16px;
   --radius-sm: 8px;
+  --radius-tag: 6px;
   --radius-full: 9999px;
   --border: 1px solid var(--color-border);
 
   /* ── Mobile UX ── */
   --touch-target: 44px;
-  --color-danger: #ef4444;
-  --color-danger-surface: #fff5f5;
+  --color-danger: #D92D20;
+  --color-danger-surface: #FDE8E6;
 
   /* ── Semantic Status ── */
-  --color-surface-muted: #f8f9fa;
+  --color-surface-muted: #F1F3F2;
   --color-status-info-bg: #e7f5ff;
   --color-status-info-text: #1971c2;
   --color-status-warning-bg: #fff4e6;
   --color-status-warning-text: #e8590c;
   --color-caution-bg: #fffde7;
   --color-caution-border: #ffd43b;
+
+  /* ── 회차 마감 강조(노랑) ── */
+  --color-deadline: #FFD43B;
+  --color-deadline-surface: #FFF4CC;
+  --color-deadline-text: #3B2F00;
 }
 
 /* 300ms 탭 딜레이 제거 + 텍스트 선택 방지 (모바일 버튼/링크) */

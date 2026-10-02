@@ -330,7 +330,7 @@ export default function BoardClient() {
             </Text>
             {tab === 'preparing' && (
               <Anchor
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}
                 onClick={() => router.push('/map')}
               >
                 지도에서 경로 보기

@@ -133,7 +133,7 @@ export default function HubsPage() {
                 mt="xs"
                 style={{
                   fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-primary)',
+                  color: 'var(--color-primary-dark)',
                   fontWeight: 500,
                 }}
               >

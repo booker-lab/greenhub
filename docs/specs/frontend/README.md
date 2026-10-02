@@ -8,6 +8,7 @@
 - 회차 직배송 UI는 `docs/specs/mvp-sales-round-direct-delivery.md`와 활성 출시 문서를 우선한다.
 - 인증은 `docs/specs/api/auth.md`, 주문·결제·상품·정산은 해당 API spec을 함께 본다.
 - 공통 visual token은 `packages/ui`의 현재 구현을 정본으로 본다.
+- 색·글자·모양을 어디에 쓰는지는 `design-standard.md`(2026-10-03 확정 디자인 기준)를 따른다.
 
 ## 기본적으로 역사 자료인 파일
 
