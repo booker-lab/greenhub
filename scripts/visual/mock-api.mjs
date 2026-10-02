@@ -1,6 +1,7 @@
 // 화면 확인용 가짜 API 서버.
 // 앱별 fixture 모듈(fixtures/<app>.mjs)의 조회 경로만 응답하고, 외부로 나가는 코드는 없다.
-// 쓰기 요청(POST/PATCH/PUT/DELETE, /auth/* 제외)은 기록만 하고 200 {}을 돌려준다.
+// 쓰기 요청(POST/PATCH/PUT/DELETE, /auth/* 제외)은 기록하고, fixture에 같은 메서드 경로가 있으면 그 응답을,
+// 없으면 200 {}을 돌려준다(예: 장바구니 검증처럼 화면이 응답 내용을 읽는 POST).
 import fs from 'node:fs';
 import http from 'node:http';
 
@@ -105,21 +106,22 @@ export function startMockApi({ port, hosts, allowedOrigins, fixtures, logFile })
       return send(req, res, 503, { message: '하네스: firebase-token 미지원' });
     }
 
-    // ── 쓰기 요청: 기록만 하고 200 ──
-    if (m !== 'GET' && m !== 'HEAD') {
-      record({ kind: 'write', method: m, path: p, query: url.search, body: body.slice(0, 500) });
-      return send(req, res, 200, {});
-    }
-
-    // ── 조회: fixture 경로 표에서 첫 일치 ──
+    // ── fixture 경로 표에서 같은 메서드의 첫 일치 ──
+    const isWrite = m !== 'GET' && m !== 'HEAD';
     for (const [method, pattern, handle] of routes) {
       if (method !== m) continue;
       const match = p.match(pattern);
       if (!match) continue;
-      const out = handle({ url, params: match.slice(1).map(decodeURIComponent) });
+      const out = handle({ url, params: match.slice(1).map(decodeURIComponent), body });
       const status = out.status ?? 200;
-      record({ kind: 'read', method: m, path: p, query: url.search, status });
+      record({ kind: isWrite ? 'write' : 'read', method: m, path: p, query: url.search, status });
       return send(req, res, status, out.body, out.delay ?? 0);
+    }
+
+    // ── fixture에 없는 쓰기 요청: 기록만 하고 200 ──
+    if (isWrite) {
+      record({ kind: 'write', method: m, path: p, query: url.search, body: body.slice(0, 500) });
+      return send(req, res, 200, {});
     }
 
     record({ kind: 'missing', method: m, path: p, query: url.search, status: 404 });

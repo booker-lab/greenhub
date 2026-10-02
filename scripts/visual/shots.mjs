@@ -1,6 +1,6 @@
 // 화면 자동 캡처 — start.mjs로 띄운 화면 확인 서버에서 fixtures/<app>.mjs의 screens를 모바일·데스크톱으로 찍는다.
 //
-//   node scripts/visual/shots.mjs [app] [--label after] [--only id,id] [--base http://127.0.0.1:3102]
+//   node scripts/visual/shots.mjs [app] [--label after] [--only id,id] [--base http://127.0.0.1:3202]
 //
 // 결과: %TEMP%/greenhub-visual/<app>/shots/<label>/ 아래 PNG와 manifest.json.
 // manifest에는 화면별 최종 주소·콘솔 오류·fixture 없는 API 경로가 남는다(report.mjs가 읽는다).
@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { API_PORT, APPS } from './apps.mjs';
+import { APPS, RUNTIME_FILE } from './apps.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -39,12 +39,14 @@ if (!app) {
   process.exit(1);
 }
 const base = option('base', `http://127.0.0.1:${app.port}`);
-const apiBase = `http://${new URL(base).hostname}:${API_PORT}`;
+const runtimeFile = path.join(os.tmpdir(), 'greenhub-visual', appName, RUNTIME_FILE);
+const runtime = fs.existsSync(runtimeFile) ? JSON.parse(fs.readFileSync(runtimeFile, 'utf8')) : {};
+const apiBase = `http://${new URL(base).hostname}:${app.apiPort}`;
 const label = option('label', 'current');
 const only = option('only', '')?.split(',').filter(Boolean) ?? [];
 const outDir = option('out', path.join(os.tmpdir(), 'greenhub-visual', appName, 'shots', label));
 
-const { screens: allScreens } = await import(`./fixtures/${appName}.mjs`);
+const { screens: allScreens, browserStorage } = await import(`./fixtures/${appName}.mjs`);
 const screens = only.length ? allScreens.filter((s) => only.includes(s.id)) : allScreens;
 
 const { chromium } = createRequire(path.join(ROOT, 'apps/e2e/package.json'))('@playwright/test');
@@ -88,6 +90,8 @@ async function login(context) {
   const csrf = await (await context.request.get(`${base}/api/auth/csrf`)).json();
   await context.request.post(`${base}/api/auth/callback/credentials`, {
     maxRedirects: 0,
+    // 소비자 앱은 E2E 헤더 게이트를 통과해야 한다(start.mjs가 만든 1회용 값).
+    headers: runtime.e2eSecret ? { 'x-e2e-test-token': runtime.e2eSecret } : {},
     form: {
       email: 'visual@local.test',
       password: 'visual',
@@ -154,6 +158,15 @@ try {
         errors.push(m.text().slice(0, 300));
       });
       page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 300)));
+      // storage: true인 화면은 열기 전에 fixture의 브라우저 저장소 값(장바구니 등)을 넣는다.
+      if (screen.storage && browserStorage) {
+        await page.addInitScript((stored) => {
+          for (const [k, v] of Object.entries(stored.localStorage ?? {}))
+            localStorage.setItem(k, v);
+          for (const [k, v] of Object.entries(stored.sessionStorage ?? {}))
+            sessionStorage.setItem(k, v);
+        }, browserStorage);
+      }
       await fetch(`${apiBase}/__log/reset`, { method: 'POST' });
       const t0 = Date.now();
       await page.goto(`${base}${screen.path}`, { waitUntil: 'load', timeout: 180_000 });

@@ -147,7 +147,7 @@ function renderMeta() {
   $('#meta').textContent = `${DATA.app} · ${DATA.run}${DATA.gitSha ? ` @${DATA.gitSha}` : ''} · ${kst(DATA.createdAt)} 촬영`;
   $('#about').textContent = DATA.before
     ? `가짜 데이터로 띄운 화면을 작업 전(${DATA.before}${DATA.beforeSha ? ` @${DATA.beforeSha}` : ''})과 작업 후로 나란히 보여 줍니다. 화면마다 괜찮음/고칠 것을 누르고, 고칠 점은 메모로 남겨 주세요.`
-    : '가짜 데이터로 띄운 화면을 폰·PC 크기로 찍었습니다. 화면마다 괜찮음/고칠 것을 누르고, 고칠 점은 메모로 남겨 주세요. 상품·준비 화면은 Firestore를 직접 읽어서 빈 상태로 보일 수 있어요.';
+    : '가짜 데이터로 띄운 화면을 폰·PC 크기로 찍었습니다. 화면마다 괜찮음/고칠 것을 누르고, 고칠 점은 메모로 남겨 주세요. 상품 사진은 가짜 데이터라 빈 칸으로 나오고, 판매자 상품·준비 화면은 빈 상태로 보일 수 있어요. 결제하기 버튼은 이 화면에서 동작하지 않아요.';
 }
 
 function renderCounts() {
@@ -246,7 +246,7 @@ async function save(id, patch) {
   if (!db) return;
   const screen = DATA.screens.find((s) => s.id === id);
   const prev = state.verdicts[id] ?? {};
-  const next = { run: DATA.run, app: DATA.app, screenId: id, title: screen.title, path: screen.path,
+  const next = { run: DATA.run, app: screen.app ?? DATA.app, screenId: id, title: screen.title, path: screen.path,
     verdict: prev.verdict ?? null, note: prev.note ?? '', ...patch, updatedAt: new Date().toISOString() };
   state.verdicts[id] = next;
   refreshCard(id);

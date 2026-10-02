@@ -2,7 +2,7 @@
 // 배포·Vercel·카카오 로그인 없이 작업 직후 화면을 PC 브라우저나 휴대폰(Tailscale)으로 본다.
 //
 //   node scripts/visual/start.mjs [app] [--phone]
-//     app      셀러(어드민 포함)만 지원: seller (기본)
+//     app      seller(셀러·어드민, 기본) 또는 consumer(소비자)
 //     --phone  Tailscale 주소에 바인딩해 휴대폰에서 접속한다(같은 tailnet 기기만 접근 가능)
 //
 // 안전장치: 앱의 .env 파일 값(운영 API·Firebase·비밀값)을 전부 빈 값으로 덮고,
@@ -14,7 +14,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { API_PORT, APPS } from './apps.mjs';
+import { APPS, RUNTIME_FILE } from './apps.mjs';
 import { startMockApi } from './mock-api.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -70,7 +70,7 @@ if (!host) fail('Tailscale 주소(100.x)를 찾지 못했습니다. Tailscale이
 
 const appDir = path.join(ROOT, app.dir);
 const appUrl = `http://${host}:${app.port}`;
-const apiUrl = `http://${host}:${API_PORT}`;
+const apiUrl = `http://${host}:${app.apiPort}`;
 
 const runDir = path.join(os.tmpdir(), 'greenhub-visual', appName);
 fs.mkdirSync(runDir, { recursive: true });
@@ -83,7 +83,7 @@ for (const f of Object.values(logs)) fs.writeFileSync(f, '');
 
 const { user, routes } = await import(`./fixtures/${appName}.mjs`);
 const mock = startMockApi({
-  port: API_PORT,
+  port: app.apiPort,
   hosts: [...new Set(['127.0.0.1', host])],
   allowedOrigins: [appUrl, `http://localhost:${app.port}`],
   fixtures: { user, routes },
@@ -109,14 +109,29 @@ Object.assign(env, {
   NEXT_PUBLIC_FIREBASE_APP_ID: '1:0:web:0',
   AUTH_SECRET: randomBytes(32).toString('hex'),
   AUTH_TRUST_HOST: 'true',
-  // 로그인 화면의 이메일·비밀번호 입력을 켜고 E2E 헤더 게이트를 생략한다(auth.ts isLocalCredentialRuntime).
-  GREENHUB_LOCAL_RUNTIME: 'true',
-  E2E_TEST: '',
   NEXT_TELEMETRY_DISABLED: '1',
   NODE_OPTIONS: `--require "${path.join(HERE, 'node-guard.cjs').replaceAll('\\', '/')}"`,
   VISUAL_GUARD_ALLOW: host,
   VISUAL_GUARD_LOG: logs.guard,
 });
+
+// 로그인 화면의 이메일·비밀번호 입력을 켠다. 방식은 앱마다 다르다(apps.mjs credentials).
+const e2eSecret = randomBytes(24).toString('hex');
+if (app.credentials === 'local-runtime') {
+  Object.assign(env, { GREENHUB_LOCAL_RUNTIME: 'true', E2E_TEST: '' });
+} else {
+  // 하네스 전용 1회용 비밀값이다. shots.mjs가 runtime.json에서 읽어 x-e2e-test-token 헤더로 보낸다.
+  Object.assign(env, { GREENHUB_LOCAL_RUNTIME: '', E2E_TEST: 'true', E2E_TEST_SECRET: e2eSecret });
+}
+fs.writeFileSync(
+  path.join(runDir, RUNTIME_FILE),
+  JSON.stringify({
+    app: appName,
+    appUrl,
+    apiUrl,
+    e2eSecret: app.credentials === 'e2e-header' ? e2eSecret : null,
+  }),
+);
 
 const nextBin = createRequire(path.join(appDir, 'package.json')).resolve('next/dist/bin/next');
 const child = spawn(
@@ -139,7 +154,9 @@ const onOutput = (chunk) => {
         '',
         `✅ 화면 확인 서버 준비됨 (${appName})`,
         `   주소: ${appUrl}/login`,
-        '   로그인: 아무 이메일·비밀번호나 입력 → 겸직(어드민+셀러) 가짜 계정으로 들어갑니다',
+        app.credentials === 'local-runtime'
+          ? '   로그인: 아무 이메일·비밀번호나 입력 → fixture의 가짜 계정으로 들어갑니다'
+          : '   로그인: 브라우저에서는 공개 화면만 볼 수 있어요(로그인 화면은 자동 캡처 shots.mjs에서만 통과)',
         `   요청 기록: ${logs.api}`,
         `   next 로그: ${logs.next}`,
         '   종료: Ctrl+C',

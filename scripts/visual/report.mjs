@@ -14,9 +14,12 @@ function option(name, fallback) {
 }
 
 const args = process.argv.slice(2);
-const appName =
-  args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--')) ?? 'seller';
-const shotsRoot = path.join(os.tmpdir(), 'greenhub-visual', appName, 'shots');
+// 여러 앱을 한 확인판에 넣을 수 있다: consumer,seller (앞에 쓴 앱이 위에 온다).
+const appNames = (
+  args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--')) ?? 'seller'
+).split(',');
+// 확인판에서 앱을 구분하는 묶음 이름 앞머리. 셀러 fixture의 묶음(판매자·어드민)은 그대로 둔다.
+const APP_GROUP_PREFIX = { consumer: '소비자 · ' };
 const afterLabel = option('after', 'current');
 const beforeLabel = option('before', null);
 const outDir = option('out', null);
@@ -25,54 +28,72 @@ if (!outDir) {
   process.exit(1);
 }
 
-function readRun(label) {
-  const file = path.join(shotsRoot, label, 'manifest.json');
+const shotsRoot = (app) => path.join(os.tmpdir(), 'greenhub-visual', app, 'shots');
+
+function readRun(app, label) {
+  const file = path.join(shotsRoot(app), label, 'manifest.json');
   if (!fs.existsSync(file)) {
-    console.error(`❌ 캡처 기록이 없습니다: ${file} (먼저 shots.mjs --label ${label})`);
+    console.error(`❌ 캡처 기록이 없습니다: ${file} (먼저 shots.mjs ${app} --label ${label})`);
     process.exit(1);
   }
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
-function copyShots(label) {
-  const dest = path.join(outDir, 'shots', label);
+function copyShots(app, label) {
+  const dest = path.join(outDir, 'shots', app, label);
   fs.mkdirSync(dest, { recursive: true });
-  for (const f of fs.readdirSync(path.join(shotsRoot, label))) {
-    if (f.endsWith('.png')) fs.copyFileSync(path.join(shotsRoot, label, f), path.join(dest, f));
+  for (const f of fs.readdirSync(path.join(shotsRoot(app), label))) {
+    if (f.endsWith('.png'))
+      fs.copyFileSync(path.join(shotsRoot(app), label, f), path.join(dest, f));
   }
 }
 
-const after = readRun(afterLabel);
-const before = beforeLabel ? readRun(beforeLabel) : null;
 fs.rmSync(outDir, { recursive: true, force: true });
-copyShots(afterLabel);
-if (before) copyShots(beforeLabel);
 
-// 화면(id) 단위로 묶는다: 각 화면에 모바일·데스크톱 캡처와(있으면) 이전 캡처를 붙인다.
+// 화면 단위로 묶는다: 각 화면에 모바일·데스크톱 캡처와(있으면) 이전 캡처를 붙인다.
+// 화면 id는 앱 이름을 붙여 앱 사이에서 겹치지 않게 한다(판정 문서 id에도 쓰인다).
 const screens = [];
-for (const shot of after.shots) {
-  let screen = screens.find((s) => s.id === shot.id);
-  if (!screen) {
-    screen = { id: shot.id, group: shot.group, title: shot.title, path: shot.path, views: {} };
-    screens.push(screen);
+const runs = [];
+for (const app of appNames) {
+  const after = readRun(app, afterLabel);
+  const before = beforeLabel ? readRun(app, beforeLabel) : null;
+  copyShots(app, afterLabel);
+  if (before) copyShots(app, beforeLabel);
+  runs.push({
+    app,
+    gitSha: after.gitSha,
+    beforeSha: before?.gitSha ?? null,
+    createdAt: after.createdAt,
+  });
+  for (const shot of after.shots) {
+    const id = `${app}-${shot.id}`;
+    let screen = screens.find((s) => s.id === id);
+    if (!screen) {
+      const group = `${APP_GROUP_PREFIX[app] ?? ''}${shot.group}`;
+      screen = { id, app, group, title: shot.title, path: shot.path, views: {} };
+      screens.push(screen);
+    }
+    const prev = before?.shots.find((b) => b.id === shot.id && b.viewport === shot.viewport);
+    screen.views[shot.viewport] = {
+      src: `shots/${app}/${afterLabel}/${shot.file}`,
+      beforeSrc: prev ? `shots/${app}/${beforeLabel}/${prev.file}` : null,
+      finalPath: shot.finalPath,
+      missing: shot.missing,
+      errors: shot.errors,
+    };
   }
-  const prev = before?.shots.find((b) => b.id === shot.id && b.viewport === shot.viewport);
-  screen.views[shot.viewport] = {
-    src: `shots/${afterLabel}/${shot.file}`,
-    beforeSrc: prev ? `shots/${beforeLabel}/${prev.file}` : null,
-    finalPath: shot.finalPath,
-    missing: shot.missing,
-    errors: shot.errors,
-  };
 }
 
 const data = {
-  app: appName,
+  app: appNames.join(','),
   run: afterLabel,
   before: beforeLabel,
-  gitSha: after.gitSha,
-  beforeSha: before?.gitSha ?? null,
-  createdAt: after.createdAt,
+  gitSha: runs[0].gitSha,
+  beforeSha: runs[0].beforeSha,
+  createdAt: runs
+    .map((r) => r.createdAt)
+    .sort()
+    .at(-1),
   screens,
 };
 
