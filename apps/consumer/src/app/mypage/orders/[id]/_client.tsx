@@ -23,18 +23,18 @@ import { useOrderStatus } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { readPortonePaymentConfiguration } from '@/lib/portone-config';
 import {
-  formatDateTime,
-  classifyCommandFailure,
-  hasAuthoritativeOrderStatus,
-  isStaleOrderRead,
-  readCommandConfirmation,
   type CommandOutcome,
+  classifyCommandFailure,
+  formatDateTime,
+  hasAuthoritativeOrderStatus,
   IDLE_COMMAND_OUTCOME,
   isDeliveryHoldActive,
   isNonEmptyString,
   isRecord,
   isSafeIdentifier,
+  isStaleOrderRead,
   type OrderDetailView,
+  readCommandConfirmation,
   readOrderDetail,
   readRedeliveryPaymentResponse,
 } from './_detail';
@@ -180,15 +180,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         }
       }
       if (caught instanceof TypeError) {
-        const uncertainMessage =
-          '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.';
+        const uncertainMessage = '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.';
         setCancelOutcome({ kind: 'uncertain', message: uncertainMessage });
         setActionError(uncertainMessage);
         return;
       }
-      setCancelOutcome({ kind: 'uncertain', message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.' });
+      setCancelOutcome({
+        kind: 'uncertain',
+        message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+      });
       setActionError(
-        caught instanceof Error ? caught.message : '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+        caught instanceof Error
+          ? caught.message
+          : '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
       );
     }
   }
@@ -276,9 +280,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           throw {
             kind: 'rejected',
             message:
-              (isRecord(result) && isNonEmptyString(result.message)
-                ? result.message
-                : null) ?? '재배송비 결제가 취소되었습니다.',
+              (isRecord(result) && isNonEmptyString(result.message) ? result.message : null) ??
+              '재배송비 결제가 취소되었습니다.',
           } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
         }
       }
@@ -401,10 +404,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setActionError(uncertainMessage);
         return;
       }
-      setReviewOutcome({ kind: 'uncertain', message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.' });
-      setActionError(
-        caught instanceof Error ? caught.message : '구매 확정에 실패했습니다.',
-      );
+      setReviewOutcome({
+        kind: 'uncertain',
+        message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+      });
+      setActionError(caught instanceof Error ? caught.message : '구매 확정에 실패했습니다.');
     }
   }
 
@@ -514,15 +518,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const showCancelReconcileWarning =
     !isAuthoritativelyCancelled && cancelOutcome.kind === 'reconcile-failed';
   const showCancelCommand =
-    detail.canRequestCancellation &&
-    !isAuthoritativelyCancelled &&
-    cancelOutcome.kind !== 'done';
+    detail.canRequestCancellation && !isAuthoritativelyCancelled && cancelOutcome.kind !== 'done';
   const isReviewable =
     !isAuthoritativelyReviewed &&
     (detail.status === 'DELIVERED' || detail.status === 'PICKED_UP') &&
     reviewOutcome.kind !== 'done';
-  const showReviewConfirmed =
-    isAuthoritativelyReviewed || reviewOutcome.kind === 'done';
+  const showReviewConfirmed = isAuthoritativelyReviewed || reviewOutcome.kind === 'done';
   const showReviewSection = isReviewable || reviewOutcome.kind !== 'idle' || showReviewConfirmed;
   const showReviewReconcileWarning =
     !isAuthoritativelyReviewed && reviewOutcome.kind === 'reconcile-failed';
@@ -547,6 +548,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const currentStep =
     detail.status === 'REVIEWED' ? steps.length : Math.max(0, steps.indexOf(detail.status));
   const paymentIsDone = detail.redeliveryPayment.paid;
+  // 배송 보류·취소는 문제 상태라 빨강 계열 배지로 보인다
+  const isProblemStatus = detail.status === 'DELIVERY_HELD' || detail.status === 'CANCELLED';
 
   return (
     <Container size="sm" px="md" pt="lg" pb={80}>
@@ -554,7 +557,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <ChevronLeft size={16} /> 뒤로
       </Button>
       {(status === 'network' || status === 'server') && (
-        <Alert color="yellow" variant="light" radius="md" mb="lg" title="최신 정보를 불러오지 못했습니다">
+        <Alert
+          color="yellow"
+          variant="light"
+          radius="lg"
+          mb="lg"
+          title="최신 정보를 불러오지 못했습니다"
+        >
           <Stack gap={6}>
             <Text size="sm">{error ?? '최신 주문 정보를 확인하지 못했습니다.'}</Text>
             <Text size="sm">표시된 정보가 최신이 아닐 수 있습니다.</Text>
@@ -575,19 +584,40 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
       <Group justify="space-between" align="flex-start" mb="lg">
         <Box>
-          <Title order={3}>주문 상세</Title>
+          <Title
+            order={1}
+            style={{ fontSize: 22, fontWeight: 'var(--fw-extrabold)', letterSpacing: '-0.01em' }}
+          >
+            주문 상세
+          </Title>
           <Text size="sm" c="var(--color-text-disabled)">
             주문번호: {detail.orderNumber}
           </Text>
         </Box>
-        <Text fw="var(--fw-bold)" c={detail.status === 'DELIVERY_HELD' ? 'red' : 'brand'}>
+        <Text
+          style={{
+            background: isProblemStatus
+              ? 'var(--color-danger-surface)'
+              : 'var(--color-primary-surface)',
+            borderRadius: 'var(--radius-full)',
+            color: isProblemStatus ? 'var(--color-danger)' : 'var(--color-primary-dark)',
+            flexShrink: 0,
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-extrabold)',
+            padding: '4px 12px',
+          }}
+        >
           {STATUS_LABELS[detail.status]}
         </Text>
       </Group>
 
-      <Paper withBorder radius="md" p="md" mb="lg">
+      <Paper
+        p="md"
+        mb="lg"
+        style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
+      >
         <Group justify="space-between" mb="sm">
-          <Text fw="var(--fw-bold)">주문 상품</Text>
+          <Text fw="var(--fw-extrabold)">주문 상품</Text>
           {detail.items.length > 0 && (
             <Text size="sm" c="var(--color-text-secondary)">
               총 {detail.items.length}개 상품 ·{' '}
@@ -615,12 +645,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           )}
           <Group justify="space-between">
             <Text fw="var(--fw-bold)">결제 금액</Text>
-            <Text fw="var(--fw-bold)">{detail.totalAmount.toLocaleString('ko-KR')}원</Text>
+            <Text
+              style={{
+                fontSize: 20,
+                fontVariantNumeric: 'tabular-nums',
+                fontWeight: 'var(--fw-extrabold)',
+              }}
+            >
+              {detail.totalAmount.toLocaleString('ko-KR')}원
+            </Text>
           </Group>
         </Stack>
       </Paper>
 
-      <Paper withBorder radius="md" p="md" mb="lg">
+      <Paper withBorder radius="lg" p="md" mb="lg">
         <Stack gap="xs">
           <Group justify="space-between">
             <Text size="sm" c="var(--color-text-secondary)">
@@ -657,7 +695,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </Paper>
 
       {detail.deliveryHold && isDeliveryHoldActive(detail) && (
-        <Alert color="red" variant="light" radius="md" mb="lg" title="배송 보류">
+        <Alert color="red" variant="light" radius="lg" mb="lg" title="배송 보류">
           <Stack gap={6}>
             <Text size="sm">{detail.deliveryHold.reasonMessage}</Text>
             <Text size="sm">
@@ -710,14 +748,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {detail.deliveryPhotoUrl && (
-        <Paper withBorder radius="md" p="md" mb="lg">
+        <Paper withBorder radius="lg" p="md" mb="lg">
           <Text fw="var(--fw-bold)" size="sm" mb="sm">
             배송 완료 사진
           </Text>
           <Image
             src={detail.deliveryPhotoUrl}
             alt="배송 완료 사진"
-            radius="md"
+            radius="lg"
             fit="cover"
             mah={420}
           />
@@ -725,7 +763,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {showPickupCode && (
-        <Paper withBorder radius="md" p="lg" mb="lg" ta="center">
+        <Paper withBorder radius="lg" p="lg" mb="lg" ta="center">
           <Text size="sm" fw="var(--fw-bold)" c="brand.8">
             픽업 코드
           </Text>
@@ -740,9 +778,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {showCancelCommand && (
         <Alert
-          color="blue"
+          color="gray"
           variant="light"
-          radius="md"
+          radius="lg"
           mb="lg"
           title={detail.isRoundOrder ? '주문 마감 전 취소' : '공동구매 모집 중'}
         >
@@ -775,7 +813,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {showCancelReconcileWarning && (
-        <Alert color="yellow" variant="light" radius="md" mb="lg" title="취소 확인됨 · 상태 재확인 필요">
+        <Alert
+          color="yellow"
+          variant="light"
+          radius="lg"
+          mb="lg"
+          title="취소 확인됨 · 상태 재확인 필요"
+        >
           <Stack gap={6}>
             <Text size="sm">
               취소는 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 취소 실패가
@@ -795,20 +839,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {isCancelled && (
-        <Alert color="red" variant="light" radius="md" mb="lg" ta="center">
+        <Alert color="red" variant="light" radius="lg" mb="lg" ta="center">
           <Text fw="var(--fw-bold)">주문이 취소되었습니다</Text>
           {detail.cancelReason && <Text size="sm">사유: {detail.cancelReason}</Text>}
         </Alert>
       )}
 
       {actionError && (
-        <Alert color="red" variant="light" radius="md" mb="lg">
+        <Alert color="red" variant="light" radius="lg" mb="lg">
           <Stack gap={6}>
             <Text size="sm">{actionError}</Text>
             {needsStatusRecheck && (
-              <Text size="sm">
-                중복 요청 전에 다시 시도로 현재 상태를 확인해 주세요.
-              </Text>
+              <Text size="sm">중복 요청 전에 다시 시도로 현재 상태를 확인해 주세요.</Text>
             )}
             {needsStatusRecheck && (
               <Button
@@ -829,8 +871,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <Stack gap={6} mb="lg">
           <Button
             fullWidth
-            radius="md"
-            disabled={reviewBusy || showReviewConfirmed || showReviewReconcileWarning || isStaleRead}
+            disabled={
+              reviewBusy || showReviewConfirmed || showReviewReconcileWarning || isStaleRead
+            }
             loading={reviewBusy}
             variant={showReviewConfirmed ? 'outline' : 'filled'}
             onClick={handleConfirm}
@@ -851,11 +894,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {showReviewReconcileWarning && (
-        <Alert color="yellow" variant="light" radius="md" mb="lg" title="구매 확정 확인됨 · 상태 재확인 필요">
+        <Alert
+          color="yellow"
+          variant="light"
+          radius="lg"
+          mb="lg"
+          title="구매 확정 확인됨 · 상태 재확인 필요"
+        >
           <Stack gap={6}>
             <Text size="sm">
-              구매 확정은 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 확정
-              실패가 아니므로 바로 다시 확정하지 말고 상태를 확인해 주세요.
+              구매 확정은 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 확정 실패가
+              아니므로 바로 다시 확정하지 말고 상태를 확인해 주세요.
             </Text>
             <Button
               mt="xs"

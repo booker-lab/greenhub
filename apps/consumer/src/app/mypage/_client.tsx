@@ -1,17 +1,8 @@
 'use client';
 
 import type { Order, OrderStatus } from '@greenhub/shared';
-import {
-  Box,
-  Button,
-  Container,
-  Divider,
-  Group,
-  Stack,
-  Text,
-  Title,
-  UnstyledButton,
-} from '@mantine/core';
+import { Box, Button, Container, Group, Stack, Text, Title, UnstyledButton } from '@mantine/core';
+import { ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect } from 'react';
@@ -49,20 +40,11 @@ const STATUS_COLORS: Partial<Record<OrderStatus, StatusColorKey>> = {
   REVIEWED: { bg: 'var(--color-surface-muted)', text: 'var(--color-text-secondary)' },
 };
 
-const ACCENT_COLORS: Partial<Record<OrderStatus, string>> = {
-  PENDING: 'var(--color-text-disabled)',
-  RECRUITING: 'var(--color-status-info-text)',
-  CONFIRMED: 'var(--color-status-info-text)',
-  ACCEPTED: 'var(--color-primary)',
-  PREPARING: 'var(--color-primary)',
-  DELIVERING: 'var(--color-status-warning-text)',
-  DELIVERY_HELD: 'var(--color-danger)',
-  HUB_ARRIVED: 'var(--color-status-warning-text)',
-  PICKED_UP: 'var(--color-primary)',
-  DELIVERED: 'var(--color-primary)',
-  CANCELLED: 'var(--color-danger)',
-  REVIEWED: 'var(--color-text-disabled)',
-};
+const sectionTitleStyle = {
+  color: 'var(--color-text)',
+  fontSize: 'var(--font-size-lg)',
+  fontWeight: 'var(--fw-extrabold)',
+} as const;
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -140,7 +122,6 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
     bg: 'var(--color-surface-muted)',
     text: 'var(--color-text-secondary)',
   };
-  const accentColor = ACCENT_COLORS[order.status] ?? 'var(--color-text-disabled)';
   const label = STATUS_LABELS[order.status] ?? order.status;
   const summary = readOrderListSummary(order);
 
@@ -153,9 +134,8 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
         width: '100%',
         background: 'var(--color-bg)',
         border: '1px solid var(--color-border)',
-        borderLeft: `4px solid ${accentColor}`,
-        borderRadius: 'var(--radius-sm)',
-        padding: '14px 16px',
+        borderRadius: 'var(--radius)',
+        padding: '16px',
       }}
     >
       <Group justify="space-between" mb={8}>
@@ -194,7 +174,7 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
         <Text
           style={{
             fontSize: 'var(--font-size-md)',
-            fontWeight: 'var(--fw-bold)',
+            fontWeight: 'var(--fw-extrabold)',
             color: 'var(--color-text)',
           }}
           mb={4}
@@ -203,7 +183,7 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
           {summary.additionalProductCount > 0 ? ` 외 ${summary.additionalProductCount}개` : ''}
         </Text>
       )}
-      <Group justify="space-between">
+      <Group justify="space-between" align="baseline">
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
           {summary
             ? `상품 ${summary.productCount}종 · 총 수량 ${summary.totalQuantity}개`
@@ -211,8 +191,9 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
         </Text>
         <Text
           style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-bold)',
+            fontSize: 'var(--font-size-md)',
+            fontVariantNumeric: 'tabular-nums',
+            fontWeight: 'var(--fw-extrabold)',
             color: 'var(--color-text)',
           }}
         >
@@ -250,13 +231,17 @@ export default function MyPageClient() {
       <Box
         mb="xl"
         p="lg"
-        style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius-sm)' }}
+        style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
       >
         <Group justify="space-between" align="flex-start">
           <Box>
             <Title
-              order={4}
-              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
+              order={1}
+              style={{
+                color: 'var(--color-text)',
+                fontSize: 20,
+                fontWeight: 'var(--fw-extrabold)',
+              }}
               mb={4}
             >
               {session.user?.name ?? '사용자'}
@@ -268,7 +253,7 @@ export default function MyPageClient() {
           <Button
             variant="default"
             size="xs"
-            radius="sm"
+            radius="xl"
             onClick={() => signOut({ callbackUrl: '/' })}
           >
             로그아웃
@@ -278,12 +263,9 @@ export default function MyPageClient() {
 
       {/* 주문 내역 */}
       <Box mb="xl">
-        <Stack gap={4} mb="md">
-          <Title order={5} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
-            주문 내역
-          </Title>
-          <Divider />
-        </Stack>
+        <Title order={2} mb="md" style={sectionTitleStyle}>
+          주문 내역
+        </Title>
         {loading && orders.length === 0 && (
           <Text
             ta="center"
@@ -301,7 +283,7 @@ export default function MyPageClient() {
             <Button
               variant="default"
               size="xs"
-              radius="sm"
+              radius="xl"
               onClick={refetch}
               data-testid="orders-retry"
             >
@@ -336,7 +318,7 @@ export default function MyPageClient() {
                 <Button
                   variant="default"
                   size="xs"
-                  radius="sm"
+                  radius="xl"
                   onClick={refetch}
                   data-testid="orders-retry"
                 >
@@ -357,12 +339,9 @@ export default function MyPageClient() {
 
       {/* 메뉴 */}
       <Box mb="xl">
-        <Stack gap={4} mb="md">
-          <Title order={5} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
-            내 정보
-          </Title>
-          <Divider />
-        </Stack>
+        <Title order={2} mb="md" style={sectionTitleStyle}>
+          내 정보
+        </Title>
         <Stack gap="xs">
           <UnstyledButton
             onClick={() => router.push('/mypage/notifications')}
@@ -373,7 +352,8 @@ export default function MyPageClient() {
               width: '100%',
               background: 'var(--color-bg)',
               border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-sm)',
+              borderRadius: 'var(--radius)',
+              minHeight: 'var(--touch-target)',
               padding: '14px 16px',
             }}
           >
@@ -386,9 +366,7 @@ export default function MyPageClient() {
             >
               알림 내역
             </Text>
-            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-md)' }}>
-              ›
-            </Text>
+            <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
           </UnstyledButton>
           <UnstyledButton
             onClick={() => router.push('/mypage/addresses')}
@@ -399,7 +377,8 @@ export default function MyPageClient() {
               width: '100%',
               background: 'var(--color-bg)',
               border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-sm)',
+              borderRadius: 'var(--radius)',
+              minHeight: 'var(--touch-target)',
               padding: '14px 16px',
             }}
           >
@@ -412,21 +391,16 @@ export default function MyPageClient() {
             >
               배송지 목록 · 추가 · 수정
             </Text>
-            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-md)' }}>
-              ›
-            </Text>
+            <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
           </UnstyledButton>
         </Stack>
       </Box>
 
       {/* 앱 설치 */}
       <Box>
-        <Stack gap={4} mb="md">
-          <Title order={5} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
-            앱 설치
-          </Title>
-          <Divider />
-        </Stack>
+        <Title order={2} mb="md" style={sectionTitleStyle}>
+          앱 설치
+        </Title>
         <A2HSButton />
       </Box>
     </Container>
