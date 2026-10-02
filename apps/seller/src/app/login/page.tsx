@@ -52,10 +52,13 @@ export default function LoginPage() {
                 <polyline points="9 22 9 12 15 12 15 22" />
               </svg>
             </Box>
-            <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
-              Green Love 판매자
+            <Title
+              order={2}
+              style={{ fontSize: 22, fontWeight: 'var(--fw-extrabold)', letterSpacing: '-0.01em' }}
+            >
+              그린러브 판매자
             </Title>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
               판매자 계정으로 로그인하세요
             </Text>
           </Stack>

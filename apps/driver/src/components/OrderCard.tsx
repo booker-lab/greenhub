@@ -86,7 +86,7 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
                   ? 'var(--color-primary-dark)'
                   : payment.color === 'red'
                     ? 'var(--color-danger)'
-                    : '#d97706',
+                    : 'var(--color-status-warning-text)',
               fontWeight: 'var(--fw-medium)',
             }}
           >
