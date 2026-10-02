@@ -10,6 +10,16 @@ const MAX_JPEG_BYTES = 5 * 1024 * 1024;
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const RUN_ID_PATTERN = /^[a-z0-9][a-z0-9-]{6,46}[a-z0-9]$/;
 const DEPLOYMENT_APPS = ['consumer', 'seller', 'driver'];
+// 로컬 대상 모드: Vercel Preview 대신 같은 SHA를 로컬 `next build && next start`로 띄운 세 앱.
+// ROUND_DIRECT_E2E_TARGET_MODE=local 표식이 있을 때만 아래 앱별 고정 루프백 origin(http)을 허용한다.
+// apps/e2e/tests/_helpers/target-url.ts의 ROUND_DIRECT_LOCAL_TARGET_ORIGINS와 같아야 한다.
+export const LOCAL_TARGET_MODE = 'local';
+export const LOCAL_TARGET_ORIGINS = Object.freeze({
+  consumer: 'http://127.0.0.1:3101',
+  seller: 'http://127.0.0.2:3102',
+  driver: 'http://127.0.0.3:3103',
+});
+const TARGET_MODES = ['preview', LOCAL_TARGET_MODE];
 
 function splitList(value) {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -78,6 +88,25 @@ function normalizeTargetUrls(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(
     DEPLOYMENT_APPS.map((app) => [app, safePreviewTargetUrl(value[app])]),
+  );
+}
+
+function safeLocalTargetUrl(app, value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.username || url.password || url.search || url.hash) return null;
+    const normalized = url.toString().replace(/\/$/, '');
+    return normalized === LOCAL_TARGET_ORIGINS[app] ? normalized : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeLocalTargetUrls(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    DEPLOYMENT_APPS.map((app) => [app, safeLocalTargetUrl(app, value[app])]),
   );
 }
 
@@ -316,10 +345,13 @@ export function normalizeReadinessInput(env = process.env, options = {}) {
     env.ROUND_DIRECT_E2E_JPEG_PATH ??
     path.resolve(process.cwd(), 'apps/e2e/fixtures/round-direct-delivery.jpg');
   const authEvidence = parseJsonObject(env.ROUND_DIRECT_E2E_AUTH_EVIDENCE_JSON);
+  const targetMode = env.ROUND_DIRECT_E2E_TARGET_MODE?.trim() || 'preview';
+  const rawTargetUrls = parseJsonObject(env.ROUND_DIRECT_E2E_TARGET_URLS_JSON);
 
   return {
     enabled: env.ROUND_DIRECT_E2E_ENABLED,
     environment: env.ROUND_DIRECT_E2E_ENV,
+    targetMode,
     runId,
     expectedSha: env.ROUND_DIRECT_E2E_EXPECTED_SHA?.trim().toLowerCase() ?? '',
     providerMode: env.ROUND_DIRECT_E2E_PROVIDER_MODE,
@@ -345,7 +377,10 @@ export function normalizeReadinessInput(env = process.env, options = {}) {
       (runId ? `e2e/round-direct/${runId}/` : ''),
     fixtureStoreId: env.ROUND_DIRECT_E2E_STORE_ID?.trim() ?? '',
     deploymentShas: parseJsonObject(env.ROUND_DIRECT_E2E_DEPLOYMENT_SHAS_JSON),
-    targetUrls: normalizeTargetUrls(parseJsonObject(env.ROUND_DIRECT_E2E_TARGET_URLS_JSON)),
+    targetUrls:
+      targetMode === LOCAL_TARGET_MODE
+        ? normalizeLocalTargetUrls(rawTargetUrls)
+        : normalizeTargetUrls(rawTargetUrls),
     auth: {
       consumer: authEvidence.consumer ?? {
         configured: Boolean(env.TEST_CONSUMER_EMAIL && env.TEST_CONSUMER_PASSWORD),
@@ -387,6 +422,11 @@ export function evaluateReadiness(input) {
   if (input.environment !== 'preview') {
     addFailure(failures, 'ENVIRONMENT_NOT_PREVIEW', '실행 환경이 preview가 아닙니다.');
   }
+  const targetMode = input.targetMode ?? 'preview';
+  if (!TARGET_MODES.includes(targetMode)) {
+    addFailure(failures, 'TARGET_MODE_INVALID', '대상 모드는 비워 두거나 local이어야 합니다.');
+  }
+  const localTarget = targetMode === LOCAL_TARGET_MODE;
   if (!RUN_ID_PATTERN.test(runId)) {
     addFailure(failures, 'RUN_ID_INVALID', '실행 ID 형식이 올바르지 않습니다.');
   }
@@ -436,8 +476,11 @@ export function evaluateReadiness(input) {
     );
   }
   const targetUrls = input.targetUrls ?? {};
-  const targetUrlsConfigured = DEPLOYMENT_APPS.every(
-    (app) => typeof targetUrls[app] === 'string' && targetUrls[app].length > 0,
+  // local 모드는 Vercel deployment target_url 대신 앱별 고정 루프백 origin과 정확히 같아야 한다.
+  const targetUrlsConfigured = DEPLOYMENT_APPS.every((app) =>
+    localTarget
+      ? targetUrls[app] === LOCAL_TARGET_ORIGINS[app]
+      : typeof targetUrls[app] === 'string' && targetUrls[app].length > 0,
   );
   if (!targetUrlsConfigured) {
     addFailure(
@@ -447,25 +490,30 @@ export function evaluateReadiness(input) {
     );
   }
 
-  for (const [name, role] of [
-    ['consumer', 'consumer'],
-    ['seller', 'seller'],
-  ]) {
-    const evidence = input.auth?.[name] ?? {};
-    if (!evidence.configured || !evidence.verified || evidence.role !== role) {
-      addFailure(
-        failures,
-        `${name.toUpperCase()}_AUTH_NOT_VERIFIED`,
-        `${name} 인증이 검증되지 않았습니다.`,
-      );
+  // 원격 실행은 workflow secret으로 사전 인증 증거를 받는다. local 모드는 그 증거가 없으므로
+  // Playwright globalSetup이 세 역할을 실제 로그인하고 role·accessToken·세션 쿠키를 검증하는
+  // 단계(실패 시 테스트 0건으로 중단)로 대체한다.
+  if (!localTarget) {
+    for (const [name, role] of [
+      ['consumer', 'consumer'],
+      ['seller', 'seller'],
+    ]) {
+      const evidence = input.auth?.[name] ?? {};
+      if (!evidence.configured || !evidence.verified || evidence.role !== role) {
+        addFailure(
+          failures,
+          `${name.toUpperCase()}_AUTH_NOT_VERIFIED`,
+          `${name} 인증이 검증되지 않았습니다.`,
+        );
+      }
     }
-  }
-  const driver = input.auth?.driver ?? {};
-  if (!driver.configured || !driver.verified || driver.role !== 'driver') {
-    addFailure(failures, 'DRIVER_AUTH_NOT_VERIFIED', 'driver 인증이 검증되지 않았습니다.');
-  }
-  if (!driver.approved) {
-    addFailure(failures, 'DRIVER_NOT_APPROVED', 'driver 승인 상태가 확인되지 않았습니다.');
+    const driver = input.auth?.driver ?? {};
+    if (!driver.configured || !driver.verified || driver.role !== 'driver') {
+      addFailure(failures, 'DRIVER_AUTH_NOT_VERIFIED', 'driver 인증이 검증되지 않았습니다.');
+    }
+    if (!driver.approved) {
+      addFailure(failures, 'DRIVER_NOT_APPROVED', 'driver 승인 상태가 확인되지 않았습니다.');
+    }
   }
 
   const egress = (input.providerEgressHosts ?? []).filter((host) =>
@@ -514,6 +562,8 @@ export function evaluateReadiness(input) {
     runId,
     expectedSha,
     environment: input.environment ?? null,
+    targetMode,
+    authEvidenceSource: localTarget ? 'playwright-global-setup' : 'workflow-secret',
     apiOrigin: input.apiOrigin || null,
     firebaseProjectId: input.firebaseProjectId || null,
     serviceAccountProjectId: input.serviceAccount?.projectId ?? null,
