@@ -35,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     fontWeight: 'var(--fw-medium)',
-                    color: 'var(--color-primary)',
+                    color: 'var(--color-primary-dark)',
                     textDecoration: 'none',
                   }}
                 >

@@ -61,7 +61,7 @@ export default function ProductInfo({ product, variety }: Props) {
           style={{
             fontSize: 'var(--font-size-xl)',
             fontWeight: 'var(--fw-bold)',
-            color: 'var(--color-primary)',
+            color: 'var(--color-primary-dark)',
             lineHeight: 1.3,
           }}
         >

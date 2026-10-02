@@ -47,7 +47,7 @@ function StoreInitialAvatar({ name }: { name: string }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: 'var(--color-primary)',
+        color: 'var(--color-primary-dark)',
         fontWeight: 'var(--fw-bold)',
         fontSize: 'var(--font-size-md)',
       }}
@@ -262,7 +262,10 @@ export default function LegacyProductActions({ product }: Props) {
             </Text>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
               배송{' '}
-              <Text span style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>
+              <Text
+                span
+                style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
+              >
                 {new Date(groupConfig.groupDeliveryDate).toLocaleDateString('ko-KR', {
                   month: 'long',
                   day: 'numeric',

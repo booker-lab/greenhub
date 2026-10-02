@@ -290,7 +290,7 @@ function OrderSuccessContent() {
           <>
             <Text style={{ fontSize: 56 }}>✅</Text>
             <Title order={2}>주문이 완료되었습니다</Title>
-            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>
+            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}>
               {STATUS_LABELS[validOrder.status]}
             </Text>
             {validOrder.status === 'RECRUITING' && (
@@ -364,7 +364,7 @@ function OrderSuccessContent() {
           <>
             <Text style={{ fontSize: 56 }}>✅</Text>
             <Title order={2}>주문이 접수되었습니다</Title>
-            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>
+            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}>
               현재 상태: {STATUS_LABELS[validOrder.status] ?? '주문 진행 중'}
             </Text>
             <Text

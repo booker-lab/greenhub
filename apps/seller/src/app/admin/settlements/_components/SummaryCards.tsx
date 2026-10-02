@@ -34,7 +34,7 @@ export function SummaryCards({ totalFee, totalNet }: SummaryCardsProps) {
           style={{
             fontSize: 'var(--font-size-lg)',
             fontWeight: 'var(--fw-bold)',
-            color: 'var(--color-primary)',
+            color: 'var(--color-primary-dark)',
           }}
         >
           {toKRW(totalNet)}

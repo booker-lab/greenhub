@@ -115,7 +115,7 @@ export default function OrderDetailPage() {
         <UnstyledButton
           onClick={() => router.back()}
           style={{
-            color: 'var(--color-primary)',
+            color: 'var(--color-primary-dark)',
             textDecoration: 'underline',
             fontSize: 'var(--font-size-sm)',
           }}
@@ -143,7 +143,7 @@ export default function OrderDetailPage() {
         <UnstyledButton
           onClick={() => router.back()}
           style={{
-            color: 'var(--color-primary)',
+            color: 'var(--color-primary-dark)',
             textDecoration: 'underline',
             fontSize: 'var(--font-size-sm)',
           }}
@@ -186,7 +186,7 @@ export default function OrderDetailPage() {
             <UnstyledButton
               onClick={() => router.back()}
               style={{
-                color: 'var(--color-primary)',
+                color: 'var(--color-primary-dark)',
                 textDecoration: 'underline',
                 fontSize: 'var(--font-size-sm)',
               }}
@@ -227,7 +227,7 @@ export default function OrderDetailPage() {
               <UnstyledButton
                 onClick={refresh}
                 style={{
-                  color: 'var(--color-primary)',
+                  color: 'var(--color-primary-dark)',
                   fontSize: 'var(--font-size-sm)',
                 }}
               >
@@ -253,7 +253,7 @@ export default function OrderDetailPage() {
               <UnstyledButton
                 onClick={reconcile}
                 style={{
-                  color: 'var(--color-primary)',
+                  color: 'var(--color-primary-dark)',
                   fontSize: 'var(--font-size-sm)',
                   whiteSpace: 'nowrap',
                 }}

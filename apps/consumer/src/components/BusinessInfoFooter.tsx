@@ -33,7 +33,7 @@ const wideItemStyle = {
 
 const linkStyle = {
   alignItems: 'center',
-  color: 'var(--color-primary)',
+  color: 'var(--color-primary-dark)',
   display: 'inline-flex',
   minHeight: 'var(--touch-target)',
   textDecoration: 'underline',

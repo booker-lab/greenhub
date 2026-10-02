@@ -167,7 +167,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
                     ? {
                         backgroundColor: 'var(--color-primary-surface)',
                         borderColor: 'var(--color-primary)',
-                        color: 'var(--color-primary)',
+                        color: 'var(--color-primary-dark)',
                       }
                     : {}
                 }

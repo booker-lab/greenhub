@@ -68,7 +68,7 @@ export default function ProductCard({ product }: ProductCardProps) {
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
-                color: 'var(--color-primary)',
+                color: 'var(--color-primary-dark)',
                 background: 'var(--color-primary-surface)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '1px 8px',

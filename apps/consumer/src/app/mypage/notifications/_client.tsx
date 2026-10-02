@@ -153,7 +153,10 @@ function NotificationItem({
           </Text>
         )}
         {notification.orderId && (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }} mt={3}>
+          <Text
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}
+            mt={3}
+          >
             주문 상세 보기 ›
           </Text>
         )}
@@ -226,7 +229,7 @@ export default function NotificationsClient() {
           <Button
             variant="transparent"
             size="xs"
-            style={{ color: 'var(--color-primary)' }}
+            style={{ color: 'var(--color-primary-dark)' }}
             onClick={markAllRead}
           >
             모두 읽음

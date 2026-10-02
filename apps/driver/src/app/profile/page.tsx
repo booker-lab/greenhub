@@ -42,7 +42,7 @@ export default async function ProfilePage() {
                 >
                   <Text
                     style={{
-                      color: 'var(--color-primary)',
+                      color: 'var(--color-primary-dark)',
                       fontWeight: 'var(--fw-bold)',
                       fontSize: 'var(--font-size-xl)',
                     }}

@@ -54,7 +54,7 @@ export function OrdersTab({ settlements, listLoading, fetchSettlements }: Orders
               onClick={() => downloadCSV(settlements, '', '')}
               style={{
                 fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-primary)',
+                color: 'var(--color-primary-dark)',
                 fontWeight: 500,
               }}
             >
