@@ -1,7 +1,8 @@
 'use client';
 
 import type { OrderStatus } from '@greenhub/shared';
-import { Button, Container, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { Box, Button, Container, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { CircleAlert, CircleCheck, CircleX, Clock } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Suspense, useEffect } from 'react';
@@ -196,23 +197,52 @@ function isReceivedStatus(status: OrderStatus): boolean {
   );
 }
 
-function OrderResultActions({
-  onOrders,
-  onHome,
-}: {
-  onOrders: () => void;
-  onHome: () => void;
-}) {
+type StatusTone = 'success' | 'waiting' | 'danger';
+
+const STATUS_TONE: Record<StatusTone, { background: string; color: string }> = {
+  success: { background: 'var(--color-primary-surface)', color: 'var(--color-primary)' },
+  waiting: { background: 'var(--color-deadline-surface)', color: 'var(--color-deadline-text)' },
+  danger: { background: 'var(--color-danger-surface)', color: 'var(--color-danger)' },
+};
+
+const STATUS_ICON = { success: CircleCheck, waiting: Clock, danger: CircleX, alert: CircleAlert };
+
+// 결과 화면 맨 위의 둥근 상태 아이콘(디자인 기준: 이모지 대신 색 원 + 선 아이콘)
+function StatusMark({ tone, icon }: { tone: StatusTone; icon: keyof typeof STATUS_ICON }) {
+  const Icon = STATUS_ICON[icon];
+  return (
+    <Box
+      aria-hidden
+      mb={4}
+      style={{
+        ...STATUS_TONE[tone],
+        alignItems: 'center',
+        borderRadius: 'var(--radius-full)',
+        display: 'flex',
+        height: 72,
+        justifyContent: 'center',
+        width: 72,
+      }}
+    >
+      <Icon size={36} strokeWidth={2.2} />
+    </Box>
+  );
+}
+
+const resultTitleStyle = {
+  fontSize: 22,
+  fontWeight: 'var(--fw-extrabold)',
+  letterSpacing: '-0.01em',
+  textAlign: 'center',
+} as const;
+
+function OrderResultActions({ onOrders, onHome }: { onOrders: () => void; onHome: () => void }) {
   return (
     <>
-      <Button color="brand" radius="md" size="md" mt="lg" onClick={onOrders}>
+      <Button color="brand" radius="xl" size="lg" mt="lg" fullWidth onClick={onOrders}>
         주문 내역 보기
       </Button>
-      <Button
-        variant="transparent"
-        style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
-        onClick={onHome}
-      >
+      <Button variant="subtle" color="gray" radius="xl" size="md" fullWidth onClick={onHome}>
         홈으로
       </Button>
     </>
@@ -222,12 +252,14 @@ function OrderResultActions({
 function ErrorState({ message, onHome }: { message: string; onHome: () => void }) {
   return (
     <>
-      <Text style={{ fontSize: 56 }}>⚠️</Text>
-      <Title order={2}>주문 정보를 불러올 수 없습니다</Title>
+      <StatusMark tone="danger" icon="alert" />
+      <Title order={1} style={resultTitleStyle}>
+        주문 정보를 불러올 수 없습니다
+      </Title>
       <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>
         {message}
       </Text>
-      <Button color="brand" radius="md" mt="md" onClick={onHome}>
+      <Button color="brand" radius="xl" size="lg" mt="md" fullWidth onClick={onHome}>
         홈으로
       </Button>
     </>
@@ -273,10 +305,10 @@ function OrderSuccessContent() {
       <Stack align="center" gap="xs">
         {!!orderId && !errorMessage && (loading || isPending) && (
           <>
-            <Text size="xl" style={{ fontSize: 56 }}>
-              ⏳
-            </Text>
-            <Title order={2}>결제 확인 중...</Title>
+            <StatusMark tone="waiting" icon="waiting" />
+            <Title order={1} style={resultTitleStyle}>
+              결제 확인 중...
+            </Title>
             <Text
               style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
               ta="center"
@@ -288,8 +320,10 @@ function OrderSuccessContent() {
 
         {successOrder && validOrder && (
           <>
-            <Text style={{ fontSize: 56 }}>✅</Text>
-            <Title order={2}>주문이 완료되었습니다</Title>
+            <StatusMark tone="success" icon="success" />
+            <Title order={1} style={resultTitleStyle}>
+              주문이 완료되었습니다
+            </Title>
             <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}>
               {STATUS_LABELS[validOrder.status]}
             </Text>
@@ -309,9 +343,17 @@ function OrderSuccessContent() {
 
             {successOrder.isRoundOrder && (
               <>
-                <Paper radius="md" p="md" mt="md" w="100%" withBorder>
+                <Paper
+                  p="md"
+                  mt="lg"
+                  w="100%"
+                  style={{
+                    background: 'var(--color-surface-muted)',
+                    borderRadius: 'var(--radius)',
+                  }}
+                >
                   <Group justify="space-between" mb="sm">
-                    <Text fw="var(--fw-bold)">주문 상품</Text>
+                    <Text fw="var(--fw-extrabold)">주문 상품</Text>
                     <Text size="sm" c="var(--color-text-secondary)">
                       총 {successOrder.items.length}개 상품 · {successOrder.totalQuantity}개
                     </Text>
@@ -325,11 +367,23 @@ function OrderSuccessContent() {
                         <Text size="sm">{item.subtotalAmount.toLocaleString()}원</Text>
                       </Group>
                     ))}
-                    <Group justify="space-between" mt="xs">
+                    <Group
+                      justify="space-between"
+                      align="baseline"
+                      mt="xs"
+                      pt={10}
+                      style={{ borderTop: '1px solid var(--color-border)' }}
+                    >
                       <Text size="sm" fw="var(--fw-bold)">
                         결제 금액
                       </Text>
-                      <Text size="sm" fw="var(--fw-bold)">
+                      <Text
+                        style={{
+                          fontSize: 22,
+                          fontVariantNumeric: 'tabular-nums',
+                          fontWeight: 'var(--fw-extrabold)',
+                        }}
+                      >
                         {successOrder.totalAmount.toLocaleString()}원
                       </Text>
                     </Group>
@@ -337,13 +391,15 @@ function OrderSuccessContent() {
                 </Paper>
 
                 <Paper
-                  radius="md"
                   p="md"
                   mt="sm"
                   w="100%"
-                  style={{ background: 'var(--color-surface-muted)' }}
+                  style={{
+                    background: 'var(--color-primary-surface)',
+                    borderRadius: 'var(--radius)',
+                  }}
                 >
-                  <Text fw="var(--fw-bold)" size="sm" mb={4}>
+                  <Text fw="var(--fw-extrabold)" size="sm" c="var(--color-primary-dark)" mb={4}>
                     화요일 배송 안내
                   </Text>
                   <Text size="sm">
@@ -362,8 +418,10 @@ function OrderSuccessContent() {
 
         {isReceived && validOrder && !errorMessage && (
           <>
-            <Text style={{ fontSize: 56 }}>✅</Text>
-            <Title order={2}>주문이 접수되었습니다</Title>
+            <StatusMark tone="success" icon="success" />
+            <Title order={1} style={resultTitleStyle}>
+              주문이 접수되었습니다
+            </Title>
             <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}>
               현재 상태: {STATUS_LABELS[validOrder.status] ?? '주문 진행 중'}
             </Text>
@@ -382,8 +440,10 @@ function OrderSuccessContent() {
 
         {isCancelled && validOrder && !errorMessage && (
           <>
-            <Text style={{ fontSize: 56 }}>❌</Text>
-            <Title order={2}>결제가 취소되었습니다</Title>
+            <StatusMark tone="danger" icon="danger" />
+            <Title order={1} style={resultTitleStyle}>
+              결제가 취소되었습니다
+            </Title>
             <Text
               style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
               ta="center"
