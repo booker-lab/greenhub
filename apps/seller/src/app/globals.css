@@ -25,6 +25,9 @@
 @import "@mantine/core/styles/ModalBase.css";
 
 /* 사용 컴포넌트 */
+/* 2026-10-03 누락 보완: 아이콘 버튼(수량·닫기 등), 숫자 입력(가격·수량) */
+@import "@mantine/core/styles/ActionIcon.css";
+@import "@mantine/core/styles/NumberInput.css";
 @import "@mantine/core/styles/Alert.css";
 @import "@mantine/core/styles/Badge.css";
 @import "@mantine/core/styles/Button.css";

@@ -2,6 +2,7 @@ import { ColorSchemeScript } from '@mantine/core';
 import '@mantine/notifications/styles.css';
 import type { Metadata, Viewport } from 'next';
 import { Geist } from 'next/font/google';
+import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
 import Providers from './providers';
 import './globals.css';
@@ -43,17 +44,7 @@ export default function RootLayout({
       </head>
       <body>
         <Providers>
-          <div
-            style={{
-              maxWidth: 480,
-              margin: '0 auto',
-              position: 'relative',
-              backgroundColor: 'var(--color-bg)',
-              minHeight: '100dvh',
-            }}
-          >
-            {children}
-          </div>
+          <AppShell>{children}</AppShell>
           <BottomNav />
         </Providers>
       </body>
