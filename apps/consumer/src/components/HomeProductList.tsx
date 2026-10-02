@@ -255,7 +255,7 @@ function RoundDirectHome({
             {currentRound ? roundSectionTitle(currentRound.status) : '이번 주 판매'}
           </Title>
           {currentRound?.status === 'SCHEDULED' && (
-            <Text size="sm" fw="var(--fw-bold)" c="var(--color-primary)">
+            <Text size="sm" fw="var(--fw-bold)" c="var(--color-primary-dark)">
               {formatOrderOpenLabel(currentRound.schedule.orderOpenAt)}
             </Text>
           )}
@@ -272,7 +272,7 @@ function RoundDirectHome({
             mt={4}
             p="sm"
             style={{
-              color: 'var(--color-primary)',
+              color: 'var(--color-primary-dark)',
               background: 'var(--color-primary-surface)',
               borderRadius: 'var(--radius)',
               fontSize: 'var(--font-size-sm)',
@@ -361,7 +361,7 @@ function LegacyHomeProductList({
                 <Text
                   size="sm"
                   fw={500}
-                  c="var(--color-primary)"
+                  c="var(--color-primary-dark)"
                   bg="var(--color-primary-surface)"
                   px={8}
                 >
@@ -372,7 +372,7 @@ function LegacyHomeProductList({
             <Link
               href="/groupbuy"
               style={{
-                color: 'var(--color-primary)',
+                color: 'var(--color-primary-dark)',
                 textDecoration: 'none',
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
@@ -417,7 +417,7 @@ function LegacyHomeProductList({
                   <Text size="sm" fw={700} c="var(--color-text)" lineClamp={2} mb={2}>
                     {product.name}
                   </Text>
-                  <Text size="sm" fw={500} c="var(--color-primary)">
+                  <Text size="sm" fw={500} c="var(--color-primary-dark)">
                     {product.groupSummary
                       ? `${product.groupSummary.currentQuantity}/${product.groupSummary.targetQuantity}개`
                       : '모집 중'}

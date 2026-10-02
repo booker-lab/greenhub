@@ -161,7 +161,7 @@ function RoundProductCard({
         />
       </Box>
       <Box p="xs">
-        <Text size="xs" fw={700} c="var(--color-primary)" mb={4}>
+        <Text size="xs" fw={700} c="var(--color-primary-dark)" mb={4}>
           {isPast ? '지난 회차' : '이번 주 회차'}
         </Text>
         <Text size="sm" fw={500} c="var(--color-text)" lineClamp={2}>

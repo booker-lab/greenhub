@@ -11,7 +11,7 @@ type LegalDocumentPageProps = {
 
 const linkStyle = {
   alignItems: 'center',
-  color: 'var(--color-primary)',
+  color: 'var(--color-primary-dark)',
   display: 'inline-flex',
   fontWeight: 'var(--fw-semibold)',
   minHeight: 'var(--touch-target)',
@@ -53,7 +53,7 @@ export default function LegalDocumentPage({
         >
           <p
             style={{
-              color: 'var(--color-primary)',
+              color: 'var(--color-primary-dark)',
               fontSize: 'var(--font-size-sm)',
               fontWeight: 'var(--fw-semibold)',
               margin: '0 0 8px',

@@ -26,7 +26,7 @@ export default function GreenLoveBrandSection() {
             style={{
               fontSize: 'var(--font-size-sm)',
               fontWeight: 'var(--fw-bold)',
-              color: 'var(--color-primary)',
+              color: 'var(--color-primary-dark)',
             }}
           >
             Green Love

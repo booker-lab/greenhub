@@ -117,7 +117,7 @@ export function OrderCard({ order }: { order: Order }) {
           <Text
             style={{
               fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-primary)',
+              color: 'var(--color-primary-dark)',
               fontWeight: 'var(--fw-medium)',
             }}
             mb={4}

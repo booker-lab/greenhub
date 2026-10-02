@@ -146,7 +146,7 @@ export default function GroupBuyPage() {
             style={{
               fontSize: 'var(--font-size-lg)',
               fontWeight: 'var(--fw-bold)',
-              color: 'var(--color-primary)',
+              color: 'var(--color-primary-dark)',
             }}
           >
             ⚡ 공동구매
@@ -177,7 +177,7 @@ export default function GroupBuyPage() {
         <p
           style={{
             fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-primary)',
+            color: 'var(--color-primary-dark)',
             margin: 0,
             fontWeight: 'var(--fw-medium)',
           }}
@@ -235,7 +235,7 @@ export default function GroupBuyPage() {
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
-                color: 'var(--color-primary)',
+                color: 'var(--color-primary-dark)',
                 background: 'var(--color-primary-surface)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '1px 8px',

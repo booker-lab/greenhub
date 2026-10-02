@@ -85,7 +85,7 @@ export function InviteGenerator({
           <Text
             style={{
               fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-primary)',
+              color: 'var(--color-primary-dark)',
               fontWeight: 'var(--fw-medium)',
             }}
             mb="xs"
@@ -110,7 +110,10 @@ export function InviteGenerator({
               {copied ? '복사됨!' : '복사'}
             </Button>
           </Group>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)' }} mt="xs">
+          <Text
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}
+            mt="xs"
+          >
             만료: {formatExpiryLong(lastToken.expiresAt)}
           </Text>
         </Box>

@@ -89,7 +89,7 @@ export default function RoundPurchasePanel({
               <Text size="sm" fw="var(--fw-bold)">
                 주문 시작
               </Text>
-              <Text size="sm" ta="right" c="var(--color-primary)" fw="var(--fw-bold)">
+              <Text size="sm" ta="right" c="var(--color-primary-dark)" fw="var(--fw-bold)">
                 {formatRoundTime(round.schedule.orderOpenAt) ?? '일정 확인 중'}
               </Text>
             </Group>

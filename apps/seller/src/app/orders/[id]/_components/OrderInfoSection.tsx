@@ -159,7 +159,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
                     fontSize: 'var(--font-size-2xl)',
                     letterSpacing: '0.2em',
                     fontWeight: 'var(--fw-bold)',
-                    color: 'var(--color-primary)',
+                    color: 'var(--color-primary-dark)',
                   }}
                 >
                   {order.pickupCode}

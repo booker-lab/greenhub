@@ -4,7 +4,7 @@ const channelLinkStyle = {
   alignItems: 'center',
   border: 'var(--border)',
   borderRadius: 'var(--radius-full)',
-  color: 'var(--color-primary)',
+  color: 'var(--color-primary-dark)',
   display: 'inline-flex',
   fontSize: 'var(--font-size-sm)',
   fontWeight: 'var(--fw-bold)',
@@ -43,7 +43,7 @@ export default function BusinessRelationshipNotice() {
     >
       <p
         style={{
-          color: 'var(--color-primary)',
+          color: 'var(--color-primary-dark)',
           fontSize: 'var(--font-size-xs)',
           fontWeight: 'var(--fw-bold)',
           margin: '0 0 8px',
@@ -98,7 +98,7 @@ export default function BusinessRelationshipNotice() {
           <li key={product.url} style={{ minWidth: 0 }}>
             <a href={product.url} style={productLinkStyle}>
               <span>{product.name}</span>
-              <span style={{ color: 'var(--color-primary)', fontSize: 'var(--font-size-xs)' }}>
+              <span style={{ color: 'var(--color-primary-dark)', fontSize: 'var(--font-size-xs)' }}>
                 상품 보기 →
               </span>
             </a>

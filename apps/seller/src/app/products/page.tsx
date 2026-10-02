@@ -162,7 +162,7 @@ export default function ProductsPage() {
                   href="/products/new"
                   mt="xs"
                   style={{
-                    color: 'var(--color-primary)',
+                    color: 'var(--color-primary-dark)',
                     fontWeight: 'var(--fw-medium)',
                     fontSize: 'var(--font-size-md)',
                   }}

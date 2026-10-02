@@ -95,7 +95,7 @@ export function DailySummaryTab({
             >
               정산 예정
             </Text>
-            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary)' }}>
+            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}>
               {toKRW(summary?.totalNetAmount ?? 0)}
             </Text>
           </Group>

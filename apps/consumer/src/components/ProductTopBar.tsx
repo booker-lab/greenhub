@@ -65,7 +65,7 @@ export default function ProductTopBar() {
             fontSize: 'var(--font-size-lg)',
             fontWeight: 'var(--fw-bold)',
             letterSpacing: '-0.5px',
-            color: 'var(--color-primary)',
+            color: 'var(--color-primary-dark)',
           }}
         >
           Green Love
