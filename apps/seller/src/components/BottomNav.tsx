@@ -3,6 +3,7 @@
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { isAdminPath } from './AppShell';
 
 export const SELLER_BOTTOM_NAV_ITEMS = [
   { href: '/orders', label: '주문', icon: OrderIcon },
@@ -21,6 +22,8 @@ export default function BottomNav() {
 
   const hiddenPaths = ['/login', '/onboarding'];
   if (hiddenPaths.some((p) => pathname.startsWith(p))) return null;
+  // 어드민 콘솔은 자체 상단 탭이 있어 판매자 하단 탭을 숨긴다
+  if (isAdminPath(pathname)) return null;
 
   return (
     <Box

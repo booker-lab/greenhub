@@ -654,10 +654,10 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 셀러 주문 목록 카드의 손님 이름과 이름·전화 통합 검색(`seller-orders-customer-info-plan.md` T1·T4)은 목록 API(`seller-order-read-model.ts` `LIST_FIELDS`)에 손님 정보가 없어 보류했다. 개인정보 최소화 계약을 넓힐지 결정한 뒤 진행한다. 상세 화면 표시는 #314. 2026-09-28 발견.
 
 ### ADMIN-DESKTOP-TABLE-IN-480-SHELL
-- [ ] 셀러 앱 루트 레이아웃이 폭 480px로 고정돼 있다. 그런데 어드민 탭은 Mantine `visibleFrom="sm"`(창 폭 기준)으로 데스크톱 표를 고른다. 그래서 PC에서도 카드 폭 446px 안에 표가 들어가고 `overflow:hidden`으로 오른쪽이 잘린다. 어드민 주문 표(489px)는 강제환불 버튼이 "강제환"까지만 보인다. 기존 결함이다(#318과 무관). 어드민을 넓은 레이아웃으로 뺄지, 표 기준을 컨테이너 폭으로 바꿀지 결정한다. #317은 표를 4칸으로 유지해 피했다. 2026-09-28 로컬 하네스 검증에서 발견.
+- [x] 2026-10-03 해결: 사용자 결정(어드민만 넓은 레이아웃)대로 `AppShell`이 `/admin`에서 폭 제한을 풀고 판매자 하단 탭을 숨긴다. 이전 기록: 셀러 앱 루트 레이아웃이 폭 480px로 고정돼 있다. 그런데 어드민 탭은 Mantine `visibleFrom="sm"`(창 폭 기준)으로 데스크톱 표를 고른다. 그래서 PC에서도 카드 폭 446px 안에 표가 들어가고 `overflow:hidden`으로 오른쪽이 잘린다. 어드민 주문 표(489px)는 강제환불 버튼이 "강제환"까지만 보인다. 기존 결함이다(#318과 무관). 어드민을 넓은 레이아웃으로 뺄지, 표 기준을 컨테이너 폭으로 바꿀지 결정한다. #317은 표를 4칸으로 유지해 피했다. 2026-09-28 로컬 하네스 검증에서 발견.
 
 ### DRIVER-MANTINE-CSS-AUDIT
-- [ ] 드라이버 `globals.css`는 Mantine CSS를 골라 import한다. 알림 스타일 누락은 #323으로 고쳤지만, `Modal.css` 같은 다른 사용 컴포넌트 CSS도 빠졌을 수 있다. 실제 사용 컴포넌트와 import 목록을 대조한다. 2026-09-28 발견.
+- [x] 2026-10-03 대조 완료: 세 앱의 사용 컴포넌트와 import를 대조한 결과 드라이버는 누락 없음, 소비자(Checkbox·Image·Modal 계열)와 셀러(ActionIcon·NumberInput)는 채움. 이전 기록: 드라이버 `globals.css`는 Mantine CSS를 골라 import한다. 알림 스타일 누락은 #323으로 고쳤지만, `Modal.css` 같은 다른 사용 컴포넌트 CSS도 빠졌을 수 있다. 실제 사용 컴포넌트와 import 목록을 대조한다. 2026-09-28 발견.
 
 ### ADMIN-TAB-PLANS-STALE-PROGRESS
 - [ ] 어드민 탭 계획서(`docs/specs/frontend/admin-tabs-improve-plan.md`와 `admin/admin-tab-*-plan.md`) 진행표가 현재 코드보다 뒤처져 있다. stores는 T7·T8을 빼고 구현을 마쳤고, 6개 탭 공통 조회 실패 표시와 users D1·banner T1·T3도 끝났는데 표에는 "미착수"로 남아 있다. 문서 정합성 작업으로 정리한다. 2026-09-28 코드 대조로 확인.
