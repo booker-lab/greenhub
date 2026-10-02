@@ -56,7 +56,10 @@ const requireForTest = (specifier) => {
     specifier === 'next/link' ||
     specifier === 'next/navigation' ||
     specifier === 'next-auth/react' ||
-    specifier === '@mantine/core'
+    specifier === '@mantine/core' ||
+    specifier === 'lucide-react' ||
+    specifier === '@/hooks/useSaleRounds' ||
+    specifier === '@/lib/round-schedule-label'
   ) {
     return {};
   }
