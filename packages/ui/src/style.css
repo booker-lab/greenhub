@@ -42,10 +42,11 @@
 
   /* ── Semantic Status ── */
   --color-surface-muted: #F1F3F2;
-  --color-status-info-bg: #e7f5ff;
-  --color-status-info-text: #1971c2;
-  --color-status-warning-bg: #fff4e6;
-  --color-status-warning-text: #e8590c;
+  /* 정보=중립 회색, 경고=마감 노랑 계열(디자인 기준: 파랑·주황·보라를 쓰지 않는다) */
+  --color-status-info-bg: #F1F3F2;
+  --color-status-info-text: #3F4642;
+  --color-status-warning-bg: #FFF4CC;
+  --color-status-warning-text: #7A5B00;
   --color-caution-bg: #fffde7;
   --color-caution-border: #ffd43b;
 

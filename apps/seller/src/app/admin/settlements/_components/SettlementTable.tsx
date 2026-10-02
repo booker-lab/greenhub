@@ -98,7 +98,6 @@ export function SettlementTable({
                   disabled={processingId === s.id}
                   size="xs"
                   variant="outline"
-                  color="blue"
                   radius="md"
                 >
                   {processingId === s.id ? '처리중…' : '지급처리'}
@@ -209,8 +208,7 @@ export function SettlementTable({
                       disabled={processingId === s.id}
                       size="xs"
                       variant="outline"
-                      color="blue"
-                      radius="md"
+                          radius="md"
                     >
                       {processingId === s.id ? '처리중…' : '지급처리'}
                     </Button>

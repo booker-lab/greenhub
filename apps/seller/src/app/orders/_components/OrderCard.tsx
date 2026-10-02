@@ -86,7 +86,7 @@ export function OrderCard({ order }: { order: Order }) {
 
       {order.status === 'RECRUITING' && (
         <Alert
-          color="blue"
+          color="gray"
           variant="light"
           radius="md"
           mt="xs"
