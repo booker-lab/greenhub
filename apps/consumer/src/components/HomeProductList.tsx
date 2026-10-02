@@ -15,16 +15,19 @@ import {
 } from '@mantine/core';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import DeadlineSection from '@/components/DeadlineSection';
 import ProductCard from '@/components/ProductCard';
+import QuickAddToast, { type QuickAddToastState } from '@/components/QuickAddToast';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import RoundCountdownStrip from '@/components/RoundCountdownStrip';
+import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
 import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
 import { deliveryDayTag } from '@/lib/round-countdown';
+import { canQuickAdd, cartAddFailureMessage, roundItemCartInput } from '@/lib/round-quick-add';
 import {
   formatOrderCloseLabel,
   formatOrderOpenLabel,
@@ -128,15 +131,101 @@ function RoundProductCard({
   item,
   round,
   isPast = false,
+  onQuickAdd,
 }: {
   item: SaleRoundItem;
   round: PublicSaleRound;
   isPast?: boolean;
+  onQuickAdd?: (item: SaleRoundItem) => void;
 }) {
   const href = `/products/${encodeURIComponent(item.productId)}?round=${encodeURIComponent(round.id)}`;
   const tag = roundItemTag(item, round, isPast);
   const dimmed = isPast || item.status === 'SOLD_OUT';
+  const quickAdd = onQuickAdd && canQuickAdd(item, round.status, isPast) ? onQuickAdd : null;
 
+  return (
+    <Box style={{ position: 'relative', minWidth: 0 }}>
+      <RoundProductCardLink
+        href={href}
+        item={item}
+        round={round}
+        isPast={isPast}
+        tag={tag}
+        dimmed={dimmed}
+      />
+      {quickAdd && (
+        // 사진과 같은 정사각형 영역 위에 + 버튼을 겹친다(링크 안에 버튼을 넣지 않기 위해 형제로 둔다).
+        <Box
+          style={{
+            aspectRatio: '1/1',
+            left: 0,
+            pointerEvents: 'none',
+            position: 'absolute',
+            top: 0,
+            width: '100%',
+          }}
+        >
+          <button
+            type="button"
+            aria-label={`${item.productNameSnapshot} 장바구니에 담기`}
+            onClick={() => quickAdd(item)}
+            style={{
+              alignItems: 'center',
+              background: 'transparent',
+              border: 0,
+              bottom: 2,
+              cursor: 'pointer',
+              display: 'flex',
+              height: 'var(--touch-target)',
+              justifyContent: 'center',
+              padding: 0,
+              pointerEvents: 'auto',
+              position: 'absolute',
+              right: 2,
+              width: 'var(--touch-target)',
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                alignItems: 'center',
+                background: 'var(--color-bg)',
+                borderRadius: 'var(--radius-full)',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                color: 'var(--color-primary-dark)',
+                display: 'flex',
+                fontSize: 22,
+                fontWeight: 'var(--fw-extrabold)',
+                height: 34,
+                justifyContent: 'center',
+                lineHeight: 1,
+                width: 34,
+              }}
+            >
+              +
+            </span>
+          </button>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function RoundProductCardLink({
+  href,
+  item,
+  round,
+  isPast,
+  tag,
+  dimmed,
+}: {
+  href: string;
+  item: SaleRoundItem;
+  round: PublicSaleRound;
+  isPast: boolean;
+  tag: ReturnType<typeof roundItemTag>;
+  dimmed: boolean;
+}) {
   return (
     <Box
       component={Link}
@@ -205,7 +294,15 @@ function RoundProductCard({
   );
 }
 
-function RoundItems({ round, isPast = false }: { round: PublicSaleRound; isPast?: boolean }) {
+function RoundItems({
+  round,
+  isPast = false,
+  onQuickAdd,
+}: {
+  round: PublicSaleRound;
+  isPast?: boolean;
+  onQuickAdd?: (item: SaleRoundItem) => void;
+}) {
   const items = visibleItems(round);
   if (items.length === 0) {
     return (
@@ -220,7 +317,13 @@ function RoundItems({ round, isPast = false }: { round: PublicSaleRound; isPast?
   return (
     <SimpleGrid cols={2} spacing={12} verticalSpacing={20}>
       {items.map((item) => (
-        <RoundProductCard key={item.id} item={item} round={round} isPast={isPast} />
+        <RoundProductCard
+          key={item.id}
+          item={item}
+          round={round}
+          isPast={isPast}
+          onQuickAdd={onQuickAdd}
+        />
       ))}
     </SimpleGrid>
   );
@@ -244,6 +347,21 @@ function RoundDirectHome({
   status,
   refetch,
 }: ReturnType<typeof useSaleRounds>) {
+  const { addItem } = useCart();
+  const [toast, setToast] = useState<QuickAddToastState | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
+  const handleQuickAdd = useCallback(
+    (item: SaleRoundItem) => {
+      const result = addItem(roundItemCartInput(item));
+      setToast({
+        id: Date.now(),
+        tone: result.ok ? 'success' : 'error',
+        message: result.ok ? '장바구니에 담았어요' : cartAddFailureMessage(result.reason),
+      });
+    },
+    [addItem],
+  );
+
   if (loading) {
     return (
       <Stack gap="md" aria-label="판매 회차 불러오는 중">
@@ -346,7 +464,7 @@ function RoundDirectHome({
         </Stack>
 
         {currentRound ? (
-          <RoundItems round={currentRound} />
+          <RoundItems round={currentRound} onQuickAdd={handleQuickAdd} />
         ) : (
           <Stack align="center" py={40}>
             <Text size="sm" c="var(--color-text-disabled)">
@@ -383,6 +501,7 @@ function RoundDirectHome({
           </Stack>
         )}
       </Box>
+      <QuickAddToast toast={toast} onClose={closeToast} />
     </Stack>
   );
 }

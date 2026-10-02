@@ -10,6 +10,7 @@ import ProductCTABar from '@/components/ProductCTABar';
 import { type RoundCartItem, useCart } from '@/hooks/useCart';
 import { useStore } from '@/hooks/useProducts';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
+import { cartAddFailureMessage } from '@/lib/round-quick-add';
 import type { RoundProductActionContext } from './ProductActions';
 
 interface Props {
@@ -44,13 +45,7 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
       roundPrice: roundProduct.item.roundPrice,
     });
     if (!result.ok) {
-      setCartError(
-        result.reason === 'different_round'
-          ? '장바구니에는 같은 회차 상품만 담을 수 있습니다. 기존 장바구니를 비운 뒤 다시 시도해 주세요.'
-          : result.reason === 'incompatible_cart'
-            ? '기존 판매 상품과 회차 상품은 함께 담을 수 없습니다. 기존 장바구니를 비운 뒤 다시 시도해 주세요.'
-            : '회차 상품 정보를 확인할 수 없어 장바구니에 담지 못했습니다.',
-      );
+      setCartError(cartAddFailureMessage(result.reason));
       return;
     }
     setCartError(null);
