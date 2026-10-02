@@ -1,25 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import type { SavedAddress } from '@greenhub/shared';
 import {
-  Container,
-  Box,
-  Group,
-  Text,
-  Button,
-  Stack,
-  Paper,
-  Badge,
-  Modal,
-  TextInput,
   Alert,
+  Badge,
+  Box,
+  Button,
+  Container,
+  Group,
+  Modal,
+  Paper,
+  Stack,
+  Text,
+  TextInput,
 } from '@mantine/core';
 import { ChevronLeft } from 'lucide-react';
-import { useAddresses } from '@/hooks/useAddresses';
-import type { SavedAddress } from '@greenhub/shared';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { useState } from 'react';
 import type { AddressFormData } from '@/hooks/useAddresses';
+import { useAddresses } from '@/hooks/useAddresses';
 
 const EMPTY_FORM: AddressFormData = { label: '', address: '', addressDetail: '', zipCode: '' };
 
@@ -35,7 +35,7 @@ function AddressCard({
   onSetDefault: () => void;
 }) {
   return (
-    <Paper p="md" radius="md" withBorder>
+    <Paper p="md" radius="lg" withBorder>
       <Group justify="space-between" align="flex-start" mb="xs">
         <Box style={{ flex: 1, minWidth: 0 }}>
           <Group gap="xs" mb={4}>
@@ -68,14 +68,14 @@ function AddressCard({
       </Group>
       <Group gap="xs" mt="xs">
         {!addr.isDefault && (
-          <Button size="xs" variant="outline" color="gray" radius="sm" onClick={onSetDefault}>
+          <Button size="xs" variant="outline" color="gray" radius="xl" onClick={onSetDefault}>
             기본으로 설정
           </Button>
         )}
-        <Button size="xs" variant="outline" color="gray" radius="sm" onClick={onEdit}>
+        <Button size="xs" variant="outline" color="gray" radius="xl" onClick={onEdit}>
           수정
         </Button>
-        <Button size="xs" variant="outline" color="red" radius="sm" onClick={onDelete}>
+        <Button size="xs" variant="outline" color="red" radius="xl" onClick={onDelete}>
           삭제
         </Button>
       </Group>
@@ -164,7 +164,7 @@ function AddressFormModal({
             </Alert>
           )}
 
-          <Button type="submit" fullWidth color="brand" radius="md" loading={saving} mt="xs">
+          <Button type="submit" fullWidth color="brand" radius="xl" loading={saving} mt="xs">
             저장
           </Button>
         </Stack>
@@ -248,13 +248,7 @@ export default function AddressesClient() {
             <Alert color="red" variant="light">
               <Group justify="space-between" align="center" gap="sm">
                 <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
-                <Button
-                  size="xs"
-                  variant="white"
-                  color="red"
-                  radius="sm"
-                  onClick={() => refetch()}
-                >
+                <Button size="xs" variant="white" color="red" radius="xl" onClick={() => refetch()}>
                   다시 시도
                 </Button>
               </Group>
@@ -284,7 +278,7 @@ export default function AddressesClient() {
           >
             배송지 정보를 불러오지 못했습니다.
           </Text>
-          <Button size="sm" color="brand" radius="md" onClick={() => refetch()}>
+          <Button size="sm" color="brand" radius="xl" onClick={() => refetch()}>
             다시 조회
           </Button>
         </Stack>
@@ -313,7 +307,7 @@ export default function AddressesClient() {
       <Button
         fullWidth
         color="brand"
-        radius="md"
+        radius="xl"
         size="md"
         onClick={() => setModal({ mode: 'add' })}
       >
