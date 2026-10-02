@@ -211,7 +211,7 @@ export default function OrdersPage() {
                 fontSize: 'var(--font-size-sm)',
                 borderRadius: 99,
                 backgroundColor:
-                  loading || refreshing ? 'var(--color-surface-muted)' : 'var(--color-text)',
+                  loading || refreshing ? 'var(--color-surface-muted)' : 'var(--color-primary)',
                 color:
                   loading || refreshing ? 'var(--color-text-disabled)' : 'var(--color-bg)',
                 opacity: loading || refreshing ? 0.7 : 1,
@@ -294,8 +294,8 @@ export default function OrdersPage() {
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
                     backgroundColor:
-                      datePreset === p.key ? 'var(--color-text)' : 'var(--color-surface-muted)',
-                    color: datePreset === p.key ? 'var(--color-bg)' : 'var(--color-text-disabled)',
+                      datePreset === p.key ? 'var(--color-primary)' : 'var(--color-surface-muted)',
+                    color: datePreset === p.key ? 'var(--color-bg)' : 'var(--color-text-secondary)',
                     transition: 'all 0.15s',
                   }}
                 >
@@ -382,8 +382,8 @@ export default function OrdersPage() {
                   padding: '6px 14px',
                   fontSize: 'var(--font-size-sm)',
                   borderRadius: 99,
-                  backgroundColor: !heldOnly ? 'var(--color-text)' : 'transparent',
-                  color: !heldOnly ? 'var(--color-bg)' : 'var(--color-text-disabled)',
+                  backgroundColor: !heldOnly ? 'var(--color-primary)' : 'transparent',
+                  color: !heldOnly ? 'var(--color-bg)' : 'var(--color-text-secondary)',
                   transition: 'all 0.15s',
                 }}
               >
@@ -396,8 +396,8 @@ export default function OrdersPage() {
                   padding: '6px 14px',
                   fontSize: 'var(--font-size-sm)',
                   borderRadius: 99,
-                  backgroundColor: heldOnly ? 'var(--color-text)' : 'transparent',
-                  color: heldOnly ? 'var(--color-bg)' : 'var(--color-text-disabled)',
+                  backgroundColor: heldOnly ? 'var(--color-primary)' : 'transparent',
+                  color: heldOnly ? 'var(--color-bg)' : 'var(--color-text-secondary)',
                   transition: 'all 0.15s',
                 }}
               >
@@ -425,8 +425,8 @@ export default function OrdersPage() {
                     padding: '6px 14px',
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
-                    backgroundColor: subFilter === sf.key ? 'var(--color-text)' : 'transparent',
-                    color: subFilter === sf.key ? 'var(--color-bg)' : 'var(--color-text-disabled)',
+                    backgroundColor: subFilter === sf.key ? 'var(--color-primary)' : 'transparent',
+                    color: subFilter === sf.key ? 'var(--color-bg)' : 'var(--color-text-secondary)',
                     transition: 'all 0.15s',
                   }}
                 >
@@ -453,7 +453,7 @@ export default function OrdersPage() {
                     padding: '6px 14px',
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
-                    backgroundColor: 'var(--color-text)',
+                    backgroundColor: 'var(--color-primary)',
                     color: 'var(--color-bg)',
                   }}
                 >
@@ -477,7 +477,7 @@ export default function OrdersPage() {
                     padding: '6px 14px',
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
-                    backgroundColor: 'var(--color-text)',
+                    backgroundColor: 'var(--color-primary)',
                     color: 'var(--color-bg)',
                     flexShrink: 0,
                   }}
@@ -511,7 +511,7 @@ export default function OrdersPage() {
                       padding: '6px 14px',
                       fontSize: 'var(--font-size-sm)',
                       borderRadius: 99,
-                      backgroundColor: 'var(--color-text)',
+                      backgroundColor: 'var(--color-primary)',
                       color: 'var(--color-bg)',
                       flexShrink: 0,
                     }}

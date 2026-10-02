@@ -55,33 +55,33 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
 };
 
 export const STATUS_COLOR: Record<OrderStatus, string> = {
-  ACCEPTED: 'orange',
-  CONFIRMED: 'orange',
-  RECRUITING: 'orange',
+  ACCEPTED: 'brand',
+  CONFIRMED: 'brand',
+  RECRUITING: 'brand',
   DELIVERY_HELD: 'red',
-  PREPARING: 'blue',
-  DELIVERING: 'violet',
-  HUB_ARRIVED: 'violet',
+  PREPARING: 'yellow',
+  DELIVERING: 'dark',
+  HUB_ARRIVED: 'dark',
   CANCELLED: 'red',
   PENDING: 'gray',
-  DELIVERED: 'green',
-  PICKED_UP: 'green',
-  REVIEWED: 'green',
+  DELIVERED: 'gray',
+  PICKED_UP: 'gray',
+  REVIEWED: 'gray',
 };
 
 export const ACCENT_BORDER: Record<OrderStatus, string> = {
-  ACCEPTED: 'var(--color-status-warning-text)',
-  CONFIRMED: 'var(--color-status-warning-text)',
-  RECRUITING: 'var(--color-status-warning-text)',
+  ACCEPTED: 'var(--color-primary)',
+  CONFIRMED: 'var(--color-primary)',
+  RECRUITING: 'var(--color-primary)',
   DELIVERY_HELD: 'var(--color-danger)',
-  PREPARING: 'var(--color-status-info-text)',
-  DELIVERING: '#7048e8',
-  HUB_ARRIVED: '#7048e8',
+  PREPARING: 'var(--color-deadline)',
+  DELIVERING: 'var(--color-text-secondary)',
+  HUB_ARRIVED: 'var(--color-text-secondary)',
   CANCELLED: 'var(--color-danger)',
   PENDING: 'var(--color-text-disabled)',
-  DELIVERED: 'var(--color-primary)',
-  PICKED_UP: 'var(--color-primary)',
-  REVIEWED: 'var(--color-text-disabled)',
+  DELIVERED: 'var(--color-border)',
+  PICKED_UP: 'var(--color-border)',
+  REVIEWED: 'var(--color-border)',
 };
 
 export const DELIVERY_LABEL: Record<string, string> = {
