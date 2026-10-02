@@ -30,6 +30,7 @@
     "load:run": "node scripts/load/run-k6.mjs",
     "test:e2e": "pnpm --filter e2e test",
     "test:e2e:ui": "pnpm --filter e2e test:ui",
+    "test:e2e:local": "node scripts/round-direct-e2e-local.mjs",
     "test:vercel-ignore": "node --test scripts/vercel/ignore-build.spec.mjs",
     "test:git-safety": "node --test scripts/git/*.spec.mjs",
     "test:agent-runner": "node --test scripts/agent/run-once.spec.mjs",

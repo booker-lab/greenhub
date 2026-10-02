@@ -5,6 +5,7 @@ import {
   evaluateTargetReadiness,
   inspectFirebaseServiceAccount,
   inspectJpegBuffer,
+  LOCAL_TARGET_ORIGINS,
   normalizeReadinessInput,
 } from './check-round-direct-e2e-readiness.mjs';
 
@@ -337,5 +338,106 @@ describe('환경 입력과 JPEG 판독', () => {
       hasStartMagic: true,
       hasEndMagic: true,
     });
+  });
+});
+
+describe('로컬 대상 모드 준비조건 계약', () => {
+  const localTargets = {
+    consumer: 'http://127.0.0.1:3101',
+    seller: 'http://127.0.0.2:3102',
+    driver: 'http://127.0.0.3:3103',
+  };
+  const localInput = (overrides = {}) =>
+    validInput({ targetMode: 'local', targetUrls: { ...localTargets }, auth: {}, ...overrides });
+
+  it('local 표식과 고정 루프백 대상·로컬 빌드 SHA가 맞으면 통과하고 인증 증거는 globalSetup으로 넘긴다', () => {
+    const result = evaluateReadiness(localInput());
+    assert.equal(result.ready, true);
+    assert.deepEqual(result.failures, []);
+    assert.equal(result.targetMode, 'local');
+    assert.equal(result.authEvidenceSource, 'playwright-global-setup');
+    assert.deepEqual({ ...LOCAL_TARGET_ORIGINS }, localTargets);
+  });
+
+  it('local 모드에서도 운영 Firebase·운영 API·운영 store·preview 아닌 환경은 거부한다', () => {
+    const cases = [
+      [
+        { firebaseProjectId: 'green-e4fe3', allowedFirebaseProjects: ['green-e4fe3'] },
+        'PRODUCTION_FIREBASE_PROJECT',
+      ],
+      [
+        {
+          serviceAccount: { configured: true, parseable: true, projectId: 'green-e4fe3' },
+        },
+        'PRODUCTION_FIREBASE_SERVICE_ACCOUNT',
+      ],
+      [
+        {
+          apiOrigin: 'https://api-production-13e7.up.railway.app',
+          allowedApiOrigins: ['https://api-production-13e7.up.railway.app'],
+        },
+        'PRODUCTION_API_ORIGIN',
+      ],
+      [{ fixtureStoreId: '80189070-2c3d-45f2-bc11-68a870b13951' }, 'PRODUCTION_STORE'],
+      [{ environment: 'local' }, 'ENVIRONMENT_NOT_PREVIEW'],
+      [{ providerMode: 'live' }, 'PROVIDER_MODE_NOT_STUB'],
+    ];
+    for (const [overrides, code] of cases) {
+      const result = evaluateReadiness(localInput(overrides));
+      assert.equal(result.ready, false);
+      assert.ok(result.failureCodes.includes(code), code);
+    }
+  });
+
+  it('local 모드에서 대상이 고정 루프백과 다르거나 SHA가 다르면 거부한다', () => {
+    for (const targetUrls of [
+      { ...localTargets, consumer: localTargets.seller, seller: localTargets.consumer },
+      { ...localTargets, driver: 'https://driver-preview.example.test' },
+      { consumer: localTargets.consumer },
+    ]) {
+      const result = evaluateReadiness(localInput({ targetUrls }));
+      assert.ok(result.failureCodes.includes('DEPLOYMENT_TARGET_URL_MISSING'));
+    }
+    const shaResult = evaluateReadiness(
+      localInput({ deploymentShas: { consumer: SHA, seller: SHA, driver: 'b'.repeat(40) } }),
+    );
+    assert.ok(shaResult.failureCodes.includes('DEPLOYMENT_SHA_MISMATCH'));
+  });
+
+  it('알 수 없는 대상 모드는 거부하고, 표식이 없으면 기존 인증 증거 요구를 유지한다', () => {
+    const invalid = evaluateReadiness(validInput({ targetMode: 'loopback' }));
+    assert.ok(invalid.failureCodes.includes('TARGET_MODE_INVALID'));
+
+    const previewWithoutAuth = evaluateReadiness(validInput({ auth: {} }));
+    assert.equal(previewWithoutAuth.authEvidenceSource, 'workflow-secret');
+    assert.ok(previewWithoutAuth.failureCodes.includes('CONSUMER_AUTH_NOT_VERIFIED'));
+    assert.ok(previewWithoutAuth.failureCodes.includes('DRIVER_AUTH_NOT_VERIFIED'));
+  });
+
+  it('환경 입력 정규화는 local 표식이 있을 때만 루프백 http 대상을 남긴다', () => {
+    const env = {
+      ROUND_DIRECT_E2E_TARGET_URLS_JSON: JSON.stringify({
+        consumer: 'http://127.0.0.1:3101/',
+        seller: 'http://127.0.0.2:3102/',
+        driver: 'http://127.0.0.3:3103/',
+      }),
+    };
+    assert.deepEqual(normalizeReadinessInput(env).targetUrls, {
+      consumer: null,
+      seller: null,
+      driver: null,
+    });
+    const local = normalizeReadinessInput({ ...env, ROUND_DIRECT_E2E_TARGET_MODE: 'local' });
+    assert.equal(local.targetMode, 'local');
+    assert.deepEqual(local.targetUrls, localTargets);
+    const swapped = normalizeReadinessInput({
+      ROUND_DIRECT_E2E_TARGET_MODE: 'local',
+      ROUND_DIRECT_E2E_TARGET_URLS_JSON: JSON.stringify({
+        consumer: 'http://127.0.0.2:3102',
+        seller: 'http://127.0.0.1:3101',
+        driver: 'https://driver.greenlove.co.kr',
+      }),
+    });
+    assert.deepEqual(swapped.targetUrls, { consumer: null, seller: null, driver: null });
   });
 });
