@@ -13,7 +13,7 @@ import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
 import ProductActions from './_components/ProductActions';
 import ProductImages from './_components/ProductImages';
 import ProductInfo from './_components/ProductInfo';
-import RoundPurchasePanel from './_components/RoundPurchasePanel';
+import RoundPurchasePanel, { RoundPurchaseNotices } from './_components/RoundPurchasePanel';
 
 const API_URL = getApiBaseUrl();
 const MAX_ROUND_ID_LENGTH = 128;
@@ -240,7 +240,7 @@ function ProductDetailContent({ product, variety, roundProduct }: ProductDetailC
         style={{ paddingTop: 'calc(52px + env(safe-area-inset-top))' }}
       >
         <ProductImages images={product.images ?? []} name={product.name} />
-        <ProductInfo product={product} variety={variety} />
+        {/* 회차 상품은 이름·회차 가격을 패널에서 보여주므로 상품 정보의 이름·원래 가격은 숨긴다 */}
         {roundProduct && (
           <RoundPurchasePanel
             round={roundProduct.round}
@@ -249,6 +249,8 @@ function ProductDetailContent({ product, variety, roundProduct }: ProductDetailC
             isPurchasable={roundProduct.isPurchasable}
           />
         )}
+        <ProductInfo product={product} variety={variety} showSummary={!roundProduct} />
+        {roundProduct && <RoundPurchaseNotices />}
         {roundProduct ? (
           <ProductActions product={product} roundProduct={roundProduct} />
         ) : (
