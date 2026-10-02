@@ -81,7 +81,7 @@
 - 카카오 비즈니스 채널 승인 완료.
 - repository ALIGO logical 8-code contract: `VERIFIED` — #65에서 확인한 repository 계약.
 - ALIGO 템플릿 8종(UK_5691~5698): 2026-09-28 콘솔에서 코드·이름·승인완료·본문·변수 일치 확인. actual send는 `NOT RUN`이다.
-- **운영 배포 완료(2026-09-28, 출시 SHA `197f84a4`)**: API·프런트 3개·Firestore/Storage 규칙·인덱스가 같은 SHA로 반영됐다. 이후 2026-09-30 API·프런트 3개를 `389066c8`(회차 주문 요청사항 칸 포함)로 갱신했다(규칙·인덱스 변경 없음). 상세는 아래 5절.
+- **운영 배포 완료(2026-09-28, 출시 SHA `197f84a4`)**: API·프런트 3개·Firestore/Storage 규칙·인덱스가 같은 SHA로 반영됐다. 이후 2026-09-30 `389066c8`(회차 주문 요청사항 칸 포함), 2026-10-03 `f89f9ed9`(회차 자동 오픈·55분 로그아웃 방지 등 #325~#340)로 API·프런트 3개를 갱신했다(규칙·인덱스 변경 없음). 상세는 아래 5절.
 - production 배포 완료. 첫 회차 "11월 10일 배송 회차"가 `SCHEDULED`다(주문 11/1 10:00 오픈).
 - 판매 모드: **`round_direct`**(2026-09-29 전환). 파일럿 운영 시작은 **2026-11-01로 연기**했다.
 
@@ -155,6 +155,7 @@ revocation window 결정(D2, 2026-09-28)은 `docs/specs/api/auth.md`를 따른�
 - 운영 규칙 반영으로 driver 전체 주문 읽기 등 7/31 이후 수정된 경계가 운영에서도 적용된다.
 - 2026-09-28 운영 API `781285ea`(ALIGO 송신 프록시, 배포 `1e3e57b1…`), 판매자 앱 `437af74b`(새 회차 화면, `dpl_7bcozKG2bkMhoHWXMumUoH1B27Yr`, 이전 `dpl_FXtMd6FkhLGZgikQD48mHjqXi7yg`)로 갱신했다. 각 SHA는 원격 회차 E2E 52 + 세션 12를 통과했다(run `36383185604`, `36410582745`).
 - 2026-09-30 API·프런트 3개를 `389066c8`로 갱신했다(프런트 PR #314~#320·#323·#332, API는 #332 요청사항 칸). 배포 전 같은 SHA exact Preview로 원격 회차 E2E 52 + 세션 12 통과, fixture 잔여 0(run `36727676723`). Railway 배포 `7f956a35…` SUCCESS·health 200, Vercel production consumer `dpl_4ByBmtSMWAsfEpJXSwT4DLF5mZQB`·seller `dpl_EgQY1EYSJjpk2vB6h4bXSbpWWbWn`·driver `dpl_A748dkEL9DU9hWSpuFhK48TFCRz6`, 배포 기록 SHA 일치, 운영 도메인 주요 페이지 200·CORS 정상·비인증 401. 롤백 대상: API `1e3e57b1…`(`781285ea`), consumer `dpl_79CBcA2hcxsUt88u2fQNv7NRfDWF`·seller `dpl_7bcozKG2bkMhoHWXMumUoH1B27Yr`·driver `dpl_FBSZWeeMnzSMM6njySy5DwNJT3gx`.
+- 2026-10-03 API·프런트 3개를 `f89f9ed9`로 갱신했다. 포함: 회차 주문 경로의 자동 `OPEN` 판정(#326 — 저장값 `SCHEDULED`여도 `orderOpenAt` 경과 시 예약·장바구니 검증 통과, 첫 예약 때 `OPEN` 저장), Auth.js proxy 쿠키 반영과 refresh 회전 60초 유예(#333), 기사 연락처·Mantine CSS·카메라 정책(#327·#329·#331·#336·#337), 소비자 결제 재시도·MY 주문·손님 화면(#328·#330·#335), 자동 배포 끔(#339). 배포 전 같은 SHA exact Preview로 원격 회차 E2E 52 + 세션 12 통과·cleanup 성공(run `37023360349`). Railway 배포 `3272e92b…` SUCCESS·health 200, Vercel production consumer `dpl_5PkihD5zHMUAa14HWRxDH54cdueC`·seller `dpl_D3aUXpRxg5ZYgNzBhoQLhDYCP9j3`·driver `dpl_CriRnQ2sccPvj6LaLFqCEGzmifUH`, 운영 최신 배포 SHA 일치, 운영 도메인 주요 페이지 200·CORS 정상·비인증 401. 롤백 대상: API `7f956a35…`(`389066c8`), consumer `dpl_4ByBmtSMWAsfEpJXSwT4DLF5mZQB`·seller `dpl_EgQY1EYSJjpk2vB6h4bXSbpWWbWn`·driver `dpl_A748dkEL9DU9hWSpuFhK48TFCRz6`.
 - **activation(2026-09-29)**: 첫 회차 `e8ca686f-a9db-4c6b-8ebf-2bf190351a3c` "10월 6일 배송 회차"를 판매자 앱에서 만들어 `SCHEDULED`로 예약했다(주문 10/1 목 10:00 ~ 10/5 월 00:00, 경매 10/5 07:00, 배송 10/6 00:00~09:00, 경기도 이천시, 배송지 15곳·수량 30개, 빅립 30,000·만천홍 25,000·v3 45,000원 각 10개). 2026-09-29 파일럿 연기에 맞춰 같은 회차를 "11월 10일 배송 회차"(주문 11/1 일 10:00 ~ 11/9 월 00:00, 경매 11/9 07:00, 배송 11/10 00:00~09:00)로 옮겼다(`SCHEDULED` 유지, 공개 API 반영 확인). 사용자 승인으로 `salesMode`를 `legacy → round_direct`로 전환했고(dry-run 대상 1곳 확인 후 `--confirm` 적용), 공개 회차 API에서 회차와 상품 3개를 확인했다. 전환 시점 미해결 운영 예외 0건.
 - 회차 상태는 조회 시 계산된다: `SCHEDULED`는 `orderOpenAt` 경과 시 자동 `OPEN`, `orderCloseAt` 경과 시 자동 `CLOSED`다. 공개 회차에는 `SCHEDULED`도 노출된다.
 - 롤백: `node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=legacy --confirm=80189070-2c3d-45f2-bc11-68a870b13951:round_direct:legacy`
@@ -328,7 +329,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 검증 상태
 
-- 최근 원격 회차 E2E: run `36727676723`(현재 운영 SHA `389066c8`) 52/52 + 세션 12/12, fixture 잔여 0. 운영에 나갈 SHA가 바뀌면 그 SHA로 다시 판정한다.
+- 최근 원격 회차 E2E: run `37023360349`(현재 운영 SHA `f89f9ed9`) 52/52 + 세션 12/12, cleanup 성공. 운영에 나갈 SHA가 바뀌면 그 SHA로 다시 판정한다.
 - 이전 운영 SHA 증거: 출시 `197f84a4` run `36372493414`, API `781285ea` run `36383185604`, 판매자 앱 `437af74b` run `36410582745`(각 52/52 + 세션 12/12, cleanup 0).
 - 이전 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`(52건).
 - 과거 run을 현재 release 증거로 확장하지 않는다.
@@ -354,7 +355,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 ## 다음 작업
 
 1. 파일럿 시작(2026-11-01) 전 프런트엔드 점검: 첫 회차는 `orderOpenAt`(11/1 10:00)에 자동 `OPEN`된다. 일정을 다시 미루면 그 전에 회차 일정을 옮긴다. 결정 3건(`ADMIN-CANCELLED-REFUND-RETRY`·`SELLER-ORDER-LIST-BUYER-INFO`·`ADMIN-DESKTOP-TABLE-IN-480-SHELL`)도 파일럿 전에 정한다.
-2. SMS 발신번호를 사업자 번호로 교체하고 문자 재시험.
+2. SMS 발신번호를 사업자 번호로 교체하고 문자 재시험. 사업자 번호를 ALIGO 발신번호로 추가 등록해 승인 대기 중이다(2026-10-02). 승인 전에 `ALIGO_SENDER_PHONE`을 바꾸면 알림톡도 실패하므로 승인 확인 뒤 바꾼다.
 3. 파일럿 시작 직후 실제 결제 1건(결제 → 접수 알림톡 → 소비자 취소·환불 → 취소 알림톡)으로 운영 PortOne 경로를 확인한다. 결제는 지금까지 E2E 모의 결제로만 검증됐다.
 4. 운영 배포는 검증된 SHA를 지정해 API → 프런트 → 규칙 순으로 한다. Railway UI "Deploy"는 `main` HEAD를 배포하므로 병합 후 미검증 코드가 나갈 수 있다.
 5. Pilot `MARKETING_NOT_USED_IN_PILOT`와 legal/source wording을 문서 범위에서 정합화한다.
