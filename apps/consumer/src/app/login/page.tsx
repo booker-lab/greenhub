@@ -1,5 +1,5 @@
+import { Container, Stack, Text, Title } from '@mantine/core';
 import { Suspense } from 'react';
-import { Container, Title, Stack } from '@mantine/core';
 import { LoginForm } from './_form';
 
 export const dynamic = 'force-dynamic';
@@ -10,9 +10,37 @@ export default function LoginPage() {
   return (
     <Container size={400} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
       <Stack gap="lg" w="100%">
-        <Title order={1} ta="center" style={{ color: 'var(--color-primary-dark)' }}>
-          Green Love
-        </Title>
+        <Stack gap={4} align="center" mb="md">
+          <Title
+            order={1}
+            ta="center"
+            style={{
+              color: 'var(--color-primary-dark)',
+              fontSize: 34,
+              fontWeight: 'var(--fw-extrabold)',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            그린러브
+          </Title>
+          <Text
+            style={{
+              color: 'var(--color-primary)',
+              fontSize: 'var(--font-size-xs)',
+              fontWeight: 'var(--fw-extrabold)',
+              letterSpacing: '0.18em',
+            }}
+          >
+            Green Love
+          </Text>
+          <Text
+            ta="center"
+            mt="sm"
+            style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
+          >
+            월요일 새벽 경매, 화요일 아침 문 앞 도착
+          </Text>
+        </Stack>
         <Suspense fallback={<div style={{ height: 240 }} />}>
           <LoginForm showCredentials={showCredentials} />
         </Suspense>

@@ -1,8 +1,8 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { Box } from '@mantine/core';
 import { ChevronLeft, Home, ShoppingCart } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useCart } from '@/hooks/useCart';
 
 export default function ProductTopBar() {
@@ -63,12 +63,12 @@ export default function ProductTopBar() {
         <span
           style={{
             fontSize: 'var(--font-size-lg)',
-            fontWeight: 'var(--fw-bold)',
-            letterSpacing: '-0.5px',
+            fontWeight: 'var(--fw-extrabold)',
+            letterSpacing: '-0.02em',
             color: 'var(--color-primary-dark)',
           }}
         >
-          Green Love
+          그린러브
         </span>
 
         {/* 홈 + 장바구니 */}
@@ -116,7 +116,7 @@ export default function ProductTopBar() {
                   position: 'absolute',
                   top: 6,
                   right: 4,
-                  background: 'var(--color-danger)',
+                  background: 'var(--color-primary-dark)',
                   color: 'var(--color-bg)',
                   fontSize: 10,
                   fontWeight: 'var(--fw-bold)',

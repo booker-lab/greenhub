@@ -1,17 +1,9 @@
 'use client';
 
-import { signIn } from 'next-auth/react';
+import { Alert, Button, Divider, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useSearchParams } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import { useState } from 'react';
-import {
-  TextInput,
-  PasswordInput,
-  Button,
-  Text,
-  Alert,
-  Stack,
-  Divider,
-} from '@mantine/core';
 
 export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const searchParams = useSearchParams();
@@ -47,8 +39,8 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
     <Stack gap="sm">
       <Button
         fullWidth
-        radius="md"
-        size="md"
+        radius="xl"
+        size="lg"
         style={{ backgroundColor: '#FEE500', color: '#000000' }}
         onClick={() => signIn('kakao', { callbackUrl })}
       >
@@ -68,7 +60,6 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="example@email.com"
-                radius="md"
               />
               <PasswordInput
                 label="비밀번호"
@@ -76,7 +67,6 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="비밀번호 입력"
-                radius="md"
               />
 
               {error && (
@@ -85,7 +75,7 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
                 </Alert>
               )}
 
-              <Button type="submit" loading={loading} fullWidth color="brand" radius="md" mt="xs">
+              <Button type="submit" loading={loading} fullWidth color="brand" size="lg" mt="xs">
                 로그인
               </Button>
             </Stack>
