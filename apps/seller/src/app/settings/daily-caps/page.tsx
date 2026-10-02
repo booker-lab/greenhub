@@ -266,7 +266,9 @@ export default function DailyCapsPage() {
                         style={{
                           fontSize: 'var(--font-size-sm)',
                           fontWeight: 'var(--fw-medium)',
-                          color: isToday ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                          color: isToday
+                            ? 'var(--color-primary-dark)'
+                            : 'var(--color-text-secondary)',
                         }}
                       >
                         {parseInt(date.split('-')[2], 10)}

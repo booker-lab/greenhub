@@ -205,7 +205,7 @@ export default function BoardClient() {
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
                 borderBottom: `2px solid ${tab === key ? 'var(--color-primary)' : 'transparent'}`,
-                color: tab === key ? 'var(--color-primary)' : 'var(--color-text-disabled)',
+                color: tab === key ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

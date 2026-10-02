@@ -155,7 +155,7 @@ export default function ProductCard({ product }: ProductCardProps) {
                 <p
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    color: done ? 'var(--color-text-disabled)' : 'var(--color-primary)',
+                    color: done ? 'var(--color-text-disabled)' : 'var(--color-primary-dark)',
                     marginTop: 2,
                     marginBottom: 0,
                     fontWeight: 'var(--fw-medium)',

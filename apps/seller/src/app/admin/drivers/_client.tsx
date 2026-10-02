@@ -70,7 +70,7 @@ export default function DriversClient() {
                 fontWeight: 500,
                 borderBottom: `2px solid ${tab === t.value ? 'var(--color-primary)' : 'transparent'}`,
                 marginBottom: -1,
-                color: tab === t.value ? 'var(--color-primary)' : 'var(--color-text-disabled)',
+                color: tab === t.value ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
               }}
             >
               {t.label}

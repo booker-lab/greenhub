@@ -159,7 +159,7 @@ export default function BottomNav() {
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     fontWeight: isActive ? 'var(--fw-bold)' : 'var(--fw-medium)',
-                    color: isActive ? 'var(--color-primary)' : 'var(--color-text-disabled)',
+                    color: isActive ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
                   }}
                 >
                   {tab.label}

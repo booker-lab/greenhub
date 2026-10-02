@@ -42,7 +42,7 @@ export default function RoundPurchasePanel({
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
-                color: closed ? 'var(--color-text-secondary)' : 'var(--color-primary)',
+                color: closed ? 'var(--color-text-secondary)' : 'var(--color-primary-dark)',
               }}
             >
               {closed ? '마감된 회차' : notOpenYet ? '판매 예정 회차' : '이번 주 판매 회차'}
@@ -71,7 +71,7 @@ export default function RoundPurchasePanel({
             style={{
               fontSize: 28,
               fontWeight: 'var(--fw-bold)',
-              color: closed ? 'var(--color-text-secondary)' : 'var(--color-primary)',
+              color: closed ? 'var(--color-text-secondary)' : 'var(--color-primary-dark)',
             }}
           >
             {item.roundPrice.toLocaleString('ko-KR')}원
