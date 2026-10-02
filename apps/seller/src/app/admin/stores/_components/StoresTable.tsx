@@ -156,7 +156,7 @@ export function StoresTable({
   // 수수료 설정 진입 버튼 — 테이블·카드 공용
   const renderSetButton = (store: AdminStore) =>
     editId !== store.id && (
-      <Button onClick={() => onStartEdit(store)} size="xs" variant="subtle" color="blue">
+      <Button onClick={() => onStartEdit(store)} size="xs" variant="subtle">
         수수료 설정
       </Button>
     );
@@ -165,7 +165,7 @@ export function StoresTable({
   const renderArchiveButton = (store: AdminStore) =>
     editId !== store.id &&
     (store.status === 'archived' ? (
-      <Button onClick={() => onRestore(store)} size="xs" variant="subtle" color="blue">
+      <Button onClick={() => onRestore(store)} size="xs" variant="subtle">
         복구
       </Button>
     ) : (

@@ -30,10 +30,10 @@ const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 const STATUS_META: Record<SaleRoundStatus, { label: string; color: string }> = {
   DRAFT: { label: '작성 중', color: 'gray' },
-  SCHEDULED: { label: '판매 예정', color: 'blue' },
-  OPEN: { label: '판매 중', color: 'green' },
+  SCHEDULED: { label: '판매 예정', color: 'yellow' },
+  OPEN: { label: '판매 중', color: 'brand' },
   CLOSED: { label: '주문 마감', color: 'orange' },
-  COMPLETED: { label: '배송 완료', color: 'teal' },
+  COMPLETED: { label: '배송 완료', color: 'dark' },
   CANCELLED: { label: '취소', color: 'red' },
 };
 

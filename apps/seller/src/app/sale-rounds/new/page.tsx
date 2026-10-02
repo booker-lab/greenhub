@@ -59,7 +59,7 @@ export default function NewSaleRoundPage() {
           </Alert>
         ) : template ? (
           <Stack gap="md">
-            <Alert color="blue" title="기본값을 채워 두었습니다">
+            <Alert color="gray" title="기본값을 채워 두었습니다">
               다음 주기 일정(일요일 24:00 마감·화요일 00:00~09:00 배송), 경기도 이천시, 배송지
               15곳·판매 수량 30개, 일반 판매 상품의 현재 가격을 넣었습니다. 확인하고 저장하면
               고객에게 보이지 않는 작성 중(DRAFT) 회차로 만들어집니다.

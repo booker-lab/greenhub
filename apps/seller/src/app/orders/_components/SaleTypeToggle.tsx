@@ -37,7 +37,7 @@ export function SaleTypeToggle({ value, onChange }: Props) {
                   fontSize: 'var(--font-size-sm)',
                   fontWeight: active ? 700 : 400,
                   borderBottom: `2px solid ${active ? 'var(--color-text)' : 'transparent'}`,
-                  color: active ? 'var(--color-text)' : 'var(--color-text-disabled)',
+                  color: active ? 'var(--color-text)' : 'var(--color-text-secondary)',
                   transition: 'all 0.15s',
                 }}
               >
