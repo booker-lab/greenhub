@@ -6,20 +6,22 @@ import {
   Box,
   Button,
   Container,
-  Divider,
   Group,
   Paper,
   Stack,
   Text,
   Title,
 } from '@mantine/core';
+import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
+import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartItemValidationIssues, getCartValidationError } from '@/lib/cartValidation';
+import { formatOrderCloseLabel } from '@/lib/round-schedule-label';
 
 const API_URL = getApiBaseUrl();
 type RoundCartValidation =
@@ -120,17 +122,12 @@ function unavailableValidations(items: RoundCartItem[], message?: string): Valid
       cartItemKey(item),
       {
         status: 'unavailable',
-        reason: message
-          ? unavailableReason(message)
-          : '서버 검증 응답을 확인할 수 없습니다.',
+        reason: message ? unavailableReason(message) : '서버 검증 응답을 확인할 수 없습니다.',
       },
     ]),
   );
 }
-function resolveRoundCartBatchValidation(
-  items: RoundCartItem[],
-  value: unknown,
-): ValidationByKey {
+function resolveRoundCartBatchValidation(items: RoundCartItem[], value: unknown): ValidationByKey {
   if (
     items.length === 0 ||
     !isRecord(value) ||
@@ -172,7 +169,11 @@ function selectCheckoutItems(items: CartItem[], validationByKey: ValidationByKey
   if (!items.every(isRoundCartItem)) return items;
   return items.filter((item) => validationByKey[cartItemKey(item)]?.status === 'eligible');
 }
-async function postRoundCartValidation(items: RoundCartItem[], accessToken: string, signal: AbortSignal) {
+async function postRoundCartValidation(
+  items: RoundCartItem[],
+  accessToken: string,
+  signal: AbortSignal,
+) {
   try {
     const response = await fetch(
       `${API_URL}/stores/${encodeURIComponent(items[0]?.storeId ?? '')}/orders/validate-cart`,
@@ -195,7 +196,11 @@ async function postRoundCartValidation(items: RoundCartItem[], accessToken: stri
     return { ok: false, message: undefined } as const;
   }
 }
-function useRoundCartValidation(items: CartItem[], accessToken: string | undefined, sessionStatus: 'authenticated' | 'loading' | 'unauthenticated') {
+function useRoundCartValidation(
+  items: CartItem[],
+  accessToken: string | undefined,
+  sessionStatus: 'authenticated' | 'loading' | 'unauthenticated',
+) {
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle', items: {} });
   useEffect(() => {
     const roundItems = items.filter(isRoundCartItem);
@@ -271,28 +276,39 @@ function useRoundCartValidation(items: CartItem[], accessToken: string | undefin
 function RoundValidationNotice({ validation }: { validation: RoundCartValidation | undefined }) {
   if (!validation) {
     return (
-      <Text mt={6} size="xs" c="var(--color-text-secondary)" role="status">서버에서 구매 가능 여부 확인 중</Text>
+      <Text mt={6} size="xs" c="var(--color-text-secondary)" role="status">
+        서버에서 구매 가능 여부 확인 중
+      </Text>
     );
   }
   if (validation.status === 'eligible') {
     return (
-      <Text mt={6} size="xs" c="green">서버 확인 완료 · 같은 회차 상품</Text>
+      <Text mt={6} size="xs" fw="var(--fw-bold)" c="var(--color-primary-dark)">
+        서버 확인 완료 · 같은 회차 상품
+      </Text>
     );
   }
   if (validation.status === 'price_changed') {
     return (
       <Stack gap={2} mt={6} role="alert">
-        <Text size="xs" c="red">
-          가격이 변경되었습니다: 현재 회차 가격 {validation.currentUnitPrice.toLocaleString('ko-KR')}원
+        <Text size="xs" c="var(--color-danger)">
+          가격이 변경되었습니다: 현재 회차 가격{' '}
+          {validation.currentUnitPrice.toLocaleString('ko-KR')}원
         </Text>
-        <Text size="xs" c="red">결제 대상에서 제외되었습니다.</Text>
+        <Text size="xs" c="var(--color-danger)">
+          결제 대상에서 제외되었습니다.
+        </Text>
       </Stack>
     );
   }
   return (
     <Stack gap={2} mt={6} role="alert">
-      <Text size="xs" c="red">{validation.reason}</Text>
-      <Text size="xs" c="red">결제 대상에서 제외되었습니다.</Text>
+      <Text size="xs" c="var(--color-danger)">
+        {validation.reason}
+      </Text>
+      <Text size="xs" c="var(--color-danger)">
+        결제 대상에서 제외되었습니다.
+      </Text>
     </Stack>
   );
 }
@@ -300,11 +316,7 @@ export default function CartPage() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const { items, updateQuantity, removeItem, clearCart } = useCart();
-  const validation = useRoundCartValidation(
-    items,
-    session?.user?.accessToken,
-    sessionStatus,
-  );
+  const validation = useRoundCartValidation(items, session?.user?.accessToken, sessionStatus);
   const isRoundCart = items.length > 0 && items.every(isRoundCartItem);
   const checkoutItems = selectCheckoutItems(items, validation.items);
   const checkoutAmount = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -319,13 +331,35 @@ export default function CartPage() {
     sessionStorage.setItem('checkout_cart', JSON.stringify(checkoutItems));
     router.push('/checkout?from=cart');
   }
+  // 회차 장바구니면 같은 회차의 주문 마감 시각을 가져와 노란 안내에 쓴다(실패하면 안내만 숨긴다).
+  const firstRoundItem = items.find(isRoundCartItem) ?? null;
+  const saleRounds = useSaleRounds(isRoundCart ? (firstRoundItem?.storeId ?? null) : null);
+  const cartRound =
+    firstRoundItem && saleRounds.currentRound?.id === firstRoundItem.roundId
+      ? saleRounds.currentRound
+      : null;
+
   if (items.length === 0) {
     return (
       <Container size="sm" px="md" py={64}>
         <Stack align="center" gap="md">
-          <Text size="xl">🛒</Text>
-          <Text c="var(--color-text-disabled)">장바구니가 비어있습니다.</Text>
-          <Button component={Link} href="/" color="brand" radius="md">
+          <Box
+            aria-hidden
+            style={{
+              alignItems: 'center',
+              background: 'var(--color-surface-muted)',
+              borderRadius: 'var(--radius-full)',
+              color: 'var(--color-text-secondary)',
+              display: 'flex',
+              height: 72,
+              justifyContent: 'center',
+              width: 72,
+            }}
+          >
+            <ShoppingBag size={32} strokeWidth={1.8} />
+          </Box>
+          <Text c="var(--color-text-secondary)">장바구니가 비어있습니다.</Text>
+          <Button component={Link} href="/" color="brand" radius="xl" size="md">
             쇼핑하러 가기
           </Button>
         </Stack>
@@ -334,30 +368,63 @@ export default function CartPage() {
   }
   return (
     <Container size="sm" px="md" pt="lg" pb={100}>
-      <Group justify="space-between" mb="lg">
-        <Title order={3} fw="var(--fw-bold)" c="var(--color-text)">
+      <Group justify="space-between" align="center" mb="md">
+        <Title
+          order={1}
+          style={{
+            color: 'var(--color-text)',
+            fontSize: 22,
+            fontWeight: 'var(--fw-extrabold)',
+            letterSpacing: '-0.01em',
+          }}
+        >
           장바구니
         </Title>
-        <Button variant="transparent" size="xs" c="var(--color-text-disabled)" onClick={clearCart}>
+        <Button variant="subtle" color="gray" size="xs" radius="xl" onClick={clearCart}>
           전체 삭제
         </Button>
       </Group>
       {isRoundCart && (
-        <Paper p="md" radius="md" mb="md" bg="var(--color-surface-muted)">
-          <Group justify="space-between" align="flex-start">
-            <Box>
-              <Text fw="var(--fw-bold)" size="sm">
-                이번 주 판매
-              </Text>
-              <Text size="xs" c="var(--color-text-secondary)">
-                같은 회차 상품을 서버에서 확인해 한 번에 결제합니다.
-              </Text>
+        <Stack gap="xs" mb="md">
+          <Box
+            p="md"
+            style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
+          >
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <Box>
+                <Text fw="var(--fw-extrabold)" size="sm" c="var(--color-text)">
+                  이번 주 판매
+                </Text>
+                <Text size="sm" c="var(--color-text-secondary)">
+                  같은 회차 상품을 서버에서 확인해 한 번에 결제합니다.
+                </Text>
+              </Box>
+              <Badge
+                color={isChecking ? 'gray' : 'brand'}
+                variant={isChecking ? 'light' : 'filled'}
+                style={{ flexShrink: 0 }}
+              >
+                {isChecking ? '확인 중' : '확인 완료'}
+              </Badge>
+            </Group>
+          </Box>
+          {cartRound && (
+            <Box
+              px="md"
+              py="sm"
+              style={{
+                background: 'var(--color-deadline-surface)',
+                borderRadius: 'var(--radius)',
+                color: 'var(--color-deadline-text)',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 'var(--fw-bold)',
+              }}
+            >
+              {formatOrderCloseLabel(cartRound.schedule.orderCloseAt)} 결제해야 이번 회차로
+              배송돼요.
             </Box>
-            <Badge color={isChecking ? 'gray' : 'brand'} variant="light">
-              {isChecking ? '확인 중' : '확인 완료'}
-            </Badge>
-          </Group>
-        </Paper>
+          )}
+        </Stack>
       )}
       <Stack gap="sm" mb="lg">
         {items.map((item) => {
@@ -368,17 +435,21 @@ export default function CartPage() {
             : `/products/${item.productId}`;
           const itemValidation = roundItem ? validation.items[cartItemKey(roundItem)] : undefined;
           return (
-            <Paper key={cartItemKey(item)} p="md" radius="md" withBorder>
-              <Group gap="md" align="flex-start">
+            <Box
+              key={cartItemKey(item)}
+              p="sm"
+              style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}
+            >
+              <Group gap="md" align="flex-start" wrap="nowrap">
                 <Box
                   component={Link}
                   href={productHref}
-                  w={72}
-                  h={72}
+                  w={76}
+                  h={76}
                   bg="var(--color-surface-muted)"
                   style={{
                     flexShrink: 0,
-                    borderRadius: 'var(--radius-sm)',
+                    borderRadius: 12,
                     overflow: 'hidden',
                     display: 'block',
                   }}
@@ -390,27 +461,52 @@ export default function CartPage() {
                   />
                 </Box>
                 <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    component={Link}
-                    href={productHref}
-                    fw="var(--fw-bold)"
-                    c="var(--color-text)"
-                    size="sm"
-                    style={{
-                      display: 'block',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      textDecoration: 'none',
-                    }}
-                  >
-                    {item.name}
-                  </Text>
+                  <Group gap={4} justify="space-between" align="flex-start" wrap="nowrap">
+                    <Text
+                      component={Link}
+                      href={productHref}
+                      fw="var(--fw-extrabold)"
+                      c="var(--color-text)"
+                      size="sm"
+                      style={{
+                        display: 'block',
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      {item.name}
+                    </Text>
+                    <Button
+                      variant="subtle"
+                      color="gray"
+                      size="compact-sm"
+                      radius="xl"
+                      aria-label={`${item.name} 삭제`}
+                      onClick={() => removeItem(item.productId)}
+                      style={{ flexShrink: 0 }}
+                    >
+                      삭제
+                    </Button>
+                  </Group>
                   {roundItem ? (
                     <>
-                      <Badge size="xs" color="brand" variant="light" mt={4}>
+                      <span
+                        style={{
+                          background: 'var(--color-primary-surface)',
+                          borderRadius: 'var(--radius-tag)',
+                          color: 'var(--color-primary-dark)',
+                          display: 'inline-block',
+                          fontSize: 'var(--font-size-xs)',
+                          fontWeight: 'var(--fw-bold)',
+                          marginTop: 4,
+                          padding: '2px 7px',
+                        }}
+                      >
                         회차 가격 {roundItem.roundPrice.toLocaleString('ko-KR')}원
-                      </Badge>
+                      </span>
                       <RoundValidationNotice validation={itemValidation} />
                     </>
                   ) : (
@@ -444,7 +540,7 @@ export default function CartPage() {
                               size="xs"
                               variant="light"
                               color="orange"
-                              radius="md"
+                              radius="xl"
                               mt={4}
                             >
                               다시 선택하기
@@ -454,74 +550,108 @@ export default function CartPage() {
                       )}
                     </>
                   )}
-                  <Text fw="var(--fw-bold)" c="var(--color-text)" mt={6}>
-                    {(item.price * item.quantity).toLocaleString('ko-KR')}원
-                  </Text>
-                  <Group gap="xs" mt="sm">
-                    <ActionIcon
-                      size="lg"
-                      variant="default"
-                      radius="md"
-                      aria-label={`${item.name} 수량 줄이기`}
-                      onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                  <Group justify="space-between" align="center" mt="sm" wrap="nowrap">
+                    <Group
+                      gap={2}
+                      wrap="nowrap"
+                      px={2}
+                      style={{
+                        background: 'var(--color-surface-muted)',
+                        borderRadius: 'var(--radius-full)',
+                      }}
                     >
-                      −
-                    </ActionIcon>
-                    <Text fw="var(--fw-bold)" size="sm" w={24} ta="center">
-                      {item.quantity}
+                      <ActionIcon
+                        size={36}
+                        variant="subtle"
+                        color="dark"
+                        radius="xl"
+                        aria-label={`${item.name} 수량 줄이기`}
+                        onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                      >
+                        −
+                      </ActionIcon>
+                      <Text
+                        fw="var(--fw-extrabold)"
+                        size="sm"
+                        w={24}
+                        ta="center"
+                        style={{ fontVariantNumeric: 'tabular-nums' }}
+                      >
+                        {item.quantity}
+                      </Text>
+                      <ActionIcon
+                        size={36}
+                        variant="subtle"
+                        color="dark"
+                        radius="xl"
+                        aria-label={`${item.name} 수량 늘리기`}
+                        onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                      >
+                        +
+                      </ActionIcon>
+                    </Group>
+                    <Text
+                      fw="var(--fw-extrabold)"
+                      c="var(--color-text)"
+                      style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+                    >
+                      {(item.price * item.quantity).toLocaleString('ko-KR')}원
                     </Text>
-                    <ActionIcon
-                      size="lg"
-                      variant="default"
-                      radius="md"
-                      aria-label={`${item.name} 수량 늘리기`}
-                      onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                    >
-                      +
-                    </ActionIcon>
-                    <Button
-                      variant="transparent"
-                      size="xs"
-                      c="var(--color-text-disabled)"
-                      ml="auto"
-                      onClick={() => removeItem(item.productId)}
-                    >
-                      삭제
-                    </Button>
                   </Group>
                 </Box>
               </Group>
-            </Paper>
+            </Box>
           );
         })}
       </Stack>
       {excludedCount > 0 && (
-        <Paper p="sm" radius="md" mb="md" withBorder role="alert">
-          <Text size="sm" c="red">
+        <Paper
+          p="sm"
+          mb="md"
+          role="alert"
+          style={{ background: 'var(--color-danger-surface)', borderRadius: 'var(--radius)' }}
+        >
+          <Text size="sm" fw="var(--fw-bold)" c="var(--color-danger)">
             변경·마감·구매 불가 상품 {excludedCount}개는 장바구니에 남아 있으며 결제 대상에서
             제외됩니다.
           </Text>
         </Paper>
       )}
-      <Paper radius="md" p="lg" mb="md" bg="var(--color-text)" c="var(--color-bg)">
-        <Group justify="space-between" mb={8}>
+      <Stack
+        gap={8}
+        p="md"
+        mb="md"
+        style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
+      >
+        <Group justify="space-between">
           <Text size="sm" c="var(--color-text-secondary)">
             결제 대상 상품 수
           </Text>
-          <Text size="sm" c="var(--color-bg)">
+          <Text size="sm" c="var(--color-text)" style={{ fontVariantNumeric: 'tabular-nums' }}>
             {checkoutCount}개
           </Text>
         </Group>
-        <Divider mb={12} style={{ borderColor: 'rgba(255,255,255,0.15)' }} />
-        <Group justify="space-between">
-          <Text size="sm" fw="var(--fw-bold)" c="var(--color-text-secondary)">
+        <Group
+          justify="space-between"
+          align="baseline"
+          pt={10}
+          style={{ borderTop: '1px solid var(--color-border)' }}
+        >
+          <Text size="sm" fw="var(--fw-bold)" c="var(--color-text)">
             총 결제 금액
           </Text>
-          <Text size="xl" fw="var(--fw-bold)" c="var(--color-bg)">
+          <Text
+            style={{
+              color: 'var(--color-text)',
+              fontSize: 22,
+              fontVariantNumeric: 'tabular-nums',
+              fontWeight: 'var(--fw-extrabold)',
+            }}
+          >
             {checkoutAmount.toLocaleString('ko-KR')}원
           </Text>
         </Group>
-      </Paper>
+      </Stack>
       {hasLegacyValidationIssues && (
         <Text mb="xs" ta="center" size="sm" c="var(--color-text-disabled)">
           문제 있는 상품을 다시 선택하면 결제할 수 있어요.
@@ -531,7 +661,7 @@ export default function CartPage() {
         fullWidth
         size="lg"
         color="brand"
-        radius="md"
+        radius="xl"
         disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
         onClick={handleCheckout}
       >
