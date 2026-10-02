@@ -130,7 +130,7 @@ export default function BottomNav() {
                   <Icon
                     size={24}
                     strokeWidth={isActive ? 2.2 : 1.8}
-                    color={isActive ? 'var(--color-primary)' : 'var(--color-text-disabled)'}
+                    color={isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)'}
                   />
                   {tab.showBadge && visibleItemCount > 0 && (
                     <Box
@@ -138,7 +138,7 @@ export default function BottomNav() {
                         position: 'absolute',
                         top: -6,
                         right: -10,
-                        background: 'var(--color-danger)',
+                        background: 'var(--color-primary-dark)',
                         color: 'var(--color-bg)',
                         fontSize: 10,
                         fontWeight: 'var(--fw-bold)',
@@ -158,8 +158,8 @@ export default function BottomNav() {
                 <Text
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    fontWeight: isActive ? 'var(--fw-bold)' : 'var(--fw-medium)',
-                    color: isActive ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
+                    fontWeight: isActive ? 'var(--fw-extrabold)' : 'var(--fw-medium)',
+                    color: isActive ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
                   }}
                 >
                   {tab.label}

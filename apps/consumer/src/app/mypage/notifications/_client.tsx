@@ -1,12 +1,29 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { Box, Group, Text, Button, Stack, Alert } from '@mantine/core';
-import { ChevronLeft } from 'lucide-react';
-import { useNotifications } from '@/hooks/useNotifications';
 import type { Notification, NotificationTemplateCode } from '@greenhub/shared';
+import { Alert, Box, Button, Group, Stack, Text } from '@mantine/core';
+import {
+  AlarmClock,
+  Bell,
+  BellOff,
+  CalendarClock,
+  ChevronLeft,
+  CircleCheck,
+  CirclePause,
+  CircleX,
+  CreditCard,
+  type LucideIcon,
+  MapPin,
+  Package,
+  PackageCheck,
+  TriangleAlert,
+  Truck,
+  Users,
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { useEffect } from 'react';
+import { useNotifications } from '@/hooks/useNotifications';
 
 const TEMPLATE_LABELS: Record<NotificationTemplateCode, string> = {
   ORDER_ACCEPTED: '결제 완료',
@@ -31,28 +48,39 @@ const TEMPLATE_LABELS: Record<NotificationTemplateCode, string> = {
   GROUP_DELIVERED: '공동구매 배송 완료',
 };
 
-const TEMPLATE_ICONS: Record<NotificationTemplateCode, string> = {
-  ORDER_ACCEPTED: '✅',
-  ORDER_PREPARING: '📦',
-  ORDER_DELIVERING: '🚚',
-  ORDER_DELIVERY_HELD: '⏸️',
-  ORDER_REDELIVERY_PAYMENT_REQUESTED: '💳',
-  ORDER_REDELIVERY_SCHEDULED: '📅',
-  ORDER_HUB_ARRIVED: '📍',
-  ORDER_DELIVERED: '🎉',
-  ORDER_CANCELLED: '❌',
-  ROUND_ORDER_CONFIRMED: '✅',
-  OPERATION_ISSUE_CREATED: '⚠️',
-  CUSTOMER_NOTICE_FAILED: '📵',
-  GROUP_JOINED: '👥',
-  GROUP_DEADLINE_SOON: '⏰',
-  GROUP_CONFIRMED: '✅',
-  GROUP_CANCELLED_LACK: '❌',
-  GROUP_CANCELLED_SELF: '❌',
-  GROUP_PREPARING: '📦',
-  GROUP_DELIVERING: '🚚',
-  GROUP_DELIVERED: '🎉',
+type NoticeTone = 'success' | 'waiting' | 'danger';
+
+const NOTICE_TONE: Record<NoticeTone, { background: string; color: string }> = {
+  success: { background: 'var(--color-primary-surface)', color: 'var(--color-primary-dark)' },
+  waiting: { background: 'var(--color-deadline-surface)', color: 'var(--color-deadline-text)' },
+  danger: { background: 'var(--color-danger-surface)', color: 'var(--color-danger)' },
 };
+
+// 알림 종류별 선 아이콘과 색(디자인 기준: 이모지 대신 색 원 + 선 아이콘)
+const TEMPLATE_ICONS: Record<NotificationTemplateCode, { Icon: LucideIcon; tone: NoticeTone }> = {
+  ORDER_ACCEPTED: { Icon: CircleCheck, tone: 'success' },
+  ORDER_PREPARING: { Icon: Package, tone: 'success' },
+  ORDER_DELIVERING: { Icon: Truck, tone: 'success' },
+  ORDER_DELIVERY_HELD: { Icon: CirclePause, tone: 'danger' },
+  ORDER_REDELIVERY_PAYMENT_REQUESTED: { Icon: CreditCard, tone: 'danger' },
+  ORDER_REDELIVERY_SCHEDULED: { Icon: CalendarClock, tone: 'waiting' },
+  ORDER_HUB_ARRIVED: { Icon: MapPin, tone: 'success' },
+  ORDER_DELIVERED: { Icon: PackageCheck, tone: 'success' },
+  ORDER_CANCELLED: { Icon: CircleX, tone: 'danger' },
+  ROUND_ORDER_CONFIRMED: { Icon: CircleCheck, tone: 'success' },
+  OPERATION_ISSUE_CREATED: { Icon: TriangleAlert, tone: 'danger' },
+  CUSTOMER_NOTICE_FAILED: { Icon: BellOff, tone: 'danger' },
+  GROUP_JOINED: { Icon: Users, tone: 'success' },
+  GROUP_DEADLINE_SOON: { Icon: AlarmClock, tone: 'waiting' },
+  GROUP_CONFIRMED: { Icon: CircleCheck, tone: 'success' },
+  GROUP_CANCELLED_LACK: { Icon: CircleX, tone: 'danger' },
+  GROUP_CANCELLED_SELF: { Icon: CircleX, tone: 'danger' },
+  GROUP_PREPARING: { Icon: Package, tone: 'success' },
+  GROUP_DELIVERING: { Icon: Truck, tone: 'success' },
+  GROUP_DELIVERED: { Icon: PackageCheck, tone: 'success' },
+};
+
+const DEFAULT_ICON = { Icon: Bell, tone: 'success' as NoticeTone };
 
 function formatDate(iso: string | null): string {
   if (!iso) return '';
@@ -87,7 +115,7 @@ function NotificationItem({
   onOrderClick: () => void;
 }) {
   const label = TEMPLATE_LABELS[notification.templateCode] ?? notification.templateCode;
-  const icon = TEMPLATE_ICONS[notification.templateCode] ?? '🔔';
+  const { Icon, tone } = TEMPLATE_ICONS[notification.templateCode] ?? DEFAULT_ICON;
   const productName = extractProductName(notification);
   const date = formatDate(notification.sentAt ?? notification.createdAt);
 
@@ -111,15 +139,15 @@ function NotificationItem({
           width: 36,
           height: 36,
           borderRadius: '50%',
-          background: 'var(--color-primary-surface)',
+          ...NOTICE_TONE[tone],
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 18,
           flexShrink: 0,
         }}
+        aria-hidden
       >
-        {icon}
+        <Icon size={18} strokeWidth={2.2} />
       </Box>
 
       <Box style={{ flex: 1, minWidth: 0 }}>
@@ -255,7 +283,7 @@ export default function NotificationsClient() {
           <Button
             variant="default"
             size="xs"
-            radius="sm"
+            radius="xl"
             onClick={refetch}
             data-testid="notifications-retry"
           >
@@ -297,7 +325,7 @@ export default function NotificationsClient() {
               <Button
                 variant="default"
                 size="xs"
-                radius="sm"
+                radius="xl"
                 mt="xs"
                 onClick={refetch}
                 data-testid="notifications-retry"
