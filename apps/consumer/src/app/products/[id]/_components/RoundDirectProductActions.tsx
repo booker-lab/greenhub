@@ -1,7 +1,7 @@
 'use client';
 
 import type { Product } from '@greenhub/shared';
-import { ActionIcon, Box, Divider, Group, Paper, Stack, Text } from '@mantine/core';
+import { ActionIcon, Box, Divider, Group, Stack, Text } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import { useState } from 'react';
@@ -86,9 +86,15 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
 
   return (
     <Stack gap={0} px="md" pb={88}>
-      <Paper radius="md" p="md" mb="lg" style={{ background: 'var(--color-surface-muted)' }}>
+      <Group
+        justify="space-between"
+        wrap="nowrap"
+        mt="md"
+        mb="lg"
+        py="sm"
+        style={{ borderTop: 'var(--border)', borderBottom: 'var(--border)' }}
+      >
         <Text
-          mb="sm"
           style={{
             fontWeight: 'var(--fw-bold)',
             fontSize: 'var(--font-size-sm)',
@@ -97,11 +103,17 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
         >
           수량
         </Text>
-        <Group gap="sm">
+        <Group
+          gap={4}
+          wrap="nowrap"
+          px={4}
+          style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius-full)' }}
+        >
           <ActionIcon
-            size="lg"
-            variant="default"
-            radius="md"
+            size={40}
+            variant="subtle"
+            color="dark"
+            radius="xl"
             aria-label="수량 줄이기"
             disabled={!roundProduct.isPurchasable}
             onClick={() => setQuantity(Math.max(1, quantity - 1))}
@@ -112,14 +124,19 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
             w={32}
             ta="center"
             aria-live="polite"
-            style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--fw-bold)' }}
+            style={{
+              fontSize: 'var(--font-size-md)',
+              fontVariantNumeric: 'tabular-nums',
+              fontWeight: 'var(--fw-extrabold)',
+            }}
           >
             {quantity}
           </Text>
           <ActionIcon
-            size="lg"
-            variant="default"
-            radius="md"
+            size={40}
+            variant="subtle"
+            color="dark"
+            radius="xl"
             aria-label="수량 늘리기"
             disabled={!roundProduct.isPurchasable}
             onClick={() => setQuantity(Math.min(99, quantity + 1))}
@@ -127,7 +144,7 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
             +
           </ActionIcon>
         </Group>
-      </Paper>
+      </Group>
 
       <Divider mb="xl" />
       <Box mb="xl">

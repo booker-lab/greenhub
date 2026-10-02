@@ -56,29 +56,28 @@ export default function ProductCTABar({
         }}
       >
         {/* 총 금액 */}
-        <Text
-          mb={6}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-        >
-          총 금액{' '}
+        <Group justify="space-between" mb={8}>
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            총 금액
+          </Text>
           <Text
-            span
             style={{
-              fontWeight: 'var(--fw-bold)',
-              fontSize: 'var(--font-size-md)',
+              fontWeight: 'var(--fw-extrabold)',
+              fontSize: 'var(--font-size-lg)',
+              fontVariantNumeric: 'tabular-nums',
               color: 'var(--color-text)',
             }}
           >
             {totalAmount.toLocaleString()}원
           </Text>
-        </Text>
+        </Group>
 
-        {/* 버튼 */}
+        {/* 버튼: 디자인 기준 §4 — 완전히 둥근 버튼, 보조는 외곽선 */}
         <Group gap={8} style={{ flexWrap: 'nowrap' }}>
           <Button
             flex={1}
-            variant="default"
-            radius="md"
+            variant="outline"
+            radius="xl"
             size="lg"
             disabled={!canAddToCart}
             onClick={onAddToCart}
@@ -88,7 +87,7 @@ export default function ProductCTABar({
           <Button
             flex={2}
             size="lg"
-            radius="md"
+            radius="xl"
             disabled={!canBuy}
             onClick={onBuyNow}
             style={{

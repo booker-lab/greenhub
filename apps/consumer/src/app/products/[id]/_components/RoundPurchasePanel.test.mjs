@@ -49,7 +49,11 @@ test('현재와 마감 상태를 구분하고 구매 불가 상태를 구매 가
 });
 
 test('상품 상세은 Task 4.8이 검증한 회차 상품 구조를 패널에 그대로 전달한다', () => {
-  assert.match(pageSource, /import RoundPurchasePanel from '.\/_components\/RoundPurchasePanel'/);
+  assert.match(
+    pageSource,
+    /import RoundPurchasePanel(, \{ RoundPurchaseNotices \})? from '.\/_components\/RoundPurchasePanel'/,
+  );
+  assert.match(pageSource, /\{roundProduct && <RoundPurchaseNotices \/>\}/);
   assert.match(
     pageSource,
     /<RoundPurchasePanel\s+round=\{roundProduct\.round\}\s+item=\{roundProduct\.item\}\s+state=\{roundProduct\.state\}\s+isPurchasable=\{roundProduct\.isPurchasable\}\s+\/>/s,
