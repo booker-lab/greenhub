@@ -30,10 +30,10 @@ const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
   parcel: '택배',
 };
 
-const PAYMENT_OPTIONS: { method: PaymentMethod; label: string; icon: string }[] = [
-  { method: 'kakaopay', label: '카카오페이', icon: '💛' },
+const PAYMENT_OPTIONS: { method: PaymentMethod; label: string; dot: string }[] = [
+  { method: 'kakaopay', label: '카카오페이', dot: '#FEE500' },
   ...(NAVERPAY_ENABLED
-    ? [{ method: 'naverpay' as PaymentMethod, label: '네이버페이', icon: '🟢' }]
+    ? [{ method: 'naverpay' as PaymentMethod, label: '네이버페이', dot: '#03C75A' }]
     : []),
 ];
 
@@ -138,13 +138,24 @@ export default function CheckoutForm({
 
   return (
     <Container size="sm" px="md" py="lg">
-      <Title order={2} mb="lg">
+      <Title
+        order={1}
+        mb="lg"
+        style={{ fontSize: 22, fontWeight: 'var(--fw-extrabold)', letterSpacing: '-0.01em' }}
+      >
         결제
       </Title>
 
       {/* 주문 요약 */}
-      <Paper radius="md" p="md" mb="lg" style={{ background: 'var(--color-surface-muted)' }}>
-        <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }} mb="xs">
+      <Paper
+        p="md"
+        mb="xl"
+        style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
+      >
+        <Text
+          style={{ fontWeight: 'var(--fw-extrabold)', fontSize: 'var(--font-size-md)' }}
+          mb="xs"
+        >
           주문 정보
         </Text>
         {items.length > 0 && (
@@ -222,11 +233,23 @@ export default function CheckoutForm({
             </Group>
           )}
           {totalAmount > 0 && (
-            <Group justify="space-between" mt={4}>
+            <Group
+              justify="space-between"
+              align="baseline"
+              mt={8}
+              pt={10}
+              style={{ borderTop: '1px solid var(--color-border)' }}
+            >
               <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
                 결제 금액
               </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
+              <Text
+                style={{
+                  fontSize: 22,
+                  fontVariantNumeric: 'tabular-nums',
+                  fontWeight: 'var(--fw-extrabold)',
+                }}
+              >
                 {totalAmount.toLocaleString()}원
               </Text>
             </Group>
@@ -235,8 +258,8 @@ export default function CheckoutForm({
       </Paper>
 
       {/* 배송지 */}
-      <Stack gap="sm" mb="lg">
-        <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}>
+      <Stack gap="sm" mb="xl">
+        <Text style={{ fontWeight: 'var(--fw-extrabold)', fontSize: 'var(--font-size-md)' }}>
           배송지
         </Text>
         <Group gap="xs" align="flex-end">
@@ -246,14 +269,13 @@ export default function CheckoutForm({
             placeholder="주소 검색 후 자동 입력 *"
             value={address.address}
             readOnly
-            radius="md"
             error={
               isRoundCheckout && address.address && !isIcheonAddress
                 ? '경기도 이천시 주소만 주문할 수 있습니다.'
                 : undefined
             }
           />
-          <Button variant="outline" color="gray" radius="md" onClick={openAddressSearch}>
+          <Button variant="outline" color="gray" radius="xl" onClick={openAddressSearch}>
             주소 검색
           </Button>
         </Group>
@@ -261,14 +283,8 @@ export default function CheckoutForm({
           placeholder="상세 주소"
           value={address.addressDetail}
           onChange={(e) => onAddressChange({ ...address, addressDetail: e.target.value })}
-          radius="md"
         />
-        <TextInput
-          placeholder="우편번호 (자동 입력)"
-          value={address.zipCode}
-          readOnly
-          radius="md"
-        />
+        <TextInput placeholder="우편번호 (자동 입력)" value={address.zipCode} readOnly />
         <TextInput
           label={isRoundCheckout ? '배송 연락처 (필수)' : '연락처'}
           description={
@@ -281,7 +297,6 @@ export default function CheckoutForm({
           value={deliveryPhone}
           onChange={(e) => onDeliveryPhoneChange(e.target.value)}
           autoComplete="tel"
-          radius="md"
           required
         />
         {isRoundCheckout && onRequestNoteChange && (
@@ -297,19 +312,18 @@ export default function CheckoutForm({
             autosize
             minRows={2}
             maxRows={6}
-            radius="md"
           />
         )}
       </Stack>
 
       {isRoundCheckout && (
-        <Stack gap="md" mb="lg">
-          <Paper p="md" radius="md" withBorder>
-            <Text fw="var(--fw-bold)" size="sm" mb="xs">
+        <Stack gap="md" mb="xl">
+          <Paper p="md" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
+            <Text fw="var(--fw-extrabold)" size="sm" mb="xs">
               필수 고지
             </Text>
             <Stack gap="xs">
-              <Text size="sm">
+              <Text size="sm" fw="var(--fw-bold)" c="var(--color-primary-dark)">
                 경기도 이천시 직접배송만 제공하며 화요일 오전 9시까지 문 앞 배송합니다.
               </Text>
               <Text size="sm" c="var(--color-text-secondary)">
@@ -324,8 +338,11 @@ export default function CheckoutForm({
             </Stack>
           </Paper>
 
-          <Paper p="md" radius="md" bg="var(--color-surface-muted)">
-            <Text size="sm" fw="var(--fw-bold)" mb={4}>
+          <Paper
+            p="md"
+            style={{ background: 'var(--color-deadline-surface)', borderRadius: 'var(--radius)' }}
+          >
+            <Text size="sm" fw="var(--fw-extrabold)" c="var(--color-deadline-text)" mb={4}>
               결제 직전 확인
             </Text>
             <Text size="sm" c="var(--color-text-secondary)" mb="sm">
@@ -341,27 +358,37 @@ export default function CheckoutForm({
       )}
 
       {/* 결제 수단 */}
-      <Stack gap="xs" mb="lg">
-        <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}>
+      <Stack gap="xs" mb="xl">
+        <Text style={{ fontWeight: 'var(--fw-extrabold)', fontSize: 'var(--font-size-md)' }}>
           결제 수단
         </Text>
-        {PAYMENT_OPTIONS.map(({ method, label, icon }) => {
+        {PAYMENT_OPTIONS.map(({ method, label, dot }) => {
           const isSelected = paymentMethod === method;
           return (
             <Paper
               key={method}
-              p="sm"
-              radius="md"
+              p="md"
               onClick={() => onPaymentMethodChange(method)}
               style={{
                 border: `2px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                borderRadius: 'var(--radius)',
+                background: isSelected ? 'var(--color-primary-surface)' : 'var(--color-bg)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
                 cursor: 'pointer',
               }}
             >
-              <span>{icon}</span>
+              <span
+                aria-hidden
+                style={{
+                  background: dot,
+                  borderRadius: 'var(--radius-full)',
+                  display: 'inline-block',
+                  height: 14,
+                  width: 14,
+                }}
+              />
               <Text
                 style={{
                   fontWeight: isSelected ? 'var(--fw-bold)' : 'var(--fw-medium)',
@@ -385,7 +412,7 @@ export default function CheckoutForm({
         fullWidth
         size="lg"
         color="brand"
-        radius="md"
+        radius="xl"
         disabled={!effectiveCanPay}
         loading={isLoading}
         onClick={() => {

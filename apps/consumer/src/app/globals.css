@@ -36,6 +36,12 @@
 @import "@mantine/core/styles/Skeleton.css";
 @import "@mantine/core/styles/Stack.css";
 @import "@mantine/core/styles/Stepper.css";
+/* 2026-10-03 누락 보완: 결제 확인 체크박스, 상품 이미지, 주소·주문 모달 */
+@import "@mantine/core/styles/Checkbox.css";
+@import "@mantine/core/styles/Image.css";
+@import "@mantine/core/styles/ModalBase.css";
+@import "@mantine/core/styles/Overlay.css";
+@import "@mantine/core/styles/Modal.css";
 @import "@mantine/core/styles/Text.css";
 @import "@mantine/core/styles/Title.css";
 
