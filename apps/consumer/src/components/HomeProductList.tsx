@@ -15,14 +15,16 @@ import {
 } from '@mantine/core';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import DeadlineSection from '@/components/DeadlineSection';
 import ProductCard from '@/components/ProductCard';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
+import RoundCountdownStrip from '@/components/RoundCountdownStrip';
 import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
 import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import { deliveryDayTag } from '@/lib/round-countdown';
 import {
   formatOrderCloseLabel,
   formatOrderOpenLabel,
@@ -98,6 +100,30 @@ function visibleItems(round: PublicSaleRound) {
     .sort((a, b) => a.displayOrder - b.displayOrder);
 }
 
+type TagTone = 'primary' | 'deadline' | 'muted';
+
+const TAG_TONE: Record<TagTone, { background: string; color: string }> = {
+  primary: { background: 'var(--color-primary-surface)', color: 'var(--color-primary-dark)' },
+  deadline: { background: 'var(--color-deadline-surface)', color: 'var(--color-deadline-text)' },
+  muted: { background: 'var(--color-surface-muted)', color: 'var(--color-text-secondary)' },
+};
+
+// 남은 수량은 공개 API가 숨기는 재고 신호라 표시하지 않는다(품절만 표시).
+function roundItemTag(
+  item: SaleRoundItem,
+  round: PublicSaleRound,
+  isPast: boolean,
+): { label: string; tone: TagTone } | null {
+  if (isPast) return null;
+  if (item.status === 'SOLD_OUT') return { label: '품절', tone: 'muted' };
+  if (round.status === 'SCHEDULED') return { label: '판매 예정', tone: 'deadline' };
+  if (round.status !== 'OPEN' || item.status === 'CLOSED') {
+    return { label: '판매 종료', tone: 'muted' };
+  }
+  const arrival = deliveryDayTag(round.schedule.deliveryStartAt);
+  return arrival ? { label: arrival, tone: 'primary' } : null;
+}
+
 function RoundProductCard({
   item,
   round,
@@ -108,27 +134,24 @@ function RoundProductCard({
   isPast?: boolean;
 }) {
   const href = `/products/${encodeURIComponent(item.productId)}?round=${encodeURIComponent(round.id)}`;
+  const tag = roundItemTag(item, round, isPast);
+  const dimmed = isPast || item.status === 'SOLD_OUT';
 
   return (
     <Box
       component={Link}
       href={href}
       aria-label={isPast ? `지난 회차 ${round.name} ${item.productNameSnapshot}` : undefined}
-      style={{
-        display: 'block',
-        overflow: 'hidden',
-        color: 'inherit',
-        textDecoration: 'none',
-        border: 'var(--border)',
-        borderRadius: 'var(--radius)',
-      }}
+      style={{ display: 'block', minWidth: 0, color: 'inherit', textDecoration: 'none' }}
     >
       <Box
         style={{
           position: 'relative',
-          aspectRatio: '4/5',
+          aspectRatio: '1/1',
           overflow: 'hidden',
-          background: 'var(--color-border)',
+          borderRadius: 'var(--radius)',
+          background: 'var(--color-surface-muted)',
+          opacity: dimmed ? 0.6 : 1,
         }}
       >
         <ResilientImage
@@ -140,14 +163,44 @@ function RoundProductCard({
           style={{ objectFit: 'cover' }}
         />
       </Box>
-      <Box p="xs">
-        <Text size="sm" fw={500} c="var(--color-text)" lineClamp={2}>
-          {item.productNameSnapshot}
-        </Text>
-        <Text size="sm" fw={700} c="var(--color-text-secondary)" mt={4}>
-          {item.roundPrice.toLocaleString()}원
-        </Text>
-      </Box>
+      <Text
+        mt={8}
+        lineClamp={2}
+        style={{
+          color: 'var(--color-text)',
+          fontSize: 'var(--font-size-sm)',
+          fontWeight: 'var(--fw-bold)',
+          lineHeight: 1.35,
+        }}
+      >
+        {item.productNameSnapshot}
+      </Text>
+      <Text
+        mt={2}
+        style={{
+          color: 'var(--color-text)',
+          fontSize: 'var(--font-size-md)',
+          fontVariantNumeric: 'tabular-nums',
+          fontWeight: 'var(--fw-extrabold)',
+        }}
+      >
+        {item.roundPrice.toLocaleString()}원
+      </Text>
+      {tag && (
+        <span
+          style={{
+            ...TAG_TONE[tag.tone],
+            borderRadius: 'var(--radius-tag)',
+            display: 'inline-block',
+            fontSize: 'var(--font-size-xs)',
+            fontWeight: 'var(--fw-bold)',
+            marginTop: 6,
+            padding: '2px 7px',
+          }}
+        >
+          {tag.label}
+        </span>
+      )}
     </Box>
   );
 }
@@ -165,13 +218,20 @@ function RoundItems({ round, isPast = false }: { round: PublicSaleRound; isPast?
   }
 
   return (
-    <SimpleGrid cols={2} spacing="sm">
+    <SimpleGrid cols={2} spacing={12} verticalSpacing={20}>
       {items.map((item) => (
         <RoundProductCard key={item.id} item={item} round={round} isPast={isPast} />
       ))}
     </SimpleGrid>
   );
 }
+
+const sectionTitleStyle = {
+  color: 'var(--color-text)',
+  fontSize: 'var(--font-size-lg)',
+  fontWeight: 'var(--fw-extrabold)',
+  letterSpacing: '-0.01em',
+} as const;
 
 function RoundDirectHome({
   currentRound,
@@ -216,7 +276,7 @@ function RoundDirectHome({
   }
 
   return (
-    <Stack gap="xl">
+    <Stack gap={28}>
       {isRefreshing && (
         <Text size="sm" c="var(--color-text-secondary)" ta="center" aria-live="polite">
           최신 회차 정보를 확인하는 중...
@@ -224,19 +284,18 @@ function RoundDirectHome({
       )}
       {isStale && (
         <Box
-          p="sm"
+          p="md"
           role="alert"
           style={{
-            background: 'var(--color-primary-surface)',
+            background: 'var(--color-deadline-surface)',
             borderRadius: 'var(--radius)',
-            border: 'var(--border)',
           }}
         >
-          <Text size="sm" c="var(--color-text-secondary)">
+          <Text size="sm" fw="var(--fw-bold)" c="var(--color-deadline-text)">
             최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
           </Text>
           {error && (
-            <Text size="sm" c="var(--color-text-disabled)" mt={4}>
+            <Text size="sm" c="var(--color-text-secondary)" mt={4}>
               {error}
             </Text>
           )}
@@ -246,16 +305,29 @@ function RoundDirectHome({
         </Box>
       )}
       <Box component="section" aria-labelledby="current-round-title">
-        <Stack gap={6} mb="md">
-          <Title
-            id="current-round-title"
-            order={3}
-            style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
-          >
+        <Group justify="space-between" align="baseline" gap="xs" wrap="nowrap">
+          <Title id="current-round-title" order={2} style={sectionTitleStyle}>
             {currentRound ? roundSectionTitle(currentRound.status) : '이번 주 판매'}
           </Title>
+          {currentRound && (
+            <Text
+              ta="right"
+              style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
+            >
+              {currentRound.name}
+              {currentRound.status === 'CLOSED' ? ' · 주문 마감' : ''}
+            </Text>
+          )}
+        </Group>
+        <Stack
+          gap={2}
+          mt="sm"
+          mb="md"
+          p="md"
+          style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
+        >
           {currentRound?.status === 'SCHEDULED' && (
-            <Text size="sm" fw="var(--fw-bold)" c="var(--color-primary-dark)">
+            <Text size="sm" fw="var(--fw-extrabold)" c="var(--color-primary-dark)">
               {formatOrderOpenLabel(currentRound.schedule.orderOpenAt)}
             </Text>
           )}
@@ -268,32 +340,15 @@ function RoundDirectHome({
           <Text size="sm" c="var(--color-text-secondary)">
             경기도 이천시 직접배송
           </Text>
-          <Box
-            mt={4}
-            p="sm"
-            style={{
-              color: 'var(--color-primary-dark)',
-              background: 'var(--color-primary-surface)',
-              borderRadius: 'var(--radius)',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--fw-bold)',
-            }}
-          >
+          <Text mt={6} size="sm" fw="var(--fw-extrabold)" c="var(--color-primary-dark)">
             화요일 오전 9시까지 문 앞 배송
-          </Box>
+          </Text>
         </Stack>
 
         {currentRound ? (
-          <>
-            <Text mb={12} c="var(--color-text)" fw={700}>
-              {currentRound.name}
-              {currentRound.status === 'CLOSED' ? ' · 주문 마감' : ''}
-            </Text>
-            <RoundItems round={currentRound} />
-          </>
+          <RoundItems round={currentRound} />
         ) : (
           <Stack align="center" py={40}>
-            <span style={{ fontSize: 'var(--font-size-xl)' }}>🌱</span>
             <Text size="sm" c="var(--color-text-disabled)">
               {isEmpty
                 ? '준비된 판매 회차가 없습니다.'
@@ -303,15 +358,10 @@ function RoundDirectHome({
         )}
       </Box>
 
-      <Divider />
+      <Box aria-hidden mx={-16} style={{ height: 8, background: 'var(--color-surface-muted)' }} />
 
       <Box component="section" aria-labelledby="past-round-title">
-        <Title
-          id="past-round-title"
-          order={4}
-          mb="md"
-          style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
-        >
+        <Title id="past-round-title" order={2} mb="md" style={sectionTitleStyle}>
           지난 회차
         </Title>
         {pastRounds.length === 0 ? (
@@ -473,7 +523,7 @@ function LegacyHomeProductList({
   );
 }
 
-export default function HomeProductList() {
+export default function HomeProductList({ banner }: { banner?: ReactNode }) {
   const requestedStoreId = useSearchParams().get('storeId');
   const { products, loading, error, refetch } = useProducts();
   const { products: groupProducts, loading: groupLoading } = useProducts(
@@ -494,39 +544,52 @@ export default function HomeProductList() {
   const saleRounds = useSaleRounds(
     storeMode.salesMode === 'round_direct' ? storeMode.storeId : null,
   );
+  const isRoundDirect = storeMode.status === 'ready' && storeMode.salesMode === 'round_direct';
 
+  let content: ReactNode;
   if (storeMode.status === 'loading') {
-    return (
-      <SimpleGrid cols={2} spacing="sm" aria-label="판매 정보 불러오는 중">
+    content = (
+      <SimpleGrid cols={2} spacing={12} aria-label="판매 정보 불러오는 중">
         {[...Array(4)].map((_, index) => (
           <Skeleton key={index} height={260} radius="md" />
         ))}
       </SimpleGrid>
     );
-  }
-
-  if (storeMode.status === 'error') {
-    return (
+  } else if (storeMode.status === 'error') {
+    content = (
       <Stack align="center" py={48} role="alert">
         <Text size="sm" c="var(--color-text-secondary)">
           판매 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
         </Text>
       </Stack>
     );
-  }
-
-  if (storeMode.salesMode === 'round_direct') {
-    return <RoundDirectHome {...saleRounds} />;
+  } else if (storeMode.salesMode === 'round_direct') {
+    content = <RoundDirectHome {...saleRounds} />;
+  } else {
+    content = (
+      <LegacyHomeProductList
+        products={products}
+        loading={loading}
+        error={error}
+        refetch={refetch}
+        groupProducts={groupProducts}
+        groupLoading={groupLoading}
+      />
+    );
   }
 
   return (
-    <LegacyHomeProductList
-      products={products}
-      loading={loading}
-      error={error}
-      refetch={refetch}
-      groupProducts={groupProducts}
-      groupLoading={groupLoading}
-    />
+    <>
+      {isRoundDirect && saleRounds.currentRound && (
+        <RoundCountdownStrip
+          status={saleRounds.currentRound.status}
+          schedule={saleRounds.currentRound.schedule}
+        />
+      )}
+      <Box px="md" pt="md">
+        {banner}
+        {content}
+      </Box>
+    </>
   );
 }

@@ -15,3 +15,4 @@
 | `mypage/_client.tsx` 주문 상태 뱃지 | `fontSize: 12` | 작은 뱃지 패턴 |
 | `ProductActions.tsx` 카운트다운 뱃지 | `fontSize: 13` | 타이머 표시 |
 | `orders/[id]/_client.tsx` Stepper 단계 설명 | `fontSize: 12` | Mantine Stepper 내부 텍스트 |
+| `HomeProductList.tsx` 회차 상품 태그(도착·품절·판매 예정) | `--font-size-xs`(12) | 작은 뱃지 패턴(디자인 기준 §3) |
