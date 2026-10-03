@@ -175,7 +175,7 @@ provider 응답은 `classifyAlimtalkProviderError()`/`classifySmsProviderError()
 
 - `RATE_LIMITED`: HTTP 429 또는 발송·요청·호출 한도/제한/초과 문구. 같은 채널을 `rateLimitBackoffMs` 이상 쉬게 한 뒤 재시도한다.
 - `RETRYABLE`: 일시/시간 초과/5xx 등 일시 오류. bounded backoff 뒤 같은 채널을 재시도한다.
-- `PERMANENT`: 명시적 요청 오류. 같은 채널 blind 재시도를 줄이고 SMS fallback 1회로 넘긴다.
+- `PERMANENT`: 명시적 요청 오류. 같은 채널 재시도를 멈춘다. 원인별로 SMS fallback 여부가 다르다(`ALIGO_PERMANENT_ERROR_SMS_FALLBACK`): 잔액 부족·송신 IP 미인증·계정 인증 오류·발신번호 미등록처럼 SMS도 같은 원인으로 실패하는 경우는 SMS를 건너뛰고, 템플릿·발신 프로필 오류처럼 알림톡에만 해당하는 경우는 SMS fallback 1회로 넘긴다. ALIGO는 `-99` 하나에 여러 원인을 담으므로 확인된 문구와 `-101`만 영구 사유로 분류하고, 사유를 알 수 없는 `-99`는 기존 재시도를 유지한다. 발송 기록에 `errorClass`·`permanentErrorReason`을 남긴다(#357).
 - `UNKNOWN`: 응답 파싱·transport 불확실. 재시도하지 않고 수동 확인 대상(`needsVerify`)으로 남긴다.
 
 `UNKNOWN` 결과는 접수 여부가 불확실하므로 SMS fallback을 포함한 blind 재발송을 하지 않는다. 위 4~7의 시도 상한은 유지되지만, `PERMANENT`는 3회를 다 채우지 않을 수 있다.
