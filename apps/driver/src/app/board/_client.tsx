@@ -214,7 +214,7 @@ export default function BoardClient() {
             >
               {label}
               {count > 0 && (
-                <Badge size="xs" color={key === 'preparing' ? 'red' : 'blue'} circle>
+                <Badge size="xs" color={key === 'preparing' ? 'brand' : 'dark'} circle>
                   {count}
                 </Badge>
               )}
