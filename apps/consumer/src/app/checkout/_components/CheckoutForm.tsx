@@ -146,11 +146,12 @@ export default function CheckoutForm({
         결제
       </Title>
 
-      {/* 주문 요약 */}
+      {/* 주문 요약: 회색 바탕 위 회색 글자는 대비가 약해 흰 카드·본문 색 글자로 둔다 */}
       <Paper
         p="md"
         mb="xl"
-        style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
+        withBorder
+        style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius)' }}
       >
         <Text
           style={{ fontWeight: 'var(--fw-extrabold)', fontSize: 'var(--font-size-md)' }}
@@ -171,13 +172,20 @@ export default function CheckoutForm({
                     <Text
                       style={{
                         fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-secondary)',
+                        fontWeight: 'var(--fw-medium)',
+                        color: 'var(--color-text)',
                         flex: 1,
                       }}
                     >
                       {item.name} × {item.quantity}
                     </Text>
-                    <Text style={{ fontSize: 'var(--font-size-sm)' }}>
+                    <Text
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        fontWeight: 'var(--fw-bold)',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
                       {(item.price * item.quantity).toLocaleString()}원
                     </Text>
                   </Group>

@@ -167,7 +167,7 @@ function RoundProductCard({
         <Text size="sm" fw={500} c="var(--color-text)" lineClamp={2}>
           {item.productNameSnapshot}
         </Text>
-        <Text size="xs" c="var(--color-text-disabled)" mt={6}>
+        <Text size="sm" c="var(--color-text-disabled)" mt={6}>
           회차 가격
         </Text>
         <Text size="sm" fw={700} c="var(--color-text-secondary)">
