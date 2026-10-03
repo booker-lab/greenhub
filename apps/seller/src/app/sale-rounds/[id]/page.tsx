@@ -20,6 +20,7 @@ import { use, useEffect, useRef, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
+import { RoundDeadlineStrip } from '@/components/RoundDeadlineStrip';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import {
   type CreateSaleRoundInput,
@@ -125,6 +126,49 @@ function ErrorState({
   );
 }
 
+// 디자인 기준 §5: 판매자 요약 숫자는 연두 상자. 배송 보류가 있으면 문제 상태라 빨강 연한 면.
+// 라벨과 값은 같은 부모 아래 형제로 둔다(회차 E2E가 라벨의 부모에서 값을 찾는다).
+function SummaryStat({
+  label,
+  value,
+  alert = false,
+}: {
+  label: string;
+  value: string;
+  alert?: boolean;
+}) {
+  return (
+    <Box
+      p="sm"
+      style={{
+        background: alert ? 'var(--color-danger-surface)' : 'var(--color-primary-surface)',
+        borderRadius: 'var(--radius-tag)',
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 'var(--font-size-xs)',
+          fontWeight: 'var(--fw-bold)',
+          color: alert ? 'var(--color-danger)' : 'var(--color-text-secondary)',
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        mt={2}
+        style={{
+          fontSize: 'var(--font-size-lg)',
+          fontWeight: 'var(--fw-extrabold)',
+          fontVariantNumeric: 'tabular-nums',
+          color: alert ? 'var(--color-danger)' : 'var(--color-text)',
+        }}
+      >
+        {value}
+      </Text>
+    </Box>
+  );
+}
+
 function RoundSummary({ round }: { round: SellerSaleRound }) {
   const status = STATUS_META[round.status];
   const attentionCount =
@@ -161,39 +205,20 @@ function RoundSummary({ round }: { round: SellerSaleRound }) {
             </Button>
           )}
         </Group>
-        <SimpleGrid cols={{ base: 1, xs: 3 }}>
-          <Box>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              주문 배송지
-            </Text>
-            <Text style={{ fontWeight: 'var(--fw-medium)' }}>
-              {round.counters.orderedDeliveryAddresses.toLocaleString()} /{' '}
-              {round.limits.maxDeliveryAddresses.toLocaleString()}
-            </Text>
-          </Box>
-          <Box>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              판매 수량
-            </Text>
-            <Text style={{ fontWeight: 'var(--fw-medium)' }}>
-              {round.counters.orderedItemQuantity.toLocaleString()} /{' '}
-              {round.limits.maxItemQuantity.toLocaleString()}
-            </Text>
-          </Box>
-          <Box>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              배송 보류
-            </Text>
-            <Text
-              style={{
-                fontWeight: 'var(--fw-medium)',
-                color:
-                  round.counters.heldOrderCount > 0 ? 'var(--color-danger)' : 'var(--color-text)',
-              }}
-            >
-              {round.counters.heldOrderCount.toLocaleString()}건
-            </Text>
-          </Box>
+        <SimpleGrid cols={3} spacing="xs">
+          <SummaryStat
+            label="주문 배송지"
+            value={`${round.counters.orderedDeliveryAddresses.toLocaleString()} / ${round.limits.maxDeliveryAddresses.toLocaleString()}`}
+          />
+          <SummaryStat
+            label="판매 수량"
+            value={`${round.counters.orderedItemQuantity.toLocaleString()} / ${round.limits.maxItemQuantity.toLocaleString()}`}
+          />
+          <SummaryStat
+            label="배송 보류"
+            value={`${round.counters.heldOrderCount.toLocaleString()}건`}
+            alert={round.counters.heldOrderCount > 0}
+          />
         </SimpleGrid>
       </Stack>
     </Paper>
@@ -348,6 +373,7 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
   return (
     <>
       <Stack gap="md">
+        <RoundDeadlineStrip round={round} rounded />
         <RoundSummary round={round} />
         {actionSuccess && (
           <Alert color="brand" title="상태 변경 완료" role="status">
