@@ -35,7 +35,8 @@ export const READONLY_STATUSES: OrderStatus[] = [
 
 export const CANCELLABLE_STATUSES: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
 
-// 셀러 상세 API는 받는 분 연락처를 deliveryPhone 하나로 내려준다(없으면 buyerPhone 대체).
+// buyerName은 주문한 계정 이름이다(선물 받는 분은 요청사항에 적는다).
+// 셀러 상세 API는 연락처를 주문서의 deliveryPhone 하나로 내려준다(없으면 buyerPhone 대체).
 export function displayBuyerName(order: Pick<Order, 'buyerName'>): string {
   return order.buyerName?.trim() || '이름 없음';
 }
