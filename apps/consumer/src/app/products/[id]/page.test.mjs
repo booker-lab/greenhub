@@ -73,3 +73,17 @@ test('상품 상세 mount는 기존 당근 유입 캡처 함수를 호출한다'
   assert.match(source, /import \{ captureAcquisition \} from '@\/lib\/acquisition'/);
   assert.match(pageSource, /useEffect\(\(\) => \{\s*captureAcquisition\(\);\s*\}, \[\]\);/s);
 });
+
+test('round 없이 들어온 상품 주소는 공개 현재 회차에 그 상품이 있을 때만 그 회차로 잇는다', () => {
+  assert.match(
+    source,
+    /function findCurrentRoundIdForProduct\(product: Product, currentRound: PublicSaleRound \| null\)/,
+  );
+  assert.match(source, /resolveRoundProduct\(product, currentRound\.id, currentRound, \[\]\)/);
+  assert.match(source, /!roundId && roundsSettled/);
+  assert.match(source, /const effectiveRoundId = roundId \?\? linkedRoundId;/);
+  assert.match(source, /query\.set\('round', linkedRoundId\)/);
+  assert.match(source, /이번 회차에서 판매하지 않는 상품이에요\./);
+  assert.match(source, /이번 주 상품 보기/);
+  assert.doesNotMatch(source, /유효한 판매 회차가 지정되지 않았습니다/);
+});
