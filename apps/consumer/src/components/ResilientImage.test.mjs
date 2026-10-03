@@ -44,7 +44,8 @@ test('상품 대표 사진은 모든 카드와 상세에서 같은 로컬 대체
     assert.match(componentSource, /ResilientImage/);
     assert.match(componentSource, /fallbackSrc=\{PRODUCT_IMAGE_FALLBACK\}/);
   }
-  assert.match(resilientSource, /PRODUCT_IMAGE_FALLBACK = '\/icons\/icon-192x192\.png'/);
+  // 2026-10-03부터 앱 아이콘 대신 전용 대체 그림(design-standard.md §7)
+  assert.match(resilientSource, /PRODUCT_IMAGE_FALLBACK = '\/images\/product-placeholder\.png'/);
 });
 
 test('자유 비율 상세 이미지 실패는 해당 이미지만 숨긴다', () => {

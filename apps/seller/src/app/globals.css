@@ -7,6 +7,15 @@
   font-display: swap;
 }
 
+/* Nunito ExtraBold(라틴 글자만) — 로고 "Green Love" 전용 */
+@font-face {
+  font-family: "Nunito";
+  src: url("../../public/fonts/Nunito-ExtraBold-latin.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Mantine v9 — 선택적 CSS import (사용 컴포넌트만) */
 @import "@mantine/core/styles/global.css";
 @import "@mantine/core/styles/baseline.css";
