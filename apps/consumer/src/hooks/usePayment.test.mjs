@@ -13,6 +13,25 @@ const compiled = ts.transpileModule(source, {
   fileName: 'usePayment.ts',
 }).outputText;
 
+const redirectSource = await readFile(
+  new URL('../lib/payment-redirect.ts', import.meta.url),
+  'utf8',
+);
+const redirectModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(redirectSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(redirectModule, redirectModule.exports);
+const {
+  PENDING_ORDER_PAYMENT_STORAGE_KEY,
+  parsePaymentRedirectResult,
+  resolveOrderPaymentReturn,
+  takePendingOrderPayment,
+} = redirectModule.exports;
+
 const originalFetch = globalThis.fetch;
 const originalEnvironment = {
   apiUrl: process.env.NEXT_PUBLIC_API_URL,
@@ -39,7 +58,7 @@ test.after(() => {
   }
 });
 
-function loadHook({ paymentResponses = [] } = {}) {
+function loadHook({ paymentResponses = [], onPayment } = {}) {
   const paymentCalls = [];
   const stateChanges = [];
   const paymentModule = { exports: {} };
@@ -63,6 +82,7 @@ function loadHook({ paymentResponses = [] } = {}) {
           item.roundPrice === item.price,
       };
     }
+    if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => process.env.NEXT_PUBLIC_API_URL };
     }
@@ -82,6 +102,7 @@ function loadHook({ paymentResponses = [] } = {}) {
       return {
         requestPayment: async (parameters) => {
           paymentCalls.push(parameters);
+          if (onPayment) return onPayment(parameters);
           return paymentResponses.shift();
         },
       };
@@ -429,4 +450,171 @@ test('기존 단일 상품 usePayment 요청 계약을 보존한다', async () =
   assert.equal(loaded.paymentCalls.length, 1);
   assert.equal(loaded.paymentCalls[0].paymentId, 'legacy-order');
   assert.equal(loaded.paymentCalls[0].channelKey, 'naver-channel');
+});
+
+function installBrowser() {
+  const values = new Map();
+  const sessionStorage = {
+    getItem: (key) => (values.has(key) ? values.get(key) : null),
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
+  };
+  globalThis.window = {
+    location: {
+      origin: 'https://shop.example',
+      pathname: '/checkout',
+      search: '?from=cart',
+    },
+    sessionStorage,
+  };
+  return {
+    values,
+    sessionStorage,
+    restore() {
+      delete globalThis.window;
+    },
+  };
+}
+
+function mountRoundPayment(loaded, orderRequest = deliveryRequest) {
+  // biome-ignore lint/correctness/useHookAtTopLevel: React를 모의한 훅 계약 단위 테스트다.
+  return loaded.usePayment({
+    storeId: 'store-1',
+    orderRequest,
+    roundItems: [firstRoundItem, secondRoundItem],
+    accessToken: 'access-token',
+    paymentMethod: 'kakaopay',
+  });
+}
+
+const leaveForRedirect = () => new Promise(() => {});
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+test('브라우저에서는 현재 origin 기준 redirectUrl을 넘기고 PC Promise 흐름은 그대로 완료한다', async () => {
+  const browser = installBrowser();
+  try {
+    const bodies = [];
+    globalThis.fetch = async (_url, init) => {
+      bodies.push(JSON.parse(init.body));
+      return jsonResponse(successfulRoundResponse);
+    };
+    let pendingDuringPayment = null;
+    const loaded = loadHook({
+      onPayment: () => {
+        pendingDuringPayment = browser.values.get(PENDING_ORDER_PAYMENT_STORAGE_KEY);
+        return { transactionType: 'PAYMENT', txId: 'tx-1', paymentId: 'order-1' };
+      },
+    });
+    const result = mountRoundPayment(loaded, {
+      ...deliveryRequest,
+      requestNote: '문 앞에 놓아 주세요',
+    });
+
+    await result.requestPayment();
+
+    assert.equal(bodies[0].requestNote, '문 앞에 놓아 주세요');
+    assert.equal(loaded.paymentCalls[0].redirectUrl, 'https://shop.example/order/success');
+    assert.equal(Object.hasOwn(loaded.paymentCalls[0], 'forceRedirect'), false);
+    const pending = JSON.parse(pendingDuringPayment);
+    assert.equal(pending.paymentId, 'order-1');
+    assert.deepEqual(pending.roundItemIds, ['round-item-1', 'round-item-2']);
+    assert.equal(pending.clearCheckoutCart, true);
+    assert.equal(pending.retryPath, '/checkout?from=cart');
+    // 결제 시도 ID·연락처·요청사항은 복귀용 기록에 남기지 않는다.
+    assert.equal(pendingDuringPayment.includes(bodies[0].clientOrderRequestId), false);
+    assert.equal(pendingDuringPayment.includes('010-1234-5678'), false);
+    assert.equal(pendingDuringPayment.includes('문 앞에'), false);
+    // Promise로 끝났으므로 복귀용 기록은 지운다.
+    assert.equal(browser.values.has(PENDING_ORDER_PAYMENT_STORAGE_KEY), false);
+    assert.equal(loaded.stateChanges.at(-1), 'done');
+  } finally {
+    browser.restore();
+  }
+});
+
+test('모바일 리다이렉트 뒤 실패·취소로 돌아와 다시 결제하면 새 clientOrderRequestId로 주문한다', async () => {
+  const browser = installBrowser();
+  try {
+    const bodies = [];
+    globalThis.fetch = async (_url, init) => {
+      bodies.push(JSON.parse(init.body));
+      return jsonResponse(successfulRoundResponse);
+    };
+    // 1) 모바일: 결제사로 이동하면 Promise는 끝나지 않고 페이지가 사라진다.
+    const leaving = loadHook({ onPayment: leaveForRedirect });
+    void mountRoundPayment(leaving, {
+      ...deliveryRequest,
+      requestNote: '첫 요청',
+    }).requestPayment();
+    await settle();
+    assert.equal(leaving.paymentCalls.length, 1);
+    assert.equal(bodies[0].requestNote, '첫 요청');
+    assert.ok(browser.values.has(PENDING_ORDER_PAYMENT_STORAGE_KEY));
+
+    // 2) code 쿼리로 복귀: 실패로 해석하고 재시도 경로만 준다(장바구니 정리 없음).
+    const returned = resolveOrderPaymentReturn(
+      parsePaymentRedirectResult(
+        new URLSearchParams('paymentId=order-1&code=FAILURE_TYPE_PG&message=취소'),
+      ),
+      takePendingOrderPayment(browser.sessionStorage, Date.now()),
+    );
+    assert.deepEqual(returned, {
+      kind: 'failure',
+      message: '취소',
+      retryPath: '/checkout?from=cart',
+    });
+
+    // 3) 새로 로드된 체크아웃에서 내용을 바꿔 다시 결제해도 새 ID라
+    //    409(같은 결제 시도 ID에 다른 주문 내용)가 나지 않는다.
+    const reloaded = loadHook({
+      onPayment: () => ({ transactionType: 'PAYMENT', txId: 'tx-2', paymentId: 'order-1' }),
+    });
+    await mountRoundPayment(reloaded, {
+      ...deliveryRequest,
+      deliveryPhone: '010-9999-0000',
+      requestNote: '바꾼 요청',
+    }).requestPayment();
+
+    assert.equal(bodies.length, 2);
+    assert.notEqual(bodies[0].clientOrderRequestId, bodies[1].clientOrderRequestId);
+    assert.equal(bodies[1].requestNote, '바꾼 요청');
+    assert.equal(reloaded.stateChanges.at(-1), 'done');
+  } finally {
+    browser.restore();
+  }
+});
+
+test('모바일 리다이렉트 성공 쿼리는 서버 조회 대상 주문 ID와 결제한 회차 상품만 넘긴다', async () => {
+  const browser = installBrowser();
+  try {
+    globalThis.fetch = async () => jsonResponse(successfulRoundResponse);
+    const leaving = loadHook({ onPayment: leaveForRedirect });
+    void mountRoundPayment(leaving).requestPayment();
+    await settle();
+
+    const returned = resolveOrderPaymentReturn(
+      parsePaymentRedirectResult(
+        new URLSearchParams('paymentId=order-1&transactionType=PAYMENT&txId=tx-1'),
+      ),
+      takePendingOrderPayment(browser.sessionStorage, Date.now()),
+    );
+    assert.deepEqual(returned, {
+      kind: 'confirm',
+      orderId: 'order-1',
+      roundItemIds: ['round-item-1', 'round-item-2'],
+      clearCheckoutCart: true,
+      unpaidItemCount: 0,
+    });
+    // 성공 쿼리만으로 'done'이 되지 않는다(주문 완료 화면이 서버 상태 조회로 확정).
+    assert.notEqual(leaving.stateChanges.at(-1), 'done');
+  } finally {
+    browser.restore();
+  }
+});
+
+test('브라우저 밖(origin 없음)에서는 redirectUrl 없이 기존 Promise 계약을 유지한다', async () => {
+  globalThis.fetch = async () => jsonResponse(successfulRoundResponse);
+  const { result, paymentCalls } = createRoundHook();
+  await result.requestPayment();
+  assert.equal(Object.hasOwn(paymentCalls[0], 'redirectUrl'), false);
 });

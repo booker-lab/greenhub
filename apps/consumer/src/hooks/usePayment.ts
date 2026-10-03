@@ -5,6 +5,13 @@ import { useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem } from '@/hooks/useCart';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import {
+  buildPaymentRedirectUrl,
+  createPendingOrderPayment,
+  ORDER_PAYMENT_REDIRECT_PATH,
+  readBrowserPaymentContext,
+  savePendingOrderPayment,
+} from '@/lib/payment-redirect';
+import {
   type PortonePaymentMethod,
   readPortonePaymentConfiguration,
 } from '@/lib/portone-config';
@@ -260,16 +267,40 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
 
       transition('paying');
       const PortOne = await import('@portone/browser-sdk/v2');
-      const response = await PortOne.requestPayment({
-        storeId: configuration.portoneStoreId,
-        paymentId: payment.paymentId,
-        orderName: payment.name,
-        totalAmount: payment.amount,
-        currency: 'KRW' as const,
-        channelKey: configuration.channelKey,
-        payMethod: 'EASY_PAY',
-        easyPay: { easyPayProvider: configuration.easyPayProvider },
-      });
+      // 모바일은 같은 탭에서 결제사로 이동했다가 redirectUrl로 돌아온다(PC는 그대로 Promise).
+      // 페이지가 새로 로드되므로 복귀 뒤 장바구니 정리에 필요한 정보만 sessionStorage에 남긴다.
+      // 결제 시도 ID는 남기지 않는다: 복귀 뒤 다시 결제하면 새 ID로 주문한다(#328).
+      const browser = readBrowserPaymentContext();
+      const redirectUrl = browser
+        ? buildPaymentRedirectUrl(browser.origin, ORDER_PAYMENT_REDIRECT_PATH)
+        : null;
+      savePendingOrderPayment(
+        browser?.storage ?? null,
+        createPendingOrderPayment({
+          paymentId: payment.paymentId,
+          roundItemIds: options.roundItems?.map((item) => item.roundItemId),
+          clearCheckoutCart: options.roundItems !== undefined,
+          retryPath: browser?.currentPath ?? null,
+          now: Date.now(),
+        }),
+      );
+      let response: Awaited<ReturnType<typeof PortOne.requestPayment>>;
+      try {
+        response = await PortOne.requestPayment({
+          storeId: configuration.portoneStoreId,
+          paymentId: payment.paymentId,
+          orderName: payment.name,
+          totalAmount: payment.amount,
+          currency: 'KRW' as const,
+          channelKey: configuration.channelKey,
+          payMethod: 'EASY_PAY',
+          easyPay: { easyPayProvider: configuration.easyPayProvider },
+          ...(redirectUrl ? { redirectUrl } : {}),
+        });
+      } finally {
+        // Promise로 결과를 받은 경우(PC·결제창 오류)에는 이 화면이 직접 처리하므로 복귀용 기록을 지운다.
+        savePendingOrderPayment(browser?.storage ?? null, null);
+      }
 
       if (response && 'code' in response) {
         attemptSettled = true;

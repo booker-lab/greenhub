@@ -57,6 +57,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/hooks/useSaleRounds') return { useSaleRounds: () => ({}) };
   if (specifier === '@/lib/acquisition') return { getAcquisitionSnapshot: () => null };
   if (specifier === '@/lib/cartValidation') return { getCartValidationError: () => null };
+  if (specifier === '@/lib/payment-redirect') return {};
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
   }
@@ -300,4 +301,22 @@ test('legacy checkout은 장바구니 필수 정보가 없으면 결제 호출 �
   assert.match(legacyCheckoutSource, /!cartValidationError/);
   assert.match(legacyCheckoutSource, /if \(cartValidationError\)/);
   assert.match(legacyCheckoutSource, /setError\(cartValidationError\)/);
+});
+
+test('legacy checkout도 모바일 리다이렉트 복귀 URL과 남은 미결제 상품 수를 결제 전에 남긴다', () => {
+  const start = source.indexOf('function LegacyCartCheckoutContent');
+  const end = source.indexOf('function RoundCartCheckoutContent', start);
+  const legacyCheckoutSource = source.slice(start, end);
+
+  assert.match(
+    legacyCheckoutSource,
+    /buildPaymentRedirectUrl\(browser\.origin, ORDER_PAYMENT_REDIRECT_PATH\)/,
+  );
+  assert.match(legacyCheckoutSource, /\.\.\.\(redirectUrl \? \{ redirectUrl \} : \{\}\)/);
+  assert.match(legacyCheckoutSource, /unpaidItemCount: cartItems\.length - index - 1/);
+  // 앞 상품이 결제된 뒤의 실패는 같은 장바구니 재결제(중복 주문)로 안내하지 않는다.
+  assert.match(legacyCheckoutSource, /retryPath: index === 0 \?/);
+  const save = legacyCheckoutSource.indexOf('savePendingOrderPayment(');
+  const sdkCall = legacyCheckoutSource.indexOf('PortOne.requestPayment(');
+  assert.ok(save >= 0 && save < sdkCall);
 });

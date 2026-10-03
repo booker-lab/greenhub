@@ -5,7 +5,7 @@ import ts from 'typescript';
 
 const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
 const testableSource = `${source}
-export { isReceivedStatus, parseOrderId, readSuccessOrder };`;
+export { isReceivedStatus, parseOrderId, readSuccessOrder, resolveSuccessOrderId };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
     esModuleInterop: true,
@@ -16,14 +16,31 @@ const compiled = ts.transpileModule(testableSource, {
   fileName: 'page.tsx',
 }).outputText;
 
+const redirectSource = await readFile(
+  new URL('../../../lib/payment-redirect.ts', import.meta.url),
+  'utf8',
+);
+const redirectModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(redirectSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(redirectModule, redirectModule.exports);
+
 const pageModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
     return {
       Suspense: () => null,
       useEffect: () => {},
+      useRef: (initial) => ({ current: initial }),
+      useState: (initial) => [initial, () => {}],
     };
   }
+  if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
+  if (specifier === '@/hooks/useCart') return { useCart: () => ({ removeRoundItems: () => {} }) };
   if (specifier === 'react/jsx-runtime') {
     return { Fragment: Symbol('Fragment'), jsx: () => null, jsxs: () => null };
   }
@@ -44,7 +61,9 @@ new Function('require', 'module', 'exports', compiled)(
   pageModule.exports,
 );
 
-const { isReceivedStatus, parseOrderId, readSuccessOrder } = pageModule.exports;
+const { isReceivedStatus, parseOrderId, readSuccessOrder, resolveSuccessOrderId } =
+  pageModule.exports;
+const { parsePaymentRedirectResult } = redirectModule.exports;
 
 const roundOrder = {
   id: 'round-order-1',
@@ -192,4 +211,33 @@ test('결제 확인·성공·취소 외 유효 상태는 접수 안내 화면으
   assert.match(source, /주문이 접수되었습니다/);
   assert.match(source, /isReceived && validOrder && !errorMessage/);
   assert.equal(source.match(/<OrderResultActions/g)?.length, 2);
+});
+
+test('모바일 결제 리다이렉트 성공 복귀는 paymentId(= 주문 ID)로 서버 주문 상태를 조회한다', () => {
+  const resolve = (search) => {
+    const params = new URLSearchParams(search);
+    return resolveSuccessOrderId(params.getAll('orderId'), parsePaymentRedirectResult(params));
+  };
+  assert.equal(resolve('orderId=order-1'), 'order-1');
+  assert.equal(resolve('paymentId=order-1'), 'order-1');
+  assert.equal(resolve('paymentId=order-1&transactionType=PAYMENT&txId=tx-1'), 'order-1');
+  assert.equal(resolve('orderId=order-1&paymentId=order-1'), 'order-1');
+  // 서로 다른 식별자·실패·손상 복귀는 주문 조회 대상으로 쓰지 않는다.
+  assert.equal(resolve('orderId=order-1&paymentId=order-2'), null);
+  assert.equal(resolve('paymentId=order-1&code=FAILURE_TYPE_PG&message=취소'), null);
+  assert.equal(resolve('paymentId=a&paymentId=b'), null);
+  assert.equal(resolve(''), null);
+});
+
+test('리다이렉트 실패 복귀는 성공 화면 대신 실패 안내와 재시도 경로를, 성공은 서버 조회 화면을 쓴다', () => {
+  assert.match(source, /결제가 완료되지 않았습니다/);
+  assert.match(source, /router\.replace\(retryPath\)/);
+  // 결제 전 기록은 한 번만 꺼내고, 성공 복귀일 때만 결제한 회차 상품과 checkout_cart를 정리한다.
+  assert.match(source, /takePendingOrderPayment\(/);
+  const confirmGuard = source.indexOf("resolved.kind === 'confirm'");
+  const removal = source.indexOf('removeRoundItems(resolved.roundItemIds)');
+  assert.ok(confirmGuard >= 0 && confirmGuard < removal);
+  assert.match(source, /removeItem\('checkout_cart'\)/);
+  // 복귀 쿼리가 있으면 orderId가 없어도 홈으로 보내지 않는다.
+  assert.match(source, /if \(!orderId && !redirectSearch\) router\.replace\('\/'\)/);
 });

@@ -5,8 +5,18 @@ import { Box, Button, Container, Group, Paper, Stack, Text, Title } from '@manti
 import { CircleAlert, CircleCheck, CircleX, Clock } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useCart } from '@/hooks/useCart';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
+import {
+  DEFAULT_PAYMENT_FAILURE_MESSAGE,
+  type OrderPaymentReturn,
+  type PaymentRedirectResult,
+  parsePaymentRedirectResult,
+  readBrowserPaymentContext,
+  resolveOrderPaymentReturn,
+  takePendingOrderPayment,
+} from '@/lib/payment-redirect';
 
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   PENDING: '결제 확인 중...',
@@ -91,6 +101,24 @@ function isPositiveQuantity(value: unknown): value is number {
 
 function parseOrderId(values: string[]): string | null {
   return values.length === 1 && isSafeIdentifier(values[0]) ? values[0] : null;
+}
+
+/**
+ * 조회할 주문 ID. 모바일 결제 리다이렉트 복귀는 `paymentId`(= 주문 ID)로 오고,
+ * 기존 Promise 완료 경로는 `orderId`로 온다. 실패·손상 복귀는 조회하지 않는다.
+ */
+function resolveSuccessOrderId(
+  orderIdValues: string[],
+  redirectResult: PaymentRedirectResult,
+): string | null {
+  if (redirectResult.kind === 'failure' || redirectResult.kind === 'invalid') return null;
+  if (redirectResult.kind === 'success') {
+    if (orderIdValues.length > 0 && parseOrderId(orderIdValues) !== redirectResult.paymentId) {
+      return null;
+    }
+    return redirectResult.paymentId;
+  }
+  return parseOrderId(orderIdValues);
 }
 
 function readOrderRecord(value: unknown, requestedOrderId: string): ValidOrderRecord | null {
@@ -270,14 +298,40 @@ function OrderSuccessContent() {
   const params = useSearchParams();
   const router = useRouter();
   const { data: session } = useSession();
-  const orderId = parseOrderId(params.getAll('orderId'));
+  const { removeRoundItems } = useCart();
+  const redirectResult = parsePaymentRedirectResult(params);
+  const redirectSearch = redirectResult.kind === 'none' ? null : params.toString();
+  const orderId = resolveSuccessOrderId(params.getAll('orderId'), redirectResult);
+  const [paymentReturn, setPaymentReturn] = useState<OrderPaymentReturn | null>(null);
+  const handledRedirect = useRef<string | null>(null);
   const { order, loading, error } = useOrderStatus(orderId, session?.user?.accessToken);
   const validOrder = orderId ? readOrderRecord(order, orderId) : null;
   const successOrder = !loading && !error && orderId ? readSuccessOrder(order, orderId) : null;
 
   useEffect(() => {
-    if (!orderId) router.replace('/');
-  }, [orderId, router]);
+    if (!orderId && !redirectSearch) router.replace('/');
+  }, [orderId, redirectSearch, router]);
+
+  // 모바일 결제 리다이렉트 복귀: 결제 전 기록을 한 번만 꺼내 장바구니 정리(#328)·재시도 경로를 정한다.
+  // 결제 확정은 아래 주문 상태 조회(서버)로만 한다.
+  useEffect(() => {
+    if (!redirectSearch || handledRedirect.current === redirectSearch) return;
+    handledRedirect.current = redirectSearch;
+    const browser = readBrowserPaymentContext();
+    const resolved = resolveOrderPaymentReturn(
+      parsePaymentRedirectResult(new URLSearchParams(redirectSearch)),
+      takePendingOrderPayment(browser?.storage ?? null, Date.now()),
+    );
+    if (resolved.kind === 'confirm') {
+      try {
+        if (resolved.clearCheckoutCart) browser?.storage?.removeItem('checkout_cart');
+        if (resolved.roundItemIds.length > 0) removeRoundItems(resolved.roundItemIds);
+      } catch {
+        // 저장소 접근이 막혀도 결제 결과 확인은 막지 않는다.
+      }
+    }
+    setPaymentReturn(resolved);
+  }, [redirectSearch, removeRoundItems]);
 
   useEffect(() => {
     if (validOrder?.status !== 'CANCELLED') return;
@@ -295,10 +349,19 @@ function OrderSuccessContent() {
     (!order ||
       !validOrder ||
       (validOrder && SUCCESS_STATUSES.has(validOrder.status) && !successOrder));
-  const errorMessage = !orderId
-    ? '올바른 주문번호가 필요합니다.'
-    : error ||
-      (responseError ? '주문 응답을 확인할 수 없습니다. 주문 내역에서 다시 확인해 주세요.' : null);
+  const paymentFailure = redirectResult.kind === 'failure' ? redirectResult : null;
+  const retryPath = paymentReturn?.kind === 'failure' ? paymentReturn.retryPath : null;
+  const unpaidItemCount = paymentReturn?.kind === 'confirm' ? paymentReturn.unpaidItemCount : 0;
+  const errorMessage = paymentFailure
+    ? null
+    : redirectResult.kind === 'invalid'
+      ? '결제 결과를 확인할 수 없습니다. 주문 내역에서 결제 상태를 확인해 주세요.'
+      : !orderId
+        ? '올바른 주문번호가 필요합니다.'
+        : error ||
+          (responseError
+            ? '주문 응답을 확인할 수 없습니다. 주문 내역에서 다시 확인해 주세요.'
+            : null);
 
   return (
     <Container size="sm" px="md" py={60}>
@@ -456,6 +519,54 @@ function OrderSuccessContent() {
               잠시 후 홈 화면으로 이동합니다.
             </Text>
           </>
+        )}
+
+        {paymentFailure && (
+          <>
+            <StatusMark tone="danger" icon="danger" />
+            <Title order={1} style={resultTitleStyle}>
+              결제가 완료되지 않았습니다
+            </Title>
+            <Text
+              style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+              ta="center"
+            >
+              {paymentFailure.message ?? DEFAULT_PAYMENT_FAILURE_MESSAGE}
+            </Text>
+            {retryPath && (
+              <Button
+                color="brand"
+                radius="xl"
+                size="lg"
+                mt="lg"
+                fullWidth
+                onClick={() => router.replace(retryPath)}
+              >
+                다시 결제하기
+              </Button>
+            )}
+            <Button
+              variant="subtle"
+              color="gray"
+              radius="xl"
+              size="md"
+              fullWidth
+              onClick={() => router.push('/')}
+            >
+              홈으로
+            </Button>
+          </>
+        )}
+
+        {unpaidItemCount > 0 && !errorMessage && (
+          <Text
+            style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+            ta="center"
+            mt="md"
+          >
+            장바구니의 다른 상품 {unpaidItemCount}개는 아직 결제되지 않았습니다. 장바구니에서 이어서
+            결제해 주세요.
+          </Text>
         )}
 
         {errorMessage && <ErrorState message={errorMessage} onHome={() => router.push('/')} />}
