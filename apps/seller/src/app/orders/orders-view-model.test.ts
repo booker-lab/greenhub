@@ -574,3 +574,42 @@ describe('2-phase ownership (SLICE-02)', () => {
     expect(combined.scopedGroupCounts).toEqual(scoped.scopedGroupCounts);
   });
 });
+
+describe('통합 검색', () => {
+  const base = {
+    saleType: 'normal' as const,
+    activeTab: 'ACTION_REQUIRED' as OrderGroup,
+    subFilter: 'ALL' as InDeliverySubFilter,
+    heldOnly: false,
+    datePreset: 'custom' as const,
+    customFrom: '',
+    customTo: '',
+  };
+
+  it('검색은 탭 뱃지와 목록에 함께 적용하고 업무 우선순위 집계는 그대로 둔다', () => {
+    const orders = [
+      makeOrder({ status: 'PENDING', buyerName: '김손님' }),
+      makeOrder({ status: 'DELIVERED', buyerName: '김손님' }),
+      makeOrder({ status: 'PENDING', buyerName: '이손님' }),
+      makeOrder({ status: 'DELIVERY_HELD', buyerName: '박손님' }),
+    ];
+    const unsearched = buildOrdersViewModel({ ...base, orders });
+    const vm = buildOrdersViewModel({ ...base, orders, search: { query: '김' } });
+
+    expect(vm.priorityCounts).toEqual(unsearched.priorityCounts);
+    expect(vm.scopedGroupCounts.ACTION_REQUIRED).toBe(1);
+    expect(vm.scopedGroupCounts.DONE).toBe(1);
+    expect(vm.filteredOrders.map((o) => o.buyerName)).toEqual(['김손님']);
+  });
+
+  it('전화 검색 결과 id에 든 주문만 남긴다', () => {
+    const phoneHit = makeOrder({ status: 'PENDING', buyerName: '이손님' });
+    const orders = [phoneHit, makeOrder({ status: 'PENDING', buyerName: '박손님' })];
+    const vm = buildOrdersViewModel({
+      ...base,
+      orders,
+      search: { query: '5678', phoneMatchIds: new Set([phoneHit.id]) },
+    });
+    expect(vm.filteredOrders.map((o) => o.id)).toEqual([phoneHit.id]);
+  });
+});

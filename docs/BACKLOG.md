@@ -651,7 +651,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 서버 강제환불은 이미 취소된 주문도 재시도를 허용한다(일반: `cancellation.status` LOCAL_PENDING·LOCAL_FAILED·REFUND_FAILED·만료 claim·취소 상태 기록 없음, 회차: 결제가 아직 PAID). 어드민 주문 탭은 취소 주문에 버튼이 없다(#318 이후에도 동일). 결과 불명확 환불은 운영 이슈 `AUTO_REFUND_FAILED`→`RETRY_REFUND`로, 취소 전 주문은 기존 버튼으로 복구할 수 있어 급하지 않다. 취소 주문용 "환불 재시도" 버튼을 둘지 사람이 결정한다. 2026-09-28 발견.
 
 ### SELLER-ORDER-LIST-BUYER-INFO
-- [ ] 셀러 주문 목록 카드의 손님 이름과 이름·전화 통합 검색(`seller-orders-customer-info-plan.md` T1·T4)은 목록 API(`seller-order-read-model.ts` `LIST_FIELDS`)에 손님 정보가 없어 보류했다. 개인정보 최소화 계약을 넓힐지 결정한 뒤 진행한다. 상세 화면 표시는 #314. 2026-09-28 발견.
+- [x] 2026-10-04 사용자 결정으로 해결: 목록 카드에 손님 이름을 보이고 이름·전화 통합 검색을 넣는다. 목록 API `LIST_FIELDS`에는 상세와 같은 `buyerName`만 더하고 전화는 싣지 않는다. 전화 검색은 서버(`?phone=` 숫자 4자리 이상)가 판매자에게 보이는 연락처 숫자만 비교해 자기 매장의 맞는 주문만 돌려준다(`seller-orders-customer-info-plan.md` T1·T4). 이전 기록: 목록 API에 손님 정보가 없어 개인정보 최소화 계약을 넓힐지 결정 대기였다. 상세 화면 표시는 #314. 2026-09-28 발견.
 
 ### ADMIN-DESKTOP-TABLE-IN-480-SHELL
 - [x] 2026-10-03 해결: 사용자 결정(어드민만 넓은 레이아웃)대로 `AppShell`이 `/admin`에서 폭 제한을 풀고 판매자 하단 탭을 숨긴다. 이전 기록: 셀러 앱 루트 레이아웃이 폭 480px로 고정돼 있다. 그런데 어드민 탭은 Mantine `visibleFrom="sm"`(창 폭 기준)으로 데스크톱 표를 고른다. 그래서 PC에서도 카드 폭 446px 안에 표가 들어가고 `overflow:hidden`으로 오른쪽이 잘린다. 어드민 주문 표(489px)는 강제환불 버튼이 "강제환"까지만 보인다. 기존 결함이다(#318과 무관). 어드민을 넓은 레이아웃으로 뺄지, 표 기준을 컨테이너 폭으로 바꿀지 결정한다. #317은 표를 4칸으로 유지해 피했다. 2026-09-28 로컬 하네스 검증에서 발견.

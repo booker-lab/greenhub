@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { OrdersQueryService } from './orders-query.service';
 
@@ -197,6 +197,10 @@ describe('OrdersQueryService 조회 권한', () => {
     expect(list[0]).not.toHaveProperty('acquisition');
     expect(list[0]).not.toHaveProperty('redeliveryChargeId');
     expect(list[0]).not.toHaveProperty('requestNote');
+    // 목록 카드용 손님 이름은 상세와 같은 buyerName, 전화는 목록에 싣지 않는다.
+    expect(list[0]).toMatchObject({ buyerName: '구매자' });
+    expect(list[0]).not.toHaveProperty('deliveryPhone');
+    expect(list[0]).not.toHaveProperty('buyerPhone');
 
     expect(detail).toMatchObject({
       id: 'seller-order',
@@ -248,6 +252,82 @@ describe('OrdersQueryService 조회 권한', () => {
     expect(detail.orderItems[0]).not.toHaveProperty('lineAmount');
     expect(detail.orderItems[0]).not.toHaveProperty('internalItemCost');
     expect(detail.redeliveryPayment).not.toHaveProperty('chargeId');
+  });
+
+  describe('판매자 목록 전화 검색', () => {
+    const phoneRecords: RecordMap = {
+      'stores/store-1': { ownerId: 'seller-1' },
+      'stores/store-2': { ownerId: 'seller-2' },
+      'orders/delivery-phone': {
+        storeId: 'store-1',
+        buyerName: '김손님',
+        deliveryPhone: '010-1234-5678',
+        buyerPhone: '010-9999-0000',
+        status: 'PREPARING',
+      },
+      'orders/profile-phone-only': {
+        storeId: 'store-1',
+        buyerName: '이손님',
+        buyerPhone: '010 5555 5678',
+        status: 'PREPARING',
+      },
+      'orders/no-phone': {
+        storeId: 'store-1',
+        buyerName: '박손님',
+        status: 'PREPARING',
+      },
+      'orders/other-store': {
+        storeId: 'store-2',
+        buyerName: '다른매장손님',
+        deliveryPhone: '010-1234-5678',
+        status: 'PREPARING',
+      },
+    };
+    const seller = requester('seller-1', 'seller');
+
+    it('판매자에게 보이는 연락처(deliveryPhone 우선, 없으면 buyerPhone) 숫자로만 찾고 전화는 응답에 없다', async () => {
+      const service = new OrdersQueryService(makeFirestore(phoneRecords) as never);
+
+      const byEnding = await service.getOrders('store-1', seller, { phone: '5678' });
+      expect(byEnding.map((order) => order.id).sort()).toEqual([
+        'delivery-phone',
+        'profile-phone-only',
+      ]);
+      for (const order of byEnding) {
+        expect(order).toHaveProperty('buyerName');
+        expect(order).not.toHaveProperty('deliveryPhone');
+        expect(order).not.toHaveProperty('buyerPhone');
+      }
+
+      const withHyphen = await service.getOrders('store-1', seller, { phone: '1234-5678' });
+      expect(withHyphen.map((order) => order.id)).toEqual(['delivery-phone']);
+    });
+
+    it('수령 연락처가 있으면 가입 프로필 전화로는 찾지 않는다', async () => {
+      const service = new OrdersQueryService(makeFirestore(phoneRecords) as never);
+
+      await expect(service.getOrders('store-1', seller, { phone: '9999' })).resolves.toEqual([]);
+    });
+
+    it('다른 매장 주문은 같은 번호여도 나오지 않고, 남의 매장 검색은 거부한다', async () => {
+      const service = new OrdersQueryService(makeFirestore(phoneRecords) as never);
+
+      const result = await service.getOrders('store-1', seller, { phone: '01012345678' });
+      expect(result.map((order) => order.id)).toEqual(['delivery-phone']);
+      await expect(
+        service.getOrders('store-2', seller, { phone: '01012345678' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('숫자 4자리 미만 검색은 거부한다', async () => {
+      const service = new OrdersQueryService(makeFirestore(phoneRecords) as never);
+
+      for (const phone of ['', '123', '김손님', '01-2']) {
+        await expect(service.getOrders('store-1', seller, { phone })).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+      }
+    });
   });
 
   it('admin은 기존처럼 스토어 주문 전체를 조회할 수 있다', async () => {

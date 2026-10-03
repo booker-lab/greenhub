@@ -12,7 +12,12 @@ import {
   isCurrentRedeliveryPaymentRequired,
   resolveRedeliveryPaymentActionability,
 } from './redelivery-resume-gate';
-import { projectSellerOrder } from './seller-order-read-model';
+import {
+  matchesSellerPhoneSearch,
+  normalizeSellerPhoneSearch,
+  projectSellerOrder,
+  SELLER_PHONE_SEARCH_MIN_DIGITS,
+} from './seller-order-read-model';
 
 type OrderRequester = Pick<JwtPayload, 'sub' | 'role'>;
 type OrderRequesterInput = OrderRequester | string;
@@ -43,7 +48,7 @@ export class OrdersQueryService {
   async getOrders(
     storeId: string,
     requesterInput: OrderRequesterInput,
-    query: { userId?: string; status?: string; saleType?: string },
+    query: { userId?: string; status?: string; saleType?: string; phone?: string },
   ) {
     const requester = this.normalizeRequester(requesterInput);
     await this.assertStoreOrderReadAccess(storeId, requester);
@@ -70,6 +75,13 @@ export class OrdersQueryService {
     if (query.saleType && !VALID_SALE_TYPES.includes(query.saleType)) {
       throw new BadRequestException(`유효하지 않은 saleType: ${query.saleType}`);
     }
+    // 전화 검색: 목록 응답에 전화를 싣지 않고 서버에서 숫자만 비교해 맞는 주문만 돌려준다.
+    const phoneDigits = query.phone === undefined ? null : normalizeSellerPhoneSearch(query.phone);
+    if (query.phone !== undefined && phoneDigits === null) {
+      throw new BadRequestException(
+        `전화번호 검색은 숫자 ${SELLER_PHONE_SEARCH_MIN_DIGITS}자리 이상이어야 합니다.`,
+      );
+    }
 
     let ref = this.firestore.collection('orders').where('storeId', '==', storeId) as any;
 
@@ -83,12 +95,15 @@ export class OrdersQueryService {
     }
 
     const snap = await ref.get();
+    const docs = phoneDigits
+      ? snap.docs.filter((d: any) => matchesSellerPhoneSearch(d.data(), phoneDigits))
+      : snap.docs;
     if (requester.role === 'seller') {
-      return snap.docs.map((d: any) => projectSellerOrder({ id: d.id, ...d.data() }, 'list'));
+      return docs.map((d: any) => projectSellerOrder({ id: d.id, ...d.data() }, 'list'));
     }
 
     const orders = await Promise.all(
-      snap.docs.map((d: any) => this.withRedeliveryPayment({ id: d.id, ...d.data() })),
+      docs.map((d: any) => this.withRedeliveryPayment({ id: d.id, ...d.data() })),
     );
     return orders;
   }
