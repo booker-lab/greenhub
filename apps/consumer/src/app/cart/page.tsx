@@ -455,7 +455,7 @@ export default function CartPage() {
                   }}
                 >
                   <img
-                    src={item.image || '/icons/icon-192x192.png'}
+                    src={item.image || '/images/product-placeholder.png'}
                     alt={item.name}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
