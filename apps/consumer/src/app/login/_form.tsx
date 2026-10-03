@@ -4,11 +4,14 @@ import { Alert, Button, Divider, PasswordInput, Stack, Text, TextInput } from '@
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { useState } from 'react';
+import { safeCallbackPath } from './_callback-url';
 
 export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const searchParams = useSearchParams();
-  const raw = searchParams.get('callbackUrl') ?? '/';
-  const callbackUrl = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/';
+  const rawCallbackUrl = searchParams.get('callbackUrl');
+  // 같은 출처 상대 경로만 복귀 주소로 쓴다(열린 리다이렉트 방지). 출처 비교에 window가
+  // 필요하므로 서버 렌더가 아닌 클릭 시점에 계산한다.
+  const resolveCallbackUrl = () => safeCallbackPath(rawCallbackUrl, window.location.origin);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +35,7 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
       return;
     }
 
-    window.location.href = callbackUrl;
+    window.location.href = resolveCallbackUrl();
   };
 
   return (
@@ -42,7 +45,7 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
         radius="xl"
         size="lg"
         style={{ backgroundColor: '#FEE500', color: '#000000' }}
-        onClick={() => signIn('kakao', { callbackUrl })}
+        onClick={() => signIn('kakao', { callbackUrl: resolveCallbackUrl() })}
       >
         카카오로 시작하기
       </Button>
