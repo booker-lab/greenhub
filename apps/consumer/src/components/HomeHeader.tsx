@@ -25,14 +25,15 @@ export default function HomeHeader() {
     >
       <h1
         style={{
-          fontSize: 22,
-          fontWeight: 'var(--fw-extrabold)',
-          letterSpacing: '-0.02em',
+          fontFamily: 'var(--font-brand)',
+          fontSize: 24,
+          fontWeight: 800,
+          letterSpacing: '-0.01em',
           lineHeight: 1.2,
           margin: 0,
         }}
       >
-        그린러브
+        Green Love
       </h1>
       <nav aria-label="바로가기" style={{ display: 'flex' }}>
         <Link href="/mypage/notifications" aria-label="알림" style={iconLinkStyle}>

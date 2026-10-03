@@ -9,7 +9,8 @@ test.describe('소비자 홈', () => {
 
   test('페이지 정상 렌더링', async ({ page }) => {
     await expect(page).toHaveTitle(/Green Love/)
-    await expect(page.getByText('그린러브', { exact: true })).toBeVisible()
+    // 홈 머리띠 로고는 2026-10-03부터 영문 "Green Love"(design-standard.md §7)
+    await expect(page.getByRole('heading', { name: 'Green Love' })).toBeVisible()
   })
 
   test('공동구매 섹션 존재', async ({ page }) => {

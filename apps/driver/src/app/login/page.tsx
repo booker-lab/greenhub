@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { signIn } from '@/auth';
 import { Box, Divider, PasswordInput, Stack, Button, Text, TextInput, Title, Alert, Paper } from '@mantine/core';
 
@@ -36,36 +37,22 @@ export default async function LoginPage({
         <Paper radius="lg" p="xl" style={{ border: 'var(--border)' }}>
           {/* 로고 */}
           <Stack align="center" gap="xs" mb="xl">
-            <Box
+            <Image
+              src="/icons/icon-192x192.png"
+              alt="그린러브 기사 앱 아이콘"
+              width={64}
+              height={64}
+              style={{ borderRadius: 16, display: 'block' }}
+            />
+            <Title
+              order={2}
               style={{
-                width: 56,
-                height: 56,
-                borderRadius: 16,
-                backgroundColor: 'var(--color-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                fontFamily: 'var(--font-brand)',
+                fontSize: 26,
+                fontWeight: 800,
+                color: 'var(--color-primary-dark)',
               }}
             >
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="var(--color-bg)"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <rect x="1" y="3" width="15" height="13" rx="1" />
-                <path d="M16 8h4l3 3v5h-7V8z" />
-                <circle cx="5.5" cy="18.5" r="2.5" />
-                <circle cx="18.5" cy="18.5" r="2.5" />
-              </svg>
-            </Box>
-            <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
               Green Love 드라이버
             </Title>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
