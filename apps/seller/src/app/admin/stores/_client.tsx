@@ -76,7 +76,7 @@ export default function AdminStoresClient() {
     const parsed = parseRate(rateInput);
     if (!parsed.ok) {
       notifications.show({
-        color: 'orange',
+        color: 'yellow',
         title: '입력 값을 확인하세요',
         message: '0~1 사이의 수수료율을 입력해야 합니다 (예: 0.05 = 5%).',
       });
@@ -101,7 +101,7 @@ export default function AdminStoresClient() {
     // rejected: 서버 reason 보존 + 편집 유지(수정 가능). unknown: 재확인 우선 + 편집 유지.
     const presentation = describeAdminCommandOutcome(outcome, '수수료율 변경');
     notifications.show({
-      color: outcome.kind === 'rejected' ? 'red' : 'orange',
+      color: outcome.kind === 'rejected' ? 'red' : 'yellow',
       title: presentation.title,
       message: presentation.message,
     });
@@ -134,7 +134,7 @@ export default function AdminStoresClient() {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
         const presentation = describeAdminCommandOutcome(classified, '정리');
-        notifications.show({ color: 'orange', title: presentation.title, message: presentation.message });
+        notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
         return;
       }
       // 기록 가드(400) 등 차단 사유를 서버 메시지 그대로 안내
@@ -160,7 +160,7 @@ export default function AdminStoresClient() {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
         const presentation = describeAdminCommandOutcome(classified, '복구');
-        notifications.show({ color: 'orange', title: presentation.title, message: presentation.message });
+        notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
         return;
       }
       notifications.show({

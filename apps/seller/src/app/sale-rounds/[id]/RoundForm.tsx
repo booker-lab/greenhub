@@ -238,7 +238,7 @@ export function RoundForm({
       <Stack gap="md">
         {saveFeedback && (
           <Alert
-            color={saveFeedback.kind === 'success' ? 'green' : 'red'}
+            color={saveFeedback.kind === 'success' ? 'brand' : 'red'}
             title={saveFeedback.kind === 'success' ? '저장 완료' : '저장 실패'}
             role={saveFeedback.kind === 'success' ? 'status' : 'alert'}
           >

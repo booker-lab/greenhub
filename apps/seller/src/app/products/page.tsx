@@ -288,7 +288,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
               onChange={handleToggleActive}
               disabled={toggling}
               size="sm"
-              color="green"
+              color="brand"
               aria-label={
                 product.isActive ? '판매 중 — 클릭하여 비활성' : '비활성 — 클릭하여 판매 중으로'
               }

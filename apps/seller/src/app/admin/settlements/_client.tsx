@@ -33,7 +33,7 @@ export default function AdminSettlementsClient() {
       // stale은 완료+재조회 copy를 사용한다. rejected는 서버 reason 보존, unknown은 재확인 우선.
       const presentation = describeAdminCommandOutcome(outcome, '지급');
       notifications.show({
-        color: outcome.kind === 'rejected' ? 'red' : outcome.kind === 'unknown' ? 'orange' : 'yellow',
+        color: outcome.kind === 'rejected' ? 'red' : 'yellow',
         title: presentation.title,
         message: presentation.message,
       });
@@ -109,7 +109,7 @@ export default function AdminSettlementsClient() {
         title="정산 지급 처리"
         message="이 정산을 지급 완료 처리하시겠습니까?"
         confirmLabel="지급 완료"
-        confirmColor="blue"
+        confirmColor="brand"
         loading={processingId !== null}
         onConfirm={runPay}
         onClose={() => {

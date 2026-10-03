@@ -19,7 +19,7 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
 
 export function getStatusColor(status: OrderStatus): string {
   if (status === 'CANCELLED' || status === 'DELIVERY_HELD') return 'red';
-  if (status === 'DELIVERED' || status === 'REVIEWED') return 'green';
+  if (status === 'DELIVERED' || status === 'REVIEWED') return 'brand';
   return 'yellow';
 }
 
