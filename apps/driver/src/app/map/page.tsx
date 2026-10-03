@@ -9,6 +9,7 @@ import {
   toDriverListReadError,
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
+import { buildOrderMapLink } from './_lib/map-navigation-link';
 import { Box, Stack, Text, Title, Badge, Button } from '@mantine/core';
 
 type Order = {
@@ -180,23 +181,9 @@ export default function MapPage() {
   }, [session?.user.id, session?.user.role, session?.user.accessToken, sessionStatus, reloadKey]);
 
   const sorted = nearestNeighbor(orders);
-
-  function buildKakaoNaviUrl() {
-    if (sorted.length === 0) return '';
-    const last = sorted[sorted.length - 1];
-    const lastAddr = last.deliveryMethod === 'hub' ? (last.hubAddress ?? '') : (last.address ?? '');
-    return (
-      `kakaomap://route?ep=${last.lat ?? 0},${last.lng ?? 0}` +
-      `&eName=${encodeURIComponent(lastAddr)}` +
-      (sorted.length > 1
-        ? `&${sorted
-            .slice(0, -1)
-            .map((o, i) => (o.lat ? `via${i}Lat=${o.lat}&via${i}Lng=${o.lng}` : ''))
-            .filter(Boolean)
-            .join('&')}`
-        : '')
-    );
-  }
+  // 주문에는 배송지 좌표가 없으므로 여러 곳 경유 길안내 대신
+  // 다음 배송지 1곳만 연다. 유효 좌표가 없으면 주소 검색 링크로 연다.
+  const nextStopLink = sorted.length > 0 ? buildOrderMapLink(sorted[0]) : null;
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -336,6 +323,8 @@ export default function MapPage() {
                 order.deliveryMethod === 'hub'
                   ? `${order.hubName ?? '거점'} · ${order.hubAddress ?? '-'}`
                   : (order.address ?? '-');
+              // stale(error) 상태에서는 목록 행 지도 링크도 fail-closed로 숨긴다.
+              const mapLink = error ? null : buildOrderMapLink(order);
               return (
                 <Box
                   key={order.id}
@@ -390,6 +379,21 @@ export default function MapPage() {
                   >
                     {order.status === 'DELIVERING' ? '배송 중' : '수거 대기'}
                   </Badge>
+                  {mapLink && (
+                    <Button
+                      component="a"
+                      href={mapLink.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      size="xs"
+                      radius="xl"
+                      variant="light"
+                      color="brand"
+                      aria-label={`${idx + 1}번 배송지 카카오맵에서 열기`}
+                    >
+                      지도
+                    </Button>
+                  )}
                 </Box>
               );
             })}
@@ -397,7 +401,7 @@ export default function MapPage() {
         )}
       </Box>
 
-      {/* 주행 시작 버튼: error/stale에서는 fail-closed로 비활성화한다 */}
+      {/* 다음 배송지 길안내 버튼: error/stale에서는 fail-closed로 비활성화한다 */}
       {sorted.length > 0 && !loading && !authRequired && !error && hasSuccessfulRead && (
         <Box
           style={{
@@ -406,16 +410,35 @@ export default function MapPage() {
             padding: '0 16px 16px',
           }}
         >
-          <Button
-            component="a"
-            href={buildKakaoNaviUrl()}
-            fullWidth
-            size="lg"
-            radius="xl"
-            color="brand"
-          >
-            주행 시작 (카카오내비)
-          </Button>
+          {nextStopLink ? (
+            <Button
+              component="a"
+              href={nextStopLink.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              fullWidth
+              size="lg"
+              radius="xl"
+              color="brand"
+            >
+              다음 배송지 카카오맵에서 열기
+            </Button>
+          ) : (
+            <Stack gap="xs">
+              <Button fullWidth size="lg" radius="xl" color="gray" disabled>
+                다음 배송지 카카오맵에서 열기
+              </Button>
+              <Text
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-danger)',
+                  textAlign: 'center',
+                }}
+              >
+                다음 배송지 주소가 없어 지도를 열 수 없습니다. 목록에서 주소를 확인해 주세요.
+              </Text>
+            </Stack>
+          )}
         </Box>
       )}
       {sorted.length > 0 && error && hasSuccessfulRead && (
@@ -428,7 +451,7 @@ export default function MapPage() {
         >
           <Stack gap="xs">
             <Button fullWidth size="lg" radius="xl" color="gray" disabled>
-              주행 시작 (카카오내비)
+              다음 배송지 카카오맵에서 열기
             </Button>
             <Text
               style={{
@@ -437,8 +460,8 @@ export default function MapPage() {
                 textAlign: 'center',
               }}
             >
-              최신 경로 확인에 실패해 주행을 시작할 수 없습니다. 다시 시도 후 최신 경로에서
-              시작해 주세요.
+              최신 경로 확인에 실패해 길안내를 열 수 없습니다. 다시 시도 후 최신 경로에서 열어
+              주세요.
             </Text>
           </Stack>
         </Box>
