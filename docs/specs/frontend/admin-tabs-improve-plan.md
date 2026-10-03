@@ -9,15 +9,17 @@
 > 해당 탭 SDD의 끝 섹션(예: §E-11)에 "연계 작업" 부속 항으로 두고, 세부는 별도 계획서로 위임한다.
 
 ## 탭별 SDD (분할 본문)
+> 구현 열은 2026-10-04 코드 대조 기준이다. "진행 중(PR 예정)"은 별도 PR로 작업 중인 항목이다.
+
 | 탭 | 진단 | 구현 | SDD |
 |----|------|------|------|
-| stores(판매자) | ✅ 세션92 | ✅ PR-A(C1·C2)·PR-B(C3) 구현 종결 · 배포/육안 위임 · 다음 PR-C(C4) | [admin-tab-stores-plan.md](./admin/admin-tab-stores-plan.md) |
-| orders(주문) | ✅ 세션93 / 🔄 셀러앱 연계 추가 | ⬜ 미착수 (D1 선결) | [admin-tab-orders-plan.md](./admin/admin-tab-orders-plan.md) |
-| drivers(기사) | ✅ 세션93 / 세션95 `/further` 확정 | 🟡 착수 대기 (T1+T2 확정) | [admin-tab-drivers-plan.md](./admin/admin-tab-drivers-plan.md) |
-| settlements(정산) | ✅ 세션94 / 🔄 셀러 정산 교차 참조 | ⬜ 미착수 | [admin-tab-settlements-plan.md](./admin/admin-tab-settlements-plan.md) |
-| users(소비자) | ✅ 세션96 / ✅ 세션92 grill-me 종결 (S1~S6 플랜 확정) | 🟢 S1(D1) 착수 가능 | [admin-tab-users-plan.md](./admin/admin-tab-users-plan.md) |
-| invite(초대) | ✅ 세션97 / 세션98 Further 확장 | 🟡 착수 대기 (F1+F2+F3+F4+F6 확정) | [admin-tab-invite-plan.md](./admin/admin-tab-invite-plan.md) |
-| banner(배너) | ✅ 세션95 / 세션92 Further 다중 배너 모델 확정 | ⬜ 미착수 (D-G1 4건 선결) | [admin-tab-banner-plan.md](./admin/admin-tab-banner-plan.md) |
+| stores(판매자) | ✅ 세션92 | ✅ T7·T8 외 완료(PR-A~E, e2e 포함) · 남음: T7 드릴다운·T8 기본 수수료(별도 SDD·사용자 결정) · 육안 위임 | [admin-tab-stores-plan.md](./admin/admin-tab-stores-plan.md) |
+| orders(주문) | ✅ 세션93 / 🔄 셀러앱 연계 추가 | 🟡 T1 완료(#315)·환불 버튼 서버 규칙 정렬(#318)·T2·T3 폐기 · 남음: T4 스토어 Select·T5 새로고침/폴링·T6 모달·T7 e2e | [admin-tab-orders-plan.md](./admin/admin-tab-orders-plan.md) |
+| drivers(기사) | ✅ 세션93 / 세션95 `/further` 확정 | 🔄 T1 서버 필터 진행 중(PR 예정) · 남음: T2 타입·S3 e2e·T3~T5 | [admin-tab-drivers-plan.md](./admin/admin-tab-drivers-plan.md) |
+| settlements(정산) | ✅ 세션94 / 🔄 셀러 정산 교차 참조 | 🟡 T1 KST(#316)·T2 조회 실패 완료 · T4b status 필터 백엔드 진행 중(PR 예정) · 남음: F2 일괄 지급(사용자 결정)·T3·T5·T6·T7 | [admin-tab-settlements-plan.md](./admin/admin-tab-settlements-plan.md) |
+| users(소비자) | ✅ 세션96 / ✅ 세션92 grill-me 종결 (S1~S6 플랜 확정) | 🟡 S1(D1)·S2(T1+T2 #317) 완료 · 남음: S3 검색·필터, S4 limit(사용자 결정), S5 e2e | [admin-tab-users-plan.md](./admin/admin-tab-users-plan.md) |
+| invite(초대) | ✅ 세션97 / 세션98 Further 확장 | 🟡 T1·T3 완료(#319) · T0+T4 토큰 취소 백엔드 진행 중(PR 예정) · 남음: T2·T5~T12 | [admin-tab-invite-plan.md](./admin/admin-tab-invite-plan.md) |
+| banner(배너) | ✅ 세션95 / 세션92 Further 다중 배너 모델 확정 | 🟡 T1·T3 완료(`21b93153`), D-G1 닫힘 · 남음: T2·T5a·T6, 다중 배너 SDD S4~S7 | [admin-tab-banner-plan.md](./admin/admin-tab-banner-plan.md) |
 
 ## 공통 정합성 검토 기준 (모든 어드민 탭 공통)
 
@@ -47,7 +49,7 @@
 | users §E-11 (셀러앱 손님 정보·검색·전화) | [`seller-orders-customer-info-plan.md`](./seller-orders-customer-info-plan.md) |
 | settlements §D-11 (셀러 정산 화면 기능 확장 #CL-56) | [`settlement-seller-feature-plan.md`](./settlement-seller-feature-plan.md) |
 | drivers §C-9 (T1+T2 한 묶음 상세) | [`../../plans/admin-drivers-T1-T2-plan.md`](../../plans/admin-drivers-T1-T2-plan.md) |
-| banner §G-11 (다중 배너 SDD — 아직 미작성) | `admin-banner-multi-sdd.md` (예정) |
+| banner §G-11 (다중 배너 SDD) | [`admin/admin-banner-multi-sdd.md`](./admin/admin-banner-multi-sdd.md) |
 | 전 탭 공통 (코드 완료 후 육안) | [`pending-visual-verify.md`](./pending-visual-verify.md) |
 
 ## 관련 문서

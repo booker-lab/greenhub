@@ -4,7 +4,7 @@
 > SDD 분리(세션91)·반응형 카드형(세션88)은 끝남. **표현 레이어 품질은 7개 탭 중 가장 정돈됨**
 > (`page`→`_client`→`_components/`(Filters·SummaryCards·Table)→`_lib`, 라벨/색 shared SSOT).
 > 본 진단은 그 위의 **기능 부재(셀러 탭 대비 비대칭)·표현 정합·타임존 일관성** 정리.
-> **구현 미착수.**
+> **진행(2026-10-04 코드 대조):** T1 완료(#316 `5e1db7b0`), T2 완료(`e448a9c3` — 계획의 `Alert` 배너 대신 오류 Paper와 "다시 조회"로 표를 대체). T4b(status 필터 백엔드)는 진행 중(PR 예정). 미완료: F2 일괄 지급(SDD-2 사용자 결정 선결), T3 툴팁, T7 새로고침, T5(T4b 선결), T6(셀러 #CL-56 T2 선결), E3·E5. T4a 인덱스(`status+settledAt`·`storeId+status+settledAt`)는 `firestore.indexes.json`에 이미 있으며 운영 배포 여부는 확인 필요.
 
 ## 0. 공통 정합성 검토 기준 (모든 어드민 탭 공통)
 
@@ -150,7 +150,7 @@
 | 태스크 | 내용 | 의존 | 정합성 |
 |--------|------|------|--------|
 | **T1** (D-3·Q1) ✅ 2026-09-28 `fix/admin-settlements-kst` — **Q1 대신 최소 해결**: shared 시그니처는 바꾸지 않고 `_lib.ts toDateStr`를 `Intl.DateTimeFormat`(`timeZone: 'Asia/Seoul'`, 기존 표시 옵션 동일)로 교체 + `_lib.test.ts` KST 경계 vitest. 기간 기본값 계산 없음(필터 초기값 빈 문자열), `from`/`to` 쿼리는 백엔드가 이미 `dateRangeKST`로 해석하므로 불변. 아래는 원 계획: shared `toDateStrKST`에 `{ hour?: '2-digit'; minute?: '2-digit' }` **옵션 추가** → 어드민 `_lib.ts toDateStr` 치환. 셀러 사용처(세션85 결과물) 회귀 0 확인 | 독립 | shared 수정 시 셀러·소비자 앱 영향 grep 필수. vitest 케이스 추가(옵션 on/off 2건) |
-| **T2** (D-3·Q4) | `useAdminSettlements`의 `error` 구독을 `_client.tsx`에 추가 → Mantine `Alert color="red"` 배너 노출. **Table은 손대지 않음**(3분기 유지) | 독립 | 다른 탭과 패턴 동일성. error 발생 시점에 빈결과 가드와 동시 노출 시 우선순위(error만 표시) |
+| **T2** (D-3·Q4) ✅ `e448a9c3` — 오류 Paper+"다시 조회"로 표 대체(아래 원 계획과 형태 다름) | `useAdminSettlements`의 `error` 구독을 `_client.tsx`에 추가 → Mantine `Alert color="red"` 배너 노출. **Table은 손대지 않음**(3분기 유지) | 독립 | 다른 탭과 패턴 동일성. error 발생 시점에 빈결과 가드와 동시 노출 시 우선순위(error만 표시) |
 | **T3** (D-4·Q6) | `SummaryCards`의 두 카드 라벨에 Mantine `Tooltip` 부착("현재 필터 범위의 confirmed+paid 합계, pending·cancelled 제외"). **라벨 텍스트는 불변** | 독립 | C7 시각 회귀 0. 모바일 카드 폭 영향 0 |
 | **T7** (F6) | `_client.tsx`에 reload 버튼 노출(헤더 우측, `ActionIcon`). hook의 reload 호출 | 독립 | stores T9·orders F2·drivers F2와 동일 패턴 |
 
@@ -163,7 +163,7 @@
 | 태스크 | 내용 | 의존 | 정합성 |
 |--------|------|------|--------|
 | **T4a** (Q2) | **인덱스 설계 단독 커밋**. 현 `getSettlements` 사용 인덱스 실측 + status 추가 시 필요 신규 인덱스 정의. `firestore.indexes.json` PR. 세션80 선례 동일 | 선결 | Firebase Console 배포 후 빌드 단계 동작 확인 |
-| **T4b** (F1 백엔드) | `QueryAdminSettlementsDto`에 `status?: SettlementStatus` (`@IsIn(SETTLEMENT_STATUSES)`) 추가. `getSettlements`에 `where('status','==',dto.status)` 조건부 적용 | T4a | T4a 인덱스 배포 확인 후 머지. tsc 0 |
+| **T4b** (F1 백엔드) 🔄 진행 중(PR 예정) | `QueryAdminSettlementsDto`에 `status?: SettlementStatus` (`@IsIn(SETTLEMENT_STATUSES)`) 추가. `getSettlements`에 `where('status','==',dto.status)` 조건부 적용 | T4a | T4a 인덱스 배포 확인 후 머지. tsc 0 |
 | **T5** (F1 프론트·Q3) | **어드민 `settlements/_constants.ts` 신설**(셀러 cross-import 금지). `SETTLEMENT_FILTER_TABS` 자체 정의(키 배열) + 라벨은 shared `STATUS_LABEL` 재사용. `SettlementFilters` 상단에 `SegmentedTabs<SettlementFilterKey>` 배치. hook `withQuery`에 status 배선. 로딩·빈결과에서도 탭 유지(세션86 C6) | T4b | tsc·biome 0. 세션86 선례 e2e 패턴 차용 가능 |
 
 **커밋 단위**: T4a / T4b / T5 = 3커밋.
