@@ -1,0 +1,311 @@
+<title>그린허브 화면 확인판</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 레이아웃: 상단 고정 요약줄 + 앱 영역(판매자·어드민)별 화면 카드 격자, 카드 안은 캡처 → 판정 순서 */
+:root {
+  --bg: #f3f6f4;
+  --surface: #ffffff;
+  --sunken: #e9eeeb;
+  --fg: #17211c;
+  --muted: #5b6a62;
+  --line: #d6dfd9;
+  --accent: #2d6a4f;
+  --accent-ink: #ffffff;
+  --ok: #2f7d4f;
+  --ok-soft: #e1f1e7;
+  --fix: #b9461b;
+  --fix-soft: #fbe7dd;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d6;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111814; --surface: #19221d; --sunken: #0d1310; --fg: #e5ece8; --muted: #9aaba1; --line: #2b3830;
+    --accent: #6fbf95; --accent-ink: #0d1310; --ok: #74c99a; --ok-soft: #1c3326; --fix: #f08a5d; --fix-soft: #3a2218;
+    --warn: #e5b85a; --warn-soft: #33290f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111814; --surface: #19221d; --sunken: #0d1310; --fg: #e5ece8; --muted: #9aaba1; --line: #2b3830;
+  --accent: #6fbf95; --accent-ink: #0d1310; --ok: #74c99a; --ok-soft: #1c3326; --fix: #f08a5d; --fix-soft: #3a2218;
+  --warn: #e5b85a; --warn-soft: #33290f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+header.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line); margin-inline: -16px; padding: 12px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+h1 { font-size: 1.15rem; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.meta { color: var(--muted); font-size: 0.8rem; font-family: var(--font-mono); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; background: var(--sunken); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg button {
+  border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 0.85rem; font-weight: 500;
+  padding: 5px 12px; border-radius: 999px; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+.seg button:focus-visible, .verdict button:focus-visible, .save:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notice { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: 0.85rem; }
+.about { color: var(--muted); font-size: 0.85rem; margin: 14px 0 0; max-width: 70ch; }
+section.group { margin-top: 28px; }
+section.group h2 {
+  font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
+  margin: 0 0 10px; display: flex; gap: 8px; align-items: baseline;
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.card[data-verdict="ok"] { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.card[data-verdict="fix"] { border-color: color-mix(in srgb, var(--fix) 60%, var(--line)); }
+.card-head { padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.card-head h3 { margin: 0; font-size: 1rem; font-weight: 600; text-wrap: balance; }
+.path { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.fix { background: var(--fix-soft); color: var(--fix); }
+details.diag { font-size: 0.78rem; color: var(--muted); }
+details.diag pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); margin: 6px 0 0; }
+.shot-tabs { padding: 0 14px 8px; }
+.frame { background: var(--sunken); max-height: 70vh; overflow: auto; border-block: 1px solid var(--line); }
+.frame img { display: block; width: 100%; height: auto; }
+.frame[data-viewport="desktop"] img { min-width: 0; }
+.verdict { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+.verdict-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.verdict button {
+  font: inherit; font-weight: 600; font-size: 0.9rem; padding: 9px 10px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+}
+.verdict button[data-v="ok"][aria-pressed="true"] { background: var(--ok); border-color: var(--ok); color: var(--accent-ink); }
+.verdict button[data-v="fix"][aria-pressed="true"] { background: var(--fix); border-color: var(--fix); color: var(--accent-ink); }
+.verdict button:disabled, .save:disabled { opacity: 0.5; cursor: not-allowed; }
+textarea {
+  width: 100%; min-height: 64px; resize: vertical; font: inherit; font-size: 0.9rem; color: var(--fg);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
+}
+.note-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.saved { font-size: 0.78rem; color: var(--muted); }
+.save {
+  font: inherit; font-size: 0.85rem; font-weight: 600; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  border: 0; background: var(--accent); color: var(--accent-ink);
+}
+.empty { color: var(--muted); padding: 24px 0; }
+@media (prefers-reduced-motion: no-preference) { .card { transition: border-color 0.2s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="title-row">
+      <h1>그린허브 화면 확인판</h1>
+      <span class="meta" id="meta"></span>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="화면 크기">
+        <button type="button" id="vp-mobile" data-vp="mobile" aria-pressed="true">폰</button>
+        <button type="button" id="vp-desktop" data-vp="desktop" aria-pressed="false">PC</button>
+      </div>
+      <div class="seg" role="group" aria-label="판정 필터" id="filters">
+        <button type="button" id="f-all" data-f="all" aria-pressed="true">전체 <span></span></button>
+        <button type="button" id="f-todo" data-f="todo" aria-pressed="false">미확인 <span></span></button>
+        <button type="button" id="f-fix" data-f="fix" aria-pressed="false">고칠 것 <span></span></button>
+        <button type="button" id="f-ok" data-f="ok" aria-pressed="false">괜찮음 <span></span></button>
+      </div>
+    </div>
+  </header>
+  <p class="about" id="about"></p>
+  <div class="notice" id="no-db" hidden>판정 저장이 꺼져 있어요. claude.ai에 로그인한 상태로 열면 ✅/❌와 메모가 저장되고 Claude가 읽을 수 있어요.</div>
+  <main id="groups"></main>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const state = { viewport: 'mobile', filter: 'all', verdicts: {}, tab: {} };
+let db = null;
+
+const $ = (sel, el = document) => el.querySelector(sel);
+const docId = (screenId) => `${DATA.run}__${screenId}`.replace(/[^A-Za-z0-9_\-.~:@+]/g, '-');
+const kst = (iso) => new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+function readPref(key, fallback) {
+  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
+function writePref(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* 저장 불가 환경 */ }
+}
+
+function verdictOf(id) { return state.verdicts[id]?.verdict ?? null; }
+
+function renderMeta() {
+  $('#meta').textContent = `${DATA.app} · ${DATA.run}${DATA.gitSha ? ` @${DATA.gitSha}` : ''} · ${kst(DATA.createdAt)} 촬영`;
+  $('#about').textContent = DATA.before
+    ? `가짜 데이터로 띄운 화면을 작업 전(${DATA.before}${DATA.beforeSha ? ` @${DATA.beforeSha}` : ''})과 작업 후로 나란히 보여 줍니다. 화면마다 괜찮음/고칠 것을 누르고, 고칠 점은 메모로 남겨 주세요.`
+    : '가짜 데이터로 띄운 화면을 폰·PC 크기로 찍었습니다. 화면마다 괜찮음/고칠 것을 누르고, 고칠 점은 메모로 남겨 주세요. 상품 사진은 가짜 데이터라 빈 칸으로 나오고, 판매자 상품·준비 화면은 빈 상태로 보일 수 있어요. 결제하기 버튼은 이 화면에서 동작하지 않아요.';
+}
+
+function renderCounts() {
+  const ids = DATA.screens.map((s) => s.id);
+  const count = { all: ids.length, todo: 0, fix: 0, ok: 0 };
+  for (const id of ids) {
+    const v = verdictOf(id);
+    if (v === 'ok') count.ok++; else if (v === 'fix') count.fix++; else count.todo++;
+  }
+  for (const b of document.querySelectorAll('#filters button')) $('span', b).textContent = count[b.dataset.f];
+}
+
+function visible(screen) {
+  const v = verdictOf(screen.id);
+  if (state.filter === 'all') return true;
+  if (state.filter === 'todo') return !v;
+  return v === state.filter;
+}
+
+function cardHtml(screen) {
+  const view = screen.views[state.viewport] ?? Object.values(screen.views)[0];
+  const tab = state.tab[screen.id] ?? 'after';
+  const src = tab === 'before' && view.beforeSrc ? view.beforeSrc : view.src;
+  const record = state.verdicts[screen.id];
+  const v = record?.verdict ?? null;
+  const chips = [];
+  if (view.finalPath && view.finalPath !== screen.path) chips.push(`<span class="chip">다른 화면으로 이동: ${escapeHtml(view.finalPath)}</span>`);
+  if (view.missing?.length) chips.push(`<span class="chip">가짜 데이터 없음 ${view.missing.length}</span>`);
+  if (view.errors?.length) chips.push(`<span class="chip fix">오류 ${view.errors.length}</span>`);
+  if (v === 'ok') chips.push('<span class="chip ok">괜찮음</span>');
+  if (v === 'fix') chips.push('<span class="chip fix">고칠 것</span>');
+  const diag = [...(view.missing ?? []).map((p) => `가짜 데이터 없음: ${p}`), ...(view.errors ?? [])];
+  const disabled = db ? '' : 'disabled';
+  return `
+    <article class="card" data-id="${screen.id}" data-verdict="${v ?? ''}">
+      <div class="card-head">
+        <h3>${escapeHtml(screen.title)}</h3>
+        <span class="path">${escapeHtml(screen.path)}</span>
+        ${chips.length ? `<div class="chips">${chips.join('')}</div>` : ''}
+        ${diag.length ? `<details class="diag"><summary>자세히</summary><pre>${escapeHtml(diag.join('\n'))}</pre></details>` : ''}
+      </div>
+      ${view.beforeSrc ? `
+      <div class="shot-tabs"><div class="seg" role="group" aria-label="이전·이후">
+        <button type="button" data-tab="after" aria-pressed="${tab === 'after'}">작업 후</button>
+        <button type="button" data-tab="before" aria-pressed="${tab === 'before'}">작업 전</button>
+      </div></div>` : ''}
+      <div class="frame" data-viewport="${state.viewport}">
+        <img src="${src}" alt="${escapeHtml(screen.title)} 화면 캡처" loading="lazy">
+      </div>
+      <div class="verdict">
+        <div class="verdict-buttons">
+          <button type="button" data-v="ok" aria-pressed="${v === 'ok'}" ${disabled}>괜찮음</button>
+          <button type="button" data-v="fix" aria-pressed="${v === 'fix'}" ${disabled}>고칠 것</button>
+        </div>
+        <textarea id="note-${screen.id}" placeholder="고칠 점이나 느낀 점 (예: 버튼 글자가 작아요)" ${disabled}>${escapeHtml(record?.note ?? '')}</textarea>
+        <div class="note-row">
+          <span class="saved">${record?.updatedAt ? `${kst(record.updatedAt)} 저장됨` : ''}</span>
+          <button type="button" class="save" ${disabled}>메모 저장</button>
+        </div>
+      </div>
+    </article>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function render() {
+  renderCounts();
+  const groups = [...new Set(DATA.screens.map((s) => s.group))];
+  const html = groups.map((g) => {
+    const list = DATA.screens.filter((s) => s.group === g && visible(s));
+    if (!list.length) return '';
+    return `<section class="group"><h2>${escapeHtml(g)} <span>${list.length}</span></h2><div class="grid">${list.map(cardHtml).join('')}</div></section>`;
+  }).join('');
+  $('#groups').innerHTML = html || '<p class="empty">이 필터에 해당하는 화면이 없어요.</p>';
+}
+
+// 메모 입력 중에는 다시 그리지 않도록, 저장소 변경은 해당 카드만 갱신한다.
+function refreshCard(id) {
+  const card = document.querySelector(`.card[data-id="${id}"]`);
+  const screen = DATA.screens.find((s) => s.id === id);
+  if (!card || !screen) return render();
+  const typing = document.activeElement?.id === `note-${id}`;
+  const draft = typing ? document.activeElement.value : null;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = cardHtml(screen);
+  const fresh = tmp.firstElementChild;
+  if (typing) fresh.querySelector('textarea').value = draft;
+  card.replaceWith(fresh);
+  if (typing) fresh.querySelector('textarea').focus();
+  renderCounts();
+}
+
+async function save(id, patch) {
+  if (!db) return;
+  const screen = DATA.screens.find((s) => s.id === id);
+  const prev = state.verdicts[id] ?? {};
+  const next = { run: DATA.run, app: screen.app ?? DATA.app, screenId: id, title: screen.title, path: screen.path,
+    verdict: prev.verdict ?? null, note: prev.note ?? '', ...patch, updatedAt: new Date().toISOString() };
+  state.verdicts[id] = next;
+  refreshCard(id);
+  try {
+    await db.collection('verdicts').doc(docId(id)).set(next);
+  } catch (e) {
+    const card = document.querySelector(`.card[data-id="${id}"] .saved`);
+    if (card) card.textContent = `저장 못 함: ${e?.message ?? '다시 눌러 주세요'}`;
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const vp = e.target.closest('[data-vp]');
+  if (vp) {
+    state.viewport = vp.dataset.vp;
+    writePref('viewport', state.viewport);
+    for (const b of document.querySelectorAll('[data-vp]')) b.setAttribute('aria-pressed', String(b === vp));
+    return render();
+  }
+  const f = e.target.closest('[data-f]');
+  if (f) {
+    state.filter = f.dataset.f;
+    for (const b of document.querySelectorAll('[data-f]')) b.setAttribute('aria-pressed', String(b === f));
+    return render();
+  }
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const id = card.dataset.id;
+  const tab = e.target.closest('[data-tab]');
+  if (tab) { state.tab[id] = tab.dataset.tab; return refreshCard(id); }
+  const vb = e.target.closest('[data-v]');
+  if (vb) {
+    const v = vb.dataset.v;
+    const note = card.querySelector('textarea').value;
+    return save(id, { verdict: verdictOf(id) === v ? null : v, note });
+  }
+  if (e.target.closest('.save')) save(id, { note: card.querySelector('textarea').value });
+});
+
+state.viewport = readPref('viewport', 'mobile') === 'desktop' ? 'desktop' : 'mobile';
+for (const b of document.querySelectorAll('[data-vp]')) b.setAttribute('aria-pressed', String(b.dataset.vp === state.viewport));
+renderMeta();
+render();
+
+(async () => {
+  db = (await window.claude?.use?.('db')) ?? null;
+  if (!db) { $('#no-db').hidden = false; return render(); }
+  render();
+  db.collection('verdicts').where('run', '==', DATA.run).onSnapshot((snap) => {
+    const changed = [];
+    for (const d of snap.docs) {
+      const row = d.data();
+      if (!row?.screenId) continue;
+      const before = JSON.stringify(state.verdicts[row.screenId] ?? null);
+      state.verdicts[row.screenId] = row;
+      if (before !== JSON.stringify(row)) changed.push(row.screenId);
+    }
+    for (const id of changed) refreshCard(id);
+    renderCounts();
+  }, () => { $('#no-db').hidden = false; });
+})();
+</script>
