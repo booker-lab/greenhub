@@ -10,6 +10,7 @@ import {
   STATUS_COLOR,
   STATUS_LABEL,
 } from '../_constants';
+import { displayBuyerName } from '../[id]/_lib';
 
 export function OrderCard({ order }: { order: Order }) {
   const router = useRouter();
@@ -54,6 +55,14 @@ export function OrderCard({ order }: { order: Order }) {
           {order.productName}
         </Text>
       )}
+      {/* 손님 이름 — 상세와 같은 표시 규칙. 전화는 카드에 싣지 않고 검색에만 쓴다. */}
+      <Text
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        mb={4}
+        lineClamp={1}
+      >
+        주문자 {displayBuyerName(order)}
+      </Text>
       <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }} mb={6}>
         {DELIVERY_LABEL[order.deliveryMethod]}
         {order.requestedDeliveryDate && ` · ${order.requestedDeliveryDate}`}

@@ -21,10 +21,12 @@ import { RoundDeadlineStrip } from '@/components/RoundDeadlineStrip';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useGroupConfigs } from '@/hooks/useGroupConfigs';
+import { useOrderPhoneSearch } from '@/hooks/useOrderPhoneSearch';
 import { useOrders } from '@/hooks/useOrders';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { pickDeadlineRound } from '@/lib/round-deadline';
 import { DateSection } from './_components/DateSection';
+import { OrderSearchInput } from './_components/OrderSearchInput';
 import { SaleTypeToggle } from './_components/SaleTypeToggle';
 import {
   DATE_PRESETS,
@@ -35,6 +37,7 @@ import {
   isArchiveTab,
   type OrderGroup,
 } from './_constants';
+import { phoneSearchDigits } from './order-search';
 import {
   buildOrdersScopedViewModel,
   deriveOrdersFetchInput,
@@ -118,6 +121,9 @@ export default function OrdersPage() {
   const [datePreset, setDatePreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const phoneSearch = useOrderPhoneSearch(storeId, phoneSearchDigits(searchQuery));
+  const { phoneMatchIds } = phoneSearch;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -150,6 +156,7 @@ export default function OrdersPage() {
         customFrom,
         customTo,
         groupConfigMap,
+        search: { query: searchQuery, phoneMatchIds },
       }),
     [
       fetchInput,
@@ -161,6 +168,8 @@ export default function OrdersPage() {
       customFrom,
       customTo,
       groupConfigMap,
+      searchQuery,
+      phoneMatchIds,
     ],
   );
   const { priorityCounts, scopedGroupCounts, customInvalid, filteredOrders, groupedOrders } = view;
@@ -171,9 +180,10 @@ export default function OrdersPage() {
     setDatePreset('week');
     setCustomFrom('');
     setCustomTo('');
+    setSearchQuery('');
   };
 
-  // 우선순위 진입이 날짜 필터에 가려 대상을 숨기지 않도록 필터를 해제한다.
+  // 우선순위 진입이 날짜 필터·검색어에 가려 대상을 숨기지 않도록 필터를 해제한다.
   // 배송 보류 진입은 DELIVERY_HELD만 격리해 count와 목록을 1:1로 일치시키고,
   // 확인 필요 진입은 기존 ACTION_REQUIRED 전체를 유지한다.
   const handleDeliveryHeldEntry = () => {
@@ -183,6 +193,7 @@ export default function OrdersPage() {
     setDatePreset('custom');
     setCustomFrom('');
     setCustomTo('');
+    setSearchQuery('');
   };
 
   const handleActionRequiredEntry = () => {
@@ -192,6 +203,7 @@ export default function OrdersPage() {
     setDatePreset('custom');
     setCustomFrom('');
     setCustomTo('');
+    setSearchQuery('');
   };
 
   return (
@@ -284,6 +296,12 @@ export default function OrdersPage() {
 
       {/* 판매 유형 토글 — 일반/공구 1차 분기 */}
       <SaleTypeToggle value={saleType} onChange={handleSaleTypeChange} />
+      <OrderSearchInput
+        value={searchQuery}
+        onChange={setSearchQuery}
+        phoneSearching={phoneSearch.searching}
+        phoneSearchError={phoneSearch.error}
+      />
 
       {/* 날짜 범위 필터 — 일반 토글에서만 노출 (공구는 1차 미노출) */}
       {saleType === 'normal' && (
@@ -565,7 +583,9 @@ export default function OrdersPage() {
                     <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                   </svg>
                 }
-                text="현재 해당 주문이 없습니다"
+                text={
+                  searchQuery.trim() ? '검색어와 맞는 주문이 없습니다' : '현재 해당 주문이 없습니다'
+                }
               />
             )}
 
