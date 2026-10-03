@@ -21,15 +21,26 @@ const brand: MantineColorsTuple = [
 ];
 
 // 외곽선 버튼은 글자색이 테두리와 같은 주색(흰 바탕 대비 3.2:1)이라 글자만 짙은 초록으로 바꾼다.
+// 노랑 연한 변형(배지·안내 상자·연한 버튼)은 Mantine 기본 글자색이 주황 계열이라, 기준의 경고 토큰
+// (노랑 연한 바탕 + 짙은 노랑 글자)으로 바꾼다. 디자인 기준은 주황을 쓰지 않는다.
 const variantColorResolver: VariantColorsResolver = (input) => {
   const colors = defaultVariantColorsResolver(input);
-  if (input.variant !== 'outline') return colors;
+  if (input.variant !== 'outline' && input.variant !== 'light') return colors;
   const parsed = parseThemeColor({
     color: input.color || input.theme.primaryColor,
     theme: input.theme,
   });
-  if (parsed.isThemeColor && parsed.color === 'brand' && parsed.shade === undefined) {
+  if (!parsed.isThemeColor || parsed.shade !== undefined) return colors;
+  if (input.variant === 'outline' && parsed.color === 'brand') {
     return { ...colors, color: 'var(--mantine-color-brand-8)' };
+  }
+  if (input.variant === 'light' && parsed.color === 'yellow') {
+    return {
+      ...colors,
+      background: 'var(--color-status-warning-bg)',
+      hover: 'var(--color-status-warning-bg)',
+      color: 'var(--color-status-warning-text)',
+    };
   }
   return colors;
 };

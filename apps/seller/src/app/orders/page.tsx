@@ -17,10 +17,13 @@ import { useFirebaseReady } from '@/app/providers';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
+import { RoundDeadlineStrip } from '@/components/RoundDeadlineStrip';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useGroupConfigs } from '@/hooks/useGroupConfigs';
 import { useOrders } from '@/hooks/useOrders';
+import { useSaleRounds } from '@/hooks/useSaleRounds';
+import { pickDeadlineRound } from '@/lib/round-deadline';
 import { DateSection } from './_components/DateSection';
 import { SaleTypeToggle } from './_components/SaleTypeToggle';
 import {
@@ -106,6 +109,8 @@ export default function OrdersPage() {
   const storeId = session?.user.storeId ?? null;
   const firebaseReady = useFirebaseReady();
   const { orders, loading, refreshing, error, refresh } = useOrders(storeId);
+  const { rounds } = useSaleRounds();
+  const deadlineRound = useMemo(() => pickDeadlineRound(rounds), [rounds]);
   const [saleType, setSaleType] = useState<SaleType>('normal');
   const [activeTab, setActiveTab] = useState<OrderGroup>('ACTION_REQUIRED');
   const [subFilter, setSubFilter] = useState<'ALL' | 'DELIVERING' | 'HUB_ARRIVED'>('ALL');
@@ -223,6 +228,11 @@ export default function OrdersPage() {
             </UnstyledButton>
           </Group>
         }
+      />
+      <RoundDeadlineStrip
+        round={deadlineRound}
+        showName
+        href={deadlineRound ? `/sale-rounds/${deadlineRound.id}` : undefined}
       />
 
       {!loading && (
