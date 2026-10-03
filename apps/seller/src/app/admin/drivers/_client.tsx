@@ -38,7 +38,7 @@ export default function DriversClient() {
       // rejected는 서버 reason 보존, unknown/stale은 재확인 우선 + blind retry 금지.
       const presentation = describeAdminCommandOutcome(outcome, actionLabel);
       notifications.show({
-        color: outcome.kind === 'rejected' ? 'red' : outcome.kind === 'unknown' ? 'orange' : 'yellow',
+        color: outcome.kind === 'rejected' ? 'red' : 'yellow',
         title: presentation.title,
         message: presentation.message,
       });

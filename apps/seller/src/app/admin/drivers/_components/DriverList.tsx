@@ -97,7 +97,7 @@ export function DriverList({
                   onClick={() => onAction(driver.id, 'approve')}
                   disabled={processingId === driver.id}
                   size="xs"
-                  color="green"
+                  color="brand"
                   radius="md"
                 >
                   {processingId === driver.id ? '처리중…' : '승인'}

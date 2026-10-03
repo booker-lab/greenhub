@@ -38,7 +38,7 @@ function CopyTokenButton({
       onClick={() => onCopy(token)}
       size="compact-xs"
       variant="outline"
-      color="green"
+      color="brand"
       radius="md"
       aria-label={`토큰 ${token} 복사`}
     >

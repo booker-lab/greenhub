@@ -106,7 +106,7 @@ export function InviteGenerator({
             >
               {lastToken.token}
             </Text>
-            <Button onClick={onCopy} size="xs" variant="outline" color="green" radius="md">
+            <Button onClick={onCopy} size="xs" variant="outline" color="brand" radius="md">
               {copied ? '복사됨!' : '복사'}
             </Button>
           </Group>

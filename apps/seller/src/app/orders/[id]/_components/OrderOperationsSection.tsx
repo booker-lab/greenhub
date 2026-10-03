@@ -57,7 +57,7 @@ function getRedeliveryPaymentPresentation(payment: Order['redeliveryPayment']) {
     return {
       label: '재배송비 결제 완료',
       description: '서버에서 재배송비 결제 완료 상태를 확인했습니다.',
-      color: 'green',
+      color: 'brand',
     };
   }
 
@@ -65,7 +65,7 @@ function getRedeliveryPaymentPresentation(payment: Order['redeliveryPayment']) {
     return {
       label: '재배송비 결제 대기',
       description: '주문자의 재배송비 결제를 기다리는 중입니다.',
-      color: 'orange',
+      color: 'yellow',
     };
   }
 
@@ -98,8 +98,8 @@ function RedeliveryPaymentPanel({ payment }: { payment: Order['redeliveryPayment
 function issueColor(issue: OrderOperationIssue) {
   if (issue.status !== 'OPEN') return 'gray';
   if (issue.severity === 'critical') return 'red';
-  if (issue.severity === 'warning') return 'orange';
-  return 'blue';
+  if (issue.severity === 'warning') return 'yellow';
+  return 'gray';
 }
 
 function IssueCard({
@@ -164,7 +164,7 @@ function IssueCard({
                 <Text style={{ fontSize: 'var(--font-size-sm)' }}>
                   {ACTION_LABELS[action.actionType]}
                 </Text>
-                <Badge color={action.status === 'SUCCEEDED' ? 'green' : 'red'} variant="light">
+                <Badge color={action.status === 'SUCCEEDED' ? 'brand' : 'red'} variant="light">
                   {action.status === 'SUCCEEDED' ? '성공' : '실패'}
                 </Badge>
               </Group>
@@ -186,7 +186,7 @@ function IssueCard({
             mt="sm"
             fullWidth
             radius="xl"
-            color={allowedAction === 'RETRY_REFUND' ? 'red' : 'blue'}
+            color={allowedAction === 'RETRY_REFUND' ? 'red' : 'brand'}
             loading={actionIssueId === issue.id}
             disabled={actionIssueId !== null && actionIssueId !== issue.id}
             onClick={() => void onAction(issue)}

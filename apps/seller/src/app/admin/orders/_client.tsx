@@ -27,7 +27,7 @@ export default function AdminOrdersClient() {
     // stale은 완료+재조회 copy를 사용한다. rejected는 서버 reason 보존, unknown은 재확인 우선.
     const presentation = describeAdminCommandOutcome(outcome, '환불');
     notifications.show({
-      color: outcome.kind === 'rejected' ? 'red' : outcome.kind === 'unknown' ? 'orange' : 'yellow',
+      color: outcome.kind === 'rejected' ? 'red' : 'yellow',
       title: presentation.title,
       message: presentation.message,
     });

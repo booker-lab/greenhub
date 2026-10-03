@@ -11,7 +11,7 @@ export const STATUS_LABEL: Record<StoreStatus, string> = {
 };
 
 export const STATUS_COLOR: Record<StoreStatus, string> = {
-  active: 'green',
+  active: 'brand',
   invited: 'yellow',
   archived: 'gray',
 };
