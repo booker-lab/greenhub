@@ -355,10 +355,12 @@ test('R5. stale command finally는 새 scope의 loading·in-flight를 덮지 않
   const finallyAt = detailSource.indexOf('} finally {');
   assert.ok(finallyAt !== -1, 'finally가 있어야 한다');
   const finallyBlock = detailSource.slice(finallyAt, finallyAt + 600);
-  assert.match(finallyBlock, /if \(!isCommandCurrent\(\)\) return;/);
+  // finally 안 return은 예외를 삼키므로(noUnsafeFinally) 가드는 조건 블록으로 둔다.
+  assert.match(finallyBlock, /if \(isCommandCurrent\(\)\) \{/);
+  assert.doesNotMatch(finallyBlock, /return;/);
   assert.match(finallyBlock, /inFlightRef\.current = false/);
   assert.match(finallyBlock, /setLoading\(false\)/);
-  const guardAt = finallyBlock.indexOf('if (!isCommandCurrent()) return;');
+  const guardAt = finallyBlock.indexOf('if (isCommandCurrent()) {');
   const releaseAt = finallyBlock.indexOf('inFlightRef.current = false');
   assert.ok(guardAt !== -1 && guardAt < releaseAt, 'finally 해제는 가드 뒤에만 한다');
 });

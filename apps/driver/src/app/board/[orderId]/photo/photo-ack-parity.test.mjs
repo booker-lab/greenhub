@@ -15,8 +15,6 @@ const legacyEnd = photoCaptureSource.indexOf('router.replace', legacyStart);
 assert.ok(legacyEnd !== -1, 'legacy branch 뒤에 board 이동이 있어야 한다');
 const legacySlice = photoCaptureSource.slice(legacyStart, legacyEnd);
 
-const UNCERTAINTY_COPY = '결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.';
-
 // 구현과 동일한 의미의 판정 미러다. 소스 계약이 바뀌면 아래 behavioral 테스트와
 // source-contract 테스트 중 최소 하나가 먼저 실패한다.
 function isLegacyHubStatusAck(result, orderId) {
