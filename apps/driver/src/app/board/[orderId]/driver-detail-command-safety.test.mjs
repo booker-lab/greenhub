@@ -4,7 +4,9 @@ import test from 'node:test';
 import {
   classifyDriverOrderCommandError,
   isDriverOrderCommandAllowed,
+  isDriverTerminalCommandStatus,
   readDriverOrderErrorCode,
+  resolveDriverStatusCommandReadback,
   shouldPreserveDriverOrderOnReadError,
 } from '../_lib/driver-order-detail.ts';
 
@@ -292,19 +294,105 @@ test('H4. STATUS C ACK mismatch converges with GET and no resend', () => {
   assert.doesNotMatch(cBlock, /method: 'PATCH'/);
 });
 
-test('H5. STATUS H network catch converges with GET without resend copy', () => {
+test('H5. STATUS H network/timeout catch converges with GET without resend copy', () => {
   const fnAt = detailSource.indexOf('async function updateStatus');
-  const navAt = detailSource.indexOf("router.replace('/board", fnAt);
-  assert.ok(navAt !== -1);
-  const catchAt = detailSource.indexOf('} catch {', navAt);
-  assert.ok(catchAt !== -1);
-  const hBlock = detailSource.slice(catchAt, catchAt + 900);
+  const hMarker = detailSource.indexOf('// H: network/transport', fnAt);
+  assert.ok(hMarker !== -1);
+  const catchAt = detailSource.lastIndexOf('} catch (cause: unknown) {', hMarker);
+  assert.ok(catchAt !== -1 && catchAt > fnAt, 'H catch는 원인을 받아 시간 초과를 구분한다');
+  const finallyAt = detailSource.indexOf('} finally {', hMarker);
+  assert.ok(finallyAt !== -1);
+  const hBlock = detailSource.slice(catchAt, finallyAt);
   assert.match(hBlock, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
+  assert.match(hBlock, /isApiTimeoutError\(cause\)/);
+  assert.match(hBlock, /STATUS_TIMEOUT_CONVERGENCE_MESSAGE/);
   assert.match(hBlock, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
   assert.match(hBlock, /await readDetail\(token\)/);
   assert.doesNotMatch(hBlock, /method: 'PATCH'/);
-  const hSetErrorAt = hBlock.indexOf('setReadbackWarning');
-  assert.ok(hSetErrorAt !== -1);
+  assert.doesNotMatch(hBlock, /updateStatus\(/);
+  assert.ok(
+    hBlock.indexOf('setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING)') <
+      hBlock.indexOf('await readDetail(token)'),
+  );
+});
+
+// T. 시간 초과 = 응답 불확실: in-flight 해제 + authoritative GET 결과로 성공/미반영/불명 수렴.
+test('T1. 불확실 수렴 뒤 fresh GET 결과로 성공·미반영·불명을 판정한다', () => {
+  const resolve = (requestedStatus, readback) =>
+    resolveDriverStatusCommandReadback({ requestedStatus, readback });
+  // 이미 전이됨 → 성공.
+  assert.equal(resolve('DELIVERING', { kind: 'order', status: 'DELIVERING' }), 'APPLIED');
+  // 상태 그대로 → 미반영(다시 눌러도 서버가 STATE_CONFLICT로 중복을 막는다).
+  assert.equal(resolve('DELIVERING', { kind: 'order', status: 'PREPARING' }), 'NOT_APPLIED');
+  assert.equal(resolve('DELIVERED', { kind: 'order', status: 'DELIVERING' }), 'NOT_APPLIED');
+  // 완료 전이 뒤 상세 404 → 기사 범위 밖(목록으로 수렴).
+  assert.equal(
+    resolve('DELIVERED', { kind: 'error', errorKind: 'NOT_FOUND' }),
+    'LEFT_DRIVER_SCOPE',
+  );
+  assert.equal(
+    resolve('HUB_ARRIVED', { kind: 'error', errorKind: 'NOT_FOUND' }),
+    'LEFT_DRIVER_SCOPE',
+  );
+  // 비완료 전이의 404, 조회 실패, 권한 상실, stale → 불명(fail-closed 유지).
+  assert.equal(resolve('DELIVERING', { kind: 'error', errorKind: 'NOT_FOUND' }), 'UNKNOWN');
+  assert.equal(resolve('DELIVERED', { kind: 'error', errorKind: 'FETCH_ERROR' }), 'UNKNOWN');
+  assert.equal(resolve('DELIVERED', { kind: 'error', errorKind: 'AUTH_ERROR' }), 'UNKNOWN');
+  assert.equal(resolve('DELIVERING', { kind: 'stale' }), 'UNKNOWN');
+  assert.equal(isDriverTerminalCommandStatus('DELIVERED'), true);
+  assert.equal(isDriverTerminalCommandStatus('HUB_ARRIVED'), true);
+  assert.equal(isDriverTerminalCommandStatus('DELIVERING'), false);
+});
+
+test('T2. 모든 불확실 경로(B·C·F/G·H)는 GET 결과를 settleUncertainReadback으로 판정한다', () => {
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  const updateBlock = detailSource.slice(fnAt);
+  const settleCalls =
+    updateBlock.match(/settleUncertainReadback\(await readDetail\(token\)\)/g) ?? [];
+  assert.equal(settleCalls.length, 4, 'B·C·F/G·H 네 경로');
+  // 맨 readDetail 대기로 결과를 버리는 불확실 경로가 남지 않는다(STATE_CONFLICT 수렴만 예외).
+  const bareAwaits = updateBlock.match(/\n\s*await readDetail\(token\);/g) ?? [];
+  assert.equal(bareAwaits.length, 1, 'STATE_CONFLICT 수렴 1곳만 결과 판정 없이 GET한다');
+});
+
+test('T3. settleUncertainReadback은 재전송 없이 성공·목록 수렴·미반영 안내만 한다', () => {
+  const at = detailSource.indexOf('const settleUncertainReadback');
+  assert.ok(at !== -1);
+  const end = detailSource.indexOf('inFlightRef.current = true', at);
+  assert.ok(end !== -1, 'settle 정의는 in-flight 선점보다 앞(디스패치 전)에 있다');
+  const block = detailSource.slice(at, end);
+  assert.match(block, /if \(!isCommandCurrent\(\)\) return;/);
+  assert.match(
+    block,
+    /resolveDriverStatusCommandReadback\(\{ requestedStatus: status, readback \}\)/,
+  );
+  assert.match(block, /result === 'APPLIED'/);
+  assert.match(block, /STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE/);
+  assert.match(block, /result === 'LEFT_DRIVER_SCOPE'/);
+  assert.match(block, /router\.replace\('\/board\?tab=preparing'\)/);
+  assert.match(block, /result === 'NOT_APPLIED'/);
+  assert.match(block, /STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE/);
+  // 같은 명령을 자동으로 다시 보내지 않는다.
+  assert.doesNotMatch(block, /apiFetch\(/);
+  assert.doesNotMatch(block, /updateStatus\(/);
+  assert.doesNotMatch(block, /setTimeout/);
+  // 미반영 안내는 서버 중복 차단(STATE_CONFLICT)에 근거해 다시 눌러도 된다고 안내한다.
+  assert.match(detailSource, /아직 처리되지 않았습니다\. 다시 눌러도 두 번 처리되지 않습니다\./);
+  assert.match(detailSource, /서버 응답이 늦어 처리되었는지 확실하지 않습니다/);
+});
+
+test('T4. readDetail은 수렴 판정용 결과를 돌려주고 시간 초과는 FETCH_ERROR로 끝낸다', () => {
+  assert.match(detailSource, /async \(token: string\): Promise<DriverOrderReadback> =>/);
+  assert.match(detailSource, /readback = \{ kind: 'order', status: payload\.status \}/);
+  assert.match(detailSource, /readback = \{ kind: 'error', errorKind: failure\.kind \}/);
+  assert.match(detailSource, /return \{ kind: 'stale' \}/);
+  // AbortError(호출자 취소)만 조용히 끝내고, 시간 초과는 오류 화면(다시 확인)으로 수렴한다.
+  assert.match(detailSource, /cause instanceof DOMException && cause\.name === 'AbortError'/);
+  // in-flight 해제는 여전히 finally 한 곳: 시간 초과 뒤에도 버튼이 다시 살아난다.
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  const releaseCount = (detailSource.slice(fnAt).match(/inFlightRef\.current = false/g) ?? [])
+    .length;
+  assert.equal(releaseCount, 1);
 });
 
 test('H6. STATUS uncertain keeps fail-closed and manual GET without synthesis', () => {
