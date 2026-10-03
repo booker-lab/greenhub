@@ -8,7 +8,8 @@ import { DRIVER_ADMIN_ACCOUNT_ERROR, resolveDriverLoginNotice } from './app/logi
 // 1) 서버가 거부하는 상태에서 보류 버튼을 노출하지 않는다.
 // 2) 인증 오류 화면에는 로그인으로 돌아가는 길이 있다.
 // 3) 로그인 거절(?error=)을 로그인 화면이 안내한다.
-// 4) 관리자 세션은 403 반복 대신 안내로 멈춘다.
+// 4) 기사 앱은 기사(driver) 역할만 받는다(2026-10-04 결정). 관리자 계정은 로그인·기존 세션
+//    모두 거절하고 로그인 화면 안내로 멈춘다.
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const detailSource = await read('./app/board/[orderId]/page.tsx');
 const boardSource = await read('./app/board/_client.tsx');
@@ -17,6 +18,7 @@ const authSource = await read('./auth.ts');
 const proxySource = await read('./proxy.ts');
 const apiScopeSource = await read('../../api/src/orders/driver-order-scope.service.ts');
 const apiTransitionSource = await read('../../api/src/orders/orders.helpers.ts');
+const apiAuthServiceSource = await read('../../api/src/auth/auth.service.ts');
 
 test('보류 진입은 회차 직배송 DELIVERING에서만 보인다', () => {
   assert.equal(isDriverHoldEntryVisible({ status: 'DELIVERING', isRoundDirect: true }), true);
@@ -77,12 +79,13 @@ test('로그인 안내 문구는 error·pending 값을 구분한다', () => {
   const denied = resolveDriverLoginNotice({ error: 'AccessDenied' });
   assert.equal(denied?.kind, 'access-denied');
   assert.match(denied?.body ?? '', /관리자 승인 대기 중이거나 기사 계정이 아닙니다/);
-  assert.equal(denied?.offerSignOut, false);
 
   const admin = resolveDriverLoginNotice({ error: DRIVER_ADMIN_ACCOUNT_ERROR });
   assert.equal(admin?.kind, 'admin-account');
   assert.match(admin?.title ?? '', /관리자 계정은 기사 앱을 쓸 수 없습니다/);
-  assert.equal(admin?.offerSignOut, true);
+  assert.match(admin?.body ?? '', /기사 계정으로 로그인해 주세요/);
+  // 관리자 계정에는 세션이 생기지 않으므로 로그아웃 버튼 같은 세션 정리 수단을 두지 않는다.
+  assert.equal('offerSignOut' in (admin ?? {}), false);
 
   assert.equal(resolveDriverLoginNotice({ pending: 'true' })?.kind, 'pending');
   assert.equal(resolveDriverLoginNotice({ error: ['AccessDenied', 'x'] })?.kind, 'access-denied');
@@ -98,12 +101,50 @@ test('로그인 안내 문구는 error·pending 값을 구분한다', () => {
 test('Auth.js 오류는 로그인 화면으로 오고 로그인 화면이 error를 읽는다', () => {
   assert.match(authSource, /pages:\s*\{\s*signIn: '\/login',[\s\S]{0,300}error: '\/login',\s*\}/);
   assert.match(loginSource, /resolveDriverLoginNotice\(\{ pending, error \}\)/);
-  assert.match(loginSource, /signOut\(\{ redirectTo: '\/login' \}\)/);
+  assert.doesNotMatch(loginSource, /signOut/);
 });
 
-test('proxy는 관리자 세션을 403 반복 대신 로그인 안내로 보낸다', () => {
+test('기사 앱 허용 역할은 driver 하나다', () => {
+  assert.match(authSource, /const DRIVER_APP_ROLE = 'driver';/);
+  assert.match(authSource, /const SESSION_ALLOWED_ROLES = \[DRIVER_APP_ROLE\];/);
+  // 이전 허용 목록(driver|admin)과 "admin은 승인 절차 없이 통과" 분기가 남지 않는다.
+  assert.doesNotMatch(authSource, /\[\s*'driver',\s*'admin'\s*\]/);
+  assert.doesNotMatch(authSource, /admin은 승인 절차 없이/);
+});
+
+test('카카오 로그인은 관리자 계정을 세션 없이 로그인 안내로 보낸다', () => {
+  const start = authSource.indexOf('async signIn({ user, account })');
+  const end = authSource.indexOf('jwt: async', start);
+  const signInScope = authSource.slice(start, end);
+  // API 거절(403 + 관리자 code)과 응답 역할 재확인 둘 다 안내 URL을 돌려준다.
+  assert.match(
+    signInScope,
+    /res\.status === 403 &&[\s\S]{0,120}=== KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT[\s\S]{0,60}return ADMIN_ACCOUNT_LOGIN_URL;/,
+  );
+  assert.match(signInScope, /if \(data\.user\.role === 'admin'\) return ADMIN_ACCOUNT_LOGIN_URL;/);
+  assert.match(signInScope, /if \(data\.user\.role !== DRIVER_APP_ROLE\) return false;/);
+  assert.match(authSource, /const ADMIN_ACCOUNT_LOGIN_URL = `\/login\?error=\$\{DRIVER_ADMIN_ACCOUNT_ERROR\}`;/);
+  // 앱과 API의 관리자 거절 code가 같은 값이다.
+  const appCode = authSource.match(/const KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT = '([A-Z_]+)';/)?.[1];
+  const apiCode = apiAuthServiceSource.match(
+    /export const KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT = '([A-Z_]+)';/,
+  )?.[1];
+  assert.ok(appCode, '앱 code 상수가 있어야 한다');
+  assert.equal(appCode, apiCode);
+  // API의 기사 앱(targetRole=driver) 허용 역할도 driver 하나다.
+  assert.match(apiAuthServiceSource, /dto\.targetRole === 'driver'\s*\?[^\n]*\n\s*\['driver'\]\s*\n/);
+});
+
+test('기존 비기사 세션은 jwt 갱신 전에 끝난다', () => {
+  const start = authSource.indexOf('jwt: async');
+  const end = authSource.indexOf('verifySessionAuthority(accessToken', start);
+  const jwtScope = authSource.slice(start, end);
+  assert.match(jwtScope, /if \(token\.role !== DRIVER_APP_ROLE\) \{\s*return null;\s*\}/);
+});
+
+test('proxy는 남아 있는 관리자 세션도 기사 화면 대신 로그인 안내로 보낸다', () => {
+  assert.match(proxySource, /session\.user\.role !== 'driver'/);
   assert.match(proxySource, /session\.user\.role === 'admin'/);
   assert.match(proxySource, /searchParams\.set\('error', DRIVER_ADMIN_ACCOUNT_ERROR\)/);
-  assert.match(proxySource, /session\.user\.role !== 'driver'/);
   assert.equal(DRIVER_ADMIN_ACCOUNT_ERROR, 'AdminAccount');
 });
