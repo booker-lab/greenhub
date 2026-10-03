@@ -5,9 +5,14 @@ import { BYPASS_STATE_PATH } from './tests/_helpers/auth'
 
 config({ path: resolve(__dirname, '.env') })
 
+// 로컬 대상 모드(scripts/round-direct-e2e-local.mjs)는 한국의 로컬 앱이 해외 스테이징 API를 부르므로
+// 원격 Preview보다 첫 화면 데이터가 늦다. 화면 확인 대기만 로컬 모드에서 늘리고 원격 기준은 그대로 둔다.
+const isLocalTargetMode = process.env.ROUND_DIRECT_E2E_TARGET_MODE === 'local'
+
 export default defineConfig({
   testDir: './tests',
   timeout: 30_000,
+  ...(isLocalTargetMode ? { expect: { timeout: 15_000 } } : {}),
   retries: 1,
   reporter: [['html', { open: 'never' }], ['list']],
   // globalSetup이 Preview 배포의 Vercel SSO 우회 쿠키(_vercel_jwt)를 발급해
