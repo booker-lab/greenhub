@@ -15,13 +15,14 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import {
   buildDriverOrderDetailScope,
   classifyDriverOrderCommandError,
   type DriverOrderReadErrorKind,
+  isDriverHoldEntryVisible,
   isDriverOrderCommandAllowed,
   isDriverOrderCommandContinuationCurrent,
   isDriverOrderStatusAck,
@@ -466,6 +467,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               다시 시도
             </Button>
           )}
+          {readError?.kind === 'AUTH_ERROR' && (
+            // 같은 토큰으로 재조회해도 401/403이 반복되므로 세션을 정리하고 로그인으로 보낸다.
+            <Button
+              variant="outline"
+              color="brand"
+              radius="xl"
+              onClick={() => void signOut({ redirectTo: '/login' })}
+            >
+              다시 로그인
+            </Button>
+          )}
         </Stack>
       </Box>
     );
@@ -479,6 +491,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
     order.schemaVersion === 2 && Boolean(order.roundId) && order.deliveryMethod === 'direct';
   const paymentPresentation = getRedeliveryPaymentPresentation(order.redeliveryPayment);
   const deliveryStartAllowed = isDeliveryStartAllowed(order.redeliveryPayment);
+  // 서버가 반드시 허용하는 상태(본인 배정 DELIVERING)에서만 보류 진입을 노출한다.
+  const holdEntryVisible = isDriverHoldEntryVisible({ status: order.status, isRoundDirect });
   // stale FETCH_ERROR 또는 readback 미확인 상태의 order는 최신 authoritative state가 아니다.
   // 위험 command 진입(상태 변경·사진 촬영·보류)은 fail-closed로 비활성화한다.
   const commandsAllowed = isDriverOrderCommandAllowed({
@@ -779,17 +793,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                 배송 완료 사진 촬영
               </Button>
             )}
-            <Button
-              fullWidth
-              size="lg"
-              radius="xl"
-              color="red"
-              variant="outline"
-              disabled={loading || !commandsAllowed}
-              onClick={() => setHoldOpened(true)}
-            >
-              배송 보류
-            </Button>
+            {holdEntryVisible && (
+              <Button
+                fullWidth
+                size="lg"
+                radius="xl"
+                color="red"
+                variant="outline"
+                disabled={loading || !commandsAllowed}
+                onClick={() => setHoldOpened(true)}
+              >
+                배송 보류
+              </Button>
+            )}
           </Stack>
         )}
         {isPreparing &&

@@ -410,5 +410,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   pages: {
     signIn: '/login',
+    // signIn 콜백 거절(AccessDenied: 승인 전 기사·다른 역할) 등 오류 종류 실패도 Auth.js 기본
+    // 오류 페이지가 아니라 로그인 화면(`?error=`)으로 보내 안내 문구를 보인다.
+    error: '/login',
   },
 });
