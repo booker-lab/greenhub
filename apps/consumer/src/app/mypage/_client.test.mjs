@@ -30,7 +30,8 @@ const requireForTest = (specifier) => {
     specifier === 'next-auth/react' ||
     specifier === 'next/navigation' ||
     specifier === '@/hooks/useOrders' ||
-    specifier === '@/components/A2HSButton'
+    specifier === '@/components/A2HSButton' ||
+    specifier === '@/components/ResilientImage'
   ) {
     return {};
   }
@@ -70,6 +71,7 @@ const multiItemOrder = {
 test('서버가 정규화한 다중 orderItems로 대표명과 상품 수를 만든다', () => {
   assert.deepEqual(readOrderListSummary(multiItemOrder), {
     representativeName: '호접란 하나',
+    representativeImageUrl: null,
     additionalProductCount: 1,
     productCount: 2,
     totalQuantity: 3,
@@ -93,6 +95,7 @@ test('서버가 정규화한 단일 legacy orderItems 계약을 보존한다', (
     }),
     {
       representativeName: '레거시 호접란',
+      representativeImageUrl: null,
       additionalProductCount: 0,
       productCount: 1,
       totalQuantity: 2,
@@ -142,4 +145,28 @@ test('MY 내 정보는 알림 내역은 제공하지만 파일럿 마케팅 설�
   assert.match(source, />\s*알림 내역\s*<\/Text>/s);
   assert.doesNotMatch(source, /router\.push\('\/mypage\/notifications\/settings'\)/);
   assert.doesNotMatch(source, /마케팅 알림 설정/);
+});
+
+test('대표(첫) 상품의 주문 시점 사진 주소를 썸네일로 쓴다', () => {
+  const withImages = {
+    ...multiItemOrder,
+    orderItems: multiItemOrder.orderItems.map((item, index) => ({
+      ...item,
+      productImageUrl:
+        index === 0 ? 'https://example.test/first.jpg' : 'https://example.test/second.jpg',
+    })),
+  };
+  assert.equal(
+    readOrderListSummary(withImages)?.representativeImageUrl,
+    'https://example.test/first.jpg',
+  );
+
+  const blankFirst = {
+    ...multiItemOrder,
+    orderItems: multiItemOrder.orderItems.map((item, index) => ({
+      ...item,
+      productImageUrl: index === 0 ? '   ' : 'https://example.test/second.jpg',
+    })),
+  };
+  assert.equal(readOrderListSummary(blankFirst)?.representativeImageUrl, null);
 });
