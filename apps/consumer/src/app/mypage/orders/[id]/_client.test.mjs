@@ -998,3 +998,24 @@ test('redelivery paid 확인 게이트가 보존된다', () => {
   assert.match(source, /PortOne\.requestPayment/);
   assert.doesNotMatch(source, /requestPayment\(\{\s*storeId:[^}]*test/i);
 });
+
+test('재배송비 결제는 모바일 리다이렉트로 이 주문 상세에 돌아오고 서버 paid로만 완료한다', () => {
+  const handler = source.slice(source.indexOf('async function handleRedeliveryPayment'));
+  assert.match(
+    handler,
+    /buildPaymentRedirectUrl\(browser\.origin, redeliveryPaymentRedirectPath\(detail\.id\)\)/,
+  );
+  assert.match(handler, /\.\.\.\(redirectUrl \? \{ redirectUrl \} : \{\}\)/);
+  // 복귀 쿼리는 한 번만 읽고 주소에서 지운다.
+  assert.match(
+    source,
+    /parsePaymentRedirectResult\(new URLSearchParams\(window\.location\.search\)\)/,
+  );
+  assert.match(source, /window\.history\.replaceState\(/);
+  // 완료 판정은 서버 상태(redeliveryPayment.paid, stale 읽기 제외)를 거친다.
+  assert.match(
+    source,
+    /const redeliveryPaid = detail && !isStaleRead \? detail\.redeliveryPayment\.paid : undefined/,
+  );
+  assert.match(source, /resolveRedeliveryPaymentReturn\(redeliveryRedirect, redeliveryPaid\)/);
+});
