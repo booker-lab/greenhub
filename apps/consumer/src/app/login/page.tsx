@@ -15,23 +15,24 @@ export default function LoginPage() {
             order={1}
             ta="center"
             style={{
+              fontFamily: 'var(--font-brand)',
               color: 'var(--color-primary-dark)',
-              fontSize: 34,
-              fontWeight: 'var(--fw-extrabold)',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            그린러브
-          </Title>
-          <Text
-            style={{
-              color: 'var(--color-primary)',
-              fontSize: 'var(--font-size-xs)',
-              fontWeight: 'var(--fw-extrabold)',
-              letterSpacing: '0.18em',
+              fontSize: 42,
+              fontWeight: 800,
+              letterSpacing: '-0.01em',
             }}
           >
             Green Love
+          </Title>
+          <Text
+            style={{
+              color: 'var(--color-primary-dark)',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-bold)',
+              letterSpacing: '0.04em',
+            }}
+          >
+            그린러브
           </Text>
           <Text
             ta="center"

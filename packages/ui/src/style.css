@@ -16,6 +16,7 @@
 
   /* ── Typography ── */
   --font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-brand: 'Nunito', 'Pretendard Variable', Pretendard, system-ui, sans-serif; /* 로고 글자 전용 */
   --fw-light: 300;
   --fw-regular: 400;
   --fw-medium: 500;

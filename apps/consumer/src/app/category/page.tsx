@@ -154,7 +154,7 @@ function RoundProductCard({
       >
         <Image
           fill
-          src={item.productImageUrlSnapshot ?? '/icons/icon-192x192.png'}
+          src={item.productImageUrlSnapshot ?? '/images/product-placeholder.png'}
           alt={item.productNameSnapshot}
           sizes="(max-width: 600px) 50vw, 33vw"
           style={{ objectFit: 'cover' }}
