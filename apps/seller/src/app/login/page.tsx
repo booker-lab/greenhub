@@ -1,4 +1,5 @@
 import { Box, Container, Paper, Stack, Text, Title } from '@mantine/core';
+import Image from 'next/image';
 import { LoginForm } from './_form';
 
 export const dynamic = 'force-dynamic';
@@ -25,38 +26,24 @@ export default function LoginPage() {
       <Container size="xs" w="100%">
         <Paper radius="lg" shadow="sm" p="xl">
           <Stack align="center" gap="xs" mb="xl">
-            <Box
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 16,
-                backgroundColor: 'var(--color-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="white"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-            </Box>
+            <Image
+              src="/icons/icon-192x192.png"
+              alt="그린러브 판매자 앱 아이콘"
+              width={64}
+              height={64}
+              style={{ borderRadius: 16, display: 'block' }}
+            />
             <Title
               order={2}
-              style={{ fontSize: 22, fontWeight: 'var(--fw-extrabold)', letterSpacing: '-0.01em' }}
+              style={{
+                fontFamily: 'var(--font-brand)',
+                fontSize: 30,
+                fontWeight: 800,
+                letterSpacing: '-0.01em',
+                color: 'var(--color-primary-dark)',
+              }}
             >
-              그린러브 판매자
+              Green Love
             </Title>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
               판매자 계정으로 로그인하세요

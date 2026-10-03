@@ -1,5 +1,7 @@
-import { signIn } from '@/auth';
+import Image from 'next/image';
+import { signIn, signOut } from '@/auth';
 import { Box, Divider, PasswordInput, Stack, Button, Text, TextInput, Title, Alert, Paper } from '@mantine/core';
+import { resolveDriverLoginNotice } from './login-notice';
 
 async function localCredentialSignIn(formData: FormData) {
   'use server';
@@ -10,12 +12,19 @@ async function localCredentialSignIn(formData: FormData) {
   });
 }
 
+// 기사 앱을 쓸 수 없는 세션(관리자 등)을 정리하고 로그인 화면으로 돌아온다.
+async function signOutToLogin() {
+  'use server';
+  await signOut({ redirectTo: '/login' });
+}
+
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pending?: string }>;
+  searchParams: Promise<{ pending?: string | string[]; error?: string | string[] }>;
 }) {
-  const { pending } = await searchParams;
+  const { pending, error } = await searchParams;
+  const notice = resolveDriverLoginNotice({ pending, error });
   // Local pilot runtime에서만 승인된 드라이버의 Credentials 진입을 노출한다.
   // 운영/Preview에서는 카카오 로그인만 사용한다.
   const showLocalCredentials =
@@ -36,36 +45,22 @@ export default async function LoginPage({
         <Paper radius="lg" p="xl" style={{ border: 'var(--border)' }}>
           {/* 로고 */}
           <Stack align="center" gap="xs" mb="xl">
-            <Box
+            <Image
+              src="/icons/icon-192x192.png"
+              alt="그린러브 기사 앱 아이콘"
+              width={64}
+              height={64}
+              style={{ borderRadius: 16, display: 'block' }}
+            />
+            <Title
+              order={2}
               style={{
-                width: 56,
-                height: 56,
-                borderRadius: 16,
-                backgroundColor: 'var(--color-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                fontFamily: 'var(--font-brand)',
+                fontSize: 26,
+                fontWeight: 800,
+                color: 'var(--color-primary-dark)',
               }}
             >
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="var(--color-bg)"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <rect x="1" y="3" width="15" height="13" rx="1" />
-                <path d="M16 8h4l3 3v5h-7V8z" />
-                <circle cx="5.5" cy="18.5" r="2.5" />
-                <circle cx="18.5" cy="18.5" r="2.5" />
-              </svg>
-            </Box>
-            <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
               Green Love 드라이버
             </Title>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
@@ -73,20 +68,30 @@ export default async function LoginPage({
             </Text>
           </Stack>
 
-          {/* 승인 대기 안내 */}
-          {pending === 'true' && (
-            <Alert color="yellow" radius="md" mb="md">
+          {/* 승인 대기·로그인 거절·관리자 계정·로그인 실패 안내 */}
+          {notice && (
+            <Alert color={notice.kind === 'failed' ? 'red' : 'yellow'} radius="md" mb="md">
               <Text
                 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
                 mb={4}
               >
-                승인 대기 중입니다
+                {notice.title}
               </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>
-                관리자 승인 후 이용할 수 있습니다.
-                <br />
-                승인이 완료되면 다시 로그인해 주세요.
-              </Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{notice.body}</Text>
+              {notice.offerSignOut && (
+                <form action={signOutToLogin}>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    color="dark"
+                    size="xs"
+                    radius="xl"
+                    mt="sm"
+                  >
+                    로그아웃
+                  </Button>
+                </form>
+              )}
             </Alert>
           )}
 

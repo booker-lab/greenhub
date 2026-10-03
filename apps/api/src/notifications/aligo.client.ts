@@ -80,6 +80,78 @@ const RETRYABLE_MESSAGE_PATTERNS: readonly RegExp[] = [
 const RETRYABLE_ALIMTALK_CODES: ReadonlySet<number> = new Set([-1, -2, -3, -99, -100]);
 const RETRYABLE_SMS_CODES: ReadonlySet<number> = new Set([-1, -2, -3, -99, -100]);
 
+// ALIGO는 -99 하나에 잔액 부족·인증 실패·파라미터 누락 등 성격이 다른 실패를 함께 싣는다
+// (smartsms.aligo.in/alimapi.html 응답 예시). 그래서 code만으로는 영구 여부를 알 수 없어
+// 공식 문서·운영 실측으로 확인된 문구만 영구 사유로 본다. 확인되지 않은 응답은 null을
+// 돌려 기존 분류(재시도 가능 코드 등)를 그대로 따른다.
+export type AligoPermanentErrorReason =
+  | 'INSUFFICIENT_BALANCE'
+  | 'UNAUTHORIZED_IP'
+  | 'AUTH_FAILED'
+  | 'SENDER_NOT_REGISTERED'
+  | 'TEMPLATE_INVALID'
+  | 'SENDER_PROFILE_INVALID';
+
+/**
+ * 영구 사유별로 SMS 대체가 의미 있는지 고정한다. 잔액·송신 IP·계정 인증·발신번호는
+ * 같은 ALIGO 계정과 발신번호를 쓰는 SMS도 같은 원인으로 거절되므로 대체하지 않는다.
+ * 템플릿·발신 프로필(senderkey)은 알림톡에만 쓰이므로 SMS 대체 1회를 유지한다.
+ */
+export const ALIGO_PERMANENT_ERROR_SMS_FALLBACK: Readonly<
+  Record<AligoPermanentErrorReason, boolean>
+> = {
+  INSUFFICIENT_BALANCE: false,
+  UNAUTHORIZED_IP: false,
+  AUTH_FAILED: false,
+  SENDER_NOT_REGISTERED: false,
+  TEMPLATE_INVALID: true,
+  SENDER_PROFILE_INVALID: true,
+};
+
+const ALIGO_PERMANENT_MESSAGE_PATTERNS: ReadonlyArray<
+  readonly [AligoPermanentErrorReason, RegExp]
+> = [
+  // 공식: "포인트가 부족합니다." / 2026-09-28 운영 실측: "보유건수가 부족합니다"
+  [
+    'INSUFFICIENT_BALANCE',
+    /(포인트|보유\s*건수|잔액|잔여\s*건수|발송\s*가능\s*건수)[^\n]{0,10}부족/,
+  ],
+  // 운영 실측·명세: "-99 인증되지 않는 서버 IP"
+  ['UNAUTHORIZED_IP', /인증되지\s*않[는은]\s*(서버\s*)?ip/i],
+  // 공식: "등록되지 않은 인증키 입니다." / "인증오류입니다."
+  ['AUTH_FAILED', /등록되지\s*않은\s*인증\s*키|인증\s*오류/],
+  // 사전 등록된 발신번호만 발송할 수 있다(발신번호 미등록 문구가 명시될 때만)
+  [
+    'SENDER_NOT_REGISTERED',
+    /(등록되지\s*않은|미등록)[^\n]{0,10}발신\s*번호|발신\s*번호[^\n]{0,15}(등록되지\s*않|미등록)/,
+  ],
+  // 공식: "발신 프로파일 키(=senderkey)파라메더 정보가 전달되지 않았습니다."
+  ['SENDER_PROFILE_INVALID', /발신\s*프로[파필]|senderkey/i],
+  // 알림톡 전용 자원인 템플릿을 지목한 거절
+  ['TEMPLATE_INVALID', /템플릿|tpl_code/i],
+];
+
+// 공식: -101 "인증오류입니다."(알림톡·문자 API 공통)
+const ALIGO_AUTH_FAILED_CODES: ReadonlySet<number> = new Set([-101]);
+
+export function classifyAligoPermanentError(input: {
+  code?: number | null;
+  message?: string | null;
+}): AligoPermanentErrorReason | null {
+  const message = typeof input.message === 'string' ? input.message : '';
+  for (const [reason, pattern] of ALIGO_PERMANENT_MESSAGE_PATTERNS) {
+    if (pattern.test(message)) return reason;
+  }
+  if (
+    typeof input.code === 'number' &&
+    Number.isFinite(input.code) &&
+    ALIGO_AUTH_FAILED_CODES.has(input.code)
+  ) {
+    return 'AUTH_FAILED';
+  }
+  return null;
+}
+
 export function classifyProviderError(input: {
   code?: number | null;
   message?: string | null;
@@ -87,6 +159,8 @@ export function classifyProviderError(input: {
   retryableCodes: ReadonlySet<number>;
 }): ProviderErrorClass {
   if (input.httpStatus === 429) return 'RATE_LIMITED';
+  // 재시도해도 결과가 같은 영구 사유는 재시도 가능 코드(-99 등)보다 우선한다.
+  if (classifyAligoPermanentError(input) !== null) return 'PERMANENT';
   const message = typeof input.message === 'string' ? input.message : '';
   if (RATE_LIMIT_MESSAGE_PATTERNS.some((pattern) => pattern.test(message))) {
     return 'RATE_LIMITED';
@@ -151,6 +225,8 @@ export type NotificationDeliveryResult = {
   attemptId: string | null;
   needsVerify: boolean;
   errorMessage?: string;
+  // 최종 실패를 만든 ALIGO 영구 사유. 영구 사유가 아니거나 성공이면 없음/null.
+  permanentErrorReason?: AligoPermanentErrorReason | null;
 };
 
 type ProviderAttemptResult = {
@@ -158,6 +234,7 @@ type ProviderAttemptResult = {
   providerReceipt: string | null;
   errorMessage?: string;
   errorClass?: ProviderErrorClass;
+  permanentReason?: AligoPermanentErrorReason | null;
 };
 
 export function normalizeProviderReceipt(value: unknown): string | null {
@@ -291,6 +368,7 @@ export class AligoClient {
     let errorMessage = '알림톡 발송에 실패했습니다.';
     let alimtalkAttemptsUsed = 0;
     let lastErrorClass: ProviderErrorClass = 'RETRYABLE';
+    let alimtalkPermanentReason: AligoPermanentErrorReason | null = null;
 
     for (
       let attempt = 0;
@@ -333,6 +411,7 @@ export class AligoClient {
         };
       }
       lastErrorClass = result.errorClass ?? 'RETRYABLE';
+      alimtalkPermanentReason = result.permanentReason ?? null;
       this.recordProviderAttemptError('alimtalk', result);
       errorMessage = result.errorMessage ?? errorMessage;
       const hasNextAttempt =
@@ -342,6 +421,27 @@ export class AligoClient {
       const retryDelayMs = computeNotificationRetryDelayMs(lastErrorClass, attempt);
       this.retryMetrics.recordAppliedRetryDelay('alimtalk', retryDelayMs);
       await this.delay(retryDelayMs);
+    }
+
+    // 잔액·송신 IP·계정 인증처럼 SMS도 같은 원인으로 거절될 것이 확실하면 대체를 건너뛴다.
+    if (
+      alimtalkPermanentReason !== null &&
+      !ALIGO_PERMANENT_ERROR_SMS_FALLBACK[alimtalkPermanentReason]
+    ) {
+      return {
+        success: false,
+        outcome: 'REJECTED',
+        errorClass: 'PERMANENT',
+        channel: null,
+        message,
+        alimtalkAttempts: alimtalkAttemptsUsed,
+        smsAttempts: 0,
+        providerReceipt: null,
+        attemptId,
+        needsVerify: false,
+        errorMessage,
+        permanentErrorReason: alimtalkPermanentReason,
+      };
     }
 
     const smsResult = await this.sendSmsMessage(phone, message);
@@ -391,6 +491,7 @@ export class AligoClient {
       attemptId,
       needsVerify: false,
       errorMessage: smsResult.errorMessage ?? errorMessage,
+      permanentErrorReason: smsResult.permanentReason ?? null,
     };
   }
 
@@ -477,6 +578,7 @@ export class AligoClient {
       attemptId,
       needsVerify: false,
       errorMessage: result.errorMessage,
+      permanentErrorReason: result.permanentReason ?? null,
     };
   }
 
@@ -570,14 +672,18 @@ export class AligoClient {
           typeof record['message'] === 'string' && record['message'].trim().length > 0
             ? (record['message'] as string)
             : '알림톡 발송에 실패했습니다.';
+        const errorInput = {
+          code: record['code'],
+          message: messageText,
+          httpStatus: res.status,
+        };
+        const errorClass = classifyAlimtalkProviderError(errorInput);
         return {
           outcome: 'REJECTED',
           providerReceipt: null,
-          errorClass: classifyAlimtalkProviderError({
-            code: record['code'],
-            message: messageText,
-            httpStatus: res.status,
-          }),
+          errorClass,
+          permanentReason:
+            errorClass === 'PERMANENT' ? classifyAligoPermanentError(errorInput) : null,
           errorMessage: messageText,
         };
       }
@@ -642,14 +748,14 @@ export class AligoClient {
           typeof record['message'] === 'string' && record['message'].trim().length > 0
             ? (record['message'] as string)
             : '문자 대체 발송에 실패했습니다.';
+        const errorInput = { code: resultCode, message: messageText, httpStatus: res.status };
+        const errorClass = classifySmsProviderError(errorInput);
         return {
           outcome: 'REJECTED',
           providerReceipt: null,
-          errorClass: classifySmsProviderError({
-            code: resultCode,
-            message: messageText,
-            httpStatus: res.status,
-          }),
+          errorClass,
+          permanentReason:
+            errorClass === 'PERMANENT' ? classifyAligoPermanentError(errorInput) : null,
           errorMessage: messageText,
         };
       }

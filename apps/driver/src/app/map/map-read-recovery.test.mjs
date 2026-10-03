@@ -64,7 +64,7 @@ test('Map successful results render filtered route list', () => {
   assert.match(mapSource, /setHasSuccessfulRead\(true\)/);
   assert.match(mapSource, /hasSuccessfulReadRef\.current = true/);
   assert.match(mapSource, /sorted\.map\(\(order, idx\)/);
-  assert.match(mapSource, /buildKakaoNaviUrl\(\)/);
+  assert.match(mapSource, /buildOrderMapLink\(sorted\[0\]\)/);
 });
 
 // 3. successful empty: only after authoritative success with zero filtered rows.
@@ -164,13 +164,13 @@ test('Map navigation is fail-closed on error and stale states', () => {
     /sorted\.length > 0 && !loading && !authRequired && !error && hasSuccessfulRead/,
   );
   assert.match(mapSource, /component="a"/);
-  assert.match(mapSource, /href=\{buildKakaoNaviUrl\(\)\}/);
+  assert.match(mapSource, /href=\{nextStopLink\.href\}/);
   // Stale navigation renders disabled with an explicit safety notice.
   assert.match(mapSource, /sorted\.length > 0 && error && hasSuccessfulRead/);
   assert.match(mapSource, /disabled/);
   assert.match(
     mapSource,
-    /최신 경로 확인에 실패해 주행을 시작할 수 없습니다\. 다시 시도 후 최신 경로에서/,
+    /최신 경로 확인에 실패해 길안내를 열 수 없습니다\. 다시 시도 후 최신 경로에서/,
   );
 });
 
@@ -183,13 +183,13 @@ test('Map loading, auth, and initial-error states expose no navigation', () => {
     mapSource.indexOf('{loading ?'),
     mapSource.indexOf(') : authRequired ?'),
   );
-  assert.doesNotMatch(loadingBranch, /buildKakaoNaviUrl|component="a"/);
+  assert.doesNotMatch(loadingBranch, /buildOrderMapLink|component="a"/);
   // Auth branch contains no navigation link.
   const authBranch = mapSource.slice(
     mapSource.indexOf(') : authRequired ?'),
     mapSource.indexOf(') : error && !hasSuccessfulRead ?'),
   );
-  assert.doesNotMatch(authBranch, /buildKakaoNaviUrl|component="a"/);
+  assert.doesNotMatch(authBranch, /buildOrderMapLink|component="a"/);
 });
 
 // 11a. nearestNeighbor implementation is preserved (regression pins).
@@ -359,7 +359,7 @@ test('Map auth-loss exposes no navigation and stale fail-close is preserved', ()
   const authAt = catchBlock.indexOf("kind === 'AUTH_ERROR'");
   const authBranch = catchBlock.slice(authAt, catchBlock.indexOf('if (shouldPreserveDriverListOnReadError'));
   assert.match(authBranch, /setOrders\(\[\]\)/);
-  assert.doesNotMatch(authBranch, /buildKakaoNaviUrl/);
+  assert.doesNotMatch(authBranch, /buildOrderMapLink/);
   // fresh navigation 가드와 stale fail-closed 렌더는 그대로 유지된다.
   assert.match(
     mapSource,

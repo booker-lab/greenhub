@@ -3,7 +3,7 @@
 import { useState, type ImgHTMLAttributes, type ReactNode } from 'react';
 import Image, { type ImageProps } from 'next/image';
 
-export const PRODUCT_IMAGE_FALLBACK = '/icons/icon-192x192.png';
+export const PRODUCT_IMAGE_FALLBACK = '/images/product-placeholder.png';
 
 type ImagePhase = 'primary' | 'fallback' | 'terminal';
 
