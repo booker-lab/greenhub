@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { dateRangeKST } from '@greenhub/shared';
 import * as admin from 'firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
+import { inviteConflict } from '../auth/invite-conflict';
 import { FirestoreService } from '../firestore/firestore.service';
 import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
 import type { OrderStatus } from '../orders/dto/update-status.dto';
@@ -27,6 +28,8 @@ import {
 } from './dto/admin.dto';
 
 const LEGACY_REFUND_CLAIM_MS = 5 * 60 * 1000;
+// 발급 토큰은 영숫자뿐이다. 경로 구분자 등이 섞인 값으로 다른 문서를 가리키지 못하게 막는다.
+const INVITE_TOKEN_PATTERN = /^[A-Za-z0-9]{1,64}$/;
 
 type LegacyRefundClaimResult =
   | { kind: 'done' }
@@ -527,6 +530,42 @@ export class AdminService {
     ).get();
 
     return snap.docs.map((d: any) => d.data());
+  }
+
+  /**
+   * 아직 쓰이지 않은 유효 초대 토큰만 취소한다. 문서는 지우지 않고 revokedAt·revokedBy를 남긴다.
+   * 상태 우선순위(revokedAt > usedAt > 만료)대로 409 + reason으로 거부하고,
+   * 가입 트랜잭션과 같은 문서를 트랜잭션으로 읽어 동시 가입과 한쪽만 성공하게 한다.
+   */
+  async revokeInvite(token: string, adminId: string) {
+    if (!INVITE_TOKEN_PATTERN.test(token)) {
+      throw new NotFoundException('초대 토큰을 찾을 수 없습니다.');
+    }
+    const ref = this.firestore.doc(`invites/${token}`);
+    const revokedAt = new Date();
+
+    await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException('초대 토큰을 찾을 수 없습니다.');
+      const invite = snap.data()!;
+
+      if (invite['revokedAt'] != null) {
+        throw inviteConflict('already_revoked', '이미 취소된 초대 토큰입니다.');
+      }
+      if (invite['usedAt'] != null) {
+        throw inviteConflict('already_used', '이미 사용된 초대 토큰은 취소할 수 없습니다.');
+      }
+      if ((invite['expiresAt'] as admin.firestore.Timestamp).toMillis() < revokedAt.getTime()) {
+        throw inviteConflict('expired', '만료된 초대 토큰은 취소할 수 없습니다.');
+      }
+
+      tx.update(ref, {
+        revokedAt: this.firestore.Timestamp.fromDate(revokedAt),
+        revokedBy: adminId,
+      });
+    });
+
+    return { token, revokedAt: revokedAt.toISOString() };
   }
 
   // ── Banner ───────────────────────────────────────────────────────

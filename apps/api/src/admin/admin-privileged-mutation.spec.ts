@@ -25,6 +25,7 @@ type MutationName =
   | 'restoreStore'
   | 'suspendUser'
   | 'generateInvite'
+  | 'revokeInvite'
   | 'upsertBanner';
 
 const JWT_SECRET = 'admin-privileged-mutation-test-secret';
@@ -115,6 +116,10 @@ function makeHttpHarness() {
       token: 'TESTINVITE12345678',
       expiresAt: new Date(0).toISOString(),
     }),
+    revokeInvite: jest.spyOn(adminService, 'revokeInvite').mockResolvedValue({
+      token: 'TESTINVITE123456',
+      revokedAt: new Date(0).toISOString(),
+    }),
     upsertBanner: jest.spyOn(adminService, 'upsertBanner').mockResolvedValue({
       headline: '검증 배너',
     }),
@@ -185,6 +190,8 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         return http.patch('/admin/users/consumer-1/status').send({ suspended: true });
       case 'generateInvite':
         return http.post('/admin/invite');
+      case 'revokeInvite':
+        return http.post('/admin/invite/TESTINVITE123456/revoke');
       case 'upsertBanner':
         return http.put('/admin/banner').send({ headline: '검증 배너' });
     }
@@ -197,7 +204,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
   }
 
   function successStatus(name: MutationName) {
-    return name === 'refund' || name === 'generateInvite' ? 201 : 200;
+    return name === 'refund' || name === 'generateInvite' || name === 'revokeInvite' ? 201 : 200;
   }
 
   const mutations: MutationName[] = [
@@ -210,6 +217,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     'restoreStore',
     'suspendUser',
     'generateInvite',
+    'revokeInvite',
     'upsertBanner',
   ];
 
@@ -225,6 +233,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     expect(harness.serviceBoundary.restoreStore).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendUser).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.generateInvite).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.revokeInvite).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.upsertBanner).not.toHaveBeenCalled();
     expect(harness.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(harness.settlements.cancelSettlement).not.toHaveBeenCalled();
@@ -250,6 +259,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     expect(harness.serviceBoundary.restoreStore).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendUser).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.generateInvite).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.revokeInvite).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.upsertBanner).not.toHaveBeenCalled();
     expect(harness.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(harness.settlements.cancelSettlement).not.toHaveBeenCalled();
@@ -297,6 +307,12 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         break;
       case 'generateInvite':
         expect(harness.serviceBoundary.generateInvite).toHaveBeenCalledWith('admin-1');
+        break;
+      case 'revokeInvite':
+        expect(harness.serviceBoundary.revokeInvite).toHaveBeenCalledWith(
+          'TESTINVITE123456',
+          'admin-1',
+        );
         break;
       case 'upsertBanner':
         expect(harness.serviceBoundary.upsertBanner).toHaveBeenCalledWith({

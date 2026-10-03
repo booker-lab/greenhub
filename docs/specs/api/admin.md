@@ -31,7 +31,7 @@ admin role을 어떤 운영 절차로 부여하는지는 계정 보안 정책이
 
 위 class-level guard 구현이 존재한다. `apps/api/src/admin/admin-privileged-mutation.spec.ts`가 실제 `AdminController` + `JwtAuthGuard` + `RolesGuard` + `JwtStrategy`를 Nest HTTP 경계로 구동해 다음을 직접 고정한다.
 
-- 10개 privileged mutation(`refund`, `pay`, `approveDriver`, `suspendDriver`, `setCommission`, `archiveStore`, `restoreStore`, `suspendUser`, `generateInvite`, `upsertBanner`)에 대한 unauthenticated 401
+- 11개 privileged mutation(`refund`, `pay`, `approveDriver`, `suspendDriver`, `setCommission`, `archiveStore`, `restoreStore`, `suspendUser`, `generateInvite`, `revokeInvite`, `upsertBanner`)에 대한 unauthenticated 401
 - consumer/seller/driver 요청의 403
 - invalid role에서 service 호출·payment/settlement/round lifecycle·Firestore write side-effect 0
 - admin 정상 요청이 controller service boundary까지 도달
@@ -310,6 +310,23 @@ GET /admin/invite
 
 - `createdAt DESC`
 - 최대 50건
+- 문서 필드를 그대로 돌려주므로 취소된 토큰은 `revokedAt`(ISO 문자열)·`revokedBy`가 함께 온다.
+
+### 취소
+
+```text
+POST /admin/invite/:token/revoke
+```
+
+- 아직 쓰이지 않은 유효 토큰만 취소한다. 문서는 지우지 않고 `revokedAt`·`revokedBy`(admin user ID)를 기록한다.
+- 거부는 409 하나로 통일하고 본문 `reason`으로 구분한다. 판정 순서는 `revokedAt` > `usedAt` > 만료다.
+  - 이미 취소됨 → `reason: 'already_revoked'`
+  - 이미 사용됨 → `reason: 'already_used'`
+  - 만료됨 → `reason: 'expired'`
+- 없는 토큰(영숫자가 아닌 값 포함)은 404.
+- 성공 응답: `{ token: string, revokedAt: string }`
+- 판매자 가입(`POST /auth/register`)은 `revokedAt`이 있는 토큰을 사전 검사와 가입 트랜잭션 안에서 모두 409 `reason: 'already_revoked'`로 거부한다. 취소와 가입이 동시에 오면 같은 문서를 트랜잭션으로 읽어 한쪽만 성공한다.
+- 직접 증거: `apps/api/src/admin/admin-invite-revoke.spec.ts`
 
 ## 9. Banner 관리
 
