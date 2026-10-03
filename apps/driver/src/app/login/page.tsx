@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { signIn, signOut } from '@/auth';
+import { signIn } from '@/auth';
 import { Box, Divider, PasswordInput, Stack, Button, Text, TextInput, Title, Alert, Paper } from '@mantine/core';
 import { resolveDriverLoginNotice } from './login-notice';
 
@@ -10,12 +10,6 @@ async function localCredentialSignIn(formData: FormData) {
     password: formData.get('password'),
     redirectTo: '/board',
   });
-}
-
-// 기사 앱을 쓸 수 없는 세션(관리자 등)을 정리하고 로그인 화면으로 돌아온다.
-async function signOutToLogin() {
-  'use server';
-  await signOut({ redirectTo: '/login' });
 }
 
 export default async function LoginPage({
@@ -78,20 +72,6 @@ export default async function LoginPage({
                 {notice.title}
               </Text>
               <Text style={{ fontSize: 'var(--font-size-sm)' }}>{notice.body}</Text>
-              {notice.offerSignOut && (
-                <form action={signOutToLogin}>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    color="dark"
-                    size="xs"
-                    radius="xl"
-                    mt="sm"
-                  >
-                    로그아웃
-                  </Button>
-                </form>
-              )}
             </Alert>
           )}
 
