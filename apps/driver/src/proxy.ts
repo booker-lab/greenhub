@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { DRIVER_ADMIN_ACCOUNT_ERROR } from '@/app/login/login-notice';
 import { auth } from '@/auth';
 
 // auth() 래퍼로 감싸야 proxy에서 토큰이 갱신될 때 새 세션 쿠키가 응답에 실린다.
@@ -11,7 +12,15 @@ export const proxy = auth((request) => {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (!['driver', 'admin'].includes(session.user.role)) {
+  // 관리자 세션은 로그인·세션 계약상 유지되지만, 기사 화면의 모든 조회 API(`/driver/*`)는
+  // driver 역할만 허용해 403만 반복된다. 막다른 재시도 대신 로그인 화면 안내로 보낸다.
+  if (session.user.role === 'admin') {
+    const url = new URL('/login', request.url);
+    url.searchParams.set('error', DRIVER_ADMIN_ACCOUNT_ERROR);
+    return NextResponse.redirect(url);
+  }
+
+  if (session.user.role !== 'driver') {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

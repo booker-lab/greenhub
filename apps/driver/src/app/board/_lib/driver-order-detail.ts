@@ -253,3 +253,23 @@ export function isDriverOrderCommandContinuationCurrent(args: {
 }): boolean {
   return args.snapshotSeq === args.currentSeq && args.snapshotScope === args.currentScope;
 }
+
+/**
+ * 배송 보류 진입 버튼을 보여도 되는가 (서버 허용 범위의 부분집합만 노출).
+ *
+ * 서버 `DriverOrderScopeService.assertMutationRules` 기준:
+ * - 기사 보류(→ DELIVERY_HELD)는 DRIVER_TRANSITIONS상 PREPARING·DELIVERING에서만 가능하다.
+ * - 그중에서도 본인 배정(`driverId === 요청자`) 주문만 허용한다.
+ *   미배정 주문은 first claim(PREPARING → DELIVERING) 외 전이를 STATE_CONFLICT로 거부한다.
+ *
+ * 상세 응답에는 배정 여부가 없다. 기사에게 보이는 DELIVERING 주문은 본인 배정 주문뿐이므로
+ * (미배정 노출은 PREPARING discovery뿐) DELIVERING만 서버가 반드시 허용하는 상태다.
+ * PREPARING은 미배정(항상 거부)과 본인 배정(허용)을 구분할 수 없어 노출하지 않는다.
+ * 보류 모달은 회차 직배송 주문에서만 렌더되므로 회차 직배송 여부도 함께 본다.
+ */
+export function isDriverHoldEntryVisible(args: {
+  status: string;
+  isRoundDirect: boolean;
+}): boolean {
+  return args.isRoundDirect && args.status === 'DELIVERING';
+}
