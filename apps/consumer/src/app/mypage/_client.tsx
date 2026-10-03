@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect } from 'react';
 import A2HSButton from '@/components/A2HSButton';
+import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { useOrders } from '@/hooks/useOrders';
 
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
@@ -54,6 +55,8 @@ function formatDate(iso: string) {
 
 interface OrderListSummary {
   representativeName: string;
+  /** 대표(첫) 상품의 주문 시점 사진. 없으면 null → 대체 그림 */
+  representativeImageUrl: string | null;
   additionalProductCount: number;
   productCount: number;
   totalQuantity: number;
@@ -85,6 +88,7 @@ function readOrderListSummary(value: unknown): OrderListSummary | null {
 
   const identities = new Set<string>();
   let representativeName = '';
+  let representativeImageUrl: string | null = null;
   let totalQuantity = 0;
 
   for (const item of value.orderItems) {
@@ -104,13 +108,17 @@ function readOrderListSummary(value: unknown): OrderListSummary | null {
     if (identities.has(identity)) return null;
     identities.add(identity);
 
-    if (!representativeName) representativeName = item.productName.trim();
+    if (!representativeName) {
+      representativeName = item.productName.trim();
+      representativeImageUrl = isNonEmptyString(item.productImageUrl) ? item.productImageUrl : null;
+    }
     totalQuantity += item.quantity;
     if (!Number.isSafeInteger(totalQuantity)) return null;
   }
 
   return {
     representativeName,
+    representativeImageUrl,
     additionalProductCount: value.orderItems.length - 1,
     productCount: value.orderItems.length,
     totalQuantity,
@@ -155,50 +163,74 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
           {formatDate(order.createdAt)}
         </Text>
       </Group>
-      <Text
-        style={{
-          fontSize: 'var(--font-size-sm)',
-          fontWeight: 'var(--fw-bold)',
-          color: 'var(--color-text)',
-        }}
-        mb={4}
-      >
-        {order.saleType === 'group' ? '[공동구매] ' : ''}
-        {order.deliveryMethod === 'hub'
-          ? '거점 픽업'
-          : order.deliveryMethod === 'parcel'
-            ? '택배'
-            : '직배송'}
-      </Text>
-      {summary && (
-        <Text
+      <Group gap={12} align="flex-start" wrap="nowrap">
+        <Box
           style={{
-            fontSize: 'var(--font-size-md)',
-            fontWeight: 'var(--fw-extrabold)',
-            color: 'var(--color-text)',
-          }}
-          mb={4}
-        >
-          {summary.representativeName}
-          {summary.additionalProductCount > 0 ? ` 외 ${summary.additionalProductCount}개` : ''}
-        </Text>
-      )}
-      <Group justify="space-between" align="baseline">
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-          {summary
-            ? `상품 ${summary.productCount}종 · 총 수량 ${summary.totalQuantity}개`
-            : `수량 ${order.quantity}개`}
-        </Text>
-        <Text
-          style={{
-            fontSize: 'var(--font-size-md)',
-            fontVariantNumeric: 'tabular-nums',
-            fontWeight: 'var(--fw-extrabold)',
-            color: 'var(--color-text)',
+            position: 'relative',
+            width: 64,
+            height: 64,
+            flexShrink: 0,
+            overflow: 'hidden',
+            borderRadius: 12,
+            background: 'var(--color-surface-muted)',
           }}
         >
-          {order.totalAmount.toLocaleString('ko-KR')}원
-        </Text>
+          <ResilientImage
+            fill
+            src={summary?.representativeImageUrl ?? PRODUCT_IMAGE_FALLBACK}
+            fallbackSrc={PRODUCT_IMAGE_FALLBACK}
+            alt=""
+            sizes="64px"
+            style={{ objectFit: 'cover' }}
+          />
+        </Box>
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Text
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-bold)',
+              color: 'var(--color-text)',
+            }}
+            mb={4}
+          >
+            {order.saleType === 'group' ? '[공동구매] ' : ''}
+            {order.deliveryMethod === 'hub'
+              ? '거점 픽업'
+              : order.deliveryMethod === 'parcel'
+                ? '택배'
+                : '직배송'}
+          </Text>
+          {summary && (
+            <Text
+              style={{
+                fontSize: 'var(--font-size-md)',
+                fontWeight: 'var(--fw-extrabold)',
+                color: 'var(--color-text)',
+              }}
+              mb={4}
+            >
+              {summary.representativeName}
+              {summary.additionalProductCount > 0 ? ` 외 ${summary.additionalProductCount}개` : ''}
+            </Text>
+          )}
+          <Group justify="space-between" align="baseline">
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+              {summary
+                ? `상품 ${summary.productCount}종 · 총 수량 ${summary.totalQuantity}개`
+                : `수량 ${order.quantity}개`}
+            </Text>
+            <Text
+              style={{
+                fontSize: 'var(--font-size-md)',
+                fontVariantNumeric: 'tabular-nums',
+                fontWeight: 'var(--fw-extrabold)',
+                color: 'var(--color-text)',
+              }}
+            >
+              {order.totalAmount.toLocaleString('ko-KR')}원
+            </Text>
+          </Group>
+        </Box>
       </Group>
     </UnstyledButton>
   );
