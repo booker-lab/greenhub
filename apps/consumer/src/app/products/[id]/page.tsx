@@ -3,8 +3,9 @@
 import type { Product, SaleRoundItem, SalesMode, Variety } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
 import { Box, Button, Container, Skeleton, Stack, Text } from '@mantine/core';
-import { notFound } from 'next/navigation';
-import { use, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { notFound, usePathname, useRouter } from 'next/navigation';
+import { type ReactNode, use, useEffect, useState } from 'react';
 import ProductTopBar from '@/components/ProductTopBar';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
@@ -195,14 +196,32 @@ function resolveRoundProduct(
   };
 }
 
+/**
+ * round 없이 들어온 상품 주소(카카오 채널 소식·홈 대표 판매상품 등)는 공개 현재 회차(판매 중·판매 예정)에
+ * 이 상품이 실제로 있을 때만 그 회차로 잇는다. 지난 회차·다른 스토어로는 잇지 않고, round가 잘못 지정된
+ * 주소에도 임의 기본값을 만들지 않는다(같은 resolveRoundProduct 검증을 쓴다).
+ */
+function findCurrentRoundIdForProduct(product: Product, currentRound: PublicSaleRound | null) {
+  if (!currentRound) return null;
+  return resolveRoundProduct(product, currentRound.id, currentRound, []) ? currentRound.id : null;
+}
+
+const homeAction = (
+  <Button component={Link} href="/" radius="xl">
+    이번 주 상품 보기
+  </Button>
+);
+
 function DetailStateFrame({
   label,
   message,
   alert = false,
+  action,
 }: {
   label: string;
   message?: string;
   alert?: boolean;
+  action?: ReactNode;
 }) {
   return (
     <Container size="sm" p={0}>
@@ -215,9 +234,12 @@ function DetailStateFrame({
         aria-label={label}
       >
         {message ? (
-          <Text ta="center" py={48} c="var(--color-text-secondary)" size="sm">
-            {message}
-          </Text>
+          <Stack align="center" gap="md" py={48}>
+            <Text ta="center" c="var(--color-text-secondary)" size="sm">
+              {message}
+            </Text>
+            {action}
+          </Stack>
         ) : (
           <>
             <Skeleton height={360} radius={0} />
@@ -271,16 +293,22 @@ function RoundDirectProductDetail({
   roundId: string | null;
 }) {
   const saleRounds = useSaleRounds(product.storeId);
+  const router = useRouter();
+  const pathname = usePathname();
+  const roundsSettled = saleRounds.status !== 'loading' && saleRounds.status !== 'error';
+  const linkedRoundId =
+    !roundId && roundsSettled
+      ? findCurrentRoundIdForProduct(product, saleRounds.currentRound)
+      : null;
 
-  if (!roundId) {
-    return (
-      <DetailStateFrame
-        label="판매 회차 확인 실패"
-        message="유효한 판매 회차가 지정되지 않았습니다."
-        alert
-      />
-    );
-  }
+  // 연결한 회차를 주소에도 남겨 공유·새로고침 때 같은 회차가 열리게 한다(당근 유입 값 등 다른 쿼리는 보존).
+  useEffect(() => {
+    if (!linkedRoundId) return;
+    const query = new URLSearchParams(window.location.search);
+    query.set('round', linkedRoundId);
+    router.replace(`${pathname}?${query.toString()}`, { scroll: false });
+  }, [linkedRoundId, pathname, router]);
+
   if (saleRounds.status === 'loading') {
     return <DetailStateFrame label="판매 회차 불러오는 중" />;
   }
@@ -312,9 +340,21 @@ function RoundDirectProductDetail({
     );
   }
 
+  const effectiveRoundId = roundId ?? linkedRoundId;
+  if (!effectiveRoundId) {
+    return (
+      <DetailStateFrame
+        label="판매 회차 확인 실패"
+        message="이번 회차에서 판매하지 않는 상품이에요."
+        alert
+        action={homeAction}
+      />
+    );
+  }
+
   const roundProduct = resolveRoundProduct(
     product,
-    roundId,
+    effectiveRoundId,
     saleRounds.currentRound,
     saleRounds.pastRounds,
   );
@@ -354,6 +394,7 @@ function RoundDirectProductDetail({
         label="판매 회차 상품 확인 실패"
         message="이 상품에 연결된 공개 판매 회차를 찾을 수 없습니다."
         alert
+        action={homeAction}
       />
     );
   }
