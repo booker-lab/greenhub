@@ -8,13 +8,17 @@
 ```bash
 node scripts/visual/start.mjs                    # 셀러(어드민 포함) → http://127.0.0.1:3202/login
 node scripts/visual/start.mjs consumer           # 소비자 → http://127.0.0.1:3201/
+node scripts/visual/start.mjs driver             # 기사 → http://127.0.0.1:3203/login
 node scripts/visual/start.mjs consumer --phone   # Tailscale 주소에 바인딩 → 휴대폰에서 http://<Tailscale IP>:3201/
 ```
 
 포트는 `apps.mjs`가 정한다. `dev:local`(3000~3003)과 로컬 E2E(127.0.0.x:3101~3103)를 피해 3200번대를 쓰고,
-가짜 API도 앱마다 따로 둬서(4201·4202) 두 앱을 동시에 띄울 수 있다.
+가짜 API도 앱마다 따로 둬서(4201·4202·4203) 여러 앱을 동시에 띄울 수 있다.
 
 - 셀러: 로그인 화면에서 아무 이메일·비밀번호나 넣으면 겸직(어드민+셀러) 가짜 계정으로 들어간다.
+- 기사: 셀러와 같은 로컬 로그인이다. 승인된 가짜 기사 계정으로 들어가고, 배송판·주문 상세(준비 중·배송 중·배송 보류)·지도·내 정보를 본다.
+  - 응답 모양은 API `DriverService.projectOrder`를 따르고, 전화번호는 실제 노출 규칙대로 단계별로만 넣었다.
+  - 지도 화면의 카카오맵은 외부 스크립트라 그려지지 않는다.
 - 소비자: 소비자 앱은 E2E 헤더 게이트(`x-e2e-test-token`)가 있어 브라우저에서는 공개 화면만 볼 수 있다.
   - 자동 캡처(`shots.mjs`)는 실행기가 만든 1회용 값(`runtime.json`)으로 로그인한다.
   - 하네스는 `E2E_TEST=true`로 띄우므로 로그인 화면에 운영에 없는 이메일 입력칸이 함께 보인다.

@@ -2,7 +2,7 @@
 // 배포·Vercel·카카오 로그인 없이 작업 직후 화면을 PC 브라우저나 휴대폰(Tailscale)으로 본다.
 //
 //   node scripts/visual/start.mjs [app] [--phone]
-//     app      seller(셀러·어드민, 기본) 또는 consumer(소비자)
+//     app      seller(셀러·어드민, 기본), consumer(소비자), driver(기사)
 //     --phone  Tailscale 주소에 바인딩해 휴대폰에서 접속한다(같은 tailnet 기기만 접근 가능)
 //
 // 안전장치: 앱의 .env 파일 값(운영 API·Firebase·비밀값)을 전부 빈 값으로 덮고,
