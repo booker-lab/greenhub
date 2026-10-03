@@ -17,7 +17,36 @@ import {
 
 export type ProviderOutcome = 'ACCEPTED' | 'REJECTED' | 'UNKNOWN';
 
-type AligoFetch = (url: string, init: { method: string; body: URLSearchParams }) => Promise<Response>;
+type AligoFetch = (
+  url: string,
+  init: { method: string; body: URLSearchParams; signal: AbortSignal },
+) => Promise<Response>;
+
+/**
+ * ALIGO HTTP 호출 1회(연결·요청 전송·응답 헤더·본문 읽기 전체)의 시간 상한.
+ * 주문 상태 변경 요청(기사 배송 시작·완료 등)이 알림 발송을 기다리므로 상한이 없으면
+ * ALIGO나 고정 IP 프록시가 멈출 때 그 요청도 끝없이 멈춘다. 정상 ALIGO 응답은 1초 안팎이고
+ * 프록시 한 홉을 더해도 8초면 충분한 여유가 있다. 최악 지연(알림톡 3회+SMS 1회가 모두
+ * 상한 직전에 오류 응답) = 4 × 8초 + backoff 최대 3초 ≈ 35초.
+ */
+export const ALIGO_REQUEST_TIMEOUT_MS = 8_000;
+
+/**
+ * 시간 상한 신호. AbortSignal.timeout() 대신 전역 setTimeout을 써서 호출이 끝나면 바로
+ * 정리하고, 테스트의 가짜 타이머로도 같은 경로를 검증할 수 있게 한다. 신호는 전역 fetch와
+ * 프록시(undici fetch + ProxyAgent dispatcher) 양쪽에 그대로 전달되고 본문 읽기까지 덮는다.
+ */
+function startAligoRequestTimeout(): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ALIGO_REQUEST_TIMEOUT_MS);
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
+}
+
+// 시간 초과는 연결 단계인지 요청 전송 뒤인지 구분할 수 없다(신호 하나가 전 구간을 덮는다).
+// 요청이 이미 ALIGO에 닿았을 수 있으므로 접수 여부 불확실(UNKNOWN)로 보고 blind 재발송하지 않는다.
+function aligoTimeoutMessage(channelLabel: string): string {
+  return `${channelLabel} 요청이 ${ALIGO_REQUEST_TIMEOUT_MS}ms 안에 끝나지 않아 접수 여부를 확인할 수 없습니다. blind retry 없이 수동 확인이 필요합니다.`;
+}
 
 /**
  * ALIGO는 등록된 송신 IP만 허용한다. 호스팅의 송신 IP가 고정되지 않을 때는
@@ -631,6 +660,7 @@ export class AligoClient {
     templateCode: string,
     message: string,
   ): Promise<ProviderAttemptResult> {
+    const timeout = startAligoRequestTimeout();
     try {
       const params = new URLSearchParams({
         apikey: this.apiKey,
@@ -646,6 +676,7 @@ export class AligoClient {
       const res = await this.requireAligoFetch()('https://kakaoapi.aligo.in/akv10/alimtalk/send/', {
         method: 'POST',
         body: params,
+        signal: timeout.signal,
       });
       let json: unknown;
       try {
@@ -655,7 +686,9 @@ export class AligoClient {
           outcome: 'UNKNOWN',
           providerReceipt: null,
           errorClass: 'UNKNOWN',
-          errorMessage: `알림톡 응답 파싱 실패: ${String(e)}`,
+          errorMessage: timeout.signal.aborted
+            ? aligoTimeoutMessage('알림톡')
+            : `알림톡 응답 파싱 실패: ${String(e)}`,
         };
       }
       const record = (json ?? {}) as Record<string, unknown>;
@@ -693,8 +726,12 @@ export class AligoClient {
         outcome: 'UNKNOWN',
         providerReceipt: null,
         errorClass: 'UNKNOWN',
-        errorMessage: `알림톡 transport 불확실: ${String(e)}`,
+        errorMessage: timeout.signal.aborted
+          ? aligoTimeoutMessage('알림톡')
+          : `알림톡 transport 불확실: ${String(e)}`,
       };
+    } finally {
+      timeout.clear();
     }
   }
 
@@ -709,6 +746,7 @@ export class AligoClient {
     phone: string,
     message: string,
   ): Promise<ProviderAttemptResult> {
+    const timeout = startAligoRequestTimeout();
     try {
       const params = new URLSearchParams({
         key: this.apiKey,
@@ -721,6 +759,7 @@ export class AligoClient {
       const res = await this.requireAligoFetch()('https://apis.aligo.in/send/', {
         method: 'POST',
         body: params,
+        signal: timeout.signal,
       });
       let json: unknown;
       try {
@@ -730,7 +769,9 @@ export class AligoClient {
           outcome: 'UNKNOWN',
           providerReceipt: null,
           errorClass: 'UNKNOWN',
-          errorMessage: `문자 응답 파싱 실패: ${String(e)}`,
+          errorMessage: timeout.signal.aborted
+            ? aligoTimeoutMessage('문자')
+            : `문자 응답 파싱 실패: ${String(e)}`,
         };
       }
       const record = (json ?? {}) as Record<string, unknown>;
@@ -765,8 +806,12 @@ export class AligoClient {
         outcome: 'UNKNOWN',
         providerReceipt: null,
         errorClass: 'UNKNOWN',
-        errorMessage: `문자 transport 불확실: ${String(e)}`,
+        errorMessage: timeout.signal.aborted
+          ? aligoTimeoutMessage('문자')
+          : `문자 transport 불확실: ${String(e)}`,
       };
+    } finally {
+      timeout.clear();
     }
   }
 }
