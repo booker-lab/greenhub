@@ -64,7 +64,9 @@ function makeFirestore(order: Data, salesMode = 'legacy') {
           }),
         };
         const value = await callback(transaction);
-        pending.forEach((data, path) => records.set(path, data));
+        pending.forEach((data, path) => {
+          records.set(path, data);
+        });
         return value;
       });
       transactionQueue = result.then(

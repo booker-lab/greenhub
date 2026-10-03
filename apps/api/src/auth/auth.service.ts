@@ -240,7 +240,9 @@ export class AuthService {
     };
 
     if (newAddr.isDefault) {
-      addresses.forEach((a) => (a.isDefault = false));
+      addresses.forEach((a) => {
+        a.isDefault = false;
+      });
     }
     addresses.push(newAddr);
 
@@ -261,7 +263,9 @@ export class AuthService {
     if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
 
     if (dto.isDefault) {
-      addresses.forEach((a) => (a.isDefault = false));
+      addresses.forEach((a) => {
+        a.isDefault = false;
+      });
     }
     addresses[idx] = { ...addresses[idx], ...dto, id: addressId };
 
@@ -295,7 +299,9 @@ export class AuthService {
     const idx = addresses.findIndex((a) => a.id === addressId);
     if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
 
-    addresses.forEach((a) => (a.isDefault = false));
+    addresses.forEach((a) => {
+      a.isDefault = false;
+    });
     addresses[idx].isDefault = true;
 
     await ref.update({
