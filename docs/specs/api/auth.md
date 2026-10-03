@@ -2,7 +2,7 @@
 
 # Auth API / Domain Spec
 
-> **최종 정합화**: 2026-09-05
+> **최종 정합화**: 2026-10-04
 > **상태**: Current
 > **공통 타입 정본**: `packages/shared/src/auth.types.ts`
 > **API 정본**: `apps/api/src/auth/**`
@@ -165,7 +165,14 @@ consumer | seller | driver
 
 - consumer: `consumer|admin`
 - seller: `seller|admin`
-- driver: `driver|admin`
+- driver: `driver` (2026-10-04 사용자 결정)
+
+기사 앱은 기사(driver) 역할만 받는다(2026-10-04 결정). 기사 API(`@Roles('driver')`)와 주문 권한 검사가 승인된 driver만 허용해 관리자는 기사 앱에 들어와도 쓸 수 있는 기능이 없었으므로, 진입 자체를 막는다.
+
+- API `kakaoLogin`은 `targetRole: driver`에서 `driver`만 허용한다. 관리자 계정은 JWT/refresh 발급 전에 403으로 거절하고, 기사 앱이 일반 거절과 구분하도록 응답에 `code: KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT`를 붙인다. `targetRole: consumer|seller`의 관리자 허용은 그대로다.
+- 기사 앱 카카오 `signIn` 콜백은 위 거절(또는 응답 role `admin`)을 세션 없이 `/login?error=AdminAccount` 안내("관리자 계정은 기사 앱을 쓸 수 없습니다 · 기사 계정으로 로그인해 주세요")로 보낸다. Credentials(Preview E2E·local runtime) `authorize`는 원래 `driver`만 허용한다.
+- 이미 발급된 비driver 세션(이전에 허용되던 관리자 세션 등)은 기사 앱 `jwt` callback이 갱신 전에 `null`로 끝내고(쿠키 삭제), `GET /auth/session` 재검증의 앱 허용 role도 `driver`뿐이다. proxy도 `driver`가 아닌 세션을 기사 화면에 들이지 않는다(관리자면 `AdminAccount` 안내).
+- 직접 근거: `apps/api/src/auth/auth.service.spec.ts`(기사 앱 관리자 거절·consumer/seller 앱 관리자 유지), `apps/driver/src/driver-dead-ends.test.mjs`(기사 앱 허용 역할 계약).
 
 공개 `RegisterDto.role`도 현재 다음을 허용한다.
 
@@ -424,6 +431,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-04 | 기사 앱 허용 역할을 `driver`·`admin`에서 `driver`로 좁힘(사용자 결정). API `targetRole: driver` 관리자 거절·구분 code, 기사 앱 signIn·jwt·proxy 차단과 로그인 안내 계약 반영 |
 | 2026-09-28 | revocation window를 즉시(다음 요청)로 결정(D2)하고 JwtStrategy·Firestore Rules 실시간 확인 근거와 Preview 세션 수명주기 E2E 12건 증거를 연결, 로그아웃 서버 폐기는 출시 후 과제로 분리 |
 | 2026-08-24 | Task 2F-B candidate에서 public driver register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계를 검증하고 `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN으로 유지 |
 | 2026-08-24 | 공개 email `register(role=driver) → login`이 승인 없이 driver JWT를 발급할 수 있는 추가 P0 우회를 반영하고 Kakao/refresh/Firebase claim과 하나의 driver authorization lifecycle로 정합화 |
