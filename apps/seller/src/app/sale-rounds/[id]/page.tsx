@@ -38,10 +38,10 @@ import { RoundForm } from './RoundForm';
 
 const STATUS_META: Record<SaleRoundStatus, { label: string; color: string }> = {
   DRAFT: { label: '작성 중', color: 'gray' },
-  SCHEDULED: { label: '판매 예정', color: 'blue' },
-  OPEN: { label: '판매 중', color: 'green' },
-  CLOSED: { label: '주문 마감', color: 'orange' },
-  COMPLETED: { label: '배송 완료', color: 'teal' },
+  SCHEDULED: { label: '판매 예정', color: 'yellow' },
+  OPEN: { label: '판매 중', color: 'brand' },
+  CLOSED: { label: '주문 마감', color: 'dark' },
+  COMPLETED: { label: '배송 완료', color: 'gray' },
   CANCELLED: { label: '취소', color: 'red' },
 };
 
@@ -73,14 +73,14 @@ const ACTION_META: Record<
     title: '회차 주문 마감',
     message: '판매 중인 회차의 주문을 수동 마감합니다. 이 동작은 자동으로 되돌릴 수 없습니다.',
     confirmLabel: '마감 확인',
-    color: 'orange',
+    color: 'dark',
   },
   complete: {
     buttonLabel: '회차 완료',
     title: '회차 배송 완료',
     message: '미완료 또는 배송 보류 주문이 없는지 서버에서 다시 확인한 뒤 회차를 완료합니다.',
     confirmLabel: '완료 확인',
-    color: 'teal',
+    color: 'brand',
   },
 };
 
@@ -350,7 +350,7 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
       <Stack gap="md">
         <RoundSummary round={round} />
         {actionSuccess && (
-          <Alert color="green" title="상태 변경 완료" role="status">
+          <Alert color="brand" title="상태 변경 완료" role="status">
             {actionSuccess}
           </Alert>
         )}

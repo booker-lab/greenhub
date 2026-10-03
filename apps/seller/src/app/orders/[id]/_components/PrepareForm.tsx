@@ -56,7 +56,7 @@ export function PrepareForm({
             size="xs"
             radius="xl"
             variant={preparedAt === opt.iso ? 'filled' : 'outline'}
-            color={preparedAt === opt.iso ? 'green' : 'gray'}
+            color={preparedAt === opt.iso ? 'brand' : 'gray'}
             onClick={() => setPreparedAt(preparedAt === opt.iso ? null : opt.iso)}
             style={{ flex: 1, fontWeight: 'var(--fw-medium)' }}
           >

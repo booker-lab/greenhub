@@ -27,7 +27,7 @@ export function PageHeader({
   sticky = true,
 }: PageHeaderProps) {
   const pathname = usePathname();
-  // 홈 진입점 — 현재 경로가 홈이 아닐 때만 노출. 좌/우 zone과 무관하게 정중앙 고정.
+  // 홈 진입점 — 현재 경로가 홈이 아닐 때만 노출. 제목 바로 옆에 둬서 긴 제목과 겹치지 않는다.
   const showHome = pathname !== '/';
 
   return (
@@ -40,35 +40,25 @@ export function PageHeader({
         ...(sticky ? { position: 'sticky', top: 0, zIndex: 10 } : {}),
       }}
     >
-      <Container size={containerSize} style={{ position: 'relative' }}>
-        <Group justify="space-between">
-          <Group gap="sm">
+      <Container size={containerSize}>
+        <Group justify="space-between" wrap="nowrap">
+          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
             {onBack && (
               <ActionIcon variant="subtle" color="gray" onClick={onBack}>
                 <ChevronLeft size={20} />
               </ActionIcon>
             )}
-            <Title order={3}>{title}</Title>
+            <Title order={3} style={{ minWidth: 0 }}>
+              {title}
+            </Title>
+            {showHome && (
+              <ActionIcon component={Link} href="/" variant="subtle" color="gray" aria-label="홈">
+                <Home size={20} />
+              </ActionIcon>
+            )}
           </Group>
           {right}
         </Group>
-        {showHome && (
-          <ActionIcon
-            component={Link}
-            href="/"
-            variant="subtle"
-            color="gray"
-            aria-label="홈"
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              transform: 'translate(-50%, -50%)',
-            }}
-          >
-            <Home size={20} />
-          </ActionIcon>
-        )}
       </Container>
     </Box>
   );

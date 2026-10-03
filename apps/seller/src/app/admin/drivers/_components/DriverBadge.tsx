@@ -12,7 +12,7 @@ export function DriverBadge({ driver }: { driver: AdminDriver }) {
     );
   if (driver.driverApproved)
     return (
-      <Badge color="green" variant="light" radius="xl">
+      <Badge color="brand" variant="light" radius="xl">
         승인 완료
       </Badge>
     );

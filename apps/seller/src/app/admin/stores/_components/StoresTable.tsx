@@ -138,7 +138,7 @@ export function StoresTable({
           onClick={() => onSave(store.id)}
           disabled={saving}
           size="xs"
-          color="green"
+          color="brand"
           radius="md"
         >
           저장

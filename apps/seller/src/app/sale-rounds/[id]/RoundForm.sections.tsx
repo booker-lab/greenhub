@@ -408,7 +408,7 @@ export function CarrotLinksSection({
       </Stack>
       {copyFeedback && (
         <Alert
-          color={copyFeedback.kind === 'success' ? 'green' : 'red'}
+          color={copyFeedback.kind === 'success' ? 'brand' : 'red'}
           title={copyFeedback.kind === 'success' ? '링크 복사 완료' : '링크 복사 실패'}
           role={copyFeedback.kind === 'success' ? 'status' : 'alert'}
         >
