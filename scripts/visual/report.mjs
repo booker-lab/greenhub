@@ -15,9 +15,16 @@ function option(name, fallback) {
 
 const args = process.argv.slice(2);
 // 여러 앱을 한 확인판에 넣을 수 있다: consumer,seller (앞에 쓴 앱이 위에 온다).
-const appNames = (
+// 앱마다 다른 캡처를 쓰려면 앱@label로 쓴다: consumer@after,seller@baseline
+// --before는 그 label 캡처가 있고 after와 다를 때만 비교로 붙는다.
+const appSpecs = (
   args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--')) ?? 'seller'
-).split(',');
+)
+  .split(',')
+  .map((spec) => {
+    const [app, label] = spec.split('@');
+    return { app, label };
+  });
 // 확인판에서 앱을 구분하는 묶음 이름 앞머리. 셀러 fixture의 묶음(판매자·어드민)은 그대로 둔다.
 const APP_GROUP_PREFIX = { consumer: '소비자 · ' };
 const afterLabel = option('after', 'current');
@@ -54,13 +61,22 @@ fs.rmSync(outDir, { recursive: true, force: true });
 // 화면 id는 앱 이름을 붙여 앱 사이에서 겹치지 않게 한다(판정 문서 id에도 쓰인다).
 const screens = [];
 const runs = [];
-for (const app of appNames) {
-  const after = readRun(app, afterLabel);
-  const before = beforeLabel ? readRun(app, beforeLabel) : null;
-  copyShots(app, afterLabel);
-  if (before) copyShots(app, beforeLabel);
+for (const { app, label } of appSpecs) {
+  const afterOfApp = label ?? afterLabel;
+  const beforeOfApp =
+    beforeLabel &&
+    beforeLabel !== afterOfApp &&
+    fs.existsSync(path.join(shotsRoot(app), beforeLabel, 'manifest.json'))
+      ? beforeLabel
+      : null;
+  const after = readRun(app, afterOfApp);
+  const before = beforeOfApp ? readRun(app, beforeOfApp) : null;
+  copyShots(app, afterOfApp);
+  if (before) copyShots(app, beforeOfApp);
   runs.push({
     app,
+    label: afterOfApp,
+    before: beforeOfApp,
     gitSha: after.gitSha,
     beforeSha: before?.gitSha ?? null,
     createdAt: after.createdAt,
@@ -75,8 +91,8 @@ for (const app of appNames) {
     }
     const prev = before?.shots.find((b) => b.id === shot.id && b.viewport === shot.viewport);
     screen.views[shot.viewport] = {
-      src: `shots/${app}/${afterLabel}/${shot.file}`,
-      beforeSrc: prev ? `shots/${app}/${beforeLabel}/${prev.file}` : null,
+      src: `shots/${app}/${afterOfApp}/${shot.file}`,
+      beforeSrc: prev ? `shots/${app}/${beforeOfApp}/${prev.file}` : null,
       finalPath: shot.finalPath,
       missing: shot.missing,
       errors: shot.errors,
@@ -85,7 +101,8 @@ for (const app of appNames) {
 }
 
 const data = {
-  app: appNames.join(','),
+  app: appSpecs.map((s) => s.app).join(','),
+  runs,
   run: afterLabel,
   before: beforeLabel,
   gitSha: runs[0].gitSha,

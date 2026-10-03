@@ -32,6 +32,7 @@ node scripts/visual/start.mjs consumer --phone   # Tailscale 주소에 바인딩
 node scripts/visual/shots.mjs seller --label after                  # fixtures의 screens를 폰(390)·PC(1280)로 촬영
 node scripts/visual/report.mjs seller --after after --out <폴더>     # 폰에서 볼 확인판 HTML 생성
 node scripts/visual/report.mjs seller --after after --before before --out <폴더>  # 작업 전·후 비교
+node scripts/visual/report.mjs consumer@after,seller@baseline --after after --before baseline --out <폴더>  # 앱마다 다른 캡처
 ```
 
 - 캡처는 `%TEMP%\greenhub-visual\<app>\shots\<label>\`에 PNG와 `manifest.json`으로 남는다.
