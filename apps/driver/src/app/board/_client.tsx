@@ -3,7 +3,7 @@
 import type { Order } from '@greenhub/shared';
 import { Anchor, Badge, Box, Button, Stack, Text, Title, UnstyledButton } from '@mantine/core';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import OrderCard from '@/components/OrderCard';
 import { apiFetch } from '@/lib/api';
@@ -236,6 +236,14 @@ export default function BoardClient() {
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
               로그인이 필요합니다. 세션을 다시 확인해 주세요.
             </Text>
+            {/* 인증 오류는 같은 토큰으로 재조회해도 반복되므로 세션을 정리하고 로그인으로 보낸다. */}
+            <Button
+              color="brand"
+              radius="xl"
+              onClick={() => void signOut({ redirectTo: '/login' })}
+            >
+              다시 로그인
+            </Button>
             <Button
               variant="outline"
               color="brand"
