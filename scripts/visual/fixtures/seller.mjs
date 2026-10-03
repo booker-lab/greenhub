@@ -317,6 +317,72 @@ const byStatus = (items, url) => {
 };
 
 /** [메서드, 경로 정규식, 처리 함수] — 첫 일치가 응답한다. 처리 함수는 { status?, body, delay? }를 돌려준다. */
+// ── Firestore 에뮬레이터 시드 ──
+// 셀러 상품·준비 화면은 브라우저가 Firestore products를 직접 구독한다. start.mjs가 이 값을 에뮬레이터에 넣는다.
+// 저장소 firestore.rules가 그대로 적용되므로 읽기 조건(users 문서 role·storeId, stores.ownerId, 토큰 클레임)을 함께 맞춘다.
+// 상품 id는 회차 항목(roundItems)의 product-1~3과 같다.
+function storeProduct(name, price, extra = {}) {
+  return {
+    storeId: STORE_ID,
+    name,
+    images: [],
+    price,
+    category: 'orchid',
+    saleType: 'normal',
+    deliverySize: 'medium',
+    isActive: true,
+    createdAt: '2026-09-01T01:00:00.000Z',
+    updatedAt: '2026-09-28T01:00:00.000Z',
+    selection: {
+      colors: ['pink'],
+      stemType: '외대',
+      fragrance: 'light',
+      bloomCondition: 'half',
+      bundleUnit: '1분',
+      careLevel: 'easy',
+    },
+    ...extra,
+  };
+}
+
+export const firestoreSeed = {
+  users: {
+    [user.id]: {
+      role: user.role,
+      storeId: STORE_ID,
+      suspended: false,
+      name: user.name,
+      email: user.email,
+    },
+  },
+  stores: {
+    [STORE_ID]: { ownerId: user.id, name: '디어 오키드' },
+  },
+  products: {
+    // 셀러 주문 fixture(sellerOrder)가 쓰는 예전 일반 판매 상품 — 준비 물량 화면이 상품 이름을 찾는다.
+    'product-0001': storeProduct('장미 꽃다발', 30000, {
+      category: 'cut_flower',
+      createdAt: '2026-08-10T01:00:00.000Z',
+    }),
+    'product-1': storeProduct('동양란 빅립', 30000, {
+      createdAt: '2026-09-03T01:00:00.000Z',
+    }),
+    'product-2': storeProduct('동양란 만천홍', 25000, {
+      createdAt: '2026-09-02T01:00:00.000Z',
+    }),
+    'product-3': storeProduct('동양란 v3', 45000, {
+      createdAt: '2026-09-01T01:00:00.000Z',
+    }),
+    'product-4': storeProduct('오렌지 글로우', 38000, {
+      isActive: false,
+      createdAt: '2026-08-20T01:00:00.000Z',
+    }),
+  },
+};
+
+/** Auth 에뮬레이터 커스텀 토큰 클레임 — firestore.rules의 currentRole·currentSellerFor가 읽는다. */
+export const firebaseClaims = { role: user.role, storeId: STORE_ID };
+
 export const routes = [
   ['GET', /^\/stores\/[^/]+\/orders$/, () => ({ body: SELLER_ORDERS })],
   [
