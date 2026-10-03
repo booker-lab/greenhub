@@ -23,6 +23,17 @@ function normalizeProviderOutcome(value: unknown, fallbackSuccess: boolean): Pro
   return fallbackSuccess ? 'ACCEPTED' : 'REJECTED';
 }
 
+// provider 결과의 오류 분류를 알림 기록용 문자열로 정규화한다. 없으면 null.
+function readProviderErrorClassification(raw: Record<string, unknown>): {
+  errorClass: string | null;
+  permanentErrorReason: string | null;
+} {
+  return {
+    errorClass: normalizeNullableString(raw.errorClass),
+    permanentErrorReason: normalizeNullableString(raw.permanentErrorReason),
+  };
+}
+
 function normalizeNullableString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -171,6 +182,7 @@ export class NotificationsService {
         typeof (raw as { errorMessage?: unknown })['errorMessage'] === 'string'
           ? ((raw as { errorMessage?: string })['errorMessage'] as string)
           : null;
+      const classification = readProviderErrorClassification(raw);
       observedOutcome = outcome;
       observedReceipt = providerReceipt;
       observedAttemptId = attemptId;
@@ -196,6 +208,7 @@ export class NotificationsService {
         status: notificationStatus,
         attemptCount: alimtalkAttempts + smsAttempts,
         errorMessage,
+        ...classification,
         attemptId,
         providerReceipt,
         providerOutcome: outcome,
@@ -301,6 +314,7 @@ export class NotificationsService {
       typeof (raw as { errorMessage?: unknown })['errorMessage'] === 'string'
         ? ((raw as { errorMessage?: string })['errorMessage'] as string)
         : null;
+    const classification = readProviderErrorClassification(raw);
     const originIdempotencyKey =
       typeof notification['idempotencyKey'] === 'string'
         ? (notification['idempotencyKey'] as string)
@@ -316,6 +330,7 @@ export class NotificationsService {
       status: outcome === 'ACCEPTED' ? 'sent' : outcome === 'UNKNOWN' ? 'pending' : 'failed',
       attemptCount: smsAttempts,
       errorMessage,
+      ...classification,
       attemptId,
       providerReceipt,
       providerOutcome: outcome,
@@ -609,6 +624,8 @@ export class NotificationsService {
     status: string;
     attemptCount: number;
     errorMessage: string | null;
+    errorClass?: string | null;
+    permanentErrorReason?: string | null;
     attemptId?: string | null;
     providerReceipt?: string | null;
     providerOutcome?: ProviderOutcome | null;
@@ -620,6 +637,8 @@ export class NotificationsService {
     await this.firestore.doc(`notifications/${id}`).set({
       id,
       ...data,
+      errorClass: data.errorClass ?? null,
+      permanentErrorReason: data.permanentErrorReason ?? null,
       attemptId: data.attemptId ?? null,
       providerReceipt: data.providerReceipt ?? null,
       providerOutcome: data.providerOutcome ?? null,
