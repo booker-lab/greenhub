@@ -6,7 +6,23 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
+import { readDriverOrderCommandErrorCodeFromResponse } from '../../_lib/driver-order-detail';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
+import {
+  type DecodedPhoto,
+  encodeDeliveryJpeg,
+  loadImageSource,
+  PhotoEncodeError,
+} from './photo-encode';
+import {
+  classifyPhotoUploadFailure,
+  decideIdempotencyKey,
+  isDeliveryPhotoAck,
+  type PhotoUploadFailureKind,
+  photoEncodeFailureMessage,
+  readDriverOrderStatus,
+  resolvePhotoUploadFailure,
+} from './photo-upload-policy';
 
 type PhotoMode = 'legacy' | 'round-direct';
 
@@ -14,6 +30,12 @@ type PhotoCaptureProps = {
   orderId: string;
   mode: PhotoMode;
 };
+
+function encodeErrorMessage(cause: unknown): string {
+  return photoEncodeFailureMessage(
+    cause instanceof PhotoEncodeError ? cause.reason : 'ENCODE_FAILED',
+  );
+}
 
 function stopMediaStream(mediaStream: MediaStream | null) {
   mediaStream?.getTracks().forEach((track) => {
@@ -30,7 +52,6 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
   const sessionReady = Boolean(session?.user?.accessToken);
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const cameraRequestRef = useRef(0);
@@ -39,8 +60,14 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
   const [captured, setCaptured] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState('');
+  const preparingRef = useRef(false);
+  // 멱등 키는 "이 사진으로 보낸 요청" 단위다. 재촬영·확정 거절이면 새로 만들고,
+  // 응답이 불확실한 재시도는 같은 키·같은 사진을 유지한다 (photo-upload-policy).
   const requestIdRef = useRef<string | null>(null);
+  const requestPhotoRef = useRef<Blob | null>(null);
+  const lastFailureRef = useRef<PhotoUploadFailureKind | null>(null);
   const uploadInFlightRef = useRef(false);
 
   useEffect(() => {
@@ -85,6 +112,12 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
       }
     };
   }, [stream]);
+
+  // 미리보기 object URL은 사진이 바뀌거나 화면을 떠날 때 돌려준다.
+  useEffect(() => {
+    if (!captured) return;
+    return () => URL.revokeObjectURL(captured);
+  }, [captured]);
 
   useEffect(() => {
     return () => {
@@ -139,10 +172,9 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
     setFrameReady(false);
   }
 
-  function capture() {
+  async function capture() {
     const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    if (!video) return;
     if (
       !frameReady ||
       video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
@@ -152,31 +184,29 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
       setError('카메라 화면이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
       return;
     }
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext('2d');
-    if (!context) {
-      setError('사진 캔버스를 준비할 수 없습니다. 다시 시도해주세요.');
-      return;
+    if (preparingRef.current) return;
+    preparingRef.current = true;
+    setPreparing(true);
+    try {
+      // 카메라 프레임도 파일 선택과 같은 축소·재인코딩 경로를 탄다.
+      const nextBlob = await encodeDeliveryJpeg(video, video.videoWidth, video.videoHeight);
+      showPhoto(nextBlob);
+      stopStream();
+    } catch (cause) {
+      setError(encodeErrorMessage(cause));
+    } finally {
+      preparingRef.current = false;
+      setPreparing(false);
     }
-    context.drawImage(video, 0, 0);
-    canvas.toBlob(
-      (nextBlob) => {
-        if (!nextBlob || nextBlob.type !== 'image/jpeg' || nextBlob.size <= 0) {
-          setError('JPEG 사진을 만들 수 없습니다. 다시 시도해주세요.');
-          return;
-        }
-        setBlob(nextBlob);
-        setCaptured(canvas.toDataURL('image/jpeg', 0.85));
-        stopStream();
-      },
-      'image/jpeg',
-      0.85,
-    );
   }
 
-  function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
+  function showPhoto(nextBlob: Blob) {
+    setError('');
+    setBlob(nextBlob);
+    setCaptured(URL.createObjectURL(nextBlob));
+  }
+
+  async function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
@@ -189,21 +219,23 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
       setError('JPEG 사진만 선택할 수 있습니다.');
       return;
     }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== 'string') {
-        setError('사진 미리보기를 만들 수 없습니다.');
-        return;
-      }
-      setError('');
-      setBlob(file);
-      setCaptured(reader.result);
-    };
-    reader.onerror = () => {
-      setError('사진을 읽을 수 없습니다. 다시 선택해주세요.');
-    };
-    reader.readAsDataURL(file);
+    if (preparingRef.current) return;
+    preparingRef.current = true;
+    setPreparing(true);
+    setError('');
+    let decoded: DecodedPhoto | null = null;
+    try {
+      // 원본 카메라 사진은 서버 한도(5MB)를 넘기 쉬워 항상 축소해서 올린다.
+      decoded = await loadImageSource(file);
+      const nextBlob = await encodeDeliveryJpeg(decoded.source, decoded.width, decoded.height);
+      showPhoto(nextBlob);
+    } catch (cause) {
+      setError(encodeErrorMessage(cause));
+    } finally {
+      decoded?.release();
+      preparingRef.current = false;
+      setPreparing(false);
+    }
   }
 
   function retake() {
@@ -212,44 +244,121 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
     startCamera();
   }
 
+  async function readOrderStatus(token: string): Promise<string | null> {
+    try {
+      const response = await apiFetch(`/driver/orders/${encodeURIComponent(orderId)}`, token);
+      if (!response.ok) return null;
+      return readDriverOrderStatus(await response.json(), orderId);
+    } catch {
+      return null;
+    }
+  }
+
+  // 사진은 연결됐는데 DELIVERED 전이만 빠진 경우의 서버 마무리 경로.
+  // 서버는 사진이 연결된 DELIVERING 주문에서만 이 전이를 허용한다.
+  async function finishDelivery(token: string): Promise<boolean> {
+    try {
+      const response = await apiFetch(`/stores/${storeId}/orders/${orderId}/status`, token, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'DELIVERED' }),
+      });
+      if (!response.ok) return false;
+      const ack = (await response.json()) as { orderId?: unknown; status?: unknown };
+      return ack.orderId === orderId && ack.status === 'DELIVERED';
+    } catch {
+      return false;
+    }
+  }
+
+  // 실패 뒤 주문 상태를 다시 읽어, 서버가 이미 완료했으면 성공으로 수렴한다.
+  async function recoverAfterUploadFailure(
+    token: string,
+    failure: PhotoUploadFailureKind,
+  ): Promise<boolean> {
+    let resolution = resolvePhotoUploadFailure({
+      failure,
+      orderStatus: await readOrderStatus(token),
+      finishAttempted: false,
+    });
+    if (resolution.action === 'finish-delivery') {
+      if (await finishDelivery(token)) return true;
+      resolution = resolvePhotoUploadFailure({
+        failure,
+        orderStatus: await readOrderStatus(token),
+        finishAttempted: true,
+      });
+    }
+    if (resolution.action === 'complete') return true;
+    if (resolution.action === 'show') setError(resolution.message);
+    return false;
+  }
+
+  // 회차 직배송 업로드. 완료(서버가 이미 완료한 경우 포함)면 true, 안내를 띄웠으면 false.
+  async function uploadRoundDirect(token: string, blob: Blob): Promise<boolean> {
+    const keyDecision = decideIdempotencyKey({
+      hasKey: requestIdRef.current !== null,
+      photoChanged: requestPhotoRef.current !== blob,
+      lastFailure: lastFailureRef.current,
+    });
+    const requestId =
+      keyDecision === 'renew' || requestIdRef.current === null
+        ? globalThis.crypto.randomUUID()
+        : requestIdRef.current;
+    requestIdRef.current = requestId;
+    requestPhotoRef.current = blob;
+
+    let failure: PhotoUploadFailureKind;
+    try {
+      const form = new FormData();
+      form.append('photo', blob, 'delivery.jpg');
+      form.append('idempotencyKey', requestId);
+      const response = await apiFetch(
+        `/stores/${storeId}/orders/${orderId}/delivery-photos`,
+        token,
+        { method: 'POST', body: form },
+      );
+      if (response.ok) {
+        let result: unknown = null;
+        try {
+          result = await response.json();
+        } catch {
+          result = null;
+        }
+        if (isDeliveryPhotoAck(result, orderId)) {
+          lastFailureRef.current = null;
+          return true;
+        }
+        failure = classifyPhotoUploadFailure({ kind: 'ack' });
+      } else {
+        failure = classifyPhotoUploadFailure({
+          kind: 'http',
+          status: response.status,
+          code: await readDriverOrderCommandErrorCodeFromResponse(response),
+        });
+      }
+    } catch {
+      failure = classifyPhotoUploadFailure({ kind: 'network' });
+    }
+    lastFailureRef.current = failure;
+    return recoverAfterUploadFailure(token, failure);
+  }
+
   async function upload() {
     if (!blob || !session) return;
     if (uploadInFlightRef.current) return;
     uploadInFlightRef.current = true;
     setUploading(true);
     setError('');
+    const token = session.user.accessToken;
     try {
       if (isRoundDirect) {
-        requestIdRef.current ??= globalThis.crypto.randomUUID();
-        const form = new FormData();
-        form.append('photo', blob, 'delivery.jpg');
-        form.append('idempotencyKey', requestIdRef.current);
-        const response = await apiFetch(
-          `/stores/${storeId}/orders/${orderId}/delivery-photos`,
-          session.user.accessToken,
-          { method: 'POST', body: form },
-        );
-        if (!response.ok) throw new Error('배송 사진 업로드 실패');
-        const result = (await response.json()) as {
-          orderId?: unknown;
-          photoId?: unknown;
-          status?: unknown;
-        };
-        if (
-          result.orderId !== orderId ||
-          typeof result.photoId !== 'string' ||
-          !result.photoId ||
-          result.status !== 'DELIVERED'
-        ) {
-          throw new Error('배송 완료 응답 불일치');
-        }
+        if (!(await uploadRoundDirect(token, blob))) return;
       } else {
         const photoUrl = await uploadLegacyHubPhoto(orderId, blob);
-        const response = await apiFetch(
-          `/stores/${storeId}/orders/${orderId}/status`,
-          session.user.accessToken,
-          { method: 'PATCH', body: JSON.stringify({ status: 'HUB_ARRIVED', photoUrl }) },
-        );
+        const response = await apiFetch(`/stores/${storeId}/orders/${orderId}/status`, token, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'HUB_ARRIVED', photoUrl }),
+        });
         if (!response.ok) throw new Error('거점 도착 전환 실패');
         let ack: { orderId?: unknown; status?: unknown };
         try {
@@ -376,6 +485,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
             </Text>
             <Button
               onClick={startCamera}
+              disabled={preparing}
               color="white"
               style={{ color: 'var(--color-text)' }}
               radius="md"
@@ -385,6 +495,8 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
             {isRoundDirect && (
               <Button
                 onClick={() => fileInputRef.current?.click()}
+                loading={preparing}
+                disabled={preparing}
                 variant="outline"
                 color="white"
                 style={{ color: 'var(--color-bg)' }}
@@ -419,7 +531,6 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
               playsInline
               muted
             />
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
             <div
               style={{
                 position: 'absolute',
@@ -433,6 +544,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
               <button
                 type="button"
                 aria-label="사진 촬영"
+                aria-busy={preparing}
                 onClick={capture}
                 style={{
                   width: 64,
@@ -449,23 +561,20 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
         )}
 
         {captured && (
-          <>
-            <Image
-              src={captured}
-              alt="촬영 미리보기"
-              fill
-              sizes="100vw"
-              unoptimized
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-              }}
-            />
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
-          </>
+          <Image
+            src={captured}
+            alt="촬영 미리보기"
+            fill
+            sizes="100vw"
+            unoptimized
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+          />
         )}
       </div>
 
