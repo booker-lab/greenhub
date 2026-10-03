@@ -28,6 +28,20 @@ node scripts/visual/start.mjs consumer --phone   # Tailscale 주소에 바인딩
   - `next-dev.log`: next dev 출력.
   - `node-guard.log`: 차단된 외부 요청.
 
+## 셀러 상품·준비 화면(Firestore 에뮬레이터)
+
+셀러 상품·준비 화면은 브라우저가 Firestore `products`를 직접 구독한다. 셀러 fixture에 `firestoreSeed`가 있으므로 `start.mjs seller`는 다음을 함께 한다.
+
+1. Firebase Auth·Firestore 에뮬레이터를 띄운다(`firebase emulators:start --only auth,firestore --project greenhub-local`, 저장소 `firestore.rules` 적용).
+2. `firestoreSeed`(users·stores·products)를 넣는다.
+3. 앱을 로컬 Firebase 계약(project `greenhub-local`, 127.0.0.1:8080·9099)으로 띄운다.
+4. 가짜 API `/auth/firebase-token`이 Auth 에뮬레이터용 커스텀 토큰(서명 없음, 클레임은 fixture `firebaseClaims`)을 돌려준다. 그러면 앱이 실제처럼 Firebase에 로그인해 구독한다.
+
+- 필요: Firebase CLI, Java 11 이상(`dev:local`과 같다).
+- 에뮬레이터 포트(8080·9099)가 `dev:local`과 같아서 둘을 동시에 띄울 수 없다. 포트가 쓰이고 있으면 시작하지 않는다.
+- 에뮬레이터 주소가 127.0.0.1로 고정이라 `--phone`에서는 에뮬레이터를 쓰지 않는다(상품·준비는 빈 화면).
+- 기록: `%TEMP%\greenhub-visual\seller\firebase-emulator.log`
+
 ## 자동 캡처와 확인판
 
 서버를 띄운 채로 다른 터미널에서 실행한다.
@@ -54,6 +68,7 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 | `mock-api.mjs` | 가짜 API 서버. 쓰기 요청은 기록만 하고 `200 {}`을 돌려준다 |
 | `fixtures/<app>.mjs` | 앱별 가짜 사용자, 조회 경로 표, 캡처 화면 목록 |
 | `node-guard.cjs` | next dev 프로세스의 외부 연결 차단 |
+| `firebase-emulator.mjs` | Auth·Firestore 에뮬레이터 기동·시드·커스텀 토큰(fixture에 `firestoreSeed`가 있을 때) |
 | `apps.mjs` | 앱별 포트 등 공통 설정 |
 | `shots.mjs` | 화면 자동 캡처(Playwright, `apps/e2e`의 설치본 사용) |
 | `report.mjs` · `report-template.html` | 캡처 결과로 확인판 HTML 생성 |
@@ -66,8 +81,7 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 
 ## 한계
 
-- Firebase 로그인은 시작하지 않는다(`/auth/firebase-token` → 503). 그래서 개발 표시에 `Issue 1`이 뜨지만 화면에는 영향이 없다. 자동 캡처에서는 개발 표시를 숨긴다.
-- 셀러 상품·준비 화면은 Firestore를 직접 읽으므로 빈 상태로 보인다.
+- 에뮬레이터를 쓰지 않는 앱(소비자·기사, `--phone` 셀러)은 Firebase 로그인을 시작하지 않는다(`/auth/firebase-token` → 503). 그래서 개발 표시에 `Issue 1`이 뜨지만 화면에는 영향이 없다. 자동 캡처에서는 개발 표시를 숨긴다.
 - 소비자 장바구니·결제는 브라우저 저장소 값이 필요하다. 화면 목록에 `storage: true`를 주면 fixture의 `browserStorage`를 넣고 연다.
   - 결제하기 버튼(카카오페이)과 우편번호 검색은 외부 스크립트라 동작하지 않는다.
 - fixture에 없는 조회 경로는 404를 돌려준다. 새 화면을 볼 때는 `fixtures/<app>.mjs`에 경로를 더한다.
