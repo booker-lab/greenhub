@@ -276,7 +276,7 @@ function useRoundCartValidation(
 function RoundValidationNotice({ validation }: { validation: RoundCartValidation | undefined }) {
   if (!validation) {
     return (
-      <Text mt={6} size="xs" c="var(--color-text-secondary)" role="status">
+      <Text mt={6} size="sm" c="var(--color-text-secondary)" role="status">
         서버에서 구매 가능 여부 확인 중
       </Text>
     );
@@ -291,11 +291,11 @@ function RoundValidationNotice({ validation }: { validation: RoundCartValidation
   if (validation.status === 'price_changed') {
     return (
       <Stack gap={2} mt={6} role="alert">
-        <Text size="xs" c="var(--color-danger)">
+        <Text size="sm" c="var(--color-danger)">
           가격이 변경되었습니다: 현재 회차 가격{' '}
           {validation.currentUnitPrice.toLocaleString('ko-KR')}원
         </Text>
-        <Text size="xs" c="var(--color-danger)">
+        <Text size="sm" c="var(--color-danger)">
           결제 대상에서 제외되었습니다.
         </Text>
       </Stack>
@@ -303,10 +303,10 @@ function RoundValidationNotice({ validation }: { validation: RoundCartValidation
   }
   return (
     <Stack gap={2} mt={6} role="alert">
-      <Text size="xs" c="var(--color-danger)">
+      <Text size="sm" c="var(--color-danger)">
         {validation.reason}
       </Text>
-      <Text size="xs" c="var(--color-danger)">
+      <Text size="sm" c="var(--color-danger)">
         결제 대상에서 제외되었습니다.
       </Text>
     </Stack>
