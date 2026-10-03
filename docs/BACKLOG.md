@@ -659,6 +659,9 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 ### DRIVER-MANTINE-CSS-AUDIT
 - [x] 2026-10-03 대조 완료: 세 앱의 사용 컴포넌트와 import를 대조한 결과 드라이버는 누락 없음, 소비자(Checkbox·Image·Modal 계열)와 셀러(ActionIcon·NumberInput)는 채움. 이전 기록: 드라이버 `globals.css`는 Mantine CSS를 골라 import한다. 알림 스타일 누락은 #323으로 고쳤지만, `Modal.css` 같은 다른 사용 컴포넌트 CSS도 빠졌을 수 있다. 실제 사용 컴포넌트와 import 목록을 대조한다. 2026-09-28 발견.
 
+### BRAND-APP-ICON-REDESIGN
+- [ ] 2026-10-03 앱 아이콘 상징(두 잎 하트)은 사용자가 "일단 이렇게" 정한 임시안이다. 잎사귀 하트·"그" 글자·손글씨 G·새싹·붓선 하트·꽃·화분·난초·gl·G+잎 시안을 봤지만 마음에 드는 것이 없었다. 나중에 아이콘 디자인을 다시 정한다. 로고(Nunito "Green Love" 글자만)와 앱별 구성(소비자=상징만, 판매자=+Seller, 기사=+Driver)은 확정. 원본은 `packages/ui/brand/`, 기준은 `docs/specs/frontend/design-standard.md` §7.
+
 ### ADMIN-TAB-PLANS-STALE-PROGRESS
 - [ ] 어드민 탭 계획서(`docs/specs/frontend/admin-tabs-improve-plan.md`와 `admin/admin-tab-*-plan.md`) 진행표가 현재 코드보다 뒤처져 있다. stores는 T7·T8을 빼고 구현을 마쳤고, 6개 탭 공통 조회 실패 표시와 users D1·banner T1·T3도 끝났는데 표에는 "미착수"로 남아 있다. 문서 정합성 작업으로 정리한다. 2026-09-28 코드 대조로 확인.
 

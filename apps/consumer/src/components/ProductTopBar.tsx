@@ -62,13 +62,14 @@ export default function ProductTopBar() {
         {/* 로고 */}
         <span
           style={{
+            fontFamily: 'var(--font-brand)',
             fontSize: 'var(--font-size-lg)',
-            fontWeight: 'var(--fw-extrabold)',
-            letterSpacing: '-0.02em',
+            fontWeight: 800,
+            letterSpacing: '-0.01em',
             color: 'var(--color-primary-dark)',
           }}
         >
-          그린러브
+          Green Love
         </span>
 
         {/* 홈 + 장바구니 */}

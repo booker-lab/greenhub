@@ -57,3 +57,12 @@
 4. 기사 배송 화면
 
 각 단계는 로컬 화면 확인 장치(`feat/visual-harness`, 병합 후 `scripts/visual/`)로 찍은 개편 전 기준선과 비교해 검수한다.
+
+## 7. 로고와 앱 아이콘
+
+- 로고는 영문 **"Green Love"** 글자만 쓴다(잎·기호 없음). 글꼴은 **Nunito ExtraBold(800)**, 화면에서는 `--font-brand`로 쓰고 각 앱이 라틴 글자만 담은 `public/fonts/Nunito-ExtraBold-latin.woff2`(16KB)를 불러온다. 한글은 Pretendard로 넘어간다.
+- 로고 원본 SVG(글자를 경로로 바꾼 것)는 `packages/ui/brand/greenlove-logo.svg`(짙은 초록)·`greenlove-logo-white.svg`(흰색)다.
+- 앱 아이콘 상징은 **두 잎 하트**(잎 두 장이 만나 하트). 소비자=초록 바탕 상징만, 판매자=짙은 초록 바탕 상징+"Seller", 기사=검정 바탕 초록 상징+"Driver". 원본은 `packages/ui/brand/icon-*.svg`, 각 앱 `public/icons/icon-192x192.png`·`icon-512x512.png`와 `src/app/favicon.ico`는 이 SVG에서 렌더링했다.
+- 사진 없는 상품의 대체 그림은 연한 회색 바탕에 옅은 상징(`apps/consumer/public/images/product-placeholder.png`, 원본 `packages/ui/brand/product-placeholder.svg`)이다.
+- 아이콘 상징은 임시안이다. 다시 디자인할 예정이다(BACKLOG `BRAND-APP-ICON-REDESIGN`).
+
