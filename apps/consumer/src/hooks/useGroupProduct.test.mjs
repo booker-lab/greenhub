@@ -9,6 +9,9 @@ import ts from 'typescript';
 // - read failure에서 purchase fail-closed + retry
 // - scope 변경 시 stale config/error 제거
 // - 기존 group status/countdown/quantity 계약 보존
+//
+// 조회 경로: 57221e4a 이후 Firestore onSnapshot 대신 public product detail API
+// (`GET /products/:id`)를 즉시 조회 + 10초 polling한다. fetch·setInterval을 모의한다.
 
 const hookSource = await readFile(new URL('./useGroupProduct.ts', import.meta.url), 'utf8');
 const actionsSource = await readFile(
@@ -25,27 +28,55 @@ const compiled = ts.transpileModule(hookSource, {
   fileName: 'useGroupProduct.ts',
 }).outputText;
 
-function createFirestoreMock() {
-  const calls = [];
-  const subscriptions = [];
+const API_BASE_URL = 'https://api.example.test';
+
+const originalFetch = globalThis.fetch;
+test.after(() => {
+  globalThis.fetch = originalFetch;
+});
+
+function okResponse(data) {
+  return { ok: true, status: 200, json: async () => data };
+}
+
+function errorResponse(status = 500) {
+  return { ok: false, status, json: async () => ({}) };
+}
+
+// 요청마다 응답을 테스트가 직접 결정하는 fetch 모의(구 Firestore 구독 모의의 대체).
+function createApiMock() {
+  const requests = [];
+  const fetchImpl = (url) => {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    requests.push({ url: String(url), resolve, reject });
+    return promise;
+  };
+  return { requests, fetchImpl };
+}
+
+// polling 주기를 테스트가 통제하는 setInterval 모의.
+function createIntervalMock() {
+  const intervals = [];
   return {
-    calls,
-    subscriptions,
-    doc: (_db, collection, id) => {
-      calls.push({ collection, id });
-      return { collection, id };
+    intervals,
+    setInterval: (fn, ms) => {
+      const handle = { fn, ms, cleared: false };
+      intervals.push(handle);
+      return handle;
     },
-    onSnapshot: (ref, onNext, onError) => {
-      const sub = { ref, onNext, onError, unsubscribed: false };
-      subscriptions.push(sub);
-      return () => {
-        sub.unsubscribed = true;
-      };
+    clearInterval: (handle) => {
+      if (handle) handle.cleared = true;
     },
   };
 }
 
-function mountHook({ firestore, initialArgs = [null] }) {
+function mountHook({ api, timers = createIntervalMock(), initialArgs = [null] }) {
+  globalThis.fetch = api.fetchImpl;
   const hookModule = { exports: {} };
   const stateSlots = [];
   const effectSlots = [];
@@ -88,16 +119,17 @@ function mountHook({ firestore, initialArgs = [null] }) {
 
   const requireForTest = (specifier) => {
     if (specifier === 'react') return { useCallback, useEffect, useState };
-    if (specifier === '@/lib/firebase') return { db: {} };
-    if (specifier === 'firebase/firestore')
-      return { doc: firestore.doc, onSnapshot: firestore.onSnapshot };
-    if (specifier === '@greenhub/shared') return {};
+    if (specifier === '@/lib/api-base-url') {
+      return { getApiBaseUrl: () => API_BASE_URL };
+    }
     throw new Error(`예상하지 못한 group hook 모듈 요청: ${specifier}`);
   };
-  new Function('require', 'module', 'exports', compiled)(
+  new Function('require', 'module', 'exports', 'setInterval', 'clearInterval', compiled)(
     requireForTest,
     hookModule,
     hookModule.exports,
+    timers.setInterval,
+    timers.clearInterval,
   );
 
   function flushEffects() {
@@ -146,15 +178,11 @@ function mountHook({ firestore, initialArgs = [null] }) {
     currentArgs = args;
     scheduleRender();
   };
-  return { get, settle, render, setArgs };
+  return { get, settle, render, setArgs, timers };
 }
 
-function successSnap(config) {
-  return { exists: () => true, data: () => ({ ...config }) };
-}
-
-function missingSnap() {
-  return { exists: () => false, data: () => ({}) };
+function successResponse(config) {
+  return okResponse({ id: config.productId, groupConfig: { ...config } });
 }
 
 const baseConfig = {
@@ -168,12 +196,13 @@ const baseConfig = {
 };
 
 // 1. non-group product
-test('non-group productId null이면 구독 없이 config/error 없이 대기하지 않는다', async () => {
-  const firestore = createFirestoreMock();
-  const harness = mountHook({ firestore, initialArgs: [null] });
+test('non-group productId null이면 조회 없이 config/error 없이 대기하지 않는다', async () => {
+  const api = createApiMock();
+  const harness = mountHook({ api, initialArgs: [null] });
   await harness.settle();
 
-  assert.equal(firestore.subscriptions.length, 0);
+  assert.equal(api.requests.length, 0);
+  assert.equal(harness.timers.intervals.length, 0);
   assert.equal(harness.get().config, null);
   assert.equal(harness.get().loading, false);
   assert.equal(harness.get().error, null);
@@ -182,13 +211,15 @@ test('non-group productId null이면 구독 없이 config/error 없이 대기하
 
 // 2. group config loading
 test('group productId 진입 시 loading으로 구매 판정 전에 대기한다', async () => {
-  const firestore = createFirestoreMock();
-  const harness = mountHook({ firestore, initialArgs: ['p1'] });
+  const api = createApiMock();
+  const harness = mountHook({ api, initialArgs: ['p1'] });
   await harness.settle();
 
-  assert.equal(firestore.subscriptions.length, 1);
-  assert.equal(firestore.calls[0].collection, 'groupProductConfig');
-  assert.equal(firestore.calls[0].id, 'p1');
+  assert.equal(api.requests.length, 1);
+  assert.equal(api.requests[0].url, `${API_BASE_URL}/products/p1`);
+  // currentQuantity freshness를 위한 10초 polling이 걸린다.
+  assert.equal(harness.timers.intervals.length, 1);
+  assert.equal(harness.timers.intervals[0].ms, 10_000);
   assert.equal(harness.get().loading, true);
   assert.equal(harness.get().config, null);
   assert.equal(harness.get().error, null);
@@ -198,11 +229,11 @@ test('group productId 진입 시 loading으로 구매 판정 전에 대기한다
 
 // 3. group config success
 test('group config success는 기존 status/countdown/quantity 필드를 보존한다', async () => {
-  const firestore = createFirestoreMock();
-  const harness = mountHook({ firestore, initialArgs: ['p1'] });
+  const api = createApiMock();
+  const harness = mountHook({ api, initialArgs: ['p1'] });
   await harness.settle();
 
-  firestore.subscriptions[0].onNext(successSnap(baseConfig));
+  api.requests[0].resolve(successResponse(baseConfig));
   await harness.settle();
 
   assert.equal(harness.get().loading, false);
@@ -218,11 +249,11 @@ test('group config success는 기존 status/countdown/quantity 필드를 보존�
 
 // 4. authoritative config missing
 test('authoritative missing은 error 없이 missing으로 확정한다', async () => {
-  const firestore = createFirestoreMock();
-  const harness = mountHook({ firestore, initialArgs: ['p1'] });
+  const api = createApiMock();
+  const harness = mountHook({ api, initialArgs: ['p1'] });
   await harness.settle();
 
-  firestore.subscriptions[0].onNext(missingSnap());
+  api.requests[0].resolve(errorResponse(404));
   await harness.settle();
 
   assert.equal(harness.get().config, null);
@@ -233,11 +264,11 @@ test('authoritative missing은 error 없이 missing으로 확정한다', async (
 
 // 5. config read failure ≠ missing
 test('config read failure는 missing으로 위장하지 않는다', async () => {
-  const firestore = createFirestoreMock();
-  const harness = mountHook({ firestore, initialArgs: ['p1'] });
+  const api = createApiMock();
+  const harness = mountHook({ api, initialArgs: ['p1'] });
   await harness.settle();
 
-  firestore.subscriptions[0].onError(new Error('permission-denied'));
+  api.requests[0].reject(new Error('permission-denied'));
   await harness.settle();
 
   assert.match(harness.get().error ?? '', /permission-denied/);
@@ -269,23 +300,26 @@ test('read failure에서 구매 CTA는 fail-closed이고 recovery UI를 제공�
 });
 
 // 7. retry → success
-test('read failure 이후 retry는 재구독하고 성공 시 error를 clear한다', async () => {
-  const firestore = createFirestoreMock();
-  const harness = mountHook({ firestore, initialArgs: ['p1'] });
+test('read failure 이후 retry는 다시 조회하고 성공 시 error를 clear한다', async () => {
+  const api = createApiMock();
+  const harness = mountHook({ api, initialArgs: ['p1'] });
   await harness.settle();
 
-  firestore.subscriptions[0].onError(new Error('unavailable'));
+  api.requests[0].reject(new Error('unavailable'));
   await harness.settle();
   assert.notEqual(harness.get().error, null);
 
   harness.get().retry();
   await harness.settle();
 
-  assert.equal(firestore.subscriptions.length, 2);
-  assert.equal(firestore.subscriptions[0].unsubscribed, true);
-  assert.equal(firestore.calls[1].id, 'p1');
+  assert.equal(api.requests.length, 2);
+  assert.equal(api.requests[1].url, `${API_BASE_URL}/products/p1`);
+  // 이전 scope의 polling은 정리되고 새 polling이 걸린다.
+  assert.equal(harness.timers.intervals.length, 2);
+  assert.equal(harness.timers.intervals[0].cleared, true);
+  assert.equal(harness.timers.intervals[1].cleared, false);
 
-  firestore.subscriptions[1].onNext(successSnap({ ...baseConfig, currentQuantity: 7 }));
+  api.requests[1].resolve(successResponse({ ...baseConfig, currentQuantity: 7 }));
   await harness.settle();
 
   assert.equal(harness.get().error, null);
@@ -296,18 +330,18 @@ test('read failure 이후 retry는 재구독하고 성공 시 error를 clear한�
 
 // 8. productId scope change stale config 제거
 test('product A → B 전환 시 A의 config가 B에 남지 않는다', async () => {
-  const firestore = createFirestoreMock();
-  const harness = mountHook({ firestore, initialArgs: ['pA'] });
+  const api = createApiMock();
+  const harness = mountHook({ api, initialArgs: ['pA'] });
   await harness.settle();
-  firestore.subscriptions[0].onNext(successSnap({ ...baseConfig, productId: 'pA' }));
+  api.requests[0].resolve(successResponse({ ...baseConfig, productId: 'pA' }));
   await harness.settle();
   assert.equal(harness.get().config.productId, 'pA');
 
   harness.setArgs(['pB']);
   await harness.settle();
 
-  assert.equal(firestore.subscriptions[0].unsubscribed, true);
-  assert.equal(firestore.calls[1].id, 'pB');
+  assert.equal(harness.timers.intervals[0].cleared, true);
+  assert.equal(api.requests[1].url, `${API_BASE_URL}/products/pB`);
   // 새 scope 확정 전에는 이전 config를 새 것처럼 보이지 않게 한다.
   assert.equal(harness.get().config, null);
   assert.equal(harness.get().error, null);
@@ -316,34 +350,38 @@ test('product A → B 전환 시 A의 config가 B에 남지 않는다', async ()
 });
 
 test('group → non-group 전환 시 config/error가 남지 않는다', async () => {
-  const firestore = createFirestoreMock();
-  const harness = mountHook({ firestore, initialArgs: ['pA'] });
+  const api = createApiMock();
+  const harness = mountHook({ api, initialArgs: ['pA'] });
   await harness.settle();
-  firestore.subscriptions[0].onError(new Error('boom'));
+  api.requests[0].reject(new Error('boom'));
   await harness.settle();
   assert.notEqual(harness.get().error, null);
 
   harness.setArgs([null]);
   await harness.settle();
 
+  assert.equal(harness.timers.intervals[0].cleared, true);
   assert.equal(harness.get().config, null);
   assert.equal(harness.get().error, null);
   assert.equal(harness.get().isMissing, false);
   assert.equal(harness.get().loading, false);
 });
 
-// 9. previous config + listener failure actionability
-test('이전 valid config 이후 listener failure가 오면 최신 error를 무시하지 않는다', async () => {
-  const firestore = createFirestoreMock();
-  const harness = mountHook({ firestore, initialArgs: ['p1'] });
+// 9. previous config + polling failure actionability
+test('이전 valid config 이후 polling 조회 실패가 오면 최신 error를 무시하지 않는다', async () => {
+  const api = createApiMock();
+  const harness = mountHook({ api, initialArgs: ['p1'] });
   await harness.settle();
-  firestore.subscriptions[0].onNext(successSnap(baseConfig));
+  api.requests[0].resolve(successResponse(baseConfig));
   await harness.settle();
   assert.equal(harness.get().config.currentQuantity, 4);
   assert.equal(harness.get().error, null);
 
-  // 같은 구독의 listener가 이후 fatal error를 전달한 상황.
-  firestore.subscriptions[0].onError(new Error('lost-connection'));
+  // 같은 scope의 다음 polling 조회가 fatal error를 전달한 상황.
+  harness.timers.intervals[0].fn();
+  await harness.settle();
+  assert.equal(api.requests.length, 2);
+  api.requests[1].reject(new Error('lost-connection'));
   await harness.settle();
 
   assert.match(harness.get().error ?? '', /lost-connection/);

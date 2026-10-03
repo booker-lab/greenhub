@@ -15,7 +15,10 @@ test('round 쿼리는 단일 문자열만 허용하고 임의 기본 회차를 �
 test('공개 상품 storeId와 공개 스토어 salesMode로 상세 경로를 분기한다', () => {
   assert.match(source, /fetch\(`\$\{API_URL\}\/products\/\$\{encodeURIComponent\(id\)\}`/);
   assert.match(source, /product\.storeId/);
-  assert.match(source, /getDoc\(doc\(db, 'stores', storeId\)\)/);
+  // 57221e4a: Firestore stores 직접 읽기 대신 공개 스토어 프로필 API로 salesMode를 읽는다.
+  assert.match(source, /fetchPublicStoreProfile\(storeId\)/);
+  assert.match(source, /profile\.salesMode/);
+  assert.doesNotMatch(source, /getDoc\(doc\(db, 'stores'/);
   assert.match(source, /normalizeSalesMode/);
   assert.match(source, /salesMode !== 'round_direct'/);
 });
@@ -60,9 +63,19 @@ test('판매 모드와 회차 확인 전에는 상세 본문을 노출하지 않
     source,
     /<ProductImages images=\{product\.images \?\? \[\]\} name=\{product\.name\} \/>/,
   );
-  assert.match(source, /<ProductInfo product=\{product\} variety=\{variety\} \/>/);
+  // 86454e1c: 회차 상품만 요약(이름·원래 가격)을 숨기고 legacy(roundProduct 없음)는 그대로 보인다.
+  assert.match(
+    source,
+    /<ProductInfo product=\{product\} variety=\{variety\} showSummary=\{!roundProduct\} \/>/,
+  );
   assert.match(source, /<ProductActions product=\{product\} \/>/);
-  assert.doesNotMatch(source, /router\.(?:push|replace)/);
+  // 상세는 다른 경로로 보내지 않는다. 유일한 replace는 6628842b의 같은 경로 round 쿼리 연결이다.
+  assert.doesNotMatch(source, /router\.push/);
+  assert.equal(source.match(/router\.replace\(/g)?.length, 1);
+  assert.match(
+    source,
+    /router\.replace\(`\$\{pathname\}\?\$\{query\.toString\(\)\}`, \{ scroll: false \}\)/,
+  );
 });
 
 test('상품 상세 mount는 기존 당근 유입 캡처 함수를 호출한다', () => {

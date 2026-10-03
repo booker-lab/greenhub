@@ -36,6 +36,8 @@ const requireForTest = (specifier) => {
     };
   }
   if (specifier === '@mantine/core') return {};
+  // 요청사항 칸(389066c8) 길이 상한. 값은 packages/shared/src/order.types.ts와 같다.
+  if (specifier === '@greenhub/shared') return { ORDER_REQUEST_NOTE_MAX_LENGTH: 200 };
   throw new Error(`예상하지 못한 결제 폼 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(
