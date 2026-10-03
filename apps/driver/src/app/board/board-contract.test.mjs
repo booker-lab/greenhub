@@ -17,6 +17,14 @@ const photoCaptureSource = await readFile(
   new URL('./[orderId]/photo/photo-capture.tsx', import.meta.url),
   'utf8',
 );
+const photoEncodeSource = await readFile(
+  new URL('./[orderId]/photo/photo-encode.ts', import.meta.url),
+  'utf8',
+);
+const photoPolicySource = await readFile(
+  new URL('./[orderId]/photo/photo-upload-policy.ts', import.meta.url),
+  'utf8',
+);
 const pilotPhotoRouteSource = await readFile(
   new URL('./[orderId]/photo/round-direct/page.tsx', import.meta.url),
   'utf8',
@@ -272,19 +280,23 @@ test('Pilot 사진 화면은 JPEG 파일 대체 경로와 기존 업로드 계�
   assert.match(photoCaptureSource, /카메라 촬영/);
   assert.match(photoCaptureSource, /facingMode:\s*['"]environment['"]/);
   assert.match(photoCaptureSource, /audio:\s*false/);
-  assert.match(photoCaptureSource, /canvas\.toBlob/);
+  // 카메라 프레임·선택 파일 모두 같은 축소·JPEG 재인코딩 경로(photo-encode)를 탄다.
+  assert.match(photoEncodeSource, /canvas\.toBlob/);
+  assert.match(photoCaptureSource, /encodeDeliveryJpeg\(/);
   assert.match(photoCaptureSource, /type="file"/);
   assert.match(photoCaptureSource, /isRoundDirect\s*&&\s*\(\s*<input/);
   assert.match(photoCaptureSource, /accept="image\/jpeg"/);
   assert.match(photoCaptureSource, /capture="environment"/);
   assert.match(photoCaptureSource, /file\.type\s*!==\s*['"]image\/jpeg['"]/);
-  assert.match(photoCaptureSource, /new FileReader\(\)/);
-  assert.match(photoCaptureSource, /reader\.readAsDataURL\(file\)/);
+  assert.match(photoCaptureSource, /loadImageSource\(file\)/);
+  assert.match(photoCaptureSource, /URL\.createObjectURL\(nextBlob\)/);
+  assert.match(photoCaptureSource, /URL\.revokeObjectURL\(captured\)/);
   assert.match(photoCaptureSource, /form\.append\(['"]photo['"],\s*blob/);
   assert.match(photoCaptureSource, /form\.append\(['"]idempotencyKey['"]/);
-  assert.match(photoCaptureSource, /result\.photoId/);
-  assert.match(photoCaptureSource, /result\.orderId\s*!==\s*orderId/);
-  assert.match(photoCaptureSource, /result\.status\s*!==\s*['"]DELIVERED['"]/);
+  assert.match(photoCaptureSource, /isDeliveryPhotoAck\(result,\s*orderId\)/);
+  assert.match(photoPolicySource, /ack\.photoId/);
+  assert.match(photoPolicySource, /ack\.orderId\s*===\s*orderId/);
+  assert.match(photoPolicySource, /ack\.status\s*===\s*['"]DELIVERED['"]/);
   assert.doesNotMatch(photoCaptureSource, /uploadBytes|getDownloadURL|firebase\/storage/);
   assert.doesNotMatch(photoCaptureSource, /multiple/);
   assert.doesNotMatch(photoCaptureSource, /get\(['"]flow['"]\)/);
@@ -297,8 +309,8 @@ test('카메라 스트림은 video 마운트 뒤 연결되고 프레임 준비 �
   assert.match(photoCaptureSource, /video\.videoWidth\s*>\s*0/);
   assert.match(photoCaptureSource, /video\.videoHeight\s*>\s*0/);
   assert.match(photoCaptureSource, /disabled=\{!frameReady\}/);
-  assert.match(photoCaptureSource, /nextBlob\.type\s*!==\s*['"]image\/jpeg['"]/);
-  assert.match(photoCaptureSource, /nextBlob\.size\s*<=\s*0/);
+  assert.match(photoEncodeSource, /nextBlob\.type\s*!==\s*['"]image\/jpeg['"]/);
+  assert.match(photoEncodeSource, /nextBlob\.size\s*<=\s*0/);
   assert.match(photoCaptureSource, /track\.stop\(\)/);
 });
 

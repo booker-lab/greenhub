@@ -3,6 +3,11 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const photoCaptureSource = await readFile(new URL('./photo-capture.tsx', import.meta.url), 'utf8');
+const photoPolicySource = await readFile(
+  new URL('./photo-upload-policy.ts', import.meta.url),
+  'utf8',
+);
+const photoEncodeSource = await readFile(new URL('./photo-encode.ts', import.meta.url), 'utf8');
 
 const legacyStart = photoCaptureSource.indexOf('uploadLegacyHubPhoto(orderId');
 assert.ok(legacyStart !== -1, 'legacy-hub upload branch가 있어야 한다');
@@ -95,9 +100,59 @@ test('legacy-hub 중복 dispatch는 ref 기반 in-flight guard로 막는다', ()
 
 test('round-direct keyed ACK 계약 회귀 없음', () => {
   assert.match(photoCaptureSource, /form\.append\(['"]idempotencyKey['"]/);
-  assert.match(photoCaptureSource, /result\.orderId\s*!==\s*orderId/);
-  assert.match(photoCaptureSource, /result\.photoId/);
-  assert.match(photoCaptureSource, /result\.status\s*!==\s*['"]DELIVERED['"]/);
+  // ACK 판정은 순수 함수로 옮겼다: orderId·photoId·DELIVERED를 모두 확인한다.
+  assert.match(photoCaptureSource, /isDeliveryPhotoAck\(result,\s*orderId\)/);
+  assert.match(photoPolicySource, /ack\.orderId\s*===\s*orderId/);
+  assert.match(photoPolicySource, /typeof ack\.photoId\s*===\s*['"]string['"]/);
+  assert.match(photoPolicySource, /ack\.status\s*===\s*['"]DELIVERED['"]/);
+});
+
+const roundDirectSlice = photoCaptureSource.slice(
+  photoCaptureSource.indexOf('async function readOrderStatus'),
+  photoCaptureSource.indexOf('async function upload()'),
+);
+
+test('round-direct 멱등 키는 사진·직전 실패 기준으로 재사용/새로 만들기를 판단한다', () => {
+  assert.ok(roundDirectSlice.includes('async function uploadRoundDirect'));
+  assert.match(roundDirectSlice, /decideIdempotencyKey\(\{/);
+  assert.match(roundDirectSlice, /photoChanged:\s*requestPhotoRef\.current\s*!==\s*blob/);
+  assert.match(roundDirectSlice, /lastFailure:\s*lastFailureRef\.current/);
+  // 화면 수명 동안 키 1개(??=) 방식으로 되돌아가지 않는다.
+  assert.doesNotMatch(photoCaptureSource, /requestIdRef\.current\s*\?\?=/);
+});
+
+test('round-direct 실패는 원인을 분류하고 주문 상태를 다시 읽어 수렴한다', () => {
+  assert.match(roundDirectSlice, /readDriverOrderCommandErrorCodeFromResponse\(response\)/);
+  assert.match(roundDirectSlice, /classifyPhotoUploadFailure\(\{\s*kind:\s*['"]network['"]\s*\}\)/);
+  assert.match(roundDirectSlice, /classifyPhotoUploadFailure\(\{\s*kind:\s*['"]ack['"]\s*\}\)/);
+  assert.match(
+    roundDirectSlice,
+    /apiFetch\(`\/driver\/orders\/\$\{encodeURIComponent\(orderId\)\}`/,
+  );
+  assert.match(roundDirectSlice, /resolvePhotoUploadFailure\(\{/);
+  // 사진 연결 + DELIVERING 마무리는 서버의 사진 전제 DELIVERED 전이를 쓴다(사진 URL 없이).
+  assert.match(roundDirectSlice, /JSON\.stringify\(\{\s*status:\s*['"]DELIVERED['"]\s*\}\)/);
+  // round-direct 경로는 뭉뚱그린 실패 문구를 쓰지 않는다(그 문구는 legacy catch 전용).
+  assert.doesNotMatch(roundDirectSlice, /업로드 실패\. 다시 시도해주세요\./);
+  // 성공 판정 전 board 이동 금지: 이동은 upload()의 공통 성공 지점 한 곳뿐이다.
+  assert.doesNotMatch(roundDirectSlice, /router\.(replace|push)/);
+});
+
+test('사진은 업로드 전에 축소·JPEG 재인코딩되고 카메라·파일 선택이 같은 경로를 탄다', () => {
+  assert.match(
+    photoCaptureSource,
+    /encodeDeliveryJpeg\(video,\s*video\.videoWidth,\s*video\.videoHeight\)/,
+  );
+  assert.match(photoCaptureSource, /loadImageSource\(file\)/);
+  assert.match(
+    photoCaptureSource,
+    /encodeDeliveryJpeg\(decoded\.source,\s*decoded\.width,\s*decoded\.height\)/,
+  );
+  // 원본 파일을 그대로 올리지 않는다.
+  assert.doesNotMatch(photoCaptureSource, /setBlob\(file\)/);
+  assert.match(photoEncodeSource, /computeScaledSize\(/);
+  assert.match(photoEncodeSource, /planNextEncodeStep\(/);
+  assert.match(photoEncodeSource, /canvas\.toBlob\(/);
 });
 
 test('legacy Storage lifecycle을 건드리지 않는다', () => {
