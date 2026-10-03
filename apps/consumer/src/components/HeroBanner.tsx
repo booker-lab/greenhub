@@ -39,30 +39,18 @@ export default async function HeroBanner() {
   if (!banner) return null;
 
   return (
+    // 글자와 사진을 나란히 놓는다. 사진을 글자 밑에 깔면 좁은 화면에서 제목·버튼이 사진 위로 겹친다.
     <Box
       mb="lg"
       style={{
-        position: 'relative',
+        display: 'flex',
         borderRadius: 'var(--radius)',
         overflow: 'hidden',
         backgroundColor: 'var(--color-primary-surface)',
         minHeight: 200,
       }}
     >
-      {banner.imageUrl && (
-        <div style={{ position: 'absolute', right: 0, top: 0, width: '50%', height: '100%' }}>
-          <ResilientImage
-            fill
-            src={banner.imageUrl}
-            alt="배너"
-            sizes="50vw"
-            preload
-            style={{ objectFit: 'cover', objectPosition: 'center' }}
-          />
-        </div>
-      )}
-
-      <Box style={{ position: 'relative', zIndex: 1, padding: '24px 20px' }}>
+      <Box style={{ flex: '1 1 0', minWidth: 0, padding: '24px 16px 24px 20px' }}>
         {banner.tagText && (
           <span
             style={{
@@ -88,6 +76,7 @@ export default async function HeroBanner() {
               lineHeight: 1.3,
               color: 'var(--color-text)',
               whiteSpace: 'pre-line',
+              wordBreak: 'keep-all',
               margin: '0 0 8px',
             }}
           >
@@ -101,6 +90,7 @@ export default async function HeroBanner() {
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-secondary)',
               whiteSpace: 'pre-line',
+              wordBreak: 'keep-all',
               margin: '0 0 16px',
             }}
           >
@@ -150,6 +140,19 @@ export default async function HeroBanner() {
           )}
         </div>
       </Box>
+
+      {banner.imageUrl && (
+        <div style={{ position: 'relative', flex: '0 0 40%' }}>
+          <ResilientImage
+            fill
+            src={banner.imageUrl}
+            alt="배너"
+            sizes="(max-width: 430px) 40vw, 172px"
+            preload
+            style={{ objectFit: 'cover', objectPosition: 'center' }}
+          />
+        </div>
+      )}
     </Box>
   );
 }
