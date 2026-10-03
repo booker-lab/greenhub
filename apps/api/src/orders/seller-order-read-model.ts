@@ -19,6 +19,9 @@ const LIST_FIELDS = [
   'pickupCode',
   'createdAt',
   'updatedAt',
+  // 손님 이름은 상세와 같은 주문서 buyerName(주문 때 계정 이름을 복사한 값)을 그대로 쓴다.
+  // 전화번호는 목록에 싣지 않는다. 목록 전화 검색은 서버에서 숫자 비교 후 주문만 돌려준다.
+  'buyerName',
 ] as const;
 
 const DETAIL_FIELDS = [
@@ -26,7 +29,6 @@ const DETAIL_FIELDS = [
   'isMetropolitan',
   'hubId',
   'cancelReason',
-  'buyerName',
   'requestNote',
 ] as const;
 
@@ -91,11 +93,38 @@ export function projectSellerOrder(order: OrderRecord, view: SellerOrderReadView
       );
     }
 
-    const deliveryPhone = order['deliveryPhone'] ?? order['buyerPhone'];
+    const deliveryPhone = sellerVisiblePhone(order);
     if (deliveryPhone !== undefined) projected['deliveryPhone'] = deliveryPhone;
   }
 
   return projected;
+}
+
+/**
+ * 판매자에게 보이는 손님 연락처 — 결제 때 받은 수령 연락처(deliveryPhone)를 우선하고,
+ * 없으면 가입 프로필 전화(buyerPhone)로 대체한다. 상세 표시와 목록 전화 검색이 같은 값을 쓴다.
+ */
+export function sellerVisiblePhone(order: OrderRecord): unknown {
+  return order['deliveryPhone'] ?? order['buyerPhone'];
+}
+
+export const SELLER_PHONE_SEARCH_MIN_DIGITS = 4;
+const SELLER_PHONE_SEARCH_MAX_DIGITS = 20;
+
+/** 전화 검색어에서 숫자만 남긴다. 4~20자리가 아니면 null(검색 거부). */
+export function normalizeSellerPhoneSearch(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length < SELLER_PHONE_SEARCH_MIN_DIGITS) return null;
+  if (digits.length > SELLER_PHONE_SEARCH_MAX_DIGITS) return null;
+  return digits;
+}
+
+/** 판매자에게 보이는 연락처의 숫자에 검색 숫자가 들어 있으면 true. */
+export function matchesSellerPhoneSearch(order: OrderRecord, digits: string): boolean {
+  const phone = sellerVisiblePhone(order);
+  if (typeof phone !== 'string') return false;
+  return phone.replace(/\D/g, '').includes(digits);
 }
 
 function projectFields(value: unknown, fields: readonly string[]): OrderRecord | undefined {

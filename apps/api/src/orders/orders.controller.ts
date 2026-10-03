@@ -74,7 +74,7 @@ export class OrdersController {
   getOrders(
     @Param('storeId') storeId: string,
     @CurrentUser() user: JwtPayload,
-    @Query() query: { userId?: string; status?: string; saleType?: string },
+    @Query() query: { userId?: string; status?: string; saleType?: string; phone?: string },
   ) {
     return this.ordersService.getOrders(storeId, user, query);
   }
