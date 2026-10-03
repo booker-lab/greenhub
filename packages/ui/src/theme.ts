@@ -53,6 +53,15 @@ export const theme = createTheme({
   focusRing: 'auto',
   variantColorResolver,
   headings: { fontWeight: '800' },
+  // Mantine size="xs"·"sm" 글자도 디자인 토큰(style.css)을 따른다. 지정하지 않으면 Mantine 기본값
+  // (xs 12px·sm 14px)이 쓰여 본문 15px 기준보다 작아진다.
+  fontSizes: {
+    xs: 'var(--font-size-xs)',
+    sm: 'var(--font-size-sm)',
+    md: 'var(--font-size-md)',
+    lg: 'var(--font-size-lg)',
+    xl: 'var(--font-size-xl)',
+  },
   components: {
     Button: {
       // 디자인 기준: 버튼은 완전히 둥글게
