@@ -239,11 +239,11 @@ export default function MapPage() {
               d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
             />
           </svg>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            카카오맵 SDK 연동 후 활성화
-          </Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            NEXT_PUBLIC_KAKAO_MAP_KEY 설정 필요
+          <Text
+            ta="center"
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
+            배송지마다 ‘지도’를 누르면 카카오맵에서 길안내가 열려요.
           </Text>
         </Stack>
       </Box>
@@ -374,7 +374,7 @@ export default function MapPage() {
                   </Box>
                   <Badge
                     size="xs"
-                    color={order.status === 'DELIVERING' ? 'blue' : 'yellow'}
+                    color={order.status === 'DELIVERING' ? 'dark' : 'yellow'}
                     variant="light"
                   >
                     {order.status === 'DELIVERING' ? '배송 중' : '수거 대기'}

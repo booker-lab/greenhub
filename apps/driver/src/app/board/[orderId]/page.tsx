@@ -19,6 +19,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { isApiTimeoutError } from '@/lib/api-timeout';
+import { orderItemsLabel } from '@/lib/order-quantity';
 import {
   buildDriverOrderDetailScope,
   classifyDriverOrderCommandError,
@@ -599,7 +600,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           </svg>
         </UnstyledButton>
         <Group gap="xs">
-          <Badge color="green" variant="light" size="sm">
+          <Badge color="brand" variant="light" size="sm">
             {METHOD_LABEL[order.deliveryMethod] ?? order.deliveryMethod}
           </Badge>
           {isDelivering && (
@@ -700,7 +701,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               </Text>
               <InfoRow
                 label="상품"
-                value={`${order.productName ?? '-'}${order.quantity ? ` × ${order.quantity}` : ''}`}
+                value={orderItemsLabel(order.productName, order.quantity)}
               />
               {isPreparing && <InfoRow label="수거 예정" value={preparedAtStr} />}
               {isHub ? (
@@ -897,7 +898,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             fullWidth
             size="lg"
             radius="xl"
-            color="blue"
+            color="brand"
             loading={loading}
             disabled={!commandsAllowed}
             onClick={() => router.push(`/board/${orderId}/photo?storeId=${order.storeId}`)}
