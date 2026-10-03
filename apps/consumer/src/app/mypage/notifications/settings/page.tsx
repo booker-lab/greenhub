@@ -357,7 +357,7 @@ function LegacyNotificationSettingsPage() {
           ))}
 
         {!loading && preferences && (
-          <Text size="xs" c="var(--color-text-disabled)">
+          <Text size="sm" c="var(--color-text-disabled)">
             동의·철회 증거와 보관은 서버 정책에 따라 처리되며 이 화면은 해당 기록에 직접 접근하지
             않습니다.
           </Text>
