@@ -49,13 +49,11 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
   const [listError, setListError] = useState('');
 
   useEffect(() => {
+    // 브라우저마다 요일 표기가 달라("4일 일" 등) 직접 "2026년 10월 4일 (일)" 형태로 만든다.
+    const date = new Date(`${selectedDate}T00:00:00`);
+    const weekday = date.toLocaleDateString('ko-KR', { weekday: 'short' });
     setSelectedDateLabel(
-      new Date(`${selectedDate}T00:00:00`).toLocaleDateString('ko-KR', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        weekday: 'short',
-      }),
+      `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일 (${weekday})`,
     );
   }, [selectedDate]);
 
