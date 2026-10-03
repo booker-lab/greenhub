@@ -12,16 +12,14 @@ export const proxy = auth((request) => {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // 관리자 세션은 로그인·세션 계약상 유지되지만, 기사 화면의 모든 조회 API(`/driver/*`)는
-  // driver 역할만 허용해 403만 반복된다. 막다른 재시도 대신 로그인 화면 안내로 보낸다.
-  if (session.user.role === 'admin') {
-    const url = new URL('/login', request.url);
-    url.searchParams.set('error', DRIVER_ADMIN_ACCOUNT_ERROR);
-    return NextResponse.redirect(url);
-  }
-
+  // 기사 앱은 기사(driver) 역할만 받는다(2026-10-04 결정). 로그인과 jwt callback이 먼저
+  // 걸러내지만, 이미 쿠키에 남은 관리자 세션도 기사 화면에 들이지 않고 로그인 안내로 보낸다.
   if (session.user.role !== 'driver') {
-    return NextResponse.redirect(new URL('/login', request.url));
+    const url = new URL('/login', request.url);
+    if (session.user.role === 'admin') {
+      url.searchParams.set('error', DRIVER_ADMIN_ACCOUNT_ERROR);
+    }
+    return NextResponse.redirect(url);
   }
 
   return NextResponse.next();

@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
+import { DRIVER_ADMIN_ACCOUNT_ERROR } from '@/app/login/login-notice';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 
 const API = getApiBaseUrl();
@@ -155,7 +156,23 @@ async function authorizeLocalDriver(credentials: Record<string, unknown>) {
 // TTL expiry alone is not revocation: a verify-revoked token always attempts
 // POST /auth/refresh once to disambiguate access expiry (refresh succeeds)
 // from true revocation (refresh explicitly rejects).
-const SESSION_ALLOWED_ROLES = ['driver', 'admin'];
+// 기사 앱은 기사(driver) 역할만 받는다(2026-10-04 결정). 관리자 계정은 로그인·세션 모두 거절한다.
+const DRIVER_APP_ROLE = 'driver';
+const SESSION_ALLOWED_ROLES = [DRIVER_APP_ROLE];
+
+// API가 기사 앱 카카오 로그인에서 관리자 계정을 거절할 때 붙이는 code
+// (`apps/api/src/auth/auth.service.ts`의 KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT).
+const KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT = 'KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT';
+const ADMIN_ACCOUNT_LOGIN_URL = `/login?error=${DRIVER_ADMIN_ACCOUNT_ERROR}`;
+
+async function readRejectionCode(res: Response): Promise<unknown> {
+  try {
+    const body = (await res.json()) as { code?: unknown } | null;
+    return body?.code;
+  } catch {
+    return undefined;
+  }
+}
 
 function isExplicitSessionRevocationStatus(status: unknown): boolean {
   return status === 401 || status === 403;
@@ -336,13 +353,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           targetRole: 'driver',
         }),
       });
-      if (!res.ok) return false;
+      if (!res.ok) {
+        // 관리자 계정은 세션을 만들지 않고 로그인 화면에서 기사 계정 안내를 보인다.
+        if (
+          res.status === 403 &&
+          (await readRejectionCode(res)) === KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT
+        ) {
+          return ADMIN_ACCOUNT_LOGIN_URL;
+        }
+        return false;
+      }
 
       const data = await res.json();
-      if (!['driver', 'admin'].includes(data.user.role)) return false;
+      // API가 역할을 먼저 거르지만, 앱도 응답의 실제 역할을 다시 제한한다.
+      if (data.user.role === 'admin') return ADMIN_ACCOUNT_LOGIN_URL;
+      if (data.user.role !== DRIVER_APP_ROLE) return false;
 
-      // admin은 승인 절차 없이 바로 통과
-      if (data.user.role === 'driver' && !data.user.driverApproved) {
+      if (!data.user.driverApproved) {
         return '/login?pending=true';
       }
 
@@ -365,6 +392,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           sub: user.id,
           error: undefined,
         };
+      }
+      // 기사가 아닌 역할로 만들어진 기존 세션(이전에 허용되던 관리자 세션 등)은 갱신 없이 끝낸다.
+      // null을 돌려주면 Auth.js가 세션 쿠키를 지우고 auth()는 null이 된다.
+      if (token.role !== DRIVER_APP_ROLE) {
+        return null;
       }
       const accessToken = token.accessToken;
       const refreshToken = token.refreshToken;

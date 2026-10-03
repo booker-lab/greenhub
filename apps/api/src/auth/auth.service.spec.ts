@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 import * as bcrypt from 'bcrypt';
 import type { AuditService } from '../common/audit/audit.service';
 import type { FirestoreService } from '../firestore/firestore.service';
-import { AuthService } from './auth.service';
+import { AuthService, KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT } from './auth.service';
 import type { KakaoClient } from './kakao.client';
 
 jest.mock('firebase-admin', () => ({
@@ -243,6 +243,63 @@ describe('AuthService', () => {
       expect(jwt.sign).not.toHaveBeenCalled();
       expect(refreshTokenRef.set).not.toHaveBeenCalled();
     });
+
+    it('기사 앱(targetRole=driver)은 관리자 계정을 토큰 발급 전에 거절하고 구분 code를 붙인다', async () => {
+      const { audit, jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user: { id: 'admin-1', role: 'admin', storeId: null, suspended: false },
+      });
+
+      const rejection = service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' });
+      await expect(rejection).rejects.toMatchObject({ status: 403 });
+      await expect(rejection).rejects.toMatchObject({
+        response: expect.objectContaining({
+          statusCode: 403,
+          error: 'Forbidden',
+          code: KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT,
+        }),
+      });
+
+      expect(audit.log).toHaveBeenCalledWith(
+        'auth.kakao.forbidden',
+        expect.objectContaining({
+          userId: 'admin-1',
+          detail: { actualRole: 'admin', targetRole: 'driver' },
+        }),
+      );
+      expect(jwt.sign).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['consumer', 'consumer-1'],
+      ['seller', 'seller-1'],
+    ])('기사 앱의 %s 거절은 관리자 구분 code 없이 기존 거절을 유지한다', async (role, id) => {
+      const { jwt, service } = makeKakaoLoginService({
+        user: { id, role, storeId: role === 'seller' ? 'store-1' : null, suspended: false },
+      });
+
+      const rejection = service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' });
+      await expect(rejection).rejects.toMatchObject({ status: 403 });
+      await expect(rejection).rejects.not.toMatchObject({
+        response: expect.objectContaining({ code: KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT }),
+      });
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it.each(['consumer', 'seller'] as const)(
+      '관리자 계정은 %s 앱 카카오 로그인을 그대로 유지한다',
+      async (targetRole) => {
+        const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+          user: { id: 'admin-1', role: 'admin', storeId: 'store-1', suspended: false },
+        });
+
+        await expect(
+          service.kakaoLogin({ kakaoAccessToken: 'token', targetRole }),
+        ).resolves.toMatchObject({ accessToken: 'access-token', refreshToken: 'refresh-token' });
+        expect(jwt.sign).toHaveBeenCalledTimes(2);
+        expect(refreshTokenRef.set).toHaveBeenCalledTimes(1);
+      },
+    );
 
     it('신규 driver는 승인 대기 document만 생성하고 authenticated session은 만들지 않는다', async () => {
       const { jwt, refreshTokenRef, service, userRef } = makeKakaoLoginService({});

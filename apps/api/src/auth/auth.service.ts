@@ -24,6 +24,10 @@ import type { JwtPayload } from './types/jwt-payload.type';
 
 const USER_ROLES = ['consumer', 'seller', 'driver', 'admin'] as const;
 
+// 기사 앱(targetRole=driver) 카카오 로그인에서 관리자 계정을 거절할 때 붙이는 code.
+// 기사 앱 `apps/driver/src/auth.ts`가 같은 값을 읽어 로그인 화면 안내로 바꾼다.
+export const KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT = 'KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT';
+
 type AuthoritativeUser = {
   role: JwtPayload['role'];
   storeId: string | null;
@@ -345,7 +349,8 @@ export class AuthService {
         : dto.targetRole === 'seller'
           ? ['seller', 'admin']
           : dto.targetRole === 'driver'
-            ? ['driver', 'admin']
+            ? // 기사 앱은 기사 계정만 받는다(2026-10-04 결정). 관리자는 기사 API를 쓸 수 없다.
+              ['driver']
             : ['consumer', 'admin'];
     if (userData['suspended'] === true) {
       await this.audit.log('auth.login.suspended', { userId: userData['id'] as string });
@@ -357,6 +362,16 @@ export class AuthService {
         userId: userData['id'] as string,
         detail: { actualRole: role, targetRole: dto.targetRole },
       });
+      // 기사 앱이 일반 거절(승인 대기·다른 역할)과 구분해 "기사 계정으로 로그인" 안내를 보이도록
+      // 관리자 거절에만 기계 판독용 code를 붙인다. statusCode·message·error 형태는 그대로다.
+      if (dto.targetRole === 'driver' && role === 'admin') {
+        throw new ForbiddenException({
+          statusCode: 403,
+          message: '관리자 계정은 기사 앱을 쓸 수 없습니다.',
+          error: 'Forbidden',
+          code: KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT,
+        });
+      }
       throw new ForbiddenException('접근 권한이 없습니다.');
     }
 
