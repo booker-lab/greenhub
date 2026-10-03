@@ -9,7 +9,7 @@
 
 ## 분류 규칙
 
-- **자동 진행 중(PR)**: 다른 작업자가 PR로 만들고 있다. 병합되면 완료 표로 옮긴다.
+- **자동 진행 중(PR)**: PR이 열려 있고 병합을 기다린다. 병합되면 완료 표로 옮긴다.
 - **사람 결정 필요**: 정책·우선순위·도구 선택을 사람이 정해야 착수할 수 있다.
 - **외부 게이트**: 외부 심사·운영 변경·실기기·실결제처럼 별도 승인이나 바깥 상태를 기다린다.
 - **프런트(디자인 개편과 함께)**: 사용자가 디자인 개편과 함께 직접 챙기는 화면 작업이다.
@@ -28,20 +28,20 @@
 - 기사 앱 테스트 명령·`noUnsafeFinally` 린트 고장 수리. PR #388.
 
 ### CONSUMER-STALE-TESTS-REPAIR
-- 소비자 앱의 낡은 테스트 23건 수리. 진행 중(PR 예정).
+- 소비자 앱의 낡은 테스트 수리(실제 27건)와 `test` 스크립트 추가. PR #389.
 
 ### ADMIN-INVITE-REVOKE-BACKEND
-- 어드민 초대 토큰 취소 백엔드(invite T0+T4: revoke API + 가입 거부 가드). 진행 중(PR 예정). 화면(T5~T7)은 프런트 절.
+- 어드민 초대 토큰 취소 백엔드(invite T0+T4: revoke API + 가입 거부 가드). PR #390. 화면(T5~T7)은 프런트 절.
 
 ### ADMIN-SETTLEMENTS-STATUS-FILTER-BACKEND
-- 어드민 정산 status 필터 백엔드(settlements T4b). 진행 중(PR 예정). 필요한 복합 인덱스는 `firestore.indexes.json`에 있으며 운영 배포 확인은 외부 게이트 `SETTLEMENT-STATUS-INDEX-DEPLOY`.
-
-### ADMIN-DRIVERS-SERVER-FILTER
-- 어드민 기사 탭 서버 status 필터(drivers T1/S1). 진행 중(PR 예정).
+- 어드민 정산 status 필터 백엔드(settlements T4b). PR #392. 필요한 복합 인덱스는 `firestore.indexes.json`에 있으며 운영 배포 확인은 외부 게이트 `SETTLEMENT-STATUS-INDEX-DEPLOY`.
 
 ---
 
 ## 사람 결정 필요
+
+### ADMIN-DRIVERS-SERVER-FILTER
+- 어드민 기사 탭 서버 status 필터(drivers T1/S1). 명세상 T1은 화면 배선뿐이고 백엔드는 무변경이다. 서버 쿼리로 바꾸면 `suspended` 필드가 없는 기사 문서가 `==false`·`!=` 조건에서 빠져 목록에서 사라진다. 기존 문서에 필드를 채우는 운영 데이터 마이그레이션 또는 F5(`limit(100)`) 범위 결정이 먼저다.
 
 ### AUTH-LOGOUT-SERVER-REVOCATION
 - 세 앱 Auth.js 로그아웃이 API `POST /auth/logout`을 부르지 않아 서버 `refreshTokens/{sub}`가 남는다(앱 코드에 호출 없음). 로그아웃 전에 복사된 쿠키가 refresh 만료(30일)까지 재사용될 수 있다.

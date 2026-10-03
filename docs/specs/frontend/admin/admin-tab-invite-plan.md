@@ -216,7 +216,7 @@
 ### 세션 S-A (선결 + 그룹 A) — 보기 개선
 
 **선결 작업 (커밋 0):**
-- [ ] **T0** — `consumeInvite`·`signup` 경로 grep, 분기 표 작성 → 본 문서 T4 명세 보완. — 🔄 진행 중(PR 예정, T4와 함께). 참고: `consumeInvite` 함수는 없고 실제 소비 경로는 `apps/api/src/auth/auth.service.ts` 한 곳
+- [ ] **T0** — `consumeInvite`·`signup` 경로 grep, 분기 표 작성 → 본 문서 T4 명세 보완. — 🔄 PR #390(T4와 함께). 참고: `consumeInvite` 함수는 없고 실제 소비 경로는 `apps/api/src/auth/auth.service.ts` 한 곳
 
 **아토믹 태스크 (커밋 3):**
 - [x] **T1** — 행별 토큰 복사 버튼 (모든 상태 노출) — 2026-09-28 코드 완료(#319 `f4388862`, T3와 한 커밋·육안 미확인: `visual-verify-2026-09-28.md` §7)
@@ -263,7 +263,7 @@
 - [ ] T0 산출 표 재확인 — T4 거부 가드 위치 확정 (1곳/2곳)
 
 **아토믹 태스크 (커밋 4):**
-- [ ] **T4** — 백엔드 revoke 엔드포인트 + 거부 가드 (한 커밋 강제) — 🔄 진행 중(PR 예정)
+- [ ] **T4** — 백엔드 revoke 엔드포인트 + 거부 가드 (한 커밋 강제) — 🔄 PR #390
   - 정합성 검토:
     - [ ] C1 tsc 0 (api·admin·seller 3앱 — `InviteToken` 타입 변경 영향)
     - [ ] C2 biome 0 (api)

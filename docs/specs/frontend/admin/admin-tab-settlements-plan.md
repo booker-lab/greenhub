@@ -4,7 +4,7 @@
 > SDD 분리(세션91)·반응형 카드형(세션88)은 끝남. **표현 레이어 품질은 7개 탭 중 가장 정돈됨**
 > (`page`→`_client`→`_components/`(Filters·SummaryCards·Table)→`_lib`, 라벨/색 shared SSOT).
 > 본 진단은 그 위의 **기능 부재(셀러 탭 대비 비대칭)·표현 정합·타임존 일관성** 정리.
-> **진행(2026-10-04 코드 대조):** T1 완료(#316 `5e1db7b0`), T2 완료(`e448a9c3` — 계획의 `Alert` 배너 대신 오류 Paper와 "다시 조회"로 표를 대체). T4b(status 필터 백엔드)는 진행 중(PR 예정). 미완료: F2 일괄 지급(SDD-2 사용자 결정 선결), T3 툴팁, T7 새로고침, T5(T4b 선결), T6(셀러 #CL-56 T2 선결), E3·E5. T4a 인덱스(`status+settledAt`·`storeId+status+settledAt`)는 `firestore.indexes.json`에 이미 있으며 운영 배포 여부는 확인 필요.
+> **진행(2026-10-04 코드 대조):** T1 완료(#316 `5e1db7b0`), T2 완료(`e448a9c3` — 계획의 `Alert` 배너 대신 오류 Paper와 "다시 조회"로 표를 대체). T4b(status 필터 백엔드)는 PR #392. 미완료: F2 일괄 지급(SDD-2 사용자 결정 선결), T3 툴팁, T7 새로고침, T5(T4b 선결), T6(셀러 #CL-56 T2 선결), E3·E5. T4a 인덱스(`status+settledAt`·`storeId+status+settledAt`)는 `firestore.indexes.json`에 이미 있으며 운영 배포 여부는 확인 필요.
 
 ## 0. 공통 정합성 검토 기준 (모든 어드민 탭 공통)
 
@@ -163,7 +163,7 @@
 | 태스크 | 내용 | 의존 | 정합성 |
 |--------|------|------|--------|
 | **T4a** (Q2) | **인덱스 설계 단독 커밋**. 현 `getSettlements` 사용 인덱스 실측 + status 추가 시 필요 신규 인덱스 정의. `firestore.indexes.json` PR. 세션80 선례 동일 | 선결 | Firebase Console 배포 후 빌드 단계 동작 확인 |
-| **T4b** (F1 백엔드) 🔄 진행 중(PR 예정) | `QueryAdminSettlementsDto`에 `status?: SettlementStatus` (`@IsIn(SETTLEMENT_STATUSES)`) 추가. `getSettlements`에 `where('status','==',dto.status)` 조건부 적용 | T4a | T4a 인덱스 배포 확인 후 머지. tsc 0 |
+| **T4b** (F1 백엔드) 🔄 PR #392 | `QueryAdminSettlementsDto`에 `status?: SettlementStatus` (`@IsIn(SETTLEMENT_STATUSES)`) 추가. `getSettlements`에 `where('status','==',dto.status)` 조건부 적용 | T4a | T4a 인덱스 배포 확인 후 머지. tsc 0 |
 | **T5** (F1 프론트·Q3) | **어드민 `settlements/_constants.ts` 신설**(셀러 cross-import 금지). `SETTLEMENT_FILTER_TABS` 자체 정의(키 배열) + 라벨은 shared `STATUS_LABEL` 재사용. `SettlementFilters` 상단에 `SegmentedTabs<SettlementFilterKey>` 배치. hook `withQuery`에 status 배선. 로딩·빈결과에서도 탭 유지(세션86 C6) | T4b | tsc·biome 0. 세션86 선례 e2e 패턴 차용 가능 |
 
 **커밋 단위**: T4a / T4b / T5 = 3커밋.
