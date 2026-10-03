@@ -68,7 +68,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                   가입일 {formatJoinedDate(user.createdAt)}
                 </Text>
               </Box>
-              <Badge color={user.suspended ? 'red' : 'green'} variant="light" radius="xl">
+              <Badge color={user.suspended ? 'red' : 'brand'} variant="light" radius="xl">
                 {user.suspended ? '정지됨' : '정상'}
               </Badge>
             </Group>
@@ -78,7 +78,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                 disabled={processingId === user.id}
                 size="xs"
                 variant="outline"
-                color={user.suspended ? 'green' : 'red'}
+                color={user.suspended ? 'brand' : 'red'}
                 radius="md"
               >
                 {processingId === user.id ? '처리중…' : user.suspended ? '복구' : '정지'}
@@ -161,7 +161,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                   </Text>
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Badge color={user.suspended ? 'red' : 'green'} variant="light" radius="xl">
+                  <Badge color={user.suspended ? 'red' : 'brand'} variant="light" radius="xl">
                     {user.suspended ? '정지됨' : '정상'}
                   </Badge>
                 </Box>
@@ -171,7 +171,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                     disabled={processingId === user.id}
                     size="xs"
                     variant="outline"
-                    color={user.suspended ? 'green' : 'red'}
+                    color={user.suspended ? 'brand' : 'red'}
                     radius="md"
                   >
                     {processingId === user.id ? '처리중…' : user.suspended ? '복구' : '정지'}

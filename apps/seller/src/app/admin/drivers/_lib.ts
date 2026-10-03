@@ -16,7 +16,7 @@ export const ACTION_META: Record<
     title: '드라이버 승인',
     message: '이 드라이버를 승인하시겠습니까?',
     confirmLabel: '승인',
-    confirmColor: 'green',
+    confirmColor: 'brand',
   },
   suspend: {
     title: '드라이버 정지',

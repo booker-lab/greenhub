@@ -29,7 +29,7 @@ export default function AdminUsersClient() {
       // rejected는 서버 reason 보존, unknown/stale은 재확인 우선 + blind retry 금지.
       const presentation = describeAdminCommandOutcome(outcome, actionLabel);
       notifications.show({
-        color: outcome.kind === 'rejected' ? 'red' : outcome.kind === 'unknown' ? 'orange' : 'yellow',
+        color: outcome.kind === 'rejected' ? 'red' : 'yellow',
         title: presentation.title,
         message: presentation.message,
       });
@@ -108,7 +108,7 @@ export default function AdminUsersClient() {
             : '이 계정을 정지하시겠습니까?'
         }
         confirmLabel={pending?.currentlySuspended ? '해제' : '정지'}
-        confirmColor={pending?.currentlySuspended ? 'green' : 'red'}
+        confirmColor={pending?.currentlySuspended ? 'brand' : 'red'}
         loading={processingId !== null}
         onConfirm={runPending}
         onClose={() => {

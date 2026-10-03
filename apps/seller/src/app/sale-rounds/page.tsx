@@ -32,8 +32,8 @@ const STATUS_META: Record<SaleRoundStatus, { label: string; color: string }> = {
   DRAFT: { label: '작성 중', color: 'gray' },
   SCHEDULED: { label: '판매 예정', color: 'yellow' },
   OPEN: { label: '판매 중', color: 'brand' },
-  CLOSED: { label: '주문 마감', color: 'orange' },
-  COMPLETED: { label: '배송 완료', color: 'dark' },
+  CLOSED: { label: '주문 마감', color: 'dark' },
+  COMPLETED: { label: '배송 완료', color: 'gray' },
   CANCELLED: { label: '취소', color: 'red' },
 };
 
@@ -363,7 +363,7 @@ export default function SaleRoundsPage() {
         <Stack gap="sm">
           {copySuccess && (
             <Alert
-              color="green"
+              color="brand"
               title="회차 복사 완료"
               withCloseButton
               onClose={() => setCopySuccess(null)}
