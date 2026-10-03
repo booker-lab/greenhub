@@ -18,15 +18,19 @@ import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
+import { isApiTimeoutError } from '@/lib/api-timeout';
 import {
   buildDriverOrderDetailScope,
   classifyDriverOrderCommandError,
+  type DriverOrderReadback,
   type DriverOrderReadErrorKind,
   isDriverHoldEntryVisible,
   isDriverOrderCommandAllowed,
   isDriverOrderCommandContinuationCurrent,
   isDriverOrderStatusAck,
+  isDriverTerminalCommandStatus,
   readDriverOrderCommandErrorCodeFromResponse,
+  resolveDriverStatusCommandReadback,
   shouldPreserveDriverOrderOnReadError,
   toDriverOrderNetworkError,
   toDriverOrderReadError,
@@ -79,6 +83,16 @@ const STATUS_UNCERTAIN_CONVERGENCE_MESSAGE =
   '명령이 처리되었는지 확실하지 않습니다. 최신 상태를 다시 확인합니다.';
 const STATUS_UNCERTAIN_READBACK_WARNING =
   '명령 결과를 확인하지 못했습니다. 상태를 다시 확인해 주세요. 같은 명령을 바로 다시 보내지 마세요.';
+// 시간 초과(apiFetch 기본 제한, lib/api-timeout.ts)도 같은 ACK-uncertain 수렴을 따른다.
+const STATUS_TIMEOUT_CONVERGENCE_MESSAGE =
+  '서버 응답이 늦어 처리되었는지 확실하지 않습니다. 최신 상태를 다시 확인합니다.';
+// 불확실 수렴 뒤 fresh GET 판정(resolveDriverStatusCommandReadback) 결과 안내.
+const STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE = '처리된 것을 확인했습니다.';
+// 서버는 이미 적용된 같은 전이를 403/409 STATE_CONFLICT로 거절하므로 다시 눌러도 두 번 처리되지 않는다.
+const STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE =
+  '아직 처리되지 않았습니다. 다시 눌러도 두 번 처리되지 않습니다.';
+const STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE =
+  '주문이 진행 목록에서 빠졌습니다. 목록에서 결과를 확인해 주세요.';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
@@ -117,7 +131,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const inFlightRef = useRef(false);
 
   const readDetail = useCallback(
-    async (token: string) => {
+    async (token: string): Promise<DriverOrderReadback> => {
       readSeqRef.current += 1;
       const seq = readSeqRef.current;
       const isCurrent = () => seq === readSeqRef.current;
@@ -128,9 +142,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         setReadLoading(true);
       }
       setReadError(null);
+      let readback: DriverOrderReadback;
       try {
         const response = await apiFetch(`/driver/orders/${encodeURIComponent(orderId)}`, token);
-        if (!isCurrent()) return;
+        if (!isCurrent()) return { kind: 'stale' };
         if (!response.ok) {
           const failure = toDriverOrderReadError(response.status);
           // AUTH_ERROR·NOT_FOUND는 authority loss/absence이므로 이전 order를 즉시 제거한다.
@@ -143,24 +158,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             setReadError({ kind: failure.kind, message: failure.message });
             setReadbackWarning(null);
           }
+          readback = { kind: 'error', errorKind: failure.kind };
         } else {
           const payload = (await response.json()) as Order;
-          if (!isCurrent()) return;
+          if (!isCurrent()) return { kind: 'stale' };
           hasOrderRef.current = true;
           setOrder(payload);
           setReadError(null);
           // fresh authoritative read는 이전 readback 불확실성을 해소한다.
           setReadbackWarning(null);
+          readback = { kind: 'order', status: payload.status };
         }
       } catch (cause: unknown) {
-        if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) return;
+        if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) {
+          return { kind: 'stale' };
+        }
+        // 시간 초과(ApiTimeoutError)는 AbortError가 아니므로 여기서 FETCH_ERROR로 수렴한다.
         const failure = toDriverOrderNetworkError();
         if (!hasOrderRef.current) setOrder(null);
         setReadError({ kind: failure.kind, message: failure.message });
+        readback = { kind: 'error', errorKind: failure.kind };
       }
-      if (!isCurrent()) return;
+      if (!isCurrent()) return { kind: 'stale' };
       setReadLoading(false);
       setReadRefreshing(false);
+      return readback;
     },
     [orderId],
   );
@@ -260,6 +282,33 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         currentSeq: commandSeqRef.current,
         currentScope: liveScopeRef.current,
       });
+    // ACK-uncertain 수렴(authoritative GET) 결과로 마무리한다. 같은 PATCH는 자동 재전송하지 않는다.
+    // 이미 전이됐으면 성공으로, 반영 안 됐으면 fresh 상태 그대로 다시 누를 수 있게 둔다.
+    // 조회 실패면 readDetail이 남긴 FETCH_ERROR·불확실 경고로 fail-closed를 유지한다.
+    const settleUncertainReadback = (readback: DriverOrderReadback) => {
+      if (!isCommandCurrent()) return;
+      const result = resolveDriverStatusCommandReadback({ requestedStatus: status, readback });
+      if (result === 'APPLIED') {
+        notifications.show({ message: STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE });
+        if (isDriverTerminalCommandStatus(status)) router.replace('/board?tab=preparing');
+        return;
+      }
+      if (result === 'LEFT_DRIVER_SCOPE') {
+        // 완료 전이 요청 뒤 상세 404: 완료 ACK 경로와 같이 목록 조회로 수렴한다.
+        notifications.show({
+          color: 'yellow',
+          message: STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE,
+        });
+        router.replace('/board?tab=preparing');
+        return;
+      }
+      if (result === 'NOT_APPLIED') {
+        notifications.show({
+          color: 'yellow',
+          message: STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE,
+        });
+      }
+    };
     inFlightRef.current = true;
     setLoading(true);
     setReadbackWarning(null);
@@ -333,7 +382,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
         });
         setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
-        await readDetail(token);
+        settleUncertainReadback(await readDetail(token));
         return;
       }
       // B: 2xx이지만 malformed JSON 등으로 ACK 파싱 불가. 자동 resend 없이 GET 수렴한다.
@@ -347,7 +396,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
         });
         setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
-        await readDetail(token);
+        settleUncertainReadback(await readDetail(token));
         return;
       }
       if (!isCommandCurrent()) return;
@@ -358,7 +407,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
         });
         setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
-        await readDetail(token);
+        settleUncertainReadback(await readDetail(token));
         return;
       }
       const isTerminal = status === 'DELIVERED' || status === 'HUB_ARRIVED';
@@ -403,16 +452,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         if (!isCommandCurrent()) return;
         router.replace('/board?tab=preparing');
       }
-    } catch {
-      // H: network/transport error 등 PATCH ACK-uncertain. 같은 PATCH를 자동 재전송하지 않고
-      // UNCERTAIN을 보존한 채 authoritative GET으로 수렴한다. same-command 재시도 유도 copy 금지.
+    } catch (cause: unknown) {
+      // H: network/transport error·시간 초과 등 PATCH ACK-uncertain. 같은 PATCH를 자동 재전송하지
+      // 않고 UNCERTAIN을 보존한 채 authoritative GET으로 수렴한다. same-command 재시도 유도 copy 금지.
+      // 시간 초과는 서버가 상태를 저장한 뒤 알림 발송을 기다리는 중일 수 있어 이미 처리됐을 수 있다.
       if (!isCommandCurrent()) return;
       notifications.show({
         color: 'yellow',
-        message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+        message: isApiTimeoutError(cause)
+          ? STATUS_TIMEOUT_CONVERGENCE_MESSAGE
+          : STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
       });
       setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
-      await readDetail(token);
+      settleUncertainReadback(await readDetail(token));
     } finally {
       // 모든 종료 경로에서 in-flight를 해제한다. 401/403 authority-clear return,
       // 409 convergence return, readback 분기 return, throw 모두 여기를 거친다.
