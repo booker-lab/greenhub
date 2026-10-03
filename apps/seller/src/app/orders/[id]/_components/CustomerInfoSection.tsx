@@ -23,7 +23,7 @@ export function CustomerInfoSection({ order }: { order: Order }) {
         손님 정보
       </Text>
       <Stack gap={6}>
-        <Row label="받는 분" value={displayBuyerName(order)} />
+        <Row label="주문자" value={displayBuyerName(order)} />
         <Row label="연락처" value={phone ?? '연락처 없음'} />
         {requestNote && (
           <Stack gap={2} mt={4}>
