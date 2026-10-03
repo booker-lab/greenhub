@@ -8,7 +8,14 @@ export const proxy = auth((request) => {
   const session = request.auth;
 
   if (!session) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    // 로그인 뒤 원래 보던 화면(경로+쿼리)으로 돌아오도록 복귀 주소를 싣는다.
+    // 로그인 화면은 이 값을 같은 출처 상대 경로로만 받아들인다(login/_callback-url.ts).
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set(
+      'callbackUrl',
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    );
+    return NextResponse.redirect(loginUrl);
   }
 
   if (session.user.role === 'driver') {
