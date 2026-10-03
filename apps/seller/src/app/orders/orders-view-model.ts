@@ -14,9 +14,16 @@ import {
   type OrderPriorityCounts,
   shouldShowActionRequiredOrder,
 } from './order-priority';
+import { filterOrdersBySearch } from './order-search';
 
 /** IN_DELIVERY 탭 하위 필터 — page의 subFilter state와 동일한 vocabulary */
 export type InDeliverySubFilter = 'ALL' | 'DELIVERING' | 'HUB_ARRIVED';
+
+/** 이름·전화·주문번호 통합 검색 — 전화는 서버가 찾아 준 주문 id 집합으로 전달한다 */
+export interface OrdersSearch {
+  query: string;
+  phoneMatchIds?: ReadonlySet<string> | null;
+}
 
 export interface OrdersListFilter {
   activeTab: OrderGroup;
@@ -36,6 +43,7 @@ export interface OrdersViewModelInput {
   customFrom: string;
   customTo: string;
   groupConfigMap?: GroupConfigMap;
+  search?: OrdersSearch;
 }
 
 export interface OrdersViewModel {
@@ -75,6 +83,7 @@ export interface OrdersScopedViewInput {
   customFrom: string;
   customTo: string;
   groupConfigMap?: GroupConfigMap;
+  search?: OrdersSearch;
 }
 
 /** PHASE_2 출력 — 뱃지/목록/그룹핑 렌더 데이터 (fetch input 제외). */
@@ -191,6 +200,8 @@ export function deriveOrdersFetchInput(
 /**
  * PHASE_2 — 이미 scope된 동일 참조에서 counts와 filtered를 함께 파생한다.
  * 뱃지와 목록이 서로 다른 scope 배열에서 계산되는 구조적 불일치가 불가능하다.
+ * 검색은 탭 뱃지와 목록에 함께 적용해 다른 탭의 검색 결과 수를 보여 준다.
+ * 업무 우선순위 집계는 검색과 무관한 판매 유형 전체 기준이다(우선순위 진입 시 검색을 비운다).
  */
 export function buildOrdersScopedViewModel(input: OrdersScopedViewInput): OrdersScopedView {
   const {
@@ -203,9 +214,13 @@ export function buildOrdersScopedViewModel(input: OrdersScopedViewInput): Orders
     customFrom,
     customTo,
     groupConfigMap,
+    search,
   } = input;
   const dateRange = resolveOrdersDateRange(saleType, datePreset, activeTab, customFrom, customTo);
-  const filteredOrders = filterOrdersForView(saleTypeOrders, {
+  const searchedOrders = search
+    ? filterOrdersBySearch(saleTypeOrders, search.query, search.phoneMatchIds)
+    : saleTypeOrders;
+  const filteredOrders = filterOrdersForView(searchedOrders, {
     activeTab,
     subFilter,
     heldOnly,
@@ -214,7 +229,7 @@ export function buildOrdersScopedViewModel(input: OrdersScopedViewInput): Orders
   });
   return {
     priorityCounts: getOrderPriorityCounts(saleTypeOrders),
-    scopedGroupCounts: countOrdersByGroup(saleTypeOrders),
+    scopedGroupCounts: countOrdersByGroup(searchedOrders),
     customInvalid: isCustomRangeInvalid(datePreset, customFrom, customTo),
     dateRange,
     filteredOrders,
@@ -238,6 +253,7 @@ export function buildOrdersViewModel(input: OrdersViewModelInput): OrdersViewMod
     customFrom,
     customTo,
     groupConfigMap,
+    search,
   } = input;
   const fetchInput = deriveOrdersFetchInput(orders, saleType, activeTab);
   const scoped = buildOrdersScopedViewModel({
@@ -250,6 +266,7 @@ export function buildOrdersViewModel(input: OrdersViewModelInput): OrdersViewMod
     customFrom,
     customTo,
     groupConfigMap,
+    search,
   });
   return {
     saleTypeOrders: fetchInput.saleTypeOrders,

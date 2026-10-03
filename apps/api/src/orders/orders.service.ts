@@ -29,7 +29,7 @@ export class OrdersService {
   getOrders(
     storeId: string,
     requester: JwtPayload,
-    query: { userId?: string; status?: string; saleType?: string },
+    query: { userId?: string; status?: string; saleType?: string; phone?: string },
   ) {
     return this.query.getOrders(storeId, requester, query);
   }

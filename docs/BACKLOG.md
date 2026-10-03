@@ -648,10 +648,10 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] 셀러 정산 탭 정산일시가 timeZone 미지정 `toLocaleDateString`으로 표시되고, CSV는 UTC(`Z`) ISO로 기록되어 KST 자정 전후 정산이 전날로 읽힌다. 수정 PR #320(화면 Asia/Seoul 고정·CSV `+09:00`)과 어드민 정산 #316 병합, 2026-09-30 운영 반영(`389066c8`). 2026-09-28 발견.
 
 ### ADMIN-CANCELLED-REFUND-RETRY
-- [ ] 서버 강제환불은 이미 취소된 주문도 재시도를 허용한다(일반: `cancellation.status` LOCAL_PENDING·LOCAL_FAILED·REFUND_FAILED·만료 claim·취소 상태 기록 없음, 회차: 결제가 아직 PAID). 어드민 주문 탭은 취소 주문에 버튼이 없다(#318 이후에도 동일). 결과 불명확 환불은 운영 이슈 `AUTO_REFUND_FAILED`→`RETRY_REFUND`로, 취소 전 주문은 기존 버튼으로 복구할 수 있어 급하지 않다. 취소 주문용 "환불 재시도" 버튼을 둘지 사람이 결정한다. 2026-09-28 발견.
+- [x] 서버 강제환불은 이미 취소된 주문도 재시도를 허용한다(일반: `cancellation.status` LOCAL_PENDING·LOCAL_FAILED·REFUND_FAILED·만료 claim·취소 상태 기록 없음, 회차: 결제가 아직 PAID). 어드민 주문 탭은 취소 주문에 버튼이 없다(#318 이후에도 동일). 결과 불명확 환불은 운영 이슈 `AUTO_REFUND_FAILED`→`RETRY_REFUND`로, 취소 전 주문은 기존 버튼으로 복구할 수 있어 급하지 않다. 취소 주문용 "환불 재시도" 버튼을 둘지 사람이 결정한다. 2026-09-28 발견. **2026-10-04 결정: 만들지 않는다.** 기존 복구 경로(운영 이슈 `RETRY_REFUND`, 취소 전 주문 강제환불 버튼)로 충분하고, 버튼 추가는 중복 환불 실수 위험만 늘린다. 파일럿에서 실제로 필요해지면 다시 연다.
 
 ### SELLER-ORDER-LIST-BUYER-INFO
-- [ ] 셀러 주문 목록 카드의 손님 이름과 이름·전화 통합 검색(`seller-orders-customer-info-plan.md` T1·T4)은 목록 API(`seller-order-read-model.ts` `LIST_FIELDS`)에 손님 정보가 없어 보류했다. 개인정보 최소화 계약을 넓힐지 결정한 뒤 진행한다. 상세 화면 표시는 #314. 2026-09-28 발견.
+- [x] 2026-10-04 사용자 결정으로 해결: 목록 카드에 손님 이름을 보이고 이름·전화 통합 검색을 넣는다. 목록 API `LIST_FIELDS`에는 상세와 같은 `buyerName`만 더하고 전화는 싣지 않는다. 전화 검색은 서버(`?phone=` 숫자 4자리 이상)가 판매자에게 보이는 연락처 숫자만 비교해 자기 매장의 맞는 주문만 돌려준다(`seller-orders-customer-info-plan.md` T1·T4). 이전 기록: 목록 API에 손님 정보가 없어 개인정보 최소화 계약을 넓힐지 결정 대기였다. 상세 화면 표시는 #314. 2026-09-28 발견.
 
 ### ADMIN-DESKTOP-TABLE-IN-480-SHELL
 - [x] 2026-10-03 해결: 사용자 결정(어드민만 넓은 레이아웃)대로 `AppShell`이 `/admin`에서 폭 제한을 풀고 판매자 하단 탭을 숨긴다. 이전 기록: 셀러 앱 루트 레이아웃이 폭 480px로 고정돼 있다. 그런데 어드민 탭은 Mantine `visibleFrom="sm"`(창 폭 기준)으로 데스크톱 표를 고른다. 그래서 PC에서도 카드 폭 446px 안에 표가 들어가고 `overflow:hidden`으로 오른쪽이 잘린다. 어드민 주문 표(489px)는 강제환불 버튼이 "강제환"까지만 보인다. 기존 결함이다(#318과 무관). 어드민을 넓은 레이아웃으로 뺄지, 표 기준을 컨테이너 폭으로 바꿀지 결정한다. #317은 표를 4칸으로 유지해 피했다. 2026-09-28 로컬 하네스 검증에서 발견.
@@ -670,6 +670,12 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 ### ADMIN-TAB-PLANS-STALE-PROGRESS
 - [ ] 어드민 탭 계획서(`docs/specs/frontend/admin-tabs-improve-plan.md`와 `admin/admin-tab-*-plan.md`) 진행표가 현재 코드보다 뒤처져 있다. stores는 T7·T8을 빼고 구현을 마쳤고, 6개 탭 공통 조회 실패 표시와 users D1·banner T1·T3도 끝났는데 표에는 "미착수"로 남아 있다. 문서 정합성 작업으로 정리한다. 2026-09-28 코드 대조로 확인.
+
+### DRIVER-SELLER-PHONE-BEFORE-PICKUP
+- [ ] 기사 IA(`docs/design/드라이버-2단계-IA.md` §4)는 수거 전 화면에 판매자 연락처를 두지만, 코드(`2e2c0b50` 최소 노출)와 테스트는 미배정 주문의 `sellerPhone`을 숨긴다. **2026-10-04 결정: 파일럿 동안 현재 동작(숨김)을 유지한다.** 파일럿은 판매자와 기사가 같은 사람이라 필요가 없다. 외부 기사를 쓰기 시작할 때 노출 범위를 다시 정하고 IA 또는 테스트를 맞춘다.
+
+### ROUND-PAYMENT-RETRY-DOUBLE-HOLD
+- [ ] 소비자가 결제창을 닫고 새 결제 시도 ID로 다시 결제하면(#328), 이전 시도의 `PENDING` 주문·`HELD` 예약이 결제 실패 웹훅 또는 15분 만료 정리(1분 주기)까지 최대 약 16분 동안 회차 배송지·수량·상품 한도를 함께 차지한다. **2026-10-04 결정: 파일럿 동안 유지한다.** 즉시 해제하려면 늦게 도착한 이전 결제(늦은 결제 재확보·자동 환불) 흐름까지 다시 맞춰야 해서 위험이 이득보다 크다. 주문 오픈 날 '한도 마감'이 비정상적으로 빨리 나오면 우선 대응한다.
 
 ---
 
