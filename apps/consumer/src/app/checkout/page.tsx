@@ -25,6 +25,13 @@ import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartValidationError } from '@/lib/cartValidation';
+import {
+  buildPaymentRedirectUrl,
+  createPendingOrderPayment,
+  ORDER_PAYMENT_REDIRECT_PATH,
+  readBrowserPaymentContext,
+  savePendingOrderPayment,
+} from '@/lib/payment-redirect';
 import { readPortonePaymentConfiguration } from '@/lib/portone-config';
 import CheckoutForm from './_components/CheckoutForm';
 
@@ -293,10 +300,16 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       return;
     }
     const PortOne = await import('@portone/browser-sdk/v2');
+    // 모바일은 같은 탭 리다이렉트로 결과가 오므로 첫 결제 뒤 이 반복문은 이어지지 않는다.
+    // 복귀 화면이 남은 미결제 상품 수를 안내할 수 있게 결제 전 기록에 남긴다.
+    const browser = readBrowserPaymentContext();
+    const redirectUrl = browser
+      ? buildPaymentRedirectUrl(browser.origin, ORDER_PAYMENT_REDIRECT_PATH)
+      : null;
 
     let lastOrderId: string | null = null;
 
-    for (const item of cartItems) {
+    for (const [index, item] of cartItems.entries()) {
       const itemKey = [
         item.storeId,
         item.productId,
@@ -336,16 +349,33 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       lastOrderId = orderId;
 
       setState('paying');
-      const response = await PortOne.requestPayment({
-        storeId: configuration.portoneStoreId,
-        paymentId: orderId,
-        orderName: portonePaymentParams.name,
-        totalAmount: portonePaymentParams.amount,
-        currency: 'KRW' as const,
-        channelKey: configuration.channelKey,
-        payMethod: 'EASY_PAY',
-        easyPay: { easyPayProvider: configuration.easyPayProvider },
-      });
+      savePendingOrderPayment(
+        browser?.storage ?? null,
+        createPendingOrderPayment({
+          paymentId: orderId,
+          clearCheckoutCart: true,
+          unpaidItemCount: cartItems.length - index - 1,
+          // 앞 상품이 이미 결제됐다면 같은 장바구니로 다시 결제하면 중복 주문이 되므로 첫 상품만 재시도 경로를 둔다.
+          retryPath: index === 0 ? (browser?.currentPath ?? null) : null,
+          now: Date.now(),
+        }),
+      );
+      let response: Awaited<ReturnType<typeof PortOne.requestPayment>>;
+      try {
+        response = await PortOne.requestPayment({
+          storeId: configuration.portoneStoreId,
+          paymentId: orderId,
+          orderName: portonePaymentParams.name,
+          totalAmount: portonePaymentParams.amount,
+          currency: 'KRW' as const,
+          channelKey: configuration.channelKey,
+          payMethod: 'EASY_PAY',
+          easyPay: { easyPayProvider: configuration.easyPayProvider },
+          ...(redirectUrl ? { redirectUrl } : {}),
+        });
+      } finally {
+        savePendingOrderPayment(browser?.storage ?? null, null);
+      }
       if (response && 'code' in response) {
         setError(response.message ?? '결제가 취소되었습니다.');
         setState('error');

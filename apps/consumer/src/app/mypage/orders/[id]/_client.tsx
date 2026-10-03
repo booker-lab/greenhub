@@ -18,9 +18,17 @@ import {
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import {
+  buildPaymentRedirectUrl,
+  type PaymentRedirectResult,
+  parsePaymentRedirectResult,
+  readBrowserPaymentContext,
+  redeliveryPaymentRedirectPath,
+  resolveRedeliveryPaymentReturn,
+} from '@/lib/payment-redirect';
 import { readPortonePaymentConfiguration } from '@/lib/portone-config';
 import {
   type CommandOutcome,
@@ -90,6 +98,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const reviewBusy = reviewOutcome.kind === 'executing' || reviewOutcome.kind === 'reconciling';
   const redeliveryBusy =
     redeliveryOutcome.kind === 'executing' || redeliveryOutcome.kind === 'reconciling';
+  const [redeliveryRedirect, setRedeliveryRedirect] = useState<PaymentRedirectResult | null>(null);
+  const redeliveryPaid = detail && !isStaleRead ? detail.redeliveryPayment.paid : undefined;
 
   async function handleRetry() {
     setRetrying(true);
@@ -266,6 +276,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       if (payment.status === 'PENDING') {
         const configuration = readPortonePaymentConfiguration('kakaopay');
         const PortOne = await import('@portone/browser-sdk/v2');
+        const browser = readBrowserPaymentContext();
+        const redirectUrl = browser
+          ? buildPaymentRedirectUrl(browser.origin, redeliveryPaymentRedirectPath(detail.id))
+          : null;
         const result = await PortOne.requestPayment({
           storeId: configuration.portoneStoreId,
           paymentId: payment.paymentId,
@@ -275,6 +289,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           channelKey: configuration.channelKey,
           payMethod: 'EASY_PAY',
           easyPay: { easyPayProvider: configuration.easyPayProvider },
+          ...(redirectUrl ? { redirectUrl } : {}),
         });
         if (result && 'code' in result) {
           throw {
@@ -323,6 +338,38 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       setActionError(fallbackMessage);
     }
   }
+
+  // 모바일 재배송비 결제는 같은 탭 리다이렉트로 이 주문 상세에 돌아온다. 결과 쿼리는 한 번만 읽고 지운다.
+  useEffect(() => {
+    const result = parsePaymentRedirectResult(new URLSearchParams(window.location.search));
+    if (result.kind === 'none') return;
+    setRedeliveryRedirect(result);
+    window.history.replaceState(window.history.state, '', window.location.pathname);
+  }, []);
+
+  // 성공 쿼리여도 서버 redeliveryPayment.paid(웹훅 반영)를 확인할 때만 완료로 본다.
+  useEffect(() => {
+    if (!redeliveryRedirect) return;
+    const outcome = resolveRedeliveryPaymentReturn(redeliveryRedirect, redeliveryPaid);
+    if (outcome.kind === 'none') {
+      setRedeliveryRedirect(null);
+      return;
+    }
+    if (outcome.kind === 'reconciling') {
+      setRedeliveryOutcome({ kind: 'reconciling' });
+      return;
+    }
+    if (outcome.kind === 'done') {
+      setRedeliveryOutcome({ kind: 'done' });
+      setActionError(null);
+      setRedeliveryRedirect(null);
+      return;
+    }
+    setRedeliveryOutcome(outcome);
+    setActionError(outcome.message);
+    // 실패·취소는 확정이다. 성공 쿼리인데 아직 미확인이면 폴링으로 paid가 올 때까지 계속 본다.
+    if (outcome.kind === 'rejected') setRedeliveryRedirect(null);
+  }, [redeliveryRedirect, redeliveryPaid]);
 
   async function handleConfirm() {
     if (!session?.user?.accessToken || !detail) return;
