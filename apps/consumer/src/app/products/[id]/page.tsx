@@ -5,7 +5,7 @@ import { normalizeSalesMode } from '@greenhub/shared';
 import { Box, Button, Container, Skeleton, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
 import { notFound, usePathname, useRouter } from 'next/navigation';
-import { type ReactNode, use, useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import ProductTopBar from '@/components/ProductTopBar';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
@@ -206,22 +206,14 @@ function findCurrentRoundIdForProduct(product: Product, currentRound: PublicSale
   return resolveRoundProduct(product, currentRound.id, currentRound, []) ? currentRound.id : null;
 }
 
-const homeAction = (
-  <Button component={Link} href="/" radius="xl">
-    이번 주 상품 보기
-  </Button>
-);
-
 function DetailStateFrame({
   label,
   message,
   alert = false,
-  action,
 }: {
   label: string;
   message?: string;
   alert?: boolean;
-  action?: ReactNode;
 }) {
   return (
     <Container size="sm" p={0}>
@@ -234,12 +226,9 @@ function DetailStateFrame({
         aria-label={label}
       >
         {message ? (
-          <Stack align="center" gap="md" py={48}>
-            <Text ta="center" c="var(--color-text-secondary)" size="sm">
-              {message}
-            </Text>
-            {action}
-          </Stack>
+          <Text ta="center" py={48} c="var(--color-text-secondary)" size="sm">
+            {message}
+          </Text>
         ) : (
           <>
             <Skeleton height={360} radius={0} />
@@ -248,6 +237,70 @@ function DetailStateFrame({
           </>
         )}
       </Stack>
+    </Container>
+  );
+}
+
+// 회차에 없는 상품(카카오 채널·대표 판매상품 링크 등으로 들어옴)은 막다른 안내 대신 사진·이름·설명을
+// 보여 주고, 원래 가격·구매 버튼 자리에 이번 주 상품으로 가는 안내를 둔다(회차 가격과 헷갈리지 않게).
+function RoundUnavailableProductDetail({
+  product,
+  variety,
+  label,
+  message,
+}: {
+  product: Product;
+  variety: Variety | null;
+  label: string;
+  message: string;
+}) {
+  return (
+    <Container size="sm" p={0}>
+      <ProductTopBar />
+      <Box
+        data-sales-mode="round_direct"
+        data-round-state="unavailable"
+        style={{ paddingTop: 'calc(52px + env(safe-area-inset-top))' }}
+      >
+        <ProductImages images={product.images ?? []} name={product.name} />
+        <Stack gap="sm" px="md" pt="lg">
+          <Text
+            component="h1"
+            style={{
+              color: 'var(--color-text)',
+              fontSize: 22,
+              fontWeight: 'var(--fw-extrabold)',
+              lineHeight: 1.3,
+              margin: 0,
+            }}
+          >
+            {product.name}
+          </Text>
+          <Box
+            p="md"
+            role="status"
+            aria-label={label}
+            style={{ background: 'var(--color-deadline-surface)', borderRadius: 'var(--radius)' }}
+          >
+            <Text
+              style={{
+                color: 'var(--color-deadline-text)',
+                fontSize: 'var(--font-size-md)',
+                fontWeight: 'var(--fw-extrabold)',
+              }}
+            >
+              {message}
+            </Text>
+            <Text mt={4} size="sm" c="var(--color-text-secondary)">
+              회차마다 경매에서 고른 상품이 바뀌어요. 이번 주 판매 상품을 확인해 주세요.
+            </Text>
+            <Button component={Link} href="/" fullWidth mt="md" size="md">
+              이번 주 상품 보기
+            </Button>
+          </Box>
+        </Stack>
+        <ProductInfo product={product} variety={variety} showSummary={false} />
+      </Box>
     </Container>
   );
 }
@@ -343,11 +396,11 @@ function RoundDirectProductDetail({
   const effectiveRoundId = roundId ?? linkedRoundId;
   if (!effectiveRoundId) {
     return (
-      <DetailStateFrame
+      <RoundUnavailableProductDetail
+        product={product}
+        variety={variety}
         label="판매 회차 확인 실패"
         message="이번 회차에서 판매하지 않는 상품이에요."
-        alert
-        action={homeAction}
       />
     );
   }
@@ -390,11 +443,11 @@ function RoundDirectProductDetail({
       );
     }
     return (
-      <DetailStateFrame
+      <RoundUnavailableProductDetail
+        product={product}
+        variety={variety}
         label="판매 회차 상품 확인 실패"
-        message="이 상품에 연결된 공개 판매 회차를 찾을 수 없습니다."
-        alert
-        action={homeAction}
+        message="판매가 끝났거나 이번 회차에 없는 상품이에요."
       />
     );
   }
