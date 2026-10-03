@@ -255,6 +255,66 @@ export function isDriverOrderCommandContinuationCurrent(args: {
 }
 
 /**
+ * 상세 화면이 기사 명령 뒤 "응답 불확실" 수렴에서 받는 authoritative GET 결과.
+ * - order: fresh GET 성공(현재 서버 상태)
+ * - error: GET 실패(readDetail이 이미 화면을 해당 의미로 수렴시킴)
+ * - stale: 더 새로운 조회·scope 전환에 밀려 이 결과를 쓰면 안 됨
+ */
+export type DriverOrderReadback =
+  | { kind: 'order'; status: string }
+  | { kind: 'error'; errorKind: DriverOrderReadErrorKind }
+  | { kind: 'stale' };
+
+/**
+ * 응답 불확실(시간 초과·네트워크·5xx·ACK 미확인) 명령의 결과를 fresh GET으로 판정한다.
+ *
+ * 서버 계약 (apps/api orders-lifecycle.service.ts · driver-order-scope.service.ts):
+ * - 상태 저장(트랜잭션 commit) 뒤에 알림 발송을 기다렸다가 응답한다. 그래서 응답이 늦어
+ *   시간 초과가 나도 상태는 이미 바뀌어 있을 수 있다.
+ * - 같은 명령을 다시 보내면 FSM 검사(현재 상태 → 같은 상태 전이 불허)와 트랜잭션 안
+ *   expectedStatus 검사로 403/409 DRIVER_ORDER_STATE_CONFLICT로 거절된다.
+ *   즉 중복 적용·중복 알림은 없지만 "성공" 응답이 오지도 않는다(멱등 성공 아님, 안전 거절).
+ * - 기사 상세 GET은 PREPARING·DELIVERING·DELIVERY_HELD만 보인다. 완료 전이
+ *   (DELIVERED·HUB_ARRIVED)가 적용되면 상세는 404가 된다.
+ *
+ * 결과:
+ * - APPLIED: fresh 상태가 요청 상태와 같다 → 성공으로 처리.
+ * - LEFT_DRIVER_SCOPE: 완료 전이를 요청했고 상세가 404 → 기존 완료 ACK 경로와 같이
+ *   목록으로 돌아가 목록 조회로 확인한다(성공이라고 단정하지 않는다).
+ * - NOT_APPLIED: fresh 상태가 요청 상태와 다르다 → 반영 안 됨. 다시 눌러도 서버가 중복을 막는다.
+ * - UNKNOWN: 조회 실패·stale → 불확실 경고를 유지해 fail-closed.
+ */
+export type DriverStatusCommandReadbackResult =
+  | 'APPLIED'
+  | 'LEFT_DRIVER_SCOPE'
+  | 'NOT_APPLIED'
+  | 'UNKNOWN';
+
+const DRIVER_TERMINAL_COMMAND_STATUSES: readonly string[] = ['DELIVERED', 'HUB_ARRIVED'];
+
+export function isDriverTerminalCommandStatus(status: string): boolean {
+  return DRIVER_TERMINAL_COMMAND_STATUSES.includes(status);
+}
+
+export function resolveDriverStatusCommandReadback(args: {
+  requestedStatus: string;
+  readback: DriverOrderReadback;
+}): DriverStatusCommandReadbackResult {
+  const { requestedStatus, readback } = args;
+  if (readback.kind === 'order') {
+    return readback.status === requestedStatus ? 'APPLIED' : 'NOT_APPLIED';
+  }
+  if (
+    readback.kind === 'error' &&
+    readback.errorKind === 'NOT_FOUND' &&
+    isDriverTerminalCommandStatus(requestedStatus)
+  ) {
+    return 'LEFT_DRIVER_SCOPE';
+  }
+  return 'UNKNOWN';
+}
+
+/**
  * 배송 보류 진입 버튼을 보여도 되는가 (서버 허용 범위의 부분집합만 노출).
  *
  * 서버 `DriverOrderScopeService.assertMutationRules` 기준:
