@@ -87,3 +87,19 @@ test('round 없이 들어온 상품 주소는 공개 현재 회차에 그 상품
   assert.match(source, /이번 주 상품 보기/);
   assert.doesNotMatch(source, /유효한 판매 회차가 지정되지 않았습니다/);
 });
+
+test('회차에 없는 상품은 사진·이름·설명을 보이되 원래 가격·구매 버튼 없이 이번 주 상품 안내를 둔다', () => {
+  const start = source.indexOf('function RoundUnavailableProductDetail(');
+  const end = source.indexOf('function ProductDetailContent(');
+  assert.ok(start !== -1 && end > start);
+  const block = source.slice(start, end);
+  assert.match(block, /<ProductImages /);
+  assert.match(block, /\{product\.name\}/);
+  assert.match(
+    block,
+    /<ProductInfo product=\{product\} variety=\{variety\} showSummary=\{false\} \/>/,
+  );
+  assert.match(block, /href="\/"/);
+  assert.doesNotMatch(block, /ProductActions/);
+  assert.doesNotMatch(block, /product\.price/);
+});
