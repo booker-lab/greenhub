@@ -14,7 +14,8 @@ export function StepIndicator({ step }: { step: number }) {
       }}
     >
       <Container size="sm">
-        <Group gap={0}>
+        {/* 두 줄 이름이 있어도 동그라미가 같은 높이에 오도록 위쪽 정렬 */}
+        <Group gap={0} align="flex-start" wrap="nowrap">
           {STEP_LABELS.map((label, i) => {
             const s = i + 1;
             const active = s === step;
@@ -48,9 +49,11 @@ export function StepIndicator({ step }: { step: number }) {
                 </Box>
                 <Text
                   style={{
-                    fontSize: 'var(--font-size-sm)',
+                    fontSize: 'var(--font-size-xs)',
+                    lineHeight: 1.35,
+                    wordBreak: 'keep-all',
                     color: active ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
-                    fontWeight: active ? 'var(--fw-medium)' : 400,
+                    fontWeight: active ? 'var(--fw-bold)' : 400,
                   }}
                 >
                   {label}
