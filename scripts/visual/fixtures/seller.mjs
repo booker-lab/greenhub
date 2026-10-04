@@ -334,7 +334,7 @@ function storeProduct(name, price, extra = {}) {
     createdAt: '2026-09-01T01:00:00.000Z',
     updatedAt: '2026-09-28T01:00:00.000Z',
     selection: {
-      colors: ['pink'],
+      colors: ['핑크'],
       stemType: '외대',
       fragrance: 'light',
       bloomCondition: 'half',
@@ -382,6 +382,29 @@ export const firestoreSeed = {
 
 /** Auth 에뮬레이터 커스텀 토큰 클레임 — firestore.rules의 currentRole·currentSellerFor가 읽는다. */
 export const firebaseClaims = { role: user.role, storeId: STORE_ID };
+
+// ── 상품 등록·수정 화면 ──
+// 수정 화면은 API /stores/:storeId/products/:id/owner로 상품을 읽고, 등록 화면은 /varieties로 품종을 고른다.
+const VARIETIES = [
+  ['variety-biglip', '빅립', 'cymbidium', ['핑크', '레드']],
+  ['variety-mancheonhong', '만천홍', 'cymbidium', ['레드']],
+  ['variety-orange-glow', '오렌지 글로우', 'cymbidium', ['오렌지', '옐로우']],
+].map(([id, name, subCategory, typicalColors]) => ({
+  id,
+  name,
+  category: 'orchid',
+  subCategory,
+  flowerSize: 'medium',
+  plantSize: 'medium',
+  availableStemTypes: ['외대'],
+  hasFragrance: true,
+  fragranceLevel: 'light',
+  bloomDuration: '60~90일',
+  careLevel: 'easy',
+  typicalColors,
+  notes: '',
+  createdAt: '2026-08-01T01:00:00.000Z',
+}));
 
 export const routes = [
   ['GET', /^\/stores\/[^/]+\/orders$/, () => ({ body: SELLER_ORDERS })],
@@ -432,6 +455,25 @@ export const routes = [
   ],
   ['GET', /^\/admin\/drivers$/, () => ({ body: { drivers: ADMIN_DRIVERS } })],
   ['GET', /^\/admin\/banner$/, () => ({ body: ADMIN_BANNER })],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/products\/([^/]+)\/owner$/,
+    ({ params: [id] }) => {
+      const product = firestoreSeed.products[id];
+      return product
+        ? { body: { id, ...product } }
+        : { status: 404, body: { message: '상품 없음' } };
+    },
+  ],
+  [
+    'GET',
+    /^\/varieties$/,
+    ({ url }) => ({
+      body: VARIETIES.filter(
+        (v) => !url.searchParams.get('category') || v.category === url.searchParams.get('category'),
+      ),
+    }),
+  ],
 ];
 
 /**
@@ -470,6 +512,8 @@ export const screens = [
   },
   { id: 'sale-round-new', group: '판매자', title: '새 회차', path: '/sale-rounds/new' },
   { id: 'products', group: '판매자', title: '상품 목록', path: '/products' },
+  { id: 'product-new', group: '판매자', title: '상품 등록', path: '/products/new' },
+  { id: 'product-edit', group: '판매자', title: '상품 수정', path: '/products/product-1/edit' },
   { id: 'settlements', group: '판매자', title: '정산', path: '/settlements' },
   { id: 'settings', group: '판매자', title: '설정', path: '/settings' },
   { id: 'admin-orders', group: '어드민', title: '주문', path: '/admin/orders' },
