@@ -57,7 +57,10 @@ test('round_direct는 검증된 회차 장바구니 계약만 저장하고 후�
   assert.match(roundSource, /roundItemId:\s*roundProduct\.item\.id/);
   assert.match(roundSource, /roundPrice:\s*roundProduct\.item\.roundPrice/);
   assert.match(roundSource, /if \(!result\.ok\)/);
-  assert.match(roundSource, /result\.reason === 'different_round'/);
+  // c2c76c6a 이후 실패 사유(different_round 등) 안내는 공용 cartAddFailureMessage가 맡는다.
+  // 사유별 문구는 lib/round-quick-add.test.mjs가 검증한다.
+  assert.match(roundSource, /cartAddFailureMessage\(result\.reason\)/);
+  assert.match(roundSource, /from '@\/lib\/round-quick-add'/);
   assert.doesNotMatch(roundSource, /schemaVersion\s*:/);
   assert.doesNotMatch(roundSource, /acquisition\s*:/);
 });

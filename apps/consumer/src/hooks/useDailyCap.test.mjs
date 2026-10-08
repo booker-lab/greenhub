@@ -133,7 +133,6 @@ function mountHook({ hookName, initialProps, firestore, subscriptions }) {
   function render() {
     cursor = 0;
     renderScheduled = false;
-    // biome-ignore lint/correctness/useHookAtTopLevel: React를 모의한 훅 계약 단위 테스트다.
     latest = hookModule.exports[hookName](...Object.values(props));
     flushEffects();
   }

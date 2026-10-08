@@ -28,8 +28,17 @@ test('상품 카드는 모집기한 마감 상태를 모집 중과 구분한다'
 });
 
 test('만료되거나 설정이 없는 공동구매는 장바구니와 결제 동선을 모두 차단한다', () => {
-  assert.match(actionsSource, /isGroupUnavailable = isGroup && groupStatus !== 'open'/);
-  assert.equal(actionsSource.match(/if \(isGroupUnavailable\) return;/g)?.length, 2);
+  // bf1f0f50 이후 조회 중·조회 실패도 함께 차단하지만, open이 아닌 상태(만료·설정 없음)
+  // 차단은 그대로 판정식 안에 있어야 한다.
+  assert.match(
+    actionsSource,
+    /isGroupUnavailable\s*=\s*isGroup && \([^)]*groupStatus !== 'open'\)/,
+  );
+  // 장바구니 담기·바로 결제 두 핸들러 모두 isGroupUnavailable이면 진행하지 않는다.
+  assert.equal(
+    actionsSource.match(/if \(isGroupUnavailable(?: \|\| [A-Za-z]+)*\) return;/g)?.length,
+    2,
+  );
   assert.match(ctaSource, /canAddToCart = !\(isGroup && isUnavailable\)/);
   assert.match(ctaSource, /disabled=\{!canAddToCart\}/);
   assert.match(ctaSource, /disabled=\{!canBuy\}/);

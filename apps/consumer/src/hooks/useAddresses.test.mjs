@@ -185,6 +185,7 @@ function createDriver(initialAddresses, failOverrides = {}) {
     for (let round = 0; round < 6; round += 1) {
       hookCursor = 0;
       effectCursor = 0;
+      // biome-ignore lint/correctness/useHookAtTopLevel: React를 모의한 훅 계약 단위 테스트다.
       latest = useAddresses();
       const pending = [];
       for (let i = 0; i < effectSlots.length; i += 1) {
@@ -209,6 +210,7 @@ function createDriver(initialAddresses, failOverrides = {}) {
     }
     hookCursor = 0;
     effectCursor = 0;
+    // biome-ignore lint/correctness/useHookAtTopLevel: React를 모의한 훅 계약 단위 테스트다.
     latest = useAddresses();
     for (let i = 0; i < effectSlots.length; i += 1) {
       if (effectSlots[i].pending) {
@@ -242,6 +244,7 @@ function createDriver(initialAddresses, failOverrides = {}) {
     await flushTicks();
     hookCursor = 0;
     effectCursor = 0;
+    // biome-ignore lint/correctness/useHookAtTopLevel: React를 모의한 훅 계약 단위 테스트다.
     latest = useAddresses();
     return latest;
   }
