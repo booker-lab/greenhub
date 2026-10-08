@@ -406,6 +406,25 @@ const VARIETIES = [
   createdAt: '2026-08-01T01:00:00.000Z',
 }));
 
+const HUBS = [
+  {
+    id: 'hub-0001',
+    name: '이천 부발 픽업점',
+    address: '경기도 이천시 부발읍 경충대로 2091',
+    addressDetail: '1층 꽃집',
+    operatingHours: '평일 10:00~19:00',
+    isActive: true,
+  },
+  {
+    id: 'hub-0002',
+    name: '증포동 거점',
+    address: '경기도 이천시 증포동 403',
+    addressDetail: null,
+    operatingHours: null,
+    isActive: false,
+  },
+];
+
 export const routes = [
   ['GET', /^\/stores\/[^/]+\/orders$/, () => ({ body: SELLER_ORDERS })],
   [
@@ -455,6 +474,39 @@ export const routes = [
   ],
   ['GET', /^\/admin\/drivers$/, () => ({ body: { drivers: ADMIN_DRIVERS } })],
   ['GET', /^\/admin\/banner$/, () => ({ body: ADMIN_BANNER })],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/delivery-config$/,
+    () => ({
+      body: {
+        directFee: 3000,
+        hubFee: 1000,
+        parcelFee: 4000,
+        freeThresholdDirect: 50000,
+        freeThresholdHub: 30000,
+        freeThresholdParcel: 50000,
+        weatherRestrictionActive: false,
+      },
+    }),
+  ],
+  // 이번 달 몇몇 날짜에 한도를 넣는다(보는 달이 바뀌어도 같은 날짜 모양이 보이게 from의 연·월을 따른다).
+  [
+    'GET',
+    /^\/stores\/[^/]+\/daily-caps$/,
+    ({ url }) => {
+      const month = (url.searchParams.get('from') ?? '2026-10-01').slice(0, 7);
+      return {
+        body: {
+          caps: [
+            { date: `${month}-10`, totalCap: 20, usedSlots: 12 },
+            { date: `${month}-11`, totalCap: 20, usedSlots: 20 },
+            { date: `${month}-17`, totalCap: 15, usedSlots: 3 },
+          ],
+        },
+      };
+    },
+  ],
+  ['GET', /^\/stores\/[^/]+\/hubs$/, () => ({ body: { hubs: HUBS } })],
   [
     'GET',
     /^\/stores\/[^/]+\/products\/([^/]+)\/owner$/,
@@ -530,6 +582,19 @@ export const screens = [
     click: '주문별 상세',
   },
   { id: 'settings', group: '판매자', title: '설정', path: '/settings' },
+  {
+    id: 'settings-delivery',
+    group: '판매자',
+    title: '설정 · 배송비',
+    path: '/settings/delivery',
+  },
+  {
+    id: 'settings-daily-caps',
+    group: '판매자',
+    title: '설정 · 배송 한도',
+    path: '/settings/daily-caps',
+  },
+  { id: 'hubs', group: '판매자', title: '거점', path: '/hubs' },
   { id: 'admin-orders', group: '어드민', title: '주문', path: '/admin/orders' },
   { id: 'admin-settlements', group: '어드민', title: '정산', path: '/admin/settlements' },
   { id: 'admin-users', group: '어드민', title: '소비자', path: '/admin/users' },

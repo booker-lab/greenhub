@@ -9,7 +9,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { SELLER_OPERATION_SETTINGS } from './settings-links';
 
-/** 설정 섹션 카드 — 대문자 라벨 헤더 + 행 목록. */
+/** 설정 섹션 카드 — 작은 회색 라벨 헤더 + 행 목록. */
 function SectionCard({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Paper radius="lg" shadow="xs" style={{ overflow: 'hidden' }}>
@@ -18,9 +18,7 @@ function SectionCard({ label, children }: { label: string; children: ReactNode }
           style={{
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-medium)',
-            color: 'var(--color-text-disabled)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
+            color: 'var(--color-text-secondary)',
           }}
         >
           {label}
@@ -75,7 +73,9 @@ export default function SettingsPage() {
               onClick={() => signOut({ callbackUrl: '/login' })}
               style={rowStyle(true)}
             >
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
                 로그아웃
               </Text>
             </UnstyledButton>

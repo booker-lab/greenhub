@@ -47,12 +47,12 @@ export default async function ProfilePage() {
                       fontSize: 'var(--font-size-xl)',
                     }}
                   >
-                    {user.name?.[0] ?? 'D'}
+                    {user.name?.[0] ?? '기'}
                   </Text>
                 </Box>
               )}
               <Stack gap={2}>
-                <Text style={{ fontWeight: 'var(--fw-bold)' }}>{user.name ?? '드라이버'}</Text>
+                <Text style={{ fontWeight: 'var(--fw-bold)' }}>{user.name ?? '기사'}</Text>
                 <Text
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
                 >
@@ -101,7 +101,7 @@ export default async function ProfilePage() {
               await signOut({ redirectTo: '/login' });
             }}
           >
-            <Button type="submit" fullWidth variant="outline" color="red" radius="xl" size="md">
+            <Button type="submit" fullWidth variant="default" radius="xl" size="md">
               로그아웃
             </Button>
           </form>
