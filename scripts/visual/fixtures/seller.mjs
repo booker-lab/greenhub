@@ -507,6 +507,14 @@ export const routes = [
     },
   ],
   ['GET', /^\/stores\/[^/]+\/hubs$/, () => ({ body: { hubs: HUBS } })],
+  // 파일럿 가게와 같은 회차 판매 가게 — 설정에서 예전 방식 메뉴(배송비·배송 슬롯·거점)가 숨는다.
+  [
+    'GET',
+    /^\/stores\/([^/]+)\/public-profile$/,
+    ({ params: [id] }) => ({
+      body: { id, name: '그린러브 검증 가게', logoUrl: null, salesMode: 'round_direct' },
+    }),
+  ],
   [
     'GET',
     /^\/stores\/[^/]+\/products\/([^/]+)\/owner$/,
