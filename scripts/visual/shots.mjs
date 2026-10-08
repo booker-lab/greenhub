@@ -171,8 +171,17 @@ try {
       const t0 = Date.now();
       await page.goto(`${base}${screen.path}`, { waitUntil: 'load', timeout: 180_000 });
       // 데이터 요청이 끝나고 화면이 안정될 때까지 잠시 기다린다.
-      await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-      await page.waitForTimeout(800);
+      // 에뮬레이터 모드는 Firestore 구독이 연결을 계속 열어 두어 networkidle이 오지 않으므로 짧게 기다린다.
+      await page
+        .waitForLoadState('networkidle', { timeout: runtime.emulator ? 2_000 : 15_000 })
+        .catch(() => {});
+      await page.waitForTimeout(runtime.emulator ? 2_000 : 800);
+      // click: 주소로 열 수 없는 화면 안 상태(탭 등)는 찍기 전에 그 글자를 가진 요소를 누른다.
+      if (screen.click) {
+        await page.getByText(screen.click, { exact: true }).first().click();
+        await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => {});
+        await page.waitForTimeout(800);
+      }
       const file = `${screen.id}-${viewportName}.png`;
       await capture(page, path.join(outDir, file));
       const log = await (await fetch(`${apiBase}/__log`)).json();
