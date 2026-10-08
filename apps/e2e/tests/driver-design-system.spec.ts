@@ -8,8 +8,8 @@ test.describe('드라이버 디자인 시스템 — 로그인 페이지', () => 
   test('로그인 페이지 정상 렌더링', async ({ page }) => {
     await page.goto(`${BASE}/login`)
     await expect(page.locator('body')).toBeVisible()
-    await expect(page.locator('text=Green Love 드라이버')).toBeVisible()
-    await expect(page.locator('text=드라이버 계정으로 로그인하세요')).toBeVisible()
+    await expect(page.locator('text=Green Love')).toBeVisible()
+    await expect(page.locator('text=기사 계정으로 로그인하세요')).toBeVisible()
     await expect(page.locator('text=카카오로 시작하기')).toBeVisible()
   })
 
