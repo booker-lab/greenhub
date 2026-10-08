@@ -68,7 +68,9 @@ export class ProductsService {
         .collection('groupProductConfig')
         .where('productId', 'in', groupProductIds.slice(offset, offset + 30))
         .get();
-      gcSnap.docs.forEach((d) => groupConfigMap.set(d.data()['productId'], d.data()));
+      gcSnap.docs.forEach((d) => {
+        groupConfigMap.set(d.data()['productId'], d.data());
+      });
     }
 
     // 스펙 응답: { items: ProductSummary[], total: number }
@@ -337,7 +339,9 @@ export class ProductsService {
         .collection('groupProductConfig')
         .where('productId', 'in', groupProductIds.slice(offset, offset + 30))
         .get();
-      gcSnap.docs.forEach((d: any) => groupConfigMap.set(d.data()['productId'], d.data()));
+      gcSnap.docs.forEach((d: any) => {
+        groupConfigMap.set(d.data()['productId'], d.data());
+      });
     }
 
     const items = products.map((p: any) =>

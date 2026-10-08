@@ -566,7 +566,9 @@ export class OrderCapacityService {
       throw new LatePaymentCapacityError('결제 만료 후 회차 한도 마감');
     }
     try {
-      itemRecords.forEach((item) => this.assertItemCapacity(item.data, item.input.quantity));
+      itemRecords.forEach((item) => {
+        this.assertItemCapacity(item.data, item.input.quantity);
+      });
     } catch {
       throw new LatePaymentCapacityError('결제 만료 후 회차 한도 마감');
     }
