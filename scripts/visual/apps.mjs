@@ -7,6 +7,7 @@
 export const APPS = {
   seller: { dir: 'apps/seller', port: 3202, apiPort: 4202, credentials: 'local-runtime' },
   consumer: { dir: 'apps/consumer', port: 3201, apiPort: 4201, credentials: 'e2e-header' },
+  driver: { dir: 'apps/driver', port: 3203, apiPort: 4203, credentials: 'local-runtime' },
 };
 
 /** start.mjs가 기동 정보를 남기고 shots.mjs가 읽는 파일(실행마다 새로 만드는 하네스 전용 비밀값 포함). */

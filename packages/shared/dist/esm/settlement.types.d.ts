@@ -14,7 +14,10 @@ export type SettlementStatus = 'pending' | 'confirmed' | 'paid' | 'cancelled';
 export declare const SETTLEMENT_STATUSES: SettlementStatus[];
 /** 사용자 확정값: 셀러본 라벨 채택 */
 export declare const STATUS_LABEL: Record<SettlementStatus, string>;
-/** 사용자 확정값: 셀러본 색 채택(pending=yellow) */
+/**
+ * 사용자 확정값: 셀러본 색 채택(pending=yellow).
+ * 디자인 기준(파랑 안 씀·Mantine 기본 green 대신 brand)과 주문 상태 체계(진행=초록, 완료=회색)에 맞춘다.
+ */
 export declare const STATUS_COLOR: Record<SettlementStatus, string>;
 /**
  * 정산 문서 공유 인터페이스 — 셀러·어드민 필드 합집합(N8).

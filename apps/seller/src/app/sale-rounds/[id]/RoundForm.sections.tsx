@@ -92,7 +92,7 @@ export function ScheduleSection({
   return (
     <FormSection
       title="일정"
-      description="모든 시각은 Asia/Seoul 기준입니다. 주문 시작 < 주문 마감 <= 경매 시각 <= 배송 시작 < 배송 종료 순서를 지켜 주세요."
+      description="한국 시간 기준입니다. 주문 시작 → 주문 마감 → 경매 → 배송 시작 → 배송 종료 순서로 맞춰 주세요."
     >
       <SimpleGrid cols={{ base: 1, sm: 2 }}>
         {(
@@ -131,14 +131,12 @@ export function DeliveryRegionSection({
   onChange: (enabled: boolean) => void;
 }) {
   return (
-    <FormSection title="배송 지역" description="검증된 배송 지역의 활성 상태만 변경합니다.">
+    <FormSection
+      title="배송 지역"
+      description="이 회차에서 주문을 받는 지역입니다. 끄면 이 지역 주문을 받지 않습니다."
+    >
       <Group justify="space-between" align="center" wrap="nowrap">
-        <Box>
-          <Text style={{ fontWeight: 'var(--fw-medium)' }}>{region.label}</Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-            {region.province} {region.city} · {region.id}
-          </Text>
-        </Box>
+        <Text style={{ fontWeight: 'var(--fw-medium)' }}>{region.label}</Text>
         <Switch
           label="배송 지역 활성"
           checked={enabled}
@@ -216,7 +214,7 @@ export function ProductsSection({
   return (
     <FormSection
       title="회차 상품"
-      description="회차 가격·상품별 한도는 1 이상, 노출 순서는 0 이상의 정수로 입력합니다."
+      description="회차 가격과 상품별 판매 한도는 1 이상, 노출 순서는 0부터 숫자로 적어 주세요(작은 숫자가 먼저 보입니다)."
     >
       {items.length === 0 && (
         <Alert color="yellow" title="선택한 상품이 없습니다">
@@ -290,7 +288,7 @@ export function ProductsSection({
         </Text>
         {availableProducts.length === 0 && (
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            추가 가능한 검증된 상품이 없습니다.
+            추가할 수 있는 상품이 없습니다. 상품 관리에서 판매 중인 상품을 먼저 등록해 주세요.
           </Text>
         )}
         {availableProducts.map((product) => (
@@ -354,7 +352,7 @@ function LinkRow({
                 wordBreak: 'break-all',
               }}
             >
-              {url ?? '검증된 링크가 제공되지 않았습니다.'}
+              {url ?? '아직 공유 링크가 없습니다.'}
             </Text>
           </Box>
         </Group>
@@ -392,7 +390,7 @@ export function CarrotLinksSection({
   return (
     <FormSection
       title="당근 공유 링크"
-      description="상위 경계에서 검증해 전달한 http(s) 링크만 표시하고 복사합니다."
+      description="당근 게시글에 붙여 넣을 회차·상품 링크입니다. 복사해서 쓰세요."
     >
       <Stack gap="sm">
         <LinkRow label="당근 대표 링크" url={representativeUrl} disabled={busy} onCopy={onCopy} />
