@@ -397,7 +397,6 @@ test('T4. readDetail은 수렴 판정용 결과를 돌려주고 시간 초과는
 
 test('H6. STATUS uncertain keeps fail-closed and manual GET without synthesis', () => {
   assert.match(detailSource, /setReadbackWarning\(STATUS_UNCERTAIN_READBACK_WARNING\)/);
-  const recheckAt = detailSource.indexOf('recheck');
   assert.match(detailSource, /readDetail\(token\)/);
   assert.doesNotMatch(detailSource, /setOrder\(\{\s*\.\.\.order/);
   for (const marker of ['malformed JSON', 'ACK orderId', '403/409']) {

@@ -471,9 +471,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       // 409 convergence return, readback 분기 return, throw 모두 여기를 거친다.
       // 이전 command의 finally가 새 scope의 command/loading 상태를 덮지 않도록
       // 동일 generation + 동일 scope일 때만 해제한다.
-      if (!isCommandCurrent()) return;
-      inFlightRef.current = false;
-      setLoading(false);
+      // finally 안의 return은 진행 중인 예외를 삼키므로 return 대신 조건 블록으로 감싼다.
+      if (isCommandCurrent()) {
+        inFlightRef.current = false;
+        setLoading(false);
+      }
     }
   }
 

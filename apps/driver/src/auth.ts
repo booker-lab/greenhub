@@ -303,7 +303,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g7-upstream-non-ok');
         }
 
-        // biome-ignore lint/suspicious/noExplicitAny: upstream contract is any-shaped;
+        // upstream contract is any-shaped;
         // 38B adds no new validation beyond role/approval, preserves original any-shape.
         let data: any;
         try {

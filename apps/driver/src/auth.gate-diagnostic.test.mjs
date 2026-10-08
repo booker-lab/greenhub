@@ -186,12 +186,7 @@ describe('38B Driver authorize gate-class diagnostic (source contract)', () => {
   });
 
   it('gate ordering is runtime, secret, shape, allowlist, then upstream', () => {
-    // Order by throw sites (not type-union order): find each code's first
-    // `throw new DiagnosticCredentialsSignin('...')` occurrence.
-    const throwAt = (code) => source.indexOf(`throw new DiagnosticCredentialsSignin(\n            '${code}'`) >= 0
-      ? source.indexOf(`throw new DiagnosticCredentialsSignin(\n            '${code}'`)
-      : source.indexOf(`throw new DiagnosticCredentialsSignin('${code}'`);
-    // Fallback: search for the code after the authorize() entry to skip the
+    // Search for each code after the authorize() entry to skip the
     // type-union preamble (which lists g4 before g5).
     const authzAt = source.indexOf('async authorize(credentials');
     const at = (code) => {
