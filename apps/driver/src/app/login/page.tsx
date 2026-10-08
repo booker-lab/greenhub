@@ -36,7 +36,7 @@ export default async function LoginPage({
       }}
     >
       <Box w="100%" style={{ maxWidth: 400 }}>
-        <Paper radius="lg" p="xl" style={{ border: 'var(--border)' }}>
+        <Paper radius="lg" shadow="sm" p="xl">
           {/* 로고 */}
           <Stack align="center" gap="xs" mb="xl">
             <Image
@@ -50,15 +50,16 @@ export default async function LoginPage({
               order={2}
               style={{
                 fontFamily: 'var(--font-brand)',
-                fontSize: 26,
+                fontSize: 30,
                 fontWeight: 800,
+                letterSpacing: '-0.01em',
                 color: 'var(--color-primary-dark)',
               }}
             >
-              Green Love 드라이버
+              Green Love
             </Title>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              드라이버 계정으로 로그인하세요
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+              기사 계정으로 로그인하세요
             </Text>
           </Stack>
 
@@ -102,7 +103,7 @@ export default async function LoginPage({
           {showLocalCredentials && (
             <form action={localCredentialSignIn}>
               <Stack gap="sm" mt="md">
-                <Divider label="또는 로컬 계정" labelPosition="center" />
+                <Divider label="또는" labelPosition="center" />
                 <TextInput
                   type="email"
                   name="email"
