@@ -57,13 +57,7 @@ export default function ProductsPage() {
       <PageHeader
         title="상품 관리"
         right={
-          <Button
-            component={Link}
-            href="/products/new"
-            size="xs"
-            radius="md"
-            style={{ backgroundColor: 'var(--color-primary)' }}
-          >
+          <Button component={Link} href="/products/new" size="xs">
             + 등록
           </Button>
         }

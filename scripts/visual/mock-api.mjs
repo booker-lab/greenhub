@@ -12,8 +12,17 @@ import http from 'node:http';
  * @param {string[]} opts.allowedOrigins CORS 허용 origin(앱 dev 서버 주소)
  * @param {{ user: object, routes: Array<[string, RegExp, Function]> }} opts.fixtures
  * @param {string} opts.logFile 요청 기록(JSON lines)
+ * @param {(() => string) | null} [opts.firebaseToken] 있으면 /auth/firebase-token이 이 값(Auth 에뮬레이터용
+ *   커스텀 토큰)을 평문으로 돌려준다. 앱은 응답을 res.text()로 읽어 signInWithCustomToken에 넘긴다.
  */
-export function startMockApi({ port, hosts, allowedOrigins, fixtures, logFile }) {
+export function startMockApi({
+  port,
+  hosts,
+  allowedOrigins,
+  fixtures,
+  logFile,
+  firebaseToken = null,
+}) {
   const log = [];
   const record = (entry) => {
     const line = { at: new Date().toISOString(), ...entry };
@@ -102,7 +111,12 @@ export function startMockApi({ port, hosts, allowedOrigins, fixtures, logFile })
       });
     }
     if (p === '/auth/firebase-token' && m === 'GET') {
-      // Firebase 로그인 자체를 시작하지 않게 실패로 응답한다(하네스 한계).
+      if (firebaseToken) {
+        record({ kind: 'auth', method: m, path: p });
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', ...corsHeaders(req) });
+        return res.end(firebaseToken());
+      }
+      // 에뮬레이터 없이 띄운 앱은 Firebase 로그인 자체를 시작하지 않게 실패로 응답한다.
       return send(req, res, 503, { message: '하네스: firebase-token 미지원' });
     }
 

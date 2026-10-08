@@ -317,6 +317,95 @@ const byStatus = (items, url) => {
 };
 
 /** [메서드, 경로 정규식, 처리 함수] — 첫 일치가 응답한다. 처리 함수는 { status?, body, delay? }를 돌려준다. */
+// ── Firestore 에뮬레이터 시드 ──
+// 셀러 상품·준비 화면은 브라우저가 Firestore products를 직접 구독한다. start.mjs가 이 값을 에뮬레이터에 넣는다.
+// 저장소 firestore.rules가 그대로 적용되므로 읽기 조건(users 문서 role·storeId, stores.ownerId, 토큰 클레임)을 함께 맞춘다.
+// 상품 id는 회차 항목(roundItems)의 product-1~3과 같다.
+function storeProduct(name, price, extra = {}) {
+  return {
+    storeId: STORE_ID,
+    name,
+    images: [],
+    price,
+    category: 'orchid',
+    saleType: 'normal',
+    deliverySize: 'medium',
+    isActive: true,
+    createdAt: '2026-09-01T01:00:00.000Z',
+    updatedAt: '2026-09-28T01:00:00.000Z',
+    selection: {
+      colors: ['핑크'],
+      stemType: '외대',
+      fragrance: 'light',
+      bloomCondition: 'half',
+      bundleUnit: '1분',
+      careLevel: 'easy',
+    },
+    ...extra,
+  };
+}
+
+export const firestoreSeed = {
+  users: {
+    [user.id]: {
+      role: user.role,
+      storeId: STORE_ID,
+      suspended: false,
+      name: user.name,
+      email: user.email,
+    },
+  },
+  stores: {
+    [STORE_ID]: { ownerId: user.id, name: '디어 오키드' },
+  },
+  products: {
+    // 셀러 주문 fixture(sellerOrder)가 쓰는 예전 일반 판매 상품 — 준비 물량 화면이 상품 이름을 찾는다.
+    'product-0001': storeProduct('장미 꽃다발', 30000, {
+      category: 'cut_flower',
+      createdAt: '2026-08-10T01:00:00.000Z',
+    }),
+    'product-1': storeProduct('동양란 빅립', 30000, {
+      createdAt: '2026-09-03T01:00:00.000Z',
+    }),
+    'product-2': storeProduct('동양란 만천홍', 25000, {
+      createdAt: '2026-09-02T01:00:00.000Z',
+    }),
+    'product-3': storeProduct('동양란 v3', 45000, {
+      createdAt: '2026-09-01T01:00:00.000Z',
+    }),
+    'product-4': storeProduct('오렌지 글로우', 38000, {
+      isActive: false,
+      createdAt: '2026-08-20T01:00:00.000Z',
+    }),
+  },
+};
+
+/** Auth 에뮬레이터 커스텀 토큰 클레임 — firestore.rules의 currentRole·currentSellerFor가 읽는다. */
+export const firebaseClaims = { role: user.role, storeId: STORE_ID };
+
+// ── 상품 등록·수정 화면 ──
+// 수정 화면은 API /stores/:storeId/products/:id/owner로 상품을 읽고, 등록 화면은 /varieties로 품종을 고른다.
+const VARIETIES = [
+  ['variety-biglip', '빅립', 'cymbidium', ['핑크', '레드']],
+  ['variety-mancheonhong', '만천홍', 'cymbidium', ['레드']],
+  ['variety-orange-glow', '오렌지 글로우', 'cymbidium', ['오렌지', '옐로우']],
+].map(([id, name, subCategory, typicalColors]) => ({
+  id,
+  name,
+  category: 'orchid',
+  subCategory,
+  flowerSize: 'medium',
+  plantSize: 'medium',
+  availableStemTypes: ['외대'],
+  hasFragrance: true,
+  fragranceLevel: 'light',
+  bloomDuration: '60~90일',
+  careLevel: 'easy',
+  typicalColors,
+  notes: '',
+  createdAt: '2026-08-01T01:00:00.000Z',
+}));
+
 export const routes = [
   ['GET', /^\/stores\/[^/]+\/orders$/, () => ({ body: SELLER_ORDERS })],
   [
@@ -366,6 +455,25 @@ export const routes = [
   ],
   ['GET', /^\/admin\/drivers$/, () => ({ body: { drivers: ADMIN_DRIVERS } })],
   ['GET', /^\/admin\/banner$/, () => ({ body: ADMIN_BANNER })],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/products\/([^/]+)\/owner$/,
+    ({ params: [id] }) => {
+      const product = firestoreSeed.products[id];
+      return product
+        ? { body: { id, ...product } }
+        : { status: 404, body: { message: '상품 없음' } };
+    },
+  ],
+  [
+    'GET',
+    /^\/varieties$/,
+    ({ url }) => ({
+      body: VARIETIES.filter(
+        (v) => !url.searchParams.get('category') || v.category === url.searchParams.get('category'),
+      ),
+    }),
+  ],
 ];
 
 /**
@@ -404,7 +512,23 @@ export const screens = [
   },
   { id: 'sale-round-new', group: '판매자', title: '새 회차', path: '/sale-rounds/new' },
   { id: 'products', group: '판매자', title: '상품 목록', path: '/products' },
+  { id: 'product-new', group: '판매자', title: '상품 등록', path: '/products/new' },
+  { id: 'product-edit', group: '판매자', title: '상품 수정', path: '/products/product-1/edit' },
   { id: 'settlements', group: '판매자', title: '정산', path: '/settlements' },
+  {
+    id: 'settlements-period',
+    group: '판매자',
+    title: '정산 · 기간별 조회',
+    path: '/settlements',
+    click: '기간별 조회',
+  },
+  {
+    id: 'settlements-orders',
+    group: '판매자',
+    title: '정산 · 주문별 상세',
+    path: '/settlements',
+    click: '주문별 상세',
+  },
   { id: 'settings', group: '판매자', title: '설정', path: '/settings' },
   { id: 'admin-orders', group: '어드민', title: '주문', path: '/admin/orders' },
   { id: 'admin-settlements', group: '어드민', title: '정산', path: '/admin/settlements' },
