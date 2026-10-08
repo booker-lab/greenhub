@@ -507,6 +507,21 @@ export const routes = [
     },
   ],
   ['GET', /^\/stores\/[^/]+\/hubs$/, () => ({ body: { hubs: HUBS } })],
+  [
+    'GET',
+    /^\/stores\/([^/]+)$/,
+    ({ params: [id] }) => ({
+      body: {
+        id,
+        name: '그린러브 검증 가게',
+        ceoName: '김농부',
+        phone: '010-4452-2104',
+        address: '경기도 이천시 부발읍 경충대로 2091',
+        businessNumber: '123-45-67890',
+        logoUrl: '',
+      },
+    }),
+  ],
   // 파일럿 가게와 같은 회차 판매 가게 — 설정에서 예전 방식 메뉴(배송비·배송 슬롯·거점)가 숨는다.
   [
     'GET',
@@ -543,6 +558,8 @@ export const routes = [
  */
 export const screens = [
   { id: 'login', group: '판매자', title: '로그인', path: '/login', auth: false },
+  { id: 'home', group: '판매자', title: '홈', path: '/' },
+  { id: 'onboarding', group: '판매자', title: '사업자 프로필 수정', path: '/onboarding' },
   { id: 'orders', group: '판매자', title: '주문 목록', path: '/orders' },
   {
     id: 'order-contact',

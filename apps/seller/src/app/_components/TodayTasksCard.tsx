@@ -10,7 +10,8 @@ import { isDelayed } from '@/lib/prep';
 
 interface TaskRow {
   key: string;
-  icon: string;
+  /** 줄 앞 점 색 — 새 주문=초록(할 일), 발송 지연=빨강(문제), 비활성 상품=노랑(점검). */
+  dot: string;
   label: string;
   href: string;
 }
@@ -43,21 +44,21 @@ export function TodayTasksCard({
   if (newOrderCount > 0)
     tasks.push({
       key: 'new',
-      icon: '🔴',
+      dot: 'var(--color-primary)',
       label: `신규 주문 ${newOrderCount}건 처리하기`,
       href: '/orders?tab=ACTION_REQUIRED',
     });
   if (delayedCount > 0)
     tasks.push({
       key: 'delayed',
-      icon: '🔴',
+      dot: 'var(--color-danger)',
       label: `발송 지연 ${delayedCount}건 확인`,
       href: '/prep',
     });
   if (productsTrustworthy && inactiveCount > 0)
     tasks.push({
       key: 'inactive',
-      icon: '⚠️',
+      dot: 'var(--color-status-warning-text)',
       label: `비활성 상품 ${inactiveCount}건 점검`,
       href: '/products',
     });
@@ -65,7 +66,7 @@ export function TodayTasksCard({
   const showProductWarning = !productsTrustworthy;
 
   return (
-    <DashboardCard title="☀️ 오늘 할 일">
+    <DashboardCard title="오늘 할 일">
       {showProductWarning && (
         <Text
           role={productsError ? 'alert' : 'status'}
@@ -82,7 +83,7 @@ export function TodayTasksCard({
       )}
       {tasks.length === 0 && productsTrustworthy ? (
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-          오늘 할 일을 모두 마쳤어요 🎉
+          오늘 할 일을 모두 마쳤어요
         </Text>
       ) : tasks.length === 0 && !productsTrustworthy ? (
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
@@ -103,7 +104,16 @@ export function TodayTasksCard({
                 borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
               }}
             >
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{t.icon}</Text>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor: t.dot,
+                  flexShrink: 0,
+                }}
+              />
               <Text
                 style={{
                   flex: 1,
