@@ -81,10 +81,8 @@ test.describe('셀러 디자인 시스템 — 인증 화면', () => {
   test('설정 — 메뉴 렌더링', async ({ page }) => {
     await page.goto(`${BASE}/settings`)
     await expect(page.getByRole('heading', { name: '설정' })).toBeVisible({ timeout: 10_000 })
-    await expect(page.locator('text=배송비 설정 / 기상 제한')).toBeVisible()
-    await expect(page.locator('text=배송 슬롯 (Daily Cap)')).toBeVisible()
-    // 세션39(#CL-33): 거점 관리가 설정 하위로 이동
-    await expect(page.locator('text=거점 관리')).toBeVisible()
+    await expect(page.locator('text=정산 관리')).toBeVisible()
+    // 배송비·배송 슬롯·거점 메뉴는 예전 판매 방식 가게에만 보인다(회차 판매 가게는 숨김, settings-links.test.ts).
   })
 
   test('거점 관리 — 목록 렌더링', async ({ page }) => {
