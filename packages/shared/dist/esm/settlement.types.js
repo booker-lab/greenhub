@@ -23,11 +23,14 @@ export const STATUS_LABEL = {
     paid: '지급 완료',
     cancelled: '취소',
 };
-/** 사용자 확정값: 셀러본 색 채택(pending=yellow) */
+/**
+ * 사용자 확정값: 셀러본 색 채택(pending=yellow).
+ * 디자인 기준(파랑 안 씀·Mantine 기본 green 대신 brand)과 주문 상태 체계(진행=초록, 완료=회색)에 맞춘다.
+ */
 export const STATUS_COLOR = {
     pending: 'yellow',
-    confirmed: 'blue',
-    paid: 'green',
+    confirmed: 'brand',
+    paid: 'gray',
     cancelled: 'red',
 };
 //# sourceMappingURL=settlement.types.js.map

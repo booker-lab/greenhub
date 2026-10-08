@@ -35,17 +35,20 @@ export function PeriodTab({
         >
           조회 기간을 선택하세요
         </Text>
-        <Group gap="xs" mb="md">
+        {/* 두 날짜 칸이 한 줄에 나란히 오게(좁은 화면에서 줄바꿈되며 "~"만 남던 문제) */}
+        <Group gap="xs" mb="md" wrap="nowrap">
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
             style={{
               flex: 1,
-              padding: '8px 12px',
+              minWidth: 0,
+              padding: '8px 10px',
               border: '1px solid var(--color-border)',
               borderRadius: 12,
               fontSize: 'var(--font-size-sm)',
+              fontVariantNumeric: 'tabular-nums',
             }}
           />
           <Text style={{ color: 'var(--color-text-disabled)' }}>~</Text>
@@ -55,10 +58,12 @@ export function PeriodTab({
             onChange={(e) => setTo(e.target.value)}
             style={{
               flex: 1,
-              padding: '8px 12px',
+              minWidth: 0,
+              padding: '8px 10px',
               border: '1px solid var(--color-border)',
               borderRadius: 12,
               fontSize: 'var(--font-size-sm)',
+              fontVariantNumeric: 'tabular-nums',
             }}
           />
         </Group>

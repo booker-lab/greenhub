@@ -176,6 +176,12 @@ try {
         .waitForLoadState('networkidle', { timeout: runtime.emulator ? 2_000 : 15_000 })
         .catch(() => {});
       await page.waitForTimeout(runtime.emulator ? 2_000 : 800);
+      // click: 주소로 열 수 없는 화면 안 상태(탭 등)는 찍기 전에 그 글자를 가진 요소를 누른다.
+      if (screen.click) {
+        await page.getByText(screen.click, { exact: true }).first().click();
+        await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => {});
+        await page.waitForTimeout(800);
+      }
       const file = `${screen.id}-${viewportName}.png`;
       await capture(page, path.join(outDir, file));
       const log = await (await fetch(`${apiBase}/__log`)).json();
