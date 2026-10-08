@@ -2,7 +2,7 @@
 // 배포·Vercel·카카오 로그인 없이 작업 직후 화면을 PC 브라우저나 휴대폰(Tailscale)으로 본다.
 //
 //   node scripts/visual/start.mjs [app] [--phone]
-//     app      seller(셀러·어드민, 기본) 또는 consumer(소비자)
+//     app      seller(셀러·어드민, 기본), consumer(소비자), driver(기사)
 //     --phone  Tailscale 주소에 바인딩해 휴대폰에서 접속한다(같은 tailnet 기기만 접근 가능)
 //
 // 안전장치: 앱의 .env 파일 값(운영 API·Firebase·비밀값)을 전부 빈 값으로 덮고,
@@ -15,6 +15,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APPS, RUNTIME_FILE } from './apps.mjs';
+import {
+  assertEmulatorPortsFree,
+  EMULATOR,
+  emulatorCustomToken,
+  seedFirestore,
+  startEmulators,
+  waitForEmulators,
+} from './firebase-emulator.mjs';
 import { startMockApi } from './mock-api.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -78,16 +86,40 @@ const logs = {
   api: path.join(runDir, 'mock-api.log'),
   guard: path.join(runDir, 'node-guard.log'),
   next: path.join(runDir, 'next-dev.log'),
+  emulator: path.join(runDir, 'firebase-emulator.log'),
 };
 for (const f of Object.values(logs)) fs.writeFileSync(f, '');
 
-const { user, routes } = await import(`./fixtures/${appName}.mjs`);
+const { user, routes, firestoreSeed, firebaseClaims } = await import(`./fixtures/${appName}.mjs`);
+
+// fixture에 firestoreSeed가 있으면(셀러 상품·준비처럼 Firestore를 직접 구독하는 화면) Auth·Firestore 에뮬레이터를
+// 띄우고 데이터를 넣는다. 앱 계약상 에뮬레이터 주소가 127.0.0.1로 고정이라 --phone에서는 쓰지 않는다.
+const useEmulator = Boolean(firestoreSeed) && !phone;
+let emulator = null;
+if (useEmulator) {
+  try {
+    await assertEmulatorPortsFree();
+    console.log('⏳ Firebase 에뮬레이터(Auth·Firestore) 기동 중…');
+    emulator = startEmulators({ root: ROOT, logFile: logs.emulator });
+    await waitForEmulators({ child: emulator.child });
+    const count = await seedFirestore(firestoreSeed);
+    console.log(`✅ 에뮬레이터 준비됨 · 시드 문서 ${count}개`);
+  } catch (error) {
+    emulator?.stop();
+    fail(`에뮬레이터 실패: ${error.message} (로그: ${logs.emulator})`);
+  }
+}
+
 const mock = startMockApi({
   port: app.apiPort,
   hosts: [...new Set(['127.0.0.1', host])],
   allowedOrigins: [appUrl, `http://localhost:${app.port}`],
   fixtures: { user, routes },
   logFile: logs.api,
+  firebaseToken: useEmulator
+    ? () =>
+        emulatorCustomToken(user.id, firebaseClaims ?? { role: user.role, storeId: user.storeId })
+    : null,
 });
 
 // ── next dev 환경: env 파일 값은 전부 빈 값으로 덮고, 하네스 값만 넣는다 ──
@@ -115,6 +147,17 @@ Object.assign(env, {
   VISUAL_GUARD_LOG: logs.guard,
 });
 
+// 에뮬레이터를 쓰면 앱을 로컬 Firebase 계약(project·bucket·에뮬레이터 주소 고정)으로 띄운다.
+if (useEmulator) {
+  Object.assign(env, {
+    NEXT_PUBLIC_GREENHUB_LOCAL_RUNTIME: 'true',
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID: EMULATOR.projectId,
+    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: EMULATOR.storageBucket,
+    NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST: `${EMULATOR.firestore.host}:${EMULATOR.firestore.port}`,
+    NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST: `${EMULATOR.auth.host}:${EMULATOR.auth.port}`,
+  });
+}
+
 // 로그인 화면의 이메일·비밀번호 입력을 켠다. 방식은 앱마다 다르다(apps.mjs credentials).
 const e2eSecret = randomBytes(24).toString('hex');
 if (app.credentials === 'local-runtime') {
@@ -130,6 +173,7 @@ fs.writeFileSync(
     appUrl,
     apiUrl,
     e2eSecret: app.credentials === 'e2e-header' ? e2eSecret : null,
+    emulator: useEmulator,
   }),
 );
 
@@ -157,11 +201,16 @@ const onOutput = (chunk) => {
         app.credentials === 'local-runtime'
           ? '   로그인: 아무 이메일·비밀번호나 입력 → fixture의 가짜 계정으로 들어갑니다'
           : '   로그인: 브라우저에서는 공개 화면만 볼 수 있어요(로그인 화면은 자동 캡처 shots.mjs에서만 통과)',
+        useEmulator
+          ? `   Firestore: 에뮬레이터 ${EMULATOR.firestore.host}:${EMULATOR.firestore.port} (로그: ${logs.emulator})`
+          : null,
         `   요청 기록: ${logs.api}`,
         `   next 로그: ${logs.next}`,
         '   종료: Ctrl+C',
         '',
-      ].join('\n'),
+      ]
+        .filter((line) => line !== null)
+        .join('\n'),
     );
   }
 };
@@ -173,6 +222,7 @@ function stop(code = 0) {
   if (stopping) return;
   stopping = true;
   killTree(child);
+  emulator?.stop();
   mock.close();
   nextLog.end();
   process.exit(code);
