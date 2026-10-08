@@ -52,7 +52,7 @@ export function OrderStatusCard({ groupCounts }: { groupCounts: Record<OrderGrou
                       fontSize: 'var(--font-size-2xl)',
                       fontWeight: 'var(--fw-bold)',
                       lineHeight: 1,
-                      color: accent ? 'var(--color-danger)' : 'var(--color-text)',
+                      color: accent ? 'var(--color-primary-dark)' : 'var(--color-text)',
                     }}
                   >
                     {count}
@@ -284,7 +284,7 @@ export function ProductStatusCard({
             style={{
               fontSize: 'var(--font-size-md)',
               fontWeight: 'var(--fw-bold)',
-              color: inactiveCount > 0 ? 'var(--color-danger)' : 'var(--color-text)',
+              color: inactiveCount > 0 ? 'var(--color-status-warning-text)' : 'var(--color-text)',
             }}
           >
             {inactiveCount}
