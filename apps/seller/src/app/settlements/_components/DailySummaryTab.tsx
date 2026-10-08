@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, Divider, Group, Paper, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Badge, Group, Paper, SimpleGrid, Stack, Text } from '@mantine/core';
 import type { SettlementStatus, Summary } from '../_constants';
 import { STATUS_COLOR, STATUS_LABEL } from '../_constants';
 import { toKRW } from '../_lib';
@@ -84,18 +84,27 @@ export function DailySummaryTab({
               −{toKRW(summary?.totalPlatformFee ?? 0)}
             </Text>
           </Group>
-          <Divider />
-          <Group justify="space-between">
-            <Text
-              style={{
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
-                color: 'var(--color-text-secondary)',
-              }}
-            >
+          {/* 디자인 기준 §5: 판매자 요약 숫자는 연두 상자 */}
+          <Group
+            justify="space-between"
+            align="center"
+            p="md"
+            style={{
+              background: 'var(--color-primary-surface)',
+              borderRadius: 'var(--radius-tag)',
+            }}
+          >
+            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
               정산 예정
             </Text>
-            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}>
+            <Text
+              style={{
+                fontSize: 'var(--font-size-xl)',
+                fontWeight: 'var(--fw-extrabold)',
+                fontVariantNumeric: 'tabular-nums',
+                color: 'var(--color-primary-dark)',
+              }}
+            >
               {toKRW(summary?.totalNetAmount ?? 0)}
             </Text>
           </Group>

@@ -84,7 +84,7 @@ export function SettlementTable({
               <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
                 거래 ₩{s.totalAmount.toLocaleString()}
               </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
                 수수료 ₩{s.platformFee.toLocaleString()}
               </Text>
             </Group>
@@ -181,7 +181,11 @@ export function SettlementTable({
                 </Box>
                 <Box
                   component="td"
-                  style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--color-danger)' }}
+                  style={{
+                    padding: '12px 16px',
+                    textAlign: 'right',
+                    color: 'var(--color-text-secondary)',
+                  }}
                 >
                   ₩{s.platformFee.toLocaleString()}
                 </Box>
