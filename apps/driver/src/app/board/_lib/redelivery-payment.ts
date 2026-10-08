@@ -37,7 +37,7 @@ export function getRedeliveryPaymentPresentation(
     return {
       label: '재배송비 결제 완료',
       description: '서버에서 결제 완료 상태를 확인했습니다. 배송을 시작할 수 있습니다.',
-      color: 'green',
+      color: 'brand',
     };
   }
 
@@ -45,7 +45,7 @@ export function getRedeliveryPaymentPresentation(
     return {
       label: '재배송비 결제 정보 확인 필요',
       description: '결제 정보를 확인할 때까지 배송을 시작할 수 없습니다.',
-      color: 'orange',
+      color: 'yellow',
     };
   }
 
@@ -53,7 +53,7 @@ export function getRedeliveryPaymentPresentation(
     return {
       label: '재배송비 결제 대기',
       description: '결제가 완료될 때까지 배송을 시작할 수 없습니다.',
-      color: 'orange',
+      color: 'yellow',
     };
   }
 

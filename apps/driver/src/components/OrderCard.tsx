@@ -2,10 +2,11 @@ import type { Order } from '@greenhub/shared';
 import { Badge, Card, Group, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
 import { getRedeliveryPaymentPresentation } from '@/app/board/_lib/redelivery-payment';
+import { orderItemsLabel } from '@/lib/order-quantity';
 
 const METHOD_BADGE: Record<string, { label: string; color: string }> = {
-  direct: { label: '직배송', color: 'green' },
-  hub: { label: '거점 픽업', color: 'blue' },
+  direct: { label: '직배송', color: 'brand' },
+  hub: { label: '거점 픽업', color: 'gray' },
   parcel: { label: '택배', color: 'gray' },
 };
 
@@ -73,8 +74,7 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
         </Text>
         {order.productName && (
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            {order.productName}
-            {order.quantity && order.quantity > 1 ? ` 외 ${order.quantity - 1}건` : ''}
+            {orderItemsLabel(order.productName, order.quantity)}
           </Text>
         )}
         {payment && (
@@ -82,7 +82,7 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
             style={{
               fontSize: 'var(--font-size-sm)',
               color:
-                payment.color === 'green'
+                payment.color === 'brand'
                   ? 'var(--color-primary-dark)'
                   : payment.color === 'red'
                     ? 'var(--color-danger)'

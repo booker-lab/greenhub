@@ -42,8 +42,9 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState('');
 
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  // 기간별 조회는 이번 달 1일~오늘(한국 날짜)을 미리 채워 빈 날짜 칸(yyyy-mm-dd)으로 시작하지 않는다.
+  const [from, setFrom] = useState(() => `${today.slice(0, 8)}01`);
+  const [to, setTo] = useState(today);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState('');
