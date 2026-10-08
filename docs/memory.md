@@ -9,7 +9,7 @@
 - Git·GitHub와 #63/#70/#71 release state: `2026-09-06 KST` 직접 재조회
 - 파일럿 준비 재판정: `2026-09-28 KST` — live `main`, 원격 회차 E2E, Auth.js 세션 E2E, ALIGO 콘솔, 운영 Railway 배포 기록을 직접 재조회
 - Vercel 배포 안전·exact-source Preview: 역사적 증거 snapshot; 현재 release proof로 재사용하지 않는다.
-- ALIGO provider current metadata: 콘솔 기준 템플릿 8종 `VERIFIED`(2026-09-28), API read-back은 출시 배포 뒤 재확인 — 아래 ALIGO 상태 참고.
+- ALIGO provider current metadata: 콘솔 기준 템플릿 8종 `VERIFIED`(2026-09-28), 출시 배포 뒤 운영 컨테이너 API 조회 `code=0`·8종 일치(2026-09-28) — 아래 ALIGO 상태 참고.
 - 운영 상태 변경은 별도 승인 없이 수행하지 않는다.
 
 ## Git·배포 기준선
@@ -132,7 +132,7 @@ revocation window 결정(D2, 2026-09-28)은 `docs/specs/api/auth.md`를 따른�
 상태: 템플릿 `VERIFIED`(콘솔) / 운영 반영·IP·실발송 `RELEASE_GATE`.
 
 - 템플릿 8종과 운영 매핑 `ALIGO_TEMPLATE_CODES_JSON`(Railway 저장값)은 일치한다.
-- 실행 중인 운영 API 프로세스에는 ALIGO 변수가 아직 없다(8/23 이전 배포). 출시 배포 때 반영된다.
+- 운영 API에는 2026-09-28 출시 배포(`197f84a4`)와 송신 프록시 배포(`781285ea`)로 반영됐다.
 - ALIGO는 등록 IP만 허용한다. Railway 현재 요금제에 고정 송신 IP가 없어 Fixie 고정 IP 프록시(`ALIGO_OUTBOUND_PROXY_URL`)를 거친다. 2026-09-28 운영 컨테이너 조회에서 `code=0`, 템플릿 8종 API 기준 글자 단위 일치를 확인했다.
 - 격리 실발송: 알림톡은 휴대폰 도착까지 확인했다. 문자(SMS fallback)는 발신번호(`ALIGO_SENDER_PHONE`, 개인 휴대폰)가 통신사 번호도용 문자차단 서비스에 가입돼 차단된다 → 사업자 번호로 교체 필요.
 
@@ -174,9 +174,9 @@ revocation window 결정(D2, 2026-09-28)은 `docs/specs/api/auth.md`를 따른�
 
 ### 7. Pilot marketing wording
 
-상태: `DOC_DELTA_CANDIDATE`.
+상태: `RESOLVED`(2026-10-04 재대조).
 
-Pilot 정책은 `MARKETING_NOT_USED_IN_PILOT`이며, 선택 consent/retention wording만 문서에서 정규화한다. 새로운 runtime 사실이나 marketing 기능을 만들지 않는다.
+Pilot 정책은 `MARKETING_NOT_USED_IN_PILOT`이다. API는 회차 주문의 `marketingConsent`를 거부하고(`round-order-create.service.ts`), MY 설정은 마케팅을 운영하지 않는다고 안내하며, 공개 `/privacy`·`/terms`(시행일 2026-08-30, 9/28 출시 배포 반영)와 `docs/specs/legal/README.md`가 같은 정책을 적는다. 향후 marketing 활성화는 별도 결정이다.
 
 ## HISTORICAL / CLOSED BY REL-STATE-01
 
@@ -289,7 +289,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 - repository logical 8-code contract: `VERIFIED` — #65에서 8개 logical code/body/required-variable 계약을 확인했다.
 - provider 템플릿 metadata: `VERIFIED`(2026-09-28 콘솔) — UK_5691~5698 코드·이름·승인완료·본문·변수가 저장소 계약과 일치하고, 채널 `@greenlove`는 정상, 버튼은 없다. 템플릿 대체문자는 `발송안함`이며 SMS fallback은 코드가 별도로 수행한다.
-- production mapping: Railway production 변수 `ALIGO_TEMPLATE_CODES_JSON`이 8종을 올바른 코드로 매핑한다. 다만 실행 중인 운영 API 프로세스에는 아직 반영되지 않았다(8/23 이전 배포).
+- production mapping: Railway production 변수 `ALIGO_TEMPLATE_CODES_JSON`이 8종을 올바른 코드로 매핑하며, 2026-09-28 출시 배포로 운영 API에 반영됐다.
 - 운영 송신 IP: Railway 송신 IP는 재배포로 바뀐다(`152.55.176.19` → `152.55.177.34`). 그래서 ALIGO 호출은 Fixie 고정 IP 2개를 거치며, 두 IP를 ALIGO 허용 IP에 등록했다(2026-09-28, 조회 `code=0`). Railway Pro 전환 시에는 고정 IP 3개를 먼저 추가 등록한 뒤 `ALIGO_OUTBOUND_PROXY_URL`을 삭제한다.
 - actual Alimtalk: 2026-09-28 격리 시험(`ORDER_PREPARING`, 가짜 주문번호 `TEST-0928`)에서 `@greenlove` 채널로 휴대폰 도착 확인. 첫 시도는 ALIGO 선불 잔액 부족으로 거부됐고 충전 뒤 성공했다.
 - actual SMS: ALIGO 접수 뒤 `이통사 번호도용문자차단서비스에 가입된 발신번호 사용`으로 차단. 사업자 번호를 ALIGO 발신번호로 추가 등록(통신서비스 이용증명원 필요)하고 승인 뒤 `ALIGO_SENDER_PHONE`을 교체한 다음 재시험한다. 새 번호가 승인되기 전에 변수를 바꾸면 알림톡 요청에도 같은 발신번호가 쓰여 실패한다.
@@ -324,8 +324,8 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 
 ## 판매 활성화 legal 상태
 
-- production `/privacy`, `/terms`는 2026-08-19 비판매 상태 기준.
-- 실제 판매 전 주문·취소·환불·재배송비·보류, PortOne/PG, ALIGO, seller/driver 개인정보 접근을 재정합화해야 한다.
+- 공개 `/privacy`, `/terms`는 2026-08-30 RC-D 실제 사용 정합화본(주문·취소·환불·재배송비·보류, PortOne/PG, ALIGO, 내부 판매·배송 접근, 파일럿 마케팅 미사용)이며 2026-09-28 출시 배포로 운영에 반영됐다.
+- 남은 legal 과제(법률 자문 판단, 회원 탈퇴 API, 카카오 연결 해제 webhook, 일반 컬렉션 자동 만료 삭제)는 `docs/specs/legal/README.md`가 소유한다.
 - 2026-08-19 consumer legal baseline의 “마케팅 수신 동의 기능 없음” 사실은 현재 코드와 달라 `docs/specs/legal/README.md`의 2026-08-24 errata가 해당 구현 사실을 우선한다.
 - Pilot marketing policy는 `MARKETING_NOT_USED_IN_PILOT`이다. 이 문서화는 marketing runtime sender, consent lifecycle, provider 상태를 새로 주장하지 않는다.
 - broad read를 legal 문구로 정당화하지 않는다.
@@ -363,4 +363,3 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 2. SMS 발신번호를 사업자 번호로 교체하고 문자 재시험. 사업자 번호를 ALIGO 발신번호로 추가 등록해 승인 대기 중이다(2026-10-02). 승인 전에 `ALIGO_SENDER_PHONE`을 바꾸면 알림톡도 실패하므로 승인 확인 뒤 바꾼다.
 3. 파일럿 시작 직후 실제 결제 1건(결제 → 접수 알림톡 → 소비자 취소·환불 → 취소 알림톡)으로 운영 PortOne 경로를 확인한다. 결제는 지금까지 E2E 모의 결제로만 검증됐다.
 4. 운영 배포는 검증된 SHA를 지정해 API → 프런트 → 규칙 순으로 한다. Railway UI "Deploy"는 `main` HEAD를 배포하므로 병합 후 미검증 코드가 나갈 수 있다.
-5. Pilot `MARKETING_NOT_USED_IN_PILOT`와 legal/source wording을 문서 범위에서 정합화한다.

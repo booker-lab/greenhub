@@ -6,8 +6,8 @@
 
 ## 메타
 
-- 최종 정합화: 2026-09-05 KST
-- 상태: `active_p0_parallel / public_readiness_closed / publication_pending`
+- 최종 정합화: 2026-10-04 KST (진행 표기만 현재 코드·`docs/memory.md`에 맞춤)
+- 상태: `phase0_done / production_deployed(2026-09-28) / activated(2026-09-29) / pilot_pending(2026-11-01)` — 남은 게이트는 SMS fallback, 실결제·환불 1건, 초기 회차 모니터링(`docs/BACKLOG.md`)
 - 외부 ALIGO 심사 차단점: 해소 — 회차 템플릿 8종 `승인완료`
 - 다음 ALIGO gate: provider code 1:1 확인 → 격리 알림톡 → SMS fallback
 - 승인 증거: `docs/reports/REPORT_aligo_template_approval_20260827.md`
@@ -33,7 +33,7 @@
 
 ## 출시 게이트
 
-> 2026-09-28 재대조: 0B~0K는 현재 `main`의 구현과 직접 회귀로 종결됐다(근거 spec 7개 191건 통과). 운영 API는 8/23 이전 코드로 실행 중이며 출시 배포에서 함께 반영된다. 상태 SSOT는 `docs/memory.md`다.
+> 2026-09-28 재대조: 0B~0K는 현재 `main`의 구현과 직접 회귀로 종결됐다(근거 spec 7개 191건 통과). 2026-09-28 출시 배포(`197f84a4`)로 운영에 반영됐다. 상태 SSOT는 `docs/memory.md`다.
 
 | ID | 게이트 | 상태 |
 |---|---|---|
@@ -49,15 +49,15 @@
 | 0J | settlement 생성·confirm·cancel core lifecycle coverage | 완료 — `settlements-lifecycle.spec.ts` `IMPLEMENTATION_PROVEN` |
 | 0K | marketing consent→preference→withdrawal→retention lifecycle | 대체 종결 — Pilot `MARKETING_NOT_USED_IN_PILOT` |
 | 1 | ALIGO 8종 최종 승인 | 완료 — 2026-08-27 provider UI 8종 `승인완료` |
-| 2 | provider code 1:1 검사 + 실제 알림톡 | code 1:1 완료(2026-09-28 콘솔) — 실제 알림톡은 출시 배포 뒤 |
-| 3 | SMS fallback | 미실행 |
-| 4 | 판매 활성화 legal | 미실행 |
-| 5 | actual release SHA | 미실행 |
-| 6 | exact SHA E2E 52+cleanup | 출시 전 통과(2026-09-28, 52 + 세션 12) — 출시 SHA로 재실행 필요 |
-| 7 | 운영 Firebase 재조회 | 미실행 |
-| 8 | 운영 ALIGO 설정 | Railway 변수 저장 완료, 운영 API 미반영(8/23 이전 배포) — 출시 배포 때 반영 후 송신 IP 등록 확인 |
-| 9 | exact-SHA production | 별도 승인 필요 |
-| 10~12 | 첫 회차 → 최종 판정 → `round_direct` | 미실행 |
+| 2 | provider code 1:1 검사 + 실제 알림톡 | 완료 — code 1:1(2026-09-28 콘솔·운영 API 조회 `code=0`), 격리 알림톡 휴대폰 도착(2026-09-28) |
+| 3 | SMS fallback | 미완료 — 개인 번호 차단으로 실패, 사업자 번호 ALIGO 심사 대기(외부) |
+| 4 | 판매 활성화 legal | 공개 문서 정합화 완료(2026-08-30 RC-D, 9/28 배포 반영) — 법률 자문·탈퇴 등 잔여는 `docs/specs/legal/README.md` |
+| 5 | actual release SHA | 완료 — `197f84a4` |
+| 6 | exact SHA E2E 52+cleanup | 완료 — `197f84a4` run `36372493414` 52 + 세션 12, 이후 배포마다 같은 SHA로 재실행 |
+| 7 | 운영 Firebase 재조회 | 완료 — 2026-09-28 규칙·인덱스 배포 뒤 재조회 일치 |
+| 8 | 운영 ALIGO 설정 | 완료 — 출시 배포 반영, Fixie 고정 IP 등록·조회 `code=0`(2026-09-28). `ALIGO_SENDER_PHONE` 교체는 3번 게이트에 종속 |
+| 9 | exact-SHA production | 완료 — 2026-09-28 사용자 승인 배포 |
+| 10~12 | 첫 회차 → 최종 판정 → `round_direct` | 완료 — 2026-09-29 첫 회차 `SCHEDULED`·`round_direct` 전환. 파일럿 시작(11/1)·초기 두 회차 모니터링·rollback dry-run은 미완료 |
 
 ## Completion Contract
 
@@ -94,27 +94,27 @@
 
 ### Task 0.4 — Payment finalization PAID boundary
 - Backlog: `PAYMENT-FINALIZATION-PAID-GUARD`
-- Status: todo_code
+- Status: done — 게이트 0B (`payment-finalization.service.ts` 비`PAID` 반환, `payments.service.spec.ts`)
 
 ### Task 0.5 — Order mutation authorization coverage
 - Backlog: `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
-- Status: todo_test
+- Status: done — 게이트 0C (`orders/order-mutation-authorization.spec.ts`)
 
 ### Task 0.6 — Order direct read·minimization
 - Backlog: `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
-- Status: todo_code_security
+- Status: done — 게이트 0D (`firestore.rules` orders read는 seller·admin만)
 
 ### Task 0.7 — Driver approval·session revocation
 - Backlog: `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
 - Priority: highest security coupling with Task 0.6
 - Candidate verified (not yet main): public register/login approval gate, Kakao new/legacy no-auto-approval, JWT strategy/current-user/Firebase approval boundary.
 - Remaining: `AUTH-SESSION-CLAIM-REVOCATION` — authoritative refresh state, stale claims, suspension/role/store/approval revocation SLA, access-token window, logout/rotation regression.
-- Status: candidate_gate_verified / todo_session_revocation
+- Status: done — 게이트 0E (`auth.service.ts` refresh·`getSession` authoritative 재조회, D2 즉시 철회, Preview 세션 E2E 12건). 로그아웃 서버 폐기는 `AUTH-LOGOUT-SERVER-REVOCATION`(출시 후)
 
 ### Task 0.8 — Admin force-refund lifecycle
 - Backlog: `ADMIN-FORCE-REFUND-CONSISTENCY`
 - Goal: 본 결제·추가 charge·capacity·held counter·settlement 불변식 수렴 + paid settlement 정책
-- Status: todo_code_financial
+- Status: done — 게이트 0F (`admin.service.ts` `forceRefund`, `test/admin-force-refund.e2e-spec.ts`)
 
 ### Task 0.9 — 유료 재배송 상태머신 정합화
 - Backlog: `ORDER-REDELIVERY-PAID-RESUME-GATE`
@@ -137,7 +137,7 @@
   - seller PREPARING 정책 직접 고정
   - PREPARING 경유 미결제 배송 시작 거부
   - PAID 뒤 정상 1회 재개
-- Status: todo_code_financial
+- Status: done — 게이트 0G (`orders/redelivery-resume-gate.ts` + spec)
 
 ### Task 0.10 — Payment webhook real-signature coverage
 - Backlog: `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
@@ -151,7 +151,7 @@
   - controller + real verifier에서 invalid request가 service에 도달하지 않음
   - invalid request side effect 0
   - duplicate webhook 멱등 회귀 유지
-- Status: todo_test_security
+- Status: done — 게이트 0H (`payments/portone-webhook-boundary.spec.ts`)
 
 ### Task 0.11 — Admin privileged mutation coverage
 - Backlog: `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
@@ -165,7 +165,7 @@
   - settlement missing/invalid states 거부, `confirmed → paid` 성공
   - transaction fresh-read + concurrent pay 한 번만 수렴
   - 실제 guard를 mock으로 우회하지 않는 integration 증거
-- Status: todo_test_security_financial
+- Status: done — 게이트 0I (`admin/admin-privileged-mutation.spec.ts`)
 
 ### Task 0.12 — Settlement core lifecycle coverage
 - Backlog: `SETTLEMENT-LIFECYCLE-COVERAGE`
@@ -179,7 +179,7 @@
   - confirm/cancel race에서 cancelled 미덮어쓰기
   - missing no-op, pending/confirmed cancelled, cancelled 멱등, paid 역전 금지
   - 실제 회차 integration에서 DELIVERED settlement 1건 + REVIEWED 중복 없음
-- Status: todo_test_financial
+- Status: done — 게이트 0J (`settlements/settlements-lifecycle.spec.ts`)
 
 ### Task 0.13 — Marketing consent lifecycle consistency
 - Backlog: `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
@@ -196,14 +196,14 @@
   - 실제 marketing sender가 있다면 opt-out 준수
   - ORDER_* 정보성 연락은 marketing opt-out과 분리
   - final legal wording과 실제 구현 일치
-- Status: todo_code_legal
+- Status: superseded — 게이트 0K, Pilot `MARKETING_NOT_USED_IN_PILOT`(API가 `marketingConsent` 거부, 공개 문서 2026-08-30 반영)
 
 ## Phase 1 — ALIGO
 
 1. [x] 8종 provider 승인 — 2026-08-27 15:06 KST 경 모두 `승인완료`
-2. [ ] provider code 1:1 검사
-3. [ ] 승인된 템플릿 격리 실제 알림톡
-4. [ ] SMS fallback
+2. [x] provider code 1:1 검사 — 2026-09-28
+3. [x] 승인된 템플릿 격리 실제 알림톡 — 2026-09-28 휴대폰 도착
+4. [ ] SMS fallback — 사업자 번호 심사 대기
 
 증거: `docs/reports/REPORT_aligo_template_approval_20260827.md`.
 

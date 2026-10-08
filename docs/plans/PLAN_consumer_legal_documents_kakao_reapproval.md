@@ -9,7 +9,7 @@
 - **Labels**: consumer, privacy, terms, compliance, kakao-review
 - **Architectural Goal**: 실제 consumer 개인정보 흐름과 현재 운영 상태를 기준으로 공개 법적 고지를 만들고 카카오 사업자채널 연관성 검증을 다시 요청한다.
 - **작성일**: 2026-08-19
-- **상태**: 계획 작성 완료·구현 승인 대기
+- **상태**: 완료(2026-10-04 정합화) — Task 1.1~4.3 done, 카카오 비즈니스 채널 승인 완료(`docs/memory.md`), Task 5.1은 회차 직배송 출시(2026-09-28)로 대체 종결. 이후 공개 문서는 2026-08-30 RC-D 개정본(`docs/specs/legal/README.md`)
 - **실행 승인 문구**: `PLAN 전체 실행`
 - **계획 검증**: 저장소 `Justfile`에 `plan-preread`·`plan-lint`가 없어 이식 규칙 수동 검증을 적용한다.
 
@@ -413,7 +413,7 @@
 - **Goal**: 법적 고지 완료와 최신 main 통합을 회차 직배송 재개 선행 조건으로 기록한다.
 - **Verify**: `git -C C:/Develop/greenhub diff --check -- docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`
 - **Conclusion**: _(실행 후 법적 고지·카카오 결과·main SHA·통합 여부·계속 중단 범위를 기록)_
-- **Status**: pending
+- **Status**: superseded — 회차 직배송은 `PLAN_mvp_round_direct_launch_blockers.md` 경로로 2026-09-28 출시
 
 ## Release Gate
 
