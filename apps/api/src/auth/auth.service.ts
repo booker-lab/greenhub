@@ -14,6 +14,7 @@ import * as admin from 'firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { AuditService } from '../common/audit/audit.service';
+import { INVITE_REVOKED_MESSAGE, inviteConflict } from './invite-conflict';
 import type { AddressDto } from './dto/address.dto';
 import type { KakaoLoginDto } from './dto/kakao-login.dto';
 import type { LoginDto } from './dto/login.dto';
@@ -98,6 +99,11 @@ export class AuthService {
 
       const invite = inviteSnap.data()!;
 
+      // 관리자가 취소한 토큰은 만료·사용 여부보다 먼저 거부한다(상태 우선순위 revokedAt > usedAt > 만료).
+      if (invite['revokedAt'] != null) {
+        throw inviteConflict('already_revoked', INVITE_REVOKED_MESSAGE);
+      }
+
       if ((invite['expiresAt'] as admin.firestore.Timestamp).toMillis() < Date.now()) {
         throw new GoneException('만료된 초대 토큰입니다.');
       }
@@ -144,6 +150,10 @@ export class AuthService {
         const inviteDoc = await tx.get(inviteRef);
 
         // 트랜잭션 내 재검증 — 동시 요청으로 인한 경쟁 조건 방지
+        // (사전 검사 뒤 관리자 취소가 먼저 커밋된 경우도 여기서 거부된다)
+        if (inviteDoc.exists && inviteDoc.data()!['revokedAt'] != null) {
+          throw inviteConflict('already_revoked', INVITE_REVOKED_MESSAGE);
+        }
         if (!inviteDoc.exists || inviteDoc.data()!['usedAt'] !== null) {
           throw new ConflictException('이미 사용된 초대 토큰입니다.');
         }
