@@ -1,13 +1,15 @@
 'use client';
 
+import type { SalesMode } from '@greenhub/shared';
 import { Box, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { signOut, useSession } from 'next-auth/react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
-import { SELLER_OPERATION_SETTINGS } from './settings-links';
+import { apiJson } from '@/lib/api';
+import { operationSettingsFor } from './settings-links';
 
 /** 설정 섹션 카드 — 작은 회색 라벨 헤더 + 행 목록. */
 function SectionCard({ label, children }: { label: string; children: ReactNode }) {
@@ -60,6 +62,26 @@ export default function SettingsPage() {
   const { data: session } = useSession();
   // 겸직 계정(어드민 + 자기 store 보유)만 관리자 콘솔 진입 노출 (#CL-52)
   const isDualRole = session?.user.role === 'admin' && !!session.user.storeId;
+  const storeId = session?.user.storeId;
+  const token = session?.user.accessToken;
+  const [salesMode, setSalesMode] = useState<SalesMode>();
+
+  // 회차 판매 가게에는 적용되지 않는 예전 방식 메뉴(배송비·배송 슬롯·거점)를 숨기려고 판매 방식을 확인한다.
+  useEffect(() => {
+    if (!storeId || !token) return;
+    let cancelled = false;
+    apiJson<{ salesMode?: SalesMode }>(`/stores/${storeId}/public-profile`, token)
+      .then((profile) => {
+        if (!cancelled) setSalesMode(profile.salesMode ?? 'legacy');
+      })
+      .catch(() => {
+        // 조회 실패 시 메뉴 접근을 막지 않는다.
+        if (!cancelled) setSalesMode('legacy');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId, token]);
 
   return (
     <PageShell>
@@ -87,7 +109,7 @@ export default function SettingsPage() {
             </SectionCard>
           )}
 
-          {SELLER_OPERATION_SETTINGS.map((section) => (
+          {operationSettingsFor(salesMode).map((section) => (
             <SectionCard key={section.label} label={section.label}>
               {section.links.map((link, index) => (
                 <LinkRow key={link.href} {...link} borderTop={index > 0} />
