@@ -49,12 +49,14 @@
 - `/sale-rounds`: 회차 상태, KST 일정, 한도, 예약·주문 집계, `heldOrderCount` 확인
 - `/orders`: 배송 보류와 확인 필요 건수 확인
 - `/orders/{orderId}`: 주문 상태, 보류 사유, 재배송비, 운영 예외와 감사 기록 확인
+- `/operations`: 가게 전체 열린 운영 예외(critical 먼저) 확인. 조치는 주문 화면에서 한다
 
 화면의 상태는 서버 재조회가 성공한 뒤의 값만 증거로 사용한다. 브라우저에 남은 이전 화면이나 낙관적 표시를 정본으로 사용하지 않는다.
 
-`/sale-rounds/{roundId}` 상세와 공개 회차 목록·상세는 조회 과정에서 현재 시각과 한도를
-평가해 `SCHEDULED → OPEN`, `OPEN → CLOSED`, 한도 회복 시 `CLOSED → OPEN`을 반영할
-수 있다. 상태 무변경 확인에는 셀러 `/sale-rounds` 목록만 사용하고 상세·공개 조회는
+셀러 `/sale-rounds/{roundId}` 상세 조회는 현재 시각과 한도를 평가해
+`SCHEDULED → OPEN`, `OPEN → CLOSED`, 한도 회복 시 `CLOSED → OPEN`을 저장할 수 있다.
+공개 회차 목록·상세는 같은 계산으로 보여 주기만 하고 저장하지 않는다(회차 첫 예약도
+`OPEN`을 저장한다). 상태 무변경 확인에는 셀러 `/sale-rounds` 목록만 사용하고 셀러 상세는
 사용하지 않는다.
 
 ### 3.2 읽기 전용 API 예시
