@@ -170,6 +170,7 @@ export class AdminService {
         orderId,
         expectedStatus: order['status'],
         reason,
+        customerNotice: 'ADMIN_REFUND',
       });
       await this.settlements.cancelSettlement(orderId);
       return result;

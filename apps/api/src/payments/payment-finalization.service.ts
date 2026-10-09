@@ -3,6 +3,10 @@ import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../common/audit/audit.service';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  REFUND_NOTICE_REASONS,
+  refundNoticeIdempotencyKey,
+} from '../notifications/refund-notice-reasons';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import {
   LatePaymentCapacityError,
@@ -223,6 +227,7 @@ export class PaymentFinalizationService {
           LATE_PAYMENT_REFUND_REASON,
         );
         if (refundOutcome === 'order_missing') return { ok: false, reason: 'order_not_found' };
+        await this.sendLatePaymentRefundNotice(order, orderId);
         return { ok: false, reason: 'late_payment_refunded' };
       }
       if (error instanceof LegacyDailyCapacityError) {
@@ -233,6 +238,7 @@ export class PaymentFinalizationService {
           LEGACY_LATE_PAYMENT_REFUND_REASON,
         );
         if (refundOutcome === 'order_missing') return { ok: false, reason: 'order_not_found' };
+        await this.sendLatePaymentRefundNotice(order, orderId);
         return { ok: false, reason: 'late_payment_refunded' };
       }
       throw error;
@@ -267,6 +273,23 @@ export class PaymentFinalizationService {
       orderId,
     );
     return { ok: true, status: newStatus };
+  }
+
+  // 결제는 됐지만 회차 한도가 없어 자동 환불한 주문. 고객은 접수 알림을 받지 못했으므로
+  // 왜 돈이 돌아왔는지 알려 준다. 안내 실패는 환불 결과를 바꾸지 않는다.
+  private async sendLatePaymentRefundNotice(order: Record<string, any>, orderId: string) {
+    if (typeof order['userId'] !== 'string') return;
+    try {
+      await this.notifications.sendToUser(
+        order['userId'],
+        'ORDER_CANCELLED',
+        { orderId, reason: REFUND_NOTICE_REASONS.LATE_PAYMENT },
+        orderId,
+        refundNoticeIdempotencyKey('LATE_PAYMENT', orderId),
+      );
+    } catch {
+      // 발송 실패는 알림 서비스가 운영 이슈로 남긴다.
+    }
   }
 
   async cancelPendingOrder(orderId: string, reason: string) {
