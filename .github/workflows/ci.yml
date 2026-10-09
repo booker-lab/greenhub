@@ -42,6 +42,8 @@ jobs:
         run: cd apps/api && npx tsc --noEmit -p tsconfig.build.json
       - name: Workspace build selection
         run: node scripts/check-workspace-build-selection.mjs
+      - name: CSS variables are defined
+        run: node scripts/check-css-vars.mjs
 
   unit:
     name: unit tests
