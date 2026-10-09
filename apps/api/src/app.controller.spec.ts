@@ -30,5 +30,20 @@ describe('AppController', () => {
       expect(result.status).toBe('ok');
       expect(() => new Date(result.timestamp).toISOString()).not.toThrow();
     });
+
+    it('배포 커밋 SHA를 알 때만 commit에 싣는다', () => {
+      const previous = process.env.RAILWAY_GIT_COMMIT_SHA;
+      try {
+        process.env.RAILWAY_GIT_COMMIT_SHA = '0bcceaea1234567890abcdef1234567890abcdef';
+        expect(appController.health().commit).toBe('0bcceaea1234567890abcdef1234567890abcdef');
+        process.env.RAILWAY_GIT_COMMIT_SHA = 'not a sha';
+        expect(appController.health().commit).toBeNull();
+        delete process.env.RAILWAY_GIT_COMMIT_SHA;
+        expect(appController.health().commit).toBeNull();
+      } finally {
+        if (previous === undefined) delete process.env.RAILWAY_GIT_COMMIT_SHA;
+        else process.env.RAILWAY_GIT_COMMIT_SHA = previous;
+      }
+    });
   });
 });

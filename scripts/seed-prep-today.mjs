@@ -15,20 +15,26 @@
  *   node scripts/seed-prep-today.mjs <storeId> --restore  # 백업에서 원본 복원
  */
 import { initializeApp, cert } from 'firebase-admin/app';
+import { assertProductionWriteAllowed } from './production-write-guard.mjs';
 import { getFirestore } from 'firebase-admin/firestore';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+function guarded(serviceAccount) {
+  assertProductionWriteAllowed(serviceAccount, { script: 'seed-prep-today.mjs' });
+  return cert(serviceAccount);
+}
+
 function resolveCredential() {
   const envJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (envJson) {
     const raw = envJson.trim();
-    return cert(JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw));
+    return guarded(JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw));
   }
   const require = createRequire(import.meta.url);
-  return cert(require(join(__dirname, '../apps/api/firebase-adminsdk.json')));
+  return guarded(require(join(__dirname, '../apps/api/firebase-adminsdk.json')));
 }
 initializeApp({ credential: resolveCredential() });
 const db = getFirestore();
