@@ -102,10 +102,6 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-    env:
-      VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN }}
-      VERCEL_EXACT_PREVIEW_SELLER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_SELLER_TOKEN }}
-      VERCEL_EXACT_PREVIEW_DRIVER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN }}
     steps:
       - name: full history checkout (SHA provenance check)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -126,6 +122,9 @@ jobs:
           REPOSITORY_OWNER: ${{ github.repository_owner }}
           EXACT_SHA: ${{ inputs.exact_sha }}
           APP: ${{ inputs.app }}
+          VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN }}
+          VERCEL_EXACT_PREVIEW_SELLER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_SELLER_TOKEN }}
+          VERCEL_EXACT_PREVIEW_DRIVER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN }}
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
@@ -212,6 +211,9 @@ jobs:
         env:
           EXACT_SHA: ${{ inputs.exact_sha }}
           APP: ${{ inputs.app }}
+          VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_CONSUMER_TOKEN }}
+          VERCEL_EXACT_PREVIEW_SELLER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_SELLER_TOKEN }}
+          VERCEL_EXACT_PREVIEW_DRIVER_TOKEN: ${{ secrets.VERCEL_EXACT_PREVIEW_DRIVER_TOKEN }}
         run: |
           set -euo pipefail
           # Token travels only via env -> Authorization header; never echoed.
