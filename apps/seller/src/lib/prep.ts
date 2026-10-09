@@ -1,4 +1,5 @@
 import type { Order, Product } from '@greenhub/shared';
+import { isRoundOrder } from './round-purchase-list';
 
 /** 셀러가 아직 발송 처리하지 않은 주문 상태 — 준비 물량 집계 대상. */
 export const UNSHIPPED_STATUSES: ReadonlyArray<Order['status']> = [
@@ -58,6 +59,7 @@ function selectionLabel(product: Product | undefined): string | null {
  * 미발송·일반 주문을 productId별로 quantity 합산.
  * 배송예정일 = 오늘 → today, < 오늘 → delayed, > 오늘·미지정 → 제외.
  * 공동구매 주문은 배송일이 별도 문서라 1차 범위에서 제외(saleType='group').
+ * 회차 주문(roundId)도 제외 — 상품별 수량은 회차 구매 목록(round-purchase-list)이 보여 준다.
  */
 export function aggregatePrep(
   orders: Order[],
@@ -70,6 +72,8 @@ export function aggregatePrep(
 
   for (const o of orders) {
     if (o.saleType === 'group') continue;
+    // 회차 주문은 대표 상품·총수량만 실려 있어 여기서 합산하면 틀린다. 회차 구매 목록이 맡는다.
+    if (isRoundOrder(o)) continue;
     if (!isUnshipped(o)) continue;
     const key = deliveryDateKey(o);
     if (key === null) continue;
