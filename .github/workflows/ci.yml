@@ -1,0 +1,143 @@
+name: CI
+
+# PR 단계 제품 코드 검증. 외부 서비스·비밀값을 쓰지 않는다(빌드는 가짜 공개 설정값만 사용).
+# 운영·Preview 배포, Firebase 프로젝트, PortOne, ALIGO에 접근하지 않는다.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: lint · typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # 프런트·패키지는 Biome 오류 0을 유지한다(경고·포맷 부채는 별도 정리 대상).
+      - name: Biome lint (errors)
+        run: pnpm biome lint --diagnostic-level=error apps/consumer/src apps/seller/src apps/driver/src packages
+      - name: Typecheck apps
+        run: |
+          for dir in apps/consumer apps/seller apps/driver apps/e2e packages/shared; do
+            echo "::group::tsc $dir"
+            (cd "$dir" && npx tsc --noEmit -p tsconfig.json)
+            echo "::endgroup::"
+          done
+      - name: Typecheck API (build config)
+        run: cd apps/api && npx tsc --noEmit -p tsconfig.build.json
+      - name: Workspace build selection
+        run: node scripts/check-workspace-build-selection.mjs
+
+  unit:
+    name: unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: API (jest)
+        run: pnpm --filter api test
+      - name: Seller (vitest)
+        run: pnpm --filter seller test
+      - name: Driver (vitest + node:test)
+        run: pnpm --filter driver test
+      - name: Consumer (node:test)
+        run: pnpm --filter consumer test
+      - name: Shared (vitest)
+        run: pnpm --filter @greenhub/shared test
+
+  scripts:
+    name: script specs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # 실제 하위 프로세스 겹침을 재는 spec이 있어 파일을 하나씩 실행한다.
+      - name: Script specs
+        run: node --test --test-concurrency=1 'scripts/**/*.spec.mjs' 'scripts/**/*.test.mjs'
+
+  rules:
+    name: Firebase rules (emulator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile
+      # demo- 프로젝트는 에뮬레이터 전용이며 실제 Firebase에 접근하지 않는다.
+      # 두 파일이 같은 에뮬레이터를 쓰므로 순서대로 실행한다.
+      - name: Firestore·Storage rules
+        run: >
+          npx -y firebase-tools@14.11.1 emulators:exec --only firestore,storage --project demo-greenhub
+          "node --test --test-concurrency=1 tests/firestore/firestore-rules.test.mjs tests/storage/storage-rules.test.mjs"
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    env:
+      # 빌드 전용 가짜 값. 비밀값이 아니며 어떤 외부 서비스에도 연결되지 않는다.
+      AUTH_SECRET: ci-build-only-not-a-secret
+      KAKAO_CLIENT_ID: ci
+      KAKAO_CLIENT_SECRET: ci
+      NEXT_PUBLIC_API_URL: https://api.ci.invalid
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: demo-greenhub.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-greenhub
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: demo-greenhub.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '0'
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci
+      NEXT_PUBLIC_PORTONE_STORE_ID: ci
+      NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY: ci
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build shared, API, consumer, seller, driver
+        run: pnpm build
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      # 검증된(실제로 유효한) 비밀값만 실패로 본다. 결과 원문을 다른 곳에 옮기지 않는다.
+      - uses: trufflesecurity/trufflehog@v3.99.2
+        with:
+          extra_args: --only-verified
