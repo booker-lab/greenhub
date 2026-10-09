@@ -49,9 +49,25 @@ function aligoTimeoutMessage(channelLabel: string): string {
 }
 
 /**
+ * 수신번호를 ALIGO에 보낼 단일 국내 휴대폰 번호(숫자만)로 정규화한다. 공백·하이픈·괄호는
+ * 제거하고 +82 국가번호는 0으로 바꾼다. 쉼표 등으로 여러 번호를 이은 값이나 휴대폰 형식이
+ * 아닌 값은 null을 돌려 발송하지 않게 한다.
+ */
+export function normalizeAligoRecipientPhone(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  let digits = raw.replace(/[\s\-().]/g, '');
+  if (digits.startsWith('+82')) digits = `0${digits.slice(3).replace(/^0/, '')}`;
+  return /^(?:010\d{8}|01[16789]\d{7,8})$/.test(digits) ? digits : null;
+}
+
+const LOOPBACK_PROXY_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
  * ALIGO는 등록된 송신 IP만 허용한다. 호스팅의 송신 IP가 고정되지 않을 때는
- * ALIGO_OUTBOUND_PROXY_URL(고정 IP HTTP 프록시)을 설정해 ALIGO 호출만 그 프록시로 보낸다.
+ * ALIGO_OUTBOUND_PROXY_URL(고정 IP 프록시)을 설정해 ALIGO 호출만 그 프록시로 보낸다.
  * 값이 없으면 직접 호출하고, 형식이 잘못되면 직접 호출로 우회하지 않고 발송을 거부한다.
+ * 프록시 URL의 인증 정보가 평문 구간을 지나지 않도록 `https:`만 허용하고, `http:`는
+ * 같은 호스트 안의 루프백 프록시(localhost·127.0.0.1·::1)에만 허용한다.
  * 프록시 URL에는 인증 정보가 들어 있으므로 오류·로그에 원문을 남기지 않는다.
  */
 export function resolveAligoOutboundFetch(
@@ -69,6 +85,11 @@ export function resolveAligoOutboundFetch(
   }
   if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname) {
     return { configError: 'ALIGO 송신 프록시 설정이 올바르지 않습니다.' };
+  }
+  if (parsed.protocol === 'http:' && !LOOPBACK_PROXY_HOSTS.has(parsed.hostname.toLowerCase())) {
+    return {
+      configError: 'ALIGO 송신 프록시는 https URL이어야 합니다(http는 루프백 주소만 허용).',
+    };
   }
   const dispatcher = new ProxyAgent(raw);
   return {
@@ -291,6 +312,8 @@ export function parseSmsReceipt(json: unknown): string | null {
   return normalizeProviderReceipt(record['msg_id']);
 }
 
+const ALIGO_INVALID_RECIPIENT_MESSAGE = '수신번호가 단일 휴대폰 번호 형식이 아닙니다.';
+
 function localRejection(
   message: string,
   alimtalkAttempts: number,
@@ -381,6 +404,11 @@ export class AligoClient {
       );
     }
 
+    const receiver = normalizeAligoRecipientPhone(phone);
+    if (!receiver) {
+      return localRejection(message, 0, 0, ALIGO_INVALID_RECIPIENT_MESSAGE);
+    }
+
     let providerTemplateCode: string;
     try {
       providerTemplateCode = resolveAligoTemplateCode(this.templateCodesJson, templateCode);
@@ -404,7 +432,7 @@ export class AligoClient {
       attempt < NOTIFICATION_RETRY_BACKOFF_POLICY.maxAlimtalkAttempts;
       attempt += 1
     ) {
-      const result = await this.sendAlimtalkOnce(phone, providerTemplateCode, message);
+      const result = await this.sendAlimtalkOnce(receiver, providerTemplateCode, message);
       alimtalkAttemptsUsed = attempt + 1;
       if (result.outcome === 'ACCEPTED') {
         return {
@@ -473,7 +501,7 @@ export class AligoClient {
       };
     }
 
-    const smsResult = await this.sendSmsMessage(phone, message);
+    const smsResult = await this.sendSmsMessage(receiver, message);
     if (smsResult.outcome === 'ACCEPTED') {
       return {
         success: true,
@@ -560,8 +588,12 @@ export class AligoClient {
         this.outboundProxyError ?? 'ALIGO 송신 프록시 설정이 올바르지 않습니다.',
       );
     }
+    const receiver = normalizeAligoRecipientPhone(phone);
+    if (!receiver) {
+      return localRejection(message, 0, 0, ALIGO_INVALID_RECIPIENT_MESSAGE);
+    }
     const attemptId = uuidv4();
-    const result = await this.sendSmsMessage(phone, message);
+    const result = await this.sendSmsMessage(receiver, message);
     if (result.outcome === 'ACCEPTED') {
       return {
         success: true,

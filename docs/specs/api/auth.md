@@ -349,6 +349,12 @@ export interface UserProfile {
 
 `providers`에 legacy 값이 존재할 수 있으므로 저장 데이터와 현재 UI provider 지원 범위를 구분한다.
 
+`POST /auth/register`와 `PATCH /auth/me`의 입력 제약(`RegisterDto`·`UpdateMeDto`):
+
+- `name`: 20자 이하, 제어문자·줄바꿈·보이지 않는 서식 문자 금지, 링크·도메인 형태(`scheme://`, `www.`, `<문자>.<영문 2자 이상>`) 금지
+- `phone`: 숫자·스페이스·하이픈·괄호·`+`로 된 8~20자 1개(쉼표 등으로 이은 여러 번호 금지)
+- 직접 근거: `apps/api/src/auth/dto/profile-fields.dto.spec.ts`. Kakao 로그인 이름은 이 DTO를 거치지 않으며, 주문 복사(`buyerName`)와 알림 렌더링 단계에서 따로 정리된다.
+
 ## 9. 배송지
 
 인증 사용자는 API를 통해 저장 배송지를 관리한다.
@@ -431,6 +437,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-09 | 가입·프로필 수정의 `name`(20자·제어문자·링크 금지)과 `phone`(단일 번호 형식) 입력 제약 반영 |
 | 2026-10-04 | 기사 앱 허용 역할을 `driver`·`admin`에서 `driver`로 좁힘(사용자 결정). API `targetRole: driver` 관리자 거절·구분 code, 기사 앱 signIn·jwt·proxy 차단과 로그인 안내 계약 반영 |
 | 2026-09-28 | revocation window를 즉시(다음 요청)로 결정(D2)하고 JwtStrategy·Firestore Rules 실시간 확인 근거와 Preview 세션 수명주기 E2E 12건 증거를 연결, 로그아웃 서버 폐기는 출시 후 과제로 분리 |
 | 2026-08-24 | Task 2F-B candidate에서 public driver register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계를 검증하고 `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN으로 유지 |

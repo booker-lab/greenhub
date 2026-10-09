@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { PaymentsService } from '../payments/payments.service';
-import { AligoClient, type ProviderOutcome } from './aligo.client';
+import { AligoClient, normalizeAligoRecipientPhone, type ProviderOutcome } from './aligo.client';
 import type { ApiNotificationTemplateCode } from './notification-templates';
 
 export type NotificationTemplateCode = ApiNotificationTemplateCode;
@@ -13,6 +13,12 @@ export type NotificationTemplateCode = ApiNotificationTemplateCode;
 export type NotificationDeliveryStatus = 'PROCESSING' | 'SENT' | 'FAILED' | 'NEEDS_VERIFY';
 
 export const NOTIFICATION_DELIVERY_PROCESSING_LEASE_TTL_MS = 5 * 60 * 1000;
+
+// legacy 공동구매 확정·취소 처리 lease. 같은 상품을 cron 중복 실행·조기 확정 트리거가
+// 동시에 처리하지 않도록 처리 전에 트랜잭션으로 잡고, 성공하면 isProcessed로 닫는다.
+// 처리 중 프로세스가 죽으면 만료 뒤 다음 실행이 다시 잡는다(하위 단계는 주문 트랜잭션·
+// 환불 claim·알림 멱등 키로 반복해도 결과가 같다).
+export const GROUP_BUY_PROCESSING_LEASE_TTL_MS = 5 * 60 * 1000;
 
 const PROVIDER_OUTCOMES: readonly ProviderOutcome[] = ['ACCEPTED', 'REJECTED', 'UNKNOWN'];
 
@@ -365,6 +371,7 @@ export class NotificationsService {
     productId: string,
     templateCode: NotificationTemplateCode,
     variables: Record<string, string>,
+    idempotencyScope?: string,
   ) {
     const snap = await this.firestore
       .collection('orders')
@@ -378,7 +385,15 @@ export class NotificationsService {
     const promises = snap.docs
       .filter((doc) => !terminalStatuses.includes(doc.data()['status'] as string))
       .filter((doc) => !this.isLegacyCancellationOwned(doc.data() as Record<string, unknown>))
-      .map((doc) => this.sendToUser(doc.data()['userId'], templateCode, variables, doc.id));
+      .map((doc) =>
+        this.sendToUser(
+          doc.data()['userId'],
+          templateCode,
+          variables,
+          doc.id,
+          idempotencyScope ? `${idempotencyScope}:${doc.id}` : undefined,
+        ),
+      );
     await Promise.all(promises);
   }
 
@@ -388,6 +403,7 @@ export class NotificationsService {
     templateCode: NotificationTemplateCode,
     variables: Record<string, string>,
     orderId?: string,
+    idempotencyKey?: string,
   ) {
     const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
     if (!storeSnap.exists) return;
@@ -395,23 +411,16 @@ export class NotificationsService {
     const ownerId = storeSnap.data()!['ownerId'] as string | undefined;
     if (!ownerId) return;
 
-    await this.sendToUser(ownerId, templateCode, variables, orderId);
+    await this.sendToUser(ownerId, templateCode, variables, orderId, idempotencyKey);
   }
 
   // ── 선착순 마감: targetQuantity 도달 시 즉시 확정 ──
   async processGroupBuyEarlyConfirm(productId: string) {
-    const gcSnap = await this.firestore.doc(`groupProductConfig/${productId}`).get();
-    if (!gcSnap.exists) return;
-
-    const gc = gcSnap.data() as Record<string, unknown>;
-    if (gc['isProcessed']) return; // 이미 처리된 경우 스킵
-
-    await this.confirmGroupBuy(productId, gc);
-    await gcSnap.ref.update({ isProcessed: true });
+    await this.processGroupBuyWithLease(productId, (gc) => this.confirmGroupBuy(productId, gc));
   }
 
   // ── 스케줄러: 공동구매 자동 확정·취소 (매 1분) ──
-  // isProcessed: true인 항목은 쿼리에서 제외하여 중복 처리 방지
+  // isProcessed: true인 항목은 쿼리에서 제외하고, 처리 직전 트랜잭션 lease로 중복 처리를 막는다.
   @Cron(CronExpression.EVERY_MINUTE)
   async processGroupBuyDeadlines() {
     const now = new Date();
@@ -423,17 +432,15 @@ export class NotificationsService {
       .get();
 
     const promises = expiredSnap.docs.map(async (gcDoc) => {
-      const gc = gcDoc.data();
-      const productId = gc['productId'] as string;
-
-      if (gc['currentQuantity'] >= gc['minQuantity']) {
-        await this.confirmGroupBuy(productId, gc);
-      } else {
-        await this.cancelGroupBuyLack(productId, gc);
-      }
-
-      // 처리 완료 플래그 설정 (중복 실행 방지)
-      await gcDoc.ref.update({ isProcessed: true });
+      const productId = (gcDoc.data()['productId'] as string | undefined) ?? gcDoc.id;
+      // 확정·취소 판단은 lease를 잡은 트랜잭션의 최신 값으로 한다.
+      await this.processGroupBuyWithLease(productId, async (gc) => {
+        if ((gc['currentQuantity'] as number) >= (gc['minQuantity'] as number)) {
+          await this.confirmGroupBuy(productId, gc);
+        } else {
+          await this.cancelGroupBuyLack(productId, gc);
+        }
+      });
     });
 
     await Promise.all(promises);
@@ -457,18 +464,98 @@ export class NotificationsService {
       const productSnap = await this.firestore.doc(`products/${gc['productId']}`).get();
       const productName = productSnap.data()?.['name'] ?? '';
 
-      await this.sendToGroupParticipants(gc['productId'], 'GROUP_DEADLINE_SOON', {
-        productName,
-        currentQuantity: String(gc['currentQuantity']),
-        minQuantity: String(gc['minQuantity']),
-        remaining: String((gc['minQuantity'] as number) - (gc['currentQuantity'] as number)),
-      });
+      // cron 중복 실행에도 참여 주문당 1회만 보낸다.
+      await this.sendToGroupParticipants(
+        gc['productId'],
+        'GROUP_DEADLINE_SOON',
+        {
+          productName,
+          currentQuantity: String(gc['currentQuantity']),
+          minQuantity: String(gc['minQuantity']),
+          remaining: String((gc['minQuantity'] as number) - (gc['currentQuantity'] as number)),
+        },
+        `group-deadline-soon:${gc['productId']}`,
+      );
     }
   }
 
   // ────────────────────────────────────────────────────────────
   // Private helpers
   // ────────────────────────────────────────────────────────────
+
+  /**
+   * groupProductConfig 1건의 처리 권한을 트랜잭션으로 잡은 뒤 work를 실행한다. 이미 처리됐거나
+   * 다른 실행이 유효한 lease를 가지고 있으면 아무것도 하지 않는다. 성공하면 같은 lease를 가진
+   * 경우에만 isProcessed를 기록하고, 실패하면 lease를 풀어 다음 실행이 다시 처리하게 한다.
+   */
+  private async processGroupBuyWithLease(
+    productId: string,
+    work: (gc: Record<string, unknown>) => Promise<void>,
+  ): Promise<void> {
+    const claim = await this.claimGroupBuyProcessing(productId);
+    if (!claim) return;
+    try {
+      await work(claim.gc);
+    } catch (error) {
+      await this.finishGroupBuyProcessing(productId, claim.leaseId, false).catch(() => undefined);
+      throw error;
+    }
+    await this.finishGroupBuyProcessing(productId, claim.leaseId, true);
+  }
+
+  private async claimGroupBuyProcessing(
+    productId: string,
+  ): Promise<{ leaseId: string; gc: Record<string, unknown> } | null> {
+    const ref = this.firestore.doc(`groupProductConfig/${productId}`);
+    const leaseId = uuidv4();
+    // 커밋된 시도의 반환값만으로 결정한다(재시도된 트랜잭션의 중간 판단이 새지 않게).
+    return this.firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) return null;
+      const gc = snapshot.data() as Record<string, unknown>;
+      if (gc['isProcessed'] === true) return null;
+      const lease = gc['processingLease'] as
+        | { id?: unknown; expiresAt?: unknown }
+        | null
+        | undefined;
+      if (
+        lease &&
+        typeof lease.id === 'string' &&
+        typeof lease.expiresAt === 'number' &&
+        lease.expiresAt > Date.now()
+      ) {
+        return null;
+      }
+      transaction.update(ref, {
+        processingLease: {
+          id: leaseId,
+          expiresAt: Date.now() + GROUP_BUY_PROCESSING_LEASE_TTL_MS,
+        },
+      });
+      return { leaseId, gc };
+    });
+  }
+
+  private async finishGroupBuyProcessing(
+    productId: string,
+    leaseId: string,
+    succeeded: boolean,
+  ): Promise<void> {
+    const ref = this.firestore.doc(`groupProductConfig/${productId}`);
+    await this.firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) return;
+      const lease = (snapshot.data() as Record<string, unknown>)['processingLease'] as
+        | { id?: unknown }
+        | null
+        | undefined;
+      if (lease?.id !== leaseId) return;
+      transaction.update(
+        ref,
+        succeeded ? { isProcessed: true, processingLease: null } : { processingLease: null },
+      );
+    });
+  }
 
   private isLegacyCancellationOwned(order: Record<string, unknown> | null | undefined) {
     const status = (order?.['cancellation'] as Record<string, unknown> | undefined)?.[
@@ -512,19 +599,30 @@ export class NotificationsService {
     const productName = productSnap.data()?.['name'] ?? '';
     const storeId = productSnap.data()?.['storeId'] as string | undefined;
 
-    // 소비자 전체 알림
-    await this.sendToGroupParticipants(productId, 'GROUP_CONFIRMED', {
-      productName,
-      minQuantity: String(gc['minQuantity']),
-      groupDeliveryDate: String(gc['groupDeliveryDate']),
-    });
+    // 소비자 전체 알림 — 재처리·중복 실행에도 참여 주문당 1회
+    await this.sendToGroupParticipants(
+      productId,
+      'GROUP_CONFIRMED',
+      {
+        productName,
+        minQuantity: String(gc['minQuantity']),
+        groupDeliveryDate: String(gc['groupDeliveryDate']),
+      },
+      `group-buy:${productId}:GROUP_CONFIRMED`,
+    );
 
     // 판매자 알림
     if (storeId) {
-      await this.sendToStoreOwner(storeId, 'SELLER_GROUP_CONFIRMED', {
-        productName,
-        currentQuantity: String(gc['currentQuantity']),
-      });
+      await this.sendToStoreOwner(
+        storeId,
+        'SELLER_GROUP_CONFIRMED',
+        {
+          productName,
+          currentQuantity: String(gc['currentQuantity']),
+        },
+        undefined,
+        `group-buy:${productId}:SELLER_GROUP_CONFIRMED`,
+      );
     }
   }
 
@@ -586,15 +684,22 @@ export class NotificationsService {
       cancellationTargets.filter((target) => cancelledOrderIds.has(target.orderId)),
       'GROUP_CANCELLED_LACK',
       { productName },
+      `group-buy:${productId}:GROUP_CANCELLED_LACK`,
     );
 
     // 판매자 알림
     if (storeId) {
-      await this.sendToStoreOwner(storeId, 'SELLER_GROUP_CANCELLED_LACK', {
-        productName,
-        currentQuantity: String(gc['currentQuantity']),
-        minQuantity: String(gc['minQuantity']),
-      });
+      await this.sendToStoreOwner(
+        storeId,
+        'SELLER_GROUP_CANCELLED_LACK',
+        {
+          productName,
+          currentQuantity: String(gc['currentQuantity']),
+          minQuantity: String(gc['minQuantity']),
+        },
+        undefined,
+        `group-buy:${productId}:SELLER_GROUP_CANCELLED_LACK`,
+      );
     }
   }
 
@@ -605,10 +710,17 @@ export class NotificationsService {
     recipients: readonly { userId: string; orderId: string }[],
     templateCode: NotificationTemplateCode,
     variables: Record<string, string>,
+    idempotencyScope?: string,
   ) {
     await Promise.all(
       recipients.map((recipient) =>
-        this.sendToUser(recipient.userId, templateCode, variables, recipient.orderId),
+        this.sendToUser(
+          recipient.userId,
+          templateCode,
+          variables,
+          recipient.orderId,
+          idempotencyScope ? `${idempotencyScope}:${recipient.orderId}` : undefined,
+        ),
       ),
     );
   }
@@ -831,14 +943,12 @@ export class NotificationsService {
     order: Record<string, unknown> | null,
     user: Record<string, unknown> | null,
   ): string | null {
-    if (order?.['userId'] === userId && typeof order['deliveryPhone'] === 'string') {
-      const deliveryPhone = order['deliveryPhone'].trim();
+    // 단일 휴대폰 번호로 정규화되는 값만 수신번호로 쓴다. 주문 배송 연락처가 비었거나
+    // 휴대폰 형식이 아니면 주문자 본인의 프로필 연락처로 대체한다.
+    if (order?.['userId'] === userId) {
+      const deliveryPhone = normalizeAligoRecipientPhone(order['deliveryPhone']);
       if (deliveryPhone) return deliveryPhone;
     }
-    if (typeof user?.['phone'] === 'string') {
-      const profilePhone = user['phone'].trim();
-      if (profilePhone) return profilePhone;
-    }
-    return null;
+    return normalizeAligoRecipientPhone(user?.['phone']);
   }
 }

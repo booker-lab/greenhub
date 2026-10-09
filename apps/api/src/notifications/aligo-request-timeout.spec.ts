@@ -131,7 +131,7 @@ describe('ALIGO HTTP 호출 시간 제한', () => {
     undiciFetch.mockImplementation(stalledFetch);
     const client = makeClient({
       ...configured,
-      ALIGO_OUTBOUND_PROXY_URL: 'http://proxy.example.test:80',
+      ALIGO_OUTBOUND_PROXY_URL: 'https://proxy.example.test:443',
     });
 
     const promise = client.sendAlimtalk(phone, templateCode, variables);

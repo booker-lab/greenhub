@@ -204,6 +204,14 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 - group scheduler(`confirmGroupBuy`/`cancelGroupBuyLack`)는 active cancellation ownership을 transaction fresh 재확인으로 존중하고 broadcast에서 제외한다.
 - 증거: `apps/api/src/orders/orders-lifecycle.service.ts`, `apps/api/src/notifications/notifications.service.ts`, `apps/api/src/orders/legacy-consumer-cancel-convergence.spec.ts`(`8 tests`).
 
+### 8A-2. Legacy seller cancel — 환불 전 claim
+
+- 대상: legacy 주문(`schemaVersion: 2 + roundId` 아님)의 `PATCH .../status`(`status = CANCELLED`) 중 환불 대상 상태(`ACCEPTED|RECRUITING|CONFIRMED|PREPARING|DELIVERY_HELD`).
+- provider refund 전에 fresh status가 진입 상태와 같은지 확인하고 `cancellation = { status: REFUNDING, refundClaim: { token, expiresAt } }`를 transaction으로 획득한다. 상태가 바뀌었거나 다른 활성 claim이 있으면 `409`이고 refund side effect는 `0`이다.
+- claim이 `REFUNDING|LOCAL_PENDING|LOCAL_FAILED|REFUND_FAILED`인 동안 legacy 상태 전이(기사 배송 시작 등)는 `409`로 거절한다. 환불이 끝난 주문이 배송·정산으로 진행되지 않는다.
+- refund 실패는 `REFUND_FAILED`, refund 뒤 local 실패는 `LOCAL_FAILED`로 남고 판매자 재요청은 claim을 다시 잡아 수렴한다. local 취소는 token 검증 transaction에서 `CANCELLED` + `cancellation.status = COMPLETED`로 닫는다.
+- 증거: `apps/api/src/orders/legacy-seller-cancel-claim.spec.ts`, `apps/api/src/orders/group-confirmed-quantity-restoration.spec.ts`.
+
 ### 8B. Specialized pickup/review commands — `IMPLEMENTATION COMPLETE`
 
 - 대상: `OrdersLifecycleService.reviewOrder`(`DELIVERED|PICKED_UP → REVIEWED`),
@@ -403,6 +411,7 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-09 | legacy 판매자 취소의 환불 전 `REFUNDING` claim과 claim 중 legacy 상태 전이 거절(Section 8A-2), 주문 `buyerName` 한 줄 정리·20자 상한, 요청사항 제어문자 제거 반영 |
 | 2026-09-11 | Generic consumer `REVIEWED`와 specialized `reviewOrder`를 single semantic owner(`executeConsumerReviewedConvergence`)로 수렴 + settlement failure/retry convergence 회귀 9건 추가 |
 | 2026-09-11 | `ORDER-SPECIALIZED-COMMAND-RACE-CONVERGENCE-01`: review/confirmPickup/hubConfirmPickup fresh expected-status transaction + cross-command CAS + settlement convergence 수렴(`specialized-command-race-convergence.spec.ts` 18 tests PASS) 후 Section 8B를 `IMPLEMENTATION COMPLETE`로 수렴 |
 | 2026-09-10 | `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-DECISION-01` 결정 계약 게시: Status/Hold duplicate submission & convergence contract 추가, S1은 `IMPLEMENTATION PENDING`으로 명시 |
