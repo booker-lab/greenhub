@@ -677,6 +677,21 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 ### ROUND-PAYMENT-RETRY-DOUBLE-HOLD
 - [ ] 소비자가 결제창을 닫고 새 결제 시도 ID로 다시 결제하면(#328), 이전 시도의 `PENDING` 주문·`HELD` 예약이 결제 실패 웹훅 또는 15분 만료 정리(1분 주기)까지 최대 약 16분 동안 회차 배송지·수량·상품 한도를 함께 차지한다. **2026-10-04 결정: 파일럿 동안 유지한다.** 즉시 해제하려면 늦게 도착한 이전 결제(늦은 결제 재확보·자동 환불) 흐름까지 다시 맞춰야 해서 위험이 이득보다 크다. 주문 오픈 날 '한도 마감'이 비정상적으로 빨리 나오면 우선 대응한다.
 
+### CI-REQUIRED-CHECK
+- [ ] **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다.
+
+### STORE-COMMISSION-RATE-UNUSED
+- [ ] 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). **2026-10-09 결정: 파일럿 동안 그대로 둔다**(가게가 하나). 어드민 판매자 목록에 "정산은 공통 수수료율" 안내만 표시한다. 가게가 늘면 다시 정한다.
+
+### SILENT-REFUND-CUSTOMER-NOTICE
+- [ ] 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다.
+
+### OPS-ALERTING
+- [ ] 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. **2026-10-09 결정: 도입한다.** 휴대폰 푸시 채널과 GitHub 정기 가동 확인(실패 시 소유자 이메일)으로 시작한다.
+
+### FIRESTORE-MANAGED-BACKUP
+- [ ] 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이다. **2026-10-09 결정: 켠다.** PITR과 일일 관리형 백업을 GCP 콘솔에서 사용자가 켠다(이 저장소 작업 환경에는 GCP 권한이 없다). 켠 뒤 비운영 프로젝트 복구 연습을 한 번 한다.
+
 ---
 
 ## STALE_OR_SUPERSEDED
