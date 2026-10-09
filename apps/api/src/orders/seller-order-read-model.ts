@@ -15,6 +15,8 @@ const LIST_FIELDS = [
   'deliveryFee',
   'totalAmount',
   'requestedDeliveryDate',
+  // 회차 주문 구분(준비 물량 집계에서 회차 주문을 빼고 회차 구매 목록으로 보낸다).
+  'roundId',
   'preparedAt',
   'pickupCode',
   'createdAt',

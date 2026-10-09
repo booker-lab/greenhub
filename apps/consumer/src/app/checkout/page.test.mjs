@@ -57,6 +57,9 @@ const requireForTest = (specifier) => {
   if (specifier === '@/hooks/useSaleRounds') return { useSaleRounds: () => ({}) };
   if (specifier === '@/lib/acquisition') return { getAcquisitionSnapshot: () => null };
   if (specifier === '@/lib/cartValidation') return { getCartValidationError: () => null };
+  if (specifier === '@/lib/checkout-prefill') {
+    return { pickCheckoutPrefill: () => ({}), prefillAddress: (c) => c, prefillPhone: (c) => c };
+  }
   if (specifier === '@/lib/payment-redirect') return {};
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };

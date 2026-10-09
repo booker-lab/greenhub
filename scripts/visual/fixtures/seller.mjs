@@ -229,12 +229,21 @@ const SALE_ROUNDS = [
     deliveryEndAt: '2026-11-10T00:00:00.000Z',
   }),
 ];
+// 상품별 수량은 회차 counters 합계와 맞춘다(판매 중 11개·결제 중 2개, 마감 27개).
+const ROUND_ITEM_QUANTITIES = {
+  OPEN: { ordered: [4, 5, 2], reserved: [1, 1, 0] },
+  CLOSED: { ordered: [10, 10, 7], reserved: [0, 0, 0] },
+};
 function roundItems(round) {
+  const quantities = ROUND_ITEM_QUANTITIES[round.status] ?? {
+    ordered: [0, 0, 0],
+    reserved: [0, 0, 0],
+  };
   return [
-    ['빅립', 30000, 10, 4],
-    ['만천홍', 25000, 10, 5],
-    ['v3', 45000, 10, 2],
-  ].map(([name, price, limit, ordered], i) => ({
+    ['빅립', 30000, 10],
+    ['만천홍', 25000, 10],
+    ['v3', 45000, 10],
+  ].map(([name, price, limit], i) => ({
     id: `${round.id}-item-${i + 1}`,
     roundId: round.id,
     storeId: STORE_ID,
@@ -243,14 +252,58 @@ function roundItems(round) {
     productImageUrlSnapshot: null,
     roundPrice: price,
     saleLimitQuantity: limit,
-    reservedQuantity: 0,
-    orderedQuantity: round.status === 'OPEN' ? ordered : 0,
+    reservedQuantity: quantities.reserved[i],
+    orderedQuantity: quantities.ordered[i],
     displayOrder: i,
     status: 'ACTIVE',
     createdAt: round.createdAt,
     updatedAt: round.updatedAt,
   }));
 }
+
+// ── 운영 확인 기록(가게 전체 목록·주문 상세) ──
+function operationIssue(id, type, severity, status, orderId, updatedAt) {
+  return {
+    id,
+    storeId: STORE_ID,
+    orderId,
+    paymentId: orderId,
+    type,
+    severity,
+    status,
+    createdAt: updatedAt,
+    updatedAt,
+    resolvedAt: status === 'OPEN' ? null : updatedAt,
+    latestSnapshot: { orderStatus: 'CANCELLED', paymentStatus: 'UNKNOWN' },
+    actions: [],
+  };
+}
+const OPERATION_ISSUES = [
+  operationIssue(
+    'issue-visual-0001',
+    'FINALIZATION_REFUND_FAILED',
+    'critical',
+    'OPEN',
+    'order-with-contact',
+    '2026-10-06T01:10:00.000Z',
+  ),
+  operationIssue(
+    'issue-visual-0002',
+    'CUSTOMER_NOTICE_FAILED',
+    'warning',
+    'OPEN',
+    'order-no-contact',
+    '2026-10-06T02:30:00.000Z',
+  ),
+  operationIssue(
+    'issue-visual-0003',
+    'AUTO_REFUND_FAILED',
+    'warning',
+    'RESOLVED',
+    'order-with-contact',
+    '2026-10-05T09:00:00.000Z',
+  ),
+];
 
 // ── 어드민 기사·배너 ──
 const ADMIN_DRIVERS = [
@@ -435,7 +488,7 @@ export const routes = [
       return o ? { body: o } : { status: 404, body: { message: '주문 없음' } };
     },
   ],
-  ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: [] } })],
+  ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
   [
     'GET',
     /^\/stores\/[^/]+\/settlements\/summary$/,
@@ -574,6 +627,7 @@ export const screens = [
     path: '/orders/order-no-contact',
   },
   { id: 'prep', group: '판매자', title: '준비', path: '/prep' },
+  { id: 'operations', group: '판매자', title: '운영 확인', path: '/operations' },
   { id: 'sale-rounds', group: '판매자', title: '회차 목록', path: '/sale-rounds' },
   {
     id: 'sale-round-open',

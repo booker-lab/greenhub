@@ -28,11 +28,14 @@ export function TodayTasksCard({
   products,
   productsError,
   productsTrustworthy,
+  openIssueCount = 0,
 }: {
   orders: Order[];
   products: Product[];
   productsError: string | null;
   productsTrustworthy: boolean;
+  /** 가게 전체 열린 운영 기록 수(환불·결제·연락·사진 확인 필요). */
+  openIssueCount?: number;
 }) {
   const newOrderCount = orders.filter(
     (o) => STATUS_GROUP_MAP[o.status] === 'ACTION_REQUIRED',
@@ -41,6 +44,13 @@ export function TodayTasksCard({
   const inactiveCount = productsTrustworthy ? products.filter((p) => !p.isActive).length : 0;
 
   const tasks: TaskRow[] = [];
+  if (openIssueCount > 0)
+    tasks.push({
+      key: 'operations',
+      dot: 'var(--color-danger)',
+      label: `운영 확인 ${openIssueCount}건 보기`,
+      href: '/operations',
+    });
   if (newOrderCount > 0)
     tasks.push({
       key: 'new',

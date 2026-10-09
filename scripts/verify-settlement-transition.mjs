@@ -20,6 +20,7 @@
  * 실행: node scripts/verify-settlement-transition.mjs
  */
 import { initializeApp, cert } from 'firebase-admin/app';
+import { assertProductionWriteAllowed } from './production-write-guard.mjs';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
@@ -28,15 +29,20 @@ import { dirname, join } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // 인증 자격 — seed-e2e-orders.mjs:27-49 와 동일 규약(#CL-42).
+function guarded(serviceAccount) {
+  assertProductionWriteAllowed(serviceAccount, { script: 'verify-settlement-transition.mjs' });
+  return cert(serviceAccount);
+}
+
 function resolveCredential() {
   const envJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (envJson) {
     const raw = envJson.trim();
     const json = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
-    return cert(JSON.parse(json));
+    return guarded(JSON.parse(json));
   }
   const require = createRequire(import.meta.url);
-  return cert(require(join(__dirname, '../apps/api/firebase-adminsdk.json')));
+  return guarded(require(join(__dirname, '../apps/api/firebase-adminsdk.json')));
 }
 
 initializeApp({ credential: resolveCredential() });
