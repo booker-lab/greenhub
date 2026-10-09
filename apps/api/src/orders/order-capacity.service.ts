@@ -224,14 +224,27 @@ export class OrderCapacityService {
     });
   }
 
+  /**
+   * `allowLapsedHold`: 결제 제공자가 PAID를 확인한 PENDING 주문만 쓴다. 만료됐어도 아직
+   * HELD인 예약은 해제된 적이 없어 그 한도를 계속 차지하고 있으므로, 같은 예약을
+   * reserved→ordered로 옮겨도 한도를 넘지 않는다.
+   */
   async consumeReservationInTransaction(
     tx: any,
-    input: { reservationId: string; orderId: string; paymentId?: string | null },
+    input: {
+      reservationId: string;
+      orderId: string;
+      paymentId?: string | null;
+      allowLapsedHold?: boolean;
+    },
   ): Promise<ReservationRecord> {
-    return this.moveReservationInTransaction(tx, input.reservationId, 'CONSUMED', {
-      orderId: input.orderId,
-      paymentId: input.paymentId ?? null,
-    });
+    return this.moveReservationInTransaction(
+      tx,
+      input.reservationId,
+      'CONSUMED',
+      { orderId: input.orderId, paymentId: input.paymentId ?? null },
+      { allowLapsedHold: input.allowLapsedHold === true },
+    );
   }
 
   async releaseReservationInTransaction(
@@ -638,6 +651,7 @@ export class OrderCapacityService {
     reservationId: string,
     nextStatus: Exclude<ReservationStatus, 'HELD'>,
     patch: { orderId?: string | null; paymentId?: string | null },
+    options: { allowLapsedHold?: boolean } = {},
   ): Promise<ReservationRecord> {
     const reservationRef = this.firestore.doc(`checkoutReservations/${reservationId}`);
     const reservationSnap = await tx.get(reservationRef);
@@ -672,7 +686,7 @@ export class OrderCapacityService {
       if (!Number.isFinite(clockMillis)) {
         throw new ConflictException('예약 만료 시각을 확인할 수 없습니다.');
       }
-      if (new Date(reservation.expiresAt).getTime() <= clockMillis) {
+      if (new Date(reservation.expiresAt).getTime() <= clockMillis && !options.allowLapsedHold) {
         throw new ConflictException('만료된 결제 예약입니다.');
       }
     }

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
+import { OpsAlertService } from '../ops-alerts/ops-alert.service';
 
 export type OperationIssueRecord = Record<string, unknown> & {
   id: string;
@@ -23,6 +24,7 @@ export class OperationIssueWriterService {
   constructor(
     @Inject(FirestoreService)
     private readonly firestore: FirestoreService,
+    @Optional() private readonly opsAlerts?: OpsAlertService,
   ) {}
 
   async createOrMergeIssue(
@@ -32,9 +34,11 @@ export class OperationIssueWriterService {
     const issueId = this.issueId(input.idempotencyKey);
     const issueRef = this.firestore.doc(`operationIssues/${issueId}`);
     let result: OperationIssueRecord | null = null;
+    let opened = false;
 
     const write = async (tx: OperationIssueTransaction) => {
       const existingSnap = await tx.get(issueRef);
+      opened = !existingSnap.exists || (existingSnap.data() as OperationIssueRecord).status !== 'OPEN';
       const now = this.firestore.Timestamp.now();
       if (existingSnap.exists) {
         const existing = existingSnap.data() as OperationIssueRecord;
@@ -73,7 +77,28 @@ export class OperationIssueWriterService {
     if (transaction) await write(transaction);
     else await this.firestore.runTransaction(write);
     if (!result) throw new Error('운영 예외 저장 결과를 확인할 수 없습니다.');
+    // 새로 열린(또는 해결 뒤 다시 열린) 기록만 알린다. 같은 기록이 매분 합쳐질 때는 보내지 않는다.
+    // 호출자 트랜잭션 안의 기록은 커밋 여부를 여기서 알 수 없어 보내지 않는다.
+    if (opened && !transaction) void this.alertOpened(result);
     return result;
+  }
+
+  private async alertOpened(issue: OperationIssueRecord) {
+    if (!this.opsAlerts?.enabled) return;
+    const severity = issue['severity'];
+    if (severity !== 'critical' && severity !== 'warning') return;
+    const title = typeof issue['title'] === 'string' ? issue['title'] : '운영 확인 필요';
+    const message = typeof issue['message'] === 'string' ? issue['message'] : null;
+    await this.opsAlerts.send({
+      level: severity,
+      title: `운영 확인: ${title}`,
+      lines: [
+        ...(message ? [message] : []),
+        `유형 ${String(issue['type'] ?? '-')}`,
+        '판매자 앱 > 홈 "운영 확인"에서 보고 주문 화면에서 처리하세요.',
+      ],
+      dedupeKey: `issue:${issue.id}`,
+    });
   }
 
   private snapshot(value: unknown): Record<string, unknown> {
