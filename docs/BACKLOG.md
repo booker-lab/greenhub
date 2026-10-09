@@ -677,6 +677,21 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 ### ROUND-PAYMENT-RETRY-DOUBLE-HOLD
 - [ ] 소비자가 결제창을 닫고 새 결제 시도 ID로 다시 결제하면(#328), 이전 시도의 `PENDING` 주문·`HELD` 예약이 결제 실패 웹훅 또는 15분 만료 정리(1분 주기)까지 최대 약 16분 동안 회차 배송지·수량·상품 한도를 함께 차지한다. **2026-10-04 결정: 파일럿 동안 유지한다.** 즉시 해제하려면 늦게 도착한 이전 결제(늦은 결제 재확보·자동 환불) 흐름까지 다시 맞춰야 해서 위험이 이득보다 크다. 주문 오픈 날 '한도 마감'이 비정상적으로 빨리 나오면 우선 대응한다.
 
+### CI-REQUIRED-CHECK
+- [ ] `.github/workflows/ci.yml`(lint·tsc·단위·API 통합·Rules·빌드·비밀값 검사)을 branch protection 필수 검사로 지정할지 결정한다. GitHub 설정 변경이라 사용자 승인 대상. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다.
+
+### STORE-COMMISSION-RATE-UNUSED
+- [ ] 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). 가게별 수수료를 정산에 적용할지, 어드민 설정을 없앨지 금전 정책 결정이 필요하다.
+
+### SILENT-REFUND-CUSTOMER-NOTICE
+- [ ] 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. 승인된 `ORDER_CANCELLED`(고정 사유 문구)를 보낼지 결정한다. 실제 발송 정책이라 사용자 결정 대상.
+
+### OPS-ALERTING
+- [ ] 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. 알림 채널(이메일·Slack·운영자 알림톡 새 템플릿)과 일일 요약 도입을 결정한다.
+
+### FIRESTORE-MANAGED-BACKUP
+- [ ] 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이다. PITR·일일 관리형 백업과 비운영 프로젝트 복구 연습을 켤지 결정한다(운영 Firebase 설정·비용 변경).
+
 ---
 
 ## STALE_OR_SUPERSEDED
