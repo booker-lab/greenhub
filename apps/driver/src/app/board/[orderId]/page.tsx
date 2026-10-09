@@ -20,6 +20,7 @@ import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { isApiTimeoutError } from '@/lib/api-timeout';
 import { orderItemsLabel } from '@/lib/order-quantity';
+import { buildOrderMapLink } from '../../map/_lib/map-navigation-link';
 import {
   buildDriverOrderDetailScope,
   classifyDriverOrderCommandError,
@@ -541,6 +542,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const isPreparing = order.status === 'PREPARING';
   const isHeld = order.status === 'DELIVERY_HELD';
   const isHub = order.deliveryMethod === 'hub';
+  // 소비자 이름은 넣지 않고 주소(거점은 거점 주소)만으로 외부 지도 링크를 만든다.
+  const mapLink = buildOrderMapLink({
+    deliveryMethod: order.deliveryMethod,
+    // 상세 주소(동·호수)가 붙지 않은 기본 주소가 있으면 그것으로 검색한다.
+    address: order.deliveryAddress?.address ?? order.address,
+    hubName: order.hubName,
+    hubAddress: order.hubAddress,
+  });
   const isRoundDirect =
     order.schemaVersion === 2 && Boolean(order.roundId) && order.deliveryMethod === 'direct';
   const paymentPresentation = getRedeliveryPaymentPresentation(order.redeliveryPayment);
@@ -715,6 +724,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                   label="배송지"
                   value={order.address ?? order.deliveryAddress?.address ?? '-'}
                 />
+              )}
+              {mapLink && (
+                <Button
+                  component="a"
+                  href={mapLink.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="light"
+                  size="sm"
+                  fullWidth
+                >
+                  카카오맵에서 {mapLink.kind === 'route' ? '길찾기' : '주소 보기'}
+                </Button>
               )}
               {isPreparing && <InfoRow label="소비자" value={order.buyerName ?? '-'} />}
               {order.requestNote?.trim() && (
