@@ -33,7 +33,8 @@ async function main() {
   const weakHits = [];
   for (const d of emailProviders) {
     const u = d.data();
-    const hashPrefix = u.passwordHash ? u.passwordHash.slice(0, 12) : '(없음)';
+    // 해시 본문(salt 포함)은 출력하지 않고 알고리즘·cost 접두어만 보인다.
+    const hashPrefix = u.passwordHash ? u.passwordHash.slice(0, 7) : '(없음)';
     const sid = (u.storeId ?? '').slice(0, 8);
     console.log(
       `${d.id.slice(0,8)}... | ${(u.email ?? '').padEnd(25)} | ${(u.role ?? '').padEnd(8)} | ${sid.padEnd(12)} | ${hashPrefix.padEnd(16)} | ${u.suspended ?? false}`
@@ -43,7 +44,8 @@ async function main() {
       for (const pw of COMMON_WEAK) {
         const ok = await bcrypt.compare(pw, u.passwordHash);
         if (ok) {
-          weakHits.push({ id: d.id, email: u.email, role: u.role, storeId: u.storeId, password: pw });
+          // 일치한 비밀번호 원문은 보관·출력하지 않는다.
+          weakHits.push({ id: d.id, email: u.email, role: u.role, storeId: u.storeId });
           break;
         }
       }
@@ -55,7 +57,7 @@ async function main() {
     console.log('  (없음 — common-weak 사전 기준)');
   } else {
     weakHits.forEach(h => {
-      console.log(`  ⚠️  ${h.email} (role=${h.role}, storeId=${(h.storeId ?? '').slice(0,8)}...) → password="${h.password}"`);
+      console.log(`  ⚠️  ${h.email} (role=${h.role}, storeId=${(h.storeId ?? '').slice(0,8)}...) → 약한 비밀번호 사전과 일치 (원문 미출력)`);
     });
   }
 
