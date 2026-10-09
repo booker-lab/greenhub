@@ -3,6 +3,8 @@ import { VarietiesService } from './varieties.service';
 import { CreateVarietyDto } from './dto/create-variety.dto';
 import { UpdateVarietyDto } from './dto/update-variety.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @Controller('varieties')
 export class VarietiesController {
@@ -22,14 +24,16 @@ export class VarietiesController {
 
   // 신규 품종 등록 — 관리자만
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   create(@Body() dto: CreateVarietyDto) {
     return this.varietiesService.create(dto);
   }
 
   // 품종 정보 수정 — 관리자만
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   update(@Param('id') id: string, @Body() dto: UpdateVarietyDto) {
     return this.varietiesService.update(id, dto);
   }
