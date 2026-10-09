@@ -3,6 +3,7 @@
  * 실행: node scripts/seed-test-data.mjs
  */
 import { initializeApp, cert } from 'firebase-admin/app';
+import { assertProductionWriteAllowed } from './production-write-guard.mjs';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
@@ -11,6 +12,7 @@ import { dirname, join } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const serviceAccount = require(join(__dirname, '../apps/api/firebase-adminsdk.json'));
+assertProductionWriteAllowed(serviceAccount, { script: 'seed-test-data.mjs' });
 
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();

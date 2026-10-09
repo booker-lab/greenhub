@@ -49,6 +49,9 @@ export class SettlementsService {
         id: orderId,
         storeId: order['storeId'],
         orderId,
+        // 판매자 CSV·회차별 집계용 식별자(개인정보 아님). 옛 주문은 null.
+        orderNumber: typeof order['orderNumber'] === 'string' ? order['orderNumber'] : null,
+        roundId: typeof order['roundId'] === 'string' ? order['roundId'] : null,
         totalAmount,
         platformFeeRate: this.feeRate,
         platformFee,
@@ -138,10 +141,10 @@ export class SettlementsService {
 
     if (snap.empty) return;
 
-    let confirmed = 0;
     // 트랜잭션 내 재확인으로 멱등성 확보 + 취소 경합 차단(GAP-1):
     // 배치 도중 cancelSettlement가 cancelled로 바꿨다면 status가 더는 pending이 아니므로 skip → cancelled 미덮어씀.
-    const results = await Promise.all(
+    // 한 건의 실패가 나머지 결과·로그를 가리지 않도록 건별로 격리한다. 실패 건은 pending으로 남아 다음 날 다시 시도된다.
+    const results = await Promise.allSettled(
       snap.docs.map((doc) =>
         this.firestore.runTransaction(async (t) => {
           const fresh = await t.get(doc.ref);
@@ -157,8 +160,16 @@ export class SettlementsService {
       ),
     );
 
-    confirmed = results.filter(Boolean).length;
-    this.logger.log(`[SettlementScheduler] confirmed ${confirmed}건`);
+    const confirmed = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+    const failedIds = snap.docs
+      .filter((_, index) => results[index].status === 'rejected')
+      .map((doc) => doc.id);
+    this.logger.log(
+      `[SettlementScheduler] confirmed ${confirmed}건, 실패 ${failedIds.length}건 (대상 ${snap.size}건)`,
+    );
+    if (failedIds.length > 0) {
+      this.logger.error(`[SettlementScheduler] confirm 실패 정산: ${failedIds.join(', ')}`);
+    }
   }
 
   // **취소 반영**: 주문 CANCELLED 시 해당 settlement status → 'cancelled'
