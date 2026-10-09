@@ -43,6 +43,8 @@ backend는 타입을, seller/admin UI는 공통 라벨·색 상수를 사용한�
   id: string
   storeId: string
   orderId: string
+  orderNumber: string | null // 판매자 CSV용. 2026-10 이전 정산에는 없다
+  roundId: string | null // 회차 주문만. 회차별 집계용
   totalAmount: number
   platformFeeRate: number
   platformFee: number

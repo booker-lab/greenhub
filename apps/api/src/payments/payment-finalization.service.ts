@@ -191,10 +191,14 @@ export class PaymentFinalizationService {
           } else {
             reservationId = freshOrder['reservationId'] as string | undefined;
             if (!reservationId) throw new Error('결제 예약 식별자가 없습니다.');
+            // PortOne이 PAID를 확인했다. 웹훅이 늦거나 빠져 15분 scheduler가 확정하는 경우
+            // 예약은 이미 만료 시각이 지났지만 HELD로 한도를 계속 차지하고 있으므로 그대로
+            // 소비한다(해제 후 재확보하면 그 사이 다른 주문이 자리를 가져가 결제 고객이 환불된다).
             await this.capacity.consumeReservationInTransaction(tx, {
               reservationId,
               orderId,
               paymentId: orderId,
+              allowLapsedHold: true,
             });
           }
         }
