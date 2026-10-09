@@ -17,7 +17,15 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
-import { AlertTriangle, CalendarDays, Copy, MapPin, Plus, RefreshCcw } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarDays,
+  ChevronRight,
+  Copy,
+  MapPin,
+  Plus,
+  RefreshCcw,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
@@ -173,16 +181,26 @@ function RoundCard({ round, onCopy }: { round: SaleRound; onCopy: (round: SaleRo
               {round.name}
             </Text>
           </Box>
-          <Button
-            size="xs"
-            variant="light"
-            color="gray"
-            leftSection={<Copy size={14} />}
-            onClick={() => onCopy(round)}
-            style={{ flexShrink: 0 }}
-          >
-            이전 회차 복사
-          </Button>
+          <Stack gap={6} align="flex-end" style={{ flexShrink: 0 }}>
+            <Button
+              component={Link}
+              href={`/sale-rounds/${encodeURIComponent(round.id)}`}
+              size="xs"
+              variant="light"
+              rightSection={<ChevronRight size={14} />}
+            >
+              회차 열기
+            </Button>
+            <Button
+              size="xs"
+              variant="light"
+              color="gray"
+              leftSection={<Copy size={14} />}
+              onClick={() => onCopy(round)}
+            >
+              이전 회차 복사
+            </Button>
+          </Stack>
         </Group>
 
         <Stack gap={6}>
@@ -276,7 +294,7 @@ export default function SaleRoundsPage() {
   } = useSaleRounds();
   const [copyForm, setCopyForm] = useState<CopyFormState | null>(null);
   const [copyValidationError, setCopyValidationError] = useState<string | null>(null);
-  const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState<{ message: string; roundId: string } | null>(null);
   const copying = pendingOperation === 'copy';
 
   const openCopyModal = (source: SaleRound) => {
@@ -323,9 +341,10 @@ export default function SaleRoundsPage() {
         schedule,
       });
       setCopyForm(null);
-      setCopySuccess(
-        `"${copied.name}" 회차를 ${STATUS_META[copied.status].label} 상태로 복사했습니다.`,
-      );
+      setCopySuccess({
+        message: `"${copied.name}" 회차를 ${STATUS_META[copied.status].label} 상태로 복사했습니다.`,
+        roundId: copied.id,
+      });
     } catch {
       // 훅이 검증된 오류 문구와 작업 상태를 관리한다.
     }
@@ -368,7 +387,18 @@ export default function SaleRoundsPage() {
               withCloseButton
               onClose={() => setCopySuccess(null)}
             >
-              {copySuccess}
+              <Stack gap="xs" align="flex-start">
+                <Text style={{ fontSize: 'var(--font-size-sm)' }}>{copySuccess.message}</Text>
+                <Button
+                  component={Link}
+                  href={`/sale-rounds/${encodeURIComponent(copySuccess.roundId)}`}
+                  size="xs"
+                  variant="light"
+                  rightSection={<ChevronRight size={14} />}
+                >
+                  복사한 회차 열어 일정·상품 확인하기
+                </Button>
+              </Stack>
             </Alert>
           )}
 
