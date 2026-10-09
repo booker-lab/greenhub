@@ -211,7 +211,9 @@ test('Driver local auth는 승인된 driver만 localhost 실경로로 진입한�
   assert.match(loginPage, /redirectTo.*\/board/);
   const proxy = readRepo('apps/driver/src/proxy.ts');
   assert.match(proxy, /\/board\/:path\*/);
-  assert.match(proxy, /driver.*admin|admin.*driver/);
+  // 기사 앱은 기사(driver) 역할만 받는다(#381, 2026-10-04 결정): 관리자 세션도 로그인으로 보낸다.
+  assert.match(proxy, /session\.user\.role !== 'driver'/);
+  assert.match(proxy, /DRIVER_ADMIN_ACCOUNT_ERROR/);
 });
 
 test('외부 provider DENY 정책은 API client에서 강제된다', () => {
