@@ -49,6 +49,9 @@ export class SettlementsService {
         id: orderId,
         storeId: order['storeId'],
         orderId,
+        // 판매자 CSV·회차별 집계용 식별자(개인정보 아님). 옛 주문은 null.
+        orderNumber: typeof order['orderNumber'] === 'string' ? order['orderNumber'] : null,
+        roundId: typeof order['roundId'] === 'string' ? order['roundId'] : null,
         totalAmount,
         platformFeeRate: this.feeRate,
         platformFee,
