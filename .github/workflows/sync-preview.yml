@@ -53,10 +53,7 @@ jobs:
         continue-on-error: true
         run: node scripts/wait-preview-deploy.mjs --diagnostic-status
 
-      # GITHUB_TOKEN 으로 만든 push 는 다른 워크플로(e2e.yml 의 push 트리거)를
-      # 재귀 방지 정책상 발화시키지 않는다. workflow_dispatch 는 발화하므로
-      # 동기화 직후 e2e 를 명시적으로 디스패치한다.
-      - name: Trigger E2E workflow on preview
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run e2e.yml --ref preview
+      # 일반 E2E(e2e.yml)는 더 이상 자동으로 디스패치하지 않는다. 회차 직배송 판매 모드에서는
+      # 쓰지 않는 legacy 흐름이고, 설정 출처 문제(BACKLOG LEGACY-E2E-WORKFLOW-VARS)로 최근 100회
+      # 성공이 없어 실패 알림만 반복했다. 필요하면 Actions에서 수동(workflow_dispatch)으로 실행한다.
+      # 출시 검증은 e2e-round-direct.yml이 소유한다.
