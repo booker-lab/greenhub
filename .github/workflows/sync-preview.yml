@@ -11,6 +11,9 @@ on:
       - '**/*.md'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 # 동시 실행 방지 — preview push 충돌 회피
 concurrency:
   group: sync-preview
@@ -19,39 +22,30 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # preview push(contents)와 e2e dispatch(actions)에만 쓰기 권한을 둔다.
+    # 저장소 스크립트를 실행하는 진단은 아래 읽기 전용 job으로 분리한다.
     permissions:
       contents: write
       actions: write
-      statuses: read
+    outputs:
+      preview_sha: ${{ steps.merge.outputs.preview_sha }}
 
     steps:
-      - uses: actions/checkout@v6
+      # preview 브랜치로 push 하므로 checkout 자격 증명을 유지한다.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: preview
           fetch-depth: 0
 
-      # wait-preview-deploy.mjs 는 액션이 아니라 러너 기본 Node 로 직접 실행되므로
-      # 러너 OS 변동에 좌우되지 않도록 Node 버전을 명시 고정한다(e2e.yml 과 동일 22).
-      # npm 의존성 없음(child_process + gh CLI 빌트인만) → cache/install 불필요.
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-
       - name: Merge main into preview
+        id: merge
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git merge origin/main --no-edit -m "chore(preview): sync main into preview"
           git push origin preview
-
-      # 이 자동 동기화 경로에는 workflow_dispatch로 고정한 deployment ID가 없다.
-      # 따라서 GitHub commit status는 진단 정보로만 남기고 canonical acceptance에는
-      # 사용하지 않는다. pinned metadata 검증은 round-direct workflow가 소유한다.
-      - name: Preview commit status diagnostic (non-blocking)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-        run: node scripts/wait-preview-deploy.mjs --diagnostic-status
+          printf 'preview_sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # GITHUB_TOKEN 으로 만든 push 는 다른 워크플로(e2e.yml 의 push 트리거)를
       # 재귀 방지 정책상 발화시키지 않는다. workflow_dispatch 는 발화하므로
@@ -60,3 +54,34 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run e2e.yml --ref preview
+
+  # 이 자동 동기화 경로에는 workflow_dispatch로 고정한 deployment ID가 없다.
+  # 따라서 GitHub commit status는 진단 정보로만 남기고 canonical acceptance에는
+  # 사용하지 않는다. pinned metadata 검증은 round-direct workflow가 소유한다.
+  preview-status-diagnostic:
+    needs: sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      statuses: read
+
+    steps:
+      # 동기화 job이 push 한 preview HEAD 를 그대로 진단한다.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ needs.sync.outputs.preview_sha }}
+          persist-credentials: false
+
+      # wait-preview-deploy.mjs 는 액션이 아니라 러너 기본 Node 로 직접 실행되므로
+      # 러너 OS 변동에 좌우되지 않도록 Node 버전을 명시 고정한다(e2e.yml 과 동일 22).
+      # npm 의존성 없음(child_process + gh CLI 빌트인만) → cache/install 불필요.
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '22'
+
+      - name: Preview commit status diagnostic (non-blocking)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+        run: node scripts/wait-preview-deploy.mjs --diagnostic-status
