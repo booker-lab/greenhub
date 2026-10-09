@@ -161,6 +161,11 @@ function currentHoldAt(order: OrderRecord): string | null {
   return typeof heldAt === 'string' && heldAt.trim().length > 0 ? heldAt : null;
 }
 
+export function isDeliveryHoldUnresolved(hold: unknown): boolean {
+  if (!hold || typeof hold !== 'object') return false;
+  return isUnresolved((hold as OrderRecord)['resolvedAt']);
+}
+
 function isUnresolved(value: unknown): boolean {
   if (value === null || value === undefined) return true;
   if (typeof value === 'string') {

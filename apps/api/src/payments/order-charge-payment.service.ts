@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
+import { isOrderCancelledOrCancelling } from '../orders/order-cancellation-state';
 import {
   isCurrentRedeliveryChargeLinked,
   isCurrentRedeliveryPaymentRequired,
@@ -13,6 +14,9 @@ type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
 const PAYMENT_ID_PREFIX = 'order-charge-';
 const REFUND_CLAIM_MS = 5 * 60 * 1000;
 const REFUND_OWNER = 'order-charge-refund';
+const CANCELLED_ORDER_CHARGE_REFUND_REASON = '주문 취소에 따른 재배송비 환불';
+// 재배송비 결제가 실제로 필요한 주문 상태(보류 중이거나 결제 후 재개 대기).
+const CHARGE_PAYABLE_ORDER_STATUSES = ['DELIVERY_HELD', 'PREPARING'];
 
 type ChargeRefundClaimStatus = 'CLAIMED' | 'UNKNOWN';
 
@@ -64,17 +68,26 @@ export class OrderChargePaymentService {
   }
 
   private async finalizePaid(chargeId: string, paymentId: string, paymentData: PaymentData) {
+    const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
     // Retry purity: the post-transaction decision must come only from the
     // committed attempt's return value. An outer `let result` would leak an
     // aborted attempt's decision across OCC retry.
-    const result: Record<string, unknown> =
+    const result: Record<string, unknown> & { refundRequired?: boolean } =
       await this.firestore.runTransaction(async (tx) => {
-        const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
         const chargeSnap = await tx.get(chargeRef);
         if (!chargeSnap.exists) return { ok: false, reason: 'charge_not_found' };
         const charge = chargeSnap.data() as Record<string, any>;
         if (charge['status'] === 'PAID') {
-          return { ok: true, reason: 'already_processed' };
+          if (charge['refundedAt']) return { ok: true, reason: 'already_processed' };
+          // A PAID charge on a cancelled/cancelling order must not stay
+          // captured; a redelivered webhook resumes the claim-based refund.
+          const paidOrderSnap = await tx.get(this.firestore.doc(`orders/${charge['orderId']}`));
+          const paidOrder = paidOrderSnap.exists
+            ? (paidOrderSnap.data() as Record<string, any>)
+            : undefined;
+          return isOrderCancelledOrCancelling(paidOrder)
+            ? { ok: true, reason: 'already_processed', refundRequired: true }
+            : { ok: true, reason: 'already_processed' };
         }
         if (
           charge['status'] !== 'PENDING' ||
@@ -88,8 +101,32 @@ export class OrderChargePaymentService {
 
         const orderSnap = await tx.get(this.firestore.doc(`orders/${charge['orderId']}`));
         const order = orderSnap.data() as Record<string, any> | undefined;
+        if (!orderSnap.exists || order?.['storeId'] !== charge['storeId']) {
+          throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
+        }
+        const now = this.firestore.Timestamp.now();
+        const paidUpdate = {
+          status: 'PAID',
+          portoneTransactionId: paymentData.transactionId,
+          payMethod: paymentData.method?.type ?? null,
+          paidAt: now,
+          failedAt: null,
+          updatedAt: now,
+        };
+        if (isOrderCancelledOrCancelling(order)) {
+          // The customer completed payment after the order was cancelled (or
+          // while cancellation is in progress). Record the provider-confirmed
+          // payment and refund it instead of applying it to a cancelled order.
+          tx.update(chargeRef, paidUpdate);
+          return {
+            ok: true,
+            status: 'PAID',
+            reason: 'cancelled_order_refund',
+            refundRequired: true,
+          };
+        }
         if (
-          !orderSnap.exists ||
+          !CHARGE_PAYABLE_ORDER_STATUSES.includes(order?.['status']) ||
           !isCurrentRedeliveryPaymentRequired({ ...order, id: charge['orderId'] }) ||
           !isCurrentRedeliveryChargeLinked(
             { ...order, id: charge['orderId'] },
@@ -99,18 +136,14 @@ export class OrderChargePaymentService {
         ) {
           throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
         }
-        const now = this.firestore.Timestamp.now();
-        tx.update(chargeRef, {
-          status: 'PAID',
-          portoneTransactionId: paymentData.transactionId,
-          payMethod: paymentData.method?.type ?? null,
-          paidAt: now,
-          failedAt: null,
-          updatedAt: now,
-        });
+        tx.update(chargeRef, paidUpdate);
         return { ok: true, status: 'PAID' };
       });
-    return result;
+    const { refundRequired, ...response } = result;
+    if (refundRequired) {
+      await this.refundCharge(chargeRef, CANCELLED_ORDER_CHARGE_REFUND_REASON);
+    }
+    return response;
   }
 
   private async markFailed(chargeId: string, paymentId: string) {
