@@ -60,14 +60,12 @@ export function normalizeAligoRecipientPhone(raw: unknown): string | null {
   return /^(?:010\d{8}|01[16789]\d{7,8})$/.test(digits) ? digits : null;
 }
 
-const LOOPBACK_PROXY_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
-
 /**
  * ALIGO는 등록된 송신 IP만 허용한다. 호스팅의 송신 IP가 고정되지 않을 때는
- * ALIGO_OUTBOUND_PROXY_URL(고정 IP 프록시)을 설정해 ALIGO 호출만 그 프록시로 보낸다.
+ * ALIGO_OUTBOUND_PROXY_URL(고정 IP HTTP 프록시)을 설정해 ALIGO 호출만 그 프록시로 보낸다.
  * 값이 없으면 직접 호출하고, 형식이 잘못되면 직접 호출로 우회하지 않고 발송을 거부한다.
- * 프록시 URL의 인증 정보가 평문 구간을 지나지 않도록 `https:`만 허용하고, `http:`는
- * 같은 호스트 안의 루프백 프록시(localhost·127.0.0.1·::1)에만 허용한다.
+ * 운영 고정 IP 프록시(Fixie)는 `http://` 엔드포인트만 제공하므로 `http:`·`https:`를 모두 받는다.
+ * ALIGO 호출 자체는 HTTPS CONNECT 터널로 전달돼 본문은 프록시 구간에서도 암호화된다.
  * 프록시 URL에는 인증 정보가 들어 있으므로 오류·로그에 원문을 남기지 않는다.
  */
 export function resolveAligoOutboundFetch(
@@ -85,11 +83,6 @@ export function resolveAligoOutboundFetch(
   }
   if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname) {
     return { configError: 'ALIGO 송신 프록시 설정이 올바르지 않습니다.' };
-  }
-  if (parsed.protocol === 'http:' && !LOOPBACK_PROXY_HOSTS.has(parsed.hostname.toLowerCase())) {
-    return {
-      configError: 'ALIGO 송신 프록시는 https URL이어야 합니다(http는 루프백 주소만 허용).',
-    };
   }
   const dispatcher = new ProxyAgent(raw);
   return {

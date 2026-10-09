@@ -119,7 +119,7 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 - `ALIGO_TEMPLATE_CODES_JSON`
 - `ALIGO_OUTBOUND_PROXY_URL` (선택)
 
-ALIGO는 등록된 송신 IP의 호출만 허용한다(`code=-99 인증되지 않는 서버 IP`). 호스팅 송신 IP가 고정되지 않으면 `ALIGO_OUTBOUND_PROXY_URL`에 고정 IP 프록시(`https://user:password@host:port`)를 설정하고, 그 프록시의 고정 IP를 ALIGO 허용 IP에 모두 등록한다. 설정이 있으면 알림톡(`kakaoapi.aligo.in`)과 SMS(`apis.aligo.in`) 호출만 프록시를 거치고 다른 외부 호출은 그대로다. HTTPS는 CONNECT 터널로 전달되어 프록시가 본문을 볼 수 없다. 프록시 인증 정보가 평문 구간을 지나지 않도록 `https:`만 허용하고, `http:`는 루프백 주소(`localhost`·`127.0.0.1`·`::1`)에만 허용한다. 값은 비밀값으로 다루며 오류·로그에 남기지 않는다. 직접 근거: `apps/api/src/notifications/aligo-outbound-proxy.spec.ts`.
+ALIGO는 등록된 송신 IP의 호출만 허용한다(`code=-99 인증되지 않는 서버 IP`). 호스팅 송신 IP가 고정되지 않으면 `ALIGO_OUTBOUND_PROXY_URL`에 고정 IP HTTP 프록시(`http(s)://user:password@host:port`)를 설정하고, 그 프록시의 고정 IP를 ALIGO 허용 IP에 모두 등록한다. 설정이 있으면 알림톡(`kakaoapi.aligo.in`)과 SMS(`apis.aligo.in`) 호출만 프록시를 거치고 다른 외부 호출은 그대로다. HTTPS는 CONNECT 터널로 전달되어 프록시가 본문을 볼 수 없다. 값은 비밀값으로 다루며 오류·로그에 남기지 않는다. 직접 근거: `apps/api/src/notifications/aligo-outbound-proxy.spec.ts`.
 
 `ALIGO_TEMPLATE_CODES_JSON`은 논리 코드 → 실제 ALIGO `tpl_code` 문자열의 JSON 객체다.
 
@@ -206,7 +206,7 @@ provider 응답은 `classifyAlimtalkProviderError()`/`classifySmsProviderError()
 
 - 필수 본문 변수 누락
 - ALIGO 필수 자격 증명 누락
-- `ALIGO_OUTBOUND_PROXY_URL` 형식 오류(`https:` 외, 루프백이 아닌 `http:`, 또는 URL 아님) — 직접 호출로 우회하지 않는다
+- `ALIGO_OUTBOUND_PROXY_URL` 형식 오류(`http:`·`https:` 외 또는 URL 아님) — 직접 호출로 우회하지 않는다
 - 수신번호가 단일 국내 휴대폰 번호(`010` 11자리, `011·016·017·018·019` 10~11자리)로 정규화되지 않음(쉼표 등으로 이은 여러 번호 포함)
 - `ALIGO_TEMPLATE_CODES_JSON` 파싱 오류
 - 허용되지 않은 논리 코드
@@ -397,7 +397,7 @@ state → withdrawal → retention evidence → sender gating의 lifecycle을 �
 
 | 날짜 | 내용 |
 |---|---|
-| 2026-10-09 | 알림 본문 변수 한 줄 정리·변수별 길이 상한(이름 링크 차단), 수신번호 단일 휴대폰 형식 강제, `ALIGO_OUTBOUND_PROXY_URL` `https:` 강제(루프백 `http:`만 예외), legacy 공동구매 처리 lease·알림 멱등 키 반영 |
+| 2026-10-09 | 알림 본문 변수 한 줄 정리·변수별 길이 상한(이름 링크 차단), 수신번호 단일 휴대폰 형식 강제, legacy 공동구매 처리 lease·알림 멱등 키 반영 |
 | 2026-09-28 | 선택 설정 `ALIGO_OUTBOUND_PROXY_URL`(고정 IP 프록시 경유)과 형식 오류 fail-closed 계약 추가 |
 | 2026-09-28 | 소비자 회차 직접 취소 `ORDER_CANCELLED` 발송 정책 결정과 구현 반영(고정 사유 `고객 요청`, PENDING·기취소 제외, 멱등 키) |
 | 2026-09-26 | `NOTIFICATION_RETRY_METRICS` in-process 관측 recorder 계약(채널별 오류 분류 counter·적용 지연 집계·PII 미기록·전달 결과 불변) 및 전용 회귀 추가 |
