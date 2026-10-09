@@ -17,6 +17,8 @@ export const SETTLEMENT_FILTER_TABS: { key: SettlementFilterKey; label: string }
 export interface Settlement {
   id: string;
   orderId: string;
+  /** 2026-10 이후 생성된 정산만 있다. */
+  orderNumber?: string | null;
   totalAmount: number;
   platformFee: number;
   netAmount: number;

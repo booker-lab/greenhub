@@ -104,6 +104,8 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 
 소비자 직접 취소 알림 정책(2026-09-28 결정): 회차 주문을 소비자가 주문 마감 전에 직접 취소해도 `ORDER_CANCELLED` 거래성 알림을 보낸다. 결제 전(`PENDING`) 주문과 호출 시점에 이미 `CANCELLED`인 주문은 보내지 않으며, 같은 취소의 재호출은 멱등 키 `round-consumer-cancel:<orderId>`로 한 번만 발송한다. 직접 근거: `apps/api/src/orders/legacy-consumer-cancel-convergence.spec.ts` S9~S12.
 
+고객이 요청하지 않은 환불 알림 정책(2026-10-09 결정): 회차 전체 취소, 관리자 강제 환불(회차 주문), 늦은 결제 자동 환불도 `ORDER_CANCELLED`를 보낸다. 사유는 `apps/api/src/notifications/refund-notice-reasons.ts`의 상황별 고정 문구이며 파일럿 개시 전 최종 확정한다. 결제 전(`PENDING`)·이미 취소가 끝난 주문은 보내지 않고, 실패했던 취소를 다시 처리할 때는 보낸다. 멱등 키는 `refund-notice:<ROUND_CANCELLED|ADMIN_REFUND|LATE_PAYMENT>:<orderId>`. 안내 실패는 환불·취소 결과를 바꾸지 않는다. 직접 근거: `apps/api/src/notifications/refund-notice.spec.ts`.
+
 세부 생성 규칙은 실제 호출부와 회차 직배송 spec을 함께 확인한다.
 
 ## 5. 내부 논리 코드와 ALIGO `tpl_code`
