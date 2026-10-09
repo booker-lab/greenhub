@@ -195,6 +195,8 @@ legacy 비택배 주문은 취소 시 daily cap을 반환하고, `schemaVersion:
 2. 재확보 성공 → 새 reservation을 consume하며 정상 주문으로 최종화한다.
 3. 재확보 실패 → PortOne 전액 환불 후 `latePaymentRefundedAt`과 `CANCELLED` payment 기록으로 수렴한다.
 
+아직 `PENDING`인 회차 주문의 결제가 `PAID`인데 결제 예약(15분)이 만료 시각을 지난 경우(웹훅 지연·누락, 생성 15분 뒤만 보는 scheduler)에는 그 예약이 아직 `HELD`라면 그대로 소비해 `ACCEPTED`로 확정한다. 해제된 적 없는 `HELD` 예약은 한도를 계속 차지하고 있어 소비해도 한도를 넘지 않는다. 해제 뒤 재확보하면 그 사이 다른 주문이 자리를 가져가 결제 고객이 환불될 수 있어 쓰지 않는다. 결제 확인 없는 일반 consume은 만료 예약을 계속 거부한다.
+
 따라서 “timeout 뒤 webhook은 무조건 무시” 또는 “timeout 주문은 무조건 삭제”는 잘못된 구현 가정이다.
 
 ## 9. 환불
