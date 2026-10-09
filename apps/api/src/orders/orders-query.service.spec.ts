@@ -405,6 +405,51 @@ describe('OrdersQueryService 조회 권한', () => {
   });
 
   it.each([
+    ['PREPARING', false],
+    ['DELIVERING', true],
+    ['DELIVERY_HELD', true],
+  ])('공유 GET의 배정 기사 응답도 기사 전용 조회처럼 %s 단계별로 고객 연락처를 가린다', async (status, phoneVisible) => {
+    const driverRecords: RecordMap = {
+      'users/driver-1': { id: 'driver-1', role: 'driver', driverApproved: true },
+      'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+      'saleRounds/round-valid': { id: 'round-valid', storeId: 'pilot' },
+      'orders/pilot-order': {
+        id: 'pilot-order',
+        storeId: 'pilot',
+        userId: 'consumer-1',
+        schemaVersion: 2,
+        roundId: 'round-valid',
+        deliveryMethod: 'direct',
+        status,
+        driverId: 'driver-1',
+        buyerName: '받는 분',
+        buyerPhone: '010-0000-0001',
+        deliveryPhone: '010-0000-0002',
+        sellerPhone: '02-000-0000',
+        requestNote: '문 앞',
+        deliveryAddress: { address: '서울시 어딘가', addressDetail: '101호' },
+        paymentId: 'payment-secret',
+        totalAmount: 10000,
+        quantity: 1,
+      },
+    };
+    const service = new OrdersQueryService(makeFirestore(driverRecords) as never);
+
+    const result = await service.getOrderById('pilot-order', requester('driver-1', 'driver'));
+
+    expect(result).toMatchObject({ id: 'pilot-order', status, requestNote: '문 앞' });
+    expect(result).not.toHaveProperty('userId');
+    expect(result).not.toHaveProperty('paymentId');
+    expect(result).not.toHaveProperty('totalAmount');
+    expect(result).toHaveProperty('deliveryAddress', { address: '서울시 어딘가' });
+    if (phoneVisible) {
+      expect(result).toHaveProperty('buyerPhone', '010-0000-0002');
+    } else {
+      expect(result).not.toHaveProperty('buyerPhone');
+    }
+  });
+
+  it.each([
     'DELIVERED',
     'REVIEWED',
   ])('%s 단건 상세은 권한 확인 뒤 첫 연결 사진의 15분 서명 URL을 반환한다', async (status) => {
