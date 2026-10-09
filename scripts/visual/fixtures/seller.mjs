@@ -261,6 +261,50 @@ function roundItems(round) {
   }));
 }
 
+// ── 운영 확인 기록(가게 전체 목록·주문 상세) ──
+function operationIssue(id, type, severity, status, orderId, updatedAt) {
+  return {
+    id,
+    storeId: STORE_ID,
+    orderId,
+    paymentId: orderId,
+    type,
+    severity,
+    status,
+    createdAt: updatedAt,
+    updatedAt,
+    resolvedAt: status === 'OPEN' ? null : updatedAt,
+    latestSnapshot: { orderStatus: 'CANCELLED', paymentStatus: 'UNKNOWN' },
+    actions: [],
+  };
+}
+const OPERATION_ISSUES = [
+  operationIssue(
+    'issue-visual-0001',
+    'FINALIZATION_REFUND_FAILED',
+    'critical',
+    'OPEN',
+    'order-with-contact',
+    '2026-10-06T01:10:00.000Z',
+  ),
+  operationIssue(
+    'issue-visual-0002',
+    'CUSTOMER_NOTICE_FAILED',
+    'warning',
+    'OPEN',
+    'order-no-contact',
+    '2026-10-06T02:30:00.000Z',
+  ),
+  operationIssue(
+    'issue-visual-0003',
+    'AUTO_REFUND_FAILED',
+    'warning',
+    'RESOLVED',
+    'order-with-contact',
+    '2026-10-05T09:00:00.000Z',
+  ),
+];
+
 // ── 어드민 기사·배너 ──
 const ADMIN_DRIVERS = [
   {
@@ -444,7 +488,7 @@ export const routes = [
       return o ? { body: o } : { status: 404, body: { message: '주문 없음' } };
     },
   ],
-  ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: [] } })],
+  ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
   [
     'GET',
     /^\/stores\/[^/]+\/settlements\/summary$/,
@@ -583,6 +627,7 @@ export const screens = [
     path: '/orders/order-no-contact',
   },
   { id: 'prep', group: '판매자', title: '준비', path: '/prep' },
+  { id: 'operations', group: '판매자', title: '운영 확인', path: '/operations' },
   { id: 'sale-rounds', group: '판매자', title: '회차 목록', path: '/sale-rounds' },
   {
     id: 'sale-round-open',
