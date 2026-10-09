@@ -13,6 +13,10 @@ const ctaSource = await readFile(
   'utf8',
 );
 const pageSource = await readFile(new URL('../page.tsx', import.meta.url), 'utf8');
+const quickAddSource = await readFile(
+  new URL('../../../../lib/round-quick-add.ts', import.meta.url),
+  'utf8',
+);
 
 test('상품 상세은 검증한 회차 구매 계약을 ProductActions에 전달하고 legacy 호출을 보존한다', () => {
   assert.match(
@@ -57,7 +61,9 @@ test('round_direct는 검증된 회차 장바구니 계약만 저장하고 후�
   assert.match(roundSource, /roundItemId:\s*roundProduct\.item\.id/);
   assert.match(roundSource, /roundPrice:\s*roundProduct\.item\.roundPrice/);
   assert.match(roundSource, /if \(!result\.ok\)/);
-  assert.match(roundSource, /result\.reason === 'different_round'/);
+  // 담기 실패 사유별 문구는 홈 바로 담기와 같은 공통 함수가 소유한다.
+  assert.match(roundSource, /cartAddFailureMessage\(result\.reason\)/);
+  assert.match(quickAddSource, /reason === 'different_round'/);
   assert.doesNotMatch(roundSource, /schemaVersion\s*:/);
   assert.doesNotMatch(roundSource, /acquisition\s*:/);
 });
