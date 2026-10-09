@@ -23,6 +23,9 @@ export function Step5Pricing({ form, set, setGroupConfig }: Step5PricingProps) {
         }
         thousandSeparator=","
         min={0}
+        max={100_000_000}
+        allowDecimal={false}
+        allowNegative={false}
         hideControls
         value={form.price === '' ? '' : Number(form.price)}
         onChange={(val) => set('price', val === '' ? '' : String(val))}
