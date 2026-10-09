@@ -16,6 +16,7 @@ import { FirestoreModule } from './firestore/firestore.module';
 import { HubsModule } from './hubs/hubs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OperationsModule } from './operations/operations.module';
+import { OpsAlertModule } from './ops-alerts/ops-alert.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ProductsModule } from './products/products.module';
@@ -51,6 +52,7 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
       throttlers: [{ name: 'default', ttl: 60000, limit: 100 }],
     }),
     FirestoreModule,
+    OpsAlertModule,
     AuditModule,
     AuthModule,
     ProductsModule,

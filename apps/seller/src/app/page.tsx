@@ -13,6 +13,7 @@ import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
 import { useOrders } from '@/hooks/useOrders';
+import { useStoreOperationIssues } from '@/hooks/useStoreOperationIssues';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { areStoreProductCountsTrustworthy } from '@/hooks/useStoreProducts.recovery';
 
@@ -36,6 +37,7 @@ export default function Home() {
     hasLoaded: summaryHasLoaded,
     retry: retrySummary,
   } = useDashboardSummary();
+  const { openIssues } = useStoreOperationIssues();
   const productsTrustworthy = areStoreProductCountsTrustworthy({
     hasLoaded: productsHasLoaded,
     loading: productsLoading,
@@ -75,6 +77,7 @@ export default function Home() {
             products={products}
             productsError={productsError}
             productsTrustworthy={productsTrustworthy}
+            openIssueCount={openIssues.length}
           />
           <OrderStatusCard groupCounts={groupCounts} />
           <SettlementCard

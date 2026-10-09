@@ -25,6 +25,7 @@ import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartValidationError } from '@/lib/cartValidation';
+import { pickCheckoutPrefill, prefillAddress, prefillPhone } from '@/lib/checkout-prefill';
 import {
   buildPaymentRedirectUrl,
   createPendingOrderPayment,
@@ -426,6 +427,29 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   useEffect(() => {
     setAcquisition(getAcquisitionSnapshot());
   }, []);
+
+  // 계정에 저장된 기본 배송지·전화번호로 빈 칸만 채운다(결제 실패 뒤 다시 들어와도 그대로).
+  const accessToken = session?.user?.accessToken;
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    void fetch(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((profile) => {
+        if (cancelled || !profile) return;
+        const prefill = pickCheckoutPrefill(profile);
+        setAddress((current) => prefillAddress(current, prefill));
+        setDeliveryPhone((current) => prefillPhone(current, prefill));
+      })
+      .catch(() => {
+        // 자동 채움은 편의 기능이라 실패해도 직접 입력으로 진행한다.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
 
   const { state, orderId, error, requestPayment } = usePayment({
     storeId,
