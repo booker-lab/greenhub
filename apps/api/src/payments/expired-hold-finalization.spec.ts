@@ -7,8 +7,8 @@ type Data = Record<string, any>;
 
 // PENDING 회차 주문의 결제가 PortOne에서 PAID인데 결제 예약(15분)이 이미 만료된 경우.
 // 웹훅이 15분 안에 처리되지 못하면 1분 scheduler가 이 상태를 만난다(주문 생성 15분 뒤만
-// 조회하므로 예약은 항상 만료돼 있다). 결제된 주문이 PENDING에 갇히지 않고 기존
-// timeout 뒤 늦은 결제와 같은 규칙(재확보 → ACCEPTED, 한도 없음 → 전액 환불)으로 수렴해야 한다.
+// 조회하므로 예약은 항상 만료돼 있다). 만료됐어도 HELD 예약은 한도를 계속 차지하고 있으므로
+// 같은 예약을 그대로 소비해 ACCEPTED로 확정한다(해제 뒤 재확보하면 그 사이 자리를 잃는다).
 
 function seedBase(
   limits = { maxDeliveryAddresses: 15, maxItemQuantity: 30 },
@@ -120,7 +120,7 @@ function reservationKeys(memory: ReturnType<typeof createInMemoryFirestore>) {
 }
 
 describe('만료된 결제 예약의 PENDING 회차 주문 결제 확정', () => {
-  it('한도가 남아 있으면 만료 예약을 반환하고 새로 확보해 ACCEPTED로 확정한다', async () => {
+  it('만료됐지만 HELD인 예약을 그대로 소비해 ACCEPTED로 확정하고 재시도는 0 move다', async () => {
     const fixture = await setup();
 
     await expect(
@@ -129,11 +129,8 @@ describe('만료된 결제 예약의 PENDING 회차 주문 결제 확정', () =>
 
     const order = fixture.memory.read('orders/order-1');
     expect(order?.status).toBe('ACCEPTED');
-    expect(order?.reservationId).not.toBe(fixture.reservation.id);
+    expect(order?.reservationId).toBe(fixture.reservation.id);
     expect(fixture.memory.read(`checkoutReservations/${fixture.reservation.id}`)?.status).toBe(
-      'EXPIRED',
-    );
-    expect(fixture.memory.read(`checkoutReservations/${order?.reservationId}`)?.status).toBe(
       'CONSUMED',
     );
     expect(fixture.memory.read('saleRounds/round-1')?.counters).toMatchObject({
@@ -154,6 +151,7 @@ describe('만료된 결제 예약의 PENDING 회차 주문 결제 확정', () =>
       'order-1',
     );
     expect(fixture.portone.refund).not.toHaveBeenCalled();
+    expect(reservationKeys(fixture.memory)).toHaveLength(1);
 
     // 같은 결제의 재시도(웹훅 재전송·다음 scheduler)는 0 move로 끝난다.
     await expect(
@@ -164,35 +162,33 @@ describe('만료된 결제 예약의 PENDING 회차 주문 결제 확정', () =>
       orderedDeliveryAddresses: 1,
       orderedItemQuantity: 2,
     });
-    expect(reservationKeys(fixture.memory)).toHaveLength(2);
   });
 
-  it('한도가 다 찼으면 만료 예약을 반환하고 전액 환불로 수렴한다', async () => {
-    const fixture = await setup({ maxDeliveryAddresses: 1, maxItemQuantity: 30 });
-    // 만료 예약이 반환된 뒤 다른 고객이 마지막 배송지를 가져간 상황.
-    const rawRound = fixture.memory.read('saleRounds/round-1')!;
-    fixture.memory.records.set('saleRounds/round-1', {
-      ...rawRound,
-      limits: { maxDeliveryAddresses: 1, maxItemQuantity: 30 },
-      counters: { ...rawRound.counters, orderedDeliveryAddresses: 1, orderedItemQuantity: 1 },
-    });
+  it('만료 예약이 마지막 자리를 차지하고 있어도 그 자리로 확정한다(환불하지 않는다)', async () => {
+    const fixture = await setup({ maxDeliveryAddresses: 1, maxItemQuantity: 2 });
 
     await expect(
       fixture.finalization.finalizePaidOrder('order-1', paymentData),
-    ).resolves.toMatchObject({ ok: false, reason: 'late_payment_refunded' });
-
-    expect(fixture.portone.refund).toHaveBeenCalledTimes(1);
-    expect(fixture.memory.read('orders/order-1')?.status).toBe('CANCELLED');
-    expect(fixture.memory.read(`checkoutReservations/${fixture.reservation.id}`)?.status).toBe(
-      'EXPIRED',
-    );
+    ).resolves.toMatchObject({ ok: true, status: 'ACCEPTED' });
+    expect(fixture.portone.refund).not.toHaveBeenCalled();
     expect(fixture.memory.read('saleRounds/round-1')?.counters).toMatchObject({
       reservedDeliveryAddresses: 0,
-      reservedItemQuantity: 0,
       orderedDeliveryAddresses: 1,
-      orderedItemQuantity: 1,
+      orderedItemQuantity: 2,
     });
-    expect(fixture.notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
+  it('결제 확인이 없는 일반 consume은 여전히 만료 예약을 거부한다', async () => {
+    const fixture = await setup();
+    await expect(
+      fixture.capacity.consumeReservation({
+        reservationId: fixture.reservation.id,
+        orderId: 'order-1',
+      }),
+    ).rejects.toThrow('만료된 결제 예약입니다.');
+    expect(fixture.memory.read(`checkoutReservations/${fixture.reservation.id}`)?.status).toBe(
+      'HELD',
+    );
   });
 
   it('scheduler가 만난 만료 예약 결제도 운영 예외 없이 확정한다', async () => {

@@ -5,7 +5,6 @@ import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import {
-  ExpiredReservationError,
   LatePaymentCapacityError,
   OrderCapacityService,
 } from '../orders/order-capacity.service';
@@ -100,11 +99,7 @@ export class PaymentFinalizationService {
     });
   }
 
-  async finalizePaidOrder(
-    orderId: string,
-    paymentData: PaymentData,
-    options: { expiredHoldConverged?: boolean } = {},
-  ) {
+  async finalizePaidOrder(orderId: string, paymentData: PaymentData) {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!orderSnap.exists) return { ok: false, reason: 'order_not_found' };
     const order = orderSnap.data() as Record<string, any>;
@@ -196,10 +191,14 @@ export class PaymentFinalizationService {
           } else {
             reservationId = freshOrder['reservationId'] as string | undefined;
             if (!reservationId) throw new Error('결제 예약 식별자가 없습니다.');
+            // PortOne이 PAID를 확인했다. 웹훅이 늦거나 빠져 15분 scheduler가 확정하는 경우
+            // 예약은 이미 만료 시각이 지났지만 HELD로 한도를 계속 차지하고 있으므로 그대로
+            // 소비한다(해제 후 재확보하면 그 사이 다른 주문이 자리를 가져가 결제 고객이 환불된다).
             await this.capacity.consumeReservationInTransaction(tx, {
               reservationId,
               orderId,
               paymentId: orderId,
+              allowLapsedHold: true,
             });
           }
         }
@@ -220,15 +219,6 @@ export class PaymentFinalizationService {
         return { kind: 'applied' };
       });
     } catch (error) {
-      if (error instanceof ExpiredReservationError && !options.expiredHoldConverged) {
-        // PAID arrived after the PENDING order's hold lapsed (missed/late
-        // webhook, or the scheduler that only sees orders older than the hold
-        // TTL). Converge exactly like the scheduler-timeout-then-late-payment
-        // race: release the lapsed hold as EXPIRED, then re-run finalization so
-        // the late-payment path reacquires capacity atomically or refunds.
-        await this.cancelPendingOrder(orderId, 'timeout');
-        return this.finalizePaidOrder(orderId, paymentData, { expiredHoldConverged: true });
-      }
       if (error instanceof LatePaymentCapacityError) {
         const refundOutcome = await this.refundWithFinalizationOwnership(
           orderId,
