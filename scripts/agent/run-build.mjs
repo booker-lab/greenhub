@@ -77,10 +77,14 @@ import {
   defaultInvokeOpencode,
   defaultRemoveWorkspace,
   fetchBaseline,
+  findProtectedPaths,
   gitCapture,
   isPathAllowed,
   normalizeRepoPath,
   observeChangedPaths,
+  PROTECTED_BASENAME_PATTERNS,
+  PROTECTED_EXACT_PATHS,
+  PROTECTED_PATH_PREFIXES,
   readLiveRemoteMain,
   resolveOpencodeCommand,
 } from './run-once.mjs';
@@ -446,6 +450,11 @@ function selectorContractLines() {
     '- each task: allow declares at least one path, closes at least one criterion, proof at',
     '  least one command; proof_owner is index-positional with proof when present',
     '- AUTONOMOUSLY_ALLOWED declares at least one path; BUDGET values are non-negative integers',
+    '- protected repository paths must not appear in AUTONOMOUSLY_ALLOWED or task allow, and',
+    '  a task that changes one fails closed: directories',
+    `  ${PROTECTED_PATH_PREFIXES.map((prefix) => `${prefix}/**`).join(', ')}; files`,
+    `  ${PROTECTED_EXACT_PATHS.join(', ')}; any path whose file name matches`,
+    `  ${PROTECTED_BASENAME_PATTERNS.map((pattern) => pattern.source).join(', ')} (case-insensitive)`,
     `- reconciliation is required when satisfied is false and must be one of: ${SELECTOR_RECONCILIATIONS.join(', ')}`,
     '- unknown fields at any level reject the decision (there is no tolerant extra-field mode)',
   ];
@@ -1099,7 +1108,21 @@ function verifyEntrySatisfaction({ entry, repositoryRoot, pin, options, deps, lo
 }
 
 function validateTaskBoundaries({ taskCatalog, autonomouslyAllowed }) {
+  const protectedAllowed = findProtectedPaths(autonomouslyAllowed);
+  if (protectedAllowed.length > 0) {
+    return {
+      ok: false,
+      reason: `AUTONOMOUSLY_ALLOWED names protected repository path(s): ${protectedAllowed.join(', ')}`,
+    };
+  }
   for (const task of taskCatalog) {
+    const protectedAllow = findProtectedPaths(task.allow);
+    if (protectedAllow.length > 0) {
+      return {
+        ok: false,
+        reason: `task ${task.id} allow names protected repository path(s): ${protectedAllow.join(', ')}`,
+      };
+    }
     const declared = [...task.allow, ...task.semantic_owner, ...task.proof_owner.flat()];
     const outside = declared.filter((path) => !isPathAllowed(path, autonomouslyAllowed));
     if (outside.length > 0) {

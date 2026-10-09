@@ -258,6 +258,7 @@ function createFakeGithub({
   allowSquashMerge = true,
   mergeEffect = null,
   onChecks = null,
+  protectionResponse = null,
 } = {}) {
   const calls = [];
   const prs = new Map();
@@ -300,6 +301,7 @@ function createFakeGithub({
       return ok(JSON.stringify({ allow_squash_merge: allowSquashMerge }));
     }
     if (args[0] === 'api' && args[1] === `repos/${repository}/branches/main/protection`) {
+      if (protectionResponse !== null) return protectionResponse({ ok, fail });
       return ok(JSON.stringify({ required_status_checks: { contexts: requiredChecks, strict: true } }));
     }
     if (args[0] === 'pr' && args[1] === 'create') {
@@ -1709,6 +1711,151 @@ test('G ??a rebind whose affected proof fails ends PROOF_FAILED with no PR and n
     assert.equal(existsSync(dirname(result.workspace.path)), false);
     assert.equal(result.canonicalCheckout.unchanged, true);
     assert.equal(fake.invocations.length, 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Branch protection lookup fails closed
+// ---------------------------------------------------------------------------
+
+for (const [label, response] of [
+  ['HTTP 404 (Branch not protected)', ({ fail }) => fail('gh: Branch not protected (HTTP 404)\n')],
+  [
+    'HTTP 403 (insufficient permission)',
+    ({ fail }) => fail('gh: Resource not accessible (HTTP 403)\n'),
+  ],
+  ['a lookup error', ({ fail }) => fail('gh: connection reset\n')],
+  [
+    'a protection record without required checks',
+    ({ ok }) => ok(JSON.stringify({ required_status_checks: { contexts: [], checks: [] } })),
+  ],
+  [
+    'a protection record without a required_status_checks block',
+    ({ ok }) => ok(JSON.stringify({})),
+  ],
+]) {
+  test(`PROTECTION — ${label} blocks publication before any transport, PR, or merge`, () => {
+    const fixture = buildFixture();
+    try {
+      const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+      const github = createFakeGithub({ bare: fixture.bare, protectionResponse: response });
+      const result = runPublishOnce(publishOptions(fixture), {
+        invokeOpencode: fake.invokeOpencode,
+        runGh: github.runGh,
+        log: () => {},
+      });
+
+      assert.equal(result.status, PUBLICATION_BLOCKED);
+      assert.notEqual(result.publication.protection, 'UNPROTECTED');
+      assert.equal(result.publication.requiredChecks, null);
+      assert.match(result.reason, /branch protection|protection returned no JSON/);
+      assert.equal(github.prs.size, 0);
+      assert.equal(github.state.mergeCalls.length, 0);
+      assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+      assert.equal(remoteRefSha(fixture.bare, 'main'), fixture.baseSha);
+    } finally {
+      removeFixture(fixture);
+    }
+  });
+}
+
+test('PROTECTION — required checks declared through the checks array are honoured', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      protectionResponse: ({ ok }) =>
+        ok(
+          JSON.stringify({
+            required_status_checks: { checks: [{ context: 'verify', app_id: 1 }] },
+          }),
+        ),
+    });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS_PUBLISHED);
+    assert.equal(result.publication.protection, 'PROTECTED');
+    assert.deepEqual(result.publication.requiredChecks, ['verify']);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Operator kill switch
+// ---------------------------------------------------------------------------
+
+test('KILL SWITCH — a stop file blocks publication before transport', () => {
+  const fixture = buildFixture();
+  try {
+    writeFileSync(join(fixture.root, '.agent-stop'), '');
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+    });
+
+    assert.equal(result.status, PUBLICATION_BLOCKED);
+    assert.match(result.reason, /kill switch is active before transport/);
+    assert.equal(github.prs.size, 0);
+    assert.equal(github.state.mergeCalls.length, 0);
+    assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+    assert.equal(remoteRefSha(fixture.bare, 'main'), fixture.baseSha);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('KILL SWITCH — GREENHUB_AGENT_STOP blocks publication before transport', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+      env: { ...process.env, GREENHUB_AGENT_STOP: '1' },
+    });
+
+    assert.equal(result.status, PUBLICATION_BLOCKED);
+    assert.match(result.reason, /GREENHUB_AGENT_STOP/);
+    assert.equal(github.prs.size, 0);
+    assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('KILL SWITCH — a stop file created while checks run blocks the merge and retains the PR', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      onChecks: () => writeFileSync(join(fixture.root, '.agent-stop'), ''),
+    });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+    });
+
+    assert.equal(result.status, PUBLICATION_BLOCKED);
+    assert.match(result.reason, /kill switch is active before merge/);
+    assert.equal(github.prs.size, 1);
+    assert.equal(github.state.mergeCalls.length, 0);
+    assert.equal(result.publication.retained, true);
+    assert.equal(remoteRefSha(fixture.bare, 'main'), fixture.baseSha);
   } finally {
     removeFixture(fixture);
   }

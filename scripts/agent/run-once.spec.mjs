@@ -21,20 +21,27 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  AGENT_STOP_ENV,
+  AGENT_STOP_FILE_NAME,
   ALREADY_SATISFIED,
   BOUNDARY_VIOLATION,
   buildChildEnv,
+  buildProofEnv,
   buildOpencodeArgs,
   buildTaskPrompt,
   CLEANUP_FAILED,
   classifyChangedPaths,
   defaultRemoveWorkspace,
+  defaultRunProofCommand,
   EXECUTOR_FAILED,
   extractWindowsShimTarget,
+  findProtectedPaths,
   gitCapture,
   HEADLESS_MODE,
   INVALID_INPUT,
   isPathAllowed,
+  isProtectedPath,
+  observeKillSwitch,
   OPENCODE_ATTACH_URL_ENV,
   PROOF_FAILED,
   parseArgs,
@@ -44,6 +51,7 @@ import {
   resolveOpencodeCommand,
   runOnce,
   SUCCESS,
+  splitProofCommand,
   VISIBLE_TUI_MODE,
 } from './run-once.mjs';
 import {
@@ -1992,6 +2000,290 @@ test('C6 — two independent invocations on one baseline survive caller-side mov
     assert.equal(readFileSync(join(fixture.root, 'foreign-untracked.txt'), 'utf8'), 'foreign\n');
   } finally {
     removeFixture(fixture);
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Protected repository paths
+// ---------------------------------------------------------------------------
+
+test('PROTECTED — protected repository paths are recognised regardless of declaration', () => {
+  for (const path of [
+    '.github/workflows/ci.yml',
+    '.github/CODEOWNERS',
+    '.github',
+    'scripts/agent/run-once.mjs',
+    'scripts/git/publication-transport.mjs',
+    'scripts/verify-deployment-safety.mjs',
+    'firestore.rules',
+    'storage.rules',
+    'firebase.json',
+    'Dockerfile',
+    'apps/api/Dockerfile.prod',
+    '.env',
+    'apps/api/.env.example',
+    'apps/consumer/.env.local',
+    'AGENTS.md',
+    'apps/consumer/AGENTS.md',
+    'CLAUDE.md',
+    'CODEOWNERS',
+    '.codex/hooks.json',
+    'docs/goals/pilot.goal.json',
+    './.GitHub/workflows/x.yml',
+  ]) {
+    assert.equal(isProtectedPath(path), true, `${path} must be protected`);
+  }
+  for (const path of [
+    'src/a.ts',
+    'scripts/probe-auth-runtime.spec.mjs',
+    'scripts/agentic/notes.md',
+    'docs/specs/api/orders.md',
+    'apps/api/src/environment.ts',
+    'docs/AGENTS-guide.md',
+    'scripts',
+  ]) {
+    assert.equal(isProtectedPath(path), false, `${path} must not be protected`);
+  }
+  assert.deepEqual(
+    classifyChangedPaths({
+      changedPaths: ['.github/workflows/ci.yml', 'src/a.ts'],
+      allowedPaths: ['.github', 'src'],
+    }),
+    { withinBoundary: ['src/a.ts'], violations: ['.github/workflows/ci.yml'] },
+  );
+  assert.deepEqual(findProtectedPaths(['src/a.ts', 'AGENTS.md', 'AGENTS.md']), ['AGENTS.md']);
+});
+
+test('PROTECTED — a task that changes a protected path fails closed even when allowed', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({
+      writes: [
+        { path: '.github/workflows/probe.yml', content: 'name: changed\n' },
+        { path: 'src/allowed.txt', content: 'ok\n' },
+      ],
+    });
+    let finalizerCalls = 0;
+    const result = runOnce(
+      runOptions(fixture, {
+        allowedPaths: ['src', '.github/workflows/probe.yml'],
+        proofCommands: ['SHOULD_NOT_RUN'],
+      }),
+      {
+        invokeOpencode: fake.invokeOpencode,
+        runProofCommand: () => {
+          throw new Error('proofs must not run after a protected-path change');
+        },
+        successFinalizer: () => {
+          finalizerCalls += 1;
+        },
+        log: () => {},
+      },
+    );
+
+    assert.equal(result.status, BOUNDARY_VIOLATION);
+    assert.match(result.reason, /protected repository path/);
+    assert.deepEqual(result.boundary.protectedPaths, ['.github/workflows/probe.yml']);
+    assert.deepEqual(result.boundary.violations, ['.github/workflows/probe.yml']);
+    assert.equal(result.proofResults.length, 0);
+    assert.equal(finalizerCalls, 0);
+    assert.equal(result.successHandoff, null);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Proof command environment and execution
+// ---------------------------------------------------------------------------
+
+const OPERATOR_ENV_WITH_CREDENTIALS = Object.freeze({
+  PATH: '/usr/bin',
+  HOME: '/home/operator',
+  LANG: 'ko_KR.UTF-8',
+  LC_ALL: 'C.UTF-8',
+  CI: '1',
+  NODE_OPTIONS: '--max-old-space-size=4096',
+  TMPDIR: '/tmp/operator',
+  PNPM_HOME: '/home/operator/.local/share/pnpm',
+  npm_config_registry: 'https://registry.npmjs.org/',
+  COREPACK_HOME: '/home/operator/.cache/corepack',
+  GH_TOKEN: 'gh-token',
+  GITHUB_TOKEN: 'github-token',
+  FIREBASE_SERVICE_ACCOUNT_JSON: '{"private_key":"x"}',
+  FIREBASE_TOKEN: 'firebase-token',
+  GOOGLE_APPLICATION_CREDENTIALS: '/home/operator/sa.json',
+  PORTONE_API_SECRET: 'portone-secret',
+  JWT_SECRET: 'jwt-secret',
+  OPENAI_API_KEY: 'openai-key',
+  ANTHROPIC_API_KEY: 'anthropic-key',
+  SOME_SERVICE_KEY: 'service-key',
+  VERCEL_TOKEN: 'vercel-token',
+  NPM_TOKEN: 'npm-token',
+  npm_config__authToken: 'npm-auth-token',
+  'npm_config_//registry.npmjs.org/:_authToken': 'npm-registry-token',
+  COREPACK_NPM_TOKEN: 'corepack-token',
+  PNPM_AUTH_TOKEN: 'pnpm-auth-token',
+  HTTPS_PROXY: 'http://user:pass@proxy:8080',
+  GIT_DIR: '/elsewhere/.git',
+  GREENHUB_OPENCODE_ATTACH_URL: 'http://127.0.0.1:4096',
+  SSH_AUTH_SOCK: '/tmp/agent.sock',
+});
+
+test('PROOF ENV — proofs receive only allow-listed, non-credential variables', () => {
+  const env = buildProofEnv(OPERATOR_ENV_WITH_CREDENTIALS);
+  assert.deepEqual(env, {
+    PATH: '/usr/bin',
+    HOME: '/home/operator',
+    LANG: 'ko_KR.UTF-8',
+    LC_ALL: 'C.UTF-8',
+    CI: '1',
+    NODE_OPTIONS: '--max-old-space-size=4096',
+    TMPDIR: '/tmp/operator',
+    PNPM_HOME: '/home/operator/.local/share/pnpm',
+    npm_config_registry: 'https://registry.npmjs.org/',
+    COREPACK_HOME: '/home/operator/.cache/corepack',
+  });
+  assert.deepEqual(buildProofEnv({ Path: 'C:\\Windows', SystemRoot: 'C:\\Windows' }), {
+    Path: 'C:\\Windows',
+    SystemRoot: 'C:\\Windows',
+  });
+});
+
+test('PROOF ENV — simple commands run without a shell; shell syntax keeps the shell', () => {
+  assert.deepEqual(splitProofCommand('node --test scripts/a.spec.mjs', 'linux'), [
+    'node',
+    '--test',
+    'scripts/a.spec.mjs',
+  ]);
+  assert.deepEqual(splitProofCommand('  pnpm   test:agent-build ', 'darwin'), [
+    'pnpm',
+    'test:agent-build',
+  ]);
+  assert.equal(splitProofCommand('node -e "process.exit(0)"', 'linux'), null);
+  assert.equal(splitProofCommand('node a.mjs && node b.mjs', 'linux'), null);
+  assert.equal(splitProofCommand('node a.mjs | tee out', 'linux'), null);
+  assert.equal(splitProofCommand('echo $HOME', 'linux'), null);
+  assert.equal(splitProofCommand('FOO=1 node a.mjs', 'linux'), null);
+  assert.equal(splitProofCommand('node --test a.spec.mjs', 'win32'), null);
+
+  const calls = [];
+  const fakeSpawn = (...args) => {
+    calls.push(args);
+    return { status: 0, signal: null, stdout: 'ok', stderr: '' };
+  };
+  const direct = defaultRunProofCommand({
+    command: 'node --test a.spec.mjs',
+    cwd: '/work',
+    env: OPERATOR_ENV_WITH_CREDENTIALS,
+    timeoutMs: 0,
+    platform: 'linux',
+    spawn: fakeSpawn,
+  });
+  assert.equal(direct.exitCode, 0);
+  assert.equal(calls[0][0], 'node');
+  assert.deepEqual(calls[0][1], ['--test', 'a.spec.mjs']);
+  assert.equal(calls[0][2].shell, false);
+  assert.equal(calls[0][2].env.GH_TOKEN, undefined);
+  assert.equal(calls[0][2].env.PATH, '/usr/bin');
+
+  defaultRunProofCommand({
+    command: 'node -e "process.exit(0)"',
+    cwd: '/work',
+    env: OPERATOR_ENV_WITH_CREDENTIALS,
+    timeoutMs: 0,
+    platform: 'linux',
+    spawn: fakeSpawn,
+  });
+  assert.equal(calls[1][0], 'node -e "process.exit(0)"');
+  assert.equal(calls[1][1].shell, true);
+  assert.equal(calls[1][1].env.FIREBASE_TOKEN, undefined);
+  assert.equal(calls[1][1].env.JWT_SECRET, undefined);
+});
+
+test('PROOF ENV — a real proof process does not observe operator credentials', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'greenhub-run-once-spec-proof-env-'));
+  try {
+    const script = join(scratch, 'print-env.cjs');
+    writeFileSync(script, 'process.stdout.write(JSON.stringify(Object.keys(process.env)));\n');
+    const env = {
+      ...OPERATOR_ENV_WITH_CREDENTIALS,
+      PATH: process.env.PATH ?? '',
+      HOME: scratch,
+    };
+    const commands = [`node ${script}`, `node "${script}"`];
+    for (const command of commands) {
+      const proof = defaultRunProofCommand({ command, cwd: scratch, env, timeoutMs: 30000 });
+      assert.equal(proof.exitCode, 0, proof.stderr);
+      const names = JSON.parse(proof.stdout);
+      for (const secret of [
+        'GH_TOKEN',
+        'GITHUB_TOKEN',
+        'FIREBASE_SERVICE_ACCOUNT_JSON',
+        'FIREBASE_TOKEN',
+        'PORTONE_API_SECRET',
+        'JWT_SECRET',
+        'OPENAI_API_KEY',
+        'SOME_SERVICE_KEY',
+        'HTTPS_PROXY',
+        'GIT_DIR',
+      ]) {
+        assert.equal(names.includes(secret), false, `${secret} reached the proof via ${command}`);
+      }
+      assert.equal(names.includes('CI'), true);
+    }
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('PROOF ENV — runOnce hands proofs the sanitized environment', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const proofEnvs = [];
+    const result = runOnce(runOptions(fixture, { proofCommands: ['node proof-check.cjs'] }), {
+      invokeOpencode: fake.invokeOpencode,
+      runProofCommand: ({ env }) => {
+        proofEnvs.push(env);
+        return { exitCode: 0, signal: null, timedOut: false, stdout: '', stderr: '' };
+      },
+      env: { ...process.env, GH_TOKEN: 'gh-token', FIREBASE_TOKEN: 'firebase-token' },
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS);
+    assert.equal(proofEnvs.length, 1);
+    assert.equal(proofEnvs[0].GH_TOKEN, undefined);
+    assert.equal(proofEnvs[0].FIREBASE_TOKEN, undefined);
+    assert.equal(proofEnvs[0].PATH, process.env.PATH);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Operator kill switch observation
+// ---------------------------------------------------------------------------
+
+test('KILL SWITCH — env flag and stop file are observed; 0 and absence are not', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'greenhub-run-once-spec-kill-switch-'));
+  try {
+    assert.equal(observeKillSwitch({ repositoryRoot: scratch, env: {} }).stop, false);
+    assert.equal(
+      observeKillSwitch({ repositoryRoot: scratch, env: { [AGENT_STOP_ENV]: '0' } }).stop,
+      false,
+    );
+    const flagged = observeKillSwitch({ repositoryRoot: scratch, env: { [AGENT_STOP_ENV]: '1' } });
+    assert.equal(flagged.stop, true);
+    assert.equal(flagged.source, 'ENV');
+    writeFileSync(join(scratch, AGENT_STOP_FILE_NAME), '');
+    const filed = observeKillSwitch({ repositoryRoot: scratch, env: {} });
+    assert.equal(filed.stop, true);
+    assert.equal(filed.source, 'FILE');
+    assert.match(filed.reason, /\.agent-stop/);
+  } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
 });
