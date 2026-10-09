@@ -5,6 +5,7 @@ import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import {
+  ExpiredReservationError,
   LatePaymentCapacityError,
   OrderCapacityService,
 } from '../orders/order-capacity.service';
@@ -99,7 +100,11 @@ export class PaymentFinalizationService {
     });
   }
 
-  async finalizePaidOrder(orderId: string, paymentData: PaymentData) {
+  async finalizePaidOrder(
+    orderId: string,
+    paymentData: PaymentData,
+    options: { expiredHoldConverged?: boolean } = {},
+  ) {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
     if (!orderSnap.exists) return { ok: false, reason: 'order_not_found' };
     const order = orderSnap.data() as Record<string, any>;
@@ -215,6 +220,15 @@ export class PaymentFinalizationService {
         return { kind: 'applied' };
       });
     } catch (error) {
+      if (error instanceof ExpiredReservationError && !options.expiredHoldConverged) {
+        // PAID arrived after the PENDING order's hold lapsed (missed/late
+        // webhook, or the scheduler that only sees orders older than the hold
+        // TTL). Converge exactly like the scheduler-timeout-then-late-payment
+        // race: release the lapsed hold as EXPIRED, then re-run finalization so
+        // the late-payment path reacquires capacity atomically or refunds.
+        await this.cancelPendingOrder(orderId, 'timeout');
+        return this.finalizePaidOrder(orderId, paymentData, { expiredHoldConverged: true });
+      }
       if (error instanceof LatePaymentCapacityError) {
         const refundOutcome = await this.refundWithFinalizationOwnership(
           orderId,

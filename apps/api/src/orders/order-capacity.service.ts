@@ -30,6 +30,15 @@ export class LatePaymentCapacityError extends ConflictException {
   }
 }
 
+// A HELD reservation whose 15-minute hold has lapsed cannot be consumed.
+// Typed so payment finalization can converge a PAID PENDING order through the
+// timeout + late-payment path instead of leaving it stuck in PENDING.
+export class ExpiredReservationError extends ConflictException {
+  constructor(message = '만료된 결제 예약입니다.') {
+    super(message);
+  }
+}
+
 type RoundItemInput = {
   roundItemId: string;
   quantity: number;
@@ -673,7 +682,7 @@ export class OrderCapacityService {
         throw new ConflictException('예약 만료 시각을 확인할 수 없습니다.');
       }
       if (new Date(reservation.expiresAt).getTime() <= clockMillis) {
-        throw new ConflictException('만료된 결제 예약입니다.');
+        throw new ExpiredReservationError();
       }
     }
     const releasingConsumed = reservation.status === 'CONSUMED' && nextStatus === 'RELEASED';
