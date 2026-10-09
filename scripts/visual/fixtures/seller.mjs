@@ -229,12 +229,21 @@ const SALE_ROUNDS = [
     deliveryEndAt: '2026-11-10T00:00:00.000Z',
   }),
 ];
+// 상품별 수량은 회차 counters 합계와 맞춘다(판매 중 11개·결제 중 2개, 마감 27개).
+const ROUND_ITEM_QUANTITIES = {
+  OPEN: { ordered: [4, 5, 2], reserved: [1, 1, 0] },
+  CLOSED: { ordered: [10, 10, 7], reserved: [0, 0, 0] },
+};
 function roundItems(round) {
+  const quantities = ROUND_ITEM_QUANTITIES[round.status] ?? {
+    ordered: [0, 0, 0],
+    reserved: [0, 0, 0],
+  };
   return [
-    ['빅립', 30000, 10, 4],
-    ['만천홍', 25000, 10, 5],
-    ['v3', 45000, 10, 2],
-  ].map(([name, price, limit, ordered], i) => ({
+    ['빅립', 30000, 10],
+    ['만천홍', 25000, 10],
+    ['v3', 45000, 10],
+  ].map(([name, price, limit], i) => ({
     id: `${round.id}-item-${i + 1}`,
     roundId: round.id,
     storeId: STORE_ID,
@@ -243,8 +252,8 @@ function roundItems(round) {
     productImageUrlSnapshot: null,
     roundPrice: price,
     saleLimitQuantity: limit,
-    reservedQuantity: 0,
-    orderedQuantity: round.status === 'OPEN' ? ordered : 0,
+    reservedQuantity: quantities.reserved[i],
+    orderedQuantity: quantities.ordered[i],
     displayOrder: i,
     status: 'ACTIVE',
     createdAt: round.createdAt,
