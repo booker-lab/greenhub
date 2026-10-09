@@ -97,6 +97,21 @@ pnpm load:readiness
 
 build, test, formatter가 생성한 파일은 의도한 소스 변경과 분리해 확인한다. read-only 감사에서 작업 트리가 바뀌면 원인을 먼저 식별하고 임의로 commit하지 않는다.
 
+## 5.1 PR CI (`.github/workflows/ci.yml`)
+
+`main` 대상 PR·push마다 다음을 실행한다. 비밀값과 외부 서비스를 쓰지 않는다.
+
+- Biome lint 오류 0(프런트 3개 앱 `src`, `packages`) — 경고·포맷 부채는 범위 밖
+- 정의되지 않은 CSS 변수 0(`scripts/check-css-vars.mjs`)
+- `tsc --noEmit`: consumer·seller·driver·e2e·shared, API는 `tsconfig.build.json`
+- 단위 테스트: API jest·API 통합(`test:e2e`), seller vitest, driver vitest + node:test, consumer node:test, shared vitest
+- `scripts/**` spec(파일 단위 직렬)
+- Firestore·Storage Rules: `firebase emulators:exec`(`demo-greenhub`, 직렬)
+- `pnpm build`(가짜 공개 설정값으로 Next 빌드)
+- TruffleHog(검증된 비밀값만)
+
+필수 검사(branch protection) 지정은 GitHub 설정 변경이라 별도 승인 대상이다. API ESLint(`API-LINT-BASELINE`)는 기존 오류가 정리된 뒤 추가한다.
+
 ## 5.2 배포 후 점검
 
 `node scripts/release/post-deploy-smoke.mjs [--expect-sha=<sha>]`가 운영 배포 뒤 확인(API `/health`, 세 앱 주요 페이지 200, API CORS, 비로그인 기사·판매자 주문 API 401)을 GET·OPTIONS만으로 한 번에 실행한다. API `/health`는 Railway GitHub 배포의 커밋(`RAILWAY_GIT_COMMIT_SHA`)을 `commit`으로 돌려주므로 `--expect-sha`로 실행 중인 SHA를 확인한다(CLI 업로드 배포는 `null`). 운영 대상 실행도 읽기 전용이지만 배포 절차의 일부로만 실행한다.

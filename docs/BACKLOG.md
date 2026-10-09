@@ -639,7 +639,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] exact Preview(브랜치 없는 배포)는 Vercel의 브랜치 미지정 Preview env를 쓴다. 판매자 앱은 이 env에서 API=스테이징, Firebase=운영(`green-e4fe3`, 운영·Preview·개발 공통 항목)으로 어긋나 Firebase 클라이언트 로그인이 실패한다. 세 앱의 브랜치 미지정 Preview Firebase 설정을 비운영 프로젝트로 분리할지 결정한다.
 
 ### LEGACY-E2E-WORKFLOW-VARS
-- [ ] 일반 E2E `e2e.yml`은 저장소 수준 `vars.ROUND_DIRECT_E2E_*`를 읽지만 값이 `round-direct-e2e` 환경에만 있어 대상 확인 단계에서 매번 실패한다(최근 100회 성공 없음). legacy 판매 재도입 전에 설정 출처를 고치고 legacy 흐름을 새 코드로 검증한다.
+- [ ] (2026-10-09: `sync-preview`의 자동 디스패치를 끄고 수동 실행만 남김) 일반 E2E `e2e.yml`은 저장소 수준 `vars.ROUND_DIRECT_E2E_*`를 읽지만 값이 `round-direct-e2e` 환경에만 있어 대상 확인 단계에서 매번 실패한다(최근 100회 성공 없음). legacy 판매 재도입 전에 설정 출처를 고치고 legacy 흐름을 새 코드로 검증한다.
 
 ### EXACT-PREVIEW-WORKFLOW-CREDENTIALS
 - [ ] `create-exact-preview-deployment.yml`은 앱별 Vercel 토큰(`VERCEL_EXACT_PREVIEW_{CONSUMER,SELLER,DRIVER}_TOKEN`) 미등록으로 성공한 적이 없다. 현재 exact Preview는 로컬 Vercel CLI 권한으로 `preview-exact/<scope>/<sha>` ref를 사용해 만든다. 워크플로 경로로 옮길지 결정한다.

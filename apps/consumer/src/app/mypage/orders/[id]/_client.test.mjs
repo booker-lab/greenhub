@@ -941,7 +941,7 @@ test('review 확인 + 재조회 성공은 done으로 수렴한다', () => {
 test('review 확인 + 재조회 실패는 확정 실패가 되지 않는다', () => {
   assert.match(source, /setReviewOutcome\(\{ kind: 'reconcile-failed' \}\)/);
   assert.match(source, /구매 확정 확인됨 · 상태 재확인 필요/);
-  assert.match(source, /실패가 아니므로 바로 다시 확정하지 말고/);
+  assert.match(source, /확정 실패가\s+아니므로 바로 다시 확정하지 말고/);
   // reconcile-failed 동안 명령 버튼은 중복 확정을 막기 위해 비활성화된다.
   assert.match(source, /showReviewReconcileWarning/);
 });

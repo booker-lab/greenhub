@@ -44,6 +44,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/*.test.mjs"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useHookAtTopLevel": "off"
+          }
+        }
+      }
     }
   ],
   "files": {
