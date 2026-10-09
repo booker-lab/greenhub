@@ -1,0 +1,66 @@
+name: Uptime check
+
+# 운영 API와 세 앱이 살아 있는지 15분마다 확인한다(읽기 전용 GET).
+# 실패하면 저장소 비밀값 OPS_TELEGRAM_BOT_TOKEN·OPS_TELEGRAM_CHAT_ID가 있을 때 텔레그램으로 알리고,
+# 작업 자체도 실패로 남긴다. GitHub 예약 실행은 몇 분 늦을 수 있다.
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check production endpoints
+        id: check
+        shell: bash
+        run: |
+          set -u
+          failures=()
+          probe() {
+            local name="$1" url="$2" code
+            code=$(curl -s -o /tmp/body -w '%{http_code}' --max-time 15 --retry 2 --retry-delay 10 --retry-all-errors "$url" || echo 000)
+            if [ "$code" != "200" ]; then failures+=("$name HTTP $code"); return; fi
+            if [ "$name" = "API /health" ] && ! grep -q '"status":"ok"' /tmp/body; then failures+=("$name 응답 이상"); fi
+          }
+          probe "API /health" "https://api-production-13e7.up.railway.app/health"
+          probe "소비자 홈" "https://greenlove.co.kr/"
+          probe "판매자 로그인" "https://seller.greenlove.co.kr/login"
+          probe "기사 로그인" "https://driver.greenlove.co.kr/login"
+          if [ ${#failures[@]} -gt 0 ]; then
+            printf '%s\n' "${failures[@]}" > /tmp/failures
+            cat /tmp/failures
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "모두 정상"
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Notify Telegram
+        if: steps.check.outputs.failed == 'true'
+        env:
+          BOT_TOKEN: ${{ secrets.OPS_TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.OPS_TELEGRAM_CHAT_ID }}
+        shell: bash
+        run: |
+          if [ -z "${BOT_TOKEN:-}" ] || [ -z "${CHAT_ID:-}" ]; then
+            echo "텔레그램 비밀값이 없어 알림을 건너뜁니다."
+            exit 0
+          fi
+          text=$(printf '🔴 그린러브 · 서비스 응답 이상\n%s\n%s' "$(cat /tmp/failures)" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")
+          curl -s -o /dev/null --max-time 15 -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" --data-urlencode "text=${text}" \
+            --data-urlencode "disable_web_page_preview=true"
+
+      - name: Fail when unhealthy
+        if: steps.check.outputs.failed == 'true'
+        run: exit 1

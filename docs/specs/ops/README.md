@@ -6,6 +6,7 @@
 - `mvp-sales-round-runbook.md` — 회차 직배송 운영 런북
 - `mvp-sales-round-e2e-environment.md` — 지정 SHA 비운영 E2E 격리 계약
 - `preview-auth-url-policy.md` — Preview/Kakao OAuth URL 정책
+- `ops-alerts.md` — 운영자 휴대폰 알림(텔레그램)과 가동 확인
 
 현재 외부 상태와 출시 순서는 `docs/memory.md`와 활성 HANDOFF·PLAN이 우선한다.
 
