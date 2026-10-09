@@ -59,4 +59,6 @@ test('테스트·시각 확인용 쓰기 스크립트는 모두 이 가드를 �
     const source = readFileSync(new URL(`./${script}`, import.meta.url), 'utf8');
     assert.match(source, /assertProductionWriteAllowed\(/, script);
   }
+  const apiCopy = readFileSync(new URL('../apps/api/migrate-storeId.mjs', import.meta.url), 'utf8');
+  assert.match(apiCopy, /assertProductionWriteAllowed\(/, 'apps/api/migrate-storeId.mjs');
 });
