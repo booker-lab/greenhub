@@ -1,29 +1,15 @@
 'use client';
 
-import type {
-  OperationIssueActionType,
-  OperationIssueStatus,
-  OperationIssueType,
-  Order,
-} from '@greenhub/shared';
+import type { OperationIssueActionType, OperationIssueStatus, Order } from '@greenhub/shared';
 import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
-import { getAllowedOperationAction, type OrderOperationIssue } from '../operation-issues';
+import {
+  getAllowedOperationAction,
+  ISSUE_DESCRIPTIONS,
+  ISSUE_LABELS,
+  type OrderOperationIssue,
+} from '../operation-issues';
 import { Row } from './OrderRow';
 
-const ISSUE_LABELS: Record<OperationIssueType, string> = {
-  PAYMENT_LOOKUP_FAILED: '결제 조회 확인',
-  AUTO_REFUND_FAILED: '환불 재시도 필요',
-  CUSTOMER_NOTICE_FAILED: '고객 연락 실패',
-  REDELIVERY_FAILED: '재배송 분쟁 기록',
-  RETENTION_DELETE_FAILED: '보관 파기 확인',
-};
-const ISSUE_DESCRIPTIONS: Record<OperationIssueType, string> = {
-  PAYMENT_LOOKUP_FAILED: '결제 조회 결과를 서버에서 확인 중인 기록입니다.',
-  AUTO_REFUND_FAILED: '자동 환불이 완료되지 않아 서버 재시도가 필요한 기록입니다.',
-  CUSTOMER_NOTICE_FAILED: '알림톡과 문자 대체 발송이 모두 실패한 연락 기록입니다.',
-  REDELIVERY_FAILED: '유료 재배송까지 실패해 자동 환불 판단 없이 남긴 분쟁 기록입니다.',
-  RETENTION_DELETE_FAILED: '보관 객체 파기 실패로 관리자 확인이 필요한 기록입니다.',
-};
 const STATUS_LABELS: Record<OperationIssueStatus, string> = {
   OPEN: '확인 필요',
   RESOLVED: '해결',

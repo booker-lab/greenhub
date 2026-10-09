@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   assertCancellationClaim,
@@ -12,6 +13,12 @@ import {
   type SaleRoundRecord,
 } from '../sale-rounds/sale-round-state.contract';
 import { FirestoreService } from '../firestore/firestore.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import {
+  REFUND_NOTICE_REASONS,
+  type RefundNoticeKind,
+  refundNoticeIdempotencyKey,
+} from '../notifications/refund-notice-reasons';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
 import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
@@ -56,6 +63,7 @@ export class RoundOrderLifecycleService {
     private readonly settlements: SettlementsService,
     private readonly capacity: OrderCapacityService,
     driverScope?: DriverOrderScopeService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {
     this.driverScope = driverScope ?? new DriverOrderScopeService(firestore);
   }
@@ -196,13 +204,54 @@ export class RoundOrderLifecycleService {
     expectedStatus: OrderStatus;
     reason: string;
     cancellationClaim?: SaleRoundCancellationClaim;
+    /** 결제된 주문이면 취소 완료 뒤 고객에게 ORDER_CANCELLED를 보낸다. */
+    customerNotice?: RefundNoticeKind;
   }) {
-    return this.cancel({
+    const before = input.customerNotice
+      ? ((await this.firestore.doc(`orders/${input.orderId}`).get()).data() as
+          | Record<string, any>
+          | undefined)
+      : undefined;
+    const result = await this.cancel({
       storeId: input.storeId,
       orderId: input.orderId,
       reason: input.reason,
       cancellationClaim: input.cancellationClaim,
     });
+    if (input.customerNotice && before && this.wasPaidBeforeCancellation(before)) {
+      await this.sendRefundNotice(before, input.orderId, input.customerNotice);
+    }
+    return result;
+  }
+
+  // 결제 전(PENDING) 주문과 이미 취소가 끝난 주문은 안내하지 않는다.
+  // 실패한 취소를 다시 처리하는 경우는 안내가 안 갔을 수 있어 보내고, 멱등 키로 중복을 막는다.
+  private wasPaidBeforeCancellation(order: Record<string, any>): boolean {
+    if (order['status'] === 'PENDING') return false;
+    if (order['status'] === 'CANCELLED') {
+      const cancellationStatus = order['cancellation']?.['status'];
+      return cancellationStatus != null && cancellationStatus !== 'COMPLETED';
+    }
+    return true;
+  }
+
+  private async sendRefundNotice(
+    order: Record<string, any>,
+    orderId: string,
+    kind: RefundNoticeKind,
+  ) {
+    if (!this.notifications || typeof order['userId'] !== 'string') return;
+    try {
+      await this.notifications.sendToUser(
+        order['userId'],
+        'ORDER_CANCELLED',
+        { orderId, reason: REFUND_NOTICE_REASONS[kind] },
+        orderId,
+        refundNoticeIdempotencyKey(kind, orderId),
+      );
+    } catch {
+      // 안내 실패가 이미 끝난 환불·취소를 되돌리지 않는다. 발송 실패는 알림 서비스가 운영 이슈로 남긴다.
+    }
   }
 
   private async cancel(input: {
