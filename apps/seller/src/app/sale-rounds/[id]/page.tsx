@@ -21,6 +21,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { RoundDeadlineStrip } from '@/components/RoundDeadlineStrip';
+import { RoundPurchaseListCard } from '@/components/RoundPurchaseListCard';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import {
   type CreateSaleRoundInput,
@@ -28,6 +29,7 @@ import {
   useSaleRounds,
 } from '@/hooks/useSaleRounds';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
+import { isPurchaseListRound } from '@/lib/round-purchase-list';
 import {
   buildRoundPageData,
   getRoundAction,
@@ -375,6 +377,7 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
       <Stack gap="md">
         <RoundDeadlineStrip round={round} rounded />
         <RoundSummary round={round} />
+        {isPurchaseListRound(round) && <RoundPurchaseListCard round={round} />}
         {actionSuccess && (
           <Alert color="brand" title="상태 변경 완료" role="status">
             {actionSuccess}
