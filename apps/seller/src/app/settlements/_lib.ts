@@ -47,8 +47,15 @@ export function toKSTISO(value: unknown): string {
   return `${new Date(date.getTime() + KST_OFFSET_MS).toISOString().slice(0, 19)}+09:00`;
 }
 
-export function downloadCSV(items: Settlement[], from: string, to: string) {
-  const header = '주문ID,정산일시,총금액,플랫폼수수료,정산액,상태';
+/** CSV 칸: 쉼표·따옴표·줄바꿈이 있으면 따옴표로 감싸고, 수식으로 해석될 첫 글자는 막는다. */
+export function csvCell(value: unknown): string {
+  let text = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@]/.test(text) && typeof value === 'string') text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+export function buildSettlementCsv(items: Settlement[]): string {
+  const header = ['주문ID', '정산일시', '총금액', '플랫폼수수료', '정산액', '상태', '주문번호'];
   const rows = items.map((s: Settlement) =>
     [
       s.orderId,
@@ -57,10 +64,17 @@ export function downloadCSV(items: Settlement[], from: string, to: string) {
       s.platformFee,
       s.netAmount,
       STATUS_LABEL[s.status as SettlementStatus],
-    ].join(','),
+      s.orderNumber ?? '',
+    ]
+      .map(csvCell)
+      .join(','),
   );
-  const csv = [header, ...rows].join('\n');
-  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
+  return [header.join(','), ...rows].join('\n');
+}
+
+export function downloadCSV(items: Settlement[], from: string, to: string) {
+  const csv = buildSettlementCsv(items);
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

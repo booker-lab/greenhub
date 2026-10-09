@@ -11,7 +11,32 @@ const ISSUE_TYPES = new Set<OperationIssueType>([
   'CUSTOMER_NOTICE_FAILED',
   'REDELIVERY_FAILED',
   'RETENTION_DELETE_FAILED',
+  // 서버가 critical로 남기는 결과 불명확 기록. 목록에서 빠지면 운영자가 볼 수 없다.
+  'FINALIZATION_REFUND_FAILED',
+  'DELIVERY_PHOTO_RECONCILIATION_REQUIRED',
 ]);
+
+export const ISSUE_LABELS: Record<OperationIssueType, string> = {
+  PAYMENT_LOOKUP_FAILED: '결제 조회 확인',
+  AUTO_REFUND_FAILED: '환불 재시도 필요',
+  CUSTOMER_NOTICE_FAILED: '고객 연락 실패',
+  REDELIVERY_FAILED: '재배송 분쟁 기록',
+  RETENTION_DELETE_FAILED: '보관 파기 확인',
+  FINALIZATION_REFUND_FAILED: '환불 결과 확인',
+  DELIVERY_PHOTO_RECONCILIATION_REQUIRED: '배송 사진 확인',
+};
+
+export const ISSUE_DESCRIPTIONS: Record<OperationIssueType, string> = {
+  PAYMENT_LOOKUP_FAILED: '결제 조회 결과를 서버에서 확인 중인 기록입니다.',
+  AUTO_REFUND_FAILED: '자동 환불이 완료되지 않아 서버 재시도가 필요한 기록입니다.',
+  CUSTOMER_NOTICE_FAILED: '알림톡과 문자 대체 발송이 모두 실패한 연락 기록입니다.',
+  REDELIVERY_FAILED: '유료 재배송까지 실패해 자동 환불 판단 없이 남긴 분쟁 기록입니다.',
+  RETENTION_DELETE_FAILED: '보관 객체 파기 실패로 관리자 확인이 필요한 기록입니다.',
+  FINALIZATION_REFUND_FAILED:
+    '결제 확정 중 환불 요청 결과를 확정하지 못했습니다. 재시도하지 말고 PortOne 콘솔에서 환불 여부를 확인하세요.',
+  DELIVERY_PHOTO_RECONCILIATION_REQUIRED:
+    '배송 사진 저장 결과를 자동으로 확정하지 못했습니다. 사진과 주문 배송 상태를 확인하세요.',
+};
 const ISSUE_STATUSES = new Set<OperationIssueStatus>(['OPEN', 'RESOLVED', 'DISMISSED']);
 const ISSUE_SEVERITIES = new Set<OperationIssueSeverity>(['info', 'warning', 'critical']);
 const ACTION_TYPES = new Set<OperationIssueActionType>(['RETRY_REFUND', 'RESEND_SMS']);
@@ -202,6 +227,32 @@ export function readOperationIssueList(
       if (left.status !== 'OPEN' && right.status === 'OPEN') return 1;
       return right.updatedAt.localeCompare(left.updatedAt);
     });
+}
+
+function compareIssues(left: OrderOperationIssue, right: OrderOperationIssue) {
+  if (left.status === 'OPEN' && right.status !== 'OPEN') return -1;
+  if (left.status !== 'OPEN' && right.status === 'OPEN') return 1;
+  if (left.status === 'OPEN' && left.severity !== right.severity) {
+    if (left.severity === 'critical') return -1;
+    if (right.severity === 'critical') return 1;
+  }
+  return right.updatedAt.localeCompare(left.updatedAt);
+}
+
+/** 가게 전체 운영 기록: 열린 기록 → critical 우선 → 최근 순. 다른 가게 기록은 버린다. */
+export function readStoreOperationIssueList(
+  value: unknown,
+  expectedStoreId: string,
+): OrderOperationIssue[] {
+  if (!isRecord(value) || !Array.isArray(value.items)) {
+    throw new Error('운영 기록 응답을 확인할 수 없습니다.');
+  }
+  return value.items
+    .map(readOperationIssue)
+    .filter(
+      (issue): issue is OrderOperationIssue => issue !== null && issue.storeId === expectedStoreId,
+    )
+    .sort(compareIssues);
 }
 
 export function getAllowedOperationAction(

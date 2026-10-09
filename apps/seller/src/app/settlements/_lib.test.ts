@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toDateStr, toKSTISO } from './_lib';
+import { buildSettlementCsv, csvCell, toDateStr, toKSTISO } from './_lib';
 
 // 오전/오후 표기는 ICU 버전에 따라 달라질 수 있어 월·일과 시:분 숫자만 검증한다.
 // 포매터가 timeZone을 고정하므로 실행 환경 시간대와 무관하다.
@@ -45,5 +45,44 @@ describe('toKSTISO (CSV 정산일시)', () => {
     expect(toKSTISO(seconds)).toBe('2026-09-28T00:00:00+09:00');
     expect(toKSTISO({ _seconds: seconds })).toBe('2026-09-28T00:00:00+09:00');
     expect(toKSTISO('bad')).toBe('');
+  });
+});
+
+describe('정산 CSV', () => {
+  it('주문번호를 마지막 칸에 싣고 기존 칸 순서는 유지한다', () => {
+    const csv = buildSettlementCsv([
+      {
+        id: 'o1',
+        orderId: 'o1',
+        orderNumber: '20261110-000001',
+        totalAmount: 30000,
+        platformFee: 1500,
+        netAmount: 28500,
+        status: 'pending',
+        settledAt: '2026-09-27T15:00:00.000Z',
+      },
+      {
+        id: 'o2',
+        orderId: 'o2',
+        totalAmount: 25000,
+        platformFee: 1250,
+        netAmount: 23750,
+        status: 'confirmed',
+        settledAt: '2026-09-27T15:00:00.000Z',
+      },
+    ]);
+    const [header, first, second] = csv.split('\n');
+    expect(header).toBe('주문ID,정산일시,총금액,플랫폼수수료,정산액,상태,주문번호');
+    expect(first.startsWith('o1,2026-09-28T00:00:00+09:00,30000,1500,28500,')).toBe(true);
+    expect(first.endsWith(',20261110-000001')).toBe(true);
+    expect(second.endsWith(',')).toBe(true);
+  });
+
+  it('쉼표·따옴표는 감싸고 수식 시작 문자는 무력화한다', () => {
+    expect(csvCell('a,b')).toBe('"a,b"');
+    expect(csvCell('say "hi"')).toBe('"say ""hi"""');
+    expect(csvCell('=SUM(A1)')).toBe("'=SUM(A1)");
+    expect(csvCell(-1500)).toBe('-1500');
+    expect(csvCell(null)).toBe('');
   });
 });

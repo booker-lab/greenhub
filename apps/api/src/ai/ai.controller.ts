@@ -4,10 +4,14 @@ import { GuardrailValidatorService } from './guardrail-validator.service';
 import { VarietiesService } from '../varieties/varieties.service';
 import { GenerateContentDto } from './dto/generate-content.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import type { Selection, Variety } from '@greenhub/shared';
 
+// 상품 설명 생성은 판매자 상품 등록 화면만 쓴다. 유료 Gemini 호출이라 소비자·기사 토큰으로는 막는다.
 @Controller('ai')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('seller', 'admin')
 export class AiController {
   constructor(
     private readonly aiService: AiService,
