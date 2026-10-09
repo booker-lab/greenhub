@@ -102,6 +102,7 @@ build, test, formatter가 생성한 파일은 의도한 소스 변경과 분리�
 `main` 대상 PR·push마다 다음을 실행한다. 비밀값과 외부 서비스를 쓰지 않는다.
 
 - Biome lint 오류 0(프런트 3개 앱 `src`, `packages`) — 경고·포맷 부채는 범위 밖
+- 정의되지 않은 CSS 변수 0(`scripts/check-css-vars.mjs`)
 - `tsc --noEmit`: consumer·seller·driver·e2e·shared, API는 `tsconfig.build.json`
 - 단위 테스트: API jest·API 통합(`test:e2e`), seller vitest, driver vitest + node:test, consumer node:test, shared vitest
 - `scripts/**` spec(파일 단위 직렬)
