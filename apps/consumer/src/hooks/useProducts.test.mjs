@@ -117,11 +117,14 @@ function mountHook({ fetchImpl, initialArgs = [] }) {
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => API_BASE_URL };
     }
-    if (specifier === 'firebase/firestore') {
-      return { doc: () => ({}), getDoc: async () => ({ exists: () => false, data: () => ({}) }) };
-    }
-    if (specifier === '@/lib/firebase') {
-      return { db: {} };
+    if (specifier === '@/lib/public-store-profile') {
+      // useProducts 목록 조회는 스토어 프로필을 읽지 않는다. 호출되면 계약 위반이다.
+      return {
+        PublicStoreProfileNotFoundError: class PublicStoreProfileNotFoundError extends Error {},
+        fetchPublicStoreProfile: async () => {
+          throw new Error('useProducts 목록 조회가 스토어 프로필을 요청했습니다.');
+        },
+      };
     }
     if (specifier === '@greenhub/shared') return {};
     throw new Error(`예상하지 못한 상품 조회 모듈 요청: ${specifier}`);
