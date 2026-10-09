@@ -111,6 +111,10 @@ build, test, formatter가 생성한 파일은 의도한 소스 변경과 분리�
 
 필수 검사(branch protection) 지정은 GitHub 설정 변경이라 별도 승인 대상이다. API ESLint(`API-LINT-BASELINE`)는 기존 오류가 정리된 뒤 추가한다.
 
+## 5.2 배포 후 점검
+
+`node scripts/release/post-deploy-smoke.mjs [--expect-sha=<sha>]`가 운영 배포 뒤 확인(API `/health`, 세 앱 주요 페이지 200, API CORS, 비로그인 기사·판매자 주문 API 401)을 GET·OPTIONS만으로 한 번에 실행한다. API `/health`는 Railway GitHub 배포의 커밋(`RAILWAY_GIT_COMMIT_SHA`)을 `commit`으로 돌려주므로 `--expect-sha`로 실행 중인 SHA를 확인한다(CLI 업로드 배포는 `null`). 운영 대상 실행도 읽기 전용이지만 배포 절차의 일부로만 실행한다.
+
 ## 6. E2E
 
 일반 E2E와 회차 출시 E2E를 구분한다.
