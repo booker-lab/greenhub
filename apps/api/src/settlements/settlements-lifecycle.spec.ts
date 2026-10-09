@@ -479,6 +479,30 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
       expect(firestore.transactionUpdates).toHaveLength(0);
     });
 
+    it('한 건의 confirm 트랜잭션이 실패해도 나머지는 확정하고 실패 건은 pending으로 남긴다', async () => {
+      const { firestore, service } = makeSettlementsService({
+        SETTLEMENT_CONFIRM_DELAY_DAYS: '1',
+      });
+      for (const orderId of ['order-batch-1', 'order-batch-2']) {
+        firestore.seed(
+          `settlements/${orderId}`,
+          makeSettlement(orderId, 'pending', {
+            settledAt: new Date('2026-08-25T00:00:00.000Z'),
+          }),
+        );
+      }
+      firestore.runTransaction.mockImplementationOnce(() =>
+        Promise.reject(new Error('transaction contention')),
+      );
+
+      await expect(withFixedClock(() => service.confirmDueSettlements())).resolves.toBeUndefined();
+
+      const statuses = ['order-batch-1', 'order-batch-2']
+        .map((orderId) => firestore.getData(`settlements/${orderId}`)?.['status'])
+        .sort();
+      expect(statuses).toEqual(['confirmed', 'pending']);
+    });
+
     it('query 결과가 stale여도 transaction의 fresh status가 우선된다', async () => {
       const { firestore, service } = makeSettlementsService({
         SETTLEMENT_CONFIRM_DELAY_DAYS: '1',

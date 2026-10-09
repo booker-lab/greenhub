@@ -171,7 +171,7 @@ function readRoundSummary(
   return payload as unknown as SaleRound;
 }
 
-function readRoundDetail(
+export function readRoundDetail(
   payload: unknown,
   expectedStoreId: string,
   expectedRoundId?: string,
