@@ -145,6 +145,7 @@ export class SaleRoundStateService {
           expectedStatus: order.data().status,
           reason: input.reason,
           cancellationClaim: claim,
+          customerNotice: 'ROUND_CANCELLED',
         });
         await this.assertCancellationLease(input.storeId, input.roundId, claim);
       }
