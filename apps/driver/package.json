@@ -7,7 +7,8 @@
     "prebuild": "node ../../scripts/copy-fonts.cjs",
     "build": "next build --webpack",
     "start": "next start",
-    "test": "vitest run",
+    "test": "vitest run && pnpm run test:node",
+    "test:node": "node --test 'src/**/*.test.mjs'",
     "lint": "biome lint src",
     "format": "biome format src --write"
   },
