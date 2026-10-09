@@ -7,7 +7,7 @@ const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
 test('공개 상품의 storeId와 공개 스토어 salesMode로 공동구매 진입을 분기한다', () => {
   assert.match(source, /useProducts\(\)/);
   assert.match(source, /product\.storeId/);
-  assert.match(source, /getDoc\(doc\(db, 'stores', storeId\)\)/);
+  assert.match(source, /fetchPublicStoreProfile\(storeId\)/);
   assert.match(source, /normalizeSalesMode/);
 });
 

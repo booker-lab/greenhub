@@ -471,6 +471,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       // 409 convergence return, readback 분기 return, throw 모두 여기를 거친다.
       // 이전 command의 finally가 새 scope의 command/loading 상태를 덮지 않도록
       // 동일 generation + 동일 scope일 때만 해제한다.
+      // biome-ignore lint/correctness/noUnsafeFinally: 지난 명령의 오류는 새 화면 상태로 올리지 않고 여기서 끝낸다.
       if (!isCommandCurrent()) return;
       inFlightRef.current = false;
       setLoading(false);

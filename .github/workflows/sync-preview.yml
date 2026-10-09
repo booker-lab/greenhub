@@ -23,11 +23,10 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # preview push(contents)와 e2e dispatch(actions)에만 쓰기 권한을 둔다.
+    # preview push(contents)에만 쓰기 권한을 둔다.
     # 저장소 스크립트를 실행하는 진단은 아래 읽기 전용 job으로 분리한다.
     permissions:
       contents: write
-      actions: write
     outputs:
       preview_sha: ${{ steps.merge.outputs.preview_sha }}
 
@@ -47,13 +46,10 @@ jobs:
           git push origin preview
           printf 'preview_sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      # GITHUB_TOKEN 으로 만든 push 는 다른 워크플로(e2e.yml 의 push 트리거)를
-      # 재귀 방지 정책상 발화시키지 않는다. workflow_dispatch 는 발화하므로
-      # 동기화 직후 e2e 를 명시적으로 디스패치한다.
-      - name: Trigger E2E workflow on preview
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run e2e.yml --ref preview
+      # 일반 E2E(e2e.yml)는 더 이상 자동으로 디스패치하지 않는다. 회차 직배송 판매 모드에서는
+      # 쓰지 않는 legacy 흐름이고, 설정 출처 문제(BACKLOG LEGACY-E2E-WORKFLOW-VARS)로 최근 100회
+      # 성공이 없어 실패 알림만 반복했다. 필요하면 Actions에서 수동(workflow_dispatch)으로 실행한다.
+      # 출시 검증은 e2e-round-direct.yml이 소유한다.
 
   # 이 자동 동기화 경로에는 workflow_dispatch로 고정한 deployment ID가 없다.
   # 따라서 GitHub commit status는 진단 정보로만 남기고 canonical acceptance에는
