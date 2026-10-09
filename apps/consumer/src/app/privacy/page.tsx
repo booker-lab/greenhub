@@ -30,7 +30,7 @@ const listStyle = {
 const cardStyle = {
   background: 'var(--color-surface-muted)',
   border: 'var(--border)',
-  borderRadius: 'var(--radius-md)',
+  borderRadius: 'var(--radius-sm)',
   marginTop: 12,
   padding: 16,
 } as const;
