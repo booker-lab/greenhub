@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { FirestoreService } from '../firestore/firestore.service';
 import { StorageService } from '../firestore/storage.service';
@@ -109,6 +109,8 @@ function addUtcYears(value: Date, years: number): Date {
 
 @Injectable()
 export class RetentionService {
+  private readonly retentionLogger = new Logger(RetentionService.name);
+
   constructor(
     private readonly firestore: FirestoreService,
     @Inject(StorageService)
@@ -206,7 +208,17 @@ export class RetentionService {
 
   @Cron('0 3 * * *', { timeZone: 'Asia/Seoul' })
   async runScheduledPurge(): Promise<RetentionMetadata> {
-    return this.purgeExpiredRecords({ now: new Date() });
+    try {
+      const result = await this.purgeExpiredRecords({ now: new Date() });
+      // 무엇을 몇 건 지웠는지 남긴다(문서 내용·경로는 남기지 않는다).
+      this.retentionLogger.log(`[RetentionScheduler] ${JSON.stringify(result)}`);
+      return result;
+    } catch (error) {
+      this.retentionLogger.error(
+        `[RetentionScheduler] 보관 기한 삭제 실패: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
   }
 
   private canPurge(data: RetentionMetadata): boolean {
