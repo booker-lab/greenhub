@@ -8,6 +8,13 @@ const TERMINAL_STATUSES = new Set(['CANCELLED', 'DELIVERED', 'REVIEWED']);
 // NOTE: Firebase SDK의 onSnapshot은 PWA Service Worker와 충돌하여 동작 불가.
 // Firestore REST API 대신 Railway API 폴링 방식으로 대체. 설계 결정: docs/CRITICAL_LOGIC.md [2026-03-27] 참조
 
+/** 탭이 숨겨져 있으면 주문 상태 폴링을 쉰다(다시 보이면 바로 조회하고 이어 간다). */
+export function isDocumentHidden(
+  doc: { visibilityState?: string } | undefined = globalThis.document,
+): boolean {
+  return doc?.visibilityState === 'hidden';
+}
+
 export type OrderDetailReadStatus = 'loading' | 'found' | 'not-found' | 'auth' | 'network' | 'server';
 
 export function classifyOrderDetailFetchFailure(input: {
@@ -68,6 +75,18 @@ export function useOrderStatus(
     let requestSequence = 0;
     let activeController: AbortController | null = null;
     let interval: ReturnType<typeof setInterval> | null = null;
+    // 404·auth·종료 상태로 폴링을 끝냈으면 탭이 다시 보여도 재개하지 않는다.
+    let pollingFinished = false;
+
+    function stopPolling() {
+      if (interval) clearInterval(interval);
+      interval = null;
+    }
+
+    function finishPolling() {
+      pollingFinished = true;
+      stopPolling();
+    }
 
     async function fetchOrder(): Promise<Order | null | undefined> {
       const sequence = ++requestSequence;
@@ -89,7 +108,7 @@ export function useOrderStatus(
           setLoading(false);
           setError(null);
           setStatus('not-found');
-          if (interval) clearInterval(interval);
+          finishPolling();
           return null;
         }
         if (!res.ok) {
@@ -100,7 +119,7 @@ export function useOrderStatus(
           const message = getOrderDetailReadErrorMessage(failure);
           if (failure === 'auth') {
             setOrder(null);
-            if (interval) clearInterval(interval);
+            finishPolling();
           }
           setError(message);
           setLoading(false);
@@ -116,7 +135,7 @@ export function useOrderStatus(
         setError(null);
         setStatus('found');
         // 종료 상태 도달 시 폴링 중단
-        if (TERMINAL_STATUSES.has(latestOrder.status) && interval) clearInterval(interval);
+        if (TERMINAL_STATUSES.has(latestOrder.status)) finishPolling();
         return latestOrder;
       } catch (e: unknown) {
         if (
@@ -137,15 +156,33 @@ export function useOrderStatus(
       }
     }
 
+    function startPolling() {
+      if (interval || pollingFinished || isDocumentHidden()) return;
+      interval = setInterval(() => void fetchOrder(), 3000);
+    }
+
+    // 숨김 탭에서는 폴링을 멈춘다. 다시 보이면 최신 상태를 바로 조회하고 폴링을 이어 간다.
+    function handleVisibilityChange() {
+      if (isDocumentHidden()) {
+        stopPolling();
+        return;
+      }
+      if (pollingFinished || interval) return;
+      void fetchOrder();
+      startPolling();
+    }
+
     fetchOrderRef.current = fetchOrder;
-    interval = setInterval(() => void fetchOrder(), 3000);
+    globalThis.document?.addEventListener('visibilitychange', handleVisibilityChange);
+    startPolling();
     void fetchOrder();
     return () => {
       cancelled = true;
       requestSequence += 1;
       activeController?.abort();
       if (fetchOrderRef.current === fetchOrder) fetchOrderRef.current = null;
-      if (interval) clearInterval(interval);
+      globalThis.document?.removeEventListener('visibilitychange', handleVisibilityChange);
+      stopPolling();
     };
   }, [orderId, accessToken]);
 
