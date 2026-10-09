@@ -22,9 +22,10 @@ import { PageShell } from '@/components/PageShell';
 import { RoundPurchaseListCard } from '@/components/RoundPurchaseListCard';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useOrders } from '@/hooks/useOrders';
-import { type SellerSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
+import { readRoundDetail, type SellerSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { resolveStoreProductsView } from '@/hooks/useStoreProducts.recovery';
+import { apiJson } from '@/lib/api';
 import { aggregatePrep, type PrepLine } from '@/lib/prep';
 import { isPurchaseListRound } from '@/lib/round-purchase-list';
 
@@ -66,9 +67,13 @@ function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accen
   );
 }
 
-// 판매 중·주문 마감 회차의 구매 목록. 회차 상세를 하나씩 순서대로 읽는다(회차 작업은 동시에 하나만).
+// 판매 중·주문 마감 회차의 구매 목록. 회차 상세를 직접 읽는다(회차 작업 잠금을 쓰지 않아
+// 토큰 갱신으로 다시 읽을 때도 이전 읽기와 부딪히지 않는다).
 function RoundPurchaseSection() {
-  const { rounds, loading, getRound } = useSaleRounds();
+  const { data: session } = useSession();
+  const storeId = session?.user.storeId ?? null;
+  const token = session?.user.accessToken ?? null;
+  const { rounds, loading } = useSaleRounds();
   const [details, setDetails] = useState<SellerSaleRound[]>([]);
   const [failed, setFailed] = useState(false);
   const activeIds = useMemo(
@@ -78,27 +83,32 @@ function RoundPurchaseSection() {
   const activeKey = activeIds.join(',');
 
   useEffect(() => {
+    if (!storeId || !token) return;
     let cancelled = false;
     const ids = activeKey ? activeKey.split(',') : [];
     void (async () => {
-      const loaded: SellerSaleRound[] = [];
-      let readFailed = false;
-      for (const id of ids) {
-        try {
-          loaded.push(await getRound(id));
-        } catch {
-          readFailed = true;
-        }
-      }
-      if (!cancelled) {
-        setDetails(loaded);
-        setFailed(readFailed);
-      }
+      const results = await Promise.allSettled(
+        ids.map(async (id) =>
+          readRoundDetail(
+            await apiJson(
+              `/stores/${encodeURIComponent(storeId)}/sale-rounds/${encodeURIComponent(id)}`,
+              token,
+            ),
+            storeId,
+            id,
+          ),
+        ),
+      );
+      if (cancelled) return;
+      setDetails(
+        results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : [])),
+      );
+      setFailed(results.some((result) => result.status === 'rejected'));
     })();
     return () => {
       cancelled = true;
     };
-  }, [activeKey, getRound]);
+  }, [activeKey, storeId, token]);
 
   if (loading || (activeIds.length === 0 && !failed)) return null;
 
