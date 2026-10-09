@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
+import { OpsAlertService } from '../ops-alerts/ops-alert.service';
 import { PaymentsService } from '../payments/payments.service';
 import { AligoClient, normalizeAligoRecipientPhone, type ProviderOutcome } from './aligo.client';
 import type { ApiNotificationTemplateCode } from './notification-templates';
@@ -72,6 +73,20 @@ function notificationDeliveryLeaseExpiryMillis(
   return Number.NaN;
 }
 
+// 알리고 계정 수준 오류(모든 발송이 막힘)와 운영자가 할 일.
+const ALIGO_ACCOUNT_FAILURE_GUIDE: Record<string, { title: string; action: string }> = {
+  INSUFFICIENT_BALANCE: { title: '알리고 잔액 부족', action: '알리고 관리자에서 충전하세요.' },
+  UNAUTHORIZED_IP: {
+    title: '알리고 허용 IP 아님',
+    action: '서버 송신 IP(Fixie 프록시)가 알리고 허용 IP에 등록돼 있는지 확인하세요.',
+  },
+  AUTH_FAILED: { title: '알리고 인증 실패', action: 'ALIGO API 키·사용자 ID 설정을 확인하세요.' },
+  SENDER_NOT_REGISTERED: {
+    title: '발신번호 미등록',
+    action: 'ALIGO_SENDER_PHONE이 알리고에 승인된 발신번호인지 확인하세요.',
+  },
+};
+
 @Injectable()
 export class NotificationsService {
   constructor(
@@ -83,6 +98,7 @@ export class NotificationsService {
     private readonly payments: PaymentsService,
     @Inject(OperationIssueWriterService)
     private readonly issueWriter: OperationIssueWriterService,
+    @Optional() private readonly opsAlerts?: OpsAlertService,
   ) {}
 
   async getUserNotifications(userId: string) {
@@ -240,6 +256,7 @@ export class NotificationsService {
         return;
       }
 
+      await this.alertAccountLevelFailure(classification.permanentErrorReason);
       if (orderId) {
         await this.createCustomerNoticeFailedIssue(orderId, templateCode, notificationId);
       }
@@ -910,6 +927,20 @@ export class NotificationsService {
 
   private notificationDeliveryId(idempotencyKey: string): string {
     return createHash('sha256').update(idempotencyKey).digest('hex');
+  }
+
+  // 알리고 계정 문제는 모든 고객 알림을 막으므로 주문 단위 기록과 별도로 바로 알린다.
+  private async alertAccountLevelFailure(reason: string | null | undefined) {
+    if (!reason || !this.opsAlerts?.enabled) return;
+    const guide = ALIGO_ACCOUNT_FAILURE_GUIDE[reason];
+    if (!guide) return;
+    await this.opsAlerts.send({
+      level: 'critical',
+      title: `알림톡 발송 막힘: ${guide.title}`,
+      lines: [guide.action, '고객 알림이 모두 실패하고 있을 수 있습니다.'],
+      dedupeKey: `aligo-account:${reason}`,
+      dedupeWindowMs: 60 * 60_000,
+    });
   }
 
   private async createCustomerNoticeFailedIssue(
