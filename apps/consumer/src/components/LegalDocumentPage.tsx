@@ -13,7 +13,7 @@ const linkStyle = {
   alignItems: 'center',
   color: 'var(--color-primary-dark)',
   display: 'inline-flex',
-  fontWeight: 'var(--fw-semibold)',
+  fontWeight: 'var(--fw-bold)',
   minHeight: 'var(--touch-target)',
   textDecoration: 'underline',
   textUnderlineOffset: 3,
@@ -55,7 +55,7 @@ export default function LegalDocumentPage({
             style={{
               color: 'var(--color-primary-dark)',
               fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--fw-semibold)',
+              fontWeight: 'var(--fw-bold)',
               margin: '0 0 8px',
             }}
           >
