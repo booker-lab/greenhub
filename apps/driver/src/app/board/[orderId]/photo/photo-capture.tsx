@@ -448,7 +448,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
           order={1}
           style={{
             color: 'var(--color-bg)',
-            fontSize: 'var(--font-size-base)',
+            fontSize: 'var(--font-size-md)',
             fontWeight: 'var(--fw-bold)',
           }}
         >
