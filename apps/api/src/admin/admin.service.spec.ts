@@ -300,6 +300,7 @@ describe('AdminService 강제 환불 수렴', () => {
       orderId: 'order-1',
       expectedStatus: 'ACCEPTED',
       reason: '관리자 사유',
+      customerNotice: 'ADMIN_REFUND',
     });
     expect(fixture.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(1);
