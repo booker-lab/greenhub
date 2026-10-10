@@ -135,6 +135,21 @@ export class RoundOrderLifecycleService {
           requesterRole: input.requesterRole,
         });
       }
+      // 재배송비 결제를 기다리는 보류는 PREPARING으로 돌아와도 보류 집계에 남고, 결제는 그 보류의
+      // heldAt에 연결돼 있다. 다시 보류하면 집계가 두 번 늘고 새 heldAt이 결제 연결을 끊으므로
+      // 결제로 재개하거나 취소할 때까지 거절한다.
+      if (
+        input.dto.status === 'DELIVERY_HELD' &&
+        order['status'] === 'PREPARING' &&
+        isCurrentRedeliveryPaymentRequired(order)
+      ) {
+        const message =
+          '재배송비 결제를 기다리는 주문은 다시 배송 보류할 수 없습니다. 결제를 기다리거나 주문을 취소해 주세요.';
+        if (input.requesterRole === 'driver') {
+          throwDriverOrderStateConflict(message, true);
+        }
+        throw new ConflictException(message);
+      }
       if (
         input.dto.status === 'DELIVERED' &&
         order['deliveryMethod'] === 'direct' &&
