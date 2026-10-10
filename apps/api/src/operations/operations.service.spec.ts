@@ -105,9 +105,18 @@ function makeService(initial: Record<string, Data> = {}) {
       }
     }
   };
+  // 실제 재배송비 환불 경로처럼 주문의 PAID charge를 REFUNDED로 바꾼다.
+  const markChargesRefunded = (orderId: string) => {
+    for (const [path, data] of store.records) {
+      if (path.startsWith('orderCharges/') && data['orderId'] === orderId) {
+        store.records.set(path, { ...data, status: 'REFUNDED', refundedAt: 'refunded-at' });
+      }
+    }
+  };
   const payments = {
     requeryPayment: jest.fn().mockResolvedValue({ status: 'PAID' }),
     processRefundByOrderId: jest.fn(async (orderId: string) => markRefunded(orderId)),
+    refundOrderChargesByOrderId: jest.fn(async (orderId: string) => markChargesRefunded(orderId)),
   };
   const notifications = {
     resendSms: jest.fn().mockResolvedValue({ success: true }),
@@ -561,6 +570,77 @@ describe('환불 재시도는 실제 환불을 확인했을 때만 해결한다'
     expect(payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(records.get('operationIssues/issue-1')).toEqual(afterFirst);
     expect(afterFirst?.['actions']).toEqual([expect.objectContaining({ status: 'SUCCEEDED' })]);
+  });
+});
+
+describe('재배송비 환불 기록은 orderCharges를 대상으로 재시도한다', () => {
+  const chargeIssue = {
+    ...baseIssue,
+    id: 'issue-c',
+    paymentId: null,
+    chargeId: 'charge-1',
+    status: 'OPEN',
+    actions: [],
+    idempotencyKey: 'auto-charge-refund-failed:order-1:charge-1',
+  };
+  const openChargeIssue = {
+    'operationIssues/issue-c': chargeIssue,
+    'orders/order-1': { id: 'order-1', status: 'CANCELLED' },
+    // 본 결제는 이미 환불됐어도 재배송비 기록의 해결 여부와 무관하다.
+    'payments/order-1': { id: 'order-1', orderId: 'order-1', status: 'CANCELLED' },
+    'orderCharges/charge-1': { id: 'charge-1', orderId: 'order-1', status: 'PAID' },
+  };
+  const retry = { issueId: 'issue-c', actorId: 'seller-1', actionType: 'RETRY_REFUND' };
+
+  it('재배송비 환불 경로를 부르고 charge가 REFUNDED면 RESOLVED로 기록한다', async () => {
+    const { service, payments, records } = makeService(openChargeIssue);
+
+    const result = await service.executeAction(retry);
+
+    expect(payments.refundOrderChargesByOrderId).toHaveBeenCalledWith(
+      'order-1',
+      '운영 예외 환불 재시도',
+    );
+    expect(payments.processRefundByOrderId).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'RESOLVED' });
+    expect(records.get('orderCharges/charge-1')).toMatchObject({ status: 'REFUNDED' });
+  });
+
+  it('charge가 그대로 PAID면 OPEN을 유지하고 REFUND_NOT_CONFIRMED를 남긴다', async () => {
+    const { service, payments, records } = makeService(openChargeIssue);
+    payments.refundOrderChargesByOrderId.mockResolvedValueOnce(undefined);
+
+    await expect(service.executeAction(retry)).rejects.toBeInstanceOf(ConflictException);
+    expect(records.get('operationIssues/issue-c')).toMatchObject({
+      status: 'OPEN',
+      actions: [expect.objectContaining({ status: 'FAILED', failureCode: 'REFUND_NOT_CONFIRMED' })],
+    });
+  });
+
+  it('이미 REFUNDED인 charge는 환불을 다시 부르지 않고 해결한다', async () => {
+    const { service, payments } = makeService({
+      ...openChargeIssue,
+      'orderCharges/charge-1': { id: 'charge-1', orderId: 'order-1', status: 'REFUNDED' },
+    });
+
+    const result = await service.executeAction(retry);
+
+    expect(payments.refundOrderChargesByOrderId).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'RESOLVED' });
+  });
+
+  it('charge가 다른 주문의 것이면 환불하지 않고 PAYMENT_ORDER_MISMATCH로 남긴다', async () => {
+    const { service, payments, records } = makeService({
+      ...openChargeIssue,
+      'orderCharges/charge-1': { id: 'charge-1', orderId: 'order-2', status: 'PAID' },
+    });
+
+    await expect(service.executeAction(retry)).rejects.toBeInstanceOf(ConflictException);
+    expect(payments.refundOrderChargesByOrderId).not.toHaveBeenCalled();
+    expect(records.get('operationIssues/issue-c')).toMatchObject({
+      status: 'OPEN',
+      actions: [expect.objectContaining({ failureCode: 'PAYMENT_ORDER_MISMATCH' })],
+    });
   });
 });
 

@@ -343,7 +343,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 - 이전 운영 SHA 증거: 출시 `197f84a4` run `36372493414`, API `781285ea` run `36383185604`, 판매자 앱 `437af74b` run `36410582745`(각 52/52 + 세션 12/12, cleanup 0).
 - 이전 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`(52건).
 - 과거 run을 현재 release 증거로 확장하지 않는다.
-- 2026-10-10 결제·인증·규칙 재대조(`main` `680a190`, API 단위 1768건·통합 26건 통과, CI Firebase rules 에뮬레이터 통과): 과거 P0(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, 관리자 강제 환불)와 #402 규칙은 `VERIFIED`. 남은 일은 BACKLOG `AUTH-MULTI-DEVICE-SESSION`(결정 필요), `CHARGE-REFUND-ISSUE-ROUTING`(구현 결함), `PORTONE-CHANNEL-CHECK`(#426 미병합), `RATE-LIMIT-CLIENT-IP`(#404 미병합), `STORAGE-CORS-APPLY`. 상세: `docs/reports/REPORT_payments_auth_rules_reaudit_20261010.md`.
+- 2026-10-10 결제·인증·규칙 재대조(`main` `680a190`, API 단위 1768건·통합 26건 통과, CI Firebase rules 에뮬레이터 통과): 과거 P0(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, 관리자 강제 환불)와 #402 규칙은 `VERIFIED`. 남은 일은 BACKLOG `AUTH-MULTI-DEVICE-SESSION`(결정 필요), `CHARGE-REFUND-ISSUE-ROUTING`(구현 결함, 같은 날 수정·운영 미배포), `PORTONE-CHANNEL-CHECK`(#426 미병합), `RATE-LIMIT-CLIENT-IP`(#404 미병합), `STORAGE-CORS-APPLY`. 상세: `docs/reports/REPORT_payments_auth_rules_reaudit_20261010.md`.
 - exact-SHA Preview/browser/fixture와 필요한 legal/release proof는 actual release candidate에서 다시 판정한다.
 
 ## 활성 문서

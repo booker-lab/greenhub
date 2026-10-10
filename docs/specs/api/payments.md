@@ -394,7 +394,7 @@ export interface Payment {
 
 `AUTO_REFUND_FAILED`의 `RETRY_REFUND` 조치는 기존 환불 경로를 부른 뒤 결제 문서를 다시 읽어 `CANCELLED`/`REFUNDED`일 때만 `RESOLVED`로 바꾼다. 그 밖에는 `OPEN`을 유지하고 `failureCode`(`REFUND_PENDING`·`REFUND_NOT_CONFIRMED`·`PAYMENT_NOT_FOUND`·`PAYMENT_ORDER_MISMATCH` 등)를 남긴 뒤 `409`로 응답한다.
 
-알려진 제약: 재배송비 환불 결과가 불명확하면 `AUTO_REFUND_FAILED`가 빈 `storeId`와 `paymentId = chargeId`로 기록된다. 그래서 가게 범위 운영 기록 목록에 보이지 않고, `RETRY_REFUND`도 `payments/{chargeId}`를 찾지 못해 해결할 수 없다(BACKLOG `CHARGE-REFUND-ISSUE-ROUTING`).
+재배송비 환불 결과가 불명확하면 `AUTO_REFUND_FAILED`를 charge의 `storeId`, `paymentId: null`, `chargeId`로 기록한다. 그래서 가게 범위 운영 기록 목록에 보이고, `RETRY_REFUND`는 `orderCharges/{chargeId}`를 대상으로 `refundOrderChargesByOrderId()`를 다시 부른 뒤 charge가 `REFUNDED`일 때만 해결로 바꾼다(`order-charge-refund-provider-ambiguity.spec.ts` C8, `operations.service.spec.ts` 재배송비 환불 기록 블록). 수정 전에 빈 `storeId`로 남은 기록은 가게 범위 조회로 닿지 않는다(BACKLOG `CHARGE-REFUND-ISSUE-ROUTING`).
 
 이 이슈가 열려 있으면 상태를 추측하거나 PortOne 콘솔에서 반복 환불하지 않는다. 운영 조치는 `docs/specs/ops/mvp-sales-round-runbook.md`를 따른다.
 
