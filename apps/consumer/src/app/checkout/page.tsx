@@ -172,6 +172,32 @@ function resolveRoundCheckoutSchedule(
   );
   return matchesRoundItems ? { round, requestedDeliveryDate } : null;
 }
+
+/**
+ * 단건 결제 화면의 표시 금액. URL 쿼리의 금액 값은 받지 않고 서버가 돌려준 상품 가격과
+ * 주문 요청에 그대로 쓰는 수량으로만 계산한다. 실제 청구 금액은 주문 생성 응답이 정하고
+ * 결제창도 그 값만 쓴다. null은 서버 상품을 확인하는 중, 0은 표시할 금액이 없음을 뜻한다.
+ */
+function resolveSingleCheckoutAmount(
+  product: Pick<Product, 'price'> | null,
+  quantity: number,
+  productUnavailable: boolean,
+): number | null {
+  if (productUnavailable) return 0;
+  if (!product) return null;
+  const { price } = product;
+  if (
+    !Number.isSafeInteger(price) ||
+    price < 0 ||
+    !Number.isSafeInteger(quantity) ||
+    quantity <= 0
+  ) {
+    return 0;
+  }
+  const amount = price * quantity;
+  return Number.isSafeInteger(amount) ? amount : 0;
+}
+
 function SingleCheckoutContent() {
   const { data: session } = useSession();
   const params = useSearchParams();
@@ -181,20 +207,24 @@ function SingleCheckoutContent() {
   const quantity = Number(params.get('quantity') ?? 1);
   const saleType = (params.get('saleType') ?? 'normal') as SaleType;
   const deliveryMethod = (params.get('deliveryMethod') ?? 'direct') as DeliveryMethod;
-  const totalAmount = Number(params.get('totalAmount') ?? 0);
   const requestedDeliveryDate = params.get('requestedDeliveryDate') ?? undefined;
 
   const [product, setProduct] = useState<Product | null>(null);
+  const [productLoadFailed, setProductLoadFailed] = useState(false);
 
   useEffect(() => {
     if (!productId) return;
-    fetch(`${API_URL}/products/${productId}`)
+    fetch(`${API_URL}/products/${encodeURIComponent(productId)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data) setProduct(data as Product);
+        else setProductLoadFailed(true);
       })
-      .catch(() => {});
+      .catch(() => setProductLoadFailed(true));
   }, [productId]);
+
+  const productUnavailable = !productId || productLoadFailed;
+  const totalAmount = resolveSingleCheckoutAmount(product, quantity, productUnavailable);
 
   const [address, setAddress] = useState<DeliveryAddress>({
     address: '',
@@ -249,7 +279,10 @@ function SingleCheckoutContent() {
       onPaymentMethodChange={setPaymentMethod}
       isLoading={isLoading}
       canPay={canPay}
-      error={error}
+      error={
+        error ??
+        (productUnavailable ? '상품 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' : null)
+      }
       onPay={requestPayment}
       singleSummary={{ quantity, deliveryMethod, requestedDeliveryDate }}
     />

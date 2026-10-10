@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { FirestoreService } from '../firestore/firestore.service';
+import { stripJpegMetadata } from '../firestore/jpeg-metadata';
 import { type DeliveryPhotoReconciliation, StorageService } from '../firestore/storage.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { RetentionService } from '../retention/retention.service';
@@ -68,7 +69,9 @@ export class DeliveryPhotosService {
     }
 
     const photoId = this.createPhotoId(input.orderId, input.idempotencyKey);
-    const contentSha256 = createHash('sha256').update(input.content).digest('hex');
+    // Storage가 저장하는 것과 같은 메타데이터 제거 후 바이트로 해시·재조정을 맞춘다.
+    const content = stripJpegMetadata(input.content);
+    const contentSha256 = createHash('sha256').update(content).digest('hex');
     const order = await this.readOrder(input);
     await this.assertPreUploadEligibility(order, input, photoId);
 
@@ -80,7 +83,7 @@ export class DeliveryPhotosService {
         photoId,
         requesterId: input.requesterId,
         requesterRole: input.requesterRole,
-        content: input.content,
+        content,
         contentType: 'image/jpeg',
       });
     } catch (error) {

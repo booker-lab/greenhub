@@ -1,10 +1,18 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { todayKST } from '@greenhub/shared';
 import { ApiError, apiJson } from '@/lib/api';
-import type { Settlement, SettlementStatus, SettlementTab, Summary } from '../_constants';
+import type {
+  Settlement,
+  SettlementListQuery,
+  SettlementListResponse,
+  SettlementStatus,
+  SettlementTab,
+  Summary,
+} from '../_constants';
+import { appendSettlementPage, readSettlementPage, settlementListPath } from '../_lib';
 
 export interface UseSettlementsResult {
   selectedDate: string;
@@ -24,9 +32,14 @@ export interface UseSettlementsResult {
   settlements: Settlement[];
   listLoading: boolean;
   listError: string;
+  /** 서버가 같은 조건의 정산이 더 있다고 알려 준 경우만 true. */
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMoreError: string;
 
   fetchSummary: () => Promise<void>;
   fetchSettlements: (f?: string, t?: string, status?: SettlementStatus) => Promise<void>;
+  loadMoreSettlements: () => Promise<void>;
 }
 
 export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
@@ -48,6 +61,17 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState('');
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState('');
+  // 지금 보이는 목록의 조회 조건과 다음 위치. 응답을 반영할 때 함께 바꿔 더 보기가 다른 조건으로 이어지지 않게 한다.
+  const pageRef = useRef<{ query: SettlementListQuery; nextCursor: string | null }>({
+    query: {},
+    nextCursor: null,
+  });
+  // 새 조회를 시작하면 늦게 도착한 이전 조회·더 보기 응답은 버린다.
+  const listRequestRef = useRef(0);
+  const loadingMoreRef = useRef(false);
 
   useEffect(() => {
     // 브라우저마다 요일 표기가 달라("4일 일" 등) 직접 "2026년 10월 4일 (일)" 형태로 만든다.
@@ -78,26 +102,56 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
   const fetchSettlements = useCallback(
     async (f?: string, t?: string, status?: SettlementStatus) => {
       if (!storeId || !token) return;
+      const requestId = ++listRequestRef.current;
+      const query: SettlementListQuery = { from: f, to: t, status };
       setListLoading(true);
       setListError('');
+      setLoadMoreError('');
       try {
-        const params = new URLSearchParams();
-        if (f) params.set('from', f);
-        if (t) params.set('to', t);
-        if (status) params.set('status', status);
-        const data = await apiJson<{ settlements: Settlement[] }>(
-          `/stores/${storeId}/settlements?${params.toString()}`,
+        const data = await apiJson<SettlementListResponse>(
+          settlementListPath(storeId, query),
           token,
         );
-        setSettlements(data.settlements);
+        if (requestId !== listRequestRef.current) return;
+        const page = readSettlementPage(data);
+        pageRef.current = { query, nextCursor: page.nextCursor };
+        setSettlements(page.settlements);
+        setHasMore(page.hasMore);
       } catch (e) {
+        if (requestId !== listRequestRef.current) return;
         setListError(e instanceof ApiError ? e.message : '조회에 실패했습니다');
       } finally {
-        setListLoading(false);
+        if (requestId === listRequestRef.current) setListLoading(false);
       }
     },
     [storeId, token],
   );
+
+  const loadMoreSettlements = useCallback(async () => {
+    const { query, nextCursor } = pageRef.current;
+    if (!storeId || !token || !nextCursor || loadingMoreRef.current) return;
+    const requestId = listRequestRef.current;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setLoadMoreError('');
+    try {
+      const data = await apiJson<SettlementListResponse>(
+        settlementListPath(storeId, query, nextCursor),
+        token,
+      );
+      if (requestId !== listRequestRef.current) return;
+      const page = readSettlementPage(data);
+      pageRef.current = { query, nextCursor: page.nextCursor };
+      setSettlements((current) => appendSettlementPage(current, page.settlements));
+      setHasMore(page.hasMore);
+    } catch (e) {
+      if (requestId !== listRequestRef.current) return;
+      setLoadMoreError(e instanceof ApiError ? e.message : '더 불러오지 못했습니다');
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [storeId, token]);
 
   useEffect(() => {
     if (activeTab === 'daily') fetchSummary();
@@ -119,7 +173,11 @@ export function useSettlements(activeTab: SettlementTab): UseSettlementsResult {
     settlements,
     listLoading,
     listError,
+    hasMore,
+    loadingMore,
+    loadMoreError,
     fetchSummary,
     fetchSettlements,
+    loadMoreSettlements,
   };
 }

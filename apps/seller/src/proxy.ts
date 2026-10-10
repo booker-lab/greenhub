@@ -8,8 +8,8 @@ export const proxy = auth((request) => {
   const session = request.auth;
   const { pathname } = request.nextUrl;
 
-  // 미로그인 → /login 리다이렉트
-  if (!session) {
+  // 미로그인 → /login 리다이렉트. 세션 객체가 있어도 필수 필드(role)가 없으면 미로그인으로 본다.
+  if (!session?.user?.role) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
