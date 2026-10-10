@@ -1,0 +1,32 @@
+# API 이미지 빌드 컨텍스트는 허용 목록으로 관리한다.
+# 기본은 모두 제외하고, Dockerfile이 COPY하는 경로만 다시 포함한다.
+# (.git, docs, tests, scripts 워크스페이스, consumer·seller·driver·e2e 앱, .claude 등은 제외된다)
+*
+
+!pnpm-workspace.yaml
+!package.json
+!pnpm-lock.yaml
+!scripts/copy-fonts.cjs
+!packages/shared/
+!apps/api/
+
+# 다시 포함한 경로 안에서도 제외할 항목
+**/node_modules
+**/.env*
+**/*.log
+**/*.tsbuildinfo
+**/coverage
+
+# 서비스 계정 키 등 자격 증명 파일
+**/*adminsdk*.json
+**/*serviceAccount*.json
+**/*service-account*.json
+**/*credentials*.json
+**/*.pem
+**/*.key
+
+# API 빌드에 필요 없는 테스트·운영 스크립트·로컬 산출물
+apps/api/dist
+apps/api/test
+apps/api/*.mjs
+packages/shared/src/**/*.test.ts
