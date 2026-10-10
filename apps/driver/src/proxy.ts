@@ -8,7 +8,8 @@ import { auth } from '@/auth';
 export const proxy = auth((request) => {
   const session = request.auth;
 
-  if (!session) {
+  // 세션 객체가 있어도 필수 필드(role)가 없으면 로그인하지 않은 것으로 본다.
+  if (!session?.user?.role) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

@@ -5,8 +5,12 @@
  * 없다. 본 스크립트는 능동(synthetic) 측정으로 p50/p95/p99 + 실패율을 산출한다.
  *
  * 사용법:
- *   node scripts/measure-api-latency.mjs [--api <url>] [--health-count N]
+ *   node scripts/measure-api-latency.mjs --api <url> [--health-count N]
  *        [--login-count N] [--email <e>] [--password <p>] [--json <path>]
+ *   또는 MEASURE_API_URL=<url> node scripts/measure-api-latency.mjs ...
+ *
+ * 측정할 API base URL은 기본값이 없다. --api 또는 MEASURE_API_URL로 꼭 지정한다
+ * (없으면 사용법을 출력하고 exit 2).
  *
  * 측정 대상:
  *   - GET  /health       네트워크 왕복 + 자명한 핸들러 (서버 작업 ~0)
@@ -19,15 +23,38 @@
  * (한도 10, 마진 2). refreshTokens/{uid}는 단일 doc 덮어쓰기라 잔여물 없음.
  */
 import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+export const API_URL_ENV = 'MEASURE_API_URL';
+export const USAGE =
+  'usage: node scripts/measure-api-latency.mjs --api <url> [--health-count N] [--login-count N] ' +
+  `[--email <e>] [--password <p>] [--json <path>]  (또는 ${API_URL_ENV}=<url>)`;
+
 // --- 인자 파싱 ---
-function arg(name, fallback) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+function arg(name, fallback, argv = process.argv) {
+  const i = argv.indexOf(`--${name}`);
+  return i !== -1 && argv[i + 1] ? argv[i + 1] : fallback;
+}
+
+// 측정 대상은 실행하는 사람이 정한다. 기본 호스트를 두지 않는다.
+export function resolveApiBaseUrl({ argv = process.argv, env = process.env } = {}) {
+  const raw = (arg('api', undefined, argv) ?? env[API_URL_ENV] ?? '').trim();
+  if (!raw) {
+    throw new Error(`API base URL이 필요합니다: --api <url> 또는 ${API_URL_ENV} 환경 변수`);
+  }
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`API base URL 형식이 올바르지 않습니다: ${raw}`);
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`API base URL은 http(s)여야 합니다: ${raw}`);
+  }
+  return raw.replace(/\/+$/, '');
 }
 
 // apps/e2e/.env 에서 키 읽기 (인자 미지정 시 fallback)
@@ -40,13 +67,6 @@ function envFromE2e(key) {
     return undefined;
   }
 }
-
-const API = arg('api', 'https://api-production-13e7.up.railway.app').replace(/\/$/, '');
-const HEALTH_COUNT = Number(arg('health-count', '24'));
-const LOGIN_COUNT = Number(arg('login-count', '24'));
-const EMAIL = arg('email', envFromE2e('TEST_SELLER_EMAIL'));
-const PASSWORD = arg('password', envFromE2e('TEST_SELLER_PASSWORD'));
-const JSON_OUT = arg('json', undefined);
 
 const WINDOW_SIZE = 8; // throttle 10/분 → 윈도우당 8 (마진 2)
 const WINDOW_GAP_MS = 62_000; // throttle ttl 60s + 여유 2s
@@ -109,7 +129,9 @@ async function measureWindowed(label, count, requestFn) {
       const s = await timed(requestFn);
       samples.push(s);
       done++;
-      process.stdout.write(`\r[${label}] ${done}/${count} win=${w + 1}/${windows} last=${s.ms}ms status=${s.status}   `);
+      process.stdout.write(
+        `\r[${label}] ${done}/${count} win=${w + 1}/${windows} last=${s.ms}ms status=${s.status}   `,
+      );
     }
     if (w < windows - 1) {
       process.stdout.write(`\n[${label}] throttle 윈도우 대기 ${WINDOW_GAP_MS / 1000}s...\n`);
@@ -120,10 +142,10 @@ async function measureWindowed(label, count, requestFn) {
   return samples;
 }
 
-function printReport(rows) {
+function printReport(api, rows) {
   const col = (v, w) => String(v ?? '-').padStart(w);
   console.log('\n=== Railway API latency 계측 결과 ===');
-  console.log(`API: ${API}`);
+  console.log(`API: ${api}`);
   console.log(`측정 시각: ${new Date().toISOString()}\n`);
   console.log('endpoint          total   ok  fail  429   min   p50   p95   p99   max  mean(ms)');
   console.log('-'.repeat(80));
@@ -136,39 +158,57 @@ function printReport(rows) {
   }
 }
 
-async function main() {
-  console.log(`[measure-api-latency] API=${API} health=${HEALTH_COUNT} login=${LOGIN_COUNT}\n`);
+async function main(api) {
+  const HEALTH_COUNT = Number(arg('health-count', '24'));
+  const LOGIN_COUNT = Number(arg('login-count', '24'));
+  const EMAIL = arg('email', envFromE2e('TEST_SELLER_EMAIL'));
+  const PASSWORD = arg('password', envFromE2e('TEST_SELLER_PASSWORD'));
+  const JSON_OUT = arg('json', undefined);
+
+  console.log(`[measure-api-latency] API=${api} health=${HEALTH_COUNT} login=${LOGIN_COUNT}\n`);
 
   // 콜드 연결 워밍업 1회 (집계 제외) — 첫 요청은 TLS handshake 비용 포함
-  await timed(() => fetch(`${API}/health`));
+  await timed(() => fetch(`${api}/health`));
 
-  const health = await measureWindowed('health', HEALTH_COUNT, () => fetch(`${API}/health`));
+  const health = await measureWindowed('health', HEALTH_COUNT, () => fetch(`${api}/health`));
 
   let login = [];
   if (EMAIL && PASSWORD) {
     login = await measureWindowed('login', LOGIN_COUNT, () =>
-      fetch(`${API}/auth/login`, {
+      fetch(`${api}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
       }),
     );
   } else {
-    console.warn('[login] 자격증명 없음 — /auth/login 측정 건너뜀 (--email/--password 또는 apps/e2e/.env 필요)');
+    console.warn(
+      '[login] 자격증명 없음 — /auth/login 측정 건너뜀 (--email/--password 또는 apps/e2e/.env 필요)',
+    );
   }
 
   const rows = [summarize('GET /health', health)];
   if (login.length) rows.push(summarize('POST /auth/login', login));
-  printReport(rows);
+  printReport(api, rows);
 
   if (JSON_OUT) {
     const { writeFileSync } = await import('fs');
-    writeFileSync(JSON_OUT, JSON.stringify({ api: API, at: new Date().toISOString(), rows }, null, 2));
+    writeFileSync(JSON_OUT, JSON.stringify({ api, at: new Date().toISOString(), rows }, null, 2));
     console.log(`\nJSON 저장: ${JSON_OUT}`);
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  let api;
+  try {
+    api = resolveApiBaseUrl();
+  } catch (e) {
+    console.error(`[measure-api-latency] ${e.message}`);
+    console.error(USAGE);
+    process.exit(2);
+  }
+  main(api).catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
