@@ -412,11 +412,17 @@ export class RoundOrderLifecycleService {
           });
           return { completed: false, needsRefund: true };
         }
+        // An unresolved paid-redelivery hold keeps the order in the held
+        // projection even after DELIVERY_HELD → PREPARING (see updateStatus
+        // heldOrderDelta), so cancelling from there must exit it too.
+        const holdStillCounted =
+          order['status'] === 'DELIVERY_HELD' ||
+          (order['status'] === 'PREPARING' && isCurrentRedeliveryPaymentRequired(order));
         // Single-owner cancellation convergence: reservation ordered
         // projection and held projection move exactly once in one read phase
         // (reservation + round + items) followed by one write phase. No direct
         // FieldValue.increment outside OrderCapacityService.
-        const needsHeldExit = order['status'] === 'DELIVERY_HELD' && order['roundId'];
+        const needsHeldExit = holdStillCounted && order['roundId'];
         if (order['reservationId'] || needsHeldExit) {
           await this.capacity.releaseForOrderCancellationInTransaction(tx, {
             reservationId: order['reservationId'] ?? null,
