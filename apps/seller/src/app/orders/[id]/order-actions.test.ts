@@ -12,9 +12,7 @@ import {
 
 describe('상태별 주문 상세 버튼', () => {
   const visible = (status: OrderStatus, deliveryMethod: 'direct' | 'hub' | 'parcel' = 'direct') =>
-    Object.entries(
-      resolveOrderDetailActions({ status, deliveryMethod, schemaVersion: 2, roundId: 'round-1' }),
-    )
+    Object.entries(resolveOrderDetailActions({ status, deliveryMethod, roundId: 'round-1' }))
       .filter(([, shown]) => shown)
       .map(([action]) => action);
 
@@ -35,26 +33,32 @@ describe('상태별 주문 상세 버튼', () => {
   });
 
   it('판매자 보류는 회차 직배송 주문만 — 예전 주문은 재배송비 결제를 만들 수 없다', () => {
-    for (const legacy of [
-      { schemaVersion: 1 as const, roundId: null },
-      { schemaVersion: 2 as const, roundId: null },
-      { schemaVersion: 2 as const, roundId: '' },
-    ]) {
+    for (const roundId of [null, undefined, '']) {
       const actions = resolveOrderDetailActions({
         status: 'PREPARING',
         deliveryMethod: 'direct',
-        ...legacy,
+        roundId,
       });
       expect(actions.hold).toBe(false);
       expect(actions.cancel).toBe(true);
     }
   });
 
+  it('판매자 상세 응답처럼 schemaVersion이 없어도 회차 직배송 준비 중 주문에는 보류가 보인다', () => {
+    // seller-order-read-model의 상세 필드에는 schemaVersion이 없다(#449 회귀: 버튼이 아예 안 보였다).
+    const detailResponse = {
+      status: 'PREPARING',
+      deliveryMethod: 'direct',
+      roundId: 'round-1',
+    } as const;
+    expect('schemaVersion' in detailResponse).toBe(false);
+    expect(resolveOrderDetailActions(detailResponse).hold).toBe(true);
+  });
+
   it('재배송비 결제를 기다리는 보류가 열린 준비 중 주문은 다시 보류하지 않는다(보류 건수 이중 집계)', () => {
     const base = {
       status: 'PREPARING' as const,
       deliveryMethod: 'direct' as const,
-      schemaVersion: 2 as const,
       roundId: 'round-1',
     };
     expect(
