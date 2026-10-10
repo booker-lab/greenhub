@@ -37,9 +37,19 @@ interface RetentionTransaction {
   set(ref: unknown, data: RetentionMetadata): void;
 }
 
+/** 객체 삭제 결과. 이미 없는 객체(NOT_FOUND)는 삭제된 것으로 본다. */
+type StorageDeleteOutcome = 'DELETED' | 'NOT_FOUND' | 'FAILED';
+
+/** 삭제 실패 원인. 오류 메시지·경로는 담지 않고 오류 종류와 코드만 남긴다. */
+interface StorageDeleteFailureCause {
+  errorName: string;
+  errorCode: string | null;
+}
+
 const RETENTION_BATCH_SIZE = 450;
 const STORAGE_DELETE_ATTEMPTS = 3;
 const SAFE_RECORD_ID_PATTERN = /^[A-Za-z0-9:_-]{1,160}$/;
+const SAFE_ERROR_TOKEN_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
 
 const RETENTION_POLICIES: Record<RetentionPurpose, RetentionPolicy> = {
   DELIVERY_PHOTO: {
@@ -105,6 +115,47 @@ function addUtcYears(value: Date, years: number): Date {
   const result = new Date(value.getTime());
   result.setUTCFullYear(result.getUTCFullYear() + years);
   return result;
+}
+
+function safeErrorToken(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isInteger(value)) return String(value);
+  if (typeof value === 'string' && SAFE_ERROR_TOKEN_PATTERN.test(value)) return value;
+  return null;
+}
+
+type StorageErrorShape = {
+  name?: unknown;
+  code?: unknown;
+  status?: unknown;
+  statusCode?: unknown;
+  response?: { status?: unknown } | null;
+};
+
+function describeStorageDeleteError(error: unknown): StorageDeleteFailureCause {
+  if (typeof error !== 'object' || error === null) {
+    return { errorName: typeof error, errorCode: null };
+  }
+  const shape = error as StorageErrorShape;
+  // Storage SDK 오류(ApiError)는 name이 'Error'로 남아 있어 클래스 이름을 쓴다.
+  const name =
+    shape.name === 'Error' || shape.name === undefined ? error.constructor?.name : shape.name;
+  return {
+    errorName: safeErrorToken(name) ?? 'UnknownError',
+    errorCode:
+      safeErrorToken(shape.code) ??
+      safeErrorToken(shape.status) ??
+      safeErrorToken(shape.statusCode) ??
+      safeErrorToken(shape.response?.status),
+  };
+}
+
+function isStorageNotFoundError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const shape = error as StorageErrorShape;
+  if (shape.code === 'NOT_FOUND') return true;
+  return [shape.code, shape.status, shape.statusCode, shape.response?.status].some(
+    (value) => value === 404 || value === '404',
+  );
 }
 
 @Injectable()
@@ -173,15 +224,17 @@ export class RetentionService {
 
     const deletable: typeof candidates = [];
     let failedCount = 0;
+    let storageNotFoundCount = 0;
     for (const candidate of candidates) {
       const { collection, document } = candidate;
       const storagePath = document.data()['storagePath'];
       if (typeof storagePath === 'string' && storagePath.length > 0) {
-        const deleted = await this.deleteStorageObject(collection, storagePath, document.data());
-        if (!deleted) {
+        const outcome = await this.deleteStorageObject(collection, storagePath, document.data());
+        if (outcome === 'FAILED') {
           failedCount += 1;
           continue;
         }
+        if (outcome === 'NOT_FOUND') storageNotFoundCount += 1;
       }
       deletable.push(candidate);
     }
@@ -202,6 +255,7 @@ export class RetentionService {
     return {
       deletedCount: deletable.length,
       failedCount,
+      storageNotFoundCount,
       deletedByPurpose,
     };
   }
@@ -252,15 +306,24 @@ export class RetentionService {
     collection: string,
     storagePath: string,
     data: RetentionMetadata,
-  ): Promise<boolean> {
+  ): Promise<StorageDeleteOutcome> {
+    let lastError: unknown;
     for (let attempt = 1; attempt <= STORAGE_DELETE_ATTEMPTS; attempt += 1) {
       try {
         await this.storage.deleteObject(storagePath);
-        return true;
-      } catch {
-        if (attempt < STORAGE_DELETE_ATTEMPTS) continue;
+        return 'DELETED';
+      } catch (error) {
+        // 이미 없는 객체는 파기가 끝난 것으로 본다.
+        if (isStorageNotFoundError(error)) return 'NOT_FOUND';
+        lastError = error;
       }
     }
+
+    const cause = describeStorageDeleteError(lastError);
+    // 경로에는 주문 식별자가 들어 있어 로그에는 컬렉션과 오류 종류·코드만 남긴다.
+    this.retentionLogger.error(
+      `[RetentionPurge] 보관 객체 삭제 최종 실패: collection=${collection} attempts=${STORAGE_DELETE_ATTEMPTS} errorName=${cause.errorName} errorCode=${cause.errorCode ?? 'none'}`,
+    );
 
     await this.issueWriter.createOrMergeIssue({
       storeId: String(data['storeId'] ?? ''),
@@ -273,8 +336,11 @@ export class RetentionService {
       latestSnapshot: {
         collection,
         failureStage: 'storage_delete',
+        attempts: STORAGE_DELETE_ATTEMPTS,
+        errorName: cause.errorName,
+        errorCode: cause.errorCode,
       },
     });
-    return false;
+    return 'FAILED';
   }
 }
