@@ -39,6 +39,7 @@ describe('프로필 이름·전화번호 입력 제약 (RegisterDto, UpdateMeDto
     ['URL', '환불 http://x.test'],
     ['www', 'www.example'],
     ['도메인', 'bit.ly/abc'],
+    ['최상위 도메인', 'example.com'],
   ])('%s 이름은 거부한다', async (_label, name) => {
     await expect(
       errorProperties(plainToInstance(RegisterDto, { ...validRegister, name })),
@@ -46,6 +47,13 @@ describe('프로필 이름·전화번호 입력 제약 (RegisterDto, UpdateMeDto
     await expect(errorProperties(plainToInstance(UpdateMeDto, { name }))).resolves.toEqual([
       'name',
     ]);
+  });
+
+  it.each(['john.doe', 'Mr.Kim', 'J.Lee'])('점이 들어간 일반 이름(%s)은 받는다', async (name) => {
+    await expect(
+      errorProperties(plainToInstance(RegisterDto, { ...validRegister, name })),
+    ).resolves.toEqual([]);
+    await expect(errorProperties(plainToInstance(UpdateMeDto, { name }))).resolves.toEqual([]);
   });
 
   it.each([

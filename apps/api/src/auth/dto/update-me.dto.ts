@@ -8,9 +8,10 @@ export const PROFILE_NAME_NO_CONTROL_PATTERN =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: 제어문자를 거부하기 위한 패턴이다.
   /^[^\u0000-\u001F\u007F-\u009F\u00AD\u200B\u200C\u200E\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]*$/;
 
-// scheme URL, www., `<문자>.<영문 2자 이상>` 형태의 도메인을 포함하지 않는다.
+// scheme URL, www., 도메인(`<문자>.<영문>/…` 경로가 붙거나 흔한 최상위 도메인으로 끝남)을 포함하지 않는다.
+// `john.doe`·`Mr.Kim`처럼 점이 들어간 이름은 받는다. 알림 본문의 이름 판정과 같은 규칙이다.
 export const PROFILE_NAME_NO_LINK_PATTERN =
-  /^(?![\s\S]*(?:[a-z][a-z0-9+.-]*:\/\/|www\.|[\p{L}\p{N}-]+\.[a-z]{2,}(?![a-z])))/iu;
+  /^(?![\s\S]*(?:[a-z][a-z0-9+.-]*:\/\/|www\.|[\p{L}\p{N}-]+\.(?:[a-z]{2,}\/|(?:com|net|org|kr|co|io|me|ly|gl|to|cc|tv|us|jp|cn|app|xyz|info|biz|shop|site|top|link|online|store)(?![a-z]))))/iu;
 
 // 전화번호 1개(숫자·공백·하이픈·괄호·+, 8~20자). 쉼표·줄바꿈 등으로 여러 번호를 이은 값은 받지 않는다.
 // 주문 배송 연락처(deliveryPhone)와 같은 문자 집합이되 공백은 스페이스만 허용한다.

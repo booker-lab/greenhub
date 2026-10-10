@@ -137,8 +137,10 @@ const NOTIFICATION_LINE_BREAK_OR_CONTROL = /[\p{Cc}\u2028\u2029]/gu;
 // 제거한다. 이모지 조합에 쓰이는 zero-width joiner(U+200D)는 남긴다.
 export const INVISIBLE_FORMAT_CHARACTERS =
   /[\u00AD\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
-// scheme URL, www., 또는 `<문자>.<영문 2자 이상>` 형태의 도메인.
-const NOTIFICATION_LINK_LIKE = /[a-z][a-z0-9+.-]*:\/\/|www\.|[\p{L}\p{N}-]+\.[a-z]{2,}(?![a-z])/iu;
+// scheme URL, www., 또는 도메인(`<문자>.<영문>/…` 경로가 붙거나 흔한 최상위 도메인으로 끝남).
+// `john.doe`·`Mr.Kim`처럼 점이 들어간 이름은 링크로 보지 않는다.
+const NOTIFICATION_LINK_LIKE =
+  /[a-z][a-z0-9+.-]*:\/\/|www\.|[\p{L}\p{N}-]+\.(?:[a-z]{2,}\/|(?:com|net|org|kr|co|io|me|ly|gl|to|cc|tv|us|jp|cn|app|xyz|info|biz|shop|site|top|link|online|store)(?![a-z]))/iu;
 
 /**
  * 알림 본문 변수 1개를 한 줄 텍스트로 정리한다. 제어문자·줄바꿈은 공백으로, 보이지 않는 서식

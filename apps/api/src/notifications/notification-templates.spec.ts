@@ -94,6 +94,23 @@ describe('알림 본문 변수 정리', () => {
     );
   });
 
+  it.each([
+    'john.doe',
+    'Mr.Kim',
+    'kim.ys',
+    'J.Lee',
+  ])('점이 들어간 일반 이름(%s)은 그대로 둔다', (name) => {
+    expect(sanitizeNotificationVariable('name', name)).toBe(name);
+  });
+
+  it.each([
+    'example.com',
+    'shop.co.kr 문의',
+    'evil.xyz',
+  ])('흔한 최상위 도메인으로 끝나는 이름(%s)은 고정 호칭으로 바꾼다', (name) => {
+    expect(sanitizeNotificationVariable('name', name)).toBe(NOTIFICATION_NAME_FALLBACK);
+  });
+
   it('이름이 아닌 변수는 링크 판정으로 바꾸지 않는다', () => {
     expect(sanitizeNotificationVariable('hubAddress', '서울시 강남구 example.test')).toBe(
       '서울시 강남구 example.test',
