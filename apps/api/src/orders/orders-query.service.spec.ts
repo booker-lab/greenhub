@@ -192,7 +192,8 @@ describe('OrdersQueryService 조회 권한', () => {
     });
     expect(list[0]).not.toHaveProperty('userId');
     expect(list[0]).not.toHaveProperty('driverId');
-    expect(list[0]).not.toHaveProperty('orderItems');
+    // 목록 카드("첫 상품 외 N종")용 상품 줄은 이름과 수량만 싣고 가격·사진·내부 값은 뺀다.
+    expect(list[0].orderItems).toEqual([{ productName: '호접란', quantity: 2 }]);
     expect(list[0]).not.toHaveProperty('marketingConsent');
     expect(list[0]).not.toHaveProperty('acquisition');
     expect(list[0]).not.toHaveProperty('redeliveryChargeId');
@@ -252,6 +253,15 @@ describe('OrdersQueryService 조회 권한', () => {
     expect(detail.orderItems[0]).not.toHaveProperty('lineAmount');
     expect(detail.orderItems[0]).not.toHaveProperty('internalItemCost');
     expect(detail.redeliveryPayment).not.toHaveProperty('chargeId');
+  });
+
+  it('판매자 목록은 상품 줄이 저장되지 않은 예전 주문에 상품 줄을 만들지 않는다', async () => {
+    const service = new OrdersQueryService(makeFirestore(records) as never);
+
+    const list = await service.getOrders('store-1', requester('seller-1', 'seller'), {});
+
+    expect(list).toHaveLength(2);
+    for (const order of list) expect(order).not.toHaveProperty('orderItems');
   });
 
   describe('판매자 목록 전화 검색', () => {
