@@ -1,6 +1,11 @@
 import type { Order, OrderStatus } from '@greenhub/shared';
 import { describe, expect, it } from 'vitest';
-import type { GroupConfigMap, OrderGroup } from './_constants';
+import {
+  DATE_PRESETS,
+  DEFAULT_DATE_PRESET,
+  type GroupConfigMap,
+  type OrderGroup,
+} from './_constants';
 import {
   buildOrdersScopedViewModel,
   buildOrdersViewModel,
@@ -8,6 +13,7 @@ import {
   countOrdersByGroup,
   deriveOrdersFetchInput,
   filterBySaleType,
+  filterOrdersByRound,
   filterOrdersForView,
   groupFilteredOrdersByDate,
   isCustomRangeInvalid,
@@ -611,5 +617,57 @@ describe('통합 검색', () => {
       search: { query: '5678', phoneMatchIds: new Set([phoneHit.id]) },
     });
     expect(vm.filteredOrders.map((o) => o.id)).toEqual([phoneHit.id]);
+  });
+});
+
+describe('기본 날짜 필터(모든 날짜)와 회차 필터', () => {
+  const base = {
+    saleType: 'normal' as const,
+    activeTab: 'ACTION_REQUIRED' as OrderGroup,
+    subFilter: 'ALL' as InDeliverySubFilter,
+    heldOnly: false,
+    customFrom: '',
+    customTo: '',
+  };
+
+  it('기본은 날짜로 거르지 않아 1~2주 뒤 배송할 회차 주문도 처리 필요 목록에 보인다', () => {
+    const roundOrder = makeOrder({
+      status: 'ACCEPTED',
+      roundId: 'round-1',
+      requestedDeliveryDate: isoDaysFromToday(9),
+    });
+    const vm = buildOrdersViewModel({
+      ...base,
+      orders: [roundOrder],
+      datePreset: DEFAULT_DATE_PRESET,
+    });
+    expect(DEFAULT_DATE_PRESET).toBe('all');
+    expect(vm.dateRange).toBeNull();
+    expect(vm.scopedGroupCounts.ACTION_REQUIRED).toBe(1);
+    expect(vm.filteredOrders.map((o) => o.id)).toEqual([roundOrder.id]);
+
+    // '이번 주'를 고르면 예전처럼 거른다 — 뱃지는 1인데 목록이 비던 원인.
+    const week = buildOrdersViewModel({ ...base, orders: [roundOrder], datePreset: 'week' });
+    expect(week.scopedGroupCounts.ACTION_REQUIRED).toBe(1);
+    expect(week.filteredOrders).toHaveLength(0);
+  });
+
+  it('기존 프리셋은 그대로 두고 "모든 날짜"를 맨 앞에 더한다(라벨에 "전체"를 쓰지 않는다)', () => {
+    expect(DATE_PRESETS.map((preset) => preset.key)).toEqual([
+      'all',
+      'today',
+      'week',
+      'month',
+      'custom',
+    ]);
+    for (const preset of DATE_PRESETS) expect(preset.label).not.toContain('전체');
+  });
+
+  it('회차 필터는 그 회차 주문만 남기고, 없으면 그대로 둔다', () => {
+    const first = makeOrder({ status: 'ACCEPTED', roundId: 'round-1' });
+    const second = makeOrder({ status: 'ACCEPTED', roundId: 'round-2' });
+    const legacy = makeOrder({ status: 'ACCEPTED' });
+    expect(filterOrdersByRound([first, second, legacy], 'round-1')).toEqual([first]);
+    expect(filterOrdersByRound([first, second, legacy], null)).toEqual([first, second, legacy]);
   });
 });

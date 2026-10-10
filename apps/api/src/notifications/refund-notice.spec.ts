@@ -37,6 +37,24 @@ const baseInput = {
 };
 
 describe('회차 주문 취소 환불 안내', () => {
+  it('안내 본문에는 고객이 보는 주문번호를 쓰고 발송 기록·멱등 키는 문서 ID로 둔다', async () => {
+    const { service, notifications } = makeLifecycle({
+      userId: 'user-1',
+      status: 'ACCEPTED',
+      orderNumber: '20261101-000003',
+    });
+
+    await service.cancelForRound({ ...baseInput, customerNotice: 'ROUND_CANCELLED' });
+
+    expect(notifications.sendToUser).toHaveBeenCalledWith(
+      'user-1',
+      'ORDER_CANCELLED',
+      { orderId: '20261101-000003', reason: REFUND_NOTICE_REASONS.ROUND_CANCELLED },
+      'order-1',
+      'refund-notice:ROUND_CANCELLED:order-1',
+    );
+  });
+
   it.each([
     ['ADMIN_REFUND', REFUND_NOTICE_REASONS.ADMIN_REFUND],
     ['ROUND_CANCELLED', REFUND_NOTICE_REASONS.ROUND_CANCELLED],
