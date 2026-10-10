@@ -211,6 +211,7 @@ provider 응답은 `classifyAlimtalkProviderError()`/`classifySmsProviderError()
 - 필수 본문 변수 누락
 - ALIGO 필수 자격 증명 누락
 - `ALIGO_OUTBOUND_PROXY_URL` 형식 오류(`http:`·`https:` 외 또는 URL 아님) — 직접 호출로 우회하지 않는다
+- 수신번호가 단일 국내 휴대폰 번호(`010` 11자리, `011·016·017·018·019` 10~11자리)로 정규화되지 않음(쉼표 등으로 이은 여러 번호 포함)
 - `ALIGO_TEMPLATE_CODES_JSON` 파싱 오류
 - 허용되지 않은 논리 코드
 - 현재 템플릿의 provider 매핑 누락
@@ -241,6 +242,9 @@ provider 응답은 `classifyAlimtalkProviderError()`/`classifySmsProviderError()
 ## 8. 수신자와 최종 실패 처리
 
 `NotificationsService.sendToUser()`는 주문 snapshot과 사용자 정보를 기준으로 수신 전화번호를 해석한다.
+
+- 공백·하이픈·괄호를 지우고 `+82`를 `0`으로 바꿔 단일 휴대폰 번호(숫자만)로 정규화되는 값만 쓴다.
+- 주문자 본인 알림은 주문 배송 연락처(`deliveryPhone`)를 먼저 쓰고, 비었거나 휴대폰 형식이 아니면 프로필 연락처로 대체한다.
 
 - 유효한 전화번호가 없고 주문 연계 알림이면 고객 안내 실패 운영 이슈를 만든다.
 - 외부 발송 결과는 `notifications`에 기록한다.
@@ -336,6 +340,13 @@ ALIGO 실제 발송은 별도 승인된 운영 readiness 검증의 대상이다.
 
 회귀는 `apps/api/src/notifications/legacy-group-cancel-notification.spec.ts`에서 취소 대상 participant snapshot 기준 consumer 알림 1회 전달, 판매자 알림 유지, 다른 template의 terminal filtering 의미 유지를 직접 확인한다.
 
+### 처리 lease와 알림 멱등 키
+
+- 마감 cron과 목표 도달 조기 확정은 `groupProductConfig/{productId}.processingLease`(`id`, `expiresAt`, 5분)를 트랜잭션으로 잡은 실행만 처리한다. 성공하면 같은 lease일 때만 `isProcessed: true`로 닫고, 실패하면 lease를 풀어 다음 실행이 다시 처리한다. 확정·취소 판단은 lease 트랜잭션의 최신 값으로 한다.
+- 조기 확정 트리거는 주문 생성 트랜잭션이 커밋된 뒤에만 실행한다.
+- 공동구매 알림은 멱등 키로 주문당 1회만 보낸다: `group-buy:{productId}:{templateCode}:{orderId}`(소비자 확정·미달 취소), `group-buy:{productId}:{templateCode}`(판매자 확정·미달 취소), `group-deadline-soon:{productId}:{orderId}`(마감 임박).
+- 회귀: 같은 spec의 처리 lease 묶음(중복 실행, 조기 확정 선점, 유효·만료 lease, 실패 뒤 재처리, 마감 임박 멱등 키).
+
 ## 11. FCM 상태
 
 `fcm` 타입과 `fcmToken` 필드는 호환 구조로 남아 있으나 현재 notifications API 코드에는 `sendFcmPush()` 구현이 없다. 따라서 FCM을 현재 운영 발송 채널로 문서화하지 않는다.
@@ -390,6 +401,7 @@ state → withdrawal → retention evidence → sender gating의 lifecycle을 �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-09 | 알림 본문 변수 한 줄 정리·변수별 길이 상한(이름 링크 차단), 수신번호 단일 휴대폰 형식 강제, legacy 공동구매 처리 lease·알림 멱등 키 반영 |
 | 2026-09-28 | 선택 설정 `ALIGO_OUTBOUND_PROXY_URL`(고정 IP 프록시 경유)과 형식 오류 fail-closed 계약 추가 |
 | 2026-09-28 | 소비자 회차 직접 취소 `ORDER_CANCELLED` 발송 정책 결정과 구현 반영(고정 사유 `고객 요청`, PENDING·기취소 제외, 멱등 키) |
 | 2026-09-26 | `NOTIFICATION_RETRY_METRICS` in-process 관측 recorder 계약(채널별 오류 분류 counter·적용 지연 집계·PII 미기록·전달 결과 불변) 및 전용 회귀 추가 |

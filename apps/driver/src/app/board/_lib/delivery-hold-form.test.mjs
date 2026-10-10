@@ -4,7 +4,10 @@ import test from 'node:test';
 import {
   deliveryHoldResponsibilityFeeHint,
   HOLD_FEE_NOT_ALLOWED_HINT,
+  HOLD_FEE_RANGE_HINT,
   HOLD_FEE_REQUIRED_HINT,
+  isRedeliveryFeeWithinLimit,
+  MAX_REDELIVERY_FEE_KRW,
   parseRedeliveryFee,
 } from './delivery-hold-form.ts';
 
@@ -75,6 +78,31 @@ test('책임과 재배송비가 맞거나 기상 보류면 안내 없이 저장�
     }),
     null,
   );
+});
+
+test('재배송비는 서버 상한(50,000원) 이하의 정수만 받고, 넘으면 저장을 막고 안내한다', () => {
+  assert.equal(MAX_REDELIVERY_FEE_KRW, 50_000);
+  assert.equal(HOLD_FEE_RANGE_HINT, '재배송비는 50,000원 이하의 정수로 입력해 주세요.');
+  assert.equal(isRedeliveryFeeWithinLimit(null), true);
+  assert.equal(isRedeliveryFeeWithinLimit(MAX_REDELIVERY_FEE_KRW), true);
+  assert.equal(isRedeliveryFeeWithinLimit(MAX_REDELIVERY_FEE_KRW + 1), false);
+  assert.equal(isRedeliveryFeeWithinLimit(1500.5), false);
+  for (const reasonCode of NON_WEATHER) {
+    for (const redeliveryFee of [1, '3000', MAX_REDELIVERY_FEE_KRW, '50000']) {
+      assert.equal(
+        deliveryHoldResponsibilityFeeHint({ reasonCode, customerResponsible: true, redeliveryFee }),
+        null,
+        String(redeliveryFee),
+      );
+    }
+    for (const redeliveryFee of [MAX_REDELIVERY_FEE_KRW + 1, '50001', 1500.5, '3000.5', '1e21']) {
+      assert.equal(
+        deliveryHoldResponsibilityFeeHint({ reasonCode, customerResponsible: true, redeliveryFee }),
+        HOLD_FEE_RANGE_HINT,
+        String(redeliveryFee),
+      );
+    }
+  }
 });
 
 test('보류 모달은 어긋난 책임·재배송비를 저장 버튼에서 막고 입력칸 아래에 안내한다', () => {

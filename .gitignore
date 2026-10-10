@@ -2,15 +2,27 @@ node_modules/
 dist/
 !packages/shared/dist/
 .next/
-.env
-.env.local
-.env.*.local
+# 환경 변수 파일: 모든 변형(.env.production, .env.staging, .env.e2e 등)을 무시하고 예시 파일만 추적
+.env*
+!.env.example
 *.log
 .DS_Store
 
-# Firebase 서비스 계정 키 (절대 커밋 금지)
+# Firebase·GCP 서비스 계정 키와 인증서·키 파일 (절대 커밋 금지)
 firebase-adminsdk*.json
 *-adminsdk-*.json
+*service-account*.json
+*serviceAccount*.json
+sa.json
+*credentials*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# 브라우저 추적·네트워크 기록 (쿠키·토큰 포함 가능)
+trace.zip
+*.har
 
 .vercel
 
@@ -29,14 +41,17 @@ apps/e2e/.round-direct-*-state.json
 # 회차 E2E 로컬 대상 모드 env(E2E Firebase 웹 설정·서비스 계정 경로, 커밋 금지)
 apps/e2e/.env.local-target
 
-# 회차 직배송 E2E의 민감 fixture manifest와 원본 실행 결과
+# 로컬 실행 증거·진단 출력(회차 직배송 E2E manifest·원본 결과, probe 증거, vercel inspect 등)
+# 기본 무시한다. 이미 추적 중인 역사적 증거 파일은 이 규칙과 무관하게 그대로 추적된다.
+.artifacts/
 apps/e2e/.artifacts/
-.artifacts/round-direct/**/manifest.json
-.artifacts/round-direct/**/*-raw.json
-.artifacts/round-direct/**/playwright-results.json
 
 # Firestore 로컬 백업
 backups/
+*_firestore.json
+
+# 에이전트 실행 중지 신호 파일 (로컬 한정)
+.agent-stop
 
 # TypeScript 빌드 캐시
 *.tsbuildinfo

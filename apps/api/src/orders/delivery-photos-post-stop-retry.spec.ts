@@ -5,7 +5,7 @@ import { DriverOrderScopeService } from './driver-order-scope.service';
 
 type Data = Record<string, any>;
 
-const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]);
+const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02, 0xff, 0xd9]);
 
 function deterministicPhotoId(orderId: string, key: string): string {
   return createHash('sha256').update(`${orderId}:${key}`).digest('hex').slice(0, 32);
