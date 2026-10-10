@@ -19,7 +19,11 @@ import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { use, useEffect, useState } from 'react';
-import { useOrderStatus } from '@/hooks/useOrderStatus';
+import {
+  ORDER_STATUS_POLL_INTERVAL_MS,
+  ORDER_STATUS_POLL_MAX_MS,
+  useOrderStatus,
+} from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
 import {
@@ -29,6 +33,7 @@ import {
   readBrowserPaymentContext,
   redeliveryPaymentRedirectPath,
   resolveRedeliveryPaymentReturn,
+  shouldRecheckRedeliveryPayment,
 } from '@/lib/payment-redirect';
 import { readPortonePaymentConfiguration } from '@/lib/portone-config';
 import {
@@ -368,9 +373,41 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     }
     setRedeliveryOutcome(outcome);
     setActionError(outcome.message);
-    // 실패·취소는 확정이다. 성공 쿼리인데 아직 미확인이면 폴링으로 paid가 올 때까지 계속 본다.
+    // 실패·취소는 확정이다. 성공 쿼리인데 아직 미확인이면 아래 재확인으로 paid가 올 때까지 계속 본다.
     if (outcome.kind === 'rejected') setRedeliveryRedirect(null);
   }, [redeliveryRedirect, redeliveryPaid]);
+
+  // 성공으로 돌아왔는데 서버 결제 확인(웹훅) 전이면 3초마다 다시 읽는다(최대 2분).
+  // 주문 상태 자동 확인은 결제 대기(PENDING) 주문만 하므로 보류·준비 중 주문은 여기서 따로 본다.
+  const awaitingRedeliveryPaid = shouldRecheckRedeliveryPayment(
+    redeliveryRedirect,
+    redeliveryPaid,
+    0,
+    ORDER_STATUS_POLL_MAX_MS,
+  );
+  useEffect(() => {
+    if (!awaitingRedeliveryPaid) return;
+    const startedAt = Date.now();
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // 다시 읽기가 끝난 뒤에만 다음 확인을 예약한다(요청이 겹치지 않는다).
+    const scheduleRecheck = () => {
+      if (
+        stopped ||
+        Date.now() - startedAt + ORDER_STATUS_POLL_INTERVAL_MS >= ORDER_STATUS_POLL_MAX_MS
+      ) {
+        return;
+      }
+      timer = setTimeout(() => {
+        void refetch().finally(scheduleRecheck);
+      }, ORDER_STATUS_POLL_INTERVAL_MS);
+    };
+    scheduleRecheck();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [awaitingRedeliveryPaid, refetch]);
 
   async function handleConfirm() {
     if (!session?.user?.accessToken || !detail) return;
