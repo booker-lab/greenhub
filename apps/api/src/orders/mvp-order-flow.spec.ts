@@ -1253,6 +1253,47 @@ describe('MVP 회차 주문 흐름 계약', () => {
     expect(records.get('orders/order-legacy-weather')).not.toHaveProperty('deliveryHold');
   });
 
+  it.each([
+    ['재배송비 없는 고객 책임', { customerResponsible: true, redeliveryFee: null }],
+    ['고객 책임 아닌 재배송비', { customerResponsible: false, redeliveryFee: 3000 }],
+  ])('회차 주문의 기상 외 보류에 %s 조합을 저장하지 않는다', async (_name, responsibility) => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-access': {
+          id: 'order-access',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'PREPARING',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          deliveryMethod: 'direct',
+        },
+      }),
+    );
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.updateStatus(
+        'store-round',
+        'order-access',
+        'seller-1',
+        {
+          status: 'DELIVERY_HELD',
+          deliveryHold: {
+            reasonCode: 'ACCESS_UNAVAILABLE',
+            reasonMessage: '공동현관 출입 불가',
+            ...responsibility,
+          },
+        } as never,
+        'seller',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(records.get('orders/order-access')).not.toHaveProperty('deliveryHold');
+    expect(records.get('saleRounds/round-1')).toMatchObject({
+      counters: expect.objectContaining({ heldOrderCount: 0 }),
+    });
+  });
+
   it('같은 배송 보류 요청이 중복 실행돼도 회차 보류 주문 수는 한 번만 증가한다', async () => {
     const { firestore, records } = makeFirestore(
       seedRoundRecords({
