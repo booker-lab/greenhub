@@ -2,6 +2,8 @@
 
 # Project Blueprint: 회차 직배송 MVP 출시 차단 요소 해소
 
+> **Historical — 2026-09-05 snapshot.** 이 문서는 현재 재개 지점이나 실행 지시가 아니다. 이후 2026-09-28 운영 배포, 2026-09-29 activation(`salesMode=round_direct`, 첫 회차 `SCHEDULED`), ALIGO 운영 반영·격리 알림톡이 끝났다. 현재 상태와 다음 작업은 `docs/memory.md`, 미완료는 `docs/BACKLOG.md`를 따른다.
+
 > 실행 순서·의존성·승인 게이트만 관리한다. 상태는 `docs/memory.md`, 세부 Acceptance Criteria는 `docs/BACKLOG.md`, 도메인 계약은 current spec을 따른다.
 
 ## 메타

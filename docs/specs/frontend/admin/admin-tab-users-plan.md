@@ -93,7 +93,7 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 ### 그룹 A — 표시 정보 보강 (저위험, 묶음 커밋)
 
 #### **T1. 가입일·전화 표시 (F1+F2)**
-- **상태(2026-09-28):** 구현 완료·PR 병합 대기, 육안 미확인. 실제 위치 `apps/seller/src/app/admin/users/` — `_lib.ts`(`formatJoinedDate`·`formatPhone`, `toDateStrKST` 재사용) + `_lib.test.ts`·`_components/UsersTable.test.tsx` 신설. API(`getUsers`)는 이미 `createdAt`·`phone`을 내려줘 변경 없음.
+- **상태(2026-10-04):** 구현·병합 완료(#317 `e2ed2983`), 육안 미확인. 실제 위치 `apps/seller/src/app/admin/users/` — `_lib.ts`(`formatJoinedDate`·`formatPhone`, `toDateStrKST` 재사용) + `_lib.test.ts`·`_components/UsersTable.test.tsx` 신설. API(`getUsers`)는 이미 `createdAt`·`phone`을 내려줘 변경 없음.
 - **변경:**
   - `_components/UsersTable.tsx` 데스크톱: `<th>가입일</th>`·`<th>전화</th>` 컬럼 2개 추가
   - `_components/UsersTable.tsx` 모바일 카드: 이메일 아래에 `가입일` 별도 줄, `전화` 별도 줄
@@ -103,7 +103,7 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 - **위험:** 모바일 카드 높이 증가 = C7 시각 회귀 항목. 의도적 변경, 육안 §추가.
 
 #### **T2. 새로고침 버튼 (F4)**
-- **상태(2026-09-28):** 구현 완료·PR 병합 대기, 육안 미확인. stores `StoresFilters` 새로고침 버튼 형태(`Button variant="light" color="gray"`)를 따름 — `ActionIcon` 대신 텍스트 버튼.
+- **상태(2026-10-04):** 구현·병합 완료(#317 `e2ed2983`), 육안 미확인. stores `StoresFilters` 새로고침 버튼 형태(`Button variant="light" color="gray"`)를 따름 — `ActionIcon` 대신 텍스트 버튼.
 - **변경:** `users/_client.tsx`에 `useAdminUsers().reload` 노출. 제목 헤더 우측에 `<ActionIcon><IconRefresh/></ActionIcon>`. 로딩 중 `loading` prop.
 - **표준 위치 약속:** 후속 6개 탭(stores·orders·drivers·settlements·invite·banner)도 동일 위치 따라감(SDD 부채 기록).
 - **선행 = 없음.** T1과 묶음 커밋.
@@ -152,10 +152,10 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 
 | 세션 | 범위 | 산출물 | 정합성 | 비고 |
 |------|------|--------|--------|------|
-| **S1** | D1 단독 | `auth.service.ts` refresh()에 suspended 차단 + vitest | C1~C3 (백엔드 only) | 정지 결함 30일→1시간 단축. 가장 시급 |
-| **S2** | T1+T2 묶음 | `UsersTable.tsx` 가입일·전화 표시 + `_client.tsx` 새로고침 버튼 | C1~C5, C7 | 저위험. 모바일 카드 높이 회귀 의도적 |
-| **S3** | T3 단독 | `UsersFilters.tsx`·`_lib.ts`·`_lib.test.ts` 신설 + `_client.tsx` 통합 | C1~C7 전부 | 본 범위 핵심. vitest 첫 통과 후 PR |
-| **S4** | T4 단독 | `admin.service.ts:getUsers` limit·orderBy + 인덱스 배포 | C1~C3, 인덱스 확인 | user 수 확인 후 limit 값 확정 |
+| **S1** ✅ | D1 단독 (완료 — `auth.service.ts` `refresh()`가 `getAuthoritativeUser()`로 정지 계정 401, 회귀 `auth.service.spec.ts`) | `auth.service.ts` refresh()에 suspended 차단 + vitest | C1~C3 (백엔드 only) | 정지 결함 30일→1시간 단축. 가장 시급 |
+| **S2** ✅ | T1+T2 묶음 (완료 — #317, 육안 미확인) | `UsersTable.tsx` 가입일·전화 표시 + `_client.tsx` 새로고침 버튼 | C1~C5, C7 | 저위험. 모바일 카드 높이 회귀 의도적 |
+| **S3** ⬜ | T3 단독 | `UsersFilters.tsx`·`_lib.ts`·`_lib.test.ts` 신설 + `_client.tsx` 통합 | C1~C7 전부 | 본 범위 핵심. vitest 첫 통과 후 PR |
+| **S4** ⬜ | T4 단독 (limit 값은 사용자 결정) | `admin.service.ts:getUsers` limit·orderBy + 인덱스 배포 | C1~C3, 인덱스 확인 | user 수 확인 후 limit 값 확정 |
 | **S5** | e2e | §E-9 시나리오 4건 라이브 수행 | playwright 0 fail | S1~S4 코드 머지 후 |
 | **S6** | 육안 종결 | `pending-visual-verify.md` §추가 항목 전수 통과 | 사용자 확정 | 운영 배포 후 |
 

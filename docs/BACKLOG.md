@@ -26,11 +26,11 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 - R1 Combined Public Readiness: `PUBLIC_READINESS_CLOSED`
 - S2 → R1 campaign: `TERMINAL_SUCCESS`
 - #63이 확인한 pre-publication main 기준선: `ffd999423f8a98b0c1f34d020d832d7929feab72` — historical baseline
-- #71이 재확인한 현재 live `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`
+- #71이 재확인한 당시(2026-09-06) live `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` — historical baseline
 - #70 `SALE-ROUND-STATE-01`은 `MERGED`; 회차 atomicity/recovery implementation과 직접 proof가 publication되었다.
 - 역사적 exact-source Preview 기준선: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` — 현재 main, PR, merge, production 증거로 승격하지 않는다.
 - #63의 accepted closure는 닫힌 semantic work를 다시 열지 않는다는 뜻이며, Preview·Auth.js runtime 검증 잔여와 production/activation은 별도 상태다.
-- 기존 문서 candidate는 PR #69에서 후속 갱신하며, 이 Goal은 PR #69를 merge하지 않고 Git-native publication 경계(`docs/specs/ops/development-authority.md`)를 따른다.
+- 문서 candidate PR #69는 2026-09-05에 merge됐다.
 
 ---
 
@@ -42,12 +42,12 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 | verification | Sale Round proof `PROVEN`; 2026-09-28 exact Preview 원격 E2E 52 + 세션 12 통과(`PRE_RELEASE_PROVEN`), 출시 SHA 재실행은 `PENDING` |
 | prior candidate | PR #69의 기존 accepted candidate는 `9c921684a26597cb57887b6049288f1143b017c8` |
 | updated candidate | PR #69의 후속 candidate는 remote-addressable 상태로 갱신하며, 정확한 head SHA는 Issue #75 TASK_RECORD에 기록 |
-| PR | 기존 documentation PR #69는 `OPEN`; 이번 Goal은 merge하지 않음 |
-| published / merged | PR #70은 `MERGED`; live `main`은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` |
+| PR | documentation PR #69는 2026-09-05 `MERGED` |
+| published / merged | PR #70은 `MERGED`; 당시 live `main`은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`(historical) |
 | Preview runtime proof | Auth.js 세션 런타임 `RUNTIME_PROVEN`(Preview); 출시 SHA 기준 재실행은 `PENDING` |
-| production deployment | `PRODUCTION_AUTHORITY_PENDING` |
-| production activation | `PRODUCTION_AUTHORITY_PENDING` |
-| first live round | `PRODUCTION_AUTHORITY_PENDING` |
+| production deployment | `DONE` — 2026-09-28 출시 SHA `197f84a4`, 이후 갱신 이력과 현재 운영 SHA는 `memory.md` 5절 |
+| production activation | `DONE` — 2026-09-29 `salesMode=round_direct`, 첫 회차 `SCHEDULED` |
+| first live round | `NOT DONE` — 파일럿 2026-11-01(첫 회차 주문 11/1 10:00 자동 오픈) |
 
 ---
 
@@ -353,7 +353,7 @@ repo-side production auto-deploy 차단과 GitHub main 보호를 완료했다. 2
 
 Issue #66이 회차 수정·수동 개방·주문 예약·취소 복구의 race/recovery 구현과 직접 proof를
 accepted했다. semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는 PR #70으로
-게시되었고, PR #70은 merge되어 현재 live `main` `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`로
+게시되었고, PR #70은 merge되어 당시 live `main` `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`로
 read-back되었다.
 
 직접 proof 범위:
@@ -366,10 +366,9 @@ read-back되었다.
 | crash recovery, partial cancellation/retry와 duplicate convergence | `PROVEN` |
 | focused/integration/regression proof와 exact candidate publication | `PROVEN` / `PUBLISHED` |
 
-이 상태는 implementation과 repository publication에 대한 proof다. exact-release Preview/browser/runtime
-proof는 `PENDING`이며, production deployment·production activation·`salesMode` 전환·live round·actual
-payment/notification·first live round는 `PRODUCTION_AUTHORITY_PENDING`이다. 이 문서 후보와 PR #69는
-이를 production-ready로 표현하지 않는다.
+이 상태는 implementation과 repository publication에 대한 proof다. 이 proof만으로 production
+deployment·activation·live round·actual payment/notification을 주장하지 않는다. 운영 배포·activation
+상태는 위 `상태 구분` 표와 `memory.md` 5절이 소유한다.
 
 기술 계약은 `docs/specs/mvp-sales-round-direct-delivery.md`, 운영 중단·재개 규칙은
 `docs/specs/ops/mvp-sales-round-runbook.md`에 둔다.
@@ -433,17 +432,19 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 - repository logical 8-code contract: `VERIFIED` — #65에서 8개 logical code/body/required-variable 계약을 확인했다.
 - provider 템플릿: 2026-09-28 콘솔에서 UK_5691~5698 코드·이름·승인완료·본문·변수 일치 확인.
-- production mapping: Railway production 변수 저장값은 8종 모두 올바르다. 실행 중인 운영 API(8/23 이전 배포)에는 아직 반영되지 않았다.
-- 남은 gate: 출시 배포 뒤 운영 송신 IP의 ALIGO 등록 확인, API 기준 템플릿 대조, 격리 actual Alimtalk/SMS 및 fallback(별도 authority).
+- production mapping: Railway production 변수 저장값은 8종 모두 올바르고, 2026-09-28 출시 배포로 운영 API에 반영됐다.
+- 2026-09-28 완료: 운영 송신 IP(Fixie 고정 IP)의 ALIGO 등록 확인, 운영 컨테이너 API 기준 템플릿 대조 일치, 격리 실제 알림톡 도착.
+- 남은 gate: SMS fallback 실발송 — 사업자 발신번호 승인 뒤 `ALIGO_SENDER_PHONE` 교체와 재시험(아래 NEXT).
 
 ## AUTHORITY_PENDING
 
 ### Production deployment·activation
 
-상태: `PRODUCTION_AUTHORITY_PENDING`.
+상태: deployment `DONE`(2026-09-28) / activation `DONE`(2026-09-29) / live round·실제 결제 `NOT DONE`.
 
-- production deployment, `salesMode` 전환, 운영 회차/live round, actual payment, actual notification, first-round completion은 이 문서 후보나 PR로 완료되지 않는다.
-- production deployment와 production activation은 각각 별도 gate이며, exact release SHA와 별도 authority 없이는 주장하지 않는다.
+- 운영 배포 이력과 현재 운영 SHA는 `memory.md` 5절이 소유한다.
+- 남은 일: 파일럿 시작(2026-11-01)과 시작 직후 실제 결제·환불 1건 시험(아래 NEXT).
+- 운영 배포는 계속 exact release SHA와 별도 사용자 승인으로만 한다.
 
 ## PRODUCT_POLICY_DECISION_REQUIRED
 
@@ -458,10 +459,10 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### Pilot marketing contract
 
-상태: `DOC_DELTA_CANDIDATE`.
+상태: `VERIFIED` — 2026-10-10 코드·테스트·공개 문서 대조.
 
-- Pilot 정책은 `MARKETING_NOT_USED_IN_PILOT`이다.
-- 선택 마케팅 consent/retention wording을 현재 Pilot 계약보다 넓게 유지하지 않는다.
+- Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`: 회차 주문 API가 `marketingConsent`를 거부한다(`apps/api/src/orders/round-order-create.service.ts`, 회귀 `apps/api/src/orders/mvp-order-flow.spec.ts`). 결제 화면은 동의를 받지 않고 MY 마케팅 설정은 미운영 안내만 보인다.
+- 공개 `/privacy`·`/terms`(시행일 2026-08-30)와 `docs/specs/legal/README.md`, `docs/specs/mvp-sales-round-direct-delivery.md`, `docs/specs/api/notifications.md`가 같은 정책을 적는다.
 - 향후 marketing 활성화는 별도의 product·legal·provider·release authority와 현재 증거가 필요한 후속 판단이다.
 
 ## NEXT — 현재 residual 해소 후
@@ -483,10 +484,18 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### 법무·출시 후보 정합성
 
-- [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책 반영
+2026-10-10 재대조 결과는 `docs/specs/legal/README.md` `2026-10-10 실제 흐름 재대조`가 소유한다.
+
+- [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책 반영 — 8/30 판에 반영됐고, 남은 공백은 아래 `LEGAL-LATE-PAYMENT-REFUND-TERMS`
 - [ ] settlement 및 payment 검증 결과 반영
-- [ ] PortOne/PG·ALIGO 전화번호·메시지 처리 경계 반영
-- [ ] Pilot `MARKETING_NOT_USED_IN_PILOT` 정책과 공개 legal/source wording 정합화
+- [x] PortOne/PG·ALIGO 전화번호·메시지 처리 경계 반영 — 8/30 판 `/privacy` 4절. ALIGO 고정 IP 프록시는 HTTPS 터널이라 위탁 고지 대상 아님(2026-10-10)
+- [x] **`LEGAL-PRIVACY-OFFICER`**: 2026-10-10 사용자 결정(대표자)으로 `/privacy` 9절에 반영, `legal-documents.test.mjs`에 고정. 2026-11-01 시행 개정판이며 운영 배포 대기 묶음과 함께 나간다.
+- [ ] **`LEGAL-MAIL-ORDER-REGISTRATION`** (파일럿 전, 사람 결정): 통신판매업 신고 대상 여부를 정한다. 신고하면 번호를 footer에 넣고 `BusinessInfoFooter.test.mjs`의 미노출 단언을 바꾼다.
+- [x] **`LEGAL-DRIVER-KAKAOMAP-NOTICE`**: 2026-10-10 사용자 결정(고지)으로 `/privacy` 4절에 반영.
+- [x] **`LEGAL-LATE-PAYMENT-REFUND-TERMS`**: `/terms` 제7조에 반영(2026-11-01 시행).
+- [ ] **`LEGAL-REVISION-EFFECTIVE-DATE`**: 개정판 시행일 2026-11-01은 운영 배포가 그보다 앞서야 성립한다. 운영 배포 대기 묶음 배포가 11/1 이후로 밀리면 시행일과 `legal-documents.test.mjs`를 함께 고친다.
+- [ ] `OPS-ALERT-NO-PII-TEST` (선택): 운영자 텔레그램 알림에 고객 이름·전화·주소가 실리지 않음을 직접 테스트로 고정한다(현재 코드상 고정 문구만 보냄).
+- [x] Pilot `MARKETING_NOT_USED_IN_PILOT` 정책과 공개 legal/source wording 정합화 — 2026-10-10 대조(위 DOC_DELTA)
 - [ ] exact release SHA와 필요한 release verification
 
 ---
@@ -669,7 +678,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 2026-10-03 앱 아이콘 상징(두 잎 하트)은 사용자가 "일단 이렇게" 정한 임시안이다. 잎사귀 하트·"그" 글자·손글씨 G·새싹·붓선 하트·꽃·화분·난초·gl·G+잎 시안을 봤지만 마음에 드는 것이 없었다. 나중에 아이콘 디자인을 다시 정한다. 로고(Nunito "Green Love" 글자만)와 앱별 구성(소비자=상징만, 판매자=+Seller, 기사=+Driver)은 확정. 원본은 `packages/ui/brand/`, 기준은 `docs/specs/frontend/design-standard.md` §7.
 
 ### ADMIN-TAB-PLANS-STALE-PROGRESS
-- [ ] 어드민 탭 계획서(`docs/specs/frontend/admin-tabs-improve-plan.md`와 `admin/admin-tab-*-plan.md`) 진행표가 현재 코드보다 뒤처져 있다. stores는 T7·T8을 빼고 구현을 마쳤고, 6개 탭 공통 조회 실패 표시와 users D1·banner T1·T3도 끝났는데 표에는 "미착수"로 남아 있다. 문서 정합성 작업으로 정리한다. 2026-09-28 코드 대조로 확인.
+- [x] 2026-10-10 해결: PR #391의 어드민 탭 계획서 진행표 갱신(2026-10-04 코드 대조)을 옮겼다. 인용 커밋 12개가 `main`에 있고 그 뒤 어드민 코드 변경은 문구·안내 수준이라 판정이 바뀌지 않았다. 이전 기록: 어드민 탭 계획서(`docs/specs/frontend/admin-tabs-improve-plan.md`와 `admin/admin-tab-*-plan.md`) 진행표가 현재 코드보다 뒤처져 있다. stores는 T7·T8을 빼고 구현을 마쳤고, 6개 탭 공통 조회 실패 표시와 users D1·banner T1·T3도 끝났는데 표에는 "미착수"로 남아 있다. 문서 정합성 작업으로 정리한다. 2026-09-28 코드 대조로 확인.
 
 ### DRIVER-SELLER-PHONE-BEFORE-PICKUP
 - [ ] 기사 IA(`docs/design/드라이버-2단계-IA.md` §4)는 수거 전 화면에 판매자 연락처를 두지만, 코드(`2e2c0b50` 최소 노출)와 테스트는 미배정 주문의 `sellerPhone`을 숨긴다. **2026-10-04 결정: 파일럿 동안 현재 동작(숨김)을 유지한다.** 파일럿은 판매자와 기사가 같은 사람이라 필요가 없다. 외부 기사를 쓰기 시작할 때 노출 범위를 다시 정하고 IA 또는 테스트를 맞춘다.
