@@ -5,10 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { CancelOrderModal } from './_components/CancelOrderModal';
+import { DeliveryHoldModal } from './_components/DeliveryHoldModal';
 import { OrderInfoSection } from './_components/OrderInfoSection';
 import { OrderOperationsSection } from './_components/OrderOperationsSection';
 import { PrepareForm } from './_components/PrepareForm';
@@ -20,7 +22,8 @@ import {
   SELLER_ORDER_DETAIL_AUTH_ERROR,
 } from './_hooks/useOrderDetail.recovery';
 import { useOrderOperations } from './_hooks/useOrderOperations';
-import { CANCELLABLE_STATUSES, READONLY_STATUSES } from './_lib';
+import { READONLY_STATUSES } from './_lib';
+import { holdReleaseMessage, resolveOrderDetailActions } from './order-actions';
 
 function DetailStatusBox({ children }: { children: ReactNode }) {
   return (
@@ -79,9 +82,15 @@ export default function OrderDetailPage() {
     setShowCancelModal,
     cancelReason,
     setCancelReason,
+    showHoldModal,
+    setShowHoldModal,
+    showReleaseConfirm,
+    setShowReleaseConfirm,
     handlePrepare,
     handleCancel,
     handleShipParcel,
+    handleHold,
+    handleReleaseHold,
   } = useOrderDetailActions(storeId, orderId, handleReconciled);
   const {
     issues,
@@ -200,11 +209,16 @@ export default function OrderDetailPage() {
   }
 
   const isReadonly = READONLY_STATUSES.includes(order.status);
-  const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED';
-  const canCancel = CANCELLABLE_STATUSES.includes(order.status);
-  // BUG-16 T3: 택배 주문은 PREPARING 단계에서 셀러가 직접 발송 완료 가능.
-  const canShipParcel = order.deliveryMethod === 'parcel' && order.status === 'PREPARING';
-  const showFooter = !isReadonly && !showPrepareForm && (canPrepare || canCancel || canShipParcel);
+  // 상태별 버튼 — BUG-16 T3: 택배 주문은 PREPARING 단계에서 셀러가 직접 발송 완료 가능.
+  const actions = resolveOrderDetailActions(order);
+  const canPrepare = actions.prepare;
+  const canCancel = actions.cancel;
+  const canShipParcel = actions.shipParcel;
+  const isHeld = actions.releaseHold;
+  const showFooter =
+    !isReadonly &&
+    !showPrepareForm &&
+    (canPrepare || canCancel || canShipParcel || actions.hold || actions.releaseHold);
   const deliveryDate =
     order.saleType === 'normal'
       ? order.requestedDeliveryDate
@@ -354,6 +368,40 @@ export default function OrderDetailPage() {
                   택배 발송 완료
                 </Button>
               )}
+              {actions.releaseHold && (
+                <Button
+                  onClick={() => {
+                    setActionError(null);
+                    setShowReleaseConfirm(true);
+                  }}
+                  disabled={actionLoading}
+                  fullWidth
+                  size="md"
+                  radius="xl"
+                  style={{
+                    backgroundColor: 'var(--color-primary)',
+                    fontWeight: 'var(--fw-medium)',
+                  }}
+                >
+                  재배송 준비로 돌리기
+                </Button>
+              )}
+              {actions.hold && (
+                <Button
+                  onClick={() => {
+                    setActionError(null);
+                    setShowHoldModal(true);
+                  }}
+                  disabled={actionLoading}
+                  fullWidth
+                  size="md"
+                  radius="xl"
+                  variant="outline"
+                  color="gray"
+                >
+                  배송 보류
+                </Button>
+              )}
               {canCancel && (
                 <Button
                   onClick={() => setShowCancelModal(true)}
@@ -364,7 +412,7 @@ export default function OrderDetailPage() {
                   variant="outline"
                   color="red"
                 >
-                  강제 취소
+                  {isHeld ? '주문 취소·환불' : '강제 취소'}
                 </Button>
               )}
             </Stack>
@@ -378,12 +426,36 @@ export default function OrderDetailPage() {
         setCancelReason={setCancelReason}
         actionLoading={actionLoading}
         actionError={actionError}
+        title={isHeld ? '주문 취소·환불' : undefined}
+        note={isHeld ? '결제 금액과 결제된 재배송비를 모두 환불해요.' : undefined}
         onClose={() => {
           setShowCancelModal(false);
           setCancelReason('');
           setActionError(null);
         }}
         onConfirm={handleCancel}
+      />
+
+      <DeliveryHoldModal
+        opened={showHoldModal}
+        actionLoading={actionLoading}
+        actionError={actionError}
+        onClose={() => {
+          setShowHoldModal(false);
+          setActionError(null);
+        }}
+        onSubmit={handleHold}
+      />
+
+      <ConfirmModal
+        opened={showReleaseConfirm}
+        title="재배송 준비로 돌리기"
+        message={holdReleaseMessage(order)}
+        confirmLabel="재배송 준비"
+        confirmColor="brand"
+        loading={actionLoading}
+        onConfirm={handleReleaseHold}
+        onClose={() => setShowReleaseConfirm(false)}
       />
     </PageShell>
   );
