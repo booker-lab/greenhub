@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
+import { isAllowedRedeliveryFee } from './dto/update-status.dto';
+import { isOrderCancellationInProgress } from './order-cancellation-state';
 import {
   isChargeForCurrentHold,
   isCurrentRedeliveryPaymentRequired,
@@ -40,6 +42,9 @@ export class OrderChargesService {
       const order = orderSnap.data()!;
       if (order['userId'] !== input.requesterId) {
         throw new ForbiddenException('주문자만 재배송비 결제를 만들 수 있습니다.');
+      }
+      if (isOrderCancellationInProgress(order)) {
+        throw new ConflictException('주문 취소가 진행 중이어서 재배송비 결제를 만들 수 없습니다.');
       }
       const hold = order['deliveryHold'] as Record<string, unknown> | null | undefined;
       if (
@@ -100,7 +105,7 @@ export class OrderChargesService {
         return;
       }
       const amount = Number(hold['redeliveryFee'] ?? 0);
-      if (!Number.isFinite(amount) || amount <= 0) {
+      if (!Number.isFinite(amount) || amount <= 0 || !isAllowedRedeliveryFee(amount)) {
         throw new BadRequestException('재배송비 금액이 올바르지 않습니다.');
       }
       const now = this.firestore.Timestamp.now();
