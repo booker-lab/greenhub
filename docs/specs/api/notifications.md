@@ -106,6 +106,8 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 
 고객이 요청하지 않은 환불 알림 정책(2026-10-09 결정): 회차 전체 취소, 관리자 강제 환불(회차 주문), 늦은 결제 자동 환불도 `ORDER_CANCELLED`를 보낸다. 사유는 `apps/api/src/notifications/refund-notice-reasons.ts`의 상황별 고정 문구이며 파일럿 개시 전 최종 확정한다. 결제 전(`PENDING`)·이미 취소가 끝난 주문은 보내지 않고, 실패했던 취소를 다시 처리할 때는 보낸다. 멱등 키는 `refund-notice:<ROUND_CANCELLED|ADMIN_REFUND|LATE_PAYMENT>:<orderId>`. 안내 실패는 환불·취소 결과를 바꾸지 않는다. 직접 근거: `apps/api/src/notifications/refund-notice.spec.ts`.
 
+고객 알림 본문의 `#{orderId}`에는 고객이 결제 완료·MY 주문 화면에서 보는 주문번호(`orderNumber`, 예: `20261101-000003`)를 넣는다. 주문번호가 없는 옛 주문만 문서 ID를 쓴다. 발송 기록(`notificationDeliveries.orderId`)·멱등 키·운영 이슈 연결은 계속 문서 ID를 쓴다. 직접 근거: `apps/api/src/notifications/customer-order-label.spec.ts`.
+
 세부 생성 규칙은 실제 호출부와 회차 직배송 spec을 함께 확인한다.
 
 ## 5. 내부 논리 코드와 ALIGO `tpl_code`

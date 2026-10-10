@@ -60,7 +60,7 @@ import {
 } from '../../lib/driver-list-read.ts';
 
 test('Driver Board는 Driver role API에서 세 상태를 조회한다', () => {
-  assert.match(boardSource, /apiFetch\(\s*['"]\/driver\/orders['"]/);
+  assert.match(boardSource, /apiRead\(\s*['"]\/driver\/orders['"]/);
   assert.doesNotMatch(boardSource, /onSnapshot|collection\(db|from ['"]firebase\/firestore['"]/);
 });
 
@@ -80,12 +80,12 @@ test('주문 카드는 안정적인 test id와 배송 보류 상태 배지를 �
 });
 
 test('Driver 상세는 Driver detail API를 사용하고 raw Firestore 주문을 읽지 않는다', () => {
-  assert.match(detailSource, /apiFetch\([\s\S]*driver\/orders/);
+  assert.match(detailSource, /apiRead\(`\/driver\/orders\//);
   assert.doesNotMatch(detailSource, /onSnapshot|doc\(db|from ['"]firebase\/firestore['"]/);
 });
 
 test('Driver Map은 Driver 목록 API를 사용하고 raw Firestore 주문을 읽지 않는다', () => {
-  assert.match(mapSource, /apiFetch\(\s*['"]\/driver\/orders['"]/);
+  assert.match(mapSource, /apiRead\(\s*['"]\/driver\/orders['"]/);
   assert.doesNotMatch(mapSource, /onSnapshot|collection\(db|from ['"]firebase\/firestore['"]/);
 });
 
@@ -300,6 +300,29 @@ test('Pilot 사진 화면은 JPEG 파일 대체 경로와 기존 업로드 계�
   assert.doesNotMatch(photoCaptureSource, /uploadBytes|getDownloadURL|firebase\/storage/);
   assert.doesNotMatch(photoCaptureSource, /multiple/);
   assert.doesNotMatch(photoCaptureSource, /get\(['"]flow['"]\)/);
+});
+
+test('밤 촬영: 카메라는 후면·FHD를 청하고, 파일 입력은 플래시가 있는 카메라 앱 경로로 안내한다', () => {
+  assert.match(
+    photoCaptureSource,
+    /video: \{ facingMode: 'environment', width: \{ ideal: 1920 \}, height: \{ ideal: 1080 \} \}/,
+  );
+  // 최소 해상도를 강제하지 않는다(지원하지 않는 기기에서 카메라가 아예 안 열리면 안 된다).
+  assert.doesNotMatch(photoCaptureSource, /(min|exact):\s*\d/);
+  assert.match(photoCaptureSource, /aria-label="카메라 앱으로 찍기·사진 선택"/);
+  assert.match(photoCaptureSource, />\s*카메라 앱으로 찍기·사진 선택\s*</);
+  assert.doesNotMatch(photoCaptureSource, /사진 파일 선택/);
+});
+
+test('배송을 마치면 남은 배송을 보도록 배송 중 탭으로 돌아간다', () => {
+  assert.match(photoCaptureSource, /router\.replace\('\/board\?tab=delivering'\)/);
+  assert.equal(
+    (detailSource.match(/router\.replace\('\/board\?tab=delivering'\)/g) ?? []).length,
+    3,
+  );
+  for (const source of [detailSource, photoCaptureSource]) {
+    assert.doesNotMatch(source, /tab=preparing/);
+  }
 });
 
 test('카메라 스트림은 video 마운트 뒤 연결되고 프레임 준비 전 촬영을 막는다', () => {

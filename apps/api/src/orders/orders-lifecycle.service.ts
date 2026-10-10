@@ -26,6 +26,7 @@ import { randomUUID } from 'node:crypto';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 import { releaseLegacyGroupQuantityInTransaction } from './_lib/legacy-group-quantity';
+import { customerOrderLabel } from '../notifications/customer-order-label';
 
 const LEGACY_CONSUMER_CANCEL_CLAIM_MS = 5 * 60 * 1000;
 const LEGACY_SELLER_CANCEL_CLAIM_MS = 5 * 60 * 1000;
@@ -521,7 +522,7 @@ export class OrdersLifecycleService {
       await this.notifications.sendToUser(
         userId,
         'GROUP_CANCELLED_SELF',
-        { orderId, productId },
+        { orderId: customerOrderLabel(order, orderId), productId },
         orderId,
         `consumer-cancel:${orderId}`,
       );
@@ -1212,7 +1213,10 @@ export class OrdersLifecycleService {
 
     if (!templateCode) return;
 
-    const variables: Record<string, string> = { orderId, ...extraVariables };
+    const variables: Record<string, string> = {
+      orderId: customerOrderLabel(order, orderId),
+      ...extraVariables,
+    };
     if (templateCode === 'ORDER_HUB_ARRIVED') {
       variables['productName'] = String(order['productName'] ?? '');
       variables['pickupCode'] = String(order['pickupCode'] ?? '');

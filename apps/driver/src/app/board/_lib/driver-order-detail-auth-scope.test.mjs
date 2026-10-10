@@ -338,7 +338,7 @@ test('R4. 이전 orderId command 결과는 새 order detail을 덮거나 이동�
   assert.match(detailSource, /const cmdOrderId = orderId/);
   assert.match(detailSource, /cmdOrderId === liveScopeRef/);
   // navigation은 scope/sequence 가드 뒤에만 있다.
-  const navAt = detailSource.indexOf("router.replace('/board?tab=preparing')");
+  const navAt = detailSource.indexOf("router.replace('/board?tab=delivering')");
   assert.ok(navAt !== -1, 'terminal navigation이 있어야 한다');
   const navWindow = detailSource.slice(Math.max(0, navAt - 300), navAt);
   assert.match(navWindow, /isCommandCurrent/);
