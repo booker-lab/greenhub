@@ -203,6 +203,7 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     product: `${namespace}-product-1`,
     secondProduct: `${namespace}-product-2`,
     closedProduct: `${namespace}-product-closed`,
+    soldOutProduct: `${namespace}-product-soldout`,
     openRound: `${namespace}-round-open`,
   };
   const tag = { runId, project, namespace };
@@ -245,6 +246,11 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     price: 9000, status: 'ACTIVE', isActive: false, stock: 300,
     images: ['https://placehold.co/600x600.jpg'], thumbnailUrl: 'https://placehold.co/600x600.jpg',
   });
+  add('products', ids.soldOutProduct, {
+    id: ids.soldOutProduct, storeId, sellerId: ids.seller, name: 'E2E 품절 호접란',
+    price: 15000, status: 'ACTIVE', isActive: true, stock: 300,
+    images: ['https://placehold.co/600x600.jpg'], thumbnailUrl: 'https://placehold.co/600x600.jpg',
+  });
 
   const roundDefinitions = [
     ['round-open', 'OPEN', {}],
@@ -275,33 +281,68 @@ export function buildFixtureManifest({ runId, project, accounts }) {
         updatedAt: new Date().toISOString(), completedAt: null,
       },
     }],
+    // 회차 상세 "이 회차 주문": 결제 완료 2건(상품 2종 × 1개씩)을 한꺼번에 준비 시작한다.
+    ['seller-round-bulk-prepare', 'CLOSED', {
+      counters: {
+        reservedDeliveryAddresses: 0, reservedItemQuantity: 0,
+        orderedDeliveryAddresses: 2, orderedItemQuantity: 4, heldOrderCount: 0,
+      },
+    }],
+    // 판매자 보류 해소: 기사 배정 없는 무료(기상) 보류 1건을 재배송 준비로 돌린다.
+    ['seller-round-hold-release', 'CLOSED', {
+      counters: {
+        reservedDeliveryAddresses: 0, reservedItemQuantity: 0,
+        orderedDeliveryAddresses: 1, orderedItemQuantity: 2, heldOrderCount: 1,
+      },
+    }],
+    // 판매자 보류: 기사가 가져가기 전 준비 중 주문 1건을 멈춘다.
+    ['seller-round-hold-preparing', 'CLOSED', {
+      counters: {
+        reservedDeliveryAddresses: 0, reservedItemQuantity: 0,
+        orderedDeliveryAddresses: 1, orderedItemQuantity: 2, heldOrderCount: 0,
+      },
+    }],
   ];
+  // 일괄 준비 시작 회차의 구매 목록은 결제된 주문 2건의 상품별 수량(2개씩)과 맞춘다.
+  const roundsWithSecondItem = new Set(['round-open', 'seller-round-bulk-prepare']);
   for (const [suffix, status, overrides] of roundDefinitions) {
     const roundId = `${namespace}-${suffix}`;
+    const orderedQuantity = suffix === 'seller-round-bulk-prepare' ? 2 : 0;
     add('saleRounds', roundId, roundDocument(roundId, storeId, status, overrides));
     add('saleRoundItems', `${roundId}-item-1`, {
       id: `${roundId}-item-1`, roundId, storeId, productId: ids.product,
       productNameSnapshot: 'E2E 호접란',
       productImageUrlSnapshot: 'https://placehold.co/600x600.jpg',
       roundPrice: 12000, saleLimitQuantity: 300, displayOrder: 1,
-      reservedQuantity: 0, orderedQuantity: 0, status: 'ACTIVE',
+      reservedQuantity: 0, orderedQuantity, status: 'ACTIVE',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     });
-    if (suffix === 'round-open') {
+    if (roundsWithSecondItem.has(suffix)) {
       add('saleRoundItems', `${roundId}-item-2`, {
         id: `${roundId}-item-2`, roundId, storeId, productId: ids.secondProduct,
         productNameSnapshot: 'E2E 미니 호접란',
         productImageUrlSnapshot: 'https://placehold.co/600x600.jpg',
         roundPrice: 6000, saleLimitQuantity: 300, displayOrder: 2,
-        reservedQuantity: 0, orderedQuantity: 0, status: 'ACTIVE',
+        reservedQuantity: 0, orderedQuantity, status: 'ACTIVE',
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
+    }
+    if (suffix === 'round-open') {
       add('saleRoundItems', `${roundId}-item-closed`, {
         id: `${roundId}-item-closed`, roundId, storeId, productId: ids.closedProduct,
         productNameSnapshot: 'E2E 마감 호접란',
         productImageUrlSnapshot: 'https://placehold.co/600x600.jpg',
         roundPrice: 9000, saleLimitQuantity: 300, displayOrder: 3,
         reservedQuantity: 0, orderedQuantity: 0, status: 'HIDDEN',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+      // 결제 확정 수량이 상품별 한도에 닿은 상품. 공개 회차 조회가 품절(SOLD_OUT)로 계산한다.
+      add('saleRoundItems', `${roundId}-item-soldout`, {
+        id: `${roundId}-item-soldout`, roundId, storeId, productId: ids.soldOutProduct,
+        productNameSnapshot: 'E2E 품절 호접란',
+        productImageUrlSnapshot: 'https://placehold.co/600x600.jpg',
+        roundPrice: 15000, saleLimitQuantity: 2, displayOrder: 4,
+        reservedQuantity: 0, orderedQuantity: 2, status: 'ACTIVE',
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
     }
@@ -360,6 +401,39 @@ export function buildFixtureManifest({ runId, project, accounts }) {
         heldAt: new Date().toISOString(), reasonCode: 'ACCESS_UNAVAILABLE',
         reasonMessage: '출입 정보 확인 필요', customerResponsible: true,
         redeliveryFee: 3000, nextContactAt: null, nextDeliveryAt: null,
+      },
+    },
+  ));
+
+  // 판매자 회차 운영 주문. 기사가 아직 맡지 않은 주문이라 driverId가 없다.
+  const sellerOrders = [
+    ['seller-round-bulk-prepare-order-1', 'seller-round-bulk-prepare', 'ACCEPTED', {}],
+    ['seller-round-bulk-prepare-order-2', 'seller-round-bulk-prepare', 'ACCEPTED', {}],
+    ['seller-round-hold-release-order', 'seller-round-hold-release', 'DELIVERY_HELD', {
+      deliveryHold: {
+        heldAt: new Date().toISOString(), reasonCode: 'WEATHER',
+        reasonMessage: '강풍으로 배송을 미룹니다.', customerResponsible: false,
+        redeliveryFee: null, nextContactAt: null,
+        nextDeliveryAt: new Date(Date.now() + 86400000).toISOString(), resolvedAt: null,
+      },
+    }],
+    ['seller-round-hold-preparing-order', 'seller-round-hold-preparing', 'PREPARING', {}],
+  ];
+  for (const [suffix, roundSuffix, status, overrides] of sellerOrders) {
+    const orderId = `${namespace}-${suffix}`;
+    add('orders', orderId, orderDocument(
+      orderId, storeId, `${namespace}-${roundSuffix}`, ids.consumer, null, status, overrides,
+    ));
+  }
+
+  // 결제 시간이 지나 자동 취소된 주문(결제 기록 없음). 화면은 내부 코드(timeout) 대신 한국어 사유를 보인다.
+  const timeoutOrderId = `${namespace}-round-direct-order-cancelled-timeout`;
+  add('orders', timeoutOrderId, orderDocument(
+    timeoutOrderId, storeId, ids.openRound, ids.consumer, null, 'CANCELLED', {
+      cancelReason: 'timeout',
+      cancellation: {
+        status: 'COMPLETED', reason: 'timeout',
+        completedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       },
     },
   ));

@@ -180,6 +180,71 @@ describe('회차 E2E fixture manifest 계약', () => {
       manifest.generatedStorageObjects,
     );
   });
+
+  it('품절·자동 취소·판매자 회차 운영 시나리오 데이터가 서버 판정과 맞는다', () => {
+    const manifest = buildFixtureManifest({ runId, project: 'chromium', accounts });
+    const doc = (suffix) =>
+      manifest.documents.find(({ path: docPath }) => docPath.endsWith(`/${manifest.namespace}-${suffix}`))
+        ?.data;
+    const ordersInRound = (roundSuffix) =>
+      manifest.documents
+        .filter(({ path: docPath }) => docPath.startsWith('orders/'))
+        .map(({ data }) => data)
+        .filter((order) => order.roundId === `${manifest.namespace}-${roundSuffix}`);
+
+    // 공개 조회 품절 판정: ACTIVE이고 결제 중+확정 수량이 상품별 한도에 닿음.
+    const soldOut = doc('round-open-item-soldout');
+    assert.equal(soldOut.status, 'ACTIVE');
+    assert.ok(soldOut.reservedQuantity + soldOut.orderedQuantity >= soldOut.saleLimitQuantity);
+    assert.equal(doc('product-soldout').isActive, true);
+
+    // 자동 취소 주문은 결제 기록 없이 내부 사유 코드만 갖는다.
+    const timeout = doc('round-direct-order-cancelled-timeout');
+    assert.equal(timeout.status, 'CANCELLED');
+    assert.equal(timeout.cancelReason, 'timeout');
+    assert.equal(
+      manifest.documents.some(({ path: docPath }) =>
+        docPath === `payments/${manifest.namespace}-round-direct-order-cancelled-timeout`),
+      false,
+    );
+
+    // 일괄 준비 시작: 기사 배정 전 결제 완료 2건, 구매 목록 수량·배송지 수가 주문과 같다.
+    const bulkOrders = ordersInRound('seller-round-bulk-prepare');
+    assert.deepEqual(bulkOrders.map((order) => order.status), ['ACCEPTED', 'ACCEPTED']);
+    assert.ok(bulkOrders.every((order) => order.driverId === null));
+    const bulkRound = doc('seller-round-bulk-prepare');
+    assert.equal(bulkRound.status, 'CLOSED');
+    assert.equal(bulkRound.counters.orderedDeliveryAddresses, bulkOrders.length);
+    const bulkQuantity = bulkOrders.reduce(
+      (sum, order) => sum + order.orderItems.reduce((total, item) => total + item.quantity, 0),
+      0,
+    );
+    assert.equal(bulkRound.counters.orderedItemQuantity, bulkQuantity);
+    assert.equal(
+      doc('seller-round-bulk-prepare-item-1').orderedQuantity +
+        doc('seller-round-bulk-prepare-item-2').orderedQuantity,
+      bulkQuantity,
+    );
+
+    // 보류 해소·판매자 보류: 회차 보류 건수가 보류 주문 수와 같아야 서버 집계가 어긋나지 않는다.
+    for (const [roundSuffix, status] of [
+      ['seller-round-hold-release', 'DELIVERY_HELD'],
+      ['seller-round-hold-preparing', 'PREPARING'],
+    ]) {
+      const orders = ordersInRound(roundSuffix);
+      assert.deepEqual(orders.map((order) => order.status), [status]);
+      assert.equal(orders[0].driverId, null);
+      assert.equal(
+        doc(roundSuffix).counters.heldOrderCount,
+        orders.filter((order) => order.status === 'DELIVERY_HELD').length,
+      );
+    }
+    const freeHold = ordersInRound('seller-round-hold-release')[0].deliveryHold;
+    assert.equal(freeHold.reasonCode, 'WEATHER');
+    assert.equal(freeHold.customerResponsible, false);
+    assert.equal(freeHold.redeliveryFee, null);
+    assert.equal(typeof freeHold.nextDeliveryAt, 'string');
+  });
 });
 
 describe('회차 E2E fixture seed·verify·cleanup 계약', () => {

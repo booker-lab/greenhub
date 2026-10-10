@@ -76,6 +76,20 @@ test.describe('Consumer 회차 직배송 공개 화면 계약', () => {
     await expect(page.getByRole('button', { name: '장바구니', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /바로 구매/ })).toBeVisible();
   });
+
+  test('상품별 한도가 찬 회차 상품은 품절로 보이고 담거나 살 수 없다', async ({
+    page,
+    roundDirect,
+  }) => {
+    await page.goto(
+      `${BASE}/products/${roundDirect.soldOutProductId}?round=${roundDirect.openRoundId}`,
+    );
+
+    await expect(page.locator('section[data-round-state="sold_out"]')).toBeVisible();
+    await expect(page.getByRole('button', { name: '품절', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: '장바구니', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /바로 구매/ })).toHaveCount(0);
+  });
 });
 
 test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
@@ -125,6 +139,36 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
     await expect(page.getByText(/이천시 배송 가능 주소/)).toBeVisible();
     await expect(page.getByText(/필수 고지/)).toBeVisible();
     await expect(page.getByRole('checkbox', { name: /마케팅 정보 수신/ })).toHaveCount(0);
+  });
+
+  test('결제는 계정의 기본 배송지와 전화번호로 빈 칸을 채운다', async ({ page }) => {
+    // 계정 응답에 기본 배송지·전화번호를 더한다. 저장·조회 자체는 API 단위 테스트가 맡고,
+    // 여기서는 결제 화면이 그 값으로 빈 칸만 채우는지 본다.
+    await page.route('**/auth/me', async (route) => {
+      const response = await route.fetch();
+      const profile = (await response.json()) as Record<string, unknown>;
+      await route.fulfill({
+        response,
+        json: {
+          ...profile,
+          phone: '010-2345-6789',
+          savedAddresses: [
+            {
+              id: 'e2e-default-address',
+              address: '경기도 이천시 중리천로 1',
+              addressDetail: '2층',
+              zipCode: '17379',
+              isDefault: true,
+            },
+          ],
+        },
+      });
+    });
+    await page.goto(`${BASE}/checkout?from=cart`);
+
+    await expect(page.getByLabel('이천시 배송 가능 주소')).toHaveValue('경기도 이천시 중리천로 1');
+    await expect(page.getByPlaceholder('상세 주소')).toHaveValue('2층');
+    await expect(page.getByLabel(/배송 연락처/)).toHaveValue('010-2345-6789');
   });
 
   test('결제 직전 재검증 변경은 사용자 재확인 없이는 결제를 진행하지 않는다', async ({
@@ -179,5 +223,19 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
     await expect(page.getByRole('button', { name: /주문 취소/ })).toBeVisible();
     await expect(page.getByText(/배송 보류/)).toHaveCount(0);
     await expect(page.getByRole('img', { name: /배송 완료 사진/ })).toHaveCount(0);
+  });
+
+  test('결제 시간이 지나 자동 취소된 주문 상세는 취소 사유를 한국어로 보여 준다', async ({
+    page,
+    roundDirect,
+  }) => {
+    await page.goto(
+      `${BASE}/mypage/orders/${roundDirect.orderId('round-direct-order-cancelled-timeout')}`,
+    );
+
+    await expect(page.getByText('주문이 취소되었습니다')).toBeVisible();
+    await expect(page.getByText('사유: 결제 시간이 지나 주문이 자동으로 취소됐어요')).toBeVisible();
+    await expect(page.getByText(/timeout/)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /주문 취소/ })).toHaveCount(0);
   });
 });
