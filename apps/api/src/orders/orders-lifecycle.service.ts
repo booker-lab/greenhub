@@ -31,6 +31,17 @@ import { releaseLegacyGroupQuantityInTransaction } from './_lib/legacy-group-qua
 import { customerOrderLabel } from '../notifications/customer-order-label';
 
 const LEGACY_CONSUMER_CANCEL_CLAIM_MS = 5 * 60 * 1000;
+const LEGACY_SELLER_CANCEL_CLAIM_MS = 5 * 60 * 1000;
+// legacy 주문의 취소·환불이 끝나지 않았음을 뜻하는 cancellation 상태. 이 상태에서는 취소를
+// 소유한 흐름 외의 상태 전이(기사 배송 시작 등)를 막는다.
+const PENDING_LEGACY_CANCELLATION_STATUSES: readonly string[] = [
+  'REFUNDING',
+  'LOCAL_PENDING',
+  'LOCAL_FAILED',
+  'REFUND_FAILED',
+];
+
+type LegacySellerCancelClaim = { token: string; reason: string };
 const ROUND_CONSUMER_CANCEL_NOTIFICATION_REASON = '고객 요청';
 
 type LegacyConsumerCancelClaimResult =
@@ -185,6 +196,7 @@ export class OrdersLifecycleService {
       throw new ConflictException('회차 주문 상태가 올바르지 않아 처리할 수 없습니다.');
     }
 
+    let sellerCancelClaim: LegacySellerCancelClaim | null = null;
     if (nextStatus === 'CANCELLED') {
       const refundableStatuses: OrderStatus[] = [
         'ACCEPTED',
@@ -194,10 +206,28 @@ export class OrdersLifecycleService {
         'DELIVERY_HELD',
       ];
       if (refundableStatuses.includes(currentStatus)) {
-        await this.payments.processRefundByOrderId(
+        const cancelReason = confirmedCancelReason ?? '판매자 취소';
+        // 환불보다 먼저 취소 claim을 트랜잭션으로 잡는다. claim이 살아 있는 동안 다른 상태 전이
+        // (기사 배송 시작 등)는 거절되므로, 환불이 끝난 주문이 배송·정산으로 진행되지 않는다.
+        const token = await this.claimLegacySellerCancellation(
+          storeId,
           orderId,
-          confirmedCancelReason ?? '판매자 취소',
+          currentStatus,
+          cancelReason,
         );
+        sellerCancelClaim = { token, reason: cancelReason };
+        try {
+          await this.payments.processRefundByOrderId(orderId, cancelReason);
+        } catch (error) {
+          await this.recordLegacyConsumerCancellationState(
+            storeId,
+            orderId,
+            token,
+            'REFUND_FAILED',
+            cancelReason,
+          );
+          throw error;
+        }
       }
     }
 
@@ -214,130 +244,150 @@ export class OrdersLifecycleService {
       currentStatus === 'DELIVERY_HELD' &&
       (!isCurrentRedeliveryPaymentRequired(order) || nextStatus === 'DELIVERING');
     const heldOrderDelta = nextStatus === 'DELIVERY_HELD' ? 1 : resolvesCurrentHold ? -1 : 0;
-    if (role === 'driver') {
-      await this.updateDriverStatusInTransaction({
-        storeId,
-        orderId,
-        requesterId,
-        requesterRole: role,
-        expectedStatus: currentStatus,
-        dto,
-        now,
-      });
-    } else if (heldOrderDelta !== 0 && order['roundId']) {
-      await this.firestore.runTransaction(async (t) => {
-        const orderRef = this.firestore.doc(`orders/${orderId}`);
-        const latestOrderSnap = await t.get(orderRef);
-        if (!latestOrderSnap.exists || latestOrderSnap.data()?.['storeId'] !== storeId) {
-          throw new NotFoundException();
-        }
-        if (latestOrderSnap.data()?.['status'] !== currentStatus) {
-          throw new ConflictException('주문 상태가 변경되었습니다.');
-        }
-        if (nextStatus === 'DELIVERING') {
-          await assertPaidRedeliveryResume({
-            tx: t,
-            firestore: this.firestore,
-            order: { ...latestOrderSnap.data(), id: orderId },
-            orderId,
-          });
-        }
-        // Single-owner held counter: OrderCapacityService is the sole writer.
-        await this.capacity.adjustHeldOrderCountInTransaction(t, {
+    try {
+      if (role === 'driver') {
+        await this.updateDriverStatusInTransaction({
           storeId,
-          roundId: order['roundId'],
-          delta: heldOrderDelta,
-          now: update['updatedAt'],
+          orderId,
+          requesterId,
+          requesterRole: role,
+          expectedStatus: currentStatus,
+          dto,
+          now,
         });
-        if (nextStatus === 'CANCELLED') {
-          await releaseLegacyDailyCapacityInTransaction(
-            this.firestore,
-            t,
-            orderId,
-            confirmedCancelReason ?? '판매자 취소',
-          );
-          // Legacy group restoration converges in this same transaction. Round v2 and
-          // normal orders are NOT_ELIGIBLE, so round/daily-cap semantics are unchanged.
-          await releaseLegacyGroupQuantityInTransaction(
-            this.firestore,
-            t,
-            orderId,
-            (latestOrderSnap.data() ?? {}) as Record<string, any>,
-          );
-        }
-        t.update(orderRef, update);
-      });
-    } else {
-      if (nextStatus === 'DELIVERING') {
-        await this.firestore.runTransaction(async (transaction) => {
+      } else if (heldOrderDelta !== 0 && order['roundId']) {
+        await this.firestore.runTransaction(async (t) => {
           const orderRef = this.firestore.doc(`orders/${orderId}`);
-          const latestSnap = await transaction.get(orderRef);
-          if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+          const latestOrderSnap = await t.get(orderRef);
+          if (!latestOrderSnap.exists || latestOrderSnap.data()?.['storeId'] !== storeId) {
             throw new NotFoundException();
           }
-          const latestOrder = latestSnap.data()!;
-          if (latestOrder['status'] !== currentStatus) {
+          if (latestOrderSnap.data()?.['status'] !== currentStatus) {
             throw new ConflictException('주문 상태가 변경되었습니다.');
           }
-          await assertPaidRedeliveryResume({
-            tx: transaction,
-            firestore: this.firestore,
-            order: { ...latestOrder, id: orderId },
-            orderId,
+          this.assertLegacyCancellationGate(latestOrderSnap.data()!, sellerCancelClaim);
+          if (nextStatus === 'DELIVERING') {
+            await assertPaidRedeliveryResume({
+              tx: t,
+              firestore: this.firestore,
+              order: { ...latestOrderSnap.data(), id: orderId },
+              orderId,
+            });
+          }
+          // Single-owner held counter: OrderCapacityService is the sole writer.
+          await this.capacity.adjustHeldOrderCountInTransaction(t, {
+            storeId,
+            roundId: order['roundId'],
+            delta: heldOrderDelta,
+            now: update['updatedAt'],
           });
-          transaction.update(orderRef, update);
-        });
-      } else {
-        if (nextStatus === 'CANCELLED') {
-          await this.firestore.runTransaction(async (transaction) => {
-            const orderRef = this.firestore.doc(`orders/${orderId}`);
-            const latestSnap = await transaction.get(orderRef);
-            if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
-              throw new NotFoundException();
-            }
-            if (latestSnap.data()?.['status'] !== currentStatus) {
-              throw new ConflictException('주문 상태가 변경되었습니다.');
-            }
+          if (nextStatus === 'CANCELLED') {
             await releaseLegacyDailyCapacityInTransaction(
               this.firestore,
-              transaction,
+              t,
               orderId,
               confirmedCancelReason ?? '판매자 취소',
             );
-            // CONFIRMED legacy group seller cancellation restores currentQuantity here,
-            // atomically with the CANCELLED flip: aborted/failed cancellations restore
-            // nothing, and the expectedStatus guard above keeps retries exactly-once.
+            // Legacy group restoration converges in this same transaction. Round v2 and
+            // normal orders are NOT_ELIGIBLE, so round/daily-cap semantics are unchanged.
             await releaseLegacyGroupQuantityInTransaction(
               this.firestore,
-              transaction,
+              t,
               orderId,
-              (latestSnap.data() ?? {}) as Record<string, any>,
+              (latestOrderSnap.data() ?? {}) as Record<string, any>,
             );
-            transaction.update(orderRef, update);
-          });
-        } else {
+          }
+          t.update(orderRef, this.withSellerCancelCompletion(update, sellerCancelClaim, now));
+        });
+      } else {
+        if (nextStatus === 'DELIVERING') {
           await this.firestore.runTransaction(async (transaction) => {
             const orderRef = this.firestore.doc(`orders/${orderId}`);
             const latestSnap = await transaction.get(orderRef);
             if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
               throw new NotFoundException();
             }
-            if (latestSnap.data()?.['status'] !== currentStatus) {
+            const latestOrder = latestSnap.data()!;
+            if (latestOrder['status'] !== currentStatus) {
               throw new ConflictException('주문 상태가 변경되었습니다.');
             }
-            transaction.update(
-              orderRef,
-              this.buildStatusUpdate(
-                latestSnap.data()!,
-                dto,
-                requesterId,
-                now,
-                confirmedCancelReason,
-              ),
-            );
+            this.assertLegacyCancellationGate(latestOrder, null);
+            await assertPaidRedeliveryResume({
+              tx: transaction,
+              firestore: this.firestore,
+              order: { ...latestOrder, id: orderId },
+              orderId,
+            });
+            transaction.update(orderRef, update);
           });
+        } else {
+          if (nextStatus === 'CANCELLED') {
+            await this.firestore.runTransaction(async (transaction) => {
+              const orderRef = this.firestore.doc(`orders/${orderId}`);
+              const latestSnap = await transaction.get(orderRef);
+              if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+                throw new NotFoundException();
+              }
+              if (latestSnap.data()?.['status'] !== currentStatus) {
+                throw new ConflictException('주문 상태가 변경되었습니다.');
+              }
+              this.assertLegacyCancellationGate(latestSnap.data()!, sellerCancelClaim);
+              await releaseLegacyDailyCapacityInTransaction(
+                this.firestore,
+                transaction,
+                orderId,
+                confirmedCancelReason ?? '판매자 취소',
+              );
+              // CONFIRMED legacy group seller cancellation restores currentQuantity here,
+              // atomically with the CANCELLED flip: aborted/failed cancellations restore
+              // nothing, and the expectedStatus guard above keeps retries exactly-once.
+              await releaseLegacyGroupQuantityInTransaction(
+                this.firestore,
+                transaction,
+                orderId,
+                (latestSnap.data() ?? {}) as Record<string, any>,
+              );
+              transaction.update(
+                orderRef,
+                this.withSellerCancelCompletion(update, sellerCancelClaim, now),
+              );
+            });
+          } else {
+            await this.firestore.runTransaction(async (transaction) => {
+              const orderRef = this.firestore.doc(`orders/${orderId}`);
+              const latestSnap = await transaction.get(orderRef);
+              if (!latestSnap.exists || latestSnap.data()?.['storeId'] !== storeId) {
+                throw new NotFoundException();
+              }
+              if (latestSnap.data()?.['status'] !== currentStatus) {
+                throw new ConflictException('주문 상태가 변경되었습니다.');
+              }
+              this.assertLegacyCancellationGate(latestSnap.data()!, null);
+              transaction.update(
+                orderRef,
+                this.buildStatusUpdate(
+                  latestSnap.data()!,
+                  dto,
+                  requesterId,
+                  now,
+                  confirmedCancelReason,
+                ),
+              );
+            });
+          }
         }
       }
+    } catch (error) {
+      if (sellerCancelClaim) {
+        await this.recordLegacyConsumerCancellationState(
+          storeId,
+          orderId,
+          sellerCancelClaim.token,
+          'LOCAL_FAILED',
+          sellerCancelClaim.reason,
+        );
+      }
+      throw error;
     }
 
     // 판매자 강제 취소 → settlement 취소 반영
@@ -491,6 +541,107 @@ export class OrdersLifecycleService {
     }
 
     return { orderId, status: 'CANCELLED' };
+  }
+
+  /**
+   * legacy 판매자 취소의 환불 전 claim. 주문이 아직 기대 상태이고 다른 취소·환불 claim이
+   * 진행 중이 아니면 cancellation을 REFUNDING으로 잡는다. 실패·만료된 claim은 다시 잡을 수 있다.
+   * 결정은 커밋된 시도의 반환값으로만 한다.
+   */
+  private async claimLegacySellerCancellation(
+    storeId: string,
+    orderId: string,
+    expectedStatus: OrderStatus,
+    reason: string,
+  ): Promise<string> {
+    const token = randomUUID();
+    return this.firestore.runTransaction<string>(async (tx) => {
+      const orderRef = this.firestore.doc(`orders/${orderId}`);
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== storeId) {
+        throw new NotFoundException();
+      }
+      const order = orderSnap.data() as Record<string, any>;
+      if (order['status'] !== expectedStatus) {
+        throw new ConflictException('주문 상태가 변경되었습니다.');
+      }
+      const cancellation = (order['cancellation'] ?? null) as Record<string, any> | null;
+      if (cancellation?.['status'] === 'REFUNDING') {
+        const refundClaim = cancellation['refundClaim'] as
+          | { token?: unknown; expiresAt?: unknown }
+          | undefined;
+        const expired =
+          typeof refundClaim?.token === 'string' &&
+          refundClaim.token.length > 0 &&
+          typeof refundClaim.expiresAt === 'number' &&
+          refundClaim.expiresAt <= Date.now();
+        if (!expired) {
+          throw new ConflictException('주문 취소가 이미 처리 중입니다.');
+        }
+      }
+
+      const now = this.firestore.Timestamp.now();
+      tx.update(orderRef, {
+        cancellation: {
+          status: 'REFUNDING',
+          reason,
+          refundClaim: {
+            token,
+            expiresAt: Date.now() + LEGACY_SELLER_CANCEL_CLAIM_MS,
+          },
+          updatedAt: this.toIso(now),
+        },
+        updatedAt: now,
+      });
+      return token;
+    });
+  }
+
+  private hasPendingLegacyCancellation(order: Record<string, any>): boolean {
+    const status = (order['cancellation'] as Record<string, unknown> | null | undefined)?.[
+      'status'
+    ];
+    return typeof status === 'string' && PENDING_LEGACY_CANCELLATION_STATUSES.includes(status);
+  }
+
+  /**
+   * legacy 상태 전이 트랜잭션의 취소 claim 관문. 판매자 취소 claim을 가진 호출은 그 claim이
+   * 아직 유효해야 하고, 그 외 전이는 진행 중이거나 실패한 취소·환불이 있으면 거절한다.
+   */
+  private assertLegacyCancellationGate(
+    order: Record<string, any>,
+    claim: LegacySellerCancelClaim | null,
+  ): void {
+    if (claim) {
+      const cancellation = (order['cancellation'] ?? null) as Record<string, any> | null;
+      if (
+        cancellation?.['status'] !== 'REFUNDING' ||
+        cancellation?.['refundClaim']?.['token'] !== claim.token
+      ) {
+        throw new ConflictException('주문 취소 claim이 더 이상 유효하지 않습니다.');
+      }
+      return;
+    }
+    if (this.hasPendingLegacyCancellation(order)) {
+      throw new ConflictException('주문 취소가 처리 중이어서 상태를 변경할 수 없습니다.');
+    }
+  }
+
+  private withSellerCancelCompletion(
+    update: Record<string, unknown>,
+    claim: LegacySellerCancelClaim | null,
+    now: unknown,
+  ): Record<string, unknown> {
+    if (!claim) return update;
+    return {
+      ...update,
+      cancellation: {
+        status: 'COMPLETED',
+        reason: claim.reason,
+        completedAt: this.toIso(now),
+        updatedAt: this.toIso(now),
+      },
+    };
   }
 
   private async claimLegacyConsumerCancellation(
@@ -918,6 +1069,9 @@ export class OrdersLifecycleService {
         throwDriverOrderNotFound();
       }
       const latestOrder = latestSnap.data()!;
+      if (this.hasPendingLegacyCancellation(latestOrder)) {
+        throwDriverOrderStateConflict('주문 취소가 처리 중이어서 상태를 변경할 수 없습니다.', true);
+      }
       const mutationInput = {
         requesterId: input.requesterId,
         requesterRole: input.requesterRole,
