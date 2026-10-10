@@ -1,6 +1,6 @@
 import type { Order, Product } from '@greenhub/shared';
 import { describe, expect, it } from 'vitest';
-import { aggregatePrep } from './prep';
+import { aggregatePrep, isDelayed } from './prep';
 
 function order(overrides: Partial<Order>): Order {
   return {
@@ -54,5 +54,18 @@ describe('aggregatePrep', () => {
     expect(result.today).toEqual([
       { productId: 'p2', productName: '만천홍', selectionLabel: null, quantity: 1 },
     ]);
+  });
+});
+
+describe('isDelayed', () => {
+  it('배송일이 지난 미발송 일반 주문은 발송 지연이다', () => {
+    expect(isDelayed(order({ requestedDeliveryDate: '2026-11-10' }), '2026-11-11')).toBe(true);
+    expect(isDelayed(order({ status: 'PREPARING' }), '2026-11-11')).toBe(true);
+    expect(isDelayed(order({}), '2026-11-10')).toBe(false);
+    expect(isDelayed(order({ status: 'DELIVERED' }), '2026-11-11')).toBe(false);
+  });
+
+  it('회차 주문은 회차 화면이 맡으므로 발송 지연으로 세지 않는다(준비 화면 집계와 같은 기준)', () => {
+    expect(isDelayed(order({ status: 'PREPARING', roundId: 'round-1' }), '2026-11-11')).toBe(false);
   });
 });
