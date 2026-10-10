@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import {
   getConfigValues,
   isLocalRuntime,
@@ -84,7 +84,7 @@ export class StoresService {
   async createStore(requesterId: string, dto: UpdateStoreDto): Promise<{ storeId: string }> {
     this.assertLogoUrl(dto.logoUrl, requesterId);
 
-    const storeId = uuidv4();
+    const storeId = randomUUID();
     const userRef = this.firestore.doc(`users/${requesterId}`);
     const storeRef = this.firestore.doc(`stores/${storeId}`);
     const deliveryFeeConfigRef = this.firestore.doc(`deliveryFeeConfig/${storeId}`);

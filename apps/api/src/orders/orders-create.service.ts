@@ -4,7 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -87,7 +87,7 @@ export class OrdersCreateService {
       deliveryConfig,
     );
 
-    const orderId = uuidv4();
+    const orderId = randomUUID();
     const now = this.firestore.Timestamp.now();
 
     // T8: orderNumber 발급 — 카운터 read는 트랜잭션 첫 read로 배치 (write 전 read 규칙 준수)
