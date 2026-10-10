@@ -26,8 +26,13 @@ export function isUnshipped(order: Order): boolean {
   return UNSHIPPED_STATUSES.includes(order.status);
 }
 
-/** 미발송 상태이며 배송예정일이 오늘 이전(경과)인 주문 — 발송 지연. */
+/**
+ * 미발송 상태이며 배송예정일이 오늘 이전(경과)인 주문 — 발송 지연.
+ * 회차 주문은 빼고 회차 화면이 맡는다. 홈 "발송 지연" 링크가 가는 준비 화면도
+ * 회차 주문을 집계하지 않으므로 같은 기준을 써야 눌렀을 때 빈 화면이 나오지 않는다.
+ */
 export function isDelayed(order: Order, today: string = todayKey()): boolean {
+  if (isRoundOrder(order)) return false;
   if (!isUnshipped(order)) return false;
   const key = deliveryDateKey(order);
   return key !== null && key < today;
