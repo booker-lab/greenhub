@@ -7,7 +7,8 @@ import { auth } from '@/auth';
 export const proxy = auth((request) => {
   const session = request.auth;
 
-  if (!session) {
+  // 세션 객체가 있어도 필수 필드(role)가 없으면 로그인하지 않은 것으로 본다.
+  if (!session?.user?.role) {
     // 로그인 뒤 원래 보던 화면(경로+쿼리)으로 돌아오도록 복귀 주소를 싣는다.
     // 로그인 화면은 이 값을 같은 출처 상대 경로로만 받아들인다(login/_callback-url.ts).
     const loginUrl = new URL('/login', request.url);
