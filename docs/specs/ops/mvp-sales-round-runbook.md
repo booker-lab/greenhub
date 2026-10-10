@@ -130,9 +130,9 @@ node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=round_dir
 
 회차 편집은 `DRAFT|SCHEDULED`의 fresh 상태와 item snapshot을 같은 write transaction에서 재확인해야
 한다. `OPEN` 전환·예약·배송 주문과 경합해 어느 상태인지 확정할 수 없거나 item 사용량이 이미
-존재하면 저장을 중단하고 기술 담당자에게 전달한다. `CANCELLING` 저장 뒤 process interruption은
-현재 owner·lease·expiry 기반 deterministic recovery가 직접 검증된 상태가 아니므로,
-Firestore를 직접 `CANCELLED`로 고치거나 주문을 임의 정리하지 않는다.
+존재하면 저장을 중단하고 기술 담당자에게 전달한다.
+
+회차 취소는 관리자 계정(판매자 앱에 자기 스토어가 연결된 관리자)만 회차 상세의 "회차 취소"에서 회차 이름을 그대로 입력해 실행한다. 결제된 주문은 하나씩 환불되고 고객에게 고정 사유의 `ORDER_CANCELLED` 알림톡이 가며 되돌릴 수 없다. 취소가 멈추면(`LOCAL_FAILED`, 또는 5분 lease가 끝난 `CANCELLING`) 같은 화면의 "회차 취소 다시 진행"으로 같은 요청을 다시 보낸다. 서버는 남은 주문만 처리하고 이미 환불한 주문은 다시 환불하지 않는다(`apps/api/src/sale-rounds/sale-rounds.service.spec.ts` lease takeover·중단 회차 수렴 회귀). lease가 살아 있는 동안에는 다시 보내지 않는다. Firestore를 직접 `CANCELLED`로 고치거나 주문을 임의 정리하지 않는다.
 
 ### 5.2 일요일 주문 마감
 
@@ -226,6 +226,12 @@ Firestore를 직접 `CANCELLED`로 고치거나 주문을 임의 정리하지 �
 | 유료 재배송 실패 | 자동 환불 판단 금지. `REDELIVERY_FAILED`, `requiresOperationalReview`를 확인하고 상품 상태·재판매 가능성·고객 연락 기록을 대표자에게 전달 |
 
 보류 해소는 셀러가 `PREPARING|CANCELLED`, 담당 기사가 `DELIVERING`으로만 수행한다. `REDELIVERY_FAILED`에는 자동 조치가 없으므로 환불이나 문자 조치를 임의로 연결하지 않는다.
+
+셀러는 판매자 앱 주문 상세에서 처리한다.
+
+- "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`): 결제 전 유료 재배송(고객 책임·재배송비 > 0)이면 고객에게 `ORDER_REDELIVERY_PAYMENT_REQUESTED` 알림톡이 가고 결제 전에는 기사가 배송을 다시 시작할 수 없다. 무료·판매자 책임 보류는 알림톡 없이 기사 수거 대기로 돌아간다. 이미 결제된 유료 재배송도 서버가 결제 요청 알림톡을 한 번 더 보내므로, 기사가 맡은 주문이면 기사 화면에서 바로 재개하는 편이 낫다.
+- "주문 취소·환불"(`DELIVERY_HELD → CANCELLED`): 본 결제와 결제된 재배송비를 환불하고 고객에게 `ORDER_CANCELLED`(입력한 사유)가 간다.
+- 기사가 가져가기 전 준비 중 주문은 "배송 보류"로 한 건씩 멈출 수 있다(위 표와 같은 사유·책임·재배송비 규칙, 일괄 보류 없음). 셀러가 보류한 미배정 주문은 기사 화면에 나오지 않으므로 다시 보낼 때 "재배송 준비로 돌리기"가 필요하다.
 
 ### 6.5 배송 사진 업로드·권한·서명 URL
 
