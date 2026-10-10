@@ -1,8 +1,9 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { FirestoreService } from '../../firestore/firestore.service';
+import { hasExpectedTokenClaims, JWT_ALGORITHM } from '../token-claims';
 import { JwtPayload } from '../types/jwt-payload.type';
 
 const USER_ROLES = ['consumer', 'seller', 'driver', 'admin'] as const;
@@ -30,10 +31,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: config.get<string>('JWT_SECRET')!,
+      algorithms: [JWT_ALGORITHM],
     });
   }
 
   async validate(payload: JwtPayload): Promise<JwtPayload> {
+    // refresh 등 다른 종류의 토큰이나 다른 수신자의 토큰은 사용자 조회 전에 거부한다.
+    if (!hasExpectedTokenClaims(payload, 'access')) {
+      throw new UnauthorizedException('유효하지 않은 인증 토큰입니다.');
+    }
+
     const userSnap = await this.firestore.doc(`users/${payload.sub}`).get();
     const user = userSnap.data();
     const currentRole = user?.['role'];
