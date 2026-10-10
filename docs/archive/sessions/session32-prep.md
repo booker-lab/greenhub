@@ -27,7 +27,7 @@ p50/p95/p99·실패율을 산출했고, 그 과정에서 **throttler 전역 누�
 | **P3 `/admin/banner` prerender 실패** | Vercel admin/seller 프로젝트 Firebase env 점검 → 누락 config 추가 → 재배포 검증 | 소 | `auth/invalid-api-key` 해소, 빌드 prerender 통과 |
 | **e2e `cleanup-spec-residue` CI 실패** | `scripts/cleanup-spec-residue.mjs:19`가 `apps/api/firebase-adminsdk.json`(gitignore된 로컬 키)을 `require` → CI 러너엔 없어 `exit=1`. CI 환경변수 기반 인증으로 전환 | 소 | seller-auth-invite `afterAll` 정리가 CI에서 동작, 테스트 계정 잔여 누적 차단 |
 | **e2e `consumer-groupbuy:14` flake** | 페이지 느린 로드 시 리스트도 empty-state도 미렌더 상태에서 `isEmpty=false` 판정 → "모집 중" 강제 단언 실패. 리스트 OR empty-state 중 하나가 뜰 때까지 대기하도록 로직 보강 | 소 | flake 제거, 167/0 베이스라인 신뢰도 회복 |
-| **P3 consumer@test.com 강한비번 전환** | Firebase Auth 비번 교체 + `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 갱신 + e2e 풀런 검증 | 소 | 편의 결정(test1234) → 보안 정상화. `feedback_security_convenience` 재확인 필요 |
+| **P3 <TEST_CONSUMER_EMAIL> 강한비번 전환** | Firebase Auth 비번 교체 + `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 갱신 + e2e 풀런 검증 | 소 | 보안 정상화(자격증명은 저장소 밖에서 관리). `feedback_security_convenience` 재확인 필요 |
 
 ### 🟠 조건부 / 다른 작업 의존 (단독 착수 비권장)
 
@@ -72,7 +72,7 @@ e2e 안정성 2건(`cleanup-spec-residue`·`consumer-groupbuy` flake)을 먼저 
 ## P3 잔여 (BACKLOG §12-2 참조)
 
 - [ ] `/admin/banner` prerender 실패 — Vercel admin/seller Firebase env 점검·추가·재배포.
-- [ ] consumer@test.com 강한비번 전환 — 현재 test1234(편의 결정). 보안 follow-up.
+- [ ] <TEST_CONSUMER_EMAIL> 강한비번 전환 — 보안 follow-up. 자격증명은 저장소 밖에서 관리.
 - [ ] `useOrderActions` 훅 통합 — detail/OrderCard 시그니처 불일치. UI 리팩토링 사이클에서.
 - [ ] G1 `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 신규 구현.
 - [ ] Driver Kakao Maps SDK 연동.
