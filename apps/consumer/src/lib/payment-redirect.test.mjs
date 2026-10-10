@@ -21,6 +21,7 @@ const {
   resolveOrderPaymentReturn,
   resolveRedeliveryPaymentReturn,
   savePendingOrderPayment,
+  shouldRecheckRedeliveryPayment,
   takePendingOrderPayment,
 } = module.exports;
 
@@ -308,4 +309,24 @@ test('재배송비 복귀는 서버 paid 확인 전까지 완료로 보지 않�
   assert.deepEqual(resolveRedeliveryPaymentReturn(parsePaymentRedirectResult(query('')), true), {
     kind: 'none',
   });
+});
+
+test('재배송비 결제가 성공으로 돌아왔는데 서버 확인 전이면 정해진 시간 안에서만 다시 읽는다', () => {
+  const MAX = 120_000;
+  const success = parsePaymentRedirectResult(query('paymentId=redelivery-1'));
+  // 서버 확인 전(false)·아직 못 읽음(undefined)은 다시 읽는다.
+  assert.equal(shouldRecheckRedeliveryPayment(success, false, 0, MAX), true);
+  assert.equal(shouldRecheckRedeliveryPayment(success, undefined, 60_000, MAX), true);
+  // 서버가 확인했거나 시간이 지나면 멈춘다.
+  assert.equal(shouldRecheckRedeliveryPayment(success, true, 0, MAX), false);
+  assert.equal(shouldRecheckRedeliveryPayment(success, false, MAX, MAX), false);
+  assert.equal(shouldRecheckRedeliveryPayment(success, false, Number.NaN, MAX), false);
+  // 실패·취소·잘못된 복귀와 복귀 없음은 확정이거나 볼 결제가 없다.
+  for (const result of [
+    parsePaymentRedirectResult(query('code=X&message=취소함&paymentId=redelivery-1')),
+    parsePaymentRedirectResult(query('')),
+    null,
+  ]) {
+    assert.equal(shouldRecheckRedeliveryPayment(result, false, 0, MAX), false);
+  }
 });
