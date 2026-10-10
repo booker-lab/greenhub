@@ -2,6 +2,28 @@ import { auth, signOut } from '@/auth';
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
 import { Box, Stack, Card, Group, Text, Title, Button, Divider } from '@mantine/core';
+import { getApiBaseUrl } from '@/lib/api-base-url';
+
+const LOGOUT_REVOKE_TIMEOUT_MS = 5_000;
+
+/**
+ * 로그아웃 전에 API의 refresh token을 폐기한다. auth()가 만료된 access token을 먼저 갱신하므로
+ * 현재 access token으로 `POST /auth/logout`을 부른다. 실패해도 로그아웃은 계속한다.
+ */
+async function revokeApiSession(): Promise<void> {
+  try {
+    const current = await auth();
+    const accessToken = current?.user?.accessToken;
+    if (!accessToken) return;
+    await fetch(`${getApiBaseUrl()}/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(LOGOUT_REVOKE_TIMEOUT_MS),
+    });
+  } catch {
+    // 응답이 없거나 늦어도 로그아웃은 계속한다. refresh token은 만료 시각에 끝난다.
+  }
+}
 
 export default async function ProfilePage() {
   const session = await auth();
@@ -98,6 +120,7 @@ export default async function ProfilePage() {
           <form
             action={async () => {
               'use server';
+              await revokeApiSession();
               await signOut({ redirectTo: '/login' });
             }}
           >

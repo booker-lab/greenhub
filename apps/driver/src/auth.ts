@@ -3,6 +3,12 @@ import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
 import { DRIVER_ADMIN_ACCOUNT_ERROR } from '@/app/login/login-notice';
+import {
+  authUpstreamSignal,
+  isLoopbackApiUrl,
+  isTestCredentialsProviderEnabled,
+  revokeApiSession,
+} from '@/auth-runtime';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 
 const API = getApiBaseUrl();
@@ -116,6 +122,7 @@ function isLocalCredentialRuntime(): boolean {
   if (process.env.NODE_ENV === 'production') return false;
   if (process.env.VERCEL_ENV === 'production') return false;
   if (process.env.RAILWAY_ENVIRONMENT_NAME === 'production') return false;
+  if (!isLoopbackApiUrl(API)) return false;
   return true;
 }
 
@@ -130,6 +137,7 @@ async function authorizeLocalDriver(credentials: Record<string, unknown>) {
       email: credentials.email,
       password: credentials.password,
     }),
+    signal: authUpstreamSignal(),
   });
   if (!res.ok) return null;
 
@@ -185,6 +193,7 @@ async function verifySessionAuthority(
     const res = await fetch(`${API}/auth/session`, {
       method: 'GET',
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: authUpstreamSignal(),
     });
     if (res.ok) {
       let data: { role?: unknown } | null = null;
@@ -211,6 +220,7 @@ async function refreshAccessToken(token: Record<string, unknown>) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: token.refreshToken }),
+      signal: authUpstreamSignal(),
     });
     if (!res.ok) {
       if (isExplicitSessionRevocationStatus(res.status)) {
@@ -231,6 +241,105 @@ async function refreshAccessToken(token: Record<string, unknown>) {
   }
 }
 
+// 테스트 전용 Credentials provider(Preview E2E·local runtime). 운영 런타임에는 등록하지 않는다
+// (아래 providers의 isTestCredentialsProviderEnabled 게이트). 등록돼도 authorize의 기존 게이트를
+// 그대로 통과해야 한다.
+const testCredentialsProvider = Credentials({
+  credentials: {
+    email: { label: '이메일', type: 'email' },
+    password: { label: '비밀번호', type: 'password' },
+  },
+  async authorize(credentials, request) {
+    if (isLocalCredentialRuntime()) {
+      return authorizeLocalDriver(credentials as Record<string, unknown>);
+    }
+    if (process.env.VERCEL_ENV !== 'preview' || process.env.ROUND_DIRECT_E2E_ENABLED !== 'true') {
+      throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g2-enabled');
+    }
+    const expectedSecret = process.env.ROUND_DIRECT_E2E_SHARED_SECRET;
+    const receivedSecret = request?.headers?.get('x-round-direct-e2e-secret') ?? null;
+    if (!secretsMatch(receivedSecret, expectedSecret))
+      throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g3-secret-mismatch');
+    // 38B gate split (preserves `reject if either`): shape first, then allowlist.
+    // Previously g4 lumped both; now malformed/missing credential shape maps
+    // to g5 (CREDENTIAL_SHAPE_REJECTED) and well-shaped but non-allowlisted
+    // email maps to g4 (DRIVER_ALLOWLIST_REJECTED). Both still reject.
+    const credShape = credentials as Record<string, unknown> | null | undefined;
+    if (!credShape || typeof credShape !== 'object') {
+      throw new DiagnosticCredentialsSignin(
+        'authorize-rejected__driver-g5-credential-shape-rejected',
+      );
+    }
+    if (typeof credShape.password !== 'string') {
+      throw new DiagnosticCredentialsSignin(
+        'authorize-rejected__driver-g5-credential-shape-rejected',
+      );
+    }
+    if (typeof credShape.email !== 'string') {
+      throw new DiagnosticCredentialsSignin(
+        'authorize-rejected__driver-g5-credential-shape-rejected',
+      );
+    }
+    if (!isAllowedE2EDriverEmail(credShape.email)) {
+      throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g4-allowlist-rejected');
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: credShape.email,
+          password: credShape.password,
+        }),
+        signal: authUpstreamSignal(),
+      });
+    } catch {
+      // UPSTREAM_DISPATCH_FAILED: fetch threw, no response obtained.
+      // Distinct from UPSTREAM_NON_OK (response received, res.ok == false).
+      throw new DiagnosticCredentialsSignin(
+        'authorize-rejected__driver-g6-upstream-dispatch-failed',
+      );
+    }
+    if (!res.ok) {
+      throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g7-upstream-non-ok');
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: upstream contract is any-shaped;
+    // 38B adds no new validation beyond role/approval, preserves original any-shape.
+    let data: any;
+    try {
+      data = await res.json();
+    } catch {
+      throw new DiagnosticCredentialsSignin(
+        'authorize-rejected__driver-g8-upstream-response-invalid',
+      );
+    }
+    const gatedUser = data?.user;
+    if (!gatedUser || typeof gatedUser !== 'object') {
+      throw new DiagnosticCredentialsSignin(
+        'authorize-rejected__driver-g8-upstream-response-invalid',
+      );
+    }
+    const gatedRecord = gatedUser as Record<string, unknown>;
+    if (gatedRecord.role !== 'driver') {
+      throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g9-role-rejected');
+    }
+    if (gatedRecord.driverApproved !== true) {
+      throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g10-approval-rejected');
+    }
+    return {
+      id: data.user?.id,
+      email: data.user?.email,
+      name: data.user?.name,
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+      role: gatedRecord.role,
+    };
+  },
+});
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET,
   trustHost: true,
@@ -239,132 +348,57 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.KAKAO_CLIENT_ID!,
       clientSecret: process.env.KAKAO_CLIENT_SECRET!,
     }),
-    Credentials({
-      credentials: {
-        email: { label: '이메일', type: 'email' },
-        password: { label: '비밀번호', type: 'password' },
-      },
-      async authorize(credentials, request) {
-        if (isLocalCredentialRuntime()) {
-          return authorizeLocalDriver(credentials as Record<string, unknown>);
-        }
-        if (
-          process.env.VERCEL_ENV !== 'preview' ||
-          process.env.ROUND_DIRECT_E2E_ENABLED !== 'true'
-        ) {
-          throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g2-enabled');
-        }
-        const expectedSecret = process.env.ROUND_DIRECT_E2E_SHARED_SECRET;
-        const receivedSecret = request?.headers?.get('x-round-direct-e2e-secret') ?? null;
-        if (!secretsMatch(receivedSecret, expectedSecret))
-          throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g3-secret-mismatch');
-        // 38B gate split (preserves `reject if either`): shape first, then allowlist.
-        // Previously g4 lumped both; now malformed/missing credential shape maps
-        // to g5 (CREDENTIAL_SHAPE_REJECTED) and well-shaped but non-allowlisted
-        // email maps to g4 (DRIVER_ALLOWLIST_REJECTED). Both still reject.
-        const credShape = credentials as Record<string, unknown> | null | undefined;
-        if (!credShape || typeof credShape !== 'object') {
-          throw new DiagnosticCredentialsSignin(
-            'authorize-rejected__driver-g5-credential-shape-rejected',
-          );
-        }
-        if (typeof credShape.password !== 'string') {
-          throw new DiagnosticCredentialsSignin(
-            'authorize-rejected__driver-g5-credential-shape-rejected',
-          );
-        }
-        if (typeof credShape.email !== 'string') {
-          throw new DiagnosticCredentialsSignin(
-            'authorize-rejected__driver-g5-credential-shape-rejected',
-          );
-        }
-        if (!isAllowedE2EDriverEmail(credShape.email)) {
-          throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g4-allowlist-rejected');
-        }
-
-        let res: Response;
-        try {
-          res = await fetch(`${API}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: credShape.email,
-              password: credShape.password,
-            }),
-          });
-        } catch {
-          // UPSTREAM_DISPATCH_FAILED: fetch threw, no response obtained.
-          // Distinct from UPSTREAM_NON_OK (response received, res.ok == false).
-          throw new DiagnosticCredentialsSignin(
-            'authorize-rejected__driver-g6-upstream-dispatch-failed',
-          );
-        }
-        if (!res.ok) {
-          throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g7-upstream-non-ok');
-        }
-
-        // biome-ignore lint/suspicious/noExplicitAny: upstream contract is any-shaped;
-        // 38B adds no new validation beyond role/approval, preserves original any-shape.
-        let data: any;
-        try {
-          data = await res.json();
-        } catch {
-          throw new DiagnosticCredentialsSignin(
-            'authorize-rejected__driver-g8-upstream-response-invalid',
-          );
-        }
-        const gatedUser = data?.user;
-        if (!gatedUser || typeof gatedUser !== 'object') {
-          throw new DiagnosticCredentialsSignin(
-            'authorize-rejected__driver-g8-upstream-response-invalid',
-          );
-        }
-        const gatedRecord = gatedUser as Record<string, unknown>;
-        if (gatedRecord.role !== 'driver') {
-          throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g9-role-rejected');
-        }
-        if (gatedRecord.driverApproved !== true) {
-          throw new DiagnosticCredentialsSignin(
-            'authorize-rejected__driver-g10-approval-rejected',
-          );
-        }
-        return {
-          id: data.user?.id,
-          email: data.user?.email,
-          name: data.user?.name,
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
-          role: gatedRecord.role,
-        };
-      },
-    }),
+    ...(isTestCredentialsProviderEnabled() ? [testCredentialsProvider] : []),
   ],
+  events: {
+    // 로그아웃하면 쿠키 삭제와 함께 API의 refresh token도 폐기한다. 실패해도 로그아웃은 계속한다.
+    async signOut(message) {
+      const token = 'token' in message ? message.token : null;
+      if (!token) return;
+      await revokeApiSession({
+        apiBaseUrl: API,
+        accessToken: token.accessToken,
+        refreshToken: token.refreshToken,
+      });
+    },
+  },
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === 'credentials') return true;
       if (account?.provider !== 'kakao') return false;
       if (!account.access_token) return false;
 
-      const res = await fetch(`${API}/auth/kakao-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kakaoAccessToken: account.access_token,
-          targetRole: 'driver',
-        }),
-      });
-      if (!res.ok) {
-        // 관리자 계정은 세션을 만들지 않고 로그인 화면에서 기사 계정 안내를 보인다.
-        if (
-          res.status === 403 &&
-          (await readRejectionCode(res)) === KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT
-        ) {
-          return ADMIN_ACCOUNT_LOGIN_URL;
+      // API 응답이 없거나 늦으면(시간 제한 초과 포함) 세션을 만들지 않는다.
+      let data: {
+        accessToken: string;
+        refreshToken: string;
+        user: { id: string; role: string; driverApproved?: boolean };
+      };
+      try {
+        const res = await fetch(`${API}/auth/kakao-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            kakaoAccessToken: account.access_token,
+            targetRole: 'driver',
+          }),
+          signal: authUpstreamSignal(),
+        });
+        if (!res.ok) {
+          // 관리자 계정은 세션을 만들지 않고 로그인 화면에서 기사 계정 안내를 보인다.
+          if (
+            res.status === 403 &&
+            (await readRejectionCode(res)) === KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT
+          ) {
+            return ADMIN_ACCOUNT_LOGIN_URL;
+          }
+          return false;
         }
+        data = await res.json();
+      } catch {
         return false;
       }
-
-      const data = await res.json();
+      if (!data?.user) return false;
       // API가 역할을 먼저 거르지만, 앱도 응답의 실제 역할을 다시 제한한다.
       if (data.user.role === 'admin') return ADMIN_ACCOUNT_LOGIN_URL;
       if (data.user.role !== DRIVER_APP_ROLE) return false;
