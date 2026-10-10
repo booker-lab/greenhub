@@ -127,7 +127,7 @@ test('round-direct 실패는 원인을 분류하고 주문 상태를 다시 읽�
   assert.match(roundDirectSlice, /classifyPhotoUploadFailure\(\{\s*kind:\s*['"]ack['"]\s*\}\)/);
   assert.match(
     roundDirectSlice,
-    /apiFetch\(`\/driver\/orders\/\$\{encodeURIComponent\(orderId\)\}`/,
+    /apiRead\(`\/driver\/orders\/\$\{encodeURIComponent\(orderId\)\}`/,
   );
   assert.match(roundDirectSlice, /resolvePhotoUploadFailure\(\{/);
   // 사진 연결 + DELIVERING 마무리는 서버의 사진 전제 DELIVERED 전이를 쓴다(사진 URL 없이).

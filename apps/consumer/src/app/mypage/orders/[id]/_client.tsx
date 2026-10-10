@@ -21,6 +21,7 @@ import { useSession } from 'next-auth/react';
 import { use, useEffect, useState } from 'react';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { formatCancelReason } from '@/lib/order-cancel-reason';
 import {
   buildPaymentRedirectUrl,
   type PaymentRedirectResult,
@@ -562,6 +563,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   const isCancelled = isAuthoritativelyCancelled || cancelOutcome.kind === 'done';
+  const cancelReasonText = formatCancelReason(detail.cancelReason);
   const showCancelReconcileWarning =
     !isAuthoritativelyCancelled && cancelOutcome.kind === 'reconcile-failed';
   const showCancelCommand =
@@ -888,7 +890,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       {isCancelled && (
         <Alert color="red" variant="light" radius="lg" mb="lg" ta="center">
           <Text fw="var(--fw-bold)">주문이 취소되었습니다</Text>
-          {detail.cancelReason && <Text size="sm">사유: {detail.cancelReason}</Text>}
+          {cancelReasonText && <Text size="sm">사유: {cancelReasonText}</Text>}
         </Alert>
       )}
 
