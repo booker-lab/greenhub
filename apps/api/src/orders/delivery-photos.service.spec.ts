@@ -114,7 +114,7 @@ function makeService(initialOrder: Data) {
   };
 }
 
-const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]);
+const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02, 0xff, 0xd9]);
 
 function uploadInput(overrides: Data = {}) {
   return {
@@ -336,6 +336,57 @@ describe('회차 직배송 사진 API 서비스 계약', () => {
     expect(context.storage.deleteObject).not.toHaveBeenCalled();
     expect(result.status).toBe('DELIVERED');
     expect(context.issueWriter.createOrMergeIssue).not.toHaveBeenCalled();
+  });
+
+  it('EXIF를 제거한 바이트를 저장하고 재조정 해시도 같은 바이트 기준으로 계산한다', async () => {
+    const context = makeService({
+      id: 'order-safe',
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: [],
+    });
+    const exif = Buffer.from('Exif\0\0GPS-37.5664N', 'latin1');
+    const app1 = Buffer.concat([Buffer.from([0xff, 0xe1, 0x00, exif.length + 2]), exif]);
+    const withExif = Buffer.concat([jpeg.subarray(0, 6), app1, jpeg.subarray(6)]);
+    context.storage.uploadDeliveryPhoto.mockRejectedValueOnce(new Error('저장 결과 불확실'));
+    context.storage.reconcileDeliveryPhoto.mockResolvedValueOnce({ state: 'CLEAN' });
+
+    await expect(
+      context.service.uploadAndComplete(uploadInput({ content: withExif })),
+    ).rejects.toThrow('저장 결과 불확실');
+
+    const stored = context.storage.uploadDeliveryPhoto.mock.calls[0][0].content as Buffer;
+    expect(stored).toEqual(jpeg);
+    expect(stored.includes(exif)).toBe(false);
+    expect(context.storage.reconcileDeliveryPhoto).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contentSha256: createHash('sha256').update(jpeg).digest('hex'),
+      }),
+    );
+  });
+
+  it('구조를 해석할 수 없는 JPEG는 저장 전에 거부한다', async () => {
+    const context = makeService({
+      id: 'order-safe',
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: [],
+    });
+
+    await expect(
+      context.service.uploadAndComplete(
+        uploadInput({ content: Buffer.from([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x40, 0xff, 0xd9]) }),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(context.storage.uploadDeliveryPhoto).not.toHaveBeenCalled();
   });
 
   it('Storage 결과와 객체 소유권을 읽어 확정할 수 없으면 기록 후 성공을 반환하지 않는다', async () => {

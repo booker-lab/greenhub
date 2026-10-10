@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import type * as admin from 'firebase-admin';
 import { FirestoreService } from './firestore.service';
+import { stripJpegMetadata } from './jpeg-metadata';
 
 const DELIVERY_PHOTO_URL_TTL_MS = 15 * 60 * 1000;
 const DELIVERY_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
@@ -60,14 +61,16 @@ export class StorageService {
     },
   ): Promise<{ orderId: string; photoId: string; path: string; created: boolean }> {
     this.assertJpegContent(input.content);
+    // 위치·기기 정보가 담긴 EXIF 등 메타데이터는 저장하지 않는다. 해시도 제거 후 바이트 기준이다.
+    const content = stripJpegMetadata(input.content);
     const order = await this.getOrder(input);
     await this.assertAccess(input, order, 'upload');
     const path = this.deliveryPhotoPath(input.orderId, input.photoId);
-    const contentSha256 = createHash('sha256').update(input.content).digest('hex');
+    const contentSha256 = createHash('sha256').update(content).digest('hex');
     const file = this.bucket.file(path);
 
     try {
-      await file.save(input.content, {
+      await file.save(content, {
         resumable: false,
         validation: 'crc32c',
         preconditionOpts: { ifGenerationMatch: 0 },
