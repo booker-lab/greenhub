@@ -1,7 +1,8 @@
 // 주문 취소와 재배송비 결제가 엇갈릴 때의 정합성.
 // - 취소 진행 중에는 새 재배송비 결제를 만들지 않는다.
 // - 취소(진행) 뒤 도착한 결제 완료는 PAID로 기록하고 claim 기반으로 환불한다.
-// - 결제가 필요한 주문 상태가 아니면 결제를 확정하지 않는다.
+// - 결제가 필요한 주문 상태가 아니거나 현재 보류에 연결되지 않은 결제는 주문에 반영하지 않고 기록한 뒤 환불한다.
+// - 실패 웹훅 뒤 PortOne이 확정한 결제는 현재 보류의 결제로 반영한다.
 // - 이미 환불된 결제의 재전송은 처리 완료로 답하고, 멈춘 환불 claim은 재시도 응답으로 이어 간다.
 
 import {
@@ -221,17 +222,77 @@ describe('취소 주문의 재배송비 결제 완료 처리', () => {
     expect(occ.getData(CHARGE_PATH)).toMatchObject({ status: 'PAID' });
   });
 
-  it('결제가 필요한 주문 상태(보류·재개 대기)가 아니면 결제를 확정하지 않는다', async () => {
+  it('결제가 필요한 주문 상태(보류·재개 대기)가 아니면 주문에 반영하지 않고 결제를 기록한 뒤 환불한다', async () => {
     const occ = createOccFirestore();
     seedOrder(occ, { status: 'DELIVERED' });
     seedCharge(occ);
     const { service, portone } = makePaymentService(occ);
 
-    await expect(service.handleWebhook('Transaction.Paid', PAYMENT_ID)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(service.handleWebhook('Transaction.Paid', PAYMENT_ID)).resolves.toEqual({
+      ok: true,
+      status: 'PAID',
+      reason: 'unneeded_charge_refund',
+    });
+    expect(portone.refund).toHaveBeenCalledTimes(1);
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({
+      status: 'REFUNDED',
+      unneededPaidAt: expect.anything(),
+      refundedAt: expect.anything(),
+    });
+  });
+
+  it('보류가 다른 보류로 바뀐 뒤 이전 청구로 결제하면 환불한다', async () => {
+    const occ = createOccFirestore();
+    seedOrder(occ, {
+      deliveryHold: { ...hold, heldAt: '2026-10-03T00:00:00.000Z' },
+      redeliveryChargeId: 'charge-2',
+      redeliveryChargeHoldAt: '2026-10-03T00:00:00.000Z',
+    });
+    seedCharge(occ);
+    const { service, portone } = makePaymentService(occ);
+
+    await service.handleWebhook('Transaction.Paid', PAYMENT_ID);
+
+    expect(portone.refund).toHaveBeenCalledTimes(1);
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({ status: 'REFUNDED' });
+    expect(occ.getData(`orders/${ORDER_ID}`)).toMatchObject({ redeliveryChargeId: 'charge-2' });
+  });
+
+  it('실패 웹훅 뒤 PortOne이 결제를 확정하면 현재 보류의 결제로 반영한다', async () => {
+    const occ = createOccFirestore();
+    seedOrder(occ);
+    seedCharge(occ, { status: 'FAILED', failedAt: '2026-10-02T00:00:00.000Z' });
+    const { service, portone } = makePaymentService(occ);
+
+    await expect(service.handleWebhook('Transaction.Paid', PAYMENT_ID)).resolves.toEqual({
+      ok: true,
+      status: 'PAID',
+    });
     expect(portone.refund).not.toHaveBeenCalled();
-    expect(occ.getData(CHARGE_PATH)).toMatchObject({ status: 'PENDING' });
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({ status: 'PAID', failedAt: null });
+  });
+
+  it('필요 없어진 결제의 환불이 실패하면 같은 결제 완료 재전송에서 환불을 이어 간다', async () => {
+    const occ = createOccFirestore();
+    seedOrder(occ, { status: 'DELIVERED' });
+    seedCharge(occ);
+    const { service, portone } = makePaymentService(occ);
+    portone.refund.mockRejectedValueOnce(new Error('provider timeout'));
+
+    await expect(service.handleWebhook('Transaction.Paid', PAYMENT_ID)).rejects.toThrow(
+      'provider timeout',
+    );
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({
+      status: 'PAID',
+      refundClaim: expect.objectContaining({ status: 'UNKNOWN' }),
+    });
+
+    await expect(service.handleWebhook('Transaction.Paid', PAYMENT_ID)).resolves.toEqual({
+      ok: true,
+      reason: 'already_processed',
+    });
+    expect(portone.refund).toHaveBeenCalledTimes(2);
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({ status: 'REFUNDED' });
   });
 });
 
