@@ -100,6 +100,10 @@ describe('Operations action claim fencing (OCC retry)', () => {
     const occ = createOccFirestore();
     seedRefundIssue(occ);
     const { service, payments } = makeService(occ);
+    // 환불 경로가 실제로 결제를 환불한 경우에만 해결로 기록한다.
+    payments.processRefundByOrderId.mockImplementationOnce(async () => {
+      occ.updateOutsideTransaction('payments/payment-1', { status: 'CANCELLED' });
+    });
 
     await service.executeAction({
       issueId: 'issue-1',
@@ -129,6 +133,7 @@ describe('Operations action claim fencing (OCC retry)', () => {
     const { service, payments } = makeService(occ);
 
     payments.processRefundByOrderId.mockImplementationOnce(async () => {
+      occ.updateOutsideTransaction('payments/payment-1', { status: 'CANCELLED' });
       // A held tokenA while running provider; B takeovers before A completes.
       occ.updateOutsideTransaction('operationIssues/issue-1', {
         actionClaim: {
