@@ -20,6 +20,12 @@ import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 import type { UpdateMeDto } from './dto/update-me.dto';
 import { KakaoClient } from './kakao.client';
+import {
+  JWT_ALGORITHM,
+  JWT_AUDIENCE,
+  type TokenType,
+  hasExpectedTokenClaims,
+} from './token-claims';
 import type { JwtPayload } from './types/jwt-payload.type';
 
 const USER_ROLES = ['consumer', 'seller', 'driver', 'admin'] as const;
@@ -27,6 +33,15 @@ const USER_ROLES = ['consumer', 'seller', 'driver', 'admin'] as const;
 // 기사 앱(targetRole=driver) 카카오 로그인에서 관리자 계정을 거절할 때 붙이는 code.
 // 기사 앱 `apps/driver/src/auth.ts`가 같은 값을 읽어 로그인 화면 안내로 바꾼다.
 export const KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT = 'KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT';
+
+// 계정이 없거나 비밀번호가 없는 계정의 로그인도 실제 계정과 같은 비용(cost 12)의 bcrypt 비교를
+// 거치게 하는 고정 해시. 어떤 비밀번호와도 일치하지 않는 무작위 값으로 만들었다.
+const DUMMY_PASSWORD_HASH = '$2b$12$kXNeYjWNPfuITzHstqiwSOrcnNfjK8UxQARUTuW1gPuNecbN11Dt.';
+
+const LOGIN_FAILED_MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다.';
+
+// 카카오 사용자 id(숫자)를 Firestore 문서 id로 쓸 수 있는지 확인한다.
+const KAKAO_IDENTITY_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 type AuthoritativeUser = {
   role: JwtPayload['role'];
@@ -165,21 +180,29 @@ export class AuthService {
       .limit(1)
       .get();
 
-    if (snap.empty) {
+    // 계정이 없거나 비밀번호가 없는(카카오 전용) 계정도 같은 비용의 bcrypt 비교를 거쳐
+    // 같은 401로 끝낸다. 응답 내용과 시간으로 가입 여부·가입 방식이 드러나지 않게 한다.
+    const userData = snap.empty ? undefined : snap.docs[0].data();
+    const passwordHash = userData?.['passwordHash'];
+    const hasPassword = typeof passwordHash === 'string';
+    const matched = await bcrypt.compare(
+      dto.password,
+      hasPassword ? passwordHash : DUMMY_PASSWORD_HASH,
+    );
+
+    if (!userData) {
       await this.audit.log('auth.login.failed', {
         detail: { email: dto.email, reason: 'user_not_found' },
       });
-      throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
+      throw new UnauthorizedException(LOGIN_FAILED_MESSAGE);
     }
 
-    const userData = snap.docs[0].data();
-    const valid = await bcrypt.compare(dto.password, userData['passwordHash']);
-    if (!valid) {
+    if (!hasPassword || !matched) {
       await this.audit.log('auth.login.failed', {
         userId: userData['id'],
-        detail: { email: dto.email, reason: 'wrong_password' },
+        detail: { email: dto.email, reason: hasPassword ? 'wrong_password' : 'password_not_set' },
       });
-      throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
+      throw new UnauthorizedException(LOGIN_FAILED_MESSAGE);
     }
 
     if (userData['suspended'] === true) {
@@ -321,25 +344,7 @@ export class AuthService {
       if (dto.targetRole === 'seller') {
         throw new ForbiddenException('판매자 계정은 관리자 초대로만 가입할 수 있습니다.');
       }
-      const userId = uuidv4();
-      const now = this.firestore.Timestamp.now();
-      const newRole = dto.targetRole ?? 'consumer';
-      userData = {
-        id: userId,
-        kakaoId: kakaoProfile.kakaoId,
-        email: kakaoProfile.email,
-        name: kakaoProfile.name,
-        phone: null,
-        role: newRole,
-        ...(newRole === 'driver' ? { driverApproved: false } : {}),
-        storeId: null,
-        providers: ['kakao'],
-        savedAddresses: [],
-        fcmToken: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await this.firestore.doc(`users/${userId}`).set(userData);
+      userData = await this.createKakaoUser(kakaoProfile, dto.targetRole ?? 'consumer');
     }
 
     const role = userData['role'] as string;
@@ -391,13 +396,60 @@ export class AuthService {
     return { accessToken, refreshToken, user: this.sanitizeUser(userData) };
   }
 
+  // 카카오 첫 로그인의 사용자 생성. 같은 카카오 계정의 동시 요청(콜백 중복 등)이 사용자 문서를
+  // 둘 만들지 않도록 `kakaoIdentities/{kakaoId}`를 트랜잭션 안에서 함께 써서 하나로 모은다.
+  // 먼저 커밋한 요청이 만든 사용자를 나중 요청은 그대로 받는다.
+  private async createKakaoUser(
+    kakaoProfile: Awaited<ReturnType<KakaoClient['getUser']>>,
+    newRole: NonNullable<KakaoLoginDto['targetRole']>,
+  ): Promise<Record<string, unknown>> {
+    if (!KAKAO_IDENTITY_ID_PATTERN.test(kakaoProfile.kakaoId)) {
+      throw new UnauthorizedException('카카오 사용자 정보를 확인할 수 없습니다.');
+    }
+    const identityRef = this.firestore.doc(`kakaoIdentities/${kakaoProfile.kakaoId}`);
+
+    return this.firestore.runTransaction(async (tx) => {
+      const identitySnap = await tx.get(identityRef);
+      const linkedUserId = identitySnap.exists ? identitySnap.data()?.['userId'] : undefined;
+      if (typeof linkedUserId === 'string') {
+        const linkedUserSnap = await tx.get(this.firestore.doc(`users/${linkedUserId}`));
+        if (linkedUserSnap.exists) return linkedUserSnap.data() as Record<string, unknown>;
+      }
+
+      const userId = uuidv4();
+      const now = this.firestore.Timestamp.now();
+      const userData: Record<string, unknown> = {
+        id: userId,
+        kakaoId: kakaoProfile.kakaoId,
+        email: kakaoProfile.email,
+        name: kakaoProfile.name,
+        phone: null,
+        role: newRole,
+        ...(newRole === 'driver' ? { driverApproved: false } : {}),
+        storeId: null,
+        providers: ['kakao'],
+        savedAddresses: [],
+        fcmToken: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      tx.set(identityRef, { userId, createdAt: now });
+      tx.set(this.firestore.doc(`users/${userId}`), userData);
+      return userData;
+    });
+  }
+
   async refresh(refreshToken: string) {
     let payload: JwtPayload;
     try {
       payload = this.jwt.verify(refreshToken, {
         secret: this.config.get('JWT_REFRESH_SECRET'),
+        algorithms: [JWT_ALGORITHM],
       });
     } catch {
+      throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
+    }
+    if (!hasExpectedTokenClaims(payload, 'refresh')) {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
     }
 
@@ -448,6 +500,7 @@ export class AuthService {
 
     if (outcome.kind === 'reused') {
       await this.audit.log('auth.token.stolen', { userId: payload.sub });
+      await this.revokeFirebaseSessions(payload.sub);
     }
     if (outcome.kind !== 'issued') {
       throw new UnauthorizedException('만료된 리프레시 토큰입니다.');
@@ -487,7 +540,22 @@ export class AuthService {
 
   async logout(userId: string) {
     await this.firestore.doc(`refreshTokens/${userId}`).delete();
+    await this.revokeFirebaseSessions(userId);
     await this.audit.log('auth.logout', { userId });
+  }
+
+  // `/auth/firebase-token`으로 시작한 Firebase 클라이언트 세션의 갱신을 끊는다. 이미 발급된
+  // Firebase ID 토큰은 만료(최대 1시간)까지 남는다. custom token을 받은 적 없는 사용자는 Firebase
+  // 사용자 기록이 없으므로 끊을 세션도 없다. 그 밖의 실패는 API 세션 폐기를 되돌리지 않고 기록만 남긴다.
+  private async revokeFirebaseSessions(userId: string) {
+    try {
+      await admin.auth().revokeRefreshTokens(userId);
+    } catch (error) {
+      if ((error as { code?: unknown })?.code === 'auth/user-not-found') return;
+      this.logger.error(
+        `auth.firebase.revoke_failed userId=${userId} error=${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   async updateFcmToken(userId: string, fcmToken: string) {
@@ -536,18 +604,26 @@ export class AuthService {
     };
   }
 
+  private withTokenType(payload: JwtPayload, typ: TokenType): JwtPayload {
+    return { sub: payload.sub, role: payload.role, storeId: payload.storeId, typ };
+  }
+
   private signAccessToken(payload: JwtPayload) {
-    return this.jwt.sign(payload, {
+    return this.jwt.sign(this.withTokenType(payload, 'access'), {
       secret: this.config.get('JWT_SECRET'),
       expiresIn: this.config.get('JWT_EXPIRES_IN', '1h'),
+      algorithm: JWT_ALGORITHM,
+      audience: JWT_AUDIENCE,
     });
   }
 
   private signTokens(payload: JwtPayload) {
     const accessToken = this.signAccessToken(payload);
-    const refreshToken = this.jwt.sign(payload, {
+    const refreshToken = this.jwt.sign(this.withTokenType(payload, 'refresh'), {
       secret: this.config.get('JWT_REFRESH_SECRET'),
       expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '30d'),
+      algorithm: JWT_ALGORITHM,
+      audience: JWT_AUDIENCE,
     });
     return { accessToken, refreshToken };
   }
