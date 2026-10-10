@@ -10,7 +10,7 @@ export interface OrderDetailActions {
   shipParcel: boolean;
   /**
    * 기사가 가져가기 전 회차 직배송 PREPARING → DELIVERY_HELD. 기사 앱 보류와 같은 범위다 —
-   * 예전 주문은 재배송비 결제를 만들 수 없고(서버가 schemaVersion 2만 받음), 택배·거점은 기사 직배송이 아니다.
+   * 예전(회차 아님) 주문은 재배송비 결제를 만들 수 없고, 택배·거점은 기사 직배송이 아니다.
    */
   hold: boolean;
   /** DELIVERY_HELD → PREPARING(재배송 준비) */
@@ -20,13 +20,10 @@ export interface OrderDetailActions {
 }
 
 export function resolveOrderDetailActions(
-  order: Pick<
-    Order,
-    'status' | 'deliveryMethod' | 'schemaVersion' | 'roundId' | 'redeliveryPayment'
-  >,
+  order: Pick<Order, 'status' | 'deliveryMethod' | 'roundId' | 'redeliveryPayment'>,
 ): OrderDetailActions {
+  // 회차 주문은 회차 ID로 가린다. 판매자 상세 응답(seller-order-read-model)에는 schemaVersion이 없다.
   const isRoundDirect =
-    order.schemaVersion === 2 &&
     typeof order.roundId === 'string' &&
     order.roundId.length > 0 &&
     order.deliveryMethod === 'direct';
