@@ -6,6 +6,7 @@ import {
   throwDriverOrderStateConflict,
 } from './driver-order-error';
 import type { OrderStatus } from './dto/update-status.dto';
+import { isOrderCancellationInProgress } from './order-cancellation-state';
 
 type OrderRecord = Record<string, any>;
 
@@ -270,6 +271,8 @@ export class DriverOrderScopeService {
 
   private isDiscoveryEligibleForScope(scope: ScopeEvaluation, order: OrderRecord): boolean {
     if (order['status'] !== 'PREPARING' || order['driverId'] != null) return false;
+    // 취소가 진행 중인 주문은 first claim이 409로 막히므로 기사 목록에 올리지 않는다.
+    if (isOrderCancellationInProgress(order)) return false;
     if (scope.mode === 'round_direct')
       return scope.pilotBase && order['deliveryMethod'] === 'direct';
     return ['direct', 'hub'].includes(String(order['deliveryMethod']));
@@ -292,6 +295,7 @@ export class DriverOrderScopeService {
     scope: ScopeEvaluation,
     inTransaction = false,
   ) {
+    this.assertNoCancellationInProgress(input, inTransaction);
     if (
       input.expectedStatus !== 'PREPARING' ||
       input.nextStatus !== 'DELIVERING' ||
@@ -322,6 +326,7 @@ export class DriverOrderScopeService {
     scope: ScopeEvaluation,
     inTransaction = false,
   ) {
+    this.assertNoCancellationInProgress(input, inTransaction);
     if (input.order['status'] !== input.expectedStatus) {
       throwDriverOrderStateConflict('주문 상태가 변경되었습니다.', inTransaction);
     }
@@ -351,6 +356,16 @@ export class DriverOrderScopeService {
       return;
     }
     throwDriverOrderStateConflict('미배정 주문은 first claim으로만 배송을 시작할 수 있습니다.');
+  }
+
+  // 취소 orchestration이 환불·로컬 취소를 진행하는 동안에는 배송 전이와 사진 연결을 막는다.
+  private assertNoCancellationInProgress(input: DriverOrderMutationInput, inTransaction: boolean) {
+    if (isOrderCancellationInProgress(input.order)) {
+      throwDriverOrderStateConflict(
+        '주문 취소가 진행 중이어서 배송 상태를 변경할 수 없습니다.',
+        inTransaction,
+      );
+    }
   }
 
   private assertPilotScope(scope: ScopeEvaluation) {

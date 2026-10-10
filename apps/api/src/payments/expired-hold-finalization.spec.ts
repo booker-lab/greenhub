@@ -199,6 +199,7 @@ describe('만료된 결제 예약의 PENDING 회차 주문 결제 확정', () =>
       fixture.finalization,
       { refundByOrderId: jest.fn() } as never,
       { isOrderChargePaymentId: jest.fn().mockReturnValue(false) } as never,
+      { createOrMergeIssue: jest.fn() } as never,
     );
 
     await service.cleanupPendingOrders();
@@ -215,6 +216,7 @@ describe('만료된 결제 예약의 PENDING 회차 주문 결제 확정', () =>
       fixture.finalization,
       { refundByOrderId: jest.fn() } as never,
       { isOrderChargePaymentId: jest.fn().mockReturnValue(false) } as never,
+      { createOrMergeIssue: jest.fn() } as never,
     );
 
     await expect(
