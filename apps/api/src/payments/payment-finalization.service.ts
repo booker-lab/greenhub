@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../common/audit/audit.service';
+import { getConfigValues } from '../config/runtime-config';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -15,6 +17,11 @@ import {
 import { RetentionService } from '../retention/retention.service';
 import { PortoneClient } from './portone.client';
 import { PaymentRefundService } from './payment-refund.service';
+import {
+  findPortonePaymentContextMismatch,
+  type PortonePaymentContextPolicy,
+  resolvePortonePaymentContextPolicy,
+} from './portone-payment-context';
 import {
   isLegacyDailyCapacityEligible,
   LegacyDailyCapacityError,
@@ -37,6 +44,7 @@ const FINALIZATION_REFUND_CLAIM_MS = 5 * 60 * 1000;
 
 type FinalizationRefundReasonClass =
   | 'amount_mismatch'
+  | 'payment_context_mismatch'
   | 'late_capacity_round'
   | 'late_capacity_legacy';
 
@@ -68,6 +76,9 @@ type FinalizationRefundClaimOutcome =
 
 @Injectable()
 export class PaymentFinalizationService {
+  private readonly logger = new Logger(PaymentFinalizationService.name);
+  private readonly paymentContextPolicy: PortonePaymentContextPolicy;
+
   constructor(
     private readonly firestore: FirestoreService,
     private readonly portone: PortoneClient,
@@ -78,7 +89,19 @@ export class PaymentFinalizationService {
     private readonly issueWriter: OperationIssueWriterService,
     private readonly retention: RetentionService,
     private readonly refunds: PaymentRefundService,
-  ) {}
+    // Nest DI는 전역 ConfigService를 항상 주입한다. 직접 생성하는 테스트만 process.env를 쓴다.
+    config?: ConfigService,
+  ) {
+    this.paymentContextPolicy = resolvePortonePaymentContextPolicy(
+      config
+        ? { ...getConfigValues(config), PORTONE_STORE_ID: config.get<string>('PORTONE_STORE_ID') }
+        : process.env,
+    );
+    const policy = this.paymentContextPolicy;
+    if (policy.requireLiveChannel && !policy.expectedStoreId) {
+      this.logger.warn('PORTONE_STORE_ID가 없어 결제 확정 시 PortOne 상점 비교를 건너뜁니다.');
+    }
+  }
 
   async recordPaymentLookupFailure(orderId: string, error: unknown) {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
@@ -112,6 +135,32 @@ export class PaymentFinalizationService {
     }
     if (!this.canFinalize(order) && !this.isCancellationSettlementCandidate(order)) {
       return { ok: true, reason: 'already_processed' };
+    }
+
+    const contextMismatch = findPortonePaymentContextMismatch(
+      paymentData,
+      this.paymentContextPolicy,
+    );
+    if (contextMismatch) {
+      // 금액 불일치와 같은 환불·취소 경로를 그대로 쓴다.
+      await this.audit.log('payment.amount_tampered', {
+        userId: order['userId'] as string,
+        detail: {
+          orderId,
+          field: contextMismatch.field,
+          expected: contextMismatch.expected,
+          actual: contextMismatch.actual,
+        },
+      });
+      const refundOutcome = await this.refundWithFinalizationOwnership(
+        orderId,
+        paymentData,
+        'payment_context_mismatch',
+        '결제 상점·통화·채널 불일치',
+      );
+      if (refundOutcome === 'order_missing') return { ok: false, reason: 'order_not_found' };
+      await this.cancelPendingOrder(orderId, 'payment_context_mismatch');
+      return { ok: false, reason: 'payment_context_mismatch' };
     }
 
     if (paymentData.amount.total !== order['totalAmount']) {
@@ -600,6 +649,7 @@ export class PaymentFinalizationService {
     if (typeof marker['token'] !== 'string' || marker['token'].length === 0) return null;
     if (
       marker['reason'] !== 'amount_mismatch' &&
+      marker['reason'] !== 'payment_context_mismatch' &&
       marker['reason'] !== 'late_capacity_round' &&
       marker['reason'] !== 'late_capacity_legacy'
     ) {

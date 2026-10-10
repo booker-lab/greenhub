@@ -8,6 +8,11 @@ interface PortonePaymentData {
   amount: { total: number };
   status: string;
   method?: { type: string };
+  // PortOne V2 PaidPayment 필수 필드. 확정 전 상점·통화·채널 확인에 쓴다
+  // (portone-payment-context.ts). 다른 상태나 E2E stub 응답에는 없을 수 있다.
+  storeId?: string;
+  currency?: string;
+  channel?: { type?: string };
 }
 
 const WEBHOOK_TOLERANCE_SECONDS = 5 * 60;
