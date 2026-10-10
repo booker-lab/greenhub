@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { CreateVarietyDto } from './dto/create-variety.dto';
 import { UpdateVarietyDto } from './dto/update-variety.dto';
@@ -42,7 +42,7 @@ export class VarietiesService {
   }
 
   async create(dto: CreateVarietyDto) {
-    const id = uuidv4();
+    const id = randomUUID();
     const now = new Date().toISOString();
     const data = { ...dto, notes: dto.notes ?? '', createdAt: now };
     await this.firestore.collection('varieties').doc(id).set(data);

@@ -1,6 +1,6 @@
 import { todayKST } from '@greenhub/shared';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
@@ -138,7 +138,7 @@ export class ProductsService {
   async createProduct(storeId: string, sellerId: string, dto: CreateProductDto, role?: string) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
 
-    const productId = uuidv4();
+    const productId = randomUUID();
     const now = this.firestore.Timestamp.now();
     const { groupConfig, ...productFields } = dto;
 

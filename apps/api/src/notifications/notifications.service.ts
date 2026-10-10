@@ -1,7 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { forwardRef, Inject, Injectable, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { OpsAlertService } from '../ops-alerts/ops-alert.service';
@@ -190,7 +189,7 @@ export class NotificationsService {
       const providerReceipt =
         normalizeNullableString((raw as { providerReceipt?: unknown })['providerReceipt']);
       const attemptId =
-        normalizeNullableString((raw as { attemptId?: unknown })['attemptId']) ?? uuidv4();
+        normalizeNullableString((raw as { attemptId?: unknown })['attemptId']) ?? randomUUID();
       const needsVerify =
         typeof (raw as { needsVerify?: unknown })['needsVerify'] === 'boolean'
           ? ((raw as { needsVerify?: boolean })['needsVerify'] as boolean)
@@ -326,7 +325,7 @@ export class NotificationsService {
       (raw as { providerReceipt?: unknown })['providerReceipt'],
     );
     const attemptId =
-      normalizeNullableString((raw as { attemptId?: unknown })['attemptId']) ?? uuidv4();
+      normalizeNullableString((raw as { attemptId?: unknown })['attemptId']) ?? randomUUID();
     const needsVerify =
       typeof (raw as { needsVerify?: unknown })['needsVerify'] === 'boolean'
         ? ((raw as { needsVerify?: boolean })['needsVerify'] as boolean)
@@ -524,7 +523,7 @@ export class NotificationsService {
     productId: string,
   ): Promise<{ leaseId: string; gc: Record<string, unknown> } | null> {
     const ref = this.firestore.doc(`groupProductConfig/${productId}`);
-    const leaseId = uuidv4();
+    const leaseId = randomUUID();
     // 커밋된 시도의 반환값만으로 결정한다(재시도된 트랜잭션의 중간 판단이 새지 않게).
     return this.firestore.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref);
@@ -762,7 +761,7 @@ export class NotificationsService {
     idempotencyKey?: string | null;
     resendOfNotificationId?: string | null;
   }) {
-    const id = uuidv4();
+    const id = randomUUID();
     await this.firestore.doc(`notifications/${id}`).set({
       id,
       ...data,
@@ -790,7 +789,7 @@ export class NotificationsService {
     const ref = this.firestore.doc(
       `notificationDeliveries/${this.notificationDeliveryId(input.idempotencyKey)}`,
     );
-    const leaseId = uuidv4();
+    const leaseId = randomUUID();
     let acquired: string | null = null;
     await this.firestore.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref);

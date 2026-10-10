@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { projectSellerOrder } from '../orders/seller-order-read-model';
 import { CreateHubDto, UpdateHubDto } from './dto/create-hub.dto';
@@ -61,7 +61,7 @@ export class HubsService {
   async createHub(storeId: string, requesterId: string, dto: CreateHubDto) {
     await this.verifyOwnership(storeId, requesterId);
 
-    const hubId = uuidv4();
+    const hubId = randomUUID();
     const now = this.firestore.Timestamp.now();
 
     await this.firestore.doc(`hubs/${hubId}`).set({

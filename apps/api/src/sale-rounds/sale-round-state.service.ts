@@ -1,6 +1,6 @@
 import type { SaleRound, SaleRoundStatus } from '@greenhub/shared';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
 import {
@@ -130,7 +130,7 @@ export class SaleRoundStateService {
     // 배송 중인 주문은 취소·환불할 수 없다. 하나라도 있으면 환불을 시작하기 전에 거절해,
     // 앞 주문만 환불·안내되고 회차가 LOCAL_FAILED에 멈추는 부분 취소를 막는다.
     await this.assertNoOrdersInDelivery(input.roundId);
-    const claim = { ownerId: uuidv4(), leaseId: uuidv4() };
+    const claim = { ownerId: randomUUID(), leaseId: randomUUID() };
     const claimed = await this.claimCancellation(input, claim);
     if (claimed.done) return claimed.round;
 
