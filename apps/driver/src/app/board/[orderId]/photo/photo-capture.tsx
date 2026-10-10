@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiRead } from '@/lib/api';
 import { readDriverOrderCommandErrorCodeFromResponse } from '../../_lib/driver-order-detail';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
 import {
@@ -133,7 +133,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
     if (!navigator.mediaDevices?.getUserMedia) {
       setError(
         isRoundDirect
-          ? '카메라를 사용할 수 없습니다. 사진 파일 선택으로 계속해주세요.'
+          ? '카메라를 사용할 수 없습니다. 카메라 앱으로 찍거나 사진을 선택해 계속해주세요.'
           : '카메라를 사용할 수 없습니다.',
       );
       return;
@@ -143,8 +143,10 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
     const requestId = cameraRequestRef.current;
 
     try {
+      // 해상도를 따로 청하지 않으면 브라우저가 640×480으로 여는 경우가 많아 밤 사진이 뭉개진다.
+      // ideal이라 지원하지 않는 기기는 가능한 해상도로 열린다. 업로드 전 4MB 이하 JPEG 재인코딩은 그대로다.
       const nextStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: false,
       });
       if (cameraRequestRef.current !== requestId) {
@@ -157,7 +159,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
       if (cameraRequestRef.current !== requestId) return;
       setError(
         isRoundDirect
-          ? '카메라 접근 권한이 필요합니다. 사진 파일 선택으로 계속해주세요.'
+          ? '카메라 접근 권한이 필요합니다. 카메라 앱으로 찍거나 사진을 선택해 계속해주세요.'
           : '카메라 접근 권한이 필요합니다.',
       );
     }
@@ -246,7 +248,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
 
   async function readOrderStatus(token: string): Promise<string | null> {
     try {
-      const response = await apiFetch(`/driver/orders/${encodeURIComponent(orderId)}`, token);
+      const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token);
       if (!response.ok) return null;
       return readDriverOrderStatus(await response.json(), orderId);
     } catch {
@@ -371,7 +373,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
         }
       }
 
-      router.replace('/board?tab=preparing');
+      router.replace('/board?tab=delivering');
     } catch (error) {
       if (
         error instanceof Error &&
@@ -464,7 +466,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
             accept="image/jpeg"
             capture="environment"
             onChange={selectPhoto}
-            aria-label="사진 파일 선택"
+            aria-label="카메라 앱으로 찍기·사진 선택"
             style={{ display: 'none' }}
           />
         )}
@@ -502,7 +504,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
                 style={{ color: 'var(--color-bg)' }}
                 radius="md"
               >
-                사진 파일 선택
+                카메라 앱으로 찍기·사진 선택
               </Button>
             )}
             {error && (

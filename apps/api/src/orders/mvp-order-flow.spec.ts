@@ -391,6 +391,37 @@ describe('MVP 회차 주문 흐름 계약', () => {
     );
   }
 
+  it('받는 분 연락처가 휴대폰 번호가 아니면 예약·주문 전에 거절한다', async () => {
+    const { firestore, records } = makeFirestore(seedRoundRecords());
+    const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
+    const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
+    const service = new RoundOrderCreateService(firestore as never, capacity, retention as never);
+    const before = JSON.stringify(Array.from(records.entries()));
+
+    for (const deliveryPhone of ['00000000', '031-123-4567', '010-123-567']) {
+      await expect(
+        service.create('store-round', 'user-1', roundOrderRequest({ deliveryPhone }) as never),
+      ).rejects.toThrow('받는 분 휴대폰 번호를 확인해 주세요');
+    }
+    expect(JSON.stringify(Array.from(records.entries()))).toBe(before);
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('받는 분 휴대폰 번호는 010-1234-5678 꼴로 맞춰 저장한다', async () => {
+    const { firestore, records } = makeFirestore(seedRoundRecords());
+    const capacity = new (require('./order-capacity.service').OrderCapacityService)(firestore);
+    const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
+    const service = new RoundOrderCreateService(firestore as never, capacity, retention as never);
+
+    const result = await service.create(
+      'store-round',
+      'user-1',
+      roundOrderRequest({ deliveryPhone: ' 010 9999 0000 ' }) as never,
+    );
+
+    expect(records.get(`orders/${result['orderId']}`)?.['deliveryPhone']).toBe('010-9999-0000');
+  });
+
   it('round_direct 주문은 이천시 밖 배송 주소를 결제 예약 전에 차단한다', async () => {
     const { firestore } = makeFirestore(seedRoundRecords());
     const service = makeCreateService(firestore);
@@ -1251,6 +1282,47 @@ describe('MVP 회차 주문 흐름 계약', () => {
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(records.get('orders/order-legacy-weather')).not.toHaveProperty('deliveryHold');
+  });
+
+  it.each([
+    ['재배송비 없는 고객 책임', { customerResponsible: true, redeliveryFee: null }],
+    ['고객 책임 아닌 재배송비', { customerResponsible: false, redeliveryFee: 3000 }],
+  ])('회차 주문의 기상 외 보류에 %s 조합을 저장하지 않는다', async (_name, responsibility) => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-access': {
+          id: 'order-access',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'PREPARING',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          deliveryMethod: 'direct',
+        },
+      }),
+    );
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.updateStatus(
+        'store-round',
+        'order-access',
+        'seller-1',
+        {
+          status: 'DELIVERY_HELD',
+          deliveryHold: {
+            reasonCode: 'ACCESS_UNAVAILABLE',
+            reasonMessage: '공동현관 출입 불가',
+            ...responsibility,
+          },
+        } as never,
+        'seller',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(records.get('orders/order-access')).not.toHaveProperty('deliveryHold');
+    expect(records.get('saleRounds/round-1')).toMatchObject({
+      counters: expect.objectContaining({ heldOrderCount: 0 }),
+    });
   });
 
   it('같은 배송 보류 요청이 중복 실행돼도 회차 보류 주문 수는 한 번만 증가한다', async () => {
