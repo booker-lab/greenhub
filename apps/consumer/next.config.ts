@@ -40,6 +40,10 @@ function firebaseStorageImagePatterns() {
 }
 
 const nextConfig: NextConfig = {
+  // Mantine은 Next 기본 최적화 목록에 없어 배럴 import가 쓰지 않는 컴포넌트까지 번들에 끌어온다.
+  experimental: {
+    optimizePackageImports: ['@mantine/core', '@mantine/hooks'],
+  },
   poweredByHeader: false,
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
