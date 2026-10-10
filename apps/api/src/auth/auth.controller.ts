@@ -23,6 +23,10 @@ import { JwtPayload } from './types/jwt-payload.type';
 
 // 인증 엔드포인트는 brute-force 방어로 1분 10회 — 전역 'default'(100/분) 오버라이드.
 const AUTH_THROTTLE = { default: { limit: 10, ttl: 60000 } };
+// 카카오 로그인·토큰 갱신은 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 접속 IP가 손님이 아니라
+// Vercel 서버다. 여러 손님이 같은 서버 IP를 나눠 쓰므로 10회/분이면 오픈 직후 로그인이 막힌다.
+// 유효한 카카오 토큰·리프레시 토큰이 있어야만 성공하는 경로라 대입 공격 위험이 낮아 한도를 넓힌다.
+const RELAYED_AUTH_THROTTLE = { default: { limit: 120, ttl: 60000 } };
 
 @Controller('auth')
 export class AuthController {
@@ -43,14 +47,14 @@ export class AuthController {
 
   @Post('kakao-login')
   @HttpCode(HttpStatus.OK)
-  @Throttle(AUTH_THROTTLE)
+  @Throttle(RELAYED_AUTH_THROTTLE)
   kakaoLogin(@Body() dto: KakaoLoginDto) {
     return this.authService.kakaoLogin(dto);
   }
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @Throttle(AUTH_THROTTLE)
+  @Throttle(RELAYED_AUTH_THROTTLE)
   refresh(@Body('refreshToken') refreshToken: string) {
     return this.authService.refresh(refreshToken);
   }
