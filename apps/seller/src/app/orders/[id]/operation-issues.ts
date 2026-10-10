@@ -14,6 +14,8 @@ const ISSUE_TYPES = new Set<OperationIssueType>([
   // 서버가 critical로 남기는 결과 불명확 기록. 목록에서 빠지면 운영자가 볼 수 없다.
   'FINALIZATION_REFUND_FAILED',
   'DELIVERY_PHOTO_RECONCILIATION_REQUIRED',
+  // 결제 확정 뒤 PortOne 쪽에서 취소·분쟁이 생긴 critical 기록. 운영 알림이 이 화면을 가리킨다.
+  'PROVIDER_REVERSAL_DETECTED',
 ]);
 
 export const ISSUE_LABELS: Record<OperationIssueType, string> = {
@@ -24,6 +26,7 @@ export const ISSUE_LABELS: Record<OperationIssueType, string> = {
   RETENTION_DELETE_FAILED: '보관 파기 확인',
   FINALIZATION_REFUND_FAILED: '환불 결과 확인',
   DELIVERY_PHOTO_RECONCILIATION_REQUIRED: '배송 사진 확인',
+  PROVIDER_REVERSAL_DETECTED: '결제사 취소·분쟁 확인',
 };
 
 export const ISSUE_DESCRIPTIONS: Record<OperationIssueType, string> = {
@@ -36,6 +39,8 @@ export const ISSUE_DESCRIPTIONS: Record<OperationIssueType, string> = {
     '결제 확정 중 환불 요청 결과를 확정하지 못했습니다. 재시도하지 말고 PortOne 콘솔에서 환불 여부를 확인하세요.',
   DELIVERY_PHOTO_RECONCILIATION_REQUIRED:
     '배송 사진 저장 결과를 자동으로 확정하지 못했습니다. 사진과 주문 배송 상태를 확인하세요.',
+  PROVIDER_REVERSAL_DETECTED:
+    '주문을 받은 뒤 PortOne에서 결제가 취소되거나 분쟁이 접수됐습니다. PortOne 콘솔에서 결제를 확인하고, 정산 지급과 배송 진행 여부를 점검하세요.',
 };
 const ISSUE_STATUSES = new Set<OperationIssueStatus>(['OPEN', 'RESOLVED', 'DISMISSED']);
 const ISSUE_SEVERITIES = new Set<OperationIssueSeverity>(['info', 'warning', 'critical']);
@@ -43,7 +48,14 @@ const ACTION_TYPES = new Set<OperationIssueActionType>(['RETRY_REFUND', 'RESEND_
 const ACTION_STATUSES = new Set(['SUCCEEDED', 'FAILED']);
 const SAFE_IDENTIFIER_PATTERN = /^[A-Za-z0-9:_-]{1,160}$/;
 const SAFE_STATE_FIELDS = ['orderStatus', 'paymentStatus'] as const;
-const SAFE_SNAPSHOT_FIELDS = [...SAFE_STATE_FIELDS, 'failureStage', 'templateCode'] as const;
+const SAFE_SNAPSHOT_FIELDS = [
+  ...SAFE_STATE_FIELDS,
+  'failureStage',
+  'templateCode',
+  'providerStatus',
+  'providerEvent',
+  'settlementStatus',
+] as const;
 
 export interface OperationStateSnapshot {
   orderStatus: string | null;
@@ -53,6 +65,9 @@ export interface OperationStateSnapshot {
 export interface OperationSnapshot extends OperationStateSnapshot {
   failureStage: string | null;
   templateCode: string | null;
+  providerStatus: string | null;
+  providerEvent: string | null;
+  settlementStatus: string | null;
 }
 
 export interface OrderOperationAction {
