@@ -1,5 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && pnpm --filter @greenhub/shared build && pnpm --filter driver build",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "outputDirectory": ".next",
   "ignoreCommand": "node ../../scripts/vercel/ignore-build.mjs --app driver",
   "git": {
     "deploymentEnabled": false

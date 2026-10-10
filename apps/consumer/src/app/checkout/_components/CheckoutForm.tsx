@@ -39,7 +39,8 @@ const PAYMENT_OPTIONS: { method: PaymentMethod; label: string; dot: string }[] =
 
 export interface CheckoutFormProps {
   items: CartItem[];
-  totalAmount: number;
+  /** 화면에 보일 결제 금액. null이면 서버 금액을 확인하는 중으로 표시하고, 0이면 줄을 숨긴다. */
+  totalAmount: number | null;
   address: DeliveryAddress;
   onAddressChange: (a: DeliveryAddress) => void;
   deliveryPhone: string;
@@ -240,7 +241,7 @@ export default function CheckoutForm({
               </Text>
             </Group>
           )}
-          {totalAmount > 0 && (
+          {(totalAmount === null || totalAmount > 0) && (
             <Group
               justify="space-between"
               align="baseline"
@@ -251,15 +252,24 @@ export default function CheckoutForm({
               <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
                 결제 금액
               </Text>
-              <Text
-                style={{
-                  fontSize: 22,
-                  fontVariantNumeric: 'tabular-nums',
-                  fontWeight: 'var(--fw-extrabold)',
-                }}
-              >
-                {totalAmount.toLocaleString()}원
-              </Text>
+              {totalAmount === null ? (
+                <Text
+                  aria-live="polite"
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  금액 확인 중...
+                </Text>
+              ) : (
+                <Text
+                  style={{
+                    fontSize: 22,
+                    fontVariantNumeric: 'tabular-nums',
+                    fontWeight: 'var(--fw-extrabold)',
+                  }}
+                >
+                  {totalAmount.toLocaleString()}원
+                </Text>
+              )}
             </Group>
           )}
         </Stack>

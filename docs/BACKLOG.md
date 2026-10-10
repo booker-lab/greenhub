@@ -26,11 +26,11 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 - R1 Combined Public Readiness: `PUBLIC_READINESS_CLOSED`
 - S2 → R1 campaign: `TERMINAL_SUCCESS`
 - #63이 확인한 pre-publication main 기준선: `ffd999423f8a98b0c1f34d020d832d7929feab72` — historical baseline
-- #71이 재확인한 현재 live `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`
+- #71이 재확인한 당시(2026-09-06) live `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` — historical baseline
 - #70 `SALE-ROUND-STATE-01`은 `MERGED`; 회차 atomicity/recovery implementation과 직접 proof가 publication되었다.
 - 역사적 exact-source Preview 기준선: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` — 현재 main, PR, merge, production 증거로 승격하지 않는다.
 - #63의 accepted closure는 닫힌 semantic work를 다시 열지 않는다는 뜻이며, Preview·Auth.js runtime 검증 잔여와 production/activation은 별도 상태다.
-- 기존 문서 candidate는 PR #69에서 후속 갱신하며, 이 Goal은 PR #69를 merge하지 않고 Git-native publication 경계(`docs/specs/ops/development-authority.md`)를 따른다.
+- 문서 candidate PR #69는 2026-09-05에 merge됐다.
 
 ---
 
@@ -42,12 +42,12 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 | verification | Sale Round proof `PROVEN`; 2026-09-28 exact Preview 원격 E2E 52 + 세션 12 통과(`PRE_RELEASE_PROVEN`), 출시 SHA 재실행은 `PENDING` |
 | prior candidate | PR #69의 기존 accepted candidate는 `9c921684a26597cb57887b6049288f1143b017c8` |
 | updated candidate | PR #69의 후속 candidate는 remote-addressable 상태로 갱신하며, 정확한 head SHA는 Issue #75 TASK_RECORD에 기록 |
-| PR | 기존 documentation PR #69는 `OPEN`; 이번 Goal은 merge하지 않음 |
-| published / merged | PR #70은 `MERGED`; live `main`은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` |
+| PR | documentation PR #69는 2026-09-05 `MERGED` |
+| published / merged | PR #70은 `MERGED`; 당시 live `main`은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`(historical) |
 | Preview runtime proof | Auth.js 세션 런타임 `RUNTIME_PROVEN`(Preview); 출시 SHA 기준 재실행은 `PENDING` |
-| production deployment | `PRODUCTION_AUTHORITY_PENDING` |
-| production activation | `PRODUCTION_AUTHORITY_PENDING` |
-| first live round | `PRODUCTION_AUTHORITY_PENDING` |
+| production deployment | `DONE` — 2026-09-28 출시 SHA `197f84a4`, 이후 갱신 이력과 현재 운영 SHA는 `memory.md` 5절 |
+| production activation | `DONE` — 2026-09-29 `salesMode=round_direct`, 첫 회차 `SCHEDULED` |
+| first live round | `NOT DONE` — 파일럿 2026-11-01(첫 회차 주문 11/1 10:00 자동 오픈) |
 
 ---
 
@@ -353,7 +353,7 @@ repo-side production auto-deploy 차단과 GitHub main 보호를 완료했다. 2
 
 Issue #66이 회차 수정·수동 개방·주문 예약·취소 복구의 race/recovery 구현과 직접 proof를
 accepted했다. semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는 PR #70으로
-게시되었고, PR #70은 merge되어 현재 live `main` `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`로
+게시되었고, PR #70은 merge되어 당시 live `main` `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`로
 read-back되었다.
 
 직접 proof 범위:
@@ -366,10 +366,9 @@ read-back되었다.
 | crash recovery, partial cancellation/retry와 duplicate convergence | `PROVEN` |
 | focused/integration/regression proof와 exact candidate publication | `PROVEN` / `PUBLISHED` |
 
-이 상태는 implementation과 repository publication에 대한 proof다. exact-release Preview/browser/runtime
-proof는 `PENDING`이며, production deployment·production activation·`salesMode` 전환·live round·actual
-payment/notification·first live round는 `PRODUCTION_AUTHORITY_PENDING`이다. 이 문서 후보와 PR #69는
-이를 production-ready로 표현하지 않는다.
+이 상태는 implementation과 repository publication에 대한 proof다. 이 proof만으로 production
+deployment·activation·live round·actual payment/notification을 주장하지 않는다. 운영 배포·activation
+상태는 위 `상태 구분` 표와 `memory.md` 5절이 소유한다.
 
 기술 계약은 `docs/specs/mvp-sales-round-direct-delivery.md`, 운영 중단·재개 규칙은
 `docs/specs/ops/mvp-sales-round-runbook.md`에 둔다.
@@ -433,17 +432,19 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 - repository logical 8-code contract: `VERIFIED` — #65에서 8개 logical code/body/required-variable 계약을 확인했다.
 - provider 템플릿: 2026-09-28 콘솔에서 UK_5691~5698 코드·이름·승인완료·본문·변수 일치 확인.
-- production mapping: Railway production 변수 저장값은 8종 모두 올바르다. 실행 중인 운영 API(8/23 이전 배포)에는 아직 반영되지 않았다.
-- 남은 gate: 출시 배포 뒤 운영 송신 IP의 ALIGO 등록 확인, API 기준 템플릿 대조, 격리 actual Alimtalk/SMS 및 fallback(별도 authority).
+- production mapping: Railway production 변수 저장값은 8종 모두 올바르고, 2026-09-28 출시 배포로 운영 API에 반영됐다.
+- 2026-09-28 완료: 운영 송신 IP(Fixie 고정 IP)의 ALIGO 등록 확인, 운영 컨테이너 API 기준 템플릿 대조 일치, 격리 실제 알림톡 도착.
+- 남은 gate: SMS fallback 실발송 — 사업자 발신번호 승인 뒤 `ALIGO_SENDER_PHONE` 교체와 재시험(아래 NEXT).
 
 ## AUTHORITY_PENDING
 
 ### Production deployment·activation
 
-상태: `PRODUCTION_AUTHORITY_PENDING`.
+상태: deployment `DONE`(2026-09-28) / activation `DONE`(2026-09-29) / live round·실제 결제 `NOT DONE`.
 
-- production deployment, `salesMode` 전환, 운영 회차/live round, actual payment, actual notification, first-round completion은 이 문서 후보나 PR로 완료되지 않는다.
-- production deployment와 production activation은 각각 별도 gate이며, exact release SHA와 별도 authority 없이는 주장하지 않는다.
+- 운영 배포 이력과 현재 운영 SHA는 `memory.md` 5절이 소유한다.
+- 남은 일: 파일럿 시작(2026-11-01)과 시작 직후 실제 결제·환불 1건 시험(아래 NEXT).
+- 운영 배포는 계속 exact release SHA와 별도 사용자 승인으로만 한다.
 
 ## PRODUCT_POLICY_DECISION_REQUIRED
 
@@ -458,10 +459,10 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### Pilot marketing contract
 
-상태: `DOC_DELTA_CANDIDATE`.
+상태: `VERIFIED` — 2026-10-10 코드·테스트·공개 문서 대조.
 
-- Pilot 정책은 `MARKETING_NOT_USED_IN_PILOT`이다.
-- 선택 마케팅 consent/retention wording을 현재 Pilot 계약보다 넓게 유지하지 않는다.
+- Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`: 회차 주문 API가 `marketingConsent`를 거부한다(`apps/api/src/orders/round-order-create.service.ts`, 회귀 `apps/api/src/orders/mvp-order-flow.spec.ts`). 결제 화면은 동의를 받지 않고 MY 마케팅 설정은 미운영 안내만 보인다.
+- 공개 `/privacy`·`/terms`(시행일 2026-08-30)와 `docs/specs/legal/README.md`, `docs/specs/mvp-sales-round-direct-delivery.md`, `docs/specs/api/notifications.md`가 같은 정책을 적는다.
 - 향후 marketing 활성화는 별도의 product·legal·provider·release authority와 현재 증거가 필요한 후속 판단이다.
 
 ## NEXT — 현재 residual 해소 후
@@ -483,10 +484,18 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### 법무·출시 후보 정합성
 
-- [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책 반영
+2026-10-10 재대조 결과는 `docs/specs/legal/README.md` `2026-10-10 실제 흐름 재대조`가 소유한다.
+
+- [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책 반영 — 8/30 판에 반영됐고, 남은 공백은 아래 `LEGAL-LATE-PAYMENT-REFUND-TERMS`
 - [ ] settlement 및 payment 검증 결과 반영
-- [ ] PortOne/PG·ALIGO 전화번호·메시지 처리 경계 반영
-- [ ] Pilot `MARKETING_NOT_USED_IN_PILOT` 정책과 공개 legal/source wording 정합화
+- [x] PortOne/PG·ALIGO 전화번호·메시지 처리 경계 반영 — 8/30 판 `/privacy` 4절. ALIGO 고정 IP 프록시는 HTTPS 터널이라 위탁 고지 대상 아님(2026-10-10)
+- [x] **`LEGAL-PRIVACY-OFFICER`**: 2026-10-10 사용자 결정(대표자)으로 `/privacy` 9절에 반영, `legal-documents.test.mjs`에 고정. 2026-11-01 시행 개정판이며 운영 배포 대기 묶음과 함께 나간다.
+- [ ] **`LEGAL-MAIL-ORDER-REGISTRATION`** (파일럿 전, 사람 결정): 통신판매업 신고 대상 여부를 정한다. 신고하면 번호를 footer에 넣고 `BusinessInfoFooter.test.mjs`의 미노출 단언을 바꾼다.
+- [x] **`LEGAL-DRIVER-KAKAOMAP-NOTICE`**: 2026-10-10 사용자 결정(고지)으로 `/privacy` 4절에 반영.
+- [x] **`LEGAL-LATE-PAYMENT-REFUND-TERMS`**: `/terms` 제7조에 반영(2026-11-01 시행).
+- [ ] **`LEGAL-REVISION-EFFECTIVE-DATE`**: 개정판 시행일 2026-11-01은 운영 배포가 그보다 앞서야 성립한다. 운영 배포 대기 묶음 배포가 11/1 이후로 밀리면 시행일과 `legal-documents.test.mjs`를 함께 고친다.
+- [ ] `OPS-ALERT-NO-PII-TEST` (선택): 운영자 텔레그램 알림에 고객 이름·전화·주소가 실리지 않음을 직접 테스트로 고정한다(현재 코드상 고정 문구만 보냄).
+- [x] Pilot `MARKETING_NOT_USED_IN_PILOT` 정책과 공개 legal/source wording 정합화 — 2026-10-10 대조(위 DOC_DELTA)
 - [ ] exact release SHA와 필요한 release verification
 
 ---
@@ -633,7 +642,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] Railway contingency, 다중 판매자, hub_staff, 외부 driver 정산, 결제수단 확장
 
 ### AUTH-LOGOUT-SERVER-REVOCATION
-- [ ] 세 앱 Auth.js 로그아웃 시 API `POST /auth/logout`도 호출해 서버 refresh token을 폐기한다. 현재는 쿠키만 삭제되어 로그아웃 전에 복사된 쿠키가 refresh 만료(30일)까지 재사용될 수 있다. `refreshTokens/{sub}`가 사용자당 1개라 같은 계정의 다른 기기도 함께 로그아웃되는 영향을 설계에 포함한다. 2026-09-28 결정(D2)으로 출시 후 과제.
+- [ ] 세 앱 Auth.js 로그아웃 시 API `POST /auth/logout`도 호출해 서버 refresh token을 폐기한다. 현재는 쿠키만 삭제되어 로그아웃 전에 복사된 쿠키가 refresh 만료(30일)까지 재사용될 수 있다. `refreshTokens/{sub}`가 사용자당 1개라 같은 계정의 다른 기기도 함께 로그아웃되는 영향을 설계에 포함한다. 2026-09-28 결정(D2)으로 출시 후 과제. **2026-10-10 결정: 지금 한다**(아래 `AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE`의 경쟁 상태 확인). 병행 세션 PR #415·#429·#431 병합 대기.
 
 ### PREVIEW-GENERIC-ENV-ALIGNMENT
 - [ ] exact Preview(브랜치 없는 배포)는 Vercel의 브랜치 미지정 Preview env를 쓴다. 판매자 앱은 이 env에서 API=스테이징, Firebase=운영(`green-e4fe3`, 운영·Preview·개발 공통 항목)으로 어긋나 Firebase 클라이언트 로그인이 실패한다. 세 앱의 브랜치 미지정 Preview Firebase 설정을 비운영 프로젝트로 분리할지 결정한다.
@@ -660,7 +669,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] 2026-10-03 대조 완료: 세 앱의 사용 컴포넌트와 import를 대조한 결과 드라이버는 누락 없음, 소비자(Checkbox·Image·Modal 계열)와 셀러(ActionIcon·NumberInput)는 채움. 이전 기록: 드라이버 `globals.css`는 Mantine CSS를 골라 import한다. 알림 스타일 누락은 #323으로 고쳤지만, `Modal.css` 같은 다른 사용 컴포넌트 CSS도 빠졌을 수 있다. 실제 사용 컴포넌트와 import 목록을 대조한다. 2026-09-28 발견.
 
 ### AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE
-- [ ] 2026-10-03 원격 회차 E2E run `37108803974` 1차에서 `auth-session-lifecycle` mobile seller "로그아웃하면 사라진다"가 실패했다. 로그아웃 뒤 세션 쿠키는 없었는데 바로 이은 `/api/auth/session`이 `seller`를 돌려줬다. 같은 Preview 재실행에서는 통과했고, 직전 실행들도 통과했다. 로그아웃 순간 화면이 보낸 다른 요청의 응답이 갱신된 세션 쿠키를 다시 써 넣는 경쟁 상태로 추정한다(#333 proxy 쿠키 반영과 관련 가능). 실제로 로그아웃이 되돌려질 수 있는지 로컬에서 재현해 확인한다.
+- [ ] 2026-10-03 원격 회차 E2E run `37108803974` 1차에서 `auth-session-lifecycle` mobile seller "로그아웃하면 사라진다"가 실패했다. 로그아웃 뒤 세션 쿠키는 없었는데 바로 이은 `/api/auth/session`이 `seller`를 돌려줬다. 같은 Preview 재실행에서는 통과했고, 직전 실행들도 통과했다. 로그아웃 순간 화면이 보낸 다른 요청의 응답이 갱신된 세션 쿠키를 다시 써 넣는 경쟁 상태로 추정한다(#333 proxy 쿠키 반영과 관련 가능). 실제로 로그아웃이 되돌려질 수 있는지 로컬에서 재현해 확인한다. 2026-10-10 코드 대조로 원인을 확인했다: JWT 세션 조회 응답이 세션 쿠키를 다시 쓰고(#333 proxy 반영), 로그아웃은 서버 토큰을 폐기하지 않아 늦게 도착한 응답이 유효한 쿠키를 되살린다. 같은 날 로컬 에뮬레이터(dev:local)로 세션 스펙을 돌려 6건 중 가끔 1건이 같은 방식으로 실패하는 것도 재현했다(`page.goto(base)`가 연 화면의 세션 조회가 로그아웃과 겹칠 때). 테스트에서 화면을 비워 피하지 않고 `AUTH-LOGOUT-SERVER-REVOCATION`으로 고친다.
 
 ### HOME-BANNER-OVERLAP-AND-LEGACY-CTA
 - [x] 2026-10-03 해결: 배너를 글자 칸과 사진 칸(40%)을 나란히 두는 배치로 바꾸고 한글을 낱말 단위로 줄바꿈했다(#365, `53f8e374` 운영 배포). 운영 배너 문서 `banners/main_hero`의 cta2("공구 참여하기 " → `/groupbuy`)는 어드민 화면에서 비운 것과 같은 `{label:"", href:""}`로 바꿨다. 이어서 운영에서 cta1 "지금인기 호접란" 링크가 이미 없는 상품(404)이고, 배너가 현재 회차에서 팔지 않는 호접란과 "할인"을 알리는 것을 확인했다. 사용자 결정으로 배너를 `isActive:false`로 내렸다(내용은 보존). 다시 켤 때는 특정 상품 대신 서비스 안내 문구와 404가 날 수 없는 링크를 쓴다. 같은 날 소비자 앱에 한국어 404 화면을 추가했다(#367). 이전 기록: 운영 소비자 홈 캡처에서 관리자 배너(`HeroBanner`)의 긴 제목이 오른쪽 절반 사진 위로 겹쳐 읽기 어렵다(모바일 390px). 또 배너 버튼에 예전 판매용 "공구 참여하기"가 떠 있는데 회차 직배송에서는 공동구매 진입을 숨긴다. 배너 레이아웃(사진을 배경으로 깔거나 제목 폭 제한)과 배너 내용(어드민 배너 탭에서 버튼 정리)을 함께 정리한다.
@@ -669,28 +678,41 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 2026-10-03 앱 아이콘 상징(두 잎 하트)은 사용자가 "일단 이렇게" 정한 임시안이다. 잎사귀 하트·"그" 글자·손글씨 G·새싹·붓선 하트·꽃·화분·난초·gl·G+잎 시안을 봤지만 마음에 드는 것이 없었다. 나중에 아이콘 디자인을 다시 정한다. 로고(Nunito "Green Love" 글자만)와 앱별 구성(소비자=상징만, 판매자=+Seller, 기사=+Driver)은 확정. 원본은 `packages/ui/brand/`, 기준은 `docs/specs/frontend/design-standard.md` §7.
 
 ### ADMIN-TAB-PLANS-STALE-PROGRESS
-- [ ] 어드민 탭 계획서(`docs/specs/frontend/admin-tabs-improve-plan.md`와 `admin/admin-tab-*-plan.md`) 진행표가 현재 코드보다 뒤처져 있다. stores는 T7·T8을 빼고 구현을 마쳤고, 6개 탭 공통 조회 실패 표시와 users D1·banner T1·T3도 끝났는데 표에는 "미착수"로 남아 있다. 문서 정합성 작업으로 정리한다. 2026-09-28 코드 대조로 확인.
+- [x] 2026-10-10 해결: PR #391의 어드민 탭 계획서 진행표 갱신(2026-10-04 코드 대조)을 옮겼다. 인용 커밋 12개가 `main`에 있고 그 뒤 어드민 코드 변경은 문구·안내 수준이라 판정이 바뀌지 않았다. 이전 기록: 어드민 탭 계획서(`docs/specs/frontend/admin-tabs-improve-plan.md`와 `admin/admin-tab-*-plan.md`) 진행표가 현재 코드보다 뒤처져 있다. stores는 T7·T8을 빼고 구현을 마쳤고, 6개 탭 공통 조회 실패 표시와 users D1·banner T1·T3도 끝났는데 표에는 "미착수"로 남아 있다. 문서 정합성 작업으로 정리한다. 2026-09-28 코드 대조로 확인.
 
 ### DRIVER-SELLER-PHONE-BEFORE-PICKUP
 - [ ] 기사 IA(`docs/design/드라이버-2단계-IA.md` §4)는 수거 전 화면에 판매자 연락처를 두지만, 코드(`2e2c0b50` 최소 노출)와 테스트는 미배정 주문의 `sellerPhone`을 숨긴다. **2026-10-04 결정: 파일럿 동안 현재 동작(숨김)을 유지한다.** 파일럿은 판매자와 기사가 같은 사람이라 필요가 없다. 외부 기사를 쓰기 시작할 때 노출 범위를 다시 정하고 IA 또는 테스트를 맞춘다.
 
 ### ROUND-PAYMENT-RETRY-DOUBLE-HOLD
 - [ ] 소비자가 결제창을 닫고 새 결제 시도 ID로 다시 결제하면(#328), 이전 시도의 `PENDING` 주문·`HELD` 예약이 결제 실패 웹훅 또는 15분 만료 정리(1분 주기)까지 최대 약 16분 동안 회차 배송지·수량·상품 한도를 함께 차지한다. **2026-10-04 결정: 파일럿 동안 유지한다.** 즉시 해제하려면 늦게 도착한 이전 결제(늦은 결제 재확보·자동 환불) 흐름까지 다시 맞춰야 해서 위험이 이득보다 크다. 주문 오픈 날 '한도 마감'이 비정상적으로 빨리 나오면 우선 대응한다.
+- 2026-10-10 결정: 이전 예약 유지는 그대로 두고, 같은 회차에서 고객 한 명이 동시에 가질 수 있는 만료 전 결제 예약을 3건으로 제한한다(4번째 시도는 409 안내). 구현: `OrderCapacityService` `MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND`.
 
 ### CI-REQUIRED-CHECK
-- [ ] **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다.
+- [ ] **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다. 2026-10-09 CI 추가(#417) 뒤 PR마다 통과한다. 남은 일은 branch protection 필수 검사 지정(사용자)이다.
 
 ### STORE-COMMISSION-RATE-UNUSED
 - [ ] 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). **2026-10-09 결정: 파일럿 동안 그대로 둔다**(가게가 하나). 어드민 판매자 목록에 "정산은 공통 수수료율" 안내만 표시한다. 가게가 늘면 다시 정한다.
 
 ### SILENT-REFUND-CUSTOMER-NOTICE
-- [ ] 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다.
+- [ ] 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다. 2026-10-09 코드 반영(#420, 운영 미배포). 남은 일은 `apps/api/src/notifications/refund-notice-reasons.ts` 문구 확정이다.
 
 ### OPS-ALERTING
-- [ ] 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. **2026-10-09 결정: 도입한다.** 휴대폰 푸시 채널과 GitHub 정기 가동 확인(실패 시 소유자 이메일)으로 시작한다.
+- [ ] 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. **2026-10-09 결정: 도입한다.** 휴대폰 푸시 채널과 GitHub 정기 가동 확인(실패 시 소유자 이메일)으로 시작한다. 2026-10-09 코드 반영(#421, 텔레그램 봇과 GitHub 15분 가동 확인, 운영 미배포). 남은 일은 `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`를 Railway 운영과 GitHub Actions 비밀값에 넣는 것이다(`docs/specs/ops/ops-alerts.md` §2).
 
 ### FIRESTORE-MANAGED-BACKUP
 - [ ] 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이다. **2026-10-09 결정: 켠다.** PITR과 일일 관리형 백업을 GCP 콘솔에서 사용자가 켠다(이 저장소 작업 환경에는 GCP 권한이 없다). 켠 뒤 비운영 프로젝트 복구 연습을 한 번 한다.
+
+### ROUND-HOLD-ABUSE-LIMITS
+- [ ] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. 주문당 상품별 수량 상한(병행 PR #422), 쓰이지 않는 공개 회원가입 API 차단(#431), 같은 회차의 고객별 활성 결제 예약 상한(#427). 예약 상한은 `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`(재결제 때 이전 예약 유지)를 그대로 두고 최대 3건으로 정해 #427을 고치는 중이다.
+
+### OPERATION-ISSUE-MANUAL-RESOLVE
+- [ ] 환불 재시도·문자 재발송 외의 운영 기록은 닫을 방법이 없어 홈 경고와 아침 텔레그램 요약에 계속 남는다. **2026-10-10 결정**: 판매자·관리자가 메모를 남기고 닫는다. 운영 기록 API를 고치는 병행 PR #436 병합 뒤 구현한다.
+
+### CHECKOUT-DELIVERY-PHONE-CLIENT-CHECK
+- [ ] 받는 분 연락처는 휴대폰 번호만 받는다(**2026-10-10 결정**). 서버 검사는 #445로 들어갔다. 결제 화면 입력 단계 검사는 같은 화면을 고치는 병행 PR #437 병합 뒤 맞춘다(그전에도 서버 400 안내 문구가 결제 화면에 보인다).
+
+### REDELIVERY-PAID-REQUEST-RESEND
+- [ ] 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 병행 PR #448이 연결 결제가 PAID면 건너뛰게 고치고, 판매자 확인 창 문구·런북도 함께 맞춘다. 2026-10-10 발견.
 
 ---
 

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/privacy' },
 };
 
-const EFFECTIVE_DATE = '2026년 8월 30일';
+const EFFECTIVE_DATE = '2026년 11월 1일';
 
 const sectionStyle = {
   marginTop: 34,
@@ -180,7 +180,9 @@ export default function PrivacyPage() {
         <p>
           카카오 로그인은 이용자의 선택에 따라 Kakao Corp.가 카카오 계정 정보를 회사에 제공하는 외부
           로그인 서비스입니다. 다음 우편번호 서비스는 주소 검색 때 브라우저에서 직접 불러오는 Kakao
-          Corp.의 외부 스크립트이며, 각 제공자가 접속정보를 처리할 수 있습니다. PortOne·PG의 결제
+          Corp.의 외부 스크립트이며, 각 제공자가 접속정보를 처리할 수 있습니다. 배송 담당자가 길
+          안내를 위해 카카오맵을 열면 받는 분 이름과 동·호수를 뺀 배송지 기본주소 또는 거점 위치가
+          Kakao Corp.의 지도 서비스로 전달됩니다. PortOne·PG의 결제
           요청·원격 상태 확인·환불과 ALIGO의 거래성 알림 전달은 선택 마케팅과 별도의 거래 처리입니다.
           실제 provider 계약·활성 범위가 바뀌면 수탁 업무와 데이터 항목을 갱신합니다.
         </p>
@@ -274,11 +276,28 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="9. 방침의 변경">
+      <Section title="9. 개인정보 보호책임자">
+        <p>
+          회사는 개인정보 처리에 관한 업무를 총괄하고 이용자의 문의·불만·피해 구제를 처리하기 위해
+          다음과 같이 개인정보 보호책임자를 둡니다.
+        </p>
+        <ul style={listStyle}>
+          <li>개인정보 보호책임자: {PUBLIC_BUSINESS_INFO.representative} (대표)</li>
+          <li>
+            이메일: <a href={PUBLIC_BUSINESS_INFO.emailHref}>{PUBLIC_BUSINESS_INFO.email}</a>
+          </li>
+          <li>
+            전화: <a href={PUBLIC_BUSINESS_INFO.phoneHref}>{PUBLIC_BUSINESS_INFO.phone}</a>
+          </li>
+        </ul>
+      </Section>
+
+      <Section title="10. 방침의 변경">
         <p>
           이 방침은 {EFFECTIVE_DATE}부터 시행합니다. 중요한 변경은 시행 전에 서비스 화면에서 적용일,
-          변경 이유와 주요 내용을 알리고 이전 버전을 확인할 수 있도록 보관하겠습니다. 이번 개정 전
-          공개본의 시행일은 2026년 8월 19일입니다.
+          변경 이유와 주요 내용을 알리고 이전 버전을 확인할 수 있도록 보관하겠습니다. 이번 개정은
+          개인정보 보호책임자와 배송 담당자의 카카오맵 길 안내 이용을 추가로 알립니다. 이번 개정 전
+          공개본의 시행일은 2026년 8월 30일이고, 그 전 공개본의 시행일은 2026년 8월 19일입니다.
         </p>
         <p>
           서비스 이용 조건은 <a href="/terms">이용약관</a>에서 확인할 수 있습니다.

@@ -43,7 +43,7 @@ export function resolveOrderDetailActions(
  * 보류 주문을 재배송 준비(PREPARING)로 돌릴 때 서버가 하는 일.
  * - PAYMENT_REQUEST: 유료 재배송(고객 책임·재배송비 > 0·미해소)이고 아직 결제 전 → 결제 요청 알림톡,
  *   결제 전에는 기사가 배송을 다시 시작할 수 없다.
- * - ALREADY_PAID: 유료 재배송인데 이미 결제됨 → 서버는 그래도 결제 요청 알림톡을 보낸다.
+ * - ALREADY_PAID: 유료 재배송인데 이미 결제됨 → 결제 요청 알림톡 없이 기사 수거 대기로 돌아간다.
  * - FREE: 무료·판매자 책임 보류 → 보류를 해소하고 알림톡 없이 기사 수거 대기로 돌아간다.
  * 서버 판단(isCurrentRedeliveryPaymentRequired)은 상세 응답의 redeliveryPayment.required로 받는다.
  */
@@ -78,7 +78,7 @@ export function holdReleaseMessage(
     case 'PAYMENT_REQUEST':
       return `고객에게 재배송비${amount} 결제 요청 알림톡이 가요. 결제가 끝나야 기사가 배송을 다시 시작할 수 있어요.`;
     case 'ALREADY_PAID':
-      return `재배송비${amount}은 이미 결제됐어요. 기사 화면 수거 대기로 돌아가 바로 배송을 다시 시작할 수 있어요. 다만 고객에게 결제 요청 알림톡이 한 번 더 가요.`;
+      return `재배송비${amount}은 이미 결제됐어요. 기사 화면 수거 대기로 돌아가 바로 배송을 다시 시작할 수 있어요.`;
     default:
       return '기사 화면 수거 대기로 돌아가요(알림톡 없음).';
   }

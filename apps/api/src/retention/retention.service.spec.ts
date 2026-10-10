@@ -1,3 +1,5 @@
+import { Logger } from '@nestjs/common';
+
 type Data = Record<string, unknown>;
 
 type RetentionPurpose = 'DELIVERY_PHOTO' | 'MARKETING_CONSENT' | 'LEGAL_ORDER' | 'LEGAL_DISPUTE';
@@ -424,6 +426,127 @@ describe('보관 기간과 파기 계약', () => {
     expect(JSON.stringify(issueWriter.createOrMergeIssue.mock.calls[0][0])).not.toMatch(
       /authorization|bearer|secret/i,
     );
+  });
+
+  describe('Storage 객체 삭제 결과 구분', () => {
+    let errorLog: jest.SpyInstance;
+
+    beforeEach(() => {
+      errorLog = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      errorLog.mockRestore();
+    });
+
+    it('삭제된 객체는 보관 문서도 파기하고 실패로 세지 않는다', async () => {
+      const { issueWriter, records, service, storage } = makeService({
+        'deliveryPhotoRecords/photo-deleted': {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+          storagePath: 'deliveryPhotos/order-safe/photo-deleted.jpg',
+        },
+      });
+
+      await expect(service.purgeExpiredRecords({ now })).resolves.toMatchObject({
+        deletedCount: 1,
+        failedCount: 0,
+        storageNotFoundCount: 0,
+      });
+
+      expect(storage.deleteObject).toHaveBeenCalledTimes(1);
+      expect(records.has('deliveryPhotoRecords/photo-deleted')).toBe(false);
+      expect(issueWriter.createOrMergeIssue).not.toHaveBeenCalled();
+      expect(errorLog).not.toHaveBeenCalled();
+    });
+
+    it('이미 없는 객체(404)는 재시도 없이 삭제된 것으로 보고 따로 센다', async () => {
+      const { issueWriter, records, service, storage } = makeService({
+        'deliveryPhotoRecords/photo-missing': {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+          storagePath: 'deliveryPhotos/order-safe/photo-missing.jpg',
+        },
+      });
+      storage.deleteObject.mockRejectedValue(
+        Object.assign(new Error('No such object: deliveryPhotos/order-safe/photo-missing.jpg'), {
+          code: 404,
+        }),
+      );
+
+      await expect(service.purgeExpiredRecords({ now })).resolves.toMatchObject({
+        deletedCount: 1,
+        failedCount: 0,
+        storageNotFoundCount: 1,
+      });
+
+      expect(storage.deleteObject).toHaveBeenCalledTimes(1);
+      expect(records.has('deliveryPhotoRecords/photo-missing')).toBe(false);
+      expect(issueWriter.createOrMergeIssue).not.toHaveBeenCalled();
+      expect(errorLog).not.toHaveBeenCalled();
+    });
+
+    it('삭제 실패는 오류 종류·코드를 남기고 나머지 기록 파기는 계속한다', async () => {
+      class ApiError extends Error {
+        code = 503;
+      }
+      const failedPath = 'deliveryPhotos/order-private/photo-failed.jpg';
+      const { issueWriter, records, service, storage } = makeService({
+        'deliveryPhotoRecords/photo-failed': {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+          storagePath: failedPath,
+          storeId: 'store-safe',
+          orderId: 'order-private',
+        },
+        'deliveryPhotoRecords/photo-ok': {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+          storagePath: 'deliveryPhotos/order-safe/photo-ok.jpg',
+        },
+        'legalOrderRecords/order-expired': {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+        },
+      });
+      storage.deleteObject.mockImplementation(async (path: string) => {
+        if (path === failedPath) {
+          throw new ApiError(`authorization=Bearer secret ${failedPath}`);
+        }
+      });
+
+      await expect(service.purgeExpiredRecords({ now })).resolves.toMatchObject({
+        deletedCount: 2,
+        failedCount: 1,
+        storageNotFoundCount: 0,
+      });
+
+      expect(storage.deleteObject.mock.calls.filter(([path]) => path === failedPath)).toHaveLength(
+        3,
+      );
+      expect(records.has('deliveryPhotoRecords/photo-failed')).toBe(true);
+      expect(records.has('deliveryPhotoRecords/photo-ok')).toBe(false);
+      expect(records.has('legalOrderRecords/order-expired')).toBe(false);
+
+      expect(issueWriter.createOrMergeIssue).toHaveBeenCalledTimes(1);
+      const issue = issueWriter.createOrMergeIssue.mock.calls[0][0] as Data;
+      expect(issue).toMatchObject({
+        type: 'RETENTION_DELETE_FAILED',
+        storeId: 'store-safe',
+        latestSnapshot: {
+          collection: 'deliveryPhotoRecords',
+          failureStage: 'storage_delete',
+          attempts: 3,
+          errorName: 'ApiError',
+          errorCode: '503',
+        },
+      });
+      expect(JSON.stringify(issue['latestSnapshot'])).not.toMatch(
+        /authorization|bearer|secret|order-private/i,
+      );
+
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      const logLine = String(errorLog.mock.calls[0][0]);
+      expect(logLine).toContain('collection=deliveryPhotoRecords');
+      expect(logLine).toContain('errorName=ApiError');
+      expect(logLine).toContain('errorCode=503');
+      expect(logLine).not.toMatch(/authorization|bearer|secret|order-private|deliveryPhotos\//i);
+    });
   });
 
   it('저장 fixture와 파기 결과에 개인정보 본문이나 비밀값을 포함하지 않는다', async () => {

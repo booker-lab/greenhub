@@ -68,13 +68,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: 의존성 설치 (deterministic spec bcrypt/fixture parity)
         run: pnpm install --frozen-lockfile
@@ -184,10 +186,11 @@ jobs:
       ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS }}
     steps:
       - name: runner SHA checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.runner_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: 수동 승인과 runner checkout SHA 확인
         shell: bash
@@ -224,12 +227,21 @@ jobs:
             echo 'checkout SHA가 runner SHA와 달라 실행을 차단합니다.' >&2
             exit 1
           fi
+          # fetch-depth: 0 checkout이 가져온 origin/main 기준으로, main 이력에 포함된 runner SHA만 실행한다.
+          if ! git rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}' > /dev/null; then
+            echo 'origin/main을 확인할 수 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$AUTH_PROBE_RUNNER_SHA" refs/remotes/origin/main; then
+            echo 'runner SHA가 main 이력에 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: 의존성 설치 (identity seed only)
         run: pnpm install --frozen-lockfile
@@ -280,7 +292,7 @@ jobs:
 
       - name: 비민감 identity 증거 artifact 업로드
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: auth-probe-identities-${{ github.run_id }}-${{ github.run_attempt }}
           path: .artifacts/auth-probe-identities/${{ env.AUTH_PROBE_IDENTITY_RUN_ID }}/evidence/
@@ -335,10 +347,11 @@ jobs:
 
     steps:
       - name: runner SHA checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.runner_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: 수동 승인과 runner checkout SHA 확인
         shell: bash
@@ -379,9 +392,18 @@ jobs:
             echo 'checkout SHA가 runner SHA와 달라 실행을 차단합니다.' >&2
             exit 1
           fi
+          # fetch-depth: 0 checkout이 가져온 origin/main 기준으로, main 이력에 포함된 runner SHA만 실행한다.
+          if ! git rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}' > /dev/null; then
+            echo 'origin/main을 확인할 수 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$AUTH_PROBE_RUNNER_SHA" refs/remotes/origin/main; then
+            echo 'runner SHA가 main 이력에 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
           printf 'AUTH_PROBE_CHECKOUT_SHA=%s\n' "$actual_sha" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
 
@@ -497,6 +519,7 @@ jobs:
       - name: session-only auth probe 실행
         shell: bash
         env:
+          APPROVAL: ${{ inputs.approval }}
           E2E_TEST_SECRET: ${{ secrets.ROUND_DIRECT_E2E_TEST_SECRET }}
           ROUND_DIRECT_E2E_SHARED_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SHARED_SECRET }}
           ROUND_DIRECT_E2E_DRIVER_EMAILS: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM }}
@@ -534,7 +557,7 @@ jobs:
             --driver-url="$AUTH_PROBE_DRIVER_URL" \
             --api-url="$AUTH_PROBE_API_ORIGIN" \
             --evidence-json="$evidence_root/probe-evidence.json" \
-            --approval="${{ inputs.approval }}" \
+            --approval="$APPROVAL" \
             > "$evidence_root/probe-raw.json"
           probe_status=$?
           set -e
@@ -607,7 +630,7 @@ jobs:
 
       - name: 비민감 증거 artifact 업로드
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: auth-session-probe-${{ github.run_id }}-${{ github.run_attempt }}
           path: .artifacts/auth-session-probe/${{ env.AUTH_PROBE_RUN_ID }}/evidence/
@@ -664,7 +687,7 @@ jobs:
 
     steps:
       - name: probe 코드 checkout (workflow ref)
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           # Binding/provenance input (inputs.expected_sha) is the LOCKED
           # deployment source SHA and intentionally differs from the probe
@@ -673,6 +696,7 @@ jobs:
           # follows inputs.expected_sha. Both SHAs are recorded in evidence.
           ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: 수동 승인과 checkout SHA 확인
         shell: bash
@@ -714,7 +738,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
 
@@ -817,6 +841,7 @@ jobs:
       - name: locked Consumer callback probe 실행
         shell: bash
         env:
+          APPROVAL: ${{ inputs.approval }}
           E2E_TEST_SECRET: ${{ secrets.ROUND_DIRECT_E2E_TEST_SECRET }}
           TEST_CONSUMER_EMAIL: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_EMAIL_CHROMIUM }}
           TEST_CONSUMER_PASSWORD: ${{ secrets.ROUND_DIRECT_E2E_CONSUMER_PASSWORD_CHROMIUM }}
@@ -844,7 +869,7 @@ jobs:
             --consumer-deployment-id="$AUTH_CALLBACK_CONSUMER_DEPLOYMENT_ID" \
             --evidence-json="$evidence_root/probe-evidence.json" \
             --expected-api-origin="$AUTH_CALLBACK_EXPECTED_API_ORIGIN" \
-            --approval="${{ inputs.approval }}" \
+            --approval="$APPROVAL" \
             --protection-passage-mode="AUTOMATION_BYPASS" \
             > "$evidence_root/probe-raw.json"
           probe_status=$?
@@ -964,7 +989,7 @@ jobs:
 
       - name: 비민감 증거 artifact 업로드
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: auth-callback-probe-${{ github.run_id }}-${{ github.run_attempt }}
           path: .artifacts/auth-callback-probe/${{ env.AUTH_CALLBACK_RUN_ID }}/evidence/
@@ -1012,10 +1037,11 @@ jobs:
 
     steps:
       - name: probe 코드 checkout (workflow ref)
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: 수동 승인과 checkout SHA 확인
         shell: bash
@@ -1057,7 +1083,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
 
@@ -1160,6 +1186,7 @@ jobs:
       - name: locked Driver callback probe 실행
         shell: bash
         env:
+          APPROVAL: ${{ inputs.approval }}
           ROUND_DIRECT_E2E_SHARED_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SHARED_SECRET }}
           TEST_DRIVER_EMAIL: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_EMAIL_CHROMIUM }}
           TEST_DRIVER_PASSWORD: ${{ secrets.ROUND_DIRECT_E2E_DRIVER_PASSWORD_CHROMIUM }}
@@ -1184,7 +1211,7 @@ jobs:
             --deployment-id="$ROLE_CALLBACK_DRIVER_DEPLOYMENT_ID" \
             --evidence-json="$evidence_root/probe-evidence.json" \
             --expected-api-origin="$ROLE_CALLBACK_EXPECTED_API_ORIGIN" \
-            --approval="${{ inputs.approval }}" \
+            --approval="$APPROVAL" \
             --protection-passage-mode="AUTOMATION_BYPASS" \
             > "$evidence_root/driver-raw.json"
           probe_status=$?
@@ -1234,7 +1261,7 @@ jobs:
 
       - name: 비민감 증거 artifact 업로드
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: auth-role-callback-probe-${{ github.run_id }}-${{ github.run_attempt }}
           path: .artifacts/auth-role-callback-probe/${{ env.ROLE_CALLBACK_RUN_ID }}/evidence/
@@ -1252,8 +1279,13 @@ jobs:
     # service-account material is ever persisted or logged.
     # 34B: role-callback-probe joins the closeout set so seller/driver seeds
     # cannot leak when the role probe fails or is skipped.
+    # Approval binding: auth_identity_seed runs only after approval_gate
+    # succeeds, so a skipped seed means the gate did not pass and cleanup
+    # must not start. A failed/cancelled seed or probe still reaches cleanup.
+    # The first step re-runs the dispatch/owner/approval/runner SHA preflight
+    # before any checkout so this job never runs code the gate did not admit.
     needs: [auth_identity_seed, session-probe, callback-probe, role-callback-probe]
-    if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.auth_identity_seed.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Defense-in-depth only: the authoritative lifecycle lock is the
@@ -1276,24 +1308,75 @@ jobs:
       FIREBASE_PROJECT_ID: ${{ vars.ROUND_DIRECT_E2E_FIREBASE_PROJECT_ID }}
       ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS: ${{ vars.ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS }}
     steps:
+      - name: 수동 승인과 runner SHA 사전 확인 (checkout 전)
+        shell: bash
+        env:
+          APPROVAL: ${{ inputs.approval }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch 이외의 이벤트에서는 auth probe identity를 정리할 수 없습니다.' >&2
+            exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow 실행자가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo 'workflow triggering actor가 repository owner와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ "$APPROVAL" != 'NON_PRODUCTION_AUTH_PROBE_APPROVED' ]]; then
+            echo 'auth probe 수동 승인이 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if [[ ! "$AUTH_PROBE_RUNNER_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'runner SHA는 40자리 소문자 16진수여야 합니다.' >&2
+            exit 1
+          fi
+
       - name: runner SHA checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.runner_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - name: runner checkout SHA와 main 이력 확인
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          if [[ "$actual_sha" != "$AUTH_PROBE_RUNNER_SHA" ]]; then
+            echo 'checkout SHA가 runner SHA와 달라 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          # fetch-depth: 0 checkout이 가져온 origin/main 기준으로, main 이력에 포함된 runner SHA만 실행한다.
+          if ! git rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}' > /dev/null; then
+            echo 'origin/main을 확인할 수 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$AUTH_PROBE_RUNNER_SHA" refs/remotes/origin/main; then
+            echo 'runner SHA가 main 이력에 없어 실행을 차단합니다.' >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: 의존성 설치 (identity cleanup only)
         run: pnpm install --frozen-lockfile
 
       - name: identity manifest 복원 (non-sensitive artifact only)
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: auth-probe-identities-${{ github.run_id }}-${{ github.run_attempt }}
           path: .artifacts/auth-probe-identities/${{ env.AUTH_PROBE_IDENTITY_RUN_ID }}/evidence/
@@ -1303,6 +1386,7 @@ jobs:
         env:
           NON_PRODUCTION_AUTH_PROBE_APPROVAL: ${{ inputs.approval }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.ROUND_DIRECT_E2E_FIREBASE_SERVICE_ACCOUNT_JSON }}
+          SEED_RESULT: ${{ needs.auth_identity_seed.result }}
         run: |
           set -euo pipefail
           # No secret values are logged. Manifest holds only redacted
@@ -1310,6 +1394,14 @@ jobs:
           evidence_root=".artifacts/auth-probe-identities/$AUTH_PROBE_IDENTITY_RUN_ID"
           mkdir -p "$evidence_root/evidence"
           manifest="$evidence_root/evidence/identity-manifest.json"
+          if [[ ! -f "$manifest" && "$SEED_RESULT" == 'success' ]]; then
+            # A successful seed always uploads its manifest; a missing one
+            # means owned identities may remain, so surface it as a failure.
+            printf '{"action":"cleanup","runId":"%s","status":"manifest-missing"}\n' "$AUTH_PROBE_IDENTITY_RUN_ID" \
+              > "$evidence_root/evidence/cleanup-summary.json"
+            echo 'identity seed는 성공했지만 manifest를 복원하지 못해 cleanup을 실패로 처리합니다.' >&2
+            exit 1
+          fi
           if [[ ! -f "$manifest" ]]; then
             printf '{"action":"cleanup","runId":"%s","status":"not-seeded"}\n' "$AUTH_PROBE_IDENTITY_RUN_ID" \
               > "$evidence_root/evidence/cleanup-summary.json"
@@ -1342,7 +1434,7 @@ jobs:
 
       - name: 비민감 cleanup 증거 artifact 업로드
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: auth-probe-identities-cleanup-${{ github.run_id }}-${{ github.run_attempt }}
           path: .artifacts/auth-probe-identities/${{ env.AUTH_PROBE_IDENTITY_RUN_ID }}/evidence/

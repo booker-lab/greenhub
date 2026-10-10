@@ -1,15 +1,33 @@
-import { Injectable, ForbiddenException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, ForbiddenException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { dateRangeKST, todayKST } from '@greenhub/shared';
 import { FirestoreService } from '../firestore/firestore.service';
-import { QuerySettlementsDto, QuerySummaryDto } from './dto/query-settlements.dto';
+import {
+  QuerySettlementsDto,
+  QuerySummaryDto,
+  SETTLEMENT_CURSOR_PATTERN,
+} from './dto/query-settlements.dto';
 import { calcFee } from './_lib/fee-calculator';
 import { aggregateSettlements } from './_lib/settlement-aggregator';
 
 // 정산 상태 타입 SSOT = @greenhub/shared (F-1/S4). DTO 등 기존 import 경로 유지를 위해 re-export + 로컬 사용.
 import type { SettlementStatus } from '@greenhub/shared';
 export type { SettlementStatus } from '@greenhub/shared';
+
+/**
+ * 판매자 정산 목록 1회 응답 건수. 기본값을 상한과 같게 둔다.
+ * 다음 페이지를 모르는 이전 판매자 화면도 관리자 정산 목록(500건)과 같은 범위를 그대로 받게 하기 위해서다.
+ */
+export const SETTLEMENT_LIST_DEFAULT_LIMIT = 500;
+export const SETTLEMENT_LIST_MAX_LIMIT = 500;
+
+/** limit 생략·비정상 값은 기본값, 범위를 벗어나면 1~상한으로 맞춘다. */
+export function resolveSettlementListLimit(raw: unknown): number {
+  const value = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return SETTLEMENT_LIST_DEFAULT_LIMIT;
+  return Math.min(Math.max(Math.floor(value), 1), SETTLEMENT_LIST_MAX_LIMIT);
+}
 
 @Injectable()
 export class SettlementsService {
@@ -92,10 +110,25 @@ export class SettlementsService {
     // N10(F-2): 어드민(desc)과 정렬 방향 통일 — 양 화면 settledAt 최신순.
     ref = ref.orderBy('settledAt', 'desc');
 
-    const snap = await ref.get();
-    const settlements = snap.docs.map((d: any) => d.data());
+    // 이어받기: 앞 응답의 마지막 정산 문서 다음부터. 문서 스냅샷 기준이라 settledAt이 같은 건도
+    // 문서 id 순으로 이어져 빠지거나 겹치지 않고, 기존 (storeId, [status,] settledAt DESC) 인덱스를 그대로 쓴다.
+    if (dto.cursor !== undefined) {
+      ref = ref.startAfter(await this.readListCursor(storeId, dto.cursor));
+    }
 
-    return { settlements, total: settlements.length };
+    const limit = resolveSettlementListLimit(dto.limit);
+    const snap = await ref.limit(limit + 1).get();
+    const docs = snap.docs.slice(0, limit);
+    const settlements = docs.map((d: any) => d.data());
+    const hasMore = snap.docs.length > limit;
+
+    // total = 이번 응답에 담긴 건수. hasMore/nextCursor는 추가 필드라 이전 화면은 무시해도 된다.
+    return {
+      settlements,
+      total: settlements.length,
+      hasMore,
+      nextCursor: hasMore ? (docs[docs.length - 1].id as string) : null,
+    };
   }
 
   async getSummary(storeId: string, requesterId: string, role: string, dto: QuerySummaryDto) {
@@ -196,6 +229,18 @@ export class SettlementsService {
         updatedAt: this.firestore.Timestamp.now(),
       });
     });
+  }
+
+  private async readListCursor(storeId: string, cursor: unknown) {
+    if (typeof cursor !== 'string' || !SETTLEMENT_CURSOR_PATTERN.test(cursor)) {
+      throw new BadRequestException('cursor 값이 올바르지 않습니다');
+    }
+    const cursorSnap = await this.firestore.doc(`settlements/${cursor}`).get();
+    // 다른 매장 정산이나 없는 문서는 같은 응답으로 거절한다(존재 여부를 드러내지 않음).
+    if (!cursorSnap.exists || cursorSnap.data()?.['storeId'] !== storeId) {
+      throw new BadRequestException('cursor 값이 올바르지 않습니다');
+    }
+    return cursorSnap;
   }
 
   private async verifyOwnership(storeId: string, requesterId: string, role: string) {

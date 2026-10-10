@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -19,9 +20,20 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
+import { UpdateDailyCapDto } from './dto/update-daily-cap.dto';
 import { UpdateDeliveryConfigDto } from './dto/update-delivery-config.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
+import { CalendarDatePipe } from './validators/calendar-date';
+import { readProductImageStoreId } from './validators/product-image-url';
+
+/** 상품 이미지는 해당 매장의 `products/<storeId>/` 경로에 있어야 한다. */
+function assertImagesBelongToStore(storeId: string, images: string[] | undefined): void {
+  if (!images) return;
+  if (images.some((image) => readProductImageStoreId(image) !== storeId)) {
+    throw new BadRequestException('상품 이미지는 해당 매장의 이미지 주소만 사용할 수 있습니다.');
+  }
+}
 
 @Controller('stores/:storeId/products')
 export class ProductsController {
@@ -56,6 +68,7 @@ export class ProductsController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateProductDto,
   ) {
+    assertImagesBelongToStore(storeId, dto.images);
     return this.productsService.createProduct(storeId, user.sub, dto, user.role);
   }
 
@@ -68,6 +81,7 @@ export class ProductsController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: UpdateProductDto,
   ) {
+    assertImagesBelongToStore(storeId, dto.images);
     return this.productsService.updateProduct(storeId, productId, user.sub, dto, user.role);
   }
 
@@ -127,8 +141,8 @@ export class DailyCapsController {
   getDailyCaps(
     @Param('storeId') storeId: string,
     @CurrentUser() user: JwtPayload,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
+    @Query('from', new CalendarDatePipe({ optional: true })) from?: string,
+    @Query('to', new CalendarDatePipe({ optional: true })) to?: string,
   ) {
     return this.productsService.getDailyCaps(storeId, user.sub, from, to, user.role);
   }
@@ -138,11 +152,11 @@ export class DailyCapsController {
   @Roles('seller', 'admin')
   updateDailyCap(
     @Param('storeId') storeId: string,
-    @Param('date') date: string,
+    @Param('date', new CalendarDatePipe()) date: string,
     @CurrentUser() user: JwtPayload,
-    @Body('totalCap') totalCap: number,
+    @Body() dto: UpdateDailyCapDto,
   ) {
-    return this.productsService.updateDailyCap(storeId, date, user.sub, totalCap, user.role);
+    return this.productsService.updateDailyCap(storeId, date, user.sub, dto.totalCap, user.role);
   }
 }
 

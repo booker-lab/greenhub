@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { OrderChargePaymentService } from '../payments/order-charge-payment.service';
 import { OrderChargesService } from './order-charges.service';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
@@ -346,5 +346,128 @@ describe('유료 재배송 서버 불변식', () => {
       status: 'PAID',
     });
     expect(context.memory.read('orderCharges/charge-1')).toMatchObject({ status: 'PAID', holdAt });
+  });
+});
+
+describe('재배송 준비(HELD → PREPARING) 결제 요청 알림', () => {
+  const paymentRequested = [
+    'consumer-1',
+    'ORDER_REDELIVERY_PAYMENT_REQUESTED',
+    { orderId: 'order-1' },
+    'order-1',
+    undefined,
+  ] as const;
+
+  function releaseHold(context: ReturnType<typeof makeContext>) {
+    return context.lifecycle.updateStatus(
+      'store-1',
+      'order-1',
+      'seller-1',
+      { status: 'PREPARING' } as never,
+      'seller',
+    );
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it.each([
+    ['회차 주문', {}],
+    ['일반 주문', { schemaVersion: 1, roundId: null }],
+  ])('%s: 현재 hold에 연결된 charge가 이미 PAID면 결제 요청 알림을 보내지 않고 전환은 그대로 한다', async (_label, orderOverrides) => {
+    const context = makeContext({ chargeStatus: 'PAID', orderOverrides });
+
+    await expect(releaseHold(context)).resolves.toMatchObject({ status: 'PREPARING' });
+
+    expect(context.memory.read('orders/order-1')).toMatchObject({
+      status: 'PREPARING',
+      redeliveryChargeId: 'charge-1',
+      redeliveryChargeHoldAt: holdAt,
+      deliveryHold: { heldAt: holdAt, resolvedAt: null },
+    });
+    expect(context.notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'charge가 연결되지 않음',
+      {
+        omitCharge: true,
+        orderOverrides: { redeliveryChargeId: null, redeliveryChargeHoldAt: null },
+      },
+    ],
+    ['연결된 charge 문서가 없음', { omitCharge: true }],
+    ['charge가 PENDING', { chargeStatus: 'PENDING' as const }],
+    [
+      '이전 hold의 PAID charge',
+      {
+        chargeStatus: 'PAID' as const,
+        chargeOverrides: { holdAt: '2026-08-01T00:00:00.000Z' },
+        orderOverrides: { redeliveryChargeHoldAt: '2026-08-01T00:00:00.000Z' },
+      },
+    ],
+    [
+      '현재 hold와 금액이 다른 PAID charge',
+      { chargeStatus: 'PAID' as const, chargeOverrides: { amount: 3_000 } },
+    ],
+  ])('%s이면 결제 요청 알림을 보낸다', async (_label, options) => {
+    const context = makeContext(options);
+
+    await expect(releaseHold(context)).resolves.toMatchObject({ status: 'PREPARING' });
+
+    expect(context.notifications.sendToUser).toHaveBeenCalledTimes(1);
+    expect(context.notifications.sendToUser).toHaveBeenCalledWith(...paymentRequested);
+  });
+
+  it('charge 조회가 실패하면 결제 요청 알림을 그대로 보내고 고객 정보 없이 경고를 남긴다', async () => {
+    const context = makeContext({ chargeStatus: 'PAID' });
+    const originalDoc = context.memory.firestore.doc;
+    jest.spyOn(context.memory.firestore, 'doc').mockImplementation((path: string) => {
+      const ref = originalDoc(path);
+      if (path === 'orderCharges/charge-1') {
+        ref.get = jest
+          .fn()
+          .mockRejectedValue(
+            Object.assign(new Error('consumer-1 조회 실패'), { code: 'unavailable' }),
+          );
+      }
+      return ref;
+    });
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+    await expect(releaseHold(context)).resolves.toMatchObject({ status: 'PREPARING' });
+
+    expect(context.notifications.sendToUser).toHaveBeenCalledWith(...paymentRequested);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = String(warn.mock.calls[0][0]);
+    expect(message).toContain('orderId=order-1');
+    expect(message).toContain('error=unavailable');
+    expect(message).not.toContain('consumer-1');
+  });
+
+  it('무료·판매자 책임 hold는 PAID charge가 남아 있어도 결제 요청 알림을 보내지 않는다', async () => {
+    const context = makeContext({
+      chargeStatus: 'PAID',
+      orderOverrides: {
+        deliveryHold: {
+          heldAt: holdAt,
+          reasonCode: 'OTHER',
+          reasonMessage: '판매자 배송 처리 지연',
+          customerResponsible: false,
+          redeliveryFee: null,
+          nextContactAt: null,
+          nextDeliveryAt: null,
+          resolvedAt: null,
+        },
+      },
+    });
+
+    await expect(releaseHold(context)).resolves.toMatchObject({ status: 'PREPARING' });
+
+    expect(context.memory.read('orders/order-1')?.deliveryHold).toMatchObject({
+      resolvedAt: expect.any(String),
+    });
+    expect(context.notifications.sendToUser).not.toHaveBeenCalled();
   });
 });

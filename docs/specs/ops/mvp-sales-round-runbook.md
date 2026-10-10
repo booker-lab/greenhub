@@ -16,7 +16,7 @@
 - 경매·매입: 월요일
 - 직접배송: 화요일 00:00~09:00
 
-현재 **출시 전 게이트와 작업 순서**의 정본은 `docs/memory.md`, `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`, `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`다. 이 런북에 남은 운영 절차가 활성 출시 PLAN의 승인·검증 게이트를 대체하지 않는다.
+현재 **출시·배포 게이트와 작업 순서**의 정본은 `docs/memory.md`다(`docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`, `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`는 2026-09-05 snapshot인 역사 자료). 이 런북에 남은 운영 절차가 `docs/memory.md`의 승인 경계와 배포 안전 PLAN의 검증 게이트를 대체하지 않는다.
 
 이 문서는 명령 실행 권한을 부여하지 않는다. 아래 명령은 절차를 설명하는 예시이며, 승인 기록 없이 실행하지 않는다. 특히 `--apply`, 환불, 문자 발송, 회차·주문 상태 변경, 파기 재실행은 별도 승인과 담당자 확인이 필요하다.
 
@@ -229,7 +229,7 @@ node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=round_dir
 
 셀러는 판매자 앱 주문 상세에서 처리한다.
 
-- "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`): 결제 전 유료 재배송(고객 책임·재배송비 > 0)이면 고객에게 `ORDER_REDELIVERY_PAYMENT_REQUESTED` 알림톡이 가고 결제 전에는 기사가 배송을 다시 시작할 수 없다. 무료·판매자 책임 보류는 알림톡 없이 기사 수거 대기로 돌아간다. 이미 결제된 유료 재배송도 서버가 결제 요청 알림톡을 한 번 더 보내므로, 기사가 맡은 주문이면 기사 화면에서 바로 재개하는 편이 낫다.
+- "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`): 결제 전 유료 재배송(고객 책임·재배송비 > 0)이면 고객에게 `ORDER_REDELIVERY_PAYMENT_REQUESTED` 알림톡이 가고 결제 전에는 기사가 배송을 다시 시작할 수 없다. 무료·판매자 책임 보류는 알림톡 없이 기사 수거 대기로 돌아간다. 이미 결제된 유료 재배송은 결제 요청 알림톡 없이 기사 수거 대기로 돌아간다.
 - "주문 취소·환불"(`DELIVERY_HELD → CANCELLED`): 본 결제와 결제된 재배송비를 환불하고 고객에게 `ORDER_CANCELLED`(입력한 사유)가 간다.
 - 기사가 가져가기 전 준비 중인 회차 직배송 주문은 "배송 보류"로 한 건씩 멈출 수 있다(위 표와 같은 사유·책임·재배송비 규칙, 일괄 보류 없음). 재배송비 결제를 기다리는 보류가 아직 열린 주문(유료 재배송을 재배송 준비로 돌린 주문)은 다시 보류하지 않는다. 셀러가 보류한 미배정 주문은 기사 화면에 나오지 않으므로 다시 보낼 때 "재배송 준비로 돌리기"가 필요하다.
 
