@@ -27,6 +27,7 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
   const [cartError, setCartError] = useState<string | null>(null);
   const totalAmount = roundProduct.item.roundPrice * quantity;
   const notOpenYet = roundProduct.state === 'current' && roundProduct.round?.status === 'SCHEDULED';
+  const soldOut = roundProduct.state === 'sold_out';
 
   function handleAddToCart() {
     if (!roundProduct.isPurchasable) return;
@@ -187,7 +188,7 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
         totalAmount={totalAmount}
         isGroup={false}
         isUnavailable={!roundProduct.isPurchasable}
-        unavailableLabel={notOpenYet ? '주문 시작 전' : '주문 마감'}
+        unavailableLabel={soldOut ? '품절' : notOpenYet ? '주문 시작 전' : '주문 마감'}
         canBuy={roundProduct.isPurchasable}
         canAddToCart={roundProduct.isPurchasable}
         addToCartLabel="장바구니"

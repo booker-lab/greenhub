@@ -434,6 +434,13 @@ export default function CartPage() {
             ? `/products/${item.productId}?round=${encodeURIComponent(roundItem.roundId)}`
             : `/products/${item.productId}`;
           const itemValidation = roundItem ? validation.items[cartItemKey(roundItem)] : undefined;
+          // 공개 회차가 품절로 보이는 상품은 이유를 알 수 있게 태그를 단다(결제 제외는 서버 검증이 정한다).
+          const soldOut =
+            roundItem !== null &&
+            cartRound?.items.some(
+              (candidate) =>
+                candidate.id === roundItem.roundItemId && candidate.status === 'SOLD_OUT',
+            ) === true;
           return (
             <Box
               key={cartItemKey(item)}
@@ -507,6 +514,23 @@ export default function CartPage() {
                       >
                         회차 가격 {roundItem.roundPrice.toLocaleString('ko-KR')}원
                       </span>
+                      {soldOut && (
+                        <span
+                          style={{
+                            background: 'var(--color-surface-muted)',
+                            borderRadius: 'var(--radius-tag)',
+                            color: 'var(--color-text-secondary)',
+                            display: 'inline-block',
+                            fontSize: 'var(--font-size-xs)',
+                            fontWeight: 'var(--fw-bold)',
+                            marginLeft: 6,
+                            marginTop: 4,
+                            padding: '2px 7px',
+                          }}
+                        >
+                          품절
+                        </span>
+                      )}
                       <RoundValidationNotice validation={itemValidation} />
                     </>
                   ) : (

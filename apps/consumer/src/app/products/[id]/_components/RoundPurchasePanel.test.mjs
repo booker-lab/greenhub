@@ -48,6 +48,20 @@ test('현재와 마감 상태를 구분하고 구매 불가 상태를 구매 가
   assert.match(panelSource, /data-round-purchasable=\{isPurchasable\}/);
 });
 
+test('수량이 찬 현재 회차 상품은 판매 마감이 아니라 품절로 표시한다', () => {
+  assert.match(panelSource, /state: 'current' \| 'closed' \| 'sold_out'/);
+  assert.match(panelSource, /const soldOut = state === 'sold_out'/);
+  assert.match(panelSource, /soldOut \? '품절'/);
+  // 품절은 회차가 끝난 것이 아니므로 제목은 현재·예정 회차 문구를 유지한다.
+  assert.match(panelSource, /const notOpenYet = !closed && round\.status === 'SCHEDULED'/);
+  assert.match(pageSource, /const isSoldOut = isCurrentRound && item\.status === 'SOLD_OUT'/);
+  assert.match(
+    pageSource,
+    /state: isCurrentRound && isCurrentItem \? 'current' : isSoldOut \? 'sold_out' : 'closed'/,
+  );
+  assert.match(pageSource, /isPurchasable: round\.status === 'OPEN' && isCurrentItem/);
+});
+
 test('상품 상세은 Task 4.8이 검증한 회차 상품 구조를 패널에 그대로 전달한다', () => {
   assert.match(
     pageSource,

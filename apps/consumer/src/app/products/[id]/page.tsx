@@ -34,7 +34,7 @@ type StoreModeState =
 interface RoundProduct {
   round: PublicSaleRound;
   item: SaleRoundItem;
-  state: 'current' | 'closed';
+  state: 'current' | 'closed' | 'sold_out';
   isPurchasable: boolean;
 }
 
@@ -187,11 +187,13 @@ function resolveRoundProduct(
   const item = matchingItems[0];
   const isCurrentRound = round.status === 'OPEN' || round.status === 'SCHEDULED';
   const isCurrentItem = item.status === 'ACTIVE';
+  // 판매 중 회차에서 수량이 찬 상품(결제 대기 예약 포함)은 회차 마감이 아니라 품절로 보인다.
+  const isSoldOut = isCurrentRound && item.status === 'SOLD_OUT';
 
   return {
     round,
     item,
-    state: isCurrentRound && isCurrentItem ? 'current' : 'closed',
+    state: isCurrentRound && isCurrentItem ? 'current' : isSoldOut ? 'sold_out' : 'closed',
     isPurchasable: round.status === 'OPEN' && isCurrentItem,
   };
 }
