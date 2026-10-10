@@ -96,6 +96,12 @@ export interface OrdersScopedView {
   groupedOrders: DateGroup[];
 }
 
+/** 회차 필터(`?round=`) — 지정하면 그 회차 주문만 남긴다. 없으면 입력 그대로. */
+export function filterOrdersByRound(orders: Order[], roundId: string | null): Order[] {
+  if (!roundId) return orders;
+  return orders.filter((order) => order.roundId === roundId);
+}
+
 /** 판매 유형 1차 분기 — 일반은 group 제외, 공구는 group만 */
 export function filterBySaleType(orders: Order[], saleType: SaleType): Order[] {
   return orders.filter((order) =>

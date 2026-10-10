@@ -334,6 +334,108 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     );
   });
 
+  it('목록·상세에 상품별 이름·수량만 싣고 가격·상품 ID는 싣지 않는다', async () => {
+    const { service } = makeService({
+      'orders/round-two-items': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+        productName: '동양란 만천홍',
+        quantity: 3,
+        orderItems: [
+          {
+            roundItemId: 'round-item-1',
+            productId: 'product-1',
+            productName: '동양란 만천홍',
+            productImageUrl: 'https://example.com/1.jpg',
+            unitPrice: 30000,
+            quantity: 2,
+            subtotalAmount: 60000,
+          },
+          {
+            roundItemId: 'round-item-2',
+            productId: 'product-2',
+            productName: '호접란',
+            productImageUrl: null,
+            unitPrice: 50000,
+            quantity: 1,
+            subtotalAmount: 50000,
+          },
+        ],
+      },
+      'orders/legacy-single': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+        productId: 'product-legacy',
+        productName: '산세베리아',
+        quantity: 2,
+        totalAmount: 40000,
+      },
+      'orders/malformed-items': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+        productName: '동양란',
+        quantity: 2,
+        orderItems: [
+          { productName: '동양란', quantity: 1 },
+          { productName: ' ', quantity: 1 },
+        ],
+      },
+    });
+    const expectedItems = [
+      { productName: '동양란 만천홍', quantity: 2 },
+      { productName: '호접란', quantity: 1 },
+    ];
+
+    const list = await service.getOrders('driver-1');
+    const byId = Object.fromEntries(list.map((order) => [order.id, order]));
+    expect(byId['round-two-items'].items).toEqual(expectedItems);
+    for (const item of byId['round-two-items'].items as Array<Record<string, unknown>>) {
+      expect(Object.keys(item).sort()).toEqual(['productName', 'quantity']);
+    }
+    // 상품 스냅샷이 없는 이전 주문은 주문의 상품·수량 한 줄이 된다.
+    expect(byId['legacy-single'].items).toEqual([{ productName: '산세베리아', quantity: 2 }]);
+    // 하나라도 어긋나면 통째로 빼서 앱이 기존 한 줄 표기로 대신한다.
+    expect(byId['malformed-items']).not.toHaveProperty('items');
+
+    const detail = await service.getOrder('driver-1', 'round-two-items');
+    expect(detail.items).toEqual(expectedItems);
+    expect(detail).not.toHaveProperty('orderItems');
+  });
+
+  it('목록은 전체 주소를 싣는 행에만 지도 검색용 기본 주소를 함께 싣는다', async () => {
+    const { service } = makeService({
+      'orders/with-address': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+        address: '경기도 이천시 중리천로 1 101동 1001호',
+        deliveryAddress: {
+          address: '경기도 이천시 중리천로 1',
+          addressDetail: '101동 1001호',
+          zipCode: '17379',
+        },
+      },
+      'orders/without-address': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+        deliveryAddress: { addressDetail: '101동 1001호', zipCode: '17379' },
+      },
+    });
+
+    const list = await service.getOrders('driver-1');
+    const withAddress = list.find((order) => order.id === 'with-address');
+    expect(withAddress).toMatchObject({ address: '경기도 이천시 중리천로 1 101동 1001호' });
+    // 상세 주소·우편번호는 목록에 따로 싣지 않는다.
+    expect(withAddress?.['deliveryAddress']).toEqual({ address: '경기도 이천시 중리천로 1' });
+    expect(list.find((order) => order.id === 'without-address')).not.toHaveProperty(
+      'deliveryAddress',
+    );
+  });
+
   it('본인 배정 직배송의 배송 중·보류 상세에 수령 연락처 우선 고객 전화를 반환한다', async () => {
     const { service } = makeService({
       'orders/delivering-profile-only': {

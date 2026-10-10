@@ -10,6 +10,9 @@ interface CancelOrderModalProps {
   actionError: string | null;
   onClose: () => void;
   onConfirm: () => void;
+  title?: string;
+  /** 사유 안내 아래에 덧붙일 설명(예: 배송 보류 주문의 환불 범위) */
+  note?: string;
 }
 
 export function CancelOrderModal({
@@ -20,18 +23,25 @@ export function CancelOrderModal({
   actionError,
   onClose,
   onConfirm,
+  title = '강제 취소',
+  note,
 }: CancelOrderModalProps) {
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      title={<Text style={{ fontWeight: 'var(--fw-bold)' }}>강제 취소</Text>}
+      title={<Text style={{ fontWeight: 'var(--fw-bold)' }}>{title}</Text>}
       radius="lg"
     >
       <Stack gap="sm">
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
           취소 사유를 입력하세요. 소비자에게 알림톡으로 전달됩니다.
         </Text>
+        {note && (
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            {note}
+          </Text>
+        )}
         <Textarea
           value={cancelReason}
           onChange={(e) => setCancelReason(e.target.value)}

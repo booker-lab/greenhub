@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useOrderStatusUpdate } from '@/hooks/useOrderStatusUpdate';
+import type { DeliveryHoldPayload } from '../delivery-hold-form';
 import { shouldReconcileOrderDetailAfterMutation } from './useOrderDetail.recovery';
 
 export { shouldReconcileOrderDetailAfterMutation } from './useOrderDetail.recovery';
@@ -18,9 +19,15 @@ export interface UseOrderDetailActionsResult {
   setShowCancelModal: (v: boolean) => void;
   cancelReason: string;
   setCancelReason: (v: string) => void;
+  showHoldModal: boolean;
+  setShowHoldModal: (v: boolean) => void;
+  showReleaseConfirm: boolean;
+  setShowReleaseConfirm: (v: boolean) => void;
   handlePrepare: () => Promise<void>;
   handleCancel: () => Promise<void>;
   handleShipParcel: () => Promise<void>;
+  handleHold: (deliveryHold: DeliveryHoldPayload) => Promise<boolean>;
+  handleReleaseHold: () => Promise<void>;
 }
 
 /**
@@ -36,14 +43,14 @@ export function useOrderDetailActions(
   orderId: string,
   onReconciled?: () => void,
 ): UseOrderDetailActionsResult {
-  const { actionLoading, actionError, setActionError, updateStatus } = useOrderStatusUpdate(
-    storeId,
-    orderId,
-  );
+  const { actionLoading, actionError, setActionError, updateStatus, holdDelivery } =
+    useOrderStatusUpdate(storeId, orderId);
   const [showPrepareForm, setShowPrepareForm] = useState(false);
   const [preparedAt, setPreparedAt] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const [showHoldModal, setShowHoldModal] = useState(false);
+  const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
 
   function reconcileAfterCommand(commandOk: boolean) {
     if (shouldReconcileOrderDetailAfterMutation(commandOk)) onReconciled?.();
@@ -74,6 +81,21 @@ export function useOrderDetailActions(
     reconcileAfterCommand(ok);
   }
 
+  // 기사가 가져가기 전 판매자 보류(PREPARING → DELIVERY_HELD). 실패하면 창을 열어 둔 채 오류를 보인다.
+  async function handleHold(deliveryHold: DeliveryHoldPayload) {
+    const ok = await holdDelivery(deliveryHold);
+    if (ok) setShowHoldModal(false);
+    reconcileAfterCommand(ok);
+    return ok;
+  }
+
+  // 보류 해소 — 재배송 준비(DELIVERY_HELD → PREPARING). 알림톡 여부는 서버가 보류 내용으로 정한다.
+  async function handleReleaseHold() {
+    const ok = await updateStatus('PREPARING');
+    setShowReleaseConfirm(false);
+    reconcileAfterCommand(ok);
+  }
+
   return {
     actionLoading,
     actionError,
@@ -86,8 +108,14 @@ export function useOrderDetailActions(
     setShowCancelModal,
     cancelReason,
     setCancelReason,
+    showHoldModal,
+    setShowHoldModal,
+    showReleaseConfirm,
+    setShowReleaseConfirm,
     handlePrepare,
     handleCancel,
     handleShipParcel,
+    handleHold,
+    handleReleaseHold,
   };
 }
