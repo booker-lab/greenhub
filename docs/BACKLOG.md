@@ -633,7 +633,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] Railway contingency, 다중 판매자, hub_staff, 외부 driver 정산, 결제수단 확장
 
 ### AUTH-LOGOUT-SERVER-REVOCATION
-- [ ] 세 앱 Auth.js 로그아웃 시 API `POST /auth/logout`도 호출해 서버 refresh token을 폐기한다. 현재는 쿠키만 삭제되어 로그아웃 전에 복사된 쿠키가 refresh 만료(30일)까지 재사용될 수 있다. `refreshTokens/{sub}`가 사용자당 1개라 같은 계정의 다른 기기도 함께 로그아웃되는 영향을 설계에 포함한다. 2026-09-28 결정(D2)으로 출시 후 과제.
+- [ ] 세 앱 Auth.js 로그아웃 시 API `POST /auth/logout`도 호출해 서버 refresh token을 폐기한다. 현재는 쿠키만 삭제되어 로그아웃 전에 복사된 쿠키가 refresh 만료(30일)까지 재사용될 수 있다. `refreshTokens/{sub}`가 사용자당 1개라 같은 계정의 다른 기기도 함께 로그아웃되는 영향을 설계에 포함한다. 2026-09-28 결정(D2)으로 출시 후 과제. **2026-10-10 결정: 지금 한다**(아래 `AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE`의 경쟁 상태 확인). 병행 세션 PR #415·#429·#431 병합 대기.
 
 ### PREVIEW-GENERIC-ENV-ALIGNMENT
 - [ ] exact Preview(브랜치 없는 배포)는 Vercel의 브랜치 미지정 Preview env를 쓴다. 판매자 앱은 이 env에서 API=스테이징, Firebase=운영(`green-e4fe3`, 운영·Preview·개발 공통 항목)으로 어긋나 Firebase 클라이언트 로그인이 실패한다. 세 앱의 브랜치 미지정 Preview Firebase 설정을 비운영 프로젝트로 분리할지 결정한다.
@@ -660,7 +660,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] 2026-10-03 대조 완료: 세 앱의 사용 컴포넌트와 import를 대조한 결과 드라이버는 누락 없음, 소비자(Checkbox·Image·Modal 계열)와 셀러(ActionIcon·NumberInput)는 채움. 이전 기록: 드라이버 `globals.css`는 Mantine CSS를 골라 import한다. 알림 스타일 누락은 #323으로 고쳤지만, `Modal.css` 같은 다른 사용 컴포넌트 CSS도 빠졌을 수 있다. 실제 사용 컴포넌트와 import 목록을 대조한다. 2026-09-28 발견.
 
 ### AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE
-- [ ] 2026-10-03 원격 회차 E2E run `37108803974` 1차에서 `auth-session-lifecycle` mobile seller "로그아웃하면 사라진다"가 실패했다. 로그아웃 뒤 세션 쿠키는 없었는데 바로 이은 `/api/auth/session`이 `seller`를 돌려줬다. 같은 Preview 재실행에서는 통과했고, 직전 실행들도 통과했다. 로그아웃 순간 화면이 보낸 다른 요청의 응답이 갱신된 세션 쿠키를 다시 써 넣는 경쟁 상태로 추정한다(#333 proxy 쿠키 반영과 관련 가능). 실제로 로그아웃이 되돌려질 수 있는지 로컬에서 재현해 확인한다.
+- [ ] 2026-10-03 원격 회차 E2E run `37108803974` 1차에서 `auth-session-lifecycle` mobile seller "로그아웃하면 사라진다"가 실패했다. 로그아웃 뒤 세션 쿠키는 없었는데 바로 이은 `/api/auth/session`이 `seller`를 돌려줬다. 같은 Preview 재실행에서는 통과했고, 직전 실행들도 통과했다. 로그아웃 순간 화면이 보낸 다른 요청의 응답이 갱신된 세션 쿠키를 다시 써 넣는 경쟁 상태로 추정한다(#333 proxy 쿠키 반영과 관련 가능). 실제로 로그아웃이 되돌려질 수 있는지 로컬에서 재현해 확인한다. 2026-10-10 코드 대조로 원인을 확인했다: JWT 세션 조회 응답이 세션 쿠키를 다시 쓰고(#333 proxy 반영), 로그아웃은 서버 토큰을 폐기하지 않아 늦게 도착한 응답이 유효한 쿠키를 되살린다. 같은 날 로컬 에뮬레이터(dev:local)로 세션 스펙을 돌려 6건 중 가끔 1건이 같은 방식으로 실패하는 것도 재현했다(`page.goto(base)`가 연 화면의 세션 조회가 로그아웃과 겹칠 때). 테스트에서 화면을 비워 피하지 않고 `AUTH-LOGOUT-SERVER-REVOCATION`으로 고친다.
 
 ### HOME-BANNER-OVERLAP-AND-LEGACY-CTA
 - [x] 2026-10-03 해결: 배너를 글자 칸과 사진 칸(40%)을 나란히 두는 배치로 바꾸고 한글을 낱말 단위로 줄바꿈했다(#365, `53f8e374` 운영 배포). 운영 배너 문서 `banners/main_hero`의 cta2("공구 참여하기 " → `/groupbuy`)는 어드민 화면에서 비운 것과 같은 `{label:"", href:""}`로 바꿨다. 이어서 운영에서 cta1 "지금인기 호접란" 링크가 이미 없는 상품(404)이고, 배너가 현재 회차에서 팔지 않는 호접란과 "할인"을 알리는 것을 확인했다. 사용자 결정으로 배너를 `isActive:false`로 내렸다(내용은 보존). 다시 켤 때는 특정 상품 대신 서비스 안내 문구와 404가 날 수 없는 링크를 쓴다. 같은 날 소비자 앱에 한국어 404 화면을 추가했다(#367). 이전 기록: 운영 소비자 홈 캡처에서 관리자 배너(`HeroBanner`)의 긴 제목이 오른쪽 절반 사진 위로 겹쳐 읽기 어렵다(모바일 390px). 또 배너 버튼에 예전 판매용 "공구 참여하기"가 떠 있는데 회차 직배송에서는 공동구매 진입을 숨긴다. 배너 레이아웃(사진을 배경으로 깔거나 제목 폭 제한)과 배너 내용(어드민 배너 탭에서 버튼 정리)을 함께 정리한다.
@@ -678,19 +678,31 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 소비자가 결제창을 닫고 새 결제 시도 ID로 다시 결제하면(#328), 이전 시도의 `PENDING` 주문·`HELD` 예약이 결제 실패 웹훅 또는 15분 만료 정리(1분 주기)까지 최대 약 16분 동안 회차 배송지·수량·상품 한도를 함께 차지한다. **2026-10-04 결정: 파일럿 동안 유지한다.** 즉시 해제하려면 늦게 도착한 이전 결제(늦은 결제 재확보·자동 환불) 흐름까지 다시 맞춰야 해서 위험이 이득보다 크다. 주문 오픈 날 '한도 마감'이 비정상적으로 빨리 나오면 우선 대응한다.
 
 ### CI-REQUIRED-CHECK
-- [ ] **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다.
+- [ ] **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다. 2026-10-09 CI 추가(#417) 뒤 PR마다 통과한다. 남은 일은 branch protection 필수 검사 지정(사용자)이다.
 
 ### STORE-COMMISSION-RATE-UNUSED
 - [ ] 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). **2026-10-09 결정: 파일럿 동안 그대로 둔다**(가게가 하나). 어드민 판매자 목록에 "정산은 공통 수수료율" 안내만 표시한다. 가게가 늘면 다시 정한다.
 
 ### SILENT-REFUND-CUSTOMER-NOTICE
-- [ ] 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다.
+- [ ] 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다. 2026-10-09 코드 반영(#420, 운영 미배포). 남은 일은 `apps/api/src/notifications/refund-notice-reasons.ts` 문구 확정이다.
 
 ### OPS-ALERTING
-- [ ] 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. **2026-10-09 결정: 도입한다.** 휴대폰 푸시 채널과 GitHub 정기 가동 확인(실패 시 소유자 이메일)으로 시작한다.
+- [ ] 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. **2026-10-09 결정: 도입한다.** 휴대폰 푸시 채널과 GitHub 정기 가동 확인(실패 시 소유자 이메일)으로 시작한다. 2026-10-09 코드 반영(#421, 텔레그램 봇과 GitHub 15분 가동 확인, 운영 미배포). 남은 일은 `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`를 Railway 운영과 GitHub Actions 비밀값에 넣는 것이다(`docs/specs/ops/ops-alerts.md` §2).
 
 ### FIRESTORE-MANAGED-BACKUP
 - [ ] 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이다. **2026-10-09 결정: 켠다.** PITR과 일일 관리형 백업을 GCP 콘솔에서 사용자가 켠다(이 저장소 작업 환경에는 GCP 권한이 없다). 켠 뒤 비운영 프로젝트 복구 연습을 한 번 한다.
+
+### ROUND-HOLD-ABUSE-LIMITS
+- [ ] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. 주문당 상품별 수량 상한(병행 PR #422), 쓰이지 않는 공개 회원가입 API 차단(#431), 같은 회차의 고객별 활성 결제 예약 상한(#427). 예약 상한은 `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`(재결제 때 이전 예약 유지)를 그대로 두고 최대 3건으로 정해 #427을 고치는 중이다.
+
+### OPERATION-ISSUE-MANUAL-RESOLVE
+- [ ] 환불 재시도·문자 재발송 외의 운영 기록은 닫을 방법이 없어 홈 경고와 아침 텔레그램 요약에 계속 남는다. **2026-10-10 결정**: 판매자·관리자가 메모를 남기고 닫는다. 운영 기록 API를 고치는 병행 PR #436 병합 뒤 구현한다.
+
+### CHECKOUT-DELIVERY-PHONE-CLIENT-CHECK
+- [ ] 받는 분 연락처는 휴대폰 번호만 받는다(**2026-10-10 결정**). 서버 검사는 #445로 들어갔다. 결제 화면 입력 단계 검사는 같은 화면을 고치는 병행 PR #437 병합 뒤 맞춘다(그전에도 서버 400 안내 문구가 결제 화면에 보인다).
+
+### REDELIVERY-PAID-REQUEST-RESEND
+- [ ] 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 병행 PR #448이 연결 결제가 PAID면 건너뛰게 고치고, 판매자 확인 창 문구·런북도 함께 맞춘다. 2026-10-10 발견.
 
 ---
 
