@@ -90,7 +90,10 @@ test('C. HoldModal은 submittingRef guard로 double-submit PATCH를 차단한다
   assert.ok(finallyAt !== -1 && finallyAt < releaseAt, 'submitting 해제는 finally에서 한다');
   // 저장 버튼도 명시적으로 disabled다.
   assert.match(holdModalSource, /배송 보류 저장/);
-  assert.match(holdModalSource, /onClick=\{submit\} loading=\{loading\} disabled=\{loading\}/);
+  assert.match(
+    holdModalSource,
+    /onClick=\{submit\}\s*loading=\{loading\}\s*disabled=\{loading \|\| responsibilityFeeHint !== null\}/,
+  );
 });
 
 // D. modal open 뒤 order status 변경 → stale payload dispatch 0회.
@@ -210,7 +213,7 @@ test('F. readback 불확실성은 PATCH 재호출 없이 warning과 fail-closed�
 test('G. terminal ACK 뒤 readback loss에서도 board navigation 계약이 유지된다', () => {
   assert.match(detailSource, /const isTerminal = status === 'DELIVERED' \|\| status === 'HUB_ARRIVED'/);
   assert.match(detailSource, /terminal은 board가 fresh fetch하므로 navigation 계약을 유지한다/);
-  assert.match(detailSource, /router\.replace\('\/board\?tab=preparing'\)/);
+  assert.match(detailSource, /router\.replace\('\/board\?tab=delivering'\)/);
   // detail에 머물도록 바꾸지 않는다: terminal 분기에 return이 끼어들지 않는다.
   const terminalAt = detailSource.indexOf('} else if (isTerminal) {');
   assert.ok(terminalAt !== -1);
@@ -369,7 +372,7 @@ test('T3. settleUncertainReadback은 재전송 없이 성공·목록 수렴·미
   assert.match(block, /result === 'APPLIED'/);
   assert.match(block, /STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE/);
   assert.match(block, /result === 'LEFT_DRIVER_SCOPE'/);
-  assert.match(block, /router\.replace\('\/board\?tab=preparing'\)/);
+  assert.match(block, /router\.replace\('\/board\?tab=delivering'\)/);
   assert.match(block, /result === 'NOT_APPLIED'/);
   assert.match(block, /STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE/);
   // 같은 명령을 자동으로 다시 보내지 않는다.
