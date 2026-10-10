@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AdminModule } from './admin/admin.module';
@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AuditModule } from './common/audit/audit.module';
+import { FirestoreRetryableErrorFilter } from './common/filters/firestore-retryable-error.filter';
 import { ClientThrottlerGuard } from './common/guards/client-throttler.guard';
 import { shouldEnableScheduledJobs, validateRuntimeConfig, isApiUnitTestEnv } from './config/runtime-config';
 import { DriverModule } from './driver/driver.module';
@@ -37,7 +38,11 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
 
 @Module({
   controllers: [AppController],
-  providers: [AppService, { provide: APP_GUARD, useClass: ClientThrottlerGuard }],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: ClientThrottlerGuard },
+    { provide: APP_FILTER, useClass: FirestoreRetryableErrorFilter },
+  ],
 
   imports: [
     configModule,
@@ -50,6 +55,7 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
     // 집계 기준(검증된 sub·login IP+이메일·클라이언트 IP)은 ClientThrottlerGuard가 정한다.
     ThrottlerModule.forRoot({
       throttlers: [{ name: 'default', ttl: 60000, limit: 100 }],
+      errorMessage: '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.',
     }),
     FirestoreModule,
     OpsAlertModule,

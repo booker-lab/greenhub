@@ -13,9 +13,11 @@ import { ClientThrottlerGuard, clientIp, normalizedEmail } from './client-thrott
 
 const ACCESS_SECRET = 'access-secret-for-throttler-spec-0123456789';
 const REFRESH_SECRET = 'refresh-secret-for-throttler-spec-0123456789';
-// 운영과 같은 한도: 전역 100/분, 인증 라우트는 @Throttle 10/분.
+// 운영과 같은 한도: 전역 100/분, register·login은 @Throttle 10/분,
+// 서버가 대신 호출하는 kakao-login·refresh는 @Throttle 120/분.
 const DEFAULT_LIMIT = 100;
 const AUTH_LIMIT = 10;
+const RELAYED_AUTH_LIMIT = 120;
 
 @Controller('probe')
 class ProbeController {
@@ -214,8 +216,9 @@ describe('ClientThrottlerGuard 집계 기준', () => {
         .set('X-Forwarded-For', shared)
         .send({ refreshToken: token });
 
-    const userA = await hit(AUTH_LIMIT + 1, () => refresh(refreshToken('user-a')));
-    expect(userA[AUTH_LIMIT]).toBe(429);
+    const userA = await hit(RELAYED_AUTH_LIMIT + 1, () => refresh(refreshToken('user-a')));
+    expect(userA.slice(0, RELAYED_AUTH_LIMIT).every((status) => status === 200)).toBe(true);
+    expect(userA[RELAYED_AUTH_LIMIT]).toBe(429);
     expect((await refresh(refreshToken('user-b'))).status).toBe(200);
   });
 
@@ -224,7 +227,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
     const server = app.getHttpServer();
     let counter = 0;
 
-    const statuses = await hit(AUTH_LIMIT + 1, () => {
+    const statuses = await hit(RELAYED_AUTH_LIMIT + 1, () => {
       counter += 1;
       return request(server)
         .post('/auth/refresh')
@@ -232,23 +235,27 @@ describe('ClientThrottlerGuard 집계 기준', () => {
         .send({ refreshToken: accessToken(`access-${counter}`) });
     });
 
-    expect(statuses[AUTH_LIMIT]).toBe(429);
+    expect(statuses[RELAYED_AUTH_LIMIT]).toBe(429);
   });
 
-  it('/auth/kakao-login은 클라이언트 IP 기준 10회 한도를 유지한다', async () => {
+  it('/auth/kakao-login은 클라이언트 IP 기준 120회 한도를 유지한다', async () => {
     app = await createApp(1);
     const server = app.getHttpServer();
     let counter = 0;
-
-    const statuses = await hit(AUTH_LIMIT + 1, () => {
+    const kakaoLogin = (ip: string) => {
       counter += 1;
       return request(server)
         .post('/auth/kakao-login')
-        .set('X-Forwarded-For', '203.0.113.70')
+        .set('X-Forwarded-For', ip)
         .send({ kakaoAccessToken: `token-${counter}` });
-    });
+    };
 
-    expect(statuses[AUTH_LIMIT]).toBe(429);
+    const statuses = await hit(RELAYED_AUTH_LIMIT + 1, () => kakaoLogin('203.0.113.70'));
+
+    expect(statuses.slice(0, RELAYED_AUTH_LIMIT).every((status) => status === 200)).toBe(true);
+    expect(statuses[RELAYED_AUTH_LIMIT]).toBe(429);
+    // 다른 클라이언트 IP는 별도 버킷이다.
+    expect((await kakaoLogin('203.0.113.71')).status).toBe(200);
   });
 });
 
