@@ -29,15 +29,18 @@ import {
   useSaleRounds,
 } from '@/hooks/useSaleRounds';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
+import { showsRoundOrders } from '@/lib/round-orders';
 import { isPurchaseListRound } from '@/lib/round-purchase-list';
 import {
   buildRoundPageData,
   getRoundAction,
+  isRoundEditable,
   type RoundAction,
   type RoundPageData,
   readSafeRoundId,
 } from './page.logic';
 import { RoundForm } from './RoundForm';
+import { RoundOrdersSection } from './RoundOrdersSection';
 
 const STATUS_META: Record<SaleRoundStatus, { label: string; color: string }> = {
   DRAFT: { label: '작성 중', color: 'gray' },
@@ -280,6 +283,7 @@ function RoundEditor({
         carrotLinks={pageData.carrotLinks}
         onSave={onSave}
         disabled={disabled}
+        readOnly={!isRoundEditable(round)}
       />
     </Stack>
   );
@@ -377,6 +381,7 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
       <Stack gap="md">
         <RoundDeadlineStrip round={round} rounded />
         <RoundSummary round={round} />
+        {showsRoundOrders(round.status) && <RoundOrdersSection round={round} />}
         {isPurchaseListRound(round) && <RoundPurchaseListCard round={round} />}
         {actionSuccess && (
           <Alert color="brand" title="상태 변경 완료" role="status">
