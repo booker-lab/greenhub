@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
@@ -17,6 +18,7 @@ import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
 import {
   assertPaidRedeliveryResume,
   isCurrentRedeliveryPaymentRequired,
+  resolveRedeliveryPaymentActionability,
 } from './redelivery-resume-gate';
 import {
   throwDriverOrderNotFound,
@@ -57,6 +59,7 @@ const DELIVERY_HOLD_CUSTOMER_REASONS: Record<string, string> = {
 
 @Injectable()
 export class OrdersLifecycleService {
+  private readonly logger = new Logger(OrdersLifecycleService.name);
   private readonly driverScope: DriverOrderScopeService;
 
   constructor(
@@ -1199,6 +1202,14 @@ export class OrdersLifecycleService {
     ) {
       return;
     }
+    // 고객이 주문 상세에서 현재 보류의 재배송비를 미리 결제했으면 결제 요청 알림톡을 보내지 않는다.
+    if (
+      from === 'DELIVERY_HELD' &&
+      to === 'PREPARING' &&
+      (await this.isCurrentRedeliveryChargePaid(order, orderId))
+    ) {
+      return;
+    }
 
     const isRedeliveryResume =
       to === 'DELIVERING' &&
@@ -1244,6 +1255,34 @@ export class OrdersLifecycleService {
         orderId,
         idempotencyKey,
       );
+    }
+  }
+
+  // 현재 보류에 연결된 재배송비 charge가 PAID인지 본다. 판정은 주문 조회 응답의
+  // redeliveryPayment.paid와 같은 resolveRedeliveryPaymentActionability(배송 재개 게이트
+  // assertPaidRedeliveryResume와 같은 연결·상태 조건)를 쓴다. 알림은 best effort라 charge를
+  // 읽지 못하면 결제 요청 알림을 기존대로 보낸다.
+  private async isCurrentRedeliveryChargePaid(
+    order: Record<string, unknown>,
+    orderId: string,
+  ): Promise<boolean> {
+    const chargeId = order['redeliveryChargeId'];
+    if (typeof chargeId !== 'string' || chargeId.length === 0) return false;
+    try {
+      const chargeSnap = await this.firestore.doc(`orderCharges/${chargeId}`).get();
+      return resolveRedeliveryPaymentActionability({
+        order: { ...order, id: orderId },
+        chargeExists: chargeSnap.exists,
+        charge: chargeSnap.exists ? chargeSnap.data() : undefined,
+      }).paid;
+    } catch (error) {
+      // 주문 id와 오류 코드만 남긴다(고객 정보·charge 본문은 로그에 남기지 않는다).
+      const code = (error as { code?: unknown } | null)?.code;
+      const reason = code ?? (error instanceof Error ? error.name : 'unknown');
+      this.logger.warn(
+        `재배송비 결제 상태를 읽지 못해 결제 요청 알림을 그대로 보냅니다 (orderId=${orderId}, error=${String(reason)})`,
+      );
+      return false;
     }
   }
 
