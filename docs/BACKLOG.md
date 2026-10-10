@@ -677,7 +677,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 2026-10-03 앱 아이콘 상징(두 잎 하트)은 사용자가 "일단 이렇게" 정한 임시안이다. 잎사귀 하트·"그" 글자·손글씨 G·새싹·붓선 하트·꽃·화분·난초·gl·G+잎 시안을 봤지만 마음에 드는 것이 없었다. 나중에 아이콘 디자인을 다시 정한다. 로고(Nunito "Green Love" 글자만)와 앱별 구성(소비자=상징만, 판매자=+Seller, 기사=+Driver)은 확정. 원본은 `packages/ui/brand/`, 기준은 `docs/specs/frontend/design-standard.md` §7.
 
 ### ADMIN-TAB-PLANS-STALE-PROGRESS
-- [ ] 어드민 탭 계획서(`docs/specs/frontend/admin-tabs-improve-plan.md`와 `admin/admin-tab-*-plan.md`) 진행표가 현재 코드보다 뒤처져 있다. stores는 T7·T8을 빼고 구현을 마쳤고, 6개 탭 공통 조회 실패 표시와 users D1·banner T1·T3도 끝났는데 표에는 "미착수"로 남아 있다. 문서 정합성 작업으로 정리한다. 2026-09-28 코드 대조로 확인.
+- [x] 2026-10-10 해결: PR #391의 어드민 탭 계획서 진행표 갱신(2026-10-04 코드 대조)을 옮겼다. 인용 커밋 12개가 `main`에 있고 그 뒤 어드민 코드 변경은 문구·안내 수준이라 판정이 바뀌지 않았다. 이전 기록: 어드민 탭 계획서(`docs/specs/frontend/admin-tabs-improve-plan.md`와 `admin/admin-tab-*-plan.md`) 진행표가 현재 코드보다 뒤처져 있다. stores는 T7·T8을 빼고 구현을 마쳤고, 6개 탭 공통 조회 실패 표시와 users D1·banner T1·T3도 끝났는데 표에는 "미착수"로 남아 있다. 문서 정합성 작업으로 정리한다. 2026-09-28 코드 대조로 확인.
 
 ### DRIVER-SELLER-PHONE-BEFORE-PICKUP
 - [ ] 기사 IA(`docs/design/드라이버-2단계-IA.md` §4)는 수거 전 화면에 판매자 연락처를 두지만, 코드(`2e2c0b50` 최소 노출)와 테스트는 미배정 주문의 `sellerPhone`을 숨긴다. **2026-10-04 결정: 파일럿 동안 현재 동작(숨김)을 유지한다.** 파일럿은 판매자와 기사가 같은 사람이라 필요가 없다. 외부 기사를 쓰기 시작할 때 노출 범위를 다시 정하고 IA 또는 테스트를 맞춘다.
