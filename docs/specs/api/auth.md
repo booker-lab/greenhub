@@ -231,6 +231,8 @@ Accepted source에서 확인된 조건:
 
 실제 서버 JWT 만료값은 환경 설정에 의해 달라질 수 있으므로 오래된 문서의 “항상 1시간/30일”을 외부 환경 현재값으로 단정하지 않는다.
 
+API가 발급하는 access/refresh token에는 `typ`(`access`/`refresh`)와 `aud`(`greenhub-api`)가 들어가고 HS256으로 서명한다. `JwtStrategy`와 `AuthService.refresh()`는 HS256만 받고, `typ`·`aud`가 있으면 기대값과 같아야 한다(refresh token을 Bearer로 쓰거나 access token을 refresh로 쓰면 401). 이 claim이 없는 이전 발급 token은 만료까지 계속 받는다(`apps/api/src/auth/auth.token-boundary.spec.ts`, `auth.service.spec.ts` `토큰 종류·수신자 claim`). refresh token 저장 형식(평문 단일 문서)은 바뀌지 않았다.
+
 ### 현재 구현 한계 — stale authorization claims
 
 ~~현재 `AuthService.refresh()`는 refresh token 자체와 rotation record를 검증한 뒤 **기존 refresh JWT payload의 `sub/role/storeId`를 그대로 새 access/refresh token에 재사용**한다. 사용자 문서의 현재 `suspended`, `role`, `storeId`, driver 승인 상태를 refresh 시 다시 조회하지 않는다.~~
@@ -251,7 +253,8 @@ rotation record 검증 뒤 authoritative user를 재조회하고 payload `role/s
 - 신규 로그인에서 `suspended === true`를 거부하는 동작은 구현·테스트됨.
 - refresh/session 경계의 stale-claim 재발급 차단과 `suspended`/`role`/`store`/`driverApproved` 변경 수렴은 `IMPLEMENTED / PROVEN`이다.
 - revocation window는 즉시(다음 요청)로 결정됐고(D2), runtime/browser session lifecycle은 Preview에서 `RUNTIME_PROVEN`이다(run `36341189483`, 12건).
-- Auth.js 로그아웃은 브라우저 쿠키만 삭제하고 서버 `refreshTokens/{sub}`는 유지한다. 로그아웃 전에 복사된 쿠키는 refresh 만료(30일)까지 재사용될 수 있으며, 파일럿에서는 이를 수용하고 출시 후 `AUTH-LOGOUT-SERVER-REVOCATION`으로 개선한다.
+- `POST /auth/logout`은 `refreshTokens/{sub}` 삭제와 함께 Firebase refresh token을 폐기한다(`revokeRefreshTokens`). refresh token 재사용 감지도 같은 폐기를 수행한다. Firebase 사용자 기록이 없으면(custom token 미사용) 폐기할 것이 없으므로 그대로 진행하고, 그 밖의 폐기 실패는 API 세션 폐기를 되돌리지 않고 서버 로그에만 남긴다. 이미 발급된 Firebase ID token은 만료(최대 1시간)까지 남는다.
+- Auth.js 로그아웃은 아직 `POST /auth/logout`을 호출하지 않고 브라우저 쿠키만 삭제하므로 서버 `refreshTokens/{sub}`는 유지된다. 로그아웃 전에 복사된 쿠키는 refresh 만료(30일)까지 재사용될 수 있으며, 파일럿에서는 이를 수용하고 출시 후 `AUTH-LOGOUT-SERVER-REVOCATION`으로 개선한다.
 - “정지된 계정이 refresh를 통해 계속 새 권한 토큰을 얻을 수 있음”은 현재 계약이 아니다.
 
 Task 2F-A/2F-B의 public approval-gate와 current-user 경계 검증에 더해, 위 refresh/session 직접 회귀가 static/refresh 경계를 닫는다.
@@ -308,6 +311,8 @@ POST /auth/refresh
 - **이 두 endpoint가 공개라는 사실 자체는 현재 보안 경계다. UI 미노출을 authorization control로 취급하지 않는다.**
 - `role: driver` register→login 승인 우회는 해소됐다: 공개 `register`는 `driverApproved: false`를 저장하고 client 주입을 거부하며, 승인값이 false/누락인 driver의 `login`·`getFirebaseToken`은 token side effect 전에 거부된다(`apps/api/src/auth/auth.service.spec.ts`). 공개 endpoint라는 사실 자체는 계속 현재 보안 경계다.
 - 일반 사용자에게 credentials 인증을 제품 기능으로 노출하려면 별도 제품·보안 결정이 필요하다.
+- `login`은 계정 없음·비밀번호 불일치·비밀번호 없는(카카오 전용) 계정을 모두 같은 bcrypt 비교 비용을 거쳐 같은 401 메시지로 거부한다.
+- 카카오 첫 로그인의 사용자 생성은 `kakaoIdentities/{kakaoId}`(`userId`)를 사용자 문서와 한 트랜잭션에서 함께 써서, 같은 카카오 계정의 동시 요청이 사용자 문서를 하나만 만들게 한다(`apps/api/src/auth/auth.kakao-signup-occ.spec.ts`). 이 연결 문서가 없는 기존 사용자는 지금처럼 `users.kakaoId` 조회로 찾는다.
 - Seller/Driver의 explicit local-runtime branch 역시 production indicator(`NODE_ENV`·`VERCEL_ENV`·`RAILWAY_ENVIRONMENT_NAME` 중 어느 하나라도 `production`)가 존재하면 fail-closed된다. local marker를 켜도 production runtime에서는 local admission이 열리지 않으며, Seller는 기존 E2E header gate로, Driver는 기존 Preview/E2E gate로 복귀한다. production에서 local marker를 켠다고 사용할 수 있는 것이 아니다.
 
 ### 인증 사용자
@@ -325,7 +330,7 @@ GET    /auth/firebase-token
 POST   /auth/logout
 ```
 
-모두 `JwtAuthGuard`가 적용된다. `firebase-token`은 throttle 예외지만 JWT 인증은 필요하다.
+모두 `JwtAuthGuard`가 적용된다. `firebase-token`은 throttle 예외지만 JWT 인증이 필요하고, Firebase 클라이언트를 쓰는 `seller`·`driver`·`admin`만 받는다(`consumer`는 403).
 
 ## 8. 사용자 프로필 공통 타입
 
@@ -431,6 +436,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-10 | access/refresh token `typ`·`aud`·HS256 검증(이전 발급 token 호환), logout·refresh 재사용 감지의 Firebase refresh token 폐기, `firebase-token` 역할 제한, email login 응답 균일화, 카카오 첫 로그인 사용자 생성 단일화 반영 |
 | 2026-10-04 | 기사 앱 허용 역할을 `driver`·`admin`에서 `driver`로 좁힘(사용자 결정). API `targetRole: driver` 관리자 거절·구분 code, 기사 앱 signIn·jwt·proxy 차단과 로그인 안내 계약 반영 |
 | 2026-09-28 | revocation window를 즉시(다음 요청)로 결정(D2)하고 JwtStrategy·Firestore Rules 실시간 확인 근거와 Preview 세션 수명주기 E2E 12건 증거를 연결, 로그아웃 서버 폐기는 출시 후 과제로 분리 |
 | 2026-08-24 | Task 2F-B candidate에서 public driver register/login approval gate, Kakao 자동승인 방지, JWT/current-user 경계를 검증하고 `AUTH-SESSION-CLAIM-REVOCATION`은 OPEN으로 유지 |
