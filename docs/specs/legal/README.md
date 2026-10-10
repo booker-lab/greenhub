@@ -2,7 +2,7 @@
 
 # Legal 문서 라우터와 실제 사용 정합성 게이트
 
-> 최종 정합화: 2026-08-30 KST
+> 최종 정합화: 2026-10-10 KST
 > 상태: Current
 
 ## 현재 정본
@@ -97,13 +97,14 @@ provider 승인, 실제 결제·환불·알림 발송을 승인했다는 뜻이 
 | 고객이 요청하지 않은 환불의 취소 알림톡(#420, 미배포) | `VERIFIED` — 기존 8종 `ORDER_CANCELLED`·템플릿 변수 범위 | `apps/api/src/notifications/refund-notice-reasons.ts`; 사유 문구 확정은 BACKLOG `SILENT-REFUND-CUSTOMER-NOTICE` |
 | ALIGO 고정 IP 프록시(Fixie, 운영 중) | 개인정보 처리위탁 고지 대상 아님 | ALIGO 호출은 HTTPS(`kakaoapi.aligo.in`, `apis.aligo.in`)를 undici `ProxyAgent` 터널로 보내 프록시는 목적지 호스트·접속 정보만 본다(`apps/api/src/notifications/aligo.client.ts`) |
 | 운영자 텔레그램 알림(#421, 미배포) | `IMPLEMENTED / UNVERIFIED` — 고객 정보 없음 | 운영 기록 알림은 고정 제목·문구·유형, 아침 요약은 건수·금액만 보낸다(`apps/api/src/ops-alerts/`, `operation-issue-writer.service.ts`). 고객 정보가 실리지 않음을 고정하는 직접 테스트는 없다 |
-| 기사 카카오맵 길찾기(#418, 미배포) | `DECISION REQUIRED` | 기사가 누르면 배송지 기본주소(이름·동·호수 제외) 또는 거점 좌표가 `map.kakao.com` 링크로 Kakao에 전달된다(`apps/driver/src/app/map/_lib/map-navigation-link.ts`). `/privacy` 4절은 Kakao를 로그인·우편번호 검색으로만 적는다 |
-| 늦은 결제 자동 환불(2026-07부터 존재) | `COVERAGE GAP` — 약관 문구 | 결제가 확인됐지만 예약 만료 뒤 회차 한도가 마감되면 주문을 받지 않고 자동 환불한다(`apps/api/src/payments/payment-finalization.service.ts`). `/terms` 제7조·제8조에는 이 경우가 없다 |
-| 개인정보 보호책임자 | `IMPLEMENTATION FINDING` — 공개 문서 누락 | `/privacy`에 보호책임자(성명 또는 담당 부서와 연락처) 항목이 없고 고객센터 연락처만 있다. 처리방침 필수 기재 사항이다 |
+| 기사 카카오맵 길찾기(#418, 미배포) | `DECISION REQUIRED` → 고지하기로 결정, 2026-11-01 개정판 `/privacy` 4절에 반영 | 기사가 누르면 배송지 기본주소(이름·동·호수 제외) 또는 거점 좌표가 `map.kakao.com` 링크로 Kakao에 전달된다(`apps/driver/src/app/map/_lib/map-navigation-link.ts`). `/privacy` 4절은 Kakao를 로그인·우편번호 검색으로만 적는다 |
+| 늦은 결제 자동 환불(2026-07부터 존재) | `COVERAGE GAP` → 2026-11-01 개정판 `/terms` 제7조에 반영 | 결제가 확인됐지만 예약 만료 뒤 회차 한도가 마감되면 주문을 받지 않고 자동 환불한다(`apps/api/src/payments/payment-finalization.service.ts`). `/terms` 제7조·제8조에는 이 경우가 없다 |
+| 개인정보 보호책임자 | `IMPLEMENTATION FINDING` → 2026-11-01 개정판 `/privacy` 9절에 대표자로 반영(사용자 결정) | `/privacy`에 보호책임자(성명 또는 담당 부서와 연락처) 항목이 없고 고객센터 연락처만 있다. 처리방침 필수 기재 사항이다 |
 | 통신판매업 신고번호 | `DECISION REQUIRED` | footer는 확정 전 노출을 막는다(`BusinessInfoFooter.test.mjs`). 2026-11-01 실제 판매 시작 전에 신고 대상 여부를 사람이 판단한다 |
 
-후속 작업과 완료 조건은 `docs/BACKLOG.md`의 `법무·출시 후보 정합성`이 소유한다. 공개 문서 변경은
-문구 결정·사용자 승인 뒤 별도 Task로 하고, 변경 이력에 남긴다.
+후속 작업과 완료 조건은 `docs/BACKLOG.md`의 `법무·출시 후보 정합성`이 소유한다. 위 세 항목은
+2026-10-10 사용자 결정(보호책임자=대표자, 카카오맵 고지, 시행일 2026-11-01)으로 개정판에 반영했다.
+개정판은 운영 배포 대기 묶음과 함께 나가며, 배포 전까지 운영에는 2026-08-30 판이 보인다.
 
 ## 변경 범위와 검증 게이트
 
@@ -132,6 +133,7 @@ API 문서와 그 focused test다. application source의 A/B/C 동작, Driver `S
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-10 | 2026-11-01 시행 개정판 작성: `/privacy` 개인정보 보호책임자(9절)·카카오맵 길 안내(4절), `/terms` 늦은 결제 환불(제7조) |
 | 2026-10-10 | 8/30 판 이후 실제 흐름 재대조(공개 문서 변경 없음): 보호책임자 누락, 기사 길찾기 고지·통신판매업 신고 결정 필요, 늦은 결제 자동 환불 약관 공백 기록 |
 | 2026-08-30 | RC-D 실제 사용 정합화: 회차 거래·취소·환불·배송 보류·유료 재배송, PortOne/PG·ALIGO, 내부 판매·배송 접근, 파일럿 마케팅 미사용 반영 |
 | 2026-08-24 | 이전 비판매 baseline과 선택 마케팅·직접 주문 read의 구현 finding 기록 |

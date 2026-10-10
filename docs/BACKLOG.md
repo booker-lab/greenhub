@@ -489,10 +489,11 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [ ] 주문 성립·취소·환불·배송·재배송비·보류 실제 정책 반영 — 8/30 판에 반영됐고, 남은 공백은 아래 `LEGAL-LATE-PAYMENT-REFUND-TERMS`
 - [ ] settlement 및 payment 검증 결과 반영
 - [x] PortOne/PG·ALIGO 전화번호·메시지 처리 경계 반영 — 8/30 판 `/privacy` 4절. ALIGO 고정 IP 프록시는 HTTPS 터널이라 위탁 고지 대상 아님(2026-10-10)
-- [ ] **`LEGAL-PRIVACY-OFFICER`** (파일럿 2026-11-01 전): `/privacy`에 개인정보 보호책임자(성명 또는 담당 부서와 연락처) 항목을 넣는다. 사용자가 책임자를 정한 뒤 공개 문서 변경 Task로 하고 `legal-documents.test.mjs`에 항목 존재를 고정한다.
+- [x] **`LEGAL-PRIVACY-OFFICER`**: 2026-10-10 사용자 결정(대표자)으로 `/privacy` 9절에 반영, `legal-documents.test.mjs`에 고정. 2026-11-01 시행 개정판이며 운영 배포 대기 묶음과 함께 나간다.
 - [ ] **`LEGAL-MAIL-ORDER-REGISTRATION`** (파일럿 전, 사람 결정): 통신판매업 신고 대상 여부를 정한다. 신고하면 번호를 footer에 넣고 `BusinessInfoFooter.test.mjs`의 미노출 단언을 바꾼다.
-- [ ] **`LEGAL-DRIVER-KAKAOMAP-NOTICE`** (운영 배포 대기 묶음 배포 전, 사람 결정): 기사 카카오맵 길찾기(#418)가 배송지 기본주소·거점 좌표를 Kakao에 넘기는 것을 `/privacy` 4절에 적을지 정한다. 적지 않기로 하면 그 판단 근거를 legal README에 남긴다.
-- [ ] **`LEGAL-LATE-PAYMENT-REFUND-TERMS`** (파일럿 전): 결제가 확인됐어도 예약 만료 뒤 회차 한도가 마감되면 주문이 성립하지 않고 자동 환불된다는 점을 `/terms` 제7조 또는 제8조에 적을지 정하고, 적으면 문구를 반영한다.
+- [x] **`LEGAL-DRIVER-KAKAOMAP-NOTICE`**: 2026-10-10 사용자 결정(고지)으로 `/privacy` 4절에 반영.
+- [x] **`LEGAL-LATE-PAYMENT-REFUND-TERMS`**: `/terms` 제7조에 반영(2026-11-01 시행).
+- [ ] **`LEGAL-REVISION-EFFECTIVE-DATE`**: 개정판 시행일 2026-11-01은 운영 배포가 그보다 앞서야 성립한다. 운영 배포 대기 묶음 배포가 11/1 이후로 밀리면 시행일과 `legal-documents.test.mjs`를 함께 고친다.
 - [ ] `OPS-ALERT-NO-PII-TEST` (선택): 운영자 텔레그램 알림에 고객 이름·전화·주소가 실리지 않음을 직접 테스트로 고정한다(현재 코드상 고정 문구만 보냄).
 - [x] Pilot `MARKETING_NOT_USED_IN_PILOT` 정책과 공개 legal/source wording 정합화 — 2026-10-10 대조(위 DOC_DELTA)
 - [ ] exact release SHA와 필요한 release verification

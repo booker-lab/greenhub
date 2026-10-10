@@ -328,7 +328,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 ## 판매 활성화 legal 상태
 
 - production `/privacy`, `/terms`는 시행일 2026-08-30 판이며 2026-09-28 출시 배포(`197f84a4`)부터 운영에 반영됐다. 8/30 판은 회차 거래·취소·환불·배송 보류·유료 재배송, PortOne/PG·ALIGO, 내부 판매·배송 접근, 파일럿 마케팅 미사용을 반영했다(`docs/specs/legal/README.md` 개정 이력).
-- 2026-10-10 8/30 판 이후 흐름을 재대조했다(`docs/specs/legal/README.md`). 파일럿 전 남은 일: 개인정보 보호책임자 항목 추가, 통신판매업 신고 여부 결정, 늦은 결제 자동 환불 약관 문구. 운영 배포 대기 묶음 배포 전: 기사 카카오맵 길찾기 고지 여부 결정. 상세는 BACKLOG `법무·출시 후보 정합성`.
+- 2026-10-10 8/30 판 이후 흐름을 재대조했다(`docs/specs/legal/README.md`). 보호책임자(대표자)·카카오맵 길 안내·늦은 결제 환불을 담은 2026-11-01 시행 개정판을 만들었고 운영 배포 대기 묶음과 함께 나간다(배포가 11/1 이후로 밀리면 시행일을 다시 정함). 남은 일: 통신판매업 신고 여부 결정. 상세는 BACKLOG `법무·출시 후보 정합성`.
 - 2026-08-19 consumer legal baseline의 “마케팅 수신 동의 기능 없음” 사실은 현재 코드와 달라 `docs/specs/legal/README.md`의 2026-08-24 errata가 해당 구현 사실을 우선한다.
 - Pilot marketing policy는 `MARKETING_NOT_USED_IN_PILOT`이며 공개 문서에 반영됐다(위 7절).
 - broad read를 legal 문구로 정당화하지 않는다.
