@@ -9,6 +9,7 @@ import { FirestoreService } from '../firestore/firestore.service';
 import { RetentionService } from '../retention/retention.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
+import { normalizeKoreanMobilePhone } from './_lib/korean-mobile-phone';
 
 @Injectable()
 export class RoundOrderCreateService {
@@ -20,6 +21,12 @@ export class RoundOrderCreateService {
 
   async create(storeId: string, userId: string, dto: CreateOrderDto) {
     this.assertRequest(dto);
+    const deliveryPhone = normalizeKoreanMobilePhone(dto.deliveryPhone);
+    if (!deliveryPhone) {
+      throw new BadRequestException(
+        '받는 분 휴대폰 번호를 확인해 주세요. 휴대폰 번호만 받을 수 있어요(예: 010-1234-5678).',
+      );
+    }
     const requestId = dto.clientOrderRequestId!;
     const orderId = this.stableId(storeId, userId, requestId);
     const payloadHash = this.payloadHash(storeId, userId, dto);
@@ -27,7 +34,14 @@ export class RoundOrderCreateService {
     let result: Record<string, unknown> | null = null;
 
     await this.firestore.runTransaction(async (tx: any) => {
-      const existingSnap = await tx.get(orderRef);
+      // 읽기를 한 번에 보내 트랜잭션 시간을 줄인다(오픈 직후 같은 문서를 여러 결제가 다툰다).
+      const counter = this.orderCounterRef();
+      const [existingSnap, storeSnap, userSnap, counterSnap] = await Promise.all([
+        tx.get(orderRef),
+        tx.get(this.firestore.doc(`stores/${storeId}`)),
+        tx.get(this.firestore.doc(`users/${userId}`)),
+        tx.get(counter.ref),
+      ]);
       if (existingSnap.exists) {
         const existing = existingSnap.data() as Record<string, any>;
         if (existing['clientOrderPayloadHash'] !== payloadHash) {
@@ -37,15 +51,14 @@ export class RoundOrderCreateService {
         return;
       }
 
-      const [storeSnap, userSnap] = await Promise.all([
-        tx.get(this.firestore.doc(`stores/${storeId}`)),
-        tx.get(this.firestore.doc(`users/${userId}`)),
-      ]);
       if (!storeSnap.exists || storeSnap.data()?.['salesMode'] !== 'round_direct') {
         throw new NotFoundException('회차 주문 스토어를 찾을 수 없습니다.');
       }
 
-      const orderCounter = await this.nextOrderNumber(tx);
+      const orderCounter = {
+        ...counter,
+        seq: (counterSnap.exists ? counterSnap.data()?.['seq'] : 0) + 1,
+      };
       const reservation = await this.capacity.reserveCheckoutInTransaction(tx, {
         storeId,
         roundId: dto.roundId!,
@@ -94,7 +107,7 @@ export class RoundOrderCreateService {
         deliveryMethod: 'direct',
         deliveryFee: 0,
         deliveryAddress: dto.deliveryAddress,
-        deliveryPhone: dto.deliveryPhone,
+        deliveryPhone,
         requestNote: normalizeRequestNote(dto.requestNote),
         requestedDeliveryDate: dto.requestedDeliveryDate ?? null,
         schemaVersion: 2,
@@ -161,13 +174,10 @@ export class RoundOrderCreateService {
     };
   }
 
-  private async nextOrderNumber(tx: any) {
+  private orderCounterRef() {
     const kstDate = new Date(Date.now() + 9 * 3600 * 1000);
     const yyyymmdd = kstDate.toISOString().slice(0, 10).replace(/-/g, '');
-    const counterRef = this.firestore.doc(`orderCounters/${yyyymmdd}`);
-    const counterSnap = await tx.get(counterRef);
-    const seq = (counterSnap.exists ? counterSnap.data()?.['seq'] : 0) + 1;
-    return { ref: counterRef, seq, yyyymmdd };
+    return { ref: this.firestore.doc(`orderCounters/${yyyymmdd}`), yyyymmdd };
   }
 
   private stableId(storeId: string, userId: string, requestId: string) {

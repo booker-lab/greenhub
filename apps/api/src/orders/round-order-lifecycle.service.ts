@@ -33,6 +33,7 @@ import {
   throwDriverOrderNotFound,
   throwDriverOrderStateConflict,
 } from './driver-order-error';
+import { customerOrderLabel } from '../notifications/customer-order-label';
 
 type OrderRecord = Record<string, any>;
 
@@ -219,7 +220,10 @@ export class RoundOrderLifecycleService {
       await this.notifications.sendToUser(
         order['userId'],
         'ORDER_CANCELLED',
-        { orderId, reason: REFUND_NOTICE_REASONS[kind] },
+        {
+          orderId: customerOrderLabel(order, orderId),
+          reason: REFUND_NOTICE_REASONS[kind],
+        },
         orderId,
         refundNoticeIdempotencyKey(kind, orderId),
       );
