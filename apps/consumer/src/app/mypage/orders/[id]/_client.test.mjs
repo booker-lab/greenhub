@@ -850,7 +850,20 @@ test('이전 데이터가 있는 refresh 실패는 stale을 유지하고 재시�
   assert.match(source, /표시된 정보가 최신이 아닐 수 있습니다/);
   assert.match(source, /\(status === 'network' \|\| status === 'server'\)/);
   assert.match(source, /loading=\{retrying\}/);
-  assert.match(hookSource, /setInterval\(\(\) => void fetchOrder\(\), 3000\)/);
+  // 자동 확인은 결제 확인 중(PENDING) 주문만 2분 안에서 하고, 그 밖에는 다시 시도(refetch)로 읽는다.
+  assert.match(
+    hookSource,
+    /setTimeout\(\(\) => void fetchOrder\(\), ORDER_STATUS_POLL_INTERVAL_MS\)/,
+  );
+  assert.match(hookSource, /shouldPollOrderStatus\(lastStatus, Date\.now\(\) - pollStartedAt\)/);
+  assert.doesNotMatch(hookSource, /setInterval/);
+});
+
+test('취소 사유는 내부 코드 대신 고객이 읽을 문장으로 보인다', () => {
+  assert.match(source, /import \{ formatCancelReason \} from '@\/lib\/order-cancel-reason'/);
+  assert.match(source, /const cancelReasonText = formatCancelReason\(detail\.cancelReason\)/);
+  assert.match(source, /사유: \{cancelReasonText\}/);
+  assert.doesNotMatch(source, /사유: \{detail\.cancelReason\}/);
 });
 
 const {
