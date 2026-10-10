@@ -469,6 +469,7 @@ describe('결제 facade 위임', () => {
       {
         isOrderChargePaymentId: jest.fn().mockReturnValue(false),
       } as never,
+      { createOrMergeIssue: jest.fn() } as never,
     );
 
     await service.handleWebhook({
@@ -496,6 +497,7 @@ describe('결제 facade 위임', () => {
       finalization as never,
       {} as never,
       {} as never,
+      { createOrMergeIssue: jest.fn() } as never,
     );
 
     await service.cleanupPendingOrders();
@@ -559,6 +561,7 @@ describe('재배송비 결제 수명주기', () => {
       {} as never,
       {} as never,
       fixture.service,
+      { createOrMergeIssue: jest.fn() } as never,
     );
 
     await expect(
@@ -583,6 +586,7 @@ describe('재배송비 결제 수명주기', () => {
       {} as never,
       {} as never,
       fixture.service,
+      { createOrMergeIssue: jest.fn() } as never,
     );
 
     await facade.handleWebhook({
@@ -643,5 +647,259 @@ describe('재배송비 결제 수명주기', () => {
       refundedAt: expect.anything(),
       refundClaim: null,
     });
+  });
+});
+
+describe('결제 확정 뒤 결제사 되돌림 웹훅', () => {
+  function makeFacade(initial: Record<string, Data>, getPayment?: jest.Mock) {
+    const { firestore, records } = makeFirestore(initial);
+    const portone = {
+      getPayment: getPayment ?? jest.fn().mockResolvedValue(paymentDataWithStatus('CANCELLED')),
+    };
+    const finalization = {
+      finalizePaidOrder: jest.fn(),
+      cancelPendingOrder: jest.fn().mockResolvedValue(false),
+      recordPaymentLookupFailure: jest.fn(),
+    };
+    const issueWriter = { createOrMergeIssue: jest.fn().mockResolvedValue({ id: 'issue-1' }) };
+    const service = new PaymentsService(
+      firestore as never,
+      portone as never,
+      finalization as never,
+      { refundByOrderId: jest.fn() } as never,
+      { isOrderChargePaymentId: jest.fn().mockReturnValue(false) } as never,
+      issueWriter as never,
+    );
+    return { service, records, portone, finalization, issueWriter };
+  }
+
+  const acceptedOrder = { id: 'order-1', storeId: 'store-1', status: 'ACCEPTED' };
+  const paidPayment = { id: 'order-1', orderId: 'order-1', status: 'PAID', amount: 100000 };
+
+  it('확정 주문의 결제사 취소는 운영 확인 기록을 남기고 재전송은 같은 기록으로 합친다', async () => {
+    const fixture = makeFacade({
+      'orders/order-1': acceptedOrder,
+      'payments/order-1': paidPayment,
+      'settlements/order-1': { id: 'order-1', status: 'confirmed' },
+    });
+    const webhook = {
+      type: 'Transaction.Cancelled',
+      data: { paymentId: 'order-1', storeId: 'portone-store', cancellationId: 'cancel-1' },
+    } as never;
+
+    await expect(fixture.service.handleWebhook(webhook)).resolves.toEqual({
+      ok: true,
+      reason: 'provider_reversal_recorded',
+    });
+    await fixture.service.handleWebhook(webhook);
+
+    expect(fixture.issueWriter.createOrMergeIssue).toHaveBeenCalledTimes(2);
+    const [first] = fixture.issueWriter.createOrMergeIssue.mock.calls[0];
+    const [second] = fixture.issueWriter.createOrMergeIssue.mock.calls[1];
+    expect(first).toEqual(
+      expect.objectContaining({
+        storeId: 'store-1',
+        orderId: 'order-1',
+        type: 'PROVIDER_REVERSAL_DETECTED',
+        severity: 'critical',
+        idempotencyKey: 'provider-reversal:order-1:Transaction.Cancelled:cancel-1',
+        latestSnapshot: {
+          orderStatus: 'ACCEPTED',
+          paymentStatus: 'PAID',
+          providerStatus: 'CANCELLED',
+          providerEvent: 'Transaction.Cancelled',
+          settlementStatus: 'confirmed',
+          failureStage: 'provider_reversal',
+        },
+      }),
+    );
+    expect(second.idempotencyKey).toBe(first.idempotencyKey);
+    // 주문·결제·정산 문서는 바꾸지 않는다.
+    expect(fixture.records.get('orders/order-1')).toEqual(acceptedOrder);
+    expect(fixture.records.get('payments/order-1')).toEqual(paidPayment);
+    expect(fixture.records.get('settlements/order-1')).toEqual({
+      id: 'order-1',
+      status: 'confirmed',
+    });
+  });
+
+  it('부분 취소마다 다른 기록을 남긴다', async () => {
+    const fixture = makeFacade({ 'orders/order-1': { ...acceptedOrder, status: 'DELIVERED' } });
+
+    for (const cancellationId of ['cancel-1', 'cancel-2']) {
+      await fixture.service.handleWebhook({
+        type: 'Transaction.PartialCancelled',
+        data: { paymentId: 'order-1', storeId: 'portone-store', cancellationId },
+      } as never);
+    }
+
+    const keys = fixture.issueWriter.createOrMergeIssue.mock.calls.map(
+      ([input]) => input.idempotencyKey,
+    );
+    expect(keys).toEqual([
+      'provider-reversal:order-1:Transaction.PartialCancelled:cancel-1',
+      'provider-reversal:order-1:Transaction.PartialCancelled:cancel-2',
+    ]);
+  });
+
+  it.each<[string, Record<string, Data>]>([
+    ['PENDING 주문', { 'orders/order-1': { ...acceptedOrder, status: 'PENDING' } }],
+    ['우리 쪽에서 취소한 주문', { 'orders/order-1': { ...acceptedOrder, status: 'CANCELLED' } }],
+    [
+      '환불 claim이 걸린 결제',
+      {
+        'orders/order-1': acceptedOrder,
+        'payments/order-1': { ...paidPayment, refundClaim: { owner: 'payment-refund' } },
+      },
+    ],
+    [
+      '환불이 끝난 결제',
+      {
+        'orders/order-1': acceptedOrder,
+        'payments/order-1': { ...paidPayment, status: 'CANCELLED', refundedAt: new Date() },
+      },
+    ],
+  ])('%s의 취소 웹훅은 기록하지 않는다', async (_label, initial) => {
+    const fixture = makeFacade(initial);
+
+    await fixture.service.handleWebhook({
+      type: 'Transaction.Cancelled',
+      data: { paymentId: 'order-1', storeId: 'portone-store' },
+    } as never);
+
+    expect(fixture.finalization.cancelPendingOrder).toHaveBeenCalledWith(
+      'order-1',
+      'payment_failed',
+    );
+    expect(fixture.issueWriter.createOrMergeIssue).not.toHaveBeenCalled();
+    expect(fixture.portone.getPayment).not.toHaveBeenCalled();
+  });
+
+  it('결제 실패 웹훅은 확정 주문에서 기존처럼 아무 기록도 남기지 않는다', async () => {
+    const fixture = makeFacade({ 'orders/order-1': acceptedOrder });
+
+    await expect(
+      fixture.service.handleWebhook({
+        type: 'Transaction.Failed',
+        data: { paymentId: 'order-1', storeId: 'portone-store' },
+      } as never),
+    ).resolves.toEqual({ ok: true });
+
+    expect(fixture.issueWriter.createOrMergeIssue).not.toHaveBeenCalled();
+  });
+
+  it('분쟁은 환불된 결제여도 기록하고 결제사 조회 실패는 상태로만 남긴다', async () => {
+    const fixture = makeFacade(
+      {
+        'orders/order-1': { ...acceptedOrder, status: 'CANCELLED' },
+        'payments/order-1': { ...paidPayment, status: 'CANCELLED', refundedAt: new Date() },
+      },
+      jest.fn().mockRejectedValue(new PortoneError(503, 'TEMPORARY_ERROR', 'authorization=민감값')),
+    );
+
+    await fixture.service.handleWebhook({
+      type: 'Transaction.DisputeCreated',
+      data: { paymentId: 'order-1', storeId: 'portone-store' },
+    } as never);
+
+    expect(fixture.issueWriter.createOrMergeIssue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'PROVIDER_REVERSAL_DETECTED',
+        title: '결제사 분쟁 접수',
+        idempotencyKey: 'provider-reversal:order-1:Transaction.DisputeCreated:-',
+        latestSnapshot: expect.objectContaining({
+          orderStatus: 'CANCELLED',
+          providerStatus: 'LOOKUP_FAILED',
+          settlementStatus: null,
+        }),
+      }),
+    );
+    expect(JSON.stringify(fixture.issueWriter.createOrMergeIssue.mock.calls)).not.toMatch(/민감값/);
+  });
+});
+
+describe('PENDING 정리 cron 동시성', () => {
+  function makeCleanup(orderCount: number) {
+    const initial: Record<string, Data> = {};
+    for (let index = 0; index < orderCount; index += 1) {
+      initial[`orders/order-${index}`] = { id: `order-${index}`, status: 'PENDING' };
+    }
+    const { firestore } = makeFirestore(initial);
+    let active = 0;
+    let maxActive = 0;
+    const releases: Array<() => void> = [];
+    const portone = {
+      getPayment: jest.fn(async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active -= 1;
+        return paymentDataWithStatus('FAILED');
+      }),
+    };
+    const finalization = {
+      finalizePaidOrder: jest.fn(),
+      cancelPendingOrder: jest.fn().mockResolvedValue(true),
+      recordPaymentLookupFailure: jest.fn(),
+    };
+    const service = new PaymentsService(
+      firestore as never,
+      portone as never,
+      finalization as never,
+      {} as never,
+      {} as never,
+      { createOrMergeIssue: jest.fn() } as never,
+    );
+    const tick = () => new Promise((resolve) => setImmediate(resolve));
+    // 대기 중인 PortOne 응답을 풀어 주며 run이 끝날 때까지 기다린다.
+    const settle = async (run: Promise<unknown>) => {
+      let done = false;
+      const tracked = run.finally(() => {
+        done = true;
+      });
+      while (!done) {
+        await tick();
+        for (const release of releases.splice(0)) release();
+      }
+      return tracked;
+    };
+    return { service, portone, finalization, settle, tick, maxActive: () => maxActive };
+  }
+
+  it('PortOne 조회를 최대 4건씩만 동시에 보내고 모든 주문을 처리한다', async () => {
+    const fixture = makeCleanup(10);
+
+    await fixture.settle(fixture.service.cleanupPendingOrders());
+
+    expect(fixture.portone.getPayment).toHaveBeenCalledTimes(10);
+    expect(fixture.maxActive()).toBe(4);
+    expect(fixture.finalization.cancelPendingOrder).toHaveBeenCalledTimes(10);
+  });
+
+  it('이전 실행이 끝나기 전의 다음 실행은 건너뛰고, 끝난 뒤에는 다시 실행한다', async () => {
+    const fixture = makeCleanup(2);
+
+    const first = fixture.service.cleanupPendingOrders();
+    await fixture.tick();
+    await fixture.service.cleanupPendingOrders();
+    expect(fixture.portone.getPayment).toHaveBeenCalledTimes(2);
+    await fixture.settle(first);
+
+    await fixture.settle(fixture.service.cleanupPendingOrders());
+    expect(fixture.portone.getPayment).toHaveBeenCalledTimes(4);
+  });
+
+  it('한 건의 처리 오류는 나머지 주문을 막지 않고, 실행이 끝난 뒤 guard를 푼다', async () => {
+    const fixture = makeCleanup(3);
+    fixture.finalization.cancelPendingOrder.mockRejectedValueOnce(new Error('tx 실패'));
+    fixture.finalization.recordPaymentLookupFailure.mockRejectedValueOnce(new Error('기록 실패'));
+
+    await expect(fixture.settle(fixture.service.cleanupPendingOrders())).rejects.toThrow(
+      '기록 실패',
+    );
+    expect(fixture.finalization.cancelPendingOrder).toHaveBeenCalledTimes(3);
+
+    await fixture.settle(fixture.service.cleanupPendingOrders());
+    expect(fixture.portone.getPayment).toHaveBeenCalledTimes(6);
   });
 });
