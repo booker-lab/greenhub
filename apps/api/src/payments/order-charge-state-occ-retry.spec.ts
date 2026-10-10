@@ -23,8 +23,8 @@ function chargeIdOf(paymentId: string): string {
   return paymentId.slice('order-charge-'.length);
 }
 
-function makeService(occ: Occ, getPayment: jest.Mock) {
-  const portone = { getPayment, refund: jest.fn() } as never;
+function makeService(occ: Occ, getPayment: jest.Mock, refund: jest.Mock = jest.fn()) {
+  const portone = { getPayment, refund } as never;
   return new OrderChargePaymentService(occ.firestore as never, portone);
 }
 
@@ -118,7 +118,7 @@ describe('OrderCharge state OCC retry purity', () => {
     });
 
     it.each([
-      ['wrong status', { status: 'FAILED' }],
+      ['wrong status', { status: 'CANCELLED' }],
       ['wrong type', { type: 'OTHER' }],
       ['wrong paymentId', { portonePaymentId: 'order-charge-other' }],
     ])('3a. charge %s keeps BadRequestException', async (_label, overrides) => {
@@ -149,29 +149,33 @@ describe('OrderCharge state OCC retry purity', () => {
       expect(occ.getData('orderCharges/c-pm-1')).toMatchObject({ status: 'PENDING' });
     });
 
-    it('4a. order missing keeps BadRequestException', async () => {
+    it('4a. order missing records the provider-confirmed payment and refunds it', async () => {
       const occ = createOccFirestore();
       seedCharge(occ, 'c-no-order-1', 'order-no-order-1');
       const getPayment = jest.fn().mockResolvedValue(paidPaymentData(FEE));
-      const service = makeService(occ, getPayment);
+      const refund = jest.fn().mockResolvedValue(undefined);
+      const service = makeService(occ, getPayment, refund);
 
       await expect(
         service.handleWebhook('Transaction.Paid', 'order-charge-c-no-order-1'),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(occ.getData('orderCharges/c-no-order-1')).toMatchObject({ status: 'PENDING' });
+      ).resolves.toEqual({ ok: true, status: 'PAID', reason: 'unneeded_charge_refund' });
+      expect(refund).toHaveBeenCalledTimes(1);
+      expect(occ.getData('orderCharges/c-no-order-1')).toMatchObject({ status: 'REFUNDED' });
     });
 
-    it('4b. linkage mismatch keeps BadRequestException', async () => {
+    it('4b. linkage mismatch records the payment and refunds instead of leaving it unrecorded', async () => {
       const occ = createOccFirestore();
       seedLinkedPending(occ, 'c-link-1', 'order-link-1');
       occ.updateOutsideTransaction('orders/order-link-1', { redeliveryChargeId: 'other' });
       const getPayment = jest.fn().mockResolvedValue(paidPaymentData(FEE));
-      const service = makeService(occ, getPayment);
+      const refund = jest.fn().mockResolvedValue(undefined);
+      const service = makeService(occ, getPayment, refund);
 
       await expect(
         service.handleWebhook('Transaction.Paid', 'order-charge-c-link-1'),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(occ.getData('orderCharges/c-link-1')).toMatchObject({ status: 'PENDING' });
+      ).resolves.toEqual({ ok: true, status: 'PAID', reason: 'unneeded_charge_refund' });
+      expect(refund).toHaveBeenCalledTimes(1);
+      expect(occ.getData('orderCharges/c-link-1')).toMatchObject({ status: 'REFUNDED' });
     });
 
     it('5. normal PENDING commits PAID and returns PAID', async () => {

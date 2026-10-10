@@ -20,6 +20,7 @@ const PAYMENT_ID_PREFIX = 'order-charge-';
 const REFUND_CLAIM_MS = 5 * 60 * 1000;
 const REFUND_OWNER = 'order-charge-refund';
 const CANCELLED_ORDER_CHARGE_REFUND_REASON = '주문 취소에 따른 재배송비 환불';
+const UNNEEDED_CHARGE_REFUND_REASON = '재배송이 필요 없어진 재배송비 결제 환불';
 // 재배송비 결제가 실제로 필요한 주문 상태(보류 중이거나 결제 후 재개 대기).
 const CHARGE_PAYABLE_ORDER_STATUSES = ['DELIVERY_HELD', 'PREPARING'];
 
@@ -82,7 +83,7 @@ export class OrderChargePaymentService {
     // Retry purity: the post-transaction decision must come only from the
     // committed attempt's return value. An outer `let result` would leak an
     // aborted attempt's decision across OCC retry.
-    const result: Record<string, unknown> & { refundRequired?: boolean } =
+    const result: Record<string, unknown> & { refundReason?: string } =
       await this.firestore.runTransaction(async (tx) => {
         const chargeSnap = await tx.get(chargeRef);
         if (!chargeSnap.exists) return { ok: false, reason: 'charge_not_found' };
@@ -99,12 +100,21 @@ export class OrderChargePaymentService {
           const paidOrder = paidOrderSnap.exists
             ? (paidOrderSnap.data() as Record<string, any>)
             : undefined;
-          return isOrderCancelledOrCancelling(paidOrder)
-            ? { ok: true, reason: 'already_processed', refundRequired: true }
+          // 필요 없어진 결제로 기록된 청구도 환불이 끝날 때까지 웹훅 재전송이 환불을 이어 간다.
+          if (isOrderCancelledOrCancelling(paidOrder)) {
+            return {
+              ok: true,
+              reason: 'already_processed',
+              refundReason: CANCELLED_ORDER_CHARGE_REFUND_REASON,
+            };
+          }
+          return charge['unneededPaidAt']
+            ? { ok: true, reason: 'already_processed', refundReason: UNNEEDED_CHARGE_REFUND_REASON }
             : { ok: true, reason: 'already_processed' };
         }
+        // 실패 웹훅이 먼저 와 FAILED가 된 청구도 PortOne이 PAID를 확정하면 실제 결제다.
         if (
-          charge['status'] !== 'PENDING' ||
+          !['PENDING', 'FAILED'].includes(charge['status']) ||
           charge['type'] !== 'REDELIVERY_FEE' ||
           charge['portonePaymentId'] !== paymentId ||
           paymentData.status !== 'PAID' ||
@@ -115,7 +125,7 @@ export class OrderChargePaymentService {
 
         const orderSnap = await tx.get(this.firestore.doc(`orders/${charge['orderId']}`));
         const order = orderSnap.data() as Record<string, any> | undefined;
-        if (!orderSnap.exists || order?.['storeId'] !== charge['storeId']) {
+        if (orderSnap.exists && order?.['storeId'] !== charge['storeId']) {
           throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
         }
         const now = this.firestore.Timestamp.now();
@@ -136,10 +146,11 @@ export class OrderChargePaymentService {
             ok: true,
             status: 'PAID',
             reason: 'cancelled_order_refund',
-            refundRequired: true,
+            refundReason: CANCELLED_ORDER_CHARGE_REFUND_REASON,
           };
         }
         if (
+          !orderSnap.exists ||
           !CHARGE_PAYABLE_ORDER_STATUSES.includes(order?.['status']) ||
           !isCurrentRedeliveryPaymentRequired({ ...order, id: charge['orderId'] }) ||
           !isCurrentRedeliveryChargeLinked(
@@ -148,17 +159,25 @@ export class OrderChargePaymentService {
             chargeId,
           )
         ) {
-          throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
+          // 승인된 돈인데 현재 보류에 필요 없는 결제다(주문 없음·보류 해소·다른 보류로 교체·배송 재개 뒤).
+          // 400으로 끝내면 결제만 되고 기록·환불이 남지 않으므로 결제를 기록하고 환불한다.
+          tx.update(chargeRef, { ...paidUpdate, unneededPaidAt: now });
+          return {
+            ok: true,
+            status: 'PAID',
+            reason: 'unneeded_charge_refund',
+            refundReason: UNNEEDED_CHARGE_REFUND_REASON,
+          };
         }
         tx.update(chargeRef, paidUpdate);
         return { ok: true, status: 'PAID' };
       });
-    const { refundRequired, ...response } = result;
-    if (refundRequired) {
-      const refund = await this.refundCharge(chargeRef, CANCELLED_ORDER_CHARGE_REFUND_REASON);
+    const { refundReason, ...response } = result;
+    if (refundReason) {
+      const refund = await this.refundCharge(chargeRef, refundReason);
       if (refund === 'claim_in_flight') {
         // 다른 시도가 claim을 잡은 뒤 환불 POST나 UNKNOWN 기록 전에 멈췄을 수 있다.
-        // 취소 주문의 PAID 재배송비를 다시 훑는 다른 경로는 없으므로 200으로 끝내지 않고
+        // 취소 주문·필요 없어진 PAID 재배송비를 다시 훑는 다른 경로는 없으므로 200으로 끝내지 않고
         // 재시도 가능한 응답을 준다. PortOne 재전송이 claim 만료 뒤 takeover로 환불을 끝낸다.
         throw new ServiceUnavailableException(
           '재배송비 환불이 아직 끝나지 않았습니다. 잠시 후 다시 시도해 주세요.',

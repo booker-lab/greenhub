@@ -99,7 +99,7 @@ afterEach(() => {
 });
 
 describe('Driver Firebase local binding (FE-PILOT-DRIVER-FIREBASE-BINDING-PROOF-01, driver-only)', () => {
-  it('local 구성에서 세 emulator connector를 한 번만 구성한다', async () => {
+  it('local 구성에서 Auth·Storage emulator connector를 한 번만 구성하고 Firestore는 만들지 않는다', async () => {
     setEnvironment(localEnvironment);
     const firebase = await import('./firebase');
 
@@ -114,12 +114,10 @@ describe('Driver Firebase local binding (FE-PILOT-DRIVER-FIREBASE-BINDING-PROOF-
       'http://127.0.0.1:9099',
       { disableWarnings: true },
     );
-    expect(firebaseMocks.connectFirestoreEmulator).toHaveBeenCalledTimes(1);
-    expect(firebaseMocks.connectFirestoreEmulator).toHaveBeenCalledWith(
-      expect.anything(),
-      '127.0.0.1',
-      8080,
-    );
+    // 기사 앱은 Firestore를 쓰지 않아 인스턴스도 emulator 연결도 만들지 않는다.
+    expect(firebaseMocks.initializeFirestore).not.toHaveBeenCalled();
+    expect(firebaseMocks.getFirestore).not.toHaveBeenCalled();
+    expect(firebaseMocks.connectFirestoreEmulator).not.toHaveBeenCalled();
     expect(firebaseMocks.connectStorageEmulator).toHaveBeenCalledTimes(1);
     expect(firebaseMocks.connectStorageEmulator).toHaveBeenCalledWith(
       expect.anything(),
@@ -186,11 +184,11 @@ describe('Driver Firebase local binding (FE-PILOT-DRIVER-FIREBASE-BINDING-PROOF-
     expect(firebaseMocks.connectStorageEmulator).not.toHaveBeenCalled();
   });
 
-  it('driver consumer export(db/firebaseAuth/storage/getter)를 유지한다', async () => {
+  it('driver consumer export(firebaseAuth/storage/getter)를 유지하고 Firestore db는 내보내지 않는다', async () => {
     setEnvironment(localEnvironment);
     const firebase = await import('./firebase');
 
-    expect(firebase.db).toBeDefined();
+    expect('db' in firebase).toBe(false);
     expect(firebase.firebaseAuth).toBeDefined();
     expect(firebase.storage).toBeDefined();
     expect(typeof firebase.getFirebaseAuth).toBe('function');

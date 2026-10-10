@@ -34,6 +34,7 @@
   process interruption 뒤 안전하게 인수·재개하거나 deterministic recovery로 닫혀야 한다.
 - 용량 때문에 자동 마감된 회차는 주문 마감 전 한도가 반환되면 `OPEN`으로 복귀한다. 일정 종료·수동 마감 회차는 자동 재개하지 않는다.
 - Firestore `Timestamp`는 API에서 ISO8601 문자열로 반환하고 회차 목록은 정규화된 시각 기준 최신순으로 정렬한다.
+- 회차 생성·수정의 일정 시각(`orderOpenAt`·`orderCloseAt`·`auctionAt`·`deliveryStartAt`·`deliveryEndAt`)은 시차(`Z` 또는 `±hh:mm`)가 있는 ISO8601만 받는다. 시차 없는 시각은 서버 시간대로 해석돼 일정이 어긋나므로 `400`이다.
 
 위 회차 atomicity·recovery 항목은 current contract이며, #66에서 fresh edit gate,
 pre-open reservation gate, cancellation recovery/fencing의 구현과 직접 proof가

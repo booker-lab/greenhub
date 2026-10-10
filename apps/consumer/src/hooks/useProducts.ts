@@ -7,6 +7,7 @@ import {
   PublicStoreProfileNotFoundError,
   fetchPublicStoreProfile,
 } from '@/lib/public-store-profile';
+import { sharedRequest } from '@/lib/shared-request';
 
 export interface StoreInfo {
   id: string;
@@ -15,6 +16,10 @@ export interface StoreInfo {
 }
 
 const API_URL = getApiBaseUrl();
+
+// 같은 화면에서 하단 메뉴·목록이 같은 상품 목록을 함께 쓰도록 짧게 공유한다.
+// 재고·판매 상태가 바뀌는 목록이라 화면 진입 때의 중복만 줄일 만큼만 둔다.
+const PRODUCT_LIST_SHARE_MS = 5_000;
 
 /**
  * API를 통해 활성 상품 목록 조회
@@ -57,11 +62,22 @@ export function useProducts(
           });
         }
         if (saleType) params.set('saleType', saleType);
-        const res = await fetch(`${API_URL}/products?${params}`);
+        const url = `${API_URL}/products?${params}`;
+        const data = await sharedRequest(
+          url,
+          async () => {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
+            return (await res.json()) as unknown;
+          },
+          { ttlMs: PRODUCT_LIST_SHARE_MS, fresh: tick > 0 },
+        );
         if (cancelled || requestSequenceRef.current !== requestId) return;
-        if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
-        const data = await res.json();
-        const items: Product[] = Array.isArray(data) ? data : (data.items ?? []);
+        const list = Array.isArray(data)
+          ? data
+          : ((data as { items?: Product[] } | null)?.items ?? []);
+        // 공유된 응답 배열을 정렬로 바꾸지 않도록 복사한다.
+        const items: Product[] = [...(list as Product[])];
         items.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
         if (cancelled || requestSequenceRef.current !== requestId) return;
         setProducts(items);

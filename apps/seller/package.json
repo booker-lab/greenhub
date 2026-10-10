@@ -4,7 +4,6 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "prebuild": "node ../../scripts/copy-fonts.cjs",
     "build": "next build --webpack",
     "start": "next start",
     "test": "vitest run",

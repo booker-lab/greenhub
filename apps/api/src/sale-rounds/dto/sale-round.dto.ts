@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -25,20 +26,31 @@ const SALE_ROUND_STATUSES = [
 
 export type SaleRoundStatusDtoValue = (typeof SALE_ROUND_STATUSES)[number];
 
+// 회차 일정은 시차(Z 또는 ±hh:mm)를 반드시 담는다. 시차 없는 시각(예: 2026-10-10T18:00:00)은
+// 서버 시간대(UTC)로 해석돼 Asia/Seoul 기준 9시간 늦은 일정이 저장되므로 받지 않는다.
+const SCHEDULE_INSTANT_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
+const SCHEDULE_INSTANT_MESSAGE = '회차 일정 시각에는 시차(Z 또는 +09:00)가 필요합니다.';
+
 class SaleRoundScheduleDto {
   @IsISO8601()
+  @Matches(SCHEDULE_INSTANT_PATTERN, { message: SCHEDULE_INSTANT_MESSAGE })
   orderOpenAt: string;
 
   @IsISO8601()
+  @Matches(SCHEDULE_INSTANT_PATTERN, { message: SCHEDULE_INSTANT_MESSAGE })
   orderCloseAt: string;
 
   @IsISO8601()
+  @Matches(SCHEDULE_INSTANT_PATTERN, { message: SCHEDULE_INSTANT_MESSAGE })
   auctionAt: string;
 
   @IsISO8601()
+  @Matches(SCHEDULE_INSTANT_PATTERN, { message: SCHEDULE_INSTANT_MESSAGE })
   deliveryStartAt: string;
 
   @IsISO8601()
+  @Matches(SCHEDULE_INSTANT_PATTERN, { message: SCHEDULE_INSTANT_MESSAGE })
   deliveryEndAt: string;
 
   @IsEnum(['Asia/Seoul'])

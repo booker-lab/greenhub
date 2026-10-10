@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.0.1",
   "scripts": {
-    "postinstall": "node scripts/copy-fonts.cjs",
     "dev:local": "node scripts/dev/local/launcher.mjs",
     "dev:local:stop": "node scripts/dev/local/stop.mjs",
     "dev:consumer": "pnpm --filter consumer dev",

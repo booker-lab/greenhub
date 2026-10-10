@@ -236,12 +236,13 @@ REDELIVERY_FEE
 `OrderChargePaymentService`는 webhook에서 다음을 검증한다.
 
 - charge 존재
-- 상태가 `PENDING`
+- 상태가 `PENDING` 또는 `FAILED`(실패 webhook 뒤 실제 결제가 확정된 경우)
 - type이 `REDELIVERY_FEE`
 - 저장된 `portonePaymentId`와 webhook payment ID 일치
 - PortOne 원격 상태 `PAID`
 - 원격 금액과 charge 금액 일치
-- 연결 주문의 `redeliveryChargeId`, `storeId`, `userId` 일치
+
+위 검증을 통과한 결제는 PortOne이 승인한 돈이다. 연결 주문이 `DELIVERY_HELD`·`PREPARING`이고 현재 보류의 `redeliveryChargeId`, `storeId`, `userId`가 일치하면 `PAID`로 반영한다. 주문이 취소(진행)됐으면 `PAID`로 기록한 뒤 환불하고, 그 밖에 현재 보류에 필요 없는 결제(주문 없음·보류 해소·다른 보류로 교체·배송 재개 뒤)는 `PAID` + `unneededPaidAt`로 기록한 뒤 환불한다. 환불이 끝나지 않으면 같은 결제의 `Transaction.Paid` 재전송이 환불을 이어 간다. 결제만 되고 기록·환불이 없는 상태를 남기지 않는다.
 
 본 주문 취소 시 paid 재배송비도 별도 refund 경로로 환불할 수 있다. 본 결제와 재배송비 결제를 같은 payment record라고 가정하지 않는다.
 
@@ -284,7 +285,7 @@ REDELIVERY_FEE
 `OrderChargePaymentService` 구현과 직접 회귀가 다음을 확인한다.
 
 - `Transaction.Paid`에서 원격 결제를 재조회하고 `PAID` 상태·금액·charge/order 연결 관계 검증
-- 불일치 시 `PENDING` charge를 확정하지 않음
+- 식별자·금액 불일치 시 charge를 확정하지 않음, 현재 보류에 필요 없는 승인 결제는 기록 후 환불
 - 실패 webhook 중복 시 `FAILED`로 한 번 수렴
 - paid 재배송비 환불의 동시 호출·완료 후 재시도에서 PortOne 환불 1회
 - 주문 생성 측에서는 고객 책임 배송 보류, WEATHER 제외, 양수 재배송비, 주문자 소유권을 확인
