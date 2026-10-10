@@ -16,7 +16,7 @@ const compiled = ts.transpileModule(source, {
 // React hook을 한 번 실행하는 최소 대역: useEffect 본문을 꺼내 직접 실행·정리한다.
 function loadHook() {
   const effects = [];
-  const state = { lastOrder: undefined, lastStatus: undefined };
+  const state = { lastOrder: undefined, lastStatus: undefined, pollingExpired: undefined };
   const hookModule = { exports: {} };
   new Function('require', 'module', 'exports', compiled)(
     (specifier) => {
@@ -28,6 +28,11 @@ function loadHook() {
           useState: (initial) => [
             initial,
             (value) => {
+              // pollingExpired는 false로 시작하는 유일한 state다.
+              if (initial === false) {
+                state.pollingExpired = value;
+                return;
+              }
               if (value && typeof value === 'object' && 'status' in value) state.lastOrder = value;
               if (typeof value === 'string') state.lastStatus = value;
             },
@@ -45,10 +50,11 @@ function loadHook() {
   return { hook: hookModule.exports, effects, state };
 }
 
-function installFakeBrowser({ hidden = false, orderStatus = 'PREPARING' } = {}) {
+// 다시 확인은 결제 확인 전(PENDING) 주문만 setTimeout으로 하나씩 예약한다.
+function installFakeBrowser({ hidden = false, orderStatus = 'PENDING' } = {}) {
   const listeners = new Map();
-  const intervals = new Map();
-  let nextIntervalId = 1;
+  const timers = new Map();
+  let nextTimerId = 1;
   const fetchCalls = [];
   const fakeDocument = {
     visibilityState: hidden ? 'hidden' : 'visible',
@@ -60,11 +66,13 @@ function installFakeBrowser({ hidden = false, orderStatus = 'PREPARING' } = {}) 
   const original = {
     document: globalThis.document,
     fetch: globalThis.fetch,
-    setInterval: globalThis.setInterval,
-    clearInterval: globalThis.clearInterval,
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    dateNow: Date.now,
   };
-  const current = { orderStatus };
+  const current = { orderStatus, now: 0 };
   globalThis.document = fakeDocument;
+  Date.now = () => current.now;
   globalThis.fetch = async (url) => {
     fetchCalls.push(url);
     return new Response(JSON.stringify({ id: 'order-1', status: current.orderStatus }), {
@@ -72,30 +80,35 @@ function installFakeBrowser({ hidden = false, orderStatus = 'PREPARING' } = {}) 
       headers: { 'Content-Type': 'application/json' },
     });
   };
-  globalThis.setInterval = (fn, ms) => {
-    const id = nextIntervalId++;
-    intervals.set(id, { fn, ms });
+  globalThis.setTimeout = (fn, ms) => {
+    const id = nextTimerId++;
+    timers.set(id, { fn, ms });
     return id;
   };
-  globalThis.clearInterval = (id) => intervals.delete(id);
+  globalThis.clearTimeout = (id) => timers.delete(id);
 
   return {
     current,
     fetchCalls,
-    intervals,
+    timers,
     listeners,
     setVisibility(value) {
       fakeDocument.visibilityState = value;
       listeners.get('visibilitychange')?.();
     },
     tick() {
-      for (const { fn } of [...intervals.values()]) fn();
+      for (const [id, { fn, ms }] of [...timers.entries()]) {
+        timers.delete(id);
+        current.now += ms;
+        fn();
+      }
     },
     restore() {
       globalThis.document = original.document;
       globalThis.fetch = original.fetch;
-      globalThis.setInterval = original.setInterval;
-      globalThis.clearInterval = original.clearInterval;
+      globalThis.setTimeout = original.setTimeout;
+      globalThis.clearTimeout = original.clearTimeout;
+      Date.now = original.dateNow;
     },
   };
 }
@@ -115,7 +128,7 @@ test('isDocumentHidden은 visibilityState가 hidden일 때만 true다', () => {
   assert.equal(hook.isDocumentHidden(undefined), false);
 });
 
-test('보이는 탭에서는 3초 폴링을 하고, 숨기면 멈췄다가 다시 보이면 바로 조회하고 이어 간다', async () => {
+test('보이는 탭에서는 PENDING 주문을 3초마다 다시 읽고, 숨기면 멈췄다가 다시 보이면 바로 조회하고 이어 간다', async () => {
   const browser = installFakeBrowser();
   try {
     const { hook, effects } = loadHook();
@@ -125,15 +138,16 @@ test('보이는 탭에서는 3초 폴링을 하고, 숨기면 멈췄다가 다�
     await flush();
 
     assert.equal(browser.fetchCalls.length, 1, '처음 한 번 조회한다');
-    assert.equal(browser.intervals.size, 1);
-    assert.equal([...browser.intervals.values()][0].ms, 3000);
+    assert.equal(browser.timers.size, 1);
+    assert.equal([...browser.timers.values()][0].ms, 3000);
 
     browser.tick();
     await flush();
     assert.equal(browser.fetchCalls.length, 2);
+    assert.equal(browser.timers.size, 1);
 
     browser.setVisibility('hidden');
-    assert.equal(browser.intervals.size, 0, '숨김 탭에서는 interval이 없다');
+    assert.equal(browser.timers.size, 0, '숨김 탭에서는 예약된 확인이 없다');
     browser.tick();
     await flush();
     assert.equal(browser.fetchCalls.length, 2, '숨김 동안 조회하지 않는다');
@@ -141,10 +155,10 @@ test('보이는 탭에서는 3초 폴링을 하고, 숨기면 멈췄다가 다�
     browser.setVisibility('visible');
     await flush();
     assert.equal(browser.fetchCalls.length, 3, '다시 보이면 바로 조회한다');
-    assert.equal(browser.intervals.size, 1, '폴링을 이어 간다');
+    assert.equal(browser.timers.size, 1, '폴링을 이어 간다');
 
     cleanup();
-    assert.equal(browser.intervals.size, 0);
+    assert.equal(browser.timers.size, 0);
     assert.equal(browser.listeners.has('visibilitychange'), false, '정리 시 listener를 뗀다');
   } finally {
     browser.restore();
@@ -159,33 +173,60 @@ test('숨김 탭에서 열리면 한 번만 조회하고, 보일 때부터 폴�
     const cleanup = effects[0]();
     await flush();
     assert.equal(browser.fetchCalls.length, 1);
-    assert.equal(browser.intervals.size, 0);
+    assert.equal(browser.timers.size, 0);
 
     browser.setVisibility('visible');
     await flush();
     assert.equal(browser.fetchCalls.length, 2);
-    assert.equal(browser.intervals.size, 1);
+    assert.equal(browser.timers.size, 1);
     cleanup();
   } finally {
     browser.restore();
   }
 });
 
-test('종료 상태에 도달하면 폴링을 끝내고 탭이 다시 보여도 재개하지 않는다', async () => {
-  const browser = installFakeBrowser({ orderStatus: 'DELIVERED' });
+test('PENDING이 아니라 폴링을 끝낸 주문은 탭이 다시 보여도 재개하지 않는다', async () => {
+  for (const orderStatus of ['ACCEPTED', 'DELIVERED']) {
+    const browser = installFakeBrowser({ orderStatus });
+    try {
+      const { hook, effects } = loadHook();
+      runOrderStatusEffectHost(hook, 'order-1', 'access-token');
+      const cleanup = effects[0]();
+      await flush();
+      assert.equal(browser.fetchCalls.length, 1, orderStatus);
+      assert.equal(browser.timers.size, 0, orderStatus);
+
+      browser.setVisibility('hidden');
+      browser.setVisibility('visible');
+      await flush();
+      assert.equal(browser.fetchCalls.length, 1, orderStatus);
+      assert.equal(browser.timers.size, 0, orderStatus);
+      cleanup();
+    } finally {
+      browser.restore();
+    }
+  }
+});
+
+test('숨긴 동안 2분 창이 지나면 다시 보일 때 한 번만 조회하고 자동 확인 멈춤을 알린다', async () => {
+  const browser = installFakeBrowser();
   try {
-    const { hook, effects } = loadHook();
+    const { hook, effects, state } = loadHook();
     runOrderStatusEffectHost(hook, 'order-1', 'access-token');
     const cleanup = effects[0]();
     await flush();
     assert.equal(browser.fetchCalls.length, 1);
-    assert.equal(browser.intervals.size, 0);
+    assert.equal(browser.timers.size, 1);
 
     browser.setVisibility('hidden');
+    assert.equal(browser.timers.size, 0);
+    browser.current.now += 2 * 60 * 1000;
+
     browser.setVisibility('visible');
     await flush();
-    assert.equal(browser.fetchCalls.length, 1);
-    assert.equal(browser.intervals.size, 0);
+    assert.equal(browser.fetchCalls.length, 2, '다시 보이면 최신 상태를 한 번 조회한다');
+    assert.equal(browser.timers.size, 0, '2분 창이 지났으므로 이어 가지 않는다');
+    assert.equal(state.pollingExpired, true);
     cleanup();
   } finally {
     browser.restore();

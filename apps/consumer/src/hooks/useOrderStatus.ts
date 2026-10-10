@@ -1,18 +1,33 @@
 'use client';
 
-import type { Order } from '@greenhub/shared';
+import type { Order, OrderStatus } from '@greenhub/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 
-const TERMINAL_STATUSES = new Set(['CANCELLED', 'DELIVERED', 'REVIEWED']);
 // NOTE: Firebase SDK의 onSnapshot은 PWA Service Worker와 충돌하여 동작 불가.
 // Firestore REST API 대신 Railway API 폴링 방식으로 대체. 설계 결정: docs/CRITICAL_LOGIC.md [2026-03-27] 참조
+// 폴링은 결제 확인을 기다리는 PENDING 주문만 3초 간격으로 하고 2분이 지나면 멈춘다(IP당 API 요청 한도 보호).
+// 그 밖의 상태는 한 번 읽고 멈추며, 화면의 다시 확인(refetch)이 새로 읽고 2분 창을 다시 연다.
+// 탭이 숨겨져 있으면 다음 확인을 미루고, 다시 보이면 바로 확인한 뒤 같은 2분 창 안에서 이어 간다.
+export const ORDER_STATUS_POLL_INTERVAL_MS = 3000;
+export const ORDER_STATUS_POLL_MAX_MS = 2 * 60 * 1000;
 
 /** 탭이 숨겨져 있으면 주문 상태 폴링을 쉰다(다시 보이면 바로 조회하고 이어 간다). */
 export function isDocumentHidden(
   doc: { visibilityState?: string } | undefined = globalThis.document,
 ): boolean {
   return doc?.visibilityState === 'hidden';
+}
+
+/**
+ * 다음 폴링 여부. lastStatus는 마지막으로 읽은 주문 상태이고 아직 한 번도 못 읽었으면 null이다
+ * (일시 실패도 같은 2분 안에서만 다시 시도한다).
+ */
+export function shouldPollOrderStatus(lastStatus: OrderStatus | null, elapsedMs: number): boolean {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs >= ORDER_STATUS_POLL_MAX_MS) {
+    return false;
+  }
+  return lastStatus === null || lastStatus === 'PENDING';
 }
 
 export type OrderDetailReadStatus = 'loading' | 'found' | 'not-found' | 'auth' | 'network' | 'server';
@@ -39,6 +54,8 @@ interface UseOrderStatusResult {
   loading: boolean;
   error: string | null;
   status: OrderDetailReadStatus;
+  /** PENDING 주문을 2분 동안 다시 확인했지만 아직 결제 확인 전이라 자동 확인을 멈췄다. */
+  pollingExpired: boolean;
   refetch: () => Promise<Order | null | undefined>;
 }
 
@@ -50,10 +67,12 @@ export function useOrderStatus(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<OrderDetailReadStatus>('loading');
+  const [pollingExpired, setPollingExpired] = useState(false);
   const fetchOrderRef = useRef<(() => Promise<Order | null | undefined>) | null>(null);
   const refetch = useCallback(() => fetchOrderRef.current?.() ?? Promise.resolve(undefined), []);
 
   useEffect(() => {
+    setPollingExpired(false);
     // accessToken이 undefined면 세션 아직 로딩 중 — 대기
     if (!orderId) {
       setLoading(false);
@@ -74,22 +93,36 @@ export function useOrderStatus(
     let cancelled = false;
     let requestSequence = 0;
     let activeController: AbortController | null = null;
-    let interval: ReturnType<typeof setInterval> | null = null;
-    // 404·auth·종료 상태로 폴링을 끝냈으면 탭이 다시 보여도 재개하지 않는다.
-    let pollingFinished = false;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let pollStartedAt = Date.now();
+    let lastStatus: OrderStatus | null = null;
+    // 숨김 탭이라 다음 확인을 미뤘다. 다시 보이면 바로 확인한다.
+    let pollDeferredWhileHidden = false;
 
     function stopPolling() {
-      if (interval) clearInterval(interval);
-      interval = null;
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = null;
+      pollDeferredWhileHidden = false;
     }
 
-    function finishPolling() {
-      pollingFinished = true;
+    // 최신 응답을 반영한 뒤에만 다음 확인을 예약한다(요청이 겹치지 않는다).
+    function scheduleNextPoll() {
       stopPolling();
+      if (cancelled) return;
+      if (shouldPollOrderStatus(lastStatus, Date.now() - pollStartedAt)) {
+        if (isDocumentHidden()) {
+          pollDeferredWhileHidden = true;
+          return;
+        }
+        pollTimer = setTimeout(() => void fetchOrder(), ORDER_STATUS_POLL_INTERVAL_MS);
+        return;
+      }
+      if (lastStatus === 'PENDING') setPollingExpired(true);
     }
 
     async function fetchOrder(): Promise<Order | null | undefined> {
       const sequence = ++requestSequence;
+      stopPolling();
       activeController?.abort();
       const controller = new AbortController();
       activeController = controller;
@@ -108,7 +141,6 @@ export function useOrderStatus(
           setLoading(false);
           setError(null);
           setStatus('not-found');
-          finishPolling();
           return null;
         }
         if (!res.ok) {
@@ -119,11 +151,12 @@ export function useOrderStatus(
           const message = getOrderDetailReadErrorMessage(failure);
           if (failure === 'auth') {
             setOrder(null);
-            finishPolling();
           }
           setError(message);
           setLoading(false);
           setStatus(failure);
+          // 404·권한 오류는 다시 확인하지 않고, 일시 실패만 같은 2분 안에서 다시 시도한다.
+          if (failure !== 'auth') scheduleNextPoll();
           return undefined;
         }
 
@@ -134,8 +167,8 @@ export function useOrderStatus(
         setLoading(false);
         setError(null);
         setStatus('found');
-        // 종료 상태 도달 시 폴링 중단
-        if (TERMINAL_STATUSES.has(latestOrder.status)) finishPolling();
+        lastStatus = latestOrder.status;
+        scheduleNextPoll();
         return latestOrder;
       } catch (e: unknown) {
         if (
@@ -152,39 +185,43 @@ export function useOrderStatus(
         setError(getOrderDetailReadErrorMessage(failure));
         setLoading(false);
         setStatus(failure);
+        scheduleNextPoll();
         return undefined;
       }
     }
 
-    function startPolling() {
-      if (interval || pollingFinished || isDocumentHidden()) return;
-      interval = setInterval(() => void fetchOrder(), 3000);
+    // 화면의 다시 확인: 바로 새로 읽고, 아직 PENDING이면 2분 동안 다시 자동 확인한다.
+    function refetchOrder(): Promise<Order | null | undefined> {
+      pollStartedAt = Date.now();
+      setPollingExpired(false);
+      return fetchOrder();
     }
 
-    // 숨김 탭에서는 폴링을 멈춘다. 다시 보이면 최신 상태를 바로 조회하고 폴링을 이어 간다.
+    // 숨김 탭에서는 예약된 확인을 멈춘다. 다시 보이면 미뤄 둔 확인을 바로 하고 폴링을 이어 간다.
+    // 폴링을 끝낸 주문(PENDING 아님·404·권한 오류·2분 경과)은 다시 보여도 새로 읽지 않는다.
     function handleVisibilityChange() {
       if (isDocumentHidden()) {
+        if (!pollTimer) return;
         stopPolling();
+        pollDeferredWhileHidden = true;
         return;
       }
-      if (pollingFinished || interval) return;
+      if (cancelled || !pollDeferredWhileHidden) return;
       void fetchOrder();
-      startPolling();
     }
 
-    fetchOrderRef.current = fetchOrder;
+    fetchOrderRef.current = refetchOrder;
     globalThis.document?.addEventListener('visibilitychange', handleVisibilityChange);
-    startPolling();
     void fetchOrder();
     return () => {
       cancelled = true;
       requestSequence += 1;
       activeController?.abort();
-      if (fetchOrderRef.current === fetchOrder) fetchOrderRef.current = null;
+      if (fetchOrderRef.current === refetchOrder) fetchOrderRef.current = null;
       globalThis.document?.removeEventListener('visibilitychange', handleVisibilityChange);
       stopPolling();
     };
   }, [orderId, accessToken]);
 
-  return { order, loading, error, status, refetch };
+  return { order, loading, error, status, pollingExpired, refetch };
 }

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import OrderCard from '@/components/OrderCard';
-import { apiFetch } from '@/lib/api';
+import { apiRead } from '@/lib/api';
 import {
   buildDriverListScope,
   shouldPreserveDriverListOnReadError,
@@ -106,7 +106,7 @@ export default function BoardClient() {
     setAuthRequired(false);
     setError(null);
 
-    apiFetch('/driver/orders', token, { signal: controller.signal })
+    apiRead('/driver/orders', token, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw toDriverListReadError(response.status);
         const payload: unknown = await response.json();
