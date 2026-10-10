@@ -85,6 +85,26 @@ provider 승인, 실제 결제·환불·알림 발송을 승인했다는 뜻이 
   향후 적법하게 외부 배송 수행자를 지정하거나 provider의 처리 지역·계약 범위가 바뀌면 실제
   도입 전에 제공·위탁·국외 처리·보유기간을 다시 고지한다.
 
+## 2026-10-10 실제 흐름 재대조
+
+시행일 2026-08-30 공개 `/privacy`·`/terms`를 그 뒤 바뀐 데이터 흐름과 현재 `main` 코드로 대조했다.
+공개 문서는 바꾸지 않았다. 운영 배포 대기 묶음(`docs/memory.md` 검증 상태)에 든 변경은 "미배포"로 표시한다.
+
+| 흐름 | 판정 | 근거 |
+|---|---|---|
+| 판매자 주문 목록 손님 이름·전화 검색(#383, 운영 중) | `VERIFIED` — 기존 "최소 주문 화면" 범위 | 목록은 `buyerName`만 싣고 전화는 싣지 않으며, 전화 검색은 서버가 자기 매장 주문만 돌려준다(`apps/api/src/orders/seller-order-read-model.ts`, `orders-query.service.spec.ts`) |
+| 결제 화면 자동 채움(#418, 미배포) | `VERIFIED` — 기존 "회원 프로필·주소록" 목적 범위 | 본인 기본 배송지·전화로 빈 칸만 채운다(`apps/consumer/src/lib/checkout-prefill.ts`, 같은 이름 test) |
+| 고객이 요청하지 않은 환불의 취소 알림톡(#420, 미배포) | `VERIFIED` — 기존 8종 `ORDER_CANCELLED`·템플릿 변수 범위 | `apps/api/src/notifications/refund-notice-reasons.ts`; 사유 문구 확정은 BACKLOG `SILENT-REFUND-CUSTOMER-NOTICE` |
+| ALIGO 고정 IP 프록시(Fixie, 운영 중) | 개인정보 처리위탁 고지 대상 아님 | ALIGO 호출은 HTTPS(`kakaoapi.aligo.in`, `apis.aligo.in`)를 undici `ProxyAgent` 터널로 보내 프록시는 목적지 호스트·접속 정보만 본다(`apps/api/src/notifications/aligo.client.ts`) |
+| 운영자 텔레그램 알림(#421, 미배포) | `IMPLEMENTED / UNVERIFIED` — 고객 정보 없음 | 운영 기록 알림은 고정 제목·문구·유형, 아침 요약은 건수·금액만 보낸다(`apps/api/src/ops-alerts/`, `operation-issue-writer.service.ts`). 고객 정보가 실리지 않음을 고정하는 직접 테스트는 없다 |
+| 기사 카카오맵 길찾기(#418, 미배포) | `DECISION REQUIRED` | 기사가 누르면 배송지 기본주소(이름·동·호수 제외) 또는 거점 좌표가 `map.kakao.com` 링크로 Kakao에 전달된다(`apps/driver/src/app/map/_lib/map-navigation-link.ts`). `/privacy` 4절은 Kakao를 로그인·우편번호 검색으로만 적는다 |
+| 늦은 결제 자동 환불(2026-07부터 존재) | `COVERAGE GAP` — 약관 문구 | 결제가 확인됐지만 예약 만료 뒤 회차 한도가 마감되면 주문을 받지 않고 자동 환불한다(`apps/api/src/payments/payment-finalization.service.ts`). `/terms` 제7조·제8조에는 이 경우가 없다 |
+| 개인정보 보호책임자 | `IMPLEMENTATION FINDING` — 공개 문서 누락 | `/privacy`에 보호책임자(성명 또는 담당 부서와 연락처) 항목이 없고 고객센터 연락처만 있다. 처리방침 필수 기재 사항이다 |
+| 통신판매업 신고번호 | `DECISION REQUIRED` | footer는 확정 전 노출을 막는다(`BusinessInfoFooter.test.mjs`). 2026-11-01 실제 판매 시작 전에 신고 대상 여부를 사람이 판단한다 |
+
+후속 작업과 완료 조건은 `docs/BACKLOG.md`의 `법무·출시 후보 정합성`이 소유한다. 공개 문서 변경은
+문구 결정·사용자 승인 뒤 별도 Task로 하고, 변경 이력에 남긴다.
+
 ## 변경 범위와 검증 게이트
 
 RC-D에서 허용한 변경은 현재 실제 사용을 설명하는 법률 문서·공개 페이지·직접 충돌하는 current
@@ -112,6 +132,7 @@ API 문서와 그 focused test다. application source의 A/B/C 동작, Driver `S
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-10 | 8/30 판 이후 실제 흐름 재대조(공개 문서 변경 없음): 보호책임자 누락, 기사 길찾기 고지·통신판매업 신고 결정 필요, 늦은 결제 자동 환불 약관 공백 기록 |
 | 2026-08-30 | RC-D 실제 사용 정합화: 회차 거래·취소·환불·배송 보류·유료 재배송, PortOne/PG·ALIGO, 내부 판매·배송 접근, 파일럿 마케팅 미사용 반영 |
 | 2026-08-24 | 이전 비판매 baseline과 선택 마케팅·직접 주문 read의 구현 finding 기록 |
 | 2026-08-19 | 최초 공개 개인정보처리방침·이용약관 baseline |
