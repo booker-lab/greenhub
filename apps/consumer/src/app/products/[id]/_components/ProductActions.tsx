@@ -6,7 +6,7 @@ import RoundDirectProductActions from './RoundDirectProductActions';
 
 export interface RoundProductActionContext {
   item: SaleRoundItem;
-  state: 'current' | 'closed';
+  state: 'current' | 'closed' | 'sold_out';
   isPurchasable: boolean;
   /** 주문 시작 전(SCHEDULED) 안내에 쓴다. */
   round?: Pick<SaleRound, 'status'>;

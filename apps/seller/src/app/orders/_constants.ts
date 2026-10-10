@@ -92,9 +92,15 @@ export const DELIVERY_LABEL: Record<string, string> = {
 
 // ─── 날짜 범위 필터 (T5) ─────────────────────────────────────────────────────
 
-export type DateRangePreset = 'today' | 'week' | 'month' | 'custom';
+export type DateRangePreset = 'all' | 'today' | 'week' | 'month' | 'custom';
+
+// 'all'(모든 날짜)은 날짜로 거르지 않는다. 회차 주문은 배송일이 주문일보다 1~2주 뒤라
+// "이번 주"를 기본으로 두면 처리 필요 뱃지는 있는데 목록이 비는 날이 생긴다.
+// (라벨에 "전체"를 쓰지 않는다 — 주문 E2E가 하위 필터의 "전체" 글자를 한 곳에서만 찾는다.)
+export const DEFAULT_DATE_PRESET: DateRangePreset = 'all';
 
 export const DATE_PRESETS: { key: DateRangePreset; label: string }[] = [
+  { key: 'all', label: '모든 날짜' },
   { key: 'today', label: '오늘' },
   { key: 'week', label: '이번 주' },
   { key: 'month', label: '이번 달' },
@@ -145,7 +151,7 @@ export function getOrderDate(
 
 /**
  * 프리셋·탭에 따른 날짜 범위(inclusive)를 반환. `custom`은 from/to 입력값 사용.
- * 입력이 비었거나 from > to면 `null` (→ 호출부에서 날짜 필터 미적용).
+ * `all`이거나 입력이 비었거나 from > to면 `null` (→ 호출부에서 날짜 필터 미적용).
  */
 export function getDateRange(
   preset: DateRangePreset,
@@ -153,6 +159,7 @@ export function getDateRange(
   customFrom = '',
   customTo = '',
 ): { from: Date; to: Date } | null {
+  if (preset === 'all') return null;
   const today = startOfDay(new Date());
   const archive = isArchiveTab(tab);
 
