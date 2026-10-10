@@ -1,5 +1,6 @@
 'use client';
 
+import type { SaleRound } from '@greenhub/shared';
 import {
   Alert,
   Box,
@@ -69,11 +70,10 @@ function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accen
 
 // 판매 중·주문 마감 회차의 구매 목록. 회차 상세를 직접 읽는다(회차 작업 잠금을 쓰지 않아
 // 토큰 갱신으로 다시 읽을 때도 이전 읽기와 부딪히지 않는다).
-function RoundPurchaseSection() {
+function RoundPurchaseSection({ rounds, loading }: { rounds: SaleRound[]; loading: boolean }) {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
   const token = session?.user.accessToken ?? null;
-  const { rounds, loading } = useSaleRounds();
   const [details, setDetails] = useState<SellerSaleRound[]>([]);
   const [failed, setFailed] = useState(false);
   const activeIds = useMemo(
@@ -152,6 +152,9 @@ export default function PrepPage() {
     retry: retryProducts,
     hasLoaded: productsHasLoaded,
   } = useStoreProducts(storeId);
+  const { rounds, loading: roundsLoading } = useSaleRounds();
+  // 회차 구매 목록이 보이면 아래 빈 안내가 회차 물량까지 없다는 뜻으로 읽히지 않게 고쳐 쓴다.
+  const showsRoundPurchaseList = rounds.some(isPurchaseListRound);
 
   const { today, delayed } = useMemo(() => aggregatePrep(orders, products), [orders, products]);
 
@@ -223,13 +226,24 @@ export default function PrepPage() {
           </Alert>
         )}
 
-        <RoundPurchaseSection />
+        <RoundPurchaseSection rounds={rounds} loading={roundsLoading} />
 
         {isConnecting && <LoadingState />}
 
-        {!isConnecting && today.length === 0 && delayed.length === 0 && (
-          <EmptyState text="오늘 준비할 물량이 없습니다" />
-        )}
+        {!isConnecting &&
+          today.length === 0 &&
+          delayed.length === 0 &&
+          (showsRoundPurchaseList ? (
+            <Text
+              ta="center"
+              py="md"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
+              회차 주문 외에는 오늘 준비할 물량이 없습니다
+            </Text>
+          ) : (
+            <EmptyState text="오늘 준비할 물량이 없습니다" />
+          ))}
 
         {!isConnecting && (today.length > 0 || delayed.length > 0) && (
           <Stack gap="md">
