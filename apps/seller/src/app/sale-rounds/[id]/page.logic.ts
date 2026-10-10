@@ -1,4 +1,4 @@
-import type { Product, SaleRoundStatus } from '@greenhub/shared';
+import type { Product, SaleRound, SaleRoundStatus } from '@greenhub/shared';
 import type { SellerSaleRound } from '@/hooks/useSaleRounds';
 import type { RoundFormCarrotLinks } from './RoundForm';
 
@@ -21,6 +21,11 @@ export function getRoundAction(status: SaleRoundStatus): RoundAction | null {
   if (status === 'OPEN') return 'close';
   if (status === 'CLOSED') return 'complete';
   return null;
+}
+
+/** 서버는 작성 중·판매 예정이고 취소가 걸리지 않은 회차만 수정을 받는다. 그 밖에는 읽기 전용. */
+export function isRoundEditable(round: Pick<SaleRound, 'status' | 'cancellation'>): boolean {
+  return (round.status === 'DRAFT' || round.status === 'SCHEDULED') && round.cancellation == null;
 }
 
 function isSafeProductId(value: unknown): value is string {
