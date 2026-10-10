@@ -2,6 +2,7 @@ name: CI
 
 # PR 단계 제품 코드 검증. 외부 서비스·비밀값을 쓰지 않는다(빌드는 가짜 공개 설정값만 사용).
 # 운영·Preview 배포, Firebase 프로젝트, PortOne, ALIGO에 접근하지 않는다.
+# 외부 액션은 커밋 SHA로 고정하고 버전을 주석으로 남긴다.
 on:
   pull_request:
     branches: [main]
@@ -20,10 +21,13 @@ jobs:
   static:
     name: lint · typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: pnpm
@@ -44,14 +48,39 @@ jobs:
         run: node scripts/check-workspace-build-selection.mjs
       - name: CSS variables are defined
         run: node scripts/check-css-vars.mjs
+      # 설치는 모두 루트 pnpm-lock.yaml 하나로 한다. 하위 폴더 lockfile은 어떤 설치에도 쓰이지 않고
+      # 의존성 그래프·스캐너에 실제와 다른 버전을 보여 준다.
+      - name: Single root lockfile
+        run: |
+          stray=$(git ls-files -- '*pnpm-lock.yaml' '*package-lock.json' '*yarn.lock' '*npm-shrinkwrap.json' ':(exclude)pnpm-lock.yaml')
+          if [ -n "$stray" ]; then
+            echo "::error::루트 pnpm-lock.yaml 외의 lockfile이 저장소에 있다. 삭제하고 루트에서 pnpm install로 갱신한다."
+            echo "$stray"
+            exit 1
+          fi
+      # workflow 문법·표현식·스크립트 오류를 검사한다. shellcheck는 warning 이상만 본다.
+      - name: Workflow lint (actionlint)
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          SHELLCHECK_OPTS: --severity=warning
+        run: |
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -sSfL -o "$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
 
   unit:
     name: unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: pnpm
@@ -72,10 +101,13 @@ jobs:
   scripts:
     name: script specs
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: pnpm
@@ -87,14 +119,17 @@ jobs:
   rules:
     name: Firebase rules (emulator)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: pnpm
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '21'
@@ -109,6 +144,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       # 빌드 전용 가짜 값. 비밀값이 아니며 어떤 외부 서비스에도 연결되지 않는다.
       AUTH_SECRET: ci-build-only-not-a-secret
@@ -124,24 +160,51 @@ jobs:
       NEXT_PUBLIC_PORTONE_STORE_ID: ci
       NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY: ci
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build shared, API, consumer, seller, driver
         run: pnpm build
+      # API 이미지는 커밋된 packages/shared/dist를 그대로 쓰고 프런트는 src를 다시 빌드한다.
+      # 커밋된 dist가 방금 빌드한 결과와 같아야 두 쪽이 같은 shared 코드를 쓴다.
+      - name: Committed shared dist matches build
+        run: |
+          drift=$(git status --porcelain --untracked-files=all -- packages/shared/dist)
+          if [ -n "$drift" ]; then
+            echo "::error::packages/shared/dist가 src 빌드 결과와 다르다. pnpm --filter @greenhub/shared build 후 dist를 함께 커밋한다."
+            echo "$drift"
+            git --no-pager diff --stat -- packages/shared/dist
+            exit 1
+          fi
 
   secrets:
     name: secret scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
-      # 검증된(실제로 유효한) 비밀값만 실패로 본다. 결과 원문을 다른 곳에 옮기지 않는다.
-      - uses: trufflesecurity/trufflehog@v3.99.2
+          persist-credentials: false
+      # PR·push 변경 범위에서 탐지된 값은 검증 여부와 관계없이 실패로 본다(검증 수단이 없는 형식 포함).
+      # 로그에는 파일·줄·탐지 종류만 남고 값은 남지 않는다. 테스트·문서의 자리표시 값은 그 줄에
+      # `trufflehog:ignore` 주석을 달고, 줄을 고칠 수 없을 때만 제외 경로 파일에 추가한다.
+      - name: Secret scan (changed range)
+        if: github.event_name != 'workflow_dispatch'
+        uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
         with:
+          version: 3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
+          extra_args: --results=verified,unverified,unknown --exclude-paths=.github/trufflehog-exclude-paths.txt
+      # 수동 실행은 범위 없이 전체 이력을 검사하므로 지금처럼 검증된 값만 실패로 본다.
+      - name: Secret scan (manual run, full history, verified only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
+        with:
+          version: 3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
           extra_args: --only-verified
