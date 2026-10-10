@@ -2952,3 +2952,83 @@ test('CASE W8b — a published task is never re-executed for the same invocation
     removeFixture(fixture);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Protected repository paths
+// ---------------------------------------------------------------------------
+
+test('PROTECTED — a catalog task whose allow names a protected path is refused even inside AUTONOMOUSLY_ALLOWED', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeChildren();
+    const result = runGoalOn(
+      fixture,
+      baseContract({
+        AUTONOMOUSLY_ALLOWED: ['docs', 'src', '.github/workflows/probe.yml'],
+        CRITERIA: [pathCriterion()],
+        TASK_CATALOG: [publicationTask({ allow: ['docs', '.github/workflows/probe.yml'] })],
+      }),
+      fake.deps,
+    );
+
+    assert.equal(result.status, HUMAN_DECISION_REQUIRED);
+    assert.equal(result.childCalls, 0);
+    assert.equal(childCallCount(fake), 0);
+    assert.equal(result.refusals.length, 1);
+    assert.equal(result.refusals[0].taskId, 'T1');
+    assert.match(
+      result.refusals[0].reason,
+      /protected repository paths: \.github\/workflows\/probe\.yml/,
+    );
+    assert.match(result.reason, /T1/);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('PROTECTED — a planner task whose allow names a protected path fails closed', () => {
+  const fixture = buildFixture();
+  try {
+    const planner = createFakePlanner({
+      proposals: plannerTaskProposal({ allow: ['docs/AGENTS.md'], semantic_owner: ['docs'] }),
+    });
+    const fake = createFakeChildren();
+    const result = runGoalOn(
+      fixture,
+      baseContract({ CRITERIA: [proofCriterion()], PLANNER: { enabled: true } }),
+      { ...fake.deps, ...planner.deps },
+    );
+
+    assert.equal(result.status, HUMAN_DECISION_REQUIRED);
+    assert.equal(result.planner.lastStatus, 'ALLOW_OUTSIDE_AUTHORITY');
+    assert.match(result.planner.lastReason, /protected repository paths: docs\/AGENTS\.md/);
+    assert.equal(childCallCount(fake), 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('PROOF ENV — PROOF_AT_MAIN criterion commands receive the sanitized environment', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeChildren();
+    const proofEnvs = [];
+    runGoalOn(fixture, baseContract({ CRITERIA: [proofCriterion()] }), {
+      ...fake.deps,
+      env: { ...process.env, GH_TOKEN: 'gh-token', FIREBASE_SERVICE_ACCOUNT_JSON: '{}' },
+      runProofCommand: (input) => {
+        proofEnvs.push(input.env);
+        return { exitCode: 0, signal: null, timedOut: false, stdout: '', stderr: '' };
+      },
+    });
+
+    assert.ok(proofEnvs.length >= 1);
+    for (const env of proofEnvs) {
+      assert.equal(env.GH_TOKEN, undefined);
+      assert.equal(env.FIREBASE_SERVICE_ACCOUNT_JSON, undefined);
+      assert.equal(env.PATH, process.env.PATH);
+    }
+  } finally {
+    removeFixture(fixture);
+  }
+});

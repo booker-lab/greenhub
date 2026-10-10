@@ -47,6 +47,11 @@ import {
   SELECTOR_TASK_OUTCOME_MAX_CHARS,
 } from './run-build.mjs';
 import { MAX_BATCH_CONCURRENCY } from './run-goal.mjs';
+import {
+  PROTECTED_BASENAME_PATTERNS,
+  PROTECTED_EXACT_PATHS,
+  PROTECTED_PATH_PREFIXES,
+} from './run-once.mjs';
 
 // ---------------------------------------------------------------------------
 // Fixture lifetime ownership (development-authority section 7.1)
@@ -2947,4 +2952,88 @@ test('CASE CLI2 — main() rejects an invalid argument surface without any invoc
   const payload = JSON.parse(stdoutChunks.join(''));
   assert.equal(payload.status, INVALID_BUILD_REQUEST);
   assert.match(stderrChunks.join(''), /unknown argument/);
+});
+
+// ---------------------------------------------------------------------------
+// Protected repository paths in the selector contract
+// ---------------------------------------------------------------------------
+
+function protectedPathDecision({ autonomouslyAllowed = ['docs'], allow = ['docs'] } = {}) {
+  const entry = {
+    priority: 1,
+    id: 'F1',
+    statement: 'docs/feature.md exists.',
+    kind: 'PRODUCT',
+    criteria: [criterion({ id: 'C1', path: 'docs/feature.md' })],
+    satisfied: false,
+  };
+  return frontierDecision({
+    considered: [entry],
+    selected: {
+      priority: 1,
+      id: 'F1',
+      statement: entry.statement,
+      kind: 'PRODUCT',
+      why_selected: 'only frontier',
+      goal: {
+        ...goalFor({
+          criteria: entry.criteria,
+          tasks: [task({ id: 'T1', closes: ['C1'], allow, proof: ['node proof-feature.cjs'] })],
+        }),
+        AUTONOMOUSLY_ALLOWED: autonomouslyAllowed,
+      },
+    },
+  });
+}
+
+test('PROTECTED — a selector task allow naming a protected path is rejected before execution', () => {
+  const fixture = buildFixture();
+  try {
+    const { result, fake } = runBuildOn(fixture, {
+      decision: protectedPathDecision({ allow: ['docs/AGENTS.md'] }),
+    });
+    assert.equal(result.status, BLOCKED_EXTERNAL);
+    assert.match(
+      result.reason,
+      /task T1 allow names protected repository path\(s\): docs\/AGENTS\.md/,
+    );
+    assert.equal(childCallCount(fake), 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('PROTECTED — AUTONOMOUSLY_ALLOWED naming a protected path is rejected before execution', () => {
+  const fixture = buildFixture();
+  try {
+    const { result, fake } = runBuildOn(fixture, {
+      decision: protectedPathDecision({ autonomouslyAllowed: ['docs', '.github/workflows'] }),
+    });
+    assert.equal(result.status, BLOCKED_EXTERNAL);
+    assert.match(
+      result.reason,
+      /AUTONOMOUSLY_ALLOWED names protected repository path\(s\): \.github\/workflows/,
+    );
+    assert.equal(childCallCount(fake), 0);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('PROTECTED — the selector prompt states the protected path rule from the same constants', () => {
+  const prompt = buildFrontierPrompt({
+    buildRequest: 'MODE: BUILD\n\nclose exactly one bounded frontier',
+    declaredAuthority: ['docs/authority.md'],
+    canonicalAuthority: ['AGENTS.md', 'docs/README.md'],
+    pin: { fetchedSha: 'a'.repeat(40) },
+  });
+  assert.match(
+    prompt,
+    /protected repository paths must not appear in AUTONOMOUSLY_ALLOWED or task allow/,
+  );
+  for (const prefix of PROTECTED_PATH_PREFIXES) assert.ok(prompt.includes(`${prefix}/**`), prefix);
+  for (const path of PROTECTED_EXACT_PATHS) assert.ok(prompt.includes(path), path);
+  for (const pattern of PROTECTED_BASENAME_PATTERNS) {
+    assert.ok(prompt.includes(pattern.source), pattern.source);
+  }
 });

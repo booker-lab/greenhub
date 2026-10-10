@@ -27,10 +27,21 @@
 // cycle always reaches its own terminal; no new cycle starts afterwards.
 // Repeated SIGINT only prints a diagnostic and never escalates to a hard kill.
 //
+// SIGTERM contract: SIGTERM records the same stop request, and because the
+// Night Run process itself is being terminated, it also terminates the active
+// BUILD child's whole process group (SIGTERM, then SIGKILL after a grace
+// period; `taskkill /T /F` on Windows) so no detached child keeps publishing
+// after its parent is gone.
+//
+// Kill switch: a `.agent-stop` file at the canonical checkout root, or a
+// non-empty `GREENHUB_AGENT_STOP` value other than `0`, stops the Night Run
+// before its next BUILD cycle. run-publish-once checks the same switch before
+// transport and before merge.
+//
 // Never created here: daemon, scheduler, durable queue, background service,
 // watchdog, polling loop, persistent loop state, or a second publication path.
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,6 +69,7 @@ import {
   DEFAULT_OPENCODE_TIMEOUT_MS,
   DEFAULT_PROOF_TIMEOUT_MS,
   OPENCODE_ATTACH_URL_ENV,
+  observeKillSwitch,
   parseVisibleAttachUrl,
   probeVisibleServer,
   readLiveRemoteMain,
@@ -292,6 +304,44 @@ function buildBuildChildEnv({ baseEnv, attachUrl, backend }) {
   return childEnv;
 }
 
+export const BUILD_TERMINATION_GRACE_MS = 10000;
+
+/**
+ * Terminate a detached BUILD child together with every descendant in its
+ * process group. On POSIX the detached child leads its own group, so the
+ * negative pid addresses the whole group; on Windows `taskkill /T /F` ends the
+ * process tree. Errors are reported, never thrown.
+ */
+export function defaultKillProcessTree({
+  pid,
+  signal = 'SIGTERM',
+  platform = process.platform,
+  kill = process.kill.bind(process),
+  spawnSyncFn = spawnSync,
+}) {
+  if (!Number.isInteger(pid) || pid <= 0) return { ok: false, error: 'no child pid' };
+  if (platform === 'win32') {
+    const result = spawnSyncFn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+    });
+    return result?.status === 0
+      ? { ok: true, error: null }
+      : { ok: false, error: `taskkill exit ${result?.status ?? 'null'}` };
+  }
+  try {
+    kill(-pid, signal);
+    return { ok: true, error: null };
+  } catch (groupError) {
+    try {
+      kill(pid, signal);
+      return { ok: true, error: null };
+    } catch (error) {
+      return { ok: false, error: `${messageOf(groupError)}; ${messageOf(error)}` };
+    }
+  }
+}
+
 /**
  * Spawn one real run-build child in its own process group so a console Ctrl+C
  * addressed to the Night Run process is never delivered into an active BUILD
@@ -307,6 +357,9 @@ export function defaultInvokeBuild({
   stderr,
   spawnFn = spawn,
   execPath = process.execPath,
+  abortSignal = null,
+  killProcessTree = defaultKillProcessTree,
+  terminationGraceMs = BUILD_TERMINATION_GRACE_MS,
 }) {
   return new Promise((resolveInvocation) => {
     let child;
@@ -336,11 +389,29 @@ export function defaultInvokeBuild({
     let stdinError = null;
     let stdinFinished = false;
     let settled = false;
+    let terminationRequested = false;
+    let forceKillTimer = null;
+    const onAbort = () => {
+      if (settled || terminationRequested) return;
+      terminationRequested = true;
+      killProcessTree({ pid: child.pid, signal: 'SIGTERM' });
+      forceKillTimer = setTimeout(() => {
+        if (!settled) killProcessTree({ pid: child.pid, signal: 'SIGKILL' });
+      }, terminationGraceMs);
+      forceKillTimer.unref?.();
+    };
     const settle = (payload) => {
       if (settled) return;
       settled = true;
-      resolveInvocation(payload);
+      if (forceKillTimer !== null) clearTimeout(forceKillTimer);
+      abortSignal?.removeEventListener?.('abort', onAbort);
+      resolveInvocation({ ...payload, terminationRequested });
     };
+    if (abortSignal?.aborted) {
+      onAbort();
+    } else {
+      abortSignal?.addEventListener?.('abort', onAbort, { once: true });
+    }
     child.on('error', (error) => {
       settle({
         exitCode: null,
@@ -445,6 +516,9 @@ function createNightResult(options) {
       cyclesFinishedAfterRequest: 0,
       signals: 0,
       stoppedBeforeNextBuild: false,
+      terminationSignals: 0,
+      buildTerminated: false,
+      killSwitch: null,
     },
     progressGuard: {
       triggered: false,
@@ -655,6 +729,7 @@ export async function runNight(options = {}, deps = {}) {
   const signalSource = deps.signalSource ?? process;
   const readLiveMain = deps.readLiveMain ?? readLiveRemoteMain;
   const invokeBuild = deps.invokeBuild ?? defaultInvokeBuild;
+  const observeKillSwitchImpl = deps.observeKillSwitch ?? observeKillSwitch;
   const yieldToSignals =
     deps.yieldToSignals ?? (() => new Promise((resolveYield) => setImmediate(resolveYield)));
   const buildScriptPath =
@@ -702,23 +777,42 @@ export async function runNight(options = {}, deps = {}) {
 
   let stopRequested = false;
   let activeBuild = false;
-  const onSignal = () => {
-    result.operatorStop.signals += 1;
+  const termination = new AbortController();
+  const recordStopRequest = () => {
     result.operatorStop.requested = true;
     if (activeBuild) {
       result.operatorStop.duringCycle = true;
     } else {
       result.operatorStop.stoppedBeforeNextBuild = true;
     }
-    if (result.operatorStop.signals === 1) {
+    stopRequested = true;
+  };
+  const onSignal = () => {
+    result.operatorStop.signals += 1;
+    const firstRequest = !stopRequested;
+    recordStopRequest();
+    if (firstRequest) {
       log('[NIGHT RUN] stop requested.');
       log('[NIGHT RUN] current BUILD will finish safely; no new BUILD will start.');
     } else {
       log('[NIGHT RUN] safe stop already requested; current BUILD is reaching its terminal.');
     }
-    stopRequested = true;
+  };
+  // SIGTERM ends this process, so the detached BUILD child is terminated with
+  // its process group instead of being left to continue without a parent.
+  const onTerminate = () => {
+    result.operatorStop.terminationSignals += 1;
+    recordStopRequest();
+    if (activeBuild) {
+      result.operatorStop.buildTerminated = true;
+      log('[NIGHT RUN] SIGTERM received; terminating the active BUILD process group.');
+    } else {
+      log('[NIGHT RUN] SIGTERM received; no new BUILD will start.');
+    }
+    termination.abort();
   };
   signalSource.on('SIGINT', onSignal);
+  signalSource.on('SIGTERM', onTerminate);
 
   try {
     log(
@@ -788,6 +882,14 @@ export async function runNight(options = {}, deps = {}) {
       }
       await yieldToSignals();
       if (stopRequested) break;
+      const killSwitch = observeKillSwitchImpl({ repositoryRoot: result.repositoryRoot, env });
+      if (killSwitch.stop) {
+        result.operatorStop.requested = true;
+        result.operatorStop.stoppedBeforeNextBuild = true;
+        result.operatorStop.killSwitch = killSwitch.reason;
+        log(`[NIGHT RUN] kill switch active (${killSwitch.reason}); no new BUILD will start.`);
+        return finish(USER_STOPPED, `operator kill switch is active: ${killSwitch.reason}`);
+      }
 
       const startObservation = observeLiveMain({
         readLiveMain,
@@ -811,6 +913,7 @@ export async function runNight(options = {}, deps = {}) {
           env: buildChildEnv,
           requestText: request.text,
           stderr,
+          abortSignal: termination.signal,
         });
       } catch (error) {
         invocation = {
@@ -972,6 +1075,7 @@ export async function runNight(options = {}, deps = {}) {
     return finish(MAX_CYCLES_REACHED, 'max-cycles bound reached');
   } finally {
     signalSource.removeListener?.('SIGINT', onSignal);
+    signalSource.removeListener?.('SIGTERM', onTerminate);
   }
 }
 
@@ -1010,7 +1114,10 @@ export const USAGE = [
   'Foreground Night Run: each cycle is the existing BUILD front door re-run on',
   'fresh live main. Ctrl+C once requests a safe stop: the active BUILD cycle',
   'finishes its own terminal and no new BUILD starts. Repeated Ctrl+C only',
-  'prints a diagnostic and never escalates to a hard kill. The BUILD request is',
+  'prints a diagnostic and never escalates to a hard kill. SIGTERM records the',
+  'same stop and terminates the active BUILD process group. A .agent-stop file',
+  'in the canonical checkout root or GREENHUB_AGENT_STOP=1 stops before the',
+  'next BUILD and refuses publication before transport and merge. The BUILD request is',
   'read once into process memory and reused unchanged for every cycle; it is',
   'never stored as durable coordination state.',
   '',

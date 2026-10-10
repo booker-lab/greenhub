@@ -32,13 +32,16 @@ import {
   INVALID_INPUT,
   PROOF_FAILED,
   SUCCESS,
+  buildProofEnv,
   createBaselineWorkspace,
   defaultRemoveWorkspace,
   defaultRunProofCommand,
   DEFAULT_PROOF_TIMEOUT_MS,
   fetchBaseline,
   gitCapture,
+  findProtectedPaths,
   normalizeRepoPath,
+  observeKillSwitch,
   parseArgs as parseRunOnceArgs,
   readLiveRemoteMain,
   revParse,
@@ -465,21 +468,37 @@ function readRequiredChecks({ runGh, cwd, repository }) {
       reason: `main protection could not be read: ${ghMessageOf(protection)}`,
     };
   }
+  // Fail closed: a missing, unreadable, or forbidden protection record (HTTP
+  // 404/403 included) is never read as "no required checks". Publication
+  // continues only against a confirmed protection record that names at least
+  // one required status check.
   if (protection.exitCode !== 0) {
-    const message = ghMessageOf(protection);
-    if (/not protected|Branch not protected|HTTP 404/i.test(message)) {
-      return { ok: true, requiredChecks: [], protection: 'UNPROTECTED' };
-    }
-    return { ok: false, reason: `main protection could not be read: ${message}` };
+    return {
+      ok: false,
+      reason:
+        `main branch protection could not be confirmed, so publication is refused: ` +
+        ghMessageOf(protection),
+    };
   }
   const payload = parseJson(protection.stdout);
   if (payload === null || typeof payload !== 'object') {
     return { ok: false, reason: 'main protection returned no JSON payload' };
   }
   const contexts = payload?.required_status_checks?.contexts;
-  const requiredChecks = Array.isArray(contexts)
-    ? contexts.map((entry) => String(entry)).filter((entry) => entry.trim().length > 0)
-    : [];
+  const checks = payload?.required_status_checks?.checks;
+  const requiredChecks = [
+    ...new Set([
+      ...(Array.isArray(contexts) ? contexts.map((entry) => String(entry)) : []),
+      ...(Array.isArray(checks) ? checks.map((entry) => String(entry?.context ?? '')) : []),
+    ]),
+  ].filter((entry) => entry.trim().length > 0);
+  if (requiredChecks.length === 0) {
+    return {
+      ok: false,
+      reason:
+        'main branch protection declares no required status checks, so publication is refused',
+    };
+  }
   return { ok: true, requiredChecks, protection: 'PROTECTED' };
 }
 
@@ -597,7 +616,12 @@ export function waitForRequiredChecks({
   sleep = defaultSleep,
 }) {
   if (!Array.isArray(requiredChecks) || requiredChecks.length === 0) {
-    return { ok: true, status: 'NONE_REQUIRED', checks: [] };
+    return {
+      ok: false,
+      status: 'NO_REQUIRED_CHECKS',
+      checks: [],
+      reason: 'no required status check is declared, so the merge gate cannot be observed',
+    };
   }
   const deadline = timeoutMs > 0 ? Date.now() + timeoutMs : null;
   for (;;) {
@@ -936,6 +960,13 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
       return finish(candidate.status, candidate.reason);
     }
     publication.ownedPaths = candidate.changedPaths;
+    const protectedOwned = findProtectedPaths(candidate.changedPaths);
+    if (protectedOwned.length > 0) {
+      return finish(
+        PUBLICATION_BLOCKED,
+        `candidate changes protected repository path(s): ${protectedOwned.join(', ')}`,
+      );
+    }
     log(
       `[run-publish-once] candidate ${candidate.candidateSha} (${candidate.changedPaths.length} owned path(s))`,
     );
@@ -1014,7 +1045,7 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
             entries: staleEntries,
             timeoutMs: proofTimeoutMs,
             runProofCommand,
-            env: baseEnv,
+            env: buildProofEnv(baseEnv),
             log,
           });
           if (proofRun.cleanup === 'FAILED') {
@@ -1140,6 +1171,18 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
         publication.protection = checks.protection;
         publication.requiredChecks = checks.requiredChecks;
         provider = { repository: repository.repository };
+      }
+
+      const transportStop = observeKillSwitch({
+        repositoryRoot: context.repositoryRoot,
+        env: baseEnv,
+      });
+      if (transportStop.stop) {
+        if (openAttempt !== null) publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `operator kill switch is active before transport: ${transportStop.reason}`,
+        );
       }
 
       const retired = retireOpenPublication('rebind re-publication');
@@ -1366,6 +1409,15 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
         return finish(
           PUBLICATION_BLOCKED,
           'the provider reports a merge conflict; local merge/rebase fallback is forbidden',
+        );
+      }
+
+      const mergeStop = observeKillSwitch({ repositoryRoot: context.repositoryRoot, env: baseEnv });
+      if (mergeStop.stop) {
+        publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `operator kill switch is active before merge: ${mergeStop.reason}`,
         );
       }
 
