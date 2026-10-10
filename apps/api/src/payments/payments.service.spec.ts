@@ -90,7 +90,11 @@ function paymentDataWithStatus(status: string, overrides: Data = {}) {
   return { ...(paymentData as Data), status, ...overrides } as never;
 }
 
-function makeFinalization(overrides: Data = {}) {
+function makeConfig(values: Record<string, string>) {
+  return { get: jest.fn((key: string) => values[key]) } as never;
+}
+
+function makeFinalization(overrides: Data = {}, configValues?: Record<string, string>) {
   const order = {
     id: 'order-1',
     storeId: 'store-1',
@@ -129,6 +133,7 @@ function makeFinalization(overrides: Data = {}) {
     issueWriter as never,
     retention as never,
     refunds as never,
+    configValues ? makeConfig(configValues) : undefined,
   );
   return {
     service,
@@ -136,6 +141,7 @@ function makeFinalization(overrides: Data = {}) {
     records,
     portone,
     notifications,
+    audit,
     capacity,
     issueWriter,
     retention,
@@ -190,6 +196,137 @@ describe('결제 최종화 경쟁 조건', () => {
     expect(fixture.portone.refund).toHaveBeenCalledWith('order-1', 99999, '금액 위변조 감지');
     expect(fixture.records.get('orders/order-1')?.status).toBe('CANCELLED');
     expect(fixture.records.has('payments/order-1')).toBe(false);
+  });
+
+  describe('PortOne 상점·통화·채널 확인', () => {
+    const productionConfig = {
+      RAILWAY_ENVIRONMENT_NAME: 'production',
+      PORTONE_STORE_ID: 'store-portone-live',
+    };
+    const stagingConfig = {
+      RAILWAY_ENVIRONMENT_NAME: 'staging',
+      PORTONE_STORE_ID: 'store-portone-live',
+    };
+    const livePayment = {
+      storeId: 'store-portone-live',
+      currency: 'KRW',
+      channel: { type: 'LIVE' },
+    };
+
+    it('운영에서 상점·KRW·LIVE 채널이 맞으면 기존처럼 확정한다', async () => {
+      const fixture = makeFinalization({}, productionConfig);
+
+      await expect(
+        fixture.service.finalizePaidOrder('order-1', paymentDataWithStatus('PAID', livePayment)),
+      ).resolves.toEqual({ ok: true, status: 'ACCEPTED' });
+
+      expect(fixture.records.get('orders/order-1')?.status).toBe('ACCEPTED');
+      expect(fixture.records.get('payments/order-1')?.status).toBe('PAID');
+      expect(fixture.portone.refund).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['운영 TEST 채널', { channel: { type: 'TEST' } }, 'channel.type', 'TEST'],
+      ['다른 상점', { storeId: 'store-other' }, 'storeId', 'store-other'],
+      ['KRW가 아닌 통화', { currency: 'USD' }, 'currency', 'USD'],
+      ['채널 정보 없음', { channel: undefined }, 'channel.type', null],
+      ['통화 정보 없음', { currency: undefined }, 'currency', null],
+    ])('%s 결제는 금액 불일치처럼 환불하고 취소한다', async (_name, override, field, actual) => {
+      const fixture = makeFinalization({}, productionConfig);
+
+      await expect(
+        fixture.service.finalizePaidOrder(
+          'order-1',
+          paymentDataWithStatus('PAID', { ...livePayment, ...override }),
+        ),
+      ).resolves.toEqual({ ok: false, reason: 'payment_context_mismatch' });
+
+      expect(fixture.portone.refund).toHaveBeenCalledWith(
+        'order-1',
+        100000,
+        '결제 상점·통화·채널 불일치',
+      );
+      expect(fixture.records.get('orders/order-1')).toMatchObject({
+        status: 'CANCELLED',
+        cancelReason: 'payment_context_mismatch',
+        finalizationRefund: expect.objectContaining({
+          reason: 'payment_context_mismatch',
+          status: 'REFUNDED',
+        }),
+      });
+      expect(fixture.records.has('payments/order-1')).toBe(false);
+      expect(fixture.capacity.consumeReservationInTransaction).not.toHaveBeenCalled();
+      expect(fixture.capacity.releaseReservationInTransaction).toHaveBeenCalledWith(
+        expect.anything(),
+        'reservation-1',
+        'RELEASED',
+      );
+      expect(fixture.notifications.sendToUser).not.toHaveBeenCalled();
+      expect(fixture.audit.log).toHaveBeenCalledWith('payment.amount_tampered', {
+        userId: 'user-1',
+        detail: expect.objectContaining({ orderId: 'order-1', field, actual }),
+      });
+    });
+
+    it('스테이징에서는 TEST 채널 결제를 확정한다', async () => {
+      const fixture = makeFinalization({}, stagingConfig);
+
+      await expect(
+        fixture.service.finalizePaidOrder(
+          'order-1',
+          paymentDataWithStatus('PAID', { ...livePayment, channel: { type: 'TEST' } }),
+        ),
+      ).resolves.toEqual({ ok: true, status: 'ACCEPTED' });
+      expect(fixture.portone.refund).not.toHaveBeenCalled();
+    });
+
+    it('스테이징 E2E stub처럼 상점·통화·채널 필드가 없어도 확정한다', async () => {
+      const fixture = makeFinalization({}, stagingConfig);
+
+      await expect(fixture.service.finalizePaidOrder('order-1', paymentData)).resolves.toEqual({
+        ok: true,
+        status: 'ACCEPTED',
+      });
+      expect(fixture.portone.refund).not.toHaveBeenCalled();
+    });
+
+    it('스테이징에서도 다른 상점 결제는 환불하고 취소한다', async () => {
+      const fixture = makeFinalization({}, stagingConfig);
+
+      await expect(
+        fixture.service.finalizePaidOrder(
+          'order-1',
+          paymentDataWithStatus('PAID', { ...livePayment, storeId: 'store-other' }),
+        ),
+      ).resolves.toEqual({ ok: false, reason: 'payment_context_mismatch' });
+      expect(fixture.records.get('orders/order-1')?.status).toBe('CANCELLED');
+    });
+
+    it('cleanup scheduler도 같은 확인을 거쳐 운영 TEST 채널 결제를 환불한다', async () => {
+      const fixture = makeFinalization({}, productionConfig);
+      fixture.portone.getPayment.mockResolvedValue(
+        paymentDataWithStatus('PAID', { ...livePayment, channel: { type: 'TEST' } }),
+      );
+      const service = new PaymentsService(
+        fixture.firestore as never,
+        fixture.portone as never,
+        fixture.service,
+        fixture.refunds as never,
+        { isOrderChargePaymentId: jest.fn(() => false) } as never,
+      );
+
+      await service.cleanupPendingOrders();
+
+      expect(fixture.portone.refund).toHaveBeenCalledWith(
+        'order-1',
+        100000,
+        '결제 상점·통화·채널 불일치',
+      );
+      expect(fixture.records.get('orders/order-1')).toMatchObject({
+        status: 'CANCELLED',
+        cancelReason: 'payment_context_mismatch',
+      });
+    });
   });
 
   it('결제 조회 최종 실패를 허용된 상태 정보만 담아 운영 예외로 기록한다', async () => {
