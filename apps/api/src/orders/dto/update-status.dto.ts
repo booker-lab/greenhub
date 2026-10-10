@@ -2,12 +2,13 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
+  IsInt,
   IsISO8601,
-  IsNumber,
   IsOptional,
   IsString,
   IsUrl,
   Matches,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -38,6 +39,23 @@ const DELIVERY_HOLD_REASONS = [
   'OTHER',
 ] as const;
 
+/**
+ * 고객 책임 재배송비 상한(원). 매장 기본 직배송비(3,000원)의 여러 배를 넘는 금액은
+ * 입력 실수로 보고 받지 않는다. KRW 결제 금액이므로 정수만 허용한다.
+ */
+export const MAX_REDELIVERY_FEE_KRW = 50_000;
+
+/** 재배송비 값이 없거나(null) 0 이상 상한 이하의 정수인지 확인한다. */
+export function isAllowedRedeliveryFee(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= MAX_REDELIVERY_FEE_KRW
+  );
+}
+
 export class DeliveryHoldDto {
   @IsEnum(DELIVERY_HOLD_REASONS)
   reasonCode: (typeof DELIVERY_HOLD_REASONS)[number];
@@ -49,8 +67,9 @@ export class DeliveryHoldDto {
   customerResponsible: boolean;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(MAX_REDELIVERY_FEE_KRW)
   redeliveryFee?: number | null;
 
   @IsOptional()
