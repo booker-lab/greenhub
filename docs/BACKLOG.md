@@ -685,6 +685,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 ### ROUND-PAYMENT-RETRY-DOUBLE-HOLD
 - [ ] 소비자가 결제창을 닫고 새 결제 시도 ID로 다시 결제하면(#328), 이전 시도의 `PENDING` 주문·`HELD` 예약이 결제 실패 웹훅 또는 15분 만료 정리(1분 주기)까지 최대 약 16분 동안 회차 배송지·수량·상품 한도를 함께 차지한다. **2026-10-04 결정: 파일럿 동안 유지한다.** 즉시 해제하려면 늦게 도착한 이전 결제(늦은 결제 재확보·자동 환불) 흐름까지 다시 맞춰야 해서 위험이 이득보다 크다. 주문 오픈 날 '한도 마감'이 비정상적으로 빨리 나오면 우선 대응한다.
+- 2026-10-10 결정: 이전 예약 유지는 그대로 두고, 같은 회차에서 고객 한 명이 동시에 가질 수 있는 만료 전 결제 예약을 3건으로 제한한다(4번째 시도는 409 안내). 구현: `OrderCapacityService` `MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND`.
 
 ### CI-REQUIRED-CHECK
 - [ ] **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다. 2026-10-09 CI 추가(#417) 뒤 PR마다 통과한다. 남은 일은 branch protection 필수 검사 지정(사용자)이다.

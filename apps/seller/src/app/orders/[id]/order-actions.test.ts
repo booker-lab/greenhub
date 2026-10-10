@@ -112,14 +112,16 @@ describe('재배송 준비로 돌리기 확인 문구', () => {
     );
   });
 
-  it('이미 결제된 유료 재배송은 결제 요청 알림톡이 한 번 더 간다는 사실을 알린다', () => {
+  it('이미 결제된 유료 재배송은 결제 요청 알림톡 없이 수거 대기로 돌아간다고 알린다', () => {
     const order = {
       deliveryHold: hold(),
       redeliveryPayment: payment({ status: 'PAID', paid: true, chargeId: 'charge-1' }),
     };
     expect(resolveHoldReleaseMode(order)).toBe('ALREADY_PAID');
-    expect(holdReleaseMessage(order)).toContain('재배송비 3,000원은 이미 결제됐어요');
-    expect(holdReleaseMessage(order)).toContain('결제 요청 알림톡이 한 번 더 가요');
+    expect(holdReleaseMessage(order)).toBe(
+      '재배송비 3,000원은 이미 결제됐어요. 기사 화면 수거 대기로 돌아가 바로 배송을 다시 시작할 수 있어요.',
+    );
+    expect(holdReleaseMessage(order)).not.toContain('알림톡');
   });
 
   it('무료·판매자 책임 보류는 알림톡 없이 수거 대기로 돌아간다', () => {
