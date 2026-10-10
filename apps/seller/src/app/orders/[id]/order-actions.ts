@@ -8,7 +8,10 @@ export interface OrderDetailActions {
   prepare: boolean;
   /** 택배 PREPARING → DELIVERED */
   shipParcel: boolean;
-  /** 기사가 가져가기 전 PREPARING → DELIVERY_HELD(직배송·거점). 택배는 기사 배송이 아니라 제외. */
+  /**
+   * 기사가 가져가기 전 회차 직배송 PREPARING → DELIVERY_HELD. 기사 앱 보류와 같은 범위다 —
+   * 예전 주문은 재배송비 결제를 만들 수 없고(서버가 schemaVersion 2만 받음), 택배·거점은 기사 직배송이 아니다.
+   */
   hold: boolean;
   /** DELIVERY_HELD → PREPARING(재배송 준비) */
   releaseHold: boolean;
@@ -17,12 +20,23 @@ export interface OrderDetailActions {
 }
 
 export function resolveOrderDetailActions(
-  order: Pick<Order, 'status' | 'deliveryMethod'>,
+  order: Pick<
+    Order,
+    'status' | 'deliveryMethod' | 'schemaVersion' | 'roundId' | 'redeliveryPayment'
+  >,
 ): OrderDetailActions {
+  const isRoundDirect =
+    order.schemaVersion === 2 &&
+    typeof order.roundId === 'string' &&
+    order.roundId.length > 0 &&
+    order.deliveryMethod === 'direct';
   return {
     prepare: order.status === 'ACCEPTED' || order.status === 'CONFIRMED',
     shipParcel: order.deliveryMethod === 'parcel' && order.status === 'PREPARING',
-    hold: order.status === 'PREPARING' && order.deliveryMethod !== 'parcel',
+    // 재배송비 결제를 기다리는 보류가 아직 열려 있으면(유료 재배송을 재배송 준비로 돌린 주문) 다시 보류하지 않는다.
+    // 서버는 그 주문을 이미 회차 보류 건수에 세고 있어, 새 보류가 한 번 더 세면 회차 완료가 막힌다.
+    hold:
+      order.status === 'PREPARING' && isRoundDirect && order.redeliveryPayment?.required !== true,
     releaseHold: order.status === 'DELIVERY_HELD',
     cancel: CANCELLABLE_STATUSES.includes(order.status),
   };
