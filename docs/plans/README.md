@@ -6,13 +6,13 @@
 
 현재 활성 여부는 파일명이나 체크박스가 아니라 `docs/memory.md`가 결정한다.
 
-2026-08-23 기준 현재 활성 계약은 다음 3개다.
+2026-10-10 기준 현재 활성 계약은 다음 1개다.
 
-- `HANDOFF_mvp_round_direct_aligo_review_pause.md` — ALIGO 외부 심사 대기와 재개 순서
-- `PLAN_mvp_round_direct_launch_blockers.md` — 실제 출시 dependency와 승인 게이트
 - `PLAN_deployment_safety_guards_20260823.md` — `main` 통합과 production 배포 분리, exact-SHA 배포 원칙, 완료된 Issue #32 보호 상태의 유지 계약
 
 현재 상태 자체는 `docs/memory.md`, 미완료 작업은 `docs/BACKLOG.md`가 정본이다.
+
+`HANDOFF_mvp_round_direct_aligo_review_pause.md`와 `PLAN_mvp_round_direct_launch_blockers.md`는 2026-09-05 snapshot인 역사 자료다. 그 뒤 운영 배포(2026-09-28)와 activation(2026-09-29)이 끝나 재개 지점은 `docs/memory.md`의 `다음 작업`이 소유한다.
 
 특히 `PLAN_deployment_safety_guards_20260823.md`는 파일명 패턴상 `PLAN_*`이지만 `docs/memory.md`가 명시적으로 활성화한 현재 계약이다. Issue #32가 `CLOSED`가 된 뒤에도 exact-SHA·production 분리·docs-only 안전 계약을 위해 현재 계약으로 유지한다.
 

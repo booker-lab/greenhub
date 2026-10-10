@@ -37,7 +37,7 @@
 | 항목 | 범위 | 규모 | 산출물 |
 |------|------|------|--------|
 | **P3 `/admin/banner` prerender 실패** | Vercel admin/seller 프로젝트 Firebase env 점검 → 누락 config 추가 → 재배포 검증 | 소 (env 점검+재배포) | `auth/invalid-api-key` 해소, 빌드 prerender 통과 |
-| **P3 consumer@test.com 강한비번 전환** | Firebase Auth 비번 교체 + `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 갱신 + e2e 풀런 검증 | 소 | 편의 결정(test1234) → 보안 정상화. `feedback_security_convenience` 재확인 필요 |
+| **P3 <TEST_CONSUMER_EMAIL> 강한비번 전환** | Firebase Auth 비번 교체 + `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 갱신 + e2e 풀런 검증 | 소 | 보안 정상화(자격증명은 저장소 밖에서 관리). `feedback_security_convenience` 재확인 필요 |
 
 ### 🟡 사용자 협조 필요 (착수 전 확인)
 
@@ -103,7 +103,7 @@ NextAuth API route cold start 영향 가능성. **P2-A 계측 데이터 확보 �
 단독으로 착수 가능한 항목부터:
 
 - [ ] `/admin/banner` prerender 실패 — Vercel admin/seller Firebase env 점검·추가·재배포. (환경변수 점검만)
-- [ ] consumer@test.com 강한비번 전환 — 현재 test1234(편의 결정). 보안 follow-up.
+- [ ] <TEST_CONSUMER_EMAIL> 강한비번 전환 — 보안 follow-up. 자격증명은 저장소 밖에서 관리.
 - [ ] `useOrderActions` 훅 통합 — detail/OrderCard 시그니처 불일치. UI 리팩토링 사이클에서.
 - [ ] G1 `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 신규 구현.
 - [ ] Driver Kakao Maps SDK 연동.

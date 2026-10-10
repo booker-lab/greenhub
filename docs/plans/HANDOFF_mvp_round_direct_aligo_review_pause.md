@@ -2,6 +2,8 @@
 
 # 회차 직배송 MVP — ALIGO 승인 후 재개 인계
 
+> **Historical — 2026-09-05 snapshot.** 이 문서는 현재 재개 지점이나 실행 지시가 아니다. 이후 2026-09-28 운영 배포, 2026-09-29 activation(`salesMode=round_direct`, 첫 회차 `SCHEDULED`), ALIGO 운영 반영·격리 알림톡이 끝났다. 현재 상태와 다음 작업은 `docs/memory.md`, 미완료는 `docs/BACKLOG.md`를 따른다.
+
 > 현재 재개 지점만 관리한다. 상세 상태는 `docs/memory.md`, Acceptance Criteria는 `docs/BACKLOG.md`, 의존성은 `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`를 따른다.
 
 ## 현재 상태 — 2026-09-05 KST
