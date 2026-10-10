@@ -40,9 +40,12 @@ function makeFirestore(initial: Record<string, RecordData>) {
       async get() {
         const docs = Array.from(records.entries())
           .filter(([path]) => path.startsWith(`${name}/`))
-          .map(([path, data]) => ({ id: path.split('/')[1], data: () => data }))
+          .map(([path, data]) => ({ id: path.split('/')[1], ref: doc(path), data: () => data }))
           .filter((snap) => filters.every(([field, value]) => snap.data()[field] === value));
         return { docs };
+      },
+      limit() {
+        return query;
       },
       doc(id: string) {
         return doc(`${name}/${id}`);
@@ -58,8 +61,10 @@ function makeFirestore(initial: Record<string, RecordData>) {
       const result = transactionQueue.then(async () => {
         const pending = new Map<string, RecordData>();
         const tx = {
-          get: jest.fn(async (ref: { path: string }) =>
-            makeSnap(pending.get(ref.path) ?? records.get(ref.path) ?? null),
+          get: jest.fn(async (ref: { path?: string; get(): Promise<unknown> }) =>
+            typeof ref.path === 'string'
+              ? makeSnap(pending.get(ref.path) ?? records.get(ref.path) ?? null)
+              : ref.get(),
           ),
           set: jest.fn((ref: { path: string }, data: RecordData, options?: { merge?: boolean }) => {
             if ((ref as { failOrderWrite?: boolean }).failOrderWrite) {

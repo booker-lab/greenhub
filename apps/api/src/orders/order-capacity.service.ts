@@ -30,6 +30,13 @@ export class LatePaymentCapacityError extends ConflictException {
   }
 }
 
+// 같은 고객이 같은 회차에서 새 결제를 시작해 대체된 이전 결제 전 주문의 취소 사유.
+// 이 주문에 결제가 뒤늦게 확인되면 기존 '취소 후 확인된 결제' 환불 경로로 정리된다.
+export const SUPERSEDED_CHECKOUT_CANCEL_REASON = 'superseded';
+
+const PREVIOUS_CHECKOUT_IN_PROGRESS_MESSAGE =
+  '이전 결제를 처리하고 있습니다. 잠시 후 주문 내역을 확인해 주세요.';
+
 type RoundItemInput = {
   roundItemId: string;
   quantity: number;
@@ -123,41 +130,102 @@ export class OrderCapacityService {
       throw new NotFoundException('회차를 찾을 수 없습니다.');
     }
     const now = this.firestore.Timestamp.now();
+    // 같은 고객의 같은 회차 활성 예약은 1건만 둔다. 이전 결제 시도의 예약은 아래에서
+    // 같은 트랜잭션으로 반환한다(읽기는 모두 쓰기 전에 끝낸다). 반환할 예약을 뺀 한도로
+    // 회차 상태와 새 예약을 판정하므로, 고객 자신의 이전 시도 때문에 재시도가 마감으로
+    // 거절되지 않는다.
+    const superseded = await this.readSupersededHoldsInTransaction(tx, {
+      storeId: input.storeId,
+      roundId: input.roundId,
+      userId: input.userId,
+      nowMillis: timestampMillis(now),
+    });
+    const storedRound = roundSnap.data() as Record<string, any>;
     const { round, statusTransition } = this.effectiveRound(
-      roundSnap.data() as Record<string, any>,
+      superseded.length === 0
+        ? storedRound
+        : {
+            ...storedRound,
+            counters: this.nextCountersOrThrow(storedRound['counters'], {
+              reservedDeliveryAddresses: -superseded.length,
+              reservedItemQuantity: -superseded.reduce(
+                (sum, { reservation }) => sum + reservation.itemQuantityTotal,
+                0,
+              ),
+            }),
+          },
       timestampMillis(now),
     );
     this.assertRoundReservable(round, timestampMillis(now));
     this.assertDeliveryCity(input.deliveryAddress.address, round['deliveryRegion']?.['city']);
 
     const normalizedItems = this.normalizeItems(input.items);
-    const itemSnaps = await Promise.all(
-      normalizedItems.map((item) =>
-        tx.get(this.firestore.doc(`saleRoundItems/${item.roundItemId}`)),
+    const nowMillis = timestampMillis(now);
+    if (!Number.isFinite(nowMillis)) {
+      throw new ConflictException('예약 시각을 확인할 수 없습니다.');
+    }
+    const supersededQuantityByItem = new Map<string, number>();
+    superseded.forEach(({ reservation }) => {
+      reservation.items.forEach((item) => {
+        if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+          throw new ConflictException('회차 상품 수량 상태가 올바르지 않아 처리할 수 없습니다.');
+        }
+        supersededQuantityByItem.set(
+          item.roundItemId,
+          (supersededQuantityByItem.get(item.roundItemId) ?? 0) + item.quantity,
+        );
+      });
+    });
+    const touchedItemIds = [
+      ...new Set([
+        ...normalizedItems.map((item) => item.roundItemId),
+        ...supersededQuantityByItem.keys(),
+      ]),
+    ];
+    const touchedItemSnaps = await Promise.all(
+      touchedItemIds.map((roundItemId) =>
+        tx.get(this.firestore.doc(`saleRoundItems/${roundItemId}`)),
       ),
     );
-    const itemRecords = itemSnaps.map((snap, index) => {
+    const touchedItems = touchedItemSnaps.map((snap, index) => {
       if (!snap.exists) throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
-      const item = snap.data() as Record<string, any>;
-      if (item['roundId'] !== input.roundId || item['storeId'] !== input.storeId) {
+      const data = snap.data() as Record<string, any> | undefined;
+      if (!data || data['roundId'] !== input.roundId || data['storeId'] !== input.storeId) {
         throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
       }
-      if (item['status'] !== 'ACTIVE') {
+      const roundItemId = touchedItemIds[index];
+      const reservedAfterRelease =
+        this.assertFiniteCounter(data['reservedQuantity'], 'item') -
+        (supersededQuantityByItem.get(roundItemId) ?? 0);
+      this.assertFiniteCounter(data['orderedQuantity'], 'item');
+      if (reservedAfterRelease < 0) {
+        throw new ConflictException('회차 상품 수량 상태가 올바르지 않아 처리할 수 없습니다.');
+      }
+      return { roundItemId, data, reservedAfterRelease };
+    });
+    const touchedById = new Map(touchedItems.map((touched) => [touched.roundItemId, touched]));
+    const itemRecords = normalizedItems.map((item) => {
+      const touched = touchedById.get(item.roundItemId);
+      if (!touched) throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
+      if (touched.data['status'] !== 'ACTIVE') {
         throw new ConflictException('구매할 수 없는 회차 상품입니다.');
       }
-      return { input: normalizedItems[index], data: item };
+      return {
+        input: item,
+        data: touched.data,
+        reservedAfterRelease: touched.reservedAfterRelease,
+      };
     });
 
     const totalQuantity = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
     this.assertRoundCapacity(round, totalQuantity);
     itemRecords.forEach((item) => {
-      this.assertItemCapacity(item.data, item.input.quantity);
+      this.assertItemCapacity(
+        { ...item.data, reservedQuantity: item.reservedAfterRelease },
+        item.input.quantity,
+      );
     });
 
-    const nowMillis = timestampMillis(now);
-    if (!Number.isFinite(nowMillis)) {
-      throw new ConflictException('예약 시각을 확인할 수 없습니다.');
-    }
     const nowIso = this.toDate(now).toISOString();
     const reservation: ReservationRecord = {
       id: reservationId,
@@ -192,25 +260,100 @@ export class OrderCapacityService {
       reservedDeliveryAddresses: 1,
       reservedItemQuantity: totalQuantity,
     });
-    itemRecords.forEach((item) => {
-      this.assertFiniteCounter(item.data['reservedQuantity'], 'item');
-      this.assertFiniteCounter(item.data['orderedQuantity'], 'item');
-    });
+    const newQuantityByItem = new Map(
+      normalizedItems.map((item) => [item.roundItemId, item.quantity] as const),
+    );
 
+    superseded.forEach(({ reservation: previous, orderRef }) => {
+      tx.update(this.firestore.doc(`checkoutReservations/${previous.id}`), {
+        status: 'RELEASED',
+        releasedAt: nowIso,
+        updatedAt: nowIso,
+      });
+      if (orderRef) {
+        tx.update(orderRef, {
+          status: 'CANCELLED',
+          cancelReason: SUPERSEDED_CHECKOUT_CANCEL_REASON,
+          updatedAt: now,
+        });
+      }
+    });
     tx.set(reservationRef, reservation);
     tx.update(roundRef, {
       ...statusTransition,
       counters: nextReserveCounters,
       updatedAt: nowIso,
     });
-    itemRecords.forEach((item) => {
-      tx.update(this.firestore.doc(`saleRoundItems/${item.input.roundItemId}`), {
-        reservedQuantity:
-          this.assertFiniteCounter(item.data['reservedQuantity'], 'item') + item.input.quantity,
+    touchedItems.forEach(({ roundItemId, reservedAfterRelease }) => {
+      tx.update(this.firestore.doc(`saleRoundItems/${roundItemId}`), {
+        reservedQuantity: reservedAfterRelease + (newQuantityByItem.get(roundItemId) ?? 0),
         updatedAt: nowIso,
       });
     });
     return reservation;
+  }
+
+  /**
+   * 같은 (회차, 고객)의 만료 전 HELD 예약을 찾아, 새 결제 시도로 대체해도 안전한지
+   * 판정한다. 읽기만 하고 쓰지 않는다.
+   * - 연결 주문이 결제 전 PENDING이고 결제 기록·취소 진행이 없으면 대체 대상이다.
+   * - 연결 주문이 없으면(주문 없이 남은 예약) 결제될 수 없으므로 대체 대상이다.
+   * - 그 밖에는 이전 결제가 처리 중일 수 있으므로 반환하지 않고 409로 거절한다.
+   * 만료 시각이 지난 HELD는 결제 조회 뒤 정리하는 15분 scheduler에 맡긴다.
+   * 결제 확인 뒤 소비되는 늦은 결제 예약(`late-payment:`)은 대상이 아니다.
+   */
+  private async readSupersededHoldsInTransaction(
+    tx: any,
+    input: { storeId: string; roundId: string; userId: string; nowMillis: number },
+  ): Promise<Array<{ reservation: ReservationRecord; orderRef: unknown | null }>> {
+    const heldSnap = await tx.get(
+      this.firestore
+        .collection('checkoutReservations')
+        .where('roundId', '==', input.roundId)
+        .where('userId', '==', input.userId)
+        .where('status', '==', 'HELD'),
+    );
+    const active = (heldSnap.docs as Array<{ data(): unknown }>)
+      .map((snap) => snap.data() as ReservationRecord)
+      .filter(
+        (held) =>
+          held.storeId === input.storeId &&
+          !String(held.idempotencyKey ?? '').startsWith('late-payment:') &&
+          new Date(held.expiresAt).getTime() > input.nowMillis,
+      );
+
+    const superseded: Array<{ reservation: ReservationRecord; orderRef: unknown | null }> = [];
+    for (const held of active) {
+      if (!Array.isArray(held.items) || held.items.length === 0) {
+        throw new ConflictException(PREVIOUS_CHECKOUT_IN_PROGRESS_MESSAGE);
+      }
+      const orderSnap = await tx.get(
+        this.firestore.collection('orders').where('reservationId', '==', held.id).limit(2),
+      );
+      const orderDocs = orderSnap.docs as Array<{ id: string; ref: unknown; data(): unknown }>;
+      if (orderDocs.length === 0) {
+        superseded.push({ reservation: held, orderRef: null });
+        continue;
+      }
+      if (orderDocs.length > 1) {
+        throw new ConflictException(PREVIOUS_CHECKOUT_IN_PROGRESS_MESSAGE);
+      }
+      const order = orderDocs[0].data() as Record<string, any>;
+      const paymentSnap = await tx.get(this.firestore.doc(`payments/${orderDocs[0].id}`));
+      const replaceable =
+        order['status'] === 'PENDING' &&
+        order['schemaVersion'] === 2 &&
+        order['storeId'] === input.storeId &&
+        order['roundId'] === input.roundId &&
+        order['userId'] === input.userId &&
+        order['cancellation'] == null &&
+        !paymentSnap.exists;
+      if (!replaceable) {
+        throw new ConflictException(PREVIOUS_CHECKOUT_IN_PROGRESS_MESSAGE);
+      }
+      superseded.push({ reservation: held, orderRef: orderDocs[0].ref });
+    }
+    return superseded;
   }
 
   async consumeReservation(input: {
