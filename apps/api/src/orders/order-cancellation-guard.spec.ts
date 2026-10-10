@@ -10,6 +10,7 @@ import { createOccFirestore } from '../../test/helpers/firestore-occ-fake';
 import { DriverOrderScopeService } from './driver-order-scope.service';
 import { HoldDeliveryDto, MAX_REDELIVERY_FEE_KRW } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
+import { resolveRedeliveryPaymentActionability } from './redelivery-resume-gate';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 
 type Occ = ReturnType<typeof createOccFirestore>;
@@ -176,6 +177,84 @@ describe('취소 진행 중 주문의 상태 전이 차단', () => {
 
       await expect(scope.assertMutationEligibility(input)).resolves.toBe('legacy');
     });
+
+    it('취소 진행 중 미배정 준비 주문은 기사 목록·상세에 올리지 않는다', async () => {
+      const authority = { requesterId: 'driver-1', role: 'driver', driverApproved: true } as const;
+      const cancelling = makeScope({
+        status: 'PREPARING',
+        driverId: null,
+        cancellation: { status: 'REFUNDING' },
+      });
+      await expect(
+        cancelling.scope.isDiscoveryEligible(cancelling.input.order, 'driver-1', authority),
+      ).resolves.toBe(false);
+      await expect(
+        cancelling.scope.isOrderVisible(cancelling.input.order, 'driver-1', authority),
+      ).resolves.toBe(false);
+
+      const open = makeScope({ status: 'PREPARING', driverId: null, cancellation: null });
+      await expect(
+        open.scope.isDiscoveryEligible(open.input.order, 'driver-1', authority),
+      ).resolves.toBe(true);
+    });
+  });
+});
+
+describe('취소 진행 중 주문의 재배송비 결제 표시', () => {
+  const heldOrder = {
+    id: ORDER_ID,
+    storeId: 'store-1',
+    userId: 'user-1',
+    status: 'DELIVERY_HELD',
+    deliveryHold: paidRedeliveryHold,
+    redeliveryChargeId: 'charge-1',
+    redeliveryChargeHoldAt: paidRedeliveryHold.heldAt,
+  };
+  const pendingCharge = {
+    id: 'charge-1',
+    orderId: ORDER_ID,
+    storeId: 'store-1',
+    userId: 'user-1',
+    type: 'REDELIVERY_FEE',
+    status: 'PENDING',
+    amount: paidRedeliveryHold.redeliveryFee,
+    customerResponsible: true,
+    holdAt: paidRedeliveryHold.heldAt,
+    portonePaymentId: 'order-charge-charge-1',
+  };
+
+  it('결제 대기 charge가 있어도 취소가 진행 중이면 결제를 열지 않는다', () => {
+    expect(
+      resolveRedeliveryPaymentActionability({
+        order: heldOrder,
+        chargeExists: true,
+        charge: pendingCharge,
+      }),
+    ).toMatchObject({ status: 'PENDING', canPay: true, requiresRecovery: false });
+    expect(
+      resolveRedeliveryPaymentActionability({
+        order: { ...heldOrder, cancellation: { status: 'REFUNDING' } },
+        chargeExists: true,
+        charge: pendingCharge,
+      }),
+    ).toMatchObject({ status: 'PENDING', canPay: false, requiresRecovery: false });
+  });
+
+  it('charge가 아직 없어도 취소가 진행 중이면 결제를 열지 않고 복구 대상으로도 보지 않는다', () => {
+    const withoutCharge = {
+      ...heldOrder,
+      redeliveryChargeId: undefined,
+      redeliveryChargeHoldAt: undefined,
+    };
+    expect(
+      resolveRedeliveryPaymentActionability({ order: withoutCharge, chargeExists: false }),
+    ).toMatchObject({ status: 'MISSING', canPay: true, requiresRecovery: false });
+    expect(
+      resolveRedeliveryPaymentActionability({
+        order: { ...withoutCharge, cancellation: { status: 'LOCAL_PENDING' } },
+        chargeExists: false,
+      }),
+    ).toMatchObject({ status: 'MISSING', canPay: false, requiresRecovery: false });
   });
 });
 

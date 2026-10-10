@@ -1,6 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import type { RedeliveryPaymentActionability, RedeliveryPaymentState } from '@greenhub/shared';
 import { throwDriverOrderStateConflict } from './driver-order-error';
+import { isOrderCancellationInProgress } from './order-cancellation-state';
 
 type OrderRecord = Record<string, any>;
 
@@ -108,6 +109,8 @@ export function resolveRedeliveryPaymentActionability(input: {
   charge?: OrderRecord;
 }): RedeliveryPaymentActionability {
   const { order, chargeExists, charge } = input;
+  // 취소가 진행 중이면 재배송비 결제 생성이 409로 막히므로 결제 버튼을 열지 않는다.
+  const cancelling = isOrderCancellationInProgress(order);
   const holdAt = currentHoldAt(order);
   const chargeId = typeof order['redeliveryChargeId'] === 'string' ? order['redeliveryChargeId'] : null;
   const base = { holdAt, chargeId, required: true };
@@ -131,8 +134,14 @@ export function resolveRedeliveryPaymentActionability(input: {
     if (order['redeliveryChargeHoldAt'] !== null && order['redeliveryChargeHoldAt'] !== undefined) {
       return { ...base, status: 'MISMATCHED', canPay: false, paid: false, requiresRecovery: true };
     }
-    const canPay = order['status'] === 'DELIVERY_HELD' || order['status'] === 'PREPARING';
-    return { ...base, status: 'MISSING', canPay, paid: false, requiresRecovery: !canPay };
+    const payableStatus = order['status'] === 'DELIVERY_HELD' || order['status'] === 'PREPARING';
+    return {
+      ...base,
+      status: 'MISSING',
+      canPay: payableStatus && !cancelling,
+      paid: false,
+      requiresRecovery: !payableStatus,
+    };
   }
   if (order['redeliveryChargeHoldAt'] !== holdAt) {
     return { ...base, status: 'MISMATCHED', canPay: false, paid: false, requiresRecovery: true };
@@ -150,7 +159,7 @@ export function resolveRedeliveryPaymentActionability(input: {
   return {
     ...base,
     status,
-    canPay: status === 'PENDING',
+    canPay: status === 'PENDING' && !cancelling,
     paid: status === 'PAID',
     requiresRecovery: status === 'FAILED' || status === 'REFUNDED' || status === 'MISMATCHED',
   };
