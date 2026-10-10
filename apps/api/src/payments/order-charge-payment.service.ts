@@ -28,6 +28,7 @@ type ChargeRefundClaimStatus = 'CLAIMED' | 'UNKNOWN';
 type ChargeRefundPayload = {
   chargeId: string;
   orderId: string;
+  storeId: string;
   portonePaymentId: string;
   amount: number;
 };
@@ -233,6 +234,7 @@ export class OrderChargePaymentService {
             payload: {
               chargeId: String(charge['id'] ?? chargeRef.id ?? chargeRef.path ?? ''),
               orderId: String(charge['orderId'] ?? ''),
+              storeId: String(charge['storeId'] ?? ''),
               portonePaymentId: charge['portonePaymentId'],
               amount: charge['amount'],
             },
@@ -268,6 +270,7 @@ export class OrderChargePaymentService {
           payload: {
             chargeId: String(charge['id'] ?? chargeRef.id ?? chargeRef.path ?? ''),
             orderId: String(charge['orderId'] ?? ''),
+            storeId: String(charge['storeId'] ?? ''),
             portonePaymentId: charge['portonePaymentId'],
             amount: charge['amount'],
           },
@@ -416,10 +419,13 @@ export class OrderChargePaymentService {
       });
     });
     if (!this.issueWriter) return;
+    // 판매자 운영 화면은 매장 범위로 기록을 보여 주므로 charge의 storeId로 남긴다.
+    // 본 결제(payments) 문서가 아니므로 paymentId는 비우고 chargeId로 재시도 대상을 가리킨다.
     await this.issueWriter.createOrMergeIssue({
-      storeId: '',
+      storeId: charge.storeId,
       orderId: charge.orderId,
-      paymentId: charge.chargeId,
+      paymentId: null,
+      chargeId: charge.chargeId,
       type: 'AUTO_REFUND_FAILED',
       severity: 'critical',
       title: '재배송비 환불 결과 불명확',

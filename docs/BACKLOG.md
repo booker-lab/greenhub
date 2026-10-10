@@ -285,6 +285,8 @@ round checkout 선택 마케팅 consent, user preference, 철회, retention evid
 
 ### 역사적 P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
 
+> 2026-10-10: #402로 `orders`·`saleRounds`·`saleRoundItems` 원문 직접 읽기·쓰기를 모든 클라이언트에 거부한다(`main`, 운영 미배포). 세 앱 모두 이 원문을 직접 읽지 않는다.
+
 API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 
 - [ ] 미배정 `PREPARING` direct/hub discovery 최소 대상·필드 정의
@@ -642,7 +644,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] Railway contingency, 다중 판매자, hub_staff, 외부 driver 정산, 결제수단 확장
 
 ### AUTH-LOGOUT-SERVER-REVOCATION
-- [ ] 세 앱 Auth.js 로그아웃 시 API `POST /auth/logout`도 호출해 서버 refresh token을 폐기한다. 현재는 쿠키만 삭제되어 로그아웃 전에 복사된 쿠키가 refresh 만료(30일)까지 재사용될 수 있다. `refreshTokens/{sub}`가 사용자당 1개라 같은 계정의 다른 기기도 함께 로그아웃되는 영향을 설계에 포함한다. 2026-09-28 결정(D2)으로 출시 후 과제. **2026-10-10 결정: 지금 한다**(아래 `AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE`의 경쟁 상태 확인). 병행 세션 PR #415·#429·#431 병합 대기.
+- [ ] 세 앱 Auth.js 로그아웃 시 API `POST /auth/logout`도 호출해 서버 refresh token을 폐기한다. **2026-10-10 재대조: 구현됨**(#415·#429·#431 병합, 세 앱 `events.signOut` → `revokeApiSession`, 단위 테스트 있음). 남은 일: 배포 전 회차 E2E로 런타임 확인, 다른 기기 동시 로그아웃은 `AUTH-MULTI-DEVICE-SESSION`에서 결정. 이전 기록: 쿠키만 삭제되어 로그아웃 전에 복사된 쿠키가 refresh 만료(30일)까지 재사용될 수 있다. `refreshTokens/{sub}`가 사용자당 1개라 같은 계정의 다른 기기도 함께 로그아웃되는 영향을 설계에 포함한다. 2026-09-28 결정(D2)으로 출시 후 과제. **2026-10-10 결정: 지금 한다**(아래 `AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE`의 경쟁 상태 확인).
 
 ### PREVIEW-GENERIC-ENV-ALIGNMENT
 - [ ] exact Preview(브랜치 없는 배포)는 Vercel의 브랜치 미지정 Preview env를 쓴다. 판매자 앱은 이 env에서 API=스테이징, Firebase=운영(`green-e4fe3`, 운영·Preview·개발 공통 항목)으로 어긋나 Firebase 클라이언트 로그인이 실패한다. 세 앱의 브랜치 미지정 Preview Firebase 설정을 비운영 프로젝트로 분리할지 결정한다.
@@ -669,7 +671,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] 2026-10-03 대조 완료: 세 앱의 사용 컴포넌트와 import를 대조한 결과 드라이버는 누락 없음, 소비자(Checkbox·Image·Modal 계열)와 셀러(ActionIcon·NumberInput)는 채움. 이전 기록: 드라이버 `globals.css`는 Mantine CSS를 골라 import한다. 알림 스타일 누락은 #323으로 고쳤지만, `Modal.css` 같은 다른 사용 컴포넌트 CSS도 빠졌을 수 있다. 실제 사용 컴포넌트와 import 목록을 대조한다. 2026-09-28 발견.
 
 ### AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE
-- [ ] 2026-10-03 원격 회차 E2E run `37108803974` 1차에서 `auth-session-lifecycle` mobile seller "로그아웃하면 사라진다"가 실패했다. 로그아웃 뒤 세션 쿠키는 없었는데 바로 이은 `/api/auth/session`이 `seller`를 돌려줬다. 같은 Preview 재실행에서는 통과했고, 직전 실행들도 통과했다. 로그아웃 순간 화면이 보낸 다른 요청의 응답이 갱신된 세션 쿠키를 다시 써 넣는 경쟁 상태로 추정한다(#333 proxy 쿠키 반영과 관련 가능). 실제로 로그아웃이 되돌려질 수 있는지 로컬에서 재현해 확인한다. 2026-10-10 코드 대조로 원인을 확인했다: JWT 세션 조회 응답이 세션 쿠키를 다시 쓰고(#333 proxy 반영), 로그아웃은 서버 토큰을 폐기하지 않아 늦게 도착한 응답이 유효한 쿠키를 되살린다. 같은 날 로컬 에뮬레이터(dev:local)로 세션 스펙을 돌려 6건 중 가끔 1건이 같은 방식으로 실패하는 것도 재현했다(`page.goto(base)`가 연 화면의 세션 조회가 로그아웃과 겹칠 때). 테스트에서 화면을 비워 피하지 않고 `AUTH-LOGOUT-SERVER-REVOCATION`으로 고친다.
+- [ ] 2026-10-03 원격 회차 E2E run `37108803974` 1차에서 `auth-session-lifecycle` mobile seller "로그아웃하면 사라진다"가 실패했다. 로그아웃 뒤 세션 쿠키는 없었는데 바로 이은 `/api/auth/session`이 `seller`를 돌려줬다. 같은 Preview 재실행에서는 통과했고, 직전 실행들도 통과했다. 로그아웃 순간 화면이 보낸 다른 요청의 응답이 갱신된 세션 쿠키를 다시 써 넣는 경쟁 상태로 추정한다(#333 proxy 쿠키 반영과 관련 가능). 실제로 로그아웃이 되돌려질 수 있는지 로컬에서 재현해 확인한다. 2026-10-10 코드 대조로 원인을 확인했다: JWT 세션 조회 응답이 세션 쿠키를 다시 쓰고(#333 proxy 반영), 로그아웃은 서버 토큰을 폐기하지 않아 늦게 도착한 응답이 유효한 쿠키를 되살린다. 같은 날 로컬 에뮬레이터(dev:local)로 세션 스펙을 돌려 6건 중 가끔 1건이 같은 방식으로 실패하는 것도 재현했다(`page.goto(base)`가 연 화면의 세션 조회가 로그아웃과 겹칠 때). 테스트에서 화면을 비워 피하지 않고 `AUTH-LOGOUT-SERVER-REVOCATION`으로 고친다. **2026-10-10 재대조**: 서버 폐기가 들어가 늦게 온 응답이 쿠키를 되살려도 다음 조회에서 `GET /auth/session`·refresh가 401이 되어 세션이 사라진다. 다만 서버 폐기 호출이 실패(5초 초과·5xx)하면 같은 현상이 남고 경쟁 상태 재현 테스트는 없다. 배포 전 회차 E2E가 반복 통과하면 닫는다.
 
 ### HOME-BANNER-OVERLAP-AND-LEGACY-CTA
 - [x] 2026-10-03 해결: 배너를 글자 칸과 사진 칸(40%)을 나란히 두는 배치로 바꾸고 한글을 낱말 단위로 줄바꿈했다(#365, `53f8e374` 운영 배포). 운영 배너 문서 `banners/main_hero`의 cta2("공구 참여하기 " → `/groupbuy`)는 어드민 화면에서 비운 것과 같은 `{label:"", href:""}`로 바꿨다. 이어서 운영에서 cta1 "지금인기 호접란" 링크가 이미 없는 상품(404)이고, 배너가 현재 회차에서 팔지 않는 호접란과 "할인"을 알리는 것을 확인했다. 사용자 결정으로 배너를 `isActive:false`로 내렸다(내용은 보존). 다시 켤 때는 특정 상품 대신 서비스 안내 문구와 404가 날 수 없는 링크를 쓴다. 같은 날 소비자 앱에 한국어 404 화면을 추가했다(#367). 이전 기록: 운영 소비자 홈 캡처에서 관리자 배너(`HeroBanner`)의 긴 제목이 오른쪽 절반 사진 위로 겹쳐 읽기 어렵다(모바일 390px). 또 배너 버튼에 예전 판매용 "공구 참여하기"가 떠 있는데 회차 직배송에서는 공동구매 진입을 숨긴다. 배너 레이아웃(사진을 배경으로 깔거나 제목 폭 제한)과 배너 내용(어드민 배너 탭에서 버튼 정리)을 함께 정리한다.
@@ -703,7 +705,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이다. **2026-10-09 결정: 켠다.** PITR과 일일 관리형 백업을 GCP 콘솔에서 사용자가 켠다(이 저장소 작업 환경에는 GCP 권한이 없다). 켠 뒤 비운영 프로젝트 복구 연습을 한 번 한다.
 
 ### ROUND-HOLD-ABUSE-LIMITS
-- [ ] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. 주문당 상품별 수량 상한(병행 PR #422), 쓰이지 않는 공개 회원가입 API 차단(#431), 같은 회차의 고객별 활성 결제 예약 상한(#427). 예약 상한은 `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`(재결제 때 이전 예약 유지)를 그대로 두고 최대 3건으로 정해 #427을 고치는 중이다.
+- [ ] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. 주문당 상품별 수량 상한(병행 PR #422), 쓰이지 않는 공개 회원가입 API 차단(**미완료** — #431은 register를 바꾸지 않았고 `POST /auth/register`는 공개·10회/분 그대로다, 2026-10-10 확인), 같은 회차의 고객별 활성 결제 예약 상한(#427). 예약 상한은 `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`(재결제 때 이전 예약 유지)를 그대로 두고 최대 3건으로 정해 #427을 고치는 중이다.
 
 ### OPERATION-ISSUE-MANUAL-RESOLVE
 - [ ] 환불 재시도·문자 재발송 외의 운영 기록은 닫을 방법이 없어 홈 경고와 아침 텔레그램 요약에 계속 남는다. **2026-10-10 결정**: 판매자·관리자가 메모를 남기고 닫는다. 운영 기록 API를 고치는 병행 PR #436 병합 뒤 구현한다.
@@ -713,6 +715,21 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 ### REDELIVERY-PAID-REQUEST-RESEND
 - [ ] 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 병행 PR #448이 연결 결제가 PAID면 건너뛰게 고치고, 판매자 확인 창 문구·런북도 함께 맞춘다. 2026-10-10 발견.
+
+### AUTH-MULTI-DEVICE-SESSION
+- [ ] **DECISION REQUIRED** (2026-10-10 재대조 발견): `refreshTokens/{sub}`가 사용자당 문서 1개다. 같은 계정으로 두 번째 기기에서 로그인하면 문서를 덮어써(`apps/api/src/auth/auth.service.ts` `issueTokens`) 첫 기기의 다음 refresh(최대 약 55분 뒤)가 재사용으로 판정된다. 그러면 문서 삭제·Firebase 세션 폐기·`auth.token.stolen` 기록으로 두 기기 모두 끊기고 거짓 탈취 기록이 남는다. 한 기기 로그아웃도 모든 기기를 끊는다. 판매자가 휴대폰과 PC를 함께 쓰면 파일럿에서 겪을 수 있다. 사용자당 단일 세션을 계약으로 확정할지, 기기별 refresh 문서로 바꿀지 정한다.
+
+### CHARGE-REFUND-ISSUE-ROUTING
+- [x] **2026-10-10 수정(운영 미배포)**: 기록을 charge의 `storeId`·`paymentId: null`·`chargeId`로 남기고, `RETRY_REFUND`가 `chargeId` 기록이면 `orderCharges` 문서를 대상으로 재배송비 환불을 다시 부른 뒤 `REFUNDED`일 때만 해결한다. 직접 회귀: `order-charge-refund-provider-ambiguity.spec.ts` C8, `operations.service.spec.ts` "재배송비 환불 기록은 orderCharges를 대상으로 재시도한다". 남은 일: 수정 전에 빈 `storeId`로 생긴 운영 기록이 있는지 운영 데이터 확인(사용자 승인 필요, 파일럿 전이라 없을 가능성이 크다). 이전 기록 — **IMPLEMENTATION FINDING** (2026-10-10 재대조 발견, 돈이 잘못 빠지는 문제는 아니고 운영 복구 문제): 재배송비 환불 결과가 불명확하면(PortOne 504 등) `AUTO_REFUND_FAILED`를 `storeId: ''`, `paymentId: chargeId`로 남긴다(`apps/api/src/payments/order-charge-payment.service.ts` `persistUncertainRefund`). 판매자 운영 화면은 매장 범위로만 보여 이 기록이 안 보이고, `RETRY_REFUND`는 `payments/<chargeId>`를 읽어 늘 `PAYMENT_NOT_FOUND`(409)로 끝난다. 남은 신호는 텔레그램 알림·아침 요약의 critical 건수뿐이다. 완료 조건: 주문의 실제 `storeId`로 기록하고, 재배송비 환불 재시도가 `orderCharges`를 대상으로 동작하며, 직접 회귀 테스트가 있다.
+
+### PORTONE-CHANNEL-CHECK
+- [ ] 결제 확정은 PortOne 결제의 상태와 금액만 확인한다. 상점·통화·채널 확인 PR #426은 아직 병합되지 않았다(2026-10-10 기준 열림). 소비자 앱은 `channelKey`를 공개 환경 변수에서 넘기므로, 운영 PortOne 상점에 TEST 채널이 함께 있으면 테스트 결제로 금액만 맞춘 `PAID`가 실제 주문을 확정할 수 있다. 파일럿 전에 PortOne 콘솔에서 운영 상점의 TEST 채널 유무를 확인하고(사용자), #426 병합 여부를 정한다.
+
+### RATE-LIMIT-CLIENT-IP
+- [ ] 인증 요청 한도(10회/분·120회/분)는 직접 테스트가 없고, API에 `trust proxy`·클라이언트 IP 추적 설정이 없다. Railway 앞단 프록시 주소가 `req.ip`로 잡히면 한도가 모든 손님에게 공유될 수 있다. 집계 기준을 고치는 PR #404가 열려 있다. 운영 `req.ip` 값을 확인하고 #404를 마무리한다.
+
+### STORAGE-CORS-APPLY
+- [ ] #402가 `cors.json`의 허용 메서드를 GET·HEAD로 줄였지만 `firebase deploy`로 반영되지 않고 버킷에 따로 적용해야 한다. 적용 절차 문서와 확인 테스트가 없다. Firebase SDK 업로드는 다른 엔드포인트를 쓰므로 영향이 없을 가능성이 크지만 확인이 필요하다. 적용 여부와 절차를 정해 런북에 적는다.
 
 ---
 

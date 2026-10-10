@@ -2,7 +2,7 @@
 
 # Auth API / Domain Spec
 
-> **최종 정합화**: 2026-10-04
+> **최종 정합화**: 2026-10-10
 > **상태**: Current
 > **공통 타입 정본**: `packages/shared/src/auth.types.ts`
 > **API 정본**: `apps/api/src/auth/**`
@@ -11,7 +11,7 @@
 
 ## Driver approval gate overlay — S4 initial gate
 
-현재 accepted source `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`에 아래 approval-gate 하위 범위가 반영돼 있다. 이 source는 local publication candidate이며, policy-compliant PR로 remote `main`에 게시되기 전에는 remote `main` 또는 production 출시 상태로 해석하지 않는다.
+아래 approval-gate 하위 범위는 `main`에 반영돼 있다(최초 accepted source `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`).
 
 - 공개 `POST /auth/register`의 driver user는 `driverApproved: false`로 생성되고, client가 `driverApproved: true`를 주입할 수 없다.
 - 공개 `POST /auth/register` → `POST /auth/login`에서 승인값이 `false`이거나 누락된 driver는 JWT/refresh side effect 전에 거부된다. 승인된 driver는 정상 로그인하고 consumer/seller/admin 경로는 유지된다.
@@ -19,7 +19,7 @@
 - API `JwtStrategy`와 Firebase custom-token 경계가 현재 Firestore user의 role, `driverApproved`, `suspended`를 확인하며, stale/suspended/role-mismatch/missing-user/cross-driver 경계가 기존 candidate Rules/API 회귀로 확인됐다.
 - 직접 근거: `apps/api/src/auth/auth.controller.spec.ts`, `apps/api/src/auth/auth.service.spec.ts`, `apps/api/src/auth/strategies/jwt.strategy.spec.ts`.
 
-`AUTH-SESSION-CLAIM-REVOCATION`의 static/refresh 경계는 `IMPLEMENTED / PROVEN`이다. `AuthService.refresh()`는 rotation record 검증 뒤 authoritative user를 재조회해 `suspended`/`role`/`storeId`/`driverApproved` 불일치를 token/session write 없이 거부하고, `GET /auth/session`과 세 앱 `jwt` callback이 same-deployment session authority를 재검증한다. 직접 근거: `apps/api/src/auth/auth.service.spec.ts`의 `refresh current authority`, `getSession same-deployment authority`. revocation window는 2026-09-28 결정(D2)으로 **즉시(다음 요청)**로 확정했고, Preview 브라우저 증거는 원격 회차 E2E run `36341189483`의 `auth-session-lifecycle.spec.ts` 12건이다. 로그아웃 시 서버 refresh token 폐기는 출시 후 `AUTH-LOGOUT-SERVER-REVOCATION`에서 다룬다.
+`AUTH-SESSION-CLAIM-REVOCATION`의 static/refresh 경계는 `IMPLEMENTED / PROVEN`이다. `AuthService.refresh()`는 rotation record 검증 뒤 authoritative user를 재조회해 `suspended`/`role`/`storeId`/`driverApproved` 불일치를 token/session write 없이 거부하고, `GET /auth/session`과 세 앱 `jwt` callback이 same-deployment session authority를 재검증한다. 직접 근거: `apps/api/src/auth/auth.service.spec.ts`의 `refresh current authority`, `getSession same-deployment authority`. revocation window는 2026-09-28 결정(D2)으로 **즉시(다음 요청)**로 확정했고, Preview 브라우저 증거는 원격 회차 E2E run `36341189483`의 `auth-session-lifecycle.spec.ts` 12건이다(2026-10-10 변경 이전 source 기준). 로그아웃 시 서버 refresh token 폐기는 세 앱 Auth.js `events.signOut`에서 수행한다(§6).
 
 ## 1. 인증 계층
 
@@ -44,11 +44,15 @@ driver   → targetRole: driver
 
 NextAuth callback은 Kakao에서 받은 access token을 `POST /auth/kakao-login`으로 넘기고, NestJS API가 Kakao 사용자 정보 API를 통해 실제 계정을 검증한다. 클라이언트가 임의로 전달한 Kakao ID·email·name을 신뢰하지 않는다.
 
+`KAKAO_APP_ID`가 설정돼 있으면 API는 `/v1/user/access_token_info`의 `app_id`가 이 값과 같은지, 토큰 정보의 사용자 id가 사용자 정보와 같은지 확인하고, 다르거나 `app_id`가 없거나 조회가 실패하면 401로 거부한다. `KAKAO_APP_ID`가 없으면 `app_id` 비교 없이 로그인하며, 운영 runtime에서는 경고 로그만 한 번 남긴다(`apps/api/src/auth/kakao.client.ts`, `kakao.client.spec.ts` `토큰 발급 앱·사용자 확인`). Kakao API 호출에는 시간 상한이 있고, 넘기면 인증 실패로 끝난다.
+
 `packages/shared`의 `AuthProvider`에는 과거 호환을 위해 `'naver' | 'email'`이 남아 있지만, **현재 세 앱의 NextAuth 운영 provider 목록에는 Naver가 없다.** Naver 로그인을 현재 지원 기능으로 문서화하지 않는다.
 
 ## 3. Credentials의 현재 용도
 
 `Credentials` provider는 일반 사용자용 production 이메일 로그인 UI가 아니다. 앱별로 허용된 진입이 다르다.
+
+세 앱 모두 테스트 전용 Credentials provider 자체를 운영 runtime에 등록하지 않는다(`src/auth-runtime.ts`의 `isTestCredentialsProviderEnabled`). `VERCEL_ENV` 또는 `RAILWAY_ENVIRONMENT_NAME`이 `production`이면 등록하지 않고, `VERCEL_ENV === 'preview'`(로컬 E2E 실행기 포함)이면 등록하며, 그 밖에는 `NODE_ENV !== 'production'`일 때만 등록한다. 등록돼도 아래 앱별 authorize 게이트를 그대로 통과해야 한다. 직접 근거: `apps/consumer/src/auth-runtime.test.mjs`, `apps/seller/src/auth-runtime.test.ts`, `apps/driver/src/auth-runtime.test.ts`.
 
 ### Consumer — E2E/test 전용
 
@@ -70,8 +74,9 @@ E2E/test 경로는 `E2E_TEST_SECRET` + `x-e2e-test-token` 헤더 게이트를 �
 - AND `NODE_ENV !== 'production'`
 - AND `VERCEL_ENV !== 'production'`
 - AND `RAILWAY_ENVIRONMENT_NAME !== 'production'`
+- AND API base URL이 loopback(`localhost`·`127.0.0.1`·`[::1]`)
 
-production indicator가 하나라도 존재하면 fail-closed되어 기존 E2E header gate로 복귀한다.
+production indicator가 하나라도 존재하거나 API가 loopback이 아니면 fail-closed되어 기존 E2E header gate로 복귀한다.
 
 local path는 인증을 bypass하지 않는다.
 
@@ -101,6 +106,7 @@ Preview/E2E 경로는 더 좁게 제한한다.
 - AND `NODE_ENV !== 'production'`
 - AND `VERCEL_ENV !== 'production'`
 - AND `RAILWAY_ENVIRONMENT_NAME !== 'production'`
+- AND API base URL이 loopback(`localhost`·`127.0.0.1`·`[::1]`)
 
 local path에서는 Preview/E2E gate(secret·allowlist)를 사용하지 않지만, 다음을 반드시 만족해야 한다.
 
@@ -192,17 +198,17 @@ consumer | seller | driver
 
 ### Candidate reconciliation — Driver approval P0
 
-2026-08-24 `origin/main` 감사에서 신규/legacy Kakao 자동승인과 공개 email register/login 우회가 확인됐다. candidate에서는 다음 approval-gate 하위 범위를 직접 고정했다.
+2026-08-24 `origin/main` 감사에서 신규/legacy Kakao 자동승인과 공개 email register/login 우회가 확인됐다. 다음 approval-gate 하위 범위를 직접 고정했고 현재 `main`에 반영돼 있다.
 
 1. 신규 Kakao `targetRole: driver`는 `driverApproved: false`로 생성된다.
 2. 기존 `driverApproved` 누락 driver는 Kakao 로그인 중 자동 승인되지 않는다.
 3. 공개 `POST /auth/register`는 driver를 false approval 상태로 만들고 client-supplied approval을 거부한다. 이어지는 공개 `POST /auth/login`은 승인되지 않은 driver의 API JWT/refresh token 발급을 거부한다.
 
-따라서 frontend Credentials UI 비노출에 의존하지 않는 API authorization boundary가 candidate에서 확인됐다. Firebase custom token도 현재 user의 승인·정지·역할 경계를 확인한다. broad driver order read와 refresh/session lifecycle은 별도 P0로 남는다.
+따라서 frontend Credentials UI 비노출에 의존하지 않는 API authorization boundary가 확인됐다. Firebase custom token도 현재 user의 승인·정지·역할 경계를 확인한다. refresh/session lifecycle은 §6에서 닫혔고, broad driver order read는 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`에서 다룬다.
 
 추적 umbrella: `docs/BACKLOG.md`의 `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`. 기술 finding 이름으로 `DRIVER-APPROVAL-GATE-BYPASS`를 사용할 수 있으나 별도 완료 항목으로 중복 추적하지 않는다.
 
-Accepted source에서 확인된 조건:
+확인된 조건(`main` 반영):
 
 - [x] 공개 registration이 관리자 승인 전 usable driver authorization을 만들지 않음
 - [x] email login이 미승인 driver에게 driver JWT/refresh token을 발급하지 않음
@@ -214,11 +220,11 @@ Accepted source에서 확인된 조건:
 
 여전히 남은 조건:
 
-- [ ] 과거 계정 migration이 필요하면 로그인 side effect가 아닌 명시적·감사 가능한 절차로 분리
-- [ ] `AUTH-SESSION-CLAIM-REVOCATION`: refresh 시 authoritative 상태 재조회와 stale claim 재발급 차단
-- [ ] suspended/role/store/driver approval 변경의 session revocation SLA와 access-token window 결정
-- [ ] logout/refresh-token rotation을 포함한 session lifecycle 직접 회귀
-- [ ] accepted source를 policy-compliant PR로 remote `main`에 통합
+- [ ] 과거 계정 migration이 필요하면 로그인 side effect가 아닌 명시적·감사 가능한 절차로 분리 — 로그인 자동 승인은 없고, 승인값이 없는 driver는 관리자 승인 대기 목록에 나타나 `PATCH /admin/drivers/:userId/approve`로만 승인된다(`apps/api/src/admin/admin.service.ts`). 다만 승인 처리는 감사 기록(`audit.log`)을 남기지 않으므로 이를 "감사 가능한 절차"로 볼지는 결정이 필요하다.
+- [x] `AUTH-SESSION-CLAIM-REVOCATION`: refresh 시 authoritative 상태 재조회와 stale claim 재발급 차단(§6)
+- [x] suspended/role/store/driver approval 변경의 session revocation SLA와 access-token window 결정(2026-09-28 D2, 즉시)
+- [x] logout/refresh-token rotation을 포함한 session lifecycle 직접 회귀(`apps/api/src/auth/auth.service.spec.ts`)
+- [x] `main` 통합
 
 ## 6. Access / Refresh token과 권한 변경 수렴
 
@@ -228,10 +234,13 @@ Accepted source에서 확인된 조건:
 - refresh endpoint: `POST /auth/refresh`
 - 갱신 실패 시 session에 token error를 표시하고 유효 access token을 비운다.
 - driver Credentials session은 E2E 경로와 local-runtime 경로 모두 `credentials` provider를 경유하므로 앱 레이어에서 더 짧은 access-token refresh 기준(15분, `E2E_ACCESS_TOKEN_TTL`)을 사용한다. 일반 Kakao session 기준(약 55분, `ACCESS_TOKEN_TTL`)과 구분된다. TTL 값을 새로 결정하지 않으며 `apps/driver/src/auth.ts`의 분기를 그대로 기술한다.
+- 세 앱 Auth.js 서버 쪽의 로그인·세션 확인·갱신 API 호출은 10초(`AUTH_UPSTREAM_TIMEOUT_MS`), 로그아웃 시 API 세션 폐기 전체는 5초(`AUTH_LOGOUT_TIMEOUT_MS`) 시간 제한을 쓴다(각 앱 `src/auth-runtime.ts`). 시간 제한 초과는 각 호출자의 기존 일시 실패 경로로 처리한다.
 
 실제 서버 JWT 만료값은 환경 설정에 의해 달라질 수 있으므로 오래된 문서의 “항상 1시간/30일”을 외부 환경 현재값으로 단정하지 않는다.
 
 API가 발급하는 access/refresh token에는 `typ`(`access`/`refresh`)와 `aud`(`greenhub-api`)가 들어가고 HS256으로 서명한다. `JwtStrategy`와 `AuthService.refresh()`는 HS256만 받고, `typ`·`aud`가 있으면 기대값과 같아야 한다(refresh token을 Bearer로 쓰거나 access token을 refresh로 쓰면 401). 이 claim이 없는 이전 발급 token은 만료까지 계속 받는다(`apps/api/src/auth/auth.token-boundary.spec.ts`, `auth.service.spec.ts` `토큰 종류·수신자 claim`). refresh token 저장 형식(평문 단일 문서)은 바뀌지 않았다.
+
+refresh token은 사용자당 `refreshTokens/{sub}` 문서 하나에 저장되고 회전한다. 로그인(email·Kakao)은 이 문서를 새 token으로 덮어쓰고 직전 token 유예를 남기지 않는다. `POST /auth/refresh`는 저장된 최신 token이면 새 token으로 회전하면서 직전 token과 회전 시각을 함께 저장한다. 같은 세션의 동시 갱신·쿠키 반영 전 재요청으로 직전 token이 회전 후 60초(`REFRESH_ROTATION_GRACE_MS`) 안에 다시 오면 재회전 없이 현재 refresh token과 새 access token을 준다. 그 밖의 token은 재사용(탈취)으로 보고 문서를 삭제하고 Firebase refresh token을 폐기하며 `auth.token.stolen`을 기록한 뒤 401로 거부한다. 유예 안이어도 현재 권한 재조회를 통과해야 한다. 직접 근거: `apps/api/src/auth/auth.service.spec.ts` `refresh current authority`.
 
 ### 현재 구현 한계 — stale authorization claims
 
@@ -252,9 +261,10 @@ rotation record 검증 뒤 authoritative user를 재조회하고 payload `role/s
 
 - 신규 로그인에서 `suspended === true`를 거부하는 동작은 구현·테스트됨.
 - refresh/session 경계의 stale-claim 재발급 차단과 `suspended`/`role`/`store`/`driverApproved` 변경 수렴은 `IMPLEMENTED / PROVEN`이다.
-- revocation window는 즉시(다음 요청)로 결정됐고(D2), runtime/browser session lifecycle은 Preview에서 `RUNTIME_PROVEN`이다(run `36341189483`, 12건).
+- revocation window는 즉시(다음 요청)로 결정됐고(D2), runtime/browser session lifecycle은 Preview에서 `RUNTIME_PROVEN`이다(run `36341189483`, 12건, 2026-10-10 로그아웃·token 변경 이전 source 기준).
 - `POST /auth/logout`은 `refreshTokens/{sub}` 삭제와 함께 Firebase refresh token을 폐기한다(`revokeRefreshTokens`). refresh token 재사용 감지도 같은 폐기를 수행한다. Firebase 사용자 기록이 없으면(custom token 미사용) 폐기할 것이 없으므로 그대로 진행하고, 그 밖의 폐기 실패는 API 세션 폐기를 되돌리지 않고 서버 로그에만 남긴다. 이미 발급된 Firebase ID token은 만료(최대 1시간)까지 남는다.
-- Auth.js 로그아웃은 아직 `POST /auth/logout`을 호출하지 않고 브라우저 쿠키만 삭제하므로 서버 `refreshTokens/{sub}`는 유지된다. 로그아웃 전에 복사된 쿠키는 refresh 만료(30일)까지 재사용될 수 있으며, 파일럿에서는 이를 수용하고 출시 후 `AUTH-LOGOUT-SERVER-REVOCATION`으로 개선한다.
+- 세 앱 Auth.js 로그아웃은 쿠키 삭제와 함께 `events.signOut`에서 `POST /auth/logout`을 호출해 서버 `refreshTokens/{sub}`를 폐기한다(`apps/{consumer,seller,driver}/src/auth.ts`, 각 `src/auth-runtime.ts`의 `revokeApiSession`). access token이 401/403이면 refresh로 새 access token을 받아 한 번 더 호출하고, refresh도 401/403이면 이미 끝난 세션으로 본다. 폐기 실패·네트워크 오류·시간 제한(5초) 초과는 예외 없이 끝나 로그아웃 자체는 계속되며, 이 경우 서버 세션은 남는다. 직접 근거는 각 앱 `auth-runtime` 단위 테스트이며, `events.signOut` 연결은 소스 대조로만 확인한다. Preview E2E(`auth-session-lifecycle.spec.ts`)는 로그아웃 뒤 쿠키·세션 소멸만 확인하고 서버 token 폐기는 직접 확인하지 않는다.
+- 알려진 한계(결정된 계약 아님): `refreshTokens/{sub}`가 사용자당 문서 하나이므로, 같은 계정이 두 번째 기기에서 로그인하면 첫 기기의 다음 refresh가 재사용으로 판정되어 두 기기 모두 로그아웃되고 Firebase 세션이 폐기되며 `auth.token.stolen`이 기록된다. 한 기기의 로그아웃도 같은 계정의 모든 기기를 로그아웃시킨다. 또 `GET /auth/session`은 문서 존재만 확인하므로, 로그아웃 뒤 같은 계정이 다시 로그인하면 로그아웃 전 쿠키의 access token은 만료 전까지 이 검사를 통과한다. 다기기 정책은 `docs/BACKLOG.md`의 `AUTH-MULTI-DEVICE-SESSION`(DECISION REQUIRED)에서 다룬다.
 - “정지된 계정이 refresh를 통해 계속 새 권한 토큰을 얻을 수 있음”은 현재 계약이 아니다.
 
 Task 2F-A/2F-B의 public approval-gate와 current-user 경계 검증에 더해, 위 refresh/session 직접 회귀가 static/refresh 경계를 닫는다.
@@ -303,7 +313,7 @@ POST /auth/kakao-login
 POST /auth/refresh
 ```
 
-`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다.
+`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다(`apps/api/src/auth/auth.controller.ts`). 이 한도에는 직접 테스트가 없다. 한도는 요청 IP별로 집계되지만 API에 `trust proxy`·별도 tracker 설정이 없어 proxy 뒤에서 실제 손님 IP로 집계되는지는 미결 PR #404에 달려 있다(`docs/BACKLOG.md` `RATE-LIMIT-CLIENT-IP`).
 
 주의:
 
@@ -379,9 +389,9 @@ interface SavedAddress {
 
 ## 10. Firebase Custom Token
 
-`GET /auth/firebase-token`은 현재 API JWT 사용자에게 Firebase client용 custom token을 발급하는 경로다. 현재 controller는 `CurrentUser()`의 `sub/role/storeId`를 그대로 `AuthService.getFirebaseToken()`에 전달하고, service는 그 값으로 Firebase custom claims를 만든다.
+`GET /auth/firebase-token`은 현재 API JWT 사용자에게 Firebase client용 custom token을 발급하는 경로다. controller는 `CurrentUser()`의 `sub`만 `AuthService.getFirebaseToken()`에 전달하고, service는 현재 user 문서를 다시 읽어(`suspended`·role·storeId·`driverApproved` 확인) 그 값으로 Firebase custom claims를 만든다(`apps/api/src/auth/auth.service.spec.ts` `getFirebaseToken`).
 
-따라서 이 경로의 안전성은 API JWT claims의 현재성에 의존한다. `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`이 해결되기 전에는 **미승인 driver·정지·role/store 변경 이후 Firebase claims가 authoritative user 상태와 일치한다고 가정하지 않는다.**
+따라서 custom token 발급 시점의 claims는 JWT payload가 아니라 authoritative user 상태를 따른다. 이미 발급된 Firebase ID token은 만료(최대 1시간)까지 남으며, logout·refresh 재사용 감지 때 Firebase refresh token이 폐기된다(§6).
 
 특히 Firestore Rules가 `role`/`storeId` claims를 데이터 접근의 근거로 사용하므로 auth claim lifecycle과 Rules authorization을 별개의 문제로 분리하지 않는다.
 
@@ -442,6 +452,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-10 | 코드 대조 정합화: 세 앱 로그아웃의 API 세션 폐기, refresh 회전 60초 유예·재사용 감지, 사용자당 단일 refresh 문서의 다기기 한계(`AUTH-MULTI-DEVICE-SESSION`), 운영 runtime의 테스트 전용 Credentials 미등록·local-runtime loopback 조건, `KAKAO_APP_ID` 토큰 발급 앱 확인, 앱 서버 쪽 API 호출 시간 제한, Firebase custom token의 현재 user 재조회, 요청 한도 미검증·IP 집계 의존(#404) 반영, candidate·출시 후 과제 표현 정리 |
 | 2026-10-10 | access/refresh token `typ`·`aud`·HS256 검증(이전 발급 token 호환), logout·refresh 재사용 감지의 Firebase refresh token 폐기, `firebase-token` 역할 제한, email login 응답 균일화, 카카오 첫 로그인 사용자 생성 단일화 반영 |
 | 2026-10-09 | 가입·프로필 수정의 `name`(20자·제어문자·링크 금지)과 `phone`(단일 번호 형식) 입력 제약 반영 |
 | 2026-10-04 | 기사 앱 허용 역할을 `driver`·`admin`에서 `driver`로 좁힘(사용자 결정). API `targetRole: driver` 관리자 거절·구분 code, 기사 앱 signIn·jwt·proxy 차단과 로그인 안내 계약 반영 |
