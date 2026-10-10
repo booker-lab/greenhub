@@ -1,7 +1,7 @@
 import type { Product } from '@greenhub/shared';
 import { describe, expect, it } from 'vitest';
 import type { SellerSaleRound } from '@/hooks/useSaleRounds';
-import { buildRoundPageData, getRoundAction, readSafeRoundId } from './page.logic';
+import { buildRoundPageData, getRoundAction, isRoundEditable, readSafeRoundId } from './page.logic';
 
 const ROUND: SellerSaleRound = {
   id: 'round-a',
@@ -91,6 +91,32 @@ describe('판매 회차 상세 라우트 경계', () => {
     ['CANCELLED', null],
   ] as const)('%s 상태에는 허용된 상세 동작만 제공한다', (status, action) => {
     expect(getRoundAction(status)).toBe(action);
+  });
+
+  it.each([
+    ['DRAFT', true],
+    ['SCHEDULED', true],
+    ['OPEN', false],
+    ['CLOSED', false],
+    ['COMPLETED', false],
+    ['CANCELLED', false],
+  ] as const)('%s 회차는 서버 수정 허용과 같게 편집 가능 여부를 정한다', (status, editable) => {
+    expect(isRoundEditable({ status, cancellation: null })).toBe(editable);
+  });
+
+  it('취소가 걸린 회차는 판매 예정이어도 읽기 전용이다', () => {
+    expect(
+      isRoundEditable({
+        status: 'SCHEDULED',
+        cancellation: {
+          status: 'LOCAL_FAILED',
+          reason: '확인 필요',
+          failedOrderId: null,
+          updatedAt: '2026-11-01T00:00:00.000Z',
+          completedAt: null,
+        },
+      }),
+    ).toBe(false);
   });
 
   it('검증된 회차와 현재 스토어 상품으로 당근 링크를 구성한다', () => {
