@@ -2,33 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isPublicSaleRoundStatus(status) {
-      return status in ['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED'];
-    }
-
-    function isRoundDirectStore(storeId) {
-      let storePath = /databases/$(database)/documents/stores/$(storeId);
-      return storeId is string &&
-        exists(storePath) &&
-        get(storePath).data.get('salesMode', null) == 'round_direct';
-    }
-
-    function isPublicSaleRound(round) {
-      let storeId = round.data.get('storeId', null);
-      return storeId is string &&
-        isRoundDirectStore(storeId) &&
-        isPublicSaleRoundStatus(round.data.get('status', null));
-    }
-
-    function isPublicSaleRoundItem(roundId, storeId) {
-      let roundPath = /databases/$(database)/documents/saleRounds/$(roundId);
-      return storeId is string &&
-        exists(roundPath) &&
-        isRoundDirectStore(storeId) &&
-        get(roundPath).data.get('storeId', null) == storeId &&
-        isPublicSaleRoundStatus(get(roundPath).data.get('status', null));
-    }
-
     function currentUserPath() {
       return /databases/$(database)/documents/users/$(request.auth.uid);
     }
@@ -74,10 +47,10 @@ service cloud.firestore {
       return currentSellerFor(storeId) && isStoreOwner(storeId);
     }
 
-    // orders: 매장 소유자·관리자만 직접 읽고 기사는 API를 사용한다
+    // orders: 판매자·관리자·기사 모두 API 응답 투영으로만 조회한다.
+    // 클라이언트 직접 읽기 사용처가 없으므로 원문 접근을 모두 차단한다.
     match /orders/{orderId} {
-      allow read: if currentSellerFor(resource.data.storeId) || currentAdmin();
-      allow write: if false;
+      allow read, write: if false;
     }
 
     // products: anonymous raw read는 PR #141에서 차단됨. 이번 Task는
@@ -127,16 +100,14 @@ service cloud.firestore {
       allow list, write: if false;
     }
 
-    // 공개 판매 회차: 소비자 조회만 허용하고 모든 클라이언트 직접 쓰기 차단
+    // 판매 회차: 공개 조회는 API 공개 투영(/stores/:storeId/sale-rounds/public)만
+    // 사용한다. 내부 집계 필드가 섞인 원문은 클라이언트가 직접 읽거나 쓸 수 없다.
     match /saleRounds/{roundId} {
-      allow read: if isPublicSaleRound(resource);
-      allow write: if false;
+      allow read, write: if false;
     }
 
     match /saleRoundItems/{roundItemId} {
-      allow read: if isPublicSaleRoundItem(resource.data.roundId, resource.data.storeId)
-        && resource.data.status != 'HIDDEN';
-      allow write: if false;
+      allow read, write: if false;
     }
 
     // 결제 예약·운영·법정 보관·알림 전달 기록: Admin SDK를 사용하는 서버 전용
