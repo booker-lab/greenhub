@@ -641,7 +641,7 @@ describe('운영 예외 목록 한도와 주문 필터', () => {
     expect(limited.items.map((item) => item['id'])).toEqual([
       'open-critical',
       'open-warning',
-      expect.stringMatching(/^resolved-/),
+      'resolved-new',
     ]);
     expect(limited.hasMore).toBe(true);
 
@@ -654,6 +654,20 @@ describe('운영 예외 목록 한도와 주문 필터', () => {
       'resolved-old',
     ]);
     expect(all.hasMore).toBe(false);
+  });
+
+  it('한도보다 기록이 많아도 문서 ID 순서가 아니라 최근 갱신 기록을 돌려준다', async () => {
+    // 문서 ID 순으로는 맨 뒤지만 가장 최근에 갱신된 기록이 한도 안에 들어와야 한다.
+    const { service } = makeListService([
+      ...manyResolved(150),
+      issueDoc('zzz-latest', { updatedAt: '2026-09-30T00:00:00.000Z' }),
+    ]);
+
+    const result = await list(service, { limit: 10 });
+
+    expect(result.items[0]['id']).toBe('zzz-latest');
+    expect(result.items).toHaveLength(10);
+    expect(result.hasMore).toBe(true);
   });
 
   it('orderId를 주면 같은 가게의 그 주문 기록만 돌려준다', async () => {

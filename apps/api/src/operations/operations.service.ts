@@ -14,6 +14,7 @@ import { PaymentsService } from '../payments/payments.service';
 import {
   OPERATION_ISSUE_LIST_DEFAULT_LIMIT,
   OPERATION_ISSUE_LIST_MAX_LIMIT,
+  OPERATION_ISSUE_LIST_SCAN_LIMIT,
 } from './dto/list-operation-issues.dto';
 import type { OperationActionType } from './dto/operation-action.dto';
 import {
@@ -90,13 +91,15 @@ export class OperationsService {
     const byStore = this.firestore.collection('operationIssues').where('storeId', '==', storeId);
     const scoped = options.orderId ? byStore.where('orderId', '==', options.orderId) : byStore;
     // 동등 조건만 사용해 단일 필드 인덱스 병합으로 처리한다(복합 인덱스 불필요).
-    // 열린 기록은 따로 읽어, 해결된 기록이 많아져도 미해결 기록이 한도 밖으로 밀려나지 않게 한다.
+    // 정렬 조건 없는 조회는 문서 ID(해시) 순서라, 응답 한도만큼만 읽으면 임의의 기록이 남는다.
+    // 그래서 훑기 상한까지 읽어 메모리에서 정렬한 뒤 한도만큼 돌려준다.
+    // 열린 기록은 따로 읽어, 해결된 기록이 많아져도 미해결 기록이 범위 밖으로 밀려나지 않게 한다.
     const [openSnap, scopedSnap] = await Promise.all([
       scoped
         .where('status', '==', 'OPEN')
-        .limit(limit + 1)
+        .limit(OPERATION_ISSUE_LIST_SCAN_LIMIT)
         .get(),
-      scoped.limit(limit + 1).get(),
+      scoped.limit(OPERATION_ISSUE_LIST_SCAN_LIMIT).get(),
     ]);
     const byId = new Map<string, OperationIssue>();
     for (const doc of [...openSnap.docs, ...scopedSnap.docs]) {
