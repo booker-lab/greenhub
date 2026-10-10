@@ -50,7 +50,56 @@ const SELLER_ORDERS = [
     deliveryPhone: '010-1234-5678',
   }),
   sellerOrder('order-no-contact', '20260928-000102', { buyerName: null, deliveryPhone: null }),
+  // 판매 중 회차(round-open) 주문: 여러 상품 주문·상태별 한 건씩(회차 상세 "이 회차 주문"·상품별 수량 확인용).
+  roundOrder('order-round-multi', '20261001-000001', 'ACCEPTED', [
+    ['빅립', 30000, 1],
+    ['만천홍', 25000, 2],
+  ]),
+  roundOrder('order-round-single', '20261001-000002', 'ACCEPTED', [['v3', 45000, 1]]),
+  roundOrder('order-round-preparing', '20261001-000003', 'PREPARING', [['빅립', 30000, 2]]),
+  roundOrder('order-round-held', '20261001-000004', 'DELIVERY_HELD', [['만천홍', 25000, 1]]),
+  roundOrder('order-round-pending', '20261001-000005', 'PENDING', [
+    ['빅립', 30000, 1],
+    ['만천홍', 25000, 1],
+  ]),
 ];
+
+function roundOrder(id, orderNumber, status, items) {
+  const orderItems = items.map(([name, unitPrice, quantity]) => {
+    const index = ['빅립', '만천홍', 'v3'].indexOf(name) + 1;
+    return {
+      roundItemId: `round-open-item-${index}`,
+      productId: `product-${index}`,
+      productName: `동양란 ${name}`,
+      productImageUrl: null,
+      unitPrice,
+      quantity,
+      subtotalAmount: unitPrice * quantity,
+    };
+  });
+  return sellerOrder(id, orderNumber, {
+    schemaVersion: 2,
+    roundId: 'round-open',
+    status,
+    buyerName: '이천손님',
+    deliveryPhone: '010-2345-6789',
+    productId: orderItems[0].productId,
+    productName: orderItems[0].productName,
+    quantity: orderItems.reduce((sum, item) => sum + item.quantity, 0),
+    orderItems,
+    deliveryFee: 0,
+    totalAmount: orderItems.reduce((sum, item) => sum + item.subtotalAmount, 0),
+    deliveryAddress: {
+      address: '경기도 이천시 중리천로 1',
+      addressDetail: '2층',
+      zipCode: '17379',
+    },
+    isMetropolitan: false,
+    requestedDeliveryDate: '2026-10-06',
+    createdAt: '2026-10-01T02:00:00.000Z',
+    updatedAt: '2026-10-01T02:00:00.000Z',
+  });
+}
 
 // ── 셀러 정산 ──
 const SELLER_SETTLEMENTS = [
@@ -625,6 +674,12 @@ export const screens = [
     group: '판매자',
     title: '주문 상세 · 손님 정보 없음',
     path: '/orders/order-no-contact',
+  },
+  {
+    id: 'order-round',
+    group: '판매자',
+    title: '회차 주문 상세(여러 상품)',
+    path: '/orders/order-round-multi',
   },
   { id: 'prep', group: '판매자', title: '준비', path: '/prep' },
   { id: 'operations', group: '판매자', title: '운영 확인', path: '/operations' },
