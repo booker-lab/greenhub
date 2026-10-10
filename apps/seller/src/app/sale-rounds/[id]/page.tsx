@@ -16,6 +16,7 @@ import {
 import { AlertTriangle, CalendarDays, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { use, useEffect, useRef, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { PageHeader } from '@/components/PageHeader';
@@ -38,7 +39,10 @@ import {
   type RoundAction,
   type RoundPageData,
   readSafeRoundId,
+  resolveRoundCancelAction,
+  resolveRoundCancellationProgress,
 } from './page.logic';
+import { RoundCancelModal } from './RoundCancelModal';
 import { RoundForm } from './RoundForm';
 import { RoundOrdersSection } from './RoundOrdersSection';
 
@@ -299,12 +303,15 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
     completeRound,
     clearOperationError,
   } = useSaleRounds();
+  const { data: session } = useSession();
+  const role = session?.user.role ?? null;
   const [round, setRound] = useState<SellerSaleRound | null>(null);
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [action, setAction] = useState<RoundAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const requestId = useRef(0);
 
   useEffect(() => {
@@ -363,6 +370,29 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
     }
   };
 
+  // 회차 취소(관리자 전용) — 기존 상태 변경 PATCH {status:'CANCELLED'}. 멈춘 취소도 같은 요청으로 잇는다.
+  const handleCancelRound = async () => {
+    if (!round) return;
+    clearOperationError();
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const updated = await changeStatus(roundId, 'CANCELLED');
+      setRound((current) => (current ? mergeRoundSummary(current, updated) : current));
+      setActionSuccess('회차를 취소했어요. 결제된 주문은 모두 환불했어요.');
+    } catch (requestError) {
+      setActionError(errorMessage(requestError, '회차를 취소하지 못했어요.'));
+      // 실패해도 서버의 취소 진행 상태가 바뀌었을 수 있어 다시 읽는다(멈춤이면 "다시 진행"이 보인다).
+      try {
+        setRound(await getRound(roundId));
+      } catch {
+        // 다시 읽기 실패는 위 오류 안내로 충분하다.
+      }
+    } finally {
+      setCancelOpen(false);
+    }
+  };
+
   if (detailLoading) return <LoadingState />;
   if (detailError || !round) {
     return (
@@ -375,6 +405,9 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
   }
 
   const availableAction = getRoundAction(round.status);
+  const now = Date.now();
+  const cancelProgress = resolveRoundCancellationProgress(round, now);
+  const cancelAction = resolveRoundCancelAction(round, role, now);
 
   return (
     <>
@@ -407,6 +440,31 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
             {ACTION_META[availableAction].buttonLabel}
           </Button>
         )}
+        {cancelProgress === 'RUNNING' && (
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            회차 취소를 처리하고 있어요. 몇 분 뒤 새로고침해서 확인해 주세요.
+          </Text>
+        )}
+        {cancelProgress === 'STUCK' && !cancelAction && (
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+            회차 취소가 끝나지 않았어요. 관리자 계정에서 &lsquo;회차 취소 다시 진행&rsquo;을 눌러야
+            해요.
+          </Text>
+        )}
+        {cancelAction && (
+          <Button
+            variant="subtle"
+            color="red"
+            onClick={() => {
+              clearOperationError();
+              setActionError(null);
+              setCancelOpen(true);
+            }}
+            disabled={operationLoading}
+          >
+            {cancelAction === 'resume' ? '회차 취소 다시 진행' : '회차 취소'}
+          </Button>
+        )}
         <RoundEditor
           key={round.storeId}
           round={round}
@@ -430,6 +488,15 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
           }}
         />
       )}
+
+      <RoundCancelModal
+        opened={cancelOpen}
+        roundName={round.name}
+        resume={cancelAction === 'resume'}
+        loading={pendingOperation === 'status'}
+        onConfirm={handleCancelRound}
+        onClose={() => setCancelOpen(false)}
+      />
     </>
   );
 }

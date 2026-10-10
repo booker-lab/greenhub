@@ -28,6 +28,53 @@ export function isRoundEditable(round: Pick<SaleRound, 'status' | 'cancellation'
   return (round.status === 'DRAFT' || round.status === 'SCHEDULED') && round.cancellation == null;
 }
 
+/** 서버가 취소를 받는 회차 상태(sale-round-state.contract assertStatusTransition). */
+const ROUND_CANCELLABLE_STATUSES: readonly SaleRoundStatus[] = [
+  'DRAFT',
+  'SCHEDULED',
+  'OPEN',
+  'CLOSED',
+];
+
+export type RoundCancellationProgress = 'NONE' | 'RUNNING' | 'STUCK';
+
+/**
+ * 회차 취소 진행 상태. 서버는 취소 작업자에게 5분 lease를 주고 주문마다 갱신한다.
+ * - RUNNING: lease가 살아 있는 CANCELLING — 다른 요청은 서버가 거부한다.
+ * - STUCK: LOCAL_FAILED 또는 lease가 끝난 CANCELLING — 같은 취소 요청으로 이어서 진행한다
+ *   (서버가 남은 주문만 처리하고, 이미 환불된 주문은 다시 환불하지 않는다).
+ */
+export function resolveRoundCancellationProgress(
+  round: Pick<SaleRound, 'status' | 'cancellation'>,
+  nowMs: number,
+): RoundCancellationProgress {
+  const cancellation = round.cancellation;
+  if (round.status === 'CANCELLED' || !cancellation || cancellation.status === 'COMPLETED') {
+    return 'NONE';
+  }
+  if (cancellation.status === 'LOCAL_FAILED') return 'STUCK';
+  const leaseExpiresAt = Date.parse(cancellation.leaseExpiresAt ?? '');
+  return Number.isFinite(leaseExpiresAt) && leaseExpiresAt > nowMs ? 'RUNNING' : 'STUCK';
+}
+
+/** 회차 취소 버튼 — 관리자 계정만 본다(사용자 결정). 멈춘 취소는 "다시 진행"으로 보인다. */
+export function resolveRoundCancelAction(
+  round: Pick<SaleRound, 'status' | 'cancellation'>,
+  role: string | null | undefined,
+  nowMs: number,
+): 'cancel' | 'resume' | null {
+  if (role !== 'admin' || !ROUND_CANCELLABLE_STATUSES.includes(round.status)) return null;
+  const progress = resolveRoundCancellationProgress(round, nowMs);
+  if (progress === 'RUNNING') return null;
+  return progress === 'STUCK' ? 'resume' : 'cancel';
+}
+
+/** 회차 이름을 그대로 입력해야 취소를 보낸다(앞뒤 공백만 무시). */
+export function isRoundCancelConfirmationValid(input: string, roundName: string): boolean {
+  const expected = roundName.trim();
+  return expected.length > 0 && input.trim() === expected;
+}
+
 function isSafeProductId(value: unknown): value is string {
   return typeof value === 'string' && SAFE_IDENTIFIER_PATTERN.test(value);
 }

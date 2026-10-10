@@ -33,7 +33,15 @@ export const READONLY_STATUSES: OrderStatus[] = [
   'CANCELLED',
 ];
 
-export const CANCELLABLE_STATUSES: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
+// 판매자 취소(결제 금액 환불)가 허용되는 상태. DELIVERY_HELD는 보류 해소 방법의 하나다 —
+// 회차 주문은 본 결제와 결제된 재배송비를 함께 환불하고(재배송비는 회차 주문에만 있다),
+// 예전 주문은 본 결제를 환불한다(API orders.helpers.ts SELLER_TRANSITIONS).
+export const CANCELLABLE_STATUSES: OrderStatus[] = [
+  'ACCEPTED',
+  'CONFIRMED',
+  'PREPARING',
+  'DELIVERY_HELD',
+];
 
 // buyerName은 주문한 계정 이름이다(선물 받는 분은 요청사항에 적는다).
 // 셀러 상세 API는 연락처를 주문서의 deliveryPhone 하나로 내려준다(없으면 buyerPhone 대체).

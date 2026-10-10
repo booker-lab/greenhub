@@ -1,7 +1,15 @@
 import type { Product } from '@greenhub/shared';
 import { describe, expect, it } from 'vitest';
 import type { SellerSaleRound } from '@/hooks/useSaleRounds';
-import { buildRoundPageData, getRoundAction, isRoundEditable, readSafeRoundId } from './page.logic';
+import {
+  buildRoundPageData,
+  getRoundAction,
+  isRoundCancelConfirmationValid,
+  isRoundEditable,
+  readSafeRoundId,
+  resolveRoundCancelAction,
+  resolveRoundCancellationProgress,
+} from './page.logic';
 
 const ROUND: SellerSaleRound = {
   id: 'round-a',
@@ -161,5 +169,69 @@ describe('판매 회차 상세 라우트 경계', () => {
     expect(() => buildRoundPageData(ROUND, [{ ...PRODUCT, id: 'product/a' }])).toThrow(
       '스토어 상품 응답이 올바르지 않습니다.',
     );
+  });
+});
+
+describe('회차 취소(관리자 전용)', () => {
+  const NOW = Date.parse('2026-11-09T01:00:00.000Z');
+  const cancellation = (
+    status: 'CANCELLING' | 'LOCAL_FAILED' | 'COMPLETED',
+    leaseExpiresAt: string | null = null,
+  ) => ({
+    status,
+    reason: '판매 회차 취소',
+    failedOrderId: null,
+    leaseExpiresAt,
+    updatedAt: '2026-11-09T00:59:00.000Z',
+    completedAt: null,
+  });
+
+  it('관리자만, 서버가 취소를 받는 상태에서만 버튼이 보인다', () => {
+    for (const status of ['DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED'] as const) {
+      expect(resolveRoundCancelAction({ status, cancellation: null }, 'admin', NOW)).toBe('cancel');
+      expect(resolveRoundCancelAction({ status, cancellation: null }, 'seller', NOW)).toBeNull();
+    }
+    for (const status of ['COMPLETED', 'CANCELLED'] as const) {
+      expect(resolveRoundCancelAction({ status, cancellation: null }, 'admin', NOW)).toBeNull();
+    }
+    expect(resolveRoundCancelAction({ status: 'OPEN', cancellation: null }, null, NOW)).toBeNull();
+  });
+
+  it('멈춘 취소(LOCAL_FAILED·lease 만료)는 "다시 진행", 진행 중이면 버튼을 숨긴다', () => {
+    const failed = { status: 'CLOSED' as const, cancellation: cancellation('LOCAL_FAILED') };
+    expect(resolveRoundCancellationProgress(failed, NOW)).toBe('STUCK');
+    expect(resolveRoundCancelAction(failed, 'admin', NOW)).toBe('resume');
+    expect(resolveRoundCancelAction(failed, 'seller', NOW)).toBeNull();
+
+    const running = {
+      status: 'OPEN' as const,
+      cancellation: cancellation('CANCELLING', '2026-11-09T01:04:00.000Z'),
+    };
+    expect(resolveRoundCancellationProgress(running, NOW)).toBe('RUNNING');
+    expect(resolveRoundCancelAction(running, 'admin', NOW)).toBeNull();
+
+    const expired = {
+      status: 'OPEN' as const,
+      cancellation: cancellation('CANCELLING', '2026-11-09T00:55:00.000Z'),
+    };
+    expect(resolveRoundCancellationProgress(expired, NOW)).toBe('STUCK');
+    expect(resolveRoundCancelAction(expired, 'admin', NOW)).toBe('resume');
+
+    expect(
+      resolveRoundCancellationProgress(
+        { status: 'CANCELLED', cancellation: cancellation('COMPLETED') },
+        NOW,
+      ),
+    ).toBe('NONE');
+  });
+
+  it('회차 이름을 그대로 입력해야 취소할 수 있다(앞뒤 공백만 무시)', () => {
+    expect(isRoundCancelConfirmationValid('11월 10일 배송 회차', '11월 10일 배송 회차')).toBe(true);
+    expect(isRoundCancelConfirmationValid(' 11월 10일 배송 회차 ', '11월 10일 배송 회차')).toBe(
+      true,
+    );
+    expect(isRoundCancelConfirmationValid('11월 10일 배송', '11월 10일 배송 회차')).toBe(false);
+    expect(isRoundCancelConfirmationValid('11월10일 배송 회차', '11월 10일 배송 회차')).toBe(false);
+    expect(isRoundCancelConfirmationValid('', '')).toBe(false);
   });
 });
