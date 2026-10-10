@@ -4,8 +4,11 @@ import {
   type DeliveryHoldFormValues,
   deliveryHoldResponsibilityFeeHint,
   HOLD_FEE_NOT_ALLOWED_HINT,
+  HOLD_FEE_RANGE_HINT,
   HOLD_FEE_REQUIRED_HINT,
   HOLD_REASON_LABEL,
+  isRedeliveryFeeWithinLimit,
+  MAX_REDELIVERY_FEE_KRW,
   parseRedeliveryFee,
 } from './delivery-hold-form';
 
@@ -45,6 +48,25 @@ describe('재배송비·책임 규칙(기사 앱·서버와 같음)', () => {
       }),
     ).toBeNull();
     expect(deliveryHoldResponsibilityFeeHint(base)).toBeNull();
+  });
+
+  it('재배송비는 서버 상한(50,000원) 이하의 정수만 받는다', () => {
+    expect(MAX_REDELIVERY_FEE_KRW).toBe(50_000);
+    expect(HOLD_FEE_RANGE_HINT).toBe('재배송비는 50,000원 이하의 정수로 입력해 주세요.');
+    expect(isRedeliveryFeeWithinLimit(null)).toBe(true);
+    expect(isRedeliveryFeeWithinLimit(MAX_REDELIVERY_FEE_KRW)).toBe(true);
+    expect(isRedeliveryFeeWithinLimit(MAX_REDELIVERY_FEE_KRW + 1)).toBe(false);
+    expect(isRedeliveryFeeWithinLimit(1500.5)).toBe(false);
+    for (const redeliveryFee of [1, '3000', MAX_REDELIVERY_FEE_KRW, '50000']) {
+      expect(
+        deliveryHoldResponsibilityFeeHint({ ...base, customerResponsible: true, redeliveryFee }),
+      ).toBeNull();
+    }
+    for (const redeliveryFee of [MAX_REDELIVERY_FEE_KRW + 1, '50001', 1500.5, '3000.5', '1e21']) {
+      expect(
+        deliveryHoldResponsibilityFeeHint({ ...base, customerResponsible: true, redeliveryFee }),
+      ).toBe(HOLD_FEE_RANGE_HINT);
+    }
   });
 
   it('기상 보류는 책임·재배송비를 보지 않는다', () => {
@@ -135,6 +157,27 @@ describe('buildDeliveryHoldPayload', () => {
       ok: false,
       error: HOLD_FEE_NOT_ALLOWED_HINT,
     });
+  });
+
+  it('상한을 넘거나 정수가 아닌 재배송비는 보내지 않고 고칠 방법을 준다', () => {
+    for (const redeliveryFee of ['60000', 1500.5]) {
+      expect(
+        buildDeliveryHoldPayload({
+          ...base,
+          reasonCode: 'CUSTOMER_UNREACHABLE',
+          customerResponsible: true,
+          redeliveryFee,
+        }),
+      ).toEqual({ ok: false, error: HOLD_FEE_RANGE_HINT });
+    }
+    expect(
+      buildDeliveryHoldPayload({
+        ...base,
+        reasonCode: 'CUSTOMER_UNREACHABLE',
+        customerResponsible: true,
+        redeliveryFee: MAX_REDELIVERY_FEE_KRW,
+      }),
+    ).toMatchObject({ ok: true, payload: { redeliveryFee: MAX_REDELIVERY_FEE_KRW } });
   });
 
   it('읽을 수 없는 날짜는 보내지 않는다', () => {

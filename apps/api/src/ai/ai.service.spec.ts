@@ -1,7 +1,20 @@
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { AiService, type GenerateContentParams } from './ai.service';
+import {
+  BadGatewayException,
+  GatewayTimeoutException,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import {
+  AI_GENERATION_FAILED_MESSAGE,
+  AI_TIMEOUT_MESSAGE,
+  AI_UNAVAILABLE_MESSAGE,
+  AiService,
+  GEMINI_TIMEOUT_MS,
+  type GenerateContentParams,
+} from './ai.service';
 
 jest.mock('@google/generative-ai', () => ({
   GoogleGenerativeAI: jest.fn(),
@@ -56,9 +69,12 @@ describe('AiService', () => {
       expect(service).toBeInstanceOf(AiService);
       expect(GoogleGenerativeAIMock).not.toHaveBeenCalled();
 
-      await expect(service.generateProductContent(params)).rejects.toThrow(
-        'GEMINI_API_KEY가 설정되지 않았습니다.',
-      );
+      const logError = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const result = service.generateProductContent(params);
+      await expect(result).rejects.toBeInstanceOf(ServiceUnavailableException);
+      await expect(result).rejects.toThrow(AI_UNAVAILABLE_MESSAGE);
+      expect(logError).toHaveBeenCalledWith(expect.stringContaining('GEMINI_API_KEY'));
+      logError.mockRestore();
       expect(get).toHaveBeenCalledWith('GEMINI_API_KEY');
       expect(GoogleGenerativeAIMock).not.toHaveBeenCalled();
     } finally {
@@ -92,7 +108,9 @@ describe('AiService', () => {
     expect(getGenerativeModel).toHaveBeenCalledTimes(1);
     expect(getGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-3-flash-preview' });
     expect(generateContent).toHaveBeenCalledTimes(1);
-    expect(generateContent).toHaveBeenCalledWith(expect.stringContaining('테스트 메모'));
+    expect(generateContent).toHaveBeenCalledWith(expect.stringContaining('테스트 메모'), {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('같은 서비스 인스턴스의 반복 호출에서는 모델 초기화를 반복하지 않는다', async () => {
@@ -106,5 +124,63 @@ describe('AiService', () => {
     expect(GoogleGenerativeAIMock).toHaveBeenCalledTimes(1);
     expect(getGenerativeModel).toHaveBeenCalledTimes(1);
     expect(generateContent).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('AiService 오류 응답', () => {
+  let logError: jest.SpyInstance;
+  let logWarn: jest.SpyInstance;
+
+  beforeEach(() => {
+    GoogleGenerativeAIMock.mockReset();
+    logError = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    logWarn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    logError.mockRestore();
+    logWarn.mockRestore();
+    jest.useRealTimers();
+  });
+
+  it('Gemini 오류 원문을 응답에 넣지 않고 서버 로그에만 남긴다', async () => {
+    const { config } = createConfig(TEST_API_KEY);
+    const { generateContent } = mockModel();
+    generateContent.mockRejectedValue(new Error('[429] quota exceeded for gemini-3-flash-preview'));
+    const service = new AiService(config);
+
+    const result = service.generateProductContent(params);
+    await expect(result).rejects.toBeInstanceOf(BadGatewayException);
+    await expect(result).rejects.toThrow(AI_GENERATION_FAILED_MESSAGE);
+    await expect(result).rejects.not.toThrow(/quota|gemini/);
+    expect(logError).toHaveBeenCalledWith(expect.stringContaining('quota exceeded'));
+  });
+
+  it('JSON이 없는 AI 응답 원문을 클라이언트에 돌려주지 않는다', async () => {
+    const { config } = createConfig(TEST_API_KEY);
+    mockModel('내부 지시문이 그대로 노출된 응답');
+    const service = new AiService(config);
+
+    const result = service.generateProductContent(params);
+    await expect(result).rejects.toThrow(AI_GENERATION_FAILED_MESSAGE);
+    await expect(result).rejects.not.toThrow(/내부 지시문/);
+    expect(logError).toHaveBeenCalledWith(expect.stringContaining('내부 지시문'));
+  });
+
+  it('응답이 제한 시간을 넘으면 요청을 중단하고 504를 반환한다', async () => {
+    jest.useFakeTimers();
+    const { config } = createConfig(TEST_API_KEY);
+    const { generateContent } = mockModel();
+    generateContent.mockImplementation(() => new Promise(() => undefined));
+    const service = new AiService(config);
+
+    const result = service.generateProductContent(params);
+    const settled = expect(result).rejects.toBeInstanceOf(GatewayTimeoutException);
+    await jest.advanceTimersByTimeAsync(GEMINI_TIMEOUT_MS);
+    await settled;
+    await expect(result).rejects.toThrow(AI_TIMEOUT_MESSAGE);
+
+    const { signal } = generateContent.mock.calls[0][1] as { signal: AbortSignal };
+    expect(signal.aborted).toBe(true);
   });
 });

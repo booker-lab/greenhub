@@ -16,21 +16,29 @@ import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { SkipThrottle } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
-import { AuditService } from '../common/audit/audit.service';
 import { PortoneClient } from './portone.client';
 import { PortoneWebhookDto } from './dto/portone-webhook.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/types/jwt-payload.type';
 
+// 서명 검증 실패는 요청마다 저장하지 않고, 구간마다 경고 한 줄과 직전 구간의 건수만 남긴다.
+export const WEBHOOK_REJECTION_LOG_WINDOW_MS = 60 * 1000;
+
+type WebhookRejectionReason =
+  | 'missing_credentials'
+  | 'timestamp_out_of_range'
+  | 'signature_mismatch';
+
 @Controller('payments')
 export class PaymentsController {
   private readonly logger = new Logger(PaymentsController.name);
+  private rejectionWindowStartedAt: number | null = null;
+  private suppressedRejections = 0;
 
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly portone: PortoneClient,
-    private readonly audit: AuditService,
   ) {}
 
   @Post('webhook/portone')
@@ -44,10 +52,7 @@ export class PaymentsController {
     @Headers('webhook-signature') webhookSignature: string,
   ) {
     const rawBody = req.rawBody;
-    this.logger.log(
-      `webhook received: id=${webhookId ?? 'MISSING'} ts=${webhookTimestamp ?? 'MISSING'} sig=${webhookSignature ? 'present' : 'MISSING'} rawBody=${rawBody ? `${rawBody.length}bytes` : 'MISSING'}`,
-    );
-
+    let reason: WebhookRejectionReason = 'missing_credentials';
     try {
       if (
         !Buffer.isBuffer(rawBody) ||
@@ -57,19 +62,35 @@ export class PaymentsController {
       ) {
         throw new UnauthorizedException('웹훅 인증 정보가 누락되었습니다.');
       }
+      reason = 'signature_mismatch';
       this.portone.verifyWebhookSignature(webhookId, webhookTimestamp, rawBody, webhookSignature);
     } catch (e) {
-      this.logger.error(`webhook sig verify failed: ${(e as Error).message}`);
-      await this.audit.log('payment.webhook.invalid_sig', {
-        detail: {
-          webhookId: webhookId ?? null,
-          webhookTimestamp: webhookTimestamp ?? null,
-          error: (e as Error).message,
-        },
-      });
+      if (reason === 'signature_mismatch' && /timestamp/.test((e as Error).message ?? '')) {
+        reason = 'timestamp_out_of_range';
+      }
+      this.recordWebhookRejection(reason);
       throw e;
     }
+    this.logger.log(`webhook verified: id=${webhookId.slice(0, 80)} type=${dto.type.slice(0, 60)}`);
     return this.paymentsService.handleWebhook(dto);
+  }
+
+  // 요청 값(헤더·본문)은 남기지 않는다. 구간의 첫 실패만 경고하고, 나머지는 다음 구간 첫 경고에 건수로 합친다.
+  private recordWebhookRejection(reason: WebhookRejectionReason) {
+    const now = Date.now();
+    if (
+      this.rejectionWindowStartedAt !== null &&
+      now - this.rejectionWindowStartedAt < WEBHOOK_REJECTION_LOG_WINDOW_MS
+    ) {
+      this.suppressedRejections += 1;
+      return;
+    }
+    const suppressed = this.suppressedRejections;
+    this.rejectionWindowStartedAt = now;
+    this.suppressedRejections = 0;
+    this.logger.warn(
+      `webhook rejected: reason=${reason}${suppressed > 0 ? ` suppressedSinceLastWarning=${suppressed}` : ''}`,
+    );
   }
 
   @Get(':paymentId')

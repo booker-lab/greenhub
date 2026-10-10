@@ -10,7 +10,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { calcDeliveryFee, detectMetropolitan, generatePickupCode } from './orders.helpers';
-import { RoundOrderCreateService } from './round-order-create.service';
+import { RoundOrderCreateService, resolveOrderBuyerName } from './round-order-create.service';
 import {
   LegacyDailyCapacityError,
   reserveLegacyDailyCapacity,
@@ -69,10 +69,7 @@ export class OrdersCreateService {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
     const productData = product.data()!;
-    const rawBuyerName: string = userSnap.data()?.['name'] ?? '';
-    const buyerEmail: string = userSnap.data()?.['email'] ?? '';
-    const buyerName: string =
-      rawBuyerName && rawBuyerName !== '???' ? rawBuyerName : buyerEmail.split('@')[0] || userId;
+    const buyerName = resolveOrderBuyerName(userSnap.data(), userId);
     const buyerPhone: string | null = userSnap.data()?.['phone'] ?? null;
     const sellerPhone: string | null = storeSnap.data()?.['phone'] ?? null;
     const hubData = (hubSnap as any)?.exists ? (hubSnap as any).data() : null;
@@ -100,7 +97,10 @@ export class OrdersCreateService {
 
     let orderNumber = '';
 
-    await this.firestore.runTransaction(async (t) => {
+    // 트랜잭션은 재시도될 수 있으므로 부수효과(조기 확정 트리거)는 커밋된 시도의 반환값으로만
+    // 결정하고 커밋 뒤에 실행한다.
+    const groupTargetReached = await this.firestore.runTransaction(async (t) => {
+      let reachedTarget = false;
       // T8: 일자별 카운터 read (모든 write 이전에 수행)
       const counterSnap = await t.get(counterRef);
       const seq = (counterSnap.exists ? (counterSnap.data()!['seq'] as number) : 0) + 1;
@@ -161,14 +161,8 @@ export class OrdersCreateService {
         const newQuantity = (gc['currentQuantity'] as number) + dto.quantity;
         t.update(gcRef, { currentQuantity: newQuantity });
 
-        // 선착순 마감: 트랜잭션 외부에서 조기 확정 트리거 (비동기, 실패 무시)
-        if (newQuantity >= (gc['targetQuantity'] as number)) {
-          setImmediate(() => {
-            this.notifications
-              .processGroupBuyEarlyConfirm(dto.productId)
-              .catch((err) => console.error('[GroupBuy] 조기 확정 트리거 실패', err));
-          });
-        }
+        // 선착순 마감: 목표 도달 여부만 기록하고 트리거는 커밋 뒤에 실행한다.
+        reachedTarget = newQuantity >= (gc['targetQuantity'] as number);
       }
 
       const isMetropolitan = detectMetropolitan(dto.deliveryAddress.address);
@@ -214,7 +208,15 @@ export class OrdersCreateService {
         createdAt: now,
         updatedAt: now,
       });
+      return reachedTarget;
     });
+
+    if (groupTargetReached) {
+      // 응답을 기다리게 하지 않고 비동기로 실행한다. 중복 실행은 처리 lease가 막는다.
+      void Promise.resolve()
+        .then(() => this.notifications.processGroupBuyEarlyConfirm(dto.productId))
+        .catch((err) => console.error('[GroupBuy] 조기 확정 트리거 실패', err));
+    }
 
     return {
       orderId,
