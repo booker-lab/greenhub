@@ -300,7 +300,7 @@ POST /auth/kakao-login
 POST /auth/refresh
 ```
 
-`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다.
+`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `login`은 클라이언트 IP+정규화한 이메일 단위로 세고, 이메일과 무관한 클라이언트 IP 단위 1분 60회 상한을 함께 둔다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다. `refresh`는 서명 검증된 refresh token의 사용자 단위로 세고(검증 실패 시 IP 단위), 그 밖의 인증 요청은 서명 검증된 access token의 사용자 단위, 없으면 클라이언트 IP 단위로 센다.
 
 주의:
 
