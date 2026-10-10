@@ -54,6 +54,19 @@ const PAYMENT_FIELDS = [
   'requiresRecovery',
 ] as const;
 
+const ORDER_ITEM_DETAIL_FIELDS = [
+  'roundItemId',
+  'productId',
+  'productName',
+  'productImageUrl',
+  'unitPrice',
+  'quantity',
+  'subtotalAmount',
+] as const;
+
+// 목록 카드의 "첫 상품 외 N종" 표시용 — 상품 이름과 수량만 싣는다. 가격·사진은 상세에서만 준다.
+const ORDER_ITEM_LIST_FIELDS = ['productName', 'quantity'] as const;
+
 export function projectSellerOrder(order: OrderRecord, view: SellerOrderReadView) {
   const projected: OrderRecord = {};
   const fields = view === 'list' ? LIST_FIELDS : DETAIL_FIELDS;
@@ -65,6 +78,13 @@ export function projectSellerOrder(order: OrderRecord, view: SellerOrderReadView
   const firstItem = Array.isArray(order['orderItems']) ? order['orderItems'][0] : undefined;
   if (projected['productName'] === undefined && typeof firstItem?.['productName'] === 'string') {
     projected['productName'] = firstItem['productName'];
+  }
+
+  if (Array.isArray(order['orderItems'])) {
+    const itemFields = view === 'list' ? ORDER_ITEM_LIST_FIELDS : ORDER_ITEM_DETAIL_FIELDS;
+    projected['orderItems'] = order['orderItems'].map((item: OrderRecord) =>
+      projectFields(item, itemFields),
+    );
   }
 
   if (view === 'detail') {
@@ -80,20 +100,6 @@ export function projectSellerOrder(order: OrderRecord, view: SellerOrderReadView
 
     const payment = projectFields(order['redeliveryPayment'], PAYMENT_FIELDS);
     if (payment) projected['redeliveryPayment'] = payment;
-
-    if (Array.isArray(order['orderItems'])) {
-      projected['orderItems'] = order['orderItems'].map((item: OrderRecord) =>
-        projectFields(item, [
-          'roundItemId',
-          'productId',
-          'productName',
-          'productImageUrl',
-          'unitPrice',
-          'quantity',
-          'subtotalAmount',
-        ]),
-      );
-    }
 
     const deliveryPhone = sellerVisiblePhone(order);
     if (deliveryPhone !== undefined) projected['deliveryPhone'] = deliveryPhone;
