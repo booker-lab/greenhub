@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsNotEmpty, Matches } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { STORE_LOGO_URL_MAX_LENGTH } from '../store-logo-url';
 
 export class UpdateStoreDto {
   @IsString()
@@ -30,7 +31,9 @@ export class UpdateStoreDto {
   @IsOptional()
   businessNumber?: string;
 
+  // 허용 호스트·bucket·객체 경로는 StoresService가 구성된 Firebase storage bucket으로 검사한다.
   @IsString()
+  @MaxLength(STORE_LOGO_URL_MAX_LENGTH)
   @IsOptional()
   logoUrl?: string;
 }
