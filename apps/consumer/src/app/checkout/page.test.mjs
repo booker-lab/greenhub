@@ -28,7 +28,7 @@ new Function('require', 'module', 'exports', compiledCart)(
 
 const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
 const testableSource = `${source}
-export { parseCheckoutCart, resolveRoundCheckoutSchedule };`;
+export { parseCheckoutCart, resolveRoundCheckoutSchedule, resolveSingleCheckoutAmount, SingleCheckoutContent };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
     esModuleInterop: true,
@@ -90,7 +90,8 @@ new Function('require', 'module', 'exports', compiled)(
   pageModule.exports,
 );
 
-const { parseCheckoutCart, resolveRoundCheckoutSchedule } = pageModule.exports;
+const { parseCheckoutCart, resolveRoundCheckoutSchedule, resolveSingleCheckoutAmount } =
+  pageModule.exports;
 
 const firstRoundItem = {
   productId: 'product-1',
@@ -322,4 +323,169 @@ test('legacy checkout도 모바일 리다이렉트 복귀 URL과 남은 미결�
   const save = legacyCheckoutSource.indexOf('savePendingOrderPayment(');
   const sdkCall = legacyCheckoutSource.indexOf('PortOne.requestPayment(');
   assert.ok(save >= 0 && save < sdkCall);
+});
+
+function CheckoutFormStub() {
+  return null;
+}
+
+/**
+ * 단건 checkout을 최소 훅 런타임으로 그려 CheckoutForm에 넘긴 값을 기록한다.
+ * 첫 렌더 뒤 effect(상품 조회)를 실행하고, 조회가 끝나면 다시 그린다.
+ */
+function createSingleCheckoutHarness(search) {
+  const slots = [];
+  const effects = [];
+  const renders = [];
+  let cursor = 0;
+  const requireForRender = (specifier) => {
+    if (specifier === 'react') {
+      return {
+        Suspense: () => null,
+        useEffect: (effect) => {
+          effects.push(effect);
+        },
+        useRef: (initial) => ({ current: initial }),
+        useState: (initial) => {
+          const index = cursor++;
+          if (!(index in slots)) slots[index] = initial;
+          return [
+            slots[index],
+            (next) => {
+              slots[index] = typeof next === 'function' ? next(slots[index]) : next;
+            },
+          ];
+        },
+      };
+    }
+    if (specifier === 'react/jsx-runtime') {
+      const jsx = (type, props) => {
+        if (type === CheckoutFormStub) renders.push(props);
+        return null;
+      };
+      return { Fragment: Symbol('Fragment'), jsx, jsxs: jsx };
+    }
+    if (specifier === 'next/navigation') {
+      return {
+        useRouter: () => ({ replace: () => {} }),
+        useSearchParams: () => new URLSearchParams(search),
+      };
+    }
+    if (specifier === 'next-auth/react') return { useSession: () => ({ data: null }) };
+    if (specifier === '@/hooks/usePayment') {
+      return {
+        usePayment: () => ({ state: 'idle', orderId: null, error: null, requestPayment: () => {} }),
+      };
+    }
+    if (specifier === './_components/CheckoutForm') {
+      return { __esModule: true, default: CheckoutFormStub };
+    }
+    return requireForTest(specifier);
+  };
+  const renderModule = { exports: {} };
+  new Function('require', 'module', 'exports', compiled)(
+    requireForRender,
+    renderModule,
+    renderModule.exports,
+  );
+
+  return {
+    render() {
+      cursor = 0;
+      renderModule.exports.SingleCheckoutContent();
+      return renders.at(-1);
+    },
+    async runEffectsAndSettle() {
+      for (const effect of effects.splice(0)) effect();
+      await new Promise((resolve) => setImmediate(resolve));
+    },
+  };
+}
+
+async function withFetch(fetchImpl, run) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+const serverProduct = {
+  id: 'product-1',
+  storeId: 'store-1',
+  name: '서버 상품',
+  price: 25000,
+  saleType: 'normal',
+};
+
+test('단건 checkout은 URL totalAmount를 무시하고 서버 상품 가격으로만 결제 금액을 표시한다', async () => {
+  const base = 'productId=product-1&quantity=2&saleType=normal&deliveryMethod=parcel';
+  for (const search of [base, `${base}&totalAmount=1`, `${base}&totalAmount=99999999`]) {
+    const requestedUrls = [];
+    await withFetch(
+      async (url) => {
+        requestedUrls.push(url);
+        return { ok: true, json: async () => serverProduct };
+      },
+      async () => {
+        const harness = createSingleCheckoutHarness(search);
+
+        const beforeFetch = harness.render();
+        assert.equal(beforeFetch.totalAmount, null, `${search}: 조회 전에는 확인 중`);
+        assert.equal(beforeFetch.error, null);
+
+        await harness.runEffectsAndSettle();
+        const afterFetch = harness.render();
+        assert.equal(afterFetch.totalAmount, 50000, `${search}: 서버 가격 x 수량`);
+        assert.equal(afterFetch.error, null);
+      },
+    );
+    assert.deepEqual(requestedUrls, ['http://localhost:3000/products/product-1']);
+  }
+});
+
+test('단건 checkout은 상품 조회에 실패하면 URL 금액 대신 금액을 숨기고 오류를 안내한다', async () => {
+  await withFetch(
+    async () => ({ ok: false, json: async () => ({}) }),
+    async () => {
+      const harness = createSingleCheckoutHarness(
+        'productId=product-1&quantity=1&saleType=normal&deliveryMethod=parcel&totalAmount=1000',
+      );
+      harness.render();
+      await harness.runEffectsAndSettle();
+      const rendered = harness.render();
+      assert.equal(rendered.totalAmount, 0);
+      assert.match(rendered.error, /상품 정보를 불러오지 못했습니다/);
+    },
+  );
+});
+
+test('단건 checkout 표시 금액은 서버 가격과 정수 수량이 모두 유효할 때만 계산한다', () => {
+  assert.equal(resolveSingleCheckoutAmount(null, 2, false), null);
+  assert.equal(resolveSingleCheckoutAmount(null, 2, true), 0);
+  assert.equal(resolveSingleCheckoutAmount({ price: 25000 }, 2, true), 0);
+  assert.equal(resolveSingleCheckoutAmount({ price: 25000 }, 3, false), 75000);
+  for (const quantity of [0, -1, 1.5, Number.NaN]) {
+    assert.equal(resolveSingleCheckoutAmount({ price: 25000 }, quantity, false), 0);
+  }
+  for (const price of [-1, 1.5, '25000', undefined]) {
+    assert.equal(resolveSingleCheckoutAmount({ price }, 1, false), 0);
+  }
+  assert.equal(resolveSingleCheckoutAmount({ price: Number.MAX_SAFE_INTEGER }, 2, false), 0);
+});
+
+test('단건 checkout은 URL의 totalAmount 쿼리를 읽지 않는다', () => {
+  const start = source.indexOf('function SingleCheckoutContent');
+  const end = source.indexOf('function LegacyCartCheckoutContent', start);
+  const singleCheckoutSource = source.slice(start, end);
+
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  assert.doesNotMatch(source, /params\.get\('totalAmount'\)/);
+  assert.match(
+    singleCheckoutSource,
+    /resolveSingleCheckoutAmount\(product, quantity, productUnavailable\)/,
+  );
 });
