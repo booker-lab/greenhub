@@ -93,18 +93,34 @@ async function seedFixtures() {
       }),
       firestore.collection('users').doc('seller-role-lifecycle').set({
         role: 'seller',
-        storeId: 'store-1',
+        storeId: 'store-lc-role',
         suspended: false,
       }),
       firestore.collection('users').doc('seller-store-lifecycle').set({
         role: 'seller',
-        storeId: 'store-1',
+        storeId: 'store-lc-store',
         suspended: false,
       }),
       firestore.collection('users').doc('seller-suspended-lifecycle').set({
         role: 'seller',
+        storeId: 'store-lc-suspended',
+        suspended: false,
+      }),
+      firestore.collection('users').doc('seller-orphan').set({
+        role: 'seller',
         storeId: 'store-1',
         suspended: false,
+      }),
+      firestore.collection('stores').doc('store-1').set({ ownerId: 'seller-1' }),
+      firestore.collection('stores').doc('store-2').set({ ownerId: 'seller-2' }),
+      firestore.collection('stores').doc('store-lc-role').set({
+        ownerId: 'seller-role-lifecycle',
+      }),
+      firestore.collection('stores').doc('store-lc-store').set({
+        ownerId: 'seller-store-lifecycle',
+      }),
+      firestore.collection('stores').doc('store-lc-suspended').set({
+        ownerId: 'seller-suspended-lifecycle',
       }),
       firestore.collection('users').doc('admin-1').set({
         role: 'admin',
@@ -219,6 +235,45 @@ test('상품 이미지는 인증·storeId 소유권·역할을 모두 검증한�
 
   for (const storage of deniedActors) {
     await assertFails(upload(storage, 'products/store-1/forbidden-product.jpg', 'image/jpeg'));
+  }
+});
+
+test('상품 이미지 변경은 stores.ownerId가 현재 판매자와 일치해야 한다', async () => {
+  // seller-orphan: token storeId와 users storeId는 store-1이지만
+  // stores/store-1.ownerId는 seller-1이다.
+  const orphan = storageFor('seller-orphan', { role: 'seller', storeId: 'store-1' });
+
+  await assertFails(upload(orphan, 'products/store-1/orphan-product.jpg', 'image/jpeg'));
+  await assertFails(
+    objectRef(orphan, 'products/store-1/public-product.jpg').put(content(), {
+      contentType: 'image/jpeg',
+    }),
+  );
+  await assertFails(
+    objectRef(orphan, 'products/store-1/public-product.jpg').updateMetadata({
+      contentType: 'image/png',
+    }),
+  );
+  await assertFails(objectRef(orphan, 'products/store-1/public-product.jpg').delete());
+  // 매장 문서가 없는 storeId도 소유를 증명할 수 없으므로 거부한다.
+  await assertFails(
+    upload(
+      storageFor('seller-orphan', { role: 'seller', storeId: 'store-missing' }),
+      'products/store-missing/orphan-product.jpg',
+      'image/jpeg',
+    ),
+  );
+});
+
+test('공개 이미지 경로는 단건 조회만 허용하고 목록 조회를 거부한다', async () => {
+  for (const [, storage] of actorStorages()) {
+    await assertSucceeds(objectRef(storage, 'products/store-1/public-product.jpg').getMetadata());
+    await assertSucceeds(objectRef(storage, 'banners/main_hero/public-banner.png').getMetadata());
+    await assertSucceeds(objectRef(storage, 'logos/seller-1_1721433600000').getMetadata());
+
+    await assertFails(objectRef(storage, 'products/store-1').listAll());
+    await assertFails(objectRef(storage, 'banners/main_hero').listAll());
+    await assertFails(objectRef(storage, 'logos').listAll());
   }
 });
 
@@ -358,20 +413,26 @@ test('정의되지 않은 경로는 모든 역할의 직접 접근을 거부한�
 test('Storage seller 권한은 현재 role, storeId, suspension을 함께 검증한다', async () => {
   const roleChanged = storageFor('seller-role-lifecycle', {
     role: 'seller',
-    storeId: 'store-1',
+    storeId: 'store-lc-role',
   });
   const storeChanged = storageFor('seller-store-lifecycle', {
     role: 'seller',
-    storeId: 'store-1',
+    storeId: 'store-lc-store',
   });
   const suspended = storageFor('seller-suspended-lifecycle', {
     role: 'seller',
-    storeId: 'store-1',
+    storeId: 'store-lc-suspended',
   });
 
-  await assertSucceeds(upload(roleChanged, 'products/store-1/lifecycle-role.jpg', 'image/jpeg'));
-  await assertSucceeds(upload(storeChanged, 'products/store-1/lifecycle-store.jpg', 'image/jpeg'));
-  await assertSucceeds(upload(suspended, 'products/store-1/lifecycle-suspended.jpg', 'image/jpeg'));
+  await assertSucceeds(
+    upload(roleChanged, 'products/store-lc-role/lifecycle-role.jpg', 'image/jpeg'),
+  );
+  await assertSucceeds(
+    upload(storeChanged, 'products/store-lc-store/lifecycle-store.jpg', 'image/jpeg'),
+  );
+  await assertSucceeds(
+    upload(suspended, 'products/store-lc-suspended/lifecycle-suspended.jpg', 'image/jpeg'),
+  );
 
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     const database = context.firestore();
@@ -380,10 +441,14 @@ test('Storage seller 권한은 현재 role, storeId, suspension을 함께 검증
     await updateDoc(doc(database, 'users', 'seller-suspended-lifecycle'), { suspended: true });
   });
 
-  await assertFails(upload(roleChanged, 'products/store-1/lifecycle-role-denied.jpg', 'image/jpeg'));
-  await assertFails(upload(storeChanged, 'products/store-1/lifecycle-store-denied.jpg', 'image/jpeg'));
   await assertFails(
-    upload(suspended, 'products/store-1/lifecycle-suspended-denied.jpg', 'image/jpeg'),
+    upload(roleChanged, 'products/store-lc-role/lifecycle-role-denied.jpg', 'image/jpeg'),
+  );
+  await assertFails(
+    upload(storeChanged, 'products/store-lc-store/lifecycle-store-denied.jpg', 'image/jpeg'),
+  );
+  await assertFails(
+    upload(suspended, 'products/store-lc-suspended/lifecycle-suspended-denied.jpg', 'image/jpeg'),
   );
 });
 
@@ -400,7 +465,9 @@ test('Storage admin 권한은 현재 role과 suspension을 함께 검증한다',
     await updateDoc(doc(database, 'users', 'admin-suspended-lifecycle'), { suspended: true });
   });
 
-  await assertFails(upload(roleChanged, 'banners/main_hero/lifecycle-role-denied.png', 'image/png'));
+  await assertFails(
+    upload(roleChanged, 'banners/main_hero/lifecycle-role-denied.png', 'image/png'),
+  );
   await assertFails(
     upload(suspended, 'banners/main_hero/lifecycle-suspended-denied.png', 'image/png'),
   );

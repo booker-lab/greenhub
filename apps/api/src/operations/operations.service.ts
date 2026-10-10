@@ -474,6 +474,10 @@ export class OperationsService {
       paymentStatus: this.safeStatus(snapshot['paymentStatus']),
       failureStage: this.safeStatus(snapshot['failureStage']),
       templateCode: this.safeStatus(snapshot['templateCode']),
+      // 결제사 취소·분쟁 기록(PROVIDER_REVERSAL_DETECTED)의 상태 문자열. 개인정보는 담기지 않는다.
+      providerStatus: this.safeStatus(snapshot['providerStatus']),
+      providerEvent: this.safeStatus(snapshot['providerEvent']),
+      settlementStatus: this.safeStatus(snapshot['settlementStatus']),
     };
   }
 

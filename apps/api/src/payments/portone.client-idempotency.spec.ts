@@ -49,6 +49,7 @@ describe('PortoneClient refund idempotency transport 28B (I11)', () => {
         'Idempotency-Key': key,
       },
       body: JSON.stringify({ reason: '고객 요청', amount: 100000 }),
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -79,6 +80,7 @@ describe('PortoneClient refund idempotency transport 28B (I11)', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ reason: '사유', amount: 100 }),
+      signal: expect.any(AbortSignal),
     });
   });
 
