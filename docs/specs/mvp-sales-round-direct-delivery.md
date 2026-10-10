@@ -100,6 +100,7 @@ proof나 production deployment·activation·first live round를 의미하지 않
 - 장바구니 검증 API는 회차 상태, 가격, 판매 가능 수량, 이천시 배송 가능 여부를 서버 기준으로 재검증한다.
 - 주문 생성 API는 같은 회차의 주문 상품 배열, 배송 주소, 배송 연락용 전화번호, 당근 유입 값을 받는다. Pilot은
   `MARKETING_NOT_USED_IN_PILOT`이므로 마케팅 동의 field를 이 계약의 사용 범위로 정의하지 않는다.
+- 배송 연락용 전화번호는 휴대폰 번호(`01[016789]`로 시작하는 10~11자리, `+82` 허용)만 받고 `010-1234-5678` 꼴로 맞춰 저장한다. 집 전화·자릿수가 맞지 않는 번호는 예약 전에 `400`으로 거절한다(2026-10-10 결정, `apps/api/src/orders/_lib/korean-mobile-phone.ts`).
 - `round_direct` 스토어는 회차 필드 누락 시 legacy 주문 생성으로 우회하지 않는다. 배송 주소는 문자열 포함 여부가 아니라 주소 선두의 이천시 행정구역 경계로 판정한다.
 - 고객 취소 API는 주문 마감 전 주문만 허용하고 결제 환불과 한도 반환을 함께 수행한다.
 - 주문 상품 응답 금액 필드는 `subtotalAmount`가 정본이다. 기존 `lineAmount` 저장 데이터는 조회 시 `subtotalAmount`로 변환하고 `lineAmount`는 응답에서 제거한다.

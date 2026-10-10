@@ -9,6 +9,7 @@ import { FirestoreService } from '../firestore/firestore.service';
 import { RetentionService } from '../retention/retention.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
+import { normalizeKoreanMobilePhone } from './_lib/korean-mobile-phone';
 
 @Injectable()
 export class RoundOrderCreateService {
@@ -20,6 +21,12 @@ export class RoundOrderCreateService {
 
   async create(storeId: string, userId: string, dto: CreateOrderDto) {
     this.assertRequest(dto);
+    const deliveryPhone = normalizeKoreanMobilePhone(dto.deliveryPhone);
+    if (!deliveryPhone) {
+      throw new BadRequestException(
+        '받는 분 휴대폰 번호를 확인해 주세요. 휴대폰 번호만 받을 수 있어요(예: 010-1234-5678).',
+      );
+    }
     const requestId = dto.clientOrderRequestId!;
     const orderId = this.stableId(storeId, userId, requestId);
     const payloadHash = this.payloadHash(storeId, userId, dto);
@@ -100,7 +107,7 @@ export class RoundOrderCreateService {
         deliveryMethod: 'direct',
         deliveryFee: 0,
         deliveryAddress: dto.deliveryAddress,
-        deliveryPhone: dto.deliveryPhone,
+        deliveryPhone,
         requestNote: normalizeRequestNote(dto.requestNote),
         requestedDeliveryDate: dto.requestedDeliveryDate ?? null,
         schemaVersion: 2,
