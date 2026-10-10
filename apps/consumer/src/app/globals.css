@@ -1,11 +1,6 @@
-/* Pretendard Variable — webpack 번들링 (Vercel .next/static/media 서빙 보장) */
-@font-face {
-  font-family: "Pretendard Variable";
-  src: url("../../public/fonts/PretendardVariable.woff2") format("woff2-variations");
-  font-weight: 45 920;
-  font-style: normal;
-  font-display: swap;
-}
+/* Pretendard Variable — 글자 범위별로 나눈 파일(dynamic subset)을 webpack이 번들링한다.
+   브라우저는 화면에 나온 글자 범위의 조각만 받는다(전체 2MB 한 파일 대신). */
+@import "@greenhub/ui/fonts/pretendard.css";
 
 /* Nunito ExtraBold(라틴 글자만) — 로고 "Green Love" 전용 */
 @font-face {

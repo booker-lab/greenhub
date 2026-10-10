@@ -99,7 +99,7 @@ test('같은 출처 /api/* 규칙은 기본 "apis" 캐시 규칙을 대체한다
 test('정적 자산·공개 상품 이미지는 NetworkOnly 규칙에 걸리지 않아 기본 캐시 규칙을 따른다', () => {
   for (const href of [
     `${APP}/_next/static/chunks/main.js`,
-    `${APP}/fonts/PretendardVariable.woff2`,
+    `${APP}/_next/static/media/PretendardVariable.subset.0.1a2b3c4d.woff2`,
     'https://firebasestorage.googleapis.com/v0/b/green-test.appspot.com/o/products%2Fa.jpg?alt=media',
   ]) {
     assert.equal(matchingRule(href), undefined, href);

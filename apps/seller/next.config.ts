@@ -48,6 +48,15 @@ const nextConfig: NextConfig = {
   },
 };
 
+// next-pwa 기본 precache 제외 규칙에 Pretendard 글자 범위 조각(92개, 약 3MB)을 더한다.
+// 조각은 화면 글자에 필요한 것만 받으므로 서비스워커 설치 때 전부 미리 받지 않는다.
+const precacheExclude = [
+  /\/_next\/static\/.*(?<!\.p)\.woff2/,
+  /\.map$/,
+  /^manifest.*\.js$/,
+  /PretendardVariable\.subset\.\d+\.[0-9a-f]+\.woff2$/,
+];
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default withBundleAnalyzer(withPWA({
   dest: "public",
@@ -57,6 +66,7 @@ export default withBundleAnalyzer(withPWA({
   cleanupOutdatedCaches: true,
   disable: process.env.NODE_ENV === "development",
   workboxOptions: {
+    exclude: precacheExclude,
     runtimeCaching: [
       // Firestore WebChannel — 캐시 불가
       {

@@ -60,9 +60,6 @@ backups/
 playwright-report/
 test-results/
 
-# Pretendard 폰트 — git 추적 (Vercel static 배포 보장)
-# apps/*/public/fonts/
-
 # next-pwa 빌드 생성 파일 — sw.js·worker-*.js는 git 추적 (Vercel 서빙 보장)
 apps/*/public/sw.js.map
 apps/*/public/workbox-*.js
