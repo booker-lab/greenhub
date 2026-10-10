@@ -8,6 +8,7 @@ import { throwDriverOrderNotFound } from '../orders/driver-order-error';
 import { OrdersQueryService } from '../orders/orders-query.service';
 
 type DriverOrderView = 'list' | 'detail';
+type DriverOrderItem = { productName: string; quantity: number };
 type DriverOrderReadModel = Record<string, unknown> & {
   redeliveryPayment: {
     required: boolean;
@@ -127,7 +128,18 @@ export class DriverService {
       redeliveryPayment: this.projectRedeliveryPayment(order['redeliveryPayment']),
     };
 
-    if (view === 'list') return projected;
+    // 기사가 상품마다 챙길 개수를 보도록 상품 이름·수량만 싣는다(가격·상품 ID 등은 싣지 않는다).
+    const items = this.projectItems(order['orderItems']);
+    if (items) projected['items'] = items;
+
+    if (view === 'list') {
+      // 지도 검색용 기본 주소(동·호수 없는 deliveryAddress.address)는 전체 주소를 이미 싣는 행에만 싣는다.
+      const deliveryAddress = this.projectDeliveryAddress(order['deliveryAddress']);
+      if (deliveryAddress && projected['address'] != null) {
+        projected['deliveryAddress'] = deliveryAddress;
+      }
+      return projected;
+    }
 
     projected['storeId'] = order['storeId'];
     projected['schemaVersion'] = order['schemaVersion'];
@@ -187,6 +199,25 @@ export class DriverService {
       paid: payment['paid'],
       requiresRecovery: payment['requiresRecovery'],
     };
+  }
+
+  // 하나라도 형식이 어긋나면 통째로 빼서, 앱이 기존 "첫 상품 · 총 N개" 표기로 대신하게 한다.
+  private projectItems(value: unknown): DriverOrderItem[] | undefined {
+    if (!Array.isArray(value) || value.length === 0) return undefined;
+    const items: DriverOrderItem[] = [];
+    for (const item of value) {
+      if (
+        !isRecord(item) ||
+        typeof item['productName'] !== 'string' ||
+        item['productName'].trim().length === 0 ||
+        !Number.isInteger(item['quantity']) ||
+        item['quantity'] <= 0
+      ) {
+        return undefined;
+      }
+      items.push({ productName: item['productName'], quantity: item['quantity'] });
+    }
+    return items;
   }
 
   private projectDeliveryAddress(value: unknown): Record<string, unknown> | undefined {
