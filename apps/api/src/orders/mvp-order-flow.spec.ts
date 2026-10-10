@@ -40,12 +40,9 @@ function makeFirestore(initial: Record<string, RecordData>) {
       async get() {
         const docs = Array.from(records.entries())
           .filter(([path]) => path.startsWith(`${name}/`))
-          .map(([path, data]) => ({ id: path.split('/')[1], ref: doc(path), data: () => data }))
+          .map(([path, data]) => ({ id: path.split('/')[1], data: () => data }))
           .filter((snap) => filters.every(([field, value]) => snap.data()[field] === value));
         return { docs };
-      },
-      limit() {
-        return query;
       },
       doc(id: string) {
         return doc(`${name}/${id}`);
