@@ -6,6 +6,7 @@ import {
   buildKakaoMapSearchUrl,
   buildOrderMapLink,
   destinationAddress,
+  pickNextDeliveryStop,
   toValidCoordinate,
 } from './map-navigation-link.ts';
 
@@ -111,6 +112,46 @@ test('주문 링크: hub 배송은 거점 주소를 쓰고, 유효 좌표면 거
     kind: 'route',
     href: `https://map.kakao.com/link/to/${encodeURIComponent('판교 거점')},37.39,127.11`,
   });
+});
+
+test('주문 링크: 기본 주소가 있으면 동·호수 붙은 전체 주소 대신 기본 주소로 검색한다', () => {
+  const order = {
+    deliveryMethod: 'direct',
+    address: '경기도 이천시 중리천로 1 101동 1001호',
+    deliveryAddress: { address: '경기도 이천시 중리천로 1' },
+  };
+  assert.equal(destinationAddress(order), '경기도 이천시 중리천로 1');
+  assert.equal(
+    buildOrderMapLink(order).href,
+    `https://map.kakao.com/link/search/${encodeURIComponent('경기도 이천시 중리천로 1')}`,
+  );
+  // 기본 주소가 없거나 비었으면 전체 주소로 검색한다(이전 API 응답 포함).
+  for (const deliveryAddress of [undefined, null, {}, { address: '  ' }, { address: 3 }]) {
+    assert.equal(
+      destinationAddress({ ...order, deliveryAddress }),
+      '경기도 이천시 중리천로 1 101동 1001호',
+      JSON.stringify(deliveryAddress),
+    );
+  }
+  // 거점 배송은 그대로 거점 주소를 쓴다.
+  assert.equal(
+    destinationAddress({ ...order, deliveryMethod: 'hub', hubAddress: '성남시 분당구 판교역로 1' }),
+    '성남시 분당구 판교역로 1',
+  );
+});
+
+test('다음 배송지: 경로에서 처음 나오는 배송 중 주문만 고르고 수거 대기 주문은 고르지 않는다', () => {
+  const route = [
+    { id: 'unclaimed', status: 'PREPARING' },
+    { id: 'mine-1', status: 'DELIVERING' },
+    { id: 'mine-2', status: 'DELIVERING' },
+  ];
+  assert.equal(pickNextDeliveryStop(route)?.id, 'mine-1');
+  assert.equal(pickNextDeliveryStop([{ id: 'a', status: 'PREPARING' }]), null);
+  assert.equal(pickNextDeliveryStop([]), null);
+  // 지도 탭은 이 판단으로 다음 배송지를 고르고, 없으면 안내만 보인다.
+  assert.match(mapSource, /const nextStop = pickNextDeliveryStop\(sorted\)/);
+  assert.match(mapSource, /아직 배송 중인 주문이 없습니다/);
 });
 
 test('주문 링크: 주소와 유효 좌표가 모두 없으면 링크를 만들지 않는다', () => {

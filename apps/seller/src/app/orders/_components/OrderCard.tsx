@@ -10,12 +10,13 @@ import {
   STATUS_COLOR,
   STATUS_LABEL,
 } from '../_constants';
-import { displayBuyerName } from '../[id]/_lib';
+import { displayBuyerName, summarizeOrderProducts } from '../[id]/_lib';
 
 export function OrderCard({ order }: { order: Order }) {
   const router = useRouter();
 
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED';
+  const productSummary = summarizeOrderProducts(order);
 
   return (
     <Paper
@@ -46,13 +47,13 @@ export function OrderCard({ order }: { order: Order }) {
       >
         주문 {order.orderNumber ?? `#${order.id.slice(-8).toUpperCase()}`}
       </Text>
-      {order.productName && (
+      {productSummary && (
         <Text
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           mb={4}
           lineClamp={1}
         >
-          {order.productName}
+          {productSummary}
         </Text>
       )}
       {/* 손님 이름 — 상세와 같은 표시 규칙. 전화는 카드에 싣지 않고 검색에만 쓴다. */}
