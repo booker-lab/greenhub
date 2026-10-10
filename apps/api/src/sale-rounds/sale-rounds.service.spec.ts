@@ -633,6 +633,27 @@ describe('SaleRoundsService', () => {
     });
   });
 
+  it('배송 중인 주문이 있으면 환불을 시작하기 전에 회차 취소를 거절한다', async () => {
+    const { service, roundLifecycle, records } = makeService(
+      {
+        'orders/order-1': { id: 'order-1', roundId: 'round-1', status: 'ACCEPTED' },
+        'orders/order-2': { id: 'order-2', roundId: 'round-1', status: 'DELIVERING' },
+      },
+      makeRound({ status: 'CLOSED' }),
+    );
+    const before = records.get('saleRounds/round-1');
+
+    await expect(
+      (service as any).updateStatus('store-1', 'round-1', 'seller-1', 'seller', {
+        status: 'CANCELLED',
+      }),
+    ).rejects.toThrow('배송 중인 주문 1건이 있어 회차를 취소할 수 없습니다.');
+    // 어떤 주문도 환불·취소하지 않고, 회차에 취소 진행 기록도 남기지 않는다.
+    expect(roundLifecycle.cancelForRound).not.toHaveBeenCalled();
+    expect(records.get('orders/order-1')).toMatchObject({ status: 'ACCEPTED' });
+    expect(records.get('saleRounds/round-1')).toEqual(before);
+  });
+
   it('회차 취소 정리 실패는 실패 주문을 기록하고 재시도 가능한 상태를 보존한다', async () => {
     const { service, roundLifecycle, records } = makeService(
       {

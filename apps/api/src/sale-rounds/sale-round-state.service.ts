@@ -19,6 +19,10 @@ import {
 
 type CancellationClaim = SaleRoundCancellationClaim & { leaseExpiresAt: string };
 
+// 배송이 진행 중이라 취소·환불할 수 없는 주문 상태. 회차 주문 취소는 배송 전 상태와 배송 보류에서만 된다
+// (RoundOrderLifecycleService cancel).
+const ROUND_CANCEL_BLOCKING_ORDER_STATUSES = new Set(['DELIVERING', 'HUB_ARRIVED']);
+
 @Injectable()
 export class SaleRoundStateService {
   constructor(
@@ -123,6 +127,9 @@ export class SaleRoundStateService {
     expectedStatus?: SaleRoundStatus;
     reason: string;
   }): Promise<SaleRound> {
+    // 배송 중인 주문은 취소·환불할 수 없다. 하나라도 있으면 환불을 시작하기 전에 거절해,
+    // 앞 주문만 환불·안내되고 회차가 LOCAL_FAILED에 멈추는 부분 취소를 막는다.
+    await this.assertNoOrdersInDelivery(input.roundId);
     const claim = { ownerId: uuidv4(), leaseId: uuidv4() };
     const claimed = await this.claimCancellation(input, claim);
     if (claimed.done) return claimed.round;
@@ -160,6 +167,18 @@ export class SaleRoundStateService {
         claim,
       );
       throw error;
+    }
+  }
+
+  private async assertNoOrdersInDelivery(roundId: string): Promise<void> {
+    const orders = await this.firestore.collection('orders').where('roundId', '==', roundId).get();
+    const inDelivery = orders.docs.filter((doc: any) =>
+      ROUND_CANCEL_BLOCKING_ORDER_STATUSES.has(doc.data()?.['status']),
+    ).length;
+    if (inDelivery > 0) {
+      throw new ConflictException(
+        `배송 중인 주문 ${inDelivery}건이 있어 회차를 취소할 수 없습니다. 배송을 마치거나 배송 보류로 바꾼 뒤 다시 시도해 주세요.`,
+      );
     }
   }
 
