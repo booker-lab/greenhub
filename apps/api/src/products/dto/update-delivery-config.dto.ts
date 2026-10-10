@@ -1,34 +1,41 @@
-import { IsNumber, IsBoolean, IsOptional, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { PRODUCT_MONEY_MAX } from './create-product.dto';
 
 export class UpdateDeliveryConfigDto {
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(PRODUCT_MONEY_MAX)
   directFee?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(PRODUCT_MONEY_MAX)
   hubFee?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(PRODUCT_MONEY_MAX)
   parcelFee?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(PRODUCT_MONEY_MAX)
   freeThresholdDirect?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(PRODUCT_MONEY_MAX)
   freeThresholdHub?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(PRODUCT_MONEY_MAX)
   freeThresholdParcel?: number;
 
   @IsOptional()

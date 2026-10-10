@@ -2,11 +2,11 @@ import * as crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { AuditService } from '../common/audit/audit.service';
-import { PaymentsController } from './payments.controller';
+import { PaymentsController, WEBHOOK_REJECTION_LOG_WINDOW_MS } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { PortoneClient } from './portone.client';
 
@@ -46,10 +46,6 @@ const paymentsService = {
     sideEffects.capacityMutation += 1;
     return { ok: true };
   }),
-};
-
-const auditService = {
-  log: jest.fn().mockResolvedValue(undefined),
 };
 
 function timestampAtOffset(offsetSeconds: number): string {
@@ -156,7 +152,6 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
       providers: [
         { provide: PaymentsService, useValue: paymentsService },
         { provide: PortoneClient, useValue: portoneClient },
-        { provide: AuditService, useValue: auditService },
       ],
     }).compile();
 
@@ -235,15 +230,6 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
     const response = await postWebhook(webhook);
 
     expect(response.status).toBe(401);
-    expect(auditService.log).toHaveBeenCalledWith(
-      'payment.webhook.invalid_sig',
-      expect.objectContaining({
-        detail: expect.objectContaining({
-          webhookId: webhook.webhookId,
-          webhookTimestamp: webhook.webhookTimestamp,
-        }),
-      }),
-    );
     expectBusinessBoundaryClosed();
   });
 
@@ -277,10 +263,6 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
     const response = await postWebhook(createSignedWebhook(), omitHeader);
 
     expect(response.status).toBe(401);
-    expect(auditService.log).toHaveBeenCalledWith(
-      'payment.webhook.invalid_sig',
-      expect.anything(),
-    );
     expectBusinessBoundaryClosed();
   });
 
@@ -295,5 +277,40 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
     expect(sideEffects.paymentMutation).toBe(0);
     expect(sideEffects.orderChargeMutation).toBe(0);
     expect(sideEffects.capacityMutation).toBe(0);
+  });
+
+  it('서명 실패는 요청 값 없이 구간당 경고 한 줄로 모으고 다음 구간에 묶인 건수를 남긴다', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const windowStart = FIXED_NOW_MS + 10 * WEBHOOK_REJECTION_LOG_WINDOW_MS;
+    (Date.now as jest.Mock).mockReturnValue(windowStart);
+    const forged = (index: number) => ({
+      ...createSignedWebhook({ webhookId: `forged-id-${index}` }),
+      webhookSignature: invalidHmacHeader(),
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      await postWebhook(forged(index)).expect(401);
+    }
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    // 앞선 테스트의 실패 건수가 이 구간 첫 경고에 합쳐질 수 있다.
+    expect(warnSpy.mock.calls[0][0]).toMatch(
+      /^webhook rejected: reason=timestamp_out_of_range( suppressedSinceLastWarning=\d+)?$/,
+    );
+
+    (Date.now as jest.Mock).mockReturnValue(windowStart + WEBHOOK_REJECTION_LOG_WINDOW_MS);
+    const late = createSignedWebhook({
+      webhookId: 'forged-id-late',
+      webhookTimestamp: String(Math.floor((windowStart + WEBHOOK_REJECTION_LOG_WINDOW_MS) / 1000)),
+    });
+    await postWebhook({ ...late, webhookSignature: invalidHmacHeader() }).expect(401);
+
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    expect(warnSpy.mock.calls[1][0]).toBe(
+      'webhook rejected: reason=signature_mismatch suppressedSinceLastWarning=4',
+    );
+    const logged = JSON.stringify([...warnSpy.mock.calls, ...errorSpy.mock.calls]);
+    expect(logged).not.toMatch(/forged-id|payment-1|store-1/);
+    expectBusinessBoundaryClosed();
   });
 });

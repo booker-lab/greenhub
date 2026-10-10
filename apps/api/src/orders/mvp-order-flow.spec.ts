@@ -58,8 +58,10 @@ function makeFirestore(initial: Record<string, RecordData>) {
       const result = transactionQueue.then(async () => {
         const pending = new Map<string, RecordData>();
         const tx = {
-          get: jest.fn(async (ref: { path: string }) =>
-            makeSnap(pending.get(ref.path) ?? records.get(ref.path) ?? null),
+          get: jest.fn(async (ref: { path?: string; get(): Promise<unknown> }) =>
+            typeof ref.path === 'string'
+              ? makeSnap(pending.get(ref.path) ?? records.get(ref.path) ?? null)
+              : ref.get(),
           ),
           set: jest.fn((ref: { path: string }, data: RecordData, options?: { merge?: boolean }) => {
             if ((ref as { failOrderWrite?: boolean }).failOrderWrite) {

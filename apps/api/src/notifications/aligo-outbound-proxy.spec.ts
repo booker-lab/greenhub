@@ -122,6 +122,14 @@ describe('ALIGO 송신 프록시(ALIGO_OUTBOUND_PROXY_URL)', () => {
     expect(undiciFetch).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'http://fixie:proxy-password@proxy.example.test:80',
+    'https://fixie:proxy-password@proxy.example.test:443',
+  ])('운영 고정 IP 프록시 형식(%s)은 http·https 모두 허용한다', (allowed) => {
+    expect(resolveAligoOutboundFetch(allowed)).toHaveProperty('fetch');
+    expect(proxyAgentConstructor).toHaveBeenCalledWith(allowed);
+  });
+
   it('프록시 설정 오류 메시지에 인증 정보 원문을 남기지 않는다', () => {
     const secretish = 'ftp://fixie:proxy-password@proxy.example.test:21';
     const result = resolveAligoOutboundFetch(secretish);
