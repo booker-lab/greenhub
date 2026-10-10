@@ -9,12 +9,19 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AuthController } from '../../auth/auth.controller';
 import { AuthService } from '../../auth/auth.service';
-import { ClientThrottlerGuard, clientIp, normalizedEmail } from './client-throttler.guard';
+import {
+  ClientThrottlerGuard,
+  clientIp,
+  LOGIN_PER_IP_LIMIT,
+  normalizedEmail,
+} from './client-throttler.guard';
 
 const ACCESS_SECRET = 'access-secret-for-throttler-spec-0123456789';
 const REFRESH_SECRET = 'refresh-secret-for-throttler-spec-0123456789';
 // 운영과 같은 한도: 전역 100/분, register·login은 @Throttle 10/분,
 // 서버가 대신 호출하는 kakao-login·refresh는 @Throttle 120/분.
+// login은 IP+이메일 10/분에 더해 이메일과 무관한 IP 상한 LOGIN_PER_IP_LIMIT/분.
+const THROTTLE_MESSAGE = '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.';
 const DEFAULT_LIMIT = 100;
 const AUTH_LIMIT = 10;
 const RELAYED_AUTH_LIMIT = 120;
@@ -54,6 +61,7 @@ async function createApp(trustProxyHops: number | false): Promise<INestApplicati
     imports: [
       ThrottlerModule.forRoot({
         throttlers: [{ name: 'default', ttl: 60000, limit: DEFAULT_LIMIT }],
+        errorMessage: THROTTLE_MESSAGE,
       }),
     ],
     controllers: [AuthController, ProbeController],
@@ -204,6 +212,63 @@ describe('ClientThrottlerGuard 집계 기준', () => {
     const first = await hit(AUTH_LIMIT + 1, () => login('203.0.113.50'));
     expect(first[AUTH_LIMIT]).toBe(429);
     expect((await login('203.0.113.51')).status).toBe(200);
+  });
+
+  it('/auth/login은 이메일을 바꿔도 같은 IP에서 IP 상한을 넘으면 막고 다른 IP·다른 경로는 그대로 둔다', async () => {
+    app = await createApp(1);
+    const server = app.getHttpServer();
+    const shared = '203.0.113.42';
+    let counter = 0;
+    const loginWithNewEmail = (ip: string) => {
+      counter += 1;
+      return request(server)
+        .post('/auth/login')
+        .set('X-Forwarded-For', ip)
+        .send({ email: `user-${counter}@example.test`, password: 'password' });
+    };
+
+    // 상한까지는 이메일마다 1회씩이라 이메일별 한도에 걸리지 않고 모두 통과한다.
+    const statuses = await hit(LOGIN_PER_IP_LIMIT, () => loginWithNewEmail(shared));
+    expect(statuses.every((status) => status === 200)).toBe(true);
+
+    const blocked = await loginWithNewEmail(shared);
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.message).toBe(THROTTLE_MESSAGE);
+    expect(blocked.headers['retry-after']).toBeDefined();
+
+    // 다른 클라이언트 IP는 별도 버킷이다.
+    expect((await loginWithNewEmail('203.0.113.43')).status).toBe(200);
+    // 로그인 IP 상한은 다른 경로의 집계에 영향을 주지 않는다.
+    expect((await request(server).get('/probe').set('X-Forwarded-For', shared)).status).toBe(200);
+    expect(
+      (
+        await request(server)
+          .post('/auth/kakao-login')
+          .set('X-Forwarded-For', shared)
+          .send({ kakaoAccessToken: 'token' })
+      ).status,
+    ).toBe(200);
+  });
+
+  it('/auth/login IP 상한은 요청 본문과 무관하게 이메일이 없는 요청도 함께 센다', async () => {
+    app = await createApp(1);
+    const server = app.getHttpServer();
+    const shared = '203.0.113.44';
+    const withoutEmail = 5;
+    let counter = 0;
+    const login = (body: Record<string, unknown>) =>
+      request(server).post('/auth/login').set('X-Forwarded-For', shared).send(body);
+
+    const noEmail = await hit(withoutEmail, () => login({ password: 'password' }));
+    expect(noEmail.every((status) => status === 200)).toBe(true);
+
+    const withEmail = await hit(LOGIN_PER_IP_LIMIT - withoutEmail, () => {
+      counter += 1;
+      return login({ email: `user-${counter}@example.test`, password: 'password' });
+    });
+    expect(withEmail.every((status) => status === 200)).toBe(true);
+
+    expect((await login({ email: 'fresh@example.test', password: 'password' })).status).toBe(429);
   });
 
   it('/auth/refresh는 서명 검증된 refresh token의 sub별로 집계한다', async () => {
