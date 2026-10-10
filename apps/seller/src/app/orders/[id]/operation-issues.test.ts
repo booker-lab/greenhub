@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getAllowedOperationAction,
+  ISSUE_DESCRIPTIONS,
   ISSUE_LABELS,
   readOperationIssue,
   readOperationIssueList,
@@ -148,6 +149,49 @@ describe('가게 전체 운영 기록 목록', () => {
       expect(ISSUE_LABELS[issue.type]).toBeTruthy();
       expect(getAllowedOperationAction(issue)).toBeNull();
     }
+  });
+
+  it('결제사 취소·분쟁 기록을 읽어 이름을 붙이고 결제사·정산 상태만 보존한다', () => {
+    const issues = readStoreOperationIssueList(
+      {
+        items: [
+          { ...baseIssue, id: 'warning-new', updatedAt: '2026-07-18T05:00:00.000Z' },
+          {
+            ...baseIssue,
+            id: 'reversal',
+            type: 'PROVIDER_REVERSAL_DETECTED',
+            severity: 'critical',
+            updatedAt: '2026-07-18T01:00:00.000Z',
+            latestSnapshot: {
+              orderStatus: 'ACCEPTED',
+              paymentStatus: 'PAID',
+              providerStatus: 'CANCELLED',
+              providerEvent: 'Transaction.Cancelled',
+              settlementStatus: 'confirmed',
+              failureStage: 'provider_reversal',
+              phone: '010-0000-0000',
+            },
+          },
+        ],
+      },
+      'store-1',
+    );
+
+    expect(issues.map((issue) => issue.id)).toEqual(['reversal', 'warning-new']);
+    const reversal = issues[0];
+    expect(reversal?.type).toBe('PROVIDER_REVERSAL_DETECTED');
+    expect(ISSUE_LABELS.PROVIDER_REVERSAL_DETECTED).toBe('결제사 취소·분쟁 확인');
+    expect(ISSUE_DESCRIPTIONS.PROVIDER_REVERSAL_DETECTED).toContain('PortOne');
+    expect(reversal?.latestSnapshot).toMatchObject({
+      orderStatus: 'ACCEPTED',
+      paymentStatus: 'PAID',
+      providerStatus: 'CANCELLED',
+      providerEvent: 'Transaction.Cancelled',
+      settlementStatus: 'confirmed',
+      failureStage: 'provider_reversal',
+    });
+    expect(reversal?.latestSnapshot).not.toHaveProperty('phone');
+    if (reversal) expect(getAllowedOperationAction(reversal)).toBeNull();
   });
 
   it('응답 모양이 다르면 빈 목록으로 위장하지 않는다', () => {

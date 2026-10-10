@@ -79,7 +79,7 @@ describe('배송 사진 Storage 계약', () => {
       status: 'DELIVERING',
       deliveryPhotoIds: [],
     });
-    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0xff, 0xd9]);
+    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02, 0xff, 0xd9]);
 
     const result = await service.uploadDeliveryPhoto({
       storeId: 'store-safe',
@@ -112,6 +112,38 @@ describe('배송 사진 Storage 계약', () => {
     });
   });
 
+  it('위치 정보가 담긴 EXIF 세그먼트를 제거한 바이트와 그 해시로 저장한다', async () => {
+    const { save, service } = makeService({
+      storeId: 'store-safe',
+      driverId: 'driver-safe',
+      schemaVersion: 2,
+      roundId: 'round-safe',
+      deliveryMethod: 'direct',
+      status: 'DELIVERING',
+      deliveryPhotoIds: [],
+    });
+    const exif = Buffer.from('Exif\0\0GPSLatitude=37.5664', 'latin1');
+    const app1 = Buffer.concat([Buffer.from([0xff, 0xe1, 0x00, exif.length + 2]), exif]);
+    const clean = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02, 0xff, 0xd9]);
+    const content = Buffer.concat([clean.subarray(0, 6), app1, clean.subarray(6)]);
+
+    await service.uploadDeliveryPhoto({
+      storeId: 'store-safe',
+      orderId: 'order-safe',
+      photoId: 'photo-safe',
+      requesterId: 'driver-safe',
+      requesterRole: 'driver',
+      content,
+      contentType: 'image/jpeg',
+    });
+
+    const [saved, options] = save.mock.calls[0];
+    expect(saved).toEqual(clean);
+    expect(options.metadata).toEqual(
+      expect.objectContaining({ metadata: { contentSha256: contentSha256(clean) } }),
+    );
+  });
+
   it('같은 사진 ID와 같은 JPEG 재시도는 기존 객체를 바꾸지 않고 멱등 성공한다', async () => {
     const context = makeService({
       storeId: 'store-safe',
@@ -122,7 +154,7 @@ describe('배송 사진 Storage 계약', () => {
       status: 'DELIVERING',
       deliveryPhotoIds: [],
     });
-    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0xff, 0xd9]);
+    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x03, 0x01, 0xff, 0xd9]);
     const input = {
       storeId: 'store-safe',
       orderId: 'order-safe',
@@ -164,14 +196,14 @@ describe('배송 사진 Storage 계약', () => {
 
     await context.service.uploadDeliveryPhoto({
       ...base,
-      content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0xff, 0xd9]),
+      content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x03, 0x01, 0xff, 0xd9]),
     });
     const metadataAfterFirst = context.getStoredMetadata();
 
     await expect(
       context.service.uploadDeliveryPhoto({
         ...base,
-        content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x02, 0xff, 0xd9]),
+        content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x03, 0x02, 0xff, 0xd9]),
       }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(context.getStoredMetadata()).toBe(metadataAfterFirst);
@@ -257,7 +289,7 @@ describe('배송 사진 Storage 계약', () => {
         photoId: 'photo-safe',
         requesterId: 'other-driver',
         requesterRole: 'driver',
-        content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]),
+        content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02, 0xff, 0xd9]),
         contentType: 'image/jpeg',
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
@@ -373,7 +405,7 @@ describe('배송 사진 Storage 계약', () => {
           photoId: 'photo-safe',
           requesterId: 'driver-safe',
           requesterRole: 'driver',
-          content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]),
+          content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02, 0xff, 0xd9]),
           contentType: 'image/jpeg',
         }),
       ).rejects.toBeInstanceOf(ForbiddenException);
@@ -459,7 +491,7 @@ describe('배송 사진 Storage 계약', () => {
       status: 'DELIVERING',
       deliveryPhotoIds: [],
     });
-    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0xff, 0xd9]);
+    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x03, 0x01, 0xff, 0xd9]);
     await context.service.uploadDeliveryPhoto({
       storeId: 'store-safe',
       orderId: 'order-safe',
@@ -496,7 +528,7 @@ describe('배송 사진 Storage 계약', () => {
       status: 'DELIVERING',
       deliveryPhotoIds: ['photo-safe'],
     });
-    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x02, 0xff, 0xd9]);
+    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x03, 0x02, 0xff, 0xd9]);
     await context.service.uploadDeliveryPhoto({
       storeId: 'store-safe',
       orderId: 'order-safe',
@@ -531,8 +563,8 @@ describe('배송 사진 Storage 계약', () => {
       status: 'DELIVERING',
       deliveryPhotoIds: [],
     });
-    const stored = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x03, 0xff, 0xd9]);
-    const requested = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x04, 0xff, 0xd9]);
+    const stored = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x03, 0x03, 0xff, 0xd9]);
+    const requested = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x03, 0x04, 0xff, 0xd9]);
     await context.service.uploadDeliveryPhoto({
       storeId: 'store-safe',
       orderId: 'order-safe',

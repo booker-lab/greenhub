@@ -2,7 +2,11 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { COLOR_OPTIONS } from '@greenhub/shared';
-import { CreateVarietyDto } from './create-variety.dto';
+import {
+  CreateVarietyDto,
+  VARIETY_NAME_MAX_LENGTH,
+  VARIETY_NOTES_MAX_LENGTH,
+} from './create-variety.dto';
 import { UpdateVarietyDto } from './update-variety.dto';
 
 const validCreate = {
@@ -58,5 +62,43 @@ describe('품종 PATCH 계약', () => {
     );
 
     expect(errors).not.toHaveLength(0);
+  });
+});
+
+describe('품종 입력 상한', () => {
+  it('생성 시 상한을 넘는 문자열과 배열을 거부한다', async () => {
+    const errors = await validate(
+      plainToInstance(CreateVarietyDto, {
+        ...validCreate,
+        name: 'a'.repeat(VARIETY_NAME_MAX_LENGTH + 1),
+        notes: 'a'.repeat(VARIETY_NOTES_MAX_LENGTH + 1),
+        typicalColors: [...COLOR_OPTIONS, COLOR_OPTIONS[0]],
+      }),
+    );
+
+    expect(errors.map((error) => error.property).sort()).toEqual([
+      'name',
+      'notes',
+      'typicalColors',
+    ]);
+  });
+
+  it('수정 시 상한을 넘는 notes와 줄기 배열을 거부한다', async () => {
+    const errors = await validate(
+      plainToInstance(UpdateVarietyDto, {
+        notes: 'a'.repeat(VARIETY_NOTES_MAX_LENGTH + 1),
+        availableStemTypes: ['외대', '쌍대', '가지', '3대', '외대'],
+      }),
+    );
+
+    expect(errors.map((error) => error.property).sort()).toEqual(['availableStemTypes', 'notes']);
+  });
+
+  it('상한 이내 값은 허용한다', async () => {
+    const errors = await validate(
+      plainToInstance(UpdateVarietyDto, { notes: 'a'.repeat(VARIETY_NOTES_MAX_LENGTH) }),
+    );
+
+    expect(errors).toHaveLength(0);
   });
 });

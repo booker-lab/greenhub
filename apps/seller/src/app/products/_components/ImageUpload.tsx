@@ -4,6 +4,12 @@ import { Box, Group, Loader, Paper, Text } from '@mantine/core';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { useRef, useState } from 'react';
 import { getFirebaseStorage } from '@/lib/firebase';
+import {
+  ImageReencodeError,
+  imageReencodeFailureMessage,
+  PRODUCT_IMAGE_ENCODE,
+  reencodeImageToJpeg,
+} from './image-reencode';
 
 interface ImageUploadProps {
   storeId: string;
@@ -36,19 +42,23 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
 
     setUploading(true);
     try {
+      const batchId = Date.now();
       const urls = await Promise.all(
-        toUpload.map(async (file) => {
-          const r = storageRef(
-            getFirebaseStorage(),
-            `products/${storeId}/${Date.now()}_${file.name}`,
-          );
-          await uploadBytes(r, file);
+        toUpload.map(async (file, index) => {
+          // canvas로 다시 그려 EXIF(촬영 위치 등)를 지운 JPEG만 올린다. 원본 파일명도 쓰지 않는다.
+          const jpeg = await reencodeImageToJpeg(file, PRODUCT_IMAGE_ENCODE);
+          const r = storageRef(getFirebaseStorage(), `products/${storeId}/${batchId}_${index}.jpg`);
+          await uploadBytes(r, jpeg, { contentType: 'image/jpeg' });
           return getDownloadURL(r);
         }),
       );
       onChange([...images, ...urls]);
-    } catch {
-      onError('이미지 업로드에 실패했습니다.');
+    } catch (e) {
+      onError(
+        e instanceof ImageReencodeError
+          ? imageReencodeFailureMessage(e.reason)
+          : '이미지 업로드에 실패했습니다.',
+      );
     } finally {
       setUploading(false);
     }

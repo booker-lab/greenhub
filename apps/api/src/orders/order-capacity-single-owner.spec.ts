@@ -445,6 +445,157 @@ describe('CAPACITY single-owner remediation proof', () => {
     });
   });
 
+  describe('I2. PREPARING cancellation after DELIVERY_HELD → PREPARING', () => {
+    function preparingRecords(deliveryHold: Data, heldOrderCount: number): Record<string, Data> {
+      return {
+        ...seedBase(),
+        'saleRounds/round-1': {
+          ...seedBase()['saleRounds/round-1'],
+          counters: {
+            reservedDeliveryAddresses: 0,
+            reservedItemQuantity: 0,
+            orderedDeliveryAddresses: 1,
+            orderedItemQuantity: 2,
+            heldOrderCount,
+          },
+        },
+        'saleRoundItems/round-item-1': {
+          ...seedBase()['saleRoundItems/round-item-1'],
+          reservedQuantity: 0,
+          orderedQuantity: 2,
+        },
+        'checkoutReservations/reservation-released-hold': {
+          id: 'reservation-released-hold',
+          roundId: 'round-1',
+          storeId: 'store-1',
+          userId: 'user-1',
+          orderId: 'order-released-hold',
+          paymentId: 'order-released-hold',
+          status: 'CONSUMED',
+          addressKey: 'test',
+          deliveryAddressCount: 1,
+          itemQuantityTotal: 2,
+          items: [
+            { roundItemId: 'round-item-1', productId: 'product-1', quantity: 2, unitPrice: 50000 },
+          ],
+          idempotencyKey: 'released-hold',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          consumedAt: '2026-01-01T00:00:00.000Z',
+          releasedAt: null,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        'orders/order-released-hold': {
+          id: 'order-released-hold',
+          storeId: 'store-1',
+          userId: 'user-1',
+          status: 'PREPARING',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          reservationId: 'reservation-released-hold',
+          orderItems: [{ roundItemId: 'round-item-1', quantity: 2 }],
+          deliveryMethod: 'direct',
+          deliveryHold,
+          cancellation: {
+            status: 'LOCAL_PENDING',
+            reason: 'test',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+          },
+        },
+      };
+    }
+
+    function roundLifecycleFor(memory: ReturnType<typeof createInMemoryFirestore>) {
+      const firestore = memory.firestore as never;
+      return new RoundOrderLifecycleService(
+        firestore,
+        {
+          processRefundByOrderId: jest.fn().mockResolvedValue(undefined),
+          refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+        } as never,
+        { cancelSettlement: jest.fn().mockResolvedValue(undefined) } as never,
+        new OrderCapacityService(firestore) as never,
+      );
+    }
+
+    it('unresolved paid hold still counted after release exits held projection exactly once', async () => {
+      // 결제 전 유료 보류를 '재배송 준비'로 돌리면 보류 건수는 배송 재개(DELIVERING)까지 남는다.
+      // 그 사이 취소되면 취소가 건수를 빼야 회차를 완료할 수 있다.
+      const memory = createInMemoryFirestore(
+        preparingRecords(
+          {
+            heldAt: '2026-01-02T00:00:00.000Z',
+            reasonCode: 'CUSTOMER_UNREACHABLE',
+            reasonMessage: '연락이 닿지 않았습니다.',
+            customerResponsible: true,
+            redeliveryFee: 3000,
+            resolvedAt: null,
+          },
+          1,
+        ),
+      );
+      const roundLifecycle = roundLifecycleFor(memory);
+
+      await roundLifecycle.cancelForRound({
+        storeId: 'store-1',
+        orderId: 'order-released-hold',
+        expectedStatus: 'PREPARING',
+        reason: 'test cancel',
+      });
+
+      expect(memory.read('orders/order-released-hold')?.status).toBe('CANCELLED');
+      expect(memory.read('saleRounds/round-1')?.counters).toEqual({
+        reservedDeliveryAddresses: 0,
+        reservedItemQuantity: 0,
+        orderedDeliveryAddresses: 0,
+        orderedItemQuantity: 0,
+        heldOrderCount: 0,
+      });
+
+      // Retry converges via order-level idempotency (already CANCELLED).
+      await roundLifecycle.cancelForRound({
+        storeId: 'store-1',
+        orderId: 'order-released-hold',
+        expectedStatus: 'CANCELLED' as never,
+        reason: 'test cancel',
+      });
+      expect(memory.read('saleRounds/round-1')?.counters).toMatchObject({ heldOrderCount: 0 });
+    });
+
+    it('resolved free hold was already exited at release and is not decremented again', async () => {
+      const memory = createInMemoryFirestore(
+        preparingRecords(
+          {
+            heldAt: '2026-01-02T00:00:00.000Z',
+            reasonCode: 'WEATHER',
+            reasonMessage: '기상 악화',
+            customerResponsible: false,
+            redeliveryFee: null,
+            resolvedAt: '2026-01-02T01:00:00.000Z',
+          },
+          0,
+        ),
+      );
+      const roundLifecycle = roundLifecycleFor(memory);
+
+      await roundLifecycle.cancelForRound({
+        storeId: 'store-1',
+        orderId: 'order-released-hold',
+        expectedStatus: 'PREPARING',
+        reason: 'test cancel',
+      });
+
+      expect(memory.read('orders/order-released-hold')?.status).toBe('CANCELLED');
+      expect(memory.read('saleRounds/round-1')?.counters).toEqual({
+        reservedDeliveryAddresses: 0,
+        reservedItemQuantity: 0,
+        orderedDeliveryAddresses: 0,
+        orderedItemQuantity: 0,
+        heldOrderCount: 0,
+      });
+    });
+  });
+
   it('J. held enter +1, valid exit -1, corrupt zero exit fail-closed', async () => {
     const memory = createInMemoryFirestore(seedBase());
     const capacity = new OrderCapacityService(memory.firestore as never);

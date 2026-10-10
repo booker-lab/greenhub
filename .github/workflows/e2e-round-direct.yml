@@ -349,7 +349,7 @@ jobs:
             "$evidence_root/verify-mobile-raw.json" \
             > "$evidence_root/evidence/verify-mobile.json"
 
-      - name: 소비자·셀러·드라이버 52건 실행
+      - name: 소비자·셀러·드라이버 64건 실행
         id: e2e
         env:
           SELLER_BYPASS_SECRET: ${{ secrets.ROUND_DIRECT_E2E_SELLER_BYPASS_SECRET }}
@@ -380,19 +380,19 @@ jobs:
           --retries=0
           --reporter=list,json
 
-      - name: 52건 무건너뜀 판정
+      - name: 64건 무건너뜀 판정
         id: e2e_gate
         shell: bash
         run: |
           set -euo pipefail
           jq -e '
-            .stats.expected == 52 and
+            .stats.expected == 64 and
             .stats.skipped == 0 and
             .stats.unexpected == 0 and
             .stats.flaky == 0
           ' "$PLAYWRIGHT_JSON_OUTPUT_FILE" > /dev/null
 
-      # 로그아웃·정지는 같은 계정의 다른 세션에도 영향을 줄 수 있어 52건이 모두 끝난 뒤에만 실행한다.
+      # 로그아웃·정지는 같은 계정의 다른 세션에도 영향을 줄 수 있어 64건이 모두 끝난 뒤에만 실행한다.
       # 사용자 상태 변경은 비운영 fixture 가드를 통과한 이번 실행 fixture 사용자에게만 적용되고 즉시 복원된다.
       - name: 세션 수명주기 12건 실행
         id: session_lifecycle
