@@ -231,25 +231,32 @@ export function buildFixtureManifest({ runId, project, accounts }) {
     id: storeId, ownerId: ids.seller, name: `E2E 회차 직배송 ${project}`,
     salesMode: 'round_direct', isActive: true, status: 'ACTIVE',
   });
+  // 판매자 앱 상품 목록(useStoreProducts)은 createdAt으로 정렬한다. 실제 상품처럼 생성·수정 시각을 둔다.
+  const productCreatedAt = new Date().toISOString();
+  const productTimestamps = { createdAt: productCreatedAt, updatedAt: productCreatedAt };
   add('products', ids.product, {
     id: ids.product, storeId, sellerId: ids.seller, name: 'E2E 호접란',
     price: 12000, status: 'ACTIVE', isActive: true, stock: 300,
     images: ['https://placehold.co/600x600.jpg'], thumbnailUrl: 'https://placehold.co/600x600.jpg',
+    ...productTimestamps,
   });
   add('products', ids.secondProduct, {
     id: ids.secondProduct, storeId, sellerId: ids.seller, name: 'E2E 미니 호접란',
     price: 6000, status: 'ACTIVE', isActive: true, stock: 300,
     images: ['https://placehold.co/600x600.jpg'], thumbnailUrl: 'https://placehold.co/600x600.jpg',
+    ...productTimestamps,
   });
   add('products', ids.closedProduct, {
     id: ids.closedProduct, storeId, sellerId: ids.seller, name: 'E2E 마감 호접란',
     price: 9000, status: 'ACTIVE', isActive: false, stock: 300,
     images: ['https://placehold.co/600x600.jpg'], thumbnailUrl: 'https://placehold.co/600x600.jpg',
+    ...productTimestamps,
   });
   add('products', ids.soldOutProduct, {
     id: ids.soldOutProduct, storeId, sellerId: ids.seller, name: 'E2E 품절 호접란',
     price: 15000, status: 'ACTIVE', isActive: true, stock: 300,
     images: ['https://placehold.co/600x600.jpg'], thumbnailUrl: 'https://placehold.co/600x600.jpg',
+    ...productTimestamps,
   });
 
   const roundDefinitions = [

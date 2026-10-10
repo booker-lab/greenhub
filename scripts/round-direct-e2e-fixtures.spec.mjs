@@ -245,6 +245,18 @@ describe('회차 E2E fixture manifest 계약', () => {
     assert.equal(freeHold.redeliveryFee, null);
     assert.equal(typeof freeHold.nextDeliveryAt, 'string');
   });
+
+  it('상품마다 판매자 상품 목록이 정렬에 쓰는 생성·수정 시각을 둔다', () => {
+    const manifest = buildFixtureManifest({ runId, project: 'chromium', accounts });
+    const products = manifest.documents.filter(({ path: docPath }) => docPath.startsWith('products/'));
+    assert.equal(products.length, 4);
+    for (const { path: docPath, data } of products) {
+      for (const field of ['createdAt', 'updatedAt']) {
+        assert.equal(typeof data[field], 'string', `${docPath} ${field}`);
+        assert.equal(new Date(data[field]).toISOString(), data[field], `${docPath} ${field}`);
+      }
+    }
+  });
 });
 
 describe('회차 E2E fixture seed·verify·cleanup 계약', () => {

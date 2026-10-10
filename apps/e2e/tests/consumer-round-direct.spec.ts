@@ -1,4 +1,4 @@
-import { expect, test as base } from '@playwright/test';
+import { expect, test as base, type Page } from '@playwright/test';
 import {
   installPortOneBrowserStub,
   installRoundDirectCart,
@@ -8,6 +8,10 @@ import {
 import { resolveE2ETargetUrl } from './_helpers/target-url';
 
 const BASE = resolveE2ETargetUrl('consumer');
+
+// 상품 상세 아래쪽 '장바구니' 담기 버튼. 상단 바 장바구니 아이콘도 이름이 '장바구니'(aria-label)라
+// 이름으로는 둘이 걸리므로, 글자가 '장바구니'인 버튼으로 찾는다.
+const addToCartButton = (page: Page) => page.getByRole('button').filter({ hasText: /^장바구니$/ });
 
 type RoundDirectConsumerFixtures = {
   roundDirect: RoundDirectFixture;
@@ -70,10 +74,12 @@ test.describe('Consumer 회차 직배송 공개 화면 계약', () => {
       `${BASE}/products/${roundDirect.productId}?round=${roundDirect.openRoundId}`,
     );
 
+    // 회차를 다 불러온 뒤에 본다. 불러오는 동안에는 아래 '없음' 확인이 내용을 보지 않고 통과한다.
+    await expect(page.locator('section[data-round-state="current"]')).toBeVisible();
     await expect(page.getByText(/배송 방법/)).toHaveCount(0);
     await expect(page.getByText(/배송 희망일/)).toHaveCount(0);
     await expect(page.getByText(/공동구매/)).toHaveCount(0);
-    await expect(page.getByRole('button', { name: '장바구니', exact: true })).toBeVisible();
+    await expect(addToCartButton(page)).toBeVisible();
     await expect(page.getByRole('button', { name: /바로 구매/ })).toBeVisible();
   });
 
@@ -87,7 +93,7 @@ test.describe('Consumer 회차 직배송 공개 화면 계약', () => {
 
     await expect(page.locator('section[data-round-state="sold_out"]')).toBeVisible();
     await expect(page.getByRole('button', { name: '품절', exact: true })).toBeDisabled();
-    await expect(page.getByRole('button', { name: '장바구니', exact: true })).toBeDisabled();
+    await expect(addToCartButton(page)).toBeDisabled();
     await expect(page.getByRole('button', { name: /바로 구매/ })).toHaveCount(0);
   });
 });
