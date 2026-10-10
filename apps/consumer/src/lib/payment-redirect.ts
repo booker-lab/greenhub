@@ -290,6 +290,21 @@ export function resolveRedeliveryPaymentReturn(
   };
 }
 
+/**
+ * 모바일 재배송비 결제가 성공으로 돌아왔는데 서버가 아직 결제를 확인하지 못했으면(웹훅 반영 전)
+ * 주문을 다시 읽어 확인할지. 주문 상태 자동 확인은 결제 대기(PENDING) 주문만 하므로
+ * 보류·준비 중 주문의 재배송비 결제 확인은 이 판단으로 따로 한다. 실패·취소 복귀는 확정이라 다시 읽지 않는다.
+ */
+export function shouldRecheckRedeliveryPayment(
+  result: PaymentRedirectResult | null,
+  paid: boolean | undefined,
+  elapsedMs: number,
+  maxMs: number,
+): boolean {
+  if (result?.kind !== 'success' || paid === true) return false;
+  return Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs < maxMs;
+}
+
 export function savePendingOrderPayment(
   storage: PaymentStorage | null,
   pending: PendingOrderPayment | null,
