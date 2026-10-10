@@ -2,7 +2,7 @@
 
 # Payments API / Domain Spec
 
-> **최종 정합화**: 2026-09-25
+> **최종 정합화**: 2026-10-10
 > **상태**: Current
 > **공통 타입 정본**: `packages/shared/src/payment.types.ts`
 > **서버 구현 정본**: `apps/api/src/payments/**`
@@ -61,7 +61,11 @@ orderId == paymentId == payments/{paymentId}.id
   refundReason: string | null
   refundClaim?: {
     token: string
+    owner: string
+    status: 'CLAIMED' | 'UNKNOWN'
+    providerKey: string
     expiresAt: number
+    updatedAt: Timestamp
   } | null
   createdAt: Timestamp
   updatedAt: Timestamp
@@ -96,7 +100,7 @@ webhook-signature
 - timestamp 허용 오차: ±5분
 - HMAC SHA-256 signature를 timing-safe 비교
 - 검증 실패 시 `401` 계열 실패
-- invalid signature는 audit에 기록
+- 검증 실패는 요청마다 audit 문서를 쓰지 않는다. controller가 요청 값(header·body) 없이 60초 구간마다 이유(`missing_credentials`·`timestamp_out_of_range`·`signature_mismatch`)를 담은 경고 한 줄과 직전 구간에 묶인 건수만 로그로 남긴다.
 
 과거 문서의 “웹훅 인증 미적용, IP allowlist 권장만” 설명은 현행 계약이 아니다.
 
@@ -108,11 +112,16 @@ webhook-signature
 2. 본 결제라면 `orders/{paymentId}`를 조회한다.
 3. `Transaction.Ready`는 상태 변경 없이 무시한다.
 4. `Transaction.Paid`가 아닌 이벤트는 아직 처리 가능한 `PENDING` 주문을 `payment_failed`로 취소·release하는 경로로 보낸다.
+   `PENDING`이 아닌 주문에 `Transaction.Cancelled`·`Transaction.PartialCancelled`·`Transaction.CancelPending`·`Transaction.DisputeCreated`가 오면
+   주문·결제·정산 문서는 바꾸지 않고 결제사 상태·정산 상태를 담은 `PROVIDER_REVERSAL_DETECTED` critical 운영 기록을 남긴다.
+   취소 계열은 우리 쪽 취소·환불 흐름이 소유한 경우(주문 `CANCELLED`, 결제 `CANCELLED`/`refundedAt`/`refundClaim`, `finalizationRefund`)를 제외하고, 분쟁은 항상 기록한다. 재전송은 같은 기록에 합친다.
 5. `Transaction.Paid`이면 webhook body의 금액을 신뢰하지 않고 `GET /payments/{paymentId}`로 PortOne 원격 결제를 다시 조회한다.
 6. `PaymentFinalizationService.finalizePaidOrder()`가 원격 `paymentData.status === 'PAID'`를 다시
    확인한 뒤 정상 finalization·취소 후 환불 수렴을 진행한다.
 
 중복 webhook은 최종화 service의 주문 상태 검사와 transaction으로 멱등 처리한다. “PENDING 아니면 무조건 skip”보다 실제 구현의 `canFinalize()` 조건을 따른다.
+
+`timeout`이 아닌 사유로 `CANCELLED`됐거나 취소가 진행 중(`cancellation.status`가 `LOCAL_PENDING`·`LOCAL_FAILED`·`REFUNDING`)인 주문에 `PAID`가 확인되면, 정상 확정 대신 `PAID` 결제를 기록한 뒤 `refundByOrderId()`로 환불한다. 환불이 실패하면 `cancellation.status = REFUND_FAILED`로 남긴다.
 
 ## 6. 결제 성공 최종화
 
@@ -128,6 +137,8 @@ webhook-signature
 - PortOne 금액과 주문 금액 일치 여부
 - 회차 reservation/capacity 조건
 
+현재 finalization은 provider 결제의 `status`와 `amount.total`만 확인하며, PortOne 상점(storeId)·통화(currency)·채널(channel)은 확인하지 않는다(해당 확인을 추가하는 PR #426은 아직 병합되지 않은 open 상태).
+
 비`PAID` 입력은 상태 변경·환불·알림 없이 `payment_not_paid`로 종료한다. 정상 `PAID` 경로는
 주문 수락, 결제 기록, reservation/capacity 수렴과 거래성 알림으로 이어진다. 이 설명은 현재
 source behavior이며, 전체 release 회귀 통과를 뜻하지 않는다.
@@ -141,9 +152,11 @@ PortOne payment.amount.total === orders.totalAmount
 불일치 시:
 
 1. `payment.amount_tampered` audit 기록
-2. PortOne 전액 환불 시도
-3. 주문을 `amount_mismatch` 사유로 `CANCELLED`
+2. 주문의 `finalizationRefund` 소유 표시를 먼저 기록한 뒤 PortOne 전액 환불 시도
+3. 주문이 아직 `PENDING`이면 `amount_mismatch` 사유로 `CANCELLED`
 4. 연결된 capacity/reservation 반환
+
+환불 결과가 불명확(throw·시간 초과 포함)하면 소유 표시를 `UNKNOWN`으로 남기고 `FINALIZATION_REFUND_FAILED` 운영 이슈를 기록한다. 다음 시도는 PortOne 재조회로 상태를 확인한 뒤에만 다시 환불을 요청한다. 같은 소유 표시는 늦은 결제 환불(회차·legacy)에도 쓰인다.
 
 클라이언트가 보낸 금액을 최종 검증값으로 사용하지 않는다.
 
@@ -166,6 +179,7 @@ PortOne payment.amount.total === orders.totalAmount
 ## 7. 15분 `PENDING` 수렴
 
 `PaymentsService.cleanupPendingOrders()`는 매분 실행하며 15분보다 오래된 `PENDING` 주문을 찾는다.
+PortOne 조회는 최대 4건씩만 동시에 보내고, 같은 프로세스에서 이전 실행이 끝나기 전의 다음 실행은 건너뛴다.
 
 중요: 현재 동작은 **바로 삭제하거나 무조건 취소하지 않는다.**
 
@@ -208,10 +222,10 @@ legacy 비택배 주문은 취소 시 daily cap을 반환하고, `schemaVersion:
 1. 주문에 연결된 payment를 찾는다.
 2. `PAID`이면서 아직 환불되지 않은 경우에만 refund claim을 획득한다.
 3. claim TTL은 5분이다.
-4. PortOne `/payments/{paymentId}/cancel`을 호출한다.
+4. PortOne `/payments/{paymentId}/cancel`을 claim에 고정된 `Idempotency-Key`(`providerKey`)와 함께 호출한다.
 5. 성공 시 payment를 `CANCELLED`, `refundAmount/refundedAt/refundReason` 기록으로 갱신한다.
 6. 법정 분쟁·고객지원 보존 record를 생성한다.
-7. 실패 시 claim을 해제하고 `AUTO_REFUND_FAILED` 운영 이슈를 생성한다.
+7. provider 결과가 불명확(throw·시간 초과·로컬 완료 실패 포함)하면 claim을 해제하지 않고 같은 `providerKey`를 유지한 `UNKNOWN`으로 남기며 `AUTO_REFUND_FAILED` 운영 이슈를 생성한다. 다음 시도는 PortOne 재조회로 `CANCELLED`면 로컬만 수렴하고, 여전히 `PAID`·금액 일치일 때만 같은 key로 다시 요청하며, 그 밖의 상태는 요청 없이 실패로 닫는다.
 
 이미 `CANCELLED`, `refundedAt` 존재, 다른 유효 claim이 존재하는 경우 외부 환불을 중복 호출하지 않는다.
 
@@ -242,6 +256,9 @@ REDELIVERY_FEE
 - PortOne 원격 상태 `PAID`
 - 원격 금액과 charge 금액 일치
 - 연결 주문의 `redeliveryChargeId`, `storeId`, `userId` 일치
+- 주문 상태가 `DELIVERY_HELD` 또는 `PREPARING`이고, charge가 현재 미해소 고객 책임 보류(`holdAt`)에 연결됨
+
+주문이 취소됐거나 취소가 진행 중이면 결제 완료를 `PAID`로 기록한 뒤 claim 기반 경로로 환불한다. 같은 웹훅이 재전송되면 남은 환불을 이어 가고, 다른 시도가 만료 전 claim을 쥐고 있으면 `503`으로 응답해 재전송을 유도한다.
 
 본 주문 취소 시 paid 재배송비도 별도 refund 경로로 환불할 수 있다. 본 결제와 재배송비 결제를 같은 payment record라고 가정하지 않는다.
 
@@ -276,7 +293,7 @@ REDELIVERY_FEE
 - `PAID`이며 미환불인 결제만 refund claim 획득
 - 동시 환불 호출과 완료 뒤 재시도에서 PortOne 외부 환불 1회
 - 성공 뒤 `CANCELLED`/환불 금액·시각 기록
-- provider 실패 시 claim 해제와 `AUTO_REFUND_FAILED` 운영 이슈
+- provider 결과 불명확 시 claim을 `UNKNOWN`으로 유지(같은 `Idempotency-Key`)하고 `AUTO_REFUND_FAILED` 운영 이슈, 재시도는 재조회 뒤에만 요청
 - 법정 분쟁·고객지원 retention 기록에 provider 원문·민감정보를 복제하지 않음
 
 ### 재배송비 결제·환불 — `VERIFIED`
@@ -334,6 +351,7 @@ GET /stores/:storeId/orders/:orderId/payment
 - `404 + PAYMENT_NOT_FOUND`: PENDING reconciliation에서 “결제가 존재하지 않음”으로 취급 가능
 - `401`: 인증 실패이며 결제 없음으로 취급하면 안 됨
 - 네트워크/파싱/기타 provider 오류: 결제 상태를 추측하지 않고 확인 필요로 남김
+- 시간 상한: 결제 조회 10초, 취소 15초. 시간 초과는 요청이 PortOne에 닿았는지 알 수 없으므로 `PortoneError(504, PORTONE_TIMEOUT)`로 바꿔 위의 결과 불확실 경로(조회 실패 기록·환불 `UNKNOWN`)로 보낸다.
 
 오류 메시지는 진단용으로 정제하며 비밀 인증 header를 로그에 출력하지 않는다.
 
@@ -370,7 +388,13 @@ export interface Payment {
 결제 계열 주요 운영 이슈:
 
 - `PAYMENT_LOOKUP_FAILED`: timeout reconciliation 중 원격 결제 상태를 신뢰성 있게 조회하지 못함
-- `AUTO_REFUND_FAILED`: 자동 환불 provider 호출 실패
+- `AUTO_REFUND_FAILED`: 자동 환불 provider 호출 결과 불명확(본 결제·재배송비)
+- `FINALIZATION_REFUND_FAILED`: 금액 불일치·늦은 결제 확정 환불의 결과 불명확
+- `PROVIDER_REVERSAL_DETECTED`: 확정된 주문에 결제사 쪽 취소·부분 취소·취소 대기·분쟁 웹훅 수신
+
+`AUTO_REFUND_FAILED`의 `RETRY_REFUND` 조치는 기존 환불 경로를 부른 뒤 결제 문서를 다시 읽어 `CANCELLED`/`REFUNDED`일 때만 `RESOLVED`로 바꾼다. 그 밖에는 `OPEN`을 유지하고 `failureCode`(`REFUND_PENDING`·`REFUND_NOT_CONFIRMED`·`PAYMENT_NOT_FOUND`·`PAYMENT_ORDER_MISMATCH` 등)를 남긴 뒤 `409`로 응답한다.
+
+알려진 제약: 재배송비 환불 결과가 불명확하면 `AUTO_REFUND_FAILED`가 빈 `storeId`와 `paymentId = chargeId`로 기록된다. 그래서 가게 범위 운영 기록 목록에 보이지 않고, `RETRY_REFUND`도 `payments/{chargeId}`를 찾지 못해 해결할 수 없다(BACKLOG `CHARGE-REFUND-ISSUE-ROUTING`).
 
 이 이슈가 열려 있으면 상태를 추측하거나 PortOne 콘솔에서 반복 환불하지 않는다. 운영 조치는 `docs/specs/ops/mvp-sales-round-runbook.md`를 따른다.
 
@@ -397,6 +421,7 @@ export interface Payment {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-10 | 웹훅 거절 로그 집계, 결제사 취소·분쟁 운영 기록, PENDING 정리 cron 동시성, PortOne 시간 상한, 환불 `UNKNOWN` claim·`Idempotency-Key`, 확정 환불 소유 표시, `RETRY_REFUND` 확인 조건, 재배송비 취소 주문 환불을 current source에 맞춰 정합화하고, 상점·통화·채널 미확인(#426 미병합)과 재배송비 환불 운영 기록 라우팅 제약을 명시 |
 | 2026-09-25 | `PAYMENT-FINALIZATION-PAID-GUARD`와 `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`를 직접 회귀 증거와 함께 `IMPLEMENTED / PROVEN`으로 정합화하고 stale 최종 회귀 요구 표현 제거 |
 | 2026-08-30 | `finalizePaidOrder()`의 자체 `PAID` guard와 실제 PortOne·PG 결제/환불 역할을 current source에 맞춰 정렬 |
 | 2026-08-24 | 문서 정합성 기준에 따라 finalization P0, 본 결제 환불, 재배송비 결제·환불의 검증 상태를 분리 |

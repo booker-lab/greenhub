@@ -183,7 +183,7 @@ Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`이 코드와 공개 문서에 반영�
 
 ## HISTORICAL / CLOSED BY REL-STATE-01
 
-> 2026-09-28 재대조: 아래 P0의 구현·직접 회귀는 현재 `main`에 있다(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, admin 강제환불·권한, 정산 lifecycle, auth 세션 폐기 근거 spec 7개 191건 통과, `firestore.rules`의 orders read는 seller·admin만 허용). 각 절의 "미완료" 서술은 당시 기록이다.
+> 2026-09-28 재대조: 아래 P0의 구현·직접 회귀는 현재 `main`에 있다(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, admin 강제환불·권한, 정산 lifecycle, auth 세션 폐기 근거 spec 7개 191건 통과, 당시 `firestore.rules`의 orders read는 seller·admin만 허용 — #402 이후 `main` 규칙은 `orders` 원문 직접 읽기·쓰기를 모든 클라이언트에 거부한다). 각 절의 "미완료" 서술은 당시 기록이다.
 
 > 아래 과거 P0 서술은 #63의 `A-N closed semantic work` 분류에 따른 historical record다. 현재 release blocker, current implementation finding, current verification proof, remote-addressable candidate, PR, merged, Preview, production 상태를 이 기록만으로 추론하지 않는다.
 
@@ -338,11 +338,12 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 ## 검증 상태
 
 - 최근 원격 회차 E2E: run `37735343338`(현재 운영 SHA `0bcceaea`) 52/52 + 세션 12/12, cleanup 성공. 운영에 나갈 SHA가 바뀌면 그 SHA로 다시 판정한다.
-- 운영 배포 대기: `0bcceaea` 뒤 `main`에 병합된 변경은 모두 원격 회차 E2E로 아직 판정하지 않았고 운영에 나가지 않았다(`git log 0bcceaea..origin/main`). 2026-10-10 18시 기준 #399~#403, #405~#409, #411~#423, #425, #427~#431, #433, #439~#451, #453, #455다(#454는 로컬 개발 도구만 바꿔 배포 영향 없음). **#402가 `firestore.rules`·`storage.rules`를 바꿨다**(주문·판매 회차 원문 직접 조회 차단, Storage 공개 경로 단건 조회). 인덱스 변경은 없다. 이후 병합분은 위 `git log`로 다시 센다.
+- 운영 배포 대기: `0bcceaea` 뒤 `main`에 병합된 변경은 모두 원격 회차 E2E로 아직 판정하지 않았고 운영에 나가지 않았다(`git log 0bcceaea..origin/main`). 2026-10-10 18시 기준 #399~#403, #405~#409, #411~#423, #425, #427~#431, #433, #439~#451, #453, #455다(#454는 로컬 개발 도구만 바꿔 배포 영향 없음). **#402가 `firestore.rules`·`storage.rules`를 바꿨다**(주문·판매 회차 원문 직접 조회 차단, Storage 공개 경로 단건 조회만 허용, 상품 이미지 쓰기에 `stores.ownerId` 일치 추가). `cors.json`도 GET·HEAD로 줄었지만 `firebase deploy`로 반영되지 않아 버킷에 따로 적용해야 한다. 인덱스 변경은 없다. 이후 병합분은 위 `git log`로 다시 센다.
 - 원격 회차 E2E 판정 기준은 #447부터 64건(소비자·셀러·드라이버 32건 × chromium·mobile) + 세션 수명주기 12건이다.
 - 이전 운영 SHA 증거: 출시 `197f84a4` run `36372493414`, API `781285ea` run `36383185604`, 판매자 앱 `437af74b` run `36410582745`(각 52/52 + 세션 12/12, cleanup 0).
 - 이전 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`(52건).
 - 과거 run을 현재 release 증거로 확장하지 않는다.
+- 2026-10-10 결제·인증·규칙 재대조(`main` `680a190`, API 단위 1768건·통합 26건 통과, CI Firebase rules 에뮬레이터 통과): 과거 P0(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, 관리자 강제 환불)와 #402 규칙은 `VERIFIED`. 남은 일은 BACKLOG `AUTH-MULTI-DEVICE-SESSION`(결정 필요), `CHARGE-REFUND-ISSUE-ROUTING`(구현 결함), `PORTONE-CHANNEL-CHECK`(#426 미병합), `RATE-LIMIT-CLIENT-IP`(#404 미병합), `STORAGE-CORS-APPLY`. 상세: `docs/reports/REPORT_payments_auth_rules_reaudit_20261010.md`.
 - exact-SHA Preview/browser/fixture와 필요한 legal/release proof는 actual release candidate에서 다시 판정한다.
 
 ## 활성 문서
@@ -368,5 +369,5 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 2. SMS 발신번호를 사업자 번호로 교체하고 문자 재시험. 사업자 번호를 ALIGO 발신번호로 추가 등록해 승인 대기 중이다(2026-10-02). 승인 전에 `ALIGO_SENDER_PHONE`을 바꾸면 알림톡도 실패하므로 승인 확인 뒤 바꾼다.
 3. 파일럿 시작 직후 실제 결제 1건(결제 → 접수 알림톡 → 소비자 취소·환불 → 취소 알림톡)으로 운영 PortOne 경로를 확인한다. 결제는 지금까지 E2E 모의 결제로만 검증됐다.
 4. 운영 배포는 검증된 SHA를 지정해 API → 프런트 → 규칙 순으로 한다. Railway UI "Deploy"는 `main` HEAD를 배포하므로 병합 후 미검증 코드가 나갈 수 있다.
-5. 운영 배포 대기 묶음(위 검증 상태)은 병합을 모은 최종 `main` SHA로 원격 회차 E2E(64 + 세션 12)를 한 번 돌린 뒤 별도 승인으로 API → 프런트 3개 → Firestore·Storage 규칙(#402) 순으로 배포한다(2026-10-25 전후 예정). 규칙을 앱보다 먼저 내면 옛 프런트의 직접 조회가 막힐 수 있다. 새 환경 변수는 모두 선택 항목이다: `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`(없으면 운영자 휴대폰 알림만 꺼짐), `KAKAO_APP_ID`(#425, 없으면 카카오 토큰 발급 앱 확인을 건너뛰고 경고 로그). API 빌드는 #408로 nixpacks 설정이 지워지고 루트 `Dockerfile`(Node 22 멀티스테이지)만 남았으므로 배포 전에 Railway 빌드 방식이 Dockerfile을 쓰는지 확인한다.
+5. 운영 배포 대기 묶음(위 검증 상태)은 병합을 모은 최종 `main` SHA로 원격 회차 E2E(64 + 세션 12)를 한 번 돌린 뒤 별도 승인으로 API → 프런트 3개 → Firestore·Storage 규칙(#402) 순으로 배포한다(2026-10-25 전후 예정). 2026-10-10 대조로 운영 중인 옛 프런트(`0bcceaea`)도 #402가 막은 원문을 직접 읽지 않아 규칙 순서로 깨지는 조회는 없다. 배포 전에 운영 판매자 계정의 `stores.ownerId`가 그 판매자 uid인지 확인한다(상품 이미지 업로드 조건). 새 환경 변수는 모두 선택 항목이다: `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`(없으면 운영자 휴대폰 알림만 꺼짐), `KAKAO_APP_ID`(#425, 없으면 카카오 토큰 발급 앱 확인을 건너뛰고 경고 로그). API 빌드는 #408로 nixpacks 설정이 지워지고 루트 `Dockerfile`(Node 22 멀티스테이지)만 남았으므로 배포 전에 Railway 빌드 방식이 Dockerfile을 쓰는지 확인한다.
 6. 사용자 작업(코드 밖): CI 필수 검사 지정(`CI-REQUIRED-CHECK`), 텔레그램 비밀값 등록(`OPS-ALERTING`), Firestore PITR·관리형 백업(`FIRESTORE-MANAGED-BACKUP`), 고객 환불 안내 사유 문구 확정(`SILENT-REFUND-CUSTOMER-NOTICE`), 개인정보 보호책임자와 통신판매업 신고번호.
