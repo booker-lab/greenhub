@@ -16,7 +16,7 @@
 - 경매·매입: 월요일
 - 직접배송: 화요일 00:00~09:00
 
-현재 **출시 전 게이트와 작업 순서**의 정본은 `docs/memory.md`, `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`, `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`다. 이 런북에 남은 운영 절차가 활성 출시 PLAN의 승인·검증 게이트를 대체하지 않는다.
+현재 **출시·배포 게이트와 작업 순서**의 정본은 `docs/memory.md`다(`docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`, `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`는 2026-09-05 snapshot인 역사 자료). 이 런북에 남은 운영 절차가 `docs/memory.md`의 승인 경계와 배포 안전 PLAN의 검증 게이트를 대체하지 않는다.
 
 이 문서는 명령 실행 권한을 부여하지 않는다. 아래 명령은 절차를 설명하는 예시이며, 승인 기록 없이 실행하지 않는다. 특히 `--apply`, 환불, 문자 발송, 회차·주문 상태 변경, 파기 재실행은 별도 승인과 담당자 확인이 필요하다.
 
