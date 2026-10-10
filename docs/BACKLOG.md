@@ -702,7 +702,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 받는 분 연락처는 휴대폰 번호만 받는다(**2026-10-10 결정**). 서버 검사는 #445로 들어갔다. 결제 화면 입력 단계 검사는 같은 화면을 고치는 병행 PR #437 병합 뒤 맞춘다(그전에도 서버 400 안내 문구가 결제 화면에 보인다).
 
 ### REDELIVERY-PAID-REQUEST-RESEND
-- [ ] 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 병행 세션이 별도 PR(브랜치 `claude/zen-curie-mcbly7-redelivery-paid-notice`)로 연결 결제가 PAID면 건너뛰게 고치는 중이다. 2026-10-10 발견.
+- [ ] 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 병행 PR #448이 연결 결제가 PAID면 건너뛰게 고치고, 판매자 확인 창 문구·런북도 함께 맞춘다. 2026-10-10 발견.
 
 ---
 
