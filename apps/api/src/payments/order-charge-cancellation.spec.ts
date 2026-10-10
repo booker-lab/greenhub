@@ -2,8 +2,13 @@
 // - 취소 진행 중에는 새 재배송비 결제를 만들지 않는다.
 // - 취소(진행) 뒤 도착한 결제 완료는 PAID로 기록하고 claim 기반으로 환불한다.
 // - 결제가 필요한 주문 상태가 아니면 결제를 확정하지 않는다.
+// - 이미 환불된 결제의 재전송은 처리 완료로 답하고, 멈춘 환불 claim은 재시도 응답으로 이어 간다.
 
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { createOccFirestore } from '../../test/helpers/firestore-occ-fake';
 import { MAX_REDELIVERY_FEE_KRW } from '../orders/dto/update-status.dto';
 import { OrderChargesService } from '../orders/order-charges.service';
@@ -136,6 +141,72 @@ describe('취소 주문의 재배송비 결제 완료 처리', () => {
 
     expect(portone.refund).toHaveBeenCalledTimes(1);
     expect(occ.getData(CHARGE_PATH)).toMatchObject({ status: 'REFUNDED' });
+  });
+
+  it('이미 환불된 결제의 결제 완료 재전송은 처리 완료로 답하고 다시 환불하지 않는다', async () => {
+    const occ = createOccFirestore();
+    seedOrder(occ, { status: 'CANCELLED', cancellation: { status: 'COMPLETED' } });
+    seedCharge(occ, {
+      status: 'REFUNDED',
+      paidAt: '2026-10-02T00:00:00.000Z',
+      refundedAt: '2026-10-02T00:01:00.000Z',
+      refundClaim: null,
+    });
+    const { service, portone } = makePaymentService(occ);
+
+    await expect(service.handleWebhook('Transaction.Paid', PAYMENT_ID)).resolves.toEqual({
+      ok: true,
+      reason: 'already_processed',
+    });
+
+    expect(portone.refund).not.toHaveBeenCalled();
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({ status: 'REFUNDED' });
+  });
+
+  it('환불 claim을 쥔 시도가 멈추면 재전송에 재시도 응답을 주고, 만료 뒤 같은 키로 환불을 끝낸다', async () => {
+    const occ = createOccFirestore();
+    seedOrder(occ, { status: 'CANCELLED', cancellation: { status: 'COMPLETED' } });
+    // 앞선 시도가 claim만 남기고 환불 POST·UNKNOWN 기록 전에 멈춘 상태.
+    const stalledClaim = {
+      token: 'stalled-token',
+      owner: 'order-charge-refund',
+      status: 'CLAIMED',
+      providerKey: 'order-charge-refund-stalled-key',
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    };
+    seedCharge(occ, {
+      status: 'PAID',
+      paidAt: '2026-10-02T00:00:00.000Z',
+      refundClaim: stalledClaim,
+    });
+    const { service, portone } = makePaymentService(occ);
+
+    await expect(service.handleWebhook('Transaction.Paid', PAYMENT_ID)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(portone.refund).not.toHaveBeenCalled();
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({ status: 'PAID', refundClaim: stalledClaim });
+
+    // claim이 만료되면 다음 재전송이 takeover해 provider 상태를 확인한 뒤 환불한다.
+    occ.updateOutsideTransaction(CHARGE_PATH, {
+      refundClaim: { ...stalledClaim, expiresAt: Date.now() - 1 },
+    });
+    await expect(service.handleWebhook('Transaction.Paid', PAYMENT_ID)).resolves.toEqual({
+      ok: true,
+      reason: 'already_processed',
+    });
+    expect(portone.refund).toHaveBeenCalledTimes(1);
+    expect(portone.refund).toHaveBeenCalledWith(
+      PAYMENT_ID,
+      FEE,
+      expect.any(String),
+      stalledClaim.providerKey,
+    );
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({
+      status: 'REFUNDED',
+      refundedAt: expect.anything(),
+      refundClaim: null,
+    });
   });
 
   it('취소되지 않은 주문의 PAID 결제는 재전송돼도 환불하지 않는다', async () => {

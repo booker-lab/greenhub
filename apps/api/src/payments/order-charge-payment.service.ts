@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Injectable, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { isOrderCancelledOrCancelling } from '../orders/order-cancellation-state';
@@ -31,7 +36,12 @@ type ChargeRefundClaimOutcome =
   | { outcome: 'claimed_fresh'; token: string; providerKey: string; payload: ChargeRefundPayload }
   | { outcome: 'claimed_retry'; token: string; providerKey: string; payload: ChargeRefundPayload }
   | { outcome: 'already_handled' }
+  // 다른 시도가 아직 만료되지 않은 CLAIMED claim을 쥐고 있고 환불은 끝나지 않았다.
+  | { outcome: 'claim_in_flight' }
   | { outcome: 'doc_missing' };
+
+// 환불 시도 결과. claim_in_flight는 다른 시도가 claim을 쥔 채 환불을 끝내지 않은 상태다.
+type ChargeRefundRunResult = 'handled' | 'claim_in_flight';
 
 @Injectable()
 export class OrderChargePaymentService {
@@ -77,8 +87,12 @@ export class OrderChargePaymentService {
         const chargeSnap = await tx.get(chargeRef);
         if (!chargeSnap.exists) return { ok: false, reason: 'charge_not_found' };
         const charge = chargeSnap.data() as Record<string, any>;
+        // 이미 환불까지 끝난 결제의 Transaction.Paid 재전송은 처리 완료로 답해
+        // PortOne이 재시도를 멈추게 한다.
+        if (charge['status'] === 'REFUNDED' || charge['refundedAt']) {
+          return { ok: true, reason: 'already_processed' };
+        }
         if (charge['status'] === 'PAID') {
-          if (charge['refundedAt']) return { ok: true, reason: 'already_processed' };
           // A PAID charge on a cancelled/cancelling order must not stay
           // captured; a redelivered webhook resumes the claim-based refund.
           const paidOrderSnap = await tx.get(this.firestore.doc(`orders/${charge['orderId']}`));
@@ -141,7 +155,15 @@ export class OrderChargePaymentService {
       });
     const { refundRequired, ...response } = result;
     if (refundRequired) {
-      await this.refundCharge(chargeRef, CANCELLED_ORDER_CHARGE_REFUND_REASON);
+      const refund = await this.refundCharge(chargeRef, CANCELLED_ORDER_CHARGE_REFUND_REASON);
+      if (refund === 'claim_in_flight') {
+        // 다른 시도가 claim을 잡은 뒤 환불 POST나 UNKNOWN 기록 전에 멈췄을 수 있다.
+        // 취소 주문의 PAID 재배송비를 다시 훑는 다른 경로는 없으므로 200으로 끝내지 않고
+        // 재시도 가능한 응답을 준다. PortOne 재전송이 claim 만료 뒤 takeover로 환불을 끝낸다.
+        throw new ServiceUnavailableException(
+          '재배송비 환불이 아직 끝나지 않았습니다. 잠시 후 다시 시도해 주세요.',
+        );
+      }
     }
     return response;
   }
@@ -169,7 +191,7 @@ export class OrderChargePaymentService {
     return result;
   }
 
-  private async refundCharge(chargeRef: any, reason: string) {
+  private async refundCharge(chargeRef: any, reason: string): Promise<ChargeRefundRunResult> {
     const token = randomUUID();
     // Retry purity: only the committed attempt's return value may authorize
     // the provider refund. An outer `let claimed` would leak an aborted
@@ -218,7 +240,7 @@ export class OrderChargePaymentService {
         }
         if (marker.owner !== REFUND_OWNER) return { outcome: 'already_handled' };
         if (marker.status === 'CLAIMED' && marker.expiresAt > Date.now()) {
-          return { outcome: 'already_handled' };
+          return { outcome: 'claim_in_flight' };
         }
         // Expired CLAIMED or any UNKNOWN: a prior attempt may already have
         // reached the provider. Take over as uncertain so a getPayment
@@ -252,8 +274,9 @@ export class OrderChargePaymentService {
         };
       },
     );
+    if (claimResult.outcome === 'claim_in_flight') return 'claim_in_flight';
     if (claimResult.outcome === 'already_handled' || claimResult.outcome === 'doc_missing') {
-      return;
+      return 'handled';
     }
 
     const charge = claimResult.payload;
@@ -267,7 +290,7 @@ export class OrderChargePaymentService {
         claimToken,
         providerKey,
       );
-      if (reconciled !== 'proceed') return;
+      if (reconciled !== 'proceed') return 'handled';
     }
 
     try {
@@ -292,6 +315,7 @@ export class OrderChargePaymentService {
       );
       throw error;
     }
+    return 'handled';
   }
 
   /**
