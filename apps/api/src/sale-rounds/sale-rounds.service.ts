@@ -69,7 +69,8 @@ export interface PublicSaleRound {
  * Public sale-round item projection — explicit allowlist.
  * Excluded as internal: reservedQuantity/orderedQuantity (inventory signals),
  * createdAt/updatedAt. saleLimitQuantity stays public: it is the per-item
- * purchase constraint, not internal metadata.
+ * purchase constraint, not internal metadata. status is the effective public
+ * status (see resolvePublicRoundItemStatus).
  */
 export interface PublicSaleRoundItem {
   id: string;
@@ -100,6 +101,34 @@ export function toPublicSaleRound(round: SaleRound): PublicSaleRound {
   };
 }
 
+function itemCount(value: unknown): number | null {
+  const count = value ?? 0;
+  return typeof count === 'number' && Number.isFinite(count) ? count : null;
+}
+
+/**
+ * Public sold-out display — computed at read time, never persisted.
+ * An ACTIVE item whose checkout holds (15-minute reservations) plus paid
+ * orders reached saleLimitQuantity cannot take even one more unit, so the
+ * public read reports SOLD_OUT. When a hold is released the next read reports
+ * ACTIVE again. Raw counts stay private; checkout/reservation validation is
+ * unchanged and remains the authority. Malformed counters fail closed
+ * (the order path rejects them too).
+ */
+export function resolvePublicRoundItemStatus(
+  item: Pick<
+    SaleRoundItem,
+    'status' | 'saleLimitQuantity' | 'reservedQuantity' | 'orderedQuantity'
+  >,
+): SaleRoundItem['status'] {
+  if (item.status !== 'ACTIVE') return item.status;
+  const reserved = itemCount(item.reservedQuantity);
+  const ordered = itemCount(item.orderedQuantity);
+  const limit = itemCount(item.saleLimitQuantity);
+  if (reserved === null || ordered === null || limit === null) return 'SOLD_OUT';
+  return reserved + ordered >= limit ? 'SOLD_OUT' : 'ACTIVE';
+}
+
 export function toPublicSaleRoundItem(item: SaleRoundItem): PublicSaleRoundItem {
   return {
     id: item.id,
@@ -111,7 +140,7 @@ export function toPublicSaleRoundItem(item: SaleRoundItem): PublicSaleRoundItem 
     roundPrice: item.roundPrice,
     saleLimitQuantity: item.saleLimitQuantity,
     displayOrder: item.displayOrder,
-    status: item.status,
+    status: resolvePublicRoundItemStatus(item),
   };
 }
 
@@ -135,7 +164,13 @@ export class SaleRoundsService {
       .collection('saleRounds')
       .where('storeId', '==', storeId)
       .get();
-    const rounds = snap.docs.map((doc: any) => this.normalizeRound(doc.data() as SaleRound));
+    // READ-ONLY: the list shows the same effective status as the public list
+    // (orderOpenAt/orderCloseAt/capacity) without persisting it. Persisting
+    // stays on the seller detail read and the write-side state machine.
+    const nowMillis = timestampMillis(this.firestore.Timestamp.now());
+    const rounds = snap.docs.map((doc: any) =>
+      this.normalizeRound(this.applyEffectiveState(doc.data() as SaleRound, nowMillis)),
+    );
     return {
       items: rounds.sort((a, b) => this.dateMillis(b.createdAt) - this.dateMillis(a.createdAt)),
     };
@@ -414,7 +449,7 @@ export class SaleRoundsService {
       .sort((a, b) => a.displayOrder - b.displayOrder);
   }
   private applyEffectiveState(stored: SaleRound, nowMillis: number): SaleRound {
-    // Pure automatic transition for public reads. Reuses the single
+    // Pure automatic transition for public reads and the seller list. Reuses the single
     // write-side domain function without persisting (no transaction/write).
     // Preserves the full SaleRound response contract; only status/closeReason
     // are overlaid with the effective values.
