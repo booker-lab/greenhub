@@ -693,7 +693,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이다. **2026-10-09 결정: 켠다.** PITR과 일일 관리형 백업을 GCP 콘솔에서 사용자가 켠다(이 저장소 작업 환경에는 GCP 권한이 없다). 켠 뒤 비운영 프로젝트 복구 연습을 한 번 한다.
 
 ### ROUND-HOLD-ABUSE-LIMITS
-- [ ] **2026-10-10 결정**: 같은 회차에서 사용자당 결제 진행 중 주문은 최대 2건, 주문당 상품별 수량 상한, 쓰이지 않는 공개 회원가입 API 차단. `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`(재결제 때 이전 예약 유지)는 그대로 두고 상한만 건다. 수량 상한은 병행 PR #422, 가입 차단은 #431이 맡는다. 예약 상한은 #427(초안)이 "1건만 유지"로 만들어 위 결정과 다르므로 2건 기준으로 맞춘 뒤 병합한다.
+- [ ] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. 주문당 상품별 수량 상한(병행 PR #422), 쓰이지 않는 공개 회원가입 API 차단(#431), 같은 회차의 고객별 활성 결제 예약 상한(#427). 예약 상한은 `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`(재결제 때 이전 예약 유지)를 그대로 두고 최대 3건으로 정해 #427을 고치는 중이다.
 
 ### OPERATION-ISSUE-MANUAL-RESOLVE
 - [ ] 환불 재시도·문자 재발송 외의 운영 기록은 닫을 방법이 없어 홈 경고와 아침 텔레그램 요약에 계속 남는다. **2026-10-10 결정**: 판매자·관리자가 메모를 남기고 닫는다. 운영 기록 API를 고치는 병행 PR #436 병합 뒤 구현한다.
@@ -702,7 +702,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 받는 분 연락처는 휴대폰 번호만 받는다(**2026-10-10 결정**). 서버 검사는 #445로 들어갔다. 결제 화면 입력 단계 검사는 같은 화면을 고치는 병행 PR #437 병합 뒤 맞춘다(그전에도 서버 400 안내 문구가 결제 화면에 보인다).
 
 ### REDELIVERY-PAID-REQUEST-RESEND
-- [ ] 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 같은 코드를 고치는 병행 PR #409·#411 병합 뒤, 연결 결제가 PAID면 건너뛰게 고친다. 2026-10-10 발견.
+- [ ] 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 병행 세션이 별도 PR(브랜치 `claude/zen-curie-mcbly7-redelivery-paid-notice`)로 연결 결제가 PAID면 건너뛰게 고치는 중이다. 2026-10-10 발견.
 
 ---
 
