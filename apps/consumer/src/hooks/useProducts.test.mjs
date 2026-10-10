@@ -126,6 +126,11 @@ function mountHook({ fetchImpl, initialArgs = [] }) {
         },
       };
     }
+    if (specifier === '@/lib/shared-request') {
+      // 요청 공유는 lib/shared-request.test.mjs가 검증한다. 여기서는 매번 그대로 보내
+      // 훅의 요청 순서·stale 응답 규칙만 본다.
+      return { sharedRequest: (_key, load) => Promise.resolve().then(load) };
+    }
     if (specifier === '@greenhub/shared') return {};
     throw new Error(`예상하지 못한 상품 조회 모듈 요청: ${specifier}`);
   };
