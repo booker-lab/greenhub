@@ -137,6 +137,7 @@ describe('Operations action claim fencing (lease expiry)', () => {
     const { service, payments } = makeService(occ);
 
     payments.processRefundByOrderId.mockImplementationOnce(() => {
+      occ.updateOutsideTransaction('payments/payment-1', { status: 'CANCELLED' });
       // A held tokenA through its fresh-owner read, but its lease expired while
       // the provider call was in flight; B took over with tokenB.
       occ.updateOutsideTransaction('operationIssues/issue-1', {

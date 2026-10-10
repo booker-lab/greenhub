@@ -68,8 +68,9 @@ export function useOrderOperations(
     setLoading(true);
     setError(null);
     try {
+      // 서버에서 이 주문의 기록만 받는다. orderId를 모르는 이전 API는 쿼리를 무시하므로 아래 필터를 유지한다.
       const payload = await apiJson(
-        `/stores/${encodeURIComponent(storeId)}/operation-issues`,
+        `/stores/${encodeURIComponent(storeId)}/operation-issues?orderId=${encodeURIComponent(orderId)}`,
         token,
       );
       setIssues(readOperationIssueList(payload, { storeId, orderId }));
