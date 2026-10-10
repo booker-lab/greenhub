@@ -30,6 +30,7 @@ import { OrderSearchInput } from './_components/OrderSearchInput';
 import { SaleTypeToggle } from './_components/SaleTypeToggle';
 import {
   DATE_PRESETS,
+  DEFAULT_DATE_PRESET,
   type DateRangePreset,
   GROUP_TABS,
   getGroupHeaderMeta,
@@ -37,19 +38,13 @@ import {
   isArchiveTab,
   type OrderGroup,
 } from './_constants';
+import { readOrdersDeepLink } from './orders-deep-link';
 import { phoneSearchDigits } from './order-search';
 import {
   buildOrdersScopedViewModel,
   deriveOrdersFetchInput,
+  filterOrdersByRound,
 } from './orders-view-model';
-
-const VALID_TABS = new Set<OrderGroup>([
-  'ACTION_REQUIRED',
-  'WAITING',
-  'IN_DELIVERY',
-  'DONE',
-  'CANCELLED',
-]);
 
 function PriorityItem({
   label,
@@ -118,26 +113,42 @@ export default function OrdersPage() {
   const [activeTab, setActiveTab] = useState<OrderGroup>('ACTION_REQUIRED');
   const [subFilter, setSubFilter] = useState<'ALL' | 'DELIVERING' | 'HUB_ARRIVED'>('ALL');
   const [heldOnly, setHeldOnly] = useState(false);
-  const [datePreset, setDatePreset] = useState<DateRangePreset>('week');
+  const [datePreset, setDatePreset] = useState<DateRangePreset>(DEFAULT_DATE_PRESET);
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [roundFilter, setRoundFilter] = useState<string | null>(null);
   const phoneSearch = useOrderPhoneSearch(storeId, phoneSearchDigits(searchQuery));
   const { phoneMatchIds } = phoneSearch;
+  const roundFilterName = roundFilter
+    ? (rounds.find((round) => round.id === roundFilter)?.name ?? null)
+    : null;
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab') as OrderGroup | null;
-    if (tab && VALID_TABS.has(tab)) setActiveTab(tab);
+    const deepLink = readOrdersDeepLink(window.location.search);
+    if (deepLink.tab) setActiveTab(deepLink.tab);
+    if (deepLink.heldOnly) setHeldOnly(true);
+    if (deepLink.roundId) setRoundFilter(deepLink.roundId);
   }, []);
+
+  const clearRoundFilter = () => {
+    setRoundFilter(null);
+    window.history.replaceState(null, '', window.location.pathname);
+  };
+
+  // 회차 필터(`?round=`)가 있으면 그 회차 주문만 이후 단계로 보낸다(뱃지·목록·우선순위 모두 같은 범위).
+  const roundScopedOrders = useMemo(
+    () => filterOrdersByRound(orders, roundFilter),
+    [orders, roundFilter],
+  );
 
   // PHASE_1_INPUT_DERIVATION → fetch boundary → PHASE_2_VIEW_MODEL.
   // useGroupConfigs가 productIds fetch를 필요로 하므로 단일 호출로 합칠 수 없고,
   // 두 순수 경계를 같은 saleTypeOrders 참조로 연결해 scope 중복을 제거한다.
   // 뱃지(counts)와 목록(filtered)은 PHASE_2 안에서 동일 참조로 파생된다.
   const fetchInput = useMemo(
-    () => deriveOrdersFetchInput(orders, saleType, activeTab),
-    [orders, saleType, activeTab],
+    () => deriveOrdersFetchInput(roundScopedOrders, saleType, activeTab),
+    [roundScopedOrders, saleType, activeTab],
   );
   const groupConfigs = useGroupConfigs(
     fetchInput.groupProductIds,
@@ -177,20 +188,20 @@ export default function OrdersPage() {
   const handleSaleTypeChange = (next: SaleType) => {
     setSaleType(next);
     setHeldOnly(false);
-    setDatePreset('week');
+    setDatePreset(DEFAULT_DATE_PRESET);
     setCustomFrom('');
     setCustomTo('');
     setSearchQuery('');
   };
 
-  // 우선순위 진입이 날짜 필터·검색어에 가려 대상을 숨기지 않도록 필터를 해제한다.
+  // 우선순위 진입이 날짜 필터·검색어에 가려 대상을 숨기지 않도록 필터를 해제한다('모든 날짜').
   // 배송 보류 진입은 DELIVERY_HELD만 격리해 count와 목록을 1:1로 일치시키고,
   // 확인 필요 진입은 기존 ACTION_REQUIRED 전체를 유지한다.
   const handleDeliveryHeldEntry = () => {
     setActiveTab('ACTION_REQUIRED');
     setSubFilter('ALL');
     setHeldOnly(true);
-    setDatePreset('custom');
+    setDatePreset('all');
     setCustomFrom('');
     setCustomTo('');
     setSearchQuery('');
@@ -200,7 +211,7 @@ export default function OrdersPage() {
     setActiveTab('ACTION_REQUIRED');
     setSubFilter('ALL');
     setHeldOnly(false);
-    setDatePreset('custom');
+    setDatePreset('all');
     setCustomFrom('');
     setCustomTo('');
     setSearchQuery('');
@@ -246,6 +257,34 @@ export default function OrdersPage() {
         showName
         href={deadlineRound ? `/sale-rounds/${deadlineRound.id}` : undefined}
       />
+
+      {/* 회차 상세 "이 회차 주문"에서 들어오면 그 회차 주문만 보여 준다. */}
+      {roundFilter && (
+        <Container size="sm" px="md" pt="md">
+          <Paper radius="lg" shadow="xs" p="sm">
+            <Group justify="space-between" gap="xs" wrap="nowrap">
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
+                {roundFilterName ?? '선택한 회차'} 주문만 보고 있어요
+              </Text>
+              <UnstyledButton
+                onClick={clearRoundFilter}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 'var(--font-size-sm)',
+                  borderRadius: 99,
+                  backgroundColor: 'var(--color-surface-muted)',
+                  color: 'var(--color-text-secondary)',
+                  flexShrink: 0,
+                }}
+              >
+                모든 주문 보기
+              </UnstyledButton>
+            </Group>
+          </Paper>
+        </Container>
+      )}
 
       {!loading && (
         <Container size="sm" px="md" pt="md">

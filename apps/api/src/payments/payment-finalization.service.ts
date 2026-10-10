@@ -28,6 +28,7 @@ import {
   reacquireLegacyDailyCapacityInTransaction,
   releaseLegacyDailyCapacityInTransaction,
 } from './_lib/legacy-daily-capacity';
+import { customerOrderLabel } from '../notifications/customer-order-label';
 
 type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
 const LATE_PAYMENT_REFUND_REASON = '결제 만료 후 회차 한도 마감';
@@ -321,8 +322,11 @@ export class PaymentFinalizationService {
       order['userId'],
       newStatus === 'ACCEPTED' ? 'ORDER_ACCEPTED' : 'GROUP_JOINED',
       newStatus === 'ACCEPTED'
-        ? { orderId, name: this.resolveBuyerDisplayName(order) }
-        : { orderId },
+        ? {
+            orderId: customerOrderLabel(order, orderId),
+            name: this.resolveBuyerDisplayName(order),
+          }
+        : { orderId: customerOrderLabel(order, orderId) },
       orderId,
     );
     return { ok: true, status: newStatus };
@@ -336,7 +340,10 @@ export class PaymentFinalizationService {
       await this.notifications.sendToUser(
         order['userId'],
         'ORDER_CANCELLED',
-        { orderId, reason: REFUND_NOTICE_REASONS.LATE_PAYMENT },
+        {
+          orderId: customerOrderLabel(order, orderId),
+          reason: REFUND_NOTICE_REASONS.LATE_PAYMENT,
+        },
         orderId,
         refundNoticeIdempotencyKey('LATE_PAYMENT', orderId),
       );

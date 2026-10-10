@@ -389,6 +389,19 @@ describe('결제 최종화 경쟁 조건', () => {
     );
   });
 
+  it('접수 알림톡 본문에는 고객 화면과 같은 주문번호를 쓴다', async () => {
+    const fixture = makeFinalization({ buyerName: '홍길동', orderNumber: '20261101-000003' });
+
+    await fixture.service.finalizePaidOrder('order-1', paymentData);
+
+    expect(fixture.notifications.sendToUser).toHaveBeenCalledWith(
+      'user-1',
+      'ORDER_ACCEPTED',
+      { orderId: '20261101-000003', name: '홍길동' },
+      'order-1',
+    );
+  });
+
   it('결제 확정 트랜잭션에 원문 제공자 응답 없는 법정 결제 기록을 남긴다', async () => {
     const fixture = makeFinalization();
 
