@@ -4,21 +4,12 @@ import type { Order, Product } from '@greenhub/shared';
 import { Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { STATUS_GROUP_MAP } from '@/app/orders/_constants';
 import { DashboardCard } from '@/components/DashboardCard';
-import { isDelayed } from '@/lib/prep';
-
-interface TaskRow {
-  key: string;
-  /** 줄 앞 점 색 — 새 주문=초록(할 일), 발송 지연=빨강(문제), 비활성 상품=노랑(점검). */
-  dot: string;
-  label: string;
-  href: string;
-}
+import { buildTodayTasks } from './today-tasks';
 
 /**
  * 홈 최상단 "오늘 할 일" 체크리스트.
- * 각 줄은 건수 > 0일 때만 렌더, 전부 0이면 완료 메시지.
+ * 각 줄은 건수 > 0일 때만 렌더, 전부 0이면 완료 메시지(줄 계산은 today-tasks.ts).
  * 모든 항목은 홈이 이미 로드하는 데이터로 계산 — 신규 API 없음.
  * 상품 집계는 신뢰 가능할 때만 사용한다. 상품 조회 실패·로딩 중에는
  * 비활성 상품 0건으로 오인하지 않고 경고로 분리한다.
@@ -37,41 +28,8 @@ export function TodayTasksCard({
   /** 가게 전체 열린 운영 기록 수(환불·결제·연락·사진 확인 필요). */
   openIssueCount?: number;
 }) {
-  const newOrderCount = orders.filter(
-    (o) => STATUS_GROUP_MAP[o.status] === 'ACTION_REQUIRED',
-  ).length;
-  const delayedCount = orders.filter((o) => isDelayed(o)).length;
   const inactiveCount = productsTrustworthy ? products.filter((p) => !p.isActive).length : 0;
-
-  const tasks: TaskRow[] = [];
-  if (openIssueCount > 0)
-    tasks.push({
-      key: 'operations',
-      dot: 'var(--color-danger)',
-      label: `운영 확인 ${openIssueCount}건 보기`,
-      href: '/operations',
-    });
-  if (newOrderCount > 0)
-    tasks.push({
-      key: 'new',
-      dot: 'var(--color-primary)',
-      label: `신규 주문 ${newOrderCount}건 처리하기`,
-      href: '/orders?tab=ACTION_REQUIRED',
-    });
-  if (delayedCount > 0)
-    tasks.push({
-      key: 'delayed',
-      dot: 'var(--color-danger)',
-      label: `발송 지연 ${delayedCount}건 확인`,
-      href: '/prep',
-    });
-  if (productsTrustworthy && inactiveCount > 0)
-    tasks.push({
-      key: 'inactive',
-      dot: 'var(--color-status-warning-text)',
-      label: `비활성 상품 ${inactiveCount}건 점검`,
-      href: '/products',
-    });
+  const tasks = buildTodayTasks({ orders, openIssueCount, inactiveCount });
 
   const showProductWarning = !productsTrustworthy;
 
