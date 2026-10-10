@@ -10,7 +10,7 @@
  *
  * 단계: env 검증 → 임시 git worktree(대상 SHA, .env.local 없음) → pnpm install → 허용 env만으로
  * 세 앱 빌드 → 빌드 산출물의 운영 식별자 검사 → 앱별 루프백 호스트로 next start → readiness →
- * fixture seed/verify → Playwright 52건·판정 → 세션 수명주기 12건·판정.
+ * fixture seed/verify → Playwright 64건·판정 → 세션 수명주기 12건·판정.
  * 성공·실패·예외 모두에서 fixture cleanup, 서버 종료, 임시 worktree 제거를 수행하고 실패를 숨기지 않는다.
  *
  * 사용법과 필요한 env 이름: apps/e2e/README.md
@@ -468,7 +468,7 @@ const PLAYWRIGHT_COMMON_ARGS = [
   '--retries=0',
   '--reporter=list,json',
 ];
-// 워크플로 "소비자·셀러·드라이버 52건 실행"·"세션 수명주기 12건 실행"과 같은 인자.
+// 워크플로 "소비자·셀러·드라이버 64건 실행"·"세션 수명주기 12건 실행"과 같은 인자.
 export const PLAYWRIGHT_ROUND_ARGS = Object.freeze([
   '--filter',
   'e2e',
@@ -489,7 +489,7 @@ export const PLAYWRIGHT_SESSION_ARGS = Object.freeze([
   'auth-session-lifecycle',
   ...PLAYWRIGHT_COMMON_ARGS,
 ]);
-export const EXPECTED_ROUND_TESTS = 52;
+export const EXPECTED_ROUND_TESTS = 64;
 export const EXPECTED_SESSION_TESTS = 12;
 
 /** 워크플로의 jq 무건너뜀 판정과 같은 조건. */
@@ -808,7 +808,7 @@ export async function runLocalRoundDirectE2E(context, ops) {
       EXPECTED_ROUND_TESTS,
       'playwright-summary.json',
     );
-    // 로그아웃·정지는 같은 계정의 다른 세션에 영향을 주므로 52건이 모두 통과한 뒤에만 실행한다.
+    // 로그아웃·정지는 같은 계정의 다른 세션에 영향을 주므로 64건이 모두 통과한 뒤에만 실행한다.
     await playwright(
       `세션 수명주기 ${EXPECTED_SESSION_TESTS}건 실행`,
       [...PLAYWRIGHT_SESSION_ARGS],
