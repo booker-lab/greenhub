@@ -14,7 +14,7 @@
     "react": "^19"
   },
   "devDependencies": {
-    "@mantine/core": "^9.0.0",
-    "@mantine/hooks": "^9.0.0"
+    "@mantine/core": "^9.7.1",
+    "@mantine/hooks": "^9.7.1"
   }
 }
