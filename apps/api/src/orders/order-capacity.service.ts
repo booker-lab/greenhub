@@ -30,6 +30,15 @@ export class LatePaymentCapacityError extends ConflictException {
   }
 }
 
+// 같은 고객이 같은 회차에 동시에 둘 수 있는 만료 전 결제 예약(HELD) 수.
+// 결제를 다시 시도해도 이전 시도의 결제 전 주문·예약은 반환하지 않는다(늦게 도착한 결제의
+// 재확보·자동 환불 흐름과 맞추기 위한 2026-10-04 결정). 대신 재시도가 쌓여 한 고객이 회차
+// 한도를 오래 차지하지 않도록 개수를 제한한다.
+export const MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND = 3;
+
+const ACTIVE_CHECKOUT_HOLD_LIMIT_MESSAGE =
+  '이전 결제 시도를 아직 처리하고 있어요. 잠시 후 다시 시도하거나 주문 내역을 확인해 주세요.';
+
 type RoundItemInput = {
   roundItemId: string;
   quantity: number;
@@ -117,6 +126,16 @@ export class OrderCapacityService {
     const reservationSnap = await tx.get(reservationRef);
     if (reservationSnap.exists) return reservationSnap.data() as ReservationRecord;
 
+    // 같은 고객의 같은 회차 HELD 예약은 회차 문서보다 먼저 읽는다(회차 문서를 여러 결제가
+    // 다투는 구간을 늘리지 않는다). 동등 조건만 써서 복합 색인이 필요 없다.
+    const userHeldSnap = await tx.get(
+      this.firestore
+        .collection('checkoutReservations')
+        .where('roundId', '==', input.roundId)
+        .where('userId', '==', input.userId)
+        .where('status', '==', 'HELD'),
+    );
+
     const roundRef = this.firestore.doc(`saleRounds/${input.roundId}`);
     const roundSnap = await tx.get(roundRef);
     if (!roundSnap.exists || roundSnap.data()?.['storeId'] !== input.storeId) {
@@ -129,6 +148,16 @@ export class OrderCapacityService {
     );
     this.assertRoundReservable(round, timestampMillis(now));
     this.assertDeliveryCity(input.deliveryAddress.address, round['deliveryRegion']?.['city']);
+    if (
+      this.countActiveCheckoutHolds(
+        userHeldSnap.docs,
+        input,
+        reservationId,
+        timestampMillis(now),
+      ) >= MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND
+    ) {
+      throw new ConflictException(ACTIVE_CHECKOUT_HOLD_LIMIT_MESSAGE);
+    }
 
     const normalizedItems = this.normalizeItems(input.items);
     const itemSnaps = await Promise.all(
@@ -211,6 +240,30 @@ export class OrderCapacityService {
       });
     });
     return reservation;
+  }
+
+  /**
+   * 같은 (가게, 회차, 고객)의 만료 전 HELD 결제 예약 수를 센다. 읽은 결과만 세고 쓰지 않는다.
+   * - 만료 시각이 지난 HELD는 결제 조회 뒤 정리하는 만료 정리 작업이 맡으므로 세지 않는다.
+   * - 결제 확인 뒤 다시 잡는 늦은 결제 예약(`late-payment:`)은 세지 않는다.
+   * - 지금 요청한 결제 시도 ID의 예약은 세지 않는다(같은 ID 재요청은 위에서 그대로 돌려준다).
+   */
+  private countActiveCheckoutHolds(
+    heldDocs: Array<{ id: string; data(): unknown }>,
+    input: { storeId: string; idempotencyKey: string },
+    reservationId: string,
+    nowMillis: number,
+  ): number {
+    return heldDocs.filter((snap) => {
+      const held = snap.data() as Partial<ReservationRecord> | undefined;
+      if (!held || snap.id === reservationId || held.idempotencyKey === input.idempotencyKey) {
+        return false;
+      }
+      if (held.storeId !== input.storeId || held.status !== 'HELD') return false;
+      if (String(held.idempotencyKey ?? '').startsWith('late-payment:')) return false;
+      // moveReservationInTransaction과 같은 기준: 만료 시각 이하이면 만료다.
+      return !(new Date(held.expiresAt ?? '').getTime() <= nowMillis);
+    }).length;
   }
 
   async consumeReservation(input: {

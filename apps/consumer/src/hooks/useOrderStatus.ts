@@ -8,8 +8,16 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 // Firestore REST API 대신 Railway API 폴링 방식으로 대체. 설계 결정: docs/CRITICAL_LOGIC.md [2026-03-27] 참조
 // 폴링은 결제 확인을 기다리는 PENDING 주문만 3초 간격으로 하고 2분이 지나면 멈춘다(IP당 API 요청 한도 보호).
 // 그 밖의 상태는 한 번 읽고 멈추며, 화면의 다시 확인(refetch)이 새로 읽고 2분 창을 다시 연다.
+// 탭이 숨겨져 있으면 다음 확인을 미루고, 다시 보이면 바로 확인한 뒤 같은 2분 창 안에서 이어 간다.
 export const ORDER_STATUS_POLL_INTERVAL_MS = 3000;
 export const ORDER_STATUS_POLL_MAX_MS = 2 * 60 * 1000;
+
+/** 탭이 숨겨져 있으면 주문 상태 폴링을 쉰다(다시 보이면 바로 조회하고 이어 간다). */
+export function isDocumentHidden(
+  doc: { visibilityState?: string } | undefined = globalThis.document,
+): boolean {
+  return doc?.visibilityState === 'hidden';
+}
 
 /**
  * 다음 폴링 여부. lastStatus는 마지막으로 읽은 주문 상태이고 아직 한 번도 못 읽었으면 null이다
@@ -88,10 +96,13 @@ export function useOrderStatus(
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
     let pollStartedAt = Date.now();
     let lastStatus: OrderStatus | null = null;
+    // 숨김 탭이라 다음 확인을 미뤘다. 다시 보이면 바로 확인한다.
+    let pollDeferredWhileHidden = false;
 
     function stopPolling() {
       if (pollTimer) clearTimeout(pollTimer);
       pollTimer = null;
+      pollDeferredWhileHidden = false;
     }
 
     // 최신 응답을 반영한 뒤에만 다음 확인을 예약한다(요청이 겹치지 않는다).
@@ -99,6 +110,10 @@ export function useOrderStatus(
       stopPolling();
       if (cancelled) return;
       if (shouldPollOrderStatus(lastStatus, Date.now() - pollStartedAt)) {
+        if (isDocumentHidden()) {
+          pollDeferredWhileHidden = true;
+          return;
+        }
         pollTimer = setTimeout(() => void fetchOrder(), ORDER_STATUS_POLL_INTERVAL_MS);
         return;
       }
@@ -182,13 +197,28 @@ export function useOrderStatus(
       return fetchOrder();
     }
 
+    // 숨김 탭에서는 예약된 확인을 멈춘다. 다시 보이면 미뤄 둔 확인을 바로 하고 폴링을 이어 간다.
+    // 폴링을 끝낸 주문(PENDING 아님·404·권한 오류·2분 경과)은 다시 보여도 새로 읽지 않는다.
+    function handleVisibilityChange() {
+      if (isDocumentHidden()) {
+        if (!pollTimer) return;
+        stopPolling();
+        pollDeferredWhileHidden = true;
+        return;
+      }
+      if (cancelled || !pollDeferredWhileHidden) return;
+      void fetchOrder();
+    }
+
     fetchOrderRef.current = refetchOrder;
+    globalThis.document?.addEventListener('visibilitychange', handleVisibilityChange);
     void fetchOrder();
     return () => {
       cancelled = true;
       requestSequence += 1;
       activeController?.abort();
       if (fetchOrderRef.current === refetchOrder) fetchOrderRef.current = null;
+      globalThis.document?.removeEventListener('visibilitychange', handleVisibilityChange);
       stopPolling();
     };
   }, [orderId, accessToken]);

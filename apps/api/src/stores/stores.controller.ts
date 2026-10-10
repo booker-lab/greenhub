@@ -1,19 +1,21 @@
 import {
+  Body,
   Controller,
   Get,
-  Post,
-  Patch,
-  Body,
-  Param,
-  UseGuards,
   HttpCode,
   HttpStatus,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
 } from '@nestjs/common';
-import { StoresService } from './stores.service';
-import { UpdateStoreDto } from './dto/update-store.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/types/jwt-payload.type';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { UpdateStoreDto } from './dto/update-store.dto';
+import { STORE_CREATOR_ROLES, StoresService } from './stores.service';
 
 @Controller('stores')
 @UseGuards(JwtAuthGuard)
@@ -25,6 +27,8 @@ export class StoresController {
     return this.storesService.getStore(storeId, user.sub);
   }
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(...STORE_CREATOR_ROLES)
   @HttpCode(HttpStatus.CREATED)
   createStore(@CurrentUser() user: JwtPayload, @Body() dto: UpdateStoreDto) {
     return this.storesService.createStore(user.sub, dto);
