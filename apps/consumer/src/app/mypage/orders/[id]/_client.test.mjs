@@ -859,6 +859,22 @@ test('이전 데이터가 있는 refresh 실패는 stale을 유지하고 재시�
   assert.doesNotMatch(hookSource, /setInterval/);
 });
 
+test('모바일 재배송비 결제 복귀는 서버 결제 확인 전까지 주문을 다시 읽는다', () => {
+  // 주문 상태 자동 확인은 PENDING 주문만 하므로, 보류·준비 중 주문의 재배송비 결제는 화면이 따로 다시 읽는다.
+  assert.match(source, /shouldRecheckRedeliveryPayment\(\s*redeliveryRedirect,\s*redeliveryPaid,/);
+  assert.match(source, /ORDER_STATUS_POLL_MAX_MS/);
+  const recheckAt = source.indexOf('if (!awaitingRedeliveryPaid) return;');
+  assert.ok(recheckAt !== -1, '재확인 효과가 있어야 한다');
+  const recheckBlock = source.slice(recheckAt, recheckAt + 900);
+  // 다시 읽기가 끝난 뒤에만 다음 확인을 예약하고, 화면을 떠나면 멈춘다.
+  assert.match(recheckBlock, /void refetch\(\)\.finally\(scheduleRecheck\)/);
+  assert.match(recheckBlock, /ORDER_STATUS_POLL_INTERVAL_MS/);
+  assert.match(recheckBlock, /stopped = true/);
+  assert.match(recheckBlock, /clearTimeout\(timer\)/);
+  // 결제 명령을 자동으로 다시 보내지 않는다.
+  assert.doesNotMatch(recheckBlock, /handleRedeliveryPayment/);
+});
+
 test('취소 사유는 내부 코드 대신 고객이 읽을 문장으로 보인다', () => {
   assert.match(source, /import \{ formatCancelReason \} from '@\/lib\/order-cancel-reason'/);
   assert.match(source, /const cancelReasonText = formatCancelReason\(detail\.cancelReason\)/);
