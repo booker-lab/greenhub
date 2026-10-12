@@ -101,16 +101,18 @@ export class NotificationsService {
   ) {}
 
   async getUserNotifications(userId: string) {
+    // 최신 50건만 서버에서 읽는다(복합 인덱스 notifications: userId ASC, createdAt DESC 필요).
+    // 알림 기록은 logNotification만 쓰고 항상 createdAt(Timestamp)을 넣는다.
     const snap = await this.firestore
       .collection('notifications')
       .where('userId', '==', userId)
+      .orderBy('createdAt', 'desc')
+      .limit(50)
       .get();
 
-    const items = snap.docs
-      .map((d) => d.data())
-      .sort((a, b) => (b['createdAt']?.seconds ?? 0) - (a['createdAt']?.seconds ?? 0))
-      .slice(0, 50);
+    const items = snap.docs.map((d) => d.data());
 
+    // total은 기존과 같이 반환한 건수(최대 50)다. 전체 알림 수가 아니다.
     return { items, total: items.length };
   }
 
