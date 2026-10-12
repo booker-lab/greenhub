@@ -380,6 +380,16 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 - [ ] 롤백 명령과 승인자 확인
 - [ ] 비밀정보 없는 증거 묶음 확인
 
+### Firebase 규칙·Storage CORS 반영 (#402 이후)
+
+규칙은 앱 배포 뒤에 낸다(#402 규칙은 운영 중인 옛 프런트의 직접 조회를 막지 않지만 순서를 지킨다). 모두 운영 Firebase 권한이 있는 사람이 별도 승인으로 실행한다.
+
+0. 배포 전 데이터 점검(읽기 전용): `node scripts/release/pre-deploy-check.mjs`(운영 서비스 계정 필요). 취소 진행 중 주문, 범위 밖 재배송비, 판매자가 아닌 매장 소유자, 매장 2개 이상 소유 계정, 판매자 storeId·ownerId 불일치, 자사 bucket 밖 상품 이미지를 문서 ID와 건수로 낸다. 하나라도 걸리면(exit 1) 배포 전에 정리한다.
+1. 상품 이미지 업로드 조건 확인: 운영 판매자 계정의 `stores/{storeId}.ownerId`가 그 판매자 uid와 같은지 콘솔에서 본다(#402부터 `storage.rules`가 요구).
+2. 규칙 배포: `firebase deploy --only firestore:rules,storage --project <운영 프로젝트>` 뒤 콘솔에서 ruleset이 저장소 파일과 같은지 재조회한다.
+3. CORS(선택, `firebase deploy`로 반영되지 않음): 적용 전 `gsutil cors get gs://<운영 버킷>`으로 현재 값을 남기고, `gsutil cors set cors.json gs://<운영 버킷>`으로 GET·HEAD만 허용한다. 버킷 이름은 운영 `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` 값으로 확인한다.
+4. 적용 직후 판매자 상품 이미지 업로드와 기사 배송 사진 업로드·표시를 한 번씩 확인한다. 업로드가 CORS로 막히면 3에서 남긴 값으로 즉시 되돌린다(이전 저장소 값: `git show 0bcceaea:cors.json`).
+
 ### 출시 후 첫 두 회차
 
 - [ ] 매일 `OPEN` 운영 예외 점검
@@ -401,5 +411,6 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-12 | #402 이후 Firebase 규칙 배포 순서와 `cors.json` 버킷 적용·확인·되돌리기 절차 추가 |
 | 2026-09-02 | 회차 edit/open/reservation race와 취소 recovery, 보관 failure routing의 현재 미해결 범위를 `docs/BACKLOG.md`와 정합화 |
 | 2026-08-23 | 과거 `Task 6.7` 출시 전제 표현을 현재 `memory`/HANDOFF/launch PLAN 게이트와 실제 출시 SHA 원격 E2E 기준으로 정합화 |

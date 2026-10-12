@@ -27,6 +27,8 @@ type OperationIssue = Record<string, unknown> & {
   id: string;
   orderId?: string | null;
   paymentId?: string | null;
+  // 재배송비 환불 기록은 본 결제가 아니라 orderCharges 문서를 가리킨다.
+  chargeId?: string | null;
   status: string;
   actions?: OperationAction[];
 };
@@ -130,7 +132,7 @@ export class OperationsService {
   ): Promise<Record<string, unknown>> {
     const issue = await this.readAuthorizedIssue(storeId, issueId, requesterId, role);
     const order = await this.readRelatedDocument('orders', issue.orderId);
-    const payment = await this.readRelatedDocument('payments', issue.paymentId);
+    const payment = await this.readRefundTarget(issue);
     return {
       ...this.toSafeResponse(issue),
       currentState: {
@@ -170,7 +172,7 @@ export class OperationsService {
     if (issue.status !== 'OPEN') return issue;
 
     if (input.actionType === 'RETRY_REFUND') {
-      const payment = await this.readRelatedDocument('payments', issue.paymentId);
+      const payment = await this.readRefundTarget(issue);
       if (!this.refundTargetFailure(issue, payment) && this.isRefunded(payment)) {
         return this.recordSuccess(issueRef, issue, input, true);
       }
@@ -209,8 +211,12 @@ export class OperationsService {
     // 기록이 가리키는 결제가 이 주문의 결제가 아니면 주문 결제를 환불하지 않는다.
     const targetFailure = this.refundTargetFailure(issue, payment);
     if (targetFailure) return targetFailure;
-    await this.payments.processRefundByOrderId(String(issue.orderId), REFUND_RETRY_REASON);
-    const fresh = await this.readRelatedDocument('payments', issue.paymentId);
+    if (this.isChargeIssue(issue)) {
+      await this.payments.refundOrderChargesByOrderId(String(issue.orderId), REFUND_RETRY_REASON);
+    } else {
+      await this.payments.processRefundByOrderId(String(issue.orderId), REFUND_RETRY_REASON);
+    }
+    const fresh = await this.readRefundTarget(issue);
     const freshTargetFailure = this.refundTargetFailure(issue, fresh);
     if (freshTargetFailure) return freshTargetFailure;
     if (this.isRefunded(fresh)) return { resolved: true };
@@ -483,6 +489,17 @@ export class OperationsService {
 
   private safeStatus(value: unknown) {
     return typeof value === 'string' ? value.slice(0, 80) : null;
+  }
+
+  private isChargeIssue(issue: OperationIssue) {
+    return typeof issue.chargeId === 'string' && issue.chargeId.length > 0;
+  }
+
+  /** 기록이 가리키는 환불 대상: 재배송비 기록이면 orderCharges, 아니면 payments 문서. */
+  private readRefundTarget(issue: OperationIssue) {
+    return this.isChargeIssue(issue)
+      ? this.readRelatedDocument('orderCharges', issue.chargeId)
+      : this.readRelatedDocument('payments', issue.paymentId);
   }
 
   private isRefunded(payment: Record<string, unknown> | null) {
