@@ -705,7 +705,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이다. **2026-10-09 결정: 켠다.** PITR과 일일 관리형 백업을 GCP 콘솔에서 사용자가 켠다(이 저장소 작업 환경에는 GCP 권한이 없다). 켠 뒤 비운영 프로젝트 복구 연습을 한 번 한다.
 
 ### ROUND-HOLD-ABUSE-LIMITS
-- [ ] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. 주문당 상품별 수량 상한(병행 PR #422), 쓰이지 않는 공개 회원가입 API 차단(**미완료** — #431은 register를 바꾸지 않았고 `POST /auth/register`는 공개·10회/분 그대로다, 2026-10-10 확인), 같은 회차의 고객별 활성 결제 예약 상한(#427). 예약 상한은 `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`(재결제 때 이전 예약 유지)를 그대로 두고 최대 3건으로 정해 #427을 고치는 중이다.
+- [ ] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. 주문당 상품별 수량 상한(병행 PR #422), 쓰이지 않는 공개 회원가입 API 차단(**미완료** — #431은 register를 바꾸지 않았고 `POST /auth/register`는 공개·10회/분 그대로다, 2026-10-10 확인. 열린 PR #474(보안 세션)가 운영에서 판매자 초대 가입 외 register를 403으로 막는다), 같은 회차의 고객별 활성 결제 예약 상한(#427). 예약 상한은 `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`(재결제 때 이전 예약 유지)를 그대로 두고 최대 3건으로 정해 #427을 고치는 중이다.
 
 ### OPERATION-ISSUE-MANUAL-RESOLVE
 - [ ] 환불 재시도·문자 재발송 외의 운영 기록은 닫을 방법이 없어 홈 경고와 아침 텔레그램 요약에 계속 남는다. **2026-10-10 결정**: 판매자·관리자가 메모를 남기고 닫는다. 운영 기록 API를 고치는 병행 PR #436 병합 뒤 구현한다.
@@ -717,16 +717,16 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 병행 PR #448이 연결 결제가 PAID면 건너뛰게 고치고, 판매자 확인 창 문구·런북도 함께 맞춘다. 2026-10-10 발견.
 
 ### AUTH-MULTI-DEVICE-SESSION
-- [ ] **DECISION REQUIRED** (2026-10-10 재대조 발견): `refreshTokens/{sub}`가 사용자당 문서 1개다. 같은 계정으로 두 번째 기기에서 로그인하면 문서를 덮어써(`apps/api/src/auth/auth.service.ts` `issueTokens`) 첫 기기의 다음 refresh(최대 약 55분 뒤)가 재사용으로 판정된다. 그러면 문서 삭제·Firebase 세션 폐기·`auth.token.stolen` 기록으로 두 기기 모두 끊기고 거짓 탈취 기록이 남는다. 한 기기 로그아웃도 모든 기기를 끊는다. 판매자가 휴대폰과 PC를 함께 쓰면 파일럿에서 겪을 수 있다. 사용자당 단일 세션을 계약으로 확정할지, 기기별 refresh 문서로 바꿀지 정한다.
+- [ ] **DECISION REQUIRED** (2026-10-10 재대조 발견): `refreshTokens/{sub}`가 사용자당 문서 1개다. 같은 계정으로 두 번째 기기에서 로그인하면 문서를 덮어써(`apps/api/src/auth/auth.service.ts` `issueTokens`) 첫 기기의 다음 refresh(최대 약 55분 뒤)가 재사용으로 판정된다. 그러면 문서 삭제·Firebase 세션 폐기·`auth.token.stolen` 기록으로 두 기기 모두 끊기고 거짓 탈취 기록이 남는다. 한 기기 로그아웃도 모든 기기를 끊는다. 판매자가 휴대폰과 PC를 함께 쓰면 파일럿에서 겪을 수 있다. 사용자당 단일 세션을 계약으로 확정할지, 기기별 refresh 문서로 바꿀지 정한다. 열린 PR #474(보안 세션)가 refresh 토큰 해시 저장·로그아웃/정지 폐기를 바꾸므로 결정은 #474 병합 뒤 그 구조 위에서 한다.
 
 ### CHARGE-REFUND-ISSUE-ROUTING
 - [x] **2026-10-10 수정(운영 미배포)**: 기록을 charge의 `storeId`·`paymentId: null`·`chargeId`로 남기고, `RETRY_REFUND`가 `chargeId` 기록이면 `orderCharges` 문서를 대상으로 재배송비 환불을 다시 부른 뒤 `REFUNDED`일 때만 해결한다. 직접 회귀: `order-charge-refund-provider-ambiguity.spec.ts` C8, `operations.service.spec.ts` "재배송비 환불 기록은 orderCharges를 대상으로 재시도한다". 남은 일: 수정 전에 빈 `storeId`로 생긴 운영 기록이 있는지 운영 데이터 확인(사용자 승인 필요, 파일럿 전이라 없을 가능성이 크다). 이전 기록 — **IMPLEMENTATION FINDING** (2026-10-10 재대조 발견, 돈이 잘못 빠지는 문제는 아니고 운영 복구 문제): 재배송비 환불 결과가 불명확하면(PortOne 504 등) `AUTO_REFUND_FAILED`를 `storeId: ''`, `paymentId: chargeId`로 남긴다(`apps/api/src/payments/order-charge-payment.service.ts` `persistUncertainRefund`). 판매자 운영 화면은 매장 범위로만 보여 이 기록이 안 보이고, `RETRY_REFUND`는 `payments/<chargeId>`를 읽어 늘 `PAYMENT_NOT_FOUND`(409)로 끝난다. 남은 신호는 텔레그램 알림·아침 요약의 critical 건수뿐이다. 완료 조건: 주문의 실제 `storeId`로 기록하고, 재배송비 환불 재시도가 `orderCharges`를 대상으로 동작하며, 직접 회귀 테스트가 있다.
 
 ### PORTONE-CHANNEL-CHECK
-- [ ] 결제 확정은 PortOne 결제의 상태와 금액만 확인한다. 상점·통화·채널 확인 PR #426은 아직 병합되지 않았다(2026-10-10 기준 열림). 소비자 앱은 `channelKey`를 공개 환경 변수에서 넘기므로, 운영 PortOne 상점에 TEST 채널이 함께 있으면 테스트 결제로 금액만 맞춘 `PAID`가 실제 주문을 확정할 수 있다. 파일럿 전에 PortOne 콘솔에서 운영 상점의 TEST 채널 유무를 확인하고(사용자), #426 병합 여부를 정한다.
+- [ ] 결제 확정은 PortOne 결제의 상태와 금액만 확인한다. 상점·통화·채널 확인 PR #426은 아직 병합되지 않았다(2026-10-10 기준 열림). 소비자 앱은 `channelKey`를 공개 환경 변수에서 넘기므로, 운영 PortOne 상점에 TEST 채널이 함께 있으면 테스트 결제로 금액만 맞춘 `PAID`가 실제 주문을 확정할 수 있다. 파일럿 전에 PortOne 콘솔에서 운영 상점의 TEST 채널 유무를 확인하고(사용자), #426 병합 여부를 정한다. #426(보안 세션)이 이 항목을 소유한다. 병합 전 조건: 운영 결제 채널 키가 LIVE, API `PORTONE_STORE_ID`와 consumer `NEXT_PUBLIC_PORTONE_STORE_ID` 일치, `RAILWAY_ENVIRONMENT_NAME=production`(아니면 결제가 자동 환불·취소된다).
 
 ### RATE-LIMIT-CLIENT-IP
-- [ ] 인증 요청 한도(10회/분·120회/분)는 직접 테스트가 없고, API에 `trust proxy`·클라이언트 IP 추적 설정이 없다. Railway 앞단 프록시 주소가 `req.ip`로 잡히면 한도가 모든 손님에게 공유될 수 있다. 집계 기준을 고치는 PR #404가 열려 있다. 운영 `req.ip` 값을 확인하고 #404를 마무리한다.
+- [ ] 인증 요청 한도(10회/분·120회/분)는 직접 테스트가 없고, API에 `trust proxy`·클라이언트 IP 추적 설정이 없다. Railway 앞단 프록시 주소가 `req.ip`로 잡히면 한도가 모든 손님에게 공유될 수 있다. 집계 기준을 고치는 PR #404(보안 세션)가 이 항목을 소유한다. #404는 `JWT_SECRET`·`JWT_REFRESH_SECRET`이 같으면 API가 기동하지 않고 `TRUST_PROXY_HOPS=1` 명시를 권장하므로, 병합 전 운영 Railway 값 확인(사용자)이 필요하다.
 
 ### STORAGE-CORS-APPLY
 - [ ] #402가 `cors.json`의 허용 메서드를 GET·HEAD로 줄였지만 `firebase deploy`로 반영되지 않고 버킷에 따로 적용해야 한다. 적용 절차 문서와 확인 테스트가 없다. Firebase SDK 업로드는 다른 엔드포인트를 쓰므로 영향이 없을 가능성이 크지만 확인이 필요하다. 적용 여부와 절차를 정해 런북에 적는다. **2026-10-12**: 절차는 `docs/specs/ops/mvp-sales-round-runbook.md` §10에 적었다(적용 전 현재 값 보관 → 적용 → 업로드 확인 → 막히면 되돌리기). 남은 일: 운영 버킷에 적용할지 결정하고 실행(사용자, GCP 권한 필요).
