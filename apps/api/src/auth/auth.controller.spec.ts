@@ -1,14 +1,17 @@
 import { type ExecutionContext, INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import * as bcrypt from 'bcrypt';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AuditService } from '../common/audit/audit.service';
 import { FirestoreService } from '../firestore/firestore.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { AuthController } from './auth.controller';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { AuthController, FIREBASE_TOKEN_THROTTLE } from './auth.controller';
 import { AuthService } from './auth.service';
 import {
   ADDRESS_DETAIL_MAX_LENGTH,
@@ -17,6 +20,7 @@ import {
   ADDRESS_ZIP_CODE_MAX_LENGTH,
 } from './dto/address.dto';
 import { FCM_TOKEN_MAX_LENGTH } from './dto/fcm-token.dto';
+import { REFRESH_TOKEN_MAX_LENGTH } from './dto/refresh-token.dto';
 import { KakaoClient } from './kakao.client';
 
 type UserRecord = Record<string, unknown>;
@@ -117,9 +121,8 @@ function makeAuthHarness() {
   };
 
   const jwt = {
-    sign: jest.fn(
-      (_payload: Record<string, unknown>, options: { secret?: string }) =>
-        options.secret === 'access-secret' ? 'access-token' : 'refresh-token',
+    sign: jest.fn((_payload: Record<string, unknown>, options: { secret?: string }) =>
+      options.secret === 'access-secret' ? 'access-token' : 'refresh-token',
     ),
     verify: jest.fn(),
   };
@@ -185,10 +188,7 @@ describe('AuthController public driver approval boundary', () => {
       expect.objectContaining({ role: 'driver', driverApproved: false }),
     );
 
-    await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email, password })
-      .expect(403);
+    await request(app.getHttpServer()).post('/auth/login').send({ email, password }).expect(403);
 
     expect(harness.jwt.sign).not.toHaveBeenCalled();
     expect(harness.refreshTokenWrites).toHaveLength(0);
@@ -392,5 +392,107 @@ describe('AuthController 입력 검증(fcm-token·배송지)', () => {
     await request(app.getHttpServer()).patch('/auth/me/addresses/addr-1').send(body).expect(400);
     expect(authService.addAddress).not.toHaveBeenCalled();
     expect(authService.updateAddress).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthController POST /auth/refresh 입력 검증', () => {
+  let app: INestApplication<App>;
+  const tokens = { accessToken: 'next-access', refreshToken: 'next-refresh' };
+  const authService = { refresh: jest.fn().mockResolvedValue(tokens) };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [{ provide: AuthService, useValue: authService }],
+    }).compile();
+    app = module.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+    await app.init();
+  });
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it.each([
+    ['일반 토큰', 'header.payload.signature'],
+    [`${REFRESH_TOKEN_MAX_LENGTH}자`, 'a'.repeat(REFRESH_TOKEN_MAX_LENGTH)],
+  ])('%s는 service로 넘기고 응답을 그대로 돌려준다', async (_label, refreshToken) => {
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(tokens);
+      });
+    expect(authService.refresh).toHaveBeenCalledWith(refreshToken);
+  });
+
+  it.each([
+    ['누락', {}],
+    ['빈 문자열', { refreshToken: '' }],
+    ['숫자', { refreshToken: 123 }],
+    ['배열', { refreshToken: ['a', 'b'] }],
+    ['객체', { refreshToken: { nested: 'x' } }],
+    ['길이 초과', { refreshToken: 'a'.repeat(REFRESH_TOKEN_MAX_LENGTH + 1) }],
+    ['알 수 없는 필드', { refreshToken: 'token', extra: 'x' }],
+  ])('%s는 400이고 service를 부르지 않는다', async (_label, body) => {
+    await request(app.getHttpServer()).post('/auth/refresh').send(body).expect(400);
+    expect(authService.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthController GET /auth/firebase-token 요청 한도', () => {
+  let app: INestApplication<App>;
+  const getFirebaseToken = jest.fn().mockResolvedValue('custom-token');
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    // app.module과 같은 단일 'default' throttler(100/분)를 전역 가드로 건다.
+    const module = await Test.createTestingModule({
+      imports: [
+        ThrottlerModule.forRoot({ throttlers: [{ name: 'default', ttl: 60000, limit: 100 }] }),
+      ],
+      controllers: [AuthController],
+      providers: [
+        { provide: AuthService, useValue: { getFirebaseToken } },
+        { provide: APP_GUARD, useClass: ThrottlerGuard },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({
+        canActivate: (ctx: ExecutionContext) => {
+          ctx.switchToHttp().getRequest().user = { sub: 'seller-1', role: 'seller' };
+          return true;
+        },
+      })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+    app = module.createNestApplication();
+    await app.init();
+  });
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it('한도 안에서는 커스텀 토큰을 돌려주고, 한도를 넘으면 429를 돌려준다', async () => {
+    const { limit } = FIREBASE_TOKEN_THROTTLE.default;
+    for (let i = 0; i < limit; i += 1) {
+      await request(app.getHttpServer())
+        .get('/auth/firebase-token')
+        .expect(200)
+        .expect(({ text }) => {
+          expect(text).toBe('custom-token');
+        });
+    }
+    await request(app.getHttpServer()).get('/auth/firebase-token').expect(429);
+    expect(getFirebaseToken).toHaveBeenCalledTimes(limit);
+  });
+
+  it('한도는 한 사무실 IP 뒤 직원 여럿이 쓸 수 있는 분당 60회다', () => {
+    expect(FIREBASE_TOKEN_THROTTLE).toEqual({ default: { limit: 60, ttl: 60000 } });
   });
 });

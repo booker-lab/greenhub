@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@ne
 import { VarietiesService } from './varieties.service';
 import { CreateVarietyDto } from './dto/create-variety.dto';
 import { UpdateVarietyDto } from './dto/update-variety.dto';
+import { VarietyQueryDto } from './dto/variety-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -12,8 +13,8 @@ export class VarietiesController {
 
   // 셀러 품종 선택 드롭다운 — 인증 불필요
   @Get()
-  findAll(@Query('category') category?: string) {
-    return this.varietiesService.findAll(category);
+  findAll(@Query() query: VarietyQueryDto) {
+    return this.varietiesService.findAll(query.category);
   }
 
   // 가드레일 단건 조회 — AI 충돌 검증에서도 사용
