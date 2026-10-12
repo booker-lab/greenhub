@@ -36,6 +36,7 @@ function createFirestoreMock() {
     doc: (db, col, id) => ({ __kind: 'doc', col, id }),
     query: (colRef, ...conds) => ({ __kind: 'query', colRef, conds }),
     where: (field, op, value) => ({ field, op, value }),
+    limit: (count) => ({ limit: count }),
     onSnapshot: (target, onNext, onError) => {
       const sub = { target, onNext, onError, unsubscribed: false };
       subscriptions.push(sub);
@@ -204,6 +205,7 @@ function loadPureHelpers() {
         onSnapshot: () => () => {},
         query: () => ({}),
         where: () => ({}),
+        limit: () => ({}),
       };
     }
     if (specifier === '@/lib/firebase') return { db: {} };
@@ -220,6 +222,37 @@ function loadPureHelpers() {
 
 const { buildDeliverySlotsMap, isDeliveryDateSelectable, computeRemainingSlots } =
   loadPureHelpers();
+
+test('배송일 범위 쿼리는 storeId·날짜 범위 조건과 규칙 상한(62) limit을 함께 보낸다', async () => {
+  const h = mountDeliverySlots();
+  await h.settle();
+  assert.equal(h.subscriptions.length, 1);
+
+  const target = h.subscriptions[0].target;
+  assert.equal(target.__kind, 'query');
+  assert.equal(target.colRef.name, 'dailyCaps');
+  assert.deepEqual(target.conds, [
+    { field: 'storeId', op: '==', value: 'store-1' },
+    { field: 'date', op: '>=', value: '2026-09-01' },
+    { field: 'date', op: '<=', value: '2026-10-31' },
+    { limit: 62 },
+  ]);
+});
+
+test('배송일 picker 조회 범위(당월 1일~익월 말일)는 쿼리 limit 62일 이내다', () => {
+  assert.match(pickerSource, /const from = toDateStr\(todayYear, todayMonth - 1, 1\);/);
+  assert.match(pickerSource, /new Date\(Date\.UTC\(todayYear, todayMonth \+ 1, 0\)\)/);
+  assert.match(source, /export const DELIVERY_SLOTS_QUERY_LIMIT = 62;/);
+  // 연속한 두 달의 최대 일수 합(7·8월, 12·1월)이 62일이다.
+  let maxDays = 0;
+  for (let month = 0; month < 12; month += 1) {
+    const year = 2028; // 윤년 포함 확인
+    const first = Date.UTC(year, month, 1);
+    const last = Date.UTC(year, month + 2, 0);
+    maxDays = Math.max(maxDays, (last - first) / 86_400_000 + 1);
+  }
+  assert.equal(maxDays, 62);
+});
 
 test('initial successful slots는 map을 적재하고 error/stale을 비운다', async () => {
   const h = mountDeliverySlots();

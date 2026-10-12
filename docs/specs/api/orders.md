@@ -169,8 +169,9 @@ PATCH /stores/:storeId/orders/:orderId/hub-confirm
   않는다.
 - driver는 기존 CLOSED `SEC-02` API 경계와 배송 업무 projection을 사용한다. 이 문서는 driver
   authorization을 재설계하지 않는다.
-- Firestore Rules의 legacy direct-read 잔여 계약이 별도로 남아 있다면 현재 API projection의
-  근거로 사용하지 않으며, 법률 문구가 원문 전체 접근을 정당화하지 않는다.
+- Firestore Rules는 #402부터 `orders` 원문 직접 읽기·쓰기를 판매자·관리자·기사를 포함한 모든
+  클라이언트에 거부하며(`tests/firestore/firestore-rules.test.mjs`), 주문 조회는 API 응답 투영만
+  사용한다. 법률 문구가 원문 전체 접근을 정당화하지 않는다.
 
 ### 상태 변경 authorization — `IMPLEMENTED / PROVEN`
 
