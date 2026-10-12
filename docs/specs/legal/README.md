@@ -96,7 +96,7 @@ provider 승인, 실제 결제·환불·알림 발송을 승인했다는 뜻이 
 | 결제 화면 자동 채움(#418, 미배포) | `VERIFIED` — 기존 "회원 프로필·주소록" 목적 범위 | 본인 기본 배송지·전화로 빈 칸만 채운다(`apps/consumer/src/lib/checkout-prefill.ts`, 같은 이름 test) |
 | 고객이 요청하지 않은 환불의 취소 알림톡(#420, 미배포) | `VERIFIED` — 기존 8종 `ORDER_CANCELLED`·템플릿 변수 범위 | `apps/api/src/notifications/refund-notice-reasons.ts`; 사유 문구 확정은 BACKLOG `SILENT-REFUND-CUSTOMER-NOTICE` |
 | ALIGO 고정 IP 프록시(Fixie, 운영 중) | 개인정보 처리위탁 고지 대상 아님 | ALIGO 호출은 HTTPS(`kakaoapi.aligo.in`, `apis.aligo.in`)를 undici `ProxyAgent` 터널로 보내 프록시는 목적지 호스트·접속 정보만 본다(`apps/api/src/notifications/aligo.client.ts`) |
-| 운영자 텔레그램 알림(#421, 미배포) | `IMPLEMENTED / UNVERIFIED` — 고객 정보 없음 | 운영 기록 알림은 고정 제목·문구·유형, 아침 요약은 건수·금액만 보낸다(`apps/api/src/ops-alerts/`, `operation-issue-writer.service.ts`). 고객 정보가 실리지 않음을 고정하는 직접 테스트는 없다 |
+| 운영자 텔레그램 알림(#421, 미배포) | `VERIFIED` — 고객 정보 없음 | 운영 기록 알림은 고정 제목·문구·유형, 아침 요약은 건수·금액만 보낸다(`apps/api/src/ops-alerts/`, `operation-issue-writer.service.ts`). 고객 정보가 실리지 않음은 `ops-alert.spec.ts`가 고정한다(2026-10-12) |
 | 기사 카카오맵 길찾기(#418, 미배포) | `DECISION REQUIRED` → 고지하기로 결정, 2026-11-01 개정판 `/privacy` 4절에 반영 | 기사가 누르면 배송지 기본주소(이름·동·호수 제외) 또는 거점 좌표가 `map.kakao.com` 링크로 Kakao에 전달된다(`apps/driver/src/app/map/_lib/map-navigation-link.ts`). `/privacy` 4절은 Kakao를 로그인·우편번호 검색으로만 적는다 |
 | 늦은 결제 자동 환불(2026-07부터 존재) | `COVERAGE GAP` → 2026-11-01 개정판 `/terms` 제7조에 반영 | 결제가 확인됐지만 예약 만료 뒤 회차 한도가 마감되면 주문을 받지 않고 자동 환불한다(`apps/api/src/payments/payment-finalization.service.ts`). `/terms` 제7조·제8조에는 이 경우가 없다 |
 | 개인정보 보호책임자 | `IMPLEMENTATION FINDING` → 2026-11-01 개정판 `/privacy` 9절에 대표자로 반영(사용자 결정) | `/privacy`에 보호책임자(성명 또는 담당 부서와 연락처) 항목이 없고 고객센터 연락처만 있다. 처리방침 필수 기재 사항이다 |
