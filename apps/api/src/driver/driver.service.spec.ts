@@ -59,6 +59,7 @@ function makeService(
   return {
     service: new DriverService(firestore as never, ordersQuery, driverScope),
     query,
+    firestore,
   };
 }
 
@@ -678,6 +679,51 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
       'legacy-direct',
       'legacy-hub',
     ]);
+  });
+
+  it('목록 한 번의 요청에서 같은 stores·saleRounds 문서는 주문 수와 관계없이 한 번만 읽는다', async () => {
+    const records: Record<string, Data> = {
+      'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+      'stores/legacy': { id: 'legacy', salesMode: 'legacy' },
+      'saleRounds/round-valid': { id: 'round-valid', storeId: 'pilot' },
+    };
+    for (let i = 0; i < 4; i += 1) {
+      records[`orders/pilot-${i}`] = {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-valid',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+        updatedAt: `2026-01-01T00:0${i}:00.000Z`,
+      };
+      records[`orders/legacy-${i}`] = {
+        storeId: 'legacy',
+        deliveryMethod: 'hub',
+        status: 'PREPARING',
+        driverId: null,
+        updatedAt: `2026-01-01T01:0${i}:00.000Z`,
+      };
+    }
+    const { service, firestore } = makeService(records);
+
+    const result = await service.getOrders('driver-1');
+
+    expect(result.map((order) => order.id)).toEqual([
+      'pilot-0',
+      'pilot-1',
+      'pilot-2',
+      'pilot-3',
+      'legacy-0',
+      'legacy-1',
+      'legacy-2',
+      'legacy-3',
+    ]);
+    const readCount = (path: string) =>
+      firestore.doc.mock.calls.filter(([called]) => called === path).length;
+    expect(readCount('stores/pilot')).toBe(1);
+    expect(readCount('stores/legacy')).toBe(1);
+    expect(readCount('saleRounds/round-valid')).toBe(1);
   });
 
   it.each([
