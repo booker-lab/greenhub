@@ -209,12 +209,15 @@ jobs:
       # PR·push 변경 범위에서 탐지된 값은 검증 여부와 관계없이 실패로 본다(검증 수단이 없는 형식 포함).
       # 로그에는 파일·줄·탐지 종류만 남고 값은 남지 않는다. 테스트·문서의 자리표시 값은 그 줄에
       # `trufflehog:ignore` 주석을 달고, 줄을 고칠 수 없을 때만 제외 경로 파일에 추가한다.
+      # `.trufflehog.yml`은 기본 탐지기에 없는 이 프로젝트의 자격 증명 형식(PortOne, ALIGO, Kakao,
+      # Vercel 우회 secret, 서비스 계정 키, 프록시 URL)을 더한다. 검증 수단이 없어 결과는 unverified다.
+      # 전체 이력은 `secret-scan-scheduled.yml`이 매주 검사한다.
       - name: Secret scan (changed range)
         if: github.event_name != 'workflow_dispatch'
         uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
         with:
           version: 3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
-          extra_args: --results=verified,unverified,unknown --exclude-paths=.github/trufflehog-exclude-paths.txt
+          extra_args: --results=verified,unverified,unknown --config=.trufflehog.yml --exclude-paths=.github/trufflehog-exclude-paths.txt
       # 수동 실행은 범위 없이 전체 이력을 검사하므로 지금처럼 검증된 값만 실패로 본다.
       - name: Secret scan (manual run, full history, verified only)
         if: github.event_name == 'workflow_dispatch'
