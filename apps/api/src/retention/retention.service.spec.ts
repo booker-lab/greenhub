@@ -58,10 +58,28 @@ function makeService(initial: Record<string, Data> = {}) {
 
   const doc = (path: string) => ({
     path,
+    get: async () => ({ exists: records.has(path), data: () => records.get(path) }),
     set: jest.fn(async (data: Data) => {
       writes.push({ path, data });
       records.set(path, data);
     }),
+  });
+  // 정기 파기 회차 lease용 최소 트랜잭션. 같은 프로세스 안에서 차례로 실행한다.
+  let transactionQueue: Promise<unknown> = Promise.resolve();
+  const runTransaction = jest.fn(<T>(callback: (transaction: Data) => Promise<T>): Promise<T> => {
+    const transaction = {
+      get: async (ref: { path: string }) => ({
+        exists: records.has(ref.path),
+        data: () => records.get(ref.path),
+      }),
+      set: (ref: { path: string }, data: Data, options?: { merge?: boolean }) => {
+        const current = records.get(ref.path);
+        records.set(ref.path, options?.merge && current ? { ...current, ...data } : { ...data });
+      },
+    };
+    const run = transactionQueue.then(() => callback(transaction));
+    transactionQueue = run.catch(() => undefined);
+    return run;
   });
   const collection = (name: string) => {
     const filters: Array<[string, string, unknown]> = [];
@@ -117,6 +135,7 @@ function makeService(initial: Record<string, Data> = {}) {
   const firestore = {
     doc,
     collection,
+    runTransaction,
     batch: jest.fn(createBatch),
     Timestamp: {
       now: jest.fn(() => timestamp('2026-07-17T01:00:00.000Z')),
@@ -394,6 +413,71 @@ describe('보관 기간과 파기 계약', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('정기 파기는 회차 lease를 잡은 실행 하나만 돌고 같은 날 다시 돌지 않는다', async () => {
+    jest.useFakeTimers({ now, doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+    const { commits, records, service } = makeService({
+      'legalOrderRecords/order-expired': {
+        expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+      },
+    });
+
+    try {
+      const results = await Promise.all([service.runScheduledPurge(), service.runScheduledPurge()]);
+
+      expect(results.filter((result) => result['skipped'] === true)).toEqual([
+        { skipped: true, reason: 'HELD' },
+      ]);
+      expect(results.find((result) => result['skipped'] !== true)).toMatchObject({
+        deletedCount: 1,
+      });
+      expect(commits).toHaveLength(1);
+      expect(records.get('jobLeases/retention-scheduled-purge')).toMatchObject({
+        holderId: null,
+        lastCompletedSlot: '2026-07-17',
+      });
+
+      await expect(service.runScheduledPurge()).resolves.toEqual({
+        skipped: true,
+        reason: 'ALREADY_DONE',
+      });
+      expect(commits).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('정기 파기가 실패하면 기존처럼 오류를 올리고 회차를 완료로 남기지 않는다', async () => {
+    jest.useFakeTimers({ now, doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+    const { records, service } = makeService();
+    const purge = jest
+      .spyOn(service, 'purgeExpiredRecords')
+      .mockRejectedValueOnce(new Error('purge failed'));
+
+    try {
+      await expect(service.runScheduledPurge()).rejects.toThrow('purge failed');
+      const lease = records.get('jobLeases/retention-scheduled-purge');
+      expect(lease).toMatchObject({ holderId: null, expiresAt: null });
+      expect(lease?.['lastCompletedSlot']).toBeUndefined();
+
+      await expect(service.runScheduledPurge()).resolves.toMatchObject({ deletedCount: 0 });
+      expect(purge).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('회차 lease 저장소를 읽지 못하면 throw하지 않고 파기를 건너뛴다', async () => {
+    const { firestore, service } = makeService();
+    firestore.runTransaction.mockRejectedValueOnce(new Error('UNAVAILABLE'));
+    const purge = jest.spyOn(service, 'purgeExpiredRecords');
+
+    await expect(service.runScheduledPurge()).resolves.toEqual({
+      skipped: true,
+      reason: 'UNAVAILABLE',
+    });
+    expect(purge).not.toHaveBeenCalled();
   });
 
   it('Storage 삭제 최종 실패는 안전한 운영 예외로 남기고 보관 문서는 유지한다', async () => {

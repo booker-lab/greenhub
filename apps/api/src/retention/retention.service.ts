@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { acquireJobLease, completeJobLease, seoulDailySlotKey } from '../common/job-lease';
 import { FirestoreService } from '../firestore/firestore.service';
 import { StorageService } from '../firestore/storage.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
@@ -52,6 +53,8 @@ interface StorageDeleteFailureCause {
 }
 
 const RETENTION_BATCH_SIZE = 450;
+const RETENTION_PURGE_JOB_NAME = 'retention-scheduled-purge';
+const RETENTION_PURGE_LEASE_TTL_MS = 2 * 60 * 60 * 1000;
 const STORAGE_DELETE_ATTEMPTS = 3;
 const SAFE_RECORD_ID_PATTERN = /^[A-Za-z0-9:_-]{1,160}$/;
 const SAFE_ERROR_TOKEN_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -332,17 +335,38 @@ export class RetentionService {
     });
   }
 
+  // 인스턴스가 여럿 떠 있어도(배포 겹침·복제본) 하루 한 번만 돌도록 회차 lease를 잡는다.
+  // lease를 잡지 못하면(이미 끝남·다른 실행 중·저장소 장애) 로그만 남기고 건너뛴다.
   @Cron('0 3 * * *', { timeZone: 'Asia/Seoul' })
   async runScheduledPurge(): Promise<RetentionMetadata> {
+    const now = new Date();
+    const acquired = await acquireJobLease(this.firestore, {
+      jobName: RETENTION_PURGE_JOB_NAME,
+      slotKey: seoulDailySlotKey(now),
+      ttlMs: RETENTION_PURGE_LEASE_TTL_MS,
+      logger: this.retentionLogger,
+    });
+    if (acquired.status !== 'ACQUIRED') {
+      return { skipped: true, reason: acquired.status };
+    }
     try {
-      const result = await this.purgeExpiredRecords({ now: new Date() });
+      const result = await this.purgeExpiredRecords({ now });
       // 무엇을 몇 건 지웠는지 남긴다(문서 내용·경로는 남기지 않는다).
       this.retentionLogger.log(`[RetentionScheduler] ${JSON.stringify(result)}`);
+      await completeJobLease(this.firestore, acquired.lease, {
+        succeeded: true,
+        logger: this.retentionLogger,
+      });
       return result;
     } catch (error) {
       this.retentionLogger.error(
         `[RetentionScheduler] 보관 기한 삭제 실패: ${error instanceof Error ? error.message : String(error)}`,
       );
+      // 실패한 회차는 완료로 남기지 않고 lease만 풀어 다시 시도할 수 있게 한다.
+      await completeJobLease(this.firestore, acquired.lease, {
+        succeeded: false,
+        logger: this.retentionLogger,
+      });
       throw error;
     }
   }
