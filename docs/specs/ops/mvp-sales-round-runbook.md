@@ -384,6 +384,7 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 
 규칙은 앱 배포 뒤에 낸다(#402 규칙은 운영 중인 옛 프런트의 직접 조회를 막지 않지만 순서를 지킨다). 모두 운영 Firebase 권한이 있는 사람이 별도 승인으로 실행한다.
 
+0. 배포 전 데이터 점검(읽기 전용): `node scripts/release/pre-deploy-check.mjs`(운영 서비스 계정 필요). 취소 진행 중 주문, 범위 밖 재배송비, 판매자가 아닌 매장 소유자, 매장 2개 이상 소유 계정, 판매자 storeId·ownerId 불일치, 자사 bucket 밖 상품 이미지를 문서 ID와 건수로 낸다. 하나라도 걸리면(exit 1) 배포 전에 정리한다.
 1. 상품 이미지 업로드 조건 확인: 운영 판매자 계정의 `stores/{storeId}.ownerId`가 그 판매자 uid와 같은지 콘솔에서 본다(#402부터 `storage.rules`가 요구).
 2. 규칙 배포: `firebase deploy --only firestore:rules,storage --project <운영 프로젝트>` 뒤 콘솔에서 ruleset이 저장소 파일과 같은지 재조회한다.
 3. CORS(선택, `firebase deploy`로 반영되지 않음): 적용 전 `gsutil cors get gs://<운영 버킷>`으로 현재 값을 남기고, `gsutil cors set cors.json gs://<운영 버킷>`으로 GET·HEAD만 허용한다. 버킷 이름은 운영 `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` 값으로 확인한다.
