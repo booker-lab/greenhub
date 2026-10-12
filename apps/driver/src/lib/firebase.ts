@@ -6,13 +6,6 @@ import {
   setPersistence,
   type Auth,
 } from 'firebase/auth';
-import {
-  connectFirestoreEmulator,
-  getFirestore,
-  initializeFirestore,
-  memoryLocalCache,
-  type Firestore,
-} from 'firebase/firestore';
 import { connectStorageEmulator, getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const LOCAL_FIREBASE_PROJECT_ID = 'greenhub-local';
@@ -52,12 +45,10 @@ type BrowserRuntimeValues = Record<string, unknown>;
 
 type FirebaseServiceRegistry = {
   auth?: Auth;
-  firestore?: Firestore;
   storage?: FirebaseStorage;
   localRuntime?: boolean;
   emulators?: {
     auth?: boolean;
-    firestore?: boolean;
     storage?: boolean;
   };
 };
@@ -236,43 +227,6 @@ function getFirebaseApp(): FirebaseApp {
 
 const app = getFirebaseApp();
 
-function isAlreadyInitializedError(error: unknown): boolean {
-  const code = (error as { code?: unknown } | null)?.code;
-  return code === 'failed-precondition' || code === 'firestore/failed-precondition';
-}
-
-function configureFirestoreEmulator(
-  firestore: Firestore,
-  registry: FirebaseServiceRegistry,
-): void {
-  if (!localRuntime) return;
-  const emulators = registry.emulators ?? {};
-  registry.emulators = emulators;
-  if (emulators.firestore) return;
-  connectFirestoreEmulator(
-    firestore,
-    LOCAL_FIRESTORE_EMULATOR_HOST,
-    LOCAL_FIRESTORE_EMULATOR_PORT,
-  );
-  emulators.firestore = true;
-}
-
-function getFirestoreInstance(): Firestore {
-  const registry = getServiceRegistry(app);
-  if (registry.firestore) return registry.firestore;
-
-  let firestore: Firestore;
-  try {
-    firestore = initializeFirestore(app, { localCache: memoryLocalCache() });
-  } catch (error) {
-    if (!isAlreadyInitializedError(error)) throw error;
-    firestore = getFirestore(app);
-  }
-  registry.firestore = firestore;
-  configureFirestoreEmulator(firestore, registry);
-  return firestore;
-}
-
 export function getFirebaseAuth(): Auth {
   const registry = getServiceRegistry(app);
   if (registry.auth) return registry.auth;
@@ -288,7 +242,7 @@ export function getFirebaseAuth(): Auth {
     }
   }
   // Firebase 로그인 상태를 탭 세션(sessionStorage)에만 둔다. 탭을 닫으면 사라지고,
-  // 같은 탭의 새로고침·이동에서는 유지돼 Firestore 구독과 Storage 업로드가 그대로 동작한다.
+  // 같은 탭의 새로고침·이동에서는 유지돼 Storage 업로드가 그대로 동작한다.
   // 이전 기본값(IndexedDB)에 남아 있던 로그인 상태는 이 호출이 옮긴 뒤 지운다.
   if (typeof window !== 'undefined') {
     setPersistence(auth, browserSessionPersistence).catch((error: unknown) => {
@@ -319,8 +273,8 @@ export function getFirebaseStorage(): FirebaseStorage {
   return storage;
 }
 
-export const db = getFirestoreInstance();
-
+// 기사 앱은 Firestore를 직접 읽지 않는다(주문은 API로만 조회). Firestore SDK를 번들에
+// 넣지 않도록 Firestore 인스턴스를 만들지 않는다. 로그인과 거점 사진 Storage만 쓴다.
 // 기존 import 경로 유지: 기본 인스턴스를 같은 이름으로 노출한다.
 export const firebaseAuth = getFirebaseAuth();
 export const storage = getFirebaseStorage();

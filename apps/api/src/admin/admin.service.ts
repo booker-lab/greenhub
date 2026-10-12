@@ -7,7 +7,6 @@ import {
 import { randomUUID } from 'node:crypto';
 import { dateRangeKST } from '@greenhub/shared';
 import * as admin from 'firebase-admin';
-import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../firestore/firestore.service';
 import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
 import type { OrderStatus } from '../orders/dto/update-status.dto';
@@ -500,7 +499,7 @@ export class AdminService {
   // ── Invite ───────────────────────────────────────────────────────
 
   async generateInvite(adminId: string) {
-    const token = uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase();
+    const token = randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase();
     const now = this.firestore.Timestamp.now();
 
     // 7일 만료

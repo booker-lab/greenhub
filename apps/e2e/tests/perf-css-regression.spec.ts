@@ -1,14 +1,30 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
 /**
  * 6순위 CSS 회귀 검증
  * - Mantine CSS treeshaking 후 컴포넌트 스타일 정상 여부
- * - Pretendard self-hosting 후 폰트 로딩 여부
+ * - Pretendard self-hosting(글자 범위별 dynamic subset) 후 폰트 로딩 여부
  */
 
 const CONSUMER_BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr'
 const SELLER_BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
 const DRIVER_BASE = process.env['DRIVER_BASE'] ?? 'https://driver.greenlove.co.kr'
+
+// Pretendard는 글자 범위별 조각(PretendardVariable.subset.N.*.woff2)으로 번들링돼
+// /_next/static/media에서 제공된다. 화면 글자에 필요한 조각만 받는지 확인한다.
+async function expectPretendardSubsetLoaded(page: Page, url: string) {
+  const fontResponses: { url: string; status: number }[] = []
+  page.on('response', (res) => {
+    if (res.url().includes('PretendardVariable.subset.')) {
+      fontResponses.push({ url: res.url(), status: res.status() })
+    }
+  })
+  await page.goto(url)
+  await page.waitForLoadState('networkidle')
+  expect(fontResponses.length).toBeGreaterThan(0)
+  expect(fontResponses.every((res) => res.status === 200)).toBe(true)
+  expect(fontResponses.every((res) => res.url.includes('/_next/static/media/'))).toBe(true)
+}
 
 // ── Consumer ────────────────────────────────────────────────────────
 
@@ -24,10 +40,8 @@ test.describe('Consumer — CSS 회귀', () => {
     expect(critical).toHaveLength(0)
   })
 
-  test('홈 — Pretendard 폰트 파일 200 응답', async ({ request }) => {
-    const fontRes = await request.get(`${CONSUMER_BASE}/fonts/PretendardVariable.woff2`)
-    expect(fontRes.status()).toBe(200)
-    expect(fontRes.headers()['content-type']).toMatch(/font|octet/)
+  test('홈 — Pretendard 글자 범위 조각만 받는다', async ({ page }) => {
+    await expectPretendardSubsetLoaded(page, CONSUMER_BASE)
   })
 
   test('홈 — Pretendard 폰트 CSS 변수 적용', async ({ page }) => {
@@ -98,9 +112,8 @@ test.describe('Seller — CSS 회귀', () => {
     expect(critical).toHaveLength(0)
   })
 
-  test('로그인 — Pretendard 폰트 파일 200 응답', async ({ request }) => {
-    const fontRes = await request.get(`${SELLER_BASE}/fonts/PretendardVariable.woff2`)
-    expect(fontRes.status()).toBe(200)
+  test('로그인 — Pretendard 글자 범위 조각만 받는다', async ({ page }) => {
+    await expectPretendardSubsetLoaded(page, `${SELLER_BASE}/login`)
   })
 
   test('로그인 — CDN 외부 폰트 요청 없음 (jsdelivr)', async ({ page }) => {
@@ -139,9 +152,8 @@ test.describe('Driver — CSS 회귀', () => {
     expect(critical).toHaveLength(0)
   })
 
-  test('로그인 — Pretendard 폰트 파일 200 응답', async ({ request }) => {
-    const fontRes = await request.get(`${DRIVER_BASE}/fonts/PretendardVariable.woff2`)
-    expect(fontRes.status()).toBe(200)
+  test('로그인 — Pretendard 글자 범위 조각만 받는다', async ({ page }) => {
+    await expectPretendardSubsetLoaded(page, `${DRIVER_BASE}/login`)
   })
 
   test('로그인 — CDN 외부 폰트 요청 없음 (jsdelivr)', async ({ page }) => {
