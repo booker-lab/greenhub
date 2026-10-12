@@ -90,15 +90,31 @@ export class DriverOrderScopeService {
     authority?: DriverAuthority,
   ): Promise<boolean> {
     const verified = await this.authorityFor(requesterId, authority);
-    const scope = await this.resolveScope(order, order['storeId'], (path) =>
+    return this.isOrderVisibleWith(order, verified.requesterId, (path) =>
       this.firestore.doc(path).get(),
     );
-    if (!this.isUsableScope(scope)) return false;
+  }
 
-    return (
-      this.isDiscoveryEligibleForScope(scope, order) ||
-      this.isAssignedVisibleForScope(scope, order, verified.requesterId)
+  // 목록 한 번의 요청 안에서는 같은 stores·saleRounds 문서를 주문마다 다시 읽지 않는다.
+  async filterVisibleOrders<T extends OrderRecord>(
+    orders: T[],
+    requesterId: string,
+    authority?: DriverAuthority,
+  ): Promise<T[]> {
+    const verified = await this.authorityFor(requesterId, authority);
+    const reads = new Map<string, Promise<DocumentSnapshotLike>>();
+    const getDocument = (path: string) => {
+      let read = reads.get(path);
+      if (!read) {
+        read = this.firestore.doc(path).get();
+        reads.set(path, read);
+      }
+      return read;
+    };
+    const visibility = await Promise.all(
+      orders.map((order) => this.isOrderVisibleWith(order, verified.requesterId, getDocument)),
     );
+    return orders.filter((_, index) => visibility[index]);
   }
 
   async isDiscoveryEligible(
@@ -232,6 +248,20 @@ export class DriverOrderScopeService {
   ): Promise<DriverAuthority> {
     if (authority?.requesterId === requesterId) return authority;
     return this.assertDriverAuthority(requesterId);
+  }
+
+  private async isOrderVisibleWith(
+    order: OrderRecord,
+    requesterId: string,
+    getDocument: (path: string) => Promise<DocumentSnapshotLike>,
+  ): Promise<boolean> {
+    const scope = await this.resolveScope(order, order['storeId'], getDocument);
+    if (!this.isUsableScope(scope)) return false;
+
+    return (
+      this.isDiscoveryEligibleForScope(scope, order) ||
+      this.isAssignedVisibleForScope(scope, order, requesterId)
+    );
   }
 
   private async resolveScope(
