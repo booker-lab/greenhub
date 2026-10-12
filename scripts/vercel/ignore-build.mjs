@@ -68,15 +68,14 @@ export const EXACT_PREVIEW_PROVISIONING_SCOPES = Object.freeze(['consumer', 'sel
 export const EXACT_PREVIEW_PROVISIONING_REF_PATTERN =
   /^preview-exact\/(consumer|seller|driver|both)\/[0-9a-f]{40}$/;
 
-// Files read by `pnpm install` or by `next build` (via @greenhub/shared or the
-// font prebuild) of every frontend app. A change here must rebuild all three.
+// Files read by `pnpm install` or by `next build` (via @greenhub/shared) of
+// every frontend app. A change here must rebuild all three.
 export const GLOBAL_FRONTEND_INPUTS = Object.freeze([
   'package.json',
   'pnpm-lock.yaml',
   'pnpm-workspace.yaml',
   'tsconfig.base.json',
   '.vercelignore',
-  'scripts/copy-fonts.cjs',
   // Trailing '/' entries are directory prefixes.
   'scripts/vercel/',
 ]);
