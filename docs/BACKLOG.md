@@ -496,7 +496,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [x] **`LEGAL-DRIVER-KAKAOMAP-NOTICE`**: 2026-10-10 사용자 결정(고지)으로 `/privacy` 4절에 반영.
 - [x] **`LEGAL-LATE-PAYMENT-REFUND-TERMS`**: `/terms` 제7조에 반영(2026-11-01 시행).
 - [ ] **`LEGAL-REVISION-EFFECTIVE-DATE`**: 개정판 시행일 2026-11-01은 운영 배포가 그보다 앞서야 성립한다. 운영 배포 대기 묶음 배포가 11/1 이후로 밀리면 시행일과 `legal-documents.test.mjs`를 함께 고친다.
-- [ ] `OPS-ALERT-NO-PII-TEST` (선택): 운영자 텔레그램 알림에 고객 이름·전화·주소가 실리지 않음을 직접 테스트로 고정한다(현재 코드상 고정 문구만 보냄).
+- [x] `OPS-ALERT-NO-PII-TEST`: 2026-10-12 `apps/api/src/ops-alerts/ops-alert.spec.ts`에 고정. 알림 payload에 주문·결제 ID와 스냅샷의 이름·전화·주소가 없음을 확인하고, 운영 기록을 만드는 모든 호출의 `title`·`message`가 고정 문자열(또는 고정 문자열 두 개 중 하나를 고르는 조건식)인지 소스에서 검사한다.
 - [x] Pilot `MARKETING_NOT_USED_IN_PILOT` 정책과 공개 legal/source wording 정합화 — 2026-10-10 대조(위 DOC_DELTA)
 - [ ] exact release SHA와 필요한 release verification
 
