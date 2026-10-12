@@ -3,6 +3,7 @@
 import type { Product } from '@greenhub/shared';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFirebaseReady } from '@/app/providers';
 import { db } from '@/lib/firebase';
 import {
   isStoreProductsBackgroundRefresh,
@@ -26,6 +27,9 @@ export function useStoreProducts(storeId: string | null): UseStoreProductsResult
   const [error, setError] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  // products 규칙은 Firebase에 로그인한 소유 판매자만 읽게 한다. 첫 로그인 직후 custom token
+  // 로그인이 끝나기 전에 구독하면 권한 오류로 listener가 끝나므로, 로그인된 뒤에 구독한다.
+  const firebaseReady = useFirebaseReady();
   const [scope, setScope] = useState(storeId);
   const scopeRef = useRef(storeId);
   const hasLoadedRef = useRef(false);
@@ -55,6 +59,8 @@ export function useStoreProducts(storeId: string | null): UseStoreProductsResult
       setLoading(false);
       return;
     }
+    // Firebase 로그인 전에는 구독하지 않고 현재 상태(첫 로딩 또는 이전 데이터)를 그대로 둔다.
+    if (!firebaseReady) return;
 
     if (isStoreProductsBackgroundRefresh(hasLoadedRef.current)) {
       // stale 유지 중 재구독은 initial loading으로 되돌리지 않고
@@ -107,7 +113,7 @@ export function useStoreProducts(storeId: string | null): UseStoreProductsResult
       active = false;
       unsubscribe();
     };
-  }, [scope, retryKey]);
+  }, [scope, retryKey, firebaseReady]);
 
   const isStale = hasLoaded && error !== null;
   return { products, loading, error, retry, hasLoaded, isStale };
