@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { FirestoreService } from '../../firestore/firestore.service';
+import { isIssuedBeforeSessionRevocation, SESSIONS_REVOKED_AT_FIELD } from '../session-revocation';
 import { hasExpectedTokenClaims, JWT_ALGORITHM } from '../token-claims';
 import { JwtPayload } from '../types/jwt-payload.type';
 
@@ -57,6 +58,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       (currentRole === 'driver' && user?.['driverApproved'] !== true)
     ) {
       throw new ForbiddenException('현재 사용자 권한과 일치하지 않는 인증 토큰입니다.');
+    }
+
+    // 로그아웃·정지로 세션을 폐기한 시각 이전에 발급된 토큰은 만료 전이어도 받지 않는다.
+    if (isIssuedBeforeSessionRevocation(payload.iat, user?.[SESSIONS_REVOKED_AT_FIELD])) {
+      throw new UnauthorizedException('폐기된 세션의 인증 토큰입니다.');
     }
 
     const storeId = normalizeStoreId(user?.['storeId']);
