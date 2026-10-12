@@ -305,7 +305,7 @@ export class DriverOrderScopeService {
   }
 
   private isDiscoveryEligibleForScope(scope: ScopeEvaluation, order: OrderRecord): boolean {
-    if (order['status'] !== DRIVER_DISCOVERY_STATUS || order['driverId'] != null) return false;
+    if (order['status'] !== 'PREPARING' || order['driverId'] != null) return false;
     // 취소가 진행 중인 주문은 first claim이 409로 막히므로 기사 목록에 올리지 않는다.
     if (isOrderCancellationInProgress(order)) return false;
     if (scope.mode === 'round_direct')
