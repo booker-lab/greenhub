@@ -1447,7 +1447,7 @@ test('VISIBLE_TUI C ??non-loopback or malformed attach targets fail closed befor
     'http://localhost.evil.example:4096',
     'https://opencode.example.com',
     'ftp://127.0.0.1:4096',
-    'http://user:pass@127.0.0.1:4096',
+    'http://user:pass@127.0.0.1:4096', // trufflehog:ignore
     'http://127.0.0.1:4096/prefix',
     'http://127.0.0.1:4096/?x=1',
     'not-a-url',
