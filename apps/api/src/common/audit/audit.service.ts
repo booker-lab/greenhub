@@ -1,7 +1,6 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../../firestore/firestore.service';
 
 export type AuditAction =
@@ -66,7 +65,7 @@ export class AuditService {
     action: AuditAction,
     opts: { userId?: string; ip?: string; detail?: Record<string, unknown> } = {},
   ): Promise<void> {
-    const id = uuidv4();
+    const id = randomUUID();
     await this.firestore.doc(`auditLogs/${id}`).set({
       id,
       action,

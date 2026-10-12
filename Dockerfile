@@ -15,9 +15,6 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 RUN corepack enable && corepack install
 
-# 루트 postinstall이 참조하는 스크립트만 복사한다(scripts 워크스페이스 전체는 넣지 않는다).
-COPY scripts/copy-fonts.cjs ./scripts/copy-fonts.cjs
-
 # 공유 패키지(dist는 git에 포함)와 API 앱
 COPY packages/shared/ ./packages/shared/
 COPY apps/api/ ./apps/api/
