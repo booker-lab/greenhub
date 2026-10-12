@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import type {
   CopySaleRoundDto,
@@ -242,7 +242,7 @@ export class SaleRoundsService {
     await this.assertSellerOwnsStore(storeId, requesterId, role);
     this.assertScheduleOrder(dto.schedule);
     const now = this.firestore.Timestamp.now();
-    const roundId = uuidv4();
+    const roundId = randomUUID();
     const itemDocs = await this.buildItemDocs(storeId, roundId, dto.items, now);
     const round: SaleRound = {
       id: roundId,
@@ -526,7 +526,7 @@ export class SaleRoundsService {
       }
       const product = snap.data()!;
       docs.push({
-        id: uuidv4(),
+        id: randomUUID(),
         roundId,
         storeId,
         productId: item.productId,
@@ -567,7 +567,7 @@ export class SaleRoundsService {
       }
       const product = snap.data()!;
       return {
-        id: uuidv4(),
+        id: randomUUID(),
         roundId,
         storeId,
         productId: item.productId,
