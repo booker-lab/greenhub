@@ -23,6 +23,11 @@ type TransactionLike = {
 export const DRIVER_VISIBLE_STATUSES = ['PREPARING', 'DELIVERING', 'DELIVERY_HELD'] as const;
 
 export type DriverVisibleStatus = (typeof DRIVER_VISIBLE_STATUSES)[number];
+
+// 미배정 discovery는 이 상태·배송 방식의 주문만 대상이다. 기사 목록 쿼리도 같은 값으로 후보를 좁힌다.
+export const DRIVER_DISCOVERY_STATUS: DriverVisibleStatus = 'PREPARING';
+export const DRIVER_DISCOVERY_DELIVERY_METHODS: readonly string[] = ['direct', 'hub'];
+
 export type DriverOrderMode = 'legacy' | 'round_direct';
 
 export interface DriverAuthority {
@@ -305,7 +310,7 @@ export class DriverOrderScopeService {
     if (isOrderCancellationInProgress(order)) return false;
     if (scope.mode === 'round_direct')
       return scope.pilotBase && order['deliveryMethod'] === 'direct';
-    return ['direct', 'hub'].includes(String(order['deliveryMethod']));
+    return DRIVER_DISCOVERY_DELIVERY_METHODS.includes(String(order['deliveryMethod']));
   }
 
   private isAssignedVisibleForScope(
