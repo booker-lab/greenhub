@@ -2,7 +2,7 @@ import type { NotificationChannel } from '@greenhub/shared';
 import { Injectable } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { resolveAligoTemplateCode } from './aligo-template-codes';
 import {
   type NotificationRetryMetricsChannel,
@@ -414,7 +414,7 @@ export class AligoClient {
       );
     }
 
-    const attemptId = uuidv4();
+    const attemptId = randomUUID();
     let errorMessage = '알림톡 발송에 실패했습니다.';
     let alimtalkAttemptsUsed = 0;
     let lastErrorClass: ProviderErrorClass = 'RETRYABLE';
@@ -585,7 +585,7 @@ export class AligoClient {
     if (!receiver) {
       return localRejection(message, 0, 0, ALIGO_INVALID_RECIPIENT_MESSAGE);
     }
-    const attemptId = uuidv4();
+    const attemptId = randomUUID();
     const result = await this.sendSmsMessage(receiver, message);
     if (result.outcome === 'ACCEPTED') {
       return {
