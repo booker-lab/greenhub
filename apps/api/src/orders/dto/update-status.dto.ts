@@ -6,13 +6,13 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { IsLegacyDeliveryPhotoUrl } from '../delivery-photo-url';
 
 const ORDER_STATUSES = [
   'PENDING',
@@ -94,7 +94,7 @@ export class CreateRedeliveryFeeDto {
 }
 
 export class AttachDeliveryPhotoDto {
-  @IsUrl({ require_protocol: true })
+  @IsLegacyDeliveryPhotoUrl()
   photoUrl: string;
 }
 
@@ -115,7 +115,7 @@ export class UpdateStatusDto {
   preparedAt?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsLegacyDeliveryPhotoUrl()
   photoUrl?: string;
 
   @IsOptional()
