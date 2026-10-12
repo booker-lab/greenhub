@@ -184,7 +184,7 @@ Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`이 코드와 공개 문서에 반영�
 
 ## HISTORICAL / CLOSED BY REL-STATE-01
 
-> 2026-09-28 재대조: 아래 P0의 구현·직접 회귀는 현재 `main`에 있다(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, admin 강제환불·권한, 정산 lifecycle, auth 세션 폐기 근거 spec 7개 191건 통과, `firestore.rules`의 orders read는 seller·admin만 허용). 각 절의 "미완료" 서술은 당시 기록이다.
+> 2026-09-28 재대조: 아래 P0의 구현·직접 회귀는 현재 `main`에 있다(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, admin 강제환불·권한, 정산 lifecycle, auth 세션 폐기 근거 spec 7개 191건 통과, 당시 `firestore.rules`의 orders read는 seller·admin만 허용 — #402 이후 `main` 규칙은 `orders` 원문 직접 읽기·쓰기를 모든 클라이언트에 거부한다). 각 절의 "미완료" 서술은 당시 기록이다.
 
 > 아래 과거 P0 서술은 #63의 `A-N closed semantic work` 분류에 따른 historical record다. 현재 release blocker, current implementation finding, current verification proof, remote-addressable candidate, PR, merged, Preview, production 상태를 이 기록만으로 추론하지 않는다.
 
@@ -344,6 +344,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 - 이전 운영 SHA 증거: `0bcceaea` run `37735343338`(52/52 + 세션 12/12), 출시 `197f84a4` run `36372493414`, API `781285ea` run `36383185604`, 판매자 앱 `437af74b` run `36410582745`(각 52/52 + 세션 12/12, cleanup 0).
 - 이전 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`(52건).
 - 과거 run을 현재 release 증거로 확장하지 않는다.
+- 2026-10-10 결제·인증·규칙 재대조(`main` `680a190`, API 단위 1768건·통합 26건 통과, CI Firebase rules 에뮬레이터 통과): 과거 P0(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, 관리자 강제 환불)와 #402 규칙은 `VERIFIED`. 남은 일은 BACKLOG `AUTH-MULTI-DEVICE-SESSION`(결정 필요), `CHARGE-REFUND-ISSUE-ROUTING`(구현 결함, 같은 날 수정·운영 미배포), `PORTONE-CHANNEL-CHECK`(#426 미병합), `RATE-LIMIT-CLIENT-IP`(#404 미병합), `STORAGE-CORS-APPLY`. 상세: `docs/reports/REPORT_payments_auth_rules_reaudit_20261010.md`.
 - exact-SHA Preview/browser/fixture와 필요한 legal/release proof는 actual release candidate에서 다시 판정한다.
 
 ## 활성 문서
