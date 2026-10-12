@@ -2,11 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { dateRangeKST } from '@greenhub/shared';
-import * as admin from 'firebase-admin';
 import { FirestoreService } from '../firestore/firestore.service';
 import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
 import type { OrderStatus } from '../orders/dto/update-status.dto';
@@ -16,6 +16,11 @@ import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy
 import { releaseLegacyGroupQuantityInTransaction } from '../orders/_lib/legacy-group-quantity';
 import { hasOpenProviderReversalInTransaction } from '../settlements/_lib/provider-reversal-hold';
 import { SettlementsService } from '../settlements/settlements.service';
+import {
+  SESSIONS_REVOKED_AT_FIELD,
+  revokeFirebaseSessions,
+  sessionsRevokedAtMillis,
+} from '../auth/session-revocation';
 import {
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
@@ -35,6 +40,8 @@ type LegacyRefundClaimResult =
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly firestore: FirestoreService,
     private readonly payments: PaymentsService,
@@ -128,11 +135,32 @@ export class AdminService {
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('사용자를 찾을 수 없습니다.');
 
-    await ref.update({
-      suspended: dto.suspended,
-      updatedAt: this.firestore.Timestamp.now(),
-    });
+    await ref.update(this.suspensionUpdate(dto.suspended));
+    if (dto.suspended) {
+      await this.revokeSuspendedUserSessions(userId);
+    }
     return { userId, suspended: dto.suspended };
+  }
+
+  // 정지할 때는 이전에 발급된 API access token도 거부되도록 세션 폐기 시각을 함께 기록한다.
+  private suspensionUpdate(suspended: boolean) {
+    return {
+      suspended,
+      ...(suspended
+        ? {
+            [SESSIONS_REVOKED_AT_FIELD]: this.firestore.Timestamp.fromMillis(
+              sessionsRevokedAtMillis(),
+            ),
+          }
+        : {}),
+      updatedAt: this.firestore.Timestamp.now(),
+    };
+  }
+
+  // 정지된 계정의 API refresh 기록과 Firebase 클라이언트 세션을 끊는다(로그아웃과 같은 폐기).
+  private async revokeSuspendedUserSessions(userId: string) {
+    await this.firestore.doc(`refreshTokens/${userId}`).delete();
+    await revokeFirebaseSessions(userId, this.logger);
   }
 
   // ── Orders ───────────────────────────────────────────────────────
@@ -444,12 +472,18 @@ export class AdminService {
   // ── Drivers ──────────────────────────────────────────────────────
 
   async getDrivers(dto: QueryAdminDriversDto) {
-    // 복합 인덱스 없이도 동작하도록 role 단일 필터 후 메모리 필터링
+    // 복합 인덱스 없이도 동작하도록 role 단일 필터 후 메모리 필터링·정렬한다.
+    // 정렬 전에 잘리지 않도록 넉넉히 읽고, 한도를 넘는 기사가 더 있으면 hasMore로 알린다.
+    const ADMIN_DRIVER_SCAN_LIMIT = 500;
     const snap = await (
-      this.firestore.collection('users').where('role', '==', 'driver').limit(100) as any
+      this.firestore
+        .collection('users')
+        .where('role', '==', 'driver')
+        .limit(ADMIN_DRIVER_SCAN_LIMIT + 1) as any
     ).get();
+    const hasMore = snap.docs.length > ADMIN_DRIVER_SCAN_LIMIT;
 
-    let drivers = snap.docs.map((d: any) => {
+    let drivers = snap.docs.slice(0, ADMIN_DRIVER_SCAN_LIMIT).map((d: any) => {
       const { passwordHash: _pw, ...user } = d.data();
       return user;
     });
@@ -464,7 +498,7 @@ export class AdminService {
 
     drivers.sort((a: any, b: any) => (b.createdAt?._seconds ?? 0) - (a.createdAt?._seconds ?? 0));
 
-    return { drivers, total: drivers.length };
+    return { drivers, total: drivers.length, hasMore };
   }
 
   async approveDriver(userId: string) {
@@ -494,12 +528,9 @@ export class AdminService {
       throw new BadRequestException('드라이버 계정이 아닙니다.');
     }
 
-    await ref.update({
-      suspended: dto.suspended,
-      updatedAt: this.firestore.Timestamp.now(),
-    });
+    await ref.update(this.suspensionUpdate(dto.suspended));
     if (dto.suspended) {
-      await admin.auth().revokeRefreshTokens(userId);
+      await this.revokeSuspendedUserSessions(userId);
     }
     return { userId, suspended: dto.suspended };
   }

@@ -263,6 +263,8 @@ rotation record 검증 뒤 authoritative user를 재조회하고 payload `role/s
 - refresh/session 경계의 stale-claim 재발급 차단과 `suspended`/`role`/`store`/`driverApproved` 변경 수렴은 `IMPLEMENTED / PROVEN`이다.
 - revocation window는 즉시(다음 요청)로 결정됐고(D2), runtime/browser session lifecycle은 Preview에서 `RUNTIME_PROVEN`이다(run `36341189483`, 12건, 2026-10-10 로그아웃·token 변경 이전 source 기준).
 - `POST /auth/logout`은 `refreshTokens/{sub}` 삭제와 함께 Firebase refresh token을 폐기한다(`revokeRefreshTokens`). refresh token 재사용 감지도 같은 폐기를 수행한다. Firebase 사용자 기록이 없으면(custom token 미사용) 폐기할 것이 없으므로 그대로 진행하고, 그 밖의 폐기 실패는 API 세션 폐기를 되돌리지 않고 서버 로그에만 남긴다. 이미 발급된 Firebase ID token은 만료(최대 1시간)까지 남는다.
+- `POST /auth/logout`과 관리자 정지(`PATCH /admin/users/:userId/status`, `PATCH /admin/drivers/:userId/suspend`에서 `suspended: true`)는 `users/{uid}.sessionsRevokedAt`(Timestamp, 초 단위로 내린 시각)을 기록한다. `JwtStrategy`는 access token의 `iat * 1000`이 이 시각보다 이전이면 만료 전이어도 401로 거부한다(`iat` 없는 토큰·형식을 알 수 없는 기록도 거부). 같은 초에 새로 로그인해 받은 토큰은 통과한다. 정지는 `refreshTokens/{uid}` 삭제와 Firebase refresh token 폐기(로그아웃과 같은 처리)도 함께 한다. 정지 해제는 폐기 시각을 지우지 않으므로 정지 전 토큰은 다시 쓰이지 않는다(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`, `apps/api/src/admin/admin.service.spec.ts`).
+- `refreshTokens/{sub}`의 `token`·`previousToken`은 refresh token 원문이 아니라 SHA-256(hex)이다. 회전 유예(60초) 동안 직전 토큰을 다시 보낸 요청에 현재 토큰을 돌려주기 위해, 현재 토큰을 직전 토큰에서 만든 키로 암호화한 `sealedToken`을 함께 둔다. 해시 형식(64자 hex)이 아닌 배포 전 원문 기록은 원문과 timing-safe로 한 번 비교하고, 맞으면 그 회전에서 해시 기록으로 바뀐다. 재사용 탐지(유예 밖 직전 토큰·그 밖의 토큰은 기록 삭제와 Firebase 폐기)는 그대로다.
 - 세 앱 Auth.js 로그아웃은 쿠키 삭제와 함께 `events.signOut`에서 `POST /auth/logout`을 호출해 서버 `refreshTokens/{sub}`를 폐기한다(`apps/{consumer,seller,driver}/src/auth.ts`, 각 `src/auth-runtime.ts`의 `revokeApiSession`). access token이 401/403이면 refresh로 새 access token을 받아 한 번 더 호출하고, refresh도 401/403이면 이미 끝난 세션으로 본다. 폐기 실패·네트워크 오류·시간 제한(5초) 초과는 예외 없이 끝나 로그아웃 자체는 계속되며, 이 경우 서버 세션은 남는다. 직접 근거는 각 앱 `auth-runtime` 단위 테스트이며, `events.signOut` 연결은 소스 대조로만 확인한다. Preview E2E(`auth-session-lifecycle.spec.ts`)는 로그아웃 뒤 쿠키·세션 소멸만 확인하고 서버 token 폐기는 직접 확인하지 않는다.
 - 알려진 한계(결정된 계약 아님): `refreshTokens/{sub}`가 사용자당 문서 하나이므로, 같은 계정이 두 번째 기기에서 로그인하면 첫 기기의 다음 refresh가 재사용으로 판정되어 두 기기 모두 로그아웃되고 Firebase 세션이 폐기되며 `auth.token.stolen`이 기록된다. 한 기기의 로그아웃도 같은 계정의 모든 기기를 로그아웃시킨다. 또 `GET /auth/session`은 문서 존재만 확인하므로, 로그아웃 뒤 같은 계정이 다시 로그인하면 로그아웃 전 쿠키의 access token은 만료 전까지 이 검사를 통과한다. 다기기 정책은 `docs/BACKLOG.md`의 `AUTH-MULTI-DEVICE-SESSION`(DECISION REQUIRED)에서 다룬다.
 - “정지된 계정이 refresh를 통해 계속 새 권한 토큰을 얻을 수 있음”은 현재 계약이 아니다.
@@ -323,6 +325,8 @@ POST /auth/refresh
 - 일반 사용자에게 credentials 인증을 제품 기능으로 노출하려면 별도 제품·보안 결정이 필요하다.
 - `login`은 계정 없음·비밀번호 불일치·비밀번호 없는(카카오 전용) 계정을 모두 같은 bcrypt 비교 비용을 거쳐 같은 401 메시지로 거부한다.
 - 카카오 첫 로그인의 사용자 생성은 `kakaoIdentities/{kakaoId}`(`userId`)를 사용자 문서와 한 트랜잭션에서 함께 써서, 같은 카카오 계정의 동시 요청이 사용자 문서를 하나만 만들게 한다(`apps/api/src/auth/auth.kakao-signup-occ.spec.ts`). 이 연결 문서가 없는 기존 사용자는 지금처럼 `users.kakaoId` 조회로 찾는다.
+- 운영 런타임(`isProductionRuntime`: `RAILWAY_ENVIRONMENT_NAME` → `VERCEL_ENV` → `NODE_ENV` 순으로 `production` 판정)의 `register`는 판매자 초대 가입(유효한 `inviteToken`)만 받고 `consumer`·`driver` 이메일 가입은 403으로 거부한다(2026-10-10 결정, 운영 화면은 카카오 로그인만 사용). local·test·Preview 런타임의 가입은 그대로다.
+- 이메일 가입은 정규화 이메일(trim·소문자)의 SHA-256(hex)을 키로 한 `emailIdentities/{key}`(`userId`·`email`)를 사용자 문서와 한 트랜잭션에서 `create`해, 같은 이메일의 동시 가입이 사용자 문서를 하나만 만들게 한다(나머지는 409). 이 연결 문서가 없는 기존 계정은 지금처럼 `users.email` 조회로 409가 된다. 로그인 경로는 바뀌지 않는다.
 - Seller/Driver의 explicit local-runtime branch 역시 production indicator(`NODE_ENV`·`VERCEL_ENV`·`RAILWAY_ENVIRONMENT_NAME` 중 어느 하나라도 `production`)가 존재하면 fail-closed된다. local marker를 켜도 production runtime에서는 local admission이 열리지 않으며, Seller는 기존 E2E header gate로, Driver는 기존 Preview/E2E gate로 복귀한다. production에서 local marker를 켠다고 사용할 수 있는 것이 아니다.
 
 ### 인증 사용자
@@ -387,6 +391,8 @@ interface SavedAddress {
 
 배송지 추가·수정·삭제·기본값 변경은 자신의 `userId` 범위에서만 처리한다. 운영 Firestore에서 다른 사용자의 주소 배열을 troubleshooting 목적으로 직접 수정하지 않는다.
 
+입력 상한(`AddressDto`): `label` 50자, `address` 200자, `addressDetail` 100자, `zipCode` 10자. 한 사용자는 배송지를 20개까지 저장하고, 넘는 추가는 400이다. 추가·수정·삭제·기본값 변경은 `savedAddresses` 읽기와 쓰기를 한 트랜잭션에서 해 동시 요청이 서로의 변경을 덮어쓰지 않는다(`apps/api/src/auth/auth.addresses.spec.ts`).
+
 ## 10. Firebase Custom Token
 
 `GET /auth/firebase-token`은 현재 API JWT 사용자에게 Firebase client용 custom token을 발급하는 경로다. controller는 `CurrentUser()`의 `sub`만 `AuthService.getFirebaseToken()`에 전달하고, service는 현재 user 문서를 다시 읽어(`suspended`·role·storeId·`driverApproved` 확인) 그 값으로 Firebase custom claims를 만든다(`apps/api/src/auth/auth.service.spec.ts` `getFirebaseToken`).
@@ -402,6 +408,8 @@ interface SavedAddress {
 `PATCH /auth/me/fcm-token`과 shared `fcmToken` 필드는 현재 남아 있다. 그러나 현재 notifications API의 실제 외부 발송 구현은 ALIGO/SMS이며 FCM send 구현은 없다.
 
 따라서 FCM token endpoint를 “현재 운영 push 알림이 활성화돼 있다”는 증거로 사용하지 않는다. 실제 FCM 재도입은 별도 Task에서 정의한다.
+
+`PATCH /auth/me/fcm-token` 입력(`FcmTokenDto`): `fcmToken`은 4096자 이하 문자열 또는 `null`(지우기)이다. 누락·다른 타입·알 수 없는 필드는 400이다.
 
 ## 12. OAuth URL 정책
 
@@ -452,6 +460,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-12 | logout·관리자 정지의 `sessionsRevokedAt` 기록과 access token `iat` 비교, 정지 시 refresh 기록·Firebase 세션 폐기, refresh token 해시 저장(원문 기록 자동 전환), 운영 이메일 가입을 판매자 초대로 제한, `emailIdentities` 이메일 가입 단일화, fcm-token·배송지 입력 상한과 배송지 트랜잭션 반영 |
 | 2026-10-10 | 코드 대조 정합화: 세 앱 로그아웃의 API 세션 폐기, refresh 회전 60초 유예·재사용 감지, 사용자당 단일 refresh 문서의 다기기 한계(`AUTH-MULTI-DEVICE-SESSION`), 운영 runtime의 테스트 전용 Credentials 미등록·local-runtime loopback 조건, `KAKAO_APP_ID` 토큰 발급 앱 확인, 앱 서버 쪽 API 호출 시간 제한, Firebase custom token의 현재 user 재조회, 요청 한도 미검증·IP 집계 의존(#404) 반영, candidate·출시 후 과제 표현 정리 |
 | 2026-10-10 | access/refresh token `typ`·`aud`·HS256 검증(이전 발급 token 호환), logout·refresh 재사용 감지의 Firebase refresh token 폐기, `firebase-token` 역할 제한, email login 응답 균일화, 카카오 첫 로그인 사용자 생성 단일화 반영 |
 | 2026-10-09 | 가입·프로필 수정의 `name`(20자·제어문자·링크 금지)과 `phone`(단일 번호 형식) 입력 제약 반영 |
