@@ -39,6 +39,7 @@ import {
   BLOCKED_EXTERNAL,
   BUILD_CHILD_FAILED,
   defaultInvokeBuild,
+  defaultKillProcessTree,
   FRONTIER_COMPLETE,
   HUMAN_DECISION_REQUIRED,
   INVALID_BUILD_REQUEST,
@@ -2119,5 +2120,228 @@ test('CLI5 — Night status vocabulary keeps one reused BUILD vocabulary', () =>
     INVALID_NIGHT_REQUEST,
   ]) {
     assert.equal(NIGHT_STATUSES.includes(status), true, status);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SIGTERM, process-group termination, and the operator kill switch
+// ---------------------------------------------------------------------------
+
+test('SIGTERM — during a cycle it records the stop and terminates the active BUILD', async () => {
+  const harness = createNightHarness({
+    mains: [shaFor(1), shaFor(2), shaFor(2), shaFor(3)],
+    buildCycle: CYCLE_COMPLETE,
+  });
+  const abortStates = [];
+  const baseInvoke = harness.deps.invokeBuild;
+  harness.deps.invokeBuild = async (input) => {
+    abortStates.push(input.abortSignal?.aborted ?? null);
+    harness.signalSource.emit('SIGTERM');
+    abortStates.push(input.abortSignal?.aborted ?? null);
+    return baseInvoke(input);
+  };
+
+  const result = await runHarness(harness, { maxCycles: 5 });
+
+  assert.equal(result.status, USER_STOPPED);
+  assert.equal(harness.buildCalls.length, 1);
+  assert.deepEqual(abortStates, [false, true]);
+  assert.equal(result.operatorStop.requested, true);
+  assert.equal(result.operatorStop.duringCycle, true);
+  assert.equal(result.operatorStop.terminationSignals, 1);
+  assert.equal(result.operatorStop.buildTerminated, true);
+  assert.equal(result.operatorStop.signals, 0);
+  assert.equal(harness.signalSource.listenerCount('SIGTERM'), 0);
+  assert.equal(harness.signalSource.listenerCount('SIGINT'), 0);
+  assert.match(
+    harness.logLines.join('\n'),
+    /SIGTERM received; terminating the active BUILD process group/,
+  );
+});
+
+test('SIGTERM — between cycles it stops before the next BUILD', async () => {
+  const harness = createNightHarness({
+    mains: [shaFor(1), shaFor(2), shaFor(2), shaFor(3)],
+    buildCycle: CYCLE_COMPLETE,
+  });
+  let yields = 0;
+  harness.deps.yieldToSignals = async () => {
+    yields += 1;
+    if (yields === 2) harness.signalSource.emit('SIGTERM');
+  };
+
+  const result = await runHarness(harness, { maxCycles: 5 });
+
+  assert.equal(result.status, USER_STOPPED);
+  assert.equal(harness.buildCalls.length, 1);
+  assert.equal(result.operatorStop.stoppedBeforeNextBuild, true);
+  assert.equal(result.operatorStop.buildTerminated, false);
+  assert.equal(result.operatorStop.terminationSignals, 1);
+});
+
+test('KILL SWITCH — an observed kill switch stops before the next BUILD cycle', async () => {
+  const harness = createNightHarness({
+    mains: [shaFor(1), shaFor(2), shaFor(2), shaFor(3)],
+    buildCycle: CYCLE_COMPLETE,
+  });
+  const observations = [];
+  harness.deps.observeKillSwitch = (input) => {
+    observations.push(input);
+    return observations.length >= 2
+      ? { stop: true, source: 'FILE', reason: 'stop file is present: /repo/.agent-stop' }
+      : { stop: false, source: null, reason: null };
+  };
+
+  const result = await runHarness(harness, { maxCycles: 5 });
+
+  assert.equal(result.status, USER_STOPPED);
+  assert.equal(harness.buildCalls.length, 1);
+  assert.equal(observations.length, 2);
+  assert.equal(observations[0].repositoryRoot, result.repositoryRoot);
+  assert.match(result.stopReason, /kill switch/);
+  assert.equal(result.operatorStop.killSwitch, 'stop file is present: /repo/.agent-stop');
+  assert.equal(result.operatorStop.stoppedBeforeNextBuild, true);
+});
+
+test('KILL SWITCH — a real stop file or GREENHUB_AGENT_STOP prevents the first BUILD', async () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'greenhub-run-night-spec-kill-switch-'));
+  try {
+    writeFileSync(join(scratch, '.agent-stop'), '');
+    const fileHarness = createNightHarness({ buildCycle: CYCLE_COMPLETE });
+    const fileResult = await runHarness(fileHarness, { repositoryRoot: scratch });
+    assert.equal(fileResult.status, USER_STOPPED);
+    assert.equal(fileHarness.buildCalls.length, 0);
+
+    rmSync(join(scratch, '.agent-stop'));
+    const envHarness = createNightHarness({ buildCycle: CYCLE_COMPLETE });
+    envHarness.deps.env = { ...envHarness.deps.env, GREENHUB_AGENT_STOP: '1' };
+    const envResult = await runHarness(envHarness, { repositoryRoot: scratch });
+    assert.equal(envResult.status, USER_STOPPED);
+    assert.equal(envHarness.buildCalls.length, 0);
+    assert.match(envResult.stopReason, /GREENHUB_AGENT_STOP/);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('KILL TREE — POSIX targets the process group, Windows uses taskkill /T /F', () => {
+  const kills = [];
+  assert.deepEqual(
+    defaultKillProcessTree({
+      pid: 4321,
+      signal: 'SIGTERM',
+      platform: 'linux',
+      kill: (pid, signal) => kills.push([pid, signal]),
+    }),
+    { ok: true, error: null },
+  );
+  assert.deepEqual(kills, [[-4321, 'SIGTERM']]);
+
+  const fallback = [];
+  const fallbackResult = defaultKillProcessTree({
+    pid: 4321,
+    signal: 'SIGKILL',
+    platform: 'linux',
+    kill: (pid, signal) => {
+      fallback.push([pid, signal]);
+      if (pid < 0) throw Object.assign(new Error('no such group'), { code: 'ESRCH' });
+    },
+  });
+  assert.equal(fallbackResult.ok, true);
+  assert.deepEqual(fallback, [
+    [-4321, 'SIGKILL'],
+    [4321, 'SIGKILL'],
+  ]);
+
+  const spawned = [];
+  const windows = defaultKillProcessTree({
+    pid: 4321,
+    platform: 'win32',
+    spawnSyncFn: (command, args) => {
+      spawned.push([command, args]);
+      return { status: 0 };
+    },
+  });
+  assert.equal(windows.ok, true);
+  assert.deepEqual(spawned, [['taskkill', ['/PID', '4321', '/T', '/F']]]);
+  assert.equal(defaultKillProcessTree({ pid: undefined }).ok, false);
+});
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) !== 'Z';
+  } catch {
+    return true;
+  }
+}
+
+test('KILL TREE — aborting a real BUILD invocation terminates the child and its descendants', {
+  skip: process.platform === 'win32',
+  timeout: 30000,
+}, async () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'greenhub-run-night-spec-kill-tree-'));
+  const pidFile = join(scratch, 'grandchild.pid');
+  let grandchildPid = null;
+  try {
+    const source = [
+      "const { spawn } = require('node:child_process');",
+      "const { writeFileSync } = require('node:fs');",
+      "const grandchild = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
+      `writeFileSync(${JSON.stringify(pidFile)}, String(grandchild.pid));`,
+      'process.stdin.resume();',
+      'setInterval(() => {}, 1000);',
+    ].join('\n');
+    const controller = new AbortController();
+    const invocation = defaultInvokeBuild({
+      buildScriptPath: '-e',
+      args: [source],
+      cwd: scratch,
+      env: process.env,
+      requestText: 'MODE: BUILD\n',
+      stderr: { write() {} },
+      abortSignal: controller.signal,
+      terminationGraceMs: 2000,
+    });
+    const deadline = Date.now() + 15000;
+    while (!existsSync(pidFile) || readFileSync(pidFile, 'utf8').length === 0) {
+      if (Date.now() > deadline)
+        throw new Error('the synthetic BUILD child never started its descendant');
+      await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+    }
+    grandchildPid = Number(readFileSync(pidFile, 'utf8'));
+    assert.equal(isProcessAlive(grandchildPid), true);
+
+    controller.abort();
+    const settled = await invocation;
+
+    assert.equal(settled.terminationRequested, true);
+    assert.ok(
+      settled.signal === 'SIGTERM' || settled.signal === 'SIGKILL',
+      JSON.stringify(settled),
+    );
+    const exitDeadline = Date.now() + 10000;
+    while (isProcessAlive(grandchildPid) && Date.now() < exitDeadline) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+    }
+    assert.equal(
+      isProcessAlive(grandchildPid),
+      false,
+      'the BUILD descendant outlived its process group',
+    );
+  } finally {
+    if (grandchildPid !== null && isProcessAlive(grandchildPid)) {
+      try {
+        process.kill(grandchildPid, 'SIGKILL');
+      } catch {
+        // already gone
+      }
+    }
+    rmSync(scratch, { recursive: true, force: true });
   }
 });
