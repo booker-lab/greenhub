@@ -169,14 +169,15 @@ test('Driver Firebase binding은 Seller와 같은 local/emulator 계약이다 (U
   assert.match(binding, /9199/);
   assert.match(binding, /green-e4fe3/);
   assert.match(binding, /FirebaseRuntimeConfigurationError/);
-  assert.match(binding, /connectFirestoreEmulator/);
+  // 기사 앱은 Firestore를 쓰지 않아 Firestore 인스턴스·emulator 연결을 만들지 않는다.
+  assert.doesNotMatch(binding, /connectFirestoreEmulator|from 'firebase\/firestore'/);
   assert.match(binding, /connectAuthEmulator/);
   assert.match(binding, /connectStorageEmulator/);
   assert.match(binding, /non-local 브라우저 설정에는 Firebase emulator host를 둘 수 없습니다/);
   // 기존 import 경로 유지 (호출자 수정 없음)
   assert.match(binding, /export const firebaseAuth/);
   assert.match(binding, /export const storage/);
-  assert.match(binding, /export const db/);
+  assert.doesNotMatch(binding, /export const db/);
 });
 
 test('Seller local auth는 launcher marker에서 E2E 헤더 없이 진입한다 (fail-closed)', () => {
