@@ -73,6 +73,10 @@ export class OrdersCreateService {
     const buyerPhone: string | null = userSnap.data()?.['phone'] ?? null;
     const sellerPhone: string | null = storeSnap.data()?.['phone'] ?? null;
     const hubData = (hubSnap as any)?.exists ? (hubSnap as any).data() : null;
+    // 거점은 주문하는 매장의 거점이어야 한다. 다른 매장 거점의 이름·주소를 주문에 담지 않는다.
+    if (dto.hubId && (!hubData || hubData['storeId'] !== storeId)) {
+      throw new NotFoundException('거점을 찾을 수 없습니다.');
+    }
     const hubName: string | null = hubData?.['name'] ?? null;
     const hubAddress: string | null = hubData
       ? [hubData['address'], hubData['addressDetail']].filter(Boolean).join(' ') || null
