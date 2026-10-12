@@ -149,6 +149,16 @@ async function seedFixtures() {
         driverApproved: true,
         suspended: false,
       }),
+      firestore.collection('orders').doc('order-legacy-delivered').set({
+        driverId: 'driver-1',
+        deliveryMethod: 'hub',
+        status: 'DELIVERED',
+      }),
+      firestore.collection('orders').doc('order-legacy-direct').set({
+        driverId: 'driver-1',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+      }),
       firestore.collection('orders').doc('order-driver-lifecycle').set({
         driverId: 'driver-lifecycle',
         deliveryMethod: 'hub',
@@ -167,6 +177,11 @@ async function seedFixtures() {
       upload(storage, 'logos/seller-1_1721433600000', 'image/webp'),
       upload(storage, 'logos/seller-1_1721433600001', 'image/png'),
       upload(storage, 'logos/seller-1_1721433600002', 'image/jpeg'),
+      upload(storage, 'deliveryPhotos/order-legacy-direct_1721433600000.jpg', 'image/jpeg'),
+      upload(storage, 'deliveryPhotos/order-missing_1721433600000.jpg', 'image/jpeg'),
+      upload(storage, 'unknown/seeded.jpg', 'image/jpeg'),
+      upload(storage, 'users/user-1/profile.jpg', 'image/jpeg'),
+      upload(storage, 'root-level.jpg', 'image/jpeg'),
     ]);
   });
 }
@@ -205,6 +220,37 @@ test('회차 직배송 사진은 모든 클라이언트의 직접 읽기·생성
     await assertFails(existing.put(content(), { contentType: 'image/jpeg' }));
     await assertFails(existing.delete());
   }
+});
+
+test('회차 직배송 사진 주문 폴더와 상위 폴더 목록 조회는 모든 클라이언트에서 거부한다', async () => {
+  for (const [, storage] of actorStorages()) {
+    await assertFails(objectRef(storage, 'deliveryPhotos/order-1').listAll());
+    await assertFails(objectRef(storage, 'deliveryPhotos').listAll());
+  }
+});
+
+test('상품 이미지 기존 객체는 비소유 판매자·소비자·기사·익명이 덮어쓰거나 삭제할 수 없다', async () => {
+  for (const storage of [
+    storageFor(),
+    storageFor('user-1', { role: 'consumer' }),
+    storageFor('seller-2', { role: 'seller', storeId: 'store-2' }),
+    storageFor('driver-1', { role: 'driver', driverApproved: true }),
+  ]) {
+    const existing = objectRef(storage, 'products/store-1/public-product.jpg');
+
+    await assertFails(existing.put(content(), { contentType: 'image/jpeg' }));
+    await assertFails(existing.updateMetadata({ contentType: 'image/png' }));
+    await assertFails(existing.delete());
+  }
+});
+
+test('상품 이미지는 소유 판매자 토큰의 storeId와 다른 매장 경로를 거부한다', async () => {
+  const seller = storageFor('seller-1', { role: 'seller', storeId: 'store-1' });
+  // token storeId를 다른 매장으로 위조해도 users/stores 소유 기준이 맞지 않으면 거부한다.
+  const forgedClaim = storageFor('seller-1', { role: 'seller', storeId: 'store-2' });
+
+  await assertFails(upload(seller, 'products/store-2/cross-store.jpg', 'image/jpeg'));
+  await assertFails(upload(forgedClaim, 'products/store-2/forged-claim.jpg', 'image/jpeg'));
 });
 
 test('상품 이미지는 공개 읽기를 유지하고 소유 판매자와 관리자만 변경한다', async () => {
@@ -306,6 +352,20 @@ test('배너 이미지는 공개 읽기를 유지하고 관리자만 생성·수
   await assertFails(upload(seller, 'banners/main_hero/seller-banner.png', 'image/png'));
 });
 
+test('배너 이미지는 관리자가 아닌 모든 클라이언트의 생성·덮어쓰기·삭제를 거부한다', async () => {
+  for (const [actor, storage] of actorStorages()) {
+    if (actor === '관리자') continue;
+    const existing = objectRef(storage, 'banners/main_hero/public-banner.png');
+
+    await assertFails(
+      upload(storage, `banners/main_hero/created-${encodeURIComponent(actor)}.png`, 'image/png'),
+    );
+    await assertFails(existing.put(content(), { contentType: 'image/png' }));
+    await assertFails(existing.updateMetadata({ contentType: 'image/jpeg' }));
+    await assertFails(existing.delete());
+  }
+});
+
 test('배너 이미지는 5MiB 이하의 허용 contentType과 고정 경로만 받는다', async () => {
   const admin = storageFor('admin-1', { role: 'admin' });
 
@@ -338,6 +398,22 @@ test('상점 로고는 잘못된 소유자·역할·크기·contentType·경로�
   await assertFails(upload(seller, 'logos/seller-1_1721433600013', 'image/jpeg', TWO_MIB + 1));
   await assertFails(upload(seller, 'logos/seller-1_1721433600014', 'image/gif'));
   await assertFails(upload(seller, 'logos/seller-1/not-flat.png', 'image/png'));
+});
+
+test('상점 로고 기존 객체는 다른 판매자·관리자·소비자·기사·익명이 덮어쓰거나 삭제할 수 없다', async () => {
+  for (const [actor, storage] of actorStorages()) {
+    if (actor === '판매자') continue;
+    const existing = objectRef(storage, 'logos/seller-1_1721433600000');
+
+    await assertFails(existing.put(content(), { contentType: 'image/png' }));
+    await assertFails(existing.updateMetadata({ contentType: 'image/png' }));
+    await assertFails(existing.delete());
+  }
+  // 소유자 uid 형식이 맞아도 seller role이 아니면 본인 이름 로고를 만들 수 없다.
+  await assertFails(
+    upload(storageFor('user-1', { role: 'consumer' }), 'logos/user-1_1721433600020', 'image/png'),
+  );
+  await assertFails(upload(storageFor(), 'logos/anonymous_1721433600021', 'image/png'));
 });
 
 test('legacy 거점 사진은 담당 기사에게만 단건 읽기와 평면 JPEG 생성을 허용한다', async () => {
@@ -404,9 +480,47 @@ test('legacy 거점 사진은 수정·삭제와 잘못된 경로·크기·conten
   );
 });
 
+test('legacy 거점 사진은 배송 중이 아닌 주문·거점이 아닌 주문·없는 주문을 거부한다', async () => {
+  const driver = storageFor('driver-1', { role: 'driver', driverApproved: true });
+
+  // 배송 완료 주문: 담당 기사라도 새 사진을 만들 수 없다.
+  await assertFails(
+    upload(driver, 'deliveryPhotos/order-legacy-delivered_1721433600030.jpg', 'image/jpeg'),
+  );
+  // 거점 배송이 아닌 주문: 담당 기사라도 읽거나 만들 수 없다.
+  await assertFails(
+    objectRef(driver, 'deliveryPhotos/order-legacy-direct_1721433600000.jpg').getMetadata(),
+  );
+  await assertFails(
+    upload(driver, 'deliveryPhotos/order-legacy-direct_1721433600031.jpg', 'image/jpeg'),
+  );
+  // 주문 문서가 없으면 담당 관계를 증명할 수 없으므로 거부한다.
+  await assertFails(
+    objectRef(driver, 'deliveryPhotos/order-missing_1721433600000.jpg').getMetadata(),
+  );
+  await assertFails(upload(driver, 'deliveryPhotos/order-missing_1721433600032.jpg', 'image/jpeg'));
+});
+
 test('정의되지 않은 경로는 모든 역할의 직접 접근을 거부한다', async () => {
   for (const [, storage] of actorStorages()) {
     await assertFails(upload(storage, 'unknown/file.jpg', 'image/jpeg'));
+  }
+});
+
+test('정의되지 않은 경로의 기존 객체는 모든 역할의 읽기·목록·덮어쓰기·삭제를 거부한다', async () => {
+  for (const [, storage] of actorStorages()) {
+    for (const path of ['unknown/seeded.jpg', 'users/user-1/profile.jpg', 'root-level.jpg']) {
+      const existing = objectRef(storage, path);
+
+      await assertFails(existing.getMetadata());
+      await assertFails(existing.getDownloadURL());
+      await assertFails(existing.put(content(), { contentType: 'image/jpeg' }));
+      await assertFails(existing.delete());
+    }
+    await assertFails(objectRef(storage, 'unknown').listAll());
+    await assertFails(objectRef(storage, 'users/user-1').listAll());
+    await assertFails(objectRef(storage, '').listAll());
+    await assertFails(upload(storage, 'users/user-1/created.jpg', 'image/jpeg'));
   }
 });
 
