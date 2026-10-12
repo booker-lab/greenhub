@@ -1,9 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { acquireJobLease, completeJobLease, seoulDailySlotKey } from '../common/job-lease';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OpsAlertService } from './ops-alert.service';
 
 const STALE_PENDING_MS = 20 * 60_000;
+const DIGEST_JOB_NAME = 'ops-daily-digest';
+const DIGEST_LEASE_TTL_MS = 10 * 60_000;
 
 function millis(value: unknown): number | null {
   if (value instanceof Date) return value.getTime();
@@ -85,9 +88,22 @@ export class OpsDigestService {
     return { level, lines };
   }
 
+  // 인스턴스가 여럿 떠 있어도(배포 겹침·복제본) 하루 한 번만 보내도록 회차 lease를 잡는다.
   @Cron('30 8 * * *', { timeZone: 'Asia/Seoul' })
   async sendDailyDigest(): Promise<void> {
     if (!this.alerts.enabled) return;
+    const acquired = await acquireJobLease(this.firestore, {
+      jobName: DIGEST_JOB_NAME,
+      slotKey: seoulDailySlotKey(),
+      ttlMs: DIGEST_LEASE_TTL_MS,
+      logger: this.logger,
+    });
+    if (acquired.status === 'ALREADY_DONE' || acquired.status === 'HELD') return;
+    if (acquired.status === 'UNAVAILABLE') {
+      // 저장소를 읽지 못하면 요약도 만들 수 없다. 조용히 넘기지 않고 실패 알림을 보낸다.
+      await this.sendFailureAlert();
+      return;
+    }
     try {
       const { level, lines } = OpsDigestService.format(await this.collect());
       await this.alerts.send({ level, title: '아침 운영 요약', lines });
@@ -95,11 +111,19 @@ export class OpsDigestService {
       this.logger.error(
         `[OpsDigest] 요약 실패: ${error instanceof Error ? error.message : String(error)}`,
       );
-      await this.alerts.send({
-        level: 'warning',
-        title: '아침 운영 요약을 만들지 못했습니다',
-        lines: ['서버 로그를 확인하세요.'],
-      });
+      await this.sendFailureAlert();
     }
+    await completeJobLease(this.firestore, acquired.lease, {
+      succeeded: true,
+      logger: this.logger,
+    });
+  }
+
+  private async sendFailureAlert(): Promise<void> {
+    await this.alerts.send({
+      level: 'warning',
+      title: '아침 운영 요약을 만들지 못했습니다',
+      lines: ['서버 로그를 확인하세요.'],
+    });
   }
 }
