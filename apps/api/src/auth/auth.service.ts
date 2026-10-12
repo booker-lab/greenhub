@@ -13,7 +13,7 @@ import { ConfigService } from '@nestjs/config';
 import { getConfigValues, isProductionRuntime } from '../config/runtime-config';
 import * as bcrypt from 'bcrypt';
 import * as admin from 'firebase-admin';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { AuditService } from '../common/audit/audit.service';
 import type { AddressDto } from './dto/address.dto';
@@ -177,7 +177,7 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const userId = uuidv4();
+    const userId = randomUUID();
     const now = this.firestore.Timestamp.now();
 
     const userDoc = {
@@ -329,7 +329,7 @@ export class AuthService {
         );
       }
       const newAddr = {
-        id: uuidv4(),
+        id: randomUUID(),
         label: dto.label,
         address: dto.address,
         addressDetail: dto.addressDetail,
@@ -498,7 +498,7 @@ export class AuthService {
         if (linkedUserSnap.exists) return linkedUserSnap.data() as Record<string, unknown>;
       }
 
-      const userId = uuidv4();
+      const userId = randomUUID();
       const now = this.firestore.Timestamp.now();
       const userData: Record<string, unknown> = {
         id: userId,

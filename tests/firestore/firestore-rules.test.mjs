@@ -11,6 +11,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   setDoc,
@@ -710,11 +711,43 @@ test('인증된 seller owner surface 읽기( products/stores/groupConfig )를 �
   await assertSucceeds(getDoc(doc(seller, 'groupProductConfig', 'product-1')));
 });
 
-test('공개 dailyCaps 직접 구독을 보존한다', async () => {
+test('공개 dailyCaps 단건 조회와 배송일 picker 범위 쿼리를 보존한다', async () => {
   const database = testEnvironment.unauthenticatedContext().firestore();
 
   await assertSucceeds(getDoc(doc(database, 'dailyCaps', 'store-1_2026-07-18')));
-  await assertSucceeds(getDocs(collection(database, 'dailyCaps')));
+  // 소비자 useDeliverySlots와 같은 형태: storeId 동등 + 날짜 범위 + limit 62.
+  await assertSucceeds(
+    getDocs(
+      query(
+        collection(database, 'dailyCaps'),
+        where('storeId', '==', 'store-1'),
+        where('date', '>=', '2026-07-01'),
+        where('date', '<=', '2026-08-31'),
+        limit(62),
+      ),
+    ),
+  );
+});
+
+test('dailyCaps는 limit 없는 목록과 상한을 넘는 limit 목록을 거부한다', async () => {
+  const database = testEnvironment.unauthenticatedContext().firestore();
+
+  await assertFails(getDocs(collection(database, 'dailyCaps')));
+  await assertFails(
+    getDocs(query(collection(database, 'dailyCaps'), where('storeId', '==', 'store-1'))),
+  );
+  await assertFails(getDocs(query(collection(database, 'dailyCaps'), limit(63))));
+  await assertFails(
+    getDocs(
+      query(
+        collection(database, 'dailyCaps'),
+        where('storeId', '==', 'store-1'),
+        where('date', '>=', '2026-07-01'),
+        where('date', '<=', '2026-08-31'),
+        limit(63),
+      ),
+    ),
+  );
 });
 
 test('품종은 공개 단건 조회만 허용하고 목록과 모든 직접 쓰기를 거부한다', async () => {
