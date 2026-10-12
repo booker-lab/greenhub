@@ -16,6 +16,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { AddressDto } from './dto/address.dto';
+import { FcmTokenDto } from './dto/fcm-token.dto';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -112,8 +113,8 @@ export class AuthController {
   @Patch('me/fcm-token')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  updateFcmToken(@CurrentUser() user: JwtPayload, @Body('fcmToken') fcmToken: string) {
-    return this.authService.updateFcmToken(user.sub, fcmToken);
+  updateFcmToken(@CurrentUser() user: JwtPayload, @Body() dto: FcmTokenDto) {
+    return this.authService.updateFcmToken(user.sub, dto.fcmToken);
   }
 
   // Firebase 클라이언트(Storage·Firestore 직접 접근)를 쓰는 판매자 앱(seller·admin)과 기사 앱(driver)만 받는다.
