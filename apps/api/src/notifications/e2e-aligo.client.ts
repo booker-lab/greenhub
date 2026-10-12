@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { NotificationChannel } from '@greenhub/shared';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { resolveE2EProviderMode } from '../common/e2e-provider-mode';
 import type { NotificationDeliveryResult } from './aligo.client';
 import {
@@ -52,7 +52,7 @@ export class E2EAligoClient {
   ): Promise<NotificationDeliveryResult> {
     const scenario = scenarioFromVariables(variables);
     const message = renderNotificationMessage(templateCode, variables);
-    const attemptId = uuidv4();
+    const attemptId = randomUUID();
     const result: NotificationDeliveryResult =
       scenario === 'alimtalk_success'
         ? {
@@ -114,7 +114,7 @@ export class E2EAligoClient {
       alimtalkAttempts: 0,
       smsAttempts: 1,
       providerReceipt: success ? 'e2e-sms-msg-id-stub-001' : null,
-      attemptId: uuidv4(),
+      attemptId: randomUUID(),
       needsVerify: false,
       errorMessage: success ? undefined : 'E2E 문자 최종 실패 fixture입니다.',
     };

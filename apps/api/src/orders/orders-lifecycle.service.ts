@@ -11,6 +11,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
 import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
+import {
+  isLegacyDeliveryPhotoUrlForOrder,
+  LEGACY_DELIVERY_PHOTO_URL_MESSAGE,
+} from './delivery-photo-url';
 import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { DriverOrderScopeService } from './driver-order-scope.service';
@@ -99,6 +103,14 @@ export class OrdersLifecycleService {
       role = userSnap.data()?.['role'] ?? 'consumer';
     }
     await this.assertOrderActionAccess(storeId, requesterId, role ?? 'consumer', order, nextStatus);
+    // 배송 사진 URL은 자사 Storage에 올린 이 주문의 거점 배송 사진만 저장한다.
+    if (
+      dto.photoUrl !== undefined &&
+      dto.photoUrl !== null &&
+      !isLegacyDeliveryPhotoUrlForOrder(dto.photoUrl, orderId)
+    ) {
+      throw new BadRequestException(LEGACY_DELIVERY_PHOTO_URL_MESSAGE);
+    }
 
     // Generic consumer REVIEWED shares the single semantic owner with reviewOrder.
     // Sequential duplicate (entry REVIEWED) converges settlement before preserving 403.

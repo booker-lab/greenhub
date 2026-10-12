@@ -129,6 +129,71 @@ describe('운영 기록이 열릴 때 알림', () => {
     expect(alerts.send).not.toHaveBeenCalled();
   });
 
+  it('알림에는 제목·메시지·유형만 싣고 주문·결제 식별자와 스냅샷의 고객 정보는 싣지 않는다', async () => {
+    const { writer, alerts } = setup();
+    await writer.createOrMergeIssue({
+      ...issue,
+      paymentId: 'payment-secret-1',
+      idempotencyKey: 'pii-1',
+      latestSnapshot: {
+        orderStatus: 'CANCELLED',
+        buyerName: '홍길동',
+        buyerPhone: '010-1234-5678',
+        address: '경기도 이천시 백사면 1',
+      },
+    });
+    await flush();
+    const sent = JSON.stringify(alerts.send.mock.calls[0][0]);
+    for (const leaked of [
+      'order-1',
+      'payment-secret-1',
+      '홍길동',
+      '010-1234-5678',
+      '이천시',
+      'store-1',
+    ]) {
+      expect(sent).not.toContain(leaked);
+    }
+  });
+
+  it('운영 기록을 만드는 모든 호출의 title·message는 고정 문자열이다', () => {
+    // 알림 본문은 기록의 title·message를 그대로 보낸다. 값에 고객 정보가 끼지 않도록
+    // 호출부의 두 필드가 문자열 리터럴인지 소스에서 확인한다.
+    const { readdirSync, readFileSync, statSync } = require('node:fs') as typeof import('node:fs');
+    const { join } = require('node:path') as typeof import('node:path');
+    const root = join(__dirname, '..');
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (path.endsWith('.ts') && !path.endsWith('.spec.ts')) files.push(path);
+      }
+    };
+    walk(root);
+    let calls = 0;
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/createOrMergeIssue\(\s*\{([\s\S]*?)\n\s*\}/g)) {
+        calls += 1;
+        const body = match[1];
+        for (const field of ['title', 'message']) {
+          // 필드 값은 다음 `키:` 줄 전까지다(여러 줄 조건식 포함).
+          const value =
+            body.match(new RegExp(`\\b${field}:([\\s\\S]*?)(?=\\n\\s*\\w+:|$)`))?.[1] ?? '';
+          const withoutLiterals = value.replace(/'[^'\\]*'/g, 'L');
+          // 문자열 리터럴이거나 "조건 ? 리터럴 : 리터럴"만 허용한다. 템플릿·연결·변수 값은 거부한다.
+          expect({ file, field, value: withoutLiterals.trim() }).toEqual({
+            file,
+            field,
+            value: expect.stringMatching(/^(?:[\w.!]+\s*\?\s*L\s*:\s*)?L,?$/),
+          });
+        }
+      }
+    }
+    expect(calls).toBeGreaterThanOrEqual(8);
+  });
+
   it('알림 서비스가 없어도 기록은 그대로 저장된다', async () => {
     const memory = createInMemoryFirestore();
     const writer = new OperationIssueWriterService(memory.firestore as never);

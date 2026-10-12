@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { FirestoreService } from '../firestore/firestore.service';
 import { StorageService } from '../firestore/storage.service';
@@ -37,6 +37,11 @@ interface RetentionTransaction {
   set(ref: unknown, data: RetentionMetadata): void;
 }
 
+interface LegalHoldTransaction {
+  get(refOrQuery: unknown): Promise<unknown>;
+  update(ref: unknown, data: RetentionMetadata): unknown;
+}
+
 /** 객체 삭제 결과. 이미 없는 객체(NOT_FOUND)는 삭제된 것으로 본다. */
 type StorageDeleteOutcome = 'DELETED' | 'NOT_FOUND' | 'FAILED';
 
@@ -50,6 +55,7 @@ const RETENTION_BATCH_SIZE = 450;
 const STORAGE_DELETE_ATTEMPTS = 3;
 const SAFE_RECORD_ID_PATTERN = /^[A-Za-z0-9:_-]{1,160}$/;
 const SAFE_ERROR_TOKEN_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
+const SAFE_ORDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 const RETENTION_POLICIES: Record<RetentionPurpose, RetentionPolicy> = {
   DELIVERY_PHOTO: {
@@ -104,6 +110,11 @@ const RETENTION_POLICIES: Record<RetentionPurpose, RetentionPolicy> = {
 };
 
 const RETENTION_COLLECTIONS = Object.values(RETENTION_POLICIES).map(({ collection }) => collection);
+
+/** 보존 보류를 걸 수 있는 주문 연결 보관 기록 컬렉션(마케팅 동의 기록은 주문 분쟁 증빙이 아니다). */
+const LEGAL_HOLD_COLLECTIONS = Object.values(RETENTION_POLICIES)
+  .filter(({ allowedMetadata }) => allowedMetadata.has('legalHold'))
+  .map(({ collection }) => collection);
 
 function addUtcDays(value: Date, days: number): Date {
   const result = new Date(value.getTime());
@@ -258,6 +269,67 @@ export class RetentionService {
       storageNotFoundCount,
       deletedByPurpose,
     };
+  }
+
+  /**
+   * 주문에 연결된 보관 기록(배송 사진·계약/결제·환불/분쟁)의 보존 보류를 설정하거나 해제한다.
+   * 보류가 설정된 기록은 만료일이 지나도 파기하지 않는다(canPurge).
+   */
+  async setOrderLegalHold(input: {
+    orderId: string;
+    hold: boolean;
+    reason: string;
+    actorId: string;
+  }): Promise<RetentionMetadata> {
+    if (!SAFE_ORDER_ID_PATTERN.test(input.orderId)) {
+      throw new BadRequestException('주문 식별자 형식이 올바르지 않습니다.');
+    }
+    const orderRef = this.firestore.doc(`orders/${input.orderId}`);
+
+    return this.firestore.runTransaction(async (rawTx) => {
+      const tx = rawTx as unknown as LegalHoldTransaction;
+      const order = (await tx.get(orderRef)) as { exists: boolean };
+      if (!order.exists) {
+        throw new NotFoundException('주문을 찾을 수 없습니다.');
+      }
+
+      const snapshots = await Promise.all(
+        LEGAL_HOLD_COLLECTIONS.map(async (collection) => {
+          const snapshot = (await tx.get(
+            this.firestore.collection(collection).where('orderId', '==', input.orderId),
+          )) as RetentionQuerySnapshot;
+          return { collection, snapshot };
+        }),
+      );
+
+      const now = this.firestore.Timestamp.now();
+      const updatedByPurpose: Record<string, number> = {};
+      let updatedCount = 0;
+      for (const { collection, snapshot } of snapshots) {
+        for (const document of snapshot.docs) {
+          tx.update(document.ref, {
+            legalHold: input.hold,
+            legalHoldReason: input.reason,
+            legalHoldUpdatedBy: input.actorId,
+            legalHoldUpdatedAt: now,
+          });
+          updatedByPurpose[collection] = (updatedByPurpose[collection] ?? 0) + 1;
+          updatedCount += 1;
+        }
+      }
+
+      // 사유 원문·주문 식별자는 로그에 남기지 않는다(기록 문서에만 저장).
+      this.retentionLogger.log(
+        `[RetentionLegalHold] hold=${input.hold} updatedCount=${updatedCount} actor=${input.actorId}`,
+      );
+
+      return {
+        orderId: input.orderId,
+        legalHold: input.hold,
+        updatedCount,
+        updatedByPurpose,
+      };
+    });
   }
 
   @Cron('0 3 * * *', { timeZone: 'Asia/Seoul' })
