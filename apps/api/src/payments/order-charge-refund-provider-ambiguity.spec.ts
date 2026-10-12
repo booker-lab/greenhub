@@ -327,4 +327,35 @@ describe('OrderCharge refund provider ambiguity 28A (C1-C7)', () => {
       refundClaim: { token: 'foreign-token' },
     });
   });
+
+  it('C8. uncertain refund issue is routed to the charge store and points at the charge, not a payment', async () => {
+    const occ = createOccFirestore();
+    occ.seed('orderCharges/c-c8', {
+      id: 'c-c8',
+      orderId: 'order-c8',
+      storeId: 'store-c8',
+      status: 'PAID',
+      type: 'REDELIVERY_FEE',
+      amount: 3000,
+      portonePaymentId: 'order-charge-c-c8',
+    });
+    const portone = {
+      refund: jest.fn().mockRejectedValue(new Error('provider timeout')),
+      getPayment: jest.fn(),
+    };
+    const { service, issueWriter } = makeService(occ, portone);
+
+    await expect(service.refundByOrderId('order-c8', 'r')).rejects.toThrow('provider timeout');
+
+    expect(issueWriter.createOrMergeIssue).toHaveBeenCalledTimes(1);
+    expect(issueWriter.createOrMergeIssue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storeId: 'store-c8',
+        orderId: 'order-c8',
+        paymentId: null,
+        chargeId: 'c-c8',
+        type: 'AUTO_REFUND_FAILED',
+      }),
+    );
+  });
 });

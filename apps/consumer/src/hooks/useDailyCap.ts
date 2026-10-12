@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { todayKST } from '@greenhub/shared';
 import { db } from '@/lib/firebase';
 import type { DailyCap } from '@greenhub/shared';
@@ -129,9 +129,17 @@ interface UseDeliverySlotsResult {
 }
 
 /**
+ * 배송일 picker 범위 쿼리의 최대 문서 수.
+ * picker 조회 범위는 당월 1일~익월 말일(최대 31+31=62일)이고 dailyCaps 문서는
+ * 매장·날짜당 1개(`${storeId}_${date}`)이므로 62개를 넘지 않는다.
+ * `firestore.rules`의 dailyCaps list 조건(`request.query.limit <= 62`)과 같은 값을 유지한다.
+ */
+export const DELIVERY_SLOTS_QUERY_LIMIT = 62;
+
+/**
  * 소비자 배송일 picker용 — 날짜 범위의 dailyCaps 문서를 한 번에 구독한다.
  * REST `daily-caps` API는 셀러 전용 가드(@Roles)라 소비자가 호출 불가하므로
- * Firestore `dailyCaps` 컬렉션을 직접 쿼리한다 (보안 규칙 read: true).
+ * Firestore `dailyCaps` 컬렉션을 직접 쿼리한다 (보안 규칙: get 공개, list는 limit 62 이하만 허용).
  *
  * @param storeId - 스토어 ID
  * @param from    - 조회 시작일 'YYYY-MM-DD' (inclusive)
@@ -190,6 +198,7 @@ export function useDeliverySlots(
       where('storeId', '==', storeId),
       where('date', '>=', from),
       where('date', '<=', to),
+      limit(DELIVERY_SLOTS_QUERY_LIMIT),
     );
     const unsubscribe = onSnapshot(
       q,

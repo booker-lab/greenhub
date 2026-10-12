@@ -74,10 +74,14 @@ service cloud.firestore {
       allow list, write: if false;
     }
 
-    // dailyCaps: 소비자 배송일 picker가 직접 구독 (공개 잔여 ظرفیت, PII 없음).
+    // dailyCaps: 소비자 배송일 picker가 직접 구독 (공개 잔여 수량, PII 없음).
     // REST daily-caps는 seller 전용이므로 consumer 직접 읽기를 유지한다.
+    // 단건 get은 공개, list는 picker 조회 범위(당월 1일~익월 말일, 최대 62일 =
+    // 매장당 최대 62문서)에 맞춘 limit을 명시한 쿼리만 허용한다.
+    // 클라이언트 useDeliverySlots의 DELIVERY_SLOTS_QUERY_LIMIT과 같은 값을 유지한다.
     match /dailyCaps/{docId} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if request.query.limit != null && request.query.limit <= 62;
       allow write: if false;
     }
 
