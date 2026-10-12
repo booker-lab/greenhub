@@ -9,6 +9,7 @@ type TransactionWrite = {
   data: TestRecord;
 };
 type TestSnapshot = {
+  id: string;
   exists: boolean;
   data: () => TestRecord | undefined;
   ref: TestDocumentReference;
@@ -18,8 +19,10 @@ type TestDocumentReference = {
   get: () => Promise<TestSnapshot>;
   update: (data: TestRecord) => Promise<void>;
 };
+type TestQuerySnapshot = { empty: boolean; size: number; docs: TestSnapshot[] };
 type TestTransaction = {
-  get: (reference: TestDocumentReference) => Promise<TestSnapshot>;
+  get(reference: TestDocumentReference): Promise<TestSnapshot>;
+  get(query: TestQuery): Promise<TestQuerySnapshot>;
   set: (reference: TestDocumentReference, data: TestRecord) => void;
   update: (reference: TestDocumentReference, data: TestRecord) => void;
 };
@@ -31,6 +34,7 @@ type QueryFilter = {
 type TestQuery = {
   where: jest.Mock;
   orderBy: jest.Mock;
+  limit: jest.Mock;
   get: jest.Mock;
 };
 type CommitHookContext = {
@@ -147,6 +151,7 @@ class FakeFirestore {
     const document = this.documents.get(path);
     const data = document ? copyRecord(document.data) : undefined;
     return {
+      id: path.slice(path.lastIndexOf('/') + 1),
       exists: document !== undefined,
       data: () => data,
       ref: reference,
@@ -157,12 +162,21 @@ class FakeFirestore {
     collectionName: string,
     filters: QueryFilter[],
     orderBy?: string,
+    maximum?: number,
   ): TestQuery {
     const query = {
       where: jest.fn((field: string, operator: QueryFilter['operator'], expected: unknown) =>
-        this.createQuery(collectionName, [...filters, { field, operator, expected }], orderBy),
+        this.createQuery(
+          collectionName,
+          [...filters, { field, operator, expected }],
+          orderBy,
+          maximum,
+        ),
       ),
-      orderBy: jest.fn((field: string) => this.createQuery(collectionName, filters, field)),
+      orderBy: jest.fn((field: string) =>
+        this.createQuery(collectionName, filters, field, maximum),
+      ),
+      limit: jest.fn((value: number) => this.createQuery(collectionName, filters, orderBy, value)),
       get: jest.fn(() => {
         const documents = [...this.documents.entries()]
           .filter(([path]) => path.startsWith(`${collectionName}/`))
@@ -181,8 +195,13 @@ class FakeFirestore {
             const rightValue = comparable(right.data[orderBy]);
             return (rightValue as number) - (leftValue as number);
           })
+          .slice(0, maximum)
           .map(([path]) => this.readSnapshot(path));
-        return Promise.resolve({ empty: documents.length === 0, docs: documents });
+        return Promise.resolve({
+          empty: documents.length === 0,
+          size: documents.length,
+          docs: documents,
+        });
       }),
     };
     return query;
@@ -198,12 +217,15 @@ class FakeFirestore {
 
       const readVersions = new Map<string, number>();
       const writes: TransactionWrite[] = [];
-      const transaction: TestTransaction = {
-        get: (reference) => {
+      const transaction = {
+        get: (target: TestDocumentReference | TestQuery) => {
+          if (!('path' in target)) return target.get();
+          const reference = target;
           const document = this.documents.get(reference.path);
           readVersions.set(reference.path, document?.version ?? 0);
           const data = document ? copyRecord(document.data) : undefined;
           return Promise.resolve({
+            id: reference.path.slice(reference.path.lastIndexOf('/') + 1),
             exists: document !== undefined,
             data: () => data,
             ref: reference,
@@ -215,7 +237,7 @@ class FakeFirestore {
         update: (reference, data) => {
           writes.push({ kind: 'update', path: reference.path, data: copyRecord(data) });
         },
-      };
+      } as TestTransaction;
 
       const result = await callback(transaction);
       await new Promise<void>((resolve) => setImmediate(resolve));
@@ -543,6 +565,105 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
       await withFixedClock(() => service.confirmDueSettlements());
 
       expect(firestore.getData(`settlements/${orderId}`)?.['status']).toBe('cancelled');
+    });
+
+    describe('결제사 취소·분쟁 운영 기록', () => {
+      function seedReversalIssue(
+        firestore: FakeFirestore,
+        issueId: string,
+        orderId: string,
+        status: 'OPEN' | 'RESOLVED' | 'DISMISSED',
+        type = 'PROVIDER_REVERSAL_DETECTED',
+      ) {
+        firestore.seed(`operationIssues/${issueId}`, {
+          id: issueId,
+          storeId: 'store-1',
+          orderId,
+          type,
+          status,
+          severity: 'critical',
+        });
+      }
+
+      function seedDuePending(firestore: FakeFirestore, orderId: string) {
+        firestore.seed(
+          `settlements/${orderId}`,
+          makeSettlement(orderId, 'pending', {
+            settledAt: new Date('2026-08-25T00:00:00.000Z'),
+          }),
+        );
+      }
+
+      it('OPEN 기록이 있는 주문은 확정하지 않고 pending으로 두며 나머지는 확정한다', async () => {
+        const { firestore, service } = makeSettlementsService({
+          SETTLEMENT_CONFIRM_DELAY_DAYS: '1',
+        });
+        seedDuePending(firestore, 'order-reversal-1');
+        seedDuePending(firestore, 'order-clean-1');
+        seedReversalIssue(firestore, 'issue-1', 'order-reversal-1', 'OPEN');
+        const warn = jest
+          .spyOn((service as unknown as { logger: { warn: () => void } }).logger, 'warn')
+          .mockImplementation(() => undefined);
+
+        await withFixedClock(() => service.confirmDueSettlements());
+
+        expect(firestore.getData('settlements/order-reversal-1')?.['status']).toBe('pending');
+        expect(firestore.getData('settlements/order-clean-1')?.['status']).toBe('confirmed');
+        expect(firestore.transactionUpdates.map((update) => update.path)).toEqual([
+          'settlements/order-clean-1',
+        ]);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('order-reversal-1'));
+        // 기존 기록만 활용하고 새 운영 기록은 만들지 않는다.
+        expect(firestore.listData('operationIssues/')).toHaveLength(1);
+      });
+
+      it.each([
+        ['RESOLVED', 'RESOLVED', 'PROVIDER_REVERSAL_DETECTED'],
+        ['DISMISSED', 'DISMISSED', 'PROVIDER_REVERSAL_DETECTED'],
+        ['다른 유형의 OPEN', 'OPEN', 'PAYMENT_LOOKUP_FAILED'],
+      ] as const)('%s 기록은 확정을 막지 않는다', async (_label, status, type) => {
+        const { firestore, service } = makeSettlementsService({
+          SETTLEMENT_CONFIRM_DELAY_DAYS: '1',
+        });
+        seedDuePending(firestore, 'order-reversal-2');
+        seedReversalIssue(firestore, 'issue-2', 'order-reversal-2', status, type);
+
+        await withFixedClock(() => service.confirmDueSettlements());
+
+        expect(firestore.getData('settlements/order-reversal-2')?.['status']).toBe('confirmed');
+      });
+
+      it('다른 주문의 OPEN 기록은 확정을 막지 않는다', async () => {
+        const { firestore, service } = makeSettlementsService({
+          SETTLEMENT_CONFIRM_DELAY_DAYS: '1',
+        });
+        seedDuePending(firestore, 'order-reversal-3');
+        seedReversalIssue(firestore, 'issue-3', 'order-other', 'OPEN');
+
+        await withFixedClock(() => service.confirmDueSettlements());
+
+        expect(firestore.getData('settlements/order-reversal-3')?.['status']).toBe('confirmed');
+      });
+
+      it('확정 트랜잭션 재시도에서 새로 열린 기록을 다시 읽어 확정하지 않는다', async () => {
+        const { firestore, service } = makeSettlementsService({
+          SETTLEMENT_CONFIRM_DELAY_DAYS: '1',
+        });
+        const orderId = 'order-reversal-race-1';
+        seedDuePending(firestore, orderId);
+        // 첫 시도 commit 직전에 웹훅 기록이 열리고 정산 문서도 바뀌어 트랜잭션이 재시도된다.
+        firestore.setBeforeCommit(() => {
+          seedReversalIssue(firestore, 'issue-race-1', orderId, 'OPEN');
+          firestore.updateOutsideTransaction(`settlements/${orderId}`, {
+            updatedAt: new Date('2026-08-26T12:00:00.000Z'),
+          });
+        });
+
+        await withFixedClock(() => service.confirmDueSettlements());
+
+        expect(firestore.getData(`settlements/${orderId}`)?.['status']).toBe('pending');
+        expect(firestore.transactionUpdates).toHaveLength(0);
+      });
     });
   });
 

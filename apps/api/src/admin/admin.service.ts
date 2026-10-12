@@ -14,6 +14,7 @@ import { getAllowedTransitions } from '../orders/orders.helpers';
 import { PaymentsService } from '../payments/payments.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 import { releaseLegacyGroupQuantityInTransaction } from '../orders/_lib/legacy-group-quantity';
+import { hasOpenProviderReversalInTransaction } from '../settlements/_lib/provider-reversal-hold';
 import { SettlementsService } from '../settlements/settlements.service';
 import {
   QueryAdminSettlementsDto,
@@ -420,6 +421,13 @@ export class AdminService {
       }
       if (data['status'] !== 'confirmed') {
         throw new BadRequestException('confirmed 상태의 정산만 지급 처리할 수 있습니다.');
+      }
+      // 결제사 취소·분쟁 운영 기록이 OPEN이면 지급하지 않는다. 같은 트랜잭션에서 읽어 경합을 막는다.
+      const orderId = typeof data['orderId'] === 'string' ? data['orderId'] : settlementId;
+      if (await hasOpenProviderReversalInTransaction(this.firestore, t, orderId)) {
+        throw new ConflictException(
+          '결제사 취소·분쟁 확인이 끝나지 않은 주문입니다. 운영 확인 기록을 먼저 처리한 뒤 지급하세요.',
+        );
       }
 
       const now = this.firestore.Timestamp.now();
