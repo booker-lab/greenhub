@@ -121,6 +121,8 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 
 배치 도중 다른 경로가 `cancelled`로 바꾸면 transaction 재확인에서 skip해 취소 상태를 덮어쓰지 않는다.
 
+결제사 취소·분쟁 보류: 같은 주문(`orderId`)에 `operationIssues`의 `type == PROVIDER_REVERSAL_DETECTED`, `status == OPEN` 기록이 있으면 자동 확정은 그 정산을 `pending`으로 둔 채 건너뛰고(warn 로그만 남기며 새 운영 기록은 만들지 않음), admin 지급(`markAsPaid`)은 `confirmed`여도 409로 거부한다. 판정은 각 transaction 안에서 동등 조건 조회(`orderId`·`type`·`status`, `limit 1`)로 하므로 복합 인덱스가 필요 없고, `RESOLVED`·`DISMISSED` 기록은 막지 않아 처리 후 다음 배치에서 확정·지급된다. 직접 증거: `settlements-lifecycle.spec.ts`(confirm 보류), `admin-privileged-mutation.spec.ts`(지급 409).
+
 ## 7. 취소 반영
 
 `cancelSettlement(orderId)`는 연결 settlement가 있으면 취소를 반영한다.
