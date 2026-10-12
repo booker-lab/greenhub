@@ -18,7 +18,7 @@ type Data = Record<string, unknown>;
 const phone = '01012345678';
 const templateCode = 'ORDER_DELIVERY_HELD';
 const variables = { orderId: 'order-1', reason: '연락 불가' };
-const proxyUrl = 'http://fixie:proxy-password@proxy.example.test:80';
+const proxyUrl = 'http://fixie:proxy-password@proxy.example.test:80'; // trufflehog:ignore
 
 const configured = {
   ALIGO_API_KEY: 'test-api-key',
@@ -102,7 +102,7 @@ describe('ALIGO 송신 프록시(ALIGO_OUTBOUND_PROXY_URL)', () => {
   it.each([
     'not a url',
     'ftp://proxy.example.test:21',
-    'socks5://fixie:pw@proxy.example.test:1080',
+    'socks5://fixie:pw@proxy.example.test:1080', // trufflehog:ignore
   ])('형식이 잘못된 설정(%s)이면 직접 호출로 우회하지 않고 네트워크 호출 없이 거부한다', async (invalid) => {
     const client = makeClient({ ...configured, ALIGO_OUTBOUND_PROXY_URL: invalid });
 
@@ -123,15 +123,15 @@ describe('ALIGO 송신 프록시(ALIGO_OUTBOUND_PROXY_URL)', () => {
   });
 
   it.each([
-    'http://fixie:proxy-password@proxy.example.test:80',
-    'https://fixie:proxy-password@proxy.example.test:443',
+    'http://fixie:proxy-password@proxy.example.test:80', // trufflehog:ignore
+    'https://fixie:proxy-password@proxy.example.test:443', // trufflehog:ignore
   ])('운영 고정 IP 프록시 형식(%s)은 http·https 모두 허용한다', (allowed) => {
     expect(resolveAligoOutboundFetch(allowed)).toHaveProperty('fetch');
     expect(proxyAgentConstructor).toHaveBeenCalledWith(allowed);
   });
 
   it('프록시 설정 오류 메시지에 인증 정보 원문을 남기지 않는다', () => {
-    const secretish = 'ftp://fixie:proxy-password@proxy.example.test:21';
+    const secretish = 'ftp://fixie:proxy-password@proxy.example.test:21'; // trufflehog:ignore
     const result = resolveAligoOutboundFetch(secretish);
 
     expect(result).toEqual({ configError: 'ALIGO 송신 프록시 설정이 올바르지 않습니다.' });

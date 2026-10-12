@@ -64,12 +64,11 @@ export class DriverService {
     const candidates = snap.docs
       .map((d: any) => ({ id: d.id, ...d.data() }))
       .sort(compareByPreparedThenUpdated);
-    const visibility = await Promise.all(
-      candidates.map((order: Record<string, unknown>) =>
-        this.driverScope.isOrderVisible(order, driverId, authority),
-      ),
+    const visibleOrders = await this.driverScope.filterVisibleOrders(
+      candidates,
+      driverId,
+      authority,
     );
-    const visibleOrders = candidates.filter((_, index) => visibility[index]);
 
     return Promise.all(visibleOrders.map((order) => this.toDriverOrder(order, driverId, 'list')));
   }
