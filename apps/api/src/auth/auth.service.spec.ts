@@ -6,6 +6,8 @@ import type { AuditService } from '../common/audit/audit.service';
 import type { FirestoreService } from '../firestore/firestore.service';
 import { AuthService, KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT } from './auth.service';
 import type { KakaoClient } from './kakao.client';
+import { emailIdentityKey } from './email-identity';
+import { hashRefreshToken, sealRotatedRefreshToken } from './refresh-token-store';
 
 jest.mock('firebase-admin', () => ({
   auth: jest.fn(),
@@ -27,6 +29,9 @@ describe('AuthService', () => {
     refreshToken?: string;
     refreshRecord?: Record<string, unknown>;
     kakaoIdentity?: Record<string, unknown>;
+    emailIdentity?: Record<string, unknown>;
+    invite?: Record<string, unknown>;
+    config?: Record<string, string>;
   }) {
     const usersQuery = {
       where: jest.fn().mockReturnThis(),
@@ -62,12 +67,35 @@ describe('AuthService', () => {
       }),
       set: jest.fn().mockResolvedValue(undefined),
     };
+    const emailIdentityRef = {
+      get: jest.fn().mockResolvedValue({
+        exists: options.emailIdentity !== undefined,
+        data: () => options.emailIdentity,
+      }),
+      create: jest.fn().mockResolvedValue(undefined),
+    };
+    const inviteRef = {
+      get: jest.fn().mockResolvedValue({
+        exists: options.invite !== undefined,
+        data: () => options.invite,
+      }),
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    type TxRef = {
+      get: () => unknown;
+      set?: (data: unknown) => unknown;
+      create?: (data: unknown) => unknown;
+      update?: (data: unknown) => unknown;
+      delete?: () => unknown;
+    };
     const firestore = {
       runTransaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
         fn({
-          get: (ref: typeof refreshTokenRef) => ref.get(),
-          set: (ref: typeof refreshTokenRef, data: unknown) => ref.set(data),
-          delete: (ref: typeof refreshTokenRef) => ref.delete(),
+          get: (ref: TxRef) => ref.get(),
+          set: (ref: TxRef, data: unknown) => ref.set?.(data),
+          create: (ref: TxRef, data: unknown) => ref.create?.(data),
+          update: (ref: TxRef, data: unknown) => ref.update?.(data),
+          delete: (ref: TxRef) => ref.delete?.(),
         }),
       ),
       collection: jest.fn((path: string) => {
@@ -78,9 +106,14 @@ describe('AuthService', () => {
         if (path.startsWith('users/')) return userRef;
         if (path.startsWith('refreshTokens/')) return refreshTokenRef;
         if (path.startsWith('kakaoIdentities/')) return kakaoIdentityRef;
+        if (path.startsWith('emailIdentities/')) return emailIdentityRef;
+        if (path.startsWith('invites/')) return inviteRef;
         throw new Error(`예상하지 못한 문서 경로: ${path}`);
       }),
-      Timestamp: { now: jest.fn(() => 'now') },
+      Timestamp: {
+        now: jest.fn(() => 'now'),
+        fromMillis: jest.fn((millis: number) => ({ toMillis: () => millis })),
+      },
     };
     const jwt = {
       sign: jest.fn((_payload: Record<string, unknown>, options: { secret?: string }) =>
@@ -95,6 +128,7 @@ describe('AuthService', () => {
           JWT_REFRESH_SECRET: 'refresh-secret',
           JWT_EXPIRES_IN: '1h',
           JWT_REFRESH_EXPIRES_IN: '30d',
+          ...options.config,
         };
         return values[key] ?? fallback;
       }),
@@ -123,6 +157,8 @@ describe('AuthService', () => {
     );
     return {
       audit,
+      emailIdentityRef,
+      inviteRef,
       firestore,
       jwt,
       kakaoClient,
@@ -685,10 +721,11 @@ describe('AuthService', () => {
       jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
 
       await service.refresh('presented-refresh');
+      // 원문 대신 SHA-256(hex)을 저장한다.
       expect(refreshTokenRef.set).toHaveBeenCalledWith(
         expect.objectContaining({
-          token: 'refresh-token',
-          previousToken: 'presented-refresh',
+          token: hashRefreshToken('refresh-token'),
+          previousToken: hashRefreshToken('presented-refresh'),
           rotatedAt: expect.any(Number),
         }),
       );
@@ -1055,6 +1092,264 @@ describe('AuthService', () => {
       await expect(service.getSession(payload as never)).rejects.toMatchObject({ status });
       expect(jwt.sign).not.toHaveBeenCalled();
       expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('logout 세션 폐기 시각', () => {
+    const firebaseAuth = { revokeRefreshTokens: jest.fn() };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      firebaseAuth.revokeRefreshTokens.mockResolvedValue(undefined);
+      (admin.auth as jest.Mock).mockReturnValue(firebaseAuth);
+    });
+
+    it('logout은 초 단위로 내린 sessionsRevokedAt을 사용자 문서에 기록한다', async () => {
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_700);
+      const { firestore, userRef, service } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer' },
+        refreshToken: 'stored-refresh',
+      });
+
+      try {
+        await service.logout('consumer-1');
+      } finally {
+        nowSpy.mockRestore();
+      }
+      expect(firestore.Timestamp.fromMillis).toHaveBeenCalledWith(1_700_000_000_000);
+      expect(userRef.update).toHaveBeenCalledWith({
+        sessionsRevokedAt: expect.objectContaining({ toMillis: expect.any(Function) }),
+      });
+      expect(firestore.doc).toHaveBeenCalledWith('users/consumer-1');
+    });
+  });
+
+  describe('refresh token 해시 저장', () => {
+    const user = { id: 'driver-1', role: 'driver', driverApproved: true, suspended: false };
+
+    it('로그인 발급은 refresh token 원문 대신 SHA-256(hex)을 저장한다', async () => {
+      const { refreshTokenRef, service } = makeKakaoLoginService({ user });
+
+      await service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' });
+
+      expect(refreshTokenRef.set).toHaveBeenCalledWith({
+        token: hashRefreshToken('refresh-token'),
+        updatedAt: 'now',
+      });
+      expect(hashRefreshToken('refresh-token')).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('해시로 저장된 최신 토큰이면 회전한다', async () => {
+      const { audit, jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user,
+        refreshRecord: { token: hashRefreshToken('presented-refresh') },
+      });
+      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+
+      await expect(service.refresh('presented-refresh')).resolves.toEqual({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      });
+      expect(refreshTokenRef.set).toHaveBeenCalledTimes(1);
+      expect(refreshTokenRef.delete).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('배포 전 원문 기록과 맞으면 회전하면서 해시 기록으로 다시 쓴다', async () => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user,
+        refreshRecord: { token: 'legacy-refresh', updatedAt: 'before' },
+      });
+      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+
+      await expect(service.refresh('legacy-refresh')).resolves.toEqual({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      });
+      const written = refreshTokenRef.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(written.token).toBe(hashRefreshToken('refresh-token'));
+      expect(written.previousToken).toBe(hashRefreshToken('legacy-refresh'));
+      expect(JSON.stringify(written)).not.toContain('legacy-refresh');
+      expect(JSON.stringify(written)).not.toContain('"refresh-token"');
+    });
+
+    it('해시 기록과 맞지 않는 토큰은 재사용으로 보고 세션을 무효화한다', async () => {
+      const { audit, jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user,
+        refreshRecord: { token: hashRefreshToken('current-refresh') },
+      });
+      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+
+      await expect(service.refresh('other-refresh')).rejects.toMatchObject({ status: 401 });
+      expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
+      expect(audit.log).toHaveBeenCalledWith('auth.token.stolen', { userId: 'driver-1' });
+    });
+
+    it('회전 직후 유예 안에 직전 토큰이 다시 오면 저장된 해시 기록에서 현재 토큰을 돌려준다', async () => {
+      // 1차: 회전해 기록을 만든다.
+      const first = makeKakaoLoginService({
+        user,
+        refreshRecord: { token: hashRefreshToken('old-refresh') },
+      });
+      first.jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      await first.service.refresh('old-refresh');
+      const rotated = first.refreshTokenRef.set.mock.calls[0][0] as Record<string, unknown>;
+
+      // 2차: 같은 세션의 동시 요청이 직전 토큰을 다시 보낸다.
+      const second = makeKakaoLoginService({ user, refreshRecord: rotated });
+      second.jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+
+      await expect(second.service.refresh('old-refresh')).resolves.toEqual({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      });
+      expect(second.refreshTokenRef.set).not.toHaveBeenCalled();
+      expect(second.refreshTokenRef.delete).not.toHaveBeenCalled();
+    });
+
+    it('유예 기록의 봉인을 제시된 직전 토큰으로 풀 수 없으면 재사용으로 본다', async () => {
+      const { audit, jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user,
+        refreshRecord: {
+          token: hashRefreshToken('current-refresh'),
+          previousToken: hashRefreshToken('previous-refresh'),
+          sealedToken: sealRotatedRefreshToken('current-refresh', 'someone-else'),
+          rotatedAt: Date.now() - 5_000,
+        },
+      });
+      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+
+      await expect(service.refresh('previous-refresh')).rejects.toMatchObject({ status: 401 });
+      expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
+      expect(audit.log).toHaveBeenCalledWith('auth.token.stolen', { userId: 'driver-1' });
+    });
+
+    it('유예가 지난 해시 기록의 직전 토큰은 재사용으로 본다', async () => {
+      const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+        user,
+        refreshRecord: {
+          token: hashRefreshToken('current-refresh'),
+          previousToken: hashRefreshToken('previous-refresh'),
+          sealedToken: sealRotatedRefreshToken('current-refresh', 'previous-refresh'),
+          rotatedAt: Date.now() - 61_000,
+        },
+      });
+      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+
+      await expect(service.refresh('previous-refresh')).rejects.toMatchObject({ status: 401 });
+      expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('이메일 가입 운영 제한·중복 방지', () => {
+    const registerDto = (overrides: Record<string, unknown> = {}) =>
+      ({
+        email: 'new@example.com',
+        password: 'password-123',
+        name: '새 사용자',
+        role: 'consumer',
+        ...overrides,
+      }) as never;
+
+    const validInvite = {
+      expiresAt: { toMillis: () => Date.now() + 60_000 },
+      usedAt: null,
+    };
+
+    it.each([
+      ['RAILWAY_ENVIRONMENT_NAME', { RAILWAY_ENVIRONMENT_NAME: 'production' }],
+      ['NODE_ENV', { NODE_ENV: 'production' }],
+    ])('운영 런타임(%s)에서는 consumer·driver 이메일 가입을 403으로 막는다', async (_label, config) => {
+      for (const role of ['consumer', 'driver']) {
+        const { firestore, service, userRef } = makeKakaoLoginService({ config });
+
+        await expect(service.register(registerDto({ role }))).rejects.toMatchObject({
+          status: 403,
+        });
+        expect(firestore.runTransaction).not.toHaveBeenCalled();
+        expect(userRef.set).not.toHaveBeenCalled();
+      }
+    });
+
+    it('운영 런타임에서도 유효한 초대 토큰의 판매자 가입은 받는다', async () => {
+      const { inviteRef, service, userRef } = makeKakaoLoginService({
+        config: { RAILWAY_ENVIRONMENT_NAME: 'production' },
+        invite: validInvite,
+      });
+
+      await expect(
+        service.register(registerDto({ role: 'seller', inviteToken: 'invite-1' })),
+      ).resolves.toEqual({ userId: expect.any(String) });
+      expect(userRef.set).toHaveBeenCalledWith(expect.objectContaining({ role: 'seller' }));
+      expect(inviteRef.update).toHaveBeenCalledWith(
+        expect.objectContaining({ usedAt: 'now', usedBy: expect.any(String) }),
+      );
+    });
+
+    it('운영 런타임에서 초대 토큰 없는 판매자 가입은 기존처럼 403이다', async () => {
+      const { service } = makeKakaoLoginService({
+        config: { RAILWAY_ENVIRONMENT_NAME: 'production' },
+      });
+
+      await expect(service.register(registerDto({ role: 'seller' }))).rejects.toMatchObject({
+        status: 403,
+      });
+    });
+
+    it('운영이 아닌 런타임(Preview 등)에서는 consumer 이메일 가입을 그대로 받는다', async () => {
+      const { service, userRef } = makeKakaoLoginService({
+        config: { RAILWAY_ENVIRONMENT_NAME: 'preview', NODE_ENV: 'production' },
+      });
+
+      await expect(service.register(registerDto())).resolves.toEqual({
+        userId: expect.any(String),
+      });
+      expect(userRef.set).toHaveBeenCalledWith(expect.objectContaining({ role: 'consumer' }));
+    });
+
+    it('정규화 이메일 키의 연결 문서를 사용자 문서와 같은 트랜잭션에서 만든다', async () => {
+      const { emailIdentityRef, firestore, service, userRef } = makeKakaoLoginService({});
+
+      const { userId } = await service.register(registerDto({ email: ' New@Example.COM ' }));
+
+      expect(firestore.doc).toHaveBeenCalledWith(
+        `emailIdentities/${emailIdentityKey('new@example.com')}`,
+      );
+      expect(firestore.runTransaction).toHaveBeenCalledTimes(1);
+      expect(emailIdentityRef.create).toHaveBeenCalledWith({
+        userId,
+        email: 'new@example.com',
+        createdAt: 'now',
+      });
+      expect(userRef.set).toHaveBeenCalledWith(expect.objectContaining({ id: userId }));
+    });
+
+    it('같은 정규화 이메일의 연결 문서가 이미 있으면 사용자 문서를 만들지 않고 409다', async () => {
+      const { emailIdentityRef, service, userRef } = makeKakaoLoginService({
+        emailIdentity: { userId: 'existing-user' },
+      });
+
+      await expect(service.register(registerDto())).rejects.toMatchObject({ status: 409 });
+      expect(emailIdentityRef.create).not.toHaveBeenCalled();
+      expect(userRef.set).not.toHaveBeenCalled();
+    });
+
+    it('동시 가입이 먼저 연결 문서를 만들어 커밋이 ALREADY_EXISTS로 실패하면 409다', async () => {
+      const { firestore, service } = makeKakaoLoginService({});
+      firestore.runTransaction.mockRejectedValueOnce(
+        Object.assign(new Error('6 ALREADY_EXISTS'), { code: 6 }),
+      );
+
+      await expect(service.register(registerDto())).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('연결 문서가 없는 기존 계정의 이메일도 기존 조회로 409다', async () => {
+      const { firestore, service } = makeKakaoLoginService({
+        user: { id: 'legacy-user', email: 'new@example.com', role: 'consumer' },
+      });
+
+      await expect(service.register(registerDto())).rejects.toMatchObject({ status: 409 });
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
     });
   });
 });
