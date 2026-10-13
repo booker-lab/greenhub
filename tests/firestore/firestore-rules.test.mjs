@@ -11,6 +11,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   setDoc,
@@ -27,6 +28,21 @@ const SERVER_ONLY_COLLECTIONS = [
   'marketingConsentLogs',
   'deliveryPhotoRecords',
   'notificationDeliveries',
+  // 인증·식별자·알림·결제·정산·감사·운영 기록: firestore.rules의 기본 거부로만
+  // 보호되므로 명시 match가 없어도 모든 클라이언트 직접 접근이 거부되는지 고정한다.
+  'refreshTokens',
+  'emailIdentities',
+  'kakaoIdentities',
+  'invites',
+  'notifications',
+  'payments',
+  'orderCharges',
+  'orderCounters',
+  'settlements',
+  'auditLogs',
+  'aiUsage',
+  'hubs',
+  'deliveryFeeConfig',
 ];
 const SALE_ROUND_COLLECTIONS = ['saleRounds', 'saleRoundItems'];
 
@@ -397,9 +413,12 @@ async function seedFixtures() {
     };
 
     for (const collectionName of SERVER_ONLY_COLLECTIONS) {
+      // 각 역할이 소유자로 보일 수 있는 필드를 함께 둬서 소유자 본인 접근도 거부되는지 확인한다.
       fixtures[`${collectionName}/existing`] = {
         ownerId: 'user-1',
+        userId: 'user-1',
         storeId: 'store-1',
+        driverId: 'driver-1',
         status: 'ACTIVE',
       };
     }
@@ -416,6 +435,17 @@ async function assertDirectAccessDenied(collectionName) {
     const created = doc(database, collectionName, `created-${actor}`);
 
     await assertFails(getDoc(existing));
+    await assertFails(getDocs(collection(database, collectionName)));
+    for (const [field, value] of [
+      ['userId', 'user-1'],
+      ['ownerId', 'user-1'],
+      ['storeId', 'store-1'],
+      ['driverId', 'driver-1'],
+    ]) {
+      await assertFails(
+        getDocs(query(collection(database, collectionName), where(field, '==', value), limit(1))),
+      );
+    }
     await assertFails(setDoc(created, { actor }));
     await assertFails(updateDoc(existing, { actor }));
     await assertFails(deleteDoc(existing));
@@ -453,6 +483,42 @@ for (const collectionName of SERVER_ONLY_COLLECTIONS) {
     await assertDirectAccessDenied(collectionName);
   });
 }
+
+test('users 문서는 본인을 포함한 모든 클라이언트의 직접 읽기·목록·쓰기를 거부한다', async () => {
+  const actors = [
+    ['consumer-1', { role: 'consumer' }],
+    ['seller-1', { role: 'seller', storeId: 'store-1' }],
+    ['driver-1', { role: 'driver', driverApproved: true }],
+    ['pending-driver', { role: 'driver', driverApproved: false }],
+    ['admin-1', { role: 'admin' }],
+    ['user-without-profile', {}],
+  ];
+  const anonymous = testEnvironment.unauthenticatedContext().firestore();
+
+  await assertFails(getDoc(doc(anonymous, 'users', 'consumer-1')));
+  await assertFails(getDocs(collection(anonymous, 'users')));
+  await assertFails(setDoc(doc(anonymous, 'users', 'anonymous-created'), { role: 'admin' }));
+
+  for (const [uid, claims] of actors) {
+    const database = testEnvironment.authenticatedContext(uid, claims).firestore();
+    const own = doc(database, 'users', uid);
+
+    await assertFails(getDoc(own));
+    await assertFails(getDoc(doc(database, 'users', 'seller-2')));
+    await assertFails(getDocs(collection(database, 'users')));
+    await assertFails(
+      getDocs(query(collection(database, 'users'), where('role', '==', 'admin'), limit(1))),
+    );
+    // 역할·승인·정지 필드는 rules 권한 판정에 쓰이므로 본인 문서라도 직접 바꿀 수 없다.
+    await assertFails(setDoc(own, { role: 'admin', suspended: false }));
+    await assertFails(updateDoc(own, { role: 'admin' }));
+    await assertFails(updateDoc(own, { driverApproved: true }));
+    await assertFails(updateDoc(own, { suspended: false }));
+    await assertFails(deleteDoc(own));
+    await assertFails(getDoc(doc(database, 'users', uid, 'private', 'profile')));
+    await assertFails(setDoc(doc(database, 'users', uid, 'private', 'profile'), { uid }));
+  }
+});
 
 test('saleRounds 원문은 공개 상태여도 모든 클라이언트의 단건·목록 조회를 거부한다', async () => {
   for (const [, database] of clientContexts()) {
@@ -710,11 +776,43 @@ test('인증된 seller owner surface 읽기( products/stores/groupConfig )를 �
   await assertSucceeds(getDoc(doc(seller, 'groupProductConfig', 'product-1')));
 });
 
-test('공개 dailyCaps 직접 구독을 보존한다', async () => {
+test('공개 dailyCaps 단건 조회와 배송일 picker 범위 쿼리를 보존한다', async () => {
   const database = testEnvironment.unauthenticatedContext().firestore();
 
   await assertSucceeds(getDoc(doc(database, 'dailyCaps', 'store-1_2026-07-18')));
-  await assertSucceeds(getDocs(collection(database, 'dailyCaps')));
+  // 소비자 useDeliverySlots와 같은 형태: storeId 동등 + 날짜 범위 + limit 62.
+  await assertSucceeds(
+    getDocs(
+      query(
+        collection(database, 'dailyCaps'),
+        where('storeId', '==', 'store-1'),
+        where('date', '>=', '2026-07-01'),
+        where('date', '<=', '2026-08-31'),
+        limit(62),
+      ),
+    ),
+  );
+});
+
+test('dailyCaps는 limit 없는 목록과 상한을 넘는 limit 목록을 거부한다', async () => {
+  const database = testEnvironment.unauthenticatedContext().firestore();
+
+  await assertFails(getDocs(collection(database, 'dailyCaps')));
+  await assertFails(
+    getDocs(query(collection(database, 'dailyCaps'), where('storeId', '==', 'store-1'))),
+  );
+  await assertFails(getDocs(query(collection(database, 'dailyCaps'), limit(63))));
+  await assertFails(
+    getDocs(
+      query(
+        collection(database, 'dailyCaps'),
+        where('storeId', '==', 'store-1'),
+        where('date', '>=', '2026-07-01'),
+        where('date', '<=', '2026-08-31'),
+        limit(63),
+      ),
+    ),
+  );
 });
 
 test('품종은 공개 단건 조회만 허용하고 목록과 모든 직접 쓰기를 거부한다', async () => {

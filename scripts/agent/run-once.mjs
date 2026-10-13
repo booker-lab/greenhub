@@ -167,8 +167,79 @@ export const CHILD_GIT_SAFETY_ENV = Object.freeze({
   GIT_CONFIG_VALUE_4: 'greenhub-run-once-no-hooks-directory',
 });
 
+// Repository surfaces an autonomous task never changes, whatever a goal,
+// selector, or planner declares as allowed: review/CI configuration, the
+// runner and Git publication guardrails themselves, agent instruction and
+// configuration files, security rules, container configuration, and env files.
+// A task that changes one of them fails closed before publication.
+export const PROTECTED_PATH_PREFIXES = Object.freeze([
+  '.github',
+  'scripts/agent',
+  'scripts/git',
+  '.codex',
+  '.opencode',
+  'docs/goals',
+]);
+export const PROTECTED_EXACT_PATHS = Object.freeze([
+  'scripts/verify-deployment-safety.mjs',
+  'firestore.rules',
+  'storage.rules',
+  'firebase.json',
+  'opencode.json',
+  '.mcp.json',
+]);
+export const PROTECTED_BASENAME_PATTERNS = Object.freeze([
+  /^AGENTS\.md$/i,
+  /^CLAUDE\.md$/i,
+  /^CODEOWNERS$/i,
+  /^Dockerfile(?:\..*)?$/i,
+  /^\.env/i,
+]);
+
 export function normalizeRepoPath(value) {
   return String(value).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+}
+
+/** True when `value` names a protected repository path (case-insensitive). */
+export function isProtectedPath(value) {
+  const target = normalizeRepoPath(value).toLowerCase();
+  if (target.length === 0) return false;
+  if (
+    PROTECTED_PATH_PREFIXES.some((prefix) => {
+      const base = prefix.toLowerCase();
+      return target === base || target.startsWith(`${base}/`);
+    })
+  ) {
+    return true;
+  }
+  if (PROTECTED_EXACT_PATHS.some((entry) => entry.toLowerCase() === target)) return true;
+  const base = target.split('/').pop() ?? '';
+  return PROTECTED_BASENAME_PATTERNS.some((pattern) => pattern.test(base));
+}
+
+export function findProtectedPaths(paths) {
+  return [...new Set((paths ?? []).filter((entry) => isProtectedPath(entry)))];
+}
+
+// Operator kill switch. A stop file at the canonical checkout root, or a
+// non-empty `GREENHUB_AGENT_STOP` value other than `0`, stops a Night Run
+// before its next BUILD cycle and refuses publication before transport and
+// before merge.
+export const AGENT_STOP_FILE_NAME = '.agent-stop';
+export const AGENT_STOP_ENV = 'GREENHUB_AGENT_STOP';
+
+export function observeKillSwitch({ repositoryRoot, env = process.env, exists = existsSync }) {
+  const flag = typeof env?.[AGENT_STOP_ENV] === 'string' ? env[AGENT_STOP_ENV].trim() : '';
+  if (flag.length > 0 && flag !== '0') {
+    return { stop: true, source: 'ENV', reason: `${AGENT_STOP_ENV} is set` };
+  }
+  if (typeof repositoryRoot === 'string' && repositoryRoot.length > 0) {
+    const stopFile = join(resolve(repositoryRoot), AGENT_STOP_FILE_NAME);
+    if (exists(stopFile)) {
+      return { stop: true, source: 'FILE', reason: `stop file is present: ${stopFile}` };
+    }
+  }
+  return { stop: false, source: null, reason: null };
 }
 
 export function isPathAllowed(changedPath, allowedPaths) {
@@ -184,7 +255,9 @@ export function classifyChangedPaths({ changedPaths, allowedPaths }) {
   const withinBoundary = [];
   const violations = [];
   for (const changedPath of changedPaths) {
-    if (isPathAllowed(changedPath, allowedPaths)) withinBoundary.push(changedPath);
+    if (isPathAllowed(changedPath, allowedPaths) && !isProtectedPath(changedPath)) {
+      withinBoundary.push(changedPath);
+    }
     else violations.push(changedPath);
   }
   return { withinBoundary, violations };
@@ -224,6 +297,84 @@ export function buildChildEnv({ baseEnv, scratchDir, backend = OPENCODE_EXECUTOR
   // publication credentials in the operator profile are not picked up.
   childEnv.GH_CONFIG_DIR = join(scratchDir, 'opencode-child-gh-config');
   return childEnv;
+}
+
+// Proof and criterion commands run with an explicit allow-listed environment
+// instead of the operator environment: command lookup, home/profile and
+// temporary directories, locale, CI flag, Node options, and pnpm/npm/corepack
+// configuration. Windows names cover the shell and per-user profile lookup.
+// Credential-shaped names are dropped even when an allowed prefix matches them,
+// and no proof receives publication or provider credentials.
+export const PROOF_ENV_ALLOWED_NAMES = Object.freeze([
+  'PATH',
+  'PATHEXT',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'USERNAME',
+  'USERPROFILE',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'SYSTEMROOT',
+  'SYSTEMDRIVE',
+  'WINDIR',
+  'COMSPEC',
+  'TEMP',
+  'TMP',
+  'TMPDIR',
+  'SHELL',
+  'TERM',
+  'LANG',
+  'LANGUAGE',
+  'TZ',
+  'CI',
+  'NO_COLOR',
+  'FORCE_COLOR',
+  'NODE_OPTIONS',
+]);
+export const PROOF_ENV_ALLOWED_PREFIXES = Object.freeze([
+  'LC_',
+  'XDG_',
+  'NPM_CONFIG_',
+  'PNPM_',
+  'COREPACK_',
+]);
+
+export function isProofEnvNameAllowed(name) {
+  const upper = String(name).toUpperCase();
+  const listed =
+    PROOF_ENV_ALLOWED_NAMES.includes(upper) ||
+    PROOF_ENV_ALLOWED_PREFIXES.some((prefix) => upper.startsWith(prefix));
+  if (!listed) return false;
+  return !isDeniedEnvName(name, CODEX_EXECUTOR) && !/(?:^|_)(?:KEY|AUTH)(?:_|$)/i.test(name);
+}
+
+export function buildProofEnv(baseEnv) {
+  const proofEnv = {};
+  for (const [name, value] of Object.entries(baseEnv ?? {})) {
+    if (typeof value !== 'string') continue;
+    if (!isProofEnvNameAllowed(name)) continue;
+    proofEnv[name] = value;
+  }
+  return proofEnv;
+}
+
+// Shell syntax that requires a shell to interpret the command. A command
+// without any of it is split on whitespace and executed directly.
+const PROOF_SHELL_SYNTAX = /[|&;<>()$`\\"'*?[\]{}~!#%^\r\n]/;
+
+/** argv for direct execution, or null when the command needs a shell. */
+export function splitProofCommand(command, platform = process.platform) {
+  // Windows package-manager entrypoints are .cmd shims that only a shell runs.
+  if (platform === 'win32') return null;
+  const text = String(command).trim();
+  if (text.length === 0 || PROOF_SHELL_SYNTAX.test(text)) return null;
+  const argv = text.split(/\s+/);
+  // A leading NAME=value assignment is shell syntax as well.
+  if (argv[0].includes('=')) return null;
+  return argv;
 }
 
 export function buildTaskPrompt({ taskText, allowedPaths }) {
@@ -516,16 +667,27 @@ export function defaultInvokeOpencode({ resolvedCommand, args, cwd, env, timeout
   };
 }
 
-export function defaultRunProofCommand({ command, cwd, env, timeoutMs }) {
-  const result = spawnSync(command, {
+export function defaultRunProofCommand({
+  command,
+  cwd,
+  env,
+  timeoutMs,
+  platform = process.platform,
+  spawn = spawnSync,
+}) {
+  const spawnOptions = {
     cwd,
-    env,
+    env: buildProofEnv(env ?? process.env),
     encoding: 'utf8',
-    shell: true,
     maxBuffer: 64 * 1024 * 1024,
     timeout: timeoutMs > 0 ? timeoutMs : undefined,
     windowsHide: true,
-  });
+  };
+  const argv = splitProofCommand(command, platform);
+  const result =
+    argv === null
+      ? spawn(command, { ...spawnOptions, shell: true })
+      : spawn(argv[0], argv.slice(1), { ...spawnOptions, shell: false });
   return {
     exitCode: typeof result.status === 'number' ? result.status : null,
     signal: result.signal ?? null,
@@ -761,6 +923,7 @@ function createResult(options = {}) {
       allowedPaths: Array.isArray(options.allowedPaths) ? [...options.allowedPaths] : [],
       withinBoundary: [],
       violations: [],
+      protectedPaths: [],
       error: null,
     },
     executor: {
@@ -1108,6 +1271,7 @@ export function runOnce(options, deps = {}) {
       });
       result.boundary.withinBoundary = classification.withinBoundary;
       result.boundary.violations = classification.violations;
+      result.boundary.protectedPaths = findProtectedPaths(observation.changedPaths);
     } catch (error) {
       result.boundary.error = messageOf(error);
       if (status === null) {
@@ -1136,6 +1300,11 @@ export function runOnce(options, deps = {}) {
         BASELINE_OBSERVATION_FAILED,
         `mutation boundary observation failed: ${result.boundary.error}`,
       );
+    } else if (result.boundary.protectedPaths.length > 0) {
+      fail(
+        BOUNDARY_VIOLATION,
+        `protected repository path(s) must not be changed by an autonomous task: ${result.boundary.protectedPaths.join(', ')}`,
+      );
     } else if (result.boundary.violations.length > 0) {
       fail(
         BOUNDARY_VIOLATION,
@@ -1151,7 +1320,7 @@ export function runOnce(options, deps = {}) {
         proof = runProofCommand({
           command,
           cwd: workspacePath,
-          env: baseEnv,
+          env: buildProofEnv(baseEnv),
           timeoutMs: proofTimeoutMs,
         });
       } catch (error) {

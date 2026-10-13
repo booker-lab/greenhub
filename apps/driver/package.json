@@ -4,7 +4,6 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack --port 3003",
-    "prebuild": "node ../../scripts/copy-fonts.cjs",
     "build": "next build --webpack",
     "start": "next start",
     "test": "vitest run && pnpm run test:node",
@@ -33,6 +32,6 @@
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",
     "typescript": "^5",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.11"
   }
 }

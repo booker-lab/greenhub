@@ -95,11 +95,13 @@ import {
   SUCCESS as RUN_ONCE_SUCCESS,
   buildChildEnv,
   buildOpencodeArgs,
+  buildProofEnv,
   createBaselineWorkspace,
   defaultInvokeOpencode,
   defaultRemoveWorkspace,
   defaultRunProofCommand,
   fetchBaseline,
+  findProtectedPaths,
   gitCapture,
   isPathAllowed,
   normalizeRepoPath,
@@ -869,7 +871,7 @@ export function evaluateCriterion({ criterion, repositoryRoot, pin, options = {}
     if (criterion.check === 'PROOF_AT_MAIN') {
       const runProofCommand = deps.runProofCommand ?? defaultRunProofCommand;
       const removeWorkspace = deps.removeWorkspace ?? defaultRemoveWorkspace;
-      const env = deps.env ?? process.env;
+      const env = buildProofEnv(deps.env ?? process.env);
       const proofTimeoutMs = options.proofTimeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS;
       let tempRoot = null;
       let workspacePath = null;
@@ -1030,6 +1032,15 @@ function taskEligibility(task, state) {
       eligible: false,
       skip: null,
       refusal: `allow path(s) outside AUTONOMOUSLY_ALLOWED: ${outside.join(', ')}`,
+      closes,
+    };
+  }
+  const protectedAllow = findProtectedPaths(task.allow);
+  if (protectedAllow.length > 0) {
+    return {
+      eligible: false,
+      skip: null,
+      refusal: `allow path(s) name protected repository paths: ${protectedAllow.join(', ')}`,
       closes,
     };
   }
@@ -1490,6 +1501,13 @@ function validatePlannerProposal({ proposal, contract, criteria, usedTaskIds }) 
     return reject(
       'ALLOW_OUTSIDE_AUTHORITY',
       `planner path(s) outside AUTONOMOUSLY_ALLOWED: ${outside.join(', ')}`,
+    );
+  }
+  const protectedAllow = findProtectedPaths(allow);
+  if (protectedAllow.length > 0) {
+    return reject(
+      'ALLOW_OUTSIDE_AUTHORITY',
+      `planner allow path(s) name protected repository paths: ${protectedAllow.join(', ')}`,
     );
   }
   return {
@@ -2491,9 +2509,9 @@ export function runGoal(options = {}, deps = {}) {
         const reason =
           status === HUMAN_DECISION_REQUIRED
             ? selection.refusals.length > 0
-              ? `catalog task(s) outside AUTONOMOUSLY_ALLOWED: ${selection.refusals
-                  .map((refusal) => refusal.taskId)
-                  .join(', ')}`
+              ? `catalog task(s) refused by the mutation boundary: ${selection.refusals
+                  .map((refusal) => `${refusal.taskId} (${refusal.reason})`)
+                  .join('; ')}`
               : 'unsatisfied HUMAN criterion requires a human decision'
             : status === BLOCKED_EXTERNAL
               ? 'unsatisfied EXTERNAL criterion or unreadable external observation'

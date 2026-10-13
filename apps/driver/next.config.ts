@@ -42,6 +42,10 @@ function firebaseStorageImagePatterns() {
 }
 
 const nextConfig: NextConfig = {
+  // Mantine은 Next 기본 최적화 목록에 없어 배럴 import가 쓰지 않는 컴포넌트까지 번들에 끌어온다.
+  experimental: {
+    optimizePackageImports: ['@mantine/core', '@mantine/hooks', '@mantine/notifications'],
+  },
   poweredByHeader: false,
   async headers() {
     return [
@@ -92,6 +96,15 @@ const networkOnlyRuntimeCaching = [
   },
 ];
 
+// next-pwa 기본 precache 제외 규칙에 Pretendard 글자 범위 조각(92개, 약 3MB)을 더한다.
+// 조각은 화면 글자에 필요한 것만 받으므로 서비스워커 설치 때 전부 미리 받지 않는다.
+const precacheExclude = [
+  /\/_next\/static\/.*(?<!\.p)\.woff2/,
+  /\.map$/,
+  /^manifest.*\.js$/,
+  /PretendardVariable\.subset\.\d+\.[0-9a-f]+\.woff2$/,
+];
+
 export default withBundleAnalyzer(withPWA({
   dest: "public",
   cacheOnFrontEndNav: false,
@@ -102,6 +115,7 @@ export default withBundleAnalyzer(withPWA({
   // 위 NetworkOnly 규칙을 앞에 두고, 정적 자산 등 나머지 기본 규칙은 그대로 유지한다
   extendDefaultRuntimeCaching: true,
   workboxOptions: {
+    exclude: precacheExclude,
     runtimeCaching: networkOnlyRuntimeCaching,
   },
 })(nextConfig));

@@ -9,6 +9,7 @@ import {
   SETTLEMENT_CURSOR_PATTERN,
 } from './dto/query-settlements.dto';
 import { calcFee } from './_lib/fee-calculator';
+import { hasOpenProviderReversalInTransaction } from './_lib/provider-reversal-hold';
 import { aggregateSettlements } from './_lib/settlement-aggregator';
 
 // 정산 상태 타입 SSOT = @greenhub/shared (F-1/S4). DTO 등 기존 import 경로 유지를 위해 re-export + 로컬 사용.
@@ -177,29 +178,49 @@ export class SettlementsService {
     // 트랜잭션 내 재확인으로 멱등성 확보 + 취소 경합 차단(GAP-1):
     // 배치 도중 cancelSettlement가 cancelled로 바꿨다면 status가 더는 pending이 아니므로 skip → cancelled 미덮어씀.
     // 한 건의 실패가 나머지 결과·로그를 가리지 않도록 건별로 격리한다. 실패 건은 pending으로 남아 다음 날 다시 시도된다.
+    // 결제사 취소·분쟁 운영 기록이 OPEN인 주문은 확정하지 않고 pending으로 둔다. 같은 트랜잭션에서 읽어
+    // 확정 직전에 기록이 열리는 경합도 막는다. 기록이 처리(RESOLVED·DISMISSED)되면 다음 배치에서 확정된다.
     const results = await Promise.allSettled(
       snap.docs.map((doc) =>
-        this.firestore.runTransaction(async (t) => {
+        this.firestore.runTransaction(async (t): Promise<'confirmed' | 'held' | 'skipped'> => {
           const fresh = await t.get(doc.ref);
-          if (!fresh.exists || fresh.data()?.['status'] !== 'pending') return false;
+          const data = fresh.data();
+          if (!fresh.exists || data?.['status'] !== 'pending') return 'skipped';
+          const orderId = typeof data['orderId'] === 'string' ? data['orderId'] : doc.id;
+          if (await hasOpenProviderReversalInTransaction(this.firestore, t, orderId)) {
+            return 'held';
+          }
           const now = this.firestore.Timestamp.now();
           t.update(doc.ref, {
             status: 'confirmed' as SettlementStatus,
             confirmedAt: now,
             updatedAt: now,
           });
-          return true;
+          return 'confirmed';
         }),
       ),
     );
 
-    const confirmed = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+    const confirmed = results.filter(
+      (r) => r.status === 'fulfilled' && r.value === 'confirmed',
+    ).length;
+    const heldIds = snap.docs
+      .filter((_, index) => {
+        const result = results[index];
+        return result.status === 'fulfilled' && result.value === 'held';
+      })
+      .map((doc) => doc.id);
     const failedIds = snap.docs
       .filter((_, index) => results[index].status === 'rejected')
       .map((doc) => doc.id);
     this.logger.log(
-      `[SettlementScheduler] confirmed ${confirmed}건, 실패 ${failedIds.length}건 (대상 ${snap.size}건)`,
+      `[SettlementScheduler] confirmed ${confirmed}건, 보류 ${heldIds.length}건, 실패 ${failedIds.length}건 (대상 ${snap.size}건)`,
     );
+    if (heldIds.length > 0) {
+      this.logger.warn(
+        `[SettlementScheduler] 결제사 취소·분쟁 확인 대기로 확정 보류한 정산: ${heldIds.join(', ')}`,
+      );
+    }
     if (failedIds.length > 0) {
       this.logger.error(`[SettlementScheduler] confirm 실패 정산: ${failedIds.join(', ')}`);
     }

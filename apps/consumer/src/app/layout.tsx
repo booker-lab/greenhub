@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import { ColorSchemeScript } from '@mantine/core';
 import Providers from './providers';
 import BottomNav from '@/components/BottomNav';
@@ -40,15 +41,17 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // proxy가 요청마다 만든 CSP nonce. 인라인 색상 모드 스크립트에 붙인다.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
     <html lang="ko" suppressHydrationWarning>
       <head>
-        <ColorSchemeScript />
+        <ColorSchemeScript nonce={nonce} />
       </head>
       <body>
         <Providers>

@@ -1,7 +1,82 @@
+# trufflehog 사용자 정의 탐지 규칙. CI 비밀값 검사(`.github/workflows/ci.yml` secrets job,
+# `.github/workflows/secret-scan-scheduled.yml`)가 `--config=.trufflehog.yml`로 읽는다.
+# 기본 탐지기는 그대로 돌고, 여기 규칙은 기본 탐지기가 모르는 이 프로젝트의 자격 증명 형식을 더한다.
+# - 검증 엔드포인트를 두지 않는다. 결과는 항상 unverified이며 PR 범위 검사에서는 실패로 본다.
+# - 값이 아니라 형식·변수 이름에 묶어 오탐을 줄인다. 빈 값, `${...}`·`process.env` 참조,
+#   하이픈이 섞인 자리표시 값, 반복 문자(엔트로피 미달)는 잡지 않는다.
+# - 테스트·문서의 자리표시 값은 그 줄에 `trufflehog:ignore` 주석을 단다.
 detectors:
-  - name: Generic
-    allowlist:
-      regexes:
-        - "example\\.com"
-        - "REPLACE_ME"
-        - "your-.*-here"
+  - name: PortOneApiSecret
+    description: 'PortOne V2(또는 V1 imp_secret) API secret. env 할당이나 `Authorization: PortOne <secret>` 헤더 형태.'
+    keywords:
+      - portone
+      - imp_secret
+    entropy: 3.5
+    regex:
+      secret: '(?i)(?:(?:portone[a-z0-9_]*secret|imp_secret)["'']?\s*[:=]\s*["''`]?|\bportone\s+)([A-Za-z0-9]{40,100})\b'
+
+  - name: PortOneWebhookSecret
+    description: 'PortOne 웹훅 서명 키(`whsec_` 접두사, Standard Webhooks 형식).'
+    keywords:
+      - whsec_
+    entropy: 3.5
+    regex:
+      secret: '\b(whsec_[A-Za-z0-9+/]{24,}={0,2})'
+
+  - name: AligoApiKey
+    description: 'ALIGO API key·발신 프로필 키 env 할당(ALIGO_API_KEY, ALIGO_SENDER_KEY).'
+    keywords:
+      - aligo_api_key
+      - aligo_sender_key
+    entropy: 3
+    regex:
+      key: '(?i)\baligo_(?:api|sender)_key["'']?\s*[:=]\s*["'']?([A-Za-z0-9]{24,64})\b'
+
+  - name: AligoCredentialPair
+    description: 'ALIGO 요청 본문·설정의 API key와 사용자 ID 쌍(apikey/key + userid/user_id).'
+    keywords:
+      - aligo
+    regex:
+      key: '(?i)(?:api_?key|\bkey)["'']?\s*[:=]\s*["'']?([A-Za-z0-9]{24,64})\b'
+      user: '(?i)\buser_?id["'']?\s*[:=]\s*["'']?([A-Za-z0-9_.-]{3,40})\b'
+    exclude_regexes_capture:
+      - '^(?:this|process|config|env|undefined|null)$'
+
+  - name: KakaoApiKey
+    description: 'Kakao REST API·Admin 키, 앱 client secret. env 할당이나 `Authorization: KakaoAK <key>` 헤더 형태.'
+    keywords:
+      - kakao
+    entropy: 3
+    regex:
+      key: '(?i)(?:\bkakao_?(?:rest_?api_?key|admin_?key|client_?secret)["'']?\s*[:=]\s*["'']?|\bKakaoAK\s+)([A-Za-z0-9]{32})\b'
+
+  - name: VercelProtectionBypassSecret
+    description: 'Vercel Deployment Protection 우회 secret(헤더·쿼리 `x-vercel-protection-bypass`, `*_BYPASS_SECRET` 할당).'
+    keywords:
+      - bypass
+    entropy: 3.5
+    regex:
+      secret: '(?i)(?:bypass_secret|x-vercel-protection-bypass)["'']?\s*[:=]\s*["'']?([A-Za-z0-9]{32})\b'
+
+  - name: GoogleServiceAccountPrivateKey
+    description: 'Google 서비스 계정 JSON의 private_key 값(파일 또는 env에 넣은 JSON 문자열).'
+    keywords:
+      - private_key
+    regex:
+      key: '\\?"private_key\\?"\s*:\s*\\?"(-----BEGIN (?:RSA )?PRIVATE KEY-----(?:\\+n|\s)+[A-Za-z0-9+/]{40,})'
+
+  - name: FixieProxyUrl
+    description: '자격 증명이 든 Fixie 고정 IP 프록시 URL.'
+    keywords:
+      - usefixie
+    regex:
+      url: '(?i)\b((?:https?|socks5h?)://[A-Za-z0-9._~%-]+:[^\s:@/''"`$*{}<>]{8,}@[A-Za-z0-9.-]*usefixie\.com)'
+
+  - name: ProxyUrlWithCredentials
+    description: '프록시 변수(*_PROXY_URL, HTTP(S)_PROXY 등)에 할당한, 자격 증명이 든 URL.'
+    keywords:
+      - proxy
+    regex:
+      url: '(?i)proxy[a-z0-9_]*["'']?\s*[:=]\s*["'']?((?:https?|socks5h?)://[A-Za-z0-9._~%-]+:[^\s:@/''"`$*{}<>]{8,}@[A-Za-z0-9.-]+)'
+    exclude_regexes_capture:
+      - '(?i)@(?:localhost|127\.0\.0\.1|[a-z0-9.-]*\.(?:test|example|invalid|localhost)|(?:[a-z0-9-]+\.)*example\.(?:com|net|org))$'

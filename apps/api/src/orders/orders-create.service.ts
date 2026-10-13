@@ -4,7 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -73,6 +73,10 @@ export class OrdersCreateService {
     const buyerPhone: string | null = userSnap.data()?.['phone'] ?? null;
     const sellerPhone: string | null = storeSnap.data()?.['phone'] ?? null;
     const hubData = (hubSnap as any)?.exists ? (hubSnap as any).data() : null;
+    // 거점은 주문하는 매장의 거점이어야 한다. 다른 매장 거점의 이름·주소를 주문에 담지 않는다.
+    if (dto.hubId && (!hubData || hubData['storeId'] !== storeId)) {
+      throw new NotFoundException('거점을 찾을 수 없습니다.');
+    }
     const hubName: string | null = hubData?.['name'] ?? null;
     const hubAddress: string | null = hubData
       ? [hubData['address'], hubData['addressDetail']].filter(Boolean).join(' ') || null
@@ -87,7 +91,7 @@ export class OrdersCreateService {
       deliveryConfig,
     );
 
-    const orderId = uuidv4();
+    const orderId = randomUUID();
     const now = this.firestore.Timestamp.now();
 
     // T8: orderNumber 발급 — 카운터 read는 트랜잭션 첫 read로 배치 (write 전 read 규칙 준수)

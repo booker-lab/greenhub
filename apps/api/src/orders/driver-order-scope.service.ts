@@ -23,6 +23,11 @@ type TransactionLike = {
 export const DRIVER_VISIBLE_STATUSES = ['PREPARING', 'DELIVERING', 'DELIVERY_HELD'] as const;
 
 export type DriverVisibleStatus = (typeof DRIVER_VISIBLE_STATUSES)[number];
+
+// 미배정 discovery는 이 상태·배송 방식의 주문만 대상이다. 기사 목록 쿼리도 같은 값으로 후보를 좁힌다.
+export const DRIVER_DISCOVERY_STATUS: DriverVisibleStatus = 'PREPARING';
+export const DRIVER_DISCOVERY_DELIVERY_METHODS: readonly string[] = ['direct', 'hub'];
+
 export type DriverOrderMode = 'legacy' | 'round_direct';
 
 export interface DriverAuthority {
@@ -90,15 +95,31 @@ export class DriverOrderScopeService {
     authority?: DriverAuthority,
   ): Promise<boolean> {
     const verified = await this.authorityFor(requesterId, authority);
-    const scope = await this.resolveScope(order, order['storeId'], (path) =>
+    return this.isOrderVisibleWith(order, verified.requesterId, (path) =>
       this.firestore.doc(path).get(),
     );
-    if (!this.isUsableScope(scope)) return false;
+  }
 
-    return (
-      this.isDiscoveryEligibleForScope(scope, order) ||
-      this.isAssignedVisibleForScope(scope, order, verified.requesterId)
+  // 목록 한 번의 요청 안에서는 같은 stores·saleRounds 문서를 주문마다 다시 읽지 않는다.
+  async filterVisibleOrders<T extends OrderRecord>(
+    orders: T[],
+    requesterId: string,
+    authority?: DriverAuthority,
+  ): Promise<T[]> {
+    const verified = await this.authorityFor(requesterId, authority);
+    const reads = new Map<string, Promise<DocumentSnapshotLike>>();
+    const getDocument = (path: string) => {
+      let read = reads.get(path);
+      if (!read) {
+        read = this.firestore.doc(path).get();
+        reads.set(path, read);
+      }
+      return read;
+    };
+    const visibility = await Promise.all(
+      orders.map((order) => this.isOrderVisibleWith(order, verified.requesterId, getDocument)),
     );
+    return orders.filter((_, index) => visibility[index]);
   }
 
   async isDiscoveryEligible(
@@ -234,6 +255,20 @@ export class DriverOrderScopeService {
     return this.assertDriverAuthority(requesterId);
   }
 
+  private async isOrderVisibleWith(
+    order: OrderRecord,
+    requesterId: string,
+    getDocument: (path: string) => Promise<DocumentSnapshotLike>,
+  ): Promise<boolean> {
+    const scope = await this.resolveScope(order, order['storeId'], getDocument);
+    if (!this.isUsableScope(scope)) return false;
+
+    return (
+      this.isDiscoveryEligibleForScope(scope, order) ||
+      this.isAssignedVisibleForScope(scope, order, requesterId)
+    );
+  }
+
   private async resolveScope(
     order: OrderRecord,
     targetStoreId: unknown,
@@ -275,7 +310,7 @@ export class DriverOrderScopeService {
     if (isOrderCancellationInProgress(order)) return false;
     if (scope.mode === 'round_direct')
       return scope.pilotBase && order['deliveryMethod'] === 'direct';
-    return ['direct', 'hub'].includes(String(order['deliveryMethod']));
+    return DRIVER_DISCOVERY_DELIVERY_METHODS.includes(String(order['deliveryMethod']));
   }
 
   private isAssignedVisibleForScope(
