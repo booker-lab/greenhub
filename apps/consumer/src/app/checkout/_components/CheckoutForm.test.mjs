@@ -103,3 +103,11 @@ test('Task 4.14 단일 회차 주문·결제와 완료 후 checkout_cart 삭제 
       roundCheckoutSource.indexOf("removeItem('checkout_cart')"),
   );
 });
+
+test('연락처 형식 오류는 칸을 벗어난 뒤에만 보여 준다', () => {
+  assert.match(formSource, /onBlur=\{\(\) => setDeliveryPhoneTouched\(true\)\}/);
+  assert.match(
+    formSource,
+    /error=\{deliveryPhoneTouched && deliveryPhoneError \? deliveryPhoneError : undefined\}/,
+  );
+});
