@@ -95,6 +95,7 @@ import {
   PUBLICATION_BLOCKED,
   PUBLICATION_REFRESH_REQUIRED,
   REMOTE_READBACK_FAILED,
+  resolvePositiveTimeoutMs,
 } from './run-publish-once.mjs';
 
 export const BUILD_MODE = 'BUILD';
@@ -803,9 +804,10 @@ function runFrontierSelector({
       args,
       cwd: workspacePath,
       env: childEnv,
-      timeoutMs: backend === CODEX_EXECUTOR
-        ? options.codexTimeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS
-        : options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
+      timeoutMs:
+        backend === CODEX_EXECUTOR
+          ? resolvePositiveTimeoutMs(options.codexTimeoutMs, DEFAULT_CODEX_TIMEOUT_MS)
+          : resolvePositiveTimeoutMs(options.opencodeTimeoutMs, DEFAULT_OPENCODE_TIMEOUT_MS),
     });
     if (backend === CODEX_EXECUTOR) {
       evidence.executor.invocationEvidence = codexInvocationEvidence({
@@ -2187,10 +2189,19 @@ export function runBuild(options = {}, deps = {}) {
         agent: selectedOptions.agent ?? null,
         opencodeBin: selectedOptions.opencodeBin ?? null,
         codexBin: selectedOptions.codexBin ?? null,
-        opencodeTimeoutMs: selectedOptions.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
-        codexTimeoutMs: selectedOptions.codexTimeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS,
-        proofTimeoutMs: selectedOptions.proofTimeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS,
-        ciTimeoutMs: selectedOptions.ciTimeoutMs ?? DEFAULT_CI_TIMEOUT_MS,
+        opencodeTimeoutMs: resolvePositiveTimeoutMs(
+          selectedOptions.opencodeTimeoutMs,
+          DEFAULT_OPENCODE_TIMEOUT_MS,
+        ),
+        codexTimeoutMs: resolvePositiveTimeoutMs(
+          selectedOptions.codexTimeoutMs,
+          DEFAULT_CODEX_TIMEOUT_MS,
+        ),
+        proofTimeoutMs: resolvePositiveTimeoutMs(
+          selectedOptions.proofTimeoutMs,
+          DEFAULT_PROOF_TIMEOUT_MS,
+        ),
+        ciTimeoutMs: resolvePositiveTimeoutMs(selectedOptions.ciTimeoutMs, DEFAULT_CI_TIMEOUT_MS),
         maxRebindAttempts: selectedOptions.maxRebindAttempts ?? DEFAULT_MAX_REBIND_ATTEMPTS,
         githubRepository: selectedOptions.githubRepository ?? null,
       },
@@ -2237,10 +2248,10 @@ export const USAGE = [
   '  --agent <name>              optional OpenCode agent override for child tasks',
   '  --opencode-bin <path>       explicit OpenCode executable for child tasks',
   '  --codex-bin <path>          explicit Codex executable for child tasks',
-  '  --opencode-timeout-ms <n>   child/selector opencode timeout in ms (default: 3600000)',
-  '  --codex-timeout-ms <n>      child/selector Codex timeout in ms (default: 3600000)',
-  '  --proof-timeout-ms <n>      child/proof timeout in ms (default: 1800000, 0 disables)',
-  '  --ci-timeout-ms <n>         child required-check watch timeout in ms (default: 2700000)',
+  '  --opencode-timeout-ms <n>   child/selector opencode timeout in ms (default: 3600000, must be > 0)',
+  '  --codex-timeout-ms <n>      child/selector Codex timeout in ms (default: 3600000, must be > 0)',
+  '  --proof-timeout-ms <n>      child/proof timeout in ms (default: 1800000, must be > 0)',
+  '  --ci-timeout-ms <n>         child required-check watch timeout in ms (default: 2700000, must be > 0)',
   '  --max-rebind-attempts <n>   child fresh-main rebind constructions (default: 2)',
   '  --github-repo <owner/name>  optional explicit GitHub repository for child publication',
   '',
@@ -2295,11 +2306,13 @@ export function parseArgs(argv) {
     '--codex-bin': 'codexBin',
     '--github-repo': 'githubRepository',
   };
-  const numberFlags = {
+  const timeoutFlags = {
     '--opencode-timeout-ms': 'opencodeTimeoutMs',
     '--codex-timeout-ms': 'codexTimeoutMs',
     '--proof-timeout-ms': 'proofTimeoutMs',
     '--ci-timeout-ms': 'ciTimeoutMs',
+  };
+  const numberFlags = {
     '--max-rebind-attempts': 'maxRebindAttempts',
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -2313,6 +2326,16 @@ export function parseArgs(argv) {
       if (value === undefined) return { ok: false, error: `${arg} requires a value` };
       index += 1;
       options[valueFlags[arg]] = value;
+      continue;
+    }
+    if (Object.hasOwn(timeoutFlags, arg)) {
+      const value = argv[index + 1];
+      const parsed = Number(value);
+      if (value === undefined || !Number.isFinite(parsed) || parsed <= 0) {
+        return { ok: false, error: `${arg} requires a positive number` };
+      }
+      index += 1;
+      options[timeoutFlags[arg]] = parsed;
       continue;
     }
     if (Object.hasOwn(numberFlags, arg)) {
