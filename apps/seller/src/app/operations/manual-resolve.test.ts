@@ -110,14 +110,25 @@ describe('운영 기록 수동 닫기 화면 계약', () => {
     expect(isValidManualResolveMemo('가'.repeat(201))).toBe(false);
   });
 
-  it('판매자는 결제사 취소·분쟁 기록을 닫을 수 없고 관리자는 닫을 수 있다', () => {
-    const [photo, reversal, closed] = parse({
+  it.each([
+    'PROVIDER_REVERSAL_DETECTED',
+    'AUTO_REFUND_FAILED',
+    'FINALIZATION_REFUND_FAILED',
+  ])('%s 기록은 관리자에게만 닫기 버튼을 보인다', (type) => {
+    const [issue] = parse({ items: [{ ...baseItem, type }] });
+
+    expect(canManuallyResolve(issue, 'seller')).toBe(false);
+    expect(canManuallyResolve(issue, 'admin')).toBe(true);
+  });
+
+  it('판매자는 그 밖의 열린 기록을 닫을 수 있고 닫힌 기록이나 다른 역할에는 버튼이 없다', () => {
+    const [photo, notice, closed] = parse({
       items: [
         baseItem,
         {
           ...baseItem,
-          id: 'reversal',
-          type: 'PROVIDER_REVERSAL_DETECTED',
+          id: 'notice',
+          type: 'CUSTOMER_NOTICE_FAILED',
           updatedAt: '2026-10-10T01:30:00.000Z',
         },
         { ...baseItem, id: 'closed', status: 'RESOLVED', resolvedAt: '2026-10-10T03:00:00.000Z' },
@@ -125,8 +136,7 @@ describe('운영 기록 수동 닫기 화면 계약', () => {
     });
 
     expect(canManuallyResolve(photo, 'seller')).toBe(true);
-    expect(canManuallyResolve(reversal, 'seller')).toBe(false);
-    expect(canManuallyResolve(reversal, 'admin')).toBe(true);
+    expect(canManuallyResolve(notice, 'seller')).toBe(true);
     expect(canManuallyResolve(closed, 'admin')).toBe(false);
     expect(canManuallyResolve(photo, 'consumer')).toBe(false);
     expect(canManuallyResolve(photo, null)).toBe(false);

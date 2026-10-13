@@ -3,8 +3,13 @@ import type { OrderOperationIssue } from '@/app/orders/[id]/operation-issues';
 /** 서버 `ResolveOperationIssueDto`와 같은 상한. */
 export const MANUAL_RESOLVE_MEMO_MAX_LENGTH = 200;
 
-/** 정산 확정·지급을 막는 기록이라 관리자만 닫는 유형(서버와 같은 규칙). */
-const ADMIN_ONLY_TYPES = new Set<OrderOperationIssue['type']>(['PROVIDER_REVERSAL_DETECTED']);
+/**
+ * 관리자만 닫는 유형. 서버 `apps/api/src/operations/dto/resolve-operation-issue.dto.ts`의
+ * `ADMIN_ONLY_MANUAL_RESOLVE_TYPES`와 같은 목록이다(정산 보류를 푸는 기록, 고객 환불이 확정되지 않은 기록).
+ */
+export const ADMIN_ONLY_MANUAL_RESOLVE_TYPES: ReadonlySet<OrderOperationIssue['type']> = new Set<
+  OrderOperationIssue['type']
+>(['PROVIDER_REVERSAL_DETECTED', 'AUTO_REFUND_FAILED', 'FINALIZATION_REFUND_FAILED']);
 
 const SAFE_IDENTIFIER_PATTERN = /^[A-Za-z0-9:_-]{1,160}$/;
 
@@ -90,7 +95,7 @@ export function canManuallyResolve(issue: OrderOperationIssue, role: string | nu
   if (issue.status !== 'OPEN') return false;
   if (role === 'admin') return true;
   if (role !== 'seller') return false;
-  return !ADMIN_ONLY_TYPES.has(issue.type);
+  return !ADMIN_ONLY_MANUAL_RESOLVE_TYPES.has(issue.type);
 }
 
 export function manualResolverLabel(resolution: ManualResolution) {

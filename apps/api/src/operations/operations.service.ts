@@ -9,6 +9,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import type { OperationIssueType } from '@greenhub/shared';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -18,7 +19,10 @@ import {
   OPERATION_ISSUE_LIST_SCAN_LIMIT,
 } from './dto/list-operation-issues.dto';
 import type { OperationActionType } from './dto/operation-action.dto';
-import { OPERATION_ISSUE_RESOLVE_MEMO_MAX_LENGTH } from './dto/resolve-operation-issue.dto';
+import {
+  ADMIN_ONLY_MANUAL_RESOLVE_TYPES,
+  OPERATION_ISSUE_RESOLVE_MEMO_MAX_LENGTH,
+} from './dto/resolve-operation-issue.dto';
 import {
   type CreateOperationIssueInput,
   type OperationIssueTransaction,
@@ -75,12 +79,6 @@ type ManualResolution = {
   memo: string;
   resolvedAt: unknown;
 };
-
-/**
- * 판매자가 닫으면 안 되는 유형. 결제사 취소·분쟁 기록은 열려 있는 동안 그 주문의 정산 확정·지급을
- * 막으므로(settlements `provider-reversal-hold`), 정산을 받는 판매자가 스스로 풀 수 없게 관리자만 닫는다.
- */
-const ADMIN_ONLY_MANUAL_RESOLVE_TYPES = new Set(['PROVIDER_REVERSAL_DETECTED']);
 
 @Injectable()
 export class OperationsService {
@@ -195,7 +193,10 @@ export class OperationsService {
   ): Promise<Record<string, unknown>> {
     const issue = await this.readAuthorizedIssue(storeId, issueId, requesterId, role);
     const actorRole = role === 'admin' ? 'admin' : 'seller';
-    if (actorRole !== 'admin' && ADMIN_ONLY_MANUAL_RESOLVE_TYPES.has(String(issue['type']))) {
+    if (
+      actorRole !== 'admin' &&
+      ADMIN_ONLY_MANUAL_RESOLVE_TYPES.has(issue['type'] as OperationIssueType)
+    ) {
       throw new ForbiddenException('이 운영 기록은 관리자만 닫을 수 있습니다.');
     }
     const normalizedMemo = this.normalizeMemo(typeof memo === 'string' ? memo : '');

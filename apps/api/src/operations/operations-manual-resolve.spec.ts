@@ -193,16 +193,38 @@ describe('POST /stores/:storeId/operation-issues/:issueId/resolve', () => {
     expect(stored()).toMatchObject({ status: 'OPEN' });
   });
 
-  it('결제사 취소·분쟁 기록은 판매자가 닫을 수 없고 관리자는 닫을 수 있다', async () => {
-    await boot(seed({ type: 'PROVIDER_REVERSAL_DETECTED' }));
+  it.each([
+    'PROVIDER_REVERSAL_DETECTED',
+    'AUTO_REFUND_FAILED',
+    'FINALIZATION_REFUND_FAILED',
+  ])('%s 기록은 판매자가 닫으면 403이고 관리자는 닫을 수 있다', async (type) => {
+    await boot(seed({ type }));
 
-    await resolve('seller', { memo: '정산 받고 싶어요' }).expect(403);
+    await resolve('seller', { memo: '직접 확인했어요' }).expect(403);
     expect(stored()).toMatchObject({ status: 'OPEN' });
+    expect(stored()['resolution']).toBeUndefined();
 
-    const response = await resolve('admin', { memo: 'PortOne 콘솔에서 분쟁 종결 확인' }).expect(
-      200,
-    );
-    expect(response.body.resolution).toMatchObject({ actorId: 'admin-1', actorRole: 'admin' });
+    const response = await resolve('admin', { memo: 'PortOne 콘솔에서 확인' }).expect(200);
+    expect(response.body).toMatchObject({
+      status: 'RESOLVED',
+      resolution: { actorId: 'admin-1', actorRole: 'admin', memo: 'PortOne 콘솔에서 확인' },
+    });
+  });
+
+  it.each([
+    'PAYMENT_LOOKUP_FAILED',
+    'CUSTOMER_NOTICE_FAILED',
+    'REDELIVERY_FAILED',
+    'RETENTION_DELETE_FAILED',
+    'DELIVERY_PHOTO_RECONCILIATION_REQUIRED',
+  ])('%s 기록은 판매자가 닫을 수 있다', async (type) => {
+    await boot(seed({ type }));
+
+    const response = await resolve('seller', { memo: '직접 확인했어요' }).expect(200);
+    expect(response.body).toMatchObject({
+      status: 'RESOLVED',
+      resolution: { actorRole: 'seller' },
+    });
   });
 
   it('관리자는 어느 가게 기록이든 닫는다', async () => {
@@ -244,7 +266,7 @@ describe('POST /stores/:storeId/operation-issues/:issueId/resolve', () => {
     const claim = { token: 'claim-1', actionType: 'RETRY_REFUND', expiresAt: Date.now() + 60_000 };
     await boot(seed({ type: 'AUTO_REFUND_FAILED', actionClaim: claim }));
 
-    await resolve('seller', { memo: '환불 확인' }).expect(409);
+    await resolve('admin', { memo: '환불 확인' }).expect(409);
     expect(stored()).toMatchObject({ status: 'OPEN', actionClaim: claim });
   });
 
@@ -252,13 +274,13 @@ describe('POST /stores/:storeId/operation-issues/:issueId/resolve', () => {
     const claim = { token: 'claim-1', actionType: 'RETRY_REFUND', expiresAt: Date.now() - 1 };
     await boot(seed({ type: 'AUTO_REFUND_FAILED', actionClaim: claim }));
 
-    await resolve('seller', { memo: 'PortOne에서 직접 환불함' }).expect(200);
+    await resolve('admin', { memo: 'PortOne에서 직접 환불함' }).expect(200);
     expect(stored()).toMatchObject({ status: 'RESOLVED', actionClaim: null });
   });
 
   it('수동으로 닫은 기록에 자동 조치를 다시 불러도 외부 부작용이 없다', async () => {
     await boot(seed({ type: 'AUTO_REFUND_FAILED' }));
-    await resolve('seller', { memo: '직접 환불 확인' }).expect(200);
+    await resolve('admin', { memo: '직접 환불 확인' }).expect(200);
 
     await request(app.getHttpServer())
       .post('/stores/store-1/operation-issues/issue-1/actions')
