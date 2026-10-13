@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { InviteToken } from '@/hooks/useAdmin';
-import { describeInviteRevokeOutcome, getAdminInviteReadState, inviteStatus } from './_lib';
+import {
+  describeInviteRevokeOutcome,
+  getAdminInviteReadState,
+  inviteStatus,
+  parseInviteRecipientEmail,
+} from './_lib';
 
 const FETCH_ERROR_MESSAGE = '초대 토큰 조회 중 오류 발생';
 
@@ -192,5 +197,31 @@ describe('describeInviteRevokeOutcome', () => {
     expect(notice?.color).toBe('yellow');
     expect(notice?.message).toContain('상태를 먼저 확인');
     expect(notice?.needsReload).toBe(true);
+  });
+});
+
+describe('parseInviteRecipientEmail', () => {
+  it('비우거나 공백만 입력하면 받는 사람 제한 없는 초대(null)로 본다', () => {
+    expect(parseInviteRecipientEmail('')).toEqual({ ok: true, value: null });
+    expect(parseInviteRecipientEmail('   ')).toEqual({ ok: true, value: null });
+  });
+
+  it('형식이 맞으면 앞뒤 공백을 뺀 값을 돌려준다', () => {
+    expect(parseInviteRecipientEmail('  Seller@Example.com ')).toEqual({
+      ok: true,
+      value: 'Seller@Example.com',
+    });
+  });
+
+  it.each([
+    'not-an-email',
+    'a@b',
+    'a b@example.com',
+    `${'a'.repeat(250)}@example.com`,
+  ])('형식이 틀린 입력 %p는 오류 문구를 돌려준다', (input) => {
+    expect(parseInviteRecipientEmail(input)).toEqual({
+      ok: false,
+      error: '이메일 형식이 올바르지 않아요.',
+    });
   });
 });

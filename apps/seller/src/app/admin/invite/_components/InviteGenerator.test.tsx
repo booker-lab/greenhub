@@ -11,6 +11,9 @@ const baseProps: Props = {
   lastToken: null,
   copied: false,
   generateError: null,
+  recipientEmail: '',
+  recipientEmailError: null,
+  onRecipientEmailChange: () => {},
   onGenerate: () => {},
   onCopy: () => {},
 };
@@ -71,6 +74,12 @@ describe('InviteGenerator command state', () => {
     expect(texts).toContain('새 토큰 생성');
     expect(texts).not.toContain('토큰 발급에 실패했습니다.');
     expect(texts).not.toContain('생성된 초대 토큰');
+  });
+
+  it('토큰 유효 기간을 서버와 같은 72시간으로 안내한다', () => {
+    const texts = textsOf(InviteGenerator({ ...baseProps }));
+    expect(texts).toContain('72시간');
+    expect(texts.some((t) => t.includes('7일'))).toBe(false);
   });
 
   it('생성 중에는 진행 copy를 표시한다', () => {
@@ -149,5 +158,80 @@ describe('InviteGenerator command state', () => {
     expect(copyHandlers.length).toBeGreaterThan(0);
     copyHandlers[0]();
     expect(onCopy).toHaveBeenCalledTimes(1);
+  });
+});
+
+interface InputLike {
+  label?: unknown;
+  error?: unknown;
+  value?: unknown;
+  onChange?: unknown;
+}
+
+/** 받는 사람 이메일 입력란(label로 식별)의 props를 찾는다. */
+function recipientInputProps(tree: ReactNode): InputLike | null {
+  let found: InputLike | null = null;
+  const visit = (current: ReactNode): void => {
+    if (found) return;
+    if (Array.isArray(current)) {
+      for (const child of current) visit(child);
+      return;
+    }
+    if (!isElement(current)) return;
+    const props = current.props as InputLike & Clickable;
+    if (props.label === '받는 사람 이메일 (선택)') {
+      found = props;
+      return;
+    }
+    visit(props.children);
+  };
+  visit(tree);
+  return found;
+}
+
+describe('InviteGenerator 받는 사람 이메일', () => {
+  it('선택 입력란에 현재 값과 오류를 전달한다', () => {
+    const tree = InviteGenerator({
+      ...baseProps,
+      recipientEmail: 'seller@example.com',
+      recipientEmailError: '이메일 형식이 올바르지 않아요.',
+    });
+    const input = recipientInputProps(tree);
+    expect(input).not.toBeNull();
+    expect(input?.value).toBe('seller@example.com');
+    expect(input?.error).toBe('이메일 형식이 올바르지 않아요.');
+  });
+
+  it('입력 변경은 onRecipientEmailChange로 값을 넘긴다', () => {
+    const onRecipientEmailChange = vi.fn();
+    const input = recipientInputProps(InviteGenerator({ ...baseProps, onRecipientEmailChange }));
+    (input?.onChange as (event: { currentTarget: { value: string } }) => void)({
+      currentTarget: { value: 'a@b.co' },
+    });
+    expect(onRecipientEmailChange).toHaveBeenCalledWith('a@b.co');
+  });
+
+  it('받는 사람을 지정해 발급한 토큰은 받는 사람을 함께 보여 준다', () => {
+    const tree = InviteGenerator({
+      ...baseProps,
+      lastToken: {
+        token: 'test-issued-aaa',
+        expiresAt: '2026-12-31T00:00:00.000Z',
+        recipientEmail: 'seller@example.com',
+      },
+    });
+    expect(textsOf(tree)).toContain('seller@example.com');
+  });
+
+  it('받는 사람 없이 발급한 토큰은 받는 사람 줄을 그리지 않는다', () => {
+    const tree = InviteGenerator({
+      ...baseProps,
+      lastToken: {
+        token: 'test-issued-aaa',
+        expiresAt: '2026-12-31T00:00:00.000Z',
+        recipientEmail: null,
+      },
+    });
+    expect(textsOf(tree).some((t) => t.includes('받는 사람:'))).toBe(false);
   });
 });
