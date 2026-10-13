@@ -12,10 +12,10 @@ import {
   type ThrottlerStorage,
 } from '@nestjs/throttler';
 import { AuthController } from '../../auth/auth.controller';
+import { hasExpectedTokenClaims, JWT_ALGORITHM, type TokenType } from '../../auth/token-claims';
 
 const MAX_SUBJECT_LENGTH = 128;
 const MAX_EMAIL_LENGTH = 320;
-const JWT_ALGORITHMS = ['HS256' as const];
 
 /**
  * `/auth/login`을 이메일과 상관없이 클라이언트 IP 하나로 묶어 세는 1분 상한.
@@ -69,7 +69,7 @@ function isHandler(context: ExecutionContext | undefined, handler: unknown): boo
  *   보내는 요청도 IP 단위 상한에 걸리게 한다.
  * - 그 밖에는 trust proxy 기준 클라이언트 IP로 집계한다.
  *
- * 검증되지 않은 토큰은 절대 사용자 키로 쓰지 않고 IP 집계로 돌아간다.
+ * 검증되지 않았거나 종류(typ)·수신자(aud)가 맞지 않는 토큰은 사용자 키로 쓰지 않고 IP 집계로 돌아간다.
  */
 @Injectable()
 export class ClientThrottlerGuard extends ThrottlerGuard {
@@ -129,27 +129,28 @@ export class ClientThrottlerGuard extends ThrottlerGuard {
     }
 
     if (isHandler(context, AuthController.prototype.refresh)) {
-      const sub = this.verifiedSubject(req.body?.refreshToken, 'JWT_REFRESH_SECRET');
+      const sub = this.verifiedSubject(req.body?.refreshToken, 'refresh');
       return sub ? `user:${sub}` : `ip:${ip}`;
     }
 
-    const sub = this.verifiedSubject(bearerToken(req), 'JWT_SECRET');
+    const sub = this.verifiedSubject(bearerToken(req), 'access');
     return sub ? `user:${sub}` : `ip:${ip}`;
   }
 
-  private verifiedSubject(
-    token: unknown,
-    secretKey: 'JWT_SECRET' | 'JWT_REFRESH_SECRET',
-  ): string | undefined {
+  private verifiedSubject(token: unknown, expected: TokenType): string | undefined {
     if (typeof token !== 'string' || !token) return undefined;
-    const secret = this.config.get<string>(secretKey);
+    const secret = this.config.get<string>(
+      expected === 'refresh' ? 'JWT_REFRESH_SECRET' : 'JWT_SECRET',
+    );
     if (typeof secret !== 'string' || !secret) return undefined;
 
     try {
       const payload = this.jwt.verify<{ sub?: unknown }>(token, {
         secret,
-        algorithms: JWT_ALGORITHMS,
+        algorithms: [JWT_ALGORITHM],
       });
+      // 다른 종류의 토큰(typ)·다른 수신자(aud)는 인증 경로와 같은 기준으로 사용자 키에서 뺀다.
+      if (!hasExpectedTokenClaims(payload, expected)) return undefined;
       const sub = payload?.sub;
       if (typeof sub !== 'string' || !sub || sub.length > MAX_SUBJECT_LENGTH) return undefined;
       return sub;

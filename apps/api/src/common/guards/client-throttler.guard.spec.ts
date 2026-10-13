@@ -9,6 +9,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AuthController } from '../../auth/auth.controller';
 import { AuthService } from '../../auth/auth.service';
+import { JWT_ALGORITHM, JWT_AUDIENCE, type TokenType } from '../../auth/token-claims';
 import {
   ClientThrottlerGuard,
   clientIp,
@@ -35,10 +36,15 @@ class ProbeController {
 }
 
 const signer = new JwtService();
-const accessToken = (sub: string, secret = ACCESS_SECRET) =>
-  signer.sign({ sub, role: 'consumer' }, { secret, expiresIn: '1h' });
+// AuthService와 같은 형태(typ·aud·HS256)로 서명한다.
+const signToken = (sub: string, typ: TokenType, secret: string, expiresIn: '1h' | '30d') =>
+  signer.sign(
+    { sub, role: 'consumer', typ },
+    { secret, expiresIn, algorithm: JWT_ALGORITHM, audience: JWT_AUDIENCE },
+  );
+const accessToken = (sub: string, secret = ACCESS_SECRET) => signToken(sub, 'access', secret, '1h');
 const refreshToken = (sub: string, secret = REFRESH_SECRET) =>
-  signer.sign({ sub, role: 'consumer' }, { secret, expiresIn: '30d' });
+  signToken(sub, 'refresh', secret, '30d');
 
 async function createApp(trustProxyHops: number | false): Promise<INestApplication<App>> {
   const authService = {
@@ -175,6 +181,29 @@ describe('ClientThrottlerGuard 집계 기준', () => {
         .get('/probe')
         .set('X-Forwarded-For', '203.0.113.31')
         .set('Authorization', `Bearer ${refreshToken(`refresh-${counter}`)}`);
+    });
+
+    expect(statuses[DEFAULT_LIMIT]).toBe(429);
+  });
+
+  it('access 서명이 맞아도 토큰 종류(typ)·수신자(aud)가 다르면 사용자 키로 인정하지 않는다', async () => {
+    app = await createApp(1);
+    const server = app.getHttpServer();
+    let counter = 0;
+
+    const statuses = await hit(DEFAULT_LIMIT + 1, () => {
+      counter += 1;
+      const token =
+        counter % 2 === 0
+          ? refreshToken(`typ-${counter}`, ACCESS_SECRET)
+          : signer.sign(
+              { sub: `aud-${counter}`, role: 'consumer', typ: 'access' },
+              { secret: ACCESS_SECRET, expiresIn: '1h', audience: 'other-service' },
+            );
+      return request(server)
+        .get('/probe')
+        .set('X-Forwarded-For', '203.0.113.32')
+        .set('Authorization', `Bearer ${token}`);
     });
 
     expect(statuses[DEFAULT_LIMIT]).toBe(429);
