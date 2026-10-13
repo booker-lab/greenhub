@@ -58,6 +58,10 @@ jobs:
             echo "$stray"
             exit 1
           fi
+      # 운영 의존성(dependencies)에 high·critical 공개 권고가 있으면 실패한다. 빌드 전용 도구는 devDependencies에 둔다.
+      # 권고 DB는 npm registry에서 조회하므로 코드 변경 없이도 새 권고가 나오면 실패할 수 있다.
+      - name: Production dependency advisories (high+)
+        run: pnpm audit --prod --audit-level high
       # workflow 문법·표현식·스크립트 오류를 검사한다. shellcheck는 warning 이상만 본다.
       - name: Workflow lint (actionlint)
         env:
