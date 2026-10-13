@@ -8,6 +8,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { dateRangeKST } from '@greenhub/shared';
 import type * as admin from 'firebase-admin';
+import { normalizeEmail } from '../auth/email-identity';
 import { inviteConflict } from '../auth/invite-conflict';
 import { FirestoreService } from '../firestore/firestore.service';
 import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
@@ -32,10 +33,13 @@ import {
   ForceRefundDto,
   UpsertBannerDto,
 } from './dto/admin.dto';
+import type { GenerateInviteDto } from './dto/invite.dto';
 
 const LEGACY_REFUND_CLAIM_MS = 5 * 60 * 1000;
 // 발급 토큰은 영숫자뿐이다. 경로 구분자 등이 섞인 값으로 다른 문서를 가리키지 못하게 막는다.
 const INVITE_TOKEN_PATTERN = /^[A-Za-z0-9]{1,64}$/;
+// 판매자 초대 토큰 유효 기간(발급 시점부터 7일).
+export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type LegacyRefundClaimResult =
   | { kind: 'done' }
@@ -544,19 +548,23 @@ export class AdminService {
 
   // ── Invite ───────────────────────────────────────────────────────
 
-  async generateInvite(adminId: string) {
+  /**
+   * 판매자 초대 토큰을 발급한다. recipientEmail을 주면 정규화(trim·소문자)해 저장하고,
+   * 가입은 같은 정규화 이메일로만 받는다. 주지 않으면 받는 사람 제한 없이 기존처럼 발급한다.
+   */
+  async generateInvite(adminId: string, dto: GenerateInviteDto = {}) {
     const token = randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase();
     const now = this.firestore.Timestamp.now();
-
-    // 7일 만료
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+    const recipientEmail =
+      typeof dto.recipientEmail === 'string' ? normalizeEmail(dto.recipientEmail) : null;
 
     await this.firestore.doc(`invites/${token}`).set({
       token,
       createdBy: adminId,
       usedAt: null,
       usedBy: null,
+      recipientEmail,
       expiresAt: this.firestore.Timestamp.fromDate(expiresAt),
       createdAt: now,
     });
@@ -564,6 +572,7 @@ export class AdminService {
     return {
       token,
       expiresAt: expiresAt.toISOString(),
+      recipientEmail,
     };
   }
 

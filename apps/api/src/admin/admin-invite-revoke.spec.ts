@@ -25,7 +25,7 @@ import { TimestampInterceptor } from '../common/interceptors/timestamp.intercept
 import { sanitizedValidationPipeOptions } from '../common/validation/sanitized-validation';
 import { FirestoreService } from '../firestore/firestore.service';
 import { AdminController } from './admin.controller';
-import { AdminService } from './admin.service';
+import { AdminService, INVITE_TTL_MS } from './admin.service';
 
 type Occ = ReturnType<typeof createOccFirestore>;
 type Data = Record<string, unknown>;
@@ -314,5 +314,113 @@ describe('관리자 초대 토큰 취소(POST /admin/invite/:token/revoke)와 �
       expect(stored).not.toHaveProperty('revokedAt');
       expect(sellerUsers()).toHaveLength(1);
     }
+  });
+
+  describe('받는 사람 이메일 지정과 가입 트랜잭션의 만료 재검증', () => {
+    function issue(body?: Data) {
+      const test = request(app.getHttpServer())
+        .post('/admin/invite')
+        .set('Authorization', bearer('admin'));
+      return body === undefined ? test : test.send(body);
+    }
+
+    function usersWithEmail(email: string) {
+      return occ.listData('users/').filter((user) => user['email'] === email);
+    }
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('받는 사람 없이 발급하면 recipientEmail이 null로 남고, 어떤 이메일로든 가입할 수 있다', async () => {
+      const before = Date.now();
+      const issued = await issue().expect(201);
+      const token = issued.body.token as string;
+
+      expect(issued.body).toEqual({ token, expiresAt: expect.any(String), recipientEmail: null });
+      const expiresAtMs = Date.parse(issued.body.expiresAt as string);
+      expect(expiresAtMs).toBeGreaterThanOrEqual(before + INVITE_TTL_MS);
+      expect(expiresAtMs).toBeLessThanOrEqual(Date.now() + INVITE_TTL_MS);
+      expect(occ.getData(`invites/${token}`)).toMatchObject({ recipientEmail: null });
+
+      await registerSeller(token, 'anyone@example.com').expect(201);
+      expect(usersWithEmail('anyone@example.com')).toHaveLength(1);
+    });
+
+    it('받는 사람 이메일을 지정하면 정규화해 저장하고, 대소문자만 다른 같은 이메일의 가입은 받는다', async () => {
+      const issued = await issue({ recipientEmail: 'New-Seller@Example.COM' }).expect(201);
+      const token = issued.body.token as string;
+
+      expect(issued.body).toMatchObject({ token, recipientEmail: 'new-seller@example.com' });
+      expect(occ.getData(`invites/${token}`)).toMatchObject({
+        recipientEmail: 'new-seller@example.com',
+      });
+
+      await registerSeller(token, 'NEW-seller@example.com').expect(201);
+
+      expect(usersWithEmail('NEW-seller@example.com')).toHaveLength(1);
+      expect(occ.getData(`invites/${token}`)).toMatchObject({ usedAt: expect.any(Date) });
+    });
+
+    it('받는 사람이 지정된 초대에 다른 이메일로 가입하면 409 recipient_mismatch이고 토큰은 쓰이지 않는다', async () => {
+      const issued = await issue({ recipientEmail: 'new-seller@example.com' }).expect(201);
+      const token = issued.body.token as string;
+
+      const rejected = await registerSeller(token, 'other@example.com').expect(409);
+
+      expect(rejected.body).toMatchObject({ statusCode: 409, reason: 'recipient_mismatch' });
+      expect(usersWithEmail('other@example.com')).toHaveLength(0);
+      expect(occ.getData(`invites/${token}`)).toMatchObject({ usedAt: null, usedBy: null });
+      expect(occ.listData('emailIdentities/')).toHaveLength(0);
+
+      // 지정된 받는 사람은 여전히 가입할 수 있다.
+      await registerSeller(token, 'new-seller@example.com').expect(201);
+      expect(sellerUsers()).toHaveLength(1);
+    });
+
+    it.each([
+      { recipientEmail: 'not-an-email' },
+      { recipientEmail: '' },
+      { recipientEmail: 123 },
+      { recipientEmail: `${'a'.repeat(250)}@example.com` },
+      { unexpected: 'field' },
+    ])('잘못된 발급 본문 %p는 400이고 초대 문서를 만들지 않는다', async (body) => {
+      await issue(body).expect(400);
+
+      expect(occ.listData('invites/')).toHaveLength(0);
+    });
+
+    it('받는 사람이 지정된 초대에 맞는 이메일과 다른 이메일이 동시에 가입하면 맞는 쪽만 성공한다', async () => {
+      seedInvite(occ, 'BOUNDTOKEN000001', { recipientEmail: 'new-seller@example.com' });
+
+      const [matched, mismatched] = await Promise.all([
+        registerSeller('BOUNDTOKEN000001', 'new-seller@example.com'),
+        registerSeller('BOUNDTOKEN000001', 'other@example.com'),
+      ]);
+
+      expect(matched.status).toBe(201);
+      expect(mismatched.status).toBe(409);
+      expect(mismatched.body).toMatchObject({ reason: 'recipient_mismatch' });
+      expect(sellerUsers()).toHaveLength(1);
+      expect(usersWithEmail('other@example.com')).toHaveLength(0);
+      expect(occ.getData('invites/BOUNDTOKEN000001')).toMatchObject({
+        usedBy: sellerUsers()[0]?.['id'],
+      });
+    });
+
+    it('가입 사전 검사 뒤 트랜잭션 전에 만료되면 가입 트랜잭션이 410으로 거부하고 토큰을 쓰지 않는다', async () => {
+      const expiresAtMs = Date.now() + 60_000;
+      seedInvite(occ, 'EXPIRINGTOKEN001', { expiresAt: new Date(expiresAtMs) });
+      occ.setBeforeAttempt(() => {
+        jest.spyOn(Date, 'now').mockReturnValue(expiresAtMs + 1);
+      });
+
+      const response = await registerSeller('EXPIRINGTOKEN001').expect(410);
+
+      expect(response.body).toMatchObject({ statusCode: 410 });
+      expect(sellerUsers()).toHaveLength(0);
+      expect(occ.listData('emailIdentities/')).toHaveLength(0);
+      expect(occ.getData('invites/EXPIRINGTOKEN001')).toMatchObject({ usedAt: null, usedBy: null });
+    });
   });
 });
