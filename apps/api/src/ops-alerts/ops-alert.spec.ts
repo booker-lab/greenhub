@@ -16,7 +16,7 @@ function okFetch() {
 
 describe('OpsAlertService', () => {
   it('토큰·채팅 ID가 없거나 로컬·E2E 실행이면 보내지 않는다', async () => {
-    for (const values of [
+    const cases: Array<Record<string, string>> = [
       {},
       { OPS_TELEGRAM_BOT_TOKEN: 'bot-token' },
       {
@@ -24,7 +24,8 @@ describe('OpsAlertService', () => {
         GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY: 'DENY_ALL_EXTERNAL_PROVIDER_DISPATCH',
       },
       { ...configured, ROUND_DIRECT_E2E_ENABLED: 'true' },
-    ]) {
+    ];
+    for (const values of cases) {
       const fetchImpl = okFetch();
       const service = new OpsAlertService(config(values), fetchImpl as never);
       expect(service.enabled).toBe(false);
