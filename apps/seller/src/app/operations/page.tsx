@@ -1,19 +1,21 @@
 'use client';
 
 import { Alert, Badge, Button, Container, Group, Paper, Stack, Text } from '@mantine/core';
-import { ChevronRight, RefreshCcw, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, ChevronRight, RefreshCcw, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import {
-  ISSUE_DESCRIPTIONS,
-  ISSUE_LABELS,
-  type OrderOperationIssue,
-} from '@/app/orders/[id]/operation-issues';
+import { ISSUE_DESCRIPTIONS, ISSUE_LABELS } from '@/app/orders/[id]/operation-issues';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useStoreOperationIssues } from '@/hooks/useStoreOperationIssues';
+import {
+  canManuallyResolve,
+  manualResolverLabel,
+  type StoreOperationIssue,
+} from './manual-resolve';
+import { ResolveIssueModal } from './ResolveIssueModal';
 
 const SEVERITY_META = {
   critical: { label: '긴급', color: 'red' },
@@ -31,9 +33,18 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function IssueRow({ issue }: { issue: OrderOperationIssue }) {
+function IssueRow({
+  issue,
+  canResolve,
+  onResolve,
+}: {
+  issue: StoreOperationIssue;
+  canResolve: boolean;
+  onResolve: (issue: StoreOperationIssue) => void;
+}) {
   const severity = SEVERITY_META[issue.severity];
   const open = issue.status === 'OPEN';
+  const resolution = issue.resolution;
   return (
     <Paper
       radius="lg"
@@ -59,17 +70,50 @@ function IssueRow({ issue }: { issue: OrderOperationIssue }) {
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             {formatDateTime(issue.updatedAt)}
           </Text>
+          {resolution && (
+            <Stack
+              gap={2}
+              mt={4}
+              p="xs"
+              style={{
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--color-surface-muted)',
+              }}
+            >
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
+                {manualResolverLabel(resolution)}가 직접 닫았어요 ·{' '}
+                {formatDateTime(resolution.resolvedAt)}
+              </Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', wordBreak: 'break-word' }}>
+                {resolution.memo}
+              </Text>
+            </Stack>
+          )}
         </Stack>
-        <Button
-          component={Link}
-          href={`/orders/${encodeURIComponent(issue.orderId)}`}
-          size="xs"
-          variant="light"
-          rightSection={<ChevronRight size={14} />}
-          style={{ flexShrink: 0 }}
-        >
-          주문 보기
-        </Button>
+        <Stack gap={6} align="flex-end" style={{ flexShrink: 0 }}>
+          <Button
+            component={Link}
+            href={`/orders/${encodeURIComponent(issue.orderId)}`}
+            size="xs"
+            variant="light"
+            rightSection={<ChevronRight size={14} />}
+          >
+            주문 보기
+          </Button>
+          {canResolve && (
+            <Button
+              size="xs"
+              variant="subtle"
+              color="gray"
+              leftSection={<CheckCircle2 size={14} />}
+              onClick={() => onResolve(issue)}
+            >
+              해결로 닫기
+            </Button>
+          )}
+        </Stack>
       </Group>
     </Paper>
   );
@@ -78,8 +122,10 @@ function IssueRow({ issue }: { issue: OrderOperationIssue }) {
 type IssueTab = 'OPEN' | 'ALL';
 
 export default function OperationsPage() {
-  const { issues, openIssues, loading, error, hasLoaded, reload } = useStoreOperationIssues();
+  const { issues, openIssues, loading, error, hasLoaded, reload, resolveIssue, role } =
+    useStoreOperationIssues();
   const [tab, setTab] = useState<IssueTab>('OPEN');
+  const [resolving, setResolving] = useState<StoreOperationIssue | null>(null);
   const visible = tab === 'OPEN' ? openIssues : issues;
 
   return (
@@ -103,7 +149,8 @@ export default function OperationsPage() {
         <Stack gap="md">
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
             결제·환불·고객 연락·배송 사진에서 자동으로 끝내지 못한 일을 모아 보여 줘요. 조치(환불
-            재시도·문자 재발송)는 각 주문 화면에서 합니다.
+            재시도·문자 재발송)는 각 주문 화면에서 하고, 직접 처리를 마친 기록은 메모를 남기고
+            &quot;해결로 닫기&quot;로 닫아 주세요.
           </Text>
           <SegmentedTabs<IssueTab>
             value={tab}
@@ -131,10 +178,20 @@ export default function OperationsPage() {
             />
           )}
           {visible.map((issue) => (
-            <IssueRow key={issue.id} issue={issue} />
+            <IssueRow
+              key={issue.id}
+              issue={issue}
+              canResolve={canManuallyResolve(issue, role)}
+              onResolve={setResolving}
+            />
           ))}
         </Stack>
       </Container>
+      <ResolveIssueModal
+        issue={resolving}
+        onClose={() => setResolving(null)}
+        onConfirm={resolveIssue}
+      />
     </PageShell>
   );
 }
