@@ -68,7 +68,9 @@ export class ProductsService {
         .collection('groupProductConfig')
         .where('productId', 'in', groupProductIds.slice(offset, offset + 30))
         .get();
-      gcSnap.docs.forEach((d) => groupConfigMap.set(d.data()['productId'], d.data()));
+      gcSnap.docs.forEach((d) => {
+        groupConfigMap.set(d.data()['productId'], d.data());
+      });
     }
 
     // 스펙 응답: { items: ProductSummary[], total: number }
@@ -77,12 +79,12 @@ export class ProductsService {
       const gc = groupConfigMap.get(p['id'] as string);
       const summary = toPublicProductSummary(
         p as Record<string, unknown>,
-        (gc as Record<string, unknown> | undefined) ?? null,
+        gc ?? null,
       );
       // Backfill groupSummary for group products when the helper omitted it
       // (kept for contract compat with the previous manual shape).
       if (p['saleType'] === 'group' && gc && !summary['groupSummary']) {
-        summary['groupSummary'] = toPublicGroupSummary(gc as Record<string, unknown>);
+        summary['groupSummary'] = toPublicGroupSummary(gc);
       }
       return summary;
     });
@@ -337,7 +339,9 @@ export class ProductsService {
         .collection('groupProductConfig')
         .where('productId', 'in', groupProductIds.slice(offset, offset + 30))
         .get();
-      gcSnap.docs.forEach((d: any) => groupConfigMap.set(d.data()['productId'], d.data()));
+      gcSnap.docs.forEach((d: any) => {
+        groupConfigMap.set(d.data()['productId'], d.data());
+      });
     }
 
     const items = products.map((p: any) =>

@@ -13,6 +13,8 @@ const baseProps: Props = {
   onRetry: () => {},
   copiedToken: null,
   onCopy: () => {},
+  revokingToken: null,
+  onRevoke: () => {},
 };
 
 // 보안: 실제 토큰 원문이 아닌 구조 검증용 더미 식별자만 사용한다.
@@ -22,7 +24,8 @@ function invite(token: string): Props['invites'][number] {
     createdBy: 'admin-test',
     usedAt: null,
     usedBy: null,
-    expiresAt: '2026-12-31T00:00:00.000Z',
+    // 실행 시각과 무관하게 유효 상태를 유지하도록 먼 미래 만료일을 쓴다.
+    expiresAt: '2999-12-31T00:00:00.000Z',
     createdAt: '2026-09-01T00:00:00.000Z',
   };
 }
@@ -105,6 +108,24 @@ function copyButtonsOf(tree: ReactNode): Array<ReactElement<CopyButtonProps>> {
 function expand(el: ReactElement<CopyButtonProps>): ReactNode {
   return (el.type as (p: CopyButtonProps) => ReactNode)(el.props);
 }
+
+describe('InviteHistoryTable 받는 사람 표시', () => {
+  it('받는 사람을 지정한 초대는 모바일 카드와 데스크톱 행 모두에 이메일을 보여 준다', () => {
+    const tree = InviteHistoryTable({
+      ...baseProps,
+      invites: [{ ...invite('test-invite-aaa'), recipientEmail: 'seller@example.com' }],
+    });
+    expect(textsOf(tree).filter((t) => t === 'seller@example.com')).toHaveLength(2);
+  });
+
+  it('받는 사람이 없거나 필드가 없는 기존 초대는 받는 사람 줄을 그리지 않는다', () => {
+    const tree = InviteHistoryTable({
+      ...baseProps,
+      invites: [{ ...invite('test-invite-aaa'), recipientEmail: null }, invite('test-invite-bbb')],
+    });
+    expect(textsOf(tree).some((t) => t.includes('받는 사람'))).toBe(false);
+  });
+});
 
 describe('InviteHistoryTable read state', () => {
   it('loading은 로딩 UI를 표시한다', () => {
@@ -226,5 +247,111 @@ describe('InviteHistoryTable 행별 토큰 복사', () => {
       copyButtonsOf(InviteHistoryTable({ ...baseProps, error: FETCH_ERROR_MESSAGE })),
     ).toHaveLength(0);
     expect(copyButtonsOf(InviteHistoryTable({ ...baseProps }))).toHaveLength(0);
+  });
+});
+
+interface RevokeButtonProps {
+  token: string;
+  revokingToken: string | null;
+  onRevoke: (token: string) => void;
+}
+
+interface RenderedRevokeButtonProps {
+  onClick: () => void;
+  disabled: boolean;
+  loading: boolean;
+  'aria-label': string;
+  children?: ReactNode;
+}
+
+/** 행별 취소 버튼(RevokeInviteButton) 요소를 수집한다 — token·onRevoke prop으로 식별. */
+function revokeButtonsOf(tree: ReactNode): Array<ReactElement<RevokeButtonProps>> {
+  const out: Array<ReactElement<RevokeButtonProps>> = [];
+  const visit = (current: ReactNode): void => {
+    if (Array.isArray(current)) {
+      for (const child of current) visit(child);
+      return;
+    }
+    if (!isElement(current)) return;
+    const props = current.props as Partial<RevokeButtonProps> & Clickable;
+    if (typeof props.token === 'string' && typeof props.onRevoke === 'function') {
+      out.push(current as unknown as ReactElement<RevokeButtonProps>);
+    }
+    visit(props.children);
+  };
+  visit(tree);
+  return out;
+}
+
+/** 취소 버튼 컴포넌트를 한 단계 전개해 실제 Button 요소를 얻는다. */
+function expandRevoke(
+  el: ReactElement<RevokeButtonProps>,
+): ReactElement<RenderedRevokeButtonProps> {
+  return (el.type as (p: RevokeButtonProps) => ReactElement<RenderedRevokeButtonProps>)(el.props);
+}
+
+describe('InviteHistoryTable 초대 취소', () => {
+  const revoked = {
+    ...invite('test-invite-revoked'),
+    revokedAt: '2026-09-02T00:00:00.000Z',
+    revokedBy: 'admin-test',
+  };
+  const used = {
+    ...invite('test-invite-used'),
+    usedAt: '2026-09-02T00:00:00.000Z',
+    usedBy: 'seller-test',
+  };
+  const expired = { ...invite('test-invite-expired'), expiresAt: '2020-01-01T00:00:00.000Z' };
+
+  it('취소된 토큰은 유효 대신 취소됨으로 표시한다', () => {
+    const texts = textsOf(InviteHistoryTable({ ...baseProps, invites: [revoked] }));
+    expect(texts).toContain('취소됨');
+    expect(texts).not.toContain('유효');
+  });
+
+  it('취소 버튼은 유효 행에만 모바일·데스크톱 양쪽에 노출한다', () => {
+    const tree = InviteHistoryTable({
+      ...baseProps,
+      invites: [invite('test-invite-aaa'), revoked, used, expired],
+    });
+    expect(revokeButtonsOf(tree).map((b) => b.props.token)).toEqual([
+      'test-invite-aaa',
+      'test-invite-aaa',
+    ]);
+  });
+
+  it('취소 버튼은 토큰을 담은 접근 가능한 이름을 갖고 해당 토큰으로 onRevoke를 호출한다', () => {
+    const onRevoke = vi.fn();
+    const tree = InviteHistoryTable({
+      ...baseProps,
+      onRevoke,
+      invites: [invite('test-invite-aaa')],
+    });
+    for (const el of revokeButtonsOf(tree)) {
+      const button = expandRevoke(el);
+      expect(button.props['aria-label']).toBe('토큰 test-invite-aaa 초대 취소');
+      expect(textsOf(button)).toContain('취소');
+      button.props.onClick();
+    }
+    expect(onRevoke.mock.calls).toEqual([['test-invite-aaa'], ['test-invite-aaa']]);
+  });
+
+  it('취소 처리 중에는 모든 취소 버튼을 잠그고 처리 중인 행만 로딩으로 표시한다', () => {
+    const tree = InviteHistoryTable({
+      ...baseProps,
+      revokingToken: 'test-invite-aaa',
+      invites: [invite('test-invite-aaa'), invite('test-invite-bbb')],
+    });
+    const buttons = revokeButtonsOf(tree);
+    expect(buttons).toHaveLength(4);
+    for (const el of buttons) {
+      const button = expandRevoke(el);
+      expect(button.props.disabled).toBe(true);
+      expect(button.props.loading).toBe(el.props.token === 'test-invite-aaa');
+    }
+  });
+
+  it('취소된 토큰에도 복사 버튼은 유지한다', () => {
+    expect(copyButtonsOf(InviteHistoryTable({ ...baseProps, invites: [revoked] }))).toHaveLength(2);
   });
 });

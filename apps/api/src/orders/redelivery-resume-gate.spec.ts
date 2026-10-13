@@ -282,7 +282,7 @@ describe('유료 재배송 서버 불변식', () => {
     });
 
     expect(first.id).toBe(second.id);
-    expect(context.memory.read(`orderCharges/${first.id}`)).toMatchObject({
+    expect(context.memory.read(`orderCharges/${first.id as string}`)).toMatchObject({
       status: 'PENDING',
       type: 'REDELIVERY_FEE',
       holdAt,

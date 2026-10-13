@@ -93,9 +93,9 @@ function incrementOf(value: unknown): number | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
   if (record['__op'] === 'increment' && typeof record['value'] === 'number') {
-    return record['value'] as number;
+    return record['value'];
   }
-  if (typeof record['__increment'] === 'number') return record['__increment'] as number;
+  if (typeof record['__increment'] === 'number') return record['__increment'];
   return null;
 }
 
@@ -253,7 +253,7 @@ export function createOccFirestore(options: { maxAttempts?: number } = {}) {
         get: (async (target: unknown) => {
           // Collection query inside a transaction: record a version for
           // every document observed so later writes to them conflict.
-          if (target && typeof target === 'object' && !('path' in (target as object))) {
+          if (target && typeof target === 'object' && !('path' in target)) {
             const snapshot = await (target as { get(): Promise<OccQuerySnapshot> }).get();
             for (const item of snapshot.docs) {
               if (!readVersions.has(item.ref.path)) {

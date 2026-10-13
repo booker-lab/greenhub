@@ -7,10 +7,7 @@ import { describe, expect, it } from 'vitest';
 // 실제 상태 분기는 _lib 순수 함수와 각 컴포넌트 focused test가 소유한다.
 
 const source = readFileSync(new URL('./_client.tsx', import.meta.url), 'utf8');
-const hookSource = readFileSync(
-  new URL('../../../hooks/useAdmin.ts', import.meta.url),
-  'utf8',
-);
+const hookSource = readFileSync(new URL('../../../hooks/useAdmin.ts', import.meta.url), 'utf8');
 
 // useAdminInvite 블록만 추출 — shared hook 회귀 검증은 이 블록 범위로 한정한다.
 function inviteBlock(): string {
@@ -86,11 +83,39 @@ describe('AdminInviteClient recovery wiring', () => {
   });
 });
 
+describe('받는 사람 이메일 배선', () => {
+  it('형식이 틀리면 발급 요청 없이 입력 오류를 보여 주고, 맞으면 정리한 값을 generate에 넘긴다', () => {
+    const parseIndex = source.indexOf('parseInviteRecipientEmail(recipientEmail)');
+    const errorIndex = source.indexOf('setRecipientEmailError(recipient.error)');
+    const generateIndex = source.indexOf('await generate(recipient.value ?? undefined)');
+    expect(parseIndex).toBeGreaterThan(-1);
+    expect(errorIndex).toBeGreaterThan(parseIndex);
+    expect(generateIndex).toBeGreaterThan(errorIndex);
+    expect(source).toContain('recipientEmail={recipientEmail}');
+    expect(source).toContain('recipientEmailError={recipientEmailError}');
+    expect(source).toContain('onRecipientEmailChange={handleRecipientEmailChange}');
+  });
+
+  it('발급에 성공한 뒤에만 입력을 비운다', () => {
+    expect(source).toContain("if (result) setRecipientEmail('')");
+  });
+
+  it('hook은 받는 사람이 있을 때만 발급 본문에 담는다', () => {
+    const block = inviteBlock();
+    expect(block).toContain('generate = async (recipientEmail?: string)');
+    expect(block).toContain(
+      '...(recipientEmail ? { body: JSON.stringify({ recipientEmail }) } : {})',
+    );
+  });
+});
+
 describe('useAdminInvite hook recovery wiring', () => {
   it('invite history error를 hook 밖으로 노출한다', () => {
     const block = inviteBlock();
     expect(block).toContain('error,');
-    expect(block).toContain('return { invites, loading, error, generating, generateError, generate, reload }');
+    expect(block).toContain(
+      'return { invites, loading, error, generating, generateError, generate, revoke, reload }',
+    );
   });
 
   it('generate 실패를 silent null로 끝내지 않고 generateError에 기록한다', () => {
@@ -106,5 +131,55 @@ describe('useAdminInvite hook recovery wiring', () => {
     const catchIndex = block.indexOf('} catch {');
     expect(tryIndex).toBeGreaterThan(-1);
     expect(catchIndex).toBeGreaterThan(tryIndex);
+  });
+});
+
+describe('초대 취소 화면 배선', () => {
+  it('행 버튼은 확인 창만 열고, 확인한 뒤에만 revoke를 호출한다', () => {
+    expect(source).toContain('onRevoke={setPendingRevoke}');
+    expect(source).toContain('<ConfirmModal');
+    expect(source).toContain('opened={pendingRevoke !== null}');
+    expect(source).toContain('onConfirm={runRevoke}');
+    expect(source).toContain('await revoke(pendingRevoke)');
+    expect(source).not.toContain('onRevoke={revoke}');
+  });
+
+  it('처리 중에는 확인 창을 닫지 않고 행 버튼에 처리 중 토큰을 전달한다', () => {
+    expect(source).toContain('loading={revokingToken !== null}');
+    expect(source).toContain('if (revokingToken === null) setPendingRevoke(null)');
+    expect(source).toContain('revokingToken={revokingToken}');
+  });
+
+  it('결과 안내는 _lib describeInviteRevokeOutcome이 소유하고 필요할 때 다시 조회한다', () => {
+    expect(source).toContain('describeInviteRevokeOutcome(outcome)');
+    expect(source).toContain('if (notice.needsReload) void reload()');
+  });
+});
+
+describe('useAdminInvite revoke', () => {
+  it('취소 엔드포인트를 토큰 인코딩 후 인증 헤더가 붙는 apiFetch로 POST한다', () => {
+    const block = inviteBlock();
+    expect(block).toMatch(
+      /apiFetch\(`\/admin\/invite\/\$\{encodeURIComponent\(inviteToken\)\}\/revoke`/,
+    );
+    expect(block).toContain("method: 'POST'");
+  });
+
+  it('토큰이 없으면 요청하지 않고 거부로 돌려준다', () => {
+    expect(inviteBlock()).toContain(
+      'if (!token) return { ...missingTokenOutcome(), reason: null }',
+    );
+  });
+
+  it('거부 응답의 reason을 보존하고 5xx·네트워크 오류는 불확정으로 분류한다', () => {
+    const block = inviteBlock();
+    expect(block).toContain('const outcome = classifyAdminCommandError(err)');
+    expect(block).toContain('classifyAdminCommandError({ status: res.status, message })');
+    expect(block).toContain("if (outcome.kind === 'unknown') return outcome");
+    expect(block).toContain("reason: typeof body?.reason === 'string' ? body.reason : null");
+  });
+
+  it('성공하면 목록을 다시 불러와 reconciliation 결과를 돌려준다', () => {
+    expect(inviteBlock()).toContain('return resolveConfirmedOutcome(await reload())');
   });
 });

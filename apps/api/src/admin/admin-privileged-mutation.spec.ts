@@ -30,6 +30,7 @@ type MutationName =
   | 'restoreStore'
   | 'suspendUser'
   | 'generateInvite'
+  | 'revokeInvite'
   | 'upsertBanner';
 
 const JWT_SECRET = 'admin-privileged-mutation-test-secret';
@@ -121,6 +122,11 @@ function makeHttpHarness() {
     generateInvite: jest.spyOn(adminService, 'generateInvite').mockResolvedValue({
       token: 'TESTINVITE12345678',
       expiresAt: new Date(0).toISOString(),
+      recipientEmail: null,
+    }),
+    revokeInvite: jest.spyOn(adminService, 'revokeInvite').mockResolvedValue({
+      token: 'TESTINVITE123456',
+      revokedAt: new Date(0).toISOString(),
     }),
     upsertBanner: jest.spyOn(adminService, 'upsertBanner').mockResolvedValue({
       headline: '검증 배너',
@@ -192,6 +198,8 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         return http.patch('/admin/users/consumer-1/status').send({ suspended: true });
       case 'generateInvite':
         return http.post('/admin/invite');
+      case 'revokeInvite':
+        return http.post('/admin/invite/TESTINVITE123456/revoke');
       case 'upsertBanner':
         return http.put('/admin/banner').send({ headline: '검증 배너' });
     }
@@ -204,7 +212,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
   }
 
   function successStatus(name: MutationName) {
-    return name === 'refund' || name === 'generateInvite' ? 201 : 200;
+    return name === 'refund' || name === 'generateInvite' || name === 'revokeInvite' ? 201 : 200;
   }
 
   const mutations: MutationName[] = [
@@ -217,6 +225,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     'restoreStore',
     'suspendUser',
     'generateInvite',
+    'revokeInvite',
     'upsertBanner',
   ];
 
@@ -232,6 +241,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     expect(harness.serviceBoundary.restoreStore).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendUser).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.generateInvite).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.revokeInvite).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.upsertBanner).not.toHaveBeenCalled();
     expect(harness.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(harness.settlements.cancelSettlement).not.toHaveBeenCalled();
@@ -257,6 +267,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     expect(harness.serviceBoundary.restoreStore).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendUser).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.generateInvite).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.revokeInvite).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.upsertBanner).not.toHaveBeenCalled();
     expect(harness.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(harness.settlements.cancelSettlement).not.toHaveBeenCalled();
@@ -303,7 +314,13 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         });
         break;
       case 'generateInvite':
-        expect(harness.serviceBoundary.generateInvite).toHaveBeenCalledWith('admin-1');
+        expect(harness.serviceBoundary.generateInvite).toHaveBeenCalledWith('admin-1', undefined);
+        break;
+      case 'revokeInvite':
+        expect(harness.serviceBoundary.revokeInvite).toHaveBeenCalledWith(
+          'TESTINVITE123456',
+          'admin-1',
+        );
         break;
       case 'upsertBanner':
         expect(harness.serviceBoundary.upsertBanner).toHaveBeenCalledWith({
@@ -457,8 +474,8 @@ describe('AdminService.markAsPaid 상태 계약', () => {
 
     expect(successes).toHaveLength(1);
     expect(failures).toHaveLength(1);
-    expect((failures[0] as PromiseRejectedResult).reason).toBeInstanceOf(BadRequestException);
-    expect((failures[0] as PromiseRejectedResult).reason.message).toBe(
+    expect(failures[0].reason).toBeInstanceOf(BadRequestException);
+    expect(failures[0].reason.message).toBe(
       '이미 지급 완료된 정산입니다.',
     );
     expect(fixture.transactionReads).toEqual([

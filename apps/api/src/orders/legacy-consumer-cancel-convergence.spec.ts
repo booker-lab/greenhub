@@ -277,7 +277,7 @@ describe('legacy consumer cancel refund-race convergence', () => {
     const rejected = results.filter((result) => result.status === 'rejected');
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
+    expect(rejected[0].reason).toBeInstanceOf(ConflictException);
 
     expect(context.payments.processRefundByOrderId).toHaveBeenCalledTimes(1);
     expect(context.payments.__portoneCalls()).toBe(1);

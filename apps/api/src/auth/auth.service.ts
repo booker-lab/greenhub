@@ -16,6 +16,12 @@ import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { AuditService } from '../common/audit/audit.service';
+import {
+  INVITE_RECIPIENT_MISMATCH_MESSAGE,
+  INVITE_REVOKED_MESSAGE,
+  assertInviteTokenFormat,
+  inviteConflict,
+} from './invite-conflict';
 import type { AddressDto } from './dto/address.dto';
 import type { KakaoLoginDto } from './dto/kakao-login.dto';
 import type { LoginDto } from './dto/login.dto';
@@ -68,6 +74,32 @@ function rethrowEmailIdentityConflict(error: unknown): never {
     throw new ConflictException(EMAIL_IN_USE_MESSAGE);
   }
   throw error;
+}
+
+// 판매자 가입에 쓸 수 있는 초대인지 판정한다. 사전 검사와 가입 트랜잭션이 같은 순서
+// (취소 > 만료 > 사용 > 받는 사람)로 판정해, 사전 검사 뒤 상태가 바뀌어도 트랜잭션 안에서 같은 응답으로 거부한다.
+// 받는 사람 이메일(recipientEmail)이 없는 초대는 이메일 제한이 없다. 값이 있으면 정규화 이메일이 같아야 한다.
+function assertInviteRedeemable(
+  invite: admin.firestore.DocumentData,
+  normalizedEmail: string,
+  nowMillis: number,
+): void {
+  if (invite['revokedAt'] != null) {
+    throw inviteConflict('already_revoked', INVITE_REVOKED_MESSAGE);
+  }
+  if ((invite['expiresAt'] as admin.firestore.Timestamp).toMillis() < nowMillis) {
+    throw new GoneException('만료된 초대 토큰입니다.');
+  }
+  if (invite['usedAt'] !== null) {
+    throw new ConflictException('이미 사용된 초대 토큰입니다.');
+  }
+  const recipientEmail = invite['recipientEmail'];
+  if (
+    recipientEmail != null &&
+    (typeof recipientEmail !== 'string' || normalizeEmail(recipientEmail) !== normalizedEmail)
+  ) {
+    throw inviteConflict('recipient_mismatch', INVITE_RECIPIENT_MISMATCH_MESSAGE);
+  }
 }
 
 // 카카오 사용자 id(숫자)를 Firestore 문서 id로 쓸 수 있는지 확인한다.
@@ -142,11 +174,13 @@ export class AuthService {
       throw new ForbiddenException('이메일 회원가입은 판매자 초대로만 할 수 있습니다.');
     }
 
-    // T2: seller는 inviteToken 필수 — 존재·만료·재사용 검증
+    // T2: seller는 inviteToken 필수 — 존재·취소·만료·재사용·받는 사람 검증
     if (dto.role === 'seller') {
       if (!dto.inviteToken) {
         throw new ForbiddenException('판매자 계정은 초대 토큰이 필요합니다.');
       }
+      // 문서 경로에 쓰기 전에 관리자 취소 경로와 같은 형식 규칙으로 거른다(경로 구분자 등은 404).
+      assertInviteTokenFormat(dto.inviteToken);
 
       const inviteSnap = await this.firestore.doc(`invites/${dto.inviteToken}`).get();
 
@@ -154,15 +188,7 @@ export class AuthService {
         throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
       }
 
-      const invite = inviteSnap.data()!;
-
-      if ((invite['expiresAt'] as admin.firestore.Timestamp).toMillis() < Date.now()) {
-        throw new GoneException('만료된 초대 토큰입니다.');
-      }
-
-      if (invite['usedAt'] !== null) {
-        throw new ConflictException('이미 사용된 초대 토큰입니다.');
-      }
+      assertInviteRedeemable(inviteSnap.data()!, normalizeEmail(dto.email), Date.now());
     }
 
     // 연결 문서가 없는 기존 계정은 이메일 조회로 막는다.
@@ -221,9 +247,11 @@ export class AuthService {
         const emailIdentitySnap = await tx.get(emailIdentityRef);
 
         // 트랜잭션 내 재검증 — 동시 요청으로 인한 경쟁 조건 방지
-        if (!inviteDoc.exists || inviteDoc.data()!['usedAt'] !== null) {
+        // (사전 검사 뒤 관리자 취소가 먼저 커밋됐거나 그사이 만료된 경우도 여기서 거부된다)
+        if (!inviteDoc.exists) {
           throw new ConflictException('이미 사용된 초대 토큰입니다.');
         }
+        assertInviteRedeemable(inviteDoc.data()!, normalizedEmail, Date.now());
         claimEmailIdentity(tx, emailIdentitySnap);
 
         tx.set(this.firestore.doc(`users/${userId}`), userDoc);
@@ -338,7 +366,9 @@ export class AuthService {
       };
 
       if (newAddr.isDefault) {
-        addresses.forEach((a) => (a.isDefault = false));
+        addresses.forEach((a) => {
+          a.isDefault = false;
+        });
       }
       addresses.push(newAddr);
 
@@ -361,7 +391,9 @@ export class AuthService {
       if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
 
       if (dto.isDefault) {
-        addresses.forEach((a) => (a.isDefault = false));
+        addresses.forEach((a) => {
+          a.isDefault = false;
+        });
       }
       addresses[idx] = { ...addresses[idx], ...dto, id: addressId };
 
@@ -399,7 +431,9 @@ export class AuthService {
       const idx = addresses.findIndex((a) => a.id === addressId);
       if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
 
-      addresses.forEach((a) => (a.isDefault = false));
+      addresses.forEach((a) => {
+        a.isDefault = false;
+      });
       addresses[idx].isDefault = true;
 
       tx.update(ref, {

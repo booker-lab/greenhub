@@ -13,8 +13,12 @@ interface InviteHistoryTableProps {
   onRetry: () => void;
   /** 방금 복사에 성공한 토큰(2초간). 해당 행 버튼만 '복사됨!'으로 바뀐다. */
   copiedToken: string | null;
-  /** 행별 토큰 복사 — 모든 상태(유효·사용됨·만료)에 노출한다(계획서 결정10). */
+  /** 행별 토큰 복사 — 모든 상태(유효·사용됨·만료·취소됨)에 노출한다(계획서 결정10). */
   onCopy: (token: string) => void;
+  /** 취소 처리 중인 토큰. 처리 중에는 모든 행의 취소 버튼을 잠근다. */
+  revokingToken: string | null;
+  /** 행별 초대 취소 요청 — 유효 상태 행에만 노출하며, 확인 창은 호출자가 띄운다. */
+  onRevoke: (token: string) => void;
 }
 
 const thBase = {
@@ -47,6 +51,48 @@ function CopyTokenButton({
   );
 }
 
+function RevokeInviteButton({
+  token,
+  revokingToken,
+  onRevoke,
+}: {
+  token: string;
+  revokingToken: string | null;
+  onRevoke: (token: string) => void;
+}) {
+  return (
+    <Button
+      onClick={() => onRevoke(token)}
+      size="compact-xs"
+      variant="subtle"
+      color="red"
+      radius="md"
+      loading={revokingToken === token}
+      disabled={revokingToken !== null}
+      aria-label={`토큰 ${token} 초대 취소`}
+    >
+      취소
+    </Button>
+  );
+}
+
+/** 받는 사람을 지정한 초대만 이메일을 보여 준다. 지정하지 않은 초대는 아무것도 그리지 않는다. */
+function recipientEmailText(recipientEmail: string | null | undefined) {
+  if (!recipientEmail) return null;
+  return (
+    <Text
+      mt={4}
+      style={{
+        fontSize: 'var(--font-size-sm)',
+        color: 'var(--color-text-disabled)',
+        wordBreak: 'break-all',
+      }}
+    >
+      받는 사람 {recipientEmail}
+    </Text>
+  );
+}
+
 export function InviteHistoryTable({
   invites,
   loading,
@@ -54,6 +100,8 @@ export function InviteHistoryTable({
   onRetry,
   copiedToken,
   onCopy,
+  revokingToken,
+  onRevoke,
 }: InviteHistoryTableProps) {
   const readState = getAdminInviteReadState({ loading, error, invites });
 
@@ -110,7 +158,7 @@ export function InviteHistoryTable({
       {/* 모바일(<sm): 카드 리스트 — 만료일 컬럼 잘림 방지 */}
       <Stack gap="sm" hiddenFrom="sm">
         {invites.map((inv) => {
-          const { label, color, expDate } = inviteStatus(inv);
+          const { label, color, expDate, revocable } = inviteStatus(inv);
           return (
             <Paper
               key={inv.token}
@@ -135,9 +183,18 @@ export function InviteHistoryTable({
                     onCopy={onCopy}
                   />
                 </Group>
-                <Badge color={color} variant="light" radius="xl">
-                  {label}
-                </Badge>
+                <Group gap="xs" wrap="nowrap">
+                  <Badge color={color} variant="light" radius="xl">
+                    {label}
+                  </Badge>
+                  {revocable && (
+                    <RevokeInviteButton
+                      token={inv.token}
+                      revokingToken={revokingToken}
+                      onRevoke={onRevoke}
+                    />
+                  )}
+                </Group>
               </Group>
               <Text
                 style={{
@@ -147,6 +204,7 @@ export function InviteHistoryTable({
               >
                 만료 {formatExpiry(expDate)}
               </Text>
+              {recipientEmailText(inv.recipientEmail)}
             </Paper>
           );
         })}
@@ -184,7 +242,7 @@ export function InviteHistoryTable({
           </Box>
           <Box component="tbody">
             {invites.map((inv) => {
-              const { label, color, expDate } = inviteStatus(inv);
+              const { label, color, expDate, revocable } = inviteStatus(inv);
               return (
                 <Box
                   component="tr"
@@ -206,11 +264,21 @@ export function InviteHistoryTable({
                         onCopy={onCopy}
                       />
                     </Group>
+                    {recipientEmailText(inv.recipientEmail)}
                   </Box>
                   <Box component="td" style={{ padding: '12px 16px' }}>
-                    <Badge color={color} variant="light" radius="xl">
-                      {label}
-                    </Badge>
+                    <Group gap="xs" wrap="nowrap">
+                      <Badge color={color} variant="light" radius="xl">
+                        {label}
+                      </Badge>
+                      {revocable && (
+                        <RevokeInviteButton
+                          token={inv.token}
+                          revokingToken={revokingToken}
+                          onRevoke={onRevoke}
+                        />
+                      )}
+                    </Group>
                   </Box>
                   <Box
                     component="td"

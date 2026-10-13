@@ -662,7 +662,7 @@ describe('AuthService', () => {
     ])('%s 정지 사용자의 custom token 발급을 거부한다', async (_label, user) => {
       const { service } = makeKakaoLoginService({ user });
 
-      await expect(service.getFirebaseToken(user.id as string)).rejects.toMatchObject({
+      await expect(service.getFirebaseToken(user.id)).rejects.toMatchObject({
         status: 401,
       });
       expect(firebaseAuth.createCustomToken).not.toHaveBeenCalled();
@@ -1278,7 +1278,7 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.register(registerDto({ role: 'seller', inviteToken: 'invite-1' })),
+        service.register(registerDto({ role: 'seller', inviteToken: 'INVITE0000000001' })),
       ).resolves.toEqual({ userId: expect.any(String) });
       expect(userRef.set).toHaveBeenCalledWith(expect.objectContaining({ role: 'seller' }));
       expect(inviteRef.update).toHaveBeenCalledWith(

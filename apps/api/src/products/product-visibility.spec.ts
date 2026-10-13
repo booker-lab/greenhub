@@ -39,7 +39,7 @@ describe('public product projection', () => {
   };
 
   it('detail에서 내부 필드를 제거한다', () => {
-    const detail = toPublicProductDetail(stored as never, null) as Record<string, unknown>;
+    const detail = toPublicProductDetail(stored as never, null);
     expect(detail).not.toHaveProperty('sellerNote');
     expect(detail).not.toHaveProperty('sellerOverride');
     expect(detail).not.toHaveProperty('testOnly');
@@ -50,7 +50,7 @@ describe('public product projection', () => {
   });
 
   it('summary는 allowlist만 반환하고 원문을 spread하지 않는다', () => {
-    const summary = toPublicProductSummary(stored as never, null) as Record<string, unknown>;
+    const summary = toPublicProductSummary(stored as never, null);
     expect(Object.keys(summary).sort()).toEqual(
       ['category', 'colors', 'id', 'images', 'isActive', 'name', 'price', 'saleType'].sort(),
     );

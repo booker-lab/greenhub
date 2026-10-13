@@ -39,6 +39,7 @@ function makeClient(config: Data = configured) {
 // reject하고, 신호가 없으면(시간 제한이 없는 예전 코드) 영원히 끝나지 않는다.
 function stalledFetch(_url: string, init: FetchInit): Promise<Response> {
   return new Promise<Response>((_resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- fetch처럼 signal.reason 그대로 reject한다.
     init.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
   });
 }
@@ -59,6 +60,7 @@ function slowRetryableResponse(delayMs: number) {
         'abort',
         () => {
           clearTimeout(timer);
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- fetch처럼 signal.reason 그대로 reject한다.
           reject(init.signal?.reason);
         },
         { once: true },
@@ -177,6 +179,7 @@ describe('ALIGO HTTP 호출 시간 제한', () => {
       status: 200,
       json: () =>
         new Promise((_resolve, reject) => {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- fetch처럼 signal.reason 그대로 reject한다.
           init.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
             once: true,
           });

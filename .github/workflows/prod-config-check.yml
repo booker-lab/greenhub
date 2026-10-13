@@ -1,0 +1,142 @@
+name: Production config check
+
+# 운영 설정 불변식 점검(읽기 전용). 운영 값을 사람이 직접 열어 보지 않도록 PASS/FAIL/UNKNOWN과 boolean만 출력한다.
+#   - Railway API: JWT_SECRET·JWT_REFRESH_SECRET 존재, 서로 다름, 각각 32바이트 이상
+#   - Railway PORTONE_STORE_ID 존재, consumer Vercel production NEXT_PUBLIC_PORTONE_STORE_ID와 같음
+#     (Vercel 변수가 sensitive라 값을 읽을 수 없으면 UNKNOWN으로 두고 실패로 보지 않는다)
+#   - Railway PORTONE_WEBHOOK_SECRET 존재, GOOGLE_GEMINI_BASE_URL 없음
+# 값은 바꾸지 않고 조회만 한다. 저장소 owner가 main에서 수동 실행할 때만 production Environment 비밀값을 읽는다.
+#   - Firestore composite index·fieldOverrides가 firestore.indexes.json과 같은 모양인지(collectionGroup·필드만 비교,
+#     문서 데이터는 읽지 않음). 차이는 WARN으로만 보고하고 운영 인덱스를 읽지 못할 때만 실패한다.
+# 비밀값은 production-deploy.yml과 같은 production Environment secret을 쓴다:
+#   RAILWAY_TOKEN, RAILWAY_API_SERVICE_ID, VERCEL_PRODUCTION_TOKEN, FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-config-check
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: 실행자 확인
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: dispatch·실행자·ref 확인
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch로만 실행합니다.' >&2; exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" || "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo '실행자가 저장소 owner가 아니어서 차단합니다.' >&2; exit 1
+          fi
+          if [[ "$REF" != 'refs/heads/main' ]]; then
+            echo 'main에서만 실행합니다.' >&2; exit 1
+          fi
+
+  check:
+    name: 운영 설정 점검
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: 운영 설정 점검
+        shell: bash
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_SERVICE_ID: ${{ secrets.RAILWAY_API_SERVICE_ID }}
+          VERCEL_PRODUCTION_TOKEN: ${{ secrets.VERCEL_PRODUCTION_TOKEN }}
+        # 스크립트가 값을 읽자마자 ::add-mask::를 등록하고, Step summary에는 판정 결과만 남긴다.
+        run: node scripts/release/prod-config-check.mjs
+
+  index-drift:
+    name: Firestore 인덱스 비교
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    permissions:
+      contents: read
+    env:
+      FIREBASE_PROJECT: green-e4fe3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      # production-deploy.yml의 Firebase 인증과 같은 방식으로 키를 RUNNER_TEMP에 600 권한으로 쓴다.
+      - name: Firebase 인증
+        shell: bash
+        env:
+          FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" ]]; then
+            echo 'production Environment 비밀값이 없습니다: FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON' >&2; exit 1
+          fi
+          key="$RUNNER_TEMP/firebase-deploy.json"
+          umask 077
+          printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key"
+          chmod 600 "$key"
+          project="$(jq -r .project_id "$key")"
+          if [[ "$project" != "$FIREBASE_PROJECT" ]]; then
+            echo "서비스 계정 프로젝트($project)가 운영($FIREBASE_PROJECT)이 아닙니다." >&2; exit 1
+          fi
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$key" >> "$GITHUB_ENV"
+
+      # 조회만 한다(datastore.indexes.list). 출력은 인덱스 모양뿐이라 파일로 받아 스크립트가 비교한다.
+      - name: 운영 인덱스 조회
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=0
+          npx -y firebase-tools@14.11.1 firestore:indexes --project "$FIREBASE_PROJECT" --json --non-interactive \
+            > "$RUNNER_TEMP/prod-indexes.json" || status=$?
+          if (( status != 0 )); then
+            # --json 오류 응답이면 스크립트가 오류 메시지 한 줄만 출력한다.
+            node scripts/release/firestore-index-drift.mjs --production="$RUNNER_TEMP/prod-indexes.json" || true
+            echo "firebase firestore:indexes 실패(exit $status)" >&2
+            exit 1
+          fi
+
+      # 차이는 WARN으로만 보고한다(exit 0). 출력을 해석하지 못하면 실패한다.
+      - name: firestore.indexes.json과 비교
+        shell: bash
+        run: node scripts/release/firestore-index-drift.mjs --production="$RUNNER_TEMP/prod-indexes.json" --file=firestore.indexes.json
+
+      - name: 서비스 계정 키 삭제
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/firebase-deploy.json" "$RUNNER_TEMP/prod-indexes.json"

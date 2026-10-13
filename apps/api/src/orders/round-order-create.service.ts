@@ -232,8 +232,10 @@ export function resolveOrderBuyerName(
 }
 
 // 요청사항은 여러 줄을 허용하되 줄바꿈 외 제어문자와 보이지 않는 서식 문자는 저장하지 않는다.
+/* eslint-disable no-control-regex -- 제어문자를 제거하기 위한 패턴이다. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: 제어문자를 제거하기 위한 패턴이다.
 const REQUEST_NOTE_CONTROL_CHARACTERS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u2028\u2029]/g;
+/* eslint-enable no-control-regex */
 
 export function normalizeRequestNote(value: string | undefined): string | null {
   if (typeof value !== 'string') return null;

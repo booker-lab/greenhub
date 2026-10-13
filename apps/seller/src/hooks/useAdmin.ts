@@ -3,10 +3,13 @@
 import type { OrderStatus, SettlementStatus, StoreStatus } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
-import { apiJson } from '@/lib/api';
+import { apiFetch, apiJson } from '@/lib/api';
 import {
   type AdminCommandOutcome,
+  classifyAdminCommandError,
   executeAdminCommand,
+  missingTokenOutcome,
+  resolveConfirmedOutcome,
 } from './useAdmin.outcome';
 
 export type { AdminCommandOutcome } from './useAdmin.outcome';
@@ -74,7 +77,28 @@ export interface InviteToken {
   usedBy: string | null;
   expiresAt: string | null;
   createdAt: string | null;
+  /** 관리자 취소 시각. 취소 기능 이전에 만든 문서에는 필드가 없다. */
+  revokedAt?: string | null;
+  revokedBy?: string | null;
+  /** 받는 사람 이메일(정규화). 지정하지 않은 초대는 null, 이 기능 이전 문서에는 필드가 없다. */
+  recipientEmail?: string | null;
 }
+
+/** 초대 발급 응답. */
+export interface IssuedInvite {
+  token: string;
+  expiresAt: string;
+  recipientEmail?: string | null;
+}
+
+/**
+ * 초대 취소 결과. 공통 AdminCommandOutcome에 409 본문의 reason
+ * (already_revoked·already_used·expired)을 더해 화면이 사유별 안내를 고를 수 있게 한다.
+ */
+export type InviteRevokeOutcome =
+  | Extract<AdminCommandOutcome, { kind: 'confirmed' }>
+  | (Extract<AdminCommandOutcome, { kind: 'rejected' }> & { reason: string | null })
+  | Extract<AdminCommandOutcome, { kind: 'unknown' }>;
 
 export type DriverStatus = 'all' | 'pending' | 'approved' | 'suspended';
 
@@ -428,13 +452,15 @@ export function useAdminInvite() {
   // 호출자(_client)가 result null 가드로 lastToken 갱신을 제한해 보장한다.
   const [generateError, setGenerateError] = useState<string | null>(null);
 
-  const generate = async (): Promise<{ token: string; expiresAt: string } | null> => {
+  // recipientEmail을 주면 그 이메일로만 가입할 수 있는 초대를 발급한다. 비우면 기존처럼 제한 없이 발급한다.
+  const generate = async (recipientEmail?: string): Promise<IssuedInvite | null> => {
     if (!token) return null;
     setGenerating(true);
     setGenerateError(null);
     try {
-      const data = await apiJson<{ token: string; expiresAt: string }>('/admin/invite', token, {
+      const data = await apiJson<IssuedInvite>('/admin/invite', token, {
         method: 'POST',
+        ...(recipientEmail ? { body: JSON.stringify({ recipientEmail }) } : {}),
       });
       await reload();
       return data;
@@ -446,5 +472,29 @@ export function useAdminInvite() {
     }
   };
 
-  return { invites, loading, error, generating, generateError, generate, reload };
+  // 취소 — 409 reason을 보존해야 하므로 apiJson 대신 apiFetch로 본문을 직접 읽는다.
+  // 4xx는 rejected(+reason), 5xx·transport는 unknown, 2xx는 목록 reload 결과로 reconciliation한다.
+  const revoke = async (inviteToken: string): Promise<InviteRevokeOutcome> => {
+    if (!token) return { ...missingTokenOutcome(), reason: null };
+    let res: Response;
+    try {
+      res = await apiFetch(`/admin/invite/${encodeURIComponent(inviteToken)}/revoke`, token, {
+        method: 'POST',
+      });
+    } catch (err) {
+      const outcome = classifyAdminCommandError(err);
+      return outcome.kind === 'unknown' ? outcome : { ...outcome, reason: null };
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: unknown; reason?: unknown };
+      const message =
+        typeof body?.message === 'string' ? body.message : `서버 오류 (${res.status})`;
+      const outcome = classifyAdminCommandError({ status: res.status, message });
+      if (outcome.kind === 'unknown') return outcome;
+      return { ...outcome, reason: typeof body?.reason === 'string' ? body.reason : null };
+    }
+    return resolveConfirmedOutcome(await reload());
+  };
+
+  return { invites, loading, error, generating, generateError, generate, revoke, reload };
 }
