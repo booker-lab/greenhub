@@ -12,7 +12,7 @@ const ctaSource = await readFile(
   new URL('../../../../components/ProductCTABar.tsx', import.meta.url),
   'utf8',
 );
-const pageSource = await readFile(new URL('../page.tsx', import.meta.url), 'utf8');
+const pageSource = await readFile(new URL('../ProductDetailClient.tsx', import.meta.url), 'utf8');
 const quickAddSource = await readFile(
   new URL('../../../../lib/round-quick-add.ts', import.meta.url),
   'utf8',
@@ -50,7 +50,10 @@ test('round_direct는 isPurchasable이 거짓이면 두 구매 동작을 모두 
   assert.match(roundSource, /canAddToCart=\{roundProduct\.isPurchasable\}/);
   // 좁은 화면에서 잘리지 않도록 짧은 문구를 쓰고, 구매 불가일 때는 이유(품절·주문 시작 전·마감)를 보여준다.
   assert.match(roundSource, /addToCartLabel="장바구니"/);
-  assert.match(roundSource, /buyNowLabel=\{roundProduct\.isPurchasable \? '바로 구매' : undefined\}/);
+  assert.match(
+    roundSource,
+    /buyNowLabel=\{roundProduct\.isPurchasable \? '바로 구매' : undefined\}/,
+  );
   assert.match(roundSource, /const soldOut = roundProduct\.state === 'sold_out'/);
   assert.match(
     roundSource,
