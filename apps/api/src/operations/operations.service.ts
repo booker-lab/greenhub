@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   forwardRef,
@@ -8,6 +9,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import type { OperationIssueType } from '@greenhub/shared';
 import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -17,6 +19,10 @@ import {
   OPERATION_ISSUE_LIST_SCAN_LIMIT,
 } from './dto/list-operation-issues.dto';
 import type { OperationActionType } from './dto/operation-action.dto';
+import {
+  ADMIN_ONLY_MANUAL_RESOLVE_TYPES,
+  OPERATION_ISSUE_RESOLVE_MEMO_MAX_LENGTH,
+} from './dto/resolve-operation-issue.dto';
 import {
   type CreateOperationIssueInput,
   type OperationIssueTransaction,
@@ -60,6 +66,19 @@ export type ListOperationIssuesOptions = {
 };
 
 const REFUND_RETRY_REASON = '운영 예외 환불 재시도';
+
+/**
+ * 사람이 메모와 함께 닫은 기록. 기록을 닫은 마지막 경위만 `resolution`에 두고,
+ * 다시 열려도 지워지지 않는 이력은 `resolutionHistory`에 쌓는다.
+ * `actions`에 넣지 않는 이유: 기존 판매자 앱은 모르는 조치 유형이 있으면 기록 전체를 버린다.
+ */
+type ManualResolution = {
+  method: 'MANUAL';
+  actorId: string;
+  actorRole: 'seller' | 'admin';
+  memo: string;
+  resolvedAt: unknown;
+};
 
 @Injectable()
 export class OperationsService {
@@ -156,6 +175,70 @@ export class OperationsService {
       actionType,
     });
     return this.toSafeResponse(result);
+  }
+
+  /**
+   * 자동으로 닫히지 않는 기록을 메모와 함께 RESOLVED로 닫는다.
+   * - 판매자는 자기 가게 기록만, 관리자는 모든 가게 기록을 닫는다(가게 범위 확인은 조회·조치와 같다).
+   * - 이미 닫힌 기록은 바꾸지 않고 그대로 돌려준다(멱등). 동시 요청은 트랜잭션에서 한 번만 닫힌다.
+   * - 환불 재시도·문자 재발송이 진행 중(claim 유효)이면 외부 조치와 겹치지 않게 409로 거부한다.
+   * - 같은 원인이 다시 생기면 기록 작성기가 다시 열고 `resolution`을 비운다(이력은 남는다).
+   */
+  async resolveIssueForStore(
+    storeId: string,
+    issueId: string,
+    requesterId: string,
+    role: string,
+    memo: string,
+  ): Promise<Record<string, unknown>> {
+    const issue = await this.readAuthorizedIssue(storeId, issueId, requesterId, role);
+    const actorRole = role === 'admin' ? 'admin' : 'seller';
+    if (
+      actorRole !== 'admin' &&
+      ADMIN_ONLY_MANUAL_RESOLVE_TYPES.has(issue['type'] as OperationIssueType)
+    ) {
+      throw new ForbiddenException('이 운영 기록은 관리자만 닫을 수 있습니다.');
+    }
+    const normalizedMemo = this.normalizeMemo(typeof memo === 'string' ? memo : '');
+    if (!normalizedMemo) {
+      throw new BadRequestException('닫는 이유를 메모로 남겨 주세요.');
+    }
+    const issueRef = this.firestore.doc(`operationIssues/${issueId}`);
+    const committed = await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(issueRef);
+      const fresh = snap.exists ? (snap.data() as OperationIssue) : null;
+      if (!fresh || fresh['storeId'] !== storeId) {
+        throw new NotFoundException('운영 예외를 찾을 수 없습니다.');
+      }
+      if (fresh.status !== 'OPEN') return fresh;
+      const claim = fresh['actionClaim'] as { expiresAt?: unknown } | null | undefined;
+      if (typeof claim?.expiresAt === 'number' && claim.expiresAt > Date.now()) {
+        throw new ConflictException('진행 중인 운영 조치가 있습니다. 잠시 후 다시 시도하세요.');
+      }
+      const resolvedAt = this.firestore.Timestamp.now();
+      const resolution: ManualResolution = {
+        method: 'MANUAL',
+        actorId: requesterId,
+        actorRole,
+        memo: normalizedMemo,
+        resolvedAt,
+      };
+      const history = Array.isArray(fresh['resolutionHistory'])
+        ? (fresh['resolutionHistory'] as unknown[])
+        : [];
+      const patch = {
+        status: 'RESOLVED',
+        resolvedAt,
+        updatedAt: resolvedAt,
+        resolution,
+        resolutionHistory: [...history, resolution],
+        // 만료된 claim을 비워, 늦게 끝난 이전 조치가 닫힌 기록을 덮지 못하게 한다.
+        actionClaim: null,
+      };
+      tx.update(issueRef, patch);
+      return { ...fresh, ...patch } as OperationIssue;
+    });
+    return this.toSafeResponse(committed);
   }
 
   async executeAction(input: ExecuteActionInput): Promise<OperationIssue> {
@@ -421,6 +504,7 @@ export class OperationsService {
       createdAt: issue['createdAt'],
       updatedAt: issue['updatedAt'],
       resolvedAt: issue['resolvedAt'] ?? null,
+      resolution: issue.status === 'OPEN' ? null : this.safeResolution(issue['resolution']),
       latestSnapshot: this.safeSnapshot(issue['latestSnapshot']),
       actions: (issue.actions ?? []).map((action) => ({
         actorId: action.actorId,
@@ -431,6 +515,34 @@ export class OperationsService {
         ...(action.failureCode ? { failureCode: action.failureCode } : {}),
       })),
     };
+  }
+
+  private safeResolution(value: unknown): ManualResolution | null {
+    if (!value || typeof value !== 'object') return null;
+    const resolution = value as Record<string, unknown>;
+    if (
+      resolution['method'] !== 'MANUAL' ||
+      typeof resolution['actorId'] !== 'string' ||
+      (resolution['actorRole'] !== 'seller' && resolution['actorRole'] !== 'admin') ||
+      typeof resolution['memo'] !== 'string'
+    ) {
+      return null;
+    }
+    return {
+      method: 'MANUAL',
+      actorId: resolution['actorId'],
+      actorRole: resolution['actorRole'],
+      memo: this.normalizeMemo(resolution['memo']),
+      resolvedAt: resolution['resolvedAt'] ?? null,
+    };
+  }
+
+  /** DTO 검증을 거친 값도 저장 전에 한 번 더 한 줄·길이 상한으로 맞춘다. */
+  private normalizeMemo(value: string) {
+    return value
+      .replace(/\p{Cc}+/gu, ' ')
+      .trim()
+      .slice(0, OPERATION_ISSUE_RESOLVE_MEMO_MAX_LENGTH);
   }
 
   private resolveListLimit(value: unknown) {
