@@ -197,10 +197,6 @@ describe('MVP 회차 주문 흐름 계약', () => {
     processRefundByOrderId: jest.fn(),
     refundOrderChargesByOrderId: jest.fn(),
   };
-  const capacity = {
-    releaseReservation: jest.fn(),
-    releaseReservationInTransaction: jest.fn(),
-  };
   const settlements = {
     createSettlement: jest.fn(),
     cancelSettlement: jest.fn(),
@@ -287,10 +283,10 @@ describe('MVP 회차 주문 흐름 계약', () => {
       roundOrderRequest({ clientOrderRequestId: 'payment-attempt-2', requestNote: '   ' }) as never,
     );
 
-    expect(records.get(`orders/${withNote.orderId}`)?.['requestNote']).toBe(
+    expect(records.get(`orders/${withNote.orderId as string}`)?.['requestNote']).toBe(
       '받는 분 김그린\n토퍼: 개업 축하',
     );
-    expect(records.get(`orders/${blank.orderId}`)?.['requestNote']).toBeNull();
+    expect(records.get(`orders/${blank.orderId as string}`)?.['requestNote']).toBeNull();
   });
 
   it('같은 결제 시도 ID에 요청사항만 달라도 충돌로 거부하고, 빈 요청사항은 없는 것과 같게 본다', async () => {
@@ -421,7 +417,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       roundOrderRequest({ deliveryPhone: ' 010 9999 0000 ' }) as never,
     );
 
-    expect(records.get(`orders/${result['orderId']}`)?.['deliveryPhone']).toBe('010-9999-0000');
+    expect(records.get(`orders/${result['orderId'] as string}`)?.['deliveryPhone']).toBe('010-9999-0000');
   });
 
   it('round_direct 주문은 이천시 밖 배송 주소를 결제 예약 전에 차단한다', async () => {

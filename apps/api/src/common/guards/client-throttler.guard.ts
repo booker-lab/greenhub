@@ -84,6 +84,7 @@ export class ClientThrottlerGuard extends ThrottlerGuard {
   }
 
   protected override async handleRequest(requestProps: ThrottlerRequest): Promise<boolean> {
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- 핸들러 동일성 비교일 뿐 호출하지 않는다.
     if (isHandler(requestProps.context, AuthController.prototype.login)) {
       await this.enforceLoginPerIpLimit(requestProps);
     }
@@ -122,12 +123,14 @@ export class ClientThrottlerGuard extends ThrottlerGuard {
   ): Promise<string> {
     const ip = clientIp(req);
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- 핸들러 동일성 비교일 뿐 호출하지 않는다.
     if (isHandler(context, AuthController.prototype.login)) {
       const email = normalizedEmail(req.body?.email);
       if (email) return `login:${ip}:${sha256(email)}`;
       return `ip:${ip}`;
     }
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- 핸들러 동일성 비교일 뿐 호출하지 않는다.
     if (isHandler(context, AuthController.prototype.refresh)) {
       const sub = this.verifiedSubject(req.body?.refreshToken, 'refresh');
       return sub ? `user:${sub}` : `ip:${ip}`;
