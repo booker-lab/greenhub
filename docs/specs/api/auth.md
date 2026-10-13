@@ -344,7 +344,7 @@ GET    /auth/firebase-token
 POST   /auth/logout
 ```
 
-모두 `JwtAuthGuard`가 적용된다. `firebase-token`은 throttle 예외지만 JWT 인증이 필요하고, Firebase 클라이언트를 쓰는 `seller`·`driver`·`admin`만 받는다(`consumer`는 403).
+모두 `JwtAuthGuard`가 적용된다. `firebase-token`은 JWT 인증이 필요하고, 서명 검증된 access token의 사용자(`sub`) 단위로 1분 60회 throttle이 걸린다(`FIREBASE_TOKEN_THROTTLE`, `apps/api/src/auth/auth.controller.ts`, #488). 또 Firebase 클라이언트를 쓰는 `seller`·`driver`·`admin`만 받는다(`consumer`는 403).
 
 ## 8. 사용자 프로필 공통 타입
 

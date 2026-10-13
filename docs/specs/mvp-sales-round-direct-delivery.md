@@ -85,6 +85,7 @@ proof나 production deployment·activation·first live round를 의미하지 않
 - 해결된 같은 원인이 재발하면 최신 안전 스냅샷을 병합하고 항목을 다시 연다.
 - 예외 유형별 허용 action만 실행하며, 동시 조치는 claim을 획득한 한 요청만 외부 동작을 수행한다.
 - 조치 실행 전 최신 결제·주문 상태를 다시 검증하고, 담당자·시각·결과·실패 사유를 감사 기록으로 남긴다.
+- 자동으로 닫히지 않는 기록은 사람이 메모와 함께 닫는다(#510). `POST /stores/:storeId/operation-issues/:issueId/resolve`에 `{ memo }`를 보내며, 메모는 공백만이 아닌 1~200자 한 줄(줄바꿈·제어문자 불가)이다. 판매자는 자기 가게 기록만, 관리자는 모든 가게 기록을 닫는다. `PROVIDER_REVERSAL_DETECTED`(정산 보류를 푸는 기록)와 `AUTO_REFUND_FAILED`·`FINALIZATION_REFUND_FAILED`(고객 환불 미확정 기록)는 관리자만 닫고 판매자는 403이다. 닫으면 `status: RESOLVED`(`DISMISSED`는 쓰지 않는다)와 `resolution { method: MANUAL, actorId, actorRole, memo, resolvedAt }`을 기록하고 `resolutionHistory`에 덧붙인다. 이미 닫힌 기록은 그대로 돌려주고, 환불 재시도·문자 재발송 claim이 유효하면 409로 거부한다. 같은 원인이 다시 생겨 기록이 열리면 `resolution`은 비우고 `resolutionHistory`는 남긴다(`apps/api/src/operations/operations.service.ts` `resolveIssueForStore`, `operations-manual-resolve.spec.ts`).
 - lease 만료 뒤 새 claimant가 생길 수 있는 action은 외부 환불·문자 호출 직전과 성공·실패
   기록에서 fresh owner token을 확인해, stale worker가 외부 side effect·claim clear·최신
   claim·status·audit를 수행하거나 덮지 못하게 한다.
