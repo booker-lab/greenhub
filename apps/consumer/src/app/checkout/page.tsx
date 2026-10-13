@@ -26,6 +26,7 @@ import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartValidationError } from '@/lib/cartValidation';
 import { pickCheckoutPrefill, prefillAddress, prefillPhone } from '@/lib/checkout-prefill';
+import { isKoreanMobilePhone, ROUND_DELIVERY_PHONE_ERROR } from '@/lib/korean-mobile-phone';
 import {
   buildPaymentRedirectUrl,
   createPendingOrderPayment,
@@ -523,13 +524,14 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
             !schedule
           ? '상품·가격·회차 정보가 변경되어 결제할 수 없습니다. 장바구니에서 변경 내용을 다시 확인해 주세요.'
           : null;
+  const deliveryPhoneValid = isKoreanMobilePhone(deliveryPhone.trim());
   const canPay =
     !isLoading &&
     !!schedule &&
     !saleRounds.isStale &&
     !!address.address &&
     !!address.zipCode &&
-    PHONE_PATTERN.test(deliveryPhone.trim()) &&
+    deliveryPhoneValid &&
     !!session;
 
   return (
@@ -570,6 +572,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       onAddressChange={setAddress}
       deliveryPhone={deliveryPhone}
       onDeliveryPhoneChange={setDeliveryPhone}
+      deliveryPhoneError={deliveryPhoneValid ? null : ROUND_DELIVERY_PHONE_ERROR}
       requestNote={requestNote}
       onRequestNoteChange={setRequestNote}
       paymentMethod={paymentMethod}
